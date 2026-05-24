@@ -19,6 +19,18 @@ pub const Error = error{
     ChildMismatch,
 };
 
+pub const HtmlError = error{
+    HtmlBudgetExceeded,
+    InvalidHtml,
+    UnsupportedHtml,
+};
+
+pub const MarkdownError = error{
+    MarkdownBudgetExceeded,
+    InvalidMarkdown,
+    UnsupportedMarkdown,
+};
+
 pub const Component = union(enum) {
     text: Text,
     card: Card,
@@ -62,6 +74,22 @@ pub const Component = union(enum) {
 
     pub fn toObject(self: Component, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
         return writeSingleComponentObject(self, ui_out, object_out, req, epoch);
+    }
+
+    pub fn toHtml(self: Component, out: []u8) HtmlError![]u8 {
+        return writeComponentHtml(self, out);
+    }
+
+    pub fn fromHtml(html: []const u8, text_out: []u8) HtmlError!Component {
+        return readComponentHtml(html, text_out);
+    }
+
+    pub fn toMarkdown(self: Component, out: []u8) MarkdownError![]u8 {
+        return writeComponentMarkdown(self, out);
+    }
+
+    pub fn fromMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!Component {
+        return readComponentMarkdown(markdown, text_out);
     }
 
     pub fn fromView(view: object.View) Error!Component {
@@ -137,7 +165,501 @@ pub const ArticleListItem = struct {
 };
 
 pub const CodeBlock = struct {
+    language: []const u8 = "",
     lines: []const []const u8,
+
+    pub fn render(self: CodeBlock, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
+        return renderCodeBlock(scene, bounds, self, options);
+    }
+
+    pub fn toHtml(self: CodeBlock, out: []u8) HtmlError![]u8 {
+        return writeCodeBlockHtml(self, out);
+    }
+
+    pub fn fromHtml(html: []const u8, out_lines: [][]const u8, text_out: []u8) HtmlError!CodeBlock {
+        return readCodeBlockHtml(html, out_lines, text_out);
+    }
+
+    pub fn toMarkdown(self: CodeBlock, out: []u8) MarkdownError![]u8 {
+        return writeCodeBlockMarkdown(self, out);
+    }
+
+    pub fn fromMarkdown(markdown: []const u8, out_lines: [][]const u8) MarkdownError!CodeBlock {
+        return readCodeBlockMarkdown(markdown, out_lines);
+    }
+};
+
+pub const Heading = struct {
+    level: u8,
+    value: []const u8,
+
+    pub fn render(self: Heading, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
+        return renderHeading(scene, bounds, self, options);
+    }
+
+    pub fn toHtml(self: Heading, out: []u8) HtmlError![]u8 {
+        return writeHeadingHtml(self, out);
+    }
+
+    pub fn fromHtml(html: []const u8, text_out: []u8) HtmlError!Heading {
+        return readHeadingHtml(html, text_out);
+    }
+
+    pub fn toMarkdown(self: Heading, out: []u8) MarkdownError![]u8 {
+        return writeHeadingMarkdown(self, out);
+    }
+
+    pub fn fromMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!Heading {
+        return readHeadingMarkdown(markdown, text_out);
+    }
+};
+
+pub const List = struct {
+    ordered: bool = false,
+    items: []const []const u8,
+
+    pub fn render(self: List, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
+        return renderList(scene, bounds, self, options);
+    }
+
+    pub fn toHtml(self: List, out: []u8) HtmlError![]u8 {
+        return writeListHtml(self, out);
+    }
+
+    pub fn fromHtml(html: []const u8, out_items: [][]const u8, text_out: []u8) HtmlError!List {
+        return readListHtml(html, out_items, text_out);
+    }
+
+    pub fn toMarkdown(self: List, out: []u8) MarkdownError![]u8 {
+        return writeListMarkdown(self, out);
+    }
+
+    pub fn fromMarkdown(markdown: []const u8, out_items: [][]const u8, text_out: []u8) MarkdownError!List {
+        return readListMarkdown(markdown, out_items, text_out);
+    }
+};
+
+pub const Callout = struct {
+    value: []const u8,
+
+    pub fn render(self: Callout, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
+        return renderCallout(scene, bounds, self, options);
+    }
+
+    pub fn toHtml(self: Callout, out: []u8) HtmlError![]u8 {
+        return writeCalloutHtml(self, out);
+    }
+
+    pub fn fromHtml(html: []const u8, text_out: []u8) HtmlError!Callout {
+        return readCalloutHtml(html, text_out);
+    }
+
+    pub fn toMarkdown(self: Callout, out: []u8) MarkdownError![]u8 {
+        return writeCalloutMarkdown(self, out);
+    }
+
+    pub fn fromMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!Callout {
+        return readCalloutMarkdown(markdown, text_out);
+    }
+};
+
+pub const Aside = struct {
+    title: []const u8,
+    body: []const u8,
+
+    pub fn render(self: Aside, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
+        return renderAside(scene, bounds, self, options);
+    }
+
+    pub fn toHtml(self: Aside, out: []u8) HtmlError![]u8 {
+        return writeAsideHtml(self, out);
+    }
+
+    pub fn fromHtml(html: []const u8, text_out: []u8) HtmlError!Aside {
+        return readAsideHtml(html, text_out);
+    }
+
+    pub fn toMarkdown(self: Aside, out: []u8) MarkdownError![]u8 {
+        return writeAsideMarkdown(self, out);
+    }
+
+    pub fn fromMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!Aside {
+        return readAsideMarkdown(markdown, text_out);
+    }
+};
+
+pub const Details = struct {
+    id: u32,
+    summary: []const u8,
+    body: []const u8,
+    open: bool = false,
+
+    pub fn render(self: Details, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
+        return renderDetails(scene, bounds, self, options);
+    }
+
+    pub fn toHtml(self: Details, out: []u8) HtmlError![]u8 {
+        return writeDetailsHtml(self, out);
+    }
+
+    pub fn fromHtml(html: []const u8, text_out: []u8) HtmlError!Details {
+        return readDetailsHtml(html, text_out);
+    }
+
+    pub fn toMarkdown(self: Details, out: []u8) MarkdownError![]u8 {
+        return writeDetailsMarkdown(self, out);
+    }
+
+    pub fn fromMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!Details {
+        return readDetailsMarkdown(markdown, text_out);
+    }
+};
+
+pub const Figure = struct {
+    src: []const u8,
+    alt: []const u8,
+    caption: []const u8,
+
+    pub fn render(self: Figure, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
+        return renderFigure(scene, bounds, self, options);
+    }
+
+    pub fn toHtml(self: Figure, out: []u8) HtmlError![]u8 {
+        return writeFigureHtml(self, out);
+    }
+
+    pub fn fromHtml(html: []const u8, text_out: []u8) HtmlError!Figure {
+        return readFigureHtml(html, text_out);
+    }
+
+    pub fn toMarkdown(self: Figure, out: []u8) MarkdownError![]u8 {
+        return writeFigureMarkdown(self, out);
+    }
+
+    pub fn fromMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!Figure {
+        return readFigureMarkdown(markdown, text_out);
+    }
+};
+
+pub const ChoiceOption = struct {
+    id: u32,
+    label: []const u8,
+    selected: bool = false,
+};
+
+pub const ChoiceGroup = struct {
+    id: u32,
+    legend: []const u8,
+    options: []const ChoiceOption,
+
+    pub fn render(self: ChoiceGroup, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
+        return renderChoiceGroup(scene, bounds, self, options);
+    }
+
+    pub fn toHtml(self: ChoiceGroup, out: []u8) HtmlError![]u8 {
+        return writeChoiceGroupHtml(self, out);
+    }
+
+    pub fn fromHtml(html: []const u8, out_options: []ChoiceOption, text_out: []u8) HtmlError!ChoiceGroup {
+        return readChoiceGroupHtml(html, out_options, text_out);
+    }
+
+    pub fn toMarkdown(self: ChoiceGroup, out: []u8) MarkdownError![]u8 {
+        return writeChoiceGroupMarkdown(self, out);
+    }
+
+    pub fn fromMarkdown(markdown: []const u8, out_options: []ChoiceOption, text_out: []u8) MarkdownError!ChoiceGroup {
+        return readChoiceGroupMarkdown(markdown, out_options, text_out);
+    }
+};
+
+pub const StepState = enum {
+    done,
+    current,
+    todo,
+};
+
+pub const StepItem = struct {
+    id: u32,
+    title: []const u8,
+    detail: []const u8,
+    state: StepState = .todo,
+};
+
+pub const StepList = struct {
+    steps: []const StepItem,
+
+    pub fn render(self: StepList, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
+        return renderStepList(scene, bounds, self, options);
+    }
+
+    pub fn toHtml(self: StepList, out: []u8) HtmlError![]u8 {
+        return writeStepListHtml(self, out);
+    }
+
+    pub fn fromHtml(html: []const u8, out_steps: []StepItem, text_out: []u8) HtmlError!StepList {
+        return readStepListHtml(html, out_steps, text_out);
+    }
+
+    pub fn toMarkdown(self: StepList, out: []u8) MarkdownError![]u8 {
+        return writeStepListMarkdown(self, out);
+    }
+
+    pub fn fromMarkdown(markdown: []const u8, out_steps: []StepItem, text_out: []u8) MarkdownError!StepList {
+        return readStepListMarkdown(markdown, out_steps, text_out);
+    }
+};
+
+pub const BreadcrumbItem = struct {
+    id: u32,
+    label: []const u8,
+    href: []const u8 = "",
+    current: bool = false,
+};
+
+pub const Breadcrumb = struct {
+    items: []const BreadcrumbItem,
+
+    pub fn render(self: Breadcrumb, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
+        return renderBreadcrumb(scene, bounds, self, options);
+    }
+
+    pub fn toHtml(self: Breadcrumb, out: []u8) HtmlError![]u8 {
+        return writeBreadcrumbHtml(self, out);
+    }
+
+    pub fn fromHtml(html: []const u8, out_items: []BreadcrumbItem, text_out: []u8) HtmlError!Breadcrumb {
+        return readBreadcrumbHtml(html, out_items, text_out);
+    }
+
+    pub fn toMarkdown(self: Breadcrumb, out: []u8) MarkdownError![]u8 {
+        return writeBreadcrumbMarkdown(self, out);
+    }
+
+    pub fn fromMarkdown(markdown: []const u8, out_items: []BreadcrumbItem, text_out: []u8) MarkdownError!Breadcrumb {
+        return readBreadcrumbMarkdown(markdown, out_items, text_out);
+    }
+};
+
+pub const DefinitionItem = struct {
+    id: u32,
+    term: []const u8,
+    detail: []const u8,
+};
+
+pub const DefinitionList = struct {
+    items: []const DefinitionItem,
+
+    pub fn render(self: DefinitionList, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
+        return renderDefinitionList(scene, bounds, self, options);
+    }
+
+    pub fn toHtml(self: DefinitionList, out: []u8) HtmlError![]u8 {
+        return writeDefinitionListHtml(self, out);
+    }
+
+    pub fn fromHtml(html: []const u8, out_items: []DefinitionItem, text_out: []u8) HtmlError!DefinitionList {
+        return readDefinitionListHtml(html, out_items, text_out);
+    }
+
+    pub fn toMarkdown(self: DefinitionList, out: []u8) MarkdownError![]u8 {
+        return writeDefinitionListMarkdown(self, out);
+    }
+
+    pub fn fromMarkdown(markdown: []const u8, out_items: []DefinitionItem, text_out: []u8) MarkdownError!DefinitionList {
+        return readDefinitionListMarkdown(markdown, out_items, text_out);
+    }
+};
+
+pub const TimelineEvent = struct {
+    id: u32,
+    time: []const u8,
+    title: []const u8,
+    detail: []const u8,
+};
+
+pub const Timeline = struct {
+    events: []const TimelineEvent,
+
+    pub fn render(self: Timeline, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
+        return renderTimeline(scene, bounds, self, options);
+    }
+
+    pub fn toHtml(self: Timeline, out: []u8) HtmlError![]u8 {
+        return writeTimelineHtml(self, out);
+    }
+
+    pub fn fromHtml(html: []const u8, out_events: []TimelineEvent, text_out: []u8) HtmlError!Timeline {
+        return readTimelineHtml(html, out_events, text_out);
+    }
+
+    pub fn toMarkdown(self: Timeline, out: []u8) MarkdownError![]u8 {
+        return writeTimelineMarkdown(self, out);
+    }
+
+    pub fn fromMarkdown(markdown: []const u8, out_events: []TimelineEvent, text_out: []u8) MarkdownError!Timeline {
+        return readTimelineMarkdown(markdown, out_events, text_out);
+    }
+};
+
+pub const ResourceItem = struct {
+    id: u32,
+    label: []const u8,
+    href: []const u8,
+    detail: []const u8,
+};
+
+pub const ResourceList = struct {
+    items: []const ResourceItem,
+
+    pub fn render(self: ResourceList, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
+        return renderResourceList(scene, bounds, self, options);
+    }
+
+    pub fn toHtml(self: ResourceList, out: []u8) HtmlError![]u8 {
+        return writeResourceListHtml(self, out);
+    }
+
+    pub fn fromHtml(html: []const u8, out_items: []ResourceItem, text_out: []u8) HtmlError!ResourceList {
+        return readResourceListHtml(html, out_items, text_out);
+    }
+
+    pub fn toMarkdown(self: ResourceList, out: []u8) MarkdownError![]u8 {
+        return writeResourceListMarkdown(self, out);
+    }
+
+    pub fn fromMarkdown(markdown: []const u8, out_items: []ResourceItem, text_out: []u8) MarkdownError!ResourceList {
+        return readResourceListMarkdown(markdown, out_items, text_out);
+    }
+};
+
+pub const ProgressSummary = struct {
+    id: u32,
+    label: []const u8,
+    completed: u32,
+    total: u32,
+
+    pub fn render(self: ProgressSummary, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
+        return renderProgressSummary(scene, bounds, self, options);
+    }
+
+    pub fn toHtml(self: ProgressSummary, out: []u8) HtmlError![]u8 {
+        return writeProgressSummaryHtml(self, out);
+    }
+
+    pub fn fromHtml(html: []const u8, text_out: []u8) HtmlError!ProgressSummary {
+        return readProgressSummaryHtml(html, text_out);
+    }
+
+    pub fn toMarkdown(self: ProgressSummary, out: []u8) MarkdownError![]u8 {
+        return writeProgressSummaryMarkdown(self, out);
+    }
+
+    pub fn fromMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!ProgressSummary {
+        return readProgressSummaryMarkdown(markdown, text_out);
+    }
+};
+
+pub const NavItem = struct {
+    id: u32,
+    label: []const u8,
+    href: []const u8 = "",
+    active: bool = false,
+};
+
+pub const Nav = struct {
+    label: []const u8 = "",
+    items: []const NavItem,
+
+    pub fn render(self: Nav, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
+        return renderNav(scene, bounds, self, options);
+    }
+
+    pub fn toHtml(self: Nav, out: []u8) HtmlError![]u8 {
+        return writeNavHtml(self, out);
+    }
+
+    pub fn fromHtml(html: []const u8, out_items: []NavItem, text_out: []u8) HtmlError!Nav {
+        return readNavHtml(html, out_items, text_out);
+    }
+
+    pub fn toMarkdown(self: Nav, out: []u8) MarkdownError![]u8 {
+        return writeNavMarkdown(self, out);
+    }
+
+    pub fn fromMarkdown(markdown: []const u8, out_items: []NavItem, text_out: []u8) MarkdownError!Nav {
+        return readNavMarkdown(markdown, out_items, text_out);
+    }
+};
+
+pub const RegionTag = enum {
+    header,
+    main,
+    footer,
+    section,
+    article,
+};
+
+pub const Region = struct {
+    tag: RegionTag,
+    label: []const u8 = "",
+    children: []const Component,
+
+    pub fn render(self: Region, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
+        return renderRegion(scene, bounds, self, options);
+    }
+
+    pub fn toHtml(self: Region, out: []u8) HtmlError![]u8 {
+        return writeRegionHtml(self, out);
+    }
+
+    pub fn fromHtml(html: []const u8, out_components: []Component, text_out: []u8) HtmlError!Region {
+        return readRegionHtml(html, out_components, text_out);
+    }
+
+    pub fn toMarkdown(self: Region, out: []u8) MarkdownError![]u8 {
+        return writeRegionMarkdown(self, out);
+    }
+
+    pub fn fromMarkdown(markdown: []const u8, out_components: []Component, text_out: []u8) MarkdownError!Region {
+        return readRegionMarkdown(markdown, out_components, text_out);
+    }
+};
+
+pub const TableCell = struct {
+    value: []const u8,
+    alignment: ui.TextAlign = .start,
+};
+
+pub const TableRow = struct {
+    id: u32,
+    cells: []const TableCell,
+};
+
+pub const Table = struct {
+    id: u32,
+    headers: []const TableCell,
+    rows: []const TableRow,
+
+    pub fn render(self: Table, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
+        return renderTable(scene, bounds, self, options);
+    }
+
+    pub fn toHtml(self: Table, out: []u8) HtmlError![]u8 {
+        return writeTableHtml(self, out);
+    }
+
+    pub fn fromHtml(html: []const u8, out_rows: []TableRow, out_cells: []TableCell, text_out: []u8) HtmlError!Table {
+        return readTableHtml(html, out_rows, out_cells, text_out);
+    }
+
+    pub fn toMarkdown(self: Table, out: []u8) MarkdownError![]u8 {
+        return writeTableMarkdown(self, out);
+    }
+
+    pub fn fromMarkdown(markdown: []const u8, out_rows: []TableRow, out_cells: []TableCell, text_out: []u8) MarkdownError!Table {
+        return readTableMarkdown(markdown, out_rows, out_cells, text_out);
+    }
 };
 
 pub fn renderComponent(scene: *ui.Scene, bounds: ui.Rect, component: Component, options: RenderOptions) ui.RenderError!void {
@@ -225,6 +747,368 @@ pub fn renderCodeBlock(scene: *ui.Scene, bounds: ui.Rect, block: CodeBlock, opti
             y += code_line_height;
         }
     }
+}
+
+pub fn renderHeading(scene: *ui.Scene, bounds: ui.Rect, heading: Heading, options: RenderOptions) ui.RenderError!void {
+    if (!validHeadingLevel(heading.level)) return;
+    const line_height: f32 = switch (heading.level) {
+        1 => heading_h1_line_h,
+        2 => heading_h2_line_h,
+        3 => heading_h3_line_h,
+        else => unreachable,
+    };
+    const avg_width: f32 = switch (heading.level) {
+        1 => heading_h1_avg_w,
+        2 => heading_h2_avg_w,
+        3 => heading_h3_avg_w,
+        else => unreachable,
+    };
+    try scene.pushWrappedText(bounds, heading.value, options.style.text, .{
+        .line_height = line_height,
+        .average_char_width = avg_width,
+        .max_lines = 3,
+    });
+}
+
+pub fn renderList(scene: *ui.Scene, bounds: ui.Rect, list: List, options: RenderOptions) ui.RenderError!void {
+    var y = bounds.y;
+    for (list.items, 0..) |item, index| {
+        if (y + list_item_h > bounds.y + bounds.h) break;
+        const marker_bounds = ui.Rect.init(bounds.x, y + list_marker_y, list_marker_w, list_marker_h);
+        if (list.ordered) {
+            try scene.pushAlignedText(marker_bounds, orderedMarker(index), options.style.accent, .end);
+        } else {
+            try scene.pushRect(ui.Rect.init(bounds.x + 4.0, y + list_bullet_y, list_bullet_size, list_bullet_size), options.style.accent, .fill, list_bullet_size * 0.5, 0.0);
+        }
+        try scene.pushWrappedText(ui.Rect.init(bounds.x + list_text_x, y, @max(1.0, bounds.w - list_text_x), list_item_h), item, options.style.text, .{
+            .line_height = list_line_h,
+            .average_char_width = list_avg_w,
+            .max_lines = 2,
+        });
+        y += list_item_h + list_item_gap;
+    }
+}
+
+pub fn renderCallout(scene: *ui.Scene, bounds: ui.Rect, callout: Callout, options: RenderOptions) ui.RenderError!void {
+    try scene.pushRect(bounds, options.style.row, .fill, callout_radius, 0.0);
+    try scene.pushRect(bounds, options.style.border, .border, callout_radius, 0.0);
+    try scene.pushRect(ui.Rect.init(bounds.x, bounds.y, callout_accent_w, bounds.h), options.style.accent, .fill, callout_radius, 0.0);
+    try scene.pushWrappedText(bounds.insetLtrb(callout_text_x, callout_text_y, callout_text_x, callout_text_y), callout.value, options.style.text, .{
+        .line_height = callout_line_h,
+        .average_char_width = callout_avg_w,
+        .max_lines = 4,
+    });
+}
+
+pub fn renderAside(scene: *ui.Scene, bounds: ui.Rect, aside: Aside, options: RenderOptions) ui.RenderError!void {
+    const style = options.style;
+    try scene.pushRect(bounds, style.panel, .fill, aside_radius, 0.0);
+    try scene.pushRect(bounds, style.border, .border, aside_radius, 0.0);
+    try scene.pushRect(ui.Rect.init(bounds.x, bounds.y, aside_accent_w, bounds.h), style.accent, .fill, aside_radius, 0.0);
+
+    const content = bounds.insetLtrb(aside_padding_x, aside_padding_y, aside_padding_x, aside_padding_y);
+    try scene.pushWrappedText(ui.Rect.init(content.x, content.y, content.w, aside_title_h), aside.title, style.text, .{
+        .line_height = aside_title_line_h,
+        .average_char_width = aside_title_avg_w,
+        .max_lines = aside_title_max_lines,
+    });
+    try scene.pushWrappedText(ui.Rect.init(content.x, content.y + aside_body_y, content.w, @max(1.0, content.h - aside_body_y)), aside.body, style.muted, .{
+        .line_height = aside_body_line_h,
+        .average_char_width = aside_body_avg_w,
+        .max_lines = aside_body_max_lines,
+    });
+}
+
+pub fn renderDetails(scene: *ui.Scene, bounds: ui.Rect, details: Details, options: RenderOptions) ui.RenderError!void {
+    const style = options.style;
+    try scene.pushRect(bounds, style.panel, .fill, details_radius, 0.0);
+    try scene.pushRect(bounds, style.border, .border, details_radius, 0.0);
+
+    const summary_bounds = ui.Rect.init(bounds.x + details_padding_x, bounds.y + details_padding_y, @max(1.0, bounds.w - details_padding_x * 2.0), details_summary_h);
+    try scene.pushAlignedText(ui.Rect.init(summary_bounds.x, summary_bounds.y + details_summary_text_y, @max(1.0, summary_bounds.w - details_marker_w), details_summary_text_h), details.summary, style.text, .start);
+    try scene.pushAlignedText(ui.Rect.init(summary_bounds.x + summary_bounds.w - details_marker_w, summary_bounds.y + details_summary_text_y, details_marker_w, details_summary_text_h), if (details.open) "v" else ">", style.accent, .center);
+    try scene.pushHit(.{ .slot = 0, .kind = .button, .id = details.id, .bounds = summary_bounds });
+
+    if (!details.open) return;
+    const body_y = summary_bounds.y + summary_bounds.h + details_body_gap;
+    if (body_y >= bounds.y + bounds.h - details_padding_y) return;
+    try scene.pushWrappedText(ui.Rect.init(summary_bounds.x, body_y, summary_bounds.w, @max(1.0, bounds.y + bounds.h - details_padding_y - body_y)), details.body, style.muted, .{
+        .line_height = details_body_line_h,
+        .average_char_width = details_body_avg_w,
+        .max_lines = details_body_max_lines,
+    });
+}
+
+pub fn renderFigure(scene: *ui.Scene, bounds: ui.Rect, figure: Figure, options: RenderOptions) ui.RenderError!void {
+    const style = options.style;
+    try scene.pushRect(bounds, style.panel, .fill, figure_radius, 0.0);
+    try scene.pushRect(bounds, style.border, .border, figure_radius, 0.0);
+
+    const media_bounds = ui.Rect.init(bounds.x + figure_padding_x, bounds.y + figure_padding_y, @max(1.0, bounds.w - figure_padding_x * 2.0), @max(1.0, bounds.h - figure_padding_y * 2.0 - figure_caption_h - figure_caption_gap));
+    try scene.pushRect(media_bounds, style.row, .fill, figure_media_radius, 0.0);
+    try scene.pushRect(media_bounds, style.border, .border, figure_media_radius, 0.0);
+    try scene.pushWrappedText(media_bounds.insetUniform(figure_alt_padding), figure.alt, style.muted, .{
+        .line_height = figure_alt_line_h,
+        .average_char_width = figure_alt_avg_w,
+        .max_lines = figure_alt_max_lines,
+    });
+
+    const caption_y = media_bounds.y + media_bounds.h + figure_caption_gap;
+    try scene.pushWrappedText(ui.Rect.init(media_bounds.x, caption_y, media_bounds.w, figure_caption_h), figure.caption, style.text, .{
+        .line_height = figure_caption_line_h,
+        .average_char_width = figure_caption_avg_w,
+        .max_lines = figure_caption_max_lines,
+    });
+}
+
+pub fn renderChoiceGroup(scene: *ui.Scene, bounds: ui.Rect, group: ChoiceGroup, options: RenderOptions) ui.RenderError!void {
+    if (group.options.len == 0) return;
+    const style = options.style;
+    try scene.pushRect(bounds, style.panel, .fill, choice_radius, 0.0);
+    try scene.pushRect(bounds, style.border, .border, choice_radius, 0.0);
+
+    const content_x = bounds.x + choice_padding_x;
+    const content_w = @max(1.0, bounds.w - choice_padding_x * 2.0);
+    var y = bounds.y + choice_padding_y;
+    try scene.pushWrappedText(ui.Rect.init(content_x, y, content_w, choice_legend_h), group.legend, style.text, .{
+        .line_height = choice_legend_line_h,
+        .average_char_width = choice_legend_avg_w,
+        .max_lines = choice_legend_max_lines,
+    });
+    y += choice_legend_h + choice_option_gap;
+
+    const bottom = bounds.y + bounds.h - choice_padding_y;
+    for (group.options) |option| {
+        if (y + choice_option_h > bottom) break;
+        const option_bounds = ui.Rect.init(content_x, y, content_w, choice_option_h);
+        if (option.selected) {
+            try scene.pushRect(option_bounds, style.row, .fill, choice_option_radius, 0.0);
+        }
+        const marker_bounds = ui.Rect.init(option_bounds.x + choice_marker_x, option_bounds.y + choice_marker_y, choice_marker_size, choice_marker_size);
+        try scene.pushRect(marker_bounds, style.border, .border, choice_marker_size * 0.5, 0.0);
+        if (option.selected) {
+            try scene.pushRect(marker_bounds.insetUniform(choice_marker_selected_inset), style.accent, .fill, (choice_marker_size - choice_marker_selected_inset * 2.0) * 0.5, 0.0);
+        }
+        try scene.pushAlignedText(ui.Rect.init(option_bounds.x + choice_label_x, option_bounds.y + choice_label_y, @max(1.0, option_bounds.w - choice_label_x - choice_option_padding_x), choice_label_h), option.label, style.text, .start);
+        try scene.pushHit(.{ .slot = 0, .kind = .button, .id = option.id, .bounds = option_bounds });
+        y += choice_option_h + choice_option_gap;
+    }
+}
+
+pub fn renderStepList(scene: *ui.Scene, bounds: ui.Rect, list: StepList, options: RenderOptions) ui.RenderError!void {
+    if (list.steps.len == 0) return;
+    const style = options.style;
+    try scene.pushRect(bounds, style.panel, .fill, step_radius, 0.0);
+    try scene.pushRect(bounds, style.border, .border, step_radius, 0.0);
+
+    var y = bounds.y + step_padding_y;
+    const content_x = bounds.x + step_padding_x;
+    const content_w = @max(1.0, bounds.w - step_padding_x * 2.0);
+    const bottom = bounds.y + bounds.h - step_padding_y;
+    for (list.steps) |step| {
+        if (y + step_item_h > bottom) break;
+        const step_bounds = ui.Rect.init(content_x, y, content_w, step_item_h);
+        if (step.state == .current) {
+            try scene.pushRect(step_bounds, style.row, .fill, step_item_radius, 0.0);
+        }
+        const marker_bounds = ui.Rect.init(step_bounds.x + step_marker_x, step_bounds.y + step_marker_y, step_marker_size, step_marker_size);
+        try scene.pushRect(marker_bounds, stepStateColor(step.state, style), .fill, step_marker_size * 0.5, 0.0);
+        try scene.pushAlignedText(ui.Rect.init(step_bounds.x + step_text_x, step_bounds.y + step_title_y, @max(1.0, step_bounds.w - step_text_x - step_text_padding_x), step_title_h), step.title, style.text, .start);
+        try scene.pushAlignedText(ui.Rect.init(step_bounds.x + step_text_x, step_bounds.y + step_detail_y, @max(1.0, step_bounds.w - step_text_x - step_text_padding_x), step_detail_h), step.detail, style.muted, .start);
+        try scene.pushHit(.{ .slot = 0, .kind = .row_item, .id = step.id, .bounds = step_bounds });
+        y += step_item_h + step_item_gap;
+    }
+}
+
+pub fn renderBreadcrumb(scene: *ui.Scene, bounds: ui.Rect, breadcrumb: Breadcrumb, options: RenderOptions) ui.RenderError!void {
+    if (breadcrumb.items.len == 0) return;
+    var cursor_x = bounds.x + breadcrumb_padding_x;
+    const y = bounds.y + @max(0.0, (bounds.h - breadcrumb_item_h) * 0.5);
+    const right = bounds.x + bounds.w - breadcrumb_padding_x;
+    for (breadcrumb.items, 0..) |item, index| {
+        const item_w = breadcrumbItemWidth(item.label);
+        if (cursor_x + item_w > right) break;
+        const item_bounds = ui.Rect.init(cursor_x, y, item_w, breadcrumb_item_h);
+        try scene.pushAlignedText(item_bounds.insetLtrb(breadcrumb_item_padding_x, breadcrumb_text_y, breadcrumb_item_padding_x, breadcrumb_text_y), item.label, if (item.current) options.style.text else options.style.muted, .start);
+        try scene.pushHit(.{ .slot = 0, .kind = .button, .id = item.id, .bounds = item_bounds });
+        cursor_x += item_w;
+        if (index + 1 < breadcrumb.items.len) {
+            if (cursor_x + breadcrumb_separator_w > right) break;
+            try scene.pushAlignedText(ui.Rect.init(cursor_x, y + breadcrumb_text_y, breadcrumb_separator_w, breadcrumb_text_h), "/", options.style.border, .center);
+            cursor_x += breadcrumb_separator_w;
+        }
+    }
+}
+
+pub fn renderDefinitionList(scene: *ui.Scene, bounds: ui.Rect, list: DefinitionList, options: RenderOptions) ui.RenderError!void {
+    if (list.items.len == 0) return;
+    const style = options.style;
+    try scene.pushRect(bounds, style.panel, .fill, definition_radius, 0.0);
+    try scene.pushRect(bounds, style.border, .border, definition_radius, 0.0);
+
+    var y = bounds.y + definition_padding_y;
+    const content_x = bounds.x + definition_padding_x;
+    const content_w = @max(1.0, bounds.w - definition_padding_x * 2.0);
+    const bottom = bounds.y + bounds.h - definition_padding_y;
+    for (list.items) |item| {
+        if (y + definition_item_h > bottom) break;
+        const item_bounds = ui.Rect.init(content_x, y, content_w, definition_item_h);
+        try scene.pushRect(item_bounds, style.row, .fill, definition_item_radius, 0.0);
+        try scene.pushAlignedText(ui.Rect.init(item_bounds.x + definition_item_padding_x, item_bounds.y + definition_term_y, @max(1.0, item_bounds.w - definition_item_padding_x * 2.0), definition_term_h), item.term, style.text, .start);
+        try scene.pushWrappedText(ui.Rect.init(item_bounds.x + definition_item_padding_x, item_bounds.y + definition_detail_y, @max(1.0, item_bounds.w - definition_item_padding_x * 2.0), definition_detail_h), item.detail, style.muted, .{
+            .line_height = definition_detail_line_h,
+            .average_char_width = definition_detail_avg_w,
+            .max_lines = definition_detail_max_lines,
+        });
+        try scene.pushHit(.{ .slot = 0, .kind = .row_item, .id = item.id, .bounds = item_bounds });
+        y += definition_item_h + definition_item_gap;
+    }
+}
+
+pub fn renderTimeline(scene: *ui.Scene, bounds: ui.Rect, timeline: Timeline, options: RenderOptions) ui.RenderError!void {
+    if (timeline.events.len == 0) return;
+    const style = options.style;
+    try scene.pushRect(bounds, style.panel, .fill, timeline_radius, 0.0);
+    try scene.pushRect(bounds, style.border, .border, timeline_radius, 0.0);
+
+    var y = bounds.y + timeline_padding_y;
+    const content_x = bounds.x + timeline_padding_x;
+    const content_w = @max(1.0, bounds.w - timeline_padding_x * 2.0);
+    const bottom = bounds.y + bounds.h - timeline_padding_y;
+    for (timeline.events) |event| {
+        if (y + timeline_event_h > bottom) break;
+        const event_bounds = ui.Rect.init(content_x, y, content_w, timeline_event_h);
+        const marker_bounds = ui.Rect.init(event_bounds.x + timeline_marker_x, event_bounds.y + timeline_marker_y, timeline_marker_size, timeline_marker_size);
+        try scene.pushRect(marker_bounds, style.accent, .fill, timeline_marker_size * 0.5, 0.0);
+        try scene.pushAlignedText(ui.Rect.init(event_bounds.x + timeline_text_x, event_bounds.y + timeline_time_y, timeline_time_w, timeline_time_h), event.time, style.accent, .start);
+        try scene.pushAlignedText(ui.Rect.init(event_bounds.x + timeline_text_x + timeline_time_w + timeline_text_gap, event_bounds.y + timeline_title_y, @max(1.0, event_bounds.w - timeline_text_x - timeline_time_w - timeline_text_gap - timeline_text_padding_x), timeline_title_h), event.title, style.text, .start);
+        try scene.pushWrappedText(ui.Rect.init(event_bounds.x + timeline_text_x, event_bounds.y + timeline_detail_y, @max(1.0, event_bounds.w - timeline_text_x - timeline_text_padding_x), timeline_detail_h), event.detail, style.muted, .{
+            .line_height = timeline_detail_line_h,
+            .average_char_width = timeline_detail_avg_w,
+            .max_lines = timeline_detail_max_lines,
+        });
+        try scene.pushHit(.{ .slot = 0, .kind = .row_item, .id = event.id, .bounds = event_bounds });
+        y += timeline_event_h + timeline_event_gap;
+    }
+}
+
+pub fn renderResourceList(scene: *ui.Scene, bounds: ui.Rect, list: ResourceList, options: RenderOptions) ui.RenderError!void {
+    if (list.items.len == 0) return;
+    const style = options.style;
+    try scene.pushRect(bounds, style.panel, .fill, resource_radius, 0.0);
+    try scene.pushRect(bounds, style.border, .border, resource_radius, 0.0);
+
+    var y = bounds.y + resource_padding_y;
+    const content_x = bounds.x + resource_padding_x;
+    const content_w = @max(1.0, bounds.w - resource_padding_x * 2.0);
+    const bottom = bounds.y + bounds.h - resource_padding_y;
+    for (list.items) |item| {
+        if (y + resource_item_h > bottom) break;
+        const item_bounds = ui.Rect.init(content_x, y, content_w, resource_item_h);
+        try scene.pushRect(item_bounds, style.row, .fill, resource_item_radius, 0.0);
+        try scene.pushAlignedText(ui.Rect.init(item_bounds.x + resource_item_padding_x, item_bounds.y + resource_label_y, @max(1.0, item_bounds.w - resource_item_padding_x * 2.0), resource_label_h), item.label, style.text, .start);
+        try scene.pushWrappedText(ui.Rect.init(item_bounds.x + resource_item_padding_x, item_bounds.y + resource_detail_y, @max(1.0, item_bounds.w - resource_item_padding_x * 2.0), resource_detail_h), item.detail, style.muted, .{
+            .line_height = resource_detail_line_h,
+            .average_char_width = resource_detail_avg_w,
+            .max_lines = resource_detail_max_lines,
+        });
+        try scene.pushHit(.{ .slot = 0, .kind = .button, .id = item.id, .bounds = item_bounds });
+        y += resource_item_h + resource_item_gap;
+    }
+}
+
+pub fn renderProgressSummary(scene: *ui.Scene, bounds: ui.Rect, summary: ProgressSummary, options: RenderOptions) ui.RenderError!void {
+    if (summary.total == 0 or summary.completed > summary.total) return;
+    const style = options.style;
+    try scene.pushRect(bounds, style.panel, .fill, progress_summary_radius, 0.0);
+    try scene.pushRect(bounds, style.border, .border, progress_summary_radius, 0.0);
+
+    const content = bounds.insetLtrb(progress_summary_padding_x, progress_summary_padding_y, progress_summary_padding_x, progress_summary_padding_y);
+    try scene.pushAlignedText(ui.Rect.init(content.x, content.y, content.w, progress_summary_label_h), summary.label, style.text, .start);
+
+    const bar_bounds = ui.Rect.init(content.x, content.y + progress_summary_bar_y, content.w, progress_summary_bar_h);
+    try scene.pushRect(bar_bounds, style.row, .fill, progress_summary_bar_radius, 0.0);
+    const ratio = @as(f32, @floatFromInt(summary.completed)) / @as(f32, @floatFromInt(summary.total));
+    if (ratio > 0.0) {
+        try scene.pushRect(ui.Rect.init(bar_bounds.x, bar_bounds.y, @max(progress_summary_bar_min_w, bar_bounds.w * ratio), bar_bounds.h), style.accent, .fill, progress_summary_bar_radius, 0.0);
+    }
+
+    try scene.pushHit(.{ .slot = 0, .kind = .button, .id = summary.id, .bounds = bounds });
+}
+
+pub fn renderNav(scene: *ui.Scene, bounds: ui.Rect, nav: Nav, options: RenderOptions) ui.RenderError!void {
+    if (nav.items.len == 0) return;
+    const style = options.style;
+    try scene.pushRect(bounds, style.panel, .fill, nav_radius, 0.0);
+    try scene.pushRect(bounds, style.border, .border, nav_radius, 0.0);
+
+    var cursor_x = bounds.x + nav_padding_x;
+    const item_y = bounds.y + @max(0.0, (bounds.h - nav_item_h) * 0.5);
+    const item_right = bounds.x + bounds.w - nav_padding_x;
+    for (nav.items) |item| {
+        const item_w = navItemWidth(item.label);
+        if (cursor_x + item_w > item_right) break;
+        const item_bounds = ui.Rect.init(cursor_x, item_y, item_w, nav_item_h);
+        if (item.active) {
+            try scene.pushRect(item_bounds, style.row, .fill, nav_item_radius, 0.0);
+            try scene.pushRect(ui.Rect.init(item_bounds.x + nav_active_inset_x, item_bounds.y + item_bounds.h - nav_active_h, @max(1.0, item_bounds.w - nav_active_inset_x * 2.0), nav_active_h), style.accent, .fill, nav_active_h * 0.5, 0.0);
+        }
+        try scene.pushAlignedText(item_bounds.insetLtrb(nav_item_padding_x, nav_item_text_y, nav_item_padding_x, nav_item_text_y), item.label, if (item.active) style.text else style.muted, .center);
+        try scene.pushHit(.{ .slot = 0, .kind = .button, .id = item.id, .bounds = item_bounds });
+        cursor_x += item_w + nav_item_gap;
+    }
+}
+
+pub fn renderRegion(scene: *ui.Scene, bounds: ui.Rect, region: Region, options: RenderOptions) ui.RenderError!void {
+    if (region.children.len == 0) return;
+    if (region.tag == .header or region.tag == .footer) {
+        try scene.pushRect(bounds, options.style.panel, .fill, region_radius, 0.0);
+        try scene.pushRect(bounds, options.style.border, .border, region_radius, 0.0);
+    }
+
+    var y = bounds.y + region_padding_y;
+    const child_x = bounds.x + region_padding_x;
+    const child_w = @max(1.0, bounds.w - region_padding_x * 2.0);
+    const bottom = bounds.y + bounds.h - region_padding_y;
+    for (region.children) |child| {
+        const child_h = regionChildHeight(child);
+        if (y + child_h > bottom) break;
+        try renderComponent(scene, ui.Rect.init(child_x, y, child_w, child_h), child, options);
+        y += child_h + region_child_gap;
+    }
+}
+
+pub fn renderTable(scene: *ui.Scene, bounds: ui.Rect, table: Table, options: RenderOptions) ui.RenderError!void {
+    if (table.headers.len == 0) return;
+    const style = options.style;
+    try scene.pushRect(bounds, style.panel, .fill, table_radius, 0.0);
+    try scene.pushRect(bounds, style.border, .border, table_radius, 0.0);
+
+    const column_count = table.headers.len;
+    const column_w = @max(1.0, (bounds.w - table_padding_x * 2.0) / @as(f32, @floatFromInt(column_count)));
+    const header_y = bounds.y + table_padding_y;
+    for (table.headers, 0..) |header, index| {
+        const cell_bounds = tableCellBounds(bounds, column_w, header_y, index);
+        try scene.pushAlignedText(cell_bounds, header.value, style.muted, header.alignment);
+    }
+
+    var y = header_y + table_header_h + table_row_gap;
+    for (table.rows) |row| {
+        if (row.cells.len != column_count) continue;
+        if (y + table_row_h > bounds.y + bounds.h - table_padding_y) break;
+        const row_bounds = ui.Rect.init(bounds.x + table_row_inset, y, @max(1.0, bounds.w - table_row_inset * 2.0), table_row_h);
+        try scene.pushRect(row_bounds, style.row, .fill, table_row_radius, 0.0);
+        for (row.cells, 0..) |cell, index| {
+            const cell_bounds = tableCellBounds(bounds, column_w, y + table_text_y, index);
+            try scene.pushAlignedText(cell_bounds, cell.value, style.text, cell.alignment);
+        }
+        try scene.pushHit(.{ .slot = 0, .kind = .row_item, .id = row.id, .bounds = row_bounds });
+        y += table_row_h + table_row_gap;
+    }
+}
+
+fn tableCellBounds(bounds: ui.Rect, column_w: f32, y: f32, index: usize) ui.Rect {
+    return ui.Rect.init(bounds.x + table_padding_x + column_w * @as(f32, @floatFromInt(index)), y, @max(1.0, column_w - table_column_gap), table_text_h);
 }
 
 pub fn renderSurface(scene: *ui.Scene, bounds: ui.Rect, title: []const u8, detail: []const u8, options: RenderOptions) ui.RenderError!void {
@@ -358,13 +1242,13 @@ fn badgeLabelBounds(bounds: ui.Rect) ui.Rect {
 }
 
 const button_radius: f32 = 7.0;
-const button_label_height: f32 = 14.0;
-const button_label_padding: f32 = 4.0;
-const button_label_average_w: f32 = 7.2;
+const button_label_height: f32 = 16.0;
+const button_label_padding: f32 = 14.0;
+const button_label_average_w: f32 = 8.0;
 const button_label_min_width: f32 = 8.0;
 const button_icon_size: f32 = 18.0;
 const button_icon_gap: f32 = 8.0;
-const button_content_min_x: f32 = 8.0;
+const button_content_min_x: f32 = 14.0;
 const badge_height: f32 = 24.0;
 const badge_text_height: f32 = 13.0;
 const badge_padding_x: f32 = 12.0;
@@ -397,6 +1281,17 @@ const article_list_summary_line_height: f32 = 18.0;
 const article_list_summary_average_char_width: f32 = 9.0;
 const article_list_summary_max_lines: usize = 3;
 const article_list_divider_height: f32 = 1.0;
+const table_radius: f32 = 8.0;
+const table_row_radius: f32 = 6.0;
+const table_padding_x: f32 = 14.0;
+const table_padding_y: f32 = 14.0;
+const table_header_h: f32 = 14.0;
+const table_row_h: f32 = 38.0;
+const table_row_gap: f32 = 6.0;
+const table_row_inset: f32 = 8.0;
+const table_text_y: f32 = 12.0;
+const table_text_h: f32 = 14.0;
+const table_column_gap: f32 = 10.0;
 
 fn articleListTextWidth(width: f32) f32 {
     return @max(1.0, width - article_list_padding_x * 2.0 - article_list_arrow_slot);
@@ -419,6 +1314,216 @@ const code_padding_y: f32 = 18.0;
 const code_line_height: f32 = 17.0;
 const code_text_height: f32 = 12.0;
 const code_clip_inset: f32 = 1.0;
+const heading_h1_line_h: f32 = 34.0;
+const heading_h2_line_h: f32 = 26.0;
+const heading_h3_line_h: f32 = 21.0;
+const heading_h1_avg_w: f32 = 15.0;
+const heading_h2_avg_w: f32 = 12.0;
+const heading_h3_avg_w: f32 = 10.5;
+const list_item_h: f32 = 42.0;
+const list_item_gap: f32 = 4.0;
+const list_marker_w: f32 = 24.0;
+const list_marker_h: f32 = 14.0;
+const list_marker_y: f32 = 4.0;
+const list_bullet_y: f32 = 8.0;
+const list_bullet_size: f32 = 5.0;
+const list_text_x: f32 = 28.0;
+const list_line_h: f32 = 18.0;
+const list_avg_w: f32 = 9.0;
+const callout_radius: f32 = 8.0;
+const callout_accent_w: f32 = 4.0;
+const callout_text_x: f32 = 18.0;
+const callout_text_y: f32 = 14.0;
+const callout_line_h: f32 = 18.0;
+const callout_avg_w: f32 = 9.0;
+const aside_radius: f32 = 8.0;
+const aside_accent_w: f32 = 4.0;
+const aside_padding_x: f32 = 18.0;
+const aside_padding_y: f32 = 14.0;
+const aside_title_h: f32 = 22.0;
+const aside_title_line_h: f32 = 18.0;
+const aside_title_avg_w: f32 = 9.0;
+const aside_title_max_lines: usize = 1;
+const aside_body_y: f32 = 30.0;
+const aside_body_line_h: f32 = 18.0;
+const aside_body_avg_w: f32 = 9.0;
+const aside_body_max_lines: usize = 4;
+const details_radius: f32 = 8.0;
+const details_padding_x: f32 = 14.0;
+const details_padding_y: f32 = 12.0;
+const details_summary_h: f32 = 28.0;
+const details_summary_text_y: f32 = 7.0;
+const details_summary_text_h: f32 = 14.0;
+const details_marker_w: f32 = 24.0;
+const details_body_gap: f32 = 10.0;
+const details_body_line_h: f32 = 18.0;
+const details_body_avg_w: f32 = 9.0;
+const details_body_max_lines: usize = 5;
+const figure_radius: f32 = 8.0;
+const figure_media_radius: f32 = 6.0;
+const figure_padding_x: f32 = 12.0;
+const figure_padding_y: f32 = 12.0;
+const figure_alt_padding: f32 = 14.0;
+const figure_alt_line_h: f32 = 18.0;
+const figure_alt_avg_w: f32 = 9.0;
+const figure_alt_max_lines: usize = 3;
+const figure_caption_gap: f32 = 10.0;
+const figure_caption_h: f32 = 42.0;
+const figure_caption_line_h: f32 = 18.0;
+const figure_caption_avg_w: f32 = 9.0;
+const figure_caption_max_lines: usize = 2;
+const choice_radius: f32 = 8.0;
+const choice_padding_x: f32 = 14.0;
+const choice_padding_y: f32 = 14.0;
+const choice_legend_h: f32 = 42.0;
+const choice_legend_line_h: f32 = 20.0;
+const choice_legend_avg_w: f32 = 9.5;
+const choice_legend_max_lines: usize = 2;
+const choice_option_h: f32 = 36.0;
+const choice_option_gap: f32 = 6.0;
+const choice_option_radius: f32 = 6.0;
+const choice_option_padding_x: f32 = 10.0;
+const choice_marker_x: f32 = 10.0;
+const choice_marker_y: f32 = 10.0;
+const choice_marker_size: f32 = 16.0;
+const choice_marker_selected_inset: f32 = 4.0;
+const choice_label_x: f32 = 36.0;
+const choice_label_y: f32 = 10.0;
+const choice_label_h: f32 = 14.0;
+const step_radius: f32 = 8.0;
+const step_padding_x: f32 = 14.0;
+const step_padding_y: f32 = 14.0;
+const step_item_h: f32 = 58.0;
+const step_item_gap: f32 = 8.0;
+const step_item_radius: f32 = 6.0;
+const step_marker_x: f32 = 12.0;
+const step_marker_y: f32 = 18.0;
+const step_marker_size: f32 = 16.0;
+const step_text_x: f32 = 42.0;
+const step_text_padding_x: f32 = 10.0;
+const step_title_y: f32 = 11.0;
+const step_title_h: f32 = 16.0;
+const step_detail_y: f32 = 32.0;
+const step_detail_h: f32 = 14.0;
+const breadcrumb_padding_x: f32 = 4.0;
+const breadcrumb_item_h: f32 = 28.0;
+const breadcrumb_item_padding_x: f32 = 6.0;
+const breadcrumb_text_y: f32 = 7.0;
+const breadcrumb_text_h: f32 = 14.0;
+const breadcrumb_avg_w: f32 = 8.0;
+const breadcrumb_min_w: f32 = 18.0;
+const breadcrumb_separator_w: f32 = 16.0;
+const definition_radius: f32 = 8.0;
+const definition_padding_x: f32 = 12.0;
+const definition_padding_y: f32 = 12.0;
+const definition_item_h: f32 = 76.0;
+const definition_item_gap: f32 = 8.0;
+const definition_item_radius: f32 = 6.0;
+const definition_item_padding_x: f32 = 12.0;
+const definition_term_y: f32 = 11.0;
+const definition_term_h: f32 = 16.0;
+const definition_detail_y: f32 = 34.0;
+const definition_detail_h: f32 = 34.0;
+const definition_detail_line_h: f32 = 16.0;
+const definition_detail_avg_w: f32 = 8.5;
+const definition_detail_max_lines: usize = 2;
+const timeline_radius: f32 = 8.0;
+const timeline_padding_x: f32 = 12.0;
+const timeline_padding_y: f32 = 12.0;
+const timeline_event_h: f32 = 82.0;
+const timeline_event_gap: f32 = 8.0;
+const timeline_marker_x: f32 = 10.0;
+const timeline_marker_y: f32 = 14.0;
+const timeline_marker_size: f32 = 12.0;
+const timeline_text_x: f32 = 34.0;
+const timeline_time_y: f32 = 9.0;
+const timeline_time_w: f32 = 74.0;
+const timeline_time_h: f32 = 14.0;
+const timeline_text_gap: f32 = 10.0;
+const timeline_title_y: f32 = 9.0;
+const timeline_title_h: f32 = 16.0;
+const timeline_detail_y: f32 = 34.0;
+const timeline_detail_h: f32 = 38.0;
+const timeline_detail_line_h: f32 = 17.0;
+const timeline_detail_avg_w: f32 = 8.5;
+const timeline_detail_max_lines: usize = 2;
+const timeline_text_padding_x: f32 = 10.0;
+const resource_radius: f32 = 8.0;
+const resource_padding_x: f32 = 12.0;
+const resource_padding_y: f32 = 12.0;
+const resource_item_h: f32 = 70.0;
+const resource_item_gap: f32 = 8.0;
+const resource_item_radius: f32 = 6.0;
+const resource_item_padding_x: f32 = 12.0;
+const resource_label_y: f32 = 11.0;
+const resource_label_h: f32 = 16.0;
+const resource_detail_y: f32 = 34.0;
+const resource_detail_h: f32 = 30.0;
+const resource_detail_line_h: f32 = 15.0;
+const resource_detail_avg_w: f32 = 8.5;
+const resource_detail_max_lines: usize = 2;
+const progress_summary_radius: f32 = 8.0;
+const progress_summary_padding_x: f32 = 14.0;
+const progress_summary_padding_y: f32 = 14.0;
+const progress_summary_label_h: f32 = 16.0;
+const progress_summary_bar_y: f32 = 30.0;
+const progress_summary_bar_h: f32 = 10.0;
+const progress_summary_bar_radius: f32 = 5.0;
+const progress_summary_bar_min_w: f32 = 2.0;
+const nav_radius: f32 = 8.0;
+const nav_padding_x: f32 = 8.0;
+const nav_item_h: f32 = 34.0;
+const nav_item_gap: f32 = 6.0;
+const nav_item_radius: f32 = 7.0;
+const nav_item_padding_x: f32 = 14.0;
+const nav_item_text_y: f32 = 9.0;
+const nav_item_avg_w: f32 = 8.5;
+const nav_item_min_w: f32 = 44.0;
+const nav_active_h: f32 = 3.0;
+const nav_active_inset_x: f32 = 12.0;
+
+fn navItemWidth(label: []const u8) f32 {
+    const label_w = @as(f32, @floatFromInt(label.len)) * nav_item_avg_w;
+    return @max(nav_item_min_w, label_w + nav_item_padding_x * 2.0);
+}
+
+const region_radius: f32 = 8.0;
+const region_padding_x: f32 = 12.0;
+const region_padding_y: f32 = 12.0;
+const region_child_gap: f32 = 10.0;
+const region_text_h: f32 = 32.0;
+const region_card_h: f32 = 88.0;
+const region_badge_h: f32 = 28.0;
+const region_button_h: f32 = 40.0;
+const region_input_h: f32 = 40.0;
+const region_row_h: f32 = 66.0;
+const region_separator_h: f32 = 1.0;
+
+fn regionChildHeight(component: Component) f32 {
+    return switch (component) {
+        .text => region_text_h,
+        .card => region_card_h,
+        .badge => region_badge_h,
+        .separator => region_separator_h,
+        .button => region_button_h,
+        .input => region_input_h,
+        .row_item => region_row_h,
+        else => region_text_h,
+    };
+}
+
+fn stepStateColor(state: StepState, style: ui.Style) ui.Color {
+    return switch (state) {
+        .done => style.accent,
+        .current => style.text,
+        .todo => style.border,
+    };
+}
+
+fn breadcrumbItemWidth(label: []const u8) f32 {
+    const label_w = @as(f32, @floatFromInt(label.len)) * breadcrumb_avg_w;
+    return @max(breadcrumb_min_w, label_w + breadcrumb_item_padding_x * 2.0);
+}
 
 pub const Tree = union(enum) {
     stack: Stack,
@@ -504,6 +1609,14 @@ pub const Card = struct {
             .card => |card| card,
             else => error.UnsupportedComponent,
         };
+    }
+
+    pub fn toMarkdown(self: Card, out: []u8) MarkdownError![]u8 {
+        return writeCardMarkdown(self, out);
+    }
+
+    pub fn fromMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!Card {
+        return readCardMarkdown(markdown, text_out);
     }
 };
 
@@ -792,6 +1905,22 @@ pub const Stack = struct {
             .children = out_components[0..layout.children.len],
         };
     }
+
+    pub fn toHtml(self: Stack, out: []u8) HtmlError![]u8 {
+        return writeStackHtml(self, out);
+    }
+
+    pub fn fromHtml(html: []const u8, out_components: []Component, text_out: []u8) HtmlError!Stack {
+        return readStackHtml(html, out_components, text_out);
+    }
+
+    pub fn toMarkdown(self: Stack, out: []u8) MarkdownError![]u8 {
+        return writeStackMarkdown(self, out);
+    }
+
+    pub fn fromMarkdown(markdown: []const u8, out_components: []Component, text_out: []u8) MarkdownError!Stack {
+        return readStackMarkdown(markdown, out_components, text_out);
+    }
 };
 
 pub const StackTree = struct {
@@ -1054,6 +2183,2556 @@ fn writeComponentRecord(writer: *codec.Writer, index: usize, component: Componen
             break :blk writer.record(index, .row_item, row.id, title, detail);
         },
     };
+}
+
+fn writeComponentHtml(component: Component, out: []u8) HtmlError![]u8 {
+    var writer = HtmlWriter.init(out);
+    try writeComponentHtmlInto(&writer, component);
+    return writer.written();
+}
+
+fn writeComponentHtmlInto(writer: *HtmlWriter, component: Component) HtmlError!void {
+    switch (component) {
+        .text => |text| {
+            try writer.writeAll("<p data-er-component=\"text\">");
+            try writer.writeEscapedText(text.value);
+            try writer.writeAll("</p>");
+        },
+        .card => |card| {
+            try writer.writeAll("<article data-er-component=\"card\"><h2>");
+            try writer.writeEscapedText(card.title);
+            try writer.writeAll("</h2><p>");
+            try writer.writeEscapedText(card.detail);
+            try writer.writeAll("</p></article>");
+        },
+        .badge => |badge| {
+            try writer.writeAll("<span data-er-component=\"badge\">");
+            try writer.writeEscapedText(badge.label);
+            try writer.writeAll("</span>");
+        },
+        .avatar => |avatar| {
+            try writer.writeAll("<span data-er-component=\"avatar\" aria-label=\"");
+            try writer.writeEscapedAttr(avatar.label);
+            try writer.writeAll("\">");
+            try writer.writeEscapedText(avatar.label);
+            try writer.writeAll("</span>");
+        },
+        .kbd => |kbd| {
+            try writer.writeAll("<kbd data-er-component=\"kbd\">");
+            try writer.writeEscapedText(kbd.label);
+            try writer.writeAll("</kbd>");
+        },
+        .separator => try writer.writeAll("<hr data-er-component=\"separator\">"),
+        .button => |button| {
+            try writer.writeAll("<button data-er-component=\"button\" data-er-id=\"");
+            try writer.writeInt(button.id);
+            try writer.writeAll("\">");
+            try writer.writeEscapedText(button.label);
+            try writer.writeAll("</button>");
+        },
+        .input => |input| {
+            try writer.writeAll("<input data-er-component=\"input\" data-er-id=\"");
+            try writer.writeInt(input.id);
+            try writer.writeAll("\" placeholder=\"");
+            try writer.writeEscapedAttr(input.placeholder);
+            try writer.writeAll("\">");
+        },
+        .textarea => |textarea| {
+            try writer.writeAll("<textarea data-er-component=\"textarea\" data-er-id=\"");
+            try writer.writeInt(textarea.id);
+            try writer.writeAll("\" placeholder=\"");
+            try writer.writeEscapedAttr(textarea.placeholder);
+            try writer.writeAll("\"></textarea>");
+        },
+        .select => |select| {
+            try writer.writeAll("<select data-er-component=\"select\" data-er-id=\"");
+            try writer.writeInt(select.id);
+            try writer.writeAll("\"><option selected>");
+            try writer.writeEscapedText(select.label);
+            try writer.writeAll("</option></select>");
+        },
+        .checkbox => |checkbox| {
+            try writer.writeAll("<label data-er-component=\"checkbox\" data-er-id=\"");
+            try writer.writeInt(checkbox.id);
+            try writer.writeAll("\" data-er-checked=\"");
+            try writer.writeAll(if (checkbox.checked) "true" else "false");
+            try writer.writeAll("\"><input type=\"checkbox\"");
+            if (checkbox.checked) try writer.writeAll(" checked");
+            try writer.writeAll(">");
+            try writer.writeEscapedText(checkbox.label);
+            try writer.writeAll("</label>");
+        },
+        .switch_control => |switch_control| {
+            try writer.writeAll("<button data-er-component=\"switch\" data-er-id=\"");
+            try writer.writeInt(switch_control.id);
+            try writer.writeAll("\" aria-pressed=\"");
+            try writer.writeAll(if (switch_control.checked) "true" else "false");
+            try writer.writeAll("\">");
+            try writer.writeEscapedText(switch_control.label);
+            try writer.writeAll("</button>");
+        },
+        .progress => |progress| {
+            try writer.writeAll("<progress data-er-component=\"progress\" value=\"");
+            try writer.writeInt(percentFromUnit(progress.value));
+            try writer.writeAll("\" max=\"100\"></progress>");
+        },
+        .slider => |slider| {
+            try writer.writeAll("<label data-er-component=\"slider\" data-er-id=\"");
+            try writer.writeInt(slider.id);
+            try writer.writeAll("\"><span>");
+            try writer.writeEscapedText(slider.label);
+            try writer.writeAll("</span><input type=\"range\" min=\"0\" max=\"100\" value=\"");
+            try writer.writeInt(percentFromUnit(slider.value));
+            try writer.writeAll("\"></label>");
+        },
+        .row_item => |row| {
+            try writer.writeAll("<div data-er-component=\"row-item\" data-er-id=\"");
+            try writer.writeInt(row.id);
+            try writer.writeAll("\"><strong>");
+            try writer.writeEscapedText(row.title);
+            try writer.writeAll("</strong><span>");
+            try writer.writeEscapedText(row.detail);
+            try writer.writeAll("</span></div>");
+        },
+    }
+}
+
+fn writeStackHtml(stack: Stack, out: []u8) HtmlError![]u8 {
+    var writer = HtmlWriter.init(out);
+    try writer.writeAll("<section data-er-component=\"stack\" data-er-axis=\"");
+    try writer.writeAll(axisName(stack.axis));
+    try writer.writeAll("\" data-er-gap=\"");
+    try writer.writeInt(stack.gap);
+    try writer.writeAll("\" data-er-padding=\"");
+    try writer.writeInt(stack.padding);
+    try writer.writeAll("\">");
+    for (stack.children) |child| try writeComponentHtmlInto(&writer, child);
+    try writer.writeAll("</section>");
+    return writer.written();
+}
+
+const markdown_component_marker = "--- component ---\n";
+const markdown_next_component_marker = "\n--- component ---\n";
+
+fn writeStackMarkdown(stack: Stack, out: []u8) MarkdownError![]u8 {
+    if (stack.children.len == 0) return error.InvalidMarkdown;
+    var writer = MarkdownWriter.init(out);
+    try writer.writeAll(":::stack\naxis: ");
+    try writer.writeAll(axisName(stack.axis));
+    try writer.writeAll("\ngap: ");
+    try writer.writeInt(stack.gap);
+    try writer.writeAll("\npadding: ");
+    try writer.writeInt(stack.padding);
+    for (stack.children) |child| {
+        try writer.writeByte('\n');
+        try writer.writeAll(markdown_component_marker);
+        try writeComponentMarkdownInto(&writer, child);
+    }
+    try writer.writeAll("\n:::");
+    return writer.written();
+}
+
+fn writeTableHtml(table: Table, out: []u8) HtmlError![]u8 {
+    if (table.headers.len == 0) return error.InvalidHtml;
+    var writer = HtmlWriter.init(out);
+    try writer.writeAll("<table data-er-component=\"table\" data-er-id=\"");
+    try writer.writeInt(table.id);
+    try writer.writeAll("\"><thead><tr>");
+    for (table.headers) |header| {
+        try writer.writeAll("<th data-er-align=\"");
+        try writer.writeAll(alignName(header.alignment));
+        try writer.writeAll("\">");
+        try writer.writeEscapedText(header.value);
+        try writer.writeAll("</th>");
+    }
+    try writer.writeAll("</tr></thead><tbody>");
+    for (table.rows) |row| {
+        if (row.cells.len != table.headers.len) return error.InvalidHtml;
+        try writer.writeAll("<tr data-er-row-id=\"");
+        try writer.writeInt(row.id);
+        try writer.writeAll("\">");
+        for (row.cells) |cell| {
+            try writer.writeAll("<td data-er-align=\"");
+            try writer.writeAll(alignName(cell.alignment));
+            try writer.writeAll("\">");
+            try writer.writeEscapedText(cell.value);
+            try writer.writeAll("</td>");
+        }
+        try writer.writeAll("</tr>");
+    }
+    try writer.writeAll("</tbody></table>");
+    return writer.written();
+}
+
+fn writeHeadingHtml(heading: Heading, out: []u8) HtmlError![]u8 {
+    if (!validHeadingLevel(heading.level)) return error.InvalidHtml;
+    var writer = HtmlWriter.init(out);
+    try writer.writeByte('<');
+    try writer.writeByte('h');
+    try writer.writeByte('0' + heading.level);
+    try writer.writeAll(" data-er-component=\"heading\">");
+    try writer.writeEscapedText(heading.value);
+    try writer.writeAll("</h");
+    try writer.writeByte('0' + heading.level);
+    try writer.writeByte('>');
+    return writer.written();
+}
+
+fn writeListHtml(list: List, out: []u8) HtmlError![]u8 {
+    if (list.items.len == 0) return error.InvalidHtml;
+    var writer = HtmlWriter.init(out);
+    const tag = if (list.ordered) "ol" else "ul";
+    try writer.writeByte('<');
+    try writer.writeAll(tag);
+    try writer.writeAll(" data-er-component=\"list\">");
+    for (list.items) |item| {
+        try writer.writeAll("<li>");
+        try writer.writeEscapedText(item);
+        try writer.writeAll("</li>");
+    }
+    try writer.writeAll("</");
+    try writer.writeAll(tag);
+    try writer.writeByte('>');
+    return writer.written();
+}
+
+fn writeCalloutHtml(callout: Callout, out: []u8) HtmlError![]u8 {
+    var writer = HtmlWriter.init(out);
+    try writer.writeAll("<blockquote data-er-component=\"callout\">");
+    try writer.writeEscapedText(callout.value);
+    try writer.writeAll("</blockquote>");
+    return writer.written();
+}
+
+fn writeAsideHtml(aside: Aside, out: []u8) HtmlError![]u8 {
+    if (aside.title.len == 0 or aside.body.len == 0) return error.InvalidHtml;
+    var writer = HtmlWriter.init(out);
+    try writer.writeAll("<aside data-er-component=\"aside\"><h2>");
+    try writer.writeEscapedText(aside.title);
+    try writer.writeAll("</h2><p>");
+    try writer.writeEscapedText(aside.body);
+    try writer.writeAll("</p></aside>");
+    return writer.written();
+}
+
+fn writeCodeBlockHtml(block: CodeBlock, out: []u8) HtmlError![]u8 {
+    var writer = HtmlWriter.init(out);
+    try writer.writeAll("<pre data-er-component=\"code-block\"><code data-er-lang=\"");
+    try writer.writeEscapedAttr(block.language);
+    try writer.writeAll("\">");
+    for (block.lines, 0..) |line, index| {
+        if (index != 0) try writer.writeByte('\n');
+        try writer.writeEscapedText(line);
+    }
+    try writer.writeAll("</code></pre>");
+    return writer.written();
+}
+
+fn writeDetailsHtml(details: Details, out: []u8) HtmlError![]u8 {
+    var writer = HtmlWriter.init(out);
+    try writer.writeAll("<details data-er-component=\"details\" data-er-id=\"");
+    try writer.writeInt(details.id);
+    try writer.writeAll("\" data-er-open=\"");
+    try writer.writeAll(if (details.open) "true" else "false");
+    try writer.writeAll("\"><summary>");
+    try writer.writeEscapedText(details.summary);
+    try writer.writeAll("</summary><p>");
+    try writer.writeEscapedText(details.body);
+    try writer.writeAll("</p></details>");
+    return writer.written();
+}
+
+fn writeFigureHtml(figure: Figure, out: []u8) HtmlError![]u8 {
+    if (figure.src.len == 0 or figure.alt.len == 0 or figure.caption.len == 0) return error.InvalidHtml;
+    var writer = HtmlWriter.init(out);
+    try writer.writeAll("<figure data-er-component=\"figure\"><img src=\"");
+    try writer.writeEscapedAttr(figure.src);
+    try writer.writeAll("\" alt=\"");
+    try writer.writeEscapedAttr(figure.alt);
+    try writer.writeAll("\"><figcaption>");
+    try writer.writeEscapedText(figure.caption);
+    try writer.writeAll("</figcaption></figure>");
+    return writer.written();
+}
+
+fn writeChoiceGroupHtml(group: ChoiceGroup, out: []u8) HtmlError![]u8 {
+    if (group.legend.len == 0 or group.options.len == 0) return error.InvalidHtml;
+    var writer = HtmlWriter.init(out);
+    try writer.writeAll("<fieldset data-er-component=\"choice-group\" data-er-id=\"");
+    try writer.writeInt(group.id);
+    try writer.writeAll("\"><legend>");
+    try writer.writeEscapedText(group.legend);
+    try writer.writeAll("</legend>");
+    for (group.options) |option| {
+        if (option.label.len == 0) return error.InvalidHtml;
+        try writer.writeAll("<label data-er-id=\"");
+        try writer.writeInt(option.id);
+        try writer.writeAll("\" data-er-selected=\"");
+        try writer.writeAll(if (option.selected) "true" else "false");
+        try writer.writeAll("\"><input type=\"radio\" name=\"choice-");
+        try writer.writeInt(group.id);
+        try writer.writeAll("\">");
+        try writer.writeEscapedText(option.label);
+        try writer.writeAll("</label>");
+    }
+    try writer.writeAll("</fieldset>");
+    return writer.written();
+}
+
+fn writeStepListHtml(list: StepList, out: []u8) HtmlError![]u8 {
+    if (list.steps.len == 0) return error.InvalidHtml;
+    var writer = HtmlWriter.init(out);
+    try writer.writeAll("<ol data-er-component=\"step-list\">");
+    for (list.steps) |step| {
+        if (step.title.len == 0 or step.detail.len == 0) return error.InvalidHtml;
+        try writer.writeAll("<li data-er-id=\"");
+        try writer.writeInt(step.id);
+        try writer.writeAll("\" data-er-state=\"");
+        try writer.writeAll(stepStateName(step.state));
+        try writer.writeAll("\"><strong>");
+        try writer.writeEscapedText(step.title);
+        try writer.writeAll("</strong><span>");
+        try writer.writeEscapedText(step.detail);
+        try writer.writeAll("</span></li>");
+    }
+    try writer.writeAll("</ol>");
+    return writer.written();
+}
+
+fn writeBreadcrumbHtml(breadcrumb: Breadcrumb, out: []u8) HtmlError![]u8 {
+    if (breadcrumb.items.len == 0) return error.InvalidHtml;
+    var writer = HtmlWriter.init(out);
+    try writer.writeAll("<nav data-er-component=\"breadcrumb\" aria-label=\"Breadcrumb\"><ol>");
+    for (breadcrumb.items) |item| {
+        if (item.label.len == 0) return error.InvalidHtml;
+        try writer.writeAll("<li data-er-id=\"");
+        try writer.writeInt(item.id);
+        try writer.writeAll("\" data-er-current=\"");
+        try writer.writeAll(if (item.current) "true" else "false");
+        try writer.writeAll("\"><a href=\"");
+        try writer.writeEscapedAttr(item.href);
+        try writer.writeAll("\">");
+        try writer.writeEscapedText(item.label);
+        try writer.writeAll("</a></li>");
+    }
+    try writer.writeAll("</ol></nav>");
+    return writer.written();
+}
+
+fn writeDefinitionListHtml(list: DefinitionList, out: []u8) HtmlError![]u8 {
+    if (list.items.len == 0) return error.InvalidHtml;
+    var writer = HtmlWriter.init(out);
+    try writer.writeAll("<dl data-er-component=\"definition-list\">");
+    for (list.items) |item| {
+        if (item.term.len == 0 or item.detail.len == 0) return error.InvalidHtml;
+        try writer.writeAll("<div data-er-id=\"");
+        try writer.writeInt(item.id);
+        try writer.writeAll("\"><dt>");
+        try writer.writeEscapedText(item.term);
+        try writer.writeAll("</dt><dd>");
+        try writer.writeEscapedText(item.detail);
+        try writer.writeAll("</dd></div>");
+    }
+    try writer.writeAll("</dl>");
+    return writer.written();
+}
+
+fn writeTimelineHtml(timeline: Timeline, out: []u8) HtmlError![]u8 {
+    if (timeline.events.len == 0) return error.InvalidHtml;
+    var writer = HtmlWriter.init(out);
+    try writer.writeAll("<ol data-er-component=\"timeline\">");
+    for (timeline.events) |event| {
+        if (event.time.len == 0 or event.title.len == 0 or event.detail.len == 0) return error.InvalidHtml;
+        try writer.writeAll("<li data-er-id=\"");
+        try writer.writeInt(event.id);
+        try writer.writeAll("\"><time>");
+        try writer.writeEscapedText(event.time);
+        try writer.writeAll("</time><strong>");
+        try writer.writeEscapedText(event.title);
+        try writer.writeAll("</strong><p>");
+        try writer.writeEscapedText(event.detail);
+        try writer.writeAll("</p></li>");
+    }
+    try writer.writeAll("</ol>");
+    return writer.written();
+}
+
+fn writeResourceListHtml(list: ResourceList, out: []u8) HtmlError![]u8 {
+    if (list.items.len == 0) return error.InvalidHtml;
+    var writer = HtmlWriter.init(out);
+    try writer.writeAll("<ul data-er-component=\"resource-list\">");
+    for (list.items) |item| {
+        if (item.label.len == 0 or item.href.len == 0 or item.detail.len == 0) return error.InvalidHtml;
+        try writer.writeAll("<li data-er-id=\"");
+        try writer.writeInt(item.id);
+        try writer.writeAll("\"><a href=\"");
+        try writer.writeEscapedAttr(item.href);
+        try writer.writeAll("\">");
+        try writer.writeEscapedText(item.label);
+        try writer.writeAll("</a><p>");
+        try writer.writeEscapedText(item.detail);
+        try writer.writeAll("</p></li>");
+    }
+    try writer.writeAll("</ul>");
+    return writer.written();
+}
+
+fn writeProgressSummaryHtml(summary: ProgressSummary, out: []u8) HtmlError![]u8 {
+    if (summary.label.len == 0 or summary.total == 0 or summary.completed > summary.total) return error.InvalidHtml;
+    var writer = HtmlWriter.init(out);
+    try writer.writeAll("<section data-er-component=\"progress-summary\" data-er-id=\"");
+    try writer.writeInt(summary.id);
+    try writer.writeAll("\"><h2>");
+    try writer.writeEscapedText(summary.label);
+    try writer.writeAll("</h2><progress value=\"");
+    try writer.writeInt(summary.completed);
+    try writer.writeAll("\" max=\"");
+    try writer.writeInt(summary.total);
+    try writer.writeAll("\"></progress></section>");
+    return writer.written();
+}
+
+fn writeNavHtml(nav: Nav, out: []u8) HtmlError![]u8 {
+    if (nav.items.len == 0) return error.InvalidHtml;
+    var writer = HtmlWriter.init(out);
+    try writer.writeAll("<nav data-er-component=\"nav\" aria-label=\"");
+    try writer.writeEscapedAttr(nav.label);
+    try writer.writeAll("\">");
+    for (nav.items) |item| {
+        try writer.writeAll("<a data-er-id=\"");
+        try writer.writeInt(item.id);
+        try writer.writeAll("\" data-er-active=\"");
+        try writer.writeAll(if (item.active) "true" else "false");
+        try writer.writeAll("\" href=\"");
+        try writer.writeEscapedAttr(item.href);
+        try writer.writeAll("\">");
+        try writer.writeEscapedText(item.label);
+        try writer.writeAll("</a>");
+    }
+    try writer.writeAll("</nav>");
+    return writer.written();
+}
+
+fn writeRegionHtml(region: Region, out: []u8) HtmlError![]u8 {
+    if (region.children.len == 0) return error.InvalidHtml;
+    var writer = HtmlWriter.init(out);
+    const tag = regionTagName(region.tag);
+    try writer.writeByte('<');
+    try writer.writeAll(tag);
+    try writer.writeAll(" data-er-component=\"region\" aria-label=\"");
+    try writer.writeEscapedAttr(region.label);
+    try writer.writeAll("\">");
+    for (region.children) |child| try writeComponentHtmlInto(&writer, child);
+    try writer.writeAll("</");
+    try writer.writeAll(tag);
+    try writer.writeByte('>');
+    return writer.written();
+}
+
+fn writeRegionMarkdown(region: Region, out: []u8) MarkdownError![]u8 {
+    if (region.children.len == 0) return error.InvalidMarkdown;
+    var writer = MarkdownWriter.init(out);
+    try writer.writeAll(":::region\ntag: ");
+    try writer.writeAll(regionTagName(region.tag));
+    try writer.writeAll("\nlabel: ");
+    try writer.writeEscapedInline(region.label);
+    for (region.children) |child| {
+        try writer.writeByte('\n');
+        try writer.writeAll(markdown_component_marker);
+        try writeComponentMarkdownInto(&writer, child);
+    }
+    try writer.writeAll("\n:::");
+    return writer.written();
+}
+
+fn writeComponentMarkdown(component: Component, out: []u8) MarkdownError![]u8 {
+    var writer = MarkdownWriter.init(out);
+    try writeComponentMarkdownInto(&writer, component);
+    return writer.written();
+}
+
+fn writeComponentMarkdownInto(writer: *MarkdownWriter, component: Component) MarkdownError!void {
+    switch (component) {
+        .text => |text| {
+            if (text.value.len == 0) return error.InvalidMarkdown;
+            try writer.writeEscapedInline(text.value);
+        },
+        .card => |card| try writeCardMarkdownInto(writer, card),
+        .badge => |badge| {
+            if (badge.label.len == 0) return error.InvalidMarkdown;
+            try writer.writeAll(":::badge\nlabel: ");
+            try writer.writeEscapedInline(badge.label);
+            try writer.writeAll("\n:::");
+        },
+        .avatar => |avatar| {
+            if (avatar.label.len == 0) return error.InvalidMarkdown;
+            try writer.writeAll(":::avatar\nlabel: ");
+            try writer.writeEscapedInline(avatar.label);
+            try writer.writeAll("\n:::");
+        },
+        .kbd => |kbd| {
+            if (kbd.label.len == 0) return error.InvalidMarkdown;
+            try writer.writeAll(":::kbd\nlabel: ");
+            try writer.writeEscapedInline(kbd.label);
+            try writer.writeAll("\n:::");
+        },
+        .separator => try writer.writeAll("---"),
+        .button => |button| {
+            if (button.label.len == 0) return error.InvalidMarkdown;
+            try writer.writeAll(":::button\nid: ");
+            try writer.writeInt(button.id);
+            try writer.writeAll("\nlabel: ");
+            try writer.writeEscapedInline(button.label);
+            try writer.writeAll("\n:::");
+        },
+        .input => |input| {
+            if (input.placeholder.len == 0) return error.InvalidMarkdown;
+            try writer.writeAll(":::input\nid: ");
+            try writer.writeInt(input.id);
+            try writer.writeAll("\nplaceholder: ");
+            try writer.writeEscapedInline(input.placeholder);
+            try writer.writeAll("\n:::");
+        },
+        .textarea => |textarea| {
+            if (textarea.placeholder.len == 0) return error.InvalidMarkdown;
+            try writer.writeAll(":::textarea\nid: ");
+            try writer.writeInt(textarea.id);
+            try writer.writeAll("\nplaceholder: ");
+            try writer.writeEscapedInline(textarea.placeholder);
+            try writer.writeAll("\n:::");
+        },
+        .select => |select| {
+            if (select.label.len == 0) return error.InvalidMarkdown;
+            try writer.writeAll(":::select\nid: ");
+            try writer.writeInt(select.id);
+            try writer.writeAll("\nlabel: ");
+            try writer.writeEscapedInline(select.label);
+            try writer.writeAll("\n:::");
+        },
+        .checkbox => |checkbox| {
+            if (checkbox.label.len == 0) return error.InvalidMarkdown;
+            try writer.writeAll(":::checkbox\nid: ");
+            try writer.writeInt(checkbox.id);
+            try writer.writeAll("\nchecked: ");
+            try writer.writeAll(if (checkbox.checked) "true" else "false");
+            try writer.writeAll("\nlabel: ");
+            try writer.writeEscapedInline(checkbox.label);
+            try writer.writeAll("\n:::");
+        },
+        .switch_control => |switch_control| {
+            if (switch_control.label.len == 0) return error.InvalidMarkdown;
+            try writer.writeAll(":::switch\nid: ");
+            try writer.writeInt(switch_control.id);
+            try writer.writeAll("\nchecked: ");
+            try writer.writeAll(if (switch_control.checked) "true" else "false");
+            try writer.writeAll("\nlabel: ");
+            try writer.writeEscapedInline(switch_control.label);
+            try writer.writeAll("\n:::");
+        },
+        .progress => |progress| {
+            try writer.writeAll(":::progress-control\nvalue: ");
+            try writer.writeInt(percentFromUnit(progress.value));
+            try writer.writeAll("\n:::");
+        },
+        .slider => |slider| {
+            if (slider.label.len == 0) return error.InvalidMarkdown;
+            try writer.writeAll(":::slider\nid: ");
+            try writer.writeInt(slider.id);
+            try writer.writeAll("\nlabel: ");
+            try writer.writeEscapedInline(slider.label);
+            try writer.writeAll("\nvalue: ");
+            try writer.writeInt(percentFromUnit(slider.value));
+            try writer.writeAll("\n:::");
+        },
+        .row_item => |row| {
+            if (row.title.len == 0 or row.detail.len == 0) return error.InvalidMarkdown;
+            try writer.writeAll(":::row-item\nid: ");
+            try writer.writeInt(row.id);
+            try writer.writeAll("\ntitle: ");
+            try writer.writeEscapedInline(row.title);
+            try writer.writeAll("\ndetail: ");
+            try writer.writeEscapedInline(row.detail);
+            try writer.writeAll("\n:::");
+        },
+    }
+}
+
+fn writeHeadingMarkdown(heading: Heading, out: []u8) MarkdownError![]u8 {
+    if (!validHeadingLevel(heading.level) or heading.value.len == 0) return error.InvalidMarkdown;
+    var writer = MarkdownWriter.init(out);
+    var level: u8 = 0;
+    while (level < heading.level) : (level += 1) try writer.writeByte('#');
+    try writer.writeAll(" ");
+    try writer.writeEscapedInline(heading.value);
+    return writer.written();
+}
+
+fn writeListMarkdown(list: List, out: []u8) MarkdownError![]u8 {
+    if (list.items.len == 0) return error.InvalidMarkdown;
+    var writer = MarkdownWriter.init(out);
+    for (list.items, 0..) |item, index| {
+        if (item.len == 0) return error.InvalidMarkdown;
+        if (index != 0) try writer.writeByte('\n');
+        if (list.ordered) {
+            try writer.writeInt(@intCast(index + 1));
+            try writer.writeAll(". ");
+        } else {
+            try writer.writeAll("- ");
+        }
+        try writer.writeEscapedInline(item);
+    }
+    return writer.written();
+}
+
+fn writeCalloutMarkdown(callout: Callout, out: []u8) MarkdownError![]u8 {
+    if (callout.value.len == 0) return error.InvalidMarkdown;
+    var writer = MarkdownWriter.init(out);
+    try writer.writeAll("> ");
+    try writer.writeEscapedInline(callout.value);
+    return writer.written();
+}
+
+fn writeAsideMarkdown(aside: Aside, out: []u8) MarkdownError![]u8 {
+    if (aside.title.len == 0 or aside.body.len == 0) return error.InvalidMarkdown;
+    var writer = MarkdownWriter.init(out);
+    try writer.writeAll(":::aside\ntitle: ");
+    try writer.writeEscapedInline(aside.title);
+    try writer.writeAll("\nbody: ");
+    try writer.writeEscapedInline(aside.body);
+    try writer.writeAll("\n:::");
+    return writer.written();
+}
+
+fn writeDetailsMarkdown(details: Details, out: []u8) MarkdownError![]u8 {
+    if (details.summary.len == 0 or details.body.len == 0) return error.InvalidMarkdown;
+    var writer = MarkdownWriter.init(out);
+    try writer.writeAll(":::details\nid: ");
+    try writer.writeInt(details.id);
+    try writer.writeAll("\nopen: ");
+    try writer.writeAll(if (details.open) "true" else "false");
+    try writer.writeAll("\nsummary: ");
+    try writer.writeEscapedInline(details.summary);
+    try writer.writeAll("\nbody: ");
+    try writer.writeEscapedInline(details.body);
+    try writer.writeAll("\n:::");
+    return writer.written();
+}
+
+fn writeFigureMarkdown(figure: Figure, out: []u8) MarkdownError![]u8 {
+    if (figure.src.len == 0 or figure.alt.len == 0 or figure.caption.len == 0) return error.InvalidMarkdown;
+    var writer = MarkdownWriter.init(out);
+    try writer.writeAll(":::figure\nsrc: ");
+    try writer.writeEscapedInline(figure.src);
+    try writer.writeAll("\nalt: ");
+    try writer.writeEscapedInline(figure.alt);
+    try writer.writeAll("\ncaption: ");
+    try writer.writeEscapedInline(figure.caption);
+    try writer.writeAll("\n:::");
+    return writer.written();
+}
+
+fn writeChoiceGroupMarkdown(group: ChoiceGroup, out: []u8) MarkdownError![]u8 {
+    if (group.legend.len == 0 or group.options.len == 0) return error.InvalidMarkdown;
+    var writer = MarkdownWriter.init(out);
+    try writer.writeAll(":::choice\nid: ");
+    try writer.writeInt(group.id);
+    try writer.writeAll("\nlegend: ");
+    try writer.writeEscapedInline(group.legend);
+    for (group.options) |option| {
+        if (option.label.len == 0) return error.InvalidMarkdown;
+        try writer.writeAll("\noption: ");
+        try writer.writeInt(option.id);
+        try writer.writeAll("\nselected: ");
+        try writer.writeAll(if (option.selected) "true" else "false");
+        try writer.writeAll("\nlabel: ");
+        try writer.writeEscapedInline(option.label);
+    }
+    try writer.writeAll("\n:::");
+    return writer.written();
+}
+
+fn writeBreadcrumbMarkdown(breadcrumb: Breadcrumb, out: []u8) MarkdownError![]u8 {
+    if (breadcrumb.items.len == 0) return error.InvalidMarkdown;
+    var writer = MarkdownWriter.init(out);
+    try writer.writeAll(":::breadcrumb");
+    for (breadcrumb.items) |item| {
+        if (item.label.len == 0) return error.InvalidMarkdown;
+        try writer.writeAll("\nitem: ");
+        try writer.writeInt(item.id);
+        try writer.writeAll("\ncurrent: ");
+        try writer.writeAll(if (item.current) "true" else "false");
+        try writer.writeAll("\nhref: ");
+        try writer.writeEscapedInline(item.href);
+        try writer.writeAll("\nlabel: ");
+        try writer.writeEscapedInline(item.label);
+    }
+    try writer.writeAll("\n:::");
+    return writer.written();
+}
+
+fn writeNavMarkdown(nav: Nav, out: []u8) MarkdownError![]u8 {
+    if (nav.items.len == 0) return error.InvalidMarkdown;
+    var writer = MarkdownWriter.init(out);
+    try writer.writeAll(":::nav\nlabel: ");
+    try writer.writeEscapedInline(nav.label);
+    for (nav.items) |item| {
+        if (item.label.len == 0) return error.InvalidMarkdown;
+        try writer.writeAll("\nitem: ");
+        try writer.writeInt(item.id);
+        try writer.writeAll("\nactive: ");
+        try writer.writeAll(if (item.active) "true" else "false");
+        try writer.writeAll("\nhref: ");
+        try writer.writeEscapedInline(item.href);
+        try writer.writeAll("\nlabel: ");
+        try writer.writeEscapedInline(item.label);
+    }
+    try writer.writeAll("\n:::");
+    return writer.written();
+}
+
+fn writeTableMarkdown(table: Table, out: []u8) MarkdownError![]u8 {
+    if (table.headers.len == 0) return error.InvalidMarkdown;
+    var writer = MarkdownWriter.init(out);
+    try writer.writeAll(":::table\nid: ");
+    try writer.writeInt(table.id);
+    for (table.headers) |header| {
+        if (header.value.len == 0) return error.InvalidMarkdown;
+        try writer.writeAll("\nheader: ");
+        try writer.writeAll(alignName(header.alignment));
+        try writer.writeAll(" ");
+        try writer.writeEscapedInline(header.value);
+    }
+    for (table.rows) |row| {
+        if (row.cells.len != table.headers.len) return error.InvalidMarkdown;
+        try writer.writeAll("\nrow: ");
+        try writer.writeInt(row.id);
+        for (row.cells) |cell| {
+            try writer.writeAll("\ncell: ");
+            try writer.writeAll(alignName(cell.alignment));
+            try writer.writeAll(" ");
+            try writer.writeEscapedInline(cell.value);
+        }
+    }
+    try writer.writeAll("\n:::");
+    return writer.written();
+}
+
+fn writeCardMarkdown(card: Card, out: []u8) MarkdownError![]u8 {
+    var writer = MarkdownWriter.init(out);
+    try writeCardMarkdownInto(&writer, card);
+    return writer.written();
+}
+
+fn writeCardMarkdownInto(writer: *MarkdownWriter, card: Card) MarkdownError!void {
+    if (card.title.len == 0 or card.detail.len == 0) return error.InvalidMarkdown;
+    try writer.writeAll(":::card\ntitle: ");
+    try writer.writeEscapedInline(card.title);
+    try writer.writeAll("\ndetail: ");
+    try writer.writeEscapedInline(card.detail);
+    try writer.writeAll("\n:::");
+}
+
+fn writeResourceListMarkdown(list: ResourceList, out: []u8) MarkdownError![]u8 {
+    if (list.items.len == 0) return error.InvalidMarkdown;
+    var writer = MarkdownWriter.init(out);
+    try writer.writeAll(":::resources");
+    for (list.items) |item| {
+        if (item.label.len == 0 or item.href.len == 0 or item.detail.len == 0) return error.InvalidMarkdown;
+        try writer.writeAll("\nitem: ");
+        try writer.writeInt(item.id);
+        try writer.writeAll("\nlabel: ");
+        try writer.writeEscapedInline(item.label);
+        try writer.writeAll("\nhref: ");
+        try writer.writeEscapedInline(item.href);
+        try writer.writeAll("\ndetail: ");
+        try writer.writeEscapedInline(item.detail);
+    }
+    try writer.writeAll("\n:::");
+    return writer.written();
+}
+
+fn writeStepListMarkdown(list: StepList, out: []u8) MarkdownError![]u8 {
+    if (list.steps.len == 0) return error.InvalidMarkdown;
+    var writer = MarkdownWriter.init(out);
+    try writer.writeAll(":::steps");
+    for (list.steps) |step| {
+        if (step.title.len == 0 or step.detail.len == 0) return error.InvalidMarkdown;
+        try writer.writeAll("\nstep: ");
+        try writer.writeInt(step.id);
+        try writer.writeAll("\nstate: ");
+        try writer.writeAll(stepStateName(step.state));
+        try writer.writeAll("\ntitle: ");
+        try writer.writeEscapedInline(step.title);
+        try writer.writeAll("\ndetail: ");
+        try writer.writeEscapedInline(step.detail);
+    }
+    try writer.writeAll("\n:::");
+    return writer.written();
+}
+
+fn writeDefinitionListMarkdown(list: DefinitionList, out: []u8) MarkdownError![]u8 {
+    if (list.items.len == 0) return error.InvalidMarkdown;
+    var writer = MarkdownWriter.init(out);
+    try writer.writeAll(":::definitions");
+    for (list.items) |item| {
+        if (item.term.len == 0 or item.detail.len == 0) return error.InvalidMarkdown;
+        try writer.writeAll("\nitem: ");
+        try writer.writeInt(item.id);
+        try writer.writeAll("\nterm: ");
+        try writer.writeEscapedInline(item.term);
+        try writer.writeAll("\ndetail: ");
+        try writer.writeEscapedInline(item.detail);
+    }
+    try writer.writeAll("\n:::");
+    return writer.written();
+}
+
+fn writeTimelineMarkdown(timeline: Timeline, out: []u8) MarkdownError![]u8 {
+    if (timeline.events.len == 0) return error.InvalidMarkdown;
+    var writer = MarkdownWriter.init(out);
+    try writer.writeAll(":::timeline");
+    for (timeline.events) |event| {
+        if (event.time.len == 0 or event.title.len == 0 or event.detail.len == 0) return error.InvalidMarkdown;
+        try writer.writeAll("\nevent: ");
+        try writer.writeInt(event.id);
+        try writer.writeAll("\ntime: ");
+        try writer.writeEscapedInline(event.time);
+        try writer.writeAll("\ntitle: ");
+        try writer.writeEscapedInline(event.title);
+        try writer.writeAll("\ndetail: ");
+        try writer.writeEscapedInline(event.detail);
+    }
+    try writer.writeAll("\n:::");
+    return writer.written();
+}
+
+fn writeProgressSummaryMarkdown(summary: ProgressSummary, out: []u8) MarkdownError![]u8 {
+    if (summary.label.len == 0 or summary.total == 0 or summary.completed > summary.total) return error.InvalidMarkdown;
+    var writer = MarkdownWriter.init(out);
+    try writer.writeAll(":::progress\nid: ");
+    try writer.writeInt(summary.id);
+    try writer.writeAll("\nlabel: ");
+    try writer.writeEscapedInline(summary.label);
+    try writer.writeAll("\ncompleted: ");
+    try writer.writeInt(summary.completed);
+    try writer.writeAll("\ntotal: ");
+    try writer.writeInt(summary.total);
+    try writer.writeAll("\n:::");
+    return writer.written();
+}
+
+fn writeCodeBlockMarkdown(block: CodeBlock, out: []u8) MarkdownError![]u8 {
+    if (!validMarkdownFenceLanguage(block.language)) return error.InvalidMarkdown;
+    var writer = MarkdownWriter.init(out);
+    try writer.writeAll("```");
+    try writer.writeAll(block.language);
+    try writer.writeByte('\n');
+    for (block.lines, 0..) |line, index| {
+        if (std.mem.indexOf(u8, line, "```") != null) return error.InvalidMarkdown;
+        if (index != 0) try writer.writeByte('\n');
+        try writer.writeAll(line);
+    }
+    try writer.writeAll("\n```");
+    return writer.written();
+}
+
+fn readHeadingMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!Heading {
+    if (std.mem.indexOfScalar(u8, markdown, '\n') != null) return error.InvalidMarkdown;
+    const level: u8 = if (std.mem.startsWith(u8, markdown, "### "))
+        3
+    else if (std.mem.startsWith(u8, markdown, "## "))
+        2
+    else if (std.mem.startsWith(u8, markdown, "# "))
+        1
+    else if (std.mem.startsWith(u8, markdown, "#"))
+        return error.InvalidMarkdown
+    else
+        return error.UnsupportedMarkdown;
+    const value_start: usize = @as(usize, level) + 1;
+    var text = MarkdownTextArena.init(text_out);
+    const value = try text.unescapeInline(markdown[value_start..]);
+    if (value.len == 0) return error.InvalidMarkdown;
+    return .{ .level = level, .value = value };
+}
+
+fn readListMarkdown(markdown: []const u8, out_items: [][]const u8, text_out: []u8) MarkdownError!List {
+    if (markdown.len == 0) return error.InvalidMarkdown;
+    const ordered = if (std.mem.startsWith(u8, markdown, "1. "))
+        true
+    else if (std.mem.startsWith(u8, markdown, "- "))
+        false
+    else if (std.mem.startsWith(u8, markdown, "1.") or std.mem.startsWith(u8, markdown, "-"))
+        return error.InvalidMarkdown
+    else
+        return error.UnsupportedMarkdown;
+
+    var text = MarkdownTextArena.init(text_out);
+    var item_count: usize = 0;
+    var cursor = LineCursor.init(markdown);
+    while (cursor.next()) |line| {
+        if (item_count == out_items.len) return error.MarkdownBudgetExceeded;
+        const value = if (ordered) blk: {
+            var prefix_buffer: [16]u8 = undefined;
+            const prefix = std.fmt.bufPrint(&prefix_buffer, "{d}. ", .{item_count + 1}) catch unreachable;
+            if (!std.mem.startsWith(u8, line, prefix)) return error.InvalidMarkdown;
+            break :blk line[prefix.len..];
+        } else blk: {
+            if (!std.mem.startsWith(u8, line, "- ")) return error.InvalidMarkdown;
+            break :blk line["- ".len..];
+        };
+        out_items[item_count] = try text.unescapeInline(value);
+        if (out_items[item_count].len == 0) return error.InvalidMarkdown;
+        item_count += 1;
+    }
+    if (item_count == 0) return error.InvalidMarkdown;
+    return .{ .ordered = ordered, .items = out_items[0..item_count] };
+}
+
+fn readCalloutMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!Callout {
+    if (!std.mem.startsWith(u8, markdown, "> ")) {
+        if (std.mem.startsWith(u8, markdown, ">")) return error.InvalidMarkdown;
+        return error.UnsupportedMarkdown;
+    }
+    if (std.mem.indexOfScalar(u8, markdown, '\n') != null) return error.InvalidMarkdown;
+    var text = MarkdownTextArena.init(text_out);
+    const value = try text.unescapeInline(markdown["> ".len..]);
+    if (value.len == 0) return error.InvalidMarkdown;
+    return .{ .value = value };
+}
+
+fn readAsideMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!Aside {
+    const prefix = ":::aside\ntitle: ";
+    const directive_body = try readMarkdownDirectiveBody(markdown, ":::aside", prefix);
+    var cursor = MarkdownCursor.init(directive_body);
+    var text = MarkdownTextArena.init(text_out);
+    const title = try text.unescapeInline(try cursor.fieldBetween("", "\nbody: "));
+    const body = try text.unescapeInline(try cursor.tailField("\nbody: "));
+    if (title.len == 0 or body.len == 0) return error.InvalidMarkdown;
+    return .{ .title = title, .body = body };
+}
+
+fn readDetailsMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!Details {
+    const prefix = ":::details\nid: ";
+    const body = try readMarkdownDirectiveBody(markdown, ":::details", prefix);
+    var cursor = MarkdownCursor.init(body);
+    const id = try parseMarkdownU32(try cursor.fieldBetween("", "\nopen: "));
+    const open = try parseMarkdownBool(try cursor.fieldBetween("\nopen: ", "\nsummary: "));
+    var text = MarkdownTextArena.init(text_out);
+    const summary = try text.unescapeInline(try cursor.fieldBetween("\nsummary: ", "\nbody: "));
+    const content = try text.unescapeInline(try cursor.tailField("\nbody: "));
+    if (summary.len == 0 or content.len == 0) return error.InvalidMarkdown;
+    return .{ .id = id, .summary = summary, .body = content, .open = open };
+}
+
+fn readFigureMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!Figure {
+    const prefix = ":::figure\nsrc: ";
+    const body = try readMarkdownDirectiveBody(markdown, ":::figure", prefix);
+    var cursor = MarkdownCursor.init(body);
+    var text = MarkdownTextArena.init(text_out);
+    const src = try text.unescapeInline(try cursor.fieldBetween("", "\nalt: "));
+    const alt = try text.unescapeInline(try cursor.fieldBetween("\nalt: ", "\ncaption: "));
+    const caption = try text.unescapeInline(try cursor.tailField("\ncaption: "));
+    if (src.len == 0 or alt.len == 0 or caption.len == 0) return error.InvalidMarkdown;
+    return .{ .src = src, .alt = alt, .caption = caption };
+}
+
+fn readChoiceGroupMarkdown(markdown: []const u8, out_options: []ChoiceOption, text_out: []u8) MarkdownError!ChoiceGroup {
+    const prefix = ":::choice\nid: ";
+    const body = try readMarkdownDirectiveBody(markdown, ":::choice", prefix);
+    var cursor = MarkdownCursor.init(body);
+    const id = try parseMarkdownU32(try cursor.fieldBetween("", "\nlegend: "));
+    var text = MarkdownTextArena.init(text_out);
+    const legend = try text.unescapeInline(try cursor.fieldBetween("\nlegend: ", "\noption: "));
+    if (legend.len == 0) return error.InvalidMarkdown;
+    var option_count: usize = 0;
+    try cursor.skipNewline();
+    while (!cursor.done()) {
+        if (option_count == out_options.len) return error.MarkdownBudgetExceeded;
+        const option_id = try parseMarkdownU32(try cursor.lineAfter("option: "));
+        const selected = try parseMarkdownBool(try cursor.fieldBetween("\nselected: ", "\nlabel: "));
+        const label = try text.unescapeInline(try cursor.finalField("\nlabel: ", "\noption: "));
+        if (label.len == 0) return error.InvalidMarkdown;
+        out_options[option_count] = .{ .id = option_id, .label = label, .selected = selected };
+        option_count += 1;
+        try cursor.skipNewline();
+    }
+    if (option_count == 0) return error.InvalidMarkdown;
+    return .{ .id = id, .legend = legend, .options = out_options[0..option_count] };
+}
+
+fn readBreadcrumbMarkdown(markdown: []const u8, out_items: []BreadcrumbItem, text_out: []u8) MarkdownError!Breadcrumb {
+    const prefix = ":::breadcrumb\n";
+    const body = try readMarkdownDirectiveBody(markdown, ":::breadcrumb", prefix);
+    var text = MarkdownTextArena.init(text_out);
+    var item_count: usize = 0;
+    var cursor = MarkdownCursor.init(body);
+    while (!cursor.done()) {
+        if (item_count == out_items.len) return error.MarkdownBudgetExceeded;
+        const id = try parseMarkdownU32(try cursor.lineAfter("item: "));
+        const current = try parseMarkdownBool(try cursor.fieldBetween("\ncurrent: ", "\nhref: "));
+        const href = try text.unescapeInline(try cursor.fieldBetween("\nhref: ", "\nlabel: "));
+        const label = try text.unescapeInline(try cursor.finalField("\nlabel: ", "\nitem: "));
+        if (label.len == 0) return error.InvalidMarkdown;
+        out_items[item_count] = .{ .id = id, .label = label, .href = href, .current = current };
+        item_count += 1;
+        try cursor.skipNewline();
+    }
+    if (item_count == 0) return error.InvalidMarkdown;
+    return .{ .items = out_items[0..item_count] };
+}
+
+fn readNavMarkdown(markdown: []const u8, out_items: []NavItem, text_out: []u8) MarkdownError!Nav {
+    const prefix = ":::nav\nlabel: ";
+    const body = try readMarkdownDirectiveBody(markdown, ":::nav", prefix);
+    const label_end_relative = std.mem.indexOf(u8, body, "\nitem: ") orelse return error.InvalidMarkdown;
+    var text = MarkdownTextArena.init(text_out);
+    const nav_label = try text.unescapeInline(body[0..label_end_relative]);
+    var item_count: usize = 0;
+    var cursor = MarkdownCursor.init(body[label_end_relative + 1 ..]);
+    while (!cursor.done()) {
+        if (item_count == out_items.len) return error.MarkdownBudgetExceeded;
+        const id = try parseMarkdownU32(try cursor.lineAfter("item: "));
+        const active = try parseMarkdownBool(try cursor.fieldBetween("\nactive: ", "\nhref: "));
+        const href = try text.unescapeInline(try cursor.fieldBetween("\nhref: ", "\nlabel: "));
+        const item_label = try text.unescapeInline(try cursor.finalField("\nlabel: ", "\nitem: "));
+        if (item_label.len == 0) return error.InvalidMarkdown;
+        out_items[item_count] = .{ .id = id, .label = item_label, .href = href, .active = active };
+        item_count += 1;
+        try cursor.skipNewline();
+    }
+    if (item_count == 0) return error.InvalidMarkdown;
+    return .{ .label = nav_label, .items = out_items[0..item_count] };
+}
+
+fn readTableMarkdown(markdown: []const u8, out_rows: []TableRow, out_cells: []TableCell, text_out: []u8) MarkdownError!Table {
+    const prefix = ":::table\nid: ";
+    const body = try readMarkdownDirectiveBody(markdown, ":::table", prefix);
+    const id_end_relative = std.mem.indexOfScalar(u8, body, '\n') orelse return error.InvalidMarkdown;
+    const id = try parseMarkdownU32(body[0..id_end_relative]);
+    var text = MarkdownTextArena.init(text_out);
+    var cell_count: usize = 0;
+    var row_count: usize = 0;
+    var cursor = id_end_relative + 1;
+    while (cursor < body.len and std.mem.startsWith(u8, body[cursor..], "header: ")) {
+        if (cell_count == out_cells.len) return error.MarkdownBudgetExceeded;
+        const line_end_relative = std.mem.indexOfScalar(u8, body[cursor..], '\n') orelse body[cursor..].len;
+        out_cells[cell_count] = try readTableCellMarkdownLine(body[cursor .. cursor + line_end_relative], "header: ", &text);
+        if (out_cells[cell_count].value.len == 0) return error.InvalidMarkdown;
+        cell_count += 1;
+        cursor += line_end_relative;
+        if (cursor < body.len) cursor += 1;
+    }
+    const header_count = cell_count;
+    if (header_count == 0) return error.InvalidMarkdown;
+    while (cursor < body.len) {
+        if (row_count == out_rows.len) return error.MarkdownBudgetExceeded;
+        if (!std.mem.startsWith(u8, body[cursor..], "row: ")) return error.InvalidMarkdown;
+        const row_id_start = cursor + "row: ".len;
+        const row_id_end_relative = std.mem.indexOfScalar(u8, body[row_id_start..], '\n') orelse return error.InvalidMarkdown;
+        const row_id = try parseMarkdownU32(body[row_id_start .. row_id_start + row_id_end_relative]);
+        cursor = row_id_start + row_id_end_relative + 1;
+        const row_cells_start = cell_count;
+        var row_cell_index: usize = 0;
+        while (row_cell_index < header_count) : (row_cell_index += 1) {
+            if (cell_count == out_cells.len) return error.MarkdownBudgetExceeded;
+            if (!std.mem.startsWith(u8, body[cursor..], "cell: ")) return error.InvalidMarkdown;
+            const line_end_relative = std.mem.indexOfScalar(u8, body[cursor..], '\n') orelse body[cursor..].len;
+            out_cells[cell_count] = try readTableCellMarkdownLine(body[cursor .. cursor + line_end_relative], "cell: ", &text);
+            cell_count += 1;
+            cursor += line_end_relative;
+            if (cursor < body.len) cursor += 1;
+        }
+        out_rows[row_count] = .{ .id = row_id, .cells = out_cells[row_cells_start..cell_count] };
+        row_count += 1;
+    }
+    if (row_count == 0) return error.InvalidMarkdown;
+    return .{ .id = id, .headers = out_cells[0..header_count], .rows = out_rows[0..row_count] };
+}
+
+fn readTableCellMarkdownLine(line: []const u8, prefix: []const u8, text: *MarkdownTextArena) MarkdownError!TableCell {
+    if (!std.mem.startsWith(u8, line, prefix)) return error.InvalidMarkdown;
+    const after_prefix = line[prefix.len..];
+    const align_end = std.mem.indexOfScalar(u8, after_prefix, ' ') orelse return error.InvalidMarkdown;
+    const alignment = parseAlignName(after_prefix[0..align_end]) orelse return error.InvalidMarkdown;
+    const value = try text.unescapeInline(after_prefix[align_end + 1 ..]);
+    return .{ .value = value, .alignment = alignment };
+}
+
+fn readCardMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!Card {
+    var text = MarkdownTextArena.init(text_out);
+    return readCardMarkdownWithArena(markdown, &text);
+}
+
+fn readCardMarkdownWithArena(markdown: []const u8, text: *MarkdownTextArena) MarkdownError!Card {
+    const prefix = ":::card\ntitle: ";
+    const body = try readMarkdownDirectiveBody(markdown, ":::card", prefix);
+    const title_end_relative = std.mem.indexOf(u8, body, "\ndetail: ") orelse return error.InvalidMarkdown;
+    const detail_start = title_end_relative + "\ndetail: ".len;
+    const title = try text.unescapeInline(body[0..title_end_relative]);
+    const detail = try text.unescapeInline(body[detail_start..]);
+    if (title.len == 0 or detail.len == 0) return error.InvalidMarkdown;
+    return .{ .title = title, .detail = detail };
+}
+
+fn readResourceListMarkdown(markdown: []const u8, out_items: []ResourceItem, text_out: []u8) MarkdownError!ResourceList {
+    const prefix = ":::resources\n";
+    const body = try readMarkdownDirectiveBody(markdown, ":::resources", prefix);
+    var text = MarkdownTextArena.init(text_out);
+    var item_count: usize = 0;
+    var cursor = MarkdownCursor.init(body);
+    while (!cursor.done()) {
+        if (item_count == out_items.len) return error.MarkdownBudgetExceeded;
+        const id = try parseMarkdownU32(try cursor.lineAfter("item: "));
+        const label = try text.unescapeInline(try cursor.fieldBetween("\nlabel: ", "\nhref: "));
+        const href = try text.unescapeInline(try cursor.fieldBetween("\nhref: ", "\ndetail: "));
+        const detail = try text.unescapeInline(try cursor.finalField("\ndetail: ", "\nitem: "));
+        if (label.len == 0 or href.len == 0 or detail.len == 0) return error.InvalidMarkdown;
+        out_items[item_count] = .{ .id = id, .label = label, .href = href, .detail = detail };
+        item_count += 1;
+        try cursor.skipNewline();
+    }
+    if (item_count == 0) return error.InvalidMarkdown;
+    return .{ .items = out_items[0..item_count] };
+}
+
+fn readStepListMarkdown(markdown: []const u8, out_steps: []StepItem, text_out: []u8) MarkdownError!StepList {
+    const prefix = ":::steps\n";
+    const body = try readMarkdownDirectiveBody(markdown, ":::steps", prefix);
+    var text = MarkdownTextArena.init(text_out);
+    var step_count: usize = 0;
+    var cursor = MarkdownCursor.init(body);
+    while (!cursor.done()) {
+        if (step_count == out_steps.len) return error.MarkdownBudgetExceeded;
+        const id = try parseMarkdownU32(try cursor.lineAfter("step: "));
+        const state = parseStepStateName(try cursor.fieldBetween("\nstate: ", "\ntitle: ")) orelse return error.InvalidMarkdown;
+        const title = try text.unescapeInline(try cursor.fieldBetween("\ntitle: ", "\ndetail: "));
+        const detail = try text.unescapeInline(try cursor.finalField("\ndetail: ", "\nstep: "));
+        if (title.len == 0 or detail.len == 0) return error.InvalidMarkdown;
+        out_steps[step_count] = .{ .id = id, .title = title, .detail = detail, .state = state };
+        step_count += 1;
+        try cursor.skipNewline();
+    }
+    if (step_count == 0) return error.InvalidMarkdown;
+    return .{ .steps = out_steps[0..step_count] };
+}
+
+fn readDefinitionListMarkdown(markdown: []const u8, out_items: []DefinitionItem, text_out: []u8) MarkdownError!DefinitionList {
+    const prefix = ":::definitions\n";
+    const body = try readMarkdownDirectiveBody(markdown, ":::definitions", prefix);
+    var text = MarkdownTextArena.init(text_out);
+    var item_count: usize = 0;
+    var cursor = MarkdownCursor.init(body);
+    while (!cursor.done()) {
+        if (item_count == out_items.len) return error.MarkdownBudgetExceeded;
+        const id = try parseMarkdownU32(try cursor.lineAfter("item: "));
+        const term = try text.unescapeInline(try cursor.fieldBetween("\nterm: ", "\ndetail: "));
+        const detail = try text.unescapeInline(try cursor.finalField("\ndetail: ", "\nitem: "));
+        if (term.len == 0 or detail.len == 0) return error.InvalidMarkdown;
+        out_items[item_count] = .{ .id = id, .term = term, .detail = detail };
+        item_count += 1;
+        try cursor.skipNewline();
+    }
+    if (item_count == 0) return error.InvalidMarkdown;
+    return .{ .items = out_items[0..item_count] };
+}
+
+fn readTimelineMarkdown(markdown: []const u8, out_events: []TimelineEvent, text_out: []u8) MarkdownError!Timeline {
+    const prefix = ":::timeline\n";
+    const body = try readMarkdownDirectiveBody(markdown, ":::timeline", prefix);
+    var text = MarkdownTextArena.init(text_out);
+    var event_count: usize = 0;
+    var cursor = MarkdownCursor.init(body);
+    while (!cursor.done()) {
+        if (event_count == out_events.len) return error.MarkdownBudgetExceeded;
+        const id = try parseMarkdownU32(try cursor.lineAfter("event: "));
+        const time = try text.unescapeInline(try cursor.fieldBetween("\ntime: ", "\ntitle: "));
+        const title = try text.unescapeInline(try cursor.fieldBetween("\ntitle: ", "\ndetail: "));
+        const detail = try text.unescapeInline(try cursor.finalField("\ndetail: ", "\nevent: "));
+        if (time.len == 0 or title.len == 0 or detail.len == 0) return error.InvalidMarkdown;
+        out_events[event_count] = .{ .id = id, .time = time, .title = title, .detail = detail };
+        event_count += 1;
+        try cursor.skipNewline();
+    }
+    if (event_count == 0) return error.InvalidMarkdown;
+    return .{ .events = out_events[0..event_count] };
+}
+
+fn readProgressSummaryMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!ProgressSummary {
+    const prefix = ":::progress\nid: ";
+    const body = try readMarkdownDirectiveBody(markdown, ":::progress", prefix);
+    var cursor = MarkdownCursor.init(body);
+    const id = try parseMarkdownU32(try cursor.fieldBetween("", "\nlabel: "));
+    var text = MarkdownTextArena.init(text_out);
+    const label = try text.unescapeInline(try cursor.fieldBetween("\nlabel: ", "\ncompleted: "));
+    const completed = try parseMarkdownU32(try cursor.fieldBetween("\ncompleted: ", "\ntotal: "));
+    const total = try parseMarkdownU32(try cursor.tailField("\ntotal: "));
+    if (label.len == 0 or total == 0 or completed > total) return error.InvalidMarkdown;
+    return .{ .id = id, .label = label, .completed = completed, .total = total };
+}
+
+fn readCodeBlockMarkdown(markdown: []const u8, out_lines: [][]const u8) MarkdownError!CodeBlock {
+    if (!std.mem.startsWith(u8, markdown, "```")) return error.UnsupportedMarkdown;
+    const language_start = "```".len;
+    const language_end_relative = std.mem.indexOfScalar(u8, markdown[language_start..], '\n') orelse return error.InvalidMarkdown;
+    const language = markdown[language_start .. language_start + language_end_relative];
+    if (!validMarkdownFenceLanguage(language)) return error.InvalidMarkdown;
+    if (!std.mem.endsWith(u8, markdown, "\n```")) return error.InvalidMarkdown;
+    const body_start = language_start + language_end_relative + 1;
+    const body_end = markdown.len - "\n```".len;
+    const lines = try readCodeBlockMarkdownLines(markdown[body_start..body_end], out_lines);
+    return .{ .language = language, .lines = lines };
+}
+
+fn readCodeBlockMarkdownLines(body: []const u8, out_lines: [][]const u8) MarkdownError![]const []const u8 {
+    if (body.len == 0) return out_lines[0..0];
+    var line_count: usize = 0;
+    var cursor = LineCursor.init(body);
+    while (cursor.next()) |line| {
+        if (line_count == out_lines.len) return error.MarkdownBudgetExceeded;
+        if (std.mem.indexOf(u8, line, "```") != null) return error.InvalidMarkdown;
+        out_lines[line_count] = line;
+        line_count += 1;
+    }
+    return out_lines[0..line_count];
+}
+
+fn readDirectiveBody(markdown: []const u8, prefix: []const u8) MarkdownError![]const u8 {
+    if (!std.mem.endsWith(u8, markdown, "\n:::")) return error.InvalidMarkdown;
+    const body_end = markdown.len - "\n:::".len;
+    if (body_end < prefix.len) return error.InvalidMarkdown;
+    return markdown[prefix.len..body_end];
+}
+
+fn readMarkdownDirectiveBody(markdown: []const u8, directive: []const u8, prefix: []const u8) MarkdownError![]const u8 {
+    if (!std.mem.startsWith(u8, markdown, prefix)) {
+        if (std.mem.startsWith(u8, markdown, directive)) return error.InvalidMarkdown;
+        return error.UnsupportedMarkdown;
+    }
+    return readDirectiveBody(markdown, prefix);
+}
+
+const MarkdownCursor = struct {
+    body: []const u8,
+    cursor: usize = 0,
+
+    fn init(body: []const u8) MarkdownCursor {
+        return .{ .body = body };
+    }
+
+    fn done(self: MarkdownCursor) bool {
+        return self.cursor >= self.body.len;
+    }
+
+    fn requirePrefix(self: MarkdownCursor, prefix: []const u8) MarkdownError!usize {
+        if (!std.mem.startsWith(u8, self.body[self.cursor..], prefix)) return error.InvalidMarkdown;
+        return self.cursor + prefix.len;
+    }
+
+    fn lineAfter(self: *MarkdownCursor, prefix: []const u8) MarkdownError![]const u8 {
+        const value_start = try self.requirePrefix(prefix);
+        const value_end_relative = std.mem.indexOfScalar(u8, self.body[value_start..], '\n') orelse return error.InvalidMarkdown;
+        self.cursor = value_start + value_end_relative;
+        return self.body[value_start..self.cursor];
+    }
+
+    fn fieldBetween(self: *MarkdownCursor, prefix: []const u8, next_prefix: []const u8) MarkdownError![]const u8 {
+        const value_start = try self.requirePrefix(prefix);
+        const value_end_relative = std.mem.indexOf(u8, self.body[value_start..], next_prefix) orelse return error.InvalidMarkdown;
+        self.cursor = value_start + value_end_relative;
+        return self.body[value_start..self.cursor];
+    }
+
+    fn finalField(self: *MarkdownCursor, prefix: []const u8, next_record_prefix: []const u8) MarkdownError![]const u8 {
+        const value_start = try self.requirePrefix(prefix);
+        const value_end_relative = std.mem.indexOf(u8, self.body[value_start..], next_record_prefix) orelse self.body[value_start..].len;
+        self.cursor = value_start + value_end_relative;
+        return self.body[value_start..self.cursor];
+    }
+
+    fn tailField(self: *MarkdownCursor, prefix: []const u8) MarkdownError![]const u8 {
+        const value_start = try self.requirePrefix(prefix);
+        self.cursor = self.body.len;
+        return self.body[value_start..];
+    }
+
+    fn skipNewline(self: *MarkdownCursor) MarkdownError!void {
+        if (self.cursor == self.body.len) return;
+        if (self.body[self.cursor] != '\n') return error.InvalidMarkdown;
+        self.cursor += 1;
+    }
+};
+
+const LineCursor = struct {
+    body: []const u8,
+    cursor: usize = 0,
+
+    fn init(body: []const u8) LineCursor {
+        return .{ .body = body };
+    }
+
+    fn done(self: LineCursor) bool {
+        return self.cursor >= self.body.len;
+    }
+
+    fn next(self: *LineCursor) ?[]const u8 {
+        if (self.cursor > self.body.len) return null;
+        if (self.body.len == 0) return null;
+        const end = std.mem.indexOfScalarPos(u8, self.body, self.cursor, '\n') orelse self.body.len;
+        const line = self.body[self.cursor..end];
+        self.cursor = if (end == self.body.len) self.body.len + 1 else end + 1;
+        return line;
+    }
+};
+
+const HtmlCursor = struct {
+    body: []const u8,
+    cursor: usize = 0,
+
+    fn init(body: []const u8) HtmlCursor {
+        return .{ .body = body };
+    }
+
+    fn done(self: HtmlCursor) bool {
+        return self.cursor >= self.body.len;
+    }
+
+    fn requirePrefix(self: HtmlCursor, prefix: []const u8) HtmlError!usize {
+        if (!std.mem.startsWith(u8, self.body[self.cursor..], prefix)) return error.InvalidHtml;
+        return self.cursor + prefix.len;
+    }
+
+    fn fieldBetween(self: *HtmlCursor, prefix: []const u8, next_prefix: []const u8) HtmlError![]const u8 {
+        const value_start = try self.requirePrefix(prefix);
+        const value_end_relative = std.mem.indexOf(u8, self.body[value_start..], next_prefix) orelse return error.InvalidHtml;
+        self.cursor = value_start + value_end_relative;
+        return self.body[value_start..self.cursor];
+    }
+
+    fn consume(self: *HtmlCursor, value: []const u8) HtmlError!void {
+        self.cursor = try self.requirePrefix(value);
+    }
+};
+
+fn readComponentMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!Component {
+    var text = MarkdownTextArena.init(text_out);
+    return readComponentMarkdownWithArena(markdown, &text);
+}
+
+fn readComponentMarkdownWithArena(markdown: []const u8, text: *MarkdownTextArena) MarkdownError!Component {
+    if (std.mem.eql(u8, markdown, "---")) return .{ .separator = .{} };
+    if (std.mem.startsWith(u8, markdown, ":::card")) return .{ .card = try readCardMarkdownWithArena(markdown, text) };
+    if (std.mem.startsWith(u8, markdown, ":::badge")) {
+        return .{ .badge = .{ .label = try readSingleFieldDirectiveMarkdown(markdown, ":::badge\nlabel: ", text) } };
+    }
+    if (std.mem.startsWith(u8, markdown, ":::avatar")) {
+        return .{ .avatar = .{ .label = try readSingleFieldDirectiveMarkdown(markdown, ":::avatar\nlabel: ", text) } };
+    }
+    if (std.mem.startsWith(u8, markdown, ":::kbd")) {
+        return .{ .kbd = .{ .label = try readSingleFieldDirectiveMarkdown(markdown, ":::kbd\nlabel: ", text) } };
+    }
+    if (std.mem.startsWith(u8, markdown, ":::button")) {
+        const body = try readMarkdownDirectiveBody(markdown, ":::button", ":::button\nid: ");
+        const decoded = try readIdLabelDirectiveBody(body, "\nlabel: ", text);
+        return .{ .button = .{ .id = decoded.id, .label = decoded.label } };
+    }
+    if (std.mem.startsWith(u8, markdown, ":::input")) {
+        const body = try readMarkdownDirectiveBody(markdown, ":::input", ":::input\nid: ");
+        const decoded = try readIdLabelDirectiveBody(body, "\nplaceholder: ", text);
+        return .{ .input = .{ .id = decoded.id, .placeholder = decoded.label } };
+    }
+    if (std.mem.startsWith(u8, markdown, ":::textarea")) {
+        const body = try readMarkdownDirectiveBody(markdown, ":::textarea", ":::textarea\nid: ");
+        const decoded = try readIdLabelDirectiveBody(body, "\nplaceholder: ", text);
+        return .{ .textarea = .{ .id = decoded.id, .placeholder = decoded.label } };
+    }
+    if (std.mem.startsWith(u8, markdown, ":::select")) {
+        const body = try readMarkdownDirectiveBody(markdown, ":::select", ":::select\nid: ");
+        const decoded = try readIdLabelDirectiveBody(body, "\nlabel: ", text);
+        return .{ .select = .{ .id = decoded.id, .label = decoded.label } };
+    }
+    if (std.mem.startsWith(u8, markdown, ":::checkbox")) {
+        const decoded = try readCheckedLabelDirectiveMarkdown(markdown, ":::checkbox\nid: ", text);
+        return .{ .checkbox = .{ .id = decoded.id, .label = decoded.label, .checked = decoded.checked } };
+    }
+    if (std.mem.startsWith(u8, markdown, ":::switch")) {
+        const decoded = try readCheckedLabelDirectiveMarkdown(markdown, ":::switch\nid: ", text);
+        return .{ .switch_control = .{ .id = decoded.id, .label = decoded.label, .checked = decoded.checked } };
+    }
+    if (std.mem.startsWith(u8, markdown, ":::progress-control")) {
+        const body = try readMarkdownDirectiveBody(markdown, ":::progress-control", ":::progress-control\nvalue: ");
+        return .{ .progress = .{ .value = try parseMarkdownPercent(body) } };
+    }
+    if (std.mem.startsWith(u8, markdown, ":::slider")) {
+        const prefix = ":::slider\nid: ";
+        const body = try readMarkdownDirectiveBody(markdown, ":::slider", prefix);
+        const id_end = std.mem.indexOf(u8, body, "\nlabel: ") orelse return error.InvalidMarkdown;
+        const id = try parseMarkdownU32(body[0..id_end]);
+        const label_start = id_end + "\nlabel: ".len;
+        const label_end_relative = std.mem.indexOf(u8, body[label_start..], "\nvalue: ") orelse return error.InvalidMarkdown;
+        const value_start = label_start + label_end_relative + "\nvalue: ".len;
+        const label = try text.unescapeInline(body[label_start .. label_start + label_end_relative]);
+        if (label.len == 0) return error.InvalidMarkdown;
+        return .{ .slider = .{ .id = id, .label = label, .value = try parseMarkdownPercent(body[value_start..]) } };
+    }
+    if (std.mem.startsWith(u8, markdown, ":::row-item")) {
+        const prefix = ":::row-item\nid: ";
+        const body = try readMarkdownDirectiveBody(markdown, ":::row-item", prefix);
+        const id_end = std.mem.indexOf(u8, body, "\ntitle: ") orelse return error.InvalidMarkdown;
+        const id = try parseMarkdownU32(body[0..id_end]);
+        const title_start = id_end + "\ntitle: ".len;
+        const title_end_relative = std.mem.indexOf(u8, body[title_start..], "\ndetail: ") orelse return error.InvalidMarkdown;
+        const detail_start = title_start + title_end_relative + "\ndetail: ".len;
+        const title = try text.unescapeInline(body[title_start .. title_start + title_end_relative]);
+        const detail = try text.unescapeInline(body[detail_start..]);
+        if (title.len == 0 or detail.len == 0) return error.InvalidMarkdown;
+        return .{ .row_item = .{ .id = id, .title = title, .detail = detail } };
+    }
+    if (std.mem.startsWith(u8, markdown, ":::")) return error.UnsupportedMarkdown;
+    if (markdown.len == 0 or std.mem.indexOfScalar(u8, markdown, '\n') != null) return error.InvalidMarkdown;
+    return .{ .text = .{ .value = try text.unescapeInline(markdown) } };
+}
+
+const MarkdownIdLabel = struct {
+    id: u32,
+    label: []const u8,
+};
+
+const MarkdownCheckedLabel = struct {
+    id: u32,
+    checked: bool,
+    label: []const u8,
+};
+
+fn readSingleFieldDirectiveMarkdown(markdown: []const u8, prefix: []const u8, text: *MarkdownTextArena) MarkdownError![]const u8 {
+    const directive_end = std.mem.indexOfScalar(u8, prefix, '\n') orelse return error.InvalidMarkdown;
+    const body = try readMarkdownDirectiveBody(markdown, prefix[0..directive_end], prefix);
+    const value = try text.unescapeInline(body);
+    if (value.len == 0) return error.InvalidMarkdown;
+    return value;
+}
+
+fn readIdLabelDirectiveBody(body: []const u8, label_prefix: []const u8, text: *MarkdownTextArena) MarkdownError!MarkdownIdLabel {
+    const id_end = std.mem.indexOf(u8, body, label_prefix) orelse return error.InvalidMarkdown;
+    const id = try parseMarkdownU32(body[0..id_end]);
+    const label = try text.unescapeInline(body[id_end + label_prefix.len ..]);
+    if (label.len == 0) return error.InvalidMarkdown;
+    return .{ .id = id, .label = label };
+}
+
+fn readCheckedLabelDirectiveMarkdown(markdown: []const u8, prefix: []const u8, text: *MarkdownTextArena) MarkdownError!MarkdownCheckedLabel {
+    const directive_end = std.mem.indexOfScalar(u8, prefix, '\n') orelse return error.InvalidMarkdown;
+    const body = try readMarkdownDirectiveBody(markdown, prefix[0..directive_end], prefix);
+    const id_end = std.mem.indexOf(u8, body, "\nchecked: ") orelse return error.InvalidMarkdown;
+    const id = try parseMarkdownU32(body[0..id_end]);
+    const checked_start = id_end + "\nchecked: ".len;
+    const checked_end_relative = std.mem.indexOf(u8, body[checked_start..], "\nlabel: ") orelse return error.InvalidMarkdown;
+    const label_start = checked_start + checked_end_relative + "\nlabel: ".len;
+    const checked = try parseMarkdownBool(body[checked_start .. checked_start + checked_end_relative]);
+    const label = try text.unescapeInline(body[label_start..]);
+    if (label.len == 0) return error.InvalidMarkdown;
+    return .{ .id = id, .checked = checked, .label = label };
+}
+
+fn readComponentHtml(html: []const u8, text_out: []u8) HtmlError!Component {
+    var text = HtmlTextArena.init(text_out);
+    return readComponentHtmlWithArena(html, &text);
+}
+
+fn readComponentHtmlWithArena(html: []const u8, text: *HtmlTextArena) HtmlError!Component {
+    if (takeWrapped(html, "<p data-er-component=\"text\">", "</p>")) |value| {
+        return .{ .text = .{ .value = try text.unescape(value) } };
+    }
+    if (takeWrapped(html, "<span data-er-component=\"badge\">", "</span>")) |value| {
+        return .{ .badge = .{ .label = try text.unescape(value) } };
+    }
+    if (std.mem.startsWith(u8, html, "<span data-er-component=\"avatar\" aria-label=\"")) {
+        const after_label = html["<span data-er-component=\"avatar\" aria-label=\"".len..];
+        const label_end = std.mem.indexOf(u8, after_label, "\">") orelse return error.InvalidHtml;
+        if (!std.mem.endsWith(u8, html, "</span>")) return error.InvalidHtml;
+        const visible_start = "<span data-er-component=\"avatar\" aria-label=\"".len + label_end + "\">".len;
+        const label = try text.unescape(after_label[0..label_end]);
+        const visible = try text.unescape(html[visible_start .. html.len - "</span>".len]);
+        if (!std.mem.eql(u8, label, visible)) return error.InvalidHtml;
+        return .{ .avatar = .{ .label = label } };
+    }
+    if (takeWrapped(html, "<kbd data-er-component=\"kbd\">", "</kbd>")) |value| {
+        return .{ .kbd = .{ .label = try text.unescape(value) } };
+    }
+    if (std.mem.eql(u8, html, "<hr data-er-component=\"separator\">")) {
+        return .{ .separator = .{} };
+    }
+    if (std.mem.startsWith(u8, html, "<button data-er-component=\"button\" data-er-id=\"")) {
+        const after_id_prefix = html["<button data-er-component=\"button\" data-er-id=\"".len..];
+        const id_end = std.mem.indexOf(u8, after_id_prefix, "\">") orelse return error.InvalidHtml;
+        const id = try parseHtmlU32(after_id_prefix[0..id_end]);
+        const label_start = "<button data-er-component=\"button\" data-er-id=\"".len + id_end + "\">".len;
+        if (!std.mem.endsWith(u8, html, "</button>")) return error.InvalidHtml;
+        const label = html[label_start .. html.len - "</button>".len];
+        return .{ .button = .{ .id = id, .label = try text.unescape(label) } };
+    }
+    if (std.mem.startsWith(u8, html, "<input data-er-component=\"input\" data-er-id=\"")) {
+        const after_id_prefix = html["<input data-er-component=\"input\" data-er-id=\"".len..];
+        const id_end = std.mem.indexOf(u8, after_id_prefix, "\" placeholder=\"") orelse return error.InvalidHtml;
+        const id = try parseHtmlU32(after_id_prefix[0..id_end]);
+        const placeholder_start = "<input data-er-component=\"input\" data-er-id=\"".len + id_end + "\" placeholder=\"".len;
+        if (!std.mem.endsWith(u8, html, "\">")) return error.InvalidHtml;
+        const placeholder = html[placeholder_start .. html.len - "\">".len];
+        return .{ .input = .{ .id = id, .placeholder = try text.unescape(placeholder) } };
+    }
+    if (std.mem.startsWith(u8, html, "<textarea data-er-component=\"textarea\" data-er-id=\"")) {
+        const after_id_prefix = html["<textarea data-er-component=\"textarea\" data-er-id=\"".len..];
+        const id_end = std.mem.indexOf(u8, after_id_prefix, "\" placeholder=\"") orelse return error.InvalidHtml;
+        const id = try parseHtmlU32(after_id_prefix[0..id_end]);
+        const placeholder_start = "<textarea data-er-component=\"textarea\" data-er-id=\"".len + id_end + "\" placeholder=\"".len;
+        if (!std.mem.endsWith(u8, html, "\"></textarea>")) return error.InvalidHtml;
+        const placeholder = html[placeholder_start .. html.len - "\"></textarea>".len];
+        return .{ .textarea = .{ .id = id, .placeholder = try text.unescape(placeholder) } };
+    }
+    if (std.mem.startsWith(u8, html, "<select data-er-component=\"select\" data-er-id=\"")) {
+        const after_id_prefix = html["<select data-er-component=\"select\" data-er-id=\"".len..];
+        const id_end = std.mem.indexOf(u8, after_id_prefix, "\"><option selected>") orelse return error.InvalidHtml;
+        const id = try parseHtmlU32(after_id_prefix[0..id_end]);
+        const label_start = "<select data-er-component=\"select\" data-er-id=\"".len + id_end + "\"><option selected>".len;
+        if (!std.mem.endsWith(u8, html, "</option></select>")) return error.InvalidHtml;
+        const label = try text.unescape(html[label_start .. html.len - "</option></select>".len]);
+        return .{ .select = .{ .id = id, .label = label } };
+    }
+    if (std.mem.startsWith(u8, html, "<label data-er-component=\"checkbox\" data-er-id=\"")) {
+        const after_id_prefix = html["<label data-er-component=\"checkbox\" data-er-id=\"".len..];
+        const id_end = std.mem.indexOf(u8, after_id_prefix, "\" data-er-checked=\"") orelse return error.InvalidHtml;
+        const id = try parseHtmlU32(after_id_prefix[0..id_end]);
+        const checked_start = "<label data-er-component=\"checkbox\" data-er-id=\"".len + id_end + "\" data-er-checked=\"".len;
+        const checked_end_relative = std.mem.indexOf(u8, html[checked_start..], "\">") orelse return error.InvalidHtml;
+        const checked = try parseHtmlBool(html[checked_start .. checked_start + checked_end_relative]);
+        const input_start = checked_start + checked_end_relative;
+        const input_text = if (checked) "\"><input type=\"checkbox\" checked>" else "\"><input type=\"checkbox\">";
+        if (!std.mem.startsWith(u8, html[input_start..], input_text)) return error.InvalidHtml;
+        if (!std.mem.endsWith(u8, html, "</label>")) return error.InvalidHtml;
+        const label_start = input_start + input_text.len;
+        const label = try text.unescape(html[label_start .. html.len - "</label>".len]);
+        return .{ .checkbox = .{ .id = id, .label = label, .checked = checked } };
+    }
+    if (std.mem.startsWith(u8, html, "<button data-er-component=\"switch\" data-er-id=\"")) {
+        const after_id_prefix = html["<button data-er-component=\"switch\" data-er-id=\"".len..];
+        const id_end = std.mem.indexOf(u8, after_id_prefix, "\" aria-pressed=\"") orelse return error.InvalidHtml;
+        const id = try parseHtmlU32(after_id_prefix[0..id_end]);
+        const pressed_start = "<button data-er-component=\"switch\" data-er-id=\"".len + id_end + "\" aria-pressed=\"".len;
+        const pressed_end_relative = std.mem.indexOf(u8, html[pressed_start..], "\">") orelse return error.InvalidHtml;
+        const checked = try parseHtmlBool(html[pressed_start .. pressed_start + pressed_end_relative]);
+        if (!std.mem.endsWith(u8, html, "</button>")) return error.InvalidHtml;
+        const label_start = pressed_start + pressed_end_relative + "\">".len;
+        const label = try text.unescape(html[label_start .. html.len - "</button>".len]);
+        return .{ .switch_control = .{ .id = id, .label = label, .checked = checked } };
+    }
+    if (std.mem.startsWith(u8, html, "<progress data-er-component=\"progress\" value=\"")) {
+        const value_start = "<progress data-er-component=\"progress\" value=\"".len;
+        const value_end_relative = std.mem.indexOf(u8, html[value_start..], "\" max=\"100\"></progress>") orelse return error.InvalidHtml;
+        const value = try parseHtmlPercent(html[value_start .. value_start + value_end_relative]);
+        return .{ .progress = .{ .value = value } };
+    }
+    if (std.mem.startsWith(u8, html, "<label data-er-component=\"slider\" data-er-id=\"")) {
+        const after_id_prefix = html["<label data-er-component=\"slider\" data-er-id=\"".len..];
+        const id_end = std.mem.indexOf(u8, after_id_prefix, "\"><span>") orelse return error.InvalidHtml;
+        const id = try parseHtmlU32(after_id_prefix[0..id_end]);
+        const label_start = "<label data-er-component=\"slider\" data-er-id=\"".len + id_end + "\"><span>".len;
+        const label_end_relative = std.mem.indexOf(u8, html[label_start..], "</span><input type=\"range\" min=\"0\" max=\"100\" value=\"") orelse return error.InvalidHtml;
+        const value_start = label_start + label_end_relative + "</span><input type=\"range\" min=\"0\" max=\"100\" value=\"".len;
+        const value_end_relative = std.mem.indexOf(u8, html[value_start..], "\"></label>") orelse return error.InvalidHtml;
+        const label = try text.unescape(html[label_start .. label_start + label_end_relative]);
+        const value = try parseHtmlPercent(html[value_start .. value_start + value_end_relative]);
+        return .{ .slider = .{ .id = id, .label = label, .value = value } };
+    }
+    if (std.mem.startsWith(u8, html, "<article data-er-component=\"card\"><h2>")) {
+        const title_start = "<article data-er-component=\"card\"><h2>".len;
+        const title_end_relative = std.mem.indexOf(u8, html[title_start..], "</h2><p>") orelse return error.InvalidHtml;
+        const detail_start = title_start + title_end_relative + "</h2><p>".len;
+        if (!std.mem.endsWith(u8, html, "</p></article>")) return error.InvalidHtml;
+        const title = try text.unescape(html[title_start .. title_start + title_end_relative]);
+        const detail = try text.unescape(html[detail_start .. html.len - "</p></article>".len]);
+        return .{ .card = .{ .title = title, .detail = detail } };
+    }
+    if (std.mem.startsWith(u8, html, "<div data-er-component=\"row-item\" data-er-id=\"")) {
+        const after_id_prefix = html["<div data-er-component=\"row-item\" data-er-id=\"".len..];
+        const id_end = std.mem.indexOf(u8, after_id_prefix, "\"><strong>") orelse return error.InvalidHtml;
+        const id = try parseHtmlU32(after_id_prefix[0..id_end]);
+        const title_start = "<div data-er-component=\"row-item\" data-er-id=\"".len + id_end + "\"><strong>".len;
+        const title_end_relative = std.mem.indexOf(u8, html[title_start..], "</strong><span>") orelse return error.InvalidHtml;
+        const detail_start = title_start + title_end_relative + "</strong><span>".len;
+        if (!std.mem.endsWith(u8, html, "</span></div>")) return error.InvalidHtml;
+        const title = try text.unescape(html[title_start .. title_start + title_end_relative]);
+        const detail = try text.unescape(html[detail_start .. html.len - "</span></div>".len]);
+        return .{ .row_item = .{ .id = id, .title = title, .detail = detail } };
+    }
+    return error.UnsupportedHtml;
+}
+
+fn readTableHtml(html: []const u8, out_rows: []TableRow, out_cells: []TableCell, text_out: []u8) HtmlError!Table {
+    const prefix = "<table data-er-component=\"table\" data-er-id=\"";
+    if (!std.mem.startsWith(u8, html, prefix)) return error.UnsupportedHtml;
+    const after_id = html[prefix.len..];
+    const id_end = std.mem.indexOf(u8, after_id, "\"><thead><tr>") orelse return error.InvalidHtml;
+    const id = try parseHtmlU32(after_id[0..id_end]);
+    const headers_start = prefix.len + id_end + "\"><thead><tr>".len;
+    const headers_end_relative = std.mem.indexOf(u8, html[headers_start..], "</tr></thead><tbody>") orelse return error.InvalidHtml;
+    const headers_html = html[headers_start .. headers_start + headers_end_relative];
+    const rows_start = headers_start + headers_end_relative + "</tr></thead><tbody>".len;
+    if (!std.mem.endsWith(u8, html, "</tbody></table>")) return error.InvalidHtml;
+    const rows_html = html[rows_start .. html.len - "</tbody></table>".len];
+
+    var text = HtmlTextArena.init(text_out);
+    var cell_count: usize = 0;
+    const headers = try readTableCellsHtml(headers_html, "th", out_cells, &cell_count, &text);
+    if (headers.len == 0) return error.InvalidHtml;
+    const rows = try readTableRowsHtml(rows_html, headers.len, out_rows, out_cells, &cell_count, &text);
+    return .{ .id = id, .headers = headers, .rows = rows };
+}
+
+fn readHeadingHtml(html: []const u8, text_out: []u8) HtmlError!Heading {
+    var text = HtmlTextArena.init(text_out);
+    inline for (.{ 1, 2, 3 }) |level| {
+        var prefix: [32]u8 = undefined;
+        const prefix_text = std.fmt.bufPrint(&prefix, "<h{d} data-er-component=\"heading\">", .{level}) catch unreachable;
+        var suffix: [6]u8 = undefined;
+        const suffix_text = std.fmt.bufPrint(&suffix, "</h{d}>", .{level}) catch unreachable;
+        if (takeWrapped(html, prefix_text, suffix_text)) |value| {
+            return .{ .level = level, .value = try text.unescape(value) };
+        }
+    }
+    if (std.mem.startsWith(u8, html, "<h")) return error.InvalidHtml;
+    return error.UnsupportedHtml;
+}
+
+fn readListHtml(html: []const u8, out_items: [][]const u8, text_out: []u8) HtmlError!List {
+    if (takeWrapped(html, "<ul data-er-component=\"list\">", "</ul>")) |body| {
+        return .{ .ordered = false, .items = try readListItemsHtml(body, out_items, text_out) };
+    }
+    if (takeWrapped(html, "<ol data-er-component=\"list\">", "</ol>")) |body| {
+        return .{ .ordered = true, .items = try readListItemsHtml(body, out_items, text_out) };
+    }
+    if (std.mem.startsWith(u8, html, "<ul") or std.mem.startsWith(u8, html, "<ol")) return error.InvalidHtml;
+    return error.UnsupportedHtml;
+}
+
+fn readListItemsHtml(html: []const u8, out_items: [][]const u8, text_out: []u8) HtmlError![]const []const u8 {
+    var text = HtmlTextArena.init(text_out);
+    var cursor: usize = 0;
+    var item_count: usize = 0;
+    while (cursor < html.len) {
+        if (item_count == out_items.len) return error.HtmlBudgetExceeded;
+        if (!std.mem.startsWith(u8, html[cursor..], "<li>")) return error.InvalidHtml;
+        const value_start = cursor + "<li>".len;
+        const value_end_relative = std.mem.indexOf(u8, html[value_start..], "</li>") orelse return error.InvalidHtml;
+        out_items[item_count] = try text.unescape(html[value_start .. value_start + value_end_relative]);
+        item_count += 1;
+        cursor = value_start + value_end_relative + "</li>".len;
+    }
+    if (item_count == 0) return error.InvalidHtml;
+    return out_items[0..item_count];
+}
+
+fn readCalloutHtml(html: []const u8, text_out: []u8) HtmlError!Callout {
+    var text = HtmlTextArena.init(text_out);
+    if (takeWrapped(html, "<blockquote data-er-component=\"callout\">", "</blockquote>")) |value| {
+        return .{ .value = try text.unescape(value) };
+    }
+    if (std.mem.startsWith(u8, html, "<blockquote")) return error.InvalidHtml;
+    return error.UnsupportedHtml;
+}
+
+fn readAsideHtml(html: []const u8, text_out: []u8) HtmlError!Aside {
+    const body = takeWrapped(html, "<aside data-er-component=\"aside\"><h2>", "</p></aside>") orelse {
+        if (std.mem.startsWith(u8, html, "<aside")) return error.InvalidHtml;
+        return error.UnsupportedHtml;
+    };
+    const title_end = std.mem.indexOf(u8, body, "</h2><p>") orelse return error.InvalidHtml;
+    const body_start = title_end + "</h2><p>".len;
+    var text = HtmlTextArena.init(text_out);
+    const title = try text.unescape(body[0..title_end]);
+    const content = try text.unescape(body[body_start..]);
+    if (title.len == 0 or content.len == 0) return error.InvalidHtml;
+    return .{ .title = title, .body = content };
+}
+
+fn readCodeBlockHtml(html: []const u8, out_lines: [][]const u8, text_out: []u8) HtmlError!CodeBlock {
+    const prefix = "<pre data-er-component=\"code-block\"><code data-er-lang=\"";
+    if (!std.mem.startsWith(u8, html, prefix)) {
+        if (std.mem.startsWith(u8, html, "<pre")) return error.InvalidHtml;
+        return error.UnsupportedHtml;
+    }
+    const after_lang = html[prefix.len..];
+    const lang_end = std.mem.indexOf(u8, after_lang, "\">") orelse return error.InvalidHtml;
+    if (!std.mem.endsWith(u8, html, "</code></pre>")) return error.InvalidHtml;
+    var text = HtmlTextArena.init(text_out);
+    const language = try text.unescape(after_lang[0..lang_end]);
+    const code_start = prefix.len + lang_end + "\">".len;
+    const body = html[code_start .. html.len - "</code></pre>".len];
+    const lines = try readCodeLinesHtml(body, out_lines, &text);
+    return .{ .language = language, .lines = lines };
+}
+
+fn readCodeLinesHtml(html: []const u8, out_lines: [][]const u8, text: *HtmlTextArena) HtmlError![]const []const u8 {
+    var line_count: usize = 0;
+    var cursor = LineCursor.init(html);
+    while (cursor.next()) |line| {
+        if (line_count == out_lines.len) return error.HtmlBudgetExceeded;
+        out_lines[line_count] = try text.unescape(line);
+        line_count += 1;
+    }
+    return out_lines[0..line_count];
+}
+
+fn readDetailsHtml(html: []const u8, text_out: []u8) HtmlError!Details {
+    const prefix = "<details data-er-component=\"details\" data-er-id=\"";
+    if (!std.mem.startsWith(u8, html, prefix)) {
+        if (std.mem.startsWith(u8, html, "<details")) return error.InvalidHtml;
+        return error.UnsupportedHtml;
+    }
+    const after_id = html[prefix.len..];
+    const id_end = std.mem.indexOf(u8, after_id, "\" data-er-open=\"") orelse return error.InvalidHtml;
+    const id = try parseHtmlU32(after_id[0..id_end]);
+    const open_start = prefix.len + id_end + "\" data-er-open=\"".len;
+    const after_open = html[open_start..];
+    const open_end = std.mem.indexOf(u8, after_open, "\"><summary>") orelse return error.InvalidHtml;
+    const open = try parseHtmlBool(after_open[0..open_end]);
+    const summary_start = open_start + open_end + "\"><summary>".len;
+    const summary_end_relative = std.mem.indexOf(u8, html[summary_start..], "</summary><p>") orelse return error.InvalidHtml;
+    const body_start = summary_start + summary_end_relative + "</summary><p>".len;
+    if (!std.mem.endsWith(u8, html, "</p></details>")) return error.InvalidHtml;
+
+    var text = HtmlTextArena.init(text_out);
+    return .{
+        .id = id,
+        .summary = try text.unescape(html[summary_start .. summary_start + summary_end_relative]),
+        .body = try text.unescape(html[body_start .. html.len - "</p></details>".len]),
+        .open = open,
+    };
+}
+
+fn readFigureHtml(html: []const u8, text_out: []u8) HtmlError!Figure {
+    const prefix = "<figure data-er-component=\"figure\"><img src=\"";
+    if (!std.mem.startsWith(u8, html, prefix)) {
+        if (std.mem.startsWith(u8, html, "<figure")) return error.InvalidHtml;
+        return error.UnsupportedHtml;
+    }
+    const after_src = html[prefix.len..];
+    const src_end = std.mem.indexOf(u8, after_src, "\" alt=\"") orelse return error.InvalidHtml;
+    const alt_start = prefix.len + src_end + "\" alt=\"".len;
+    const after_alt = html[alt_start..];
+    const alt_end = std.mem.indexOf(u8, after_alt, "\"><figcaption>") orelse return error.InvalidHtml;
+    const caption_start = alt_start + alt_end + "\"><figcaption>".len;
+    if (!std.mem.endsWith(u8, html, "</figcaption></figure>")) return error.InvalidHtml;
+
+    var text = HtmlTextArena.init(text_out);
+    const src = try text.unescape(after_src[0..src_end]);
+    const alt = try text.unescape(after_alt[0..alt_end]);
+    const caption = try text.unescape(html[caption_start .. html.len - "</figcaption></figure>".len]);
+    if (src.len == 0 or alt.len == 0 or caption.len == 0) return error.InvalidHtml;
+    return .{ .src = src, .alt = alt, .caption = caption };
+}
+
+fn readChoiceGroupHtml(html: []const u8, out_options: []ChoiceOption, text_out: []u8) HtmlError!ChoiceGroup {
+    const prefix = "<fieldset data-er-component=\"choice-group\" data-er-id=\"";
+    if (!std.mem.startsWith(u8, html, prefix)) {
+        if (std.mem.startsWith(u8, html, "<fieldset")) return error.InvalidHtml;
+        return error.UnsupportedHtml;
+    }
+    const after_id = html[prefix.len..];
+    const id_end = std.mem.indexOf(u8, after_id, "\"><legend>") orelse return error.InvalidHtml;
+    const id = try parseHtmlU32(after_id[0..id_end]);
+    const legend_start = prefix.len + id_end + "\"><legend>".len;
+    const legend_end_relative = std.mem.indexOf(u8, html[legend_start..], "</legend>") orelse return error.InvalidHtml;
+    if (!std.mem.endsWith(u8, html, "</fieldset>")) return error.InvalidHtml;
+
+    var text = HtmlTextArena.init(text_out);
+    const legend = try text.unescape(html[legend_start .. legend_start + legend_end_relative]);
+    if (legend.len == 0) return error.InvalidHtml;
+    const options_start = legend_start + legend_end_relative + "</legend>".len;
+    const options_html = html[options_start .. html.len - "</fieldset>".len];
+    const options = try readChoiceOptionsHtml(options_html, id, out_options, &text);
+    return .{ .id = id, .legend = legend, .options = options };
+}
+
+fn readChoiceOptionsHtml(html: []const u8, group_id: u32, out_options: []ChoiceOption, text: *HtmlTextArena) HtmlError![]const ChoiceOption {
+    var expected_name_buffer: [17]u8 = undefined;
+    const expected_name = std.fmt.bufPrint(&expected_name_buffer, "choice-{d}", .{group_id}) catch unreachable;
+    var cursor: usize = 0;
+    var option_count: usize = 0;
+    while (cursor < html.len) {
+        if (option_count == out_options.len) return error.HtmlBudgetExceeded;
+        if (!std.mem.startsWith(u8, html[cursor..], "<label data-er-id=\"")) return error.InvalidHtml;
+        const after_id_start = cursor + "<label data-er-id=\"".len;
+        const after_id = html[after_id_start..];
+        const id_end = std.mem.indexOf(u8, after_id, "\" data-er-selected=\"") orelse return error.InvalidHtml;
+        const id = try parseHtmlU32(after_id[0..id_end]);
+        const selected_start = after_id_start + id_end + "\" data-er-selected=\"".len;
+        const after_selected = html[selected_start..];
+        const selected_end = std.mem.indexOf(u8, after_selected, "\"><input type=\"radio\" name=\"") orelse return error.InvalidHtml;
+        const selected = try parseHtmlBool(after_selected[0..selected_end]);
+        const name_start = selected_start + selected_end + "\"><input type=\"radio\" name=\"".len;
+        const after_name = html[name_start..];
+        const name_end = std.mem.indexOf(u8, after_name, "\">") orelse return error.InvalidHtml;
+        if (!std.mem.eql(u8, after_name[0..name_end], expected_name)) return error.InvalidHtml;
+        const label_start = name_start + name_end + "\">".len;
+        const label_end_relative = std.mem.indexOf(u8, html[label_start..], "</label>") orelse return error.InvalidHtml;
+        const label = try text.unescape(html[label_start .. label_start + label_end_relative]);
+        if (label.len == 0) return error.InvalidHtml;
+        out_options[option_count] = .{ .id = id, .label = label, .selected = selected };
+        option_count += 1;
+        cursor = label_start + label_end_relative + "</label>".len;
+    }
+    if (option_count == 0) return error.InvalidHtml;
+    return out_options[0..option_count];
+}
+
+fn readStepListHtml(html: []const u8, out_steps: []StepItem, text_out: []u8) HtmlError!StepList {
+    const body = takeWrapped(html, "<ol data-er-component=\"step-list\">", "</ol>") orelse {
+        if (std.mem.startsWith(u8, html, "<ol")) return error.InvalidHtml;
+        return error.UnsupportedHtml;
+    };
+    var text = HtmlTextArena.init(text_out);
+    const steps = try readStepItemsHtml(body, out_steps, &text);
+    return .{ .steps = steps };
+}
+
+fn readStepItemsHtml(html: []const u8, out_steps: []StepItem, text: *HtmlTextArena) HtmlError![]const StepItem {
+    var cursor = HtmlCursor.init(html);
+    var step_count: usize = 0;
+    while (!cursor.done()) {
+        if (step_count == out_steps.len) return error.HtmlBudgetExceeded;
+        const id = try parseHtmlU32(try cursor.fieldBetween("<li data-er-id=\"", "\" data-er-state=\""));
+        const state = parseStepStateName(try cursor.fieldBetween("\" data-er-state=\"", "\"><strong>")) orelse return error.InvalidHtml;
+        const title = try text.unescape(try cursor.fieldBetween("\"><strong>", "</strong><span>"));
+        const detail = try text.unescape(try cursor.fieldBetween("</strong><span>", "</span></li>"));
+        try cursor.consume("</span></li>");
+        if (title.len == 0 or detail.len == 0) return error.InvalidHtml;
+        out_steps[step_count] = .{ .id = id, .title = title, .detail = detail, .state = state };
+        step_count += 1;
+    }
+    if (step_count == 0) return error.InvalidHtml;
+    return out_steps[0..step_count];
+}
+
+fn readBreadcrumbHtml(html: []const u8, out_items: []BreadcrumbItem, text_out: []u8) HtmlError!Breadcrumb {
+    const prefix = "<nav data-er-component=\"breadcrumb\" aria-label=\"Breadcrumb\"><ol>";
+    const suffix = "</ol></nav>";
+    const body = takeWrapped(html, prefix, suffix) orelse {
+        if (std.mem.startsWith(u8, html, "<nav")) return error.InvalidHtml;
+        return error.UnsupportedHtml;
+    };
+    var text = HtmlTextArena.init(text_out);
+    const items = try readBreadcrumbItemsHtml(body, out_items, &text);
+    return .{ .items = items };
+}
+
+fn readBreadcrumbItemsHtml(html: []const u8, out_items: []BreadcrumbItem, text: *HtmlTextArena) HtmlError![]const BreadcrumbItem {
+    var cursor = HtmlCursor.init(html);
+    var item_count: usize = 0;
+    while (!cursor.done()) {
+        if (item_count == out_items.len) return error.HtmlBudgetExceeded;
+        const id = try parseHtmlU32(try cursor.fieldBetween("<li data-er-id=\"", "\" data-er-current=\""));
+        const current = try parseHtmlBool(try cursor.fieldBetween("\" data-er-current=\"", "\"><a href=\""));
+        const href = try text.unescape(try cursor.fieldBetween("\"><a href=\"", "\">"));
+        const label = try text.unescape(try cursor.fieldBetween("\">", "</a></li>"));
+        try cursor.consume("</a></li>");
+        if (label.len == 0) return error.InvalidHtml;
+        out_items[item_count] = .{
+            .id = id,
+            .label = label,
+            .href = href,
+            .current = current,
+        };
+        item_count += 1;
+    }
+    if (item_count == 0) return error.InvalidHtml;
+    return out_items[0..item_count];
+}
+
+fn readDefinitionListHtml(html: []const u8, out_items: []DefinitionItem, text_out: []u8) HtmlError!DefinitionList {
+    const body = takeWrapped(html, "<dl data-er-component=\"definition-list\">", "</dl>") orelse {
+        if (std.mem.startsWith(u8, html, "<dl")) return error.InvalidHtml;
+        return error.UnsupportedHtml;
+    };
+    var text = HtmlTextArena.init(text_out);
+    const items = try readDefinitionItemsHtml(body, out_items, &text);
+    return .{ .items = items };
+}
+
+fn readDefinitionItemsHtml(html: []const u8, out_items: []DefinitionItem, text: *HtmlTextArena) HtmlError![]const DefinitionItem {
+    var cursor = HtmlCursor.init(html);
+    var item_count: usize = 0;
+    while (!cursor.done()) {
+        if (item_count == out_items.len) return error.HtmlBudgetExceeded;
+        const id = try parseHtmlU32(try cursor.fieldBetween("<div data-er-id=\"", "\"><dt>"));
+        const term = try text.unescape(try cursor.fieldBetween("\"><dt>", "</dt><dd>"));
+        const detail = try text.unescape(try cursor.fieldBetween("</dt><dd>", "</dd></div>"));
+        try cursor.consume("</dd></div>");
+        if (term.len == 0 or detail.len == 0) return error.InvalidHtml;
+        out_items[item_count] = .{ .id = id, .term = term, .detail = detail };
+        item_count += 1;
+    }
+    if (item_count == 0) return error.InvalidHtml;
+    return out_items[0..item_count];
+}
+
+fn readTimelineHtml(html: []const u8, out_events: []TimelineEvent, text_out: []u8) HtmlError!Timeline {
+    const body = takeWrapped(html, "<ol data-er-component=\"timeline\">", "</ol>") orelse {
+        if (std.mem.startsWith(u8, html, "<ol")) return error.InvalidHtml;
+        return error.UnsupportedHtml;
+    };
+    var text = HtmlTextArena.init(text_out);
+    const events = try readTimelineEventsHtml(body, out_events, &text);
+    return .{ .events = events };
+}
+
+fn readTimelineEventsHtml(html: []const u8, out_events: []TimelineEvent, text: *HtmlTextArena) HtmlError![]const TimelineEvent {
+    var cursor = HtmlCursor.init(html);
+    var event_count: usize = 0;
+    while (!cursor.done()) {
+        if (event_count == out_events.len) return error.HtmlBudgetExceeded;
+        const id = try parseHtmlU32(try cursor.fieldBetween("<li data-er-id=\"", "\"><time>"));
+        const time = try text.unescape(try cursor.fieldBetween("\"><time>", "</time><strong>"));
+        const title = try text.unescape(try cursor.fieldBetween("</time><strong>", "</strong><p>"));
+        const detail = try text.unescape(try cursor.fieldBetween("</strong><p>", "</p></li>"));
+        try cursor.consume("</p></li>");
+        if (time.len == 0 or title.len == 0 or detail.len == 0) return error.InvalidHtml;
+        out_events[event_count] = .{ .id = id, .time = time, .title = title, .detail = detail };
+        event_count += 1;
+    }
+    if (event_count == 0) return error.InvalidHtml;
+    return out_events[0..event_count];
+}
+
+fn readResourceListHtml(html: []const u8, out_items: []ResourceItem, text_out: []u8) HtmlError!ResourceList {
+    const body = takeWrapped(html, "<ul data-er-component=\"resource-list\">", "</ul>") orelse {
+        if (std.mem.startsWith(u8, html, "<ul")) return error.InvalidHtml;
+        return error.UnsupportedHtml;
+    };
+    var text = HtmlTextArena.init(text_out);
+    const items = try readResourceItemsHtml(body, out_items, &text);
+    return .{ .items = items };
+}
+
+fn readResourceItemsHtml(html: []const u8, out_items: []ResourceItem, text: *HtmlTextArena) HtmlError![]const ResourceItem {
+    var cursor = HtmlCursor.init(html);
+    var item_count: usize = 0;
+    while (!cursor.done()) {
+        if (item_count == out_items.len) return error.HtmlBudgetExceeded;
+        const id = try parseHtmlU32(try cursor.fieldBetween("<li data-er-id=\"", "\"><a href=\""));
+        const href = try text.unescape(try cursor.fieldBetween("\"><a href=\"", "\">"));
+        const label = try text.unescape(try cursor.fieldBetween("\">", "</a><p>"));
+        const detail = try text.unescape(try cursor.fieldBetween("</a><p>", "</p></li>"));
+        try cursor.consume("</p></li>");
+        if (href.len == 0 or label.len == 0 or detail.len == 0) return error.InvalidHtml;
+        out_items[item_count] = .{ .id = id, .label = label, .href = href, .detail = detail };
+        item_count += 1;
+    }
+    if (item_count == 0) return error.InvalidHtml;
+    return out_items[0..item_count];
+}
+
+fn readProgressSummaryHtml(html: []const u8, text_out: []u8) HtmlError!ProgressSummary {
+    const prefix = "<section data-er-component=\"progress-summary\" data-er-id=\"";
+    if (!std.mem.startsWith(u8, html, prefix)) {
+        if (std.mem.startsWith(u8, html, "<section")) return error.InvalidHtml;
+        return error.UnsupportedHtml;
+    }
+    if (!std.mem.endsWith(u8, html, "</progress></section>")) return error.InvalidHtml;
+
+    var text = HtmlTextArena.init(text_out);
+    const after_id_start = prefix.len;
+    const after_id = html[after_id_start..];
+    const id_end = std.mem.indexOf(u8, after_id, "\"><h2>") orelse return error.InvalidHtml;
+    const id = try parseHtmlU32(after_id[0..id_end]);
+    const label_start = after_id_start + id_end + "\"><h2>".len;
+    const label_end_relative = std.mem.indexOf(u8, html[label_start..], "</h2><progress value=\"") orelse return error.InvalidHtml;
+    const completed_start = label_start + label_end_relative + "</h2><progress value=\"".len;
+    const completed_end_relative = std.mem.indexOf(u8, html[completed_start..], "\" max=\"") orelse return error.InvalidHtml;
+    const total_start = completed_start + completed_end_relative + "\" max=\"".len;
+    const total_end_relative = std.mem.indexOf(u8, html[total_start..], "\"></progress></section>") orelse return error.InvalidHtml;
+    const completed = try parseHtmlU32(html[completed_start .. completed_start + completed_end_relative]);
+    const total = try parseHtmlU32(html[total_start .. total_start + total_end_relative]);
+    const label = try text.unescape(html[label_start .. label_start + label_end_relative]);
+    if (label.len == 0 or total == 0 or completed > total) return error.InvalidHtml;
+    return .{ .id = id, .label = label, .completed = completed, .total = total };
+}
+
+fn readNavHtml(html: []const u8, out_items: []NavItem, text_out: []u8) HtmlError!Nav {
+    const prefix = "<nav data-er-component=\"nav\" aria-label=\"";
+    if (!std.mem.startsWith(u8, html, prefix)) {
+        if (std.mem.startsWith(u8, html, "<nav")) return error.InvalidHtml;
+        return error.UnsupportedHtml;
+    }
+    const after_label = html[prefix.len..];
+    const label_end = std.mem.indexOf(u8, after_label, "\">") orelse return error.InvalidHtml;
+    if (!std.mem.endsWith(u8, html, "</nav>")) return error.InvalidHtml;
+
+    var text = HtmlTextArena.init(text_out);
+    const label = try text.unescape(after_label[0..label_end]);
+    const items_start = prefix.len + label_end + "\">".len;
+    const items_html = html[items_start .. html.len - "</nav>".len];
+    const items = try readNavItemsHtml(items_html, out_items, &text);
+    return .{ .label = label, .items = items };
+}
+
+fn readNavItemsHtml(html: []const u8, out_items: []NavItem, text: *HtmlTextArena) HtmlError![]const NavItem {
+    var cursor = HtmlCursor.init(html);
+    var item_count: usize = 0;
+    while (!cursor.done()) {
+        if (item_count == out_items.len) return error.HtmlBudgetExceeded;
+        const id = try parseHtmlU32(try cursor.fieldBetween("<a data-er-id=\"", "\" data-er-active=\""));
+        const active = try parseHtmlBool(try cursor.fieldBetween("\" data-er-active=\"", "\" href=\""));
+        const href = try text.unescape(try cursor.fieldBetween("\" href=\"", "\">"));
+        const label = try text.unescape(try cursor.fieldBetween("\">", "</a>"));
+        try cursor.consume("</a>");
+        out_items[item_count] = .{
+            .id = id,
+            .label = label,
+            .href = href,
+            .active = active,
+        };
+        item_count += 1;
+    }
+    if (item_count == 0) return error.InvalidHtml;
+    return out_items[0..item_count];
+}
+
+fn readRegionHtml(html: []const u8, out_components: []Component, text_out: []u8) HtmlError!Region {
+    inline for (.{ .header, .main, .footer, .section, .article }) |tag| {
+        const decoded = try readRegionHtmlForTag(tag, html, out_components, text_out);
+        if (decoded) |region| return region;
+    }
+    if (std.mem.startsWith(u8, html, "<header") or
+        std.mem.startsWith(u8, html, "<main") or
+        std.mem.startsWith(u8, html, "<footer") or
+        std.mem.startsWith(u8, html, "<section") or
+        std.mem.startsWith(u8, html, "<article") or
+        std.mem.indexOf(u8, html, "data-er-component=\"region\"") != null) return error.InvalidHtml;
+    return error.UnsupportedHtml;
+}
+
+fn readRegionMarkdown(markdown: []const u8, out_components: []Component, text_out: []u8) MarkdownError!Region {
+    const prefix = ":::region\ntag: ";
+    const body = try readMarkdownDirectiveBody(markdown, ":::region", prefix);
+    const tag_end_relative = std.mem.indexOf(u8, body, "\nlabel: ") orelse return error.InvalidMarkdown;
+    const tag = parseRegionTagName(body[0..tag_end_relative]) orelse return error.InvalidMarkdown;
+    const label_start = tag_end_relative + "\nlabel: ".len;
+    const label_end_relative = std.mem.indexOf(u8, body[label_start..], markdown_next_component_marker) orelse return error.InvalidMarkdown;
+    var text = MarkdownTextArena.init(text_out);
+    const label = try text.unescapeInline(body[label_start .. label_start + label_end_relative]);
+    const children_start = label_start + label_end_relative + 1;
+    const children = try readComponentListMarkdownWithArena(body[children_start..], out_components, &text);
+    return .{
+        .tag = tag,
+        .label = label,
+        .children = children,
+    };
+}
+
+fn readRegionHtmlForTag(comptime tag: RegionTag, html: []const u8, out_components: []Component, text_out: []u8) HtmlError!?Region {
+    const prefix = switch (tag) {
+        .header => "<header data-er-component=\"region\" aria-label=\"",
+        .main => "<main data-er-component=\"region\" aria-label=\"",
+        .footer => "<footer data-er-component=\"region\" aria-label=\"",
+        .section => "<section data-er-component=\"region\" aria-label=\"",
+        .article => "<article data-er-component=\"region\" aria-label=\"",
+    };
+    if (!std.mem.startsWith(u8, html, prefix)) return null;
+    const after_label = html[prefix.len..];
+    const label_end = std.mem.indexOf(u8, after_label, "\">") orelse return error.InvalidHtml;
+    const suffix = switch (tag) {
+        .header => "</header>",
+        .main => "</main>",
+        .footer => "</footer>",
+        .section => "</section>",
+        .article => "</article>",
+    };
+    if (!std.mem.endsWith(u8, html, suffix)) return error.InvalidHtml;
+
+    var text = HtmlTextArena.init(text_out);
+    const label = try text.unescape(after_label[0..label_end]);
+    const children_start = prefix.len + label_end + "\">".len;
+    const children_html = html[children_start .. html.len - suffix.len];
+    const children = try readComponentListHtmlWithArena(children_html, out_components, &text);
+    if (children.len == 0) return error.InvalidHtml;
+    return .{ .tag = tag, .label = label, .children = children };
+}
+
+fn readTableRowsHtml(html: []const u8, column_count: usize, out_rows: []TableRow, out_cells: []TableCell, cell_count: *usize, text: *HtmlTextArena) HtmlError![]const TableRow {
+    var cursor: usize = 0;
+    var row_count: usize = 0;
+    while (cursor < html.len) {
+        if (row_count == out_rows.len) return error.HtmlBudgetExceeded;
+        const prefix = "<tr data-er-row-id=\"";
+        if (!std.mem.startsWith(u8, html[cursor..], prefix)) return error.InvalidHtml;
+        const after_id_start = cursor + prefix.len;
+        const id_end_relative = std.mem.indexOf(u8, html[after_id_start..], "\">") orelse return error.InvalidHtml;
+        const id = try parseHtmlU32(html[after_id_start .. after_id_start + id_end_relative]);
+        const cells_start = after_id_start + id_end_relative + "\">".len;
+        const row_end_relative = std.mem.indexOf(u8, html[cells_start..], "</tr>") orelse return error.InvalidHtml;
+        const cells = try readTableCellsHtml(html[cells_start .. cells_start + row_end_relative], "td", out_cells, cell_count, text);
+        if (cells.len != column_count) return error.InvalidHtml;
+        out_rows[row_count] = .{ .id = id, .cells = cells };
+        row_count += 1;
+        cursor = cells_start + row_end_relative + "</tr>".len;
+    }
+    return out_rows[0..row_count];
+}
+
+fn readTableCellsHtml(html: []const u8, comptime tag: []const u8, out_cells: []TableCell, cell_count: *usize, text: *HtmlTextArena) HtmlError![]const TableCell {
+    const start = cell_count.*;
+    var cursor: usize = 0;
+    while (cursor < html.len) {
+        if (cell_count.* == out_cells.len) return error.HtmlBudgetExceeded;
+        const prefix = "<" ++ tag ++ " data-er-align=\"";
+        const close = "</" ++ tag ++ ">";
+        if (!std.mem.startsWith(u8, html[cursor..], prefix)) return error.InvalidHtml;
+        const after_align_start = cursor + prefix.len;
+        const align_end_relative = std.mem.indexOf(u8, html[after_align_start..], "\">") orelse return error.InvalidHtml;
+        const alignment = parseAlignName(html[after_align_start .. after_align_start + align_end_relative]) orelse return error.InvalidHtml;
+        const value_start = after_align_start + align_end_relative + "\">".len;
+        const value_end_relative = std.mem.indexOf(u8, html[value_start..], close) orelse return error.InvalidHtml;
+        out_cells[cell_count.*] = .{
+            .value = try text.unescape(html[value_start .. value_start + value_end_relative]),
+            .alignment = alignment,
+        };
+        cell_count.* += 1;
+        cursor = value_start + value_end_relative + close.len;
+    }
+    return out_cells[start..cell_count.*];
+}
+
+fn readStackHtml(html: []const u8, out_components: []Component, text_out: []u8) HtmlError!Stack {
+    const prefix = "<section data-er-component=\"stack\" data-er-axis=\"";
+    if (!std.mem.startsWith(u8, html, prefix)) return error.UnsupportedHtml;
+    const after_axis = html[prefix.len..];
+    const axis_end = std.mem.indexOf(u8, after_axis, "\" data-er-gap=\"") orelse return error.InvalidHtml;
+    const axis = parseAxisName(after_axis[0..axis_end]) orelse return error.InvalidHtml;
+    const gap_start = prefix.len + axis_end + "\" data-er-gap=\"".len;
+    const gap_end_relative = std.mem.indexOf(u8, html[gap_start..], "\" data-er-padding=\"") orelse return error.InvalidHtml;
+    const gap = try parseHtmlU16(html[gap_start .. gap_start + gap_end_relative]);
+    const padding_start = gap_start + gap_end_relative + "\" data-er-padding=\"".len;
+    const padding_end_relative = std.mem.indexOf(u8, html[padding_start..], "\">") orelse return error.InvalidHtml;
+    const padding = try parseHtmlU16(html[padding_start .. padding_start + padding_end_relative]);
+    const children_start = padding_start + padding_end_relative + "\">".len;
+    if (!std.mem.endsWith(u8, html, "</section>")) return error.InvalidHtml;
+    const children_html = html[children_start .. html.len - "</section>".len];
+    const children = try readStackChildrenHtml(children_html, out_components, text_out);
+    return .{
+        .axis = axis,
+        .gap = gap,
+        .padding = padding,
+        .children = children,
+    };
+}
+
+fn readStackMarkdown(markdown: []const u8, out_components: []Component, text_out: []u8) MarkdownError!Stack {
+    const prefix = ":::stack\naxis: ";
+    const body = try readMarkdownDirectiveBody(markdown, ":::stack", prefix);
+    const axis_end_relative = std.mem.indexOf(u8, body, "\ngap: ") orelse return error.InvalidMarkdown;
+    const axis = parseAxisName(body[0..axis_end_relative]) orelse return error.InvalidMarkdown;
+    const gap_start = axis_end_relative + "\ngap: ".len;
+    const gap_end_relative = std.mem.indexOf(u8, body[gap_start..], "\npadding: ") orelse return error.InvalidMarkdown;
+    const gap = try parseMarkdownU16(body[gap_start .. gap_start + gap_end_relative]);
+    const padding_start = gap_start + gap_end_relative + "\npadding: ".len;
+    const padding_end_relative = std.mem.indexOf(u8, body[padding_start..], markdown_next_component_marker) orelse return error.InvalidMarkdown;
+    const padding = try parseMarkdownU16(body[padding_start .. padding_start + padding_end_relative]);
+    const children_start = padding_start + padding_end_relative + 1;
+    const children = try readStackChildrenMarkdown(body[children_start..], out_components, text_out);
+    return .{
+        .axis = axis,
+        .gap = gap,
+        .padding = padding,
+        .children = children,
+    };
+}
+
+fn readStackChildrenHtml(html: []const u8, out_components: []Component, text_out: []u8) HtmlError![]const Component {
+    var text = HtmlTextArena.init(text_out);
+    return readComponentListHtmlWithArena(html, out_components, &text);
+}
+
+fn readStackChildrenMarkdown(markdown: []const u8, out_components: []Component, text_out: []u8) MarkdownError![]const Component {
+    var text = MarkdownTextArena.init(text_out);
+    return readComponentListMarkdownWithArena(markdown, out_components, &text);
+}
+
+fn readComponentListMarkdownWithArena(markdown: []const u8, out_components: []Component, text: *MarkdownTextArena) MarkdownError![]const Component {
+    var component_count: usize = 0;
+    var cursor: usize = 0;
+    while (cursor < markdown.len) {
+        if (component_count == out_components.len) return error.MarkdownBudgetExceeded;
+        if (!std.mem.startsWith(u8, markdown[cursor..], markdown_component_marker)) return error.InvalidMarkdown;
+        const child_start = cursor + markdown_component_marker.len;
+        const child_end_relative = std.mem.indexOf(u8, markdown[child_start..], markdown_next_component_marker) orelse markdown[child_start..].len;
+        const child_end = child_start + child_end_relative;
+        const child_markdown = markdown[child_start..child_end];
+        if (child_markdown.len == 0) return error.InvalidMarkdown;
+        out_components[component_count] = try readComponentMarkdownWithArena(child_markdown, text);
+        component_count += 1;
+        cursor = child_end;
+        if (cursor < markdown.len) cursor += 1;
+    }
+    if (component_count == 0) return error.InvalidMarkdown;
+    return out_components[0..component_count];
+}
+
+fn readComponentListHtmlWithArena(html: []const u8, out_components: []Component, text: *HtmlTextArena) HtmlError![]const Component {
+    var component_count: usize = 0;
+    var cursor: usize = 0;
+    while (cursor < html.len) {
+        if (component_count == out_components.len) return error.HtmlBudgetExceeded;
+        const end = childHtmlEnd(html[cursor..]) orelse return error.InvalidHtml;
+        out_components[component_count] = try readComponentHtmlWithArena(html[cursor .. cursor + end], text);
+        component_count += 1;
+        cursor += end;
+    }
+    return out_components[0..component_count];
+}
+
+fn childHtmlEnd(html: []const u8) ?usize {
+    const shapes = [_]HtmlShape{
+        .{ .prefix = "<p data-er-component=\"text\">", .suffix = "</p>" },
+        .{ .prefix = "<span data-er-component=\"badge\">", .suffix = "</span>" },
+        .{ .prefix = "<span data-er-component=\"avatar\" aria-label=\"", .suffix = "</span>" },
+        .{ .prefix = "<kbd data-er-component=\"kbd\">", .suffix = "</kbd>" },
+        .{ .prefix = "<hr data-er-component=\"separator\">", .suffix = "" },
+        .{ .prefix = "<button data-er-component=\"button\" data-er-id=\"", .suffix = "</button>" },
+        .{ .prefix = "<input data-er-component=\"input\" data-er-id=\"", .suffix = ">" },
+        .{ .prefix = "<textarea data-er-component=\"textarea\" data-er-id=\"", .suffix = "</textarea>" },
+        .{ .prefix = "<select data-er-component=\"select\" data-er-id=\"", .suffix = "</select>" },
+        .{ .prefix = "<label data-er-component=\"checkbox\" data-er-id=\"", .suffix = "</label>" },
+        .{ .prefix = "<button data-er-component=\"switch\" data-er-id=\"", .suffix = "</button>" },
+        .{ .prefix = "<progress data-er-component=\"progress\" value=\"", .suffix = "</progress>" },
+        .{ .prefix = "<label data-er-component=\"slider\" data-er-id=\"", .suffix = "</label>" },
+        .{ .prefix = "<article data-er-component=\"card\"><h2>", .suffix = "</p></article>" },
+        .{ .prefix = "<div data-er-component=\"row-item\" data-er-id=\"", .suffix = "</span></div>" },
+    };
+    for (shapes) |shape| {
+        if (!std.mem.startsWith(u8, html, shape.prefix)) continue;
+        if (shape.suffix.len == 0) return shape.prefix.len;
+        const suffix_start = std.mem.indexOf(u8, html, shape.suffix) orelse return null;
+        return suffix_start + shape.suffix.len;
+    }
+    return null;
+}
+
+const HtmlShape = struct {
+    prefix: []const u8,
+    suffix: []const u8,
+};
+
+const HtmlWriter = struct {
+    out: []u8,
+    len: usize = 0,
+
+    fn init(out: []u8) HtmlWriter {
+        return .{ .out = out };
+    }
+
+    fn written(self: HtmlWriter) []u8 {
+        return self.out[0..self.len];
+    }
+
+    fn writeAll(self: *HtmlWriter, value: []const u8) HtmlError!void {
+        if (self.len + value.len > self.out.len) return error.HtmlBudgetExceeded;
+        @memcpy(self.out[self.len .. self.len + value.len], value);
+        self.len += value.len;
+    }
+
+    fn writeInt(self: *HtmlWriter, value: u32) HtmlError!void {
+        var buf: [10]u8 = undefined;
+        const text = std.fmt.bufPrint(&buf, "{d}", .{value}) catch unreachable;
+        try self.writeAll(text);
+    }
+
+    fn writeEscapedText(self: *HtmlWriter, value: []const u8) HtmlError!void {
+        for (value) |byte| {
+            switch (byte) {
+                '&' => try self.writeAll("&amp;"),
+                '<' => try self.writeAll("&lt;"),
+                '>' => try self.writeAll("&gt;"),
+                else => try self.writeByte(byte),
+            }
+        }
+    }
+
+    fn writeEscapedAttr(self: *HtmlWriter, value: []const u8) HtmlError!void {
+        for (value) |byte| {
+            switch (byte) {
+                '&' => try self.writeAll("&amp;"),
+                '<' => try self.writeAll("&lt;"),
+                '>' => try self.writeAll("&gt;"),
+                '"' => try self.writeAll("&quot;"),
+                else => try self.writeByte(byte),
+            }
+        }
+    }
+
+    fn writeByte(self: *HtmlWriter, byte: u8) HtmlError!void {
+        if (self.len == self.out.len) return error.HtmlBudgetExceeded;
+        self.out[self.len] = byte;
+        self.len += 1;
+    }
+};
+
+const HtmlTextArena = struct {
+    out: []u8,
+    len: usize = 0,
+
+    fn init(out: []u8) HtmlTextArena {
+        return .{ .out = out };
+    }
+
+    fn unescape(self: *HtmlTextArena, value: []const u8) HtmlError![]const u8 {
+        const start = self.len;
+        var index: usize = 0;
+        while (index < value.len) {
+            if (value[index] != '&') {
+                try self.append(value[index]);
+                index += 1;
+                continue;
+            }
+            if (std.mem.startsWith(u8, value[index..], "&amp;")) {
+                try self.append('&');
+                index += "&amp;".len;
+            } else if (std.mem.startsWith(u8, value[index..], "&lt;")) {
+                try self.append('<');
+                index += "&lt;".len;
+            } else if (std.mem.startsWith(u8, value[index..], "&gt;")) {
+                try self.append('>');
+                index += "&gt;".len;
+            } else if (std.mem.startsWith(u8, value[index..], "&quot;")) {
+                try self.append('"');
+                index += "&quot;".len;
+            } else {
+                return error.InvalidHtml;
+            }
+        }
+        return self.out[start..self.len];
+    }
+
+    fn append(self: *HtmlTextArena, byte: u8) HtmlError!void {
+        if (self.len == self.out.len) return error.HtmlBudgetExceeded;
+        self.out[self.len] = byte;
+        self.len += 1;
+    }
+};
+
+const MarkdownWriter = struct {
+    out: []u8,
+    len: usize = 0,
+
+    fn init(out: []u8) MarkdownWriter {
+        return .{ .out = out };
+    }
+
+    fn written(self: MarkdownWriter) []u8 {
+        return self.out[0..self.len];
+    }
+
+    fn writeAll(self: *MarkdownWriter, value: []const u8) MarkdownError!void {
+        if (self.len + value.len > self.out.len) return error.MarkdownBudgetExceeded;
+        @memcpy(self.out[self.len .. self.len + value.len], value);
+        self.len += value.len;
+    }
+
+    fn writeInt(self: *MarkdownWriter, value: u32) MarkdownError!void {
+        var buf: [10]u8 = undefined;
+        const text = std.fmt.bufPrint(&buf, "{d}", .{value}) catch unreachable;
+        try self.writeAll(text);
+    }
+
+    fn writeEscapedInline(self: *MarkdownWriter, value: []const u8) MarkdownError!void {
+        for (value) |byte| {
+            switch (byte) {
+                '\n', '\r' => return error.InvalidMarkdown,
+                '\\', '`', '*', '_', '{', '}', '[', ']', '(', ')', '#', '+', '-', '.', '!', '>', '|', ':' => {
+                    try self.writeByte('\\');
+                    try self.writeByte(byte);
+                },
+                else => try self.writeByte(byte),
+            }
+        }
+    }
+
+    fn writeByte(self: *MarkdownWriter, byte: u8) MarkdownError!void {
+        if (self.len == self.out.len) return error.MarkdownBudgetExceeded;
+        self.out[self.len] = byte;
+        self.len += 1;
+    }
+};
+
+const MarkdownTextArena = struct {
+    out: []u8,
+    len: usize = 0,
+
+    fn init(out: []u8) MarkdownTextArena {
+        return .{ .out = out };
+    }
+
+    fn unescapeInline(self: *MarkdownTextArena, value: []const u8) MarkdownError![]const u8 {
+        const start = self.len;
+        var index: usize = 0;
+        while (index < value.len) {
+            const byte = value[index];
+            if (byte == '\n' or byte == '\r') return error.InvalidMarkdown;
+            if (byte != '\\') {
+                try self.append(byte);
+                index += 1;
+                continue;
+            }
+            index += 1;
+            if (index == value.len or !markdownEscapable(value[index])) return error.InvalidMarkdown;
+            try self.append(value[index]);
+            index += 1;
+        }
+        return self.out[start..self.len];
+    }
+
+    fn append(self: *MarkdownTextArena, byte: u8) MarkdownError!void {
+        if (self.len == self.out.len) return error.MarkdownBudgetExceeded;
+        self.out[self.len] = byte;
+        self.len += 1;
+    }
+};
+
+fn takeWrapped(value: []const u8, prefix: []const u8, suffix: []const u8) ?[]const u8 {
+    if (!std.mem.startsWith(u8, value, prefix)) return null;
+    if (!std.mem.endsWith(u8, value, suffix)) return null;
+    return value[prefix.len .. value.len - suffix.len];
+}
+
+fn axisName(axis: ui.Axis) []const u8 {
+    return switch (axis) {
+        .column => "column",
+        .row => "row",
+    };
+}
+
+fn parseAxisName(value: []const u8) ?ui.Axis {
+    if (std.mem.eql(u8, value, "column")) return .column;
+    if (std.mem.eql(u8, value, "row")) return .row;
+    return null;
+}
+
+fn alignName(alignment: ui.TextAlign) []const u8 {
+    return switch (alignment) {
+        .start => "start",
+        .center => "center",
+        .end => "end",
+    };
+}
+
+fn parseAlignName(value: []const u8) ?ui.TextAlign {
+    if (std.mem.eql(u8, value, "start")) return .start;
+    if (std.mem.eql(u8, value, "center")) return .center;
+    if (std.mem.eql(u8, value, "end")) return .end;
+    return null;
+}
+
+fn parseHtmlBool(value: []const u8) HtmlError!bool {
+    if (std.mem.eql(u8, value, "true")) return true;
+    if (std.mem.eql(u8, value, "false")) return false;
+    return error.InvalidHtml;
+}
+
+fn parseHtmlU16(value: []const u8) HtmlError!u16 {
+    return std.fmt.parseUnsigned(u16, value, 10) catch error.InvalidHtml;
+}
+
+fn parseHtmlU32(value: []const u8) HtmlError!u32 {
+    return std.fmt.parseUnsigned(u32, value, 10) catch error.InvalidHtml;
+}
+
+fn parseMarkdownBool(value: []const u8) MarkdownError!bool {
+    if (std.mem.eql(u8, value, "true")) return true;
+    if (std.mem.eql(u8, value, "false")) return false;
+    return error.InvalidMarkdown;
+}
+
+fn parseMarkdownU16(value: []const u8) MarkdownError!u16 {
+    return std.fmt.parseUnsigned(u16, value, 10) catch error.InvalidMarkdown;
+}
+
+fn parseMarkdownU32(value: []const u8) MarkdownError!u32 {
+    return std.fmt.parseUnsigned(u32, value, 10) catch error.InvalidMarkdown;
+}
+
+fn parseMarkdownPercent(value: []const u8) MarkdownError!f32 {
+    const parsed = try parseMarkdownU32(value);
+    if (parsed > 100) return error.InvalidMarkdown;
+    return @as(f32, @floatFromInt(parsed)) / 100.0;
+}
+
+fn markdownEscapable(byte: u8) bool {
+    return switch (byte) {
+        '\\', '`', '*', '_', '{', '}', '[', ']', '(', ')', '#', '+', '-', '.', '!', '>', '|', ':' => true,
+        else => false,
+    };
+}
+
+fn validMarkdownFenceLanguage(value: []const u8) bool {
+    for (value) |byte| {
+        switch (byte) {
+            'a'...'z', 'A'...'Z', '0'...'9', '-', '_' => {},
+            else => return false,
+        }
+    }
+    return true;
+}
+
+fn stepStateName(state: StepState) []const u8 {
+    return switch (state) {
+        .done => "done",
+        .current => "current",
+        .todo => "todo",
+    };
+}
+
+fn parseStepStateName(value: []const u8) ?StepState {
+    if (std.mem.eql(u8, value, "done")) return .done;
+    if (std.mem.eql(u8, value, "current")) return .current;
+    if (std.mem.eql(u8, value, "todo")) return .todo;
+    return null;
+}
+
+fn regionTagName(tag: RegionTag) []const u8 {
+    return switch (tag) {
+        .header => "header",
+        .main => "main",
+        .footer => "footer",
+        .section => "section",
+        .article => "article",
+    };
+}
+
+fn parseRegionTagName(value: []const u8) ?RegionTag {
+    if (std.mem.eql(u8, value, "header")) return .header;
+    if (std.mem.eql(u8, value, "main")) return .main;
+    if (std.mem.eql(u8, value, "footer")) return .footer;
+    if (std.mem.eql(u8, value, "section")) return .section;
+    if (std.mem.eql(u8, value, "article")) return .article;
+    return null;
+}
+
+fn validHeadingLevel(level: u8) bool {
+    return level >= 1 and level <= 3;
+}
+
+fn orderedMarker(index: usize) []const u8 {
+    const markers = [_][]const u8{ "1.", "2.", "3.", "4.", "5.", "6.", "7.", "8.", "9." };
+    if (index < markers.len) return markers[index];
+    return "9.";
+}
+
+fn percentFromUnit(value: f32) u32 {
+    return @intFromFloat(@round(ui.clampUnit(value) * 100.0));
+}
+
+fn parseHtmlPercent(value: []const u8) HtmlError!f32 {
+    const parsed = try parseHtmlU32(value);
+    if (parsed > 100) return error.InvalidHtml;
+    return @as(f32, @floatFromInt(parsed)) / 100.0;
 }
 
 fn boolRef(value: bool) codec.StringRef {
@@ -1423,6 +5102,1239 @@ test "component render helper owns article cards and code blocks" {
     try std.testing.expect(hasText(scene.written(), "const app = try edge.compile(source);"));
 }
 
+test "component html codec roundtrips semantic leaf components" {
+    const components = [_]Component{
+        .{ .text = .{ .value = "DNS turns names into addresses." } },
+        .{ .badge = .{ .label = "Lesson" } },
+        .{ .avatar = .{ .label = "ER" } },
+        .{ .kbd = .{ .label = "CtrlK" } },
+        .{ .separator = .{} },
+        .{ .button = .{ .id = 42, .label = "Run demo" } },
+        .{ .input = .{ .id = 77, .placeholder = "Search lessons" } },
+        .{ .textarea = .{ .id = 78, .placeholder = "Explain the packet path" } },
+        .{ .select = .{ .id = 79, .label = "Beginner track" } },
+        .{ .checkbox = .{ .id = 80, .label = "Show packet headers", .checked = true } },
+        .{ .switch_control = .{ .id = 81, .label = "Guided mode", .checked = false } },
+        .{ .progress = .{ .value = 0.64 } },
+        .{ .slider = .{ .id = 82, .label = "Simulation speed", .value = 0.72 } },
+        .{ .card = .{ .title = "Router boundary", .detail = "A router forwards packets but does not own the app." } },
+        .{ .row_item = .{ .id = 91, .title = "TLS tunnel", .detail = "Protects the trip, not every endpoint." } },
+    };
+
+    for (components) |component| {
+        var html: [512]u8 = undefined;
+        var text: [256]u8 = undefined;
+        const encoded = try component.toHtml(&html);
+        const decoded = try Component.fromHtml(encoded, &text);
+
+        try expectSameComponent(component, decoded);
+    }
+}
+
+test "component html codec emits readable semantic html" {
+    var html: [256]u8 = undefined;
+    const encoded = try (Component{ .button = .{ .id = 9, .label = "Open object" } }).toHtml(&html);
+
+    try std.testing.expectEqualStrings("<button data-er-component=\"button\" data-er-id=\"9\">Open object</button>", encoded);
+
+    const progress = try (Component{ .progress = .{ .value = 0.64 } }).toHtml(&html);
+    try std.testing.expectEqualStrings("<progress data-er-component=\"progress\" value=\"64\" max=\"100\"></progress>", progress);
+
+    const checkbox = try (Component{ .checkbox = .{ .id = 17, .label = "Show receipts", .checked = true } }).toHtml(&html);
+    try std.testing.expectEqualStrings("<label data-er-component=\"checkbox\" data-er-id=\"17\" data-er-checked=\"true\"><input type=\"checkbox\" checked>Show receipts</label>", checkbox);
+}
+
+test "component html codec escapes text and attributes" {
+    var html: [256]u8 = undefined;
+    var text: [128]u8 = undefined;
+    const encoded = try (Component{ .input = .{ .id = 5, .placeholder = "Search \"objects\" & apps" } }).toHtml(&html);
+
+    try std.testing.expectEqualStrings("<input data-er-component=\"input\" data-er-id=\"5\" placeholder=\"Search &quot;objects&quot; &amp; apps\">", encoded);
+    const decoded = try Component.fromHtml(encoded, &text);
+    try std.testing.expectEqual(@as(u32, 5), decoded.input.id);
+    try std.testing.expectEqualStrings("Search \"objects\" & apps", decoded.input.placeholder);
+
+    const textarea_html = try (Component{ .textarea = .{ .id = 6, .placeholder = "Explain \"DNS\" & TLS" } }).toHtml(&html);
+    const textarea = try Component.fromHtml(textarea_html, &text);
+    try std.testing.expectEqualStrings("Explain \"DNS\" & TLS", textarea.textarea.placeholder);
+}
+
+test "component html codec rejects untrusted browser html" {
+    var text: [128]u8 = undefined;
+
+    try std.testing.expectError(error.UnsupportedHtml, Component.fromHtml("<script>alert(1)</script>", &text));
+    try std.testing.expectError(error.UnsupportedHtml, Component.fromHtml("<button onclick=\"evil()\">Run</button>", &text));
+    try std.testing.expectError(error.InvalidHtml, Component.fromHtml("<button data-er-component=\"button\" data-er-id=\"x\">Run</button>", &text));
+    try std.testing.expectError(error.InvalidHtml, Component.fromHtml("<p data-er-component=\"text\">bad&nbsp;entity</p>", &text));
+    try std.testing.expectError(error.InvalidHtml, Component.fromHtml("<progress data-er-component=\"progress\" value=\"101\" max=\"100\"></progress>", &text));
+    try std.testing.expectError(error.InvalidHtml, Component.fromHtml("<label data-er-component=\"checkbox\" data-er-id=\"8\" data-er-checked=\"maybe\"><input type=\"checkbox\">Broken</label>", &text));
+    try std.testing.expectError(error.InvalidHtml, Component.fromHtml("<span data-er-component=\"avatar\" aria-label=\"ER\">Different</span>", &text));
+}
+
+test "component markdown codec roundtrips semantic leaf components" {
+    const components = [_]Component{
+        .{ .text = .{ .value = "DNS turns names into addresses." } },
+        .{ .card = .{ .title = "Router boundary", .detail = "Forwards packets, not app authority." } },
+        .{ .badge = .{ .label = "Lesson" } },
+        .{ .avatar = .{ .label = "ER" } },
+        .{ .kbd = .{ .label = "CtrlK" } },
+        .{ .separator = .{} },
+        .{ .button = .{ .id = 42, .label = "Run demo" } },
+        .{ .input = .{ .id = 77, .placeholder = "Search lessons" } },
+        .{ .textarea = .{ .id = 78, .placeholder = "Explain the packet path" } },
+        .{ .select = .{ .id = 79, .label = "Beginner track" } },
+        .{ .checkbox = .{ .id = 80, .label = "Show packet headers", .checked = true } },
+        .{ .switch_control = .{ .id = 81, .label = "Guided mode", .checked = false } },
+        .{ .progress = .{ .value = 0.64 } },
+        .{ .slider = .{ .id = 82, .label = "Simulation speed", .value = 0.72 } },
+        .{ .row_item = .{ .id = 91, .title = "TLS tunnel", .detail = "Protects the trip." } },
+    };
+
+    for (components) |component| {
+        var markdown: [512]u8 = undefined;
+        var text: [256]u8 = undefined;
+        const encoded = try component.toMarkdown(&markdown);
+        const decoded = try Component.fromMarkdown(encoded, &text);
+
+        try expectSameComponent(component, decoded);
+    }
+}
+
+test "component markdown codec emits readable primitive directives" {
+    var markdown: [256]u8 = undefined;
+
+    const button = try (Component{ .button = .{ .id = 9, .label = "Open object" } }).toMarkdown(&markdown);
+    try std.testing.expectEqualStrings(":::button\nid: 9\nlabel: Open object\n:::", button);
+
+    const progress = try (Component{ .progress = .{ .value = 0.64 } }).toMarkdown(&markdown);
+    try std.testing.expectEqualStrings(":::progress-control\nvalue: 64\n:::", progress);
+
+    const text = try (Component{ .text = .{ .value = "TLS > DNS?" } }).toMarkdown(&markdown);
+    try std.testing.expectEqualStrings("TLS \\> DNS?", text);
+}
+
+test "component markdown codec rejects malformed primitive directives" {
+    var text: [128]u8 = undefined;
+
+    try std.testing.expectError(error.InvalidMarkdown, Component.fromMarkdown("", &text));
+    try std.testing.expectError(error.InvalidMarkdown, Component.fromMarkdown("bad\nparagraph", &text));
+    try std.testing.expectError(error.UnsupportedMarkdown, Component.fromMarkdown(":::unknown\nvalue: no\n:::", &text));
+    try std.testing.expectError(error.InvalidMarkdown, Component.fromMarkdown(":::button\nlabel: Missing id\n:::", &text));
+    try std.testing.expectError(error.InvalidMarkdown, Component.fromMarkdown(":::badge\nname: Missing label\n:::", &text));
+    try std.testing.expectError(error.InvalidMarkdown, Component.fromMarkdown(":::button\nid: x\nlabel: Bad\n:::", &text));
+    try std.testing.expectError(error.InvalidMarkdown, Component.fromMarkdown(":::checkbox\nid: 1\nchecked: maybe\nlabel: Bad\n:::", &text));
+    try std.testing.expectError(error.InvalidMarkdown, Component.fromMarkdown(":::progress-control\nvalue: 101\n:::", &text));
+}
+
+test "stack html codec roundtrips a semantic section" {
+    const children = [_]Component{
+        .{ .text = .{ .value = "How DNS Works" } },
+        .{ .card = .{ .title = "Name lookup", .detail = "DNS turns a human name into an address a network can route." } },
+        .{ .button = .{ .id = 44, .label = "Run DNS demo" } },
+    };
+    const stack = Stack{ .axis = .column, .gap = 14, .padding = 20, .children = &children };
+    var html: [1024]u8 = undefined;
+    var decoded_children: [3]Component = undefined;
+    var text: [512]u8 = undefined;
+
+    const encoded = try stack.toHtml(&html);
+    const decoded = try Stack.fromHtml(encoded, &decoded_children, &text);
+
+    try std.testing.expect(std.mem.indexOf(u8, encoded, "<section data-er-component=\"stack\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, encoded, "<p data-er-component=\"text\">How DNS Works</p>") != null);
+    try std.testing.expectEqual(ui.Axis.column, decoded.axis);
+    try std.testing.expectEqual(@as(u16, 14), decoded.gap);
+    try std.testing.expectEqual(@as(u16, 20), decoded.padding);
+    try std.testing.expectEqual(@as(usize, 3), decoded.children.len);
+    try expectSameComponent(children[0], decoded.children[0]);
+    try expectSameComponent(children[1], decoded.children[1]);
+    try expectSameComponent(children[2], decoded.children[2]);
+}
+
+test "stack html codec streams long child components without scratch truncation" {
+    const long_detail =
+        "A lesson card can carry a full human explanation about how a request moves through the system. " ++
+        "The browser shell starts the app, the WASM side owns behavior, and every visible control still has a semantic HTML form. " ++
+        "That matters because search engines, accessibility tools, and future EdgeRun import paths need meaning instead of pixels. " ++
+        "This deliberately long card proves nested component HTML is written through the parent writer instead of a small temporary buffer. " ++
+        "The output buffer belongs to the caller, so large academy explanations can remain structured without being forced into tiny fragments. " ++
+        "The parser still rejects unsupported browser HTML and only accepts the exact component shapes that EdgeRun emits.";
+    const children = [_]Component{
+        .{ .card = .{ .title = "Long explanation", .detail = long_detail } },
+    };
+    const stack = Stack{ .axis = .column, .gap = 8, .padding = 12, .children = &children };
+    var html: [2048]u8 = undefined;
+    var decoded_children: [1]Component = undefined;
+    var text: [1024]u8 = undefined;
+
+    const encoded = try stack.toHtml(&html);
+    const decoded = try Stack.fromHtml(encoded, &decoded_children, &text);
+
+    try std.testing.expectEqual(@as(usize, 1), decoded.children.len);
+    try std.testing.expectEqualStrings(long_detail, decoded.children[0].card.detail);
+}
+
+test "stack html codec roundtrips primitive control children" {
+    const children = [_]Component{
+        .{ .avatar = .{ .label = "ER" } },
+        .{ .kbd = .{ .label = "CtrlK" } },
+        .{ .textarea = .{ .id = 1201, .placeholder = "Explain capability routing" } },
+        .{ .select = .{ .id = 1202, .label = "Security track" } },
+        .{ .checkbox = .{ .id = 1203, .label = "Show receipt ids", .checked = true } },
+        .{ .switch_control = .{ .id = 1204, .label = "Guided demo", .checked = false } },
+        .{ .progress = .{ .value = 0.42 } },
+        .{ .slider = .{ .id = 1205, .label = "Simulation speed", .value = 0.73 } },
+    };
+    const stack = Stack{ .axis = .column, .gap = 6, .padding = 10, .children = &children };
+    var html: [2048]u8 = undefined;
+    var decoded_children: [8]Component = undefined;
+    var text: [512]u8 = undefined;
+
+    const encoded = try stack.toHtml(&html);
+    const decoded = try Stack.fromHtml(encoded, &decoded_children, &text);
+
+    try std.testing.expectEqual(@as(usize, children.len), decoded.children.len);
+    for (children, decoded.children) |expected, actual| {
+        try expectSameComponent(expected, actual);
+    }
+}
+
+test "stack html codec rejects unsupported nested or malformed content" {
+    var components: [2]Component = undefined;
+    var text: [128]u8 = undefined;
+
+    try std.testing.expectError(error.InvalidHtml, Stack.fromHtml("<section data-er-component=\"stack\" data-er-axis=\"diagonal\" data-er-gap=\"1\" data-er-padding=\"0\"></section>", &components, &text));
+    try std.testing.expectError(error.InvalidHtml, Stack.fromHtml("<section data-er-component=\"stack\" data-er-axis=\"column\" data-er-gap=\"1\" data-er-padding=\"0\"><script>x()</script></section>", &components, &text));
+    try std.testing.expectError(error.UnsupportedHtml, Stack.fromHtml("<div><p>plain html</p></div>", &components, &text));
+}
+
+test "stack markdown codec roundtrips component children" {
+    const children = [_]Component{
+        .{ .text = .{ .value = "DNS turns names into addresses." } },
+        .{ .card = .{ .title = "Name lookup", .detail = "A resolver follows the route from name to address." } },
+        .{ .button = .{ .id = 44, .label = "Run DNS demo" } },
+        .{ .progress = .{ .value = 0.64 } },
+    };
+    const stack = Stack{ .axis = .column, .gap = 14, .padding = 20, .children = &children };
+    var markdown: [2048]u8 = undefined;
+    var decoded_children: [4]Component = undefined;
+    var text: [512]u8 = undefined;
+
+    const encoded = try stack.toMarkdown(&markdown);
+    const decoded = try Stack.fromMarkdown(encoded, &decoded_children, &text);
+
+    try std.testing.expect(std.mem.indexOf(u8, encoded, ":::stack\naxis: column\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, encoded, "--- component ---\n:::button") != null);
+    try std.testing.expectEqual(ui.Axis.column, decoded.axis);
+    try std.testing.expectEqual(@as(u16, 14), decoded.gap);
+    try std.testing.expectEqual(@as(u16, 20), decoded.padding);
+    try std.testing.expectEqual(@as(usize, children.len), decoded.children.len);
+    for (children, decoded.children) |expected, actual| {
+        try expectSameComponent(expected, actual);
+    }
+}
+
+test "stack markdown codec rejects malformed or unsupported children" {
+    var components: [2]Component = undefined;
+    var text: [128]u8 = undefined;
+
+    try std.testing.expectError(error.InvalidMarkdown, Stack.fromMarkdown(":::stack\naxis: diagonal\ngap: 1\npadding: 0\n--- component ---\nText\n:::", &components, &text));
+    try std.testing.expectError(error.InvalidMarkdown, Stack.fromMarkdown(":::stack\naxis: column\ngap: 1\npadding: 0\n:::", &components, &text));
+    try std.testing.expectError(error.UnsupportedMarkdown, Stack.fromMarkdown(":::stack\naxis: column\ngap: 1\npadding: 0\n--- component ---\n:::unknown\nvalue: no\n:::\n:::", &components, &text));
+}
+
+test "table component renders rows and right aligned numeric cells" {
+    const headers = [_]TableCell{
+        .{ .value = "Item" },
+        .{ .value = "Amount", .alignment = .end },
+    };
+    const row0 = [_]TableCell{
+        .{ .value = "Net Royalties" },
+        .{ .value = "$0.00", .alignment = .end },
+    };
+    const row1 = [_]TableCell{
+        .{ .value = "Processing Fee" },
+        .{ .value = "-$0.00", .alignment = .end },
+    };
+    const rows = [_]TableRow{
+        .{ .id = 701, .cells = &row0 },
+        .{ .id = 702, .cells = &row1 },
+    };
+    const table = Table{ .id = 7, .headers = &headers, .rows = &rows };
+    var commands: [64]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+
+    try table.render(&scene, ui.Rect.init(0, 0, 360, 160), .{});
+
+    try std.testing.expectEqual(ui.TextAlign.end, textCommand(scene.written(), "Amount").?.text.alignment);
+    try std.testing.expectEqual(ui.TextAlign.end, textCommand(scene.written(), "$0.00").?.text.alignment);
+    const hit = ui_input.hitTest(scene.written(), 20, 58).?;
+    try std.testing.expectEqual(@as(u32, 701), hit.id);
+}
+
+test "table html codec roundtrips semantic table" {
+    const headers = [_]TableCell{
+        .{ .value = "Layer" },
+        .{ .value = "Authority" },
+    };
+    const row0 = [_]TableCell{
+        .{ .value = "Browser" },
+        .{ .value = "host IO" },
+    };
+    const row1 = [_]TableCell{
+        .{ .value = "WASM app" },
+        .{ .value = "routing and render policy" },
+    };
+    const rows = [_]TableRow{
+        .{ .id = 81, .cells = &row0 },
+        .{ .id = 82, .cells = &row1 },
+    };
+    const table = Table{ .id = 8, .headers = &headers, .rows = &rows };
+    var html: [1024]u8 = undefined;
+    var decoded_rows: [2]TableRow = undefined;
+    var decoded_cells: [6]TableCell = undefined;
+    var text: [256]u8 = undefined;
+
+    const encoded = try table.toHtml(&html);
+    const decoded = try Table.fromHtml(encoded, &decoded_rows, &decoded_cells, &text);
+
+    try std.testing.expect(std.mem.indexOf(u8, encoded, "<table data-er-component=\"table\" data-er-id=\"8\">") != null);
+    try std.testing.expect(std.mem.indexOf(u8, encoded, "<th data-er-align=\"start\">Layer</th>") != null);
+    try std.testing.expectEqual(@as(u32, 8), decoded.id);
+    try std.testing.expectEqual(@as(usize, 2), decoded.headers.len);
+    try std.testing.expectEqual(@as(usize, 2), decoded.rows.len);
+    try std.testing.expectEqualStrings("Layer", decoded.headers[0].value);
+    try std.testing.expectEqualStrings("WASM app", decoded.rows[1].cells[0].value);
+    try std.testing.expectEqualStrings("routing and render policy", decoded.rows[1].cells[1].value);
+}
+
+test "table html codec rejects malformed tables" {
+    var rows: [2]TableRow = undefined;
+    var cells: [4]TableCell = undefined;
+    var text: [128]u8 = undefined;
+
+    try std.testing.expectError(error.UnsupportedHtml, Table.fromHtml("<table><tr><td>plain</td></tr></table>", &rows, &cells, &text));
+    try std.testing.expectError(error.InvalidHtml, Table.fromHtml("<table data-er-component=\"table\" data-er-id=\"x\"><thead><tr></tr></thead><tbody></tbody></table>", &rows, &cells, &text));
+    try std.testing.expectError(error.InvalidHtml, Table.fromHtml("<table data-er-component=\"table\" data-er-id=\"1\"><thead><tr><th data-er-align=\"left\">A</th></tr></thead><tbody></tbody></table>", &rows, &cells, &text));
+}
+
+test "details component renders summary and open body" {
+    const details = Details{
+        .id = 32001,
+        .summary = "Why does DNS matter?",
+        .body = "The name lookup decides where the next connection goes.",
+        .open = true,
+    };
+    var commands: [64]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+
+    try details.render(&scene, ui.Rect.init(0, 0, 360, 120), .{});
+
+    try std.testing.expect(hasText(scene.written(), "Why does DNS matter?"));
+    try std.testing.expect(hasTextContaining(scene.written(), "name lookup"));
+    const hit = ui_input.hitTest(scene.written(), 20, 20).?;
+    try std.testing.expectEqual(@as(u32, 32001), hit.id);
+}
+
+test "details component hides body when closed" {
+    const details = Details{
+        .id = 32002,
+        .summary = "What changes when it opens?",
+        .body = "The expanded explanation becomes visible.",
+    };
+    var commands: [32]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+
+    try details.render(&scene, ui.Rect.init(0, 0, 360, 120), .{});
+
+    try std.testing.expect(hasText(scene.written(), "What changes when it opens?"));
+    try std.testing.expect(!hasTextContaining(scene.written(), "expanded explanation"));
+}
+
+test "details html codec roundtrips semantic disclosure" {
+    const details = Details{
+        .id = 32003,
+        .summary = "TLS < identity?",
+        .body = "TLS protects a trip. Identity decides who is allowed to act.",
+        .open = true,
+    };
+    var html: [512]u8 = undefined;
+    var text: [256]u8 = undefined;
+
+    const encoded = try details.toHtml(&html);
+    const decoded = try Details.fromHtml(encoded, &text);
+
+    try std.testing.expectEqualStrings("<details data-er-component=\"details\" data-er-id=\"32003\" data-er-open=\"true\"><summary>TLS &lt; identity?</summary><p>TLS protects a trip. Identity decides who is allowed to act.</p></details>", encoded);
+    try std.testing.expectEqual(@as(u32, 32003), decoded.id);
+    try std.testing.expect(decoded.open);
+    try std.testing.expectEqualStrings("TLS < identity?", decoded.summary);
+    try std.testing.expectEqualStrings("TLS protects a trip. Identity decides who is allowed to act.", decoded.body);
+}
+
+test "details html codec rejects malformed disclosure" {
+    var text: [128]u8 = undefined;
+
+    try std.testing.expectError(error.InvalidHtml, Details.fromHtml("<details><summary>Plain</summary><p>No marker</p></details>", &text));
+    try std.testing.expectError(error.InvalidHtml, Details.fromHtml("<details data-er-component=\"details\" data-er-id=\"x\" data-er-open=\"false\"><summary>Broken</summary><p>Body</p></details>", &text));
+    try std.testing.expectError(error.InvalidHtml, Details.fromHtml("<details data-er-component=\"details\" data-er-id=\"1\" data-er-open=\"maybe\"><summary>Broken</summary><p>Body</p></details>", &text));
+}
+
+test "figure component renders alt text and caption" {
+    const figure = Figure{
+        .src = "/assets/dns-path.png",
+        .alt = "Packet path from browser to resolver",
+        .caption = "DNS translates a name before the browser can connect.",
+    };
+    var commands: [64]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+
+    try figure.render(&scene, ui.Rect.init(0, 0, 360, 180), .{});
+
+    try std.testing.expect(hasTextContaining(scene.written(), "Packet path"));
+    try std.testing.expect(hasTextContaining(scene.written(), "DNS translates"));
+}
+
+test "figure html codec roundtrips semantic media" {
+    const figure = Figure{
+        .src = "/assets/device-city.png?size=wide",
+        .alt = "Device < city map",
+        .caption = "A device is easier to understand when it is drawn as rooms and borders.",
+    };
+    var html: [512]u8 = undefined;
+    var text: [256]u8 = undefined;
+
+    const encoded = try figure.toHtml(&html);
+    const decoded = try Figure.fromHtml(encoded, &text);
+
+    try std.testing.expectEqualStrings("<figure data-er-component=\"figure\"><img src=\"/assets/device-city.png?size=wide\" alt=\"Device &lt; city map\"><figcaption>A device is easier to understand when it is drawn as rooms and borders.</figcaption></figure>", encoded);
+    try std.testing.expectEqualStrings("/assets/device-city.png?size=wide", decoded.src);
+    try std.testing.expectEqualStrings("Device < city map", decoded.alt);
+    try std.testing.expectEqualStrings("A device is easier to understand when it is drawn as rooms and borders.", decoded.caption);
+}
+
+test "figure html codec rejects malformed figures" {
+    var text: [128]u8 = undefined;
+
+    try std.testing.expectError(error.InvalidHtml, Figure.fromHtml("<figure><img src=\"/x.png\" alt=\"x\"><figcaption>x</figcaption></figure>", &text));
+    try std.testing.expectError(error.InvalidHtml, Figure.fromHtml("<figure data-er-component=\"figure\"><img src=\"\" alt=\"x\"><figcaption>x</figcaption></figure>", &text));
+    try std.testing.expectError(error.InvalidHtml, Figure.fromHtml("<figure data-er-component=\"figure\"><img src=\"/x.png\"><figcaption>x</figcaption></figure>", &text));
+}
+
+test "choice group component renders selected option and hit targets" {
+    const options = [_]ChoiceOption{
+        .{ .id = 33001, .label = "Browser asks DNS" },
+        .{ .id = 33002, .label = "GPU opens a socket", .selected = true },
+        .{ .id = 33003, .label = "Battery signs TLS" },
+    };
+    const group = ChoiceGroup{ .id = 33000, .legend = "Which part looks up a domain name?", .options = &options };
+    var commands: [96]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+
+    try group.render(&scene, ui.Rect.init(0, 0, 380, 180), .{});
+
+    try std.testing.expect(hasTextContaining(scene.written(), "domain name"));
+    try std.testing.expect(hasText(scene.written(), "GPU opens a socket"));
+    const hit = ui_input.hitTest(scene.written(), 24, 104).?;
+    try std.testing.expectEqual(@as(u32, 33002), hit.id);
+}
+
+test "choice group html codec roundtrips semantic radio options" {
+    const options = [_]ChoiceOption{
+        .{ .id = 33101, .label = "The app" },
+        .{ .id = 33102, .label = "The resolver & cache", .selected = true },
+    };
+    const group = ChoiceGroup{ .id = 33100, .legend = "Who answers cached DNS?", .options = &options };
+    var html: [768]u8 = undefined;
+    var decoded_options: [2]ChoiceOption = undefined;
+    var text: [256]u8 = undefined;
+
+    const encoded = try group.toHtml(&html);
+    const decoded = try ChoiceGroup.fromHtml(encoded, &decoded_options, &text);
+
+    try std.testing.expectEqualStrings("<fieldset data-er-component=\"choice-group\" data-er-id=\"33100\"><legend>Who answers cached DNS?</legend><label data-er-id=\"33101\" data-er-selected=\"false\"><input type=\"radio\" name=\"choice-33100\">The app</label><label data-er-id=\"33102\" data-er-selected=\"true\"><input type=\"radio\" name=\"choice-33100\">The resolver &amp; cache</label></fieldset>", encoded);
+    try std.testing.expectEqual(@as(u32, 33100), decoded.id);
+    try std.testing.expectEqualStrings("Who answers cached DNS?", decoded.legend);
+    try std.testing.expectEqual(@as(usize, 2), decoded.options.len);
+    try std.testing.expectEqual(@as(u32, 33102), decoded.options[1].id);
+    try std.testing.expect(decoded.options[1].selected);
+    try std.testing.expectEqualStrings("The resolver & cache", decoded.options[1].label);
+}
+
+test "choice group html codec rejects malformed radio groups" {
+    var options: [2]ChoiceOption = undefined;
+    var text: [128]u8 = undefined;
+
+    try std.testing.expectError(error.InvalidHtml, ChoiceGroup.fromHtml("<fieldset><legend>Plain</legend></fieldset>", &options, &text));
+    try std.testing.expectError(error.InvalidHtml, ChoiceGroup.fromHtml("<fieldset data-er-component=\"choice-group\" data-er-id=\"x\"><legend>Broken</legend></fieldset>", &options, &text));
+    try std.testing.expectError(error.InvalidHtml, ChoiceGroup.fromHtml("<fieldset data-er-component=\"choice-group\" data-er-id=\"1\"><legend>Broken</legend><label data-er-id=\"2\" data-er-selected=\"maybe\"><input type=\"radio\" name=\"choice-1\">Option</label></fieldset>", &options, &text));
+    try std.testing.expectError(error.InvalidHtml, ChoiceGroup.fromHtml("<fieldset data-er-component=\"choice-group\" data-er-id=\"1\"><legend>Broken</legend><label data-er-id=\"2\" data-er-selected=\"false\"><input type=\"radio\" name=\"choice-9\">Option</label></fieldset>", &options, &text));
+}
+
+test "step list component renders lesson state and hit targets" {
+    const steps = [_]StepItem{
+        .{ .id = 34001, .title = "Device", .detail = "Name the parts of the machine.", .state = .done },
+        .{ .id = 34002, .title = "Network", .detail = "Follow a packet across a boundary.", .state = .current },
+        .{ .id = 34003, .title = "Identity", .detail = "Bind authority to a key." },
+    };
+    const list = StepList{ .steps = &steps };
+    var commands: [96]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+
+    try list.render(&scene, ui.Rect.init(0, 0, 380, 220), .{});
+
+    try std.testing.expect(hasText(scene.written(), "Network"));
+    try std.testing.expect(hasTextContaining(scene.written(), "packet across"));
+    const hit = ui_input.hitTest(scene.written(), 24, 92).?;
+    try std.testing.expectEqual(@as(u32, 34002), hit.id);
+}
+
+test "step list html codec roundtrips semantic ordered steps" {
+    const steps = [_]StepItem{
+        .{ .id = 34101, .title = "RAM desk", .detail = "Temporary work surface.", .state = .done },
+        .{ .id = 34102, .title = "Storage", .detail = "Long term memory & files.", .state = .current },
+    };
+    const list = StepList{ .steps = &steps };
+    var html: [768]u8 = undefined;
+    var decoded_steps: [2]StepItem = undefined;
+    var text: [256]u8 = undefined;
+
+    const encoded = try list.toHtml(&html);
+    const decoded = try StepList.fromHtml(encoded, &decoded_steps, &text);
+
+    try std.testing.expectEqualStrings("<ol data-er-component=\"step-list\"><li data-er-id=\"34101\" data-er-state=\"done\"><strong>RAM desk</strong><span>Temporary work surface.</span></li><li data-er-id=\"34102\" data-er-state=\"current\"><strong>Storage</strong><span>Long term memory &amp; files.</span></li></ol>", encoded);
+    try std.testing.expectEqual(@as(usize, 2), decoded.steps.len);
+    try std.testing.expectEqual(@as(u32, 34102), decoded.steps[1].id);
+    try std.testing.expectEqual(StepState.current, decoded.steps[1].state);
+    try std.testing.expectEqualStrings("Storage", decoded.steps[1].title);
+    try std.testing.expectEqualStrings("Long term memory & files.", decoded.steps[1].detail);
+}
+
+test "step list html codec rejects malformed steps" {
+    var steps: [2]StepItem = undefined;
+    var text: [128]u8 = undefined;
+
+    try std.testing.expectError(error.InvalidHtml, StepList.fromHtml("<ol><li>Plain</li></ol>", &steps, &text));
+    try std.testing.expectError(error.InvalidHtml, StepList.fromHtml("<ol data-er-component=\"step-list\"></ol>", &steps, &text));
+    try std.testing.expectError(error.InvalidHtml, StepList.fromHtml("<ol data-er-component=\"step-list\"><li data-er-id=\"x\" data-er-state=\"todo\"><strong>Broken</strong><span>Bad id</span></li></ol>", &steps, &text));
+    try std.testing.expectError(error.InvalidHtml, StepList.fromHtml("<ol data-er-component=\"step-list\"><li data-er-id=\"1\" data-er-state=\"later\"><strong>Broken</strong><span>Bad state</span></li></ol>", &steps, &text));
+}
+
+test "breadcrumb component renders path and hit targets" {
+    const items = [_]BreadcrumbItem{
+        .{ .id = 35001, .label = "Academy", .href = "#/academy" },
+        .{ .id = 35002, .label = "Systems", .href = "#/systems" },
+        .{ .id = 35003, .label = "DNS", .href = "#/dns", .current = true },
+    };
+    const breadcrumb = Breadcrumb{ .items = &items };
+    var commands: [64]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+
+    try breadcrumb.render(&scene, ui.Rect.init(0, 0, 360, 40), .{});
+
+    try std.testing.expect(hasText(scene.written(), "Academy"));
+    try std.testing.expect(hasText(scene.written(), "DNS"));
+    const hit = ui_input.hitTest(scene.written(), 92, 20).?;
+    try std.testing.expectEqual(@as(u32, 35002), hit.id);
+}
+
+test "breadcrumb html codec roundtrips semantic navigation path" {
+    const items = [_]BreadcrumbItem{
+        .{ .id = 35101, .label = "Academy", .href = "#/academy" },
+        .{ .id = 35102, .label = "Security & Identity", .href = "#/security", .current = true },
+    };
+    const breadcrumb = Breadcrumb{ .items = &items };
+    var html: [512]u8 = undefined;
+    var decoded_items: [2]BreadcrumbItem = undefined;
+    var text: [256]u8 = undefined;
+
+    const encoded = try breadcrumb.toHtml(&html);
+    const decoded = try Breadcrumb.fromHtml(encoded, &decoded_items, &text);
+
+    try std.testing.expectEqualStrings("<nav data-er-component=\"breadcrumb\" aria-label=\"Breadcrumb\"><ol><li data-er-id=\"35101\" data-er-current=\"false\"><a href=\"#/academy\">Academy</a></li><li data-er-id=\"35102\" data-er-current=\"true\"><a href=\"#/security\">Security &amp; Identity</a></li></ol></nav>", encoded);
+    try std.testing.expectEqual(@as(usize, 2), decoded.items.len);
+    try std.testing.expectEqual(@as(u32, 35102), decoded.items[1].id);
+    try std.testing.expect(decoded.items[1].current);
+    try std.testing.expectEqualStrings("#/security", decoded.items[1].href);
+    try std.testing.expectEqualStrings("Security & Identity", decoded.items[1].label);
+}
+
+test "breadcrumb html codec rejects malformed paths" {
+    var items: [2]BreadcrumbItem = undefined;
+    var text: [128]u8 = undefined;
+
+    try std.testing.expectError(error.InvalidHtml, Breadcrumb.fromHtml("<nav><ol><li>Plain</li></ol></nav>", &items, &text));
+    try std.testing.expectError(error.InvalidHtml, Breadcrumb.fromHtml("<nav data-er-component=\"breadcrumb\" aria-label=\"Breadcrumb\"><ol></ol></nav>", &items, &text));
+    try std.testing.expectError(error.InvalidHtml, Breadcrumb.fromHtml("<nav data-er-component=\"breadcrumb\" aria-label=\"Breadcrumb\"><ol><li data-er-id=\"x\" data-er-current=\"false\"><a href=\"#\">Broken</a></li></ol></nav>", &items, &text));
+    try std.testing.expectError(error.InvalidHtml, Breadcrumb.fromHtml("<nav data-er-component=\"breadcrumb\" aria-label=\"Breadcrumb\"><ol><li data-er-id=\"1\" data-er-current=\"maybe\"><a href=\"#\">Broken</a></li></ol></nav>", &items, &text));
+}
+
+test "definition list component renders glossary rows and hit targets" {
+    const items = [_]DefinitionItem{
+        .{ .id = 36001, .term = "DNS", .detail = "Turns a name into an address the network can route." },
+        .{ .id = 36002, .term = "TLS", .detail = "Protects bytes while they travel between endpoints." },
+    };
+    const list = DefinitionList{ .items = &items };
+    var commands: [64]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+
+    try list.render(&scene, ui.Rect.init(0, 0, 380, 200), .{});
+
+    try std.testing.expect(hasText(scene.written(), "DNS"));
+    const hit = ui_input.hitTest(scene.written(), 24, 104).?;
+    try std.testing.expectEqual(@as(u32, 36002), hit.id);
+}
+
+test "definition list html codec roundtrips semantic terms" {
+    const items = [_]DefinitionItem{
+        .{ .id = 36101, .term = "Capability", .detail = "A concrete permission to do one thing." },
+        .{ .id = 36102, .term = "Identity", .detail = "A key-backed claim about who can act & sign." },
+    };
+    const list = DefinitionList{ .items = &items };
+    var html: [768]u8 = undefined;
+    var decoded_items: [2]DefinitionItem = undefined;
+    var text: [256]u8 = undefined;
+
+    const encoded = try list.toHtml(&html);
+    const decoded = try DefinitionList.fromHtml(encoded, &decoded_items, &text);
+
+    try std.testing.expectEqualStrings("<dl data-er-component=\"definition-list\"><div data-er-id=\"36101\"><dt>Capability</dt><dd>A concrete permission to do one thing.</dd></div><div data-er-id=\"36102\"><dt>Identity</dt><dd>A key-backed claim about who can act &amp; sign.</dd></div></dl>", encoded);
+    try std.testing.expectEqual(@as(usize, 2), decoded.items.len);
+    try std.testing.expectEqual(@as(u32, 36102), decoded.items[1].id);
+    try std.testing.expectEqualStrings("Identity", decoded.items[1].term);
+    try std.testing.expectEqualStrings("A key-backed claim about who can act & sign.", decoded.items[1].detail);
+}
+
+test "definition list html codec rejects malformed terms" {
+    var items: [2]DefinitionItem = undefined;
+    var text: [128]u8 = undefined;
+
+    try std.testing.expectError(error.InvalidHtml, DefinitionList.fromHtml("<dl><dt>Plain</dt><dd>No marker</dd></dl>", &items, &text));
+    try std.testing.expectError(error.InvalidHtml, DefinitionList.fromHtml("<dl data-er-component=\"definition-list\"></dl>", &items, &text));
+    try std.testing.expectError(error.InvalidHtml, DefinitionList.fromHtml("<dl data-er-component=\"definition-list\"><div data-er-id=\"x\"><dt>Broken</dt><dd>Bad id</dd></div></dl>", &items, &text));
+    try std.testing.expectError(error.InvalidHtml, DefinitionList.fromHtml("<dl data-er-component=\"definition-list\"><div data-er-id=\"1\"><dt></dt><dd>Missing term</dd></div></dl>", &items, &text));
+}
+
+test "timeline component renders events and hit targets" {
+    const events = [_]TimelineEvent{
+        .{ .id = 37001, .time = "1", .title = "Browser asks", .detail = "The app asks for a name to become an address." },
+        .{ .id = 37002, .time = "2", .title = "Resolver answers", .detail = "A cached or authoritative answer comes back." },
+    };
+    const timeline = Timeline{ .events = &events };
+    var commands: [96]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+
+    try timeline.render(&scene, ui.Rect.init(0, 0, 380, 210), .{});
+
+    try std.testing.expect(hasText(scene.written(), "Browser asks"));
+    try std.testing.expect(hasText(scene.written(), "Resolver answers"));
+    const hit = ui_input.hitTest(scene.written(), 24, 104).?;
+    try std.testing.expectEqual(@as(u32, 37002), hit.id);
+}
+
+test "timeline html codec roundtrips semantic events" {
+    const events = [_]TimelineEvent{
+        .{ .id = 37101, .time = "t0", .title = "Key exists", .detail = "The device already has a root of authority." },
+        .{ .id = 37102, .time = "t1", .title = "Receipt written", .detail = "The work result is bound to an object & signer." },
+    };
+    const timeline = Timeline{ .events = &events };
+    var html: [768]u8 = undefined;
+    var decoded_events: [2]TimelineEvent = undefined;
+    var text: [256]u8 = undefined;
+
+    const encoded = try timeline.toHtml(&html);
+    const decoded = try Timeline.fromHtml(encoded, &decoded_events, &text);
+
+    try std.testing.expectEqualStrings("<ol data-er-component=\"timeline\"><li data-er-id=\"37101\"><time>t0</time><strong>Key exists</strong><p>The device already has a root of authority.</p></li><li data-er-id=\"37102\"><time>t1</time><strong>Receipt written</strong><p>The work result is bound to an object &amp; signer.</p></li></ol>", encoded);
+    try std.testing.expectEqual(@as(usize, 2), decoded.events.len);
+    try std.testing.expectEqual(@as(u32, 37102), decoded.events[1].id);
+    try std.testing.expectEqualStrings("t1", decoded.events[1].time);
+    try std.testing.expectEqualStrings("Receipt written", decoded.events[1].title);
+    try std.testing.expectEqualStrings("The work result is bound to an object & signer.", decoded.events[1].detail);
+}
+
+test "timeline html codec rejects malformed events" {
+    var events: [2]TimelineEvent = undefined;
+    var text: [128]u8 = undefined;
+
+    try std.testing.expectError(error.InvalidHtml, Timeline.fromHtml("<ol><li>Plain</li></ol>", &events, &text));
+    try std.testing.expectError(error.InvalidHtml, Timeline.fromHtml("<ol data-er-component=\"timeline\"></ol>", &events, &text));
+    try std.testing.expectError(error.InvalidHtml, Timeline.fromHtml("<ol data-er-component=\"timeline\"><li data-er-id=\"x\"><time>1</time><strong>Broken</strong><p>Bad id</p></li></ol>", &events, &text));
+    try std.testing.expectError(error.InvalidHtml, Timeline.fromHtml("<ol data-er-component=\"timeline\"><li data-er-id=\"1\"><time></time><strong>Broken</strong><p>Missing time</p></li></ol>", &events, &text));
+}
+
+test "resource list component renders links and hit targets" {
+    const items = [_]ResourceItem{
+        .{ .id = 38001, .label = "DNS simulator", .href = "#/demo/dns", .detail = "Watch the resolver answer a cached name." },
+        .{ .id = 38002, .label = "TLS walkthrough", .href = "#/demo/tls", .detail = "Follow a protected connection from client to server." },
+    };
+    const list = ResourceList{ .items = &items };
+    var commands: [96]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+
+    try list.render(&scene, ui.Rect.init(0, 0, 380, 190), .{});
+
+    try std.testing.expect(hasText(scene.written(), "DNS simulator"));
+    try std.testing.expect(hasText(scene.written(), "TLS walkthrough"));
+    const hit = ui_input.hitTest(scene.written(), 24, 96).?;
+    try std.testing.expectEqual(@as(u32, 38002), hit.id);
+}
+
+test "resource list html codec roundtrips semantic links" {
+    const items = [_]ResourceItem{
+        .{ .id = 38101, .label = "Receipt viewer", .href = "#/tools/receipts", .detail = "Inspect object ids and signatures." },
+        .{ .id = 38102, .label = "Identity & keys", .href = "#/lessons/identity", .detail = "Learn why accounts are not identity." },
+    };
+    const list = ResourceList{ .items = &items };
+    var html: [768]u8 = undefined;
+    var decoded_items: [2]ResourceItem = undefined;
+    var text: [256]u8 = undefined;
+
+    const encoded = try list.toHtml(&html);
+    const decoded = try ResourceList.fromHtml(encoded, &decoded_items, &text);
+
+    try std.testing.expectEqualStrings("<ul data-er-component=\"resource-list\"><li data-er-id=\"38101\"><a href=\"#/tools/receipts\">Receipt viewer</a><p>Inspect object ids and signatures.</p></li><li data-er-id=\"38102\"><a href=\"#/lessons/identity\">Identity &amp; keys</a><p>Learn why accounts are not identity.</p></li></ul>", encoded);
+    try std.testing.expectEqual(@as(usize, 2), decoded.items.len);
+    try std.testing.expectEqual(@as(u32, 38102), decoded.items[1].id);
+    try std.testing.expectEqualStrings("Identity & keys", decoded.items[1].label);
+    try std.testing.expectEqualStrings("#/lessons/identity", decoded.items[1].href);
+    try std.testing.expectEqualStrings("Learn why accounts are not identity.", decoded.items[1].detail);
+}
+
+test "resource list html codec rejects malformed links" {
+    var items: [2]ResourceItem = undefined;
+    var text: [128]u8 = undefined;
+
+    try std.testing.expectError(error.InvalidHtml, ResourceList.fromHtml("<ul><li><a href=\"#\">Plain</a></li></ul>", &items, &text));
+    try std.testing.expectError(error.InvalidHtml, ResourceList.fromHtml("<ul data-er-component=\"resource-list\"></ul>", &items, &text));
+    try std.testing.expectError(error.InvalidHtml, ResourceList.fromHtml("<ul data-er-component=\"resource-list\"><li data-er-id=\"x\"><a href=\"#\">Broken</a><p>Bad id</p></li></ul>", &items, &text));
+    try std.testing.expectError(error.InvalidHtml, ResourceList.fromHtml("<ul data-er-component=\"resource-list\"><li data-er-id=\"1\"><a href=\"\">Broken</a><p>Missing href</p></li></ul>", &items, &text));
+}
+
+test "progress summary component renders progress and hit target" {
+    const summary = ProgressSummary{ .id = 39001, .label = "Academy progress", .completed = 3, .total = 8 };
+    var commands: [48]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+
+    try summary.render(&scene, ui.Rect.init(0, 0, 360, 96), .{});
+
+    try std.testing.expect(hasText(scene.written(), "Academy progress"));
+    const hit = ui_input.hitTest(scene.written(), 20, 20).?;
+    try std.testing.expectEqual(@as(u32, 39001), hit.id);
+}
+
+test "progress summary html codec roundtrips semantic progress" {
+    const summary = ProgressSummary{ .id = 39101, .label = "Systems & Security", .completed = 5, .total = 12 };
+    var html: [256]u8 = undefined;
+    var text: [128]u8 = undefined;
+
+    const encoded = try summary.toHtml(&html);
+    const decoded = try ProgressSummary.fromHtml(encoded, &text);
+
+    try std.testing.expectEqualStrings("<section data-er-component=\"progress-summary\" data-er-id=\"39101\"><h2>Systems &amp; Security</h2><progress value=\"5\" max=\"12\"></progress></section>", encoded);
+    try std.testing.expectEqual(@as(u32, 39101), decoded.id);
+    try std.testing.expectEqualStrings("Systems & Security", decoded.label);
+    try std.testing.expectEqual(@as(u32, 5), decoded.completed);
+    try std.testing.expectEqual(@as(u32, 12), decoded.total);
+}
+
+test "progress summary html codec rejects malformed progress" {
+    var text: [128]u8 = undefined;
+
+    try std.testing.expectError(error.InvalidHtml, ProgressSummary.fromHtml("<section><progress value=\"1\" max=\"2\"></progress></section>", &text));
+    try std.testing.expectError(error.InvalidHtml, ProgressSummary.fromHtml("<section data-er-component=\"progress-summary\" data-er-id=\"1\"><h2></h2><progress value=\"1\" max=\"2\"></progress></section>", &text));
+    try std.testing.expectError(error.InvalidHtml, ProgressSummary.fromHtml("<section data-er-component=\"progress-summary\" data-er-id=\"x\"><h2>Broken</h2><progress value=\"1\" max=\"2\"></progress></section>", &text));
+    try std.testing.expectError(error.InvalidHtml, ProgressSummary.fromHtml("<section data-er-component=\"progress-summary\" data-er-id=\"1\"><h2>Broken</h2><progress value=\"3\" max=\"2\"></progress></section>", &text));
+    try std.testing.expectError(error.InvalidHtml, ProgressSummary.fromHtml("<section data-er-component=\"progress-summary\" data-er-id=\"1\"><h2>Broken</h2><progress value=\"0\" max=\"0\"></progress></section>", &text));
+}
+
+test "nav component renders active item and hit targets" {
+    const items = [_]NavItem{
+        .{ .id = 30011, .label = "Academy", .href = "#/academy", .active = true },
+        .{ .id = 30012, .label = "Systems", .href = "#/systems" },
+        .{ .id = 30013, .label = "Security", .href = "#/security" },
+    };
+    const nav = Nav{ .label = "Academy sections", .items = &items };
+    var commands: [64]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+
+    try nav.render(&scene, ui.Rect.init(0, 0, 360, 48), .{});
+
+    try std.testing.expect(hasText(scene.written(), "Academy"));
+    try std.testing.expect(hasText(scene.written(), "Security"));
+    const hit = ui_input.hitTest(scene.written(), 20, 24).?;
+    try std.testing.expectEqual(@as(u32, 30011), hit.id);
+}
+
+test "nav html codec roundtrips semantic nav" {
+    const items = [_]NavItem{
+        .{ .id = 30021, .label = "Start & Map", .href = "#/start?mode=human", .active = true },
+        .{ .id = 30022, .label = "Network < DNS", .href = "#/network" },
+    };
+    const nav = Nav{ .label = "Academy & Lessons", .items = &items };
+    var html: [512]u8 = undefined;
+    var decoded_items: [2]NavItem = undefined;
+    var text: [256]u8 = undefined;
+
+    const encoded = try nav.toHtml(&html);
+    const decoded = try Nav.fromHtml(encoded, &decoded_items, &text);
+
+    try std.testing.expectEqualStrings("<nav data-er-component=\"nav\" aria-label=\"Academy &amp; Lessons\"><a data-er-id=\"30021\" data-er-active=\"true\" href=\"#/start?mode=human\">Start &amp; Map</a><a data-er-id=\"30022\" data-er-active=\"false\" href=\"#/network\">Network &lt; DNS</a></nav>", encoded);
+    try std.testing.expectEqualStrings("Academy & Lessons", decoded.label);
+    try std.testing.expectEqual(@as(usize, 2), decoded.items.len);
+    try std.testing.expectEqual(@as(u32, 30021), decoded.items[0].id);
+    try std.testing.expect(decoded.items[0].active);
+    try std.testing.expectEqualStrings("#/start?mode=human", decoded.items[0].href);
+    try std.testing.expectEqualStrings("Network < DNS", decoded.items[1].label);
+}
+
+test "nav html codec rejects malformed nav" {
+    var items: [2]NavItem = undefined;
+    var text: [128]u8 = undefined;
+
+    try std.testing.expectError(error.InvalidHtml, Nav.fromHtml("<nav><a href=\"#\">Plain</a></nav>", &items, &text));
+    try std.testing.expectError(error.InvalidHtml, Nav.fromHtml("<nav data-er-component=\"nav\" aria-label=\"Main\"><a data-er-id=\"x\" data-er-active=\"false\" href=\"#\">Broken</a></nav>", &items, &text));
+    try std.testing.expectError(error.InvalidHtml, Nav.fromHtml("<nav data-er-component=\"nav\" aria-label=\"Main\"><a data-er-id=\"1\" data-er-active=\"maybe\" href=\"#\">Broken</a></nav>", &items, &text));
+    try std.testing.expectError(error.InvalidHtml, Nav.fromHtml("<nav data-er-component=\"nav\" aria-label=\"Main\"></nav>", &items, &text));
+}
+
+test "region component renders semantic children" {
+    const children = [_]Component{
+        .{ .text = .{ .value = "Academy path" } },
+        .{ .button = .{ .id = 31001, .label = "Continue" } },
+    };
+    const region = Region{ .tag = .main, .label = "Lesson body", .children = &children };
+    var commands: [64]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+
+    try region.render(&scene, ui.Rect.init(0, 0, 360, 120), .{});
+
+    try std.testing.expect(hasText(scene.written(), "Academy path"));
+    try std.testing.expect(hasText(scene.written(), "Continue"));
+    const hit = ui_input.hitTest(scene.written(), 24, 58).?;
+    try std.testing.expectEqual(@as(u32, 31001), hit.id);
+}
+
+test "region html codec roundtrips landmark content" {
+    const children = [_]Component{
+        .{ .text = .{ .value = "A browser loads the shell." } },
+        .{ .card = .{ .title = "WASM owns behavior", .detail = "The host only evaluates the bootstrap string." } },
+    };
+    const region = Region{ .tag = .article, .label = "Browser and WASM", .children = &children };
+    var html: [1024]u8 = undefined;
+    var decoded_children: [2]Component = undefined;
+    var text: [512]u8 = undefined;
+
+    const encoded = try region.toHtml(&html);
+    const decoded = try Region.fromHtml(encoded, &decoded_children, &text);
+
+    try std.testing.expectEqualStrings("<article data-er-component=\"region\" aria-label=\"Browser and WASM\"><p data-er-component=\"text\">A browser loads the shell.</p><article data-er-component=\"card\"><h2>WASM owns behavior</h2><p>The host only evaluates the bootstrap string.</p></article></article>", encoded);
+    try std.testing.expectEqual(RegionTag.article, decoded.tag);
+    try std.testing.expectEqualStrings("Browser and WASM", decoded.label);
+    try std.testing.expectEqual(@as(usize, 2), decoded.children.len);
+    try expectSameComponent(children[0], decoded.children[0]);
+    try expectSameComponent(children[1], decoded.children[1]);
+}
+
+test "region html codec rejects plain landmarks and empty regions" {
+    var children: [2]Component = undefined;
+    var text: [128]u8 = undefined;
+
+    try std.testing.expectError(error.InvalidHtml, Region.fromHtml("<main><p>Plain</p></main>", &children, &text));
+    try std.testing.expectError(error.InvalidHtml, Region.fromHtml("<main data-er-component=\"region\" aria-label=\"Body\"></main>", &children, &text));
+    try std.testing.expectError(error.InvalidHtml, Region.fromHtml("<aside data-er-component=\"region\" aria-label=\"Side\"><p data-er-component=\"text\">No</p></aside>", &children, &text));
+}
+
+test "region markdown codec roundtrips landmark content" {
+    const children = [_]Component{
+        .{ .text = .{ .value = "A browser loads the shell." } },
+        .{ .card = .{ .title = "WASM owns behavior", .detail = "The host only evaluates the bootstrap string." } },
+        .{ .button = .{ .id = 32001, .label = "Open lesson" } },
+    };
+    const region = Region{ .tag = .main, .label = "Browser and WASM", .children = &children };
+    var markdown: [2048]u8 = undefined;
+    var decoded_children: [3]Component = undefined;
+    var text: [512]u8 = undefined;
+
+    const encoded = try region.toMarkdown(&markdown);
+    const decoded = try Region.fromMarkdown(encoded, &decoded_children, &text);
+
+    try std.testing.expect(std.mem.indexOf(u8, encoded, ":::region\ntag: main\nlabel: Browser and WASM\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, encoded, "--- component ---\n:::card") != null);
+    try std.testing.expectEqual(RegionTag.main, decoded.tag);
+    try std.testing.expectEqualStrings("Browser and WASM", decoded.label);
+    try std.testing.expectEqual(@as(usize, children.len), decoded.children.len);
+    for (children, decoded.children) |expected, actual| {
+        try expectSameComponent(expected, actual);
+    }
+}
+
+test "region markdown codec rejects unsupported landmarks and empty content" {
+    var children: [2]Component = undefined;
+    var text: [128]u8 = undefined;
+
+    try std.testing.expectError(error.InvalidMarkdown, Region.fromMarkdown(":::region\ntag: aside\nlabel: Side\n--- component ---\nNo\n:::", &children, &text));
+    try std.testing.expectError(error.InvalidMarkdown, Region.fromMarkdown(":::region\ntag: main\nlabel: Empty\n:::", &children, &text));
+    try std.testing.expectError(error.UnsupportedMarkdown, Region.fromMarkdown(":::region\ntag: article\nlabel: Body\n--- component ---\n:::unknown\nvalue: no\n:::\n:::", &children, &text));
+}
+
+test "aside component renders title and body" {
+    const aside = Aside{
+        .title = "Mental model",
+        .body = "Think of a capability as a key that only opens one specific door.",
+    };
+    var commands: [48]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+
+    try aside.render(&scene, ui.Rect.init(0, 0, 360, 120), .{});
+
+    try std.testing.expect(hasText(scene.written(), "Mental model"));
+    try std.testing.expect(hasTextContaining(scene.written(), "capability as a key"));
+}
+
+test "aside html codec roundtrips semantic side note" {
+    const aside = Aside{
+        .title = "Why this matters",
+        .body = "Security gets easier when authority is visible & narrow.",
+    };
+    var html: [384]u8 = undefined;
+    var text: [256]u8 = undefined;
+
+    const encoded = try aside.toHtml(&html);
+    const decoded = try Aside.fromHtml(encoded, &text);
+
+    try std.testing.expectEqualStrings("<aside data-er-component=\"aside\"><h2>Why this matters</h2><p>Security gets easier when authority is visible &amp; narrow.</p></aside>", encoded);
+    try std.testing.expectEqualStrings("Why this matters", decoded.title);
+    try std.testing.expectEqualStrings("Security gets easier when authority is visible & narrow.", decoded.body);
+}
+
+test "aside html codec rejects malformed side notes" {
+    var text: [128]u8 = undefined;
+
+    try std.testing.expectError(error.InvalidHtml, Aside.fromHtml("<aside><h2>Plain</h2><p>No component marker</p></aside>", &text));
+    try std.testing.expectError(error.InvalidHtml, Aside.fromHtml("<aside data-er-component=\"aside\"><h2></h2><p>Missing title</p></aside>", &text));
+    try std.testing.expectError(error.InvalidHtml, Aside.fromHtml("<aside data-er-component=\"aside\"><h2>Missing body</h2><p></p></aside>", &text));
+    try std.testing.expectError(error.InvalidHtml, Aside.fromHtml("<aside data-er-component=\"aside\"><h2>Broken</h2><span>Wrong body tag</span></aside>", &text));
+}
+
+test "markdown codecs roundtrip academy content blocks" {
+    var markdown: [768]u8 = undefined;
+    var text: [512]u8 = undefined;
+
+    const heading_markdown = try (Heading{ .level = 2, .value = "DNS & TLS: simple path" }).toMarkdown(&markdown);
+    try std.testing.expectEqualStrings("## DNS & TLS\\: simple path", heading_markdown);
+    const heading = try Heading.fromMarkdown(heading_markdown, &text);
+    try std.testing.expectEqual(@as(u8, 2), heading.level);
+    try std.testing.expectEqualStrings("DNS & TLS: simple path", heading.value);
+
+    const items = [_][]const u8{ "Browser asks", "Resolver answers", "Cache remembers" };
+    const list_markdown = try (List{ .ordered = true, .items = &items }).toMarkdown(&markdown);
+    try std.testing.expectEqualStrings("1. Browser asks\n2. Resolver answers\n3. Cache remembers", list_markdown);
+    var decoded_items: [3][]const u8 = undefined;
+    const list = try List.fromMarkdown(list_markdown, &decoded_items, &text);
+    try std.testing.expect(list.ordered);
+    try std.testing.expectEqualStrings("Resolver answers", list.items[1]);
+
+    const callout_markdown = try (Callout{ .value = "A name is not identity." }).toMarkdown(&markdown);
+    try std.testing.expectEqualStrings("> A name is not identity\\.", callout_markdown);
+    const callout = try Callout.fromMarkdown(callout_markdown, &text);
+    try std.testing.expectEqualStrings("A name is not identity.", callout.value);
+
+    const aside_markdown = try (Aside{ .title = "Mental model", .body = "A capability opens one specific door." }).toMarkdown(&markdown);
+    try std.testing.expectEqualStrings(":::aside\ntitle: Mental model\nbody: A capability opens one specific door\\.\n:::", aside_markdown);
+    const aside = try Aside.fromMarkdown(aside_markdown, &text);
+    try std.testing.expectEqualStrings("Mental model", aside.title);
+    try std.testing.expectEqualStrings("A capability opens one specific door.", aside.body);
+
+    const lines = [_][]const u8{ "const port = 443;", "try connect(port);" };
+    const code_markdown = try (CodeBlock{ .language = "zig", .lines = &lines }).toMarkdown(&markdown);
+    try std.testing.expectEqualStrings("```zig\nconst port = 443;\ntry connect(port);\n```", code_markdown);
+    var decoded_lines: [2][]const u8 = undefined;
+    const code = try CodeBlock.fromMarkdown(code_markdown, &decoded_lines);
+    try std.testing.expectEqualStrings("zig", code.language);
+    try std.testing.expectEqualStrings("try connect(port);", code.lines[1]);
+}
+
+test "markdown codecs reject unsupported or ambiguous input" {
+    var text: [128]u8 = undefined;
+    var items: [2][]const u8 = undefined;
+    var lines: [2][]const u8 = undefined;
+
+    try std.testing.expectError(error.InvalidMarkdown, Heading.fromMarkdown("#### Too deep", &text));
+    try std.testing.expectError(error.InvalidMarkdown, Heading.fromMarkdown("#", &text));
+    try std.testing.expectError(error.InvalidMarkdown, List.fromMarkdown("1. First\n3. Skips", &items, &text));
+    try std.testing.expectError(error.InvalidMarkdown, List.fromMarkdown("- ", &items, &text));
+    try std.testing.expectError(error.UnsupportedMarkdown, Callout.fromMarkdown("plain paragraph", &text));
+    try std.testing.expectError(error.InvalidMarkdown, Aside.fromMarkdown(":::aside\ntitle: Missing body\n:::", &text));
+    try std.testing.expectError(error.InvalidMarkdown, CodeBlock.fromMarkdown("```zig\nbad ``` fence\n```", &lines));
+}
+
+test "markdown directives roundtrip academy cards resources and progress" {
+    var markdown: [1024]u8 = undefined;
+    var text: [512]u8 = undefined;
+
+    const card_markdown = try (Card{ .title = "Router boundary", .detail = "Forwards packets, does not own the app." }).toMarkdown(&markdown);
+    try std.testing.expectEqualStrings(":::card\ntitle: Router boundary\ndetail: Forwards packets, does not own the app\\.\n:::", card_markdown);
+    const card = try Card.fromMarkdown(card_markdown, &text);
+    try std.testing.expectEqualStrings("Router boundary", card.title);
+    try std.testing.expectEqualStrings("Forwards packets, does not own the app.", card.detail);
+
+    const resources = [_]ResourceItem{
+        .{ .id = 41001, .label = "DNS simulator", .href = "#/demo/dns", .detail = "Watch a resolver answer." },
+        .{ .id = 41002, .label = "TLS walkthrough", .href = "#/demo/tls", .detail = "Follow protected bytes." },
+    };
+    const resource_markdown = try (ResourceList{ .items = &resources }).toMarkdown(&markdown);
+    try std.testing.expectEqualStrings(":::resources\nitem: 41001\nlabel: DNS simulator\nhref: \\#/demo/dns\ndetail: Watch a resolver answer\\.\nitem: 41002\nlabel: TLS walkthrough\nhref: \\#/demo/tls\ndetail: Follow protected bytes\\.\n:::", resource_markdown);
+    var decoded_resources: [2]ResourceItem = undefined;
+    const resource_list = try ResourceList.fromMarkdown(resource_markdown, &decoded_resources, &text);
+    try std.testing.expectEqual(@as(usize, 2), resource_list.items.len);
+    try std.testing.expectEqual(@as(u32, 41002), resource_list.items[1].id);
+    try std.testing.expectEqualStrings("TLS walkthrough", resource_list.items[1].label);
+    try std.testing.expectEqualStrings("#/demo/tls", resource_list.items[1].href);
+
+    const progress_markdown = try (ProgressSummary{ .id = 42001, .label = "Academy progress", .completed = 6, .total = 10 }).toMarkdown(&markdown);
+    try std.testing.expectEqualStrings(":::progress\nid: 42001\nlabel: Academy progress\ncompleted: 6\ntotal: 10\n:::", progress_markdown);
+    const progress = try ProgressSummary.fromMarkdown(progress_markdown, &text);
+    try std.testing.expectEqual(@as(u32, 42001), progress.id);
+    try std.testing.expectEqualStrings("Academy progress", progress.label);
+    try std.testing.expectEqual(@as(u32, 6), progress.completed);
+    try std.testing.expectEqual(@as(u32, 10), progress.total);
+}
+
+test "markdown directives reject malformed academy blocks" {
+    var text: [128]u8 = undefined;
+    var resources: [2]ResourceItem = undefined;
+
+    try std.testing.expectError(error.InvalidMarkdown, Card.fromMarkdown(":::card\ntitle: Missing detail\n:::", &text));
+    try std.testing.expectError(error.InvalidMarkdown, ResourceList.fromMarkdown(":::resources\nitem: 1\nlabel: Missing href\ndetail: No\n:::", &resources, &text));
+    try std.testing.expectError(error.InvalidMarkdown, ResourceList.fromMarkdown(":::resources\n:::", &resources, &text));
+    try std.testing.expectError(error.InvalidMarkdown, ProgressSummary.fromMarkdown(":::progress\nid: 1\nlabel: Bad\ncompleted: 11\ntotal: 10\n:::", &text));
+    try std.testing.expectError(error.InvalidMarkdown, ProgressSummary.fromMarkdown(":::progress\nid: 1\nlabel: Bad\ncompleted: 0\ntotal: 0\n:::", &text));
+}
+
+test "markdown directives roundtrip learning order blocks" {
+    var markdown: [1536]u8 = undefined;
+    var text: [768]u8 = undefined;
+
+    const steps = [_]StepItem{
+        .{ .id = 43001, .state = .done, .title = "Name the actor", .detail = "Find which component is asking for authority." },
+        .{ .id = 43002, .state = .current, .title = "Trace the boundary", .detail = "Follow the request into the host." },
+    };
+    const step_markdown = try (StepList{ .steps = &steps }).toMarkdown(&markdown);
+    try std.testing.expectEqualStrings(":::steps\nstep: 43001\nstate: done\ntitle: Name the actor\ndetail: Find which component is asking for authority\\.\nstep: 43002\nstate: current\ntitle: Trace the boundary\ndetail: Follow the request into the host\\.\n:::", step_markdown);
+    var decoded_steps: [2]StepItem = undefined;
+    const step_list = try StepList.fromMarkdown(step_markdown, &decoded_steps, &text);
+    try std.testing.expectEqual(@as(usize, 2), step_list.steps.len);
+    try std.testing.expectEqual(StepState.current, step_list.steps[1].state);
+    try std.testing.expectEqualStrings("Trace the boundary", step_list.steps[1].title);
+
+    const definitions = [_]DefinitionItem{
+        .{ .id = 44001, .term = "Capability", .detail = "A concrete permission to do one thing." },
+        .{ .id = 44002, .term = "Receipt", .detail = "A signed record that work happened." },
+    };
+    const definition_markdown = try (DefinitionList{ .items = &definitions }).toMarkdown(&markdown);
+    var decoded_definitions: [2]DefinitionItem = undefined;
+    const definition_list = try DefinitionList.fromMarkdown(definition_markdown, &decoded_definitions, &text);
+    try std.testing.expectEqual(@as(usize, 2), definition_list.items.len);
+    try std.testing.expectEqual(@as(u32, 44002), definition_list.items[1].id);
+    try std.testing.expectEqualStrings("Receipt", definition_list.items[1].term);
+
+    const events = [_]TimelineEvent{
+        .{ .id = 45001, .time = "t0", .title = "Request starts", .detail = "The UI asks for a capability." },
+        .{ .id = 45002, .time = "t1", .title = "Receipt lands", .detail = "The result is tied to identity." },
+    };
+    const timeline_markdown = try (Timeline{ .events = &events }).toMarkdown(&markdown);
+    var decoded_events: [2]TimelineEvent = undefined;
+    const timeline = try Timeline.fromMarkdown(timeline_markdown, &decoded_events, &text);
+    try std.testing.expectEqual(@as(usize, 2), timeline.events.len);
+    try std.testing.expectEqualStrings("t1", timeline.events[1].time);
+    try std.testing.expectEqualStrings("Receipt lands", timeline.events[1].title);
+}
+
+test "markdown directives reject malformed learning order blocks" {
+    var text: [128]u8 = undefined;
+    var steps: [2]StepItem = undefined;
+    var definitions: [2]DefinitionItem = undefined;
+    var events: [2]TimelineEvent = undefined;
+
+    try std.testing.expectError(error.InvalidMarkdown, StepList.fromMarkdown(":::steps\n:::", &steps, &text));
+    try std.testing.expectError(error.InvalidMarkdown, StepList.fromMarkdown(":::steps\nstep: 1\nstate: maybe\ntitle: Broken\ndetail: Bad state\n:::", &steps, &text));
+    try std.testing.expectError(error.InvalidMarkdown, DefinitionList.fromMarkdown(":::definitions\nitem: 1\nterm: Missing detail\n:::", &definitions, &text));
+    try std.testing.expectError(error.InvalidMarkdown, Timeline.fromMarkdown(":::timeline\nevent: 1\ntime: t0\ntitle: Missing detail\n:::", &events, &text));
+}
+
+test "markdown directives roundtrip interactive lesson blocks" {
+    var markdown: [1536]u8 = undefined;
+    var text: [768]u8 = undefined;
+
+    const details_markdown = try (Details{ .id = 46001, .summary = "Why DNS cache matters", .body = "Caching avoids repeating the same network trip.", .open = true }).toMarkdown(&markdown);
+    try std.testing.expectEqualStrings(":::details\nid: 46001\nopen: true\nsummary: Why DNS cache matters\nbody: Caching avoids repeating the same network trip\\.\n:::", details_markdown);
+    const details = try Details.fromMarkdown(details_markdown, &text);
+    try std.testing.expectEqual(@as(u32, 46001), details.id);
+    try std.testing.expect(details.open);
+    try std.testing.expectEqualStrings("Why DNS cache matters", details.summary);
+
+    const figure_markdown = try (Figure{ .src = "/assets/dns.png", .alt = "DNS request path", .caption = "A name becomes a routable address." }).toMarkdown(&markdown);
+    try std.testing.expectEqualStrings(":::figure\nsrc: /assets/dns\\.png\nalt: DNS request path\ncaption: A name becomes a routable address\\.\n:::", figure_markdown);
+    const figure = try Figure.fromMarkdown(figure_markdown, &text);
+    try std.testing.expectEqualStrings("/assets/dns.png", figure.src);
+    try std.testing.expectEqualStrings("DNS request path", figure.alt);
+
+    const options = [_]ChoiceOption{
+        .{ .id = 47001, .label = "The browser owns every packet" },
+        .{ .id = 47002, .label = "The resolver answers name lookups", .selected = true },
+    };
+    const choice_markdown = try (ChoiceGroup{ .id = 47000, .legend = "Who answers DNS?", .options = &options }).toMarkdown(&markdown);
+    var decoded_options: [2]ChoiceOption = undefined;
+    const choice = try ChoiceGroup.fromMarkdown(choice_markdown, &decoded_options, &text);
+    try std.testing.expectEqual(@as(u32, 47000), choice.id);
+    try std.testing.expectEqualStrings("Who answers DNS?", choice.legend);
+    try std.testing.expectEqual(@as(usize, 2), choice.options.len);
+    try std.testing.expect(choice.options[1].selected);
+    try std.testing.expectEqualStrings("The resolver answers name lookups", choice.options[1].label);
+}
+
+test "markdown directives reject malformed interactive lesson blocks" {
+    var text: [128]u8 = undefined;
+    var options: [2]ChoiceOption = undefined;
+
+    try std.testing.expectError(error.InvalidMarkdown, Details.fromMarkdown(":::details\nid: 1\nopen: maybe\nsummary: Bad\nbody: Bad\n:::", &text));
+    try std.testing.expectError(error.InvalidMarkdown, Figure.fromMarkdown(":::figure\nsrc: /x.png\nalt: Missing caption\n:::", &text));
+    try std.testing.expectError(error.InvalidMarkdown, ChoiceGroup.fromMarkdown(":::choice\nid: 1\nlegend: Empty\n:::", &options, &text));
+    try std.testing.expectError(error.InvalidMarkdown, ChoiceGroup.fromMarkdown(":::choice\nid: 1\nlegend: Bad\noption: 2\nselected: maybe\nlabel: Bad\n:::", &options, &text));
+}
+
+test "markdown directives roundtrip navigation and table blocks" {
+    var markdown: [2048]u8 = undefined;
+    var text: [768]u8 = undefined;
+
+    const crumbs = [_]BreadcrumbItem{
+        .{ .id = 48001, .label = "Academy", .href = "#/academy" },
+        .{ .id = 48002, .label = "DNS", .href = "#/academy/dns", .current = true },
+    };
+    const breadcrumb_markdown = try (Breadcrumb{ .items = &crumbs }).toMarkdown(&markdown);
+    var decoded_crumbs: [2]BreadcrumbItem = undefined;
+    const breadcrumb = try Breadcrumb.fromMarkdown(breadcrumb_markdown, &decoded_crumbs, &text);
+    try std.testing.expectEqual(@as(usize, 2), breadcrumb.items.len);
+    try std.testing.expect(breadcrumb.items[1].current);
+    try std.testing.expectEqualStrings("#/academy/dns", breadcrumb.items[1].href);
+
+    const nav_items = [_]NavItem{
+        .{ .id = 49001, .label = "Systems", .href = "#/systems", .active = true },
+        .{ .id = 49002, .label = "Security", .href = "#/security" },
+    };
+    const nav_markdown = try (Nav{ .label = "Academy sections", .items = &nav_items }).toMarkdown(&markdown);
+    var decoded_nav_items: [2]NavItem = undefined;
+    const nav = try Nav.fromMarkdown(nav_markdown, &decoded_nav_items, &text);
+    try std.testing.expectEqualStrings("Academy sections", nav.label);
+    try std.testing.expect(nav.items[0].active);
+    try std.testing.expectEqualStrings("Security", nav.items[1].label);
+
+    const headers = [_]TableCell{
+        .{ .value = "Layer" },
+        .{ .value = "Owner", .alignment = .end },
+    };
+    const row_cells = [_]TableCell{
+        .{ .value = "DNS" },
+        .{ .value = "Resolver", .alignment = .end },
+        .{ .value = "TLS" },
+        .{ .value = "Endpoint", .alignment = .end },
+    };
+    const rows = [_]TableRow{
+        .{ .id = 50001, .cells = row_cells[0..2] },
+        .{ .id = 50002, .cells = row_cells[2..4] },
+    };
+    const table_markdown = try (Table{ .id = 50000, .headers = &headers, .rows = &rows }).toMarkdown(&markdown);
+    var decoded_rows: [2]TableRow = undefined;
+    var decoded_cells: [6]TableCell = undefined;
+    const table = try Table.fromMarkdown(table_markdown, &decoded_rows, &decoded_cells, &text);
+    try std.testing.expectEqual(@as(u32, 50000), table.id);
+    try std.testing.expectEqual(@as(usize, 2), table.headers.len);
+    try std.testing.expectEqual(ui.TextAlign.end, table.headers[1].alignment);
+    try std.testing.expectEqual(@as(u32, 50002), table.rows[1].id);
+    try std.testing.expectEqualStrings("Endpoint", table.rows[1].cells[1].value);
+}
+
+test "markdown directives reject malformed navigation and table blocks" {
+    var text: [128]u8 = undefined;
+    var crumbs: [2]BreadcrumbItem = undefined;
+    var nav_items: [2]NavItem = undefined;
+    var rows: [2]TableRow = undefined;
+    var cells: [6]TableCell = undefined;
+
+    try std.testing.expectError(error.InvalidMarkdown, Breadcrumb.fromMarkdown(":::breadcrumb\n:::", &crumbs, &text));
+    try std.testing.expectError(error.InvalidMarkdown, Breadcrumb.fromMarkdown(":::breadcrumb\nitem: 1\ncurrent: maybe\nhref: #\nlabel: Bad\n:::", &crumbs, &text));
+    try std.testing.expectError(error.InvalidMarkdown, Nav.fromMarkdown(":::nav\nlabel: Empty\n:::", &nav_items, &text));
+    try std.testing.expectError(error.InvalidMarkdown, Nav.fromMarkdown(":::nav\nlabel: Bad\nitem: 1\nactive: maybe\nhref: #\nlabel: Bad\n:::", &nav_items, &text));
+    try std.testing.expectError(error.InvalidMarkdown, Table.fromMarkdown(":::table\nid: 1\n:::", &rows, &cells, &text));
+    try std.testing.expectError(error.InvalidMarkdown, Table.fromMarkdown(":::table\nid: 1\nheader: diagonal Bad\nrow: 2\ncell: start Value\n:::", &rows, &cells, &text));
+}
+
+test "semantic html codecs roundtrip heading list callout and code block" {
+    var html: [512]u8 = undefined;
+    var text: [512]u8 = undefined;
+
+    const heading_html = try (Heading{ .level = 1, .value = "How DNS Works" }).toHtml(&html);
+    try std.testing.expectEqualStrings("<h1 data-er-component=\"heading\">How DNS Works</h1>", heading_html);
+    const heading = try Heading.fromHtml(heading_html, &text);
+    try std.testing.expectEqual(@as(u8, 1), heading.level);
+    try std.testing.expectEqualStrings("How DNS Works", heading.value);
+
+    const items = [_][]const u8{ "Name", "Address", "Cache" };
+    const list_html = try (List{ .ordered = true, .items = &items }).toHtml(&html);
+    var decoded_items: [3][]const u8 = undefined;
+    const list = try List.fromHtml(list_html, &decoded_items, &text);
+    try std.testing.expect(list.ordered);
+    try std.testing.expectEqual(@as(usize, 3), list.items.len);
+    try std.testing.expectEqualStrings("Address", list.items[1]);
+
+    const callout_html = try (Callout{ .value = "TLS protects the trip, not every endpoint." }).toHtml(&html);
+    try std.testing.expectEqualStrings("<blockquote data-er-component=\"callout\">TLS protects the trip, not every endpoint.</blockquote>", callout_html);
+    const callout = try Callout.fromHtml(callout_html, &text);
+    try std.testing.expectEqualStrings("TLS protects the trip, not every endpoint.", callout.value);
+
+    const lines = [_][]const u8{ "const port = 443;", "try connect(port);" };
+    const code_html = try (CodeBlock{ .language = "zig", .lines = &lines }).toHtml(&html);
+    var decoded_lines: [2][]const u8 = undefined;
+    const code = try CodeBlock.fromHtml(code_html, &decoded_lines, &text);
+    try std.testing.expectEqualStrings("zig", code.language);
+    try std.testing.expectEqual(@as(usize, 2), code.lines.len);
+    try std.testing.expectEqualStrings("try connect(port);", code.lines[1]);
+}
+
+test "semantic html codecs escape and reject malformed content" {
+    var html: [512]u8 = undefined;
+    var text: [256]u8 = undefined;
+    var items: [2][]const u8 = undefined;
+    var lines: [2][]const u8 = undefined;
+
+    const heading_html = try (Heading{ .level = 2, .value = "TLS < DNS & TPM" }).toHtml(&html);
+    try std.testing.expectEqualStrings("<h2 data-er-component=\"heading\">TLS &lt; DNS &amp; TPM</h2>", heading_html);
+    const heading = try Heading.fromHtml(heading_html, &text);
+    try std.testing.expectEqualStrings("TLS < DNS & TPM", heading.value);
+
+    try std.testing.expectError(error.InvalidHtml, Heading.fromHtml("<h4 data-er-component=\"heading\">Too deep</h4>", &text));
+    try std.testing.expectError(error.InvalidHtml, List.fromHtml("<ul data-er-component=\"list\"><script>x()</script></ul>", &items, &text));
+    try std.testing.expectError(error.InvalidHtml, Callout.fromHtml("<blockquote>plain quote</blockquote>", &text));
+    try std.testing.expectError(error.InvalidHtml, CodeBlock.fromHtml("<pre><code>plain</code></pre>", &lines, &text));
+}
+
+test "semantic components render through scene primitives" {
+    var commands: [64]ui.Command = undefined;
+    var clips: [4]ui.Rect = undefined;
+    var scene = ui.Scene.initWithClips(&commands, &clips);
+    const list_items = [_][]const u8{ "DNS query leaves the device", "Resolver answers with an address" };
+
+    try (Heading{ .level = 2, .value = "Lookup path" }).render(&scene, ui.Rect.init(0, 0, 360, 64), .{});
+    try (List{ .items = &list_items }).render(&scene, ui.Rect.init(0, 70, 360, 110), .{});
+    try (Callout{ .value = "A name is a lookup, not an identity." }).render(&scene, ui.Rect.init(0, 190, 360, 72), .{});
+    try (CodeBlock{ .language = "zig", .lines = &.{"const dns = lookup(name);"} }).render(&scene, ui.Rect.init(0, 272, 360, 64), .{});
+
+    try std.testing.expect(hasText(scene.written(), "Lookup path"));
+    try std.testing.expect(hasTextContaining(scene.written(), "DNS query"));
+    try std.testing.expect(hasTextContaining(scene.written(), "lookup, not an identity"));
+    try std.testing.expect(hasText(scene.written(), "const dns = lookup(name);"));
+}
+
 test "article list item expands around wrapped titles" {
     const short_article = ArticleListItem{
         .id = 811,
@@ -1453,6 +6365,58 @@ test "article list item expands around wrapped titles" {
     try std.testing.expect(hasTextContaining(scene.written(), "Show why TCP"));
 }
 
+fn expectSameComponent(expected: Component, actual: Component) !void {
+    try std.testing.expectEqual(std.meta.activeTag(expected), std.meta.activeTag(actual));
+    switch (expected) {
+        .text => |component| try std.testing.expectEqualStrings(component.value, actual.text.value),
+        .card => |component| {
+            try std.testing.expectEqualStrings(component.title, actual.card.title);
+            try std.testing.expectEqualStrings(component.detail, actual.card.detail);
+        },
+        .badge => |component| try std.testing.expectEqualStrings(component.label, actual.badge.label),
+        .avatar => |component| try std.testing.expectEqualStrings(component.label, actual.avatar.label),
+        .kbd => |component| try std.testing.expectEqualStrings(component.label, actual.kbd.label),
+        .separator => {},
+        .button => |component| {
+            try std.testing.expectEqual(component.id, actual.button.id);
+            try std.testing.expectEqualStrings(component.label, actual.button.label);
+        },
+        .input => |component| {
+            try std.testing.expectEqual(component.id, actual.input.id);
+            try std.testing.expectEqualStrings(component.placeholder, actual.input.placeholder);
+        },
+        .textarea => |component| {
+            try std.testing.expectEqual(component.id, actual.textarea.id);
+            try std.testing.expectEqualStrings(component.placeholder, actual.textarea.placeholder);
+        },
+        .select => |component| {
+            try std.testing.expectEqual(component.id, actual.select.id);
+            try std.testing.expectEqualStrings(component.label, actual.select.label);
+        },
+        .checkbox => |component| {
+            try std.testing.expectEqual(component.id, actual.checkbox.id);
+            try std.testing.expectEqualStrings(component.label, actual.checkbox.label);
+            try std.testing.expectEqual(component.checked, actual.checkbox.checked);
+        },
+        .switch_control => |component| {
+            try std.testing.expectEqual(component.id, actual.switch_control.id);
+            try std.testing.expectEqualStrings(component.label, actual.switch_control.label);
+            try std.testing.expectEqual(component.checked, actual.switch_control.checked);
+        },
+        .progress => |component| try std.testing.expect(@abs(component.value - actual.progress.value) < 0.001),
+        .slider => |component| {
+            try std.testing.expectEqual(component.id, actual.slider.id);
+            try std.testing.expectEqualStrings(component.label, actual.slider.label);
+            try std.testing.expect(@abs(component.value - actual.slider.value) < 0.001);
+        },
+        .row_item => |component| {
+            try std.testing.expectEqual(component.id, actual.row_item.id);
+            try std.testing.expectEqualStrings(component.title, actual.row_item.title);
+            try std.testing.expectEqualStrings(component.detail, actual.row_item.detail);
+        },
+    }
+}
+
 fn hasText(commands: []const ui.Command, value: []const u8) bool {
     for (commands) |command| switch (command) {
         .text => |text_command| if (std.mem.eql(u8, text_command.value, value)) return true,
@@ -1467,6 +6431,14 @@ fn hasTextContaining(commands: []const ui.Command, value: []const u8) bool {
         else => {},
     };
     return false;
+}
+
+fn textCommand(commands: []const ui.Command, value: []const u8) ?ui.Command {
+    for (commands) |command| switch (command) {
+        .text => |text_command| if (std.mem.eql(u8, text_command.value, value)) return command,
+        else => {},
+    };
+    return null;
 }
 
 fn hasIcon(commands: []const ui.Command, value: icon.Icon) bool {
