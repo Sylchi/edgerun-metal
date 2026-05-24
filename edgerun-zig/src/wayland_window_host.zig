@@ -1,6 +1,7 @@
 const std = @import("std");
 const icon = @import("icon.zig");
 const input = @import("input.zig");
+const linux_drm = @import("linux_drm.zig");
 const renderer_font_atlas = @import("renderer_font_atlas.zig");
 const renderer_gpu = @import("renderer_gpu.zig");
 const renderer_ir = @import("renderer_ir.zig");
@@ -110,6 +111,7 @@ const Options = struct {
     height: u32 = default_height,
     seconds: u32 = default_seconds,
     present: PresentMode = .cpu,
+    drm_device: []const u8 = linux_drm.default_device_path,
     dmabuf_fd: ?posix.fd_t = null,
 };
 
@@ -318,6 +320,10 @@ fn parseOptions(args: []const [:0]const u8) !Options {
             index += 1;
             if (index >= args.len) return error.InvalidArguments;
             options.present = try parsePresentMode(args[index]);
+        } else if (std.mem.eql(u8, arg, "--drm-device")) {
+            index += 1;
+            if (index >= args.len) return error.InvalidArguments;
+            options.drm_device = args[index];
         } else if (std.mem.eql(u8, arg, "--dmabuf-fd")) {
             index += 1;
             if (index >= args.len) return error.InvalidArguments;
@@ -327,7 +333,6 @@ fn parseOptions(args: []const [:0]const u8) !Options {
         }
     }
     if (options.width == 0 or options.height == 0 or options.seconds == 0) return error.InvalidArguments;
-    if (options.present == .gpu_dmabuf and options.dmabuf_fd == null) return error.MissingDmabufFd;
     return options;
 }
 
@@ -602,6 +607,7 @@ const NativeApp = struct {
     dirty_ids: [max_tiles]u32 = undefined,
     state: AppState = .{},
     gpu_recorder: GpuRecorder = .{},
+    drm_buffer: ?linux_drm.DumbBuffer = null,
 
     fn init(client: *WaylandClient, allocator: std.mem.Allocator, options: Options) !NativeApp {
         const width = options.width;
@@ -613,6 +619,11 @@ const NativeApp = struct {
         errdefer allocator.free(pixels);
         const gpu_primitives = try allocator.alloc(renderer_gpu.Primitive, max_gpu_primitives);
         errdefer allocator.free(gpu_primitives);
+        const drm_buffer: ?linux_drm.DumbBuffer = if (options.present == .gpu_dmabuf and options.dmabuf_fd == null)
+            try linux_drm.DumbBuffer.createExported(options.drm_device, width, height, .xrgb8888)
+        else
+            null;
+        errdefer if (drm_buffer) |*buffer| buffer.deinit();
         return .{
             .allocator = allocator,
             .width = width,
@@ -622,10 +633,12 @@ const NativeApp = struct {
             .shm = shm,
             .pixels = pixels,
             .gpu_primitives = gpu_primitives,
+            .drm_buffer = drm_buffer,
         };
     }
 
     fn deinit(self: *NativeApp) void {
+        if (self.drm_buffer) |*buffer| buffer.deinit();
         self.allocator.free(self.gpu_primitives);
         self.allocator.free(self.pixels);
         self.shm.deinit();
@@ -686,6 +699,11 @@ const NativeApp = struct {
                 const dmabuf_surface = try self.dmabufSurface();
                 const import = try DmabufImport.fromNativeSurface(dmabuf_surface);
                 try client.createDmabufBuffer(import);
+                try self.renderSoftwarePixels(buffers, atlases);
+                if (self.drm_buffer) |*buffer| {
+                    const memory = try buffer.map();
+                    packXrgb8888Strided(memory, buffer.pitch_bytes, self.width, self.height, self.pixels);
+                }
                 var dmabuf_sink_state = WaylandDmabufCommitSink{};
                 const receipt = try renderer_native_present.renderGpuBackedAndSubmit(
                     dmabuf_surface,
@@ -725,14 +743,15 @@ const NativeApp = struct {
     }
 
     fn dmabufSurface(self: *const NativeApp) !renderer_native_present.NativeSurface {
-        const fd = self.dmabuf_fd orelse return error.MissingDmabufFd;
+        const fd = if (self.dmabuf_fd) |fd| fd else if (self.drm_buffer) |buffer| buffer.dma_buf_fd else return error.MissingDmabufFd;
+        const stride = if (self.drm_buffer) |buffer| try buffer.stridePixels() else self.width;
         if (fd < 0) return error.InvalidDmabufImport;
         return .{ .wayland = .{
             .surface_id = surface_id,
             .buffer_id = dmabuf_wl_buffer_id,
             .width = self.width,
             .height = self.height,
-            .stride = self.width,
+            .stride = stride,
             .scale = 1,
             .format = .xrgb8888,
             .gpu_buffer = .{
@@ -942,12 +961,22 @@ fn siteBackground() ui.Color {
 }
 
 fn packXrgb8888(out: []u8, pixels: []const ui.Color) void {
-    for (pixels, 0..) |pixel, index| {
-        const base = index * @sizeOf(u32);
-        out[base + 0] = pixel.b;
-        out[base + 1] = pixel.g;
-        out[base + 2] = pixel.r;
-        out[base + 3] = 255;
+    packXrgb8888Strided(out, @intCast(pixels.len * @sizeOf(u32)), @intCast(pixels.len), 1, pixels);
+}
+
+fn packXrgb8888Strided(out: []u8, stride_bytes: u32, width: u32, height: u32, pixels: []const ui.Color) void {
+    const row_bytes = @as(usize, width) * @sizeOf(u32);
+    for (0..height) |y| {
+        const out_row = @as(usize, y) * stride_bytes;
+        const pixel_row = @as(usize, y) * width;
+        for (pixels[pixel_row .. pixel_row + width], 0..) |pixel, x| {
+            const base = out_row + x * @sizeOf(u32);
+            out[base + 0] = pixel.b;
+            out[base + 1] = pixel.g;
+            out[base + 2] = pixel.r;
+            out[base + 3] = 255;
+        }
+        if (stride_bytes > row_bytes) @memset(out[out_row + row_bytes .. out_row + stride_bytes], 0);
     }
 }
 
@@ -1271,8 +1300,11 @@ test "wayland host parses explicit presentation mode" {
     try std.testing.expectEqual(PresentMode.gpu_dmabuf, dmabuf_options.present);
     try std.testing.expectEqual(@as(posix.fd_t, 17), dmabuf_options.dmabuf_fd.?);
 
-    const missing_fd_args = [_][:0]const u8{ "wayland-window", "--present", "gpu-dmabuf" };
-    try std.testing.expectError(error.MissingDmabufFd, parseOptions(&missing_fd_args));
+    const allocated_dmabuf_args = [_][:0]const u8{ "wayland-window", "--present", "gpu-dmabuf", "--drm-device", "/dev/dri/card1" };
+    const allocated_dmabuf_options = try parseOptions(&allocated_dmabuf_args);
+    try std.testing.expectEqual(PresentMode.gpu_dmabuf, allocated_dmabuf_options.present);
+    try std.testing.expectEqualStrings("/dev/dri/card1", allocated_dmabuf_options.drm_device);
+    try std.testing.expect(allocated_dmabuf_options.dmabuf_fd == null);
 }
 
 test "wayland registry global parser keeps interface slice and version" {
@@ -1429,6 +1461,32 @@ test "wayland native app builds dmabuf surface only in explicit fd mode" {
 
     app.dmabuf_fd = null;
     try std.testing.expectError(error.MissingDmabufFd, app.dmabufSurface());
+}
+
+test "wayland native app builds dmabuf surface from owned drm buffer" {
+    var app = NativeApp{
+        .allocator = std.testing.allocator,
+        .width = 320,
+        .height = 240,
+        .present = .gpu_dmabuf,
+        .dmabuf_fd = null,
+        .shm = undefined,
+        .pixels = &.{},
+        .gpu_primitives = &.{},
+        .drm_buffer = .{
+            .drm_fd = 18,
+            .dma_buf_fd = 19,
+            .handle = 20,
+            .width = 320,
+            .height = 240,
+            .pitch_bytes = 320 * @sizeOf(u32),
+            .size = 320 * 240 * @sizeOf(u32),
+        },
+    };
+    const surface = try app.dmabufSurface();
+    const import = try DmabufImport.fromNativeSurface(surface);
+    try std.testing.expectEqual(@as(posix.fd_t, 19), import.fd);
+    try std.testing.expectEqual(@as(u32, 320 * @sizeOf(u32)), import.stride);
 }
 
 test "wayland attach message can target shm or dmabuf buffers" {
