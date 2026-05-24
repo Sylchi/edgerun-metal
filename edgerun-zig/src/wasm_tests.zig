@@ -529,7 +529,7 @@ test "wasm interpreter produces clocked work receipt for execution" {
     });
 
     try std.testing.expectEqual(@as(i64, 42), result.value);
-    try std.testing.expectEqualSlices(u8, &wasm.outputHashI64(42), &result.output);
+    try std.testing.expectEqualSlices(u8, &wasm_app.outputHashI64(42), &result.output);
     try std.testing.expect(result.receipt.valid());
     try std.testing.expect(result.receipt.parent.eql(parent.id));
     try std.testing.expect(result.receipt.app.eql(app.id.id));
