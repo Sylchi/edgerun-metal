@@ -304,6 +304,8 @@ const Opcode = enum(u8) {
     i32_shl = 0x74,
     i32_shr_s = 0x75,
     i32_shr_u = 0x76,
+    i32_rotl = 0x77,
+    i32_rotr = 0x78,
     i64_clz = 0x79,
     i64_ctz = 0x7a,
     i64_popcnt = 0x7b,
@@ -320,6 +322,8 @@ const Opcode = enum(u8) {
     i64_shl = 0x86,
     i64_shr_s = 0x87,
     i64_shr_u = 0x88,
+    i64_rotl = 0x89,
+    i64_rotr = 0x8a,
     f32_abs = 0x8b,
     f32_neg = 0x8c,
     f32_sqrt = 0x91,
@@ -727,6 +731,8 @@ const BinaryOp = enum {
     shl,
     shr_s,
     shr_u,
+    rotl,
+    rotr,
 };
 
 const UnaryOp = enum {
@@ -1467,6 +1473,8 @@ const Executor = struct {
                 .i64_shl => try pushI64Binary(&frame, .shl),
                 .i64_shr_s => try pushI64Binary(&frame, .shr_s),
                 .i64_shr_u => try pushI64Binary(&frame, .shr_u),
+                .i64_rotl => try pushI64Binary(&frame, .rotl),
+                .i64_rotr => try pushI64Binary(&frame, .rotr),
                 .i64_clz => try pushI64Unary(&frame, .clz),
                 .i64_ctz => try pushI64Unary(&frame, .ctz),
                 .i64_popcnt => try pushI64Unary(&frame, .popcnt),
@@ -1523,6 +1531,8 @@ const Executor = struct {
                 .i32_shl => try pushI32Binary(&frame, .shl),
                 .i32_shr_s => try pushI32Binary(&frame, .shr_s),
                 .i32_shr_u => try pushI32Binary(&frame, .shr_u),
+                .i32_rotl => try pushI32Binary(&frame, .rotl),
+                .i32_rotr => try pushI32Binary(&frame, .rotr),
                 .i32_clz => try pushI32Unary(&frame, .clz),
                 .i32_ctz => try pushI32Unary(&frame, .ctz),
                 .i32_popcnt => try pushI32Unary(&frame, .popcnt),
@@ -2362,6 +2372,8 @@ fn opcodeFromByte(value: u8) ?Opcode {
         @intFromEnum(Opcode.i32_shl) => .i32_shl,
         @intFromEnum(Opcode.i32_shr_s) => .i32_shr_s,
         @intFromEnum(Opcode.i32_shr_u) => .i32_shr_u,
+        @intFromEnum(Opcode.i32_rotl) => .i32_rotl,
+        @intFromEnum(Opcode.i32_rotr) => .i32_rotr,
         @intFromEnum(Opcode.i64_clz) => .i64_clz,
         @intFromEnum(Opcode.i64_ctz) => .i64_ctz,
         @intFromEnum(Opcode.i64_popcnt) => .i64_popcnt,
@@ -2378,6 +2390,8 @@ fn opcodeFromByte(value: u8) ?Opcode {
         @intFromEnum(Opcode.i64_shl) => .i64_shl,
         @intFromEnum(Opcode.i64_shr_s) => .i64_shr_s,
         @intFromEnum(Opcode.i64_shr_u) => .i64_shr_u,
+        @intFromEnum(Opcode.i64_rotl) => .i64_rotl,
+        @intFromEnum(Opcode.i64_rotr) => .i64_rotr,
         @intFromEnum(Opcode.f32_abs) => .f32_abs,
         @intFromEnum(Opcode.f32_neg) => .f32_neg,
         @intFromEnum(Opcode.f32_sqrt) => .f32_sqrt,
@@ -2690,6 +2704,8 @@ fn skipOpcodeImmediate(reader: *Reader, opcode: Opcode) Error!void {
         .i32_shl,
         .i32_shr_s,
         .i32_shr_u,
+        .i32_rotl,
+        .i32_rotr,
         .i32_clz,
         .i32_ctz,
         .i32_popcnt,
@@ -2706,6 +2722,8 @@ fn skipOpcodeImmediate(reader: *Reader, opcode: Opcode) Error!void {
         .i64_shl,
         .i64_shr_s,
         .i64_shr_u,
+        .i64_rotl,
+        .i64_rotr,
         .i64_clz,
         .i64_ctz,
         .i64_popcnt,
@@ -2916,6 +2934,8 @@ fn applyI32Binary(op: BinaryOp, left: i32, right: i32) Error!i32 {
         .shl => @bitCast(left_unsigned << shift),
         .shr_s => left >> shift,
         .shr_u => @bitCast(left_unsigned >> shift),
+        .rotl => @bitCast(rotateLeft32(left_unsigned, shift)),
+        .rotr => @bitCast(rotateRight32(left_unsigned, shift)),
     };
 }
 
@@ -2950,7 +2970,29 @@ fn applyI64Binary(op: BinaryOp, left: i64, right: i64) Error!i64 {
         .shl => @bitCast(left_unsigned << shift),
         .shr_s => left >> shift,
         .shr_u => @bitCast(left_unsigned >> shift),
+        .rotl => @bitCast(rotateLeft64(left_unsigned, shift)),
+        .rotr => @bitCast(rotateRight64(left_unsigned, shift)),
     };
+}
+
+fn rotateLeft32(value: u32, shift: u5) u32 {
+    const reverse_shift: u5 = @intCast((32 - @as(u32, shift)) & 31);
+    return (value << shift) | (value >> reverse_shift);
+}
+
+fn rotateRight32(value: u32, shift: u5) u32 {
+    const reverse_shift: u5 = @intCast((32 - @as(u32, shift)) & 31);
+    return (value >> shift) | (value << reverse_shift);
+}
+
+fn rotateLeft64(value: u64, shift: u6) u64 {
+    const reverse_shift: u6 = @intCast((64 - @as(u64, shift)) & 63);
+    return (value << shift) | (value >> reverse_shift);
+}
+
+fn rotateRight64(value: u64, shift: u6) u64 {
+    const reverse_shift: u6 = @intCast((64 - @as(u64, shift)) & 63);
+    return (value >> shift) | (value << reverse_shift);
 }
 
 fn applyF32Binary(op: FloatBinaryOp, left: f32, right: f32) f32 {

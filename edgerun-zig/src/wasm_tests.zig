@@ -55,6 +55,15 @@ const return_multi_value_wasm = [_]u8{
     0x01, 0x06, 0x00, 0x41, 0x07, 0x42, 0x2a, 0x0b,
 };
 
+const integer_rotate_wasm = [_]u8{
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+    0x01, 0x06, 0x01, 0x60, 0x00, 0x02, 0x7f, 0x7e,
+    0x03, 0x02, 0x01, 0x00, 0x07, 0x08, 0x01, 0x04,
+    'm',  'a',  'i',  'n',  0x00, 0x00, 0x0a, 0x0f,
+    0x01, 0x0d, 0x00, 0x41, 0x01, 0x41, 0x08, 0x77,
+    0x42, 0x80, 0x02, 0x42, 0x08, 0x8a, 0x0b,
+};
+
 const return_float_values_wasm = [_]u8{
     0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
     0x01, 0x06, 0x01, 0x60, 0x00, 0x02, 0x7d, 0x7c,
@@ -1061,6 +1070,16 @@ test "wasm interpreter returns multiple typed values" {
     try std.testing.expectEqual(@as(i32, 7), try result.valueI32(0));
     try std.testing.expectEqual(@as(i64, 42), try result.valueI64(1));
     try std.testing.expectEqual(@as(u64, 1), ticks);
+}
+
+test "wasm interpreter executes integer rotations" {
+    var memory: [256]u8 = undefined;
+    var ticks: u64 = 16;
+    var runtime = wasm.Runtime.init(&memory, &ticks);
+
+    const result = try wasm.executeExportValues(&runtime, &integer_rotate_wasm, "main");
+    try std.testing.expectEqual(@as(i32, 256), try result.valueI32(0));
+    try std.testing.expectEqual(@as(i64, 1), try result.valueI64(1));
 }
 
 test "wasm interpreter returns float values without integer gate" {
