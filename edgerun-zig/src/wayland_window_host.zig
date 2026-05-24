@@ -215,6 +215,7 @@ const DmabufImport = struct {
             .stride = surface.stride * @sizeOf(u32),
             .format = dmabufFormat(surface.format),
             .offset = gpu_buffer.offset,
+            .modifier = gpu_buffer.modifier,
         };
         if (!import.valid()) return error.InvalidDmabufImport;
         return import;
@@ -1380,6 +1381,7 @@ test "wayland dmabuf import derives from gpu backed native wayland surface" {
             .kind = .dma_buf,
             .handle = 7,
             .offset = 128,
+            .modifier = 0x0102030405060708,
         },
     } });
     try std.testing.expectEqual(@as(posix.fd_t, 7), import.fd);
@@ -1388,6 +1390,7 @@ test "wayland dmabuf import derives from gpu backed native wayland surface" {
     try std.testing.expectEqual(@as(u32, 320 * @sizeOf(u32)), import.stride);
     try std.testing.expectEqual(drm_format_argb8888, import.format);
     try std.testing.expectEqual(@as(u32, 128), import.offset);
+    try std.testing.expectEqual(@as(u64, 0x0102030405060708), import.modifier);
 
     try std.testing.expectError(error.InvalidDmabufImport, DmabufImport.fromNativeSurface(.{ .wayland = .{
         .surface_id = surface_id,

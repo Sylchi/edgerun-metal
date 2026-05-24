@@ -38,6 +38,7 @@ pub const SurfaceBuffer = struct {
     format: SurfaceFormat,
     handle: u64,
     offset: u32 = 0,
+    modifier: u64 = 0,
     plane_count: u8 = 1,
 
     pub fn valid(self: SurfaceBuffer) bool {
@@ -87,6 +88,7 @@ pub const Primitive = struct {
     color2: ui.Color = .clear,
     surface_id: u32 = 0,
     buffer_handle: u64 = 0,
+    buffer_modifier: u64 = 0,
     atlas_id: u32 = 0,
     u0: f32 = 0.0,
     v0: f32 = 0.0,
@@ -339,6 +341,7 @@ fn encodeSurface(surface: Surface, out: *CommandBuffer) Error!void {
         .color = .{ .r = 255, .g = 255, .b = 255, .a = surface.opacity },
         .surface_id = surface.id,
         .buffer_handle = surface.buffer.handle,
+        .buffer_modifier = surface.buffer.modifier,
         .is_opaque = surface.is_opaque,
     });
 }
@@ -510,6 +513,7 @@ fn testSurface() Surface {
             .stride = 512,
             .format = .xrgb8888,
             .handle = 0xabc,
+            .modifier = 0x0102030405060708,
         },
     };
 }
@@ -547,6 +551,7 @@ test "gpu compositor encodes surfaces scene primitives and dirty tiles" {
 
     try std.testing.expect(available(frame.mode));
     try std.testing.expectEqual(PrimitiveKind.surface, frame.primitives[0].kind);
+    try std.testing.expectEqual(@as(u64, 0x0102030405060708), frame.primitives[0].buffer_modifier);
     try std.testing.expect(frame.primitives.len > surfaces.len);
     try std.testing.expect(frame.dirty_tiles.len > 0);
     try std.testing.expectEqual(Backend.gpu, frame.backend);
