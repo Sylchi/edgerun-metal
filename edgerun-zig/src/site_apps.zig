@@ -21,6 +21,11 @@ const eyebrow_w: f32 = 96.0;
 const card_gap: f32 = 18.0;
 const card_h: f32 = 184.0;
 const compact_card_h: f32 = 170.0;
+const app_card_pad: f32 = 18.0;
+const app_card_gap: f32 = 12.0;
+const app_card_tag_w: f32 = 96.0;
+const app_card_tag_h: f32 = 24.0;
+const app_card_icon_slot: f32 = 24.0;
 const capability_h: f32 = 118.0;
 const capability_gap: f32 = 14.0;
 const terminal_h: f32 = 260.0;
@@ -246,15 +251,23 @@ fn renderAppGrid(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui
 }
 
 fn renderAppCard(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, app: App, id: u32) (ui.RenderError || interaction.Error)!void {
-    const card = components.ArticleCard{
-        .id = id,
-        .category = app.category,
-        .meta = app.status,
-        .title = app.name,
-        .summary = app.summary,
-    };
-    try card.render(scene, bounds, .{ .style = siteStyle() });
-    try card.collectInteractions(collector, bounds);
+    try scene.pushRect(bounds.insetUniform(-1.0), ui.Color{ .r = 0, .g = 0, .b = 0, .a = 96 }, .shadow, 12.0, 8.0);
+    try fill(scene, bounds, palette.card, 12.0);
+    try scene.pushRect(bounds, palette.border, .border, 12.0, 0.0);
+    const inset = bounds.insetUniform(app_card_pad);
+    try tag(scene, ui.Rect.init(inset.x, inset.y, app_card_tag_w, app_card_tag_h), app.category, palette.primary);
+    try scene.pushAlignedText(ui.Rect.init(inset.x + app_card_tag_w + app_card_gap, inset.y + 6.0, @max(1.0, inset.w - app_card_tag_w - app_card_gap), 12.0), app.status, palette.dim, .end);
+    try scene.pushWrappedText(ui.Rect.init(inset.x, inset.y + 42.0, inset.w - app_card_icon_slot, 50.0), app.name, palette.text, .{
+        .line_height = 22.0,
+        .average_char_width = 10.5,
+        .max_lines = 2,
+    });
+    try scene.pushWrappedText(ui.Rect.init(inset.x, bounds.y + bounds.h - 58.0, inset.w - app_card_icon_slot, 44.0), app.summary, palette.dim, .{
+        .line_height = 18.0,
+        .average_char_width = 10.0,
+        .max_lines = 2,
+    });
+    try collector.addHit(bounds, .button, id);
     const icon_box = ui.Rect.init(bounds.x + bounds.w - 48.0, bounds.y + 54.0, 28.0, 28.0);
     try iconQuad(scene, icon_box, app.icon_value, palette.primary);
 }
