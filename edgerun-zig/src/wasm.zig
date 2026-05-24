@@ -277,6 +277,10 @@ const FuncType = struct {
         return self.param_count == 0 and self.result_count == 1 and self.result_type == .i64;
     }
 
+    fn i64ResultWithArgs(self: FuncType, args: []const i64) bool {
+        return self.param_count == args.len and self.result_count == 1 and self.result_type == .i64 and self.supportedParams();
+    }
+
     fn noParamsNoResult(self: FuncType) bool {
         return self.param_count == 0 and self.result_count == 0 and self.result_type == null;
     }
@@ -669,12 +673,12 @@ const Executor = struct {
         }
     };
 
-    fn runExport(self: *Executor, name: []const u8) Error!i64 {
+    fn runExport(self: *Executor, name: []const u8, args: []const i64) Error!i64 {
         const function_index = try self.module.findExport(name);
         const function = self.module.functions[function_index];
         const function_type = self.module.types[function.type_index];
-        if (!function_type.noParamsI64Result()) return error.Unsupported;
-        return (try self.runFunction(function_index, 0, &.{})) orelse error.Corrupt;
+        if (!function_type.i64ResultWithArgs(args)) return error.Unsupported;
+        return (try self.runFunction(function_index, 0, args)) orelse error.Corrupt;
     }
 
     fn runStart(self: *Executor) Error!void {
@@ -992,6 +996,10 @@ const Executor = struct {
 };
 
 pub fn executeExportI64(runtime: *Runtime, wasm_bytes: []const u8, export_name: []const u8) Error!i64 {
+    return executeExportI64Args(runtime, wasm_bytes, export_name, &.{});
+}
+
+pub fn executeExportI64Args(runtime: *Runtime, wasm_bytes: []const u8, export_name: []const u8, args: []const i64) Error!i64 {
     if (export_name.len == 0) return error.BadArgument;
     const module = try Module.parse(wasm_bytes);
     const required_memory = try module.requiredMemoryBytes();
@@ -1002,7 +1010,7 @@ pub fn executeExportI64(runtime: *Runtime, wasm_bytes: []const u8, export_name: 
         .module = module,
     };
     try executor.runStart();
-    return executor.runExport(export_name);
+    return executor.runExport(export_name, args);
 }
 
 fn checkedAdd(left: usize, right: usize) ?usize {
