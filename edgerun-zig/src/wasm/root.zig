@@ -1485,110 +1485,110 @@ const Executor = struct {
                 .i32_const => try frame.pushI32(try reader.readI32Leb()),
                 .f32_const => try frame.push(.{ .f32 = try reader.readF32() }),
                 .f64_const => try frame.push(.{ .f64 = try reader.readF64() }),
-                .i64_add => try pushI64Binary(&frame, .add),
-                .i64_sub => try pushI64Binary(&frame, .sub),
-                .i64_mul => try pushI64Binary(&frame, .mul),
-                .i64_div_s => try pushI64Binary(&frame, .div_s),
-                .i64_div_u => try pushI64Binary(&frame, .div_u),
-                .i64_rem_s => try pushI64Binary(&frame, .rem_s),
-                .i64_rem_u => try pushI64Binary(&frame, .rem_u),
-                .i64_and => try pushI64Binary(&frame, .@"and"),
-                .i64_or => try pushI64Binary(&frame, .@"or"),
-                .i64_xor => try pushI64Binary(&frame, .xor),
-                .i64_shl => try pushI64Binary(&frame, .shl),
-                .i64_shr_s => try pushI64Binary(&frame, .shr_s),
-                .i64_shr_u => try pushI64Binary(&frame, .shr_u),
-                .i64_rotl => try pushI64Binary(&frame, .rotl),
-                .i64_rotr => try pushI64Binary(&frame, .rotr),
-                .i64_clz => try pushI64Unary(&frame, .clz),
-                .i64_ctz => try pushI64Unary(&frame, .ctz),
-                .i64_popcnt => try pushI64Unary(&frame, .popcnt),
+                .i64_add => try pushIntegerBinary(i64, &frame, .add),
+                .i64_sub => try pushIntegerBinary(i64, &frame, .sub),
+                .i64_mul => try pushIntegerBinary(i64, &frame, .mul),
+                .i64_div_s => try pushIntegerBinary(i64, &frame, .div_s),
+                .i64_div_u => try pushIntegerBinary(i64, &frame, .div_u),
+                .i64_rem_s => try pushIntegerBinary(i64, &frame, .rem_s),
+                .i64_rem_u => try pushIntegerBinary(i64, &frame, .rem_u),
+                .i64_and => try pushIntegerBinary(i64, &frame, .@"and"),
+                .i64_or => try pushIntegerBinary(i64, &frame, .@"or"),
+                .i64_xor => try pushIntegerBinary(i64, &frame, .xor),
+                .i64_shl => try pushIntegerBinary(i64, &frame, .shl),
+                .i64_shr_s => try pushIntegerBinary(i64, &frame, .shr_s),
+                .i64_shr_u => try pushIntegerBinary(i64, &frame, .shr_u),
+                .i64_rotl => try pushIntegerBinary(i64, &frame, .rotl),
+                .i64_rotr => try pushIntegerBinary(i64, &frame, .rotr),
+                .i64_clz => try pushIntegerUnary(i64, &frame, .clz),
+                .i64_ctz => try pushIntegerUnary(i64, &frame, .ctz),
+                .i64_popcnt => try pushIntegerUnary(i64, &frame, .popcnt),
                 .i64_eqz => {
                     const value = try frame.popI64();
                     try frame.pushI32(if (value == 0) 1 else 0);
                 },
-                .i64_eq => try pushI64Comparison(&frame, .eq),
-                .i64_ne => try pushI64Comparison(&frame, .ne),
-                .i64_lt_s => try pushI64Comparison(&frame, .lt_s),
-                .i64_lt_u => try pushI64Comparison(&frame, .lt_u),
-                .i64_gt_s => try pushI64Comparison(&frame, .gt_s),
-                .i64_gt_u => try pushI64Comparison(&frame, .gt_u),
-                .i64_le_s => try pushI64Comparison(&frame, .le_s),
-                .i64_le_u => try pushI64Comparison(&frame, .le_u),
-                .i64_ge_s => try pushI64Comparison(&frame, .ge_s),
-                .i64_ge_u => try pushI64Comparison(&frame, .ge_u),
-                .f32_eq => try pushF32Comparison(&frame, .eq),
-                .f32_ne => try pushF32Comparison(&frame, .ne),
-                .f32_lt => try pushF32Comparison(&frame, .lt),
-                .f32_gt => try pushF32Comparison(&frame, .gt),
-                .f32_le => try pushF32Comparison(&frame, .le),
-                .f32_ge => try pushF32Comparison(&frame, .ge),
-                .f64_eq => try pushF64Comparison(&frame, .eq),
-                .f64_ne => try pushF64Comparison(&frame, .ne),
-                .f64_lt => try pushF64Comparison(&frame, .lt),
-                .f64_gt => try pushF64Comparison(&frame, .gt),
-                .f64_le => try pushF64Comparison(&frame, .le),
-                .f64_ge => try pushF64Comparison(&frame, .ge),
+                .i64_eq => try pushIntegerComparison(i64, &frame, .eq),
+                .i64_ne => try pushIntegerComparison(i64, &frame, .ne),
+                .i64_lt_s => try pushIntegerComparison(i64, &frame, .lt_s),
+                .i64_lt_u => try pushIntegerComparison(i64, &frame, .lt_u),
+                .i64_gt_s => try pushIntegerComparison(i64, &frame, .gt_s),
+                .i64_gt_u => try pushIntegerComparison(i64, &frame, .gt_u),
+                .i64_le_s => try pushIntegerComparison(i64, &frame, .le_s),
+                .i64_le_u => try pushIntegerComparison(i64, &frame, .le_u),
+                .i64_ge_s => try pushIntegerComparison(i64, &frame, .ge_s),
+                .i64_ge_u => try pushIntegerComparison(i64, &frame, .ge_u),
+                .f32_eq => try pushFloatComparison(f32, &frame, .eq),
+                .f32_ne => try pushFloatComparison(f32, &frame, .ne),
+                .f32_lt => try pushFloatComparison(f32, &frame, .lt),
+                .f32_gt => try pushFloatComparison(f32, &frame, .gt),
+                .f32_le => try pushFloatComparison(f32, &frame, .le),
+                .f32_ge => try pushFloatComparison(f32, &frame, .ge),
+                .f64_eq => try pushFloatComparison(f64, &frame, .eq),
+                .f64_ne => try pushFloatComparison(f64, &frame, .ne),
+                .f64_lt => try pushFloatComparison(f64, &frame, .lt),
+                .f64_gt => try pushFloatComparison(f64, &frame, .gt),
+                .f64_le => try pushFloatComparison(f64, &frame, .le),
+                .f64_ge => try pushFloatComparison(f64, &frame, .ge),
                 .i32_eqz => {
                     const value = try frame.popI32();
                     try frame.pushI32(if (value == 0) 1 else 0);
                 },
-                .i32_eq => try pushI32Comparison(&frame, .eq),
-                .i32_ne => try pushI32Comparison(&frame, .ne),
-                .i32_lt_s => try pushI32Comparison(&frame, .lt_s),
-                .i32_lt_u => try pushI32Comparison(&frame, .lt_u),
-                .i32_gt_s => try pushI32Comparison(&frame, .gt_s),
-                .i32_gt_u => try pushI32Comparison(&frame, .gt_u),
-                .i32_le_s => try pushI32Comparison(&frame, .le_s),
-                .i32_le_u => try pushI32Comparison(&frame, .le_u),
-                .i32_ge_s => try pushI32Comparison(&frame, .ge_s),
-                .i32_ge_u => try pushI32Comparison(&frame, .ge_u),
-                .i32_add => try pushI32Binary(&frame, .add),
-                .i32_sub => try pushI32Binary(&frame, .sub),
-                .i32_mul => try pushI32Binary(&frame, .mul),
-                .i32_div_s => try pushI32Binary(&frame, .div_s),
-                .i32_div_u => try pushI32Binary(&frame, .div_u),
-                .i32_rem_s => try pushI32Binary(&frame, .rem_s),
-                .i32_rem_u => try pushI32Binary(&frame, .rem_u),
-                .i32_and => try pushI32Binary(&frame, .@"and"),
-                .i32_or => try pushI32Binary(&frame, .@"or"),
-                .i32_xor => try pushI32Binary(&frame, .xor),
-                .i32_shl => try pushI32Binary(&frame, .shl),
-                .i32_shr_s => try pushI32Binary(&frame, .shr_s),
-                .i32_shr_u => try pushI32Binary(&frame, .shr_u),
-                .i32_rotl => try pushI32Binary(&frame, .rotl),
-                .i32_rotr => try pushI32Binary(&frame, .rotr),
-                .i32_clz => try pushI32Unary(&frame, .clz),
-                .i32_ctz => try pushI32Unary(&frame, .ctz),
-                .i32_popcnt => try pushI32Unary(&frame, .popcnt),
-                .f32_abs => try pushF32Unary(&frame, .abs),
-                .f32_neg => try pushF32Unary(&frame, .neg),
-                .f32_ceil => try pushF32Unary(&frame, .ceil),
-                .f32_floor => try pushF32Unary(&frame, .floor),
-                .f32_trunc => try pushF32Unary(&frame, .trunc),
-                .f32_nearest => try pushF32Unary(&frame, .nearest),
-                .f32_sqrt => try pushF32Unary(&frame, .sqrt),
-                .f32_add => try pushF32Binary(&frame, .add),
-                .f32_sub => try pushF32Binary(&frame, .sub),
-                .f32_mul => try pushF32Binary(&frame, .mul),
-                .f32_div => try pushF32Binary(&frame, .div),
-                .f32_min => try pushF32Binary(&frame, .min),
-                .f32_max => try pushF32Binary(&frame, .max),
-                .f32_copysign => try pushF32Binary(&frame, .copysign),
-                .f64_abs => try pushF64Unary(&frame, .abs),
-                .f64_neg => try pushF64Unary(&frame, .neg),
-                .f64_ceil => try pushF64Unary(&frame, .ceil),
-                .f64_floor => try pushF64Unary(&frame, .floor),
-                .f64_trunc => try pushF64Unary(&frame, .trunc),
-                .f64_nearest => try pushF64Unary(&frame, .nearest),
-                .f64_sqrt => try pushF64Unary(&frame, .sqrt),
-                .f64_add => try pushF64Binary(&frame, .add),
-                .f64_sub => try pushF64Binary(&frame, .sub),
-                .f64_mul => try pushF64Binary(&frame, .mul),
-                .f64_div => try pushF64Binary(&frame, .div),
-                .f64_min => try pushF64Binary(&frame, .min),
-                .f64_max => try pushF64Binary(&frame, .max),
-                .f64_copysign => try pushF64Binary(&frame, .copysign),
+                .i32_eq => try pushIntegerComparison(i32, &frame, .eq),
+                .i32_ne => try pushIntegerComparison(i32, &frame, .ne),
+                .i32_lt_s => try pushIntegerComparison(i32, &frame, .lt_s),
+                .i32_lt_u => try pushIntegerComparison(i32, &frame, .lt_u),
+                .i32_gt_s => try pushIntegerComparison(i32, &frame, .gt_s),
+                .i32_gt_u => try pushIntegerComparison(i32, &frame, .gt_u),
+                .i32_le_s => try pushIntegerComparison(i32, &frame, .le_s),
+                .i32_le_u => try pushIntegerComparison(i32, &frame, .le_u),
+                .i32_ge_s => try pushIntegerComparison(i32, &frame, .ge_s),
+                .i32_ge_u => try pushIntegerComparison(i32, &frame, .ge_u),
+                .i32_add => try pushIntegerBinary(i32, &frame, .add),
+                .i32_sub => try pushIntegerBinary(i32, &frame, .sub),
+                .i32_mul => try pushIntegerBinary(i32, &frame, .mul),
+                .i32_div_s => try pushIntegerBinary(i32, &frame, .div_s),
+                .i32_div_u => try pushIntegerBinary(i32, &frame, .div_u),
+                .i32_rem_s => try pushIntegerBinary(i32, &frame, .rem_s),
+                .i32_rem_u => try pushIntegerBinary(i32, &frame, .rem_u),
+                .i32_and => try pushIntegerBinary(i32, &frame, .@"and"),
+                .i32_or => try pushIntegerBinary(i32, &frame, .@"or"),
+                .i32_xor => try pushIntegerBinary(i32, &frame, .xor),
+                .i32_shl => try pushIntegerBinary(i32, &frame, .shl),
+                .i32_shr_s => try pushIntegerBinary(i32, &frame, .shr_s),
+                .i32_shr_u => try pushIntegerBinary(i32, &frame, .shr_u),
+                .i32_rotl => try pushIntegerBinary(i32, &frame, .rotl),
+                .i32_rotr => try pushIntegerBinary(i32, &frame, .rotr),
+                .i32_clz => try pushIntegerUnary(i32, &frame, .clz),
+                .i32_ctz => try pushIntegerUnary(i32, &frame, .ctz),
+                .i32_popcnt => try pushIntegerUnary(i32, &frame, .popcnt),
+                .f32_abs => try pushFloatUnary(f32, &frame, .abs),
+                .f32_neg => try pushFloatUnary(f32, &frame, .neg),
+                .f32_ceil => try pushFloatUnary(f32, &frame, .ceil),
+                .f32_floor => try pushFloatUnary(f32, &frame, .floor),
+                .f32_trunc => try pushFloatUnary(f32, &frame, .trunc),
+                .f32_nearest => try pushFloatUnary(f32, &frame, .nearest),
+                .f32_sqrt => try pushFloatUnary(f32, &frame, .sqrt),
+                .f32_add => try pushFloatBinary(f32, &frame, .add),
+                .f32_sub => try pushFloatBinary(f32, &frame, .sub),
+                .f32_mul => try pushFloatBinary(f32, &frame, .mul),
+                .f32_div => try pushFloatBinary(f32, &frame, .div),
+                .f32_min => try pushFloatBinary(f32, &frame, .min),
+                .f32_max => try pushFloatBinary(f32, &frame, .max),
+                .f32_copysign => try pushFloatBinary(f32, &frame, .copysign),
+                .f64_abs => try pushFloatUnary(f64, &frame, .abs),
+                .f64_neg => try pushFloatUnary(f64, &frame, .neg),
+                .f64_ceil => try pushFloatUnary(f64, &frame, .ceil),
+                .f64_floor => try pushFloatUnary(f64, &frame, .floor),
+                .f64_trunc => try pushFloatUnary(f64, &frame, .trunc),
+                .f64_nearest => try pushFloatUnary(f64, &frame, .nearest),
+                .f64_sqrt => try pushFloatUnary(f64, &frame, .sqrt),
+                .f64_add => try pushFloatBinary(f64, &frame, .add),
+                .f64_sub => try pushFloatBinary(f64, &frame, .sub),
+                .f64_mul => try pushFloatBinary(f64, &frame, .mul),
+                .f64_div => try pushFloatBinary(f64, &frame, .div),
+                .f64_min => try pushFloatBinary(f64, &frame, .min),
+                .f64_max => try pushFloatBinary(f64, &frame, .max),
+                .f64_copysign => try pushFloatBinary(f64, &frame, .copysign),
                 .i32_wrap_i64 => {
                     const value = try frame.popI64();
                     try frame.pushI32(@bitCast(@as(u32, @truncate(@as(u64, @bitCast(value))))));
@@ -2726,52 +2726,61 @@ fn resultMatchesType(result: ExecutionResult, function_type: FuncType) bool {
     return true;
 }
 
-fn pushI32Binary(frame: *Executor.Frame, op: BinaryOp) Error!void {
-    const right = try frame.popI32();
-    const left = try frame.popI32();
-    try frame.pushI32(try applyI32Binary(op, left, right));
+fn pushIntegerBinary(comptime Int: type, frame: *Executor.Frame, op: BinaryOp) Error!void {
+    const right = try popInteger(Int, frame);
+    const left = try popInteger(Int, frame);
+    try pushInteger(Int, frame, try applyIntegerBinary(Int, op, left, right));
 }
 
-fn pushI64Binary(frame: *Executor.Frame, op: BinaryOp) Error!void {
-    const right = try frame.popI64();
-    const left = try frame.popI64();
-    try frame.pushI64(try applyI64Binary(op, left, right));
+fn pushFloatBinary(comptime Float: type, frame: *Executor.Frame, op: FloatBinaryOp) Error!void {
+    const right = try popFloat(Float, frame);
+    const left = try popFloat(Float, frame);
+    try pushFloat(Float, frame, applyFloatBinary(Float, op, left, right));
 }
 
-fn pushF32Binary(frame: *Executor.Frame, op: FloatBinaryOp) Error!void {
-    const right = try frame.popF32();
-    const left = try frame.popF32();
-    try frame.push(.{ .f32 = applyF32Binary(op, left, right) });
+fn pushIntegerUnary(comptime Int: type, frame: *Executor.Frame, op: UnaryOp) Error!void {
+    try pushInteger(Int, frame, applyIntegerUnary(Int, op, try popInteger(Int, frame)));
 }
 
-fn pushF64Binary(frame: *Executor.Frame, op: FloatBinaryOp) Error!void {
-    const right = try frame.popF64();
-    const left = try frame.popF64();
-    try frame.push(.{ .f64 = applyF64Binary(op, left, right) });
+fn pushFloatUnary(comptime Float: type, frame: *Executor.Frame, op: FloatUnaryOp) Error!void {
+    try pushFloat(Float, frame, applyFloatUnary(Float, op, try popFloat(Float, frame)));
 }
 
-fn pushI32Unary(frame: *Executor.Frame, op: UnaryOp) Error!void {
-    const value = try frame.popI32();
-    try frame.pushI32(applyI32Unary(op, value));
+fn popInteger(comptime Int: type, frame: *Executor.Frame) Error!Int {
+    return switch (Int) {
+        i32 => try frame.popI32(),
+        i64 => try frame.popI64(),
+        else => @compileError("unsupported wasm integer type"),
+    };
 }
 
-fn pushI64Unary(frame: *Executor.Frame, op: UnaryOp) Error!void {
-    const value = try frame.popI64();
-    try frame.pushI64(applyI64Unary(op, value));
+fn pushInteger(comptime Int: type, frame: *Executor.Frame, value: Int) Error!void {
+    switch (Int) {
+        i32 => try frame.pushI32(value),
+        i64 => try frame.pushI64(value),
+        else => @compileError("unsupported wasm integer type"),
+    }
 }
 
-fn pushF32Unary(frame: *Executor.Frame, op: FloatUnaryOp) Error!void {
-    const value = try frame.popF32();
-    try frame.push(.{ .f32 = applyF32Unary(op, value) });
+fn popFloat(comptime Float: type, frame: *Executor.Frame) Error!Float {
+    return switch (Float) {
+        f32 => try frame.popF32(),
+        f64 => try frame.popF64(),
+        else => @compileError("unsupported wasm float type"),
+    };
 }
 
-fn pushF64Unary(frame: *Executor.Frame, op: FloatUnaryOp) Error!void {
-    const value = try frame.popF64();
-    try frame.push(.{ .f64 = applyF64Unary(op, value) });
+fn pushFloat(comptime Float: type, frame: *Executor.Frame, value: Float) Error!void {
+    switch (Float) {
+        f32 => try frame.push(.{ .f32 = value }),
+        f64 => try frame.push(.{ .f64 = value }),
+        else => @compileError("unsupported wasm float type"),
+    }
 }
 
-fn applyI32Unary(op: UnaryOp, value: i32) i32 {
-    const unsigned = @as(u32, @bitCast(value));
+fn applyIntegerUnary(comptime Int: type, op: UnaryOp, value: Int) Int {
+    const Unsigned = unsignedFor(Int);
+    const unsigned = @as(Unsigned, @bitCast(value));
     const result = switch (op) {
         .clz => @clz(unsigned),
         .ctz => @ctz(unsigned),
@@ -2780,50 +2789,32 @@ fn applyI32Unary(op: UnaryOp, value: i32) i32 {
     return @intCast(result);
 }
 
-fn applyI64Unary(op: UnaryOp, value: i64) i64 {
-    const unsigned = @as(u64, @bitCast(value));
-    const result = switch (op) {
-        .clz => @clz(unsigned),
-        .ctz => @ctz(unsigned),
-        .popcnt => @popCount(unsigned),
-    };
-    return @intCast(result);
-}
-
-fn applyF32Unary(op: FloatUnaryOp, value: f32) f32 {
+fn applyFloatUnary(comptime Float: type, op: FloatUnaryOp, value: Float) Float {
     return switch (op) {
         .abs => @abs(value),
         .neg => -value,
         .ceil => @ceil(value),
         .floor => @floor(value),
         .trunc => @trunc(value),
-        .nearest => nearestFloat(f32, value),
+        .nearest => nearestFloat(Float, value),
         .sqrt => @sqrt(value),
     };
 }
 
-fn applyF64Unary(op: FloatUnaryOp, value: f64) f64 {
-    return switch (op) {
-        .abs => @abs(value),
-        .neg => -value,
-        .ceil => @ceil(value),
-        .floor => @floor(value),
-        .trunc => @trunc(value),
-        .nearest => nearestFloat(f64, value),
-        .sqrt => @sqrt(value),
-    };
-}
-
-fn applyI32Binary(op: BinaryOp, left: i32, right: i32) Error!i32 {
-    const left_unsigned = @as(u32, @bitCast(left));
-    const right_unsigned = @as(u32, @bitCast(right));
-    const shift: u5 = @intCast(@as(u32, @bitCast(right)) & 31);
+fn applyIntegerBinary(comptime Int: type, op: BinaryOp, left: Int, right: Int) Error!Int {
+    const Unsigned = unsignedFor(Int);
+    const Shift = shiftFor(Int);
+    const bit_count = @bitSizeOf(Int);
+    const shift_mask: Unsigned = bit_count - 1;
+    const left_unsigned = @as(Unsigned, @bitCast(left));
+    const right_unsigned = @as(Unsigned, @bitCast(right));
+    const shift: Shift = @intCast(right_unsigned & shift_mask);
     return switch (op) {
         .add => left +% right,
         .sub => left -% right,
         .mul => left *% right,
         .div_s => signed: {
-            if (right == 0 or (left == minSigned(i32) and right == -1)) return error.ArithmeticTrap;
+            if (right == 0 or (left == minSigned(Int) and right == -1)) return error.ArithmeticTrap;
             break :signed @divTrunc(left, right);
         },
         .div_u => unsigned: {
@@ -2832,7 +2823,7 @@ fn applyI32Binary(op: BinaryOp, left: i32, right: i32) Error!i32 {
         },
         .rem_s => signed: {
             if (right == 0) return error.ArithmeticTrap;
-            if (left == minSigned(i32) and right == -1) break :signed 0;
+            if (left == minSigned(Int) and right == -1) break :signed 0;
             break :signed @rem(left, right);
         },
         .rem_u => unsigned: {
@@ -2845,88 +2836,50 @@ fn applyI32Binary(op: BinaryOp, left: i32, right: i32) Error!i32 {
         .shl => @bitCast(left_unsigned << shift),
         .shr_s => left >> shift,
         .shr_u => @bitCast(left_unsigned >> shift),
-        .rotl => @bitCast(rotateLeft32(left_unsigned, shift)),
-        .rotr => @bitCast(rotateRight32(left_unsigned, shift)),
+        .rotl => @bitCast(rotateLeftInt(Unsigned, Shift, left_unsigned, shift)),
+        .rotr => @bitCast(rotateRightInt(Unsigned, Shift, left_unsigned, shift)),
     };
 }
 
-fn applyI64Binary(op: BinaryOp, left: i64, right: i64) Error!i64 {
-    const left_unsigned = @as(u64, @bitCast(left));
-    const right_unsigned = @as(u64, @bitCast(right));
-    const shift: u6 = @intCast(@as(u64, @bitCast(right)) & 63);
-    return switch (op) {
-        .add => left +% right,
-        .sub => left -% right,
-        .mul => left *% right,
-        .div_s => signed: {
-            if (right == 0 or (left == minSigned(i64) and right == -1)) return error.ArithmeticTrap;
-            break :signed @divTrunc(left, right);
-        },
-        .div_u => unsigned: {
-            if (right_unsigned == 0) return error.ArithmeticTrap;
-            break :unsigned @bitCast(@divTrunc(left_unsigned, right_unsigned));
-        },
-        .rem_s => signed: {
-            if (right == 0) return error.ArithmeticTrap;
-            if (left == minSigned(i64) and right == -1) break :signed 0;
-            break :signed @rem(left, right);
-        },
-        .rem_u => unsigned: {
-            if (right_unsigned == 0) return error.ArithmeticTrap;
-            break :unsigned @bitCast(@rem(left_unsigned, right_unsigned));
-        },
-        .@"and" => left & right,
-        .@"or" => left | right,
-        .xor => left ^ right,
-        .shl => @bitCast(left_unsigned << shift),
-        .shr_s => left >> shift,
-        .shr_u => @bitCast(left_unsigned >> shift),
-        .rotl => @bitCast(rotateLeft64(left_unsigned, shift)),
-        .rotr => @bitCast(rotateRight64(left_unsigned, shift)),
-    };
-}
-
-fn rotateLeft32(value: u32, shift: u5) u32 {
-    const reverse_shift: u5 = @intCast((32 - @as(u32, shift)) & 31);
+fn rotateLeftInt(comptime Unsigned: type, comptime Shift: type, value: Unsigned, shift: Shift) Unsigned {
+    const bit_count: Unsigned = @bitSizeOf(Unsigned);
+    const shift_mask: Unsigned = bit_count - 1;
+    const reverse_shift: Shift = @intCast((bit_count - @as(Unsigned, shift)) & shift_mask);
     return (value << shift) | (value >> reverse_shift);
 }
 
-fn rotateRight32(value: u32, shift: u5) u32 {
-    const reverse_shift: u5 = @intCast((32 - @as(u32, shift)) & 31);
+fn rotateRightInt(comptime Unsigned: type, comptime Shift: type, value: Unsigned, shift: Shift) Unsigned {
+    const bit_count: Unsigned = @bitSizeOf(Unsigned);
+    const shift_mask: Unsigned = bit_count - 1;
+    const reverse_shift: Shift = @intCast((bit_count - @as(Unsigned, shift)) & shift_mask);
     return (value >> shift) | (value << reverse_shift);
 }
 
-fn rotateLeft64(value: u64, shift: u6) u64 {
-    const reverse_shift: u6 = @intCast((64 - @as(u64, shift)) & 63);
-    return (value << shift) | (value >> reverse_shift);
-}
-
-fn rotateRight64(value: u64, shift: u6) u64 {
-    const reverse_shift: u6 = @intCast((64 - @as(u64, shift)) & 63);
-    return (value >> shift) | (value << reverse_shift);
-}
-
-fn applyF32Binary(op: FloatBinaryOp, left: f32, right: f32) f32 {
+fn applyFloatBinary(comptime Float: type, op: FloatBinaryOp, left: Float, right: Float) Float {
     return switch (op) {
         .add => left + right,
         .sub => left - right,
         .mul => left * right,
         .div => left / right,
-        .min => minF32(left, right),
-        .max => maxF32(left, right),
-        .copysign => copySignF32(left, right),
+        .min => if (Float == f32) minF32(left, right) else minF64(left, right),
+        .max => if (Float == f32) maxF32(left, right) else maxF64(left, right),
+        .copysign => if (Float == f32) copySignF32(left, right) else copySignF64(left, right),
     };
 }
 
-fn applyF64Binary(op: FloatBinaryOp, left: f64, right: f64) f64 {
-    return switch (op) {
-        .add => left + right,
-        .sub => left - right,
-        .mul => left * right,
-        .div => left / right,
-        .min => minF64(left, right),
-        .max => maxF64(left, right),
-        .copysign => copySignF64(left, right),
+fn unsignedFor(comptime Int: type) type {
+    return switch (Int) {
+        i32 => u32,
+        i64 => u64,
+        else => @compileError("unsupported wasm integer type"),
+    };
+}
+
+fn shiftFor(comptime Int: type) type {
+    return switch (Int) {
+        i32 => u5,
+        i64 => u6,
+        else => @compileError("unsupported wasm integer type"),
     };
 }
 
@@ -2990,33 +2943,22 @@ fn isNan(value: anytype) bool {
     return value != value;
 }
 
-fn pushI32Comparison(frame: *Executor.Frame, comparison: Comparison) Error!void {
-    const right = try frame.popI32();
-    const left = try frame.popI32();
-    try frame.pushI32(if (compareI32(comparison, left, right)) 1 else 0);
+fn pushIntegerComparison(comptime Int: type, frame: *Executor.Frame, comparison: Comparison) Error!void {
+    const right = try popInteger(Int, frame);
+    const left = try popInteger(Int, frame);
+    try frame.pushI32(if (compareInteger(Int, comparison, left, right)) 1 else 0);
 }
 
-fn pushI64Comparison(frame: *Executor.Frame, comparison: Comparison) Error!void {
-    const right = try frame.popI64();
-    const left = try frame.popI64();
-    try frame.pushI32(if (compareI64(comparison, left, right)) 1 else 0);
+fn pushFloatComparison(comptime Float: type, frame: *Executor.Frame, comparison: FloatComparison) Error!void {
+    const right = try popFloat(Float, frame);
+    const left = try popFloat(Float, frame);
+    try frame.pushI32(if (compareFloat(Float, comparison, left, right)) 1 else 0);
 }
 
-fn pushF32Comparison(frame: *Executor.Frame, comparison: FloatComparison) Error!void {
-    const right = try frame.popF32();
-    const left = try frame.popF32();
-    try frame.pushI32(if (compareF32(comparison, left, right)) 1 else 0);
-}
-
-fn pushF64Comparison(frame: *Executor.Frame, comparison: FloatComparison) Error!void {
-    const right = try frame.popF64();
-    const left = try frame.popF64();
-    try frame.pushI32(if (compareF64(comparison, left, right)) 1 else 0);
-}
-
-fn compareI32(comparison: Comparison, left: i32, right: i32) bool {
-    const left_unsigned = @as(u32, @bitCast(left));
-    const right_unsigned = @as(u32, @bitCast(right));
+fn compareInteger(comptime Int: type, comparison: Comparison, left: Int, right: Int) bool {
+    const Unsigned = unsignedFor(Int);
+    const left_unsigned = @as(Unsigned, @bitCast(left));
+    const right_unsigned = @as(Unsigned, @bitCast(right));
     return switch (comparison) {
         .eq => left == right,
         .ne => left != right,
@@ -3031,35 +2973,7 @@ fn compareI32(comparison: Comparison, left: i32, right: i32) bool {
     };
 }
 
-fn compareI64(comparison: Comparison, left: i64, right: i64) bool {
-    const left_unsigned = @as(u64, @bitCast(left));
-    const right_unsigned = @as(u64, @bitCast(right));
-    return switch (comparison) {
-        .eq => left == right,
-        .ne => left != right,
-        .lt_s => left < right,
-        .lt_u => left_unsigned < right_unsigned,
-        .gt_s => left > right,
-        .gt_u => left_unsigned > right_unsigned,
-        .le_s => left <= right,
-        .le_u => left_unsigned <= right_unsigned,
-        .ge_s => left >= right,
-        .ge_u => left_unsigned >= right_unsigned,
-    };
-}
-
-fn compareF32(comparison: FloatComparison, left: f32, right: f32) bool {
-    return switch (comparison) {
-        .eq => left == right,
-        .ne => left != right,
-        .lt => left < right,
-        .gt => left > right,
-        .le => left <= right,
-        .ge => left >= right,
-    };
-}
-
-fn compareF64(comparison: FloatComparison, left: f64, right: f64) bool {
+fn compareFloat(comptime Float: type, comparison: FloatComparison, left: Float, right: Float) bool {
     return switch (comparison) {
         .eq => left == right,
         .ne => left != right,
