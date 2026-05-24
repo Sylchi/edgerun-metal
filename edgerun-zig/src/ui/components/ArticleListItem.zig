@@ -3,6 +3,7 @@ const common = @import("../../ui_component_common.zig");
 const ui = @import("../../ui.zig");
 const ui_input = @import("../../input.zig");
 const layout = @import("../../layouts/Types.zig");
+const base_text_block = @import("base/TextBlock.zig");
 
 const RenderOptions = common.RenderOptions;
 
@@ -29,13 +30,14 @@ pub const ArticleListItem = struct {
 
 pub fn articleListItemHeight(width: f32, article: ArticleListItem) f32 {
     const text_width = articleListTextWidth(width);
-    const title_lines = wrappedLineCount(article.title, text_width, article_list_title_average_char_width, article_list_title_max_lines);
-    const summary_lines = wrappedLineCount(article.summary, text_width, article_list_summary_average_char_width, article_list_summary_max_lines);
+    const text_constraints = articleListTextConstraints(text_width);
+    const title = base_text_block.measure(article.title, text_constraints, article_list_title_metrics);
+    const summary = base_text_block.measure(article.summary, text_constraints, article_list_summary_metrics);
     const text_height = article_list_meta_height +
         article_list_meta_gap +
-        @as(f32, @floatFromInt(title_lines)) * article_list_title_line_height +
+        title.preferred.h +
         article_list_title_summary_gap +
-        @as(f32, @floatFromInt(summary_lines)) * article_list_summary_line_height;
+        summary.preferred.h;
     return @max(article_list_min_height, article_list_padding_y * 2.0 + text_height);
 }
 
@@ -59,22 +61,13 @@ pub fn renderArticleListItem(article: ArticleListItem, scene: *ui.Scene, bounds:
     try scene.pushAlignedText(meta_bounds, meta, options.style.muted, .end);
 
     const title_y = text_top + article_list_meta_height + article_list_meta_gap;
-    const title_lines = wrappedLineCount(article.title, text_width, article_list_title_average_char_width, article_list_title_max_lines);
-    const title_h = @as(f32, @floatFromInt(title_lines)) * article_list_title_line_height;
-    try scene.pushWrappedText(ui.Rect.init(text_x, title_y, text_width, title_h), article.title, options.style.text, .{
-        .line_height = article_list_title_line_height,
-        .average_char_width = article_list_title_average_char_width,
-        .max_lines = article_list_title_max_lines,
-    });
+    const text_constraints = articleListTextConstraints(text_width);
+    const title = base_text_block.measure(article.title, text_constraints, article_list_title_metrics);
+    try base_text_block.render(scene, ui.Rect.init(text_x, title_y, text_width, title.preferred.h), article.title, options.style.text, article_list_title_metrics);
 
-    const summary_y = title_y + title_h + article_list_title_summary_gap;
-    const summary_lines = wrappedLineCount(article.summary, text_width, article_list_summary_average_char_width, article_list_summary_max_lines);
-    const summary_h = @as(f32, @floatFromInt(summary_lines)) * article_list_summary_line_height;
-    try scene.pushWrappedText(ui.Rect.init(text_x, summary_y, text_width, summary_h), article.summary, options.style.muted, .{
-        .line_height = article_list_summary_line_height,
-        .average_char_width = article_list_summary_average_char_width,
-        .max_lines = article_list_summary_max_lines,
-    });
+    const summary_y = title_y + title.preferred.h + article_list_title_summary_gap;
+    const summary = base_text_block.measure(article.summary, text_constraints, article_list_summary_metrics);
+    try base_text_block.render(scene, ui.Rect.init(text_x, summary_y, text_width, summary.preferred.h), article.summary, options.style.muted, article_list_summary_metrics);
 
     const divider = ui.Rect.init(bounds.x, bounds.y + bounds.h - article_list_divider_height, bounds.w, article_list_divider_height);
     try scene.pushRect(divider, options.style.border, .fill, 0.0, 0.0);
@@ -97,22 +90,23 @@ const article_list_summary_max_lines: usize = 3;
 const article_list_divider_height: f32 = 1.0;
 const article_list_min_width: f32 = 180.0;
 const article_list_default_width: f32 = 420.0;
+const article_list_title_metrics = base_text_block.Metrics{
+    .line_height = article_list_title_line_height,
+    .average_char_width = article_list_title_average_char_width,
+    .max_lines = article_list_title_max_lines,
+};
+const article_list_summary_metrics = base_text_block.Metrics{
+    .line_height = article_list_summary_line_height,
+    .average_char_width = article_list_summary_average_char_width,
+    .max_lines = article_list_summary_max_lines,
+};
 
 fn articleListTextWidth(width: f32) f32 {
     return @max(1.0, width - article_list_padding_x * 2.0 - article_list_arrow_slot);
 }
 
-fn wrappedLineCount(value: []const u8, width: f32, average_char_width: f32, max_lines: usize) usize {
-    if (value.len == 0 or max_lines == 0) return 0;
-    const char_capacity = @max(@as(usize, 1), @as(usize, @intFromFloat(@max(1.0, width / average_char_width))));
-    var byte_cursor: usize = 0;
-    var line_count: usize = 0;
-    while (line_count < max_lines) : (line_count += 1) {
-        byte_cursor = ui.skipAsciiSpace(value, byte_cursor);
-        if (byte_cursor >= value.len) return line_count;
-        byte_cursor = ui.wrappedLine(value, byte_cursor, char_capacity).next;
-    }
-    return line_count;
+fn articleListTextConstraints(width: f32) layout.Constraints {
+    return .{ .width = .{ .exact = width }, .text_wrap = .wrap };
 }
 
 test "article list item expands around wrapped titles and summaries" {
