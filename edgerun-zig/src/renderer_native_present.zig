@@ -1,11 +1,12 @@
 const std = @import("std");
+const renderer_gpu = @import("renderer_gpu.zig");
 const renderer_ir = @import("renderer_ir.zig");
 const renderer_present = @import("renderer_present.zig");
 const renderer_software = @import("renderer_software.zig");
 const renderer_surface = @import("renderer_surface.zig");
 const ui = @import("ui.zig");
 
-pub const Error = renderer_software.Error || error{
+pub const Error = renderer_software.Error || renderer_gpu.Error || error{
     UnsupportedTarget,
     InvalidFramebuffer,
     InvalidNativeSurface,
@@ -145,6 +146,18 @@ pub const Receipt = struct {
     }
 };
 
+pub const GpuNativeReceipt = struct {
+    gpu: renderer_gpu.Receipt,
+    native: Receipt,
+
+    pub fn valid(self: GpuNativeReceipt) bool {
+        return self.gpu.valid() and
+            self.native.valid() and
+            self.gpu.presentation_transport == .gpu_command_stream and
+            (self.native.transport == .drm_framebuffer or self.native.transport == .wayland_surface);
+    }
+};
+
 pub const Sink = struct {
     context: *anyopaque,
     submit_drm: ?*const fn (context: *anyopaque, commit: DrmCommit) bool = null,
@@ -153,6 +166,14 @@ pub const Sink = struct {
     pub fn valid(self: Sink) bool {
         return @intFromPtr(self.context) != 0 and (self.submit_drm != null or self.submit_wayland != null);
     }
+};
+
+pub const GpuWorkspace = struct {
+    primitives: []renderer_gpu.Primitive,
+    gpu_tile_marks: []u8,
+    gpu_dirty_ids: []u32,
+    native_tile_marks: []u8,
+    native_dirty_ids: []u32,
 };
 
 pub const CpuFramebuffer = struct {
@@ -258,6 +279,45 @@ pub fn renderCpuAndSubmit(
     return planAndSubmit(surface, buffers, atlases.resources(), refresh_hz, tile_width, tile_height, tile_marks, dirty_ids, sink);
 }
 
+pub fn renderGpuAndSubmit(
+    surface: NativeSurface,
+    buffers: renderer_ir.Buffers,
+    resources: renderer_present.Resources,
+    device: renderer_gpu.Device,
+    workspace: GpuWorkspace,
+    refresh_hz: u32,
+    tile_width: u32,
+    tile_height: u32,
+    sink: Sink,
+) Error!GpuNativeReceipt {
+    try surface.validate();
+    var renderer = try renderer_gpu.Renderer.init(
+        device,
+        surface.mode(refresh_hz),
+        tile_width,
+        tile_height,
+        workspace.primitives,
+        workspace.gpu_tile_marks,
+        workspace.gpu_dirty_ids,
+    );
+    const gpu_receipt = try renderer.renderIrWithResources(&.{}, buffers, resources);
+    const native_receipt = try planAndSubmit(
+        surface,
+        buffers,
+        resources,
+        refresh_hz,
+        tile_width,
+        tile_height,
+        workspace.native_tile_marks,
+        workspace.native_dirty_ids,
+        sink,
+    );
+    return .{
+        .gpu = gpu_receipt,
+        .native = native_receipt,
+    };
+}
+
 fn commitForSurface(surface: NativeSurface, dirty_tiles: []const u32) Commit {
     return switch (surface) {
         .drm => |value| .{ .drm = .{
@@ -310,6 +370,54 @@ const TestSink = struct {
         self.wayland_count += 1;
         self.last_surface_id = commit.surface_id;
         return commit.dirty_tiles.len != 0;
+    }
+};
+
+const TestGpuDevice = struct {
+    began: usize = 0,
+    uploaded: usize = 0,
+    rendered: usize = 0,
+    presented: usize = 0,
+    last_sequence: u64 = 0,
+    reject_present: bool = false,
+
+    fn device(self: *TestGpuDevice) renderer_gpu.Device {
+        return .{
+            .context = self,
+            .begin_frame = beginFrame,
+            .upload_primitives = uploadPrimitives,
+            .render_tiles = renderTiles,
+            .present = present,
+        };
+    }
+
+    fn beginFrame(context: *anyopaque, frame: renderer_gpu.Frame) bool {
+        const self: *TestGpuDevice = @ptrCast(@alignCast(context));
+        if (frame.sequence == 0 or frame.primitives.len == 0) return false;
+        self.began += 1;
+        return true;
+    }
+
+    fn uploadPrimitives(context: *anyopaque, primitives: []const renderer_gpu.Primitive) bool {
+        const self: *TestGpuDevice = @ptrCast(@alignCast(context));
+        if (primitives.len == 0) return false;
+        self.uploaded += primitives.len;
+        return true;
+    }
+
+    fn renderTiles(context: *anyopaque, dirty_tiles: []const u32) bool {
+        const self: *TestGpuDevice = @ptrCast(@alignCast(context));
+        if (dirty_tiles.len == 0) return false;
+        self.rendered += dirty_tiles.len;
+        return true;
+    }
+
+    fn present(context: *anyopaque, sequence: u64) bool {
+        const self: *TestGpuDevice = @ptrCast(@alignCast(context));
+        if (self.reject_present or sequence == 0) return false;
+        self.presented += 1;
+        self.last_sequence = sequence;
+        return true;
     }
 };
 
@@ -573,4 +681,132 @@ test "native cpu render rejects framebuffer size mismatch" {
         &dirty_ids,
         sink_state.waylandSink(),
     ));
+}
+
+test "native gpu render submits wayland commit from canonical ir" {
+    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0){};
+    const buffers = storage.buffers();
+    try renderer_ir.pushRect(buffers, .base, .{ .x = 0, .y = 0, .w = 32, .h = 32 }, .accent, .clear, 0, 0, 0);
+
+    var primitives: [16]renderer_gpu.Primitive = undefined;
+    var gpu_tile_marks: [16]u8 = undefined;
+    var gpu_dirty_ids: [16]u32 = undefined;
+    var native_tile_marks: [16]u8 = undefined;
+    var native_dirty_ids: [16]u32 = undefined;
+    var gpu_device = TestGpuDevice{};
+    var sink_state = TestSink{};
+    const receipt = try renderGpuAndSubmit(
+        .{ .wayland = .{
+            .surface_id = 61,
+            .buffer_id = 67,
+            .width = 64,
+            .height = 64,
+            .stride = 64,
+        } },
+        buffers,
+        .{},
+        gpu_device.device(),
+        .{
+            .primitives = &primitives,
+            .gpu_tile_marks = &gpu_tile_marks,
+            .gpu_dirty_ids = &gpu_dirty_ids,
+            .native_tile_marks = &native_tile_marks,
+            .native_dirty_ids = &native_dirty_ids,
+        },
+        60,
+        16,
+        16,
+        sink_state.waylandSink(),
+    );
+
+    try std.testing.expect(receipt.valid());
+    try std.testing.expectEqual(renderer_present.Transport.gpu_command_stream, receipt.gpu.presentation_transport);
+    try std.testing.expectEqual(renderer_present.Transport.wayland_surface, receipt.native.transport);
+    try std.testing.expectEqual(@as(usize, 1), gpu_device.began);
+    try std.testing.expectEqual(receipt.gpu.primitive_count, gpu_device.uploaded);
+    try std.testing.expectEqual(receipt.gpu.dirty_tile_count, gpu_device.rendered);
+    try std.testing.expectEqual(@as(usize, 1), gpu_device.presented);
+    try std.testing.expectEqual(receipt.gpu.sequence, gpu_device.last_sequence);
+    try std.testing.expectEqual(@as(usize, 1), sink_state.wayland_count);
+    try std.testing.expectEqual(@as(u32, 61), sink_state.last_surface_id);
+}
+
+test "native gpu render rejects missing resources before native submit" {
+    var storage = renderer_ir.FixedBuffers(0, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0){};
+    storage.text_vertex_len = renderer_ir.textured_quad_vertex_count * renderer_ir.text_vertex_float_stride;
+
+    var primitives: [16]renderer_gpu.Primitive = undefined;
+    var gpu_tile_marks: [16]u8 = undefined;
+    var gpu_dirty_ids: [16]u32 = undefined;
+    var native_tile_marks: [16]u8 = undefined;
+    var native_dirty_ids: [16]u32 = undefined;
+    var gpu_device = TestGpuDevice{};
+    var sink_state = TestSink{};
+
+    try std.testing.expectError(error.MissingFontAtlas, renderGpuAndSubmit(
+        .{ .drm = .{
+            .framebuffer_id = 71,
+            .connector_id = 73,
+            .crtc_id = 79,
+            .width = 64,
+            .height = 64,
+            .stride = 64,
+        } },
+        storage.buffers(),
+        .{},
+        gpu_device.device(),
+        .{
+            .primitives = &primitives,
+            .gpu_tile_marks = &gpu_tile_marks,
+            .gpu_dirty_ids = &gpu_dirty_ids,
+            .native_tile_marks = &native_tile_marks,
+            .native_dirty_ids = &native_dirty_ids,
+        },
+        60,
+        16,
+        16,
+        sink_state.drmSink(),
+    ));
+    try std.testing.expectEqual(@as(usize, 0), gpu_device.began);
+    try std.testing.expectEqual(@as(usize, 0), sink_state.drm_count);
+}
+
+test "native gpu render fails when gpu device rejects frame" {
+    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0){};
+    const buffers = storage.buffers();
+    try renderer_ir.pushRect(buffers, .base, .{ .x = 0, .y = 0, .w = 16, .h = 16 }, .accent, .clear, 0, 0, 0);
+
+    var primitives: [16]renderer_gpu.Primitive = undefined;
+    var gpu_tile_marks: [16]u8 = undefined;
+    var gpu_dirty_ids: [16]u32 = undefined;
+    var native_tile_marks: [16]u8 = undefined;
+    var native_dirty_ids: [16]u32 = undefined;
+    var gpu_device = TestGpuDevice{ .reject_present = true };
+    var sink_state = TestSink{};
+
+    try std.testing.expectError(error.DeviceFailure, renderGpuAndSubmit(
+        .{ .wayland = .{
+            .surface_id = 83,
+            .buffer_id = 89,
+            .width = 64,
+            .height = 64,
+            .stride = 64,
+        } },
+        buffers,
+        .{},
+        gpu_device.device(),
+        .{
+            .primitives = &primitives,
+            .gpu_tile_marks = &gpu_tile_marks,
+            .gpu_dirty_ids = &gpu_dirty_ids,
+            .native_tile_marks = &native_tile_marks,
+            .native_dirty_ids = &native_dirty_ids,
+        },
+        60,
+        16,
+        16,
+        sink_state.waylandSink(),
+    ));
+    try std.testing.expectEqual(@as(usize, 1), gpu_device.began);
+    try std.testing.expectEqual(@as(usize, 0), sink_state.wayland_count);
 }

@@ -2,6 +2,7 @@ const std = @import("std");
 const icon = @import("icon.zig");
 const input = @import("input.zig");
 const renderer_font_atlas = @import("renderer_font_atlas.zig");
+const renderer_gpu = @import("renderer_gpu.zig");
 const renderer_ir = @import("renderer_ir.zig");
 const renderer_native_present = @import("renderer_native_present.zig");
 const renderer_software = @import("renderer_software.zig");
@@ -29,6 +30,7 @@ const max_overlay_rects: usize = 512;
 const max_overlay_text_vertices: usize = 8192;
 const max_overlay_icon_vertices: usize = 256;
 const max_tiles: usize = 512;
+const max_gpu_primitives: usize = 32768;
 const max_registry_globals: usize = 128;
 const socket_read_bytes: usize = 8192;
 const message_bytes: usize = 512;
@@ -98,6 +100,12 @@ const Options = struct {
     width: u32 = default_width,
     height: u32 = default_height,
     seconds: u32 = default_seconds,
+    present: PresentMode = .cpu,
+};
+
+const PresentMode = enum {
+    cpu,
+    gpu_record,
 };
 
 const ObjectKind = enum {
@@ -224,7 +232,7 @@ pub fn main(init: std.process.Init) !void {
     defer client.close(init.io);
     try client.bootstrap();
     try client.createWindow(options.width, options.height);
-    var app = try NativeApp.init(&client, allocator, options.width, options.height);
+    var app = try NativeApp.init(&client, allocator, options.width, options.height, options.present);
     defer app.deinit();
     try app.render(&client);
     try client.eventLoop(options.seconds, &app);
@@ -247,12 +255,22 @@ fn parseOptions(args: []const [:0]const u8) !Options {
             index += 1;
             if (index >= args.len) return error.InvalidArguments;
             options.seconds = try std.fmt.parseUnsigned(u32, args[index], 10);
+        } else if (std.mem.eql(u8, arg, "--present")) {
+            index += 1;
+            if (index >= args.len) return error.InvalidArguments;
+            options.present = try parsePresentMode(args[index]);
         } else {
             return error.InvalidArguments;
         }
     }
     if (options.width == 0 or options.height == 0 or options.seconds == 0) return error.InvalidArguments;
     return options;
+}
+
+fn parsePresentMode(value: []const u8) !PresentMode {
+    if (std.mem.eql(u8, value, "cpu")) return .cpu;
+    if (std.mem.eql(u8, value, "gpu-record")) return .gpu_record;
+    return error.InvalidArguments;
 }
 
 fn waylandSocketPath(init: std.process.Init, allocator: std.mem.Allocator) ![]u8 {
@@ -465,32 +483,42 @@ const NativeApp = struct {
     allocator: std.mem.Allocator,
     width: u32,
     height: u32,
+    present: PresentMode,
     shm: ShmBuffer,
     pixels: []ui.Color,
     commands: [max_commands]ui.Command = undefined,
     clips: [max_clips]ui.Rect = undefined,
     ir_storage: IrStorage = .{},
     font_atlas: renderer_font_atlas.Atlas = renderer_font_atlas.Atlas.init(),
+    gpu_primitives: []renderer_gpu.Primitive,
+    gpu_tile_marks: [max_tiles]u8 = undefined,
+    gpu_dirty_ids: [max_tiles]u32 = undefined,
     tile_marks: [max_tiles]u8 = undefined,
     dirty_ids: [max_tiles]u32 = undefined,
     state: AppState = .{},
+    gpu_recorder: GpuRecorder = .{},
 
-    fn init(client: *WaylandClient, allocator: std.mem.Allocator, width: u32, height: u32) !NativeApp {
+    fn init(client: *WaylandClient, allocator: std.mem.Allocator, width: u32, height: u32, present: PresentMode) !NativeApp {
         const stride = width * @sizeOf(u32);
         const shm = try client.createShmBuffer(@as(usize, stride) * height, width, height, stride);
         errdefer shm.deinit();
         const pixels = try allocator.alloc(ui.Color, @as(usize, width) * height);
         errdefer allocator.free(pixels);
+        const gpu_primitives = try allocator.alloc(renderer_gpu.Primitive, max_gpu_primitives);
+        errdefer allocator.free(gpu_primitives);
         return .{
             .allocator = allocator,
             .width = width,
             .height = height,
+            .present = present,
             .shm = shm,
             .pixels = pixels,
+            .gpu_primitives = gpu_primitives,
         };
     }
 
     fn deinit(self: *NativeApp) void {
+        self.allocator.free(self.gpu_primitives);
         self.allocator.free(self.pixels);
         self.shm.deinit();
     }
@@ -508,29 +536,64 @@ const NativeApp = struct {
             .font = .{ .width = renderer_font_atlas.width, .height = renderer_font_atlas.height, .alpha = self.font_atlas.alphaSlice() },
             .icon = .{ .width = tabler_atlas.width, .height = tabler_atlas.height, .alpha = tabler_atlas.alpha },
         };
-        const receipt = try renderer_native_present.renderCpuAndSubmit(
-            .{ .wayland = .{
-                .surface_id = surface_id,
-                .buffer_id = wl_buffer_id,
-                .width = self.width,
-                .height = self.height,
-                .stride = self.width,
-                .scale = 1,
-            } },
-            buffers,
-            atlases,
-            .{ .width = self.width, .height = self.height, .pixels = self.pixels },
-            siteBackground(),
-            default_refresh_hz,
-            tile_width,
-            tile_height,
-            &self.tile_marks,
-            &self.dirty_ids,
-            sink_state.sink(),
-        );
-        if (!receipt.valid() or !sink_state.submitted) return error.WaylandCommitRejected;
+        switch (self.present) {
+            .cpu => {
+                const receipt = try renderer_native_present.renderCpuAndSubmit(
+                    self.waylandSurface(),
+                    buffers,
+                    atlases,
+                    .{ .width = self.width, .height = self.height, .pixels = self.pixels },
+                    siteBackground(),
+                    default_refresh_hz,
+                    tile_width,
+                    tile_height,
+                    &self.tile_marks,
+                    &self.dirty_ids,
+                    sink_state.sink(),
+                );
+                if (!receipt.valid() or !sink_state.submitted) return error.WaylandCommitRejected;
+            },
+            .gpu_record => {
+                const receipt = try renderer_native_present.renderGpuAndSubmit(
+                    self.waylandSurface(),
+                    buffers,
+                    atlases.resources(),
+                    self.gpu_recorder.device(),
+                    .{
+                        .primitives = self.gpu_primitives,
+                        .gpu_tile_marks = &self.gpu_tile_marks,
+                        .gpu_dirty_ids = &self.gpu_dirty_ids,
+                        .native_tile_marks = &self.tile_marks,
+                        .native_dirty_ids = &self.dirty_ids,
+                    },
+                    default_refresh_hz,
+                    tile_width,
+                    tile_height,
+                    sink_state.sink(),
+                );
+                if (!receipt.valid() or !sink_state.submitted) return error.WaylandCommitRejected;
+                try self.renderSoftwarePixels(buffers, atlases);
+            },
+        }
         packXrgb8888(self.shm.memory, self.pixels);
         try client.attachCommit(self.width, self.height);
+    }
+
+    fn waylandSurface(self: *const NativeApp) renderer_native_present.NativeSurface {
+        return .{ .wayland = .{
+            .surface_id = surface_id,
+            .buffer_id = wl_buffer_id,
+            .width = self.width,
+            .height = self.height,
+            .stride = self.width,
+            .scale = 1,
+        } };
+    }
+
+    fn renderSoftwarePixels(self: *NativeApp, buffers: renderer_ir.Buffers, atlases: renderer_software.IrAtlases) !void {
+        const software_surface = try renderer_software.Surface.init(self.width, self.height, self.pixels);
+        software_surface.clear(siteBackground());
+        _ = try software_surface.renderIrFrameWithAtlases(buffers, atlases);
     }
 
     fn handleWaylandInput(self: *NativeApp, client: *WaylandClient, kind: ObjectKind, message: Message) !bool {
@@ -624,6 +687,53 @@ const WaylandCommitSink = struct {
         const self: *WaylandCommitSink = @ptrCast(@alignCast(context));
         self.submitted = commit.surface_id == surface_id and commit.buffer_id == wl_buffer_id and commit.dirty_tiles.len != 0;
         return self.submitted;
+    }
+};
+
+const GpuRecorder = struct {
+    began: usize = 0,
+    uploaded: usize = 0,
+    rendered: usize = 0,
+    presented: usize = 0,
+    last_sequence: u64 = 0,
+
+    fn device(self: *GpuRecorder) renderer_gpu.Device {
+        return .{
+            .context = self,
+            .begin_frame = beginFrame,
+            .upload_primitives = uploadPrimitives,
+            .render_tiles = renderTiles,
+            .present = present,
+        };
+    }
+
+    fn beginFrame(context: *anyopaque, frame: renderer_gpu.Frame) bool {
+        const self: *GpuRecorder = @ptrCast(@alignCast(context));
+        if (frame.sequence == 0 or frame.primitives.len == 0) return false;
+        self.began += 1;
+        return true;
+    }
+
+    fn uploadPrimitives(context: *anyopaque, primitives: []const renderer_gpu.Primitive) bool {
+        const self: *GpuRecorder = @ptrCast(@alignCast(context));
+        if (primitives.len == 0) return false;
+        self.uploaded += primitives.len;
+        return true;
+    }
+
+    fn renderTiles(context: *anyopaque, dirty_tiles: []const u32) bool {
+        const self: *GpuRecorder = @ptrCast(@alignCast(context));
+        if (dirty_tiles.len == 0) return false;
+        self.rendered += dirty_tiles.len;
+        return true;
+    }
+
+    fn present(context: *anyopaque, sequence: u64) bool {
+        const self: *GpuRecorder = @ptrCast(@alignCast(context));
+        if (sequence == 0) return false;
+        self.presented += 1;
+        self.last_sequence = sequence;
+        return true;
     }
 };
 
@@ -934,6 +1044,19 @@ test "wayland bind message encodes registry name interface version and new id" {
     try std.testing.expectEqual(@as(u32, compositor_id), std.mem.readInt(u32, bytes[36..40], .little));
 }
 
+test "wayland host parses explicit presentation mode" {
+    try std.testing.expectEqual(PresentMode.cpu, try parsePresentMode("cpu"));
+    try std.testing.expectEqual(PresentMode.gpu_record, try parsePresentMode("gpu-record"));
+    try std.testing.expectError(error.InvalidArguments, parsePresentMode("gpu"));
+
+    const args = [_][:0]const u8{ "wayland-window", "--width", "800", "--height", "600", "--seconds", "1", "--present", "gpu-record" };
+    const options = try parseOptions(&args);
+    try std.testing.expectEqual(@as(u32, 800), options.width);
+    try std.testing.expectEqual(@as(u32, 600), options.height);
+    try std.testing.expectEqual(@as(u32, 1), options.seconds);
+    try std.testing.expectEqual(PresentMode.gpu_record, options.present);
+}
+
 test "wayland registry global parser keeps interface slice and version" {
     var payload: [32]u8 = undefined;
     std.mem.writeInt(u32, payload[0..4], 11, .little);
@@ -985,6 +1108,50 @@ test "wayland host renders the browser landing app through canonical ir" {
     try std.testing.expect(ir_storage.rect_len > 0);
     try std.testing.expect(ir_storage.text_vertex_len > 0);
     try std.testing.expect(ir_storage.icon_vertex_len > 0);
+}
+
+test "wayland gpu recorder accepts canonical ir frame callbacks" {
+    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0){};
+    const buffers = storage.buffers();
+    try renderer_ir.pushRect(buffers, .base, .{ .x = 0, .y = 0, .w = 32, .h = 32 }, .accent, .clear, 0, 0, 0);
+
+    var primitives: [16]renderer_gpu.Primitive = undefined;
+    var gpu_tile_marks: [16]u8 = undefined;
+    var gpu_dirty_ids: [16]u32 = undefined;
+    var native_tile_marks: [16]u8 = undefined;
+    var native_dirty_ids: [16]u32 = undefined;
+    var recorder = GpuRecorder{};
+    var sink_state = WaylandCommitSink{};
+    const receipt = try renderer_native_present.renderGpuAndSubmit(
+        .{ .wayland = .{
+            .surface_id = surface_id,
+            .buffer_id = wl_buffer_id,
+            .width = 64,
+            .height = 64,
+            .stride = 64,
+        } },
+        buffers,
+        .{},
+        recorder.device(),
+        .{
+            .primitives = &primitives,
+            .gpu_tile_marks = &gpu_tile_marks,
+            .gpu_dirty_ids = &gpu_dirty_ids,
+            .native_tile_marks = &native_tile_marks,
+            .native_dirty_ids = &native_dirty_ids,
+        },
+        default_refresh_hz,
+        16,
+        16,
+        sink_state.sink(),
+    );
+
+    try std.testing.expect(receipt.valid());
+    try std.testing.expect(sink_state.submitted);
+    try std.testing.expectEqual(@as(usize, 1), recorder.began);
+    try std.testing.expectEqual(receipt.gpu.primitive_count, recorder.uploaded);
+    try std.testing.expectEqual(receipt.gpu.dirty_tile_count, recorder.rendered);
+    try std.testing.expectEqual(receipt.gpu.sequence, recorder.last_sequence);
 }
 
 test "wayland host pointer input updates hover activation and scroll state" {
