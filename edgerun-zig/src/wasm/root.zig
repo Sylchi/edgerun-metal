@@ -1192,12 +1192,7 @@ const Module = struct {
         if (end > self.table_min_entries or end > max_table_entries) return error.Corrupt;
         var function_index: usize = 0;
         while (function_index < function_count) : (function_index += 1) {
-            const function_ref = switch (payload) {
-                .function_index_vector, .element_kind => try reader.readU32Leb(),
-                .ref_func_expression_vector => try readRefFuncExpression(reader),
-            };
-            if (function_ref >= self.totalFunctionCount()) return error.Corrupt;
-            self.table_entries[base + function_index] = function_ref;
+            self.table_entries[base + function_index] = try self.readElementFunctionRef(reader, payload);
         }
     }
 
@@ -1208,14 +1203,7 @@ const Module = struct {
         segment.count = function_count;
         var function_index: usize = 0;
         while (function_index < function_count) : (function_index += 1) {
-            const function_ref = switch (payload) {
-                .function_index_vector,
-                .element_kind,
-                => try reader.readU32Leb(),
-                .ref_func_expression_vector => try readRefFuncExpression(reader),
-            };
-            if (function_ref >= self.totalFunctionCount()) return error.Corrupt;
-            segment.entries[function_index] = function_ref;
+            segment.entries[function_index] = try self.readElementFunctionRef(reader, payload);
         }
     }
 
@@ -1223,12 +1211,17 @@ const Module = struct {
         const function_count = try readElementFunctionCount(reader, payload);
         var function_index: usize = 0;
         while (function_index < function_count) : (function_index += 1) {
-            const function_ref = switch (payload) {
-                .function_index_vector, .element_kind => try reader.readU32Leb(),
-                .ref_func_expression_vector => try readRefFuncExpression(reader),
-            };
-            if (function_ref >= self.totalFunctionCount()) return error.Corrupt;
+            _ = try self.readElementFunctionRef(reader, payload);
         }
+    }
+
+    fn readElementFunctionRef(self: Module, reader: *Reader, payload: ElementPayload) Error!usize {
+        const function_ref = switch (payload) {
+            .function_index_vector, .element_kind => try reader.readU32Leb(),
+            .ref_func_expression_vector => try readRefFuncExpression(reader),
+        };
+        if (function_ref >= self.totalFunctionCount()) return error.Corrupt;
+        return function_ref;
     }
 
     fn findExport(self: Module, name: []const u8) Error!usize {
@@ -1262,32 +1255,16 @@ const Module = struct {
 
     fn resolveImports(self: *Module, runtime: Runtime) Error!void {
         for (self.imports[0..self.import_count]) |imported| {
-            for (runtime.imports) |host| {
-                if (host.kind == .function and imported.matches(host)) break;
-            } else return error.MissingImport;
+            _ = try findHostImport(runtime, imported, .function);
         }
         if (self.imported_memory) |imported| {
-            for (runtime.imports) |host| {
-                if (!imported.matches(host)) continue;
-                try validateImportedMemory(imported, host);
-                return;
-            }
-            return error.MissingImport;
+            try validateImportedMemory(imported, try findHostImport(runtime, imported, .memory));
         }
         if (self.imported_table) |imported| {
-            for (runtime.imports) |host| {
-                if (!imported.matches(host)) continue;
-                try validateImportedTable(imported, host);
-                return;
-            }
-            return error.MissingImport;
+            try validateImportedTable(imported, try findHostImport(runtime, imported, .table));
         }
         for (self.imported_globals[0..self.imported_global_count]) |imported| {
-            for (runtime.imports) |host| {
-                if (!imported.matches(host)) continue;
-                try self.resolveImportedGlobal(imported, host);
-                break;
-            } else return error.MissingImport;
+            try self.resolveImportedGlobal(imported, try findHostImport(runtime, imported, .global));
         }
     }
 
@@ -2232,6 +2209,14 @@ fn readTableMinimumEntries(reader: *Reader) Error!usize {
         if (encoded_max < min) return error.Corrupt;
     }
     return min;
+}
+
+fn findHostImport(runtime: Runtime, imported: anytype, kind: HostImportKind) Error!HostImport {
+    for (runtime.imports) |host| {
+        if (host.kind != kind) continue;
+        if (imported.matches(host)) return host;
+    }
+    return error.MissingImport;
 }
 
 fn validateImportedMemory(imported: ImportedMemory, host: HostImport) Error!void {
