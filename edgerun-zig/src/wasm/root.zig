@@ -1767,9 +1767,7 @@ const Executor = struct {
 
     fn callIndirectFromFrame(self: *Executor, frame: *Frame, type_index: usize, table_index: u32, depth: usize) Error!ExecutionResult {
         if (table_index != 0) return error.Unsupported;
-        const table_offset = try frame.popI32();
-        if (table_offset < 0) return error.Trap;
-        const table_entry: usize = @intCast(table_offset);
+        const table_entry = try popTableEntry(frame);
         if (table_entry >= self.module.table_min_entries) return error.Trap;
         const function_index = self.module.table_entries[table_entry] orelse return error.Trap;
         const expected_type = self.module.types[type_index];
@@ -1780,9 +1778,7 @@ const Executor = struct {
 
     fn tableGet(self: *Executor, frame: *Frame, reader: *Reader) Error!void {
         try readTableIndex(reader);
-        const table_offset = try frame.popI32();
-        if (table_offset < 0) return error.Trap;
-        const table_entry: usize = @intCast(table_offset);
+        const table_entry = try popTableEntry(frame);
         if (table_entry >= self.module.table_min_entries) return error.Trap;
         try frame.push(.{ .funcref = self.module.table_entries[table_entry] });
     }
@@ -1790,9 +1786,7 @@ const Executor = struct {
     fn tableSet(self: *Executor, frame: *Frame, reader: *Reader) Error!void {
         try readTableIndex(reader);
         const function_ref = try frame.popFuncref();
-        const table_offset = try frame.popI32();
-        if (table_offset < 0) return error.Trap;
-        const table_entry: usize = @intCast(table_offset);
+        const table_entry = try popTableEntry(frame);
         if (table_entry >= self.module.table_min_entries) return error.Trap;
         if (function_ref) |index| {
             if (index >= self.module.totalFunctionCount()) return error.Corrupt;
@@ -2149,35 +2143,32 @@ fn integerArgsForExport(module: Module, export_name: []const u8, args: []const i
 }
 
 fn popMemoryBase(frame: *Executor.Frame) Error!usize {
-    const value = try frame.popI32();
-    if (value < 0) return error.NoMemory;
-    return @intCast(value);
+    return popNonNegativeUsize(frame, error.NoMemory);
 }
 
 fn popMemoryLength(frame: *Executor.Frame) Error!usize {
+    return popNonNegativeUsize(frame, error.NoMemory);
+}
+
+fn popTableEntry(frame: *Executor.Frame) Error!usize {
+    return popNonNegativeUsize(frame, error.Trap);
+}
+
+fn popNonNegativeUsize(frame: *Executor.Frame, negative_error: Error) Error!usize {
     const value = try frame.popI32();
-    if (value < 0) return error.NoMemory;
+    if (value < 0) return negative_error;
     return @intCast(value);
 }
 
 fn copyMemory(destination: []u8, source: []const u8) void {
-    if (destination.len != source.len) unreachable;
-    if (destination.len == 0) return;
-    if (@intFromPtr(destination.ptr) <= @intFromPtr(source.ptr)) {
-        var index: usize = 0;
-        while (index < destination.len) : (index += 1) {
-            destination[index] = source[index];
-        }
-    } else {
-        var index = destination.len;
-        while (index > 0) {
-            index -= 1;
-            destination[index] = source[index];
-        }
-    }
+    copyOverlapping(u8, destination, source);
 }
 
 fn copyTable(destination: []?usize, source: []const ?usize) void {
+    copyOverlapping(?usize, destination, source);
+}
+
+fn copyOverlapping(comptime Item: type, destination: []Item, source: []const Item) void {
     if (destination.len != source.len) unreachable;
     if (destination.len == 0) return;
     if (@intFromPtr(destination.ptr) <= @intFromPtr(source.ptr)) {
