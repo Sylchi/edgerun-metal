@@ -4,6 +4,7 @@ const input = @import("input.zig");
 const linux_drm = @import("linux_drm.zig");
 const renderer_font_atlas = @import("renderer_font_atlas.zig");
 const renderer_gpu = @import("renderer_gpu.zig");
+const renderer_gpu_buffer = @import("renderer_gpu_buffer.zig");
 const renderer_ir = @import("renderer_ir.zig");
 const renderer_native_present = @import("renderer_native_present.zig");
 const renderer_software = @import("renderer_software.zig");
@@ -607,6 +608,7 @@ const NativeApp = struct {
     dirty_ids: [max_tiles]u32 = undefined,
     state: AppState = .{},
     gpu_recorder: GpuRecorder = .{},
+    gpu_buffer_device: renderer_gpu_buffer.CpuFilledDevice = .{},
     drm_buffer: ?linux_drm.DumbBuffer = null,
 
     fn init(client: *WaylandClient, allocator: std.mem.Allocator, options: Options) !NativeApp {
@@ -709,7 +711,7 @@ const NativeApp = struct {
                     dmabuf_surface,
                     buffers,
                     atlases.resources(),
-                    self.gpu_recorder.device(),
+                    self.gpu_buffer_device.device(),
                     .{
                         .primitives = self.gpu_primitives,
                         .gpu_tile_marks = &self.gpu_tile_marks,
@@ -723,6 +725,7 @@ const NativeApp = struct {
                     dmabuf_sink_state.sink(),
                 );
                 if (!receipt.gpuBackedValid() or !dmabuf_sink_state.submitted) return error.WaylandCommitRejected;
+                if (receipt.gpu.rasterization != .cpu_filled_gpu_buffer) return error.InvalidGpuReceipt;
                 try client.attachDmabufCommit(self.width, self.height);
                 return;
             },

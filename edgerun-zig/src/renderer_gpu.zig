@@ -92,6 +92,9 @@ pub const Primitive = struct {
     bounds: ui.Rect,
     color: ui.Color,
     color2: ui.Color = .clear,
+    rect_mode: ui.RectMode = .fill,
+    radius: f32 = 0.0,
+    shadow: f32 = 0.0,
     surface_id: u32 = 0,
     buffer_handle: u64 = 0,
     buffer_modifier: u64 = 0,
@@ -387,6 +390,9 @@ fn encodeIrRects(
             .bounds = rect.bounds,
             .color = rect.color,
             .color2 = rect.color2,
+            .rect_mode = rect.mode,
+            .radius = rect.radius,
+            .shadow = rect.shadow,
         });
     }
 }
@@ -434,11 +440,15 @@ fn encodeCommand(command: ui.Command, out: *CommandBuffer) Error!void {
             .bounds = rect_cmd.bounds,
             .color = rect_cmd.color,
             .color2 = rect_cmd.color2,
+            .rect_mode = rect_cmd.mode,
+            .radius = rect_cmd.radius,
+            .shadow = rect_cmd.shadow,
         }),
         .border => |border_cmd| try out.append(.{
             .kind = .border,
             .bounds = border_cmd.bounds,
             .color = border_cmd.color,
+            .rect_mode = .border,
         }),
         .text => |text_cmd| try out.append(.{
             .kind = .text,
@@ -569,6 +579,7 @@ test "gpu compositor encodes surfaces scene primitives and dirty tiles" {
     try std.testing.expectEqual(PrimitiveKind.surface, frame.primitives[0].kind);
     try std.testing.expectEqual(@as(u64, 0x0102030405060708), frame.primitives[0].buffer_modifier);
     try std.testing.expect(frame.primitives.len > surfaces.len);
+    try std.testing.expectEqual(ui.RectMode.fill, frame.primitives[1].rect_mode);
     try std.testing.expect(frame.dirty_tiles.len > 0);
     try std.testing.expectEqual(Backend.gpu, frame.backend);
 }
@@ -631,6 +642,8 @@ test "gpu renderer encodes canonical ir frames" {
     const surfaces = [_]Surface{testSurface()};
     const receipt = try renderer.renderIrWithResources(&surfaces, buffers, .{ .font_atlas = true, .icon_atlas = true });
     try std.testing.expect(receipt.valid());
+    try std.testing.expectEqual(ui.RectMode.shadow, primitives[1].rect_mode);
+    try std.testing.expect(primitives[1].radius > 0.0);
     try std.testing.expectEqual(renderer_present.Transport.gpu_command_stream, receipt.presentation_transport);
     try std.testing.expectEqual(@as(usize, 3), receipt.presentation_primitive_count);
     try std.testing.expectEqual(@as(usize, 1), test_device.began);

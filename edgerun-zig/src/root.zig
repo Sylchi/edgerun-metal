@@ -45,6 +45,7 @@ const tpmapp = @import("tpmapp.zig");
 pub const theme = @import("theme.zig");
 pub const compositor = @import("compositor.zig");
 pub const renderer_gpu = @import("renderer_gpu.zig");
+pub const renderer_gpu_buffer = @import("renderer_gpu_buffer.zig");
 pub const renderer_font_atlas = @import("renderer_font_atlas.zig");
 pub const renderer_ir = @import("renderer_ir.zig");
 pub const renderer_native_present = @import("renderer_native_present.zig");
@@ -110,6 +111,7 @@ test {
     _ = theme;
     _ = compositor;
     _ = renderer_gpu;
+    _ = renderer_gpu_buffer;
     _ = renderer_font_atlas;
     _ = renderer_ir;
     _ = renderer_native_present;
