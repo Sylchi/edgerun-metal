@@ -1,6 +1,7 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
 const layout = @import("../../layouts/Types.zig");
+const base_info_row = @import("base/InfoRow.zig");
 const base_surface = @import("base/Surface.zig");
 const ui = @import("../../ui.zig");
 const ui_input = @import("../../input.zig");
@@ -86,17 +87,14 @@ pub fn renderStepList(list: StepList, scene: *ui.Scene, bounds: ui.Rect, options
     const content_w = @max(1.0, bounds.w - step_padding_x * 2.0);
     const bottom = bounds.y + bounds.h - step_padding_y;
     for (list.steps) |step| {
-        if (y + step_item_h > bottom) break;
-        const step_bounds = ui.Rect.init(content_x, y, content_w, step_item_h);
-        if (step.state == .current) {
-            try scene.pushRect(step_bounds, style.row, .fill, step_item_radius, 0.0);
-        }
+        var row_metrics = step_row_metrics;
+        row_metrics.fill = step.state == .current;
+        if (y + row_metrics.height > bottom) break;
+        const step_bounds = ui.Rect.init(content_x, y, content_w, row_metrics.height);
+        try base_info_row.render(scene, step_bounds, .{ .id = step.id, .title = step.title, .detail = step.detail }, row_metrics, options);
         const marker_bounds = ui.Rect.init(step_bounds.x + step_marker_x, step_bounds.y + step_marker_y, step_marker_size, step_marker_size);
         try scene.pushRect(marker_bounds, stepStateColor(step.state, style), .fill, step_marker_size * 0.5, 0.0);
-        try scene.pushAlignedText(ui.Rect.init(step_bounds.x + step_text_x, step_bounds.y + step_title_y, @max(1.0, step_bounds.w - step_text_x - step_text_padding_x), step_title_h), step.title, style.text, .start);
-        try scene.pushAlignedText(ui.Rect.init(step_bounds.x + step_text_x, step_bounds.y + step_detail_y, @max(1.0, step_bounds.w - step_text_x - step_text_padding_x), step_detail_h), step.detail, style.muted, .start);
-        try scene.pushHit(.{ .slot = 0, .kind = .row_item, .id = step.id, .bounds = step_bounds });
-        y += step_item_h + step_item_gap;
+        y += row_metrics.height + step_item_gap;
     }
 }
 
@@ -111,7 +109,7 @@ pub fn measureStepList(list: StepList, constraints: layout.Constraints) layout.M
         preferred_height += row.preferred.h;
     }
     return layout.Measurement.flexible(
-        .{ .w = step_min_w, .h = step_padding_y * 2.0 },
+        .{ .w = step_row_metrics.min_width, .h = step_padding_y * 2.0 },
         .{ .w = preferred_width, .h = preferred_height },
         .{ .w = constraints.width.limit(preferred_width), .h = preferred_height },
     ).withInsets(stepInsets()).applyExact(constraints);
@@ -240,33 +238,24 @@ fn parseStepStateName(value: []const u8) ?StepState {
 
 const step_padding_x: f32 = 14.0;
 const step_padding_y: f32 = 14.0;
-const step_item_h: f32 = 58.0;
 const step_item_gap: f32 = 8.0;
-const step_item_radius: f32 = 6.0;
 const step_marker_x: f32 = 12.0;
 const step_marker_y: f32 = 18.0;
 const step_marker_size: f32 = 16.0;
-const step_text_x: f32 = 42.0;
-const step_text_padding_x: f32 = 10.0;
-const step_title_y: f32 = 11.0;
-const step_title_h: f32 = 16.0;
-const step_title_avg_w: f32 = 8.5;
-const step_detail_y: f32 = 32.0;
-const step_detail_h: f32 = 14.0;
-const step_detail_avg_w: f32 = 8.5;
-const step_text_max_lines: usize = 1;
-const step_min_w: f32 = 180.0;
+const step_row_metrics = base_info_row.Metrics{
+    .height = 58.0,
+    .padding_left = 42.0,
+    .padding_right = 10.0,
+    .title_y = 11.0,
+    .title_height = 16.0,
+    .detail_y = 32.0,
+    .detail_height = 14.0,
+    .detail_line_height = 14.0,
+    .detail_max_lines = 1,
+};
 
 fn measureStepItem(step: StepItem, constraints: layout.Constraints) layout.Measurement {
-    const text_constraints = constraints.inner(.{ .left = step_text_x, .right = step_text_padding_x });
-    const title = layout.measureText(step.title, text_constraints, .{ .line_height = step_title_h, .average_char_width = step_title_avg_w, .max_lines = step_text_max_lines });
-    const detail = layout.measureText(step.detail, text_constraints, .{ .line_height = step_detail_h, .average_char_width = step_detail_avg_w, .max_lines = step_text_max_lines });
-    const text_width = @max(title.preferred.w, detail.preferred.w) + step_text_x + step_text_padding_x;
-    return layout.Measurement.flexible(
-        .{ .w = step_min_w, .h = step_item_h },
-        .{ .w = text_width, .h = step_item_h },
-        .{ .w = constraints.width.limit(text_width), .h = step_item_h },
-    ).applyExact(constraints);
+    return base_info_row.measure(step.title, step.detail, constraints, step_row_metrics);
 }
 
 fn stepInsets() layout.Insets {
