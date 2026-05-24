@@ -17,6 +17,7 @@ const progress_summary_component = @import("ui/components/ProgressSummary.zig");
 const resource_list_component = @import("ui/components/ResourceList.zig");
 const step_list_component = @import("ui/components/StepList.zig");
 const table_component = @import("ui/components/Table.zig");
+const timeline_component = @import("ui/components/Timeline.zig");
 
 const tree_layout_magic = "ERUL001\x00";
 const tree_layout_size = 16;
@@ -288,36 +289,8 @@ pub const Breadcrumb = breadcrumb_component.Breadcrumb;
 pub const DefinitionItem = definition_list_component.DefinitionItem;
 pub const DefinitionList = definition_list_component.DefinitionList;
 
-pub const TimelineEvent = struct {
-    id: u32,
-    time: []const u8,
-    title: []const u8,
-    detail: []const u8,
-};
-
-pub const Timeline = struct {
-    events: []const TimelineEvent,
-
-    pub fn render(self: Timeline, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return renderTimeline(scene, bounds, self, options);
-    }
-
-    pub fn toHtml(self: Timeline, out: []u8) HtmlError![]u8 {
-        return writeTimelineHtml(self, out);
-    }
-
-    pub fn fromHtml(html: []const u8, out_events: []TimelineEvent, text_out: []u8) HtmlError!Timeline {
-        return readTimelineHtml(html, out_events, text_out);
-    }
-
-    pub fn toMarkdown(self: Timeline, out: []u8) MarkdownError![]u8 {
-        return writeTimelineMarkdown(self, out);
-    }
-
-    pub fn fromMarkdown(markdown: []const u8, out_events: []TimelineEvent, text_out: []u8) MarkdownError!Timeline {
-        return readTimelineMarkdown(markdown, out_events, text_out);
-    }
-};
+pub const TimelineEvent = timeline_component.TimelineEvent;
+pub const Timeline = timeline_component.Timeline;
 
 pub const ResourceItem = resource_list_component.ResourceItem;
 pub const ResourceList = resource_list_component.ResourceList;
@@ -403,6 +376,10 @@ pub fn registerStepList(registry: *ComponentRegistry) RegistryError!void {
 
 pub fn registerTable(registry: *ComponentRegistry) RegistryError!void {
     return table_component.register(registry);
+}
+
+pub fn registerTimeline(registry: *ComponentRegistry) RegistryError!void {
+    return timeline_component.register(registry);
 }
 
 pub fn renderComponent(scene: *ui.Scene, bounds: ui.Rect, component: Component, options: RenderOptions) ui.RenderError!void {
@@ -574,33 +551,6 @@ pub fn renderChoiceGroup(scene: *ui.Scene, bounds: ui.Rect, group: ChoiceGroup, 
         try scene.pushAlignedText(ui.Rect.init(option_bounds.x + choice_label_x, option_bounds.y + choice_label_y, @max(1.0, option_bounds.w - choice_label_x - choice_option_padding_x), choice_label_h), option.label, style.text, .start);
         try scene.pushHit(.{ .slot = 0, .kind = .button, .id = option.id, .bounds = option_bounds });
         y += choice_option_h + choice_option_gap;
-    }
-}
-
-pub fn renderTimeline(scene: *ui.Scene, bounds: ui.Rect, timeline: Timeline, options: RenderOptions) ui.RenderError!void {
-    if (timeline.events.len == 0) return;
-    const style = options.style;
-    try scene.pushRect(bounds, style.panel, .fill, timeline_radius, 0.0);
-    try scene.pushRect(bounds, style.border, .border, timeline_radius, 0.0);
-
-    var y = bounds.y + timeline_padding_y;
-    const content_x = bounds.x + timeline_padding_x;
-    const content_w = @max(1.0, bounds.w - timeline_padding_x * 2.0);
-    const bottom = bounds.y + bounds.h - timeline_padding_y;
-    for (timeline.events) |event| {
-        if (y + timeline_event_h > bottom) break;
-        const event_bounds = ui.Rect.init(content_x, y, content_w, timeline_event_h);
-        const marker_bounds = ui.Rect.init(event_bounds.x + timeline_marker_x, event_bounds.y + timeline_marker_y, timeline_marker_size, timeline_marker_size);
-        try scene.pushRect(marker_bounds, style.accent, .fill, timeline_marker_size * 0.5, 0.0);
-        try scene.pushAlignedText(ui.Rect.init(event_bounds.x + timeline_text_x, event_bounds.y + timeline_time_y, timeline_time_w, timeline_time_h), event.time, style.accent, .start);
-        try scene.pushAlignedText(ui.Rect.init(event_bounds.x + timeline_text_x + timeline_time_w + timeline_text_gap, event_bounds.y + timeline_title_y, @max(1.0, event_bounds.w - timeline_text_x - timeline_time_w - timeline_text_gap - timeline_text_padding_x), timeline_title_h), event.title, style.text, .start);
-        try scene.pushWrappedText(ui.Rect.init(event_bounds.x + timeline_text_x, event_bounds.y + timeline_detail_y, @max(1.0, event_bounds.w - timeline_text_x - timeline_text_padding_x), timeline_detail_h), event.detail, style.muted, .{
-            .line_height = timeline_detail_line_h,
-            .average_char_width = timeline_detail_avg_w,
-            .max_lines = timeline_detail_max_lines,
-        });
-        try scene.pushHit(.{ .slot = 0, .kind = .row_item, .id = event.id, .bounds = event_bounds });
-        y += timeline_event_h + timeline_event_gap;
     }
 }
 
@@ -854,27 +804,6 @@ const choice_marker_selected_inset: f32 = 4.0;
 const choice_label_x: f32 = 36.0;
 const choice_label_y: f32 = 10.0;
 const choice_label_h: f32 = 14.0;
-const timeline_radius: f32 = 8.0;
-const timeline_padding_x: f32 = 12.0;
-const timeline_padding_y: f32 = 12.0;
-const timeline_event_h: f32 = 82.0;
-const timeline_event_gap: f32 = 8.0;
-const timeline_marker_x: f32 = 10.0;
-const timeline_marker_y: f32 = 14.0;
-const timeline_marker_size: f32 = 12.0;
-const timeline_text_x: f32 = 34.0;
-const timeline_time_y: f32 = 9.0;
-const timeline_time_w: f32 = 74.0;
-const timeline_time_h: f32 = 14.0;
-const timeline_text_gap: f32 = 10.0;
-const timeline_title_y: f32 = 9.0;
-const timeline_title_h: f32 = 16.0;
-const timeline_detail_y: f32 = 34.0;
-const timeline_detail_h: f32 = 38.0;
-const timeline_detail_line_h: f32 = 17.0;
-const timeline_detail_avg_w: f32 = 8.5;
-const timeline_detail_max_lines: usize = 2;
-const timeline_text_padding_x: f32 = 10.0;
 const region_radius: f32 = 8.0;
 const region_padding_x: f32 = 12.0;
 const region_padding_y: f32 = 12.0;
@@ -1776,26 +1705,6 @@ fn writeChoiceGroupHtml(group: ChoiceGroup, out: []u8) HtmlError![]u8 {
     return writer.written();
 }
 
-fn writeTimelineHtml(timeline: Timeline, out: []u8) HtmlError![]u8 {
-    if (timeline.events.len == 0) return error.InvalidHtml;
-    var writer = HtmlWriter.init(out);
-    try writer.writeAll("<ol data-er-component=\"timeline\">");
-    for (timeline.events) |event| {
-        if (event.time.len == 0 or event.title.len == 0 or event.detail.len == 0) return error.InvalidHtml;
-        try writer.writeAll("<li");
-        try writer.writeAttrInt("data-er-id", event.id);
-        try writer.writeAll("><time>");
-        try writer.writeEscapedText(event.time);
-        try writer.writeAll("</time><strong>");
-        try writer.writeEscapedText(event.title);
-        try writer.writeAll("</strong><p>");
-        try writer.writeEscapedText(event.detail);
-        try writer.writeAll("</p></li>");
-    }
-    try writer.writeAll("</ol>");
-    return writer.written();
-}
-
 fn writeRegionHtml(region: Region, out: []u8) HtmlError![]u8 {
     if (region.children.len == 0) return error.InvalidHtml;
     var writer = HtmlWriter.init(out);
@@ -1992,21 +1901,6 @@ fn writeCardMarkdownInto(writer: *MarkdownWriter, card: Card) MarkdownError!void
     try writer.endDirective();
 }
 
-fn writeTimelineMarkdown(timeline: Timeline, out: []u8) MarkdownError![]u8 {
-    if (timeline.events.len == 0) return error.InvalidMarkdown;
-    var writer = MarkdownWriter.init(out);
-    try writer.beginDirective("timeline");
-    for (timeline.events) |event| {
-        if (event.time.len == 0 or event.title.len == 0 or event.detail.len == 0) return error.InvalidMarkdown;
-        try writer.fieldInt("event", event.id);
-        try writer.fieldText("time", event.time);
-        try writer.fieldText("title", event.title);
-        try writer.fieldText("detail", event.detail);
-    }
-    try writer.endDirective();
-    return writer.written();
-}
-
 fn writeCodeBlockMarkdown(block: CodeBlock, out: []u8) MarkdownError![]u8 {
     if (!validMarkdownFenceLanguage(block.language)) return error.InvalidMarkdown;
     var writer = MarkdownWriter.init(out);
@@ -2124,27 +2018,6 @@ fn readCardMarkdownWithArena(markdown: []const u8, text: *MarkdownTextArena) Mar
     const detail = try text.unescapeInline(body[detail_start..]);
     if (title.len == 0 or detail.len == 0) return error.InvalidMarkdown;
     return .{ .title = title, .detail = detail };
-}
-
-fn readTimelineMarkdown(markdown: []const u8, out_events: []TimelineEvent, text_out: []u8) MarkdownError!Timeline {
-    const prefix = ":::timeline\n";
-    const body = try readMarkdownDirectiveBody(markdown, ":::timeline", prefix);
-    var text = MarkdownTextArena.init(text_out);
-    var event_count: usize = 0;
-    var cursor = MarkdownCursor.init(body);
-    while (!cursor.done()) {
-        if (event_count == out_events.len) return error.MarkdownBudgetExceeded;
-        const id = try parseMarkdownU32(try cursor.lineAfter("event: "));
-        const time = try text.unescapeInline(try cursor.fieldBetween("\ntime: ", "\ntitle: "));
-        const title = try text.unescapeInline(try cursor.fieldBetween("\ntitle: ", "\ndetail: "));
-        const detail = try text.unescapeInline(try cursor.finalField("\ndetail: ", "\nevent: "));
-        if (time.len == 0 or title.len == 0 or detail.len == 0) return error.InvalidMarkdown;
-        out_events[event_count] = .{ .id = id, .time = time, .title = title, .detail = detail };
-        event_count += 1;
-        try cursor.skipNewline();
-    }
-    if (event_count == 0) return error.InvalidMarkdown;
-    return .{ .events = out_events[0..event_count] };
 }
 
 fn readCodeBlockMarkdown(markdown: []const u8, out_lines: [][]const u8) MarkdownError!CodeBlock {
@@ -2661,34 +2534,6 @@ fn readChoiceOptionsHtml(html: []const u8, group_id: u32, out_options: []ChoiceO
     }
     if (option_count == 0) return error.InvalidHtml;
     return out_options[0..option_count];
-}
-
-fn readTimelineHtml(html: []const u8, out_events: []TimelineEvent, text_out: []u8) HtmlError!Timeline {
-    const body = takeWrapped(html, "<ol data-er-component=\"timeline\">", "</ol>") orelse {
-        if (std.mem.startsWith(u8, html, "<ol")) return error.InvalidHtml;
-        return error.UnsupportedHtml;
-    };
-    var text = HtmlTextArena.init(text_out);
-    const events = try readTimelineEventsHtml(body, out_events, &text);
-    return .{ .events = events };
-}
-
-fn readTimelineEventsHtml(html: []const u8, out_events: []TimelineEvent, text: *HtmlTextArena) HtmlError![]const TimelineEvent {
-    var cursor = HtmlCursor.init(html);
-    var event_count: usize = 0;
-    while (!cursor.done()) {
-        if (event_count == out_events.len) return error.HtmlBudgetExceeded;
-        const id = try parseHtmlU32(try cursor.fieldBetween("<li data-er-id=\"", "\"><time>"));
-        const time = try text.unescape(try cursor.fieldBetween("\"><time>", "</time><strong>"));
-        const title = try text.unescape(try cursor.fieldBetween("</time><strong>", "</strong><p>"));
-        const detail = try text.unescape(try cursor.fieldBetween("</strong><p>", "</p></li>"));
-        try cursor.consume("</p></li>");
-        if (time.len == 0 or title.len == 0 or detail.len == 0) return error.InvalidHtml;
-        out_events[event_count] = .{ .id = id, .time = time, .title = title, .detail = detail };
-        event_count += 1;
-    }
-    if (event_count == 0) return error.InvalidHtml;
-    return out_events[0..event_count];
 }
 
 fn readRegionHtml(html: []const u8, out_components: []Component, text_out: []u8) HtmlError!Region {
@@ -3903,54 +3748,6 @@ test "choice group html codec rejects malformed radio groups" {
     try std.testing.expectError(error.InvalidHtml, ChoiceGroup.fromHtml("<fieldset data-er-component=\"choice-group\" data-er-id=\"x\"><legend>Broken</legend></fieldset>", &options, &text));
     try std.testing.expectError(error.InvalidHtml, ChoiceGroup.fromHtml("<fieldset data-er-component=\"choice-group\" data-er-id=\"1\"><legend>Broken</legend><label data-er-id=\"2\" data-er-selected=\"maybe\"><input type=\"radio\" name=\"choice-1\">Option</label></fieldset>", &options, &text));
     try std.testing.expectError(error.InvalidHtml, ChoiceGroup.fromHtml("<fieldset data-er-component=\"choice-group\" data-er-id=\"1\"><legend>Broken</legend><label data-er-id=\"2\" data-er-selected=\"false\"><input type=\"radio\" name=\"choice-9\">Option</label></fieldset>", &options, &text));
-}
-
-test "timeline component renders events and hit targets" {
-    const events = [_]TimelineEvent{
-        .{ .id = 37001, .time = "1", .title = "Browser asks", .detail = "The app asks for a name to become an address." },
-        .{ .id = 37002, .time = "2", .title = "Resolver answers", .detail = "A cached or authoritative answer comes back." },
-    };
-    const timeline = Timeline{ .events = &events };
-    var commands: [96]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-
-    try timeline.render(&scene, ui.Rect.init(0, 0, 380, 210), .{});
-
-    try std.testing.expect(hasText(scene.written(), "Browser asks"));
-    try std.testing.expect(hasText(scene.written(), "Resolver answers"));
-    const hit = ui_input.hitTest(scene.written(), 24, 104).?;
-    try std.testing.expectEqual(@as(u32, 37002), hit.id);
-}
-
-test "timeline html codec roundtrips semantic events" {
-    const events = [_]TimelineEvent{
-        .{ .id = 37101, .time = "t0", .title = "Key exists", .detail = "The device already has a root of authority." },
-        .{ .id = 37102, .time = "t1", .title = "Receipt written", .detail = "The work result is bound to an object & signer." },
-    };
-    const timeline = Timeline{ .events = &events };
-    var html: [768]u8 = undefined;
-    var decoded_events: [2]TimelineEvent = undefined;
-    var text: [256]u8 = undefined;
-
-    const encoded = try timeline.toHtml(&html);
-    const decoded = try Timeline.fromHtml(encoded, &decoded_events, &text);
-
-    try std.testing.expectEqualStrings("<ol data-er-component=\"timeline\"><li data-er-id=\"37101\"><time>t0</time><strong>Key exists</strong><p>The device already has a root of authority.</p></li><li data-er-id=\"37102\"><time>t1</time><strong>Receipt written</strong><p>The work result is bound to an object &amp; signer.</p></li></ol>", encoded);
-    try std.testing.expectEqual(@as(usize, 2), decoded.events.len);
-    try std.testing.expectEqual(@as(u32, 37102), decoded.events[1].id);
-    try std.testing.expectEqualStrings("t1", decoded.events[1].time);
-    try std.testing.expectEqualStrings("Receipt written", decoded.events[1].title);
-    try std.testing.expectEqualStrings("The work result is bound to an object & signer.", decoded.events[1].detail);
-}
-
-test "timeline html codec rejects malformed events" {
-    var events: [2]TimelineEvent = undefined;
-    var text: [128]u8 = undefined;
-
-    try std.testing.expectError(error.InvalidHtml, Timeline.fromHtml("<ol><li>Plain</li></ol>", &events, &text));
-    try std.testing.expectError(error.InvalidHtml, Timeline.fromHtml("<ol data-er-component=\"timeline\"></ol>", &events, &text));
-    try std.testing.expectError(error.InvalidHtml, Timeline.fromHtml("<ol data-er-component=\"timeline\"><li data-er-id=\"x\"><time>1</time><strong>Broken</strong><p>Bad id</p></li></ol>", &events, &text));
-    try std.testing.expectError(error.InvalidHtml, Timeline.fromHtml("<ol data-er-component=\"timeline\"><li data-er-id=\"1\"><time></time><strong>Broken</strong><p>Missing time</p></li></ol>", &events, &text));
 }
 
 test "region component renders semantic children" {
