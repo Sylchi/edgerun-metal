@@ -475,6 +475,19 @@ const table_fill_wasm = [_]u8{
     0x42, 0x15, 0x41, 0x01, 0x11, 0x00, 0x00, 0x0b,
 };
 
+const table_grow_wasm = [_]u8{
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+    0x01, 0x0a, 0x02, 0x60, 0x01, 0x7e, 0x01, 0x7e,
+    0x60, 0x00, 0x01, 0x7e, 0x03, 0x04, 0x03, 0x00,
+    0x00, 0x01, 0x04, 0x04, 0x01, 0x70, 0x00, 0x01,
+    0x07, 0x08, 0x01, 0x04, 'm',  'a',  'i',  'n',
+    0x00, 0x02, 0x0a, 0x23, 0x03, 0x07, 0x00, 0x20,
+    0x00, 0x42, 0x01, 0x7c, 0x0b, 0x07, 0x00, 0x20,
+    0x00, 0x42, 0x02, 0x7e, 0x0b, 0x11, 0x00, 0xd2,
+    0x01, 0x41, 0x01, 0xfc, 0x0f, 0x00, 0x1a, 0x42,
+    0x15, 0x41, 0x01, 0x11, 0x00, 0x00, 0x0b,
+};
+
 const memory_grow_load_wasm = [_]u8{
     0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
     0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7e, 0x03,
@@ -938,12 +951,26 @@ const GrowAuthority = struct {
     requests: usize = 0,
 };
 
+const TableGrowAuthorityState = struct {
+    max_entries: usize,
+    requests: usize = 0,
+};
+
 fn grantGrow(context: ?*anyopaque, runtime: *wasm.Runtime, request: wasm.MemoryGrowRequest) wasm.Error!bool {
     const authority: *GrowAuthority = @ptrCast(@alignCast(context orelse return error.BadArgument));
     if (!request.valid()) return error.Corrupt;
     if (request.requested_bytes > authority.backing.len) return false;
     authority.requests += 1;
     runtime.memory = authority.backing[0..request.requested_bytes];
+    return true;
+}
+
+fn grantTableGrow(context: ?*anyopaque, runtime: *wasm.Runtime, request: wasm.TableGrowRequest) wasm.Error!bool {
+    _ = runtime;
+    const authority: *TableGrowAuthorityState = @ptrCast(@alignCast(context orelse return error.BadArgument));
+    if (!request.valid()) return error.Corrupt;
+    if (request.requested_entries > authority.max_entries) return false;
+    authority.requests += 1;
     return true;
 }
 
@@ -1508,6 +1535,28 @@ test "wasm interpreter fills tables with function references" {
     var runtime = wasm.Runtime.init(&memory, &ticks);
 
     try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64(&runtime, &table_fill_wasm, "main"));
+}
+
+test "wasm table growth requires parent authority" {
+    var memory: [256]u8 = undefined;
+    var ticks: u64 = 32;
+    var runtime = wasm.Runtime.init(&memory, &ticks);
+
+    try std.testing.expectError(error.TableGrowthRequiresAuthority, wasm.executeExportI64(&runtime, &table_grow_wasm, "main"));
+}
+
+test "wasm table growth can be granted by parent authority" {
+    var memory: [256]u8 = undefined;
+    var ticks: u64 = 32;
+    var authority = TableGrowAuthorityState{ .max_entries = 2 };
+    var runtime = wasm.Runtime.init(&memory, &ticks);
+    runtime.table_grow_authority = .{
+        .context = &authority,
+        .request = grantTableGrow,
+    };
+
+    try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64(&runtime, &table_grow_wasm, "main"));
+    try std.testing.expectEqual(@as(usize, 1), authority.requests);
 }
 
 test "wasm interpreter grows linear memory within declared limits" {
