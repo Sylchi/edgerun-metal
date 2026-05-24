@@ -11,6 +11,7 @@ const aside_component = @import("ui/components/Aside.zig");
 const breadcrumb_component = @import("ui/components/Breadcrumb.zig");
 const callout_component = @import("ui/components/Callout.zig");
 const choice_group_component = @import("ui/components/ChoiceGroup.zig");
+const code_block_component = @import("ui/components/CodeBlock.zig");
 const definition_list_component = @import("ui/components/DefinitionList.zig");
 const details_component = @import("ui/components/Details.zig");
 const figure_component = @import("ui/components/Figure.zig");
@@ -146,30 +147,7 @@ pub const ArticleListItem = struct {
     summary: []const u8,
 };
 
-pub const CodeBlock = struct {
-    language: []const u8 = "",
-    lines: []const []const u8,
-
-    pub fn render(self: CodeBlock, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return renderCodeBlock(scene, bounds, self, options);
-    }
-
-    pub fn toHtml(self: CodeBlock, out: []u8) HtmlError![]u8 {
-        return writeCodeBlockHtml(self, out);
-    }
-
-    pub fn fromHtml(html: []const u8, out_lines: [][]const u8, text_out: []u8) HtmlError!CodeBlock {
-        return readCodeBlockHtml(html, out_lines, text_out);
-    }
-
-    pub fn toMarkdown(self: CodeBlock, out: []u8) MarkdownError![]u8 {
-        return writeCodeBlockMarkdown(self, out);
-    }
-
-    pub fn fromMarkdown(markdown: []const u8, out_lines: [][]const u8) MarkdownError!CodeBlock {
-        return readCodeBlockMarkdown(markdown, out_lines);
-    }
-};
+pub const CodeBlock = code_block_component.CodeBlock;
 
 pub const Heading = heading_component.Heading;
 
@@ -259,6 +237,10 @@ pub fn registerCallout(registry: *ComponentRegistry) RegistryError!void {
 
 pub fn registerChoiceGroup(registry: *ComponentRegistry) RegistryError!void {
     return choice_group_component.register(registry);
+}
+
+pub fn registerCodeBlock(registry: *ComponentRegistry) RegistryError!void {
+    return code_block_component.register(registry);
 }
 
 pub fn registerDefinitionList(registry: *ComponentRegistry) RegistryError!void {
@@ -375,21 +357,6 @@ pub fn renderArticleListItem(scene: *ui.Scene, bounds: ui.Rect, article: Article
     const divider = ui.Rect.init(bounds.x, bounds.y + bounds.h - article_list_divider_height, bounds.w, article_list_divider_height);
     try scene.pushRect(divider, options.style.border, .fill, 0.0, 0.0);
     try scene.pushHit(.{ .slot = 0, .kind = .button, .id = article.id, .bounds = bounds });
-}
-
-pub fn renderCodeBlock(scene: *ui.Scene, bounds: ui.Rect, block: CodeBlock, options: RenderOptions) ui.RenderError!void {
-    const radius = surface_radius;
-    try scene.pushRect(bounds, options.style.bg, .fill, radius, 0.0);
-    try scene.pushRect(bounds, options.style.border, .border, radius, 0.0);
-    if (try scene.pushClip(bounds.insetUniform(code_clip_inset))) {
-        defer scene.popClip();
-        var y = bounds.y + code_padding_y;
-        for (block.lines) |line| {
-            if (y + code_line_height > bounds.y + bounds.h - code_padding_y) break;
-            try scene.pushAlignedText(ui.Rect.init(bounds.x + code_padding_x, y, @max(1.0, bounds.w - code_padding_x * 2.0), code_text_height), line, options.style.accent, .start);
-            y += code_line_height;
-        }
-    }
 }
 
 pub fn renderRegion(scene: *ui.Scene, bounds: ui.Rect, region: Region, options: RenderOptions) ui.RenderError!void {
@@ -597,11 +564,6 @@ fn wrappedLineCount(value: []const u8, width: f32, average_char_width: f32, max_
     }
     return line_count;
 }
-const code_padding_x: f32 = 18.0;
-const code_padding_y: f32 = 18.0;
-const code_line_height: f32 = 17.0;
-const code_text_height: f32 = 12.0;
-const code_clip_inset: f32 = 1.0;
 const region_radius: f32 = 8.0;
 const region_padding_x: f32 = 12.0;
 const region_padding_y: f32 = 12.0;
@@ -1427,19 +1389,6 @@ fn writeStackMarkdown(stack: Stack, out: []u8) MarkdownError![]u8 {
     return writer.written();
 }
 
-fn writeCodeBlockHtml(block: CodeBlock, out: []u8) HtmlError![]u8 {
-    var writer = HtmlWriter.init(out);
-    try writer.writeAll("<pre data-er-component=\"code-block\"><code");
-    try writer.writeAttrText("data-er-lang", block.language);
-    try writer.writeByte('>');
-    for (block.lines, 0..) |line, index| {
-        if (index != 0) try writer.writeByte('\n');
-        try writer.writeEscapedText(line);
-    }
-    try writer.writeAll("</code></pre>");
-    return writer.written();
-}
-
 fn writeRegionHtml(region: Region, out: []u8) HtmlError![]u8 {
     if (region.children.len == 0) return error.InvalidHtml;
     var writer = HtmlWriter.init(out);
@@ -1585,21 +1534,6 @@ fn writeCardMarkdownInto(writer: *MarkdownWriter, card: Card) MarkdownError!void
     try writer.endDirective();
 }
 
-fn writeCodeBlockMarkdown(block: CodeBlock, out: []u8) MarkdownError![]u8 {
-    if (!validMarkdownFenceLanguage(block.language)) return error.InvalidMarkdown;
-    var writer = MarkdownWriter.init(out);
-    try writer.writeAll("```");
-    try writer.writeAll(block.language);
-    try writer.writeByte('\n');
-    for (block.lines, 0..) |line, index| {
-        if (std.mem.indexOf(u8, line, "```") != null) return error.InvalidMarkdown;
-        if (index != 0) try writer.writeByte('\n');
-        try writer.writeAll(line);
-    }
-    try writer.writeAll("\n```");
-    return writer.written();
-}
-
 fn readCardMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!Card {
     var text = MarkdownTextArena.init(text_out);
     return readCardMarkdownWithArena(markdown, &text);
@@ -1614,32 +1548,6 @@ fn readCardMarkdownWithArena(markdown: []const u8, text: *MarkdownTextArena) Mar
     const detail = try text.unescapeInline(body[detail_start..]);
     if (title.len == 0 or detail.len == 0) return error.InvalidMarkdown;
     return .{ .title = title, .detail = detail };
-}
-
-fn readCodeBlockMarkdown(markdown: []const u8, out_lines: [][]const u8) MarkdownError!CodeBlock {
-    if (!std.mem.startsWith(u8, markdown, "```")) return error.UnsupportedMarkdown;
-    const language_start = "```".len;
-    const language_end_relative = std.mem.indexOfScalar(u8, markdown[language_start..], '\n') orelse return error.InvalidMarkdown;
-    const language = markdown[language_start .. language_start + language_end_relative];
-    if (!validMarkdownFenceLanguage(language)) return error.InvalidMarkdown;
-    if (!std.mem.endsWith(u8, markdown, "\n```")) return error.InvalidMarkdown;
-    const body_start = language_start + language_end_relative + 1;
-    const body_end = markdown.len - "\n```".len;
-    const lines = try readCodeBlockMarkdownLines(markdown[body_start..body_end], out_lines);
-    return .{ .language = language, .lines = lines };
-}
-
-fn readCodeBlockMarkdownLines(body: []const u8, out_lines: [][]const u8) MarkdownError![]const []const u8 {
-    if (body.len == 0) return out_lines[0..0];
-    var line_count: usize = 0;
-    var cursor = LineCursor.init(body);
-    while (cursor.next()) |line| {
-        if (line_count == out_lines.len) return error.MarkdownBudgetExceeded;
-        if (std.mem.indexOf(u8, line, "```") != null) return error.InvalidMarkdown;
-        out_lines[line_count] = line;
-        line_count += 1;
-    }
-    return out_lines[0..line_count];
 }
 
 fn readDirectiveBody(markdown: []const u8, prefix: []const u8) MarkdownError![]const u8 {
@@ -1705,28 +1613,6 @@ const MarkdownCursor = struct {
         if (self.cursor == self.body.len) return;
         if (self.body[self.cursor] != '\n') return error.InvalidMarkdown;
         self.cursor += 1;
-    }
-};
-
-const LineCursor = struct {
-    body: []const u8,
-    cursor: usize = 0,
-
-    fn init(body: []const u8) LineCursor {
-        return .{ .body = body };
-    }
-
-    fn done(self: LineCursor) bool {
-        return self.cursor >= self.body.len;
-    }
-
-    fn next(self: *LineCursor) ?[]const u8 {
-        if (self.cursor > self.body.len) return null;
-        if (self.body.len == 0) return null;
-        const end = std.mem.indexOfScalarPos(u8, self.body, self.cursor, '\n') orelse self.body.len;
-        const line = self.body[self.cursor..end];
-        self.cursor = if (end == self.body.len) self.body.len + 1 else end + 1;
-        return line;
     }
 };
 
@@ -2010,34 +1896,6 @@ fn readComponentHtmlWithArena(html: []const u8, text: *HtmlTextArena) HtmlError!
         return .{ .row_item = .{ .id = id, .title = title, .detail = detail } };
     }
     return error.UnsupportedHtml;
-}
-
-fn readCodeBlockHtml(html: []const u8, out_lines: [][]const u8, text_out: []u8) HtmlError!CodeBlock {
-    const prefix = "<pre data-er-component=\"code-block\"><code data-er-lang=\"";
-    if (!std.mem.startsWith(u8, html, prefix)) {
-        if (std.mem.startsWith(u8, html, "<pre")) return error.InvalidHtml;
-        return error.UnsupportedHtml;
-    }
-    const after_lang = html[prefix.len..];
-    const lang_end = std.mem.indexOf(u8, after_lang, "\">") orelse return error.InvalidHtml;
-    if (!std.mem.endsWith(u8, html, "</code></pre>")) return error.InvalidHtml;
-    var text = HtmlTextArena.init(text_out);
-    const language = try text.unescape(after_lang[0..lang_end]);
-    const code_start = prefix.len + lang_end + "\">".len;
-    const body = html[code_start .. html.len - "</code></pre>".len];
-    const lines = try readCodeLinesHtml(body, out_lines, &text);
-    return .{ .language = language, .lines = lines };
-}
-
-fn readCodeLinesHtml(html: []const u8, out_lines: [][]const u8, text: *HtmlTextArena) HtmlError![]const []const u8 {
-    var line_count: usize = 0;
-    var cursor = LineCursor.init(html);
-    while (cursor.next()) |line| {
-        if (line_count == out_lines.len) return error.HtmlBudgetExceeded;
-        out_lines[line_count] = try text.unescape(line);
-        line_count += 1;
-    }
-    return out_lines[0..line_count];
 }
 
 fn readRegionHtml(html: []const u8, out_components: []Component, text_out: []u8) HtmlError!Region {
@@ -2547,16 +2405,6 @@ fn markdownEscapable(byte: u8) bool {
     };
 }
 
-fn validMarkdownFenceLanguage(value: []const u8) bool {
-    for (value) |byte| {
-        switch (byte) {
-            'a'...'z', 'A'...'Z', '0'...'9', '-', '_' => {},
-            else => return false,
-        }
-    }
-    return true;
-}
-
 fn regionTagName(tag: RegionTag) []const u8 {
     return switch (tag) {
         .header => "header",
@@ -2945,7 +2793,7 @@ test "component render helper owns article cards and code blocks" {
         .title = "EdgeRun Apps Run Where The User Is",
         .summary = "A short introduction to identity-routed apps and local execution.",
     }, .{});
-    try renderCodeBlock(&scene, ui.Rect.init(0, 190, 360, 72), .{ .lines = &.{ "const app = try edge.compile(source);", "try app.run(.{});" } }, .{});
+    try (CodeBlock{ .lines = &.{ "const app = try edge.compile(source);", "try app.run(.{});" } }).render(&scene, ui.Rect.init(0, 190, 360, 72), .{});
 
     const hit = ui_input.hitTest(scene.written(), 20, 20).?;
     try std.testing.expectEqual(@as(u32, 801), hit.id);
