@@ -190,6 +190,16 @@ const memory_fill_copy_wasm = [_]u8{
     0x00, 0x00, 0x41, 0x08, 0x29, 0x03, 0x00, 0x0b,
 };
 
+const typed_select_wasm = [_]u8{
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+    0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7d, 0x03,
+    0x02, 0x01, 0x00, 0x07, 0x08, 0x01, 0x04, 'm',
+    'a',  'i',  'n',  0x00, 0x00, 0x0a, 0x13, 0x01,
+    0x11, 0x00, 0x43, 0x00, 0x00, 0xc0, 0x3f, 0x43,
+    0x00, 0x00, 0x20, 0x40, 0x41, 0x00, 0x1c, 0x01,
+    0x7d, 0x0b,
+};
+
 const passive_data_memory_init_wasm = [_]u8{
     0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
     0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7e, 0x03,
@@ -1008,6 +1018,17 @@ test "wasm interpreter executes memory fill and copy prefix opcodes" {
     try std.testing.expectEqual(@as(u64, 0x2a2a2a2a2a2a2a2a), byte_utils.load64(memory[0..8]).?);
     try std.testing.expectEqual(@as(u64, 0x2a2a2a2a2a2a2a2a), byte_utils.load64(memory[8..16]).?);
     try std.testing.expectEqual(@as(u64, 5), ticks);
+}
+
+test "wasm interpreter executes typed select" {
+    var memory: [256]u8 = undefined;
+    var ticks: u64 = 8;
+    var runtime = wasm.Runtime.init(&memory, &ticks);
+
+    const result = try wasm.executeExportValues(&runtime, &typed_select_wasm, "main");
+    try std.testing.expectEqual(@as(usize, 1), result.count);
+    try std.testing.expectEqual(@as(u32, 0x40200000), @as(u32, @bitCast(try result.valueF32(0))));
+    try std.testing.expectEqual(@as(u64, 3), ticks);
 }
 
 test "wasm interpreter initializes memory from passive data segments" {
