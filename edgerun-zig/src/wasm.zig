@@ -12,9 +12,7 @@ const max_call_depth = 8;
 const max_control_depth = 16;
 const max_globals = 16;
 const max_table_entries = 32;
-const max_code_bytes = 512;
 const max_data_segments = 8;
-const max_data_bytes = 256;
 const max_export_name = 32;
 const wasm_page_bytes = 65536;
 const leb32_max_bytes = 5;
@@ -1082,7 +1080,6 @@ const Module = struct {
         self.code_count = count;
         for (self.code[0..count]) |*code| {
             const body_size = try reader.readU32Leb();
-            if (body_size > max_code_bytes) return error.Unsupported;
             var body_reader = Reader{ .bytes = try reader.readBytes(body_size) };
             const local_group_count = try body_reader.readU32Leb();
             code.* = .{};
@@ -1114,7 +1111,6 @@ const Module = struct {
                     const offset = try readConstantI32Expression(reader);
                     if (offset < 0) return error.NoMemory;
                     const byte_count = try reader.readU32Leb();
-                    if (byte_count > max_data_bytes) return error.Unsupported;
                     segment.* = .{
                         .offset = @intCast(offset),
                         .bytes = try reader.readBytes(byte_count),
@@ -1123,7 +1119,6 @@ const Module = struct {
                 },
                 1 => {
                     const byte_count = try reader.readU32Leb();
-                    if (byte_count > max_data_bytes) return error.Unsupported;
                     segment.* = .{
                         .bytes = try reader.readBytes(byte_count),
                         .active = false,
@@ -1135,7 +1130,6 @@ const Module = struct {
                     const offset = try readConstantI32Expression(reader);
                     if (offset < 0) return error.NoMemory;
                     const byte_count = try reader.readU32Leb();
-                    if (byte_count > max_data_bytes) return error.Unsupported;
                     segment.* = .{
                         .offset = @intCast(offset),
                         .bytes = try reader.readBytes(byte_count),

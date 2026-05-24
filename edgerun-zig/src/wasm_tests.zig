@@ -946,6 +946,48 @@ fn executeRuntime(memory: []u8, ticks: *u64, wasm_bytes: []const u8) wasm.Error!
     return wasm.executeExportI64(&runtime, wasm_bytes, "main");
 }
 
+fn writeU32Leb(writer: anytype, value: u32) !void {
+    var remaining = value;
+    while (true) {
+        var byte: u8 = @intCast(remaining & 0x7f);
+        remaining >>= 7;
+        if (remaining != 0) byte |= 0x80;
+        try writer.writeByte(byte);
+        if (remaining == 0) return;
+    }
+}
+
+fn u32LebByteCount(value: u32) u32 {
+    var remaining = value;
+    var count: u32 = 1;
+    while (remaining >= 0x80) {
+        remaining >>= 7;
+        count += 1;
+    }
+    return count;
+}
+
+const TestByteWriter = struct {
+    bytes: []u8,
+    len: usize = 0,
+
+    fn writeByte(self: *TestByteWriter, byte: u8) !void {
+        if (self.len >= self.bytes.len) return error.NoSpace;
+        self.bytes[self.len] = byte;
+        self.len += 1;
+    }
+
+    fn writeAll(self: *TestByteWriter, bytes: []const u8) !void {
+        if (self.len + bytes.len > self.bytes.len) return error.NoSpace;
+        @memcpy(self.bytes[self.len .. self.len + bytes.len], bytes);
+        self.len += bytes.len;
+    }
+
+    fn written(self: TestByteWriter) []const u8 {
+        return self.bytes[0..self.len];
+    }
+};
+
 const GrowAuthority = struct {
     backing: []u8,
     requests: usize = 0,
@@ -1320,6 +1362,71 @@ test "wasm interpreter executes nop as charged no-op" {
 
     try std.testing.expectEqual(@as(i64, 42), try executeRuntime(&memory, &ticks, &nop_before_return_wasm));
     try std.testing.expectEqual(@as(u64, 1), ticks);
+}
+
+test "wasm parser accepts large borrowed code bodies" {
+    const nop_count: u32 = 600;
+    const body_size: u32 = 1 + nop_count + 2 + 1;
+    const code_payload_size: u32 = 1 + u32LebByteCount(body_size) + body_size;
+
+    var bytes: [700]u8 = undefined;
+    var writer = TestByteWriter{ .bytes = &bytes };
+
+    try writer.writeAll(&.{
+        0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+        0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7e, 0x03,
+        0x02, 0x01, 0x00, 0x07, 0x08, 0x01, 0x04, 'm',
+        'a',  'i',  'n',  0x00, 0x00, 0x0a,
+    });
+    try writeU32Leb(&writer, code_payload_size);
+    try writer.writeByte(0x01);
+    try writeU32Leb(&writer, body_size);
+    try writer.writeByte(0x00);
+
+    var index: u32 = 0;
+    while (index < nop_count) : (index += 1) {
+        try writer.writeByte(0x01);
+    }
+
+    try writer.writeAll(&.{ 0x42, 0x2a, 0x0b });
+
+    var memory: [256]u8 = undefined;
+    var ticks: u64 = 700;
+    try std.testing.expectEqual(@as(i64, 42), try executeRuntime(&memory, &ticks, writer.written()));
+}
+
+test "wasm parser accepts large borrowed active data segments" {
+    const data_size: u32 = 300;
+    const data_payload_size: u32 = 1 + 1 + 3 + u32LebByteCount(data_size) + data_size;
+
+    var bytes: [400]u8 = undefined;
+    var writer = TestByteWriter{ .bytes = &bytes };
+
+    try writer.writeAll(&.{
+        0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+        0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7e, 0x03,
+        0x02, 0x01, 0x00, 0x05, 0x03, 0x01, 0x00, 0x01,
+        0x07, 0x08, 0x01, 0x04, 'm',  'a',  'i',  'n',
+        0x00, 0x00, 0x0a, 0x06, 0x01, 0x04, 0x00, 0x42,
+        0x2a, 0x0b, 0x0b,
+    });
+    try writeU32Leb(&writer, data_payload_size);
+    try writer.writeByte(0x01);
+    try writer.writeByte(0x00);
+    try writer.writeAll(&.{ 0x41, 0x00, 0x0b });
+    try writeU32Leb(&writer, data_size);
+
+    var index: u32 = 0;
+    while (index < data_size) : (index += 1) {
+        try writer.writeByte(@intCast(index % 251));
+    }
+
+    var memory: [wasm_page_bytes]u8 = undefined;
+    var ticks: u64 = 16;
+    var runtime = wasm.Runtime.init(&memory, &ticks);
+    try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64(&runtime, writer.written(), "main"));
+    try std.testing.expectEqual(@as(u8, 0), memory[0]);
+    try std.testing.expectEqual(@as(u8, 48), memory[data_size - 1]);
 }
 
 test "wasm interpreter traps explicit unreachable opcode" {
