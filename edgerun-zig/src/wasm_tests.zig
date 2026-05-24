@@ -85,6 +85,19 @@ const imported_double_wasm = [_]u8{
     0x15, 0x10, 0x00, 0x0b,
 };
 
+const imported_memory_load_wasm = [_]u8{
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+    0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7e, 0x02,
+    0x0f, 0x01, 0x03, 'e',  'n',  'v',  0x06, 'm',
+    'e',  'm',  'o',  'r',  'y',  0x02, 0x00, 0x01,
+    0x03, 0x02, 0x01, 0x00, 0x07, 0x08, 0x01, 0x04,
+    'm',  'a',  'i',  'n',  0x00, 0x00, 0x0a, 0x09,
+    0x01, 0x07, 0x00, 0x41, 0x00, 0x29, 0x03, 0x00,
+    0x0b, 0x0b, 0x0e, 0x01, 0x00, 0x41, 0x00, 0x0b,
+    0x08, 0x2a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00,
+};
+
 const signed_i32_const_wasm = [_]u8{
     0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
     0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7e, 0x03,
@@ -632,6 +645,31 @@ test "wasm interpreter reports unresolved imported functions" {
     var runtime = wasm.Runtime.init(&memory, &ticks);
 
     try std.testing.expectError(error.MissingImport, wasm.executeExportI64(&runtime, &imported_double_wasm, "main"));
+}
+
+test "wasm interpreter uses imported memory from runtime allocation" {
+    var memory: [wasm_page_bytes]u8 = undefined;
+    @memset(&memory, 0);
+    var ticks: u64 = 8;
+    const imports = [_]wasm.HostImport{.{
+        .module = "env",
+        .name = "memory",
+        .kind = .memory,
+        .memory_min_pages = 1,
+        .memory_max_pages = 1,
+    }};
+    var runtime = wasm.Runtime.initWithImports(&memory, &ticks, &imports);
+
+    try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64(&runtime, &imported_memory_load_wasm, "main"));
+    try std.testing.expectEqual(@as(u64, 5), ticks);
+}
+
+test "wasm interpreter reports unresolved imported memory" {
+    var memory: [wasm_page_bytes]u8 = undefined;
+    var ticks: u64 = 8;
+    var runtime = wasm.Runtime.init(&memory, &ticks);
+
+    try std.testing.expectError(error.MissingImport, wasm.executeExportI64(&runtime, &imported_memory_load_wasm, "main"));
 }
 
 test "wasm interpreter decodes signed i32 constants" {
