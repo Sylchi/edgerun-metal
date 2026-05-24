@@ -13,6 +13,7 @@ const RenderOptions = common.RenderOptions;
 
 pub const CodeBlock = struct {
     language: []const u8 = "",
+    git_commit: ?[]const u8 = null,
     lines: []const []const u8,
 
     pub fn render(self: CodeBlock, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
@@ -73,9 +74,11 @@ fn renderRegistered(component: *const anyopaque, scene: *ui.Scene, bounds: ui.Re
 }
 
 pub fn writeHtml(block: CodeBlock, out: []u8) HtmlError![]u8 {
+    if (block.git_commit) |commit| try validateGitCommitHtml(commit);
     var writer = HtmlWriter.init(out);
     try writer.writeAll("<pre data-er-component=\"code-block\"><code");
     try writer.writeAttrText("data-er-lang", block.language);
+    if (block.git_commit) |commit| try writer.writeAttrText("data-er-git-commit", commit);
     try writer.writeByte('>');
     for (block.lines, 0..) |line, index| {
         if (index != 0) try writer.writeByte('\n');
@@ -92,9 +95,14 @@ fn writeHtmlRegistered(component: *const anyopaque, out: []u8) HtmlError![]u8 {
 
 pub fn writeMarkdown(block: CodeBlock, out: []u8) MarkdownError![]u8 {
     if (!validMarkdownFenceLanguage(block.language)) return error.InvalidMarkdown;
+    if (block.git_commit) |commit| try validateGitCommitMarkdown(commit);
     var writer = MarkdownWriter.init(out);
     try writer.writeAll("```");
     try writer.writeAll(block.language);
+    if (block.git_commit) |commit| {
+        try writer.writeAll(" git-commit=");
+        try writer.writeAll(commit);
+    }
     try writer.writeByte('\n');
     for (block.lines, 0..) |line, index| {
         if (std.mem.indexOf(u8, line, "```") != null) return error.InvalidMarkdown;
@@ -112,15 +120,15 @@ fn writeMarkdownRegistered(component: *const anyopaque, out: []u8) MarkdownError
 
 pub fn readMarkdown(markdown: []const u8, out_lines: [][]const u8) MarkdownError!CodeBlock {
     if (!std.mem.startsWith(u8, markdown, "```")) return error.UnsupportedMarkdown;
-    const language_start = "```".len;
-    const language_end_relative = std.mem.indexOfScalar(u8, markdown[language_start..], '\n') orelse return error.InvalidMarkdown;
-    const language = markdown[language_start .. language_start + language_end_relative];
-    if (!validMarkdownFenceLanguage(language)) return error.InvalidMarkdown;
+    const info_start = "```".len;
+    const info_end_relative = std.mem.indexOfScalar(u8, markdown[info_start..], '\n') orelse return error.InvalidMarkdown;
+    const info = markdown[info_start .. info_start + info_end_relative];
+    const meta = try parseMarkdownFenceInfo(info);
     if (!std.mem.endsWith(u8, markdown, "\n```")) return error.InvalidMarkdown;
-    const body_start = language_start + language_end_relative + 1;
+    const body_start = info_start + info_end_relative + 1;
     const body_end = markdown.len - "\n```".len;
     const lines = try readMarkdownLines(markdown[body_start..body_end], out_lines);
-    return .{ .language = language, .lines = lines };
+    return .{ .language = meta.language, .git_commit = meta.git_commit, .lines = lines };
 }
 
 fn readMarkdownLines(body: []const u8, out_lines: [][]const u8) MarkdownError![]const []const u8 {
@@ -143,14 +151,18 @@ pub fn readHtml(html: []const u8, out_lines: [][]const u8, text_out: []u8) HtmlE
         return error.UnsupportedHtml;
     }
     const after_lang = html[prefix.len..];
-    const lang_end = std.mem.indexOf(u8, after_lang, "\">") orelse return error.InvalidHtml;
+    const lang_end = std.mem.indexOfScalar(u8, after_lang, '"') orelse return error.InvalidHtml;
     if (!std.mem.endsWith(u8, html, "</code></pre>")) return error.InvalidHtml;
     var text = HtmlTextArena.init(text_out);
     const language = try text.unescape(after_lang[0..lang_end]);
-    const code_start = prefix.len + lang_end + "\">".len;
+    if (!validMarkdownFenceLanguage(language)) return error.InvalidHtml;
+    const after_language = after_lang[lang_end..];
+    const html_git = try readHtmlGitCommit(after_language, prefix.len + lang_end, &text);
+    const git_commit = html_git.git_commit;
+    const code_start = html_git.code_start;
     const body = html[code_start .. html.len - "</code></pre>".len];
     const lines = try readHtmlLines(body, out_lines, &text);
-    return .{ .language = language, .lines = lines };
+    return .{ .language = language, .git_commit = git_commit, .lines = lines };
 }
 
 fn readHtmlLines(html: []const u8, out_lines: [][]const u8, text: *HtmlTextArena) HtmlError![]const []const u8 {
@@ -170,6 +182,20 @@ const code_padding_y: f32 = 18.0;
 const code_line_height: f32 = 17.0;
 const code_text_height: f32 = 12.0;
 const code_clip_inset: f32 = 1.0;
+const git_sha1_len: usize = 40;
+const git_sha256_len: usize = 64;
+const git_commit_attr = "\" data-er-git-commit=\"";
+const git_commit_markdown_key = " git-commit=";
+
+const MarkdownFenceInfo = struct {
+    language: []const u8,
+    git_commit: ?[]const u8 = null,
+};
+
+const HtmlGitCommit = struct {
+    git_commit: ?[]const u8,
+    code_start: usize,
+};
 
 const LineCursor = struct {
     body: []const u8,
@@ -193,6 +219,50 @@ fn validMarkdownFenceLanguage(value: []const u8) bool {
     for (value) |byte| {
         switch (byte) {
             'a'...'z', 'A'...'Z', '0'...'9', '-', '_' => {},
+            else => return false,
+        }
+    }
+    return true;
+}
+
+fn parseMarkdownFenceInfo(info: []const u8) MarkdownError!MarkdownFenceInfo {
+    if (std.mem.indexOf(u8, info, git_commit_markdown_key)) |commit_key| {
+        const language = info[0..commit_key];
+        if (!validMarkdownFenceLanguage(language)) return error.InvalidMarkdown;
+        const commit = info[commit_key + git_commit_markdown_key.len ..];
+        try validateGitCommitMarkdown(commit);
+        return .{ .language = language, .git_commit = commit };
+    }
+    if (!validMarkdownFenceLanguage(info)) return error.InvalidMarkdown;
+    return .{ .language = info };
+}
+
+fn readHtmlGitCommit(after_language: []const u8, code_start_base: usize, text: *HtmlTextArena) HtmlError!HtmlGitCommit {
+    if (std.mem.startsWith(u8, after_language, "\">")) {
+        return .{ .git_commit = null, .code_start = code_start_base + "\">".len };
+    }
+    if (!std.mem.startsWith(u8, after_language, git_commit_attr)) return error.InvalidHtml;
+    const commit_start = git_commit_attr.len;
+    const commit_end_relative = std.mem.indexOf(u8, after_language[commit_start..], "\">") orelse return error.InvalidHtml;
+    const escaped_commit = after_language[commit_start .. commit_start + commit_end_relative];
+    const commit = try text.unescape(escaped_commit);
+    try validateGitCommitHtml(commit);
+    return .{ .git_commit = commit, .code_start = code_start_base + commit_start + commit_end_relative + "\">".len };
+}
+
+fn validateGitCommitMarkdown(commit: []const u8) MarkdownError!void {
+    if (!validGitCommit(commit)) return error.InvalidMarkdown;
+}
+
+fn validateGitCommitHtml(commit: []const u8) HtmlError!void {
+    if (!validGitCommit(commit)) return error.InvalidHtml;
+}
+
+fn validGitCommit(commit: []const u8) bool {
+    if (commit.len != git_sha1_len and commit.len != git_sha256_len) return false;
+    for (commit) |byte| {
+        switch (byte) {
+            '0'...'9', 'a'...'f', 'A'...'F' => {},
             else => return false,
         }
     }
@@ -227,6 +297,22 @@ test "code block html codec roundtrips escaped language and source" {
     try std.testing.expectEqualStrings("    return &root;", decoded.lines[1]);
 }
 
+test "code block html codec roundtrips git commit reference" {
+    const commit = "0123456789abcdef0123456789abcdef01234567";
+    const lines = [_][]const u8{"const port = 443;"};
+    const block = CodeBlock{ .language = "zig", .git_commit = commit, .lines = &lines };
+    var html: [256]u8 = undefined;
+    var decoded_lines: [1][]const u8 = undefined;
+    var text: [128]u8 = undefined;
+
+    const encoded = try block.toHtml(&html);
+    const decoded = try CodeBlock.fromHtml(encoded, &decoded_lines, &text);
+
+    try std.testing.expectEqualStrings("<pre data-er-component=\"code-block\"><code data-er-lang=\"zig\" data-er-git-commit=\"0123456789abcdef0123456789abcdef01234567\">const port = 443;</code></pre>", encoded);
+    try std.testing.expectEqualStrings(commit, decoded.git_commit.?);
+    try std.testing.expectEqualStrings("const port = 443;", decoded.lines[0]);
+}
+
 test "code block html codec rejects malformed blocks" {
     var lines: [2][]const u8 = undefined;
     var text: [64]u8 = undefined;
@@ -249,11 +335,27 @@ test "code block markdown codec roundtrips fenced source" {
     try std.testing.expectEqualStrings("try connect(port);", decoded.lines[1]);
 }
 
+test "code block markdown codec roundtrips git commit reference" {
+    const commit = "abcdef0123456789abcdef0123456789abcdef01";
+    const lines = [_][]const u8{"try connect(port);"};
+    const block = CodeBlock{ .language = "zig", .git_commit = commit, .lines = &lines };
+    var markdown: [160]u8 = undefined;
+    var decoded_lines: [1][]const u8 = undefined;
+
+    const encoded = try block.toMarkdown(&markdown);
+    const decoded = try CodeBlock.fromMarkdown(encoded, &decoded_lines);
+
+    try std.testing.expectEqualStrings("```zig git-commit=abcdef0123456789abcdef0123456789abcdef01\ntry connect(port);\n```", encoded);
+    try std.testing.expectEqualStrings(commit, decoded.git_commit.?);
+    try std.testing.expectEqualStrings("try connect(port);", decoded.lines[0]);
+}
+
 test "code block markdown codec rejects bad fences and languages" {
     var lines: [2][]const u8 = undefined;
 
     try std.testing.expectError(error.InvalidMarkdown, CodeBlock.fromMarkdown("```zig\nbad ``` fence\n```", &lines));
     try std.testing.expectError(error.InvalidMarkdown, CodeBlock.fromMarkdown("```zig lang\nbad\n```", &lines));
+    try std.testing.expectError(error.InvalidMarkdown, CodeBlock.fromMarkdown("```zig git-commit=short\nbad\n```", &lines));
     try std.testing.expectError(error.UnsupportedMarkdown, CodeBlock.fromMarkdown("plain paragraph", &lines));
 }
 
