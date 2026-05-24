@@ -2,6 +2,7 @@ const std = @import("std");
 const common = @import("../../ui_component_common.zig");
 const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
+const base_marker = @import("base/Marker.zig");
 
 const ComponentRegistry = common.ComponentRegistry;
 const HtmlCursor = common.HtmlCursor;
@@ -69,7 +70,7 @@ pub fn renderList(list: List, scene: *ui.Scene, bounds: ui.Rect, options: Render
         if (list.ordered) {
             try scene.pushAlignedText(marker_bounds, orderedMarker(index), options.style.accent, .end);
         } else {
-            try scene.pushRect(ui.Rect.init(bounds.x + list_bullet_x, y + list_bullet_y, list_bullet_size, list_bullet_size), options.style.accent, .fill, list_bullet_size * 0.5, 0.0);
+            try base_marker.renderFilled(scene, ui.Rect.init(bounds.x + list_bullet_x, y + list_bullet_y, list_bullet_size, list_bullet_size), options.style.accent);
         }
         try scene.pushWrappedText(ui.Rect.init(bounds.x + list_text_x, y, @max(1.0, bounds.w - list_text_x), list_item_h), item, options.style.text, .{
             .line_height = list_line_h,
