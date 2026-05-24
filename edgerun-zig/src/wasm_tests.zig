@@ -122,6 +122,17 @@ const call_indirect_wasm = [_]u8{
     0x0b,
 };
 
+const memory_grow_load_wasm = [_]u8{
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+    0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7e, 0x03,
+    0x02, 0x01, 0x00, 0x05, 0x04, 0x01, 0x01, 0x01,
+    0x02, 0x07, 0x08, 0x01, 0x04, 'm',  'a',  'i',
+    'n',  0x00, 0x00, 0x0a, 0x19, 0x01, 0x17, 0x00,
+    0x41, 0x01, 0x40, 0x00, 0x1a, 0x41, 0x80, 0x80,
+    0x04, 0x42, 0x2a, 0x37, 0x03, 0x00, 0x41, 0x80,
+    0x80, 0x04, 0x29, 0x03, 0x00, 0x0b,
+};
+
 const signed_i32_const_wasm = [_]u8{
     0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
     0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7e, 0x03,
@@ -727,6 +738,17 @@ test "wasm interpreter executes active funcref tables through call_indirect" {
 
     try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64(&runtime, &call_indirect_wasm, "main"));
     try std.testing.expectEqual(@as(u64, 8), ticks);
+}
+
+test "wasm interpreter grows linear memory within declared limits" {
+    var memory: [wasm_page_bytes * 2]u8 = undefined;
+    @memset(&memory, 0);
+    var ticks: u64 = 16;
+    var runtime = wasm.Runtime.init(&memory, &ticks);
+
+    try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64(&runtime, &memory_grow_load_wasm, "main"));
+    try std.testing.expectEqual(@as(u64, 7), ticks);
+    try std.testing.expectEqual(@as(u64, 42), byte_utils.load64(memory[wasm_page_bytes .. wasm_page_bytes + 8]).?);
 }
 
 test "wasm interpreter decodes signed i32 constants" {

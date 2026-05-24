@@ -95,6 +95,8 @@ const Opcode = enum(u8) {
     i64_store8 = 0x3c,
     i64_store16 = 0x3d,
     i64_store32 = 0x3e,
+    memory_size = 0x3f,
+    memory_grow = 0x40,
     i32_const = 0x41,
     i64_const = 0x42,
     i32_eqz = 0x45,
@@ -515,6 +517,7 @@ const Module = struct {
     data_segment_count: usize = 0,
     imported_memory: ?ImportedMemory = null,
     memory_min_pages: usize = 0,
+    memory_max_pages: ?usize = null,
     start_function_index: ?usize = null,
 
     fn parse(bytes: []const u8) Error!Module {
@@ -636,6 +639,7 @@ const Module = struct {
         @memcpy(imported.name[0..import_name.len], import_name);
         self.imported_memory = imported;
         self.memory_min_pages = limits.min;
+        self.memory_max_pages = limits.max;
     }
 
     fn parseTableSection(self: *Module, reader: *Reader) Error!void {
@@ -680,6 +684,7 @@ const Module = struct {
         if (self.imported_memory != null) return error.Corrupt;
         const limits = try readLimits(reader);
         self.memory_min_pages = limits.min;
+        self.memory_max_pages = limits.max;
     }
 
     fn parseGlobalSection(self: *Module, reader: *Reader) Error!void {
@@ -884,6 +889,7 @@ const Module = struct {
 const Executor = struct {
     runtime: *Runtime,
     module: Module,
+    memory_pages: usize,
 
     const ControlKind = enum {
         block,
@@ -1162,6 +1168,8 @@ const Executor = struct {
                 .i64_store8 => try self.storeMemory(&frame, &reader, .i64_8),
                 .i64_store16 => try self.storeMemory(&frame, &reader, .i64_16),
                 .i64_store32 => try self.storeMemory(&frame, &reader, .i64_32),
+                .memory_size => try self.memorySize(&frame, &reader),
+                .memory_grow => try self.memoryGrow(&frame, &reader),
                 .call => {
                     const callee = try reader.readU32Leb();
                     const result = try self.callFunctionFromFrame(&frame, callee, depth);
@@ -1257,6 +1265,38 @@ const Executor = struct {
         if (!stored) return error.Corrupt;
     }
 
+    fn memorySize(self: *Executor, frame: *Frame, reader: *Reader) Error!void {
+        try readMemoryIndex(reader);
+        try frame.pushI32(@intCast(self.memory_pages));
+    }
+
+    fn memoryGrow(self: *Executor, frame: *Frame, reader: *Reader) Error!void {
+        try readMemoryIndex(reader);
+        const delta = try frame.popI32();
+        if (delta < 0) return error.Corrupt;
+        const previous_pages = self.memory_pages;
+        const requested_pages = checkedAdd(previous_pages, @intCast(delta)) orelse {
+            try frame.pushI32(-1);
+            return;
+        };
+        const requested_bytes = checkedMul(requested_pages, wasm_page_bytes) orelse {
+            try frame.pushI32(-1);
+            return;
+        };
+        if (requested_bytes > self.runtime.memoryLen()) {
+            try frame.pushI32(-1);
+            return;
+        }
+        if (self.module.memory_max_pages) |max_pages| {
+            if (requested_pages > max_pages) {
+                try frame.pushI32(-1);
+                return;
+            }
+        }
+        self.memory_pages = requested_pages;
+        try frame.pushI32(@intCast(previous_pages));
+    }
+
     fn popAddress(frame: *Frame, offset: u32) Error!usize {
         const base = try frame.pop();
         if (base < 0) return error.NoMemory;
@@ -1264,7 +1304,7 @@ const Executor = struct {
     }
 
     fn memoryRange(self: *Executor, address: usize, size: usize) Error![]u8 {
-        const limit = try self.module.requiredMemoryBytes();
+        const limit = checkedMul(self.memory_pages, wasm_page_bytes) orelse return error.Unsupported;
         const end = checkedAdd(address, size) orelse return error.NoMemory;
         if (end > limit or end > self.runtime.memory.len) return error.NoMemory;
         return self.runtime.memory[address..end];
@@ -1307,6 +1347,7 @@ pub fn executeExportI64Args(runtime: *Runtime, wasm_bytes: []const u8, export_na
     var executor = Executor{
         .runtime = runtime,
         .module = module,
+        .memory_pages = module.memory_min_pages,
     };
     try executor.runStart();
     return executor.runExport(export_name, args);
@@ -1432,6 +1473,8 @@ fn opcodeFromByte(value: u8) ?Opcode {
         @intFromEnum(Opcode.i64_store8) => .i64_store8,
         @intFromEnum(Opcode.i64_store16) => .i64_store16,
         @intFromEnum(Opcode.i64_store32) => .i64_store32,
+        @intFromEnum(Opcode.memory_size) => .memory_size,
+        @intFromEnum(Opcode.memory_grow) => .memory_grow,
         @intFromEnum(Opcode.i32_const) => .i32_const,
         @intFromEnum(Opcode.i64_const) => .i64_const,
         @intFromEnum(Opcode.i32_eqz) => .i32_eqz,
@@ -1573,6 +1616,8 @@ fn skipOpcodeImmediate(reader: *Reader, opcode: Opcode) Error!void {
         .call,
         .br,
         .br_if,
+        .memory_size,
+        .memory_grow,
         => _ = try reader.readU32Leb(),
         .call_indirect => {
             _ = try reader.readU32Leb();
@@ -1869,6 +1914,11 @@ fn readConstantValueExpression(reader: *Reader, value_type: ValueType) Error!i64
 fn readMemoryImmediate(reader: *Reader) Error!u32 {
     _ = try reader.readU32Leb();
     return try reader.readU32Leb();
+}
+
+fn readMemoryIndex(reader: *Reader) Error!void {
+    const memory_index = try reader.readU32Leb();
+    if (memory_index != 0) return error.Unsupported;
 }
 
 fn memoryLoadSize(kind: MemoryLoad) usize {
