@@ -3,6 +3,7 @@
 	clock-test identity-test object-test storage-test sdk-test \
 	ui-core-test \
 	zig-check zig-fmt-check zig-fmt zig-test zig-real-tpm sdk-cli sdk-bench \
+	wayland-window wayland-window-test \
 	pi-zero-w-v1_1-kernel pi-zero-w-v1_1-usb-probe pi-usb-host pi-usb-state \
 	pi-boot-firmware-check pi-usb-reset-controller pi-usb-dry-run pi-usb-boot-dir \
 	pi-usb-load pi-usb-load-probe pi-usb-load-usbflag pi-usb-load-probe-usbflag \
@@ -52,6 +53,12 @@ sdk-bench:
 
 ui-core-test:
 	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig ui-core-test
+
+wayland-window:
+	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig wayland-window -- --seconds 5
+
+wayland-window-test:
+	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig wayland-window-test
 
 zig-check: zig-fmt-check zig-test
 

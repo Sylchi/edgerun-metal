@@ -175,6 +175,32 @@ pub fn build(b: *std.Build) void {
     const ui_bench_step = b.step("ui-bench", "Benchmark the Zig UI software renderer");
     ui_bench_step.dependOn(&run_ui_bench.step);
 
+    const wayland_window = b.addExecutable(.{
+        .name = "edgerun-wayland-window",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/wayland_window_host.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+
+    const run_wayland_window = b.addRunArtifact(wayland_window);
+    if (b.args) |args| run_wayland_window.addArgs(args);
+    const wayland_window_step = b.step("wayland-window", "Open a native Wayland shm window using canonical UI IR");
+    wayland_window_step.dependOn(&run_wayland_window.step);
+
+    const wayland_window_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/wayland_window_host.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    const run_wayland_window_tests = b.addRunArtifact(wayland_window_tests);
+    const wayland_window_test_step = b.step("wayland-window-test", "Run native Wayland host protocol tests");
+    wayland_window_test_step.dependOn(&run_wayland_window_tests.step);
+    test_step.dependOn(&run_wayland_window_tests.step);
+
     const ui_browser_target = b.resolveTargetQuery(std.Target.Query.parse(.{
         .arch_os_abi = "wasm32-freestanding",
     }) catch unreachable);
