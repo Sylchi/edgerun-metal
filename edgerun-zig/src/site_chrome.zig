@@ -22,7 +22,7 @@ const compact_icon_gap: f32 = 8.0;
 
 pub const ActiveNav = enum {
     none,
-    docs,
+    components,
     blog,
     apps,
 };
@@ -55,9 +55,9 @@ pub fn renderHeader(scene: *ui.Scene, collector: *interaction.Collector, bounds:
 
     const nav_y = bounds.y + 18.0;
     const nav_center = content.x + content.w * 0.5;
-    try navItem(scene, collector, ui.Rect.init(nav_center - 150.0, nav_y, 68.0, 30.0), "Docs", docs_button_id, active == .docs);
-    try navItem(scene, collector, ui.Rect.init(nav_center - 64.0, nav_y, 96.0, 30.0), "Academy", blog_button_id, active == .blog);
-    try navItem(scene, collector, ui.Rect.init(nav_center + 50.0, nav_y, 64.0, 30.0), "Apps", apps_button_id, active == .apps);
+    try navItem(scene, collector, ui.Rect.init(nav_center - 178.0, nav_y, 116.0, 30.0), "Components", docs_button_id, active == .components);
+    try navItem(scene, collector, ui.Rect.init(nav_center - 48.0, nav_y, 96.0, 30.0), "Academy", blog_button_id, active == .blog);
+    try navItem(scene, collector, ui.Rect.init(nav_center + 62.0, nav_y, 64.0, 30.0), "Apps", apps_button_id, active == .apps);
 
     const launch = ui.Rect.init(content.x + content.w - 128.0, bounds.y + 16.0, 128.0, 32.0);
     try button(scene, collector, launch, "Launch Desktop", launch_button_id, .primary, null, null);
@@ -91,7 +91,7 @@ fn renderCompactHeader(scene: *ui.Scene, collector: *interaction.Collector, boun
     const docs = ui.Rect.init(blog.x - compact_nav_gap - 42.0, nav_y, 42.0, 30.0);
     const logo_right = logo.x + 118.0 + compact_nav_gap;
     if (docs.x >= logo_right) {
-        try navItem(scene, collector, docs, "Docs", docs_button_id, active == .docs);
+        try navItem(scene, collector, docs, "UI", docs_button_id, active == .components);
         try navItem(scene, collector, blog, "Academy", blog_button_id, active == .blog);
         try navItem(scene, collector, apps, "Apps", apps_button_id, active == .apps);
     }

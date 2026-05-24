@@ -3,6 +3,7 @@ const interaction = @import("ui_interaction.zig");
 const renderer_font_atlas = @import("renderer_font_atlas.zig");
 const renderer_gles = @import("renderer_gles.zig");
 const renderer_ir = @import("renderer_ir.zig");
+const component_gallery = @import("component_gallery.zig");
 const site_apps = @import("site_apps.zig");
 const site_blog = @import("site_blog.zig");
 const site_chrome = @import("site_chrome.zig");
@@ -140,6 +141,11 @@ const SceneState = struct {
             .landing => try site_landing.render(&scene, &collector, bounds, app.landingState()),
             .blog => try site_blog.render(&scene, &collector, bounds, app.blogState()),
             .apps => try site_apps.render(&scene, &collector, bounds, app.appsState()),
+            .components => try component_gallery.renderComponentGallery(&scene, &collector, bounds, .{
+                .scroll_y = app.scroll_y,
+                .hover_x = app.hover_x,
+                .hover_y = app.hover_y,
+            }),
         }
         updateHoverHit(app, collector.written());
         try site_cursor.render(&scene, app.hover_x, app.hover_y, app.cursorKind());
@@ -205,6 +211,7 @@ const AppState = struct {
             else
                 site_blog.postContentHeight(width, self.route.selected_blog_post_id),
             .apps => site_apps.contentHeight(width),
+            .components => component_gallery.contentHeight(width),
         };
     }
 

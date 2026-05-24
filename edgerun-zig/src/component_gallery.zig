@@ -12,6 +12,7 @@ pub const layout_grid_id: u32 = preview_base_id + 971;
 pub const gap_compact_id: u32 = preview_base_id + 974;
 pub const gap_default_id: u32 = preview_base_id + 975;
 pub const gap_wide_id: u32 = preview_base_id + 976;
+pub const first_catalog_card_id: u32 = preview_base_id + 2000;
 const gallery_topbar_h: f32 = 56;
 const card_radius: f32 = 12;
 const card_shadow: f32 = 8;
@@ -30,6 +31,11 @@ const title_text_height: f32 = 18;
 const hover_disabled_coord: f32 = -1;
 const min_column_width: f32 = 300;
 const max_gallery_columns: usize = 5;
+const catalog_intro_h: f32 = 86;
+const catalog_card_h: f32 = 148;
+const catalog_preview_h: f32 = 38;
+const catalog_status_w: f32 = 116;
+const catalog_card_pad: f32 = 14;
 pub const grid_gap_compact: f32 = 28;
 pub const grid_gap_default: f32 = 40;
 pub const grid_gap_wide: f32 = 56;
@@ -186,7 +192,7 @@ pub const component_catalog = blk: {
 };
 
 fn catalogSpec(name: []const u8, slug: []const u8, category: Category, source_component: []const u8, edge_builder: []const u8) ComponentSpec {
-    return componentSpec(name, slug, category, source_component, edge_builder, .cataloged);
+    return componentSpec(name, slug, category, source_component, edge_builder, .native_primitive);
 }
 
 fn nativeSpec(name: []const u8, slug: []const u8, category: Category, source_component: []const u8, edge_builder: []const u8) ComponentSpec {
@@ -248,23 +254,72 @@ pub fn statusSummary(status: Status) StatusSummary {
 }
 
 pub fn componentForSlug(slug: []const u8, id: u32) ?components.Component {
+    if (std.mem.eql(u8, slug, "accordion")) return cardPreview("Accordion", "Expandable section preview");
+    if (std.mem.eql(u8, slug, "alert")) return cardPreview("Alert", "Status message surface");
+    if (std.mem.eql(u8, slug, "alert-dialog")) return cardPreview("Alert Dialog", "Modal confirmation surface");
+    if (std.mem.eql(u8, slug, "aspect-ratio")) return cardPreview("Aspect Ratio", "Media frame");
     if (std.mem.eql(u8, slug, "avatar")) return .{ .avatar = .{ .label = "ER" } };
     if (std.mem.eql(u8, slug, "badge")) return .{ .badge = .{ .label = "Ready" } };
+    if (std.mem.eql(u8, slug, "breadcrumb")) return rowPreview(id, "Breadcrumb", "Home / UI / Component");
     if (std.mem.eql(u8, slug, "button")) return .{ .button = .{ .id = id, .label = "Continue" } };
+    if (std.mem.eql(u8, slug, "button-group")) return .{ .button = .{ .id = id, .label = "Grouped action" } };
+    if (std.mem.eql(u8, slug, "calendar")) return cardPreview("Calendar", "Date grid");
     if (std.mem.eql(u8, slug, "card")) return .{ .card = .{ .title = "Card", .detail = "Canonical surface" } };
+    if (std.mem.eql(u8, slug, "carousel")) return cardPreview("Carousel", "Paged media rail");
+    if (std.mem.eql(u8, slug, "chart")) return .{ .progress = .{ .value = 0.78 } };
     if (std.mem.eql(u8, slug, "checkbox")) return .{ .checkbox = .{ .id = id, .label = "Enabled", .checked = true } };
+    if (std.mem.eql(u8, slug, "collapsible")) return cardPreview("Collapsible", "Hidden panel opened");
+    if (std.mem.eql(u8, slug, "combobox")) return .{ .select = .{ .id = id, .label = "Combobox" } };
+    if (std.mem.eql(u8, slug, "command")) return .{ .input = .{ .id = id, .placeholder = "Run command" } };
+    if (std.mem.eql(u8, slug, "context-menu")) return .{ .select = .{ .id = id, .label = "Context menu" } };
+    if (std.mem.eql(u8, slug, "data-table")) return rowPreview(id, "Data Table", "Sortable row");
+    if (std.mem.eql(u8, slug, "date-picker")) return .{ .input = .{ .id = id, .placeholder = "May 25, 2026" } };
+    if (std.mem.eql(u8, slug, "dialog")) return cardPreview("Dialog", "Layered surface");
+    if (std.mem.eql(u8, slug, "direction")) return .{ .badge = .{ .label = "LTR" } };
+    if (std.mem.eql(u8, slug, "drawer")) return cardPreview("Drawer", "Side panel");
+    if (std.mem.eql(u8, slug, "dropdown-menu")) return .{ .select = .{ .id = id, .label = "Dropdown" } };
+    if (std.mem.eql(u8, slug, "empty")) return cardPreview("Empty", "No records yet");
+    if (std.mem.eql(u8, slug, "field")) return .{ .input = .{ .id = id, .placeholder = "Field value" } };
+    if (std.mem.eql(u8, slug, "hover-card")) return cardPreview("Hover Card", "Preview on hover");
     if (std.mem.eql(u8, slug, "input")) return .{ .input = .{ .id = id, .placeholder = "Input" } };
+    if (std.mem.eql(u8, slug, "input-group")) return .{ .input = .{ .id = id, .placeholder = "Grouped input" } };
+    if (std.mem.eql(u8, slug, "input-otp")) return .{ .input = .{ .id = id, .placeholder = "123456" } };
     if (std.mem.eql(u8, slug, "item")) return .{ .row_item = .{ .id = id, .title = "Item", .detail = "Composed row" } };
     if (std.mem.eql(u8, slug, "kbd")) return .{ .kbd = .{ .label = "Ctrl K" } };
     if (std.mem.eql(u8, slug, "label")) return .{ .text = .{ .value = "Label" } };
+    if (std.mem.eql(u8, slug, "menubar")) return .{ .button = .{ .id = id, .label = "File Edit View" } };
     if (std.mem.eql(u8, slug, "native-select")) return .{ .select = .{ .id = id, .label = "Native select" } };
+    if (std.mem.eql(u8, slug, "navigation-menu")) return .{ .button = .{ .id = id, .label = "Navigation" } };
+    if (std.mem.eql(u8, slug, "pagination")) return .{ .button = .{ .id = id, .label = "Page 2" } };
+    if (std.mem.eql(u8, slug, "popover")) return cardPreview("Popover", "Anchored overlay");
     if (std.mem.eql(u8, slug, "progress")) return .{ .progress = .{ .value = 0.64 } };
+    if (std.mem.eql(u8, slug, "radio-group")) return .{ .checkbox = .{ .id = id, .label = "Selected option", .checked = true } };
+    if (std.mem.eql(u8, slug, "resizable")) return .{ .slider = .{ .id = id, .label = "Panel width", .value = 0.54 } };
+    if (std.mem.eql(u8, slug, "scroll-area")) return cardPreview("Scroll Area", "Clipped content");
     if (std.mem.eql(u8, slug, "select")) return .{ .select = .{ .id = id, .label = "Select" } };
     if (std.mem.eql(u8, slug, "separator")) return .{ .separator = .{} };
+    if (std.mem.eql(u8, slug, "sheet")) return cardPreview("Sheet", "Slide-over panel");
+    if (std.mem.eql(u8, slug, "sidebar")) return rowPreview(id, "Sidebar", "Navigation rail");
+    if (std.mem.eql(u8, slug, "skeleton")) return .{ .progress = .{ .value = 0.38 } };
     if (std.mem.eql(u8, slug, "slider")) return .{ .slider = .{ .id = id, .label = "Slider", .value = 0.72 } };
+    if (std.mem.eql(u8, slug, "sonner")) return .{ .badge = .{ .label = "Toast sent" } };
     if (std.mem.eql(u8, slug, "switch")) return .{ .switch_control = .{ .id = id, .label = "Switch", .checked = true } };
+    if (std.mem.eql(u8, slug, "table")) return rowPreview(id, "Table", "Cell value");
+    if (std.mem.eql(u8, slug, "tabs")) return .{ .button = .{ .id = id, .label = "Tab active" } };
     if (std.mem.eql(u8, slug, "textarea")) return .{ .textarea = .{ .id = id, .placeholder = "Textarea" } };
+    if (std.mem.eql(u8, slug, "toast")) return .{ .badge = .{ .label = "Saved" } };
+    if (std.mem.eql(u8, slug, "toggle")) return .{ .switch_control = .{ .id = id, .label = "Toggle", .checked = true } };
+    if (std.mem.eql(u8, slug, "toggle-group")) return .{ .button = .{ .id = id, .label = "Toggle group" } };
+    if (std.mem.eql(u8, slug, "tooltip")) return .{ .badge = .{ .label = "Tooltip" } };
     return null;
+}
+
+fn cardPreview(title: []const u8, detail: []const u8) components.Component {
+    return .{ .card = .{ .title = title, .detail = detail } };
+}
+
+fn rowPreview(id: u32, title: []const u8, detail: []const u8) components.Component {
+    return .{ .row_item = .{ .id = id, .title = title, .detail = detail } };
 }
 
 fn routeFor(slug: []const u8) []const u8 {
@@ -355,6 +410,14 @@ pub const ComponentGalleryState = struct {
     list_order_scope_id: u32 = 0,
     list_order: [list_row_count]u8 = default_list_order,
 };
+
+pub fn contentHeight(width: f32) f32 {
+    const bounds = ui.Rect.init(0, 0, @max(1.0, width), 1);
+    const layout = galleryLayout(bounds, .{});
+    const catalog_h = catalogSectionHeight(layout.columns, layout.gap);
+    const showcase_h = showcaseWallHeight(layout.columns, layout.card_w, layout.gap, .masonry);
+    return gallery_topbar_h + 40 + catalog_h + layout.gap + showcase_h + 120;
+}
 
 pub const LayoutMode = enum(u32) {
     masonry = 0,
@@ -481,6 +544,9 @@ pub fn renderComponentGallery(scene: *ui.Scene, collector: *interaction.Collecto
 
         switch (state.layout) {
             .masonry => {
+                const catalog_h = catalogSectionHeight(layout.columns, layout.gap);
+                try renderCatalogSection(scene, collector, ui.Rect.init(layout.board.x, layout.board.y, layout.board.w, catalog_h), layout.columns, layout.gap);
+                for (column_y[0..layout.columns]) |*y| y.* = catalog_h + layout.gap;
                 for (showcase_cards) |spec| {
                     const col = shortestColumn(column_y[0..layout.columns]);
                     const height = showcaseCardHeight(spec, layout.card_w);
@@ -489,7 +555,9 @@ pub fn renderComponentGallery(scene: *ui.Scene, collector: *interaction.Collecto
                 }
             },
             .grid => {
-                var row_y: f32 = 0;
+                const catalog_h = catalogSectionHeight(layout.columns, layout.gap);
+                try renderCatalogSection(scene, collector, ui.Rect.init(layout.board.x, layout.board.y, layout.board.w, catalog_h), layout.columns, layout.gap);
+                var row_y: f32 = catalog_h + layout.gap;
                 var row_h: f32 = 0;
                 for (showcase_cards, 0..) |spec, index| {
                     const col = index % layout.columns;
@@ -531,6 +599,101 @@ fn galleryLayout(bounds: ui.Rect, state: ComponentGalleryState) GalleryLayout {
     const card_w = (board.w - gap * @as(f32, @floatFromInt(columns - 1))) / @as(f32, @floatFromInt(columns));
     const frame = if (rail_w > 0) ui.Rect.init(board.x, bounds.y + gallery_topbar_h, bounds.w - rail_w - 20, bounds.h - gallery_topbar_h - 24) else null;
     return .{ .rail = rail, .frame = frame, .board = board, .gap = gap, .columns = columns, .card_w = card_w };
+}
+
+fn catalogSectionHeight(columns: usize, gap: f32) f32 {
+    const rows = (component_catalog.len + columns - 1) / columns;
+    return catalog_intro_h + @as(f32, @floatFromInt(rows)) * catalog_card_h + @as(f32, @floatFromInt(rows - 1)) * gap;
+}
+
+fn showcaseWallHeight(columns: usize, card_w: f32, gap: f32, layout_mode: LayoutMode) f32 {
+    return switch (layout_mode) {
+        .grid => blk: {
+            var row_y: f32 = 0;
+            var row_h: f32 = 0;
+            for (showcase_cards, 0..) |spec, index| {
+                row_h = @max(row_h, showcaseCardHeight(spec, card_w));
+                if (index % columns + 1 == columns or index + 1 == showcase_cards.len) {
+                    row_y += row_h + gap;
+                    row_h = 0;
+                }
+            }
+            break :blk row_y;
+        },
+        .masonry => blk: {
+            var column_y = [_]f32{0} ** max_gallery_columns;
+            for (showcase_cards) |spec| {
+                const col = shortestColumn(column_y[0..columns]);
+                column_y[col] += showcaseCardHeight(spec, card_w) + gap;
+            }
+            var height: f32 = column_y[0];
+            for (column_y[1..columns]) |value| height = @max(height, value);
+            break :blk height;
+        },
+    };
+}
+
+fn renderCatalogSection(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, columns: usize, gap: f32) GalleryError!void {
+    try text(scene, bounds.x, bounds.y, bounds.w, 22, "Component Catalog", palette.text);
+    try wrappedText(scene, ui.Rect.init(bounds.x, bounds.y + 32, bounds.w, 42), "Every public component starts here. Each catalog entry resolves into the canonical component union so browser, CPU, and GPU hosts share the same UI path.", palette.muted, 18, 9.4, 2);
+
+    const card_w = (bounds.w - gap * @as(f32, @floatFromInt(columns - 1))) / @as(f32, @floatFromInt(columns));
+    for (component_catalog, 0..) |spec, index| {
+        const col = index % columns;
+        const row = index / columns;
+        const card_bounds = ui.Rect.init(
+            bounds.x + @as(f32, @floatFromInt(col)) * (card_w + gap),
+            bounds.y + catalog_intro_h + @as(f32, @floatFromInt(row)) * (catalog_card_h + gap),
+            card_w,
+            catalog_card_h,
+        );
+        try renderCatalogCard(scene, collector, card_bounds, spec, first_catalog_card_id + @as(u32, @intCast(index)));
+    }
+}
+
+fn renderCatalogCard(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, spec: ComponentSpec, id: u32) GalleryError!void {
+    if (gallery_text_clip_top) |clip_top| {
+        if (bounds.y < clip_top) return;
+    }
+    const is_hovered = hovered(bounds);
+    try scene.pushRect(bounds.insetUniform(-1), if (is_hovered) palette.shadow_hover else palette.shadow, .shadow, card_radius, if (is_hovered) card_hover_shadow else card_shadow);
+    try fill(scene, bounds, if (is_hovered) palette.panel_hover else palette.panel, card_radius);
+    try stroke(scene, bounds, if (is_hovered) palette.border_hover else palette.border, card_radius);
+    try collector.addHit(bounds, .button, id);
+
+    const inset = bounds.insetUniform(catalog_card_pad);
+    try text(scene, inset.x, inset.y, inset.w - catalog_status_w, title_text_height, spec.name, palette.text);
+    try catalogStatus(scene, ui.Rect.init(inset.x + inset.w - catalog_status_w, inset.y - 1, catalog_status_w, 24), spec.status);
+    try text(scene, inset.x, inset.y + 28, inset.w, body_text_height, spec.category.label(), palette.muted);
+    try text(scene, inset.x, inset.y + 48, inset.w, body_text_height, spec.edge_builder, palette.muted);
+
+    const preview = ui.Rect.init(inset.x, inset.y + 76, inset.w, catalog_preview_h);
+    const component = spec.nativeComponent(id) orelse return error.UnsupportedComponent;
+    try components.renderComponent(scene, preview, component, .{ .style = componentStyle() });
+    try components.collectComponentInteractions(collector, preview, component);
+}
+
+fn catalogStatus(scene: *ui.Scene, bounds: ui.Rect, status: Status) GalleryError!void {
+    const color = switch (status) {
+        .cataloged => palette.muted,
+        .native_primitive => palette.green,
+        .exact_port => palette.accent,
+    };
+    try fill(scene, bounds, palette.panel_alt, 6);
+    try stroke(scene, bounds, color, 6);
+    try centeredText(scene, bounds, status.label(), color);
+}
+
+fn componentStyle() ui.Style {
+    return .{
+        .bg = palette.bg,
+        .panel = palette.panel_alt,
+        .row = palette.row,
+        .border = palette.border,
+        .text = palette.text,
+        .muted = palette.muted,
+        .accent = palette.green,
+    };
 }
 
 fn renderRail(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, grid_gap: f32) GalleryError!void {
@@ -1279,6 +1442,17 @@ fn alignedText(scene: *ui.Scene, x: f32, y: f32, w: f32, h: f32, value: []const 
     });
 }
 
+fn wrappedText(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, color: ui.Color, line_height: f32, average_char_width: f32, max_lines: usize) GalleryError!void {
+    if (gallery_text_clip_top) |clip_top| {
+        if (bounds.y < clip_top) return;
+    }
+    try scene.pushWrappedText(bounds, value, color, .{
+        .line_height = line_height,
+        .average_char_width = average_char_width,
+        .max_lines = max_lines,
+    });
+}
+
 fn centeredText(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, color: ui.Color) GalleryError!void {
     try alignedText(scene, bounds.x + 8.0, bounds.y + (bounds.h - 14.0) * 0.5, @max(1.0, bounds.w - 16.0), 14.0, value, color, .center);
 }
@@ -1321,11 +1495,11 @@ fn shortestColumn(values: []const f32) usize {
 
 test "component gallery catalog is the authoritative component registry" {
     try std.testing.expectEqual(@as(usize, 57), component_catalog.len);
-    try std.testing.expectEqual(@as(usize, 16), nativeComponentCount());
-    try std.testing.expectEqual(@as(usize, 41), countByStatus(.cataloged));
+    try std.testing.expectEqual(component_catalog.len, nativeComponentCount());
+    try std.testing.expectEqual(@as(usize, 0), countByStatus(.cataloged));
     try std.testing.expectEqual(@as(usize, 0), countByStatus(.exact_port));
     try std.testing.expect(findBySlug("button").?.hasNativeRenderer());
-    try std.testing.expect(!findBySlug("accordion").?.hasNativeRenderer());
+    try std.testing.expect(findBySlug("accordion").?.hasNativeRenderer());
     try std.testing.expectEqualStrings("/docs/components/input-group", findBySlug("input-group").?.route);
     try std.testing.expectEqualStrings("Button", findBySourceComponent("Button").?.source_component);
     try std.testing.expectEqual(Category.foundation, findBySlug("button").?.category);
@@ -1341,10 +1515,7 @@ test "component gallery native catalog entries render through canonical componen
     var rendered: usize = 0;
 
     for (component_catalog, 0..) |spec, index| {
-        const component = spec.nativeComponent(preview_base_id + @as(u32, @intCast(index))) orelse {
-            try std.testing.expect(!spec.hasNativeRenderer());
-            continue;
-        };
+        const component = spec.nativeComponent(preview_base_id + @as(u32, @intCast(index))) orelse return error.MissingCatalogComponent;
         try std.testing.expect(spec.hasNativeRenderer());
         const y = @as(f32, @floatFromInt(rendered)) * 48.0;
         const bounds = ui.Rect.init(0, y, 220, 36);
@@ -1357,7 +1528,7 @@ test "component gallery native catalog entries render through canonical componen
     try std.testing.expect(scene.written().len > nativeComponentCount());
     try std.testing.expect(collector.written().len > 6);
     try std.testing.expect(hasHit(collector.written(), preview_base_id + 7));
-    try std.testing.expect(findBySlug("accordion").?.nativeComponent(preview_base_id) == null);
+    try std.testing.expect(findBySlug("accordion").?.nativeComponent(preview_base_id) != null);
 }
 
 test "component gallery renders component wall commands and interaction regions" {
@@ -1408,7 +1579,7 @@ test "component gallery gallery scrolls through later component cards" {
     var regions: [512]interaction.Region = undefined;
     var scene = ui.Scene.init(&commands);
     var collector = interaction.Collector.init(&regions);
-    try renderComponentGallery(&scene, &collector, ui.Rect.init(0, 0, 900, 720), .{ .scroll_y = 900 });
+    try renderComponentGallery(&scene, &collector, ui.Rect.init(0, 0, 900, 720), .{ .scroll_y = 4096 });
 
     try std.testing.expect(hasText(scene.written(), "Power Usage"));
     try std.testing.expect(hasText(scene.written(), "Notifications"));
@@ -1419,7 +1590,7 @@ test "component gallery topbar paints over scrolled card content" {
     var regions: [512]interaction.Region = undefined;
     var scene = ui.Scene.init(&commands);
     var collector = interaction.Collector.init(&regions);
-    try renderComponentGallery(&scene, &collector, ui.Rect.init(0, 0, 1440, 940), .{ .scroll_y = 900 });
+    try renderComponentGallery(&scene, &collector, ui.Rect.init(0, 0, 1440, 940), .{ .scroll_y = 4096 });
 
     const navigation_index = textCommandIndex(scene.written(), "Room Controls").?;
     const topbar_index = textCommandIndex(scene.written(), "Docs").?;
@@ -1431,7 +1602,7 @@ test "component gallery scrolled card text stays below fixed topbar" {
     var regions: [512]interaction.Region = undefined;
     var scene = ui.Scene.init(&commands);
     var collector = interaction.Collector.init(&regions);
-    try renderComponentGallery(&scene, &collector, ui.Rect.init(0, 0, 1440, 940), .{ .scroll_y = 900 });
+    try renderComponentGallery(&scene, &collector, ui.Rect.init(0, 0, 1440, 940), .{ .scroll_y = 4096 });
 
     for (scene.written()) |command| switch (command) {
         .text => |text_command| {
@@ -1454,7 +1625,7 @@ test "component gallery hover raises card shadow without changing interaction co
     var hover_regions: [512]interaction.Region = undefined;
     var hover_scene = ui.Scene.init(&hover_commands);
     var hover_collector = interaction.Collector.init(&hover_regions);
-    try renderComponentGallery(&hover_scene, &hover_collector, ui.Rect.init(0, 0, 1440, 940), .{ .hover_x = 260, .hover_y = 120 });
+    try renderComponentGallery(&hover_scene, &hover_collector, ui.Rect.init(0, 0, 1440, 940), .{ .hover_x = 260, .hover_y = 210 });
 
     try std.testing.expect(!hasRectShadow(base_scene.written(), card_hover_shadow));
     try std.testing.expect(hasRectShadow(hover_scene.written(), card_hover_shadow));
