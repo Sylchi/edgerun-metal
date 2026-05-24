@@ -1,4 +1,5 @@
 const std = @import("std");
+const renderer_ir = @import("renderer_ir.zig");
 const ui = @import("ui.zig");
 
 pub const bytes_per_pixel: u32 = 4;
@@ -282,6 +283,18 @@ pub fn dirtyTilesMarkScene(plan: TilePlan, scene: ui.Scene, tile_marks: []u8, li
     return true;
 }
 
+pub fn dirtyTilesMarkIrBuffers(plan: TilePlan, buffers: renderer_ir.Buffers, tile_marks: []u8, list: *DirtyTileList) bool {
+    renderer_ir.validateBuffers(buffers) catch return false;
+    for (renderer_ir.drawBatches(buffers)) |batch| {
+        const marked = switch (batch) {
+            .rects, .overlay_rects => |rects| dirtyTilesMarkIrRects(plan, rects, tile_marks, list),
+            .image, .text, .icon, .overlay_text, .overlay_icon => |vertices| dirtyTilesMarkIrTextured(plan, vertices, tile_marks, list),
+        };
+        if (!marked) return false;
+    }
+    return true;
+}
+
 pub fn dirtyTilesMarkSceneDiff(plan: TilePlan, prev: ui.Scene, next: ui.Scene, tile_marks: []u8, list: *DirtyTileList) bool {
     const prev_commands = prev.written();
     const next_commands = next.written();
@@ -372,6 +385,22 @@ fn markCommand(plan: TilePlan, command: ui.Command, tile_marks: []u8, list: *Dir
     return dirtyTilesMarkRect(plan, bounds.x, bounds.y, bounds.w, bounds.h, tile_marks, list);
 }
 
+fn dirtyTilesMarkIrRects(plan: TilePlan, values: []const f32, tile_marks: []u8, list: *DirtyTileList) bool {
+    var iter = renderer_ir.RectIterator.init(values) catch return false;
+    while (iter.next() catch return false) |rect| {
+        if (!dirtyTilesMarkRect(plan, rect.bounds.x, rect.bounds.y, rect.bounds.w, rect.bounds.h, tile_marks, list)) return false;
+    }
+    return true;
+}
+
+fn dirtyTilesMarkIrTextured(plan: TilePlan, values: []const f32, tile_marks: []u8, list: *DirtyTileList) bool {
+    var iter = renderer_ir.TexturedQuadIterator.init(values) catch return false;
+    while (iter.next() catch return false) |quad| {
+        if (!dirtyTilesMarkRect(plan, quad.bounds.x, quad.bounds.y, quad.bounds.w, quad.bounds.h, tile_marks, list)) return false;
+    }
+    return true;
+}
+
 fn dirtyInputsValid(plan: TilePlan, tile_marks: []u8, list: *const DirtyTileList) bool {
     return plan.tile_count > 0 and plan.tile_count <= tile_marks.len and plan.tile_count <= std.math.maxInt(u32) and list.tile_ids.len >= plan.max_dirty_tiles;
 }
@@ -440,6 +469,22 @@ test "dirty tile tracking marks rects scene diffs and overflow" {
     try std.testing.expect(dirtyTilesReset(plan, &marks, &list));
     try std.testing.expect(dirtyTilesMarkSceneDiff(plan, prev, next, &marks, &list));
     try std.testing.expectEqualSlices(u32, &.{ 0, 10 }, list.written());
+}
+
+test "dirty tile tracking marks canonical ir buffers" {
+    const plan = tilePlanFromMode(.{ .width = 64, .height = 64, .stride = 64, .refresh_hz = 1 }, 16, 16, 8).?;
+    var marks: [16]u8 = undefined;
+    var ids: [8]u32 = undefined;
+    var list = DirtyTileList{ .tile_ids = &ids };
+
+    var storage = renderer_ir.FixedBuffers(1, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0){};
+    const buffers = storage.buffers();
+    try renderer_ir.pushRect(buffers, .base, ui.Rect.init(15.5, 0, 2, 16), .text, .clear, 0, 0, renderer_ir.rectModeCode(.fill));
+    try renderer_ir.pushClippedTexturedQuad(buffers.text_vertices, buffers.text_vertex_len, ui.Rect.init(32, 32, 8, 8), ui.Rect.init(32, 32, 8, 8), 0, 0, 1, 1, .accent);
+
+    try std.testing.expect(dirtyTilesReset(plan, &marks, &list));
+    try std.testing.expect(dirtyTilesMarkIrBuffers(plan, buffers, &marks, &list));
+    try std.testing.expectEqualSlices(u32, &.{ 0, 1, 10 }, list.written());
 }
 
 test "frame budget and rgb packing match C planning contracts" {

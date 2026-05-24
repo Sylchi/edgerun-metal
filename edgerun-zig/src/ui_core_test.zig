@@ -1,4 +1,4 @@
-pub const app = @import("app.zig");
+const app = @import("app.zig");
 pub const assets = @import("assets.zig");
 pub const compositor = @import("compositor.zig");
 pub const hardware_inventory_app = @import("hardware_inventory_app.zig");
@@ -6,6 +6,10 @@ pub const icon = @import("icon.zig");
 pub const input = @import("input.zig");
 pub const painter = @import("painter.zig");
 pub const renderer_gpu = @import("renderer_gpu.zig");
+pub const renderer_font_atlas = @import("renderer_font_atlas.zig");
+pub const renderer_ir = @import("renderer_ir.zig");
+pub const renderer_native_present = @import("renderer_native_present.zig");
+pub const renderer_present = @import("renderer_present.zig");
 pub const renderer_software = @import("renderer_software.zig");
 pub const renderer_surface = @import("renderer_surface.zig");
 pub const component_gallery = @import("component_gallery.zig");
@@ -24,6 +28,10 @@ test {
     _ = input;
     _ = painter;
     _ = renderer_gpu;
+    _ = renderer_font_atlas;
+    _ = renderer_ir;
+    _ = renderer_native_present;
+    _ = renderer_present;
     _ = renderer_software;
     _ = renderer_surface;
     _ = component_gallery;
