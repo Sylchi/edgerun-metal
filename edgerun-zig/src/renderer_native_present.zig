@@ -194,6 +194,17 @@ pub const GpuNativeReceipt = struct {
             self.gpu.presentation_transport == .gpu_command_stream and
             (self.native.transport == .drm_framebuffer or self.native.transport == .wayland_surface);
     }
+
+    pub fn gpuBackedValid(self: GpuNativeReceipt) bool {
+        if (!self.valid()) return false;
+        const gpu_buffer = self.buffer orelse return false;
+        if (!gpu_buffer.valid()) return false;
+        return switch (self.native.transport) {
+            .drm_framebuffer => gpu_buffer.kind == .scanout or gpu_buffer.kind == .dma_buf,
+            .wayland_surface => gpu_buffer.kind == .dma_buf,
+            else => false,
+        };
+    }
 };
 
 pub const Sink = struct {
@@ -846,6 +857,7 @@ test "native gpu render submits wayland commit from canonical ir" {
     );
 
     try std.testing.expect(receipt.valid());
+    try std.testing.expect(!receipt.gpuBackedValid());
     try std.testing.expectEqual(renderer_present.Transport.gpu_command_stream, receipt.gpu.presentation_transport);
     try std.testing.expectEqual(renderer_present.Transport.wayland_surface, receipt.native.transport);
     try std.testing.expectEqual(@as(usize, 1), gpu_device.began);
@@ -896,6 +908,7 @@ test "native gpu backed render binds scanout surface before native commit" {
     );
 
     try std.testing.expect(receipt.valid());
+    try std.testing.expect(receipt.gpuBackedValid());
     try std.testing.expectEqual(renderer_present.Transport.gpu_command_stream, receipt.gpu.presentation_transport);
     try std.testing.expectEqual(renderer_present.Transport.drm_framebuffer, receipt.native.transport);
     try std.testing.expectEqual(@as(usize, 1), gpu_device.began);
@@ -1029,6 +1042,7 @@ test "native gpu backed wayland render accepts dma buf surface" {
     );
 
     try std.testing.expect(receipt.valid());
+    try std.testing.expect(receipt.gpuBackedValid());
     try std.testing.expectEqual(renderer_present.Transport.wayland_surface, receipt.native.transport);
     try std.testing.expectEqual(@as(usize, 1), gpu_device.began);
     try std.testing.expectEqual(renderer_gpu.BufferKind.dma_buf, receipt.buffer.?.kind);

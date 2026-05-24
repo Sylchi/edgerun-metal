@@ -704,7 +704,7 @@ const NativeApp = struct {
                     tile_height,
                     dmabuf_sink_state.sink(),
                 );
-                if (!receipt.valid() or !dmabuf_sink_state.submitted) return error.WaylandCommitRejected;
+                if (!receipt.gpuBackedValid() or !dmabuf_sink_state.submitted) return error.WaylandCommitRejected;
                 try client.attachDmabufCommit(self.width, self.height);
                 return;
             },
