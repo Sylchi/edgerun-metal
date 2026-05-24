@@ -113,7 +113,7 @@ pub fn main(init: std.process.Init) !void {
     var scene_state = SceneState{};
     const buffers = try scene_state.rebuild(width, height, &font_atlas);
     try renderer_gles.renderFrame(gl, width, height, buffers);
-    try renderer_gles.verifyFrameNonBlank(width, height);
+    _ = try renderer_gles.verifyFrameNonBlank(width, height);
     if (c.eglSwapBuffers(egl.display, egl.surface) != c.EGL_TRUE) return error.EglSwapFailed;
 
     var scanout = try lockScanout(fd, &gbm, @intCast(width), @intCast(height));
