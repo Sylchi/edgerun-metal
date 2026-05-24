@@ -1429,6 +1429,87 @@ test "wasm parser accepts large borrowed active data segments" {
     try std.testing.expectEqual(@as(u8, 48), memory[data_size - 1]);
 }
 
+test "wasm parser borrows long export names" {
+    const export_name = "main-export-name-longer-than-thirty-two-bytes";
+    const export_name_len: u32 = @intCast(export_name.len);
+    const export_payload_size: u32 = 1 + u32LebByteCount(export_name_len) + export_name_len + 2;
+
+    var bytes: [128]u8 = undefined;
+    var writer = TestByteWriter{ .bytes = &bytes };
+
+    try writer.writeAll(&.{
+        0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+        0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7e, 0x03,
+        0x02, 0x01, 0x00, 0x07,
+    });
+    try writeU32Leb(&writer, export_payload_size);
+    try writer.writeByte(0x01);
+    try writeU32Leb(&writer, export_name_len);
+    try writer.writeAll(export_name);
+    try writer.writeAll(&.{
+        0x00, 0x00,
+        0x0a, 0x06,
+        0x01, 0x04,
+        0x00, 0x42,
+        0x2a, 0x0b,
+    });
+
+    var memory: [256]u8 = undefined;
+    var ticks: u64 = 16;
+    var runtime = wasm.Runtime.init(&memory, &ticks);
+    try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64(&runtime, writer.written(), export_name));
+}
+
+test "wasm parser borrows long import names" {
+    const module_name = "edgerun-host-module-name-longer-than-thirty-two-bytes";
+    const import_name = "edgerun-host-import-name-longer-than-thirty-two-bytes";
+    const module_name_len: u32 = @intCast(module_name.len);
+    const import_name_len: u32 = @intCast(import_name.len);
+    const import_payload_size: u32 = 1 +
+        u32LebByteCount(module_name_len) + module_name_len +
+        u32LebByteCount(import_name_len) + import_name_len +
+        2;
+
+    var bytes: [160]u8 = undefined;
+    var writer = TestByteWriter{ .bytes = &bytes };
+
+    try writer.writeAll(&.{
+        0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+        0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7f, 0x02,
+    });
+    try writeU32Leb(&writer, import_payload_size);
+    try writer.writeByte(0x01);
+    try writeU32Leb(&writer, module_name_len);
+    try writer.writeAll(module_name);
+    try writeU32Leb(&writer, import_name_len);
+    try writer.writeAll(import_name);
+    try writer.writeAll(&.{
+        0x00, 0x00,
+        0x03, 0x02,
+        0x01, 0x00,
+        0x07, 0x08,
+        0x01, 0x04,
+        'm',  'a',
+        'i',  'n',
+        0x00, 0x01,
+        0x0a, 0x06,
+        0x01, 0x04,
+        0x00, 0x10,
+        0x00, 0x0b,
+    });
+
+    var memory: [256]u8 = undefined;
+    var ticks: u64 = 16;
+    const imports = [_]wasm.HostImport{.{
+        .module = module_name,
+        .name = import_name,
+        .call = answerI32Import,
+    }};
+    var runtime = wasm.Runtime.initWithImports(&memory, &ticks, &imports);
+
+    try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64(&runtime, writer.written(), "main"));
+}
+
 test "wasm interpreter traps explicit unreachable opcode" {
     var memory: [256]u8 = undefined;
     var ticks: u64 = 4;
