@@ -1578,6 +1578,7 @@ test "wayland gpu recorder accepts canonical ir frame callbacks" {
     );
 
     try std.testing.expect(receipt.valid());
+    try std.testing.expectEqual(renderer_gpu.Rasterization.recorded_commands, receipt.gpu.rasterization);
     try std.testing.expect(sink_state.submitted);
     try std.testing.expectEqual(@as(usize, 1), recorder.began);
     try std.testing.expectEqual(receipt.gpu.primitive_count, recorder.uploaded);
