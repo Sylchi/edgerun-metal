@@ -8,6 +8,8 @@ Code becomes instructions. Instructions change memory. The operating system deci
 
 That simple fact removes a lot of mystery. A program is not a spirit inside the machine. It is a long list of small operations: load this value, compare it with that value, jump here if the comparison passed, write the result back to memory, ask the operating system for permission to do something outside the process.
 
+> Mental model: the CPU is obedient, not wise; it does exactly what authority lets code ask it to do.
+
 ## What the CPU does
 
 - fetch an instruction
@@ -39,10 +41,14 @@ intent -> OS boundary -> allowed action
 allowed action -> object or packet
 ```
 
+## Interactive model
+
+[[demo:post_model]]
+
 ## Main lesson
 
 The CPU does not know what you want. It only knows the next instruction and the boundaries that let that instruction affect the outside world.
 
-## Edgerun seed
+## EdgeRun seed
 
 A deterministic app runtime gives us a way to reason about what instructions were allowed to do, what memory they touched, and what authority they were given. The important question is not only "did the code run?" It is "what could the running code touch?"

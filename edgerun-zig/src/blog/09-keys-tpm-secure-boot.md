@@ -8,6 +8,8 @@ Secure boot checks that boot software is approved. A TPM or secure element can s
 
 Those tools can protect the user. They can also protect a vendor from the user. The mechanism is not enough. You have to ask who controls the keys, who can enroll new software, who can recover after failure, and who can override the policy.
 
+> Mental model: a root of trust is only pro-user if the user has a real path to authority.
+
 ## The hard question
 
 When a device says "this is secure," ask:
@@ -42,6 +44,6 @@ The important part is the direction. Hardware helps bind keys to a measured loca
 
 Security depends less on having a lock and more on who holds the master key, who can change the lock, and what the key is allowed to approve.
 
-## Edgerun seed
+## EdgeRun seed
 
 Critical services should verify user intent and measured runtime state, not require trust in one vendor-approved phone path. A TPM-backed identity is valuable when it signs explicit local authority, not when it becomes another opaque platform blessing.

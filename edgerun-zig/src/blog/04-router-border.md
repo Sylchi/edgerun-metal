@@ -6,6 +6,8 @@ Before a message reaches a server, the device usually talks to a router. Wi-Fi e
 
 The router is the first network authority outside the device. It is close enough to feel like part of the home, but it is still a separate system with its own software, passwords, logs, update policy, DNS settings, firewall rules, and sometimes vendor cloud management.
 
+> Mental model: leaving the device means crossing a border before the internet even begins.
+
 ## What Wi-Fi protects
 
 Wi-Fi encryption protects the radio link between your device and the access point. That matters. Without it, nearby observers could more easily join the network or inspect local traffic.

@@ -4,9 +4,13 @@ A VPN does not remove trust. It moves it.
 
 A VPN creates an encrypted tunnel from your device or router to someone else's network. That can be useful when your local network is hostile, censored, or untrusted. But the pipe ends somewhere, and at the end of that pipe is another network.
 
+> The joke: a commercial VPN does not delete the middleman. It gives the middleman a new logo and a nicer landing page.
+
 ## The marketing problem
 
-Separate useful private connectivity from consumer privacy theater. The reader should leave understanding that VPN means "tunnel to another middleman," not "privacy solved."
+A useful VPN is private connectivity. Marketing often sells something else: the feeling that privacy has been solved because the local ISP can see less. Those are different claims.
+
+VPN means "tunnel to another network." It does not mean "trust disappeared."
 
 ## The path
 
@@ -22,7 +26,7 @@ After commercial VPN:
 you -> router -> ISP -> VPN provider -> website
 ```
 
-Your ISP sees less of the final destination, but the VPN provider now sees a concentrated version of your traffic metadata. You did not eliminate the watcher. You changed the watcher.
+Your ISP sees less of the final destination, but the VPN provider now sees a concentrated version of your traffic metadata. You did not eliminate the watcher. You changed the watcher and moved the exit.
 
 ## Two different things called VPN
 
@@ -30,6 +34,8 @@ Your ISP sees less of the final destination, but the VPN provider now sees a con
 - Commercial consumer VPN: "hide your IP," "be anonymous," and "secure your internet." This sends your traffic through a stranger's exit server.
 
 With a commercial VPN you may be trusting the VPN company, hosting provider, server admins, logging policy, payment processor, jurisdiction, app, browser extension, update mechanism, DNS resolver, and sometimes a root certificate.
+
+That can still be the right trade in a hostile network. It is not a magic amulet.
 
 ## The network boundary problem
 
@@ -49,7 +55,7 @@ Your local ISP is usually licensed, physically present in your country, connecte
 
 A random VPN provider may be a shell company, renting servers from another provider, operating across jurisdictions, reselling infrastructure, using affiliates, hiding ownership, or changing operators without the user knowing.
 
-So the sharper question is: why replace a regulated local network operator with an anonymous marketing company and call that privacy?
+So the sharper question is: why replace a regulated local network operator with an anonymous marketing company and call that privacy by default?
 
 ## What VPNs can help with
 
@@ -74,6 +80,8 @@ So the sharper question is: why replace a regulated local network operator with 
 - cloud data ownership
 - metadata after the VPN exit
 - trust in the service you are using
+
+> Turning on a VPN is not a personality trait. It is one routing choice in a larger trust graph.
 
 ## Who sees what
 

@@ -11,6 +11,7 @@ pub const launch_button_id: u32 = site_chrome.launch_button_id;
 pub const search_button_id: u32 = site_chrome.search_button_id;
 pub const blog_button_id: u32 = site_chrome.blog_button_id;
 pub const source_button_id: u32 = site_chrome.source_button_id;
+pub const mobile_menu_button_id: u32 = site_chrome.mobile_menu_button_id;
 pub const reveal_identity_button_id: u32 = 20_001;
 
 const max_columns: usize = 4;
@@ -27,6 +28,7 @@ const hero_split_gap: f32 = 92.0;
 const hero_split_min_w: f32 = hero_terminal_min_w + hero_split_gap + hero_copy_min_w;
 const hero_split_terminal_y: f32 = 84.0;
 const hero_split_copy_y: f32 = 92.0;
+const hero_split_min_h: f32 = 760.0;
 const hero_stacked_copy_y: f32 = 44.0;
 const hero_stacked_copy_max_w: f32 = 860.0;
 const hero_stacked_paragraph_max_w: f32 = 560.0;
@@ -40,6 +42,9 @@ const hero_inline_title_min_w: f32 = 720.0;
 const hero_inline_title_first_w: f32 = 286.0;
 const hero_inline_title_accent_w: f32 = 382.0;
 const hero_inline_title_gap: f32 = 12.0;
+const hero_mobile_title_max_w: f32 = 520.0;
+const hero_mobile_title_line_h: f32 = 46.0;
+const hero_mobile_title_average_w: f32 = 24.0;
 const title_weight_offset: f32 = 0.75;
 const terminal_line_h: f32 = 22.0;
 const terminal_line_reveal_ms: f32 = 250.0;
@@ -47,6 +52,7 @@ const terminal_hold_ms: f32 = 1600.0;
 const terminal_cursor_w: f32 = 8.0;
 const terminal_cursor_h: f32 = 14.0;
 const terminal_cursor_alpha: u8 = 190;
+const terminal_hint_gap: f32 = 14.0;
 const impact_card_count: usize = 3;
 const impact_card_gap: f32 = 14.0;
 const impact_card_h: f32 = 190.0;
@@ -66,17 +72,26 @@ const traffic_pie_fraction: f32 = 0.36;
 const traffic_legend_gap: f32 = 30.0;
 const traffic_legend_row_h: f32 = 24.0;
 const traffic_legend_swatch: f32 = 8.0;
+const stats_compact_w: f32 = 620.0;
+const stats_compact_h: f32 = 190.0;
+const stats_default_h: f32 = 138.0;
+const stats_compact_y: f32 = 32.0;
+const stats_default_y: f32 = 38.0;
+const stats_row_h: f32 = 66.0;
+const node_land_alpha: u8 = 8;
+const node_online_halo_alpha: u8 = 18;
+const node_offline_halo_alpha: u8 = 12;
 
 const palette = struct {
     const bg = ui.Color{ .r = 11, .g = 11, .b = 11 };
-    const card = ui.Color{ .r = 18, .g = 18, .b = 18, .a = 238 };
-    const card_alt = ui.Color{ .r = 24, .g = 24, .b = 24, .a = 224 };
+    const card = ui.Color{ .r = 18, .g = 18, .b = 18 };
+    const card_alt = ui.Color{ .r = 24, .g = 24, .b = 24 };
     const muted = ui.Color{ .r = 92, .g = 92, .b = 92 };
     const border = ui.Color{ .r = 56, .g = 56, .b = 56 };
     const text = ui.Color{ .r = 242, .g = 242, .b = 242 };
     const dim = ui.Color{ .r = 154, .g = 154, .b = 154 };
     const primary = ui.Color{ .r = 74, .g = 222, .b = 128 };
-    const neutral_soft = ui.Color{ .r = 32, .g = 32, .b = 32, .a = 190 };
+    const neutral_soft = ui.Color{ .r = 32, .g = 32, .b = 32 };
     const danger = ui.Color{ .r = 239, .g = 68, .b = 68 };
     const orange = ui.Color{ .r = 249, .g = 115, .b = 22 };
     const blue = ui.Color{ .r = 96, .g = 165, .b = 250 };
@@ -105,7 +120,7 @@ const terminal_lines = [_]TerminalLine{
     .{ .value = "initializing wasm runtime...", .color = palette.dim },
     .{ .value = "runtime loaded (2.1mb)", .color = palette.primary },
     .{ .value = "waiting for click entropy...", .color = palette.dim },
-    .{ .value = "keygen runs inside wasm", .color = palette.primary },
+    .{ .value = "click reveal to create identity", .color = palette.primary },
     .{ .value = "identity source: ed25519_public", .color = palette.dim },
     .{ .value = "public identity:", .color = palette.text },
     .{ .value = "bootstrapping local app runtime...", .color = palette.dim },
@@ -153,8 +168,9 @@ pub fn render(scene: *ui.Scene, bounds: ui.Rect, state: State) ui.RenderError!vo
     const content = centered(bounds, content_wide);
     const page_y = header_h - state.scroll_y;
 
-    const map_h = header_h + heroSectionHeight(content.w);
-    try renderNodeMap(scene, ui.Rect.init(bounds.x, bounds.y, bounds.w, map_h), state, content.w >= hero_split_min_w);
+    const map_y = page_y;
+    const map_h = page_top_pad + heroSectionHeight(content.w) + hero_bottom_pad;
+    try renderNodeMap(scene, ui.Rect.init(bounds.x, map_y, bounds.w, map_h), state, false);
 
     const page_clip = ui.Rect.init(bounds.x, bounds.y + header_h, bounds.w, @max(1.0, bounds.h - header_h));
     if (try scene.pushClip(page_clip)) {
@@ -196,7 +212,7 @@ fn flowSections(scene: ?*ui.Scene, bounds: ui.Rect, state: State) ui.RenderError
 fn sectionHeight(content: ui.Rect, kind: SectionKind) f32 {
     return switch (kind) {
         .hero => heroSectionHeight(content.w),
-        .stats => 138.0,
+        .stats => if (content.w < stats_compact_w) stats_compact_h else stats_default_h,
         .problem => 420.0,
         .principles => if (content.w > 720.0) 430.0 else 682.0,
         .architecture => 500.0,
@@ -215,6 +231,7 @@ fn renderHero(scene: *ui.Scene, bounds: ui.Rect, state: State) ui.RenderError!vo
     const stacked = bounds.w < hero_split_min_w;
 
     try renderTerminal(scene, layout.terminal, state);
+    try renderTerminalHint(scene, layout.terminal, state, stacked);
 
     const badge_w = @min(330.0, layout.copy.w);
     const badge_x = if (stacked) layout.copy.x + (layout.copy.w - badge_w) * 0.5 else layout.copy.x;
@@ -222,7 +239,10 @@ fn renderHero(scene: *ui.Scene, bounds: ui.Rect, state: State) ui.RenderError!vo
     try nativeBadge(scene, badge, "Written in Zig. Zero dependencies.");
     try iconQuad(scene, ui.Rect.init(badge.x + 12.0, badge.y + 5.0, 18.0, 18.0), .terminal, palette.primary);
 
-    if (stacked and layout.copy.w >= hero_inline_title_min_w) {
+    if (stacked and layout.copy.w < hero_mobile_title_max_w) {
+        try titleMobile(scene, ui.Rect.init(layout.copy.x, layout.copy.y + 58.0, layout.copy.w, 54.0), "Your Node is", palette.text);
+        try titleMobile(scene, ui.Rect.init(layout.copy.x, layout.copy.y + 118.0, layout.copy.w, 102.0), "Already Running", palette.primary);
+    } else if (stacked and layout.copy.w >= hero_inline_title_min_w) {
         const title_w = hero_inline_title_first_w + hero_inline_title_gap + hero_inline_title_accent_w;
         const title_x = layout.copy.x + (layout.copy.w - title_w) * 0.5;
         try titleLine(scene, ui.Rect.init(title_x, layout.copy.y + 58.0, hero_inline_title_first_w, 58.0), "Your Node is", palette.text);
@@ -271,7 +291,8 @@ fn heroSectionHeight(width: f32) f32 {
     const layout = heroLayout(bounds);
     const terminal_bottom = layout.terminal.y + layout.terminal.h;
     const actions_bottom = layout.button_y + 42.0;
-    return @max(terminal_bottom, actions_bottom) - bounds.y + hero_bottom_pad;
+    const measured = @max(terminal_bottom, actions_bottom) - bounds.y + hero_bottom_pad;
+    return if (width >= hero_split_min_w) @max(measured, hero_split_min_h) else measured;
 }
 
 fn renderTerminal(scene: *ui.Scene, bounds: ui.Rect, state: State) ui.RenderError!void {
@@ -291,8 +312,13 @@ fn renderTerminal(scene: *ui.Scene, bounds: ui.Rect, state: State) ui.RenderErro
         y += terminal_line_h;
     }
     if (visible > terminal_identity_line_index) {
-        try text(scene, bounds.x + 24.0, y, bounds.w - 48.0, 14.0, state.public_identity, palette.primary);
-        y += terminal_line_h;
+        const identity_h: f32 = if (state.public_identity_ready) 36.0 else 14.0;
+        try scene.pushWrappedText(ui.Rect.init(bounds.x + 24.0, y, bounds.w - 48.0, identity_h), state.public_identity, palette.primary, .{
+            .line_height = 16.0,
+            .average_char_width = 8.2,
+            .max_lines = 2,
+        });
+        y += if (state.public_identity_ready) 38.0 else terminal_line_h;
     }
     if (visible > terminal_identity_line_index + 1) {
         for (terminal_lines[terminal_identity_line_index..@min(visible - 1, terminal_lines.len)]) |line| {
@@ -305,13 +331,28 @@ fn renderTerminal(scene: *ui.Scene, bounds: ui.Rect, state: State) ui.RenderErro
     try fill(scene, ui.Rect.init(bounds.x + 24.0, y, terminal_cursor_w, terminal_cursor_h), cursor_color, 1.0);
 
     if (!state.public_identity_ready) {
-        const reveal = ui.Rect.init(bounds.x + 24.0, bounds.y + bounds.h - 54.0, 174.0, 32.0);
-        try outlineButton(scene, reveal, "Reveal Identity", reveal_identity_button_id);
+        const reveal = ui.Rect.init(bounds.x + 24.0, bounds.y + bounds.h - 54.0, 196.0, 32.0);
+        try outlineButton(scene, reveal, "Click to Reveal ID", reveal_identity_button_id);
     }
 }
 
+fn renderTerminalHint(scene: *ui.Scene, terminal: ui.Rect, state: State, stacked: bool) ui.RenderError!void {
+    const hint_y = terminal.y + terminal.h + terminal_hint_gap;
+    const hint_w = if (stacked) terminal.w else @min(terminal.w, 480.0);
+    const hint_x = if (stacked) terminal.x + (terminal.w - hint_w) * 0.5 else terminal.x;
+    const message = if (state.public_identity_ready)
+        "Your browser app is running. Share this public ID to connect with others. No account needed."
+    else
+        "Reveal creates an ephemeral browser identity inside the WASM app. No account needed.";
+    try scene.pushWrappedText(ui.Rect.init(hint_x, hint_y, hint_w, 36.0), message, palette.dim, .{
+        .line_height = 18.0,
+        .average_char_width = 8.5,
+        .max_lines = 2,
+    });
+}
+
 fn renderStats(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
-    try fill(scene, bounds, ui.Color{ .r = 18, .g = 18, .b = 18, .a = 120 }, 0.0);
+    try fill(scene, bounds, palette.card, 0.0);
     try fill(scene, ui.Rect.init(bounds.x, bounds.y, bounds.w, 1.0), palette.border, 0.0);
     const content = centered(bounds, content_wide);
     const stats = [_]struct { []const u8, []const u8, []const u8 }{
@@ -320,9 +361,13 @@ fn renderStats(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
         .{ "2.4", "M", "Messages Today" },
         .{ "0", "", "Zero Accounts Created" },
     };
-    const cols = columns(content, 4, 18.0);
+    const compact = content.w < stats_compact_w;
+    const cols: usize = if (compact) 2 else columns(content, 4, 18.0);
+    const start_y = bounds.y + if (compact) stats_compact_y else stats_default_y;
     for (stats, 0..) |item, index| {
-        const r = colBounds(content, cols, 18.0, index, bounds.y + 38.0, 66.0);
+        const row = index / cols;
+        const col = index % cols;
+        const r = colBounds(content, cols, 18.0, col, start_y + @as(f32, @floatFromInt(row)) * stats_row_h, stats_row_h);
         try text(scene, r.x, r.y, r.w, 24.0, item[0], palette.text);
         try text(scene, r.x + 74.0, r.y + 4.0, 72.0, 16.0, item[1], palette.primary);
         try text(scene, r.x, r.y + 34.0, r.w, 14.0, item[2], palette.dim);
@@ -476,7 +521,7 @@ fn renderFooter(scene: *ui.Scene, bounds: ui.Rect, content: ui.Rect) ui.RenderEr
     try fill(scene, ui.Rect.init(bounds.x, bounds.y, bounds.w, 1.0), palette.border, 0.0);
     try text(scene, content.x, bounds.y + 44.0, 120.0, 18.0, "EdgeRun", palette.text);
     try paragraph(scene, ui.Rect.init(content.x, bounds.y + 78.0, 260.0, 54.0), "A decentralized runtime for user sovereignty. Own your digital identity.");
-    try footerColumn(scene, ui.Rect.init(content.x + content.w * 0.36, bounds.y + 44.0, 160.0, 150.0), "Product", &.{ "Documentation", "Blog", "App Store", "Roadmap" });
+    try footerColumn(scene, ui.Rect.init(content.x + content.w * 0.36, bounds.y + 44.0, 160.0, 150.0), "Product", &.{ "Documentation", "Academy", "App Store", "Roadmap" });
     try footerColumn(scene, ui.Rect.init(content.x + content.w * 0.58, bounds.y + 44.0, 180.0, 150.0), "Resources", &.{ "Getting Started", "Architecture", "Security Model", "API Reference" });
     try footerColumn(scene, ui.Rect.init(content.x + content.w * 0.81, bounds.y + 44.0, 140.0, 150.0), "Community", &.{ "GitHub", "Discord", "Contributing" });
 }
@@ -489,7 +534,7 @@ fn renderNodeMap(scene: *ui.Scene, bounds: ui.Rect, state: State, show_status: b
         while (y < bounds.y + bounds.h) : (y += grid) {
             const lng = (x / @max(bounds.w, 1.0)) * 360.0 - 180.0;
             const lat = 90.0 - (y / @max(bounds.h, 1.0)) * 140.0;
-            if (isLand(lat, lng)) try fill(scene, ui.Rect.init(x, y, 2.0, 2.0), ui.Color{ .r = 255, .g = 255, .b = 255, .a = 12 }, 1.0);
+            if (isLand(lat, lng)) try fill(scene, ui.Rect.init(x, y, 2.0, 2.0), ui.Color{ .r = 255, .g = 255, .b = 255, .a = node_land_alpha }, 1.0);
         }
     }
     const nodes = [_]struct { f32, f32, bool }{
@@ -500,7 +545,7 @@ fn renderNodeMap(scene: *ui.Scene, bounds: ui.Rect, state: State, show_status: b
     };
     for (nodes) |node| {
         const p = latLng(bounds, node[0], node[1]);
-        try fill(scene, ui.Rect.init(p.x - 5.0, p.y - 5.0, 10.0, 10.0), ui.Color{ .r = 255, .g = 255, .b = 255, .a = if (node[2]) 24 else 16 }, 5.0);
+        try fill(scene, ui.Rect.init(p.x - 5.0, p.y - 5.0, 10.0, 10.0), ui.Color{ .r = 255, .g = 255, .b = 255, .a = if (node[2]) node_online_halo_alpha else node_offline_halo_alpha }, 5.0);
         try fill(scene, ui.Rect.init(p.x - 2.0, p.y - 2.0, 4.0, 4.0), if (node[2]) palette.primary else palette.muted, 2.0);
     }
     if (show_status and state.scroll_y <= 1.0) {
@@ -525,6 +570,12 @@ fn titleAccent(scene: *ui.Scene, bounds: ui.Rect, value: []const u8) ui.RenderEr
 fn titleLine(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, color: ui.Color) ui.RenderError!void {
     try scene.pushAlignedText(ui.Rect.init(bounds.x + title_weight_offset, bounds.y, bounds.w, bounds.h), value, color, .start);
     try scene.pushAlignedText(bounds, value, color, .start);
+}
+
+fn titleMobile(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, color: ui.Color) ui.RenderError!void {
+    const wrap = ui.TextWrap{ .line_height = hero_mobile_title_line_h, .average_char_width = hero_mobile_title_average_w, .max_lines = 2 };
+    try scene.pushWrappedText(ui.Rect.init(bounds.x + title_weight_offset, bounds.y, bounds.w, bounds.h), value, color, wrap);
+    try scene.pushWrappedText(bounds, value, color, wrap);
 }
 
 fn titleWrapped(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, color: ui.Color) ui.RenderError!void {
@@ -697,7 +748,10 @@ fn nativeComponent(scene: *ui.Scene, bounds: ui.Rect, component: components.Comp
 }
 
 fn siteStyle() ui.Style {
-    return site_chrome.style();
+    var resolved = site_chrome.style();
+    resolved.panel = palette.card;
+    resolved.row = palette.card_alt;
+    return resolved;
 }
 
 fn fill(scene: *ui.Scene, bounds: ui.Rect, color: ui.Color, r: f32) ui.RenderError!void {
@@ -771,6 +825,8 @@ test "landing page renders site sections and primary actions" {
     try std.testing.expect(hasText(scene.written(), "Centralization Crisis"));
     try std.testing.expect(hasText(scene.written(), "Pure Zig."));
     try std.testing.expect(hasText(scene.written(), "Others"));
+    try std.testing.expect(hasText(scene.written(), "Click to Reveal ID"));
+    try std.testing.expect(!hasText(scene.written(), "113 nodes online"));
     try std.testing.expect(hasPieSlice(scene.written()));
     try std.testing.expect(hasHit(scene.written(), docs_button_id));
     try std.testing.expect(hasHit(scene.written(), apps_button_id));
@@ -793,6 +849,20 @@ test "landing page clips scrolled content below fixed header" {
 test "landing page content height reaches footer without extra scroll space" {
     try std.testing.expectEqual(try flowSections(null, ui.Rect.init(0.0, 0.0, 1280.0, 1.0), .{}), contentHeight(1280.0));
     try std.testing.expect(contentHeight(640.0) > contentHeight(1280.0));
+}
+
+test "compact stats render as two reference columns" {
+    var commands: [128]ui.Command = undefined;
+    var clips: [4]ui.Rect = undefined;
+    var scene = ui.Scene.initWithClips(&commands, &clips);
+    try renderStats(&scene, ui.Rect.init(0.0, 0.0, 390.0, stats_compact_h));
+
+    const active = textOrigin(scene.written(), "Active Nodes").?;
+    const bandwidth = textOrigin(scene.written(), "Mesh Bandwidth").?;
+    const messages = textOrigin(scene.written(), "Messages Today").?;
+    try std.testing.expect(bandwidth.x > active.x);
+    try std.testing.expect(messages.y > active.y);
+    try std.testing.expect(messages.x == active.x);
 }
 
 test "impact section cards stay inside measured section" {
@@ -839,6 +909,30 @@ test "terminal animation reveals deterministic line counts" {
     try std.testing.expectEqual(@as(usize, 1), terminalVisibleLineCount(1.0));
     try std.testing.expectEqual(@as(usize, 2), terminalVisibleLineCount(terminal_line_reveal_ms));
     try std.testing.expectEqual(terminal_line_count, terminalVisibleLineCount(terminal_line_reveal_ms * @as(f32, @floatFromInt(terminal_line_count)) + 1.0));
+}
+
+test "hero node map scrolls with page content" {
+    var commands_top: [1024]ui.Command = undefined;
+    var scene_top = ui.Scene.init(&commands_top);
+    try renderNodeMap(&scene_top, ui.Rect.init(0.0, header_h, 1280.0, 720.0), .{}, false);
+
+    var commands_scrolled: [1024]ui.Command = undefined;
+    var scene_scrolled = ui.Scene.init(&commands_scrolled);
+    try renderNodeMap(&scene_scrolled, ui.Rect.init(0.0, header_h - 120.0, 1280.0, 720.0), .{}, false);
+
+    const first_top = firstNodeMapNode(scene_top.written()).?;
+    const first_scrolled = firstNodeMapNode(scene_scrolled.written()).?;
+    try std.testing.expectApproxEqAbs(first_top.y - 120.0, first_scrolled.y, 0.01);
+}
+
+fn firstNodeMapNode(commands: []const ui.Command) ?ui.Rect {
+    for (commands) |command| switch (command) {
+        .rect => |rect_command| {
+            if (rect_command.bounds.w == 10.0 and rect_command.bounds.h == 10.0 and rect_command.color.a == node_online_halo_alpha) return rect_command.bounds;
+        },
+        else => {},
+    };
+    return null;
 }
 
 fn hasText(commands: []const ui.Command, value: []const u8) bool {

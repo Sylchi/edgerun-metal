@@ -6,6 +6,8 @@ When you type a domain, your device asks a resolver for an address. The resolver
 
 Names feel permanent because humans need them to be memorable. The machinery underneath is not permanent. It is delegated, cached, leased, updated, filtered, blocked, sold, seized, expired, and sometimes lied about.
 
+> Mental model: DNS is a pointer system, not identity.
+
 ## The lookup path
 
 [[demo:dns_lookup_path]]

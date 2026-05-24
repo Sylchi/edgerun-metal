@@ -6,6 +6,8 @@ Today that context is fragmented across companies. Each company gets a slice. No
 
 The most useful assistant is the one that understands your real context. The most dangerous assistant is also the one that understands your real context unless it runs under your control.
 
+> Mental model: personal context is the user's memory, not raw material for another account.
+
 ## Personal context
 
 ```text
@@ -24,6 +26,16 @@ Context is the valuable part. A model without your data is generic. A model with
 - no assistant: privacy is preserved by giving up useful computation
 
 The better path is local user-owned memory: import data locally, index it locally, run local AI first, and send only explicit sealed tasks to remote compute when needed.
+
+## Why local memory changes the shape
+
+If memory lives locally, the assistant can become less magical and more inspectable. You can see which files were indexed, which message thread answered a question, which calendar item created a reminder, and which sealed object left the machine. The assistant stops being an all-knowing account and becomes a tool with receipts.
+
+That matters for normal people because mistakes become fixable. A bad summary can be traced to a source. A sensitive task can stay on device. A remote model can receive only the narrow job it needs instead of a copy of your life.
+
+## Interactive model
+
+[[demo:post_model]]
 
 ## Main lesson
 

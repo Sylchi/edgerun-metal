@@ -6,6 +6,8 @@ A phone does not magically know you. It recognizes signals: SIM card, unlock PIN
 
 The phone is not identifying a soul. It is correlating evidence. Some evidence is local, like a PIN unlocking a device. Some is biometric, like face or fingerprint unlock. Some is networked, like a SIM registration or push token. Some is commercial, like a payment card or app account. Some is behavioral, like location and usage history.
 
+> Mental model: phone identity is a stack of signals, not proof of personhood.
+
 ## The signal stack
 
 [[demo:phone_identity_stack]]

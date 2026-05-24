@@ -8,6 +8,8 @@ RAM is fast but temporary. Storage is slower but persistent. Apps need RAM to ru
 
 RAM is where the living version of a program exists. The file on disk may contain the app. The database may contain saved records. But when the app is running, the active state is in memory: the current document, the current cursor position, the decoded image, the temporary network response, the decrypted secret, the undo stack, the open handles, and the buffers waiting to be written.
 
+> Mental model: memory is temporary authority to exist while work is happening.
+
 ## Why this matters
 
 When an app is alive, its working state lives in RAM:
@@ -39,10 +41,14 @@ The same idea applies to secret material. A private key, decrypted note, or loca
 
 These are not abstract computer science problems. They are ways that apps crash, slow down, expose data, or make local decisions impossible to audit.
 
+## Interactive model
+
+[[demo:post_model]]
+
 ## Main lesson
 
 RAM is where a program lives while it is alive. Controlling memory means controlling what can exist, what can be touched, and when temporary authority ends.
 
-## Edgerun seed
+## EdgeRun seed
 
-Edgerun apps receive memory from a parent runtime. Subapps can only use what the parent gave them. When an app closes, its memory can disappear cleanly, and sensitive work can be scoped to the operation that actually needed it.
+EdgeRun apps receive memory from a parent runtime. Subapps can only use what the parent gave them. When an app closes, its memory can disappear cleanly, and sensitive work can be scoped to the operation that actually needed it.

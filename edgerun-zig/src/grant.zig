@@ -27,7 +27,7 @@ pub const Grant = struct {
     pub fn valid(self: Grant) bool {
         return self.issuer.valid() and
             self.subject.valid() and
-            (self.amount != 0 or self.resource == .route_handles or self.resource == .device_handles) and
+            (self.amount != 0 or zeroAmountAllowed(self.resource)) and
             self.epoch.valid();
     }
 
@@ -47,6 +47,20 @@ pub const Grant = struct {
         return preimage.hash("edgerun:zig:v1:grant", writer.written());
     }
 };
+
+fn zeroAmountAllowed(resource: Resource) bool {
+    return switch (resource) {
+        .storage_bytes,
+        .storage_slots,
+        .route_handles,
+        .device_handles,
+        => true,
+        .memory,
+        .read_only_memory,
+        .execution_ticks,
+        => false,
+    };
+}
 
 pub const SpawnReceipt = struct {
     parent: identity.Id,
@@ -248,6 +262,7 @@ test "spawn receipt deterministically records delegated resources" {
     const route_handle = preimage.hash("edgerun:zig:v1:test-route", "spawn receipt route");
     const receipt = spawnReceipt(parent, child, epoch, 16, 32, 2).?;
     const allocated_receipt = spawnReceiptAllocated(parent, child, epoch, 16, 32, 2, 4, 1, 1, route_handle, device.id).?;
+    const memory_only_receipt = spawnReceiptAllocated(parent, child, epoch, 16, 0, 0, 4, 0, 0, [_]u8{0} ** preimage.hash_size, .{ .bytes = [_]u8{0} ** identity.id_size }).?;
 
     try std.testing.expect(receipt.valid());
     try std.testing.expect(bytes.nonzero(&receipt.id().?));
@@ -260,6 +275,9 @@ test "spawn receipt deterministically records delegated resources" {
     try std.testing.expectEqual(@as(u64, 1), allocated_receipt.device_handles.amount);
     try std.testing.expect(bytes.eql(&route_handle, &allocated_receipt.route_handle));
     try std.testing.expect(allocated_receipt.device_handle.eql(device.id));
+    try std.testing.expect(memory_only_receipt.valid());
+    try std.testing.expectEqual(@as(u64, 0), memory_only_receipt.storage_bytes.amount);
+    try std.testing.expectEqual(@as(u64, 0), memory_only_receipt.storage_slots.amount);
     try std.testing.expect(spawnReceiptAllocated(parent, child, epoch, 16, 32, 2, 4, 1, 1, [_]u8{0} ** preimage.hash_size, device.id) == null);
     try std.testing.expect(spawnReceiptAllocated(parent, child, epoch, 16, 32, 2, 4, 1, 1, route_handle, .{ .bytes = [_]u8{0} ** identity.id_size }) == null);
 }

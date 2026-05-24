@@ -1,4 +1,5 @@
 const std = @import("std");
+const browser_runtime_js = @import("browser_runtime_js.zig");
 const clock = @import("clock.zig");
 const icon = @import("icon.zig");
 const identity = @import("identity.zig");
@@ -10,7 +11,10 @@ const component_gallery = @import("component_gallery.zig");
 const site_apps = @import("site_apps.zig");
 const site_blog = @import("site_blog.zig");
 const site_chrome = @import("site_chrome.zig");
+const site_cursor = @import("site_cursor.zig");
+const site_images = @import("site_images.zig");
 const site_landing = @import("site_landing.zig");
+const site_navigation = @import("site_navigation.zig");
 const tabler_atlas = @import("tabler_atlas.zig");
 const ui = @import("ui.zig");
 const ui_codec = @import("ui_codec.zig");
@@ -46,10 +50,13 @@ const font_row_gap: usize = 8;
 const font_bitmap_bytes: usize = 8 * 1024 * 1024;
 const icon_atlas_width: usize = tabler_atlas.width;
 const icon_atlas_height: usize = tabler_atlas.height;
-const post_image_bytes = @embedFile("assets/old-man-yells-at-cloud.webp");
 const site_source_url = "https://github.com/edgerun";
-const route_bytes_capacity: usize = 96;
-const route_hash_bytes_capacity: usize = route_bytes_capacity + 1;
+const route_bytes_capacity: usize = site_navigation.route_path_capacity;
+const route_hash_bytes_capacity: usize = site_navigation.route_hash_capacity;
+const host_command_capacity: usize = 4;
+const title_text = "EdgeRun Academy";
+const dom_surface_id = "edgerun-dom";
+const boot_dom_html = "";
 const search_query_capacity: usize = 64;
 const search_result_limit: usize = 6;
 const search_overlay_id: u32 = 70_000;
@@ -62,9 +69,6 @@ const key_upper_k: u32 = 'K';
 const key_lower_k: u32 = 'k';
 const key_backspace_text = "Backspace";
 const key_escape_text = "Escape";
-const key_modifier_ctrl: u32 = 1 << 0;
-const key_modifier_meta: u32 = 1 << 1;
-const key_modifier_alt: u32 = 1 << 2;
 const entropy_pool_size: usize = 32;
 const ephemeral_seed_size: usize = std.crypto.sign.Ed25519.KeyPair.seed_length;
 const public_identity_prefix = "er1:";
@@ -127,6 +131,11 @@ var route_bytes: [route_bytes_capacity]u8 = undefined;
 var route_len: usize = 0;
 var route_hash_bytes: [route_hash_bytes_capacity]u8 = undefined;
 var route_hash_len: usize = 0;
+var browser_hover_x: f32 = -1.0;
+var browser_hover_y: f32 = -1.0;
+var host_commands: [host_command_capacity]HostCommand = [_]HostCommand{.{}} ** host_command_capacity;
+var host_command_len: usize = 0;
+var next_host_command_id: u32 = 1;
 var entropy_pool: [entropy_pool_size]u8 = initialEntropyPool();
 var entropy_event_count: u64 = 0;
 var ephemeral_seed: [ephemeral_seed_size]u8 = [_]u8{0} ** ephemeral_seed_size;
@@ -143,18 +152,41 @@ const HostAction = enum(u32) {
     open_url = 1,
 };
 
-const CursorKind = enum(u32) {
-    default = 0,
-    pointer = 1,
-    text = 2,
-    grabbing = 3,
+const HostCommandKind = enum(u32) {
+    none = 0,
+    open_url = 1,
+    push_route_hash = 2,
+    set_title = 3,
+    set_element_html = 4,
 };
 
-const SiteView = enum(u32) {
-    landing = 0,
-    blog = 1,
-    apps = 2,
+const HostCommand = struct {
+    kind: HostCommandKind = .none,
+    id: u32 = 0,
 };
+
+const BrowserEventKind = enum(u32) {
+    resize = 1,
+    wheel = 2,
+    pointer_move = 3,
+    pointer_leave = 4,
+    pointer_down = 5,
+    pointer_up = 6,
+    popstate = 7,
+    hashchange = 8,
+    key_down = 9,
+};
+
+const browser_event_prevent_default: u32 = 1 << 0;
+const browser_event_schedule_frame: u32 = 1 << 1;
+const browser_event_host_command: u32 = 1 << 3;
+const browser_event_capture_pointer: u32 = 1 << 4;
+const browser_event_release_pointer: u32 = 1 << 5;
+const browser_event_error: u32 = 1 << 8;
+
+const CursorKind = site_cursor.Kind;
+
+const SiteView = site_navigation.View;
 
 const SiteState = struct {
     view: SiteView = .landing,
@@ -355,12 +387,20 @@ export fn er_ui_gpu_overlay_icon_vertex_buffer_len() usize {
     return gpu_overlay_icon_vertex_float_len;
 }
 
-export fn er_ui_post_image_webp_ptr() usize {
-    return @intFromPtr(post_image_bytes.ptr);
+export fn er_ui_post_image_rgba_ptr() usize {
+    return site_images.cloudMemeRgbaPtr();
 }
 
-export fn er_ui_post_image_webp_len() usize {
-    return post_image_bytes.len;
+export fn er_ui_post_image_rgba_len() usize {
+    return site_images.cloudMemeRgbaLen();
+}
+
+export fn er_ui_post_image_width() u32 {
+    return site_images.cloud_meme_width;
+}
+
+export fn er_ui_post_image_height() u32 {
+    return site_images.cloud_meme_height;
 }
 
 export fn er_ui_font_atlas_width() u32 {
@@ -439,6 +479,15 @@ export fn er_ui_hover_hit_id() u32 {
 
 export fn er_ui_cursor_kind() u32 {
     return @intFromEnum(currentCursorKind());
+}
+
+export fn er_ui_cursor_css_ptr() usize {
+    const value = currentCursorCss();
+    return @intFromPtr(value.ptr);
+}
+
+export fn er_ui_cursor_css_len() usize {
+    return currentCursorCss().len;
 }
 
 export fn er_ui_last_action_kind() u32 {
@@ -558,6 +607,79 @@ export fn er_ui_site_host_action_url_len() usize {
     return site_source_url.len;
 }
 
+export fn er_ui_host_command_count() u32 {
+    return @intCast(host_command_len);
+}
+
+export fn er_ui_host_command_kind(index: u32) u32 {
+    if (index >= host_command_len) return @intFromEnum(HostCommandKind.none);
+    return @intFromEnum(host_commands[index].kind);
+}
+
+export fn er_ui_host_command_id(index: u32) u32 {
+    if (index >= host_command_len) return 0;
+    return host_commands[index].id;
+}
+
+export fn er_ui_host_command_target_ptr(index: u32) usize {
+    if (index >= host_command_len) return 0;
+    return switch (host_commands[index].kind) {
+        .none, .open_url, .push_route_hash, .set_title => 0,
+        .set_element_html => @intFromPtr(dom_surface_id.ptr),
+    };
+}
+
+export fn er_ui_host_command_target_len(index: u32) usize {
+    if (index >= host_command_len) return 0;
+    return switch (host_commands[index].kind) {
+        .none, .open_url, .push_route_hash, .set_title => 0,
+        .set_element_html => dom_surface_id.len,
+    };
+}
+
+export fn er_ui_host_command_payload_ptr(index: u32) usize {
+    if (index >= host_command_len) return 0;
+    return switch (host_commands[index].kind) {
+        .none => 0,
+        .open_url => @intFromPtr(site_source_url.ptr),
+        .push_route_hash => {
+            refreshRouteHash();
+            return @intFromPtr(route_hash_bytes[0..].ptr);
+        },
+        .set_title => @intFromPtr(title_text.ptr),
+        .set_element_html => @intFromPtr(boot_dom_html.ptr),
+    };
+}
+
+export fn er_ui_host_command_payload_len(index: u32) usize {
+    if (index >= host_command_len) return 0;
+    return switch (host_commands[index].kind) {
+        .none => 0,
+        .open_url => site_source_url.len,
+        .push_route_hash => {
+            refreshRouteHash();
+            return route_hash_len;
+        },
+        .set_title => title_text.len,
+        .set_element_html => boot_dom_html.len,
+    };
+}
+
+export fn er_ui_host_command_clear() u32 {
+    clearHostCommands();
+    site_state.resetHostAction();
+    last_error = .ok;
+    return @intFromEnum(ErrorCode.ok);
+}
+
+export fn er_ui_bootstrap_js_ptr() usize {
+    return @intFromPtr(browser_runtime_js.source.ptr);
+}
+
+export fn er_ui_bootstrap_js_len() usize {
+    return browser_runtime_js.source.len;
+}
+
 export fn er_ui_site_route_hash_ptr() usize {
     refreshRouteHash();
     return @intFromPtr(route_hash_bytes[0..].ptr);
@@ -585,72 +707,35 @@ export fn er_ui_site_set_route_path(path_len: usize) u32 {
     return @intFromEnum(ErrorCode.ok);
 }
 
+export fn er_ui_site_set_browser_route_hash(hash_len: usize) u32 {
+    if (hash_len > input_bytes.len) return finishError(.bad_input);
+    const route_path = routePathFromBrowserHash(input_bytes[0..hash_len]) catch return finishError(.bad_input);
+    applyRoutePath(route_path);
+    last_error = .ok;
+    return @intFromEnum(ErrorCode.ok);
+}
+
 export fn er_ui_site_activate_hit(hit_id: u32) u32 {
     site_state.resetHostAction();
+    clearHostCommands();
+    if (site_navigation.fromHit(hit_id, currentRoute())) |route| {
+        applyRoute(route);
+        return @intFromEnum(site_state.host_action);
+    }
     switch (hit_id) {
-        site_chrome.logo_button_id => {
-            site_state.view = .landing;
-            site_state.selected_blog_post_id = 0;
-            site_state.blog_arc_filter_index = null;
-            site_state.resetScroll();
-            site_state.search_open = false;
-        },
         site_chrome.search_button_id => {
             site_state.search_open = true;
         },
-        site_chrome.docs_button_id => {
-            site_state.view = .landing;
-            site_state.selected_blog_post_id = 0;
-            site_state.blog_arc_filter_index = null;
-            site_state.resetScroll();
-            site_state.search_open = false;
-        },
-        site_chrome.blog_button_id => {
-            site_state.view = .blog;
-            site_state.selected_blog_post_id = 0;
-            site_state.blog_arc_filter_index = null;
-            site_state.resetScroll();
-            site_state.search_open = false;
-        },
-        site_chrome.apps_button_id => {
-            site_state.view = .apps;
-            site_state.selected_blog_post_id = 0;
-            site_state.blog_arc_filter_index = null;
-            site_state.resetScroll();
-            site_state.search_open = false;
-        },
         site_chrome.source_button_id => {
             site_state.host_action = .open_url;
+            queueHostCommand(.open_url) catch return finishError(.bad_input);
         },
         site_landing.reveal_identity_button_id => {
             if (!ephemeral_identity_ready) {
                 generateEphemeralIdentity() catch return finishError(.identity_failed);
             }
         },
-        site_blog.back_button_id => {
-            site_state.selected_blog_post_id = 0;
-            site_state.resetScroll();
-            site_state.search_open = false;
-        },
-        site_blog.all_lessons_button_id => {
-            site_state.view = .blog;
-            site_state.selected_blog_post_id = 0;
-            site_state.blog_arc_filter_index = null;
-            site_state.resetScroll();
-            site_state.search_open = false;
-        },
-        else => if (site_blog.postById(hit_id) != null) {
-            site_state.view = .blog;
-            site_state.selected_blog_post_id = hit_id;
-            site_state.resetScroll();
-            site_state.search_open = false;
-        } else if (site_blog.arcFilterIndexById(hit_id)) |index| {
-            site_state.view = .blog;
-            site_state.selected_blog_post_id = 0;
-            site_state.blog_arc_filter_index = index;
-            site_state.resetScroll();
-            site_state.search_open = false;
-        },
+        else => {},
     }
     return @intFromEnum(site_state.host_action);
 }
@@ -684,12 +769,12 @@ export fn er_ui_site_search_input_byte(byte: u32) u32 {
     return @intFromEnum(ErrorCode.ok);
 }
 
-export fn er_ui_site_key_event(key_len: usize, modifiers: u32) u32 {
+export fn er_ui_site_key_event(key_len: usize, ctrl: u32, meta: u32, alt: u32) u32 {
     if (key_len == 0) return 0;
     if (key_len > input_bytes.len) return finishError(.bad_input);
     const key = input_bytes[0..key_len];
-    const ctrl_or_meta = (modifiers & (key_modifier_ctrl | key_modifier_meta)) != 0;
-    const alt = (modifiers & key_modifier_alt) != 0;
+    const ctrl_or_meta = modifierPressed(ctrl) or modifierPressed(meta);
+    const alt_pressed = modifierPressed(alt);
 
     const key_byte = singleAsciiKey(key);
     const search_shortcut = key_byte != null and (key_byte.? == key_lower_k or key_byte.? == key_upper_k) and ctrl_or_meta;
@@ -711,7 +796,7 @@ export fn er_ui_site_key_event(key_len: usize, modifiers: u32) u32 {
         last_error = .ok;
         return 1;
     }
-    if (!ctrl_or_meta and !alt and key_byte != null and key_byte.? >= 32 and key_byte.? <= 126) {
+    if (!ctrl_or_meta and !alt_pressed and key_byte != null and key_byte.? >= 32 and key_byte.? <= 126) {
         if (site_state.search_query_len >= site_state.search_query.len) return finishError(.bad_input);
         site_state.search_query[site_state.search_query_len] = key_byte.?;
         site_state.search_query_len += 1;
@@ -721,9 +806,103 @@ export fn er_ui_site_key_event(key_len: usize, modifiers: u32) u32 {
     return 0;
 }
 
+export fn er_ui_browser_event(kind_raw: u32, x: f32, y: f32, delta_y: f32, ctrl: u32, meta: u32, alt: u32, text_len: usize, width: f32, height: f32) u32 {
+    const kind: BrowserEventKind = switch (kind_raw) {
+        @intFromEnum(BrowserEventKind.resize) => .resize,
+        @intFromEnum(BrowserEventKind.wheel) => .wheel,
+        @intFromEnum(BrowserEventKind.pointer_move) => .pointer_move,
+        @intFromEnum(BrowserEventKind.pointer_leave) => .pointer_leave,
+        @intFromEnum(BrowserEventKind.pointer_down) => .pointer_down,
+        @intFromEnum(BrowserEventKind.pointer_up) => .pointer_up,
+        @intFromEnum(BrowserEventKind.popstate) => .popstate,
+        @intFromEnum(BrowserEventKind.hashchange) => .hashchange,
+        @intFromEnum(BrowserEventKind.key_down) => .key_down,
+        else => {
+            _ = finishError(.bad_input);
+            return browser_event_error;
+        },
+    };
+
+    switch (kind) {
+        .resize => return browser_event_schedule_frame,
+        .wheel => {
+            const code = er_ui_site_scroll_by(delta_y, width, height);
+            if (code != @intFromEnum(ErrorCode.ok)) return browser_event_error;
+            return browser_event_prevent_default | browser_event_schedule_frame;
+        },
+        .pointer_move => {
+            browser_hover_x = x;
+            browser_hover_y = y;
+            _ = er_ui_pointer_move(x, y);
+            return browser_event_schedule_frame;
+        },
+        .pointer_leave => {
+            browser_hover_x = -1.0;
+            browser_hover_y = -1.0;
+            updateHoverHit(lastCommands(), -1.0, -1.0);
+            return browser_event_schedule_frame;
+        },
+        .pointer_down => {
+            browser_hover_x = x;
+            browser_hover_y = y;
+            _ = er_ui_pointer_down(x, y);
+            return browser_event_capture_pointer | browser_event_schedule_frame;
+        },
+        .pointer_up => {
+            browser_hover_x = x;
+            browser_hover_y = y;
+            _ = er_ui_site_pointer_up(x, y);
+            queueHostCommand(.push_route_hash) catch return browser_event_error;
+            const result = browser_event_release_pointer | browser_event_host_command | browser_event_schedule_frame;
+            return result;
+        },
+        .popstate, .hashchange => {
+            const code = er_ui_site_set_browser_route_hash(text_len);
+            if (code != @intFromEnum(ErrorCode.ok)) return browser_event_error;
+            return browser_event_schedule_frame;
+        },
+        .key_down => {
+            const handled = er_ui_site_key_event(text_len, ctrl, meta, alt);
+            if (handled == 0) return 0;
+            if (handled != 1) return browser_event_error;
+            return browser_event_prevent_default | browser_event_schedule_frame;
+        },
+    }
+}
+
+export fn er_ui_browser_boot() u32 {
+    clearHostCommands();
+    queueHostCommand(.set_title) catch return finishError(.bad_input);
+    queueHostCommand(.set_element_html) catch return finishError(.bad_input);
+    last_error = .ok;
+    return browser_event_host_command | browser_event_schedule_frame;
+}
+
 fn singleAsciiKey(key: []const u8) ?u8 {
     if (key.len != 1) return null;
     return key[0];
+}
+
+fn modifierPressed(value: u32) bool {
+    return value != 0;
+}
+
+fn queueHostCommand(kind: HostCommandKind) error{HostCommandBudget}!void {
+    if (host_command_len >= host_commands.len) return error.HostCommandBudget;
+    host_commands[host_command_len] = .{ .kind = kind, .id = nextHostCommandId() };
+    host_command_len += 1;
+}
+
+fn nextHostCommandId() u32 {
+    const value = next_host_command_id;
+    next_host_command_id +%= 1;
+    if (next_host_command_id == 0) next_host_command_id = 1;
+    return value;
+}
+
+fn clearHostCommands() void {
+    for (host_commands[0..host_command_len]) |*command| command.* = .{};
+    host_command_len = 0;
 }
 
 export fn er_ui_site_scroll_by(delta_y: f32, width: f32, height: f32) u32 {
@@ -923,6 +1102,10 @@ export fn er_ui_build_site_gpu_frame(width: u32, height: u32, hover_x: f32, hove
     return finishGpuSceneFrameWithOverlay(scene, hover_x, hover_y, overlay_start);
 }
 
+export fn er_ui_build_browser_frame(width: u32, height: u32, frame_ms: f32) u32 {
+    return er_ui_build_site_gpu_frame(width, height, browser_hover_x, browser_hover_y, frame_ms);
+}
+
 fn finishGpuSceneFrame(scene: ui.Scene, hover_x: f32, hover_y: f32) u32 {
     last_command_count = scene.written().len;
     updateHoverHit(scene.written(), hover_x, hover_y);
@@ -987,9 +1170,11 @@ fn renderSceneIr(surface: renderer.Surface, scene_commands: []const ui.Command, 
     const buffers = gpuBuffers();
     try renderer_ir.packScene(buffers, gpuSources(), scene_commands);
     surface.clear(background);
+    const image_texture = try site_images.cloudMeme();
     const receipt = try surface.renderIrFrameWithAtlases(buffers, .{
         .font = .{ .width = font_atlas_width, .height = font_atlas_height, .alpha = &font_atlas_alpha },
         .icon = .{ .width = icon_atlas_width, .height = icon_atlas_height, .alpha = tabler_atlas.alpha },
+        .image = image_texture,
     });
     recordPresentation(receipt);
 }
@@ -1146,91 +1331,50 @@ fn galleryState(layout_raw: u32, grid_gap: f32, scroll_y: f32, hover_x: f32, hov
 }
 
 fn applyRoutePath(path: []const u8) void {
+    applyRoute(site_navigation.fromPath(path));
+}
+
+fn applyRoute(route: site_navigation.Route) void {
     site_state.search_open = false;
     site_state.search_query_len = 0;
     site_state.resetScroll();
-    const trimmed = trimRoute(path);
-    if (std.mem.eql(u8, trimmed, "/academy")) {
-        site_state.view = .blog;
-        site_state.selected_blog_post_id = 0;
-        site_state.blog_arc_filter_index = null;
-        return;
-    }
-    if (std.mem.eql(u8, trimmed, "/apps")) {
-        site_state.view = .apps;
-        site_state.selected_blog_post_id = 0;
-        site_state.blog_arc_filter_index = null;
-        return;
-    }
-    if (std.mem.startsWith(u8, trimmed, "/academy/")) {
-        const raw_id = std.fmt.parseUnsigned(u32, trimmed["/academy/".len..], 10) catch {
-            site_state.view = .blog;
-            site_state.selected_blog_post_id = 0;
-            return;
-        };
-        site_state.view = .blog;
-        site_state.selected_blog_post_id = if (site_blog.postById(raw_id) != null) raw_id else 0;
-        site_state.blog_arc_filter_index = null;
-        return;
-    }
-    site_state.view = .landing;
-    site_state.selected_blog_post_id = 0;
-    site_state.blog_arc_filter_index = null;
+    site_state.view = route.view;
+    site_state.selected_blog_post_id = route.selected_blog_post_id;
+    site_state.blog_arc_filter_index = route.blog_arc_filter_index;
 }
 
 fn trimRoute(path: []const u8) []const u8 {
-    if (path.len == 0) return "/";
-    const query = std.mem.indexOfScalar(u8, path, '?') orelse path.len;
-    const hash = std.mem.indexOfScalar(u8, path[0..query], '#') orelse query;
-    const trimmed = path[0..hash];
-    return if (trimmed.len == 0) "/" else trimmed;
+    return site_navigation.trimPath(path);
+}
+
+fn routePathFromBrowserHash(hash: []const u8) error{InvalidBrowserRoute}![]const u8 {
+    return site_navigation.pathFromBrowserHash(hash);
 }
 
 fn refreshRoutePath() void {
-    route_len = switch (site_state.view) {
-        .landing => writeRoute("/"),
-        .blog => if (site_state.selected_blog_post_id == 0)
-            writeRoute("/academy")
-        else
-            writePostRoute(site_state.selected_blog_post_id),
-        .apps => writeRoute("/apps"),
-    };
+    route_len = site_navigation.writePath(&route_bytes, currentRoute()) catch unreachable;
 }
 
 fn refreshRouteHash() void {
-    refreshRoutePath();
-    if (route_len == 1 and route_bytes[0] == '/') {
-        route_hash_len = 0;
-        return;
-    }
-    route_hash_bytes[0] = '#';
-    @memcpy(route_hash_bytes[1 .. route_len + 1], route_bytes[0..route_len]);
-    route_hash_len = route_len + 1;
+    route_hash_len = site_navigation.writeHash(&route_hash_bytes, currentRoute()) catch unreachable;
 }
 
-fn writeRoute(value: []const u8) usize {
-    @memcpy(route_bytes[0..value.len], value);
-    return value.len;
-}
-
-fn writePostRoute(post_id: u32) usize {
-    const out = std.fmt.bufPrint(&route_bytes, "/academy/{d}", .{post_id}) catch unreachable;
-    return out.len;
+fn currentRoute() site_navigation.Route {
+    return .{
+        .view = site_state.view,
+        .selected_blog_post_id = site_state.selected_blog_post_id,
+        .blog_arc_filter_index = site_state.blog_arc_filter_index,
+    };
 }
 
 fn currentCursorKind() CursorKind {
     const action_kind: ui_runtime.ActionKind = @enumFromInt(@as(u8, @intCast(last_action_kind)));
-    switch (action_kind) {
-        .drag_started, .drag_moved => return .grabbing,
-        .none, .hovered, .activated, .dropped, .reordered => {},
-    }
+    const hit_kind: ?ui.HitKind = if (hover_hit_kind == hover_hit_kind_none) null else @enumFromInt(@as(u8, @intCast(hover_hit_kind)));
+    return site_cursor.fromState(action_kind, hit_kind);
+}
 
-    if (hover_hit_kind == hover_hit_kind_none) return .default;
-    const hit_kind: ui.HitKind = @enumFromInt(@as(u8, @intCast(hover_hit_kind)));
-    return switch (hit_kind) {
-        .input, .textarea => .text,
-        .button, .row_item, .checkbox, .switch_control, .slider, .select => .pointer,
-    };
+fn currentCursorCss() []const u8 {
+    return site_cursor.css(currentCursorKind());
 }
 
 fn renderSearchOverlay(scene: *ui.Scene, hover_x: f32, hover_y: f32) ui.RenderError!void {
@@ -1570,8 +1714,10 @@ test "browser site blog builds packed webgl buffers and post hit state" {
     try std.testing.expect(gpu_text_vertex_float_len > 0);
     try std.testing.expect(gpu_icon_vertex_float_len > 0);
     try std.testing.expect(gpu_image_vertex_float_len > 0);
-    try std.testing.expect(er_ui_post_image_webp_ptr() != 0);
-    try std.testing.expect(er_ui_post_image_webp_len() > 0);
+    try std.testing.expect(er_ui_post_image_rgba_ptr() != 0);
+    try std.testing.expectEqual(site_images.cloud_meme_width, er_ui_post_image_width());
+    try std.testing.expectEqual(site_images.cloud_meme_height, er_ui_post_image_height());
+    try std.testing.expectEqual(site_images.cloud_meme_pixel_count * @sizeOf(ui.Color), er_ui_post_image_rgba_len());
     try std.testing.expectEqual(@as(u32, @intCast(site_blog.posts.len)), er_ui_blog_post_count());
     try std.testing.expect(er_ui_site_blog_content_height(1280.0) > 5200.0);
     try std.testing.expect(er_ui_site_blog_post_content_height(1280.0, site_blog.postIdAt(16)) > 1200.0);
@@ -1604,6 +1750,13 @@ test "browser site activation keeps page state in wasm" {
     try std.testing.expectEqual(@intFromEnum(HostAction.open_url), er_ui_site_host_action_kind());
     try std.testing.expectEqual(site_source_url.len, er_ui_site_host_action_url_len());
     try std.testing.expect(er_ui_site_host_action_url_ptr() != 0);
+    try std.testing.expectEqual(@as(u32, 1), er_ui_host_command_count());
+    try std.testing.expectEqual(@intFromEnum(HostCommandKind.open_url), er_ui_host_command_kind(0));
+    try std.testing.expect(er_ui_host_command_id(0) != 0);
+    try std.testing.expectEqual(site_source_url.len, er_ui_host_command_payload_len(0));
+    try std.testing.expect(er_ui_host_command_payload_ptr(0) != 0);
+    try std.testing.expectEqual(@as(u32, 0), er_ui_host_command_clear());
+    try std.testing.expectEqual(@as(u32, 0), er_ui_host_command_count());
     try std.testing.expectEqual(@intFromEnum(HostAction.none), er_ui_site_activate_hit(site_chrome.logo_button_id));
     try std.testing.expectEqual(site_landing.contentHeight(1280.0), er_ui_site_content_height(1280.0));
     try std.testing.expectEqual(@intFromEnum(HostAction.none), er_ui_site_activate_hit(site_blog.arcFilterButtonId(3)));
@@ -1618,28 +1771,27 @@ test "browser native route sync owns URL path state" {
     site_state = .{};
     defer site_state = .{};
 
-    @memcpy(input_bytes[0.."/academy".len], "/academy");
-    try std.testing.expectEqual(@as(u32, 0), er_ui_site_set_route_path("/academy".len));
+    try std.testing.expectEqual(@as(u32, 0), er_ui_site_set_browser_route_hash(writeInputForTest("#/academy")));
     try std.testing.expectEqual(site_blog.indexContentHeight(1280.0), er_ui_site_content_height(1280.0));
     try std.testing.expectEqualStrings("/academy", route_bytes[0..er_ui_site_route_path_len()]);
     try std.testing.expectEqualStrings("#/academy", route_hash_bytes[0..er_ui_site_route_hash_len()]);
 
-    const route = "/academy/40100";
-    @memcpy(input_bytes[0..route.len], route);
-    try std.testing.expectEqual(@as(u32, 0), er_ui_site_set_route_path(route.len));
+    const route = "#/academy/40100";
+    try std.testing.expectEqual(@as(u32, 0), er_ui_site_set_browser_route_hash(writeInputForTest(route)));
     try std.testing.expectEqual(site_blog.postContentHeight(1280.0, site_blog.postIdAt(0)), er_ui_site_content_height(1280.0));
-    try std.testing.expectEqualStrings(route, route_bytes[0..er_ui_site_route_path_len()]);
+    try std.testing.expectEqualStrings("/academy/40100", route_bytes[0..er_ui_site_route_path_len()]);
     try std.testing.expectEqualStrings("#/academy/40100", route_hash_bytes[0..er_ui_site_route_hash_len()]);
 
-    @memcpy(input_bytes[0.."/".len], "/");
-    try std.testing.expectEqual(@as(u32, 0), er_ui_site_set_route_path("/".len));
+    try std.testing.expectEqual(@as(u32, 0), er_ui_site_set_browser_route_hash(writeInputForTest("")));
     try std.testing.expectEqual(site_landing.contentHeight(1280.0), er_ui_site_content_height(1280.0));
     try std.testing.expectEqualStrings("/", route_bytes[0..er_ui_site_route_path_len()]);
     try std.testing.expectEqualStrings("", route_hash_bytes[0..er_ui_site_route_hash_len()]);
 
-    @memcpy(input_bytes[0.."/apps".len], "/apps");
-    try std.testing.expectEqual(@as(u32, 0), er_ui_site_set_route_path("/apps".len));
+    try std.testing.expectEqual(@as(u32, 0), er_ui_site_set_browser_route_hash(writeInputForTest("#/apps")));
     try std.testing.expectEqual(site_apps.contentHeight(1280.0), er_ui_site_content_height(1280.0));
+    try std.testing.expectEqualStrings("/apps", route_bytes[0..er_ui_site_route_path_len()]);
+
+    try std.testing.expectEqual(@as(u32, @intFromEnum(ErrorCode.bad_input)), er_ui_site_set_browser_route_hash(writeInputForTest("#academy")));
     try std.testing.expectEqualStrings("/apps", route_bytes[0..er_ui_site_route_path_len()]);
 }
 
@@ -1665,23 +1817,123 @@ test "browser native search accepts keyboard text and renders overlay results" {
     try std.testing.expectEqual(@as(u32, 0), er_ui_site_search_is_open());
 }
 
+fn writeInputForTest(value: []const u8) usize {
+    @memcpy(input_bytes[0..value.len], value);
+    return value.len;
+}
+
+fn keyEventForTest(value: []const u8, ctrl: bool, meta: bool, alt: bool) u32 {
+    return er_ui_site_key_event(
+        writeInputForTest(value),
+        if (ctrl) 1 else 0,
+        if (meta) 1 else 0,
+        if (alt) 1 else 0,
+    );
+}
+
 test "browser native key policy owns search shortcuts and text editing" {
     site_state = .{};
     defer site_state = .{};
 
-    try std.testing.expectEqual(@as(u32, 1), er_ui_site_key_event(key_slash, 0));
+    try std.testing.expectEqual(@as(u32, 1), keyEventForTest("/", false, false, false));
     try std.testing.expectEqual(@as(u32, 1), er_ui_site_search_is_open());
-    for ("phone") |byte| try std.testing.expectEqual(@as(u32, 1), er_ui_site_key_event(byte, 0));
+    for ("phone") |byte| {
+        const key = [_]u8{byte};
+        try std.testing.expectEqual(@as(u32, 1), keyEventForTest(&key, false, false, false));
+    }
     try std.testing.expectEqualStrings("phone", site_state.searchQuery());
-    try std.testing.expectEqual(@as(u32, 1), er_ui_site_key_event(key_backspace, 0));
+    try std.testing.expectEqual(@as(u32, 1), keyEventForTest(key_backspace_text, false, false, false));
     try std.testing.expectEqualStrings("phon", site_state.searchQuery());
-    try std.testing.expectEqual(@as(u32, 1), er_ui_site_key_event(key_escape, 0));
+    try std.testing.expectEqual(@as(u32, 1), keyEventForTest(key_escape_text, false, false, false));
     try std.testing.expectEqual(@as(u32, 0), er_ui_site_search_is_open());
 
-    try std.testing.expectEqual(@as(u32, 1), er_ui_site_key_event(key_lower_k, key_modifier_ctrl));
+    try std.testing.expectEqual(@as(u32, 1), keyEventForTest("k", true, false, false));
     try std.testing.expectEqual(@as(u32, 1), er_ui_site_search_is_open());
-    try std.testing.expectEqual(@as(u32, 0), er_ui_site_key_event('x', key_modifier_alt));
+    try std.testing.expectEqual(@as(u32, 0), keyEventForTest("x", false, false, true));
+    try std.testing.expectEqual(@as(u32, 0), keyEventForTest("ArrowDown", false, false, false));
     try std.testing.expectEqualStrings("", site_state.searchQuery());
+
+    site_state.search_open = false;
+    try std.testing.expectEqual(@as(u32, 1), keyEventForTest("K", false, true, false));
+    try std.testing.expectEqual(@as(u32, 1), er_ui_site_search_is_open());
+}
+
+test "browser native event pump owns dom event interpretation" {
+    site_state = .{};
+    runtime_state = .{};
+    clearHostCommands();
+    browser_hover_x = -1.0;
+    browser_hover_y = -1.0;
+    last_command_count = 0;
+    defer site_state = .{};
+    defer runtime_state = .{};
+    defer clearHostCommands();
+
+    try std.testing.expectEqual(browser_event_schedule_frame, er_ui_browser_event(@intFromEnum(BrowserEventKind.resize), 0, 0, 0, 0, 0, 0, 0, 1280.0, 900.0));
+
+    const wheel_result = er_ui_browser_event(@intFromEnum(BrowserEventKind.wheel), 0, 0, 320.0, 0, 0, 0, 0, 1280.0, 900.0);
+    try std.testing.expectEqual(browser_event_prevent_default | browser_event_schedule_frame, wheel_result);
+    try std.testing.expectEqual(@as(f32, 320.0), site_state.scroll_y);
+
+    try std.testing.expectEqual(browser_event_schedule_frame, er_ui_browser_event(@intFromEnum(BrowserEventKind.pointer_move), 42.0, 88.0, 0, 0, 0, 0, 0, 1280.0, 900.0));
+    try std.testing.expectEqual(@as(f32, 42.0), browser_hover_x);
+    try std.testing.expectEqual(@as(f32, 88.0), browser_hover_y);
+    try std.testing.expectEqual(browser_event_schedule_frame, er_ui_browser_event(@intFromEnum(BrowserEventKind.pointer_leave), 0, 0, 0, 0, 0, 0, 0, 1280.0, 900.0));
+    try std.testing.expectEqual(@as(f32, -1.0), browser_hover_x);
+    try std.testing.expectEqual(@as(f32, -1.0), browser_hover_y);
+
+    try std.testing.expectEqual(browser_event_prevent_default | browser_event_schedule_frame, er_ui_browser_event(@intFromEnum(BrowserEventKind.key_down), 0, 0, 0, 0, 0, 0, writeInputForTest("/"), 1280.0, 900.0));
+    try std.testing.expectEqual(@as(u32, 1), er_ui_site_search_is_open());
+
+    try std.testing.expectEqual(browser_event_schedule_frame, er_ui_browser_event(@intFromEnum(BrowserEventKind.hashchange), 0, 0, 0, 0, 0, 0, writeInputForTest("#/apps"), 1280.0, 900.0));
+    try std.testing.expectEqualStrings("/apps", route_bytes[0..er_ui_site_route_path_len()]);
+
+    try std.testing.expectEqual(browser_event_error, er_ui_browser_event(@intFromEnum(BrowserEventKind.hashchange), 0, 0, 0, 0, 0, 0, writeInputForTest("#apps"), 1280.0, 900.0));
+    try std.testing.expectEqual(@intFromEnum(ErrorCode.bad_input), er_ui_last_error());
+    try std.testing.expectEqualStrings("/apps", route_bytes[0..er_ui_site_route_path_len()]);
+
+    site_state.host_action = .none;
+    var local_commands: [1]ui.Command = undefined;
+    var scene = ui.Scene.init(&local_commands);
+    try scene.pushHit(.{ .slot = 0, .kind = .button, .id = site_chrome.source_button_id, .bounds = ui.Rect.init(0, 0, 40, 40) });
+    last_command_count = scene.written().len;
+    @memcpy(commands[0..last_command_count], scene.written());
+    const pointer_result = er_ui_browser_event(@intFromEnum(BrowserEventKind.pointer_up), 8.0, 8.0, 0, 0, 0, 0, 0, 1280.0, 900.0);
+    try std.testing.expectEqual(browser_event_release_pointer | browser_event_schedule_frame | browser_event_host_command, pointer_result);
+    try std.testing.expectEqual(@as(u32, 2), er_ui_host_command_count());
+    try std.testing.expectEqual(@intFromEnum(HostCommandKind.open_url), er_ui_host_command_kind(0));
+    try std.testing.expectEqual(@intFromEnum(HostCommandKind.push_route_hash), er_ui_host_command_kind(1));
+    try std.testing.expect(er_ui_host_command_id(0) != 0);
+    try std.testing.expect(er_ui_host_command_id(1) != 0);
+    try std.testing.expect(er_ui_host_command_id(0) != er_ui_host_command_id(1));
+    try std.testing.expectEqualStrings("#/apps", (@as([*]const u8, @ptrFromInt(er_ui_host_command_payload_ptr(1))))[0..er_ui_host_command_payload_len(1)]);
+}
+
+test "browser native boot emits document title host command" {
+    clearHostCommands();
+    defer clearHostCommands();
+
+    const result = er_ui_browser_boot();
+    try std.testing.expectEqual(browser_event_host_command | browser_event_schedule_frame, result);
+    try std.testing.expectEqual(@as(u32, 2), er_ui_host_command_count());
+    try std.testing.expectEqual(@intFromEnum(HostCommandKind.set_title), er_ui_host_command_kind(0));
+    try std.testing.expect(er_ui_host_command_id(0) != 0);
+    try std.testing.expectEqual(@as(usize, 0), er_ui_host_command_target_len(0));
+    try std.testing.expectEqualStrings(title_text, (@as([*]const u8, @ptrFromInt(er_ui_host_command_payload_ptr(0))))[0..er_ui_host_command_payload_len(0)]);
+    try std.testing.expectEqual(@intFromEnum(HostCommandKind.set_element_html), er_ui_host_command_kind(1));
+    try std.testing.expect(er_ui_host_command_id(1) != 0);
+    try std.testing.expect(er_ui_host_command_id(0) != er_ui_host_command_id(1));
+    try std.testing.expectEqualStrings(dom_surface_id, (@as([*]const u8, @ptrFromInt(er_ui_host_command_target_ptr(1))))[0..er_ui_host_command_target_len(1)]);
+    try std.testing.expectEqualStrings(boot_dom_html, (@as([*]const u8, @ptrFromInt(er_ui_host_command_payload_ptr(1))))[0..er_ui_host_command_payload_len(1)]);
+}
+
+test "browser native exposes eval bootstrap javascript bytes" {
+    const bootstrap_js: [*]const u8 = @ptrFromInt(er_ui_bootstrap_js_ptr());
+    const bytes = bootstrap_js[0..er_ui_bootstrap_js_len()];
+
+    try std.testing.expectEqualStrings(browser_runtime_js.source, bytes);
+    try std.testing.expect(std.mem.indexOf(u8, bytes, "document.body.innerHTML") != null);
+    try std.testing.expect(std.mem.indexOf(u8, bytes, "WebAssembly.instantiateStreaming") == null);
 }
 
 test "browser native site state owns scroll position" {
@@ -1700,15 +1952,20 @@ test "browser native cursor intent owns hit and drag cursor policy" {
     hover_hit_kind = hover_hit_kind_none;
     last_action_kind = @intFromEnum(ui_runtime.ActionKind.none);
     try std.testing.expectEqual(@intFromEnum(CursorKind.default), er_ui_cursor_kind());
+    try std.testing.expectEqualStrings(site_cursor.css_default, currentCursorCss());
 
     hover_hit_kind = @intFromEnum(ui.HitKind.input);
     try std.testing.expectEqual(@intFromEnum(CursorKind.text), er_ui_cursor_kind());
+    try std.testing.expectEqualStrings(site_cursor.css_text, currentCursorCss());
 
     hover_hit_kind = @intFromEnum(ui.HitKind.button);
     try std.testing.expectEqual(@intFromEnum(CursorKind.pointer), er_ui_cursor_kind());
+    try std.testing.expectEqualStrings(site_cursor.css_pointer, currentCursorCss());
 
     last_action_kind = @intFromEnum(ui_runtime.ActionKind.drag_started);
     try std.testing.expectEqual(@intFromEnum(CursorKind.grabbing), er_ui_cursor_kind());
+    const cursor_css_ptr: [*]const u8 = @ptrFromInt(er_ui_cursor_css_ptr());
+    try std.testing.expectEqualStrings(site_cursor.css_grabbing, cursor_css_ptr[0..er_ui_cursor_css_len()]);
 }
 
 test "browser native pointer up owns activation suppression policy" {

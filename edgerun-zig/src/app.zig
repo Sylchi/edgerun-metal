@@ -30,6 +30,12 @@ pub const work_receipt_object_size = object.header_size + work_receipt_body_size
 const admitted_authorization_capacity = 16;
 const accepted_work_capacity = 8;
 const spawned_child_capacity = 8;
+const runtime_signature_size = preimage.hash_size;
+
+const SpawnCodePolicy = enum {
+    wasm_only,
+    native_runtime_allowed,
+};
 
 pub const SpawnError = error{
     BadAllocation,
@@ -61,6 +67,38 @@ pub const AdmissionError = error{
 pub const ReclaimError = error{
     Corrupt,
     Unauthorized,
+};
+
+pub const ExecutionHost = struct {
+    id: identity.Identity,
+
+    pub fn init(id: identity.Identity) ?ExecutionHost {
+        if (id.kind != .device or !id.id.valid()) return null;
+        return .{ .id = id };
+    }
+
+    pub fn spawnDeclared(self: ExecutionHost, parent: *App, allocator_id: identity.Identity, child_id: identity.Identity, epoch: clock.Stamp, authorization: intent.Receipt, allocation: App.DeclaredAllocation) SpawnError!App.Spawned {
+        if (!self.id.id.valid()) return error.Unauthorized;
+        return parent.spawnDeclared(allocator_id, child_id, epoch, authorization, allocation);
+    }
+
+    pub fn spawnManifest(self: ExecutionHost, parent: *App, allocator_id: identity.Identity, child_id: identity.Identity, epoch: clock.Stamp, authorization: intent.Receipt, manifest_canonical: []const u8) SpawnError!App.Spawned {
+        if (!self.id.id.valid()) return error.Unauthorized;
+        return parent.spawnManifest(allocator_id, child_id, epoch, authorization, manifest_canonical, .wasm_only);
+    }
+
+    pub fn spawnNativeRuntimeManifest(self: ExecutionHost, parent: *App, allocator_id: identity.Identity, child_id: identity.Identity, epoch: clock.Stamp, authorization: intent.Receipt, manifest_canonical: []const u8, runtime_signer: identity.Identity, runtime_signature_canonical: []const u8) SpawnError!App.Spawned {
+        if (!self.id.id.valid()) return error.Unauthorized;
+        const manifest = App.Manifest.fromObject(manifest_canonical) orelse return error.BadAllocation;
+        if (!manifest.nativeRuntimeRequired()) return error.Unauthorized;
+        if (!nativeRuntimeSignatureValid(runtime_signer, manifest_canonical, runtime_signature_canonical)) return error.Unauthorized;
+        return parent.spawnManifest(allocator_id, child_id, epoch, authorization, manifest_canonical, .native_runtime_allowed);
+    }
+
+    pub fn reclaimChild(self: ExecutionHost, parent: *App, child: *App, receipt: grant.SpawnReceipt, epoch: clock.Stamp) ReclaimError!App.Reclaimed {
+        if (!self.id.id.valid()) return error.Unauthorized;
+        return parent.reclaimChild(child, receipt, epoch);
+    }
 };
 
 pub const App = struct {
@@ -288,13 +326,17 @@ pub const App = struct {
 
         pub fn valid(self: DeclaredAllocation) bool {
             return self.memory_bytes != 0 and
-                self.storage_bytes != 0 and
-                self.storage_slots != 0 and
+                self.storageDeclarationValid() and
                 self.execution_ticks != 0 and
                 ((self.route_handles == 0 and bytes.zeroed(&self.route_handle)) or
                     (self.route_handles != 0 and bytes.nonzero(&self.route_handle))) and
                 ((self.device_handles == 0 and !self.device_handle.valid()) or
                     (self.device_handles != 0 and self.device_handle.valid()));
+        }
+
+        fn storageDeclarationValid(self: DeclaredAllocation) bool {
+            return (self.storage_bytes == 0 and self.storage_slots == 0) or
+                (self.storage_bytes != 0 and self.storage_slots != 0);
         }
 
         pub fn id(self: DeclaredAllocation) ?preimage.Hash {
@@ -325,6 +367,8 @@ pub const App = struct {
     pub const manifest_code_hash_offset = 16;
     pub const manifest_allocation_offset = 48;
     pub const manifest_flag_child_spawn: u32 = 1;
+    pub const manifest_flag_native_runtime: u32 = 2;
+    pub const manifest_allowed_flags: u32 = manifest_flag_child_spawn | manifest_flag_native_runtime;
 
     pub const Manifest = struct {
         code_hash: preimage.Hash,
@@ -334,11 +378,15 @@ pub const App = struct {
         pub fn valid(self: Manifest) bool {
             return bytes.nonzero(&self.code_hash) and
                 self.allocation.valid() and
-                (self.flags & ~manifest_flag_child_spawn) == 0;
+                (self.flags & ~manifest_allowed_flags) == 0;
         }
 
         pub fn childSpawnAllowed(self: Manifest) bool {
             return (self.flags & manifest_flag_child_spawn) != 0;
+        }
+
+        pub fn nativeRuntimeRequired(self: Manifest) bool {
+            return (self.flags & manifest_flag_native_runtime) != 0;
         }
 
         pub fn encodeBody(self: Manifest, out: []u8) bool {
@@ -733,7 +781,7 @@ pub const App = struct {
         }
     };
 
-    pub fn spawnDeclared(self: *App, allocator_id: identity.Identity, child_id: identity.Identity, epoch: clock.Stamp, authorization: intent.Receipt, allocation: DeclaredAllocation) SpawnError!Spawned {
+    fn spawnDeclared(self: *App, allocator_id: identity.Identity, child_id: identity.Identity, epoch: clock.Stamp, authorization: intent.Receipt, allocation: DeclaredAllocation) SpawnError!Spawned {
         if (!allocation.valid()) return error.BadAllocation;
         if (!self.state.can_spawn_children) return error.Unauthorized;
         if (!authorization.permitsAt(epoch, allocator_id.id, child_id.id, .spawn_app, .delegates_resources)) return error.Unauthorized;
@@ -795,8 +843,9 @@ pub const App = struct {
         };
     }
 
-    pub fn spawnManifest(self: *App, allocator_id: identity.Identity, child_id: identity.Identity, epoch: clock.Stamp, authorization: intent.Receipt, manifest_canonical: []const u8) SpawnError!Spawned {
+    fn spawnManifest(self: *App, allocator_id: identity.Identity, child_id: identity.Identity, epoch: clock.Stamp, authorization: intent.Receipt, manifest_canonical: []const u8, code_policy: SpawnCodePolicy) SpawnError!Spawned {
         const manifest = Manifest.fromObjectFor(manifest_canonical, child_id.id) orelse return error.BadAllocation;
+        if (manifest.nativeRuntimeRequired() and code_policy != .native_runtime_allowed) return error.Unauthorized;
         const manifest_id = object.Header.id(manifest_canonical);
         var spawned = try self.spawnDeclared(allocator_id, child_id, epoch, authorization, manifest.allocation);
         spawned.app.state.can_spawn_children = manifest.childSpawnAllowed();
@@ -881,7 +930,7 @@ pub const App = struct {
         _ = self.state.accepted_work.append(accepted);
     }
 
-    pub fn reclaimChild(self: *App, child: *App, receipt: grant.SpawnReceipt, epoch: clock.Stamp) ReclaimError!Reclaimed {
+    fn reclaimChild(self: *App, child: *App, receipt: grant.SpawnReceipt, epoch: clock.Stamp) ReclaimError!Reclaimed {
         if (!epoch.valid() or !receipt.valid()) return error.Corrupt;
         if (!receipt.parent.eql(self.id.id) or !receipt.child.eql(child.id.id)) return error.Unauthorized;
         const record_slot = self.activeSpawnRecordSlot(child.id.id, receipt) orelse return error.Corrupt;
@@ -1065,6 +1114,7 @@ pub const App = struct {
         const expected_slice = sharedMemoryId(self.id.id, offset, slice.bytes.len, slice.epoch) orelse return error.Corrupt;
         if (!bytes.eql(&expected_slice, &slice.id)) return error.Corrupt;
         if (!authorization.permitsAt(epoch, self.id.id, reader, .grant_resource, .exports_data)) return error.Unauthorized;
+        if (!self.hasAdmittedAuthorization(authorization, epoch, self.id.id, reader, .grant_resource, .exports_data)) return error.Unauthorized;
 
         const receipt = grant.memoryViewReceipt(self.id, reader, slice.id, epoch, offset, slice.bytes.len) orelse return error.Corrupt;
         return .{
@@ -1276,6 +1326,28 @@ fn workReceiptSignature(capability: App.SigningCapability, draft_canonical: []co
     return builder.final();
 }
 
+fn nativeRuntimeSignature(runtime_signer: identity.Identity, manifest_canonical: []const u8) ?preimage.Hash {
+    if (runtime_signer.kind != .app or !runtime_signer.id.valid()) return null;
+    _ = App.Manifest.fromObject(manifest_canonical) orelse return null;
+    var builder = preimage.Builder.init("edgerun:zig:v1:native-runtime-manifest-signature");
+    builder.id(runtime_signer.id);
+    builder.hash(object.Header.id(manifest_canonical));
+    builder.bytes(manifest_canonical);
+    return builder.final();
+}
+
+fn nativeRuntimeSignatureValid(runtime_signer: identity.Identity, manifest_canonical: []const u8, runtime_signature_canonical: []const u8) bool {
+    const expected = nativeRuntimeSignature(runtime_signer, manifest_canonical) orelse return false;
+    const info = object.decodeSignatureReceipt(runtime_signature_canonical) catch return false;
+    const manifest_id = object.Header.id(manifest_canonical);
+    return runtime_signer.kind == .app and
+        bytes.eql(&info.signer_id, &runtime_signer.id.bytes) and
+        bytes.eql(&info.subject_id, &manifest_id) and
+        bytes.eql(&info.challenge_id, &manifest_id) and
+        info.algorithm == .ecdsa_p256_sha256 and
+        bytes.eql(info.signature, &expected);
+}
+
 fn mapResolverError(err: ui_resolver.Error) App.UiError {
     return switch (err) {
         error.Corrupt => error.Corrupt,
@@ -1365,7 +1437,7 @@ test "manifest spawn transfers declared memory and storage to child" {
         },
     };
     const manifest_canonical = try App.writeManifestObject(child_id, manifest, epoch, &manifest_raw);
-    var spawned = try parent.spawnManifest(allocator_id, child_id, epoch, authorization, manifest_canonical);
+    var spawned = try (ExecutionHost.init(device_id).?).spawnManifest(&parent, allocator_id, child_id, epoch, authorization, manifest_canonical);
     var child = spawned.app;
     try std.testing.expectEqual(@as(usize, 48), parent.state.memory.remaining());
     try std.testing.expectEqual(@as(usize, 224), parent.state.storage.data.len());
@@ -1394,11 +1466,11 @@ test "manifest spawn transfers declared memory and storage to child" {
         },
     };
     const oversized_canonical = try App.writeManifestObject(child_id, oversized_manifest, epoch, &manifest_raw);
-    try std.testing.expectError(error.NoMemory, parent.spawnManifest(allocator_id, child_id, epoch, authorization, oversized_canonical));
+    try std.testing.expectError(error.NoMemory, (ExecutionHost.init(device_id).?).spawnManifest(&parent, allocator_id, child_id, epoch, authorization, oversized_canonical));
     try std.testing.expect(spawned.receipt.valid());
     try std.testing.expectEqual(@as(u64, 288), spawned.receipt.storage_bytes.amount);
 
-    const reclaimed = try parent.reclaimChild(&child, spawned.receipt, epoch);
+    const reclaimed = try (ExecutionHost.init(device_id).?).reclaimChild(&parent, &child, spawned.receipt, epoch);
     try std.testing.expect(reclaimed.valid());
     try std.testing.expect(bytes.nonzero(&reclaimed.id().?));
     try std.testing.expectEqual(@as(usize, 64), parent.state.memory.remaining());
@@ -1406,6 +1478,119 @@ test "manifest spawn transfers declared memory and storage to child" {
     try std.testing.expectEqual(@as(usize, 4), parent.state.storage.slotCapacity());
     try std.testing.expectEqual(@as(usize, 0), child.state.memory.remaining());
     try std.testing.expect(child.state.storage.getObject(child.id.id, child_hash) == null);
+}
+
+test "manifest spawn can run app with no ram object storage" {
+    const parent_memory_bytes = 64;
+    const parent_storage_bytes = 128;
+    const parent_storage_slots = 2;
+    const child_memory_bytes = 16;
+    const child_storage_bytes = 0;
+    const child_storage_slots = 0;
+
+    var memory_bytes: [parent_memory_bytes]u8 = undefined;
+    var storage_bytes: [parent_storage_bytes]u8 = undefined;
+    var slots: [parent_storage_slots]store.Blob = undefined;
+    var manifest_raw: [object.header_size + object.owner_size + App.manifest_body_size]u8 = undefined;
+
+    const keeper = clock.KeeperId{ .bytes = [_]u8{21} ++ [_]u8{0} ** 31 };
+    const epoch = clock.Stamp{ .keeper = keeper };
+    const user_id = identity.Identity.init(.user, identity.Source.prepare(.hash, &preimage.rawHash("memory only user")).?, epoch).?;
+    const device_id = identity.Identity.init(.device, identity.Source.prepare(.hash, &preimage.rawHash("memory only device")).?, epoch).?;
+    const parent_id = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("memory only parent")).?, epoch).?;
+    const child_id = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("memory only child")).?, epoch).?;
+
+    var parent = App.initAllocated(
+        parent_id,
+        BoundedArena.init(.{ .base = &memory_bytes }),
+        store.Store.init(.{ .base = &storage_bytes }, &slots),
+        .{
+            .memory_bytes = parent_memory_bytes,
+            .storage_bytes = parent_storage_bytes,
+            .storage_slots = parent_storage_slots,
+            .execution_ticks = 1,
+        },
+    ).?;
+    const allocation = App.DeclaredAllocation{
+        .memory_bytes = child_memory_bytes,
+        .storage_bytes = child_storage_bytes,
+        .storage_slots = child_storage_slots,
+        .execution_ticks = 1,
+    };
+    const manifest = App.Manifest{
+        .code_hash = preimage.hash("edgerun:zig:v1:test-code", "memory only child"),
+        .allocation = allocation,
+    };
+    const manifest_canonical = try App.writeManifestObject(child_id, manifest, epoch, &manifest_raw);
+    const authorization = intent.admit(user_id, device_id, parent_id, child_id, .spawn_app, .delegates_resources, epoch, intent.requestId("memory only spawn").?).?;
+    try parent.admitAuthorization(authorization, parent.admissionCapability(authorization) orelse unreachable);
+    const spawned = try (ExecutionHost.init(device_id).?).spawnManifest(&parent, parent_id, child_id, epoch, authorization, manifest_canonical);
+    var child = spawned.app;
+
+    try std.testing.expect(spawned.receipt.valid());
+    try std.testing.expectEqual(@as(u64, child_storage_bytes), spawned.receipt.storage_bytes.amount);
+    try std.testing.expectEqual(@as(u64, child_storage_slots), spawned.receipt.storage_slots.amount);
+    try std.testing.expectEqual(@as(usize, parent_storage_bytes), parent.state.storage.data.len());
+    try std.testing.expectEqual(@as(usize, parent_storage_slots), parent.state.storage.slotCapacity());
+    try std.testing.expectEqual(@as(usize, child_storage_bytes), child.state.storage.data.len());
+    try std.testing.expectEqual(@as(usize, child_storage_slots), child.state.storage.slotCapacity());
+    try std.testing.expect(child.state.storage.putRawBlob("implicit durable state") == null);
+
+    _ = try (ExecutionHost.init(device_id).?).reclaimChild(&parent, &child, spawned.receipt, epoch);
+    try std.testing.expectEqual(@as(usize, parent_storage_bytes), parent.state.storage.data.len());
+    try std.testing.expectEqual(@as(usize, parent_storage_slots), parent.state.storage.slotCapacity());
+    try std.testing.expectEqual(@as(usize, 0), child.state.storage.data.len());
+    try std.testing.expectEqual(@as(usize, 0), child.state.storage.slotCapacity());
+}
+
+test "native runtime manifest requires edgerun runtime signature" {
+    var memory_bytes: [64]u8 = undefined;
+    var storage_bytes: [512]u8 = undefined;
+    var slots: [4]store.Blob = undefined;
+    var manifest_raw: [object.header_size + object.owner_size + App.manifest_body_size]u8 = undefined;
+    var signature_raw: [object.header_size + object.signature_fixed_body_size + runtime_signature_size]u8 = undefined;
+
+    const keeper = clock.KeeperId{ .bytes = [_]u8{31} ++ [_]u8{0} ** 31 };
+    const epoch = clock.Stamp{ .keeper = keeper };
+    const user_id = identity.Identity.init(.user, identity.Source.prepare(.hash, &preimage.rawHash("native user")).?, epoch).?;
+    const device_id = identity.Identity.init(.device, identity.Source.prepare(.hash, &preimage.rawHash("native device")).?, epoch).?;
+    const parent_id = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("native parent")).?, epoch).?;
+    const child_id = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("native child")).?, epoch).?;
+    const runtime_id = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("edgerun signed runtime")).?, epoch).?;
+    var parent = App.initAllocated(
+        parent_id,
+        BoundedArena.init(.{ .base = &memory_bytes }),
+        store.Store.init(.{ .base = &storage_bytes }, &slots),
+        .{
+            .memory_bytes = memory_bytes.len,
+            .storage_bytes = storage_bytes.len,
+            .storage_slots = slots.len,
+            .execution_ticks = 2,
+        },
+    ).?;
+    const manifest = App.Manifest{
+        .code_hash = preimage.hash("edgerun:zig:v1:test-code", "native runtime child"),
+        .allocation = .{
+            .memory_bytes = 16,
+            .storage_bytes = 128,
+            .storage_slots = 1,
+        },
+        .flags = App.manifest_flag_native_runtime,
+    };
+    const manifest_canonical = try App.writeManifestObject(child_id, manifest, epoch, &manifest_raw);
+    const authorization = intent.admit(user_id, device_id, parent_id, child_id, .spawn_app, .delegates_resources, epoch, intent.requestId("native runtime spawn").?).?;
+    try parent.admitAuthorization(authorization, parent.admissionCapability(authorization) orelse unreachable);
+    const host = ExecutionHost.init(device_id).?;
+
+    try std.testing.expectError(error.Unauthorized, host.spawnManifest(&parent, parent_id, child_id, epoch, authorization, manifest_canonical));
+    try std.testing.expectError(error.Unauthorized, host.spawnNativeRuntimeManifest(&parent, parent_id, child_id, epoch, authorization, manifest_canonical, runtime_id, manifest_canonical));
+
+    const signature = nativeRuntimeSignature(runtime_id, manifest_canonical).?;
+    const signature_canonical = try object.writeSignatureReceipt(manifest_canonical, manifest_canonical, runtime_id.id.bytes, .ecdsa_p256_sha256, &signature, epoch, &signature_raw);
+    var spawned = try host.spawnNativeRuntimeManifest(&parent, parent_id, child_id, epoch, authorization, manifest_canonical, runtime_id, signature_canonical);
+    try std.testing.expect(spawned.receipt.valid());
+    try std.testing.expectEqual(@as(usize, 48), parent.state.memory.remaining());
+    try std.testing.expectEqual(@as(usize, 16), spawned.app.state.memory.remaining());
 }
 
 test "declared allocation bounds app child work receipts and clean reclaim" {
@@ -1508,7 +1693,7 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
     ).?;
     try parent.admitAuthorization(child_authorization, parent.admissionCapability(child_authorization) orelse unreachable);
 
-    const spawned_child = try parent.spawnManifest(parent_id, child_id, start, child_authorization, child_manifest_canonical);
+    const spawned_child = try (ExecutionHost.init(device_id).?).spawnManifest(&parent, parent_id, child_id, start, child_authorization, child_manifest_canonical);
     var child = spawned_child.app;
     try std.testing.expectEqual(@as(usize, parent_memory_bytes - child_memory_bytes), parent.state.memory.remaining());
     try std.testing.expectEqual(@as(usize, child_memory_bytes), child.state.memory.remaining());
@@ -1558,7 +1743,7 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
         .route_handle = route_id,
         .device_handle = device_id.id,
     };
-    try std.testing.expectError(error.NoMemory, child.spawnDeclared(child_id, grandchild_id, start, grandchild_authorization, impossible_grandchild));
+    try std.testing.expectError(error.NoMemory, (ExecutionHost.init(device_id).?).spawnDeclared(&child, child_id, grandchild_id, start, grandchild_authorization, impossible_grandchild));
 
     const impossible_route_grandchild = App.DeclaredAllocation{
         .memory_bytes = grandchild_memory_bytes,
@@ -1570,7 +1755,7 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
         .route_handle = route_id,
         .device_handle = device_id.id,
     };
-    try std.testing.expectError(error.NoRoute, child.spawnDeclared(child_id, grandchild_id, start, grandchild_authorization, impossible_route_grandchild));
+    try std.testing.expectError(error.NoRoute, (ExecutionHost.init(device_id).?).spawnDeclared(&child, child_id, grandchild_id, start, grandchild_authorization, impossible_route_grandchild));
 
     const grandchild_allocation = App.DeclaredAllocation{
         .memory_bytes = grandchild_memory_bytes,
@@ -1588,7 +1773,7 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
     };
     const grandchild_manifest_canonical = try App.writeManifestObject(grandchild_id, grandchild_manifest, start, &grandchild_manifest_raw);
     const grandchild_manifest_id = object.Header.id(grandchild_manifest_canonical);
-    const spawned_grandchild = try child.spawnManifest(child_id, grandchild_id, start, grandchild_authorization, grandchild_manifest_canonical);
+    const spawned_grandchild = try (ExecutionHost.init(device_id).?).spawnManifest(&child, child_id, grandchild_id, start, grandchild_authorization, grandchild_manifest_canonical);
     var grandchild = spawned_grandchild.app;
     try std.testing.expectEqual(@as(usize, grandchild_memory_bytes), grandchild.state.memory.remaining());
     try std.testing.expectEqual(@as(usize, grandchild_storage_bytes), grandchild.state.storage.data.len());
@@ -1608,7 +1793,7 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
         start,
         intent.requestId("blocked great grandchild spawn").?,
     ).?;
-    try std.testing.expectError(error.Unauthorized, grandchild.spawnDeclared(grandchild_id, great_grandchild_id, start, great_grandchild_authorization, grandchild_allocation));
+    try std.testing.expectError(error.Unauthorized, (ExecutionHost.init(device_id).?).spawnDeclared(&grandchild, grandchild_id, great_grandchild_id, start, great_grandchild_authorization, grandchild_allocation));
 
     try std.testing.expect(child.createRelayEnvelope(route, 1, hashMaterial("route object"), hashMaterial("route payload")) == null);
     try std.testing.expect(!grandchild.consumeExecution(grandchild_execution_ticks + 1));
@@ -1648,9 +1833,9 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
     wrong_route_receipt.route_handle = hashMaterial("wrong receipt route");
     try std.testing.expect(grandchild.completeWork(child.id.id, input_hash, output_hash, grandchild_manifest.code_hash, grandchild_manifest_id, start, end, grandchild_allocation, wrong_route_receipt) == null);
 
-    try std.testing.expectError(error.Corrupt, parent.reclaimChild(&child, spawned_child.receipt, end));
-    try std.testing.expectError(error.Corrupt, child.reclaimChild(&grandchild, wrong_route_receipt, end));
-    const grandchild_reclaim = try child.reclaimChild(&grandchild, spawned_grandchild.receipt, end);
+    try std.testing.expectError(error.Corrupt, (ExecutionHost.init(device_id).?).reclaimChild(&parent, &child, spawned_child.receipt, end));
+    try std.testing.expectError(error.Corrupt, (ExecutionHost.init(device_id).?).reclaimChild(&child, &grandchild, wrong_route_receipt, end));
+    const grandchild_reclaim = try (ExecutionHost.init(device_id).?).reclaimChild(&child, &grandchild, spawned_grandchild.receipt, end);
     try std.testing.expect(grandchild_reclaim.valid());
     try std.testing.expectEqual(@as(usize, 0), grandchild.state.memory.remaining());
     try std.testing.expect(grandchild.state.storage.getObject(grandchild.id.id, output_hash) == null);
@@ -1658,7 +1843,7 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
     try std.testing.expectEqual(@as(u64, child_route_handles), child.state.route_handles);
     try std.testing.expectEqual(@as(u64, child_device_handles), child.state.device_handles);
 
-    const child_reclaim = try parent.reclaimChild(&child, spawned_child.receipt, end);
+    const child_reclaim = try (ExecutionHost.init(device_id).?).reclaimChild(&parent, &child, spawned_child.receipt, end);
     try std.testing.expect(child_reclaim.valid());
     try std.testing.expectEqual(@as(usize, parent_memory_bytes), parent.state.memory.remaining());
     try std.testing.expectEqual(@as(usize, parent_storage_bytes), parent.state.storage.data.len());
@@ -1749,7 +1934,7 @@ test "minimum containment memory storage and reclaim laws" {
         intent.requestId("minimum laws child spawn").?,
     ).?;
     try parent.admitAuthorization(child_authorization, parent.admissionCapability(child_authorization) orelse unreachable);
-    const spawned_child = try parent.spawnManifest(parent_id, child_id, epoch, child_authorization, child_manifest_canonical);
+    const spawned_child = try (ExecutionHost.init(device_id).?).spawnManifest(&parent, parent_id, child_id, epoch, child_authorization, child_manifest_canonical);
     var child = spawned_child.app;
 
     const child_allocator = child.state.memory.allocator();
@@ -1782,20 +1967,20 @@ test "minimum containment memory storage and reclaim laws" {
         },
     };
     const grandchild_manifest_canonical = try App.writeManifestObject(grandchild_id, grandchild_manifest, epoch, &grandchild_manifest_raw);
-    const spawned_grandchild = try child.spawnManifest(child_id, grandchild_id, epoch, grandchild_authorization, grandchild_manifest_canonical);
+    const spawned_grandchild = try (ExecutionHost.init(device_id).?).spawnManifest(&child, child_id, grandchild_id, epoch, grandchild_authorization, grandchild_manifest_canonical);
     var grandchild = spawned_grandchild.app;
     try std.testing.expectEqual(@as(u64, child_execution_ticks - grandchild_execution_ticks), child.state.execution_ticks);
     try std.testing.expectEqual(@as(usize, grandchild_memory_bytes), grandchild.state.memory.remaining());
     try std.testing.expectEqual(@as(usize, parent_memory_bytes - child_memory_bytes), parent.state.memory.remaining());
 
-    try std.testing.expectError(error.Corrupt, parent.reclaimChild(&child, spawned_child.receipt, epoch));
-    _ = try child.reclaimChild(&grandchild, spawned_grandchild.receipt, epoch);
-    _ = try parent.reclaimChild(&child, spawned_child.receipt, epoch);
+    try std.testing.expectError(error.Corrupt, (ExecutionHost.init(device_id).?).reclaimChild(&parent, &child, spawned_child.receipt, epoch));
+    _ = try (ExecutionHost.init(device_id).?).reclaimChild(&child, &grandchild, spawned_grandchild.receipt, epoch);
+    _ = try (ExecutionHost.init(device_id).?).reclaimChild(&parent, &child, spawned_child.receipt, epoch);
     try std.testing.expectEqual(@as(usize, parent_memory_bytes), parent.state.memory.remaining());
     try std.testing.expectEqual(@as(usize, parent_storage_bytes), parent.state.storage.data.len());
     try std.testing.expectEqual(@as(usize, 0), child.state.memory.remaining());
     try std.testing.expectEqual(@as(usize, 0), child.state.storage.data.len());
-    try std.testing.expectError(error.Corrupt, parent.reclaimChild(&child, spawned_child.receipt, epoch));
+    try std.testing.expectError(error.Corrupt, (ExecutionHost.init(device_id).?).reclaimChild(&parent, &child, spawned_child.receipt, epoch));
 }
 
 test "minimum containment child cannot write byte past 4kb allocation" {
@@ -1854,7 +2039,7 @@ test "minimum containment rejects parent allocation id as child memory id" {
     const manifest_canonical = try App.writeManifestObject(child_id, manifest, epoch, &manifest_raw);
     const authorization = intent.admit(user_id, device_id, parent_id, child_id, .spawn_app, .delegates_resources, epoch, intent.requestId("allocation id spawn").?).?;
     try parent.admitAuthorization(authorization, parent.admissionCapability(authorization) orelse unreachable);
-    const spawned = try parent.spawnManifest(parent_id, child_id, epoch, authorization, manifest_canonical);
+    const spawned = try (ExecutionHost.init(device_id).?).spawnManifest(&parent, parent_id, child_id, epoch, authorization, manifest_canonical);
     var child = spawned.app;
     const child_memory = try child.state.memory.allocator().alloc(u8, 1);
     const forged_allocation_slice = App.SharedMemory{
@@ -1933,7 +2118,7 @@ test "minimum containment routes devices receipts and revoked handles" {
     const child_manifest_id = object.Header.id(child_manifest_canonical);
     const authorization = intent.admit(user_id, device_id, parent_id, child_id, .spawn_app, .delegates_resources, start, intent.requestId("receipt laws spawn").?).?;
     try parent.admitAuthorization(authorization, parent.admissionCapability(authorization) orelse unreachable);
-    const spawned = try parent.spawnManifest(parent_id, child_id, start, authorization, child_manifest_canonical);
+    const spawned = try (ExecutionHost.init(device_id).?).spawnManifest(&parent, parent_id, child_id, start, authorization, child_manifest_canonical);
     var child = spawned.app;
 
     try std.testing.expect(child.createRelayEnvelope(route, 1, hashMaterial("receipt laws object"), hashMaterial("receipt laws payload")) != null);
@@ -1962,7 +2147,7 @@ test "minimum containment routes devices receipts and revoked handles" {
     const tampered_info = try App.WorkReceipt.decodeObject(&tampered_receipt);
     try std.testing.expect(!tampered_info.matches(work));
 
-    _ = try parent.reclaimChild(&child, spawned.receipt, end);
+    _ = try (ExecutionHost.init(device_id).?).reclaimChild(&parent, &child, spawned.receipt, end);
     try std.testing.expect(!child.useDevice(device_id));
     try std.testing.expect(child.createRelayEnvelope(route, 3, hashMaterial("receipt laws object"), hashMaterial("receipt laws payload")) == null);
     try std.testing.expect(!child.consumeExecution(1));
@@ -2016,7 +2201,7 @@ test "minimum containment work receipt records ticks used" {
     const manifest_id = object.Header.id(manifest_canonical);
     const authorization = intent.admit(user_id, device_id, parent_id, child_id, .spawn_app, .delegates_resources, start, intent.requestId("usage receipt spawn").?).?;
     try parent.admitAuthorization(authorization, parent.admissionCapability(authorization) orelse unreachable);
-    const spawned = try parent.spawnManifest(parent_id, child_id, start, authorization, manifest_canonical);
+    const spawned = try (ExecutionHost.init(device_id).?).spawnManifest(&parent, parent_id, child_id, start, authorization, manifest_canonical);
     var child = spawned.app;
 
     try std.testing.expect(child.consumeExecution(used_execution_ticks));
@@ -2091,7 +2276,7 @@ test "parent signs validated work receipt drafts" {
     const manifest_id = object.Header.id(manifest_canonical);
     const authorization = intent.admit(user_id, device_id, parent_id, child_id, .spawn_app, .delegates_resources, start, intent.requestId("signed receipt spawn").?).?;
     try parent.admitAuthorization(authorization, parent.admissionCapability(authorization) orelse unreachable);
-    const spawned = try parent.spawnManifest(parent_id, child_id, start, authorization, manifest_canonical);
+    const spawned = try (ExecutionHost.init(device_id).?).spawnManifest(&parent, parent_id, child_id, start, authorization, manifest_canonical);
     var child = spawned.app;
     const input_hash = hashMaterial("signed input");
     const output_hash = hashMaterial("signed output");
@@ -2266,6 +2451,7 @@ test "app shares owned memory read only for direct ui updates" {
         epoch,
         intent.requestId("share ui state").?,
     ).?;
+    try producer.admitAuthorization(authorization, producer.admissionCapability(authorization) orelse unreachable);
 
     const view = try producer.shareMemoryReadOnly(ui_id.id, shared, epoch, authorization);
     try std.testing.expect(view.valid());

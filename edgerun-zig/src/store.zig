@@ -25,7 +25,12 @@ pub const Shape = struct {
     slot_count: usize,
 
     pub fn valid(self: Shape) bool {
-        return self.data_bytes != 0 and self.slot_count != 0;
+        return (self.data_bytes == 0 and self.slot_count == 0) or
+            (self.data_bytes != 0 and self.slot_count != 0);
+    }
+
+    pub fn empty(self: Shape) bool {
+        return self.data_bytes == 0 and self.slot_count == 0;
     }
 };
 
@@ -185,6 +190,10 @@ pub const Store = struct {
 
     pub fn initFromArena(arena: *BoundedArena, shape: Shape) ?Store {
         if (!shape.valid()) return null;
+        if (shape.empty()) {
+            const data = arena.takeRegion(0) orelse return null;
+            return Store.init(data, empty_blob_slots[0..]);
+        }
         const slots = arena.allocSlice(Blob, shape.slot_count) orelse return null;
         const data = arena.takeRegion(shape.data_bytes) orelse return null;
         return Store.init(data, slots);
@@ -352,6 +361,8 @@ pub const Store = struct {
         return null;
     }
 };
+
+var empty_blob_slots: [0]Blob = .{};
 
 pub const Stats = struct {
     slot_capacity: usize,
@@ -1135,6 +1146,22 @@ test "store can be carved from an app-owned arena" {
     try std.testing.expectEqualStrings("owned storage", s.get(hash).?);
     try std.testing.expect(s.data.len() < 64);
     try std.testing.expect(arena.remaining() < 960);
+}
+
+test "ram store can explicitly declare no object storage" {
+    const no_storage_bytes = 0;
+    const no_storage_slots = 0;
+    var memory: [16]u8 = undefined;
+    var arena = BoundedArena.init(.{ .base = &memory });
+    var s = Store.initFromArena(&arena, .{
+        .data_bytes = no_storage_bytes,
+        .slot_count = no_storage_slots,
+    }).?;
+
+    try std.testing.expectEqual(@as(usize, no_storage_bytes), s.data.len());
+    try std.testing.expectEqual(@as(usize, no_storage_slots), s.slotCapacity());
+    try std.testing.expect(s.putRawBlob("implicit durable storage") == null);
+    try std.testing.expectEqual(@as(usize, memory.len), arena.remaining());
 }
 
 test "store entries are typed and owner scoped" {

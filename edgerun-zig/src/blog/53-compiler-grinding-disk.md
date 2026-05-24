@@ -2,6 +2,10 @@
 
 I stopped using Rust and Cargo for one very simple reason: the build system was abusing my machine.
 
+> Mental model: active work belongs in memory; disk should keep durable facts, not hide temporary churn.
+
+## What happened
+
 Not because Rust is a bad language. Not because memory safety is a bad goal. Not because package managers are useless.
 
 Because the actual development experience became absurd.
@@ -11,6 +15,8 @@ I had vendored dependencies. I had plenty of RAM. I was not building on some tin
 And still, the tooling was writing enormous amounts of data to disk. At one point, I was seeing what looked like terabytes of writes per day.
 
 That was the moment I stopped seeing it as normal compiler behavior and started seeing it as a symptom of a deeper disease.
+
+## The disk-as-universe model
 
 Modern development tooling still treats disk as the center of the universe.
 
@@ -31,6 +37,8 @@ But because so much Unix-style tooling is built around everything being a file, 
 That model made sense when RAM was tiny, storage was simpler, and programs were smaller.
 
 It makes much less sense when I have 64GB of RAM and my compiler still acts like the only reliable way to remember anything for five seconds is to scrape it across an SSD.
+
+## What the machine should report
 
 The problem is not just performance. It is observability and control.
 
@@ -56,9 +64,11 @@ Most things a computer touches are not worth storing forever. Most working state
 
 Temporary computation should not constantly become disk pollution.
 
-This is one of the reasons I moved toward a different model for Edgerun.
+## Better resource shape
 
-In Edgerun, memory is not treated as some accidental cache behind the real file system. Memory is the live world. Apps receive allocated memory from their parent. Subapps can only use what the parent gave them. If memory runs out, the user or parent runtime decides what to evict, prune, checkpoint, or kill.
+This is one of the reasons I moved toward a different model for EdgeRun.
+
+In EdgeRun, memory is not treated as some accidental cache behind the real file system. Memory is the live world. Apps receive allocated memory from their parent. Subapps can only use what the parent gave them. If memory runs out, the user or parent runtime decides what to evict, prune, checkpoint, or kill.
 
 Storage is not a dumping ground. It is preallocated, scoped, sealed, and accounted for.
 
@@ -88,8 +98,18 @@ A good tool should respect the machine it runs on.
 
 A good runtime should know the difference between memory, storage, cache, and durable state.
 
+## Interactive model
+
+[[demo:post_model]]
+
+## Main lesson
+
 A good system should not force the user to trace mystery I/O just to understand why their own computer is slow.
 
 My computer has memory. Use it.
 
 My disk is for things worth keeping.
+
+## EdgeRun seed
+
+Active work belongs in accounted memory. Durable state should cross an explicit boundary: a signed output, saved file, export, checkpoint, release artifact, receipt, or sealed object. Everything else is working state, and working state should not quietly grind the user's disk into a mystery ledger.

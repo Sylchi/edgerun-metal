@@ -9,12 +9,14 @@ const seal = @import("seal.zig");
 
 pub const id_size = preimage.hash_size;
 pub const EventLog = bounded.SliceList(Event);
+const admission_capacity = 16;
 
 pub const Error = error{
     BadApp,
     BadPolicy,
     BadRequest,
     NoEventSpace,
+    NoAdmissionSpace,
     Unauthorized,
 };
 
@@ -111,6 +113,47 @@ pub const App = struct {
     device: identity.Identity,
     clock: clock.Clock,
     events: EventLog,
+    admissions: Admissions = .{},
+
+    const AdmissionRecord = struct {
+        receipt: preimage.Hash,
+        actor: identity.Id,
+        subject: identity.Id,
+        action: intent.Action,
+        consequence: intent.Consequence,
+        not_after: clock.Stamp,
+
+        fn valid(self: AdmissionRecord) bool {
+            return bytes.nonzero(&self.receipt) and
+                self.actor.valid() and
+                self.subject.valid() and
+                self.not_after.valid();
+        }
+
+        fn matches(self: AdmissionRecord, authorization: intent.Receipt, epoch: clock.Stamp, actor: identity.Id, subject: identity.Id, action: intent.Action, consequence: intent.Consequence) bool {
+            const receipt_id = authorization.id() orelse return false;
+            return self.valid() and
+                bytes.eql(&self.receipt, &receipt_id) and
+                self.actor.eql(actor) and
+                self.subject.eql(subject) and
+                self.action == action and
+                self.consequence == consequence and
+                epoch.sameKeeper(self.not_after) and
+                epoch.order(self.not_after) <= 0;
+        }
+    };
+
+    const Admissions = bounded.FixedList(AdmissionRecord, admission_capacity);
+
+    const AdmissionCapability = struct {
+        app: identity.Id,
+        receipt: preimage.Hash,
+
+        fn permits(self: AdmissionCapability, app: identity.Id, authorization: intent.Receipt) bool {
+            const receipt_id = authorization.id() orelse return false;
+            return self.app.eql(app) and bytes.eql(&self.receipt, &receipt_id);
+        }
+    };
 
     pub fn init(id: identity.Identity, device: identity.Identity, local_clock: clock.Clock, events: []Event) ?App {
         if (id.kind != .app or device.kind != .device) return null;
@@ -122,8 +165,35 @@ pub const App = struct {
         };
     }
 
+    pub fn admissionCapability(self: App, authorization: intent.Receipt) ?AdmissionCapability {
+        if (!authorization.valid()) return null;
+        return .{
+            .app = self.id.id,
+            .receipt = authorization.id() orelse return null,
+        };
+    }
+
+    pub fn admitAuthorization(self: *App, authorization: intent.Receipt, capability: AdmissionCapability) Error!void {
+        if (!authorization.valid() or !capability.permits(self.id.id, authorization)) return error.Unauthorized;
+        const receipt_id = authorization.id() orelse return error.Unauthorized;
+        for (self.admissions.slice()) |admission| {
+            if (!admission.valid()) return error.Unauthorized;
+            if (bytes.eql(&admission.receipt, &receipt_id)) return;
+        }
+        if (self.admissions.full()) return error.NoAdmissionSpace;
+        _ = self.admissions.append(.{
+            .receipt = receipt_id,
+            .actor = authorization.intent.actor,
+            .subject = authorization.intent.subject,
+            .action = authorization.intent.action,
+            .consequence = authorization.intent.consequence,
+            .not_after = authorization.not_after,
+        });
+    }
+
     pub fn sealFor(self: *App, caller: identity.Identity, user: identity.Identity, policy: seal.Policy, authorization: intent.Receipt, plaintext: []const u8) Error!Sealed {
         if (!authorization.permitsAt(self.clock.now, caller.id, self.id.id, .seal_data, .writes_private_state)) return error.Unauthorized;
+        if (!self.hasAdmittedAuthorization(authorization, caller.id, self.id.id, .seal_data, .writes_private_state)) return error.Unauthorized;
         if (!policyAllowsCaller(policy, self.device.id, caller.id, user.id)) return error.BadPolicy;
 
         const plaintext_hash = hashBytes("edgerun:zig:v1:tpmapp:plaintext", plaintext);
@@ -139,6 +209,7 @@ pub const App = struct {
 
     pub fn unsealFor(self: *App, caller: identity.Identity, user: identity.Identity, sealed: Sealed, authorization: intent.Receipt) Error!preimage.Hash {
         if (!authorization.permitsAt(self.clock.now, caller.id, self.id.id, .unseal_data, .reads_private_state)) return error.Unauthorized;
+        if (!self.hasAdmittedAuthorization(authorization, caller.id, self.id.id, .unseal_data, .reads_private_state)) return error.Unauthorized;
         if (!sealed.valid() or !policyAllowsCaller(sealed.policy, self.device.id, caller.id, user.id)) return error.BadPolicy;
 
         const event_id = try self.record(.unseal, caller.id, sealed.policy, sealed.ciphertext_hash, sealed.plaintext_hash, authorization);
@@ -147,6 +218,7 @@ pub const App = struct {
 
     pub fn signFor(self: *App, caller: identity.Identity, authorization: intent.Receipt, subject: []const u8) Error!Signature {
         if (!authorization.permitsAt(self.clock.now, caller.id, self.id.id, .sign_data, .attests_state)) return error.Unauthorized;
+        if (!self.hasAdmittedAuthorization(authorization, caller.id, self.id.id, .sign_data, .attests_state)) return error.Unauthorized;
 
         const subject_hash = hashBytes("edgerun:zig:v1:tpmapp:subject", subject);
         const signature_hash = signatureHash(self.id.id, caller.id, subject_hash);
@@ -163,6 +235,7 @@ pub const App = struct {
     pub fn randomFor(self: *App, caller: identity.Identity, authorization: intent.Receipt, request: []const u8, out: []u8) Error!Random {
         if (out.len == 0 or request.len == 0) return error.BadRequest;
         if (!authorization.permitsAt(self.clock.now, caller.id, self.id.id, .random_bytes, .creates_secret_material)) return error.Unauthorized;
+        if (!self.hasAdmittedAuthorization(authorization, caller.id, self.id.id, .random_bytes, .creates_secret_material)) return error.Unauthorized;
 
         const request_hash = hashBytes("edgerun:zig:v1:tpmapp:rng-request", request);
         fillRandomModel(self.id.id, caller.id, self.clock.now, request_hash, out);
@@ -202,6 +275,13 @@ pub const App = struct {
         if (!self.events.append(event)) return error.NoEventSpace;
         _ = self.clock.advance(1) orelse return error.BadPolicy;
         return event_id;
+    }
+
+    fn hasAdmittedAuthorization(self: App, authorization: intent.Receipt, actor: identity.Id, subject: identity.Id, action: intent.Action, consequence: intent.Consequence) bool {
+        for (self.admissions.slice()) |admission| {
+            if (admission.matches(authorization, self.clock.now, actor, subject, action, consequence)) return true;
+        }
+        return false;
     }
 };
 
@@ -276,6 +356,10 @@ fn testIdentities(epoch: clock.Stamp) TestIdentities {
     };
 }
 
+fn admitForTest(app: *App, authorization: intent.Receipt) !void {
+    try app.admitAuthorization(authorization, app.admissionCapability(authorization) orelse return error.Unauthorized);
+}
+
 test "tpm app seals only for authorized caller-bound policy" {
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
@@ -283,6 +367,7 @@ test "tpm app seals only for authorized caller-bound policy" {
     var events: [4]Event = undefined;
     var tpm = App.init(ids.tpm, ids.device, clock.Clock.init(keeper, .{}).?, &events).?;
     const authorization = intent.admit(ids.user, ids.device, ids.chat, ids.tpm, .seal_data, .writes_private_state, tpm.clock.now, intent.requestId("seal chat data").?).?;
+    try admitForTest(&tpm, authorization);
     const policy = seal.Policy.machineAppUser(ids.device, ids.chat, ids.user);
 
     const sealed = try tpm.sealFor(ids.chat, ids.user, policy, authorization, "message");
@@ -293,6 +378,7 @@ test "tpm app seals only for authorized caller-bound policy" {
 
     const claimed_policy = seal.Policy.machineAppUser(ids.device, ids.other, ids.user);
     const second_authorization = intent.admit(ids.user, ids.device, ids.chat, ids.tpm, .seal_data, .writes_private_state, tpm.clock.now, intent.requestId("seal bad policy").?).?;
+    try admitForTest(&tpm, second_authorization);
     try std.testing.expectError(error.BadPolicy, tpm.sealFor(ids.chat, ids.user, claimed_policy, second_authorization, "message"));
 }
 
@@ -306,6 +392,8 @@ test "tpm app refuses signatures without caller intent" {
     const authorization = intent.admit(ids.user, ids.device, ids.chat, ids.tpm, .sign_data, .attests_state, tpm.clock.now, intent.requestId("sign app state").?).?;
 
     try std.testing.expectError(error.Unauthorized, tpm.signFor(ids.chat, wrong_authorization, "state root"));
+    try std.testing.expectError(error.Unauthorized, tpm.signFor(ids.chat, authorization, "state root"));
+    try admitForTest(&tpm, authorization);
     const signature = try tpm.signFor(ids.chat, authorization, "state root");
     try std.testing.expect(signature.valid());
     try std.testing.expectEqual(@as(usize, 1), tpm.eventCount());
@@ -319,6 +407,7 @@ test "tpm app exposes authorized rng to apps" {
     var tpm = App.init(ids.tpm, ids.device, clock.Clock.init(keeper, .{}).?, &events).?;
     const authorization = intent.admit(ids.user, ids.device, ids.chat, ids.tpm, .random_bytes, .creates_secret_material, tpm.clock.now, intent.requestId("message key material").?).?;
     const wrong_authorization = intent.admit(ids.user, ids.device, ids.other, ids.tpm, .random_bytes, .creates_secret_material, tpm.clock.now, intent.requestId("other key material").?).?;
+    try admitForTest(&tpm, authorization);
 
     var key: [32]u8 = undefined;
     const random = try tpm.randomFor(ids.chat, authorization, "message-key", &key);

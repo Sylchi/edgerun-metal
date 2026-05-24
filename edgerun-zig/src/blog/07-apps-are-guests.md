@@ -8,6 +8,8 @@ Mobile operating systems sandbox apps. Browsers sandbox websites. That is good. 
 
 The problem is not that apps need access. Apps are useful because they do things for the user. The problem is that platforms often turn one reasonable request into a permanent, oversized grant.
 
+> Mental model: an app should borrow specific rooms, not receive the keys to the building.
+
 ## Bad permission model
 
 "Allow contacts" can mean upload the whole social graph.
@@ -44,10 +46,14 @@ parent revokes -> app loses access
 
 The contract does not have to be loud. It has to be real.
 
+## Interactive model
+
+[[demo:post_model]]
+
 ## Main lesson
 
 A safe app should receive exactly what it needs for the task in front of the user, not a tour of the user's life.
 
-## Edgerun seed
+## EdgeRun seed
 
-Edgerun apps run inside a parent runtime. They get memory, storage, identity, routes, and capabilities from the parent. Subapps can only spend what they were allocated, and useful software can be composed without turning every plugin into an owner.
+EdgeRun apps run inside a parent runtime. They get memory, storage, identity, routes, and capabilities from the parent. Subapps can only spend what they were allocated, and useful software can be composed without turning every plugin into an owner.

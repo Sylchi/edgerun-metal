@@ -6,6 +6,8 @@ A simple "hello" can pass through load balancers, application handlers, queues, 
 
 The word "server" hides a lot. It sounds like one machine waiting politely for requests. In practice, the message may enter a distributed operation owned by a company, shaped by deployment tools, observability systems, fraud checks, abuse policy, experiments, and retention rules.
 
+> Mental model: reaching the server means entering someone else's building, workflow, and policy system.
+
 ## Inside the building
 
 [[demo:server_pipeline]]

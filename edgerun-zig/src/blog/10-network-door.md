@@ -6,6 +6,8 @@ The app creates data. The operating system gives it to the network stack. Networ
 
 People often start the story at the server. That skips the part where the device decided what the message was, which app was allowed to create it, which key was allowed to sign it, and which route was allowed to carry it.
 
+> Mental model: networking carries a decision the device already made.
+
 ## Before the packet leaves
 
 Your device already decided:
@@ -48,10 +50,14 @@ local object -> explicit intent -> route decision
 route decision -> packet -> remote verifier
 ```
 
+## Interactive model
+
+[[demo:post_model]]
+
 ## Main lesson
 
 The network begins after your device has already decided what to send. Fixing the network cannot fix a device that gave the wrong data the right permission.
 
-## Bridge
+## EdgeRun seed
 
 Now we can talk about the internet. A message does not start in the cloud. It starts inside a machine full of boundaries, and the door out should be treated as one more explicit boundary.

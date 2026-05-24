@@ -6,6 +6,8 @@ The point is not that every layer is evil. The point is that every layer is a tr
 
 The message felt simple because the complexity was hidden. That is the bargain most modern software offers: an easy surface in exchange for remote authority, opaque dependencies, platform wake paths, server databases, account policy, and rented infrastructure.
 
+> Mental model: a simple hello is a chain of authority decisions wearing a friendly UI.
+
 ## The conventional path
 
 ```text
@@ -40,6 +42,10 @@ This path still uses networks. It may still use relays. It may still need abuse 
 - the user can export meaningful state
 
 The goal is not nostalgia for offline computing. The goal is to use the network without letting the network become the user.
+
+## Interactive model
+
+[[demo:post_model]]
 
 ## Main lesson
 

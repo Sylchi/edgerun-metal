@@ -6,6 +6,8 @@ A modern app can include analytics, crash reporting, ad SDKs, notification SDKs,
 
 The icon is a brand promise. The binary is a supply chain.
 
+> Mental model: installing one app often means trusting a crowd hidden behind one icon.
+
 ## What came with the app
 
 The feature the user wanted might be simple: send a message, edit a note, show a calendar, track a workout. But the installed app may also include:

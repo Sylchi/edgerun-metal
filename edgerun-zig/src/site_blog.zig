@@ -6,6 +6,7 @@ const site_chrome = @import("site_chrome.zig");
 
 pub const back_button_id: u32 = 40_001;
 pub const first_post_button_id: u32 = 40_100;
+pub const all_lessons_button_id: u32 = 40_899;
 pub const first_arc_filter_button_id: u32 = 40_900;
 
 const header_h: f32 = site_chrome.header_h;
@@ -13,16 +14,38 @@ const content_wide: f32 = 1180.0;
 const content_pad: f32 = 28.0;
 const workflow_w: f32 = 380.0;
 const index_intro_w: f32 = 760.0;
-const guide_h: f32 = 320.0;
+const guide_h: f32 = 280.0;
 const line_h: f32 = 18.0;
 const code_line_h: f32 = 17.0;
 const cloud_meme_image_id: u32 = 1;
 const post_list_gap: f32 = 0.0;
 const arc_overview_gap: f32 = 18.0;
-const arc_overview_h: f32 = 104.0;
-const section_header_h: f32 = 86.0;
-const section_gap: f32 = 30.0;
+const arc_overview_h: f32 = 96.0;
+const lesson_rhythm_gap: f32 = 24.0;
+const lesson_rhythm_h: f32 = 96.0;
+const section_header_h: f32 = 62.0;
+const section_gap: f32 = 18.0;
 const page_bottom_pad: f32 = 160.0;
+const post_list_padding_x: f32 = 6.0;
+const post_list_padding_y: f32 = 10.0;
+const post_list_min_h: f32 = 76.0;
+const post_list_meta_h: f32 = 12.0;
+const post_list_meta_gap: f32 = 8.0;
+const post_list_title_h: f32 = 20.0;
+const post_list_title_avg_char_w: f32 = 10.2;
+const post_list_title_max_lines: usize = 2;
+const post_list_summary_gap: f32 = 6.0;
+const post_list_summary_h: f32 = 15.0;
+const post_list_summary_avg_char_w: f32 = 8.6;
+const post_list_summary_max_lines: usize = 2;
+const post_list_arrow_slot: f32 = 32.0;
+const post_list_divider_h: f32 = 1.0;
+const node_map_min_h: f32 = 720.0;
+const node_map_grid: f32 = 26.0;
+const node_map_dot_size: f32 = 2.0;
+const node_map_dot_radius: f32 = 1.0;
+const node_map_dot_alpha: u8 = 10;
+const node_map_pattern_divisor: i32 = 7;
 const post_footer_gap: f32 = 52.0;
 const post_footer_column_gap: f32 = 36.0;
 const post_footer_heading_h: f32 = 34.0;
@@ -30,13 +53,27 @@ const post_footer_list_gap: f32 = 0.0;
 const post_footer_neighbor_count: usize = 2;
 const post_sidebar_w: f32 = 292.0;
 const post_sidebar_gap: f32 = 48.0;
+const post_sidebar_h: f32 = 420.0;
 const post_header_top_h: f32 = 112.0;
 const post_title_line_h: f32 = 44.0;
 const post_title_max_lines: usize = 3;
 const post_title_average_char_w: f32 = 22.0;
+const post_focus_gap: f32 = 22.0;
+const post_focus_h: f32 = 92.0;
 const post_demo_gap: f32 = 24.0;
 const post_demo_h: f32 = 32.0;
 const post_body_gap: f32 = 28.0;
+const post_model_demo_h: f32 = 360.0;
+const post_model_demo_pad: f32 = 22.0;
+const post_model_card_count: usize = 3;
+const post_model_card_gap: f32 = 14.0;
+const post_model_card_h: f32 = 128.0;
+const post_model_detail_h: f32 = 74.0;
+const callout_gap: f32 = 18.0;
+const callout_pad_x: f32 = 18.0;
+const callout_pad_y: f32 = 16.0;
+const callout_line_h: f32 = 18.0;
+const callout_avg_char_w: f32 = 9.2;
 const post_demo_directive_gap: f32 = 30.0;
 const vpn_demo_h: f32 = 430.0;
 const vpn_demo_pad: f32 = 22.0;
@@ -151,8 +188,8 @@ const arc_control_end: usize = 61;
 const arc_accounting_start: usize = 61;
 const arc_accounting_end: usize = 66;
 
-pub const season_title = "Your Device Is Already a Computer";
-pub const season_subtitle = "Before we talk about the internet, we need to understand the machine in your hand.";
+pub const season_title = "EdgeRun Academy";
+pub const season_subtitle = "A practical, slightly irreverent path through devices, networks, security, and user-owned computing.";
 pub const arc_local = "Arc 0: How Your Device Works";
 pub const arc_network = "Arc 1: How Data Moves";
 pub const arc_device = "Arc 2: Who Owns The Device?";
@@ -173,7 +210,7 @@ const arc_sections = [_]ArcSection{
     .{
         .title = arc_local,
         .detail = "CPU, RAM, storage, GPU, OS, apps, firmware, keys, and the door out of the machine.",
-        .count_label = "10 posts",
+        .count_label = "10 lessons",
         .card_title = "Your device is a computer",
         .card_detail = "CPU -> RAM -> OS",
         .start = arc_local_start,
@@ -182,7 +219,7 @@ const arc_sections = [_]ArcSection{
     .{
         .title = arc_network,
         .detail = "From keypress to server: the simple message path becomes visible.",
-        .count_label = "11 posts",
+        .count_label = "11 lessons",
         .card_title = "How data moves",
         .card_detail = "keypress -> DNS -> TLS",
         .start = arc_network_start,
@@ -191,7 +228,7 @@ const arc_sections = [_]ArcSection{
     .{
         .title = arc_device,
         .detail = "After the message arrives, the endpoint becomes the real question.",
-        .count_label = "13 posts",
+        .count_label = "13 lessons",
         .card_title = "Who owns the device",
         .card_detail = "phone -> account -> app store",
         .start = arc_device_start,
@@ -200,7 +237,7 @@ const arc_sections = [_]ArcSection{
     .{
         .title = arc_control,
         .detail = "The hidden levers that rewrite attention, updates, payments, discovery, and trust.",
-        .count_label = "27 posts",
+        .count_label = "27 lessons",
         .card_title = "Who controls the rules",
         .card_detail = "updates -> feeds -> AI",
         .start = arc_control_start,
@@ -209,7 +246,7 @@ const arc_sections = [_]ArcSection{
     .{
         .title = arc_accounting,
         .detail = "Receipts, contribution, settlement, and why fair systems need explicit resource accounting.",
-        .count_label = "5 posts",
+        .count_label = "5 lessons",
         .card_title = "Who pays",
         .card_detail = "receipts -> settlement",
         .start = arc_accounting_start,
@@ -219,13 +256,13 @@ const arc_sections = [_]ArcSection{
 
 const palette = struct {
     const bg = ui.Color{ .r = 11, .g = 11, .b = 11 };
-    const card = ui.Color{ .r = 18, .g = 18, .b = 18, .a = 238 };
-    const card_alt = ui.Color{ .r = 24, .g = 24, .b = 24, .a = 224 };
+    const card = ui.Color{ .r = 18, .g = 18, .b = 18 };
+    const card_alt = ui.Color{ .r = 24, .g = 24, .b = 24 };
     const border = ui.Color{ .r = 56, .g = 56, .b = 56 };
     const text = ui.Color{ .r = 242, .g = 242, .b = 242 };
     const dim = ui.Color{ .r = 154, .g = 154, .b = 154 };
     const primary = ui.Color{ .r = 74, .g = 222, .b = 128 };
-    const neutral_soft = ui.Color{ .r = 32, .g = 32, .b = 32, .a = 190 };
+    const neutral_soft = ui.Color{ .r = 32, .g = 32, .b = 32 };
     const blue = ui.Color{ .r = 96, .g = 165, .b = 250 };
 };
 
@@ -854,14 +891,15 @@ pub const State = struct {
 
 pub fn render(scene: *ui.Scene, bounds: ui.Rect, state: State) ui.RenderError!void {
     try fill(scene, bounds, palette.bg, 0.0);
-    try renderNodeMap(scene, ui.Rect.init(bounds.x, bounds.y, bounds.w, @max(bounds.h, 720.0)));
 
     const content = centered(bounds, content_wide);
+    const page_y = header_h - state.scroll_y;
+    try renderNodeMap(scene, ui.Rect.init(bounds.x, page_y, bounds.w, @max(bounds.h, node_map_min_h)));
+
     const page_clip = ui.Rect.init(bounds.x, bounds.y + header_h, bounds.w, @max(1.0, bounds.h - header_h));
     if (try scene.pushClip(page_clip)) {
         defer scene.popClip();
 
-        const page_y = header_h - state.scroll_y;
         if (postIndexById(state.selected_post_id)) |index| {
             try renderPost(scene, ui.Rect.init(content.x, page_y + 52.0, content.w, 1800.0), index, state.hover_x, state.hover_y);
         } else {
@@ -914,23 +952,25 @@ fn renderIndex(scene: *ui.Scene, bounds: ui.Rect, arc_filter_index: ?usize) ui.R
 fn flowIndexContent(scene: ?*ui.Scene, bounds: ui.Rect, arc_filter_index: ?usize) ui.RenderError!f32 {
     const split = bounds.w >= 980.0;
     const headline_w = if (split) @min(index_intro_w, bounds.w - workflow_w - 64.0) else bounds.w;
-    const workflow_y = if (split) bounds.y + 28.0 else bounds.y + 256.0;
-    const overview_y = if (split) bounds.y + 260.0 else workflow_y + 222.0;
-    const intro_h: f32 = if (split) 392.0 else 602.0;
+    const workflow_y = if (split) bounds.y + 18.0 else bounds.y + 230.0;
+    const overview_y = if (split) bounds.y + 228.0 else workflow_y + 206.0;
+    const rhythm_y = overview_y + arc_overview_h + lesson_rhythm_gap;
+    const intro_h = rhythm_y - bounds.y + lesson_rhythm_h + 46.0;
 
     if (scene) |target| {
-        try tag(target, ui.Rect.init(bounds.x, bounds.y, 92.0, 24.0), "ARC 0", palette.primary);
-        try text(target, bounds.x, bounds.y + 48.0, headline_w, 46.0, "Your Device Is", palette.text);
-        try text(target, bounds.x, bounds.y + 102.0, headline_w, 46.0, "Already a Computer", palette.text);
-        try paragraph(target, ui.Rect.init(bounds.x, bounds.y + 162.0, headline_w, 72.0), "Before we talk about the internet, we need to understand the machine in your hand.");
+        try tag(target, ui.Rect.init(bounds.x, bounds.y, 136.0, 24.0), "EDGERUN ACADEMY", palette.primary);
+        try text(target, bounds.x, bounds.y + 48.0, headline_w, 46.0, "Computers Are", palette.text);
+        try text(target, bounds.x, bounds.y + 102.0, headline_w, 46.0, "Not Magic", palette.text);
+        try paragraph(target, ui.Rect.init(bounds.x, bounds.y + 162.0, headline_w, 72.0), "A guided, hands-on path through devices, networks, security, and user-owned computing. The old man can still yell at cloud; now the yelling has a syllabus.");
 
         if (split) {
-            try renderCloudMeme(target, ui.Rect.init(bounds.x + bounds.w - workflow_w, workflow_y, workflow_w, 214.0));
+            try renderCloudMeme(target, ui.Rect.init(bounds.x + bounds.w - workflow_w, workflow_y, workflow_w, 188.0));
         } else {
-            try renderCloudMeme(target, ui.Rect.init(bounds.x, workflow_y, bounds.w, 198.0));
+            try renderCloudMeme(target, ui.Rect.init(bounds.x, workflow_y, bounds.w, 184.0));
         }
 
         try renderArcOverview(target, ui.Rect.init(bounds.x, overview_y, bounds.w, arc_overview_h), arc_filter_index);
+        try renderLessonRhythm(target, ui.Rect.init(bounds.x, rhythm_y, bounds.w, lesson_rhythm_h));
     }
 
     var next_y = bounds.y + intro_h;
@@ -943,7 +983,7 @@ fn flowIndexContent(scene: ?*ui.Scene, bounds: ui.Rect, arc_filter_index: ?usize
     }
 
     const guide_y = next_y + 90.0;
-    if (scene) |target| try renderGuide(target, ui.Rect.init(bounds.x, guide_y, bounds.w, guide_h));
+    if (scene) |target| try renderReaderGuide(target, ui.Rect.init(bounds.x, guide_y, bounds.w, guide_h));
     return guide_y + guide_h;
 }
 
@@ -982,10 +1022,32 @@ fn renderArcOverview(scene: *ui.Scene, bounds: ui.Rect, active_index: ?usize) ui
     }
 }
 
+fn renderLessonRhythm(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
+    try nativeCard(scene, bounds, "", "");
+    try tag(scene, ui.Rect.init(bounds.x + 18.0, bounds.y + 18.0, 92.0, 24.0), "HOW TO READ", palette.blue);
+    try text(scene, bounds.x + 128.0, bounds.y + 23.0, bounds.w - 286.0, 14.0, "Every lesson has a job: notice the ordinary action, name the hidden authority, then ask what the user can own.", palette.text);
+    try outlineButton(scene, ui.Rect.init(bounds.x + bounds.w - 140.0, bounds.y + 14.0, 122.0, 32.0), "All Lessons", all_lessons_button_id);
+
+    const gap: f32 = 14.0;
+    const item_y = bounds.y + 56.0;
+    const item_h: f32 = 22.0;
+    const item_w = (bounds.w - 36.0 - gap * 2.0) / 3.0;
+    const steps = [_]struct { []const u8, []const u8 }{
+        .{ "1. Observe", "start with something normal" },
+        .{ "2. Name", "find the key, policy, or server" },
+        .{ "3. Own", "move authority back to the user" },
+    };
+    for (steps, 0..) |step, index| {
+        const x = bounds.x + 18.0 + @as(f32, @floatFromInt(index)) * (item_w + gap);
+        try text(scene, x, item_y, item_w, item_h, step[0], palette.primary);
+        try text(scene, x, item_y + 22.0, item_w, item_h, step[1], palette.dim);
+    }
+}
+
 fn flowPostSection(scene: ?*ui.Scene, bounds: ui.Rect, y: f32, section: ArcSection) ui.RenderError!f32 {
     if (scene) |target| {
-        try text(target, bounds.x, y, bounds.w, 22.0, section.title, palette.text);
-        try paragraph(target, ui.Rect.init(bounds.x, y + 32.0, @min(bounds.w, 720.0), 40.0), section.detail);
+        try text(target, bounds.x, y, bounds.w, 20.0, section.title, palette.text);
+        try paragraph(target, ui.Rect.init(bounds.x, y + 28.0, @min(bounds.w, 760.0), 30.0), section.detail);
     }
 
     var item_y = y + section_header_h;
@@ -1028,48 +1090,72 @@ fn renderWorkflow(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
 }
 
 fn renderPostListItem(scene: *ui.Scene, bounds: ui.Rect, index: usize, post: Post) ui.RenderError!void {
-    try components.renderArticleListItem(scene, bounds, .{
-        .id = postIdAt(index),
-        .category = episodeLabel(episodeAt(index)),
-        .meta = post.arc,
-        .title = post.title,
-        .summary = post.summary,
-    }, .{ .style = siteStyle() });
+    const text_x = bounds.x + post_list_padding_x;
+    const text_w = postListTextWidth(bounds.w);
+    const meta_y = bounds.y + post_list_padding_y;
+    try text(scene, text_x, meta_y, 118.0, post_list_meta_h, episodeLabel(episodeAt(index)), palette.primary);
+    try alignedText(scene, text_x, meta_y, text_w, post_list_meta_h, post.arc, palette.dim, .end);
+
+    const title_y = meta_y + post_list_meta_h + post_list_meta_gap;
+    const title_lines = wrappedLineCount(post.title, text_w, post_list_title_avg_char_w, post_list_title_max_lines);
+    const title_h = post_list_title_h * @as(f32, @floatFromInt(title_lines));
+    try scene.pushWrappedText(ui.Rect.init(text_x, title_y, text_w, title_h), post.title, palette.text, .{
+        .line_height = post_list_title_h,
+        .average_char_width = post_list_title_avg_char_w,
+        .max_lines = post_list_title_max_lines,
+    });
+
+    const summary_y = title_y + title_h + post_list_summary_gap;
+    const summary_lines = wrappedLineCount(post.summary, text_w, post_list_summary_avg_char_w, post_list_summary_max_lines);
+    const summary_h = post_list_summary_h * @as(f32, @floatFromInt(summary_lines));
+    try scene.pushWrappedText(ui.Rect.init(text_x, summary_y, text_w, summary_h), post.summary, palette.dim, .{
+        .line_height = post_list_summary_h,
+        .average_char_width = post_list_summary_avg_char_w,
+        .max_lines = post_list_summary_max_lines,
+    });
+
+    try fill(scene, ui.Rect.init(bounds.x, bounds.y + bounds.h - post_list_divider_h, bounds.w, post_list_divider_h), palette.border, 0.0);
     try iconQuad(scene, ui.Rect.init(bounds.x + bounds.w - 22.0, bounds.y + (bounds.h - 16.0) * 0.5, 16.0, 16.0), .chevron_right, palette.primary);
+    try hit(scene, bounds, .button, postIdAt(index));
 }
 
 fn postListItemHeight(width: f32, index: usize, post: Post) f32 {
-    return components.articleListItemHeight(width, .{
-        .id = postIdAt(index),
-        .category = episodeLabel(episodeAt(index)),
-        .meta = post.arc,
-        .title = post.title,
-        .summary = post.summary,
-    });
+    _ = index;
+    const text_w = postListTextWidth(width);
+    const title_lines = wrappedLineCount(post.title, text_w, post_list_title_avg_char_w, post_list_title_max_lines);
+    const summary_lines = wrappedLineCount(post.summary, text_w, post_list_summary_avg_char_w, post_list_summary_max_lines);
+    const text_h = post_list_padding_y * 2.0 +
+        post_list_meta_h +
+        post_list_meta_gap +
+        post_list_title_h * @as(f32, @floatFromInt(title_lines)) +
+        post_list_summary_gap +
+        post_list_summary_h * @as(f32, @floatFromInt(summary_lines));
+    return @max(post_list_min_h, text_h);
 }
 
-fn renderGuide(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
+fn postListTextWidth(width: f32) f32 {
+    return @max(1.0, width - post_list_padding_x * 2.0 - post_list_arrow_slot);
+}
+
+fn renderReaderGuide(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
     const split = bounds.w >= 900.0;
     const copy_w = if (split) bounds.w * 0.46 else bounds.w - 48.0;
     const code_bounds = if (split)
         ui.Rect.init(bounds.x + bounds.w * 0.54, bounds.y + 34.0, bounds.w * 0.42, bounds.h - 68.0)
     else
-        ui.Rect.init(bounds.x + 24.0, bounds.y + 178.0, bounds.w - 48.0, bounds.h - 202.0);
+        ui.Rect.init(bounds.x + 24.0, bounds.y + 166.0, bounds.w - 48.0, bounds.h - 190.0);
 
     try nativeCard(scene, bounds, "", "");
-    try tag(scene, ui.Rect.init(bounds.x + 24.0, bounds.y + 24.0, 116.0, 24.0), "AUTHORING", palette.blue);
-    try text(scene, bounds.x + 24.0, bounds.y + 70.0, bounds.w - 48.0, 24.0, "Add an episode by committing a markdown file.", palette.text);
-    try paragraph(scene, ui.Rect.init(bounds.x + 24.0, bounds.y + 112.0, copy_w, 88.0), "The season engine uses repo content as its source of truth. Add markdown, register episode metadata in the native index, and the browser render path picks it up at build time.");
+    try tag(scene, ui.Rect.init(bounds.x + 24.0, bounds.y + 24.0, 110.0, 24.0), "ACADEMY MAP", palette.blue);
+    try text(scene, bounds.x + 24.0, bounds.y + 70.0, bounds.w - 48.0, 24.0, "Start at the phone. End with user-owned authority.", palette.text);
+    try paragraph(scene, ui.Rect.init(bounds.x + 24.0, bounds.y + 112.0, copy_w, 82.0), "The joke stays useful: every lesson follows one ordinary action until the invisible middlemen become visible enough to question.");
     try codeBlock(scene, code_bounds, &.{
-        "edgerun-zig/src/blog/my-post.md",
-        "",
-        "# Title",
-        "",
-        "## Section",
-        "- point",
-        "```zig",
-        "const value = run();",
-        "```",
+        "learning path",
+        "01 device basics",
+        "02 data movement",
+        "03 ownership and identity",
+        "04 platform control",
+        "05 accounting and resources",
     });
 }
 
@@ -1083,10 +1169,11 @@ fn flowPostContent(scene: ?*ui.Scene, bounds: ui.Rect, index: usize, hover_x: f3
     const main_w = if (sidebar_split) @max(320.0, bounds.w - post_sidebar_w - post_sidebar_gap) else bounds.w;
     const title_w = @min(main_w, 760.0);
     const title_h = wrappedTextHeight(post.title, title_w, post_title_line_h, post_title_max_lines, post_title_average_char_w);
-    const demo_y = bounds.y + post_header_top_h + title_h + post_demo_gap;
+    const focus_y = bounds.y + post_header_top_h + title_h + post_focus_gap;
+    const demo_y = focus_y + post_focus_h + post_demo_gap;
     const body_y = demo_y + post_demo_h + post_body_gap;
     if (scene) |target| {
-        try outlineButton(target, ui.Rect.init(bounds.x, bounds.y, 124.0, 34.0), "All Posts", back_button_id);
+        try outlineButton(target, ui.Rect.init(bounds.x, bounds.y, 134.0, 34.0), "All Lessons", back_button_id);
         try nativeBadge(target, ui.Rect.init(bounds.x, bounds.y + 62.0, 118.0, 24.0), episodeLabel(episodeAt(index)));
         try text(target, bounds.x + 136.0, bounds.y + 68.0, 280.0, 12.0, post.arc, palette.dim);
         try target.pushWrappedText(ui.Rect.init(bounds.x, bounds.y + post_header_top_h, title_w, title_h), post.title, palette.text, .{
@@ -1094,18 +1181,26 @@ fn flowPostContent(scene: ?*ui.Scene, bounds: ui.Rect, index: usize, hover_x: f3
             .average_char_width = post_title_average_char_w,
             .max_lines = post_title_max_lines,
         });
+        try renderLessonFocus(target, ui.Rect.init(bounds.x, focus_y, @min(main_w, 760.0), post_focus_h), post);
         try paragraph(target, ui.Rect.init(bounds.x, demo_y, @min(main_w, 720.0), post_demo_h), post.demo);
     }
 
     const content = ui.Rect.init(bounds.x, body_y, @min(main_w, 820.0), 1300.0);
-    const content_end = try flowMarkdown(scene, content, bodyWithoutTitle(post.body), hover_x, hover_y);
+    const content_end = try flowMarkdown(scene, content, index, bodyWithoutTitle(post.body), hover_x, hover_y);
     const footer_y = content_end + post_footer_gap;
     const footer_h = postFooterHeight(bounds.w, index);
     if (scene) |target| {
         try renderPostFooter(target, ui.Rect.init(bounds.x, footer_y, bounds.w, footer_h), index);
-        if (sidebar_split) try renderSidebar(target, ui.Rect.init(bounds.x + bounds.w - post_sidebar_w, bounds.y + post_header_top_h, post_sidebar_w, 280.0), post);
+        if (sidebar_split) try renderSidebar(target, ui.Rect.init(bounds.x + bounds.w - post_sidebar_w, bounds.y + post_header_top_h, post_sidebar_w, post_sidebar_h), index);
     }
     return footer_y + footer_h;
+}
+
+fn renderLessonFocus(scene: *ui.Scene, bounds: ui.Rect, post: Post) ui.RenderError!void {
+    try nativeCard(scene, bounds, "", "");
+    try tag(scene, ui.Rect.init(bounds.x + 18.0, bounds.y + 18.0, 86.0, 24.0), "LESSON", palette.blue);
+    try text(scene, bounds.x + 122.0, bounds.y + 22.0, bounds.w - 140.0, 14.0, post.category, palette.primary);
+    try paragraph(scene, ui.Rect.init(bounds.x + 18.0, bounds.y + 54.0, bounds.w - 36.0, 28.0), "Use the demo, then read for the authority shift: what action looks local, who actually decides, and what a user-owned version would change.");
 }
 
 fn renderPostFooter(scene: *ui.Scene, bounds: ui.Rect, index: usize) ui.RenderError!void {
@@ -1193,18 +1288,42 @@ fn neighborIndex(index: usize, direction: NeighborDirection, offset: usize) ?usi
     };
 }
 
-fn renderSidebar(scene: *ui.Scene, bounds: ui.Rect, post: Post) ui.RenderError!void {
+fn renderSidebar(scene: *ui.Scene, bounds: ui.Rect, index: usize) ui.RenderError!void {
     if (bounds.x < 880.0) return;
+    const post = posts[index];
     try nativeCard(scene, bounds, "", "");
-    try text(scene, bounds.x + 20.0, bounds.y + 20.0, bounds.w - 40.0, 16.0, "Interactive Demo", palette.text);
-    try paragraph(scene, ui.Rect.init(bounds.x + 20.0, bounds.y + 54.0, bounds.w - 40.0, 58.0), post.demo);
-    try fill(scene, ui.Rect.init(bounds.x + 20.0, bounds.y + 134.0, bounds.w - 40.0, 1.0), palette.border, 0.0);
-    try text(scene, bounds.x + 20.0, bounds.y + 158.0, bounds.w - 40.0, 12.0, "Arc", palette.dim);
-    try paragraph(scene, ui.Rect.init(bounds.x + 20.0, bounds.y + 184.0, bounds.w - 40.0, 42.0), post.arc);
-    try text(scene, bounds.x + 20.0, bounds.y + 236.0, bounds.w - 40.0, 12.0, post.date, palette.text);
+    try text(scene, bounds.x + 20.0, bounds.y + 20.0, bounds.w - 40.0, 16.0, "Learning path", palette.text);
+    try text(scene, bounds.x + 20.0, bounds.y + 52.0, bounds.w - 40.0, 12.0, episodeLabel(episodeAt(index)), palette.primary);
+    try paragraph(scene, ui.Rect.init(bounds.x + 20.0, bounds.y + 78.0, bounds.w - 40.0, 42.0), post.arc);
+
+    try fill(scene, ui.Rect.init(bounds.x + 20.0, bounds.y + 138.0, bounds.w - 40.0, 1.0), palette.border, 0.0);
+    try text(scene, bounds.x + 20.0, bounds.y + 160.0, bounds.w - 40.0, 12.0, "Interactive model", palette.dim);
+    try paragraph(scene, ui.Rect.init(bounds.x + 20.0, bounds.y + 184.0, bounds.w - 40.0, 48.0), post.demo);
+
+    try fill(scene, ui.Rect.init(bounds.x + 20.0, bounds.y + 250.0, bounds.w - 40.0, 1.0), palette.border, 0.0);
+    if (neighborIndex(index, .previous, 0)) |previous_index| {
+        try text(scene, bounds.x + 20.0, bounds.y + 272.0, bounds.w - 40.0, 12.0, "Builds on", palette.dim);
+        try scene.pushWrappedText(ui.Rect.init(bounds.x + 20.0, bounds.y + 294.0, bounds.w - 40.0, 36.0), posts[previous_index].title, palette.text, .{
+            .line_height = 18.0,
+            .average_char_width = 8.8,
+            .max_lines = 2,
+        });
+    } else {
+        try text(scene, bounds.x + 20.0, bounds.y + 272.0, bounds.w - 40.0, 12.0, "Starts with", palette.dim);
+        try text(scene, bounds.x + 20.0, bounds.y + 294.0, bounds.w - 40.0, 14.0, "the device itself", palette.text);
+    }
+    if (neighborIndex(index, .next, 0)) |next_index| {
+        try text(scene, bounds.x + 20.0, bounds.y + 342.0, bounds.w - 40.0, 12.0, "Next", palette.dim);
+        try scene.pushWrappedText(ui.Rect.init(bounds.x + 20.0, bounds.y + 364.0, bounds.w - 40.0, 36.0), posts[next_index].title, palette.text, .{
+            .line_height = 18.0,
+            .average_char_width = 8.8,
+            .max_lines = 2,
+        });
+    }
 }
 
 const DemoDirective = enum {
+    post_model,
     vpn_who_sees_what,
     tls_endpoint,
     data_copy_map,
@@ -1222,7 +1341,7 @@ const DemoDirective = enum {
     secure_boot_root,
 };
 
-fn flowMarkdown(scene: ?*ui.Scene, bounds: ui.Rect, source: []const u8, hover_x: f32, hover_y: f32) ui.RenderError!f32 {
+fn flowMarkdown(scene: ?*ui.Scene, bounds: ui.Rect, post_index: usize, source: []const u8, hover_x: f32, hover_y: f32) ui.RenderError!f32 {
     var y = bounds.y;
     var in_code = false;
     var code_lines: [12][]const u8 = undefined;
@@ -1251,7 +1370,7 @@ fn flowMarkdown(scene: ?*ui.Scene, bounds: ui.Rect, source: []const u8, hover_x:
             continue;
         }
         if (demoDirective(line_value)) |directive| {
-            y += try flowDemoDirective(scene, ui.Rect.init(bounds.x, y, bounds.w, demoHeight(directive)), directive, hover_x, hover_y);
+            y += try flowDemoDirective(scene, ui.Rect.init(bounds.x, y, bounds.w, demoHeight(directive)), post_index, directive, hover_x, hover_y);
             y += post_demo_directive_gap;
             continue;
         }
@@ -1273,6 +1392,10 @@ fn flowMarkdown(scene: ?*ui.Scene, bounds: ui.Rect, source: []const u8, hover_x:
                 try paragraph(target, ui.Rect.init(bounds.x + 22.0, y, bounds.w - 22.0, 42.0), line_value[2..]);
             }
             y += 44.0;
+        } else if (std.mem.startsWith(u8, line_value, "> ")) {
+            const callout_h = calloutHeight(line_value[2..], bounds.w);
+            if (scene) |target| try callout(target, ui.Rect.init(bounds.x, y, bounds.w, callout_h), line_value[2..]);
+            y += callout_h + callout_gap;
         } else {
             if (scene) |target| try paragraph(target, ui.Rect.init(bounds.x, y, bounds.w, 76.0), line_value);
             y += paragraphHeight(line_value, bounds.w) + 14.0;
@@ -1282,6 +1405,7 @@ fn flowMarkdown(scene: ?*ui.Scene, bounds: ui.Rect, source: []const u8, hover_x:
 }
 
 fn demoDirective(line_value: []const u8) ?DemoDirective {
+    if (std.mem.eql(u8, line_value, "[[demo:post_model]]")) return .post_model;
     if (std.mem.eql(u8, line_value, "[[demo:vpn_who_sees_what]]")) return .vpn_who_sees_what;
     if (std.mem.eql(u8, line_value, "[[demo:tls_endpoint]]")) return .tls_endpoint;
     if (std.mem.eql(u8, line_value, "[[demo:data_copy_map]]")) return .data_copy_map;
@@ -1302,6 +1426,7 @@ fn demoDirective(line_value: []const u8) ?DemoDirective {
 
 fn demoHeight(directive: DemoDirective) f32 {
     return switch (directive) {
+        .post_model => post_model_demo_h,
         .vpn_who_sees_what => vpn_demo_h,
         .tls_endpoint => tls_demo_h,
         .data_copy_map => data_copy_demo_h,
@@ -1320,8 +1445,9 @@ fn demoHeight(directive: DemoDirective) f32 {
     };
 }
 
-fn flowDemoDirective(scene: ?*ui.Scene, bounds: ui.Rect, directive: DemoDirective, hover_x: f32, hover_y: f32) ui.RenderError!f32 {
+fn flowDemoDirective(scene: ?*ui.Scene, bounds: ui.Rect, post_index: usize, directive: DemoDirective, hover_x: f32, hover_y: f32) ui.RenderError!f32 {
     if (scene) |target| switch (directive) {
+        .post_model => try renderPostModelDemo(target, bounds, post_index, hover_x, hover_y),
         .vpn_who_sees_what => try renderVpnWhoSeesWhatDemo(target, bounds, hover_x, hover_y),
         .tls_endpoint => try renderTlsEndpointDemo(target, bounds, hover_x, hover_y),
         .data_copy_map => try renderDataCopyMapDemo(target, bounds, hover_x, hover_y),
@@ -1339,6 +1465,127 @@ fn flowDemoDirective(scene: ?*ui.Scene, bounds: ui.Rect, directive: DemoDirectiv
         .secure_boot_root => try renderSecureBootRootDemo(target, bounds, hover_x, hover_y),
     };
     return bounds.h;
+}
+
+const PostModelCard = enum {
+    visible_action,
+    authority_shift,
+    user_owned_shape,
+};
+
+fn renderPostModelDemo(scene: *ui.Scene, bounds: ui.Rect, post_index: usize, hover_x: f32, hover_y: f32) ui.RenderError!void {
+    const post = posts[post_index];
+    try fill(scene, bounds, palette.card, 8.0);
+    try scene.pushRect(bounds, palette.border, .border, 8.0, 0.0);
+    const inner = bounds.insetUniform(post_model_demo_pad);
+    try tag(scene, ui.Rect.init(inner.x, inner.y, 150.0, 24.0), "INTERACTIVE MODEL", palette.blue);
+    try text(scene, inner.x, inner.y + 38.0, inner.w, 18.0, post.category, palette.text);
+    try paragraph(scene, ui.Rect.init(inner.x + 184.0, inner.y + 2.0, @max(1.0, inner.w - 184.0), 54.0), post.demo);
+
+    const card_w = (inner.w - post_model_card_gap * @as(f32, @floatFromInt(post_model_card_count - 1))) / @as(f32, @floatFromInt(post_model_card_count));
+    const cards_y = inner.y + 86.0;
+    var active: PostModelCard = .authority_shift;
+    const cards = [_]PostModelCard{ .visible_action, .authority_shift, .user_owned_shape };
+    for (cards, 0..) |card_kind, card_index| {
+        const card_bounds = ui.Rect.init(
+            inner.x + @as(f32, @floatFromInt(card_index)) * (card_w + post_model_card_gap),
+            cards_y,
+            card_w,
+            post_model_card_h,
+        );
+        const hovered = card_bounds.containsInclusive(hover_x, hover_y);
+        if (hovered) active = card_kind;
+        try renderPostModelCard(scene, card_bounds, post, card_kind, hovered);
+    }
+
+    const detail_y = inner.y + inner.h - post_model_detail_h;
+    try renderPostModelDetail(scene, ui.Rect.init(inner.x, detail_y, inner.w, post_model_detail_h), post, active);
+}
+
+fn renderPostModelCard(scene: *ui.Scene, bounds: ui.Rect, post: Post, card: PostModelCard, hovered: bool) ui.RenderError!void {
+    try fill(scene, bounds, postModelCardColor(card), 7.0);
+    try scene.pushRect(bounds, if (hovered) palette.primary else palette.border, .border, 7.0, 0.0);
+    try text(scene, bounds.x + 14.0, bounds.y + 14.0, bounds.w - 28.0, 13.0, postModelCardTitle(card), palette.text);
+    try paragraph(scene, ui.Rect.init(bounds.x + 14.0, bounds.y + 42.0, bounds.w - 28.0, 58.0), postModelCardBody(post, card));
+    try alignedText(scene, bounds.x + 14.0, bounds.y + bounds.h - 22.0, bounds.w - 28.0, 10.0, postModelCardFooter(card), palette.primary, .center);
+}
+
+fn renderPostModelDetail(scene: *ui.Scene, bounds: ui.Rect, post: Post, card: PostModelCard) ui.RenderError!void {
+    try fill(scene, bounds, ui.Color{ .r = 9, .g = 9, .b = 9, .a = 210 }, 6.0);
+    try text(scene, bounds.x + 16.0, bounds.y + 14.0, 220.0, 14.0, postModelDetailTitle(card), palette.primary);
+    try paragraph(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 34.0, bounds.w - 32.0, 34.0), postModelDetail(post, card));
+}
+
+fn postModelCardTitle(card: PostModelCard) []const u8 {
+    return switch (card) {
+        .visible_action => "Visible action",
+        .authority_shift => "Authority shift",
+        .user_owned_shape => "User-owned shape",
+    };
+}
+
+fn postModelCardBody(post: Post, card: PostModelCard) []const u8 {
+    return switch (card) {
+        .visible_action => post.demo,
+        .authority_shift => post.summary,
+        .user_owned_shape => postModelArcShape(post.arc),
+    };
+}
+
+fn postModelCardFooter(card: PostModelCard) []const u8 {
+    return switch (card) {
+        .visible_action => "what the user sees",
+        .authority_shift => "who gets power",
+        .user_owned_shape => "what changes",
+    };
+}
+
+fn postModelDetailTitle(card: PostModelCard) []const u8 {
+    return switch (card) {
+        .visible_action => "Visible action",
+        .authority_shift => "Authority shift",
+        .user_owned_shape => "User-owned shape",
+    };
+}
+
+fn postModelDetail(post: Post, card: PostModelCard) []const u8 {
+    return switch (card) {
+        .visible_action => "Start with the ordinary thing the reader recognizes. The model makes the hidden systems around that action visible enough to inspect.",
+        .authority_shift => postModelArcRisk(post.arc),
+        .user_owned_shape => postModelArcDetail(post.arc),
+    };
+}
+
+fn postModelArcShape(arc: []const u8) []const u8 {
+    if (std.mem.eql(u8, arc, arc_local)) return "Name the local component before sending work away.";
+    if (std.mem.eql(u8, arc, arc_network)) return "Keep transport from becoming identity or ownership.";
+    if (std.mem.eql(u8, arc, arc_device)) return "Move root authority back toward owner-held keys.";
+    if (std.mem.eql(u8, arc, arc_control)) return "Make policy, ranking, updates, and access inspectable.";
+    return "Turn hidden resource use into explicit receipts.";
+}
+
+fn postModelArcRisk(arc: []const u8) []const u8 {
+    if (std.mem.eql(u8, arc, arc_local)) return "The risk is treating the device as magic. Once local components are invisible, cloud authority feels natural.";
+    if (std.mem.eql(u8, arc, arc_network)) return "The risk is trusting the path as if it owned the user's intent. Networks carry objects; they should not become roots.";
+    if (std.mem.eql(u8, arc, arc_device)) return "The risk is buying hardware but renting the keys, accounts, storage, identity, and recovery path.";
+    if (std.mem.eql(u8, arc, arc_control)) return "The risk is letting platforms quietly define discovery, payments, updates, attention, terms, and legitimacy.";
+    return "The risk is invisible cost: memory, storage, compute, dependencies, and bandwidth get spent without a local receipt.";
+}
+
+fn postModelArcDetail(arc: []const u8) []const u8 {
+    if (std.mem.eql(u8, arc, arc_local)) return "The user should see which local component acts, what state it changes, and which boundary must approve the next step.";
+    if (std.mem.eql(u8, arc, arc_network)) return "The better path is sealed objects, explicit routes, and minimal metadata: transport does work without owning meaning.";
+    if (std.mem.eql(u8, arc, arc_device)) return "The better path is owner-held identity, portable storage, inspectable capabilities, and recovery that does not become platform ownership.";
+    if (std.mem.eql(u8, arc, arc_control)) return "The better path is replaceable clients, visible rules, signed claims, local indexes, and appealable receipts.";
+    return "The better path is preallocated resources, scoped children, explicit durable commits, and receipts for work performed.";
+}
+
+fn postModelCardColor(card: PostModelCard) ui.Color {
+    return switch (card) {
+        .visible_action => ui.Color{ .r = 24, .g = 55, .b = 44, .a = 238 },
+        .authority_shift => ui.Color{ .r = 72, .g = 36, .b = 36, .a = 238 },
+        .user_owned_shape => ui.Color{ .r = 26, .g = 36, .b = 52, .a = 238 },
+    };
 }
 
 const VpnActorRole = enum {
@@ -2991,10 +3238,41 @@ fn paragraphHeight(value: []const u8, width: f32) f32 {
     return line_h * @as(f32, @floatFromInt(@max(@as(usize, 1), @min(@as(usize, 5), lines))));
 }
 
+fn calloutHeight(value: []const u8, width: f32) f32 {
+    const text_w = @max(1.0, width - callout_pad_x * 2.0 - 18.0);
+    const chars_per_line = @max(@as(usize, 18), @as(usize, @intFromFloat(text_w / callout_avg_char_w)));
+    const lines = @max(@as(usize, 1), @min(@as(usize, 4), (value.len + chars_per_line - 1) / chars_per_line));
+    return callout_pad_y * 2.0 + callout_line_h * @as(f32, @floatFromInt(lines));
+}
+
+fn callout(scene: *ui.Scene, bounds: ui.Rect, value: []const u8) ui.RenderError!void {
+    try fill(scene, bounds, palette.card_alt, site_chrome.surface_radius);
+    try scene.pushRect(bounds, palette.border, .border, site_chrome.surface_radius, 0.0);
+    try fill(scene, ui.Rect.init(bounds.x, bounds.y, 3.0, bounds.h), palette.primary, 2.0);
+    try scene.pushWrappedText(ui.Rect.init(bounds.x + callout_pad_x, bounds.y + callout_pad_y, bounds.w - callout_pad_x * 2.0, bounds.h - callout_pad_y * 2.0), value, palette.text, .{
+        .line_height = callout_line_h,
+        .average_char_width = callout_avg_char_w,
+        .max_lines = 4,
+    });
+}
+
 fn wrappedTextHeight(value: []const u8, width: f32, line_height_value: f32, max_lines: usize, average_char_width: f32) f32 {
     const chars_per_line = @max(@as(usize, 1), @as(usize, @intFromFloat(width / average_char_width)));
     const lines = @max(@as(usize, 1), @min(max_lines, (value.len + chars_per_line - 1) / chars_per_line));
     return line_height_value * @as(f32, @floatFromInt(lines));
+}
+
+fn wrappedLineCount(value: []const u8, width: f32, average_char_width: f32, max_lines: usize) usize {
+    if (value.len == 0 or max_lines == 0) return 0;
+    const char_capacity = @max(@as(usize, 1), @as(usize, @intFromFloat(@max(1.0, width / average_char_width))));
+    var byte_cursor: usize = 0;
+    var line_count: usize = 0;
+    while (line_count < max_lines) : (line_count += 1) {
+        byte_cursor = ui.skipAsciiSpace(value, byte_cursor);
+        if (byte_cursor >= value.len) return line_count;
+        byte_cursor = ui.wrappedLine(value, byte_cursor, char_capacity).next;
+    }
+    return line_count;
 }
 
 fn episodeLabel(episode: usize) []const u8 {
@@ -3007,13 +3285,12 @@ fn codeBlock(scene: *ui.Scene, bounds: ui.Rect, lines: []const []const u8) ui.Re
 }
 
 fn renderNodeMap(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
-    const grid: f32 = 26.0;
     var x = bounds.x;
-    while (x < bounds.x + bounds.w) : (x += grid) {
+    while (x < bounds.x + bounds.w) : (x += node_map_grid) {
         var y = bounds.y;
-        while (y < bounds.y + bounds.h) : (y += grid) {
-            if (@mod(@as(i32, @intFromFloat(x + y)), 7) == 0) {
-                try fill(scene, ui.Rect.init(x, y, 2.0, 2.0), ui.Color{ .r = 255, .g = 255, .b = 255, .a = 10 }, 1.0);
+        while (y < bounds.y + bounds.h) : (y += node_map_grid) {
+            if (@mod(@as(i32, @intFromFloat(x + y)), node_map_pattern_divisor) == 0) {
+                try fill(scene, ui.Rect.init(x, y, node_map_dot_size, node_map_dot_size), ui.Color{ .r = 255, .g = 255, .b = 255, .a = node_map_dot_alpha }, node_map_dot_radius);
             }
         }
     }
@@ -3047,7 +3324,10 @@ fn nativeComponent(scene: *ui.Scene, bounds: ui.Rect, component: components.Comp
 }
 
 fn siteStyle() ui.Style {
-    return site_chrome.style();
+    var resolved = site_chrome.style();
+    resolved.panel = palette.card;
+    resolved.row = palette.card_alt;
+    return resolved;
 }
 
 fn fill(scene: *ui.Scene, bounds: ui.Rect, color: ui.Color, r: f32) ui.RenderError!void {
@@ -3086,9 +3366,13 @@ test "blog renders committed post index through native components" {
     var scene = ui.Scene.initWithClips(&commands, &clips);
     try render(&scene, ui.Rect.init(0, 0, 1280, 1800), .{});
 
+    try std.testing.expectEqualStrings("EdgeRun Academy", season_title);
     try std.testing.expectEqual(posts.len, arc_accounting_end);
-    try std.testing.expect(hasText(scene.written(), "Your Device Is"));
-    try std.testing.expect(hasText(scene.written(), "Already a Computer"));
+    try std.testing.expect(hasText(scene.written(), "Computers Are"));
+    try std.testing.expect(hasText(scene.written(), "Not Magic"));
+    try std.testing.expect(hasText(scene.written(), "EDGERUN ACADEMY"));
+    try std.testing.expect(hasText(scene.written(), "HOW TO READ"));
+    try std.testing.expect(hasText(scene.written(), "3. Own"));
     try std.testing.expect(hasText(scene.written(), posts[0].title));
     try std.testing.expect(postById(postIdAt(posts.len - 1)) != null);
     try std.testing.expectEqualStrings("Computers Are Deterministic. We Made Them Guess.", posts[posts.len - 1].title);
@@ -3100,8 +3384,58 @@ test "blog renders committed post index through native components" {
     try std.testing.expect(hasHit(scene.written(), postIdAt(0)));
     try std.testing.expect(hasHit(scene.written(), site_chrome.blog_button_id));
     try std.testing.expect(hasHit(scene.written(), site_chrome.logo_button_id));
+    try std.testing.expect(hasHit(scene.written(), all_lessons_button_id));
     try std.testing.expect(hasHit(scene.written(), arcFilterButtonId(0)));
     try std.testing.expect(hasImage(scene.written(), cloud_meme_image_id));
+}
+
+test "blog posts follow shared teaching format" {
+    for (posts) |post| {
+        try std.testing.expect(std.mem.startsWith(u8, post.body, "# "));
+        try std.testing.expect(markdownSectionCount(post.body) >= 4);
+        try std.testing.expect(hasMarkdownCallout(post.body));
+        try std.testing.expect(contains(post.body, "[[demo:"));
+        try std.testing.expect(contains(post.body, "\n## Main lesson\n"));
+        try std.testing.expect(contains(post.body, "\n## EdgeRun seed\n"));
+        try std.testing.expect(!contains(post.body, "\n## Main Lesson\n"));
+        try std.testing.expect(!contains(post.body, "\n## EdgeRun Seed\n"));
+        try std.testing.expect(!contains(post.body, "\n## Edgerun seed\n"));
+        try std.testing.expect(!contains(post.body, "\n## Interactive Demo\n"));
+        try std.testing.expect(!contains(post.body, "\n## The Path\n"));
+        try std.testing.expect(!contains(post.body, "\n## The Problem\n"));
+        try std.testing.expect(!contains(post.body, "\n## The Border\n"));
+        try std.testing.expect(!contains(post.body, "Edgerun"));
+    }
+}
+
+test "blog post list rows expand for wrapped titles and summaries" {
+    const short_post = Post{
+        .arc = arc_local,
+        .title = "Short title",
+        .date = "2026-05-24",
+        .category = "test",
+        .demo = "demo",
+        .summary = "Short summary.",
+        .body = "# Short title\n\nBody.",
+    };
+    const long_post = Post{
+        .arc = arc_control,
+        .title = "A Long Episode Title Should Stay Readable On Narrow Blog Lists",
+        .date = "2026-05-24",
+        .category = "test",
+        .demo = "demo",
+        .summary = "This summary is long enough to wrap into a second line when the reader uses a narrow viewport.",
+        .body = "# Long\n\nBody.",
+    };
+
+    const short_h = postListItemHeight(320.0, 0, short_post);
+    const long_h = postListItemHeight(320.0, 1, long_post);
+    try std.testing.expect(long_h > short_h);
+
+    var commands: [64]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+    try renderPostListItem(&scene, ui.Rect.init(0.0, 0.0, 320.0, long_h), 1, long_post);
+    try std.testing.expect(hasHit(scene.written(), postIdAt(1)));
 }
 
 test "blog renders authoring guide after expanded season index" {
@@ -3110,19 +3444,46 @@ test "blog renders authoring guide after expanded season index" {
     var scene = ui.Scene.initWithClips(&commands, &clips);
     try render(&scene, ui.Rect.init(0, 0, 1280, 1800), .{ .scroll_y = indexContentHeight(1280.0) - 1600.0 });
 
-    try std.testing.expect(textWithin(scene.written(), "Add an episode by committing a markdown file.", ui.Rect.init(0, 64.0, 1280.0, 1736.0)));
-    try std.testing.expect(textWithin(scene.written(), "const value = run();", ui.Rect.init(0, 64.0, 1280.0, 1736.0)));
+    try std.testing.expect(textWithin(scene.written(), "Start at the phone. End with user-owned authority.", ui.Rect.init(0, 64.0, 1280.0, 1736.0)));
+    try std.testing.expect(textWithin(scene.written(), "05 accounting and resources", ui.Rect.init(0, 64.0, 1280.0, 1736.0)));
+}
+
+test "blog node map scrolls with page content" {
+    var commands_top: [4096]ui.Command = undefined;
+    var clips_top: [8]ui.Rect = undefined;
+    var scene_top = ui.Scene.initWithClips(&commands_top, &clips_top);
+    try render(&scene_top, ui.Rect.init(0, 0, 1280, 900), .{});
+
+    const scroll_delta = node_map_grid * @as(f32, @floatFromInt(node_map_pattern_divisor));
+    var commands_scrolled: [4096]ui.Command = undefined;
+    var clips_scrolled: [8]ui.Rect = undefined;
+    var scene_scrolled = ui.Scene.initWithClips(&commands_scrolled, &clips_scrolled);
+    try render(&scene_scrolled, ui.Rect.init(0, 0, 1280, 900), .{ .scroll_y = scroll_delta });
+
+    const first_top = firstNodeMapDot(scene_top.written()).?;
+    const first_scrolled = firstNodeMapDot(scene_scrolled.written()).?;
+    try std.testing.expectApproxEqAbs(first_top.y - scroll_delta, first_scrolled.y, 0.01);
 }
 
 test "blog renders selected markdown post body" {
     var commands: [4096]ui.Command = undefined;
     var clips: [8]ui.Rect = undefined;
     var scene = ui.Scene.initWithClips(&commands, &clips);
-    try render(&scene, ui.Rect.init(0, 0, 1280, 1400), .{ .selected_post_id = postIdAt(0) });
+    try render(&scene, ui.Rect.init(0, 0, 1280, 3600), .{ .selected_post_id = postIdAt(0) });
 
-    try std.testing.expect(hasText(scene.written(), "All Posts"));
+    try std.testing.expect(hasText(scene.written(), "All Lessons"));
     try std.testing.expect(std.mem.startsWith(u8, bodyWithoutTitle(posts[0].body), "Before your message"));
     try std.testing.expect(hasText(scene.written(), "The city model"));
+    try std.testing.expect(hasTextPrefix(scene.written(), "The trick: before blaming"));
+    try std.testing.expect(hasText(scene.written(), "Learning path"));
+    try std.testing.expect(hasText(scene.written(), "LESSON"));
+    try std.testing.expect(hasText(scene.written(), posts[0].category));
+    try std.testing.expect(hasText(scene.written(), "Interactive model"));
+    try std.testing.expect(hasText(scene.written(), "Visible action"));
+    try std.testing.expect(hasText(scene.written(), "Authority shift"));
+    try std.testing.expect(hasText(scene.written(), "User-owned shape"));
+    try std.testing.expect(hasText(scene.written(), "Starts with"));
+    try std.testing.expect(hasText(scene.written(), "Next"));
     try std.testing.expect(hasHit(scene.written(), back_button_id));
 }
 
@@ -3242,6 +3603,32 @@ fn hasText(commands: []const ui.Command, value: []const u8) bool {
     return false;
 }
 
+fn contains(haystack: []const u8, needle: []const u8) bool {
+    return std.mem.indexOf(u8, haystack, needle) != null;
+}
+
+fn markdownSectionCount(source: []const u8) usize {
+    var count: usize = 0;
+    var it = std.mem.splitScalar(u8, source, '\n');
+    while (it.next()) |line| {
+        if (std.mem.startsWith(u8, line, "## ")) count += 1;
+    }
+    return count;
+}
+
+fn hasMarkdownCallout(source: []const u8) bool {
+    if (std.mem.startsWith(u8, source, "> ")) return true;
+    return contains(source, "\n> ");
+}
+
+fn hasTextPrefix(commands: []const ui.Command, value: []const u8) bool {
+    for (commands) |command| switch (command) {
+        .text => |text_command| if (std.mem.startsWith(u8, text_command.value, value)) return true,
+        else => {},
+    };
+    return false;
+}
+
 fn hasHit(commands: []const ui.Command, id: u32) bool {
     for (commands) |command| switch (command) {
         .hit => |hit_command| if (hit_command.id == id) return true,
@@ -3256,6 +3643,16 @@ fn hasImage(commands: []const ui.Command, id: u32) bool {
         else => {},
     };
     return false;
+}
+
+fn firstNodeMapDot(commands: []const ui.Command) ?ui.Rect {
+    for (commands) |command| switch (command) {
+        .rect => |rect_command| {
+            if (rect_command.bounds.w == node_map_dot_size and rect_command.bounds.h == node_map_dot_size and rect_command.color.a == node_map_dot_alpha) return rect_command.bounds;
+        },
+        else => {},
+    };
+    return null;
 }
 
 fn textWithin(commands: []const ui.Command, value: []const u8, bounds: ui.Rect) bool {

@@ -10,12 +10,15 @@ pub const launch_button_id: u32 = 30_003;
 pub const search_button_id: u32 = 30_004;
 pub const blog_button_id: u32 = 30_011;
 pub const source_button_id: u32 = 30_012;
+pub const mobile_menu_button_id: u32 = 30_013;
 
 pub const header_h: f32 = 64.0;
 pub const surface_radius: f32 = 8.0;
 const compact_header_w: f32 = 720.0;
+const compact_mobile_w: f32 = 520.0;
 const compact_nav_gap: f32 = 6.0;
 const compact_search_w: f32 = 34.0;
+const compact_icon_gap: f32 = 8.0;
 
 pub const ActiveNav = enum {
     none,
@@ -26,14 +29,14 @@ pub const ActiveNav = enum {
 
 const palette = struct {
     const bg = ui.Color{ .r = 11, .g = 11, .b = 11 };
-    const panel = ui.Color{ .r = 18, .g = 18, .b = 18, .a = 238 };
-    const row = ui.Color{ .r = 24, .g = 24, .b = 24, .a = 224 };
+    const panel = ui.Color{ .r = 18, .g = 18, .b = 18 };
+    const row = ui.Color{ .r = 24, .g = 24, .b = 24 };
     const border = ui.Color{ .r = 56, .g = 56, .b = 56 };
     const text = ui.Color{ .r = 242, .g = 242, .b = 242 };
     const dim = ui.Color{ .r = 154, .g = 154, .b = 154 };
     const primary = ui.Color{ .r = 74, .g = 222, .b = 128 };
-    const active = ui.Color{ .r = 24, .g = 52, .b = 33, .a = 196 };
-    const kbd = ui.Color{ .r = 32, .g = 32, .b = 32, .a = 220 };
+    const active = ui.Color{ .r = 24, .g = 52, .b = 33 };
+    const kbd = ui.Color{ .r = 32, .g = 32, .b = 32 };
 };
 
 pub fn renderHeader(scene: *ui.Scene, bounds: ui.Rect, content: ui.Rect, active: ActiveNav) ui.RenderError!void {
@@ -53,9 +56,9 @@ pub fn renderHeader(scene: *ui.Scene, bounds: ui.Rect, content: ui.Rect, active:
 
     const nav_y = bounds.y + 18.0;
     const nav_center = content.x + content.w * 0.5;
-    try navItem(scene, ui.Rect.init(nav_center - 122.0, nav_y, 68.0, 30.0), "Docs", docs_button_id, active == .docs);
-    try navItem(scene, ui.Rect.init(nav_center - 36.0, nav_y, 64.0, 30.0), "Blog", blog_button_id, active == .blog);
-    try navItem(scene, ui.Rect.init(nav_center + 46.0, nav_y, 64.0, 30.0), "Apps", apps_button_id, active == .apps);
+    try navItem(scene, ui.Rect.init(nav_center - 150.0, nav_y, 68.0, 30.0), "Docs", docs_button_id, active == .docs);
+    try navItem(scene, ui.Rect.init(nav_center - 64.0, nav_y, 96.0, 30.0), "Academy", blog_button_id, active == .blog);
+    try navItem(scene, ui.Rect.init(nav_center + 50.0, nav_y, 64.0, 30.0), "Apps", apps_button_id, active == .apps);
 
     const launch = ui.Rect.init(content.x + content.w - 128.0, bounds.y + 16.0, 128.0, 32.0);
     try button(scene, launch, "Launch Desktop", launch_button_id, .primary, null, null);
@@ -74,18 +77,26 @@ fn renderCompactHeader(scene: *ui.Scene, bounds: ui.Rect, content: ui.Rect, acti
     try text(scene, logo.x + 40.0, bounds.y + 23.0, 78.0, 18.0, "EdgeRun", palette.text);
     try hit(scene, ui.Rect.init(logo.x, logo.y, 118.0, logo.h), .button, logo_button_id);
 
+    if (content.w < compact_mobile_w) {
+        const menu = ui.Rect.init(content.x + content.w - compact_search_w, bounds.y + 15.0, compact_search_w, 34.0);
+        const source = ui.Rect.init(menu.x - compact_icon_gap - compact_search_w, menu.y, compact_search_w, 34.0);
+        try iconButton(scene, source, .github, source_button_id);
+        try iconButton(scene, menu, .menu, mobile_menu_button_id);
+        return;
+    }
+
     const search = ui.Rect.init(content.x + content.w - compact_search_w, bounds.y + 15.0, compact_search_w, 34.0);
     try compactSearchButton(scene, search);
 
     const nav_y = bounds.y + 18.0;
     const nav_right = search.x - compact_nav_gap;
     const apps = ui.Rect.init(nav_right - 40.0, nav_y, 40.0, 30.0);
-    const blog = ui.Rect.init(apps.x - compact_nav_gap - 42.0, nav_y, 42.0, 30.0);
+    const blog = ui.Rect.init(apps.x - compact_nav_gap - 74.0, nav_y, 74.0, 30.0);
     const docs = ui.Rect.init(blog.x - compact_nav_gap - 42.0, nav_y, 42.0, 30.0);
     const logo_right = logo.x + 118.0 + compact_nav_gap;
     if (docs.x >= logo_right) {
         try navItem(scene, docs, "Docs", docs_button_id, active == .docs);
-        try navItem(scene, blog, "Blog", blog_button_id, active == .blog);
+        try navItem(scene, blog, "Academy", blog_button_id, active == .blog);
         try navItem(scene, apps, "Apps", apps_button_id, active == .apps);
     }
 }
@@ -177,13 +188,28 @@ test "site chrome compact header keeps hit targets separated" {
     var commands: [128]ui.Command = undefined;
     var clips: [4]ui.Rect = undefined;
     var scene = ui.Scene.initWithClips(&commands, &clips);
-    try renderHeader(&scene, ui.Rect.init(0, 0, 390, header_h), ui.Rect.init(28, 0, 334, header_h), .none);
+    try renderHeader(&scene, ui.Rect.init(0, 0, 640, header_h), ui.Rect.init(28, 0, 584, header_h), .none);
 
     const logo = expectHitRect(scene.written(), logo_button_id);
     const search = expectHitRect(scene.written(), search_button_id);
     try expectNoHorizontalOverlap(logo, search);
     if (hitRect(scene.written(), docs_button_id)) |docs| try expectNoHorizontalOverlap(logo, docs);
     if (hitRect(scene.written(), apps_button_id)) |apps| try expectNoHorizontalOverlap(apps, search);
+}
+
+test "site chrome mobile header uses reference icon controls" {
+    var commands: [128]ui.Command = undefined;
+    var clips: [4]ui.Rect = undefined;
+    var scene = ui.Scene.initWithClips(&commands, &clips);
+    try renderHeader(&scene, ui.Rect.init(0, 0, 390, header_h), ui.Rect.init(28, 0, 334, header_h), .none);
+
+    const logo = expectHitRect(scene.written(), logo_button_id);
+    const source = expectHitRect(scene.written(), source_button_id);
+    const menu = expectHitRect(scene.written(), mobile_menu_button_id);
+    try expectNoHorizontalOverlap(logo, source);
+    try expectNoHorizontalOverlap(source, menu);
+    try std.testing.expect(hitRect(scene.written(), docs_button_id) == null);
+    try std.testing.expect(hitRect(scene.written(), search_button_id) == null);
 }
 
 fn expectHit(commands: []const ui.Command, id: u32) !void {

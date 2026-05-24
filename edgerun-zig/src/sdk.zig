@@ -265,6 +265,7 @@ pub fn simulate(config: Config, workspace: Workspace) Error!Simulation {
         store.Store.init(.{ .base = workspace.storage[0..resources.parent_storage_bytes] }, workspace.slots[0..resources.parent_storage_slots]),
         parentAllocation(resources),
     ) orelse return error.BadAllocation;
+    const host = app_mod.ExecutionHost.init(node.ids.device) orelse return error.Unauthorized;
     const request = intent.requestId("edgerun-sdk spawn app") orelse return error.BadConfiguration;
     const authorization = intent.admit(
         node.ids.user,
@@ -289,7 +290,8 @@ pub fn simulate(config: Config, workspace: Workspace) Error!Simulation {
         error.Unsupported => error.BadConfiguration,
     };
     const manifest_id = object.Header.id(manifest_canonical);
-    const spawned = root_app.spawnManifest(
+    const spawned = host.spawnManifest(
+        &root_app,
         node.ids.allocator,
         node.ids.app,
         node.clock.now,

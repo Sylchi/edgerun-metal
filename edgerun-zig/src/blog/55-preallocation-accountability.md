@@ -2,6 +2,10 @@
 
 Modern software has become very good at hiding its bad behavior.
 
+> Mental model: preallocation turns resource use from a system-wide surprise into a local promise.
+
+## Hidden cushions
+
 Programs allocate too much memory, write too much cache, spawn too many helpers, pull too many dependencies, and leave too much garbage behind.
 
 Instead of making programs honest, we add cushions.
@@ -29,6 +33,8 @@ The programmer asks for memory casually. The runtime gives it. The OS lies and s
 The user gets a slow computer and nobody knows who is responsible.
 
 That is insane.
+
+## What preallocation says
 
 Preallocation sounds old-fashioned until you remember what it actually does.
 
@@ -70,6 +76,8 @@ zram can help workloads with compressible memory. Swap can prevent a crash. Both
 
 They should not be the core resource model.
 
+## When the system guesses
+
 The fastest memory available to a program is RAM. If the app is designed around a known budget, it can use RAM intentionally and predictably. If it assumes infinite memory and relies on the OS to fake it, the system becomes unpredictable.
 
 The worst part is not only that software overuses memory.
@@ -108,6 +116,8 @@ Better model:
 
 A program should not be able to spend memory it does not own and make another program pay the bill.
 
+## Pressure flows upward
+
 This is why preallocation is not just performance engineering.
 
 It is accountability.
@@ -132,7 +142,7 @@ The parent can:
 
 No app gets to create a global emergency by pretending resources are infinite.
 
-Edgerun takes this seriously.
+EdgeRun takes this seriously.
 
 Memory is the live world.
 
@@ -156,6 +166,12 @@ No hidden infinite pile.
 
 No mystery abuse.
 
+## Interactive model
+
+[[demo:post_model]]
+
+## Main lesson
+
 The point is not to make computers harsh.
 
 The point is to stop lying.
@@ -175,3 +191,7 @@ Good software does not hide its cost.
 Good software accounts for it.
 
 If something must die, the user should know what is dying, why it is dying, and which app caused the pressure.
+
+## EdgeRun seed
+
+EdgeRun treats resource pressure as an authority question. A child asks its parent. A parent accounts for its children. The user can see the budget, the pressure, and the consequence before unrelated work gets punished.

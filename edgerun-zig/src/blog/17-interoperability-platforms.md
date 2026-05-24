@@ -10,6 +10,8 @@ Your phone can send bytes to almost any server on Earth. But your WhatsApp canno
 
 The internet connects machines. Platforms separate people.
 
+> Mental model: interoperability is not only pipes; it is portable meaning, identity, and trust.
+
 ## The real interoperability problem
 
 Explain why interoperability is not mainly a network problem. The internet already has universal pipes. What it lacks is user-owned meaning, identity, and trust.
@@ -127,6 +129,10 @@ After:
 ```text
 user -> own identity and data -> any app -> any transport
 ```
+
+## Interactive model
+
+[[demo:post_model]]
 
 ## Main lesson
 
