@@ -25,6 +25,7 @@ const leb_sign_mask = 0x40;
 const leb_bits_per_byte = 7;
 const wasm_empty_block_type = 0x40;
 const wasm_funcref_type = 0x70;
+const wasm_ref_func_opcode = 0xd2;
 const wasm_extended_prefix = 0xfc;
 const ext_i32_trunc_sat_f32_s: u32 = 0;
 const ext_i32_trunc_sat_f32_u: u32 = 1;
@@ -423,6 +424,7 @@ pub const HostImport = struct {
     context: ?*anyopaque = null,
     call: ?*const fn (context: ?*anyopaque, args: []const Value) Error!ExecutionResult = null,
     memory_min_pages: usize = 0,
+    table_min_entries: usize = 0,
     global_value_type: ValueType = .i64,
     global_mutable: bool = false,
     global_value: Value = .{ .i64 = 0 },
@@ -431,6 +433,7 @@ pub const HostImport = struct {
 pub const HostImportKind = enum {
     function,
     memory,
+    table,
     global,
 };
 
@@ -617,6 +620,22 @@ const ImportedMemory = struct {
     }
 };
 
+const ImportedTable = struct {
+    module: [max_import_name]u8 = undefined,
+    module_len: usize = 0,
+    name: [max_import_name]u8 = undefined,
+    name_len: usize = 0,
+    min_entries: usize = 0,
+
+    fn matches(self: ImportedTable, host: HostImport) bool {
+        return host.kind == .table and
+            self.module_len == host.module.len and
+            self.name_len == host.name.len and
+            byte_utils.eql(self.module[0..self.module_len], host.module) and
+            byte_utils.eql(self.name[0..self.name_len], host.name);
+    }
+};
+
 const ImportedGlobal = struct {
     module: [max_import_name]u8 = undefined,
     module_len: usize = 0,
@@ -765,6 +784,7 @@ const Module = struct {
     data_segment_count: usize = 0,
     declared_data_count: ?usize = null,
     imported_memory: ?ImportedMemory = null,
+    imported_table: ?ImportedTable = null,
     memory_min_pages: usize = 0,
     has_memory: bool = false,
     start_function_index: ?usize = null,
@@ -875,7 +895,7 @@ const Module = struct {
                 },
                 .memory => try self.parseMemoryImport(reader, module_name, import_name),
                 .global => try self.parseGlobalImport(reader, module_name, import_name),
-                .table => return error.Unsupported,
+                .table => try self.parseTableImport(reader, module_name, import_name),
             }
         }
     }
@@ -895,10 +915,29 @@ const Module = struct {
         self.memory_min_pages = min_pages;
     }
 
+    fn parseTableImport(self: *Module, reader: *Reader, module_name: []const u8, import_name: []const u8) Error!void {
+        if (self.imported_table != null or self.has_table) return error.Unsupported;
+        const ref_type = try reader.readByte();
+        if (ref_type != wasm_funcref_type) return error.Unsupported;
+        const min_entries = try readTableMinimumEntries(reader);
+        if (min_entries > max_table_entries) return error.Unsupported;
+        var imported = ImportedTable{
+            .module_len = module_name.len,
+            .name_len = import_name.len,
+            .min_entries = min_entries,
+        };
+        @memcpy(imported.module[0..module_name.len], module_name);
+        @memcpy(imported.name[0..import_name.len], import_name);
+        self.imported_table = imported;
+        self.has_table = true;
+        self.table_min_entries = min_entries;
+    }
+
     fn parseTableSection(self: *Module, reader: *Reader) Error!void {
         const count = try reader.readU32Leb();
         if (count > 1) return error.Unsupported;
         if (count == 0) return;
+        if (self.imported_table != null) return error.Corrupt;
         const ref_type = try reader.readByte();
         if (ref_type != wasm_funcref_type) return error.Unsupported;
         const min_entries = try readTableMinimumEntries(reader);
@@ -1068,27 +1107,64 @@ const Module = struct {
 
     fn parseElementSection(self: *Module, reader: *Reader) Error!void {
         const count = try reader.readU32Leb();
-        if (count > 1) return error.Unsupported;
+        if (count > max_data_segments) return error.Unsupported;
         var segment_index: usize = 0;
         while (segment_index < count) : (segment_index += 1) {
             const mode = try reader.readU32Leb();
-            const table_index: usize = switch (mode) {
-                0 => 0,
+            switch (mode) {
+                0 => try self.parseActiveFunctionElements(reader, 0, .function_index_vector),
+                1 => try self.skipPassiveFunctionElements(reader, .element_kind),
+                2 => {
+                    const table_index = try reader.readU32Leb();
+                    try self.parseActiveFunctionElements(reader, table_index, .element_kind);
+                },
+                3 => try self.skipPassiveFunctionElements(reader, .element_kind),
+                4 => try self.parseActiveFunctionElements(reader, 0, .ref_func_expression_vector),
+                5 => try self.skipPassiveFunctionElements(reader, .ref_func_expression_vector),
+                6 => {
+                    const table_index = try reader.readU32Leb();
+                    try self.parseActiveFunctionElements(reader, table_index, .ref_func_expression_vector);
+                },
+                7 => try self.skipPassiveFunctionElements(reader, .ref_func_expression_vector),
                 else => return error.Unsupported,
-            };
-            if (table_index != 0 or self.table_min_entries == 0) return error.Corrupt;
-            const offset = try readConstantI32Expression(reader);
-            if (offset < 0) return error.Corrupt;
-            const base: usize = @intCast(offset);
-            const function_count = try reader.readU32Leb();
-            const end = checkedAdd(base, function_count) orelse return error.Corrupt;
-            if (end > self.table_min_entries or end > max_table_entries) return error.Corrupt;
-            var function_index: usize = 0;
-            while (function_index < function_count) : (function_index += 1) {
-                const function_ref = try reader.readU32Leb();
-                if (function_ref >= self.totalFunctionCount()) return error.Corrupt;
-                self.table_entries[base + function_index] = function_ref;
             }
+        }
+    }
+
+    const ElementPayload = enum {
+        function_index_vector,
+        element_kind,
+        ref_func_expression_vector,
+    };
+
+    fn parseActiveFunctionElements(self: *Module, reader: *Reader, table_index: u32, payload: ElementPayload) Error!void {
+        if (table_index != 0 or self.table_min_entries == 0) return error.Corrupt;
+        const offset = try readConstantI32Expression(reader);
+        if (offset < 0) return error.Corrupt;
+        const base: usize = @intCast(offset);
+        const function_count = try readElementFunctionCount(reader, payload);
+        const end = checkedAdd(base, function_count) orelse return error.Corrupt;
+        if (end > self.table_min_entries or end > max_table_entries) return error.Corrupt;
+        var function_index: usize = 0;
+        while (function_index < function_count) : (function_index += 1) {
+            const function_ref = switch (payload) {
+                .function_index_vector, .element_kind => try reader.readU32Leb(),
+                .ref_func_expression_vector => try readRefFuncExpression(reader),
+            };
+            if (function_ref >= self.totalFunctionCount()) return error.Corrupt;
+            self.table_entries[base + function_index] = function_ref;
+        }
+    }
+
+    fn skipPassiveFunctionElements(self: *Module, reader: *Reader, payload: ElementPayload) Error!void {
+        const function_count = try readElementFunctionCount(reader, payload);
+        var function_index: usize = 0;
+        while (function_index < function_count) : (function_index += 1) {
+            const function_ref = switch (payload) {
+                .function_index_vector, .element_kind => try reader.readU32Leb(),
+                .ref_func_expression_vector => try readRefFuncExpression(reader),
+            };
+            if (function_ref >= self.totalFunctionCount()) return error.Corrupt;
         }
     }
 
@@ -1131,6 +1207,14 @@ const Module = struct {
             for (runtime.imports) |host| {
                 if (!imported.matches(host)) continue;
                 try validateImportedMemory(imported, host);
+                return;
+            }
+            return error.MissingImport;
+        }
+        if (self.imported_table) |imported| {
+            for (runtime.imports) |host| {
+                if (!imported.matches(host)) continue;
+                try validateImportedTable(imported, host);
                 return;
             }
             return error.MissingImport;
@@ -1922,6 +2006,10 @@ fn validateImportedMemory(imported: ImportedMemory, host: HostImport) Error!void
     if (host.memory_min_pages < imported.min_pages) return error.NoMemory;
 }
 
+fn validateImportedTable(imported: ImportedTable, host: HostImport) Error!void {
+    if (host.table_min_entries < imported.min_entries) return error.NoMemory;
+}
+
 fn sectionFromByte(value: u8) ?Section {
     return switch (value) {
         @intFromEnum(Section.type) => .type,
@@ -2159,6 +2247,32 @@ fn readSelectType(reader: *Reader) Error!ValueType {
     const type_count = try reader.readU32Leb();
     if (type_count != 1) return error.Unsupported;
     return readValueType(reader);
+}
+
+fn readElementFunctionCount(reader: *Reader, payload: Module.ElementPayload) Error!usize {
+    switch (payload) {
+        .function_index_vector => {},
+        .element_kind => {
+            const element_kind = try reader.readByte();
+            if (element_kind != 0) return error.Unsupported;
+        },
+        .ref_func_expression_vector => {
+            const ref_type = try reader.readByte();
+            if (ref_type != wasm_funcref_type) return error.Unsupported;
+        },
+    }
+    const function_count = try reader.readU32Leb();
+    if (function_count > max_table_entries) return error.Unsupported;
+    return function_count;
+}
+
+fn readRefFuncExpression(reader: *Reader) Error!usize {
+    const opcode = try reader.readByte();
+    if (opcode != wasm_ref_func_opcode) return error.Unsupported;
+    const function_ref = try reader.readU32Leb();
+    const end = opcodeFromByte(try reader.readByte()) orelse return error.Unsupported;
+    if (end != .end) return error.Unsupported;
+    return function_ref;
 }
 
 const IfSkipResult = enum {
