@@ -7,6 +7,7 @@ const tabler_atlas = @import("tabler_atlas.zig");
 const ui = @import("ui.zig");
 
 const linux = std.os.linux;
+const posix = std.posix;
 
 const c = @cImport({
     @cInclude("wayland-client.h");
@@ -19,6 +20,7 @@ const c = @cImport({
 const default_width: i32 = 960;
 const default_height: i32 = 540;
 const default_seconds: u32 = 5;
+const frame_ms: i32 = 16;
 const max_commands: usize = 4096;
 const max_clips: usize = 64;
 const max_rects: usize = 8192;
@@ -117,11 +119,7 @@ pub fn main(init: std.process.Init) !void {
 
     var frames_remaining: u32 = options.seconds * 60;
     while (!wl.closed and frames_remaining != 0) : (frames_remaining -= 1) {
-        while (c.wl_display_prepare_read(wl.display) != 0) {
-            if (c.wl_display_dispatch_pending(wl.display) < 0) return error.WaylandDispatchFailed;
-        }
-        _ = c.wl_display_flush(wl.display);
-        c.wl_display_cancel_read(wl.display);
+        try pumpWaylandEvents(&wl);
 
         if (wl.resized) {
             c.wl_egl_window_resize(egl.window, wl.width, wl.height, 0, 0);
@@ -130,13 +128,39 @@ pub fn main(init: std.process.Init) !void {
         }
         try renderFrame(gl, wl.width, wl.height, buffers, &font_atlas);
         if (c.eglSwapBuffers(egl.display, egl.surface) != c.EGL_TRUE) return error.EglSwapFailed;
-        if (c.wl_display_dispatch_pending(wl.display) < 0) return error.WaylandDispatchFailed;
         sleepFrame();
     }
 }
 
+fn pumpWaylandEvents(wl: *WaylandState) !void {
+    while (c.wl_display_prepare_read(wl.display) != 0) {
+        if (c.wl_display_dispatch_pending(wl.display) < 0) return error.WaylandDispatchFailed;
+    }
+    if (c.wl_display_flush(wl.display) < 0) {
+        c.wl_display_cancel_read(wl.display);
+        return error.WaylandFlushFailed;
+    }
+
+    var fds = [_]posix.pollfd{.{
+        .fd = c.wl_display_get_fd(wl.display),
+        .events = linux.POLL.IN,
+        .revents = 0,
+    }};
+    const ready = try posix.poll(&fds, 0);
+    if ((fds[0].revents & (linux.POLL.ERR | linux.POLL.HUP | linux.POLL.NVAL)) != 0) {
+        c.wl_display_cancel_read(wl.display);
+        return error.WaylandPollFailed;
+    }
+    if (ready != 0 and (fds[0].revents & linux.POLL.IN) != 0) {
+        if (c.wl_display_read_events(wl.display) < 0) return error.WaylandReadFailed;
+    } else {
+        c.wl_display_cancel_read(wl.display);
+    }
+    if (c.wl_display_dispatch_pending(wl.display) < 0) return error.WaylandDispatchFailed;
+}
+
 fn sleepFrame() void {
-    const req = linux.timespec{ .sec = 0, .nsec = 16 * std.time.ns_per_ms };
+    const req = linux.timespec{ .sec = 0, .nsec = frame_ms * std.time.ns_per_ms };
     _ = linux.nanosleep(&req, null);
 }
 
