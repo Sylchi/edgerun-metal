@@ -41,6 +41,8 @@ const ext_memory_copy: u32 = 10;
 const ext_memory_fill: u32 = 11;
 const ext_table_init: u32 = 12;
 const ext_elem_drop: u32 = 13;
+const ext_table_copy: u32 = 14;
+const ext_table_size: u32 = 16;
 const i32_min_as_f32: f32 = -2147483648.0;
 const i32_max_plus_one_as_f32: f32 = 2147483648.0;
 const u32_max_plus_one_as_f32: f32 = 4294967296.0;
@@ -1692,6 +1694,8 @@ const Executor = struct {
             ext_memory_fill => try self.memoryFill(frame, reader),
             ext_table_init => try self.tableInit(frame, reader),
             ext_elem_drop => try self.elemDrop(reader),
+            ext_table_copy => try self.tableCopy(frame, reader),
+            ext_table_size => try self.tableSize(frame, reader),
             else => return error.Unsupported,
         }
     }
@@ -1879,6 +1883,23 @@ const Executor = struct {
         self.module.element_segments[element_index].dropped = true;
     }
 
+    fn tableCopy(self: *Executor, frame: *Frame, reader: *Reader) Error!void {
+        try readTableIndex(reader);
+        try readTableIndex(reader);
+        const length = try popMemoryLength(frame);
+        const source = try popMemoryBase(frame);
+        const destination = try popMemoryBase(frame);
+        const source_end = checkedAdd(source, length) orelse return error.Trap;
+        const destination_end = checkedAdd(destination, length) orelse return error.Trap;
+        if (source_end > self.module.table_min_entries or destination_end > self.module.table_min_entries) return error.Trap;
+        copyTable(self.module.table_entries[destination..destination_end], self.module.table_entries[source..source_end]);
+    }
+
+    fn tableSize(self: *Executor, frame: *Frame, reader: *Reader) Error!void {
+        try readTableIndex(reader);
+        try frame.pushI32(@intCast(self.module.table_min_entries));
+    }
+
     fn memoryFill(self: *Executor, frame: *Frame, reader: *Reader) Error!void {
         try readMemoryIndex(reader);
         const length = try popMemoryLength(frame);
@@ -1997,6 +2018,23 @@ fn popMemoryLength(frame: *Executor.Frame) Error!usize {
 }
 
 fn copyMemory(destination: []u8, source: []const u8) void {
+    if (destination.len != source.len) unreachable;
+    if (destination.len == 0) return;
+    if (@intFromPtr(destination.ptr) <= @intFromPtr(source.ptr)) {
+        var index: usize = 0;
+        while (index < destination.len) : (index += 1) {
+            destination[index] = source[index];
+        }
+    } else {
+        var index = destination.len;
+        while (index > 0) {
+            index -= 1;
+            destination[index] = source[index];
+        }
+    }
+}
+
+fn copyTable(destination: []?usize, source: []const ?usize) void {
     if (destination.len != source.len) unreachable;
     if (destination.len == 0) return;
     if (@intFromPtr(destination.ptr) <= @intFromPtr(source.ptr)) {
@@ -2423,6 +2461,11 @@ fn skipExtendedOpcodeImmediate(reader: *Reader) Error!void {
             try readTableIndex(reader);
         },
         ext_elem_drop => _ = try reader.readU32Leb(),
+        ext_table_copy => {
+            try readTableIndex(reader);
+            try readTableIndex(reader);
+        },
+        ext_table_size => try readTableIndex(reader),
         else => return error.Unsupported,
     }
 }
