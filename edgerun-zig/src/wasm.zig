@@ -53,6 +53,10 @@ const u64_max_plus_one_as_f32: f32 = 18446744073709551616.0;
 const i64_min_as_f64: f64 = -9223372036854775808.0;
 const i64_max_plus_one_as_f64: f64 = 9223372036854775808.0;
 const u64_max_plus_one_as_f64: f64 = 18446744073709551616.0;
+const f32_sign_mask: u32 = 0x80000000;
+const f32_magnitude_mask: u32 = 0x7fffffff;
+const f64_sign_mask: u64 = 0x8000000000000000;
+const f64_magnitude_mask: u64 = 0x7fffffffffffffff;
 
 const wasm_magic = [_]u8{ 0x00, 0x61, 0x73, 0x6d };
 const wasm_version = [_]u8{ 0x01, 0x00, 0x00, 0x00 };
@@ -331,6 +335,9 @@ const Opcode = enum(u8) {
     f32_sub = 0x93,
     f32_mul = 0x94,
     f32_div = 0x95,
+    f32_min = 0x96,
+    f32_max = 0x97,
+    f32_copysign = 0x98,
     f64_abs = 0x99,
     f64_neg = 0x9a,
     f64_sqrt = 0x9f,
@@ -338,6 +345,9 @@ const Opcode = enum(u8) {
     f64_sub = 0xa1,
     f64_mul = 0xa2,
     f64_div = 0xa3,
+    f64_min = 0xa4,
+    f64_max = 0xa5,
+    f64_copysign = 0xa6,
     i32_wrap_i64 = 0xa7,
     i32_trunc_f32_s = 0xa8,
     i32_trunc_f32_u = 0xa9,
@@ -746,6 +756,9 @@ const FloatBinaryOp = enum {
     sub,
     mul,
     div,
+    min,
+    max,
+    copysign,
 };
 
 const FloatUnaryOp = enum {
@@ -1543,6 +1556,9 @@ const Executor = struct {
                 .f32_sub => try pushF32Binary(&frame, .sub),
                 .f32_mul => try pushF32Binary(&frame, .mul),
                 .f32_div => try pushF32Binary(&frame, .div),
+                .f32_min => try pushF32Binary(&frame, .min),
+                .f32_max => try pushF32Binary(&frame, .max),
+                .f32_copysign => try pushF32Binary(&frame, .copysign),
                 .f64_abs => try pushF64Unary(&frame, .abs),
                 .f64_neg => try pushF64Unary(&frame, .neg),
                 .f64_sqrt => try pushF64Unary(&frame, .sqrt),
@@ -1550,6 +1566,9 @@ const Executor = struct {
                 .f64_sub => try pushF64Binary(&frame, .sub),
                 .f64_mul => try pushF64Binary(&frame, .mul),
                 .f64_div => try pushF64Binary(&frame, .div),
+                .f64_min => try pushF64Binary(&frame, .min),
+                .f64_max => try pushF64Binary(&frame, .max),
+                .f64_copysign => try pushF64Binary(&frame, .copysign),
                 .i32_wrap_i64 => {
                     const value = try frame.popI64();
                     try frame.pushI32(@bitCast(@as(u32, @truncate(@as(u64, @bitCast(value))))));
@@ -2399,6 +2418,9 @@ fn opcodeFromByte(value: u8) ?Opcode {
         @intFromEnum(Opcode.f32_sub) => .f32_sub,
         @intFromEnum(Opcode.f32_mul) => .f32_mul,
         @intFromEnum(Opcode.f32_div) => .f32_div,
+        @intFromEnum(Opcode.f32_min) => .f32_min,
+        @intFromEnum(Opcode.f32_max) => .f32_max,
+        @intFromEnum(Opcode.f32_copysign) => .f32_copysign,
         @intFromEnum(Opcode.f64_abs) => .f64_abs,
         @intFromEnum(Opcode.f64_neg) => .f64_neg,
         @intFromEnum(Opcode.f64_sqrt) => .f64_sqrt,
@@ -2406,6 +2428,9 @@ fn opcodeFromByte(value: u8) ?Opcode {
         @intFromEnum(Opcode.f64_sub) => .f64_sub,
         @intFromEnum(Opcode.f64_mul) => .f64_mul,
         @intFromEnum(Opcode.f64_div) => .f64_div,
+        @intFromEnum(Opcode.f64_min) => .f64_min,
+        @intFromEnum(Opcode.f64_max) => .f64_max,
+        @intFromEnum(Opcode.f64_copysign) => .f64_copysign,
         @intFromEnum(Opcode.i32_wrap_i64) => .i32_wrap_i64,
         @intFromEnum(Opcode.i32_trunc_f32_s) => .i32_trunc_f32_s,
         @intFromEnum(Opcode.i32_trunc_f32_u) => .i32_trunc_f32_u,
@@ -2734,6 +2759,9 @@ fn skipOpcodeImmediate(reader: *Reader, opcode: Opcode) Error!void {
         .f32_sub,
         .f32_mul,
         .f32_div,
+        .f32_min,
+        .f32_max,
+        .f32_copysign,
         .f64_abs,
         .f64_neg,
         .f64_sqrt,
@@ -2741,6 +2769,9 @@ fn skipOpcodeImmediate(reader: *Reader, opcode: Opcode) Error!void {
         .f64_sub,
         .f64_mul,
         .f64_div,
+        .f64_min,
+        .f64_max,
+        .f64_copysign,
         .i32_wrap_i64,
         .i32_trunc_f32_s,
         .i32_trunc_f32_u,
@@ -3001,6 +3032,9 @@ fn applyF32Binary(op: FloatBinaryOp, left: f32, right: f32) f32 {
         .sub => left - right,
         .mul => left * right,
         .div => left / right,
+        .min => minF32(left, right),
+        .max => maxF32(left, right),
+        .copysign => copySignF32(left, right),
     };
 }
 
@@ -3010,7 +3044,58 @@ fn applyF64Binary(op: FloatBinaryOp, left: f64, right: f64) f64 {
         .sub => left - right,
         .mul => left * right,
         .div => left / right,
+        .min => minF64(left, right),
+        .max => maxF64(left, right),
+        .copysign => copySignF64(left, right),
     };
+}
+
+fn minF32(left: f32, right: f32) f32 {
+    if (isNanF32(left)) return left;
+    if (isNanF32(right)) return right;
+    if (left == 0 and right == 0) return @bitCast(@as(u32, @bitCast(left)) | @as(u32, @bitCast(right)));
+    return if (left < right) left else right;
+}
+
+fn maxF32(left: f32, right: f32) f32 {
+    if (isNanF32(left)) return left;
+    if (isNanF32(right)) return right;
+    if (left == 0 and right == 0) return @bitCast(@as(u32, @bitCast(left)) & @as(u32, @bitCast(right)));
+    return if (left > right) left else right;
+}
+
+fn copySignF32(left: f32, right: f32) f32 {
+    const magnitude = @as(u32, @bitCast(left)) & f32_magnitude_mask;
+    const sign = @as(u32, @bitCast(right)) & f32_sign_mask;
+    return @bitCast(magnitude | sign);
+}
+
+fn minF64(left: f64, right: f64) f64 {
+    if (isNanF64(left)) return left;
+    if (isNanF64(right)) return right;
+    if (left == 0 and right == 0) return @bitCast(@as(u64, @bitCast(left)) | @as(u64, @bitCast(right)));
+    return if (left < right) left else right;
+}
+
+fn maxF64(left: f64, right: f64) f64 {
+    if (isNanF64(left)) return left;
+    if (isNanF64(right)) return right;
+    if (left == 0 and right == 0) return @bitCast(@as(u64, @bitCast(left)) & @as(u64, @bitCast(right)));
+    return if (left > right) left else right;
+}
+
+fn copySignF64(left: f64, right: f64) f64 {
+    const magnitude = @as(u64, @bitCast(left)) & f64_magnitude_mask;
+    const sign = @as(u64, @bitCast(right)) & f64_sign_mask;
+    return @bitCast(magnitude | sign);
+}
+
+fn isNanF32(value: f32) bool {
+    return value != value;
+}
+
+fn isNanF64(value: f64) bool {
+    return value != value;
 }
 
 fn pushI32Comparison(frame: *Executor.Frame, comparison: Comparison) Error!void {
