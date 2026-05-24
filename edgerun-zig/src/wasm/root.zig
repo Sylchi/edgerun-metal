@@ -1,4 +1,4 @@
-const byte_utils = @import("bytes.zig");
+const byte_utils = @import("../bytes.zig");
 
 const max_functions = 16;
 const max_imports = 16;
@@ -57,8 +57,6 @@ const f32_sign_mask: u32 = 0x80000000;
 const f32_magnitude_mask: u32 = 0x7fffffff;
 const f64_sign_mask: u64 = 0x8000000000000000;
 const f64_magnitude_mask: u64 = 0x7fffffffffffffff;
-const f32_two: f32 = 2.0;
-const f64_two: f64 = 2.0;
 
 const wasm_magic = [_]u8{ 0x00, 0x61, 0x73, 0x6d };
 const wasm_version = [_]u8{ 0x01, 0x00, 0x00, 0x00 };
@@ -2799,7 +2797,7 @@ fn applyF32Unary(op: FloatUnaryOp, value: f32) f32 {
         .ceil => @ceil(value),
         .floor => @floor(value),
         .trunc => @trunc(value),
-        .nearest => nearestF32(value),
+        .nearest => nearestFloat(f32, value),
         .sqrt => @sqrt(value),
     };
 }
@@ -2811,7 +2809,7 @@ fn applyF64Unary(op: FloatUnaryOp, value: f64) f64 {
         .ceil => @ceil(value),
         .floor => @floor(value),
         .trunc => @trunc(value),
-        .nearest => nearestF64(value),
+        .nearest => nearestFloat(f64, value),
         .sqrt => @sqrt(value),
     };
 }
@@ -2933,15 +2931,15 @@ fn applyF64Binary(op: FloatBinaryOp, left: f64, right: f64) f64 {
 }
 
 fn minF32(left: f32, right: f32) f32 {
-    if (isNanF32(left)) return left;
-    if (isNanF32(right)) return right;
+    if (isNan(left)) return left;
+    if (isNan(right)) return right;
     if (left == 0 and right == 0) return @bitCast(@as(u32, @bitCast(left)) | @as(u32, @bitCast(right)));
     return if (left < right) left else right;
 }
 
 fn maxF32(left: f32, right: f32) f32 {
-    if (isNanF32(left)) return left;
-    if (isNanF32(right)) return right;
+    if (isNan(left)) return left;
+    if (isNan(right)) return right;
     if (left == 0 and right == 0) return @bitCast(@as(u32, @bitCast(left)) & @as(u32, @bitCast(right)));
     return if (left > right) left else right;
 }
@@ -2953,15 +2951,15 @@ fn copySignF32(left: f32, right: f32) f32 {
 }
 
 fn minF64(left: f64, right: f64) f64 {
-    if (isNanF64(left)) return left;
-    if (isNanF64(right)) return right;
+    if (isNan(left)) return left;
+    if (isNan(right)) return right;
     if (left == 0 and right == 0) return @bitCast(@as(u64, @bitCast(left)) | @as(u64, @bitCast(right)));
     return if (left < right) left else right;
 }
 
 fn maxF64(left: f64, right: f64) f64 {
-    if (isNanF64(left)) return left;
-    if (isNanF64(right)) return right;
+    if (isNan(left)) return left;
+    if (isNan(right)) return right;
     if (left == 0 and right == 0) return @bitCast(@as(u64, @bitCast(left)) & @as(u64, @bitCast(right)));
     return if (left > right) left else right;
 }
@@ -2972,8 +2970,8 @@ fn copySignF64(left: f64, right: f64) f64 {
     return @bitCast(magnitude | sign);
 }
 
-fn nearestF32(value: f32) f32 {
-    if (isNanF32(value)) return value;
+fn nearestFloat(comptime Float: type, value: Float) Float {
+    if (isNan(value)) return value;
 
     const lower = @floor(value);
     const upper = @ceil(value);
@@ -2981,34 +2979,14 @@ fn nearestF32(value: f32) f32 {
     const upper_distance = upper - value;
     if (lower_distance < upper_distance) return lower;
     if (upper_distance < lower_distance) return upper;
-    return if (evenF32(lower)) lower else upper;
+    return if (evenFloat(Float, lower)) lower else upper;
 }
 
-fn nearestF64(value: f64) f64 {
-    if (isNanF64(value)) return value;
-
-    const lower = @floor(value);
-    const upper = @ceil(value);
-    const lower_distance = value - lower;
-    const upper_distance = upper - value;
-    if (lower_distance < upper_distance) return lower;
-    if (upper_distance < lower_distance) return upper;
-    return if (evenF64(lower)) lower else upper;
+fn evenFloat(comptime Float: type, value: Float) bool {
+    return @mod(@abs(value), @as(Float, 2.0)) == 0;
 }
 
-fn evenF32(value: f32) bool {
-    return @mod(@abs(value), f32_two) == 0;
-}
-
-fn evenF64(value: f64) bool {
-    return @mod(@abs(value), f64_two) == 0;
-}
-
-fn isNanF32(value: f32) bool {
-    return value != value;
-}
-
-fn isNanF64(value: f64) bool {
+fn isNan(value: anytype) bool {
     return value != value;
 }
 
@@ -3092,51 +3070,47 @@ fn compareF64(comparison: FloatComparison, left: f64, right: f64) bool {
     };
 }
 
-fn invalidTruncF32(value: f32, min: f32, max_exclusive: f32) bool {
-    return value != value or value < min or value >= max_exclusive;
-}
-
-fn invalidTruncF64(value: f64, min: f64, max_exclusive: f64) bool {
+fn invalidTrunc(value: anytype, min: @TypeOf(value), max_exclusive: @TypeOf(value)) bool {
     return value != value or value < min or value >= max_exclusive;
 }
 
 fn truncF32ToI32(value: f32) Error!i32 {
-    if (invalidTruncF32(value, i32_min_as_f32, i32_max_plus_one_as_f32)) return error.ArithmeticTrap;
+    if (invalidTrunc(value, i32_min_as_f32, i32_max_plus_one_as_f32)) return error.ArithmeticTrap;
     return @intFromFloat(value);
 }
 
 fn truncF32ToU32(value: f32) Error!u32 {
-    if (invalidTruncF32(value, 0.0, u32_max_plus_one_as_f32)) return error.ArithmeticTrap;
+    if (invalidTrunc(value, 0.0, u32_max_plus_one_as_f32)) return error.ArithmeticTrap;
     return @intFromFloat(value);
 }
 
 fn truncF64ToI32(value: f64) Error!i32 {
-    if (invalidTruncF64(value, i32_min_as_f64, i32_max_plus_one_as_f64)) return error.ArithmeticTrap;
+    if (invalidTrunc(value, i32_min_as_f64, i32_max_plus_one_as_f64)) return error.ArithmeticTrap;
     return @intFromFloat(value);
 }
 
 fn truncF64ToU32(value: f64) Error!u32 {
-    if (invalidTruncF64(value, 0.0, u32_max_plus_one_as_f64)) return error.ArithmeticTrap;
+    if (invalidTrunc(value, 0.0, u32_max_plus_one_as_f64)) return error.ArithmeticTrap;
     return @intFromFloat(value);
 }
 
 fn truncF32ToI64(value: f32) Error!i64 {
-    if (invalidTruncF32(value, i64_min_as_f32, i64_max_plus_one_as_f32)) return error.ArithmeticTrap;
+    if (invalidTrunc(value, i64_min_as_f32, i64_max_plus_one_as_f32)) return error.ArithmeticTrap;
     return @intFromFloat(value);
 }
 
 fn truncF32ToU64(value: f32) Error!u64 {
-    if (invalidTruncF32(value, 0.0, u64_max_plus_one_as_f32)) return error.ArithmeticTrap;
+    if (invalidTrunc(value, 0.0, u64_max_plus_one_as_f32)) return error.ArithmeticTrap;
     return @intFromFloat(value);
 }
 
 fn truncF64ToI64(value: f64) Error!i64 {
-    if (invalidTruncF64(value, i64_min_as_f64, i64_max_plus_one_as_f64)) return error.ArithmeticTrap;
+    if (invalidTrunc(value, i64_min_as_f64, i64_max_plus_one_as_f64)) return error.ArithmeticTrap;
     return @intFromFloat(value);
 }
 
 fn truncF64ToU64(value: f64) Error!u64 {
-    if (invalidTruncF64(value, 0.0, u64_max_plus_one_as_f64)) return error.ArithmeticTrap;
+    if (invalidTrunc(value, 0.0, u64_max_plus_one_as_f64)) return error.ArithmeticTrap;
     return @intFromFloat(value);
 }
 
@@ -3283,5 +3257,5 @@ fn store8(out: []u8, value: u8) bool {
 }
 
 test {
-    _ = @import("wasm_tests.zig");
+    _ = @import("tests.zig");
 }
