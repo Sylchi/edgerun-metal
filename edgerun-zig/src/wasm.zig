@@ -1,5 +1,4 @@
 const byte_utils = @import("bytes.zig");
-const preimage = @import("preimage.zig");
 
 const max_functions = 16;
 const max_types = 16;
@@ -1004,11 +1003,6 @@ pub fn executeExportI64(runtime: *Runtime, wasm_bytes: []const u8, export_name: 
     };
     try executor.runStart();
     return executor.runExport(export_name);
-}
-
-pub fn outputHashI64(value: i64) preimage.Hash {
-    const raw = byte_utils.stored64(@as(u64, @bitCast(value)));
-    return preimage.hash("edgerun:zig:v1:wasm-i64-output", &raw);
 }
 
 fn checkedAdd(left: usize, right: usize) ?usize {
