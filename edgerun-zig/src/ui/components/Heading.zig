@@ -2,6 +2,7 @@ const std = @import("std");
 const common = @import("../../ui_component_common.zig");
 const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
+const base_text_block = @import("base/TextBlock.zig");
 
 const ComponentRegistry = common.ComponentRegistry;
 const HtmlError = common.HtmlError;
@@ -62,32 +63,12 @@ pub fn register(registry: *ComponentRegistry) RegistryError!void {
 
 pub fn renderHeading(heading: Heading, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
     if (!validHeadingLevel(heading.level)) return;
-    const line_height: f32 = switch (heading.level) {
-        1 => heading_h1_line_h,
-        2 => heading_h2_line_h,
-        3 => heading_h3_line_h,
-        else => unreachable,
-    };
-    const avg_width: f32 = switch (heading.level) {
-        1 => heading_h1_avg_w,
-        2 => heading_h2_avg_w,
-        3 => heading_h3_avg_w,
-        else => unreachable,
-    };
-    try scene.pushWrappedText(bounds, heading.value, options.style.text, .{
-        .line_height = line_height,
-        .average_char_width = avg_width,
-        .max_lines = heading_max_lines,
-    });
+    try base_text_block.render(scene, bounds, heading.value, options.style.text, headingMetrics(heading.level));
 }
 
 pub fn measureHeading(heading: Heading, constraints: layout.Constraints) layout.Measurement {
     if (!validHeadingLevel(heading.level)) return layout.Measurement.fixed(.{ .w = 0, .h = 0 });
-    return layout.measureText(heading.value, constraints, .{
-        .line_height = headingLineHeight(heading.level),
-        .average_char_width = headingAverageWidth(heading.level),
-        .max_lines = heading_max_lines,
-    });
+    return base_text_block.measure(heading.value, constraints, headingMetrics(heading.level));
 }
 
 fn renderRegistered(component: *const anyopaque, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
@@ -190,6 +171,14 @@ fn headingAverageWidth(level: u8) f32 {
         2 => heading_h2_avg_w,
         3 => heading_h3_avg_w,
         else => unreachable,
+    };
+}
+
+fn headingMetrics(level: u8) base_text_block.Metrics {
+    return .{
+        .line_height = headingLineHeight(level),
+        .average_char_width = headingAverageWidth(level),
+        .max_lines = heading_max_lines,
     };
 }
 
