@@ -1,6 +1,7 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
 const layout = @import("../../layouts/Types.zig");
+const base_frame = @import("base/Frame.zig");
 const base_surface = @import("base/Surface.zig");
 const ui = @import("../../ui.zig");
 
@@ -68,8 +69,7 @@ pub fn renderFigure(figure: Figure, scene: *ui.Scene, bounds: ui.Rect, options: 
     try base_surface.renderFrame(scene, bounds, options);
 
     const media_bounds = ui.Rect.init(bounds.x + figure_padding_x, bounds.y + figure_padding_y, @max(1.0, bounds.w - figure_padding_x * 2.0), @max(1.0, bounds.h - figure_padding_y * 2.0 - figure_caption_h - figure_caption_gap));
-    try scene.pushRect(media_bounds, style.row, .fill, figure_media_radius, 0.0);
-    try scene.pushRect(media_bounds, style.border, .border, figure_media_radius, 0.0);
+    try base_frame.render(scene, media_bounds, .{ .fill = style.row, .border = style.border, .radius = figure_media_radius });
     try scene.pushWrappedText(media_bounds.insetUniform(figure_alt_padding), figure.alt, style.muted, .{
         .line_height = figure_alt_line_h,
         .average_char_width = figure_alt_avg_w,

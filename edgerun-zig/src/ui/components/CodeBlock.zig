@@ -2,6 +2,7 @@ const std = @import("std");
 const common = @import("../../ui_component_common.zig");
 const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
+const base_frame = @import("base/Frame.zig");
 
 const ComponentRegistry = common.ComponentRegistry;
 const HtmlError = common.HtmlError;
@@ -61,8 +62,7 @@ pub fn register(registry: *ComponentRegistry) RegistryError!void {
 }
 
 pub fn renderCodeBlock(block: CodeBlock, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-    try scene.pushRect(bounds, options.style.bg, .fill, code_radius, 0.0);
-    try scene.pushRect(bounds, options.style.border, .border, code_radius, 0.0);
+    try base_frame.render(scene, bounds, .{ .fill = options.style.bg, .border = options.style.border, .radius = code_radius });
     if (try scene.pushClip(bounds.insetUniform(code_clip_inset))) {
         defer scene.popClip();
         var y = bounds.y + code_padding_y;
