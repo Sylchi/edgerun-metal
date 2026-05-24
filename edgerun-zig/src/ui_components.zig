@@ -10,6 +10,7 @@ const component_common = @import("ui_component_common.zig");
 const aside_component = @import("ui/components/Aside.zig");
 const details_component = @import("ui/components/Details.zig");
 const figure_component = @import("ui/components/Figure.zig");
+const progress_summary_component = @import("ui/components/ProgressSummary.zig");
 const table_component = @import("ui/components/Table.zig");
 
 const tree_layout_magic = "ERUL001\x00";
@@ -432,32 +433,7 @@ pub const ResourceList = struct {
     }
 };
 
-pub const ProgressSummary = struct {
-    id: u32,
-    label: []const u8,
-    completed: u32,
-    total: u32,
-
-    pub fn render(self: ProgressSummary, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return renderProgressSummary(scene, bounds, self, options);
-    }
-
-    pub fn toHtml(self: ProgressSummary, out: []u8) HtmlError![]u8 {
-        return writeProgressSummaryHtml(self, out);
-    }
-
-    pub fn fromHtml(html: []const u8, text_out: []u8) HtmlError!ProgressSummary {
-        return readProgressSummaryHtml(html, text_out);
-    }
-
-    pub fn toMarkdown(self: ProgressSummary, out: []u8) MarkdownError![]u8 {
-        return writeProgressSummaryMarkdown(self, out);
-    }
-
-    pub fn fromMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!ProgressSummary {
-        return readProgressSummaryMarkdown(markdown, text_out);
-    }
-};
+pub const ProgressSummary = progress_summary_component.ProgressSummary;
 
 pub const NavItem = struct {
     id: u32,
@@ -539,6 +515,10 @@ pub fn registerDetails(registry: *ComponentRegistry) RegistryError!void {
 
 pub fn registerFigure(registry: *ComponentRegistry) RegistryError!void {
     return figure_component.register(registry);
+}
+
+pub fn registerProgressSummary(registry: *ComponentRegistry) RegistryError!void {
+    return progress_summary_component.register(registry);
 }
 
 pub fn registerTable(registry: *ComponentRegistry) RegistryError!void {
@@ -837,25 +817,6 @@ pub fn renderResourceList(scene: *ui.Scene, bounds: ui.Rect, list: ResourceList,
         try scene.pushHit(.{ .slot = 0, .kind = .button, .id = item.id, .bounds = item_bounds });
         y += resource_item_h + resource_item_gap;
     }
-}
-
-pub fn renderProgressSummary(scene: *ui.Scene, bounds: ui.Rect, summary: ProgressSummary, options: RenderOptions) ui.RenderError!void {
-    if (summary.total == 0 or summary.completed > summary.total) return;
-    const style = options.style;
-    try scene.pushRect(bounds, style.panel, .fill, progress_summary_radius, 0.0);
-    try scene.pushRect(bounds, style.border, .border, progress_summary_radius, 0.0);
-
-    const content = bounds.insetLtrb(progress_summary_padding_x, progress_summary_padding_y, progress_summary_padding_x, progress_summary_padding_y);
-    try scene.pushAlignedText(ui.Rect.init(content.x, content.y, content.w, progress_summary_label_h), summary.label, style.text, .start);
-
-    const bar_bounds = ui.Rect.init(content.x, content.y + progress_summary_bar_y, content.w, progress_summary_bar_h);
-    try scene.pushRect(bar_bounds, style.row, .fill, progress_summary_bar_radius, 0.0);
-    const ratio = @as(f32, @floatFromInt(summary.completed)) / @as(f32, @floatFromInt(summary.total));
-    if (ratio > 0.0) {
-        try scene.pushRect(ui.Rect.init(bar_bounds.x, bar_bounds.y, @max(progress_summary_bar_min_w, bar_bounds.w * ratio), bar_bounds.h), style.accent, .fill, progress_summary_bar_radius, 0.0);
-    }
-
-    try scene.pushHit(.{ .slot = 0, .kind = .button, .id = summary.id, .bounds = bounds });
 }
 
 pub fn renderNav(scene: *ui.Scene, bounds: ui.Rect, nav: Nav, options: RenderOptions) ui.RenderError!void {
@@ -1203,14 +1164,6 @@ const resource_detail_h: f32 = 30.0;
 const resource_detail_line_h: f32 = 15.0;
 const resource_detail_avg_w: f32 = 8.5;
 const resource_detail_max_lines: usize = 2;
-const progress_summary_radius: f32 = 8.0;
-const progress_summary_padding_x: f32 = 14.0;
-const progress_summary_padding_y: f32 = 14.0;
-const progress_summary_label_h: f32 = 16.0;
-const progress_summary_bar_y: f32 = 30.0;
-const progress_summary_bar_h: f32 = 10.0;
-const progress_summary_bar_radius: f32 = 5.0;
-const progress_summary_bar_min_w: f32 = 2.0;
 const nav_radius: f32 = 8.0;
 const nav_padding_x: f32 = 8.0;
 const nav_item_h: f32 = 34.0;
@@ -2238,20 +2191,6 @@ fn writeResourceListHtml(list: ResourceList, out: []u8) HtmlError![]u8 {
     return writer.written();
 }
 
-fn writeProgressSummaryHtml(summary: ProgressSummary, out: []u8) HtmlError![]u8 {
-    if (summary.label.len == 0 or summary.total == 0 or summary.completed > summary.total) return error.InvalidHtml;
-    var writer = HtmlWriter.init(out);
-    try writer.writeAll("<section data-er-component=\"progress-summary\"");
-    try writer.writeAttrInt("data-er-id", summary.id);
-    try writer.writeAll("><h2>");
-    try writer.writeEscapedText(summary.label);
-    try writer.writeAll("</h2><progress");
-    try writer.writeAttrInt("value", summary.completed);
-    try writer.writeAttrInt("max", summary.total);
-    try writer.writeAll("></progress></section>");
-    return writer.written();
-}
-
 fn writeNavHtml(nav: Nav, out: []u8) HtmlError![]u8 {
     if (nav.items.len == 0) return error.InvalidHtml;
     var writer = HtmlWriter.init(out);
@@ -2557,18 +2496,6 @@ fn writeTimelineMarkdown(timeline: Timeline, out: []u8) MarkdownError![]u8 {
     return writer.written();
 }
 
-fn writeProgressSummaryMarkdown(summary: ProgressSummary, out: []u8) MarkdownError![]u8 {
-    if (summary.label.len == 0 or summary.total == 0 or summary.completed > summary.total) return error.InvalidMarkdown;
-    var writer = MarkdownWriter.init(out);
-    try writer.beginDirective("progress");
-    try writer.fieldInt("id", summary.id);
-    try writer.fieldText("label", summary.label);
-    try writer.fieldInt("completed", summary.completed);
-    try writer.fieldInt("total", summary.total);
-    try writer.endDirective();
-    return writer.written();
-}
-
 fn writeCodeBlockMarkdown(block: CodeBlock, out: []u8) MarkdownError![]u8 {
     if (!validMarkdownFenceLanguage(block.language)) return error.InvalidMarkdown;
     var writer = MarkdownWriter.init(out);
@@ -2813,19 +2740,6 @@ fn readTimelineMarkdown(markdown: []const u8, out_events: []TimelineEvent, text_
     }
     if (event_count == 0) return error.InvalidMarkdown;
     return .{ .events = out_events[0..event_count] };
-}
-
-fn readProgressSummaryMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!ProgressSummary {
-    const prefix = ":::progress\nid: ";
-    const body = try readMarkdownDirectiveBody(markdown, ":::progress", prefix);
-    var cursor = MarkdownCursor.init(body);
-    const id = try parseMarkdownU32(try cursor.fieldBetween("", "\nlabel: "));
-    var text = MarkdownTextArena.init(text_out);
-    const label = try text.unescapeInline(try cursor.fieldBetween("\nlabel: ", "\ncompleted: "));
-    const completed = try parseMarkdownU32(try cursor.fieldBetween("\ncompleted: ", "\ntotal: "));
-    const total = try parseMarkdownU32(try cursor.tailField("\ntotal: "));
-    if (label.len == 0 or total == 0 or completed > total) return error.InvalidMarkdown;
-    return .{ .id = id, .label = label, .completed = completed, .total = total };
 }
 
 fn readCodeBlockMarkdown(markdown: []const u8, out_lines: [][]const u8) MarkdownError!CodeBlock {
@@ -3488,32 +3402,6 @@ fn readResourceItemsHtml(html: []const u8, out_items: []ResourceItem, text: *Htm
     }
     if (item_count == 0) return error.InvalidHtml;
     return out_items[0..item_count];
-}
-
-fn readProgressSummaryHtml(html: []const u8, text_out: []u8) HtmlError!ProgressSummary {
-    const prefix = "<section data-er-component=\"progress-summary\" data-er-id=\"";
-    if (!std.mem.startsWith(u8, html, prefix)) {
-        if (std.mem.startsWith(u8, html, "<section")) return error.InvalidHtml;
-        return error.UnsupportedHtml;
-    }
-    if (!std.mem.endsWith(u8, html, "</progress></section>")) return error.InvalidHtml;
-
-    var text = HtmlTextArena.init(text_out);
-    const after_id_start = prefix.len;
-    const after_id = html[after_id_start..];
-    const id_end = std.mem.indexOf(u8, after_id, "\"><h2>") orelse return error.InvalidHtml;
-    const id = try parseHtmlU32(after_id[0..id_end]);
-    const label_start = after_id_start + id_end + "\"><h2>".len;
-    const label_end_relative = std.mem.indexOf(u8, html[label_start..], "</h2><progress value=\"") orelse return error.InvalidHtml;
-    const completed_start = label_start + label_end_relative + "</h2><progress value=\"".len;
-    const completed_end_relative = std.mem.indexOf(u8, html[completed_start..], "\" max=\"") orelse return error.InvalidHtml;
-    const total_start = completed_start + completed_end_relative + "\" max=\"".len;
-    const total_end_relative = std.mem.indexOf(u8, html[total_start..], "\"></progress></section>") orelse return error.InvalidHtml;
-    const completed = try parseHtmlU32(html[completed_start .. completed_start + completed_end_relative]);
-    const total = try parseHtmlU32(html[total_start .. total_start + total_end_relative]);
-    const label = try text.unescape(html[label_start .. label_start + label_end_relative]);
-    if (label.len == 0 or total == 0 or completed > total) return error.InvalidHtml;
-    return .{ .id = id, .label = label, .completed = completed, .total = total };
 }
 
 fn readNavHtml(html: []const u8, out_items: []NavItem, text_out: []u8) HtmlError!Nav {
@@ -5023,43 +4911,6 @@ test "resource list html codec rejects malformed links" {
     try std.testing.expectError(error.InvalidHtml, ResourceList.fromHtml("<ul data-er-component=\"resource-list\"></ul>", &items, &text));
     try std.testing.expectError(error.InvalidHtml, ResourceList.fromHtml("<ul data-er-component=\"resource-list\"><li data-er-id=\"x\"><a href=\"#\">Broken</a><p>Bad id</p></li></ul>", &items, &text));
     try std.testing.expectError(error.InvalidHtml, ResourceList.fromHtml("<ul data-er-component=\"resource-list\"><li data-er-id=\"1\"><a href=\"\">Broken</a><p>Missing href</p></li></ul>", &items, &text));
-}
-
-test "progress summary component renders progress and hit target" {
-    const summary = ProgressSummary{ .id = 39001, .label = "Academy progress", .completed = 3, .total = 8 };
-    var commands: [48]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-
-    try summary.render(&scene, ui.Rect.init(0, 0, 360, 96), .{});
-
-    try std.testing.expect(hasText(scene.written(), "Academy progress"));
-    const hit = ui_input.hitTest(scene.written(), 20, 20).?;
-    try std.testing.expectEqual(@as(u32, 39001), hit.id);
-}
-
-test "progress summary html codec roundtrips semantic progress" {
-    const summary = ProgressSummary{ .id = 39101, .label = "Systems & Security", .completed = 5, .total = 12 };
-    var html: [256]u8 = undefined;
-    var text: [128]u8 = undefined;
-
-    const encoded = try summary.toHtml(&html);
-    const decoded = try ProgressSummary.fromHtml(encoded, &text);
-
-    try std.testing.expectEqualStrings("<section data-er-component=\"progress-summary\" data-er-id=\"39101\"><h2>Systems &amp; Security</h2><progress value=\"5\" max=\"12\"></progress></section>", encoded);
-    try std.testing.expectEqual(@as(u32, 39101), decoded.id);
-    try std.testing.expectEqualStrings("Systems & Security", decoded.label);
-    try std.testing.expectEqual(@as(u32, 5), decoded.completed);
-    try std.testing.expectEqual(@as(u32, 12), decoded.total);
-}
-
-test "progress summary html codec rejects malformed progress" {
-    var text: [128]u8 = undefined;
-
-    try std.testing.expectError(error.InvalidHtml, ProgressSummary.fromHtml("<section><progress value=\"1\" max=\"2\"></progress></section>", &text));
-    try std.testing.expectError(error.InvalidHtml, ProgressSummary.fromHtml("<section data-er-component=\"progress-summary\" data-er-id=\"1\"><h2></h2><progress value=\"1\" max=\"2\"></progress></section>", &text));
-    try std.testing.expectError(error.InvalidHtml, ProgressSummary.fromHtml("<section data-er-component=\"progress-summary\" data-er-id=\"x\"><h2>Broken</h2><progress value=\"1\" max=\"2\"></progress></section>", &text));
-    try std.testing.expectError(error.InvalidHtml, ProgressSummary.fromHtml("<section data-er-component=\"progress-summary\" data-er-id=\"1\"><h2>Broken</h2><progress value=\"3\" max=\"2\"></progress></section>", &text));
-    try std.testing.expectError(error.InvalidHtml, ProgressSummary.fromHtml("<section data-er-component=\"progress-summary\" data-er-id=\"1\"><h2>Broken</h2><progress value=\"0\" max=\"0\"></progress></section>", &text));
 }
 
 test "nav component renders active item and hit targets" {
