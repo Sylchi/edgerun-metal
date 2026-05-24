@@ -45,7 +45,7 @@ const ExternalKind = enum(u8) {
     global = 3,
 };
 
-const ValueType = enum(u8) {
+pub const ValueType = enum(u8) {
     i32 = 0x7f,
     i64 = 0x7e,
     f32 = 0x7d,
@@ -206,11 +206,15 @@ pub const HostImport = struct {
     call: ?*const fn (context: ?*anyopaque, args: []const i64) Error!?i64 = null,
     memory_min_pages: usize = 0,
     memory_max_pages: ?usize = null,
+    global_value_type: ValueType = .i64,
+    global_mutable: bool = false,
+    global_value: i64 = 0,
 };
 
 pub const HostImportKind = enum {
     function,
     memory,
+    global,
 };
 
 const Reader = struct {
@@ -373,6 +377,22 @@ const ImportedMemory = struct {
     }
 };
 
+const ImportedGlobal = struct {
+    module: [max_import_name]u8 = undefined,
+    module_len: usize = 0,
+    name: [max_import_name]u8 = undefined,
+    name_len: usize = 0,
+    global_index: usize = 0,
+
+    fn matches(self: ImportedGlobal, host: HostImport) bool {
+        return host.kind == .global and
+            self.module_len == host.module.len and
+            self.name_len == host.name.len and
+            byte_utils.eql(self.module[0..self.module_len], host.module) and
+            byte_utils.eql(self.name[0..self.name_len], host.name);
+    }
+};
+
 const Export = struct {
     name: [max_export_name]u8 = undefined,
     name_len: usize = 0,
@@ -465,6 +485,8 @@ const Module = struct {
     type_count: usize = 0,
     imports: [max_imports]ImportedFunction = undefined,
     import_count: usize = 0,
+    imported_globals: [max_globals]ImportedGlobal = undefined,
+    imported_global_count: usize = 0,
     functions: [max_functions]Function = undefined,
     function_count: usize = 0,
     code: [max_functions]Code = undefined,
@@ -577,7 +599,8 @@ const Module = struct {
                     self.import_count += 1;
                 },
                 .memory => try self.parseMemoryImport(reader, module_name, import_name),
-                .table, .global => return error.Unsupported,
+                .global => try self.parseGlobalImport(reader, module_name, import_name),
+                .table => return error.Unsupported,
             }
         }
     }
@@ -597,6 +620,30 @@ const Module = struct {
         self.memory_min_pages = limits.min;
     }
 
+    fn parseGlobalImport(self: *Module, reader: *Reader, module_name: []const u8, import_name: []const u8) Error!void {
+        if (self.global_count >= max_globals or self.imported_global_count >= max_globals) return error.Unsupported;
+        const value_type = try readValueType(reader);
+        if (!supportedInteger(value_type)) return error.Unsupported;
+        const mutability = try reader.readByte();
+        if (mutability > 1) return error.Corrupt;
+        const global_index = self.global_count;
+        self.globals[global_index] = .{
+            .value_type = value_type,
+            .mutable = mutability == 1,
+            .value = 0,
+        };
+        var imported = ImportedGlobal{
+            .module_len = module_name.len,
+            .name_len = import_name.len,
+            .global_index = global_index,
+        };
+        @memcpy(imported.module[0..module_name.len], module_name);
+        @memcpy(imported.name[0..import_name.len], import_name);
+        self.imported_globals[self.imported_global_count] = imported;
+        self.imported_global_count += 1;
+        self.global_count += 1;
+    }
+
     fn parseMemorySection(self: *Module, reader: *Reader) Error!void {
         const count = try reader.readU32Leb();
         if (count > 1) return error.Unsupported;
@@ -608,9 +655,10 @@ const Module = struct {
 
     fn parseGlobalSection(self: *Module, reader: *Reader) Error!void {
         const count = try reader.readU32Leb();
-        if (count > max_globals) return error.Unsupported;
-        self.global_count = count;
-        for (self.globals[0..count]) |*global| {
+        if (self.global_count + count > max_globals) return error.Unsupported;
+        const base = self.global_count;
+        self.global_count += count;
+        for (self.globals[base..self.global_count]) |*global| {
             const value_type = try readValueType(reader);
             if (!supportedInteger(value_type)) return error.Unsupported;
             const mutability = try reader.readByte();
@@ -735,7 +783,7 @@ const Module = struct {
         return checkedMul(self.memory_min_pages, wasm_page_bytes) orelse error.Unsupported;
     }
 
-    fn resolveImports(self: Module, runtime: Runtime) Error!void {
+    fn resolveImports(self: *Module, runtime: Runtime) Error!void {
         for (self.imports[0..self.import_count]) |imported| {
             for (runtime.imports) |host| {
                 if (host.kind == .function and imported.matches(host)) break;
@@ -749,6 +797,23 @@ const Module = struct {
             }
             return error.MissingImport;
         }
+        for (self.imported_globals[0..self.imported_global_count]) |imported| {
+            for (runtime.imports) |host| {
+                if (!imported.matches(host)) continue;
+                try self.resolveImportedGlobal(imported, host);
+                break;
+            } else return error.MissingImport;
+        }
+    }
+
+    fn resolveImportedGlobal(self: *Module, imported: ImportedGlobal, host: HostImport) Error!void {
+        const global = &self.globals[imported.global_index];
+        if (global.value_type != host.global_value_type or global.mutable != host.global_mutable) return error.Corrupt;
+        global.value = switch (global.value_type) {
+            .i32 => @as(i32, @truncate(host.global_value)),
+            .i64 => host.global_value,
+            .f32, .f64 => return error.Unsupported,
+        };
     }
 
     fn applyDataSegments(self: Module, runtime: *Runtime) Error!void {
@@ -1159,7 +1224,7 @@ pub fn executeExportI64(runtime: *Runtime, wasm_bytes: []const u8, export_name: 
 
 pub fn executeExportI64Args(runtime: *Runtime, wasm_bytes: []const u8, export_name: []const u8, args: []const i64) Error!i64 {
     if (export_name.len == 0) return error.BadArgument;
-    const module = try Module.parse(wasm_bytes);
+    var module = try Module.parse(wasm_bytes);
     try module.resolveImports(runtime.*);
     const required_memory = try module.requiredMemoryBytes();
     if (required_memory > runtime.memoryLen()) return error.NoMemory;
