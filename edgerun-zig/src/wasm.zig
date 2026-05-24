@@ -1,4 +1,3 @@
-const std = @import("std");
 const byte_utils = @import("bytes.zig");
 const preimage = @import("preimage.zig");
 
@@ -322,7 +321,7 @@ const Export = struct {
     index: usize = 0,
 
     fn matches(self: Export, name: []const u8) bool {
-        return self.name_len == name.len and std.mem.eql(u8, self.name[0..self.name_len], name);
+        return self.name_len == name.len and byte_utils.eql(self.name[0..self.name_len], name);
     }
 };
 
@@ -415,8 +414,8 @@ const Module = struct {
 
     fn parse(bytes: []const u8) Error!Module {
         var reader = Reader{ .bytes = bytes };
-        if (!std.mem.eql(u8, try reader.readBytes(wasm_magic.len), &wasm_magic)) return error.Corrupt;
-        if (!std.mem.eql(u8, try reader.readBytes(wasm_version.len), &wasm_version)) return error.Corrupt;
+        if (!byte_utils.eql(try reader.readBytes(wasm_magic.len), &wasm_magic)) return error.Corrupt;
+        if (!byte_utils.eql(try reader.readBytes(wasm_version.len), &wasm_version)) return error.Corrupt;
 
         var module = Module{};
         var previous_section: u8 = 0;
@@ -605,13 +604,13 @@ const Module = struct {
     }
 
     fn requiredMemoryBytes(self: Module) Error!usize {
-        return std.math.mul(usize, self.memory_min_pages, wasm_page_bytes) catch error.Unsupported;
+        return checkedMul(self.memory_min_pages, wasm_page_bytes) orelse error.Unsupported;
     }
 
     fn applyDataSegments(self: Module, runtime: *Runtime) Error!void {
         const limit = try self.requiredMemoryBytes();
         for (self.data_segments[0..self.data_segment_count]) |segment| {
-            const end = std.math.add(usize, segment.offset, segment.bytes.len) catch return error.NoMemory;
+            const end = checkedAdd(segment.offset, segment.bytes.len) orelse return error.NoMemory;
             if (end > limit or end > runtime.memory.len) return error.NoMemory;
             @memcpy(runtime.memory[segment.offset..end], segment.bytes);
         }
@@ -960,12 +959,12 @@ const Executor = struct {
     fn popAddress(frame: *Frame, offset: u32) Error!usize {
         const base = try frame.pop();
         if (base < 0) return error.NoMemory;
-        return std.math.add(usize, @as(usize, @intCast(base)), offset) catch error.NoMemory;
+        return checkedAdd(@as(usize, @intCast(base)), offset) orelse error.NoMemory;
     }
 
     fn memoryRange(self: *Executor, address: usize, size: usize) Error![]u8 {
         const limit = try self.module.requiredMemoryBytes();
-        const end = std.math.add(usize, address, size) catch return error.NoMemory;
+        const end = checkedAdd(address, size) orelse return error.NoMemory;
         if (end > limit or end > self.runtime.memory.len) return error.NoMemory;
         return self.runtime.memory[address..end];
     }
@@ -1010,6 +1009,22 @@ pub fn executeExportI64Runtime(runtime: *Runtime, wasm_bytes: []const u8, export
 pub fn outputHashI64(value: i64) preimage.Hash {
     const raw = byte_utils.stored64(@as(u64, @bitCast(value)));
     return preimage.hash("edgerun:zig:v1:wasm-i64-output", &raw);
+}
+
+fn checkedAdd(left: usize, right: usize) ?usize {
+    const result = @addWithOverflow(left, right);
+    if (result[1] != 0) return null;
+    return result[0];
+}
+
+fn checkedMul(left: usize, right: usize) ?usize {
+    const result = @mulWithOverflow(left, right);
+    if (result[1] != 0) return null;
+    return result[0];
+}
+
+fn minSigned(comptime Int: type) Int {
+    return @as(Int, -1) << (@typeInfo(Int).int.bits - 1);
 }
 
 fn readValueType(reader: *Reader) Error!ValueType {
@@ -1388,7 +1403,7 @@ fn applyI32Binary(op: BinaryOp, left: i32, right: i32) Error!i32 {
         .sub => left -% right,
         .mul => left *% right,
         .div_s => signed: {
-            if (right == 0 or (left == std.math.minInt(i32) and right == -1)) return error.ArithmeticTrap;
+            if (right == 0 or (left == minSigned(i32) and right == -1)) return error.ArithmeticTrap;
             break :signed @divTrunc(left, right);
         },
         .div_u => unsigned: {
@@ -1397,7 +1412,7 @@ fn applyI32Binary(op: BinaryOp, left: i32, right: i32) Error!i32 {
         },
         .rem_s => signed: {
             if (right == 0) return error.ArithmeticTrap;
-            if (left == std.math.minInt(i32) and right == -1) break :signed 0;
+            if (left == minSigned(i32) and right == -1) break :signed 0;
             break :signed @rem(left, right);
         },
         .rem_u => unsigned: {
@@ -1422,7 +1437,7 @@ fn applyI64Binary(op: BinaryOp, left: i64, right: i64) Error!i64 {
         .sub => left -% right,
         .mul => left *% right,
         .div_s => signed: {
-            if (right == 0 or (left == std.math.minInt(i64) and right == -1)) return error.ArithmeticTrap;
+            if (right == 0 or (left == minSigned(i64) and right == -1)) return error.ArithmeticTrap;
             break :signed @divTrunc(left, right);
         },
         .div_u => unsigned: {
@@ -1431,7 +1446,7 @@ fn applyI64Binary(op: BinaryOp, left: i64, right: i64) Error!i64 {
         },
         .rem_s => signed: {
             if (right == 0) return error.ArithmeticTrap;
-            if (left == std.math.minInt(i64) and right == -1) break :signed 0;
+            if (left == minSigned(i64) and right == -1) break :signed 0;
             break :signed @rem(left, right);
         },
         .rem_u => unsigned: {
