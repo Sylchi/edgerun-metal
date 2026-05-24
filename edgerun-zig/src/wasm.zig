@@ -34,6 +34,8 @@ const ext_i64_trunc_sat_f32_s: u32 = 4;
 const ext_i64_trunc_sat_f32_u: u32 = 5;
 const ext_i64_trunc_sat_f64_s: u32 = 6;
 const ext_i64_trunc_sat_f64_u: u32 = 7;
+const ext_memory_init: u32 = 8;
+const ext_data_drop: u32 = 9;
 const ext_memory_copy: u32 = 10;
 const ext_memory_fill: u32 = 11;
 const i32_min_as_f32: f32 = -2147483648.0;
@@ -64,6 +66,7 @@ const Section = enum(u8) {
     element = 9,
     code = 10,
     data = 11,
+    data_count = 12,
 };
 
 const ExternalKind = enum(u8) {
@@ -643,6 +646,8 @@ const Export = struct {
 const DataSegment = struct {
     offset: usize = 0,
     bytes: []const u8 = &.{},
+    active: bool = false,
+    dropped: bool = false,
 };
 
 const Global = struct {
@@ -757,6 +762,7 @@ const Module = struct {
     has_table: bool = false,
     data_segments: [max_data_segments]DataSegment = undefined,
     data_segment_count: usize = 0,
+    declared_data_count: ?usize = null,
     imported_memory: ?ImportedMemory = null,
     memory_min_pages: usize = 0,
     has_memory: bool = false,
@@ -768,15 +774,16 @@ const Module = struct {
         if (!byte_utils.eql(try reader.readBytes(wasm_version.len), &wasm_version)) return error.Corrupt;
 
         var module = Module{};
-        var previous_section: u8 = 0;
+        var previous_section_order: u8 = 0;
         while (!reader.done()) {
             const section_id_raw = try reader.readByte();
             const section_size = try reader.readU32Leb();
             const payload = try reader.readBytes(section_size);
             if (section_id_raw == 0) continue;
-            if (section_id_raw <= previous_section) return error.Corrupt;
-            previous_section = section_id_raw;
             const section = sectionFromByte(section_id_raw) orelse return error.Unsupported;
+            const current_section_order = sectionOrder(section);
+            if (current_section_order <= previous_section_order) return error.Corrupt;
+            previous_section_order = current_section_order;
             var section_reader = Reader{ .bytes = payload };
             switch (section) {
                 .type => try module.parseTypeSection(&section_reader),
@@ -788,12 +795,16 @@ const Module = struct {
                 .@"export" => try module.parseExportSection(&section_reader),
                 .start => try module.parseStartSection(&section_reader),
                 .element => try module.parseElementSection(&section_reader),
+                .data_count => try module.parseDataCountSection(&section_reader),
                 .code => try module.parseCodeSection(&section_reader),
                 .data => try module.parseDataSection(&section_reader),
             }
             if (!section_reader.done()) return error.Corrupt;
         }
         if (module.function_count != module.code_count) return error.Corrupt;
+        if (module.declared_data_count) |declared| {
+            if (declared != module.data_segment_count) return error.Corrupt;
+        }
         return module;
     }
 
@@ -1010,24 +1021,48 @@ const Module = struct {
         self.data_segment_count = count;
         for (self.data_segments[0..count]) |*segment| {
             const mode = try reader.readU32Leb();
-            const offset = switch (mode) {
-                0 => try readConstantI32Expression(reader),
-                1 => return error.Unsupported,
-                2 => active: {
+            switch (mode) {
+                0 => {
+                    const offset = try readConstantI32Expression(reader);
+                    if (offset < 0) return error.NoMemory;
+                    const byte_count = try reader.readU32Leb();
+                    if (byte_count > max_data_bytes) return error.Unsupported;
+                    segment.* = .{
+                        .offset = @intCast(offset),
+                        .bytes = try reader.readBytes(byte_count),
+                        .active = true,
+                    };
+                },
+                1 => {
+                    const byte_count = try reader.readU32Leb();
+                    if (byte_count > max_data_bytes) return error.Unsupported;
+                    segment.* = .{
+                        .bytes = try reader.readBytes(byte_count),
+                        .active = false,
+                    };
+                },
+                2 => {
                     const memory_index = try reader.readU32Leb();
                     if (memory_index != 0) return error.Unsupported;
-                    break :active try readConstantI32Expression(reader);
+                    const offset = try readConstantI32Expression(reader);
+                    if (offset < 0) return error.NoMemory;
+                    const byte_count = try reader.readU32Leb();
+                    if (byte_count > max_data_bytes) return error.Unsupported;
+                    segment.* = .{
+                        .offset = @intCast(offset),
+                        .bytes = try reader.readBytes(byte_count),
+                        .active = true,
+                    };
                 },
                 else => return error.Unsupported,
-            };
-            if (offset < 0) return error.NoMemory;
-            const byte_count = try reader.readU32Leb();
-            if (byte_count > max_data_bytes) return error.Unsupported;
-            segment.* = .{
-                .offset = @intCast(offset),
-                .bytes = try reader.readBytes(byte_count),
-            };
+            }
         }
+    }
+
+    fn parseDataCountSection(self: *Module, reader: *Reader) Error!void {
+        const count = try reader.readU32Leb();
+        if (count > max_data_segments) return error.Unsupported;
+        self.declared_data_count = count;
     }
 
     fn parseElementSection(self: *Module, reader: *Reader) Error!void {
@@ -1118,6 +1153,7 @@ const Module = struct {
     fn applyDataSegments(self: Module, runtime: *Runtime) Error!void {
         const limit = try self.requiredMemoryBytes();
         for (self.data_segments[0..self.data_segment_count]) |segment| {
+            if (!segment.active) continue;
             const end = checkedAdd(segment.offset, segment.bytes.len) orelse return error.NoMemory;
             if (end > limit or end > runtime.memory.len) return error.NoMemory;
             @memcpy(runtime.memory[segment.offset..end], segment.bytes);
@@ -1525,6 +1561,8 @@ const Executor = struct {
             ext_i64_trunc_sat_f32_u => try frame.pushI64(@bitCast(saturatingTruncF32ToU64(try frame.popF32()))),
             ext_i64_trunc_sat_f64_s => try frame.pushI64(saturatingTruncF64ToI64(try frame.popF64())),
             ext_i64_trunc_sat_f64_u => try frame.pushI64(@bitCast(saturatingTruncF64ToU64(try frame.popF64()))),
+            ext_memory_init => try self.memoryInit(frame, reader),
+            ext_data_drop => try self.dataDrop(reader),
             ext_memory_copy => try self.memoryCopy(frame, reader),
             ext_memory_fill => try self.memoryFill(frame, reader),
             else => return error.Unsupported,
@@ -1666,6 +1704,27 @@ const Executor = struct {
         const source_range = try self.memoryRange(source, length);
         const destination_range = try self.memoryRange(destination, length);
         copyMemory(destination_range, source_range);
+    }
+
+    fn memoryInit(self: *Executor, frame: *Frame, reader: *Reader) Error!void {
+        const data_index = try reader.readU32Leb();
+        try readMemoryIndex(reader);
+        if (data_index >= self.module.data_segment_count) return error.Corrupt;
+        const segment = self.module.data_segments[data_index];
+        if (segment.active or segment.dropped) return error.Trap;
+        const length = try popMemoryLength(frame);
+        const source = try popMemoryBase(frame);
+        const destination = try popMemoryBase(frame);
+        const source_end = checkedAdd(source, length) orelse return error.Trap;
+        if (source_end > segment.bytes.len) return error.Trap;
+        const destination_range = try self.memoryRange(destination, length);
+        copyMemory(destination_range, segment.bytes[source..source_end]);
+    }
+
+    fn dataDrop(self: *Executor, reader: *Reader) Error!void {
+        const data_index = try reader.readU32Leb();
+        if (data_index >= self.module.data_segment_count) return error.Corrupt;
+        self.module.data_segments[data_index].dropped = true;
     }
 
     fn memoryFill(self: *Executor, frame: *Frame, reader: *Reader) Error!void {
@@ -1868,7 +1927,25 @@ fn sectionFromByte(value: u8) ?Section {
         @intFromEnum(Section.element) => .element,
         @intFromEnum(Section.code) => .code,
         @intFromEnum(Section.data) => .data,
+        @intFromEnum(Section.data_count) => .data_count,
         else => null,
+    };
+}
+
+fn sectionOrder(section: Section) u8 {
+    return switch (section) {
+        .type => 1,
+        .import => 2,
+        .function => 3,
+        .table => 4,
+        .memory => 5,
+        .global => 6,
+        .@"export" => 7,
+        .start => 8,
+        .element => 9,
+        .data_count => 10,
+        .code => 11,
+        .data => 12,
     };
 }
 
@@ -2142,6 +2219,11 @@ fn skipExtendedOpcodeImmediate(reader: *Reader) Error!void {
         ext_i64_trunc_sat_f64_s,
         ext_i64_trunc_sat_f64_u,
         => {},
+        ext_memory_init => {
+            _ = try reader.readU32Leb();
+            try readMemoryIndex(reader);
+        },
+        ext_data_drop => _ = try reader.readU32Leb(),
         ext_memory_copy => {
             try readMemoryIndex(reader);
             try readMemoryIndex(reader);
