@@ -6,30 +6,23 @@ const ui_input = @import("input.zig");
 const object = @import("object.zig");
 const ui = @import("ui.zig");
 const codec = @import("ui_codec.zig");
+const component_common = @import("ui_component_common.zig");
+const aside_component = @import("ui/components/Aside.zig");
+const details_component = @import("ui/components/Details.zig");
+const figure_component = @import("ui/components/Figure.zig");
+const table_component = @import("ui/components/Table.zig");
 
 const tree_layout_magic = "ERUL001\x00";
 const tree_layout_size = 16;
 const slot_layout_magic = "ERUS001\x00";
 const slot_layout_size = 16;
 
-pub const Error = error{
-    Corrupt,
-    UnsupportedComponent,
-    ComponentBudgetExceeded,
-    ChildMismatch,
-};
-
-pub const HtmlError = error{
-    HtmlBudgetExceeded,
-    InvalidHtml,
-    UnsupportedHtml,
-};
-
-pub const MarkdownError = error{
-    MarkdownBudgetExceeded,
-    InvalidMarkdown,
-    UnsupportedMarkdown,
-};
+pub const Error = component_common.Error;
+pub const HtmlError = component_common.HtmlError;
+pub const MarkdownError = component_common.MarkdownError;
+pub const RegistryError = component_common.RegistryError;
+pub const ComponentDescriptor = component_common.ComponentDescriptor;
+pub const ComponentRegistry = component_common.ComponentRegistry;
 
 pub const Component = union(enum) {
     text: Text,
@@ -121,32 +114,10 @@ pub const Component = union(enum) {
     }
 };
 
-pub const ButtonVariant = enum {
-    primary,
-    outline,
-    ghost,
-};
-
-pub const BadgeVariant = enum {
-    accent,
-    neutral,
-    danger,
-};
-
-pub const SurfaceVariant = enum {
-    panel,
-    elevated,
-    subtle,
-};
-
-pub const RenderOptions = struct {
-    style: ui.Style = .{},
-    button_variant: ButtonVariant = .primary,
-    button_leading_icon: ?icon.Icon = null,
-    button_trailing_icon: ?icon.Icon = null,
-    badge_variant: BadgeVariant = .accent,
-    surface_variant: SurfaceVariant = .panel,
-};
+pub const ButtonVariant = component_common.ButtonVariant;
+pub const BadgeVariant = component_common.BadgeVariant;
+pub const SurfaceVariant = component_common.SurfaceVariant;
+pub const RenderOptions = component_common.RenderOptions;
 
 pub const ArticleCard = struct {
     id: u32,
@@ -263,83 +234,11 @@ pub const Callout = struct {
     }
 };
 
-pub const Aside = struct {
-    title: []const u8,
-    body: []const u8,
+pub const Aside = aside_component.Aside;
 
-    pub fn render(self: Aside, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return renderAside(scene, bounds, self, options);
-    }
+pub const Details = details_component.Details;
 
-    pub fn toHtml(self: Aside, out: []u8) HtmlError![]u8 {
-        return writeAsideHtml(self, out);
-    }
-
-    pub fn fromHtml(html: []const u8, text_out: []u8) HtmlError!Aside {
-        return readAsideHtml(html, text_out);
-    }
-
-    pub fn toMarkdown(self: Aside, out: []u8) MarkdownError![]u8 {
-        return writeAsideMarkdown(self, out);
-    }
-
-    pub fn fromMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!Aside {
-        return readAsideMarkdown(markdown, text_out);
-    }
-};
-
-pub const Details = struct {
-    id: u32,
-    summary: []const u8,
-    body: []const u8,
-    open: bool = false,
-
-    pub fn render(self: Details, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return renderDetails(scene, bounds, self, options);
-    }
-
-    pub fn toHtml(self: Details, out: []u8) HtmlError![]u8 {
-        return writeDetailsHtml(self, out);
-    }
-
-    pub fn fromHtml(html: []const u8, text_out: []u8) HtmlError!Details {
-        return readDetailsHtml(html, text_out);
-    }
-
-    pub fn toMarkdown(self: Details, out: []u8) MarkdownError![]u8 {
-        return writeDetailsMarkdown(self, out);
-    }
-
-    pub fn fromMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!Details {
-        return readDetailsMarkdown(markdown, text_out);
-    }
-};
-
-pub const Figure = struct {
-    src: []const u8,
-    alt: []const u8,
-    caption: []const u8,
-
-    pub fn render(self: Figure, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return renderFigure(scene, bounds, self, options);
-    }
-
-    pub fn toHtml(self: Figure, out: []u8) HtmlError![]u8 {
-        return writeFigureHtml(self, out);
-    }
-
-    pub fn fromHtml(html: []const u8, text_out: []u8) HtmlError!Figure {
-        return readFigureHtml(html, text_out);
-    }
-
-    pub fn toMarkdown(self: Figure, out: []u8) MarkdownError![]u8 {
-        return writeFigureMarkdown(self, out);
-    }
-
-    pub fn fromMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!Figure {
-        return readFigureMarkdown(markdown, text_out);
-    }
-};
+pub const Figure = figure_component.Figure;
 
 pub const ChoiceOption = struct {
     id: u32,
@@ -626,41 +525,25 @@ pub const Region = struct {
     }
 };
 
-pub const TableCell = struct {
-    value: []const u8,
-    alignment: ui.TextAlign = .start,
-};
+pub const TableCell = table_component.TableCell;
+pub const TableRow = table_component.TableRow;
+pub const Table = table_component.Table;
 
-pub const TableRow = struct {
-    id: u32,
-    cells: []const TableCell,
-};
+pub fn registerAside(registry: *ComponentRegistry) RegistryError!void {
+    return aside_component.register(registry);
+}
 
-pub const Table = struct {
-    id: u32,
-    headers: []const TableCell,
-    rows: []const TableRow,
+pub fn registerDetails(registry: *ComponentRegistry) RegistryError!void {
+    return details_component.register(registry);
+}
 
-    pub fn render(self: Table, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return renderTable(scene, bounds, self, options);
-    }
+pub fn registerFigure(registry: *ComponentRegistry) RegistryError!void {
+    return figure_component.register(registry);
+}
 
-    pub fn toHtml(self: Table, out: []u8) HtmlError![]u8 {
-        return writeTableHtml(self, out);
-    }
-
-    pub fn fromHtml(html: []const u8, out_rows: []TableRow, out_cells: []TableCell, text_out: []u8) HtmlError!Table {
-        return readTableHtml(html, out_rows, out_cells, text_out);
-    }
-
-    pub fn toMarkdown(self: Table, out: []u8) MarkdownError![]u8 {
-        return writeTableMarkdown(self, out);
-    }
-
-    pub fn fromMarkdown(markdown: []const u8, out_rows: []TableRow, out_cells: []TableCell, text_out: []u8) MarkdownError!Table {
-        return readTableMarkdown(markdown, out_rows, out_cells, text_out);
-    }
-};
+pub fn registerTable(registry: *ComponentRegistry) RegistryError!void {
+    return table_component.register(registry);
+}
 
 pub fn renderComponent(scene: *ui.Scene, bounds: ui.Rect, component: Component, options: RenderOptions) ui.RenderError!void {
     switch (component) {
@@ -797,67 +680,6 @@ pub fn renderCallout(scene: *ui.Scene, bounds: ui.Rect, callout: Callout, option
         .line_height = callout_line_h,
         .average_char_width = callout_avg_w,
         .max_lines = 4,
-    });
-}
-
-pub fn renderAside(scene: *ui.Scene, bounds: ui.Rect, aside: Aside, options: RenderOptions) ui.RenderError!void {
-    const style = options.style;
-    try scene.pushRect(bounds, style.panel, .fill, aside_radius, 0.0);
-    try scene.pushRect(bounds, style.border, .border, aside_radius, 0.0);
-    try scene.pushRect(ui.Rect.init(bounds.x, bounds.y, aside_accent_w, bounds.h), style.accent, .fill, aside_radius, 0.0);
-
-    const content = bounds.insetLtrb(aside_padding_x, aside_padding_y, aside_padding_x, aside_padding_y);
-    try scene.pushWrappedText(ui.Rect.init(content.x, content.y, content.w, aside_title_h), aside.title, style.text, .{
-        .line_height = aside_title_line_h,
-        .average_char_width = aside_title_avg_w,
-        .max_lines = aside_title_max_lines,
-    });
-    try scene.pushWrappedText(ui.Rect.init(content.x, content.y + aside_body_y, content.w, @max(1.0, content.h - aside_body_y)), aside.body, style.muted, .{
-        .line_height = aside_body_line_h,
-        .average_char_width = aside_body_avg_w,
-        .max_lines = aside_body_max_lines,
-    });
-}
-
-pub fn renderDetails(scene: *ui.Scene, bounds: ui.Rect, details: Details, options: RenderOptions) ui.RenderError!void {
-    const style = options.style;
-    try scene.pushRect(bounds, style.panel, .fill, details_radius, 0.0);
-    try scene.pushRect(bounds, style.border, .border, details_radius, 0.0);
-
-    const summary_bounds = ui.Rect.init(bounds.x + details_padding_x, bounds.y + details_padding_y, @max(1.0, bounds.w - details_padding_x * 2.0), details_summary_h);
-    try scene.pushAlignedText(ui.Rect.init(summary_bounds.x, summary_bounds.y + details_summary_text_y, @max(1.0, summary_bounds.w - details_marker_w), details_summary_text_h), details.summary, style.text, .start);
-    try scene.pushAlignedText(ui.Rect.init(summary_bounds.x + summary_bounds.w - details_marker_w, summary_bounds.y + details_summary_text_y, details_marker_w, details_summary_text_h), if (details.open) "v" else ">", style.accent, .center);
-    try scene.pushHit(.{ .slot = 0, .kind = .button, .id = details.id, .bounds = summary_bounds });
-
-    if (!details.open) return;
-    const body_y = summary_bounds.y + summary_bounds.h + details_body_gap;
-    if (body_y >= bounds.y + bounds.h - details_padding_y) return;
-    try scene.pushWrappedText(ui.Rect.init(summary_bounds.x, body_y, summary_bounds.w, @max(1.0, bounds.y + bounds.h - details_padding_y - body_y)), details.body, style.muted, .{
-        .line_height = details_body_line_h,
-        .average_char_width = details_body_avg_w,
-        .max_lines = details_body_max_lines,
-    });
-}
-
-pub fn renderFigure(scene: *ui.Scene, bounds: ui.Rect, figure: Figure, options: RenderOptions) ui.RenderError!void {
-    const style = options.style;
-    try scene.pushRect(bounds, style.panel, .fill, figure_radius, 0.0);
-    try scene.pushRect(bounds, style.border, .border, figure_radius, 0.0);
-
-    const media_bounds = ui.Rect.init(bounds.x + figure_padding_x, bounds.y + figure_padding_y, @max(1.0, bounds.w - figure_padding_x * 2.0), @max(1.0, bounds.h - figure_padding_y * 2.0 - figure_caption_h - figure_caption_gap));
-    try scene.pushRect(media_bounds, style.row, .fill, figure_media_radius, 0.0);
-    try scene.pushRect(media_bounds, style.border, .border, figure_media_radius, 0.0);
-    try scene.pushWrappedText(media_bounds.insetUniform(figure_alt_padding), figure.alt, style.muted, .{
-        .line_height = figure_alt_line_h,
-        .average_char_width = figure_alt_avg_w,
-        .max_lines = figure_alt_max_lines,
-    });
-
-    const caption_y = media_bounds.y + media_bounds.h + figure_caption_gap;
-    try scene.pushWrappedText(ui.Rect.init(media_bounds.x, caption_y, media_bounds.w, figure_caption_h), figure.caption, style.text, .{
-        .line_height = figure_caption_line_h,
-        .average_char_width = figure_caption_avg_w,
-        .max_lines = figure_caption_max_lines,
     });
 }
 
@@ -1078,39 +900,6 @@ pub fn renderRegion(scene: *ui.Scene, bounds: ui.Rect, region: Region, options: 
     }
 }
 
-pub fn renderTable(scene: *ui.Scene, bounds: ui.Rect, table: Table, options: RenderOptions) ui.RenderError!void {
-    if (table.headers.len == 0) return;
-    const style = options.style;
-    try scene.pushRect(bounds, style.panel, .fill, table_radius, 0.0);
-    try scene.pushRect(bounds, style.border, .border, table_radius, 0.0);
-
-    const column_count = table.headers.len;
-    const column_w = @max(1.0, (bounds.w - table_padding_x * 2.0) / @as(f32, @floatFromInt(column_count)));
-    const header_y = bounds.y + table_padding_y;
-    for (table.headers, 0..) |header, index| {
-        const cell_bounds = tableCellBounds(bounds, column_w, header_y, index);
-        try scene.pushAlignedText(cell_bounds, header.value, style.muted, header.alignment);
-    }
-
-    var y = header_y + table_header_h + table_row_gap;
-    for (table.rows) |row| {
-        if (row.cells.len != column_count) continue;
-        if (y + table_row_h > bounds.y + bounds.h - table_padding_y) break;
-        const row_bounds = ui.Rect.init(bounds.x + table_row_inset, y, @max(1.0, bounds.w - table_row_inset * 2.0), table_row_h);
-        try scene.pushRect(row_bounds, style.row, .fill, table_row_radius, 0.0);
-        for (row.cells, 0..) |cell, index| {
-            const cell_bounds = tableCellBounds(bounds, column_w, y + table_text_y, index);
-            try scene.pushAlignedText(cell_bounds, cell.value, style.text, cell.alignment);
-        }
-        try scene.pushHit(.{ .slot = 0, .kind = .row_item, .id = row.id, .bounds = row_bounds });
-        y += table_row_h + table_row_gap;
-    }
-}
-
-fn tableCellBounds(bounds: ui.Rect, column_w: f32, y: f32, index: usize) ui.Rect {
-    return ui.Rect.init(bounds.x + table_padding_x + column_w * @as(f32, @floatFromInt(index)), y, @max(1.0, column_w - table_column_gap), table_text_h);
-}
-
 pub fn renderSurface(scene: *ui.Scene, bounds: ui.Rect, title: []const u8, detail: []const u8, options: RenderOptions) ui.RenderError!void {
     const style = options.style;
     const radius = switch (options.surface_variant) {
@@ -1281,18 +1070,6 @@ const article_list_summary_line_height: f32 = 18.0;
 const article_list_summary_average_char_width: f32 = 9.0;
 const article_list_summary_max_lines: usize = 3;
 const article_list_divider_height: f32 = 1.0;
-const table_radius: f32 = 8.0;
-const table_row_radius: f32 = 6.0;
-const table_padding_x: f32 = 14.0;
-const table_padding_y: f32 = 14.0;
-const table_header_h: f32 = 14.0;
-const table_row_h: f32 = 38.0;
-const table_row_gap: f32 = 6.0;
-const table_row_inset: f32 = 8.0;
-const table_text_y: f32 = 12.0;
-const table_text_h: f32 = 14.0;
-const table_column_gap: f32 = 10.0;
-
 fn articleListTextWidth(width: f32) f32 {
     return @max(1.0, width - article_list_padding_x * 2.0 - article_list_arrow_slot);
 }
@@ -1336,42 +1113,6 @@ const callout_text_x: f32 = 18.0;
 const callout_text_y: f32 = 14.0;
 const callout_line_h: f32 = 18.0;
 const callout_avg_w: f32 = 9.0;
-const aside_radius: f32 = 8.0;
-const aside_accent_w: f32 = 4.0;
-const aside_padding_x: f32 = 18.0;
-const aside_padding_y: f32 = 14.0;
-const aside_title_h: f32 = 22.0;
-const aside_title_line_h: f32 = 18.0;
-const aside_title_avg_w: f32 = 9.0;
-const aside_title_max_lines: usize = 1;
-const aside_body_y: f32 = 30.0;
-const aside_body_line_h: f32 = 18.0;
-const aside_body_avg_w: f32 = 9.0;
-const aside_body_max_lines: usize = 4;
-const details_radius: f32 = 8.0;
-const details_padding_x: f32 = 14.0;
-const details_padding_y: f32 = 12.0;
-const details_summary_h: f32 = 28.0;
-const details_summary_text_y: f32 = 7.0;
-const details_summary_text_h: f32 = 14.0;
-const details_marker_w: f32 = 24.0;
-const details_body_gap: f32 = 10.0;
-const details_body_line_h: f32 = 18.0;
-const details_body_avg_w: f32 = 9.0;
-const details_body_max_lines: usize = 5;
-const figure_radius: f32 = 8.0;
-const figure_media_radius: f32 = 6.0;
-const figure_padding_x: f32 = 12.0;
-const figure_padding_y: f32 = 12.0;
-const figure_alt_padding: f32 = 14.0;
-const figure_alt_line_h: f32 = 18.0;
-const figure_alt_avg_w: f32 = 9.0;
-const figure_alt_max_lines: usize = 3;
-const figure_caption_gap: f32 = 10.0;
-const figure_caption_h: f32 = 42.0;
-const figure_caption_line_h: f32 = 18.0;
-const figure_caption_avg_w: f32 = 9.0;
-const figure_caption_max_lines: usize = 2;
 const choice_radius: f32 = 8.0;
 const choice_padding_x: f32 = 14.0;
 const choice_padding_y: f32 = 14.0;
@@ -2211,9 +1952,9 @@ fn writeComponentHtmlInto(writer: *HtmlWriter, component: Component) HtmlError!v
             try writer.writeAll("</span>");
         },
         .avatar => |avatar| {
-            try writer.writeAll("<span data-er-component=\"avatar\" aria-label=\"");
-            try writer.writeEscapedAttr(avatar.label);
-            try writer.writeAll("\">");
+            try writer.writeAll("<span data-er-component=\"avatar\"");
+            try writer.writeAttrText("aria-label", avatar.label);
+            try writer.writeByte('>');
             try writer.writeEscapedText(avatar.label);
             try writer.writeAll("</span>");
         },
@@ -2224,71 +1965,68 @@ fn writeComponentHtmlInto(writer: *HtmlWriter, component: Component) HtmlError!v
         },
         .separator => try writer.writeAll("<hr data-er-component=\"separator\">"),
         .button => |button| {
-            try writer.writeAll("<button data-er-component=\"button\" data-er-id=\"");
-            try writer.writeInt(button.id);
-            try writer.writeAll("\">");
+            try writer.writeAll("<button data-er-component=\"button\"");
+            try writer.writeAttrInt("data-er-id", button.id);
+            try writer.writeByte('>');
             try writer.writeEscapedText(button.label);
             try writer.writeAll("</button>");
         },
         .input => |input| {
-            try writer.writeAll("<input data-er-component=\"input\" data-er-id=\"");
-            try writer.writeInt(input.id);
-            try writer.writeAll("\" placeholder=\"");
-            try writer.writeEscapedAttr(input.placeholder);
-            try writer.writeAll("\">");
+            try writer.writeAll("<input data-er-component=\"input\"");
+            try writer.writeAttrInt("data-er-id", input.id);
+            try writer.writeAttrText("placeholder", input.placeholder);
+            try writer.writeByte('>');
         },
         .textarea => |textarea| {
-            try writer.writeAll("<textarea data-er-component=\"textarea\" data-er-id=\"");
-            try writer.writeInt(textarea.id);
-            try writer.writeAll("\" placeholder=\"");
-            try writer.writeEscapedAttr(textarea.placeholder);
-            try writer.writeAll("\"></textarea>");
+            try writer.writeAll("<textarea data-er-component=\"textarea\"");
+            try writer.writeAttrInt("data-er-id", textarea.id);
+            try writer.writeAttrText("placeholder", textarea.placeholder);
+            try writer.writeAll("></textarea>");
         },
         .select => |select| {
-            try writer.writeAll("<select data-er-component=\"select\" data-er-id=\"");
-            try writer.writeInt(select.id);
-            try writer.writeAll("\"><option selected>");
+            try writer.writeAll("<select data-er-component=\"select\"");
+            try writer.writeAttrInt("data-er-id", select.id);
+            try writer.writeAll("><option selected>");
             try writer.writeEscapedText(select.label);
             try writer.writeAll("</option></select>");
         },
         .checkbox => |checkbox| {
-            try writer.writeAll("<label data-er-component=\"checkbox\" data-er-id=\"");
-            try writer.writeInt(checkbox.id);
-            try writer.writeAll("\" data-er-checked=\"");
-            try writer.writeAll(if (checkbox.checked) "true" else "false");
-            try writer.writeAll("\"><input type=\"checkbox\"");
+            try writer.writeAll("<label data-er-component=\"checkbox\"");
+            try writer.writeAttrInt("data-er-id", checkbox.id);
+            try writer.writeAttrBool("data-er-checked", checkbox.checked);
+            try writer.writeAll("><input type=\"checkbox\"");
             if (checkbox.checked) try writer.writeAll(" checked");
             try writer.writeAll(">");
             try writer.writeEscapedText(checkbox.label);
             try writer.writeAll("</label>");
         },
         .switch_control => |switch_control| {
-            try writer.writeAll("<button data-er-component=\"switch\" data-er-id=\"");
-            try writer.writeInt(switch_control.id);
-            try writer.writeAll("\" aria-pressed=\"");
-            try writer.writeAll(if (switch_control.checked) "true" else "false");
-            try writer.writeAll("\">");
+            try writer.writeAll("<button data-er-component=\"switch\"");
+            try writer.writeAttrInt("data-er-id", switch_control.id);
+            try writer.writeAttrBool("aria-pressed", switch_control.checked);
+            try writer.writeByte('>');
             try writer.writeEscapedText(switch_control.label);
             try writer.writeAll("</button>");
         },
         .progress => |progress| {
-            try writer.writeAll("<progress data-er-component=\"progress\" value=\"");
-            try writer.writeInt(percentFromUnit(progress.value));
-            try writer.writeAll("\" max=\"100\"></progress>");
+            try writer.writeAll("<progress data-er-component=\"progress\"");
+            try writer.writeAttrInt("value", percentFromUnit(progress.value));
+            try writer.writeAttrRaw("max", "100");
+            try writer.writeAll("></progress>");
         },
         .slider => |slider| {
-            try writer.writeAll("<label data-er-component=\"slider\" data-er-id=\"");
-            try writer.writeInt(slider.id);
-            try writer.writeAll("\"><span>");
+            try writer.writeAll("<label data-er-component=\"slider\"");
+            try writer.writeAttrInt("data-er-id", slider.id);
+            try writer.writeAll("><span>");
             try writer.writeEscapedText(slider.label);
             try writer.writeAll("</span><input type=\"range\" min=\"0\" max=\"100\" value=\"");
             try writer.writeInt(percentFromUnit(slider.value));
             try writer.writeAll("\"></label>");
         },
         .row_item => |row| {
-            try writer.writeAll("<div data-er-component=\"row-item\" data-er-id=\"");
-            try writer.writeInt(row.id);
-            try writer.writeAll("\"><strong>");
+            try writer.writeAll("<div data-er-component=\"row-item\"");
+            try writer.writeAttrInt("data-er-id", row.id);
+            try writer.writeAll("><strong>");
             try writer.writeEscapedText(row.title);
             try writer.writeAll("</strong><span>");
             try writer.writeEscapedText(row.detail);
@@ -2299,13 +2037,11 @@ fn writeComponentHtmlInto(writer: *HtmlWriter, component: Component) HtmlError!v
 
 fn writeStackHtml(stack: Stack, out: []u8) HtmlError![]u8 {
     var writer = HtmlWriter.init(out);
-    try writer.writeAll("<section data-er-component=\"stack\" data-er-axis=\"");
-    try writer.writeAll(axisName(stack.axis));
-    try writer.writeAll("\" data-er-gap=\"");
-    try writer.writeInt(stack.gap);
-    try writer.writeAll("\" data-er-padding=\"");
-    try writer.writeInt(stack.padding);
-    try writer.writeAll("\">");
+    try writer.writeAll("<section data-er-component=\"stack\"");
+    try writer.writeAttrRaw("data-er-axis", axisName(stack.axis));
+    try writer.writeAttrInt("data-er-gap", stack.gap);
+    try writer.writeAttrInt("data-er-padding", stack.padding);
+    try writer.writeByte('>');
     for (stack.children) |child| try writeComponentHtmlInto(&writer, child);
     try writer.writeAll("</section>");
     return writer.written();
@@ -2317,50 +2053,16 @@ const markdown_next_component_marker = "\n--- component ---\n";
 fn writeStackMarkdown(stack: Stack, out: []u8) MarkdownError![]u8 {
     if (stack.children.len == 0) return error.InvalidMarkdown;
     var writer = MarkdownWriter.init(out);
-    try writer.writeAll(":::stack\naxis: ");
-    try writer.writeAll(axisName(stack.axis));
-    try writer.writeAll("\ngap: ");
-    try writer.writeInt(stack.gap);
-    try writer.writeAll("\npadding: ");
-    try writer.writeInt(stack.padding);
+    try writer.beginDirective("stack");
+    try writer.fieldRaw("axis", axisName(stack.axis));
+    try writer.fieldInt("gap", stack.gap);
+    try writer.fieldInt("padding", stack.padding);
     for (stack.children) |child| {
         try writer.writeByte('\n');
         try writer.writeAll(markdown_component_marker);
         try writeComponentMarkdownInto(&writer, child);
     }
-    try writer.writeAll("\n:::");
-    return writer.written();
-}
-
-fn writeTableHtml(table: Table, out: []u8) HtmlError![]u8 {
-    if (table.headers.len == 0) return error.InvalidHtml;
-    var writer = HtmlWriter.init(out);
-    try writer.writeAll("<table data-er-component=\"table\" data-er-id=\"");
-    try writer.writeInt(table.id);
-    try writer.writeAll("\"><thead><tr>");
-    for (table.headers) |header| {
-        try writer.writeAll("<th data-er-align=\"");
-        try writer.writeAll(alignName(header.alignment));
-        try writer.writeAll("\">");
-        try writer.writeEscapedText(header.value);
-        try writer.writeAll("</th>");
-    }
-    try writer.writeAll("</tr></thead><tbody>");
-    for (table.rows) |row| {
-        if (row.cells.len != table.headers.len) return error.InvalidHtml;
-        try writer.writeAll("<tr data-er-row-id=\"");
-        try writer.writeInt(row.id);
-        try writer.writeAll("\">");
-        for (row.cells) |cell| {
-            try writer.writeAll("<td data-er-align=\"");
-            try writer.writeAll(alignName(cell.alignment));
-            try writer.writeAll("\">");
-            try writer.writeEscapedText(cell.value);
-            try writer.writeAll("</td>");
-        }
-        try writer.writeAll("</tr>");
-    }
-    try writer.writeAll("</tbody></table>");
+    try writer.endDirective();
     return writer.written();
 }
 
@@ -2404,22 +2106,11 @@ fn writeCalloutHtml(callout: Callout, out: []u8) HtmlError![]u8 {
     return writer.written();
 }
 
-fn writeAsideHtml(aside: Aside, out: []u8) HtmlError![]u8 {
-    if (aside.title.len == 0 or aside.body.len == 0) return error.InvalidHtml;
-    var writer = HtmlWriter.init(out);
-    try writer.writeAll("<aside data-er-component=\"aside\"><h2>");
-    try writer.writeEscapedText(aside.title);
-    try writer.writeAll("</h2><p>");
-    try writer.writeEscapedText(aside.body);
-    try writer.writeAll("</p></aside>");
-    return writer.written();
-}
-
 fn writeCodeBlockHtml(block: CodeBlock, out: []u8) HtmlError![]u8 {
     var writer = HtmlWriter.init(out);
-    try writer.writeAll("<pre data-er-component=\"code-block\"><code data-er-lang=\"");
-    try writer.writeEscapedAttr(block.language);
-    try writer.writeAll("\">");
+    try writer.writeAll("<pre data-er-component=\"code-block\"><code");
+    try writer.writeAttrText("data-er-lang", block.language);
+    try writer.writeByte('>');
     for (block.lines, 0..) |line, index| {
         if (index != 0) try writer.writeByte('\n');
         try writer.writeEscapedText(line);
@@ -2428,48 +2119,20 @@ fn writeCodeBlockHtml(block: CodeBlock, out: []u8) HtmlError![]u8 {
     return writer.written();
 }
 
-fn writeDetailsHtml(details: Details, out: []u8) HtmlError![]u8 {
-    var writer = HtmlWriter.init(out);
-    try writer.writeAll("<details data-er-component=\"details\" data-er-id=\"");
-    try writer.writeInt(details.id);
-    try writer.writeAll("\" data-er-open=\"");
-    try writer.writeAll(if (details.open) "true" else "false");
-    try writer.writeAll("\"><summary>");
-    try writer.writeEscapedText(details.summary);
-    try writer.writeAll("</summary><p>");
-    try writer.writeEscapedText(details.body);
-    try writer.writeAll("</p></details>");
-    return writer.written();
-}
-
-fn writeFigureHtml(figure: Figure, out: []u8) HtmlError![]u8 {
-    if (figure.src.len == 0 or figure.alt.len == 0 or figure.caption.len == 0) return error.InvalidHtml;
-    var writer = HtmlWriter.init(out);
-    try writer.writeAll("<figure data-er-component=\"figure\"><img src=\"");
-    try writer.writeEscapedAttr(figure.src);
-    try writer.writeAll("\" alt=\"");
-    try writer.writeEscapedAttr(figure.alt);
-    try writer.writeAll("\"><figcaption>");
-    try writer.writeEscapedText(figure.caption);
-    try writer.writeAll("</figcaption></figure>");
-    return writer.written();
-}
-
 fn writeChoiceGroupHtml(group: ChoiceGroup, out: []u8) HtmlError![]u8 {
     if (group.legend.len == 0 or group.options.len == 0) return error.InvalidHtml;
     var writer = HtmlWriter.init(out);
-    try writer.writeAll("<fieldset data-er-component=\"choice-group\" data-er-id=\"");
-    try writer.writeInt(group.id);
-    try writer.writeAll("\"><legend>");
+    try writer.writeAll("<fieldset data-er-component=\"choice-group\"");
+    try writer.writeAttrInt("data-er-id", group.id);
+    try writer.writeAll("><legend>");
     try writer.writeEscapedText(group.legend);
     try writer.writeAll("</legend>");
     for (group.options) |option| {
         if (option.label.len == 0) return error.InvalidHtml;
-        try writer.writeAll("<label data-er-id=\"");
-        try writer.writeInt(option.id);
-        try writer.writeAll("\" data-er-selected=\"");
-        try writer.writeAll(if (option.selected) "true" else "false");
-        try writer.writeAll("\"><input type=\"radio\" name=\"choice-");
+        try writer.writeAll("<label");
+        try writer.writeAttrInt("data-er-id", option.id);
+        try writer.writeAttrBool("data-er-selected", option.selected);
+        try writer.writeAll("><input type=\"radio\" name=\"choice-");
         try writer.writeInt(group.id);
         try writer.writeAll("\">");
         try writer.writeEscapedText(option.label);
@@ -2485,11 +2148,10 @@ fn writeStepListHtml(list: StepList, out: []u8) HtmlError![]u8 {
     try writer.writeAll("<ol data-er-component=\"step-list\">");
     for (list.steps) |step| {
         if (step.title.len == 0 or step.detail.len == 0) return error.InvalidHtml;
-        try writer.writeAll("<li data-er-id=\"");
-        try writer.writeInt(step.id);
-        try writer.writeAll("\" data-er-state=\"");
-        try writer.writeAll(stepStateName(step.state));
-        try writer.writeAll("\"><strong>");
+        try writer.writeAll("<li");
+        try writer.writeAttrInt("data-er-id", step.id);
+        try writer.writeAttrRaw("data-er-state", stepStateName(step.state));
+        try writer.writeAll("><strong>");
         try writer.writeEscapedText(step.title);
         try writer.writeAll("</strong><span>");
         try writer.writeEscapedText(step.detail);
@@ -2505,13 +2167,12 @@ fn writeBreadcrumbHtml(breadcrumb: Breadcrumb, out: []u8) HtmlError![]u8 {
     try writer.writeAll("<nav data-er-component=\"breadcrumb\" aria-label=\"Breadcrumb\"><ol>");
     for (breadcrumb.items) |item| {
         if (item.label.len == 0) return error.InvalidHtml;
-        try writer.writeAll("<li data-er-id=\"");
-        try writer.writeInt(item.id);
-        try writer.writeAll("\" data-er-current=\"");
-        try writer.writeAll(if (item.current) "true" else "false");
-        try writer.writeAll("\"><a href=\"");
-        try writer.writeEscapedAttr(item.href);
-        try writer.writeAll("\">");
+        try writer.writeAll("<li");
+        try writer.writeAttrInt("data-er-id", item.id);
+        try writer.writeAttrBool("data-er-current", item.current);
+        try writer.writeAll("><a");
+        try writer.writeAttrText("href", item.href);
+        try writer.writeByte('>');
         try writer.writeEscapedText(item.label);
         try writer.writeAll("</a></li>");
     }
@@ -2525,9 +2186,9 @@ fn writeDefinitionListHtml(list: DefinitionList, out: []u8) HtmlError![]u8 {
     try writer.writeAll("<dl data-er-component=\"definition-list\">");
     for (list.items) |item| {
         if (item.term.len == 0 or item.detail.len == 0) return error.InvalidHtml;
-        try writer.writeAll("<div data-er-id=\"");
-        try writer.writeInt(item.id);
-        try writer.writeAll("\"><dt>");
+        try writer.writeAll("<div");
+        try writer.writeAttrInt("data-er-id", item.id);
+        try writer.writeAll("><dt>");
         try writer.writeEscapedText(item.term);
         try writer.writeAll("</dt><dd>");
         try writer.writeEscapedText(item.detail);
@@ -2543,9 +2204,9 @@ fn writeTimelineHtml(timeline: Timeline, out: []u8) HtmlError![]u8 {
     try writer.writeAll("<ol data-er-component=\"timeline\">");
     for (timeline.events) |event| {
         if (event.time.len == 0 or event.title.len == 0 or event.detail.len == 0) return error.InvalidHtml;
-        try writer.writeAll("<li data-er-id=\"");
-        try writer.writeInt(event.id);
-        try writer.writeAll("\"><time>");
+        try writer.writeAll("<li");
+        try writer.writeAttrInt("data-er-id", event.id);
+        try writer.writeAll("><time>");
         try writer.writeEscapedText(event.time);
         try writer.writeAll("</time><strong>");
         try writer.writeEscapedText(event.title);
@@ -2563,11 +2224,11 @@ fn writeResourceListHtml(list: ResourceList, out: []u8) HtmlError![]u8 {
     try writer.writeAll("<ul data-er-component=\"resource-list\">");
     for (list.items) |item| {
         if (item.label.len == 0 or item.href.len == 0 or item.detail.len == 0) return error.InvalidHtml;
-        try writer.writeAll("<li data-er-id=\"");
-        try writer.writeInt(item.id);
-        try writer.writeAll("\"><a href=\"");
-        try writer.writeEscapedAttr(item.href);
-        try writer.writeAll("\">");
+        try writer.writeAll("<li");
+        try writer.writeAttrInt("data-er-id", item.id);
+        try writer.writeAll("><a");
+        try writer.writeAttrText("href", item.href);
+        try writer.writeByte('>');
         try writer.writeEscapedText(item.label);
         try writer.writeAll("</a><p>");
         try writer.writeEscapedText(item.detail);
@@ -2580,32 +2241,29 @@ fn writeResourceListHtml(list: ResourceList, out: []u8) HtmlError![]u8 {
 fn writeProgressSummaryHtml(summary: ProgressSummary, out: []u8) HtmlError![]u8 {
     if (summary.label.len == 0 or summary.total == 0 or summary.completed > summary.total) return error.InvalidHtml;
     var writer = HtmlWriter.init(out);
-    try writer.writeAll("<section data-er-component=\"progress-summary\" data-er-id=\"");
-    try writer.writeInt(summary.id);
-    try writer.writeAll("\"><h2>");
+    try writer.writeAll("<section data-er-component=\"progress-summary\"");
+    try writer.writeAttrInt("data-er-id", summary.id);
+    try writer.writeAll("><h2>");
     try writer.writeEscapedText(summary.label);
-    try writer.writeAll("</h2><progress value=\"");
-    try writer.writeInt(summary.completed);
-    try writer.writeAll("\" max=\"");
-    try writer.writeInt(summary.total);
-    try writer.writeAll("\"></progress></section>");
+    try writer.writeAll("</h2><progress");
+    try writer.writeAttrInt("value", summary.completed);
+    try writer.writeAttrInt("max", summary.total);
+    try writer.writeAll("></progress></section>");
     return writer.written();
 }
 
 fn writeNavHtml(nav: Nav, out: []u8) HtmlError![]u8 {
     if (nav.items.len == 0) return error.InvalidHtml;
     var writer = HtmlWriter.init(out);
-    try writer.writeAll("<nav data-er-component=\"nav\" aria-label=\"");
-    try writer.writeEscapedAttr(nav.label);
-    try writer.writeAll("\">");
+    try writer.writeAll("<nav data-er-component=\"nav\"");
+    try writer.writeAttrText("aria-label", nav.label);
+    try writer.writeByte('>');
     for (nav.items) |item| {
-        try writer.writeAll("<a data-er-id=\"");
-        try writer.writeInt(item.id);
-        try writer.writeAll("\" data-er-active=\"");
-        try writer.writeAll(if (item.active) "true" else "false");
-        try writer.writeAll("\" href=\"");
-        try writer.writeEscapedAttr(item.href);
-        try writer.writeAll("\">");
+        try writer.writeAll("<a");
+        try writer.writeAttrInt("data-er-id", item.id);
+        try writer.writeAttrBool("data-er-active", item.active);
+        try writer.writeAttrText("href", item.href);
+        try writer.writeByte('>');
         try writer.writeEscapedText(item.label);
         try writer.writeAll("</a>");
     }
@@ -2619,9 +2277,9 @@ fn writeRegionHtml(region: Region, out: []u8) HtmlError![]u8 {
     const tag = regionTagName(region.tag);
     try writer.writeByte('<');
     try writer.writeAll(tag);
-    try writer.writeAll(" data-er-component=\"region\" aria-label=\"");
-    try writer.writeEscapedAttr(region.label);
-    try writer.writeAll("\">");
+    try writer.writeAttrRaw("data-er-component", "region");
+    try writer.writeAttrText("aria-label", region.label);
+    try writer.writeByte('>');
     for (region.children) |child| try writeComponentHtmlInto(&writer, child);
     try writer.writeAll("</");
     try writer.writeAll(tag);
@@ -2632,16 +2290,15 @@ fn writeRegionHtml(region: Region, out: []u8) HtmlError![]u8 {
 fn writeRegionMarkdown(region: Region, out: []u8) MarkdownError![]u8 {
     if (region.children.len == 0) return error.InvalidMarkdown;
     var writer = MarkdownWriter.init(out);
-    try writer.writeAll(":::region\ntag: ");
-    try writer.writeAll(regionTagName(region.tag));
-    try writer.writeAll("\nlabel: ");
-    try writer.writeEscapedInline(region.label);
+    try writer.beginDirective("region");
+    try writer.fieldRaw("tag", regionTagName(region.tag));
+    try writer.fieldText("label", region.label);
     for (region.children) |child| {
         try writer.writeByte('\n');
         try writer.writeAll(markdown_component_marker);
         try writeComponentMarkdownInto(&writer, child);
     }
-    try writer.writeAll("\n:::");
+    try writer.endDirective();
     return writer.written();
 }
 
@@ -2660,99 +2317,87 @@ fn writeComponentMarkdownInto(writer: *MarkdownWriter, component: Component) Mar
         .card => |card| try writeCardMarkdownInto(writer, card),
         .badge => |badge| {
             if (badge.label.len == 0) return error.InvalidMarkdown;
-            try writer.writeAll(":::badge\nlabel: ");
-            try writer.writeEscapedInline(badge.label);
-            try writer.writeAll("\n:::");
+            try writer.beginDirective("badge");
+            try writer.fieldText("label", badge.label);
+            try writer.endDirective();
         },
         .avatar => |avatar| {
             if (avatar.label.len == 0) return error.InvalidMarkdown;
-            try writer.writeAll(":::avatar\nlabel: ");
-            try writer.writeEscapedInline(avatar.label);
-            try writer.writeAll("\n:::");
+            try writer.beginDirective("avatar");
+            try writer.fieldText("label", avatar.label);
+            try writer.endDirective();
         },
         .kbd => |kbd| {
             if (kbd.label.len == 0) return error.InvalidMarkdown;
-            try writer.writeAll(":::kbd\nlabel: ");
-            try writer.writeEscapedInline(kbd.label);
-            try writer.writeAll("\n:::");
+            try writer.beginDirective("kbd");
+            try writer.fieldText("label", kbd.label);
+            try writer.endDirective();
         },
         .separator => try writer.writeAll("---"),
         .button => |button| {
             if (button.label.len == 0) return error.InvalidMarkdown;
-            try writer.writeAll(":::button\nid: ");
-            try writer.writeInt(button.id);
-            try writer.writeAll("\nlabel: ");
-            try writer.writeEscapedInline(button.label);
-            try writer.writeAll("\n:::");
+            try writer.beginDirective("button");
+            try writer.fieldInt("id", button.id);
+            try writer.fieldText("label", button.label);
+            try writer.endDirective();
         },
         .input => |input| {
             if (input.placeholder.len == 0) return error.InvalidMarkdown;
-            try writer.writeAll(":::input\nid: ");
-            try writer.writeInt(input.id);
-            try writer.writeAll("\nplaceholder: ");
-            try writer.writeEscapedInline(input.placeholder);
-            try writer.writeAll("\n:::");
+            try writer.beginDirective("input");
+            try writer.fieldInt("id", input.id);
+            try writer.fieldText("placeholder", input.placeholder);
+            try writer.endDirective();
         },
         .textarea => |textarea| {
             if (textarea.placeholder.len == 0) return error.InvalidMarkdown;
-            try writer.writeAll(":::textarea\nid: ");
-            try writer.writeInt(textarea.id);
-            try writer.writeAll("\nplaceholder: ");
-            try writer.writeEscapedInline(textarea.placeholder);
-            try writer.writeAll("\n:::");
+            try writer.beginDirective("textarea");
+            try writer.fieldInt("id", textarea.id);
+            try writer.fieldText("placeholder", textarea.placeholder);
+            try writer.endDirective();
         },
         .select => |select| {
             if (select.label.len == 0) return error.InvalidMarkdown;
-            try writer.writeAll(":::select\nid: ");
-            try writer.writeInt(select.id);
-            try writer.writeAll("\nlabel: ");
-            try writer.writeEscapedInline(select.label);
-            try writer.writeAll("\n:::");
+            try writer.beginDirective("select");
+            try writer.fieldInt("id", select.id);
+            try writer.fieldText("label", select.label);
+            try writer.endDirective();
         },
         .checkbox => |checkbox| {
             if (checkbox.label.len == 0) return error.InvalidMarkdown;
-            try writer.writeAll(":::checkbox\nid: ");
-            try writer.writeInt(checkbox.id);
-            try writer.writeAll("\nchecked: ");
-            try writer.writeAll(if (checkbox.checked) "true" else "false");
-            try writer.writeAll("\nlabel: ");
-            try writer.writeEscapedInline(checkbox.label);
-            try writer.writeAll("\n:::");
+            try writer.beginDirective("checkbox");
+            try writer.fieldInt("id", checkbox.id);
+            try writer.fieldBool("checked", checkbox.checked);
+            try writer.fieldText("label", checkbox.label);
+            try writer.endDirective();
         },
         .switch_control => |switch_control| {
             if (switch_control.label.len == 0) return error.InvalidMarkdown;
-            try writer.writeAll(":::switch\nid: ");
-            try writer.writeInt(switch_control.id);
-            try writer.writeAll("\nchecked: ");
-            try writer.writeAll(if (switch_control.checked) "true" else "false");
-            try writer.writeAll("\nlabel: ");
-            try writer.writeEscapedInline(switch_control.label);
-            try writer.writeAll("\n:::");
+            try writer.beginDirective("switch");
+            try writer.fieldInt("id", switch_control.id);
+            try writer.fieldBool("checked", switch_control.checked);
+            try writer.fieldText("label", switch_control.label);
+            try writer.endDirective();
         },
         .progress => |progress| {
-            try writer.writeAll(":::progress-control\nvalue: ");
-            try writer.writeInt(percentFromUnit(progress.value));
-            try writer.writeAll("\n:::");
+            try writer.beginDirective("progress-control");
+            try writer.fieldInt("value", percentFromUnit(progress.value));
+            try writer.endDirective();
         },
         .slider => |slider| {
             if (slider.label.len == 0) return error.InvalidMarkdown;
-            try writer.writeAll(":::slider\nid: ");
-            try writer.writeInt(slider.id);
-            try writer.writeAll("\nlabel: ");
-            try writer.writeEscapedInline(slider.label);
-            try writer.writeAll("\nvalue: ");
-            try writer.writeInt(percentFromUnit(slider.value));
-            try writer.writeAll("\n:::");
+            try writer.beginDirective("slider");
+            try writer.fieldInt("id", slider.id);
+            try writer.fieldText("label", slider.label);
+            try writer.fieldInt("value", percentFromUnit(slider.value));
+            try writer.endDirective();
         },
         .row_item => |row| {
             if (row.title.len == 0 or row.detail.len == 0) return error.InvalidMarkdown;
-            try writer.writeAll(":::row-item\nid: ");
-            try writer.writeInt(row.id);
-            try writer.writeAll("\ntitle: ");
-            try writer.writeEscapedInline(row.title);
-            try writer.writeAll("\ndetail: ");
-            try writer.writeEscapedInline(row.detail);
-            try writer.writeAll("\n:::");
+            try writer.beginDirective("row-item");
+            try writer.fieldInt("id", row.id);
+            try writer.fieldText("title", row.title);
+            try writer.fieldText("detail", row.detail);
+            try writer.endDirective();
         },
     }
 }
@@ -2792,128 +2437,50 @@ fn writeCalloutMarkdown(callout: Callout, out: []u8) MarkdownError![]u8 {
     return writer.written();
 }
 
-fn writeAsideMarkdown(aside: Aside, out: []u8) MarkdownError![]u8 {
-    if (aside.title.len == 0 or aside.body.len == 0) return error.InvalidMarkdown;
-    var writer = MarkdownWriter.init(out);
-    try writer.writeAll(":::aside\ntitle: ");
-    try writer.writeEscapedInline(aside.title);
-    try writer.writeAll("\nbody: ");
-    try writer.writeEscapedInline(aside.body);
-    try writer.writeAll("\n:::");
-    return writer.written();
-}
-
-fn writeDetailsMarkdown(details: Details, out: []u8) MarkdownError![]u8 {
-    if (details.summary.len == 0 or details.body.len == 0) return error.InvalidMarkdown;
-    var writer = MarkdownWriter.init(out);
-    try writer.writeAll(":::details\nid: ");
-    try writer.writeInt(details.id);
-    try writer.writeAll("\nopen: ");
-    try writer.writeAll(if (details.open) "true" else "false");
-    try writer.writeAll("\nsummary: ");
-    try writer.writeEscapedInline(details.summary);
-    try writer.writeAll("\nbody: ");
-    try writer.writeEscapedInline(details.body);
-    try writer.writeAll("\n:::");
-    return writer.written();
-}
-
-fn writeFigureMarkdown(figure: Figure, out: []u8) MarkdownError![]u8 {
-    if (figure.src.len == 0 or figure.alt.len == 0 or figure.caption.len == 0) return error.InvalidMarkdown;
-    var writer = MarkdownWriter.init(out);
-    try writer.writeAll(":::figure\nsrc: ");
-    try writer.writeEscapedInline(figure.src);
-    try writer.writeAll("\nalt: ");
-    try writer.writeEscapedInline(figure.alt);
-    try writer.writeAll("\ncaption: ");
-    try writer.writeEscapedInline(figure.caption);
-    try writer.writeAll("\n:::");
-    return writer.written();
-}
-
 fn writeChoiceGroupMarkdown(group: ChoiceGroup, out: []u8) MarkdownError![]u8 {
     if (group.legend.len == 0 or group.options.len == 0) return error.InvalidMarkdown;
     var writer = MarkdownWriter.init(out);
-    try writer.writeAll(":::choice\nid: ");
-    try writer.writeInt(group.id);
-    try writer.writeAll("\nlegend: ");
-    try writer.writeEscapedInline(group.legend);
+    try writer.beginDirective("choice");
+    try writer.fieldInt("id", group.id);
+    try writer.fieldText("legend", group.legend);
     for (group.options) |option| {
         if (option.label.len == 0) return error.InvalidMarkdown;
-        try writer.writeAll("\noption: ");
-        try writer.writeInt(option.id);
-        try writer.writeAll("\nselected: ");
-        try writer.writeAll(if (option.selected) "true" else "false");
-        try writer.writeAll("\nlabel: ");
-        try writer.writeEscapedInline(option.label);
+        try writer.fieldInt("option", option.id);
+        try writer.fieldBool("selected", option.selected);
+        try writer.fieldText("label", option.label);
     }
-    try writer.writeAll("\n:::");
+    try writer.endDirective();
     return writer.written();
 }
 
 fn writeBreadcrumbMarkdown(breadcrumb: Breadcrumb, out: []u8) MarkdownError![]u8 {
     if (breadcrumb.items.len == 0) return error.InvalidMarkdown;
     var writer = MarkdownWriter.init(out);
-    try writer.writeAll(":::breadcrumb");
+    try writer.beginDirective("breadcrumb");
     for (breadcrumb.items) |item| {
         if (item.label.len == 0) return error.InvalidMarkdown;
-        try writer.writeAll("\nitem: ");
-        try writer.writeInt(item.id);
-        try writer.writeAll("\ncurrent: ");
-        try writer.writeAll(if (item.current) "true" else "false");
-        try writer.writeAll("\nhref: ");
-        try writer.writeEscapedInline(item.href);
-        try writer.writeAll("\nlabel: ");
-        try writer.writeEscapedInline(item.label);
+        try writer.fieldInt("item", item.id);
+        try writer.fieldBool("current", item.current);
+        try writer.fieldText("href", item.href);
+        try writer.fieldText("label", item.label);
     }
-    try writer.writeAll("\n:::");
+    try writer.endDirective();
     return writer.written();
 }
 
 fn writeNavMarkdown(nav: Nav, out: []u8) MarkdownError![]u8 {
     if (nav.items.len == 0) return error.InvalidMarkdown;
     var writer = MarkdownWriter.init(out);
-    try writer.writeAll(":::nav\nlabel: ");
-    try writer.writeEscapedInline(nav.label);
+    try writer.beginDirective("nav");
+    try writer.fieldText("label", nav.label);
     for (nav.items) |item| {
         if (item.label.len == 0) return error.InvalidMarkdown;
-        try writer.writeAll("\nitem: ");
-        try writer.writeInt(item.id);
-        try writer.writeAll("\nactive: ");
-        try writer.writeAll(if (item.active) "true" else "false");
-        try writer.writeAll("\nhref: ");
-        try writer.writeEscapedInline(item.href);
-        try writer.writeAll("\nlabel: ");
-        try writer.writeEscapedInline(item.label);
+        try writer.fieldInt("item", item.id);
+        try writer.fieldBool("active", item.active);
+        try writer.fieldText("href", item.href);
+        try writer.fieldText("label", item.label);
     }
-    try writer.writeAll("\n:::");
-    return writer.written();
-}
-
-fn writeTableMarkdown(table: Table, out: []u8) MarkdownError![]u8 {
-    if (table.headers.len == 0) return error.InvalidMarkdown;
-    var writer = MarkdownWriter.init(out);
-    try writer.writeAll(":::table\nid: ");
-    try writer.writeInt(table.id);
-    for (table.headers) |header| {
-        if (header.value.len == 0) return error.InvalidMarkdown;
-        try writer.writeAll("\nheader: ");
-        try writer.writeAll(alignName(header.alignment));
-        try writer.writeAll(" ");
-        try writer.writeEscapedInline(header.value);
-    }
-    for (table.rows) |row| {
-        if (row.cells.len != table.headers.len) return error.InvalidMarkdown;
-        try writer.writeAll("\nrow: ");
-        try writer.writeInt(row.id);
-        for (row.cells) |cell| {
-            try writer.writeAll("\ncell: ");
-            try writer.writeAll(alignName(cell.alignment));
-            try writer.writeAll(" ");
-            try writer.writeEscapedInline(cell.value);
-        }
-    }
-    try writer.writeAll("\n:::");
+    try writer.endDirective();
     return writer.written();
 }
 
@@ -2925,99 +2492,80 @@ fn writeCardMarkdown(card: Card, out: []u8) MarkdownError![]u8 {
 
 fn writeCardMarkdownInto(writer: *MarkdownWriter, card: Card) MarkdownError!void {
     if (card.title.len == 0 or card.detail.len == 0) return error.InvalidMarkdown;
-    try writer.writeAll(":::card\ntitle: ");
-    try writer.writeEscapedInline(card.title);
-    try writer.writeAll("\ndetail: ");
-    try writer.writeEscapedInline(card.detail);
-    try writer.writeAll("\n:::");
+    try writer.beginDirective("card");
+    try writer.fieldText("title", card.title);
+    try writer.fieldText("detail", card.detail);
+    try writer.endDirective();
 }
 
 fn writeResourceListMarkdown(list: ResourceList, out: []u8) MarkdownError![]u8 {
     if (list.items.len == 0) return error.InvalidMarkdown;
     var writer = MarkdownWriter.init(out);
-    try writer.writeAll(":::resources");
+    try writer.beginDirective("resources");
     for (list.items) |item| {
         if (item.label.len == 0 or item.href.len == 0 or item.detail.len == 0) return error.InvalidMarkdown;
-        try writer.writeAll("\nitem: ");
-        try writer.writeInt(item.id);
-        try writer.writeAll("\nlabel: ");
-        try writer.writeEscapedInline(item.label);
-        try writer.writeAll("\nhref: ");
-        try writer.writeEscapedInline(item.href);
-        try writer.writeAll("\ndetail: ");
-        try writer.writeEscapedInline(item.detail);
+        try writer.fieldInt("item", item.id);
+        try writer.fieldText("label", item.label);
+        try writer.fieldText("href", item.href);
+        try writer.fieldText("detail", item.detail);
     }
-    try writer.writeAll("\n:::");
+    try writer.endDirective();
     return writer.written();
 }
 
 fn writeStepListMarkdown(list: StepList, out: []u8) MarkdownError![]u8 {
     if (list.steps.len == 0) return error.InvalidMarkdown;
     var writer = MarkdownWriter.init(out);
-    try writer.writeAll(":::steps");
+    try writer.beginDirective("steps");
     for (list.steps) |step| {
         if (step.title.len == 0 or step.detail.len == 0) return error.InvalidMarkdown;
-        try writer.writeAll("\nstep: ");
-        try writer.writeInt(step.id);
-        try writer.writeAll("\nstate: ");
-        try writer.writeAll(stepStateName(step.state));
-        try writer.writeAll("\ntitle: ");
-        try writer.writeEscapedInline(step.title);
-        try writer.writeAll("\ndetail: ");
-        try writer.writeEscapedInline(step.detail);
+        try writer.fieldInt("step", step.id);
+        try writer.fieldRaw("state", stepStateName(step.state));
+        try writer.fieldText("title", step.title);
+        try writer.fieldText("detail", step.detail);
     }
-    try writer.writeAll("\n:::");
+    try writer.endDirective();
     return writer.written();
 }
 
 fn writeDefinitionListMarkdown(list: DefinitionList, out: []u8) MarkdownError![]u8 {
     if (list.items.len == 0) return error.InvalidMarkdown;
     var writer = MarkdownWriter.init(out);
-    try writer.writeAll(":::definitions");
+    try writer.beginDirective("definitions");
     for (list.items) |item| {
         if (item.term.len == 0 or item.detail.len == 0) return error.InvalidMarkdown;
-        try writer.writeAll("\nitem: ");
-        try writer.writeInt(item.id);
-        try writer.writeAll("\nterm: ");
-        try writer.writeEscapedInline(item.term);
-        try writer.writeAll("\ndetail: ");
-        try writer.writeEscapedInline(item.detail);
+        try writer.fieldInt("item", item.id);
+        try writer.fieldText("term", item.term);
+        try writer.fieldText("detail", item.detail);
     }
-    try writer.writeAll("\n:::");
+    try writer.endDirective();
     return writer.written();
 }
 
 fn writeTimelineMarkdown(timeline: Timeline, out: []u8) MarkdownError![]u8 {
     if (timeline.events.len == 0) return error.InvalidMarkdown;
     var writer = MarkdownWriter.init(out);
-    try writer.writeAll(":::timeline");
+    try writer.beginDirective("timeline");
     for (timeline.events) |event| {
         if (event.time.len == 0 or event.title.len == 0 or event.detail.len == 0) return error.InvalidMarkdown;
-        try writer.writeAll("\nevent: ");
-        try writer.writeInt(event.id);
-        try writer.writeAll("\ntime: ");
-        try writer.writeEscapedInline(event.time);
-        try writer.writeAll("\ntitle: ");
-        try writer.writeEscapedInline(event.title);
-        try writer.writeAll("\ndetail: ");
-        try writer.writeEscapedInline(event.detail);
+        try writer.fieldInt("event", event.id);
+        try writer.fieldText("time", event.time);
+        try writer.fieldText("title", event.title);
+        try writer.fieldText("detail", event.detail);
     }
-    try writer.writeAll("\n:::");
+    try writer.endDirective();
     return writer.written();
 }
 
 fn writeProgressSummaryMarkdown(summary: ProgressSummary, out: []u8) MarkdownError![]u8 {
     if (summary.label.len == 0 or summary.total == 0 or summary.completed > summary.total) return error.InvalidMarkdown;
     var writer = MarkdownWriter.init(out);
-    try writer.writeAll(":::progress\nid: ");
-    try writer.writeInt(summary.id);
-    try writer.writeAll("\nlabel: ");
-    try writer.writeEscapedInline(summary.label);
-    try writer.writeAll("\ncompleted: ");
-    try writer.writeInt(summary.completed);
-    try writer.writeAll("\ntotal: ");
-    try writer.writeInt(summary.total);
-    try writer.writeAll("\n:::");
+    try writer.beginDirective("progress");
+    try writer.fieldInt("id", summary.id);
+    try writer.fieldText("label", summary.label);
+    try writer.fieldInt("completed", summary.completed);
+    try writer.fieldInt("total", summary.total);
+    try writer.endDirective();
     return writer.written();
 }
 
@@ -3100,42 +2648,6 @@ fn readCalloutMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!Callo
     return .{ .value = value };
 }
 
-fn readAsideMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!Aside {
-    const prefix = ":::aside\ntitle: ";
-    const directive_body = try readMarkdownDirectiveBody(markdown, ":::aside", prefix);
-    var cursor = MarkdownCursor.init(directive_body);
-    var text = MarkdownTextArena.init(text_out);
-    const title = try text.unescapeInline(try cursor.fieldBetween("", "\nbody: "));
-    const body = try text.unescapeInline(try cursor.tailField("\nbody: "));
-    if (title.len == 0 or body.len == 0) return error.InvalidMarkdown;
-    return .{ .title = title, .body = body };
-}
-
-fn readDetailsMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!Details {
-    const prefix = ":::details\nid: ";
-    const body = try readMarkdownDirectiveBody(markdown, ":::details", prefix);
-    var cursor = MarkdownCursor.init(body);
-    const id = try parseMarkdownU32(try cursor.fieldBetween("", "\nopen: "));
-    const open = try parseMarkdownBool(try cursor.fieldBetween("\nopen: ", "\nsummary: "));
-    var text = MarkdownTextArena.init(text_out);
-    const summary = try text.unescapeInline(try cursor.fieldBetween("\nsummary: ", "\nbody: "));
-    const content = try text.unescapeInline(try cursor.tailField("\nbody: "));
-    if (summary.len == 0 or content.len == 0) return error.InvalidMarkdown;
-    return .{ .id = id, .summary = summary, .body = content, .open = open };
-}
-
-fn readFigureMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!Figure {
-    const prefix = ":::figure\nsrc: ";
-    const body = try readMarkdownDirectiveBody(markdown, ":::figure", prefix);
-    var cursor = MarkdownCursor.init(body);
-    var text = MarkdownTextArena.init(text_out);
-    const src = try text.unescapeInline(try cursor.fieldBetween("", "\nalt: "));
-    const alt = try text.unescapeInline(try cursor.fieldBetween("\nalt: ", "\ncaption: "));
-    const caption = try text.unescapeInline(try cursor.tailField("\ncaption: "));
-    if (src.len == 0 or alt.len == 0 or caption.len == 0) return error.InvalidMarkdown;
-    return .{ .src = src, .alt = alt, .caption = caption };
-}
-
 fn readChoiceGroupMarkdown(markdown: []const u8, out_options: []ChoiceOption, text_out: []u8) MarkdownError!ChoiceGroup {
     const prefix = ":::choice\nid: ";
     const body = try readMarkdownDirectiveBody(markdown, ":::choice", prefix);
@@ -3202,60 +2714,6 @@ fn readNavMarkdown(markdown: []const u8, out_items: []NavItem, text_out: []u8) M
     }
     if (item_count == 0) return error.InvalidMarkdown;
     return .{ .label = nav_label, .items = out_items[0..item_count] };
-}
-
-fn readTableMarkdown(markdown: []const u8, out_rows: []TableRow, out_cells: []TableCell, text_out: []u8) MarkdownError!Table {
-    const prefix = ":::table\nid: ";
-    const body = try readMarkdownDirectiveBody(markdown, ":::table", prefix);
-    const id_end_relative = std.mem.indexOfScalar(u8, body, '\n') orelse return error.InvalidMarkdown;
-    const id = try parseMarkdownU32(body[0..id_end_relative]);
-    var text = MarkdownTextArena.init(text_out);
-    var cell_count: usize = 0;
-    var row_count: usize = 0;
-    var cursor = id_end_relative + 1;
-    while (cursor < body.len and std.mem.startsWith(u8, body[cursor..], "header: ")) {
-        if (cell_count == out_cells.len) return error.MarkdownBudgetExceeded;
-        const line_end_relative = std.mem.indexOfScalar(u8, body[cursor..], '\n') orelse body[cursor..].len;
-        out_cells[cell_count] = try readTableCellMarkdownLine(body[cursor .. cursor + line_end_relative], "header: ", &text);
-        if (out_cells[cell_count].value.len == 0) return error.InvalidMarkdown;
-        cell_count += 1;
-        cursor += line_end_relative;
-        if (cursor < body.len) cursor += 1;
-    }
-    const header_count = cell_count;
-    if (header_count == 0) return error.InvalidMarkdown;
-    while (cursor < body.len) {
-        if (row_count == out_rows.len) return error.MarkdownBudgetExceeded;
-        if (!std.mem.startsWith(u8, body[cursor..], "row: ")) return error.InvalidMarkdown;
-        const row_id_start = cursor + "row: ".len;
-        const row_id_end_relative = std.mem.indexOfScalar(u8, body[row_id_start..], '\n') orelse return error.InvalidMarkdown;
-        const row_id = try parseMarkdownU32(body[row_id_start .. row_id_start + row_id_end_relative]);
-        cursor = row_id_start + row_id_end_relative + 1;
-        const row_cells_start = cell_count;
-        var row_cell_index: usize = 0;
-        while (row_cell_index < header_count) : (row_cell_index += 1) {
-            if (cell_count == out_cells.len) return error.MarkdownBudgetExceeded;
-            if (!std.mem.startsWith(u8, body[cursor..], "cell: ")) return error.InvalidMarkdown;
-            const line_end_relative = std.mem.indexOfScalar(u8, body[cursor..], '\n') orelse body[cursor..].len;
-            out_cells[cell_count] = try readTableCellMarkdownLine(body[cursor .. cursor + line_end_relative], "cell: ", &text);
-            cell_count += 1;
-            cursor += line_end_relative;
-            if (cursor < body.len) cursor += 1;
-        }
-        out_rows[row_count] = .{ .id = row_id, .cells = out_cells[row_cells_start..cell_count] };
-        row_count += 1;
-    }
-    if (row_count == 0) return error.InvalidMarkdown;
-    return .{ .id = id, .headers = out_cells[0..header_count], .rows = out_rows[0..row_count] };
-}
-
-fn readTableCellMarkdownLine(line: []const u8, prefix: []const u8, text: *MarkdownTextArena) MarkdownError!TableCell {
-    if (!std.mem.startsWith(u8, line, prefix)) return error.InvalidMarkdown;
-    const after_prefix = line[prefix.len..];
-    const align_end = std.mem.indexOfScalar(u8, after_prefix, ' ') orelse return error.InvalidMarkdown;
-    const alignment = parseAlignName(after_prefix[0..align_end]) orelse return error.InvalidMarkdown;
-    const value = try text.unescapeInline(after_prefix[align_end + 1 ..]);
-    return .{ .value = value, .alignment = alignment };
 }
 
 fn readCardMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!Card {
@@ -3766,27 +3224,6 @@ fn readComponentHtmlWithArena(html: []const u8, text: *HtmlTextArena) HtmlError!
     return error.UnsupportedHtml;
 }
 
-fn readTableHtml(html: []const u8, out_rows: []TableRow, out_cells: []TableCell, text_out: []u8) HtmlError!Table {
-    const prefix = "<table data-er-component=\"table\" data-er-id=\"";
-    if (!std.mem.startsWith(u8, html, prefix)) return error.UnsupportedHtml;
-    const after_id = html[prefix.len..];
-    const id_end = std.mem.indexOf(u8, after_id, "\"><thead><tr>") orelse return error.InvalidHtml;
-    const id = try parseHtmlU32(after_id[0..id_end]);
-    const headers_start = prefix.len + id_end + "\"><thead><tr>".len;
-    const headers_end_relative = std.mem.indexOf(u8, html[headers_start..], "</tr></thead><tbody>") orelse return error.InvalidHtml;
-    const headers_html = html[headers_start .. headers_start + headers_end_relative];
-    const rows_start = headers_start + headers_end_relative + "</tr></thead><tbody>".len;
-    if (!std.mem.endsWith(u8, html, "</tbody></table>")) return error.InvalidHtml;
-    const rows_html = html[rows_start .. html.len - "</tbody></table>".len];
-
-    var text = HtmlTextArena.init(text_out);
-    var cell_count: usize = 0;
-    const headers = try readTableCellsHtml(headers_html, "th", out_cells, &cell_count, &text);
-    if (headers.len == 0) return error.InvalidHtml;
-    const rows = try readTableRowsHtml(rows_html, headers.len, out_rows, out_cells, &cell_count, &text);
-    return .{ .id = id, .headers = headers, .rows = rows };
-}
-
 fn readHeadingHtml(html: []const u8, text_out: []u8) HtmlError!Heading {
     var text = HtmlTextArena.init(text_out);
     inline for (.{ 1, 2, 3 }) |level| {
@@ -3836,20 +3273,6 @@ fn readCalloutHtml(html: []const u8, text_out: []u8) HtmlError!Callout {
     return error.UnsupportedHtml;
 }
 
-fn readAsideHtml(html: []const u8, text_out: []u8) HtmlError!Aside {
-    const body = takeWrapped(html, "<aside data-er-component=\"aside\"><h2>", "</p></aside>") orelse {
-        if (std.mem.startsWith(u8, html, "<aside")) return error.InvalidHtml;
-        return error.UnsupportedHtml;
-    };
-    const title_end = std.mem.indexOf(u8, body, "</h2><p>") orelse return error.InvalidHtml;
-    const body_start = title_end + "</h2><p>".len;
-    var text = HtmlTextArena.init(text_out);
-    const title = try text.unescape(body[0..title_end]);
-    const content = try text.unescape(body[body_start..]);
-    if (title.len == 0 or content.len == 0) return error.InvalidHtml;
-    return .{ .title = title, .body = content };
-}
-
 fn readCodeBlockHtml(html: []const u8, out_lines: [][]const u8, text_out: []u8) HtmlError!CodeBlock {
     const prefix = "<pre data-er-component=\"code-block\"><code data-er-lang=\"";
     if (!std.mem.startsWith(u8, html, prefix)) {
@@ -3876,55 +3299,6 @@ fn readCodeLinesHtml(html: []const u8, out_lines: [][]const u8, text: *HtmlTextA
         line_count += 1;
     }
     return out_lines[0..line_count];
-}
-
-fn readDetailsHtml(html: []const u8, text_out: []u8) HtmlError!Details {
-    const prefix = "<details data-er-component=\"details\" data-er-id=\"";
-    if (!std.mem.startsWith(u8, html, prefix)) {
-        if (std.mem.startsWith(u8, html, "<details")) return error.InvalidHtml;
-        return error.UnsupportedHtml;
-    }
-    const after_id = html[prefix.len..];
-    const id_end = std.mem.indexOf(u8, after_id, "\" data-er-open=\"") orelse return error.InvalidHtml;
-    const id = try parseHtmlU32(after_id[0..id_end]);
-    const open_start = prefix.len + id_end + "\" data-er-open=\"".len;
-    const after_open = html[open_start..];
-    const open_end = std.mem.indexOf(u8, after_open, "\"><summary>") orelse return error.InvalidHtml;
-    const open = try parseHtmlBool(after_open[0..open_end]);
-    const summary_start = open_start + open_end + "\"><summary>".len;
-    const summary_end_relative = std.mem.indexOf(u8, html[summary_start..], "</summary><p>") orelse return error.InvalidHtml;
-    const body_start = summary_start + summary_end_relative + "</summary><p>".len;
-    if (!std.mem.endsWith(u8, html, "</p></details>")) return error.InvalidHtml;
-
-    var text = HtmlTextArena.init(text_out);
-    return .{
-        .id = id,
-        .summary = try text.unescape(html[summary_start .. summary_start + summary_end_relative]),
-        .body = try text.unescape(html[body_start .. html.len - "</p></details>".len]),
-        .open = open,
-    };
-}
-
-fn readFigureHtml(html: []const u8, text_out: []u8) HtmlError!Figure {
-    const prefix = "<figure data-er-component=\"figure\"><img src=\"";
-    if (!std.mem.startsWith(u8, html, prefix)) {
-        if (std.mem.startsWith(u8, html, "<figure")) return error.InvalidHtml;
-        return error.UnsupportedHtml;
-    }
-    const after_src = html[prefix.len..];
-    const src_end = std.mem.indexOf(u8, after_src, "\" alt=\"") orelse return error.InvalidHtml;
-    const alt_start = prefix.len + src_end + "\" alt=\"".len;
-    const after_alt = html[alt_start..];
-    const alt_end = std.mem.indexOf(u8, after_alt, "\"><figcaption>") orelse return error.InvalidHtml;
-    const caption_start = alt_start + alt_end + "\"><figcaption>".len;
-    if (!std.mem.endsWith(u8, html, "</figcaption></figure>")) return error.InvalidHtml;
-
-    var text = HtmlTextArena.init(text_out);
-    const src = try text.unescape(after_src[0..src_end]);
-    const alt = try text.unescape(after_alt[0..alt_end]);
-    const caption = try text.unescape(html[caption_start .. html.len - "</figcaption></figure>".len]);
-    if (src.len == 0 or alt.len == 0 or caption.len == 0) return error.InvalidHtml;
-    return .{ .src = src, .alt = alt, .caption = caption };
 }
 
 fn readChoiceGroupHtml(html: []const u8, out_options: []ChoiceOption, text_out: []u8) HtmlError!ChoiceGroup {
@@ -4243,40 +3617,6 @@ fn readRegionHtmlForTag(comptime tag: RegionTag, html: []const u8, out_component
     return .{ .tag = tag, .label = label, .children = children };
 }
 
-fn readTableRowsHtml(html: []const u8, column_count: usize, out_rows: []TableRow, out_cells: []TableCell, cell_count: *usize, text: *HtmlTextArena) HtmlError![]const TableRow {
-    var cursor = HtmlCursor.init(html);
-    var row_count: usize = 0;
-    while (!cursor.done()) {
-        if (row_count == out_rows.len) return error.HtmlBudgetExceeded;
-        const id = try parseHtmlU32(try cursor.fieldBetween("<tr data-er-row-id=\"", "\">"));
-        const cells_html = try cursor.fieldBetween("\">", "</tr>");
-        const cells = try readTableCellsHtml(cells_html, "td", out_cells, cell_count, text);
-        try cursor.consume("</tr>");
-        if (cells.len != column_count) return error.InvalidHtml;
-        out_rows[row_count] = .{ .id = id, .cells = cells };
-        row_count += 1;
-    }
-    return out_rows[0..row_count];
-}
-
-fn readTableCellsHtml(html: []const u8, comptime tag: []const u8, out_cells: []TableCell, cell_count: *usize, text: *HtmlTextArena) HtmlError![]const TableCell {
-    const start = cell_count.*;
-    var cursor = HtmlCursor.init(html);
-    while (!cursor.done()) {
-        if (cell_count.* == out_cells.len) return error.HtmlBudgetExceeded;
-        const prefix = "<" ++ tag ++ " data-er-align=\"";
-        const close = "</" ++ tag ++ ">";
-        const alignment = parseAlignName(try cursor.fieldBetween(prefix, "\">")) orelse return error.InvalidHtml;
-        out_cells[cell_count.*] = .{
-            .value = try text.unescape(try cursor.fieldBetween("\">", close)),
-            .alignment = alignment,
-        };
-        try cursor.consume(close);
-        cell_count.* += 1;
-    }
-    return out_cells[start..cell_count.*];
-}
-
 fn readStackHtml(html: []const u8, out_components: []Component, text_out: []u8) HtmlError!Stack {
     const prefix = "<section data-er-component=\"stack\" data-er-axis=\"";
     if (!std.mem.startsWith(u8, html, prefix)) return error.UnsupportedHtml;
@@ -4421,6 +3761,40 @@ const HtmlWriter = struct {
         try self.writeAll(text);
     }
 
+    fn writeBool(self: *HtmlWriter, value: bool) HtmlError!void {
+        try self.writeAll(boolName(value));
+    }
+
+    fn writeAttrInt(self: *HtmlWriter, name: []const u8, value: u32) HtmlError!void {
+        try self.writeAttrPrefix(name);
+        try self.writeInt(value);
+        try self.writeByte('"');
+    }
+
+    fn writeAttrBool(self: *HtmlWriter, name: []const u8, value: bool) HtmlError!void {
+        try self.writeAttrPrefix(name);
+        try self.writeBool(value);
+        try self.writeByte('"');
+    }
+
+    fn writeAttrText(self: *HtmlWriter, name: []const u8, value: []const u8) HtmlError!void {
+        try self.writeAttrPrefix(name);
+        try self.writeEscapedAttr(value);
+        try self.writeByte('"');
+    }
+
+    fn writeAttrRaw(self: *HtmlWriter, name: []const u8, value: []const u8) HtmlError!void {
+        try self.writeAttrPrefix(name);
+        try self.writeAll(value);
+        try self.writeByte('"');
+    }
+
+    fn writeAttrPrefix(self: *HtmlWriter, name: []const u8) HtmlError!void {
+        try self.writeByte(' ');
+        try self.writeAll(name);
+        try self.writeAll("=\"");
+    }
+
     fn writeEscapedText(self: *HtmlWriter, value: []const u8) HtmlError!void {
         for (value) |byte| {
             switch (byte) {
@@ -4518,6 +3892,41 @@ const MarkdownWriter = struct {
         try self.writeAll(text);
     }
 
+    fn beginDirective(self: *MarkdownWriter, name: []const u8) MarkdownError!void {
+        try self.writeAll(":::");
+        try self.writeAll(name);
+    }
+
+    fn endDirective(self: *MarkdownWriter) MarkdownError!void {
+        try self.writeAll("\n:::");
+    }
+
+    fn fieldInt(self: *MarkdownWriter, name: []const u8, value: u32) MarkdownError!void {
+        try self.fieldPrefix(name);
+        try self.writeInt(value);
+    }
+
+    fn fieldBool(self: *MarkdownWriter, name: []const u8, value: bool) MarkdownError!void {
+        try self.fieldPrefix(name);
+        try self.writeAll(boolName(value));
+    }
+
+    fn fieldText(self: *MarkdownWriter, name: []const u8, value: []const u8) MarkdownError!void {
+        try self.fieldPrefix(name);
+        try self.writeEscapedInline(value);
+    }
+
+    fn fieldRaw(self: *MarkdownWriter, name: []const u8, value: []const u8) MarkdownError!void {
+        try self.fieldPrefix(name);
+        try self.writeAll(value);
+    }
+
+    fn fieldPrefix(self: *MarkdownWriter, name: []const u8) MarkdownError!void {
+        try self.writeByte('\n');
+        try self.writeAll(name);
+        try self.writeAll(": ");
+    }
+
     fn writeEscapedInline(self: *MarkdownWriter, value: []const u8) MarkdownError!void {
         for (value) |byte| {
             switch (byte) {
@@ -4604,6 +4013,13 @@ fn parseAlignName(value: []const u8) ?ui.TextAlign {
     if (std.mem.eql(u8, value, "center")) return .center;
     if (std.mem.eql(u8, value, "end")) return .end;
     return null;
+}
+
+fn boolName(value: bool) []const u8 {
+    return switch (value) {
+        true => "true",
+        false => "false",
+    };
 }
 
 fn parseHtmlBool(value: []const u8) HtmlError!bool {
@@ -5319,183 +4735,6 @@ test "stack markdown codec rejects malformed or unsupported children" {
     try std.testing.expectError(error.UnsupportedMarkdown, Stack.fromMarkdown(":::stack\naxis: column\ngap: 1\npadding: 0\n--- component ---\n:::unknown\nvalue: no\n:::\n:::", &components, &text));
 }
 
-test "table component renders rows and right aligned numeric cells" {
-    const headers = [_]TableCell{
-        .{ .value = "Item" },
-        .{ .value = "Amount", .alignment = .end },
-    };
-    const row0 = [_]TableCell{
-        .{ .value = "Net Royalties" },
-        .{ .value = "$0.00", .alignment = .end },
-    };
-    const row1 = [_]TableCell{
-        .{ .value = "Processing Fee" },
-        .{ .value = "-$0.00", .alignment = .end },
-    };
-    const rows = [_]TableRow{
-        .{ .id = 701, .cells = &row0 },
-        .{ .id = 702, .cells = &row1 },
-    };
-    const table = Table{ .id = 7, .headers = &headers, .rows = &rows };
-    var commands: [64]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-
-    try table.render(&scene, ui.Rect.init(0, 0, 360, 160), .{});
-
-    try std.testing.expectEqual(ui.TextAlign.end, textCommand(scene.written(), "Amount").?.text.alignment);
-    try std.testing.expectEqual(ui.TextAlign.end, textCommand(scene.written(), "$0.00").?.text.alignment);
-    const hit = ui_input.hitTest(scene.written(), 20, 58).?;
-    try std.testing.expectEqual(@as(u32, 701), hit.id);
-}
-
-test "table html codec roundtrips semantic table" {
-    const headers = [_]TableCell{
-        .{ .value = "Layer" },
-        .{ .value = "Authority" },
-    };
-    const row0 = [_]TableCell{
-        .{ .value = "Browser" },
-        .{ .value = "host IO" },
-    };
-    const row1 = [_]TableCell{
-        .{ .value = "WASM app" },
-        .{ .value = "routing and render policy" },
-    };
-    const rows = [_]TableRow{
-        .{ .id = 81, .cells = &row0 },
-        .{ .id = 82, .cells = &row1 },
-    };
-    const table = Table{ .id = 8, .headers = &headers, .rows = &rows };
-    var html: [1024]u8 = undefined;
-    var decoded_rows: [2]TableRow = undefined;
-    var decoded_cells: [6]TableCell = undefined;
-    var text: [256]u8 = undefined;
-
-    const encoded = try table.toHtml(&html);
-    const decoded = try Table.fromHtml(encoded, &decoded_rows, &decoded_cells, &text);
-
-    try std.testing.expect(std.mem.indexOf(u8, encoded, "<table data-er-component=\"table\" data-er-id=\"8\">") != null);
-    try std.testing.expect(std.mem.indexOf(u8, encoded, "<th data-er-align=\"start\">Layer</th>") != null);
-    try std.testing.expectEqual(@as(u32, 8), decoded.id);
-    try std.testing.expectEqual(@as(usize, 2), decoded.headers.len);
-    try std.testing.expectEqual(@as(usize, 2), decoded.rows.len);
-    try std.testing.expectEqualStrings("Layer", decoded.headers[0].value);
-    try std.testing.expectEqualStrings("WASM app", decoded.rows[1].cells[0].value);
-    try std.testing.expectEqualStrings("routing and render policy", decoded.rows[1].cells[1].value);
-}
-
-test "table html codec rejects malformed tables" {
-    var rows: [2]TableRow = undefined;
-    var cells: [4]TableCell = undefined;
-    var text: [128]u8 = undefined;
-
-    try std.testing.expectError(error.UnsupportedHtml, Table.fromHtml("<table><tr><td>plain</td></tr></table>", &rows, &cells, &text));
-    try std.testing.expectError(error.InvalidHtml, Table.fromHtml("<table data-er-component=\"table\" data-er-id=\"x\"><thead><tr></tr></thead><tbody></tbody></table>", &rows, &cells, &text));
-    try std.testing.expectError(error.InvalidHtml, Table.fromHtml("<table data-er-component=\"table\" data-er-id=\"1\"><thead><tr><th data-er-align=\"left\">A</th></tr></thead><tbody></tbody></table>", &rows, &cells, &text));
-}
-
-test "details component renders summary and open body" {
-    const details = Details{
-        .id = 32001,
-        .summary = "Why does DNS matter?",
-        .body = "The name lookup decides where the next connection goes.",
-        .open = true,
-    };
-    var commands: [64]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-
-    try details.render(&scene, ui.Rect.init(0, 0, 360, 120), .{});
-
-    try std.testing.expect(hasText(scene.written(), "Why does DNS matter?"));
-    try std.testing.expect(hasTextContaining(scene.written(), "name lookup"));
-    const hit = ui_input.hitTest(scene.written(), 20, 20).?;
-    try std.testing.expectEqual(@as(u32, 32001), hit.id);
-}
-
-test "details component hides body when closed" {
-    const details = Details{
-        .id = 32002,
-        .summary = "What changes when it opens?",
-        .body = "The expanded explanation becomes visible.",
-    };
-    var commands: [32]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-
-    try details.render(&scene, ui.Rect.init(0, 0, 360, 120), .{});
-
-    try std.testing.expect(hasText(scene.written(), "What changes when it opens?"));
-    try std.testing.expect(!hasTextContaining(scene.written(), "expanded explanation"));
-}
-
-test "details html codec roundtrips semantic disclosure" {
-    const details = Details{
-        .id = 32003,
-        .summary = "TLS < identity?",
-        .body = "TLS protects a trip. Identity decides who is allowed to act.",
-        .open = true,
-    };
-    var html: [512]u8 = undefined;
-    var text: [256]u8 = undefined;
-
-    const encoded = try details.toHtml(&html);
-    const decoded = try Details.fromHtml(encoded, &text);
-
-    try std.testing.expectEqualStrings("<details data-er-component=\"details\" data-er-id=\"32003\" data-er-open=\"true\"><summary>TLS &lt; identity?</summary><p>TLS protects a trip. Identity decides who is allowed to act.</p></details>", encoded);
-    try std.testing.expectEqual(@as(u32, 32003), decoded.id);
-    try std.testing.expect(decoded.open);
-    try std.testing.expectEqualStrings("TLS < identity?", decoded.summary);
-    try std.testing.expectEqualStrings("TLS protects a trip. Identity decides who is allowed to act.", decoded.body);
-}
-
-test "details html codec rejects malformed disclosure" {
-    var text: [128]u8 = undefined;
-
-    try std.testing.expectError(error.InvalidHtml, Details.fromHtml("<details><summary>Plain</summary><p>No marker</p></details>", &text));
-    try std.testing.expectError(error.InvalidHtml, Details.fromHtml("<details data-er-component=\"details\" data-er-id=\"x\" data-er-open=\"false\"><summary>Broken</summary><p>Body</p></details>", &text));
-    try std.testing.expectError(error.InvalidHtml, Details.fromHtml("<details data-er-component=\"details\" data-er-id=\"1\" data-er-open=\"maybe\"><summary>Broken</summary><p>Body</p></details>", &text));
-}
-
-test "figure component renders alt text and caption" {
-    const figure = Figure{
-        .src = "/assets/dns-path.png",
-        .alt = "Packet path from browser to resolver",
-        .caption = "DNS translates a name before the browser can connect.",
-    };
-    var commands: [64]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-
-    try figure.render(&scene, ui.Rect.init(0, 0, 360, 180), .{});
-
-    try std.testing.expect(hasTextContaining(scene.written(), "Packet path"));
-    try std.testing.expect(hasTextContaining(scene.written(), "DNS translates"));
-}
-
-test "figure html codec roundtrips semantic media" {
-    const figure = Figure{
-        .src = "/assets/device-city.png?size=wide",
-        .alt = "Device < city map",
-        .caption = "A device is easier to understand when it is drawn as rooms and borders.",
-    };
-    var html: [512]u8 = undefined;
-    var text: [256]u8 = undefined;
-
-    const encoded = try figure.toHtml(&html);
-    const decoded = try Figure.fromHtml(encoded, &text);
-
-    try std.testing.expectEqualStrings("<figure data-er-component=\"figure\"><img src=\"/assets/device-city.png?size=wide\" alt=\"Device &lt; city map\"><figcaption>A device is easier to understand when it is drawn as rooms and borders.</figcaption></figure>", encoded);
-    try std.testing.expectEqualStrings("/assets/device-city.png?size=wide", decoded.src);
-    try std.testing.expectEqualStrings("Device < city map", decoded.alt);
-    try std.testing.expectEqualStrings("A device is easier to understand when it is drawn as rooms and borders.", decoded.caption);
-}
-
-test "figure html codec rejects malformed figures" {
-    var text: [128]u8 = undefined;
-
-    try std.testing.expectError(error.InvalidHtml, Figure.fromHtml("<figure><img src=\"/x.png\" alt=\"x\"><figcaption>x</figcaption></figure>", &text));
-    try std.testing.expectError(error.InvalidHtml, Figure.fromHtml("<figure data-er-component=\"figure\"><img src=\"\" alt=\"x\"><figcaption>x</figcaption></figure>", &text));
-    try std.testing.expectError(error.InvalidHtml, Figure.fromHtml("<figure data-er-component=\"figure\"><img src=\"/x.png\"><figcaption>x</figcaption></figure>", &text));
-}
-
 test "choice group component renders selected option and hit targets" {
     const options = [_]ChoiceOption{
         .{ .id = 33001, .label = "Browser asks DNS" },
@@ -5951,45 +5190,6 @@ test "region markdown codec rejects unsupported landmarks and empty content" {
     try std.testing.expectError(error.InvalidMarkdown, Region.fromMarkdown(":::region\ntag: aside\nlabel: Side\n--- component ---\nNo\n:::", &children, &text));
     try std.testing.expectError(error.InvalidMarkdown, Region.fromMarkdown(":::region\ntag: main\nlabel: Empty\n:::", &children, &text));
     try std.testing.expectError(error.UnsupportedMarkdown, Region.fromMarkdown(":::region\ntag: article\nlabel: Body\n--- component ---\n:::unknown\nvalue: no\n:::\n:::", &children, &text));
-}
-
-test "aside component renders title and body" {
-    const aside = Aside{
-        .title = "Mental model",
-        .body = "Think of a capability as a key that only opens one specific door.",
-    };
-    var commands: [48]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-
-    try aside.render(&scene, ui.Rect.init(0, 0, 360, 120), .{});
-
-    try std.testing.expect(hasText(scene.written(), "Mental model"));
-    try std.testing.expect(hasTextContaining(scene.written(), "capability as a key"));
-}
-
-test "aside html codec roundtrips semantic side note" {
-    const aside = Aside{
-        .title = "Why this matters",
-        .body = "Security gets easier when authority is visible & narrow.",
-    };
-    var html: [384]u8 = undefined;
-    var text: [256]u8 = undefined;
-
-    const encoded = try aside.toHtml(&html);
-    const decoded = try Aside.fromHtml(encoded, &text);
-
-    try std.testing.expectEqualStrings("<aside data-er-component=\"aside\"><h2>Why this matters</h2><p>Security gets easier when authority is visible &amp; narrow.</p></aside>", encoded);
-    try std.testing.expectEqualStrings("Why this matters", decoded.title);
-    try std.testing.expectEqualStrings("Security gets easier when authority is visible & narrow.", decoded.body);
-}
-
-test "aside html codec rejects malformed side notes" {
-    var text: [128]u8 = undefined;
-
-    try std.testing.expectError(error.InvalidHtml, Aside.fromHtml("<aside><h2>Plain</h2><p>No component marker</p></aside>", &text));
-    try std.testing.expectError(error.InvalidHtml, Aside.fromHtml("<aside data-er-component=\"aside\"><h2></h2><p>Missing title</p></aside>", &text));
-    try std.testing.expectError(error.InvalidHtml, Aside.fromHtml("<aside data-er-component=\"aside\"><h2>Missing body</h2><p></p></aside>", &text));
-    try std.testing.expectError(error.InvalidHtml, Aside.fromHtml("<aside data-er-component=\"aside\"><h2>Broken</h2><span>Wrong body tag</span></aside>", &text));
 }
 
 test "markdown codecs roundtrip academy content blocks" {
