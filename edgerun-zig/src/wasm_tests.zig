@@ -98,6 +98,16 @@ const imported_memory_load_wasm = [_]u8{
     0x00,
 };
 
+const imported_global_wasm = [_]u8{
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+    0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7e, 0x02,
+    0x0f, 0x01, 0x03, 'e',  'n',  'v',  0x06, 'a',
+    'n',  's',  'w',  'e',  'r',  0x03, 0x7e, 0x00,
+    0x03, 0x02, 0x01, 0x00, 0x07, 0x08, 0x01, 0x04,
+    'm',  'a',  'i',  'n',  0x00, 0x00, 0x0a, 0x06,
+    0x01, 0x04, 0x00, 0x23, 0x00, 0x0b,
+};
+
 const signed_i32_const_wasm = [_]u8{
     0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
     0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7e, 0x03,
@@ -670,6 +680,30 @@ test "wasm interpreter reports unresolved imported memory" {
     var runtime = wasm.Runtime.init(&memory, &ticks);
 
     try std.testing.expectError(error.MissingImport, wasm.executeExportI64(&runtime, &imported_memory_load_wasm, "main"));
+}
+
+test "wasm interpreter reads imported globals" {
+    var memory: [256]u8 = undefined;
+    var ticks: u64 = 4;
+    const imports = [_]wasm.HostImport{.{
+        .module = "env",
+        .name = "answer",
+        .kind = .global,
+        .global_value_type = .i64,
+        .global_value = 42,
+    }};
+    var runtime = wasm.Runtime.initWithImports(&memory, &ticks, &imports);
+
+    try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64(&runtime, &imported_global_wasm, "main"));
+    try std.testing.expectEqual(@as(u64, 2), ticks);
+}
+
+test "wasm interpreter reports unresolved imported globals" {
+    var memory: [256]u8 = undefined;
+    var ticks: u64 = 4;
+    var runtime = wasm.Runtime.init(&memory, &ticks);
+
+    try std.testing.expectError(error.MissingImport, wasm.executeExportI64(&runtime, &imported_global_wasm, "main"));
 }
 
 test "wasm interpreter decodes signed i32 constants" {
