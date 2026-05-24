@@ -1,10 +1,41 @@
 const std = @import("std");
 const icon = @import("icon.zig");
+const renderer_ir = @import("renderer_ir.zig");
+const renderer_present = @import("renderer_present.zig");
 const ui = @import("ui.zig");
 const varfont = @import("varfont.zig");
 
-pub const Error = error{
+pub const Error = renderer_present.Error || error{
     PixelBudgetExceeded,
+    InvalidIrBuffer,
+    InvalidIrAtlas,
+    UnsupportedIrPrimitive,
+};
+
+pub const AlphaAtlas = struct {
+    width: usize,
+    height: usize,
+    alpha: []const u8,
+
+    pub fn valid(self: AlphaAtlas) bool {
+        return self.width != 0 and self.height != 0 and self.alpha.len >= self.width * self.height;
+    }
+};
+
+pub const RgbaTexture = struct {
+    width: usize,
+    height: usize,
+    pixels: []const ui.Color,
+
+    pub fn valid(self: RgbaTexture) bool {
+        return self.width != 0 and self.height != 0 and self.pixels.len >= self.width * self.height;
+    }
+};
+
+pub const IrAtlases = struct {
+    font: AlphaAtlas,
+    icon: AlphaAtlas,
+    image: ?RgbaTexture = null,
 };
 
 pub const Surface = struct {
@@ -40,6 +71,116 @@ pub const Surface = struct {
             .icon_quad => |quad| self.drawIconQuad(quad, scale),
             .hit, .drag_source, .drop_target, .text_quad, .image_quad, .transition => {},
         };
+    }
+
+    pub fn rasterizeIr(self: Surface, buffers: renderer_ir.Buffers) Error!void {
+        renderer_ir.validateBuffers(buffers) catch return error.InvalidIrBuffer;
+        if (buffers.hasTexturedVertices()) return error.UnsupportedIrPrimitive;
+        for (renderer_ir.drawBatches(buffers)) |batch| switch (batch) {
+            .rects, .overlay_rects => |rects| try self.rasterizeIrRects(rects),
+            .image, .text, .icon, .overlay_text, .overlay_icon => {},
+        };
+    }
+
+    pub fn rasterizeIrWithAtlases(self: Surface, buffers: renderer_ir.Buffers, atlases: IrAtlases) Error!void {
+        renderer_ir.validateBuffers(buffers) catch return error.InvalidIrBuffer;
+        if (!atlases.font.valid() or !atlases.icon.valid()) return error.InvalidIrAtlas;
+        const image_texture = if (!buffers.hasImageVertices())
+            null
+        else
+            atlases.image orelse return error.InvalidIrAtlas;
+        if (image_texture) |texture| if (!texture.valid()) return error.InvalidIrAtlas;
+
+        for (renderer_ir.drawBatches(buffers)) |batch| switch (batch) {
+            .rects, .overlay_rects => |rects| try self.rasterizeIrRects(rects),
+            .image => |vertices| if (image_texture) |texture| try self.rasterizeRgbaTexturedQuads(vertices, texture),
+            .text, .overlay_text => |vertices| try self.rasterizeAlphaTexturedQuads(vertices, atlases.font),
+            .icon, .overlay_icon => |vertices| try self.rasterizeAlphaTexturedQuads(vertices, atlases.icon),
+        };
+    }
+
+    pub fn renderIrFrameWithAtlases(self: Surface, buffers: renderer_ir.Buffers, atlases: IrAtlases) Error!renderer_present.Receipt {
+        const receipt = renderer_present.present(.{
+            .target = .{
+                .kind = .cpu,
+                .width = @intCast(self.width),
+                .height = @intCast(self.height),
+            },
+            .buffers = buffers,
+            .resources = atlasResources(atlases),
+        }) catch |err| return switch (err) {
+            error.InvalidBuffer => error.InvalidIrBuffer,
+            else => err,
+        };
+        try self.rasterizeIrWithAtlases(buffers, atlases);
+        return receipt;
+    }
+
+    fn rasterizeIrRects(self: Surface, rects: []const f32) Error!void {
+        var iter = renderer_ir.RectIterator.init(rects) catch return error.InvalidIrBuffer;
+        while (iter.next() catch return error.InvalidIrBuffer) |rect| {
+            self.drawRect(rect, default_raster_scale);
+        }
+    }
+
+    fn rasterizeRgbaTexturedQuads(self: Surface, vertices: []const f32, texture: RgbaTexture) Error!void {
+        var iter = renderer_ir.TexturedQuadIterator.init(vertices) catch return error.InvalidIrBuffer;
+        while (iter.next() catch return error.InvalidIrBuffer) |quad| {
+            try self.rasterizeRgbaTexturedQuad(quad, texture);
+        }
+    }
+
+    fn rasterizeRgbaTexturedQuad(self: Surface, quad: renderer_ir.TexturedQuad, texture: RgbaTexture) Error!void {
+        const px0 = clampCoord(@intFromFloat(@floor(quad.bounds.x)), self.width);
+        const py0 = clampCoord(@intFromFloat(@floor(quad.bounds.y)), self.height);
+        const px1 = clampCoord(@intFromFloat(@ceil(quad.bounds.x + quad.bounds.w)), self.width);
+        const py1 = clampCoord(@intFromFloat(@ceil(quad.bounds.y + quad.bounds.h)), self.height);
+        if (px1 <= px0 or py1 <= py0) return;
+
+        var y = py0;
+        while (y < py1) : (y += 1) {
+            const fy = (@as(f32, @floatFromInt(y)) + pixel_center - quad.bounds.y) / quad.bounds.h;
+            const v = lerp(quad.v0, quad.v1, fy);
+            var x = px0;
+            while (x < px1) : (x += 1) {
+                const fx = (@as(f32, @floatFromInt(x)) + pixel_center - quad.bounds.x) / quad.bounds.w;
+                const u = lerp(quad.u0, quad.u1, fx);
+                const texel = sampleRgba(texture, u, v);
+                const color = multiplyRgb(texel, quad.color);
+                const alpha = scaleByte(quad.color.a, @as(f32, @floatFromInt(texel.a)) / 255.0);
+                if (alpha != 0) self.blendPixel(x, y, color, alpha);
+            }
+        }
+    }
+
+    fn rasterizeAlphaTexturedQuads(self: Surface, vertices: []const f32, atlas: AlphaAtlas) Error!void {
+        var iter = renderer_ir.TexturedQuadIterator.init(vertices) catch return error.InvalidIrBuffer;
+        while (iter.next() catch return error.InvalidIrBuffer) |quad| {
+            try self.rasterizeAlphaTexturedQuad(quad, atlas);
+        }
+    }
+
+    fn rasterizeAlphaTexturedQuad(self: Surface, quad: renderer_ir.TexturedQuad, atlas: AlphaAtlas) Error!void {
+        const px0 = clampCoord(@intFromFloat(@floor(quad.bounds.x)), self.width);
+        const py0 = clampCoord(@intFromFloat(@floor(quad.bounds.y)), self.height);
+        const px1 = clampCoord(@intFromFloat(@ceil(quad.bounds.x + quad.bounds.w)), self.width);
+        const py1 = clampCoord(@intFromFloat(@ceil(quad.bounds.y + quad.bounds.h)), self.height);
+        if (px1 <= px0 or py1 <= py0) return;
+
+        var y = py0;
+        while (y < py1) : (y += 1) {
+            const fy = (@as(f32, @floatFromInt(y)) + pixel_center - quad.bounds.y) / quad.bounds.h;
+            const v = lerp(quad.v0, quad.v1, fy);
+            var x = px0;
+            while (x < px1) : (x += 1) {
+                const fx = (@as(f32, @floatFromInt(x)) + pixel_center - quad.bounds.x) / quad.bounds.w;
+                const u = lerp(quad.u0, quad.u1, fx);
+                const alpha = scaleByte(quad.color.a, sampleAlpha(atlas, u, v) / 255.0);
+                var color = quad.color;
+                color.a = 255;
+                if (alpha != 0) self.blendPixel(x, y, color, alpha);
+            }
+        }
     }
 
     fn drawRect(self: Surface, rect: anytype, scale: f32) void {
@@ -438,6 +579,14 @@ pub const Surface = struct {
     }
 };
 
+fn atlasResources(atlases: IrAtlases) renderer_present.Resources {
+    return .{
+        .font_atlas = atlases.font.valid(),
+        .icon_atlas = atlases.icon.valid(),
+        .image_texture = if (atlases.image) |image| image.valid() else false,
+    };
+}
+
 const default_raster_scale: f32 = 1.0;
 const max_alpha: u8 = 255;
 const pixel_center: f32 = 0.5;
@@ -540,8 +689,68 @@ fn mixByte(a: u8, b: u8, t: f32) u8 {
     return @intFromFloat(@round(af + (bf - af) * t));
 }
 
+fn lerp(a: f32, b: f32, t: f32) f32 {
+    return a + (b - a) * std.math.clamp(t, 0.0, 1.0);
+}
+
 fn scaleByte(value: u8, factor: f32) u8 {
     return @intFromFloat(@round(std.math.clamp(@as(f32, @floatFromInt(value)) * factor, 0.0, 255.0)));
+}
+
+fn sampleAlpha(atlas: AlphaAtlas, u: f32, v: f32) f32 {
+    const x = std.math.clamp(u, 0.0, 1.0) * @as(f32, @floatFromInt(atlas.width - 1));
+    const y = std.math.clamp(v, 0.0, 1.0) * @as(f32, @floatFromInt(atlas.height - 1));
+    const x0: usize = @intFromFloat(@floor(x));
+    const y0: usize = @intFromFloat(@floor(y));
+    const x1 = @min(x0 + 1, atlas.width - 1);
+    const y1 = @min(y0 + 1, atlas.height - 1);
+    const tx = x - @as(f32, @floatFromInt(x0));
+    const ty = y - @as(f32, @floatFromInt(y0));
+    const a00: f32 = @floatFromInt(atlas.alpha[y0 * atlas.width + x0]);
+    const a10: f32 = @floatFromInt(atlas.alpha[y0 * atlas.width + x1]);
+    const a01: f32 = @floatFromInt(atlas.alpha[y1 * atlas.width + x0]);
+    const a11: f32 = @floatFromInt(atlas.alpha[y1 * atlas.width + x1]);
+    return lerp(lerp(a00, a10, tx), lerp(a01, a11, tx), ty);
+}
+
+fn sampleRgba(texture: RgbaTexture, u: f32, v: f32) ui.Color {
+    const x = std.math.clamp(u, 0.0, 1.0) * @as(f32, @floatFromInt(texture.width - 1));
+    const y = std.math.clamp(v, 0.0, 1.0) * @as(f32, @floatFromInt(texture.height - 1));
+    const x0: usize = @intFromFloat(@floor(x));
+    const y0: usize = @intFromFloat(@floor(y));
+    const x1 = @min(x0 + 1, texture.width - 1);
+    const y1 = @min(y0 + 1, texture.height - 1);
+    const tx = x - @as(f32, @floatFromInt(x0));
+    const ty = y - @as(f32, @floatFromInt(y0));
+    const c00 = texture.pixels[y0 * texture.width + x0];
+    const c10 = texture.pixels[y0 * texture.width + x1];
+    const c01 = texture.pixels[y1 * texture.width + x0];
+    const c11 = texture.pixels[y1 * texture.width + x1];
+    return .{
+        .r = sampleChannel(c00.r, c10.r, c01.r, c11.r, tx, ty),
+        .g = sampleChannel(c00.g, c10.g, c01.g, c11.g, tx, ty),
+        .b = sampleChannel(c00.b, c10.b, c01.b, c11.b, tx, ty),
+        .a = sampleChannel(c00.a, c10.a, c01.a, c11.a, tx, ty),
+    };
+}
+
+fn sampleChannel(a00: u8, a10: u8, a01: u8, a11: u8, tx: f32, ty: f32) u8 {
+    const top = lerp(@floatFromInt(a00), @floatFromInt(a10), tx);
+    const bottom = lerp(@floatFromInt(a01), @floatFromInt(a11), tx);
+    return @intFromFloat(@round(lerp(top, bottom, ty)));
+}
+
+fn multiplyRgb(texel: ui.Color, tint: ui.Color) ui.Color {
+    return .{
+        .r = multiplyByte(texel.r, tint.r),
+        .g = multiplyByte(texel.g, tint.g),
+        .b = multiplyByte(texel.b, tint.b),
+        .a = 255,
+    };
+}
+
+fn multiplyByte(a: u8, b: u8) u8 {
+    return @intCast((@as(u16, a) * @as(u16, b) + 127) / 255);
 }
 
 fn byteUnit(value: u8) f32 {
@@ -611,6 +820,150 @@ test "software renderer honors rounded gradient and shadow rect modes" {
     try std.testing.expect(pixels[18 * 64 + 39].a > 0);
 }
 
+test "software renderer rasterizes rect ir equivalent to command path" {
+    var commands: [4]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+    try scene.pushRect(ui.Rect.init(0.0, 0.0, 64.0, 48.0), .bg, .fill, 0.0, 0.0);
+    try scene.pushGradientRect(ui.Rect.init(8.0, 8.0, 24.0, 24.0), .{ .r = 240, .g = 40, .b = 40 }, .{ .r = 40, .g = 40, .b = 240 }, 8.0);
+    try scene.pushRect(ui.Rect.init(42.0, 18.0, 12.0, 12.0), .{ .r = 0, .g = 0, .b = 0, .a = 120 }, .shadow, 4.0, 5.0);
+    try scene.pushRect(ui.Rect.init(44.0, 20.0, 10.0, 10.0), .accent, .border, 3.0, 0.0);
+
+    var command_pixels: [64 * 48]ui.Color = undefined;
+    const command_surface = try Surface.init(64, 48, &command_pixels);
+    command_surface.clear(.clear);
+    command_surface.rasterize(scene.written());
+
+    var storage = renderer_ir.FixedBuffers(3, 0, 0, 0, 1, 0, 0){};
+    const buffers = storage.buffers();
+    var source_context: u8 = 0;
+    const sources = renderer_ir.Sources{
+        .font = .{ .context = &source_context, .metrics = irTestFontMetrics, .width = irTestTextWidth, .glyph = irTestGlyph },
+        .icon = .{ .context = &source_context, .rect = irTestIconRect },
+    };
+    try renderer_ir.packSceneWithOverlay(buffers, sources, scene.written(), 3);
+
+    var ir_pixels: [64 * 48]ui.Color = undefined;
+    const ir_surface = try Surface.init(64, 48, &ir_pixels);
+    ir_surface.clear(.clear);
+    try ir_surface.rasterizeIr(buffers);
+
+    try std.testing.expectEqualSlices(ui.Color, &command_pixels, &ir_pixels);
+}
+
+test "software renderer rejects textured ir without atlases" {
+    var pixels: [4]ui.Color = undefined;
+    const surface = try Surface.init(2, 2, &pixels);
+    var storage = renderer_ir.FixedBuffers(0, 1, 0, 0, 0, 0, 0){};
+    storage.text_vertex_len = 1;
+    const buffers = storage.buffers();
+    try std.testing.expectError(error.UnsupportedIrPrimitive, surface.rasterizeIr(buffers));
+}
+
+test "software renderer rasterizes alpha textured ir with supplied atlases" {
+    var pixels: [8 * 8]ui.Color = undefined;
+    const surface = try Surface.init(8, 8, &pixels);
+    surface.clear(.clear);
+
+    var storage = renderer_ir.FixedBuffers(0, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0){};
+    const buffers = storage.buffers();
+
+    try renderer_ir.pushClippedTexturedQuad(
+        buffers.text_vertices,
+        buffers.text_vertex_len,
+        ui.Rect.init(0, 0, 8, 8),
+        ui.Rect.init(0, 0, 8, 8),
+        0.0,
+        0.0,
+        1.0,
+        1.0,
+        .{ .r = 255, .g = 32, .b = 16, .a = 200 },
+    );
+    const alpha = [_]u8{
+        0,   255,
+        255, 255,
+    };
+    const atlases = IrAtlases{
+        .font = .{ .width = 2, .height = 2, .alpha = &alpha },
+        .icon = .{ .width = 2, .height = 2, .alpha = &alpha },
+    };
+
+    const receipt = try surface.renderIrFrameWithAtlases(buffers, atlases);
+    try std.testing.expect(receipt.valid());
+    try std.testing.expectEqual(renderer_present.Transport.software_pixels, receipt.transport);
+    try std.testing.expectEqual(@as(usize, 1), receipt.primitive_count);
+    const pixel = pixels[4 * 8 + 4];
+    try std.testing.expect(pixel.a > 0);
+    try std.testing.expect(pixel.r > pixel.g);
+}
+
+test "software renderer rasterizes image ir with supplied rgba texture" {
+    var pixels: [8 * 8]ui.Color = undefined;
+    const surface = try Surface.init(8, 8, &pixels);
+    surface.clear(.clear);
+
+    var storage = renderer_ir.FixedBuffers(0, 0, 0, renderer_ir.textured_quad_vertex_count, 0, 0, 0){};
+    const buffers = storage.buffers();
+
+    try renderer_ir.pushClippedTexturedQuad(
+        buffers.image_vertices,
+        buffers.image_vertex_len,
+        ui.Rect.init(0, 0, 8, 8),
+        ui.Rect.init(0, 0, 8, 8),
+        0.0,
+        0.0,
+        1.0,
+        1.0,
+        .{ .r = 128, .g = 255, .b = 255, .a = 255 },
+    );
+    const alpha = [_]u8{ 255, 255, 255, 255 };
+    const image = [_]ui.Color{
+        .{ .r = 255, .g = 0, .b = 0, .a = 255 },
+        .{ .r = 255, .g = 0, .b = 0, .a = 255 },
+        .{ .r = 255, .g = 0, .b = 0, .a = 255 },
+        .{ .r = 255, .g = 0, .b = 0, .a = 255 },
+    };
+    const atlases = IrAtlases{
+        .font = .{ .width = 2, .height = 2, .alpha = &alpha },
+        .icon = .{ .width = 2, .height = 2, .alpha = &alpha },
+        .image = .{ .width = 2, .height = 2, .pixels = &image },
+    };
+
+    const receipt = try surface.renderIrFrameWithAtlases(buffers, atlases);
+    try std.testing.expect(receipt.valid());
+    try std.testing.expect(receipt.requirements.image_texture);
+    const pixel = pixels[4 * 8 + 4];
+    try std.testing.expect(pixel.r > 120);
+    try std.testing.expect(pixel.r < 140);
+    try std.testing.expectEqual(@as(u8, 0), pixel.g);
+    try std.testing.expectEqual(@as(u8, 0), pixel.b);
+}
+
+test "software renderer frame rejects missing image texture through presentation contract" {
+    var pixels: [8 * 8]ui.Color = undefined;
+    const surface = try Surface.init(8, 8, &pixels);
+
+    var storage = renderer_ir.FixedBuffers(0, 0, 0, renderer_ir.textured_quad_vertex_count, 0, 0, 0){};
+    const buffers = storage.buffers();
+    try renderer_ir.pushClippedTexturedQuad(
+        buffers.image_vertices,
+        buffers.image_vertex_len,
+        ui.Rect.init(0, 0, 8, 8),
+        ui.Rect.init(0, 0, 8, 8),
+        0.0,
+        0.0,
+        1.0,
+        1.0,
+        .{ .r = 255, .g = 255, .b = 255, .a = 255 },
+    );
+
+    const alpha = [_]u8{ 255, 255, 255, 255 };
+    const atlases = IrAtlases{
+        .font = .{ .width = 2, .height = 2, .alpha = &alpha },
+        .icon = .{ .width = 2, .height = 2, .alpha = &alpha },
+    };
+    try std.testing.expectError(error.MissingImageTexture, surface.renderIrFrameWithAtlases(buffers, atlases));
+}
+
 fn sampleRoot(children: []ui.Node) ui.Node {
     std.debug.assert(children.len >= 5);
     children[0] = .{ .text = .{ .value = "edgerun ui", .color = .accent } };
@@ -619,4 +972,20 @@ fn sampleRoot(children: []ui.Node) ui.Node {
     children[3] = .{ .slot = .{ .id = 7, .child = &children[4] } };
     children[4] = .{ .button = .{ .id = 30, .label = "Render" } };
     return .{ .stack = .{ .axis = .column, .gap = 10, .padding = 16, .children = children[0..4] } };
+}
+
+fn irTestFontMetrics(_: *anyopaque, _: u8) renderer_ir.TextMetrics {
+    return .{ .ascender = 10.0, .descender = -3.0 };
+}
+
+fn irTestTextWidth(_: *anyopaque, value: []const u8, _: u8) f32 {
+    return @floatFromInt(value.len * 8);
+}
+
+fn irTestGlyph(_: *anyopaque, _: u8, _: u8) renderer_ir.Error!?renderer_ir.Glyph {
+    return null;
+}
+
+fn irTestIconRect(_: *anyopaque, _: u32) ?renderer_ir.AtlasRect {
+    return null;
 }

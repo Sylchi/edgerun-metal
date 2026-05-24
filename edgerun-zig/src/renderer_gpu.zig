@@ -1,14 +1,17 @@
 const std = @import("std");
+const renderer_ir = @import("renderer_ir.zig");
+const renderer_present = @import("renderer_present.zig");
 const renderer_surface = @import("renderer_surface.zig");
 const ui = @import("ui.zig");
 
-pub const Error = error{
+pub const Error = renderer_present.Error || error{
     InvalidMode,
     InvalidDevice,
     PrimitiveBudgetExceeded,
     DirtyTileBudgetExceeded,
     SurfaceBudgetExceeded,
     InvalidSurface,
+    InvalidIrBuffer,
     DeviceFailure,
 };
 
@@ -128,6 +131,8 @@ pub const Receipt = struct {
     sequence: u64,
     primitive_count: usize,
     dirty_tile_count: usize,
+    presentation_primitive_count: usize = 0,
+    presentation_transport: renderer_present.Transport = .gpu_command_stream,
 
     pub fn valid(self: Receipt) bool {
         return self.sequence != 0 and self.primitive_count != 0;
@@ -203,6 +208,47 @@ pub const Renderer = struct {
             .dirty_tile_count = frame.dirty_tiles.len,
         };
     }
+
+    pub fn renderIr(self: *Renderer, surfaces: []const Surface, buffers: renderer_ir.Buffers) Error!Receipt {
+        return self.renderIrWithResources(surfaces, buffers, .{});
+    }
+
+    pub fn renderIrWithResources(self: *Renderer, surfaces: []const Surface, buffers: renderer_ir.Buffers, resources: renderer_present.Resources) Error!Receipt {
+        self.sequence += 1;
+        const presentation = try renderer_present.present(.{
+            .target = .{
+                .kind = .gpu,
+                .width = self.mode.width,
+                .height = self.mode.height,
+            },
+            .buffers = buffers,
+            .resources = resources,
+        });
+        const frame = try encodeIrFrame(
+            self.sequence,
+            self.mode,
+            self.tile_width,
+            self.tile_height,
+            surfaces,
+            buffers,
+            self.tile_marks,
+            self.dirty_ids,
+            &self.commands,
+        );
+
+        if (!self.device.begin_frame(self.device.context, frame)) return error.DeviceFailure;
+        if (!self.device.upload_primitives(self.device.context, frame.primitives)) return error.DeviceFailure;
+        if (!self.device.render_tiles(self.device.context, frame.dirty_tiles)) return error.DeviceFailure;
+        if (!self.device.present(self.device.context, frame.sequence)) return error.DeviceFailure;
+
+        return .{
+            .sequence = frame.sequence,
+            .primitive_count = frame.primitives.len,
+            .dirty_tile_count = frame.dirty_tiles.len,
+            .presentation_primitive_count = presentation.primitive_count,
+            .presentation_transport = presentation.transport,
+        };
+    }
 };
 
 pub fn available(mode: renderer_surface.Mode) bool {
@@ -228,21 +274,48 @@ pub fn encodeFrame(
 
     for (surfaces) |surface| {
         try encodeSurface(surface, out);
-        if (!renderer_surface.dirtyTilesMarkRect(
-            plan,
-            @floatFromInt(surface.x),
-            @floatFromInt(surface.y),
-            @floatFromInt(surface.width),
-            @floatFromInt(surface.height),
-            tile_marks,
-            &dirty,
-        )) return error.DirtyTileBudgetExceeded;
+        try markDirtyRect(plan, @floatFromInt(surface.x), @floatFromInt(surface.y), @floatFromInt(surface.width), @floatFromInt(surface.height), tile_marks, &dirty);
     }
 
     for (scene.written()) |command| {
         try encodeCommand(command, out);
     }
     if (!renderer_surface.dirtyTilesMarkScene(plan, scene, tile_marks, &dirty)) return error.DirtyTileBudgetExceeded;
+
+    return .{
+        .sequence = sequence,
+        .mode = mode,
+        .tile_plan = plan,
+        .dirty_tiles = dirty.written(),
+        .primitives = out.written(),
+    };
+}
+
+pub fn encodeIrFrame(
+    sequence: u64,
+    mode: renderer_surface.Mode,
+    tile_width: u32,
+    tile_height: u32,
+    surfaces: []const Surface,
+    buffers: renderer_ir.Buffers,
+    tile_marks: []u8,
+    dirty_ids: []u32,
+    out: *CommandBuffer,
+) Error!Frame {
+    if (sequence == 0) return error.InvalidMode;
+    const plan = renderer_surface.tilePlanFromMode(mode, tile_width, tile_height, @intCast(dirty_ids.len)) orelse return error.InvalidMode;
+    var dirty = renderer_surface.DirtyTileList{ .tile_ids = dirty_ids };
+    if (!renderer_surface.dirtyTilesReset(plan, tile_marks, &dirty)) return error.DirtyTileBudgetExceeded;
+    renderer_ir.validateBuffers(buffers) catch return error.InvalidIrBuffer;
+    out.clear();
+
+    for (surfaces) |surface| {
+        try encodeSurface(surface, out);
+        try markDirtyRect(plan, @floatFromInt(surface.x), @floatFromInt(surface.y), @floatFromInt(surface.width), @floatFromInt(surface.height), tile_marks, &dirty);
+    }
+
+    try encodeIrBuffers(buffers, out);
+    if (!renderer_surface.dirtyTilesMarkIrBuffers(plan, buffers, tile_marks, &dirty)) return error.DirtyTileBudgetExceeded;
 
     return .{
         .sequence = sequence,
@@ -268,6 +341,73 @@ fn encodeSurface(surface: Surface, out: *CommandBuffer) Error!void {
         .buffer_handle = surface.buffer.handle,
         .is_opaque = surface.is_opaque,
     });
+}
+
+fn encodeIrBuffers(
+    buffers: renderer_ir.Buffers,
+    out: *CommandBuffer,
+) Error!void {
+    for (renderer_ir.drawBatches(buffers)) |batch| switch (batch) {
+        .rects, .overlay_rects => |rects| try encodeIrRects(rects, out),
+        .image => |vertices| try encodeIrTextured(.image_quad, vertices, out),
+        .text, .overlay_text => |vertices| try encodeIrTextured(.text_quad, vertices, out),
+        .icon, .overlay_icon => |vertices| try encodeIrTextured(.icon_quad, vertices, out),
+    };
+}
+
+fn encodeIrRects(
+    values: []const f32,
+    out: *CommandBuffer,
+) Error!void {
+    var iter = renderer_ir.RectIterator.init(values) catch return error.InvalidIrBuffer;
+    while (iter.next() catch return error.InvalidIrBuffer) |rect| {
+        const kind: PrimitiveKind = switch (rect.mode) {
+            .border => .border,
+            .fill, .shadow, .linear_gradient, .pie_slice => .rect,
+        };
+        try out.append(.{
+            .kind = kind,
+            .bounds = rect.bounds,
+            .color = rect.color,
+            .color2 = rect.color2,
+        });
+    }
+}
+
+fn encodeIrTextured(
+    kind: PrimitiveKind,
+    values: []const f32,
+    out: *CommandBuffer,
+) Error!void {
+    var iter = renderer_ir.TexturedQuadIterator.init(values) catch return error.InvalidIrBuffer;
+    while (iter.next() catch return error.InvalidIrBuffer) |quad| {
+        const primitive = irTexturedPrimitive(kind, quad);
+        try out.append(primitive);
+    }
+}
+
+fn irTexturedPrimitive(kind: PrimitiveKind, quad: renderer_ir.TexturedQuad) Primitive {
+    return .{
+        .kind = kind,
+        .bounds = quad.bounds,
+        .color = quad.color,
+        .u0 = quad.u0,
+        .v0 = quad.v0,
+        .u1 = quad.u1,
+        .v1 = quad.v1,
+    };
+}
+
+fn markDirtyRect(
+    plan: renderer_surface.TilePlan,
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    tile_marks: []u8,
+    dirty: *renderer_surface.DirtyTileList,
+) Error!void {
+    if (!renderer_surface.dirtyTilesMarkRect(plan, x, y, w, h, tile_marks, dirty)) return error.DirtyTileBudgetExceeded;
 }
 
 fn encodeCommand(command: ui.Command, out: *CommandBuffer) Error!void {
@@ -437,4 +577,81 @@ test "gpu renderer submits encoded frame to required device callbacks" {
     try std.testing.expect(test_device.rendered == receipt.dirty_tile_count);
     try std.testing.expectEqual(@as(usize, 1), test_device.presented);
     try std.testing.expectEqual(receipt.sequence, test_device.last_sequence);
+}
+
+test "gpu renderer encodes canonical ir frames" {
+    var commands: [16]ui.Command = undefined;
+    const scene = try testScene(&commands);
+    var storage = renderer_ir.FixedBuffers(8, renderer_ir.textured_quad_vertex_count * 8, renderer_ir.textured_quad_vertex_count * 8, 0, 0, 0, 0){};
+    const buffers = storage.buffers();
+    var source_context: u8 = 0;
+    const sources = renderer_ir.Sources{
+        .font = .{ .context = &source_context, .metrics = testFontMetrics, .width = testTextWidth, .glyph = testGlyph },
+        .icon = .{ .context = &source_context, .rect = testIconRect },
+    };
+    try renderer_ir.packScene(buffers, sources, scene.written());
+
+    var primitives: [16]Primitive = undefined;
+    var tile_marks: [64]u8 = undefined;
+    var dirty_ids: [64]u32 = undefined;
+    var test_device = TestDevice{};
+    var renderer = try Renderer.init(
+        test_device.device(),
+        .{ .width = 320, .height = 240, .stride = 320, .refresh_hz = 120 },
+        64,
+        64,
+        &primitives,
+        &tile_marks,
+        &dirty_ids,
+    );
+
+    const surfaces = [_]Surface{testSurface()};
+    const receipt = try renderer.renderIrWithResources(&surfaces, buffers, .{ .font_atlas = true, .icon_atlas = true });
+    try std.testing.expect(receipt.valid());
+    try std.testing.expectEqual(renderer_present.Transport.gpu_command_stream, receipt.presentation_transport);
+    try std.testing.expectEqual(@as(usize, 3), receipt.presentation_primitive_count);
+    try std.testing.expectEqual(@as(usize, 1), test_device.began);
+    try std.testing.expect(test_device.uploaded == receipt.primitive_count);
+    try std.testing.expect(test_device.rendered == receipt.dirty_tile_count);
+    try std.testing.expectEqual(receipt.sequence, test_device.last_sequence);
+}
+
+test "gpu renderer rejects textured canonical ir without declared resources" {
+    var storage = renderer_ir.FixedBuffers(0, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0){};
+    storage.text_vertex_len = renderer_ir.textured_quad_vertex_count * renderer_ir.text_vertex_float_stride;
+    const buffers = storage.buffers();
+
+    var primitives: [16]Primitive = undefined;
+    var tile_marks: [64]u8 = undefined;
+    var dirty_ids: [64]u32 = undefined;
+    var test_device = TestDevice{};
+    var renderer = try Renderer.init(
+        test_device.device(),
+        .{ .width = 320, .height = 240, .stride = 320, .refresh_hz = 120 },
+        64,
+        64,
+        &primitives,
+        &tile_marks,
+        &dirty_ids,
+    );
+
+    const surfaces = [_]Surface{testSurface()};
+    try std.testing.expectError(error.MissingFontAtlas, renderer.renderIr(&surfaces, buffers));
+    try std.testing.expectEqual(@as(usize, 0), test_device.began);
+}
+
+fn testFontMetrics(_: *anyopaque, _: u8) renderer_ir.TextMetrics {
+    return .{ .ascender = 10.0, .descender = -3.0 };
+}
+
+fn testTextWidth(_: *anyopaque, value: []const u8, _: u8) f32 {
+    return @floatFromInt(value.len * 8);
+}
+
+fn testGlyph(_: *anyopaque, _: u8, _: u8) renderer_ir.Error!?renderer_ir.Glyph {
+    return null;
+}
+
+fn testIconRect(_: *anyopaque, _: u32) ?renderer_ir.AtlasRect {
+    return null;
 }

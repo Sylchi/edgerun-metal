@@ -4,7 +4,10 @@ const icon = @import("icon.zig");
 const identity = @import("identity.zig");
 const input = @import("input.zig");
 const renderer = @import("renderer_software.zig");
+const renderer_ir = @import("renderer_ir.zig");
+const renderer_present = @import("renderer_present.zig");
 const component_gallery = @import("component_gallery.zig");
+const site_apps = @import("site_apps.zig");
 const site_blog = @import("site_blog.zig");
 const site_chrome = @import("site_chrome.zig");
 const site_landing = @import("site_landing.zig");
@@ -20,10 +23,10 @@ const max_pixels: usize = max_width * max_height;
 const max_input_bytes: usize = 8192;
 const max_nodes: usize = 256;
 const max_commands: usize = 4096;
-const gpu_rect_float_stride: usize = 15;
-const gpu_text_vertex_float_stride: usize = 8;
-const gpu_icon_vertex_float_stride: usize = 8;
-const gpu_image_vertex_float_stride: usize = 8;
+const gpu_rect_float_stride: usize = renderer_ir.rect_float_stride;
+const gpu_text_vertex_float_stride: usize = renderer_ir.text_vertex_float_stride;
+const gpu_icon_vertex_float_stride: usize = renderer_ir.icon_vertex_float_stride;
+const gpu_image_vertex_float_stride: usize = renderer_ir.image_vertex_float_stride;
 const max_gpu_rects: usize = 8192;
 const max_gpu_text_vertices: usize = 24576;
 const max_gpu_icon_vertices: usize = 4096;
@@ -36,10 +39,8 @@ const font_atlas_width: usize = 4096;
 const font_atlas_height: usize = 4096;
 const font_atlas_bytes: usize = font_atlas_width * font_atlas_height;
 const font_glyph_capacity: usize = 1280;
-const font_first_px: u8 = 11;
-const font_last_px: u8 = 48;
-const font_first_char: u8 = 32;
-const font_last_char: u8 = 126;
+const font_first_char: u8 = renderer_ir.font_first_char;
+const font_last_char: u8 = renderer_ir.font_last_char;
 const font_padding: usize = 8;
 const font_row_gap: usize = 8;
 const font_bitmap_bytes: usize = 8 * 1024 * 1024;
@@ -48,6 +49,7 @@ const icon_atlas_height: usize = tabler_atlas.height;
 const post_image_bytes = @embedFile("assets/old-man-yells-at-cloud.webp");
 const site_source_url = "https://github.com/edgerun";
 const route_bytes_capacity: usize = 96;
+const route_hash_bytes_capacity: usize = route_bytes_capacity + 1;
 const search_query_capacity: usize = 64;
 const search_result_limit: usize = 6;
 const search_overlay_id: u32 = 70_000;
@@ -55,6 +57,14 @@ const search_input_id: u32 = 70_001;
 const search_scrim_alpha: u8 = 204;
 const search_panel_alpha: u8 = 255;
 const search_result_alpha: u8 = 255;
+const key_slash: u32 = '/';
+const key_upper_k: u32 = 'K';
+const key_lower_k: u32 = 'k';
+const key_backspace_text = "Backspace";
+const key_escape_text = "Escape";
+const key_modifier_ctrl: u32 = 1 << 0;
+const key_modifier_meta: u32 = 1 << 1;
+const key_modifier_alt: u32 = 1 << 2;
 const entropy_pool_size: usize = 32;
 const ephemeral_seed_size: usize = std.crypto.sign.Ed25519.KeyPair.seed_length;
 const public_identity_prefix = "er1:";
@@ -99,6 +109,8 @@ var font_atlas_generation: u32 = 0;
 var frame_width: usize = 0;
 var frame_height: usize = 0;
 var last_command_count: usize = 0;
+var last_present_primitive_count: usize = 0;
+var last_present_transport: renderer_present.Transport = .webgl_buffers;
 var last_error: ErrorCode = .ok;
 var hover_hit_kind: u32 = hover_hit_kind_none;
 var hover_hit_id: u32 = 0;
@@ -113,6 +125,8 @@ var gallery_list_order: [component_gallery.list_row_count]u8 = component_gallery
 var site_state = SiteState{};
 var route_bytes: [route_bytes_capacity]u8 = undefined;
 var route_len: usize = 0;
+var route_hash_bytes: [route_hash_bytes_capacity]u8 = undefined;
+var route_hash_len: usize = 0;
 var entropy_pool: [entropy_pool_size]u8 = initialEntropyPool();
 var entropy_event_count: u64 = 0;
 var ephemeral_seed: [ephemeral_seed_size]u8 = [_]u8{0} ** ephemeral_seed_size;
@@ -120,6 +134,7 @@ var ephemeral_public_key: [identity.ed25519_public_size]u8 = [_]u8{0} ** identit
 var ephemeral_identity_id: [identity.id_size]u8 = [_]u8{0} ** identity.id_size;
 var public_identity_text: [public_identity_text_len]u8 = [_]u8{0} ** public_identity_text_len;
 var ephemeral_identity_ready = false;
+var gpu_source_context: u8 = 0;
 
 const hover_hit_kind_none: u32 = 255;
 
@@ -128,15 +143,24 @@ const HostAction = enum(u32) {
     open_url = 1,
 };
 
+const CursorKind = enum(u32) {
+    default = 0,
+    pointer = 1,
+    text = 2,
+    grabbing = 3,
+};
+
 const SiteView = enum(u32) {
     landing = 0,
     blog = 1,
+    apps = 2,
 };
 
 const SiteState = struct {
     view: SiteView = .landing,
     selected_blog_post_id: u32 = 0,
     blog_arc_filter_index: ?usize = null,
+    scroll_y: f32 = 0.0,
     host_action: HostAction = .none,
     search_open: bool = false,
     search_query: [search_query_capacity]u8 = [_]u8{0} ** search_query_capacity,
@@ -148,6 +172,10 @@ const SiteState = struct {
 
     fn searchQuery(state: *const SiteState) []const u8 {
         return state.search_query[0..state.search_query_len];
+    }
+
+    fn resetScroll(state: *SiteState) void {
+        state.scroll_y = 0.0;
     }
 };
 
@@ -177,6 +205,67 @@ const FontGlyph = struct {
     top: f32,
     advance: f32,
 };
+
+fn gpuBuffers() renderer_ir.Buffers {
+    return .{
+        .rects = gpu_rect_floats[0..],
+        .rect_len = &gpu_rect_float_len,
+        .text_vertices = gpu_text_vertex_floats[0..],
+        .text_vertex_len = &gpu_text_vertex_float_len,
+        .icon_vertices = gpu_icon_vertex_floats[0..],
+        .icon_vertex_len = &gpu_icon_vertex_float_len,
+        .image_vertices = gpu_image_vertex_floats[0..],
+        .image_vertex_len = &gpu_image_vertex_float_len,
+        .overlay_rects = gpu_overlay_rect_floats[0..],
+        .overlay_rect_len = &gpu_overlay_rect_float_len,
+        .overlay_text_vertices = gpu_overlay_text_vertex_floats[0..],
+        .overlay_text_vertex_len = &gpu_overlay_text_vertex_float_len,
+        .overlay_icon_vertices = gpu_overlay_icon_vertex_floats[0..],
+        .overlay_icon_vertex_len = &gpu_overlay_icon_vertex_float_len,
+    };
+}
+
+fn gpuSources() renderer_ir.Sources {
+    return .{
+        .font = .{
+            .context = &gpu_source_context,
+            .metrics = fontMetricsForIr,
+            .width = textWidthForIr,
+            .glyph = fontGlyphForIr,
+        },
+        .icon = .{
+            .context = &gpu_source_context,
+            .rect = iconAtlasRectForIr,
+        },
+    };
+}
+
+fn fontMetricsForIr(_: *anyopaque, px: u8) renderer_ir.TextMetrics {
+    return fontMetrics(px);
+}
+
+fn textWidthForIr(_: *anyopaque, value: []const u8, px: u8) f32 {
+    return textWidth(value, px);
+}
+
+fn fontGlyphForIr(_: *anyopaque, ch: u8, px: u8) renderer_ir.Error!?renderer_ir.Glyph {
+    const glyph = (getFontGlyph(ch, px) catch return error.Budget) orelse return null;
+    return .{
+        .u0 = glyph.u0,
+        .v0 = glyph.v0,
+        .u1 = glyph.u1,
+        .v1 = glyph.v1,
+        .w = glyph.w,
+        .h = glyph.h,
+        .left = glyph.left,
+        .top = glyph.top,
+        .advance = glyph.advance,
+    };
+}
+
+fn iconAtlasRectForIr(_: *anyopaque, atlas_id: u32) ?renderer_ir.AtlasRect {
+    return iconAtlasRect(atlas_id);
+}
 
 export fn er_ui_max_width() u32 {
     return max_width;
@@ -348,6 +437,10 @@ export fn er_ui_hover_hit_id() u32 {
     return hover_hit_id;
 }
 
+export fn er_ui_cursor_kind() u32 {
+    return @intFromEnum(currentCursorKind());
+}
+
 export fn er_ui_last_action_kind() u32 {
     return last_action_kind;
 }
@@ -387,6 +480,14 @@ export fn er_ui_pointer_up(x: f32, y: f32) u32 {
     recordAction(runtime_state.pointerUp(lastCommands(), x, y));
     updateHoverHit(lastCommands(), x, y);
     return last_action_kind;
+}
+
+export fn er_ui_site_pointer_up(x: f32, y: f32) u32 {
+    const action_kind = er_ui_pointer_up(x, y);
+    if (action_kind == @intFromEnum(ui_runtime.ActionKind.reordered)) {
+        return @intFromEnum(HostAction.none);
+    }
+    return er_ui_site_activate_hit(hover_hit_id);
 }
 
 export fn er_ui_component_gallery_layout_masonry_id() u32 {
@@ -457,6 +558,16 @@ export fn er_ui_site_host_action_url_len() usize {
     return site_source_url.len;
 }
 
+export fn er_ui_site_route_hash_ptr() usize {
+    refreshRouteHash();
+    return @intFromPtr(route_hash_bytes[0..].ptr);
+}
+
+export fn er_ui_site_route_hash_len() usize {
+    refreshRouteHash();
+    return route_hash_len;
+}
+
 export fn er_ui_site_route_path_ptr() usize {
     refreshRoutePath();
     return @intFromPtr(route_bytes[0..].ptr);
@@ -481,6 +592,7 @@ export fn er_ui_site_activate_hit(hit_id: u32) u32 {
             site_state.view = .landing;
             site_state.selected_blog_post_id = 0;
             site_state.blog_arc_filter_index = null;
+            site_state.resetScroll();
             site_state.search_open = false;
         },
         site_chrome.search_button_id => {
@@ -490,12 +602,21 @@ export fn er_ui_site_activate_hit(hit_id: u32) u32 {
             site_state.view = .landing;
             site_state.selected_blog_post_id = 0;
             site_state.blog_arc_filter_index = null;
+            site_state.resetScroll();
             site_state.search_open = false;
         },
         site_chrome.blog_button_id => {
             site_state.view = .blog;
             site_state.selected_blog_post_id = 0;
             site_state.blog_arc_filter_index = null;
+            site_state.resetScroll();
+            site_state.search_open = false;
+        },
+        site_chrome.apps_button_id => {
+            site_state.view = .apps;
+            site_state.selected_blog_post_id = 0;
+            site_state.blog_arc_filter_index = null;
+            site_state.resetScroll();
             site_state.search_open = false;
         },
         site_chrome.source_button_id => {
@@ -508,16 +629,26 @@ export fn er_ui_site_activate_hit(hit_id: u32) u32 {
         },
         site_blog.back_button_id => {
             site_state.selected_blog_post_id = 0;
+            site_state.resetScroll();
+            site_state.search_open = false;
+        },
+        site_blog.all_lessons_button_id => {
+            site_state.view = .blog;
+            site_state.selected_blog_post_id = 0;
+            site_state.blog_arc_filter_index = null;
+            site_state.resetScroll();
             site_state.search_open = false;
         },
         else => if (site_blog.postById(hit_id) != null) {
             site_state.view = .blog;
             site_state.selected_blog_post_id = hit_id;
+            site_state.resetScroll();
             site_state.search_open = false;
         } else if (site_blog.arcFilterIndexById(hit_id)) |index| {
             site_state.view = .blog;
             site_state.selected_blog_post_id = 0;
             site_state.blog_arc_filter_index = index;
+            site_state.resetScroll();
             site_state.search_open = false;
         },
     }
@@ -553,6 +684,61 @@ export fn er_ui_site_search_input_byte(byte: u32) u32 {
     return @intFromEnum(ErrorCode.ok);
 }
 
+export fn er_ui_site_key_event(key_len: usize, modifiers: u32) u32 {
+    if (key_len == 0) return 0;
+    if (key_len > input_bytes.len) return finishError(.bad_input);
+    const key = input_bytes[0..key_len];
+    const ctrl_or_meta = (modifiers & (key_modifier_ctrl | key_modifier_meta)) != 0;
+    const alt = (modifiers & key_modifier_alt) != 0;
+
+    const key_byte = singleAsciiKey(key);
+    const search_shortcut = key_byte != null and (key_byte.? == key_lower_k or key_byte.? == key_upper_k) and ctrl_or_meta;
+    if (search_shortcut or (key_byte != null and key_byte.? == key_slash and !site_state.search_open)) {
+        site_state.search_open = true;
+        last_error = .ok;
+        return 1;
+    }
+
+    if (!site_state.search_open) return 0;
+    if (std.mem.eql(u8, key, key_escape_text)) {
+        site_state.search_open = false;
+        site_state.search_query_len = 0;
+        last_error = .ok;
+        return 1;
+    }
+    if (std.mem.eql(u8, key, key_backspace_text)) {
+        if (site_state.search_query_len > 0) site_state.search_query_len -= 1;
+        last_error = .ok;
+        return 1;
+    }
+    if (!ctrl_or_meta and !alt and key_byte != null and key_byte.? >= 32 and key_byte.? <= 126) {
+        if (site_state.search_query_len >= site_state.search_query.len) return finishError(.bad_input);
+        site_state.search_query[site_state.search_query_len] = key_byte.?;
+        site_state.search_query_len += 1;
+        last_error = .ok;
+        return 1;
+    }
+    return 0;
+}
+
+fn singleAsciiKey(key: []const u8) ?u8 {
+    if (key.len != 1) return null;
+    return key[0];
+}
+
+export fn er_ui_site_scroll_by(delta_y: f32, width: f32, height: f32) u32 {
+    if (!std.math.isFinite(delta_y) or !std.math.isFinite(width) or !std.math.isFinite(height)) return finishError(.bad_input);
+    if (width <= 0.0 or height <= 0.0) return finishError(.bad_input);
+    const limit = siteScrollLimit(width, height);
+    site_state.scroll_y = std.math.clamp(site_state.scroll_y + delta_y, 0.0, limit);
+    last_error = .ok;
+    return @intFromEnum(ErrorCode.ok);
+}
+
+export fn er_ui_site_scroll_y() f32 {
+    return site_state.scroll_y;
+}
+
 export fn er_ui_site_landing_content_height(width: f32) f32 {
     return site_landing.contentHeight(width);
 }
@@ -565,6 +751,10 @@ export fn er_ui_site_blog_post_content_height(width: f32, post_id: u32) f32 {
     return site_blog.postContentHeight(width, post_id);
 }
 
+export fn er_ui_site_apps_content_height(width: f32) f32 {
+    return site_apps.contentHeight(width);
+}
+
 export fn er_ui_site_content_height(width: f32) f32 {
     return switch (site_state.view) {
         .landing => site_landing.contentHeight(width),
@@ -572,7 +762,12 @@ export fn er_ui_site_content_height(width: f32) f32 {
             site_blog.indexContentHeightFiltered(width, site_state.blog_arc_filter_index)
         else
             site_blog.postContentHeight(width, site_state.selected_blog_post_id),
+        .apps => site_apps.contentHeight(width),
     };
+}
+
+fn siteScrollLimit(width: f32, height: f32) f32 {
+    return @max(0.0, er_ui_site_content_height(width) - height);
 }
 
 export fn er_ui_clear(width: u32, height: u32) u32 {
@@ -601,12 +796,7 @@ export fn er_ui_render_component_gallery_layout_gap_hover(width: u32, height: u3
         .h = @floatFromInt(frame_height),
     }, galleryState(layout_raw, grid_gap, scroll_y, hover_x, hover_y)) catch return finishError(.render_failed);
 
-    last_command_count = scene.written().len;
-    updateHoverHit(scene.written(), hover_x, hover_y);
-    surface.clear(.bg);
-    surface.rasterize(scene.written());
-    last_error = .ok;
-    return @intFromEnum(ErrorCode.ok);
+    return finishCpuSceneFrame(surface, scene, .{ .enabled = true, .x = hover_x, .y = hover_y }, .bg);
 }
 
 export fn er_ui_build_component_gallery_gpu_frame(width: u32, height: u32, scroll_y: f32) u32 {
@@ -615,7 +805,6 @@ export fn er_ui_build_component_gallery_gpu_frame(width: u32, height: u32, scrol
 
 export fn er_ui_build_component_gallery_gpu_frame_layout_gap_hover(width: u32, height: u32, scroll_y: f32, layout_raw: u32, grid_gap: f32, hover_x: f32, hover_y: f32) u32 {
     if (!setFrameSize(width, height)) return finishError(.bad_size);
-    ensureFontAtlas() catch return finishError(.font_atlas);
 
     var scene = ui.Scene.init(&commands);
     component_gallery.renderComponentGallery(&scene, .{
@@ -625,16 +814,11 @@ export fn er_ui_build_component_gallery_gpu_frame_layout_gap_hover(width: u32, h
         .h = @floatFromInt(frame_height),
     }, galleryState(layout_raw, grid_gap, scroll_y, hover_x, hover_y)) catch return finishError(.render_failed);
 
-    last_command_count = scene.written().len;
-    updateHoverHit(scene.written(), hover_x, hover_y);
-    packGpuScene(scene.written()) catch return finishError(.gpu_budget);
-    last_error = .ok;
-    return @intFromEnum(ErrorCode.ok);
+    return finishGpuSceneFrame(scene, hover_x, hover_y);
 }
 
 export fn er_ui_build_site_landing_gpu_frame(width: u32, height: u32, scroll_y: f32, hover_x: f32, hover_y: f32, frame_ms: f32) u32 {
     if (!setFrameSize(width, height)) return finishError(.bad_size);
-    ensureFontAtlas() catch return finishError(.font_atlas);
 
     var scene = ui.Scene.initWithClips(&commands, &clips);
     site_landing.render(&scene, .{
@@ -651,16 +835,11 @@ export fn er_ui_build_site_landing_gpu_frame(width: u32, height: u32, scroll_y: 
         .public_identity_ready = ephemeral_identity_ready,
     }) catch return finishError(.render_failed);
 
-    last_command_count = scene.written().len;
-    updateHoverHit(scene.written(), hover_x, hover_y);
-    packGpuScene(scene.written()) catch return finishError(.gpu_budget);
-    last_error = .ok;
-    return @intFromEnum(ErrorCode.ok);
+    return finishGpuSceneFrame(scene, hover_x, hover_y);
 }
 
 export fn er_ui_build_site_blog_gpu_frame(width: u32, height: u32, scroll_y: f32, hover_x: f32, hover_y: f32, selected_post_id: u32) u32 {
     if (!setFrameSize(width, height)) return finishError(.bad_size);
-    ensureFontAtlas() catch return finishError(.font_atlas);
 
     var scene = ui.Scene.initWithClips(&commands, &clips);
     site_blog.render(&scene, .{
@@ -675,16 +854,30 @@ export fn er_ui_build_site_blog_gpu_frame(width: u32, height: u32, scroll_y: f32
         .selected_post_id = selected_post_id,
     }) catch return finishError(.render_failed);
 
-    last_command_count = scene.written().len;
-    updateHoverHit(scene.written(), hover_x, hover_y);
-    packGpuScene(scene.written()) catch return finishError(.gpu_budget);
-    last_error = .ok;
-    return @intFromEnum(ErrorCode.ok);
+    return finishGpuSceneFrame(scene, hover_x, hover_y);
 }
 
-export fn er_ui_build_site_gpu_frame(width: u32, height: u32, scroll_y: f32, hover_x: f32, hover_y: f32, frame_ms: f32) u32 {
+export fn er_ui_build_site_apps_gpu_frame(width: u32, height: u32, scroll_y: f32, hover_x: f32, hover_y: f32) u32 {
     if (!setFrameSize(width, height)) return finishError(.bad_size);
-    ensureFontAtlas() catch return finishError(.font_atlas);
+
+    var scene = ui.Scene.initWithClips(&commands, &clips);
+    site_apps.render(&scene, .{
+        .x = 0,
+        .y = 0,
+        .w = @floatFromInt(frame_width),
+        .h = @floatFromInt(frame_height),
+    }, .{
+        .scroll_y = scroll_y,
+        .hover_x = hover_x,
+        .hover_y = hover_y,
+    }) catch return finishError(.render_failed);
+
+    return finishGpuSceneFrame(scene, hover_x, hover_y);
+}
+
+export fn er_ui_build_site_gpu_frame(width: u32, height: u32, hover_x: f32, hover_y: f32, frame_ms: f32) u32 {
+    if (!setFrameSize(width, height)) return finishError(.bad_size);
+    site_state.scroll_y = @min(site_state.scroll_y, siteScrollLimit(@floatFromInt(frame_width), @floatFromInt(frame_height)));
 
     var scene = ui.Scene.initWithClips(&commands, &clips);
     switch (site_state.view) {
@@ -694,7 +887,7 @@ export fn er_ui_build_site_gpu_frame(width: u32, height: u32, scroll_y: f32, hov
             .w = @floatFromInt(frame_width),
             .h = @floatFromInt(frame_height),
         }, .{
-            .scroll_y = scroll_y,
+            .scroll_y = site_state.scroll_y,
             .hover_x = hover_x,
             .hover_y = hover_y,
             .frame_ms = frame_ms,
@@ -707,19 +900,61 @@ export fn er_ui_build_site_gpu_frame(width: u32, height: u32, scroll_y: f32, hov
             .w = @floatFromInt(frame_width),
             .h = @floatFromInt(frame_height),
         }, .{
-            .scroll_y = scroll_y,
+            .scroll_y = site_state.scroll_y,
             .hover_x = hover_x,
             .hover_y = hover_y,
             .selected_post_id = site_state.selected_blog_post_id,
             .arc_filter_index = site_state.blog_arc_filter_index,
         }) catch return finishError(.render_failed),
+        .apps => site_apps.render(&scene, .{
+            .x = 0,
+            .y = 0,
+            .w = @floatFromInt(frame_width),
+            .h = @floatFromInt(frame_height),
+        }, .{
+            .scroll_y = site_state.scroll_y,
+            .hover_x = hover_x,
+            .hover_y = hover_y,
+        }) catch return finishError(.render_failed),
     }
     const overlay_start = scene.written().len;
     if (site_state.search_open) renderSearchOverlay(&scene, hover_x, hover_y) catch return finishError(.render_failed);
 
+    return finishGpuSceneFrameWithOverlay(scene, hover_x, hover_y, overlay_start);
+}
+
+fn finishGpuSceneFrame(scene: ui.Scene, hover_x: f32, hover_y: f32) u32 {
     last_command_count = scene.written().len;
     updateHoverHit(scene.written(), hover_x, hover_y);
-    packGpuSceneWithOverlay(scene.written(), overlay_start) catch return finishError(.gpu_budget);
+    ensureFontAtlas() catch return finishError(.font_atlas);
+    const buffers = gpuBuffers();
+    renderer_ir.packScene(buffers, gpuSources(), scene.written()) catch return finishError(.gpu_budget);
+    presentBrowserBuffers(buffers) catch return finishError(.render_failed);
+    last_error = .ok;
+    return @intFromEnum(ErrorCode.ok);
+}
+
+fn finishGpuSceneFrameWithOverlay(scene: ui.Scene, hover_x: f32, hover_y: f32, overlay_start: usize) u32 {
+    last_command_count = scene.written().len;
+    updateHoverHit(scene.written(), hover_x, hover_y);
+    ensureFontAtlas() catch return finishError(.font_atlas);
+    const buffers = gpuBuffers();
+    renderer_ir.packSceneWithOverlay(buffers, gpuSources(), scene.written(), overlay_start) catch return finishError(.gpu_budget);
+    presentBrowserBuffers(buffers) catch return finishError(.render_failed);
+    last_error = .ok;
+    return @intFromEnum(ErrorCode.ok);
+}
+
+const HoverUpdate = struct {
+    enabled: bool,
+    x: f32 = 0.0,
+    y: f32 = 0.0,
+};
+
+fn finishCpuSceneFrame(surface: renderer.Surface, scene: ui.Scene, hover: HoverUpdate, background: ui.Color) u32 {
+    last_command_count = scene.written().len;
+    if (hover.enabled) updateHoverHit(scene.written(), hover.x, hover.y);
+    renderSceneIr(surface, scene.written(), background) catch return finishError(.render_failed);
     last_error = .ok;
     return @intFromEnum(ErrorCode.ok);
 }
@@ -737,10 +972,7 @@ export fn er_ui_render_input_object(input_len: usize, width: u32, height: u32) u
         .h = @floatFromInt(frame_height),
     }, .{}) catch return finishError(.render_failed);
 
-    surface.clear(.bg);
-    surface.rasterize(scene.written());
-    last_error = .ok;
-    return @intFromEnum(ErrorCode.ok);
+    return finishCpuSceneFrame(surface, scene, .{ .enabled = false }, .bg);
 }
 
 fn beginFrame(width_raw: u32, height_raw: u32) ?renderer.Surface {
@@ -748,6 +980,40 @@ fn beginFrame(width_raw: u32, height_raw: u32) ?renderer.Surface {
     const height: usize = height_raw;
     if (!setFrameSize(width, height)) return null;
     return renderer.Surface.init(width, height, pixels[0 .. width * height]) catch null;
+}
+
+fn renderSceneIr(surface: renderer.Surface, scene_commands: []const ui.Command, background: ui.Color) !void {
+    try ensureFontAtlas();
+    const buffers = gpuBuffers();
+    try renderer_ir.packScene(buffers, gpuSources(), scene_commands);
+    surface.clear(background);
+    const receipt = try surface.renderIrFrameWithAtlases(buffers, .{
+        .font = .{ .width = font_atlas_width, .height = font_atlas_height, .alpha = &font_atlas_alpha },
+        .icon = .{ .width = icon_atlas_width, .height = icon_atlas_height, .alpha = tabler_atlas.alpha },
+    });
+    recordPresentation(receipt);
+}
+
+fn presentBrowserBuffers(buffers: renderer_ir.Buffers) renderer_present.Error!void {
+    const receipt = try renderer_present.present(.{
+        .target = .{
+            .kind = .browser,
+            .width = @intCast(frame_width),
+            .height = @intCast(frame_height),
+        },
+        .buffers = buffers,
+        .resources = .{
+            .font_atlas = true,
+            .icon_atlas = true,
+            .image_texture = true,
+        },
+    });
+    recordPresentation(receipt);
+}
+
+fn recordPresentation(receipt: renderer_present.Receipt) void {
+    last_present_primitive_count = receipt.primitive_count;
+    last_present_transport = receipt.transport;
 }
 
 fn setFrameSize(width: usize, height: usize) bool {
@@ -882,15 +1148,22 @@ fn galleryState(layout_raw: u32, grid_gap: f32, scroll_y: f32, hover_x: f32, hov
 fn applyRoutePath(path: []const u8) void {
     site_state.search_open = false;
     site_state.search_query_len = 0;
+    site_state.resetScroll();
     const trimmed = trimRoute(path);
-    if (std.mem.eql(u8, trimmed, "/blog")) {
+    if (std.mem.eql(u8, trimmed, "/academy")) {
         site_state.view = .blog;
         site_state.selected_blog_post_id = 0;
         site_state.blog_arc_filter_index = null;
         return;
     }
-    if (std.mem.startsWith(u8, trimmed, "/blog/")) {
-        const raw_id = std.fmt.parseUnsigned(u32, trimmed["/blog/".len..], 10) catch {
+    if (std.mem.eql(u8, trimmed, "/apps")) {
+        site_state.view = .apps;
+        site_state.selected_blog_post_id = 0;
+        site_state.blog_arc_filter_index = null;
+        return;
+    }
+    if (std.mem.startsWith(u8, trimmed, "/academy/")) {
+        const raw_id = std.fmt.parseUnsigned(u32, trimmed["/academy/".len..], 10) catch {
             site_state.view = .blog;
             site_state.selected_blog_post_id = 0;
             return;
@@ -917,10 +1190,22 @@ fn refreshRoutePath() void {
     route_len = switch (site_state.view) {
         .landing => writeRoute("/"),
         .blog => if (site_state.selected_blog_post_id == 0)
-            writeRoute("/blog")
+            writeRoute("/academy")
         else
             writePostRoute(site_state.selected_blog_post_id),
+        .apps => writeRoute("/apps"),
     };
+}
+
+fn refreshRouteHash() void {
+    refreshRoutePath();
+    if (route_len == 1 and route_bytes[0] == '/') {
+        route_hash_len = 0;
+        return;
+    }
+    route_hash_bytes[0] = '#';
+    @memcpy(route_hash_bytes[1 .. route_len + 1], route_bytes[0..route_len]);
+    route_hash_len = route_len + 1;
 }
 
 fn writeRoute(value: []const u8) usize {
@@ -929,8 +1214,23 @@ fn writeRoute(value: []const u8) usize {
 }
 
 fn writePostRoute(post_id: u32) usize {
-    const out = std.fmt.bufPrint(&route_bytes, "/blog/{d}", .{post_id}) catch unreachable;
+    const out = std.fmt.bufPrint(&route_bytes, "/academy/{d}", .{post_id}) catch unreachable;
     return out.len;
+}
+
+fn currentCursorKind() CursorKind {
+    const action_kind: ui_runtime.ActionKind = @enumFromInt(@as(u8, @intCast(last_action_kind)));
+    switch (action_kind) {
+        .drag_started, .drag_moved => return .grabbing,
+        .none, .hovered, .activated, .dropped, .reordered => {},
+    }
+
+    if (hover_hit_kind == hover_hit_kind_none) return .default;
+    const hit_kind: ui.HitKind = @enumFromInt(@as(u8, @intCast(hover_hit_kind)));
+    return switch (hit_kind) {
+        .input, .textarea => .text,
+        .button, .row_item, .checkbox, .switch_control, .slider, .select => .pointer,
+    };
 }
 
 fn renderSearchOverlay(scene: *ui.Scene, hover_x: f32, hover_y: f32) ui.RenderError!void {
@@ -950,7 +1250,7 @@ fn renderSearchOverlay(scene: *ui.Scene, hover_x: f32, hover_y: f32) ui.RenderEr
     try scene.pushRect(input_bounds, .{ .r = 70, .g = 70, .b = 70, .a = 255 }, .border, 7.0, 0.0);
     try scene.pushIconQuad(.{ .bounds = ui.Rect.init(input_bounds.x + 14.0, input_bounds.y + 13.0, 20.0, 20.0), .atlas_id = icon.atlasId(.search), .color = .{ .r = 74, .g = 222, .b = 128 } });
     const query = site_state.searchQuery();
-    const placeholder = if (query.len == 0) "Search posts..." else query;
+    const placeholder = if (query.len == 0) "Search lessons..." else query;
     const color = if (query.len == 0) ui.Color{ .r = 118, .g = 118, .b = 118 } else ui.Color{ .r = 242, .g = 242, .b = 242 };
     try scene.pushText(ui.Rect.init(input_bounds.x + 46.0, input_bounds.y + 14.0, input_bounds.w - 94.0, 18.0), placeholder, color);
     try scene.pushText(ui.Rect.init(input_bounds.x + input_bounds.w - 42.0, input_bounds.y + 15.0, 28.0, 14.0), "Esc", .{ .r = 118, .g = 118, .b = 118 });
@@ -971,7 +1271,7 @@ fn renderSearchOverlay(scene: *ui.Scene, hover_x: f32, hover_y: f32) ui.RenderEr
         rendered += 1;
     }
     if (rendered == 0) {
-        try scene.pushText(ui.Rect.init(panel.x + 22.0, results_y + 10.0, panel.w - 44.0, 18.0), "No matching posts", .{ .r = 154, .g = 154, .b = 154 });
+        try scene.pushText(ui.Rect.init(panel.x + 22.0, results_y + 10.0, panel.w - 44.0, 18.0), "No matching lessons", .{ .r = 154, .g = 154, .b = 154 });
     }
 }
 
@@ -1030,150 +1330,6 @@ fn applyGalleryListReorder(scope_id: u32, from_index: usize, to_index: usize) vo
         }
     }
     gallery_list_order[to_index] = moving;
-}
-
-fn packGpuScene(scene_commands: []const ui.Command) error{Budget}!void {
-    gpu_rect_float_len = 0;
-    gpu_text_vertex_float_len = 0;
-    gpu_icon_vertex_float_len = 0;
-    gpu_image_vertex_float_len = 0;
-    clearOverlayGpuScene();
-    try packGpuSceneRange(scene_commands, .base);
-}
-
-fn packGpuSceneWithOverlay(scene_commands: []const ui.Command, overlay_start: usize) error{Budget}!void {
-    gpu_rect_float_len = 0;
-    gpu_text_vertex_float_len = 0;
-    gpu_icon_vertex_float_len = 0;
-    gpu_image_vertex_float_len = 0;
-    clearOverlayGpuScene();
-    try packGpuSceneRange(scene_commands[0..overlay_start], .base);
-    try packGpuSceneRange(scene_commands[overlay_start..], .overlay);
-}
-
-fn clearOverlayGpuScene() void {
-    gpu_overlay_rect_float_len = 0;
-    gpu_overlay_text_vertex_float_len = 0;
-    gpu_overlay_icon_vertex_float_len = 0;
-}
-
-const GpuLayer = enum {
-    base,
-    overlay,
-};
-
-fn packGpuSceneRange(scene_commands: []const ui.Command, layer: GpuLayer) error{Budget}!void {
-    for (scene_commands) |command| switch (command) {
-        .rect => |rect| try pushPackedRect(layer, rect.bounds, rect.color, rect.color2, rect.radius, rect.shadow, rectModeCode(rect.mode)),
-        .border => |border| try pushPackedRect(layer, border.bounds, border.color, .clear, 0, 0, rectModeCode(.border)),
-        .text => |text_command| try pushPackedText(layer, text_command.origin, text_command.value, text_command.color, text_command.alignment),
-        .icon_quad => |quad| try pushPackedIcon(layer, quad),
-        .image_quad => |quad| if (layer == .base) try pushPackedImage(quad),
-        .hit, .drag_source, .drop_target, .text_quad, .transition => {},
-    };
-}
-
-fn pushPackedRect(layer: GpuLayer, bounds: ui.Rect, color: ui.Color, color2: ui.Color, radius: f32, shadow: f32, mode: f32) error{Budget}!void {
-    if (!bounds.valid()) return;
-    const buffer = switch (layer) {
-        .base => &gpu_rect_floats,
-        .overlay => &gpu_overlay_rect_floats,
-    };
-    const len = switch (layer) {
-        .base => &gpu_rect_float_len,
-        .overlay => &gpu_overlay_rect_float_len,
-    };
-    if (len.* + gpu_rect_float_stride > buffer.len) return error.Budget;
-    const values = [_]f32{
-        bounds.x,
-        bounds.y,
-        bounds.w,
-        bounds.h,
-        radius,
-        shadow,
-        channel(color.r),
-        channel(color.g),
-        channel(color.b),
-        channel(color.a),
-        channel(color2.r),
-        channel(color2.g),
-        channel(color2.b),
-        channel(color2.a),
-        mode,
-    };
-    @memcpy(buffer[len.* .. len.* + gpu_rect_float_stride], &values);
-    len.* += gpu_rect_float_stride;
-}
-
-fn pushPackedText(layer: GpuLayer, bounds: ui.Rect, value: []const u8, color: ui.Color, alignment: ui.TextAlign) error{Budget}!void {
-    if (value.len == 0 or !bounds.valid()) return;
-    const buffer = switch (layer) {
-        .base => gpu_text_vertex_floats[0..],
-        .overlay => gpu_overlay_text_vertex_floats[0..],
-    };
-    const len = switch (layer) {
-        .base => &gpu_text_vertex_float_len,
-        .overlay => &gpu_overlay_text_vertex_float_len,
-    };
-    const px = textPx(bounds.h);
-    var pen_x = bounds.x + textAlignOffset(value, px, bounds.w, alignment);
-    const metrics = fontMetrics(px);
-    const baseline = bounds.y + metrics.ascender;
-    const clip = textClipBounds(bounds, metrics);
-    for (value) |byte| {
-        if (byte < font_first_char or byte > font_last_char) continue;
-        const glyph = (getFontGlyph(byte, px) catch return error.Budget) orelse continue;
-        if (glyph.w > 0.0 and glyph.h > 0.0) {
-            const quad = snapGlyphQuad(pen_x + glyph.left, baseline + glyph.top, glyph.w, glyph.h);
-            try pushClippedTexturedQuad(buffer, len, clip, quad, glyph.u0, glyph.v0, glyph.u1, glyph.v1, color);
-        }
-        pen_x += glyph.advance;
-        if (pen_x > bounds.x + bounds.w) break;
-    }
-}
-
-fn pushPackedIcon(layer: GpuLayer, quad: ui.Quad) error{Budget}!void {
-    if (!quad.bounds.valid() or quad.atlas_id == 0) return;
-    const rect = iconAtlasRect(quad.atlas_id) orelse return;
-    const buffer = switch (layer) {
-        .base => gpu_icon_vertex_floats[0..],
-        .overlay => gpu_overlay_icon_vertex_floats[0..],
-    };
-    const len = switch (layer) {
-        .base => &gpu_icon_vertex_float_len,
-        .overlay => &gpu_overlay_icon_vertex_float_len,
-    };
-    try pushClippedTexturedQuad(buffer, len, quad.bounds, quad.bounds, rect.u0, rect.v0, rect.u1, rect.v1, quad.color);
-}
-
-fn pushPackedImage(quad: ui.Quad) error{Budget}!void {
-    if (!quad.bounds.valid() or quad.atlas_id == 0) return;
-    try pushClippedTexturedQuad(&gpu_image_vertex_floats, &gpu_image_vertex_float_len, quad.bounds, quad.bounds, quad.u0, quad.v0, quad.u1, quad.v1, quad.color);
-}
-
-fn pushClippedTexturedQuad(buffer: []f32, len: *usize, clip: ui.Rect, bounds: ui.Rect, tex_u0: f32, tex_v0: f32, tex_u1: f32, tex_v1: f32, color: ui.Color) error{Budget}!void {
-    const clipped = bounds.intersect(clip) orelse return;
-    if (len.* + gpu_text_vertex_float_stride * 6 > buffer.len) return error.Budget;
-    const tx0 = if (bounds.w > 0.0) (clipped.x - bounds.x) / bounds.w else 0.0;
-    const ty0 = if (bounds.h > 0.0) (clipped.y - bounds.y) / bounds.h else 0.0;
-    const tx1 = if (bounds.w > 0.0) (clipped.x + clipped.w - bounds.x) / bounds.w else 1.0;
-    const ty1 = if (bounds.h > 0.0) (clipped.y + clipped.h - bounds.y) / bounds.h else 1.0;
-    const cu0 = lerp(tex_u0, tex_u1, tx0);
-    const cv0 = lerp(tex_v0, tex_v1, ty0);
-    const cu1 = lerp(tex_u0, tex_u1, tx1);
-    const cv1 = lerp(tex_v0, tex_v1, ty1);
-    pushTexturedVertex(buffer, len, clipped.x, clipped.y, cu0, cv0, color);
-    pushTexturedVertex(buffer, len, clipped.x + clipped.w, clipped.y, cu1, cv0, color);
-    pushTexturedVertex(buffer, len, clipped.x + clipped.w, clipped.y + clipped.h, cu1, cv1, color);
-    pushTexturedVertex(buffer, len, clipped.x, clipped.y, cu0, cv0, color);
-    pushTexturedVertex(buffer, len, clipped.x + clipped.w, clipped.y + clipped.h, cu1, cv1, color);
-    pushTexturedVertex(buffer, len, clipped.x, clipped.y + clipped.h, cu0, cv1, color);
-}
-
-fn pushTexturedVertex(buffer: []f32, len: *usize, x: f32, y: f32, u: f32, v: f32, color: ui.Color) void {
-    const values = [_]f32{ x, y, u, v, channel(color.r), channel(color.g), channel(color.b), channel(color.a) };
-    @memcpy(buffer[len.* .. len.* + gpu_text_vertex_float_stride], &values);
-    len.* += gpu_text_vertex_float_stride;
 }
 
 fn ensureFontAtlas() !void {
@@ -1281,47 +1437,15 @@ fn scaledFontValue(value: f32) f32 {
     return value / font_atlas_device_scale;
 }
 
-fn snapGlyphQuad(x: f32, y: f32, w: f32, h: f32) ui.Rect {
-    const left = @round(x);
-    const top = @round(y);
-    const right = @max(left + 1.0, @round(x + w));
-    const bottom = @max(top + 1.0, @round(y + h));
-    return ui.Rect.init(left, top, right - left, bottom - top);
-}
-
-fn textPx(height: f32) u8 {
-    return @intFromFloat(@round(std.math.clamp(height, @as(f32, @floatFromInt(font_first_px)), @as(f32, @floatFromInt(font_last_px)))));
-}
-
 fn normalizedDeviceScale(scale: f32) f32 {
     if (!std.math.isFinite(scale)) return 2.0;
     return std.math.clamp(scale, 2.0, 4.0);
 }
 
-const TextMetrics = struct {
-    ascender: f32,
-    descender: f32,
-};
-
-fn fontMetrics(px: u8) TextMetrics {
+fn fontMetrics(px: u8) renderer_ir.TextMetrics {
     const face = varfont.Face.geist() catch unreachable;
     const metrics = face.metrics(@floatFromInt(px));
     return .{ .ascender = metrics.ascender, .descender = metrics.descender };
-}
-
-fn textClipBounds(bounds: ui.Rect, metrics: TextMetrics) ui.Rect {
-    const top_extra = @max(0.0, metrics.ascender - bounds.h);
-    const bottom_extra = @max(0.0, -metrics.descender);
-    return ui.Rect.init(bounds.x, bounds.y - top_extra, bounds.w, bounds.h + top_extra + bottom_extra);
-}
-
-fn textAlignOffset(value: []const u8, px: u8, width: f32, alignment: ui.TextAlign) f32 {
-    const measured = textWidth(value, px);
-    return switch (alignment) {
-        .start => 0.0,
-        .center => @max(0.0, (width - measured) * 0.5),
-        .end => @max(0.0, width - measured),
-    };
 }
 
 fn textWidth(value: []const u8, px: u8) f32 {
@@ -1339,14 +1463,7 @@ fn textWidth(value: []const u8, px: u8) f32 {
     return out;
 }
 
-const AtlasRect = struct {
-    u0: f32,
-    v0: f32,
-    u1: f32,
-    v1: f32,
-};
-
-fn iconAtlasRect(atlas_id: u32) ?AtlasRect {
+fn iconAtlasRect(atlas_id: u32) ?renderer_ir.AtlasRect {
     const value = icon.fromAtlasId(atlas_id) orelse return null;
     const found = tabler_atlas.rect(value);
     return .{
@@ -1355,24 +1472,6 @@ fn iconAtlasRect(atlas_id: u32) ?AtlasRect {
         .u1 = (@as(f32, @floatFromInt(found.x + found.w)) - 0.5) / @as(f32, @floatFromInt(icon_atlas_width)),
         .v1 = (@as(f32, @floatFromInt(found.y + found.h)) - 0.5) / @as(f32, @floatFromInt(icon_atlas_height)),
     };
-}
-
-fn rectModeCode(mode: ui.RectMode) f32 {
-    return switch (mode) {
-        .fill => 0,
-        .shadow => 1,
-        .border => 2,
-        .linear_gradient => 3,
-        .pie_slice => 4,
-    };
-}
-
-fn channel(value: u8) f32 {
-    return @as(f32, @floatFromInt(value)) / 255.0;
-}
-
-fn lerp(a: f32, b: f32, t: f32) f32 {
-    return a + (b - a) * t;
 }
 
 test "browser hover state exposes scene hit kind and id" {
@@ -1389,14 +1488,46 @@ test "browser hover state exposes scene hit kind and id" {
     try std.testing.expectEqual(@as(u32, 0), hover_hit_id);
 }
 
+test "browser cpu ir finish preserves hover state when disabled" {
+    hover_hit_kind = @intFromEnum(ui.HitKind.button);
+    hover_hit_id = 99;
+    var local_commands: [1]ui.Command = undefined;
+    const scene = ui.Scene.init(&local_commands);
+    var local_pixels: [4]ui.Color = undefined;
+    const surface = try renderer.Surface.init(2, 2, &local_pixels);
+
+    try std.testing.expectEqual(@as(u32, 0), finishCpuSceneFrame(surface, scene, .{ .enabled = false }, .bg));
+    try std.testing.expectEqual(@intFromEnum(ui.HitKind.button), hover_hit_kind);
+    try std.testing.expectEqual(@as(u32, 99), hover_hit_id);
+}
+
 test "browser component gallery builds packed webgl buffers and atlases" {
+    font_atlas_ready = false;
     const code = er_ui_build_component_gallery_gpu_frame_layout_gap_hover(960, 640, 0.0, @intFromEnum(component_gallery.LayoutMode.masonry), component_gallery.grid_gap_default, -1.0, -1.0);
     try std.testing.expectEqual(@as(u32, 0), code);
+    try std.testing.expect(font_atlas_ready);
+    try std.testing.expectEqual(renderer_present.Transport.webgl_buffers, last_present_transport);
+    try std.testing.expect(last_present_primitive_count > 0);
     try std.testing.expect(gpu_rect_float_len > 0);
     try std.testing.expect(gpu_text_vertex_float_len > 0);
     try std.testing.expect(gpu_icon_vertex_float_len > 0);
     try std.testing.expect(er_ui_font_atlas_ptr() != 0);
     try std.testing.expect(er_ui_icon_atlas_ptr() != 0);
+}
+
+test "browser component gallery cpu render uses canonical ir buffers" {
+    const code = er_ui_render_component_gallery_layout_gap_hover(480, 360, 0.0, @intFromEnum(component_gallery.LayoutMode.masonry), component_gallery.grid_gap_default, -1.0, -1.0);
+    try std.testing.expectEqual(@as(u32, 0), code);
+    try std.testing.expectEqual(renderer_present.Transport.software_pixels, last_present_transport);
+    try std.testing.expect(last_present_primitive_count > 0);
+    try std.testing.expect(gpu_rect_float_len > 0);
+    try std.testing.expect(gpu_text_vertex_float_len > 0);
+    try std.testing.expect(gpu_icon_vertex_float_len > 0);
+    var painted: usize = 0;
+    for (pixels[0 .. frame_width * frame_height]) |pixel| {
+        if (!std.meta.eql(pixel, ui.Color.bg)) painted += 1;
+    }
+    try std.testing.expect(painted > 0);
 }
 
 test "browser site landing builds packed webgl buffers and hit state" {
@@ -1433,7 +1564,7 @@ test "browser site reveal derives public identity inside wasm from interaction" 
 }
 
 test "browser site blog builds packed webgl buffers and post hit state" {
-    const code = er_ui_build_site_blog_gpu_frame(1280, 800, 0.0, 340.0, 620.0, 0);
+    const code = er_ui_build_site_blog_gpu_frame(1280, 800, 0.0, 340.0, 700.0, 0);
     try std.testing.expectEqual(@as(u32, 0), code);
     try std.testing.expect(gpu_rect_float_len > 0);
     try std.testing.expect(gpu_text_vertex_float_len > 0);
@@ -1446,6 +1577,18 @@ test "browser site blog builds packed webgl buffers and post hit state" {
     try std.testing.expect(er_ui_site_blog_post_content_height(1280.0, site_blog.postIdAt(16)) > 1200.0);
     try std.testing.expectEqual(@intFromEnum(ui.HitKind.button), hover_hit_kind);
     try std.testing.expectEqual(site_blog.postIdAt(0), hover_hit_id);
+}
+
+test "browser site apps builds packed webgl buffers and hit state" {
+    const code = er_ui_build_site_apps_gpu_frame(1280, 900, 0.0, 360.0, 700.0);
+    try std.testing.expectEqual(@as(u32, 0), code);
+    try std.testing.expect(gpu_rect_float_len > 0);
+    try std.testing.expect(gpu_text_vertex_float_len > 0);
+    try std.testing.expect(gpu_icon_vertex_float_len > 0);
+    try std.testing.expectEqual(site_apps.contentHeight(1280.0), er_ui_site_apps_content_height(1280.0));
+    try std.testing.expectEqual(@intFromEnum(ui.HitKind.button), hover_hit_kind);
+    try std.testing.expectEqual(site_apps.first_app_button_id, hover_hit_id);
+    try std.testing.expectEqual(@intFromEnum(CursorKind.pointer), er_ui_cursor_kind());
 }
 
 test "browser site activation keeps page state in wasm" {
@@ -1465,27 +1608,39 @@ test "browser site activation keeps page state in wasm" {
     try std.testing.expectEqual(site_landing.contentHeight(1280.0), er_ui_site_content_height(1280.0));
     try std.testing.expectEqual(@intFromEnum(HostAction.none), er_ui_site_activate_hit(site_blog.arcFilterButtonId(3)));
     try std.testing.expectEqual(site_blog.indexContentHeightFiltered(1280.0, 3), er_ui_site_content_height(1280.0));
+    try std.testing.expectEqual(@intFromEnum(HostAction.none), er_ui_site_activate_hit(site_blog.all_lessons_button_id));
+    try std.testing.expectEqual(site_blog.indexContentHeight(1280.0), er_ui_site_content_height(1280.0));
+    try std.testing.expectEqual(@intFromEnum(HostAction.none), er_ui_site_activate_hit(site_chrome.apps_button_id));
+    try std.testing.expectEqual(site_apps.contentHeight(1280.0), er_ui_site_content_height(1280.0));
 }
 
 test "browser native route sync owns URL path state" {
     site_state = .{};
     defer site_state = .{};
 
-    @memcpy(input_bytes[0.."/blog".len], "/blog");
-    try std.testing.expectEqual(@as(u32, 0), er_ui_site_set_route_path("/blog".len));
+    @memcpy(input_bytes[0.."/academy".len], "/academy");
+    try std.testing.expectEqual(@as(u32, 0), er_ui_site_set_route_path("/academy".len));
     try std.testing.expectEqual(site_blog.indexContentHeight(1280.0), er_ui_site_content_height(1280.0));
-    try std.testing.expectEqualStrings("/blog", route_bytes[0..er_ui_site_route_path_len()]);
+    try std.testing.expectEqualStrings("/academy", route_bytes[0..er_ui_site_route_path_len()]);
+    try std.testing.expectEqualStrings("#/academy", route_hash_bytes[0..er_ui_site_route_hash_len()]);
 
-    const route = "/blog/40100";
+    const route = "/academy/40100";
     @memcpy(input_bytes[0..route.len], route);
     try std.testing.expectEqual(@as(u32, 0), er_ui_site_set_route_path(route.len));
     try std.testing.expectEqual(site_blog.postContentHeight(1280.0, site_blog.postIdAt(0)), er_ui_site_content_height(1280.0));
     try std.testing.expectEqualStrings(route, route_bytes[0..er_ui_site_route_path_len()]);
+    try std.testing.expectEqualStrings("#/academy/40100", route_hash_bytes[0..er_ui_site_route_hash_len()]);
 
     @memcpy(input_bytes[0.."/".len], "/");
     try std.testing.expectEqual(@as(u32, 0), er_ui_site_set_route_path("/".len));
     try std.testing.expectEqual(site_landing.contentHeight(1280.0), er_ui_site_content_height(1280.0));
     try std.testing.expectEqualStrings("/", route_bytes[0..er_ui_site_route_path_len()]);
+    try std.testing.expectEqualStrings("", route_hash_bytes[0..er_ui_site_route_hash_len()]);
+
+    @memcpy(input_bytes[0.."/apps".len], "/apps");
+    try std.testing.expectEqual(@as(u32, 0), er_ui_site_set_route_path("/apps".len));
+    try std.testing.expectEqual(site_apps.contentHeight(1280.0), er_ui_site_content_height(1280.0));
+    try std.testing.expectEqualStrings("/apps", route_bytes[0..er_ui_site_route_path_len()]);
 }
 
 test "browser native search accepts keyboard text and renders overlay results" {
@@ -1497,7 +1652,7 @@ test "browser native search accepts keyboard text and renders overlay results" {
     for ("phone") |byte| try std.testing.expectEqual(@as(u32, 0), er_ui_site_search_input_byte(byte));
     try std.testing.expectEqualStrings("phone", site_state.searchQuery());
 
-    const code = er_ui_build_site_gpu_frame(1280, 900, 0.0, -1.0, -1.0, 0.0);
+    const code = er_ui_build_site_gpu_frame(1280, 900, -1.0, -1.0, 0.0);
     try std.testing.expectEqual(@as(u32, 0), code);
     try std.testing.expect(gpu_rect_float_len > 0);
     try std.testing.expect(gpu_text_vertex_float_len > 0);
@@ -1508,6 +1663,84 @@ test "browser native search accepts keyboard text and renders overlay results" {
     try std.testing.expectEqualStrings("phon", site_state.searchQuery());
     try std.testing.expectEqual(@as(u32, 0), er_ui_site_search_close());
     try std.testing.expectEqual(@as(u32, 0), er_ui_site_search_is_open());
+}
+
+test "browser native key policy owns search shortcuts and text editing" {
+    site_state = .{};
+    defer site_state = .{};
+
+    try std.testing.expectEqual(@as(u32, 1), er_ui_site_key_event(key_slash, 0));
+    try std.testing.expectEqual(@as(u32, 1), er_ui_site_search_is_open());
+    for ("phone") |byte| try std.testing.expectEqual(@as(u32, 1), er_ui_site_key_event(byte, 0));
+    try std.testing.expectEqualStrings("phone", site_state.searchQuery());
+    try std.testing.expectEqual(@as(u32, 1), er_ui_site_key_event(key_backspace, 0));
+    try std.testing.expectEqualStrings("phon", site_state.searchQuery());
+    try std.testing.expectEqual(@as(u32, 1), er_ui_site_key_event(key_escape, 0));
+    try std.testing.expectEqual(@as(u32, 0), er_ui_site_search_is_open());
+
+    try std.testing.expectEqual(@as(u32, 1), er_ui_site_key_event(key_lower_k, key_modifier_ctrl));
+    try std.testing.expectEqual(@as(u32, 1), er_ui_site_search_is_open());
+    try std.testing.expectEqual(@as(u32, 0), er_ui_site_key_event('x', key_modifier_alt));
+    try std.testing.expectEqualStrings("", site_state.searchQuery());
+}
+
+test "browser native site state owns scroll position" {
+    site_state = .{};
+    defer site_state = .{};
+
+    try std.testing.expectEqual(@as(u32, 0), er_ui_site_scroll_by(320.0, 1280.0, 900.0));
+    try std.testing.expectEqual(@as(f32, 320.0), er_ui_site_scroll_y());
+    try std.testing.expectEqual(@as(u32, 0), er_ui_site_activate_hit(site_chrome.blog_button_id));
+    try std.testing.expectEqual(@as(f32, 0.0), er_ui_site_scroll_y());
+    try std.testing.expectEqual(@as(u32, 0), er_ui_site_scroll_by(200000.0, 1280.0, 900.0));
+    try std.testing.expectEqual(siteScrollLimit(1280.0, 900.0), er_ui_site_scroll_y());
+}
+
+test "browser native cursor intent owns hit and drag cursor policy" {
+    hover_hit_kind = hover_hit_kind_none;
+    last_action_kind = @intFromEnum(ui_runtime.ActionKind.none);
+    try std.testing.expectEqual(@intFromEnum(CursorKind.default), er_ui_cursor_kind());
+
+    hover_hit_kind = @intFromEnum(ui.HitKind.input);
+    try std.testing.expectEqual(@intFromEnum(CursorKind.text), er_ui_cursor_kind());
+
+    hover_hit_kind = @intFromEnum(ui.HitKind.button);
+    try std.testing.expectEqual(@intFromEnum(CursorKind.pointer), er_ui_cursor_kind());
+
+    last_action_kind = @intFromEnum(ui_runtime.ActionKind.drag_started);
+    try std.testing.expectEqual(@intFromEnum(CursorKind.grabbing), er_ui_cursor_kind());
+}
+
+test "browser native pointer up owns activation suppression policy" {
+    var local_commands: [3]ui.Command = undefined;
+    var scene = ui.Scene.init(&local_commands);
+    try scene.pushHit(.{ .slot = 0, .kind = .button, .id = site_chrome.blog_button_id, .bounds = ui.Rect.init(0, 0, 40, 40) });
+    last_command_count = scene.written().len;
+    @memcpy(commands[0..last_command_count], scene.written());
+
+    site_state = .{};
+    runtime_state = .{};
+    defer site_state = .{};
+    defer runtime_state = .{};
+
+    _ = er_ui_pointer_down(8, 8);
+    try std.testing.expectEqual(@intFromEnum(HostAction.none), er_ui_site_pointer_up(8, 8));
+    try std.testing.expectEqual(site_blog.indexContentHeight(1280.0), er_ui_site_content_height(1280.0));
+
+    var drag_commands: [4]ui.Command = undefined;
+    var drag_scene = ui.Scene.init(&drag_commands);
+    try drag_scene.pushDragSource(.{ .scope_id = 81, .item_id = 1, .index = 0, .bounds = ui.Rect.init(0, 0, 40, 40) });
+    try drag_scene.pushDropTarget(.{ .scope_id = 81, .index = 2, .bounds = ui.Rect.init(0, 70, 40, 40) });
+    try drag_scene.pushHit(.{ .slot = 0, .kind = .button, .id = site_chrome.apps_button_id, .bounds = ui.Rect.init(0, 70, 40, 40) });
+    last_command_count = drag_scene.written().len;
+    @memcpy(commands[0..last_command_count], drag_scene.written());
+    runtime_state = .{};
+    site_state = .{};
+
+    _ = er_ui_pointer_down(8, 8);
+    _ = er_ui_pointer_move(8, 88);
+    try std.testing.expectEqual(@intFromEnum(HostAction.none), er_ui_site_pointer_up(8, 88));
+    try std.testing.expectEqual(site_landing.contentHeight(1280.0), er_ui_site_content_height(1280.0));
 }
 
 test "browser pointer runtime applies visible list reorder state" {
@@ -1538,7 +1771,7 @@ test "browser packed text preserves variable font descenders" {
     try std.testing.expectEqual(@as(usize, 0), font_glyph_count);
     gpu_text_vertex_float_len = 0;
     const bounds = ui.Rect.init(0, 0, 64, 14);
-    try pushPackedText(.base, bounds, "y", .text, .start);
+    try renderer_ir.pushText(gpuBuffers(), gpuSources().font, .base, bounds, "y", .text, .start);
     try std.testing.expect(gpu_text_vertex_float_len > 0);
     try std.testing.expect(font_glyph_count > 0);
     try std.testing.expect(font_glyph_count < 8);
@@ -1575,7 +1808,7 @@ test "browser font atlas populates glyphs on demand" {
     try std.testing.expectEqual(@as(usize, 0), font_glyph_count);
 
     gpu_text_vertex_float_len = 0;
-    try pushPackedText(.base, ui.Rect.init(0, 0, 160, 18), "EdgeRun", .text, .start);
+    try renderer_ir.pushText(gpuBuffers(), gpuSources().font, .base, ui.Rect.init(0, 0, 160, 18), "EdgeRun", .text, .start);
     try std.testing.expect(gpu_text_vertex_float_len > 0);
     try std.testing.expect(font_glyph_count > 0);
     try std.testing.expect(font_glyph_count < 16);

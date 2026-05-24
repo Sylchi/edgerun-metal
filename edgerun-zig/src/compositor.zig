@@ -1,10 +1,17 @@
 const std = @import("std");
+const renderer_ir = @import("renderer_ir.zig");
 const renderer_software = @import("renderer_software.zig");
 const ui = @import("ui.zig");
 
 pub const Error = error{
     InvalidTarget,
     InvalidSurface,
+    InvalidIrBuffer,
+    InvalidIrAtlas,
+    MissingFontAtlas,
+    MissingIconAtlas,
+    MissingImageTexture,
+    UnsupportedIrPrimitive,
     DamageBudgetExceeded,
 };
 
@@ -147,6 +154,44 @@ pub const Compositor = struct {
         };
     }
 
+    pub fn composeIr(
+        self: *Compositor,
+        surfaces: []const Surface,
+        buffers: renderer_ir.Buffers,
+        atlases: renderer_software.IrAtlases,
+        background: ui.Color,
+    ) Error!Receipt {
+        self.target.clear(background);
+        self.damage.reset();
+        renderer_ir.validateBuffers(buffers) catch return error.InvalidIrBuffer;
+
+        var pixels_written: u64 = 0;
+        for (surfaces) |surface| {
+            pixels_written += try self.compositeSurface(surface);
+        }
+
+        try self.markIrDamage(buffers);
+        const presentation = self.target.renderIrFrameWithAtlases(buffers, atlases) catch |err| return switch (err) {
+            error.InvalidIrBuffer => error.InvalidIrBuffer,
+            error.InvalidBuffer => error.InvalidIrBuffer,
+            error.InvalidIrAtlas => error.InvalidIrAtlas,
+            error.MissingFontAtlas => error.MissingFontAtlas,
+            error.MissingIconAtlas => error.MissingIconAtlas,
+            error.MissingImageTexture => error.MissingImageTexture,
+            error.UnsupportedIrPrimitive => error.UnsupportedIrPrimitive,
+            error.PixelBudgetExceeded => error.InvalidTarget,
+            error.InvalidTarget => error.InvalidTarget,
+            error.Budget => error.InvalidIrBuffer,
+        };
+
+        return .{
+            .surface_count = surfaces.len,
+            .ui_command_count = presentation.primitive_count,
+            .damage_count = self.damage.written().len,
+            .pixels_written = pixels_written,
+        };
+    }
+
     pub fn damageRects(self: Compositor) []const PixelRect {
         return self.damage.written();
     }
@@ -196,6 +241,31 @@ pub const Compositor = struct {
             .image_quad => |quad| try self.markRect(quad.bounds),
             .hit, .drag_source, .drop_target, .transition => {},
         }
+    }
+
+    fn markIrDamage(self: *Compositor, buffers: renderer_ir.Buffers) Error!void {
+        for (renderer_ir.drawBatches(buffers)) |batch| switch (batch) {
+            .rects, .overlay_rects => |rects| try self.markIrRectBuffer(rects),
+            .image, .text, .icon, .overlay_text, .overlay_icon => |vertices| try self.markTexturedVertices(vertices),
+        };
+    }
+
+    fn markIrRectBuffer(self: *Compositor, values: []const f32) Error!void {
+        var iter = renderer_ir.RectIterator.init(values) catch return error.InvalidIrBuffer;
+        while (iter.next() catch return error.InvalidIrBuffer) |rect| {
+            try self.markRect(rect.bounds);
+        }
+    }
+
+    fn markTexturedVertices(self: *Compositor, values: []const f32) Error!void {
+        var iter = renderer_ir.TexturedQuadIterator.init(values) catch return error.InvalidIrBuffer;
+        while (iter.next() catch return error.InvalidIrBuffer) |quad| {
+            try self.markTexturedQuad(quad);
+        }
+    }
+
+    fn markTexturedQuad(self: *Compositor, quad: renderer_ir.TexturedQuad) Error!void {
+        try self.markRect(quad.bounds);
     }
 
     fn markRect(self: *Compositor, rect: ui.Rect) Error!void {
@@ -318,4 +388,70 @@ test "compositor renders ui scene above app surfaces" {
     try std.testing.expectEqual(blue, pixels[0]);
     try std.testing.expectEqual(red, pixels[1 * 4 + 1]);
     try std.testing.expectEqual(@as(usize, 2), compositor.damageRects().len);
+}
+
+test "compositor renders canonical ir above app surfaces" {
+    const blue = ui.Color{ .r = 0, .g = 0, .b = 255 };
+    const red = ui.Color{ .r = 255, .g = 0, .b = 0 };
+    const source_pixels = [_]ui.Color{ blue, blue, blue, blue };
+    const buffer = SurfaceBuffer{ .pixels = &source_pixels, .width = 2, .height = 2, .stride = 2, .format = .xrgb8888 };
+    const app_surface = Surface{
+        .id = 7,
+        .x = 0,
+        .y = 0,
+        .width = 4,
+        .height = 4,
+        .is_opaque = true,
+        .buffer = buffer,
+        .sample = SampleRect.full(buffer),
+    };
+
+    var commands: [2]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+    try scene.pushRect(ui.Rect.init(1, 1, 2, 2), red, .fill, 0.0, 0.0);
+
+    var command_pixels: [4 * 4]ui.Color = undefined;
+    const command_target = try renderer_software.Surface.init(4, 4, &command_pixels);
+    var command_damage: [4]PixelRect = undefined;
+    var command_compositor = try Compositor.init(command_target, &command_damage);
+    const command_receipt = try command_compositor.compose(&.{app_surface}, scene, .clear);
+
+    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0){};
+    const buffers = storage.buffers();
+    var source_context: u8 = 0;
+    const sources = renderer_ir.Sources{
+        .font = .{ .context = &source_context, .metrics = testFontMetrics, .width = testTextWidth, .glyph = testGlyph },
+        .icon = .{ .context = &source_context, .rect = testIconRect },
+    };
+    try renderer_ir.packScene(buffers, sources, scene.written());
+
+    var ir_pixels: [4 * 4]ui.Color = undefined;
+    const ir_target = try renderer_software.Surface.init(4, 4, &ir_pixels);
+    var ir_damage: [4]PixelRect = undefined;
+    var ir_compositor = try Compositor.init(ir_target, &ir_damage);
+    const alpha = [_]u8{255};
+    const ir_receipt = try ir_compositor.composeIr(&.{app_surface}, buffers, .{
+        .font = .{ .width = 1, .height = 1, .alpha = &alpha },
+        .icon = .{ .width = 1, .height = 1, .alpha = &alpha },
+    }, .clear);
+
+    try std.testing.expect(ir_receipt.valid());
+    try std.testing.expectEqual(command_receipt.damage_count, ir_receipt.damage_count);
+    try std.testing.expectEqualSlices(ui.Color, &command_pixels, &ir_pixels);
+}
+
+fn testFontMetrics(_: *anyopaque, _: u8) renderer_ir.TextMetrics {
+    return .{ .ascender = 10.0, .descender = -3.0 };
+}
+
+fn testTextWidth(_: *anyopaque, value: []const u8, _: u8) f32 {
+    return @floatFromInt(value.len * 8);
+}
+
+fn testGlyph(_: *anyopaque, _: u8, _: u8) renderer_ir.Error!?renderer_ir.Glyph {
+    return null;
+}
+
+fn testIconRect(_: *anyopaque, _: u32) ?renderer_ir.AtlasRect {
+    return null;
 }

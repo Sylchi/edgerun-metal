@@ -1,6 +1,25 @@
 const std = @import("std");
+const renderer_font_atlas = @import("renderer_font_atlas.zig");
+const renderer_ir = @import("renderer_ir.zig");
 const renderer_software = @import("renderer_software.zig");
 const ui = @import("ui.zig");
+
+const width: usize = 2560;
+const height: usize = 1440;
+const max_commands: usize = 64;
+const max_rects: usize = 256;
+const max_text_vertices: usize = 8192;
+const empty_texture_vertices: usize = 0;
+const empty_alpha = [_]u8{255};
+const SnapshotIrStorage = renderer_ir.FixedBuffers(
+    max_rects,
+    max_text_vertices,
+    empty_texture_vertices,
+    empty_texture_vertices,
+    empty_texture_vertices,
+    empty_texture_vertices,
+    empty_texture_vertices,
+);
 
 pub fn main(init: std.process.Init) !void {
     try renderSnapshot(init, ".build/edgerun-zig/ui.ppm");
@@ -8,27 +27,32 @@ pub fn main(init: std.process.Init) !void {
 
 fn renderSnapshot(init: std.process.Init, out_path: []const u8) !void {
     const allocator = std.heap.page_allocator;
-    const width = 2560;
-    const height = 1440;
-    const supersample = 2;
-    const render_width = width * supersample;
-    const render_height = height * supersample;
-
     var nodes: [5]ui.Node = undefined;
     const root = sampleRoot(&nodes);
 
-    var commands: [64]ui.Command = undefined;
+    var commands: [max_commands]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
     try ui.render(&scene, root, .{ .x = 0, .y = 0, .w = width, .h = height }, .{});
 
-    const render_pixels = try allocator.alloc(ui.Color, render_width * render_height);
-    defer allocator.free(render_pixels);
     const pixels = try allocator.alloc(ui.Color, width * height);
     defer allocator.free(pixels);
-    const surface = try renderer_software.Surface.init(render_width, render_height, render_pixels);
+
+    var ir_storage = SnapshotIrStorage{};
+    const buffers = ir_storage.buffers();
+
+    var font_atlas = renderer_font_atlas.Atlas.init();
+    const sources = renderer_ir.Sources{
+        .font = font_atlas.source(),
+        .icon = renderer_font_atlas.nullIconSource(&font_atlas),
+    };
+    try renderer_ir.packScene(buffers, sources, scene.written());
+
+    const surface = try renderer_software.Surface.init(width, height, pixels);
     surface.clear(.bg);
-    surface.rasterizeScaled(scene.written(), @floatFromInt(supersample));
-    downsample2x(pixels, render_pixels, width, height);
+    _ = try surface.renderIrFrameWithAtlases(buffers, .{
+        .font = .{ .width = renderer_font_atlas.width, .height = renderer_font_atlas.height, .alpha = font_atlas.alphaSlice() },
+        .icon = .{ .width = 1, .height = 1, .alpha = &empty_alpha },
+    });
 
     const io = init.io;
     try std.Io.Dir.cwd().createDirPath(io, ".build/edgerun-zig");
@@ -54,27 +78,37 @@ fn sampleRoot(children: []ui.Node) ui.Node {
     return .{ .stack = .{ .axis = .column, .gap = 18, .padding = 48, .children = children[0..4] } };
 }
 
-fn downsample2x(dst: []ui.Color, src: []const ui.Color, width: usize, height: usize) void {
-    const src_width = width * 2;
-    var y: usize = 0;
-    while (y < height) : (y += 1) {
-        var x: usize = 0;
-        while (x < width) : (x += 1) {
-            const src_index = (y * 2) * src_width + x * 2;
-            const a = src[src_index];
-            const b = src[src_index + 1];
-            const c = src[src_index + src_width];
-            const d = src[src_index + src_width + 1];
-            dst[y * width + x] = .{
-                .r = avg4(a.r, b.r, c.r, d.r),
-                .g = avg4(a.g, b.g, c.g, d.g),
-                .b = avg4(a.b, b.b, c.b, d.b),
-                .a = avg4(a.a, b.a, c.a, d.a),
-            };
-        }
-    }
-}
+test "snapshot packs and rasterizes through renderer ir" {
+    var nodes: [5]ui.Node = undefined;
+    const root = sampleRoot(&nodes);
+    var commands: [max_commands]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+    try ui.render(&scene, root, .{ .x = 0, .y = 0, .w = 320, .h = 240 }, .{});
 
-fn avg4(a: u8, b: u8, c: u8, d: u8) u8 {
-    return @intCast((@as(u16, a) + b + c + d + 2) / 4);
+    var ir_storage = SnapshotIrStorage{};
+    const buffers = ir_storage.buffers();
+
+    var font_atlas = renderer_font_atlas.Atlas.init();
+    const sources = renderer_ir.Sources{
+        .font = font_atlas.source(),
+        .icon = renderer_font_atlas.nullIconSource(&font_atlas),
+    };
+    try renderer_ir.packScene(buffers, sources, scene.written());
+    try std.testing.expect(ir_storage.rect_len > 0);
+    try std.testing.expect(ir_storage.text_vertex_len > 0);
+
+    var pixels: [320 * 240]ui.Color = undefined;
+    const surface = try renderer_software.Surface.init(320, 240, &pixels);
+    surface.clear(.bg);
+    const receipt = try surface.renderIrFrameWithAtlases(buffers, .{
+        .font = .{ .width = renderer_font_atlas.width, .height = renderer_font_atlas.height, .alpha = font_atlas.alphaSlice() },
+        .icon = .{ .width = 1, .height = 1, .alpha = &empty_alpha },
+    });
+    try std.testing.expect(receipt.valid());
+
+    var painted: usize = 0;
+    for (pixels) |pixel| {
+        if (pixel.a != 0 and !std.meta.eql(pixel, ui.Color.bg)) painted += 1;
+    }
+    try std.testing.expect(painted > 0);
 }

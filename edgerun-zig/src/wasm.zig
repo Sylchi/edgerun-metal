@@ -1,6 +1,10 @@
 const std = @import("std");
 const app_mod = @import("app.zig");
 const byte_utils = @import("bytes.zig");
+const clock = @import("clock.zig");
+const grant = @import("grant.zig");
+const identity = @import("identity.zig");
+const preimage = @import("preimage.zig");
 
 const App = app_mod.App;
 
@@ -169,6 +173,23 @@ pub const Error = error{
     StackUnderflow,
     Trap,
     ArithmeticTrap,
+};
+
+pub const ReceiptContext = struct {
+    parent: identity.Id,
+    input: preimage.Hash,
+    app_hash: preimage.Hash,
+    manifest: preimage.Hash,
+    clock_start: clock.Stamp,
+    clock_end: clock.Stamp,
+    allocation: App.DeclaredAllocation,
+    spawn_receipt: grant.SpawnReceipt,
+};
+
+pub const ReceiptResult = struct {
+    value: i64,
+    output: preimage.Hash,
+    receipt: App.WorkReceipt,
 };
 
 const Reader = struct {
@@ -987,6 +1008,33 @@ pub fn executeExportI64(app: *App, wasm_bytes: []const u8, export_name: []const 
     };
     try executor.runStart();
     return executor.runExport(export_name);
+}
+
+pub fn executeExportI64Receipt(app: *App, wasm_bytes: []const u8, export_name: []const u8, context: ReceiptContext) Error!ReceiptResult {
+    const value = try executeExportI64(app, wasm_bytes, export_name);
+    const output = outputHashI64(value);
+    const receipt = app.completeWork(
+        context.parent,
+        context.input,
+        output,
+        context.app_hash,
+        context.manifest,
+        context.clock_start,
+        context.clock_end,
+        context.allocation,
+        context.spawn_receipt,
+    ) orelse return error.Corrupt;
+    return .{
+        .value = value,
+        .output = output,
+        .receipt = receipt,
+    };
+}
+
+pub fn outputHashI64(value: i64) preimage.Hash {
+    var raw: [@sizeOf(i64)]u8 = undefined;
+    if (!byte_utils.store64(&raw, @as(u64, @bitCast(value)))) unreachable;
+    return preimage.hash("edgerun:zig:v1:wasm-i64-output", &raw);
 }
 
 fn readValueType(reader: *Reader) Error!ValueType {
