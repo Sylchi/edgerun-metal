@@ -201,6 +201,40 @@ pub fn build(b: *std.Build) void {
     wayland_window_test_step.dependOn(&run_wayland_window_tests.step);
     test_step.dependOn(&run_wayland_window_tests.step);
 
+    const xdg_shell_header_cmd = b.addSystemCommand(&.{
+        "wayland-scanner",
+        "client-header",
+        "/usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml",
+    });
+    const xdg_shell_header = xdg_shell_header_cmd.addOutputFileArg("xdg-shell-client-protocol.h");
+    const xdg_shell_code_cmd = b.addSystemCommand(&.{
+        "wayland-scanner",
+        "private-code",
+        "/usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml",
+    });
+    const xdg_shell_code = xdg_shell_code_cmd.addOutputFileArg("xdg-shell-protocol.c");
+    const wayland_egl_window = b.addExecutable(.{
+        .name = "edgerun-wayland-egl-window",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/wayland_egl_host.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    wayland_egl_window.root_module.addIncludePath(xdg_shell_header.dirname());
+    wayland_egl_window.root_module.addCSourceFile(.{ .file = xdg_shell_code });
+    wayland_egl_window.root_module.linkSystemLibrary("c", .{});
+    wayland_egl_window.root_module.linkSystemLibrary("wayland-client", .{});
+    wayland_egl_window.root_module.linkSystemLibrary("wayland-egl", .{});
+    wayland_egl_window.root_module.linkSystemLibrary("EGL", .{});
+    wayland_egl_window.root_module.linkSystemLibrary("GLESv2", .{});
+    wayland_egl_window.step.dependOn(&xdg_shell_header_cmd.step);
+    wayland_egl_window.step.dependOn(&xdg_shell_code_cmd.step);
+    const run_wayland_egl_window = b.addRunArtifact(wayland_egl_window);
+    if (b.args) |args| run_wayland_egl_window.addArgs(args);
+    const wayland_egl_window_step = b.step("wayland-egl-window", "Open a native Wayland EGL/GLES window using canonical UI IR");
+    wayland_egl_window_step.dependOn(&run_wayland_egl_window.step);
+
     const ui_browser_target = b.resolveTargetQuery(std.Target.Query.parse(.{
         .arch_os_abi = "wasm32-freestanding",
     }) catch unreachable);
