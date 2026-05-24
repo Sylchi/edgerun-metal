@@ -1,5 +1,6 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
+const layout = @import("../../layouts/Types.zig");
 const ui = @import("../../ui.zig");
 const ui_input = @import("../../input.zig");
 
@@ -27,6 +28,11 @@ pub const ResourceList = struct {
 
     pub fn render(self: ResourceList, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         return renderResourceList(self, scene, bounds, options);
+    }
+
+    pub fn measure(self: ResourceList, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
+        _ = options;
+        return measureResourceList(self, constraints);
     }
 
     pub fn toHtml(self: ResourceList, out: []u8) HtmlError![]u8 {
@@ -86,6 +92,23 @@ pub fn renderResourceList(list: ResourceList, scene: *ui.Scene, bounds: ui.Rect,
         try scene.pushHit(.{ .slot = 0, .kind = .button, .id = item.id, .bounds = item_bounds });
         y += resource_item_h + resource_item_gap;
     }
+}
+
+pub fn measureResourceList(list: ResourceList, constraints: layout.Constraints) layout.Measurement {
+    const content = constraints.inner(resourceInsets());
+    var preferred_width: f32 = 0;
+    var preferred_height: f32 = 0;
+    for (list.items, 0..) |item, index| {
+        if (index != 0) preferred_height += resource_item_gap;
+        const row = measureResourceItem(item, content);
+        preferred_width = @max(preferred_width, row.preferred.w);
+        preferred_height += row.preferred.h;
+    }
+    return layout.Measurement.flexible(
+        .{ .w = resource_min_w, .h = resource_padding_y * 2.0 },
+        .{ .w = preferred_width, .h = preferred_height },
+        .{ .w = constraints.width.limit(preferred_width), .h = preferred_height },
+    ).withInsets(resourceInsets()).applyExact(constraints);
 }
 
 fn renderRegistered(component: *const anyopaque, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
@@ -196,11 +219,31 @@ const resource_item_radius: f32 = 6.0;
 const resource_item_padding_x: f32 = 12.0;
 const resource_label_y: f32 = 11.0;
 const resource_label_h: f32 = 16.0;
+const resource_label_avg_w: f32 = 8.5;
 const resource_detail_y: f32 = 34.0;
 const resource_detail_h: f32 = 30.0;
 const resource_detail_line_h: f32 = 15.0;
 const resource_detail_avg_w: f32 = 8.5;
 const resource_detail_max_lines: usize = 2;
+const resource_label_max_lines: usize = 1;
+const resource_min_w: f32 = 180.0;
+
+fn measureResourceItem(item: ResourceItem, constraints: layout.Constraints) layout.Measurement {
+    const text_constraints = constraints.inner(layout.Insets.uniform(resource_item_padding_x));
+    const label = layout.measureText(item.label, text_constraints, .{ .line_height = resource_label_h, .average_char_width = resource_label_avg_w, .max_lines = resource_label_max_lines });
+    const detail = layout.measureText(item.detail, text_constraints, .{ .line_height = resource_detail_line_h, .average_char_width = resource_detail_avg_w, .max_lines = resource_detail_max_lines });
+    const content_width = @max(label.preferred.w, detail.preferred.w) + resource_item_padding_x * 2.0;
+    const content_height = resource_label_y + label.preferred.h + (resource_detail_y - resource_label_y - resource_label_h) + detail.preferred.h;
+    return layout.Measurement.flexible(
+        .{ .w = resource_min_w, .h = resource_item_h },
+        .{ .w = content_width, .h = @max(resource_item_h, content_height) },
+        .{ .w = constraints.width.limit(content_width), .h = @max(resource_item_h, content_height) },
+    ).applyExact(constraints);
+}
+
+fn resourceInsets() layout.Insets {
+    return .{ .top = resource_padding_y, .right = resource_padding_x, .bottom = resource_padding_y, .left = resource_padding_x };
+}
 
 test "resource list component renders links and hit targets" {
     const items = [_]ResourceItem{
@@ -217,6 +260,22 @@ test "resource list component renders links and hit targets" {
     try std.testing.expect(hasText(scene.written(), "TLS walkthrough"));
     const hit = ui_input.hitTest(scene.written(), 24, 96).?;
     try std.testing.expectEqual(@as(u32, 38002), hit.id);
+}
+
+test "resource list measurement counts link rows" {
+    const one = [_]ResourceItem{
+        .{ .id = 38001, .label = "DNS simulator", .href = "#/demo/dns", .detail = "Watch the resolver answer a cached name." },
+    };
+    const many = [_]ResourceItem{
+        one[0],
+        .{ .id = 38002, .label = "TLS walkthrough", .href = "#/demo/tls", .detail = "Follow a protected connection from client to server." },
+    };
+
+    const single = (ResourceList{ .items = &one }).measure(.{ .width = .{ .exact = 320 }, .text_wrap = .wrap }, .{});
+    const full = (ResourceList{ .items = &many }).measure(.{ .width = .{ .exact = 320 }, .text_wrap = .wrap }, .{});
+
+    try std.testing.expectEqual(@as(f32, 320), full.preferred.w);
+    try std.testing.expect(full.preferred.h > single.preferred.h);
 }
 
 test "resource list html codec roundtrips semantic links" {

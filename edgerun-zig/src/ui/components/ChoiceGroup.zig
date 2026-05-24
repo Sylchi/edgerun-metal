@@ -1,5 +1,6 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
+const layout = @import("../../layouts/Types.zig");
 const ui = @import("../../ui.zig");
 const ui_input = @import("../../input.zig");
 
@@ -28,6 +29,11 @@ pub const ChoiceGroup = struct {
 
     pub fn render(self: ChoiceGroup, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         return renderChoiceGroup(self, scene, bounds, options);
+    }
+
+    pub fn measure(self: ChoiceGroup, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
+        _ = options;
+        return measureChoiceGroup(self, constraints);
     }
 
     pub fn toHtml(self: ChoiceGroup, out: []u8) HtmlError![]u8 {
@@ -96,6 +102,32 @@ pub fn renderChoiceGroup(group: ChoiceGroup, scene: *ui.Scene, bounds: ui.Rect, 
         try scene.pushHit(.{ .slot = 0, .kind = .button, .id = option.id, .bounds = option_bounds });
         y += choice_option_h + choice_option_gap;
     }
+}
+
+pub fn measureChoiceGroup(group: ChoiceGroup, constraints: layout.Constraints) layout.Measurement {
+    const content_constraints = constraints.inner(choiceInsets());
+    const legend = layout.measureText(group.legend, content_constraints, .{
+        .line_height = choice_legend_line_h,
+        .average_char_width = choice_legend_avg_w,
+        .max_lines = choice_legend_max_lines,
+    });
+    var content_width = legend.preferred.w;
+    var content_height = legend.preferred.h;
+    for (group.options, 0..) |option, index| {
+        const option_measure = layout.measureText(option.label, content_constraints.inner(.{ .left = choice_label_x, .right = choice_option_padding_x }), .{
+            .line_height = choice_label_h,
+            .average_char_width = choice_label_avg_w,
+            .max_lines = choice_label_max_lines,
+        });
+        content_width = @max(content_width, option_measure.preferred.w + choice_label_x + choice_option_padding_x);
+        content_height += choice_option_gap + @max(choice_option_h, option_measure.preferred.h);
+        if (index == 0) content_height += 0;
+    }
+    return layout.Measurement.flexible(
+        .{ .w = choice_min_w, .h = choice_padding_y * 2.0 + choice_legend_line_h },
+        .{ .w = content_width, .h = content_height },
+        .{ .w = constraints.width.limit(content_width), .h = content_height },
+    ).withInsets(choiceInsets()).applyExact(constraints);
 }
 
 fn renderRegistered(component: *const anyopaque, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
@@ -237,6 +269,13 @@ const choice_marker_selected_inset: f32 = 4.0;
 const choice_label_x: f32 = 36.0;
 const choice_label_y: f32 = 10.0;
 const choice_label_h: f32 = 14.0;
+const choice_label_avg_w: f32 = 8.5;
+const choice_label_max_lines: usize = 1;
+const choice_min_w: f32 = 180.0;
+
+fn choiceInsets() layout.Insets {
+    return .{ .top = choice_padding_y, .right = choice_padding_x, .bottom = choice_padding_y, .left = choice_padding_x };
+}
 
 test "choice group component renders selected option and hit targets" {
     const options = [_]ChoiceOption{
@@ -254,6 +293,21 @@ test "choice group component renders selected option and hit targets" {
     try std.testing.expect(hasText(scene.written(), "GPU opens a socket"));
     const hit = ui_input.hitTest(scene.written(), 24, 104).?;
     try std.testing.expectEqual(@as(u32, 33002), hit.id);
+}
+
+test "choice group measurement counts legend and options" {
+    const options = [_]ChoiceOption{
+        .{ .id = 33001, .label = "Browser asks DNS" },
+        .{ .id = 33002, .label = "Resolver checks cache", .selected = true },
+        .{ .id = 33003, .label = "Certificate proves route ownership" },
+    };
+    const group = ChoiceGroup{ .id = 33000, .legend = "Which part looks up a domain name?", .options = &options };
+
+    const measured = group.measure(.{ .width = .{ .exact = 320 }, .text_wrap = .wrap }, .{});
+    const empty = (ChoiceGroup{ .id = 33000, .legend = group.legend, .options = &.{} }).measure(.{ .width = .{ .exact = 320 }, .text_wrap = .wrap }, .{});
+
+    try std.testing.expectEqual(@as(f32, 320), measured.preferred.w);
+    try std.testing.expect(measured.preferred.h > empty.preferred.h);
 }
 
 test "choice group html codec roundtrips semantic radio options" {

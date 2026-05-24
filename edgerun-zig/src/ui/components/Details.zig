@@ -1,5 +1,6 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
+const layout = @import("../../layouts/Types.zig");
 const ui = @import("../../ui.zig");
 const ui_input = @import("../../input.zig");
 
@@ -22,6 +23,11 @@ pub const Details = struct {
 
     pub fn render(self: Details, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         return renderDetails(self, scene, bounds, options);
+    }
+
+    pub fn measure(self: Details, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
+        _ = options;
+        return measureDetails(self, constraints);
     }
 
     pub fn toHtml(self: Details, out: []u8) HtmlError![]u8 {
@@ -76,6 +82,32 @@ pub fn renderDetails(details: Details, scene: *ui.Scene, bounds: ui.Rect, option
         .average_char_width = details_body_avg_w,
         .max_lines = details_body_max_lines,
     });
+}
+
+pub fn measureDetails(details: Details, constraints: layout.Constraints) layout.Measurement {
+    const content_constraints = constraints.inner(detailsInsets());
+    const summary_constraints = content_constraints.inner(.{ .right = details_marker_w });
+    const summary = layout.measureText(details.summary, summary_constraints, .{
+        .line_height = details_summary_text_h,
+        .average_char_width = details_summary_avg_w,
+        .max_lines = details_summary_max_lines,
+    });
+    var content_width = summary.preferred.w + details_marker_w;
+    var content_height = @max(details_summary_h, summary.preferred.h);
+    if (details.open) {
+        const body = layout.measureText(details.body, content_constraints, .{
+            .line_height = details_body_line_h,
+            .average_char_width = details_body_avg_w,
+            .max_lines = details_body_max_lines,
+        });
+        content_width = @max(content_width, body.preferred.w);
+        content_height += details_body_gap + body.preferred.h;
+    }
+    return layout.Measurement.flexible(
+        .{ .w = details_min_w, .h = details_padding_y * 2.0 + details_summary_h },
+        .{ .w = content_width, .h = content_height },
+        .{ .w = constraints.width.limit(content_width), .h = content_height },
+    ).withInsets(detailsInsets()).applyExact(constraints);
 }
 
 fn renderRegistered(component: *const anyopaque, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
@@ -164,11 +196,18 @@ const details_padding_y: f32 = 12.0;
 const details_summary_h: f32 = 28.0;
 const details_summary_text_y: f32 = 7.0;
 const details_summary_text_h: f32 = 14.0;
+const details_summary_avg_w: f32 = 8.5;
+const details_summary_max_lines: usize = 1;
 const details_marker_w: f32 = 24.0;
 const details_body_gap: f32 = 10.0;
 const details_body_line_h: f32 = 18.0;
 const details_body_avg_w: f32 = 9.0;
 const details_body_max_lines: usize = 5;
+const details_min_w: f32 = 180.0;
+
+fn detailsInsets() layout.Insets {
+    return .{ .top = details_padding_y, .right = details_padding_x, .bottom = details_padding_y, .left = details_padding_x };
+}
 
 test "details component renders summary and open body" {
     const details = Details{
@@ -201,6 +240,26 @@ test "details component hides body when closed" {
 
     try std.testing.expect(hasText(scene.written(), "What changes when it opens?"));
     try std.testing.expect(!hasTextContaining(scene.written(), "expanded explanation"));
+}
+
+test "details measurement expands only when open" {
+    const closed = Details{
+        .id = 32005,
+        .summary = "What changes when it opens?",
+        .body = "The expanded explanation becomes visible and should contribute to measurement only when the disclosure is open.",
+    };
+    const open = Details{
+        .id = closed.id,
+        .summary = closed.summary,
+        .body = closed.body,
+        .open = true,
+    };
+
+    const closed_size = closed.measure(.{ .width = .{ .exact = 220 }, .text_wrap = .wrap }, .{});
+    const open_size = open.measure(.{ .width = .{ .exact = 220 }, .text_wrap = .wrap }, .{});
+
+    try std.testing.expectEqual(@as(f32, 220), open_size.preferred.w);
+    try std.testing.expect(open_size.preferred.h > closed_size.preferred.h);
 }
 
 test "details html codec roundtrips semantic disclosure" {

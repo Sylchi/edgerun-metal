@@ -1,5 +1,6 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
+const layout = @import("../../layouts/Types.zig");
 const ui = @import("../../ui.zig");
 const ui_input = @import("../../input.zig");
 
@@ -27,6 +28,11 @@ pub const Timeline = struct {
 
     pub fn render(self: Timeline, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         return renderTimeline(self, scene, bounds, options);
+    }
+
+    pub fn measure(self: Timeline, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
+        _ = options;
+        return measureTimeline(self, constraints);
     }
 
     pub fn toHtml(self: Timeline, out: []u8) HtmlError![]u8 {
@@ -88,6 +94,23 @@ pub fn renderTimeline(timeline: Timeline, scene: *ui.Scene, bounds: ui.Rect, opt
         try scene.pushHit(.{ .slot = 0, .kind = .row_item, .id = event.id, .bounds = event_bounds });
         y += timeline_event_h + timeline_event_gap;
     }
+}
+
+pub fn measureTimeline(timeline: Timeline, constraints: layout.Constraints) layout.Measurement {
+    const content = constraints.inner(timelineInsets());
+    var preferred_width: f32 = 0;
+    var preferred_height: f32 = 0;
+    for (timeline.events, 0..) |event, index| {
+        if (index != 0) preferred_height += timeline_event_gap;
+        const row = measureTimelineEvent(event, content);
+        preferred_width = @max(preferred_width, row.preferred.w);
+        preferred_height += row.preferred.h;
+    }
+    return layout.Measurement.flexible(
+        .{ .w = timeline_min_w, .h = timeline_padding_y * 2.0 },
+        .{ .w = preferred_width, .h = preferred_height },
+        .{ .w = constraints.width.limit(preferred_width), .h = preferred_height },
+    ).withInsets(timelineInsets()).applyExact(constraints);
 }
 
 fn renderRegistered(component: *const anyopaque, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
@@ -201,15 +224,50 @@ const timeline_text_x: f32 = 34.0;
 const timeline_time_y: f32 = 9.0;
 const timeline_time_w: f32 = 74.0;
 const timeline_time_h: f32 = 14.0;
+const timeline_time_avg_w: f32 = 7.5;
 const timeline_text_gap: f32 = 10.0;
 const timeline_title_y: f32 = 9.0;
 const timeline_title_h: f32 = 16.0;
+const timeline_title_avg_w: f32 = 8.5;
 const timeline_detail_y: f32 = 34.0;
 const timeline_detail_h: f32 = 38.0;
 const timeline_detail_line_h: f32 = 17.0;
 const timeline_detail_avg_w: f32 = 8.5;
 const timeline_detail_max_lines: usize = 2;
 const timeline_text_padding_x: f32 = 10.0;
+const timeline_text_max_lines: usize = 1;
+const timeline_min_w: f32 = 180.0;
+
+fn measureTimelineEvent(event: TimelineEvent, constraints: layout.Constraints) layout.Measurement {
+    const text_constraints = constraints.inner(.{ .left = timeline_text_x, .right = timeline_text_padding_x });
+    const time = layout.measureText(event.time, .{ .width = .{ .exact = timeline_time_w }, .text_wrap = .nowrap }, .{
+        .line_height = timeline_time_h,
+        .average_char_width = timeline_time_avg_w,
+        .max_lines = timeline_text_max_lines,
+    });
+    const title = layout.measureText(event.title, text_constraints.inner(.{ .left = timeline_time_w + timeline_text_gap }), .{
+        .line_height = timeline_title_h,
+        .average_char_width = timeline_title_avg_w,
+        .max_lines = timeline_text_max_lines,
+    });
+    const detail = layout.measureText(event.detail, text_constraints, .{
+        .line_height = timeline_detail_line_h,
+        .average_char_width = timeline_detail_avg_w,
+        .max_lines = timeline_detail_max_lines,
+    });
+    const header_width = timeline_text_x + time.preferred.w + timeline_text_gap + title.preferred.w + timeline_text_padding_x;
+    const detail_width = timeline_text_x + detail.preferred.w + timeline_text_padding_x;
+    const content_height = timeline_title_y + @max(time.preferred.h, title.preferred.h) + (timeline_detail_y - timeline_title_y - timeline_title_h) + detail.preferred.h;
+    return layout.Measurement.flexible(
+        .{ .w = timeline_min_w, .h = timeline_event_h },
+        .{ .w = @max(header_width, detail_width), .h = @max(timeline_event_h, content_height) },
+        .{ .w = constraints.width.limit(@max(header_width, detail_width)), .h = @max(timeline_event_h, content_height) },
+    ).applyExact(constraints);
+}
+
+fn timelineInsets() layout.Insets {
+    return .{ .top = timeline_padding_y, .right = timeline_padding_x, .bottom = timeline_padding_y, .left = timeline_padding_x };
+}
 
 test "timeline component renders events and hit targets" {
     const events = [_]TimelineEvent{
@@ -226,6 +284,22 @@ test "timeline component renders events and hit targets" {
     try std.testing.expect(hasText(scene.written(), "Resolver answers"));
     const hit = ui_input.hitTest(scene.written(), 24, 104).?;
     try std.testing.expectEqual(@as(u32, 37002), hit.id);
+}
+
+test "timeline measurement counts event rows" {
+    const one = [_]TimelineEvent{
+        .{ .id = 37001, .time = "1", .title = "Browser asks", .detail = "The app asks for a name to become an address." },
+    };
+    const many = [_]TimelineEvent{
+        one[0],
+        .{ .id = 37002, .time = "2", .title = "Resolver answers", .detail = "A cached or authoritative answer comes back." },
+    };
+
+    const single = (Timeline{ .events = &one }).measure(.{ .width = .{ .exact = 320 }, .text_wrap = .wrap }, .{});
+    const full = (Timeline{ .events = &many }).measure(.{ .width = .{ .exact = 320 }, .text_wrap = .wrap }, .{});
+
+    try std.testing.expectEqual(@as(f32, 320), full.preferred.w);
+    try std.testing.expect(full.preferred.h > single.preferred.h);
 }
 
 test "timeline html codec roundtrips semantic events" {
