@@ -174,6 +174,26 @@ const WaylandState = struct {
     configured: bool = false,
     closed: bool = false,
     seat_has_pointer: bool = false,
+    dmabuf_bound: bool = false,
+};
+
+const DmabufImport = struct {
+    fd: posix.fd_t,
+    width: u32,
+    height: u32,
+    stride: u32,
+    format: u32 = drm_format_xrgb8888,
+    offset: u32 = 0,
+    plane_index: u32 = 0,
+    modifier: u64 = 0,
+
+    fn valid(self: DmabufImport) bool {
+        return self.fd >= 0 and
+            self.width != 0 and
+            self.height != 0 and
+            self.stride >= self.width * @sizeOf(u32) and
+            isSupportedDmabufFormat(self.format);
+    }
 };
 
 const AppState = struct {
@@ -385,6 +405,24 @@ const WaylandClient = struct {
         return .{ .fd = fd, .memory = mapped, .width = width, .height = height, .stride = stride };
     }
 
+    fn createDmabufBuffer(self: *WaylandClient, import: DmabufImport) !void {
+        if (!import.valid()) return error.InvalidDmabufImport;
+        try self.bindDmabuf();
+        try self.send(makeDmabufCreateParams);
+        try self.sendDmabufAddPlane(import);
+        try self.sendDmabufCreateImmediate(import.width, import.height, import.format);
+    }
+
+    fn bindDmabuf(self: *WaylandClient) !void {
+        if (self.state.dmabuf_bound) return;
+        const global = self.state.registry.find(.linux_dmabuf) orelse return error.MissingWaylandDmabuf;
+        try self.sendBind(global.name, "zwp_linux_dmabuf_v1", @min(global.version, 4), linux_dmabuf_id);
+        try self.send(makeSync);
+        self.state.registry_done = false;
+        while (!self.state.registry_done) try self.readEventsBlocking();
+        self.state.dmabuf_bound = true;
+    }
+
     fn attachCommit(self: *WaylandClient, width: u32, height: u32) !void {
         try self.sendAttach();
         try self.sendDamage(width, height);
@@ -428,6 +466,18 @@ const WaylandClient = struct {
     fn sendCreateBuffer(self: WaylandClient, width: u32, height: u32, stride: u32) !void {
         var buffer: [message_bytes]u8 = undefined;
         const bytes = try makeCreateBuffer(&buffer, width, height, stride);
+        try writeAll(self.fd, bytes);
+    }
+
+    fn sendDmabufAddPlane(self: WaylandClient, import: DmabufImport) !void {
+        var buffer: [message_bytes]u8 = undefined;
+        const bytes = try makeDmabufAddPlane(&buffer, import.plane_index, import.offset, import.stride, import.modifier);
+        try sendFd(self.fd, bytes, import.fd);
+    }
+
+    fn sendDmabufCreateImmediate(self: WaylandClient, width: u32, height: u32, format: u32) !void {
+        var buffer: [message_bytes]u8 = undefined;
+        const bytes = try makeDmabufCreateImmediate(&buffer, width, height, format);
         try writeAll(self.fd, bytes);
     }
 
@@ -998,6 +1048,15 @@ fn registryInterface(value: []const u8) RegistryInterface {
     return .other;
 }
 
+fn isSupportedDmabufFormat(format: u32) bool {
+    return switch (format) {
+        drm_format_xrgb8888,
+        drm_format_argb8888,
+        => true,
+        else => false,
+    };
+}
+
 fn paddedLen(len: u32) usize {
     return (@as(usize, len) + 3) & ~@as(usize, 3);
 }
@@ -1157,6 +1216,41 @@ test "wayland dmabuf messages encode params add and immediate buffer creation" {
     try std.testing.expectEqual(@as(u32, 800), std.mem.readInt(u32, create_immed[16..20], .little));
     try std.testing.expectEqual(drm_format_xrgb8888, std.mem.readInt(u32, create_immed[20..24], .little));
     try std.testing.expectEqual(dmabuf_flags_none, std.mem.readInt(u32, create_immed[24..28], .little));
+}
+
+test "wayland dmabuf import validates fd dimensions stride and format" {
+    try std.testing.expect((DmabufImport{
+        .fd = 3,
+        .width = 64,
+        .height = 64,
+        .stride = 64 * @sizeOf(u32),
+    }).valid());
+    try std.testing.expect((DmabufImport{
+        .fd = 4,
+        .width = 64,
+        .height = 64,
+        .stride = 64 * @sizeOf(u32),
+        .format = drm_format_argb8888,
+    }).valid());
+    try std.testing.expect(!(DmabufImport{
+        .fd = -1,
+        .width = 64,
+        .height = 64,
+        .stride = 64 * @sizeOf(u32),
+    }).valid());
+    try std.testing.expect(!(DmabufImport{
+        .fd = 3,
+        .width = 64,
+        .height = 64,
+        .stride = 63 * @sizeOf(u32),
+    }).valid());
+    try std.testing.expect(!(DmabufImport{
+        .fd = 3,
+        .width = 64,
+        .height = 64,
+        .stride = 64 * @sizeOf(u32),
+        .format = 0,
+    }).valid());
 }
 
 test "wayland xdg configure event marks window configured" {
