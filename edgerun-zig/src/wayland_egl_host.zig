@@ -155,7 +155,7 @@ pub fn main(init: std.process.Init) !void {
         }
         try renderer_gles.renderFrame(gl, wl.width, wl.height, buffers);
         if (!frame_verified) {
-            try renderer_gles.verifyFrameNonBlank(wl.width, wl.height);
+            _ = try renderer_gles.verifyFrameNonBlank(wl.width, wl.height);
             frame_verified = true;
         }
         if (c.eglSwapBuffers(egl.display, egl.surface) != c.EGL_TRUE) return error.EglSwapFailed;

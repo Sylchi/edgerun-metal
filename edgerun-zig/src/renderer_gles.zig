@@ -25,10 +25,30 @@ pub const Pixel = struct {
     a: u8,
 };
 
+pub const FrameProof = struct {
+    width: i32,
+    height: i32,
+    sample_count: u32,
+    opaque_count: u32,
+    variation_count: u32,
+    sample_hash: u64,
+
+    pub fn valid(self: FrameProof) bool {
+        return self.width > 0 and
+            self.height > 0 and
+            self.sample_count == verification_sample_count and
+            self.opaque_count != 0 and
+            self.variation_count != 0 and
+            self.sample_hash != 0;
+    }
+};
+
 const verification_sample_axis: usize = 17;
 const verification_sample_count: usize = verification_sample_axis * verification_sample_axis;
 const verification_grid_denominator: i32 = @intCast(verification_sample_axis + 1);
 const opaque_alpha_min: u8 = 16;
+const fnv64_offset_basis: u64 = 0xcbf29ce484222325;
+const fnv64_prime: u64 = 0x100000001b3;
 
 pub fn init(font_atlas: *renderer_font_atlas.Atlas) !State {
     try requireHardwareGl();
@@ -65,11 +85,13 @@ pub fn renderFrame(gl: State, width: i32, height: i32, buffers: renderer_ir.Buff
     try drawTextured(gl, width, height, buffers.liveOverlayIconVertices(), gl.icon_texture);
 }
 
-pub fn verifyFrameNonBlank(width: i32, height: i32) !void {
+pub fn verifyFrameNonBlank(width: i32, height: i32) !FrameProof {
     if (width <= 0 or height <= 0) return error.InvalidFramebufferSize;
     var samples: [verification_sample_count]Pixel = undefined;
     readVerificationSamples(width, height, &samples);
-    if (!samplesHaveVisibleVariation(&samples)) return error.BlankGpuFrame;
+    const proof = frameProof(width, height, &samples);
+    if (!proof.valid()) return error.BlankGpuFrame;
+    return proof;
 }
 
 pub fn sources(font_atlas: *renderer_font_atlas.Atlas) renderer_ir.Sources {
@@ -114,17 +136,49 @@ fn sampleCoordinate(size: i32, slot: i32) i32 {
     return std.math.clamp(scaled, 0, last);
 }
 
-fn samplesHaveVisibleVariation(samples: []const Pixel) bool {
-    if (samples.len == 0) return false;
+fn frameProof(width: i32, height: i32, samples: []const Pixel) FrameProof {
+    if (samples.len == 0) {
+        return .{
+            .width = width,
+            .height = height,
+            .sample_count = 0,
+            .opaque_count = 0,
+            .variation_count = 0,
+            .sample_hash = 0,
+        };
+    }
     const first = samples[0];
-    var opaque_count: usize = 0;
+    var opaque_count: u32 = 0;
+    var variation_count: u32 = 0;
     for (samples) |sample| {
         if (sample.a >= opaque_alpha_min) opaque_count += 1;
         if (sample.r != first.r or sample.g != first.g or sample.b != first.b or sample.a != first.a) {
-            return opaque_count != 0;
+            variation_count += 1;
         }
     }
-    return false;
+    return .{
+        .width = width,
+        .height = height,
+        .sample_count = @intCast(samples.len),
+        .opaque_count = opaque_count,
+        .variation_count = variation_count,
+        .sample_hash = hashSamples(samples),
+    };
+}
+
+fn hashSamples(samples: []const Pixel) u64 {
+    var hash = fnv64_offset_basis;
+    for (samples) |sample| {
+        hash = hashByte(hash, sample.r);
+        hash = hashByte(hash, sample.g);
+        hash = hashByte(hash, sample.b);
+        hash = hashByte(hash, sample.a);
+    }
+    return hash;
+}
+
+fn hashByte(hash: u64, byte: u8) u64 {
+    return (hash ^ byte) *% fnv64_prime;
 }
 
 fn drawRects(gl: State, width: i32, height: i32, values: []const f32) !void {
@@ -329,18 +383,17 @@ test "rect modes map to stable shader mode ids" {
     try std.testing.expectEqual(@as(c.GLint, 0), rectMode(.pie_slice));
 }
 
-test "frame verification rejects uniform samples and accepts variation" {
-    const uniform = [_]Pixel{
-        .{ .r = 11, .g = 11, .b = 11, .a = 255 },
-        .{ .r = 11, .g = 11, .b = 11, .a = 255 },
-    };
-    try std.testing.expect(!samplesHaveVisibleVariation(&uniform));
+test "frame proof rejects uniform samples and accepts variation" {
+    var uniform = [_]Pixel{.{ .r = 11, .g = 11, .b = 11, .a = 255 }} ** verification_sample_count;
+    try std.testing.expect(!frameProof(960, 540, &uniform).valid());
 
-    const varied = [_]Pixel{
-        .{ .r = 11, .g = 11, .b = 11, .a = 255 },
-        .{ .r = 74, .g = 222, .b = 128, .a = 255 },
-    };
-    try std.testing.expect(samplesHaveVisibleVariation(&varied));
+    var varied = uniform;
+    varied[verification_sample_count / 2] = .{ .r = 74, .g = 222, .b = 128, .a = 255 };
+    const proof = frameProof(960, 540, &varied);
+    try std.testing.expect(proof.valid());
+    try std.testing.expectEqual(@as(u32, verification_sample_count), proof.sample_count);
+    try std.testing.expectEqual(@as(u32, verification_sample_count), proof.opaque_count);
+    try std.testing.expectEqual(@as(u32, 1), proof.variation_count);
 }
 
 test "frame verification sample coordinates stay in bounds" {
@@ -348,4 +401,13 @@ test "frame verification sample coordinates stay in bounds" {
     try std.testing.expectEqual(@as(i32, 1), sampleCoordinate(18, 1));
     try std.testing.expectEqual(@as(i32, 9), sampleCoordinate(18, 9));
     try std.testing.expectEqual(@as(i32, 17), sampleCoordinate(18, 17));
+}
+
+test "frame proof sample hash is stable" {
+    const samples = [_]Pixel{
+        .{ .r = 11, .g = 11, .b = 11, .a = 255 },
+        .{ .r = 74, .g = 222, .b = 128, .a = 255 },
+    };
+    try std.testing.expectEqual(hashSamples(&samples), hashSamples(&samples));
+    try std.testing.expect(hashSamples(&samples) != 0);
 }
