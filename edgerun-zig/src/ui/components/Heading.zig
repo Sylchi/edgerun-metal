@@ -1,6 +1,7 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
 const ui = @import("../../ui.zig");
+const layout = @import("../../layouts/Types.zig");
 
 const ComponentRegistry = common.ComponentRegistry;
 const HtmlError = common.HtmlError;
@@ -18,6 +19,11 @@ pub const Heading = struct {
 
     pub fn render(self: Heading, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         return renderHeading(self, scene, bounds, options);
+    }
+
+    pub fn measure(self: Heading, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
+        _ = options;
+        return measureHeading(self, constraints);
     }
 
     pub fn toHtml(self: Heading, out: []u8) HtmlError![]u8 {
@@ -71,6 +77,15 @@ pub fn renderHeading(heading: Heading, scene: *ui.Scene, bounds: ui.Rect, option
     try scene.pushWrappedText(bounds, heading.value, options.style.text, .{
         .line_height = line_height,
         .average_char_width = avg_width,
+        .max_lines = heading_max_lines,
+    });
+}
+
+pub fn measureHeading(heading: Heading, constraints: layout.Constraints) layout.Measurement {
+    if (!validHeadingLevel(heading.level)) return layout.Measurement.fixed(.{ .w = 0, .h = 0 });
+    return layout.measureText(heading.value, constraints, .{
+        .line_height = headingLineHeight(heading.level),
+        .average_char_width = headingAverageWidth(heading.level),
         .max_lines = heading_max_lines,
     });
 }
@@ -160,6 +175,24 @@ fn validHeadingLevel(level: u8) bool {
     return level >= 1 and level <= 3;
 }
 
+fn headingLineHeight(level: u8) f32 {
+    return switch (level) {
+        1 => heading_h1_line_h,
+        2 => heading_h2_line_h,
+        3 => heading_h3_line_h,
+        else => unreachable,
+    };
+}
+
+fn headingAverageWidth(level: u8) f32 {
+    return switch (level) {
+        1 => heading_h1_avg_w,
+        2 => heading_h2_avg_w,
+        3 => heading_h3_avg_w,
+        else => unreachable,
+    };
+}
+
 test "heading component renders wrapped title text" {
     const heading = Heading{ .level = 2, .value = "Lookup path" };
     var commands: [8]ui.Command = undefined;
@@ -168,6 +201,16 @@ test "heading component renders wrapped title text" {
     try heading.render(&scene, ui.Rect.init(0, 0, 360, 64), .{});
 
     try std.testing.expect(hasText(scene.written(), "Lookup path"));
+}
+
+test "heading measurement responds to constrained wrap width" {
+    const heading = Heading{ .level = 2, .value = "DNS and TLS form a simple path when each part has one job" };
+
+    const wide = heading.measure(.{ .width = .{ .exact = 420 }, .text_wrap = .wrap }, .{});
+    const narrow = heading.measure(.{ .width = .{ .exact = 120 }, .text_wrap = .wrap }, .{});
+
+    try std.testing.expectEqual(@as(f32, 420), wide.preferred.w);
+    try std.testing.expect(narrow.preferred.h > wide.preferred.h);
 }
 
 test "heading html codec roundtrips semantic level and escaped text" {

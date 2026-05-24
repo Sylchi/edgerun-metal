@@ -1,6 +1,7 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
 const ui = @import("../../ui.zig");
+const layout = @import("../../layouts/Types.zig");
 
 const ComponentRegistry = common.ComponentRegistry;
 const HtmlError = common.HtmlError;
@@ -18,6 +19,11 @@ pub const CodeBlock = struct {
 
     pub fn render(self: CodeBlock, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         return renderCodeBlock(self, scene, bounds, options);
+    }
+
+    pub fn measure(self: CodeBlock, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
+        _ = options;
+        return measureCodeBlock(self, constraints);
     }
 
     pub fn toHtml(self: CodeBlock, out: []u8) HtmlError![]u8 {
@@ -66,6 +72,23 @@ pub fn renderCodeBlock(block: CodeBlock, scene: *ui.Scene, bounds: ui.Rect, opti
             y += code_line_height;
         }
     }
+}
+
+pub fn measureCodeBlock(block: CodeBlock, constraints: layout.Constraints) layout.Measurement {
+    var max_line_width: f32 = 0;
+    for (block.lines) |line| {
+        max_line_width = @max(max_line_width, @as(f32, @floatFromInt(line.len)) * code_average_char_width);
+    }
+    const line_count = @max(@as(usize, 1), block.lines.len);
+    const preferred = ui.Size{
+        .w = max_line_width + code_padding_x * 2.0,
+        .h = @as(f32, @floatFromInt(line_count)) * code_line_height + code_padding_y * 2.0,
+    };
+    return layout.Measurement.flexible(
+        .{ .w = @min(preferred.w, constraints.width.limit(preferred.w)), .h = @min(code_line_height + code_padding_y * 2.0, preferred.h) },
+        .{ .w = constraints.width.exactValue() orelse preferred.w, .h = constraints.height.exactValue() orelse preferred.h },
+        preferred,
+    );
 }
 
 fn renderRegistered(component: *const anyopaque, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
@@ -182,6 +205,7 @@ const code_padding_y: f32 = 18.0;
 const code_line_height: f32 = 17.0;
 const code_text_height: f32 = 12.0;
 const code_clip_inset: f32 = 1.0;
+const code_average_char_width: f32 = 8.0;
 const git_sha1_len: usize = 40;
 const git_sha256_len: usize = 64;
 const git_commit_attr = "\" data-er-git-commit=\"";
@@ -279,6 +303,16 @@ test "code block component renders clipped source lines" {
     try block.render(&scene, ui.Rect.init(0, 0, 360, 64), .{});
 
     try std.testing.expect(hasText(scene.written(), "const dns = lookup(name);"));
+}
+
+test "code block measurement uses longest source line and line count" {
+    const lines = [_][]const u8{ "const dns = lookup(name);", "try dns.await();" };
+    const block = CodeBlock{ .language = "zig", .lines = &lines };
+
+    const measured = block.measure(.{ .width = .{ .exact = 240 }, .text_wrap = .nowrap }, .{});
+
+    try std.testing.expectEqual(@as(f32, 240), measured.preferred.w);
+    try std.testing.expect(measured.preferred.h > code_padding_y * 2.0);
 }
 
 test "code block html codec roundtrips escaped language and source" {
