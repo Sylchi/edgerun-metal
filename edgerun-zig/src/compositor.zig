@@ -429,9 +429,10 @@ test "compositor renders canonical ir above app surfaces" {
     const ir_target = try renderer_software.Surface.init(4, 4, &ir_pixels);
     var ir_damage: [4]PixelRect = undefined;
     var ir_compositor = try Compositor.init(ir_target, &ir_damage);
+    const font_pixels = [_]u8{ 255, 255, 255 };
     const alpha = [_]u8{255};
     const ir_receipt = try ir_compositor.composeIr(&.{app_surface}, buffers, .{
-        .font = .{ .width = 1, .height = 1, .alpha = &alpha },
+        .font = .{ .width = 1, .height = 1, .pixels = &font_pixels },
         .icon = .{ .width = 1, .height = 1, .alpha = &alpha },
     }, .clear);
 

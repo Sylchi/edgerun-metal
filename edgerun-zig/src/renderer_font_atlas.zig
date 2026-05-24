@@ -5,7 +5,10 @@ const varfont = @import("varfont.zig");
 pub const width: usize = 1024;
 pub const height: usize = 1024;
 pub const bytes: usize = width * height;
+pub const channels: usize = 3;
+pub const texture_bytes: usize = bytes * channels;
 pub const glyph_capacity: usize = 1280;
+pub const format: varfont.AtlasFormat = .msdf_rgb;
 
 const padding: usize = 4;
 const row_gap: usize = 4;
@@ -20,7 +23,7 @@ const CachedGlyph = struct {
 };
 
 pub const Atlas = struct {
-    alpha: [bytes]u8 = [_]u8{0} ** bytes,
+    texture: [texture_bytes]u8 = [_]u8{0} ** texture_bytes,
     bitmap: [bitmap_bytes]u8 = undefined,
     glyphs: [glyph_capacity]CachedGlyph = undefined,
     glyph_count: usize = 0,
@@ -41,8 +44,8 @@ pub const Atlas = struct {
         };
     }
 
-    pub fn alphaSlice(self: *const Atlas) []const u8 {
-        return &self.alpha;
+    pub fn textureSlice(self: *const Atlas) []const u8 {
+        return &self.texture;
     }
 
     pub fn cachedGlyphCount(self: *const Atlas) usize {
@@ -73,7 +76,7 @@ pub const Atlas = struct {
     fn cacheGlyph(self: *Atlas, ch: u8, px: u8) varfont.Error!renderer_ir.Glyph {
         if (self.glyph_count >= self.glyphs.len) return error.GlyphCacheFull;
         const face = try varfont.Face.geist();
-        var cache = varfont.Cache.init(face, &self.bitmap);
+        var cache = varfont.Cache.initFormat(face, &self.bitmap, format);
         _ = cache.setAxis("wght", font_weight);
         const glyph_id = face.glyphId(ch);
         const cached = try cache.bakeGlyph(glyph_id, @as(f32, @floatFromInt(px)) * device_scale);
@@ -124,9 +127,9 @@ pub const Atlas = struct {
     fn copyGlyphBitmap(self: *Atlas, x: usize, y: usize, w: usize, h: usize, source_pixels: []const u8) void {
         var row: usize = 0;
         while (row < h) : (row += 1) {
-            const dst = (y + row) * width + x;
-            const src = row * w;
-            @memcpy(self.alpha[dst .. dst + w], source_pixels[src .. src + w]);
+            const dst = ((y + row) * width + x) * channels;
+            const src = row * w * channels;
+            @memcpy(self.texture[dst .. dst + w * channels], source_pixels[src .. src + w * channels]);
         }
     }
 };
