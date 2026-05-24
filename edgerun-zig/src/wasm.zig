@@ -984,15 +984,15 @@ const Executor = struct {
                 },
                 .@"return" => return try finishFunctionResult(function_type, &frame),
                 .block => {
-                    try readEmptyBlockType(&reader);
+                    try readBlockType(&reader);
                     try pushControl(&controls, &control_len, .block, reader.offset);
                 },
                 .loop => {
-                    try readEmptyBlockType(&reader);
+                    try readBlockType(&reader);
                     try pushControl(&controls, &control_len, .loop, reader.offset);
                 },
                 .@"if" => {
-                    try readEmptyBlockType(&reader);
+                    try readBlockType(&reader);
                     const condition = try frame.popI32();
                     if (condition == 0) {
                         const skip_result = try skipUntakenIf(&reader);
@@ -1562,9 +1562,11 @@ fn parseEmptySection(reader: *Reader) Error!void {
     if (count != 0 or !reader.done()) return error.Unsupported;
 }
 
-fn readEmptyBlockType(reader: *Reader) Error!void {
+fn readBlockType(reader: *Reader) Error!void {
     const block_type = try reader.readByte();
-    if (block_type != wasm_empty_block_type) return error.Unsupported;
+    if (block_type == wasm_empty_block_type) return;
+    const value_type = valueTypeFromByte(block_type) orelse return error.Unsupported;
+    if (!supportedInteger(value_type)) return error.Unsupported;
 }
 
 const IfSkipResult = enum {
@@ -1578,7 +1580,7 @@ fn skipUntakenIf(reader: *Reader) Error!IfSkipResult {
         const opcode = opcodeFromByte(try reader.readByte()) orelse return error.Unsupported;
         switch (opcode) {
             .block, .loop, .@"if" => {
-                try readEmptyBlockType(reader);
+                try readBlockType(reader);
                 depth += 1;
             },
             .@"else" => {
@@ -1601,7 +1603,7 @@ fn skipControlDepth(reader: *Reader, branch_depth: u32) Error!void {
         const opcode = opcodeFromByte(try reader.readByte()) orelse return error.Unsupported;
         switch (opcode) {
             .block, .loop, .@"if" => {
-                try readEmptyBlockType(reader);
+                try readBlockType(reader);
                 depth += 1;
             },
             .end => {
@@ -1668,7 +1670,7 @@ fn skipOpcodeImmediate(reader: *Reader, opcode: Opcode) Error!void {
             _ = try reader.readU32Leb();
             _ = try reader.readU32Leb();
         },
-        .block, .loop, .@"if" => try readEmptyBlockType(reader),
+        .block, .loop, .@"if" => try readBlockType(reader),
         .@"unreachable",
         .nop,
         .end,
