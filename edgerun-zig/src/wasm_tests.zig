@@ -21,6 +21,196 @@ const return_forty_two_wasm = [_]u8{
     0x04, 0x00, 0x42, 0x2a, 0x0b,
 };
 
+const export_memory_and_function_wasm = [_]u8{
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+    0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7e, 0x03,
+    0x02, 0x01, 0x00, 0x05, 0x03, 0x01, 0x00, 0x01,
+    0x07, 0x11, 0x02, 0x04, 'm',  'a',  'i',  'n',
+    0x00, 0x00, 0x06, 'm',  'e',  'm',  'o',  'r',
+    'y',  0x02, 0x00, 0x0a, 0x06, 0x01, 0x04, 0x00,
+    0x42, 0x2a, 0x0b,
+};
+
+const return_i32_wasm = [_]u8{
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+    0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7f, 0x03,
+    0x02, 0x01, 0x00, 0x07, 0x08, 0x01, 0x04, 'm',
+    'a',  'i',  'n',  0x00, 0x00, 0x0a, 0x06, 0x01,
+    0x04, 0x00, 0x41, 0x2a, 0x0b,
+};
+
+const return_void_wasm = [_]u8{
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+    0x01, 0x04, 0x01, 0x60, 0x00, 0x00, 0x03, 0x02,
+    0x01, 0x00, 0x07, 0x08, 0x01, 0x04, 'm',  'a',
+    'i',  'n',  0x00, 0x00, 0x0a, 0x05, 0x01, 0x03,
+    0x00, 0x01, 0x0b,
+};
+
+const return_multi_value_wasm = [_]u8{
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+    0x01, 0x06, 0x01, 0x60, 0x00, 0x02, 0x7f, 0x7e,
+    0x03, 0x02, 0x01, 0x00, 0x07, 0x08, 0x01, 0x04,
+    'm',  'a',  'i',  'n',  0x00, 0x00, 0x0a, 0x08,
+    0x01, 0x06, 0x00, 0x41, 0x07, 0x42, 0x2a, 0x0b,
+};
+
+const return_float_values_wasm = [_]u8{
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+    0x01, 0x06, 0x01, 0x60, 0x00, 0x02, 0x7d, 0x7c,
+    0x03, 0x02, 0x01, 0x00, 0x07, 0x08, 0x01, 0x04,
+    'm',  'a',  'i',  'n',  0x00, 0x00, 0x0a, 0x12,
+    0x01, 0x10, 0x00, 0x43, 0x00, 0x00, 0xc0, 0x3f,
+    0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04,
+    0x40, 0x0b,
+};
+
+const return_float_args_wasm = [_]u8{
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+    0x01, 0x08, 0x01, 0x60, 0x02, 0x7d, 0x7c, 0x02,
+    0x7d, 0x7c, 0x03, 0x02, 0x01, 0x00, 0x07, 0x08,
+    0x01, 0x04, 'm',  'a',  'i',  'n',  0x00, 0x00,
+    0x0a, 0x08, 0x01, 0x06, 0x00, 0x20, 0x00, 0x20,
+    0x01, 0x0b,
+};
+
+const f32_global_wasm = [_]u8{
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+    0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7d, 0x03,
+    0x02, 0x01, 0x00, 0x06, 0x09, 0x01, 0x7d, 0x00,
+    0x43, 0x00, 0x00, 0xc0, 0x3f, 0x0b, 0x07, 0x08,
+    0x01, 0x04, 'm',  'a',  'i',  'n',  0x00, 0x00,
+    0x0a, 0x06, 0x01, 0x04, 0x00, 0x23, 0x00, 0x0b,
+};
+
+const mutable_f64_global_wasm = [_]u8{
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+    0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7c, 0x03,
+    0x02, 0x01, 0x00, 0x06, 0x0d, 0x01, 0x7c, 0x01,
+    0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x0b, 0x07, 0x08, 0x01, 0x04, 'm',  'a',
+    'i',  'n',  0x00, 0x00, 0x0a, 0x11, 0x01, 0x0f,
+    0x00, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x04, 0x40, 0x24, 0x00, 0x23, 0x00, 0x0b,
+};
+
+const float_memory_wasm = [_]u8{
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+    0x01, 0x06, 0x01, 0x60, 0x00, 0x02, 0x7d, 0x7c,
+    0x03, 0x02, 0x01, 0x00, 0x05, 0x03, 0x01, 0x00,
+    0x01, 0x07, 0x08, 0x01, 0x04, 'm',  'a',  'i',
+    'n',  0x00, 0x00, 0x0a, 0x26, 0x01, 0x24, 0x00,
+    0x41, 0x00, 0x43, 0x00, 0x00, 0xc0, 0x3f, 0x38,
+    0x02, 0x00, 0x41, 0x08, 0x44, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x04, 0x40, 0x39, 0x03, 0x00,
+    0x41, 0x00, 0x2a, 0x02, 0x00, 0x41, 0x08, 0x2b,
+    0x03, 0x00, 0x0b,
+};
+
+const f32_arithmetic_wasm = [_]u8{
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+    0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7d, 0x03,
+    0x02, 0x01, 0x00, 0x07, 0x08, 0x01, 0x04, 'm',
+    'a',  'i',  'n',  0x00, 0x00, 0x0a, 0x15, 0x01,
+    0x13, 0x00, 0x43, 0x00, 0x00, 0xc0, 0x3f, 0x43,
+    0x00, 0x00, 0x20, 0x40, 0x92, 0x43, 0x00, 0x00,
+    0x00, 0x40, 0x94, 0x0b,
+};
+
+const f64_comparison_wasm = [_]u8{
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+    0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7f, 0x03,
+    0x02, 0x01, 0x00, 0x07, 0x08, 0x01, 0x04, 'm',
+    'a',  'i',  'n',  0x00, 0x00, 0x0a, 0x17, 0x01,
+    0x15, 0x00, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x10, 0x40, 0x44, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x08, 0x40, 0x64, 0x0b,
+};
+
+const f64_unary_wasm = [_]u8{
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+    0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7c, 0x03,
+    0x02, 0x01, 0x00, 0x07, 0x08, 0x01, 0x04, 'm',
+    'a',  'i',  'n',  0x00, 0x00, 0x0a, 0x0f, 0x01,
+    0x0d, 0x00, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x22, 0xc0, 0x99, 0x9f, 0x0b,
+};
+
+const numeric_conversion_wasm = [_]u8{
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+    0x01, 0x08, 0x01, 0x60, 0x00, 0x04, 0x7f, 0x7e,
+    0x7d, 0x7c, 0x03, 0x02, 0x01, 0x00, 0x07, 0x08,
+    0x01, 0x04, 'm',  'a',  'i',  'n',  0x00, 0x00,
+    0x0a, 0x1a, 0x01, 0x18, 0x00, 0x43, 0x00, 0x00,
+    0x2b, 0x42, 0xa8, 0x44, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x45, 0x40, 0xb1, 0x41, 0x7f, 0xb2,
+    0x42, 0x7e, 0xb9, 0x0b,
+};
+
+const invalid_trunc_nan_wasm = [_]u8{
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+    0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7f, 0x03,
+    0x02, 0x01, 0x00, 0x07, 0x08, 0x01, 0x04, 'm',
+    'a',  'i',  'n',  0x00, 0x00, 0x0a, 0x0a, 0x01,
+    0x08, 0x00, 0x43, 0x00, 0x00, 0xc0, 0x7f, 0xa8,
+    0x0b,
+};
+
+const reinterpret_float_bits_wasm = [_]u8{
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+    0x01, 0x06, 0x01, 0x60, 0x00, 0x02, 0x7f, 0x7e,
+    0x03, 0x02, 0x01, 0x00, 0x07, 0x08, 0x01, 0x04,
+    'm',  'a',  'i',  'n',  0x00, 0x00, 0x0a, 0x14,
+    0x01, 0x12, 0x00, 0x43, 0x00, 0x00, 0xc0, 0x3f,
+    0xbc, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x04, 0x40, 0xbd, 0x0b,
+};
+
+const saturating_trunc_wasm = [_]u8{
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+    0x01, 0x08, 0x01, 0x60, 0x00, 0x04, 0x7f, 0x7f,
+    0x7e, 0x7e, 0x03, 0x02, 0x01, 0x00, 0x07, 0x08,
+    0x01, 0x04, 'm',  'a',  'i',  'n',  0x00, 0x00,
+    0x0a, 0x28, 0x01, 0x26, 0x00, 0x43, 0x00, 0x00,
+    0xc0, 0x7f, 0xfc, 0x00, 0x44, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0xf4, 0xbf, 0xfc, 0x02, 0x43,
+    0x00, 0x00, 0x30, 0xc0, 0xfc, 0x04, 0x44, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x45, 0x40, 0xfc,
+    0x07, 0x0b,
+};
+
+const memory_fill_copy_wasm = [_]u8{
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+    0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7e, 0x03,
+    0x02, 0x01, 0x00, 0x05, 0x03, 0x01, 0x00, 0x01,
+    0x07, 0x08, 0x01, 0x04, 'm',  'a',  'i',  'n',
+    0x00, 0x00, 0x0a, 0x1c, 0x01, 0x1a, 0x00, 0x41,
+    0x00, 0x41, 0x2a, 0x41, 0x08, 0xfc, 0x0b, 0x00,
+    0x41, 0x08, 0x41, 0x00, 0x41, 0x08, 0xfc, 0x0a,
+    0x00, 0x00, 0x41, 0x08, 0x29, 0x03, 0x00, 0x0b,
+};
+
+const imported_i32_wasm = [_]u8{
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+    0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7f, 0x02,
+    0x10, 0x01, 0x03, 'e',  'n',  'v',  0x08, 'a',
+    'n',  's',  'w',  'e',  'r',  '3',  '2',  0x00,
+    0x00, 0x03, 0x02, 0x01, 0x00, 0x07, 0x08, 0x01,
+    0x04, 'm',  'a',  'i',  'n',  0x00, 0x01, 0x0a,
+    0x06, 0x01, 0x04, 0x00, 0x10, 0x00, 0x0b,
+};
+
+const imported_multi_value_wasm = [_]u8{
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+    0x01, 0x06, 0x01, 0x60, 0x00, 0x02, 0x7f, 0x7e,
+    0x02, 0x11, 0x01, 0x03, 'e',  'n',  'v',  0x09,
+    'a',  'n',  's',  'w',  'e',  'r',  '2',  'x',
+    'x',  0x00, 0x00, 0x03, 0x02, 0x01, 0x00, 0x07,
+    0x08, 0x01, 0x04, 'm',  'a',  'i',  'n',  0x00,
+    0x01, 0x0a, 0x06, 0x01, 0x04, 0x00, 0x10, 0x00,
+    0x0b,
+};
+
 const nop_before_return_wasm = [_]u8{
     0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
     0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7e, 0x03,
@@ -127,6 +317,17 @@ const memory_grow_load_wasm = [_]u8{
     0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7e, 0x03,
     0x02, 0x01, 0x00, 0x05, 0x04, 0x01, 0x01, 0x01,
     0x02, 0x07, 0x08, 0x01, 0x04, 'm',  'a',  'i',
+    'n',  0x00, 0x00, 0x0a, 0x19, 0x01, 0x17, 0x00,
+    0x41, 0x01, 0x40, 0x00, 0x1a, 0x41, 0x80, 0x80,
+    0x04, 0x42, 0x2a, 0x37, 0x03, 0x00, 0x41, 0x80,
+    0x80, 0x04, 0x29, 0x03, 0x00, 0x0b,
+};
+
+const memory_grow_beyond_module_max_wasm = [_]u8{
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+    0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7e, 0x03,
+    0x02, 0x01, 0x00, 0x05, 0x04, 0x01, 0x01, 0x01,
+    0x01, 0x07, 0x08, 0x01, 0x04, 'm',  'a',  'i',
     'n',  0x00, 0x00, 0x0a, 0x19, 0x01, 0x17, 0x00,
     0x41, 0x01, 0x40, 0x00, 0x1a, 0x41, 0x80, 0x80,
     0x04, 0x42, 0x2a, 0x37, 0x03, 0x00, 0x41, 0x80,
@@ -569,6 +770,20 @@ fn executeRuntime(memory: []u8, ticks: *u64, wasm_bytes: []const u8) wasm.Error!
     return wasm.executeExportI64(&runtime, wasm_bytes, "main");
 }
 
+const GrowAuthority = struct {
+    backing: []u8,
+    requests: usize = 0,
+};
+
+fn grantGrow(context: ?*anyopaque, runtime: *wasm.Runtime, request: wasm.MemoryGrowRequest) wasm.Error!bool {
+    const authority: *GrowAuthority = @ptrCast(@alignCast(context orelse return error.BadArgument));
+    if (!request.valid()) return error.Corrupt;
+    if (request.requested_bytes > authority.backing.len) return false;
+    authority.requests += 1;
+    runtime.memory = authority.backing[0..request.requested_bytes];
+    return true;
+}
+
 test "wasm interpreter executes exported i64 function and charges app ticks" {
     var memory: [256]u8 = undefined;
     var storage_bytes: [64]u8 = undefined;
@@ -577,6 +792,244 @@ test "wasm interpreter executes exported i64 function and charges app ticks" {
 
     try std.testing.expectEqual(@as(i64, 42), try wasm_app.executeExportI64(&app, &return_forty_two_wasm, "main"));
     try std.testing.expectEqual(@as(u64, 2), app.executionRemaining());
+}
+
+test "wasm interpreter does not reject modules that export memory" {
+    var memory: [wasm_page_bytes]u8 = undefined;
+    var ticks: u64 = 4;
+
+    try std.testing.expectEqual(@as(i64, 42), try executeRuntime(&memory, &ticks, &export_memory_and_function_wasm));
+}
+
+test "wasm interpreter runs exported i32 function without i64-only gate" {
+    var memory: [256]u8 = undefined;
+    var ticks: u64 = 4;
+    var runtime = wasm.Runtime.init(&memory, &ticks);
+
+    try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64(&runtime, &return_i32_wasm, "main"));
+    try std.testing.expectEqual(@as(u64, 2), ticks);
+}
+
+test "wasm interpreter runs exported function with no result" {
+    var memory: [256]u8 = undefined;
+    var ticks: u64 = 4;
+    var runtime = wasm.Runtime.init(&memory, &ticks);
+
+    try std.testing.expectEqual(@as(?i64, null), try wasm.executeExport(&runtime, &return_void_wasm, "main"));
+    try std.testing.expectEqual(@as(u64, 2), ticks);
+}
+
+test "wasm interpreter returns multiple typed values" {
+    var memory: [256]u8 = undefined;
+    var ticks: u64 = 4;
+    var runtime = wasm.Runtime.init(&memory, &ticks);
+
+    const result = try wasm.executeExportValues(&runtime, &return_multi_value_wasm, "main");
+    try std.testing.expectEqual(@as(usize, 2), result.count);
+    try std.testing.expectEqual(@as(i32, 7), try result.valueI32(0));
+    try std.testing.expectEqual(@as(i64, 42), try result.valueI64(1));
+    try std.testing.expectEqual(@as(u64, 1), ticks);
+}
+
+test "wasm interpreter returns float values without integer gate" {
+    var memory: [256]u8 = undefined;
+    var ticks: u64 = 4;
+    var runtime = wasm.Runtime.init(&memory, &ticks);
+
+    const result = try wasm.executeExportValues(&runtime, &return_float_values_wasm, "main");
+    try std.testing.expectEqual(@as(usize, 2), result.count);
+    try std.testing.expectEqual(@as(u32, 0x3fc00000), @as(u32, @bitCast(try result.valueF32(0))));
+    try std.testing.expectEqual(@as(u64, 0x4004000000000000), @as(u64, @bitCast(try result.valueF64(1))));
+    try std.testing.expectEqual(@as(u64, 1), ticks);
+}
+
+test "wasm interpreter reads float globals" {
+    var memory: [256]u8 = undefined;
+    var ticks: u64 = 4;
+    var runtime = wasm.Runtime.init(&memory, &ticks);
+
+    const result = try wasm.executeExportValues(&runtime, &f32_global_wasm, "main");
+    try std.testing.expectEqual(@as(usize, 1), result.count);
+    try std.testing.expectEqual(@as(u32, 0x3fc00000), @as(u32, @bitCast(try result.valueF32(0))));
+    try std.testing.expectEqual(@as(u64, 2), ticks);
+}
+
+test "wasm interpreter writes mutable float globals" {
+    var memory: [256]u8 = undefined;
+    var ticks: u64 = 6;
+    var runtime = wasm.Runtime.init(&memory, &ticks);
+
+    const result = try wasm.executeExportValues(&runtime, &mutable_f64_global_wasm, "main");
+    try std.testing.expectEqual(@as(usize, 1), result.count);
+    try std.testing.expectEqual(@as(u64, 0x4004000000000000), @as(u64, @bitCast(try result.valueF64(0))));
+    try std.testing.expectEqual(@as(u64, 2), ticks);
+}
+
+test "wasm interpreter accepts exported float parameters" {
+    var memory: [256]u8 = undefined;
+    var ticks: u64 = 4;
+    var runtime = wasm.Runtime.init(&memory, &ticks);
+
+    const result = try wasm.executeExportValueArgs(&runtime, &return_float_args_wasm, "main", &.{
+        .{ .f32 = 1.5 },
+        .{ .f64 = 2.5 },
+    });
+    try std.testing.expectEqual(@as(usize, 2), result.count);
+    try std.testing.expectEqual(@as(u32, 0x3fc00000), @as(u32, @bitCast(try result.valueF32(0))));
+    try std.testing.expectEqual(@as(u64, 0x4004000000000000), @as(u64, @bitCast(try result.valueF64(1))));
+    try std.testing.expectEqual(@as(u64, 1), ticks);
+}
+
+test "wasm interpreter loads and stores float memory" {
+    var memory: [wasm_page_bytes]u8 = undefined;
+    @memset(&memory, 0);
+    var ticks: u64 = 16;
+    var runtime = wasm.Runtime.init(&memory, &ticks);
+
+    const result = try wasm.executeExportValues(&runtime, &float_memory_wasm, "main");
+    try std.testing.expectEqual(@as(usize, 2), result.count);
+    try std.testing.expectEqual(@as(u32, 0x3fc00000), @as(u32, @bitCast(try result.valueF32(0))));
+    try std.testing.expectEqual(@as(u64, 0x4004000000000000), @as(u64, @bitCast(try result.valueF64(1))));
+    try std.testing.expectEqual(@as(u32, 0x3fc00000), byte_utils.load32(memory[0..4]).?);
+    try std.testing.expectEqual(@as(u64, 0x4004000000000000), byte_utils.load64(memory[8..16]).?);
+    try std.testing.expectEqual(@as(u64, 5), ticks);
+}
+
+test "wasm interpreter executes f32 arithmetic" {
+    var memory: [256]u8 = undefined;
+    var ticks: u64 = 16;
+    var runtime = wasm.Runtime.init(&memory, &ticks);
+
+    const result = try wasm.executeExportValues(&runtime, &f32_arithmetic_wasm, "main");
+    try std.testing.expectEqual(@as(usize, 1), result.count);
+    try std.testing.expectEqual(@as(u32, 0x41000000), @as(u32, @bitCast(try result.valueF32(0))));
+    try std.testing.expectEqual(@as(u64, 10), ticks);
+}
+
+test "wasm interpreter executes f64 comparisons" {
+    var memory: [256]u8 = undefined;
+    var ticks: u64 = 8;
+    var runtime = wasm.Runtime.init(&memory, &ticks);
+
+    try std.testing.expectEqual(@as(i32, 1), (try wasm.executeExportValues(&runtime, &f64_comparison_wasm, "main")).valueI32(0));
+    try std.testing.expectEqual(@as(u64, 4), ticks);
+}
+
+test "wasm interpreter executes f64 unary numeric operations" {
+    var memory: [256]u8 = undefined;
+    var ticks: u64 = 4;
+    var runtime = wasm.Runtime.init(&memory, &ticks);
+
+    const result = try wasm.executeExportValues(&runtime, &f64_unary_wasm, "main");
+    try std.testing.expectEqual(@as(usize, 1), result.count);
+    try std.testing.expectEqual(@as(u64, 0x4008000000000000), @as(u64, @bitCast(try result.valueF64(0))));
+    try std.testing.expectEqual(@as(u64, 0), ticks);
+}
+
+test "wasm interpreter executes numeric conversions" {
+    var memory: [256]u8 = undefined;
+    var ticks: u64 = 16;
+    var runtime = wasm.Runtime.init(&memory, &ticks);
+
+    const result = try wasm.executeExportValues(&runtime, &numeric_conversion_wasm, "main");
+    try std.testing.expectEqual(@as(usize, 4), result.count);
+    try std.testing.expectEqual(@as(i32, 42), try result.valueI32(0));
+    try std.testing.expectEqual(@as(i64, 42), try result.valueI64(1));
+    try std.testing.expectEqual(@as(u32, 0xbf800000), @as(u32, @bitCast(try result.valueF32(2))));
+    try std.testing.expectEqual(@as(u64, 0xc000000000000000), @as(u64, @bitCast(try result.valueF64(3))));
+    try std.testing.expectEqual(@as(u64, 7), ticks);
+}
+
+test "wasm interpreter traps invalid numeric truncation" {
+    var memory: [256]u8 = undefined;
+    var ticks: u64 = 4;
+    var runtime = wasm.Runtime.init(&memory, &ticks);
+
+    try std.testing.expectError(error.ArithmeticTrap, wasm.executeExportI64(&runtime, &invalid_trunc_nan_wasm, "main"));
+}
+
+test "wasm interpreter reinterprets float bits" {
+    var memory: [256]u8 = undefined;
+    var ticks: u64 = 8;
+    var runtime = wasm.Runtime.init(&memory, &ticks);
+
+    const result = try wasm.executeExportValues(&runtime, &reinterpret_float_bits_wasm, "main");
+    try std.testing.expectEqual(@as(usize, 2), result.count);
+    try std.testing.expectEqual(@as(i32, @bitCast(@as(u32, 0x3fc00000))), try result.valueI32(0));
+    try std.testing.expectEqual(@as(i64, @bitCast(@as(u64, 0x4004000000000000))), try result.valueI64(1));
+    try std.testing.expectEqual(@as(u64, 3), ticks);
+}
+
+test "wasm interpreter executes saturating truncation prefix opcodes" {
+    var memory: [256]u8 = undefined;
+    var ticks: u64 = 16;
+    var runtime = wasm.Runtime.init(&memory, &ticks);
+
+    const result = try wasm.executeExportValues(&runtime, &saturating_trunc_wasm, "main");
+    try std.testing.expectEqual(@as(usize, 4), result.count);
+    try std.testing.expectEqual(@as(i32, 0), try result.valueI32(0));
+    try std.testing.expectEqual(@as(i32, -1), try result.valueI32(1));
+    try std.testing.expectEqual(@as(i64, -2), try result.valueI64(2));
+    try std.testing.expectEqual(@as(i64, 42), try result.valueI64(3));
+    try std.testing.expectEqual(@as(u64, 7), ticks);
+}
+
+test "wasm interpreter executes memory fill and copy prefix opcodes" {
+    var memory: [wasm_page_bytes]u8 = undefined;
+    @memset(&memory, 0);
+    var ticks: u64 = 16;
+    var runtime = wasm.Runtime.init(&memory, &ticks);
+
+    try std.testing.expectEqual(@as(i64, @bitCast(@as(u64, 0x2a2a2a2a2a2a2a2a))), try wasm.executeExportI64(&runtime, &memory_fill_copy_wasm, "main"));
+    try std.testing.expectEqual(@as(u64, 0x2a2a2a2a2a2a2a2a), byte_utils.load64(memory[0..8]).?);
+    try std.testing.expectEqual(@as(u64, 0x2a2a2a2a2a2a2a2a), byte_utils.load64(memory[8..16]).?);
+    try std.testing.expectEqual(@as(u64, 5), ticks);
+}
+
+fn answerI32Import(_: ?*anyopaque, args: []const wasm.Value) wasm.Error!wasm.ExecutionResult {
+    if (args.len != 0) return error.Corrupt;
+    var result = wasm.ExecutionResult{ .count = 1 };
+    result.values[0] = .{ .i32 = 42 };
+    return result;
+}
+
+test "wasm interpreter accepts imported i32 function results" {
+    var memory: [256]u8 = undefined;
+    var ticks: u64 = 8;
+    const imports = [_]wasm.HostImport{.{
+        .module = "env",
+        .name = "answer32",
+        .call = answerI32Import,
+    }};
+    var runtime = wasm.Runtime.initWithImports(&memory, &ticks, &imports);
+
+    try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64(&runtime, &imported_i32_wasm, "main"));
+    try std.testing.expectEqual(@as(u64, 6), ticks);
+}
+
+fn answerMultiImport(_: ?*anyopaque, args: []const wasm.Value) wasm.Error!wasm.ExecutionResult {
+    if (args.len != 0) return error.Corrupt;
+    var result = wasm.ExecutionResult{ .count = 2 };
+    result.values[0] = .{ .i32 = 7 };
+    result.values[1] = .{ .i64 = 42 };
+    return result;
+}
+
+test "wasm interpreter accepts imported multi-value function results" {
+    var memory: [256]u8 = undefined;
+    var ticks: u64 = 8;
+    const imports = [_]wasm.HostImport{.{
+        .module = "env",
+        .name = "answer2xx",
+        .call = answerMultiImport,
+    }};
+    var runtime = wasm.Runtime.initWithImports(&memory, &ticks, &imports);
+
+    const result = try wasm.executeExportValues(&runtime, &imported_multi_value_wasm, "main");
+    try std.testing.expectEqual(@as(usize, 2), result.count);
+    try std.testing.expectEqual(@as(i32, 7), try result.valueI32(0));
+    try std.testing.expectEqual(@as(i64, 42), try result.valueI64(1));
+    try std.testing.expectEqual(@as(u64, 6), ticks);
 }
 
 test "wasm interpreter core runs from explicit runtime allocation" {
@@ -688,9 +1141,11 @@ test "wasm interpreter executes exported i64 functions with parameters" {
     try std.testing.expectEqual(@as(u64, 8), ticks);
 }
 
-fn doubleImport(_: ?*anyopaque, args: []const i64) wasm.Error!?i64 {
+fn doubleImport(_: ?*anyopaque, args: []const wasm.Value) wasm.Error!wasm.ExecutionResult {
     if (args.len != 1) return error.Corrupt;
-    return args[0] * 2;
+    var result = wasm.ExecutionResult{ .count = 1 };
+    result.values[0] = .{ .i64 = try args[0].asI64() * 2 };
+    return result;
 }
 
 test "wasm interpreter resolves and calls imported functions" {
@@ -724,7 +1179,6 @@ test "wasm interpreter uses imported memory from runtime allocation" {
         .name = "memory",
         .kind = .memory,
         .memory_min_pages = 1,
-        .memory_max_pages = 1,
     }};
     var runtime = wasm.Runtime.initWithImports(&memory, &ticks, &imports);
 
@@ -748,7 +1202,7 @@ test "wasm interpreter reads imported globals" {
         .name = "answer",
         .kind = .global,
         .global_value_type = .i64,
-        .global_value = 42,
+        .global_value = .{ .i64 = 42 },
     }};
     var runtime = wasm.Runtime.initWithImports(&memory, &ticks, &imports);
 
@@ -781,6 +1235,62 @@ test "wasm interpreter grows linear memory within declared limits" {
 
     try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64(&runtime, &memory_grow_load_wasm, "main"));
     try std.testing.expectEqual(@as(u64, 7), ticks);
+    try std.testing.expectEqual(@as(u64, 42), byte_utils.load64(memory[wasm_page_bytes .. wasm_page_bytes + 8]).?);
+}
+
+test "wasm memory growth is bounded by user allocation not module max" {
+    var memory: [wasm_page_bytes * 2]u8 = undefined;
+    @memset(&memory, 0);
+    var ticks: u64 = 16;
+    var runtime = wasm.Runtime.init(&memory, &ticks);
+
+    try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64(&runtime, &memory_grow_beyond_module_max_wasm, "main"));
+    try std.testing.expectEqual(@as(u64, 42), byte_utils.load64(memory[wasm_page_bytes .. wasm_page_bytes + 8]).?);
+}
+
+test "wasm memory growth beyond allocation requires authority" {
+    var memory: [wasm_page_bytes]u8 = undefined;
+    @memset(&memory, 0);
+    var ticks: u64 = 16;
+    var runtime = wasm.Runtime.init(&memory, &ticks);
+
+    try std.testing.expectError(error.MemoryGrowthRequiresAuthority, wasm.executeExportI64(&runtime, &memory_grow_load_wasm, "main"));
+}
+
+test "wasm memory growth beyond module max still asks parent authority" {
+    var memory: [wasm_page_bytes]u8 = undefined;
+    var backing: [wasm_page_bytes * 2]u8 = undefined;
+    @memset(&memory, 0);
+    @memset(&backing, 0);
+    backing[0..wasm_page_bytes].* = memory;
+    var ticks: u64 = 16;
+    var authority = GrowAuthority{ .backing = &backing };
+    var runtime = wasm.Runtime.init(&memory, &ticks);
+    runtime.memory_grow_authority = .{
+        .context = &authority,
+        .request = grantGrow,
+    };
+
+    try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64(&runtime, &memory_grow_beyond_module_max_wasm, "main"));
+    try std.testing.expectEqual(@as(usize, 1), authority.requests);
+    try std.testing.expectEqual(@as(usize, wasm_page_bytes * 2), runtime.memory.len);
+    try std.testing.expectEqual(@as(u64, 42), byte_utils.load64(backing[wasm_page_bytes .. wasm_page_bytes + 8]).?);
+}
+
+test "wasm memory growth can be granted by parent authority" {
+    var memory: [wasm_page_bytes * 2]u8 = undefined;
+    @memset(&memory, 0);
+    var ticks: u64 = 16;
+    var authority = GrowAuthority{ .backing = &memory };
+    var runtime = wasm.Runtime.init(memory[0..wasm_page_bytes], &ticks);
+    runtime.memory_grow_authority = .{
+        .context = &authority,
+        .request = grantGrow,
+    };
+
+    try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64(&runtime, &memory_grow_load_wasm, "main"));
+    try std.testing.expectEqual(@as(usize, 1), authority.requests);
+    try std.testing.expectEqual(@as(usize, wasm_page_bytes * 2), runtime.memory.len);
     try std.testing.expectEqual(@as(u64, 42), byte_utils.load64(memory[wasm_page_bytes .. wasm_page_bytes + 8]).?);
 }
 
