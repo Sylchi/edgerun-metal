@@ -243,10 +243,6 @@ pub fn registerCodeBlock(registry: *ComponentRegistry) RegistryError!void {
     return code_block_component.register(registry);
 }
 
-pub fn renderCodeBlock(scene: *ui.Scene, bounds: ui.Rect, block: CodeBlock, options: RenderOptions) ui.RenderError!void {
-    return block.render(scene, bounds, options);
-}
-
 pub fn registerDefinitionList(registry: *ComponentRegistry) RegistryError!void {
     return definition_list_component.register(registry);
 }

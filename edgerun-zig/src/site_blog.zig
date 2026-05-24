@@ -3281,7 +3281,7 @@ fn episodeLabel(episode: usize) []const u8 {
 }
 
 fn codeBlock(scene: *ui.Scene, bounds: ui.Rect, lines: []const []const u8) ui.RenderError!void {
-    try components.renderCodeBlock(scene, bounds, .{ .lines = lines }, .{ .style = siteStyle() });
+    try (components.CodeBlock{ .lines = lines }).render(scene, bounds, .{ .style = siteStyle() });
 }
 
 fn renderNodeMap(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
