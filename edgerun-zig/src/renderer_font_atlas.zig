@@ -2,19 +2,18 @@ const std = @import("std");
 const renderer_ir = @import("renderer_ir.zig");
 const varfont = @import("varfont.zig");
 
-pub const width: usize = 1024;
-pub const height: usize = 1024;
+pub const width: usize = 2048;
+pub const height: usize = 2048;
 pub const bytes: usize = width * height;
-pub const channels: usize = 3;
-pub const texture_bytes: usize = bytes * channels;
+pub const channels: usize = 1;
 pub const glyph_capacity: usize = 1280;
-pub const format: varfont.AtlasFormat = .msdf_rgb;
+pub const format: varfont.AtlasFormat = .alpha8;
 
-const padding: usize = 4;
-const row_gap: usize = 4;
+const padding: usize = 8;
+const row_gap: usize = 8;
 const bitmap_bytes: usize = 2 * 1024 * 1024;
 const font_weight: f32 = 560.0;
-const device_scale: f32 = 1.0;
+const device_scale: f32 = 2.0;
 
 const CachedGlyph = struct {
     ch: u8,
@@ -23,7 +22,7 @@ const CachedGlyph = struct {
 };
 
 pub const Atlas = struct {
-    texture: [texture_bytes]u8 = [_]u8{0} ** texture_bytes,
+    alpha: [bytes]u8 = [_]u8{0} ** bytes,
     bitmap: [bitmap_bytes]u8 = undefined,
     glyphs: [glyph_capacity]CachedGlyph = undefined,
     glyph_count: usize = 0,
@@ -44,8 +43,8 @@ pub const Atlas = struct {
         };
     }
 
-    pub fn textureSlice(self: *const Atlas) []const u8 {
-        return &self.texture;
+    pub fn alphaSlice(self: *const Atlas) []const u8 {
+        return &self.alpha;
     }
 
     pub fn cachedGlyphCount(self: *const Atlas) usize {
@@ -113,11 +112,11 @@ pub const Atlas = struct {
             .v0 = atlas_v0,
             .u1 = atlas_u1,
             .v1 = atlas_v1,
-            .w = @floatFromInt(glyph_width),
-            .h = @floatFromInt(glyph_height),
-            .left = @floatFromInt(cached.left),
-            .top = @floatFromInt(cached.top),
-            .advance = cached.advance,
+            .w = scaledFontValue(@floatFromInt(glyph_width)),
+            .h = scaledFontValue(@floatFromInt(glyph_height)),
+            .left = scaledFontValue(@floatFromInt(cached.left)),
+            .top = scaledFontValue(@floatFromInt(cached.top)),
+            .advance = scaledFontValue(cached.advance),
         };
         self.glyphs[self.glyph_count] = .{ .ch = ch, .px = px, .glyph = packed_glyph };
         self.glyph_count += 1;
@@ -127,9 +126,9 @@ pub const Atlas = struct {
     fn copyGlyphBitmap(self: *Atlas, x: usize, y: usize, w: usize, h: usize, source_pixels: []const u8) void {
         var row: usize = 0;
         while (row < h) : (row += 1) {
-            const dst = ((y + row) * width + x) * channels;
-            const src = row * w * channels;
-            @memcpy(self.texture[dst .. dst + w * channels], source_pixels[src .. src + w * channels]);
+            const dst = (y + row) * width + x;
+            const src = row * w;
+            @memcpy(self.alpha[dst .. dst + w], source_pixels[src .. src + w]);
         }
     }
 };
@@ -160,6 +159,10 @@ fn textWidth(_: *anyopaque, value: []const u8, px: u8) f32 {
         previous = glyph_id;
     }
     return out;
+}
+
+fn scaledFontValue(value: f32) f32 {
+    return value / device_scale;
 }
 
 fn glyph(context: *anyopaque, ch: u8, px: u8) renderer_ir.Error!?renderer_ir.Glyph {

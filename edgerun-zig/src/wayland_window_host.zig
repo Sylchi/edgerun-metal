@@ -656,7 +656,7 @@ const NativeApp = struct {
 
         var sink_state = WaylandCommitSink{};
         const atlases = renderer_software.IrAtlases{
-            .font = .{ .width = renderer_font_atlas.width, .height = renderer_font_atlas.height, .pixels = self.font_atlas.textureSlice() },
+            .font = .{ .width = renderer_font_atlas.width, .height = renderer_font_atlas.height, .alpha = self.font_atlas.alphaSlice() },
             .icon = .{ .width = tabler_atlas.width, .height = tabler_atlas.height, .alpha = tabler_atlas.alpha },
         };
         switch (self.present) {
