@@ -2,6 +2,7 @@ const std = @import("std");
 const common = @import("../../../ui_component_common.zig");
 const layout = @import("../../../layouts/Types.zig");
 const ui = @import("../../../ui.zig");
+const base_text_block = @import("TextBlock.zig");
 
 const RenderOptions = common.RenderOptions;
 
@@ -21,11 +22,7 @@ pub fn render(scene: *ui.Scene, bounds: ui.Rect, params: Params, options: Render
     if (params.detail.len != 0) {
         const detail_y = title_bounds.y + title_bounds.h + detail_gap;
         const detail_bounds = ui.Rect.init(title_bounds.x, detail_y, title_bounds.w, @max(1.0, bounds.y + bounds.h - detail_y - padding));
-        try scene.pushWrappedText(detail_bounds, params.detail, options.style.muted, .{
-            .line_height = detail_height,
-            .average_char_width = detail_average_w,
-            .max_lines = detail_max_lines,
-        });
+        try base_text_block.render(scene, detail_bounds, params.detail, options.style.muted, detail_metrics);
     }
 }
 
@@ -40,16 +37,8 @@ pub fn renderFrame(scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui
 
 pub fn measure(params: Params, constraints: layout.Constraints) layout.Measurement {
     const inner = constraints.inner(layout.Insets.uniform(padding));
-    const title = layout.measureText(params.title, inner, .{
-        .line_height = title_height,
-        .average_char_width = title_average_w,
-        .max_lines = title_max_lines,
-    });
-    const detail = layout.measureText(params.detail, inner, .{
-        .line_height = detail_height,
-        .average_char_width = detail_average_w,
-        .max_lines = detail_max_lines,
-    });
+    const title = base_text_block.measure(params.title, inner, title_metrics);
+    const detail = base_text_block.measure(params.detail, inner, detail_metrics);
     const content_width = @max(title.preferred.w, detail.preferred.w);
     const content_height = title.preferred.h + detail_gap + detail.preferred.h;
     return layout.Measurement.flexible(
@@ -94,6 +83,16 @@ const detail_average_w: f32 = 8.0;
 const detail_max_lines: usize = 3;
 const min_width: f32 = 160.0;
 const max_width: f32 = 4096.0;
+const title_metrics = base_text_block.Metrics{
+    .line_height = title_height,
+    .average_char_width = title_average_w,
+    .max_lines = title_max_lines,
+};
+const detail_metrics = base_text_block.Metrics{
+    .line_height = detail_height,
+    .average_char_width = detail_average_w,
+    .max_lines = detail_max_lines,
+};
 
 test "base surface renders frame and text" {
     var commands: [12]ui.Command = undefined;
