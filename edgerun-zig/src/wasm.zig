@@ -86,6 +86,7 @@ pub const ValueType = enum(u8) {
     i64 = 0x7e,
     f32 = 0x7d,
     f64 = 0x7c,
+    funcref = wasm_funcref_type,
 };
 
 pub const Value = union(ValueType) {
@@ -93,6 +94,7 @@ pub const Value = union(ValueType) {
     i64: i64,
     f32: f32,
     f64: f64,
+    funcref: ?usize,
 
     fn zero(value_type: ValueType) Error!Value {
         return switch (value_type) {
@@ -100,6 +102,7 @@ pub const Value = union(ValueType) {
             .i64 => .{ .i64 = 0 },
             .f32 => .{ .f32 = 0 },
             .f64 => .{ .f64 = 0 },
+            .funcref => .{ .funcref = null },
         };
     }
 
@@ -107,7 +110,7 @@ pub const Value = union(ValueType) {
         return switch (value_type) {
             .i32 => .{ .i32 = @truncate(value) },
             .i64 => .{ .i64 = value },
-            .f32, .f64 => error.Unsupported,
+            .f32, .f64, .funcref => error.Unsupported,
         };
     }
 
@@ -139,11 +142,18 @@ pub const Value = union(ValueType) {
         };
     }
 
+    pub fn asFuncref(self: Value) Error!?usize {
+        return switch (self) {
+            .funcref => |value| value,
+            else => error.Corrupt,
+        };
+    }
+
     pub fn asIntegerI64(self: Value) Error!i64 {
         return switch (self) {
             .i32 => |value| value,
             .i64 => |value| value,
-            .f32, .f64 => error.Unsupported,
+            .f32, .f64, .funcref => error.Unsupported,
         };
     }
 };
@@ -215,6 +225,8 @@ const Opcode = enum(u8) {
     local_tee = 0x22,
     global_get = 0x23,
     global_set = 0x24,
+    table_get = 0x25,
+    table_set = 0x26,
     i32_load = 0x28,
     i64_load = 0x29,
     f32_load = 0x2a,
@@ -354,6 +366,9 @@ const Opcode = enum(u8) {
     i64_extend8_s = 0xc2,
     i64_extend16_s = 0xc3,
     i64_extend32_s = 0xc4,
+    ref_null = 0xd0,
+    ref_is_null = 0xd1,
+    ref_func = wasm_ref_func_opcode,
 };
 
 pub const Error = error{
@@ -578,7 +593,7 @@ const FuncType = struct {
 
 fn supportedValue(value_type: ValueType) bool {
     return switch (value_type) {
-        .i32, .i64, .f32, .f64 => true,
+        .i32, .i64, .f32, .f64, .funcref => true,
     };
 }
 
@@ -1353,6 +1368,10 @@ const Executor = struct {
         fn popF64(self: *Frame) Error!f64 {
             return (try self.pop()).asF64();
         }
+
+        fn popFuncref(self: *Frame) Error!?usize {
+            return (try self.pop()).asFuncref();
+        }
     };
 
     fn runExport(self: *Executor, name: []const u8, args: []const Value) Error!ExecutionResult {
@@ -1593,6 +1612,17 @@ const Executor = struct {
                     const value: i32 = @truncate(try frame.popI64());
                     try frame.pushI64(value);
                 },
+                .ref_null => {
+                    const ref_type = try reader.readByte();
+                    if (ref_type != wasm_funcref_type) return error.Unsupported;
+                    try frame.push(.{ .funcref = null });
+                },
+                .ref_is_null => try frame.pushI32(if ((try frame.popFuncref()) == null) 1 else 0),
+                .ref_func => {
+                    const function_ref = try reader.readU32Leb();
+                    if (function_ref >= self.module.totalFunctionCount()) return error.Corrupt;
+                    try frame.push(.{ .funcref = function_ref });
+                },
                 .drop => _ = try frame.pop(),
                 .select => {
                     const condition = try frame.popI32();
@@ -1634,6 +1664,8 @@ const Executor = struct {
                     if (!global.mutable) return error.Unsupported;
                     global.value = try popTypedValue(&frame, global.value_type);
                 },
+                .table_get => try self.tableGet(&frame, &reader),
+                .table_set => try self.tableSet(&frame, &reader),
                 .i32_load => try self.loadMemory(&frame, &reader, .i32),
                 .i64_load => try self.loadMemory(&frame, &reader, .i64),
                 .f32_load => try self.loadMemory(&frame, &reader, .f32),
@@ -1711,6 +1743,28 @@ const Executor = struct {
         const actual_type = self.module.types[try self.module.typeIndexForFunction(function_index)];
         if (!actual_type.eql(expected_type)) return error.Trap;
         return try self.callFunctionFromFrame(frame, function_index, depth);
+    }
+
+    fn tableGet(self: *Executor, frame: *Frame, reader: *Reader) Error!void {
+        try readTableIndex(reader);
+        const table_offset = try frame.popI32();
+        if (table_offset < 0) return error.Trap;
+        const table_entry: usize = @intCast(table_offset);
+        if (table_entry >= self.module.table_min_entries) return error.Trap;
+        try frame.push(.{ .funcref = self.module.table_entries[table_entry] });
+    }
+
+    fn tableSet(self: *Executor, frame: *Frame, reader: *Reader) Error!void {
+        try readTableIndex(reader);
+        const function_ref = try frame.popFuncref();
+        const table_offset = try frame.popI32();
+        if (table_offset < 0) return error.Trap;
+        const table_entry: usize = @intCast(table_offset);
+        if (table_entry >= self.module.table_min_entries) return error.Trap;
+        if (function_ref) |index| {
+            if (index >= self.module.totalFunctionCount()) return error.Corrupt;
+        }
+        self.module.table_entries[table_entry] = function_ref;
     }
 
     fn callFunctionFromFrame(self: *Executor, frame: *Frame, function_index: usize, depth: usize) Error!ExecutionResult {
@@ -2159,6 +2213,7 @@ fn valueTypeFromByte(value: u8) ?ValueType {
         @intFromEnum(ValueType.i64) => .i64,
         @intFromEnum(ValueType.f32) => .f32,
         @intFromEnum(ValueType.f64) => .f64,
+        @intFromEnum(ValueType.funcref) => .funcref,
         else => null,
     };
 }
@@ -2186,6 +2241,8 @@ fn opcodeFromByte(value: u8) ?Opcode {
         @intFromEnum(Opcode.local_tee) => .local_tee,
         @intFromEnum(Opcode.global_get) => .global_get,
         @intFromEnum(Opcode.global_set) => .global_set,
+        @intFromEnum(Opcode.table_get) => .table_get,
+        @intFromEnum(Opcode.table_set) => .table_set,
         @intFromEnum(Opcode.i32_load) => .i32_load,
         @intFromEnum(Opcode.i64_load) => .i64_load,
         @intFromEnum(Opcode.f32_load) => .f32_load,
@@ -2325,6 +2382,9 @@ fn opcodeFromByte(value: u8) ?Opcode {
         @intFromEnum(Opcode.i64_extend8_s) => .i64_extend8_s,
         @intFromEnum(Opcode.i64_extend16_s) => .i64_extend16_s,
         @intFromEnum(Opcode.i64_extend32_s) => .i64_extend32_s,
+        @intFromEnum(Opcode.ref_null) => .ref_null,
+        @intFromEnum(Opcode.ref_is_null) => .ref_is_null,
+        @intFromEnum(Opcode.ref_func) => .ref_func,
         else => null,
     };
 }
@@ -2500,6 +2560,12 @@ fn skipOpcodeImmediate(reader: *Reader, opcode: Opcode) Error!void {
             _ = try reader.readU32Leb();
             _ = try reader.readU32Leb();
         },
+        .table_get, .table_set => try readTableIndex(reader),
+        .ref_null => {
+            const ref_type = try reader.readByte();
+            if (ref_type != wasm_funcref_type) return error.Unsupported;
+        },
+        .ref_func => _ = try reader.readU32Leb(),
         .i32_load,
         .i64_load,
         .f32_load,
@@ -2645,6 +2711,7 @@ fn skipOpcodeImmediate(reader: *Reader, opcode: Opcode) Error!void {
         .i64_extend8_s,
         .i64_extend16_s,
         .i64_extend32_s,
+        .ref_is_null,
         => {},
     }
 }
@@ -2674,6 +2741,7 @@ fn popTypedValue(frame: *Executor.Frame, value_type: ValueType) Error!Value {
         .i64 => .{ .i64 = try frame.popI64() },
         .f32 => .{ .f32 = try frame.popF32() },
         .f64 => .{ .f64 = try frame.popF64() },
+        .funcref => .{ .funcref = try frame.popFuncref() },
     };
 }
 
@@ -2683,6 +2751,7 @@ fn valueMatchesType(value: Value, value_type: ValueType) bool {
         .i64 => value_type == .i64,
         .f32 => value_type == .f32,
         .f64 => value_type == .f64,
+        .funcref => value_type == .funcref,
     };
 }
 
@@ -3067,6 +3136,17 @@ fn readConstantValueExpression(reader: *Reader, value_type: ValueType) Error!Val
         .f64 => value: {
             if (opcode != .f64_const) return error.Unsupported;
             break :value Value{ .f64 = try reader.readF64() };
+        },
+        .funcref => value: {
+            switch (opcode) {
+                .ref_null => {
+                    const ref_type = try reader.readByte();
+                    if (ref_type != wasm_funcref_type) return error.Unsupported;
+                    break :value Value{ .funcref = null };
+                },
+                .ref_func => break :value Value{ .funcref = try reader.readU32Leb() },
+                else => return error.Unsupported,
+            }
         },
     };
     const end = opcodeFromByte(try reader.readByte()) orelse return error.Unsupported;
