@@ -55,6 +55,7 @@ const WaylandState = struct {
     toplevel: ?*c.xdg_toplevel = null,
     configured: bool = false,
     closed: bool = false,
+    resized: bool = false,
     width: i32,
     height: i32,
 };
@@ -75,6 +76,28 @@ const GlState = struct {
     icon_texture: c.GLuint,
 };
 
+const SceneState = struct {
+    commands: [max_commands]ui.Command = undefined,
+    clips: [max_clips]ui.Rect = undefined,
+    ir_storage: IrStorage = .{},
+
+    fn rebuild(self: *SceneState, width: i32, height: i32, font_atlas: *renderer_font_atlas.Atlas) !renderer_ir.Buffers {
+        var scene = ui.Scene.initWithClips(&self.commands, &self.clips);
+        try site_landing.render(&scene, .{
+            .x = 0,
+            .y = 0,
+            .w = @floatFromInt(width),
+            .h = @floatFromInt(height),
+        }, .{
+            .public_identity = "native-egl-gpu",
+            .public_identity_ready = true,
+        });
+        const buffers = self.ir_storage.buffers();
+        try renderer_ir.packScene(buffers, sources(font_atlas), scene.written());
+        return buffers;
+    }
+};
+
 pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;
     const args = try init.minimal.args.toSlice(allocator);
@@ -89,21 +112,8 @@ pub fn main(init: std.process.Init) !void {
     var gl = try initGl(&font_atlas);
     defer deinitGl(&gl);
 
-    var commands: [max_commands]ui.Command = undefined;
-    var clips: [max_clips]ui.Rect = undefined;
-    var ir_storage = IrStorage{};
-    var scene = ui.Scene.initWithClips(&commands, &clips);
-    try site_landing.render(&scene, .{
-        .x = 0,
-        .y = 0,
-        .w = @floatFromInt(options.width),
-        .h = @floatFromInt(options.height),
-    }, .{
-        .public_identity = "native-egl-gpu",
-        .public_identity_ready = true,
-    });
-    const buffers = ir_storage.buffers();
-    try renderer_ir.packScene(buffers, sources(&font_atlas), scene.written());
+    var scene_state = SceneState{};
+    var buffers = try scene_state.rebuild(wl.width, wl.height, &font_atlas);
 
     var frames_remaining: u32 = options.seconds * 60;
     while (!wl.closed and frames_remaining != 0) : (frames_remaining -= 1) {
@@ -113,7 +123,12 @@ pub fn main(init: std.process.Init) !void {
         _ = c.wl_display_flush(wl.display);
         c.wl_display_cancel_read(wl.display);
 
-        try renderFrame(gl, options.width, options.height, buffers, &font_atlas);
+        if (wl.resized) {
+            c.wl_egl_window_resize(egl.window, wl.width, wl.height, 0, 0);
+            buffers = try scene_state.rebuild(wl.width, wl.height, &font_atlas);
+            wl.resized = false;
+        }
+        try renderFrame(gl, wl.width, wl.height, buffers, &font_atlas);
         if (c.eglSwapBuffers(egl.display, egl.surface) != c.EGL_TRUE) return error.EglSwapFailed;
         if (c.wl_display_dispatch_pending(wl.display) < 0) return error.WaylandDispatchFailed;
         sleepFrame();
@@ -223,6 +238,7 @@ fn deinitEgl(egl: *EglState) void {
 }
 
 fn initGl(font_atlas: *renderer_font_atlas.Atlas) !GlState {
+    try requireHardwareGl();
     c.glClearColor(0.043, 0.043, 0.043, 1.0);
     c.glEnable(c.GL_BLEND);
     c.glBlendFunc(c.GL_SRC_ALPHA, c.GL_ONE_MINUS_SRC_ALPHA);
@@ -234,6 +250,18 @@ fn initGl(font_atlas: *renderer_font_atlas.Atlas) !GlState {
         .font_texture = makeAlphaTexture(renderer_font_atlas.width, renderer_font_atlas.height, font_atlas.alphaSlice()),
         .icon_texture = makeAlphaTexture(tabler_atlas.width, tabler_atlas.height, tabler_atlas.alpha),
     };
+}
+
+fn requireHardwareGl() !void {
+    const renderer_raw = c.glGetString(c.GL_RENDERER) orelse return error.GlRendererUnavailable;
+    const renderer = std.mem.span(@as([*:0]const u8, @ptrCast(renderer_raw)));
+    if (isSoftwareRenderer(renderer)) return error.SoftwareGlRendererRejected;
+}
+
+fn isSoftwareRenderer(renderer: []const u8) bool {
+    return std.ascii.indexOfIgnoreCase(renderer, "llvmpipe") != null or
+        std.ascii.indexOfIgnoreCase(renderer, "softpipe") != null or
+        std.ascii.indexOfIgnoreCase(renderer, "swrast") != null;
 }
 
 fn deinitGl(gl: *GlState) void {
@@ -402,8 +430,11 @@ const xdg_toplevel_listener = c.xdg_toplevel_listener{ .configure = xdgToplevelC
 fn xdgToplevelConfigure(data: ?*anyopaque, _: ?*c.xdg_toplevel, width: i32, height: i32, _: ?*c.wl_array) callconv(.c) void {
     const state: *WaylandState = @ptrCast(@alignCast(data.?));
     if (width > 0 and height > 0) {
-        state.width = width;
-        state.height = height;
+        if (state.width != width or state.height != height) {
+            state.width = width;
+            state.height = height;
+            state.resized = true;
+        }
     }
 }
 fn xdgToplevelClose(data: ?*anyopaque, _: ?*c.xdg_toplevel) callconv(.c) void {
@@ -488,3 +519,10 @@ const textured_fragment_shader =
     \\  gl_FragColor = vec4(v_color.rgb, v_color.a * a);
     \\}
 ;
+
+test "software GL renderer names are rejected" {
+    try std.testing.expect(isSoftwareRenderer("llvmpipe (LLVM 22.1.3, 256 bits)"));
+    try std.testing.expect(isSoftwareRenderer("softpipe"));
+    try std.testing.expect(isSoftwareRenderer("Mesa swrast"));
+    try std.testing.expect(!isSoftwareRenderer("AMD Radeon 780M Graphics (radeonsi, phoenix, ACO)"));
+}
