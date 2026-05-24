@@ -1437,18 +1437,18 @@ const Executor = struct {
                 },
                 .@"return" => return try finishFunctionResult(function_type, &frame),
                 .block => {
-                    try readBlockType(&reader);
+                    try readBlockType(&reader, self.module.type_count);
                     try pushControl(&controls, &control_len, .block, reader.offset);
                 },
                 .loop => {
-                    try readBlockType(&reader);
+                    try readBlockType(&reader, self.module.type_count);
                     try pushControl(&controls, &control_len, .loop, reader.offset);
                 },
                 .@"if" => {
-                    try readBlockType(&reader);
+                    try readBlockType(&reader, self.module.type_count);
                     const condition = try frame.popI32();
                     if (condition == 0) {
-                        const skip_result = try skipUntakenIf(&reader);
+                        const skip_result = try skipUntakenIf(&reader, self.module.type_count);
                         switch (skip_result) {
                             .reached_else => try pushControl(&controls, &control_len, .if_else, reader.offset),
                             .reached_end => {},
@@ -1459,17 +1459,17 @@ const Executor = struct {
                 },
                 .@"else" => {
                     if (control_len == 0 or controls[control_len - 1].kind != .if_then) return error.Corrupt;
-                    try skipControlDepth(&reader, 0);
+                    try skipControlDepth(&reader, 0, self.module.type_count);
                     control_len -= 1;
                 },
                 .br => {
                     const branch_depth = try reader.readU32Leb();
-                    try branchToControl(&reader, &controls, &control_len, branch_depth);
+                    try branchToControl(&reader, &controls, &control_len, branch_depth, self.module.type_count);
                 },
                 .br_if => {
                     const branch_depth = try reader.readU32Leb();
                     const condition = try frame.popI32();
-                    if (condition != 0) try branchToControl(&reader, &controls, &control_len, branch_depth);
+                    if (condition != 0) try branchToControl(&reader, &controls, &control_len, branch_depth, self.module.type_count);
                 },
                 .br_table => {
                     const target_count = try reader.readU32Leb();
@@ -1481,7 +1481,7 @@ const Executor = struct {
                         if (target_index == selector) selected_target = target;
                     }
                     const default_target = try reader.readU32Leb();
-                    try branchToControl(&reader, &controls, &control_len, selected_target orelse default_target);
+                    try branchToControl(&reader, &controls, &control_len, selected_target orelse default_target, self.module.type_count);
                 },
                 .i64_const => try frame.pushI64(try reader.readI64Leb()),
                 .i32_const => try frame.pushI32(try reader.readI32Leb()),
@@ -2072,7 +2072,7 @@ const Executor = struct {
         control_len.* += 1;
     }
 
-    fn branchToControl(reader: *Reader, controls: *[max_control_depth]ControlFrame, control_len: *usize, branch_depth: u32) Error!void {
+    fn branchToControl(reader: *Reader, controls: *[max_control_depth]ControlFrame, control_len: *usize, branch_depth: u32, type_count: usize) Error!void {
         if (branch_depth >= control_len.*) return error.Corrupt;
         const target_index = control_len.* - 1 - @as(usize, @intCast(branch_depth));
         const target = controls[target_index];
@@ -2082,7 +2082,7 @@ const Executor = struct {
                 control_len.* = target_index + 1;
             },
             .block, .if_then, .if_else => {
-                try skipControlDepth(reader, branch_depth);
+                try skipControlDepth(reader, branch_depth, type_count);
                 control_len.* = target_index;
             },
         }
@@ -2503,11 +2503,29 @@ fn parseEmptySection(reader: *Reader) Error!void {
     if (count != 0 or !reader.done()) return error.Unsupported;
 }
 
-fn readBlockType(reader: *Reader) Error!void {
+fn readBlockType(reader: *Reader, type_count: usize) Error!void {
     const block_type = try reader.readByte();
     if (block_type == wasm_empty_block_type) return;
-    const value_type = valueTypeFromByte(block_type) orelse return error.Unsupported;
-    if (!supportedValue(value_type)) return error.Unsupported;
+    if (valueTypeFromByte(block_type)) |value_type| {
+        if (!supportedValue(value_type)) return error.Unsupported;
+        return;
+    }
+    const type_index = try readBlockTypeIndex(reader, block_type);
+    if (type_index >= type_count) return error.Corrupt;
+}
+
+fn readBlockTypeIndex(reader: *Reader, first_byte: u8) Error!usize {
+    var result: u32 = first_byte & leb_payload_mask;
+    if ((first_byte & leb_continue_mask) == 0) return result;
+    var shift: u5 = leb_bits_per_byte;
+    var count: usize = 1;
+    while (count < leb32_max_bytes) : (count += 1) {
+        const byte = try reader.readByte();
+        result |= @as(u32, byte & leb_payload_mask) << shift;
+        if ((byte & leb_continue_mask) == 0) return result;
+        shift += leb_bits_per_byte;
+    }
+    return error.Corrupt;
 }
 
 fn readSelectType(reader: *Reader) Error!ValueType {
@@ -2547,7 +2565,7 @@ const IfSkipResult = enum {
     reached_end,
 };
 
-fn skipUntakenIf(reader: *Reader) Error!IfSkipResult {
+fn skipUntakenIf(reader: *Reader, type_count: usize) Error!IfSkipResult {
     var depth: usize = 0;
     while (!reader.done()) {
         const opcode_byte = try reader.readByte();
@@ -2558,7 +2576,7 @@ fn skipUntakenIf(reader: *Reader) Error!IfSkipResult {
         const opcode = opcodeFromByte(opcode_byte) orelse return error.Unsupported;
         switch (opcode) {
             .block, .loop, .@"if" => {
-                try readBlockType(reader);
+                try readBlockType(reader, type_count);
                 depth += 1;
             },
             .@"else" => {
@@ -2568,13 +2586,13 @@ fn skipUntakenIf(reader: *Reader) Error!IfSkipResult {
                 if (depth == 0) return .reached_end;
                 depth -= 1;
             },
-            else => try skipOpcodeImmediate(reader, opcode),
+            else => try skipOpcodeImmediate(reader, opcode, type_count),
         }
     }
     return error.Corrupt;
 }
 
-fn skipControlDepth(reader: *Reader, branch_depth: u32) Error!void {
+fn skipControlDepth(reader: *Reader, branch_depth: u32, type_count: usize) Error!void {
     var depth: usize = 0;
     var remaining_targets: usize = branch_depth;
     while (!reader.done()) {
@@ -2586,7 +2604,7 @@ fn skipControlDepth(reader: *Reader, branch_depth: u32) Error!void {
         const opcode = opcodeFromByte(opcode_byte) orelse return error.Unsupported;
         switch (opcode) {
             .block, .loop, .@"if" => {
-                try readBlockType(reader);
+                try readBlockType(reader, type_count);
                 depth += 1;
             },
             .end => {
@@ -2597,7 +2615,7 @@ fn skipControlDepth(reader: *Reader, branch_depth: u32) Error!void {
                 }
                 depth -= 1;
             },
-            else => try skipOpcodeImmediate(reader, opcode),
+            else => try skipOpcodeImmediate(reader, opcode, type_count),
         }
     }
     return error.Corrupt;
@@ -2641,7 +2659,7 @@ fn skipExtendedOpcodeImmediate(reader: *Reader) Error!void {
     }
 }
 
-fn skipOpcodeImmediate(reader: *Reader, opcode: Opcode) Error!void {
+fn skipOpcodeImmediate(reader: *Reader, opcode: Opcode, type_count: usize) Error!void {
     switch (opcode) {
         .i32_const => _ = try reader.readI32Leb(),
         .i64_const => _ = try reader.readI64Leb(),
@@ -2704,7 +2722,7 @@ fn skipOpcodeImmediate(reader: *Reader, opcode: Opcode) Error!void {
             _ = try reader.readU32Leb();
             _ = try reader.readU32Leb();
         },
-        .block, .loop, .@"if" => try readBlockType(reader),
+        .block, .loop, .@"if" => try readBlockType(reader, type_count),
         .@"unreachable",
         .nop,
         .end,
