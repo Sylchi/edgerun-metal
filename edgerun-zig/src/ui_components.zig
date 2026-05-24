@@ -14,6 +14,7 @@ const definition_list_component = @import("ui/components/DefinitionList.zig");
 const details_component = @import("ui/components/Details.zig");
 const figure_component = @import("ui/components/Figure.zig");
 const heading_component = @import("ui/components/Heading.zig");
+const list_component = @import("ui/components/List.zig");
 const nav_component = @import("ui/components/Nav.zig");
 const progress_summary_component = @import("ui/components/ProgressSummary.zig");
 const resource_list_component = @import("ui/components/ResourceList.zig");
@@ -171,30 +172,7 @@ pub const CodeBlock = struct {
 
 pub const Heading = heading_component.Heading;
 
-pub const List = struct {
-    ordered: bool = false,
-    items: []const []const u8,
-
-    pub fn render(self: List, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return renderList(scene, bounds, self, options);
-    }
-
-    pub fn toHtml(self: List, out: []u8) HtmlError![]u8 {
-        return writeListHtml(self, out);
-    }
-
-    pub fn fromHtml(html: []const u8, out_items: [][]const u8, text_out: []u8) HtmlError!List {
-        return readListHtml(html, out_items, text_out);
-    }
-
-    pub fn toMarkdown(self: List, out: []u8) MarkdownError![]u8 {
-        return writeListMarkdown(self, out);
-    }
-
-    pub fn fromMarkdown(markdown: []const u8, out_items: [][]const u8, text_out: []u8) MarkdownError!List {
-        return readListMarkdown(markdown, out_items, text_out);
-    }
-};
+pub const List = list_component.List;
 
 pub const Callout = struct {
     value: []const u8,
@@ -316,6 +294,10 @@ pub fn registerHeading(registry: *ComponentRegistry) RegistryError!void {
     return heading_component.register(registry);
 }
 
+pub fn registerList(registry: *ComponentRegistry) RegistryError!void {
+    return list_component.register(registry);
+}
+
 pub fn registerNav(registry: *ComponentRegistry) RegistryError!void {
     return nav_component.register(registry);
 }
@@ -424,25 +406,6 @@ pub fn renderCodeBlock(scene: *ui.Scene, bounds: ui.Rect, block: CodeBlock, opti
             try scene.pushAlignedText(ui.Rect.init(bounds.x + code_padding_x, y, @max(1.0, bounds.w - code_padding_x * 2.0), code_text_height), line, options.style.accent, .start);
             y += code_line_height;
         }
-    }
-}
-
-pub fn renderList(scene: *ui.Scene, bounds: ui.Rect, list: List, options: RenderOptions) ui.RenderError!void {
-    var y = bounds.y;
-    for (list.items, 0..) |item, index| {
-        if (y + list_item_h > bounds.y + bounds.h) break;
-        const marker_bounds = ui.Rect.init(bounds.x, y + list_marker_y, list_marker_w, list_marker_h);
-        if (list.ordered) {
-            try scene.pushAlignedText(marker_bounds, orderedMarker(index), options.style.accent, .end);
-        } else {
-            try scene.pushRect(ui.Rect.init(bounds.x + 4.0, y + list_bullet_y, list_bullet_size, list_bullet_size), options.style.accent, .fill, list_bullet_size * 0.5, 0.0);
-        }
-        try scene.pushWrappedText(ui.Rect.init(bounds.x + list_text_x, y, @max(1.0, bounds.w - list_text_x), list_item_h), item, options.style.text, .{
-            .line_height = list_line_h,
-            .average_char_width = list_avg_w,
-            .max_lines = 2,
-        });
-        y += list_item_h + list_item_gap;
     }
 }
 
@@ -667,16 +630,6 @@ const code_padding_y: f32 = 18.0;
 const code_line_height: f32 = 17.0;
 const code_text_height: f32 = 12.0;
 const code_clip_inset: f32 = 1.0;
-const list_item_h: f32 = 42.0;
-const list_item_gap: f32 = 4.0;
-const list_marker_w: f32 = 24.0;
-const list_marker_h: f32 = 14.0;
-const list_marker_y: f32 = 4.0;
-const list_bullet_y: f32 = 8.0;
-const list_bullet_size: f32 = 5.0;
-const list_text_x: f32 = 28.0;
-const list_line_h: f32 = 18.0;
-const list_avg_w: f32 = 9.0;
 const callout_radius: f32 = 8.0;
 const callout_accent_w: f32 = 4.0;
 const callout_text_x: f32 = 18.0;
@@ -1508,24 +1461,6 @@ fn writeStackMarkdown(stack: Stack, out: []u8) MarkdownError![]u8 {
     return writer.written();
 }
 
-fn writeListHtml(list: List, out: []u8) HtmlError![]u8 {
-    if (list.items.len == 0) return error.InvalidHtml;
-    var writer = HtmlWriter.init(out);
-    const tag = if (list.ordered) "ol" else "ul";
-    try writer.writeByte('<');
-    try writer.writeAll(tag);
-    try writer.writeAll(" data-er-component=\"list\">");
-    for (list.items) |item| {
-        try writer.writeAll("<li>");
-        try writer.writeEscapedText(item);
-        try writer.writeAll("</li>");
-    }
-    try writer.writeAll("</");
-    try writer.writeAll(tag);
-    try writer.writeByte('>');
-    return writer.written();
-}
-
 fn writeCalloutHtml(callout: Callout, out: []u8) HtmlError![]u8 {
     var writer = HtmlWriter.init(out);
     try writer.writeAll("<blockquote data-er-component=\"callout\">");
@@ -1678,23 +1613,6 @@ fn writeComponentMarkdownInto(writer: *MarkdownWriter, component: Component) Mar
     }
 }
 
-fn writeListMarkdown(list: List, out: []u8) MarkdownError![]u8 {
-    if (list.items.len == 0) return error.InvalidMarkdown;
-    var writer = MarkdownWriter.init(out);
-    for (list.items, 0..) |item, index| {
-        if (item.len == 0) return error.InvalidMarkdown;
-        if (index != 0) try writer.writeByte('\n');
-        if (list.ordered) {
-            try writer.writeInt(@intCast(index + 1));
-            try writer.writeAll(". ");
-        } else {
-            try writer.writeAll("- ");
-        }
-        try writer.writeEscapedInline(item);
-    }
-    return writer.written();
-}
-
 fn writeCalloutMarkdown(callout: Callout, out: []u8) MarkdownError![]u8 {
     if (callout.value.len == 0) return error.InvalidMarkdown;
     var writer = MarkdownWriter.init(out);
@@ -1730,39 +1648,6 @@ fn writeCodeBlockMarkdown(block: CodeBlock, out: []u8) MarkdownError![]u8 {
     }
     try writer.writeAll("\n```");
     return writer.written();
-}
-
-fn readListMarkdown(markdown: []const u8, out_items: [][]const u8, text_out: []u8) MarkdownError!List {
-    if (markdown.len == 0) return error.InvalidMarkdown;
-    const ordered = if (std.mem.startsWith(u8, markdown, "1. "))
-        true
-    else if (std.mem.startsWith(u8, markdown, "- "))
-        false
-    else if (std.mem.startsWith(u8, markdown, "1.") or std.mem.startsWith(u8, markdown, "-"))
-        return error.InvalidMarkdown
-    else
-        return error.UnsupportedMarkdown;
-
-    var text = MarkdownTextArena.init(text_out);
-    var item_count: usize = 0;
-    var cursor = LineCursor.init(markdown);
-    while (cursor.next()) |line| {
-        if (item_count == out_items.len) return error.MarkdownBudgetExceeded;
-        const value = if (ordered) blk: {
-            var prefix_buffer: [16]u8 = undefined;
-            const prefix = std.fmt.bufPrint(&prefix_buffer, "{d}. ", .{item_count + 1}) catch unreachable;
-            if (!std.mem.startsWith(u8, line, prefix)) return error.InvalidMarkdown;
-            break :blk line[prefix.len..];
-        } else blk: {
-            if (!std.mem.startsWith(u8, line, "- ")) return error.InvalidMarkdown;
-            break :blk line["- ".len..];
-        };
-        out_items[item_count] = try text.unescapeInline(value);
-        if (out_items[item_count].len == 0) return error.InvalidMarkdown;
-        item_count += 1;
-    }
-    if (item_count == 0) return error.InvalidMarkdown;
-    return .{ .ordered = ordered, .items = out_items[0..item_count] };
 }
 
 fn readCalloutMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!Callout {
@@ -2187,31 +2072,6 @@ fn readComponentHtmlWithArena(html: []const u8, text: *HtmlTextArena) HtmlError!
         return .{ .row_item = .{ .id = id, .title = title, .detail = detail } };
     }
     return error.UnsupportedHtml;
-}
-
-fn readListHtml(html: []const u8, out_items: [][]const u8, text_out: []u8) HtmlError!List {
-    if (takeWrapped(html, "<ul data-er-component=\"list\">", "</ul>")) |body| {
-        return .{ .ordered = false, .items = try readListItemsHtml(body, out_items, text_out) };
-    }
-    if (takeWrapped(html, "<ol data-er-component=\"list\">", "</ol>")) |body| {
-        return .{ .ordered = true, .items = try readListItemsHtml(body, out_items, text_out) };
-    }
-    if (std.mem.startsWith(u8, html, "<ul") or std.mem.startsWith(u8, html, "<ol")) return error.InvalidHtml;
-    return error.UnsupportedHtml;
-}
-
-fn readListItemsHtml(html: []const u8, out_items: [][]const u8, text_out: []u8) HtmlError![]const []const u8 {
-    var text = HtmlTextArena.init(text_out);
-    var cursor = HtmlCursor.init(html);
-    var item_count: usize = 0;
-    while (!cursor.done()) {
-        if (item_count == out_items.len) return error.HtmlBudgetExceeded;
-        out_items[item_count] = try text.unescape(try cursor.fieldBetween("<li>", "</li>"));
-        try cursor.consume("</li>");
-        item_count += 1;
-    }
-    if (item_count == 0) return error.InvalidHtml;
-    return out_items[0..item_count];
 }
 
 fn readCalloutHtml(html: []const u8, text_out: []u8) HtmlError!Callout {
@@ -2785,12 +2645,6 @@ fn parseRegionTagName(value: []const u8) ?RegionTag {
     if (std.mem.eql(u8, value, "section")) return .section;
     if (std.mem.eql(u8, value, "article")) return .article;
     return null;
-}
-
-fn orderedMarker(index: usize) []const u8 {
-    const markers = [_][]const u8{ "1.", "2.", "3.", "4.", "5.", "6.", "7.", "8.", "9." };
-    if (index < markers.len) return markers[index];
-    return "9.";
 }
 
 fn percentFromUnit(value: f32) u32 {
