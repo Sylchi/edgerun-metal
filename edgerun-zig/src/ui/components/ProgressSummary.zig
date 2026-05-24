@@ -1,5 +1,6 @@
 const std = @import("std");
 const common = @import("../../ui_component_common.zig");
+const base_progress_bar = @import("base/ProgressBar.zig");
 const base_surface = @import("base/Surface.zig");
 const ui = @import("../../ui.zig");
 const ui_input = @import("../../input.zig");
@@ -68,11 +69,8 @@ pub fn renderProgressSummary(summary: ProgressSummary, scene: *ui.Scene, bounds:
     try scene.pushAlignedText(ui.Rect.init(content.x, content.y, content.w, progress_summary_label_h), summary.label, style.text, .start);
 
     const bar_bounds = ui.Rect.init(content.x, content.y + progress_summary_bar_y, content.w, progress_summary_bar_h);
-    try scene.pushRect(bar_bounds, style.row, .fill, progress_summary_bar_radius, 0.0);
     const ratio = @as(f32, @floatFromInt(summary.completed)) / @as(f32, @floatFromInt(summary.total));
-    if (ratio > 0.0) {
-        try scene.pushRect(ui.Rect.init(bar_bounds.x, bar_bounds.y, @max(progress_summary_bar_min_w, bar_bounds.w * ratio), bar_bounds.h), style.accent, .fill, progress_summary_bar_radius, 0.0);
-    }
+    try base_progress_bar.render(scene, bar_bounds, .{ .value = ratio }, options);
 
     try scene.pushHit(.{ .slot = 0, .kind = .button, .id = summary.id, .bounds = bounds });
 }
@@ -162,8 +160,6 @@ const progress_summary_padding_y: f32 = 14.0;
 const progress_summary_label_h: f32 = 16.0;
 const progress_summary_bar_y: f32 = 30.0;
 const progress_summary_bar_h: f32 = 10.0;
-const progress_summary_bar_radius: f32 = 5.0;
-const progress_summary_bar_min_w: f32 = 2.0;
 
 test "progress summary component renders progress and hit target" {
     const summary = ProgressSummary{ .id = 39001, .label = "Academy progress", .completed = 3, .total = 8 };
