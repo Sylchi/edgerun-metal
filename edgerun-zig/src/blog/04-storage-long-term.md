@@ -8,6 +8,8 @@ But storage is not the same as ownership.
 
 The device may hold a copy of your data while someone else controls the account that makes the copy useful. A music file may sit on disk but be unreadable without a license check. A chat database may contain messages but depend on a server to accept the session. A note may look local while sync policy decides which version wins. A photo may be deleted from the gallery while thumbnails, backups, indexes, or remote copies remain.
 
+> Mental model: storage keeps bytes; ownership depends on who can read, change, move, and verify them.
+
 ## What storage does not answer
 
 Storage does not answer:
@@ -47,6 +49,6 @@ Useful storage needs structure: canonical object bytes, verification, encryption
 
 Storage is not ownership. Storage is just where bytes sit. Ownership depends on who can read them, verify them, change them, delete them, and move them without asking the original service for permission.
 
-## Edgerun seed
+## EdgeRun seed
 
-Edgerun storage should be sealed objects. If someone steals the disk, they get encrypted blobs without the authority to open them. If the user exports the store, they should get verifiable objects, not an app-shaped heap of unexplained files.
+EdgeRun storage should be sealed objects. If someone steals the disk, they get encrypted blobs without the authority to open them. If the user exports the store, they should get verifiable objects, not an app-shaped heap of unexplained files.

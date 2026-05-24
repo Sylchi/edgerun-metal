@@ -8,6 +8,8 @@ The CPU can decide what should happen. The GPU is specialized for drawing and ac
 
 That makes the display powerful and dangerous. A screen can show a real account balance, a cached number, a spoofed prompt, a fake permission dialog, or an animation that makes the user believe work happened when nothing durable changed.
 
+> Mental model: the interface is a rendered claim about state, not the state itself.
+
 ## UI is a boundary
 
 Normal websites often put text and UI into the DOM, where JavaScript and browser tools can inspect it.
@@ -42,10 +44,14 @@ draw commands -> GPU -> pixels
 pixels -> user decision
 ```
 
+## Interactive model
+
+[[demo:post_model]]
+
 ## Main lesson
 
 What you see is not the app. It is the app's claim drawn as pixels, and the authority behind that claim matters.
 
-## Edgerun seed
+## EdgeRun seed
 
 If sensitive state never becomes DOM text or JavaScript-owned data, malicious page code has less to steal. JavaScript can host a canvas without owning the secrets behind it. The browser can present the surface, while the trusted runtime owns the state, layout decisions, and authority checks.

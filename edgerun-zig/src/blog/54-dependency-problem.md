@@ -8,9 +8,13 @@ Each promise says: trust me.
 
 The problem is that software does not only import code. It imports behavior, maintenance, politics, infrastructure, version drift, supply-chain risk, and hidden resource usage.
 
-That is why the core rule for Edgerun is simple:
+That is why the core rule for EdgeRun is simple:
 
 The core cannot depend on things the author cannot fully account for.
+
+> The tiny scam: every dependency says "just trust me," then arrives with a build script, a network habit, and a transitive family.
+
+## Practical pain
 
 Start with the practical pain.
 
@@ -37,6 +41,8 @@ A dependency may get access to:
 
 That is not free.
 
+## Audit theater
+
 People say: just audit your dependencies.
 
 That sounds responsible until the project has 1,000 packages, generated lockfiles, build scripts, platform-specific code paths, optional features, proc macros, native bindings, vendored archives, and transitive dependencies maintained by strangers.
@@ -48,6 +54,10 @@ You are not auditing the system.
 You are sampling the pile and hoping the rest behaves.
 
 A lockfile does not mean you understand your software. It only means the unknown pile is pinned in place.
+
+> A lockfile pins the mystery pile to the floor. It does not make the pile understandable.
+
+## Scanner limits
 
 Then comes the second ritual: automated scanning.
 
@@ -67,7 +77,9 @@ That is not hypocrisy.
 
 It is the nature of complexity.
 
-This is why Edgerun has a zero-external-dependency rule for the core.
+## Better core shape
+
+This is why EdgeRun has a zero-external-dependency rule for the core.
 
 Not because code reuse is morally wrong.
 
@@ -79,7 +91,7 @@ That is unacceptable.
 
 The smaller the core, the more honest the security claim.
 
-Edgerun's zero-dependency rule is not minimalism for aesthetics.
+EdgeRun's zero-dependency rule is not minimalism for aesthetics.
 
 It is accountability.
 
@@ -93,7 +105,7 @@ But they do not change the basic fact:
 
 A system nobody understands cannot honestly be called secure.
 
-Edgerun starts from the opposite direction.
+EdgeRun starts from the opposite direction.
 
 Make the core small.
 
@@ -107,4 +119,14 @@ Make storage sealed.
 
 Make dependencies exceptional, not normal.
 
-Because if the foundation is supposed to protect the user, the foundation cannot be a thousand strangers in a trench coat.
+## Interactive model
+
+[[demo:post_model]]
+
+## Main lesson
+
+Dependencies are authority. A small trusted core is not aesthetic minimalism; it is the only way to make the security claim inspectable.
+
+## EdgeRun seed
+
+If the foundation is supposed to protect the user, the foundation must be small enough to account for. Everything outside the core can be evaluated at the boundary, but the core itself has to be owned, understood, and deterministic.

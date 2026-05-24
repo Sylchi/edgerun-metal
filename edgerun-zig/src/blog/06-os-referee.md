@@ -6,6 +6,8 @@ It decides which app gets CPU time, which memory belongs to which process, which
 
 Without an operating system, every program would have to negotiate directly with every device and with every other program. That is chaos. The OS creates the basic rules: this process owns this memory, this file handle is open, this device request is allowed, this packet may leave, this app is suspended, this window receives the input event.
 
+> Mental model: the OS does not just run apps; it decides which requests become real.
+
 ## What the OS manages
 
 - CPU time
@@ -52,10 +54,14 @@ This is why a local-first system still has to respect the host OS while reducing
 - predictable update authority
 - revocation that actually removes access
 
+## Interactive model
+
+[[demo:post_model]]
+
 ## Main lesson
 
 The operating system is the first government your app lives under, and the user needs to know whether that government answers to them.
 
-## Edgerun seed
+## EdgeRun seed
 
-Edgerun needs to respect the OS boundary while creating a smaller, explicit authority boundary inside the app runtime. The host can provide execution, graphics, storage, and network access, but the Edgerun runtime should keep app authority narrow, inspectable, and user-owned.
+EdgeRun needs to respect the OS boundary while creating a smaller, explicit authority boundary inside the app runtime. The host can provide execution, graphics, storage, and network access, but the EdgeRun runtime should keep app authority narrow, inspectable, and user-owned.

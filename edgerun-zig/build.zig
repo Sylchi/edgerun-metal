@@ -225,6 +225,7 @@ pub fn build(b: *std.Build) void {
     wayland_egl_window.root_module.addCSourceFile(.{ .file = xdg_shell_code });
     wayland_egl_window.root_module.linkSystemLibrary("c", .{});
     wayland_egl_window.root_module.linkSystemLibrary("wayland-client", .{});
+    wayland_egl_window.root_module.linkSystemLibrary("wayland-cursor", .{});
     wayland_egl_window.root_module.linkSystemLibrary("wayland-egl", .{});
     wayland_egl_window.root_module.linkSystemLibrary("EGL", .{});
     wayland_egl_window.root_module.linkSystemLibrary("GLESv2", .{});
@@ -307,8 +308,10 @@ pub fn build(b: *std.Build) void {
         "er_ui_gpu_overlay_text_vertex_buffer_len",
         "er_ui_gpu_overlay_icon_vertex_buffer_ptr",
         "er_ui_gpu_overlay_icon_vertex_buffer_len",
-        "er_ui_post_image_webp_ptr",
-        "er_ui_post_image_webp_len",
+        "er_ui_post_image_rgba_ptr",
+        "er_ui_post_image_rgba_len",
+        "er_ui_post_image_width",
+        "er_ui_post_image_height",
         "er_ui_font_atlas_width",
         "er_ui_font_atlas_height",
         "er_ui_font_atlas_ptr",
@@ -322,53 +325,21 @@ pub fn build(b: *std.Build) void {
         "er_ui_input_capacity",
         "er_ui_last_error",
         "er_ui_set_device_scale",
-        "er_ui_hover_hit_kind",
-        "er_ui_hover_hit_id",
-        "er_ui_last_action_kind",
-        "er_ui_last_action_hit_id",
-        "er_ui_last_action_scope_id",
-        "er_ui_last_action_from_index",
-        "er_ui_last_action_to_index",
-        "er_ui_pointer_down",
-        "er_ui_pointer_move",
-        "er_ui_pointer_up",
-        "er_ui_component_gallery_layout_masonry_id",
-        "er_ui_component_gallery_layout_grid_id",
-        "er_ui_component_gallery_gap_compact_id",
-        "er_ui_component_gallery_gap_default_id",
-        "er_ui_component_gallery_gap_wide_id",
-        "er_ui_site_docs_button_id",
-        "er_ui_site_apps_button_id",
-        "er_ui_site_launch_button_id",
-        "er_ui_site_search_button_id",
-        "er_ui_site_source_button_id",
-        "er_ui_site_blog_button_id",
-        "er_ui_blog_back_button_id",
-        "er_ui_blog_first_post_button_id",
-        "er_ui_blog_post_count",
-        "er_ui_site_host_action_kind",
-        "er_ui_site_host_action_url_ptr",
-        "er_ui_site_host_action_url_len",
-        "er_ui_site_route_path_ptr",
-        "er_ui_site_route_path_len",
-        "er_ui_site_set_route_path",
-        "er_ui_site_activate_hit",
-        "er_ui_site_search_open",
-        "er_ui_site_search_close",
-        "er_ui_site_search_is_open",
-        "er_ui_site_search_backspace",
-        "er_ui_site_search_input_byte",
-        "er_ui_site_landing_content_height",
-        "er_ui_site_blog_content_height",
-        "er_ui_site_blog_post_content_height",
-        "er_ui_site_content_height",
-        "er_ui_clear",
-        "er_ui_build_component_gallery_gpu_frame",
-        "er_ui_build_component_gallery_gpu_frame_layout_gap_hover",
-        "er_ui_build_site_gpu_frame",
-        "er_ui_build_site_landing_gpu_frame",
-        "er_ui_build_site_blog_gpu_frame",
-        "er_ui_render_input_object",
+        "er_ui_cursor_css_ptr",
+        "er_ui_cursor_css_len",
+        "er_ui_browser_boot",
+        "er_ui_browser_event",
+        "er_ui_host_command_count",
+        "er_ui_host_command_kind",
+        "er_ui_host_command_id",
+        "er_ui_host_command_target_ptr",
+        "er_ui_host_command_target_len",
+        "er_ui_host_command_payload_ptr",
+        "er_ui_host_command_payload_len",
+        "er_ui_host_command_clear",
+        "er_ui_bootstrap_js_ptr",
+        "er_ui_bootstrap_js_len",
+        "er_ui_build_browser_frame",
     };
     const install_ui_browser = b.addInstallArtifact(ui_browser, .{});
     const wasm_entry = b.addExecutable(.{
@@ -380,8 +351,8 @@ pub fn build(b: *std.Build) void {
         }),
     });
     const run_wasm_entry = b.addRunArtifact(wasm_entry);
-    const wasm_entry_html = run_wasm_entry.addOutputFileArg("wasmentry.html");
-    const install_wasm_entry = b.addInstallFile(wasm_entry_html, "web/wasmentry.html");
+    const wasm_entry_html = run_wasm_entry.addOutputFileArg("index.html");
+    const install_wasm_entry = b.addInstallFile(wasm_entry_html, "web/index.html");
     const wasm_entry_step = b.step("wasm-entry", "Generate the immutable browser WASM entry point");
     wasm_entry_step.dependOn(&install_wasm_entry.step);
 

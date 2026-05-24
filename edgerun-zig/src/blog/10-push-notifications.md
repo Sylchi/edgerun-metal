@@ -6,6 +6,8 @@ That means a message often travels through the sender's service, a platform noti
 
 Push notifications exist because phones are battery-constrained. Letting every app keep its own permanent network connection would waste power and radio time. So mobile platforms centralize wakeups.
 
+> Mental model: push is a remote wake path, not just a message bubble.
+
 ## The wake path
 
 [[demo:push_wake_path]]

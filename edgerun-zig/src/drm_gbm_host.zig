@@ -107,7 +107,7 @@ pub fn main(init: std.process.Init) !void {
     var egl = try initEgl(&gbm);
     defer deinitEgl(&egl);
     var font_atlas = renderer_font_atlas.Atlas.init();
-    var gl = try renderer_gles.init(&font_atlas);
+    var gl = try renderer_gles.init(&font_atlas, null);
     defer renderer_gles.deinit(&gl);
 
     var scene_state = SceneState{};

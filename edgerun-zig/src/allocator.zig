@@ -14,10 +14,10 @@ pub const Allocator = struct {
         return .{ .id = id };
     }
 
-    pub fn spawnChild(self: Allocator, parent: *app.App, child_id: identity.Identity, epoch: clock.Stamp, authorization: intent.Receipt, manifest_canonical: []const u8) app.SpawnError!app.App.Spawned {
+    pub fn spawnChild(self: Allocator, host: app.ExecutionHost, parent: *app.App, child_id: identity.Identity, epoch: clock.Stamp, authorization: intent.Receipt, manifest_canonical: []const u8) app.SpawnError!app.App.Spawned {
         const admission = parent.admissionCapability(authorization) orelse return error.Unauthorized;
         parent.admitAuthorization(authorization, admission) catch return error.Unauthorized;
-        return parent.spawnManifest(self.id, child_id, epoch, authorization, manifest_canonical);
+        return host.spawnManifest(parent, self.id, child_id, epoch, authorization, manifest_canonical);
     }
 };
 
@@ -38,6 +38,7 @@ test "allocator app is the authorized actor for spawn transitions" {
     const parent_id = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("parent")).?, epoch).?;
     const child_id = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("child")).?, epoch).?;
     const allocator = Allocator.init(allocator_id).?;
+    const host = app.ExecutionHost.init(device).?;
     var parent = app.App.initAllocated(
         parent_id,
         BoundedArena.init(.{ .base = &memory_bytes }),
@@ -60,7 +61,7 @@ test "allocator app is the authorized actor for spawn transitions" {
     };
     const manifest_canonical = try app.App.writeManifestObject(child_id, manifest, epoch, &manifest_raw);
 
-    const spawned = try allocator.spawnChild(&parent, child_id, epoch, authorization, manifest_canonical);
+    const spawned = try allocator.spawnChild(host, &parent, child_id, epoch, authorization, manifest_canonical);
     try std.testing.expect(spawned.receipt.valid());
     try std.testing.expectEqual(@as(usize, 56), parent.memoryRemaining());
 }

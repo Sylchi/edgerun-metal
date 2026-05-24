@@ -2,6 +2,10 @@
 
 I had to turn swap off on a machine with 64GB of RAM.
 
+> Mental model: computers are easiest to trust when ownership is explicit before pressure appears.
+
+## The wrong guess
+
 Not because I was out of memory.
 
 I was using around 30GB. I had around 30GB left. I knew the workload was not going to keep growing. But the system was still swapping heavily, dragging live work through disk I/O for no useful reason.
@@ -13,6 +17,8 @@ Then I had to spend half an hour proving that the machine was doing pointless I/
 That is modern computing in one sentence:
 
 The machine does something hidden, the user suffers, and then the user has to investigate their own computer like a crime scene.
+
+## Where uncertainty enters
 
 A computer is naturally deterministic.
 
@@ -40,6 +46,8 @@ But modern software stacks deliberately add uncertainty everywhere:
 Then we act surprised when behavior becomes impossible to reason about.
 
 We replaced "this program owns this much" with "let the system guess until something breaks."
+
+## Authority has the same bug
 
 The same pattern shows up in authority.
 
@@ -87,6 +95,8 @@ The fastest computer is the one that does not need to guess what matters.
 
 If the user has to trace disk I/O to understand why their own machine is slow, the system already failed.
 
+## What explicit control says
+
 This is the reason preallocation matters.
 
 Preallocation is not primitive.
@@ -107,7 +117,7 @@ The system does not need to guess who is responsible when pressure appears.
 
 It already knows.
 
-Edgerun starts from that opposite assumption.
+EdgeRun starts from that opposite assumption.
 
 The app does not get the world.
 
@@ -129,6 +139,12 @@ If it needs more, it asks the parent or the user.
 
 If it exceeds its budget, it fails locally, prunes, checkpoints, or waits.
 
+## Interactive model
+
+[[demo:post_model]]
+
+## Main lesson
+
 No global emergency.
 
 No mystery swap storm.
@@ -140,3 +156,7 @@ No app silently converting memory pressure into disk pressure.
 That is not less advanced.
 
 That is what control should have meant from the beginning.
+
+## EdgeRun seed
+
+EdgeRun makes resource and authority ownership explicit before work starts. The runtime should know which app owns memory, storage, routes, identity authority, children, and failure responsibility, so pressure produces a local decision instead of a system-wide guess.

@@ -4,6 +4,8 @@ A real personal computer should obey the person first.
 
 Owning a device should mean more than holding the glass rectangle. It should mean authority over installation, data, repair, identity, compute, and consent.
 
+> Mental model: ownership is the ability to maintain, inspect, export, repair, and replace.
+
 ## Ownership should include
 
 - installing software from sources you choose
@@ -26,6 +28,18 @@ This is the difference between ownership as possession and ownership as authorit
 ## Replaceable clients
 
 A phone should be one client of a user's digital life. A laptop, tablet, home server, hardware key, paper recovery path, or future device should be able to participate without begging one phone ecosystem for permission.
+
+## The plain-language test
+
+Ask what happens when the vendor stops caring.
+
+Can the owner keep the device secure? Can they move their data? Can they install a maintained system? Can they repair a broken part? Can another client join the same identity and storage graph? Can the user still prove who they are without the original account?
+
+If the answer is no, the device was not really owned. It was leased with better marketing.
+
+## Interactive model
+
+[[demo:post_model]]
 
 ## Main lesson
 

@@ -6,6 +6,8 @@ Databases are powerful, but remote storage often turns memory into rent. The acc
 
 A database is not a drawer. It is a machine for shaping memory. It decides which fields exist, which indexes are fast, which relations are possible, which old values remain in backups, and which questions the service can ask later.
 
+> Mental model: a database does not merely remember; it decides what kinds of memory are easy to use.
+
 ## What a message becomes
 
 ```text
@@ -41,6 +43,10 @@ canonical object -> local store -> sync copy
 ```
 
 The server may still store a copy, but it is no longer the only place reality exists. The user's device can verify and replay its own history.
+
+## Interactive model
+
+[[demo:post_model]]
 
 ## Main lesson
 

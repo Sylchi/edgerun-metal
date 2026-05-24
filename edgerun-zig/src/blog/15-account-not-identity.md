@@ -6,6 +6,8 @@ Accounts can be suspended, deleted, locked, shadowbanned, region-restricted, rat
 
 An account is a relationship with a service. It is useful, but it is not the person. The service created the namespace, stores the record, enforces the rules, and decides what recovery means.
 
+> Mental model: an account is a rented container; identity should be proof you can carry.
+
 ## Account identity
 
 [[demo:account_vs_key]]
@@ -30,6 +32,12 @@ A private key is like a stamp only you can use. A public key is how others verif
 ## Layers above identity
 
 Names, avatars, profiles, contact methods, social graphs, recovery guardians, and reputation can all sit above keys. They can change. They can be disputed. They can be lost and rebuilt. The root identity should survive those changes.
+
+## Why this matters for normal life
+
+Most account problems are treated like customer support problems: fill the form, wait for review, hope a human agrees. But when an account becomes identity, support becomes citizenship. A locked account can cut someone off from work, money, friends, photos, purchases, or the ability to sign in elsewhere.
+
+User-owned identity does not remove services. It changes the root. A service can still ban abuse from its own space, but it should not be able to erase the person's continuity everywhere. The person should be able to prove "I am the same key holder as before" even when a platform account fails.
 
 ## Main lesson
 

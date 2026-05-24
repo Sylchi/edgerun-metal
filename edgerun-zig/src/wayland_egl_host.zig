@@ -3,15 +3,22 @@ const input = @import("input.zig");
 const renderer_font_atlas = @import("renderer_font_atlas.zig");
 const renderer_gles = @import("renderer_gles.zig");
 const renderer_ir = @import("renderer_ir.zig");
+const site_apps = @import("site_apps.zig");
+const site_blog = @import("site_blog.zig");
 const site_chrome = @import("site_chrome.zig");
+const site_cursor = @import("site_cursor.zig");
+const site_images = @import("site_images.zig");
 const site_landing = @import("site_landing.zig");
+const site_navigation = @import("site_navigation.zig");
 const ui = @import("ui.zig");
+const ui_runtime = @import("ui_runtime.zig");
 
 const linux = std.os.linux;
 const posix = std.posix;
 
 const c = @cImport({
     @cInclude("wayland-client.h");
+    @cInclude("wayland-cursor.h");
     @cInclude("wayland-egl.h");
     @cInclude("xdg-shell-client-protocol.h");
     @cInclude("EGL/egl.h");
@@ -25,6 +32,7 @@ const frame_ms: i32 = 16;
 const wayland_fixed_scale: f32 = 256.0;
 const pointer_button_left: u32 = 0x110;
 const wl_seat_protocol_version: u32 = 1;
+const cursor_size: c_int = 24;
 const max_commands: usize = 4096;
 const max_clips: usize = 64;
 const max_rects: usize = 8192;
@@ -52,20 +60,34 @@ const Options = struct {
     seconds: u32 = default_seconds,
 };
 
+const PointerEvent = enum {
+    none,
+    enter,
+    leave,
+    move,
+    down,
+    up,
+};
+
 const WaylandState = struct {
     display: *c.wl_display,
     registry: *c.wl_registry,
     compositor: ?*c.wl_compositor = null,
+    shm: ?*c.wl_shm = null,
     wm_base: ?*c.xdg_wm_base = null,
     seat: ?*c.wl_seat = null,
     pointer: ?*c.wl_pointer = null,
     surface: ?*c.wl_surface = null,
+    cursor: ?CursorState = null,
     xdg_surface: ?*c.xdg_surface = null,
     toplevel: ?*c.xdg_toplevel = null,
     configured: bool = false,
     closed: bool = false,
     resized: bool = false,
     input_dirty: bool = false,
+    cursor_dirty: bool = false,
+    pointer_serial: u32 = 0,
+    pointer_event: PointerEvent = .none,
     app: *AppState,
     width: i32,
     height: i32,
@@ -77,6 +99,24 @@ const WaylandState = struct {
 
     fn framebufferHeight(self: WaylandState) i32 {
         return self.height * self.scale;
+    }
+};
+
+const CursorState = struct {
+    theme: *c.wl_cursor_theme,
+    surface: *c.wl_surface,
+    kind: ?site_cursor.Kind = null,
+
+    fn set(self: *CursorState, pointer: *c.wl_pointer, serial: u32, kind: site_cursor.Kind) !void {
+        const cursor = c.wl_cursor_theme_get_cursor(self.theme, site_cursor.waylandName(kind).ptr) orelse return error.MissingWaylandCursor;
+        if (cursor.*.image_count == 0) return error.MissingWaylandCursorImage;
+        const image = cursor.*.images[0];
+        const buffer = c.wl_cursor_image_get_buffer(image) orelse return error.MissingWaylandCursorBuffer;
+        c.wl_pointer_set_cursor(pointer, serial, self.surface, @intCast(image.*.hotspot_x), @intCast(image.*.hotspot_y));
+        c.wl_surface_attach(self.surface, buffer, 0, 0);
+        c.wl_surface_damage_buffer(self.surface, 0, 0, @intCast(image.*.width), @intCast(image.*.height));
+        c.wl_surface_commit(self.surface);
+        self.kind = kind;
     }
 };
 
@@ -109,12 +149,17 @@ const SceneState = struct {
 
     fn rebuild(self: *SceneState, width: i32, height: i32, app: AppState, font_atlas: *renderer_font_atlas.Atlas) !renderer_ir.Buffers {
         var scene = ui.Scene.initWithClips(&self.commands, &self.clips);
-        try site_landing.render(&scene, .{
-            .x = 0,
-            .y = 0,
-            .w = @floatFromInt(width),
-            .h = @floatFromInt(height),
-        }, app.siteState());
+        const bounds = ui.Rect.init(
+            0,
+            0,
+            @floatFromInt(width),
+            @floatFromInt(height),
+        );
+        switch (app.route.view) {
+            .landing => try site_landing.render(&scene, bounds, app.landingState()),
+            .blog => try site_blog.render(&scene, bounds, app.blogState()),
+            .apps => try site_apps.render(&scene, bounds, app.appsState()),
+        }
         self.command_len = scene.written().len;
         const buffers = self.ir_storage.buffers();
         try renderer_ir.packScene(buffers, renderer_gles.sources(font_atlas), scene.written());
@@ -127,14 +172,18 @@ const SceneState = struct {
 };
 
 const AppState = struct {
+    route: site_navigation.Route = .{},
     scroll_y: f32 = 0.0,
     hover_x: f32 = -1.0,
     hover_y: f32 = -1.0,
+    runtime: ui_runtime.State = .{},
+    last_action_kind: ui_runtime.ActionKind = .none,
+    hover_hit_kind: ?ui.HitKind = null,
     hover_hit_id: u32 = 0,
     public_identity_ready: bool = true,
     public_identity: []const u8 = "native-egl-gpu",
 
-    fn siteState(self: AppState) site_landing.State {
+    fn landingState(self: AppState) site_landing.State {
         return .{
             .scroll_y = self.scroll_y,
             .hover_x = self.hover_x,
@@ -142,6 +191,44 @@ const AppState = struct {
             .public_identity_ready = self.public_identity_ready,
             .public_identity = self.public_identity,
         };
+    }
+
+    fn blogState(self: AppState) site_blog.State {
+        return .{
+            .scroll_y = self.scroll_y,
+            .hover_x = self.hover_x,
+            .hover_y = self.hover_y,
+            .selected_post_id = self.route.selected_blog_post_id,
+            .arc_filter_index = self.route.blog_arc_filter_index,
+        };
+    }
+
+    fn appsState(self: AppState) site_apps.State {
+        return .{
+            .scroll_y = self.scroll_y,
+            .hover_x = self.hover_x,
+            .hover_y = self.hover_y,
+        };
+    }
+
+    fn contentHeight(self: AppState, width: f32) f32 {
+        return switch (self.route.view) {
+            .landing => site_landing.contentHeight(width),
+            .blog => if (self.route.selected_blog_post_id == 0)
+                site_blog.indexContentHeightFiltered(width, self.route.blog_arc_filter_index)
+            else
+                site_blog.postContentHeight(width, self.route.selected_blog_post_id),
+            .apps => site_apps.contentHeight(width),
+        };
+    }
+
+    fn applyRoute(self: *AppState, route: site_navigation.Route) void {
+        self.route = route;
+        self.scroll_y = 0.0;
+    }
+
+    fn cursorKind(self: AppState) site_cursor.Kind {
+        return site_cursor.fromState(self.last_action_kind, self.hover_hit_kind);
     }
 };
 
@@ -158,7 +245,12 @@ pub fn main(init: std.process.Init) !void {
     var egl = try initEgl(&wl);
     defer deinitEgl(&egl);
     var font_atlas = renderer_font_atlas.Atlas.init();
-    var gl = try renderer_gles.init(&font_atlas);
+    const cloud_meme = try site_images.cloudMeme();
+    var gl = try renderer_gles.init(&font_atlas, .{
+        .width = cloud_meme.width,
+        .height = cloud_meme.height,
+        .pixels = cloud_meme.pixels,
+    });
     defer renderer_gles.deinit(&gl);
 
     var scene_state = SceneState{};
@@ -178,10 +270,16 @@ pub fn main(init: std.process.Init) !void {
             updateHoverHit(&app, scene_state.commandSlice());
             wl.resized = false;
         } else if (wl.input_dirty) {
+            processPointerEvent(&wl, scene_state.commandSlice());
             buffers = try scene_state.rebuild(wl.width, wl.height, app, &font_atlas);
             renderer_gles.refreshFontTexture(gl, &font_atlas);
             updateHoverHit(&app, scene_state.commandSlice());
+            wl.cursor_dirty = true;
             wl.input_dirty = false;
+        }
+        if (wl.cursor_dirty) {
+            try updateWaylandCursor(&wl);
+            wl.cursor_dirty = false;
         }
         const framebuffer = try egl.surfaceSize();
         try renderer_gles.renderFrameToViewport(gl, wl.width, wl.height, framebuffer.width, framebuffer.height, buffers);
@@ -262,12 +360,14 @@ fn initWayland(state: *WaylandState, width: i32, height: i32, scale: i32, app: *
     if (c.wl_registry_add_listener(registry, &registry_listener, state) != 0) return error.WaylandRegistryFailed;
     if (c.wl_display_roundtrip(display) < 0) return error.WaylandRoundtripFailed;
     const compositor = state.compositor orelse return error.MissingWaylandCompositor;
+    const shm = state.shm orelse return error.MissingWaylandShm;
     const wm_base = state.wm_base orelse return error.MissingXdgWmBase;
     if (c.xdg_wm_base_add_listener(wm_base, &wm_base_listener, state) != 0) return error.XdgListenerFailed;
     if (state.seat) |seat| {
         if (c.wl_seat_add_listener(seat, &seat_listener, state) != 0) return error.WaylandSeatListenerFailed;
     }
     state.surface = c.wl_compositor_create_surface(compositor) orelse return error.WaylandSurfaceFailed;
+    state.cursor = try initCursor(compositor, shm);
     c.wl_surface_set_buffer_scale(state.surface, scale);
     state.xdg_surface = c.xdg_wm_base_get_xdg_surface(wm_base, state.surface) orelse return error.XdgSurfaceFailed;
     if (c.xdg_surface_add_listener(state.xdg_surface, &xdg_surface_listener, state) != 0) return error.XdgListenerFailed;
@@ -281,15 +381,33 @@ fn initWayland(state: *WaylandState, width: i32, height: i32, scale: i32, app: *
 }
 
 fn deinitWayland(state: *WaylandState) void {
+    if (state.cursor) |value| {
+        c.wl_surface_destroy(value.surface);
+        c.wl_cursor_theme_destroy(value.theme);
+    }
     if (state.pointer) |value| c.wl_pointer_destroy(value);
     if (state.seat) |value| c.wl_seat_destroy(value);
     if (state.toplevel) |value| c.xdg_toplevel_destroy(value);
     if (state.xdg_surface) |value| c.xdg_surface_destroy(value);
     if (state.surface) |value| c.wl_surface_destroy(value);
     if (state.wm_base) |value| c.xdg_wm_base_destroy(value);
+    if (state.shm) |value| c.wl_shm_destroy(value);
     if (state.compositor) |value| c.wl_compositor_destroy(value);
     c.wl_registry_destroy(state.registry);
     c.wl_display_disconnect(state.display);
+}
+
+fn initCursor(compositor: *c.wl_compositor, shm: *c.wl_shm) !CursorState {
+    const theme = c.wl_cursor_theme_load(null, cursor_size, shm) orelse return error.WaylandCursorThemeFailed;
+    errdefer c.wl_cursor_theme_destroy(theme);
+    const surface = c.wl_compositor_create_surface(compositor) orelse return error.WaylandCursorSurfaceFailed;
+    errdefer c.wl_surface_destroy(surface);
+    const cursor = CursorState{ .theme = theme, .surface = surface };
+    _ = c.wl_cursor_theme_get_cursor(cursor.theme, site_cursor.waylandName(.default).ptr) orelse return error.MissingWaylandCursor;
+    _ = c.wl_cursor_theme_get_cursor(cursor.theme, site_cursor.waylandName(.pointer).ptr) orelse return error.MissingWaylandCursor;
+    _ = c.wl_cursor_theme_get_cursor(cursor.theme, site_cursor.waylandName(.text).ptr) orelse return error.MissingWaylandCursor;
+    _ = c.wl_cursor_theme_get_cursor(cursor.theme, site_cursor.waylandName(.grabbing).ptr) orelse return error.MissingWaylandCursor;
+    return cursor;
 }
 
 fn initEgl(wl: *WaylandState) !EglState {
@@ -335,17 +453,54 @@ fn deinitEgl(egl: *EglState) void {
 
 fn updateHoverHit(app: *AppState, commands: []const ui.Command) void {
     if (app.hover_x < 0.0 or app.hover_y < 0.0) {
+        app.hover_hit_kind = null;
         app.hover_hit_id = 0;
         return;
     }
-    app.hover_hit_id = if (input.hitTest(commands, app.hover_x, app.hover_y)) |hit| hit.id else 0;
+    if (input.hitTest(commands, app.hover_x, app.hover_y)) |hit| {
+        app.hover_hit_kind = hit.kind;
+        app.hover_hit_id = hit.id;
+        return;
+    }
+    app.hover_hit_kind = null;
+    app.hover_hit_id = 0;
+}
+
+fn updateWaylandCursor(wl: *WaylandState) !void {
+    if (wl.pointer_serial == 0) return;
+    const pointer = wl.pointer orelse return;
+    const cursor = if (wl.cursor) |*value| value else return;
+    const kind = wl.app.cursorKind();
+    if (cursor.kind != null and cursor.kind.? == kind) return;
+    try cursor.set(pointer, wl.pointer_serial, kind);
+}
+
+fn processPointerEvent(wl: *WaylandState, commands: []const ui.Command) void {
+    const app = wl.app;
+    app.last_action_kind = switch (wl.pointer_event) {
+        .none => app.last_action_kind,
+        .enter, .move => app.runtime.pointerMove(commands, app.hover_x, app.hover_y).kind,
+        .leave => blk: {
+            app.hover_hit_kind = null;
+            app.hover_hit_id = 0;
+            break :blk ui_runtime.ActionKind.none;
+        },
+        .down => app.runtime.pointerDown(commands, app.hover_x, app.hover_y).kind,
+        .up => blk: {
+            const action = app.runtime.pointerUp(commands, app.hover_x, app.hover_y);
+            if (action.kind != .reordered) activateHit(app);
+            break :blk action.kind;
+        },
+    };
+    wl.pointer_event = .none;
 }
 
 fn activateHit(app: *AppState) void {
+    if (site_navigation.fromHit(app.hover_hit_id, app.route)) |route| {
+        app.applyRoute(route);
+        return;
+    }
     switch (app.hover_hit_id) {
-        site_chrome.logo_button_id,
-        site_chrome.docs_button_id,
-        => app.scroll_y = 0.0,
         site_landing.reveal_identity_button_id => {
             app.public_identity_ready = true;
             app.public_identity = "native-egl-gpu";
@@ -356,7 +511,7 @@ fn activateHit(app: *AppState) void {
 
 fn scrollBy(app: *AppState, width: i32, height: i32, delta_y: f32) void {
     if (!std.math.isFinite(delta_y)) return;
-    const limit = @max(0.0, site_landing.contentHeight(@floatFromInt(width)) - @as(f32, @floatFromInt(height)));
+    const limit = @max(0.0, app.contentHeight(@floatFromInt(width)) - @as(f32, @floatFromInt(height)));
     app.scroll_y = std.math.clamp(app.scroll_y + delta_y, 0.0, limit);
 }
 
@@ -371,6 +526,8 @@ fn registryGlobal(data: ?*anyopaque, registry: ?*c.wl_registry, name: u32, inter
     const iface = std.mem.span(interface);
     if (std.mem.eql(u8, iface, "wl_compositor")) {
         state.compositor = @ptrCast(c.wl_registry_bind(reg, name, &c.wl_compositor_interface, @min(version, 4)));
+    } else if (std.mem.eql(u8, iface, "wl_shm")) {
+        state.shm = @ptrCast(c.wl_registry_bind(reg, name, &c.wl_shm_interface, @min(version, 1)));
     } else if (std.mem.eql(u8, iface, "xdg_wm_base")) {
         state.wm_base = @ptrCast(c.wl_registry_bind(reg, name, &c.xdg_wm_base_interface, @min(version, 1)));
     } else if (std.mem.eql(u8, iface, "wl_seat")) {
@@ -401,29 +558,43 @@ const pointer_listener = c.wl_pointer_listener{
     .button = pointerButton,
     .axis = pointerAxis,
 };
-fn pointerEnter(data: ?*anyopaque, _: ?*c.wl_pointer, _: u32, _: ?*c.wl_surface, sx: c.wl_fixed_t, sy: c.wl_fixed_t) callconv(.c) void {
+fn pointerEnter(data: ?*anyopaque, _: ?*c.wl_pointer, serial: u32, _: ?*c.wl_surface, sx: c.wl_fixed_t, sy: c.wl_fixed_t) callconv(.c) void {
     const state: *WaylandState = @ptrCast(@alignCast(data.?));
+    state.pointer_serial = serial;
     state.app.hover_x = fixedToFloat(sx);
     state.app.hover_y = fixedToFloat(sy);
+    state.pointer_event = .enter;
     state.input_dirty = true;
+    state.cursor_dirty = true;
 }
 fn pointerLeave(data: ?*anyopaque, _: ?*c.wl_pointer, _: u32, _: ?*c.wl_surface) callconv(.c) void {
     const state: *WaylandState = @ptrCast(@alignCast(data.?));
     state.app.hover_x = -1.0;
     state.app.hover_y = -1.0;
+    state.app.hover_hit_kind = null;
     state.app.hover_hit_id = 0;
+    state.pointer_event = .leave;
     state.input_dirty = true;
+    state.cursor_dirty = true;
 }
 fn pointerMotion(data: ?*anyopaque, _: ?*c.wl_pointer, _: u32, sx: c.wl_fixed_t, sy: c.wl_fixed_t) callconv(.c) void {
     const state: *WaylandState = @ptrCast(@alignCast(data.?));
     state.app.hover_x = fixedToFloat(sx);
     state.app.hover_y = fixedToFloat(sy);
+    state.pointer_event = .move;
     state.input_dirty = true;
+    state.cursor_dirty = true;
 }
-fn pointerButton(data: ?*anyopaque, _: ?*c.wl_pointer, _: u32, _: u32, button: u32, button_state: u32) callconv(.c) void {
+fn pointerButton(data: ?*anyopaque, _: ?*c.wl_pointer, serial: u32, _: u32, button: u32, button_state: u32) callconv(.c) void {
     const state: *WaylandState = @ptrCast(@alignCast(data.?));
-    if (button == pointer_button_left and button_state == c.WL_POINTER_BUTTON_STATE_RELEASED) activateHit(state.app);
+    state.pointer_serial = serial;
+    if (button == pointer_button_left and button_state == c.WL_POINTER_BUTTON_STATE_PRESSED) {
+        state.pointer_event = .down;
+    } else if (button == pointer_button_left and button_state == c.WL_POINTER_BUTTON_STATE_RELEASED) {
+        state.pointer_event = .up;
+    }
     state.input_dirty = true;
+    state.cursor_dirty = true;
 }
 fn pointerAxis(data: ?*anyopaque, _: ?*c.wl_pointer, _: u32, axis: u32, value: c.wl_fixed_t) callconv(.c) void {
     const state: *WaylandState = @ptrCast(@alignCast(data.?));
@@ -482,4 +653,29 @@ test "egl host input helpers update hover activation and scroll state" {
     const before = app.scroll_y;
     scrollBy(&app, default_width, 200, std.math.nan(f32));
     try std.testing.expectEqual(before, app.scroll_y);
+}
+
+test "egl host activation uses shared site navigation routes" {
+    var app = AppState{};
+
+    app.hover_hit_id = site_chrome.blog_button_id;
+    activateHit(&app);
+    try std.testing.expectEqual(site_navigation.View.blog, app.route.view);
+    try std.testing.expectEqual(@as(f32, 0.0), app.scroll_y);
+
+    const post_id = site_blog.postIdAt(0);
+    app.scroll_y = 120.0;
+    app.hover_hit_id = post_id;
+    activateHit(&app);
+    try std.testing.expectEqual(site_navigation.View.blog, app.route.view);
+    try std.testing.expectEqual(post_id, app.route.selected_blog_post_id);
+    try std.testing.expectEqual(@as(f32, 0.0), app.scroll_y);
+
+    app.hover_hit_id = site_chrome.apps_button_id;
+    activateHit(&app);
+    try std.testing.expectEqual(site_navigation.View.apps, app.route.view);
+
+    app.hover_hit_id = site_chrome.logo_button_id;
+    activateHit(&app);
+    try std.testing.expectEqual(site_navigation.View.landing, app.route.view);
 }

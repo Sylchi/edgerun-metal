@@ -40,6 +40,10 @@ fn testHash(material: []const u8) preimage.Hash {
     return preimage.hash("edgerun:zig:v1:cheating-app-test", material);
 }
 
+fn executionHost(test_ids: TestIds) app_mod.ExecutionHost {
+    return app_mod.ExecutionHost.init(test_ids.device).?;
+}
+
 fn allocation(memory_bytes: usize, storage_bytes: usize, storage_slots: usize, execution_ticks: u64) App.DeclaredAllocation {
     return .{
         .memory_bytes = memory_bytes,
@@ -145,7 +149,8 @@ test "cheating app cannot steal parent allocation id" {
     ).?;
     const child_allocation = allocation(child_memory_bytes, child_storage_bytes, child_storage_slots, 1);
     const child_manifest = try manifestFor(test_ids.child, child_allocation, 0, epoch, &manifest_raw);
-    const spawned = try parent.spawnManifest(
+    const spawned = try executionHost(test_ids).spawnManifest(
+        &parent,
         test_ids.parent,
         test_ids.child,
         epoch,
@@ -211,6 +216,38 @@ test "cheating app cannot read sibling storage" {
     try std.testing.expect(cheating.storedObject(sibling_object) == null);
 }
 
+test "cheating app cannot share memory with unadmitted grant" {
+    const memory_bytes = 512;
+    const storage_bytes_len = 256;
+    const storage_slots = 2;
+
+    var memory: [memory_bytes]u8 = undefined;
+    var storage_bytes: [storage_bytes_len]u8 = undefined;
+    var slots: [storage_slots]store.Blob = undefined;
+
+    const epoch = clock.Stamp{ .keeper = .{ .bytes = [_]u8{42} ++ [_]u8{0} ** 31 } };
+    const test_ids = ids(epoch);
+    var cheating = App.initAllocated(
+        test_ids.child,
+        BoundedArena.init(.{ .base = &memory }),
+        store.Store.init(.{ .base = &storage_bytes }, &slots),
+        allocation(memory_bytes, storage_bytes_len, storage_slots, 1),
+    ).?;
+    const shared = try cheating.reserveSharedMemory(8, "unadmitted share", epoch);
+    const share = intent.admit(
+        test_ids.user,
+        test_ids.device,
+        test_ids.child,
+        test_ids.reader,
+        .grant_resource,
+        .exports_data,
+        epoch,
+        intent.requestId("cheating unadmitted memory share").?,
+    ).?;
+
+    try std.testing.expectError(error.Unauthorized, cheating.shareMemoryReadOnly(test_ids.reader.id, shared, epoch, share));
+}
+
 test "cheating app cannot spawn with authorization for different actor" {
     const parent_memory_bytes = 256;
     const parent_storage_bytes = 256;
@@ -235,7 +272,8 @@ test "cheating app cannot spawn with authorization for different actor" {
     const child_allocation = allocation(child_memory_bytes, child_storage_bytes, child_storage_slots, 1);
     const child_manifest = try manifestFor(test_ids.child, child_allocation, 0, epoch, &manifest_raw);
 
-    try std.testing.expectError(error.Unauthorized, parent.spawnManifest(
+    try std.testing.expectError(error.Unauthorized, executionHost(test_ids).spawnManifest(
+        &parent,
         test_ids.parent,
         test_ids.child,
         epoch,
@@ -268,7 +306,8 @@ test "cheating app cannot spawn from manifest owned by sibling" {
     const child_allocation = allocation(child_memory_bytes, child_storage_bytes, child_storage_slots, 1);
     const sibling_owned_manifest = try manifestFor(test_ids.sibling, child_allocation, 0, epoch, &manifest_raw);
 
-    try std.testing.expectError(error.BadAllocation, parent.spawnManifest(
+    try std.testing.expectError(error.BadAllocation, executionHost(test_ids).spawnManifest(
+        &parent,
         test_ids.parent,
         test_ids.child,
         epoch,
@@ -302,13 +341,37 @@ test "cheating app cannot spawn with unadmitted authorization" {
     const child_manifest = try manifestFor(test_ids.child, child_allocation, 0, epoch, &manifest_raw);
     const authorization = spawnAuthorization(test_ids, test_ids.parent, test_ids.child, epoch, "cheating unadmitted spawn");
 
-    try std.testing.expectError(error.Unauthorized, parent.spawnManifest(
+    try std.testing.expectError(error.Unauthorized, executionHost(test_ids).spawnManifest(
+        &parent,
         test_ids.parent,
         test_ids.child,
         epoch,
         authorization,
         child_manifest,
     ));
+}
+
+test "cheating app cannot spawn native code without edgerun runtime signature" {
+    var memory: [64]u8 = undefined;
+    var storage_bytes: [256]u8 = undefined;
+    var slots: [4]store.Blob = undefined;
+    var manifest_raw: [object.header_size + object.owner_size + App.manifest_body_size]u8 = undefined;
+
+    const epoch = clock.Stamp{ .keeper = .{ .bytes = [_]u8{8} ++ [_]u8{0} ** 31 } };
+    const test_ids = ids(epoch);
+    var parent = App.initAllocated(
+        test_ids.parent,
+        BoundedArena.init(.{ .base = &memory }),
+        store.Store.init(.{ .base = &storage_bytes }, &slots),
+        allocation(64, 256, 4, 1),
+    ).?;
+    const child_allocation = allocation(16, 64, 1, 1);
+    const native_manifest = try manifestFor(test_ids.child, child_allocation, App.manifest_flag_native_runtime, epoch, &manifest_raw);
+    const authorization = admittedSpawnAuthorization(&parent, test_ids, test_ids.parent, test_ids.child, epoch, "cheating unsigned native spawn");
+
+    try std.testing.expectError(error.Unauthorized, executionHost(test_ids).spawnManifest(&parent, test_ids.parent, test_ids.child, epoch, authorization, native_manifest));
+    try std.testing.expectError(error.Unauthorized, executionHost(test_ids).spawnNativeRuntimeManifest(&parent, test_ids.parent, test_ids.child, epoch, authorization, native_manifest, test_ids.parent, native_manifest));
+    try std.testing.expectEqual(@as(usize, 64), parent.memoryRemaining());
 }
 
 test "cheating app cannot admit parent authorization with child capability" {
@@ -373,7 +436,8 @@ test "cheating app cannot double report work" {
     const child_allocation = allocation(child_memory_bytes, child_storage_bytes, child_storage_slots, 1);
     const child_manifest = try manifestFor(test_ids.child, child_allocation, 0, epoch, &manifest_raw);
     const manifest_id = object.Header.id(child_manifest);
-    const spawned = try parent.spawnManifest(
+    const spawned = try executionHost(test_ids).spawnManifest(
+        &parent,
         test_ids.parent,
         test_ids.child,
         epoch,
@@ -427,7 +491,8 @@ test "cheating app cannot sign work with unadmitted signing capability" {
     const child_allocation = allocation(child_memory_bytes, child_storage_bytes, child_storage_slots, 1);
     const child_manifest = try manifestFor(test_ids.child, child_allocation, 0, epoch, &manifest_raw);
     const manifest_id = object.Header.id(child_manifest);
-    const spawned = try parent.spawnManifest(
+    const spawned = try executionHost(test_ids).spawnManifest(
+        &parent,
         test_ids.parent,
         test_ids.child,
         epoch,
@@ -479,7 +544,8 @@ test "cheating app cannot report work for app hash not spawned" {
     const child_allocation = allocation(child_memory_bytes, child_storage_bytes, child_storage_slots, 1);
     const child_manifest = try manifestFor(test_ids.child, child_allocation, 0, epoch, &manifest_raw);
     const manifest_id = object.Header.id(child_manifest);
-    const spawned = try parent.spawnManifest(
+    const spawned = try executionHost(test_ids).spawnManifest(
+        &parent,
         test_ids.parent,
         test_ids.child,
         epoch,
@@ -533,7 +599,8 @@ test "cheating app cannot reclaim parent resources while grandchild is alive" {
     ).?;
     const child_allocation = allocation(child_memory_bytes, child_storage_bytes, child_storage_slots, 2);
     const child_manifest = try manifestFor(test_ids.child, child_allocation, App.manifest_flag_child_spawn, epoch, &child_manifest_raw);
-    const spawned_child = try parent.spawnManifest(
+    const spawned_child = try executionHost(test_ids).spawnManifest(
+        &parent,
         test_ids.parent,
         test_ids.child,
         epoch,
@@ -543,7 +610,8 @@ test "cheating app cannot reclaim parent resources while grandchild is alive" {
     var child = spawned_child.app;
     const grandchild_allocation = allocation(grandchild_memory_bytes, grandchild_storage_bytes, grandchild_storage_slots, 1);
     const grandchild_manifest = try manifestFor(test_ids.grandchild, grandchild_allocation, 0, epoch, &grandchild_manifest_raw);
-    _ = try child.spawnManifest(
+    _ = try executionHost(test_ids).spawnManifest(
+        &child,
         test_ids.child,
         test_ids.grandchild,
         epoch,
@@ -551,5 +619,5 @@ test "cheating app cannot reclaim parent resources while grandchild is alive" {
         grandchild_manifest,
     );
 
-    try std.testing.expectError(error.Corrupt, parent.reclaimChild(&child, spawned_child.receipt, epoch));
+    try std.testing.expectError(error.Corrupt, executionHost(test_ids).reclaimChild(&parent, &child, spawned_child.receipt, epoch));
 }

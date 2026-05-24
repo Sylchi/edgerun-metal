@@ -6,6 +6,8 @@ Security can protect the user from malware, the platform from user modification,
 
 The phrase sounds final because nobody wants to be against security. But security is never floating in the air. It protects a specific actor from a specific threat using a specific mechanism controlled by specific keys.
 
+> Mental model: every security claim has a beneficiary, an adversary, and an override key.
+
 ## Same mechanism, different owner
 
 - Secure boot can protect users from persistent malware.
@@ -20,6 +22,22 @@ The technical mechanism may be identical. The political result depends on who ca
 ## Override key
 
 Ask where the override key lives. If the user can override, the mechanism is a tool. If only the vendor can override, the mechanism is a control plane. If nobody can override, the mechanism may be brittle. If a government or payment network can override, the user is not the final authority.
+
+## The simple test
+
+Take any security feature and rewrite the sentence with names in it.
+
+```text
+This protects [actor] from [threat] by letting [key holder] decide [action].
+```
+
+Now the fog clears. "App review keeps users safe" becomes "the app store protects users from malicious apps by letting the store decide which apps may run." That can be partly true and still incomplete. The same sentence also says independent developers and owners depend on the store's permission.
+
+Good security can survive this sentence. Bad security hides from it.
+
+## Interactive model
+
+[[demo:post_model]]
 
 ## Main lesson
 

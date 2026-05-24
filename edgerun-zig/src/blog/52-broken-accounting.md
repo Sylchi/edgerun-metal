@@ -6,7 +6,9 @@ Users provide data but do not get paid. Users provide attention but do not see t
 
 This is broken accounting.
 
-## What The Current Model Hides
+> Mental model: hidden extraction is what happens when systems consume resources without issuing receipts.
+
+## What the current model hides
 
 - users provide data
 - users provide attention
@@ -20,7 +22,7 @@ This is broken accounting.
 
 The cost exists. It is just routed through dependency, tracking, lock-in, and invisible extraction.
 
-## What Edgerun Accounts For
+## What EdgeRun accounts for
 
 Every meaningful resource exchange should be explicit:
 
@@ -34,7 +36,7 @@ Every meaningful resource exchange should be explicit:
 
 That is not just economics. It is justice at the protocol layer.
 
-## No Hidden Extraction
+## No hidden extraction
 
 No freeloading. No lock-in. No hidden extraction.
 
@@ -44,7 +46,7 @@ Without accounting, open systems get abused by spam, free riders, storage abuse,
 
 With correct accounting, the system can be generous without being stupid.
 
-## Free Does Not Mean Unmetered
+## Free does not mean unmetered
 
 Free means you are not charged rent for what your own devices can already do.
 
@@ -58,7 +60,7 @@ Your device can store, compute, encrypt, sign, render, and communicate. So why a
 
 Because the current internet does not account for resources correctly.
 
-## Accounting Is Accountability
+## Accounting is accountability
 
 Resource accounting and moral accountability ask the same questions:
 
@@ -71,13 +73,15 @@ Resource accounting and moral accountability ask the same questions:
 
 That is why signed events, sealed messages, receipts, and content hashes are not crypto decoration. They are the accounting system.
 
-## Interactive Demo
+## Interactive model
+
+[[demo:post_model]]
 
 Resource receipt ledger: send a message, store a file, relay data, run compute, and consume an app. The demo shows which resources were local, which resources were provided by another node, which receipts were produced, and whether the user consumed more than they contributed.
 
-## Main Lesson
+## Main lesson
 
-Edgerun is not only replacing infrastructure. It is replacing hidden subsidy and extraction with explicit contribution and settlement.
+EdgeRun is not only replacing infrastructure. It is replacing hidden subsidy and extraction with explicit contribution and settlement.
 
 Current model:
 
@@ -88,7 +92,7 @@ platform captures upside
 costs stay hidden
 ```
 
-Edgerun model:
+EdgeRun model:
 
 ```text
 user owns identity and data
@@ -98,8 +102,8 @@ imbalances settle
 extra capacity becomes a market
 ```
 
-## EdgeRun Seed
+## EdgeRun seed
 
-Edgerun accounts for digital resources correctly.
+EdgeRun accounts for digital resources correctly.
 
 Your device works for you first. When you provide compute, storage, bandwidth, or uptime, you earn. When you consume more than you provide, you pay. Every action is signed. Every unit of work can produce a receipt. No platform owns the truth.

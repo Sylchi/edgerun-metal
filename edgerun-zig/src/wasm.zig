@@ -2,7 +2,6 @@ const byte_utils = @import("bytes.zig");
 
 const max_functions = 16;
 const max_imports = 16;
-const max_import_name = 32;
 const max_types = 16;
 const max_type_params = 5;
 const max_type_results = 4;
@@ -13,7 +12,6 @@ const max_control_depth = 16;
 const max_globals = 16;
 const max_table_entries = 32;
 const max_data_segments = 8;
-const max_export_name = 32;
 const wasm_page_bytes = 65536;
 const leb32_max_bytes = 5;
 const leb64_max_bytes = 10;
@@ -627,76 +625,58 @@ const Function = struct {
 };
 
 const ImportedFunction = struct {
-    module: [max_import_name]u8 = undefined,
-    module_len: usize = 0,
-    name: [max_import_name]u8 = undefined,
-    name_len: usize = 0,
+    module: []const u8 = &.{},
+    name: []const u8 = &.{},
     type_index: usize = 0,
 
     fn matches(self: ImportedFunction, host: HostImport) bool {
-        return self.module_len == host.module.len and
-            self.name_len == host.name.len and
-            byte_utils.eql(self.module[0..self.module_len], host.module) and
-            byte_utils.eql(self.name[0..self.name_len], host.name);
+        return byte_utils.eql(self.module, host.module) and byte_utils.eql(self.name, host.name);
     }
 };
 
 const ImportedMemory = struct {
-    module: [max_import_name]u8 = undefined,
-    module_len: usize = 0,
-    name: [max_import_name]u8 = undefined,
-    name_len: usize = 0,
+    module: []const u8 = &.{},
+    name: []const u8 = &.{},
     min_pages: usize = 0,
 
     fn matches(self: ImportedMemory, host: HostImport) bool {
         return host.kind == .memory and
-            self.module_len == host.module.len and
-            self.name_len == host.name.len and
-            byte_utils.eql(self.module[0..self.module_len], host.module) and
-            byte_utils.eql(self.name[0..self.name_len], host.name);
+            byte_utils.eql(self.module, host.module) and
+            byte_utils.eql(self.name, host.name);
     }
 };
 
 const ImportedTable = struct {
-    module: [max_import_name]u8 = undefined,
-    module_len: usize = 0,
-    name: [max_import_name]u8 = undefined,
-    name_len: usize = 0,
+    module: []const u8 = &.{},
+    name: []const u8 = &.{},
     min_entries: usize = 0,
 
     fn matches(self: ImportedTable, host: HostImport) bool {
         return host.kind == .table and
-            self.module_len == host.module.len and
-            self.name_len == host.name.len and
-            byte_utils.eql(self.module[0..self.module_len], host.module) and
-            byte_utils.eql(self.name[0..self.name_len], host.name);
+            byte_utils.eql(self.module, host.module) and
+            byte_utils.eql(self.name, host.name);
     }
 };
 
 const ImportedGlobal = struct {
-    module: [max_import_name]u8 = undefined,
-    module_len: usize = 0,
-    name: [max_import_name]u8 = undefined,
-    name_len: usize = 0,
+    module: []const u8 = &.{},
+    name: []const u8 = &.{},
     global_index: usize = 0,
 
     fn matches(self: ImportedGlobal, host: HostImport) bool {
         return host.kind == .global and
-            self.module_len == host.module.len and
-            self.name_len == host.name.len and
-            byte_utils.eql(self.module[0..self.module_len], host.module) and
-            byte_utils.eql(self.name[0..self.name_len], host.name);
+            byte_utils.eql(self.module, host.module) and
+            byte_utils.eql(self.name, host.name);
     }
 };
 
 const Export = struct {
-    name: [max_export_name]u8 = undefined,
-    name_len: usize = 0,
+    name: []const u8 = &.{},
     kind: ExternalKind = .function,
     index: usize = 0,
 
     fn matches(self: Export, name: []const u8) bool {
-        return self.name_len == name.len and byte_utils.eql(self.name[0..self.name_len], name);
+        return byte_utils.eql(self.name, name);
     }
 };
 

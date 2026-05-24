@@ -10,6 +10,8 @@ The opposite.
 
 I understand them too well.
 
+> Mental model: buying hardware is not ownership if someone else keeps the keys that decide what may run.
+
 ## Personal setup
 
 I rooted my phones because I wanted control over devices I paid for.
@@ -114,6 +116,10 @@ If the vendor will not maintain the device, the vendor should not be allowed to 
 A right-to-own checklist shows the user a phone after vendor support ends. The reader toggles bootloader unlock, firmware tools, recovery images, owner-controlled relocking, bank hardware-key support, app-store independence, repair parts, and alternative OS availability.
 
 The demo asks: can the owner maintain this device without vendor permission?
+
+## Interactive model
+
+[[demo:post_model]]
 
 ## Main lesson
 

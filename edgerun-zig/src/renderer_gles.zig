@@ -12,10 +12,22 @@ pub const c = @cImport({
 pub const State = struct {
     rect_program: c.GLuint,
     textured_program: c.GLuint,
+    image_program: c.GLuint,
     rect_vbo: c.GLuint,
     textured_vbo: c.GLuint,
     font_texture: c.GLuint,
     icon_texture: c.GLuint,
+    image_texture: ?c.GLuint,
+};
+
+pub const RgbaTexture = struct {
+    width: usize,
+    height: usize,
+    pixels: []const ui.Color,
+
+    pub fn valid(self: RgbaTexture) bool {
+        return self.width != 0 and self.height != 0 and self.pixels.len >= self.width * self.height;
+    }
 };
 
 pub const Pixel = struct {
@@ -50,28 +62,36 @@ const opaque_alpha_min: u8 = 16;
 const fnv64_offset_basis: u64 = 0xcbf29ce484222325;
 const fnv64_prime: u64 = 0x100000001b3;
 
-pub fn init(font_atlas: *renderer_font_atlas.Atlas) !State {
+pub fn init(font_atlas: *renderer_font_atlas.Atlas, image: ?RgbaTexture) !State {
     try requireHardwareGl();
     c.glClearColor(0.043, 0.043, 0.043, 1.0);
     c.glEnable(c.GL_BLEND);
     c.glBlendFunc(c.GL_SRC_ALPHA, c.GL_ONE_MINUS_SRC_ALPHA);
+    const image_texture = if (image) |texture| blk: {
+        if (!texture.valid()) return error.InvalidImageTexture;
+        break :blk makeRgbaTexture(texture.width, texture.height, texture.pixels);
+    } else null;
     return .{
         .rect_program = try makeProgram(rect_vertex_shader, rect_fragment_shader),
         .textured_program = try makeProgram(textured_vertex_shader, textured_fragment_shader),
+        .image_program = try makeProgram(textured_vertex_shader, image_fragment_shader),
         .rect_vbo = makeBuffer(),
         .textured_vbo = makeBuffer(),
         .font_texture = makeAlphaTexture(renderer_font_atlas.width, renderer_font_atlas.height, font_atlas.alphaSlice()),
         .icon_texture = makeAlphaTexture(tabler_atlas.width, tabler_atlas.height, tabler_atlas.alpha),
+        .image_texture = image_texture,
     };
 }
 
 pub fn deinit(gl: *State) void {
+    if (gl.image_texture) |texture| c.glDeleteTextures(1, &texture);
     c.glDeleteTextures(1, &gl.font_texture);
     c.glDeleteTextures(1, &gl.icon_texture);
     c.glDeleteBuffers(1, &gl.rect_vbo);
     c.glDeleteBuffers(1, &gl.textured_vbo);
     c.glDeleteProgram(gl.rect_program);
     c.glDeleteProgram(gl.textured_program);
+    c.glDeleteProgram(gl.image_program);
 }
 
 pub fn refreshFontTexture(gl: State, font_atlas: *const renderer_font_atlas.Atlas) void {
@@ -87,11 +107,18 @@ pub fn renderFrameToViewport(gl: State, logical_width: i32, logical_height: i32,
     c.glClear(c.GL_COLOR_BUFFER_BIT);
     const scale = viewportScale(logical_width, logical_height, framebuffer_width, framebuffer_height);
     try drawRects(gl, logical_width, logical_height, scale, buffers.liveRects());
+    try drawImage(gl, logical_width, logical_height, buffers.liveImageVertices());
     try drawTextured(gl, logical_width, logical_height, buffers.liveTextVertices(), gl.font_texture);
     try drawTextured(gl, logical_width, logical_height, buffers.liveIconVertices(), gl.icon_texture);
     try drawRects(gl, logical_width, logical_height, scale, buffers.liveOverlayRects());
     try drawTextured(gl, logical_width, logical_height, buffers.liveOverlayTextVertices(), gl.font_texture);
     try drawTextured(gl, logical_width, logical_height, buffers.liveOverlayIconVertices(), gl.icon_texture);
+}
+
+fn drawImage(gl: State, width: i32, height: i32, values: []const f32) !void {
+    if (values.len == 0) return;
+    const texture = gl.image_texture orelse return error.MissingImageTexture;
+    try drawTexturedWithProgram(gl, width, height, values, texture, gl.image_program);
 }
 
 pub fn verifyFrameNonBlank(width: i32, height: i32) !FrameProof {
@@ -219,13 +246,17 @@ fn drawRects(gl: State, width: i32, height: i32, scale: f32, values: []const f32
 }
 
 fn drawTextured(gl: State, width: i32, height: i32, values: []const f32, texture: c.GLuint) !void {
+    try drawTexturedWithProgram(gl, width, height, values, texture, gl.textured_program);
+}
+
+fn drawTexturedWithProgram(gl: State, width: i32, height: i32, values: []const f32, texture: c.GLuint, program: c.GLuint) !void {
     if (values.len == 0) return;
     if (values.len % renderer_ir.text_vertex_float_stride != 0) return error.InvalidIrBuffer;
-    c.glUseProgram(gl.textured_program);
-    c.glUniform2f(c.glGetUniformLocation(gl.textured_program, "u_screen"), @floatFromInt(width), @floatFromInt(height));
+    c.glUseProgram(program);
+    c.glUniform2f(c.glGetUniformLocation(program, "u_screen"), @floatFromInt(width), @floatFromInt(height));
     c.glActiveTexture(c.GL_TEXTURE0);
     c.glBindTexture(c.GL_TEXTURE_2D, texture);
-    c.glUniform1i(c.glGetUniformLocation(gl.textured_program, "u_tex"), 0);
+    c.glUniform1i(c.glGetUniformLocation(program, "u_tex"), 0);
     c.glBindBuffer(c.GL_ARRAY_BUFFER, gl.textured_vbo);
     c.glBufferData(c.GL_ARRAY_BUFFER, @intCast(values.len * @sizeOf(f32)), values.ptr, c.GL_DYNAMIC_DRAW);
     c.glEnableVertexAttribArray(0);
@@ -253,6 +284,19 @@ fn makeAlphaTexture(width: usize, height: usize, alpha: []const u8) c.GLuint {
     c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_WRAP_T, c.GL_CLAMP_TO_EDGE);
     c.glPixelStorei(c.GL_UNPACK_ALIGNMENT, 1);
     c.glTexImage2D(c.GL_TEXTURE_2D, 0, c.GL_ALPHA, @intCast(width), @intCast(height), 0, c.GL_ALPHA, c.GL_UNSIGNED_BYTE, alpha.ptr);
+    return texture;
+}
+
+fn makeRgbaTexture(width: usize, height: usize, pixels: []const ui.Color) c.GLuint {
+    var texture: c.GLuint = 0;
+    c.glGenTextures(1, &texture);
+    c.glBindTexture(c.GL_TEXTURE_2D, texture);
+    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_MIN_FILTER, c.GL_LINEAR);
+    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_MAG_FILTER, c.GL_LINEAR);
+    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_WRAP_S, c.GL_CLAMP_TO_EDGE);
+    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_WRAP_T, c.GL_CLAMP_TO_EDGE);
+    c.glPixelStorei(c.GL_UNPACK_ALIGNMENT, 1);
+    c.glTexImage2D(c.GL_TEXTURE_2D, 0, c.GL_RGBA, @intCast(width), @intCast(height), 0, c.GL_RGBA, c.GL_UNSIGNED_BYTE, pixels.ptr);
     return texture;
 }
 
@@ -392,6 +436,17 @@ const textured_fragment_shader =
     \\}
 ;
 
+const image_fragment_shader =
+    \\precision mediump float;
+    \\varying vec2 v_uv;
+    \\varying vec4 v_color;
+    \\uniform sampler2D u_tex;
+    \\void main() {
+    \\  vec4 texel = texture2D(u_tex, v_uv);
+    \\  gl_FragColor = vec4(texel.rgb * v_color.rgb, texel.a * v_color.a);
+    \\}
+;
+
 test "software GL renderer names are rejected" {
     try std.testing.expect(isSoftwareRenderer("llvmpipe (LLVM 22.1.3, 256 bits)"));
     try std.testing.expect(isSoftwareRenderer("softpipe"));
@@ -448,4 +503,10 @@ test "font atlas refresh API accepts populated variable font atlas" {
     const buffers = storage.buffers();
     try renderer_ir.pushText(buffers, atlas.source(), .base, .{ .x = 0, .y = 0, .w = 64, .h = 18 }, "A", .text, .start);
     try std.testing.expect(atlas.cachedGlyphCount() > 0);
+}
+
+test "rgba texture type validates image pixels" {
+    const pixels = [_]ui.Color{.{ .r = 1, .g = 2, .b = 3, .a = 4 }};
+    try std.testing.expect((RgbaTexture{ .width = 1, .height = 1, .pixels = &pixels }).valid());
+    try std.testing.expect(!(RgbaTexture{ .width = 1, .height = 2, .pixels = &pixels }).valid());
 }

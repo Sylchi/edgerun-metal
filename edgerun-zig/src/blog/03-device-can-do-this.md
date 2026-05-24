@@ -6,6 +6,8 @@ Most daily app workloads are small. Messages, notes, contacts, calendars, local 
 
 The cloud became the default owner partly because it was convenient for developers. Servers are easy to update, easy to instrument, easy to monetize, and easy to make authoritative. That convenience turned into a habit: even small personal workloads were rebuilt as remote services.
 
+> Mental model: the cloud should be extra capacity, not the default owner of every tiny task.
+
 ## What your device already has
 
 [[demo:local_compute_capacity]]

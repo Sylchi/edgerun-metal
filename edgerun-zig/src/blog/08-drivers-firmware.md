@@ -6,6 +6,8 @@ Drivers let the operating system talk to hardware. Firmware is small software ru
 
 When people say "the app did it" or "the OS did it," they often skip the lower layers that made the action possible. The OS may request a Wi-Fi transmission, but firmware inside the radio may decide the details. The OS may ask storage to write data, but a controller inside the drive manages flash blocks. The OS may display a camera frame, but image processing may already have happened inside the camera pipeline.
 
+> Mental model: some of the most powerful software on your device does not look like an app.
+
 ## Where hidden software lives
 
 Firmware can run inside:
@@ -39,10 +41,14 @@ Firmware is harder. It may be required before the device can operate at all. The
 
 The point is not fantasy purity. The point is refusing to confuse "required to operate this chip" with "allowed to own the system."
 
+## Interactive model
+
+[[demo:post_model]]
+
 ## Main lesson
 
 Your device contains computers inside the computer, and you do not control all of them. A serious system names those boundaries instead of burying them under the word "hardware."
 
-## Edgerun seed
+## EdgeRun seed
 
 A realistic user-owned system must admit hardware trust boundaries. Some parts can be made explicit and measured. Some parts remain opaque and must be isolated. Vendor firmware needed to operate a radio is not the same as vendor authority over apps, identity, storage, or policy.
