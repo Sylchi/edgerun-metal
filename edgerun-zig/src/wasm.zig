@@ -56,6 +56,44 @@ pub const ValueType = enum(u8) {
     f64 = 0x7c,
 };
 
+const Value = union(ValueType) {
+    i32: i32,
+    i64: i64,
+    f32: f32,
+    f64: f64,
+
+    fn zero(value_type: ValueType) Error!Value {
+        return switch (value_type) {
+            .i32 => .{ .i32 = 0 },
+            .i64 => .{ .i64 = 0 },
+            .f32 => .{ .f32 = 0 },
+            .f64 => .{ .f64 = 0 },
+        };
+    }
+
+    fn fromI64Arg(value_type: ValueType, value: i64) Error!Value {
+        return switch (value_type) {
+            .i32 => .{ .i32 = @truncate(value) },
+            .i64 => .{ .i64 = value },
+            .f32, .f64 => error.Unsupported,
+        };
+    }
+
+    fn asI32(self: Value) Error!i32 {
+        return switch (self) {
+            .i32 => |value| value,
+            else => error.Corrupt,
+        };
+    }
+
+    fn asI64(self: Value) Error!i64 {
+        return switch (self) {
+            .i64 => |value| value,
+            else => error.Corrupt,
+        };
+    }
+};
+
 const Opcode = enum(u8) {
     @"unreachable" = 0x00,
     nop = 0x01,
@@ -905,39 +943,50 @@ const Executor = struct {
     };
 
     const Frame = struct {
-        locals: [max_locals]i64 = undefined,
-        stack: [max_stack]i64 = undefined,
+        locals: [max_locals]Value = undefined,
+        stack: [max_stack]Value = undefined,
         stack_len: usize = 0,
 
         fn init(function_type: FuncType, code: Code, args: []const i64) Error!Frame {
             if (args.len != function_type.param_count) return error.Corrupt;
             if (function_type.param_count + code.local_count > max_locals) return error.Unsupported;
             var frame = Frame{};
-            @memset(frame.locals[0..], 0);
             for (args, 0..) |arg, index| {
-                frame.locals[index] = arg;
+                frame.locals[index] = try Value.fromI64Arg(function_type.params[index], arg);
+            }
+            var local_index: usize = 0;
+            while (local_index < code.local_count) : (local_index += 1) {
+                frame.locals[function_type.param_count + local_index] = try Value.zero(code.local_types[local_index]);
             }
             return frame;
         }
 
-        fn push(self: *Frame, value: i64) Error!void {
+        fn push(self: *Frame, value: Value) Error!void {
             if (self.stack_len >= max_stack) return error.StackOverflow;
             self.stack[self.stack_len] = value;
             self.stack_len += 1;
         }
 
-        fn pop(self: *Frame) Error!i64 {
+        fn pop(self: *Frame) Error!Value {
             if (self.stack_len == 0) return error.StackUnderflow;
             self.stack_len -= 1;
             return self.stack[self.stack_len];
         }
 
         fn pushI32(self: *Frame, value: i32) Error!void {
-            try self.push(value);
+            try self.push(.{ .i32 = value });
+        }
+
+        fn pushI64(self: *Frame, value: i64) Error!void {
+            try self.push(.{ .i64 = value });
         }
 
         fn popI32(self: *Frame) Error!i32 {
-            return @truncate(try self.pop());
+            return (try self.pop()).asI32();
+        }
+
+        fn popI64(self: *Frame) Error!i64 {
+            return (try self.pop()).asI64();
         }
     };
 
@@ -1030,8 +1079,8 @@ const Executor = struct {
                     const default_target = try reader.readU32Leb();
                     try branchToControl(&reader, &controls, &control_len, selected_target orelse default_target);
                 },
-                .i64_const => try frame.push(try reader.readI64Leb()),
-                .i32_const => try frame.push(@as(i64, try reader.readI32Leb())),
+                .i64_const => try frame.pushI64(try reader.readI64Leb()),
+                .i32_const => try frame.pushI32(try reader.readI32Leb()),
                 .i64_add => try pushI64Binary(&frame, .add),
                 .i64_sub => try pushI64Binary(&frame, .sub),
                 .i64_mul => try pushI64Binary(&frame, .mul),
@@ -1049,8 +1098,8 @@ const Executor = struct {
                 .i64_ctz => try pushI64Unary(&frame, .ctz),
                 .i64_popcnt => try pushI64Unary(&frame, .popcnt),
                 .i64_eqz => {
-                    const value = try frame.pop();
-                    try frame.push(if (value == 0) 1 else 0);
+                    const value = try frame.popI64();
+                    try frame.pushI32(if (value == 0) 1 else 0);
                 },
                 .i64_eq => try pushI64Comparison(&frame, .eq),
                 .i64_ne => try pushI64Comparison(&frame, .ne),
@@ -1063,8 +1112,8 @@ const Executor = struct {
                 .i64_ge_s => try pushI64Comparison(&frame, .ge_s),
                 .i64_ge_u => try pushI64Comparison(&frame, .ge_u),
                 .i32_eqz => {
-                    const value = try frame.pop();
-                    try frame.push(if (@as(u32, @truncate(@as(u64, @bitCast(value)))) == 0) 1 else 0);
+                    const value = try frame.popI32();
+                    try frame.pushI32(if (value == 0) 1 else 0);
                 },
                 .i32_eq => try pushI32Comparison(&frame, .eq),
                 .i32_ne => try pushI32Comparison(&frame, .ne),
@@ -1093,36 +1142,36 @@ const Executor = struct {
                 .i32_ctz => try pushI32Unary(&frame, .ctz),
                 .i32_popcnt => try pushI32Unary(&frame, .popcnt),
                 .i32_wrap_i64 => {
-                    const value = try frame.pop();
-                    try frame.push(@as(i64, @as(u32, @truncate(@as(u64, @bitCast(value))))));
+                    const value = try frame.popI64();
+                    try frame.pushI32(@bitCast(@as(u32, @truncate(@as(u64, @bitCast(value))))));
                 },
                 .i64_extend_i32_s => {
-                    const value: i32 = @truncate(try frame.pop());
-                    try frame.push(value);
+                    const value = try frame.popI32();
+                    try frame.pushI64(value);
                 },
                 .i64_extend_i32_u => {
-                    const value: u32 = @bitCast(@as(i32, @truncate(try frame.pop())));
-                    try frame.push(@intCast(value));
+                    const value: u32 = @bitCast(try frame.popI32());
+                    try frame.pushI64(@intCast(value));
                 },
                 .i32_extend8_s => {
-                    const value: i8 = @truncate(try frame.pop());
-                    try frame.push(value);
+                    const value: i8 = @truncate(try frame.popI32());
+                    try frame.pushI32(value);
                 },
                 .i32_extend16_s => {
-                    const value: i16 = @truncate(try frame.pop());
-                    try frame.push(value);
+                    const value: i16 = @truncate(try frame.popI32());
+                    try frame.pushI32(value);
                 },
                 .i64_extend8_s => {
-                    const value: i8 = @truncate(try frame.pop());
-                    try frame.push(value);
+                    const value: i8 = @truncate(try frame.popI64());
+                    try frame.pushI64(value);
                 },
                 .i64_extend16_s => {
-                    const value: i16 = @truncate(try frame.pop());
-                    try frame.push(value);
+                    const value: i16 = @truncate(try frame.popI64());
+                    try frame.pushI64(value);
                 },
                 .i64_extend32_s => {
-                    const value: i32 = @truncate(try frame.pop());
-                    try frame.push(value);
+                    const value: i32 = @truncate(try frame.popI64());
+                    try frame.pushI64(value);
                 },
                 .drop => _ = try frame.pop(),
                 .select => {
@@ -1149,7 +1198,7 @@ const Executor = struct {
                 .global_get => {
                     const index = try reader.readU32Leb();
                     if (index >= self.module.global_count) return error.Corrupt;
-                    try frame.push(self.module.globals[index].value);
+                    try frame.push(try Value.fromI64Arg(self.module.globals[index].value_type, self.module.globals[index].value));
                 },
                 .global_set => {
                     const index = try reader.readU32Leb();
@@ -1158,7 +1207,7 @@ const Executor = struct {
                     if (!global.mutable) return error.Unsupported;
                     global.value = switch (global.value_type) {
                         .i32 => try frame.popI32(),
-                        .i64 => try frame.pop(),
+                        .i64 => try frame.popI64(),
                         .f32, .f64 => return error.Unsupported,
                     };
                 },
@@ -1186,14 +1235,14 @@ const Executor = struct {
                 .call => {
                     const callee = try reader.readU32Leb();
                     const result = try self.callFunctionFromFrame(&frame, callee, depth);
-                    if (result) |value| try frame.push(value);
+                    if (result) |value| try frame.pushI64(value);
                 },
                 .call_indirect => {
                     const type_index = try reader.readU32Leb();
                     if (type_index >= self.module.type_count) return error.Corrupt;
                     const table_index = try reader.readU32Leb();
                     const result = try self.callIndirectFromFrame(&frame, type_index, table_index, depth);
-                    if (result) |value| try frame.push(value);
+                    if (result) |value| try frame.pushI64(value);
                 },
             }
         }
@@ -1221,7 +1270,11 @@ const Executor = struct {
         var remaining = function_type.param_count;
         while (remaining > 0) {
             remaining -= 1;
-            args[remaining] = try frame.pop();
+            args[remaining] = switch (function_type.params[remaining]) {
+                .i32 => try frame.popI32(),
+                .i64 => try frame.popI64(),
+                .f32, .f64 => return error.Unsupported,
+            };
         }
         return try self.runFunction(function_index, depth + 1, args[0..function_type.param_count]);
     }
@@ -1251,29 +1304,36 @@ const Executor = struct {
         const size = memoryLoadSize(kind);
         const range = try self.memoryRange(address, size);
         switch (kind) {
-            .i32 => try frame.push(@as(i64, byte_utils.load32(range).?)),
-            .i64 => try frame.push(@as(i64, @bitCast(byte_utils.load64(range).?))),
-            .i32_8_s, .i64_8_s => try frame.push(@as(i8, @bitCast(range[0]))),
-            .i32_8_u, .i64_8_u => try frame.push(range[0]),
-            .i32_16_s, .i64_16_s => try frame.push(@as(i16, @bitCast(byte_utils.load16(range).?))),
-            .i32_16_u, .i64_16_u => try frame.push(byte_utils.load16(range).?),
-            .i64_32_s => try frame.push(@as(i32, @bitCast(byte_utils.load32(range).?))),
-            .i64_32_u => try frame.push(byte_utils.load32(range).?),
+            .i32 => try frame.pushI32(@bitCast(byte_utils.load32(range).?)),
+            .i64 => try frame.pushI64(@bitCast(byte_utils.load64(range).?)),
+            .i32_8_s => try frame.pushI32(@as(i8, @bitCast(range[0]))),
+            .i32_8_u => try frame.pushI32(range[0]),
+            .i32_16_s => try frame.pushI32(@as(i16, @bitCast(byte_utils.load16(range).?))),
+            .i32_16_u => try frame.pushI32(@intCast(byte_utils.load16(range).?)),
+            .i64_8_s => try frame.pushI64(@as(i8, @bitCast(range[0]))),
+            .i64_8_u => try frame.pushI64(range[0]),
+            .i64_16_s => try frame.pushI64(@as(i16, @bitCast(byte_utils.load16(range).?))),
+            .i64_16_u => try frame.pushI64(byte_utils.load16(range).?),
+            .i64_32_s => try frame.pushI64(@as(i32, @bitCast(byte_utils.load32(range).?))),
+            .i64_32_u => try frame.pushI64(byte_utils.load32(range).?),
         }
     }
 
     fn storeMemory(self: *Executor, frame: *Frame, reader: *Reader, kind: MemoryStore) Error!void {
         const offset = try readMemoryImmediate(reader);
-        const value = try frame.pop();
+        const value = switch (kind) {
+            .i32, .i32_8, .i32_16 => @as(u64, @bitCast(@as(i64, try frame.popI32()))),
+            .i64, .i64_8, .i64_16, .i64_32 => @as(u64, @bitCast(try frame.popI64())),
+        };
         const address = try popAddress(frame, offset);
         const size = memoryStoreSize(kind);
         const range = try self.memoryRange(address, size);
         const stored = switch (kind) {
-            .i32 => byte_utils.store32(range, @truncate(@as(u64, @bitCast(value)))),
-            .i64 => byte_utils.store64(range, @as(u64, @bitCast(value))),
-            .i32_8, .i64_8 => store8(range, @truncate(@as(u64, @bitCast(value)))),
-            .i32_16, .i64_16 => byte_utils.store16(range, @truncate(@as(u64, @bitCast(value)))),
-            .i64_32 => byte_utils.store32(range, @truncate(@as(u64, @bitCast(value)))),
+            .i32 => byte_utils.store32(range, @truncate(value)),
+            .i64 => byte_utils.store64(range, value),
+            .i32_8, .i64_8 => store8(range, @truncate(value)),
+            .i32_16, .i64_16 => byte_utils.store16(range, @truncate(value)),
+            .i64_32 => byte_utils.store32(range, @truncate(value)),
         };
         if (!stored) return error.Corrupt;
     }
@@ -1311,9 +1371,8 @@ const Executor = struct {
     }
 
     fn popAddress(frame: *Frame, offset: u32) Error!usize {
-        const base = try frame.pop();
-        if (base < 0) return error.NoMemory;
-        return checkedAdd(@as(usize, @intCast(base)), offset) orelse error.NoMemory;
+        const base: u32 = @bitCast(try frame.popI32());
+        return checkedAdd(@as(usize, base), offset) orelse error.NoMemory;
     }
 
     fn memoryRange(self: *Executor, address: usize, size: usize) Error![]u8 {
@@ -1749,7 +1808,11 @@ fn finishFunctionResult(function_type: FuncType, frame: *Executor.Frame) Error!?
         if (frame.stack_len != 0) return error.Corrupt;
         return null;
     }
-    return try frame.pop();
+    return switch (function_type.result_type orelse return error.Corrupt) {
+        .i64 => try frame.popI64(),
+        .i32 => try frame.popI32(),
+        .f32, .f64 => return error.Unsupported,
+    };
 }
 
 fn pushI32Binary(frame: *Executor.Frame, op: BinaryOp) Error!void {
@@ -1759,9 +1822,9 @@ fn pushI32Binary(frame: *Executor.Frame, op: BinaryOp) Error!void {
 }
 
 fn pushI64Binary(frame: *Executor.Frame, op: BinaryOp) Error!void {
-    const right = try frame.pop();
-    const left = try frame.pop();
-    try frame.push(try applyI64Binary(op, left, right));
+    const right = try frame.popI64();
+    const left = try frame.popI64();
+    try frame.pushI64(try applyI64Binary(op, left, right));
 }
 
 fn pushI32Unary(frame: *Executor.Frame, op: UnaryOp) Error!void {
@@ -1770,8 +1833,8 @@ fn pushI32Unary(frame: *Executor.Frame, op: UnaryOp) Error!void {
 }
 
 fn pushI64Unary(frame: *Executor.Frame, op: UnaryOp) Error!void {
-    const value = try frame.pop();
-    try frame.push(applyI64Unary(op, value));
+    const value = try frame.popI64();
+    try frame.pushI64(applyI64Unary(op, value));
 }
 
 fn applyI32Unary(op: UnaryOp, value: i32) i32 {
@@ -1865,13 +1928,13 @@ fn applyI64Binary(op: BinaryOp, left: i64, right: i64) Error!i64 {
 fn pushI32Comparison(frame: *Executor.Frame, comparison: Comparison) Error!void {
     const right = try frame.popI32();
     const left = try frame.popI32();
-    try frame.push(if (compareI32(comparison, left, right)) 1 else 0);
+    try frame.pushI32(if (compareI32(comparison, left, right)) 1 else 0);
 }
 
 fn pushI64Comparison(frame: *Executor.Frame, comparison: Comparison) Error!void {
-    const right = try frame.pop();
-    const left = try frame.pop();
-    try frame.push(if (compareI64(comparison, left, right)) 1 else 0);
+    const right = try frame.popI64();
+    const left = try frame.popI64();
+    try frame.pushI32(if (compareI64(comparison, left, right)) 1 else 0);
 }
 
 fn compareI32(comparison: Comparison, left: i32, right: i32) bool {
