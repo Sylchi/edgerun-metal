@@ -8,6 +8,7 @@ const identity = @import("identity.zig");
 const preimage = @import("preimage.zig");
 const store = @import("store.zig");
 const wasm = @import("wasm.zig");
+const wasm_app = @import("wasm_app.zig");
 
 const App = app_mod.App;
 const wasm_page_bytes = 65536;
@@ -473,7 +474,7 @@ test "wasm interpreter executes exported i64 function and charges app ticks" {
     var slots: [1]store.Blob = undefined;
     var app = testApp(&memory, &storage_bytes, &slots, 4);
 
-    try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64(&app, &return_forty_two_wasm, "main"));
+    try std.testing.expectEqual(@as(i64, 42), try wasm_app.executeExportI64(&app, &return_forty_two_wasm, "main"));
     try std.testing.expectEqual(@as(u64, 2), app.executionRemaining());
 }
 
@@ -516,7 +517,7 @@ test "wasm interpreter produces clocked work receipt for execution" {
     const input = preimage.hash("edgerun:zig:v1:wasm-test-input", "return forty two input");
     const app_hash = preimage.hash("edgerun:zig:v1:wasm-test-code", &return_forty_two_wasm);
     const manifest = preimage.hash("edgerun:zig:v1:wasm-test-manifest", "return forty two manifest");
-    const result = try wasm.executeExportI64Receipt(&app, &return_forty_two_wasm, "main", .{
+    const result = try wasm_app.executeExportI64Receipt(&app, &return_forty_two_wasm, "main", .{
         .parent = parent.id,
         .input = input,
         .app_hash = app_hash,
