@@ -9,6 +9,7 @@ const codec = @import("ui_codec.zig");
 const component_common = @import("ui_component_common.zig");
 const aside_component = @import("ui/components/Aside.zig");
 const breadcrumb_component = @import("ui/components/Breadcrumb.zig");
+const definition_list_component = @import("ui/components/DefinitionList.zig");
 const details_component = @import("ui/components/Details.zig");
 const figure_component = @import("ui/components/Figure.zig");
 const nav_component = @import("ui/components/Nav.zig");
@@ -315,35 +316,8 @@ pub const StepList = struct {
 pub const BreadcrumbItem = breadcrumb_component.BreadcrumbItem;
 pub const Breadcrumb = breadcrumb_component.Breadcrumb;
 
-pub const DefinitionItem = struct {
-    id: u32,
-    term: []const u8,
-    detail: []const u8,
-};
-
-pub const DefinitionList = struct {
-    items: []const DefinitionItem,
-
-    pub fn render(self: DefinitionList, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return renderDefinitionList(scene, bounds, self, options);
-    }
-
-    pub fn toHtml(self: DefinitionList, out: []u8) HtmlError![]u8 {
-        return writeDefinitionListHtml(self, out);
-    }
-
-    pub fn fromHtml(html: []const u8, out_items: []DefinitionItem, text_out: []u8) HtmlError!DefinitionList {
-        return readDefinitionListHtml(html, out_items, text_out);
-    }
-
-    pub fn toMarkdown(self: DefinitionList, out: []u8) MarkdownError![]u8 {
-        return writeDefinitionListMarkdown(self, out);
-    }
-
-    pub fn fromMarkdown(markdown: []const u8, out_items: []DefinitionItem, text_out: []u8) MarkdownError!DefinitionList {
-        return readDefinitionListMarkdown(markdown, out_items, text_out);
-    }
-};
+pub const DefinitionItem = definition_list_component.DefinitionItem;
+pub const DefinitionList = definition_list_component.DefinitionList;
 
 pub const TimelineEvent = struct {
     id: u32,
@@ -456,6 +430,10 @@ pub fn registerAside(registry: *ComponentRegistry) RegistryError!void {
 
 pub fn registerBreadcrumb(registry: *ComponentRegistry) RegistryError!void {
     return breadcrumb_component.register(registry);
+}
+
+pub fn registerDefinitionList(registry: *ComponentRegistry) RegistryError!void {
+    return definition_list_component.register(registry);
 }
 
 pub fn registerDetails(registry: *ComponentRegistry) RegistryError!void {
@@ -672,31 +650,6 @@ pub fn renderStepList(scene: *ui.Scene, bounds: ui.Rect, list: StepList, options
         try scene.pushAlignedText(ui.Rect.init(step_bounds.x + step_text_x, step_bounds.y + step_detail_y, @max(1.0, step_bounds.w - step_text_x - step_text_padding_x), step_detail_h), step.detail, style.muted, .start);
         try scene.pushHit(.{ .slot = 0, .kind = .row_item, .id = step.id, .bounds = step_bounds });
         y += step_item_h + step_item_gap;
-    }
-}
-
-pub fn renderDefinitionList(scene: *ui.Scene, bounds: ui.Rect, list: DefinitionList, options: RenderOptions) ui.RenderError!void {
-    if (list.items.len == 0) return;
-    const style = options.style;
-    try scene.pushRect(bounds, style.panel, .fill, definition_radius, 0.0);
-    try scene.pushRect(bounds, style.border, .border, definition_radius, 0.0);
-
-    var y = bounds.y + definition_padding_y;
-    const content_x = bounds.x + definition_padding_x;
-    const content_w = @max(1.0, bounds.w - definition_padding_x * 2.0);
-    const bottom = bounds.y + bounds.h - definition_padding_y;
-    for (list.items) |item| {
-        if (y + definition_item_h > bottom) break;
-        const item_bounds = ui.Rect.init(content_x, y, content_w, definition_item_h);
-        try scene.pushRect(item_bounds, style.row, .fill, definition_item_radius, 0.0);
-        try scene.pushAlignedText(ui.Rect.init(item_bounds.x + definition_item_padding_x, item_bounds.y + definition_term_y, @max(1.0, item_bounds.w - definition_item_padding_x * 2.0), definition_term_h), item.term, style.text, .start);
-        try scene.pushWrappedText(ui.Rect.init(item_bounds.x + definition_item_padding_x, item_bounds.y + definition_detail_y, @max(1.0, item_bounds.w - definition_item_padding_x * 2.0), definition_detail_h), item.detail, style.muted, .{
-            .line_height = definition_detail_line_h,
-            .average_char_width = definition_detail_avg_w,
-            .max_lines = definition_detail_max_lines,
-        });
-        try scene.pushHit(.{ .slot = 0, .kind = .row_item, .id = item.id, .bounds = item_bounds });
-        y += definition_item_h + definition_item_gap;
     }
 }
 
@@ -1017,20 +970,6 @@ const step_title_y: f32 = 11.0;
 const step_title_h: f32 = 16.0;
 const step_detail_y: f32 = 32.0;
 const step_detail_h: f32 = 14.0;
-const definition_radius: f32 = 8.0;
-const definition_padding_x: f32 = 12.0;
-const definition_padding_y: f32 = 12.0;
-const definition_item_h: f32 = 76.0;
-const definition_item_gap: f32 = 8.0;
-const definition_item_radius: f32 = 6.0;
-const definition_item_padding_x: f32 = 12.0;
-const definition_term_y: f32 = 11.0;
-const definition_term_h: f32 = 16.0;
-const definition_detail_y: f32 = 34.0;
-const definition_detail_h: f32 = 34.0;
-const definition_detail_line_h: f32 = 16.0;
-const definition_detail_avg_w: f32 = 8.5;
-const definition_detail_max_lines: usize = 2;
 const timeline_radius: f32 = 8.0;
 const timeline_padding_x: f32 = 12.0;
 const timeline_padding_y: f32 = 12.0;
@@ -1994,24 +1933,6 @@ fn writeStepListHtml(list: StepList, out: []u8) HtmlError![]u8 {
     return writer.written();
 }
 
-fn writeDefinitionListHtml(list: DefinitionList, out: []u8) HtmlError![]u8 {
-    if (list.items.len == 0) return error.InvalidHtml;
-    var writer = HtmlWriter.init(out);
-    try writer.writeAll("<dl data-er-component=\"definition-list\">");
-    for (list.items) |item| {
-        if (item.term.len == 0 or item.detail.len == 0) return error.InvalidHtml;
-        try writer.writeAll("<div");
-        try writer.writeAttrInt("data-er-id", item.id);
-        try writer.writeAll("><dt>");
-        try writer.writeEscapedText(item.term);
-        try writer.writeAll("</dt><dd>");
-        try writer.writeEscapedText(item.detail);
-        try writer.writeAll("</dd></div>");
-    }
-    try writer.writeAll("</dl>");
-    return writer.written();
-}
-
 fn writeTimelineHtml(timeline: Timeline, out: []u8) HtmlError![]u8 {
     if (timeline.events.len == 0) return error.InvalidHtml;
     var writer = HtmlWriter.init(out);
@@ -2278,20 +2199,6 @@ fn writeStepListMarkdown(list: StepList, out: []u8) MarkdownError![]u8 {
     return writer.written();
 }
 
-fn writeDefinitionListMarkdown(list: DefinitionList, out: []u8) MarkdownError![]u8 {
-    if (list.items.len == 0) return error.InvalidMarkdown;
-    var writer = MarkdownWriter.init(out);
-    try writer.beginDirective("definitions");
-    for (list.items) |item| {
-        if (item.term.len == 0 or item.detail.len == 0) return error.InvalidMarkdown;
-        try writer.fieldInt("item", item.id);
-        try writer.fieldText("term", item.term);
-        try writer.fieldText("detail", item.detail);
-    }
-    try writer.endDirective();
-    return writer.written();
-}
-
 fn writeTimelineMarkdown(timeline: Timeline, out: []u8) MarkdownError![]u8 {
     if (timeline.events.len == 0) return error.InvalidMarkdown;
     var writer = MarkdownWriter.init(out);
@@ -2466,26 +2373,6 @@ fn readStepListMarkdown(markdown: []const u8, out_steps: []StepItem, text_out: [
     }
     if (step_count == 0) return error.InvalidMarkdown;
     return .{ .steps = out_steps[0..step_count] };
-}
-
-fn readDefinitionListMarkdown(markdown: []const u8, out_items: []DefinitionItem, text_out: []u8) MarkdownError!DefinitionList {
-    const prefix = ":::definitions\n";
-    const body = try readMarkdownDirectiveBody(markdown, ":::definitions", prefix);
-    var text = MarkdownTextArena.init(text_out);
-    var item_count: usize = 0;
-    var cursor = MarkdownCursor.init(body);
-    while (!cursor.done()) {
-        if (item_count == out_items.len) return error.MarkdownBudgetExceeded;
-        const id = try parseMarkdownU32(try cursor.lineAfter("item: "));
-        const term = try text.unescapeInline(try cursor.fieldBetween("\nterm: ", "\ndetail: "));
-        const detail = try text.unescapeInline(try cursor.finalField("\ndetail: ", "\nitem: "));
-        if (term.len == 0 or detail.len == 0) return error.InvalidMarkdown;
-        out_items[item_count] = .{ .id = id, .term = term, .detail = detail };
-        item_count += 1;
-        try cursor.skipNewline();
-    }
-    if (item_count == 0) return error.InvalidMarkdown;
-    return .{ .items = out_items[0..item_count] };
 }
 
 fn readTimelineMarkdown(markdown: []const u8, out_events: []TimelineEvent, text_out: []u8) MarkdownError!Timeline {
@@ -3051,33 +2938,6 @@ fn readStepItemsHtml(html: []const u8, out_steps: []StepItem, text: *HtmlTextAre
     }
     if (step_count == 0) return error.InvalidHtml;
     return out_steps[0..step_count];
-}
-
-fn readDefinitionListHtml(html: []const u8, out_items: []DefinitionItem, text_out: []u8) HtmlError!DefinitionList {
-    const body = takeWrapped(html, "<dl data-er-component=\"definition-list\">", "</dl>") orelse {
-        if (std.mem.startsWith(u8, html, "<dl")) return error.InvalidHtml;
-        return error.UnsupportedHtml;
-    };
-    var text = HtmlTextArena.init(text_out);
-    const items = try readDefinitionItemsHtml(body, out_items, &text);
-    return .{ .items = items };
-}
-
-fn readDefinitionItemsHtml(html: []const u8, out_items: []DefinitionItem, text: *HtmlTextArena) HtmlError![]const DefinitionItem {
-    var cursor = HtmlCursor.init(html);
-    var item_count: usize = 0;
-    while (!cursor.done()) {
-        if (item_count == out_items.len) return error.HtmlBudgetExceeded;
-        const id = try parseHtmlU32(try cursor.fieldBetween("<div data-er-id=\"", "\"><dt>"));
-        const term = try text.unescape(try cursor.fieldBetween("\"><dt>", "</dt><dd>"));
-        const detail = try text.unescape(try cursor.fieldBetween("</dt><dd>", "</dd></div>"));
-        try cursor.consume("</dd></div>");
-        if (term.len == 0 or detail.len == 0) return error.InvalidHtml;
-        out_items[item_count] = .{ .id = id, .term = term, .detail = detail };
-        item_count += 1;
-    }
-    if (item_count == 0) return error.InvalidHtml;
-    return out_items[0..item_count];
 }
 
 fn readTimelineHtml(html: []const u8, out_events: []TimelineEvent, text_out: []u8) HtmlError!Timeline {
@@ -4412,52 +4272,6 @@ test "step list html codec rejects malformed steps" {
     try std.testing.expectError(error.InvalidHtml, StepList.fromHtml("<ol data-er-component=\"step-list\"></ol>", &steps, &text));
     try std.testing.expectError(error.InvalidHtml, StepList.fromHtml("<ol data-er-component=\"step-list\"><li data-er-id=\"x\" data-er-state=\"todo\"><strong>Broken</strong><span>Bad id</span></li></ol>", &steps, &text));
     try std.testing.expectError(error.InvalidHtml, StepList.fromHtml("<ol data-er-component=\"step-list\"><li data-er-id=\"1\" data-er-state=\"later\"><strong>Broken</strong><span>Bad state</span></li></ol>", &steps, &text));
-}
-
-test "definition list component renders glossary rows and hit targets" {
-    const items = [_]DefinitionItem{
-        .{ .id = 36001, .term = "DNS", .detail = "Turns a name into an address the network can route." },
-        .{ .id = 36002, .term = "TLS", .detail = "Protects bytes while they travel between endpoints." },
-    };
-    const list = DefinitionList{ .items = &items };
-    var commands: [64]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-
-    try list.render(&scene, ui.Rect.init(0, 0, 380, 200), .{});
-
-    try std.testing.expect(hasText(scene.written(), "DNS"));
-    const hit = ui_input.hitTest(scene.written(), 24, 104).?;
-    try std.testing.expectEqual(@as(u32, 36002), hit.id);
-}
-
-test "definition list html codec roundtrips semantic terms" {
-    const items = [_]DefinitionItem{
-        .{ .id = 36101, .term = "Capability", .detail = "A concrete permission to do one thing." },
-        .{ .id = 36102, .term = "Identity", .detail = "A key-backed claim about who can act & sign." },
-    };
-    const list = DefinitionList{ .items = &items };
-    var html: [768]u8 = undefined;
-    var decoded_items: [2]DefinitionItem = undefined;
-    var text: [256]u8 = undefined;
-
-    const encoded = try list.toHtml(&html);
-    const decoded = try DefinitionList.fromHtml(encoded, &decoded_items, &text);
-
-    try std.testing.expectEqualStrings("<dl data-er-component=\"definition-list\"><div data-er-id=\"36101\"><dt>Capability</dt><dd>A concrete permission to do one thing.</dd></div><div data-er-id=\"36102\"><dt>Identity</dt><dd>A key-backed claim about who can act &amp; sign.</dd></div></dl>", encoded);
-    try std.testing.expectEqual(@as(usize, 2), decoded.items.len);
-    try std.testing.expectEqual(@as(u32, 36102), decoded.items[1].id);
-    try std.testing.expectEqualStrings("Identity", decoded.items[1].term);
-    try std.testing.expectEqualStrings("A key-backed claim about who can act & sign.", decoded.items[1].detail);
-}
-
-test "definition list html codec rejects malformed terms" {
-    var items: [2]DefinitionItem = undefined;
-    var text: [128]u8 = undefined;
-
-    try std.testing.expectError(error.InvalidHtml, DefinitionList.fromHtml("<dl><dt>Plain</dt><dd>No marker</dd></dl>", &items, &text));
-    try std.testing.expectError(error.InvalidHtml, DefinitionList.fromHtml("<dl data-er-component=\"definition-list\"></dl>", &items, &text));
-    try std.testing.expectError(error.InvalidHtml, DefinitionList.fromHtml("<dl data-er-component=\"definition-list\"><div data-er-id=\"x\"><dt>Broken</dt><dd>Bad id</dd></div></dl>", &items, &text));
-    try std.testing.expectError(error.InvalidHtml, DefinitionList.fromHtml("<dl data-er-component=\"definition-list\"><div data-er-id=\"1\"><dt></dt><dd>Missing term</dd></div></dl>", &items, &text));
 }
 
 test "timeline component renders events and hit targets" {
