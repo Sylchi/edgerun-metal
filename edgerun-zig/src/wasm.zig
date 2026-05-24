@@ -10,6 +10,7 @@ const max_stack = 32;
 const max_call_depth = 8;
 const max_control_depth = 16;
 const max_globals = 16;
+const max_table_entries = 32;
 const max_code_bytes = 512;
 const max_data_segments = 8;
 const max_data_bytes = 256;
@@ -22,6 +23,7 @@ const leb_continue_mask = 0x80;
 const leb_sign_mask = 0x40;
 const leb_bits_per_byte = 7;
 const wasm_empty_block_type = 0x40;
+const wasm_funcref_type = 0x70;
 
 const wasm_magic = [_]u8{ 0x00, 0x61, 0x73, 0x6d };
 const wasm_version = [_]u8{ 0x01, 0x00, 0x00, 0x00 };
@@ -30,10 +32,12 @@ const Section = enum(u8) {
     type = 1,
     import = 2,
     function = 3,
+    table = 4,
     memory = 5,
     global = 6,
     @"export" = 7,
     start = 8,
+    element = 9,
     code = 10,
     data = 11,
 };
@@ -64,6 +68,7 @@ const Opcode = enum(u8) {
     br_if = 0x0d,
     @"return" = 0x0f,
     call = 0x10,
+    call_indirect = 0x11,
     drop = 0x1a,
     select = 0x1b,
     local_get = 0x20,
@@ -325,6 +330,15 @@ const FuncType = struct {
         if (self.result_count == 0 and self.result_type == null) return true;
         return self.result_count == 1 and self.result_type == .i64;
     }
+
+    fn eql(self: FuncType, other: FuncType) bool {
+        if (self.param_count != other.param_count or self.result_count != other.result_count or self.result_type != other.result_type) return false;
+        var index: usize = 0;
+        while (index < self.param_count) : (index += 1) {
+            if (self.params[index] != other.params[index]) return false;
+        }
+        return true;
+    }
 };
 
 fn supportedInteger(value_type: ValueType) bool {
@@ -495,6 +509,8 @@ const Module = struct {
     export_count: usize = 0,
     globals: [max_globals]Global = undefined,
     global_count: usize = 0,
+    table_entries: [max_table_entries]?usize = [_]?usize{null} ** max_table_entries,
+    table_min_entries: usize = 0,
     data_segments: [max_data_segments]DataSegment = undefined,
     data_segment_count: usize = 0,
     imported_memory: ?ImportedMemory = null,
@@ -521,10 +537,12 @@ const Module = struct {
                 .type => try module.parseTypeSection(&section_reader),
                 .import => try module.parseImportSection(&section_reader),
                 .function => try module.parseFunctionSection(&section_reader),
+                .table => try module.parseTableSection(&section_reader),
                 .memory => try module.parseMemorySection(&section_reader),
                 .global => try module.parseGlobalSection(&section_reader),
                 .@"export" => try module.parseExportSection(&section_reader),
                 .start => try module.parseStartSection(&section_reader),
+                .element => try module.parseElementSection(&section_reader),
                 .code => try module.parseCodeSection(&section_reader),
                 .data => try module.parseDataSection(&section_reader),
             }
@@ -618,6 +636,17 @@ const Module = struct {
         @memcpy(imported.name[0..import_name.len], import_name);
         self.imported_memory = imported;
         self.memory_min_pages = limits.min;
+    }
+
+    fn parseTableSection(self: *Module, reader: *Reader) Error!void {
+        const count = try reader.readU32Leb();
+        if (count > 1) return error.Unsupported;
+        if (count == 0) return;
+        const ref_type = try reader.readByte();
+        if (ref_type != wasm_funcref_type) return error.Unsupported;
+        const limits = try readLimits(reader);
+        if (limits.min > max_table_entries) return error.Unsupported;
+        self.table_min_entries = limits.min;
     }
 
     fn parseGlobalImport(self: *Module, reader: *Reader, module_name: []const u8, import_name: []const u8) Error!void {
@@ -751,6 +780,32 @@ const Module = struct {
                 .offset = @intCast(offset),
                 .bytes = try reader.readBytes(byte_count),
             };
+        }
+    }
+
+    fn parseElementSection(self: *Module, reader: *Reader) Error!void {
+        const count = try reader.readU32Leb();
+        if (count > 1) return error.Unsupported;
+        var segment_index: usize = 0;
+        while (segment_index < count) : (segment_index += 1) {
+            const mode = try reader.readU32Leb();
+            const table_index: usize = switch (mode) {
+                0 => 0,
+                else => return error.Unsupported,
+            };
+            if (table_index != 0 or self.table_min_entries == 0) return error.Corrupt;
+            const offset = try readConstantI32Expression(reader);
+            if (offset < 0) return error.Corrupt;
+            const base: usize = @intCast(offset);
+            const function_count = try reader.readU32Leb();
+            const end = checkedAdd(base, function_count) orelse return error.Corrupt;
+            if (end > self.table_min_entries or end > max_table_entries) return error.Corrupt;
+            var function_index: usize = 0;
+            while (function_index < function_count) : (function_index += 1) {
+                const function_ref = try reader.readU32Leb();
+                if (function_ref >= self.totalFunctionCount()) return error.Corrupt;
+                self.table_entries[base + function_index] = function_ref;
+            }
         }
     }
 
@@ -1112,9 +1167,29 @@ const Executor = struct {
                     const result = try self.callFunctionFromFrame(&frame, callee, depth);
                     if (result) |value| try frame.push(value);
                 },
+                .call_indirect => {
+                    const type_index = try reader.readU32Leb();
+                    if (type_index >= self.module.type_count) return error.Corrupt;
+                    const table_index = try reader.readU32Leb();
+                    const result = try self.callIndirectFromFrame(&frame, type_index, table_index, depth);
+                    if (result) |value| try frame.push(value);
+                },
             }
         }
         return error.Corrupt;
+    }
+
+    fn callIndirectFromFrame(self: *Executor, frame: *Frame, type_index: usize, table_index: u32, depth: usize) Error!?i64 {
+        if (table_index != 0) return error.Unsupported;
+        const table_offset = try frame.popI32();
+        if (table_offset < 0) return error.Trap;
+        const table_entry: usize = @intCast(table_offset);
+        if (table_entry >= self.module.table_min_entries) return error.Trap;
+        const function_index = self.module.table_entries[table_entry] orelse return error.Trap;
+        const expected_type = self.module.types[type_index];
+        const actual_type = self.module.types[try self.module.typeIndexForFunction(function_index)];
+        if (!actual_type.eql(expected_type)) return error.Trap;
+        return try self.callFunctionFromFrame(frame, function_index, depth);
     }
 
     fn callFunctionFromFrame(self: *Executor, frame: *Frame, function_index: usize, depth: usize) Error!?i64 {
@@ -1285,10 +1360,12 @@ fn sectionFromByte(value: u8) ?Section {
         @intFromEnum(Section.type) => .type,
         @intFromEnum(Section.import) => .import,
         @intFromEnum(Section.function) => .function,
+        @intFromEnum(Section.table) => .table,
         @intFromEnum(Section.memory) => .memory,
         @intFromEnum(Section.global) => .global,
         @intFromEnum(Section.@"export") => .@"export",
         @intFromEnum(Section.start) => .start,
+        @intFromEnum(Section.element) => .element,
         @intFromEnum(Section.code) => .code,
         @intFromEnum(Section.data) => .data,
         else => null,
@@ -1328,6 +1405,7 @@ fn opcodeFromByte(value: u8) ?Opcode {
         @intFromEnum(Opcode.br_if) => .br_if,
         @intFromEnum(Opcode.@"return") => .@"return",
         @intFromEnum(Opcode.call) => .call,
+        @intFromEnum(Opcode.call_indirect) => .call_indirect,
         @intFromEnum(Opcode.drop) => .drop,
         @intFromEnum(Opcode.select) => .select,
         @intFromEnum(Opcode.local_get) => .local_get,
@@ -1496,6 +1574,10 @@ fn skipOpcodeImmediate(reader: *Reader, opcode: Opcode) Error!void {
         .br,
         .br_if,
         => _ = try reader.readU32Leb(),
+        .call_indirect => {
+            _ = try reader.readU32Leb();
+            _ = try reader.readU32Leb();
+        },
         .i32_load,
         .i64_load,
         .i32_load8_s,
