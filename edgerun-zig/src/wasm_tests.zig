@@ -462,6 +462,11 @@ fn testApp(memory: []u8, storage_bytes: []u8, slots: []store.Blob, execution_tic
     ).?;
 }
 
+fn executeRuntime(memory: []u8, ticks: *u64, wasm_bytes: []const u8) wasm.Error!i64 {
+    var runtime = wasm.Runtime.init(memory, ticks);
+    return wasm.executeExportI64Runtime(&runtime, wasm_bytes, "main");
+}
+
 test "wasm interpreter executes exported i64 function and charges app ticks" {
     var memory: [256]u8 = undefined;
     var storage_bytes: [64]u8 = undefined;
@@ -470,6 +475,15 @@ test "wasm interpreter executes exported i64 function and charges app ticks" {
 
     try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64(&app, &return_forty_two_wasm, "main"));
     try std.testing.expectEqual(@as(u64, 2), app.executionRemaining());
+}
+
+test "wasm interpreter core runs from explicit runtime allocation" {
+    var memory: [256]u8 = undefined;
+    var ticks: u64 = 4;
+    var runtime = wasm.Runtime.init(&memory, &ticks);
+
+    try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64Runtime(&runtime, &return_forty_two_wasm, "main"));
+    try std.testing.expectEqual(@as(u64, 2), ticks);
 }
 
 test "wasm interpreter produces clocked work receipt for execution" {
@@ -526,385 +540,305 @@ test "wasm interpreter produces clocked work receipt for execution" {
 
 test "wasm interpreter executes nop as charged no-op" {
     var memory: [256]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
-    var app = testApp(&memory, &storage_bytes, &slots, 4);
+    var ticks: u64 = 4;
 
-    try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64(&app, &nop_before_return_wasm, "main"));
-    try std.testing.expectEqual(@as(u64, 1), app.executionRemaining());
+    try std.testing.expectEqual(@as(i64, 42), try executeRuntime(&memory, &ticks, &nop_before_return_wasm));
+    try std.testing.expectEqual(@as(u64, 1), ticks);
 }
 
 test "wasm interpreter traps explicit unreachable opcode" {
     var memory: [256]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
-    var app = testApp(&memory, &storage_bytes, &slots, 4);
+    var ticks: u64 = 4;
 
-    try std.testing.expectError(error.Trap, wasm.executeExportI64(&app, &unreachable_wasm, "main"));
+    try std.testing.expectError(error.Trap, executeRuntime(&memory, &ticks, &unreachable_wasm));
 }
 
 test "wasm interpreter executes locals and arithmetic" {
     var memory: [256]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
-    var app = testApp(&memory, &storage_bytes, &slots, 8);
+    var ticks: u64 = 8;
 
-    try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64(&app, &add_locals_wasm, "main"));
-    try std.testing.expectEqual(@as(u64, 2), app.executionRemaining());
+    try std.testing.expectEqual(@as(i64, 42), try executeRuntime(&memory, &ticks, &add_locals_wasm));
+    try std.testing.expectEqual(@as(u64, 2), ticks);
 }
 
 test "wasm interpreter executes direct function calls inside the module" {
     var memory: [256]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
-    var app = testApp(&memory, &storage_bytes, &slots, 8);
+    var ticks: u64 = 8;
 
-    try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64(&app, &call_helper_wasm, "main"));
-    try std.testing.expectEqual(@as(u64, 4), app.executionRemaining());
+    try std.testing.expectEqual(@as(i64, 42), try executeRuntime(&memory, &ticks, &call_helper_wasm));
+    try std.testing.expectEqual(@as(u64, 4), ticks);
 }
 
 test "wasm interpreter passes call arguments through callee locals" {
     var memory: [256]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
-    var app = testApp(&memory, &storage_bytes, &slots, 12);
+    var ticks: u64 = 12;
 
-    try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64(&app, &call_with_params_wasm, "main"));
-    try std.testing.expectEqual(@as(u64, 4), app.executionRemaining());
+    try std.testing.expectEqual(@as(i64, 42), try executeRuntime(&memory, &ticks, &call_with_params_wasm));
+    try std.testing.expectEqual(@as(u64, 4), ticks);
 }
 
 test "wasm interpreter decodes signed i32 constants" {
     var memory: [256]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
-    var app = testApp(&memory, &storage_bytes, &slots, 4);
+    var ticks: u64 = 4;
 
-    try std.testing.expectEqual(@as(i64, -1), try wasm.executeExportI64(&app, &signed_i32_const_wasm, "main"));
-    try std.testing.expectEqual(@as(u64, 1), app.executionRemaining());
+    try std.testing.expectEqual(@as(i64, -1), try executeRuntime(&memory, &ticks, &signed_i32_const_wasm));
+    try std.testing.expectEqual(@as(u64, 1), ticks);
 }
 
 test "wasm interpreter extends i32 values as unsigned i64 values" {
     var memory: [256]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
-    var app = testApp(&memory, &storage_bytes, &slots, 4);
+    var ticks: u64 = 4;
 
-    try std.testing.expectEqual(@as(i64, 4294967295), try wasm.executeExportI64(&app, &unsigned_i32_extend_wasm, "main"));
-    try std.testing.expectEqual(@as(u64, 1), app.executionRemaining());
+    try std.testing.expectEqual(@as(i64, 4294967295), try executeRuntime(&memory, &ticks, &unsigned_i32_extend_wasm));
+    try std.testing.expectEqual(@as(u64, 1), ticks);
 }
 
 test "wasm interpreter checks i64 zero values" {
     var memory: [256]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
-    var app = testApp(&memory, &storage_bytes, &slots, 8);
+    var ticks: u64 = 8;
 
-    try std.testing.expectEqual(@as(i64, 1), try wasm.executeExportI64(&app, &i64_eqz_wasm, "main"));
+    try std.testing.expectEqual(@as(i64, 1), try executeRuntime(&memory, &ticks, &i64_eqz_wasm));
 }
 
 test "wasm interpreter sign extends narrow i32 values" {
     var memory: [256]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
-    var app = testApp(&memory, &storage_bytes, &slots, 8);
+    var ticks: u64 = 8;
 
-    try std.testing.expectEqual(@as(i64, -32769), try wasm.executeExportI64(&app, &i32_sign_extensions_wasm, "main"));
+    try std.testing.expectEqual(@as(i64, -32769), try executeRuntime(&memory, &ticks, &i32_sign_extensions_wasm));
 }
 
 test "wasm interpreter sign extends narrow i64 values" {
     var memory: [256]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
-    var app = testApp(&memory, &storage_bytes, &slots, 12);
+    var ticks: u64 = 12;
 
-    try std.testing.expectEqual(@as(i64, -2147516417), try wasm.executeExportI64(&app, &i64_sign_extensions_wasm, "main"));
+    try std.testing.expectEqual(@as(i64, -2147516417), try executeRuntime(&memory, &ticks, &i64_sign_extensions_wasm));
 }
 
 test "wasm interpreter executes i32 unary bit operations" {
     var memory: [256]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
-    var app = testApp(&memory, &storage_bytes, &slots, 12);
+    var ticks: u64 = 12;
 
-    try std.testing.expectEqual(@as(i64, 34), try wasm.executeExportI64(&app, &i32_unary_ops_wasm, "main"));
+    try std.testing.expectEqual(@as(i64, 34), try executeRuntime(&memory, &ticks, &i32_unary_ops_wasm));
 }
 
 test "wasm interpreter executes i64 unary bit operations" {
     var memory: [256]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
-    var app = testApp(&memory, &storage_bytes, &slots, 12);
+    var ticks: u64 = 12;
 
-    try std.testing.expectEqual(@as(i64, 66), try wasm.executeExportI64(&app, &i64_unary_ops_wasm, "main"));
+    try std.testing.expectEqual(@as(i64, 66), try executeRuntime(&memory, &ticks, &i64_unary_ops_wasm));
 }
 
 test "wasm interpreter reads defined immutable globals" {
     var memory: [256]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
-    var app = testApp(&memory, &storage_bytes, &slots, 4);
+    var ticks: u64 = 4;
 
-    try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64(&app, &const_global_wasm, "main"));
+    try std.testing.expectEqual(@as(i64, 42), try executeRuntime(&memory, &ticks, &const_global_wasm));
 }
 
 test "wasm interpreter writes defined mutable globals" {
     var memory: [256]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
-    var app = testApp(&memory, &storage_bytes, &slots, 8);
+    var ticks: u64 = 8;
 
-    try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64(&app, &mutable_global_wasm, "main"));
+    try std.testing.expectEqual(@as(i64, 42), try executeRuntime(&memory, &ticks, &mutable_global_wasm));
 }
 
 test "wasm interpreter runs start function before export" {
     var memory: [256]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
-    var app = testApp(&memory, &storage_bytes, &slots, 12);
+    var ticks: u64 = 12;
 
-    try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64(&app, &start_sets_global_wasm, "main"));
+    try std.testing.expectEqual(@as(i64, 42), try executeRuntime(&memory, &ticks, &start_sets_global_wasm));
 }
 
 test "wasm interpreter rejects start functions with results" {
     var memory: [256]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
-    var app = testApp(&memory, &storage_bytes, &slots, 12);
+    var ticks: u64 = 12;
 
-    try std.testing.expectError(error.Unsupported, wasm.executeExportI64(&app, &invalid_start_returns_value_wasm, "main"));
+    try std.testing.expectError(error.Unsupported, executeRuntime(&memory, &ticks, &invalid_start_returns_value_wasm));
 }
 
 test "wasm interpreter calls no-result helper functions" {
     var memory: [256]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
-    var app = testApp(&memory, &storage_bytes, &slots, 12);
+    var ticks: u64 = 12;
 
-    try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64(&app, &call_void_helper_wasm, "main"));
+    try std.testing.expectEqual(@as(i64, 42), try executeRuntime(&memory, &ticks, &call_void_helper_wasm));
 }
 
 test "wasm interpreter executes common i32 arithmetic" {
     var memory: [256]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
-    var app = testApp(&memory, &storage_bytes, &slots, 8);
+    var ticks: u64 = 8;
 
-    try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64(&app, &i32_arithmetic_wasm, "main"));
-    try std.testing.expectEqual(@as(u64, 3), app.executionRemaining());
+    try std.testing.expectEqual(@as(i64, 42), try executeRuntime(&memory, &ticks, &i32_arithmetic_wasm));
+    try std.testing.expectEqual(@as(u64, 3), ticks);
 }
 
 test "wasm interpreter executes integer binary operations" {
     var memory: [256]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
-    var app = testApp(&memory, &storage_bytes, &slots, 64);
+    var ticks: u64 = 64;
 
-    try std.testing.expectEqual(@as(i64, 462), try wasm.executeExportI64(&app, &integer_binary_ops_wasm, "main"));
-    try std.testing.expectEqual(@as(u64, 18), app.executionRemaining());
+    try std.testing.expectEqual(@as(i64, 462), try executeRuntime(&memory, &ticks, &integer_binary_ops_wasm));
+    try std.testing.expectEqual(@as(u64, 18), ticks);
 }
 
 test "wasm interpreter executes integer unary operations" {
     var memory: [256]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
-    var app = testApp(&memory, &storage_bytes, &slots, 20);
+    var ticks: u64 = 20;
 
-    try std.testing.expectEqual(@as(i64, 112), try wasm.executeExportI64(&app, &integer_unary_ops_wasm, "main"));
-    try std.testing.expectEqual(@as(u64, 1), app.executionRemaining());
+    try std.testing.expectEqual(@as(i64, 112), try executeRuntime(&memory, &ticks, &integer_unary_ops_wasm));
+    try std.testing.expectEqual(@as(u64, 1), ticks);
 }
 
 test "wasm interpreter executes signed and unsigned integer division" {
     var memory: [256]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
-    var app = testApp(&memory, &storage_bytes, &slots, 48);
+    var ticks: u64 = 48;
 
-    try std.testing.expectEqual(@as(i64, 80), try wasm.executeExportI64(&app, &integer_division_wasm, "main"));
-    try std.testing.expectEqual(@as(u64, 14), app.executionRemaining());
+    try std.testing.expectEqual(@as(i64, 80), try executeRuntime(&memory, &ticks, &integer_division_wasm));
+    try std.testing.expectEqual(@as(u64, 14), ticks);
 }
 
 test "wasm interpreter traps integer division by zero" {
     var memory: [256]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
-    var app = testApp(&memory, &storage_bytes, &slots, 8);
+    var ticks: u64 = 8;
 
-    try std.testing.expectError(error.ArithmeticTrap, wasm.executeExportI64(&app, &divide_by_zero_wasm, "main"));
+    try std.testing.expectError(error.ArithmeticTrap, executeRuntime(&memory, &ticks, &divide_by_zero_wasm));
 }
 
 test "wasm interpreter selects values from stack conditionally" {
     var memory: [256]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
-    var app = testApp(&memory, &storage_bytes, &slots, 16);
+    var ticks: u64 = 16;
 
-    try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64(&app, &select_values_wasm, "main"));
-    try std.testing.expectEqual(@as(u64, 4), app.executionRemaining());
+    try std.testing.expectEqual(@as(i64, 42), try executeRuntime(&memory, &ticks, &select_values_wasm));
+    try std.testing.expectEqual(@as(u64, 4), ticks);
 }
 
 test "wasm interpreter executes signed and unsigned integer comparisons" {
     var memory: [256]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
-    var app = testApp(&memory, &storage_bytes, &slots, 96);
+    var ticks: u64 = 96;
 
-    try std.testing.expectEqual(@as(i64, 20), try wasm.executeExportI64(&app, &integer_comparisons_wasm, "main"));
-    try std.testing.expectEqual(@as(u64, 14), app.executionRemaining());
+    try std.testing.expectEqual(@as(i64, 20), try executeRuntime(&memory, &ticks, &integer_comparisons_wasm));
+    try std.testing.expectEqual(@as(u64, 14), ticks);
 }
 
 test "wasm interpreter executes structured if else control flow" {
     var memory: [256]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
-    var app = testApp(&memory, &storage_bytes, &slots, 12);
+    var ticks: u64 = 12;
 
-    try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64(&app, &if_else_wasm, "main"));
+    try std.testing.expectEqual(@as(i64, 42), try executeRuntime(&memory, &ticks, &if_else_wasm));
 }
 
 test "wasm interpreter branches forward without executing skipped traps" {
     var memory: [256]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
-    var app = testApp(&memory, &storage_bytes, &slots, 12);
+    var ticks: u64 = 12;
 
-    try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64(&app, &branch_skips_trap_wasm, "main"));
+    try std.testing.expectEqual(@as(i64, 42), try executeRuntime(&memory, &ticks, &branch_skips_trap_wasm));
 }
 
 test "wasm interpreter returns without executing dead code" {
     var memory: [256]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
-    var app = testApp(&memory, &storage_bytes, &slots, 6);
+    var ticks: u64 = 6;
 
-    try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64(&app, &return_skips_trap_wasm, "main"));
-    try std.testing.expectEqual(@as(u64, 4), app.executionRemaining());
+    try std.testing.expectEqual(@as(i64, 42), try executeRuntime(&memory, &ticks, &return_skips_trap_wasm));
+    try std.testing.expectEqual(@as(u64, 4), ticks);
 }
 
 test "wasm interpreter executes loops through control labels" {
     var memory: [256]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
-    var app = testApp(&memory, &storage_bytes, &slots, 32);
+    var ticks: u64 = 32;
 
-    try std.testing.expectEqual(@as(i64, 0), try wasm.executeExportI64(&app, &loop_countdown_wasm, "main"));
+    try std.testing.expectEqual(@as(i64, 0), try executeRuntime(&memory, &ticks, &loop_countdown_wasm));
 }
 
 test "wasm interpreter branches to nested outer labels" {
     var memory: [256]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
-    var app = testApp(&memory, &storage_bytes, &slots, 16);
+    var ticks: u64 = 16;
 
-    try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64(&app, &nested_branch_depth_wasm, "main"));
+    try std.testing.expectEqual(@as(i64, 42), try executeRuntime(&memory, &ticks, &nested_branch_depth_wasm));
 }
 
 test "wasm interpreter rejects modules outside app memory allocation" {
     var memory: [256]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
-    var app = testApp(&memory, &storage_bytes, &slots, 8);
+    var ticks: u64 = 8;
 
-    try std.testing.expectError(error.NoMemory, wasm.executeExportI64(&app, &one_page_memory_wasm, "main"));
+    try std.testing.expectError(error.NoMemory, executeRuntime(&memory, &ticks, &one_page_memory_wasm));
 }
 
 test "wasm interpreter applies active data segments to app owned memory" {
     var memory: [wasm_page_bytes]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
     @memset(&memory, 0);
-    var app = testApp(&memory, &storage_bytes, &slots, 8);
+    var ticks: u64 = 8;
 
-    try std.testing.expectEqual(@as(i64, 123), try wasm.executeExportI64(&app, &active_data_wasm, "main"));
+    try std.testing.expectEqual(@as(i64, 123), try executeRuntime(&memory, &ticks, &active_data_wasm));
     try std.testing.expectEqual(@as(u64, 123), byte_utils.load64(memory[0..8]).?);
 }
 
 test "wasm interpreter rejects active data outside app allocation" {
     var memory: [wasm_page_bytes]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
-    var app = testApp(&memory, &storage_bytes, &slots, 8);
+    var ticks: u64 = 8;
 
-    try std.testing.expectError(error.NoMemory, wasm.executeExportI64(&app, &active_data_out_of_bounds_wasm, "main"));
+    try std.testing.expectError(error.NoMemory, executeRuntime(&memory, &ticks, &active_data_out_of_bounds_wasm));
 }
 
 test "wasm interpreter rejects memory access without module memory declaration" {
     var memory: [wasm_page_bytes]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
-    var app = testApp(&memory, &storage_bytes, &slots, 8);
+    var ticks: u64 = 8;
 
-    try std.testing.expectError(error.NoMemory, wasm.executeExportI64(&app, &memory_without_declaration_wasm, "main"));
+    try std.testing.expectError(error.NoMemory, executeRuntime(&memory, &ticks, &memory_without_declaration_wasm));
 }
 
 test "wasm interpreter bounds memory access by module declaration" {
     var memory: [wasm_page_bytes * 2]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
-    var app = testApp(&memory, &storage_bytes, &slots, 8);
+    var ticks: u64 = 8;
 
-    try std.testing.expectError(error.NoMemory, wasm.executeExportI64(&app, &memory_declared_page_boundary_load_wasm, "main"));
+    try std.testing.expectError(error.NoMemory, executeRuntime(&memory, &ticks, &memory_declared_page_boundary_load_wasm));
 }
 
 test "wasm interpreter bounds active data by module declaration" {
     var memory: [wasm_page_bytes * 2]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
-    var app = testApp(&memory, &storage_bytes, &slots, 8);
+    var ticks: u64 = 8;
 
-    try std.testing.expectError(error.NoMemory, wasm.executeExportI64(&app, &active_data_declared_page_boundary_wasm, "main"));
+    try std.testing.expectError(error.NoMemory, executeRuntime(&memory, &ticks, &active_data_declared_page_boundary_wasm));
 }
 
 test "wasm interpreter reads and writes only app owned linear memory" {
     var memory: [wasm_page_bytes]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
     @memset(&memory, 0);
-    var app = testApp(&memory, &storage_bytes, &slots, 16);
+    var ticks: u64 = 16;
 
-    try std.testing.expectEqual(@as(i64, 99), try wasm.executeExportI64(&app, &memory_roundtrip_wasm, "main"));
+    try std.testing.expectEqual(@as(i64, 99), try executeRuntime(&memory, &ticks, &memory_roundtrip_wasm));
     try std.testing.expectEqual(@as(u64, 99), byte_utils.load64(memory[0..8]).?);
 }
 
 test "wasm interpreter executes signed and unsigned byte memory loads" {
     var memory: [wasm_page_bytes]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
     @memset(&memory, 0);
-    var app = testApp(&memory, &storage_bytes, &slots, 16);
+    var ticks: u64 = 16;
 
-    try std.testing.expectEqual(@as(i64, 380), try wasm.executeExportI64(&app, &memory_byte_loads_wasm, "main"));
+    try std.testing.expectEqual(@as(i64, 380), try executeRuntime(&memory, &ticks, &memory_byte_loads_wasm));
 }
 
 test "wasm interpreter executes i32 and i64 byte memory stores" {
     var memory: [wasm_page_bytes]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
     @memset(&memory, 0);
-    var app = testApp(&memory, &storage_bytes, &slots, 16);
+    var ticks: u64 = 16;
 
-    try std.testing.expectEqual(@as(i64, 127), try wasm.executeExportI64(&app, &memory_byte_stores_wasm, "main"));
+    try std.testing.expectEqual(@as(i64, 127), try executeRuntime(&memory, &ticks, &memory_byte_stores_wasm));
     try std.testing.expectEqual(@as(u8, 42), memory[0]);
     try std.testing.expectEqual(@as(u8, 85), memory[1]);
 }
 
 test "wasm interpreter executes signed and unsigned narrow memory loads" {
     var memory: [wasm_page_bytes]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
     @memset(&memory, 0);
-    var app = testApp(&memory, &storage_bytes, &slots, 32);
+    var ticks: u64 = 32;
 
-    try std.testing.expectEqual(@as(i64, 305485427), try wasm.executeExportI64(&app, &memory_narrow_loads_wasm, "main"));
+    try std.testing.expectEqual(@as(i64, 305485427), try executeRuntime(&memory, &ticks, &memory_narrow_loads_wasm));
 }
 
 test "wasm interpreter executes 16-bit and 32-bit narrow memory stores" {
     var memory: [wasm_page_bytes]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
     @memset(&memory, 0);
-    var app = testApp(&memory, &storage_bytes, &slots, 32);
+    var ticks: u64 = 32;
 
-    try std.testing.expectEqual(@as(i64, 142), try wasm.executeExportI64(&app, &memory_narrow_stores_wasm, "main"));
+    try std.testing.expectEqual(@as(i64, 142), try executeRuntime(&memory, &ticks, &memory_narrow_stores_wasm));
     try std.testing.expectEqual(@as(u16, 42), byte_utils.load16(memory[0..2]).?);
     try std.testing.expectEqual(@as(u16, 37), byte_utils.load16(memory[2..4]).?);
     try std.testing.expectEqual(@as(u32, 63), byte_utils.load32(memory[4..8]).?);
@@ -912,18 +846,14 @@ test "wasm interpreter executes 16-bit and 32-bit narrow memory stores" {
 
 test "wasm interpreter traps memory access beyond app allocation" {
     var memory: [wasm_page_bytes]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
-    var app = testApp(&memory, &storage_bytes, &slots, 8);
+    var ticks: u64 = 8;
 
-    try std.testing.expectError(error.NoMemory, wasm.executeExportI64(&app, &memory_out_of_bounds_wasm, "main"));
+    try std.testing.expectError(error.NoMemory, executeRuntime(&memory, &ticks, &memory_out_of_bounds_wasm));
 }
 
 test "wasm interpreter fails locally when execution allocation is exhausted" {
     var memory: [256]u8 = undefined;
-    var storage_bytes: [64]u8 = undefined;
-    var slots: [1]store.Blob = undefined;
-    var app = testApp(&memory, &storage_bytes, &slots, 1);
+    var ticks: u64 = 1;
 
-    try std.testing.expectError(error.NoExecution, wasm.executeExportI64(&app, &return_forty_two_wasm, "main"));
+    try std.testing.expectError(error.NoExecution, executeRuntime(&memory, &ticks, &return_forty_two_wasm));
 }

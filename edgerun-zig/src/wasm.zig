@@ -192,6 +192,28 @@ pub const ReceiptResult = struct {
     receipt: App.WorkReceipt,
 };
 
+pub const Runtime = struct {
+    memory: []u8,
+    execution_ticks: *u64,
+
+    pub fn init(memory: []u8, execution_ticks: *u64) Runtime {
+        return .{
+            .memory = memory,
+            .execution_ticks = execution_ticks,
+        };
+    }
+
+    fn memoryLen(self: Runtime) usize {
+        return self.memory.len;
+    }
+
+    fn consumeExecution(self: Runtime, ticks: u64) bool {
+        if (ticks == 0 or ticks > self.execution_ticks.*) return false;
+        self.execution_ticks.* -= ticks;
+        return true;
+    }
+};
+
 const Reader = struct {
     bytes: []const u8,
     offset: usize = 0,
@@ -609,19 +631,18 @@ const Module = struct {
         return std.math.mul(usize, self.memory_min_pages, wasm_page_bytes) catch error.Unsupported;
     }
 
-    fn applyDataSegments(self: Module, app: *App) Error!void {
+    fn applyDataSegments(self: Module, runtime: *Runtime) Error!void {
         const limit = try self.requiredMemoryBytes();
-        const memory = app.state.memory.owned.base;
         for (self.data_segments[0..self.data_segment_count]) |segment| {
             const end = std.math.add(usize, segment.offset, segment.bytes.len) catch return error.NoMemory;
-            if (end > limit or end > memory.len) return error.NoMemory;
-            @memcpy(memory[segment.offset..end], segment.bytes);
+            if (end > limit or end > runtime.memory.len) return error.NoMemory;
+            @memcpy(runtime.memory[segment.offset..end], segment.bytes);
         }
     }
 };
 
 const Executor = struct {
-    app: *App,
+    runtime: *Runtime,
     module: Module,
 
     const ControlKind = enum {
@@ -702,7 +723,7 @@ const Executor = struct {
 
         var reader = Reader{ .bytes = code.body };
         while (!reader.done()) {
-            if (!self.app.consumeExecution(1)) return error.NoExecution;
+            if (!self.runtime.consumeExecution(1)) return error.NoExecution;
             const opcode = opcodeFromByte(try reader.readByte()) orelse return error.Unsupported;
             switch (opcode) {
                 .@"unreachable" => return error.Trap,
@@ -967,10 +988,9 @@ const Executor = struct {
 
     fn memoryRange(self: *Executor, address: usize, size: usize) Error![]u8 {
         const limit = try self.module.requiredMemoryBytes();
-        const memory = self.app.state.memory.owned.base;
         const end = std.math.add(usize, address, size) catch return error.NoMemory;
-        if (end > limit or end > memory.len) return error.NoMemory;
-        return memory[address..end];
+        if (end > limit or end > self.runtime.memory.len) return error.NoMemory;
+        return self.runtime.memory[address..end];
     }
 
     fn pushControl(controls: *[max_control_depth]ControlFrame, control_len: *usize, kind: ControlKind, start: usize) Error!void {
@@ -997,13 +1017,18 @@ const Executor = struct {
 };
 
 pub fn executeExportI64(app: *App, wasm_bytes: []const u8, export_name: []const u8) Error!i64 {
+    var runtime = Runtime.init(app.state.memory.owned.base, &app.state.execution_ticks);
+    return executeExportI64Runtime(&runtime, wasm_bytes, export_name);
+}
+
+pub fn executeExportI64Runtime(runtime: *Runtime, wasm_bytes: []const u8, export_name: []const u8) Error!i64 {
     if (export_name.len == 0) return error.BadArgument;
     const module = try Module.parse(wasm_bytes);
     const required_memory = try module.requiredMemoryBytes();
-    if (required_memory > app.state.memory.owned.len()) return error.NoMemory;
-    try module.applyDataSegments(app);
+    if (required_memory > runtime.memoryLen()) return error.NoMemory;
+    try module.applyDataSegments(runtime);
     var executor = Executor{
-        .app = app,
+        .runtime = runtime,
         .module = module,
     };
     try executor.runStart();
@@ -1032,8 +1057,7 @@ pub fn executeExportI64Receipt(app: *App, wasm_bytes: []const u8, export_name: [
 }
 
 pub fn outputHashI64(value: i64) preimage.Hash {
-    var raw: [@sizeOf(i64)]u8 = undefined;
-    if (!byte_utils.store64(&raw, @as(u64, @bitCast(value)))) unreachable;
+    const raw = byte_utils.stored64(@as(u64, @bitCast(value)));
     return preimage.hash("edgerun:zig:v1:wasm-i64-output", &raw);
 }
 
