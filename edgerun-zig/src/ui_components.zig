@@ -9,6 +9,7 @@ const codec = @import("ui_codec.zig");
 const component_common = @import("ui_component_common.zig");
 const aside_component = @import("ui/components/Aside.zig");
 const breadcrumb_component = @import("ui/components/Breadcrumb.zig");
+const callout_component = @import("ui/components/Callout.zig");
 const choice_group_component = @import("ui/components/ChoiceGroup.zig");
 const definition_list_component = @import("ui/components/DefinitionList.zig");
 const details_component = @import("ui/components/Details.zig");
@@ -174,29 +175,7 @@ pub const Heading = heading_component.Heading;
 
 pub const List = list_component.List;
 
-pub const Callout = struct {
-    value: []const u8,
-
-    pub fn render(self: Callout, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return renderCallout(scene, bounds, self, options);
-    }
-
-    pub fn toHtml(self: Callout, out: []u8) HtmlError![]u8 {
-        return writeCalloutHtml(self, out);
-    }
-
-    pub fn fromHtml(html: []const u8, text_out: []u8) HtmlError!Callout {
-        return readCalloutHtml(html, text_out);
-    }
-
-    pub fn toMarkdown(self: Callout, out: []u8) MarkdownError![]u8 {
-        return writeCalloutMarkdown(self, out);
-    }
-
-    pub fn fromMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!Callout {
-        return readCalloutMarkdown(markdown, text_out);
-    }
-};
+pub const Callout = callout_component.Callout;
 
 pub const Aside = aside_component.Aside;
 
@@ -272,6 +251,10 @@ pub fn registerAside(registry: *ComponentRegistry) RegistryError!void {
 
 pub fn registerBreadcrumb(registry: *ComponentRegistry) RegistryError!void {
     return breadcrumb_component.register(registry);
+}
+
+pub fn registerCallout(registry: *ComponentRegistry) RegistryError!void {
+    return callout_component.register(registry);
 }
 
 pub fn registerChoiceGroup(registry: *ComponentRegistry) RegistryError!void {
@@ -407,17 +390,6 @@ pub fn renderCodeBlock(scene: *ui.Scene, bounds: ui.Rect, block: CodeBlock, opti
             y += code_line_height;
         }
     }
-}
-
-pub fn renderCallout(scene: *ui.Scene, bounds: ui.Rect, callout: Callout, options: RenderOptions) ui.RenderError!void {
-    try scene.pushRect(bounds, options.style.row, .fill, callout_radius, 0.0);
-    try scene.pushRect(bounds, options.style.border, .border, callout_radius, 0.0);
-    try scene.pushRect(ui.Rect.init(bounds.x, bounds.y, callout_accent_w, bounds.h), options.style.accent, .fill, callout_radius, 0.0);
-    try scene.pushWrappedText(bounds.insetLtrb(callout_text_x, callout_text_y, callout_text_x, callout_text_y), callout.value, options.style.text, .{
-        .line_height = callout_line_h,
-        .average_char_width = callout_avg_w,
-        .max_lines = 4,
-    });
 }
 
 pub fn renderRegion(scene: *ui.Scene, bounds: ui.Rect, region: Region, options: RenderOptions) ui.RenderError!void {
@@ -630,12 +602,6 @@ const code_padding_y: f32 = 18.0;
 const code_line_height: f32 = 17.0;
 const code_text_height: f32 = 12.0;
 const code_clip_inset: f32 = 1.0;
-const callout_radius: f32 = 8.0;
-const callout_accent_w: f32 = 4.0;
-const callout_text_x: f32 = 18.0;
-const callout_text_y: f32 = 14.0;
-const callout_line_h: f32 = 18.0;
-const callout_avg_w: f32 = 9.0;
 const region_radius: f32 = 8.0;
 const region_padding_x: f32 = 12.0;
 const region_padding_y: f32 = 12.0;
@@ -1461,14 +1427,6 @@ fn writeStackMarkdown(stack: Stack, out: []u8) MarkdownError![]u8 {
     return writer.written();
 }
 
-fn writeCalloutHtml(callout: Callout, out: []u8) HtmlError![]u8 {
-    var writer = HtmlWriter.init(out);
-    try writer.writeAll("<blockquote data-er-component=\"callout\">");
-    try writer.writeEscapedText(callout.value);
-    try writer.writeAll("</blockquote>");
-    return writer.written();
-}
-
 fn writeCodeBlockHtml(block: CodeBlock, out: []u8) HtmlError![]u8 {
     var writer = HtmlWriter.init(out);
     try writer.writeAll("<pre data-er-component=\"code-block\"><code");
@@ -1613,14 +1571,6 @@ fn writeComponentMarkdownInto(writer: *MarkdownWriter, component: Component) Mar
     }
 }
 
-fn writeCalloutMarkdown(callout: Callout, out: []u8) MarkdownError![]u8 {
-    if (callout.value.len == 0) return error.InvalidMarkdown;
-    var writer = MarkdownWriter.init(out);
-    try writer.writeAll("> ");
-    try writer.writeEscapedInline(callout.value);
-    return writer.written();
-}
-
 fn writeCardMarkdown(card: Card, out: []u8) MarkdownError![]u8 {
     var writer = MarkdownWriter.init(out);
     try writeCardMarkdownInto(&writer, card);
@@ -1648,18 +1598,6 @@ fn writeCodeBlockMarkdown(block: CodeBlock, out: []u8) MarkdownError![]u8 {
     }
     try writer.writeAll("\n```");
     return writer.written();
-}
-
-fn readCalloutMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!Callout {
-    if (!std.mem.startsWith(u8, markdown, "> ")) {
-        if (std.mem.startsWith(u8, markdown, ">")) return error.InvalidMarkdown;
-        return error.UnsupportedMarkdown;
-    }
-    if (std.mem.indexOfScalar(u8, markdown, '\n') != null) return error.InvalidMarkdown;
-    var text = MarkdownTextArena.init(text_out);
-    const value = try text.unescapeInline(markdown["> ".len..]);
-    if (value.len == 0) return error.InvalidMarkdown;
-    return .{ .value = value };
 }
 
 fn readCardMarkdown(markdown: []const u8, text_out: []u8) MarkdownError!Card {
@@ -2071,15 +2009,6 @@ fn readComponentHtmlWithArena(html: []const u8, text: *HtmlTextArena) HtmlError!
         const detail = try text.unescape(html[detail_start .. html.len - "</span></div>".len]);
         return .{ .row_item = .{ .id = id, .title = title, .detail = detail } };
     }
-    return error.UnsupportedHtml;
-}
-
-fn readCalloutHtml(html: []const u8, text_out: []u8) HtmlError!Callout {
-    var text = HtmlTextArena.init(text_out);
-    if (takeWrapped(html, "<blockquote data-er-component=\"callout\">", "</blockquote>")) |value| {
-        return .{ .value = try text.unescape(value) };
-    }
-    if (std.mem.startsWith(u8, html, "<blockquote")) return error.InvalidHtml;
     return error.UnsupportedHtml;
 }
 
