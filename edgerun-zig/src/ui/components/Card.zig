@@ -55,3 +55,37 @@ test "card component serializes to canonical object and deserializes" {
     try std.testing.expectEqualStrings(card.title, decoded.title);
     try std.testing.expectEqualStrings(card.detail, decoded.detail);
 }
+
+test "card component lays out detail-only content without empty title gap" {
+    const card = Card{ .title = "", .detail = "Only detail" };
+    var commands: [16]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+
+    try card.render(&scene, ui.Rect.init(0, 0, 220, 80), .{});
+
+    const detail = component_test.textCommandPrefix(scene.written(), "Only").?;
+    try std.testing.expectEqual(component_render.surface_padding, detail.text.origin.y);
+    const measured = card.measure(.{}, .{});
+    try std.testing.expectEqual(component_render.surface_padding * 2.0 + component_render.surface_detail_height, measured.preferred.h);
+    try std.testing.expect(measured.preferred.h < (Card{ .title = "Title", .detail = "Only detail" }).measure(.{}, .{}).preferred.h);
+}
+
+test "card component renders surface variants through one renderer" {
+    var commands: [16]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+    const card = Card{ .title = "Project", .detail = "Interactive docs" };
+
+    try card.render(&scene, ui.Rect.init(0, 0, 220, 96), .{ .surface_variant = .elevated });
+    try card.render(&scene, ui.Rect.init(0, 104, 220, 96), .{ .surface_variant = .subtle });
+
+    try std.testing.expect(component_test.hasShadow(scene.written()));
+    try std.testing.expect(component_test.hasRectColor(scene.written(), ui.Color.row));
+}
+
+test "card component measurement respects at-most constraints" {
+    const card = Card{ .title = "Project", .detail = "Interactive docs" };
+    const measured = card.measure(.{ .width = .{ .at_most = 120.0 }, .height = .{ .at_most = 44.0 } }, .{});
+
+    try std.testing.expectEqual(@as(f32, 120.0), measured.preferred.w);
+    try std.testing.expectEqual(@as(f32, 44.0), measured.preferred.h);
+}

@@ -8,24 +8,60 @@ const ui = @import("ui.zig");
 const component_common = @import("ui_component_common.zig");
 const component_codec = @import("ui/components/Codec.zig");
 const component_io = @import("ui/components/ComponentIO.zig");
+const component_test = @import("ui/components/TestSupport.zig");
 const tree_codec = @import("ui/components/TreeCodec.zig");
 const component_render = @import("ui/components/Render.zig");
 const stack_component = @import("ui/components/Stack.zig");
 const slot_component = @import("ui/components/Slot.zig");
 const text_component = @import("ui/components/Text.zig");
+const accordion_component = @import("ui/components/Accordion.zig");
+const alert_component = @import("ui/components/Alert.zig");
+const alert_dialog_component = @import("ui/components/AlertDialog.zig");
+const aspect_ratio_component = @import("ui/components/AspectRatio.zig");
+const calendar_component = @import("ui/components/Calendar.zig");
+const carousel_component = @import("ui/components/Carousel.zig");
+const chart_component = @import("ui/components/Chart.zig");
+const combobox_component = @import("ui/components/Combobox.zig");
 const card_component = @import("ui/components/Card.zig");
+const empty_component = @import("ui/components/Empty.zig");
 const button_component = @import("ui/components/Button.zig");
+const button_group_component = @import("ui/components/ButtonGroup.zig");
+const toggle_group_component = @import("ui/components/ToggleGroup.zig");
 const badge_component = @import("ui/components/Badge.zig");
 const avatar_component = @import("ui/components/Avatar.zig");
 const kbd_component = @import("ui/components/Kbd.zig");
+const label_component = @import("ui/components/Label.zig");
 const separator_component = @import("ui/components/Separator.zig");
+const scroll_area_component = @import("ui/components/ScrollArea.zig");
+const skeleton_component = @import("ui/components/Skeleton.zig");
+const spinner_component = @import("ui/components/Spinner.zig");
+const breadcrumb_component = @import("ui/components/Breadcrumb.zig");
+const menubar_component = @import("ui/components/Menubar.zig");
+const navigation_menu_component = @import("ui/components/NavigationMenu.zig");
+const command_component = @import("ui/components/Command.zig");
+const context_menu_component = @import("ui/components/ContextMenu.zig");
+const dialog_component = @import("ui/components/Dialog.zig");
+const drawer_component = @import("ui/components/Drawer.zig");
+const dropdown_menu_component = @import("ui/components/DropdownMenu.zig");
+const field_component = @import("ui/components/Field.zig");
+const input_otp_component = @import("ui/components/InputOtp.zig");
 const input_component = @import("ui/components/Input.zig");
+const input_group_component = @import("ui/components/InputGroup.zig");
 const textarea_component = @import("ui/components/Textarea.zig");
 const select_component = @import("ui/components/Select.zig");
 const checkbox_component = @import("ui/components/Checkbox.zig");
+const radio_group_component = @import("ui/components/RadioGroup.zig");
 const switch_component = @import("ui/components/Switch.zig");
+const pagination_component = @import("ui/components/Pagination.zig");
+const popover_component = @import("ui/components/Popover.zig");
+const resizable_component = @import("ui/components/Resizable.zig");
+const sheet_component = @import("ui/components/Sheet.zig");
+const toggle_component = @import("ui/components/Toggle.zig");
 const progress_component = @import("ui/components/Progress.zig");
 const slider_component = @import("ui/components/Slider.zig");
+const tabs_component = @import("ui/components/Tabs.zig");
+const table_component = @import("ui/components/Table.zig");
+const tooltip_component = @import("ui/components/Tooltip.zig");
 const row_item_component = @import("ui/components/RowItem.zig");
 pub const layouts = @import("layouts.zig");
 
@@ -36,37 +72,107 @@ pub const Error = component_common.Error;
 
 pub const Component = union(enum) {
     text: Text,
+    accordion: Accordion,
+    alert: Alert,
+    alert_dialog: AlertDialog,
+    aspect_ratio: AspectRatio,
+    calendar: Calendar,
+    carousel: Carousel,
+    chart: Chart,
+    combobox: Combobox,
     card: Card,
+    empty: Empty,
     badge: Badge,
     avatar: Avatar,
     kbd: Kbd,
+    label: Label,
     separator: Separator,
+    scroll_area: ScrollArea,
+    skeleton: Skeleton,
+    spinner: Spinner,
+    breadcrumb: Breadcrumb,
+    menubar: Menubar,
+    navigation_menu: NavigationMenu,
+    command: Command,
+    context_menu: ContextMenu,
+    dialog: Dialog,
+    drawer: Drawer,
+    dropdown_menu: DropdownMenu,
+    field: Field,
+    input_otp: InputOtp,
     button: Button,
+    button_group: ButtonGroup,
+    toggle_group: ToggleGroup,
+    toggle: Toggle,
     input: Input,
+    input_group: InputGroup,
     textarea: Textarea,
     select: Select,
     checkbox: Checkbox,
+    radio_group: RadioGroup,
     switch_control: Switch,
+    pagination: Pagination,
+    popover: Popover,
+    resizable: Resizable,
+    sheet: Sheet,
     progress: Progress,
     slider: Slider,
+    tabs: Tabs,
+    table: Table,
+    tooltip: Tooltip,
     row_item: RowItem,
 
     pub fn node(self: Component) ui.Node {
         return switch (self) {
             .text => |component| component.node(),
+            .accordion => |component| component.node(),
+            .alert => |component| component.node(),
+            .alert_dialog => |component| component.node(),
+            .aspect_ratio => |component| component.node(),
+            .calendar => |component| component.node(),
+            .carousel => |component| component.node(),
+            .chart => |component| component.node(),
+            .combobox => |component| component.node(),
             .card => |component| component.node(),
+            .empty => |component| component.node(),
             .badge => |component| component.node(),
             .avatar => |component| component.node(),
             .kbd => |component| component.node(),
+            .label => |component| component.node(),
             .separator => |component| component.node(),
+            .scroll_area => |component| component.node(),
+            .skeleton => |component| component.node(),
+            .spinner => |component| component.node(),
+            .breadcrumb => |component| component.node(),
+            .menubar => |component| component.node(),
+            .navigation_menu => |component| component.node(),
+            .command => |component| component.node(),
+            .context_menu => |component| component.node(),
+            .dialog => |component| component.node(),
+            .drawer => |component| component.node(),
+            .dropdown_menu => |component| component.node(),
+            .field => |component| component.node(),
+            .input_otp => |component| component.node(),
             .button => |component| component.node(),
+            .button_group => |component| component.node(),
+            .toggle_group => |component| component.node(),
+            .toggle => |component| component.node(),
             .input => |component| component.node(),
+            .input_group => |component| component.node(),
             .textarea => |component| component.node(),
             .select => |component| component.node(),
             .checkbox => |component| component.node(),
+            .radio_group => |component| component.node(),
             .switch_control => |component| component.node(),
+            .pagination => |component| component.node(),
+            .popover => |component| component.node(),
+            .resizable => |component| component.node(),
+            .sheet => |component| component.node(),
             .progress => |component| component.node(),
             .slider => |component| component.node(),
+            .tabs => |component| component.node(),
+            .table => |component| component.node(),
+            .tooltip => |component| component.node(),
             .row_item => |component| component.node(),
         };
     }
@@ -94,19 +200,54 @@ pub const Component = union(enum) {
     pub fn fromNode(node_value: ui.Node) Error!Component {
         return switch (node_value) {
             .text => |text| .{ .text = .{ .value = text.value } },
+            .accordion => |accordion| .{ .accordion = .{ .id = accordion.id, .title = accordion.title, .detail = accordion.detail, .open = accordion.open } },
+            .alert => |alert| .{ .alert = .{ .title = alert.title, .detail = alert.detail, .destructive = alert.destructive } },
+            .alert_dialog => |dialog| .{ .alert_dialog = .{ .id = dialog.id, .title = dialog.title, .detail = dialog.detail } },
+            .aspect_ratio => |aspect_ratio| .{ .aspect_ratio = .{ .ratio_w = aspect_ratio.ratio_w, .ratio_h = aspect_ratio.ratio_h } },
+            .calendar => |calendar| .{ .calendar = .{ .id = calendar.id, .month = calendar.month, .selected_day = calendar.selected_day } },
+            .carousel => |carousel| .{ .carousel = .{ .id = carousel.id, .label = carousel.label } },
+            .chart => |chart| .{ .chart = .{ .id = chart.id, .label = chart.label } },
+            .combobox => |combobox| .{ .combobox = .{ .id = combobox.id, .placeholder = combobox.placeholder, .selected = combobox.selected } },
             .card => |card| .{ .card = .{ .title = card.title, .detail = card.detail } },
+            .empty => |empty| .{ .empty = .{ .title = empty.title, .detail = empty.detail } },
             .badge => |badge| .{ .badge = .{ .label = badge.label } },
             .avatar => |avatar| .{ .avatar = .{ .label = avatar.label } },
             .kbd => |kbd| .{ .kbd = .{ .label = kbd.label } },
+            .label => |label| .{ .label = .{ .value = label.value } },
             .separator => .{ .separator = .{} },
+            .scroll_area => .{ .scroll_area = .{} },
+            .skeleton => .{ .skeleton = .{} },
+            .spinner => .{ .spinner = .{} },
+            .breadcrumb => |breadcrumb| .{ .breadcrumb = .{ .id = breadcrumb.id, .first = breadcrumb.first, .current = breadcrumb.current } },
+            .menubar => |menubar| .{ .menubar = .{ .id = menubar.id, .first = menubar.first, .second = menubar.second, .active = menubar.active } },
+            .navigation_menu => |menu| .{ .navigation_menu = .{ .id = menu.id, .first = menu.first, .second = menu.second, .active = menu.active } },
+            .command => |command| .{ .command = .{ .id = command.id, .placeholder = command.placeholder } },
+            .context_menu => |menu| .{ .context_menu = .{ .id = menu.id, .first = menu.first, .second = menu.second } },
+            .dialog => |dialog| .{ .dialog = .{ .id = dialog.id, .title = dialog.title, .detail = dialog.detail } },
+            .drawer => |drawer| .{ .drawer = .{ .id = drawer.id, .title = drawer.title, .detail = drawer.detail } },
+            .dropdown_menu => |menu| .{ .dropdown_menu = .{ .id = menu.id, .first = menu.first, .second = menu.second } },
+            .field => |field| .{ .field = .{ .id = field.id, .label = field.label, .placeholder = field.placeholder } },
+            .input_otp => |otp| .{ .input_otp = .{ .id = otp.id, .value = otp.value } },
             .button => |button| .{ .button = .{ .id = button.id, .label = button.label } },
+            .button_group => |group| .{ .button_group = .{ .id = group.id, .first = group.first, .second = group.second, .active = group.active } },
+            .toggle_group => |group| .{ .toggle_group = .{ .id = group.id, .first = group.first, .second = group.second, .active = group.active } },
+            .toggle => |toggle| .{ .toggle = .{ .id = toggle.id, .label = toggle.label, .pressed = toggle.pressed } },
             .input => |input| .{ .input = .{ .id = input.id, .placeholder = input.placeholder } },
+            .input_group => |input_group| .{ .input_group = .{ .id = input_group.id, .addon = input_group.addon, .placeholder = input_group.placeholder } },
             .textarea => |textarea| .{ .textarea = .{ .id = textarea.id, .placeholder = textarea.placeholder } },
             .select => |select| .{ .select = .{ .id = select.id, .label = select.label } },
             .checkbox => |checkbox| .{ .checkbox = .{ .id = checkbox.id, .label = checkbox.label, .checked = checkbox.checked } },
+            .radio_group => |radio| .{ .radio_group = .{ .id = radio.id, .first = radio.first, .second = radio.second, .selected = radio.selected } },
             .switch_control => |switch_control| .{ .switch_control = .{ .id = switch_control.id, .label = switch_control.label, .checked = switch_control.checked } },
+            .pagination => |pagination| .{ .pagination = .{ .id = pagination.id, .page = pagination.page } },
+            .popover => |popover| .{ .popover = .{ .id = popover.id, .trigger = popover.trigger, .content = popover.content } },
+            .resizable => |resizable| .{ .resizable = .{ .id = resizable.id, .ratio = resizable.ratio } },
+            .sheet => |sheet| .{ .sheet = .{ .id = sheet.id, .title = sheet.title, .detail = sheet.detail } },
             .progress => |progress| .{ .progress = .{ .value = progress.value } },
             .slider => |slider| .{ .slider = .{ .id = slider.id, .label = slider.label, .value = slider.value } },
+            .tabs => |tabs| .{ .tabs = .{ .id = tabs.id, .first = tabs.first, .second = tabs.second, .active = tabs.active } },
+            .table => |table| .{ .table = .{ .id = table.id, .name = table.name, .role = table.role } },
+            .tooltip => |tooltip| .{ .tooltip = .{ .id = tooltip.id, .trigger = tooltip.trigger, .content = tooltip.content } },
             .row_item => |row| .{ .row_item = .{ .id = row.id, .title = row.title, .detail = row.detail } },
             else => error.UnsupportedComponent,
         };
@@ -120,9 +261,31 @@ pub const RenderOptions = component_common.RenderOptions;
 
 pub const Text = text_component.Text;
 
+pub const Accordion = accordion_component.Accordion;
+
+pub const Alert = alert_component.Alert;
+
+pub const AlertDialog = alert_dialog_component.AlertDialog;
+
+pub const AspectRatio = aspect_ratio_component.AspectRatio;
+
+pub const Calendar = calendar_component.Calendar;
+
+pub const Carousel = carousel_component.Carousel;
+
+pub const Chart = chart_component.Chart;
+
+pub const Combobox = combobox_component.Combobox;
+
 pub const Card = card_component.Card;
 
+pub const Empty = empty_component.Empty;
+
 pub const Button = button_component.Button;
+
+pub const ButtonGroup = button_group_component.ButtonGroup;
+
+pub const ToggleGroup = toggle_group_component.ToggleGroup;
 
 pub const Badge = badge_component.Badge;
 
@@ -130,9 +293,39 @@ pub const Avatar = avatar_component.Avatar;
 
 pub const Kbd = kbd_component.Kbd;
 
+pub const Label = label_component.Label;
+
 pub const Separator = separator_component.Separator;
 
+pub const ScrollArea = scroll_area_component.ScrollArea;
+
+pub const Skeleton = skeleton_component.Skeleton;
+
+pub const Spinner = spinner_component.Spinner;
+
+pub const Breadcrumb = breadcrumb_component.Breadcrumb;
+
+pub const Menubar = menubar_component.Menubar;
+
+pub const NavigationMenu = navigation_menu_component.NavigationMenu;
+
+pub const Command = command_component.Command;
+
+pub const ContextMenu = context_menu_component.ContextMenu;
+
+pub const Dialog = dialog_component.Dialog;
+
+pub const Drawer = drawer_component.Drawer;
+
+pub const DropdownMenu = dropdown_menu_component.DropdownMenu;
+
+pub const Field = field_component.Field;
+
+pub const InputOtp = input_otp_component.InputOtp;
+
 pub const Input = input_component.Input;
+
+pub const InputGroup = input_group_component.InputGroup;
 
 pub const Textarea = textarea_component.Textarea;
 
@@ -140,11 +333,29 @@ pub const Select = select_component.Select;
 
 pub const Checkbox = checkbox_component.Checkbox;
 
+pub const RadioGroup = radio_group_component.RadioGroup;
+
 pub const Switch = switch_component.Switch;
+
+pub const Pagination = pagination_component.Pagination;
+
+pub const Popover = popover_component.Popover;
+
+pub const Resizable = resizable_component.Resizable;
+
+pub const Sheet = sheet_component.Sheet;
+
+pub const Toggle = toggle_component.Toggle;
 
 pub const Progress = progress_component.Progress;
 
 pub const Slider = slider_component.Slider;
+
+pub const Tabs = tabs_component.Tabs;
+
+pub const Table = table_component.Table;
+
+pub const Tooltip = tooltip_component.Tooltip;
 
 pub const RowItem = row_item_component.RowItem;
 
@@ -155,8 +366,8 @@ pub fn renderComponent(scene: *ui.Scene, bounds: ui.Rect, component: Component, 
 pub fn renderNode(scene: *ui.Scene, bounds: ui.Rect, node: ui.Node, options: RenderOptions) ui.RenderError!void {
     if (!bounds.valid()) return error.InvalidBounds;
     switch (node) {
-        .rect => |rect| try scene.push(.{ .rect = .{ .bounds = bounds, .color = rect.color } }),
-        .text => |text| try scene.push(.{ .text = .{ .origin = bounds, .value = text.value, .color = text.color orelse options.style.text } }),
+        .rect => |rect| try scene.pushRect(bounds, rect.color, .fill, 0.0, 0.0),
+        .text => |text| try scene.pushText(bounds, text.value, text.color orelse options.style.text),
         .slot => |slot| try renderNode(scene, bounds, slot.child.*, options),
         .stack => |stack| try renderNodeStack(scene, bounds, stack, options),
         else => {
@@ -186,29 +397,27 @@ fn renderNodeStack(scene: *ui.Scene, bounds: ui.Rect, stack: ui.Layout, options:
     if (stack.children.len == 0) return;
     if (stack.children.len > node_stack_max_children) return error.CommandBudgetExceeded;
 
-    const constraints = constraintsFromBounds(bounds);
     var child_measurements: [node_stack_max_children]layouts.types.Measurement = undefined;
     var child_bounds: [node_stack_max_children]ui.Rect = undefined;
-    const measured_children = measureNodeChildren(stack.children, nodeStackChildConstraints(stack, constraints), options, &child_measurements);
-    const placed_children = layouts.Flex.place(bounds, measured_children, nodeStackLayoutOptions(stack), &child_bounds);
+    const placed_children = placeNodeStackChildren(bounds, stack, options, &child_measurements, &child_bounds);
     for (stack.children[0..placed_children.len], placed_children) |child, child_rect| {
         if (!child_rect.valid()) return error.InvalidBounds;
         try renderNode(scene, child_rect, child, options);
     }
 }
 
-fn constraintsFromBounds(bounds: ui.Rect) layouts.types.Constraints {
-    return .{
-        .width = .{ .exact = bounds.w },
-        .height = .{ .exact = bounds.h },
-        .text_wrap = .wrap,
-    };
-}
-
 fn measureNodeStack(stack: ui.Layout, constraints: layouts.types.Constraints, options: RenderOptions) layouts.types.Measurement {
     var child_measurements: [node_stack_max_children]layouts.types.Measurement = undefined;
-    const measured_children = measureNodeChildren(stack.children, nodeStackChildConstraints(stack, constraints), options, &child_measurements);
-    return layouts.Flex.measure(measured_children, constraints, nodeStackLayoutOptions(stack));
+    const child_constraints = component_render.stackChildConstraintsFor(stack.axis, stack.padding, constraints);
+    const measured_children = measureNodeChildren(stack.children, child_constraints, options, &child_measurements);
+    return layouts.Flex.measure(measured_children, constraints, nodeStackLayoutOptionsFor(stack));
+}
+
+fn placeNodeStackChildren(bounds: ui.Rect, stack: ui.Layout, options: RenderOptions, measurements: *[node_stack_max_children]layouts.types.Measurement, out: *[node_stack_max_children]ui.Rect) []ui.Rect {
+    const constraints = component_render.constraintsFromBounds(bounds);
+    const child_constraints = component_render.stackChildConstraintsFor(stack.axis, stack.padding, constraints);
+    const measured_children = measureNodeChildren(stack.children, child_constraints, options, measurements);
+    return layouts.Flex.place(bounds, measured_children, nodeStackLayoutOptionsFor(stack), out);
 }
 
 fn measureNodeChildren(children: []const ui.Node, constraints: layouts.types.Constraints, options: RenderOptions, out: []layouts.types.Measurement) []layouts.types.Measurement {
@@ -219,35 +428,24 @@ fn measureNodeChildren(children: []const ui.Node, constraints: layouts.types.Con
     return out[0..count];
 }
 
-fn nodeStackChildConstraints(stack: ui.Layout, constraints: layouts.types.Constraints) layouts.types.Constraints {
-    const inner = constraints.inner(layouts.types.Insets.uniform(stack.padding));
-    return switch (stack.axis) {
-        .column => .{ .width = inner.width, .height = .unconstrained, .text_wrap = constraints.text_wrap },
-        .row => .{ .width = .unconstrained, .height = inner.height, .text_wrap = constraints.text_wrap },
-    };
+fn nodeStackLayoutOptionsFor(stack: ui.Layout) layouts.Flex.Options {
+    return component_render.stackLayoutOptionsFor(stack.axis, stack.gap, stack.padding, nodeStackCrossAlign(stack.cross_align));
 }
 
-fn nodeStackLayoutOptions(stack: ui.Layout) layouts.Flex.Options {
-    return .{
-        .axis = switch (stack.axis) {
-            .row => .horizontal,
-            .column => .vertical,
-        },
-        .gap = stack.gap,
-        .padding = layouts.types.Insets.uniform(stack.padding),
-        .cross_align = switch (stack.cross_align) {
-            .start => .start,
-            .center, .end => .start,
-            .stretch => .stretch,
-        },
+fn nodeStackCrossAlign(value: ui.Align) layouts.Flex.Align {
+    return switch (value) {
+        .start => .start,
+        .center, .end => .start,
+        .stretch => .stretch,
     };
 }
 
 fn primitiveNodeMeasurement(node: ui.Node, constraints: layouts.types.Constraints) layouts.types.Measurement {
     const size = node.preferredSize();
+    const preferred = component_render.constrainPreferredSize(size, constraints);
     return layouts.types.Measurement.flexible(
-        .{ .w = @min(size.w, constraints.width.limit(size.w)), .h = @min(size.h, constraints.height.limit(size.h)) },
-        size,
+        .{ .w = @min(size.w, preferred.w), .h = @min(size.h, preferred.h) },
+        preferred,
         .{ .w = node_measure_max_width, .h = size.h },
     ).applyExact(constraints);
 }
@@ -373,6 +571,35 @@ test "stack measure render and interaction collection use layout placement" {
     try std.testing.expectEqual(@as(u32, 41002), hit.id);
 }
 
+test "primitive node measurement respects at-most constraints" {
+    const node = ui.inputNode(1, "Filter");
+    const measured = measureNode(node, .{ .width = .{ .at_most = 96.0 }, .height = .{ .at_most = 28.0 } }, .{});
+
+    try std.testing.expectEqual(@as(f32, 96.0), measured.preferred.w);
+    try std.testing.expectEqual(@as(f32, 28.0), measured.preferred.h);
+}
+
+test "node stack layout keeps existing cross alignment policy" {
+    try std.testing.expectEqual(layouts.Flex.Align.start, nodeStackCrossAlign(.start));
+    try std.testing.expectEqual(layouts.Flex.Align.start, nodeStackCrossAlign(.center));
+    try std.testing.expectEqual(layouts.Flex.Align.start, nodeStackCrossAlign(.end));
+    try std.testing.expectEqual(layouts.Flex.Align.stretch, nodeStackCrossAlign(.stretch));
+}
+
+test "primitive node rendering uses scene command helpers" {
+    var commands: [4]ui.Command = undefined;
+    var clips: [1]ui.Rect = undefined;
+    var scene = ui.Scene.initWithClips(&commands, &clips);
+    try std.testing.expect(try scene.pushClip(ui.Rect.init(0, 0, 40, 40)));
+
+    try renderNode(&scene, ui.Rect.init(30, 30, 20, 20), .{ .rect = .{ .color = .accent } }, .{});
+    try renderNode(&scene, ui.Rect.init(2, 4, 20, 12), .{ .text = .{ .value = "node", .color = .muted } }, .{});
+
+    try std.testing.expectEqual(ui.Rect.init(30, 30, 10, 10), scene.commandAt(0).?.rect.bounds);
+    try std.testing.expectEqual(ui.Rect.init(2, 4, 20, 12), scene.commandAt(1).?.text.origin);
+    try std.testing.expectEqual(ui.Color.muted, scene.commandAt(1).?.text.color);
+}
+
 test "slot component wraps a leaf component and renders the child" {
     const slot = Slot{
         .id = 99,
@@ -392,7 +619,15 @@ test "slot component wraps a leaf component and renders the child" {
     var scene = ui.Scene.init(&commands);
     try renderNode(&scene, .{ .x = 0, .y = 0, .w = 140, .h = 40 }, root, .{});
 
-    try std.testing.expect(hasText(scene.written(), "Inside"));
+    try std.testing.expect(component_test.hasText(scene.written(), "Inside"));
+}
+
+test "slot component rejects non-slot object roots" {
+    var ui_raw: [128]u8 = undefined;
+    var object_raw: [object.header_size + 128]u8 = undefined;
+    const canonical = (Button{ .id = 12, .label = "Plain" }).toObject(&ui_raw, &object_raw, testReq(), testEpoch()).?;
+
+    try std.testing.expectError(error.UnsupportedComponent, Slot.fromView(try object.View.decode(canonical)));
 }
 
 test "stack tree composes child component objects with explicit resolver input" {
@@ -510,9 +745,9 @@ test "component render helper owns button variants and collects hit targets" {
     try std.testing.expectEqual(@as(u32, 501), primary_hit.id);
     const outline_hit = ui_input.hitTest(collector.written(), 12, 56).?;
     try std.testing.expectEqual(@as(u32, 502), outline_hit.id);
-    try std.testing.expect(hasText(scene.written(), "Primary"));
-    try std.testing.expect(hasText(scene.written(), "Outline"));
-    try std.testing.expect(hasIcon(scene.written(), .search));
+    try std.testing.expect(component_test.hasText(scene.written(), "Primary"));
+    try std.testing.expect(component_test.hasText(scene.written(), "Outline"));
+    try std.testing.expect(component_test.hasIcon(scene.written(), icon.id(.search)));
 }
 
 test "component interaction collection covers primitive controls" {
@@ -539,21 +774,4 @@ test "component interaction collection covers primitive controls" {
         try std.testing.expectEqual(@as(u32, 601 + @as(u32, @intCast(index))), region.id);
         try std.testing.expectEqual(expected[index], region.kind);
     }
-}
-
-fn hasText(commands: []const ui.Command, value: []const u8) bool {
-    for (commands) |command| switch (command) {
-        .text => |text_command| if (std.mem.eql(u8, text_command.value, value)) return true,
-        else => {},
-    };
-    return false;
-}
-
-fn hasIcon(commands: []const ui.Command, value: icon.Icon) bool {
-    const icon_id = icon.id(value);
-    for (commands) |command| switch (command) {
-        .icon_quad => |quad| if (quad.icon_id == icon_id) return true,
-        else => {},
-    };
-    return false;
 }

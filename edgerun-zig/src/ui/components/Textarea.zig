@@ -61,3 +61,17 @@ test "textarea component serializes to canonical object and deserializes" {
     try std.testing.expectEqual(textarea.id, decoded.id);
     try std.testing.expectEqualStrings(textarea.placeholder, decoded.placeholder);
 }
+
+test "textarea component wraps placeholder inside shared control inset" {
+    const textarea = Textarea{ .id = 21, .placeholder = "Describe this app state" };
+    var commands: [16]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+
+    try textarea.render(&scene, ui.Rect.init(4, 8, 72, 88), .{});
+
+    const first = component_test.firstTextCommand(scene.written()).?;
+    try std.testing.expectEqual(ui.Color.muted, first.text.color);
+    try std.testing.expectEqual(@as(f32, 16.0), first.text.origin.x);
+    try std.testing.expectEqual(@as(f32, 20.0), first.text.origin.y);
+    try std.testing.expect(component_test.textCount(scene.written()) > 1);
+}

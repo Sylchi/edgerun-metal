@@ -8,6 +8,7 @@ const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
 const component_render = @import("Render.zig");
+const icon = @import("../../icon.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
@@ -62,4 +63,16 @@ test "checkbox component serializes to canonical object and deserializes" {
     try std.testing.expectEqual(checkbox.id, decoded.id);
     try std.testing.expectEqualStrings(checkbox.label, decoded.label);
     try std.testing.expectEqual(checkbox.checked, decoded.checked);
+}
+
+test "checkbox component renders checked mark through icon primitive" {
+    const checked = Checkbox{ .id = 11, .label = "Enable sync", .checked = true };
+    const unchecked = Checkbox{ .id = 12, .label = "Disable sync", .checked = false };
+    var commands: [24]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+
+    try checked.render(&scene, ui.Rect.init(0, 0, 220, 28), .{});
+    try unchecked.render(&scene, ui.Rect.init(0, 36, 220, 28), .{});
+
+    try std.testing.expectEqual(@as(usize, 1), component_test.iconCount(scene.written(), icon.id(.check)));
 }

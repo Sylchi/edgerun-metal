@@ -62,8 +62,10 @@ pub fn Stack(comptime Component: type) type {
         pub fn fromView(view: object.View, out_components: []Component) Error!Self {
             var nodes: [codec_max_children]ui.Node = undefined;
             const root = codec.decodeView(view, &nodes) catch return error.Corrupt;
-            if (root != .stack) return error.UnsupportedComponent;
-            const layout = root.stack;
+            const layout = switch (root) {
+                .stack => |stack| stack,
+                else => return error.UnsupportedComponent,
+            };
             if (layout.children.len > out_components.len) return error.ComponentBudgetExceeded;
 
             for (layout.children, 0..) |child, index| {
@@ -99,10 +101,11 @@ pub fn StackTree(comptime Component: type) type {
             var child_records: [tree_codec.tree_max_children]object.Child = undefined;
             if (self.children.len + 1 > child_records.len) return null;
 
-            child_records[0] = tree_codec.childRecord(layout, 0);
+            const layout_view = object.View.decode(layout) catch return null;
+            child_records[0] = tree_codec.childRecord(layout_view, 0) catch return null;
             var logical_offset = child_records[0].logical_len;
             for (self.children, 0..) |child, index| {
-                child_records[index + 1] = tree_codec.childRecord(child.canonical, logical_offset);
+                child_records[index + 1] = tree_codec.childRecord(child, logical_offset) catch return null;
                 logical_offset += child_records[index + 1].logical_len;
             }
 

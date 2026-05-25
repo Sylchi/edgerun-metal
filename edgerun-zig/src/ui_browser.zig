@@ -1114,6 +1114,23 @@ export fn er_ui_render_icon_svg_test(icon_id: u32, width: u32, height: u32) u32 
     return finishCpuSceneFrame(surface, scene, &.{}, .{ .enabled = false }, .clear);
 }
 
+export fn er_ui_render_icon_svg_tuning_test(icon_id: u32, width: u32, height: u32, curve_segments: u32, stroke_antialias_width: f32, round_cap_antialias_width: f32, line_stroke_coverage_boost: f32, curve_stroke_coverage_boost: f32, arc_stroke_coverage_boost: f32, arc_antialias_width: f32, large_arc_antialias_width: f32, arc_step_divisor: f32, large_arc_step_divisor: f32) u32 {
+    renderer.setIconTuningForTest(.{
+        .curve_segments = @intCast(curve_segments),
+        .stroke_antialias_width = stroke_antialias_width,
+        .round_cap_antialias_width = round_cap_antialias_width,
+        .line_stroke_coverage_boost = line_stroke_coverage_boost,
+        .curve_stroke_coverage_boost = curve_stroke_coverage_boost,
+        .arc_stroke_coverage_boost = arc_stroke_coverage_boost,
+        .arc_antialias_width = arc_antialias_width,
+        .large_arc_antialias_width = large_arc_antialias_width,
+        .arc_step_divisor = arc_step_divisor,
+        .large_arc_step_divisor = large_arc_step_divisor,
+    }) catch return finishError(.render_failed);
+    defer renderer.resetIconTuningForTest();
+    return er_ui_render_icon_svg_test(icon_id, width, height);
+}
+
 fn renderBrowserSiteCpu(surface: renderer.Surface, hover_x: f32, hover_y: f32) u32 {
     var scene = ui.Scene.initWithClips(&commands, &clips);
     var frame_regions: [max_interaction_regions]interaction.Region = undefined;

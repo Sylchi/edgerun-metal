@@ -9,8 +9,13 @@ pub const Writer = codec.Writer;
 pub fn singleNode(view: object.View) Error!ui.Node {
     var nodes: [1]ui.Node = undefined;
     const root = codec.decodeView(view, &nodes) catch return error.Corrupt;
-    if (root.stack.children.len != 1) return error.Corrupt;
-    return root.stack.children[0];
+    return switch (root) {
+        .stack => |stack| {
+            if (stack.children.len != 1) return error.Corrupt;
+            return stack.children[0];
+        },
+        else => error.UnsupportedComponent,
+    };
 }
 
 pub fn emptyObject(kind: codec.RecordKind, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
@@ -81,6 +86,6 @@ fn recordObjectWithWriter(writer: *Writer, kind: codec.RecordKind, id: u32, a: c
     return writer.objectNode(object_out, req, epoch);
 }
 
-fn singleWriter(ui_out: []u8) ?Writer {
+pub fn singleWriter(ui_out: []u8) ?Writer {
     return codec.Writer.init(ui_out, 1, 1, .column, 0, 0);
 }

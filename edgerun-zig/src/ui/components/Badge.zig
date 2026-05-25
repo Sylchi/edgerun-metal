@@ -53,3 +53,26 @@ test "badge component serializes to canonical object and deserializes" {
 
     try std.testing.expectEqualStrings("Ready", decoded.label);
 }
+
+test "badge component renders reference variants" {
+    var commands: [32]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+    const badge = Badge{ .label = "Ready" };
+
+    try badge.render(&scene, ui.Rect.init(0, 0, 84, component_render.badge_height), .{ .badge_variant = .destructive });
+    try badge.render(&scene, ui.Rect.init(0, 32, 84, component_render.badge_height), .{ .badge_variant = .outline });
+    try badge.render(&scene, ui.Rect.init(0, 64, 84, component_render.badge_height), .{ .badge_variant = .link });
+
+    try std.testing.expect(component_test.hasRectColor(scene.written(), ui.Color{ .r = 239, .g = 68, .b = 68, .a = 48 }));
+    try std.testing.expect(component_test.hasBorderAt(scene.written(), ui.Rect.init(0, 32, 84, component_render.badge_height)));
+    try std.testing.expect(!component_test.hasRectBounds(scene.written(), ui.Rect.init(0, 64, 84, component_render.badge_height)));
+    try std.testing.expect(component_test.hasTextColor(scene.written(), ui.Color.accent));
+}
+
+test "badge component measurement respects at-most constraints" {
+    const badge = Badge{ .label = "Production Ready" };
+    const measured = badge.measure(.{ .width = .{ .at_most = 64.0 }, .height = .{ .at_most = 18.0 } }, .{});
+
+    try std.testing.expectEqual(@as(f32, 64.0), measured.preferred.w);
+    try std.testing.expectEqual(@as(f32, 18.0), measured.preferred.h);
+}

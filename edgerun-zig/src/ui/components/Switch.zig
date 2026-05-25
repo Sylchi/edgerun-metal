@@ -63,3 +63,14 @@ test "switch component serializes to canonical object and deserializes" {
     try std.testing.expectEqualStrings(switch_control.label, decoded.label);
     try std.testing.expectEqual(switch_control.checked, decoded.checked);
 }
+
+test "switch component uses panel token for knob" {
+    const switch_control = Switch{ .id = 12, .label = "Public", .checked = true };
+    var commands: [16]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+    const panel = ui.Color{ .r = 1, .g = 2, .b = 3 };
+
+    try switch_control.render(&scene, ui.Rect.init(0, 0, 220, 32), .{ .style = .{ .panel = panel } });
+
+    try std.testing.expect(component_test.hasFillColor(scene.written(), panel));
+}

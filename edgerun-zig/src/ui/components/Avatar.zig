@@ -54,3 +54,16 @@ test "avatar component serializes to canonical object and deserializes" {
 
     try std.testing.expectEqualStrings("ER", decoded.label);
 }
+
+test "avatar component centers initials through shared control text" {
+    const avatar = Avatar{ .label = "ER" };
+    var commands: [8]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+
+    try avatar.render(&scene, ui.Rect.init(10, 20, 64, 48), .{});
+
+    const label = component_test.textCommand(scene.written(), "ER").?;
+    try std.testing.expectEqual(ui.TextAlign.center, label.text.alignment);
+    try std.testing.expectEqual(@as(f32, 28.0), label.text.origin.x);
+    try std.testing.expectEqual(@as(f32, 37.0), label.text.origin.y);
+}
