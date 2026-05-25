@@ -8,6 +8,7 @@ const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
 const component_render = @import("Render.zig");
+const icon = @import("../../icon.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
@@ -60,4 +61,15 @@ test "select component serializes to canonical object and deserializes" {
 
     try std.testing.expectEqual(select.id, decoded.id);
     try std.testing.expectEqualStrings(select.label, decoded.label);
+}
+
+test "select component renders chevron through icon primitive" {
+    const select = Select{ .id = 22, .label = "Production" };
+    var commands: [16]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+
+    try select.render(&scene, ui.Rect.init(0, 0, 220, 40), .{});
+
+    try std.testing.expect(component_test.hasIcon(scene.written(), icon.id(.chevron_right)));
+    try std.testing.expect(!component_test.hasText(scene.written(), "v"));
 }

@@ -54,3 +54,17 @@ test "kbd component serializes to canonical object and deserializes" {
 
     try std.testing.expectEqualStrings("Ctrl-K", decoded.label);
 }
+
+test "kbd component centers label through shared control text" {
+    const kbd = Kbd{ .label = "Ctrl" };
+    var commands: [8]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+
+    try kbd.render(&scene, ui.Rect.init(10, 20, 48, 32), .{});
+
+    const label = component_test.textCommand(scene.written(), "Ctrl").?;
+    try std.testing.expectEqual(ui.TextAlign.center, label.text.alignment);
+    try std.testing.expectEqual(@as(f32, 18.0), label.text.origin.x);
+    try std.testing.expectEqual(@as(f32, 32.0), label.text.origin.y);
+    try std.testing.expectEqual(@as(f32, 8.0), label.text.origin.h);
+}

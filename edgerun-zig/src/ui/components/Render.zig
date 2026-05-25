@@ -1,4 +1,5 @@
 const common = @import("../../ui_component_common.zig");
+const icon = @import("../../icon.zig");
 const layout = @import("../../layouts/Types.zig");
 const interaction = @import("../../ui_interaction.zig");
 const layouts = @import("../../layouts.zig");
@@ -11,32 +12,95 @@ const max_children: usize = 64;
 pub fn renderComponent(comptime Component: type, scene: *ui.Scene, bounds: ui.Rect, component: Component, options: RenderOptions) ui.RenderError!void {
     switch (component) {
         .text => |text| try text.render(scene, bounds, options),
+        .accordion => |accordion| try accordion.render(scene, bounds, options),
+        .alert => |alert| try alert.render(scene, bounds, options),
+        .alert_dialog => |dialog| try dialog.render(scene, bounds, options),
+        .aspect_ratio => |aspect_ratio| try aspect_ratio.render(scene, bounds, options),
+        .calendar => |calendar| try calendar.render(scene, bounds, options),
+        .carousel => |carousel| try carousel.render(scene, bounds, options),
+        .chart => |chart| try chart.render(scene, bounds, options),
+        .combobox => |combobox| try combobox.render(scene, bounds, options),
         .card => |card| try card.render(scene, bounds, options),
+        .empty => |empty| try empty.render(scene, bounds, options),
         .badge => |badge| try badge.render(scene, bounds, options),
         .avatar => |avatar| try avatar.render(scene, bounds, options),
         .kbd => |kbd| try kbd.render(scene, bounds, options),
+        .label => |label| try label.render(scene, bounds, options),
         .separator => |separator| try separator.render(scene, bounds, options),
+        .scroll_area => |scroll_area| try scroll_area.render(scene, bounds, options),
+        .skeleton => |skeleton| try skeleton.render(scene, bounds, options),
+        .spinner => |spinner| try spinner.render(scene, bounds, options),
+        .breadcrumb => |breadcrumb| try breadcrumb.render(scene, bounds, options),
+        .menubar => |menubar| try menubar.render(scene, bounds, options),
+        .navigation_menu => |menu| try menu.render(scene, bounds, options),
+        .command => |command| try command.render(scene, bounds, options),
+        .context_menu => |menu| try menu.render(scene, bounds, options),
+        .dialog => |dialog| try dialog.render(scene, bounds, options),
+        .drawer => |drawer| try drawer.render(scene, bounds, options),
+        .dropdown_menu => |menu| try menu.render(scene, bounds, options),
+        .field => |field| try field.render(scene, bounds, options),
+        .input_otp => |otp| try otp.render(scene, bounds, options),
         .button => |button| try button.render(scene, bounds, options),
+        .button_group => |group| try group.render(scene, bounds, options),
+        .toggle_group => |group| try group.render(scene, bounds, options),
+        .toggle => |toggle| try toggle.render(scene, bounds, options),
         .input => |input| try input.render(scene, bounds, options),
+        .input_group => |input_group| try input_group.render(scene, bounds, options),
         .textarea => |textarea| try textarea.render(scene, bounds, options),
         .select => |select| try select.render(scene, bounds, options),
         .checkbox => |checkbox| try checkbox.render(scene, bounds, options),
+        .radio_group => |radio| try radio.render(scene, bounds, options),
         .switch_control => |switch_control| try switch_control.render(scene, bounds, options),
+        .pagination => |pagination| try pagination.render(scene, bounds, options),
+        .popover => |popover| try popover.render(scene, bounds, options),
+        .resizable => |resizable| try resizable.render(scene, bounds, options),
+        .sheet => |sheet| try sheet.render(scene, bounds, options),
         .progress => |progress| try progress.render(scene, bounds, options),
         .slider => |slider| try slider.render(scene, bounds, options),
+        .tabs => |tabs| try tabs.render(scene, bounds, options),
+        .table => |table| try table.render(scene, bounds, options),
+        .tooltip => |tooltip| try tooltip.render(scene, bounds, options),
         .row_item => |row| try row.render(scene, bounds, options),
     }
 }
 
 pub fn collectComponentInteractions(comptime Component: type, collector: *interaction.Collector, bounds: ui.Rect, component: Component) interaction.Error!void {
     switch (component) {
+        .accordion => |accordion| try accordion.collectInteractions(collector, bounds),
+        .alert_dialog => |dialog| try dialog.collectInteractions(collector, bounds),
+        .calendar => |calendar| try calendar.collectInteractions(collector, bounds),
+        .carousel => |carousel| try carousel.collectInteractions(collector, bounds),
+        .chart => |chart| try chart.collectInteractions(collector, bounds),
+        .combobox => |combobox| try combobox.collectInteractions(collector, bounds),
+        .breadcrumb => |breadcrumb| try breadcrumb.collectInteractions(collector, bounds),
+        .menubar => |menubar| try menubar.collectInteractions(collector, bounds),
+        .navigation_menu => |menu| try menu.collectInteractions(collector, bounds),
+        .command => |command| try command.collectInteractions(collector, bounds),
+        .context_menu => |menu| try menu.collectInteractions(collector, bounds),
+        .dialog => |dialog| try dialog.collectInteractions(collector, bounds),
+        .drawer => |drawer| try drawer.collectInteractions(collector, bounds),
+        .dropdown_menu => |menu| try menu.collectInteractions(collector, bounds),
+        .field => |field| try field.collectInteractions(collector, bounds),
+        .input_otp => |otp| try otp.collectInteractions(collector, bounds),
         .button => |button| try button.collectInteractions(collector, bounds),
+        .button_group => |group| try group.collectInteractions(collector, bounds),
+        .toggle_group => |group| try group.collectInteractions(collector, bounds),
         .input => |input| try input.collectInteractions(collector, bounds),
+        .input_group => |input_group| try input_group.collectInteractions(collector, bounds),
         .textarea => |textarea| try textarea.collectInteractions(collector, bounds),
         .select => |select| try select.collectInteractions(collector, bounds),
         .checkbox => |checkbox| try checkbox.collectInteractions(collector, bounds),
+        .radio_group => |radio| try radio.collectInteractions(collector, bounds),
         .switch_control => |switch_control| try switch_control.collectInteractions(collector, bounds),
+        .pagination => |pagination| try pagination.collectInteractions(collector, bounds),
+        .popover => |popover| try popover.collectInteractions(collector, bounds),
+        .resizable => |resizable| try resizable.collectInteractions(collector, bounds),
+        .sheet => |sheet| try sheet.collectInteractions(collector, bounds),
+        .toggle => |toggle| try toggle.collectInteractions(collector, bounds),
         .slider => |slider| try slider.collectInteractions(collector, bounds),
+        .tabs => |tabs| try tabs.collectInteractions(collector, bounds),
+        .table => |table| try table.collectInteractions(collector, bounds),
+        .tooltip => |tooltip| try tooltip.collectInteractions(collector, bounds),
         .row_item => |row| try row.collectInteractions(collector, bounds),
         else => {},
     }
@@ -45,19 +109,54 @@ pub fn collectComponentInteractions(comptime Component: type, collector: *intera
 pub fn measureComponent(comptime Component: type, component: Component, constraints: layouts.types.Constraints, options: RenderOptions) layouts.types.Measurement {
     return switch (component) {
         .text => |text| text.measure(constraints, options),
+        .accordion => |accordion| accordion.measure(constraints, options),
+        .alert => |alert| alert.measure(constraints, options),
+        .alert_dialog => |dialog| dialog.measure(constraints, options),
+        .aspect_ratio => |aspect_ratio| aspect_ratio.measure(constraints, options),
+        .calendar => |calendar| calendar.measure(constraints, options),
+        .carousel => |carousel| carousel.measure(constraints, options),
+        .chart => |chart| chart.measure(constraints, options),
+        .combobox => |combobox| combobox.measure(constraints, options),
         .card => |card| card.measure(constraints, options),
+        .empty => |empty| empty.measure(constraints, options),
         .badge => |badge| badge.measure(constraints, options),
         .avatar => |avatar| avatar.measure(constraints, options),
         .kbd => |kbd| kbd.measure(constraints, options),
+        .label => |label| label.measure(constraints, options),
         .separator => |separator| separator.measure(constraints, options),
+        .scroll_area => |scroll_area| scroll_area.measure(constraints, options),
+        .skeleton => |skeleton| skeleton.measure(constraints, options),
+        .spinner => |spinner| spinner.measure(constraints, options),
+        .breadcrumb => |breadcrumb| breadcrumb.measure(constraints, options),
+        .menubar => |menubar| menubar.measure(constraints, options),
+        .navigation_menu => |menu| menu.measure(constraints, options),
+        .command => |command| command.measure(constraints, options),
+        .context_menu => |menu| menu.measure(constraints, options),
+        .dialog => |dialog| dialog.measure(constraints, options),
+        .drawer => |drawer| drawer.measure(constraints, options),
+        .dropdown_menu => |menu| menu.measure(constraints, options),
+        .field => |field| field.measure(constraints, options),
+        .input_otp => |otp| otp.measure(constraints, options),
         .button => |button| button.measure(constraints, options),
+        .button_group => |group| group.measure(constraints, options),
+        .toggle_group => |group| group.measure(constraints, options),
+        .toggle => |toggle| toggle.measure(constraints, options),
         .input => |input| input.measure(constraints, options),
+        .input_group => |input_group| input_group.measure(constraints, options),
         .textarea => |textarea| textarea.measure(constraints, options),
         .select => |select| select.measure(constraints, options),
         .checkbox => |checkbox| checkbox.measure(constraints, options),
+        .radio_group => |radio| radio.measure(constraints, options),
         .switch_control => |switch_control| switch_control.measure(constraints, options),
+        .pagination => |pagination| pagination.measure(constraints, options),
+        .popover => |popover| popover.measure(constraints, options),
+        .resizable => |resizable| resizable.measure(constraints, options),
+        .sheet => |sheet| sheet.measure(constraints, options),
         .progress => |progress| progress.measure(constraints, options),
         .slider => |slider| slider.measure(constraints, options),
+        .tabs => |tabs| tabs.measure(constraints, options),
+        .table => |table| table.measure(constraints, options),
+        .tooltip => |tooltip| tooltip.measure(constraints, options),
         .row_item => |row| row.measure(constraints, options),
     };
 }
@@ -72,11 +171,9 @@ pub fn renderStack(comptime Component: type, scene: *ui.Scene, bounds: ui.Rect, 
     if (stack.children.len == 0) return;
     if (stack.children.len > max_children) return error.CommandBudgetExceeded;
 
-    const constraints = constraintsFromBounds(bounds);
     var child_measurements: [max_children]layouts.types.Measurement = undefined;
     var child_bounds: [max_children]ui.Rect = undefined;
-    const measured_children = measureChildren(Component, stack.children, stackChildConstraints(stack, constraints), options, &child_measurements);
-    const placed_children = layouts.Flex.place(bounds, measured_children, stackLayoutOptions(stack), &child_bounds);
+    const placed_children = placeStackChildren(Component, bounds, stack, options, &child_measurements, &child_bounds);
     for (stack.children[0..placed_children.len], placed_children) |child, child_rect| {
         if (!child_rect.valid()) return error.InvalidBounds;
         try renderComponent(Component, scene, child_rect, child, options);
@@ -87,15 +184,19 @@ pub fn collectStackInteractions(comptime Component: type, collector: *interactio
     if (stack.children.len == 0) return;
     if (stack.children.len > max_children) return error.InteractionBudgetExceeded;
 
-    const constraints = constraintsFromBounds(bounds);
     var child_measurements: [max_children]layouts.types.Measurement = undefined;
     var child_bounds: [max_children]ui.Rect = undefined;
-    const measured_children = measureChildren(Component, stack.children, stackChildConstraints(stack, constraints), options, &child_measurements);
-    const placed_children = layouts.Flex.place(bounds, measured_children, stackLayoutOptions(stack), &child_bounds);
+    const placed_children = placeStackChildren(Component, bounds, stack, options, &child_measurements, &child_bounds);
     for (stack.children[0..placed_children.len], placed_children) |child, child_rect| {
         if (!child_rect.valid()) return error.InvalidInteractionBounds;
         try collectComponentInteractions(Component, collector, child_rect, child);
     }
+}
+
+fn placeStackChildren(comptime Component: type, bounds: ui.Rect, stack: anytype, options: RenderOptions, measurements: *[max_children]layouts.types.Measurement, out: *[max_children]ui.Rect) []ui.Rect {
+    const constraints = constraintsFromBounds(bounds);
+    const measured_children = measureChildren(Component, stack.children, stackChildConstraints(stack, constraints), options, measurements);
+    return layouts.Flex.place(bounds, measured_children, stackLayoutOptions(stack), out);
 }
 
 fn measureChildren(comptime Component: type, children: []const Component, constraints: layouts.types.Constraints, options: RenderOptions, out: []layouts.types.Measurement) []layouts.types.Measurement {
@@ -107,30 +208,38 @@ fn measureChildren(comptime Component: type, children: []const Component, constr
 }
 
 fn stackChildConstraints(stack: anytype, constraints: layouts.types.Constraints) layouts.types.Constraints {
-    const inner = constraints.inner(layouts.types.Insets.uniform(@floatFromInt(stack.padding)));
-    return switch (stack.axis) {
+    return stackChildConstraintsFor(stack.axis, @floatFromInt(stack.padding), constraints);
+}
+
+fn stackLayoutOptions(stack: anytype) layouts.Flex.Options {
+    return stackLayoutOptionsFor(stack.axis, @floatFromInt(stack.gap), @floatFromInt(stack.padding), .stretch);
+}
+
+pub fn stackChildConstraintsFor(axis: ui.Axis, padding: f32, constraints: layouts.types.Constraints) layouts.types.Constraints {
+    const inner = constraints.inner(layouts.types.Insets.uniform(padding));
+    return switch (axis) {
         .column => .{ .width = inner.width, .height = .unconstrained, .text_wrap = constraints.text_wrap },
         .row => .{ .width = .unconstrained, .height = inner.height, .text_wrap = constraints.text_wrap },
     };
 }
 
-fn stackLayoutOptions(stack: anytype) layouts.Flex.Options {
+pub fn stackLayoutOptionsFor(axis: ui.Axis, gap: f32, padding: f32, cross_align: layouts.Flex.Align) layouts.Flex.Options {
     return .{
-        .axis = layoutAxis(stack.axis),
-        .gap = @floatFromInt(stack.gap),
-        .padding = layouts.types.Insets.uniform(@floatFromInt(stack.padding)),
-        .cross_align = .stretch,
+        .axis = layoutAxis(axis),
+        .gap = gap,
+        .padding = layouts.types.Insets.uniform(padding),
+        .cross_align = cross_align,
     };
 }
 
-fn layoutAxis(axis: ui.Axis) layouts.types.Axis {
+pub fn layoutAxis(axis: ui.Axis) layouts.types.Axis {
     return switch (axis) {
         .row => .horizontal,
         .column => .vertical,
     };
 }
 
-fn constraintsFromBounds(bounds: ui.Rect) layouts.types.Constraints {
+pub fn constraintsFromBounds(bounds: ui.Rect) layouts.types.Constraints {
     return .{
         .width = .{ .exact = bounds.w },
         .height = .{ .exact = bounds.h },
@@ -139,7 +248,180 @@ fn constraintsFromBounds(bounds: ui.Rect) layouts.types.Constraints {
 }
 
 pub fn renderText(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, options: RenderOptions) ui.RenderError!void {
-    try scene.push(.{ .text = .{ .origin = bounds, .value = value, .color = options.style.text } });
+    try scene.pushText(bounds, value, options.style.text);
+}
+
+pub fn renderAccordion(scene: *ui.Scene, bounds: ui.Rect, title: []const u8, detail: []const u8, open: bool, options: RenderOptions) ui.RenderError!void {
+    const trigger = accordionTriggerBounds(bounds);
+    try scene.pushText(ui.Rect.init(trigger.x, trigger.y + accordion_trigger_text_y, @max(min_extent, trigger.w - accordion_icon_space), control_label_height), title, options.style.text);
+    try scene.pushIconQuad(.{ .bounds = ui.Rect.init(trigger.x + trigger.w - accordion_icon_size, trigger.y + accordion_icon_y, accordion_icon_size, accordion_icon_size), .icon_id = icon.id(.chevron_right), .color = options.style.muted });
+    try scene.pushRect(ui.Rect.init(bounds.x, trigger.y + trigger.h, bounds.w, separator_height), options.style.border, .fill, 0.0, 0.0);
+    if (open) {
+        try scene.pushWrappedText(ui.Rect.init(bounds.x, trigger.y + trigger.h + accordion_content_padding_top, bounds.w, @max(min_extent, bounds.h - trigger.h - accordion_content_padding_top)), detail, options.style.muted, .{
+            .line_height = accordion_detail_height,
+            .average_char_width = accordion_detail_average_w,
+            .max_lines = accordion_detail_max_lines,
+        });
+    }
+}
+
+pub fn accordionTriggerBounds(bounds: ui.Rect) ui.Rect {
+    return ui.Rect.init(bounds.x, bounds.y, bounds.w, accordion_trigger_h);
+}
+
+pub fn renderAlert(scene: *ui.Scene, bounds: ui.Rect, title: []const u8, detail: []const u8, destructive: bool, options: RenderOptions) ui.RenderError!void {
+    const content_color = if (destructive) alert_danger else options.style.text;
+    try scene.pushRect(bounds, options.style.panel, .fill, alert_radius, 0.0);
+    try scene.pushRect(bounds, if (destructive) alert_danger else options.style.border, .border, alert_radius, 0.0);
+    try scene.pushIconQuad(.{ .bounds = ui.Rect.init(bounds.x + alert_padding_x, bounds.y + alert_padding_y, alert_icon_size, alert_icon_size), .icon_id = icon.id(if (destructive) .warning else .shield), .color = content_color });
+    try scene.pushText(ui.Rect.init(bounds.x + alert_text_x, bounds.y + alert_padding_y - 1.0, @max(min_extent, bounds.w - alert_text_x - alert_padding_x), alert_title_height), title, content_color);
+    try scene.pushWrappedText(ui.Rect.init(bounds.x + alert_text_x, bounds.y + alert_padding_y + alert_title_height + alert_detail_gap, @max(min_extent, bounds.w - alert_text_x - alert_padding_x), @max(min_extent, bounds.h - alert_padding_y * 2.0 - alert_title_height)), detail, if (destructive) alert_danger else options.style.muted, .{
+        .line_height = alert_detail_height,
+        .average_char_width = alert_detail_average_w,
+        .max_lines = alert_detail_max_lines,
+    });
+}
+
+pub fn renderAspectRatio(scene: *ui.Scene, bounds: ui.Rect, ratio_w: u16, ratio_h: u16, options: RenderOptions) ui.RenderError!void {
+    const frame = aspectRatioFrame(bounds, ratio_w, ratio_h);
+    try scene.pushRect(frame, options.style.row, .fill, control_radius, 0.0);
+    try scene.pushRect(frame, options.style.border, .border, control_radius, 0.0);
+}
+
+pub fn aspectRatioFrame(bounds: ui.Rect, ratio_w: u16, ratio_h: u16) ui.Rect {
+    const safe_w = @max(@as(f32, @floatFromInt(ratio_w)), min_extent);
+    const safe_h = @max(@as(f32, @floatFromInt(ratio_h)), min_extent);
+    const frame_w = @min(bounds.w, bounds.h * safe_w / safe_h);
+    const frame_h = @min(bounds.h, frame_w * safe_h / safe_w);
+    return ui.Rect.init(bounds.x + (bounds.w - frame_w) * 0.5, bounds.y + (bounds.h - frame_h) * 0.5, frame_w, frame_h);
+}
+
+pub fn renderCalendar(scene: *ui.Scene, bounds: ui.Rect, month: []const u8, selected_day: u16, options: RenderOptions) ui.RenderError!void {
+    try scene.pushRect(bounds, options.style.panel, .fill, calendar_radius, 0.0);
+    try scene.pushRect(bounds, options.style.border, .border, calendar_radius, 0.0);
+    try renderCalendarNav(scene, calendarNavBounds(bounds, 0), "<", options);
+    try renderCalendarNav(scene, calendarNavBounds(bounds, 1), ">", options);
+    try scene.pushAlignedText(calendarCaptionBounds(bounds), month, options.style.text, .center);
+
+    for (calendar_weekday_labels, 0..) |label, index| {
+        try scene.pushAlignedText(calendarWeekdayBounds(bounds, index), label, options.style.muted, .center);
+    }
+    for (calendar_day_labels, 0..) |label, index| {
+        const day = @as(u16, @intCast(index + 1));
+        try renderCalendarDay(scene, calendarDayBounds(bounds, index), label, day == selected_day, options);
+    }
+}
+
+pub fn calendarNavBounds(bounds: ui.Rect, index: usize) ui.Rect {
+    const y = bounds.y + calendar_padding;
+    return switch (index) {
+        0 => ui.Rect.init(bounds.x + calendar_padding, y, calendar_nav_size, calendar_nav_size),
+        else => ui.Rect.init(bounds.x + bounds.w - calendar_padding - calendar_nav_size, y, calendar_nav_size, calendar_nav_size),
+    };
+}
+
+pub fn calendarDayBounds(bounds: ui.Rect, index: usize) ui.Rect {
+    const grid = calendarGridBounds(bounds);
+    const col = index % calendar_column_count;
+    const row = index / calendar_column_count;
+    return ui.Rect.init(
+        grid.x + @as(f32, @floatFromInt(col)) * (calendar_cell_size + calendar_cell_gap),
+        grid.y + @as(f32, @floatFromInt(row)) * (calendar_cell_size + calendar_cell_gap),
+        calendar_cell_size,
+        calendar_cell_size,
+    );
+}
+
+fn calendarCaptionBounds(bounds: ui.Rect) ui.Rect {
+    return ui.Rect.init(bounds.x + calendar_nav_size + calendar_padding * 2.0, bounds.y + calendar_padding, @max(min_extent, bounds.w - (calendar_nav_size + calendar_padding * 2.0) * 2.0), calendar_caption_h);
+}
+
+fn calendarWeekdayBounds(bounds: ui.Rect, index: usize) ui.Rect {
+    const grid = calendarGridBounds(bounds);
+    return ui.Rect.init(grid.x + @as(f32, @floatFromInt(index)) * (calendar_cell_size + calendar_cell_gap), bounds.y + calendar_weekday_y, calendar_cell_size, calendar_weekday_h);
+}
+
+fn calendarGridBounds(bounds: ui.Rect) ui.Rect {
+    const grid_w = @as(f32, @floatFromInt(calendar_column_count)) * calendar_cell_size + @as(f32, @floatFromInt(calendar_column_count - 1)) * calendar_cell_gap;
+    return ui.Rect.init(bounds.x + (bounds.w - grid_w) * 0.5, bounds.y + calendar_grid_y, grid_w, @max(min_extent, bounds.h - calendar_grid_y - calendar_padding));
+}
+
+pub fn renderCarousel(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, options: RenderOptions) ui.RenderError!void {
+    try renderCarouselButton(scene, carouselButtonBounds(bounds, 0), "<", options);
+    const content = carouselContentBounds(bounds);
+    try scene.pushRect(content, options.style.row, .fill, carousel_radius, 0.0);
+    try renderControlText(scene, content, carousel_text_padding, control_label_height, label, options.style.muted, .center);
+    try renderCarouselButton(scene, carouselButtonBounds(bounds, 1), ">", options);
+}
+
+pub fn carouselButtonBounds(bounds: ui.Rect, index: usize) ui.Rect {
+    const y = bounds.y + (bounds.h - carousel_button_size) * 0.5;
+    return switch (index) {
+        0 => ui.Rect.init(bounds.x, y, carousel_button_size, carousel_button_size),
+        else => ui.Rect.init(bounds.x + bounds.w - carousel_button_size, y, carousel_button_size, carousel_button_size),
+    };
+}
+
+fn carouselContentBounds(bounds: ui.Rect) ui.Rect {
+    const x = bounds.x + carousel_button_size + carousel_gap;
+    return ui.Rect.init(x, bounds.y, @max(min_extent, bounds.w - carousel_button_size * 2.0 - carousel_gap * 2.0), bounds.h);
+}
+
+pub fn renderChart(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, options: RenderOptions) ui.RenderError!void {
+    const plot = chartPlotBounds(bounds);
+    try scene.pushRect(bounds, options.style.panel, .fill, chart_radius, 0.0);
+    try scene.pushRect(bounds, options.style.border, .border, chart_radius, 0.0);
+    try scene.pushText(ui.Rect.init(bounds.x + chart_padding, bounds.y + chart_padding, @max(min_extent, bounds.w - chart_padding * 2.0), chart_label_h), label, options.style.text);
+    try scene.pushRect(ui.Rect.init(plot.x, plot.y + plot.h - separator_height, plot.w, separator_height), options.style.border, .fill, 0.0, 0.0);
+    for (0..chart_bar_count) |index| {
+        const bar = chartBarBounds(bounds, index);
+        try scene.pushRect(bar, if (index == chart_bar_count - 1) options.style.accent else options.style.row, .fill, chart_bar_radius, 0.0);
+    }
+}
+
+pub fn chartBarBounds(bounds: ui.Rect, index: usize) ui.Rect {
+    const plot = chartPlotBounds(bounds);
+    const gap_total = chart_bar_gap * @as(f32, @floatFromInt(chart_bar_count - 1));
+    const bar_w = @max(min_extent, (plot.w - gap_total) / @as(f32, @floatFromInt(chart_bar_count)));
+    const h = @max(min_extent, plot.h * chart_bar_values[index]);
+    return ui.Rect.init(plot.x + @as(f32, @floatFromInt(index)) * (bar_w + chart_bar_gap), plot.y + plot.h - h, bar_w, h);
+}
+
+fn chartPlotBounds(bounds: ui.Rect) ui.Rect {
+    return ui.Rect.init(bounds.x + chart_padding, bounds.y + chart_padding + chart_label_h + chart_label_gap, @max(min_extent, bounds.w - chart_padding * 2.0), @max(min_extent, bounds.h - chart_padding * 2.0 - chart_label_h - chart_label_gap));
+}
+
+pub fn renderCombobox(scene: *ui.Scene, bounds: ui.Rect, placeholder: []const u8, selected: []const u8, options: RenderOptions) ui.RenderError!void {
+    const input = comboboxInputBounds(bounds);
+    try renderControlFrame(scene, input, options.style.panel, options.style.border, control_radius);
+    if (contentInset(input, control_text_padding)) |input_content| {
+        const text_bounds = ui.Rect.init(input_content.x, input_content.y, @max(min_extent, input_content.w - combobox_icon_space), input_content.h);
+        try pushControlText(scene, text_bounds, control_label_height, placeholder, options.style.muted, .start);
+        try scene.pushIconQuad(.{
+            .bounds = ui.Rect.init(input_content.x + input_content.w - combobox_icon_size, input_content.y + (input_content.h - combobox_icon_size) * 0.5, combobox_icon_size, combobox_icon_size),
+            .icon_id = icon.id(.chevron_right),
+            .color = options.style.muted,
+        });
+    }
+
+    const popup = comboboxPopupBounds(bounds);
+    try scene.pushRect(popup, options.style.panel, .fill, combobox_popup_radius, 0.0);
+    try scene.pushRect(popup, options.style.border, .border, combobox_popup_radius, 0.0);
+    try renderComboboxOption(scene, comboboxOptionBounds(bounds), selected, true, options);
+}
+
+pub fn comboboxInputBounds(bounds: ui.Rect) ui.Rect {
+    return ui.Rect.init(bounds.x, bounds.y, bounds.w, @min(combobox_input_h, bounds.h));
+}
+
+pub fn comboboxOptionBounds(bounds: ui.Rect) ui.Rect {
+    const popup = comboboxPopupBounds(bounds);
+    return ui.Rect.init(popup.x + combobox_popup_padding, popup.y + combobox_popup_padding, @max(min_extent, popup.w - combobox_popup_padding * 2.0), @max(min_extent, popup.h - combobox_popup_padding * 2.0));
+}
+
+fn comboboxPopupBounds(bounds: ui.Rect) ui.Rect {
+    const y = bounds.y + combobox_input_h + combobox_popup_gap;
+    return ui.Rect.init(bounds.x, y, bounds.w, @max(min_extent, bounds.y + bounds.h - y));
 }
 
 pub fn renderBadge(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, options: RenderOptions) ui.RenderError!void {
@@ -155,19 +437,37 @@ pub fn renderSurface(scene: *ui.Scene, bounds: ui.Rect, title: []const u8, detai
     try renderSurfaceFrame(scene, bounds, options);
     if (title.len == 0 and detail.len == 0) return;
 
-    const title_bounds = ui.Rect.init(bounds.x + surface_padding, bounds.y + surface_padding, @max(min_extent, bounds.w - surface_padding * 2.0), surface_title_height);
+    const content_x = bounds.x + surface_padding;
+    const content_w = @max(min_extent, bounds.w - surface_padding * 2.0);
+    var cursor_y = bounds.y + surface_padding;
     if (title.len != 0) {
+        const title_bounds = ui.Rect.init(content_x, cursor_y, content_w, surface_title_height);
         try scene.pushAlignedText(title_bounds, title, options.style.text, .start);
+        cursor_y += surface_title_height;
     }
     if (detail.len != 0) {
-        const detail_y = title_bounds.y + title_bounds.h + surface_detail_gap;
-        const detail_bounds = ui.Rect.init(title_bounds.x, detail_y, title_bounds.w, @max(min_extent, bounds.y + bounds.h - detail_y - surface_padding));
+        if (title.len != 0) cursor_y += surface_detail_gap;
+        const detail_bounds = ui.Rect.init(content_x, cursor_y, content_w, @max(min_extent, bounds.y + bounds.h - cursor_y - surface_padding));
         try scene.pushWrappedText(detail_bounds, detail, options.style.muted, .{
             .line_height = surface_detail_height,
             .average_char_width = surface_detail_average_w,
             .max_lines = surface_detail_max_lines,
         });
     }
+}
+
+pub fn renderEmpty(scene: *ui.Scene, bounds: ui.Rect, title: []const u8, detail: []const u8, options: RenderOptions) ui.RenderError!void {
+    try scene.pushRect(bounds, ui.Color.clear, .fill, empty_radius, 0.0);
+    try scene.pushRect(bounds, options.style.border, .border, empty_radius, 0.0);
+    const media = ui.Rect.init(bounds.x + (bounds.w - empty_media_size) * 0.5, bounds.y + empty_padding, empty_media_size, empty_media_size);
+    try scene.pushRect(media, options.style.row, .fill, control_radius, 0.0);
+    try scene.pushIconQuad(.{ .bounds = media.insetUniform(empty_media_icon_inset), .icon_id = icon.id(.sparkles), .color = options.style.text });
+    try scene.pushAlignedText(ui.Rect.init(bounds.x + empty_padding, media.y + media.h + empty_gap, @max(min_extent, bounds.w - empty_padding * 2.0), empty_title_height), title, options.style.text, .center);
+    try scene.pushWrappedText(ui.Rect.init(bounds.x + empty_padding, media.y + media.h + empty_gap + empty_title_height + empty_detail_gap, @max(min_extent, bounds.w - empty_padding * 2.0), empty_detail_height * empty_detail_max_lines), detail, options.style.muted, .{
+        .line_height = empty_detail_height,
+        .average_char_width = empty_detail_average_w,
+        .max_lines = empty_detail_max_lines,
+    });
 }
 
 pub fn renderSurfaceFrame(scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
@@ -181,15 +481,21 @@ pub fn renderSurfaceFrame(scene: *ui.Scene, bounds: ui.Rect, options: RenderOpti
 
 pub fn renderInput(scene: *ui.Scene, bounds: ui.Rect, placeholder: []const u8, options: RenderOptions) ui.RenderError!void {
     try renderControlFrame(scene, bounds, options.style.panel, options.style.border, control_radius);
-    if (contentInset(bounds, input_text_padding)) |placeholder_bounds| {
-        try scene.push(.{ .text = .{ .origin = placeholder_bounds, .value = placeholder, .color = options.style.muted } });
-    }
+    try renderControlText(scene, bounds, control_text_padding, control_label_height, placeholder, options.style.muted, .start);
+}
+
+pub fn renderInputGroup(scene: *ui.Scene, bounds: ui.Rect, addon: []const u8, placeholder: []const u8, options: RenderOptions) ui.RenderError!void {
+    try renderControlFrame(scene, bounds, options.style.panel, options.style.border, control_radius);
+    const addon_w = @min(input_group_addon_max_w, @max(input_group_addon_min_w, @as(f32, @floatFromInt(addon.len)) * control_average_char_width + input_group_addon_padding * 2.0));
+    const addon_bounds = ui.Rect.init(bounds.x, bounds.y, addon_w, bounds.h);
+    try renderControlText(scene, addon_bounds, input_group_addon_padding, control_label_height, addon, options.style.muted, .center);
+    try scene.pushRect(ui.Rect.init(addon_bounds.x + addon_bounds.w, bounds.y + input_group_separator_inset, separator_height, @max(min_extent, bounds.h - input_group_separator_inset * 2.0)), options.style.border, .fill, 0.0, 0.0);
+    try renderControlText(scene, ui.Rect.init(addon_bounds.x + addon_bounds.w + input_group_control_gap, bounds.y, @max(min_extent, bounds.w - addon_w - input_group_control_gap), bounds.h), control_text_padding, control_label_height, placeholder, options.style.muted, .start);
 }
 
 pub fn renderTextarea(scene: *ui.Scene, bounds: ui.Rect, placeholder: []const u8, options: RenderOptions) ui.RenderError!void {
     try renderControlFrame(scene, bounds, options.style.panel, options.style.border, control_radius);
-    const text_bounds = bounds.insetUniform(textarea_padding);
-    if (text_bounds.valid()) {
+    if (contentInset(bounds, textarea_padding)) |text_bounds| {
         try scene.pushWrappedText(text_bounds, placeholder, options.style.muted, .{
             .line_height = control_label_height,
             .average_char_width = control_average_char_width,
@@ -200,11 +506,11 @@ pub fn renderTextarea(scene: *ui.Scene, bounds: ui.Rect, placeholder: []const u8
 
 pub fn renderSelect(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, options: RenderOptions) ui.RenderError!void {
     try renderControlFrame(scene, bounds, options.style.panel, options.style.border, control_radius);
-    if (contentInset(bounds, input_text_padding)) |label_bounds| {
+    if (contentInset(bounds, control_text_padding)) |label_bounds| {
         const text_bounds = ui.Rect.init(label_bounds.x, label_bounds.y, @max(min_extent, label_bounds.w - select_arrow_w), label_bounds.h);
-        try scene.push(.{ .text = .{ .origin = text_bounds, .value = label, .color = options.style.text } });
-        const arrow_bounds = ui.Rect.init(label_bounds.x + label_bounds.w - select_arrow_w, label_bounds.y, select_arrow_w, label_bounds.h);
-        try scene.push(.{ .text = .{ .origin = arrow_bounds, .value = "v", .color = options.style.muted, .alignment = .center } });
+        try pushControlText(scene, text_bounds, control_label_height, label, options.style.text, .start);
+        const arrow_bounds = ui.Rect.init(label_bounds.x + label_bounds.w - select_icon_size, label_bounds.y + (label_bounds.h - select_icon_size) * 0.5, select_icon_size, select_icon_size);
+        try scene.pushIconQuad(.{ .bounds = arrow_bounds, .icon_id = icon.id(.chevron_right), .color = options.style.muted });
     }
 }
 
@@ -213,11 +519,20 @@ pub fn renderCheckbox(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, chec
     try scene.pushRect(box, if (checked) options.style.accent else options.style.panel, .fill, control_radius, 0.0);
     try scene.pushRect(box, if (checked) options.style.accent else options.style.border, .border, control_radius, 0.0);
     if (checked) {
-        try scene.pushRect(box.insetUniform(checkbox_mark_inset), options.style.bg, .fill, checkbox_mark_radius, 0.0);
+        try scene.pushIconQuad(.{ .bounds = box.insetUniform(checkbox_icon_inset), .icon_id = icon.id(.check), .color = options.style.bg });
     }
     const label_x = box.x + box.w + checkbox_text_gap;
-    const label_bounds = ui.Rect.init(label_x, bounds.y + (bounds.h - control_label_height) * 0.5, @max(min_extent, bounds.x + bounds.w - label_x), control_label_height);
-    try scene.push(.{ .text = .{ .origin = label_bounds, .value = label, .color = options.style.text } });
+    try renderInlineLabel(scene, ui.Rect.init(label_x, bounds.y, @max(min_extent, bounds.x + bounds.w - label_x), bounds.h), label, options.style.text);
+}
+
+pub fn renderRadioGroup(scene: *ui.Scene, bounds: ui.Rect, first: []const u8, second: []const u8, selected: u16, options: RenderOptions) ui.RenderError!void {
+    try renderRadioOption(scene, radioOptionBounds(bounds, 0), first, selected == 0, options);
+    try renderRadioOption(scene, radioOptionBounds(bounds, 1), second, selected == 1, options);
+}
+
+pub fn radioOptionBounds(bounds: ui.Rect, index: usize) ui.Rect {
+    const y = bounds.y + @as(f32, @floatFromInt(index)) * radio_option_pitch;
+    return ui.Rect.init(bounds.x, y, bounds.w, radio_option_h);
 }
 
 pub fn renderSwitch(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, checked: bool, options: RenderOptions) ui.RenderError!void {
@@ -226,9 +541,175 @@ pub fn renderSwitch(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, checke
     try scene.pushRect(pill, options.style.border, .border, switch_height * 0.5, 0.0);
     const knob_x = if (checked) pill.x + pill.w - switch_knob_size - switch_knob_inset else pill.x + switch_knob_inset;
     const knob = ui.Rect.init(knob_x, pill.y + switch_knob_inset, switch_knob_size, switch_knob_size);
-    try scene.pushRect(knob, options.style.text, .fill, switch_knob_size * 0.5, 0.0);
-    const label_bounds = ui.Rect.init(bounds.x, bounds.y + (bounds.h - control_label_height) * 0.5, @max(min_extent, pill.x - bounds.x - checkbox_text_gap), control_label_height);
-    try scene.push(.{ .text = .{ .origin = label_bounds, .value = label, .color = options.style.text } });
+    try scene.pushRect(knob, options.style.panel, .fill, switch_knob_size * 0.5, 0.0);
+    try renderInlineLabel(scene, ui.Rect.init(bounds.x, bounds.y, @max(min_extent, pill.x - bounds.x - checkbox_text_gap), bounds.h), label, options.style.text);
+}
+
+pub fn renderPagination(scene: *ui.Scene, bounds: ui.Rect, page: u16, options: RenderOptions) ui.RenderError!void {
+    for (0..pagination_item_count) |index| {
+        const item = paginationItemBounds(bounds, index);
+        const active = index == page + 1;
+        const label = paginationLabel(index);
+        try scene.pushRect(item, if (active) options.style.panel else ui.Color.clear, .fill, control_radius, 0.0);
+        try scene.pushRect(item, if (active) options.style.border else ui.Color.clear, .border, control_radius, 0.0);
+        try renderControlText(scene, item, pagination_text_padding, control_label_height, label, if (active) options.style.text else options.style.muted, .center);
+    }
+}
+
+pub fn paginationItemBounds(bounds: ui.Rect, index: usize) ui.Rect {
+    return ui.Rect.init(bounds.x + @as(f32, @floatFromInt(index)) * (pagination_item_w + pagination_gap), bounds.y, pagination_item_w, @min(bounds.h, pagination_item_h));
+}
+
+fn paginationLabel(index: usize) []const u8 {
+    return switch (index) {
+        0 => "<",
+        1 => "1",
+        2 => "2",
+        3 => "3",
+        4 => ">",
+        else => "",
+    };
+}
+
+pub fn renderPopover(scene: *ui.Scene, bounds: ui.Rect, trigger: []const u8, content: []const u8, options: RenderOptions) ui.RenderError!void {
+    try renderControlFrame(scene, popoverTriggerBounds(bounds), options.style.accent, options.style.border, control_radius);
+    try renderControlText(scene, popoverTriggerBounds(bounds), control_text_padding, control_label_height, trigger, options.style.bg, .center);
+    const content_bounds = popoverContentBounds(bounds);
+    try scene.pushRect(content_bounds, options.style.panel, .fill, popover_radius, 0.0);
+    try scene.pushRect(content_bounds, options.style.border, .border, popover_radius, 0.0);
+    try renderControlText(scene, content_bounds, popover_padding, control_label_height, content, options.style.text, .start);
+}
+
+pub fn renderDialog(scene: *ui.Scene, bounds: ui.Rect, title: []const u8, detail: []const u8, destructive: bool, options: RenderOptions) ui.RenderError!void {
+    const trigger = dialogTriggerBounds(bounds);
+    try renderControlFrame(scene, trigger, if (destructive) alert_danger else options.style.accent, options.style.border, control_radius);
+    try renderControlText(scene, trigger, dialog_trigger_padding, control_label_height, if (destructive) dialog_delete_label else dialog_open_label, options.style.bg, .center);
+
+    const content = dialogContentBounds(bounds);
+    try scene.pushRect(content, options.style.panel, .fill, dialog_radius, 0.0);
+    try scene.pushRect(content, if (destructive) alert_danger else options.style.border, .border, dialog_radius, 0.0);
+    try scene.pushText(ui.Rect.init(content.x + dialog_padding, content.y + dialog_title_y, @max(min_extent, content.w - dialog_padding * 2.0), dialog_title_h), title, if (destructive) alert_danger else options.style.text);
+    try scene.pushText(ui.Rect.init(content.x + dialog_padding, content.y + dialog_detail_y, @max(min_extent, content.w - dialog_padding * 2.0), dialog_detail_h), detail, options.style.muted);
+}
+
+pub fn renderDrawer(scene: *ui.Scene, bounds: ui.Rect, title: []const u8, detail: []const u8, options: RenderOptions) ui.RenderError!void {
+    const trigger = drawerTriggerBounds(bounds);
+    try renderControlFrame(scene, trigger, options.style.accent, options.style.border, control_radius);
+    try renderControlText(scene, trigger, drawer_trigger_padding, control_label_height, overlay_open_label, options.style.bg, .center);
+
+    const content = drawerContentBounds(bounds);
+    try scene.pushRect(content, options.style.panel, .fill, drawer_radius, 0.0);
+    try scene.pushRect(content, options.style.border, .border, drawer_radius, 0.0);
+    try scene.pushRect(drawerHandleBounds(content), options.style.muted, .fill, drawer_handle_radius, 0.0);
+    try scene.pushText(ui.Rect.init(content.x + drawer_padding, content.y + drawer_title_y, @max(min_extent, content.w - drawer_padding * 2.0), overlay_title_h), title, options.style.text);
+    try scene.pushText(ui.Rect.init(content.x + drawer_padding, content.y + drawer_detail_y, @max(min_extent, content.w - drawer_padding * 2.0), overlay_detail_h), detail, options.style.muted);
+}
+
+pub fn renderSheet(scene: *ui.Scene, bounds: ui.Rect, title: []const u8, detail: []const u8, options: RenderOptions) ui.RenderError!void {
+    const trigger = sheetTriggerBounds(bounds);
+    try renderControlFrame(scene, trigger, options.style.accent, options.style.border, control_radius);
+    try renderControlText(scene, trigger, sheet_trigger_padding, control_label_height, overlay_open_label, options.style.bg, .center);
+
+    const content = sheetContentBounds(bounds);
+    try scene.pushRect(content, options.style.panel, .fill, sheet_radius, 0.0);
+    try scene.pushRect(content, options.style.border, .border, sheet_radius, 0.0);
+    try scene.pushText(ui.Rect.init(content.x + sheet_padding, content.y + sheet_title_y, @max(min_extent, content.w - sheet_padding * 2.0 - sheet_close_space), overlay_title_h), title, options.style.text);
+    try scene.pushText(ui.Rect.init(content.x + sheet_padding, content.y + sheet_detail_y, @max(min_extent, content.w - sheet_padding * 2.0), overlay_detail_h), detail, options.style.muted);
+    try scene.pushIconQuad(.{ .bounds = sheetCloseBounds(bounds), .icon_id = icon.id(.x), .color = options.style.muted });
+}
+
+pub fn renderMenu(scene: *ui.Scene, bounds: ui.Rect, trigger: []const u8, first: []const u8, second: []const u8, options: RenderOptions) ui.RenderError!void {
+    const trigger_bounds = menuTriggerBounds(bounds);
+    try renderControlFrame(scene, trigger_bounds, options.style.accent, options.style.border, control_radius);
+    try renderControlText(scene, trigger_bounds, menu_trigger_padding, control_label_height, trigger, options.style.bg, .center);
+
+    const content = menuContentBounds(bounds);
+    try scene.pushRect(content, options.style.panel, .fill, menu_radius, 0.0);
+    try scene.pushRect(content, options.style.border, .border, menu_radius, 0.0);
+    try renderMenuItem(scene, menuItemBounds(content, 0), first, options);
+    try renderMenuItem(scene, menuItemBounds(content, 1), second, options);
+}
+
+pub fn collectMenuInteractions(collector: *interaction.Collector, bounds: ui.Rect, id: u32) interaction.Error!void {
+    try collector.addHit(menuTriggerBounds(bounds), .button, id);
+    const content = menuContentBounds(bounds);
+    try collector.addHit(menuItemBounds(content, 0), .row_item, id + 1);
+    try collector.addHit(menuItemBounds(content, 1), .row_item, id + 2);
+}
+
+pub fn menuTriggerBounds(bounds: ui.Rect) ui.Rect {
+    return ui.Rect.init(bounds.x, bounds.y + menu_trigger_y, menu_trigger_w, menu_trigger_h);
+}
+
+fn menuContentBounds(bounds: ui.Rect) ui.Rect {
+    const x = bounds.x + menu_trigger_w + menu_gap;
+    return ui.Rect.init(x, bounds.y, @max(min_extent, bounds.x + bounds.w - x), bounds.h);
+}
+
+fn menuItemBounds(content: ui.Rect, index: usize) ui.Rect {
+    return ui.Rect.init(content.x + menu_padding, content.y + menu_padding + @as(f32, @floatFromInt(index)) * menu_item_pitch, @max(min_extent, content.w - menu_padding * 2.0), menu_item_h);
+}
+
+pub fn dialogTriggerBounds(bounds: ui.Rect) ui.Rect {
+    return ui.Rect.init(bounds.x, bounds.y + dialog_trigger_y, dialog_trigger_w, dialog_trigger_h);
+}
+
+pub fn dialogContentBounds(bounds: ui.Rect) ui.Rect {
+    const x = bounds.x + dialog_trigger_w + dialog_gap;
+    return ui.Rect.init(x, bounds.y, @max(min_extent, bounds.x + bounds.w - x), bounds.h);
+}
+
+pub fn drawerTriggerBounds(bounds: ui.Rect) ui.Rect {
+    return ui.Rect.init(bounds.x, bounds.y + drawer_trigger_y, drawer_trigger_w, drawer_trigger_h);
+}
+
+pub fn drawerContentBounds(bounds: ui.Rect) ui.Rect {
+    const y = bounds.y + drawer_content_y;
+    return ui.Rect.init(bounds.x + drawer_content_inset_x, y, @max(min_extent, bounds.w - drawer_content_inset_x * 2.0), @max(min_extent, bounds.y + bounds.h - y));
+}
+
+fn drawerHandleBounds(content: ui.Rect) ui.Rect {
+    return ui.Rect.init(content.x + (content.w - drawer_handle_w) * 0.5, content.y + drawer_handle_y, drawer_handle_w, drawer_handle_h);
+}
+
+pub fn sheetTriggerBounds(bounds: ui.Rect) ui.Rect {
+    return ui.Rect.init(bounds.x, bounds.y + sheet_trigger_y, sheet_trigger_w, sheet_trigger_h);
+}
+
+pub fn sheetContentBounds(bounds: ui.Rect) ui.Rect {
+    const x = bounds.x + bounds.w - @min(sheet_content_w, @max(min_extent, bounds.w - sheet_content_min_left));
+    return ui.Rect.init(x, bounds.y, @max(min_extent, bounds.x + bounds.w - x), bounds.h);
+}
+
+pub fn sheetCloseBounds(bounds: ui.Rect) ui.Rect {
+    const content = sheetContentBounds(bounds);
+    return ui.Rect.init(content.x + content.w - sheet_close_inset - sheet_close_size, content.y + sheet_close_inset, sheet_close_size, sheet_close_size);
+}
+
+pub fn popoverTriggerBounds(bounds: ui.Rect) ui.Rect {
+    return ui.Rect.init(bounds.x, bounds.y + popover_trigger_y, popover_trigger_w, popover_trigger_h);
+}
+
+pub fn popoverContentBounds(bounds: ui.Rect) ui.Rect {
+    const x = bounds.x + popover_trigger_w + popover_gap;
+    return ui.Rect.init(x, bounds.y, @max(min_extent, bounds.x + bounds.w - x), bounds.h);
+}
+
+pub fn renderTooltip(scene: *ui.Scene, bounds: ui.Rect, trigger: []const u8, content: []const u8, options: RenderOptions) ui.RenderError!void {
+    try renderControlFrame(scene, tooltipTriggerBounds(bounds), options.style.panel, options.style.border, control_radius);
+    try renderControlText(scene, tooltipTriggerBounds(bounds), control_text_padding, control_label_height, trigger, options.style.text, .center);
+    const tip = tooltipContentBounds(bounds);
+    try scene.pushRect(tip, options.style.text, .fill, tooltip_radius, 0.0);
+    try renderControlText(scene, tip, tooltip_padding, tooltip_text_h, content, options.style.bg, .center);
+}
+
+pub fn tooltipTriggerBounds(bounds: ui.Rect) ui.Rect {
+    return ui.Rect.init(bounds.x, bounds.y + tooltip_trigger_y, tooltip_trigger_w, tooltip_trigger_h);
+}
+
+fn tooltipContentBounds(bounds: ui.Rect) ui.Rect {
+    const x = bounds.x + tooltip_trigger_w + tooltip_gap;
+    return ui.Rect.init(x, bounds.y + tooltip_content_y, @max(min_extent, bounds.x + bounds.w - x), tooltip_content_h);
 }
 
 pub fn renderProgress(scene: *ui.Scene, bounds: ui.Rect, value: f32, options: RenderOptions) ui.RenderError!void {
@@ -238,14 +719,81 @@ pub fn renderProgress(scene: *ui.Scene, bounds: ui.Rect, value: f32, options: Re
 
 pub fn renderSlider(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, value: f32, options: RenderOptions) ui.RenderError!void {
     const clamped = ui.clampUnit(value);
-    try scene.push(.{ .text = .{ .origin = ui.Rect.init(bounds.x, bounds.y, bounds.w, slider_label_height), .value = label, .color = options.style.text } });
+    try scene.pushText(ui.Rect.init(bounds.x, bounds.y, bounds.w, slider_label_height), label, options.style.text);
     const track_y = bounds.y + @min(slider_track_top, @max(0.0, bounds.h - slider_track_height));
     const track = ui.Rect.init(bounds.x, track_y, bounds.w, slider_track_height);
-    try scene.pushRect(track, options.style.row, .fill, slider_track_height * 0.5, 0.0);
-    try scene.pushRect(ui.Rect.init(track.x, track.y, track.w * clamped, track.h), options.style.accent, .fill, slider_track_height * 0.5, 0.0);
+    try renderProgressTrack(scene, track, clamped, options, slider_track_height * 0.5, 0.0, true);
     const thumb_center = track.x + track.w * clamped;
     const thumb = ui.Rect.init(thumb_center - slider_thumb_size * 0.5, track.y + (track.h - slider_thumb_size) * 0.5, slider_thumb_size, slider_thumb_size);
     try scene.pushRect(thumb, options.style.text, .fill, slider_thumb_size * 0.5, 0.0);
+}
+
+pub fn renderTabs(scene: *ui.Scene, bounds: ui.Rect, first: []const u8, second: []const u8, active: u16, options: RenderOptions) ui.RenderError!void {
+    const list = tabsListBounds(bounds);
+    try scene.pushRect(list, options.style.row, .fill, tabs_list_radius, 0.0);
+    try renderTabsTrigger(scene, tabsTriggerBounds(list, 0), first, active == 0, options);
+    try renderTabsTrigger(scene, tabsTriggerBounds(list, 1), second, active == 1, options);
+    const panel = ui.Rect.init(bounds.x, bounds.y + tabs_list_h + tabs_gap, bounds.w, @max(min_extent, bounds.h - tabs_list_h - tabs_gap));
+    try scene.pushRect(panel, options.style.panel, .fill, control_radius, 0.0);
+    try scene.pushRect(panel, options.style.border, .border, control_radius, 0.0);
+    try scene.pushText(ui.Rect.init(panel.x + tabs_panel_padding, panel.y + tabs_panel_padding, @max(min_extent, panel.w - tabs_panel_padding * 2.0), control_label_height), if (active == 1) second else first, options.style.muted);
+}
+
+pub fn tabsListBounds(bounds: ui.Rect) ui.Rect {
+    return ui.Rect.init(bounds.x, bounds.y, @min(bounds.w, tabs_list_w), tabs_list_h);
+}
+
+pub fn tabsTriggerBounds(list: ui.Rect, index: usize) ui.Rect {
+    const trigger_w = @max(min_extent, (list.w - tabs_list_padding * 2.0) / 2.0);
+    return ui.Rect.init(list.x + tabs_list_padding + @as(f32, @floatFromInt(index)) * trigger_w, list.y + tabs_list_padding, trigger_w, @max(min_extent, list.h - tabs_list_padding * 2.0));
+}
+
+pub fn renderTable(scene: *ui.Scene, bounds: ui.Rect, name: []const u8, role: []const u8, options: RenderOptions) ui.RenderError!void {
+    try scene.pushRect(bounds, options.style.panel, .fill, table_radius, 0.0);
+    try scene.pushRect(bounds, options.style.border, .border, table_radius, 0.0);
+    try scene.pushText(tableHeaderCellBounds(bounds, 0), table_header_name, options.style.muted);
+    try scene.pushAlignedText(tableHeaderCellBounds(bounds, 1), table_header_role, options.style.muted, .end);
+    try scene.pushRect(ui.Rect.init(bounds.x, bounds.y + table_header_h, bounds.w, separator_height), options.style.border, .fill, 0.0, 0.0);
+    const row = tableRowBounds(bounds);
+    try scene.pushRect(row.insetUniform(table_row_inset), options.style.row, .fill, table_row_radius, 0.0);
+    try scene.pushText(tableBodyCellBounds(bounds, 0), name, options.style.text);
+    try scene.pushAlignedText(tableBodyCellBounds(bounds, 1), role, options.style.muted, .end);
+}
+
+fn tableHeaderCellBounds(bounds: ui.Rect, column: usize) ui.Rect {
+    return tableCellBounds(bounds, column, table_header_y, table_header_text_h);
+}
+
+fn tableBodyCellBounds(bounds: ui.Rect, column: usize) ui.Rect {
+    return tableCellBounds(bounds, column, table_body_y, table_body_text_h);
+}
+
+fn tableCellBounds(bounds: ui.Rect, column: usize, y_offset: f32, height: f32) ui.Rect {
+    const left_w = bounds.w * table_name_column_ratio;
+    return switch (column) {
+        0 => ui.Rect.init(bounds.x + table_padding_x, bounds.y + y_offset, @max(min_extent, left_w - table_padding_x), height),
+        else => ui.Rect.init(bounds.x + left_w, bounds.y + y_offset, @max(min_extent, bounds.w - left_w - table_padding_x), height),
+    };
+}
+
+pub fn tableRowBounds(bounds: ui.Rect) ui.Rect {
+    return ui.Rect.init(bounds.x, bounds.y + table_header_h + separator_height, bounds.w, @max(min_extent, bounds.h - table_header_h - separator_height));
+}
+
+pub fn renderResizable(scene: *ui.Scene, bounds: ui.Rect, ratio: f32, options: RenderOptions) ui.RenderError!void {
+    const handle = resizableHandleBounds(bounds, ratio);
+    const left = ui.Rect.init(bounds.x, bounds.y, @max(min_extent, handle.x - bounds.x), bounds.h);
+    const right_x = handle.x + handle.w;
+    const right = ui.Rect.init(right_x, bounds.y, @max(min_extent, bounds.x + bounds.w - right_x), bounds.h);
+    try scene.pushRect(left, options.style.panel, .fill, control_radius, 0.0);
+    try scene.pushRect(right, options.style.row, .fill, control_radius, 0.0);
+    try scene.pushRect(handle, options.style.border, .fill, resizable_handle_radius, 0.0);
+}
+
+pub fn resizableHandleBounds(bounds: ui.Rect, ratio: f32) ui.Rect {
+    const clamped_ratio = @min(@max(ratio, 0.0), 1.0);
+    const center_x = bounds.x + bounds.w * clamped_ratio;
+    return ui.Rect.init(center_x - resizable_handle_w * 0.5, bounds.y, resizable_handle_w, bounds.h);
 }
 
 pub fn renderAvatar(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, options: RenderOptions) ui.RenderError!void {
@@ -253,17 +801,18 @@ pub fn renderAvatar(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, option
     const avatar_bounds = ui.Rect.init(bounds.x + (bounds.w - size) * 0.5, bounds.y + (bounds.h - size) * 0.5, size, size);
     try scene.pushRect(avatar_bounds, options.style.row, .fill, size * 0.5, 0.0);
     try scene.pushRect(avatar_bounds, options.style.border, .border, size * 0.5, 0.0);
-    const label_bounds = avatar_bounds.insetUniform(avatar_label_inset).withHeightCentered(avatar_text_height);
-    try scene.push(.{ .text = .{ .origin = label_bounds, .value = label, .color = options.style.text, .alignment = .center } });
+    try renderControlText(scene, avatar_bounds, avatar_label_inset, avatar_text_height, label, options.style.text, .center);
 }
 
 pub fn renderKbd(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, options: RenderOptions) ui.RenderError!void {
     const height = @min(kbd_height, @max(min_extent, bounds.h));
     const kbd_bounds = ui.Rect.init(bounds.x, bounds.y + (bounds.h - height) * 0.5, bounds.w, height);
     try renderControlFrame(scene, kbd_bounds, options.style.row, options.style.border, control_radius);
-    if (contentInset(kbd_bounds, kbd_label_padding)) |label_bounds| {
-        try scene.push(.{ .text = .{ .origin = label_bounds.withHeightCentered(kbd_text_height), .value = label, .color = options.style.text, .alignment = .center } });
-    }
+    try renderControlText(scene, kbd_bounds, kbd_label_padding, kbd_text_height, label, options.style.text, .center);
+}
+
+pub fn renderLabel(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, options: RenderOptions) ui.RenderError!void {
+    try scene.pushText(bounds.withHeightCentered(label_height), value, options.style.text);
 }
 
 pub fn renderSeparator(scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
@@ -271,14 +820,173 @@ pub fn renderSeparator(scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions
     try scene.pushRect(line, options.style.border, .fill, 0.0, 0.0);
 }
 
+pub fn renderScrollArea(scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
+    try scene.pushRect(bounds, options.style.panel, .fill, scroll_area_radius, 0.0);
+    try scene.pushRect(bounds, options.style.border, .border, scroll_area_radius, 0.0);
+    const content = ui.Rect.init(bounds.x + scroll_area_padding, bounds.y + scroll_area_content_y, @max(min_extent, bounds.w - scroll_area_scrollbar_w - scroll_area_padding * 2.0), scroll_area_text_h);
+    try scene.pushText(content, scroll_area_label, options.style.text);
+    const track = ui.Rect.init(bounds.x + bounds.w - scroll_area_track_inset_x, bounds.y + scroll_area_track_inset_y, scroll_area_track_w, @max(min_extent, bounds.h - scroll_area_track_inset_y * 2.0));
+    try scene.pushRect(track, options.style.row, .fill, scroll_area_track_radius, 0.0);
+    try scene.pushRect(ui.Rect.init(track.x, track.y, track.w, @max(scroll_area_thumb_min_h, track.h * scroll_area_thumb_ratio)), options.style.border, .fill, scroll_area_track_radius, 0.0);
+}
+
+pub fn renderSkeleton(scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
+    var fill = options.style.accent;
+    fill.a = skeleton_alpha;
+    try scene.pushRect(bounds, fill, .fill, skeleton_radius, 0.0);
+}
+
+pub fn renderSpinner(scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
+    const size = @min(spinner_size, @max(min_extent, @min(bounds.w, bounds.h)));
+    const spinner = ui.Rect.init(bounds.x + (bounds.w - size) * 0.5, bounds.y + (bounds.h - size) * 0.5, size, size);
+    try scene.pushRect(spinner, options.style.border, .border, size * 0.5, 0.0);
+    try scene.pushPieSlice(spinner.insetUniform(spinner_slice_inset), options.style.accent, spinner_start_turn, spinner_end_turn);
+}
+
+pub fn renderBreadcrumb(scene: *ui.Scene, bounds: ui.Rect, first: []const u8, current: []const u8, options: RenderOptions) ui.RenderError!void {
+    const first_bounds = breadcrumbItemBounds(bounds, 0);
+    const middle_bounds = breadcrumbItemBounds(bounds, 1);
+    const current_bounds = breadcrumbItemBounds(bounds, 2);
+    try scene.pushText(first_bounds.withHeightCentered(control_label_height), first, options.style.muted);
+    try scene.pushIconQuad(.{ .bounds = breadcrumbSeparatorBounds(bounds, 0), .icon_id = icon.id(.chevron_right), .color = options.style.muted });
+    try scene.pushText(middle_bounds.withHeightCentered(control_label_height), breadcrumb_middle_label, options.style.muted);
+    try scene.pushIconQuad(.{ .bounds = breadcrumbSeparatorBounds(bounds, 1), .icon_id = icon.id(.chevron_right), .color = options.style.muted });
+    try scene.pushText(current_bounds.withHeightCentered(control_label_height), current, options.style.text);
+}
+
+pub fn breadcrumbItemBounds(bounds: ui.Rect, index: usize) ui.Rect {
+    return switch (index) {
+        0 => ui.Rect.init(bounds.x, bounds.y, breadcrumb_first_w, bounds.h),
+        1 => ui.Rect.init(bounds.x + breadcrumb_first_w + breadcrumb_separator_w, bounds.y, breadcrumb_middle_w, bounds.h),
+        else => ui.Rect.init(bounds.x + breadcrumb_first_w + breadcrumb_middle_w + breadcrumb_separator_w * 2.0, bounds.y, @max(min_extent, bounds.w - breadcrumb_first_w - breadcrumb_middle_w - breadcrumb_separator_w * 2.0), bounds.h),
+    };
+}
+
+fn breadcrumbSeparatorBounds(bounds: ui.Rect, index: usize) ui.Rect {
+    const x = if (index == 0) bounds.x + breadcrumb_first_w else bounds.x + breadcrumb_first_w + breadcrumb_separator_w + breadcrumb_middle_w;
+    return ui.Rect.init(x + breadcrumb_icon_inset, bounds.y + (bounds.h - breadcrumb_icon_size) * 0.5, breadcrumb_icon_size, breadcrumb_icon_size);
+}
+
+pub fn renderToggle(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, pressed: bool, options: RenderOptions) ui.RenderError!void {
+    const fill = if (pressed) options.style.row else ui.Color.clear;
+    const text_color = if (pressed) options.style.text else options.style.muted;
+    try scene.pushRect(bounds, fill, .fill, control_radius, 0.0);
+    try scene.pushRect(bounds, if (pressed) options.style.border else ui.Color.clear, .border, control_radius, 0.0);
+    try renderControlText(scene, bounds, toggle_text_padding, control_label_height, label, text_color, .center);
+}
+
+pub fn renderButtonGroup(scene: *ui.Scene, bounds: ui.Rect, first: []const u8, second: []const u8, active: u16, options: RenderOptions) ui.RenderError!void {
+    try renderButtonGroupSegment(scene, buttonGroupSegmentBounds(bounds, 0), first, active == 0, options);
+    try renderButtonGroupSegment(scene, buttonGroupSegmentBounds(bounds, 1), second, active == 1, options);
+}
+
+pub fn renderMenubar(scene: *ui.Scene, bounds: ui.Rect, first: []const u8, second: []const u8, active: u16, options: RenderOptions) ui.RenderError!void {
+    try renderControlFrame(scene, bounds, options.style.panel, options.style.border, control_radius);
+    try renderMenubarItem(scene, menubarItemBounds(bounds, 0), first, active == 0, options);
+    try renderMenubarItem(scene, menubarItemBounds(bounds, 1), second, active == 1, options);
+    try renderMenubarItem(scene, menubarItemBounds(bounds, 2), menubar_third_label, active == 2, options);
+}
+
+pub fn menubarItemBounds(bounds: ui.Rect, index: usize) ui.Rect {
+    const item_w = switch (index) {
+        0 => menubar_first_w,
+        1 => menubar_second_w,
+        else => menubar_third_w,
+    };
+    const item_x = switch (index) {
+        0 => bounds.x + menubar_padding,
+        1 => bounds.x + menubar_padding + menubar_first_w,
+        else => bounds.x + menubar_padding + menubar_first_w + menubar_second_w,
+    };
+    return ui.Rect.init(item_x, bounds.y + menubar_padding, item_w, @max(min_extent, bounds.h - menubar_padding * 2.0));
+}
+
+pub fn renderNavigationMenu(scene: *ui.Scene, bounds: ui.Rect, first: []const u8, second: []const u8, active: u16, options: RenderOptions) ui.RenderError!void {
+    try renderNavigationMenuItem(scene, navigationMenuItemBounds(bounds, 0), first, active == 0, true, options);
+    try renderNavigationMenuItem(scene, navigationMenuItemBounds(bounds, 1), second, active == 1, true, options);
+    try renderNavigationMenuItem(scene, navigationMenuItemBounds(bounds, 2), navigation_menu_third_label, active == 2, false, options);
+}
+
+pub fn navigationMenuItemBounds(bounds: ui.Rect, index: usize) ui.Rect {
+    const item_w = switch (index) {
+        0 => navigation_menu_first_w,
+        1 => navigation_menu_second_w,
+        else => navigation_menu_third_w,
+    };
+    const item_x = switch (index) {
+        0 => bounds.x,
+        1 => bounds.x + navigation_menu_first_w + navigation_menu_gap,
+        else => bounds.x + navigation_menu_first_w + navigation_menu_second_w + navigation_menu_gap * 2.0,
+    };
+    return ui.Rect.init(item_x, bounds.y, item_w, @min(bounds.h, navigation_menu_item_h));
+}
+
+pub fn renderCommand(scene: *ui.Scene, bounds: ui.Rect, placeholder: []const u8, options: RenderOptions) ui.RenderError!void {
+    try renderControlFrame(scene, bounds, options.style.panel, options.style.border, command_radius);
+    try scene.pushIconQuad(.{ .bounds = ui.Rect.init(bounds.x + command_icon_x, bounds.y + (bounds.h - command_icon_size) * 0.5, command_icon_size, command_icon_size), .icon_id = icon.id(.search), .color = options.style.muted });
+    try scene.pushText(ui.Rect.init(bounds.x + command_text_x, bounds.y + (bounds.h - command_text_h) * 0.5, @max(min_extent, bounds.w - command_text_x - command_padding_x), command_text_h), placeholder, options.style.muted);
+}
+
+pub fn renderField(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, placeholder: []const u8, options: RenderOptions) ui.RenderError!void {
+    try scene.pushText(fieldLabelBounds(bounds), label, options.style.text);
+    try renderInput(scene, fieldInputBounds(bounds), placeholder, options);
+}
+
+fn fieldLabelBounds(bounds: ui.Rect) ui.Rect {
+    return ui.Rect.init(bounds.x, bounds.y, bounds.w, field_label_h);
+}
+
+pub fn fieldInputBounds(bounds: ui.Rect) ui.Rect {
+    return ui.Rect.init(bounds.x, bounds.y + field_label_h + field_gap, bounds.w, @max(min_extent, bounds.h - field_label_h - field_gap));
+}
+
+pub fn renderInputOtp(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, options: RenderOptions) ui.RenderError!void {
+    for (0..input_otp_slot_count) |index| {
+        const slot = inputOtpSlotBounds(bounds, index);
+        try renderControlFrame(scene, slot, options.style.panel, options.style.border, control_radius);
+        if (index < value.len) {
+            try renderControlText(scene, slot, input_otp_text_padding, control_label_height, value[index .. index + 1], options.style.text, .center);
+        }
+    }
+}
+
+pub fn inputOtpSlotBounds(bounds: ui.Rect, index: usize) ui.Rect {
+    const x = bounds.x + @as(f32, @floatFromInt(index)) * (input_otp_slot_size + input_otp_slot_gap);
+    return ui.Rect.init(x, bounds.y, input_otp_slot_size, @min(bounds.h, input_otp_slot_size));
+}
+
+pub fn renderToggleGroup(scene: *ui.Scene, bounds: ui.Rect, first: []const u8, second: []const u8, active: u16, options: RenderOptions) ui.RenderError!void {
+    try renderToggleGroupItem(scene, toggleGroupItemBounds(bounds, 0), first, active == 0, options);
+    try renderToggleGroupItem(scene, toggleGroupItemBounds(bounds, 1), second, active == 1, options);
+    try renderToggleGroupItem(scene, toggleGroupItemBounds(bounds, 2), toggle_group_third_label, active == 2, options);
+}
+
+pub fn toggleGroupItemBounds(bounds: ui.Rect, index: usize) ui.Rect {
+    const item_w = switch (index) {
+        1 => toggle_group_middle_w,
+        else => toggle_group_side_w,
+    };
+    const item_x = switch (index) {
+        0 => bounds.x,
+        1 => bounds.x + toggle_group_side_w,
+        else => bounds.x + toggle_group_side_w + toggle_group_middle_w,
+    };
+    return ui.Rect.init(item_x, bounds.y, item_w, bounds.h);
+}
+
+pub fn buttonGroupSegmentBounds(bounds: ui.Rect, index: usize) ui.Rect {
+    const segment_w = @max(min_extent, bounds.w * 0.5);
+    return ui.Rect.init(bounds.x + @as(f32, @floatFromInt(index)) * segment_w, bounds.y, segment_w, bounds.h);
+}
+
 pub fn renderRowItem(scene: *ui.Scene, bounds: ui.Rect, title: []const u8, detail: []const u8, options: RenderOptions) ui.RenderError!void {
     try scene.pushRect(bounds, options.style.row, .fill, row_radius, 0.0);
     if (rowTitleBounds(bounds, detail.len == 0)) |title_bounds| {
-        try scene.push(.{ .text = .{ .origin = title_bounds, .value = title, .color = options.style.text } });
+        try scene.pushText(title_bounds, title, options.style.text);
     }
     if (detail.len != 0) {
         if (rowDetailBounds(bounds)) |detail_bounds| {
-            try scene.push(.{ .text = .{ .origin = detail_bounds, .value = detail, .color = options.style.muted } });
+            try scene.pushText(detail_bounds, detail, options.style.muted);
         }
     }
 }
@@ -289,55 +997,167 @@ pub fn measureText(value: []const u8, constraints: layout.Constraints) layout.Me
         .average_char_width = text_average_w,
         .max_lines = text_max_lines,
     });
+    const preferred = constrainPreferredSize(measured.preferred, constraints);
     return layout.Measurement.flexible(
-        .{ .w = @min(text_min_width, measured.preferred.w), .h = @min(text_line_height, measured.preferred.h) },
-        measured.preferred,
+        .{ .w = @min(text_min_width, preferred.w), .h = @min(text_line_height, preferred.h) },
+        preferred,
         measured.max,
     ).applyExact(constraints);
 }
 
 pub fn measureBadge(label: []const u8, constraints: layout.Constraints) layout.Measurement {
     const preferred_width = @max(badge_min_width, @as(f32, @floatFromInt(label.len)) * badge_label_average_w + badge_padding_x * 2.0);
+    const preferred = constrainPreferredSize(.{ .w = preferred_width, .h = badge_height }, constraints);
     return layout.Measurement.flexible(
-        .{ .w = badge_min_width, .h = badge_height },
-        .{ .w = preferred_width, .h = badge_height },
+        .{ .w = @min(badge_min_width, preferred.w), .h = @min(badge_height, preferred.h) },
+        preferred,
         .{ .w = measure_max_width, .h = badge_height },
     ).applyExact(constraints);
 }
 
 pub fn measureSurface(title: []const u8, detail: []const u8, constraints: layout.Constraints) layout.Measurement {
     const inner = constraints.inner(layout.Insets.uniform(surface_padding));
-    const title_measure = layout.measureText(title, inner, .{
-        .line_height = surface_title_height,
-        .average_char_width = surface_title_average_w,
-        .max_lines = surface_title_max_lines,
-    });
-    const detail_measure = layout.measureText(detail, inner, .{
-        .line_height = surface_detail_height,
-        .average_char_width = surface_detail_average_w,
-        .max_lines = surface_detail_max_lines,
-    });
+    const title_measure = if (title.len == 0)
+        layout.Measurement.fixed(.{ .w = 0.0, .h = 0.0 })
+    else
+        layout.measureText(title, inner, .{
+            .line_height = surface_title_height,
+            .average_char_width = surface_title_average_w,
+            .max_lines = surface_title_max_lines,
+        });
+    const detail_measure = if (detail.len == 0)
+        layout.Measurement.fixed(.{ .w = 0.0, .h = 0.0 })
+    else
+        layout.measureText(detail, inner, .{
+            .line_height = surface_detail_height,
+            .average_char_width = surface_detail_average_w,
+            .max_lines = surface_detail_max_lines,
+        });
     const content_width = @max(title_measure.preferred.w, detail_measure.preferred.w);
-    const content_height = title_measure.preferred.h + surface_detail_gap + detail_measure.preferred.h;
+    const content_gap: f32 = if (title.len != 0 and detail.len != 0) surface_detail_gap else 0.0;
+    const content_height = title_measure.preferred.h + content_gap + detail_measure.preferred.h;
+    const minimum_height = surfaceMinHeight(title.len != 0, detail.len != 0);
+    const preferred = constrainPreferredSize(.{
+        .w = content_width + surface_padding * 2.0,
+        .h = content_height + surface_padding * 2.0,
+    }, constraints);
     return layout.Measurement.flexible(
-        .{ .w = surface_min_width, .h = surface_padding * 2.0 + surface_title_height },
-        .{ .w = content_width + surface_padding * 2.0, .h = content_height + surface_padding * 2.0 },
+        .{ .w = @min(surface_min_width, preferred.w), .h = @min(minimum_height, preferred.h) },
+        preferred,
         .{ .w = measure_max_width, .h = content_height + surface_padding * 2.0 },
     ).applyExact(constraints);
 }
 
 pub fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
+    const resolved_preferred = constrainPreferredSize(preferred, constraints);
     return layout.Measurement.flexible(
-        .{ .w = @min(preferred.w, constraints.width.limit(preferred.w)), .h = @min(preferred.h, constraints.height.limit(preferred.h)) },
-        preferred,
+        .{ .w = @min(preferred.w, resolved_preferred.w), .h = @min(preferred.h, resolved_preferred.h) },
+        resolved_preferred,
         .{ .w = measure_max_width, .h = preferred.h },
     ).applyExact(constraints);
+}
+
+pub fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {
+    return .{
+        .w = constraints.width.limit(preferred.w),
+        .h = constraints.height.limit(preferred.h),
+    };
 }
 
 fn contentInset(bounds: ui.Rect, padding: f32) ?ui.Rect {
     const clamped = @min(@max(padding, 0.0), @min(bounds.w, bounds.h) * 0.5);
     const out = bounds.insetUniform(clamped);
     return if (out.valid()) out else null;
+}
+
+fn renderControlText(scene: *ui.Scene, bounds: ui.Rect, padding: f32, height: f32, value: []const u8, color: ui.Color, alignment: ui.TextAlign) ui.RenderError!void {
+    if (contentInset(bounds, padding)) |text_bounds| try pushControlText(scene, text_bounds, height, value, color, alignment);
+}
+
+fn pushControlText(scene: *ui.Scene, bounds: ui.Rect, height: f32, value: []const u8, color: ui.Color, alignment: ui.TextAlign) ui.RenderError!void {
+    try scene.pushAlignedText(bounds.withHeightCentered(height), value, color, alignment);
+}
+
+fn renderInlineLabel(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, color: ui.Color) ui.RenderError!void {
+    try scene.pushText(bounds.withHeightCentered(control_label_height), value, color);
+}
+
+fn renderRadioOption(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, selected: bool, options: RenderOptions) ui.RenderError!void {
+    const outer = ui.Rect.init(bounds.x, bounds.y + (bounds.h - checkbox_box_size) * 0.5, checkbox_box_size, checkbox_box_size);
+    try scene.pushRect(outer, options.style.panel, .fill, checkbox_box_size * 0.5, 0.0);
+    try scene.pushRect(outer, options.style.border, .border, checkbox_box_size * 0.5, 0.0);
+    if (selected) {
+        const dot = ui.Rect.init(outer.x + (outer.w - radio_dot_size) * 0.5, outer.y + (outer.h - radio_dot_size) * 0.5, radio_dot_size, radio_dot_size);
+        try scene.pushRect(dot, options.style.accent, .fill, radio_dot_size * 0.5, 0.0);
+    }
+    const label_x = outer.x + outer.w + checkbox_text_gap;
+    try renderInlineLabel(scene, ui.Rect.init(label_x, bounds.y, @max(min_extent, bounds.x + bounds.w - label_x), bounds.h), label, options.style.text);
+}
+
+fn renderTabsTrigger(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, active: bool, options: RenderOptions) ui.RenderError!void {
+    if (active) {
+        try scene.pushRect(bounds, options.style.panel, .fill, control_radius, 0.0);
+        try scene.pushRect(bounds, options.style.border, .border, control_radius, 0.0);
+    }
+    try renderControlText(scene, bounds, toggle_text_padding, control_label_height, label, if (active) options.style.text else options.style.muted, .center);
+}
+
+fn renderButtonGroupSegment(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, active: bool, options: RenderOptions) ui.RenderError!void {
+    try scene.pushRect(bounds, if (active) options.style.text else options.style.panel, .fill, 0.0, 0.0);
+    try scene.pushRect(bounds, options.style.border, .border, 0.0, 0.0);
+    try renderControlText(scene, bounds, toggle_text_padding, control_label_height, label, if (active) options.style.panel else options.style.text, .center);
+}
+
+fn renderCarouselButton(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, options: RenderOptions) ui.RenderError!void {
+    try renderControlFrame(scene, bounds, ui.Color.clear, options.style.border, carousel_button_size * 0.5);
+    try renderControlText(scene, bounds, carousel_button_text_padding, control_label_height, label, options.style.text, .center);
+}
+
+fn renderCalendarNav(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, options: RenderOptions) ui.RenderError!void {
+    try scene.pushRect(bounds, ui.Color.clear, .fill, control_radius, 0.0);
+    try renderControlText(scene, bounds, calendar_nav_text_padding, calendar_day_text_h, label, options.style.muted, .center);
+}
+
+fn renderCalendarDay(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, selected: bool, options: RenderOptions) ui.RenderError!void {
+    try scene.pushRect(bounds, if (selected) options.style.accent else ui.Color.clear, .fill, control_radius, 0.0);
+    try renderControlText(scene, bounds, calendar_day_text_padding, calendar_day_text_h, label, if (selected) options.style.bg else options.style.text, .center);
+}
+
+fn renderMenuItem(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, options: RenderOptions) ui.RenderError!void {
+    try scene.pushRect(bounds, options.style.row, .fill, menu_item_radius, 0.0);
+    try renderControlText(scene, bounds, menu_item_padding, menu_item_text_h, label, options.style.text, .start);
+}
+
+fn renderComboboxOption(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, selected: bool, options: RenderOptions) ui.RenderError!void {
+    try scene.pushRect(bounds, options.style.row, .fill, control_radius, 0.0);
+    try renderControlText(scene, ui.Rect.init(bounds.x, bounds.y, @max(min_extent, bounds.w - combobox_option_indicator_w), bounds.h), combobox_option_padding, control_label_height, label, options.style.text, .start);
+    if (selected) {
+        try scene.pushIconQuad(.{
+            .bounds = ui.Rect.init(bounds.x + bounds.w - combobox_icon_size - combobox_option_padding, bounds.y + (bounds.h - combobox_icon_size) * 0.5, combobox_icon_size, combobox_icon_size),
+            .icon_id = icon.id(.check),
+            .color = options.style.accent,
+        });
+    }
+}
+
+fn renderMenubarItem(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, active: bool, options: RenderOptions) ui.RenderError!void {
+    try scene.pushRect(bounds, if (active) options.style.row else ui.Color.clear, .fill, control_radius, 0.0);
+    try renderControlText(scene, bounds, menubar_item_padding_x, control_label_height, label, if (active) options.style.text else options.style.muted, .center);
+}
+
+fn renderToggleGroupItem(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, active: bool, options: RenderOptions) ui.RenderError!void {
+    try scene.pushRect(bounds, if (active) options.style.row else ui.Color.clear, .fill, 0.0, 0.0);
+    try scene.pushRect(bounds, options.style.border, .border, 0.0, 0.0);
+    try renderControlText(scene, bounds, toggle_text_padding, control_label_height, label, if (active) options.style.text else options.style.muted, .center);
+}
+
+fn renderNavigationMenuItem(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, active: bool, show_chevron: bool, options: RenderOptions) ui.RenderError!void {
+    try scene.pushRect(bounds, if (active) options.style.row else ui.Color.clear, .fill, control_radius, 0.0);
+    const icon_space: f32 = if (show_chevron) navigation_menu_icon_space else 0.0;
+    try renderControlText(scene, ui.Rect.init(bounds.x, bounds.y, @max(min_extent, bounds.w - icon_space), bounds.h), navigation_menu_text_padding, control_label_height, label, if (active) options.style.text else options.style.muted, .center);
+    if (show_chevron) {
+        try scene.pushIconQuad(.{ .bounds = ui.Rect.init(bounds.x + bounds.w - navigation_menu_icon_size - navigation_menu_icon_padding, bounds.y + (bounds.h - navigation_menu_icon_size) * 0.5, navigation_menu_icon_size, navigation_menu_icon_size), .icon_id = icon.id(.chevron_right), .color = options.style.muted });
+    }
 }
 
 fn renderControlFrame(scene: *ui.Scene, bounds: ui.Rect, fill: ui.Color, border: ui.Color, radius: f32) ui.RenderError!void {
@@ -411,49 +1231,293 @@ fn surfaceFillColor(options: RenderOptions) ui.Color {
     };
 }
 
+fn surfaceMinHeight(has_title: bool, has_detail: bool) f32 {
+    const content_height: f32 = if (has_title and has_detail)
+        surface_title_height + surface_detail_gap + surface_detail_height
+    else if (has_title)
+        surface_title_height
+    else if (has_detail)
+        surface_detail_height
+    else
+        0.0;
+    return surface_padding * 2.0 + content_height;
+}
+
 pub const preferred_badge = ui.Size{ .w = 96.0, .h = 24.0 };
+pub const preferred_alert = ui.Size{ .w = 260.0, .h = 64.0 };
+pub const preferred_accordion = ui.Size{ .w = 260.0, .h = 68.0 };
+pub const preferred_dialog = ui.Size{ .w = 240.0, .h = 52.0 };
+pub const preferred_aspect_ratio = ui.Size{ .w = 220.0, .h = 124.0 };
+pub const preferred_calendar = ui.Size{ .w = 240.0, .h = 152.0 };
+pub const preferred_carousel = ui.Size{ .w = 240.0, .h = 40.0 };
+pub const preferred_chart = ui.Size{ .w = 240.0, .h = 90.0 };
+pub const preferred_combobox = ui.Size{ .w = 240.0, .h = 82.0 };
 pub const preferred_avatar = ui.Size{ .w = 40.0, .h = 40.0 };
+pub const preferred_empty = ui.Size{ .w = 260.0, .h = 132.0 };
 pub const preferred_kbd = ui.Size{ .w = 48.0, .h = 24.0 };
+pub const preferred_label = ui.Size{ .w = 96.0, .h = 16.0 };
 pub const preferred_separator = ui.Size{ .w = 220.0, .h = 1.0 };
+pub const preferred_scroll_area = ui.Size{ .w = 220.0, .h = 48.0 };
+pub const preferred_skeleton = ui.Size{ .w = 220.0, .h = 20.0 };
+pub const preferred_spinner = ui.Size{ .w = 32.0, .h = 32.0 };
+pub const preferred_breadcrumb = ui.Size{ .w = 220.0, .h = 36.0 };
+pub const preferred_menubar = ui.Size{ .w = 170.0, .h = 36.0 };
+pub const preferred_navigation_menu = ui.Size{ .w = 220.0, .h = 36.0 };
+pub const preferred_command = ui.Size{ .w = 220.0, .h = 36.0 };
+pub const preferred_field = ui.Size{ .w = 220.0, .h = 56.0 };
+pub const preferred_menu = ui.Size{ .w = 240.0, .h = 52.0 };
+pub const preferred_input_otp = ui.Size{ .w = 200.0, .h = 36.0 };
+pub const preferred_button_group = ui.Size{ .w = 160.0, .h = 36.0 };
+pub const preferred_toggle_group = ui.Size{ .w = 180.0, .h = 36.0 };
+pub const preferred_toggle = ui.Size{ .w = 96.0, .h = 36.0 };
 pub const preferred_input = ui.Size{ .w = 220.0, .h = 40.0 };
+pub const preferred_input_group = ui.Size{ .w = 260.0, .h = 40.0 };
 pub const preferred_textarea = ui.Size{ .w = 220.0, .h = 88.0 };
 pub const preferred_select = ui.Size{ .w = 220.0, .h = 40.0 };
 pub const preferred_checkbox = ui.Size{ .w = 220.0, .h = 28.0 };
+pub const preferred_radio_group = ui.Size{ .w = 220.0, .h = 52.0 };
 pub const preferred_switch = ui.Size{ .w = 220.0, .h = 32.0 };
+pub const preferred_pagination = ui.Size{ .w = 240.0, .h = 36.0 };
+pub const preferred_popover = ui.Size{ .w = 240.0, .h = 52.0 };
+pub const preferred_resizable = ui.Size{ .w = 240.0, .h = 36.0 };
 pub const preferred_progress = ui.Size{ .w = 220.0, .h = 10.0 };
 pub const preferred_slider = ui.Size{ .w = 220.0, .h = 42.0 };
+pub const preferred_tabs = ui.Size{ .w = 220.0, .h = 84.0 };
+pub const preferred_table = ui.Size{ .w = 260.0, .h = 64.0 };
+pub const preferred_tooltip = ui.Size{ .w = 240.0, .h = 44.0 };
 pub const preferred_row_item = ui.Size{ .w = 260.0, .h = 48.0 };
 
 const min_extent: f32 = 1.0;
 const measure_max_width: f32 = 4096.0;
+pub const menubar_item_count: u32 = 3;
+pub const navigation_menu_item_count: u32 = 3;
+pub const input_otp_slot_count: usize = 6;
+pub const toggle_group_item_count: u32 = 3;
+const accordion_trigger_h: f32 = 36.0;
+const accordion_trigger_text_y: f32 = 10.0;
+const accordion_icon_space: f32 = 22.0;
+const accordion_icon_size: f32 = 14.0;
+const accordion_icon_y: f32 = 11.0;
+const accordion_content_padding_top: f32 = 8.0;
+const accordion_detail_height: f32 = 16.0;
+const accordion_detail_average_w: f32 = 7.5;
+const accordion_detail_max_lines: usize = 2;
+const alert_radius: f32 = 8.0;
+const alert_padding_x: f32 = 16.0;
+const alert_padding_y: f32 = 12.0;
+const alert_icon_size: f32 = 16.0;
+const alert_text_x: f32 = 44.0;
+const alert_title_height: f32 = 16.0;
+const alert_detail_gap: f32 = 2.0;
+const alert_detail_height: f32 = 16.0;
+const alert_detail_average_w: f32 = 7.5;
+const alert_detail_max_lines: usize = 2;
+const alert_danger = ui.Color{ .r = 239, .g = 68, .b = 68 };
 const control_radius: f32 = 6.0;
+pub const calendar_day_count: usize = 28;
+pub const calendar_day_id_offset: u32 = 2;
+const calendar_column_count: usize = 7;
+const calendar_radius: f32 = 8.0;
+const calendar_padding: f32 = 8.0;
+const calendar_nav_size: f32 = 24.0;
+const calendar_caption_h: f32 = 24.0;
+const calendar_weekday_y: f32 = 36.0;
+const calendar_weekday_h: f32 = 16.0;
+const calendar_grid_y: f32 = 56.0;
+const calendar_cell_size: f32 = 22.0;
+const calendar_cell_gap: f32 = 2.0;
+const calendar_day_text_h: f32 = 12.0;
+const calendar_day_text_padding: f32 = 2.0;
+const calendar_nav_text_padding: f32 = 4.0;
+const carousel_button_size: f32 = 28.0;
+const carousel_gap: f32 = 8.0;
+const carousel_radius: f32 = 8.0;
+const carousel_text_padding: f32 = 8.0;
+const carousel_button_text_padding: f32 = 4.0;
+pub const chart_bar_count: usize = 5;
+const chart_radius: f32 = 8.0;
+const chart_padding: f32 = 8.0;
+const chart_label_h: f32 = 14.0;
+const chart_label_gap: f32 = 4.0;
+const chart_bar_gap: f32 = 5.0;
+const chart_bar_radius: f32 = 5.0;
+const combobox_input_h: f32 = 36.0;
+const combobox_popup_gap: f32 = 6.0;
+const combobox_popup_radius: f32 = 8.0;
+const combobox_popup_padding: f32 = 4.0;
+const combobox_icon_size: f32 = 14.0;
+const combobox_icon_space: f32 = 22.0;
+const combobox_option_padding: f32 = 8.0;
+const combobox_option_indicator_w: f32 = 28.0;
+const menubar_padding: f32 = 4.0;
+const menubar_first_w: f32 = 48.0;
+const menubar_second_w: f32 = 48.0;
+const menubar_third_w: f32 = 48.0;
+const menubar_item_padding_x: f32 = 8.0;
+const menubar_third_label = "View";
+const navigation_menu_gap: f32 = 4.0;
+const navigation_menu_item_h: f32 = 36.0;
+const navigation_menu_first_w: f32 = 62.0;
+const navigation_menu_second_w: f32 = 112.0;
+const navigation_menu_third_w: f32 = 56.0;
+const navigation_menu_text_padding: f32 = 10.0;
+const navigation_menu_icon_size: f32 = 12.0;
+const navigation_menu_icon_space: f32 = 16.0;
+const navigation_menu_icon_padding: f32 = 8.0;
+const navigation_menu_third_label = "Blocks";
+const command_radius: f32 = 8.0;
+const command_icon_x: f32 = 8.0;
+const command_icon_size: f32 = 14.0;
+const command_text_x: f32 = 28.0;
+const command_padding_x: f32 = 8.0;
+const command_text_h: f32 = 13.0;
+const field_label_h: f32 = 14.0;
+const field_gap: f32 = 6.0;
+const input_otp_slot_size: f32 = 36.0;
+const input_otp_slot_gap: f32 = 0.0;
+const input_otp_text_padding: f32 = 8.0;
+const toggle_group_side_w: f32 = 48.0;
+const toggle_group_middle_w: f32 = 64.0;
+const toggle_group_third_label = "Right";
+const table_radius: f32 = 6.0;
+const table_padding_x: f32 = 8.0;
+const table_header_h: f32 = 24.0;
+const table_header_y: f32 = 5.0;
+const table_header_text_h: f32 = 14.0;
+const table_body_y: f32 = 35.0;
+const table_body_text_h: f32 = 14.0;
+const table_name_column_ratio: f32 = 0.55;
+const table_row_inset: f32 = 4.0;
+const table_row_radius: f32 = 4.0;
+const table_header_name = "Name";
+const table_header_role = "Role";
+const resizable_handle_w: f32 = 6.0;
+const resizable_handle_radius: f32 = 3.0;
+pub const resizable_handle_hit_outset: f32 = 8.0;
+const empty_radius: f32 = 8.0;
+const empty_padding: f32 = 24.0;
+const empty_media_size: f32 = 40.0;
+const empty_media_icon_inset: f32 = 8.0;
+const empty_gap: f32 = 10.0;
+const empty_title_height: f32 = 20.0;
+const empty_detail_gap: f32 = 4.0;
+const empty_detail_height: f32 = 16.0;
+const empty_detail_average_w: f32 = 7.5;
+const empty_detail_max_lines: usize = 2;
 const row_radius: f32 = 4.0;
-const input_text_padding: f32 = 12.0;
+const control_text_padding: f32 = 12.0;
 const control_label_height: f32 = 16.0;
 const control_average_char_width: f32 = 8.5;
+const input_group_addon_min_w: f32 = 42.0;
+const input_group_addon_max_w: f32 = 96.0;
+const input_group_addon_padding: f32 = 10.0;
+const input_group_control_gap: f32 = 8.0;
+const input_group_separator_inset: f32 = 8.0;
 const textarea_padding: f32 = 12.0;
 const textarea_max_lines: usize = 4;
 const select_arrow_w: f32 = 18.0;
+const select_icon_size: f32 = 14.0;
 const checkbox_box_size: f32 = 18.0;
-const checkbox_mark_inset: f32 = 5.0;
-const checkbox_mark_radius: f32 = 2.0;
+const checkbox_icon_inset: f32 = 3.0;
 const checkbox_text_gap: f32 = 10.0;
+const radio_dot_size: f32 = 8.0;
+const radio_option_h: f32 = 20.0;
+const radio_option_pitch: f32 = 26.0;
 const switch_width: f32 = 42.0;
 const switch_height: f32 = 24.0;
 const switch_knob_size: f32 = 18.0;
 const switch_knob_inset: f32 = 3.0;
+const pagination_item_count: usize = 5;
+const pagination_item_w: f32 = 36.0;
+const pagination_item_h: f32 = 36.0;
+const pagination_gap: f32 = 4.0;
+const pagination_text_padding: f32 = 2.0;
+const popover_trigger_y: f32 = 6.0;
+const popover_trigger_w: f32 = 64.0;
+const popover_trigger_h: f32 = 30.0;
+const popover_gap: f32 = 10.0;
+const popover_radius: f32 = 8.0;
+const popover_padding: f32 = 10.0;
+const dialog_trigger_y: f32 = 6.0;
+const dialog_trigger_w: f32 = 66.0;
+const dialog_trigger_h: f32 = 30.0;
+const dialog_gap: f32 = 12.0;
+const dialog_radius: f32 = 10.0;
+const dialog_padding: f32 = 10.0;
+const dialog_title_y: f32 = 6.0;
+const dialog_title_h: f32 = 14.0;
+const dialog_detail_y: f32 = 22.0;
+const dialog_detail_h: f32 = 12.0;
+const dialog_trigger_padding: f32 = 8.0;
+const dialog_open_label = "Open";
+const dialog_delete_label = "Delete";
+pub const dropdown_menu_trigger = "Open";
+pub const context_menu_trigger = "Context";
+const menu_trigger_y: f32 = 4.0;
+const menu_trigger_w: f32 = 64.0;
+const menu_trigger_h: f32 = 30.0;
+const menu_gap: f32 = 8.0;
+const menu_radius: f32 = 8.0;
+const menu_padding: f32 = 5.0;
+const menu_item_h: f32 = 14.0;
+const menu_item_pitch: f32 = 16.0;
+const menu_item_radius: f32 = 4.0;
+const menu_item_padding: f32 = 5.0;
+const menu_item_text_h: f32 = 12.0;
+const menu_trigger_padding: f32 = 8.0;
 const progress_height: f32 = 8.0;
 const slider_label_height: f32 = 14.0;
 const slider_track_height: f32 = 6.0;
-const slider_thumb_size: f32 = 16.0;
+pub const slider_thumb_size: f32 = 16.0;
 const slider_track_top: f32 = 26.0;
+const tabs_list_w: f32 = 184.0;
+const tabs_list_h: f32 = 36.0;
+const tabs_list_padding: f32 = 3.0;
+const tabs_list_radius: f32 = 8.0;
+const tabs_gap: f32 = 8.0;
+const tabs_panel_padding: f32 = 10.0;
+const tooltip_trigger_y: f32 = 8.0;
+const tooltip_trigger_w: f32 = 80.0;
+const tooltip_trigger_h: f32 = 28.0;
+const tooltip_gap: f32 = 10.0;
+const tooltip_content_y: f32 = 7.0;
+const tooltip_content_h: f32 = 24.0;
+const tooltip_radius: f32 = 6.0;
+const tooltip_padding: f32 = 8.0;
+const tooltip_text_h: f32 = 12.0;
 const avatar_size: f32 = 40.0;
 const avatar_text_height: f32 = 14.0;
 const avatar_label_inset: f32 = 6.0;
 const kbd_height: f32 = 24.0;
 const kbd_text_height: f32 = 12.0;
 const kbd_label_padding: f32 = 8.0;
+const label_height: f32 = 16.0;
 const separator_height: f32 = 1.0;
+const scroll_area_radius: f32 = 7.0;
+const scroll_area_padding: f32 = 8.0;
+const scroll_area_content_y: f32 = 6.0;
+const scroll_area_text_h: f32 = 14.0;
+const scroll_area_scrollbar_w: f32 = 10.0;
+const scroll_area_track_inset_x: f32 = 6.0;
+const scroll_area_track_inset_y: f32 = 5.0;
+const scroll_area_track_w: f32 = 3.0;
+const scroll_area_track_radius: f32 = 2.0;
+const scroll_area_thumb_min_h: f32 = 12.0;
+const scroll_area_thumb_ratio: f32 = 0.45;
+const scroll_area_label = "Scrollable content";
+const skeleton_alpha: u8 = 32;
+const skeleton_radius: f32 = 6.0;
+const spinner_size: f32 = 28.0;
+const spinner_slice_inset: f32 = 3.0;
+const spinner_start_turn: f32 = 0.08;
+const spinner_end_turn: f32 = 0.78;
+const breadcrumb_first_w: f32 = 44.0;
+const breadcrumb_middle_w: f32 = 42.0;
+const breadcrumb_separator_w: f32 = 18.0;
+const breadcrumb_icon_size: f32 = 12.0;
+const breadcrumb_icon_inset: f32 = 3.0;
+const breadcrumb_middle_label = "Docs";
+const toggle_text_padding: f32 = 8.0;
 const row_text_padding_x: f32 = 12.0;
 const row_title_offset_y: f32 = 8.0;
 const row_detail_offset_y: f32 = 26.0;
@@ -463,6 +1527,9 @@ const text_line_height: f32 = 18.0;
 const text_average_w: f32 = 8.0;
 const text_max_lines: usize = 8;
 const text_min_width: f32 = 24.0;
+const calendar_weekday_labels = [_][]const u8{ "Su", "Mo", "Tu", "We", "Th", "Fr", "Sa" };
+const calendar_day_labels = [_][]const u8{ "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28" };
+const chart_bar_values = [_]f32{ 0.45, 0.72, 0.38, 0.86, 0.62 };
 pub const surface_radius: f32 = 10.0;
 pub const surface_padding: f32 = 16.0;
 pub const surface_title_height: f32 = 18.0;

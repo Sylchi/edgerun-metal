@@ -131,6 +131,7 @@ pub const PreviewKind = enum {
     sheet,
     sidebar,
     skeleton,
+    spinner,
     slider,
     sonner,
     switch_control,
@@ -203,6 +204,7 @@ pub const component_catalog = blk: {
         componentSpec("Sheet", "sheet", .overlay, "Sheet", "sheet_node", .sheet),
         componentSpec("Sidebar", "sidebar", .navigation, "Sidebar", "sidebar_node", .sidebar),
         componentSpec("Skeleton", "skeleton", .feedback, "Skeleton", "skeleton", .skeleton),
+        componentSpec("Spinner", "spinner", .feedback, "Spinner", "spinner_node", .spinner),
         componentSpec("Slider", "slider", .form, "Slider", "slider_node", .slider),
         componentSpec("Sonner", "sonner", .feedback, "Sonner", "toast", .sonner),
         componentSpec("Switch", "switch", .form, "Switch", "toggle_node", .switch_control),
@@ -329,6 +331,7 @@ const component_routes = [_]Route{
     .{ .slug = "sheet", .route = "/docs/components/sheet" },
     .{ .slug = "sidebar", .route = "/docs/components/sidebar" },
     .{ .slug = "skeleton", .route = "/docs/components/skeleton" },
+    .{ .slug = "spinner", .route = "/docs/components/spinner" },
     .{ .slug = "slider", .route = "/docs/components/slider" },
     .{ .slug = "sonner", .route = "/docs/components/sonner" },
     .{ .slug = "switch", .route = "/docs/components/switch" },
@@ -530,62 +533,63 @@ fn catalogSource(scene: *ui.Scene, bounds: ui.Rect, selected: bool) GalleryError
 
 fn renderReferencePreview(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, spec_value: ComponentSpec, id: u32) GalleryError!void {
     return switch (spec_value.preview) {
-        .accordion => previewAccordion(scene, collector, bounds, id),
-        .alert => previewAlert(scene, bounds, false),
-        .alert_dialog => previewDialogSurface(scene, collector, bounds, id, true),
-        .aspect_ratio => previewAspectRatio(scene, bounds),
+        .accordion => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
+        .alert => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
+        .alert_dialog => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
+        .aspect_ratio => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
         .avatar,
-        .badge,
         .card,
+        .empty,
         .checkbox,
         .input,
         .item,
         .kbd,
+        .label,
         .progress,
+        .radio_group,
         .select,
         .separator,
+        .skeleton,
+        .spinner,
         .slider,
         .switch_control,
         .textarea,
+        .toggle,
+        .tabs,
         => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
-        .breadcrumb => previewBreadcrumb(scene, collector, bounds, id),
+        .badge => previewBadgeVariants(scene, collector, bounds),
+        .breadcrumb => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
         .button => previewButtonVariants(scene, collector, bounds, id),
-        .button_group => previewButtonGroup(scene, collector, bounds, id),
-        .calendar => previewCalendarMini(scene, collector, bounds, id),
-        .carousel => previewCarousel(scene, collector, bounds, id),
-        .chart => previewChartMini(scene, collector, bounds, id),
-        .combobox => previewCombobox(scene, collector, bounds, id),
-        .command => previewCommand(scene, collector, bounds, id),
-        .context_menu => previewMenu(scene, collector, bounds, id, "Context"),
-        .data_table, .table => previewTable(scene, collector, bounds, id),
+        .button_group => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
+        .calendar => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
+        .carousel => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
+        .chart => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
+        .combobox => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
+        .command => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
+        .context_menu => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
+        .data_table, .table => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
         .date_picker => previewDatePicker(scene, collector, bounds, id),
-        .dialog => previewDialogSurface(scene, collector, bounds, id, false),
+        .dialog => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
         .direction => previewDirection(scene, bounds),
         .drawer => previewDrawer(scene, collector, bounds, id),
-        .dropdown_menu => previewMenu(scene, collector, bounds, id, "Open"),
-        .empty => previewEmpty(scene, collector, bounds, id),
-        .field => previewField(scene, collector, bounds, id),
+        .dropdown_menu => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
+        .field => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
         .hover_card => previewHoverCard(scene, collector, bounds, id),
-        .input_group => previewInputGroup(scene, collector, bounds, id),
-        .input_otp => previewOtp(scene, collector, bounds, id),
-        .label => previewLabel(scene, bounds),
-        .menubar => previewMenubar(scene, collector, bounds, id),
-        .native_select => previewSelect(scene, collector, bounds, id, "Native"),
-        .navigation_menu => previewNavigationMenu(scene, collector, bounds, id),
-        .pagination => previewPagination(scene, collector, bounds, id),
-        .popover => previewPopover(scene, collector, bounds, id),
-        .radio_group => previewRadioGroup(scene, collector, bounds, id),
-        .resizable => previewResizable(scene, collector, bounds, id),
-        .scroll_area => previewScrollArea(scene, bounds),
+        .input_group => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
+        .input_otp => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
+        .menubar => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
+        .native_select => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
+        .navigation_menu => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
+        .pagination => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
+        .popover => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
+        .resizable => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
+        .scroll_area => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
         .sheet => previewSheet(scene, collector, bounds, id),
         .sidebar => previewSidebar(scene, collector, bounds, id),
-        .skeleton => previewSkeletonBars(scene, bounds),
         .sonner => previewToast(scene, collector, bounds, id, "Saved"),
-        .tabs => previewTabs(scene, collector, bounds, id),
         .toast => previewToast(scene, collector, bounds, id, "Queued"),
-        .toggle => previewToggle(scene, collector, bounds, id),
-        .toggle_group => previewToggleGroup(scene, collector, bounds, id),
-        .tooltip => previewTooltip(scene, collector, bounds, id),
+        .toggle_group => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
+        .tooltip => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
     };
 }
 
@@ -602,19 +606,53 @@ fn renderPrimitivePreview(scene: *ui.Scene, collector: *interaction.Collector, b
 fn primitivePreview(kind: PreviewKind, id: u32) PrimitivePreview {
     return switch (kind) {
         .avatar => .{ .component = .{ .avatar = .{ .label = "ER" } } },
+        .accordion => .{ .component = .{ .accordion = .{ .id = id, .title = "Is it accessible?", .detail = "Yes. It follows the pattern.", .open = true } } },
+        .alert => .{ .component = .{ .alert = .{ .title = "Heads up", .detail = "Status message" } } },
+        .alert_dialog => .{ .component = .{ .alert_dialog = .{ .id = id, .title = "Are you sure?", .detail = "Modal content" } } },
+        .aspect_ratio => .{ .component = .{ .aspect_ratio = .{ .ratio_w = 16, .ratio_h = 9 } } },
         .badge => .{ .component = .{ .badge = .{ .label = "Default" } } },
+        .breadcrumb => .{ .component = .{ .breadcrumb = .{ .id = id, .first = "Home", .current = "Button" } } },
         .button => .{ .component = .{ .button = .{ .id = id, .label = "Default" } } },
+        .button_group => .{ .component = .{ .button_group = .{ .id = id, .first = "Left", .second = "Right", .active = 1 } } },
+        .calendar => .{ .component = .{ .calendar = .{ .id = id, .month = "May 2026", .selected_day = 25 } } },
+        .carousel => .{ .component = .{ .carousel = .{ .id = id, .label = "Slide" } } },
         .card => .{ .component = .{ .card = .{ .title = "Card title", .detail = "Description" } } },
+        .chart => .{ .component = .{ .chart = .{ .id = id, .label = "Visitors" } } },
+        .empty => .{ .component = .{ .empty = .{ .title = "No results", .detail = "Try another filter." } } },
+        .field => .{ .component = .{ .field = .{ .id = id, .label = "Email", .placeholder = "m@example.com" } } },
         .checkbox => .{ .component = .{ .checkbox = .{ .id = id, .label = "Accept terms", .checked = true } } },
+        .combobox => .{ .component = .{ .combobox = .{ .id = id, .placeholder = "Search framework...", .selected = "React" } } },
+        .command => .{ .component = .{ .command = .{ .id = id, .placeholder = "Type a command..." } } },
+        .context_menu => .{ .component = .{ .context_menu = .{ .id = id, .first = "Profile", .second = "Settings" } } },
+        .dropdown_menu => .{ .component = .{ .dropdown_menu = .{ .id = id, .first = "Profile", .second = "Settings" } } },
         .input => .{ .component = .{ .input = .{ .id = id, .placeholder = "Email" } } },
+        .input_group => .{ .component = .{ .input_group = .{ .id = id, .addon = "https://", .placeholder = "example.com" } } },
+        .input_otp => .{ .component = .{ .input_otp = .{ .id = id, .value = "123" } } },
         .item => .{ .component = .{ .row_item = .{ .id = id, .title = "Item title", .detail = "Description" } } },
         .kbd => .{ .component = .{ .kbd = .{ .label = "Cmd K" } } },
+        .label => .{ .component = .{ .label = .{ .value = "Email" } } },
+        .menubar => .{ .component = .{ .menubar = .{ .id = id, .first = "File", .second = "Edit", .active = 0 } } },
+        .navigation_menu => .{ .component = .{ .navigation_menu = .{ .id = id, .first = "Docs", .second = "Components", .active = 1 } } },
+        .native_select => .{ .component = .{ .select = .{ .id = id, .label = "Native" } } },
+        .pagination => .{ .component = .{ .pagination = .{ .id = id, .page = 1 } } },
+        .popover => .{ .component = .{ .popover = .{ .id = id, .trigger = "Open", .content = "Place content" } } },
         .progress => .{ .component = .{ .progress = .{ .value = 0.62 } } },
+        .radio_group => .{ .component = .{ .radio_group = .{ .id = id, .first = "Default", .second = "Comfortable", .selected = 1 } } },
+        .resizable => .{ .component = .{ .resizable = .{ .id = id, .ratio = 0.58 } } },
         .select => .{ .component = .{ .select = .{ .id = id, .label = "Select" } } },
         .separator => .{ .component = .{ .separator = .{} } },
+        .scroll_area => .{ .component = .{ .scroll_area = .{} } },
+        .skeleton => .{ .component = .{ .skeleton = .{} } },
+        .spinner => .{ .component = .{ .spinner = .{} } },
         .slider => .{ .component = .{ .slider = .{ .id = id, .label = "Volume", .value = 0.68 } } },
         .switch_control => .{ .component = .{ .switch_control = .{ .id = id, .label = "Airplane Mode", .checked = true } } },
         .textarea => .{ .component = .{ .textarea = .{ .id = id, .placeholder = "Type your message here." } } },
+        .toggle => .{ .component = .{ .toggle = .{ .id = id, .label = "Bold", .pressed = true } } },
+        .toggle_group => .{ .component = .{ .toggle_group = .{ .id = id, .first = "Left", .second = "Center", .active = 1 } } },
+        .tabs => .{ .component = .{ .tabs = .{ .id = id, .first = "Account", .second = "Password", .active = 0 } } },
+        .data_table, .table => .{ .component = .{ .table = .{ .id = id, .name = "Sarah Chen", .role = "Engineer" } } },
+        .dialog => .{ .component = .{ .dialog = .{ .id = id, .title = "Edit profile", .detail = "Modal content" } } },
+        .tooltip => .{ .component = .{ .tooltip = .{ .id = id, .trigger = "Hover me", .content = "Add to library" } } },
         else => unreachable,
     };
 }
@@ -638,17 +676,6 @@ fn componentStyle() ui.Style {
     };
 }
 
-fn previewAccordion(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32) GalleryError!void {
-    const row_h = bounds.h * 0.48;
-    const top = ui.Rect.init(bounds.x, bounds.y, bounds.w, row_h);
-    const bottom = ui.Rect.init(bounds.x, bounds.y + row_h + 2, bounds.w, @max(1, bounds.h - row_h - 2));
-    try text(scene, top.x, top.y + 4, top.w - 20, 14, "Is it accessible?", palette.text);
-    try iconQuad(scene, ui.Rect.init(top.x + top.w - 16, top.y + 5, 14, 14), .chevron_right, palette.muted);
-    try stroke(scene, ui.Rect.init(bottom.x, top.y + top.h, bottom.w, 1), palette.border, 0);
-    try text(scene, bottom.x, bottom.y + 3, bottom.w, 13, "Yes. It follows the pattern.", palette.muted);
-    try collector.addHit(top, .button, id);
-}
-
 fn previewAlert(scene: *ui.Scene, bounds: ui.Rect, destructive: bool) GalleryError!void {
     const color = if (destructive) palette.danger else palette.text;
     try fill(scene, bounds, palette.panel_alt, 8);
@@ -658,32 +685,11 @@ fn previewAlert(scene: *ui.Scene, bounds: ui.Rect, destructive: bool) GalleryErr
     try text(scene, bounds.x + 30, bounds.y + 22, bounds.w - 38, 12, "Status message", palette.muted);
 }
 
-fn previewDialogSurface(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32, destructive: bool) GalleryError!void {
-    try button(scene, collector, ui.Rect.init(bounds.x, bounds.y + 3, 66, 30), if (destructive) "Delete" else "Open", id, false);
-    const popup = ui.Rect.init(bounds.x + 78, bounds.y, @max(92, bounds.w - 78), bounds.h);
-    try fill(scene, popup, palette.panel_alt, 10);
-    try stroke(scene, popup, palette.border, 10);
-    try text(scene, popup.x + 10, popup.y + 6, popup.w - 20, 14, if (destructive) "Are you sure?" else "Edit profile", palette.text);
-    try text(scene, popup.x + 10, popup.y + 22, popup.w - 20, 12, "Modal content", palette.muted);
-    try collector.addHit(popup, .button, id + 1);
-}
-
-fn previewAspectRatio(scene: *ui.Scene, bounds: ui.Rect) GalleryError!void {
-    const frame_w = @min(bounds.w, bounds.h * 16.0 / 9.0);
-    const frame = ui.Rect.init(bounds.x, bounds.y, frame_w, bounds.h);
-    try fill(scene, frame, palette.row, 6);
-    try stroke(scene, frame, palette.border, 6);
-}
-
-fn previewBreadcrumb(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32) GalleryError!void {
-    var cursor = ui.LinearCursor.init(bounds, .row, 5);
-    const labels = [_][]const u8{ "Home", "/", "Docs", "/", "Button" };
-    for (labels, 0..) |label, index| {
-        const w: f32 = if (std.mem.eql(u8, label, "/")) 8 else @as(f32, @floatFromInt(label.len)) * 7.0 + 4.0;
-        const item = cursor.take(w);
-        try text(scene, item.x, item.y + 11, item.w, 13, label, if (index == labels.len - 1) palette.text else palette.muted);
-        if (!std.mem.eql(u8, label, "/")) try collector.addHit(item, .button, id + @as(u32, @intCast(index)));
-    }
+fn previewBadgeVariants(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect) GalleryError!void {
+    var cursor = ui.LinearCursor.init(bounds, .row, 6);
+    try renderComponentPreview(scene, collector, cursor.take(64), .{ .badge = .{ .label = "Default" } }, .{});
+    try renderComponentPreview(scene, collector, cursor.take(72), .{ .badge = .{ .label = "Outline" } }, .{ .badge_variant = .outline });
+    try renderComponentPreview(scene, collector, cursor.take(44), .{ .badge = .{ .label = "Link" } }, .{ .badge_variant = .link });
 }
 
 fn previewButtonVariants(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32) GalleryError!void {
@@ -691,79 +697,6 @@ fn previewButtonVariants(scene: *ui.Scene, collector: *interaction.Collector, bo
     try renderComponentPreview(scene, collector, cursor.take(70), .{ .button = .{ .id = id, .label = "Default" } }, .{});
     try renderComponentPreview(scene, collector, cursor.take(76), .{ .button = .{ .id = id + 1, .label = "Second" } }, .{ .button_variant = .secondary });
     try renderComponentPreview(scene, collector, cursor.take(54), .{ .button = .{ .id = id + 2, .label = "Link" } }, .{ .button_variant = .link });
-}
-
-fn previewButtonGroup(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32) GalleryError!void {
-    const item_w: f32 = @min(50, bounds.w / 3.0);
-    var cursor = ui.LinearCursor.init(ui.Rect.init(bounds.x, bounds.y + 4, item_w * 3.0, 30), .row, 0);
-    const labels = [_][]const u8{ "Left", "Mid", "Right" };
-    for (labels, 0..) |label, index| {
-        const item = cursor.take(item_w);
-        try fill(scene, item, if (index == 1) palette.text else palette.panel_alt, 0);
-        try stroke(scene, item, palette.border, 0);
-        try centeredText(scene, item, label, if (index == 1) palette.panel else palette.text);
-        try collector.addHit(item, .button, id + @as(u32, @intCast(index)));
-    }
-}
-
-fn previewCalendarMini(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32) GalleryError!void {
-    const cell = @min(18, (bounds.w - 12) / 7.0);
-    for (0..2) |row| {
-        for (0..7) |col| {
-            const day = row * 7 + col;
-            const r = ui.Rect.init(bounds.x + @as(f32, @floatFromInt(col)) * (cell + 2), bounds.y + @as(f32, @floatFromInt(row)) * (cell + 2), cell, cell);
-            try fill(scene, r, if (day == 9) palette.accent else palette.row, 5);
-            try collector.addHit(r, .button, id + @as(u32, @intCast(day)));
-        }
-    }
-}
-
-fn previewCarousel(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32) GalleryError!void {
-    const side: f32 = 26;
-    try button(scene, collector, ui.Rect.init(bounds.x, bounds.y + 6, side, side), "<", id, false);
-    try fill(scene, ui.Rect.init(bounds.x + side + 8, bounds.y, @max(1, bounds.w - side * 2 - 16), bounds.h), palette.row, 8);
-    try button(scene, collector, ui.Rect.init(bounds.x + bounds.w - side, bounds.y + 6, side, side), ">", id + 1, false);
-}
-
-fn previewChartMini(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32) GalleryError!void {
-    const values = [_]f32{ 0.45, 0.72, 0.38, 0.86, 0.62 };
-    const gap: f32 = 5;
-    const bar_w = @min(18, (bounds.w - gap * 4.0) / 5.0);
-    for (values, 0..) |value, index| {
-        const h = bounds.h * value;
-        const bar = ui.Rect.init(bounds.x + @as(f32, @floatFromInt(index)) * (bar_w + gap), bounds.y + bounds.h - h, bar_w, h);
-        try fill(scene, bar, if (index == values.len - 1) palette.accent else palette.row, 5);
-        try collector.addHit(bar, .button, id + @as(u32, @intCast(index)));
-    }
-}
-
-fn previewCombobox(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32) GalleryError!void {
-    try previewInput(scene, collector, ui.Rect.init(bounds.x, bounds.y, bounds.w, 30), id, "Search framework...");
-    const menu_bounds = ui.Rect.init(bounds.x, bounds.y + 28, @min(bounds.w, 122), 10);
-    try fill(scene, menu_bounds, palette.panel_alt, 5);
-}
-
-fn previewCommand(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32) GalleryError!void {
-    try fill(scene, bounds, palette.panel_alt, 8);
-    try stroke(scene, bounds, palette.border, 8);
-    try iconQuad(scene, ui.Rect.init(bounds.x + 8, bounds.y + 11, 14, 14), .search, palette.muted);
-    try text(scene, bounds.x + 28, bounds.y + 10, bounds.w - 36, 13, "Type a command...", palette.muted);
-    try collector.addHit(bounds, .input, id);
-}
-
-fn previewMenu(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32, label: []const u8) GalleryError!void {
-    try button(scene, collector, ui.Rect.init(bounds.x, bounds.y + 4, 64, 30), label, id, false);
-    const menu_bounds = ui.Rect.init(bounds.x + 72, bounds.y, @max(88, bounds.w - 72), bounds.h);
-    try fill(scene, menu_bounds, palette.panel_alt, 8);
-    try menuRow(scene, collector, ui.Rect.init(menu_bounds.x + 5, menu_bounds.y + 4, menu_bounds.w - 10, 14), "Profile", id + 1);
-    try menuRow(scene, collector, ui.Rect.init(menu_bounds.x + 5, menu_bounds.y + 20, menu_bounds.w - 10, 14), "Settings", id + 2);
-}
-
-fn previewTable(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32) GalleryError!void {
-    try fill(scene, bounds, palette.panel_alt, 6);
-    try text(scene, bounds.x + 8, bounds.y + 4, bounds.w * 0.5, 12, "Name", palette.muted);
-    try alignedText(scene, bounds.x + bounds.w * 0.55, bounds.y + 4, bounds.w * 0.38, 12, "Role", palette.muted, .end);
-    try menuRow(scene, collector, ui.Rect.init(bounds.x + 4, bounds.y + 18, bounds.w - 8, 14), "Sarah Chen", id);
 }
 
 fn previewDatePicker(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32) GalleryError!void {
@@ -785,17 +718,6 @@ fn previewDrawer(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui
     try stroke(scene, sheet_bounds, palette.border, 8);
 }
 
-fn previewEmpty(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32) GalleryError!void {
-    try iconQuad(scene, ui.Rect.init(bounds.x + bounds.w * 0.5 - 8, bounds.y + 2, 16, 16), .storage, palette.muted);
-    try alignedText(scene, bounds.x, bounds.y + 20, bounds.w, 12, "No results found", palette.text, .center);
-    try collector.addHit(bounds, .button, id);
-}
-
-fn previewField(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32) GalleryError!void {
-    try text(scene, bounds.x, bounds.y, bounds.w, 12, "Email", palette.text);
-    try previewInput(scene, collector, ui.Rect.init(bounds.x, bounds.y + 14, bounds.w, 24), id, "m@example.com");
-}
-
 fn previewHoverCard(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32) GalleryError!void {
     try button(scene, collector, ui.Rect.init(bounds.x, bounds.y + 4, 64, 30), "Hover", id, false);
     try fill(scene, ui.Rect.init(bounds.x + 76, bounds.y, @max(80, bounds.w - 76), bounds.h), palette.panel_alt, 8);
@@ -804,72 +726,6 @@ fn previewHoverCard(scene: *ui.Scene, collector: *interaction.Collector, bounds:
 
 fn previewInput(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32, placeholder: []const u8) GalleryError!void {
     try renderComponentPreview(scene, collector, bounds, .{ .input = .{ .id = id, .placeholder = placeholder } }, .{});
-}
-
-fn previewInputGroup(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32) GalleryError!void {
-    try button(scene, collector, ui.Rect.init(bounds.x, bounds.y + 4, 32, 30), "@", id, false);
-    try previewInput(scene, collector, ui.Rect.init(bounds.x + 32, bounds.y + 4, @max(1, bounds.w - 32), 30), id + 1, "username");
-}
-
-fn previewOtp(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32) GalleryError!void {
-    var cursor = ui.LinearCursor.init(bounds, .row, 5);
-    for (0..6) |index| {
-        const cell = cursor.take(28);
-        try fill(scene, cell, palette.panel_alt, 6);
-        try stroke(scene, cell, palette.border, 6);
-        try collector.addHit(cell, .input, id + @as(u32, @intCast(index)));
-    }
-}
-
-fn previewLabel(scene: *ui.Scene, bounds: ui.Rect) GalleryError!void {
-    try text(scene, bounds.x, bounds.y + 10, bounds.w, 14, "Email address", palette.text);
-}
-
-fn previewMenubar(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32) GalleryError!void {
-    var cursor = ui.LinearCursor.init(bounds, .row, 4);
-    const labels = [_][]const u8{ "File", "Edit", "View" };
-    for (labels, 0..) |label, index| try button(scene, collector, cursor.take(48), label, id + @as(u32, @intCast(index)), false);
-}
-
-fn previewSelect(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32, label: []const u8) GalleryError!void {
-    try renderComponentPreview(scene, collector, bounds, .{ .select = .{ .id = id, .label = label } }, .{});
-}
-
-fn previewNavigationMenu(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32) GalleryError!void {
-    var cursor = ui.LinearCursor.init(bounds, .row, 4);
-    const labels = [_][]const u8{ "Docs", "Components", "Blocks" };
-    for (labels, 0..) |label, index| try ghostButton(scene, collector, cursor.take(if (index == 1) 88 else 52), label, id + @as(u32, @intCast(index)));
-}
-
-fn previewPagination(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32) GalleryError!void {
-    var cursor = ui.LinearCursor.init(bounds, .row, 5);
-    const labels = [_][]const u8{ "<", "1", "2", "3", ">" };
-    for (labels, 0..) |label, index| try button(scene, collector, cursor.take(28), label, id + @as(u32, @intCast(index)), index == 2);
-}
-
-fn previewPopover(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32) GalleryError!void {
-    try button(scene, collector, ui.Rect.init(bounds.x, bounds.y + 4, 64, 30), "Open", id, false);
-    try fill(scene, ui.Rect.init(bounds.x + 74, bounds.y, @max(72, bounds.w - 74), bounds.h), palette.panel_alt, 8);
-}
-
-fn previewRadioGroup(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32) GalleryError!void {
-    try radioRow(scene, collector, ui.Rect.init(bounds.x, bounds.y, bounds.w, 18), "Default", true, id);
-    try radioRow(scene, collector, ui.Rect.init(bounds.x, bounds.y + 20, bounds.w, 18), "Comfortable", false, id + 1);
-}
-
-fn previewResizable(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32) GalleryError!void {
-    const left = ui.Rect.init(bounds.x, bounds.y, bounds.w * 0.58, bounds.h);
-    const grip = ui.Rect.init(left.x + left.w + 3, bounds.y, 4, bounds.h);
-    try fill(scene, left, palette.row, 6);
-    try fill(scene, grip, palette.accent, 2);
-    try fill(scene, ui.Rect.init(grip.x + 7, bounds.y, @max(1, bounds.w - left.w - 10), bounds.h), palette.panel_alt, 6);
-    try collector.addHit(grip.insetUniform(-6), .slider, id);
-}
-
-fn previewScrollArea(scene: *ui.Scene, bounds: ui.Rect) GalleryError!void {
-    try fill(scene, bounds, palette.panel_alt, 7);
-    try text(scene, bounds.x + 8, bounds.y + 6, bounds.w - 20, 12, "Scrollable content", palette.text);
-    try fill(scene, ui.Rect.init(bounds.x + bounds.w - 6, bounds.y + 5, 3, bounds.h - 10), palette.row, 2);
 }
 
 fn previewSheet(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32) GalleryError!void {
@@ -910,32 +766,10 @@ fn previewToggle(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui
     try collector.addHit(ui.Rect.init(bounds.x + 74, bounds.y + 4, 64, 30), .button, id + 1);
 }
 
-fn previewToggleGroup(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32) GalleryError!void {
-    var cursor = ui.LinearCursor.init(bounds, .row, 2);
-    const labels = [_][]const u8{ "Left", "Center", "Right" };
-    for (labels, 0..) |label, index| try button(scene, collector, cursor.take(if (index == 1) 64 else 48), label, id + @as(u32, @intCast(index)), index == 1);
-}
-
-fn previewTooltip(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32) GalleryError!void {
-    try button(scene, collector, ui.Rect.init(bounds.x, bounds.y + 8, 80, 28), "Hover me", id, false);
-    const tip = ui.Rect.init(bounds.x + 90, bounds.y + 7, @max(82, bounds.w - 90), 24);
-    try fill(scene, tip, palette.text, 6);
-    try centeredText(scene, tip, "Add to library", palette.bg);
-}
-
 fn menuRow(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id: u32) GalleryError!void {
     try fill(scene, bounds, if (hovered(bounds)) palette.row_hover else palette.row, 4);
     try text(scene, bounds.x + 5, bounds.y + 1, bounds.w - 10, 12, label, palette.text);
     try collector.addHit(bounds, .row_item, id);
-}
-
-fn radioRow(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, selected: bool, id: u32) GalleryError!void {
-    const circle = ui.Rect.init(bounds.x, bounds.y + 2, 14, 14);
-    try fill(scene, circle, if (selected) palette.text else palette.panel, 7);
-    try stroke(scene, circle, if (selected) palette.text else palette.border, 7);
-    if (selected) try fill(scene, circle.insetUniform(5), palette.panel, 2);
-    try text(scene, bounds.x + 22, bounds.y + 1, bounds.w - 22, 13, label, palette.text);
-    try collector.addHit(bounds, .checkbox, id);
 }
 
 fn renderRail(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, grid_gap: f32) GalleryError!void {
@@ -1245,7 +1079,7 @@ fn hovered(bounds: ui.Rect) bool {
 }
 
 test "component gallery catalog is the authoritative component registry" {
-    try std.testing.expectEqual(@as(usize, 57), component_catalog.len);
+    try std.testing.expectEqual(@as(usize, 58), component_catalog.len);
     try std.testing.expectEqualStrings("/docs/components/input-group", findBySlug("input-group").?.route);
     try std.testing.expectEqualStrings("Button", findBySourceComponent("Button").?.source_component);
     try std.testing.expectEqual(@as(usize, 7), indexBySlug("button").?);

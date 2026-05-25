@@ -48,11 +48,16 @@ pub fn Slot(comptime Component: type) type {
         pub fn fromView(view: object.View) Error!Self {
             var nodes: [2]ui.Node = undefined;
             const root = codec.decodeView(view, &nodes) catch return error.Corrupt;
-            if (root.stack.children.len != 1) return error.Corrupt;
-            return switch (root.stack.children[0]) {
-                .slot => |slot| .{
-                    .id = slot.id,
-                    .child = try Component.fromNode(slot.child.*),
+            return switch (root) {
+                .stack => |stack| {
+                    if (stack.children.len != 1) return error.Corrupt;
+                    return switch (stack.children[0]) {
+                        .slot => |slot| .{
+                            .id = slot.id,
+                            .child = try Component.fromNode(slot.child.*),
+                        },
+                        else => error.UnsupportedComponent,
+                    };
                 },
                 else => error.UnsupportedComponent,
             };
@@ -74,8 +79,9 @@ pub fn SlotTree(comptime Component: type) type {
             const layout = (object.NodeWriter{ .out = layout_out }).bytesNode(req, epoch, &layout_body) catch return null;
 
             var children: [2]object.Child = undefined;
-            children[0] = tree_codec.childRecord(layout, 0);
-            children[1] = tree_codec.childRecord(self.child.canonical, children[0].logical_len);
+            const layout_view = object.View.decode(layout) catch return null;
+            children[0] = tree_codec.childRecord(layout_view, 0) catch return null;
+            children[1] = tree_codec.childRecord(self.child, children[0].logical_len) catch return null;
 
             const tree = (object.NodeWriter{ .out = tree_out }).treeNode(req, epoch, &children) catch return null;
             return .{ .layout = layout, .tree = tree };

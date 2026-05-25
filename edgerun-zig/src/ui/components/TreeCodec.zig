@@ -79,9 +79,8 @@ pub fn isSlotLayout(view: object.View) bool {
         std.mem.eql(u8, view.body[0..slot_layout_magic.len], slot_layout_magic);
 }
 
-pub fn childRecord(canonical: []const u8, offset: u64) object.Child {
-    const view = object.View.decode(canonical) catch unreachable;
-    return object.Child.fromView(view, offset) catch unreachable;
+pub fn childRecord(view: object.View, offset: u64) Error!object.Child {
+    return object.Child.fromView(view, offset) catch return error.Corrupt;
 }
 
 pub fn sameId(left: [object.id_size]u8, right: [object.id_size]u8) bool {

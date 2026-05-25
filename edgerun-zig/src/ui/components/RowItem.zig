@@ -63,3 +63,17 @@ test "row item component serializes to canonical object and deserializes" {
     try std.testing.expectEqualStrings(row.title, decoded.title);
     try std.testing.expectEqualStrings(row.detail, decoded.detail);
 }
+
+test "row item component renders title and detail through shared row renderer" {
+    const row = RowItem{ .id = 20, .title = "object graph", .detail = "canonical data" };
+    var commands: [8]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+
+    try row.render(&scene, ui.Rect.init(0, 0, 260, 48), .{});
+
+    const title = component_test.textCommand(scene.written(), "object graph").?;
+    const detail = component_test.textCommand(scene.written(), "canonical data").?;
+    try std.testing.expectEqual(ui.Color.text, title.text.color);
+    try std.testing.expectEqual(ui.Color.muted, detail.text.color);
+    try std.testing.expect(detail.text.origin.y > title.text.origin.y);
+}

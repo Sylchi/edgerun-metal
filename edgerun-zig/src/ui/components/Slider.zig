@@ -63,3 +63,17 @@ test "slider component serializes to canonical object and deserializes" {
     try std.testing.expectEqualStrings(slider.label, decoded.label);
     try std.testing.expect(@abs(decoded.value - slider.value) < 0.001);
 }
+
+test "slider component clamps rendered fill and thumb to track" {
+    const slider = Slider{ .id = 13, .label = "Brightness", .value = 2.0 };
+    var commands: [16]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+    const bounds = ui.Rect.init(0, 0, 120, 42);
+
+    try slider.render(&scene, bounds, .{});
+
+    const fill = component_test.fillRectColor(scene.written(), ui.Color.accent).?;
+    try std.testing.expectEqual(@as(f32, 120.0), fill.w);
+    const thumb = component_test.lastFillRect(scene.written()).?;
+    try std.testing.expect(thumb.x + thumb.w <= bounds.x + bounds.w + component_render.slider_thumb_size * 0.5);
+}

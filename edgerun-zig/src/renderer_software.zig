@@ -15,6 +15,56 @@ pub const Error = renderer_present.Error || error{
     UnsupportedIrPrimitive,
 };
 
+pub const TuningError = error{
+    InvalidIconTuning,
+};
+
+pub const IconTuning = struct {
+    curve_segments: usize,
+    stroke_antialias_width: f32,
+    round_cap_antialias_width: f32,
+    line_stroke_coverage_boost: f32,
+    curve_stroke_coverage_boost: f32,
+    arc_stroke_coverage_boost: f32,
+    arc_antialias_width: f32,
+    large_arc_antialias_width: f32,
+    arc_step_divisor: f32,
+    large_arc_step_divisor: f32,
+};
+
+pub const default_icon_tuning = IconTuning{
+    .curve_segments = icon_curve_segments_default,
+    .stroke_antialias_width = icon_stroke_antialias_width_default,
+    .round_cap_antialias_width = icon_stroke_round_cap_antialias_width_default,
+    .line_stroke_coverage_boost = icon_line_stroke_coverage_boost_default,
+    .curve_stroke_coverage_boost = icon_curve_stroke_coverage_boost_default,
+    .arc_stroke_coverage_boost = icon_arc_stroke_coverage_boost_default,
+    .arc_antialias_width = icon_arc_antialias_width_default,
+    .large_arc_antialias_width = icon_large_arc_antialias_width_default,
+    .arc_step_divisor = icon_arc_step_divisor_default,
+    .large_arc_step_divisor = icon_large_arc_step_divisor_default,
+};
+
+var active_icon_tuning = default_icon_tuning;
+
+pub fn setIconTuningForTest(tuning: IconTuning) TuningError!void {
+    if (tuning.curve_segments < icon_curve_segments_min or tuning.curve_segments > icon_curve_segments_max) return error.InvalidIconTuning;
+    if (tuning.stroke_antialias_width < icon_stroke_antialias_width_min or tuning.stroke_antialias_width > icon_stroke_antialias_width_max) return error.InvalidIconTuning;
+    if (tuning.round_cap_antialias_width < icon_stroke_antialias_width_min or tuning.round_cap_antialias_width > icon_stroke_antialias_width_max) return error.InvalidIconTuning;
+    if (tuning.line_stroke_coverage_boost < icon_stroke_coverage_boost_min or tuning.line_stroke_coverage_boost > icon_stroke_coverage_boost_max) return error.InvalidIconTuning;
+    if (tuning.curve_stroke_coverage_boost < icon_stroke_coverage_boost_min or tuning.curve_stroke_coverage_boost > icon_stroke_coverage_boost_max) return error.InvalidIconTuning;
+    if (tuning.arc_stroke_coverage_boost < icon_stroke_coverage_boost_min or tuning.arc_stroke_coverage_boost > icon_stroke_coverage_boost_max) return error.InvalidIconTuning;
+    if (tuning.arc_antialias_width < icon_arc_antialias_width_min or tuning.arc_antialias_width > icon_arc_antialias_width_max) return error.InvalidIconTuning;
+    if (tuning.large_arc_antialias_width < icon_arc_antialias_width_min or tuning.large_arc_antialias_width > icon_arc_antialias_width_max) return error.InvalidIconTuning;
+    if (tuning.arc_step_divisor < icon_arc_step_divisor_min or tuning.arc_step_divisor > icon_arc_step_divisor_max) return error.InvalidIconTuning;
+    if (tuning.large_arc_step_divisor < icon_arc_step_divisor_min or tuning.large_arc_step_divisor > icon_arc_step_divisor_max) return error.InvalidIconTuning;
+    active_icon_tuning = tuning;
+}
+
+pub fn resetIconTuningForTest() void {
+    active_icon_tuning = default_icon_tuning;
+}
+
 pub const AlphaAtlas = struct {
     width: usize,
     height: usize,
@@ -464,48 +514,63 @@ pub const Surface = struct {
 
     fn drawIconInstance(self: Surface, icon_bounds: ui.Rect, color: ui.Color, icon_id: u32, scale: f32) void {
         const bounds = scaleRect(icon_bounds, scale);
-        var iter = icon_svg.Iterator.init(icon_svg.sourceForIconId(icon_id));
-        while (iter.nextPathData() catch unreachable) |path_data| {
-            self.drawIconPath(bounds, color, path_data);
+        self.drawIconSvg(bounds, color, icon_svg.sourceForIconId(icon_id));
+    }
+
+    fn drawIconSvg(self: Surface, bounds: ui.Rect, color: ui.Color, svg: []const u8) void {
+        var iter = icon_svg.Iterator.init(svg);
+        var buffer: [icon_alpha_mask_capacity]u8 = undefined;
+        var mask = IconAlphaMask.init(bounds, self.width, self.height, buffer[0..]);
+        var path = IconPathState{};
+        while (iter.next() catch unreachable) |op| {
+            self.drawIconOp(bounds, color, &mask, &path, op);
+        }
+        self.finishIconSubpath(&mask, &path);
+        self.blendIconMask(&mask, color);
+    }
+
+    fn drawIconOp(self: Surface, bounds: ui.Rect, color: ui.Color, mask: *IconAlphaMask, path: *IconPathState, op: icon_vector.Op) void {
+        switch (op) {
+            .polyline => |points| self.iconLine(bounds, color, points),
+            .circle => |circle| self.iconCircle(bounds, color, circle.cx, circle.cy, circle.radius),
+            .ellipse => |ellipse| self.iconEllipse(bounds, color, ellipse.cx, ellipse.cy, ellipse.rx, ellipse.ry, ellipse.full),
+            .round_rect => |rect| self.iconRoundRect(bounds, color, rect.x, rect.y, rect.w, rect.h, rect.radius),
+            .filled_circle => |circle| self.iconFilledCircle(bounds, color, circle.cx, circle.cy, circle.radius),
+            .move_to => |point| {
+                if (path.has_segment) {
+                    self.finishIconPathMask(mask, path, color);
+                }
+                path.moveTo(point);
+            },
+            .line_to => |point| {
+                if (path.current) |current| self.strokePathSegmentMask(mask, path, current, point, active_icon_tuning.stroke_antialias_width, active_icon_tuning.line_stroke_coverage_boost);
+                path.lineTo(point);
+            },
+            .quad_to => |quad| {
+                if (path.current) |current| self.strokeQuadraticPathMask(mask, path, current, quad.control, quad.end);
+                path.lineTo(quad.end);
+            },
+            .cubic_to => |cubic| {
+                if (path.current) |current| self.strokeCubicPathMask(mask, path, current, cubic.control0, cubic.control1, cubic.end);
+                path.lineTo(cubic.end);
+            },
+            .arc_to => |arc| {
+                if (path.current) |current| self.strokeArcPathMask(mask, path, current, arc);
+                path.lineTo(arc.end);
+            },
+            .close_path => if (path.current) |current| if (path.start) |start| {
+                self.strokePathSegmentMask(mask, path, current, start, active_icon_tuning.stroke_antialias_width, active_icon_tuning.line_stroke_coverage_boost);
+                self.strokeRoundPointMask(mask, start, active_icon_tuning.stroke_antialias_width, active_icon_tuning.line_stroke_coverage_boost);
+                path.closed = true;
+                path.lineTo(start);
+            },
         }
     }
 
-    fn drawIconPath(self: Surface, bounds: ui.Rect, color: ui.Color, path_data: []const u8) void {
-        var buffer: [icon_alpha_mask_capacity]u8 = undefined;
-        var mask = IconAlphaMask.init(bounds, self.width, self.height, buffer[0..]);
-        var path_iter = icon_svg.PathIterator.init(path_data);
-        var path = IconPathState{};
-        while (path_iter.next() catch unreachable) |op| {
-            switch (op) {
-                .polyline => |points| self.iconLine(bounds, color, points),
-                .circle => |circle| self.iconCircle(bounds, color, circle.cx, circle.cy, circle.radius),
-                .ellipse => |ellipse| self.iconEllipse(bounds, color, ellipse.cx, ellipse.cy, ellipse.rx, ellipse.ry, ellipse.full),
-                .round_rect => |rect| self.iconRoundRect(bounds, color, rect.x, rect.y, rect.w, rect.h, rect.radius),
-                .filled_circle => |circle| self.iconFilledCircle(bounds, color, circle.cx, circle.cy, circle.radius),
-                .move_to => |point| path.moveTo(point),
-                .line_to => |point| {
-                    if (path.current) |current| self.strokeSegmentMask(&mask, current.x, current.y, point.x, point.y);
-                    path.lineTo(point);
-                },
-                .quad_to => |quad| {
-                    if (path.current) |current| self.strokeQuadraticMask(&mask, current, quad.control, quad.end);
-                    path.lineTo(quad.end);
-                },
-                .cubic_to => |cubic| {
-                    if (path.current) |current| self.strokeCubicMask(&mask, current, cubic.control0, cubic.control1, cubic.end);
-                    path.lineTo(cubic.end);
-                },
-                .arc_to => |arc| {
-                    if (path.current) |current| self.strokeArcMask(&mask, current, arc);
-                    path.lineTo(arc.end);
-                },
-                .close_path => if (path.current) |current| if (path.start) |start| {
-                    self.strokeSegmentMask(&mask, current.x, current.y, start.x, start.y);
-                    path.lineTo(start);
-                },
-            }
-        }
-        self.blendIconMask(&mask, color);
+    fn finishIconPathMask(self: Surface, mask: *IconAlphaMask, path: *IconPathState, color: ui.Color) void {
+        self.finishIconSubpath(mask, path);
+        self.blendIconMask(mask, color);
+        mask.clear();
     }
 
     fn iconLine(self: Surface, bounds: ui.Rect, color: ui.Color, points: []const f32) void {
@@ -556,6 +621,7 @@ pub const Surface = struct {
         const dy = y1 - y0;
         const denom = dx * dx + dy * dy;
         if (denom <= 0.0) return;
+        const boost_coverage = isSlopedSegment(dx, dy);
         var y = y_start;
         while (y < y_end) : (y += 1) {
             var x = x_start;
@@ -566,13 +632,47 @@ pub const Surface = struct {
                 const cx = x0 + dx * t;
                 const cy = y0 + dy * t;
                 const dist = @sqrt((px - cx) * (px - cx) + (py - cy) * (py - cy));
-                const alpha = strokeCoverageAlpha(radius, dist);
+                const alpha = strokeCoverageAlpha(radius, dist, active_icon_tuning.stroke_antialias_width, boost_coverage, active_icon_tuning.line_stroke_coverage_boost);
                 if (alpha != 0) self.blendPixelMaxAlpha(x, y, color, alpha);
             }
         }
     }
 
-    fn strokeSegmentMask(self: Surface, mask: *IconAlphaMask, x0n: f32, y0n: f32, x1n: f32, y1n: f32) void {
+    fn strokePathSegmentMask(self: Surface, mask: *IconAlphaMask, path: *IconPathState, start: icon_vector.Point, end: icon_vector.Point, antialias_width_value: f32, coverage_boost: f32) void {
+        if (path.has_segment) {
+            self.strokeRoundPointMask(mask, start, antialias_width_value, coverage_boost);
+        } else {
+            path.first_segment_start = start;
+            path.first_cap_antialias_width = antialias_width_value;
+            path.first_cap_coverage_boost = coverage_boost;
+            path.has_segment = true;
+        }
+        self.strokeSegmentMaskButt(mask, start.x, start.y, end.x, end.y, antialias_width_value, coverage_boost);
+        path.last_segment_end = end;
+        path.last_cap_antialias_width = antialias_width_value;
+        path.last_cap_coverage_boost = coverage_boost;
+        path.segment_count += 1;
+    }
+
+    fn finishIconSubpath(self: Surface, mask: *IconAlphaMask, path: *IconPathState) void {
+        if (!path.has_segment or path.closed) {
+            path.clearStroke();
+            return;
+        }
+        if (path.endsAtStart()) {
+            path.clearStroke();
+            return;
+        }
+        const single_segment = path.segment_count == 1;
+        const cap_antialias_width = if (single_segment) active_icon_tuning.round_cap_antialias_width else path.first_cap_antialias_width;
+        const first_cap_boost = if (single_segment) 0.0 else path.first_cap_coverage_boost;
+        const last_cap_boost = if (single_segment) 0.0 else path.last_cap_coverage_boost;
+        self.strokeRoundPointMask(mask, path.first_segment_start, cap_antialias_width, first_cap_boost);
+        self.strokeRoundPointMask(mask, path.last_segment_end, cap_antialias_width, last_cap_boost);
+        path.clearStroke();
+    }
+
+    fn strokeSegmentMaskButt(self: Surface, mask: *IconAlphaMask, x0n: f32, y0n: f32, x1n: f32, y1n: f32, antialias_width_value: f32, coverage_boost: f32) void {
         _ = self;
         const bounds = mask.bounds;
         const x0 = bounds.x + bounds.w * x0n;
@@ -592,186 +692,93 @@ pub const Surface = struct {
         const dy = y1 - y0;
         const denom = dx * dx + dy * dy;
         if (denom <= 0.0) return;
+        const boost_coverage = isSlopedSegment(dx, dy);
         var y = y_start;
         while (y < y_end) : (y += 1) {
             var x = x_start;
             while (x < x_end) : (x += 1) {
                 const px = @as(f32, @floatFromInt(x)) + icon_pixel_center;
                 const py = @as(f32, @floatFromInt(y)) + icon_pixel_center;
-                const t = std.math.clamp(((px - x0) * dx + (py - y0) * dy) / denom, 0.0, 1.0);
+                const t = ((px - x0) * dx + (py - y0) * dy) / denom;
+                if (t < 0.0 or t > 1.0) continue;
                 const cx = x0 + dx * t;
                 const cy = y0 + dy * t;
                 const dist = @sqrt((px - cx) * (px - cx) + (py - cy) * (py - cy));
-                const alpha = strokeCoverageAlpha(radius, dist);
+                const alpha = strokeCoverageAlpha(radius, dist, antialias_width_value, boost_coverage, coverage_boost);
                 if (alpha != 0) mask.writeMax(x, y, alpha);
             }
         }
     }
 
-    fn strokeQuadratic(self: Surface, bounds: ui.Rect, color: ui.Color, start: icon_vector.Point, control: icon_vector.Point, end: icon_vector.Point) void {
+    fn strokeRoundPointMask(self: Surface, mask: *IconAlphaMask, point: icon_vector.Point, antialias_width_value: f32, coverage_boost: f32) void {
+        _ = self;
+        const bounds = mask.bounds;
+        const cx = bounds.x + bounds.w * point.x;
+        const cy = bounds.y + bounds.h * point.y;
+        const radius = iconStroke(bounds) * 0.5;
+        const x_start = mask.clampX(@intFromFloat(@floor(cx - radius)));
+        const y_start = mask.clampY(@intFromFloat(@floor(cy - radius)));
+        const x_end = mask.clampX(@intFromFloat(@ceil(cx + radius)));
+        const y_end = mask.clampY(@intFromFloat(@ceil(cy + radius)));
+        var y = y_start;
+        while (y < y_end) : (y += 1) {
+            var x = x_start;
+            while (x < x_end) : (x += 1) {
+                const px = @as(f32, @floatFromInt(x)) + icon_pixel_center;
+                const py = @as(f32, @floatFromInt(y)) + icon_pixel_center;
+                const dx = px - cx;
+                const dy = py - cy;
+                const dist = @sqrt(dx * dx + dy * dy);
+                const alpha = strokeCoverageAlpha(radius, dist, antialias_width_value, true, coverage_boost);
+                if (alpha != 0) mask.writeMax(x, y, alpha);
+            }
+        }
+    }
+
+    fn strokeQuadraticPathMask(self: Surface, mask: *IconAlphaMask, path: *IconPathState, start: icon_vector.Point, control: icon_vector.Point, end: icon_vector.Point) void {
         var previous = start;
+        const curve_segments = active_icon_tuning.curve_segments;
         var step: usize = 1;
-        while (step <= icon_curve_segments) : (step += 1) {
-            const t = @as(f32, @floatFromInt(step)) / @as(f32, @floatFromInt(icon_curve_segments));
+        while (step <= curve_segments) : (step += 1) {
+            const t = @as(f32, @floatFromInt(step)) / @as(f32, @floatFromInt(curve_segments));
             const mt = 1.0 - t;
             const next = icon_vector.Point{
                 .x = mt * mt * start.x + 2.0 * mt * t * control.x + t * t * end.x,
                 .y = mt * mt * start.y + 2.0 * mt * t * control.y + t * t * end.y,
             };
-            self.strokeSegment(bounds, color, previous.x, previous.y, next.x, next.y);
+            self.strokePathSegmentMask(mask, path, previous, next, active_icon_tuning.stroke_antialias_width, active_icon_tuning.curve_stroke_coverage_boost);
             previous = next;
         }
     }
 
-    fn strokeQuadraticMask(self: Surface, mask: *IconAlphaMask, start: icon_vector.Point, control: icon_vector.Point, end: icon_vector.Point) void {
+    fn strokeCubicPathMask(self: Surface, mask: *IconAlphaMask, path: *IconPathState, start: icon_vector.Point, control0: icon_vector.Point, control1: icon_vector.Point, end: icon_vector.Point) void {
         var previous = start;
+        const curve_segments = active_icon_tuning.curve_segments;
         var step: usize = 1;
-        while (step <= icon_curve_segments) : (step += 1) {
-            const t = @as(f32, @floatFromInt(step)) / @as(f32, @floatFromInt(icon_curve_segments));
-            const mt = 1.0 - t;
-            const next = icon_vector.Point{
-                .x = mt * mt * start.x + 2.0 * mt * t * control.x + t * t * end.x,
-                .y = mt * mt * start.y + 2.0 * mt * t * control.y + t * t * end.y,
-            };
-            self.strokeSegmentMask(mask, previous.x, previous.y, next.x, next.y);
-            previous = next;
-        }
-    }
-
-    fn strokeCubic(self: Surface, bounds: ui.Rect, color: ui.Color, start: icon_vector.Point, control0: icon_vector.Point, control1: icon_vector.Point, end: icon_vector.Point) void {
-        var previous = start;
-        var step: usize = 1;
-        while (step <= icon_curve_segments) : (step += 1) {
-            const t = @as(f32, @floatFromInt(step)) / @as(f32, @floatFromInt(icon_curve_segments));
+        while (step <= curve_segments) : (step += 1) {
+            const t = @as(f32, @floatFromInt(step)) / @as(f32, @floatFromInt(curve_segments));
             const mt = 1.0 - t;
             const next = icon_vector.Point{
                 .x = mt * mt * mt * start.x + 3.0 * mt * mt * t * control0.x + 3.0 * mt * t * t * control1.x + t * t * t * end.x,
                 .y = mt * mt * mt * start.y + 3.0 * mt * mt * t * control0.y + 3.0 * mt * t * t * control1.y + t * t * t * end.y,
             };
-            self.strokeSegment(bounds, color, previous.x, previous.y, next.x, next.y);
+            self.strokePathSegmentMask(mask, path, previous, next, active_icon_tuning.stroke_antialias_width, active_icon_tuning.curve_stroke_coverage_boost);
             previous = next;
         }
     }
 
-    fn strokeCubicMask(self: Surface, mask: *IconAlphaMask, start: icon_vector.Point, control0: icon_vector.Point, control1: icon_vector.Point, end: icon_vector.Point) void {
-        var previous = start;
-        var step: usize = 1;
-        while (step <= icon_curve_segments) : (step += 1) {
-            const t = @as(f32, @floatFromInt(step)) / @as(f32, @floatFromInt(icon_curve_segments));
-            const mt = 1.0 - t;
-            const next = icon_vector.Point{
-                .x = mt * mt * mt * start.x + 3.0 * mt * mt * t * control0.x + 3.0 * mt * t * t * control1.x + t * t * t * end.x,
-                .y = mt * mt * mt * start.y + 3.0 * mt * mt * t * control0.y + 3.0 * mt * t * t * control1.y + t * t * t * end.y,
-            };
-            self.strokeSegmentMask(mask, previous.x, previous.y, next.x, next.y);
-            previous = next;
-        }
-    }
-
-    fn strokeArc(self: Surface, bounds: ui.Rect, color: ui.Color, start: icon_vector.Point, arc: icon_vector.Arc) void {
-        const rx_start = @abs(arc.rx);
-        const ry_start = @abs(arc.ry);
-        if (rx_start <= 0.0 or ry_start <= 0.0) {
-            self.strokeSegment(bounds, color, start.x, start.y, arc.end.x, arc.end.y);
+    fn strokeArcPathMask(self: Surface, mask: *IconAlphaMask, path: *IconPathState, start: icon_vector.Point, arc: icon_vector.Arc) void {
+        const geometry = svgArcGeometry(start, arc) orelse {
+            self.strokePathSegmentMask(mask, path, start, arc.end, active_icon_tuning.stroke_antialias_width, active_icon_tuning.line_stroke_coverage_boost);
             return;
-        }
-        const phi = arc.x_axis_rotation * std.math.pi / 180.0;
-        const cos_phi = @cos(phi);
-        const sin_phi = @sin(phi);
-        const dx = (start.x - arc.end.x) * 0.5;
-        const dy = (start.y - arc.end.y) * 0.5;
-        const x1p = cos_phi * dx + sin_phi * dy;
-        const y1p = -sin_phi * dx + cos_phi * dy;
-        var rx = rx_start;
-        var ry = ry_start;
-        const radius_scale = x1p * x1p / (rx * rx) + y1p * y1p / (ry * ry);
-        if (radius_scale > 1.0) {
-            const scale = @sqrt(radius_scale);
-            rx *= scale;
-            ry *= scale;
-        }
-        const numerator = rx * rx * ry * ry - rx * rx * y1p * y1p - ry * ry * x1p * x1p;
-        const denominator = rx * rx * y1p * y1p + ry * ry * x1p * x1p;
-        const sign: f32 = if (arc.large_arc == arc.sweep) 1.0 else -1.0;
-        const coefficient = sign * @sqrt(@max(0.0, numerator / @max(denominator, 0.000001)));
-        const cxp = coefficient * rx * y1p / ry;
-        const cyp = coefficient * -ry * x1p / rx;
-        const center = icon_vector.Point{
-            .x = cos_phi * cxp - sin_phi * cyp + (start.x + arc.end.x) * 0.5,
-            .y = sin_phi * cxp + cos_phi * cyp + (start.y + arc.end.y) * 0.5,
         };
-        const v0 = icon_vector.Point{ .x = (x1p - cxp) / rx, .y = (y1p - cyp) / ry };
-        const v1 = icon_vector.Point{ .x = (-x1p - cxp) / rx, .y = (-y1p - cyp) / ry };
-        const start_angle = vectorAngle(.{ .x = 1.0, .y = 0.0 }, v0);
-        var delta = vectorAngle(v0, v1);
-        if (!arc.sweep and delta > 0.0) delta -= std.math.tau;
-        if (arc.sweep and delta < 0.0) delta += std.math.tau;
-        const steps: usize = @max(4, @as(usize, @intFromFloat(@ceil(@abs(delta) / icon_arc_step))));
+        const steps = arcStepCount(geometry.delta, arc);
+        const arc_antialias_width = arcAntialiasWidth(arc);
         var previous = start;
         var step: usize = 1;
         while (step <= steps) : (step += 1) {
-            const angle = start_angle + delta * @as(f32, @floatFromInt(step)) / @as(f32, @floatFromInt(steps));
-            const xp = rx * @cos(angle);
-            const yp = ry * @sin(angle);
-            const next = icon_vector.Point{
-                .x = center.x + cos_phi * xp - sin_phi * yp,
-                .y = center.y + sin_phi * xp + cos_phi * yp,
-            };
-            self.strokeSegment(bounds, color, previous.x, previous.y, next.x, next.y);
-            previous = next;
-        }
-    }
-
-    fn strokeArcMask(self: Surface, mask: *IconAlphaMask, start: icon_vector.Point, arc: icon_vector.Arc) void {
-        const rx_start = @abs(arc.rx);
-        const ry_start = @abs(arc.ry);
-        if (rx_start <= 0.0 or ry_start <= 0.0) {
-            self.strokeSegmentMask(mask, start.x, start.y, arc.end.x, arc.end.y);
-            return;
-        }
-        const phi = arc.x_axis_rotation * std.math.pi / 180.0;
-        const cos_phi = @cos(phi);
-        const sin_phi = @sin(phi);
-        const dx = (start.x - arc.end.x) * 0.5;
-        const dy = (start.y - arc.end.y) * 0.5;
-        const x1p = cos_phi * dx + sin_phi * dy;
-        const y1p = -sin_phi * dx + cos_phi * dy;
-        var rx = rx_start;
-        var ry = ry_start;
-        const radius_scale = x1p * x1p / (rx * rx) + y1p * y1p / (ry * ry);
-        if (radius_scale > 1.0) {
-            const scale = @sqrt(radius_scale);
-            rx *= scale;
-            ry *= scale;
-        }
-        const numerator = rx * rx * ry * ry - rx * rx * y1p * y1p - ry * ry * x1p * x1p;
-        const denominator = rx * rx * y1p * y1p + ry * ry * x1p * x1p;
-        const sign: f32 = if (arc.large_arc == arc.sweep) 1.0 else -1.0;
-        const coefficient = sign * @sqrt(@max(0.0, numerator / @max(denominator, 0.000001)));
-        const cxp = coefficient * rx * y1p / ry;
-        const cyp = coefficient * -ry * x1p / rx;
-        const center = icon_vector.Point{
-            .x = cos_phi * cxp - sin_phi * cyp + (start.x + arc.end.x) * 0.5,
-            .y = sin_phi * cxp + cos_phi * cyp + (start.y + arc.end.y) * 0.5,
-        };
-        const v0 = icon_vector.Point{ .x = (x1p - cxp) / rx, .y = (y1p - cyp) / ry };
-        const v1 = icon_vector.Point{ .x = (-x1p - cxp) / rx, .y = (-y1p - cyp) / ry };
-        const start_angle = vectorAngle(.{ .x = 1.0, .y = 0.0 }, v0);
-        var delta = vectorAngle(v0, v1);
-        if (!arc.sweep and delta > 0.0) delta -= std.math.tau;
-        if (arc.sweep and delta < 0.0) delta += std.math.tau;
-        const steps: usize = @max(4, @as(usize, @intFromFloat(@ceil(@abs(delta) / icon_arc_step))));
-        var previous = start;
-        var step: usize = 1;
-        while (step <= steps) : (step += 1) {
-            const angle = start_angle + delta * @as(f32, @floatFromInt(step)) / @as(f32, @floatFromInt(steps));
-            const xp = rx * @cos(angle);
-            const yp = ry * @sin(angle);
-            const next = icon_vector.Point{
-                .x = center.x + cos_phi * xp - sin_phi * yp,
-                .y = center.y + sin_phi * xp + cos_phi * yp,
-            };
-            self.strokeSegmentMask(mask, previous.x, previous.y, next.x, next.y);
+            const next = geometry.pointAt(step, steps);
+            self.strokePathSegmentMask(mask, path, previous, next, arc_antialias_width, active_icon_tuning.arc_stroke_coverage_boost);
             previous = next;
         }
     }
@@ -782,7 +789,7 @@ pub const Surface = struct {
             var col: usize = 0;
             while (col < mask.width) : (col += 1) {
                 const alpha = mask.pixels[row * mask.width + col];
-                if (alpha != 0) self.blendPixelPathAlpha(mask.x + col, mask.y + row, color, alpha);
+                if (alpha > icon_alpha_floor) self.blendPixelPathAlpha(mask.x + col, mask.y + row, color, alpha);
             }
         }
     }
@@ -891,6 +898,10 @@ const IconAlphaMask = struct {
         const index = local_y * self.width + local_x;
         if (alpha > self.pixels[index]) self.pixels[index] = alpha;
     }
+
+    fn clear(self: *IconAlphaMask) void {
+        @memset(self.pixels, 0);
+    }
 };
 
 const default_raster_scale: f32 = 1.0;
@@ -947,23 +958,151 @@ fn iconStroke(bounds: ui.Rect) f32 {
 }
 
 const icon_stroke_scale: f32 = 2.0 / 24.0;
-const icon_curve_segments: usize = 32;
-const icon_arc_step: f32 = std.math.pi / 21.0;
+const icon_stroke_antialias_width_default: f32 = 0.5;
+const icon_stroke_round_cap_antialias_width_default: f32 = 0.588086;
+const icon_stroke_antialias_width_min: f32 = 0.4;
+const icon_stroke_antialias_width_max: f32 = 0.75;
+const icon_arc_antialias_width_default: f32 = 0.54;
+const icon_large_arc_antialias_width_default: f32 = 0.66;
+const icon_large_arc_radius_threshold: f32 = 0.25;
+const icon_arc_antialias_width_min: f32 = 0.4;
+const icon_arc_antialias_width_max: f32 = 0.7;
+const icon_stroke_coverage_boost_floor: f32 = 0.5;
+const icon_line_stroke_coverage_boost_default: f32 = 1.2;
+const icon_curve_stroke_coverage_boost_default: f32 = 0.05;
+const icon_arc_stroke_coverage_boost_default: f32 = 1.4;
+const icon_stroke_coverage_boost_min: f32 = 0.0;
+const icon_stroke_coverage_boost_max: f32 = 2.0;
+const icon_axis_epsilon: f32 = 0.00001;
+const icon_closed_subpath_epsilon_squared: f32 = 0.00000001;
+const icon_alpha_floor: u8 = 1;
+const icon_curve_segments_default: usize = 4;
+const icon_curve_segments_min: usize = 2;
+const icon_curve_segments_max: usize = 64;
+const icon_arc_step_divisor_default: f32 = 40.0;
+const icon_large_arc_step_divisor_default: f32 = 10.0;
+const icon_arc_step_divisor_min: f32 = 8.0;
+const icon_arc_step_divisor_max: f32 = 64.0;
 const icon_alpha_mask_capacity: usize = 512 * 512;
+const svg_arc_denominator_min: f32 = 0.000001;
 
 const IconPathState = struct {
     current: ?icon_vector.Point = null,
     start: ?icon_vector.Point = null,
+    first_segment_start: icon_vector.Point = .{ .x = 0.0, .y = 0.0 },
+    last_segment_end: icon_vector.Point = .{ .x = 0.0, .y = 0.0 },
+    first_cap_antialias_width: f32 = icon_stroke_antialias_width_default,
+    first_cap_coverage_boost: f32 = icon_line_stroke_coverage_boost_default,
+    last_cap_antialias_width: f32 = icon_stroke_antialias_width_default,
+    last_cap_coverage_boost: f32 = icon_line_stroke_coverage_boost_default,
+    segment_count: usize = 0,
+    has_segment: bool = false,
+    closed: bool = false,
 
     fn moveTo(self: *IconPathState, point: icon_vector.Point) void {
         self.current = point;
         self.start = point;
+        self.clearStroke();
     }
 
     fn lineTo(self: *IconPathState, point: icon_vector.Point) void {
         self.current = point;
     }
+
+    fn clearStroke(self: *IconPathState) void {
+        self.first_segment_start = .{ .x = 0.0, .y = 0.0 };
+        self.last_segment_end = .{ .x = 0.0, .y = 0.0 };
+        self.first_cap_antialias_width = icon_stroke_antialias_width_default;
+        self.first_cap_coverage_boost = icon_line_stroke_coverage_boost_default;
+        self.last_cap_antialias_width = icon_stroke_antialias_width_default;
+        self.last_cap_coverage_boost = icon_line_stroke_coverage_boost_default;
+        self.segment_count = 0;
+        self.has_segment = false;
+        self.closed = false;
+    }
+
+    fn endsAtStart(self: IconPathState) bool {
+        const dx = self.last_segment_end.x - self.first_segment_start.x;
+        const dy = self.last_segment_end.y - self.first_segment_start.y;
+        return dx * dx + dy * dy <= icon_closed_subpath_epsilon_squared;
+    }
 };
+
+const SvgArcGeometry = struct {
+    center: icon_vector.Point,
+    rx: f32,
+    ry: f32,
+    cos_phi: f32,
+    sin_phi: f32,
+    start_angle: f32,
+    delta: f32,
+
+    fn pointAt(self: SvgArcGeometry, step: usize, steps: usize) icon_vector.Point {
+        const angle = self.start_angle + self.delta * @as(f32, @floatFromInt(step)) / @as(f32, @floatFromInt(steps));
+        const xp = self.rx * @cos(angle);
+        const yp = self.ry * @sin(angle);
+        return .{
+            .x = self.center.x + self.cos_phi * xp - self.sin_phi * yp,
+            .y = self.center.y + self.sin_phi * xp + self.cos_phi * yp,
+        };
+    }
+};
+
+fn svgArcGeometry(start: icon_vector.Point, arc: icon_vector.Arc) ?SvgArcGeometry {
+    const rx_start = @abs(arc.rx);
+    const ry_start = @abs(arc.ry);
+    if (rx_start <= 0.0 or ry_start <= 0.0) return null;
+    const phi = arc.x_axis_rotation * std.math.pi / 180.0;
+    const cos_phi = @cos(phi);
+    const sin_phi = @sin(phi);
+    const dx = (start.x - arc.end.x) * 0.5;
+    const dy = (start.y - arc.end.y) * 0.5;
+    const x1p = cos_phi * dx + sin_phi * dy;
+    const y1p = -sin_phi * dx + cos_phi * dy;
+    var rx = rx_start;
+    var ry = ry_start;
+    const radius_scale = x1p * x1p / (rx * rx) + y1p * y1p / (ry * ry);
+    if (radius_scale > 1.0) {
+        const scale = @sqrt(radius_scale);
+        rx *= scale;
+        ry *= scale;
+    }
+    const numerator = rx * rx * ry * ry - rx * rx * y1p * y1p - ry * ry * x1p * x1p;
+    const denominator = rx * rx * y1p * y1p + ry * ry * x1p * x1p;
+    const sign: f32 = if (arc.large_arc == arc.sweep) -1.0 else 1.0;
+    const coefficient = sign * @sqrt(@max(0.0, numerator / @max(denominator, svg_arc_denominator_min)));
+    const cxp = coefficient * rx * y1p / ry;
+    const cyp = coefficient * -ry * x1p / rx;
+    const center = icon_vector.Point{
+        .x = cos_phi * cxp - sin_phi * cyp + (start.x + arc.end.x) * 0.5,
+        .y = sin_phi * cxp + cos_phi * cyp + (start.y + arc.end.y) * 0.5,
+    };
+    const v0 = icon_vector.Point{ .x = (x1p - cxp) / rx, .y = (y1p - cyp) / ry };
+    const v1 = icon_vector.Point{ .x = (-x1p - cxp) / rx, .y = (-y1p - cyp) / ry };
+    const start_angle = vectorAngle(.{ .x = 1.0, .y = 0.0 }, v0);
+    var delta = vectorAngle(v0, v1);
+    if (!arc.sweep and delta > 0.0) delta -= std.math.tau;
+    if (arc.sweep and delta < 0.0) delta += std.math.tau;
+    return .{
+        .center = center,
+        .rx = rx,
+        .ry = ry,
+        .cos_phi = cos_phi,
+        .sin_phi = sin_phi,
+        .start_angle = start_angle,
+        .delta = delta,
+    };
+}
+
+fn arcStepCount(delta: f32, arc: icon_vector.Arc) usize {
+    const divisor = if (arc.large_arc) active_icon_tuning.large_arc_step_divisor else active_icon_tuning.arc_step_divisor;
+    return @max(4, @as(usize, @intFromFloat(@ceil(@abs(delta) * divisor / std.math.pi))));
+}
+
+fn arcAntialiasWidth(arc: icon_vector.Arc) f32 {
+    if (@max(arc.rx, arc.ry) >= icon_large_arc_radius_threshold) return active_icon_tuning.large_arc_antialias_width;
+    return active_icon_tuning.arc_antialias_width;
+}
 
 fn vectorAngle(left: icon_vector.Point, right: icon_vector.Point) f32 {
     const dot = left.x * right.x + left.y * right.y;
@@ -978,11 +1117,18 @@ fn coverageAlpha(radius: f32, distance: f32) u8 {
     return @intFromFloat(@round(std.math.clamp(coverage, 0.0, 1.0) * 255.0));
 }
 
-fn strokeCoverageAlpha(radius: f32, distance: f32) u8 {
-    const aa = 0.533;
-    if (distance <= radius - aa) return max_alpha;
-    if (distance >= radius + aa) return 0;
-    const coverage = (radius + aa - distance) / (aa * 2.0);
+fn isSlopedSegment(dx: f32, dy: f32) bool {
+    return @abs(dx) > icon_axis_epsilon and @abs(dy) > icon_axis_epsilon;
+}
+
+fn strokeCoverageAlpha(radius: f32, distance: f32, antialias_width_value: f32, boost_coverage: bool, coverage_boost: f32) u8 {
+    if (distance <= radius - antialias_width_value) return max_alpha;
+    if (distance >= radius + antialias_width_value) return 0;
+    const t = (radius + antialias_width_value - distance) / (antialias_width_value * 2.0);
+    const coverage = if (boost_coverage and t > icon_stroke_coverage_boost_floor)
+        t + coverage_boost * (t - icon_stroke_coverage_boost_floor) * (1.0 - t)
+    else
+        t;
     return @intFromFloat(@round(std.math.clamp(coverage, 0.0, 1.0) * 255.0));
 }
 
@@ -1175,6 +1321,20 @@ fn clampMaskCoord(value: isize, start: usize, limit: usize) usize {
     return std.math.clamp(as_usize, start, limit);
 }
 
+fn iconMaskPixel(mask: IconAlphaMask, x: usize, y: usize) u8 {
+    if (x < mask.x or y < mask.y) return 0;
+    const local_x = x - mask.x;
+    const local_y = y - mask.y;
+    if (local_x >= mask.width or local_y >= mask.height) return 0;
+    return mask.pixels[local_y * mask.width + local_x];
+}
+
+fn iconMaskAlphaSum(mask: IconAlphaMask) usize {
+    var sum: usize = 0;
+    for (mask.pixels) |alpha| sum += alpha;
+    return sum;
+}
+
 test "software renderer rasterizes ui commands to nonblank pixels" {
     var nodes: [5]ui.Node = undefined;
     const root = sampleRoot(&nodes);
@@ -1193,6 +1353,178 @@ test "software renderer rasterizes ui commands to nonblank pixels" {
         if (pixel.a != 0) painted += 1;
     }
     try std.testing.expect(painted > 0);
+}
+
+test "software renderer svg arc geometry follows sweep side" {
+    const start = icon_vector.Point{ .x = 0.0, .y = 0.0 };
+    const arc = icon_vector.Arc{
+        .rx = 0.7,
+        .ry = 0.55,
+        .x_axis_rotation = 0.0,
+        .large_arc = false,
+        .sweep = true,
+        .end = .{ .x = 0.8, .y = 0.2 },
+    };
+    const geometry = svgArcGeometry(start, arc).?;
+    try std.testing.expect(geometry.center.x < 0.4);
+    try std.testing.expect(geometry.center.y > 0.5);
+    try std.testing.expect(geometry.delta > 0.0);
+    try std.testing.expect(geometry.delta < std.math.pi);
+}
+
+test "software renderer boosts only sloped icon stroke mid coverage" {
+    const radius: f32 = 1.0;
+    const mid_distance: f32 = 0.707;
+    const edge_distance: f32 = 1.414;
+    const explicit_boost: f32 = 0.8;
+    const linear_mid = strokeCoverageAlpha(radius, mid_distance, icon_stroke_antialias_width_default, false, explicit_boost);
+    const boosted_mid = strokeCoverageAlpha(radius, mid_distance, icon_stroke_antialias_width_default, true, explicit_boost);
+    const default_linear_mid = strokeCoverageAlpha(radius, mid_distance, icon_stroke_antialias_width_default, false, active_icon_tuning.line_stroke_coverage_boost);
+    const default_boosted_mid = strokeCoverageAlpha(radius, mid_distance, icon_stroke_antialias_width_default, true, active_icon_tuning.line_stroke_coverage_boost);
+    const linear_edge = strokeCoverageAlpha(radius, edge_distance, icon_stroke_antialias_width_default, false, explicit_boost);
+    const boosted_edge = strokeCoverageAlpha(radius, edge_distance, icon_stroke_antialias_width_default, true, explicit_boost);
+
+    try std.testing.expect(isSlopedSegment(1.0, 1.0));
+    try std.testing.expect(!isSlopedSegment(1.0, 0.0));
+    try std.testing.expect(boosted_mid > linear_mid);
+    try std.testing.expect(default_boosted_mid > default_linear_mid);
+    try std.testing.expectEqual(linear_edge, boosted_edge);
+}
+
+test "software renderer applies svg round caps only at open subpath endpoints" {
+    var pixels: [24 * 24]ui.Color = undefined;
+    const surface = try Surface.init(24, 24, &pixels);
+    const bounds = ui.Rect.init(0, 0, 24, 24);
+    var buffer: [icon_alpha_mask_capacity]u8 = undefined;
+    var mask = IconAlphaMask.init(bounds, surface.width, surface.height, buffer[0..]);
+    var path = IconPathState{};
+    const start = icon_vector.Point{ .x = 0.25, .y = 0.5 };
+    const end = icon_vector.Point{ .x = 0.75, .y = 0.5 };
+    path.moveTo(start);
+
+    surface.strokePathSegmentMask(&mask, &path, start, end, icon_stroke_antialias_width_default, icon_line_stroke_coverage_boost_default);
+    try std.testing.expectEqual(@as(u8, 0), iconMaskPixel(mask, 5, 12));
+
+    surface.finishIconSubpath(&mask, &path);
+    try std.testing.expect(iconMaskPixel(mask, 5, 12) > 0);
+}
+
+test "software renderer treats returned subpaths as closed for svg cap handling" {
+    var pixels: [24 * 24]ui.Color = undefined;
+    const surface = try Surface.init(24, 24, &pixels);
+    const bounds = ui.Rect.init(0, 0, 24, 24);
+    var buffer: [icon_alpha_mask_capacity]u8 = undefined;
+    var mask = IconAlphaMask.init(bounds, surface.width, surface.height, buffer[0..]);
+    var path = IconPathState{};
+    const start = icon_vector.Point{ .x = 0.25, .y = 0.5 };
+    const mid = icon_vector.Point{ .x = 0.75, .y = 0.5 };
+    path.moveTo(start);
+
+    surface.strokePathSegmentMask(&mask, &path, start, mid, icon_stroke_antialias_width_default, icon_line_stroke_coverage_boost_default);
+    surface.strokePathSegmentMask(&mask, &path, mid, start, icon_stroke_antialias_width_default, icon_line_stroke_coverage_boost_default);
+    try std.testing.expect(path.endsAtStart());
+
+    surface.finishIconSubpath(&mask, &path);
+    try std.testing.expectEqual(@as(usize, 0), path.segment_count);
+}
+
+test "software renderer drops subvisible icon alpha floor on blend" {
+    var pixels: [4]ui.Color = undefined;
+    const surface = try Surface.init(2, 2, &pixels);
+    surface.clear(ui.Color.clear);
+    var mask_pixels = [_]u8{ icon_alpha_floor, icon_alpha_floor + 1, 0, max_alpha };
+    const mask = IconAlphaMask{
+        .bounds = ui.Rect.init(0, 0, 2, 2),
+        .x = 0,
+        .y = 0,
+        .width = 2,
+        .height = 2,
+        .pixels = &mask_pixels,
+    };
+
+    surface.blendIconMask(&mask, .{ .r = 255, .g = 255, .b = 255 });
+
+    try std.testing.expectEqual(ui.Color.clear, pixels[0]);
+    try std.testing.expect(pixels[1].a > 0);
+    try std.testing.expectEqual(ui.Color.clear, pixels[2]);
+    try std.testing.expectEqual(max_alpha, pixels[3].a);
+}
+
+test "software renderer composites separate icon path masks" {
+    var pixels: [1]ui.Color = undefined;
+    const surface = try Surface.init(1, 1, &pixels);
+    surface.clear(ui.Color.clear);
+    var mask_pixels = [_]u8{128};
+    var mask = IconAlphaMask{
+        .bounds = ui.Rect.init(0, 0, 1, 1),
+        .x = 0,
+        .y = 0,
+        .width = 1,
+        .height = 1,
+        .pixels = &mask_pixels,
+    };
+    var path = IconPathState{};
+
+    surface.finishIconPathMask(&mask, &path, .{ .r = 255, .g = 255, .b = 255 });
+    const first_alpha = pixels[0].a;
+    try std.testing.expect(first_alpha > 0);
+    try std.testing.expectEqual(@as(u8, 0), mask.pixels[0]);
+
+    mask.pixels[0] = 128;
+    surface.finishIconPathMask(&mask, &path, .{ .r = 255, .g = 255, .b = 255 });
+    try std.testing.expect(pixels[0].a > first_alpha);
+}
+
+test "software renderer uses svg iterator for transformed shape elements" {
+    const svg =
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        \\  <circle transform="translate(4 0)" cx="8" cy="12" r="3"/>
+        \\</svg>
+    ;
+    var pixels: [24 * 24]ui.Color = undefined;
+    const surface = try Surface.init(24, 24, &pixels);
+    surface.clear(ui.Color.clear);
+
+    surface.drawIconSvg(ui.Rect.init(0, 0, 24, 24), .{ .r = 255, .g = 255, .b = 255 }, svg);
+
+    try std.testing.expect(pixels[12 * 24 + 15].a > 0);
+    try std.testing.expectEqual(ui.Color.clear, pixels[12 * 24 + 5]);
+}
+
+test "software renderer icon tuning sweeps explicit candidates" {
+    defer resetIconTuningForTest();
+    const candidates = [_]IconTuning{
+        .{ .curve_segments = 4, .stroke_antialias_width = 0.5, .round_cap_antialias_width = 0.588086, .line_stroke_coverage_boost = 0.8, .curve_stroke_coverage_boost = 0.75, .arc_stroke_coverage_boost = 0.8, .arc_antialias_width = 0.535, .large_arc_antialias_width = 0.565, .arc_step_divisor = 16.0, .large_arc_step_divisor = 10.0 },
+        .{ .curve_segments = 5, .stroke_antialias_width = 0.52, .round_cap_antialias_width = 0.57, .line_stroke_coverage_boost = 1.0, .curve_stroke_coverage_boost = 0.75, .arc_stroke_coverage_boost = 0.95, .arc_antialias_width = 0.535, .large_arc_antialias_width = 0.565, .arc_step_divisor = icon_arc_step_divisor_default, .large_arc_step_divisor = icon_large_arc_step_divisor_default },
+        .{ .curve_segments = 4, .stroke_antialias_width = 0.48, .round_cap_antialias_width = 0.6, .line_stroke_coverage_boost = 0.9, .curve_stroke_coverage_boost = 0.65, .arc_stroke_coverage_boost = 0.9, .arc_antialias_width = 0.535, .large_arc_antialias_width = 0.545, .arc_step_divisor = 28.0, .large_arc_step_divisor = 14.0 },
+        .{ .curve_segments = 4, .stroke_antialias_width = 0.54, .round_cap_antialias_width = 0.55, .line_stroke_coverage_boost = 1.1, .curve_stroke_coverage_boost = 0.85, .arc_stroke_coverage_boost = 1.0, .arc_antialias_width = 0.545, .large_arc_antialias_width = 0.555, .arc_step_divisor = 36.0, .large_arc_step_divisor = 18.0 },
+    };
+    for (candidates) |candidate| {
+        try setIconTuningForTest(candidate);
+        try std.testing.expectEqual(candidate.curve_segments, active_icon_tuning.curve_segments);
+        try std.testing.expectEqual(candidate.stroke_antialias_width, active_icon_tuning.stroke_antialias_width);
+        try std.testing.expectEqual(candidate.round_cap_antialias_width, active_icon_tuning.round_cap_antialias_width);
+        try std.testing.expectEqual(candidate.line_stroke_coverage_boost, active_icon_tuning.line_stroke_coverage_boost);
+        try std.testing.expectEqual(candidate.curve_stroke_coverage_boost, active_icon_tuning.curve_stroke_coverage_boost);
+        try std.testing.expectEqual(candidate.arc_stroke_coverage_boost, active_icon_tuning.arc_stroke_coverage_boost);
+        try std.testing.expectEqual(candidate.arc_antialias_width, active_icon_tuning.arc_antialias_width);
+        try std.testing.expectEqual(candidate.large_arc_antialias_width, active_icon_tuning.large_arc_antialias_width);
+        try std.testing.expectEqual(candidate.arc_step_divisor, active_icon_tuning.arc_step_divisor);
+        try std.testing.expectEqual(candidate.large_arc_step_divisor, active_icon_tuning.large_arc_step_divisor);
+    }
+
+    try std.testing.expectError(error.InvalidIconTuning, setIconTuningForTest(.{
+        .curve_segments = icon_curve_segments_max + 1,
+        .stroke_antialias_width = icon_stroke_antialias_width_default,
+        .round_cap_antialias_width = icon_stroke_round_cap_antialias_width_default,
+        .line_stroke_coverage_boost = icon_line_stroke_coverage_boost_default,
+        .curve_stroke_coverage_boost = icon_curve_stroke_coverage_boost_default,
+        .arc_stroke_coverage_boost = icon_arc_stroke_coverage_boost_default,
+        .arc_antialias_width = icon_arc_antialias_width_default,
+        .large_arc_antialias_width = icon_large_arc_antialias_width_default,
+        .arc_step_divisor = icon_arc_step_divisor_default,
+        .large_arc_step_divisor = icon_large_arc_step_divisor_default,
+    }));
 }
 
 test "software renderer honors rounded gradient and shadow rect modes" {

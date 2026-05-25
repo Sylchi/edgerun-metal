@@ -61,3 +61,24 @@ test "input component serializes to canonical object and deserializes" {
     try std.testing.expectEqual(input.id, decoded.id);
     try std.testing.expectEqualStrings(input.placeholder, decoded.placeholder);
 }
+
+test "input component renders placeholder through shared control text" {
+    const input = Input{ .id = 10, .placeholder = "Search objects" };
+    var commands: [8]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+
+    try input.render(&scene, ui.Rect.init(4, 8, 220, 40), .{});
+
+    const placeholder = component_test.textCommand(scene.written(), "Search objects").?;
+    try std.testing.expectEqual(ui.Color.muted, placeholder.text.color);
+    try std.testing.expectEqual(@as(f32, 16.0), placeholder.text.origin.x);
+    try std.testing.expectEqual(@as(f32, 20.0), placeholder.text.origin.y);
+}
+
+test "input component measurement respects at-most constraints" {
+    const input = Input{ .id = 10, .placeholder = "Search objects" };
+    const measured = input.measure(.{ .width = .{ .at_most = 96.0 }, .height = .{ .at_most = 32.0 } }, .{});
+
+    try std.testing.expectEqual(@as(f32, 96.0), measured.preferred.w);
+    try std.testing.expectEqual(@as(f32, 32.0), measured.preferred.h);
+}

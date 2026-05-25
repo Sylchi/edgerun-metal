@@ -370,6 +370,7 @@ pub fn build(b: *std.Build) void {
         "er_ui_build_browser_frame",
         "er_ui_render_browser_frame",
         "er_ui_render_icon_svg_test",
+        "er_ui_render_icon_svg_tuning_test",
     };
     const install_ui_browser = b.addInstallArtifact(ui_browser, .{});
     const wasm_entry = b.addExecutable(.{

@@ -53,3 +53,14 @@ test "separator component serializes to canonical object and deserializes" {
     const canonical = (Separator{}).toObject(&ui_raw, &object_raw, component_test.req(), component_test.epoch()).?;
     _ = try Separator.fromView(try object.View.decode(canonical));
 }
+
+test "separator component renders centered border line" {
+    var commands: [4]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+    const border = ui.Color{ .r = 9, .g = 8, .b = 7 };
+
+    try (Separator{}).render(&scene, ui.Rect.init(4, 10, 120, 9), .{ .style = .{ .border = border } });
+
+    const line = component_test.fillRectColor(scene.written(), border).?;
+    try std.testing.expectEqual(ui.Rect.init(4, 14, 120, 1), line);
+}

@@ -538,19 +538,54 @@ pub const Slot = struct {
 pub const Node = union(enum) {
     rect: struct { color: Color },
     text: struct { value: []const u8, color: ?Color = null },
+    accordion: struct { id: u32, title: []const u8, detail: []const u8, open: bool },
+    alert: struct { title: []const u8, detail: []const u8, destructive: bool = false },
+    alert_dialog: struct { id: u32, title: []const u8, detail: []const u8 },
+    aspect_ratio: struct { ratio_w: u16, ratio_h: u16 },
+    calendar: struct { id: u32, month: []const u8, selected_day: u16 },
+    carousel: struct { id: u32, label: []const u8 },
+    chart: struct { id: u32, label: []const u8 },
+    combobox: struct { id: u32, placeholder: []const u8, selected: []const u8 },
     card: struct { title: []const u8, detail: []const u8 },
+    empty: struct { title: []const u8, detail: []const u8 },
     badge: struct { label: []const u8 },
     avatar: struct { label: []const u8 },
     kbd: struct { label: []const u8 },
+    label: struct { value: []const u8 },
     separator: void,
+    scroll_area: void,
+    skeleton: void,
+    spinner: void,
+    breadcrumb: struct { id: u32, first: []const u8, current: []const u8 },
+    menubar: struct { id: u32, first: []const u8, second: []const u8, active: u16 },
+    navigation_menu: struct { id: u32, first: []const u8, second: []const u8, active: u16 },
+    command: struct { id: u32, placeholder: []const u8 },
+    context_menu: struct { id: u32, first: []const u8, second: []const u8 },
+    dialog: struct { id: u32, title: []const u8, detail: []const u8 },
+    drawer: struct { id: u32, title: []const u8, detail: []const u8 },
+    dropdown_menu: struct { id: u32, first: []const u8, second: []const u8 },
+    field: struct { id: u32, label: []const u8, placeholder: []const u8 },
+    input_otp: struct { id: u32, value: []const u8 },
     button: struct { id: u32, label: []const u8 },
+    button_group: struct { id: u32, first: []const u8, second: []const u8, active: u16 },
+    toggle_group: struct { id: u32, first: []const u8, second: []const u8, active: u16 },
+    toggle: struct { id: u32, label: []const u8, pressed: bool },
     input: struct { id: u32, placeholder: []const u8 },
+    input_group: struct { id: u32, addon: []const u8, placeholder: []const u8 },
     textarea: struct { id: u32, placeholder: []const u8 },
     select: struct { id: u32, label: []const u8 },
     checkbox: struct { id: u32, label: []const u8, checked: bool },
+    radio_group: struct { id: u32, first: []const u8, second: []const u8, selected: u16 },
     switch_control: struct { id: u32, label: []const u8, checked: bool },
+    pagination: struct { id: u32, page: u16 },
+    popover: struct { id: u32, trigger: []const u8, content: []const u8 },
+    resizable: struct { id: u32, ratio: f32 },
+    sheet: struct { id: u32, title: []const u8, detail: []const u8 },
     progress: struct { value: f32 },
     slider: struct { id: u32, label: []const u8, value: f32 },
+    tabs: struct { id: u32, first: []const u8, second: []const u8, active: u16 },
+    table: struct { id: u32, name: []const u8, role: []const u8 },
+    tooltip: struct { id: u32, trigger: []const u8, content: []const u8 },
     row_item: struct { id: u32, title: []const u8, detail: []const u8 },
     slot: Slot,
     stack: Layout,
@@ -559,19 +594,54 @@ pub const Node = union(enum) {
         return switch (self) {
             .rect => .{ .w = 32, .h = 32 },
             .text => .{ .w = 96, .h = 22 },
+            .accordion => .{ .w = 260, .h = 68 },
+            .alert => .{ .w = 260, .h = 64 },
+            .alert_dialog => .{ .w = 240, .h = 52 },
+            .aspect_ratio => .{ .w = 220, .h = 124 },
+            .calendar => .{ .w = 240, .h = 152 },
+            .carousel => .{ .w = 240, .h = 40 },
+            .chart => .{ .w = 240, .h = 90 },
+            .combobox => .{ .w = 240, .h = 82 },
             .card => .{ .w = 260, .h = 96 },
+            .empty => .{ .w = 260, .h = 132 },
             .badge => .{ .w = 96, .h = 24 },
             .avatar => .{ .w = 40, .h = 40 },
             .kbd => .{ .w = 48, .h = 24 },
+            .label => .{ .w = 96, .h = 16 },
             .separator => .{ .w = 220, .h = 1 },
+            .scroll_area => .{ .w = 220, .h = 48 },
+            .skeleton => .{ .w = 220, .h = 20 },
+            .spinner => .{ .w = 32, .h = 32 },
+            .breadcrumb => .{ .w = 220, .h = 36 },
+            .menubar => .{ .w = 170, .h = 36 },
+            .navigation_menu => .{ .w = 220, .h = 36 },
+            .command => .{ .w = 220, .h = 36 },
+            .context_menu => .{ .w = 240, .h = 52 },
+            .dialog => .{ .w = 240, .h = 52 },
+            .drawer => .{ .w = 240, .h = 76 },
+            .dropdown_menu => .{ .w = 240, .h = 52 },
+            .field => .{ .w = 220, .h = 56 },
+            .input_otp => .{ .w = 200, .h = 36 },
             .button => .{ .w = 112, .h = 36 },
+            .button_group => .{ .w = 160, .h = 36 },
+            .toggle_group => .{ .w = 180, .h = 36 },
+            .toggle => .{ .w = 96, .h = 36 },
             .input => .{ .w = 220, .h = 40 },
+            .input_group => .{ .w = 260, .h = 40 },
             .textarea => .{ .w = 220, .h = 88 },
             .select => .{ .w = 220, .h = 40 },
             .checkbox => .{ .w = 220, .h = 28 },
+            .radio_group => .{ .w = 220, .h = 52 },
             .switch_control => .{ .w = 220, .h = 32 },
+            .pagination => .{ .w = 240, .h = 36 },
+            .popover => .{ .w = 240, .h = 52 },
+            .resizable => .{ .w = 240, .h = 36 },
+            .sheet => .{ .w = 240, .h = 76 },
             .progress => .{ .w = 220, .h = 10 },
             .slider => .{ .w = 220, .h = 42 },
+            .tabs => .{ .w = 220, .h = 84 },
+            .table => .{ .w = 260, .h = 64 },
+            .tooltip => .{ .w = 240, .h = 44 },
             .row_item => .{ .w = 260, .h = 48 },
             .slot => |slot_node| slot_node.child.preferredSize(),
             .stack => |layout| stackPreferredSize(layout),
@@ -587,8 +657,44 @@ pub fn textNode(value: []const u8, color: ?Color) Node {
     return .{ .text = .{ .value = value, .color = color } };
 }
 
+pub fn accordionNode(id: u32, title: []const u8, detail: []const u8, open: bool) Node {
+    return .{ .accordion = .{ .id = id, .title = title, .detail = detail, .open = open } };
+}
+
+pub fn alertNode(title: []const u8, detail: []const u8, destructive: bool) Node {
+    return .{ .alert = .{ .title = title, .detail = detail, .destructive = destructive } };
+}
+
+pub fn alertDialogNode(id: u32, title: []const u8, detail: []const u8) Node {
+    return .{ .alert_dialog = .{ .id = id, .title = title, .detail = detail } };
+}
+
+pub fn aspectRatioNode(ratio_w: u16, ratio_h: u16) Node {
+    return .{ .aspect_ratio = .{ .ratio_w = ratio_w, .ratio_h = ratio_h } };
+}
+
+pub fn calendarNode(id: u32, month: []const u8, selected_day: u16) Node {
+    return .{ .calendar = .{ .id = id, .month = month, .selected_day = selected_day } };
+}
+
+pub fn carouselNode(id: u32, label: []const u8) Node {
+    return .{ .carousel = .{ .id = id, .label = label } };
+}
+
+pub fn chartNode(id: u32, label: []const u8) Node {
+    return .{ .chart = .{ .id = id, .label = label } };
+}
+
+pub fn comboboxNode(id: u32, placeholder: []const u8, selected: []const u8) Node {
+    return .{ .combobox = .{ .id = id, .placeholder = placeholder, .selected = selected } };
+}
+
 pub fn cardNode(title: []const u8, detail: []const u8) Node {
     return .{ .card = .{ .title = title, .detail = detail } };
+}
+
+pub fn emptyNode(title: []const u8, detail: []const u8) Node {
+    return .{ .empty = .{ .title = title, .detail = detail } };
 }
 
 pub fn badgeNode(label: []const u8) Node {
@@ -603,16 +709,88 @@ pub fn kbdNode(label: []const u8) Node {
     return .{ .kbd = .{ .label = label } };
 }
 
+pub fn labelNode(value: []const u8) Node {
+    return .{ .label = .{ .value = value } };
+}
+
 pub fn separatorNode() Node {
     return .{ .separator = {} };
+}
+
+pub fn scrollAreaNode() Node {
+    return .{ .scroll_area = {} };
+}
+
+pub fn skeletonNode() Node {
+    return .{ .skeleton = {} };
+}
+
+pub fn spinnerNode() Node {
+    return .{ .spinner = {} };
+}
+
+pub fn breadcrumbNode(id: u32, first: []const u8, current: []const u8) Node {
+    return .{ .breadcrumb = .{ .id = id, .first = first, .current = current } };
+}
+
+pub fn menubarNode(id: u32, first: []const u8, second: []const u8, active: u16) Node {
+    return .{ .menubar = .{ .id = id, .first = first, .second = second, .active = @min(active, 2) } };
+}
+
+pub fn navigationMenuNode(id: u32, first: []const u8, second: []const u8, active: u16) Node {
+    return .{ .navigation_menu = .{ .id = id, .first = first, .second = second, .active = @min(active, 2) } };
+}
+
+pub fn commandNode(id: u32, placeholder: []const u8) Node {
+    return .{ .command = .{ .id = id, .placeholder = placeholder } };
+}
+
+pub fn contextMenuNode(id: u32, first: []const u8, second: []const u8) Node {
+    return .{ .context_menu = .{ .id = id, .first = first, .second = second } };
+}
+
+pub fn dialogNode(id: u32, title: []const u8, detail: []const u8) Node {
+    return .{ .dialog = .{ .id = id, .title = title, .detail = detail } };
+}
+
+pub fn drawerNode(id: u32, title: []const u8, detail: []const u8) Node {
+    return .{ .drawer = .{ .id = id, .title = title, .detail = detail } };
+}
+
+pub fn dropdownMenuNode(id: u32, first: []const u8, second: []const u8) Node {
+    return .{ .dropdown_menu = .{ .id = id, .first = first, .second = second } };
+}
+
+pub fn fieldNode(id: u32, label: []const u8, placeholder: []const u8) Node {
+    return .{ .field = .{ .id = id, .label = label, .placeholder = placeholder } };
+}
+
+pub fn inputOtpNode(id: u32, value: []const u8) Node {
+    return .{ .input_otp = .{ .id = id, .value = value } };
 }
 
 pub fn buttonNode(id: u32, label: []const u8) Node {
     return .{ .button = .{ .id = id, .label = label } };
 }
 
+pub fn buttonGroupNode(id: u32, first: []const u8, second: []const u8, active: u16) Node {
+    return .{ .button_group = .{ .id = id, .first = first, .second = second, .active = active } };
+}
+
+pub fn toggleGroupNode(id: u32, first: []const u8, second: []const u8, active: u16) Node {
+    return .{ .toggle_group = .{ .id = id, .first = first, .second = second, .active = @min(active, 2) } };
+}
+
+pub fn toggleNode(id: u32, label: []const u8, pressed: bool) Node {
+    return .{ .toggle = .{ .id = id, .label = label, .pressed = pressed } };
+}
+
 pub fn inputNode(id: u32, placeholder: []const u8) Node {
     return .{ .input = .{ .id = id, .placeholder = placeholder } };
+}
+
+pub fn inputGroupNode(id: u32, addon: []const u8, placeholder: []const u8) Node {
+    return .{ .input_group = .{ .id = id, .addon = addon, .placeholder = placeholder } };
 }
 
 pub fn textareaNode(id: u32, placeholder: []const u8) Node {
@@ -627,8 +805,28 @@ pub fn checkboxNode(id: u32, label: []const u8, checked: bool) Node {
     return .{ .checkbox = .{ .id = id, .label = label, .checked = checked } };
 }
 
+pub fn radioGroupNode(id: u32, first: []const u8, second: []const u8, selected: u16) Node {
+    return .{ .radio_group = .{ .id = id, .first = first, .second = second, .selected = selected } };
+}
+
 pub fn switchNode(id: u32, label: []const u8, checked: bool) Node {
     return .{ .switch_control = .{ .id = id, .label = label, .checked = checked } };
+}
+
+pub fn paginationNode(id: u32, page: u16) Node {
+    return .{ .pagination = .{ .id = id, .page = @min(page, 2) } };
+}
+
+pub fn popoverNode(id: u32, trigger: []const u8, content: []const u8) Node {
+    return .{ .popover = .{ .id = id, .trigger = trigger, .content = content } };
+}
+
+pub fn resizableNode(id: u32, ratio: f32) Node {
+    return .{ .resizable = .{ .id = id, .ratio = clampUnit(ratio) } };
+}
+
+pub fn sheetNode(id: u32, title: []const u8, detail: []const u8) Node {
+    return .{ .sheet = .{ .id = id, .title = title, .detail = detail } };
 }
 
 pub fn progressNode(value: f32) Node {
@@ -637,6 +835,18 @@ pub fn progressNode(value: f32) Node {
 
 pub fn sliderNode(id: u32, label: []const u8, value: f32) Node {
     return .{ .slider = .{ .id = id, .label = label, .value = value } };
+}
+
+pub fn tabsNode(id: u32, first: []const u8, second: []const u8, active: u16) Node {
+    return .{ .tabs = .{ .id = id, .first = first, .second = second, .active = active } };
+}
+
+pub fn tableNode(id: u32, name: []const u8, role: []const u8) Node {
+    return .{ .table = .{ .id = id, .name = name, .role = role } };
+}
+
+pub fn tooltipNode(id: u32, trigger: []const u8, content: []const u8) Node {
+    return .{ .tooltip = .{ .id = id, .trigger = trigger, .content = content } };
 }
 
 pub fn rowItemNode(id: u32, title: []const u8, detail: []const u8) Node {
@@ -669,18 +879,49 @@ pub fn alignedRow(gap: f32, padding: f32, cross_align: Align, children: []const 
 
 pub const Patch = union(enum) {
     text_value: []const u8,
+    accordion_open: bool,
+    alert: struct { title: []const u8, detail: []const u8, destructive: bool },
+    alert_dialog: struct { title: []const u8, detail: []const u8 },
+    calendar_selected_day: u16,
+    carousel_label: []const u8,
+    chart_label: []const u8,
+    combobox_selected: []const u8,
     card_text: struct { title: []const u8, detail: []const u8 },
+    empty_text: struct { title: []const u8, detail: []const u8 },
     badge_label: []const u8,
     avatar_label: []const u8,
     kbd_label: []const u8,
+    label_value: []const u8,
+    breadcrumb_current: []const u8,
+    menubar_active: u16,
+    navigation_menu_active: u16,
+    command_placeholder: []const u8,
+    context_menu: struct { first: []const u8, second: []const u8 },
+    dialog: struct { title: []const u8, detail: []const u8 },
+    drawer: struct { title: []const u8, detail: []const u8 },
+    dropdown_menu: struct { first: []const u8, second: []const u8 },
+    field_placeholder: []const u8,
+    input_otp_value: []const u8,
     button_label: []const u8,
+    button_group_active: u16,
+    toggle_group_active: u16,
+    toggle_pressed: bool,
     input_placeholder: []const u8,
+    input_group_placeholder: []const u8,
     textarea_placeholder: []const u8,
     select_label: []const u8,
     checkbox_checked: bool,
+    radio_selected: u16,
     switch_checked: bool,
+    pagination_page: u16,
+    popover_content: []const u8,
+    resizable_ratio: f32,
+    sheet: struct { title: []const u8, detail: []const u8 },
     progress_value: f32,
     slider_value: f32,
+    tabs_active: u16,
+    table_row: struct { name: []const u8, role: []const u8 },
+    tooltip_content: []const u8,
     row_item: struct { title: []const u8, detail: []const u8 },
     rect_color: Color,
     style_color: Color,
@@ -692,10 +933,52 @@ pub fn applyPatch(node: *Node, patch: Patch) PatchError!void {
             .text => |*text_node| text_node.value = value,
             else => return error.WrongNodeKind,
         },
+        .accordion_open => |open| switch (node.*) {
+            .accordion => |*accordion| accordion.open = open,
+            else => return error.WrongNodeKind,
+        },
+        .alert => |alert_patch| switch (node.*) {
+            .alert => |*alert| {
+                alert.title = alert_patch.title;
+                alert.detail = alert_patch.detail;
+                alert.destructive = alert_patch.destructive;
+            },
+            else => return error.WrongNodeKind,
+        },
+        .alert_dialog => |dialog_patch| switch (node.*) {
+            .alert_dialog => |*dialog| {
+                dialog.title = dialog_patch.title;
+                dialog.detail = dialog_patch.detail;
+            },
+            else => return error.WrongNodeKind,
+        },
+        .calendar_selected_day => |selected_day| switch (node.*) {
+            .calendar => |*calendar| calendar.selected_day = selected_day,
+            else => return error.WrongNodeKind,
+        },
+        .carousel_label => |label| switch (node.*) {
+            .carousel => |*carousel| carousel.label = label,
+            else => return error.WrongNodeKind,
+        },
+        .chart_label => |label| switch (node.*) {
+            .chart => |*chart| chart.label = label,
+            else => return error.WrongNodeKind,
+        },
+        .combobox_selected => |selected| switch (node.*) {
+            .combobox => |*combobox| combobox.selected = selected,
+            else => return error.WrongNodeKind,
+        },
         .card_text => |card_patch| switch (node.*) {
             .card => |*card| {
                 card.title = card_patch.title;
                 card.detail = card_patch.detail;
+            },
+            else => return error.WrongNodeKind,
+        },
+        .empty_text => |empty_patch| switch (node.*) {
+            .empty => |*empty| {
+                empty.title = empty_patch.title;
+                empty.detail = empty_patch.detail;
             },
             else => return error.WrongNodeKind,
         },
@@ -711,12 +994,84 @@ pub fn applyPatch(node: *Node, patch: Patch) PatchError!void {
             .kbd => |*kbd| kbd.label = label,
             else => return error.WrongNodeKind,
         },
+        .label_value => |value| switch (node.*) {
+            .label => |*label| label.value = value,
+            else => return error.WrongNodeKind,
+        },
+        .breadcrumb_current => |current| switch (node.*) {
+            .breadcrumb => |*breadcrumb| breadcrumb.current = current,
+            else => return error.WrongNodeKind,
+        },
+        .menubar_active => |active| switch (node.*) {
+            .menubar => |*menubar| menubar.active = @min(active, 2),
+            else => return error.WrongNodeKind,
+        },
+        .navigation_menu_active => |active| switch (node.*) {
+            .navigation_menu => |*menu| menu.active = @min(active, 2),
+            else => return error.WrongNodeKind,
+        },
+        .command_placeholder => |placeholder| switch (node.*) {
+            .command => |*command| command.placeholder = placeholder,
+            else => return error.WrongNodeKind,
+        },
+        .context_menu => |menu_patch| switch (node.*) {
+            .context_menu => |*menu| {
+                menu.first = menu_patch.first;
+                menu.second = menu_patch.second;
+            },
+            else => return error.WrongNodeKind,
+        },
+        .dialog => |dialog_patch| switch (node.*) {
+            .dialog => |*dialog| {
+                dialog.title = dialog_patch.title;
+                dialog.detail = dialog_patch.detail;
+            },
+            else => return error.WrongNodeKind,
+        },
+        .drawer => |drawer_patch| switch (node.*) {
+            .drawer => |*drawer| {
+                drawer.title = drawer_patch.title;
+                drawer.detail = drawer_patch.detail;
+            },
+            else => return error.WrongNodeKind,
+        },
+        .dropdown_menu => |menu_patch| switch (node.*) {
+            .dropdown_menu => |*menu| {
+                menu.first = menu_patch.first;
+                menu.second = menu_patch.second;
+            },
+            else => return error.WrongNodeKind,
+        },
+        .field_placeholder => |placeholder| switch (node.*) {
+            .field => |*field| field.placeholder = placeholder,
+            else => return error.WrongNodeKind,
+        },
+        .input_otp_value => |value| switch (node.*) {
+            .input_otp => |*otp| otp.value = value,
+            else => return error.WrongNodeKind,
+        },
         .button_label => |label| switch (node.*) {
             .button => |*button| button.label = label,
             else => return error.WrongNodeKind,
         },
+        .button_group_active => |active| switch (node.*) {
+            .button_group => |*group| group.active = @min(active, 1),
+            else => return error.WrongNodeKind,
+        },
+        .toggle_group_active => |active| switch (node.*) {
+            .toggle_group => |*group| group.active = @min(active, 2),
+            else => return error.WrongNodeKind,
+        },
+        .toggle_pressed => |pressed| switch (node.*) {
+            .toggle => |*toggle| toggle.pressed = pressed,
+            else => return error.WrongNodeKind,
+        },
         .input_placeholder => |placeholder| switch (node.*) {
             .input => |*input| input.placeholder = placeholder,
+            else => return error.WrongNodeKind,
+        },
+        .input_group_placeholder => |placeholder| switch (node.*) {
+            .input_group => |*input_group| input_group.placeholder = placeholder,
             else => return error.WrongNodeKind,
         },
         .textarea_placeholder => |placeholder| switch (node.*) {
@@ -731,8 +1086,31 @@ pub fn applyPatch(node: *Node, patch: Patch) PatchError!void {
             .checkbox => |*checkbox| checkbox.checked = checked,
             else => return error.WrongNodeKind,
         },
+        .radio_selected => |selected| switch (node.*) {
+            .radio_group => |*radio| radio.selected = @min(selected, 1),
+            else => return error.WrongNodeKind,
+        },
         .switch_checked => |checked| switch (node.*) {
             .switch_control => |*switch_control| switch_control.checked = checked,
+            else => return error.WrongNodeKind,
+        },
+        .pagination_page => |page| switch (node.*) {
+            .pagination => |*pagination| pagination.page = @min(page, 2),
+            else => return error.WrongNodeKind,
+        },
+        .popover_content => |content| switch (node.*) {
+            .popover => |*popover| popover.content = content,
+            else => return error.WrongNodeKind,
+        },
+        .resizable_ratio => |ratio| switch (node.*) {
+            .resizable => |*resizable| resizable.ratio = clampUnit(ratio),
+            else => return error.WrongNodeKind,
+        },
+        .sheet => |sheet_patch| switch (node.*) {
+            .sheet => |*sheet| {
+                sheet.title = sheet_patch.title;
+                sheet.detail = sheet_patch.detail;
+            },
             else => return error.WrongNodeKind,
         },
         .progress_value => |value| switch (node.*) {
@@ -741,6 +1119,21 @@ pub fn applyPatch(node: *Node, patch: Patch) PatchError!void {
         },
         .slider_value => |value| switch (node.*) {
             .slider => |*slider| slider.value = clampUnit(value),
+            else => return error.WrongNodeKind,
+        },
+        .tabs_active => |active| switch (node.*) {
+            .tabs => |*tabs| tabs.active = @min(active, 1),
+            else => return error.WrongNodeKind,
+        },
+        .table_row => |table_patch| switch (node.*) {
+            .table => |*table| {
+                table.name = table_patch.name;
+                table.role = table_patch.role;
+            },
+            else => return error.WrongNodeKind,
+        },
+        .tooltip_content => |content| switch (node.*) {
+            .tooltip => |*tooltip| tooltip.content = content,
             else => return error.WrongNodeKind,
         },
         .row_item => |row_patch| switch (node.*) {
@@ -770,7 +1163,7 @@ fn renderNode(scene: *Scene, node: Node, bounds: Rect, style: Style) RenderError
     switch (node) {
         .rect => |rect_node| try scene.push(.{ .rect = .{ .bounds = bounds, .color = rect_node.color } }),
         .text => |text_node| try scene.push(.{ .text = .{ .origin = bounds, .value = text_node.value, .color = text_node.color orelse style.text } }),
-        .card, .badge, .avatar, .kbd, .separator, .button, .input, .textarea, .select, .checkbox, .switch_control, .progress, .slider, .row_item => return error.UnsupportedComponent,
+        .accordion, .alert, .alert_dialog, .aspect_ratio, .calendar, .carousel, .chart, .combobox, .card, .empty, .badge, .avatar, .kbd, .label, .separator, .scroll_area, .skeleton, .spinner, .breadcrumb, .menubar, .navigation_menu, .command, .context_menu, .dialog, .drawer, .dropdown_menu, .field, .input_otp, .button, .button_group, .toggle_group, .toggle, .input, .input_group, .textarea, .select, .checkbox, .radio_group, .switch_control, .pagination, .popover, .resizable, .sheet, .progress, .slider, .tabs, .table, .tooltip, .row_item => return error.UnsupportedComponent,
         .slot => |slot_node| try renderNode(scene, slot_node.child.*, bounds, style),
         .stack => |layout| try renderStack(scene, layout, bounds, style),
     }

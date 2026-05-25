@@ -54,3 +54,16 @@ test "progress component serializes to canonical object and deserializes" {
 
     try std.testing.expect(@abs(decoded.value - progress.value) < 0.001);
 }
+
+test "progress component clamps rendered fill to track" {
+    const progress = Progress{ .value = 2.0 };
+    var commands: [8]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+    const bounds = ui.Rect.init(0, 0, 120, 10);
+
+    try progress.render(&scene, bounds, .{});
+
+    const fill = component_test.fillRectColor(scene.written(), ui.Color.accent).?;
+    try std.testing.expectEqual(@as(f32, 120.0), fill.w);
+    try std.testing.expect(fill.x + fill.w <= bounds.x + bounds.w);
+}

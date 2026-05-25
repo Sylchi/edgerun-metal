@@ -3446,7 +3446,7 @@ fn outlineButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui
 }
 
 fn nativeBadge(scene: *ui.Scene, bounds: ui.Rect, label: []const u8) ui.RenderError!void {
-    try nativeComponentVisual(scene, bounds, .{ .badge = .{ .label = label } }, .{ .badge_variant = .accent });
+    try nativeComponentVisual(scene, bounds, .{ .badge = .{ .label = label } }, .{ .badge_variant = .default });
 }
 
 fn nativeCard(scene: *ui.Scene, bounds: ui.Rect, title_value: []const u8, detail_value: []const u8) ui.RenderError!void {

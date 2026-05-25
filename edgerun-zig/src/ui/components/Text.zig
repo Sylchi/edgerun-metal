@@ -53,3 +53,23 @@ test "text component serializes to canonical object and deserializes" {
 
     try std.testing.expectEqualStrings(text.value, decoded.value);
 }
+
+test "text component renders through shared text renderer" {
+    const text = Text{ .value = "DNS asks" };
+    var commands: [4]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+    const color = ui.Color{ .r = 2, .g = 4, .b = 6 };
+
+    try text.render(&scene, ui.Rect.init(10, 20, 90, 18), .{ .style = .{ .text = color } });
+
+    const command = component_test.textCommand(scene.written(), "DNS asks").?;
+    try std.testing.expectEqual(color, command.text.color);
+    try std.testing.expectEqual(ui.Rect.init(10, 20, 90, 18), command.text.origin);
+}
+
+test "text component measurement respects at-most height" {
+    const text = Text{ .value = "DNS asks, resolver answers." };
+    const measured = text.measure(.{ .height = .{ .at_most = 10.0 } }, .{});
+
+    try std.testing.expectEqual(@as(f32, 10.0), measured.preferred.h);
+}
