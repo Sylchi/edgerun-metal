@@ -72,18 +72,6 @@ fn resolveTreeChildren(source: store.Store, owner: identity.Id, tree: object.Vie
     return resolved[0..child_count];
 }
 
-fn testReq() object.Requirements {
-    return .{
-        .durability = .memory,
-        .confidentiality = .public,
-        .portability = .public_portable,
-        .integrity = .hash_only,
-        .lifetime = .transient,
-        .visibility = .public,
-        .access = .hot_memory_allowed,
-    };
-}
-
 fn testEpoch() clock.Stamp {
     return .{ .keeper = .{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 } };
 }
@@ -100,12 +88,12 @@ test "resolver hydrates stack tree children from store" {
 
     var text_ui: [128]u8 = undefined;
     var text_object_raw: [object.header_size + 128]u8 = undefined;
-    const text_object = (components.Text{ .value = "Stored" }).toObject(&text_ui, &text_object_raw, testReq(), testEpoch()).?;
+    const text_object = (components.Text{ .value = "Stored" }).toObject(&text_ui, &text_object_raw, testEpoch()).?;
     const text_id = source.putObject(app.id, text_object).?;
 
     var button_ui: [128]u8 = undefined;
     var button_object_raw: [object.header_size + 128]u8 = undefined;
-    const button_object = (components.Button{ .id = 8, .label = "Load" }).toObject(&button_ui, &button_object_raw, testReq(), testEpoch()).?;
+    const button_object = (components.Button{ .id = 8, .label = "Load" }).toObject(&button_ui, &button_object_raw, testEpoch()).?;
     const button_id = source.putObject(app.id, button_object).?;
 
     const child_views = [_]object.View{
@@ -116,7 +104,7 @@ test "resolver hydrates stack tree children from store" {
 
     var layout_raw: [object.header_size + 16]u8 = undefined;
     var tree_raw: [object.header_size + object.child_size * 3]u8 = undefined;
-    const tree_objects = tree_builder.toTreeObjects(&layout_raw, &tree_raw, testReq(), testEpoch()).?;
+    const tree_objects = tree_builder.toTreeObjects(&layout_raw, &tree_raw, testEpoch()).?;
     const tree_id = try storeTreeObjects(&source, app.id, tree_objects);
     const tree_view = source.getObject(app.id, tree_id).?;
 
@@ -145,13 +133,13 @@ test "resolver rejects unresolved tree children" {
 
     var text_ui: [128]u8 = undefined;
     var text_object_raw: [object.header_size + 128]u8 = undefined;
-    const text_object = (components.Text{ .value = "Only child" }).toObject(&text_ui, &text_object_raw, testReq(), testEpoch()).?;
+    const text_object = (components.Text{ .value = "Only child" }).toObject(&text_ui, &text_object_raw, testEpoch()).?;
     const text_view = try object.View.decode(text_object);
     const tree_builder = components.StackTree{ .axis = .column, .children = &.{text_view} };
 
     var layout_raw: [object.header_size + 16]u8 = undefined;
     var tree_raw: [object.header_size + object.child_size * 2]u8 = undefined;
-    const tree_objects = tree_builder.toTreeObjects(&layout_raw, &tree_raw, testReq(), testEpoch()).?;
+    const tree_objects = tree_builder.toTreeObjects(&layout_raw, &tree_raw, testEpoch()).?;
     const tree_id = try storeTreeObjects(&source, app.id, tree_objects);
     const tree_view = source.getObject(app.id, tree_id).?;
 
@@ -168,13 +156,13 @@ test "resolver hydrates slot tree child from store" {
 
     var button_ui: [128]u8 = undefined;
     var button_object_raw: [object.header_size + 128]u8 = undefined;
-    const button_object = (components.Button{ .id = 12, .label = "Slot" }).toObject(&button_ui, &button_object_raw, testReq(), testEpoch()).?;
+    const button_object = (components.Button{ .id = 12, .label = "Slot" }).toObject(&button_ui, &button_object_raw, testEpoch()).?;
     const button_id = source.putObject(app.id, button_object).?;
     const button_view = source.getObject(app.id, button_id).?;
 
     var layout_raw: [object.header_size + 16]u8 = undefined;
     var tree_raw: [object.header_size + object.child_size * 2]u8 = undefined;
-    const tree_objects = (components.SlotTree{ .id = 77, .child = button_view }).toTreeObjects(&layout_raw, &tree_raw, testReq(), testEpoch()).?;
+    const tree_objects = (components.SlotTree{ .id = 77, .child = button_view }).toTreeObjects(&layout_raw, &tree_raw, testEpoch()).?;
     const tree_id = try storeTreeObjects(&source, app.id, tree_objects);
     const tree_view = source.getObject(app.id, tree_id).?;
 
@@ -199,13 +187,13 @@ test "generic resolver detects stored tree layout type" {
 
     var button_ui: [128]u8 = undefined;
     var button_object_raw: [object.header_size + 128]u8 = undefined;
-    const button_object = (components.Button{ .id = 31, .label = "Generic" }).toObject(&button_ui, &button_object_raw, testReq(), testEpoch()).?;
+    const button_object = (components.Button{ .id = 31, .label = "Generic" }).toObject(&button_ui, &button_object_raw, testEpoch()).?;
     const button_id = source.putObject(app.id, button_object).?;
     const button_view = source.getObject(app.id, button_id).?;
 
     var layout_raw: [object.header_size + 16]u8 = undefined;
     var tree_raw: [object.header_size + object.child_size * 2]u8 = undefined;
-    const tree_objects = (components.SlotTree{ .id = 17, .child = button_view }).toTreeObjects(&layout_raw, &tree_raw, testReq(), testEpoch()).?;
+    const tree_objects = (components.SlotTree{ .id = 17, .child = button_view }).toTreeObjects(&layout_raw, &tree_raw, testEpoch()).?;
     const tree_id = try storeTreeObjects(&source, app.id, tree_objects);
     const tree_view = source.getObject(app.id, tree_id).?;
 
@@ -231,12 +219,12 @@ test "tree object storage helper rejects insufficient storage" {
 
     var button_ui: [128]u8 = undefined;
     var button_object_raw: [object.header_size + 128]u8 = undefined;
-    const button_object = (components.Button{ .id = 1, .label = "x" }).toObject(&button_ui, &button_object_raw, testReq(), testEpoch()).?;
+    const button_object = (components.Button{ .id = 1, .label = "x" }).toObject(&button_ui, &button_object_raw, testEpoch()).?;
     const button_view = try object.View.decode(button_object);
 
     var layout_raw: [object.header_size + 16]u8 = undefined;
     var tree_raw: [object.header_size + object.child_size * 2]u8 = undefined;
-    const tree_objects = (components.SlotTree{ .id = 1, .child = button_view }).toTreeObjects(&layout_raw, &tree_raw, testReq(), testEpoch()).?;
+    const tree_objects = (components.SlotTree{ .id = 1, .child = button_view }).toTreeObjects(&layout_raw, &tree_raw, testEpoch()).?;
 
     try std.testing.expectError(error.NoSpace, storeTreeObjects(&source, app.id, tree_objects));
 }

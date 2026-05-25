@@ -28,8 +28,8 @@ pub const Avatar = struct {
         return component_render.measureFixed(component_render.preferred_avatar, constraints);
     }
 
-    pub fn toObject(self: Avatar, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
-        return component_codec.oneStringObject(.avatar, 0, self.label, ui_out, object_out, req, epoch);
+    pub fn toObject(self: Avatar, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
+        return component_codec.oneStringObject(.avatar, 0, self.label, ui_out, object_out, epoch);
     }
 
     pub fn writeRecord(self: Avatar, writer: *component_codec.Writer, index: usize) bool {
@@ -49,7 +49,7 @@ test "avatar component serializes to canonical object and deserializes" {
     var ui_raw: [128]u8 = undefined;
     var object_raw: [object.header_size + 128]u8 = undefined;
 
-    const canonical = avatar.toObject(&ui_raw, &object_raw, component_test.req(), component_test.epoch()).?;
+    const canonical = avatar.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
     const decoded = try Avatar.fromView(try object.View.decode(canonical));
 
     try std.testing.expectEqualStrings("ER", decoded.label);

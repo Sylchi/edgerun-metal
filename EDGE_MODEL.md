@@ -88,6 +88,59 @@ Sharing is separate from ownership. No share receipt, no access.
 The allocator records range ownership transitions. It does not need to read app
 memory or understand app data.
 
+## App Authoring, Preview, Release, And Sharing
+
+EdgeRun apps must be able to create other EdgeRun apps. This is not a separate
+developer toolchain bolted onto the side of the runtime. Authoring, preview,
+release, sharing, and execution are one object-and-receipt workflow.
+
+The WASM interpreter exists for that workflow. It lets a parent app run a draft
+child app inside the parent while the child is still being built. In preview
+mode, the parent may see the draft app memory and execution state because that
+visibility is the developer experience: inspect, debug, replay, edit, and
+render the same app the author is creating.
+
+Preview mode is not the release security boundary.
+
+Release mode promotes the draft into a real app object and manifest. The child
+receives memory and storage from allocator-owned slices, not from ambient parent
+access. The actual slice movement goes through the allocator admission domain.
+After release/admission, the parent gets handles, object ids, and receipts. The
+parent does not keep direct memory visibility unless the child explicitly shares
+a view back with a receipt.
+
+The intended lifecycle is:
+
+```text
+draft app object
+parent-visible interpreter preview
+release build object and manifest
+allocator admission for memory/storage slices
+installed child app with handles and receipts
+shared executable object for another user
+```
+
+A shared executable is still just an object graph plus requirements and
+receipts. A friend who receives it should be able to run the same app the
+developer previewed without installing another runtime, package manager, native
+helper, or dependency chain. The receiving user's allocator is the authority
+that grants any memory and storage slices on that machine.
+
+WASM code does not inherit network, storage, device, identity, or parent memory
+authority merely because it executes. Those powers only arrive through explicit
+EdgeRun APIs/imports backed by requirements, admission, and receipts. Authority
+bubbles up to the user whenever a consequential transition needs a real grant.
+
+This gives the system a single loop:
+
+```text
+author inside EdgeRun
+preview inside EdgeRun
+release inside EdgeRun
+share as canonical objects
+run under the recipient user's allocator
+```
+
 ## Requirements Are Constraint Vectors
 
 `er_object_requirements_t` is intentional. It captures constraints from app

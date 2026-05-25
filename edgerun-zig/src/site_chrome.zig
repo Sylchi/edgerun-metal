@@ -104,11 +104,8 @@ fn navItem(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect,
 }
 
 fn button(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id: u32, variant: components.ButtonVariant, leading: ?icon.Icon, trailing: ?icon.Icon) (ui.RenderError || interaction.Error)!void {
-    try components.renderComponent(scene, bounds, .{ .button = .{ .id = id, .label = label } }, .{
+    try components.renderComponent(scene, bounds, .{ .button = .{ .id = id, .label = label, .variant = variant, .leading_icon = leading, .trailing_icon = trailing } }, .{
         .style = style(),
-        .button_variant = variant,
-        .button_leading_icon = leading,
-        .button_trailing_icon = trailing,
     });
     try components.collectComponentInteractions(collector, bounds, .{ .button = .{ .id = id, .label = label } });
 }

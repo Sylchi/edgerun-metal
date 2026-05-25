@@ -104,6 +104,12 @@ pub fn storeBe32(out: []u8, value: u32) bool {
     return true;
 }
 
+pub fn storeBe64(out: []u8, value: u64) bool {
+    if (out.len < 8) return false;
+    return storeBe32(out[0..4], @truncate(value >> 32)) and
+        storeBe32(out[4..8], @truncate(value));
+}
+
 pub fn load16(in: []const u8) ?u16 {
     if (in.len < 2) return null;
     return @as(u16, in[0]) | (@as(u16, in[1]) << 8);
@@ -165,10 +171,12 @@ test "byte zero copy and fixed length compare match C helpers" {
 
 test "big endian roundtrip" {
     const testing = @import("std").testing;
-    var raw: [4]u8 = undefined;
+    var raw: [8]u8 = undefined;
 
     try testing.expect(storeBe32(&raw, 0x11223344));
     try testing.expectEqual(@as(u32, 0x11223344), loadBe32(&raw).?);
     try testing.expect(storeBe16(raw[0..2], 0xaabb));
     try testing.expectEqual(@as(u16, 0xaabb), loadBe16(raw[0..2]).?);
+    try testing.expect(storeBe64(&raw, 0x1122334455667788));
+    try testing.expectEqualSlices(u8, &.{ 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88 }, &raw);
 }

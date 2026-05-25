@@ -36,10 +36,10 @@ pub const Accordion = struct {
         return component_render.measureFixed(component_render.preferred_accordion, constraints);
     }
 
-    pub fn toObject(self: Accordion, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
+    pub fn toObject(self: Accordion, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
         var writer = component_codec.Writer.init(ui_out, 1, 1, .column, 0, 0) orelse return null;
         if (!self.writeRecord(&writer, 0)) return null;
-        return writer.objectNode(object_out, req, epoch);
+        return writer.objectNode(object_out, component_codec.requirements(), epoch);
     }
 
     pub fn writeRecord(self: Accordion, writer: *component_codec.Writer, index: usize) bool {
@@ -68,7 +68,7 @@ test "accordion component serializes to canonical object and deserializes" {
     var ui_raw: [192]u8 = undefined;
     var object_raw: [object.header_size + 192]u8 = undefined;
 
-    const canonical = accordion.toObject(&ui_raw, &object_raw, component_test.req(), component_test.epoch()).?;
+    const canonical = accordion.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
     const decoded = try Accordion.fromView(try object.View.decode(canonical));
 
     try std.testing.expectEqual(accordion.id, decoded.id);

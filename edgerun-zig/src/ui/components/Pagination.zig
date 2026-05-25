@@ -36,8 +36,8 @@ pub const Pagination = struct {
         return component_render.measureFixed(component_render.preferred_pagination, constraints);
     }
 
-    pub fn toObject(self: Pagination, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
-        return component_codec.refObject(.pagination, encodedId(self.id, self.page), .{}, ui_out, object_out, req, epoch);
+    pub fn toObject(self: Pagination, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
+        return component_codec.refObject(.pagination, encodedId(self.id, self.page), .{}, ui_out, object_out, epoch);
     }
 
     pub fn writeRecord(self: Pagination, writer: *component_codec.Writer, index: usize) bool {
@@ -68,7 +68,7 @@ test "pagination component serializes to canonical object and deserializes" {
     var ui_raw: [128]u8 = undefined;
     var object_raw: [object.header_size + 128]u8 = undefined;
 
-    const canonical = pagination.toObject(&ui_raw, &object_raw, component_test.req(), component_test.epoch()).?;
+    const canonical = pagination.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
     const decoded = try Pagination.fromView(try object.View.decode(canonical));
 
     try std.testing.expectEqual(pagination.id, decoded.id);

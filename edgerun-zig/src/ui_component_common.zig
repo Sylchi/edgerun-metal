@@ -35,13 +35,21 @@ pub const SurfaceVariant = enum {
 
 pub const RenderOptions = struct {
     style: ui.Style = .{},
-    button_variant: ButtonVariant = .primary,
-    button_leading_icon: ?icon.Icon = null,
-    button_trailing_icon: ?icon.Icon = null,
-    badge_variant: BadgeVariant = .default,
-    surface_variant: SurfaceVariant = .panel,
 };
 
 pub fn collectHit(collector: *interaction.Collector, bounds: ui.Rect, kind: ui.HitKind, id: u32) interaction.Error!void {
     return collector.addHit(bounds, kind, id);
+}
+
+pub const encoded_icon_count: u16 = @typeInfo(icon.Icon).@"enum".fields.len + 1;
+
+pub fn optionalIconTag(value: ?icon.Icon) u16 {
+    return if (value) |icon_value| @as(u16, @intFromEnum(icon_value)) + 1 else 0;
+}
+
+pub fn optionalIconFromTag(tag: u16) Error!?icon.Icon {
+    if (tag == 0) return null;
+    const raw = tag - 1;
+    if (raw >= @typeInfo(icon.Icon).@"enum".fields.len) return error.Corrupt;
+    return @enumFromInt(@as(u8, @intCast(raw)));
 }

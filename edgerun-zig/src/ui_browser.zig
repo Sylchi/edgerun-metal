@@ -1,10 +1,13 @@
 const std = @import("std");
 const browser_runtime_js = @import("browser_runtime_js.zig");
 const clock = @import("clock.zig");
+const source_object = @import("embedded_source_object").bytes;
+const compiler_wasm = @import("embedded_wasm_compiler").bytes;
 const icon = @import("icon.zig");
 const icon_line_buffer = @import("icon_line_buffer.zig");
 const identity = @import("identity.zig");
 const interaction = @import("ui_interaction.zig");
+const object = @import("object.zig");
 const renderer = @import("renderer_software.zig");
 const renderer_ir = @import("renderer_ir.zig");
 const renderer_present = @import("renderer_present.zig");
@@ -13,6 +16,7 @@ const site_apps = @import("site_apps.zig");
 const site_blog = @import("site_blog.zig");
 const site_chrome = @import("site_chrome.zig");
 const site_cursor = @import("site_cursor.zig");
+const site_docs = @import("site_docs.zig");
 const site_images = @import("site_images.zig");
 const site_landing = @import("site_landing.zig");
 const site_navigation = @import("site_navigation.zig");
@@ -21,11 +25,18 @@ const ui_codec = @import("ui_codec.zig");
 const ui_components = @import("ui_components.zig");
 const ui_runtime = @import("ui_runtime.zig");
 const varfont = @import("varfont.zig");
+const wasm_interpreter = @import("wasm/root.zig");
 
 const max_width: usize = 4096;
 const max_height: usize = 2880;
 const max_pixels: usize = max_width * max_height;
 const max_input_bytes: usize = 8192;
+const max_source_workspace_bytes: usize = 8 * 1024 * 1024;
+const max_release_artifact_bytes: usize = 8 * 1024 * 1024;
+const max_compiler_runtime_bytes: usize = max_source_workspace_bytes + max_release_artifact_bytes + 2 * 1024 * 1024;
+const compiler_source_gap_bytes: usize = 64 * 1024;
+const compiler_execution_tick_budget: u64 = 1_000_000_000;
+const wasm_page_bytes: usize = 64 * 1024;
 const max_nodes: usize = 256;
 const max_commands: usize = 4096;
 const max_interaction_regions: usize = 4096;
@@ -60,6 +71,7 @@ const host_command_capacity: usize = 4;
 const title_text = "EdgeRun Academy";
 const dom_surface_id = "edgerun-dom";
 const boot_dom_html = "";
+const release_artifact_filename = "edgerun-app.wasm";
 const entropy_pool_size: usize = 32;
 const ephemeral_seed_size: usize = std.crypto.sign.Ed25519.KeyPair.seed_length;
 const public_identity_prefix = "er1:";
@@ -73,6 +85,12 @@ const initial_entropy_pool = [_]u8{
 
 var pixels: [max_pixels]ui.Color = undefined;
 var input_bytes: [max_input_bytes]u8 = undefined;
+var source_workspace: [max_source_workspace_bytes]u8 = undefined;
+var source_workspace_len: usize = 0;
+var source_workspace_ready = false;
+var release_artifact: [max_release_artifact_bytes]u8 = undefined;
+var release_artifact_len: usize = 0;
+var compiler_runtime_memory: [max_compiler_runtime_bytes]u8 align(16) = undefined;
 var nodes: [max_nodes]ui.Node = undefined;
 var commands: [max_commands]ui.Command = undefined;
 var interaction_regions: [max_interaction_regions]interaction.Region = undefined;
@@ -158,6 +176,8 @@ const HostCommandKind = enum(u32) {
     push_route_hash = 2,
     set_title = 3,
     set_element_html = 4,
+    download_wasm = 5,
+    launch_wasm = 6,
 };
 
 const HostCommand = struct {
@@ -619,16 +639,18 @@ export fn er_ui_host_command_id(index: u32) u32 {
 export fn er_ui_host_command_target_ptr(index: u32) usize {
     if (index >= host_command_len) return 0;
     return switch (host_commands[index].kind) {
-        .none, .open_url, .push_route_hash, .set_title => 0,
+        .none, .open_url, .push_route_hash, .set_title, .launch_wasm => 0,
         .set_element_html => @intFromPtr(dom_surface_id.ptr),
+        .download_wasm => @intFromPtr(release_artifact_filename.ptr),
     };
 }
 
 export fn er_ui_host_command_target_len(index: u32) usize {
     if (index >= host_command_len) return 0;
     return switch (host_commands[index].kind) {
-        .none, .open_url, .push_route_hash, .set_title => 0,
+        .none, .open_url, .push_route_hash, .set_title, .launch_wasm => 0,
         .set_element_html => dom_surface_id.len,
+        .download_wasm => release_artifact_filename.len,
     };
 }
 
@@ -637,6 +659,7 @@ export fn er_ui_host_command_payload_ptr(index: u32) usize {
     return switch (host_commands[index].kind) {
         .none => 0,
         .open_url => @intFromPtr(site_source_url.ptr),
+        .download_wasm, .launch_wasm => if (release_artifact_len == 0) 0 else @intFromPtr(&release_artifact),
         .push_route_hash => {
             refreshRouteHash();
             return @intFromPtr(route_hash_bytes[0..].ptr);
@@ -651,6 +674,7 @@ export fn er_ui_host_command_payload_len(index: u32) usize {
     return switch (host_commands[index].kind) {
         .none => 0,
         .open_url => site_source_url.len,
+        .download_wasm, .launch_wasm => release_artifact_len,
         .push_route_hash => {
             refreshRouteHash();
             return route_hash_len;
@@ -673,6 +697,96 @@ export fn er_ui_bootstrap_js_ptr() usize {
 
 export fn er_ui_bootstrap_js_len() usize {
     return browser_runtime_js.source.len;
+}
+
+export fn er_ui_compiler_source_ptr() usize {
+    return @intFromPtr(&source_object);
+}
+
+export fn er_ui_compiler_source_len() usize {
+    return source_object.len;
+}
+
+export fn er_ui_source_workspace_ptr() usize {
+    ensureSourceWorkspace();
+    return @intFromPtr(&source_workspace);
+}
+
+export fn er_ui_source_workspace_len() usize {
+    ensureSourceWorkspace();
+    return source_workspace_len;
+}
+
+export fn er_ui_source_workspace_capacity() usize {
+    return source_workspace.len;
+}
+
+export fn er_ui_source_workspace_commit(source_len: usize) u32 {
+    if (source_len > source_workspace.len) return finishError(.bad_input);
+    source_workspace_len = source_len;
+    source_workspace_ready = true;
+    last_error = .ok;
+    return @intFromEnum(ErrorCode.ok);
+}
+
+export fn er_ui_source_workspace_reset() u32 {
+    source_workspace_ready = false;
+    ensureSourceWorkspace();
+    last_error = .ok;
+    return @intFromEnum(ErrorCode.ok);
+}
+
+export fn er_ui_compiler_wasm_ptr() usize {
+    return @intFromPtr(&compiler_wasm);
+}
+
+export fn er_ui_compiler_wasm_len() usize {
+    return compiler_wasm.len;
+}
+
+export fn er_ui_release_artifact_ptr() usize {
+    return @intFromPtr(&release_artifact);
+}
+
+export fn er_ui_release_artifact_len() usize {
+    return release_artifact_len;
+}
+
+export fn er_ui_release_artifact_capacity() usize {
+    return release_artifact.len;
+}
+
+export fn er_ui_release_artifact_commit(artifact_len: usize) u32 {
+    if (artifact_len > release_artifact.len) return finishError(.bad_input);
+    if (artifact_len < 4) return finishError(.bad_input);
+    if (!std.mem.eql(u8, release_artifact[0..4], &.{ 0x00, 0x61, 0x73, 0x6d })) return finishError(.bad_input);
+    release_artifact_len = artifact_len;
+    last_error = .ok;
+    return @intFromEnum(ErrorCode.ok);
+}
+
+export fn er_ui_release_artifact_clear() u32 {
+    release_artifact_len = 0;
+    last_error = .ok;
+    return @intFromEnum(ErrorCode.ok);
+}
+
+export fn er_ui_compile_workspace_wasm() u32 {
+    return @intFromEnum(compileWorkspaceInsideWasm());
+}
+
+export fn er_ui_request_release_artifact_download() u32 {
+    if (release_artifact_len == 0) return finishError(.bad_input);
+    queueHostCommand(.download_wasm) catch return finishError(.bad_input);
+    last_error = .ok;
+    return @intFromEnum(ErrorCode.ok);
+}
+
+export fn er_ui_request_release_artifact_launch() u32 {
+    if (release_artifact_len == 0) return finishError(.bad_input);
+    queueHostCommand(.launch_wasm) catch return finishError(.bad_input);
+    last_error = .ok;
+    return @intFromEnum(ErrorCode.ok);
 }
 
 export fn er_ui_site_route_hash_ptr() usize {
@@ -721,6 +835,11 @@ export fn er_ui_site_activate_hit(hit_id: u32) u32 {
         site_chrome.source_button_id => {
             site_state.host_action = .open_url;
             queueHostCommand(.open_url) catch return finishError(.bad_input);
+        },
+        site_chrome.launch_button_id => {
+            if (compileWorkspaceInsideWasm() == .ok) {
+                queueHostCommand(.launch_wasm) catch return finishError(.bad_input);
+            }
         },
         site_landing.reveal_identity_button_id => {
             if (!ephemeral_identity_ready) {
@@ -880,6 +999,75 @@ fn clearHostCommands() void {
     host_command_len = 0;
 }
 
+fn ensureSourceWorkspace() void {
+    if (source_workspace_ready) return;
+    const initial_len = @min(source_object.len, source_workspace.len);
+    @memcpy(source_workspace[0..initial_len], source_object[0..initial_len]);
+    source_workspace_len = initial_len;
+    source_workspace_ready = true;
+}
+
+fn compileWorkspaceInsideWasm() ErrorCode {
+    ensureSourceWorkspace();
+    if (source_workspace_len == 0 or source_workspace_len > source_workspace.len) return finishErrorCode(.bad_input);
+
+    const source_offset = alignForward(source_workspace_len + compiler_source_gap_bytes, 16);
+    if (source_offset > compiler_runtime_memory.len) return finishErrorCode(.bad_input);
+    if (source_workspace_len > compiler_runtime_memory.len - source_offset) return finishErrorCode(.bad_input);
+
+    @memset(&compiler_runtime_memory, 0);
+    @memcpy(compiler_runtime_memory[source_offset .. source_offset + source_workspace_len], source_workspace[0..source_workspace_len]);
+
+    var execution_ticks: u64 = compiler_execution_tick_budget;
+    var runtime = wasm_interpreter.Runtime.initWithMemoryPages(&compiler_runtime_memory, &execution_ticks, pagesForBytes(source_offset + source_workspace_len));
+    const output_capacity: i32 = @intCast(source_offset);
+    const source_ptr: i32 = @intCast(source_offset);
+    const source_len: i32 = @intCast(source_workspace_len);
+    const init_args = [_]wasm_interpreter.Value{
+        .{ .i32 = 0 },
+        .{ .i32 = output_capacity },
+    };
+    const init_result = wasm_interpreter.executeExportValueArgs(&runtime, &compiler_wasm, "er_wasm_compiler_init", &init_args) catch return finishErrorCode(.render_failed);
+    if ((init_result.valueI32(0) catch return finishErrorCode(.render_failed)) != 0) return finishErrorCode(.bad_input);
+
+    const compile_args = [_]wasm_interpreter.Value{
+        .{ .i32 = source_ptr },
+        .{ .i32 = 0 },
+        .{ .i32 = source_ptr },
+        .{ .i32 = source_len },
+    };
+    const compile_result = wasm_interpreter.executeExportValueArgs(&runtime, &compiler_wasm, "er_wasm_compiler_compile_wasm", &compile_args) catch return finishErrorCode(.render_failed);
+    if ((compile_result.valueI32(0) catch return finishErrorCode(.render_failed)) != 0) return finishErrorCode(.bad_input);
+
+    const output_ptr_result = wasm_interpreter.executeExportValueArgs(&runtime, &compiler_wasm, "er_wasm_compiler_output_ptr", &.{}) catch return finishErrorCode(.render_failed);
+    const output_len_result = wasm_interpreter.executeExportValueArgs(&runtime, &compiler_wasm, "er_wasm_compiler_output_len", &.{}) catch return finishErrorCode(.render_failed);
+    const output_ptr: usize = @intCast(output_ptr_result.valueI32(0) catch return finishErrorCode(.render_failed));
+    const output_len: usize = @intCast(output_len_result.valueI32(0) catch return finishErrorCode(.render_failed));
+    if (output_len < 4 or output_len > release_artifact.len) return finishErrorCode(.bad_input);
+    if (output_ptr > compiler_runtime_memory.len or output_len > compiler_runtime_memory.len - output_ptr) return finishErrorCode(.bad_input);
+    if (!std.mem.eql(u8, compiler_runtime_memory[output_ptr..][0..4], &.{ 0x00, 0x61, 0x73, 0x6d })) return finishErrorCode(.bad_input);
+
+    @memcpy(release_artifact[0..output_len], compiler_runtime_memory[output_ptr .. output_ptr + output_len]);
+    release_artifact_len = output_len;
+    last_error = .ok;
+    return .ok;
+}
+
+fn finishErrorCode(code: ErrorCode) ErrorCode {
+    last_error = code;
+    return code;
+}
+
+fn alignForward(value: usize, alignment: usize) usize {
+    const remainder = value % alignment;
+    if (remainder == 0) return value;
+    return value + (alignment - remainder);
+}
+
+fn pagesForBytes(value: usize) usize {
+    return (value + wasm_page_bytes - 1) / wasm_page_bytes;
+}
+
 export fn er_ui_site_scroll_by(delta_y: f32, width: f32, height: f32) u32 {
     if (!std.math.isFinite(delta_y) or !std.math.isFinite(width) or !std.math.isFinite(height)) return finishError(.bad_input);
     if (width <= 0.0 or height <= 0.0) return finishError(.bad_input);
@@ -909,6 +1097,10 @@ export fn er_ui_site_apps_content_height(width: f32) f32 {
     return site_apps.contentHeight(width);
 }
 
+export fn er_ui_site_docs_content_height(width: f32) f32 {
+    return site_docs.contentHeight(width);
+}
+
 export fn er_ui_site_content_height(width: f32) f32 {
     return switch (site_state.view) {
         .landing => site_landing.contentHeight(width),
@@ -918,6 +1110,7 @@ export fn er_ui_site_content_height(width: f32) f32 {
             site_blog.postContentHeight(width, site_state.selected_blog_post_id),
         .apps => site_apps.contentHeight(width),
         .components => component_gallery.contentHeightForState(width, galleryState(0, component_gallery.grid_gap_default, site_state.scroll_y, browser_hover_x, browser_hover_y)),
+        .docs => site_docs.contentHeight(width),
     };
 }
 
@@ -1083,6 +1276,16 @@ export fn er_ui_build_site_gpu_frame(width: u32, height: u32, hover_x: f32, hove
             .hover_x = hover_x,
             .hover_y = hover_y,
         }) catch return finishError(.render_failed),
+        .docs => site_docs.render(&scene, &collector, .{
+            .x = 0,
+            .y = 0,
+            .w = @floatFromInt(frame_width),
+            .h = @floatFromInt(frame_height),
+        }, .{
+            .scroll_y = site_state.scroll_y,
+            .hover_x = hover_x,
+            .hover_y = hover_y,
+        }) catch return finishError(.render_failed),
         .components => component_gallery.renderComponentGallery(&scene, &collector, .{
             .x = 0,
             .y = 0,
@@ -1159,6 +1362,16 @@ fn renderBrowserSiteCpu(surface: renderer.Surface, hover_x: f32, hover_y: f32) u
             .arc_filter_index = site_state.blog_arc_filter_index,
         }) catch return finishError(.render_failed),
         .apps => site_apps.render(&scene, &collector, .{
+            .x = 0,
+            .y = 0,
+            .w = @floatFromInt(frame_width),
+            .h = @floatFromInt(frame_height),
+        }, .{
+            .scroll_y = site_state.scroll_y,
+            .hover_x = hover_x,
+            .hover_y = hover_y,
+        }) catch return finishError(.render_failed),
+        .docs => site_docs.render(&scene, &collector, .{
             .x = 0,
             .y = 0,
             .w = @floatFromInt(frame_width),
@@ -1739,14 +1952,26 @@ test "browser site activation keeps page state in wasm" {
     try std.testing.expect(er_ui_host_command_payload_ptr(0) != 0);
     try std.testing.expectEqual(@as(u32, 0), er_ui_host_command_clear());
     try std.testing.expectEqual(@as(u32, 0), er_ui_host_command_count());
+    try std.testing.expectEqual(@intFromEnum(HostAction.none), er_ui_site_activate_hit(site_chrome.launch_button_id));
+    try std.testing.expectEqual(@as(u32, 1), er_ui_host_command_count());
+    try std.testing.expectEqual(@intFromEnum(HostCommandKind.launch_wasm), er_ui_host_command_kind(0));
+    try std.testing.expectEqual(er_ui_release_artifact_len(), er_ui_host_command_payload_len(0));
+    try std.testing.expect(er_ui_host_command_payload_ptr(0) != 0);
+    try std.testing.expectEqual(@as(usize, 0), er_ui_host_command_target_len(0));
+    try std.testing.expectEqual(@as(u32, 0), er_ui_host_command_clear());
     try std.testing.expectEqual(@intFromEnum(HostAction.none), er_ui_site_activate_hit(site_chrome.logo_button_id));
     try std.testing.expectEqual(site_landing.contentHeight(1280.0), er_ui_site_content_height(1280.0));
+    try std.testing.expectEqual(@intFromEnum(HostAction.none), er_ui_site_activate_hit(site_chrome.blog_button_id));
     try std.testing.expectEqual(@intFromEnum(HostAction.none), er_ui_site_activate_hit(site_blog.arcFilterButtonId(3)));
     try std.testing.expectEqual(site_blog.indexContentHeightFiltered(1280.0, 3), er_ui_site_content_height(1280.0));
     try std.testing.expectEqual(@intFromEnum(HostAction.none), er_ui_site_activate_hit(site_blog.all_lessons_button_id));
     try std.testing.expectEqual(site_blog.indexContentHeight(1280.0), er_ui_site_content_height(1280.0));
     try std.testing.expectEqual(@intFromEnum(HostAction.none), er_ui_site_activate_hit(site_chrome.apps_button_id));
     try std.testing.expectEqual(site_apps.contentHeight(1280.0), er_ui_site_content_height(1280.0));
+    try std.testing.expectEqual(@intFromEnum(HostAction.none), er_ui_site_activate_hit(site_chrome.docs_button_id));
+    try std.testing.expectEqual(site_docs.contentHeight(1280.0), er_ui_site_content_height(1280.0));
+    try std.testing.expectEqual(@intFromEnum(HostAction.none), er_ui_site_activate_hit(site_docs.component_catalog_button_id));
+    try std.testing.expectEqual(component_gallery.contentHeightForState(1280.0, .{}), er_ui_site_content_height(1280.0));
 }
 
 test "browser native route sync owns URL path state" {
@@ -1772,6 +1997,11 @@ test "browser native route sync owns URL path state" {
     try std.testing.expectEqual(@as(u32, 0), er_ui_site_set_browser_route_hash(writeInputForTest("#/apps")));
     try std.testing.expectEqual(site_apps.contentHeight(1280.0), er_ui_site_content_height(1280.0));
     try std.testing.expectEqualStrings("/apps", route_bytes[0..er_ui_site_route_path_len()]);
+
+    try std.testing.expectEqual(@as(u32, 0), er_ui_site_set_browser_route_hash(writeInputForTest("#/docs")));
+    try std.testing.expectEqual(site_docs.contentHeight(1280.0), er_ui_site_content_height(1280.0));
+    try std.testing.expectEqualStrings("/docs", route_bytes[0..er_ui_site_route_path_len()]);
+    try std.testing.expectEqualStrings("#/docs", route_hash_bytes[0..er_ui_site_route_hash_len()]);
 
     try std.testing.expectEqual(@as(u32, 0), er_ui_site_set_browser_route_hash(writeInputForTest("#/docs/components/button")));
     const button_index = component_gallery.indexBySlug("button").?;
@@ -1922,7 +2152,75 @@ test "browser native exposes eval bootstrap javascript bytes" {
 
     try std.testing.expectEqualStrings(browser_runtime_js.source, bytes);
     try std.testing.expect(std.mem.indexOf(u8, bytes, "document.body.innerHTML") != null);
-    try std.testing.expect(std.mem.indexOf(u8, bytes, "WebAssembly.instantiateStreaming") == null);
+    try std.testing.expect(std.mem.indexOf(u8, bytes, "WebAssembly.instantiate(") != null);
+    try std.testing.expect(std.mem.indexOf(u8, bytes, "er_ui_compiler_wasm_ptr") == null);
+    try std.testing.expect(std.mem.indexOf(u8, bytes, "er_wasm_compiler_compile_wasm") == null);
+    try std.testing.expect(std.mem.indexOf(u8, bytes, "fetch(") == null);
+}
+
+test "browser native exposes repo-owned source as canonical object bytes" {
+    const source: [*]const u8 = @ptrFromInt(er_ui_compiler_source_ptr());
+    const bytes = source[0..er_ui_compiler_source_len()];
+    const view = try object.View.decode(bytes);
+
+    try std.testing.expectEqual(object.Kind.bytes, view.header.kind);
+    try std.testing.expect(std.mem.indexOf(u8, view.body, "edgerun-source-object-v1") != null);
+    try std.testing.expect(std.mem.indexOf(u8, view.body, "src/ui_browser.zig") != null);
+    try std.testing.expect(std.mem.indexOf(u8, view.body, "src/compiler/wasm_compiler.zig") != null);
+}
+
+test "browser native embeds compiler wasm bytes into parent app" {
+    const wasm_bytes: [*]const u8 = @ptrFromInt(er_ui_compiler_wasm_ptr());
+    const bytes = wasm_bytes[0..er_ui_compiler_wasm_len()];
+
+    try std.testing.expect(bytes.len > 0);
+    try std.testing.expectEqualSlices(u8, &.{ 0x00, 0x61, 0x73, 0x6d }, bytes[0..4]);
+}
+
+test "browser native source workspace is mutable app source" {
+    try std.testing.expectEqual(@as(u32, 0), er_ui_source_workspace_reset());
+    defer _ = er_ui_source_workspace_reset();
+    const workspace: [*]u8 = @ptrFromInt(er_ui_source_workspace_ptr());
+    const initial = workspace[0..er_ui_source_workspace_len()];
+    const view = try object.View.decode(initial);
+    try std.testing.expect(std.mem.indexOf(u8, view.body, "er_wasm_compiler_compile_wasm") != null);
+
+    const edited = "pub export fn edited() void {}";
+    @memcpy(workspace[0..edited.len], edited);
+    try std.testing.expectEqual(@as(u32, 0), er_ui_source_workspace_commit(edited.len));
+    try std.testing.expectEqualStrings(edited, workspace[0..er_ui_source_workspace_len()]);
+}
+
+test "browser native release artifact slot only commits wasm modules" {
+    const artifact: [*]u8 = @ptrFromInt(er_ui_release_artifact_ptr());
+    try std.testing.expect(er_ui_release_artifact_capacity() >= er_ui_compiler_wasm_len());
+    try std.testing.expectEqual(@as(u32, @intFromEnum(ErrorCode.bad_input)), er_ui_release_artifact_commit(0));
+
+    const compiler_bytes: [*]const u8 = @ptrFromInt(er_ui_compiler_wasm_ptr());
+    @memcpy(artifact[0..er_ui_compiler_wasm_len()], compiler_bytes[0..er_ui_compiler_wasm_len()]);
+    try std.testing.expectEqual(@as(u32, 0), er_ui_release_artifact_commit(er_ui_compiler_wasm_len()));
+    try std.testing.expectEqual(er_ui_compiler_wasm_len(), er_ui_release_artifact_len());
+    try std.testing.expectEqualSlices(u8, &.{ 0x00, 0x61, 0x73, 0x6d }, artifact[0..4]);
+    try std.testing.expectEqual(@as(u32, 0), er_ui_release_artifact_clear());
+    try std.testing.expectEqual(@as(usize, 0), er_ui_release_artifact_len());
+}
+
+test "browser native compiles workspace through embedded wasm interpreter" {
+    try std.testing.expectEqual(@as(u32, 0), er_ui_release_artifact_clear());
+    try std.testing.expectEqual(@as(u32, 0), er_ui_source_workspace_reset());
+
+    try std.testing.expectEqual(@as(u32, 0), er_ui_compile_workspace_wasm());
+    try std.testing.expect(er_ui_release_artifact_len() > er_ui_source_workspace_len());
+    const artifact: [*]const u8 = @ptrFromInt(er_ui_release_artifact_ptr());
+    try std.testing.expectEqualSlices(u8, &.{ 0x00, 0x61, 0x73, 0x6d }, artifact[0..4]);
+    try std.testing.expectEqual(@as(u32, 0), er_ui_request_release_artifact_download());
+    try std.testing.expectEqual(@as(u32, 1), er_ui_host_command_count());
+    try std.testing.expectEqual(@intFromEnum(HostCommandKind.download_wasm), er_ui_host_command_kind(0));
+    try std.testing.expectEqualStrings(release_artifact_filename, (@as([*]const u8, @ptrFromInt(er_ui_host_command_target_ptr(0))))[0..er_ui_host_command_target_len(0)]);
+    try std.testing.expectEqual(er_ui_release_artifact_len(), er_ui_host_command_payload_len(0));
+    try std.testing.expectEqual(@as(u32, 0), er_ui_host_command_clear());
+    try std.testing.expectEqual(@as(u32, 0), er_ui_request_release_artifact_launch());
+    try std.testing.expectEqual(@intFromEnum(HostCommandKind.launch_wasm), er_ui_host_command_kind(0));
 }
 
 test "browser native site state owns scroll position" {

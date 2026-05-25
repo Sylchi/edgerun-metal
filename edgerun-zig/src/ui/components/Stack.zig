@@ -50,16 +50,17 @@ pub fn Stack(comptime Component: type) type {
             };
         }
 
-        pub fn toObject(self: Self, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
+        pub fn toObject(self: Self, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
             if (self.children.len == 0 or self.children.len > std.math.maxInt(u16)) return null;
             var writer = codec.Writer.init(ui_out, @intCast(self.children.len), @intCast(self.children.len), self.axis, self.gap, self.padding) orelse return null;
             for (self.children, 0..) |child, index| {
                 if (!component_io.writeRecord(Component, &writer, index, child)) return null;
             }
-            return writer.objectNode(object_out, req, epoch);
+            return writer.objectNode(object_out, component_io.requirements(), epoch);
         }
 
         pub fn fromView(view: object.View, out_components: []Component) Error!Self {
+            try component_io.validateView(view);
             var nodes: [codec_max_children]ui.Node = undefined;
             const root = codec.decodeView(view, &nodes) catch return error.Corrupt;
             const layout = switch (root) {
@@ -91,12 +92,12 @@ pub fn StackTree(comptime Component: type) type {
         const Self = @This();
         const StackType = Stack(Component);
 
-        pub fn toTreeObjects(self: Self, layout_out: []u8, tree_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?tree_codec.TreeObjects {
+        pub fn toTreeObjects(self: Self, layout_out: []u8, tree_out: []u8, epoch: clock.Stamp) ?tree_codec.TreeObjects {
             if (self.children.len == 0 or self.children.len + 1 > object.max_children) return null;
 
             var layout_body: [tree_codec.tree_layout_size]u8 = undefined;
             tree_codec.encodeTreeLayout(self.axis, self.gap, self.padding, @intCast(self.children.len), &layout_body) orelse return null;
-            const layout = (object.NodeWriter{ .out = layout_out }).bytesNode(req, epoch, &layout_body) catch return null;
+            const layout = (object.NodeWriter{ .out = layout_out }).bytesNode(component_io.requirements(), epoch, &layout_body) catch return null;
 
             var child_records: [tree_codec.tree_max_children]object.Child = undefined;
             if (self.children.len + 1 > child_records.len) return null;
@@ -105,15 +106,17 @@ pub fn StackTree(comptime Component: type) type {
             child_records[0] = tree_codec.childRecord(layout_view, 0) catch return null;
             var logical_offset = child_records[0].logical_len;
             for (self.children, 0..) |child, index| {
+                component_io.validateView(child) catch return null;
                 child_records[index + 1] = tree_codec.childRecord(child, logical_offset) catch return null;
                 logical_offset += child_records[index + 1].logical_len;
             }
 
-            const tree = (object.NodeWriter{ .out = tree_out }).treeNode(req, epoch, child_records[0 .. self.children.len + 1]) catch return null;
+            const tree = (object.NodeWriter{ .out = tree_out }).treeNode(component_io.requirements(), epoch, child_records[0 .. self.children.len + 1]) catch return null;
             return .{ .layout = layout, .tree = tree };
         }
 
         pub fn fromTree(tree: object.View, resolved_children: []const object.View, out_components: []Component) Error!StackType {
+            try component_io.validateTreeView(tree);
             if (tree.header.kind != .tree or tree.header.child_count == 0) return error.Corrupt;
             if (resolved_children.len != tree.header.child_count) return error.ChildMismatch;
 

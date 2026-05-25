@@ -3442,28 +3442,24 @@ fn paragraph(scene: *ui.Scene, bounds: ui.Rect, value: []const u8) ui.RenderErro
 }
 
 fn outlineButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id: u32) (ui.RenderError || interaction.Error)!void {
-    try nativeComponent(scene, collector, bounds, .{ .button = .{ .id = id, .label = label } }, .{ .button_variant = .outline });
+    try nativeComponent(scene, collector, bounds, .{ .button = .{ .id = id, .label = label, .variant = .outline } });
 }
 
 fn nativeBadge(scene: *ui.Scene, bounds: ui.Rect, label: []const u8) ui.RenderError!void {
-    try nativeComponentVisual(scene, bounds, .{ .badge = .{ .label = label } }, .{ .badge_variant = .default });
+    try nativeComponentVisual(scene, bounds, .{ .badge = .{ .label = label } });
 }
 
 fn nativeCard(scene: *ui.Scene, bounds: ui.Rect, title_value: []const u8, detail_value: []const u8) ui.RenderError!void {
-    try nativeComponentVisual(scene, bounds, .{ .card = .{ .title = title_value, .detail = detail_value } }, .{ .surface_variant = .elevated });
+    try nativeComponentVisual(scene, bounds, .{ .card = .{ .title = title_value, .detail = detail_value, .variant = .elevated } });
 }
 
-fn nativeComponent(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, component: components.Component, options: components.RenderOptions) (ui.RenderError || interaction.Error)!void {
-    var resolved = options;
-    resolved.style = siteStyle();
-    try components.renderComponent(scene, bounds, component, resolved);
+fn nativeComponent(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, component: components.Component) (ui.RenderError || interaction.Error)!void {
+    try components.renderComponent(scene, bounds, component, .{ .style = siteStyle() });
     try components.collectComponentInteractions(collector, bounds, component);
 }
 
-fn nativeComponentVisual(scene: *ui.Scene, bounds: ui.Rect, component: components.Component, options: components.RenderOptions) ui.RenderError!void {
-    var resolved = options;
-    resolved.style = siteStyle();
-    try components.renderComponent(scene, bounds, component, resolved);
+fn nativeComponentVisual(scene: *ui.Scene, bounds: ui.Rect, component: components.Component) ui.RenderError!void {
+    try components.renderComponent(scene, bounds, component, .{ .style = siteStyle() });
 }
 
 fn siteStyle() ui.Style {

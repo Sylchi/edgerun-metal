@@ -8,6 +8,7 @@ const site_apps = @import("site_apps.zig");
 const site_blog = @import("site_blog.zig");
 const site_chrome = @import("site_chrome.zig");
 const site_cursor = @import("site_cursor.zig");
+const site_docs = @import("site_docs.zig");
 const site_images = @import("site_images.zig");
 const site_landing = @import("site_landing.zig");
 const site_navigation = @import("site_navigation.zig");
@@ -141,6 +142,11 @@ const SceneState = struct {
             .landing => try site_landing.render(&scene, &collector, bounds, app.landingState()),
             .blog => try site_blog.render(&scene, &collector, bounds, app.blogState()),
             .apps => try site_apps.render(&scene, &collector, bounds, app.appsState()),
+            .docs => try site_docs.render(&scene, &collector, bounds, .{
+                .scroll_y = app.scroll_y,
+                .hover_x = app.hover_x,
+                .hover_y = app.hover_y,
+            }),
             .components => try component_gallery.renderComponentGallery(&scene, &collector, bounds, .{
                 .scroll_y = app.scroll_y,
                 .hover_x = app.hover_x,
@@ -212,6 +218,7 @@ const AppState = struct {
             else
                 site_blog.postContentHeight(width, self.route.selected_blog_post_id),
             .apps => site_apps.contentHeight(width),
+            .docs => site_docs.contentHeight(width),
             .components => component_gallery.contentHeightForState(width, .{
                 .scroll_y = self.scroll_y,
                 .hover_x = self.hover_x,
@@ -623,6 +630,10 @@ test "egl host activation uses shared site navigation routes" {
     app.runtime.hovered = .{ .kind = .button, .id = site_chrome.apps_button_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
     activateHit(&app);
     try std.testing.expectEqual(site_navigation.View.apps, app.route.view);
+
+    app.runtime.hovered = .{ .kind = .button, .id = site_chrome.docs_button_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
+    activateHit(&app);
+    try std.testing.expectEqual(site_navigation.View.docs, app.route.view);
 
     app.runtime.hovered = .{ .kind = .button, .id = site_chrome.logo_button_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
     activateHit(&app);

@@ -163,6 +163,18 @@ pub fn build(b: *std.Build) void {
     const ui_core_test_step = b.step("ui-core-test", "Run Zig UI core tests");
     ui_core_test_step.dependOn(&run_ui_core_tests.step);
 
+    const wasm_compiler_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/compiler/wasm_compiler.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    const run_wasm_compiler_tests = b.addRunArtifact(wasm_compiler_tests);
+    const wasm_compiler_test_step = b.step("wasm-compiler-test", "Run EdgeRun freestanding compiler ABI tests");
+    wasm_compiler_test_step.dependOn(&run_wasm_compiler_tests.step);
+    test_step.dependOn(&run_wasm_compiler_tests.step);
+
     const component_gallery_tests = b.addTest(.{
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/component_gallery.zig"),
@@ -301,6 +313,54 @@ pub fn build(b: *std.Build) void {
     const ui_browser_target = b.resolveTargetQuery(std.Target.Query.parse(.{
         .arch_os_abi = "wasm32-freestanding",
     }) catch unreachable);
+    const wasm_compiler = b.addExecutable(.{
+        .name = "edgerun-wasm-compiler",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/compiler/wasm_compiler.zig"),
+            .target = ui_browser_target,
+            .optimize = .ReleaseSmall,
+            .single_threaded = true,
+        }),
+    });
+    wasm_compiler.entry = .disabled;
+    wasm_compiler.export_memory = true;
+    wasm_compiler.root_module.export_symbol_names = &.{
+        "er_wasm_compiler_abi_version",
+        "er_wasm_compiler_init",
+        "er_wasm_compiler_status",
+        "er_wasm_compiler_compile_wasm",
+        "er_wasm_compiler_output_ptr",
+        "er_wasm_compiler_output_len",
+        "er_wasm_compiler_diagnostic_ptr",
+        "er_wasm_compiler_diagnostic_len",
+    };
+    const install_wasm_compiler = b.addInstallArtifact(wasm_compiler, .{});
+    const embed_file_zig_module = b.createModule(.{
+        .root_source_file = b.path("src/tools/embed_file_zig.zig"),
+        .target = b.graph.host,
+        .optimize = optimize,
+    });
+    embed_file_zig_module.addAnonymousImport("object", .{
+        .root_source_file = b.path("src/object.zig"),
+    });
+    embed_file_zig_module.addAnonymousImport("bytes", .{
+        .root_source_file = b.path("src/bytes.zig"),
+    });
+    embed_file_zig_module.addAnonymousImport("vfs", .{
+        .root_source_file = b.path("src/vfs.zig"),
+    });
+    const embed_file_zig = b.addExecutable(.{
+        .name = "edgerun-embed-file-zig",
+        .root_module = embed_file_zig_module,
+    });
+    const run_embed_wasm_compiler = b.addRunArtifact(embed_file_zig);
+    run_embed_wasm_compiler.addArg("file");
+    run_embed_wasm_compiler.addFileArg(wasm_compiler.getEmittedBin());
+    const embedded_wasm_compiler = run_embed_wasm_compiler.addOutputFileArg("embedded_wasm_compiler.zig");
+    const run_embed_source_object = b.addRunArtifact(embed_file_zig);
+    run_embed_source_object.addArg("workspace");
+    run_embed_source_object.addDirectoryArg(b.path("."));
+    const embedded_source_object = run_embed_source_object.addOutputFileArg("embedded_source_object.zig");
     const ui_browser = b.addExecutable(.{
         .name = "edgerun-ui-browser",
         .root_module = b.createModule(.{
@@ -310,6 +370,29 @@ pub fn build(b: *std.Build) void {
             .single_threaded = true,
         }),
     });
+    ui_browser.root_module.addAnonymousImport("embedded_wasm_compiler", .{
+        .root_source_file = embedded_wasm_compiler,
+    });
+    ui_browser.root_module.addAnonymousImport("embedded_source_object", .{
+        .root_source_file = embedded_source_object,
+    });
+    const wasm_compiler_runner_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/wasm_compiler_runner_test.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    wasm_compiler_runner_tests.root_module.addAnonymousImport("embedded_wasm_compiler", .{
+        .root_source_file = embedded_wasm_compiler,
+    });
+    wasm_compiler_runner_tests.root_module.addAnonymousImport("embedded_source_object", .{
+        .root_source_file = embedded_source_object,
+    });
+    const run_wasm_compiler_runner_tests = b.addRunArtifact(wasm_compiler_runner_tests);
+    const wasm_compiler_runner_test_step = b.step("wasm-compiler-runner-test", "Run embedded compiler through the EdgeRun wasm interpreter");
+    wasm_compiler_runner_test_step.dependOn(&run_wasm_compiler_runner_tests.step);
+    test_step.dependOn(&run_wasm_compiler_runner_tests.step);
     ui_browser.entry = .disabled;
     ui_browser.export_memory = true;
     ui_browser.root_module.export_symbol_names = &.{
@@ -367,6 +450,8 @@ pub fn build(b: *std.Build) void {
         "er_ui_host_command_clear",
         "er_ui_bootstrap_js_ptr",
         "er_ui_bootstrap_js_len",
+        "er_ui_request_release_artifact_download",
+        "er_ui_request_release_artifact_launch",
         "er_ui_build_browser_frame",
         "er_ui_render_browser_frame",
         "er_ui_render_icon_svg_test",
@@ -389,6 +474,7 @@ pub fn build(b: *std.Build) void {
 
     const ui_browser_step = b.step("ui-browser", "Build browser-renderable Zig UI wasm");
     ui_browser_step.dependOn(&install_ui_browser.step);
+    ui_browser_step.dependOn(&install_wasm_compiler.step);
     ui_browser_step.dependOn(&install_wasm_entry.step);
 
     const tpm_real_check = b.addExecutable(.{

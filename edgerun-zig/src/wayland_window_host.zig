@@ -14,6 +14,7 @@ const site_apps = @import("site_apps.zig");
 const site_blog = @import("site_blog.zig");
 const site_chrome = @import("site_chrome.zig");
 const site_cursor = @import("site_cursor.zig");
+const site_docs = @import("site_docs.zig");
 const site_images = @import("site_images.zig");
 const site_landing = @import("site_landing.zig");
 const site_navigation = @import("site_navigation.zig");
@@ -1147,6 +1148,11 @@ fn renderNativeSiteScene(scene: *ui.Scene, collector: *interaction.Collector, wi
             .hover_x = state.hover_x,
             .hover_y = state.hover_y,
         }),
+        .docs => try site_docs.render(scene, collector, bounds, .{
+            .scroll_y = state.scroll_y,
+            .hover_x = state.hover_x,
+            .hover_y = state.hover_y,
+        }),
         .components => try component_gallery.renderComponentGallery(scene, collector, bounds, .{
             .scroll_y = state.scroll_y,
             .hover_x = state.hover_x,
@@ -1202,6 +1208,7 @@ fn contentHeightForRoute(width: f32, route: site_navigation.Route) f32 {
         else
             site_blog.postContentHeight(width, route.selected_blog_post_id),
         .apps => site_apps.contentHeight(width),
+        .docs => site_docs.contentHeight(width),
         .components => component_gallery.contentHeightForState(width, .{
             .selected_component_index = route.selected_component_index,
         }),

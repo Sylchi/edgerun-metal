@@ -20,6 +20,8 @@ or present those records; they do not become authority roots.
   - `src/store.zig`: append-only accepted-object storage and replay state.
   - `src/seal.zig`, `src/sync.zig`, `src/relay.zig`: sealed object movement and
     receipt-shaped transfer paths.
+  - `src/wasm/`: deterministic WASM interpreter path used for EdgeRun app
+    authoring, parent-visible preview, release, and allocator-scoped execution.
   - `src/tpm.zig`, `src/tls_tpm.zig`, `src/tpm_acpi.zig`: TPM-backed authority
     and TLS-adjacent primitives.
   - `src/ui.zig`, `src/ui_components.zig`, `src/ui_resolver.zig`,
@@ -119,3 +121,17 @@ The important defaults are:
 
 When changing core behavior, update the code and tests first. Documentation
 should describe the implementation that exists, not an intended parallel design.
+
+## App Authoring Model
+
+EdgeRun apps are meant to author and share other EdgeRun apps. A draft app can
+run under the WASM interpreter inside its parent with parent-visible memory for
+preview and debugging. Releasing the draft promotes it into canonical app
+objects and a manifest; allocator admission then moves memory and storage into
+child-owned slices. The parent keeps handles and receipts, not direct memory
+visibility, unless the child explicitly shares a view back.
+
+Shared executables are object graphs plus requirements and receipts. They do not
+inherit network, storage, device, identity, or parent memory authority. The
+recipient user's allocator grants the slices and capabilities needed to run the
+app.

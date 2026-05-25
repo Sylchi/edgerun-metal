@@ -14,13 +14,14 @@ const RenderOptions = common.RenderOptions;
 pub const Card = struct {
     title: []const u8,
     detail: []const u8,
+    variant: common.SurfaceVariant = .panel,
 
     pub fn node(self: Card) ui.Node {
-        return ui.cardNode(self.title, self.detail);
+        return ui.cardVariantNode(self.title, self.detail, variantTag(self.variant));
     }
 
     pub fn render(self: Card, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return component_render.renderSurface(scene, bounds, self.title, self.detail, options);
+        return component_render.renderSurface(scene, bounds, self.title, self.detail, self.variant, options);
     }
 
     pub fn measure(self: Card, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
@@ -28,32 +29,54 @@ pub const Card = struct {
         return component_render.measureSurface(self.title, self.detail, constraints);
     }
 
-    pub fn toObject(self: Card, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
-        return component_codec.twoStringObject(.card, 0, self.title, self.detail, ui_out, object_out, req, epoch);
+    pub fn toObject(self: Card, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
+        var writer = component_codec.Writer.init(ui_out, 1, 1, .column, 0, 0) orelse return null;
+        if (!self.writeRecord(&writer, 0)) return null;
+        return writer.objectNode(object_out, component_codec.requirements(), epoch);
     }
 
     pub fn writeRecord(self: Card, writer: *component_codec.Writer, index: usize) bool {
-        return component_codec.twoStringRecord(writer, index, .card, 0, self.title, self.detail);
+        const title_ref = writer.string(self.title) orelse return false;
+        const detail_ref = writer.string(self.detail) orelse return false;
+        return writer.record(index, .card, variantTag(self.variant), title_ref, detail_ref);
     }
 
     pub fn fromView(view: object.View) Error!Card {
         return switch (try component_codec.singleNode(view)) {
-            .card => |card| .{ .title = card.title, .detail = card.detail },
+            .card => |card| .{ .title = card.title, .detail = card.detail, .variant = try variantFromTag(card.variant) },
             else => error.UnsupportedComponent,
         };
     }
 };
 
+pub fn variantTag(variant: common.SurfaceVariant) u16 {
+    return switch (variant) {
+        .panel => 0,
+        .elevated => 1,
+        .subtle => 2,
+    };
+}
+
+pub fn variantFromTag(tag: u16) Error!common.SurfaceVariant {
+    return switch (tag) {
+        0 => .panel,
+        1 => .elevated,
+        2 => .subtle,
+        else => error.Corrupt,
+    };
+}
+
 test "card component serializes to canonical object and deserializes" {
-    const card = Card{ .title = "Project", .detail = "Interactive docs" };
+    const card = Card{ .title = "Project", .detail = "Interactive docs", .variant = .elevated };
     var ui_raw: [160]u8 = undefined;
     var object_raw: [object.header_size + 160]u8 = undefined;
 
-    const canonical = card.toObject(&ui_raw, &object_raw, component_test.req(), component_test.epoch()).?;
+    const canonical = card.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
     const decoded = try Card.fromView(try object.View.decode(canonical));
 
     try std.testing.expectEqualStrings(card.title, decoded.title);
     try std.testing.expectEqualStrings(card.detail, decoded.detail);
+    try std.testing.expectEqual(common.SurfaceVariant.elevated, decoded.variant);
 }
 
 test "card component lays out detail-only content without empty title gap" {
@@ -73,10 +96,9 @@ test "card component lays out detail-only content without empty title gap" {
 test "card component renders surface variants through one renderer" {
     var commands: [16]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
-    const card = Card{ .title = "Project", .detail = "Interactive docs" };
 
-    try card.render(&scene, ui.Rect.init(0, 0, 220, 96), .{ .surface_variant = .elevated });
-    try card.render(&scene, ui.Rect.init(0, 104, 220, 96), .{ .surface_variant = .subtle });
+    try (Card{ .title = "Project", .detail = "Interactive docs", .variant = .elevated }).render(&scene, ui.Rect.init(0, 0, 220, 96), .{});
+    try (Card{ .title = "Project", .detail = "Interactive docs", .variant = .subtle }).render(&scene, ui.Rect.init(0, 104, 220, 96), .{});
 
     try std.testing.expect(component_test.hasShadow(scene.written()));
     try std.testing.expect(component_test.hasRectColor(scene.written(), ui.Color.row));

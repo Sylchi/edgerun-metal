@@ -23,7 +23,6 @@ const card_detail_y: f32 = 42;
 const card_body_top: f32 = 78;
 const card_body_bottom: f32 = 18;
 const control_radius: f32 = 7;
-const control_shadow: f32 = 6;
 const text_char_w: f32 = 8.3;
 const compact_text_height: f32 = 14;
 const body_text_height: f32 = 16;
@@ -557,9 +556,9 @@ fn renderReferencePreview(scene: *ui.Scene, collector: *interaction.Collector, b
         .toggle,
         .tabs,
         => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
-        .badge => previewBadgeVariants(scene, collector, bounds),
+        .badge => renderBadgeVariants(scene, collector, bounds),
         .breadcrumb => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
-        .button => previewButtonVariants(scene, collector, bounds, id),
+        .button => renderButtonVariants(scene, collector, bounds, id),
         .button_group => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
         .calendar => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
         .carousel => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
@@ -568,13 +567,13 @@ fn renderReferencePreview(scene: *ui.Scene, collector: *interaction.Collector, b
         .command => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
         .context_menu => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
         .data_table, .table => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
-        .date_picker => previewDatePicker(scene, collector, bounds, id),
+        .date_picker => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
         .dialog => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
-        .direction => previewDirection(scene, bounds),
-        .drawer => previewDrawer(scene, collector, bounds, id),
+        .direction => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
+        .drawer => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
         .dropdown_menu => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
         .field => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
-        .hover_card => previewHoverCard(scene, collector, bounds, id),
+        .hover_card => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
         .input_group => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
         .input_otp => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
         .menubar => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
@@ -584,83 +583,84 @@ fn renderReferencePreview(scene: *ui.Scene, collector: *interaction.Collector, b
         .popover => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
         .resizable => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
         .scroll_area => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
-        .sheet => previewSheet(scene, collector, bounds, id),
-        .sidebar => previewSidebar(scene, collector, bounds, id),
-        .sonner => previewToast(scene, collector, bounds, id, "Saved"),
-        .toast => previewToast(scene, collector, bounds, id, "Queued"),
+        .sheet => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
+        .sidebar => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
+        .sonner => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
+        .toast => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
         .toggle_group => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
         .tooltip => renderPrimitivePreview(scene, collector, bounds, spec_value.preview, id),
     };
 }
 
-const PrimitivePreview = struct {
-    component: components.Component,
-    options: components.RenderOptions = .{},
-};
+const PrimitivePreview = components.Component;
 
 fn renderPrimitivePreview(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, kind: PreviewKind, id: u32) GalleryError!void {
-    const preview = primitivePreview(kind, id);
-    try renderComponentPreview(scene, collector, bounds, preview.component, preview.options);
+    try renderComponentPreview(scene, collector, bounds, primitivePreview(kind, id));
 }
 
 fn primitivePreview(kind: PreviewKind, id: u32) PrimitivePreview {
     return switch (kind) {
-        .avatar => .{ .component = .{ .avatar = .{ .label = "ER" } } },
-        .accordion => .{ .component = .{ .accordion = .{ .id = id, .title = "Is it accessible?", .detail = "Yes. It follows the pattern.", .open = true } } },
-        .alert => .{ .component = .{ .alert = .{ .title = "Heads up", .detail = "Status message" } } },
-        .alert_dialog => .{ .component = .{ .alert_dialog = .{ .id = id, .title = "Are you sure?", .detail = "Modal content" } } },
-        .aspect_ratio => .{ .component = .{ .aspect_ratio = .{ .ratio_w = 16, .ratio_h = 9 } } },
-        .badge => .{ .component = .{ .badge = .{ .label = "Default" } } },
-        .breadcrumb => .{ .component = .{ .breadcrumb = .{ .id = id, .first = "Home", .current = "Button" } } },
-        .button => .{ .component = .{ .button = .{ .id = id, .label = "Default" } } },
-        .button_group => .{ .component = .{ .button_group = .{ .id = id, .first = "Left", .second = "Right", .active = 1 } } },
-        .calendar => .{ .component = .{ .calendar = .{ .id = id, .month = "May 2026", .selected_day = 25 } } },
-        .carousel => .{ .component = .{ .carousel = .{ .id = id, .label = "Slide" } } },
-        .card => .{ .component = .{ .card = .{ .title = "Card title", .detail = "Description" } } },
-        .chart => .{ .component = .{ .chart = .{ .id = id, .label = "Visitors" } } },
-        .empty => .{ .component = .{ .empty = .{ .title = "No results", .detail = "Try another filter." } } },
-        .field => .{ .component = .{ .field = .{ .id = id, .label = "Email", .placeholder = "m@example.com" } } },
-        .checkbox => .{ .component = .{ .checkbox = .{ .id = id, .label = "Accept terms", .checked = true } } },
-        .combobox => .{ .component = .{ .combobox = .{ .id = id, .placeholder = "Search framework...", .selected = "React" } } },
-        .command => .{ .component = .{ .command = .{ .id = id, .placeholder = "Type a command..." } } },
-        .context_menu => .{ .component = .{ .context_menu = .{ .id = id, .first = "Profile", .second = "Settings" } } },
-        .dropdown_menu => .{ .component = .{ .dropdown_menu = .{ .id = id, .first = "Profile", .second = "Settings" } } },
-        .input => .{ .component = .{ .input = .{ .id = id, .placeholder = "Email" } } },
-        .input_group => .{ .component = .{ .input_group = .{ .id = id, .addon = "https://", .placeholder = "example.com" } } },
-        .input_otp => .{ .component = .{ .input_otp = .{ .id = id, .value = "123" } } },
-        .item => .{ .component = .{ .row_item = .{ .id = id, .title = "Item title", .detail = "Description" } } },
-        .kbd => .{ .component = .{ .kbd = .{ .label = "Cmd K" } } },
-        .label => .{ .component = .{ .label = .{ .value = "Email" } } },
-        .menubar => .{ .component = .{ .menubar = .{ .id = id, .first = "File", .second = "Edit", .active = 0 } } },
-        .navigation_menu => .{ .component = .{ .navigation_menu = .{ .id = id, .first = "Docs", .second = "Components", .active = 1 } } },
-        .native_select => .{ .component = .{ .select = .{ .id = id, .label = "Native" } } },
-        .pagination => .{ .component = .{ .pagination = .{ .id = id, .page = 1 } } },
-        .popover => .{ .component = .{ .popover = .{ .id = id, .trigger = "Open", .content = "Place content" } } },
-        .progress => .{ .component = .{ .progress = .{ .value = 0.62 } } },
-        .radio_group => .{ .component = .{ .radio_group = .{ .id = id, .first = "Default", .second = "Comfortable", .selected = 1 } } },
-        .resizable => .{ .component = .{ .resizable = .{ .id = id, .ratio = 0.58 } } },
-        .select => .{ .component = .{ .select = .{ .id = id, .label = "Select" } } },
-        .separator => .{ .component = .{ .separator = .{} } },
-        .scroll_area => .{ .component = .{ .scroll_area = .{} } },
-        .skeleton => .{ .component = .{ .skeleton = .{} } },
-        .spinner => .{ .component = .{ .spinner = .{} } },
-        .slider => .{ .component = .{ .slider = .{ .id = id, .label = "Volume", .value = 0.68 } } },
-        .switch_control => .{ .component = .{ .switch_control = .{ .id = id, .label = "Airplane Mode", .checked = true } } },
-        .textarea => .{ .component = .{ .textarea = .{ .id = id, .placeholder = "Type your message here." } } },
-        .toggle => .{ .component = .{ .toggle = .{ .id = id, .label = "Bold", .pressed = true } } },
-        .toggle_group => .{ .component = .{ .toggle_group = .{ .id = id, .first = "Left", .second = "Center", .active = 1 } } },
-        .tabs => .{ .component = .{ .tabs = .{ .id = id, .first = "Account", .second = "Password", .active = 0 } } },
-        .data_table, .table => .{ .component = .{ .table = .{ .id = id, .name = "Sarah Chen", .role = "Engineer" } } },
-        .dialog => .{ .component = .{ .dialog = .{ .id = id, .title = "Edit profile", .detail = "Modal content" } } },
-        .tooltip => .{ .component = .{ .tooltip = .{ .id = id, .trigger = "Hover me", .content = "Add to library" } } },
-        else => unreachable,
+        .avatar => .{ .avatar = .{ .label = "ER" } },
+        .accordion => .{ .accordion = .{ .id = id, .title = "Is it accessible?", .detail = "Yes. It follows the pattern.", .open = true } },
+        .alert => .{ .alert = .{ .title = "Heads up", .detail = "Status message" } },
+        .alert_dialog => .{ .alert_dialog = .{ .id = id, .title = "Are you sure?", .detail = "Modal content" } },
+        .aspect_ratio => .{ .aspect_ratio = .{ .ratio_w = 16, .ratio_h = 9 } },
+        .badge => .{ .badge = .{ .label = "Default" } },
+        .breadcrumb => .{ .breadcrumb = .{ .id = id, .first = "Home", .current = "Button" } },
+        .button => .{ .button = .{ .id = id, .label = "Default" } },
+        .button_group => .{ .button_group = .{ .id = id, .first = "Left", .second = "Right", .active = 1 } },
+        .calendar => .{ .calendar = .{ .id = id, .month = "May 2026", .selected_day = 25 } },
+        .carousel => .{ .carousel = .{ .id = id, .label = "Slide" } },
+        .card => .{ .card = .{ .title = "Card title", .detail = "Description" } },
+        .chart => .{ .chart = .{ .id = id, .label = "Visitors" } },
+        .empty => .{ .empty = .{ .title = "No results", .detail = "Try another filter." } },
+        .field => .{ .field = .{ .id = id, .label = "Email", .placeholder = "m@example.com" } },
+        .hover_card => .{ .hover_card = .{ .id = id, .trigger = "Hover", .content = "@shadcn" } },
+        .checkbox => .{ .checkbox = .{ .id = id, .label = "Accept terms", .checked = true } },
+        .combobox => .{ .combobox = .{ .id = id, .placeholder = "Search framework...", .selected = "React" } },
+        .command => .{ .command = .{ .id = id, .placeholder = "Type a command..." } },
+        .context_menu => .{ .context_menu = .{ .id = id, .first = "Profile", .second = "Settings" } },
+        .dropdown_menu => .{ .dropdown_menu = .{ .id = id, .first = "Profile", .second = "Settings" } },
+        .input => .{ .input = .{ .id = id, .placeholder = "Email" } },
+        .input_group => .{ .input_group = .{ .id = id, .addon = "https://", .placeholder = "example.com" } },
+        .input_otp => .{ .input_otp = .{ .id = id, .value = "123" } },
+        .item => .{ .row_item = .{ .id = id, .title = "Item title", .detail = "Description" } },
+        .kbd => .{ .kbd = .{ .label = "Cmd K" } },
+        .label => .{ .label = .{ .value = "Email" } },
+        .menubar => .{ .menubar = .{ .id = id, .first = "File", .second = "Edit", .active = 0 } },
+        .navigation_menu => .{ .navigation_menu = .{ .id = id, .first = "Docs", .second = "Components", .active = 1 } },
+        .native_select => .{ .select = .{ .id = id, .label = "Native" } },
+        .pagination => .{ .pagination = .{ .id = id, .page = 1 } },
+        .popover => .{ .popover = .{ .id = id, .trigger = "Open", .content = "Place content" } },
+        .progress => .{ .progress = .{ .value = 0.62 } },
+        .radio_group => .{ .radio_group = .{ .id = id, .first = "Default", .second = "Comfortable", .selected = 1 } },
+        .resizable => .{ .resizable = .{ .id = id, .ratio = 0.58 } },
+        .select => .{ .select = .{ .id = id, .label = "Select" } },
+        .separator => .{ .separator = .{} },
+        .scroll_area => .{ .scroll_area = .{} },
+        .skeleton => .{ .skeleton = .{} },
+        .spinner => .{ .spinner = .{} },
+        .sonner => .{ .toast = .{ .id = id, .title = "Saved", .detail = "Notification" } },
+        .slider => .{ .slider = .{ .id = id, .label = "Volume", .value = 0.68 } },
+        .switch_control => .{ .switch_control = .{ .id = id, .label = "Airplane Mode", .checked = true } },
+        .textarea => .{ .textarea = .{ .id = id, .placeholder = "Type your message here." } },
+        .toggle => .{ .toggle = .{ .id = id, .label = "Bold", .pressed = true } },
+        .toggle_group => .{ .toggle_group = .{ .id = id, .first = "Left", .second = "Center", .active = 1 } },
+        .tabs => .{ .tabs = .{ .id = id, .first = "Account", .second = "Password", .active = 0 } },
+        .data_table, .table => .{ .table = .{ .id = id, .name = "Sarah Chen", .role = "Engineer" } },
+        .date_picker => .{ .input = .{ .id = id, .placeholder = "May 25, 2026" } },
+        .dialog => .{ .dialog = .{ .id = id, .title = "Edit profile", .detail = "Modal content" } },
+        .direction => .{ .direction = .{ .id = id, .active = 0 } },
+        .drawer => .{ .drawer = .{ .id = id, .title = "Edit profile", .detail = "Drawer content" } },
+        .sheet => .{ .sheet = .{ .id = id, .title = "Edit profile", .detail = "Sheet content" } },
+        .sidebar => .{ .sidebar = .{ .id = id, .title = "Workspace", .item = "Nav" } },
+        .tooltip => .{ .tooltip = .{ .id = id, .trigger = "Hover me", .content = "Add to library" } },
+        .toast => .{ .toast = .{ .id = id, .title = "Queued", .detail = "Notification" } },
     };
 }
 
-fn renderComponentPreview(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, component: components.Component, options: components.RenderOptions) GalleryError!void {
-    var resolved = options;
-    resolved.style = componentStyle();
-    try component.render(scene, bounds, resolved);
+fn renderComponentPreview(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, component: components.Component) GalleryError!void {
+    try component.render(scene, bounds, .{ .style = componentStyle() });
     try component.collectInteractions(collector, bounds);
 }
 
@@ -676,94 +676,18 @@ fn componentStyle() ui.Style {
     };
 }
 
-fn previewAlert(scene: *ui.Scene, bounds: ui.Rect, destructive: bool) GalleryError!void {
-    const color = if (destructive) palette.danger else palette.text;
-    try fill(scene, bounds, palette.panel_alt, 8);
-    try stroke(scene, bounds, if (destructive) palette.danger else palette.border, 8);
-    try iconQuad(scene, ui.Rect.init(bounds.x + 8, bounds.y + 10, 16, 16), .shield, color);
-    try text(scene, bounds.x + 30, bounds.y + 6, bounds.w - 38, 14, "Heads up", color);
-    try text(scene, bounds.x + 30, bounds.y + 22, bounds.w - 38, 12, "Status message", palette.muted);
-}
-
-fn previewBadgeVariants(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect) GalleryError!void {
+fn renderBadgeVariants(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect) GalleryError!void {
     var cursor = ui.LinearCursor.init(bounds, .row, 6);
-    try renderComponentPreview(scene, collector, cursor.take(64), .{ .badge = .{ .label = "Default" } }, .{});
-    try renderComponentPreview(scene, collector, cursor.take(72), .{ .badge = .{ .label = "Outline" } }, .{ .badge_variant = .outline });
-    try renderComponentPreview(scene, collector, cursor.take(44), .{ .badge = .{ .label = "Link" } }, .{ .badge_variant = .link });
+    try renderComponentPreview(scene, collector, cursor.take(64), .{ .badge = .{ .label = "Default" } });
+    try renderComponentPreview(scene, collector, cursor.take(72), .{ .badge = .{ .label = "Outline", .variant = .outline } });
+    try renderComponentPreview(scene, collector, cursor.take(44), .{ .badge = .{ .label = "Link", .variant = .link } });
 }
 
-fn previewButtonVariants(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32) GalleryError!void {
+fn renderButtonVariants(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32) GalleryError!void {
     var cursor = ui.LinearCursor.init(bounds, .row, 6);
-    try renderComponentPreview(scene, collector, cursor.take(70), .{ .button = .{ .id = id, .label = "Default" } }, .{});
-    try renderComponentPreview(scene, collector, cursor.take(76), .{ .button = .{ .id = id + 1, .label = "Second" } }, .{ .button_variant = .secondary });
-    try renderComponentPreview(scene, collector, cursor.take(54), .{ .button = .{ .id = id + 2, .label = "Link" } }, .{ .button_variant = .link });
-}
-
-fn previewDatePicker(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32) GalleryError!void {
-    try previewInput(scene, collector, bounds, id, "May 25, 2026");
-}
-
-fn previewDirection(scene: *ui.Scene, bounds: ui.Rect) GalleryError!void {
-    var no_regions: [0]interaction.Region = .{};
-    var collector = interaction.Collector.init(&no_regions);
-    try renderComponentPreview(scene, &collector, ui.Rect.init(bounds.x, bounds.y + 8, 42, 20), .{ .badge = .{ .label = "LTR" } }, .{ .badge_variant = .default });
-    try iconQuad(scene, ui.Rect.init(bounds.x + 54, bounds.y + 11, 18, 18), .route, palette.muted);
-    try renderComponentPreview(scene, &collector, ui.Rect.init(bounds.x + 84, bounds.y + 8, 42, 20), .{ .badge = .{ .label = "RTL" } }, .{ .badge_variant = .secondary });
-}
-
-fn previewDrawer(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32) GalleryError!void {
-    try button(scene, collector, ui.Rect.init(bounds.x, bounds.y + 4, 56, 30), "Open", id, false);
-    const sheet_bounds = ui.Rect.init(bounds.x + bounds.w - 72, bounds.y, 72, bounds.h);
-    try fill(scene, sheet_bounds, palette.panel_alt, 8);
-    try stroke(scene, sheet_bounds, palette.border, 8);
-}
-
-fn previewHoverCard(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32) GalleryError!void {
-    try button(scene, collector, ui.Rect.init(bounds.x, bounds.y + 4, 64, 30), "Hover", id, false);
-    try fill(scene, ui.Rect.init(bounds.x + 76, bounds.y, @max(80, bounds.w - 76), bounds.h), palette.panel_alt, 8);
-    try text(scene, bounds.x + 86, bounds.y + 10, @max(1, bounds.w - 96), 14, "@shadcn", palette.text);
-}
-
-fn previewInput(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32, placeholder: []const u8) GalleryError!void {
-    try renderComponentPreview(scene, collector, bounds, .{ .input = .{ .id = id, .placeholder = placeholder } }, .{});
-}
-
-fn previewSheet(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32) GalleryError!void {
-    try previewDrawer(scene, collector, bounds, id);
-}
-
-fn previewSidebar(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32) GalleryError!void {
-    const rail = ui.Rect.init(bounds.x, bounds.y, 52, bounds.h);
-    try fill(scene, rail, palette.panel_alt, 8);
-    try menuRow(scene, collector, ui.Rect.init(rail.x + 5, rail.y + 5, rail.w - 10, 12), "Nav", id);
-    try fill(scene, ui.Rect.init(bounds.x + 62, bounds.y, @max(1, bounds.w - 62), bounds.h), palette.row, 8);
-}
-
-fn previewSkeletonBars(scene: *ui.Scene, bounds: ui.Rect) GalleryError!void {
-    try fill(scene, ui.Rect.init(bounds.x, bounds.y + 4, bounds.w * 0.72, 8), palette.row, 4);
-    try fill(scene, ui.Rect.init(bounds.x, bounds.y + 18, bounds.w, 8), palette.row, 4);
-    try fill(scene, ui.Rect.init(bounds.x, bounds.y + 32, bounds.w * 0.48, 6), palette.row, 3);
-}
-
-fn previewTabs(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32) GalleryError!void {
-    var cursor = ui.LinearCursor.init(ui.Rect.init(bounds.x, bounds.y + 3, @min(bounds.w, 170), 30), .row, 3);
-    const labels = [_][]const u8{ "Account", "Password" };
-    for (labels, 0..) |label, index| try tabButton(scene, collector, cursor.take(if (index == 0) 76 else 88), label, id + @as(u32, @intCast(index)), index == 0);
-}
-
-fn previewToast(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32, label: []const u8) GalleryError!void {
-    try fill(scene, bounds, palette.panel_alt, 8);
-    try stroke(scene, bounds, palette.border, 8);
-    try text(scene, bounds.x + 10, bounds.y + 7, bounds.w - 20, 14, label, palette.text);
-    try text(scene, bounds.x + 10, bounds.y + 23, bounds.w - 20, 12, "Notification", palette.muted);
-    try collector.addHit(bounds, .button, id);
-}
-
-fn previewToggle(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32) GalleryError!void {
-    try button(scene, collector, ui.Rect.init(bounds.x, bounds.y + 4, 64, 30), "Bold", id, false);
-    try fill(scene, ui.Rect.init(bounds.x + 74, bounds.y + 4, 64, 30), palette.row, 8);
-    try centeredText(scene, ui.Rect.init(bounds.x + 74, bounds.y + 4, 64, 30), "Italic", palette.text);
-    try collector.addHit(ui.Rect.init(bounds.x + 74, bounds.y + 4, 64, 30), .button, id + 1);
+    try renderComponentPreview(scene, collector, cursor.take(70), .{ .button = .{ .id = id, .label = "Default" } });
+    try renderComponentPreview(scene, collector, cursor.take(76), .{ .button = .{ .id = id + 1, .label = "Second", .variant = .secondary } });
+    try renderComponentPreview(scene, collector, cursor.take(54), .{ .button = .{ .id = id + 2, .label = "Link", .variant = .link } });
 }
 
 fn menuRow(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id: u32) GalleryError!void {
@@ -900,10 +824,7 @@ fn renderGridGapControls(scene: *ui.Scene, collector: *interaction.Collector, ro
 }
 
 fn gridGapButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id_value: u32, selected: bool) GalleryError!void {
-    try fill(scene, bounds, if (selected) palette.text else palette.panel_alt, 6);
-    try stroke(scene, bounds, if (selected) palette.text else palette.border, 6);
-    try alignedText(scene, bounds.x + 2.0, bounds.y + 4.0, bounds.w - 4.0, 12.0, label, if (selected) palette.panel else palette.text, .center);
-    try collector.addHit(bounds, .button, id_value);
+    try renderComponentPreview(scene, collector, bounds, .{ .button = .{ .id = id_value, .label = label, .variant = if (selected) .primary else .secondary } });
 }
 
 fn normalizedGridGap(value: f32) f32 {
@@ -932,12 +853,8 @@ fn layoutSwitcher(scene: *ui.Scene, collector: *interaction.Collector, bounds: u
 }
 
 fn layoutSwitchItem(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id_value: u32, selected: bool) GalleryError!void {
-    const is_hovered = hovered(bounds);
-    if (selected or is_hovered) {
-        try fill(scene, bounds, if (selected) palette.text else palette.panel_alt_hover, control_radius);
-    }
-    try centeredText(scene, bounds, label, if (selected) palette.panel else palette.text);
-    try collector.addHit(bounds, .button, id_value);
+    if (!selected and hovered(bounds)) try fill(scene, bounds, palette.panel_alt_hover, control_radius);
+    try renderComponentPreview(scene, collector, bounds, .{ .button = .{ .id = id_value, .label = label, .variant = if (selected) .primary else .ghost } });
 }
 
 fn galleryColumnCount(width: f32, gap: f32) usize {
@@ -952,54 +869,21 @@ fn galleryColumnCount(width: f32, gap: f32) usize {
 }
 
 fn searchField(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id_value: u32) GalleryError!void {
-    const is_hovered = hovered(bounds);
-    try fill(scene, bounds, if (is_hovered) palette.panel_alt_hover else palette.panel_alt, control_radius);
-    try stroke(scene, bounds, if (is_hovered) palette.border_hover else palette.border, control_radius);
-    try iconQuad(scene, ui.Rect.init(bounds.x + 12, bounds.y + (bounds.h - 16.0) * 0.5, 16, 16), .search, palette.muted);
-    try text(scene, bounds.x + 36, bounds.y + (bounds.h - compact_text_height) * 0.5, bounds.w - 48, compact_text_height, label, palette.muted);
-    try collector.addHit(bounds, .input, id_value);
+    if (hovered(bounds)) try fill(scene, bounds, palette.panel_alt_hover, control_radius);
+    try renderComponentPreview(scene, collector, bounds, .{ .input = .{ .id = id_value, .placeholder = label, .leading_icon = .search } });
 }
 
 fn button(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id_value: u32, primary: bool) GalleryError!void {
-    try buttonChrome(scene, bounds, primary);
-    try centeredText(scene, bounds, label, if (primary) palette.panel else palette.text);
-    try collector.addHit(bounds, .button, id_value);
-}
-
-fn tabButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id_value: u32, primary: bool) GalleryError!void {
-    try buttonChrome(scene, bounds, primary);
-    try alignedText(scene, bounds.x + 4.0, bounds.y + (bounds.h - 12.0) * 0.5, @max(1.0, bounds.w - 8.0), 12.0, label, if (primary) palette.panel else palette.text, .center);
-    try collector.addHit(bounds, .button, id_value);
+    try renderComponentPreview(scene, collector, bounds, .{ .button = .{ .id = id_value, .label = label, .variant = if (primary) .primary else .secondary } });
 }
 
 fn buttonWithIcon(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, value: icon.Icon, id_value: u32, primary: bool) GalleryError!void {
-    try buttonChrome(scene, bounds, primary);
-    const icon_color = if (primary) palette.panel else palette.text;
-    const label_w = @min(@max(1.0, bounds.w - 40.0), @as(f32, @floatFromInt(label.len)) * text_char_w);
-    const group_w = label_w + 22.0;
-    const group_x = bounds.x + (bounds.w - group_w) * 0.5;
-    try iconQuad(scene, ui.Rect.init(group_x, bounds.y + (bounds.h - 16.0) * 0.5, 16, 16), value, icon_color);
-    try alignedText(scene, group_x + 22.0, bounds.y + (bounds.h - 14.0) * 0.5, label_w, 14.0, label, icon_color, .start);
-    try collector.addHit(bounds, .button, id_value);
-}
-
-fn buttonChrome(scene: *ui.Scene, bounds: ui.Rect, primary: bool) GalleryError!void {
-    const is_hovered = hovered(bounds);
-    if (is_hovered) try scene.pushRect(bounds.insetUniform(-1), palette.shadow_hover, .shadow, control_radius, control_shadow);
-    if (primary) {
-        const top = if (is_hovered) ui.Color{ .r = 255, .g = 255, .b = 255 } else palette.text;
-        const bottom = if (is_hovered) ui.Color{ .r = 226, .g = 232, .b = 240 } else palette.text;
-        try scene.pushGradientRect(bounds, top, bottom, control_radius);
-    } else {
-        try scene.pushGradientRect(bounds, if (is_hovered) palette.panel_alt_hover else palette.panel_alt, if (is_hovered) palette.row_hover else palette.panel_alt, control_radius);
-    }
-    try stroke(scene, bounds, if (is_hovered) palette.border_hover else if (primary) palette.text else palette.border, control_radius);
+    try renderComponentPreview(scene, collector, bounds, .{ .button = .{ .id = id_value, .label = label, .variant = if (primary) .primary else .secondary, .leading_icon = value } });
 }
 
 fn ghostButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id_value: u32) GalleryError!void {
     if (hovered(bounds)) try fill(scene, bounds, palette.panel_alt_hover, control_radius);
-    try centeredText(scene, bounds, label, palette.text);
-    try collector.addHit(bounds, .button, id_value);
+    try renderComponentPreview(scene, collector, bounds, .{ .button = .{ .id = id_value, .label = label, .variant = .ghost } });
 }
 
 fn panel(scene: *ui.Scene, bounds: ui.Rect, radius: f32) GalleryError!void {
@@ -1089,7 +973,7 @@ test "component gallery catalog is the authoritative component registry" {
     try std.testing.expectEqual(@as(usize, 6), countByCategory(.layout));
 }
 
-test "component gallery catalog entries render reference previews without proxy components" {
+test "component gallery catalog entries render reference previews with canonical components" {
     var commands: [2048]ui.Command = undefined;
     var regions: [256]interaction.Region = undefined;
     var scene = ui.Scene.init(&commands);
@@ -1231,9 +1115,11 @@ test "component gallery buttons center labels through shared primitive" {
 
     const label = textCommand(scene.written(), "Continue").?.text;
     const center_delta = @abs((label.origin.x + label.origin.w * 0.5) - (bounds.x + bounds.w * 0.5));
+    const vertical_delta = @abs((label.origin.y + label.origin.h * 0.5) - (bounds.y + bounds.h * 0.5));
     try std.testing.expectEqual(ui.TextAlign.center, label.alignment);
     try std.testing.expect(center_delta < 0.01);
-    try std.testing.expectEqual(bounds.y + 10.0, label.origin.y);
+    try std.testing.expect(vertical_delta < 0.01);
+    try std.testing.expect(hasHit(collector.written(), preview_base_id + 5010));
 }
 
 fn hasHit(regions: []const interaction.Region, id_value: u32) bool {
