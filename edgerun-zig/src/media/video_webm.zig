@@ -27,6 +27,8 @@ const webm_ebml_id_block_group: u64 = 0xa0;
 const webm_ebml_id_block: u64 = 0xa1;
 pub const track_type_video: u64 = 1;
 const webm_no_lacing_mask: u8 = 0x06;
+const webm_ebml_vint_marker_bits: usize = 7;
+const webm_ebml_vint_full_byte: u8 = 0xff;
 
 pub const InitState = struct {
     header: Header,
@@ -364,7 +366,8 @@ fn readEbmlVint(bytes: []const u8, cursor: usize, remove_marker: bool) Error!VIn
     if (first == 0) return error.BadVideo;
     const size = ebmlVintSize(first) orelse return error.BadVideo;
     if (size > webm_ebml_max_vint_bytes or bytes.len - cursor < size) return error.BadVideo;
-    var value: u64 = if (remove_marker) first & (@as(u8, 0xff) >> @intCast(size)) else first;
+    const marker_mask: u8 = if (size == webm_ebml_max_vint_bytes) 0 else webm_ebml_vint_full_byte >> @intCast(size);
+    var value: u64 = if (remove_marker) first & marker_mask else first;
     var index: usize = 1;
     while (index < size) : (index += 1) {
         value = (value << 8) | bytes[cursor + index];
@@ -384,7 +387,7 @@ fn ebmlVintSize(first: u8) ?usize {
 }
 
 fn isUnknownEbmlSize(value: u64, size: usize) bool {
-    const bits: u6 = @intCast(7 * size);
+    const bits: u6 = @intCast(webm_ebml_vint_marker_bits * size);
     return value == (@as(u64, 1) << bits) - 1;
 }
 
@@ -395,4 +398,10 @@ fn readEbmlUnsigned(payload: []const u8) Error!u64 {
         value = (value << 8) | byte;
     }
     return value;
+}
+
+test "webm ebml vint parser accepts eight byte finite sizes" {
+    const parsed = try readEbmlVint(&.{ 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00 }, 0, true);
+    try std.testing.expectEqual(@as(usize, webm_ebml_max_vint_bytes), parsed.size);
+    try std.testing.expectEqual(@as(u64, 0x1000), parsed.value);
 }

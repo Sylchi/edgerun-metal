@@ -239,6 +239,7 @@ pub const RenderError = error{
     CommandBudgetExceeded,
     InvalidBounds,
     ClipBudgetExceeded,
+    UnsupportedComponent,
 };
 
 pub const PatchError = error{
@@ -769,204 +770,13 @@ fn renderNode(scene: *Scene, node: Node, bounds: Rect, style: Style) RenderError
     switch (node) {
         .rect => |rect_node| try scene.push(.{ .rect = .{ .bounds = bounds, .color = rect_node.color } }),
         .text => |text_node| try scene.push(.{ .text = .{ .origin = bounds, .value = text_node.value, .color = text_node.color orelse style.text } }),
-        .card => |card| try renderCard(scene, bounds, card.title, card.detail, style),
-        .badge => |badge| try renderBadge(scene, bounds, badge.label, style),
-        .avatar => |avatar| try renderAvatar(scene, bounds, avatar.label, style),
-        .kbd => |kbd| try renderKbd(scene, bounds, kbd.label, style),
-        .separator => try renderSeparator(scene, bounds, style),
-        .button => |button| {
-            try scene.pushRect(bounds, surface_shadow, .shadow, control_radius, control_shadow);
-            try scene.pushGradientRect(bounds, style.accent, accent_bottom, control_radius);
-            try scene.pushRect(bounds, style.border, .border, control_radius, 0.0);
-            try scene.push(.{ .text = .{ .origin = buttonLabelBounds(bounds), .value = button.label, .color = style.bg, .alignment = .center } });
-        },
-        .input => |input| {
-            try scene.pushRect(bounds, style.panel, .fill, control_radius, 0.0);
-            try scene.pushRect(bounds, style.border, .border, control_radius, 0.0);
-            if (contentInset(bounds, input_text_padding)) |placeholder_bounds| {
-                try scene.push(.{ .text = .{ .origin = placeholder_bounds, .value = input.placeholder, .color = style.muted } });
-            }
-        },
-        .textarea => |textarea| try renderTextarea(scene, bounds, textarea.placeholder, style),
-        .select => |select| try renderSelect(scene, bounds, select.label, style),
-        .checkbox => |checkbox| try renderCheckbox(scene, bounds, checkbox.label, checkbox.checked, style),
-        .switch_control => |switch_control| try renderSwitch(scene, bounds, switch_control.label, switch_control.checked, style),
-        .progress => |progress| try renderProgress(scene, bounds, progress.value, style),
-        .slider => |slider| try renderSlider(scene, bounds, slider.label, slider.value, style),
-        .row_item => |row| {
-            try scene.pushRect(bounds, style.row, .fill, row_radius, 0.0);
-            if (rowTitleBounds(bounds, row.detail.len == 0)) |title_bounds| {
-                try scene.push(.{ .text = .{ .origin = title_bounds, .value = row.title, .color = style.text } });
-            }
-            if (row.detail.len != 0) {
-                if (rowDetailBounds(bounds)) |detail_bounds| {
-                    try scene.push(.{ .text = .{ .origin = detail_bounds, .value = row.detail, .color = style.muted } });
-                }
-            }
-        },
+        .card, .badge, .avatar, .kbd, .separator, .button, .input, .textarea, .select, .checkbox, .switch_control, .progress, .slider, .row_item => return error.UnsupportedComponent,
         .slot => |slot_node| try renderNode(scene, slot_node.child.*, bounds, style),
         .stack => |layout| try renderStack(scene, layout, bounds, style),
     }
 }
 
-const control_radius: f32 = 6.0;
-const control_shadow: f32 = 5.0;
-const row_radius: f32 = 4.0;
-const surface_shadow = Color{ .r = 0, .g = 0, .b = 0, .a = 96 };
-const accent_bottom = Color{ .r = 15, .g = 183, .b = 210 };
-const button_label_height: f32 = 14.0;
-const button_label_horizontal_padding: f32 = 16.0;
-const input_text_padding: f32 = 12.0;
-const row_text_padding_x: f32 = 12.0;
-const row_title_offset_y: f32 = 8.0;
-const row_detail_offset_y: f32 = 26.0;
-const row_title_height: f32 = 18.0;
-const row_detail_height: f32 = 16.0;
-const badge_height: f32 = 24.0;
-const badge_text_height: f32 = 13.0;
-const badge_padding_x: f32 = 10.0;
-const card_padding: f32 = 14.0;
-const card_title_height: f32 = 18.0;
-const card_detail_height: f32 = 16.0;
-const card_detail_gap: f32 = 8.0;
-const avatar_size: f32 = 40.0;
-const avatar_text_height: f32 = 14.0;
-const kbd_height: f32 = 24.0;
-const kbd_text_height: f32 = 12.0;
-const separator_height: f32 = 1.0;
-const checkbox_box_size: f32 = 18.0;
-const checkbox_mark_inset: f32 = 5.0;
-const checkbox_text_gap: f32 = 10.0;
-const control_label_height: f32 = 16.0;
-const switch_width: f32 = 42.0;
-const switch_height: f32 = 24.0;
-const switch_knob_size: f32 = 18.0;
-const switch_knob_inset: f32 = 3.0;
-const progress_height: f32 = 8.0;
-const slider_label_height: f32 = 14.0;
-const slider_track_height: f32 = 6.0;
-const slider_thumb_size: f32 = 16.0;
-const slider_track_top: f32 = 26.0;
-const textarea_padding: f32 = 12.0;
-const select_arrow_w: f32 = 18.0;
 const codec_unit_scale: f32 = 1000.0;
-
-fn renderCard(scene: *Scene, bounds: Rect, title: []const u8, detail: []const u8, style: Style) RenderError!void {
-    try scene.pushRect(bounds, surface_shadow, .shadow, control_radius + 2.0, control_shadow);
-    try scene.pushRect(bounds, style.panel, .fill, control_radius + 2.0, 0.0);
-    try scene.pushRect(bounds, style.border, .border, control_radius + 2.0, 0.0);
-    const title_bounds = Rect.init(bounds.x + card_padding, bounds.y + card_padding, @max(1.0, bounds.w - card_padding * 2.0), card_title_height);
-    try scene.push(.{ .text = .{ .origin = title_bounds, .value = title, .color = style.text } });
-    if (detail.len != 0) {
-        const detail_y = title_bounds.y + title_bounds.h + card_detail_gap;
-        const detail_bounds = Rect.init(title_bounds.x, detail_y, title_bounds.w, @max(1.0, bounds.y + bounds.h - detail_y - card_padding));
-        try scene.pushWrappedText(detail_bounds, detail, style.muted, .{
-            .line_height = card_detail_height,
-            .average_char_width = 8.5,
-            .max_lines = 3,
-        });
-    }
-}
-
-fn renderBadge(scene: *Scene, bounds: Rect, label: []const u8, style: Style) RenderError!void {
-    const height = geometry.clamp(badge_height, 1.0, bounds.h);
-    const badge_bounds = Rect.init(bounds.x, bounds.y + (bounds.h - height) * 0.5, bounds.w, height);
-    var fill = style.accent;
-    fill.a = 42;
-    try scene.pushRect(badge_bounds, fill, .fill, height * 0.5, 0.0);
-    if (contentInset(badge_bounds, badge_padding_x)) |label_bounds| {
-        try scene.push(.{ .text = .{ .origin = label_bounds.withHeightCentered(badge_text_height), .value = label, .color = style.accent, .alignment = .center } });
-    }
-}
-
-fn renderAvatar(scene: *Scene, bounds: Rect, label: []const u8, style: Style) RenderError!void {
-    const size = geometry.clamp(avatar_size, 1.0, @min(bounds.w, bounds.h));
-    const avatar_bounds = Rect.init(bounds.x + (bounds.w - size) * 0.5, bounds.y + (bounds.h - size) * 0.5, size, size);
-    try scene.pushRect(avatar_bounds, style.row, .fill, size * 0.5, 0.0);
-    try scene.pushRect(avatar_bounds, style.border, .border, size * 0.5, 0.0);
-    const label_bounds = avatar_bounds.insetUniform(6.0).withHeightCentered(avatar_text_height);
-    try scene.push(.{ .text = .{ .origin = label_bounds, .value = label, .color = style.text, .alignment = .center } });
-}
-
-fn renderKbd(scene: *Scene, bounds: Rect, label: []const u8, style: Style) RenderError!void {
-    const height = geometry.clamp(kbd_height, 1.0, bounds.h);
-    const kbd_bounds = Rect.init(bounds.x, bounds.y + (bounds.h - height) * 0.5, bounds.w, height);
-    try scene.pushRect(kbd_bounds, style.row, .fill, control_radius, 0.0);
-    try scene.pushRect(kbd_bounds, style.border, .border, control_radius, 0.0);
-    if (contentInset(kbd_bounds, 8.0)) |label_bounds| {
-        try scene.push(.{ .text = .{ .origin = label_bounds.withHeightCentered(kbd_text_height), .value = label, .color = style.text, .alignment = .center } });
-    }
-}
-
-fn renderSeparator(scene: *Scene, bounds: Rect, style: Style) RenderError!void {
-    const line = Rect.init(bounds.x, bounds.y + (bounds.h - separator_height) * 0.5, bounds.w, separator_height);
-    try scene.pushRect(line, style.border, .fill, 0.0, 0.0);
-}
-
-fn renderCheckbox(scene: *Scene, bounds: Rect, label: []const u8, checked: bool, style: Style) RenderError!void {
-    const box = Rect.init(bounds.x, bounds.y + (bounds.h - checkbox_box_size) * 0.5, checkbox_box_size, checkbox_box_size);
-    try scene.pushRect(box, if (checked) style.accent else style.panel, .fill, control_radius, 0.0);
-    try scene.pushRect(box, if (checked) style.accent else style.border, .border, control_radius, 0.0);
-    if (checked) {
-        try scene.pushRect(box.insetUniform(checkbox_mark_inset), style.bg, .fill, 2.0, 0.0);
-    }
-    const label_x = box.x + box.w + checkbox_text_gap;
-    const label_bounds = Rect.init(label_x, bounds.y + (bounds.h - control_label_height) * 0.5, @max(1.0, bounds.x + bounds.w - label_x), control_label_height);
-    try scene.push(.{ .text = .{ .origin = label_bounds, .value = label, .color = style.text } });
-}
-
-fn renderSwitch(scene: *Scene, bounds: Rect, label: []const u8, checked: bool, style: Style) RenderError!void {
-    const pill = Rect.init(bounds.x + bounds.w - switch_width, bounds.y + (bounds.h - switch_height) * 0.5, switch_width, switch_height);
-    try scene.pushRect(pill, if (checked) style.accent else style.row, .fill, switch_height * 0.5, 0.0);
-    try scene.pushRect(pill, style.border, .border, switch_height * 0.5, 0.0);
-    const knob_x = if (checked) pill.x + pill.w - switch_knob_size - switch_knob_inset else pill.x + switch_knob_inset;
-    const knob = Rect.init(knob_x, pill.y + switch_knob_inset, switch_knob_size, switch_knob_size);
-    try scene.pushRect(knob, style.text, .fill, switch_knob_size * 0.5, 0.0);
-    const label_bounds = Rect.init(bounds.x, bounds.y + (bounds.h - control_label_height) * 0.5, @max(1.0, pill.x - bounds.x - checkbox_text_gap), control_label_height);
-    try scene.push(.{ .text = .{ .origin = label_bounds, .value = label, .color = style.text } });
-}
-
-fn renderTextarea(scene: *Scene, bounds: Rect, placeholder: []const u8, style: Style) RenderError!void {
-    try scene.pushRect(bounds, style.panel, .fill, control_radius, 0.0);
-    try scene.pushRect(bounds, style.border, .border, control_radius, 0.0);
-    const text_bounds = bounds.insetUniform(textarea_padding);
-    if (text_bounds.valid()) {
-        try scene.pushWrappedText(text_bounds, placeholder, style.muted, .{
-            .line_height = control_label_height,
-            .average_char_width = 8.5,
-            .max_lines = 4,
-        });
-    }
-}
-
-fn renderSelect(scene: *Scene, bounds: Rect, label: []const u8, style: Style) RenderError!void {
-    try scene.pushRect(bounds, style.panel, .fill, control_radius, 0.0);
-    try scene.pushRect(bounds, style.border, .border, control_radius, 0.0);
-    if (contentInset(bounds, input_text_padding)) |label_bounds| {
-        const text_bounds = Rect.init(label_bounds.x, label_bounds.y, @max(1.0, label_bounds.w - select_arrow_w), label_bounds.h);
-        try scene.push(.{ .text = .{ .origin = text_bounds, .value = label, .color = style.text } });
-        const arrow_bounds = Rect.init(label_bounds.x + label_bounds.w - select_arrow_w, label_bounds.y, select_arrow_w, label_bounds.h);
-        try scene.push(.{ .text = .{ .origin = arrow_bounds, .value = "v", .color = style.muted, .alignment = .center } });
-    }
-}
-
-fn renderProgress(scene: *Scene, bounds: Rect, value: f32, style: Style) RenderError!void {
-    const track = Rect.init(bounds.x, bounds.y + (bounds.h - progress_height) * 0.5, bounds.w, progress_height);
-    try scene.pushRect(track, style.row, .fill, progress_height * 0.5, 0.0);
-    try scene.pushRect(Rect.init(track.x, track.y, track.w * clampUnit(value), track.h), style.accent, .fill, progress_height * 0.5, 0.0);
-}
-
-fn renderSlider(scene: *Scene, bounds: Rect, label: []const u8, value: f32, style: Style) RenderError!void {
-    const clamped = clampUnit(value);
-    try scene.push(.{ .text = .{ .origin = Rect.init(bounds.x, bounds.y, bounds.w, slider_label_height), .value = label, .color = style.text } });
-    const track_y = bounds.y + @min(slider_track_top, @max(0.0, bounds.h - slider_track_height));
-    const track = Rect.init(bounds.x, track_y, bounds.w, slider_track_height);
-    try scene.pushRect(track, style.row, .fill, slider_track_height * 0.5, 0.0);
-    try scene.pushRect(Rect.init(track.x, track.y, track.w * clamped, track.h), style.accent, .fill, slider_track_height * 0.5, 0.0);
-    const thumb_center = track.x + track.w * clamped;
-    const thumb = Rect.init(thumb_center - slider_thumb_size * 0.5, track.y + (track.h - slider_thumb_size) * 0.5, slider_thumb_size, slider_thumb_size);
-    try scene.pushRect(thumb, style.text, .fill, slider_thumb_size * 0.5, 0.0);
-}
 
 pub fn clampUnit(value: f32) f32 {
     if (!geometry.finite(value)) return 0.0;
@@ -979,37 +789,6 @@ pub fn encodeUnit(value: f32) u16 {
 
 pub fn decodeUnit(value: u16) f32 {
     return geometry.clamp(@as(f32, @floatFromInt(value)) / codec_unit_scale, 0.0, 1.0);
-}
-
-fn contentInset(bounds: Rect, padding: f32) ?Rect {
-    const clamped = geometry.clamp(padding, 0.0, @min(bounds.w, bounds.h) * 0.5);
-    const out = bounds.insetUniform(clamped);
-    return if (out.valid()) out else null;
-}
-
-fn buttonLabelBounds(bounds: Rect) Rect {
-    const label_margin = geometry.clamp(button_label_horizontal_padding, 0.0, bounds.w * 0.5);
-    const label_height = geometry.clamp(button_label_height, 1.0, bounds.h);
-    return Rect.init(
-        bounds.x + label_margin,
-        bounds.y + (bounds.h - label_height) * 0.5,
-        @max(1.0, bounds.w - label_margin * 2.0),
-        label_height,
-    );
-}
-
-fn rowTitleBounds(bounds: Rect, centered: bool) ?Rect {
-    const row_bounds = if (centered) bounds.withHeightCentered(row_title_height) else Rect.init(bounds.x, bounds.y + row_title_offset_y, bounds.w, row_title_height);
-    return rowTextBounds(row_bounds);
-}
-
-fn rowDetailBounds(bounds: Rect) ?Rect {
-    return rowTextBounds(Rect.init(bounds.x, bounds.y + row_detail_offset_y, bounds.w, row_detail_height));
-}
-
-fn rowTextBounds(bounds: Rect) ?Rect {
-    const out = bounds.insetLtrb(row_text_padding_x, 0.0, row_text_padding_x, 0.0);
-    return if (out.valid()) out else null;
 }
 
 fn renderStack(scene: *Scene, layout: Layout, bounds: Rect, style: Style) RenderError!void {
@@ -1180,17 +959,16 @@ fn stackPreferredSize(layout: Layout) Size {
 }
 
 fn sampleRoot(children: []Node) Node {
-    std.debug.assert(children.len >= 5);
+    std.debug.assert(children.len >= 4);
     children[0] = .{ .text = .{ .value = "edgerun ui", .color = .accent } };
-    children[1] = .{ .input = .{ .id = 10, .placeholder = "search objects" } };
-    children[2] = .{ .row_item = .{ .id = 20, .title = "object graph", .detail = "canonical data in, scene commands out" } };
-    children[3] = .{ .slot = .{ .id = 7, .child = &children[4] } };
-    children[4] = .{ .button = .{ .id = 30, .label = "Render" } };
-    return .{ .stack = .{ .axis = .column, .gap = 10, .padding = 16, .children = children[0..4] } };
+    children[1] = .{ .rect = .{ .color = .row } };
+    children[2] = .{ .slot = .{ .id = 7, .child = &children[3] } };
+    children[3] = .{ .text = .{ .value = "scene commands", .color = null } };
+    return .{ .stack = .{ .axis = .column, .gap = 10, .padding = 16, .children = children[0..3] } };
 }
 
 test "ui renderer emits paint commands without allocation" {
-    var nodes: [5]Node = undefined;
+    var nodes: [4]Node = undefined;
     const root = sampleRoot(&nodes);
 
     var commands: [32]Command = undefined;
@@ -1202,71 +980,38 @@ test "ui renderer emits paint commands without allocation" {
     try std.testing.expectEqual(@as(usize, 0), scene.stats().drop_targets);
 }
 
-test "button node centers label in core renderer" {
+test "core renderer rejects component nodes" {
     const bounds = Rect.init(10.0, 20.0, 140.0, 36.0);
     var commands: [8]Command = undefined;
     var scene = Scene.init(&commands);
-    try render(&scene, buttonNode(7, "Launch"), bounds, .{});
-
-    const label = firstText(scene.written()).?.text;
-    const label_center_x = label.origin.x + label.origin.w * 0.5;
-    const button_center_x = bounds.x + bounds.w * 0.5;
-    const label_center_y = label.origin.y + label.origin.h * 0.5;
-    const button_center_y = bounds.y + bounds.h * 0.5;
-
-    try std.testing.expectEqual(TextAlign.center, label.alignment);
-    try std.testing.expect(@abs(label_center_x - button_center_x) < 0.01);
-    try std.testing.expect(@abs(label_center_y - button_center_y) < 0.01);
-}
-
-test "core renderer exposes dev-ready form and feedback primitives" {
-    var nodes = [_]Node{
+    const nodes = [_]Node{
+        buttonNode(7, "Launch"),
         badgeNode("Ready"),
         checkboxNode(11, "Enable sync", true),
         switchNode(12, "Public statistics", false),
         progressNode(0.64),
         sliderNode(13, "Brightness", 0.72),
-    };
-    const root = columnStack(8.0, 12.0, &nodes);
-
-    var commands: [64]Command = undefined;
-    var scene = Scene.init(&commands);
-    try render(&scene, root, Rect.init(0.0, 0.0, 320.0, 180.0), .{});
-
-    try std.testing.expect(hasText(scene.written(), "Ready"));
-    try std.testing.expect(hasText(scene.written(), "Enable sync"));
-    try std.testing.expect(hasText(scene.written(), "Public statistics"));
-    try std.testing.expect(hasText(scene.written(), "Brightness"));
-}
-
-test "core renderer exposes dev-ready layout and display primitives" {
-    var nodes = [_]Node{
         cardNode("Project", "Interactive docs and app surfaces."),
         separatorNode(),
         avatarNode("ER"),
-        kbdNode("⌘K"),
+        kbdNode("Meta-K"),
         textareaNode(21, "Describe this app"),
         selectNode(22, "Production"),
     };
-    const root = columnStack(8.0, 12.0, &nodes);
 
-    var commands: [96]Command = undefined;
-    var scene = Scene.init(&commands);
-    try render(&scene, root, Rect.init(0.0, 0.0, 340.0, 340.0), .{});
-
-    try std.testing.expect(hasText(scene.written(), "Project"));
-    try std.testing.expect(hasText(scene.written(), "ER"));
-    try std.testing.expect(hasText(scene.written(), "⌘K"));
-    try std.testing.expect(hasText(scene.written(), "Describe this app"));
-    try std.testing.expect(hasText(scene.written(), "Production"));
+    for (nodes) |node| {
+        scene.clear();
+        try std.testing.expectError(error.UnsupportedComponent, render(&scene, node, bounds, .{}));
+        try std.testing.expectEqual(@as(usize, 0), scene.commandCount());
+    }
 }
 
 test "stack layout stays inside small responsive bounds" {
     var nodes = [_]Node{
         textNode("status", .accent),
-        inputNode(10, "search canonical objects"),
-        rowItemNode(20, "object graph renderer", ""),
-        buttonNode(30, "Render"),
+        rectNode(.row),
+        textNode("object graph renderer", null),
+        textNode("Render", null),
     };
     const root = columnStack(18.0, 48.0, &nodes);
     const viewport = Rect.init(0.0, 0.0, 160.0, 96.0);
@@ -1293,9 +1038,9 @@ fn hasText(commands: []const Command, value: []const u8) bool {
 
 test "row layout proportionally shrinks overflowing children" {
     var nodes = [_]Node{
-        buttonNode(1, "One"),
-        inputNode(2, "Two"),
-        buttonNode(3, "Three"),
+        textNode("One", null),
+        textNode("Two", null),
+        textNode("Three", null),
     };
     const root = rowStack(24.0, 16.0, &nodes);
     const viewport = Rect.init(0.0, 0.0, 180.0, 48.0);
@@ -1314,8 +1059,8 @@ test "row layout proportionally shrinks overflowing children" {
 
 test "stack cross-axis alignment keeps children at preferred size" {
     var nodes = [_]Node{
-        buttonNode(1, "One"),
-        buttonNode(2, "Two"),
+        textNode("One", null),
+        textNode("Two", null),
     };
     const root = alignedRow(8.0, 4.0, .center, &nodes);
     const viewport = Rect.init(0.0, 0.0, 320.0, 96.0);
@@ -1328,7 +1073,7 @@ test "stack cross-axis alignment keeps children at preferred size" {
     for (scene.written()) |command| switch (command) {
         .text => |text_cmd| {
             label_count += 1;
-            try std.testing.expectEqual(@as(f32, 14.0), text_cmd.origin.h);
+            try std.testing.expect(text_cmd.origin.h > 0.0);
             try std.testing.expect(text_cmd.origin.y > viewport.y);
             try std.testing.expect(text_cmd.origin.y + text_cmd.origin.h < viewport.y + viewport.h);
         },
@@ -1346,14 +1091,14 @@ test "patches mutate only the matching node variant" {
 }
 
 test "patches change rendered output without changing paint command shape" {
-    var node = Node{ .button = .{ .id = 42, .label = "Before" } };
+    var node = Node{ .text = .{ .value = "Before" } };
     var commands: [8]Command = undefined;
     var scene = Scene.init(&commands);
 
     try render(&scene, node, .{ .x = 0, .y = 0, .w = 120, .h = 40 }, .{});
     const before_count = scene.commandCount();
 
-    try applyPatch(&node, .{ .button_label = "After" });
+    try applyPatch(&node, .{ .text_value = "After" });
     scene.clear();
     try render(&scene, node, .{ .x = 0, .y = 0, .w = 120, .h = 40 }, .{});
 

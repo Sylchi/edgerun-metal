@@ -13,6 +13,8 @@ pub const ascii_codepoint_count: usize = renderer_ir.font_last_char - renderer_i
 pub const ascii_kern_capacity: usize = ascii_codepoint_count * ascii_codepoint_count;
 pub const ascii_command_capacity: usize = ascii_codepoint_count * font_vector.max_commands;
 pub const AsciiFontStorage = FontObjectStorage(ascii_codepoint_count, ascii_kern_capacity, ascii_command_capacity);
+pub const geist_ascii_command_count: usize = 1835;
+pub const geist_ascii_font: CompiledFont(ascii_codepoint_count, 0, geist_ascii_command_count) = compileGeistAsciiComptime();
 
 const padding: usize = 8;
 const row_gap: usize = 8;
@@ -55,6 +57,45 @@ pub fn FontObjectStorage(comptime compiled_glyph_capacity: usize, comptime kern_
 pub fn compileGeistAscii(storage: *AsciiFontStorage) font_vector.CompileError!font_vector.Body {
     var codepoints_raw: [ascii_codepoint_count]u21 = undefined;
     return try storage.compileGeist(asciiCodepoints(&codepoints_raw));
+}
+
+fn compileGeistAsciiComptime() CompiledFont(ascii_codepoint_count, 0, geist_ascii_command_count) {
+    @setEvalBranchQuota(500_000);
+    var storage: AsciiFontStorage = .{};
+    const compiled = compileGeistAscii(&storage) catch @compileError("failed to compile Geist ASCII font object");
+    if (compiled.glyphs.len != ascii_codepoint_count) @compileError("unexpected Geist ASCII glyph count");
+    if (compiled.kerns.len != 0) @compileError("unexpected Geist ASCII kern count");
+    if (compiled.commands.len != geist_ascii_command_count) @compileError("unexpected Geist ASCII command count");
+
+    var owned = CompiledFont(ascii_codepoint_count, 0, geist_ascii_command_count){
+        .metrics = compiled.metrics,
+        .glyphs = undefined,
+        .kerns = .{},
+        .commands = undefined,
+    };
+    @memcpy(&owned.glyphs, compiled.glyphs);
+    @memcpy(&owned.commands, compiled.commands);
+    return owned;
+}
+
+pub fn CompiledFont(comptime glyph_count: usize, comptime kern_count: usize, comptime command_count: usize) type {
+    return struct {
+        metrics: font_vector.Metrics,
+        glyphs: [glyph_count]font_vector.GlyphRecord,
+        kerns: [kern_count]font_vector.KernRecord,
+        commands: [command_count]font_vector.Command,
+
+        const Self = @This();
+
+        pub fn body(self: *const Self) font_vector.Body {
+            return .{
+                .metrics = self.metrics,
+                .glyphs = &self.glyphs,
+                .kerns = &self.kerns,
+                .commands = &self.commands,
+            };
+        }
+    };
 }
 
 pub fn asciiCodepoints(out: *[ascii_codepoint_count]u21) []const u21 {
@@ -105,6 +146,15 @@ pub const Atlas = struct {
             .metrics = metrics,
             .width = textWidth,
             .glyph = glyph,
+        };
+    }
+
+    pub fn objectSource(self: *Atlas) renderer_ir.FontAtlas {
+        return .{
+            .context = self,
+            .metrics = objectMetrics,
+            .width = objectTextWidthCallback,
+            .glyph = objectGlyph,
         };
     }
 
@@ -277,6 +327,16 @@ fn metrics(context: *anyopaque, px: u8) renderer_ir.TextMetrics {
     return .{ .ascender = value.ascender, .descender = value.descender };
 }
 
+fn objectMetrics(context: *anyopaque, px: u8) renderer_ir.TextMetrics {
+    const atlas: *Atlas = @ptrCast(@alignCast(context));
+    const font = atlas.font orelse return .{ .ascender = 0, .descender = 0 };
+    const scale = @as(f32, @floatFromInt(px)) / @as(f32, @floatFromInt(font.metrics.units_per_em));
+    return .{
+        .ascender = font.metrics.ascender * scale,
+        .descender = font.metrics.descender * scale,
+    };
+}
+
 fn textWidth(context: *anyopaque, value: []const u8, px: u8) f32 {
     const atlas: *Atlas = @ptrCast(@alignCast(context));
     if (atlas.font) |font| return objectTextWidth(font, value, px);
@@ -293,6 +353,12 @@ fn textWidth(context: *anyopaque, value: []const u8, px: u8) f32 {
         previous = glyph_id;
     }
     return out;
+}
+
+fn objectTextWidthCallback(context: *anyopaque, value: []const u8, px: u8) f32 {
+    const atlas: *Atlas = @ptrCast(@alignCast(context));
+    const font = atlas.font orelse return 0;
+    return objectTextWidth(font, value, px);
 }
 
 fn objectTextWidth(font: font_vector.Body, value: []const u8, px: u8) f32 {
@@ -317,6 +383,12 @@ fn scaledFontValue(value: f32) f32 {
 
 fn glyph(context: *anyopaque, ch: u8, px: u8) renderer_ir.Error!?renderer_ir.Glyph {
     const atlas: *Atlas = @ptrCast(@alignCast(context));
+    return atlas.resolveGlyph(ch, px);
+}
+
+fn objectGlyph(context: *anyopaque, ch: u8, px: u8) renderer_ir.Error!?renderer_ir.Glyph {
+    const atlas: *Atlas = @ptrCast(@alignCast(context));
+    if (atlas.font == null) return null;
     return atlas.resolveGlyph(ch, px);
 }
 

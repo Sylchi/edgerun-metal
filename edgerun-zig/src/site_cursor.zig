@@ -11,13 +11,13 @@ pub const Kind = enum(u32) {
 
 // Cursor proportions follow the MIT-licensed Tabler cursor/pointer family,
 // rendered as EdgeRun scene primitives instead of embedding SVG/path support.
-pub const default_width: f32 = 24.0;
-pub const default_height: f32 = 28.0;
-pub const default_tip_size: f32 = 5.0;
-pub const default_layer_radius: f32 = 2.0;
-pub const pointer_size: f32 = 25.0;
-pub const pointer_dot_size: f32 = 7.0;
-pub const pointer_ring_size: f32 = 15.0;
+pub const default_width: f32 = 19.0;
+pub const default_height: f32 = 25.0;
+pub const default_tip_size: f32 = 4.0;
+pub const default_layer_radius: f32 = 1.5;
+pub const pointer_size: f32 = 18.0;
+pub const pointer_dot_size: f32 = 4.0;
+pub const pointer_ring_size: f32 = 10.0;
 pub const text_width: f32 = 20.0;
 pub const text_height: f32 = 29.0;
 pub const text_stem_width: f32 = 4.0;
@@ -26,45 +26,45 @@ pub const text_center_dot_size: f32 = 5.0;
 pub const grabbing_size: f32 = 26.0;
 pub const grabbing_finger_width: f32 = 5.0;
 pub const grabbing_finger_height: f32 = 14.0;
-pub const outline_offset: f32 = 1.25;
-pub const shadow_offset: f32 = 2.0;
-pub const soft_shadow_blur: f32 = 7.0;
-pub const glow_blur: f32 = 5.0;
+pub const outline_offset: f32 = 1.0;
+pub const shadow_offset: f32 = 1.5;
+pub const soft_shadow_blur: f32 = 4.0;
+pub const glow_blur: f32 = 2.5;
 pub const layer_grow: f32 = outline_offset * 2.0;
 pub const color = ui.Color{ .r = 245, .g = 245, .b = 245, .a = 245 };
-pub const color_bottom = ui.Color{ .r = 211, .g = 214, .b = 220, .a = 245 };
-pub const outline = ui.Color{ .r = 5, .g = 5, .b = 5, .a = 235 };
-pub const accent = ui.Color{ .r = 74, .g = 222, .b = 128, .a = 245 };
+pub const color_bottom = ui.Color{ .r = 220, .g = 223, .b = 228, .a = 245 };
+pub const outline = ui.Color{ .r = 5, .g = 5, .b = 5, .a = 210 };
+pub const accent = ui.Color{ .r = 74, .g = 222, .b = 128, .a = 225 };
 pub const highlight = ui.Color{ .r = 255, .g = 255, .b = 255, .a = 110 };
-pub const shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 118 };
-pub const glow = ui.Color{ .r = 74, .g = 222, .b = 128, .a = 70 };
+pub const shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 82 };
+pub const glow = ui.Color{ .r = 74, .g = 222, .b = 128, .a = 44 };
 
 const default_tip_x: f32 = 0.0;
 const default_tip_y: f32 = 0.0;
 const default_upper_x: f32 = 2.0;
 const default_upper_y: f32 = 4.0;
-const default_upper_w: f32 = 9.0;
-const default_upper_h: f32 = 6.0;
-const default_body_x: f32 = 4.0;
-const default_body_y: f32 = 9.0;
-const default_body_w: f32 = 13.0;
-const default_body_h: f32 = 7.0;
-const default_lower_x: f32 = 7.0;
-const default_lower_y: f32 = 15.0;
-const default_lower_w: f32 = 10.0;
-const default_lower_h: f32 = 5.0;
-const default_tail_x: f32 = 11.0;
-const default_tail_y: f32 = 18.0;
-const default_tail_w: f32 = 6.0;
-const default_tail_h: f32 = 10.0;
+const default_upper_w: f32 = 7.0;
+const default_upper_h: f32 = 5.0;
+const default_body_x: f32 = 3.0;
+const default_body_y: f32 = 8.0;
+const default_body_w: f32 = 11.0;
+const default_body_h: f32 = 6.0;
+const default_lower_x: f32 = 6.0;
+const default_lower_y: f32 = 14.0;
+const default_lower_w: f32 = 8.0;
+const default_lower_h: f32 = 4.0;
+const default_tail_x: f32 = 9.0;
+const default_tail_y: f32 = 17.0;
+const default_tail_w: f32 = 5.0;
+const default_tail_h: f32 = 8.0;
 const default_highlight_x: f32 = 3.0;
 const default_highlight_y: f32 = 5.0;
 const default_highlight_w: f32 = 5.0;
 const default_highlight_h: f32 = 3.0;
-const default_accent_x: f32 = 13.0;
-const default_accent_y: f32 = 21.0;
-const default_accent_w: f32 = 4.0;
-const default_accent_h: f32 = 6.0;
+const default_accent_x: f32 = 11.0;
+const default_accent_y: f32 = 19.0;
+const default_accent_w: f32 = 3.0;
+const default_accent_h: f32 = 5.0;
 
 const text_accent_offset_x: f32 = 4.0;
 const text_accent_offset_y: f32 = 2.0;
@@ -110,6 +110,21 @@ pub fn render(scene: *ui.Scene, x: f32, y: f32, kind: Kind) ui.RenderError!void 
         .text => try renderText(scene, x, y),
         .grabbing => try renderGrabbing(scene, x, y),
     }
+}
+
+pub fn damageBounds(x: f32, y: f32, kind: Kind) ?ui.Rect {
+    if (!std.math.isFinite(x) or !std.math.isFinite(y) or x < 0.0 or y < 0.0) return null;
+    const pad = outline_offset + shadow_offset + soft_shadow_blur + 1.0;
+    return switch (kind) {
+        .default => ui.Rect.init(x - pad, y - pad, default_width + pad * 2.0, default_height + pad * 2.0),
+        .pointer => centeredBounds(x, y, pointer_size, pointer_size, pad),
+        .text => centeredBounds(x, y, text_width, text_height, pad),
+        .grabbing => centeredBounds(x, y, grabbing_size, grabbing_size, pad),
+    };
+}
+
+fn centeredBounds(x: f32, y: f32, w: f32, h: f32, pad: f32) ui.Rect {
+    return ui.Rect.init(x - w * 0.5 - pad, y - h * 0.5 - pad, w + pad * 2.0, h + pad * 2.0);
 }
 
 fn renderDefault(scene: *ui.Scene, x: f32, y: f32) ui.RenderError!void {

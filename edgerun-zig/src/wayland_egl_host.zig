@@ -145,6 +145,7 @@ const SceneState = struct {
                 .scroll_y = app.scroll_y,
                 .hover_x = app.hover_x,
                 .hover_y = app.hover_y,
+                .selected_component_index = app.route.selected_component_index,
             }),
         }
         updateHoverHit(app, collector.written());
@@ -211,7 +212,12 @@ const AppState = struct {
             else
                 site_blog.postContentHeight(width, self.route.selected_blog_post_id),
             .apps => site_apps.contentHeight(width),
-            .components => component_gallery.contentHeight(width),
+            .components => component_gallery.contentHeightForState(width, .{
+                .scroll_y = self.scroll_y,
+                .hover_x = self.hover_x,
+                .hover_y = self.hover_y,
+                .selected_component_index = self.route.selected_component_index,
+            }),
         };
     }
 

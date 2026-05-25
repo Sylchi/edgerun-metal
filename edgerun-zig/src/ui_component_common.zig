@@ -11,14 +11,20 @@ pub const Error = error{
 
 pub const ButtonVariant = enum {
     primary,
+    secondary,
     outline,
     ghost,
+    destructive,
+    link,
 };
 
 pub const BadgeVariant = enum {
-    accent,
-    neutral,
-    danger,
+    default,
+    secondary,
+    destructive,
+    outline,
+    ghost,
+    link,
 };
 
 pub const SurfaceVariant = enum {
@@ -32,7 +38,7 @@ pub const RenderOptions = struct {
     button_variant: ButtonVariant = .primary,
     button_leading_icon: ?icon.Icon = null,
     button_trailing_icon: ?icon.Icon = null,
-    badge_variant: BadgeVariant = .accent,
+    badge_variant: BadgeVariant = .default,
     surface_variant: SurfaceVariant = .panel,
 };
 

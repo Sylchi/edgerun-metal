@@ -1151,6 +1151,7 @@ fn renderNativeSiteScene(scene: *ui.Scene, collector: *interaction.Collector, wi
             .scroll_y = state.scroll_y,
             .hover_x = state.hover_x,
             .hover_y = state.hover_y,
+            .selected_component_index = state.route.selected_component_index,
         }),
     }
 }
@@ -1201,7 +1202,9 @@ fn contentHeightForRoute(width: f32, route: site_navigation.Route) f32 {
         else
             site_blog.postContentHeight(width, route.selected_blog_post_id),
         .apps => site_apps.contentHeight(width),
-        .components => component_gallery.contentHeight(width),
+        .components => component_gallery.contentHeightForState(width, .{
+            .selected_component_index = route.selected_component_index,
+        }),
     };
 }
 

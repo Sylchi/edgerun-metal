@@ -1,8 +1,11 @@
 const std = @import("std");
+const icon_svg = @import("icon_svg.zig");
 const icon_vector = @import("icon_vector.zig");
 const renderer_ir = @import("renderer_ir.zig");
 const renderer_present = @import("renderer_present.zig");
 const ui = @import("ui.zig");
+const builtin = @import("builtin");
+const ui_components = if (builtin.is_test) @import("ui_components.zig") else struct {};
 const varfont = @import("varfont.zig");
 
 pub const Error = renderer_present.Error || error{
@@ -275,6 +278,30 @@ pub const Surface = struct {
         };
     }
 
+    fn blendPixelMaxAlpha(self: Surface, x: usize, y: usize, color: ui.Color, alpha: u8) void {
+        const index = y * self.width + x;
+        if (alpha <= self.pixels[index].a) return;
+        self.pixels[index] = .{
+            .r = color.r,
+            .g = color.g,
+            .b = color.b,
+            .a = scaleByte(color.a, @as(f32, @floatFromInt(alpha)) / byte_unit_scale),
+        };
+    }
+
+    fn blendPixelPathAlpha(self: Surface, x: usize, y: usize, color: ui.Color, alpha: u8) void {
+        const index = y * self.width + x;
+        const src_a: u16 = scaleByte(color.a, @as(f32, @floatFromInt(alpha)) / byte_unit_scale);
+        const dst_a: u16 = self.pixels[index].a;
+        const out_a = src_a + (dst_a * (255 - src_a)) / 255;
+        self.pixels[index] = .{
+            .r = color.r,
+            .g = color.g,
+            .b = color.b,
+            .a = @intCast(@min(@as(u16, 255), out_a)),
+        };
+    }
+
     fn fill(self: Surface, bounds: ui.Rect, color: ui.Color) void {
         const x0 = clampCoord(@intFromFloat(@floor(bounds.x)), self.width);
         const y0 = clampCoord(@intFromFloat(@floor(bounds.y)), self.height);
@@ -437,16 +464,48 @@ pub const Surface = struct {
 
     fn drawIconInstance(self: Surface, icon_bounds: ui.Rect, color: ui.Color, icon_id: u32, scale: f32) void {
         const bounds = scaleRect(icon_bounds, scale);
-        var iter = icon_vector.Iterator.init(icon_vector.dataForIconId(icon_id));
-        while (iter.next() catch unreachable) |op| {
+        var iter = icon_svg.Iterator.init(icon_svg.sourceForIconId(icon_id));
+        while (iter.nextPathData() catch unreachable) |path_data| {
+            self.drawIconPath(bounds, color, path_data);
+        }
+    }
+
+    fn drawIconPath(self: Surface, bounds: ui.Rect, color: ui.Color, path_data: []const u8) void {
+        var buffer: [icon_alpha_mask_capacity]u8 = undefined;
+        var mask = IconAlphaMask.init(bounds, self.width, self.height, buffer[0..]);
+        var path_iter = icon_svg.PathIterator.init(path_data);
+        var path = IconPathState{};
+        while (path_iter.next() catch unreachable) |op| {
             switch (op) {
                 .polyline => |points| self.iconLine(bounds, color, points),
                 .circle => |circle| self.iconCircle(bounds, color, circle.cx, circle.cy, circle.radius),
                 .ellipse => |ellipse| self.iconEllipse(bounds, color, ellipse.cx, ellipse.cy, ellipse.rx, ellipse.ry, ellipse.full),
                 .round_rect => |rect| self.iconRoundRect(bounds, color, rect.x, rect.y, rect.w, rect.h, rect.radius),
                 .filled_circle => |circle| self.iconFilledCircle(bounds, color, circle.cx, circle.cy, circle.radius),
+                .move_to => |point| path.moveTo(point),
+                .line_to => |point| {
+                    if (path.current) |current| self.strokeSegmentMask(&mask, current.x, current.y, point.x, point.y);
+                    path.lineTo(point);
+                },
+                .quad_to => |quad| {
+                    if (path.current) |current| self.strokeQuadraticMask(&mask, current, quad.control, quad.end);
+                    path.lineTo(quad.end);
+                },
+                .cubic_to => |cubic| {
+                    if (path.current) |current| self.strokeCubicMask(&mask, current, cubic.control0, cubic.control1, cubic.end);
+                    path.lineTo(cubic.end);
+                },
+                .arc_to => |arc| {
+                    if (path.current) |current| self.strokeArcMask(&mask, current, arc);
+                    path.lineTo(arc.end);
+                },
+                .close_path => if (path.current) |current| if (path.start) |start| {
+                    self.strokeSegmentMask(&mask, current.x, current.y, start.x, start.y);
+                    path.lineTo(start);
+                },
             }
         }
+        self.blendIconMask(&mask, color);
     }
 
     fn iconLine(self: Surface, bounds: ui.Rect, color: ui.Color, points: []const f32) void {
@@ -507,8 +566,223 @@ pub const Surface = struct {
                 const cx = x0 + dx * t;
                 const cy = y0 + dy * t;
                 const dist = @sqrt((px - cx) * (px - cx) + (py - cy) * (py - cy));
-                const alpha = coverageAlpha(radius, dist);
-                if (alpha != 0) self.blendPixel(x, y, color, alpha);
+                const alpha = strokeCoverageAlpha(radius, dist);
+                if (alpha != 0) self.blendPixelMaxAlpha(x, y, color, alpha);
+            }
+        }
+    }
+
+    fn strokeSegmentMask(self: Surface, mask: *IconAlphaMask, x0n: f32, y0n: f32, x1n: f32, y1n: f32) void {
+        _ = self;
+        const bounds = mask.bounds;
+        const x0 = bounds.x + bounds.w * x0n;
+        const y0 = bounds.y + bounds.h * y0n;
+        const x1 = bounds.x + bounds.w * x1n;
+        const y1 = bounds.y + bounds.h * y1n;
+        const radius = iconStroke(bounds) * 0.5;
+        const left = @min(x0, x1) - radius;
+        const top = @min(y0, y1) - radius;
+        const right = @max(x0, x1) + radius;
+        const bottom = @max(y0, y1) + radius;
+        const x_start = mask.clampX(@intFromFloat(@floor(left)));
+        const y_start = mask.clampY(@intFromFloat(@floor(top)));
+        const x_end = mask.clampX(@intFromFloat(@ceil(right)));
+        const y_end = mask.clampY(@intFromFloat(@ceil(bottom)));
+        const dx = x1 - x0;
+        const dy = y1 - y0;
+        const denom = dx * dx + dy * dy;
+        if (denom <= 0.0) return;
+        var y = y_start;
+        while (y < y_end) : (y += 1) {
+            var x = x_start;
+            while (x < x_end) : (x += 1) {
+                const px = @as(f32, @floatFromInt(x)) + icon_pixel_center;
+                const py = @as(f32, @floatFromInt(y)) + icon_pixel_center;
+                const t = std.math.clamp(((px - x0) * dx + (py - y0) * dy) / denom, 0.0, 1.0);
+                const cx = x0 + dx * t;
+                const cy = y0 + dy * t;
+                const dist = @sqrt((px - cx) * (px - cx) + (py - cy) * (py - cy));
+                const alpha = strokeCoverageAlpha(radius, dist);
+                if (alpha != 0) mask.writeMax(x, y, alpha);
+            }
+        }
+    }
+
+    fn strokeQuadratic(self: Surface, bounds: ui.Rect, color: ui.Color, start: icon_vector.Point, control: icon_vector.Point, end: icon_vector.Point) void {
+        var previous = start;
+        var step: usize = 1;
+        while (step <= icon_curve_segments) : (step += 1) {
+            const t = @as(f32, @floatFromInt(step)) / @as(f32, @floatFromInt(icon_curve_segments));
+            const mt = 1.0 - t;
+            const next = icon_vector.Point{
+                .x = mt * mt * start.x + 2.0 * mt * t * control.x + t * t * end.x,
+                .y = mt * mt * start.y + 2.0 * mt * t * control.y + t * t * end.y,
+            };
+            self.strokeSegment(bounds, color, previous.x, previous.y, next.x, next.y);
+            previous = next;
+        }
+    }
+
+    fn strokeQuadraticMask(self: Surface, mask: *IconAlphaMask, start: icon_vector.Point, control: icon_vector.Point, end: icon_vector.Point) void {
+        var previous = start;
+        var step: usize = 1;
+        while (step <= icon_curve_segments) : (step += 1) {
+            const t = @as(f32, @floatFromInt(step)) / @as(f32, @floatFromInt(icon_curve_segments));
+            const mt = 1.0 - t;
+            const next = icon_vector.Point{
+                .x = mt * mt * start.x + 2.0 * mt * t * control.x + t * t * end.x,
+                .y = mt * mt * start.y + 2.0 * mt * t * control.y + t * t * end.y,
+            };
+            self.strokeSegmentMask(mask, previous.x, previous.y, next.x, next.y);
+            previous = next;
+        }
+    }
+
+    fn strokeCubic(self: Surface, bounds: ui.Rect, color: ui.Color, start: icon_vector.Point, control0: icon_vector.Point, control1: icon_vector.Point, end: icon_vector.Point) void {
+        var previous = start;
+        var step: usize = 1;
+        while (step <= icon_curve_segments) : (step += 1) {
+            const t = @as(f32, @floatFromInt(step)) / @as(f32, @floatFromInt(icon_curve_segments));
+            const mt = 1.0 - t;
+            const next = icon_vector.Point{
+                .x = mt * mt * mt * start.x + 3.0 * mt * mt * t * control0.x + 3.0 * mt * t * t * control1.x + t * t * t * end.x,
+                .y = mt * mt * mt * start.y + 3.0 * mt * mt * t * control0.y + 3.0 * mt * t * t * control1.y + t * t * t * end.y,
+            };
+            self.strokeSegment(bounds, color, previous.x, previous.y, next.x, next.y);
+            previous = next;
+        }
+    }
+
+    fn strokeCubicMask(self: Surface, mask: *IconAlphaMask, start: icon_vector.Point, control0: icon_vector.Point, control1: icon_vector.Point, end: icon_vector.Point) void {
+        var previous = start;
+        var step: usize = 1;
+        while (step <= icon_curve_segments) : (step += 1) {
+            const t = @as(f32, @floatFromInt(step)) / @as(f32, @floatFromInt(icon_curve_segments));
+            const mt = 1.0 - t;
+            const next = icon_vector.Point{
+                .x = mt * mt * mt * start.x + 3.0 * mt * mt * t * control0.x + 3.0 * mt * t * t * control1.x + t * t * t * end.x,
+                .y = mt * mt * mt * start.y + 3.0 * mt * mt * t * control0.y + 3.0 * mt * t * t * control1.y + t * t * t * end.y,
+            };
+            self.strokeSegmentMask(mask, previous.x, previous.y, next.x, next.y);
+            previous = next;
+        }
+    }
+
+    fn strokeArc(self: Surface, bounds: ui.Rect, color: ui.Color, start: icon_vector.Point, arc: icon_vector.Arc) void {
+        const rx_start = @abs(arc.rx);
+        const ry_start = @abs(arc.ry);
+        if (rx_start <= 0.0 or ry_start <= 0.0) {
+            self.strokeSegment(bounds, color, start.x, start.y, arc.end.x, arc.end.y);
+            return;
+        }
+        const phi = arc.x_axis_rotation * std.math.pi / 180.0;
+        const cos_phi = @cos(phi);
+        const sin_phi = @sin(phi);
+        const dx = (start.x - arc.end.x) * 0.5;
+        const dy = (start.y - arc.end.y) * 0.5;
+        const x1p = cos_phi * dx + sin_phi * dy;
+        const y1p = -sin_phi * dx + cos_phi * dy;
+        var rx = rx_start;
+        var ry = ry_start;
+        const radius_scale = x1p * x1p / (rx * rx) + y1p * y1p / (ry * ry);
+        if (radius_scale > 1.0) {
+            const scale = @sqrt(radius_scale);
+            rx *= scale;
+            ry *= scale;
+        }
+        const numerator = rx * rx * ry * ry - rx * rx * y1p * y1p - ry * ry * x1p * x1p;
+        const denominator = rx * rx * y1p * y1p + ry * ry * x1p * x1p;
+        const sign: f32 = if (arc.large_arc == arc.sweep) 1.0 else -1.0;
+        const coefficient = sign * @sqrt(@max(0.0, numerator / @max(denominator, 0.000001)));
+        const cxp = coefficient * rx * y1p / ry;
+        const cyp = coefficient * -ry * x1p / rx;
+        const center = icon_vector.Point{
+            .x = cos_phi * cxp - sin_phi * cyp + (start.x + arc.end.x) * 0.5,
+            .y = sin_phi * cxp + cos_phi * cyp + (start.y + arc.end.y) * 0.5,
+        };
+        const v0 = icon_vector.Point{ .x = (x1p - cxp) / rx, .y = (y1p - cyp) / ry };
+        const v1 = icon_vector.Point{ .x = (-x1p - cxp) / rx, .y = (-y1p - cyp) / ry };
+        const start_angle = vectorAngle(.{ .x = 1.0, .y = 0.0 }, v0);
+        var delta = vectorAngle(v0, v1);
+        if (!arc.sweep and delta > 0.0) delta -= std.math.tau;
+        if (arc.sweep and delta < 0.0) delta += std.math.tau;
+        const steps: usize = @max(4, @as(usize, @intFromFloat(@ceil(@abs(delta) / icon_arc_step))));
+        var previous = start;
+        var step: usize = 1;
+        while (step <= steps) : (step += 1) {
+            const angle = start_angle + delta * @as(f32, @floatFromInt(step)) / @as(f32, @floatFromInt(steps));
+            const xp = rx * @cos(angle);
+            const yp = ry * @sin(angle);
+            const next = icon_vector.Point{
+                .x = center.x + cos_phi * xp - sin_phi * yp,
+                .y = center.y + sin_phi * xp + cos_phi * yp,
+            };
+            self.strokeSegment(bounds, color, previous.x, previous.y, next.x, next.y);
+            previous = next;
+        }
+    }
+
+    fn strokeArcMask(self: Surface, mask: *IconAlphaMask, start: icon_vector.Point, arc: icon_vector.Arc) void {
+        const rx_start = @abs(arc.rx);
+        const ry_start = @abs(arc.ry);
+        if (rx_start <= 0.0 or ry_start <= 0.0) {
+            self.strokeSegmentMask(mask, start.x, start.y, arc.end.x, arc.end.y);
+            return;
+        }
+        const phi = arc.x_axis_rotation * std.math.pi / 180.0;
+        const cos_phi = @cos(phi);
+        const sin_phi = @sin(phi);
+        const dx = (start.x - arc.end.x) * 0.5;
+        const dy = (start.y - arc.end.y) * 0.5;
+        const x1p = cos_phi * dx + sin_phi * dy;
+        const y1p = -sin_phi * dx + cos_phi * dy;
+        var rx = rx_start;
+        var ry = ry_start;
+        const radius_scale = x1p * x1p / (rx * rx) + y1p * y1p / (ry * ry);
+        if (radius_scale > 1.0) {
+            const scale = @sqrt(radius_scale);
+            rx *= scale;
+            ry *= scale;
+        }
+        const numerator = rx * rx * ry * ry - rx * rx * y1p * y1p - ry * ry * x1p * x1p;
+        const denominator = rx * rx * y1p * y1p + ry * ry * x1p * x1p;
+        const sign: f32 = if (arc.large_arc == arc.sweep) 1.0 else -1.0;
+        const coefficient = sign * @sqrt(@max(0.0, numerator / @max(denominator, 0.000001)));
+        const cxp = coefficient * rx * y1p / ry;
+        const cyp = coefficient * -ry * x1p / rx;
+        const center = icon_vector.Point{
+            .x = cos_phi * cxp - sin_phi * cyp + (start.x + arc.end.x) * 0.5,
+            .y = sin_phi * cxp + cos_phi * cyp + (start.y + arc.end.y) * 0.5,
+        };
+        const v0 = icon_vector.Point{ .x = (x1p - cxp) / rx, .y = (y1p - cyp) / ry };
+        const v1 = icon_vector.Point{ .x = (-x1p - cxp) / rx, .y = (-y1p - cyp) / ry };
+        const start_angle = vectorAngle(.{ .x = 1.0, .y = 0.0 }, v0);
+        var delta = vectorAngle(v0, v1);
+        if (!arc.sweep and delta > 0.0) delta -= std.math.tau;
+        if (arc.sweep and delta < 0.0) delta += std.math.tau;
+        const steps: usize = @max(4, @as(usize, @intFromFloat(@ceil(@abs(delta) / icon_arc_step))));
+        var previous = start;
+        var step: usize = 1;
+        while (step <= steps) : (step += 1) {
+            const angle = start_angle + delta * @as(f32, @floatFromInt(step)) / @as(f32, @floatFromInt(steps));
+            const xp = rx * @cos(angle);
+            const yp = ry * @sin(angle);
+            const next = icon_vector.Point{
+                .x = center.x + cos_phi * xp - sin_phi * yp,
+                .y = center.y + sin_phi * xp + cos_phi * yp,
+            };
+            self.strokeSegmentMask(mask, previous.x, previous.y, next.x, next.y);
+            previous = next;
+        }
+    }
+
+    fn blendIconMask(self: Surface, mask: *const IconAlphaMask, color: ui.Color) void {
+        var row: usize = 0;
+        while (row < mask.height) : (row += 1) {
+            var col: usize = 0;
+            while (col < mask.width) : (col += 1) {
+                const alpha = mask.pixels[row * mask.width + col];
+                if (alpha != 0) self.blendPixelPathAlpha(mask.x + col, mask.y + row, color, alpha);
             }
         }
     }
@@ -572,9 +846,57 @@ pub const Surface = struct {
     }
 };
 
+const IconAlphaMask = struct {
+    bounds: ui.Rect,
+    x: usize,
+    y: usize,
+    width: usize,
+    height: usize,
+    pixels: []u8,
+
+    fn init(bounds: ui.Rect, surface_width: usize, surface_height: usize, buffer: []u8) IconAlphaMask {
+        @setRuntimeSafety(false);
+        const pad = iconStroke(bounds);
+        const x0 = clampCoord(@intFromFloat(@floor(bounds.x - pad)), surface_width);
+        const y0 = clampCoord(@intFromFloat(@floor(bounds.y - pad)), surface_height);
+        const x1 = clampCoord(@intFromFloat(@ceil(bounds.x + bounds.w + pad)), surface_width);
+        const y1 = clampCoord(@intFromFloat(@ceil(bounds.y + bounds.h + pad)), surface_height);
+        const width = x1 - x0;
+        const height = y1 - y0;
+        const length = width * height;
+        @memset(buffer[0..length], 0);
+        return .{
+            .bounds = bounds,
+            .x = x0,
+            .y = y0,
+            .width = width,
+            .height = height,
+            .pixels = buffer[0..length],
+        };
+    }
+
+    fn clampX(self: IconAlphaMask, value: isize) usize {
+        return clampMaskCoord(value, self.x, self.x + self.width);
+    }
+
+    fn clampY(self: IconAlphaMask, value: isize) usize {
+        return clampMaskCoord(value, self.y, self.y + self.height);
+    }
+
+    fn writeMax(self: *IconAlphaMask, x_value: usize, y_value: usize, alpha: u8) void {
+        if (x_value < self.x or y_value < self.y) return;
+        const local_x = x_value - self.x;
+        const local_y = y_value - self.y;
+        if (local_x >= self.width or local_y >= self.height) return;
+        const index = local_y * self.width + local_x;
+        if (alpha > self.pixels[index]) self.pixels[index] = alpha;
+    }
+};
+
 const default_raster_scale: f32 = 1.0;
 const max_alpha: u8 = 255;
 const pixel_center: f32 = 0.5;
+const icon_pixel_center: f32 = 0.5;
 const min_border_width: f32 = 1.0;
 const quarter_turn: f32 = 0.25;
 const byte_unit_scale: f32 = 255.0;
@@ -621,13 +943,46 @@ fn measureText(value: []const u8, px_size: f32) f32 {
 }
 
 fn iconStroke(bounds: ui.Rect) f32 {
-    return @max(1.5, @min(bounds.w, bounds.h) * 0.09);
+    return @max(1.5, @min(bounds.w, bounds.h) * icon_stroke_scale);
+}
+
+const icon_stroke_scale: f32 = 2.0 / 24.0;
+const icon_curve_segments: usize = 32;
+const icon_arc_step: f32 = std.math.pi / 21.0;
+const icon_alpha_mask_capacity: usize = 512 * 512;
+
+const IconPathState = struct {
+    current: ?icon_vector.Point = null,
+    start: ?icon_vector.Point = null,
+
+    fn moveTo(self: *IconPathState, point: icon_vector.Point) void {
+        self.current = point;
+        self.start = point;
+    }
+
+    fn lineTo(self: *IconPathState, point: icon_vector.Point) void {
+        self.current = point;
+    }
+};
+
+fn vectorAngle(left: icon_vector.Point, right: icon_vector.Point) f32 {
+    const dot = left.x * right.x + left.y * right.y;
+    const det = left.x * right.y - left.y * right.x;
+    return std.math.atan2(det, dot);
 }
 
 fn coverageAlpha(radius: f32, distance: f32) u8 {
     if (distance <= radius - antialias_width) return max_alpha;
     if (distance >= radius + antialias_width) return 0;
     const coverage = (radius + antialias_width - distance) / (antialias_width * 2.0);
+    return @intFromFloat(@round(std.math.clamp(coverage, 0.0, 1.0) * 255.0));
+}
+
+fn strokeCoverageAlpha(radius: f32, distance: f32) u8 {
+    const aa = 0.533;
+    if (distance <= radius - aa) return max_alpha;
+    if (distance >= radius + aa) return 0;
+    const coverage = (radius + aa - distance) / (aa * 2.0);
     return @intFromFloat(@round(std.math.clamp(coverage, 0.0, 1.0) * 255.0));
 }
 
@@ -814,13 +1169,19 @@ fn clampCoord(value: isize, limit: usize) usize {
     return @min(as_usize, limit);
 }
 
+fn clampMaskCoord(value: isize, start: usize, limit: usize) usize {
+    if (value <= 0) return start;
+    const as_usize: usize = @intCast(value);
+    return std.math.clamp(as_usize, start, limit);
+}
+
 test "software renderer rasterizes ui commands to nonblank pixels" {
     var nodes: [5]ui.Node = undefined;
     const root = sampleRoot(&nodes);
 
     var commands: [32]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
-    try ui.render(&scene, root, .{ .x = 0, .y = 0, .w = 320, .h = 240 }, .{});
+    try ui_components.renderNode(&scene, .{ .x = 0, .y = 0, .w = 320, .h = 240 }, root, .{});
 
     var pixels: [320 * 240]ui.Color = undefined;
     const surface = try Surface.init(320, 240, &pixels);

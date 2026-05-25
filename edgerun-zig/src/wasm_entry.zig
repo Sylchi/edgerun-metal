@@ -5,6 +5,7 @@ const output_file_permissions = std.Io.File.Permissions.default_file.setReadOnly
 pub const output_name = "index.html";
 pub const wasm_path = "../bin/edgerun-ui-browser.wasm";
 pub const immutable_marker = "GENERATED FILE. IMMUTABLE.";
+pub const viewport_css = "html,body{margin:0;width:100%;height:100%;overflow:hidden;cursor:none}canvas{display:block}";
 
 pub const html =
     \\<!doctype html>
@@ -14,6 +15,7 @@ pub const html =
     \\  <meta charset="utf-8">
     \\  <meta name="viewport" content="width=device-width, initial-scale=1">
     \\  <title>EdgeRun</title>
+    \\  <style>html,body{margin:0;width:100%;height:100%;overflow:hidden;cursor:none}canvas{display:block}</style>
     \\</head>
     \\<body>
     \\  <script type="module">
@@ -62,9 +64,9 @@ fn contains(needle: []const u8) bool {
 test "generated entry declares itself immutable bootstrap only" {
     try std.testing.expect(contains(immutable_marker));
     try std.testing.expect(contains("Browser/WASM bootstrap only"));
+    try std.testing.expect(contains(viewport_css));
     try std.testing.expect(!contains("<canvas"));
     try std.testing.expect(!contains("<main"));
-    try std.testing.expect(!contains("<style"));
 }
 
 test "generated entry only loads wasm and evals wasm-owned javascript" {
