@@ -36,8 +36,8 @@ pub const Breadcrumb = struct {
         return component_render.measureFixed(component_render.preferred_breadcrumb, constraints);
     }
 
-    pub fn toObject(self: Breadcrumb, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
-        return component_codec.twoStringObject(.breadcrumb, self.id, self.first, self.current, ui_out, object_out, req, epoch);
+    pub fn toObject(self: Breadcrumb, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
+        return component_codec.twoStringObject(.breadcrumb, self.id, self.first, self.current, ui_out, object_out, epoch);
     }
 
     pub fn writeRecord(self: Breadcrumb, writer: *component_codec.Writer, index: usize) bool {
@@ -57,7 +57,7 @@ test "breadcrumb component serializes to canonical object and deserializes" {
     var ui_raw: [160]u8 = undefined;
     var object_raw: [object.header_size + 160]u8 = undefined;
 
-    const canonical = breadcrumb.toObject(&ui_raw, &object_raw, component_test.req(), component_test.epoch()).?;
+    const canonical = breadcrumb.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
     const decoded = try Breadcrumb.fromView(try object.View.decode(canonical));
 
     try std.testing.expectEqual(breadcrumb.id, decoded.id);

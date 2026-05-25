@@ -35,8 +35,8 @@ pub const Select = struct {
         return component_render.measureFixed(component_render.preferred_select, constraints);
     }
 
-    pub fn toObject(self: Select, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
-        return component_codec.oneStringObject(.select, self.id, self.label, ui_out, object_out, req, epoch);
+    pub fn toObject(self: Select, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
+        return component_codec.oneStringObject(.select, self.id, self.label, ui_out, object_out, epoch);
     }
 
     pub fn writeRecord(self: Select, writer: *component_codec.Writer, index: usize) bool {
@@ -56,7 +56,7 @@ test "select component serializes to canonical object and deserializes" {
     var ui_raw: [128]u8 = undefined;
     var object_raw: [object.header_size + 128]u8 = undefined;
 
-    const canonical = select.toObject(&ui_raw, &object_raw, component_test.req(), component_test.epoch()).?;
+    const canonical = select.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
     const decoded = try Select.fromView(try object.View.decode(canonical));
 
     try std.testing.expectEqual(select.id, decoded.id);

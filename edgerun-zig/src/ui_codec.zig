@@ -67,6 +67,10 @@ pub const RecordKind = enum(u16) {
     context_menu = 49,
     drawer = 50,
     sheet = 51,
+    hover_card = 52,
+    toast = 53,
+    sidebar = 54,
+    direction = 55,
 };
 
 pub fn decodeObject(canonical: []const u8, out_nodes: []ui.Node) Error!ui.Node {
@@ -124,13 +128,13 @@ pub fn decodeBytes(raw: []const u8, out_nodes: []ui.Node) Error!ui.Node {
             .chart => .{ .chart = .{ .id = id, .label = try stringRef(string_table, a, b) } },
             .combobox => .{ .combobox = .{ .id = id, .placeholder = try stringRef(string_table, a, b), .selected = try stringRef(string_table, c, d) } },
             .empty => .{ .empty = .{ .title = try stringRef(string_table, a, b), .detail = try stringRef(string_table, c, d) } },
-            .button => .{ .button = .{ .id = id, .label = try stringRef(string_table, a, b) } },
+            .button => .{ .button = .{ .id = id, .label = try stringRef(string_table, a, b), .variant = try boundedTag(c, button_variant_count), .leading_icon = try boundedTag(d & button_icon_mask, ui_components.encoded_icon_count), .trailing_icon = try boundedTag(d >> button_icon_shift, ui_components.encoded_icon_count) } },
             .button_group => .{ .button_group = .{ .id = id / grouped_id_stride, .first = try stringRef(string_table, a, b), .second = try stringRef(string_table, c, d), .active = @intCast(id % grouped_id_stride) } },
             .toggle_group => .{ .toggle_group = .{ .id = id / toggle_group_id_stride, .first = try stringRef(string_table, a, b), .second = try stringRef(string_table, c, d), .active = @intCast(id % toggle_group_id_stride) } },
-            .input => .{ .input = .{ .id = id, .placeholder = try stringRef(string_table, a, b) } },
+            .input => .{ .input = .{ .id = id, .placeholder = try stringRef(string_table, a, b), .leading_icon = try boundedTag(c, ui_components.encoded_icon_count) } },
             .input_group => .{ .input_group = .{ .id = id, .addon = try stringRef(string_table, a, b), .placeholder = try stringRef(string_table, c, d) } },
             .row_item => .{ .row_item = .{ .id = id, .title = try stringRef(string_table, a, b), .detail = try stringRef(string_table, c, d) } },
-            .badge => .{ .badge = .{ .label = try stringRef(string_table, a, b) } },
+            .badge => .{ .badge = .{ .label = try stringRef(string_table, a, b), .variant = try boundedTag(c, badge_variant_count) } },
             .checkbox => .{ .checkbox = .{ .id = id, .label = try stringRef(string_table, a, b), .checked = decodeBool(c) orelse return error.Corrupt } },
             .switch_control => .{ .switch_control = .{ .id = id, .label = try stringRef(string_table, a, b), .checked = decodeBool(c) orelse return error.Corrupt } },
             .pagination => .{ .pagination = .{ .id = id / pagination_id_stride, .page = @intCast(id % pagination_id_stride) } },
@@ -138,7 +142,7 @@ pub fn decodeBytes(raw: []const u8, out_nodes: []ui.Node) Error!ui.Node {
             .resizable => .{ .resizable = .{ .id = id, .ratio = ui.decodeUnit(c) } },
             .progress => .{ .progress = .{ .value = ui.decodeUnit(c) } },
             .slider => .{ .slider = .{ .id = id, .label = try stringRef(string_table, a, b), .value = ui.decodeUnit(c) } },
-            .card => .{ .card = .{ .title = try stringRef(string_table, a, b), .detail = try stringRef(string_table, c, d) } },
+            .card => .{ .card = .{ .title = try stringRef(string_table, a, b), .detail = try stringRef(string_table, c, d), .variant = try boundedU32Tag(id, surface_variant_count) } },
             .avatar => .{ .avatar = .{ .label = try stringRef(string_table, a, b) } },
             .kbd => .{ .kbd = .{ .label = try stringRef(string_table, a, b) } },
             .label => .{ .label = .{ .value = try stringRef(string_table, a, b) } },
@@ -152,9 +156,11 @@ pub fn decodeBytes(raw: []const u8, out_nodes: []ui.Node) Error!ui.Node {
             .command => .{ .command = .{ .id = id, .placeholder = try stringRef(string_table, a, b) } },
             .context_menu => .{ .context_menu = .{ .id = id, .first = try stringRef(string_table, a, b), .second = try stringRef(string_table, c, d) } },
             .dialog => .{ .dialog = .{ .id = id, .title = try stringRef(string_table, a, b), .detail = try stringRef(string_table, c, d) } },
+            .direction => .{ .direction = .{ .id = id / direction_id_stride, .active = @intCast(id % direction_id_stride) } },
             .drawer => .{ .drawer = .{ .id = id, .title = try stringRef(string_table, a, b), .detail = try stringRef(string_table, c, d) } },
             .dropdown_menu => .{ .dropdown_menu = .{ .id = id, .first = try stringRef(string_table, a, b), .second = try stringRef(string_table, c, d) } },
             .field => .{ .field = .{ .id = id, .label = try stringRef(string_table, a, b), .placeholder = try stringRef(string_table, c, d) } },
+            .hover_card => .{ .hover_card = .{ .id = id, .trigger = try stringRef(string_table, a, b), .content = try stringRef(string_table, c, d) } },
             .input_otp => .{ .input_otp = .{ .id = id, .value = try stringRef(string_table, a, b) } },
             .toggle => .{ .toggle = .{ .id = id, .label = try stringRef(string_table, a, b), .pressed = decodeBool(c) orelse return error.Corrupt } },
             .textarea => .{ .textarea = .{ .id = id, .placeholder = try stringRef(string_table, a, b) } },
@@ -163,7 +169,9 @@ pub fn decodeBytes(raw: []const u8, out_nodes: []ui.Node) Error!ui.Node {
             .tabs => .{ .tabs = .{ .id = id / tabs_id_stride, .first = try stringRef(string_table, a, b), .second = try stringRef(string_table, c, d), .active = @intCast(id % tabs_id_stride) } },
             .table => .{ .table = .{ .id = id, .name = try stringRef(string_table, a, b), .role = try stringRef(string_table, c, d) } },
             .tooltip => .{ .tooltip = .{ .id = id, .trigger = try stringRef(string_table, a, b), .content = try stringRef(string_table, c, d) } },
+            .toast => .{ .toast = .{ .id = id, .title = try stringRef(string_table, a, b), .detail = try stringRef(string_table, c, d) } },
             .sheet => .{ .sheet = .{ .id = id, .title = try stringRef(string_table, a, b), .detail = try stringRef(string_table, c, d) } },
+            .sidebar => .{ .sidebar = .{ .id = id, .title = try stringRef(string_table, a, b), .item = try stringRef(string_table, c, d) } },
             .slot => blk: {
                 if (a >= node_count) return error.Corrupt;
                 break :blk .{ .slot = .{ .id = id, .child = &out_nodes[a] } };
@@ -229,11 +237,15 @@ fn recordKind(value: u16) ?RecordKind {
         @intFromEnum(RecordKind.command) => .command,
         @intFromEnum(RecordKind.context_menu) => .context_menu,
         @intFromEnum(RecordKind.dialog) => .dialog,
+        @intFromEnum(RecordKind.direction) => .direction,
         @intFromEnum(RecordKind.drawer) => .drawer,
         @intFromEnum(RecordKind.dropdown_menu) => .dropdown_menu,
         @intFromEnum(RecordKind.sheet) => .sheet,
         @intFromEnum(RecordKind.field) => .field,
+        @intFromEnum(RecordKind.hover_card) => .hover_card,
         @intFromEnum(RecordKind.input_otp) => .input_otp,
+        @intFromEnum(RecordKind.toast) => .toast,
+        @intFromEnum(RecordKind.sidebar) => .sidebar,
         else => null,
     };
 }
@@ -246,14 +258,30 @@ fn decodeBool(value: u16) ?bool {
     };
 }
 
+fn boundedTag(value: u16, count: u16) Error!u16 {
+    if (value >= count) return error.Corrupt;
+    return value;
+}
+
+fn boundedU32Tag(value: u32, count: u16) Error!u16 {
+    if (value >= count) return error.Corrupt;
+    return @intCast(value);
+}
+
 const radio_id_stride: u32 = 2;
 const tabs_id_stride: u32 = 2;
 const grouped_id_stride: u32 = 2;
+const direction_id_stride: u32 = 2;
 const toggle_group_id_stride: u32 = 3;
 const accordion_id_stride: u32 = 2;
 const pagination_id_stride: u32 = 3;
 const menubar_id_stride: u32 = 3;
 const navigation_menu_id_stride: u32 = 3;
+const button_variant_count: u16 = 6;
+const badge_variant_count: u16 = 6;
+const surface_variant_count: u16 = 3;
+const button_icon_mask: u16 = 0x00ff;
+const button_icon_shift: u4 = 8;
 
 test "decode ui bytes into borrowed nodes and render paint" {
     var raw: [256]u8 = undefined;

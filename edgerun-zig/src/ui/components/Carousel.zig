@@ -35,8 +35,8 @@ pub const Carousel = struct {
         return component_render.measureFixed(component_render.preferred_carousel, constraints);
     }
 
-    pub fn toObject(self: Carousel, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
-        return component_codec.oneStringObject(.carousel, self.id, self.label, ui_out, object_out, req, epoch);
+    pub fn toObject(self: Carousel, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
+        return component_codec.oneStringObject(.carousel, self.id, self.label, ui_out, object_out, epoch);
     }
 
     pub fn writeRecord(self: Carousel, writer: *component_codec.Writer, index: usize) bool {
@@ -56,7 +56,7 @@ test "carousel component serializes to canonical object and deserializes" {
     var ui_raw: [160]u8 = undefined;
     var object_raw: [object.header_size + 160]u8 = undefined;
 
-    const canonical = carousel.toObject(&ui_raw, &object_raw, component_test.req(), component_test.epoch()).?;
+    const canonical = carousel.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
     const decoded = try Carousel.fromView(try object.View.decode(canonical));
 
     try std.testing.expectEqual(carousel.id, decoded.id);

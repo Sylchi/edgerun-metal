@@ -34,8 +34,8 @@ pub const Resizable = struct {
         return component_render.measureFixed(component_render.preferred_resizable, constraints);
     }
 
-    pub fn toObject(self: Resizable, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
-        return component_codec.refObject(.resizable, self.id, component_codec.unitRef(self.ratio), ui_out, object_out, req, epoch);
+    pub fn toObject(self: Resizable, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
+        return component_codec.refObject(.resizable, self.id, component_codec.unitRef(self.ratio), ui_out, object_out, epoch);
     }
 
     pub fn writeRecord(self: Resizable, writer: *component_codec.Writer, index: usize) bool {
@@ -55,7 +55,7 @@ test "resizable component serializes to canonical object and deserializes" {
     var ui_raw: [128]u8 = undefined;
     var object_raw: [object.header_size + 128]u8 = undefined;
 
-    const canonical = resizable.toObject(&ui_raw, &object_raw, component_test.req(), component_test.epoch()).?;
+    const canonical = resizable.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
     const decoded = try Resizable.fromView(try object.View.decode(canonical));
 
     try std.testing.expectEqual(resizable.id, decoded.id);

@@ -522,43 +522,93 @@ pub const Surface = struct {
         var buffer: [icon_alpha_mask_capacity]u8 = undefined;
         var mask = IconAlphaMask.init(bounds, self.width, self.height, buffer[0..]);
         var path = IconPathState{};
+        var paint = color;
         while (iter.next() catch unreachable) |op| {
-            self.drawIconOp(bounds, color, &mask, &path, op);
+            self.drawIconOp(bounds, color, &paint, &mask, &path, op);
         }
         self.finishIconSubpath(&mask, &path);
-        self.blendIconMask(&mask, color);
+        self.blendIconMask(&mask, paint);
     }
 
-    fn drawIconOp(self: Surface, bounds: ui.Rect, color: ui.Color, mask: *IconAlphaMask, path: *IconPathState, op: icon_vector.Op) void {
+    fn drawIconOp(self: Surface, bounds: ui.Rect, current_color: ui.Color, paint: *ui.Color, mask: *IconAlphaMask, path: *IconPathState, op: icon_vector.Op) void {
         switch (op) {
-            .polyline => |points| self.iconLine(bounds, color, points),
-            .circle => |circle| self.iconCircle(bounds, color, circle.cx, circle.cy, circle.radius),
-            .ellipse => |ellipse| self.iconEllipse(bounds, color, ellipse.cx, ellipse.cy, ellipse.rx, ellipse.ry, ellipse.full),
-            .round_rect => |rect| self.iconRoundRect(bounds, color, rect.x, rect.y, rect.w, rect.h, rect.radius),
-            .filled_circle => |circle| self.iconFilledCircle(bounds, color, circle.cx, circle.cy, circle.radius),
+            .paint_current_color => {
+                self.finishIconPathMask(mask, path, paint.*);
+                paint.* = current_color;
+            },
+            .paint_rgba => |rgba| {
+                self.finishIconPathMask(mask, path, paint.*);
+                paint.* = .{ .r = rgba.r, .g = rgba.g, .b = rgba.b, .a = rgba.a };
+            },
+            .polyline => |points| self.iconLine(bounds, paint.*, points),
+            .circle => |circle| self.iconCircle(bounds, paint.*, circle.cx, circle.cy, circle.radius),
+            .ellipse => |ellipse| self.iconEllipse(bounds, paint.*, ellipse.cx, ellipse.cy, ellipse.rx, ellipse.ry, ellipse.full),
+            .round_rect => |rect| self.iconRoundRect(bounds, paint.*, rect.x, rect.y, rect.w, rect.h, rect.radius),
+            .filled_circle => |circle| self.iconFilledCircle(bounds, paint.*, circle.cx, circle.cy, circle.radius),
+            .filled_ellipse => |ellipse| self.iconFilledEllipse(bounds, paint.*, ellipse.cx, ellipse.cy, ellipse.rx, ellipse.ry),
+            .filled_round_rect => |rect| self.iconFilledRoundRect(bounds, paint.*, rect.x, rect.y, rect.w, rect.h, rect.radius),
+            .begin_fill_path => {
+                self.finishIconPathMask(mask, path, paint.*);
+                path.beginFill(.nonzero);
+            },
+            .begin_evenodd_fill_path => {
+                self.finishIconPathMask(mask, path, paint.*);
+                path.beginFill(.evenodd);
+            },
+            .end_fill_path => {
+                self.fillIconPath(bounds, paint.*, path);
+                path.clearFill();
+            },
             .move_to => |point| {
+                if (path.fill_active) {
+                    path.fillMoveTo(point);
+                    return;
+                }
                 if (path.has_segment) {
-                    self.finishIconPathMask(mask, path, color);
+                    self.finishIconPathMask(mask, path, paint.*);
                 }
                 path.moveTo(point);
             },
             .line_to => |point| {
+                if (path.fill_active) {
+                    path.fillLineTo(point);
+                    return;
+                }
                 if (path.current) |current| self.strokePathSegmentMask(mask, path, current, point, active_icon_tuning.stroke_antialias_width, active_icon_tuning.line_stroke_coverage_boost);
                 path.lineTo(point);
             },
             .quad_to => |quad| {
+                if (path.fill_active) {
+                    if (path.current) |current| self.fillQuadraticPath(path, current, quad.control, quad.end);
+                    path.lineTo(quad.end);
+                    return;
+                }
                 if (path.current) |current| self.strokeQuadraticPathMask(mask, path, current, quad.control, quad.end);
                 path.lineTo(quad.end);
             },
             .cubic_to => |cubic| {
+                if (path.fill_active) {
+                    if (path.current) |current| self.fillCubicPath(path, current, cubic.control0, cubic.control1, cubic.end);
+                    path.lineTo(cubic.end);
+                    return;
+                }
                 if (path.current) |current| self.strokeCubicPathMask(mask, path, current, cubic.control0, cubic.control1, cubic.end);
                 path.lineTo(cubic.end);
             },
             .arc_to => |arc| {
+                if (path.fill_active) {
+                    if (path.current) |current| self.fillArcPath(path, current, arc);
+                    path.lineTo(arc.end);
+                    return;
+                }
                 if (path.current) |current| self.strokeArcPathMask(mask, path, current, arc);
                 path.lineTo(arc.end);
             },
             .close_path => if (path.current) |current| if (path.start) |start| {
+                if (path.fill_active) {
+                    path.closeFillSubpath();
+                    return;
+                }
                 self.strokePathSegmentMask(mask, path, current, start, active_icon_tuning.stroke_antialias_width, active_icon_tuning.line_stroke_coverage_boost);
                 self.strokeRoundPointMask(mask, start, active_icon_tuning.stroke_antialias_width, active_icon_tuning.line_stroke_coverage_boost);
                 path.closed = true;
@@ -598,9 +648,40 @@ pub const Surface = struct {
         self.fillRounded(area, color, color, r);
     }
 
+    fn iconFilledEllipse(self: Surface, bounds: ui.Rect, color: ui.Color, x: f32, y: f32, rx: f32, ry: f32) void {
+        const cx = bounds.x + bounds.w * x;
+        const cy = bounds.y + bounds.h * y;
+        const radius_x = bounds.w * rx;
+        const radius_y = bounds.h * ry;
+        if (radius_x <= 0.0 or radius_y <= 0.0) return;
+        const area = ui.Rect.init(cx - radius_x - antialias_width, cy - radius_y - antialias_width, (radius_x + antialias_width) * 2.0, (radius_y + antialias_width) * 2.0);
+        const x_start = clampCoord(@intFromFloat(@floor(area.x)), self.width);
+        const y_start = clampCoord(@intFromFloat(@floor(area.y)), self.height);
+        const x_end = clampCoord(@intFromFloat(@ceil(area.x + area.w)), self.width);
+        const y_end = clampCoord(@intFromFloat(@ceil(area.y + area.h)), self.height);
+        var py_i = y_start;
+        while (py_i < y_end) : (py_i += 1) {
+            var px_i = x_start;
+            while (px_i < x_end) : (px_i += 1) {
+                const px = @as(f32, @floatFromInt(px_i)) + pixel_center;
+                const py = @as(f32, @floatFromInt(py_i)) + pixel_center;
+                const nx = (px - cx) / radius_x;
+                const ny = (py - cy) / radius_y;
+                const distance = (1.0 - @sqrt(nx * nx + ny * ny)) * @min(radius_x, radius_y);
+                const alpha = coverageAlpha(0.0, -distance);
+                if (alpha != 0) self.blendPixel(px_i, py_i, color, alpha);
+            }
+        }
+    }
+
     fn iconRoundRect(self: Surface, bounds: ui.Rect, color: ui.Color, x: f32, y: f32, w: f32, h: f32, radius: f32) void {
         const rect = ui.Rect.init(bounds.x + bounds.w * x, bounds.y + bounds.h * y, bounds.w * w, bounds.h * h);
         self.strokeRounded(rect, color, @min(bounds.w, bounds.h) * radius, iconStroke(bounds));
+    }
+
+    fn iconFilledRoundRect(self: Surface, bounds: ui.Rect, color: ui.Color, x: f32, y: f32, w: f32, h: f32, radius: f32) void {
+        const rect = ui.Rect.init(bounds.x + bounds.w * x, bounds.y + bounds.h * y, bounds.w * w, bounds.h * h);
+        self.fillRounded(rect, color, color, @min(bounds.w, bounds.h) * radius);
     }
 
     fn strokeSegment(self: Surface, bounds: ui.Rect, color: ui.Color, x0n: f32, y0n: f32, x1n: f32, y1n: f32) void {
@@ -781,6 +862,70 @@ pub const Surface = struct {
             self.strokePathSegmentMask(mask, path, previous, next, arc_antialias_width, active_icon_tuning.arc_stroke_coverage_boost);
             previous = next;
         }
+    }
+
+    fn fillQuadraticPath(self: Surface, path: *IconPathState, start: icon_vector.Point, control: icon_vector.Point, end: icon_vector.Point) void {
+        _ = self;
+        var step: usize = 1;
+        while (step <= active_icon_tuning.curve_segments) : (step += 1) {
+            const t = @as(f32, @floatFromInt(step)) / @as(f32, @floatFromInt(active_icon_tuning.curve_segments));
+            const mt = 1.0 - t;
+            path.fillLineTo(.{
+                .x = mt * mt * start.x + 2.0 * mt * t * control.x + t * t * end.x,
+                .y = mt * mt * start.y + 2.0 * mt * t * control.y + t * t * end.y,
+            });
+        }
+    }
+
+    fn fillCubicPath(self: Surface, path: *IconPathState, start: icon_vector.Point, control0: icon_vector.Point, control1: icon_vector.Point, end: icon_vector.Point) void {
+        _ = self;
+        var step: usize = 1;
+        while (step <= active_icon_tuning.curve_segments) : (step += 1) {
+            const t = @as(f32, @floatFromInt(step)) / @as(f32, @floatFromInt(active_icon_tuning.curve_segments));
+            const mt = 1.0 - t;
+            path.fillLineTo(.{
+                .x = mt * mt * mt * start.x + 3.0 * mt * mt * t * control0.x + 3.0 * mt * t * t * control1.x + t * t * t * end.x,
+                .y = mt * mt * mt * start.y + 3.0 * mt * mt * t * control0.y + 3.0 * mt * t * t * control1.y + t * t * t * end.y,
+            });
+        }
+    }
+
+    fn fillArcPath(self: Surface, path: *IconPathState, start: icon_vector.Point, arc: icon_vector.Arc) void {
+        const geometry = svgArcGeometry(start, arc) orelse {
+            path.fillLineTo(arc.end);
+            return;
+        };
+        const steps = arcStepCount(geometry.delta, arc);
+        var step: usize = 1;
+        while (step <= steps) : (step += 1) path.fillLineTo(geometry.pointAt(step, steps));
+        _ = self;
+    }
+
+    fn fillIconPath(self: Surface, bounds: ui.Rect, color: ui.Color, path: *const IconPathState) void {
+        if (path.fill_point_len < min_fill_path_points) return;
+        const x_start = clampCoord(@intFromFloat(@floor(bounds.x)), self.width);
+        const y_start = clampCoord(@intFromFloat(@floor(bounds.y)), self.height);
+        const x_end = clampCoord(@intFromFloat(@ceil(bounds.x + bounds.w)), self.width);
+        const y_end = clampCoord(@intFromFloat(@ceil(bounds.y + bounds.h)), self.height);
+        var y = y_start;
+        while (y < y_end) : (y += 1) {
+            var x = x_start;
+            while (x < x_end) : (x += 1) {
+                const coverage = self.fillPathCoverage(bounds, path, x, y);
+                if (coverage != 0) self.blendPixel(x, y, color, coverage);
+            }
+        }
+    }
+
+    fn fillPathCoverage(self: Surface, bounds: ui.Rect, path: *const IconPathState, x: usize, y: usize) u8 {
+        _ = self;
+        var inside_samples: usize = 0;
+        for (fill_sample_offsets) |offset| {
+            const nx = (@as(f32, @floatFromInt(x)) + offset.x - bounds.x) / bounds.w;
+            const ny = (@as(f32, @floatFromInt(y)) + offset.y - bounds.y) / bounds.h;
+            if (pathContainsPoint(path, .{ .x = nx, .y = ny })) inside_samples += 1;
+        }
+        return @intCast((inside_samples * max_alpha) / fill_sample_offsets.len);
     }
 
     fn blendIconMask(self: Surface, mask: *const IconAlphaMask, color: ui.Color) void {
@@ -985,6 +1130,20 @@ const icon_arc_step_divisor_min: f32 = 8.0;
 const icon_arc_step_divisor_max: f32 = 64.0;
 const icon_alpha_mask_capacity: usize = 512 * 512;
 const svg_arc_denominator_min: f32 = 0.000001;
+const max_fill_path_points: usize = 512;
+const max_fill_path_subpaths: usize = 64;
+const min_fill_path_points: usize = 3;
+const fill_sample_offsets = [_]icon_vector.Point{
+    .{ .x = 0.25, .y = 0.25 },
+    .{ .x = 0.75, .y = 0.25 },
+    .{ .x = 0.25, .y = 0.75 },
+    .{ .x = 0.75, .y = 0.75 },
+};
+
+const FillRule = enum {
+    nonzero,
+    evenodd,
+};
 
 const IconPathState = struct {
     current: ?icon_vector.Point = null,
@@ -998,6 +1157,12 @@ const IconPathState = struct {
     segment_count: usize = 0,
     has_segment: bool = false,
     closed: bool = false,
+    fill_active: bool = false,
+    fill_rule: FillRule = .nonzero,
+    fill_points: [max_fill_path_points]icon_vector.Point = undefined,
+    fill_subpaths: [max_fill_path_subpaths]usize = undefined,
+    fill_point_len: usize = 0,
+    fill_subpath_len: usize = 0,
 
     fn moveTo(self: *IconPathState, point: icon_vector.Point) void {
         self.current = point;
@@ -1007,6 +1172,49 @@ const IconPathState = struct {
 
     fn lineTo(self: *IconPathState, point: icon_vector.Point) void {
         self.current = point;
+    }
+
+    fn beginFill(self: *IconPathState, fill_rule: FillRule) void {
+        self.clearStroke();
+        self.current = null;
+        self.start = null;
+        self.fill_active = true;
+        self.fill_rule = fill_rule;
+        self.fill_point_len = 0;
+        self.fill_subpath_len = 0;
+    }
+
+    fn fillMoveTo(self: *IconPathState, point: icon_vector.Point) void {
+        if (self.fill_subpath_len >= self.fill_subpaths.len) unreachable;
+        self.fill_subpaths[self.fill_subpath_len] = self.fill_point_len;
+        self.fill_subpath_len += 1;
+        self.current = point;
+        self.start = point;
+        self.appendFillPoint(point);
+    }
+
+    fn fillLineTo(self: *IconPathState, point: icon_vector.Point) void {
+        if (self.fill_subpath_len == 0) self.fillMoveTo(point) else self.appendFillPoint(point);
+        self.current = point;
+    }
+
+    fn closeFillSubpath(self: *IconPathState) void {
+        if (self.start) |start_point| self.current = start_point;
+    }
+
+    fn clearFill(self: *IconPathState) void {
+        self.fill_active = false;
+        self.fill_rule = .nonzero;
+        self.fill_point_len = 0;
+        self.fill_subpath_len = 0;
+        self.current = null;
+        self.start = null;
+    }
+
+    fn appendFillPoint(self: *IconPathState, point: icon_vector.Point) void {
+        if (self.fill_point_len >= self.fill_points.len) unreachable;
+        self.fill_points[self.fill_point_len] = point;
+        self.fill_point_len += 1;
     }
 
     fn clearStroke(self: *IconPathState) void {
@@ -1130,6 +1338,60 @@ fn strokeCoverageAlpha(radius: f32, distance: f32, antialias_width_value: f32, b
     else
         t;
     return @intFromFloat(@round(std.math.clamp(coverage, 0.0, 1.0) * 255.0));
+}
+
+fn pathContainsPoint(path: *const IconPathState, point: icon_vector.Point) bool {
+    return switch (path.fill_rule) {
+        .nonzero => pathContainsPointNonzero(path, point),
+        .evenodd => pathContainsPointEvenOdd(path, point),
+    };
+}
+
+fn pathContainsPointNonzero(path: *const IconPathState, point: icon_vector.Point) bool {
+    var winding: isize = 0;
+    var subpath_index: usize = 0;
+    while (subpath_index < path.fill_subpath_len) : (subpath_index += 1) {
+        const start = path.fill_subpaths[subpath_index];
+        const end = if (subpath_index + 1 < path.fill_subpath_len) path.fill_subpaths[subpath_index + 1] else path.fill_point_len;
+        if (end <= start + 1) continue;
+        var previous = path.fill_points[end - 1];
+        var index = start;
+        while (index < end) : (index += 1) {
+            const current = path.fill_points[index];
+            if (previous.y <= point.y) {
+                if (current.y > point.y and isLeftOfEdge(previous, current, point) > 0.0) winding += 1;
+            } else if (current.y <= point.y and isLeftOfEdge(previous, current, point) < 0.0) {
+                winding -= 1;
+            }
+            previous = current;
+        }
+    }
+    return winding != 0;
+}
+
+fn pathContainsPointEvenOdd(path: *const IconPathState, point: icon_vector.Point) bool {
+    var crossings: usize = 0;
+    var subpath_index: usize = 0;
+    while (subpath_index < path.fill_subpath_len) : (subpath_index += 1) {
+        const start = path.fill_subpaths[subpath_index];
+        const end = if (subpath_index + 1 < path.fill_subpath_len) path.fill_subpaths[subpath_index + 1] else path.fill_point_len;
+        if (end <= start + 1) continue;
+        var previous = path.fill_points[end - 1];
+        var index = start;
+        while (index < end) : (index += 1) {
+            const current = path.fill_points[index];
+            if ((previous.y > point.y) != (current.y > point.y)) {
+                const intersection_x = previous.x + (point.y - previous.y) * (current.x - previous.x) / (current.y - previous.y);
+                if (intersection_x > point.x) crossings += 1;
+            }
+            previous = current;
+        }
+    }
+    return crossings % 2 == 1;
+}
+
+fn isLeftOfEdge(start: icon_vector.Point, end: icon_vector.Point, point: icon_vector.Point) f32 {
+    return (end.x - start.x) * (point.y - start.y) - (point.x - start.x) * (end.y - start.y);
 }
 
 fn roundedAlpha(bounds: ui.Rect, radius: f32, x: f32, y: f32) u8 {
@@ -1489,6 +1751,109 @@ test "software renderer uses svg iterator for transformed shape elements" {
 
     try std.testing.expect(pixels[12 * 24 + 15].a > 0);
     try std.testing.expectEqual(ui.Color.clear, pixels[12 * 24 + 5]);
+}
+
+test "software renderer fills default painted svg shapes" {
+    const svg =
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+        \\  <circle cx="8" cy="12" r="4"/>
+        \\  <rect x="14" y="8" width="6" height="8" rx="1"/>
+        \\</svg>
+    ;
+    var pixels: [24 * 24]ui.Color = undefined;
+    const surface = try Surface.init(24, 24, &pixels);
+    surface.clear(ui.Color.clear);
+
+    surface.drawIconSvg(ui.Rect.init(0, 0, 24, 24), .{ .r = 33, .g = 200, .b = 120, .a = 255 }, svg);
+
+    try std.testing.expect(pixels[12 * 24 + 8].a > 0);
+    try std.testing.expect(pixels[12 * 24 + 17].a > 0);
+    try std.testing.expectEqual(ui.Color.clear, pixels[2 * 24 + 2]);
+}
+
+test "software renderer honors explicit svg solid paint colors" {
+    const svg =
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+        \\  <rect x="2" y="4" width="8" height="8" fill="red"/>
+        \\  <rect x="14" y="4" width="8" height="8" fill="#0000ff"/>
+        \\  <rect x="2" y="14" width="8" height="8" fill="#00ff0080"/>
+        \\  <rect x="14" y="14" width="8" height="8" fill="rgba(1, 2, 3, .5)"/>
+        \\</svg>
+    ;
+    var pixels: [24 * 24]ui.Color = undefined;
+    const surface = try Surface.init(24, 24, &pixels);
+    surface.clear(ui.Color.clear);
+
+    surface.drawIconSvg(ui.Rect.init(0, 0, 24, 24), .{ .r = 20, .g = 200, .b = 20, .a = 255 }, svg);
+
+    try std.testing.expectEqual(ui.Color{ .r = 255, .g = 0, .b = 0, .a = 255 }, pixels[8 * 24 + 6]);
+    try std.testing.expectEqual(ui.Color{ .r = 0, .g = 0, .b = 255, .a = 255 }, pixels[8 * 24 + 18]);
+    try std.testing.expectEqual(ui.Color{ .r = 0, .g = 255, .b = 0, .a = 128 }, pixels[18 * 24 + 6]);
+    try std.testing.expectEqual(ui.Color{ .r = 1, .g = 2, .b = 3, .a = 128 }, pixels[18 * 24 + 18]);
+}
+
+test "software renderer fills svg path interiors with nonzero rule" {
+    const svg =
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+        \\  <path d="M 4 4 L 20 4 L 12 20"/>
+        \\</svg>
+    ;
+    var pixels: [24 * 24]ui.Color = undefined;
+    const surface = try Surface.init(24, 24, &pixels);
+    surface.clear(ui.Color.clear);
+
+    surface.drawIconSvg(ui.Rect.init(0, 0, 24, 24), .{ .r = 255, .g = 255, .b = 255, .a = 255 }, svg);
+
+    try std.testing.expect(pixels[10 * 24 + 12].a > 0);
+    try std.testing.expectEqual(ui.Color.clear, pixels[21 * 24 + 12]);
+}
+
+test "software renderer applies evenodd svg fill rule" {
+    const svg =
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill-rule="evenodd">
+        \\  <path d="M 4 4 H 20 V 20 H 4 Z M 8 8 H 16 V 16 H 8 Z"/>
+        \\</svg>
+    ;
+    var pixels: [24 * 24]ui.Color = undefined;
+    const surface = try Surface.init(24, 24, &pixels);
+    surface.clear(ui.Color.clear);
+
+    surface.drawIconSvg(ui.Rect.init(0, 0, 24, 24), .{ .r = 255, .g = 255, .b = 255, .a = 255 }, svg);
+
+    try std.testing.expect(pixels[6 * 24 + 6].a > 0);
+    try std.testing.expectEqual(ui.Color.clear, pixels[12 * 24 + 12]);
+}
+
+test "software renderer paints mixed fill and stroke svg paths" {
+    const svg =
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="black" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        \\  <path d="M 4 4 L 20 4 L 12 20"/>
+        \\</svg>
+    ;
+    var pixels: [24 * 24]ui.Color = undefined;
+    const surface = try Surface.init(24, 24, &pixels);
+    surface.clear(ui.Color.clear);
+
+    surface.drawIconSvg(ui.Rect.init(0, 0, 24, 24), .{ .r = 255, .g = 255, .b = 255, .a = 255 }, svg);
+
+    try std.testing.expect(pixels[10 * 24 + 12].a > 0);
+    try std.testing.expect(pixels[4 * 24 + 12].a > 0);
+}
+
+test "software renderer fills open svg subpaths as closed" {
+    const svg =
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+        \\  <polyline points="4,20 12,4 20,20"/>
+        \\</svg>
+    ;
+    var pixels: [24 * 24]ui.Color = undefined;
+    const surface = try Surface.init(24, 24, &pixels);
+    surface.clear(ui.Color.clear);
+
+    surface.drawIconSvg(ui.Rect.init(0, 0, 24, 24), .{ .r = 255, .g = 255, .b = 255, .a = 255 }, svg);
+
+    try std.testing.expect(pixels[14 * 24 + 12].a > 0);
+    try std.testing.expectEqual(ui.Color.clear, pixels[3 * 24 + 12]);
 }
 
 test "software renderer icon tuning sweeps explicit candidates" {

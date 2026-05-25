@@ -16,9 +16,12 @@ const RenderOptions = common.RenderOptions;
 pub const Button = struct {
     id: u32,
     label: []const u8,
+    variant: common.ButtonVariant = .primary,
+    leading_icon: ?icon.Icon = null,
+    trailing_icon: ?icon.Icon = null,
 
     pub fn node(self: Button) ui.Node {
-        return .{ .button = .{ .id = self.id, .label = self.label } };
+        return ui.buttonDetailNode(self.id, self.label, variantTag(self.variant), common.optionalIconTag(self.leading_icon), common.optionalIconTag(self.trailing_icon));
     }
 
     pub fn render(self: Button, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
@@ -34,27 +37,57 @@ pub const Button = struct {
         return measureButton(self.label, constraints);
     }
 
-    pub fn toObject(self: Button, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
-        return component_codec.oneStringObject(.button, self.id, self.label, ui_out, object_out, req, epoch);
+    pub fn toObject(self: Button, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
+        var writer = component_codec.Writer.init(ui_out, 1, 1, .column, 0, 0) orelse return null;
+        if (!self.writeRecord(&writer, 0)) return null;
+        return writer.objectNode(object_out, component_codec.requirements(), epoch);
     }
 
     pub fn writeRecord(self: Button, writer: *component_codec.Writer, index: usize) bool {
-        return component_codec.oneStringRecord(writer, index, .button, self.id, self.label);
+        const label_ref = writer.string(self.label) orelse return false;
+        return writer.record(index, .button, self.id, label_ref, .{ .offset = variantTag(self.variant), .len = packIconTags(self.leading_icon, self.trailing_icon) });
     }
 
     pub fn fromView(view: object.View) Error!Button {
         return switch (try component_codec.singleNode(view)) {
-            .button => |button| .{ .id = button.id, .label = button.label },
+            .button => |button| .{ .id = button.id, .label = button.label, .variant = try variantFromTag(button.variant), .leading_icon = try common.optionalIconFromTag(button.leading_icon), .trailing_icon = try common.optionalIconFromTag(button.trailing_icon) },
             else => error.UnsupportedComponent,
         };
     }
 };
 
 fn renderButton(scene: *ui.Scene, bounds: ui.Rect, button: Button, options: RenderOptions) ui.RenderError!void {
-    const paint = buttonPaint(options);
+    const paint = buttonPaint(button.variant, options);
     if (paint.fill) |fill| try scene.pushRect(bounds, fill, .fill, radius, 0.0);
     if (paint.border) |border| try scene.pushRect(bounds, border, .border, radius, 0.0);
-    try renderContent(scene, bounds, button.label, paint.text, options.button_leading_icon, options.button_trailing_icon);
+    try renderContent(scene, bounds, button.label, paint.text, button.leading_icon, button.trailing_icon);
+}
+
+pub fn variantTag(variant: common.ButtonVariant) u16 {
+    return switch (variant) {
+        .primary => 0,
+        .secondary => 1,
+        .outline => 2,
+        .ghost => 3,
+        .destructive => 4,
+        .link => 5,
+    };
+}
+
+pub fn variantFromTag(tag: u16) Error!common.ButtonVariant {
+    return switch (tag) {
+        0 => .primary,
+        1 => .secondary,
+        2 => .outline,
+        3 => .ghost,
+        4 => .destructive,
+        5 => .link,
+        else => error.Corrupt,
+    };
+}
+
+fn packIconTags(leading: ?icon.Icon, trailing: ?icon.Icon) u16 {
+    return common.optionalIconTag(leading) | (common.optionalIconTag(trailing) << icon_pack_shift);
 }
 
 fn collectButtonInteractions(collector: *interaction.Collector, bounds: ui.Rect, button: Button) interaction.Error!void {
@@ -124,8 +157,8 @@ const ButtonPaint = struct {
     text: ui.Color,
 };
 
-fn buttonPaint(options: RenderOptions) ButtonPaint {
-    return switch (options.button_variant) {
+fn buttonPaint(variant: common.ButtonVariant, options: RenderOptions) ButtonPaint {
+    return switch (variant) {
         .primary => .{ .fill = options.style.accent, .border = options.style.accent, .text = options.style.bg },
         .secondary => .{ .fill = options.style.row, .border = options.style.border, .text = options.style.text },
         .outline => .{ .fill = options.style.panel, .border = options.style.border, .text = options.style.text },
@@ -149,17 +182,21 @@ const min_width: f32 = 44.0;
 const max_width: f32 = 4096.0;
 const button_danger = ui.Color{ .r = 225, .g = 29, .b = 72 };
 const button_danger_text = ui.Color{ .r = 255, .g = 255, .b = 255 };
+const icon_pack_shift: u4 = 8;
 
 test "button component serializes to canonical object and deserializes" {
-    const button = Button{ .id = 7, .label = "Run" };
+    const button = Button{ .id = 7, .label = "Run", .variant = .secondary, .leading_icon = .search, .trailing_icon = .chevron_right };
     var ui_raw: [128]u8 = undefined;
     var object_raw: [object.header_size + 128]u8 = undefined;
 
-    const canonical = button.toObject(&ui_raw, &object_raw, component_test.req(), component_test.epoch()).?;
+    const canonical = button.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
     const decoded = try Button.fromView(try object.View.decode(canonical));
 
     try @import("std").testing.expectEqual(@as(u32, 7), decoded.id);
     try @import("std").testing.expectEqualStrings("Run", decoded.label);
+    try @import("std").testing.expectEqual(common.ButtonVariant.secondary, decoded.variant);
+    try @import("std").testing.expectEqual(icon.Icon.search, decoded.leading_icon.?);
+    try @import("std").testing.expectEqual(icon.Icon.chevron_right, decoded.trailing_icon.?);
 }
 
 test "button component measurement follows label width" {
@@ -177,10 +214,11 @@ test "button component renders extended reference variants" {
     var commands: [32]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
 
-    try renderButton(&scene, ui.Rect.init(0, 0, 120, height), .{ .id = 1, .label = "Delete" }, .{ .button_variant = .destructive });
-    try renderButton(&scene, ui.Rect.init(0, 44, 120, height), .{ .id = 2, .label = "Docs" }, .{ .button_variant = .link });
+    try renderButton(&scene, ui.Rect.init(0, 0, 120, height), .{ .id = 1, .label = "Delete", .variant = .destructive }, .{});
+    try renderButton(&scene, ui.Rect.init(0, 44, 120, height), .{ .id = 2, .label = "Docs", .variant = .link, .leading_icon = .search }, .{});
 
     try std.testing.expect(component_test.hasRectColor(scene.written(), button_danger));
     try std.testing.expect(!component_test.hasRectBounds(scene.written(), ui.Rect.init(0, 44, 120, height)));
     try std.testing.expect(component_test.hasTextColor(scene.written(), ui.Color.accent));
+    try std.testing.expect(component_test.hasIcon(scene.written(), icon.id(.search)));
 }

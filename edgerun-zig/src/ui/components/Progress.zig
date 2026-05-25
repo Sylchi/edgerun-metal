@@ -28,8 +28,8 @@ pub const Progress = struct {
         return component_render.measureFixed(component_render.preferred_progress, constraints);
     }
 
-    pub fn toObject(self: Progress, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
-        return component_codec.refObject(.progress, 0, component_codec.unitRef(self.value), ui_out, object_out, req, epoch);
+    pub fn toObject(self: Progress, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
+        return component_codec.refObject(.progress, 0, component_codec.unitRef(self.value), ui_out, object_out, epoch);
     }
 
     pub fn writeRecord(self: Progress, writer: *component_codec.Writer, index: usize) bool {
@@ -49,7 +49,7 @@ test "progress component serializes to canonical object and deserializes" {
     var ui_raw: [128]u8 = undefined;
     var object_raw: [object.header_size + 128]u8 = undefined;
 
-    const canonical = progress.toObject(&ui_raw, &object_raw, component_test.req(), component_test.epoch()).?;
+    const canonical = progress.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
     const decoded = try Progress.fromView(try object.View.decode(canonical));
 
     try std.testing.expect(@abs(decoded.value - progress.value) < 0.001);

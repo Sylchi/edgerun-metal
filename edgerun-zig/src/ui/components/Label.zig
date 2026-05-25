@@ -28,8 +28,8 @@ pub const Label = struct {
         return component_render.measureFixed(component_render.preferred_label, constraints);
     }
 
-    pub fn toObject(self: Label, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
-        return component_codec.oneStringObject(.label, 0, self.value, ui_out, object_out, req, epoch);
+    pub fn toObject(self: Label, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
+        return component_codec.oneStringObject(.label, 0, self.value, ui_out, object_out, epoch);
     }
 
     pub fn writeRecord(self: Label, writer: *component_codec.Writer, index: usize) bool {
@@ -49,7 +49,7 @@ test "label component serializes to canonical object and deserializes" {
     var ui_raw: [128]u8 = undefined;
     var object_raw: [object.header_size + 128]u8 = undefined;
 
-    const canonical = label.toObject(&ui_raw, &object_raw, component_test.req(), component_test.epoch()).?;
+    const canonical = label.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
     const decoded = try Label.fromView(try object.View.decode(canonical));
 
     try std.testing.expectEqualStrings(label.value, decoded.value);

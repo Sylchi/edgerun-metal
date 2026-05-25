@@ -546,9 +546,9 @@ pub const Node = union(enum) {
     carousel: struct { id: u32, label: []const u8 },
     chart: struct { id: u32, label: []const u8 },
     combobox: struct { id: u32, placeholder: []const u8, selected: []const u8 },
-    card: struct { title: []const u8, detail: []const u8 },
+    card: struct { title: []const u8, detail: []const u8, variant: u16 = 0 },
     empty: struct { title: []const u8, detail: []const u8 },
-    badge: struct { label: []const u8 },
+    badge: struct { label: []const u8, variant: u16 = 0 },
     avatar: struct { label: []const u8 },
     kbd: struct { label: []const u8 },
     label: struct { value: []const u8 },
@@ -562,15 +562,17 @@ pub const Node = union(enum) {
     command: struct { id: u32, placeholder: []const u8 },
     context_menu: struct { id: u32, first: []const u8, second: []const u8 },
     dialog: struct { id: u32, title: []const u8, detail: []const u8 },
+    direction: struct { id: u32, active: u16 },
     drawer: struct { id: u32, title: []const u8, detail: []const u8 },
     dropdown_menu: struct { id: u32, first: []const u8, second: []const u8 },
     field: struct { id: u32, label: []const u8, placeholder: []const u8 },
+    hover_card: struct { id: u32, trigger: []const u8, content: []const u8 },
     input_otp: struct { id: u32, value: []const u8 },
-    button: struct { id: u32, label: []const u8 },
+    button: struct { id: u32, label: []const u8, variant: u16 = 0, leading_icon: u16 = 0, trailing_icon: u16 = 0 },
     button_group: struct { id: u32, first: []const u8, second: []const u8, active: u16 },
     toggle_group: struct { id: u32, first: []const u8, second: []const u8, active: u16 },
     toggle: struct { id: u32, label: []const u8, pressed: bool },
-    input: struct { id: u32, placeholder: []const u8 },
+    input: struct { id: u32, placeholder: []const u8, leading_icon: u16 = 0 },
     input_group: struct { id: u32, addon: []const u8, placeholder: []const u8 },
     textarea: struct { id: u32, placeholder: []const u8 },
     select: struct { id: u32, label: []const u8 },
@@ -581,11 +583,13 @@ pub const Node = union(enum) {
     popover: struct { id: u32, trigger: []const u8, content: []const u8 },
     resizable: struct { id: u32, ratio: f32 },
     sheet: struct { id: u32, title: []const u8, detail: []const u8 },
+    sidebar: struct { id: u32, title: []const u8, item: []const u8 },
     progress: struct { value: f32 },
     slider: struct { id: u32, label: []const u8, value: f32 },
     tabs: struct { id: u32, first: []const u8, second: []const u8, active: u16 },
     table: struct { id: u32, name: []const u8, role: []const u8 },
     tooltip: struct { id: u32, trigger: []const u8, content: []const u8 },
+    toast: struct { id: u32, title: []const u8, detail: []const u8 },
     row_item: struct { id: u32, title: []const u8, detail: []const u8 },
     slot: Slot,
     stack: Layout,
@@ -618,9 +622,11 @@ pub const Node = union(enum) {
             .command => .{ .w = 220, .h = 36 },
             .context_menu => .{ .w = 240, .h = 52 },
             .dialog => .{ .w = 240, .h = 52 },
+            .direction => .{ .w = 150, .h = 36 },
             .drawer => .{ .w = 240, .h = 76 },
             .dropdown_menu => .{ .w = 240, .h = 52 },
             .field => .{ .w = 220, .h = 56 },
+            .hover_card => .{ .w = 240, .h = 52 },
             .input_otp => .{ .w = 200, .h = 36 },
             .button => .{ .w = 112, .h = 36 },
             .button_group => .{ .w = 160, .h = 36 },
@@ -637,11 +643,13 @@ pub const Node = union(enum) {
             .popover => .{ .w = 240, .h = 52 },
             .resizable => .{ .w = 240, .h = 36 },
             .sheet => .{ .w = 240, .h = 76 },
+            .sidebar => .{ .w = 240, .h = 64 },
             .progress => .{ .w = 220, .h = 10 },
             .slider => .{ .w = 220, .h = 42 },
             .tabs => .{ .w = 220, .h = 84 },
             .table => .{ .w = 260, .h = 64 },
             .tooltip => .{ .w = 240, .h = 44 },
+            .toast => .{ .w = 240, .h = 52 },
             .row_item => .{ .w = 260, .h = 48 },
             .slot => |slot_node| slot_node.child.preferredSize(),
             .stack => |layout| stackPreferredSize(layout),
@@ -690,7 +698,11 @@ pub fn comboboxNode(id: u32, placeholder: []const u8, selected: []const u8) Node
 }
 
 pub fn cardNode(title: []const u8, detail: []const u8) Node {
-    return .{ .card = .{ .title = title, .detail = detail } };
+    return cardVariantNode(title, detail, 0);
+}
+
+pub fn cardVariantNode(title: []const u8, detail: []const u8, variant: u16) Node {
+    return .{ .card = .{ .title = title, .detail = detail, .variant = variant } };
 }
 
 pub fn emptyNode(title: []const u8, detail: []const u8) Node {
@@ -698,7 +710,11 @@ pub fn emptyNode(title: []const u8, detail: []const u8) Node {
 }
 
 pub fn badgeNode(label: []const u8) Node {
-    return .{ .badge = .{ .label = label } };
+    return badgeVariantNode(label, 0);
+}
+
+pub fn badgeVariantNode(label: []const u8, variant: u16) Node {
+    return .{ .badge = .{ .label = label, .variant = variant } };
 }
 
 pub fn avatarNode(label: []const u8) Node {
@@ -753,6 +769,10 @@ pub fn dialogNode(id: u32, title: []const u8, detail: []const u8) Node {
     return .{ .dialog = .{ .id = id, .title = title, .detail = detail } };
 }
 
+pub fn directionNode(id: u32, active: u16) Node {
+    return .{ .direction = .{ .id = id, .active = @min(active, 1) } };
+}
+
 pub fn drawerNode(id: u32, title: []const u8, detail: []const u8) Node {
     return .{ .drawer = .{ .id = id, .title = title, .detail = detail } };
 }
@@ -765,12 +785,24 @@ pub fn fieldNode(id: u32, label: []const u8, placeholder: []const u8) Node {
     return .{ .field = .{ .id = id, .label = label, .placeholder = placeholder } };
 }
 
+pub fn hoverCardNode(id: u32, trigger: []const u8, content: []const u8) Node {
+    return .{ .hover_card = .{ .id = id, .trigger = trigger, .content = content } };
+}
+
 pub fn inputOtpNode(id: u32, value: []const u8) Node {
     return .{ .input_otp = .{ .id = id, .value = value } };
 }
 
 pub fn buttonNode(id: u32, label: []const u8) Node {
-    return .{ .button = .{ .id = id, .label = label } };
+    return buttonDetailNode(id, label, 0, 0, 0);
+}
+
+pub fn buttonVariantNode(id: u32, label: []const u8, variant: u16) Node {
+    return buttonDetailNode(id, label, variant, 0, 0);
+}
+
+pub fn buttonDetailNode(id: u32, label: []const u8, variant: u16, leading_icon: u16, trailing_icon: u16) Node {
+    return .{ .button = .{ .id = id, .label = label, .variant = variant, .leading_icon = leading_icon, .trailing_icon = trailing_icon } };
 }
 
 pub fn buttonGroupNode(id: u32, first: []const u8, second: []const u8, active: u16) Node {
@@ -786,7 +818,11 @@ pub fn toggleNode(id: u32, label: []const u8, pressed: bool) Node {
 }
 
 pub fn inputNode(id: u32, placeholder: []const u8) Node {
-    return .{ .input = .{ .id = id, .placeholder = placeholder } };
+    return inputDetailNode(id, placeholder, 0);
+}
+
+pub fn inputDetailNode(id: u32, placeholder: []const u8, leading_icon: u16) Node {
+    return .{ .input = .{ .id = id, .placeholder = placeholder, .leading_icon = leading_icon } };
 }
 
 pub fn inputGroupNode(id: u32, addon: []const u8, placeholder: []const u8) Node {
@@ -829,6 +865,10 @@ pub fn sheetNode(id: u32, title: []const u8, detail: []const u8) Node {
     return .{ .sheet = .{ .id = id, .title = title, .detail = detail } };
 }
 
+pub fn sidebarNode(id: u32, title: []const u8, item: []const u8) Node {
+    return .{ .sidebar = .{ .id = id, .title = title, .item = item } };
+}
+
 pub fn progressNode(value: f32) Node {
     return .{ .progress = .{ .value = value } };
 }
@@ -847,6 +887,10 @@ pub fn tableNode(id: u32, name: []const u8, role: []const u8) Node {
 
 pub fn tooltipNode(id: u32, trigger: []const u8, content: []const u8) Node {
     return .{ .tooltip = .{ .id = id, .trigger = trigger, .content = content } };
+}
+
+pub fn toastNode(id: u32, title: []const u8, detail: []const u8) Node {
+    return .{ .toast = .{ .id = id, .title = title, .detail = detail } };
 }
 
 pub fn rowItemNode(id: u32, title: []const u8, detail: []const u8) Node {
@@ -898,9 +942,11 @@ pub const Patch = union(enum) {
     command_placeholder: []const u8,
     context_menu: struct { first: []const u8, second: []const u8 },
     dialog: struct { title: []const u8, detail: []const u8 },
+    direction_active: u16,
     drawer: struct { title: []const u8, detail: []const u8 },
     dropdown_menu: struct { first: []const u8, second: []const u8 },
     field_placeholder: []const u8,
+    hover_card_content: []const u8,
     input_otp_value: []const u8,
     button_label: []const u8,
     button_group_active: u16,
@@ -917,11 +963,13 @@ pub const Patch = union(enum) {
     popover_content: []const u8,
     resizable_ratio: f32,
     sheet: struct { title: []const u8, detail: []const u8 },
+    sidebar_item: []const u8,
     progress_value: f32,
     slider_value: f32,
     tabs_active: u16,
     table_row: struct { name: []const u8, role: []const u8 },
     tooltip_content: []const u8,
+    toast: struct { title: []const u8, detail: []const u8 },
     row_item: struct { title: []const u8, detail: []const u8 },
     rect_color: Color,
     style_color: Color,
@@ -1028,6 +1076,10 @@ pub fn applyPatch(node: *Node, patch: Patch) PatchError!void {
             },
             else => return error.WrongNodeKind,
         },
+        .direction_active => |active| switch (node.*) {
+            .direction => |*direction| direction.active = @min(active, 1),
+            else => return error.WrongNodeKind,
+        },
         .drawer => |drawer_patch| switch (node.*) {
             .drawer => |*drawer| {
                 drawer.title = drawer_patch.title;
@@ -1044,6 +1096,10 @@ pub fn applyPatch(node: *Node, patch: Patch) PatchError!void {
         },
         .field_placeholder => |placeholder| switch (node.*) {
             .field => |*field| field.placeholder = placeholder,
+            else => return error.WrongNodeKind,
+        },
+        .hover_card_content => |content| switch (node.*) {
+            .hover_card => |*hover_card| hover_card.content = content,
             else => return error.WrongNodeKind,
         },
         .input_otp_value => |value| switch (node.*) {
@@ -1113,6 +1169,10 @@ pub fn applyPatch(node: *Node, patch: Patch) PatchError!void {
             },
             else => return error.WrongNodeKind,
         },
+        .sidebar_item => |item| switch (node.*) {
+            .sidebar => |*sidebar| sidebar.item = item,
+            else => return error.WrongNodeKind,
+        },
         .progress_value => |value| switch (node.*) {
             .progress => |*progress| progress.value = clampUnit(value),
             else => return error.WrongNodeKind,
@@ -1134,6 +1194,13 @@ pub fn applyPatch(node: *Node, patch: Patch) PatchError!void {
         },
         .tooltip_content => |content| switch (node.*) {
             .tooltip => |*tooltip| tooltip.content = content,
+            else => return error.WrongNodeKind,
+        },
+        .toast => |toast_patch| switch (node.*) {
+            .toast => |*toast| {
+                toast.title = toast_patch.title;
+                toast.detail = toast_patch.detail;
+            },
             else => return error.WrongNodeKind,
         },
         .row_item => |row_patch| switch (node.*) {
@@ -1163,7 +1230,7 @@ fn renderNode(scene: *Scene, node: Node, bounds: Rect, style: Style) RenderError
     switch (node) {
         .rect => |rect_node| try scene.push(.{ .rect = .{ .bounds = bounds, .color = rect_node.color } }),
         .text => |text_node| try scene.push(.{ .text = .{ .origin = bounds, .value = text_node.value, .color = text_node.color orelse style.text } }),
-        .accordion, .alert, .alert_dialog, .aspect_ratio, .calendar, .carousel, .chart, .combobox, .card, .empty, .badge, .avatar, .kbd, .label, .separator, .scroll_area, .skeleton, .spinner, .breadcrumb, .menubar, .navigation_menu, .command, .context_menu, .dialog, .drawer, .dropdown_menu, .field, .input_otp, .button, .button_group, .toggle_group, .toggle, .input, .input_group, .textarea, .select, .checkbox, .radio_group, .switch_control, .pagination, .popover, .resizable, .sheet, .progress, .slider, .tabs, .table, .tooltip, .row_item => return error.UnsupportedComponent,
+        .accordion, .alert, .alert_dialog, .aspect_ratio, .calendar, .carousel, .chart, .combobox, .card, .empty, .badge, .avatar, .kbd, .label, .separator, .scroll_area, .skeleton, .spinner, .breadcrumb, .menubar, .navigation_menu, .command, .context_menu, .dialog, .direction, .drawer, .dropdown_menu, .field, .hover_card, .input_otp, .button, .button_group, .toggle_group, .toggle, .input, .input_group, .textarea, .select, .checkbox, .radio_group, .switch_control, .pagination, .popover, .resizable, .sheet, .sidebar, .progress, .slider, .tabs, .table, .tooltip, .toast, .row_item => return error.UnsupportedComponent,
         .slot => |slot_node| try renderNode(scene, slot_node.child.*, bounds, style),
         .stack => |layout| try renderStack(scene, layout, bounds, style),
     }

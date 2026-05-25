@@ -35,8 +35,8 @@ pub const ContextMenu = struct {
         return component_render.measureFixed(component_render.preferred_menu, constraints);
     }
 
-    pub fn toObject(self: ContextMenu, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
-        return component_codec.twoStringObject(.context_menu, self.id, self.first, self.second, ui_out, object_out, req, epoch);
+    pub fn toObject(self: ContextMenu, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
+        return component_codec.twoStringObject(.context_menu, self.id, self.first, self.second, ui_out, object_out, epoch);
     }
 
     pub fn writeRecord(self: ContextMenu, writer: *component_codec.Writer, index: usize) bool {
@@ -56,7 +56,7 @@ test "context menu component serializes to canonical object and deserializes" {
     var ui_raw: [224]u8 = undefined;
     var object_raw: [object.header_size + 224]u8 = undefined;
 
-    const canonical = menu.toObject(&ui_raw, &object_raw, component_test.req(), component_test.epoch()).?;
+    const canonical = menu.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
     const decoded = try ContextMenu.fromView(try object.View.decode(canonical));
 
     try std.testing.expectEqual(menu.id, decoded.id);

@@ -332,18 +332,15 @@ fn tag(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, color: ui.Color) ui
 }
 
 fn primaryButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id: u32) (ui.RenderError || interaction.Error)!void {
-    try components.renderComponent(scene, bounds, .{ .button = .{ .id = id, .label = label } }, .{
+    try components.renderComponent(scene, bounds, .{ .button = .{ .id = id, .label = label, .trailing_icon = .chevron_right } }, .{
         .style = siteStyle(),
-        .button_variant = .primary,
-        .button_trailing_icon = .chevron_right,
     });
     try components.collectComponentInteractions(collector, bounds, .{ .button = .{ .id = id, .label = label } });
 }
 
 fn outlineButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id: u32) (ui.RenderError || interaction.Error)!void {
-    try components.renderComponent(scene, bounds, .{ .button = .{ .id = id, .label = label } }, .{
+    try components.renderComponent(scene, bounds, .{ .button = .{ .id = id, .label = label, .variant = .outline } }, .{
         .style = siteStyle(),
-        .button_variant = .outline,
     });
     try components.collectComponentInteractions(collector, bounds, .{ .button = .{ .id = id, .label = label } });
 }

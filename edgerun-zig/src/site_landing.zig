@@ -716,19 +716,19 @@ fn footerColumn(scene: *ui.Scene, bounds: ui.Rect, heading_value: []const u8, it
 }
 
 fn primaryButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id: u32) (ui.RenderError || interaction.Error)!void {
-    try nativeComponent(scene, collector, bounds, .{ .button = .{ .id = id, .label = label } }, .{ .button_variant = .primary });
+    try nativeComponent(scene, collector, bounds, .{ .button = .{ .id = id, .label = label } });
 }
 
 fn primaryButtonWithTrailingIcon(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, icon_value: icon.Icon, id: u32) (ui.RenderError || interaction.Error)!void {
-    try nativeComponent(scene, collector, bounds, .{ .button = .{ .id = id, .label = label } }, .{ .button_variant = .primary, .button_trailing_icon = icon_value });
+    try nativeComponent(scene, collector, bounds, .{ .button = .{ .id = id, .label = label, .trailing_icon = icon_value } });
 }
 
 fn outlineButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id: u32) (ui.RenderError || interaction.Error)!void {
-    try nativeComponent(scene, collector, bounds, .{ .button = .{ .id = id, .label = label } }, .{ .button_variant = .outline });
+    try nativeComponent(scene, collector, bounds, .{ .button = .{ .id = id, .label = label, .variant = .outline } });
 }
 
 fn outlineButtonWithTrailingIcon(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, icon_value: icon.Icon, id: u32) (ui.RenderError || interaction.Error)!void {
-    try nativeComponent(scene, collector, bounds, .{ .button = .{ .id = id, .label = label } }, .{ .button_variant = .outline, .button_trailing_icon = icon_value });
+    try nativeComponent(scene, collector, bounds, .{ .button = .{ .id = id, .label = label, .variant = .outline, .trailing_icon = icon_value } });
 }
 
 fn nativeBadge(scene: *ui.Scene, bounds: ui.Rect, label: []const u8) ui.RenderError!void {
@@ -738,13 +738,11 @@ fn nativeBadge(scene: *ui.Scene, bounds: ui.Rect, label: []const u8) ui.RenderEr
 }
 
 fn nativeCard(scene: *ui.Scene, bounds: ui.Rect, title_value: []const u8, detail_value: []const u8) ui.RenderError!void {
-    try components.renderComponent(scene, bounds, .{ .card = .{ .title = title_value, .detail = detail_value } }, .{ .style = siteStyle(), .surface_variant = .elevated });
+    try components.renderComponent(scene, bounds, .{ .card = .{ .title = title_value, .detail = detail_value, .variant = .elevated } }, .{ .style = siteStyle() });
 }
 
-fn nativeComponent(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, component: components.Component, options: components.RenderOptions) (ui.RenderError || interaction.Error)!void {
-    var resolved = options;
-    resolved.style = siteStyle();
-    try components.renderComponent(scene, bounds, component, resolved);
+fn nativeComponent(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, component: components.Component) (ui.RenderError || interaction.Error)!void {
+    try components.renderComponent(scene, bounds, component, .{ .style = siteStyle() });
     try components.collectComponentInteractions(collector, bounds, component);
 }
 

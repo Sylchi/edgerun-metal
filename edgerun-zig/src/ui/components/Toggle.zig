@@ -35,8 +35,8 @@ pub const Toggle = struct {
         return component_render.measureFixed(component_render.preferred_toggle, constraints);
     }
 
-    pub fn toObject(self: Toggle, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
-        return component_codec.stringAndRefObject(.toggle, self.id, self.label, component_codec.boolRef(self.pressed), ui_out, object_out, req, epoch);
+    pub fn toObject(self: Toggle, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
+        return component_codec.stringAndRefObject(.toggle, self.id, self.label, component_codec.boolRef(self.pressed), ui_out, object_out, epoch);
     }
 
     pub fn writeRecord(self: Toggle, writer: *component_codec.Writer, index: usize) bool {
@@ -56,7 +56,7 @@ test "toggle component serializes to canonical object and deserializes" {
     var ui_raw: [128]u8 = undefined;
     var object_raw: [object.header_size + 128]u8 = undefined;
 
-    const canonical = toggle.toObject(&ui_raw, &object_raw, component_test.req(), component_test.epoch()).?;
+    const canonical = toggle.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
     const decoded = try Toggle.fromView(try object.View.decode(canonical));
 
     try std.testing.expectEqual(toggle.id, decoded.id);

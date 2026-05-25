@@ -2,6 +2,7 @@ const std = @import("std");
 const component_gallery = @import("component_gallery.zig");
 const site_blog = @import("site_blog.zig");
 const site_chrome = @import("site_chrome.zig");
+const site_docs = @import("site_docs.zig");
 
 pub const route_path_capacity: usize = 96;
 pub const route_hash_capacity: usize = route_path_capacity + 1;
@@ -11,6 +12,7 @@ pub const View = enum(u32) {
     blog = 1,
     apps = 2,
     components = 3,
+    docs = 4,
 };
 
 pub const Route = struct {
@@ -24,7 +26,8 @@ pub fn fromPath(path: []const u8) Route {
     const trimmed = trimPath(path);
     if (std.mem.eql(u8, trimmed, "/academy")) return blogIndex(null);
     if (std.mem.eql(u8, trimmed, "/apps")) return .{ .view = .apps };
-    if (std.mem.eql(u8, trimmed, "/docs") or std.mem.eql(u8, trimmed, "/docs/components")) return .{ .view = .components };
+    if (std.mem.eql(u8, trimmed, "/docs")) return .{ .view = .docs };
+    if (std.mem.eql(u8, trimmed, "/docs/components")) return .{ .view = .components };
     if (std.mem.startsWith(u8, trimmed, "/docs/components/")) {
         const slug = trimmed["/docs/components/".len..];
         return .{ .view = .components, .selected_component_index = component_gallery.indexBySlug(slug) };
@@ -43,11 +46,14 @@ pub fn fromHit(hit_id: u32, current: Route) ?Route {
     return switch (hit_id) {
         site_chrome.logo_button_id,
         => .{},
-        site_chrome.docs_button_id => .{ .view = .components },
+        site_chrome.docs_button_id => .{ .view = .docs },
         site_chrome.blog_button_id,
         site_blog.all_lessons_button_id,
+        site_docs.academy_button_id,
         => blogIndex(null),
         site_chrome.apps_button_id => .{ .view = .apps },
+        site_docs.apps_button_id => .{ .view = .apps },
+        site_docs.component_catalog_button_id => .{ .view = .components },
         site_blog.back_button_id => blogIndex(null),
         else => routeFromDynamicHit(hit_id, current),
     };
@@ -65,6 +71,7 @@ pub fn writePath(out: []u8, route: Route) error{RouteBufferTooSmall}!usize {
         .blog => if (route.selected_blog_post_id == 0) "/academy" else return writePostPath(out, route.selected_blog_post_id),
         .apps => "/apps",
         .components => if (route.selected_component_index) |index| return writeComponentPath(out, index) else "/docs/components",
+        .docs => "/docs",
     };
     if (value.len > out.len) return error.RouteBufferTooSmall;
     @memcpy(out[0..value.len], value);
@@ -90,15 +97,19 @@ pub fn trimPath(path: []const u8) []const u8 {
 }
 
 fn routeFromDynamicHit(hit_id: u32, current: Route) ?Route {
-    _ = current;
-    if (component_gallery.indexByCatalogHit(hit_id)) |index| {
-        return .{ .view = .components, .selected_component_index = index };
-    }
-    if (site_blog.postById(hit_id) != null) {
-        return .{ .view = .blog, .selected_blog_post_id = hit_id };
-    }
-    if (site_blog.arcFilterIndexById(hit_id)) |index| {
-        return blogIndex(index);
+    switch (current.view) {
+        .components => if (component_gallery.indexByCatalogHit(hit_id)) |index| {
+            return .{ .view = .components, .selected_component_index = index };
+        },
+        .blog => {
+            if (site_blog.postById(hit_id) != null) {
+                return .{ .view = .blog, .selected_blog_post_id = hit_id };
+            }
+            if (site_blog.arcFilterIndexById(hit_id)) |index| {
+                return blogIndex(index);
+            }
+        },
+        .landing, .apps, .docs => {},
     }
     return null;
 }
@@ -124,6 +135,7 @@ test "navigation parses browser and native site routes" {
     try std.testing.expectEqual(View.landing, fromPath("").view);
     try std.testing.expectEqual(View.blog, fromPath("/academy").view);
     try std.testing.expectEqual(View.apps, fromPath("/apps").view);
+    try std.testing.expectEqual(View.docs, fromPath("/docs").view);
     try std.testing.expectEqual(View.components, fromPath("/docs/components").view);
     try std.testing.expectEqual(View.components, fromPath("/docs/components/button").view);
     try std.testing.expectEqual(component_gallery.indexBySlug("button").?, fromPath("/docs/components/button").selected_component_index.?);
@@ -148,6 +160,12 @@ test "navigation writes browser hash routes from shared state" {
     const apps_hash_len = try writeHash(&hash, apps);
     try std.testing.expectEqualStrings("#/apps", hash[0..apps_hash_len]);
 
+    const docs = Route{ .view = .docs };
+    const docs_len = try writePath(&path, docs);
+    try std.testing.expectEqualStrings("/docs", path[0..docs_len]);
+    const docs_hash_len = try writeHash(&hash, docs);
+    try std.testing.expectEqualStrings("#/docs", hash[0..docs_hash_len]);
+
     const components = Route{ .view = .components };
     const components_len = try writePath(&path, components);
     try std.testing.expectEqualStrings("/docs/components", path[0..components_len]);
@@ -163,10 +181,13 @@ test "navigation writes browser hash routes from shared state" {
 
 test "navigation maps shared hit ids to routes" {
     try std.testing.expectEqual(View.landing, fromHit(site_chrome.logo_button_id, .{}).?.view);
-    try std.testing.expectEqual(View.components, fromHit(site_chrome.docs_button_id, .{}).?.view);
+    try std.testing.expectEqual(View.docs, fromHit(site_chrome.docs_button_id, .{}).?.view);
     try std.testing.expectEqual(View.blog, fromHit(site_chrome.blog_button_id, .{}).?.view);
     try std.testing.expectEqual(View.apps, fromHit(site_chrome.apps_button_id, .{}).?.view);
-    try std.testing.expectEqual(component_gallery.indexBySlug("button").?, fromHit(component_gallery.first_catalog_card_id + 7, .{}).?.selected_component_index.?);
+    try std.testing.expectEqual(View.components, fromHit(site_docs.component_catalog_button_id, .{}).?.view);
+    try std.testing.expectEqual(component_gallery.indexBySlug("button").?, fromHit(component_gallery.first_catalog_card_id + 7, .{ .view = .components }).?.selected_component_index.?);
     const post_id = site_blog.postIdAt(0);
-    try std.testing.expectEqual(post_id, fromHit(post_id, .{}).?.selected_blog_post_id);
+    try std.testing.expectEqual(post_id, fromHit(post_id, .{ .view = .blog }).?.selected_blog_post_id);
+    try std.testing.expect(fromHit(component_gallery.first_catalog_card_id + 7, .{}) == null);
+    try std.testing.expect(fromHit(post_id, .{}) == null);
 }

@@ -1335,14 +1335,14 @@ pub const App = struct {
 
     pub fn publishUiComponent(self: *App, component: ui_components.Component, epoch: clock.Stamp, scratch: UiScratch) UiError!PublishedUi {
         if (!epoch.valid()) return error.Corrupt;
-        const canonical = component.toObject(scratch.codec, scratch.object, uiObjectRequirements(), epoch) orelse return error.NoSpace;
+        const canonical = component.toObject(scratch.codec, scratch.object, epoch) orelse return error.NoSpace;
         const object_id = self.putPublicObject(canonical) orelse return error.NoSpace;
         return .{ .app = self.id, .object_id = object_id, .epoch = epoch };
     }
 
     pub fn publishUiStack(self: *App, stack: ui_components.Stack, epoch: clock.Stamp, scratch: UiScratch) UiError!PublishedUi {
         if (!epoch.valid()) return error.Corrupt;
-        const canonical = stack.toObject(scratch.codec, scratch.object, uiObjectRequirements(), epoch) orelse return error.NoSpace;
+        const canonical = stack.toObject(scratch.codec, scratch.object, epoch) orelse return error.NoSpace;
         const object_id = self.putPublicObject(canonical) orelse return error.NoSpace;
         return .{ .app = self.id, .object_id = object_id, .epoch = epoch };
     }
@@ -1391,18 +1391,6 @@ fn mapUiRenderError(err: ui.RenderError) App.UiError {
         error.CommandBudgetExceeded, error.ClipBudgetExceeded => error.RenderBudgetExceeded,
         error.InvalidBounds => error.InvalidBounds,
         error.UnsupportedComponent => error.UnsupportedComponent,
-    };
-}
-
-pub fn uiObjectRequirements() object.Requirements {
-    return .{
-        .durability = .memory,
-        .confidentiality = .app_private,
-        .portability = .app_portable,
-        .integrity = .hash_only,
-        .lifetime = .session,
-        .visibility = .app_namespace,
-        .access = .hot_memory_allowed,
     };
 }
 

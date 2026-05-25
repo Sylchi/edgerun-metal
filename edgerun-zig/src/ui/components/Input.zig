@@ -1,6 +1,7 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
+const icon = @import("../../icon.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
@@ -15,13 +16,14 @@ const RenderOptions = common.RenderOptions;
 pub const Input = struct {
     id: u32,
     placeholder: []const u8,
+    leading_icon: ?icon.Icon = null,
 
     pub fn node(self: Input) ui.Node {
-        return .{ .input = .{ .id = self.id, .placeholder = self.placeholder } };
+        return ui.inputDetailNode(self.id, self.placeholder, common.optionalIconTag(self.leading_icon));
     }
 
     pub fn render(self: Input, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return component_render.renderInput(scene, bounds, self.placeholder, options);
+        return component_render.renderInput(scene, bounds, self.placeholder, self.leading_icon, options);
     }
 
     pub fn collectInteractions(self: Input, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
@@ -34,32 +36,36 @@ pub const Input = struct {
         return component_render.measureFixed(component_render.preferred_input, constraints);
     }
 
-    pub fn toObject(self: Input, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
-        return component_codec.oneStringObject(.input, self.id, self.placeholder, ui_out, object_out, req, epoch);
+    pub fn toObject(self: Input, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
+        var writer = component_codec.Writer.init(ui_out, 1, 1, .column, 0, 0) orelse return null;
+        if (!self.writeRecord(&writer, 0)) return null;
+        return writer.objectNode(object_out, component_codec.requirements(), epoch);
     }
 
     pub fn writeRecord(self: Input, writer: *component_codec.Writer, index: usize) bool {
-        return component_codec.oneStringRecord(writer, index, .input, self.id, self.placeholder);
+        const placeholder_ref = writer.string(self.placeholder) orelse return false;
+        return writer.record(index, .input, self.id, placeholder_ref, .{ .offset = common.optionalIconTag(self.leading_icon), .len = 0 });
     }
 
     pub fn fromView(view: object.View) Error!Input {
         return switch (try component_codec.singleNode(view)) {
-            .input => |input| .{ .id = input.id, .placeholder = input.placeholder },
+            .input => |input| .{ .id = input.id, .placeholder = input.placeholder, .leading_icon = try common.optionalIconFromTag(input.leading_icon) },
             else => error.UnsupportedComponent,
         };
     }
 };
 
 test "input component serializes to canonical object and deserializes" {
-    const input = Input{ .id = 10, .placeholder = "Search objects" };
+    const input = Input{ .id = 10, .placeholder = "Search objects", .leading_icon = .search };
     var ui_raw: [128]u8 = undefined;
     var object_raw: [object.header_size + 128]u8 = undefined;
 
-    const canonical = input.toObject(&ui_raw, &object_raw, component_test.req(), component_test.epoch()).?;
+    const canonical = input.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
     const decoded = try Input.fromView(try object.View.decode(canonical));
 
     try std.testing.expectEqual(input.id, decoded.id);
     try std.testing.expectEqualStrings(input.placeholder, decoded.placeholder);
+    try std.testing.expectEqual(icon.Icon.search, decoded.leading_icon.?);
 }
 
 test "input component renders placeholder through shared control text" {
@@ -73,6 +79,18 @@ test "input component renders placeholder through shared control text" {
     try std.testing.expectEqual(ui.Color.muted, placeholder.text.color);
     try std.testing.expectEqual(@as(f32, 16.0), placeholder.text.origin.x);
     try std.testing.expectEqual(@as(f32, 20.0), placeholder.text.origin.y);
+}
+
+test "input component renders leading icon as component state" {
+    const input = Input{ .id = 10, .placeholder = "Search objects", .leading_icon = .search };
+    var commands: [8]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+
+    try input.render(&scene, ui.Rect.init(4, 8, 220, 40), .{});
+
+    const placeholder = component_test.textCommand(scene.written(), "Search objects").?;
+    try std.testing.expect(component_test.hasIcon(scene.written(), icon.id(.search)));
+    try std.testing.expectEqual(@as(f32, 52.0), placeholder.text.origin.x);
 }
 
 test "input component measurement respects at-most constraints" {

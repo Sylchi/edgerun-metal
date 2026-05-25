@@ -23,6 +23,8 @@ const wasm_empty_block_type = 0x40;
 const wasm_funcref_type = 0x70;
 const wasm_ref_func_opcode = 0xd2;
 const wasm_extended_prefix = 0xfc;
+const limits_min_only: u8 = 0;
+const limits_min_max: u8 = 1;
 const ext_i32_trunc_sat_f32_s: u32 = 0;
 const ext_i32_trunc_sat_f32_u: u32 = 1;
 const ext_i32_trunc_sat_f64_s: u32 = 2;
@@ -413,6 +415,7 @@ pub const Runtime = struct {
     imports: []const HostImport = &.{},
     memory_grow_authority: ?MemoryGrowAuthority = null,
     table_grow_authority: ?TableGrowAuthority = null,
+    initial_memory_pages: ?usize = null,
 
     pub fn init(memory: []u8, execution_ticks: *u64) Runtime {
         return initWithImports(memory, execution_ticks, &.{});
@@ -423,6 +426,14 @@ pub const Runtime = struct {
             .memory = memory,
             .execution_ticks = execution_ticks,
             .imports = imports,
+        };
+    }
+
+    pub fn initWithMemoryPages(memory: []u8, execution_ticks: *u64, initial_memory_pages: usize) Runtime {
+        return .{
+            .memory = memory,
+            .execution_ticks = execution_ticks,
+            .initial_memory_pages = initial_memory_pages,
         };
     }
 
@@ -481,7 +492,9 @@ pub const HostImport = struct {
     context: ?*anyopaque = null,
     call: ?*const fn (context: ?*anyopaque, args: []const Value) Error!ExecutionResult = null,
     memory_min_pages: usize = 0,
+    memory_max_pages: ?usize = null,
     table_min_entries: usize = 0,
+    table_max_entries: ?usize = null,
     global_value_type: ValueType = .i64,
     global_mutable: bool = false,
     global_value: Value = .{ .i64 = 0 },
@@ -522,29 +535,28 @@ const Reader = struct {
 
     fn readU32Leb(self: *Reader) Error!u32 {
         var result: u32 = 0;
-        var shift: u5 = 0;
         var count: usize = 0;
         while (count < leb32_max_bytes) : (count += 1) {
             const byte = try self.readByte();
+            const shift: u5 = @intCast(count * leb_bits_per_byte);
             result |= @as(u32, byte & leb_payload_mask) << shift;
             if ((byte & leb_continue_mask) == 0) return result;
-            shift += leb_bits_per_byte;
         }
         return error.Corrupt;
     }
 
     fn readI32Leb(self: *Reader) Error!i32 {
         var result: i32 = 0;
-        var shift: u5 = 0;
         var count: usize = 0;
         var byte: u8 = 0;
         while (count < leb32_max_bytes) : (count += 1) {
             byte = try self.readByte();
+            const shift: u5 = @intCast(count * leb_bits_per_byte);
             result |= @as(i32, byte & leb_payload_mask) << shift;
-            shift += leb_bits_per_byte;
             if ((byte & leb_continue_mask) == 0) {
-                if (shift < 32 and (byte & leb_sign_mask) != 0) {
-                    result |= @as(i32, -1) << shift;
+                const signed_shift = (count + 1) * leb_bits_per_byte;
+                if (signed_shift < 32 and (byte & leb_sign_mask) != 0) {
+                    result |= @as(i32, -1) << @intCast(signed_shift);
                 }
                 return result;
             }
@@ -554,16 +566,16 @@ const Reader = struct {
 
     fn readI64Leb(self: *Reader) Error!i64 {
         var result: i64 = 0;
-        var shift: u6 = 0;
         var count: usize = 0;
         var byte: u8 = 0;
         while (count < leb64_max_bytes) : (count += 1) {
             byte = try self.readByte();
+            const shift: u6 = @intCast(count * leb_bits_per_byte);
             result |= @as(i64, byte & leb_payload_mask) << shift;
-            shift += leb_bits_per_byte;
             if ((byte & leb_continue_mask) == 0) {
-                if (shift < 64 and (byte & leb_sign_mask) != 0) {
-                    result |= @as(i64, -1) << shift;
+                const signed_shift = (count + 1) * leb_bits_per_byte;
+                if (signed_shift < 64 and (byte & leb_sign_mask) != 0) {
+                    result |= @as(i64, -1) << @intCast(signed_shift);
                 }
                 return result;
             }
@@ -660,6 +672,7 @@ const ImportedMemory = struct {
     module: []const u8 = &.{},
     name: []const u8 = &.{},
     min_pages: usize = 0,
+    max_pages: ?usize = null,
 
     fn matches(self: ImportedMemory, host: HostImport) bool {
         return host.kind == .memory and
@@ -672,6 +685,7 @@ const ImportedTable = struct {
     module: []const u8 = &.{},
     name: []const u8 = &.{},
     min_entries: usize = 0,
+    max_entries: ?usize = null,
 
     fn matches(self: ImportedTable, host: HostImport) bool {
         return host.kind == .table and
@@ -720,6 +734,11 @@ const Global = struct {
     value_type: ValueType = .i64,
     mutable: bool = false,
     value: Value = .{ .i64 = 0 },
+};
+
+const Limits = struct {
+    min: usize,
+    max: ?usize = null,
 };
 
 const Comparison = enum {
@@ -834,6 +853,7 @@ const Module = struct {
     global_count: usize = 0,
     table_entries: [max_table_entries]?usize = [_]?usize{null} ** max_table_entries,
     table_min_entries: usize = 0,
+    table_max_entries: ?usize = null,
     has_table: bool = false,
     element_segments: [max_data_segments]ElementSegment = undefined,
     element_segment_count: usize = 0,
@@ -843,6 +863,7 @@ const Module = struct {
     imported_memory: ?ImportedMemory = null,
     imported_table: ?ImportedTable = null,
     memory_min_pages: usize = 0,
+    memory_max_pages: ?usize = null,
     has_memory: bool = false,
     start_function_index: ?usize = null,
 
@@ -955,31 +976,38 @@ const Module = struct {
 
     fn parseMemoryImport(self: *Module, reader: *Reader, module_name: []const u8, import_name: []const u8) Error!void {
         if (self.imported_memory != null or self.has_memory) return error.Unsupported;
-        const min_pages = try readMemoryMinimumPages(reader);
+        const limits = try readLimits(reader);
         const imported = ImportedMemory{
             .module = module_name,
             .name = import_name,
-            .min_pages = min_pages,
+            .min_pages = limits.min,
+            .max_pages = limits.max,
         };
         self.imported_memory = imported;
         self.has_memory = true;
-        self.memory_min_pages = min_pages;
+        self.memory_min_pages = limits.min;
+        self.memory_max_pages = limits.max;
     }
 
     fn parseTableImport(self: *Module, reader: *Reader, module_name: []const u8, import_name: []const u8) Error!void {
         if (self.imported_table != null or self.has_table) return error.Unsupported;
         const ref_type = try reader.readByte();
         if (ref_type != wasm_funcref_type) return error.Unsupported;
-        const min_entries = try readTableMinimumEntries(reader);
-        if (min_entries > max_table_entries) return error.Unsupported;
+        const limits = try readLimits(reader);
+        if (limits.min > max_table_entries) return error.Unsupported;
+        if (limits.max) |max| {
+            if (max > max_table_entries) return error.Unsupported;
+        }
         const imported = ImportedTable{
             .module = module_name,
             .name = import_name,
-            .min_entries = min_entries,
+            .min_entries = limits.min,
+            .max_entries = limits.max,
         };
         self.imported_table = imported;
         self.has_table = true;
-        self.table_min_entries = min_entries;
+        self.table_min_entries = limits.min;
+        self.table_max_entries = limits.max;
     }
 
     fn parseTableSection(self: *Module, reader: *Reader) Error!void {
@@ -989,10 +1017,14 @@ const Module = struct {
         if (self.imported_table != null) return error.Corrupt;
         const ref_type = try reader.readByte();
         if (ref_type != wasm_funcref_type) return error.Unsupported;
-        const min_entries = try readTableMinimumEntries(reader);
-        if (min_entries > max_table_entries) return error.Unsupported;
+        const limits = try readLimits(reader);
+        if (limits.min > max_table_entries) return error.Unsupported;
+        if (limits.max) |max| {
+            if (max > max_table_entries) return error.Unsupported;
+        }
         self.has_table = true;
-        self.table_min_entries = min_entries;
+        self.table_min_entries = limits.min;
+        self.table_max_entries = limits.max;
     }
 
     fn parseGlobalImport(self: *Module, reader: *Reader, module_name: []const u8, import_name: []const u8) Error!void {
@@ -1021,7 +1053,9 @@ const Module = struct {
         if (count > 1) return error.Unsupported;
         if (count == 0) return;
         if (self.imported_memory != null) return error.Corrupt;
-        self.memory_min_pages = try readMemoryMinimumPages(reader);
+        const limits = try readLimits(reader);
+        self.memory_min_pages = limits.min;
+        self.memory_max_pages = limits.max;
         self.has_memory = true;
     }
 
@@ -1252,8 +1286,8 @@ const Module = struct {
         global.value = host.global_value;
     }
 
-    fn applyDataSegments(self: Module, runtime: *Runtime) Error!void {
-        const limit = try self.requiredMemoryBytes();
+    fn applyDataSegments(self: Module, runtime: *Runtime, memory_pages: usize) Error!void {
+        const limit = checkedMul(memory_pages, wasm_page_bytes) orelse return error.Unsupported;
         for (self.data_segments[0..self.data_segment_count]) |segment| {
             if (!segment.active) continue;
             const end = checkedAdd(segment.offset, segment.bytes.len) orelse return error.NoMemory;
@@ -1837,6 +1871,12 @@ const Executor = struct {
             try frame.pushI32(-1);
             return;
         };
+        if (self.module.memory_max_pages) |max_pages| {
+            if (requested_pages > max_pages) {
+                try frame.pushI32(-1);
+                return;
+            }
+        }
         const requested_bytes = checkedMul(requested_pages, wasm_page_bytes) orelse {
             try frame.pushI32(-1);
             return;
@@ -1949,6 +1989,12 @@ const Executor = struct {
             try frame.pushI32(-1);
             return;
         };
+        if (self.module.table_max_entries) |max_entries| {
+            if (requested_entries > max_entries) {
+                try frame.pushI32(-1);
+                return;
+            }
+        }
         if (requested_entries > max_table_entries) {
             try frame.pushI32(-1);
             return;
@@ -2075,14 +2121,24 @@ pub fn executeExportValueArgs(runtime: *Runtime, wasm_bytes: []const u8, export_
 fn executorFor(runtime: *Runtime, wasm_bytes: []const u8) Error!Executor {
     var module = try Module.parse(wasm_bytes);
     try module.resolveImports(runtime.*);
-    const required_memory = try module.requiredMemoryBytes();
+    const memory_pages = try initialMemoryPages(runtime.*, module);
+    const required_memory = checkedMul(memory_pages, wasm_page_bytes) orelse return error.Unsupported;
     if (required_memory > runtime.memoryLen()) return error.NoMemory;
-    try module.applyDataSegments(runtime);
+    try module.applyDataSegments(runtime, memory_pages);
     return Executor{
         .runtime = runtime,
         .module = module,
-        .memory_pages = module.memory_min_pages,
+        .memory_pages = memory_pages,
     };
+}
+
+fn initialMemoryPages(runtime: Runtime, module: Module) Error!usize {
+    const pages = runtime.initial_memory_pages orelse return module.memory_min_pages;
+    if (pages < module.memory_min_pages) return error.NoMemory;
+    if (module.memory_max_pages) |max_pages| {
+        if (pages > max_pages) return error.NoMemory;
+    }
+    return pages;
 }
 
 fn integerArgsForExport(module: Module, export_name: []const u8, args: []const i64, out: *[max_type_params]Value) Error![]const Value {
@@ -2167,25 +2223,18 @@ fn readValueType(reader: *Reader) Error!ValueType {
     return valueTypeFromByte(try reader.readByte()) orelse error.Unsupported;
 }
 
-fn readMemoryMinimumPages(reader: *Reader) Error!usize {
-    const limits = try reader.readByte();
-    if (limits != 0 and limits != 1) return error.Unsupported;
-    const min = try reader.readU32Leb();
-    if (limits == 1) {
-        _ = try reader.readU32Leb();
-    }
-    return min;
-}
-
-fn readTableMinimumEntries(reader: *Reader) Error!usize {
-    const limits = try reader.readByte();
-    if (limits != 0 and limits != 1) return error.Unsupported;
-    const min = try reader.readU32Leb();
-    if (limits == 1) {
-        const encoded_max = try reader.readU32Leb();
-        if (encoded_max < min) return error.Corrupt;
-    }
-    return min;
+fn readLimits(reader: *Reader) Error!Limits {
+    const tag = try reader.readByte();
+    return switch (tag) {
+        limits_min_only => .{ .min = try reader.readU32Leb() },
+        limits_min_max => limits: {
+            const min = try reader.readU32Leb();
+            const max = try reader.readU32Leb();
+            if (max < min) return error.Corrupt;
+            break :limits .{ .min = min, .max = max };
+        },
+        else => error.Unsupported,
+    };
 }
 
 fn parseActiveDataSegment(reader: *Reader) Error!DataSegment {
@@ -2217,10 +2266,18 @@ fn findHostImport(runtime: Runtime, imported: anytype, kind: HostImportKind) Err
 
 fn validateImportedMemory(imported: ImportedMemory, host: HostImport) Error!void {
     if (host.memory_min_pages < imported.min_pages) return error.NoMemory;
+    if (imported.max_pages) |imported_max| {
+        const host_max = host.memory_max_pages orelse return error.Corrupt;
+        if (host_max > imported_max) return error.Corrupt;
+    }
 }
 
 fn validateImportedTable(imported: ImportedTable, host: HostImport) Error!void {
     if (host.table_min_entries < imported.min_entries) return error.NoMemory;
+    if (imported.max_entries) |imported_max| {
+        const host_max = host.table_max_entries orelse return error.Corrupt;
+        if (host_max > imported_max) return error.Corrupt;
+    }
 }
 
 fn sectionFromByte(value: u8) ?Section {

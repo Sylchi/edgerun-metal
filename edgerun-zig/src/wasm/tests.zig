@@ -370,6 +370,19 @@ const imported_memory_load_wasm = [_]u8{
     0x00,
 };
 
+const imported_memory_load_max_wasm = [_]u8{
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+    0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7e, 0x02,
+    0x10, 0x01, 0x03, 'e',  'n',  'v',  0x06, 'm',
+    'e',  'm',  'o',  'r',  'y',  0x02, 0x01, 0x01,
+    0x01, 0x03, 0x02, 0x01, 0x00, 0x07, 0x08, 0x01,
+    0x04, 'm',  'a',  'i',  'n',  0x00, 0x00, 0x0a,
+    0x09, 0x01, 0x07, 0x00, 0x41, 0x00, 0x29, 0x03,
+    0x00, 0x0b, 0x0b, 0x0e, 0x01, 0x00, 0x41, 0x00,
+    0x0b, 0x08, 0x2a, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00,
+};
+
 const imported_global_wasm = [_]u8{
     0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
     0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7e, 0x02,
@@ -407,6 +420,21 @@ const imported_table_call_indirect_wasm = [_]u8{
     0x7c, 0x0b, 0x07, 0x00, 0x20, 0x00, 0x42, 0x02,
     0x7e, 0x0b, 0x09, 0x00, 0x42, 0x15, 0x41, 0x01,
     0x11, 0x00, 0x00, 0x0b,
+};
+
+const imported_table_call_indirect_max_wasm = [_]u8{
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+    0x01, 0x0a, 0x02, 0x60, 0x01, 0x7e, 0x01, 0x7e,
+    0x60, 0x00, 0x01, 0x7e, 0x02, 0x10, 0x01, 0x03,
+    'e',  'n',  'v',  0x05, 't',  'a',  'b',  'l',
+    'e',  0x01, 0x70, 0x01, 0x02, 0x02, 0x03, 0x04,
+    0x03, 0x00, 0x00, 0x01, 0x07, 0x08, 0x01, 0x04,
+    'm',  'a',  'i',  'n',  0x00, 0x02, 0x09, 0x08,
+    0x01, 0x00, 0x41, 0x00, 0x0b, 0x02, 0x00, 0x01,
+    0x0a, 0x1b, 0x03, 0x07, 0x00, 0x20, 0x00, 0x42,
+    0x01, 0x7c, 0x0b, 0x07, 0x00, 0x20, 0x00, 0x42,
+    0x02, 0x7e, 0x0b, 0x09, 0x00, 0x42, 0x15, 0x41,
+    0x01, 0x11, 0x00, 0x00, 0x0b,
 };
 
 const explicit_element_table_wasm = [_]u8{
@@ -534,6 +562,19 @@ const table_grow_wasm = [_]u8{
     0x00, 0x42, 0x02, 0x7e, 0x0b, 0x11, 0x00, 0xd2,
     0x01, 0x41, 0x01, 0xfc, 0x0f, 0x00, 0x1a, 0x42,
     0x15, 0x41, 0x01, 0x11, 0x00, 0x00, 0x0b,
+};
+
+const table_grow_beyond_module_max_wasm = [_]u8{
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+    0x01, 0x0a, 0x02, 0x60, 0x01, 0x7e, 0x01, 0x7e,
+    0x60, 0x00, 0x01, 0x7e, 0x03, 0x04, 0x03, 0x00,
+    0x00, 0x01, 0x04, 0x05, 0x01, 0x70, 0x01, 0x01,
+    0x01, 0x07, 0x08, 0x01, 0x04, 'm',  'a',  'i',
+    'n',  0x00, 0x02, 0x0a, 0x23, 0x03, 0x07, 0x00,
+    0x20, 0x00, 0x42, 0x01, 0x7c, 0x0b, 0x07, 0x00,
+    0x20, 0x00, 0x42, 0x02, 0x7e, 0x0b, 0x11, 0x00,
+    0xd2, 0x01, 0x41, 0x01, 0xfc, 0x0f, 0x00, 0x1a,
+    0x42, 0x15, 0x41, 0x01, 0x11, 0x00, 0x00, 0x0b,
 };
 
 const memory_grow_load_wasm = [_]u8{
@@ -1751,6 +1792,51 @@ test "wasm interpreter uses imported memory from runtime allocation" {
     try std.testing.expectEqual(@as(u64, 5), ticks);
 }
 
+test "wasm interpreter validates imported memory max limits" {
+    var memory: [wasm_page_bytes]u8 = undefined;
+    @memset(&memory, 0);
+    var ticks: u64 = 8;
+    const imports = [_]wasm.HostImport{.{
+        .module = "env",
+        .name = "memory",
+        .kind = .memory,
+        .memory_min_pages = 1,
+        .memory_max_pages = 1,
+    }};
+    var runtime = wasm.Runtime.initWithImports(&memory, &ticks, &imports);
+
+    try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64(&runtime, &imported_memory_load_max_wasm, "main"));
+}
+
+test "wasm interpreter rejects imported memory without required max" {
+    var memory: [wasm_page_bytes]u8 = undefined;
+    var ticks: u64 = 8;
+    const imports = [_]wasm.HostImport{.{
+        .module = "env",
+        .name = "memory",
+        .kind = .memory,
+        .memory_min_pages = 1,
+    }};
+    var runtime = wasm.Runtime.initWithImports(&memory, &ticks, &imports);
+
+    try std.testing.expectError(error.Corrupt, wasm.executeExportI64(&runtime, &imported_memory_load_max_wasm, "main"));
+}
+
+test "wasm interpreter rejects imported memory with wider max" {
+    var memory: [wasm_page_bytes]u8 = undefined;
+    var ticks: u64 = 8;
+    const imports = [_]wasm.HostImport{.{
+        .module = "env",
+        .name = "memory",
+        .kind = .memory,
+        .memory_min_pages = 1,
+        .memory_max_pages = 2,
+    }};
+    var runtime = wasm.Runtime.initWithImports(&memory, &ticks, &imports);
+
+    try std.testing.expectError(error.Corrupt, wasm.executeExportI64(&runtime, &imported_memory_load_max_wasm, "main"));
+}
+
 test "wasm interpreter reports unresolved imported memory" {
     var memory: [wasm_page_bytes]u8 = undefined;
     var ticks: u64 = 8;
@@ -1805,6 +1891,50 @@ test "wasm interpreter resolves imported funcref tables" {
 
     try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64(&runtime, &imported_table_call_indirect_wasm, "main"));
     try std.testing.expectEqual(@as(u64, 8), ticks);
+}
+
+test "wasm interpreter validates imported table max limits" {
+    var memory: [256]u8 = undefined;
+    var ticks: u64 = 16;
+    const imports = [_]wasm.HostImport{.{
+        .module = "env",
+        .name = "table",
+        .kind = .table,
+        .table_min_entries = 2,
+        .table_max_entries = 2,
+    }};
+    var runtime = wasm.Runtime.initWithImports(&memory, &ticks, &imports);
+
+    try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64(&runtime, &imported_table_call_indirect_max_wasm, "main"));
+}
+
+test "wasm interpreter rejects imported table without required max" {
+    var memory: [256]u8 = undefined;
+    var ticks: u64 = 16;
+    const imports = [_]wasm.HostImport{.{
+        .module = "env",
+        .name = "table",
+        .kind = .table,
+        .table_min_entries = 2,
+    }};
+    var runtime = wasm.Runtime.initWithImports(&memory, &ticks, &imports);
+
+    try std.testing.expectError(error.Corrupt, wasm.executeExportI64(&runtime, &imported_table_call_indirect_max_wasm, "main"));
+}
+
+test "wasm interpreter rejects imported table with wider max" {
+    var memory: [256]u8 = undefined;
+    var ticks: u64 = 16;
+    const imports = [_]wasm.HostImport{.{
+        .module = "env",
+        .name = "table",
+        .kind = .table,
+        .table_min_entries = 2,
+        .table_max_entries = 3,
+    }};
+    var runtime = wasm.Runtime.initWithImports(&memory, &ticks, &imports);
+
+    try std.testing.expectError(error.Corrupt, wasm.executeExportI64(&runtime, &imported_table_call_indirect_max_wasm, "main"));
 }
 
 test "wasm interpreter parses explicit table element segments" {
@@ -1903,6 +2033,20 @@ test "wasm table growth can be granted by parent authority" {
     try std.testing.expectEqual(@as(usize, 1), authority.requests);
 }
 
+test "wasm table growth stops at module max before parent authority" {
+    var memory: [256]u8 = undefined;
+    var ticks: u64 = 32;
+    var authority = TableGrowAuthorityState{ .max_entries = 2 };
+    var runtime = wasm.Runtime.init(&memory, &ticks);
+    runtime.table_grow_authority = .{
+        .context = &authority,
+        .request = grantTableGrow,
+    };
+
+    try std.testing.expectError(error.Trap, wasm.executeExportI64(&runtime, &table_grow_beyond_module_max_wasm, "main"));
+    try std.testing.expectEqual(@as(usize, 0), authority.requests);
+}
+
 test "wasm interpreter grows linear memory within declared limits" {
     var memory: [wasm_page_bytes * 2]u8 = undefined;
     @memset(&memory, 0);
@@ -1914,14 +2058,14 @@ test "wasm interpreter grows linear memory within declared limits" {
     try std.testing.expectEqual(@as(u64, 42), byte_utils.load64(memory[wasm_page_bytes .. wasm_page_bytes + 8]).?);
 }
 
-test "wasm memory growth is bounded by user allocation not module max" {
+test "wasm memory growth stops at module max" {
     var memory: [wasm_page_bytes * 2]u8 = undefined;
     @memset(&memory, 0);
     var ticks: u64 = 16;
     var runtime = wasm.Runtime.init(&memory, &ticks);
 
-    try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64(&runtime, &memory_grow_beyond_module_max_wasm, "main"));
-    try std.testing.expectEqual(@as(u64, 42), byte_utils.load64(memory[wasm_page_bytes .. wasm_page_bytes + 8]).?);
+    try std.testing.expectError(error.NoMemory, wasm.executeExportI64(&runtime, &memory_grow_beyond_module_max_wasm, "main"));
+    try std.testing.expectEqual(@as(u64, 0), byte_utils.load64(memory[wasm_page_bytes .. wasm_page_bytes + 8]).?);
 }
 
 test "wasm memory growth beyond allocation requires authority" {
@@ -1933,7 +2077,7 @@ test "wasm memory growth beyond allocation requires authority" {
     try std.testing.expectError(error.MemoryGrowthRequiresAuthority, wasm.executeExportI64(&runtime, &memory_grow_load_wasm, "main"));
 }
 
-test "wasm memory growth beyond module max still asks parent authority" {
+test "wasm memory growth beyond module max does not ask parent authority" {
     var memory: [wasm_page_bytes]u8 = undefined;
     var backing: [wasm_page_bytes * 2]u8 = undefined;
     @memset(&memory, 0);
@@ -1947,10 +2091,10 @@ test "wasm memory growth beyond module max still asks parent authority" {
         .request = grantGrow,
     };
 
-    try std.testing.expectEqual(@as(i64, 42), try wasm.executeExportI64(&runtime, &memory_grow_beyond_module_max_wasm, "main"));
-    try std.testing.expectEqual(@as(usize, 1), authority.requests);
-    try std.testing.expectEqual(@as(usize, wasm_page_bytes * 2), runtime.memory.len);
-    try std.testing.expectEqual(@as(u64, 42), byte_utils.load64(backing[wasm_page_bytes .. wasm_page_bytes + 8]).?);
+    try std.testing.expectError(error.NoMemory, wasm.executeExportI64(&runtime, &memory_grow_beyond_module_max_wasm, "main"));
+    try std.testing.expectEqual(@as(usize, 0), authority.requests);
+    try std.testing.expectEqual(@as(usize, wasm_page_bytes), runtime.memory.len);
+    try std.testing.expectEqual(@as(u64, 0), byte_utils.load64(backing[wasm_page_bytes .. wasm_page_bytes + 8]).?);
 }
 
 test "wasm memory growth can be granted by parent authority" {

@@ -12,6 +12,13 @@ pub const op_quad_to: f32 = 8.0;
 pub const op_cubic_to: f32 = 9.0;
 pub const op_arc_to: f32 = 10.0;
 pub const op_close_path: f32 = 11.0;
+pub const op_filled_ellipse: f32 = 12.0;
+pub const op_filled_round_rect: f32 = 13.0;
+pub const op_begin_fill_path: f32 = 14.0;
+pub const op_end_fill_path: f32 = 15.0;
+pub const op_begin_evenodd_fill_path: f32 = 16.0;
+pub const op_paint_rgba: f32 = 17.0;
+pub const op_paint_current_color: f32 = 18.0;
 
 pub const min_op_len: usize = 1;
 pub const polyline_header_len: usize = 2;
@@ -27,6 +34,13 @@ pub const quad_to_len: usize = 5;
 pub const cubic_to_len: usize = 7;
 pub const arc_to_len: usize = 8;
 pub const close_path_len: usize = 1;
+pub const filled_ellipse_len: usize = 6;
+pub const filled_round_rect_len: usize = 6;
+pub const begin_fill_path_len: usize = 1;
+pub const end_fill_path_len: usize = 1;
+pub const begin_evenodd_fill_path_len: usize = 1;
+pub const paint_rgba_len: usize = 5;
+pub const paint_current_color_len: usize = 1;
 
 pub const Iterator = struct {
     values: []const f32,
@@ -147,6 +161,61 @@ pub const Iterator = struct {
             self.index += close_path_len;
             return .close_path;
         }
+        if (kind == op_filled_ellipse) {
+            if (self.index + filled_ellipse_len > self.values.len) return error.InvalidIconVector;
+            const start = self.index + 1;
+            self.index += filled_ellipse_len;
+            return .{ .filled_ellipse = .{
+                .cx = self.values[start],
+                .cy = self.values[start + 1],
+                .rx = self.values[start + 2],
+                .ry = self.values[start + 3],
+                .full = self.values[start + 4] != 0.0,
+            } };
+        }
+        if (kind == op_filled_round_rect) {
+            if (self.index + filled_round_rect_len > self.values.len) return error.InvalidIconVector;
+            const start = self.index + 1;
+            self.index += filled_round_rect_len;
+            return .{ .filled_round_rect = .{
+                .x = self.values[start],
+                .y = self.values[start + 1],
+                .w = self.values[start + 2],
+                .h = self.values[start + 3],
+                .radius = self.values[start + 4],
+            } };
+        }
+        if (kind == op_begin_fill_path) {
+            if (self.index + begin_fill_path_len > self.values.len) return error.InvalidIconVector;
+            self.index += begin_fill_path_len;
+            return .begin_fill_path;
+        }
+        if (kind == op_end_fill_path) {
+            if (self.index + end_fill_path_len > self.values.len) return error.InvalidIconVector;
+            self.index += end_fill_path_len;
+            return .end_fill_path;
+        }
+        if (kind == op_begin_evenodd_fill_path) {
+            if (self.index + begin_evenodd_fill_path_len > self.values.len) return error.InvalidIconVector;
+            self.index += begin_evenodd_fill_path_len;
+            return .begin_evenodd_fill_path;
+        }
+        if (kind == op_paint_rgba) {
+            if (self.index + paint_rgba_len > self.values.len) return error.InvalidIconVector;
+            const start = self.index + 1;
+            self.index += paint_rgba_len;
+            return .{ .paint_rgba = .{
+                .r = byteFromFloat(self.values[start]) orelse return error.InvalidIconVector,
+                .g = byteFromFloat(self.values[start + 1]) orelse return error.InvalidIconVector,
+                .b = byteFromFloat(self.values[start + 2]) orelse return error.InvalidIconVector,
+                .a = byteFromFloat(self.values[start + 3]) orelse return error.InvalidIconVector,
+            } };
+        }
+        if (kind == op_paint_current_color) {
+            if (self.index + paint_current_color_len > self.values.len) return error.InvalidIconVector;
+            self.index += paint_current_color_len;
+            return .paint_current_color;
+        }
         return error.InvalidIconVector;
     }
 };
@@ -163,6 +232,20 @@ pub const Op = union(enum) {
     cubic_to: Cubic,
     arc_to: Arc,
     close_path,
+    filled_ellipse: Ellipse,
+    filled_round_rect: RoundRect,
+    begin_fill_path,
+    begin_evenodd_fill_path,
+    end_fill_path,
+    paint_rgba: Paint,
+    paint_current_color,
+};
+
+pub const Paint = struct {
+    r: u8,
+    g: u8,
+    b: u8,
+    a: u8,
 };
 
 pub const Point = struct {
@@ -211,6 +294,13 @@ pub const Arc = struct {
     sweep: bool,
     end: Point,
 };
+
+fn byteFromFloat(value: f32) ?u8 {
+    if (value < 0.0 or value > 255.0) return null;
+    const as_int: u8 = @intFromFloat(value);
+    if (@as(f32, @floatFromInt(as_int)) != value) return null;
+    return as_int;
+}
 
 pub fn dataForIconId(icon_id: u32) []const f32 {
     const value = icon.fromId(icon_id) orelse return &.{};

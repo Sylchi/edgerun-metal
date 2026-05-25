@@ -36,9 +36,11 @@ pub fn renderComponent(comptime Component: type, scene: *ui.Scene, bounds: ui.Re
         .command => |command| try command.render(scene, bounds, options),
         .context_menu => |menu| try menu.render(scene, bounds, options),
         .dialog => |dialog| try dialog.render(scene, bounds, options),
+        .direction => |direction| try direction.render(scene, bounds, options),
         .drawer => |drawer| try drawer.render(scene, bounds, options),
         .dropdown_menu => |menu| try menu.render(scene, bounds, options),
         .field => |field| try field.render(scene, bounds, options),
+        .hover_card => |hover_card| try hover_card.render(scene, bounds, options),
         .input_otp => |otp| try otp.render(scene, bounds, options),
         .button => |button| try button.render(scene, bounds, options),
         .button_group => |group| try group.render(scene, bounds, options),
@@ -55,11 +57,13 @@ pub fn renderComponent(comptime Component: type, scene: *ui.Scene, bounds: ui.Re
         .popover => |popover| try popover.render(scene, bounds, options),
         .resizable => |resizable| try resizable.render(scene, bounds, options),
         .sheet => |sheet| try sheet.render(scene, bounds, options),
+        .sidebar => |sidebar| try sidebar.render(scene, bounds, options),
         .progress => |progress| try progress.render(scene, bounds, options),
         .slider => |slider| try slider.render(scene, bounds, options),
         .tabs => |tabs| try tabs.render(scene, bounds, options),
         .table => |table| try table.render(scene, bounds, options),
         .tooltip => |tooltip| try tooltip.render(scene, bounds, options),
+        .toast => |toast| try toast.render(scene, bounds, options),
         .row_item => |row| try row.render(scene, bounds, options),
     }
 }
@@ -78,9 +82,11 @@ pub fn collectComponentInteractions(comptime Component: type, collector: *intera
         .command => |command| try command.collectInteractions(collector, bounds),
         .context_menu => |menu| try menu.collectInteractions(collector, bounds),
         .dialog => |dialog| try dialog.collectInteractions(collector, bounds),
+        .direction => |direction| try direction.collectInteractions(collector, bounds),
         .drawer => |drawer| try drawer.collectInteractions(collector, bounds),
         .dropdown_menu => |menu| try menu.collectInteractions(collector, bounds),
         .field => |field| try field.collectInteractions(collector, bounds),
+        .hover_card => |hover_card| try hover_card.collectInteractions(collector, bounds),
         .input_otp => |otp| try otp.collectInteractions(collector, bounds),
         .button => |button| try button.collectInteractions(collector, bounds),
         .button_group => |group| try group.collectInteractions(collector, bounds),
@@ -96,11 +102,13 @@ pub fn collectComponentInteractions(comptime Component: type, collector: *intera
         .popover => |popover| try popover.collectInteractions(collector, bounds),
         .resizable => |resizable| try resizable.collectInteractions(collector, bounds),
         .sheet => |sheet| try sheet.collectInteractions(collector, bounds),
+        .sidebar => |sidebar| try sidebar.collectInteractions(collector, bounds),
         .toggle => |toggle| try toggle.collectInteractions(collector, bounds),
         .slider => |slider| try slider.collectInteractions(collector, bounds),
         .tabs => |tabs| try tabs.collectInteractions(collector, bounds),
         .table => |table| try table.collectInteractions(collector, bounds),
         .tooltip => |tooltip| try tooltip.collectInteractions(collector, bounds),
+        .toast => |toast| try toast.collectInteractions(collector, bounds),
         .row_item => |row| try row.collectInteractions(collector, bounds),
         else => {},
     }
@@ -133,9 +141,11 @@ pub fn measureComponent(comptime Component: type, component: Component, constrai
         .command => |command| command.measure(constraints, options),
         .context_menu => |menu| menu.measure(constraints, options),
         .dialog => |dialog| dialog.measure(constraints, options),
+        .direction => |direction| direction.measure(constraints, options),
         .drawer => |drawer| drawer.measure(constraints, options),
         .dropdown_menu => |menu| menu.measure(constraints, options),
         .field => |field| field.measure(constraints, options),
+        .hover_card => |hover_card| hover_card.measure(constraints, options),
         .input_otp => |otp| otp.measure(constraints, options),
         .button => |button| button.measure(constraints, options),
         .button_group => |group| group.measure(constraints, options),
@@ -152,11 +162,13 @@ pub fn measureComponent(comptime Component: type, component: Component, constrai
         .popover => |popover| popover.measure(constraints, options),
         .resizable => |resizable| resizable.measure(constraints, options),
         .sheet => |sheet| sheet.measure(constraints, options),
+        .sidebar => |sidebar| sidebar.measure(constraints, options),
         .progress => |progress| progress.measure(constraints, options),
         .slider => |slider| slider.measure(constraints, options),
         .tabs => |tabs| tabs.measure(constraints, options),
         .table => |table| table.measure(constraints, options),
         .tooltip => |tooltip| tooltip.measure(constraints, options),
+        .toast => |toast| toast.measure(constraints, options),
         .row_item => |row| row.measure(constraints, options),
     };
 }
@@ -424,8 +436,8 @@ fn comboboxPopupBounds(bounds: ui.Rect) ui.Rect {
     return ui.Rect.init(bounds.x, y, bounds.w, @max(min_extent, bounds.y + bounds.h - y));
 }
 
-pub fn renderBadge(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, options: RenderOptions) ui.RenderError!void {
-    const paint = badgePaint(options);
+pub fn renderBadge(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, variant: common.BadgeVariant, options: RenderOptions) ui.RenderError!void {
+    const paint = badgePaint(variant, options);
     const resolved_height = @min(badge_height, bounds.h);
     const badge_bounds = ui.Rect.init(bounds.x, bounds.y + (bounds.h - resolved_height) * 0.5, bounds.w, resolved_height);
     if (paint.fill.a != 0) try scene.pushRect(badge_bounds, paint.fill, .fill, resolved_height * 0.5, 0.0);
@@ -433,8 +445,8 @@ pub fn renderBadge(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, options
     try scene.pushAlignedText(badgeLabelBounds(badge_bounds), label, paint.text, .center);
 }
 
-pub fn renderSurface(scene: *ui.Scene, bounds: ui.Rect, title: []const u8, detail: []const u8, options: RenderOptions) ui.RenderError!void {
-    try renderSurfaceFrame(scene, bounds, options);
+pub fn renderSurface(scene: *ui.Scene, bounds: ui.Rect, title: []const u8, detail: []const u8, variant: common.SurfaceVariant, options: RenderOptions) ui.RenderError!void {
+    try renderSurfaceFrame(scene, bounds, variant, options);
     if (title.len == 0 and detail.len == 0) return;
 
     const content_x = bounds.x + surface_padding;
@@ -470,18 +482,26 @@ pub fn renderEmpty(scene: *ui.Scene, bounds: ui.Rect, title: []const u8, detail:
     });
 }
 
-pub fn renderSurfaceFrame(scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-    const frame_radius = surfaceRadiusFor(options);
-    if (options.surface_variant == .elevated) {
+pub fn renderSurfaceFrame(scene: *ui.Scene, bounds: ui.Rect, variant: common.SurfaceVariant, options: RenderOptions) ui.RenderError!void {
+    const frame_radius = surfaceRadiusFor(variant);
+    if (variant == .elevated) {
         try scene.pushRect(bounds.insetUniform(-surface_shadow_inset), surface_shadow, .shadow, frame_radius, surface_shadow_size);
     }
-    try scene.pushRect(bounds, surfaceFillColor(options), .fill, frame_radius, 0.0);
+    try scene.pushRect(bounds, surfaceFillColor(variant, options), .fill, frame_radius, 0.0);
     try scene.pushRect(bounds, options.style.border, .border, frame_radius, 0.0);
 }
 
-pub fn renderInput(scene: *ui.Scene, bounds: ui.Rect, placeholder: []const u8, options: RenderOptions) ui.RenderError!void {
+pub fn renderInput(scene: *ui.Scene, bounds: ui.Rect, placeholder: []const u8, leading_icon: ?icon.Icon, options: RenderOptions) ui.RenderError!void {
     try renderControlFrame(scene, bounds, options.style.panel, options.style.border, control_radius);
-    try renderControlText(scene, bounds, control_text_padding, control_label_height, placeholder, options.style.muted, .start);
+    const text_bounds = if (leading_icon) |value| with_icon: {
+        try scene.pushIconQuad(.{
+            .bounds = ui.Rect.init(bounds.x + control_text_padding, bounds.y + (bounds.h - input_icon_size) * 0.5, input_icon_size, input_icon_size),
+            .icon_id = icon.id(value),
+            .color = options.style.muted,
+        });
+        break :with_icon ui.Rect.init(bounds.x + control_text_padding + input_icon_size + input_icon_gap, bounds.y, @max(min_extent, bounds.w - control_text_padding * 2.0 - input_icon_size - input_icon_gap), bounds.h);
+    } else bounds;
+    try renderControlText(scene, text_bounds, control_text_padding, control_label_height, placeholder, options.style.muted, .start);
 }
 
 pub fn renderInputGroup(scene: *ui.Scene, bounds: ui.Rect, addon: []const u8, placeholder: []const u8, options: RenderOptions) ui.RenderError!void {
@@ -580,6 +600,16 @@ pub fn renderPopover(scene: *ui.Scene, bounds: ui.Rect, trigger: []const u8, con
     try renderControlText(scene, content_bounds, popover_padding, control_label_height, content, options.style.text, .start);
 }
 
+pub fn renderHoverCard(scene: *ui.Scene, bounds: ui.Rect, trigger: []const u8, content: []const u8, options: RenderOptions) ui.RenderError!void {
+    try renderControlFrame(scene, hoverCardTriggerBounds(bounds), options.style.panel, options.style.border, control_radius);
+    try renderControlText(scene, hoverCardTriggerBounds(bounds), control_text_padding, control_label_height, trigger, options.style.text, .center);
+    const content_bounds = hoverCardContentBounds(bounds);
+    try scene.pushRect(content_bounds, options.style.panel, .fill, hover_card_radius, 0.0);
+    try scene.pushRect(content_bounds, options.style.border, .border, hover_card_radius, 0.0);
+    try scene.pushText(ui.Rect.init(content_bounds.x + hover_card_padding, content_bounds.y + hover_card_title_y, @max(min_extent, content_bounds.w - hover_card_padding * 2.0), hover_card_title_h), content, options.style.text);
+    try scene.pushText(ui.Rect.init(content_bounds.x + hover_card_padding, content_bounds.y + hover_card_detail_y, @max(min_extent, content_bounds.w - hover_card_padding * 2.0), hover_card_detail_h), hover_card_detail_label, options.style.muted);
+}
+
 pub fn renderDialog(scene: *ui.Scene, bounds: ui.Rect, title: []const u8, detail: []const u8, destructive: bool, options: RenderOptions) ui.RenderError!void {
     const trigger = dialogTriggerBounds(bounds);
     try renderControlFrame(scene, trigger, if (destructive) alert_danger else options.style.accent, options.style.border, control_radius);
@@ -590,6 +620,12 @@ pub fn renderDialog(scene: *ui.Scene, bounds: ui.Rect, title: []const u8, detail
     try scene.pushRect(content, if (destructive) alert_danger else options.style.border, .border, dialog_radius, 0.0);
     try scene.pushText(ui.Rect.init(content.x + dialog_padding, content.y + dialog_title_y, @max(min_extent, content.w - dialog_padding * 2.0), dialog_title_h), title, if (destructive) alert_danger else options.style.text);
     try scene.pushText(ui.Rect.init(content.x + dialog_padding, content.y + dialog_detail_y, @max(min_extent, content.w - dialog_padding * 2.0), dialog_detail_h), detail, options.style.muted);
+}
+
+pub fn renderDirection(scene: *ui.Scene, bounds: ui.Rect, active: u16, options: RenderOptions) ui.RenderError!void {
+    try renderDirectionItem(scene, directionItemBounds(bounds, 0), direction_ltr_label, active == 0, options);
+    try scene.pushIconQuad(.{ .bounds = directionIconBounds(bounds), .icon_id = icon.id(.route), .color = options.style.muted });
+    try renderDirectionItem(scene, directionItemBounds(bounds, 1), direction_rtl_label, active == 1, options);
 }
 
 pub fn renderDrawer(scene: *ui.Scene, bounds: ui.Rect, title: []const u8, detail: []const u8, options: RenderOptions) ui.RenderError!void {
@@ -659,6 +695,17 @@ pub fn dialogContentBounds(bounds: ui.Rect) ui.Rect {
     return ui.Rect.init(x, bounds.y, @max(min_extent, bounds.x + bounds.w - x), bounds.h);
 }
 
+pub fn directionItemBounds(bounds: ui.Rect, index: usize) ui.Rect {
+    return switch (index) {
+        0 => ui.Rect.init(bounds.x, bounds.y + direction_item_y, direction_item_w, direction_item_h),
+        else => ui.Rect.init(bounds.x + direction_second_x, bounds.y + direction_item_y, direction_item_w, direction_item_h),
+    };
+}
+
+fn directionIconBounds(bounds: ui.Rect) ui.Rect {
+    return ui.Rect.init(bounds.x + direction_icon_x, bounds.y + direction_icon_y, direction_icon_size, direction_icon_size);
+}
+
 pub fn drawerTriggerBounds(bounds: ui.Rect) ui.Rect {
     return ui.Rect.init(bounds.x, bounds.y + drawer_trigger_y, drawer_trigger_w, drawer_trigger_h);
 }
@@ -695,12 +742,44 @@ pub fn popoverContentBounds(bounds: ui.Rect) ui.Rect {
     return ui.Rect.init(x, bounds.y, @max(min_extent, bounds.x + bounds.w - x), bounds.h);
 }
 
+pub fn hoverCardTriggerBounds(bounds: ui.Rect) ui.Rect {
+    return ui.Rect.init(bounds.x, bounds.y + hover_card_trigger_y, hover_card_trigger_w, hover_card_trigger_h);
+}
+
+pub fn hoverCardContentBounds(bounds: ui.Rect) ui.Rect {
+    const x = bounds.x + hover_card_trigger_w + hover_card_gap;
+    return ui.Rect.init(x, bounds.y, @max(min_extent, bounds.x + bounds.w - x), bounds.h);
+}
+
 pub fn renderTooltip(scene: *ui.Scene, bounds: ui.Rect, trigger: []const u8, content: []const u8, options: RenderOptions) ui.RenderError!void {
     try renderControlFrame(scene, tooltipTriggerBounds(bounds), options.style.panel, options.style.border, control_radius);
     try renderControlText(scene, tooltipTriggerBounds(bounds), control_text_padding, control_label_height, trigger, options.style.text, .center);
     const tip = tooltipContentBounds(bounds);
     try scene.pushRect(tip, options.style.text, .fill, tooltip_radius, 0.0);
     try renderControlText(scene, tip, tooltip_padding, tooltip_text_h, content, options.style.bg, .center);
+}
+
+pub fn renderToast(scene: *ui.Scene, bounds: ui.Rect, title: []const u8, detail: []const u8, options: RenderOptions) ui.RenderError!void {
+    const toast = toastBounds(bounds);
+    try scene.pushRect(toast, options.style.panel, .fill, toast_radius, 0.0);
+    try scene.pushRect(toast, options.style.border, .border, toast_radius, 0.0);
+    try scene.pushIconQuad(.{ .bounds = toastIconBounds(toast), .icon_id = icon.id(.check), .color = options.style.accent });
+    const text_x = toast.x + toast_text_x;
+    try scene.pushText(ui.Rect.init(text_x, toast.y + toast_title_y, @max(min_extent, toast.x + toast.w - text_x - toast_padding), toast_title_h), title, options.style.text);
+    try scene.pushText(ui.Rect.init(text_x, toast.y + toast_detail_y, @max(min_extent, toast.x + toast.w - text_x - toast_padding), toast_detail_h), detail, options.style.muted);
+}
+
+pub fn renderSidebar(scene: *ui.Scene, bounds: ui.Rect, title: []const u8, item: []const u8, options: RenderOptions) ui.RenderError!void {
+    const rail = sidebarRailBounds(bounds);
+    try scene.pushRect(rail, options.style.panel, .fill, sidebar_radius, 0.0);
+    try scene.pushRect(rail, options.style.border, .border, sidebar_radius, 0.0);
+    try scene.pushIconQuad(.{ .bounds = sidebarTriggerBounds(bounds), .icon_id = icon.id(.menu), .color = options.style.text });
+    try scene.pushText(sidebarTitleBounds(bounds), title, options.style.muted);
+    const item_bounds = sidebarItemBounds(bounds);
+    try scene.pushRect(item_bounds, options.style.row, .fill, sidebar_item_radius, 0.0);
+    try scene.pushText(sidebarItemTextBounds(item_bounds), item, options.style.text);
+    const content = sidebarContentBounds(bounds);
+    try scene.pushRect(content, options.style.row, .fill, sidebar_radius, 0.0);
 }
 
 pub fn tooltipTriggerBounds(bounds: ui.Rect) ui.Rect {
@@ -710,6 +789,39 @@ pub fn tooltipTriggerBounds(bounds: ui.Rect) ui.Rect {
 fn tooltipContentBounds(bounds: ui.Rect) ui.Rect {
     const x = bounds.x + tooltip_trigger_w + tooltip_gap;
     return ui.Rect.init(x, bounds.y + tooltip_content_y, @max(min_extent, bounds.x + bounds.w - x), tooltip_content_h);
+}
+
+pub fn toastBounds(bounds: ui.Rect) ui.Rect {
+    return ui.Rect.init(bounds.x, bounds.y, bounds.w, @min(bounds.h, toast_h));
+}
+
+fn toastIconBounds(bounds: ui.Rect) ui.Rect {
+    return ui.Rect.init(bounds.x + toast_icon_x, bounds.y + (bounds.h - toast_icon_size) * 0.5, toast_icon_size, toast_icon_size);
+}
+
+fn sidebarRailBounds(bounds: ui.Rect) ui.Rect {
+    return ui.Rect.init(bounds.x, bounds.y, @min(bounds.w, sidebar_rail_w), bounds.h);
+}
+
+pub fn sidebarTriggerBounds(bounds: ui.Rect) ui.Rect {
+    return ui.Rect.init(bounds.x + sidebar_trigger_x, bounds.y + sidebar_trigger_y, sidebar_trigger_size, sidebar_trigger_size);
+}
+
+pub fn sidebarItemBounds(bounds: ui.Rect) ui.Rect {
+    return ui.Rect.init(bounds.x + sidebar_item_x, bounds.y + sidebar_item_y, @max(min_extent, sidebar_rail_w - sidebar_item_x * 2.0), sidebar_item_h);
+}
+
+fn sidebarTitleBounds(bounds: ui.Rect) ui.Rect {
+    return ui.Rect.init(bounds.x + sidebar_item_x, bounds.y + sidebar_title_y, @max(min_extent, sidebar_rail_w - sidebar_item_x * 2.0), sidebar_title_h);
+}
+
+fn sidebarItemTextBounds(bounds: ui.Rect) ui.Rect {
+    return ui.Rect.init(bounds.x + sidebar_item_padding, bounds.y + (bounds.h - sidebar_item_text_h) * 0.5, @max(min_extent, bounds.w - sidebar_item_padding * 2.0), sidebar_item_text_h);
+}
+
+fn sidebarContentBounds(bounds: ui.Rect) ui.Rect {
+    const x = bounds.x + sidebar_rail_w + sidebar_content_gap;
+    return ui.Rect.init(x, bounds.y, @max(min_extent, bounds.x + bounds.w - x), bounds.h);
 }
 
 pub fn renderProgress(scene: *ui.Scene, bounds: ui.Rect, value: f32, options: RenderOptions) ui.RenderError!void {
@@ -929,7 +1041,7 @@ pub fn renderCommand(scene: *ui.Scene, bounds: ui.Rect, placeholder: []const u8,
 
 pub fn renderField(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, placeholder: []const u8, options: RenderOptions) ui.RenderError!void {
     try scene.pushText(fieldLabelBounds(bounds), label, options.style.text);
-    try renderInput(scene, fieldInputBounds(bounds), placeholder, options);
+    try renderInput(scene, fieldInputBounds(bounds), placeholder, null, options);
 }
 
 fn fieldLabelBounds(bounds: ui.Rect) ui.Rect {
@@ -1128,6 +1240,12 @@ fn renderMenuItem(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, options:
     try renderControlText(scene, bounds, menu_item_padding, menu_item_text_h, label, options.style.text, .start);
 }
 
+fn renderDirectionItem(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, active: bool, options: RenderOptions) ui.RenderError!void {
+    try scene.pushRect(bounds, if (active) options.style.accent else options.style.row, .fill, direction_item_radius, 0.0);
+    try scene.pushRect(bounds, options.style.border, .border, direction_item_radius, 0.0);
+    try renderControlText(scene, bounds, direction_item_padding, direction_item_text_h, label, if (active) options.style.bg else options.style.text, .center);
+}
+
 fn renderComboboxOption(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, selected: bool, options: RenderOptions) ui.RenderError!void {
     try scene.pushRect(bounds, options.style.row, .fill, control_radius, 0.0);
     try renderControlText(scene, ui.Rect.init(bounds.x, bounds.y, @max(min_extent, bounds.w - combobox_option_indicator_w), bounds.h), combobox_option_padding, control_label_height, label, options.style.text, .start);
@@ -1194,8 +1312,8 @@ const BadgePaint = struct {
     border: ?ui.Color = null,
 };
 
-fn badgePaint(options: RenderOptions) BadgePaint {
-    return switch (options.badge_variant) {
+fn badgePaint(variant: common.BadgeVariant, options: RenderOptions) BadgePaint {
+    return switch (variant) {
         .default => alphaPaint(options.style.accent, options.style.accent),
         .secondary => .{ .fill = options.style.row, .text = options.style.text },
         .destructive => alphaPaint(badge_danger, badge_danger),
@@ -1216,16 +1334,16 @@ fn badgeLabelBounds(bounds: ui.Rect) ui.Rect {
     return ui.Rect.init(bounds.x + resolved_padding, bounds.y + (bounds.h - badge_text_height) * 0.5, @max(min_extent, bounds.w - resolved_padding * 2.0), badge_text_height);
 }
 
-pub fn surfaceRadiusFor(options: RenderOptions) f32 {
-    return switch (options.surface_variant) {
+pub fn surfaceRadiusFor(variant: common.SurfaceVariant) f32 {
+    return switch (variant) {
         .panel => surface_radius,
         .elevated => surface_radius + surface_elevated_radius_extra,
         .subtle => surface_radius,
     };
 }
 
-fn surfaceFillColor(options: RenderOptions) ui.Color {
-    return switch (options.surface_variant) {
+fn surfaceFillColor(variant: common.SurfaceVariant, options: RenderOptions) ui.Color {
+    return switch (variant) {
         .panel, .elevated => options.style.panel,
         .subtle => options.style.row,
     };
@@ -1247,6 +1365,7 @@ pub const preferred_badge = ui.Size{ .w = 96.0, .h = 24.0 };
 pub const preferred_alert = ui.Size{ .w = 260.0, .h = 64.0 };
 pub const preferred_accordion = ui.Size{ .w = 260.0, .h = 68.0 };
 pub const preferred_dialog = ui.Size{ .w = 240.0, .h = 52.0 };
+pub const preferred_direction = ui.Size{ .w = 150.0, .h = 36.0 };
 pub const preferred_aspect_ratio = ui.Size{ .w = 220.0, .h = 124.0 };
 pub const preferred_calendar = ui.Size{ .w = 240.0, .h = 152.0 };
 pub const preferred_carousel = ui.Size{ .w = 240.0, .h = 40.0 };
@@ -1265,7 +1384,10 @@ pub const preferred_menubar = ui.Size{ .w = 170.0, .h = 36.0 };
 pub const preferred_navigation_menu = ui.Size{ .w = 220.0, .h = 36.0 };
 pub const preferred_command = ui.Size{ .w = 220.0, .h = 36.0 };
 pub const preferred_field = ui.Size{ .w = 220.0, .h = 56.0 };
+pub const preferred_hover_card = ui.Size{ .w = 240.0, .h = 52.0 };
 pub const preferred_menu = ui.Size{ .w = 240.0, .h = 52.0 };
+pub const preferred_drawer = ui.Size{ .w = 240.0, .h = 76.0 };
+pub const preferred_sheet = ui.Size{ .w = 240.0, .h = 76.0 };
 pub const preferred_input_otp = ui.Size{ .w = 200.0, .h = 36.0 };
 pub const preferred_button_group = ui.Size{ .w = 160.0, .h = 36.0 };
 pub const preferred_toggle_group = ui.Size{ .w = 180.0, .h = 36.0 };
@@ -1285,6 +1407,8 @@ pub const preferred_slider = ui.Size{ .w = 220.0, .h = 42.0 };
 pub const preferred_tabs = ui.Size{ .w = 220.0, .h = 84.0 };
 pub const preferred_table = ui.Size{ .w = 260.0, .h = 64.0 };
 pub const preferred_tooltip = ui.Size{ .w = 240.0, .h = 44.0 };
+pub const preferred_toast = ui.Size{ .w = 240.0, .h = 52.0 };
+pub const preferred_sidebar = ui.Size{ .w = 240.0, .h = 64.0 };
 pub const preferred_row_item = ui.Size{ .w = 260.0, .h = 48.0 };
 
 const min_extent: f32 = 1.0;
@@ -1293,6 +1417,7 @@ pub const menubar_item_count: u32 = 3;
 pub const navigation_menu_item_count: u32 = 3;
 pub const input_otp_slot_count: usize = 6;
 pub const toggle_group_item_count: u32 = 3;
+pub const direction_item_count: u32 = 2;
 const accordion_trigger_h: f32 = 36.0;
 const accordion_trigger_text_y: f32 = 10.0;
 const accordion_icon_space: f32 = 22.0;
@@ -1408,6 +1533,8 @@ const row_radius: f32 = 4.0;
 const control_text_padding: f32 = 12.0;
 const control_label_height: f32 = 16.0;
 const control_average_char_width: f32 = 8.5;
+const input_icon_size: f32 = 16.0;
+const input_icon_gap: f32 = 8.0;
 const input_group_addon_min_w: f32 = 42.0;
 const input_group_addon_max_w: f32 = 96.0;
 const input_group_addon_padding: f32 = 10.0;
@@ -1438,6 +1565,17 @@ const popover_trigger_h: f32 = 30.0;
 const popover_gap: f32 = 10.0;
 const popover_radius: f32 = 8.0;
 const popover_padding: f32 = 10.0;
+const hover_card_trigger_y: f32 = 6.0;
+const hover_card_trigger_w: f32 = 66.0;
+const hover_card_trigger_h: f32 = 30.0;
+const hover_card_gap: f32 = 10.0;
+const hover_card_radius: f32 = 8.0;
+const hover_card_padding: f32 = 10.0;
+const hover_card_title_y: f32 = 8.0;
+const hover_card_title_h: f32 = 14.0;
+const hover_card_detail_y: f32 = 25.0;
+const hover_card_detail_h: f32 = 12.0;
+const hover_card_detail_label = "Hover content";
 const dialog_trigger_y: f32 = 6.0;
 const dialog_trigger_w: f32 = 66.0;
 const dialog_trigger_h: f32 = 30.0;
@@ -1451,6 +1589,48 @@ const dialog_detail_h: f32 = 12.0;
 const dialog_trigger_padding: f32 = 8.0;
 const dialog_open_label = "Open";
 const dialog_delete_label = "Delete";
+const direction_ltr_label = "LTR";
+const direction_rtl_label = "RTL";
+const direction_item_y: f32 = 8.0;
+const direction_item_w: f32 = 42.0;
+const direction_item_h: f32 = 20.0;
+const direction_item_radius: f32 = 6.0;
+const direction_item_padding: f32 = 5.0;
+const direction_item_text_h: f32 = 12.0;
+const direction_icon_x: f32 = 54.0;
+const direction_icon_y: f32 = 11.0;
+const direction_icon_size: f32 = 18.0;
+const direction_second_x: f32 = 84.0;
+const overlay_open_label = "Open";
+const overlay_title_h: f32 = 14.0;
+const overlay_detail_h: f32 = 12.0;
+const drawer_trigger_y: f32 = 4.0;
+const drawer_trigger_w: f32 = 62.0;
+const drawer_trigger_h: f32 = 30.0;
+const drawer_trigger_padding: f32 = 8.0;
+const drawer_content_y: f32 = 38.0;
+const drawer_content_inset_x: f32 = 10.0;
+const drawer_radius: f32 = 10.0;
+const drawer_padding: f32 = 12.0;
+const drawer_handle_w: f32 = 58.0;
+const drawer_handle_h: f32 = 4.0;
+const drawer_handle_y: f32 = 5.0;
+const drawer_handle_radius: f32 = 2.0;
+const drawer_title_y: f32 = 14.0;
+const drawer_detail_y: f32 = 31.0;
+const sheet_trigger_y: f32 = 4.0;
+const sheet_trigger_w: f32 = 62.0;
+const sheet_trigger_h: f32 = 30.0;
+const sheet_trigger_padding: f32 = 8.0;
+const sheet_content_w: f32 = 96.0;
+const sheet_content_min_left: f32 = 82.0;
+const sheet_radius: f32 = 8.0;
+const sheet_padding: f32 = 10.0;
+const sheet_title_y: f32 = 10.0;
+const sheet_detail_y: f32 = 29.0;
+const sheet_close_size: f32 = 12.0;
+const sheet_close_inset: f32 = 8.0;
+const sheet_close_space: f32 = 18.0;
 pub const dropdown_menu_trigger = "Open";
 pub const context_menu_trigger = "Context";
 const menu_trigger_y: f32 = 4.0;
@@ -1485,6 +1665,30 @@ const tooltip_content_h: f32 = 24.0;
 const tooltip_radius: f32 = 6.0;
 const tooltip_padding: f32 = 8.0;
 const tooltip_text_h: f32 = 12.0;
+const toast_h: f32 = 52.0;
+const toast_radius: f32 = 8.0;
+const toast_padding: f32 = 10.0;
+const toast_icon_x: f32 = 12.0;
+const toast_icon_size: f32 = 16.0;
+const toast_text_x: f32 = 38.0;
+const toast_title_y: f32 = 10.0;
+const toast_title_h: f32 = 14.0;
+const toast_detail_y: f32 = 27.0;
+const toast_detail_h: f32 = 12.0;
+const sidebar_rail_w: f32 = 62.0;
+const sidebar_content_gap: f32 = 10.0;
+const sidebar_radius: f32 = 8.0;
+const sidebar_trigger_x: f32 = 8.0;
+const sidebar_trigger_y: f32 = 8.0;
+const sidebar_trigger_size: f32 = 16.0;
+const sidebar_title_y: f32 = 10.0;
+const sidebar_title_h: f32 = 12.0;
+const sidebar_item_x: f32 = 6.0;
+const sidebar_item_y: f32 = 34.0;
+const sidebar_item_h: f32 = 20.0;
+const sidebar_item_radius: f32 = 4.0;
+const sidebar_item_padding: f32 = 5.0;
+const sidebar_item_text_h: f32 = 12.0;
 const avatar_size: f32 = 40.0;
 const avatar_text_height: f32 = 14.0;
 const avatar_label_inset: f32 = 6.0;

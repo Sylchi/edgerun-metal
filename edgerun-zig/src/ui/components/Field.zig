@@ -35,8 +35,8 @@ pub const Field = struct {
         return component_render.measureFixed(component_render.preferred_field, constraints);
     }
 
-    pub fn toObject(self: Field, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
-        return component_codec.twoStringObject(.field, self.id, self.label, self.placeholder, ui_out, object_out, req, epoch);
+    pub fn toObject(self: Field, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
+        return component_codec.twoStringObject(.field, self.id, self.label, self.placeholder, ui_out, object_out, epoch);
     }
 
     pub fn writeRecord(self: Field, writer: *component_codec.Writer, index: usize) bool {
@@ -56,7 +56,7 @@ test "field component serializes to canonical object and deserializes" {
     var ui_raw: [192]u8 = undefined;
     var object_raw: [object.header_size + 192]u8 = undefined;
 
-    const canonical = field.toObject(&ui_raw, &object_raw, component_test.req(), component_test.epoch()).?;
+    const canonical = field.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
     const decoded = try Field.fromView(try object.View.decode(canonical));
 
     try std.testing.expectEqual(field.id, decoded.id);

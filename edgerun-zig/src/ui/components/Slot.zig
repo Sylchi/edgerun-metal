@@ -38,14 +38,15 @@ pub fn Slot(comptime Component: type) type {
             return component_render.collectComponentInteractions(Component, collector, bounds, self.child);
         }
 
-        pub fn toObject(self: Self, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
+        pub fn toObject(self: Self, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
             var writer = codec.Writer.init(ui_out, 2, 1, .column, 0, 0) orelse return null;
             if (!writer.record(0, .slot, self.id, .{ .offset = 1, .len = 0 }, .{})) return null;
             if (!component_io.writeRecord(Component, &writer, 1, self.child)) return null;
-            return writer.objectNode(object_out, req, epoch);
+            return writer.objectNode(object_out, component_io.requirements(), epoch);
         }
 
         pub fn fromView(view: object.View) Error!Self {
+            try component_io.validateView(view);
             var nodes: [2]ui.Node = undefined;
             const root = codec.decodeView(view, &nodes) catch return error.Corrupt;
             return switch (root) {
@@ -73,21 +74,23 @@ pub fn SlotTree(comptime Component: type) type {
         const Self = @This();
         const SlotType = Slot(Component);
 
-        pub fn toTreeObjects(self: Self, layout_out: []u8, tree_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?tree_codec.TreeObjects {
+        pub fn toTreeObjects(self: Self, layout_out: []u8, tree_out: []u8, epoch: clock.Stamp) ?tree_codec.TreeObjects {
             var layout_body: [tree_codec.slot_layout_size]u8 = undefined;
             tree_codec.encodeSlotLayout(self.id, &layout_body) orelse return null;
-            const layout = (object.NodeWriter{ .out = layout_out }).bytesNode(req, epoch, &layout_body) catch return null;
+            const layout = (object.NodeWriter{ .out = layout_out }).bytesNode(component_io.requirements(), epoch, &layout_body) catch return null;
 
             var children: [2]object.Child = undefined;
             const layout_view = object.View.decode(layout) catch return null;
+            component_io.validateView(self.child) catch return null;
             children[0] = tree_codec.childRecord(layout_view, 0) catch return null;
             children[1] = tree_codec.childRecord(self.child, children[0].logical_len) catch return null;
 
-            const tree = (object.NodeWriter{ .out = tree_out }).treeNode(req, epoch, &children) catch return null;
+            const tree = (object.NodeWriter{ .out = tree_out }).treeNode(component_io.requirements(), epoch, &children) catch return null;
             return .{ .layout = layout, .tree = tree };
         }
 
         pub fn fromTree(tree: object.View, resolved_children: []const object.View) Error!SlotType {
+            try component_io.validateTreeView(tree);
             if (tree.header.kind != .tree or tree.header.child_count != 2) return error.Corrupt;
             if (resolved_children.len != 2) return error.ChildMismatch;
 

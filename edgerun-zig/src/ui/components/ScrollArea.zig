@@ -28,9 +28,9 @@ pub const ScrollArea = struct {
         return component_render.measureFixed(component_render.preferred_scroll_area, constraints);
     }
 
-    pub fn toObject(self: ScrollArea, ui_out: []u8, object_out: []u8, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
+    pub fn toObject(self: ScrollArea, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
         _ = self;
-        return component_codec.emptyObject(.scroll_area, ui_out, object_out, req, epoch);
+        return component_codec.emptyObject(.scroll_area, ui_out, object_out, epoch);
     }
 
     pub fn writeRecord(self: ScrollArea, writer: *component_codec.Writer, index: usize) bool {
@@ -51,7 +51,7 @@ test "scroll area component serializes to canonical object and deserializes" {
     var ui_raw: [128]u8 = undefined;
     var object_raw: [object.header_size + 128]u8 = undefined;
 
-    const canonical = scroll_area.toObject(&ui_raw, &object_raw, component_test.req(), component_test.epoch()).?;
+    const canonical = scroll_area.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
     _ = try ScrollArea.fromView(try object.View.decode(canonical));
 }
 
