@@ -1390,6 +1390,7 @@ fn mapUiRenderError(err: ui.RenderError) App.UiError {
     return switch (err) {
         error.CommandBudgetExceeded, error.ClipBudgetExceeded => error.RenderBudgetExceeded,
         error.InvalidBounds => error.InvalidBounds,
+        error.UnsupportedComponent => error.UnsupportedComponent,
     };
 }
 

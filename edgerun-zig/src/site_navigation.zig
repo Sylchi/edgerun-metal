@@ -1,4 +1,5 @@
 const std = @import("std");
+const component_gallery = @import("component_gallery.zig");
 const site_blog = @import("site_blog.zig");
 const site_chrome = @import("site_chrome.zig");
 
@@ -16,6 +17,7 @@ pub const Route = struct {
     view: View = .landing,
     selected_blog_post_id: u32 = 0,
     blog_arc_filter_index: ?usize = null,
+    selected_component_index: ?usize = null,
 };
 
 pub fn fromPath(path: []const u8) Route {
@@ -23,7 +25,10 @@ pub fn fromPath(path: []const u8) Route {
     if (std.mem.eql(u8, trimmed, "/academy")) return blogIndex(null);
     if (std.mem.eql(u8, trimmed, "/apps")) return .{ .view = .apps };
     if (std.mem.eql(u8, trimmed, "/docs") or std.mem.eql(u8, trimmed, "/docs/components")) return .{ .view = .components };
-    if (std.mem.startsWith(u8, trimmed, "/docs/components/")) return .{ .view = .components };
+    if (std.mem.startsWith(u8, trimmed, "/docs/components/")) {
+        const slug = trimmed["/docs/components/".len..];
+        return .{ .view = .components, .selected_component_index = component_gallery.indexBySlug(slug) };
+    }
     if (std.mem.startsWith(u8, trimmed, "/academy/")) {
         const raw_id = std.fmt.parseUnsigned(u32, trimmed["/academy/".len..], 10) catch return blogIndex(null);
         return .{
@@ -59,7 +64,7 @@ pub fn writePath(out: []u8, route: Route) error{RouteBufferTooSmall}!usize {
         .landing => "/",
         .blog => if (route.selected_blog_post_id == 0) "/academy" else return writePostPath(out, route.selected_blog_post_id),
         .apps => "/apps",
-        .components => "/docs/components",
+        .components => if (route.selected_component_index) |index| return writeComponentPath(out, index) else "/docs/components",
     };
     if (value.len > out.len) return error.RouteBufferTooSmall;
     @memcpy(out[0..value.len], value);
@@ -86,6 +91,9 @@ pub fn trimPath(path: []const u8) []const u8 {
 
 fn routeFromDynamicHit(hit_id: u32, current: Route) ?Route {
     _ = current;
+    if (component_gallery.indexByCatalogHit(hit_id)) |index| {
+        return .{ .view = .components, .selected_component_index = index };
+    }
     if (site_blog.postById(hit_id) != null) {
         return .{ .view = .blog, .selected_blog_post_id = hit_id };
     }
@@ -104,12 +112,21 @@ fn writePostPath(out: []u8, post_id: u32) error{RouteBufferTooSmall}!usize {
     return value.len;
 }
 
+fn writeComponentPath(out: []u8, index: usize) error{RouteBufferTooSmall}!usize {
+    if (index >= component_gallery.component_catalog.len) return writePath(out, .{ .view = .components });
+    const value = component_gallery.component_catalog[index].route;
+    if (value.len > out.len) return error.RouteBufferTooSmall;
+    @memcpy(out[0..value.len], value);
+    return value.len;
+}
+
 test "navigation parses browser and native site routes" {
     try std.testing.expectEqual(View.landing, fromPath("").view);
     try std.testing.expectEqual(View.blog, fromPath("/academy").view);
     try std.testing.expectEqual(View.apps, fromPath("/apps").view);
     try std.testing.expectEqual(View.components, fromPath("/docs/components").view);
     try std.testing.expectEqual(View.components, fromPath("/docs/components/button").view);
+    try std.testing.expectEqual(component_gallery.indexBySlug("button").?, fromPath("/docs/components/button").selected_component_index.?);
     const post_id = site_blog.postIdAt(0);
     var post_path: [route_path_capacity]u8 = undefined;
     const post_path_text = try std.fmt.bufPrint(&post_path, "/academy/{d}", .{post_id});
@@ -136,6 +153,12 @@ test "navigation writes browser hash routes from shared state" {
     try std.testing.expectEqualStrings("/docs/components", path[0..components_len]);
     const components_hash_len = try writeHash(&hash, components);
     try std.testing.expectEqualStrings("#/docs/components", hash[0..components_hash_len]);
+
+    const button = Route{ .view = .components, .selected_component_index = component_gallery.indexBySlug("button") };
+    const button_len = try writePath(&path, button);
+    try std.testing.expectEqualStrings("/docs/components/button", path[0..button_len]);
+    const button_hash_len = try writeHash(&hash, button);
+    try std.testing.expectEqualStrings("#/docs/components/button", hash[0..button_hash_len]);
 }
 
 test "navigation maps shared hit ids to routes" {
@@ -143,6 +166,7 @@ test "navigation maps shared hit ids to routes" {
     try std.testing.expectEqual(View.components, fromHit(site_chrome.docs_button_id, .{}).?.view);
     try std.testing.expectEqual(View.blog, fromHit(site_chrome.blog_button_id, .{}).?.view);
     try std.testing.expectEqual(View.apps, fromHit(site_chrome.apps_button_id, .{}).?.view);
+    try std.testing.expectEqual(component_gallery.indexBySlug("button").?, fromHit(component_gallery.first_catalog_card_id + 7, .{}).?.selected_component_index.?);
     const post_id = site_blog.postIdAt(0);
     try std.testing.expectEqual(post_id, fromHit(post_id, .{}).?.selected_blog_post_id);
 }

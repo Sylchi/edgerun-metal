@@ -3,6 +3,7 @@ const renderer_ir = @import("renderer_ir.zig");
 const renderer_present = @import("renderer_present.zig");
 const renderer_surface = @import("renderer_surface.zig");
 const ui = @import("ui.zig");
+const ui_components = @import("ui_components.zig");
 
 pub const Error = renderer_present.Error || error{
     InvalidMode,
@@ -575,7 +576,7 @@ fn testScene(out: []ui.Command) !ui.Scene {
     nodes[1] = .{ .button = .{ .id = 3, .label = "Go" } };
     const root = ui.Node{ .stack = .{ .axis = .column, .children = &nodes } };
     var scene = ui.Scene.init(out);
-    try ui.render(&scene, root, .{ .x = 0, .y = 0, .w = 320, .h = 240 }, .{});
+    try ui_components.renderNode(&scene, .{ .x = 0, .y = 0, .w = 320, .h = 240 }, root, .{});
     return scene;
 }
 
@@ -666,10 +667,10 @@ test "gpu renderer encodes canonical ir frames" {
     const surfaces = [_]Surface{testSurface()};
     const receipt = try renderer.renderIrWithResources(&surfaces, buffers, .{ .font_atlas = true });
     try std.testing.expect(receipt.valid());
-    try std.testing.expectEqual(ui.RectMode.shadow, primitives[1].rect_mode);
+    try std.testing.expectEqual(ui.RectMode.fill, primitives[1].rect_mode);
     try std.testing.expect(primitives[1].radius > 0.0);
     try std.testing.expectEqual(renderer_present.Transport.gpu_command_stream, receipt.presentation_transport);
-    try std.testing.expectEqual(@as(usize, 3), receipt.presentation_primitive_count);
+    try std.testing.expectEqual(@as(usize, 2), receipt.presentation_primitive_count);
     try std.testing.expectEqual(@as(usize, 1), test_device.began);
     try std.testing.expect(test_device.uploaded == receipt.primitive_count);
     try std.testing.expect(test_device.rendered == receipt.dirty_tile_count);

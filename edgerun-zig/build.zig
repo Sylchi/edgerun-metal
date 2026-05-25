@@ -125,6 +125,32 @@ pub fn build(b: *std.Build) void {
     const sdk_bench_step = b.step("sdk-bench", "Benchmark deterministic Edgerun SDK setup and simulation");
     sdk_bench_step.dependOn(&run_sdk_bench.step);
 
+    const media_video_dump = b.addExecutable(.{
+        .name = "edgerun-media-video-dump",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/media_video_dump.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+
+    const run_media_video_dump = b.addRunArtifact(media_video_dump);
+    if (b.args) |args| run_media_video_dump.addArgs(args);
+    const media_video_dump_step = b.step("media-video-dump", "Decode a VP8 IVF/WebM file to PPM frames");
+    media_video_dump_step.dependOn(&run_media_video_dump.step);
+
+    const media_video_dump_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/media_video_dump.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+
+    const run_media_video_dump_tests = b.addRunArtifact(media_video_dump_tests);
+    const media_video_dump_test_step = b.step("media-video-dump-test", "Run media video dump host-tool tests");
+    media_video_dump_test_step.dependOn(&run_media_video_dump_tests.step);
+
     const ui_core_tests = b.addTest(.{
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/ui_core_test.zig"),
@@ -289,6 +315,8 @@ pub fn build(b: *std.Build) void {
     ui_browser.root_module.export_symbol_names = &.{
         "er_ui_max_width",
         "er_ui_max_height",
+        "er_ui_pixels_ptr",
+        "er_ui_pixels_len",
         "er_ui_gpu_rect_float_stride",
         "er_ui_gpu_rect_buffer_ptr",
         "er_ui_gpu_rect_buffer_len",
@@ -298,6 +326,9 @@ pub fn build(b: *std.Build) void {
         "er_ui_gpu_icon_vertex_float_stride",
         "er_ui_gpu_icon_vertex_buffer_ptr",
         "er_ui_gpu_icon_vertex_buffer_len",
+        "er_ui_gpu_icon_line_vertex_float_stride",
+        "er_ui_gpu_icon_line_vertex_buffer_ptr",
+        "er_ui_gpu_icon_line_vertex_buffer_len",
         "er_ui_gpu_image_vertex_float_stride",
         "er_ui_gpu_image_vertex_buffer_ptr",
         "er_ui_gpu_image_vertex_buffer_len",
@@ -307,6 +338,8 @@ pub fn build(b: *std.Build) void {
         "er_ui_gpu_overlay_text_vertex_buffer_len",
         "er_ui_gpu_overlay_icon_vertex_buffer_ptr",
         "er_ui_gpu_overlay_icon_vertex_buffer_len",
+        "er_ui_gpu_overlay_icon_line_vertex_buffer_ptr",
+        "er_ui_gpu_overlay_icon_line_vertex_buffer_len",
         "er_ui_post_image_rgba_ptr",
         "er_ui_post_image_rgba_len",
         "er_ui_post_image_width",
@@ -315,8 +348,6 @@ pub fn build(b: *std.Build) void {
         "er_ui_font_atlas_height",
         "er_ui_font_atlas_ptr",
         "er_ui_font_atlas_generation",
-        "er_ui_icon_vector_ptr",
-        "er_ui_icon_vector_len",
         "er_ui_width",
         "er_ui_height",
         "er_ui_input_ptr",
@@ -325,6 +356,7 @@ pub fn build(b: *std.Build) void {
         "er_ui_set_device_scale",
         "er_ui_browser_boot",
         "er_ui_browser_event",
+        "er_ui_browser_event_bytes",
         "er_ui_host_command_count",
         "er_ui_host_command_kind",
         "er_ui_host_command_id",
@@ -336,6 +368,8 @@ pub fn build(b: *std.Build) void {
         "er_ui_bootstrap_js_ptr",
         "er_ui_bootstrap_js_len",
         "er_ui_build_browser_frame",
+        "er_ui_render_browser_frame",
+        "er_ui_render_icon_svg_test",
     };
     const install_ui_browser = b.addInstallArtifact(ui_browser, .{});
     const wasm_entry = b.addExecutable(.{

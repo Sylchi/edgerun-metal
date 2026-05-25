@@ -3,6 +3,7 @@ const bytes = @import("bytes.zig");
 const clock = @import("clock.zig");
 const object = @import("object.zig");
 const ui = @import("ui.zig");
+const ui_components = @import("ui_components.zig");
 
 pub const Error = error{
     Corrupt,
@@ -152,14 +153,14 @@ test "decode ui bytes into borrowed nodes and render paint" {
     try std.testing.expect(cursor.record(1, .input, 10, search.?, .{}));
     try std.testing.expect(cursor.record(2, .row_item, 20, row_title.?, row_detail.?));
     try std.testing.expect(cursor.record(3, .slot, 7, .{ .offset = 4, .len = 0 }, .{}));
-    try std.testing.expect(cursor.record(4, .button, 30, button.?, .{}));
+    try std.testing.expect(cursor.record(4, .badge, 30, button.?, .{}));
 
     var nodes: [5]ui.Node = undefined;
     const root = try decodeBytes(cursor.written(), &nodes);
 
     var commands: [32]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
-    try ui.render(&scene, root, .{ .x = 0, .y = 0, .w = 320, .h = 240 }, .{});
+    try ui_components.renderNode(&scene, .{ .x = 0, .y = 0, .w = 320, .h = 240 }, root, .{});
 
     try std.testing.expect(hasText(scene.written(), "Render"));
 }

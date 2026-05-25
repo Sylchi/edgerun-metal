@@ -1,5 +1,6 @@
 pub const image = @import("image.zig");
 pub const video = @import("video.zig");
+pub const audio = @import("audio.zig");
 
 pub const Header = image.Header;
 pub const DecodeError = image.DecodeError;
@@ -41,4 +42,5 @@ pub const webpAnimationDecoderScratchByteLen = image.webpAnimationDecoderScratch
 test {
     _ = image;
     _ = video;
+    _ = audio;
 }

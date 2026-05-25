@@ -3,6 +3,7 @@ const renderer_font_atlas = @import("renderer_font_atlas.zig");
 const renderer_ir = @import("renderer_ir.zig");
 const renderer_software = @import("renderer_software.zig");
 const ui = @import("ui.zig");
+const ui_components = @import("ui_components.zig");
 
 const width: usize = 2560;
 const height: usize = 1440;
@@ -31,7 +32,7 @@ fn renderSnapshot(init: std.process.Init, out_path: []const u8) !void {
 
     var commands: [max_commands]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
-    try ui.render(&scene, root, .{ .x = 0, .y = 0, .w = width, .h = height }, .{});
+    try ui_components.renderNode(&scene, .{ .x = 0, .y = 0, .w = width, .h = height }, root, .{});
 
     const pixels = try allocator.alloc(ui.Color, width * height);
     defer allocator.free(pixels);
@@ -80,7 +81,7 @@ test "snapshot packs and rasterizes through renderer ir" {
     const root = sampleRoot(&nodes);
     var commands: [max_commands]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
-    try ui.render(&scene, root, .{ .x = 0, .y = 0, .w = 320, .h = 240 }, .{});
+    try ui_components.renderNode(&scene, .{ .x = 0, .y = 0, .w = 320, .h = 240 }, root, .{});
 
     var ir_storage = SnapshotIrStorage{};
     const buffers = ir_storage.buffers();

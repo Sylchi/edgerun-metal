@@ -7,6 +7,7 @@ pub const Error = error{
     InvalidIcon,
     CommandBudgetExceeded,
     ClipBudgetExceeded,
+    UnsupportedComponent,
 };
 
 pub const Axis = enum {
@@ -108,6 +109,7 @@ fn mapRenderError(err: ui.RenderError) Error {
         error.CommandBudgetExceeded => error.CommandBudgetExceeded,
         error.ClipBudgetExceeded => error.ClipBudgetExceeded,
         error.InvalidBounds => error.CommandBudgetExceeded,
+        error.UnsupportedComponent => error.UnsupportedComponent,
     };
 }
 

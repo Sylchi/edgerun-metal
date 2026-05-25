@@ -52,21 +52,33 @@ pub const Button = struct {
 fn renderButton(scene: *ui.Scene, bounds: ui.Rect, button: Button, options: RenderOptions) ui.RenderError!void {
     const text_color = switch (options.button_variant) {
         .primary => options.style.bg,
+        .secondary => options.style.text,
         .outline => options.style.text,
         .ghost => options.style.muted,
+        .destructive => ui.Color{ .r = 255, .g = 255, .b = 255 },
+        .link => options.style.accent,
     };
     switch (options.button_variant) {
         .primary => {
             try scene.pushRect(bounds, options.style.accent, .fill, radius, 0.0);
             try scene.pushRect(bounds, options.style.accent, .border, radius, 0.0);
         },
+        .secondary => {
+            try scene.pushRect(bounds, options.style.row, .fill, radius, 0.0);
+            try scene.pushRect(bounds, options.style.border, .border, radius, 0.0);
+        },
         .outline => {
             try scene.pushRect(bounds, options.style.panel, .fill, radius, 0.0);
             try scene.pushRect(bounds, options.style.border, .border, radius, 0.0);
         },
+        .destructive => {
+            try scene.pushRect(bounds, button_danger, .fill, radius, 0.0);
+            try scene.pushRect(bounds, button_danger, .border, radius, 0.0);
+        },
         .ghost => {
             try scene.pushRect(bounds, ui.Color.clear, .fill, radius, 0.0);
         },
+        .link => {},
     }
     try renderContent(scene, bounds, button.label, text_color, options.button_leading_icon, options.button_trailing_icon);
 }
@@ -143,6 +155,7 @@ const icon_gap: f32 = 8.0;
 const content_min_x: f32 = 14.0;
 const min_width: f32 = 44.0;
 const max_width: f32 = 4096.0;
+const button_danger = ui.Color{ .r = 225, .g = 29, .b = 72 };
 
 test "button component serializes to canonical object and deserializes" {
     const button = Button{ .id = 7, .label = "Run" };
@@ -162,4 +175,40 @@ test "button component measurement follows label width" {
 
     try std.testing.expect(long.preferred.w > short.preferred.w);
     try std.testing.expectEqual(height, long.preferred.h);
+}
+
+test "button component renders extended reference variants" {
+    var commands: [32]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+
+    try renderButton(&scene, ui.Rect.init(0, 0, 120, height), .{ .id = 1, .label = "Delete" }, .{ .button_variant = .destructive });
+    try renderButton(&scene, ui.Rect.init(0, 44, 120, height), .{ .id = 2, .label = "Docs" }, .{ .button_variant = .link });
+
+    try std.testing.expect(hasRectColor(scene.written(), button_danger));
+    try std.testing.expect(!hasRectBounds(scene.written(), ui.Rect.init(0, 44, 120, height)));
+    try std.testing.expect(hasTextColor(scene.written(), ui.Color.accent));
+}
+
+fn hasRectColor(commands: []const ui.Command, color: ui.Color) bool {
+    for (commands) |command| switch (command) {
+        .rect => |rect| if (std.meta.eql(rect.color, color)) return true,
+        else => {},
+    };
+    return false;
+}
+
+fn hasRectBounds(commands: []const ui.Command, bounds: ui.Rect) bool {
+    for (commands) |command| switch (command) {
+        .rect => |rect| if (std.meta.eql(rect.bounds, bounds)) return true,
+        else => {},
+    };
+    return false;
+}
+
+fn hasTextColor(commands: []const ui.Command, color: ui.Color) bool {
+    for (commands) |command| switch (command) {
+        .text => |text| if (std.meta.eql(text.color, color)) return true,
+        else => {},
+    };
+    return false;
 }

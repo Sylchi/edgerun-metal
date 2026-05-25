@@ -143,13 +143,12 @@ pub fn renderText(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, options:
 }
 
 pub fn renderBadge(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, options: RenderOptions) ui.RenderError!void {
-    const color = badgeColor(options);
-    var fill = color;
-    fill.a = badge_fill_alpha;
+    const paint = badgePaint(options);
     const resolved_height = @min(badge_height, bounds.h);
     const badge_bounds = ui.Rect.init(bounds.x, bounds.y + (bounds.h - resolved_height) * 0.5, bounds.w, resolved_height);
-    try scene.pushRect(badge_bounds, fill, .fill, resolved_height * 0.5, 0.0);
-    try scene.pushAlignedText(badgeLabelBounds(badge_bounds), label, color, .center);
+    if (paint.fill.a != 0) try scene.pushRect(badge_bounds, paint.fill, .fill, resolved_height * 0.5, 0.0);
+    if (paint.border) |border| try scene.pushRect(badge_bounds, border, .border, resolved_height * 0.5, 0.0);
+    try scene.pushAlignedText(badgeLabelBounds(badge_bounds), label, paint.text, .center);
 }
 
 pub fn renderSurface(scene: *ui.Scene, bounds: ui.Rect, title: []const u8, detail: []const u8, options: RenderOptions) ui.RenderError!void {
@@ -181,16 +180,14 @@ pub fn renderSurfaceFrame(scene: *ui.Scene, bounds: ui.Rect, options: RenderOpti
 }
 
 pub fn renderInput(scene: *ui.Scene, bounds: ui.Rect, placeholder: []const u8, options: RenderOptions) ui.RenderError!void {
-    try scene.pushRect(bounds, options.style.panel, .fill, control_radius, 0.0);
-    try scene.pushRect(bounds, options.style.border, .border, control_radius, 0.0);
+    try renderControlFrame(scene, bounds, options.style.panel, options.style.border, control_radius);
     if (contentInset(bounds, input_text_padding)) |placeholder_bounds| {
         try scene.push(.{ .text = .{ .origin = placeholder_bounds, .value = placeholder, .color = options.style.muted } });
     }
 }
 
 pub fn renderTextarea(scene: *ui.Scene, bounds: ui.Rect, placeholder: []const u8, options: RenderOptions) ui.RenderError!void {
-    try scene.pushRect(bounds, options.style.panel, .fill, control_radius, 0.0);
-    try scene.pushRect(bounds, options.style.border, .border, control_radius, 0.0);
+    try renderControlFrame(scene, bounds, options.style.panel, options.style.border, control_radius);
     const text_bounds = bounds.insetUniform(textarea_padding);
     if (text_bounds.valid()) {
         try scene.pushWrappedText(text_bounds, placeholder, options.style.muted, .{
@@ -202,8 +199,7 @@ pub fn renderTextarea(scene: *ui.Scene, bounds: ui.Rect, placeholder: []const u8
 }
 
 pub fn renderSelect(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, options: RenderOptions) ui.RenderError!void {
-    try scene.pushRect(bounds, options.style.panel, .fill, control_radius, 0.0);
-    try scene.pushRect(bounds, options.style.border, .border, control_radius, 0.0);
+    try renderControlFrame(scene, bounds, options.style.panel, options.style.border, control_radius);
     if (contentInset(bounds, input_text_padding)) |label_bounds| {
         const text_bounds = ui.Rect.init(label_bounds.x, label_bounds.y, @max(min_extent, label_bounds.w - select_arrow_w), label_bounds.h);
         try scene.push(.{ .text = .{ .origin = text_bounds, .value = label, .color = options.style.text } });
@@ -264,8 +260,7 @@ pub fn renderAvatar(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, option
 pub fn renderKbd(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, options: RenderOptions) ui.RenderError!void {
     const height = @min(kbd_height, @max(min_extent, bounds.h));
     const kbd_bounds = ui.Rect.init(bounds.x, bounds.y + (bounds.h - height) * 0.5, bounds.w, height);
-    try scene.pushRect(kbd_bounds, options.style.row, .fill, control_radius, 0.0);
-    try scene.pushRect(kbd_bounds, options.style.border, .border, control_radius, 0.0);
+    try renderControlFrame(scene, kbd_bounds, options.style.row, options.style.border, control_radius);
     if (contentInset(kbd_bounds, kbd_label_padding)) |label_bounds| {
         try scene.push(.{ .text = .{ .origin = label_bounds.withHeightCentered(kbd_text_height), .value = label, .color = options.style.text, .alignment = .center } });
     }
@@ -345,6 +340,11 @@ fn contentInset(bounds: ui.Rect, padding: f32) ?ui.Rect {
     return if (out.valid()) out else null;
 }
 
+fn renderControlFrame(scene: *ui.Scene, bounds: ui.Rect, fill: ui.Color, border: ui.Color, radius: f32) ui.RenderError!void {
+    try scene.pushRect(bounds, fill, .fill, radius, 0.0);
+    try scene.pushRect(bounds, border, .border, radius, 0.0);
+}
+
 fn rowTitleBounds(bounds: ui.Rect, centered: bool) ?ui.Rect {
     const row_bounds = if (centered) bounds.withHeightCentered(row_title_height) else ui.Rect.init(bounds.x, bounds.y + row_title_offset_y, bounds.w, row_title_height);
     return rowTextBounds(row_bounds);
@@ -368,12 +368,27 @@ fn renderProgressTrack(scene: *ui.Scene, track: ui.Rect, value: f32, options: Re
     try scene.pushRect(ui.Rect.init(track.x, track.y, fill_width, track.h), options.style.accent, .fill, radius, 0.0);
 }
 
-fn badgeColor(options: RenderOptions) ui.Color {
+const BadgePaint = struct {
+    fill: ui.Color,
+    text: ui.Color,
+    border: ?ui.Color = null,
+};
+
+fn badgePaint(options: RenderOptions) BadgePaint {
     return switch (options.badge_variant) {
-        .accent => options.style.accent,
-        .neutral => options.style.muted,
-        .danger => ui.Color{ .r = 239, .g = 68, .b = 68 },
+        .default => alphaPaint(options.style.accent, options.style.accent),
+        .secondary => .{ .fill = options.style.row, .text = options.style.text },
+        .destructive => alphaPaint(badge_danger, badge_danger),
+        .outline => .{ .fill = ui.Color.clear, .text = options.style.text, .border = options.style.border },
+        .ghost => .{ .fill = ui.Color.clear, .text = options.style.muted },
+        .link => .{ .fill = ui.Color.clear, .text = options.style.accent },
     };
+}
+
+fn alphaPaint(color: ui.Color, text_color: ui.Color) BadgePaint {
+    var fill = color;
+    fill.a = badge_fill_alpha;
+    return .{ .fill = fill, .text = text_color };
 }
 
 fn badgeLabelBounds(bounds: ui.Rect) ui.Rect {
@@ -468,3 +483,4 @@ pub const badge_padding_x: f32 = 12.0;
 const badge_fill_alpha: u8 = 48;
 const badge_label_average_w: f32 = 8.0;
 const badge_min_width: f32 = 28.0;
+const badge_danger = ui.Color{ .r = 239, .g = 68, .b = 68 };

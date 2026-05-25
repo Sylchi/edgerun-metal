@@ -133,7 +133,7 @@ test "resolver hydrates stack tree children from store" {
     const root = stack.node(&nodes).?;
     var commands: [16]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
-    try ui.render(&scene, root, .{ .x = 0, .y = 0, .w = 240, .h = 160 }, .{});
+    try components.renderNode(&scene, .{ .x = 0, .y = 0, .w = 240, .h = 160 }, root, .{});
     try std.testing.expect(scene.commandCount() != 0);
 }
 
@@ -187,7 +187,7 @@ test "resolver hydrates slot tree child from store" {
     const root = slot.node(&nodes).?;
     var commands: [8]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
-    try ui.render(&scene, root, .{ .x = 0, .y = 0, .w = 120, .h = 40 }, .{});
+    try components.renderNode(&scene, .{ .x = 0, .y = 0, .w = 120, .h = 40 }, root, .{});
     try std.testing.expect(hasText(scene.written(), "Slot"));
 }
 
@@ -219,7 +219,7 @@ test "generic resolver detects stored tree layout type" {
     const root = tree.node(&nodes).?;
     var commands: [8]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
-    try ui.render(&scene, root, .{ .x = 0, .y = 0, .w = 120, .h = 40 }, .{});
+    try components.renderNode(&scene, .{ .x = 0, .y = 0, .w = 120, .h = 40 }, root, .{});
     try std.testing.expect(scene.commandCount() != 0);
 }
 

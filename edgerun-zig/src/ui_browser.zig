@@ -119,8 +119,6 @@ var last_action_hit_id: u32 = 0;
 var last_action_scope_id: u32 = 0;
 var last_action_from_index: u32 = 0;
 var last_action_to_index: u32 = 0;
-var gallery_list_order_scope_id: u32 = 0;
-var gallery_list_order: [component_gallery.list_row_count]u8 = component_gallery.default_list_order;
 var site_state = SiteState{};
 var route_bytes: [route_bytes_capacity]u8 = undefined;
 var route_len: usize = 0;
@@ -194,6 +192,7 @@ const SiteState = struct {
     view: SiteView = .landing,
     selected_blog_post_id: u32 = 0,
     blog_arc_filter_index: ?usize = null,
+    selected_component_index: ?usize = null,
     scroll_y: f32 = 0.0,
     host_action: HostAction = .none,
 
@@ -918,7 +917,7 @@ export fn er_ui_site_content_height(width: f32) f32 {
         else
             site_blog.postContentHeight(width, site_state.selected_blog_post_id),
         .apps => site_apps.contentHeight(width),
-        .components => component_gallery.contentHeight(width),
+        .components => component_gallery.contentHeightForState(width, galleryState(0, component_gallery.grid_gap_default, site_state.scroll_y, browser_hover_x, browser_hover_y)),
     };
 }
 
@@ -1383,8 +1382,7 @@ fn galleryState(layout_raw: u32, grid_gap: f32, scroll_y: f32, hover_x: f32, hov
         .scroll_y = scroll_y,
         .hover_x = hover_x,
         .hover_y = hover_y,
-        .list_order_scope_id = gallery_list_order_scope_id,
-        .list_order = gallery_list_order,
+        .selected_component_index = site_state.selected_component_index,
     };
 }
 
@@ -1397,6 +1395,7 @@ fn applyRoute(route: site_navigation.Route) void {
     site_state.view = route.view;
     site_state.selected_blog_post_id = route.selected_blog_post_id;
     site_state.blog_arc_filter_index = route.blog_arc_filter_index;
+    site_state.selected_component_index = route.selected_component_index;
 }
 
 fn trimRoute(path: []const u8) []const u8 {
@@ -1420,6 +1419,7 @@ fn currentRoute() site_navigation.Route {
         .view = site_state.view,
         .selected_blog_post_id = site_state.selected_blog_post_id,
         .blog_arc_filter_index = site_state.blog_arc_filter_index,
+        .selected_component_index = site_state.selected_component_index,
     };
 }
 
@@ -1442,12 +1442,6 @@ fn recordAction(action: ui_runtime.Action) void {
     last_action_scope_id = if (action.source) |source| source.scope_id else 0;
     last_action_from_index = if (action.source) |source| @intCast(source.index) else 0;
     last_action_to_index = if (action.target) |target| @intCast(target.index) else 0;
-    switch (action.kind) {
-        .reordered => if (action.source) |source| {
-            if (action.target) |target| applyGalleryListReorder(source.scope_id, source.index, target.index);
-        },
-        else => {},
-    }
 }
 
 fn hasRectColor(items: []const ui.Command, color: ui.Color) bool {
@@ -1456,29 +1450,6 @@ fn hasRectColor(items: []const ui.Command, color: ui.Color) bool {
         else => {},
     };
     return false;
-}
-
-fn applyGalleryListReorder(scope_id: u32, from_index: usize, to_index: usize) void {
-    if (from_index >= gallery_list_order.len or to_index >= gallery_list_order.len or from_index == to_index) return;
-    if (gallery_list_order_scope_id != scope_id) {
-        gallery_list_order_scope_id = scope_id;
-        gallery_list_order = component_gallery.default_list_order;
-    }
-
-    const moving = gallery_list_order[from_index];
-    if (from_index < to_index) {
-        var index = from_index;
-        while (index < to_index) : (index += 1) {
-            gallery_list_order[index] = gallery_list_order[index + 1];
-        }
-    } else {
-        var index = from_index;
-        while (index > to_index) {
-            gallery_list_order[index] = gallery_list_order[index - 1];
-            index -= 1;
-        }
-    }
-    gallery_list_order[to_index] = moving;
 }
 
 fn ensureFontAtlas() !void {
@@ -1785,8 +1756,14 @@ test "browser native route sync owns URL path state" {
     try std.testing.expectEqual(site_apps.contentHeight(1280.0), er_ui_site_content_height(1280.0));
     try std.testing.expectEqualStrings("/apps", route_bytes[0..er_ui_site_route_path_len()]);
 
+    try std.testing.expectEqual(@as(u32, 0), er_ui_site_set_browser_route_hash(writeInputForTest("#/docs/components/button")));
+    const button_index = component_gallery.indexBySlug("button").?;
+    try std.testing.expectEqual(button_index, site_state.selected_component_index.?);
+    try std.testing.expectEqual(component_gallery.contentHeightForState(1280.0, .{ .selected_component_index = button_index }), er_ui_site_content_height(1280.0));
+    try std.testing.expectEqualStrings("/docs/components/button", route_bytes[0..er_ui_site_route_path_len()]);
+
     try std.testing.expectEqual(@as(u32, @intFromEnum(ErrorCode.bad_input)), er_ui_site_set_browser_route_hash(writeInputForTest("#academy")));
-    try std.testing.expectEqualStrings("/apps", route_bytes[0..er_ui_site_route_path_len()]);
+    try std.testing.expectEqualStrings("/docs/components/button", route_bytes[0..er_ui_site_route_path_len()]);
 }
 
 fn writeInputForTest(value: []const u8) usize {
@@ -1998,29 +1975,6 @@ test "browser native pointer up owns activation suppression policy" {
     _ = er_ui_pointer_move(8, 88);
     try std.testing.expectEqual(@intFromEnum(HostAction.none), er_ui_site_pointer_up(8, 88));
     try std.testing.expectEqual(site_landing.contentHeight(1280.0), er_ui_site_content_height(1280.0));
-}
-
-test "browser pointer runtime applies visible list reorder state" {
-    runtime_state = .{};
-    gallery_list_order_scope_id = 0;
-    gallery_list_order = component_gallery.default_list_order;
-    defer gallery_list_order_scope_id = 0;
-    defer gallery_list_order = component_gallery.default_list_order;
-
-    var scene = ui.Scene.init(&commands);
-    try scene.pushDragSource(.{ .scope_id = 81, .item_id = 100, .index = 0, .bounds = ui.Rect.init(0, 0, 80, 40) });
-    try scene.pushDropTarget(.{ .scope_id = 81, .index = 0, .bounds = ui.Rect.init(0, 0, 80, 40) });
-    try scene.pushDropTarget(.{ .scope_id = 81, .index = 2, .bounds = ui.Rect.init(0, 80, 80, 40) });
-    last_command_count = scene.written().len;
-    try storeLastRegions(&.{});
-
-    try std.testing.expectEqual(@intFromEnum(ui_runtime.ActionKind.none), er_ui_pointer_down(8, 8));
-    try std.testing.expectEqual(@intFromEnum(ui_runtime.ActionKind.drag_started), er_ui_pointer_move(8, 88));
-    try std.testing.expectEqual(@intFromEnum(ui_runtime.ActionKind.reordered), er_ui_pointer_up(8, 88));
-    try std.testing.expectEqual(@as(u32, 81), er_ui_last_action_scope_id());
-    try std.testing.expectEqual(@as(u32, 0), er_ui_last_action_from_index());
-    try std.testing.expectEqual(@as(u32, 2), er_ui_last_action_to_index());
-    try std.testing.expectEqualSlices(u8, &[_]u8{ 1, 2, 0, 3 }, &gallery_list_order);
 }
 
 test "browser packed text preserves variable font descenders" {
