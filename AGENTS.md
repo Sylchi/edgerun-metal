@@ -32,7 +32,6 @@
 - `edgerun-zig/src/clock.zig`, `identity.zig`, `object.zig`, and `store.zig` are the canonical current implementations for clock, identity, object, and storage.
 - `edgerun-zig/src/root.zig` is the broad Zig integration test root.
 - `edgerun-zig/build.zig` owns Zig test and host-tool steps.
-- The top-level `edgerun-clock/`, `edgerun-identity/`, `edgerun-object/`, and `edgerun-storage/` directories may exist as package shells during the C-to-Zig transition; do not recreate deleted C sources there unless explicitly asked.
 - `edgerun-crypto/` remains C/CMake for BLAKE3.
 - `edgerun-zig/src/geometry.zig` and `ui.zig` are the canonical current UI core primitives and scene implementation.
 - `edgerun-zig/src/ui.zig`, `ui_codec.zig`, `ui_components.zig`, `ui_resolver.zig`, renderer files, and asset/font files are the Zig UI/application experimentation path.

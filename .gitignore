@@ -4,6 +4,9 @@ machine-report*.txt
 
 # generated local build artifacts
 .build/
+.zig-cache/
+edgerun-zig/.build/
+edgerun-zig/.zig-cache/
 edgerun-metal/build/
 edgerun-zig/zig-out/
 varfont/build/
@@ -12,6 +15,4 @@ varfont/build/
 toolchain/bin/clang
 toolchain/bin/lld
 
-# local upstream UI reference tree; keep it out of this repo's history
-ui/shadcn-ui/
 */.zig-cache
