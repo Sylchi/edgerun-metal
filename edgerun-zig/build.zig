@@ -352,6 +352,7 @@ pub fn build(b: *std.Build) void {
     const run_embed_source_object = b.addRunArtifact(embed_file_zig);
     run_embed_source_object.addArg("workspace");
     run_embed_source_object.addDirectoryArg(b.path("."));
+    run_embed_source_object.addFileArg(wasm_compiler.getEmittedBin());
     const embedded_source_object = run_embed_source_object.addOutputFileArg("embedded_source_object.zig");
     const ui_browser = b.addExecutable(.{
         .name = "edgerun-ui-browser",

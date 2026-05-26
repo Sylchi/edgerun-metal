@@ -1,19 +1,14 @@
 const std = @import("std");
 const uefi = std.os.uefi;
-const BoundedArena = @import("arena.zig").BoundedArena;
-const Region = @import("region.zig").Region;
 const app_mod = @import("app.zig");
 const clock = @import("clock.zig");
 const data_chunk = @import("content/data_chunk.zig");
-const grant = @import("grant.zig");
 const identity = @import("identity.zig");
 const kernel_runtime = @import("content/kernel_runtime.zig");
 const preimage = @import("preimage.zig");
 const resource_contract = @import("content/resource_contract.zig");
 const resource_inventory = @import("content/resource_inventory.zig");
-const store = @import("store.zig");
 const wasm = @import("wasm/root.zig");
-const wasm_app = @import("wasm/app.zig");
 
 const App = app_mod.App;
 
@@ -41,12 +36,10 @@ var app_chunk_slot: data_chunk.DataChunk = undefined;
 var resource_slot: resource_inventory.Resource = undefined;
 var inventory_slot: resource_inventory.Inventory = undefined;
 var runtime_slot: kernel_runtime.Runtime = undefined;
-var plan_slot: kernel_runtime.LaunchPlan = undefined;
+var request_slot: kernel_runtime.LaunchRequest = undefined;
+var image_slot: kernel_runtime.WasmAppImage = undefined;
 var result_slot: kernel_runtime.RunResult = undefined;
-var app_runtime_slot: App = undefined;
-var spawn_receipt_slot: grant.SpawnReceipt = undefined;
-var wasm_value_slot: i64 = 0;
-var blob_slots: [0]store.Blob = .{};
+var scratch_slot: kernel_runtime.Scratch = undefined;
 var wasm_storage: wasm.ExecutionStorage = .{};
 
 const return_forty_two_wasm = [_]u8{
@@ -125,19 +118,17 @@ noinline fn runLaunchPlanStage() uefi.Status {
         .storage_slots = 0,
         .execution_ticks = execution_ticks,
     };
-    plan_slot = kernel_runtime.LaunchPlan{
+    image_slot = kernel_runtime.WasmAppImage.init(&return_forty_two_wasm, "main", allocation) orelse return failText("wasm image invalid");
+    request_slot = kernel_runtime.LaunchRequest{
         .parent = parent_slot,
         .app = app_slot,
         .public_contract = contract("qemu-runtime-public", app_chunk_slot, resource_slot.id, public_memory_offset, public_memory_len),
         .private_contract = contract("qemu-runtime-private", app_chunk_slot, resource_slot.id, private_memory_offset, private_memory_len),
-        .allocation = allocation,
         .input = hash("qemu runtime input"),
-        .app_hash = hash("qemu runtime wasm"),
-        .manifest = hash("qemu runtime manifest"),
         .clock_start = epoch_slot,
         .clock_end = .{ .keeper = epoch_slot.keeper, .tick = receipt_clock_tick },
     };
-    printLine("check: runtime launch-plan ok");
+    printLine("check: runtime launch-image ok");
 
     return runWasmStage();
 }
@@ -149,102 +140,24 @@ noinline fn runWasmStage() uefi.Status {
 
 noinline fn runWasmExecuteStage() uefi.Status {
     printLine("check: runtime wasm execute start");
-    return runManualValidateStage();
-}
-
-noinline fn runManualValidateStage() uefi.Status {
-    plan_slot.validate(runtime_slot.inventory) catch |err| return failRuntime("validate plan", err);
-    printLine("check: runtime plan validated");
-    return runManualPublicContractStage();
-}
-
-noinline fn runManualPublicContractStage() uefi.Status {
-    runtime_slot.schedule.installChecked(runtime_slot.inventory, plan_slot.public_contract) catch |err| return failRuntime("public contract", err);
-    printLine("check: runtime public contract installed");
-    return runManualPrivateContractStage();
-}
-
-noinline fn runManualPrivateContractStage() uefi.Status {
-    runtime_slot.schedule.installChecked(runtime_slot.inventory, plan_slot.private_contract) catch |err| {
-        runtime_slot.schedule.len -= 1;
-        return failRuntime("private contract", err);
-    };
-    printLine("check: runtime private contract installed");
-    return runManualAppAllocateStage();
-}
-
-noinline fn runManualAppAllocateStage() uefi.Status {
-    const app_memory = boot_memory[private_memory_offset .. private_memory_offset + private_memory_len];
-    app_runtime_slot = App.initAllocated(
-        plan_slot.app,
-        BoundedArena.init(Region{ .base = app_memory }),
-        store.Store.init(Region{ .base = app_memory[0..0] }, &blob_slots),
-        plan_slot.allocation,
-    ) orelse return failRuntime("app allocation", error.BadArgument);
-    printLine("check: runtime app allocated");
-    return runManualSpawnReceiptStage();
-}
-
-noinline fn runManualSpawnReceiptStage() uefi.Status {
-    spawn_receipt_slot = grant.spawnReceiptAllocated(
-        plan_slot.parent,
-        plan_slot.app,
-        plan_slot.clock_start,
-        plan_slot.allocation.memory_bytes,
-        plan_slot.allocation.storage_bytes,
-        plan_slot.allocation.storage_slots,
-        plan_slot.allocation.execution_ticks,
-        plan_slot.allocation.route_handles,
-        plan_slot.allocation.device_handles,
-        plan_slot.allocation.route_handle,
-        plan_slot.allocation.device_handle,
-    ) orelse return failRuntime("spawn receipt", error.BadArgument);
-    if (!spawn_receipt_slot.valid()) return failText("spawn receipt invalid");
-    printLine("check: runtime spawn receipt ok");
-    return runManualWasmExecuteStage();
-}
-
-noinline fn runManualWasmExecuteStage() uefi.Status {
-    printLine("check: runtime wasm interpreter start");
-    return runManualWasmCallStage();
-}
-
-noinline fn runManualWasmCallStage() uefi.Status {
-    wasm_value_slot = wasm_app.executeExportI64ArgsWithStorage(&app_runtime_slot, &return_forty_two_wasm, "main", &.{}, &wasm_storage) catch |err| return failRuntime("wasm execute", err);
-    printLine("check: runtime wasm value ok");
-    return runManualReceiptStage();
-}
-
-noinline fn runManualReceiptStage() uefi.Status {
-    const output = wasm_app.outputHashI64(wasm_value_slot);
-    const candidate = App.WorkReceipt{
-        .parent = parent_slot.id,
-        .app = app_runtime_slot.id.id,
-        .input = plan_slot.input,
-        .output = output,
-        .app_hash = plan_slot.app_hash,
-        .manifest = plan_slot.manifest,
-        .clock_start = plan_slot.clock_start,
-        .clock_end = plan_slot.clock_end,
-        .allocation = plan_slot.allocation,
-        .execution_used = plan_slot.allocation.execution_ticks - app_runtime_slot.executionRemaining(),
-        .spawn_receipt = spawn_receipt_slot,
-    };
-    if (!candidate.valid()) return failText("candidate work receipt invalid");
-    result_slot = .{
-        .value = wasm_value_slot,
-        .output = output,
-        .receipt = candidate,
-    };
+    runtime_slot.runWasmImageI64IntoWithStorageAndScratch(
+        request_slot,
+        image_slot,
+        &wasm_storage,
+        &scratch_slot,
+        &result_slot,
+    ) catch |err| return failRuntime("wasm image execute", err);
     printLine("check: runtime wasm returned");
-    return runManualVerifyResultStage();
+    return runVerifyResultStage();
 }
 
-noinline fn runManualVerifyResultStage() uefi.Status {
+noinline fn runVerifyResultStage() uefi.Status {
     if (result_slot.value != expected_value) return failText("wrong wasm result");
     if (!result_slot.receipt.valid()) return failText("invalid work receipt");
     if (!result_slot.receipt.parent.eql(parent_slot.id)) return failText("receipt parent mismatch");
     if (!result_slot.receipt.app.eql(app_slot.id)) return failText("receipt app mismatch");
+    if (!std.mem.eql(u8, &result_slot.receipt.app_hash, &image_slot.code_hash)) return failText("receipt code hash mismatch");
+    if (!std.mem.eql(u8, &result_slot.receipt.manifest, &image_slot.manifest)) return failText("receipt manifest mismatch");
     if (result_slot.receipt.execution_used != expected_execution_used) return failText("receipt execution mismatch");
     if (runtime_slot.schedule.len != contracts.len) return failText("schedule length mismatch");
 

@@ -3,13 +3,13 @@ const interaction = @import("ui_interaction.zig");
 const renderer_font_atlas = @import("render/font_atlas.zig");
 const renderer_gles = @import("render/gles.zig");
 const renderer_ir = @import("render/ir.zig");
+const renderer_parity = @import("render/parity.zig");
 const renderer_pipeline = @import("render/pipeline.zig");
-const component_gallery = @import("component_gallery.zig");
-const site_apps = @import("site_apps.zig");
+const renderer_software = @import("render/software.zig");
 const site_blog = @import("site_blog.zig");
 const site_chrome = @import("site_chrome.zig");
 const site_cursor = @import("site_cursor.zig");
-const site_docs = @import("site_docs.zig");
+const site_frame = @import("site_frame.zig");
 const site_images = @import("site_images.zig");
 const site_landing = @import("site_landing.zig");
 const site_navigation = @import("site_navigation.zig");
@@ -60,6 +60,7 @@ const Options = struct {
     height: i32 = default_height,
     scale: i32 = default_surface_scale,
     seconds: u32 = default_seconds,
+    verify_parity: bool = false,
 };
 
 const PointerEvent = enum {
@@ -133,28 +134,7 @@ const SceneState = struct {
     fn rebuild(self: *SceneState, width: i32, height: i32, app: *AppState, font_atlas: *renderer_font_atlas.Atlas) !renderer_ir.Buffers {
         var scene = ui.Scene.initWithClips(&self.commands, &self.clips);
         var collector = interaction.Collector.init(&self.regions);
-        const bounds = ui.Rect.init(
-            0,
-            0,
-            @floatFromInt(width),
-            @floatFromInt(height),
-        );
-        switch (app.route.view) {
-            .landing => try site_landing.render(&scene, &collector, bounds, app.landingState()),
-            .blog => try site_blog.render(&scene, &collector, bounds, app.blogState()),
-            .apps => try site_apps.render(&scene, &collector, bounds, app.appsState()),
-            .docs => try site_docs.render(&scene, &collector, bounds, .{
-                .scroll_y = app.scroll_y,
-                .hover_x = app.hover_x,
-                .hover_y = app.hover_y,
-            }),
-            .components => try component_gallery.renderComponentGallery(&scene, &collector, bounds, .{
-                .scroll_y = app.scroll_y,
-                .hover_x = app.hover_x,
-                .hover_y = app.hover_y,
-                .selected_component_index = app.route.selected_component_index,
-            }),
-        }
+        try site_frame.render(&scene, &collector, ui.Rect.init(0, 0, @floatFromInt(width), @floatFromInt(height)), app.frameState());
         updateHoverHit(app, collector.written());
         try site_cursor.render(&scene, app.hover_x, app.hover_y, app.cursorKind());
         self.command_len = scene.written().len;
@@ -183,8 +163,9 @@ const AppState = struct {
     public_identity_ready: bool = true,
     public_identity: []const u8 = "native-egl-gpu",
 
-    fn landingState(self: AppState) site_landing.State {
+    fn frameState(self: AppState) site_frame.State {
         return .{
+            .route = self.route,
             .scroll_y = self.scroll_y,
             .hover_x = self.hover_x,
             .hover_y = self.hover_y,
@@ -193,40 +174,8 @@ const AppState = struct {
         };
     }
 
-    fn blogState(self: AppState) site_blog.State {
-        return .{
-            .scroll_y = self.scroll_y,
-            .hover_x = self.hover_x,
-            .hover_y = self.hover_y,
-            .selected_post_id = self.route.selected_blog_post_id,
-            .arc_filter_index = self.route.blog_arc_filter_index,
-        };
-    }
-
-    fn appsState(self: AppState) site_apps.State {
-        return .{
-            .scroll_y = self.scroll_y,
-            .hover_x = self.hover_x,
-            .hover_y = self.hover_y,
-        };
-    }
-
     fn contentHeight(self: AppState, width: f32) f32 {
-        return switch (self.route.view) {
-            .landing => site_landing.contentHeight(width),
-            .blog => if (self.route.selected_blog_post_id == 0)
-                site_blog.indexContentHeightFiltered(width, self.route.blog_arc_filter_index)
-            else
-                site_blog.postContentHeight(width, self.route.selected_blog_post_id),
-            .apps => site_apps.contentHeight(width),
-            .docs => site_docs.contentHeight(width),
-            .components => component_gallery.contentHeightForState(width, .{
-                .scroll_y = self.scroll_y,
-                .hover_x = self.hover_x,
-                .hover_y = self.hover_y,
-                .selected_component_index = self.route.selected_component_index,
-            }),
-        };
+        return site_frame.contentHeight(width, self.frameState());
     }
 
     fn applyRoute(self: *AppState, route: site_navigation.Route) void {
@@ -281,7 +230,11 @@ pub fn main(init: std.process.Init) !void {
             wl.input_dirty = false;
         }
         const framebuffer = try egl.surfaceSize();
-        try gl.renderFrameToViewport(wl.width, wl.height, framebuffer.width, framebuffer.height, buffers);
+        const receipt = try gl.renderFrameToViewport(wl.width, wl.height, framebuffer.width, framebuffer.height, buffers);
+        if (!receipt.valid()) return error.InvalidGlesReceipt;
+        if (options.verify_parity) {
+            try verifyGpuCpuParity(gl, wl.width, wl.height, framebuffer.width, framebuffer.height, buffers, &font_atlas, cloud_meme, allocator);
+        }
         if (!frame_verified) {
             _ = try gl.verifyFrameNonBlank(framebuffer.width, framebuffer.height);
             frame_verified = true;
@@ -323,6 +276,10 @@ fn sleepFrame() void {
     _ = linux.nanosleep(&req, null);
 }
 
+fn siteBackground() ui.Color {
+    return .{ .r = 11, .g = 11, .b = 11 };
+}
+
 fn parseOptions(args: []const [:0]const u8) !Options {
     var options = Options{};
     var index: usize = 1;
@@ -343,12 +300,164 @@ fn parseOptions(args: []const [:0]const u8) !Options {
             index += 1;
             if (index >= args.len) return error.InvalidArguments;
             options.seconds = try std.fmt.parseUnsigned(u32, args[index], 10);
+        } else if (std.mem.eql(u8, args[index], "--verify-parity")) {
+            options.verify_parity = true;
         } else {
             return error.InvalidArguments;
         }
     }
     if (options.width <= 0 or options.height <= 0 or options.scale <= 0 or options.seconds == 0) return error.InvalidArguments;
     return options;
+}
+
+fn verifyGpuCpuParity(
+    gl: renderer_gles.Adapter,
+    logical_width: i32,
+    logical_height: i32,
+    framebuffer_width: i32,
+    framebuffer_height: i32,
+    buffers: renderer_ir.Buffers,
+    font_atlas: *renderer_font_atlas.Atlas,
+    image_texture: renderer_software.RgbaTexture,
+    allocator: std.mem.Allocator,
+) !void {
+    if (logical_width <= 0 or logical_height <= 0) return error.InvalidFramebufferSize;
+    if (logical_width != framebuffer_width or logical_height != framebuffer_height) return error.UnsupportedParityScale;
+    const width: usize = @intCast(logical_width);
+    const height: usize = @intCast(logical_height);
+    const pixel_count = width * height;
+    const expected = try allocator.alloc(ui.Color, pixel_count);
+    defer allocator.free(expected);
+    const actual = try allocator.alloc(ui.Color, pixel_count);
+    defer allocator.free(actual);
+
+    const software_surface = try renderer_software.Framebuffer.init(width, height, expected);
+    software_surface.clear(siteBackground());
+    const software_receipt = try software_surface.renderIr(buffers, renderer_pipeline.softwareResources(font_atlas, image_texture));
+    if (!software_receipt.valid()) return error.InvalidSoftwareReceipt;
+    try gl.readFramePixels(framebuffer_width, framebuffer_height, actual);
+    const diff = try renderer_parity.compareExact(width, height, expected, actual);
+    if (!diff.valid()) {
+        std.debug.print(
+            "render parity mismatch: pixels={} mismatches={} max_delta={} first=({}, {}) expected=rgba({},{},{},{}) actual=rgba({},{},{},{}) worst=({}, {}) expected=rgba({},{},{},{}) actual=rgba({},{},{},{})\n",
+            .{
+                diff.pixel_count,
+                diff.mismatch_count,
+                diff.max_channel_delta,
+                diff.firstMismatchX(),
+                diff.firstMismatchY(),
+                diff.first_expected.r,
+                diff.first_expected.g,
+                diff.first_expected.b,
+                diff.first_expected.a,
+                diff.first_actual.r,
+                diff.first_actual.g,
+                diff.first_actual.b,
+                diff.first_actual.a,
+                diff.worstMismatchX(),
+                diff.worstMismatchY(),
+                diff.worst_expected.r,
+                diff.worst_expected.g,
+                diff.worst_expected.b,
+                diff.worst_expected.a,
+                diff.worst_actual.r,
+                diff.worst_actual.g,
+                diff.worst_actual.b,
+                diff.worst_actual.a,
+            },
+        );
+        printParityPrimitiveAt(buffers, @floatFromInt(diff.firstMismatchX()), @floatFromInt(diff.firstMismatchY()));
+        printParityPrimitiveAt(buffers, @floatFromInt(diff.worstMismatchX()), @floatFromInt(diff.worstMismatchY()));
+        return error.RenderParityMismatch;
+    }
+}
+
+fn printParityPrimitiveAt(buffers: renderer_ir.Buffers, x: f32, y: f32) void {
+    printParityRectsAt("base", buffers.liveRects(), x, y);
+    printParityTexturedAt("base text", buffers.liveTextVertices(), x, y);
+    printParityTexturedAt("base image", buffers.liveImageVertices(), x, y);
+    printParityIconsAt("base icon", buffers.liveIconVertices(), x, y);
+    printParityRectsAt("overlay", buffers.liveOverlayRects(), x, y);
+    printParityTexturedAt("overlay text", buffers.liveOverlayTextVertices(), x, y);
+    printParityIconsAt("overlay icon", buffers.liveOverlayIconVertices(), x, y);
+}
+
+fn printParityRectsAt(label: []const u8, values: []const f32, x: f32, y: f32) void {
+    var iter = renderer_ir.RectIterator.init(values) catch return;
+    while (iter.next() catch return) |rect| {
+        const influence = switch (rect.mode) {
+            .shadow => rect.bounds.insetUniform(-rect.shadow),
+            .fill, .border, .linear_gradient, .pie_slice => rect.bounds,
+        };
+        if (influence.containsInclusive(x, y)) {
+            std.debug.print(
+                "  {s} rect mode={any} bounds=({d:.2},{d:.2},{d:.2},{d:.2}) radius={d:.2} shadow={d:.2} color=rgba({},{},{},{})\n",
+                .{
+                    label,
+                    rect.mode,
+                    rect.bounds.x,
+                    rect.bounds.y,
+                    rect.bounds.w,
+                    rect.bounds.h,
+                    rect.radius,
+                    rect.shadow,
+                    rect.color.r,
+                    rect.color.g,
+                    rect.color.b,
+                    rect.color.a,
+                },
+            );
+        }
+    }
+}
+
+fn printParityTexturedAt(label: []const u8, values: []const f32, x: f32, y: f32) void {
+    var iter = renderer_ir.TexturedQuadIterator.init(values) catch return;
+    while (iter.next() catch return) |quad| {
+        if (quad.bounds.containsInclusive(x, y)) {
+            std.debug.print(
+                "  {s} bounds=({d:.2},{d:.2},{d:.2},{d:.2}) uv=({d:.4},{d:.4},{d:.4},{d:.4}) color=rgba({},{},{},{})\n",
+                .{
+                    label,
+                    quad.bounds.x,
+                    quad.bounds.y,
+                    quad.bounds.w,
+                    quad.bounds.h,
+                    quad.u0,
+                    quad.v0,
+                    quad.u1,
+                    quad.v1,
+                    quad.color.r,
+                    quad.color.g,
+                    quad.color.b,
+                    quad.color.a,
+                },
+            );
+        }
+    }
+}
+
+fn printParityIconsAt(label: []const u8, values: []const f32, x: f32, y: f32) void {
+    var iter = renderer_ir.IconIterator.init(values) catch return;
+    while (iter.next() catch return) |icon| {
+        if (icon.bounds.containsInclusive(x, y)) {
+            std.debug.print(
+                "  {s} id={} bounds=({d:.2},{d:.2},{d:.2},{d:.2}) color=rgba({},{},{},{})\n",
+                .{
+                    label,
+                    icon.icon_id,
+                    icon.bounds.x,
+                    icon.bounds.y,
+                    icon.bounds.w,
+                    icon.bounds.h,
+                    icon.color.r,
+                    icon.color.g,
+                    icon.color.b,
+                    icon.color.a,
+                },
+            );
+        }
+    }
 }
 
 fn initWayland(state: *WaylandState, width: i32, height: i32, scale: i32, app: *AppState) !void {
@@ -459,13 +568,18 @@ fn activateHit(app: *AppState) void {
         app.applyRoute(route);
         return;
     }
-    switch (hover_hit_id) {
-        site_landing.reveal_identity_button_id => {
+    if (site_navigation.actionFromHit(hover_hit_id)) |action| switch (action) {
+        .reveal_identity => {
             app.public_identity_ready = true;
             app.public_identity = "native-egl-gpu";
         },
-        else => {},
-    }
+        .compile_source,
+        .download_source_release,
+        .launch_source_release,
+        .reset_source,
+        .launch_app,
+        => {},
+    };
 }
 
 fn scrollBy(app: *AppState, width: i32, height: i32, delta_y: f32) void {
@@ -610,6 +724,27 @@ test "egl host input helpers update hover activation and scroll state" {
     const before = app.scroll_y;
     scrollBy(&app, default_width, 200, std.math.nan(f32));
     try std.testing.expectEqual(before, app.scroll_y);
+}
+
+test "egl host parses explicit parity verification mode" {
+    const args = [_][:0]const u8{
+        "wayland-egl-window",
+        "--width",
+        "320",
+        "--height",
+        "240",
+        "--scale",
+        "1",
+        "--seconds",
+        "1",
+        "--verify-parity",
+    };
+    const options = try parseOptions(&args);
+    try std.testing.expectEqual(@as(i32, 320), options.width);
+    try std.testing.expectEqual(@as(i32, 240), options.height);
+    try std.testing.expectEqual(@as(i32, 1), options.scale);
+    try std.testing.expectEqual(@as(u32, 1), options.seconds);
+    try std.testing.expect(options.verify_parity);
 }
 
 test "egl host activation uses shared site navigation routes" {

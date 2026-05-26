@@ -1,6 +1,7 @@
 const std = @import("std");
 const icon_vector = @import("../../icon_vector.zig");
 const renderer_font_atlas = @import("../font_atlas.zig");
+const renderer_icon_mask = @import("../icon_mask.zig");
 const renderer_ir = @import("../ir.zig");
 const ui = @import("../../ui.zig");
 
@@ -65,15 +66,18 @@ const icon_circle_segments: usize = 12;
 const icon_line_vertex_count: usize = 6;
 const icon_position_components: usize = 2;
 const icon_line_float_count: usize = icon_line_vertex_count * icon_position_components;
+const icon_texture_vertex_count: usize = renderer_ir.textured_quad_vertex_count;
+const icon_texture_float_count: usize = icon_texture_vertex_count * renderer_ir.text_vertex_float_stride;
 const icon_min_line_len: f32 = 0.001;
 const icon_min_stroke_px: f32 = 1.5;
 const icon_stroke_scale: f32 = 0.085;
+const shader_log_capacity: usize = 1024;
 
 pub fn init(font_atlas: *renderer_font_atlas.Atlas, image: ?RgbaTexture) !State {
     try requireHardwareGl();
     c.glClearColor(0.043, 0.043, 0.043, 1.0);
     c.glEnable(c.GL_BLEND);
-    c.glBlendFunc(c.GL_SRC_ALPHA, c.GL_ONE_MINUS_SRC_ALPHA);
+    c.glBlendFuncSeparate(c.GL_SRC_ALPHA, c.GL_ONE_MINUS_SRC_ALPHA, c.GL_ONE, c.GL_ONE_MINUS_SRC_ALPHA);
     const image_texture = if (image) |texture| blk: {
         if (!texture.valid()) return error.InvalidImageTexture;
         break :blk makeRgbaTexture(texture.width, texture.height, texture.pixels);
@@ -137,6 +141,22 @@ pub fn verifyFrameNonBlank(width: i32, height: i32) !FrameProof {
     const proof = frameProof(width, height, &samples);
     if (!proof.valid()) return error.BlankGpuFrame;
     return proof;
+}
+
+pub fn readFramePixels(width: i32, height: i32, out: []ui.Color) !void {
+    if (width <= 0 or height <= 0) return error.InvalidFramebufferSize;
+    const width_usize: usize = @intCast(width);
+    const height_usize: usize = @intCast(height);
+    const pixel_count = width_usize * height_usize;
+    if (out.len < pixel_count) return error.InvalidPixelBuffer;
+    c.glFinish();
+    c.glPixelStorei(c.GL_PACK_ALIGNMENT, 1);
+    var top_row: usize = 0;
+    while (top_row < height_usize) : (top_row += 1) {
+        const gl_row: c.GLint = @intCast(height_usize - 1 - top_row);
+        const dst = out[top_row * width_usize ..][0..width_usize];
+        c.glReadPixels(0, gl_row, @intCast(width_usize), 1, c.GL_RGBA, c.GL_UNSIGNED_BYTE, @as([*]u8, @ptrCast(dst.ptr)));
+    }
 }
 
 pub fn sources(font_atlas: *renderer_font_atlas.Atlas) renderer_ir.Sources {
@@ -243,7 +263,9 @@ fn drawRects(gl: State, width: i32, height: i32, scale: f32, values: []const f32
     c.glEnableVertexAttribArray(0);
     c.glVertexAttribPointer(0, 2, c.GL_FLOAT, c.GL_FALSE, 2 * @sizeOf(f32), null);
     while (try iter.next()) |rect| {
-        c.glUniform4f(c.glGetUniformLocation(gl.rect_program, "u_rect"), rect.bounds.x, rect.bounds.y, rect.bounds.w, rect.bounds.h);
+        const draw_bounds = rectDrawBounds(rect);
+        c.glUniform4f(c.glGetUniformLocation(gl.rect_program, "u_rect"), draw_bounds.x, draw_bounds.y, draw_bounds.w, draw_bounds.h);
+        c.glUniform4f(c.glGetUniformLocation(gl.rect_program, "u_source_rect"), rect.bounds.x, rect.bounds.y, rect.bounds.w, rect.bounds.h);
         c.glUniform4f(c.glGetUniformLocation(gl.rect_program, "u_color"), colorF(rect.color.r), colorF(rect.color.g), colorF(rect.color.b), colorF(rect.color.a));
         c.glUniform4f(c.glGetUniformLocation(gl.rect_program, "u_color2"), colorF(rect.color2.r), colorF(rect.color2.g), colorF(rect.color2.b), colorF(rect.color2.a));
         c.glUniform1f(c.glGetUniformLocation(gl.rect_program, "u_radius"), rect.radius);
@@ -251,6 +273,13 @@ fn drawRects(gl: State, width: i32, height: i32, scale: f32, values: []const f32
         c.glUniform1i(c.glGetUniformLocation(gl.rect_program, "u_mode"), rectMode(rect.mode));
         c.glDrawArrays(c.GL_TRIANGLE_STRIP, 0, 4);
     }
+}
+
+fn rectDrawBounds(rect: anytype) ui.Rect {
+    return switch (rect.mode) {
+        .shadow => rect.bounds.insetUniform(-rect.shadow),
+        .fill, .border, .linear_gradient, .pie_slice => rect.bounds,
+    };
 }
 
 fn drawTextured(gl: State, width: i32, height: i32, values: []const f32, texture: c.GLuint) !void {
@@ -284,11 +313,12 @@ fn drawIcons(gl: State, width: i32, height: i32, values: []const f32) !void {
     c.glEnableVertexAttribArray(0);
     c.glVertexAttribPointer(0, 2, c.GL_FLOAT, c.GL_FALSE, 2 * @sizeOf(f32), null);
     while (iter.next() catch return error.InvalidIrBuffer) |instance| {
-        try drawIconInstance(gl, instance);
+        try drawIconInstance(gl, width, height, instance);
     }
 }
 
-fn drawIconInstance(gl: State, instance: renderer_ir.IconInstance) !void {
+fn drawIconInstance(gl: State, screen_width: i32, screen_height: i32, instance: renderer_ir.IconInstance) !void {
+    if (try drawIconAlphaMask(gl, screen_width, screen_height, instance)) return;
     c.glUniform4f(c.glGetUniformLocation(gl.line_program, "u_color"), colorF(instance.color.r), colorF(instance.color.g), colorF(instance.color.b), colorF(instance.color.a));
     var iter = renderer_ir.iconOpIteratorForId(instance.icon_id);
     var path = IconPathState{};
@@ -350,6 +380,50 @@ fn drawIconInstance(gl: State, instance: renderer_ir.IconInstance) !void {
             => {},
         }
     }
+}
+
+fn drawIconAlphaMask(gl: State, screen_width: i32, screen_height: i32, instance: renderer_ir.IconInstance) !bool {
+    const width = iconMaskAxis(instance.bounds.w);
+    const height = iconMaskAxis(instance.bounds.h);
+    var alpha: [renderer_icon_mask.max_pixels]u8 = undefined;
+    const mask = try renderer_icon_mask.rasterizeIconAlpha(instance.icon_id, width, height, &alpha);
+    if (!mask.painted) return false;
+    const texture = makeIconAlphaTexture(mask.width, mask.height, mask.alpha);
+    defer c.glDeleteTextures(1, &texture);
+    var values: [icon_texture_float_count]f32 = undefined;
+    writeIconTextureQuad(&values, instance);
+    try drawTextured(gl, screen_width, screen_height, &values, texture);
+    return true;
+}
+
+fn iconMaskAxis(value: f32) usize {
+    if (value <= 1.0) return 1;
+    return @min(renderer_icon_mask.max_width, @max(@as(usize, 1), @as(usize, @intFromFloat(@ceil(value)))));
+}
+
+fn writeIconTextureQuad(out: *[icon_texture_float_count]f32, instance: renderer_ir.IconInstance) void {
+    const x0 = instance.bounds.x;
+    const y0 = instance.bounds.y;
+    const x1 = instance.bounds.x + instance.bounds.w;
+    const y1 = instance.bounds.y + instance.bounds.h;
+    writeTexturedVertex(out, 0, x0, y0, 0.0, 0.0, instance.color);
+    writeTexturedVertex(out, 1, x1, y0, 1.0, 0.0, instance.color);
+    writeTexturedVertex(out, 2, x0, y1, 0.0, 1.0, instance.color);
+    writeTexturedVertex(out, 3, x1, y0, 1.0, 0.0, instance.color);
+    writeTexturedVertex(out, 4, x1, y1, 1.0, 1.0, instance.color);
+    writeTexturedVertex(out, 5, x0, y1, 0.0, 1.0, instance.color);
+}
+
+fn writeTexturedVertex(out: *[icon_texture_float_count]f32, vertex_index: usize, x: f32, y: f32, u: f32, v: f32, color: ui.Color) void {
+    const base = vertex_index * renderer_ir.text_vertex_float_stride;
+    out[base + 0] = x;
+    out[base + 1] = y;
+    out[base + 2] = u;
+    out[base + 3] = v;
+    out[base + 4] = colorF(color.r);
+    out[base + 5] = colorF(color.g);
+    out[base + 6] = colorF(color.b);
+    out[base + 7] = colorF(color.a);
 }
 
 const IconPathState = struct {
@@ -488,11 +562,19 @@ fn makeBuffer() c.GLuint {
 }
 
 fn makeAlphaTexture(width: usize, height: usize, alpha: []const u8) c.GLuint {
+    return makeAlphaTextureFiltered(width, height, alpha, c.GL_LINEAR);
+}
+
+fn makeIconAlphaTexture(width: usize, height: usize, alpha: []const u8) c.GLuint {
+    return makeAlphaTextureFiltered(width, height, alpha, c.GL_NEAREST);
+}
+
+fn makeAlphaTextureFiltered(width: usize, height: usize, alpha: []const u8, filter: c.GLint) c.GLuint {
     var texture: c.GLuint = 0;
     c.glGenTextures(1, &texture);
     c.glBindTexture(c.GL_TEXTURE_2D, texture);
-    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_MIN_FILTER, c.GL_LINEAR);
-    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_MAG_FILTER, c.GL_LINEAR);
+    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_MIN_FILTER, filter);
+    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_MAG_FILTER, filter);
     c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_WRAP_S, c.GL_CLAMP_TO_EDGE);
     c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_WRAP_T, c.GL_CLAMP_TO_EDGE);
     c.glPixelStorei(c.GL_UNPACK_ALIGNMENT, 1);
@@ -541,7 +623,13 @@ fn makeShader(kind: c.GLenum, source: [:0]const u8) !c.GLuint {
     c.glCompileShader(shader);
     var ok: c.GLint = 0;
     c.glGetShaderiv(shader, c.GL_COMPILE_STATUS, &ok);
-    if (ok == 0) return error.GlShaderFailed;
+    if (ok == 0) {
+        var log: [shader_log_capacity]u8 = undefined;
+        var len: c.GLsizei = 0;
+        c.glGetShaderInfoLog(shader, log.len, &len, &log);
+        std.debug.print("gles shader compile failed: {s}\n", .{log[0..@intCast(len)]});
+        return error.GlShaderFailed;
+    }
     return shader;
 }
 
@@ -563,21 +651,18 @@ const rect_vertex_shader =
     \\attribute vec2 a_pos;
     \\uniform vec2 u_screen;
     \\uniform vec4 u_rect;
-    \\varying vec2 v_local;
-    \\varying vec2 v_size;
     \\void main() {
     \\  vec2 px = u_rect.xy + a_pos * u_rect.zw;
     \\  vec2 ndc = vec2(px.x / u_screen.x * 2.0 - 1.0, 1.0 - px.y / u_screen.y * 2.0);
     \\  gl_Position = vec4(ndc, 0.0, 1.0);
-    \\  v_local = a_pos * u_rect.zw;
-    \\  v_size = u_rect.zw;
     \\}
 ;
 
 const rect_fragment_shader =
     \\precision highp float;
-    \\varying vec2 v_local;
-    \\varying vec2 v_size;
+    \\uniform vec2 u_screen;
+    \\uniform vec4 u_rect;
+    \\uniform vec4 u_source_rect;
     \\uniform vec4 u_color;
     \\uniform vec4 u_color2;
     \\uniform float u_radius;
@@ -589,21 +674,25 @@ const rect_fragment_shader =
     \\  return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
     \\}
     \\void main() {
-    \\  vec2 p = v_local - v_size * 0.5;
-    \\  float d = rounded_box(p, v_size * 0.5, u_radius);
     \\  float aa = 1.0 / max(u_pixel_scale, 1.0);
-    \\  float alpha = 1.0 - smoothstep(0.0, aa, d);
+    \\  vec2 px = vec2(gl_FragCoord.x / max(u_pixel_scale, 1.0), u_screen.y - gl_FragCoord.y / max(u_pixel_scale, 1.0));
+    \\  vec2 p = px - u_rect.xy - u_rect.zw * 0.5;
+    \\  float d = rounded_box(p, u_rect.zw * 0.5, u_radius);
+    \\  float alpha = clamp(-d / aa, 0.0, 1.0);
+    \\  if (u_radius <= 0.0) alpha = 1.0;
+    \\  alpha = floor(alpha * 255.0 + 0.5) / 255.0;
     \\  if (u_mode == 1) {
-    \\    float sd = rounded_box(p - vec2(0.0, -u_shadow * 0.18), v_size * 0.5, u_radius + u_shadow * 0.35);
-    \\    float blur = max(u_shadow, 1.0);
-    \\    alpha = 1.0 - smoothstep(-blur, blur, sd);
-    \\    gl_FragColor = vec4(u_color.rgb, u_color.a * alpha * 0.28);
+    \\    vec2 sp = px - u_source_rect.xy - u_source_rect.zw * 0.5;
+    \\    float sd = rounded_box(sp, u_source_rect.zw * 0.5, u_radius);
+    \\    if (sd <= 0.0 || sd >= u_shadow) discard;
+    \\    float t = 1.0 - sd / max(u_shadow, 0.001);
+    \\    gl_FragColor = vec4(u_color.rgb, u_color.a * t * t * 0.34);
     \\  } else if (u_mode == 2) {
-    \\    float inner = rounded_box(p, v_size * 0.5 - vec2(1.25), max(u_radius - 1.25, 0.0));
-    \\    float border = (1.0 - smoothstep(0.0, aa, d)) * smoothstep(0.0, aa, inner);
+    \\    float inner = rounded_box(p, u_rect.zw * 0.5 - vec2(1.25), max(u_radius - 1.25, 0.0));
+    \\    float border = clamp(-d / aa, 0.0, 1.0) * clamp(inner / aa, 0.0, 1.0);
     \\    gl_FragColor = vec4(u_color.rgb, u_color.a * border);
     \\  } else if (u_mode == 3) {
-    \\    float t = clamp(v_local.y / max(v_size.y, 1.0), 0.0, 1.0);
+    \\    float t = clamp((px.y - u_rect.y) / max(u_rect.w, 1.0), 0.0, 1.0);
     \\    vec4 color = mix(u_color, u_color2, t);
     \\    gl_FragColor = vec4(color.rgb, color.a * alpha);
     \\  } else {
@@ -679,6 +768,22 @@ test "rect modes map to stable shader mode ids" {
     try std.testing.expectEqual(@as(c.GLint, 2), rectMode(.border));
     try std.testing.expectEqual(@as(c.GLint, 3), rectMode(.linear_gradient));
     try std.testing.expectEqual(@as(c.GLint, 0), rectMode(.pie_slice));
+}
+
+test "gles shadow rect expands draw bounds but keeps source bounds" {
+    const rect = renderer_ir.Rect{
+        .bounds = ui.Rect.init(10, 20, 30, 40),
+        .color = .accent,
+        .color2 = .clear,
+        .radius = 4,
+        .shadow = 6,
+        .mode = .shadow,
+    };
+    const bounds = rectDrawBounds(rect);
+    try std.testing.expectEqual(@as(f32, 4), bounds.x);
+    try std.testing.expectEqual(@as(f32, 14), bounds.y);
+    try std.testing.expectEqual(@as(f32, 42), bounds.w);
+    try std.testing.expectEqual(@as(f32, 52), bounds.h);
 }
 
 test "frame proof rejects uniform samples and accepts variation" {

@@ -31,6 +31,7 @@ const compiler_zig_std_testing_root = "compiler/zig/lib/std/testing";
 const compiler_zig_std_tz_root = "compiler/zig/lib/std/tz";
 const compiler_zig_std_zig_llvm_root = "compiler/zig/lib/std/zig/llvm";
 const compiler_zig_compiler_lib_root = "compiler/zig/lib/compiler";
+const embedded_wasm_compiler_label = "embedded_wasm_compiler";
 
 const Mode = enum {
     file,
@@ -45,12 +46,19 @@ pub fn main(init: std.process.Init) !void {
     const mode_text = args.next() orelse return error.MissingMode;
     const mode = parseMode(mode_text) orelse return error.BadMode;
     const input_path = args.next() orelse return error.MissingInputPath;
-    const output_path = args.next() orelse return error.MissingOutputPath;
+    var output_path = args.next() orelse return error.MissingOutputPath;
+    var embedded_compiler_path: ?[]const u8 = null;
+    if (mode == .workspace) {
+        if (args.next()) |next| {
+            embedded_compiler_path = output_path;
+            output_path = next;
+        }
+    }
     if (args.next() != null) return error.TooManyArguments;
 
     const embedded_bytes = switch (mode) {
         .file => try readFile(init.io, input_path),
-        .workspace => try buildWorkspaceObject(init.io, input_path),
+        .workspace => try buildWorkspaceObject(init.io, input_path, embedded_compiler_path),
     };
     defer std.heap.page_allocator.free(embedded_bytes);
     try writeZigBytes(init.io, output_path, embedded_bytes);
@@ -94,7 +102,7 @@ fn writeZigBytes(io: std.Io, output_path: []const u8, embedded_bytes: []const u8
     try output.setPermissions(io, output_file_permissions);
 }
 
-fn buildWorkspaceObject(io: std.Io, root_path: []const u8) ![]u8 {
+fn buildWorkspaceObject(io: std.Io, root_path: []const u8, embedded_compiler_path: ?[]const u8) ![]u8 {
     const allocator = std.heap.page_allocator;
     var root = try std.Io.Dir.cwd().openDir(io, root_path, .{ .iterate = true });
     defer root.close(io);
@@ -112,27 +120,43 @@ fn buildWorkspaceObject(io: std.Io, root_path: []const u8) ![]u8 {
     try manifest.appendSlice(allocator, workspace_manifest_magic);
     try appendU16(&manifest, allocator, workspace_manifest_version);
     try appendU16(&manifest, allocator, workspace_manifest_reserved);
-    try appendU32(&manifest, allocator, @intCast(paths.items.len));
+    try appendU32(&manifest, allocator, @intCast(paths.items.len + if (embedded_compiler_path == null) @as(usize, 0) else 1));
 
+    const embedded_compiler_bytes = if (embedded_compiler_path) |path| try readFile(io, path) else null;
+    defer if (embedded_compiler_bytes) |bytes| allocator.free(bytes);
+    var embedded_compiler_written = false;
     for (paths.items) |path| {
+        if (embedded_compiler_bytes) |bytes| {
+            if (!embedded_compiler_written and pathLessThan({}, embedded_wasm_compiler_label, path)) {
+                try appendWorkspaceFile(allocator, &manifest, embedded_wasm_compiler_label, bytes);
+                embedded_compiler_written = true;
+            }
+        }
         const file_bytes = try readWorkspaceFile(io, allocator, &root, path);
         defer allocator.free(file_bytes);
 
-        const file_raw = try allocator.alloc(u8, object.header_size + file_bytes.len);
-        defer allocator.free(file_raw);
-        const file_object = try (object.NodeWriter{ .out = file_raw }).bytesNode(sourceObjectRequirements(), sourceObjectEpoch(), file_bytes);
-        const label_ref = try vfs.prepareObjectLabelRef(path, file_object);
-
-        var label_ref_raw: [vfs.object_label_ref_bytes]u8 = undefined;
-        try vfs.encodeObjectLabelRef(label_ref, &label_ref_raw);
-        try manifest.appendSlice(allocator, &label_ref_raw);
-        try manifest.appendSlice(allocator, file_object);
+        try appendWorkspaceFile(allocator, &manifest, path, file_bytes);
+    }
+    if (embedded_compiler_bytes) |bytes| {
+        if (!embedded_compiler_written) try appendWorkspaceFile(allocator, &manifest, embedded_wasm_compiler_label, bytes);
     }
 
     const raw = try allocator.alloc(u8, object.header_size + manifest.items.len);
     errdefer allocator.free(raw);
     const canonical = try (object.NodeWriter{ .out = raw }).bytesNode(sourceObjectRequirements(), sourceObjectEpoch(), manifest.items);
     return raw[0..canonical.len];
+}
+
+fn appendWorkspaceFile(allocator: std.mem.Allocator, manifest: *std.ArrayList(u8), label: []const u8, file_bytes: []const u8) !void {
+    const file_raw = try allocator.alloc(u8, object.header_size + file_bytes.len);
+    defer allocator.free(file_raw);
+    const file_object = try (object.NodeWriter{ .out = file_raw }).bytesNode(sourceObjectRequirements(), sourceObjectEpoch(), file_bytes);
+    const label_ref = try vfs.prepareObjectLabelRef(label, file_object);
+
+    var label_ref_raw: [vfs.object_label_ref_bytes]u8 = undefined;
+    try vfs.encodeObjectLabelRef(label_ref, &label_ref_raw);
+    try manifest.appendSlice(allocator, &label_ref_raw);
+    try manifest.appendSlice(allocator, file_object);
 }
 
 fn appendU16(out: *std.ArrayList(u8), allocator: std.mem.Allocator, value: u16) !void {

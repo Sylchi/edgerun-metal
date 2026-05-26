@@ -3,6 +3,8 @@ const component_gallery = @import("component_gallery.zig");
 const site_blog = @import("site_blog.zig");
 const site_chrome = @import("site_chrome.zig");
 const site_docs = @import("site_docs.zig");
+const site_landing = @import("site_landing.zig");
+const site_source = @import("site_source.zig");
 
 pub const route_path_capacity: usize = 96;
 pub const route_hash_capacity: usize = route_path_capacity + 1;
@@ -13,6 +15,7 @@ pub const View = enum(u32) {
     apps = 2,
     components = 3,
     docs = 4,
+    source = 5,
 };
 
 pub const Route = struct {
@@ -22,10 +25,20 @@ pub const Route = struct {
     selected_component_index: ?usize = null,
 };
 
+pub const Action = enum(u32) {
+    launch_app,
+    reveal_identity,
+    compile_source,
+    download_source_release,
+    launch_source_release,
+    reset_source,
+};
+
 pub fn fromPath(path: []const u8) Route {
     const trimmed = trimPath(path);
     if (std.mem.eql(u8, trimmed, "/academy")) return blogIndex(null);
     if (std.mem.eql(u8, trimmed, "/apps")) return .{ .view = .apps };
+    if (std.mem.eql(u8, trimmed, "/source")) return .{ .view = .source };
     if (std.mem.eql(u8, trimmed, "/docs")) return .{ .view = .docs };
     if (std.mem.eql(u8, trimmed, "/docs/components")) return .{ .view = .components };
     if (std.mem.startsWith(u8, trimmed, "/docs/components/")) {
@@ -52,6 +65,7 @@ pub fn fromHit(hit_id: u32, current: Route) ?Route {
         site_docs.academy_button_id,
         => blogIndex(null),
         site_chrome.apps_button_id => .{ .view = .apps },
+        site_chrome.source_button_id => .{ .view = .source },
         site_docs.apps_button_id => .{ .view = .apps },
         site_docs.component_catalog_button_id => .{ .view = .components },
         site_blog.back_button_id => blogIndex(null),
@@ -59,10 +73,22 @@ pub fn fromHit(hit_id: u32, current: Route) ?Route {
     };
 }
 
-pub fn pathFromBrowserHash(hash: []const u8) error{InvalidBrowserRoute}![]const u8 {
+pub fn actionFromHit(hit_id: u32) ?Action {
+    return switch (hit_id) {
+        site_chrome.launch_button_id => .launch_app,
+        site_landing.reveal_identity_button_id => .reveal_identity,
+        site_source.compile_button_id => .compile_source,
+        site_source.download_button_id => .download_source_release,
+        site_source.launch_button_id => .launch_source_release,
+        site_source.reset_button_id => .reset_source,
+        else => null,
+    };
+}
+
+pub fn pathFromHash(hash: []const u8) error{InvalidRouteHash}![]const u8 {
     if (hash.len == 0 or std.mem.eql(u8, hash, "#")) return "/";
     if (std.mem.startsWith(u8, hash, "#/")) return hash[1..];
-    return error.InvalidBrowserRoute;
+    return error.InvalidRouteHash;
 }
 
 pub fn writePath(out: []u8, route: Route) error{RouteBufferTooSmall}!usize {
@@ -72,6 +98,7 @@ pub fn writePath(out: []u8, route: Route) error{RouteBufferTooSmall}!usize {
         .apps => "/apps",
         .components => if (route.selected_component_index) |index| return writeComponentPath(out, index) else "/docs/components",
         .docs => "/docs",
+        .source => "/source",
     };
     if (value.len > out.len) return error.RouteBufferTooSmall;
     @memcpy(out[0..value.len], value);
@@ -109,7 +136,7 @@ fn routeFromDynamicHit(hit_id: u32, current: Route) ?Route {
                 return blogIndex(index);
             }
         },
-        .landing, .apps, .docs => {},
+        .landing, .apps, .docs, .source => {},
     }
     return null;
 }
@@ -135,6 +162,7 @@ test "navigation parses browser and native site routes" {
     try std.testing.expectEqual(View.landing, fromPath("").view);
     try std.testing.expectEqual(View.blog, fromPath("/academy").view);
     try std.testing.expectEqual(View.apps, fromPath("/apps").view);
+    try std.testing.expectEqual(View.source, fromPath("/source").view);
     try std.testing.expectEqual(View.docs, fromPath("/docs").view);
     try std.testing.expectEqual(View.components, fromPath("/docs/components").view);
     try std.testing.expectEqual(View.components, fromPath("/docs/components/button").view);
@@ -160,6 +188,12 @@ test "navigation writes browser hash routes from shared state" {
     const apps_hash_len = try writeHash(&hash, apps);
     try std.testing.expectEqualStrings("#/apps", hash[0..apps_hash_len]);
 
+    const source = Route{ .view = .source };
+    const source_len = try writePath(&path, source);
+    try std.testing.expectEqualStrings("/source", path[0..source_len]);
+    const source_hash_len = try writeHash(&hash, source);
+    try std.testing.expectEqualStrings("#/source", hash[0..source_hash_len]);
+
     const docs = Route{ .view = .docs };
     const docs_len = try writePath(&path, docs);
     try std.testing.expectEqualStrings("/docs", path[0..docs_len]);
@@ -184,10 +218,21 @@ test "navigation maps shared hit ids to routes" {
     try std.testing.expectEqual(View.docs, fromHit(site_chrome.docs_button_id, .{}).?.view);
     try std.testing.expectEqual(View.blog, fromHit(site_chrome.blog_button_id, .{}).?.view);
     try std.testing.expectEqual(View.apps, fromHit(site_chrome.apps_button_id, .{}).?.view);
+    try std.testing.expectEqual(View.source, fromHit(site_chrome.source_button_id, .{}).?.view);
     try std.testing.expectEqual(View.components, fromHit(site_docs.component_catalog_button_id, .{}).?.view);
     try std.testing.expectEqual(component_gallery.indexBySlug("button").?, fromHit(component_gallery.first_catalog_card_id + 7, .{ .view = .components }).?.selected_component_index.?);
     const post_id = site_blog.postIdAt(0);
     try std.testing.expectEqual(post_id, fromHit(post_id, .{ .view = .blog }).?.selected_blog_post_id);
     try std.testing.expect(fromHit(component_gallery.first_catalog_card_id + 7, .{}) == null);
     try std.testing.expect(fromHit(post_id, .{}) == null);
+}
+
+test "navigation maps shared hit ids to site actions" {
+    try std.testing.expectEqual(Action.launch_app, actionFromHit(site_chrome.launch_button_id).?);
+    try std.testing.expectEqual(Action.reveal_identity, actionFromHit(site_landing.reveal_identity_button_id).?);
+    try std.testing.expectEqual(Action.compile_source, actionFromHit(site_source.compile_button_id).?);
+    try std.testing.expectEqual(Action.download_source_release, actionFromHit(site_source.download_button_id).?);
+    try std.testing.expectEqual(Action.launch_source_release, actionFromHit(site_source.launch_button_id).?);
+    try std.testing.expectEqual(Action.reset_source, actionFromHit(site_source.reset_button_id).?);
+    try std.testing.expect(actionFromHit(site_chrome.docs_button_id) == null);
 }

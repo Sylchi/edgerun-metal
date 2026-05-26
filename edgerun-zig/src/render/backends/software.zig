@@ -342,9 +342,9 @@ pub const Surface = struct {
         const a: u16 = alpha;
         const inv: u16 = 255 - a;
         self.pixels[index] = .{
-            .r = @intCast((@as(u16, color.r) * a + @as(u16, dst.r) * inv) / 255),
-            .g = @intCast((@as(u16, color.g) * a + @as(u16, dst.g) * inv) / 255),
-            .b = @intCast((@as(u16, color.b) * a + @as(u16, dst.b) * inv) / 255),
+            .r = blendChannel(color.r, dst.r, a, inv),
+            .g = blendChannel(color.g, dst.g, a, inv),
+            .b = blendChannel(color.b, dst.b, a, inv),
             .a = @intCast(@min(@as(u16, 255), @as(u16, dst.a) + (@as(u16, color.a) * a) / 255)),
         };
     }
@@ -2074,6 +2074,10 @@ fn lerp(a: f32, b: f32, t: f32) f32 {
 
 fn scaleByte(value: u8, factor: f32) u8 {
     return @intFromFloat(@round(std.math.clamp(@as(f32, @floatFromInt(value)) * factor, 0.0, 255.0)));
+}
+
+fn blendChannel(src: u8, dst: u8, src_alpha: u16, inv_alpha: u16) u8 {
+    return @intCast((@as(u16, src) * src_alpha + @as(u16, dst) * inv_alpha + 127) / 255);
 }
 
 fn nearestSampleIndex(value: f32, max_index_float: f32, len: usize) usize {

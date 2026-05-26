@@ -7,7 +7,7 @@ const wasm = @import("wasm/root.zig");
 const wasm_compiler = @import("embedded_wasm_compiler").bytes;
 
 const source_gap_bytes: usize = 64 * 1024;
-const successor_validation_memory_bytes: usize = 64 * 1024 * 1024;
+const successor_validation_memory_bytes: usize = 256 * 1024 * 1024;
 const compiler_memory_offset: usize = 16 * 1024 * 1024;
 const compiler_memory_extra_bytes: usize = 256 * 1024 * 1024;
 const execution_tick_budget: u64 = 16_000_000_000;
@@ -199,11 +199,30 @@ pub fn main(init: std.process.Init) !void {
     const output_len: usize = @intCast(try (try wasm.executeExportValueArgs(&runtime, &wasm_compiler, "er_wasm_compiler_output_len", &.{})).valueI32(0));
     if (compile_status != 0 or output_len == 0) {
         std.debug.print("run.compile_status={d} output.ptr={d} output.len={d}\n", .{ compile_status, reported_output_ptr, output_len });
+        const diagnostic_ptr: usize = @intCast(try (try wasm.executeExportValueArgs(&runtime, &wasm_compiler, "er_wasm_compiler_diagnostic_ptr", &.{})).valueI32(0));
+        const diagnostic_len: usize = @intCast(try (try wasm.executeExportValueArgs(&runtime, &wasm_compiler, "er_wasm_compiler_diagnostic_len", &.{})).valueI32(0));
+        if (diagnostic_ptr <= memory.len and diagnostic_len <= memory.len - diagnostic_ptr) {
+            std.debug.print("run.diagnostic={s}\n", .{memory[diagnostic_ptr..][0..diagnostic_len]});
+        }
         return error.CompilerDidNotEmitOutput;
     }
-    const output_ptr = findSuccessorWasm(memory, output_len, reported_output_ptr) orelse return error.MissingSuccessorWasm;
+    const output_ptr = findSuccessorWasm(memory, output_len, reported_output_ptr) orelse {
+        std.debug.print("output.missing_successor reported_ptr={d} len={d}", .{ reported_output_ptr, output_len });
+        if (reported_output_ptr <= memory.len and output_len >= wasm_magic.len and output_len <= memory.len - reported_output_ptr) {
+            std.debug.print(" first4={x:0>2} {x:0>2} {x:0>2} {x:0>2}", .{
+                memory[reported_output_ptr],
+                memory[reported_output_ptr + 1],
+                memory[reported_output_ptr + 2],
+                memory[reported_output_ptr + 3],
+            });
+            diagnoseSuccessorCandidate(memory, output_len, reported_output_ptr);
+        }
+        std.debug.print("\n", .{});
+        return error.MissingSuccessorWasm;
+    };
     if (output_ptr != compiler_memory_offset) return error.WrongCompilerOutputAddress;
     const output = memory[output_ptr..][0..output_len];
+    try dumpBuildArtifact(init.io, ".build/edgerun-linked-successor.wasm", output);
 
     var successor_ticks: u64 = execution_tick_budget;
     const successor_memory_len = if (source_bytes.len + source_gap_bytes > successor_validation_memory_bytes)
@@ -251,6 +270,9 @@ pub fn main(init: std.process.Init) !void {
     const lowered_input_capacity = try exportI32Optional(&successor, output, "er_ui_input_capacity");
     const lowered_source_workspace_ptr = try exportI32Optional(&successor, output, "er_ui_source_workspace_ptr");
     const lowered_source_workspace_capacity = try exportI32Optional(&successor, output, "er_ui_source_workspace_capacity");
+    const lowered_compiler_wasm_ptr = try exportI32Optional(&successor, output, "er_ui_compiler_wasm_ptr");
+    const lowered_compiler_wasm_len = try exportI32Optional(&successor, output, "er_ui_compiler_wasm_len");
+    const lowered_compiler_wasm_magic_ok = compilerMagicOk(successor_memory, lowered_compiler_wasm_ptr, lowered_compiler_wasm_len);
     const lowered_release_artifact_ptr = try exportI32Optional(&successor, output, "er_ui_release_artifact_ptr");
     const lowered_release_artifact_capacity = try exportI32Optional(&successor, output, "er_ui_release_artifact_capacity");
     const lowered_last_error = try exportI32Optional(&successor, output, "er_ui_last_error");
@@ -258,6 +280,15 @@ pub fn main(init: std.process.Init) !void {
     var source_len_after_commit: ?i32 = null;
     var source_commit_oversized: ?i32 = null;
     var source_len_after_oversized: ?i32 = null;
+    var source_commit_full: ?i32 = null;
+    var source_len_after_full: ?i32 = null;
+    var self_compile_status: ?i32 = null;
+    var self_compile_release_len: ?i32 = null;
+    var self_compile_inner_status: ?i32 = null;
+    var self_compile_diagnostic_ptr: ?i32 = null;
+    var self_compile_diagnostic_len: ?i32 = null;
+    var self_compile_release_magic_ok = false;
+    var self_compile_release_hash: ?u32 = null;
     if (lowered_source_workspace_ptr) |source_ptr_i32| {
         if (source_ptr_i32 >= 0) {
             if (lowered_source_workspace_capacity) |capacity_i32| {
@@ -270,6 +301,18 @@ pub fn main(init: std.process.Init) !void {
                     if (capacity_i32 < std.math.maxInt(i32)) {
                         source_commit_oversized = try exportI32ArgOptional(&successor, output, "er_ui_source_workspace_commit", capacity_i32 + 1);
                         source_len_after_oversized = try exportI32Optional(&successor, output, "er_ui_source_workspace_len");
+                    }
+                }
+                if (source_bytes.len <= @as(usize, @intCast(capacity_i32)) and source_ptr + source_bytes.len <= successor_memory.len) {
+                    @memcpy(successor_memory[source_ptr..][0..source_bytes.len], source_bytes);
+                    source_commit_full = try exportI32ArgOptional(&successor, output, "er_ui_source_workspace_commit", @intCast(source_bytes.len));
+                    source_len_after_full = try exportI32Optional(&successor, output, "er_ui_source_workspace_len");
+                    self_compile_status = try exportI32Optional(&successor, output, "er_ui_compile_workspace_wasm");
+                    self_compile_release_len = try exportI32Optional(&successor, output, "er_ui_release_artifact_len");
+                    if (self_compile_status != null and self_compile_status.? != 0) {
+                        self_compile_inner_status = try exportI32Optional(&successor, output, "er_wasm_compiler_status");
+                        self_compile_diagnostic_ptr = try exportI32Optional(&successor, output, "er_wasm_compiler_diagnostic_ptr");
+                        self_compile_diagnostic_len = try exportI32Optional(&successor, output, "er_wasm_compiler_diagnostic_len");
                     }
                 }
             }
@@ -290,6 +333,21 @@ pub fn main(init: std.process.Init) !void {
                 release_commit_ok = try exportI32ArgOptional(&successor, output, "er_ui_release_artifact_commit", @intCast(wasm_magic.len));
                 release_len_after_commit = try exportI32Optional(&successor, output, "er_ui_release_artifact_len");
                 release_last_error_after_commit = try exportI32Optional(&successor, output, "er_ui_last_error");
+            }
+        }
+    }
+    if (lowered_release_artifact_ptr) |artifact_ptr_i32| {
+        if (artifact_ptr_i32 >= 0) {
+            if (self_compile_release_len) |release_len_i32| {
+                if (release_len_i32 >= @as(i32, @intCast(wasm_magic.len))) {
+                    const artifact_ptr: usize = @intCast(artifact_ptr_i32);
+                    const release_len: usize = @intCast(release_len_i32);
+                    if (artifact_ptr <= successor_memory.len and release_len <= successor_memory.len - artifact_ptr) {
+                        const release = successor_memory[artifact_ptr..][0..release_len];
+                        self_compile_release_magic_ok = std.mem.eql(u8, release[0..wasm_magic.len], &wasm_magic);
+                        self_compile_release_hash = sourceHash(release);
+                    }
+                }
             }
         }
     }
@@ -332,6 +390,7 @@ pub fn main(init: std.process.Init) !void {
     std.debug.print("output.reported_ptr={d}\n", .{reported_output_ptr});
     std.debug.print("output.actual_ptr={d}\n", .{output_ptr});
     std.debug.print("output.bytes={d}\n", .{output_len});
+    std.debug.print("output.hash=0x{x:0>8}\n", .{sourceHash(output)});
     std.debug.print("output.embedded_source_offset={?d}\n", .{std.mem.indexOf(u8, output, source_bytes)});
     std.debug.print("successor.export_source_ptr={d}\n", .{app_source_ptr});
     std.debug.print("successor.export_source_len={d}\n", .{app_source_len});
@@ -366,6 +425,9 @@ pub fn main(init: std.process.Init) !void {
     std.debug.print("successor.lowered.er_ui_input_capacity={?d}\n", .{lowered_input_capacity});
     std.debug.print("successor.lowered.er_ui_source_workspace_ptr={?d}\n", .{lowered_source_workspace_ptr});
     std.debug.print("successor.lowered.er_ui_source_workspace_capacity={?d}\n", .{lowered_source_workspace_capacity});
+    std.debug.print("successor.lowered.er_ui_compiler_wasm_ptr={?d}\n", .{lowered_compiler_wasm_ptr});
+    std.debug.print("successor.lowered.er_ui_compiler_wasm_len={?d}\n", .{lowered_compiler_wasm_len});
+    std.debug.print("successor.lowered.er_ui_compiler_wasm_magic_ok={}\n", .{lowered_compiler_wasm_magic_ok});
     std.debug.print("successor.lowered.er_ui_release_artifact_ptr={?d}\n", .{lowered_release_artifact_ptr});
     std.debug.print("successor.lowered.er_ui_release_artifact_capacity={?d}\n", .{lowered_release_artifact_capacity});
     std.debug.print("successor.lowered.er_ui_last_error={?d}\n", .{lowered_last_error});
@@ -373,6 +435,22 @@ pub fn main(init: std.process.Init) !void {
     std.debug.print("successor.source_commit.len_after_ok={?d}\n", .{source_len_after_commit});
     std.debug.print("successor.source_commit.oversized={?d}\n", .{source_commit_oversized});
     std.debug.print("successor.source_commit.len_after_oversized={?d}\n", .{source_len_after_oversized});
+    std.debug.print("successor.source_commit.full={?d}\n", .{source_commit_full});
+    std.debug.print("successor.source_commit.len_after_full={?d}\n", .{source_len_after_full});
+    std.debug.print("successor.self_compile.status={?d}\n", .{self_compile_status});
+    std.debug.print("successor.self_compile.release_len={?d}\n", .{self_compile_release_len});
+    std.debug.print("successor.self_compile.inner_status={?d}\n", .{self_compile_inner_status});
+    if (self_compile_inner_status != null) {
+        printOptionalMemoryString(
+            "successor.self_compile.diagnostic",
+            successor_memory,
+            self_compile_diagnostic_ptr,
+            self_compile_diagnostic_len,
+        );
+    }
+    std.debug.print("successor.self_compile.release_magic_ok={}\n", .{self_compile_release_magic_ok});
+    std.debug.print("successor.self_compile.release_hash={?x:0>8}\n", .{self_compile_release_hash});
+    std.debug.print("successor.self_compile.same_hash={}\n", .{if (self_compile_release_hash) |hash| hash == sourceHash(output) else false});
     std.debug.print("successor.release_commit.short={?d}\n", .{release_commit_short});
     std.debug.print("successor.release_commit.last_error_after_short={?d}\n", .{release_last_error_after_short});
     std.debug.print("successor.release_commit.ok={?d}\n", .{release_commit_ok});
@@ -397,6 +475,34 @@ fn printRuntimeTrace(prefix: []const u8, trace: wasm.ExecutionTrace) void {
     std.debug.print("{s}.max_call_depth={d}\n", .{ prefix, trace.max_call_depth });
     std.debug.print("{s}.ticks_consumed={d}\n", .{ prefix, trace.execution_ticks_consumed });
     printTopOpcodes(prefix, trace);
+}
+
+fn dumpBuildArtifact(io: std.Io, path: []const u8, bytes_value: []const u8) !void {
+    const file = try std.Io.Dir.cwd().createFile(io, path, .{ .truncate = true });
+    defer file.close(io);
+    try file.writeStreamingAll(io, bytes_value);
+}
+
+fn printOptionalMemoryString(prefix: []const u8, memory: []const u8, maybe_ptr: ?i32, maybe_len: ?i32) void {
+    const ptr_i32 = maybe_ptr orelse {
+        std.debug.print("{s}=null\n", .{prefix});
+        return;
+    };
+    const len_i32 = maybe_len orelse {
+        std.debug.print("{s}=null\n", .{prefix});
+        return;
+    };
+    if (ptr_i32 < 0 or len_i32 < 0) {
+        std.debug.print("{s}=invalid\n", .{prefix});
+        return;
+    }
+    const ptr: usize = @intCast(ptr_i32);
+    const len: usize = @intCast(len_i32);
+    if (ptr > memory.len or len > memory.len - ptr) {
+        std.debug.print("{s}=out_of_bounds\n", .{prefix});
+        return;
+    }
+    std.debug.print("{s}={s}\n", .{ prefix, memory[ptr..][0..len] });
 }
 
 fn printTopOpcodes(prefix: []const u8, trace: wasm.ExecutionTrace) void {
@@ -833,6 +939,16 @@ fn exportI32ArgOptional(runtime: *wasm.Runtime, module: []const u8, name: []cons
     return try result.valueI32(0);
 }
 
+fn compilerMagicOk(memory: []const u8, maybe_ptr: ?i32, maybe_len: ?i32) bool {
+    const ptr_i32 = maybe_ptr orelse return false;
+    const len_i32 = maybe_len orelse return false;
+    if (ptr_i32 < 0 or len_i32 < @as(i32, @intCast(wasm_magic.len))) return false;
+    const ptr: usize = @intCast(ptr_i32);
+    const len: usize = @intCast(len_i32);
+    if (ptr > memory.len or len > memory.len - ptr) return false;
+    return std.mem.eql(u8, memory[ptr..][0..wasm_magic.len], &wasm_magic);
+}
+
 fn findSuccessorWasm(memory: []u8, output_len: usize, reported_output_ptr: usize) ?usize {
     if (validSuccessorAt(memory, output_len, reported_output_ptr)) return reported_output_ptr;
     var index: usize = 0;
@@ -842,6 +958,35 @@ fn findSuccessorWasm(memory: []u8, output_len: usize, reported_output_ptr: usize
         index = candidate + 1;
     }
     return null;
+}
+
+fn diagnoseSuccessorCandidate(memory: []u8, output_len: usize, offset: usize) void {
+    if (offset > memory.len or output_len > memory.len - offset) {
+        std.debug.print(" validation=out_of_bounds", .{});
+        return;
+    }
+    const candidate = memory[offset..][0..output_len];
+    const scratch_len = if (output_len + source_gap_bytes > successor_validation_memory_bytes)
+        output_len + source_gap_bytes
+    else
+        successor_validation_memory_bytes;
+    const scratch = std.heap.page_allocator.alloc(u8, scratch_len) catch {
+        std.debug.print(" validation=alloc_failed", .{});
+        return;
+    };
+    defer std.heap.page_allocator.free(scratch);
+    @memset(scratch, 0);
+    var ticks: u64 = 1024;
+    var runtime = wasm.Runtime.init(scratch, &ticks);
+    const result = wasm.executeExportValueArgs(&runtime, candidate, "er_app_abi_version", &.{}) catch |err| {
+        std.debug.print(" validation_error={s}", .{@errorName(err)});
+        return;
+    };
+    const abi = result.valueI32(0) catch |err| {
+        std.debug.print(" abi_error={s}", .{@errorName(err)});
+        return;
+    };
+    std.debug.print(" abi={d}", .{abi});
 }
 
 fn validSuccessorAt(memory: []u8, output_len: usize, offset: usize) bool {

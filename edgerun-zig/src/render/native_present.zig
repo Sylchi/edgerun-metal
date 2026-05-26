@@ -15,6 +15,7 @@ pub const Error = renderer_software.Error || renderer_gpu.Error || error{
     InvalidSink,
     SinkRejected,
     InvalidGpuBuffer,
+    InvalidSoftwareReceipt,
 };
 
 pub const PixelFormat = enum(u32) {
@@ -339,7 +340,8 @@ pub fn renderCpuAndSubmit(
 
     const software_surface = try renderer_software.Framebuffer.init(framebuffer.width, framebuffer.height, framebuffer.pixels);
     software_surface.clear(background);
-    _ = try software_surface.renderIr(buffers, resources);
+    const software_receipt = try software_surface.renderIr(buffers, resources);
+    if (!software_receipt.valid()) return error.InvalidSoftwareReceipt;
     return planAndSubmit(surface, buffers, resources.presentationResources(), refresh_hz, tile_width, tile_height, tile_marks, dirty_ids, sink);
 }
 
@@ -494,6 +496,7 @@ const TestSink = struct {
     wayland_count: usize = 0,
     last_framebuffer_id: u32 = 0,
     last_surface_id: u32 = 0,
+    last_dirty_tile_count: usize = 0,
     reject: bool = false,
 
     fn drmSink(self: *TestSink) Sink {
@@ -515,6 +518,7 @@ const TestSink = struct {
         if (self.reject) return false;
         self.drm_count += 1;
         self.last_framebuffer_id = commit.framebuffer_id;
+        self.last_dirty_tile_count = commit.dirty_tiles.len;
         return commit.dirty_tiles.len != 0;
     }
 
@@ -523,6 +527,7 @@ const TestSink = struct {
         if (self.reject) return false;
         self.wayland_count += 1;
         self.last_surface_id = commit.surface_id;
+        self.last_dirty_tile_count = commit.dirty_tiles.len;
         return commit.dirty_tiles.len != 0;
     }
 };
@@ -804,6 +809,17 @@ test "native cpu render submits drm commit from canonical ir" {
     try std.testing.expectEqual(ui.Color.accent, pixels[0]);
 }
 
+test "native cpu render retains software presentation receipt" {
+    const source = @embedFile("native_present.zig");
+    const start = std.mem.indexOf(u8, source, "pub fn renderCpuAndSubmit(") orelse return error.TestUnexpectedResult;
+    const end = std.mem.indexOf(u8, source[start..], "pub fn renderGpuAndSubmit(") orelse return error.TestUnexpectedResult;
+    const render_cpu_source = source[start .. start + end];
+    const discarded_call = "_" ++ " = try software_surface.renderIr(";
+    try std.testing.expect(std.mem.indexOf(u8, render_cpu_source, discarded_call) == null);
+    try std.testing.expect(std.mem.indexOf(u8, render_cpu_source, "const software_receipt = try software_surface.renderIr(") != null);
+    try std.testing.expect(std.mem.indexOf(u8, render_cpu_source, "if (!software_receipt.valid()) return error.InvalidSoftwareReceipt;") != null);
+}
+
 test "native cpu render rejects framebuffer size mismatch" {
     var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
@@ -888,6 +904,94 @@ test "native gpu render submits wayland commit from canonical ir" {
     try std.testing.expectEqual(receipt.gpu.sequence, gpu_device.last_sequence);
     try std.testing.expectEqual(@as(usize, 1), sink_state.wayland_count);
     try std.testing.expectEqual(@as(u32, 61), sink_state.last_surface_id);
+}
+
+test "native cpu and gpu render paths agree on canonical ir presentation" {
+    var storage = renderer_ir.FixedBuffers(1, 0, 1, 0, 0, 0, 0){};
+    const buffers = storage.buffers();
+    try renderer_ir.pushRect(buffers, .base, .{ .x = 0, .y = 0, .w = 16, .h = 16 }, .accent, .clear, 0, 0, 0);
+    try renderer_ir.pushIcon(buffers, .base, .{
+        .bounds = .{ .x = 32, .y = 32, .w = 16, .h = 16 },
+        .icon_id = 1,
+        .color = .text,
+    });
+    const expected_primitives = try renderer_ir.primitiveCount(buffers);
+
+    var pixels: [64 * 64]ui.Color = undefined;
+    const alpha = [_]u8{255};
+    const software_resources = renderer_software.Resources{
+        .font = .{ .width = 1, .height = 1, .alpha = &alpha },
+    };
+    const presentation_resources = software_resources.presentationResources();
+    var cpu_tile_marks: [16]u8 = undefined;
+    var cpu_dirty_ids: [16]u32 = undefined;
+    var cpu_sink = TestSink{};
+    const cpu_receipt = try renderCpuAndSubmit(
+        .{ .wayland = .{
+            .surface_id = 149,
+            .buffer_id = 151,
+            .width = 64,
+            .height = 64,
+            .stride = 64,
+        } },
+        buffers,
+        software_resources,
+        .{ .width = 64, .height = 64, .pixels = &pixels },
+        .clear,
+        60,
+        16,
+        16,
+        &cpu_tile_marks,
+        &cpu_dirty_ids,
+        cpu_sink.waylandSink(),
+    );
+
+    var primitives: [16]renderer_gpu.Primitive = undefined;
+    var gpu_tile_marks: [16]u8 = undefined;
+    var gpu_dirty_ids: [16]u32 = undefined;
+    var native_tile_marks: [16]u8 = undefined;
+    var native_dirty_ids: [16]u32 = undefined;
+    var gpu_device = TestGpuDevice{};
+    var gpu_sink = TestSink{};
+    const gpu_receipt = try renderGpuAndSubmit(
+        .{ .wayland = .{
+            .surface_id = 149,
+            .buffer_id = 151,
+            .width = 64,
+            .height = 64,
+            .stride = 64,
+        } },
+        buffers,
+        presentation_resources,
+        gpu_device.device(),
+        .{
+            .primitives = &primitives,
+            .gpu_tile_marks = &gpu_tile_marks,
+            .gpu_dirty_ids = &gpu_dirty_ids,
+            .native_tile_marks = &native_tile_marks,
+            .native_dirty_ids = &native_dirty_ids,
+        },
+        60,
+        16,
+        16,
+        gpu_sink.waylandSink(),
+    );
+
+    try std.testing.expect(cpu_receipt.valid());
+    try std.testing.expect(gpu_receipt.valid());
+    try std.testing.expectEqual(cpu_receipt.target, gpu_receipt.native.target);
+    try std.testing.expectEqual(cpu_receipt.transport, gpu_receipt.native.transport);
+    try std.testing.expectEqual(cpu_receipt.primitive_count, gpu_receipt.native.primitive_count);
+    try std.testing.expectEqual(cpu_receipt.primitive_count, gpu_receipt.gpu.presentation_primitive_count);
+    try std.testing.expectEqual(expected_primitives, gpu_receipt.gpu.presentation_primitive_count);
+    try std.testing.expectEqual(cpu_receipt.dirty_tile_count, gpu_receipt.native.dirty_tile_count);
+    try std.testing.expectEqual(cpu_sink.last_dirty_tile_count, gpu_sink.last_dirty_tile_count);
+    try std.testing.expectEqual(cpu_sink.last_surface_id, gpu_sink.last_surface_id);
+    try std.testing.expectEqual(@as(usize, 1), gpu_device.began);
+    try std.testing.expectEqual(gpu_receipt.gpu.primitive_count, gpu_device.uploaded);
+    try std.testing.expectEqual(gpu_receipt.gpu.dirty_tile_count, gpu_device.rendered);
+    try std.testing.expectEqual(ui.Color.accent, pixels[0]);
+    try std.testing.expectEqual(ui.Color.clear, pixels[63]);
 }
 
 test "native gpu backed render binds scanout surface before native commit" {

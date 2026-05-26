@@ -64,7 +64,8 @@ pub fn main() !void {
     i = 0;
     while (i < ir_render_iterations) : (i += 1) {
         surface.clear(.bg);
-        _ = try surface.renderIr(ir_buffers, atlas_resources);
+        const receipt = try surface.renderIr(ir_buffers, atlas_resources);
+        if (!receipt.valid()) return error.InvalidSoftwareReceipt;
     }
     const atlas_render_ns = nowNs() - atlas_render_start;
     const atlas_packed_checksum = irChecksum(ir_buffers);
@@ -91,7 +92,8 @@ pub fn main() !void {
     i = 0;
     while (i < ir_render_iterations) : (i += 1) {
         surface.clear(.bg);
-        _ = try surface.renderIr(ir_buffers, object_resources);
+        const receipt = try surface.renderIr(ir_buffers, object_resources);
+        if (!receipt.valid()) return error.InvalidSoftwareReceipt;
     }
     const object_render_ns = nowNs() - object_render_start;
 
