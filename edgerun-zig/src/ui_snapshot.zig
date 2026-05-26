@@ -41,8 +41,8 @@ fn renderSnapshot(init: std.process.Init, out_path: []const u8) !void {
     var ir_storage = SnapshotIrStorage{};
     const buffers = ir_storage.buffers();
 
-    var font_atlas = renderer_font_atlas.Atlas.init();
-    try renderer_pipeline.packScene(buffers, &font_atlas, .atlas, scene.written());
+    var font_atlas = renderer_font_atlas.Atlas.initWithFont(renderer_font_atlas.geist_ascii_font.body());
+    try renderer_pipeline.packScene(buffers, &font_atlas, .object, scene.written());
 
     const surface = try renderer_software.Framebuffer.init(width, height, pixels);
     surface.clear(.bg);
@@ -83,8 +83,8 @@ test "snapshot packs and rasterizes through renderer ir" {
     var ir_storage = SnapshotIrStorage{};
     const buffers = ir_storage.buffers();
 
-    var font_atlas = renderer_font_atlas.Atlas.init();
-    try renderer_pipeline.packScene(buffers, &font_atlas, .atlas, scene.written());
+    var font_atlas = renderer_font_atlas.Atlas.initWithFont(renderer_font_atlas.geist_ascii_font.body());
+    try renderer_pipeline.packScene(buffers, &font_atlas, .object, scene.written());
     try std.testing.expect(ir_storage.rect_len > 0);
     try std.testing.expect(ir_storage.text_vertex_len > 0);
 

@@ -3,6 +3,7 @@ const icon = @import("icon.zig");
 const ui = @import("ui.zig");
 const components = @import("ui_components.zig");
 const site_chrome = @import("site_chrome.zig");
+const design = @import("site_design.zig");
 const interaction = @import("ui_interaction.zig");
 
 pub const back_button_id: u32 = 40_001;
@@ -11,8 +12,8 @@ pub const all_lessons_button_id: u32 = 40_899;
 pub const first_arc_filter_button_id: u32 = 40_900;
 
 const header_h: f32 = site_chrome.header_h;
-const content_wide: f32 = 1180.0;
-const content_pad: f32 = 28.0;
+const content_wide: f32 = design.content_wide;
+const content_pad: f32 = design.content_pad;
 const workflow_w: f32 = 380.0;
 const index_intro_w: f32 = 760.0;
 const guide_h: f32 = 280.0;
@@ -266,17 +267,7 @@ const arc_sections = [_]ArcSection{
     },
 };
 
-const palette = struct {
-    const bg = ui.Color{ .r = 11, .g = 11, .b = 11 };
-    const card = ui.Color{ .r = 18, .g = 18, .b = 18 };
-    const card_alt = ui.Color{ .r = 24, .g = 24, .b = 24 };
-    const border = ui.Color{ .r = 56, .g = 56, .b = 56 };
-    const text = ui.Color{ .r = 242, .g = 242, .b = 242 };
-    const dim = ui.Color{ .r = 154, .g = 154, .b = 154 };
-    const primary = ui.Color{ .r = 74, .g = 222, .b = 128 };
-    const neutral_soft = ui.Color{ .r = 32, .g = 32, .b = 32 };
-    const blue = ui.Color{ .r = 96, .g = 165, .b = 250 };
-};
+const palette = design.palette;
 
 pub const Post = struct {
     arc: []const u8,

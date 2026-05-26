@@ -66,7 +66,6 @@ pub const renderer_software = @import("render/software.zig");
 pub const sdk = @import("sdk.zig");
 pub const component_gallery = @import("component_gallery.zig");
 const cheating_app_tests = @import("cheating_app_tests.zig");
-pub const site_apps = @import("site_apps.zig");
 pub const site_frame = @import("site_frame.zig");
 pub const ui = @import("ui.zig");
 pub const ui_components = @import("ui_components.zig");
@@ -145,7 +144,6 @@ test {
     _ = sdk;
     _ = component_gallery;
     _ = cheating_app_tests;
-    _ = site_apps;
     _ = ui;
     _ = ui_components;
     _ = ui_resolver;

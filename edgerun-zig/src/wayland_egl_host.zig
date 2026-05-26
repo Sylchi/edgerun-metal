@@ -140,7 +140,7 @@ const SceneState = struct {
         self.command_len = scene.written().len;
         self.region_len = collector.written().len;
         const buffers = self.ir_storage.buffers();
-        try renderer_pipeline.packScene(buffers, font_atlas, .atlas, scene.written());
+        try renderer_pipeline.packScene(buffers, font_atlas, .object, scene.written());
         return buffers;
     }
 
@@ -200,7 +200,7 @@ pub fn main(init: std.process.Init) !void {
     defer deinitWayland(&wl);
     var egl = try initEgl(&wl);
     defer deinitEgl(&egl);
-    var font_atlas = renderer_font_atlas.Atlas.init();
+    var font_atlas = renderer_font_atlas.Atlas.initWithFont(renderer_font_atlas.geist_ascii_font.body());
     const cloud_meme = try site_images.cloudMeme();
     var gl = try renderer_gles.Adapter.init(&font_atlas, .{
         .width = cloud_meme.width,
@@ -777,9 +777,9 @@ test "egl host activation uses shared site navigation routes" {
     try std.testing.expectEqual(post_id, app.route.selected_blog_post_id);
     try std.testing.expectEqual(@as(f32, 0.0), app.scroll_y);
 
-    app.runtime.hovered = .{ .kind = .button, .id = site_chrome.apps_button_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
+    app.runtime.hovered = .{ .kind = .button, .id = site_chrome.docs_button_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
     activateHit(&app);
-    try std.testing.expectEqual(site_navigation.View.apps, app.route.view);
+    try std.testing.expectEqual(site_navigation.View.docs, app.route.view);
 
     app.runtime.hovered = .{ .kind = .button, .id = site_chrome.docs_button_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
     activateHit(&app);

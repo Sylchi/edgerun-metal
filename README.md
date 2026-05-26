@@ -1,56 +1,81 @@
 # EdgeRun
 
-EdgeRun is an experiment in making computers trustworthy again.
+EdgeRun is a self-compiling app system with zero dependency chains.
 
-Today, most apps borrow trust from clouds, app stores, operating systems,
-accounts, permissions, and invisible background services. EdgeRun tries a
-stricter idea:
+No package manager. No npm install. No WASI filesystem trick. No cloud compiler.
+No browser framework. No pile of native dependencies.
 
 ```text
-If an app does work, it should be able to prove what it used,
-what it touched, who allowed it, and what came out.
+one app
+with its own compiler
+with its own UI system
+with its own object store
+with its own runtime receipts
+that runs through browser, native, CPU, GPU, and real-hardware paths
 ```
 
-That proof is built from small records: objects, identities, clocks, grants,
-sealed messages, and receipts.
+The crazy part is not that it renders a page. The crazy part is that the app can
+carry its source as data, edit that source inside its own memory, compile the
+next app artifact, and keep the whole chain explainable.
 
 ## Why This Deserves Attention
 
-EdgeRun is not another app framework. It is a way to run software where authority
-is explicit instead of ambient.
+Most software today is a stack of rented trust:
+
+```text
+cloud account -> package registry -> OS permissions -> browser APIs -> app store -> opaque update
+```
+
+EdgeRun is trying to collapse that into something a person can actually reason
+about:
+
+```text
+Here is the app.
+Here is the source object.
+Here is the compiler object.
+Here is what it asks for.
+Here is what your machine granted.
+Here is the receipt for what happened.
+```
+
+That makes the project interesting even before it is finished:
 
 - Apps do not automatically inherit your files, network, devices, identity, or
   another app's memory.
-- Important data is stored as canonical objects, not vague files or hidden app
-  state.
+- The UI is built into the system instead of outsourced to a web framework.
+- The compiler path is part of the app loop instead of a separate developer
+  machine ritual.
+- Important data is stored as canonical objects, not vague files or hidden state.
 - Work produces receipts, so execution can be replayed, checked, and explained.
-- A parent app can help create a child app, but a released child owns its own
-  memory unless it explicitly shares something back.
 - The same UI is being pushed through browser, CPU, GPU, Wayland, and DRM paths
   instead of becoming five separate app models.
-- The project includes real boot, TPM, WASM, rendering, media, and Pi bring-up
-  work, not just a whitepaper.
+- The codebase includes real boot, TPM, WASM, rendering, media, compiler, and Pi
+  bring-up work, not just a whitepaper.
 
-The simple promise is this: software should come with an audit trail ordinary
-people can understand.
+The promise is simple: an app should be able to carry its own tools, build its
+own next version, run wherever it is granted resources, and explain what it did.
 
 ## The Short Version
 
-EdgeRun treats apps as object graphs plus requirements.
+EdgeRun treats apps as self-contained object graphs.
 
-When an app wants to run, the local machine grants exact slices of memory,
-storage, identity, and device authority. The app does its work inside those
-bounds and emits receipts. Those receipts can explain, in concrete terms, what
-was allowed and what happened.
+An EdgeRun app can contain source, compiler bytes, UI components, media,
+requirements, and receipts. When it wants to run, the local machine grants exact
+slices of memory, storage, identity, and device authority. The app does its work
+inside those bounds and emits receipts.
 
-That makes sharing software different. Instead of "install this package and hope
-it behaves," the goal is closer to:
+That changes what sharing software can mean. Instead of:
 
 ```text
-Here is the app object.
-Here is what it asks for.
-Here is what your machine granted.
-Here is the receipt for the work it performed.
+install this and hope
+```
+
+the goal is:
+
+```text
+run this object
+grant these exact resources
+verify the receipt
 ```
 
 ## What Is Real In This Repo

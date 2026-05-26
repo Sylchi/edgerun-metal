@@ -12,6 +12,7 @@ const max_control_depth = 256;
 const max_globals = 16;
 const max_table_entries = 32;
 const max_data_segments = 8;
+const max_decoded_ops = 512 * 1024;
 const byte_load_bytes = 1;
 const i32_load_bytes = 4;
 const wasm_page_bytes = 65536;
@@ -445,7 +446,7 @@ pub const Runtime = struct {
         return self.memory.len;
     }
 
-    fn consumeExecution(self: Runtime, ticks: u64) bool {
+    fn consumeExecution(self: *Runtime, ticks: u64) bool {
         if (ticks == 0 or ticks > self.execution_ticks.*) return false;
         self.execution_ticks.* -= ticks;
         if (self.trace) |trace| trace.execution_ticks_consumed += ticks;
@@ -722,7 +723,34 @@ const Code = struct {
     body: []const u8 = &.{},
     local_count: usize = 0,
     local_types: [max_locals]ValueType = undefined,
+    decoded_start: usize = 0,
+    decoded_count: usize = 0,
 };
+
+const DecodedOp = struct {
+    offset: u32 = 0,
+    next_offset: u32 = 0,
+    opcode_byte: u8 = 0,
+    imm0: u32 = 0,
+    imm1: u32 = 0,
+};
+
+const DecodedProgram = struct {
+    ops: [max_decoded_ops]DecodedOp = undefined,
+    count: usize = 0,
+
+    fn reset(program: *DecodedProgram) void {
+        program.count = 0;
+    }
+
+    fn append(program: *DecodedProgram, op: DecodedOp) Error!void {
+        if (program.count >= program.ops.len) return error.Unsupported;
+        program.ops[program.count] = op;
+        program.count += 1;
+    }
+};
+
+var decoded_program: DecodedProgram = .{};
 
 const Function = struct {
     type_index: usize = 0,
@@ -946,6 +974,7 @@ const Module = struct {
 
     fn parseInto(module: *Module, bytes: []const u8) Error!void {
         module.* = .{};
+        decoded_program.reset();
         var reader = Reader{ .bytes = bytes };
         if (!byte_utils.eql(try reader.readBytes(wasm_magic.len), &wasm_magic)) return error.Corrupt;
         if (!byte_utils.eql(try reader.readBytes(wasm_version.len), &wasm_version)) return error.Corrupt;
@@ -1206,6 +1235,9 @@ const Module = struct {
             }
             code.local_count = local_count;
             code.body = body_reader.bytes[body_reader.offset..];
+            code.decoded_start = decoded_program.count;
+            try decodeCodeBody(code.body, self.type_count);
+            code.decoded_count = decoded_program.count - code.decoded_start;
         }
     }
 
@@ -1503,28 +1535,36 @@ const Executor = struct {
         var controls: [max_control_depth]ControlFrame = undefined;
         var control_len: usize = 0;
 
+        const trace = self.runtime.trace;
         var reader = Reader{ .bytes = code.body };
+        var decoded_index = code.decoded_start;
+        const decoded_end = code.decoded_start + code.decoded_count;
         while (!reader.done()) {
             if (!self.runtime.consumeExecution(1)) return error.NoExecution;
+            const decoded = try decodedOpForOffset(code, &decoded_index, decoded_end, reader.offset);
             const opcode_byte = try reader.readByte();
+            if (decoded.opcode_byte != opcode_byte) return error.Corrupt;
             if (opcode_byte == wasm_extended_prefix) {
-                if (self.runtime.trace) |trace| trace.recordExtendedOpcode();
+                if (trace) |execution_trace| execution_trace.recordExtendedOpcode();
                 try self.executeExtendedOpcode(&frame, &reader);
                 continue;
             }
             switch (opcode_byte) {
                 @intFromEnum(Opcode.local_get) => {
-                    if (self.runtime.trace) |trace| trace.recordOpcode(opcode_byte, .local_get);
-                    const index = try reader.readU32Leb();
+                    if (trace) |execution_trace| execution_trace.recordOpcode(opcode_byte, .local_get);
+                    reader.offset = decoded.next_offset;
+                    const index = decoded.imm0;
                     if (index >= local_limit) return error.Corrupt;
+                    if (try self.tryRunLocalGetSuperInstruction(&frame, &reader, &decoded_index, decoded_end, decoded, index, local_limit, trace)) continue;
                     if (frame.stack_len >= max_stack) return error.StackOverflow;
                     frame.stack[frame.stack_len] = frame.locals[index];
                     frame.stack_len += 1;
                     continue;
                 },
                 @intFromEnum(Opcode.local_set) => {
-                    if (self.runtime.trace) |trace| trace.recordOpcode(opcode_byte, .local_set);
-                    const index = try reader.readU32Leb();
+                    if (trace) |execution_trace| execution_trace.recordOpcode(opcode_byte, .local_set);
+                    reader.offset = decoded.next_offset;
+                    const index = decoded.imm0;
                     if (index >= local_limit) return error.Corrupt;
                     if (frame.stack_len == 0) return error.StackUnderflow;
                     frame.stack_len -= 1;
@@ -1532,19 +1572,24 @@ const Executor = struct {
                     continue;
                 },
                 @intFromEnum(Opcode.local_tee) => {
-                    if (self.runtime.trace) |trace| trace.recordOpcode(opcode_byte, .local_tee);
-                    const index = try reader.readU32Leb();
+                    if (trace) |execution_trace| execution_trace.recordOpcode(opcode_byte, .local_tee);
+                    reader.offset = decoded.next_offset;
+                    const index = decoded.imm0;
                     if (index >= local_limit or frame.stack_len == 0) return error.Corrupt;
                     frame.locals[index] = frame.stack[frame.stack_len - 1];
                     continue;
                 },
                 @intFromEnum(Opcode.i32_const) => {
-                    if (self.runtime.trace) |trace| trace.recordOpcode(opcode_byte, .i32_const);
-                    try frame.pushI32(try reader.readI32Leb());
+                    if (trace) |execution_trace| execution_trace.recordOpcode(opcode_byte, .i32_const);
+                    reader.offset = decoded.next_offset;
+                    const value: i32 = @bitCast(decoded.imm0);
+                    if (frame.stack_len >= max_stack) return error.StackOverflow;
+                    frame.stack[frame.stack_len] = .{ .i32 = value };
+                    frame.stack_len += 1;
                     continue;
                 },
                 @intFromEnum(Opcode.i32_add) => {
-                    if (self.runtime.trace) |trace| trace.recordOpcode(opcode_byte, .i32_add);
+                    if (trace) |execution_trace| execution_trace.recordOpcode(opcode_byte, .i32_add);
                     if (frame.stack_len < 2) return error.StackUnderflow;
                     frame.stack_len -= 1;
                     const right = switch (frame.stack[frame.stack_len]) {
@@ -1559,26 +1604,81 @@ const Executor = struct {
                     frame.stack[left_index] = .{ .i32 = left +% right };
                     continue;
                 },
+                @intFromEnum(Opcode.i32_xor) => {
+                    if (trace) |execution_trace| execution_trace.recordOpcode(opcode_byte, .i32_xor);
+                    if (frame.stack_len < 2) return error.StackUnderflow;
+                    frame.stack_len -= 1;
+                    const right = switch (frame.stack[frame.stack_len]) {
+                        .i32 => |value| value,
+                        else => return error.Corrupt,
+                    };
+                    const left_index = frame.stack_len - 1;
+                    const left = switch (frame.stack[left_index]) {
+                        .i32 => |value| value,
+                        else => return error.Corrupt,
+                    };
+                    frame.stack[left_index] = .{ .i32 = left ^ right };
+                    continue;
+                },
+                @intFromEnum(Opcode.br_if) => {
+                    if (trace) |execution_trace| execution_trace.recordOpcode(opcode_byte, .br_if);
+                    reader.offset = decoded.next_offset;
+                    const branch_depth = decoded.imm0;
+                    if (frame.stack_len == 0) return error.StackUnderflow;
+                    frame.stack_len -= 1;
+                    const condition = switch (frame.stack[frame.stack_len]) {
+                        .i32 => |value| value,
+                        else => return error.Corrupt,
+                    };
+                    if (condition != 0) try branchToControl(&reader, &controls, &control_len, branch_depth, self.module.type_count);
+                    continue;
+                },
                 @intFromEnum(Opcode.i32_load) => {
-                    if (self.runtime.trace) |trace| trace.recordOpcode(opcode_byte, .i32_load);
-                    const offset = try readMemoryImmediate(&reader);
+                    if (trace) |execution_trace| execution_trace.recordOpcode(opcode_byte, .i32_load);
+                    reader.offset = decoded.next_offset;
+                    const offset = decoded.imm1;
                     const address = try popAddress(&frame, offset);
                     const range = try self.memoryRange(address, i32_load_bytes);
-                    try frame.pushI32(@bitCast(byte_utils.load32(range).?));
+                    if (frame.stack_len >= max_stack) return error.StackOverflow;
+                    frame.stack[frame.stack_len] = .{ .i32 = @bitCast(byte_utils.load32(range).?) };
+                    frame.stack_len += 1;
                     continue;
                 },
                 @intFromEnum(Opcode.i32_load8_u) => {
-                    if (self.runtime.trace) |trace| trace.recordOpcode(opcode_byte, .i32_load8_u);
-                    const offset = try readMemoryImmediate(&reader);
+                    if (trace) |execution_trace| execution_trace.recordOpcode(opcode_byte, .i32_load8_u);
+                    reader.offset = decoded.next_offset;
+                    const offset = decoded.imm1;
                     const address = try popAddress(&frame, offset);
                     const range = try self.memoryRange(address, byte_load_bytes);
-                    try frame.pushI32(range[0]);
+                    if (frame.stack_len >= max_stack) return error.StackOverflow;
+                    frame.stack[frame.stack_len] = .{ .i32 = range[0] };
+                    frame.stack_len += 1;
+                    continue;
+                },
+                @intFromEnum(Opcode.i32_store8) => {
+                    if (trace) |execution_trace| execution_trace.recordOpcode(opcode_byte, .i32_store8);
+                    reader.offset = decoded.next_offset;
+                    const offset = decoded.imm1;
+                    if (frame.stack_len < 2) return error.StackUnderflow;
+                    frame.stack_len -= 1;
+                    const value = switch (frame.stack[frame.stack_len]) {
+                        .i32 => |stack_value| stack_value,
+                        else => return error.Corrupt,
+                    };
+                    frame.stack_len -= 1;
+                    const base: u32 = switch (frame.stack[frame.stack_len]) {
+                        .i32 => |stack_value| @bitCast(stack_value),
+                        else => return error.Corrupt,
+                    };
+                    const address = checkedAdd(@as(usize, base), offset) orelse return error.NoMemory;
+                    const range = try self.memoryRange(address, byte_load_bytes);
+                    range[0] = @truncate(@as(u32, @bitCast(value)));
                     continue;
                 },
                 else => {},
             }
             const opcode = opcodeFromByte(opcode_byte) orelse return error.Unsupported;
-            if (self.runtime.trace) |trace| trace.recordOpcode(opcode_byte, opcode);
+            if (trace) |execution_trace| execution_trace.recordOpcode(opcode_byte, opcode);
             switch (opcode) {
                 .@"unreachable" => return error.Trap,
                 .nop => {},
@@ -1980,6 +2080,91 @@ const Executor = struct {
         return error.MissingImport;
     }
 
+    fn tryRunLocalGetSuperInstruction(
+        self: *Executor,
+        frame: *Frame,
+        reader: *Reader,
+        decoded_index: *usize,
+        decoded_end: usize,
+        decoded: DecodedOp,
+        local_index: u32,
+        local_limit: usize,
+        trace: ?*ExecutionTrace,
+    ) Error!bool {
+        const first = nextStraightDecoded(decoded_index.*, decoded_end, decoded.next_offset) orelse return false;
+        switch (first.opcode_byte) {
+            @intFromEnum(Opcode.i32_const) => {
+                const second = nextStraightDecoded(decoded_index.* + 1, decoded_end, first.next_offset) orelse return false;
+                if (second.opcode_byte != @intFromEnum(Opcode.i32_add)) return false;
+                if (!self.runtime.consumeExecution(2)) return error.NoExecution;
+                if (trace) |execution_trace| {
+                    execution_trace.recordOpcode(first.opcode_byte, .i32_const);
+                    execution_trace.recordOpcode(second.opcode_byte, .i32_add);
+                }
+                const left = try localI32(frame, local_index);
+                const right: i32 = @bitCast(first.imm0);
+                if (frame.stack_len >= max_stack) return error.StackOverflow;
+                frame.stack[frame.stack_len] = .{ .i32 = left +% right };
+                frame.stack_len += 1;
+                reader.offset = second.next_offset;
+                decoded_index.* += 2;
+                return true;
+            },
+            @intFromEnum(Opcode.local_get) => {
+                const second_index = first.imm0;
+                if (second_index >= local_limit) return error.Corrupt;
+                const second = nextStraightDecoded(decoded_index.* + 1, decoded_end, first.next_offset) orelse return false;
+                const op: Opcode = switch (second.opcode_byte) {
+                    @intFromEnum(Opcode.i32_add) => .i32_add,
+                    @intFromEnum(Opcode.i32_xor) => .i32_xor,
+                    else => return false,
+                };
+                if (!self.runtime.consumeExecution(2)) return error.NoExecution;
+                if (trace) |execution_trace| {
+                    execution_trace.recordOpcode(first.opcode_byte, .local_get);
+                    execution_trace.recordOpcode(second.opcode_byte, op);
+                }
+                const left = try localI32(frame, local_index);
+                const right = try localI32(frame, second_index);
+                if (frame.stack_len >= max_stack) return error.StackOverflow;
+                frame.stack[frame.stack_len] = .{ .i32 = switch (op) {
+                    .i32_add => left +% right,
+                    .i32_xor => left ^ right,
+                    else => unreachable,
+                } };
+                frame.stack_len += 1;
+                reader.offset = second.next_offset;
+                decoded_index.* += 2;
+                return true;
+            },
+            @intFromEnum(Opcode.i32_load), @intFromEnum(Opcode.i32_load8_u) => {
+                const op: Opcode = if (first.opcode_byte == @intFromEnum(Opcode.i32_load)) .i32_load else .i32_load8_u;
+                if (!self.runtime.consumeExecution(1)) return error.NoExecution;
+                if (trace) |execution_trace| execution_trace.recordOpcode(first.opcode_byte, op);
+                const base: u32 = @bitCast(try localI32(frame, local_index));
+                const address = checkedAdd(@as(usize, base), first.imm1) orelse return error.NoMemory;
+                const size: usize = switch (op) {
+                    .i32_load => i32_load_bytes,
+                    .i32_load8_u => byte_load_bytes,
+                    else => unreachable,
+                };
+                const range = try self.memoryRange(address, size);
+                if (frame.stack_len >= max_stack) return error.StackOverflow;
+                const loaded: i32 = switch (op) {
+                    .i32_load => @bitCast(byte_utils.load32(range).?),
+                    .i32_load8_u => range[0],
+                    else => unreachable,
+                };
+                frame.stack[frame.stack_len] = .{ .i32 = loaded };
+                frame.stack_len += 1;
+                reader.offset = first.next_offset;
+                decoded_index.* += 1;
+                return true;
+            },
+            else => return false,
+        }
+    }
+
     fn loadMemory(self: *Executor, frame: *Frame, reader: *Reader, kind: MemoryLoad) Error!void {
         const offset = try readMemoryImmediate(reader);
         const address = try popAddress(frame, offset);
@@ -2250,6 +2435,45 @@ const Executor = struct {
         }
     }
 };
+
+fn decodedOpForOffset(code: Code, decoded_index: *usize, decoded_end: usize, offset: usize) Error!DecodedOp {
+    if (decoded_index.* < decoded_end) {
+        const op = decoded_program.ops[decoded_index.*];
+        if (op.offset == offset) {
+            decoded_index.* += 1;
+            return op;
+        }
+    }
+    var low = code.decoded_start;
+    var high = decoded_end;
+    while (low < high) {
+        const mid = low + (high - low) / 2;
+        const op = decoded_program.ops[mid];
+        if (op.offset < offset) {
+            low = mid + 1;
+        } else if (op.offset > offset) {
+            high = mid;
+        } else {
+            decoded_index.* = mid + 1;
+            return op;
+        }
+    }
+    return error.Corrupt;
+}
+
+fn nextStraightDecoded(index: usize, decoded_end: usize, expected_offset: u32) ?DecodedOp {
+    if (index >= decoded_end) return null;
+    const op = decoded_program.ops[index];
+    if (op.offset != expected_offset) return null;
+    return op;
+}
+
+fn localI32(frame: *const Executor.Frame, index: usize) Error!i32 {
+    return switch (frame.locals[index]) {
+        .i32 => |value| value,
+        else => error.Corrupt,
+    };
+}
 
 pub const ExecutionStorage = struct {
     module: Module = .{},
@@ -2660,6 +2884,57 @@ fn skipControlDepth(reader: *Reader, branch_depth: u32, type_count: usize) Error
         }
     }
     return error.Corrupt;
+}
+
+fn decodeCodeBody(body: []const u8, type_count: usize) Error!void {
+    var reader = Reader{ .bytes = body };
+    while (!reader.done()) {
+        const offset = reader.offset;
+        const opcode_byte = try reader.readByte();
+        var decoded = DecodedOp{
+            .offset = @intCast(offset),
+            .opcode_byte = opcode_byte,
+        };
+        if (opcode_byte == wasm_extended_prefix) {
+            try skipExtendedOpcodeImmediate(&reader);
+            decoded.next_offset = @intCast(reader.offset);
+            try decoded_program.append(decoded);
+            continue;
+        }
+        const opcode = opcodeFromByte(opcode_byte) orelse return error.Unsupported;
+        switch (opcode) {
+            .block, .loop, .@"if" => try readBlockType(&reader, type_count),
+            .br, .br_if, .call, .local_get, .local_set, .local_tee, .global_get, .global_set => {
+                decoded.imm0 = try reader.readU32Leb();
+            },
+            .br_table => {
+                const target_count = try reader.readU32Leb();
+                var target_index: u32 = 0;
+                while (target_index < target_count) : (target_index += 1) _ = try reader.readU32Leb();
+                _ = try reader.readU32Leb();
+            },
+            .call_indirect => {
+                decoded.imm0 = try reader.readU32Leb();
+                decoded.imm1 = try reader.readU32Leb();
+            },
+            .select_typed => _ = try readSelectType(&reader),
+            .table_get, .table_set => try readTableIndex(&reader),
+            .memory_size, .memory_grow => try readMemoryIndex(&reader),
+            .i32_load, .i64_load, .f32_load, .f64_load, .i32_load8_s, .i32_load8_u, .i32_load16_s, .i32_load16_u, .i64_load8_s, .i64_load8_u, .i64_load16_s, .i64_load16_u, .i64_load32_s, .i64_load32_u, .i32_store, .i64_store, .f32_store, .f64_store, .i32_store8, .i32_store16, .i64_store8, .i64_store16, .i64_store32 => {
+                decoded.imm0 = try reader.readU32Leb();
+                decoded.imm1 = try reader.readU32Leb();
+            },
+            .i32_const => decoded.imm0 = @bitCast(try reader.readI32Leb()),
+            .i64_const => _ = try reader.readI64Leb(),
+            .f32_const => _ = try reader.readF32(),
+            .f64_const => _ = try reader.readF64(),
+            .ref_null => _ = try reader.readByte(),
+            .ref_func => decoded.imm0 = try reader.readU32Leb(),
+            else => {},
+        }
+        decoded.next_offset = @intCast(reader.offset);
+        try decoded_program.append(decoded);
+    }
 }
 
 fn skipExtendedOpcodeImmediate(reader: *Reader) Error!void {
@@ -3317,6 +3592,14 @@ fn readConstantValueExpression(reader: *Reader, value_type: ValueType) Error!Val
 }
 
 fn readMemoryImmediate(reader: *Reader) Error!u32 {
+    if (reader.offset + 2 <= reader.bytes.len) {
+        const alignment = reader.bytes[reader.offset];
+        const offset = reader.bytes[reader.offset + 1];
+        if (((alignment | offset) & leb_continue_mask) == 0) {
+            reader.offset += 2;
+            return offset;
+        }
+    }
     _ = try reader.readU32Leb();
     return try reader.readU32Leb();
 }

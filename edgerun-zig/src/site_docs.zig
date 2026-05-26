@@ -6,391 +6,737 @@ const components = @import("ui_components.zig");
 const component_gallery = @import("component_gallery.zig");
 const site_blog = @import("site_blog.zig");
 const site_chrome = @import("site_chrome.zig");
+const design = @import("site_design.zig");
 
 pub const component_catalog_button_id: u32 = 31_001;
 pub const academy_button_id: u32 = 31_002;
-pub const apps_button_id: u32 = 31_003;
+pub const source_button_id: u32 = 31_003;
+pub const first_doc_page_button_id: u32 = 31_200;
 
 const header_h: f32 = site_chrome.header_h;
-const content_wide: f32 = 1180.0;
-const content_pad: f32 = 28.0;
-const page_top_pad: f32 = 48.0;
+const content_wide: f32 = design.content_wide;
+const page_top_pad: f32 = 34.0;
 const page_bottom_pad: f32 = 120.0;
-const section_gap: f32 = 40.0;
-const panel_gap: f32 = 16.0;
+const sidebar_w: f32 = 264.0;
+const sidebar_gap: f32 = 34.0;
 const panel_radius: f32 = site_chrome.surface_radius;
-const hero_h_wide: f32 = 420.0;
-const hero_h_compact: f32 = 600.0;
-const system_h_wide: f32 = 360.0;
-const system_h_compact: f32 = 650.0;
-const flow_h_wide: f32 = 430.0;
-const flow_h_compact: f32 = 780.0;
-const showcase_h_wide: f32 = 390.0;
-const showcase_h_compact: f32 = 680.0;
-const contract_h_wide: f32 = 330.0;
-const contract_h_compact: f32 = 620.0;
-const callout_h: f32 = 180.0;
-const compact_w: f32 = 760.0;
-const narrow_w: f32 = 540.0;
+const panel_gap: f32 = 14.0;
+const compact_w: f32 = 820.0;
 const card_pad: f32 = 18.0;
-const line_h: f32 = 18.0;
-const stat_h: f32 = 86.0;
-const timeline_node: f32 = 30.0;
-const timeline_gap: f32 = 18.0;
+const row_h: f32 = 38.0;
+const section_gap: f32 = 36.0;
+const hero_min_h: f32 = 220.0;
+const hero_label_h: f32 = 26.0;
+const hero_title_line_h: f32 = 34.0;
+const hero_title_avg_w: f32 = 16.0;
+const hero_title_max_lines: usize = 2;
+const hero_summary_line_h: f32 = 20.0;
+const hero_summary_avg_w: f32 = 9.4;
+const hero_summary_max_lines: usize = 4;
+const hero_button_gap: f32 = 22.0;
+const intro_title_h: f32 = 22.0;
+const intro_gap: f32 = 10.0;
+const intro_body_line_h: f32 = 18.0;
+const intro_body_avg_w: f32 = 9.0;
+const intro_body_max_lines: usize = 3;
+const feature_title_h: f32 = 16.0;
+const feature_summary_line_h: f32 = 16.0;
+const feature_summary_avg_w: f32 = 8.4;
+const feature_summary_max_lines: usize = 4;
+const detail_title_h: f32 = 16.0;
+const detail_body_line_h: f32 = 17.0;
+const detail_body_avg_w: f32 = 8.6;
+const detail_body_max_lines: usize = 6;
+const code_title_h: f32 = 14.0;
+const code_line_h: f32 = 20.0;
+const section_block_gap: f32 = 14.0;
+const section_block_title_h: f32 = 16.0;
+const section_block_body_line_h: f32 = 17.0;
+const section_block_body_avg_w: f32 = 8.4;
+const section_block_body_max_lines: usize = 14;
 const sample_button_id: u32 = 31_101;
 const sample_input_id: u32 = 31_102;
 const sample_switch_id: u32 = 31_103;
 const sample_tab_id: u32 = 31_104;
 
-const palette = struct {
-    const bg = ui.Color{ .r = 9, .g = 9, .b = 11 };
-    const panel = ui.Color{ .r = 18, .g = 18, .b = 20 };
-    const panel_alt = ui.Color{ .r = 24, .g = 24, .b = 27 };
-    const row = ui.Color{ .r = 32, .g = 32, .b = 36 };
-    const border = ui.Color{ .r = 63, .g = 63, .b = 70 };
-    const text = ui.Color{ .r = 250, .g = 250, .b = 250 };
-    const dim = ui.Color{ .r = 161, .g = 161, .b = 170 };
-    const muted = ui.Color{ .r = 113, .g = 113, .b = 122 };
-    const primary = ui.Color{ .r = 74, .g = 222, .b = 128 };
-    const cyan = ui.Color{ .r = 34, .g = 211, .b = 238 };
-    const blue = ui.Color{ .r = 96, .g = 165, .b = 250 };
-    const violet = ui.Color{ .r = 167, .g = 139, .b = 250 };
-    const amber = ui.Color{ .r = 250, .g = 204, .b = 21 };
-    const danger = ui.Color{ .r = 248, .g = 113, .b = 113 };
-};
+const palette = design.palette;
 
 pub const State = struct {
     scroll_y: f32 = 0.0,
     hover_x: f32 = -1.0,
     hover_y: f32 = -1.0,
+    selected_doc_index: ?usize = null,
 };
 
-const Surface = struct {
+pub const DocSection = enum {
+    overview,
+    runtime,
+    routing,
+    authority,
+    rendering,
+    components,
+    media,
+    fonts,
+    wasm,
+    storage,
+    source,
+
+    pub fn label(self: DocSection) []const u8 {
+        return switch (self) {
+            .overview => "Overview",
+            .runtime => "Runtime",
+            .routing => "Routing",
+            .authority => "Authority",
+            .rendering => "Rendering",
+            .components => "Components",
+            .media => "Media",
+            .fonts => "Fonts",
+            .wasm => "WASM",
+            .storage => "Storage",
+            .source => "Source",
+        };
+    }
+};
+
+pub const DocPage = struct {
+    section: DocSection,
+    slug: []const u8,
+    route: []const u8,
     title: []const u8,
-    detail: []const u8,
-    metric: []const u8,
+    summary: []const u8,
+    status: []const u8,
+    primary: []const u8,
+    secondary: []const u8,
+    api: []const u8,
     icon_value: icon.Icon,
     color: ui.Color,
 };
 
-const surfaces = [_]Surface{
+const DocBlock = struct {
+    title: []const u8,
+    body: []const u8,
+    code: []const u8 = "",
+};
+
+const runtime_blocks = [_]DocBlock{
+    .{ .title = "Single app frame", .body = "Every host enters the same app through site_frame.render. Browser, Wayland SHM, Wayland EGL, DRM, snapshots, and tests provide a rectangle and route state; they do not pick a separate product UI." },
+    .{ .title = "Host responsibilities", .body = "Hosts own window creation, input collection, presentation, and resource upload. The app owns scene commands, interaction regions, scroll state, route state, and the visible content." },
+    .{ .title = "Build contract", .body = "The browser artifact and the native window must compile the same app modules. The make wayland-window path builds ui-browser first, then launches the Wayland host against the same site frame." },
+};
+
+const routing_blocks = [_]DocBlock{
+    .{ .title = "Route object", .body = "site_navigation.Route is the only app route shape. It carries the top-level view plus selected blog post, docs page, component page, and Academy filter state." },
+    .{ .title = "Browser bridge", .body = "The browser bridge passes hash bytes into WASM. WASM parses those bytes with site_navigation.fromPath and writes canonical hashes back with writeHash. JavaScript does not choose app views." },
+    .{ .title = "Native route", .body = "Native hosts parse the same path strings and pass the resulting Route into site_frame. Header buttons, docs rows, catalog cards, and browser hashes all converge on the same route transition code.", .code = "/docs/fonts -> docs page: fonts\n/docs/components -> component catalog\n/docs/components/button -> component page: button" },
+};
+
+const authority_blocks = [_]DocBlock{
+    .{ .title = "No ambient authority", .body = "Authority is represented by explicit objects, principals, receipts, and host-mediated transitions. An app should not gain storage, child memory, native execution, or user approval because it can call a global function." },
+    .{ .title = "Object boundary", .body = "Stored or transferred data crosses boundaries as canonical EdgeRun object bytes. Callers verify object headers and typed bodies instead of inventing identity from arbitrary raw buffers." },
+    .{ .title = "Receipts", .body = "Receipts bind the actor, subject, clock window, manifest, and consequence. They are meant to make authority transitions inspectable and replay-resistant instead of relying on logs or comments." },
+};
+
+const rendering_blocks = [_]DocBlock{
+    .{ .title = "Scene first", .body = "UI code emits ui.Scene commands and interaction regions. The scene is the product UI contract; it is independent of whether pixels are eventually produced by software, browser GPU buffers, GLES, or native presentation." },
+    .{ .title = "Renderer IR", .body = "renderer_pipeline.packScene converts scene commands into packed rectangles, text vertices, icon vertices, image vertices, and overlay buffers. Backends consume those buffers and declared resources." },
+    .{ .title = "Backend boundary", .body = "Backends own storage, textures, damage, and presentation receipts. They must not duplicate product UI decisions, docs pages, components, or route logic." },
+};
+
+const component_blocks = [_]DocBlock{
+    .{ .title = "Catalog as public vocabulary", .body = "component_gallery.component_catalog is the visible list of components compiled into the app. Catalog cards and opened component pages render from the same component specifications." },
+    .{ .title = "Component object path", .body = "Components serialize to canonical component objects, render through shared component render helpers, and collect hit targets through component interaction helpers." },
+    .{ .title = "Opened component page", .body = "Each /docs/components/<slug> page shows the actual component renderings plus the API and contract. It is not a static screenshot or separate demo renderer." },
+};
+
+const media_blocks = [_]DocBlock{
+    .{ .title = "Owned decode", .body = "Media should be decoded by repo-owned code into EdgeRun drawing data. The host may present pixels, but hidden host decoders should not become part of the app contract." },
+    .{ .title = "Icons", .body = "Icon names map to semantic icon ids. SVG/vector parsing turns repo assets into renderer data so the same icon appears in browser and native paths." },
+    .{ .title = "Images and video", .body = "Images move through image decode and renderer image vertices. Video work is staged around deterministic frame decode so media can eventually be demonstrated without depending on platform players." },
+};
+
+const font_blocks = [_]DocBlock{
+    .{ .title = "Embedded asset", .body = "The font system starts with varfont.geist_bytes, an embedded Geist variable font file. The app does not ask the browser, desktop, or OS for the user's installed font stack." },
+    .{ .title = "Parser and metrics", .body = "varfont.Face.geist parses the TTF tables that EdgeRun supports, including glyph outlines, metrics, variation axes, and kerning. Text measurement uses those metrics before any backend sees a vertex." },
+    .{ .title = "Compiled font object", .body = "render/font_atlas can compile the supported ASCII codepoints into a font_vector.Body. That gives the renderer an object-font path where glyph commands, metrics, and advances are owned data." },
+    .{ .title = "Atlas bake", .body = "The atlas path rasterizes glyphs into a 2048x2048 alpha8 texture with room for 1280 cached glyphs. Glyphs are cached by character and pixel size; small text alpha is sharpened during bake." },
+    .{ .title = "Renderer consumption", .body = "renderer_ir.FontAtlas exposes metrics, text width, and glyph lookup callbacks. packScene turns text commands into textured glyph quads. Software, GLES, browser, and native hosts consume the same alpha atlas resource.", .code = "ui.Scene text\n-> renderer_ir.FontAtlas callbacks\n-> packed text vertices\n-> alpha texture in backend" },
+};
+
+const wasm_blocks = [_]DocBlock{
+    .{ .title = "Normal execution target", .body = "WASM is the default app execution format. It gives the runtime a deterministic module boundary instead of native ambient access to files, sockets, or OS process APIs." },
+    .{ .title = "Compiler path", .body = "The source route owns the embedded source workspace, compile action, release artifact buffer, download action, and launch action. The compiler runs through the WASM interpreter path." },
+    .{ .title = "Release artifact", .body = "A successful compile emits a real WASM module starting with the WASM magic bytes. That artifact can be exported or launched as another app instance." },
+};
+
+const storage_blocks = [_]DocBlock{
+    .{ .title = "Canonical bytes", .body = "Storage stores canonical EdgeRun objects and typed indexes. The stored bytes carry object headers and bodies that can be verified when read back." },
+    .{ .title = "Owner scoped indexes", .body = "Indexes are scoped by owner so one app cannot silently bind another app's object as its own. Storage paths should reject targets outside the declared owner scope." },
+    .{ .title = "Sealed movement", .body = "Encrypted and sealed object movement is the intended path for private app data. The user grants storage by choosing to keep or share the app/object, not by giving broad filesystem access." },
+};
+
+const source_blocks = [_]DocBlock{
+    .{ .title = "Workspace in the app", .body = "The source page exposes the embedded workspace as app-owned source. Editing happens inside the EdgeRun UI route, not through a host-side editor surface." },
+    .{ .title = "Compile loop", .body = "Compile, download, launch, and reset are site actions resolved inside WASM. The browser bridge only carries bytes for export or launching; it should not understand the source tree." },
+    .{ .title = "Successor app", .body = "The goal is a successor artifact: the app can edit its own source, compile a new WASM release artifact, and launch that artifact as a new isolated instance." },
+};
+
+const overview_blocks = [_]DocBlock{
+    .{ .title = "How to read these docs", .body = "Each sidebar row is a route-backed page for a real subsystem. The overview shows the map; selected sections explain their own pipeline and ownership boundary." },
+    .{ .title = "One app, many hosts", .body = "The same site frame feeds browser, native Wayland, GPU, DRM, and snapshots. Host code adapts presentation; app code owns routes, documentation, source editing, components, and interactions." },
+};
+
+pub const doc_pages = [_]DocPage{
     .{
-        .title = "Landing",
-        .detail = "The first runtime proof: local identity, live rendering, and no platform login as root authority.",
-        .metric = "runtime signal",
-        .icon_value = .terminal,
+        .section = .overview,
+        .slug = "overview",
+        .route = "/docs",
+        .title = "EdgeRun documentation",
+        .summary = "The docs are the map for what exists now: runtime, authority, rendering, components, media, fonts, WASM, storage, and source.",
+        .status = "system map",
+        .primary = "Use the sidebar as the app manual. Each row is a real feature surface or shipped subsystem, not a placeholder page.",
+        .secondary = "Components have their own route per component because their API belongs beside the rendered preview.",
+        .api = "route: /docs\nframe: site_frame.render -> site_docs.render\nnavigation: site_navigation.Route.selected_doc_index",
+        .icon_value = .file,
         .color = palette.primary,
     },
     .{
-        .title = "Academy",
-        .detail = "A teaching path that explains authority, devices, networks, storage, and app safety in sequence.",
-        .metric = "67 lessons",
+        .section = .runtime,
+        .slug = "runtime",
+        .route = "/docs/runtime",
+        .title = "Runtime",
+        .summary = "The app boots through one shared site frame, then routes into landing, academy, docs, components, or source.",
+        .status = "shared frame",
+        .primary = "Runtime pages emit EdgeRun scene commands and interaction regions. Browser, native CPU, GPU, and Wayland hosts consume the same frame contract.",
+        .secondary = "The app should never decide whether it is on CPU or GPU; the host chooses the backend after the scene is produced.",
+        .api = "entry: site_frame.render\nheight: site_frame.contentHeight\nroute: site_navigation.Route",
+        .icon_value = .terminal,
+        .color = palette.cyan,
+    },
+    .{
+        .section = .routing,
+        .slug = "routing",
+        .route = "/docs/routing",
+        .title = "Routing",
+        .summary = "Routing is one shared contract: browser hashes, native hosts, header buttons, docs rows, and component cards all resolve to site_navigation.Route.",
+        .status = "single table",
+        .primary = "Every opened surface is represented as a typed route before the frame renders. The browser bridge only carries bytes for the path hash; it does not choose the app view.",
+        .secondary = "The live component catalog owns `/docs/components`; docs pages own `/docs/<slug>`; individual rendered components own `/docs/components/<slug>`.",
+        .api = "/ -> landing\n/academy[/id] -> Academy\n/docs[/slug] -> Docs\n/docs/components[/slug] -> Components\n/source -> Source",
+        .icon_value = .route,
+        .color = palette.green,
+    },
+    .{
+        .section = .authority,
+        .slug = "authority",
+        .route = "/docs/authority",
+        .title = "Authority",
+        .summary = "Authority is modeled as explicit principal, receipt, object, and route transitions instead of ambient trust.",
+        .status = "receipt first",
+        .primary = "The current model keeps resource movement explicit: allocator grants resources, apps receive handles, storage receives canonical objects, and crossings leave receipts.",
+        .secondary = "This page links the docs to the Academy path because the learning material explains why each boundary exists.",
+        .api = "objects: object.zig canonical bytes\nidentity: identity.zig principal material\nreceipts: typed object receipt nodes",
+        .icon_value = .shield,
+        .color = palette.violet,
+    },
+    .{
+        .section = .rendering,
+        .slug = "rendering",
+        .route = "/docs/rendering",
+        .title = "Rendering",
+        .summary = "Rendering flows from UI/component code into scene commands and renderer IR before any backend paints.",
+        .status = "one contract",
+        .primary = "The software, browser, GPU, and native hosts should agree because they are adapters for the same scene and IR path.",
+        .secondary = "Backend-specific code owns presentation, not product UI decisions.",
+        .api = "scene: ui.Scene\ncomponents: ui_components.zig\nir: renderer_ir.zig\nbackends: render/backends",
+        .icon_value = .code,
+        .color = palette.blue,
+    },
+    .{
+        .section = .components,
+        .slug = "component-system",
+        .route = "/docs/component-system",
+        .title = "Components",
+        .summary = "The component catalog is the public UI vocabulary. Each component page renders the component and documents its API.",
+        .status = "57 entries",
+        .primary = "Open Components to inspect the exact catalog entries currently compiled into the app.",
+        .secondary = "The docs explainer lives at `/docs/component-system`; the live catalog is `/docs/components`, so route reads and writes never collide.",
+        .api = "catalog route: /docs/components\ncomponent route: /docs/components/<slug>\nrender: Component.render\ninteractions: Component.collectInteractions",
+        .icon_value = .app,
+        .color = palette.primary,
+    },
+    .{
+        .section = .media,
+        .slug = "media",
+        .route = "/docs/media",
+        .title = "Media",
+        .summary = "Media covers repo-owned image decode, SVG icon parsing, WebP work, and the path toward video.",
+        .status = "owned decode",
+        .primary = "Icons and media are decoded into EdgeRun-owned drawing data so hosts do not become hidden rendering dependencies.",
+        .secondary = "The current visible media surface is SVG-backed icon rendering and component previews such as aspect ratio and carousel.",
+        .api = "svg: icon_svg.zig\nimages: image.zig\nicons: icon.Icon -> icon id -> renderer IR",
         .icon_value = .file,
         .color = palette.amber,
     },
     .{
-        .title = "Components",
-        .detail = "One component catalog rendered by the same EdgeRun scene path across browser and native hosts.",
-        .metric = "shared UI",
-        .icon_value = .code,
+        .section = .fonts,
+        .slug = "fonts",
+        .route = "/docs/fonts",
+        .title = "Fonts",
+        .summary = "Fonts are owned by EdgeRun: the app embeds Geist, parses the variable font, builds an alpha atlas, and sends textured glyph quads through renderer IR.",
+        .status = "owned atlas",
+        .primary = "UI code emits text commands only. Font parsing, glyph metrics, kerning, rasterization, atlas packing, and backend upload stay inside the EdgeRun render pipeline.",
+        .secondary = "The current path supports embedded Geist bytes and compiled font objects. Small text is sharpened during atlas bake, and software/GPU/browser hosts consume the same alpha atlas resource.",
+        .api = "asset: varfont.geist_bytes\nparse: varfont.Face.geist\nobject font: font_vector -> render/font_atlas\natlas: 2048x2048 alpha8, 1280 glyphs\nir: renderer_ir.FontAtlas -> text quads\nbackends: software/GLES/browser alpha texture",
+        .icon_value = .activity,
+        .color = palette.green,
+    },
+    .{
+        .section = .wasm,
+        .slug = "wasm",
+        .route = "/docs/wasm",
+        .title = "WASM",
+        .summary = "WASM is the normal app execution target and the route for subapps to run without ambient host authority.",
+        .status = "sandbox path",
+        .primary = "The source workspace and release flow are the visible app authoring path; runtime authority is granted by manifest and receipt.",
+        .secondary = "Native execution remains special. Normal app logic should prove itself through deterministic WASM behavior.",
+        .api = "source: site_source.zig\nruntime: wasm/root.zig\nroute: /source",
+        .icon_value = .terminal,
         .color = palette.cyan,
     },
     .{
-        .title = "Apps",
-        .detail = "App surfaces are allocator-scoped guests with receipts, not bundles of ambient host permissions.",
-        .metric = "capability first",
-        .icon_value = .app,
-        .color = palette.violet,
+        .section = .storage,
+        .slug = "storage",
+        .route = "/docs/storage",
+        .title = "Storage",
+        .summary = "Storage is object based: canonical bytes, scoped ownership, typed indexes, and encrypted object movement.",
+        .status = "object boundary",
+        .primary = "Stored data should cross boundaries as validated EdgeRun objects, not raw buffers with invented identity.",
+        .secondary = "The storage docs intentionally point at object identity and receipt semantics because those are the authority boundary.",
+        .api = "object: object.View.decode\nstore: store.zig\nindex: owner-scoped app keys",
+        .icon_value = .database,
+        .color = palette.yellow,
+    },
+    .{
+        .section = .source,
+        .slug = "source",
+        .route = "/source",
+        .title = "Source",
+        .summary = "The Source page is the working authoring surface for compiling and launching a release artifact.",
+        .status = "live tool",
+        .primary = "Source is linked from Docs because it is not a marketing promise; it is a route you can open now.",
+        .secondary = "The docs describe the path, while the Source route owns the editor, compile action, release download, and launch action.",
+        .api = "route: /source\nstate: site_source.State\nactions: compile, download, launch, reset",
+        .icon_value = .code,
+        .color = palette.blue,
     },
 };
 
-const FlowStep = struct {
-    title: []const u8,
-    detail: []const u8,
-    color: ui.Color,
-};
+pub fn indexBySlug(slug: []const u8) ?usize {
+    for (doc_pages, 0..) |page, index| {
+        if (std.mem.eql(u8, page.slug, slug)) return index;
+    }
+    return null;
+}
 
-const flow_steps = [_]FlowStep{
-    .{ .title = "Author", .detail = "An EdgeRun app creates draft app objects inside the runtime.", .color = palette.primary },
-    .{ .title = "Preview", .detail = "The interpreter runs the draft with parent-visible memory for debugging.", .color = palette.cyan },
-    .{ .title = "Release", .detail = "The draft becomes canonical WASM, manifest, requirements, and receipts.", .color = palette.blue },
-    .{ .title = "Allocate", .detail = "The user's allocator moves memory and storage into child-owned slices.", .color = palette.violet },
-    .{ .title = "Share", .detail = "Friends receive executable objects that inherit no network or storage authority.", .color = palette.amber },
-};
+pub fn indexByHit(hit_id: u32) ?usize {
+    if (hit_id < first_doc_page_button_id) return null;
+    const index: usize = @intCast(hit_id - first_doc_page_button_id);
+    return if (index < doc_pages.len) index else null;
+}
 
-const Contract = struct {
-    title: []const u8,
-    detail: []const u8,
-};
-
-const contracts = [_]Contract{
-    .{ .title = "No inherited network", .detail = "WASM code cannot call the network unless an EdgeRun API grants that exact transition." },
-    .{ .title = "No inherited storage", .detail = "Storage is a slice and receipt, not a path the app can wander through." },
-    .{ .title = "No parent spying", .detail = "Release children move out of parent-visible memory; parent keeps handles." },
-    .{ .title = "User allocator wins", .detail = "Authority bubbles to the user whenever resources or capabilities are granted." },
-};
+pub fn pageAt(index: ?usize) DocPage {
+    const resolved = index orelse 0;
+    return if (resolved < doc_pages.len) doc_pages[resolved] else doc_pages[0];
+}
 
 pub fn contentHeight(width: f32) f32 {
-    const content_w = @min(content_wide, @max(1.0, width - content_pad * 2.0));
-    return header_h + page_top_pad + heroHeight(content_w) + section_gap +
-        systemHeight(content_w) + section_gap +
-        flowHeight(content_w) + section_gap +
-        showcaseHeight(content_w) + section_gap +
-        contractHeight(content_w) + section_gap +
-        callout_h + page_bottom_pad;
+    return contentHeightForState(width, .{});
+}
+
+pub fn contentHeightForState(width: f32, state: State) f32 {
+    const content_w = @min(content_wide, @max(1.0, width - design.content_pad * 2.0));
+    const compact = content_w < compact_w;
+    const sidebar_h = if (compact) sidebarHeight() + panel_gap else 0.0;
+    const body_w = if (compact) content_w else content_w - sidebar_w - sidebar_gap;
+    const body_h = docBodyHeight(body_w, compact, pageAt(state.selected_doc_index));
+    return header_h + page_top_pad + sidebar_h + body_h + page_bottom_pad;
 }
 
 pub fn render(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) (ui.RenderError || interaction.Error)!void {
     try fill(scene, bounds, palette.bg, 0.0);
-    try renderGrid(scene, ui.Rect.init(bounds.x, bounds.y + header_h - state.scroll_y, bounds.w, contentHeight(bounds.w)));
+    try renderGrid(scene, ui.Rect.init(bounds.x, bounds.y + header_h - state.scroll_y, bounds.w, contentHeightForState(bounds.w, state)));
 
-    const content = centered(bounds, content_wide);
-    const page_y = header_h + page_top_pad - state.scroll_y;
+    const content = design.centered(bounds, content_wide);
     const page_clip = ui.Rect.init(bounds.x, bounds.y + header_h, bounds.w, @max(1.0, bounds.h - header_h));
     if (try scene.pushClip(page_clip)) {
         defer scene.popClip();
-        var cursor_y = page_y;
-        try renderHero(scene, collector, ui.Rect.init(content.x, cursor_y, content.w, heroHeight(content.w)));
-        cursor_y += heroHeight(content.w) + section_gap;
-        try renderSystem(scene, collector, ui.Rect.init(content.x, cursor_y, content.w, systemHeight(content.w)));
-        cursor_y += systemHeight(content.w) + section_gap;
-        try renderFlow(scene, ui.Rect.init(content.x, cursor_y, content.w, flowHeight(content.w)));
-        cursor_y += flowHeight(content.w) + section_gap;
-        try renderShowcase(scene, collector, ui.Rect.init(content.x, cursor_y, content.w, showcaseHeight(content.w)));
-        cursor_y += showcaseHeight(content.w) + section_gap;
-        try renderContract(scene, ui.Rect.init(content.x, cursor_y, content.w, contractHeight(content.w)));
-        cursor_y += contractHeight(content.w) + section_gap;
-        try renderCallout(scene, collector, ui.Rect.init(content.x, cursor_y, content.w, callout_h));
-    }
-
-    try site_chrome.renderHeader(scene, collector, ui.Rect.init(bounds.x, bounds.y, bounds.w, header_h), content, .components);
-}
-
-fn heroHeight(width: f32) f32 {
-    return if (width < compact_w) hero_h_compact else hero_h_wide;
-}
-
-fn systemHeight(width: f32) f32 {
-    return if (width < compact_w) system_h_compact else system_h_wide;
-}
-
-fn flowHeight(width: f32) f32 {
-    return if (width < compact_w) flow_h_compact else flow_h_wide;
-}
-
-fn showcaseHeight(width: f32) f32 {
-    return if (width < compact_w) showcase_h_compact else showcase_h_wide;
-}
-
-fn contractHeight(width: f32) f32 {
-    return if (width < compact_w) contract_h_compact else contract_h_wide;
-}
-
-fn renderHero(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect) (ui.RenderError || interaction.Error)!void {
-    const split = bounds.w >= compact_w;
-    const copy_w = if (split) bounds.w * 0.54 else bounds.w;
-    const headline_h: f32 = if (split) 112.0 else 150.0;
-    const headline_line_h: f32 = if (bounds.w < narrow_w) 38.0 else 46.0;
-    const headline_average_w: f32 = if (bounds.w < narrow_w) 18.0 else 22.0;
-    try label(scene, ui.Rect.init(bounds.x, bounds.y, 170.0, 26.0), "EdgeRun Docs", palette.primary);
-    try scene.pushWrappedText(ui.Rect.init(bounds.x, bounds.y + 48.0, copy_w, headline_h), "Runtime, authoring, sharing, and UI in one system.", palette.text, .{
-        .line_height = headline_line_h,
-        .average_char_width = headline_average_w,
-        .max_lines = 3,
-    });
-    const detail_y: f32 = if (split) 182.0 else 218.0;
-    try scene.pushWrappedText(ui.Rect.init(bounds.x, bounds.y + detail_y, copy_w, 76.0), "This page is rendered by EdgeRun's own scene, component, route, and WASM browser path. It explains how the landing page, Academy, component preview, and app release model fit together.", palette.dim, .{
-        .line_height = 20.0,
-        .average_char_width = 9.3,
-        .max_lines = 4,
-    });
-    const button_offset_y: f32 = if (split) 288.0 else 330.0;
-    const button_y = bounds.y + button_offset_y;
-    try primaryButton(scene, collector, ui.Rect.init(bounds.x, button_y, 176.0, 38.0), "Components", component_catalog_button_id);
-    try outlineButton(scene, collector, ui.Rect.init(bounds.x + 190.0, button_y, 142.0, 38.0), "Academy", academy_button_id);
-
-    const diagram = if (split) ui.Rect.init(bounds.x + copy_w + 52.0, bounds.y + 34.0, bounds.w - copy_w - 52.0, 332.0) else ui.Rect.init(bounds.x, bounds.y + 404.0, bounds.w, 150.0);
-    try renderRuntimeDiagram(scene, diagram, split);
-}
-
-fn renderRuntimeDiagram(scene: *ui.Scene, bounds: ui.Rect, wide: bool) ui.RenderError!void {
-    try fill(scene, bounds, palette.panel, panel_radius);
-    try stroke(scene, bounds, palette.border, panel_radius);
-    try text(scene, bounds.x + card_pad, bounds.y + 18.0, bounds.w - card_pad * 2.0, 16.0, "EdgeRun object runtime", palette.text);
-    const labels = [_][]const u8{ "author", "preview", "release", "allocate", "share" };
-    if (wide) {
-        var y = bounds.y + 58.0;
-        for (labels, 0..) |value, index| {
-            const color = flow_steps[index].color;
-            try fill(scene, ui.Rect.init(bounds.x + 22.0, y, 10.0, 10.0), color, 5.0);
-            try text(scene, bounds.x + 46.0, y - 3.0, bounds.w - 68.0, 14.0, value, palette.dim);
-            if (index + 1 < labels.len) try fill(scene, ui.Rect.init(bounds.x + 26.0, y + 14.0, 2.0, 26.0), palette.border, 0.0);
-            y += 44.0;
-        }
-    } else {
-        const cell_w = bounds.w / @as(f32, @floatFromInt(labels.len));
-        for (labels, 0..) |value, index| {
-            const x = bounds.x + @as(f32, @floatFromInt(index)) * cell_w;
-            try fill(scene, ui.Rect.init(x + cell_w * 0.5 - 5.0, bounds.y + 70.0, 10.0, 10.0), flow_steps[index].color, 5.0);
-            try scene.pushAlignedText(ui.Rect.init(x + 2.0, bounds.y + 94.0, cell_w - 4.0, 12.0), value, palette.dim, .center);
+        const scrolled_y = bounds.y + header_h + page_top_pad - state.scroll_y;
+        const compact = content.w < compact_w;
+        if (compact) {
+            try renderSidebar(scene, collector, ui.Rect.init(content.x, scrolled_y, content.w, sidebarHeight()), state.selected_doc_index);
+            try renderDocBody(scene, collector, ui.Rect.init(content.x, scrolled_y + sidebarHeight() + panel_gap, content.w, docBodyHeight(content.w, true, pageAt(state.selected_doc_index))), true, pageAt(state.selected_doc_index));
+        } else {
+            try renderSidebar(scene, collector, ui.Rect.init(content.x, scrolled_y, sidebar_w, sidebarHeight()), state.selected_doc_index);
+            const body_w = content.w - sidebar_w - sidebar_gap;
+            const body = ui.Rect.init(content.x + sidebar_w + sidebar_gap, scrolled_y, body_w, docBodyHeight(body_w, false, pageAt(state.selected_doc_index)));
+            try renderDocBody(scene, collector, body, false, pageAt(state.selected_doc_index));
         }
     }
+
+    try site_chrome.renderHeader(scene, collector, ui.Rect.init(bounds.x, bounds.y, bounds.w, header_h), content, .docs);
 }
 
-fn renderSystem(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect) (ui.RenderError || interaction.Error)!void {
-    try sectionTitle(scene, bounds, "What this repo already has", "Landing, Academy, Components, and Apps are not separate websites. They are route states rendered by the same EdgeRun UI core.");
-    const cols = if (bounds.w < compact_w) @as(usize, 1) else @as(usize, 4);
-    const start_y = bounds.y + 92.0;
-    const card_h: f32 = if (cols == 1) 124.0 else 210.0;
-    const card_w = (bounds.w - panel_gap * @as(f32, @floatFromInt(cols - 1))) / @as(f32, @floatFromInt(cols));
-    for (surfaces, 0..) |surface, index| {
-        const row = index / cols;
-        const col = index % cols;
-        const card = ui.Rect.init(bounds.x + @as(f32, @floatFromInt(col)) * (card_w + panel_gap), start_y + @as(f32, @floatFromInt(row)) * (card_h + panel_gap), card_w, card_h);
-        try renderSurfaceCard(scene, collector, card, surface, index);
-    }
+fn sidebarHeight() f32 {
+    return 60.0 + @as(f32, @floatFromInt(doc_pages.len)) * row_h + 18.0;
 }
 
-fn renderSurfaceCard(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, surface: Surface, index: usize) (ui.RenderError || interaction.Error)!void {
+fn docBodyHeight(width: f32, compact: bool, page: DocPage) f32 {
+    return heroHeight(width, page) + section_gap +
+        sectionPageHeight(width, page) + section_gap +
+        if (page.section == .overview) feature_title_h + intro_gap + featureGridHeight(compact, width) + section_gap else 0.0 +
+            apiSectionHeight(width, page);
+}
+
+fn renderSidebar(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, selected_index: ?usize) (ui.RenderError || interaction.Error)!void {
     try fill(scene, bounds, palette.panel, panel_radius);
     try stroke(scene, bounds, palette.border, panel_radius);
-    try iconQuad(scene, ui.Rect.init(bounds.x + card_pad, bounds.y + card_pad, 24.0, 24.0), surface.icon_value, surface.color);
-    try text(scene, bounds.x + 52.0, bounds.y + 21.0, bounds.w - 70.0, 16.0, surface.title, palette.text);
-    try label(scene, ui.Rect.init(bounds.x + card_pad, bounds.y + 56.0, @min(150.0, bounds.w - card_pad * 2.0), 24.0), surface.metric, surface.color);
-    try scene.pushWrappedText(ui.Rect.init(bounds.x + card_pad, bounds.y + 96.0, bounds.w - card_pad * 2.0, bounds.h - 112.0), surface.detail, palette.dim, .{
-        .line_height = line_h,
-        .average_char_width = 8.8,
-        .max_lines = 4,
-    });
-    const id = switch (index) {
-        1 => academy_button_id,
-        2 => component_catalog_button_id,
-        3 => apps_button_id,
-        else => 0,
-    };
-    if (id != 0) try collector.addHit(bounds, .button, id);
-}
-
-fn renderFlow(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
-    try sectionTitle(scene, bounds, "How app creation works", "Draft apps run visibly in preview. Released apps move into user-allocator slices and only expose handles, receipts, and explicit shares.");
-    const start_y = bounds.y + 100.0;
-    if (bounds.w < compact_w) {
-        var y = start_y;
-        for (flow_steps) |step| {
-            try renderFlowStep(scene, ui.Rect.init(bounds.x, y, bounds.w, 112.0), step);
-            y += 112.0 + timeline_gap;
-        }
-        return;
-    }
-
-    const step_w = (bounds.w - timeline_gap * @as(f32, @floatFromInt(flow_steps.len - 1))) / @as(f32, @floatFromInt(flow_steps.len));
-    for (flow_steps, 0..) |step, index| {
-        const x = bounds.x + @as(f32, @floatFromInt(index)) * (step_w + timeline_gap);
-        if (index + 1 < flow_steps.len) try fill(scene, ui.Rect.init(x + step_w - 2.0, start_y + timeline_node * 0.5, timeline_gap + 4.0, 2.0), palette.border, 0.0);
-        try renderFlowStep(scene, ui.Rect.init(x, start_y, step_w, 238.0), step);
+    try text(scene, bounds.x + card_pad, bounds.y + 18.0, bounds.w - card_pad * 2.0, 16.0, "Docs", palette.text);
+    try text(scene, bounds.x + card_pad, bounds.y + 38.0, bounds.w - card_pad * 2.0, 14.0, "Feature map", palette.muted);
+    var y = bounds.y + 64.0;
+    for (doc_pages, 0..) |page, index| {
+        const active = (selected_index orelse 0) == index;
+        const row = ui.Rect.init(bounds.x + 10.0, y, bounds.w - 20.0, row_h - 6.0);
+        try renderSidebarRow(scene, collector, row, page, first_doc_page_button_id + @as(u32, @intCast(index)), active);
+        y += row_h;
     }
 }
 
-fn renderFlowStep(scene: *ui.Scene, bounds: ui.Rect, step: FlowStep) ui.RenderError!void {
-    try fill(scene, bounds, palette.panel, panel_radius);
-    try stroke(scene, bounds, palette.border, panel_radius);
-    try fill(scene, ui.Rect.init(bounds.x + card_pad, bounds.y + card_pad, timeline_node, timeline_node), step.color, timeline_node * 0.5);
-    try text(scene, bounds.x + card_pad, bounds.y + 62.0, bounds.w - card_pad * 2.0, 18.0, step.title, palette.text);
-    try scene.pushWrappedText(ui.Rect.init(bounds.x + card_pad, bounds.y + 92.0, bounds.w - card_pad * 2.0, bounds.h - 108.0), step.detail, palette.dim, .{
-        .line_height = line_h,
-        .average_char_width = 8.6,
-        .max_lines = 4,
-    });
+fn renderSidebarRow(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, page: DocPage, id: u32, active: bool) (ui.RenderError || interaction.Error)!void {
+    try fill(scene, bounds, if (active) palette.active else palette.panel, 6.0);
+    if (active) try stroke(scene, bounds, page.color, 6.0);
+    const icon_bounds = sidebarRowIconBounds(bounds);
+    const text_x = icon_bounds.x + icon_bounds.w + design.Icon.text_gap;
+    try iconQuad(scene, icon_bounds, page.icon_value, page.color);
+    try text(scene, text_x, bounds.y + 8.0, bounds.x + bounds.w - text_x - 10.0, 14.0, page.section.label(), if (active) palette.text else palette.dim);
+    try collector.addHit(bounds, .button, id);
 }
 
-fn renderShowcase(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect) (ui.RenderError || interaction.Error)!void {
-    try sectionTitle(scene, bounds, "The docs page uses the product UI", "Buttons, cards, inputs, progress, switches, tabs, icons, and text all come from the shared EdgeRun component system.");
-    const split = bounds.w >= compact_w;
-    const preview = if (split) ui.Rect.init(bounds.x, bounds.y + 96.0, bounds.w * 0.48, bounds.h - 96.0) else ui.Rect.init(bounds.x, bounds.y + 96.0, bounds.w, 250.0);
-    const explanation = if (split) ui.Rect.init(bounds.x + bounds.w * 0.52, bounds.y + 96.0, bounds.w * 0.48, bounds.h - 96.0) else ui.Rect.init(bounds.x, bounds.y + 368.0, bounds.w, bounds.h - 368.0);
-    try renderComponentSample(scene, collector, preview);
-    try renderShowcaseCopy(scene, explanation);
+fn renderDocBody(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, compact: bool, page: DocPage) (ui.RenderError || interaction.Error)!void {
+    var cursor_y = bounds.y;
+    const hero_h = heroHeight(bounds.w, page);
+    try renderHero(scene, collector, ui.Rect.init(bounds.x, cursor_y, bounds.w, hero_h), page);
+    cursor_y += hero_h + section_gap;
+
+    const section_h = sectionPageHeight(bounds.w, page);
+    try renderSectionPage(scene, ui.Rect.init(bounds.x, cursor_y, bounds.w, section_h), page);
+    cursor_y += section_h + section_gap;
+
+    if (page.section == .overview) {
+        try text(scene, bounds.x, cursor_y, bounds.w, feature_title_h, "Feature sections", palette.text);
+        cursor_y += feature_title_h + intro_gap;
+        const feature_h = featureGridHeight(compact, bounds.w);
+        try renderFeatureGrid(scene, collector, ui.Rect.init(bounds.x, cursor_y, bounds.w, feature_h), compact, page.section);
+        cursor_y += feature_h + section_gap;
+    }
+
+    try renderApiSection(scene, ui.Rect.init(bounds.x, cursor_y, bounds.w, apiSectionHeight(bounds.w, page)), page);
 }
 
-fn renderComponentSample(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect) (ui.RenderError || interaction.Error)!void {
+fn renderHero(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, page: DocPage) (ui.RenderError || interaction.Error)!void {
     try fill(scene, bounds, palette.panel, panel_radius);
     try stroke(scene, bounds, palette.border, panel_radius);
     const inset = bounds.insetUniform(card_pad);
-    try components.renderComponent(scene, ui.Rect.init(inset.x, inset.y, inset.w, 74.0), .{ .card = .{ .title = "Draft app", .detail = "Preview memory visible to parent" } }, .{ .style = siteStyle() });
-    try components.renderComponent(scene, ui.Rect.init(inset.x, inset.y + 92.0, @min(220.0, inset.w), 40.0), .{ .input = .{ .id = sample_input_id, .placeholder = "Search components" } }, .{ .style = siteStyle() });
-    try components.collectComponentInteractions(collector, ui.Rect.init(inset.x, inset.y + 92.0, @min(220.0, inset.w), 40.0), .{ .input = .{ .id = sample_input_id, .placeholder = "Search components" } });
-    try components.renderComponent(scene, ui.Rect.init(inset.x, inset.y + 152.0, @min(180.0, inset.w), 36.0), .{ .button = .{ .id = sample_button_id, .label = "Release", .trailing_icon = .chevron_right } }, .{ .style = siteStyle() });
-    try components.collectComponentInteractions(collector, ui.Rect.init(inset.x, inset.y + 152.0, @min(180.0, inset.w), 36.0), .{ .button = .{ .id = sample_button_id, .label = "Release" } });
-    try components.renderComponent(scene, ui.Rect.init(inset.x, inset.y + 208.0, @min(220.0, inset.w), 24.0), .{ .progress = .{ .value = 0.68 } }, .{ .style = siteStyle() });
-    if (inset.w > 360.0) {
-        const side_x = inset.x + 252.0;
-        try components.renderComponent(scene, ui.Rect.init(side_x, inset.y + 94.0, @min(180.0, inset.x + inset.w - side_x), 36.0), .{ .switch_control = .{ .id = sample_switch_id, .label = "Parent-visible", .checked = true } }, .{ .style = siteStyle() });
-        try components.renderComponent(scene, ui.Rect.init(side_x, inset.y + 152.0, @min(190.0, inset.x + inset.w - side_x), 34.0), .{ .tabs = .{ .id = sample_tab_id, .first = "Preview", .second = "Release", .active = 0 } }, .{ .style = siteStyle() });
-        try components.renderComponent(scene, ui.Rect.init(side_x, inset.y + 208.0, 112.0, 26.0), .{ .badge = .{ .label = "no ambient IO", .variant = .outline } }, .{ .style = siteStyle() });
+    try label(scene, ui.Rect.init(inset.x, inset.y, 150.0, 26.0), page.status, page.color);
+    const split = bounds.w >= compact_w;
+    const copy_w = if (split) inset.w * 0.64 else inset.w;
+    const title_y = inset.y + hero_label_h + 20.0;
+    const title_h = wrappedTextHeight(page.title, copy_w, hero_title_line_h, hero_title_max_lines, hero_title_avg_w);
+    try scene.pushWrappedText(ui.Rect.init(inset.x, title_y, copy_w, title_h), page.title, palette.text, .{
+        .line_height = hero_title_line_h,
+        .average_char_width = hero_title_avg_w,
+        .max_lines = hero_title_max_lines,
+    });
+    const summary_y = title_y + title_h + 14.0;
+    const summary_h = wrappedTextHeight(page.summary, copy_w, hero_summary_line_h, hero_summary_max_lines, hero_summary_avg_w);
+    try wrappedText(scene, ui.Rect.init(inset.x, summary_y, copy_w, summary_h), page.summary, palette.dim, hero_summary_line_h, hero_summary_avg_w, hero_summary_max_lines);
+
+    if (split) {
+        const diagram = ui.Rect.init(inset.x + inset.w * 0.72, inset.y + 18.0, inset.w * 0.28, inset.h - 36.0);
+        try renderFeatureGlyph(scene, diagram, page);
+    }
+
+    if (page.section == .components) {
+        try primaryButton(scene, collector, ui.Rect.init(inset.x, bounds.y + bounds.h - 58.0, 184.0, 38.0), "Open catalog", component_catalog_button_id);
+    } else if (page.section == .source) {
+        try primaryButton(scene, collector, ui.Rect.init(inset.x, bounds.y + bounds.h - 58.0, 150.0, 38.0), "Open source", source_button_id);
+    } else if (page.section == .authority) {
+        try outlineButton(scene, collector, ui.Rect.init(inset.x, bounds.y + bounds.h - 58.0, 150.0, 38.0), "Academy", academy_button_id);
     }
 }
 
-fn renderShowcaseCopy(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
-    const rows = [_]Contract{
-        .{ .title = "Scene", .detail = "The page emits EdgeRun draw commands, clips, icons, and text." },
-        .{ .title = "Components", .detail = "Controls are canonical component objects rendered by `ui_components.zig`." },
-        .{ .title = "Routes", .detail = "`/docs`, `/academy`, `/apps`, and `/docs/components/<slug>` share route state." },
-        .{ .title = "Targets", .detail = "Browser, CPU, GPU, Wayland, and native hosts consume the same page contract." },
+fn heroHasAction(page: DocPage) bool {
+    return switch (page.section) {
+        .authority, .components, .source => true,
+        else => false,
     };
-    var y = bounds.y;
-    for (rows) |row| {
-        try fill(scene, ui.Rect.init(bounds.x, y, bounds.w, stat_h), palette.panel_alt, panel_radius);
-        try text(scene, bounds.x + card_pad, y + 18.0, bounds.w - card_pad * 2.0, 16.0, row.title, palette.text);
-        try scene.pushWrappedText(ui.Rect.init(bounds.x + card_pad, y + 42.0, bounds.w - card_pad * 2.0, 36.0), row.detail, palette.dim, .{
-            .line_height = 17.0,
-            .average_char_width = 8.5,
-            .max_lines = 2,
-        });
-        y += stat_h + 10.0;
+}
+
+fn heroHeight(width: f32, page: DocPage) f32 {
+    const inner_w = @max(1.0, width - card_pad * 2.0);
+    const split = width >= compact_w;
+    const copy_w = if (split) inner_w * 0.64 else inner_w;
+    const title_h = wrappedTextHeight(page.title, copy_w, hero_title_line_h, hero_title_max_lines, hero_title_avg_w);
+    const summary_h = wrappedTextHeight(page.summary, copy_w, hero_summary_line_h, hero_summary_max_lines, hero_summary_avg_w);
+    const copy_h = card_pad + hero_label_h + 20.0 + title_h + 14.0 + summary_h + card_pad;
+    const action_h = if (heroHasAction(page)) hero_button_gap + design.control_h + card_pad else 0.0;
+    const diagram_h = if (split) card_pad + 18.0 + design.Icon.hero_max + 42.0 + 16.0 + card_pad else 0.0;
+    return @max(hero_min_h, @max(copy_h + action_h, diagram_h));
+}
+
+fn renderFeatureGlyph(scene: *ui.Scene, bounds: ui.Rect, page: DocPage) ui.RenderError!void {
+    if (bounds.w < 90.0) return;
+    try fill(scene, bounds, palette.panel_alt, panel_radius);
+    try stroke(scene, bounds, page.color, panel_radius);
+    const icon_size = @min(design.Icon.hero_max, bounds.w * 0.42);
+    try iconQuad(scene, ui.Rect.init(bounds.x + bounds.w * 0.5 - icon_size * 0.5, bounds.y + 42.0, icon_size, icon_size), page.icon_value, page.color);
+    try scene.pushAlignedText(ui.Rect.init(bounds.x + 12.0, bounds.y + bounds.h - 42.0, bounds.w - 24.0, 16.0), page.section.label(), palette.text, .center);
+}
+
+const docs_intro_text = "This sidebar is the docs index for the app as it exists now. Feature cards are route-backed and can become deeper pages without changing navigation shape.";
+
+fn introHeight(width: f32) f32 {
+    return intro_title_h + intro_gap + wrappedTextHeight(docs_intro_text, width, intro_body_line_h, intro_body_max_lines, intro_body_avg_w);
+}
+
+fn sectionBlocks(section: DocSection) []const DocBlock {
+    return switch (section) {
+        .overview => &overview_blocks,
+        .runtime => &runtime_blocks,
+        .routing => &routing_blocks,
+        .authority => &authority_blocks,
+        .rendering => &rendering_blocks,
+        .components => &component_blocks,
+        .media => &media_blocks,
+        .fonts => &font_blocks,
+        .wasm => &wasm_blocks,
+        .storage => &storage_blocks,
+        .source => &source_blocks,
+    };
+}
+
+fn sectionPageHeight(width: f32, page: DocPage) f32 {
+    var height: f32 = 0.0;
+    height += intro_title_h + intro_gap + wrappedTextHeight(sectionIntro(page.section), width, intro_body_line_h, intro_body_max_lines, intro_body_avg_w);
+    height += section_gap;
+    const blocks = sectionBlocks(page.section);
+    for (blocks, 0..) |block, index| {
+        height += docBlockHeight(width, block);
+        if (index + 1 < blocks.len) height += section_block_gap;
+    }
+    return height;
+}
+
+fn renderSectionPage(scene: *ui.Scene, bounds: ui.Rect, page: DocPage) ui.RenderError!void {
+    try text(scene, bounds.x, bounds.y, bounds.w, 22.0, page.section.label(), palette.text);
+    const intro_body_y = bounds.y + intro_title_h + intro_gap;
+    const intro_text = sectionIntro(page.section);
+    const intro_body_h = wrappedTextHeight(intro_text, bounds.w, intro_body_line_h, intro_body_max_lines, intro_body_avg_w);
+    try wrappedText(scene, ui.Rect.init(bounds.x, intro_body_y, bounds.w, intro_body_h), intro_text, palette.dim, intro_body_line_h, intro_body_avg_w, intro_body_max_lines);
+
+    var cursor_y = intro_body_y + intro_body_h + section_gap;
+    const blocks = sectionBlocks(page.section);
+    for (blocks) |block| {
+        const block_h = docBlockHeight(bounds.w, block);
+        try renderDocBlock(scene, ui.Rect.init(bounds.x, cursor_y, bounds.w, block_h), block);
+        cursor_y += block_h + section_block_gap;
     }
 }
 
-fn renderContract(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
-    try sectionTitle(scene, bounds, "What shared executables can and cannot do", "The safety model is not a warning dialog. WASM starts with no inherited storage, network, device, identity, or parent memory authority.");
-    const cols = if (bounds.w < compact_w) @as(usize, 1) else @as(usize, 2);
-    const card_w = (bounds.w - panel_gap * @as(f32, @floatFromInt(cols - 1))) / @as(f32, @floatFromInt(cols));
-    const card_h = 104.0;
-    const start_y = bounds.y + 96.0;
-    for (contracts, 0..) |item, index| {
-        const row = index / cols;
-        const col = index % cols;
-        const card = ui.Rect.init(bounds.x + @as(f32, @floatFromInt(col)) * (card_w + panel_gap), start_y + @as(f32, @floatFromInt(row)) * (card_h + panel_gap), card_w, card_h);
-        try fill(scene, card, palette.panel, panel_radius);
-        try stroke(scene, card, palette.border, panel_radius);
-        try text(scene, card.x + card_pad, card.y + 18.0, card.w - card_pad * 2.0, 16.0, item.title, palette.text);
-        try scene.pushWrappedText(ui.Rect.init(card.x + card_pad, card.y + 44.0, card.w - card_pad * 2.0, 44.0), item.detail, palette.dim, .{
-            .line_height = 17.0,
-            .average_char_width = 8.6,
-            .max_lines = 3,
-        });
-    }
+fn sectionIntro(section: DocSection) []const u8 {
+    return switch (section) {
+        .overview => "The overview is the map. Open any sidebar row to get a subsystem page with the actual path, ownership boundary, and current implementation shape.",
+        .runtime => "Runtime documentation explains how the same app is launched by browser and native hosts without giving each host its own product UI.",
+        .routing => "Routing documentation explains how path bytes, hit ids, and selected pages become one typed route before rendering.",
+        .authority => "Authority documentation explains what can cross app boundaries and why EdgeRun avoids ambient host access.",
+        .rendering => "Rendering documentation explains how UI becomes scene commands, then renderer IR, then backend-owned presentation.",
+        .components => "Component documentation explains how the catalog, canonical component objects, rendering, and interactions fit together.",
+        .media => "Media documentation explains which decoding and presentation work is owned by EdgeRun instead of hidden host APIs.",
+        .fonts => "Font documentation explains the full path from embedded font bytes to glyph atlas to backend texture.",
+        .wasm => "WASM documentation explains the execution and release artifact path for portable app instances.",
+        .storage => "Storage documentation explains how canonical objects and scoped indexes replace raw file access.",
+        .source => "Source documentation explains the authoring surface that edits, compiles, exports, and launches the app.",
+    };
 }
 
-fn renderCallout(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect) (ui.RenderError || interaction.Error)!void {
+fn docBlockHeight(width: f32, block: DocBlock) f32 {
+    const text_w = @max(1.0, width - card_pad * 2.0);
+    const body_h = wrappedTextHeight(block.body, text_w, section_block_body_line_h, section_block_body_max_lines, section_block_body_avg_w);
+    const code_h: f32 = if (block.code.len == 0) 0.0 else 12.0 + @as(f32, @floatFromInt(lineCount(block.code))) * code_line_h;
+    return card_pad + section_block_title_h + 10.0 + body_h + code_h + card_pad;
+}
+
+fn renderDocBlock(scene: *ui.Scene, bounds: ui.Rect, block: DocBlock) ui.RenderError!void {
     try fill(scene, bounds, palette.panel, panel_radius);
-    try stroke(scene, bounds, palette.primary, panel_radius);
-    try text(scene, bounds.x + card_pad, bounds.y + 24.0, bounds.w - card_pad * 2.0, 20.0, "Use this page as the map for the system.", palette.text);
-    try scene.pushWrappedText(ui.Rect.init(bounds.x + card_pad, bounds.y + 58.0, bounds.w - card_pad * 2.0, 48.0), "Landing proves the runtime is live. Academy teaches why the authority model matters. Components show the UI vocabulary. Apps and WASM turn that into shareable software.", palette.dim, .{
-        .line_height = line_h,
-        .average_char_width = 8.8,
-        .max_lines = 3,
-    });
-    const button_y = bounds.y + bounds.h - 56.0;
-    try primaryButton(scene, collector, ui.Rect.init(bounds.x + card_pad, button_y, 186.0, 36.0), "Open components", component_catalog_button_id);
+    try stroke(scene, bounds, palette.border, panel_radius);
+    try text(scene, bounds.x + card_pad, bounds.y + card_pad, bounds.w - card_pad * 2.0, section_block_title_h, block.title, palette.text);
+    const body_y = bounds.y + card_pad + section_block_title_h + 10.0;
+    const body_h = wrappedTextHeight(block.body, bounds.w - card_pad * 2.0, section_block_body_line_h, section_block_body_max_lines, section_block_body_avg_w);
+    try wrappedText(scene, ui.Rect.init(bounds.x + card_pad, body_y, bounds.w - card_pad * 2.0, body_h), block.body, palette.dim, section_block_body_line_h, section_block_body_avg_w, section_block_body_max_lines);
+    if (block.code.len != 0) {
+        const code_y = body_y + body_h + 12.0;
+        try renderInlineCode(scene, ui.Rect.init(bounds.x + card_pad, code_y, bounds.w - card_pad * 2.0, @as(f32, @floatFromInt(lineCount(block.code))) * code_line_h), block.code);
+    }
 }
 
-fn sectionTitle(scene: *ui.Scene, bounds: ui.Rect, title_value: []const u8, detail: []const u8) ui.RenderError!void {
-    try text(scene, bounds.x, bounds.y, bounds.w, 24.0, title_value, palette.text);
-    try scene.pushWrappedText(ui.Rect.init(bounds.x, bounds.y + 34.0, bounds.w, 44.0), detail, palette.dim, .{
-        .line_height = line_h,
-        .average_char_width = 9.0,
-        .max_lines = 2,
-    });
+fn renderInlineCode(scene: *ui.Scene, bounds: ui.Rect, value: []const u8) ui.RenderError!void {
+    try fill(scene, bounds.insetLtrb(0.0, -6.0, 0.0, -6.0), palette.code_bg, 6.0);
+    var line_cursor: usize = 0;
+    var y = bounds.y;
+    while (line_cursor < value.len) {
+        const end = std.mem.indexOfScalarPos(u8, value, line_cursor, '\n') orelse value.len;
+        try text(scene, bounds.x + 10.0, y, bounds.w - 20.0, 14.0, value[line_cursor..end], palette.primary);
+        line_cursor = if (end < value.len) end + 1 else end;
+        y += code_line_h;
+    }
+}
+
+fn featureGridHeight(compact: bool, width: f32) f32 {
+    const columns: usize = if (compact) 1 else 2;
+    const rows = (doc_pages.len + columns - 1) / columns;
+    const card_w = featureCardWidth(width, columns);
+    return @as(f32, @floatFromInt(rows)) * featureCardHeight(card_w) + @as(f32, @floatFromInt(rows - 1)) * panel_gap;
+}
+
+fn featureCardWidth(width: f32, columns: usize) f32 {
+    const column_count: f32 = @floatFromInt(columns);
+    const gap_count: f32 = @floatFromInt(columns - 1);
+    return @max(1.0, (width - panel_gap * gap_count) / column_count);
+}
+
+fn featureCardHeight(width: f32) f32 {
+    var max_summary_h: f32 = 0.0;
+    const text_w = @max(1.0, width - card_pad * 2.0);
+    for (doc_pages) |page| {
+        max_summary_h = @max(max_summary_h, wrappedTextHeight(page.summary, text_w, feature_summary_line_h, feature_summary_max_lines, feature_summary_avg_w));
+    }
+    return card_pad + design.Icon.card + 14.0 + max_summary_h + card_pad;
+}
+
+fn renderFeatureGrid(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, compact: bool, active_section: DocSection) (ui.RenderError || interaction.Error)!void {
+    const columns: usize = if (compact) 1 else 2;
+    const card_w = featureCardWidth(bounds.w, columns);
+    const card_h = featureCardHeight(card_w);
+    for (doc_pages, 0..) |page, index| {
+        const row = index / columns;
+        const col = index % columns;
+        const card = ui.Rect.init(
+            bounds.x + @as(f32, @floatFromInt(col)) * (card_w + panel_gap),
+            bounds.y + @as(f32, @floatFromInt(row)) * (card_h + panel_gap),
+            card_w,
+            card_h,
+        );
+        try renderFeatureCard(scene, collector, card, page, first_doc_page_button_id + @as(u32, @intCast(index)), page.section == active_section);
+    }
+}
+
+fn renderFeatureCard(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, page: DocPage, id: u32, active: bool) (ui.RenderError || interaction.Error)!void {
+    try fill(scene, bounds, if (active) palette.panel_hover else palette.panel_alt, panel_radius);
+    try stroke(scene, bounds, if (active) page.color else palette.border, panel_radius);
+    const icon_bounds = featureCardIconBounds(bounds);
+    const text_x = icon_bounds.x + icon_bounds.w + design.Icon.text_gap;
+    try iconQuad(scene, icon_bounds, page.icon_value, page.color);
+    try text(scene, text_x, bounds.y + 20.0, bounds.x + bounds.w - text_x - card_pad, 16.0, page.title, palette.text);
+    const summary_y = bounds.y + card_pad + design.Icon.card + 14.0;
+    try wrappedText(scene, ui.Rect.init(bounds.x + card_pad, summary_y, bounds.w - card_pad * 2.0, @max(1.0, bounds.y + bounds.h - summary_y - card_pad)), page.summary, palette.dim, feature_summary_line_h, feature_summary_avg_w, feature_summary_max_lines);
+    try collector.addHit(bounds, .button, id);
+}
+
+fn sidebarRowIconBounds(bounds: ui.Rect) ui.Rect {
+    return ui.Rect.init(bounds.x + 10.0, bounds.y + 8.0, design.Icon.sidebar, design.Icon.sidebar);
+}
+
+fn featureCardIconBounds(bounds: ui.Rect) ui.Rect {
+    return ui.Rect.init(bounds.x + card_pad, bounds.y + card_pad, design.Icon.card, design.Icon.card);
+}
+
+fn apiSectionHeight(width: f32, page: DocPage) f32 {
+    const split = width >= compact_w;
+    const detail_w = if (split) width * 0.48 else width;
+    const code_w = if (split) width * 0.48 else width;
+    const primary_h = detailCardHeight(detail_w, page.primary);
+    const secondary_h = detailCardHeight(detail_w, page.secondary);
+    const detail_h = primary_h + panel_gap + secondary_h;
+    const code_h = codeCardHeight(code_w, page.api);
+    const body_h = if (split) @max(detail_h, code_h) else detail_h + panel_gap + code_h;
+    return 42.0 + body_h;
+}
+
+fn renderApiSection(scene: *ui.Scene, bounds: ui.Rect, page: DocPage) ui.RenderError!void {
+    try text(scene, bounds.x, bounds.y, bounds.w, 22.0, "Contract and API", palette.text);
+    const top = bounds.y + 42.0;
+    const split = bounds.w >= compact_w;
+    const detail_w = if (split) bounds.w * 0.48 else bounds.w;
+    const primary_h = detailCardHeight(detail_w, page.primary);
+    const secondary_h = detailCardHeight(detail_w, page.secondary);
+    const code_w = if (split) bounds.w * 0.48 else bounds.w;
+    const code_h = codeCardHeight(code_w, page.api);
+    const left = if (split) ui.Rect.init(bounds.x, top, detail_w, primary_h + panel_gap + secondary_h) else ui.Rect.init(bounds.x, top, detail_w, primary_h + panel_gap + secondary_h);
+    const right = if (split) ui.Rect.init(bounds.x + bounds.w * 0.52, top, code_w, @max(code_h, left.h)) else ui.Rect.init(bounds.x, top + left.h + panel_gap, code_w, code_h);
+    try renderDetailCard(scene, ui.Rect.init(left.x, left.y, left.w, primary_h), "What it owns", page.primary);
+    try renderDetailCard(scene, ui.Rect.init(left.x, left.y + primary_h + panel_gap, left.w, secondary_h), "Boundary", page.secondary);
+    try renderCodeCard(scene, right, page.api);
+}
+
+fn detailCardHeight(width: f32, detail: []const u8) f32 {
+    const text_w = @max(1.0, width - card_pad * 2.0);
+    return card_pad + detail_title_h + 10.0 + wrappedTextHeight(detail, text_w, detail_body_line_h, detail_body_max_lines, detail_body_avg_w) + card_pad;
+}
+
+fn renderDetailCard(scene: *ui.Scene, bounds: ui.Rect, title_value: []const u8, detail: []const u8) ui.RenderError!void {
+    try fill(scene, bounds, palette.panel, panel_radius);
+    try stroke(scene, bounds, palette.border, panel_radius);
+    try text(scene, bounds.x + card_pad, bounds.y + 18.0, bounds.w - card_pad * 2.0, 16.0, title_value, palette.text);
+    try wrappedText(scene, ui.Rect.init(bounds.x + card_pad, bounds.y + 44.0, bounds.w - card_pad * 2.0, @max(1.0, bounds.h - 44.0 - card_pad)), detail, palette.dim, detail_body_line_h, detail_body_avg_w, detail_body_max_lines);
+}
+
+fn codeCardHeight(width: f32, value: []const u8) f32 {
+    _ = width;
+    return card_pad + code_title_h + 16.0 + @as(f32, @floatFromInt(lineCount(value))) * code_line_h + card_pad;
+}
+
+fn lineCount(value: []const u8) usize {
+    if (value.len == 0) return 0;
+    var lines: usize = 1;
+    for (value) |byte| {
+        if (byte == '\n') lines += 1;
+    }
+    return lines;
+}
+
+fn renderCodeCard(scene: *ui.Scene, bounds: ui.Rect, value: []const u8) ui.RenderError!void {
+    try fill(scene, bounds, palette.code_bg, panel_radius);
+    try stroke(scene, bounds, palette.border, panel_radius);
+    try text(scene, bounds.x + card_pad, bounds.y + 18.0, bounds.w - card_pad * 2.0, 14.0, "API surface", palette.primary);
+    var line_cursor: usize = 0;
+    var y = bounds.y + 48.0;
+    while (line_cursor < value.len and y + 14.0 < bounds.y + bounds.h - 12.0) {
+        const end = std.mem.indexOfScalarPos(u8, value, line_cursor, '\n') orelse value.len;
+        try text(scene, bounds.x + card_pad, y, bounds.w - card_pad * 2.0, 14.0, value[line_cursor..end], palette.dim);
+        line_cursor = if (end < value.len) end + 1 else end;
+        y += code_line_h;
+    }
+}
+
+fn renderGrid(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
+    const grid: f32 = 28.0;
+    var x = bounds.x;
+    while (x < bounds.x + bounds.w) : (x += grid) {
+        try fill(scene, ui.Rect.init(x, bounds.y, 1.0, bounds.h), ui.Color{ .r = 255, .g = 255, .b = 255, .a = 5 }, 0.0);
+    }
+    var y = bounds.y;
+    while (y < bounds.y + bounds.h) : (y += grid) {
+        try fill(scene, ui.Rect.init(bounds.x, y, bounds.w, 1.0), ui.Color{ .r = 255, .g = 255, .b = 255, .a = 4 }, 0.0);
+    }
 }
 
 fn primaryButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label_value: []const u8, id: u32) (ui.RenderError || interaction.Error)!void {
@@ -423,23 +769,6 @@ fn label(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, color: ui.Color) 
     try scene.pushAlignedText(ui.Rect.init(bounds.x + 8.0, bounds.y + 7.0, bounds.w - 16.0, 10.0), value, color, .center);
 }
 
-fn renderGrid(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
-    const grid: f32 = 28.0;
-    var x = bounds.x;
-    while (x < bounds.x + bounds.w) : (x += grid) {
-        try fill(scene, ui.Rect.init(x, bounds.y, 1.0, bounds.h), ui.Color{ .r = 255, .g = 255, .b = 255, .a = 5 }, 0.0);
-    }
-    var y = bounds.y;
-    while (y < bounds.y + bounds.h) : (y += grid) {
-        try fill(scene, ui.Rect.init(bounds.x, y, bounds.w, 1.0), ui.Color{ .r = 255, .g = 255, .b = 255, .a = 4 }, 0.0);
-    }
-}
-
-fn centered(bounds: ui.Rect, max_w: f32) ui.Rect {
-    const width = @min(max_w, @max(1.0, bounds.w - content_pad * 2.0));
-    return ui.Rect.init(bounds.x + (bounds.w - width) * 0.5, bounds.y, width, bounds.h);
-}
-
 fn fill(scene: *ui.Scene, bounds: ui.Rect, color: ui.Color, radius: f32) ui.RenderError!void {
     try scene.pushRect(bounds, color, .fill, radius, 0.0);
 }
@@ -452,45 +781,169 @@ fn text(scene: *ui.Scene, x: f32, y: f32, w: f32, h: f32, value: []const u8, col
     try scene.pushAlignedText(ui.Rect.init(x, y, @max(1.0, w), @max(1.0, h)), value, color, .start);
 }
 
+fn wrappedText(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, color: ui.Color, line_height: f32, average_char_width: f32, max_lines: usize) ui.RenderError!void {
+    try scene.pushWrappedText(bounds, value, color, .{
+        .line_height = line_height,
+        .average_char_width = average_char_width,
+        .max_lines = max_lines,
+    });
+}
+
+fn wrappedTextHeight(value: []const u8, width: f32, line_height: f32, max_lines: usize, average_char_width: f32) f32 {
+    const lines = @max(@as(usize, 1), wrappedLineCount(value, width, average_char_width, max_lines));
+    return line_height * @as(f32, @floatFromInt(lines));
+}
+
+fn wrappedLineCount(value: []const u8, width: f32, average_char_width: f32, max_lines: usize) usize {
+    if (value.len == 0 or max_lines == 0) return 0;
+    const char_capacity = @max(@as(usize, 1), @as(usize, @intFromFloat(@max(1.0, width / average_char_width))));
+    var byte_cursor: usize = 0;
+    var line_count: usize = 0;
+    while (line_count < max_lines) : (line_count += 1) {
+        byte_cursor = ui.skipAsciiSpace(value, byte_cursor);
+        if (byte_cursor >= value.len) return line_count;
+        byte_cursor = ui.wrappedLine(value, byte_cursor, char_capacity).next;
+    }
+    return line_count;
+}
+
 fn iconQuad(scene: *ui.Scene, bounds: ui.Rect, value: icon.Icon, color: ui.Color) ui.RenderError!void {
     try scene.pushIconQuad(.{ .bounds = bounds, .icon_id = icon.id(value), .color = color });
 }
 
-test "docs page renders system documentation with shared components" {
-    var commands: [2048]ui.Command = undefined;
-    var clips: [8]ui.Rect = undefined;
+test "docs page renders sidebar feature documentation" {
+    var commands: [4096]ui.Command = undefined;
+    var clips: [16]ui.Rect = undefined;
     var scene = ui.Scene.initWithClips(&commands, &clips);
-    var regions: [128]interaction.Region = undefined;
+    var regions: [256]interaction.Region = undefined;
     var collector = interaction.Collector.init(&regions);
 
     try render(&scene, &collector, ui.Rect.init(0, 0, 1280, contentHeight(1280.0)), .{});
 
-    try std.testing.expect(hasTextPrefix(scene.written(), "Runtime, authoring"));
-    try std.testing.expect(hasText(scene.written(), "What this repo already has"));
-    try std.testing.expect(hasText(scene.written(), "How app creation works"));
-    try std.testing.expect(hasHit(collector.written(), sample_input_id));
-    try std.testing.expect(hasHit(collector.written(), component_catalog_button_id));
-    try std.testing.expect(hasHit(collector.written(), academy_button_id));
-    try std.testing.expect(hasHit(collector.written(), site_chrome.docs_button_id));
+    try std.testing.expect(hasText(scene.written(), "Feature map"));
+    try std.testing.expect(hasText(scene.written(), "Feature sections"));
+    try std.testing.expect(hasText(scene.written(), "Contract and API"));
+    try std.testing.expect(hasHit(collector.written(), first_doc_page_button_id + @as(u32, @intCast(indexBySlug("media").?))));
+    try std.testing.expect(hasHit(collector.written(), first_doc_page_button_id + @as(u32, @intCast(indexBySlug("component-system").?))));
     try std.testing.expect(component_gallery.component_catalog.len > 0);
     try std.testing.expect(site_blog.posts.len > 0);
+}
+
+test "docs page renders selected feature route" {
+    const media_index = indexBySlug("media").?;
+    var commands: [4096]ui.Command = undefined;
+    var clips: [16]ui.Rect = undefined;
+    var scene = ui.Scene.initWithClips(&commands, &clips);
+    var regions: [256]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
+
+    try render(&scene, &collector, ui.Rect.init(0, 0, 1280, contentHeightForState(1280.0, .{ .selected_doc_index = media_index })), .{
+        .selected_doc_index = media_index,
+    });
+
+    try std.testing.expect(hasText(scene.written(), "Media"));
+    try std.testing.expect(hasText(scene.written(), "API surface"));
+    try std.testing.expect(hasText(scene.written(), "svg: icon_svg.zig"));
+}
+
+test "docs components page exposes catalog action" {
+    const components_index = indexBySlug("component-system").?;
+    var commands: [4096]ui.Command = undefined;
+    var clips: [16]ui.Rect = undefined;
+    var scene = ui.Scene.initWithClips(&commands, &clips);
+    var regions: [256]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
+
+    try render(&scene, &collector, ui.Rect.init(0, 0, 1280, contentHeightForState(1280.0, .{ .selected_doc_index = components_index })), .{
+        .selected_doc_index = components_index,
+    });
+
+    try std.testing.expect(hasText(scene.written(), "Components"));
+    try std.testing.expect(hasText(scene.written(), "catalog route: /docs/components"));
+    try std.testing.expect(hasHit(collector.written(), component_catalog_button_id));
+}
+
+test "docs fonts page documents owned font pipeline" {
+    const fonts_index = indexBySlug("fonts").?;
+    var commands: [4096]ui.Command = undefined;
+    var clips: [16]ui.Rect = undefined;
+    var scene = ui.Scene.initWithClips(&commands, &clips);
+    var regions: [256]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
+
+    try render(&scene, &collector, ui.Rect.init(0, 0, 1280, contentHeightForState(1280.0, .{ .selected_doc_index = fonts_index })), .{
+        .selected_doc_index = fonts_index,
+    });
+
+    try std.testing.expect(hasText(scene.written(), "Fonts"));
+    try std.testing.expect(hasText(scene.written(), "asset: varfont.geist_bytes"));
+    try std.testing.expect(hasText(scene.written(), "atlas: 2048x2048 alpha8, 1280 glyphs"));
+    try std.testing.expect(hasText(scene.written(), "backends: software/GLES/browser alpha texture"));
+}
+
+test "docs routing page documents the shared route table" {
+    const routing_index = indexBySlug("routing").?;
+    var commands: [4096]ui.Command = undefined;
+    var clips: [16]ui.Rect = undefined;
+    var scene = ui.Scene.initWithClips(&commands, &clips);
+    var regions: [256]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
+
+    try render(&scene, &collector, ui.Rect.init(0, 0, 1280, contentHeightForState(1280.0, .{ .selected_doc_index = routing_index })), .{
+        .selected_doc_index = routing_index,
+    });
+
+    try std.testing.expect(hasText(scene.written(), "Routing"));
+    try std.testing.expect(hasText(scene.written(), "/docs/components[/slug] -> Components"));
+    try std.testing.expect(hasHit(collector.written(), first_doc_page_button_id + @as(u32, @intCast(routing_index))));
+}
+
+test "docs sidebar sections render their own page bodies" {
+    for (doc_pages, 0..) |page, index| {
+        var commands: [4096]ui.Command = undefined;
+        var clips: [16]ui.Rect = undefined;
+        var scene = ui.Scene.initWithClips(&commands, &clips);
+        var regions: [256]interaction.Region = undefined;
+        var collector = interaction.Collector.init(&regions);
+        try render(&scene, &collector, ui.Rect.init(0, 0, 1280, contentHeightForState(1280.0, .{ .selected_doc_index = index })), .{
+            .selected_doc_index = index,
+        });
+
+        const blocks = sectionBlocks(page.section);
+        try std.testing.expect(blocks.len > 0);
+        try std.testing.expect(hasText(scene.written(), page.section.label()));
+        try std.testing.expect(hasText(scene.written(), blocks[0].title));
+    }
 }
 
 test "docs page content height grows for compact layout" {
     try std.testing.expect(contentHeight(390.0) > contentHeight(1280.0));
 }
 
+test "docs measured sections respond to available width" {
+    const media = pageAt(indexBySlug("media"));
+    try std.testing.expect(heroHeight(360.0, media) >= heroHeight(900.0, media));
+    try std.testing.expect(featureGridHeight(true, 360.0) > featureGridHeight(false, 900.0));
+    try std.testing.expect(apiSectionHeight(360.0, media) > apiSectionHeight(900.0, media));
+}
+
+test "docs icon rhythm uses shared design tokens" {
+    const row = ui.Rect.init(20.0, 40.0, 240.0, row_h - 6.0);
+    const sidebar_icon = sidebarRowIconBounds(row);
+    try std.testing.expectEqual(design.Icon.sidebar, sidebar_icon.w);
+    try std.testing.expectEqual(design.Icon.sidebar, sidebar_icon.h);
+
+    const card = ui.Rect.init(20.0, 40.0, 420.0, featureCardHeight(420.0));
+    const card_icon = featureCardIconBounds(card);
+    try std.testing.expectEqual(design.Icon.card, card_icon.w);
+    try std.testing.expectEqual(design.Icon.card, card_icon.h);
+    const title_x = card_icon.x + card_icon.w + design.Icon.text_gap;
+    try std.testing.expectEqual(card.x + card_pad + design.Icon.card + design.Icon.text_gap, title_x);
+}
+
 fn hasText(commands: []const ui.Command, value: []const u8) bool {
     for (commands) |command| switch (command) {
         .text => |text_command| if (std.mem.eql(u8, text_command.value, value)) return true,
-        else => {},
-    };
-    return false;
-}
-
-fn hasTextPrefix(commands: []const ui.Command, value: []const u8) bool {
-    for (commands) |command| switch (command) {
-        .text => |text_command| if (std.mem.startsWith(u8, text_command.value, value)) return true,
         else => {},
     };
     return false;

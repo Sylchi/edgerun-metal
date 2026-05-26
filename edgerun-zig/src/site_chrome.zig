@@ -3,41 +3,37 @@ const icon = @import("icon.zig");
 const interaction = @import("ui_interaction.zig");
 const ui = @import("ui.zig");
 const components = @import("ui_components.zig");
+const button_component = @import("ui/components/Button.zig");
+const design = @import("site_design.zig");
 
 pub const logo_button_id: u32 = 30_000;
 pub const docs_button_id: u32 = 30_001;
-pub const apps_button_id: u32 = 30_002;
 pub const launch_button_id: u32 = 30_003;
 pub const blog_button_id: u32 = 30_011;
 pub const source_button_id: u32 = 30_012;
-pub const mobile_menu_button_id: u32 = 30_013;
 
-pub const header_h: f32 = 64.0;
-pub const surface_radius: f32 = 8.0;
+pub const header_h: f32 = design.header_h;
+pub const surface_radius: f32 = design.surface_radius;
 const compact_header_w: f32 = 720.0;
 const compact_mobile_w: f32 = 520.0;
 const compact_nav_gap: f32 = 6.0;
-const compact_icon_w: f32 = 34.0;
+const compact_icon_w: f32 = design.Icon.button_box;
 const compact_icon_gap: f32 = 8.0;
+const nav_text_h: f32 = 13.0;
+const nav_item_h: f32 = 30.0;
+const nav_item_pad: f32 = 28.0;
+const nav_average_w: f32 = 7.8;
+const header_control_gap: f32 = 12.0;
+const launch_label = "Launch Desktop";
 
 pub const ActiveNav = enum {
     none,
-    components,
+    docs,
     blog,
-    apps,
     source,
 };
 
-const palette = struct {
-    const bg = ui.Color{ .r = 11, .g = 11, .b = 11 };
-    const panel = ui.Color{ .r = 18, .g = 18, .b = 18 };
-    const row = ui.Color{ .r = 24, .g = 24, .b = 24 };
-    const border = ui.Color{ .r = 56, .g = 56, .b = 56 };
-    const text = ui.Color{ .r = 242, .g = 242, .b = 242 };
-    const dim = ui.Color{ .r = 154, .g = 154, .b = 154 };
-    const primary = ui.Color{ .r = 74, .g = 222, .b = 128 };
-    const active = ui.Color{ .r = 24, .g = 52, .b = 33 };
-};
+const palette = design.palette;
 
 pub fn renderHeader(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, content: ui.Rect, active: ActiveNav) (ui.RenderError || interaction.Error)!void {
     try fill(scene, bounds, palette.bg, 0.0);
@@ -48,59 +44,64 @@ pub fn renderHeader(scene: *ui.Scene, collector: *interaction.Collector, bounds:
         return;
     }
 
-    const logo = ui.Rect.init(content.x, bounds.y + 16.0, 32.0, 32.0);
+    const logo = ui.Rect.init(content.x, bounds.y + 16.0, design.Icon.logo_box, design.Icon.logo_box);
     try fill(scene, logo, palette.primary, 7.0);
-    try iconQuad(scene, logo.insetUniform(5.0), .terminal, palette.bg);
+    try iconQuad(scene, logo.insetUniform(design.Icon.logo_inset), .terminal, palette.bg);
     try text(scene, logo.x + 42.0, bounds.y + 23.0, 110.0, 18.0, "EdgeRun", palette.text);
     try collector.addHit(ui.Rect.init(logo.x, logo.y, 148.0, logo.h), .button, logo_button_id);
 
     const nav_y = bounds.y + 18.0;
     const nav_center = content.x + content.w * 0.5;
-    try navItem(scene, collector, ui.Rect.init(nav_center - 178.0, nav_y, 116.0, 30.0), "Components", docs_button_id, active == .components);
-    try navItem(scene, collector, ui.Rect.init(nav_center - 48.0, nav_y, 96.0, 30.0), "Academy", blog_button_id, active == .blog);
-    try navItem(scene, collector, ui.Rect.init(nav_center + 62.0, nav_y, 64.0, 30.0), "Apps", apps_button_id, active == .apps);
+    const docs_w = navWidth("Docs");
+    const academy_w = navWidth("Academy");
+    const nav_total_w = docs_w + academy_w + compact_nav_gap;
+    var nav_x = nav_center - nav_total_w * 0.5;
+    try navItem(scene, collector, ui.Rect.init(nav_x, nav_y, docs_w, nav_item_h), "Docs", docs_button_id, active == .docs);
+    nav_x += docs_w + compact_nav_gap;
+    try navItem(scene, collector, ui.Rect.init(nav_x, nav_y, academy_w, nav_item_h), "Academy", blog_button_id, active == .blog);
 
-    const launch = ui.Rect.init(content.x + content.w - 128.0, bounds.y + 16.0, 128.0, 32.0);
-    try button(scene, collector, launch, "Launch Desktop", launch_button_id, .primary, null, null);
+    const launch_w = button_component.preferredWidth(launch_label, null, null);
+    const launch = ui.Rect.init(content.x + content.w - launch_w, bounds.y + 16.0, launch_w, design.compact_control_h);
+    try button(scene, collector, launch, launch_label, launch_button_id, .primary, null, null);
 
-    const source = ui.Rect.init(launch.x - 46.0, launch.y, 32.0, 32.0);
+    const source = ui.Rect.init(launch.x - header_control_gap - design.Icon.logo_box, launch.y, design.Icon.logo_box, design.Icon.logo_box);
     try iconButton(scene, collector, source, .code, source_button_id, active == .source);
 }
 
 fn renderCompactHeader(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, content: ui.Rect, active: ActiveNav) (ui.RenderError || interaction.Error)!void {
-    const logo = ui.Rect.init(content.x, bounds.y + 16.0, 32.0, 32.0);
+    const logo = ui.Rect.init(content.x, bounds.y + 16.0, design.Icon.logo_box, design.Icon.logo_box);
     try fill(scene, logo, palette.primary, 7.0);
-    try iconQuad(scene, logo.insetUniform(5.0), .terminal, palette.bg);
+    try iconQuad(scene, logo.insetUniform(design.Icon.logo_inset), .terminal, palette.bg);
     try text(scene, logo.x + 40.0, bounds.y + 23.0, 78.0, 18.0, "EdgeRun", palette.text);
     try collector.addHit(ui.Rect.init(logo.x, logo.y, 118.0, logo.h), .button, logo_button_id);
 
     if (content.w < compact_mobile_w) {
-        const menu = ui.Rect.init(content.x + content.w - compact_icon_w, bounds.y + 15.0, compact_icon_w, 34.0);
-        const source = ui.Rect.init(menu.x - compact_icon_gap - compact_icon_w, menu.y, compact_icon_w, 34.0);
+        const docs = ui.Rect.init(content.x + content.w - compact_icon_w, bounds.y + 15.0, compact_icon_w, design.Icon.button_box);
+        const source = ui.Rect.init(docs.x - compact_icon_gap - compact_icon_w, docs.y, compact_icon_w, design.Icon.button_box);
         try iconButton(scene, collector, source, .code, source_button_id, active == .source);
-        try iconButton(scene, collector, menu, .menu, mobile_menu_button_id, false);
+        try iconButton(scene, collector, docs, .file, docs_button_id, active == .docs);
         return;
     }
 
-    const source = ui.Rect.init(content.x + content.w - compact_icon_w, bounds.y + 15.0, compact_icon_w, 34.0);
+    const source = ui.Rect.init(content.x + content.w - compact_icon_w, bounds.y + 15.0, compact_icon_w, design.Icon.button_box);
     try iconButton(scene, collector, source, .code, source_button_id, active == .source);
 
     const nav_y = bounds.y + 18.0;
     const nav_right = source.x - compact_nav_gap;
-    const apps = ui.Rect.init(nav_right - 40.0, nav_y, 40.0, 30.0);
-    const blog = ui.Rect.init(apps.x - compact_nav_gap - 74.0, nav_y, 74.0, 30.0);
-    const docs = ui.Rect.init(blog.x - compact_nav_gap - 42.0, nav_y, 42.0, 30.0);
+    const blog_w = navWidth("Academy");
+    const docs_w = navWidth("Docs");
+    const blog = ui.Rect.init(nav_right - blog_w, nav_y, blog_w, nav_item_h);
+    const docs = ui.Rect.init(blog.x - compact_nav_gap - docs_w, nav_y, docs_w, nav_item_h);
     const logo_right = logo.x + 118.0 + compact_nav_gap;
     if (docs.x >= logo_right) {
-        try navItem(scene, collector, docs, "UI", docs_button_id, active == .components);
+        try navItem(scene, collector, docs, "Docs", docs_button_id, active == .docs);
         try navItem(scene, collector, blog, "Academy", blog_button_id, active == .blog);
-        try navItem(scene, collector, apps, "Apps", apps_button_id, active == .apps);
     }
 }
 
 fn navItem(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id: u32, active: bool) (ui.RenderError || interaction.Error)!void {
     if (active) try fill(scene, bounds, palette.active, 6.0);
-    try scene.pushAlignedText(ui.Rect.init(bounds.x, bounds.y + 8.0, bounds.w, 12.0), label, if (active) palette.primary else palette.dim, .center);
+    try scene.pushAlignedText(ui.Rect.init(bounds.x, bounds.y + 7.0, bounds.w, nav_text_h), label, if (active) palette.primary else palette.dim, .center);
     try collector.addHit(bounds, .button, id);
 }
 
@@ -112,21 +113,18 @@ fn button(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, 
 }
 
 fn iconButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, value: icon.Icon, id: u32, active: bool) (ui.RenderError || interaction.Error)!void {
-    if (active) try fill(scene, bounds, palette.active, 7.0) else try fill(scene, bounds, ui.Color.clear, 7.0);
-    try iconQuad(scene, bounds.insetUniform(6.0), value, if (active) palette.primary else palette.text);
+    try fill(scene, bounds, if (active) palette.active else palette.row, 7.0);
+    try scene.pushRect(bounds, if (active) palette.primary else palette.border, .border, 7.0, 0.0);
+    try iconQuad(scene, bounds.insetUniform(design.Icon.button_inset), value, if (active) palette.primary else palette.text);
     try collector.addHit(bounds, .button, id);
 }
 
 pub fn style() ui.Style {
-    return .{
-        .bg = palette.bg,
-        .panel = palette.panel,
-        .row = palette.row,
-        .border = palette.border,
-        .text = palette.text,
-        .muted = palette.dim,
-        .accent = palette.primary,
-    };
+    return design.style();
+}
+
+fn navWidth(label: []const u8) f32 {
+    return @max(design.min_touch_target, @as(f32, @floatFromInt(label.len)) * nav_average_w + nav_item_pad);
 }
 
 fn fill(scene: *ui.Scene, bounds: ui.Rect, color: ui.Color, r: f32) ui.RenderError!void {
@@ -152,7 +150,6 @@ test "site chrome header exposes canonical navigation hit targets" {
     try expectHit(collector.written(), logo_button_id);
     try expectHit(collector.written(), docs_button_id);
     try expectHit(collector.written(), blog_button_id);
-    try expectHit(collector.written(), apps_button_id);
     try expectHit(collector.written(), source_button_id);
     try expectHit(collector.written(), launch_button_id);
 }
@@ -169,7 +166,7 @@ test "site chrome compact header keeps hit targets separated" {
     const source = expectHitRect(collector.written(), source_button_id);
     try expectNoHorizontalOverlap(logo, source);
     if (hitRect(collector.written(), docs_button_id)) |docs| try expectNoHorizontalOverlap(logo, docs);
-    if (hitRect(collector.written(), apps_button_id)) |apps| try expectNoHorizontalOverlap(apps, source);
+    if (hitRect(collector.written(), blog_button_id)) |blog| try expectNoHorizontalOverlap(blog, source);
 }
 
 test "site chrome mobile header uses reference icon controls" {
@@ -182,10 +179,10 @@ test "site chrome mobile header uses reference icon controls" {
 
     const logo = expectHitRect(collector.written(), logo_button_id);
     const source = expectHitRect(collector.written(), source_button_id);
-    const menu = expectHitRect(collector.written(), mobile_menu_button_id);
+    const docs = expectHitRect(collector.written(), docs_button_id);
     try expectNoHorizontalOverlap(logo, source);
-    try expectNoHorizontalOverlap(source, menu);
-    try std.testing.expect(hitRect(collector.written(), docs_button_id) == null);
+    try expectNoHorizontalOverlap(source, docs);
+    try std.testing.expectEqual(@as(usize, 3), collector.written().len);
 }
 
 fn expectHit(regions: []const interaction.Region, id: u32) !void {
