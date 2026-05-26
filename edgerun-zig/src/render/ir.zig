@@ -17,43 +17,43 @@ pub const Error = error{
     InvalidBuffer,
 };
 
-const rect_x_index: usize = 0;
-const rect_y_index: usize = 1;
-const rect_w_index: usize = 2;
-const rect_h_index: usize = 3;
-const rect_radius_index: usize = 4;
-const rect_shadow_index: usize = 5;
-const rect_color_r_index: usize = 6;
-const rect_color_g_index: usize = 7;
-const rect_color_b_index: usize = 8;
-const rect_color_a_index: usize = 9;
-const rect_color2_r_index: usize = 10;
-const rect_color2_g_index: usize = 11;
-const rect_color2_b_index: usize = 12;
-const rect_color2_a_index: usize = 13;
-const rect_mode_index: usize = 14;
+pub const rect_x_index: usize = 0;
+pub const rect_y_index: usize = 1;
+pub const rect_w_index: usize = 2;
+pub const rect_h_index: usize = 3;
+pub const rect_radius_index: usize = 4;
+pub const rect_shadow_index: usize = 5;
+pub const rect_color_r_index: usize = 6;
+pub const rect_color_g_index: usize = 7;
+pub const rect_color_b_index: usize = 8;
+pub const rect_color_a_index: usize = 9;
+pub const rect_color2_r_index: usize = 10;
+pub const rect_color2_g_index: usize = 11;
+pub const rect_color2_b_index: usize = 12;
+pub const rect_color2_a_index: usize = 13;
+pub const rect_mode_index: usize = 14;
 const rect_mode_fill: u8 = 0;
 const rect_mode_shadow: u8 = 1;
 const rect_mode_border: u8 = 2;
 const rect_mode_linear_gradient: u8 = 3;
 const rect_mode_pie_slice: u8 = 4;
-const textured_x_index: usize = 0;
-const textured_y_index: usize = 1;
-const textured_u_index: usize = 2;
-const textured_v_index: usize = 3;
-const textured_color_r_index: usize = 4;
-const textured_color_g_index: usize = 5;
-const textured_color_b_index: usize = 6;
-const textured_color_a_index: usize = 7;
-const icon_x_index: usize = 0;
-const icon_y_index: usize = 1;
-const icon_w_index: usize = 2;
-const icon_h_index: usize = 3;
-const icon_color_r_index: usize = 4;
-const icon_color_g_index: usize = 5;
-const icon_color_b_index: usize = 6;
-const icon_color_a_index: usize = 7;
-const icon_id_index: usize = 8;
+pub const textured_x_index: usize = 0;
+pub const textured_y_index: usize = 1;
+pub const textured_u_index: usize = 2;
+pub const textured_v_index: usize = 3;
+pub const textured_color_r_index: usize = 4;
+pub const textured_color_g_index: usize = 5;
+pub const textured_color_b_index: usize = 6;
+pub const textured_color_a_index: usize = 7;
+pub const icon_x_index: usize = 0;
+pub const icon_y_index: usize = 1;
+pub const icon_w_index: usize = 2;
+pub const icon_h_index: usize = 3;
+pub const icon_color_r_index: usize = 4;
+pub const icon_color_g_index: usize = 5;
+pub const icon_color_b_index: usize = 6;
+pub const icon_color_a_index: usize = 7;
+pub const icon_id_index: usize = 8;
 
 pub const Layer = enum {
     base,
@@ -775,6 +775,15 @@ test "renderer ir owns svg source lookup and command painting boundaries" {
     try expectSourceDoesNotContain(@embedFile("../wayland_egl_host.zig"), "renderer_ir.packScene(");
     try expectSourceDoesNotContain(@embedFile("../drm_gbm_host.zig"), "renderer_ir.packScene(");
     try expectSourceDoesNotContain(@embedFile("../app_runtime.zig"), "renderer_present.present(");
+}
+
+test "renderer ir publishes packed frame field layout" {
+    try std.testing.expectEqual(@as(usize, 15), rect_float_stride);
+    try std.testing.expectEqual(rect_float_stride - 1, rect_mode_index);
+    try std.testing.expectEqual(@as(usize, 8), text_vertex_float_stride);
+    try std.testing.expectEqual(text_vertex_float_stride - 1, textured_color_a_index);
+    try std.testing.expectEqual(@as(usize, 9), icon_instance_float_stride);
+    try std.testing.expectEqual(icon_instance_float_stride - 1, icon_id_index);
 }
 
 test "renderer backends stay behind adapter imports" {

@@ -4,6 +4,12 @@ const renderer_ir = @import("ir.zig");
 const ui = @import("../ui.zig");
 
 pub const vertex_float_stride: usize = 6;
+pub const vertex_x_index: usize = 0;
+pub const vertex_y_index: usize = 1;
+pub const vertex_color_r_index: usize = 2;
+pub const vertex_color_g_index: usize = 3;
+pub const vertex_color_b_index: usize = 4;
+pub const vertex_color_a_index: usize = 5;
 pub const line_vertex_count: usize = 6;
 pub const filled_circle_segments: usize = 32;
 pub const curve_segments: usize = 32;
@@ -273,4 +279,14 @@ test "icon line buffer packs browser-ready vertices" {
     try packIconInstances(instances_storage.buffers().liveIconVertices(), &out, &out_len);
     try std.testing.expect(out_len > 0);
     try std.testing.expectEqual(@as(usize, 0), out_len % vertex_float_stride);
+}
+
+test "icon line buffer publishes packed vertex layout" {
+    try std.testing.expectEqual(@as(usize, 6), vertex_float_stride);
+    try std.testing.expectEqual(@as(usize, 0), vertex_x_index);
+    try std.testing.expectEqual(@as(usize, 1), vertex_y_index);
+    try std.testing.expectEqual(@as(usize, 2), vertex_color_r_index);
+    try std.testing.expectEqual(@as(usize, 3), vertex_color_g_index);
+    try std.testing.expectEqual(@as(usize, 4), vertex_color_b_index);
+    try std.testing.expectEqual(vertex_float_stride - 1, vertex_color_a_index);
 }
