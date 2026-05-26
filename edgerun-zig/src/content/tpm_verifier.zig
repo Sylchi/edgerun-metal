@@ -1,3 +1,4 @@
+const std = @import("std");
 const tpm = @import("../tpm.zig");
 const tls_tpm = @import("../tls_tpm.zig");
 
@@ -70,6 +71,52 @@ pub const TpmExecutor = struct {
     }
 };
 
+pub const SoftwareExecutor = struct {
+    loaded_key: [p256_public_key_len]u8 = [_]u8{0} ** p256_public_key_len,
+    loaded: bool = false,
+
+    const handle: u32 = 1;
+    const EcdsaP256Sha256 = std.crypto.sign.ecdsa.EcdsaP256Sha256;
+
+    pub fn init() SoftwareExecutor {
+        return .{};
+    }
+
+    pub fn sha256(self: *SoftwareExecutor, canonical_bytes: []const u8) ?[digest_len]u8 {
+        _ = self;
+        if (canonical_bytes.len == 0) return null;
+        var out: [digest_len]u8 = undefined;
+        std.crypto.hash.sha2.Sha256.hash(canonical_bytes, &out, .{});
+        return out;
+    }
+
+    pub fn loadP256VerifyKey(self: *SoftwareExecutor, public_key: [p256_public_key_len]u8) ?u32 {
+        if (!nonzero(&public_key) or self.loaded) return null;
+        self.loaded_key = public_key;
+        self.loaded = true;
+        return handle;
+    }
+
+    pub fn verifyP256Sha256(self: *SoftwareExecutor, loaded_handle: u32, digest: [digest_len]u8, signature: [p256_public_key_len]u8) bool {
+        if (!self.loaded or loaded_handle != handle) return false;
+        var public_key_sec1: [EcdsaP256Sha256.PublicKey.uncompressed_sec1_encoded_length]u8 = undefined;
+        public_key_sec1[0] = 0x04;
+        @memcpy(public_key_sec1[1..], &self.loaded_key);
+
+        const public_key = EcdsaP256Sha256.PublicKey.fromSec1(&public_key_sec1) catch return false;
+        const sig = EcdsaP256Sha256.Signature.fromBytes(signature);
+        sig.verifyPrehashed(digest, public_key) catch return false;
+        return true;
+    }
+
+    pub fn flush(self: *SoftwareExecutor, loaded_handle: u32) bool {
+        if (!self.loaded or loaded_handle != handle) return false;
+        self.loaded_key = [_]u8{0} ** p256_public_key_len;
+        self.loaded = false;
+        return true;
+    }
+};
+
 const test_digest = [_]u8{0x42} ** digest_len;
 const test_key = [_]u8{0x11} ** p256_public_key_len;
 const test_signature = [_]u8{0x22} ** p256_public_key_len;
@@ -132,6 +179,13 @@ fn sameBytes(left: []const u8, right: []const u8) bool {
     return true;
 }
 
+fn nonzero(value: []const u8) bool {
+    for (value) |byte| {
+        if (byte != 0) return true;
+    }
+    return false;
+}
+
 fn testSignature() Signature {
     return .{
         .public_key = test_key,
@@ -181,4 +235,49 @@ test "tpm verifier treats flush failure as fatal" {
 
     try testing.expectError(error.FlushFailed, verifier.verifySignedBytes("canonical-transition", testSignature()));
     try testing.expectEqual(RecordingExecutor.State.flushed, executor.state);
+}
+
+test "software verifier hashes and verifies p256 signatures without tpm" {
+    const testing = @import("std").testing;
+    const EcdsaP256Sha256 = SoftwareExecutor.EcdsaP256Sha256;
+    const secret_key = try EcdsaP256Sha256.SecretKey.fromBytes([_]u8{1} ** EcdsaP256Sha256.SecretKey.encoded_length);
+    const key_pair = try EcdsaP256Sha256.KeyPair.fromSecretKey(secret_key);
+    const public_key_sec1 = key_pair.public_key.toUncompressedSec1();
+    const signature_message = "pi software verifier canonical bytes";
+
+    var digest: [digest_len]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(signature_message, &digest, .{});
+    const software_signature = try key_pair.signPrehashed(digest, null);
+    const signature_bytes = software_signature.toBytes();
+
+    var public_key: [p256_public_key_len]u8 = undefined;
+    @memcpy(&public_key, public_key_sec1[1..]);
+    var executor = SoftwareExecutor.init();
+    const verifier = Verifier(SoftwareExecutor).init(&executor);
+
+    const verified_digest = try verifier.verifySignedBytes(signature_message, .{
+        .public_key = public_key,
+        .bytes = signature_bytes,
+    });
+
+    try testing.expectEqual(digest, verified_digest);
+    try testing.expect(!executor.loaded);
+}
+
+test "software verifier rejects bad p256 signatures without installing fallback behavior" {
+    const testing = @import("std").testing;
+    const EcdsaP256Sha256 = SoftwareExecutor.EcdsaP256Sha256;
+    const secret_key = try EcdsaP256Sha256.SecretKey.fromBytes([_]u8{2} ** EcdsaP256Sha256.SecretKey.encoded_length);
+    const key_pair = try EcdsaP256Sha256.KeyPair.fromSecretKey(secret_key);
+    const public_key_sec1 = key_pair.public_key.toUncompressedSec1();
+    var public_key: [p256_public_key_len]u8 = undefined;
+    @memcpy(&public_key, public_key_sec1[1..]);
+    var executor = SoftwareExecutor.init();
+    const verifier = Verifier(SoftwareExecutor).init(&executor);
+
+    try testing.expectError(error.VerifyFailed, verifier.verifySignedBytes("message", .{
+        .public_key = public_key,
+        .bytes = [_]u8{0x5a} ** p256_public_key_len,
+    }));
+    try testing.expect(!executor.loaded);
 }

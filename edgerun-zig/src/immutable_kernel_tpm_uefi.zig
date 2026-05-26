@@ -1,9 +1,13 @@
 const std = @import("std");
 const uefi = std.os.uefi;
 const bytes = @import("bytes.zig");
+const boot_resource_map = @import("boot_resource_map.zig");
+const uefi_resource_map = @import("boot/uefi_resource_map.zig");
 const kernel = @import("content/kernel.zig");
 const kernel_authority = @import("content/kernel_authority.zig");
 const data_chunk = @import("content/data_chunk.zig");
+const resource_contract = @import("content/resource_contract.zig");
+const resource_inventory = @import("content/resource_inventory.zig");
 const tpm = @import("tpm.zig");
 const tls_tpm = @import("tls_tpm.zig");
 const tpm_verifier = @import("content/tpm_verifier.zig");
@@ -12,6 +16,8 @@ const debugcon_port: u16 = 0x402;
 const line_max: usize = 192;
 const command_bytes = 512;
 const response_bytes = 3968;
+const memory_map_bytes = 131072;
+const max_boot_resources = 256;
 
 const Tcg2Protocol = extern struct {
     get_capability: *const fn (*Tcg2Protocol, *Tcg2BootServiceCapability) callconv(uefi.cc) uefi.Status,
@@ -114,6 +120,16 @@ fn runChecks() uefi.Status {
     printNewline();
     printLine("check: swtpm present");
 
+    var boot_resources: [max_boot_resources]resource_inventory.Resource = undefined;
+    var resource_ids: [max_boot_resources]resource_inventory.ResourceIdStorage = undefined;
+    var inventory = resource_inventory.Inventory.init(&boot_resources);
+    var memory_regions: [max_boot_resources]boot_resource_map.MemoryRegion = undefined;
+    const boot_map = collectBootResourceMap(boot_services, &memory_regions) catch |err| return failBootResourceMap("boot resource map", err);
+    resource_inventory.addBootResourceMap(&inventory, boot_map, &resource_ids) catch |err| return failInventory("boot resource inventory", err);
+    if (inventory.len == 0) return failText("efi memory inventory empty");
+    const app_memory_resource = findMemoryResourceForApp(inventory) orelse return failText("no app-sized efi memory resource");
+    printLine("check: boot memory resources normalized");
+
     var transport = Tcg2Transport{ .protocol = protocol };
     var command: [command_bytes]u8 = undefined;
     var response: [response_bytes]u8 = undefined;
@@ -152,6 +168,74 @@ fn runChecks() uefi.Status {
     if (allocator.len != 1) return failText("verified allocation not recorded");
     if (!allocator.rangeValid(kernel.AddressRange.init(chunk("qemu-swtpm-allocation"), 0, 256))) return failText("verified allocation invalid");
     printLine("check: kernel tpm signature verified allocation ok");
+
+    const public_memory = resource_contract.Contract.init(
+        chunk("qemu-public-memory"),
+        chunk("boot-root"),
+        app_memory_resource.id,
+        .memory,
+        100,
+        120,
+        resource_contract.Bounds.init(app_memory_resource.bounds.offset, 4096),
+        resource_contract.Pattern.exclusive(),
+    );
+    const private_memory = resource_contract.Contract.init(
+        chunk("qemu-private-memory"),
+        chunk("boot-root"),
+        app_memory_resource.id,
+        .memory,
+        100,
+        120,
+        resource_contract.Bounds.init(app_memory_resource.bounds.offset + 4096, 4096),
+        resource_contract.Pattern.exclusive(),
+    );
+    const memory_plan = resource_inventory.AppMemoryPlan.init(chunk("boot-root"), public_memory, private_memory);
+    if (!memory_plan.fits(inventory)) return failText("public/private memory plan rejected");
+    var memory_schedule_slots: [1]resource_contract.Contract = undefined;
+    var memory_schedule = resource_contract.Schedule.init(&memory_schedule_slots);
+    var public_memory_canonical: [192]u8 = undefined;
+    const public_memory_bytes = resource_contract.encode(public_memory, &public_memory_canonical) catch return failText("encode memory contract failed");
+    const public_memory_digest = ctx.sha256(public_memory_bytes) orelse return failText("tpm memory sha256 failed");
+    const public_memory_signature = ctx.signP256Sha256(primary.handle, public_memory_digest) orelse return failText("tpm memory sign failed");
+    var public_memory_scratch: [192]u8 = undefined;
+    _ = memory_schedule.installVerifiedChecked(
+        inventory,
+        tpm_verifier.TpmExecutor,
+        verifier,
+        public_memory,
+        .{ .public_key = primary.public_key, .bytes = public_memory_signature },
+        &public_memory_scratch,
+    ) catch return failText("kernel signed memory contract failed");
+    printLine("check: kernel installed boot-resource-checked public memory contract ok");
+
+    const contract = resource_contract.Contract.init(
+        chunk("qemu-swtpm-contract"),
+        chunk("boot-root"),
+        chunk("cpu-slot-0"),
+        .cpu,
+        100,
+        120,
+        resource_contract.Bounds.init(0, 1),
+        resource_contract.Pattern.periodic(2, 5),
+    );
+    var contract_canonical: [192]u8 = undefined;
+    const contract_bytes = resource_contract.encode(contract, &contract_canonical) catch return failText("encode contract failed");
+    const contract_digest = ctx.sha256(contract_bytes) orelse return failText("tpm contract sha256 failed");
+    const contract_signature = ctx.signP256Sha256(primary.handle, contract_digest) orelse return failText("tpm contract sign failed");
+    var contract_slots: [1]resource_contract.Contract = undefined;
+    var schedule = resource_contract.Schedule.init(&contract_slots);
+    var contract_scratch: [192]u8 = undefined;
+    _ = schedule.installVerified(
+        tpm_verifier.TpmExecutor,
+        verifier,
+        contract,
+        .{ .public_key = primary.public_key, .bytes = contract_signature },
+        &contract_scratch,
+    ) catch return failText("kernel signed contract failed");
+    if (schedule.ownerAt(chunk("cpu-slot-0"), 102) != null) return failText("contract owns inactive tick");
+    const owner = schedule.ownerAt(chunk("cpu-slot-0"), 105) orelse return failText("contract missing active tick owner");
+    if (!sameChunk(owner, chunk("boot-root"))) return failText("contract active tick wrong owner");
+    printLine("check: kernel tpm signature installed resource contract ok");
     printLine("PASS immutable-kernel-swtpm-qemu");
     return .success;
 }
@@ -193,6 +277,32 @@ fn createSigningKey(transport: *Tcg2Transport, command: []u8, response: []u8) ?t
     return tpm.parseCreatePrimaryP256(create_response);
 }
 
+fn collectBootResourceMap(
+    boot_services: *const uefi.tables.BootServices,
+    memory_regions: []boot_resource_map.MemoryRegion,
+) uefi_resource_map.Error!boot_resource_map.Map {
+    var map_buffer: [memory_map_bytes]u8 align(@alignOf(uefi.tables.MemoryDescriptor)) = undefined;
+    return uefi_resource_map.collectMemoryMap(boot_services, &map_buffer, memory_regions) catch |err| {
+        printText("uefi boot resource map failed ");
+        printBootResourceMapError(err);
+        printNewline();
+        return err;
+    };
+}
+
+fn printBootResourceMapError(err: uefi_resource_map.Error) void {
+    switch (err) {
+        error.NoSpace => printText("no-space"),
+    }
+}
+
+fn findMemoryResourceForApp(inventory: resource_inventory.Inventory) ?resource_inventory.Resource {
+    for (inventory.resources[0..inventory.len]) |resource| {
+        if (resource.kind == .memory and resource.bounds.length >= 8192) return resource;
+    }
+    return null;
+}
+
 fn responseLength(response: []const u8) ?usize {
     if (response.len < tpm.header_len) return null;
     const len = bytes.loadBe32(response[2..6]) orelse return null;
@@ -204,9 +314,38 @@ fn chunk(value: []const u8) data_chunk.DataChunk {
     return data_chunk.DataChunk.init(value);
 }
 
+fn sameChunk(left: data_chunk.DataChunk, right: data_chunk.DataChunk) bool {
+    return left.valid() and right.valid() and bytes.eql(left.body(), right.body());
+}
+
 fn failText(message: []const u8) uefi.Status {
     printText("FAIL ");
     printLine(message);
+    return .aborted;
+}
+
+fn failInventory(step: []const u8, err: resource_inventory.Error) uefi.Status {
+    printText("FAIL ");
+    printText(step);
+    printText(" ");
+    switch (err) {
+        error.BadArgument => printText("bad-argument"),
+        error.Duplicate => printText("duplicate"),
+        error.NoSpace => printText("no-space"),
+        error.OutOfBounds => printText("out-of-bounds"),
+    }
+    printNewline();
+    return .aborted;
+}
+
+fn failBootResourceMap(step: []const u8, err: uefi_resource_map.Error) uefi.Status {
+    printText("FAIL ");
+    printText(step);
+    printText(" ");
+    switch (err) {
+        error.NoSpace => printText("no-space"),
+    }
+    printNewline();
     return .aborted;
 }
 

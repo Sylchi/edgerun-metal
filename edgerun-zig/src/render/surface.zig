@@ -1,6 +1,6 @@
 const std = @import("std");
-const renderer_ir = @import("renderer_ir.zig");
-const ui = @import("ui.zig");
+const renderer_ir = @import("ir.zig");
+const ui = @import("../ui.zig");
 
 pub const bytes_per_pixel: u32 = 4;
 pub const dirty_tile_id_bytes: u32 = 4;

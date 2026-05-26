@@ -64,7 +64,9 @@ const Presentation = struct {
     stroke_width: f32 = default_stroke_width_scale,
     stroke_linecap_set: bool = false,
     stroke_cap: icon_vector.StrokeCap = .round,
-    stroke_linejoin: bool = false,
+    stroke_linejoin_set: bool = false,
+    stroke_join: icon_vector.StrokeJoin = .round,
+    stroke_miter_limit: f32 = default_stroke_miter_limit,
     fill_visible: bool = true,
     stroke_visible: bool = true,
     fill_opacity: u8 = color_component_max,
@@ -80,7 +82,7 @@ const Presentation = struct {
         return self.stroke_paint and
             self.stroke_width_set and
             self.stroke_linecap_set and
-            self.stroke_linejoin and
+            self.stroke_linejoin_set and
             self.stroke_visible;
     }
 
@@ -286,6 +288,9 @@ pub const Iterator = struct {
     path_stroke_color: SvgPaint = .current_color,
     path_stroke_width: f32 = default_stroke_width_scale,
     path_stroke_cap: icon_vector.StrokeCap = .round,
+    path_stroke_join: icon_vector.StrokeJoin = .round,
+    path_stroke_miter_limit: f32 = default_stroke_miter_limit,
+    path_clip_active: bool = false,
     view_box: ViewBox = default_view_box,
     invalid_svg: bool = false,
     init_error: ?Error = null,
@@ -305,6 +310,8 @@ pub const Iterator = struct {
     output_paint: SvgPaint = .current_color,
     output_stroke_width: f32 = default_stroke_width_scale,
     output_stroke_cap: icon_vector.StrokeCap = .round,
+    output_stroke_join: icon_vector.StrokeJoin = .round,
+    output_stroke_miter_limit: f32 = default_stroke_miter_limit,
 
     pub fn init(svg: []const u8) Iterator {
         const root = parseSvgRoot(svg) catch |err| return .{ .svg = svg, .invalid_svg = true, .init_error = err };
@@ -332,14 +339,21 @@ pub const Iterator = struct {
                     self.path_paint_mode = .stroke;
                     self.pushStrokeWidth(self.path_stroke_width);
                     self.pushStrokeCap(self.path_stroke_cap);
+                    self.pushStrokeJoin(self.path_stroke_join);
+                    self.pushStrokeMiterLimit(self.path_stroke_miter_limit);
                     self.pushPaint(self.path_stroke_color);
                     return .end_fill_path;
                 }
                 if (self.path_paint_mode == .fill) {
                     self.path_paint_mode = null;
+                    self.pushPathClipClear();
                     return .end_fill_path;
                 }
                 self.path_paint_mode = null;
+                if (self.path_clip_active) {
+                    self.path_clip_active = false;
+                    return .clear_clip_path;
+                }
             }
             const element = try self.nextElement() orelse return null;
             switch (element.kind) {
@@ -348,11 +362,17 @@ pub const Iterator = struct {
                     const path_transform = try combineElementTransform(element.transform, element.tag);
                     self.path = PathIterator.initWithViewBoxTransform(d, self.view_box, path_transform);
                     self.path_paint_mode = element.paint_mode;
+                    if (element.clip_path_id) |clip_id| {
+                        try self.pushClipPath(clip_id, element.transform);
+                        self.path_clip_active = true;
+                    }
                     if (element.paint_mode == .fill_then_stroke) {
                         self.path_replay = PathIterator.initWithViewBoxTransform(d, self.view_box, path_transform);
                         self.path_stroke_color = element.stroke_color;
                         self.path_stroke_width = element.stroke_width;
                         self.path_stroke_cap = element.stroke_cap;
+                        self.path_stroke_join = element.stroke_join;
+                        self.path_stroke_miter_limit = element.stroke_miter_limit;
                         self.pushPaint(element.fill_color);
                         self.pushPending(beginFillPathOp(element.fill_rule));
                         return self.takePending().?;
@@ -365,6 +385,8 @@ pub const Iterator = struct {
                     if (element.paint_mode == .stroke) {
                         self.pushStrokeWidth(element.stroke_width);
                         self.pushStrokeCap(element.stroke_cap);
+                        self.pushStrokeJoin(element.stroke_join);
+                        self.pushStrokeMiterLimit(element.stroke_miter_limit);
                         self.pushPaint(element.stroke_color);
                         if (self.takePending()) |op| return op;
                     }
@@ -373,11 +395,11 @@ pub const Iterator = struct {
                 .ellipse => return try self.ellipseOp(element),
                 .line => return try self.lineOp(element),
                 .polyline => {
-                    try self.enqueuePointList(element.tag, element.transform, false, element.paint_mode, element.fill_rule, element.fill_color, element.stroke_color, element.stroke_width, element.stroke_cap);
+                    try self.enqueuePointList(element.tag, element.transform, false, element.paint_mode, element.fill_rule, element.fill_color, element.stroke_color, element.stroke_width, element.stroke_cap, element.stroke_join, element.stroke_miter_limit);
                     return self.takePending();
                 },
                 .polygon => {
-                    try self.enqueuePointList(element.tag, element.transform, true, element.paint_mode, element.fill_rule, element.fill_color, element.stroke_color, element.stroke_width, element.stroke_cap);
+                    try self.enqueuePointList(element.tag, element.transform, true, element.paint_mode, element.fill_rule, element.fill_color, element.stroke_color, element.stroke_width, element.stroke_cap, element.stroke_join, element.stroke_miter_limit);
                     return self.takePending();
                 },
                 .rect => return try self.rectOp(element),
@@ -429,6 +451,7 @@ pub const Iterator = struct {
                 continue;
             }
             if (isGroupOpenTag(tag)) {
+                if (try clipPathReferenceForTag(tag)) |_| return error.UnsupportedSvgElement;
                 const group_render_state = try renderStateForTag(self.currentRenderState(), tag, &self.css_rules);
                 if (!group_render_state.hidesSelf()) try validateSupportedPresentationTag(tag);
                 const group_presentation = if (group_render_state.hidesSelf()) self.currentPresentation() else try presentationForTag(self.currentPresentation(), tag, &self.css_rules, self.svg, self.view_box);
@@ -449,6 +472,11 @@ pub const Iterator = struct {
                 continue;
             }
             if (isDefsCloseTag(tag)) return error.InvalidSvg;
+            if (isClipPathOpenTag(tag)) {
+                if (!isSelfClosingTag(tag)) self.search_index = try containerCloseEnd(self.svg, self.search_index, "clipPath");
+                continue;
+            }
+            if (isClipPathCloseTag(tag)) return error.InvalidSvg;
             if (isSupportedElementCloseTag(tag)) continue;
             const render_state = try renderStateForTag(self.currentRenderState(), tag, &self.css_rules);
             if (render_state.hidesSelf()) continue;
@@ -460,6 +488,8 @@ pub const Iterator = struct {
             if (supportedElementKind(tag)) |kind| {
                 try validateSupportedPresentationTag(tag);
                 const presentation = try presentationForTag(self.currentPresentation(), tag, &self.css_rules, self.svg, self.view_box);
+                const clip_path_id = try clipPathReferenceForTag(tag);
+                if (clip_path_id != null and kind != .path) return error.UnsupportedSvgElement;
                 const paint_mode = presentation.paintMode(kind) orelse {
                     if (presentation.hasVisiblePaint()) return error.UnsupportedSvgStroke;
                     continue;
@@ -474,6 +504,9 @@ pub const Iterator = struct {
                     .stroke_color = presentation.strokePaint(),
                     .stroke_width = presentation.stroke_width,
                     .stroke_cap = presentation.stroke_cap,
+                    .stroke_join = presentation.stroke_join,
+                    .stroke_miter_limit = presentation.stroke_miter_limit,
+                    .clip_path_id = clip_path_id,
                 };
             }
             return error.UnsupportedSvgElement;
@@ -503,6 +536,8 @@ pub const Iterator = struct {
         if (reference_render_state.hidesSelf()) return null;
         try validateSupportedPresentationTag(reference_tag);
         const presentation = try presentationForTag(use_presentation, reference_tag, &self.css_rules, self.svg, self.view_box);
+        const clip_path_id = try clipPathReferenceForTag(use_tag) orelse try clipPathReferenceForTag(reference_tag);
+        if (clip_path_id != null and kind != .path) return error.UnsupportedSvgElement;
         const paint_mode = presentation.paintMode(kind) orelse {
             if (presentation.hasVisiblePaint()) return error.UnsupportedSvgStroke;
             return null;
@@ -519,6 +554,9 @@ pub const Iterator = struct {
             .stroke_color = presentation.strokePaint(),
             .stroke_width = presentation.stroke_width,
             .stroke_cap = presentation.stroke_cap,
+            .stroke_join = presentation.stroke_join,
+            .stroke_miter_limit = presentation.stroke_miter_limit,
+            .clip_path_id = clip_path_id,
         };
     }
 
@@ -548,7 +586,7 @@ pub const Iterator = struct {
         const cy = center.y;
         const fill_op = if (rx == ry) icon_vector.Op{ .filled_circle = .{ .cx = cx, .cy = cy, .radius = rx } } else icon_vector.Op{ .filled_ellipse = .{ .cx = cx, .cy = cy, .rx = rx, .ry = ry, .full = true } };
         const stroke_op = if (rx == ry) icon_vector.Op{ .circle = .{ .cx = cx, .cy = cy, .radius = rx } } else icon_vector.Op{ .ellipse = .{ .cx = cx, .cy = cy, .rx = rx, .ry = ry, .full = true } };
-        return self.opForPaintMode(paint_mode, element.fill_color, element.stroke_color, element.stroke_width, element.stroke_cap, fill_op, stroke_op);
+        return self.opForPaintMode(paint_mode, element.fill_color, element.stroke_color, element.stroke_width, element.stroke_cap, element.stroke_join, element.stroke_miter_limit, fill_op, stroke_op);
     }
 
     fn ellipseOp(self: *Iterator, element: SvgElement) Error!icon_vector.Op {
@@ -564,7 +602,7 @@ pub const Iterator = struct {
             .ry = try self.normalizeHeight(transform.scaleY(try attrNumber(tag, "ry"))),
             .full = true,
         };
-        return self.opForPaintMode(paint_mode, element.fill_color, element.stroke_color, element.stroke_width, element.stroke_cap, .{ .filled_ellipse = ellipse }, .{ .ellipse = ellipse });
+        return self.opForPaintMode(paint_mode, element.fill_color, element.stroke_color, element.stroke_width, element.stroke_cap, element.stroke_join, element.stroke_miter_limit, .{ .filled_ellipse = ellipse }, .{ .ellipse = ellipse });
     }
 
     fn lineOp(self: *Iterator, element: SvgElement) Error!icon_vector.Op {
@@ -580,6 +618,8 @@ pub const Iterator = struct {
         };
         self.pushStrokeWidth(element.stroke_width);
         self.pushStrokeCap(element.stroke_cap);
+        self.pushStrokeJoin(element.stroke_join);
+        self.pushStrokeMiterLimit(element.stroke_miter_limit);
         self.pushPaint(element.stroke_color);
         self.pushPending(.{ .polyline = self.line_points[0..] });
         return self.takePending().?;
@@ -603,7 +643,7 @@ pub const Iterator = struct {
             .h = try self.normalizeHeight(transform.scaleY(height)),
             .radius = try self.normalizeWidth(transform.scaleX(radius)),
         };
-        return self.opForPaintMode(paint_mode, element.fill_color, element.stroke_color, element.stroke_width, element.stroke_cap, .{ .filled_round_rect = rect }, .{ .round_rect = rect });
+        return self.opForPaintMode(paint_mode, element.fill_color, element.stroke_color, element.stroke_width, element.stroke_cap, element.stroke_join, element.stroke_miter_limit, .{ .filled_round_rect = rect }, .{ .round_rect = rect });
     }
 
     fn paintModeForCurrentTag(self: Iterator, tag: []const u8, kind: SvgElementKind) Error!PaintMode {
@@ -611,7 +651,7 @@ pub const Iterator = struct {
         return presentation.paintMode(kind) orelse error.UnsupportedSvgStroke;
     }
 
-    fn opForPaintMode(self: *Iterator, paint_mode: PaintMode, fill_color: SvgPaint, stroke_color: SvgPaint, stroke_width: f32, stroke_cap: icon_vector.StrokeCap, fill_op: icon_vector.Op, stroke_op: icon_vector.Op) Error!icon_vector.Op {
+    fn opForPaintMode(self: *Iterator, paint_mode: PaintMode, fill_color: SvgPaint, stroke_color: SvgPaint, stroke_width: f32, stroke_cap: icon_vector.StrokeCap, stroke_join: icon_vector.StrokeJoin, stroke_miter_limit: f32, fill_op: icon_vector.Op, stroke_op: icon_vector.Op) Error!icon_vector.Op {
         switch (paint_mode) {
             .fill => {
                 self.pushPaint(fill_color);
@@ -621,6 +661,8 @@ pub const Iterator = struct {
             .stroke => {
                 self.pushStrokeWidth(stroke_width);
                 self.pushStrokeCap(stroke_cap);
+                self.pushStrokeJoin(stroke_join);
+                self.pushStrokeMiterLimit(stroke_miter_limit);
                 self.pushPaint(stroke_color);
                 self.pushPending(stroke_op);
                 return self.takePending().?;
@@ -630,6 +672,8 @@ pub const Iterator = struct {
                 self.pushPending(fill_op);
                 self.pushStrokeWidth(stroke_width);
                 self.pushStrokeCap(stroke_cap);
+                self.pushStrokeJoin(stroke_join);
+                self.pushStrokeMiterLimit(stroke_miter_limit);
                 self.pushPaint(stroke_color);
                 self.pushPending(stroke_op);
                 return self.takePending().?;
@@ -644,7 +688,7 @@ pub const Iterator = struct {
         };
     }
 
-    fn enqueuePointList(self: *Iterator, tag: []const u8, inherited_transform: Transform, close: bool, paint_mode: PaintMode, fill_rule: FillRule, fill_color: SvgPaint, stroke_color: SvgPaint, stroke_width: f32, stroke_cap: icon_vector.StrokeCap) Error!void {
+    fn enqueuePointList(self: *Iterator, tag: []const u8, inherited_transform: Transform, close: bool, paint_mode: PaintMode, fill_rule: FillRule, fill_color: SvgPaint, stroke_color: SvgPaint, stroke_width: f32, stroke_cap: icon_vector.StrokeCap, stroke_join: icon_vector.StrokeJoin, stroke_miter_limit: f32) Error!void {
         if (self.pending_len != 0) return error.InvalidSvg;
         const points = try attrValue(tag, "points");
         var values = NumberList.init(points);
@@ -659,6 +703,8 @@ pub const Iterator = struct {
         if (paint_mode == .stroke) {
             self.pushStrokeWidth(stroke_width);
             self.pushStrokeCap(stroke_cap);
+            self.pushStrokeJoin(stroke_join);
+            self.pushStrokeMiterLimit(stroke_miter_limit);
             self.pushPaint(stroke_color);
         }
         self.pushPending(.{ .move_to = first });
@@ -677,6 +723,8 @@ pub const Iterator = struct {
         if (paint_mode == .fill_then_stroke) {
             self.pushStrokeWidth(stroke_width);
             self.pushStrokeCap(stroke_cap);
+            self.pushStrokeJoin(stroke_join);
+            self.pushStrokeMiterLimit(stroke_miter_limit);
             self.pushPaint(stroke_color);
             self.pushPending(.{ .move_to = first });
             var stroke_values = NumberList.init(points);
@@ -720,6 +768,71 @@ pub const Iterator = struct {
         if (self.output_stroke_cap == cap) return;
         self.pushPending(.{ .stroke_cap = cap });
         self.output_stroke_cap = cap;
+    }
+
+    fn pushStrokeJoin(self: *Iterator, join: icon_vector.StrokeJoin) void {
+        if (self.output_stroke_join == join) return;
+        self.pushPending(.{ .stroke_join = join });
+        self.output_stroke_join = join;
+    }
+
+    fn pushStrokeMiterLimit(self: *Iterator, limit: f32) void {
+        if (@abs(self.output_stroke_miter_limit - limit) <= transform_epsilon) return;
+        self.pushPending(.{ .stroke_miter_limit = limit });
+        self.output_stroke_miter_limit = limit;
+    }
+
+    fn pushPathClipClear(self: *Iterator) void {
+        if (!self.path_clip_active) return;
+        self.pushPending(.clear_clip_path);
+        self.path_clip_active = false;
+    }
+
+    fn pushClipPath(self: *Iterator, id: []const u8, inherited_transform: Transform) Error!void {
+        const referenced = try findReferencedElement(self.svg, id);
+        if (!isClipPathOpenTag(referenced.tag)) return error.UnsupportedSvgElement;
+        if (try attrValueOptional(referenced.tag, "clipPathUnits")) |units| {
+            if (!supportedKeyword(units, "userSpaceOnUse")) return error.UnsupportedSvgElement;
+        }
+        const clip_transform = try combineElementTransform(inherited_transform, referenced.tag);
+        const previous_len = self.pending_len;
+        self.pushPending(.begin_clip_path);
+        try self.enqueueClipPathContent(referenced.content_start, referenced.content_end, clip_transform);
+        if (self.pending_len == previous_len + 1) return error.UnsupportedSvgElement;
+        self.pushPending(.end_clip_path);
+    }
+
+    fn enqueueClipPathContent(self: *Iterator, content_start: usize, content_end: usize, clip_transform: Transform) Error!void {
+        var search_index = content_start;
+        while (search_index < content_end) {
+            const tag_start_offset = std.mem.indexOfScalar(u8, self.svg[search_index..content_end], '<') orelse return;
+            const tag_start = search_index + tag_start_offset;
+            if (try skipSpecialMarkup(self.svg, tag_start, &search_index)) continue;
+            const tag_end = try svgTagEnd(self.svg, tag_start);
+            if (tag_end > content_end) return error.InvalidSvg;
+            const tag = self.svg[tag_start..tag_end];
+            search_index = tag_end + 1;
+            if (isIgnorableTag(tag) or isMetadataTag(tag) or isSupportedElementCloseTag(tag)) continue;
+            if (isGroupOpenTag(tag) or isUseTag(tag) or isClipPathOpenTag(tag) or unsupportedElementTag(tag)) return error.UnsupportedSvgElement;
+            if (supportedElementKind(tag)) |kind| {
+                if (kind != .path) return error.UnsupportedSvgElement;
+                try self.enqueueClipPathElement(tag, clip_transform);
+                continue;
+            }
+            return error.UnsupportedSvgElement;
+        }
+    }
+
+    fn enqueueClipPathElement(self: *Iterator, tag: []const u8, inherited_transform: Transform) Error!void {
+        if (try clipPathReferenceForTag(tag)) |_| return error.UnsupportedSvgElement;
+        try validateSupportedPresentationTag(tag);
+        const transform = try combineElementTransform(inherited_transform, tag);
+        const d = try attrValue(tag, "d");
+        const fill_rule = if (try attrValueOptional(tag, "clip-rule")) |value| parseFillRule(value) orelse return error.UnsupportedSvgStroke else .nonzero;
+        self.pushPending(beginFillPathOp(fill_rule));
+        var path = PathIterator.initWithViewBoxTransform(d, self.view_box, transform);
+        while (try path.next()) |op| self.pushPending(op);
+        self.pushPending(.end_fill_path);
     }
 
     fn takePending(self: *Iterator) ?icon_vector.Op {
@@ -1055,6 +1168,9 @@ const SvgElement = struct {
     stroke_color: SvgPaint,
     stroke_width: f32,
     stroke_cap: icon_vector.StrokeCap,
+    stroke_join: icon_vector.StrokeJoin,
+    stroke_miter_limit: f32,
+    clip_path_id: ?[]const u8,
 };
 
 fn parseSvgRoot(svg: []const u8) Error!SvgRoot {
@@ -1293,8 +1409,9 @@ fn validateSupportedPresentationTag(tag: []const u8) Error!void {
         _ = parseStrokeCap(value) orelse return error.UnsupportedSvgStroke;
     }
     if (try attrValueOptional(tag, "stroke-linejoin")) |value| {
-        if (!supportedKeyword(value, "round")) return error.UnsupportedSvgStroke;
+        _ = parseStrokeJoin(value) orelse return error.UnsupportedSvgStroke;
     }
+    if (try attrValueOptional(tag, "stroke-miterlimit")) |value| _ = try parseStrokeMiterLimit(value);
 }
 
 fn validateUseReferenceTag(tag: []const u8) Error!void {
@@ -1363,7 +1480,13 @@ fn presentationForTag(inherited: Presentation, tag: []const u8, css_rules: *cons
         result.stroke_linecap_set = true;
         result.stroke_cap = parseStrokeCap(value) orelse return error.UnsupportedSvgStroke;
     }
-    if (try attrValueOptional(tag, "stroke-linejoin")) |value| result.stroke_linejoin = supportedKeyword(value, "round");
+    if (try attrValueOptional(tag, "stroke-linejoin")) |value| {
+        result.stroke_linejoin_set = true;
+        result.stroke_join = parseStrokeJoin(value) orelse return error.UnsupportedSvgStroke;
+    }
+    if (try attrValueOptional(tag, "stroke-miterlimit")) |value| {
+        result.stroke_miter_limit = try parseStrokeMiterLimit(value);
+    }
     try applyMatchingPresentationRules(&result, tag, css_rules, svg, view_box);
     if (try attrValueOptional(tag, "style")) |style| try applyPresentationStyle(&result, style, svg, view_box);
     return result;
@@ -1422,7 +1545,10 @@ fn applyPresentationStyle(result: *Presentation, style: []const u8, svg: []const
             result.stroke_linecap_set = true;
             result.stroke_cap = parseStrokeCap(value) orelse return error.UnsupportedSvgStroke;
         } else if (asciiEqlIgnoreCase(property, "stroke-linejoin")) {
-            result.stroke_linejoin = supportedKeyword(value, "round");
+            result.stroke_linejoin_set = true;
+            result.stroke_join = parseStrokeJoin(value) orelse return error.UnsupportedSvgStroke;
+        } else if (asciiEqlIgnoreCase(property, "stroke-miterlimit")) {
+            result.stroke_miter_limit = try parseStrokeMiterLimit(value);
         }
     }
 }
@@ -1453,7 +1579,11 @@ fn validateSupportedStyleDeclaration(property: []const u8, value: []const u8) Er
         return;
     }
     if (asciiEqlIgnoreCase(property, "stroke-linejoin")) {
-        if (!supportedKeyword(value, "round")) return error.UnsupportedSvgStroke;
+        _ = parseStrokeJoin(value) orelse return error.UnsupportedSvgStroke;
+        return;
+    }
+    if (asciiEqlIgnoreCase(property, "stroke-miterlimit")) {
+        _ = try parseStrokeMiterLimit(value);
         return;
     }
     if (asciiEqlIgnoreCase(property, "display")) {
@@ -2386,6 +2516,19 @@ fn parseStrokeCap(value: []const u8) ?icon_vector.StrokeCap {
     return null;
 }
 
+fn parseStrokeJoin(value: []const u8) ?icon_vector.StrokeJoin {
+    if (supportedKeyword(value, "miter")) return .miter;
+    if (supportedKeyword(value, "round")) return .round;
+    if (supportedKeyword(value, "bevel")) return .bevel;
+    return null;
+}
+
+fn parseStrokeMiterLimit(value: []const u8) Error!f32 {
+    const limit = parseFiniteSvgFloat(trimAscii(value), error.InvalidSvg) catch return error.UnsupportedSvgStroke;
+    if (limit < 1.0) return error.UnsupportedSvgStroke;
+    return limit;
+}
+
 fn normalizeStrokeWidth(width: f32, view_box: ViewBox) f32 {
     return width / @min(view_box.width, view_box.height);
 }
@@ -2462,6 +2605,13 @@ fn useReferenceId(tag: []const u8) Error![]const u8 {
     return id;
 }
 
+fn clipPathReferenceForTag(tag: []const u8) Error!?[]const u8 {
+    const raw = (try attrValueOptional(tag, "clip-path")) orelse return null;
+    const reference = (try parsePaintReference(raw)) orelse return error.UnsupportedSvgElement;
+    if (reference.fallback != null) return error.UnsupportedSvgElement;
+    return reference.id orelse error.UnsupportedSvgElement;
+}
+
 fn findReferencedElement(svg: []const u8, id: []const u8) Error!ReferencedElement {
     var search_index: usize = 0;
     while (search_index < svg.len) {
@@ -2474,7 +2624,7 @@ fn findReferencedElement(svg: []const u8, id: []const u8) Error!ReferencedElemen
         if (std.mem.startsWith(u8, tag, "</")) continue;
         if (try attrValueOptional(tag, "id")) |candidate| {
             if (std.mem.eql(u8, candidate, id)) {
-                if (isReusableContainerOpenTag(tag) or isLinearGradientOpenTag(tag) or isRadialGradientOpenTag(tag)) {
+                if (isReusableContainerOpenTag(tag) or isLinearGradientOpenTag(tag) or isRadialGradientOpenTag(tag) or isClipPathOpenTag(tag)) {
                     if (isSelfClosingTag(tag)) return .{ .tag = tag, .content_start = search_index, .content_end = search_index };
                     const close_start = try containerCloseStart(svg, search_index, tagName(tag));
                     return .{ .tag = tag, .content_start = search_index, .content_end = close_start };
@@ -2673,6 +2823,14 @@ fn isLinearGradientOpenTag(tag: []const u8) bool {
 
 fn isRadialGradientOpenTag(tag: []const u8) bool {
     return tagHasName(tag, "radialGradient");
+}
+
+fn isClipPathOpenTag(tag: []const u8) bool {
+    return tagHasName(tag, "clipPath");
+}
+
+fn isClipPathCloseTag(tag: []const u8) bool {
+    return tagCloseHasName(tag, "clipPath");
 }
 
 fn styleCloseStart(svg: []const u8, content_start: usize) ?usize {
@@ -2970,7 +3128,6 @@ const svg_element_names = [_]struct {
     .{ .name = "rect", .kind = .rect },
 };
 const unsupported_svg_elements = [_][]const u8{
-    "clipPath",
     "mask",
 };
 const supported_display_values = [_][]const u8{
@@ -3002,7 +3159,7 @@ const supported_named_solid_paints = [_]struct {
     .{ .name = "green", .color = .{ .r = 0, .g = 128, .b = 0, .a = 255 } },
     .{ .name = "blue", .color = .{ .r = 0, .g = 0, .b = 255, .a = 255 } },
 };
-const max_pending_ops: usize = 128;
+const max_pending_ops: usize = 512;
 const max_transform_depth: usize = 16;
 const max_reference_depth: usize = 8;
 const max_gradient_reference_depth: usize = 8;
@@ -3015,6 +3172,7 @@ const half_unit: f32 = 0.5;
 const transform_epsilon: f32 = 0.00001;
 const default_stroke_width: f32 = 2.0;
 const default_stroke_width_scale: f32 = default_stroke_width / default_view_box.width;
+const default_stroke_miter_limit: f32 = 4.0;
 const opacity_opaque: f32 = 1.0;
 const color_component_max: u8 = 255;
 const color_component_max_float: f32 = 255.0;
@@ -4153,7 +4311,7 @@ test "svg iterator rejects unsupported presentation attributes" {
     try std.testing.expectError(error.UnsupportedSvgStroke, filled.next());
 
     var unsupported_join = Iterator.init(
-        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="miter">
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="arcs">
         \\  <path d="M 0 0 L 1 1"/>
         \\</svg>
     );
@@ -4161,7 +4319,7 @@ test "svg iterator rejects unsupported presentation attributes" {
 
     var style = Iterator.init(
         \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        \\  <path style="stroke-linejoin: bevel" d="M 0 0 L 1 1"/>
+        \\  <path style="stroke-linejoin: unknown" d="M 0 0 L 1 1"/>
         \\</svg>
     );
     try std.testing.expectError(error.UnsupportedSvgStroke, style.next());
@@ -4253,6 +4411,91 @@ test "svg iterator emits explicit stroke line caps" {
     try std.testing.expectEqual(@as(?icon_vector.Op, null), try butt.next());
 }
 
+test "svg iterator emits explicit stroke line joins" {
+    var bevel = Iterator.init(
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="bevel">
+        \\  <path d="M 0 12 L 12 12 L 12 0"/>
+        \\</svg>
+    );
+
+    try std.testing.expectEqual(icon_vector.Op{ .stroke_join = .bevel }, (try bevel.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .move_to = .{ .x = 0.0, .y = 0.5 } }, (try bevel.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .line_to = .{ .x = 0.5, .y = 0.5 } }, (try bevel.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .line_to = .{ .x = 0.5, .y = 0.0 } }, (try bevel.next()).?);
+    try std.testing.expectEqual(@as(?icon_vector.Op, null), try bevel.next());
+
+    var miter = Iterator.init(
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        \\  <path style="stroke-linejoin: miter" d="M 0 12 L 12 12 L 12 0"/>
+        \\</svg>
+    );
+
+    try std.testing.expectEqual(icon_vector.Op{ .stroke_join = .miter }, (try miter.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .move_to = .{ .x = 0.0, .y = 0.5 } }, (try miter.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .line_to = .{ .x = 0.5, .y = 0.5 } }, (try miter.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .line_to = .{ .x = 0.5, .y = 0.0 } }, (try miter.next()).?);
+    try std.testing.expectEqual(@as(?icon_vector.Op, null), try miter.next());
+}
+
+test "svg iterator emits stroke miter limit" {
+    var attr = Iterator.init(
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="miter" stroke-miterlimit="1.5">
+        \\  <path d="M 0 12 L 12 12 L 12 0"/>
+        \\</svg>
+    );
+
+    try std.testing.expectEqual(icon_vector.Op{ .stroke_join = .miter }, (try attr.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .stroke_miter_limit = 1.5 }, (try attr.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .move_to = .{ .x = 0.0, .y = 0.5 } }, (try attr.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .line_to = .{ .x = 0.5, .y = 0.5 } }, (try attr.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .line_to = .{ .x = 0.5, .y = 0.0 } }, (try attr.next()).?);
+    try std.testing.expectEqual(@as(?icon_vector.Op, null), try attr.next());
+
+    var style = Iterator.init(
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        \\  <path style="stroke-linejoin: miter; stroke-miterlimit: 2.25" d="M 0 12 L 12 12 L 12 0"/>
+        \\</svg>
+    );
+
+    try std.testing.expectEqual(icon_vector.Op{ .stroke_join = .miter }, (try style.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .stroke_miter_limit = 2.25 }, (try style.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .move_to = .{ .x = 0.0, .y = 0.5 } }, (try style.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .line_to = .{ .x = 0.5, .y = 0.5 } }, (try style.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .line_to = .{ .x = 0.5, .y = 0.0 } }, (try style.next()).?);
+    try std.testing.expectEqual(@as(?icon_vector.Op, null), try style.next());
+}
+
+test "svg iterator emits local path clip paths" {
+    var iter = Iterator.init(
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+        \\  <defs>
+        \\    <clipPath id="left"><path d="M 0 0 H 12 V 24 H 0 Z"/></clipPath>
+        \\  </defs>
+        \\  <path clip-path="url(#left)" fill="white" d="M 0 0 H 24 V 24 H 0 Z"/>
+        \\</svg>
+    );
+
+    try std.testing.expectEqual(icon_vector.Op.begin_clip_path, (try iter.next()).?);
+    try std.testing.expectEqual(icon_vector.Op.begin_fill_path, (try iter.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .move_to = .{ .x = 0.0, .y = 0.0 } }, (try iter.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .line_to = .{ .x = 0.5, .y = 0.0 } }, (try iter.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .line_to = .{ .x = 0.5, .y = 1.0 } }, (try iter.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .line_to = .{ .x = 0.0, .y = 1.0 } }, (try iter.next()).?);
+    try std.testing.expectEqual(icon_vector.Op.close_path, (try iter.next()).?);
+    try std.testing.expectEqual(icon_vector.Op.end_fill_path, (try iter.next()).?);
+    try std.testing.expectEqual(icon_vector.Op.end_clip_path, (try iter.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .paint_rgba = .{ .r = 255, .g = 255, .b = 255, .a = 255 } }, (try iter.next()).?);
+    try std.testing.expectEqual(icon_vector.Op.begin_fill_path, (try iter.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .move_to = .{ .x = 0.0, .y = 0.0 } }, (try iter.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .line_to = .{ .x = 1.0, .y = 0.0 } }, (try iter.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .line_to = .{ .x = 1.0, .y = 1.0 } }, (try iter.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .line_to = .{ .x = 0.0, .y = 1.0 } }, (try iter.next()).?);
+    try std.testing.expectEqual(icon_vector.Op.close_path, (try iter.next()).?);
+    try std.testing.expectEqual(icon_vector.Op.end_fill_path, (try iter.next()).?);
+    try std.testing.expectEqual(icon_vector.Op.clear_clip_path, (try iter.next()).?);
+    try std.testing.expectEqual(@as(?icon_vector.Op, null), try iter.next());
+}
+
 test "svg iterator resolves authored color for currentColor" {
     var attr = Iterator.init(
         \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" color="red">
@@ -4335,7 +4578,7 @@ test "svg iterator rejects unsupported matching stylesheet declarations" {
     var iter = Iterator.init(
         \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
         \\  <style>
-        \\    path { fill: none; stroke: white; stroke-width: 2; stroke-linecap: round; stroke-linejoin: miter; }
+        \\    path { fill: none; stroke: white; stroke-width: 2; stroke-linecap: round; stroke-linejoin: arcs; }
         \\  </style>
         \\  <path d="M 0 0 L 1 1"/>
         \\</svg>

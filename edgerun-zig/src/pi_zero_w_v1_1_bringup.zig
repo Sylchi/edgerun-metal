@@ -23,6 +23,25 @@ pub const aux_mu_lsr: u32 = 0x54;
 pub const aux_mu_cntl: u32 = 0x60;
 pub const aux_mu_baud: u32 = 0x68;
 
+pub const mailbox_base: u32 = 0x2000_b880;
+pub const mailbox_read: u32 = 0x00;
+pub const mailbox_status: u32 = 0x18;
+pub const mailbox_write: u32 = 0x20;
+pub const mailbox_status_empty: u32 = 0x4000_0000;
+pub const mailbox_status_full: u32 = 0x8000_0000;
+pub const mailbox_poll_budget: u32 = 1_000_000;
+pub const mailbox_property_channel: u32 = 8;
+pub const mailbox_request_code: u32 = 0;
+pub const mailbox_response_success: u32 = 0x8000_0000;
+pub const mailbox_tag_get_arm_memory: u32 = 0x0001_0005;
+pub const mailbox_tag_response: u32 = 0x8000_0000;
+pub const mailbox_tag_last: u32 = 0;
+pub const mailbox_get_arm_memory_words: usize = 8;
+pub const mailbox_get_arm_memory_bytes: u32 = mailbox_get_arm_memory_words * @sizeOf(u32);
+pub const mailbox_two_value_buffer_bytes: u32 = 8;
+pub const mailbox_address_mask: u32 = 0xffff_fff0;
+pub const mailbox_channel_mask: u32 = 0x0000_000f;
+
 pub const emmc_reg_status: u32 = 0x24;
 pub const emmc_reg_control1: u32 = 0x2c;
 pub const emmc_reg_irpt_mask: u32 = 0x34;
@@ -54,6 +73,15 @@ pub const RawLogState = struct {
     response: u32 = 0,
     relative_card_address: u32 = 0,
     write_result: u32 = 0,
+};
+
+pub const ArmMemory = struct {
+    physical_start: u32,
+    byte_len: u32,
+
+    pub fn valid(self: ArmMemory) bool {
+        return self.byte_len != 0;
+    }
 };
 
 pub const Mmio = struct {
@@ -131,6 +159,22 @@ pub const Board = struct {
         return true;
     }
 
+    pub fn queryArmMemory(self: *Board) ?ArmMemory {
+        var message: [mailbox_get_arm_memory_words]u32 align(16) = .{
+            mailbox_get_arm_memory_bytes,
+            mailbox_request_code,
+            mailbox_tag_get_arm_memory,
+            mailbox_two_value_buffer_bytes,
+            0,
+            0,
+            0,
+            mailbox_tag_last,
+        };
+
+        if (!self.mailboxCall(mailbox_property_channel, &message)) return null;
+        return armMemoryFromMailboxMessage(&message);
+    }
+
     pub fn failureCode(self: *Board) u32 {
         if ((self.raw_log.write_result & 0x8000_0000) != 0) return self.raw_log.write_result & 0xff;
         if ((self.raw_log.stage & 0x8000_0000) != 0) return self.raw_log.stage & 0xff;
@@ -204,6 +248,30 @@ pub const Board = struct {
 
     fn actLedOff(self: *Board) void {
         self.write(gpio_base, gpio_set1, 1 << (pin_act_led - 32));
+    }
+
+    fn mailboxCall(self: *Board, channel: u32, message: *[mailbox_get_arm_memory_words]u32) bool {
+        if ((channel & ~mailbox_channel_mask) != 0) return false;
+        const address: u32 = @intCast(@intFromPtr(message));
+        if ((address & mailbox_channel_mask) != 0) return false;
+        const request = (address & mailbox_address_mask) | channel;
+        if (!self.waitMailboxWritable()) return false;
+        self.write(mailbox_base, mailbox_write, request);
+
+        var poll: u32 = 0;
+        while (poll < mailbox_poll_budget) : (poll += 1) {
+            if ((self.read(mailbox_base, mailbox_status) & mailbox_status_empty) != 0) continue;
+            if (self.read(mailbox_base, mailbox_read) == request) return true;
+        }
+        return false;
+    }
+
+    fn waitMailboxWritable(self: *Board) bool {
+        var poll: u32 = 0;
+        while (poll < mailbox_poll_budget) : (poll += 1) {
+            if ((self.read(mailbox_base, mailbox_status) & mailbox_status_full) == 0) return true;
+        }
+        return false;
     }
 
     fn emmcInit(self: *Board) bool {
@@ -339,6 +407,18 @@ pub const Board = struct {
     }
 };
 
+pub fn armMemoryFromMailboxMessage(message: *const [mailbox_get_arm_memory_words]u32) ?ArmMemory {
+    if (message[1] != mailbox_response_success) return null;
+    if ((message[4] & mailbox_tag_response) == 0) return null;
+
+    const arm_memory = ArmMemory{
+        .physical_start = message[5],
+        .byte_len = message[6],
+    };
+    if (!arm_memory.valid()) return null;
+    return arm_memory;
+}
+
 pub fn rawLogBlock(state: RawLogState, event: u32) pi_zero.BootLogBlock {
     var block = [_]u8{0} ** pi_zero.boot_log_block_bytes;
     putLe32(block[0..4], 0x4744_5245);
@@ -370,4 +450,61 @@ test "builds raw Pi Zero W v1.1 SD log blocks" {
     try @import("std").testing.expectEqual(@as(u32, 0x45), block[0]);
     try @import("std").testing.expectEqual(@as(u8, 'E'), block[64]);
     try @import("std").testing.expectEqual(@as(u8, 'G'), block[69]);
+}
+
+test "parses Pi mailbox ARM memory response" {
+    const std = @import("std");
+    const message = [_]u32{
+        mailbox_get_arm_memory_bytes,
+        mailbox_response_success,
+        mailbox_tag_get_arm_memory,
+        mailbox_two_value_buffer_bytes,
+        mailbox_tag_response | mailbox_two_value_buffer_bytes,
+        0x0000_8000,
+        0x1f00_0000,
+        mailbox_tag_last,
+    };
+
+    const arm_memory = armMemoryFromMailboxMessage(&message).?;
+
+    try std.testing.expectEqual(@as(u32, 0x0000_8000), arm_memory.physical_start);
+    try std.testing.expectEqual(@as(u32, 0x1f00_0000), arm_memory.byte_len);
+}
+
+test "rejects malformed Pi mailbox ARM memory response" {
+    const std = @import("std");
+    const no_message_response = [_]u32{
+        mailbox_get_arm_memory_bytes,
+        mailbox_request_code,
+        mailbox_tag_get_arm_memory,
+        mailbox_two_value_buffer_bytes,
+        mailbox_tag_response | mailbox_two_value_buffer_bytes,
+        0x0000_8000,
+        0x1f00_0000,
+        mailbox_tag_last,
+    };
+    const no_tag_response = [_]u32{
+        mailbox_get_arm_memory_bytes,
+        mailbox_response_success,
+        mailbox_tag_get_arm_memory,
+        mailbox_two_value_buffer_bytes,
+        0,
+        0x0000_8000,
+        0x1f00_0000,
+        mailbox_tag_last,
+    };
+    const empty_region = [_]u32{
+        mailbox_get_arm_memory_bytes,
+        mailbox_response_success,
+        mailbox_tag_get_arm_memory,
+        mailbox_two_value_buffer_bytes,
+        mailbox_tag_response | mailbox_two_value_buffer_bytes,
+        0x0000_8000,
+        0,
+        mailbox_tag_last,
+    };
+
+    try std.testing.expect(armMemoryFromMailboxMessage(&no_message_response) == null);
+    try std.testing.expect(armMemoryFromMailboxMessage(&no_tag_response) == null);
+    try std.testing.expect(armMemoryFromMailboxMessage(&empty_region) == null);
 }

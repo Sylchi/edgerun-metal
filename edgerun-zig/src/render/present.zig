@@ -1,5 +1,5 @@
 const std = @import("std");
-const renderer_ir = @import("renderer_ir.zig");
+const renderer_ir = @import("ir.zig");
 
 pub const Error = renderer_ir.Error || error{
     InvalidTarget,
@@ -7,12 +7,11 @@ pub const Error = renderer_ir.Error || error{
     MissingImageTexture,
 };
 
-pub const TargetKind = enum {
-    cpu,
-    gpu,
-    browser,
-    drm,
-    wayland,
+pub const Destination = enum {
+    pixel_frame,
+    packed_frame,
+    command_frame,
+    native_surface,
 };
 
 pub const PrimitiveFormat = enum {
@@ -20,15 +19,14 @@ pub const PrimitiveFormat = enum {
 };
 
 pub const Transport = enum {
-    software_pixels,
-    gpu_command_stream,
-    webgl_buffers,
-    drm_framebuffer,
-    wayland_surface,
+    pixel_bytes,
+    packed_buffers,
+    command_stream,
+    surface_commit,
 };
 
 pub const Target = struct {
-    kind: TargetKind,
+    destination: Destination,
     width: u32,
     height: u32,
     scale: u32 = 1,
@@ -38,23 +36,21 @@ pub const Target = struct {
     }
 
     pub fn primitiveFormat(self: Target) PrimitiveFormat {
-        return switch (self.kind) {
-            .cpu,
-            .gpu,
-            .browser,
-            .drm,
-            .wayland,
+        return switch (self.destination) {
+            .pixel_frame,
+            .packed_frame,
+            .command_frame,
+            .native_surface,
             => .canonical_ir,
         };
     }
 
     pub fn transport(self: Target) Transport {
-        return switch (self.kind) {
-            .cpu => .software_pixels,
-            .gpu => .gpu_command_stream,
-            .browser => .webgl_buffers,
-            .drm => .drm_framebuffer,
-            .wayland => .wayland_surface,
+        return switch (self.destination) {
+            .pixel_frame => .pixel_bytes,
+            .packed_frame => .packed_buffers,
+            .command_frame => .command_stream,
+            .native_surface => .surface_commit,
         };
     }
 };
@@ -70,7 +66,7 @@ pub const Requirements = struct {
 };
 
 pub const Receipt = struct {
-    target: TargetKind,
+    destination: Destination,
     primitive_format: PrimitiveFormat,
     transport: Transport,
     primitive_count: usize,
@@ -125,7 +121,7 @@ pub fn bufferRequirements(buffers: renderer_ir.Buffers) Requirements {
 pub fn present(frame: Frame) Error!Receipt {
     try frame.validate();
     return .{
-        .target = frame.target.kind,
+        .destination = frame.target.destination,
         .primitive_format = frame.primitiveFormat(),
         .transport = frame.transport(),
         .primitive_count = try frame.primitiveCount(),
@@ -134,20 +130,19 @@ pub fn present(frame: Frame) Error!Receipt {
 }
 
 test "presentation targets use one canonical primitive format" {
-    const targets = [_]TargetKind{ .cpu, .gpu, .browser, .drm, .wayland };
-    for (targets) |kind| {
-        const target = Target{ .kind = kind, .width = 320, .height = 240 };
+    const destinations = [_]Destination{ .pixel_frame, .packed_frame, .command_frame, .native_surface };
+    for (destinations) |destination| {
+        const target = Target{ .destination = destination, .width = 320, .height = 240 };
         try target.validate();
         try std.testing.expectEqual(PrimitiveFormat.canonical_ir, target.primitiveFormat());
     }
 }
 
 test "presentation target transport is explicit" {
-    try std.testing.expectEqual(Transport.software_pixels, (Target{ .kind = .cpu, .width = 1, .height = 1 }).transport());
-    try std.testing.expectEqual(Transport.gpu_command_stream, (Target{ .kind = .gpu, .width = 1, .height = 1 }).transport());
-    try std.testing.expectEqual(Transport.webgl_buffers, (Target{ .kind = .browser, .width = 1, .height = 1 }).transport());
-    try std.testing.expectEqual(Transport.drm_framebuffer, (Target{ .kind = .drm, .width = 1, .height = 1 }).transport());
-    try std.testing.expectEqual(Transport.wayland_surface, (Target{ .kind = .wayland, .width = 1, .height = 1 }).transport());
+    try std.testing.expectEqual(Transport.pixel_bytes, (Target{ .destination = .pixel_frame, .width = 1, .height = 1 }).transport());
+    try std.testing.expectEqual(Transport.packed_buffers, (Target{ .destination = .packed_frame, .width = 1, .height = 1 }).transport());
+    try std.testing.expectEqual(Transport.command_stream, (Target{ .destination = .command_frame, .width = 1, .height = 1 }).transport());
+    try std.testing.expectEqual(Transport.surface_commit, (Target{ .destination = .native_surface, .width = 1, .height = 1 }).transport());
 }
 
 test "presentation frame validates canonical ir buffers for every target" {
@@ -155,10 +150,10 @@ test "presentation frame validates canonical ir buffers for every target" {
     const buffers = storage.buffers();
     try renderer_ir.pushRect(buffers, .base, .{ .x = 2, .y = 3, .w = 10, .h = 12 }, .text, .clear, 4, 0, 0);
 
-    const targets = [_]TargetKind{ .cpu, .gpu, .browser, .drm, .wayland };
-    for (targets) |kind| {
+    const destinations = [_]Destination{ .pixel_frame, .packed_frame, .command_frame, .native_surface };
+    for (destinations) |destination| {
         const frame = Frame{
-            .target = .{ .kind = kind, .width = 64, .height = 48 },
+            .target = .{ .destination = destination, .width = 64, .height = 48 },
             .buffers = buffers,
             .resources = .{},
         };
@@ -167,7 +162,7 @@ test "presentation frame validates canonical ir buffers for every target" {
         try std.testing.expectEqual(@as(usize, 1), try frame.primitiveCount());
         const receipt = try present(frame);
         try std.testing.expect(receipt.valid());
-        try std.testing.expectEqual(kind, receipt.target);
+        try std.testing.expectEqual(destination, receipt.destination);
         try std.testing.expectEqual(frame.transport(), receipt.transport);
     }
 }
@@ -176,7 +171,7 @@ test "presentation frame rejects invalid dimensions and missing texture resource
     var text_storage = renderer_ir.FixedBuffers(0, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0){};
     text_storage.text_vertex_len = renderer_ir.textured_quad_vertex_count * renderer_ir.text_vertex_float_stride;
     const text_frame = Frame{
-        .target = .{ .kind = .cpu, .width = 64, .height = 48 },
+        .target = .{ .destination = .pixel_frame, .width = 64, .height = 48 },
         .buffers = text_storage.buffers(),
         .resources = .{},
     };
@@ -185,7 +180,7 @@ test "presentation frame rejects invalid dimensions and missing texture resource
     var icon_storage = renderer_ir.FixedBuffers(0, 0, 1, 0, 0, 0, 0){};
     icon_storage.icon_vertex_len = renderer_ir.icon_instance_float_stride;
     const icon_frame = Frame{
-        .target = .{ .kind = .browser, .width = 64, .height = 48 },
+        .target = .{ .destination = .packed_frame, .width = 64, .height = 48 },
         .buffers = icon_storage.buffers(),
         .resources = .{ .font_atlas = true },
     };
@@ -194,14 +189,14 @@ test "presentation frame rejects invalid dimensions and missing texture resource
     var image_storage = renderer_ir.FixedBuffers(0, 0, 0, renderer_ir.textured_quad_vertex_count, 0, 0, 0){};
     image_storage.image_vertex_len = renderer_ir.textured_quad_vertex_count * renderer_ir.image_vertex_float_stride;
     const image_frame = Frame{
-        .target = .{ .kind = .drm, .width = 64, .height = 48 },
+        .target = .{ .destination = .native_surface, .width = 64, .height = 48 },
         .buffers = image_storage.buffers(),
         .resources = .{ .font_atlas = true },
     };
     try std.testing.expectError(error.MissingImageTexture, image_frame.validate());
 
     const invalid_target = Frame{
-        .target = .{ .kind = .wayland, .width = 0, .height = 48 },
+        .target = .{ .destination = .native_surface, .width = 0, .height = 48 },
         .buffers = image_storage.buffers(),
         .resources = .{ .font_atlas = true, .image_texture = true },
     };
@@ -215,13 +210,13 @@ test "presentation receipt records canonical resource requirements" {
     storage.image_vertex_len = renderer_ir.textured_quad_vertex_count * renderer_ir.image_vertex_float_stride;
 
     const frame = Frame{
-        .target = .{ .kind = .gpu, .width = 320, .height = 240 },
+        .target = .{ .destination = .command_frame, .width = 320, .height = 240 },
         .buffers = storage.buffers(),
         .resources = .{ .font_atlas = true, .image_texture = true },
     };
     const receipt = try present(frame);
     try std.testing.expectEqual(PrimitiveFormat.canonical_ir, receipt.primitive_format);
-    try std.testing.expectEqual(Transport.gpu_command_stream, receipt.transport);
+    try std.testing.expectEqual(Transport.command_stream, receipt.transport);
     try std.testing.expect(receipt.requirements.font_atlas);
     try std.testing.expect(receipt.requirements.image_texture);
     try std.testing.expectEqual(@as(usize, 3), receipt.primitive_count);

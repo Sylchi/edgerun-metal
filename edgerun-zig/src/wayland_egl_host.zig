@@ -1,8 +1,9 @@
 const std = @import("std");
 const interaction = @import("ui_interaction.zig");
-const renderer_font_atlas = @import("renderer_font_atlas.zig");
-const renderer_gles = @import("renderer_gles.zig");
-const renderer_ir = @import("renderer_ir.zig");
+const renderer_font_atlas = @import("render/font_atlas.zig");
+const renderer_gles = @import("render/gles.zig");
+const renderer_ir = @import("render/ir.zig");
+const renderer_pipeline = @import("render/pipeline.zig");
 const component_gallery = @import("component_gallery.zig");
 const site_apps = @import("site_apps.zig");
 const site_blog = @import("site_blog.zig");
@@ -159,7 +160,7 @@ const SceneState = struct {
         self.command_len = scene.written().len;
         self.region_len = collector.written().len;
         const buffers = self.ir_storage.buffers();
-        try renderer_ir.packScene(buffers, renderer_gles.sources(font_atlas), scene.written());
+        try renderer_pipeline.packScene(buffers, font_atlas, .atlas, scene.written());
         return buffers;
     }
 
@@ -252,16 +253,16 @@ pub fn main(init: std.process.Init) !void {
     defer deinitEgl(&egl);
     var font_atlas = renderer_font_atlas.Atlas.init();
     const cloud_meme = try site_images.cloudMeme();
-    var gl = try renderer_gles.init(&font_atlas, .{
+    var gl = try renderer_gles.Adapter.init(&font_atlas, .{
         .width = cloud_meme.width,
         .height = cloud_meme.height,
         .pixels = cloud_meme.pixels,
     });
-    defer renderer_gles.deinit(&gl);
+    defer gl.deinit();
 
     var scene_state = SceneState{};
     var buffers = try scene_state.rebuild(wl.width, wl.height, &app, &font_atlas);
-    renderer_gles.refreshFontTexture(gl, &font_atlas);
+    gl.refreshFontTexture(&font_atlas);
 
     var frames_remaining: u32 = options.seconds * 60;
     var frame_verified = false;
@@ -271,18 +272,18 @@ pub fn main(init: std.process.Init) !void {
         if (wl.resized) {
             c.wl_egl_window_resize(egl.window, wl.framebufferWidth(), wl.framebufferHeight(), 0, 0);
             buffers = try scene_state.rebuild(wl.width, wl.height, &app, &font_atlas);
-            renderer_gles.refreshFontTexture(gl, &font_atlas);
+            gl.refreshFontTexture(&font_atlas);
             wl.resized = false;
         } else if (wl.input_dirty) {
             processPointerEvent(&wl, scene_state.commandSlice(), scene_state.regionSlice());
             buffers = try scene_state.rebuild(wl.width, wl.height, &app, &font_atlas);
-            renderer_gles.refreshFontTexture(gl, &font_atlas);
+            gl.refreshFontTexture(&font_atlas);
             wl.input_dirty = false;
         }
         const framebuffer = try egl.surfaceSize();
-        try renderer_gles.renderFrameToViewport(gl, wl.width, wl.height, framebuffer.width, framebuffer.height, buffers);
+        try gl.renderFrameToViewport(wl.width, wl.height, framebuffer.width, framebuffer.height, buffers);
         if (!frame_verified) {
-            _ = try renderer_gles.verifyFrameNonBlank(framebuffer.width, framebuffer.height);
+            _ = try gl.verifyFrameNonBlank(framebuffer.width, framebuffer.height);
             frame_verified = true;
         }
         if (c.eglSwapBuffers(egl.display, egl.surface) != c.EGL_TRUE) return error.EglSwapFailed;

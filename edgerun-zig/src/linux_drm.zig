@@ -1,5 +1,5 @@
 const std = @import("std");
-const renderer_native_present = @import("renderer_native_present.zig");
+const renderer_native_present = @import("render/native_present.zig");
 
 const linux = std.os.linux;
 const posix = std.posix;

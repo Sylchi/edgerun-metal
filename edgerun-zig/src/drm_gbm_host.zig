@@ -1,7 +1,8 @@
 const std = @import("std");
-const renderer_font_atlas = @import("renderer_font_atlas.zig");
-const renderer_gles = @import("renderer_gles.zig");
-const renderer_ir = @import("renderer_ir.zig");
+const renderer_font_atlas = @import("render/font_atlas.zig");
+const renderer_gles = @import("render/gles.zig");
+const renderer_ir = @import("render/ir.zig");
+const renderer_pipeline = @import("render/pipeline.zig");
 const site_landing = @import("site_landing.zig");
 const ui = @import("ui.zig");
 const interaction = @import("ui_interaction.zig");
@@ -86,7 +87,7 @@ const SceneState = struct {
             .public_identity_ready = true,
         });
         const buffers = self.ir_storage.buffers();
-        try renderer_ir.packScene(buffers, renderer_gles.sources(font_atlas), scene.written());
+        try renderer_pipeline.packScene(buffers, font_atlas, .atlas, scene.written());
         return buffers;
     }
 };
@@ -111,14 +112,14 @@ pub fn main(init: std.process.Init) !void {
     var egl = try initEgl(&gbm);
     defer deinitEgl(&egl);
     var font_atlas = renderer_font_atlas.Atlas.init();
-    var gl = try renderer_gles.init(&font_atlas, null);
-    defer renderer_gles.deinit(&gl);
+    var gl = try renderer_gles.Adapter.init(&font_atlas, null);
+    defer gl.deinit();
 
     var scene_state = SceneState{};
     const buffers = try scene_state.rebuild(width, height, &font_atlas);
-    renderer_gles.refreshFontTexture(gl, &font_atlas);
-    try renderer_gles.renderFrame(gl, width, height, buffers);
-    _ = try renderer_gles.verifyFrameNonBlank(width, height);
+    gl.refreshFontTexture(&font_atlas);
+    try gl.renderFrame(width, height, buffers);
+    _ = try gl.verifyFrameNonBlank(width, height);
     if (c.eglSwapBuffers(egl.display, egl.surface) != c.EGL_TRUE) return error.EglSwapFailed;
 
     var scanout = try lockScanout(fd, &gbm, @intCast(width), @intCast(height));

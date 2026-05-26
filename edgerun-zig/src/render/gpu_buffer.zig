@@ -1,6 +1,6 @@
 const std = @import("std");
-const renderer_gpu = @import("renderer_gpu.zig");
-const renderer_surface = @import("renderer_surface.zig");
+const renderer_gpu = @import("gpu.zig");
+const renderer_surface = @import("surface.zig");
 
 pub const CpuFilledDevice = struct {
     began: usize = 0,

@@ -35,8 +35,23 @@ pub fn executeExportI64Args(app: *App, wasm_bytes: []const u8, export_name: []co
     return wasm.executeExportI64Args(&runtime, wasm_bytes, export_name, args);
 }
 
+pub fn executeExportI64ArgsWithStorage(app: *App, wasm_bytes: []const u8, export_name: []const u8, args: []const i64, storage: *wasm.ExecutionStorage) wasm.Error!i64 {
+    const allocation = app.executionAllocation();
+    var runtime = wasm.Runtime.init(allocation.memory, allocation.execution_ticks);
+    return wasm.executeExportI64ArgsWithStorage(&runtime, wasm_bytes, export_name, args, storage);
+}
+
 pub fn executeExportI64Receipt(app: *App, wasm_bytes: []const u8, export_name: []const u8, context: ReceiptContext) wasm.Error!ReceiptResult {
     const value = try executeExportI64(app, wasm_bytes, export_name);
+    return receiptForValue(app, value, context);
+}
+
+pub fn executeExportI64ReceiptWithStorage(app: *App, wasm_bytes: []const u8, export_name: []const u8, context: ReceiptContext, storage: *wasm.ExecutionStorage) wasm.Error!ReceiptResult {
+    const value = try executeExportI64ArgsWithStorage(app, wasm_bytes, export_name, &.{}, storage);
+    return receiptForValue(app, value, context);
+}
+
+fn receiptForValue(app: *App, value: i64, context: ReceiptContext) wasm.Error!ReceiptResult {
     const output = outputHashI64(value);
     const receipt = app.completeWork(
         context.parent,

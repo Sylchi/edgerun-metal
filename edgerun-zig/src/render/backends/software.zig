@@ -1,12 +1,11 @@
 const std = @import("std");
-const icon_svg = @import("icon_svg.zig");
-const icon_vector = @import("icon_vector.zig");
-const renderer_ir = @import("renderer_ir.zig");
-const renderer_present = @import("renderer_present.zig");
-const ui = @import("ui.zig");
+const icon_vector = @import("../../icon_vector.zig");
+const renderer_ir = @import("../ir.zig");
+const renderer_present = @import("../present.zig");
+const ui = @import("../../ui.zig");
 const builtin = @import("builtin");
-const ui_components = if (builtin.is_test) @import("ui_components.zig") else struct {};
-const varfont = @import("varfont.zig");
+const ui_components = if (builtin.is_test) @import("../../ui_components.zig") else struct {};
+const varfont = @import("../../varfont.zig");
 
 pub const Error = renderer_present.Error || error{
     PixelBudgetExceeded,
@@ -184,7 +183,7 @@ pub const Surface = struct {
     pub fn renderIrFrameWithResources(self: Surface, buffers: renderer_ir.Buffers, resources: IrResources) Error!renderer_present.Receipt {
         const receipt = renderer_present.present(.{
             .target = .{
-                .kind = .cpu,
+                .destination = .pixel_frame,
                 .width = @intCast(self.width),
                 .height = @intCast(self.height),
             },
@@ -576,32 +575,42 @@ pub const Surface = struct {
 
     fn drawIconInstance(self: Surface, icon_bounds: ui.Rect, color: ui.Color, icon_id: u32, scale: f32) void {
         const bounds = scaleRect(icon_bounds, scale);
-        self.drawIconSvg(bounds, color, icon_svg.sourceForIconId(icon_id));
+        var iter = renderer_ir.iconOpIteratorForId(icon_id);
+        self.drawIconOps(bounds, color, &iter);
     }
 
     fn drawIconSvg(self: Surface, bounds: ui.Rect, color: ui.Color, svg: []const u8) void {
-        var iter = icon_svg.Iterator.init(svg);
+        var iter = renderer_ir.iconOpIteratorFromSource(svg);
+        self.drawIconOps(bounds, color, &iter);
+    }
+
+    fn drawIconOps(self: Surface, bounds: ui.Rect, color: ui.Color, iter: *renderer_ir.IconOpIterator) void {
         var buffer: [icon_alpha_mask_capacity]u8 = undefined;
         var mask = IconAlphaMask.init(bounds, self.width, self.height, buffer[0..]);
+        var clip_buffer: [icon_alpha_mask_capacity]u8 = undefined;
+        var clip_mask = IconAlphaMask.init(bounds, self.width, self.height, clip_buffer[0..]);
+        var clip = IconClipState{ .mask = &clip_mask };
         var path = IconPathState{};
         var paint = IconPaint{ .solid = color };
         var stroke_width: f32 = icon_stroke_scale;
         var stroke_cap = icon_vector.StrokeCap.round;
+        var stroke_join = icon_vector.StrokeJoin.round;
+        var stroke_miter_limit: f32 = svg_miter_limit_default;
         while (iter.next() catch unreachable) |op| {
-            self.drawIconOp(bounds, color, &paint, &stroke_width, &stroke_cap, &mask, &path, op);
+            self.drawIconOp(bounds, color, &paint, &stroke_width, &stroke_cap, &stroke_join, &stroke_miter_limit, &mask, &clip, &path, op);
         }
         self.finishIconSubpath(&mask, &path, stroke_width, stroke_cap);
-        self.blendIconMaskPaint(&mask, paint);
+        self.blendIconMaskPaint(&mask, paint, &clip);
     }
 
-    fn drawIconOp(self: Surface, bounds: ui.Rect, current_color: ui.Color, paint: *IconPaint, stroke_width: *f32, stroke_cap: *icon_vector.StrokeCap, mask: *IconAlphaMask, path: *IconPathState, op: icon_vector.Op) void {
+    fn drawIconOp(self: Surface, bounds: ui.Rect, current_color: ui.Color, paint: *IconPaint, stroke_width: *f32, stroke_cap: *icon_vector.StrokeCap, stroke_join: *icon_vector.StrokeJoin, stroke_miter_limit: *f32, mask: *IconAlphaMask, clip: *IconClipState, path: *IconPathState, op: icon_vector.Op) void {
         switch (op) {
             .paint_current_color => {
-                self.finishIconPathMask(mask, path, paint.*, stroke_width.*, stroke_cap.*);
+                self.finishIconPathMask(mask, clip, path, paint.*, stroke_width.*, stroke_cap.*);
                 paint.* = .{ .solid = current_color };
             },
             .paint_current_color_alpha => |alpha| {
-                self.finishIconPathMask(mask, path, paint.*, stroke_width.*, stroke_cap.*);
+                self.finishIconPathMask(mask, clip, path, paint.*, stroke_width.*, stroke_cap.*);
                 paint.* = .{ .solid = .{
                     .r = current_color.r,
                     .g = current_color.g,
@@ -610,26 +619,43 @@ pub const Surface = struct {
                 } };
             },
             .paint_rgba => |rgba| {
-                self.finishIconPathMask(mask, path, paint.*, stroke_width.*, stroke_cap.*);
+                self.finishIconPathMask(mask, clip, path, paint.*, stroke_width.*, stroke_cap.*);
                 paint.* = .{ .solid = .{ .r = rgba.r, .g = rgba.g, .b = rgba.b, .a = rgba.a } };
             },
             .paint_linear_gradient => |gradient| {
-                self.finishIconPathMask(mask, path, paint.*, stroke_width.*, stroke_cap.*);
+                self.finishIconPathMask(mask, clip, path, paint.*, stroke_width.*, stroke_cap.*);
                 paint.* = .{ .linear_gradient = gradient };
             },
             .paint_radial_gradient => |gradient| {
-                self.finishIconPathMask(mask, path, paint.*, stroke_width.*, stroke_cap.*);
+                self.finishIconPathMask(mask, clip, path, paint.*, stroke_width.*, stroke_cap.*);
                 paint.* = .{ .radial_gradient = gradient };
             },
             .stroke_width => |width| {
-                self.finishIconPathMask(mask, path, paint.*, stroke_width.*, stroke_cap.*);
+                self.finishIconPathMask(mask, clip, path, paint.*, stroke_width.*, stroke_cap.*);
                 stroke_width.* = width;
             },
             .stroke_cap => |cap| {
-                self.finishIconPathMask(mask, path, paint.*, stroke_width.*, stroke_cap.*);
+                self.finishIconPathMask(mask, clip, path, paint.*, stroke_width.*, stroke_cap.*);
                 stroke_cap.* = cap;
             },
-            .polyline => |points| self.iconLine(bounds, paint.*, stroke_width.*, stroke_cap.*, points),
+            .stroke_join => |join| {
+                self.finishIconPathMask(mask, clip, path, paint.*, stroke_width.*, stroke_cap.*);
+                stroke_join.* = join;
+            },
+            .stroke_miter_limit => |limit| {
+                self.finishIconPathMask(mask, clip, path, paint.*, stroke_width.*, stroke_cap.*);
+                stroke_miter_limit.* = limit;
+            },
+            .begin_clip_path => {
+                self.finishIconPathMask(mask, clip, path, paint.*, stroke_width.*, stroke_cap.*);
+                clip.begin();
+            },
+            .end_clip_path => clip.end(),
+            .clear_clip_path => {
+                self.finishIconPathMask(mask, clip, path, paint.*, stroke_width.*, stroke_cap.*);
+                clip.clear();
+            },
+            .polyline => |points| self.iconLine(bounds, paint.*, stroke_width.*, stroke_cap.*, stroke_join.*, stroke_miter_limit.*, points),
             .circle => |circle| self.iconCircle(bounds, paint.*, stroke_width.*, circle.cx, circle.cy, circle.radius),
             .ellipse => |ellipse| self.iconEllipse(bounds, paint.*, stroke_width.*, ellipse.cx, ellipse.cy, ellipse.rx, ellipse.ry, ellipse.full),
             .round_rect => |rect| self.iconRoundRect(bounds, paint.*, stroke_width.*, rect.x, rect.y, rect.w, rect.h, rect.radius),
@@ -637,15 +663,19 @@ pub const Surface = struct {
             .filled_ellipse => |ellipse| self.iconFilledEllipse(bounds, paint.*, ellipse.cx, ellipse.cy, ellipse.rx, ellipse.ry),
             .filled_round_rect => |rect| self.iconFilledRoundRect(bounds, paint.*, rect.x, rect.y, rect.w, rect.h, rect.radius),
             .begin_fill_path => {
-                self.finishIconPathMask(mask, path, paint.*, stroke_width.*, stroke_cap.*);
+                self.finishIconPathMask(mask, clip, path, paint.*, stroke_width.*, stroke_cap.*);
                 path.beginFill(.nonzero);
             },
             .begin_evenodd_fill_path => {
-                self.finishIconPathMask(mask, path, paint.*, stroke_width.*, stroke_cap.*);
+                self.finishIconPathMask(mask, clip, path, paint.*, stroke_width.*, stroke_cap.*);
                 path.beginFill(.evenodd);
             },
             .end_fill_path => {
-                self.fillIconPath(bounds, paint.*, path);
+                if (clip.building) {
+                    self.fillClipPathMask(bounds, path, clip.mask);
+                } else {
+                    self.fillIconPath(bounds, paint.*, path, clip);
+                }
                 path.clearFill();
             },
             .move_to => |point| {
@@ -654,7 +684,7 @@ pub const Surface = struct {
                     return;
                 }
                 if (path.has_segment) {
-                    self.finishIconPathMask(mask, path, paint.*, stroke_width.*, stroke_cap.*);
+                    self.finishIconPathMask(mask, clip, path, paint.*, stroke_width.*, stroke_cap.*);
                 }
                 path.moveTo(point);
             },
@@ -663,7 +693,7 @@ pub const Surface = struct {
                     path.fillLineTo(point);
                     return;
                 }
-                if (path.current) |current| self.strokePathSegmentMask(mask, path, stroke_width.*, current, point, active_icon_tuning.stroke_antialias_width, active_icon_tuning.line_stroke_coverage_boost);
+                if (path.current) |current| self.strokePathSegmentMask(mask, path, stroke_width.*, stroke_join.*, stroke_miter_limit.*, current, point, active_icon_tuning.stroke_antialias_width, active_icon_tuning.line_stroke_coverage_boost);
                 path.lineTo(point);
             },
             .quad_to => |quad| {
@@ -672,7 +702,7 @@ pub const Surface = struct {
                     path.lineTo(quad.end);
                     return;
                 }
-                if (path.current) |current| self.strokeQuadraticPathMask(mask, path, stroke_width.*, current, quad.control, quad.end);
+                if (path.current) |current| self.strokeQuadraticPathMask(mask, path, stroke_width.*, stroke_join.*, stroke_miter_limit.*, current, quad.control, quad.end);
                 path.lineTo(quad.end);
             },
             .cubic_to => |cubic| {
@@ -681,7 +711,7 @@ pub const Surface = struct {
                     path.lineTo(cubic.end);
                     return;
                 }
-                if (path.current) |current| self.strokeCubicPathMask(mask, path, stroke_width.*, current, cubic.control0, cubic.control1, cubic.end);
+                if (path.current) |current| self.strokeCubicPathMask(mask, path, stroke_width.*, stroke_join.*, stroke_miter_limit.*, current, cubic.control0, cubic.control1, cubic.end);
                 path.lineTo(cubic.end);
             },
             .arc_to => |arc| {
@@ -690,7 +720,7 @@ pub const Surface = struct {
                     path.lineTo(arc.end);
                     return;
                 }
-                if (path.current) |current| self.strokeArcPathMask(mask, path, stroke_width.*, current, arc);
+                if (path.current) |current| self.strokeArcPathMask(mask, path, stroke_width.*, stroke_join.*, stroke_miter_limit.*, current, arc);
                 path.lineTo(arc.end);
             },
             .close_path => if (path.current) |current| if (path.start) |start| {
@@ -698,7 +728,7 @@ pub const Surface = struct {
                     path.closeFillSubpath();
                     return;
                 }
-                self.strokePathSegmentMask(mask, path, stroke_width.*, current, start, active_icon_tuning.stroke_antialias_width, active_icon_tuning.line_stroke_coverage_boost);
+                self.strokePathSegmentMask(mask, path, stroke_width.*, stroke_join.*, stroke_miter_limit.*, current, start, active_icon_tuning.stroke_antialias_width, active_icon_tuning.line_stroke_coverage_boost);
                 self.strokeRoundPointMask(mask, stroke_width.*, start, active_icon_tuning.stroke_antialias_width, active_icon_tuning.line_stroke_coverage_boost);
                 path.closed = true;
                 path.lineTo(start);
@@ -706,17 +736,20 @@ pub const Surface = struct {
         }
     }
 
-    fn finishIconPathMask(self: Surface, mask: *IconAlphaMask, path: *IconPathState, paint: IconPaint, stroke_width: f32, stroke_cap: icon_vector.StrokeCap) void {
+    fn finishIconPathMask(self: Surface, mask: *IconAlphaMask, clip: ?*const IconClipState, path: *IconPathState, paint: IconPaint, stroke_width: f32, stroke_cap: icon_vector.StrokeCap) void {
         self.finishIconSubpath(mask, path, stroke_width, stroke_cap);
-        self.blendIconMaskPaint(mask, paint);
+        self.blendIconMaskPaint(mask, paint, clip);
         mask.clear();
     }
 
-    fn iconLine(self: Surface, bounds: ui.Rect, paint: IconPaint, stroke_width: f32, stroke_cap: icon_vector.StrokeCap, points: []const f32) void {
+    fn iconLine(self: Surface, bounds: ui.Rect, paint: IconPaint, stroke_width: f32, stroke_cap: icon_vector.StrokeCap, stroke_join: icon_vector.StrokeJoin, stroke_miter_limit: f32, points: []const f32) void {
         if (points.len < 4) return;
         var index: usize = 2;
         while (index < points.len) : (index += 2) {
             self.strokeSegmentPaint(bounds, paint, stroke_width, points[index - 2], points[index - 1], points[index], points[index + 1]);
+            if (index > 2) {
+                self.strokeJoinPaint(bounds, paint, stroke_width, stroke_join, stroke_miter_limit, points[index - 4], points[index - 3], points[index - 2], points[index - 1], points[index], points[index + 1]);
+            }
         }
         self.strokeSegmentCapsPaint(bounds, paint, stroke_width, stroke_cap, points[0], points[1], points[2], points[3], points[points.len - 4], points[points.len - 3], points[points.len - 2], points[points.len - 1]);
     }
@@ -920,9 +953,16 @@ pub const Surface = struct {
         }
     }
 
-    fn strokePathSegmentMask(self: Surface, mask: *IconAlphaMask, path: *IconPathState, stroke_width: f32, start: icon_vector.Point, end: icon_vector.Point, antialias_width_value: f32, coverage_boost: f32) void {
+    fn strokeJoinPaint(self: Surface, bounds: ui.Rect, paint: IconPaint, stroke_width: f32, stroke_join: icon_vector.StrokeJoin, stroke_miter_limit: f32, x0n: f32, y0n: f32, x1n: f32, y1n: f32, x2n: f32, y2n: f32) void {
+        var local_buffer: [icon_alpha_mask_capacity]u8 = undefined;
+        var mask = IconAlphaMask.init(bounds, self.width, self.height, local_buffer[0..]);
+        self.strokeJoinMask(&mask, stroke_width, stroke_join, stroke_miter_limit, .{ .x = x0n, .y = y0n }, .{ .x = x1n, .y = y1n }, .{ .x = x2n, .y = y2n }, active_icon_tuning.stroke_antialias_width, active_icon_tuning.line_stroke_coverage_boost);
+        self.blendIconMaskPaint(&mask, paint, null);
+    }
+
+    fn strokePathSegmentMask(self: Surface, mask: *IconAlphaMask, path: *IconPathState, stroke_width: f32, stroke_join: icon_vector.StrokeJoin, stroke_miter_limit: f32, start: icon_vector.Point, end: icon_vector.Point, antialias_width_value: f32, coverage_boost: f32) void {
         if (path.has_segment) {
-            self.strokeRoundPointMask(mask, stroke_width, start, antialias_width_value, coverage_boost);
+            self.strokeJoinMask(mask, stroke_width, stroke_join, stroke_miter_limit, path.last_segment_start, start, end, antialias_width_value, coverage_boost);
         } else {
             path.first_segment_start = start;
             path.first_segment_end = end;
@@ -1065,7 +1105,58 @@ pub const Surface = struct {
         }
     }
 
-    fn strokeQuadraticPathMask(self: Surface, mask: *IconAlphaMask, path: *IconPathState, stroke_width: f32, start: icon_vector.Point, control: icon_vector.Point, end: icon_vector.Point) void {
+    fn strokeJoinMask(self: Surface, mask: *IconAlphaMask, stroke_width: f32, stroke_join: icon_vector.StrokeJoin, stroke_miter_limit: f32, previous: icon_vector.Point, joint: icon_vector.Point, next: icon_vector.Point, antialias_width_value: f32, coverage_boost: f32) void {
+        switch (stroke_join) {
+            .round => self.strokeRoundPointMask(mask, stroke_width, joint, antialias_width_value, coverage_boost),
+            .bevel, .miter => self.strokeCornerJoinMask(mask, stroke_width, stroke_join, stroke_miter_limit, previous, joint, next),
+        }
+    }
+
+    fn strokeCornerJoinMask(self: Surface, mask: *IconAlphaMask, stroke_width: f32, stroke_join: icon_vector.StrokeJoin, stroke_miter_limit: f32, previous: icon_vector.Point, joint: icon_vector.Point, next: icon_vector.Point) void {
+        const bounds = mask.bounds;
+        const p0 = pointToPixels(bounds, previous);
+        const p1 = pointToPixels(bounds, joint);
+        const p2 = pointToPixels(bounds, next);
+        const incoming = unitVector(p1, p0) orelse return;
+        const outgoing = unitVector(p2, p1) orelse return;
+        const turn = cross2(incoming, outgoing);
+        if (@abs(turn) <= icon_axis_epsilon) return;
+        const side: f32 = if (turn > 0.0) -1.0 else 1.0;
+        const n0 = icon_vector.Point{ .x = -incoming.y * side, .y = incoming.x * side };
+        const n1 = icon_vector.Point{ .x = -outgoing.y * side, .y = outgoing.x * side };
+        const radius = iconStroke(bounds, stroke_width) * 0.5;
+        const a = icon_vector.Point{ .x = p1.x + n0.x * radius, .y = p1.y + n0.y * radius };
+        const c = icon_vector.Point{ .x = p1.x + n1.x * radius, .y = p1.y + n1.y * radius };
+        const b = switch (stroke_join) {
+            .bevel => p1,
+            .round => unreachable,
+            .miter => miterPoint(p1, incoming, outgoing, n0, n1, radius, stroke_miter_limit) orelse p1,
+        };
+        self.fillTriangleMask(mask, a, b, c);
+    }
+
+    fn fillTriangleMask(self: Surface, mask: *IconAlphaMask, a: icon_vector.Point, b: icon_vector.Point, c: icon_vector.Point) void {
+        _ = self;
+        const left = @min(a.x, @min(b.x, c.x));
+        const top = @min(a.y, @min(b.y, c.y));
+        const right = @max(a.x, @max(b.x, c.x));
+        const bottom = @max(a.y, @max(b.y, c.y));
+        const x_start = mask.clampX(@intFromFloat(@floor(left - antialias_width)));
+        const y_start = mask.clampY(@intFromFloat(@floor(top - antialias_width)));
+        const x_end = mask.clampX(@intFromFloat(@ceil(right + antialias_width)));
+        const y_end = mask.clampY(@intFromFloat(@ceil(bottom + antialias_width)));
+        var y = y_start;
+        while (y < y_end) : (y += 1) {
+            var x = x_start;
+            while (x < x_end) : (x += 1) {
+                const px = @as(f32, @floatFromInt(x)) + icon_pixel_center;
+                const py = @as(f32, @floatFromInt(y)) + icon_pixel_center;
+                if (pointInTriangle(.{ .x = px, .y = py }, a, b, c)) mask.writeMax(x, y, max_alpha);
+            }
+        }
+    }
+
+    fn strokeQuadraticPathMask(self: Surface, mask: *IconAlphaMask, path: *IconPathState, stroke_width: f32, stroke_join: icon_vector.StrokeJoin, stroke_miter_limit: f32, start: icon_vector.Point, control: icon_vector.Point, end: icon_vector.Point) void {
         var previous = start;
         const curve_segments = active_icon_tuning.curve_segments;
         var step: usize = 1;
@@ -1076,12 +1167,12 @@ pub const Surface = struct {
                 .x = mt * mt * start.x + 2.0 * mt * t * control.x + t * t * end.x,
                 .y = mt * mt * start.y + 2.0 * mt * t * control.y + t * t * end.y,
             };
-            self.strokePathSegmentMask(mask, path, stroke_width, previous, next, active_icon_tuning.stroke_antialias_width, active_icon_tuning.curve_stroke_coverage_boost);
+            self.strokePathSegmentMask(mask, path, stroke_width, stroke_join, stroke_miter_limit, previous, next, active_icon_tuning.stroke_antialias_width, active_icon_tuning.curve_stroke_coverage_boost);
             previous = next;
         }
     }
 
-    fn strokeCubicPathMask(self: Surface, mask: *IconAlphaMask, path: *IconPathState, stroke_width: f32, start: icon_vector.Point, control0: icon_vector.Point, control1: icon_vector.Point, end: icon_vector.Point) void {
+    fn strokeCubicPathMask(self: Surface, mask: *IconAlphaMask, path: *IconPathState, stroke_width: f32, stroke_join: icon_vector.StrokeJoin, stroke_miter_limit: f32, start: icon_vector.Point, control0: icon_vector.Point, control1: icon_vector.Point, end: icon_vector.Point) void {
         var previous = start;
         const curve_segments = active_icon_tuning.curve_segments;
         var step: usize = 1;
@@ -1092,14 +1183,14 @@ pub const Surface = struct {
                 .x = mt * mt * mt * start.x + 3.0 * mt * mt * t * control0.x + 3.0 * mt * t * t * control1.x + t * t * t * end.x,
                 .y = mt * mt * mt * start.y + 3.0 * mt * mt * t * control0.y + 3.0 * mt * t * t * control1.y + t * t * t * end.y,
             };
-            self.strokePathSegmentMask(mask, path, stroke_width, previous, next, active_icon_tuning.stroke_antialias_width, active_icon_tuning.curve_stroke_coverage_boost);
+            self.strokePathSegmentMask(mask, path, stroke_width, stroke_join, stroke_miter_limit, previous, next, active_icon_tuning.stroke_antialias_width, active_icon_tuning.curve_stroke_coverage_boost);
             previous = next;
         }
     }
 
-    fn strokeArcPathMask(self: Surface, mask: *IconAlphaMask, path: *IconPathState, stroke_width: f32, start: icon_vector.Point, arc: icon_vector.Arc) void {
+    fn strokeArcPathMask(self: Surface, mask: *IconAlphaMask, path: *IconPathState, stroke_width: f32, stroke_join: icon_vector.StrokeJoin, stroke_miter_limit: f32, start: icon_vector.Point, arc: icon_vector.Arc) void {
         const geometry = svgArcGeometry(start, arc) orelse {
-            self.strokePathSegmentMask(mask, path, stroke_width, start, arc.end, active_icon_tuning.stroke_antialias_width, active_icon_tuning.line_stroke_coverage_boost);
+            self.strokePathSegmentMask(mask, path, stroke_width, stroke_join, stroke_miter_limit, start, arc.end, active_icon_tuning.stroke_antialias_width, active_icon_tuning.line_stroke_coverage_boost);
             return;
         };
         const steps = arcStepCount(geometry.delta, arc);
@@ -1108,7 +1199,7 @@ pub const Surface = struct {
         var step: usize = 1;
         while (step <= steps) : (step += 1) {
             const next = geometry.pointAt(step, steps);
-            self.strokePathSegmentMask(mask, path, stroke_width, previous, next, arc_antialias_width, active_icon_tuning.arc_stroke_coverage_boost);
+            self.strokePathSegmentMask(mask, path, stroke_width, stroke_join, stroke_miter_limit, previous, next, arc_antialias_width, active_icon_tuning.arc_stroke_coverage_boost);
             previous = next;
         }
     }
@@ -1150,7 +1241,7 @@ pub const Surface = struct {
         _ = self;
     }
 
-    fn fillIconPath(self: Surface, bounds: ui.Rect, paint: IconPaint, path: *const IconPathState) void {
+    fn fillIconPath(self: Surface, bounds: ui.Rect, paint: IconPaint, path: *const IconPathState, clip: *const IconClipState) void {
         if (path.fill_point_len < min_fill_path_points) return;
         const paint_bounds = fillPathPaintBounds(bounds, path);
         const x_start = clampCoord(@intFromFloat(@floor(bounds.x)), self.width);
@@ -1162,7 +1253,23 @@ pub const Surface = struct {
             var x = x_start;
             while (x < x_end) : (x += 1) {
                 const coverage = self.fillPathCoverage(bounds, path, x, y);
-                if (coverage != 0) self.blendPixel(x, y, paint.colorAt(bounds, paint_bounds, x, y), coverage);
+                if (coverage != 0) self.blendPixel(x, y, paint.colorAt(bounds, paint_bounds, x, y), clip.apply(x, y, coverage));
+            }
+        }
+    }
+
+    fn fillClipPathMask(self: Surface, bounds: ui.Rect, path: *const IconPathState, clip_mask: *IconAlphaMask) void {
+        if (path.fill_point_len < min_fill_path_points) return;
+        const x_start = clampCoord(@intFromFloat(@floor(bounds.x)), self.width);
+        const y_start = clampCoord(@intFromFloat(@floor(bounds.y)), self.height);
+        const x_end = clampCoord(@intFromFloat(@ceil(bounds.x + bounds.w)), self.width);
+        const y_end = clampCoord(@intFromFloat(@ceil(bounds.y + bounds.h)), self.height);
+        var y = y_start;
+        while (y < y_end) : (y += 1) {
+            var x = x_start;
+            while (x < x_end) : (x += 1) {
+                const coverage = self.fillPathCoverage(bounds, path, x, y);
+                if (coverage != 0) clip_mask.writeMax(x, y, coverage);
             }
         }
     }
@@ -1201,17 +1308,18 @@ pub const Surface = struct {
     }
 
     fn blendIconMask(self: Surface, mask: *const IconAlphaMask, color: ui.Color) void {
-        self.blendIconMaskPaint(mask, .{ .solid = color });
+        self.blendIconMaskPaint(mask, .{ .solid = color }, null);
     }
 
-    fn blendIconMaskPaint(self: Surface, mask: *const IconAlphaMask, paint: IconPaint) void {
+    fn blendIconMaskPaint(self: Surface, mask: *const IconAlphaMask, paint: IconPaint, clip: ?*const IconClipState) void {
         var row: usize = 0;
         while (row < mask.height) : (row += 1) {
             var col: usize = 0;
             while (col < mask.width) : (col += 1) {
-                const alpha = mask.pixels[row * mask.width + col];
+                const raw_alpha = mask.pixels[row * mask.width + col];
                 const x = mask.x + col;
                 const y = mask.y + row;
+                const alpha = if (clip) |active_clip| active_clip.apply(x, y, raw_alpha) else raw_alpha;
                 if (alpha > icon_alpha_floor) self.blendPixelPathAlpha(x, y, paint.colorAt(mask.bounds, mask.bounds, x, y), alpha);
             }
         }
@@ -1349,8 +1457,45 @@ const IconAlphaMask = struct {
         if (alpha > self.pixels[index]) self.pixels[index] = alpha;
     }
 
+    fn read(self: *const IconAlphaMask, x_value: usize, y_value: usize) u8 {
+        if (x_value < self.x or y_value < self.y) return 0;
+        const local_x = x_value - self.x;
+        const local_y = y_value - self.y;
+        if (local_x >= self.width or local_y >= self.height) return 0;
+        return self.pixels[local_y * self.width + local_x];
+    }
+
     fn clear(self: *IconAlphaMask) void {
         @memset(self.pixels, 0);
+    }
+};
+
+const IconClipState = struct {
+    mask: *IconAlphaMask,
+    active: bool = false,
+    building: bool = false,
+
+    fn begin(self: *IconClipState) void {
+        self.mask.clear();
+        self.active = false;
+        self.building = true;
+    }
+
+    fn end(self: *IconClipState) void {
+        self.building = false;
+        self.active = true;
+    }
+
+    fn clear(self: *IconClipState) void {
+        self.mask.clear();
+        self.active = false;
+        self.building = false;
+    }
+
+    fn apply(self: *const IconClipState, x: usize, y: usize, alpha: u8) u8 {
+        if (!self.active or alpha == 0) return alpha;
+        const clip_alpha = self.mask.read(x, y);
+        return @intCast((@as(u16, alpha) * @as(u16, clip_alpha) + 127) / 255);
     }
 };
 
@@ -1426,6 +1571,7 @@ const icon_arc_stroke_coverage_boost_default: f32 = 1.4;
 const icon_stroke_coverage_boost_min: f32 = 0.0;
 const icon_stroke_coverage_boost_max: f32 = 2.0;
 const icon_axis_epsilon: f32 = 0.00001;
+const svg_miter_limit_default: f32 = 4.0;
 const icon_closed_subpath_epsilon_squared: f32 = 0.00000001;
 const icon_alpha_floor: u8 = 1;
 const icon_curve_segments_default: usize = 4;
@@ -1627,6 +1773,46 @@ fn vectorAngle(left: icon_vector.Point, right: icon_vector.Point) f32 {
     const dot = left.x * right.x + left.y * right.y;
     const det = left.x * right.y - left.y * right.x;
     return std.math.atan2(det, dot);
+}
+
+fn pointToPixels(bounds: ui.Rect, point: icon_vector.Point) icon_vector.Point {
+    return .{
+        .x = bounds.x + bounds.w * point.x,
+        .y = bounds.y + bounds.h * point.y,
+    };
+}
+
+fn unitVector(to: icon_vector.Point, from: icon_vector.Point) ?icon_vector.Point {
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const length = @sqrt(dx * dx + dy * dy);
+    if (length <= icon_axis_epsilon) return null;
+    return .{ .x = dx / length, .y = dy / length };
+}
+
+fn cross2(left: icon_vector.Point, right: icon_vector.Point) f32 {
+    return left.x * right.y - left.y * right.x;
+}
+
+fn miterPoint(joint: icon_vector.Point, incoming: icon_vector.Point, outgoing: icon_vector.Point, incoming_normal: icon_vector.Point, outgoing_normal: icon_vector.Point, radius: f32, miter_limit: f32) ?icon_vector.Point {
+    const a = icon_vector.Point{ .x = joint.x + incoming_normal.x * radius, .y = joint.y + incoming_normal.y * radius };
+    const b = icon_vector.Point{ .x = joint.x + outgoing_normal.x * radius, .y = joint.y + outgoing_normal.y * radius };
+    const denom = cross2(incoming, outgoing);
+    if (@abs(denom) <= icon_axis_epsilon) return null;
+    const delta = icon_vector.Point{ .x = b.x - a.x, .y = b.y - a.y };
+    const t = cross2(delta, outgoing) / denom;
+    const point = icon_vector.Point{ .x = a.x + incoming.x * t, .y = a.y + incoming.y * t };
+    const mx = point.x - joint.x;
+    const my = point.y - joint.y;
+    if (mx * mx + my * my > radius * radius * miter_limit * miter_limit) return null;
+    return point;
+}
+
+fn pointInTriangle(point: icon_vector.Point, a: icon_vector.Point, b: icon_vector.Point, c: icon_vector.Point) bool {
+    const ab = cross2(.{ .x = b.x - a.x, .y = b.y - a.y }, .{ .x = point.x - a.x, .y = point.y - a.y });
+    const bc = cross2(.{ .x = c.x - b.x, .y = c.y - b.y }, .{ .x = point.x - b.x, .y = point.y - b.y });
+    const ca = cross2(.{ .x = a.x - c.x, .y = a.y - c.y }, .{ .x = point.x - c.x, .y = point.y - c.y });
+    return (ab >= 0.0 and bc >= 0.0 and ca >= 0.0) or (ab <= 0.0 and bc <= 0.0 and ca <= 0.0);
 }
 
 fn coverageAlpha(radius: f32, distance: f32) u8 {
@@ -2032,7 +2218,7 @@ test "software renderer rasterizes ui commands to nonblank pixels" {
     var pixels: [320 * 240]ui.Color = undefined;
     const surface = try Surface.init(320, 240, &pixels);
     surface.clear(.clear);
-    surface.rasterize(scene.written());
+    try renderTestSceneIr(surface, scene.written());
 
     var painted: usize = 0;
     for (surface.pixels) |pixel| {
@@ -2088,7 +2274,7 @@ test "software renderer applies svg round caps only at open subpath endpoints" {
     const end = icon_vector.Point{ .x = 0.75, .y = 0.5 };
     path.moveTo(start);
 
-    surface.strokePathSegmentMask(&mask, &path, icon_stroke_scale, start, end, icon_stroke_antialias_width_default, icon_line_stroke_coverage_boost_default);
+    surface.strokePathSegmentMask(&mask, &path, icon_stroke_scale, .round, svg_miter_limit_default, start, end, icon_stroke_antialias_width_default, icon_line_stroke_coverage_boost_default);
     try std.testing.expectEqual(@as(u8, 0), iconMaskPixel(mask, 5, 12));
 
     surface.finishIconSubpath(&mask, &path, icon_stroke_scale, .round);
@@ -2106,7 +2292,7 @@ test "software renderer honors svg butt and square caps" {
     var butt_mask = IconAlphaMask.init(bounds, surface.width, surface.height, butt_buffer[0..]);
     var butt_path = IconPathState{};
     butt_path.moveTo(start);
-    surface.strokePathSegmentMask(&butt_mask, &butt_path, icon_stroke_scale, start, end, icon_stroke_antialias_width_default, icon_line_stroke_coverage_boost_default);
+    surface.strokePathSegmentMask(&butt_mask, &butt_path, icon_stroke_scale, .round, svg_miter_limit_default, start, end, icon_stroke_antialias_width_default, icon_line_stroke_coverage_boost_default);
     surface.finishIconSubpath(&butt_mask, &butt_path, icon_stroke_scale, .butt);
     try std.testing.expectEqual(@as(u8, 0), iconMaskPixel(butt_mask, 5, 12));
 
@@ -2114,9 +2300,63 @@ test "software renderer honors svg butt and square caps" {
     var square_mask = IconAlphaMask.init(bounds, surface.width, surface.height, square_buffer[0..]);
     var square_path = IconPathState{};
     square_path.moveTo(start);
-    surface.strokePathSegmentMask(&square_mask, &square_path, icon_stroke_scale, start, end, icon_stroke_antialias_width_default, icon_line_stroke_coverage_boost_default);
+    surface.strokePathSegmentMask(&square_mask, &square_path, icon_stroke_scale, .round, svg_miter_limit_default, start, end, icon_stroke_antialias_width_default, icon_line_stroke_coverage_boost_default);
     surface.finishIconSubpath(&square_mask, &square_path, icon_stroke_scale, .square);
     try std.testing.expect(iconMaskPixel(square_mask, 5, 12) > 0);
+}
+
+test "software renderer honors svg bevel and miter joins" {
+    var pixels: [24 * 24]ui.Color = undefined;
+    const surface = try Surface.init(24, 24, &pixels);
+    const bounds = ui.Rect.init(0, 0, 24, 24);
+    const start = icon_vector.Point{ .x = 0.25, .y = 0.5 };
+    const corner = icon_vector.Point{ .x = 0.5, .y = 0.5 };
+    const end = icon_vector.Point{ .x = 0.5, .y = 0.25 };
+    const thick_stroke = 6.0 / 24.0;
+
+    var bevel_buffer: [icon_alpha_mask_capacity]u8 = undefined;
+    var bevel_mask = IconAlphaMask.init(bounds, surface.width, surface.height, bevel_buffer[0..]);
+    var bevel_path = IconPathState{};
+    bevel_path.moveTo(start);
+    surface.strokePathSegmentMask(&bevel_mask, &bevel_path, thick_stroke, .bevel, svg_miter_limit_default, start, corner, icon_stroke_antialias_width_default, icon_line_stroke_coverage_boost_default);
+    surface.strokePathSegmentMask(&bevel_mask, &bevel_path, thick_stroke, .bevel, svg_miter_limit_default, corner, end, icon_stroke_antialias_width_default, icon_line_stroke_coverage_boost_default);
+
+    var miter_buffer: [icon_alpha_mask_capacity]u8 = undefined;
+    var miter_mask = IconAlphaMask.init(bounds, surface.width, surface.height, miter_buffer[0..]);
+    var miter_path = IconPathState{};
+    miter_path.moveTo(start);
+    surface.strokePathSegmentMask(&miter_mask, &miter_path, thick_stroke, .miter, svg_miter_limit_default, start, corner, icon_stroke_antialias_width_default, icon_line_stroke_coverage_boost_default);
+    surface.strokePathSegmentMask(&miter_mask, &miter_path, thick_stroke, .miter, svg_miter_limit_default, corner, end, icon_stroke_antialias_width_default, icon_line_stroke_coverage_boost_default);
+
+    try std.testing.expectEqual(@as(u8, 0), iconMaskPixel(bevel_mask, 14, 14));
+    try std.testing.expect(iconMaskPixel(miter_mask, 14, 14) > 0);
+}
+
+test "software renderer honors svg miter limit" {
+    var pixels: [24 * 24]ui.Color = undefined;
+    const surface = try Surface.init(24, 24, &pixels);
+    const bounds = ui.Rect.init(0, 0, 24, 24);
+    const start = icon_vector.Point{ .x = 0.25, .y = 0.5 };
+    const corner = icon_vector.Point{ .x = 0.5, .y = 0.5 };
+    const end = icon_vector.Point{ .x = 0.5, .y = 0.25 };
+    const thick_stroke = 6.0 / 24.0;
+
+    var limited_buffer: [icon_alpha_mask_capacity]u8 = undefined;
+    var limited_mask = IconAlphaMask.init(bounds, surface.width, surface.height, limited_buffer[0..]);
+    var limited_path = IconPathState{};
+    limited_path.moveTo(start);
+    surface.strokePathSegmentMask(&limited_mask, &limited_path, thick_stroke, .miter, 1.0, start, corner, icon_stroke_antialias_width_default, icon_line_stroke_coverage_boost_default);
+    surface.strokePathSegmentMask(&limited_mask, &limited_path, thick_stroke, .miter, 1.0, corner, end, icon_stroke_antialias_width_default, icon_line_stroke_coverage_boost_default);
+
+    var default_buffer: [icon_alpha_mask_capacity]u8 = undefined;
+    var default_mask = IconAlphaMask.init(bounds, surface.width, surface.height, default_buffer[0..]);
+    var default_path = IconPathState{};
+    default_path.moveTo(start);
+    surface.strokePathSegmentMask(&default_mask, &default_path, thick_stroke, .miter, svg_miter_limit_default, start, corner, icon_stroke_antialias_width_default, icon_line_stroke_coverage_boost_default);
+    surface.strokePathSegmentMask(&default_mask, &default_path, thick_stroke, .miter, svg_miter_limit_default, corner, end, icon_stroke_antialias_width_default, icon_line_stroke_coverage_boost_default);
+
+    try std.testing.expectEqual(@as(u8, 0), iconMaskPixel(limited_mask, 14, 14));
+    try std.testing.expect(iconMaskPixel(default_mask, 14, 14) > 0);
 }
 
 test "software renderer treats returned subpaths as closed for svg cap handling" {
@@ -2130,8 +2370,8 @@ test "software renderer treats returned subpaths as closed for svg cap handling"
     const mid = icon_vector.Point{ .x = 0.75, .y = 0.5 };
     path.moveTo(start);
 
-    surface.strokePathSegmentMask(&mask, &path, icon_stroke_scale, start, mid, icon_stroke_antialias_width_default, icon_line_stroke_coverage_boost_default);
-    surface.strokePathSegmentMask(&mask, &path, icon_stroke_scale, mid, start, icon_stroke_antialias_width_default, icon_line_stroke_coverage_boost_default);
+    surface.strokePathSegmentMask(&mask, &path, icon_stroke_scale, .round, svg_miter_limit_default, start, mid, icon_stroke_antialias_width_default, icon_line_stroke_coverage_boost_default);
+    surface.strokePathSegmentMask(&mask, &path, icon_stroke_scale, .round, svg_miter_limit_default, mid, start, icon_stroke_antialias_width_default, icon_line_stroke_coverage_boost_default);
     try std.testing.expect(path.endsAtStart());
 
     surface.finishIconSubpath(&mask, &path, icon_stroke_scale, .round);
@@ -2175,13 +2415,13 @@ test "software renderer composites separate icon path masks" {
     };
     var path = IconPathState{};
 
-    surface.finishIconPathMask(&mask, &path, .{ .solid = .{ .r = 255, .g = 255, .b = 255 } }, icon_stroke_scale, .round);
+    surface.finishIconPathMask(&mask, null, &path, .{ .solid = .{ .r = 255, .g = 255, .b = 255 } }, icon_stroke_scale, .round);
     const first_alpha = pixels[0].a;
     try std.testing.expect(first_alpha > 0);
     try std.testing.expectEqual(@as(u8, 0), mask.pixels[0]);
 
     mask.pixels[0] = 128;
-    surface.finishIconPathMask(&mask, &path, .{ .solid = .{ .r = 255, .g = 255, .b = 255 } }, icon_stroke_scale, .round);
+    surface.finishIconPathMask(&mask, null, &path, .{ .solid = .{ .r = 255, .g = 255, .b = 255 } }, icon_stroke_scale, .round);
     try std.testing.expect(pixels[0].a > first_alpha);
 }
 
@@ -2549,6 +2789,26 @@ test "software renderer fills open svg subpaths as closed" {
     try std.testing.expectEqual(ui.Color.clear, pixels[3 * 24 + 12]);
 }
 
+test "software renderer applies svg path clip paths" {
+    const svg =
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+        \\  <defs>
+        \\    <clipPath id="left"><path d="M 0 0 H 12 V 24 H 0 Z"/></clipPath>
+        \\  </defs>
+        \\  <path clip-path="url(#left)" fill="white" d="M 0 0 H 24 V 24 H 0 Z"/>
+        \\</svg>
+    ;
+    var pixels: [24 * 24]ui.Color = undefined;
+    const surface = try Surface.init(24, 24, &pixels);
+    const white = ui.Color{ .r = 255, .g = 255, .b = 255, .a = 255 };
+    surface.clear(ui.Color.clear);
+
+    surface.drawIconSvg(ui.Rect.init(0, 0, 24, 24), white, svg);
+
+    try std.testing.expect(colorsEqual(pixels[12 * 24 + 6], white));
+    try std.testing.expect(colorsEqual(pixels[12 * 24 + 18], ui.Color.clear));
+}
+
 test "software renderer icon tuning sweeps explicit candidates" {
     defer resetIconTuningForTest();
     const candidates = [_]IconTuning{
@@ -2594,7 +2854,7 @@ test "software renderer honors rounded gradient and shadow rect modes" {
     var pixels: [64 * 48]ui.Color = undefined;
     const surface = try Surface.init(64, 48, &pixels);
     surface.clear(.clear);
-    surface.rasterize(scene.written());
+    try renderTestSceneIr(surface, scene.written());
 
     try std.testing.expectEqual(ui.Color.clear, pixels[8 * 64 + 8]);
     const top = pixels[12 * 64 + 20];
@@ -2604,18 +2864,13 @@ test "software renderer honors rounded gradient and shadow rect modes" {
     try std.testing.expect(pixels[18 * 64 + 39].a > 0);
 }
 
-test "software renderer rasterizes rect ir equivalent to command path" {
+test "software renderer rasterizes rect ir deterministically" {
     var commands: [4]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
     try scene.pushRect(ui.Rect.init(0.0, 0.0, 64.0, 48.0), .bg, .fill, 0.0, 0.0);
     try scene.pushGradientRect(ui.Rect.init(8.0, 8.0, 24.0, 24.0), .{ .r = 240, .g = 40, .b = 40 }, .{ .r = 40, .g = 40, .b = 240 }, 8.0);
     try scene.pushRect(ui.Rect.init(42.0, 18.0, 12.0, 12.0), .{ .r = 0, .g = 0, .b = 0, .a = 120 }, .shadow, 4.0, 5.0);
     try scene.pushRect(ui.Rect.init(44.0, 20.0, 10.0, 10.0), .accent, .border, 3.0, 0.0);
-
-    var command_pixels: [64 * 48]ui.Color = undefined;
-    const command_surface = try Surface.init(64, 48, &command_pixels);
-    command_surface.clear(.clear);
-    command_surface.rasterize(scene.written());
 
     var storage = renderer_ir.FixedBuffers(3, 0, 0, 0, 1, 0, 0){};
     const buffers = storage.buffers();
@@ -2630,7 +2885,9 @@ test "software renderer rasterizes rect ir equivalent to command path" {
     ir_surface.clear(.clear);
     try ir_surface.rasterizeIr(buffers);
 
-    try std.testing.expectEqualSlices(ui.Color, &command_pixels, &ir_pixels);
+    try std.testing.expectEqual(ui.Color.bg, ir_pixels[1 * 64 + 1]);
+    try std.testing.expect(ir_pixels[12 * 64 + 20].r > ir_pixels[28 * 64 + 20].r);
+    try std.testing.expect(ir_pixels[20 * 64 + 44].a > 0);
 }
 
 test "software renderer rejects textured ir without resources" {
@@ -2671,7 +2928,7 @@ test "software renderer rasterizes alpha textured ir with supplied resources" {
 
     const receipt = try surface.renderIrFrameWithResources(buffers, resources);
     try std.testing.expect(receipt.valid());
-    try std.testing.expectEqual(renderer_present.Transport.software_pixels, receipt.transport);
+    try std.testing.expectEqual(renderer_present.Transport.pixel_bytes, receipt.transport);
     try std.testing.expectEqual(@as(usize, 1), receipt.primitive_count);
     const pixel = pixels[4 * 8 + 4];
     try std.testing.expect(pixel.a > 0);
@@ -2759,6 +3016,20 @@ fn sampleRoot(children: []ui.Node) ui.Node {
     children[3] = .{ .slot = .{ .id = 7, .child = &children[4] } };
     children[4] = .{ .button = .{ .id = 30, .label = "Render" } };
     return .{ .stack = .{ .axis = .column, .gap = 10, .padding = 16, .children = children[0..4] } };
+}
+
+fn renderTestSceneIr(surface: Surface, commands: []const ui.Command) !void {
+    var storage = renderer_ir.FixedBuffers(64, 1024, 64, 64, 0, 0, 0){};
+    const buffers = storage.buffers();
+    var source_context: u8 = 0;
+    const sources = renderer_ir.Sources{
+        .font = .{ .context = &source_context, .metrics = irTestFontMetrics, .width = irTestTextWidth, .glyph = irTestGlyph },
+    };
+    try renderer_ir.packScene(buffers, sources, commands);
+    const alpha = [_]u8{255};
+    try surface.rasterizeIrWithResources(buffers, .{
+        .font = .{ .width = 1, .height = 1, .alpha = &alpha },
+    });
 }
 
 fn irTestFontMetrics(_: *anyopaque, _: u8) renderer_ir.TextMetrics {
