@@ -736,39 +736,7 @@ pub const Os = struct {
     }
 };
 
-pub const aarch64 = @import("Target/aarch64.zig");
-pub const alpha = @import("Target/alpha.zig");
-pub const amdgcn = @import("Target/amdgcn.zig");
-pub const arc = @import("Target/arc.zig");
-pub const arm = @import("Target/arm.zig");
-pub const avr = @import("Target/avr.zig");
-pub const bpf = @import("Target/bpf.zig");
-pub const csky = @import("Target/csky.zig");
-pub const hexagon = @import("Target/hexagon.zig");
-pub const hppa = @import("Target/hppa.zig");
-pub const kalimba = @import("Target/generic.zig");
-pub const kvx = @import("Target/kvx.zig");
-pub const lanai = @import("Target/lanai.zig");
-pub const loongarch = @import("Target/loongarch.zig");
-pub const m68k = @import("Target/m68k.zig");
-pub const microblaze = @import("Target/generic.zig");
-pub const mips = @import("Target/mips.zig");
-pub const msp430 = @import("Target/msp430.zig");
-pub const nvptx = @import("Target/nvptx.zig");
-pub const or1k = @import("Target/generic.zig");
-pub const powerpc = @import("Target/powerpc.zig");
-pub const propeller = @import("Target/propeller.zig");
-pub const riscv = @import("Target/riscv.zig");
-pub const s390x = @import("Target/s390x.zig");
-pub const sh = @import("Target/generic.zig");
-pub const sparc = @import("Target/sparc.zig");
-pub const spirv = @import("Target/spirv.zig");
-pub const ve = @import("Target/ve.zig");
 pub const wasm = @import("Target/wasm.zig");
-pub const x86 = @import("Target/x86.zig");
-pub const xcore = @import("Target/xcore.zig");
-pub const xtensa = @import("Target/xtensa.zig");
-pub const z80 = @import("Target/generic.zig");
 
 pub const Abi = enum {
     none,
@@ -1738,17 +1706,19 @@ pub const Cpu = struct {
             };
         }
 
-        /// All CPU features Zig is aware of, sorted lexicographically by name.
+        /// All CPU features EdgeRun's embedded compiler carries.
         pub fn allFeaturesList(arch: Arch) []const Cpu.Feature {
-            return switch (arch.family()) {
-                inline else => |f| &@field(Target, @tagName(f)).all_features,
+            return switch (arch) {
+                .wasm32, .wasm64 => &wasm.all_features,
+                else => &.{},
             };
         }
 
-        /// All processors Zig is aware of, sorted lexicographically by name.
+        /// All processors EdgeRun's embedded compiler carries.
         pub fn allCpuModels(arch: Arch) []const *const Cpu.Model {
-            return switch (arch.family()) {
-                inline else => |f| comptime allCpusFromDecls(@field(Target, @tagName(f)).cpu),
+            return switch (arch) {
+                .wasm32, .wasm64 => comptime allCpusFromDecls(wasm.cpu),
+                else => &.{},
             };
         }
 
@@ -1995,100 +1965,19 @@ pub const Cpu = struct {
             };
         }
 
-        /// Returns the most bare-bones CPU model that is valid for `arch`. Note that this function
-        /// can return CPU models that are understood by LLVM, but *not* understood by Clang. If
-        /// Clang compatibility is important, consider using `baseline` instead.
+        /// Returns the most bare-bones CPU model available in EdgeRun's embedded compiler.
         pub fn generic(arch: Arch) *const Model {
             return switch (arch) {
-                .alpha => &alpha.cpu.ev4,
-                .amdgcn => &amdgcn.cpu.gfx600,
-                .avr => &avr.cpu.avr1,
-                .hppa => &hppa.cpu.ts_1,
-                .hppa64 => &hppa.cpu.pa_8000,
-                .kvx => &kvx.cpu.coolidge_v1,
-                .loongarch32 => &loongarch.cpu.generic_la32,
-                .loongarch64 => &loongarch.cpu.generic_la64,
-                .mips, .mipsel => &mips.cpu.mips32,
-                .mips64, .mips64el => &mips.cpu.mips64,
-                .nvptx, .nvptx64 => &nvptx.cpu.sm_20,
-                .powerpc, .powerpcle => &powerpc.cpu.ppc,
-                .powerpc64, .powerpc64le => &powerpc.cpu.ppc64,
-                .propeller => &propeller.cpu.p1,
-                .riscv32, .riscv32be => &riscv.cpu.generic_rv32,
-                .riscv64, .riscv64be => &riscv.cpu.generic_rv64,
-                .sparc64 => &sparc.cpu.v9, // SPARC can only be 64-bit from v9 and up.
                 .wasm32, .wasm64 => &wasm.cpu.mvp,
-                .x86_16 => &x86.cpu.i86,
-                .x86 => &x86.cpu.i386,
-                .x86_64 => &x86.cpu.x86_64,
-                inline else => |a| &@field(Target, @tagName(a.family())).cpu.generic,
+                else => &wasm.cpu.mvp,
             };
         }
 
-        /// Returns a conservative CPU model for `arch` that is expected to be compatible with the
-        /// vast majority of hardware available. This function is guaranteed to return CPU models
-        /// that are understood by both LLVM and Clang, unlike `generic`.
-        ///
-        /// For certain `os` values, this function will additionally bump the baseline higher than
-        /// the baseline would be for `arch` in isolation; for example, for `aarch64-macos`, the
-        /// baseline is considered to be `apple_m1`. To avoid this behavior entirely, pass
-        /// `Os.Tag.freestanding`.
+        /// Returns the conservative CPU model available in EdgeRun's embedded compiler.
         pub fn baseline(arch: Arch, os: Os) *const Model {
+            _ = os;
             return switch (arch) {
-                .alpha => &alpha.cpu.ev6,
-                .amdgcn => &amdgcn.cpu.gfx906,
-                .arm => switch (os.tag) {
-                    .@"3ds" => &arm.cpu.mpcore,
-                    .vita => &arm.cpu.cortex_a9,
-                    else => &arm.cpu.baseline,
-                },
-                .thumb => switch (os.tag) {
-                    .vita => &arm.cpu.cortex_a9,
-                    else => &arm.cpu.baseline,
-                },
-                .armeb, .thumbeb => &arm.cpu.baseline,
-                .aarch64 => switch (os.tag) {
-                    .driverkit, .maccatalyst, .macos => &aarch64.cpu.apple_m1,
-                    .ios, .tvos => &aarch64.cpu.apple_a7,
-                    .visionos => &aarch64.cpu.apple_m2,
-                    .watchos => &aarch64.cpu.apple_s4,
-                    else => generic(arch),
-                },
-                .avr => &avr.cpu.avr2,
-                .bpfel, .bpfeb => &bpf.cpu.v3,
-                .csky => &csky.cpu.ck810, // gcc/clang do not have a generic csky model.
-                .hexagon => &hexagon.cpu.hexagonv68, // gcc/clang do not have a generic hexagon model.
-                .hppa => &hppa.cpu.pa_7300lc,
-                .kvx => &kvx.cpu.coolidge_v2,
-                .lanai => &lanai.cpu.v11, // clang does not have a generic lanai model.
-                .loongarch32 => &loongarch.cpu.la32v1_0,
-                .loongarch64 => &loongarch.cpu.la64v1_0,
-                .m68k => &m68k.cpu.M68000,
-                .mips => &mips.cpu.mips32r2,
-                .mipsel => switch (os.tag) {
-                    .psp => &mips.cpu.allegrex,
-                    else => &mips.cpu.mips32r2,
-                },
-                .mips64, .mips64el => &mips.cpu.mips64r2,
-                .msp430 => &msp430.cpu.msp430,
-                .nvptx, .nvptx64 => &nvptx.cpu.sm_52,
-                .powerpc64le => &powerpc.cpu.ppc64le,
-                .riscv32, .riscv32be => &riscv.cpu.baseline_rv32,
-                .riscv64, .riscv64be => &riscv.cpu.baseline_rv64,
-                // gcc/clang do not have a generic s390x model.
-                .s390x => &s390x.cpu.arch8,
-                .sparc => &sparc.cpu.v9, // glibc does not work with 'plain' v8.
-                .x86 => &x86.cpu.pentium4,
-                .x86_64 => switch (os.tag) {
-                    .driverkit, .maccatalyst => &x86.cpu.nehalem,
-                    .macos => &x86.cpu.core2,
-                    .ps4 => &x86.cpu.btver2,
-                    .ps5 => &x86.cpu.znver2,
-                    else => generic(arch),
-                },
-                .xcore => &xcore.cpu.xs1b_generic,
                 .wasm32, .wasm64 => &wasm.cpu.lime1,
-
                 else => generic(arch),
             };
         }
@@ -2101,27 +1990,27 @@ pub const Cpu = struct {
     }
 
     /// Returns true if `feature` is enabled.
-    pub fn has(cpu: Cpu, comptime family: Arch.Family, feature: @field(Target, @tagName(family)).Feature) bool {
-        if (family != cpu.arch.family()) return false;
-        return cpu.features.isEnabled(@intFromEnum(feature));
-    }
-
-    /// Returns true if any feature in `features` is enabled.
-    pub fn hasAny(cpu: Cpu, comptime family: Arch.Family, features: []const @field(Target, @tagName(family)).Feature) bool {
-        if (family != cpu.arch.family()) return false;
-        for (features) |feature| {
-            if (cpu.features.isEnabled(@intFromEnum(feature))) return true;
-        }
+    pub fn has(cpu: Cpu, comptime family: Arch.Family, feature: anytype) bool {
+        _ = cpu;
+        _ = family;
+        _ = feature;
         return false;
     }
 
-    /// Returns true if all features in `features` are enabled.
-    pub fn hasAll(cpu: Cpu, comptime family: Arch.Family, features: []const @field(Target, @tagName(family)).Feature) bool {
-        if (family != cpu.arch.family()) return false;
-        for (features) |feature| {
-            if (!cpu.features.isEnabled(@intFromEnum(feature))) return false;
-        }
-        return true;
+    /// Returns true if any feature in `features` is enabled.
+    pub fn hasAny(cpu: Cpu, comptime family: Arch.Family, features: anytype) bool {
+        _ = cpu;
+        _ = family;
+        _ = features;
+        return false;
+    }
+
+    /// Returns true if all features in `features` is enabled.
+    pub fn hasAll(cpu: Cpu, comptime family: Arch.Family, features: anytype) bool {
+        _ = cpu;
+        _ = family;
+        _ = features;
+        return false;
     }
 };
 
@@ -2308,7 +2197,7 @@ pub fn supportsAddressSpace(
 
         .flash, .flash1, .flash2, .flash3, .flash4, .flash5 => arch == .avr, // TODO this should also check how many flash banks the cpu has
         .cog, .hub => arch == .propeller,
-        .lut => arch == .propeller and std.Target.propeller.featureSetHas(target.cpu.features, .p2),
+        .lut => false,
 
         .global, .local, .shared => is_gpu,
         .constant => is_gpu and (context == null or context == .constant),
