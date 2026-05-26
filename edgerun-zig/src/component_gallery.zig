@@ -1061,7 +1061,7 @@ test "component gallery hover uses canonical card control state without changing
     try std.testing.expectEqual(base_collector.written().len, hover_collector.written().len);
 }
 
-test "component gallery buttons center labels through shared primitive" {
+test "component gallery buttons use shared optical label placement" {
     var commands: [16]ui.Command = undefined;
     var clips: [4]ui.Rect = undefined;
     var regions: [8]interaction.Region = undefined;
@@ -1072,10 +1072,10 @@ test "component gallery buttons center labels through shared primitive" {
 
     const label = textCommand(scene.written(), "Continue").?.text;
     const center_delta = @abs((label.origin.x + label.origin.w * 0.5) - (bounds.x + bounds.w * 0.5));
-    const vertical_delta = @abs((label.origin.y + label.origin.h * 0.5) - (bounds.y + bounds.h * 0.5));
     try std.testing.expectEqual(ui.TextAlign.center, label.alignment);
     try std.testing.expect(center_delta < 0.01);
-    try std.testing.expect(vertical_delta < 0.01);
+    try std.testing.expect(label.origin.y + label.origin.h * 0.5 < bounds.y + bounds.h * 0.5);
+    try std.testing.expect(label.origin.y >= bounds.y);
     try std.testing.expect(hasHit(collector.written(), preview_base_id + 5010));
 }
 

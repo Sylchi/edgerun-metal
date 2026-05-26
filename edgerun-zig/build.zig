@@ -472,30 +472,6 @@ pub fn build(b: *std.Build) void {
     };
     const install_app_runtime = b.addInstallArtifact(app_runtime, .{});
     const install_web_app_runtime = b.addInstallFile(app_runtime.getEmittedBin(), "web/a.wasm");
-    const keyboard_driver = b.addExecutable(.{
-        .name = "edgerun-keyboard-driver",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/wasm_keyboard_driver.zig"),
-            .target = app_runtime_target,
-            .optimize = .ReleaseSmall,
-            .single_threaded = true,
-        }),
-    });
-    keyboard_driver.entry = .disabled;
-    keyboard_driver.export_memory = true;
-    keyboard_driver.root_module.export_symbol_names = &.{
-        "er_keyboard_driver_abi_version",
-        "er_keyboard_driver_source_name_ptr",
-        "er_keyboard_driver_source_name_len",
-        "er_keyboard_driver_event_ptr",
-        "er_keyboard_driver_event_len",
-        "er_keyboard_driver_event_capacity",
-        "er_keyboard_driver_reset",
-        "er_keyboard_driver_push_i8042_byte",
-    };
-    const install_keyboard_driver = b.addInstallArtifact(keyboard_driver, .{});
-    const keyboard_driver_step = b.step("keyboard-driver-wasm", "Build the Framework i8042 keyboard driver wasm");
-    keyboard_driver_step.dependOn(&install_keyboard_driver.step);
     const wasm_entry = b.addExecutable(.{
         .name = "edgerun-wasm-entry",
         .root_module = b.createModule(.{

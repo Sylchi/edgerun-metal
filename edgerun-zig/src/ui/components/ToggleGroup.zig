@@ -41,9 +41,7 @@ pub const ToggleGroup = struct {
         const labels = [_][]const u8{ self.first, self.second, toggle_group_third_label };
         return list_layout.measureSegments(&labels, constraints, .{
             .item_count = @intCast(toggle_group_item_count),
-            .height = preferred_toggle_group.h,
             .padding = toggle_text_padding,
-            .min_width = preferred_toggle_group.w / @as(f32, @floatFromInt(toggle_group_item_count)),
         });
     }
 
@@ -89,24 +87,12 @@ fn segmentPaint(options: RenderOptions) list_layout.SegmentPaint {
 }
 
 fn itemBounds(bounds: ui.Rect, index: usize) ui.Rect {
-    const item_w = switch (index) {
-        1 => toggle_group_middle_w,
-        else => toggle_group_side_w,
-    };
-    const item_x = switch (index) {
-        0 => bounds.x,
-        1 => bounds.x + toggle_group_side_w,
-        else => bounds.x + toggle_group_side_w + toggle_group_middle_w,
-    };
-    return ui.Rect.init(item_x, bounds.y, item_w, bounds.h);
+    return list_layout.equalSegmentBounds(bounds, index, toggle_group_item_count);
 }
 
 pub const toggle_group_item_count: u32 = 3;
-const toggle_group_side_w: f32 = 48.0;
-const toggle_group_middle_w: f32 = 64.0;
 const toggle_group_third_label = "Right";
 const toggle_text_padding: f32 = 8.0;
-pub const preferred_toggle_group = ui.Size{ .w = 180.0, .h = 36.0 };
 
 test "toggle group component serializes to canonical object and deserializes" {
     const group = ToggleGroup{ .id = 550, .first = "Left", .second = "Center", .active = 1 };
@@ -146,6 +132,6 @@ test "toggle group measurement follows segment labels" {
     const short_measured = short.measure(.{}, .{});
     const long_measured = long.measure(.{}, .{});
 
-    try std.testing.expectEqual(preferred_toggle_group.w, short_measured.min.w);
+    try std.testing.expect(short_measured.min.w < short_measured.preferred.w);
     try std.testing.expect(long_measured.preferred.w > short_measured.preferred.w);
 }

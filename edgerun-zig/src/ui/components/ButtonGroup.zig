@@ -38,9 +38,7 @@ pub const ButtonGroup = struct {
         const labels = [_][]const u8{ self.first, self.second };
         return list_layout.measureSegments(&labels, constraints, .{
             .item_count = @intCast(group_item_count),
-            .height = preferred_button_group.h,
             .padding = toggle_text_padding,
-            .min_width = preferred_button_group.w / @as(f32, @floatFromInt(group_item_count)),
         });
     }
 
@@ -91,7 +89,6 @@ fn segmentBounds(bounds: ui.Rect, index: usize) ui.Rect {
 
 const group_item_count: u16 = 2;
 const toggle_text_padding: f32 = 8.0;
-pub const preferred_button_group = ui.Size{ .w = 160.0, .h = 36.0 };
 
 test "button group component serializes to canonical object and deserializes" {
     const group = ButtonGroup{ .id = 90, .first = "Left", .second = "Right", .active = 1 };
@@ -129,6 +126,6 @@ test "button group measurement follows segment labels" {
     const short_measured = short.measure(.{}, .{});
     const long_measured = long.measure(.{}, .{});
 
-    try std.testing.expectEqual(preferred_button_group.w, short_measured.min.w);
+    try std.testing.expect(short_measured.min.w < short_measured.preferred.w);
     try std.testing.expect(long_measured.preferred.w > short_measured.preferred.w);
 }
