@@ -569,6 +569,7 @@ pub const Node = union(enum) {
     hover_card: struct { id: u32, trigger: []const u8, content: []const u8 },
     input_otp: struct { id: u32, value: []const u8 },
     button: struct { id: u32, label: []const u8, variant: u16 = 0, leading_icon: u16 = 0, trailing_icon: u16 = 0 },
+    icon_button: struct { id: u32, label: []const u8, icon: u16, variant: u16 = 0 },
     button_group: struct { id: u32, first: []const u8, second: []const u8, active: u16 },
     toggle_group: struct { id: u32, first: []const u8, second: []const u8, active: u16 },
     toggle: struct { id: u32, label: []const u8, pressed: bool },
@@ -629,6 +630,7 @@ pub const Node = union(enum) {
             .hover_card => .{ .w = 240, .h = 52 },
             .input_otp => .{ .w = 200, .h = 36 },
             .button => .{ .w = 112, .h = 36 },
+            .icon_button => .{ .w = 36, .h = 36 },
             .button_group => .{ .w = 160, .h = 36 },
             .toggle_group => .{ .w = 180, .h = 36 },
             .toggle => .{ .w = 96, .h = 36 },
@@ -803,6 +805,10 @@ pub fn buttonVariantNode(id: u32, label: []const u8, variant: u16) Node {
 
 pub fn buttonDetailNode(id: u32, label: []const u8, variant: u16, leading_icon: u16, trailing_icon: u16) Node {
     return .{ .button = .{ .id = id, .label = label, .variant = variant, .leading_icon = leading_icon, .trailing_icon = trailing_icon } };
+}
+
+pub fn iconButtonNode(id: u32, label: []const u8, icon_value: u16, variant: u16) Node {
+    return .{ .icon_button = .{ .id = id, .label = label, .icon = icon_value, .variant = variant } };
 }
 
 pub fn buttonGroupNode(id: u32, first: []const u8, second: []const u8, active: u16) Node {
@@ -1230,7 +1236,7 @@ fn renderNode(scene: *Scene, node: Node, bounds: Rect, style: Style) RenderError
     switch (node) {
         .rect => |rect_node| try scene.push(.{ .rect = .{ .bounds = bounds, .color = rect_node.color } }),
         .text => |text_node| try scene.push(.{ .text = .{ .origin = bounds, .value = text_node.value, .color = text_node.color orelse style.text } }),
-        .accordion, .alert, .alert_dialog, .aspect_ratio, .calendar, .carousel, .chart, .combobox, .card, .empty, .badge, .avatar, .kbd, .label, .separator, .scroll_area, .skeleton, .spinner, .breadcrumb, .menubar, .navigation_menu, .command, .context_menu, .dialog, .direction, .drawer, .dropdown_menu, .field, .hover_card, .input_otp, .button, .button_group, .toggle_group, .toggle, .input, .input_group, .textarea, .select, .checkbox, .radio_group, .switch_control, .pagination, .popover, .resizable, .sheet, .sidebar, .progress, .slider, .tabs, .table, .tooltip, .toast, .row_item => return error.UnsupportedComponent,
+        .accordion, .alert, .alert_dialog, .aspect_ratio, .calendar, .carousel, .chart, .combobox, .card, .empty, .badge, .avatar, .kbd, .label, .separator, .scroll_area, .skeleton, .spinner, .breadcrumb, .menubar, .navigation_menu, .command, .context_menu, .dialog, .direction, .drawer, .dropdown_menu, .field, .hover_card, .input_otp, .button, .icon_button, .button_group, .toggle_group, .toggle, .input, .input_group, .textarea, .select, .checkbox, .radio_group, .switch_control, .pagination, .popover, .resizable, .sheet, .sidebar, .progress, .slider, .tabs, .table, .tooltip, .toast, .row_item => return error.UnsupportedComponent,
         .slot => |slot_node| try renderNode(scene, slot_node.child.*, bounds, style),
         .stack => |layout| try renderStack(scene, layout, bounds, style),
     }

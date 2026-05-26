@@ -31,8 +31,7 @@ pub const Field = struct {
 
     pub fn measure(self: Field, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = self;
-        _ = options;
-        return component_render.measureFixed(component_render.preferred_field, constraints);
+        return component_render.measureField(constraints, options);
     }
 
     pub fn toObject(self: Field, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -78,4 +77,29 @@ test "field component renders label input and hit region" {
     try std.testing.expect(component_test.hasText(scene.written(), "m@example.com"));
     try std.testing.expectEqual(@as(usize, 1), collector.written().len);
     try std.testing.expectEqual(@as(u32, 330), collector.written()[0].id);
+}
+
+test "field component renders helper and invalid validation text" {
+    const field = Field{ .id = 330, .label = "Email", .placeholder = "m@example.com" };
+    var commands: [24]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+
+    try field.render(&scene, ui.Rect.init(0, 0, 220, 74), .{
+        .validation = .{ .state = .invalid, .message = "Use a work email" },
+    });
+
+    const message = component_test.textCommand(scene.written(), "Use a work email").?;
+    try std.testing.expectEqual(common.state_invalid_border, message.text.color);
+    try std.testing.expect(component_test.hasRectColor(scene.written(), common.state_invalid_border));
+}
+
+test "field component measurement reserves helper text height" {
+    const field = Field{ .id = 330, .label = "Email", .placeholder = "m@example.com" };
+    const plain = field.measure(.{}, .{});
+    const helper = field.measure(.{}, .{
+        .validation = .{ .state = .helper, .message = "Visible to your team" },
+    });
+
+    try std.testing.expectEqual(component_render.preferred_field.h, plain.preferred.h);
+    try std.testing.expectEqual(component_render.preferred_field_with_validation.h, helper.preferred.h);
 }

@@ -117,6 +117,7 @@ pub const PreviewKind = enum {
     empty,
     field,
     hover_card,
+    icon_button,
     input,
     input_group,
     input_otp,
@@ -190,6 +191,7 @@ pub const component_catalog = blk: {
         componentSpec("Empty", "empty", .feedback, "Empty", "empty_state", .empty),
         componentSpec("Field", "field", .form, "Field", "field_node", .field),
         componentSpec("Hover Card", "hover-card", .overlay, "HoverCard", "hover_card_node", .hover_card),
+        componentSpec("Icon Button", "icon-button", .foundation, "IconButton", "icon_button_node", .icon_button),
         componentSpec("Input", "input", .form, "Input", "field_node", .input),
         componentSpec("Input Group", "input-group", .form, "InputGroup", "input_group_node", .input_group),
         componentSpec("Input OTP", "input-otp", .form, "InputOTP", "input_otp_node", .input_otp),
@@ -334,6 +336,7 @@ const component_routes = [_]Route{
     .{ .slug = "empty", .route = "/docs/components/empty" },
     .{ .slug = "field", .route = "/docs/components/field" },
     .{ .slug = "hover-card", .route = "/docs/components/hover-card" },
+    .{ .slug = "icon-button", .route = "/docs/components/icon-button" },
     .{ .slug = "input", .route = "/docs/components/input" },
     .{ .slug = "input-group", .route = "/docs/components/input-group" },
     .{ .slug = "input-otp", .route = "/docs/components/input-otp" },
@@ -627,6 +630,7 @@ fn renderReferencePreview(scene: *ui.Scene, collector: *interaction.Collector, b
         .card,
         .empty,
         .checkbox,
+        .icon_button,
         .input,
         .item,
         .kbd,
@@ -703,6 +707,7 @@ fn primitivePreview(kind: PreviewKind, id: u32) PrimitivePreview {
         .empty => .{ .empty = .{ .title = "No results", .detail = "Try another filter." } },
         .field => .{ .field = .{ .id = id, .label = "Email", .placeholder = "m@example.com" } },
         .hover_card => .{ .hover_card = .{ .id = id, .trigger = "Hover", .content = "@shadcn" } },
+        .icon_button => .{ .icon_button = .{ .id = id, .label = "Search", .icon_value = .search } },
         .checkbox => .{ .checkbox = .{ .id = id, .label = "Accept terms", .checked = true } },
         .combobox => .{ .combobox = .{ .id = id, .placeholder = "Search framework...", .selected = "React" } },
         .command => .{ .command = .{ .id = id, .placeholder = "Type a command..." } },
@@ -883,7 +888,7 @@ fn hovered(bounds: ui.Rect) bool {
 }
 
 test "component gallery catalog is the authoritative component registry" {
-    try std.testing.expectEqual(@as(usize, 58), component_catalog.len);
+    try std.testing.expectEqual(@as(usize, 59), component_catalog.len);
     try std.testing.expectEqualStrings("/docs/components/input-group", findBySlug("input-group").?.route);
     try std.testing.expectEqualStrings("Button", findBySourceComponent("Button").?.source_component);
     try std.testing.expectEqual(@as(usize, 7), indexBySlug("button").?);
@@ -895,8 +900,9 @@ test "component gallery catalog is the authoritative component registry" {
 
 test "component gallery catalog entries render reference previews with canonical components" {
     var commands: [2048]ui.Command = undefined;
+    var clips: [128]ui.Rect = undefined;
     var regions: [256]interaction.Region = undefined;
-    var scene = ui.Scene.init(&commands);
+    var scene = ui.Scene.initWithClips(&commands, &clips);
     var collector = interaction.Collector.init(&regions);
     var rendered: usize = 0;
 
@@ -924,8 +930,9 @@ test "component gallery preview path validates canonical component object" {
     const decoded = try components.Component.fromObject(canonical);
 
     var commands: [16]ui.Command = undefined;
+    var clips: [4]ui.Rect = undefined;
     var regions: [4]interaction.Region = undefined;
-    var scene = ui.Scene.init(&commands);
+    var scene = ui.Scene.initWithClips(&commands, &clips);
     var collector = interaction.Collector.init(&regions);
     try renderComponentPreview(&scene, &collector, ui.Rect.init(0, 0, 140, 36), source);
 
@@ -939,8 +946,9 @@ test "component gallery preview path validates canonical component object" {
 
 test "component gallery renders component wall commands and interaction regions" {
     var commands: [4096]ui.Command = undefined;
+    var clips: [128]ui.Rect = undefined;
     var regions: [512]interaction.Region = undefined;
-    var scene = ui.Scene.init(&commands);
+    var scene = ui.Scene.initWithClips(&commands, &clips);
     var collector = interaction.Collector.init(&regions);
     try renderComponentGallery(&scene, &collector, ui.Rect.init(0, 0, 1440, 940), .{});
 
@@ -956,8 +964,9 @@ test "component gallery renders component wall commands and interaction regions"
 
 test "component gallery selected route renders selected component panel" {
     var commands: [4096]ui.Command = undefined;
+    var clips: [128]ui.Rect = undefined;
     var regions: [512]interaction.Region = undefined;
-    var scene = ui.Scene.init(&commands);
+    var scene = ui.Scene.initWithClips(&commands, &clips);
     var collector = interaction.Collector.init(&regions);
     const index = indexBySlug("button").?;
     try renderComponentGallery(&scene, &collector, ui.Rect.init(0, 0, 1440, 940), .{ .selected_component_index = index });
@@ -986,8 +995,9 @@ test "component gallery derives responsive catalog columns" {
 
 test "component gallery scrolls through later catalog cards" {
     var commands: [4096]ui.Command = undefined;
+    var clips: [128]ui.Rect = undefined;
     var regions: [512]interaction.Region = undefined;
-    var scene = ui.Scene.init(&commands);
+    var scene = ui.Scene.initWithClips(&commands, &clips);
     var collector = interaction.Collector.init(&regions);
     try renderComponentGallery(&scene, &collector, ui.Rect.init(0, 0, 900, 720), .{ .scroll_y = 4096 });
 
@@ -997,14 +1007,16 @@ test "component gallery scrolls through later catalog cards" {
 
 test "component gallery hover raises card shadow without changing interaction coverage" {
     var base_commands: [4096]ui.Command = undefined;
+    var base_clips: [128]ui.Rect = undefined;
     var base_regions: [512]interaction.Region = undefined;
-    var base_scene = ui.Scene.init(&base_commands);
+    var base_scene = ui.Scene.initWithClips(&base_commands, &base_clips);
     var base_collector = interaction.Collector.init(&base_regions);
     try renderComponentGallery(&base_scene, &base_collector, ui.Rect.init(0, 0, 1440, 940), .{});
 
     var hover_commands: [4096]ui.Command = undefined;
+    var hover_clips: [128]ui.Rect = undefined;
     var hover_regions: [512]interaction.Region = undefined;
-    var hover_scene = ui.Scene.init(&hover_commands);
+    var hover_scene = ui.Scene.initWithClips(&hover_commands, &hover_clips);
     var hover_collector = interaction.Collector.init(&hover_regions);
     try renderComponentGallery(&hover_scene, &hover_collector, ui.Rect.init(0, 0, 1440, 940), .{ .hover_x = 260, .hover_y = 210 });
 
@@ -1015,8 +1027,9 @@ test "component gallery hover raises card shadow without changing interaction co
 
 test "component gallery buttons center labels through shared primitive" {
     var commands: [16]ui.Command = undefined;
+    var clips: [4]ui.Rect = undefined;
     var regions: [8]interaction.Region = undefined;
-    var scene = ui.Scene.init(&commands);
+    var scene = ui.Scene.initWithClips(&commands, &clips);
     var collector = interaction.Collector.init(&regions);
     const bounds = ui.Rect.init(10, 20, 140, 34);
     try renderComponentPreview(&scene, &collector, bounds, .{ .button = .{ .id = preview_base_id + 5010, .label = "Continue" } });

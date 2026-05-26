@@ -59,6 +59,14 @@ pub fn hasIcon(commands: []const ui.Command, icon_id: u32) bool {
     return false;
 }
 
+pub fn iconCommand(commands: []const ui.Command, icon_id: u32) ?ui.Command {
+    for (commands) |command| switch (command) {
+        .icon_quad => |quad| if (quad.icon_id == icon_id) return command,
+        else => {},
+    };
+    return null;
+}
+
 pub fn iconCount(commands: []const ui.Command, icon_id: u32) usize {
     var count: usize = 0;
     for (commands) |command| switch (command) {

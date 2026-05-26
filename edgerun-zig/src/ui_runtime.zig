@@ -14,6 +14,7 @@ pub const ActionKind = enum(u8) {
     drag_moved,
     dropped,
     reordered,
+    dismissed,
 };
 
 pub const Key = enum(u8) {
@@ -109,12 +110,45 @@ pub const State = struct {
         };
     }
 
+    pub fn keyDownModal(self: *State, regions: []const interaction.Region, scope: ModalScope, key: Key) Action {
+        return switch (key) {
+            .tab, .arrow_down, .arrow_right => self.focusNextInModal(regions, scope),
+            .shift_tab, .arrow_up, .arrow_left => self.focusPreviousInModal(regions, scope),
+            .enter, .space => self.activateFocusedInModal(scope),
+            .escape => self.dismissModal(),
+        };
+    }
+
+    pub fn pointerDownModal(self: *State, commands: []const ui.Command, regions: []const interaction.Region, scope: ModalScope, x: f32, y: f32) Action {
+        if (!scope.bounds.containsExclusive(x, y)) return self.dismissModal();
+        const hit = hitTestInModal(regions, scope, x, y);
+        self.hovered = hit;
+        self.active = hit;
+        self.focused = hit orelse self.focused;
+        self.drag = if (input.dragSourceAt(commands, x, y)) |source| .{
+            .source = source,
+            .start_x = x,
+            .start_y = y,
+            .current_x = x,
+            .current_y = y,
+        } else null;
+        return if (hit) |value| .{ .kind = .hovered, .hit = value } else Action.none();
+    }
+
     pub fn focusNext(self: *State, regions: []const interaction.Region) Action {
         return self.focusByStep(regions, .forward);
     }
 
     pub fn focusPrevious(self: *State, regions: []const interaction.Region) Action {
         return self.focusByStep(regions, .backward);
+    }
+
+    pub fn focusNextInModal(self: *State, regions: []const interaction.Region, scope: ModalScope) Action {
+        return self.focusModalByStep(regions, scope, .forward);
+    }
+
+    pub fn focusPreviousInModal(self: *State, regions: []const interaction.Region, scope: ModalScope) Action {
+        return self.focusModalByStep(regions, scope, .backward);
     }
 
     pub fn clearFocus(self: *State) Action {
@@ -131,6 +165,15 @@ pub const State = struct {
         return Action.none();
     }
 
+    fn activateFocusedInModal(self: *State, scope: ModalScope) Action {
+        if (self.focused) |hit| {
+            if (!scope.contains(hit)) return Action.none();
+            self.active = hit;
+            return .{ .kind = .activated, .hit = hit };
+        }
+        return Action.none();
+    }
+
     fn focusByStep(self: *State, regions: []const interaction.Region, direction: FocusDirection) Action {
         if (regions.len == 0) {
             self.focused = null;
@@ -140,6 +183,24 @@ pub const State = struct {
         self.focused = regions[next_index];
         self.hovered = self.focused;
         return .{ .kind = .focused, .hit = self.focused };
+    }
+
+    fn focusModalByStep(self: *State, regions: []const interaction.Region, scope: ModalScope, direction: FocusDirection) Action {
+        const next_index = nextFocusIndexInModal(regions, self.focused, scope, direction) orelse {
+            self.focused = null;
+            return Action.none();
+        };
+        self.focused = regions[next_index];
+        self.hovered = self.focused;
+        return .{ .kind = .focused, .hit = self.focused };
+    }
+
+    fn dismissModal(self: *State) Action {
+        self.hovered = null;
+        self.active = null;
+        self.focused = null;
+        self.drag = null;
+        return .{ .kind = .dismissed };
     }
 
     pub fn pointerMove(self: *State, commands: []const ui.Command, regions: []const interaction.Region, x: f32, y: f32) Action {
@@ -190,6 +251,16 @@ pub const State = struct {
     }
 };
 
+pub const ModalScope = struct {
+    bounds: ui.Rect,
+
+    pub fn contains(self: ModalScope, region: interaction.Region) bool {
+        const right = region.bounds.x + region.bounds.w;
+        const bottom = region.bounds.y + region.bounds.h;
+        return self.bounds.containsInclusive(region.bounds.x, region.bounds.y) and self.bounds.containsInclusive(right, bottom);
+    }
+};
+
 const FocusDirection = enum {
     forward,
     backward,
@@ -208,6 +279,31 @@ fn nextFocusIndex(regions: []const interaction.Region, current: ?interaction.Reg
     };
 }
 
+fn nextFocusIndexInModal(regions: []const interaction.Region, current: ?interaction.Region, scope: ModalScope, direction: FocusDirection) ?usize {
+    if (regions.len == 0) return null;
+    const current_index = if (current) |value| indexOfRegionInModal(regions, value, scope) else null;
+    return switch (direction) {
+        .forward => nextScopedIndexForward(regions, scope, if (current_index) |index| index + 1 else 0),
+        .backward => nextScopedIndexBackward(regions, scope, if (current_index) |index| index else regions.len),
+    };
+}
+
+fn nextScopedIndexForward(regions: []const interaction.Region, scope: ModalScope, start: usize) ?usize {
+    for (0..regions.len) |offset| {
+        const index = (start + offset) % regions.len;
+        if (scope.contains(regions[index])) return index;
+    }
+    return null;
+}
+
+fn nextScopedIndexBackward(regions: []const interaction.Region, scope: ModalScope, start: usize) ?usize {
+    for (0..regions.len) |offset| {
+        const index = (start + regions.len - 1 - offset) % regions.len;
+        if (scope.contains(regions[index])) return index;
+    }
+    return null;
+}
+
 fn indexOfRegion(regions: []const interaction.Region, value: interaction.Region) ?usize {
     for (regions, 0..) |region, index| {
         if (sameHit(region, value)) return index;
@@ -215,9 +311,27 @@ fn indexOfRegion(regions: []const interaction.Region, value: interaction.Region)
     return null;
 }
 
+fn indexOfRegionInModal(regions: []const interaction.Region, value: interaction.Region, scope: ModalScope) ?usize {
+    for (regions, 0..) |region, index| {
+        if (scope.contains(region) and sameHit(region, value)) return index;
+    }
+    return null;
+}
+
 fn matchingRegion(regions: []const interaction.Region, value: interaction.Region) ?interaction.Region {
     for (regions) |region| {
         if (sameHit(region, value)) return region;
+    }
+    return null;
+}
+
+fn hitTestInModal(regions: []const interaction.Region, scope: ModalScope, x: f32, y: f32) ?interaction.Region {
+    var index = regions.len;
+    while (index > 0) {
+        index -= 1;
+        const region = regions[index];
+        if (!scope.contains(region)) continue;
+        if (region.bounds.containsExclusive(x, y)) return region;
     }
     return null;
 }
@@ -316,6 +430,54 @@ test "runtime focus refresh tracks matching region bounds and clears stale focus
     try std.testing.expectEqual(@as(f32, 30.0), state.focused.?.bounds.y);
 
     state.refreshFocus(&.{});
+    try std.testing.expectEqual(@as(u32, 0), state.focusHitId());
+}
+
+test "runtime modal focus traps keyboard navigation inside modal bounds" {
+    var regions: [4]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
+    try collector.addHit(ui.Rect.init(0, 0, 40, 30), .button, 1);
+    try collector.addHit(ui.Rect.init(100, 100, 40, 30), .button, 2);
+    try collector.addHit(ui.Rect.init(100, 140, 40, 30), .input, 3);
+    try collector.addHit(ui.Rect.init(0, 40, 40, 30), .button, 4);
+
+    const scope = ModalScope{ .bounds = ui.Rect.init(90, 90, 120, 120) };
+    var state = State{};
+    var action = state.keyDownModal(collector.written(), scope, .tab);
+    try std.testing.expectEqual(ActionKind.focused, action.kind);
+    try std.testing.expectEqual(@as(u32, 2), action.hit.?.id);
+
+    action = state.keyDownModal(collector.written(), scope, .tab);
+    try std.testing.expectEqual(@as(u32, 3), action.hit.?.id);
+
+    action = state.keyDownModal(collector.written(), scope, .tab);
+    try std.testing.expectEqual(@as(u32, 2), action.hit.?.id);
+
+    action = state.keyDownModal(collector.written(), scope, .shift_tab);
+    try std.testing.expectEqual(@as(u32, 3), action.hit.?.id);
+}
+
+test "runtime modal pointer and escape dismissal clear active focus" {
+    var commands: [2]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+    var regions: [2]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
+    try collector.addHit(ui.Rect.init(0, 0, 40, 30), .button, 1);
+    try collector.addHit(ui.Rect.init(100, 100, 40, 30), .button, 2);
+
+    const scope = ModalScope{ .bounds = ui.Rect.init(90, 90, 120, 120) };
+    var state = State{};
+    var action = state.pointerDownModal(scene.written(), collector.written(), scope, 110, 110);
+    try std.testing.expectEqual(ActionKind.hovered, action.kind);
+    try std.testing.expectEqual(@as(u32, 2), state.focusHitId());
+
+    action = state.pointerDownModal(scene.written(), collector.written(), scope, 10, 10);
+    try std.testing.expectEqual(ActionKind.dismissed, action.kind);
+    try std.testing.expectEqual(@as(u32, 0), state.focusHitId());
+
+    _ = state.pointerDownModal(scene.written(), collector.written(), scope, 110, 110);
+    action = state.keyDownModal(collector.written(), scope, .escape);
+    try std.testing.expectEqual(ActionKind.dismissed, action.kind);
     try std.testing.expectEqual(@as(u32, 0), state.focusHitId());
 }
 

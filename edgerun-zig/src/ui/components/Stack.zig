@@ -35,6 +35,10 @@ pub fn Stack(comptime Component: type) type {
             return component_render.collectStackInteractions(Component, collector, bounds, self, options);
         }
 
+        pub fn collectAccessibility(self: Self, tree: *common.AccessibilityTree, bounds: ui.Rect, options: RenderOptions) common.AccessibilityError!void {
+            return component_render.collectStackAccessibility(Component, tree, bounds, self, options);
+        }
+
         pub fn node(self: Self, out_nodes: []ui.Node) ?ui.Node {
             if (out_nodes.len < self.children.len) return null;
             for (self.children, 0..) |child, index| {

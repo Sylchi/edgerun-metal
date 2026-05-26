@@ -12,19 +12,19 @@ This checklist tracks the large UI/UX work items for the current Zig UI path. Ea
 - [x] Font-metric-backed text measurement.
 - [x] Robust truncation and wrapping behavior.
 - [x] Component accessibility metadata.
-- [ ] Accessibility tree emitter.
-- [ ] Mobile breakpoint layout behavior.
-- [ ] First-class overlay host and z-order rules.
-- [ ] Modal focus trapping and dismissal behavior.
-- [ ] Toast manager with stacking and lifecycle.
-- [ ] Form validation and helper UX primitives.
-- [ ] Input editing behavior.
-- [ ] ScrollArea scrolling behavior.
-- [ ] Useful Table behavior.
-- [ ] Useful Command palette behavior.
-- [ ] Canonical IconButton component.
-- [ ] Button and input size variants.
-- [ ] Shared component chrome helpers.
+- [x] Accessibility tree emitter.
+- [x] Mobile breakpoint layout behavior.
+- [x] First-class overlay host and z-order rules.
+- [x] Modal focus trapping and dismissal behavior.
+- [x] Toast manager with stacking and lifecycle.
+- [x] Form validation and helper UX primitives.
+- [x] Input editing behavior.
+- [x] ScrollArea scrolling behavior.
+- [x] Useful Table behavior.
+- [x] Useful Command palette behavior.
+- [x] Canonical IconButton component.
+- [x] Button and input size variants.
+- [x] Shared component chrome helpers.
 - [ ] Real application shell component.
 - [ ] Deterministic animation states.
 - [ ] Blog learning progress UX.

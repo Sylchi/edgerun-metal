@@ -34,8 +34,7 @@ pub const Button = struct {
     }
 
     pub fn measure(self: Button, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
-        _ = options;
-        return measureButton(self.label, self.leading_icon, self.trailing_icon, constraints);
+        return measureButtonWithSize(self.label, self.leading_icon, self.trailing_icon, options.control_size, constraints);
     }
 
     pub fn toObject(self: Button, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -57,11 +56,61 @@ pub const Button = struct {
     }
 };
 
+pub const IconButton = struct {
+    id: u32,
+    label: []const u8,
+    icon_value: icon.Icon,
+    variant: common.ButtonVariant = .outline,
+
+    pub fn node(self: IconButton) ui.Node {
+        return ui.iconButtonNode(self.id, self.label, common.optionalIconTag(self.icon_value), variantTag(self.variant));
+    }
+
+    pub fn render(self: IconButton, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
+        const paint = buttonPaint(self.variant, options);
+        if (paint.fill) |fill| try scene.pushRect(bounds, fill, .fill, radius, 0.0);
+        if (paint.border) |border| try scene.pushRect(bounds, border, .border, radius, 0.0);
+        try scene.pushIconQuad(.{
+            .bounds = iconButtonIconBounds(bounds),
+            .icon_id = icon.id(self.icon_value),
+            .color = paint.text,
+        });
+    }
+
+    pub fn collectInteractions(self: IconButton, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+        try collector.addHit(bounds, .button, self.id);
+    }
+
+    pub fn measure(self: IconButton, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
+        _ = self;
+        const size = iconButtonSize(options.control_size);
+        return component_render.measureFixed(.{ .w = size, .h = size }, constraints);
+    }
+
+    pub fn toObject(self: IconButton, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
+        var writer = component_codec.Writer.init(ui_out, 1, 1, .column, 0, 0) orelse return null;
+        if (!self.writeRecord(&writer, 0)) return null;
+        return writer.objectNode(object_out, component_codec.requirements(), epoch);
+    }
+
+    pub fn writeRecord(self: IconButton, writer: *component_codec.Writer, index: usize) bool {
+        const label_ref = writer.string(self.label) orelse return false;
+        return writer.record(index, .icon_button, self.id, label_ref, .{ .offset = variantTag(self.variant), .len = common.optionalIconTag(self.icon_value) });
+    }
+
+    pub fn fromView(view: object.View) Error!IconButton {
+        return switch (try component_codec.singleNode(view)) {
+            .icon_button => |button| .{ .id = button.id, .label = button.label, .variant = try variantFromTag(button.variant), .icon_value = (try common.optionalIconFromTag(button.icon)) orelse return error.Corrupt },
+            else => error.UnsupportedComponent,
+        };
+    }
+};
+
 fn renderButton(scene: *ui.Scene, bounds: ui.Rect, button: Button, options: RenderOptions) ui.RenderError!void {
     const paint = buttonPaint(button.variant, options);
     if (paint.fill) |fill| try scene.pushRect(bounds, fill, .fill, radius, 0.0);
     if (paint.border) |border| try scene.pushRect(bounds, border, .border, radius, 0.0);
-    try renderContent(scene, bounds, button.label, paint.text, button.leading_icon, button.trailing_icon);
+    try renderContent(scene, bounds, button.label, paint.text, button.leading_icon, button.trailing_icon, labelPadding(options.control_size));
 }
 
 pub fn variantTag(variant: common.ButtonVariant) u16 {
@@ -96,32 +145,41 @@ fn collectButtonInteractions(collector: *interaction.Collector, bounds: ui.Rect,
 }
 
 pub fn preferredWidth(label: []const u8, leading_icon: ?icon.Icon, trailing_icon: ?icon.Icon) f32 {
+    return preferredWidthForSize(label, leading_icon, trailing_icon, .default);
+}
+
+pub fn preferredWidthForSize(label: []const u8, leading_icon: ?icon.Icon, trailing_icon: ?icon.Icon, size: common.ControlSize) f32 {
     const icon_count: usize = @as(usize, @intFromBool(leading_icon != null)) + @as(usize, @intFromBool(trailing_icon != null));
-    return @max(min_width, estimatedLabelWidth(label) + iconClusterWidth(icon_count, label.len != 0) + label_padding * 2.0);
+    return @max(minWidth(size), estimatedLabelWidth(label) + iconClusterWidth(icon_count, label.len != 0) + labelPadding(size) * 2.0);
 }
 
 fn measureButton(label: []const u8, leading_icon: ?icon.Icon, trailing_icon: ?icon.Icon, constraints: layout.Constraints) layout.Measurement {
-    const preferred_width = preferredWidth(label, leading_icon, trailing_icon);
-    const preferred = component_render.constrainPreferredSize(.{ .w = preferred_width, .h = height }, constraints);
+    return measureButtonWithSize(label, leading_icon, trailing_icon, .default, constraints);
+}
+
+fn measureButtonWithSize(label: []const u8, leading_icon: ?icon.Icon, trailing_icon: ?icon.Icon, size: common.ControlSize, constraints: layout.Constraints) layout.Measurement {
+    const preferred_width = preferredWidthForSize(label, leading_icon, trailing_icon, size);
+    const preferred_height = buttonHeight(size);
+    const preferred = component_render.constrainPreferredSize(.{ .w = preferred_width, .h = preferred_height }, constraints);
     return layout.Measurement.flexible(
-        .{ .w = @min(min_width, preferred.w), .h = @min(height, preferred.h) },
+        .{ .w = @min(minWidth(size), preferred.w), .h = @min(preferred_height, preferred.h) },
         preferred,
-        .{ .w = max_width, .h = height },
+        .{ .w = max_width, .h = preferred_height },
     ).applyExact(constraints);
 }
 
-fn renderContent(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, text_color: ui.Color, leading_icon: ?icon.Icon, trailing_icon: ?icon.Icon) ui.RenderError!void {
+fn renderContent(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, text_color: ui.Color, leading_icon: ?icon.Icon, trailing_icon: ?icon.Icon, padding: f32) ui.RenderError!void {
     const has_leading = leading_icon != null;
     const has_trailing = trailing_icon != null;
     if (!has_leading and !has_trailing) {
-        const text_bounds = textBounds(bounds);
+        const text_bounds = textBounds(bounds, padding);
         try scene.pushAlignedText(text_bounds, text_metrics.fitPrefix(label, text_metrics.button_label_px, text_bounds.w), text_color, .center);
         return;
     }
 
     const has_label = label.len != 0;
     const icon_count: usize = @as(usize, @intFromBool(has_leading)) + @as(usize, @intFromBool(has_trailing));
-    const margin = if (has_label) @min(content_min_x, bounds.w * 0.5) else 0.0;
+    const margin = if (has_label) @min(padding, bounds.w * 0.5) else 0.0;
     const available_w = @max(1.0, bounds.w - margin * 2.0);
     const icons_w = iconClusterWidth(icon_count, has_label);
     const label_w = if (has_label) @max(1.0, @min(estimatedLabelWidth(label), @max(1.0, available_w - icons_w))) else 0.0;
@@ -156,9 +214,13 @@ fn renderContent(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, text_colo
     }
 }
 
-fn textBounds(bounds: ui.Rect) ui.Rect {
-    const margin = @min(label_padding, bounds.w * 0.5);
+fn textBounds(bounds: ui.Rect, padding: f32) ui.Rect {
+    const margin = @min(padding, bounds.w * 0.5);
     return ui.Rect.init(bounds.x + margin, bounds.y + (bounds.h - label_height) * 0.5, @max(1.0, bounds.w - margin * 2.0), label_height);
+}
+
+fn iconButtonIconBounds(bounds: ui.Rect) ui.Rect {
+    return ui.Rect.init(bounds.x + (bounds.w - icon_size) * 0.5, bounds.y + (bounds.h - icon_size) * 0.5, icon_size, icon_size);
 }
 
 fn estimatedLabelWidth(label: []const u8) f32 {
@@ -199,12 +261,44 @@ pub const label_padding: f32 = 16.0;
 const label_min_width: f32 = 8.0;
 const icon_size: f32 = 18.0;
 const icon_gap: f32 = 8.0;
-const content_min_x: f32 = 14.0;
 const min_width: f32 = 44.0;
+const icon_button_size: f32 = 36.0;
 const max_width: f32 = 4096.0;
 const button_danger = ui.Color{ .r = 225, .g = 29, .b = 72 };
 const button_danger_text = ui.Color{ .r = 255, .g = 255, .b = 255 };
 const icon_pack_shift: u4 = 8;
+
+fn buttonHeight(size: common.ControlSize) f32 {
+    return switch (size) {
+        .small => 32.0,
+        .default => height,
+        .large => 44.0,
+    };
+}
+
+fn labelPadding(size: common.ControlSize) f32 {
+    return switch (size) {
+        .small => 12.0,
+        .default => label_padding,
+        .large => 20.0,
+    };
+}
+
+fn minWidth(size: common.ControlSize) f32 {
+    return switch (size) {
+        .small => 36.0,
+        .default => min_width,
+        .large => 52.0,
+    };
+}
+
+fn iconButtonSize(size: common.ControlSize) f32 {
+    return switch (size) {
+        .small => 32.0,
+        .default => icon_button_size,
+        .large => 44.0,
+    };
+}
 
 test "button component serializes to canonical object and deserializes" {
     const button = Button{ .id = 7, .label = "Run", .variant = .secondary, .leading_icon = .search, .trailing_icon = .chevron_right };
@@ -221,6 +315,39 @@ test "button component serializes to canonical object and deserializes" {
     try @import("std").testing.expectEqual(icon.Icon.chevron_right, decoded.trailing_icon.?);
 }
 
+test "icon button component serializes to canonical object and deserializes" {
+    const button = IconButton{ .id = 17, .label = "Search", .icon_value = .search, .variant = .ghost };
+    var ui_raw: [128]u8 = undefined;
+    var object_raw: [object.header_size + 128]u8 = undefined;
+
+    const canonical = button.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
+    const decoded = try IconButton.fromView(try object.View.decode(canonical));
+
+    try std.testing.expectEqual(@as(u32, 17), decoded.id);
+    try std.testing.expectEqualStrings("Search", decoded.label);
+    try std.testing.expectEqual(common.ButtonVariant.ghost, decoded.variant);
+    try std.testing.expectEqual(icon.Icon.search, decoded.icon_value);
+}
+
+test "icon button component renders centered icon and hit region" {
+    const button = IconButton{ .id = 18, .label = "Search", .icon_value = .search, .variant = .outline };
+    var commands: [8]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+    var regions: [1]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
+    const bounds = ui.Rect.init(4, 8, icon_button_size, icon_button_size);
+
+    try button.render(&scene, bounds, .{});
+    try button.collectInteractions(&collector, bounds);
+
+    const icon_command = component_test.iconCommand(scene.written(), icon.id(.search)).?;
+    try std.testing.expectEqual(bounds.x + (bounds.w - icon_size) * 0.5, icon_command.icon_quad.bounds.x);
+    try std.testing.expectEqual(bounds.y + (bounds.h - icon_size) * 0.5, icon_command.icon_quad.bounds.y);
+    try std.testing.expectEqual(@as(usize, 1), collector.written().len);
+    try std.testing.expectEqual(ui.HitKind.button, collector.written()[0].kind);
+    try std.testing.expectEqual(@as(u32, 18), collector.written()[0].id);
+}
+
 test "button component measurement follows label width" {
     const short = measureButton("Go", null, null, .{});
     const long = measureButton("Continue lesson", null, null, .{});
@@ -232,6 +359,21 @@ test "button component measurement follows label width" {
     try std.testing.expectEqual(height, long.preferred.h);
     try std.testing.expectEqual(@as(f32, 72.0), constrained.preferred.w);
     try std.testing.expectEqual(@as(f32, 24.0), constrained.preferred.h);
+}
+
+test "button component size variants adjust preferred height and padding" {
+    const button = Button{ .id = 7, .label = "Run" };
+    const small = button.measure(.{}, .{ .control_size = .small });
+    const regular = button.measure(.{}, .{});
+    const large = button.measure(.{}, .{ .control_size = .large });
+    const small_icon = (IconButton{ .id = 8, .label = "Search", .icon_value = .search }).measure(.{}, .{ .control_size = .small });
+    const large_icon = (IconButton{ .id = 9, .label = "Search", .icon_value = .search }).measure(.{}, .{ .control_size = .large });
+
+    try std.testing.expect(small.preferred.h < regular.preferred.h);
+    try std.testing.expect(large.preferred.h > regular.preferred.h);
+    try std.testing.expect(preferredWidthForSize("Run", null, null, .small) < preferredWidthForSize("Run", null, null, .large));
+    try std.testing.expect(small_icon.preferred.w < large_icon.preferred.w);
+    try std.testing.expect(small_icon.preferred.h < large_icon.preferred.h);
 }
 
 test "button component measurement uses font glyph widths" {

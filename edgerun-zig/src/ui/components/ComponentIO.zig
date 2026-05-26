@@ -57,6 +57,7 @@ pub fn writeRecord(comptime Component: type, writer: *codec.Writer, index: usize
         .hover_card => |hover_card| hover_card.writeRecord(writer, index),
         .input_otp => |otp| otp.writeRecord(writer, index),
         .button => |button| button.writeRecord(writer, index),
+        .icon_button => |button| button.writeRecord(writer, index),
         .button_group => |group| group.writeRecord(writer, index),
         .toggle_group => |group| group.writeRecord(writer, index),
         .toggle => |toggle| toggle.writeRecord(writer, index),

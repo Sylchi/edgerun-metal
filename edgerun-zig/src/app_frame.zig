@@ -9,6 +9,7 @@ const app_source = @import("app_source.zig");
 const icon = @import("icon.zig");
 const design = @import("app_design.zig");
 const ui = @import("ui.zig");
+const ui_overlay = @import("ui_overlay.zig");
 
 pub const State = struct {
     route: app_navigation.Route = .{},
@@ -64,7 +65,12 @@ pub fn render(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Re
         }),
         .source => try app_source.render(scene, collector, bounds, state.source),
     }
-    if (state.context_menu.open) try renderContextMenu(scene, collector, bounds, state.context_menu);
+    var overlay_commands: [overlay_command_capacity]ui.Command = undefined;
+    var overlay_regions: [overlay_region_capacity]interaction.Region = undefined;
+    var overlay_entries: [overlay_entry_capacity]ui_overlay.Entry = undefined;
+    var overlay_host = ui_overlay.Host.init(&overlay_commands, &overlay_regions, &overlay_entries);
+    if (state.context_menu.open) try renderContextMenu(&overlay_host, bounds, state.context_menu);
+    try overlay_host.flush(scene, collector);
 }
 
 pub fn contentHeight(width: f32, state: State) f32 {
@@ -83,7 +89,25 @@ pub fn contentHeight(width: f32, state: State) f32 {
     };
 }
 
-fn renderContextMenu(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, menu: ContextMenu) !void {
+const overlay_command_capacity: usize = 64;
+const overlay_region_capacity: usize = 32;
+const overlay_entry_capacity: usize = 8;
+
+fn renderContextMenu(host: *ui_overlay.Host, bounds: ui.Rect, menu: ContextMenu) !void {
+    var scrim = host.begin(.scrim);
+    try renderOverlayScrim(&scrim.scene, bounds);
+    try scrim.finish();
+
+    var panel_surface = host.begin(.menu);
+    try renderContextMenuPanel(&panel_surface.scene, &panel_surface.collector, bounds, menu);
+    try panel_surface.finish();
+}
+
+fn renderOverlayScrim(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
+    try scene.pushRect(ui.Rect.init(bounds.x, bounds.y, bounds.w, bounds.h), ui.Color{ .r = 0, .g = 0, .b = 0, .a = 24 }, .fill, 0.0, 0.0);
+}
+
+fn renderContextMenuPanel(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, menu: ContextMenu) !void {
     const palette = design.palette;
     const menu_w: f32 = 280.0;
     const menu_h: f32 = 88.0;
@@ -91,7 +115,6 @@ fn renderContextMenu(scene: *ui.Scene, collector: *interaction.Collector, bounds
     const x = std.math.clamp(menu.x, bounds.x + pad, bounds.x + @max(pad, bounds.w - menu_w - pad));
     const y = std.math.clamp(menu.y, bounds.y + pad, bounds.y + @max(pad, bounds.h - menu_h - pad));
     const panel = ui.Rect.init(x, y, menu_w, menu_h);
-    try scene.pushRect(ui.Rect.init(bounds.x, bounds.y, bounds.w, bounds.h), ui.Color{ .r = 0, .g = 0, .b = 0, .a = 24 }, .fill, 0.0, 0.0);
     try scene.pushRect(panel, palette.shadow, .shadow, design.surface_radius, 16.0);
     try scene.pushRect(panel, palette.panel, .fill, design.surface_radius, 0.0);
     try scene.pushRect(panel, palette.border, .border, design.surface_radius, 1.0);
