@@ -1,5 +1,6 @@
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
+const component_contract = @import("ComponentContract.zig");
 const icon = @import("../../icon.zig");
 const layout = @import("../../layouts/Types.zig");
 const object = @import("../../object.zig");
@@ -12,6 +13,8 @@ const primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
+pub const registration = component_contract.registration("icon", Icon);
+
 pub const IconSlot = union(enum) {
     none,
     leading: Icon,
@@ -20,12 +23,15 @@ pub const IconSlot = union(enum) {
     media: Icon,
 
     pub fn named(kind: SlotKind, value: icon.Icon) IconSlot {
-        const slot = Icon.named(value);
+        return of(kind, Icon.named(value));
+    }
+
+    pub fn of(kind: SlotKind, value: Icon) IconSlot {
         return switch (kind) {
-            .leading => .{ .leading = slot },
-            .trailing => .{ .trailing = slot },
-            .status => .{ .status = slot },
-            .media => .{ .media = slot },
+            .leading => .{ .leading = value },
+            .trailing => .{ .trailing = value },
+            .status => .{ .status = value },
+            .media => .{ .media = value },
         };
     }
 
@@ -61,7 +67,11 @@ pub const Icon = struct {
     }
 
     pub fn node(self: Icon) ui.Node {
-        return ui.iconNode(self.label, common.optionalIconTag(self.value));
+        return ui.iconNode(self.label, self.tag());
+    }
+
+    pub fn tag(self: Icon) u16 {
+        return common.optionalIconTag(self.value);
     }
 
     pub fn accessibility(self: Icon) common.Accessibility {
@@ -70,6 +80,10 @@ pub const Icon = struct {
 
     pub fn render(self: Icon, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         try renderIconGlyph(scene, bounds, self.value, options.style.text);
+    }
+
+    pub fn renderColor(self: Icon, scene: *ui.Scene, bounds: ui.Rect, color: ui.Color) ui.RenderError!void {
+        try renderIconGlyph(scene, bounds, self.value, color);
     }
 
     pub fn measure(self: Icon, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
@@ -100,15 +114,7 @@ pub const Icon = struct {
             .label = node_value.label,
         };
     }
-
-    pub fn renderGlyph(scene: *ui.Scene, bounds: ui.Rect, value: icon.Icon, color: ui.Color) ui.RenderError!void {
-        try renderIconGlyph(scene, bounds, value, color);
-    }
 };
-
-pub fn renderGlyph(scene: *ui.Scene, bounds: ui.Rect, value: icon.Icon, color: ui.Color) ui.RenderError!void {
-    try renderIconGlyph(scene, bounds, value, color);
-}
 
 fn renderIconGlyph(scene: *ui.Scene, bounds: ui.Rect, value: icon.Icon, color: ui.Color) ui.RenderError!void {
     const size = @max(1.0, @min(bounds.w, bounds.h));
@@ -128,6 +134,14 @@ test "icon component serializes to canonical object and deserializes" {
 
     try std.testing.expectEqual(icon.Icon.search, decoded.value);
     try std.testing.expectEqualStrings(icon.label(.search), decoded.label);
+}
+
+test "icon slot can be constructed from icon component value" {
+    const component = Icon.named(.code);
+    const slot = IconSlot.of(.leading, component);
+
+    try std.testing.expectEqual(component, slot.leading);
+    try std.testing.expectEqual(component.tag(), slot.tag());
 }
 
 test "icon component renders centered glyph" {

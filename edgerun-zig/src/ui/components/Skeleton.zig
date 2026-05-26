@@ -1,6 +1,7 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
+const component_contract = @import("ComponentContract.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
@@ -10,6 +11,8 @@ const component_primitives = @import("Primitives.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+
+pub const registration = component_contract.registration("skeleton", Skeleton);
 const measureFixed = component_primitives.measureFixed;
 
 pub const Skeleton = struct {

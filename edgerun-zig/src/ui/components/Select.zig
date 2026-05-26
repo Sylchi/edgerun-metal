@@ -1,6 +1,7 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
+const component_contract = @import("ComponentContract.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
@@ -9,10 +10,11 @@ const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
 const component_primitives = @import("Primitives.zig");
 const icon_component = @import("Icon.zig");
-const icon = @import("../../icon.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+
+pub const registration = component_contract.registration("select", Select);
 const constrainPreferredSize = component_primitives.constrainPreferredSize;
 const contentInset = component_primitives.contentInset;
 const Icon = icon_component.Icon;
@@ -39,7 +41,7 @@ pub const Select = struct {
             const text_h = @min(text_bounds.h, component_primitives.measuredTextHeight(self.label, text_bounds.w, component_primitives.control_label_height, select_label_max_lines));
             try scene.pushWrappedText(text_bounds.withHeightCentered(text_h), self.label, options.style.text, component_primitives.textWrap(self.label, component_primitives.control_label_height, select_label_max_lines));
             const arrow_bounds = ui.Rect.init(label_bounds.x + label_bounds.w - select_icon_size, label_bounds.y + (label_bounds.h - select_icon_size) * 0.5, select_icon_size, select_icon_size);
-            try icon_component.renderGlyph(scene, arrow_bounds, trailingIcon(self).value, options.style.muted);
+            try trailingIcon(self).renderColor(scene, arrow_bounds, options.style.muted);
         }
     }
 
@@ -94,8 +96,8 @@ const select_label_max_lines: usize = 2;
 const select_min_width: f32 = 112.0;
 pub const preferred_select = ui.Size{ .w = 220.0, .h = 40.0 };
 
-test "select component serializes to canonical object and deserializes" {
-    const select = Select{ .id = 22, .label = "Production" };
+test "select component serializes icon slot to canonical object and deserializes" {
+    const select = Select{ .id = 22, .label = "Production", .icon_slot = IconSlot.named(.trailing, .chevron_right) };
     var ui_raw: [128]u8 = undefined;
     var object_raw: [object.header_size + 128]u8 = undefined;
 
@@ -104,6 +106,7 @@ test "select component serializes to canonical object and deserializes" {
 
     try std.testing.expectEqual(select.id, decoded.id);
     try std.testing.expectEqualStrings(select.label, decoded.label);
+    try std.testing.expectEqual(Icon.named(.chevron_right).value, decoded.icon_slot.trailing.value);
 }
 
 test "select component renders chevron through icon primitive" {
@@ -113,7 +116,7 @@ test "select component renders chevron through icon primitive" {
 
     try select.render(&scene, ui.Rect.init(0, 0, 220, 40), .{});
 
-    try std.testing.expect(component_test.hasIcon(scene.written(), icon.id(.chevron_right)));
+    try std.testing.expect(component_test.hasIcon(scene.written(), Icon.named(.chevron_right).tag()));
     try std.testing.expect(!component_test.hasText(scene.written(), "v"));
 }
 

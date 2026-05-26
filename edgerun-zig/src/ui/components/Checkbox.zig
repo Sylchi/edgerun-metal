@@ -1,6 +1,7 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
+const component_contract = @import("ComponentContract.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
@@ -9,11 +10,13 @@ const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
 const component_primitives = @import("Primitives.zig");
 const icon_component = @import("Icon.zig");
-const icon = @import("../../icon.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+
+pub const registration = component_contract.registration("checkbox", Checkbox);
 const constrainPreferredSize = component_primitives.constrainPreferredSize;
+const Icon = icon_component.Icon;
 
 pub const Checkbox = struct {
     id: u32,
@@ -33,7 +36,7 @@ pub const Checkbox = struct {
         try scene.pushRect(box, if (self.checked) options.style.accent else options.style.panel, .fill, component_primitives.control_radius, 0.0);
         try scene.pushRect(box, if (self.checked) options.style.accent else options.style.border, .border, component_primitives.control_radius, 0.0);
         if (self.checked) {
-            try icon_component.renderGlyph(scene, box.insetUniform(checkbox_icon_inset), .check, options.style.bg);
+            try Icon.named(.check).renderColor(scene, box.insetUniform(checkbox_icon_inset), options.style.bg);
         }
         const label_x = box.x + box.w + checkbox_text_gap;
         const label_w = @max(component_primitives.min_extent, bounds.x + bounds.w - label_x);
@@ -108,7 +111,7 @@ test "checkbox component renders checked mark through icon primitive" {
     try checked.render(&scene, ui.Rect.init(0, 0, 220, 28), .{});
     try unchecked.render(&scene, ui.Rect.init(0, 36, 220, 28), .{});
 
-    try std.testing.expectEqual(@as(usize, 1), component_test.iconCount(scene.written(), icon.id(.check)));
+    try std.testing.expectEqual(@as(usize, 1), component_test.iconCount(scene.written(), Icon.named(.check).tag()));
 }
 
 test "checkbox measurement wraps long labels under narrow constraints" {

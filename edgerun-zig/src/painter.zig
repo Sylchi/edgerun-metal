@@ -1,5 +1,5 @@
 const std = @import("std");
-const icon = @import("icon.zig");
+const icon_component = @import("ui/components/Icon.zig");
 const ui = @import("ui.zig");
 
 pub const Error = error{
@@ -79,8 +79,9 @@ pub const Painter = struct {
         scene.pushDropTarget(.{ .scope_id = scope_id, .index = index, .bounds = bounds }) catch |err| return mapRenderError(err);
     }
 
-    pub fn semanticIcon(self: Painter, bounds: ui.Rect, value: icon.Icon, color: ui.Color) Error!void {
-        try self.iconId(bounds, icon.id(value), color);
+    pub fn semanticIcon(self: Painter, bounds: ui.Rect, value: icon_component.Icon, color: ui.Color) Error!void {
+        const scene = try self.activeScene();
+        value.renderColor(scene, bounds, color) catch |err| return mapRenderError(err);
     }
 
     pub fn iconId(self: Painter, bounds: ui.Rect, icon_id: u32, color: ui.Color) Error!void {
@@ -134,7 +135,7 @@ test "painter facade pushes scene commands" {
     try painter.divider(7.0, 8.0, 30.0, .vertical, .border);
     try painter.dragSource(9, 10, 2, ui.Rect.init(2.0, 3.0, 4.0, 5.0));
     try painter.dropTarget(9, 2, ui.Rect.init(3.0, 4.0, 5.0, 6.0));
-    try painter.semanticIcon(ui.Rect.init(20.0, 0.0, 16.0, 16.0), .search, .text);
+    try painter.semanticIcon(ui.Rect.init(20.0, 0.0, 16.0, 16.0), icon_component.Icon.named(.search), .text);
     try painter.textQuad(ui.Rect.init(0.0, 20.0, 16.0, 16.0), 0.0, 0.0, 1.0, 1.0, .text);
     try painter.transition(.{ .id = 7, .property = .opacity, .from = 0.0, .to = 1.0, .duration_ms = 120 });
 

@@ -1,6 +1,7 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
+const component_contract = @import("ComponentContract.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
@@ -11,6 +12,8 @@ const component_primitives = @import("Primitives.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+
+pub const registration = component_contract.registration("card", Card);
 const constrainPreferredSize = component_primitives.constrainPreferredSize;
 const measure_max_width = component_primitives.measure_max_width;
 
@@ -25,29 +28,30 @@ pub const Card = struct {
 
     pub fn render(self: Card, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         try renderFrame(scene, bounds, self.variant, options);
-        if (self.title.len == 0 and self.detail.len == 0) return;
-
-        const content_x = bounds.x + surface_padding;
-        const content_w = @max(component_primitives.min_extent, bounds.w - surface_padding * 2.0);
-        var cursor_y = bounds.y + surface_padding;
-        if (self.title.len != 0) {
-            const remaining_h = @max(component_primitives.min_extent, bounds.y + bounds.h - cursor_y - surface_padding);
-            const title_h = @min(remaining_h, titleHeightFor(content_w, self.title));
-            try scene.pushWrappedText(ui.Rect.init(content_x, cursor_y, content_w, title_h), self.title, options.style.text, .{
-                .line_height = surface_title_height,
-                .average_char_width = surface_title_average_w,
-                .max_lines = surface_title_max_lines,
-            });
-            cursor_y += title_h;
+        if (self.title.len != 0 or self.detail.len != 0) {
+            const content_x = bounds.x + surface_padding;
+            const content_w = @max(component_primitives.min_extent, bounds.w - surface_padding * 2.0);
+            var cursor_y = bounds.y + surface_padding;
+            if (self.title.len != 0) {
+                const remaining_h = @max(component_primitives.min_extent, bounds.y + bounds.h - cursor_y - surface_padding);
+                const title_h = @min(remaining_h, titleHeightFor(content_w, self.title));
+                try scene.pushWrappedText(ui.Rect.init(content_x, cursor_y, content_w, title_h), self.title, options.style.text, .{
+                    .line_height = surface_title_height,
+                    .average_char_width = surface_title_average_w,
+                    .max_lines = surface_title_max_lines,
+                });
+                cursor_y += title_h;
+            }
+            if (self.detail.len != 0) {
+                if (self.title.len != 0) cursor_y += surface_detail_gap;
+                try scene.pushWrappedText(ui.Rect.init(content_x, cursor_y, content_w, @max(component_primitives.min_extent, bounds.y + bounds.h - cursor_y - surface_padding)), self.detail, options.style.muted, .{
+                    .line_height = surface_detail_height,
+                    .average_char_width = surface_detail_average_w,
+                    .max_lines = surface_detail_max_lines,
+                });
+            }
         }
-        if (self.detail.len != 0) {
-            if (self.title.len != 0) cursor_y += surface_detail_gap;
-            try scene.pushWrappedText(ui.Rect.init(content_x, cursor_y, content_w, @max(component_primitives.min_extent, bounds.y + bounds.h - cursor_y - surface_padding)), self.detail, options.style.muted, .{
-                .line_height = surface_detail_height,
-                .average_char_width = surface_detail_average_w,
-                .max_lines = surface_detail_max_lines,
-            });
-        }
+        try component_primitives.renderControlStateOverlay(scene, bounds, options, radiusFor(self.variant));
     }
 
     pub fn measure(self: Card, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {

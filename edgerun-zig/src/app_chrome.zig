@@ -1,7 +1,6 @@
 const std = @import("std");
 const button_component = @import("ui/components/Button.zig");
 const icon_component = @import("ui/components/Icon.zig");
-const icon = @import("icon.zig");
 const interaction = @import("ui_interaction.zig");
 const ui = @import("ui.zig");
 const design = @import("app_design.zig");
@@ -59,7 +58,7 @@ pub fn renderHeader(scene: *ui.Scene, collector: *interaction.Collector, bounds:
 
     const logo = ui.Rect.init(content.x, bounds.y + 16.0, design.Icon.logo_box, design.Icon.logo_box);
     try fill(scene, logo, palette.primary, 7.0);
-    try iconQuad(scene, logo.insetUniform(design.Icon.logo_inset), .terminal, palette.bg);
+    try icon_component.Icon.named(.terminal).renderColor(scene, logo.insetUniform(design.Icon.logo_inset), palette.bg);
     try text(scene, logo.x + 42.0, bounds.y + 23.0, 110.0, 18.0, "EdgeRun", palette.text);
     try collector.addHit(ui.Rect.init(logo.x, logo.y, 148.0, logo.h), .button, logo_button_id);
 
@@ -74,13 +73,13 @@ pub fn renderHeader(scene: *ui.Scene, collector: *interaction.Collector, bounds:
     try navItem(scene, collector, ui.Rect.init(nav_x, nav_y, academy_w, nav_item_h), "Academy", blog_button_id, active == .blog);
 
     const source = ui.Rect.init(content.x + content.w - design.Icon.logo_box, bounds.y + 16.0, design.Icon.logo_box, design.Icon.logo_box);
-    try iconButton(scene, collector, source, .code, source_button_id, active == .source);
+    try iconButton(scene, collector, source, icon_component.Icon.named(.code), source_button_id, active == .source);
 }
 
 fn renderCompactHeader(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, content: ui.Rect, active: ActiveNav) (ui.RenderError || interaction.Error)!void {
     const logo = ui.Rect.init(content.x, bounds.y + 16.0, design.Icon.logo_box, design.Icon.logo_box);
     try fill(scene, logo, palette.primary, 7.0);
-    try iconQuad(scene, logo.insetUniform(design.Icon.logo_inset), .terminal, palette.bg);
+    try icon_component.Icon.named(.terminal).renderColor(scene, logo.insetUniform(design.Icon.logo_inset), palette.bg);
     try text(scene, logo.x + 40.0, bounds.y + 23.0, 78.0, 18.0, "EdgeRun", palette.text);
     try collector.addHit(ui.Rect.init(logo.x, logo.y, 118.0, logo.h), .button, logo_button_id);
 
@@ -88,8 +87,8 @@ fn renderCompactHeader(scene: *ui.Scene, collector: *interaction.Collector, boun
         .mobile => {
             const docs = ui.Rect.init(content.x + content.w - compact_icon_w, bounds.y + 15.0, compact_icon_w, design.Icon.button_box);
             const source = ui.Rect.init(docs.x - compact_icon_gap - compact_icon_w, docs.y, compact_icon_w, design.Icon.button_box);
-            try iconButton(scene, collector, source, .code, source_button_id, active == .source);
-            try iconButton(scene, collector, docs, .file, docs_button_id, active == .docs);
+            try iconButton(scene, collector, source, icon_component.Icon.named(.code), source_button_id, active == .source);
+            try iconButton(scene, collector, docs, icon_component.Icon.named(.file), docs_button_id, active == .docs);
             return;
         },
         .compact => {},
@@ -97,7 +96,7 @@ fn renderCompactHeader(scene: *ui.Scene, collector: *interaction.Collector, boun
     }
 
     const source = ui.Rect.init(content.x + content.w - compact_icon_w, bounds.y + 15.0, compact_icon_w, design.Icon.button_box);
-    try iconButton(scene, collector, source, .code, source_button_id, active == .source);
+    try iconButton(scene, collector, source, icon_component.Icon.named(.code), source_button_id, active == .source);
 
     const nav_y = bounds.y + 18.0;
     const nav_right = source.x - compact_nav_gap;
@@ -126,11 +125,11 @@ fn navItem(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect,
     try component.collectInteractions(collector, bounds);
 }
 
-fn iconButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, value: icon.Icon, id: u32, active: bool) (ui.RenderError || interaction.Error)!void {
+fn iconButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, value: icon_component.Icon, id: u32, active: bool) (ui.RenderError || interaction.Error)!void {
     const component = button_component.IconButton{
         .id = id,
-        .label = icon.label(value),
-        .icon = icon_component.Icon.named(value),
+        .label = value.label,
+        .icon = value,
         .variant = if (active) .secondary else .outline,
     };
     try component.render(scene, bounds, .{
@@ -154,10 +153,6 @@ fn fill(scene: *ui.Scene, bounds: ui.Rect, color: ui.Color, r: f32) ui.RenderErr
 
 fn text(scene: *ui.Scene, x: f32, y: f32, w: f32, h: f32, value: []const u8, color: ui.Color) ui.RenderError!void {
     try scene.pushAlignedText(ui.Rect.init(x, y, @max(1.0, w), @max(1.0, h)), value, color, .start);
-}
-
-fn iconQuad(scene: *ui.Scene, bounds: ui.Rect, value: icon.Icon, color: ui.Color) ui.RenderError!void {
-    try icon_component.renderGlyph(scene, bounds, value, color);
 }
 
 test "app chrome header exposes canonical navigation hit targets" {

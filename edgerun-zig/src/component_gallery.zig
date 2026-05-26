@@ -1,6 +1,5 @@
 const std = @import("std");
 const clock = @import("clock.zig");
-const icon = @import("icon.zig");
 const badge_component = @import("ui/components/Badge.zig");
 const card_component = @import("ui/components/Card.zig");
 const component_union = @import("ui/components/Component.zig");
@@ -867,10 +866,6 @@ fn galleryColumnCount(width: f32, gap: f32) usize {
 
 fn fill(scene: *ui.Scene, bounds: ui.Rect, color: ui.Color, radius: f32) GalleryError!void {
     try scene.pushRect(bounds, color, .fill, radius, 0);
-}
-
-fn iconQuad(scene: *ui.Scene, bounds: ui.Rect, value: icon.Icon, color: ui.Color) GalleryError!void {
-    try icon_component.renderGlyph(scene, bounds, value, color);
 }
 
 fn text(scene: *ui.Scene, x: f32, y: f32, w: f32, h: f32, value: []const u8, color: ui.Color) GalleryError!void {

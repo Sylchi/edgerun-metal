@@ -1,7 +1,7 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
-const icon = @import("../../icon.zig");
+const component_contract = @import("ComponentContract.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
@@ -13,7 +13,10 @@ const primitives = @import("Primitives.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+
+pub const registration = component_contract.registration("sheet", Sheet);
 const measureFixed = primitives.measureFixed;
+const Icon = icon_component.Icon;
 
 pub const Sheet = struct {
     id: u32,
@@ -29,7 +32,7 @@ pub const Sheet = struct {
 
         const content = contentBounds(bounds);
         try primitives.renderTitleDetailPanel(scene, content, self.title, self.detail, options, sheet_panel, options.style.border, options.style.text);
-        try icon_component.renderGlyph(scene, closeBounds(bounds), .x, options.style.muted);
+        try Icon.named(.x).renderColor(scene, closeBounds(bounds), options.style.muted);
     }
 
     pub fn collectInteractions(self: Sheet, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {

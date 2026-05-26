@@ -1,8 +1,11 @@
 const std = @import("std");
 const uefi = std.os.uefi;
 const boot_resource_map = @import("boot_resource_map.zig");
+const data_chunk = @import("content/data_chunk.zig");
+const gop_framebuffer = @import("boot/gop_framebuffer.zig");
 const immutable_kernel_post_exit = @import("immutable_kernel_post_exit.zig");
 const resource_inventory = @import("content/resource_inventory.zig");
+const resource_contract = @import("content/resource_contract.zig");
 const uefi_resource_map = @import("boot/uefi_resource_map.zig");
 
 const debugcon_port: u16 = 0x402;
@@ -17,6 +20,7 @@ var resources: [max_boot_resources]resource_inventory.Resource = undefined;
 var resource_ids: [max_boot_resources]resource_inventory.ResourceIdStorage = undefined;
 var inventory: resource_inventory.Inventory = undefined;
 var boot_map: boot_resource_map.Map = undefined;
+var framebuffer: gop_framebuffer.Framebuffer = undefined;
 var usable_resource_count: usize = 0;
 var post_exit_state: immutable_kernel_post_exit.State = undefined;
 
@@ -35,15 +39,22 @@ pub fn main() noreturn {
 fn run() Error!void {
     const boot_services = uefi.system_table.boot_services orelse return error.BootServicesUnavailable;
 
+    framebuffer = gop_framebuffer.collect(boot_services) catch |err| return mapFramebufferError(err);
+    framebuffer.drawDebugScreen(.pre_exit);
+    printLine("check: gop framebuffer handoff ok");
+
     try collectAndValidateMap(boot_services);
     printLine("check: pre-exit memory inventory ok");
 
     try exitBootServicesWithFreshMap(boot_services);
 
+    framebuffer.drawDebugScreen(.post_exit);
     writeDebugconLine("check: exited boot services debugcon alive");
     immutable_kernel_post_exit.run(&post_exit_state, inventory, writeDebugconLine) catch {
         haltForever();
     };
+    framebuffer.drawWasmResult(post_exit_state.first_app_result.value);
+    writeDebugconLine("check: wasm-result painted framebuffer");
     writeDebugconLine("PASS immutable-kernel-exit-boot-qemu");
 }
 
@@ -52,6 +63,7 @@ fn collectAndValidateMap(boot_services: *const uefi.tables.BootServices) Error!v
     boot_map = mapFromMemoryMap(memory_map);
     inventory = resource_inventory.Inventory.init(&resources);
     resource_inventory.addBootResourceMap(&inventory, boot_map, &resource_ids) catch |err| return mapInventoryError(err);
+    try installDisplayResource();
     usable_resource_count = inventory.len;
     if (usable_resource_count == 0) return error.NoUsableMemory;
     if (!hasPostExitMemory(inventory)) return error.NoKernelMemory;
@@ -64,6 +76,7 @@ fn exitBootServicesWithFreshMap(boot_services: *uefi.tables.BootServices) Error!
         boot_map = mapFromMemoryMap(memory_map);
         inventory = resource_inventory.Inventory.init(&resources);
         resource_inventory.addBootResourceMap(&inventory, boot_map, &resource_ids) catch |err| return mapInventoryError(err);
+        try installDisplayResource();
         usable_resource_count = inventory.len;
         if (usable_resource_count == 0) return error.NoUsableMemory;
 
@@ -90,6 +103,18 @@ fn mapFromMemoryMap(memory_map: uefi.tables.MemoryMapSlice) boot_resource_map.Ma
     };
 }
 
+fn installDisplayResource() Error!void {
+    const display_resource = resource_inventory.Resource.init(
+        data_chunk.DataChunk.init("boot-display-gop"),
+        .display,
+        resource_contract.Bounds.init(framebuffer.physical_base, framebuffer.byte_len),
+    );
+    inventory.add(display_resource) catch |err| switch (err) {
+        error.Duplicate => {},
+        else => return mapInventoryError(err),
+    };
+}
+
 fn hasPostExitMemory(value: resource_inventory.Inventory) bool {
     return immutable_kernel_post_exit.hasMemory(value);
 }
@@ -98,6 +123,8 @@ const Error = error{
     BootServicesUnavailable,
     ExitBootServicesFailed,
     ExitBootServicesRejected,
+    FramebufferBadFormat,
+    FramebufferMissing,
     MemoryMapInvalid,
     MemoryMapNoSpace,
     NoKernelMemory,
@@ -107,6 +134,13 @@ const Error = error{
     ResourceNoSpace,
     ResourceOutOfBounds,
 };
+
+fn mapFramebufferError(err: gop_framebuffer.Error) Error {
+    return switch (err) {
+        error.NoGraphicsOutput => error.FramebufferMissing,
+        error.UnsupportedPixelFormat => error.FramebufferBadFormat,
+    };
+}
 
 fn mapMemoryMapError(err: uefi.tables.BootServices.GetMemoryMapError) Error {
     return switch (err) {
@@ -137,6 +171,8 @@ fn printError(err: Error) void {
         error.BootServicesUnavailable => printText("boot-services-unavailable"),
         error.ExitBootServicesFailed => printText("exit-boot-services-failed"),
         error.ExitBootServicesRejected => printText("exit-boot-services-rejected"),
+        error.FramebufferBadFormat => printText("framebuffer-bad-format"),
+        error.FramebufferMissing => printText("framebuffer-missing"),
         error.MemoryMapInvalid => printText("memory-map-invalid"),
         error.MemoryMapNoSpace => printText("memory-map-no-space"),
         error.NoKernelMemory => printText("no-kernel-memory"),

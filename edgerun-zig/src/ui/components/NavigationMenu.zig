@@ -1,10 +1,10 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
+const component_contract = @import("ComponentContract.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
-const icon = @import("../../icon.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
@@ -14,8 +14,11 @@ const list_layout = @import("ListLayout.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+
+pub const registration = component_contract.registration("navigation_menu", NavigationMenu);
 const contentInset = component_primitives.contentInset;
 const measureFixed = component_primitives.measureFixed;
+const Icon = icon_component.Icon;
 
 pub const NavigationMenu = struct {
     id: u32,
@@ -87,12 +90,12 @@ fn renderItem(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, active: bool
         try scene.pushAlignedText(inner.withHeightCentered(component_primitives.control_label_height), label, text_color, .center);
     }
     if (show_chevron) {
-        try icon_component.renderGlyph(scene, ui.Rect.init(
+        try Icon.named(.chevron_right).renderColor(scene, ui.Rect.init(
             bounds.x + bounds.w - navigation_menu_icon_size - navigation_menu_icon_padding,
             bounds.y + (bounds.h - navigation_menu_icon_size) * 0.5,
             navigation_menu_icon_size,
             navigation_menu_icon_size,
-        ), .chevron_right, options.style.muted);
+        ), options.style.muted);
     }
 }
 

@@ -1,7 +1,7 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
-const icon = @import("../../icon.zig");
+const component_contract = @import("ComponentContract.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
@@ -13,6 +13,8 @@ const primitives = @import("Primitives.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+
+pub const registration = component_contract.registration("command", Command);
 const measureFixed = primitives.measureFixed;
 const renderControlFrame = primitives.renderControlFrame;
 const renderControlText = primitives.renderControlText;
@@ -31,7 +33,7 @@ pub const Command = struct {
     pub fn render(self: Command, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         const input = inputBounds(bounds);
         try renderControlFrame(scene, input, options.style.panel, options.style.border, command_radius);
-        try icon_component.renderGlyph(scene, ui.Rect.init(input.x + command_icon_x, input.y + (input.h - command_icon_size) * 0.5, command_icon_size, command_icon_size), leadingIcon(self).value, options.style.muted);
+        try leadingIcon(self).renderColor(scene, ui.Rect.init(input.x + command_icon_x, input.y + (input.h - command_icon_size) * 0.5, command_icon_size, command_icon_size), options.style.muted);
         const input_text = if (options.command_palette) |palette| if (palette.query.len == 0) self.placeholder else palette.query else self.placeholder;
         const input_color = if (options.command_palette) |palette| if (palette.query.len == 0) options.style.muted else options.style.text else options.style.muted;
         try scene.pushText(ui.Rect.init(input.x + command_text_x, input.y + (input.h - command_text_h) * 0.5, @max(primitives.min_extent, input.w - command_text_x - command_padding_x), command_text_h), input_text, input_color);
@@ -180,8 +182,8 @@ const command_max_visible_items: usize = 3;
 const command_empty_label = "No commands found";
 const command_empty_text_h: f32 = 14.0;
 
-test "command component serializes to canonical object and deserializes" {
-    const command = Command{ .id = 880, .placeholder = "Type a command..." };
+test "command component serializes icon slot to canonical object and deserializes" {
+    const command = Command{ .id = 880, .placeholder = "Type a command...", .icon_slot = IconSlot.named(.leading, .search) };
     var ui_raw: [160]u8 = undefined;
     var object_raw: [object.header_size + 160]u8 = undefined;
 
@@ -190,6 +192,7 @@ test "command component serializes to canonical object and deserializes" {
 
     try std.testing.expectEqual(command.id, decoded.id);
     try std.testing.expectEqualStrings(command.placeholder, decoded.placeholder);
+    try std.testing.expectEqual(Icon.named(.search).value, decoded.icon_slot.leading.value);
 }
 
 test "command component renders search input and hit region" {
@@ -203,7 +206,7 @@ test "command component renders search input and hit region" {
     try command.collectInteractions(&collector, ui.Rect.init(0, 0, 220, 36));
 
     try std.testing.expect(component_test.hasText(scene.written(), "Type a command..."));
-    try std.testing.expect(component_test.hasIcon(scene.written(), @import("../../icon.zig").id(.search)));
+    try std.testing.expect(component_test.hasIcon(scene.written(), Icon.named(.search).tag()));
     try std.testing.expectEqual(@as(usize, 1), collector.written().len);
     try std.testing.expectEqual(ui.HitKind.input, collector.written()[0].kind);
 }

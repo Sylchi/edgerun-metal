@@ -1,5 +1,4 @@
 const std = @import("std");
-const icon = @import("icon.zig");
 const interaction = @import("ui_interaction.zig");
 const ui = @import("ui.zig");
 const badge_component = @import("ui/components/Badge.zig");
@@ -227,7 +226,7 @@ fn renderHero(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Re
     const badge_x = if (stacked) layout.copy.x + (layout.copy.w - badge_w) * 0.5 else layout.copy.x;
     const badge = ui.Rect.init(badge_x, layout.copy.y, badge_w, 28.0);
     try nativeBadge(scene, badge, "Self-compiling. Zero dependency chain.");
-    try iconQuad(scene, ui.Rect.init(badge.x + 12.0, badge.y + 5.0, 18.0, 18.0), .terminal, palette.primary);
+    try icon_component.Icon.named(.terminal).renderColor(scene, ui.Rect.init(badge.x + 12.0, badge.y + 5.0, 18.0, 18.0), palette.primary);
 
     if (stacked and layout.copy.w < hero_mobile_title_max_w) {
         try titleMobile(scene, ui.Rect.init(layout.copy.x, layout.copy.y + 58.0, layout.copy.w, 54.0), "The App", palette.text);
@@ -245,7 +244,7 @@ fn renderHero(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Re
     const paragraph_x = if (stacked) layout.copy.x + (layout.copy.w - paragraph_w) * 0.5 else layout.copy.x;
     try heroParagraph(scene, ui.Rect.init(paragraph_x, layout.copy.y + 244.0, paragraph_w, 88.0), "EdgeRun carries its compiler, source object, UI system, object store, and receipts inside the app. Edit source, build, and run the next artifact.");
     const actions = actionPairBounds(if (stacked) layout.copy else ui.Rect.init(layout.copy.x, layout.button_y, layout.copy.w, action_button_h), layout.button_y);
-    try primaryButtonWithTrailingIcon(scene, collector, actions.primary, "View Source", .chevron_right, source_button_id);
+    try primaryButtonWithTrailingIcon(scene, collector, actions.primary, "View Source", icon_component.Icon.named(.chevron_right), source_button_id);
     try outlineButton(scene, collector, actions.secondary, "Read Docs", docs_button_id);
 }
 
@@ -386,11 +385,11 @@ fn renderPrinciples(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
     try alignedText(scene, bounds.x, bounds.y + 82.0, bounds.w, 16.0, "Source, compiler, UI, runtime, receipts.", palette.dim, .center);
     const cards_y = bounds.y + 140.0;
     const cols = columns(bounds, if (bounds.w > 720.0) 2 else 1, 16.0);
-    const items = [_]struct { icon.Icon, []const u8, []const u8, []const u8 }{
-        .{ .code, "Compiler Inside", "The app ships with compiler bytes.", "compile(source_object)" },
-        .{ .app, "Built-In UI", "Components render through one IR.", "scene -> render_ir" },
-        .{ .shield, "Receipts For Work", "Execution leaves a checkable trail.", "work -> receipt" },
-        .{ .cpu, "Runs Across Targets", "Web, native, CPU, GPU, hardware.", "present(target)" },
+    const items = [_]struct { icon_component.Icon, []const u8, []const u8, []const u8 }{
+        .{ icon_component.Icon.named(.code), "Compiler Inside", "The app ships with compiler bytes.", "compile(source_object)" },
+        .{ icon_component.Icon.named(.app), "Built-In UI", "Components render through one IR.", "scene -> render_ir" },
+        .{ icon_component.Icon.named(.shield), "Receipts For Work", "Execution leaves a checkable trail.", "work -> receipt" },
+        .{ icon_component.Icon.named(.cpu), "Runs Across Targets", "Web, native, CPU, GPU, hardware.", "present(target)" },
     };
     for (items, 0..) |item, index| {
         const row: usize = index / cols;
@@ -409,7 +408,7 @@ fn renderArchitecture(scene: *ui.Scene, collector: *interaction.Collector, bound
     try paragraph(scene, ui.Rect.init(left.x, left.y + 138.0, left.w, 96.0), "The web host loads one WASM app. That app owns the source workspace, compiler bytes, UI scene, render buffers, and release artifact.");
     const source_button_y: f32 = if (compact) 218.0 else 264.0;
     const source_button = actionButtonBounds(left, left.y + source_button_y, 180.0);
-    try outlineButtonWithTrailingIcon(scene, collector, source_button, "Open Source", .chevron_right, source_button_id);
+    try outlineButtonWithTrailingIcon(scene, collector, source_button, "Open Source", icon_component.Icon.named(.chevron_right), source_button_id);
     const stack = [_]struct { []const u8, []const u8, ui.Color }{
         .{ "app wasm", "tiny runtime and UI shell", palette.primary },
         .{ "compiler wasm", "embedded Zig-to-WASM path", palette.yellow },
@@ -509,7 +508,7 @@ fn renderCta(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rec
     try alignedText(scene, bounds.x + 40.0, bounds.y + 70.0, bounds.w - 80.0, 30.0, "Open The Self-Compiling App", palette.text, .center);
     try alignedText(scene, bounds.x + 40.0, bounds.y + 118.0, bounds.w - 80.0, 18.0, "Read the source object, edit it, and compile the next artifact from inside the app.", palette.dim, .center);
     const actions = actionPairBounds(bounds.insetLtrb(40.0, 0.0, 40.0, 0.0), bounds.y + 168.0);
-    try primaryButtonWithTrailingIcon(scene, collector, actions.primary, "View Source", .chevron_right, source_button_id);
+    try primaryButtonWithTrailingIcon(scene, collector, actions.primary, "View Source", icon_component.Icon.named(.chevron_right), source_button_id);
     try outlineButton(scene, collector, actions.secondary, "Read Docs", docs_button_id);
 }
 
@@ -673,13 +672,13 @@ fn percentLabel(value: f32) []const u8 {
     };
 }
 
-fn principleCard(scene: *ui.Scene, bounds: ui.Rect, icon_value: icon.Icon, name: []const u8, detail: []const u8, code: []const u8) ui.RenderError!void {
+fn principleCard(scene: *ui.Scene, bounds: ui.Rect, icon_value: icon_component.Icon, name: []const u8, detail: []const u8, code: []const u8) ui.RenderError!void {
     try nativeCard(scene, bounds, "", "");
     const icon_box = ui.Rect.init(bounds.x + 18.0, bounds.y + 18.0, design.Icon.tile_box, design.Icon.tile_box);
     const text_x = icon_box.x + icon_box.w + design.Icon.tile_text_gap;
     const text_w = bounds.x + bounds.w - text_x - 18.0;
     try fill(scene, icon_box, palette.neutral_soft, 9.0);
-    try iconQuad(scene, icon_box.insetUniform(design.Icon.tile_inset), icon_value, palette.primary);
+    try icon_value.renderColor(scene, icon_box.insetUniform(design.Icon.tile_inset), palette.primary);
     try text(scene, text_x, bounds.y + 18.0, text_w, 16.0, name, palette.text);
     try paragraph(scene, ui.Rect.init(text_x, bounds.y + 40.0, text_w, 28.0), detail);
     try fill(scene, ui.Rect.init(text_x, bounds.y + 76.0, @min(text_w, 210.0), 24.0), palette.neutral_soft, 4.0);
@@ -758,16 +757,16 @@ fn primaryButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui
     try nativeComponent(scene, collector, bounds, button_component.Button{ .id = id, .label = label });
 }
 
-fn primaryButtonWithTrailingIcon(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, icon_value: icon.Icon, id: u32) (ui.RenderError || interaction.Error)!void {
-    try nativeComponent(scene, collector, bounds, button_component.Button{ .id = id, .label = label, .icon_slot = icon_component.IconSlot.named(.trailing, icon_value) });
+fn primaryButtonWithTrailingIcon(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, icon_value: icon_component.Icon, id: u32) (ui.RenderError || interaction.Error)!void {
+    try nativeComponent(scene, collector, bounds, button_component.Button{ .id = id, .label = label, .icon_slot = icon_component.IconSlot.of(.trailing, icon_value) });
 }
 
 fn outlineButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id: u32) (ui.RenderError || interaction.Error)!void {
     try nativeComponent(scene, collector, bounds, button_component.Button{ .id = id, .label = label, .variant = .outline });
 }
 
-fn outlineButtonWithTrailingIcon(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, icon_value: icon.Icon, id: u32) (ui.RenderError || interaction.Error)!void {
-    try nativeComponent(scene, collector, bounds, button_component.Button{ .id = id, .label = label, .variant = .outline, .icon_slot = icon_component.IconSlot.named(.trailing, icon_value) });
+fn outlineButtonWithTrailingIcon(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, icon_value: icon_component.Icon, id: u32) (ui.RenderError || interaction.Error)!void {
+    try nativeComponent(scene, collector, bounds, button_component.Button{ .id = id, .label = label, .variant = .outline, .icon_slot = icon_component.IconSlot.of(.trailing, icon_value) });
 }
 
 fn nativeBadge(scene: *ui.Scene, bounds: ui.Rect, label: []const u8) ui.RenderError!void {
@@ -795,10 +794,6 @@ fn appStyle() ui.Style {
 
 fn alignedText(scene: *ui.Scene, x: f32, y: f32, w: f32, h: f32, value: []const u8, color: ui.Color, alignment: ui.TextAlign) ui.RenderError!void {
     try scene.pushAlignedText(ui.Rect.init(x, y, @max(1.0, w), @max(1.0, h)), value, color, alignment);
-}
-
-fn iconQuad(scene: *ui.Scene, bounds: ui.Rect, value: icon.Icon, color: ui.Color) ui.RenderError!void {
-    try icon_component.renderGlyph(scene, bounds, value, color);
 }
 
 fn columns(bounds: ui.Rect, desired: usize, gap: f32) usize {
@@ -845,8 +840,8 @@ test "landing page renders app sections and primary actions" {
     try std.testing.expect(hasPieSlice(scene.written()));
     try std.testing.expect(hasHit(collector.written(), docs_button_id));
     try std.testing.expect(hasHit(collector.written(), source_button_id));
-    try std.testing.expect(hasIcon(scene.written(), .chevron_right));
-    try std.testing.expect(hasIcon(scene.written(), .code));
+    try std.testing.expect(hasIcon(scene.written(), icon_component.Icon.named(.chevron_right)));
+    try std.testing.expect(hasIcon(scene.written(), icon_component.Icon.named(.code)));
 }
 
 test "landing page clips scrolled content below fixed header" {
@@ -977,8 +972,8 @@ fn contentTextAboveHeader(commands: []const ui.Command, value: []const u8) bool 
     return false;
 }
 
-fn hasIcon(commands: []const ui.Command, value: icon.Icon) bool {
-    const icon_id = icon.id(value);
+fn hasIcon(commands: []const ui.Command, value: icon_component.Icon) bool {
+    const icon_id = value.tag();
     for (commands) |command| switch (command) {
         .icon_quad => |quad| if (quad.icon_id == icon_id) return true,
         else => {},

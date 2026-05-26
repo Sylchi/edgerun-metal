@@ -18,6 +18,7 @@ const app_cursor = @import("app_cursor.zig");
 const app_docs = @import("app_docs.zig");
 const app_frame = @import("app_frame.zig");
 const app_images = @import("app_images.zig");
+const app_input_event = @import("app_input_event.zig");
 const app_landing = @import("app_landing.zig");
 const app_navigation = @import("app_navigation.zig");
 const app_source = @import("app_source.zig");
@@ -251,79 +252,20 @@ const OutboxMessage = struct {
     id: u32 = 0,
 };
 
-const InputEventKind = enum(u32) {
-    resize = 1,
-    wheel = 2,
-    pointer_move = 3,
-    pointer_leave = 4,
-    pointer_down = 5,
-    pointer_up = 6,
-    popstate = 7,
-    hashchange = 8,
-    key_down = 9,
-    context_menu = 10,
-    key_up = 11,
-    input = 12,
-    change = 13,
-    click = 14,
-    dbl_click = 15,
-    visibility_change = 16,
-    focus = 17,
-    blur = 18,
-    before_input = 19,
-    composition_start = 20,
-    composition_update = 21,
-    composition_end = 22,
-    touch_start = 23,
-    touch_move = 24,
-    touch_end = 25,
-    touch_cancel = 26,
-    drag_start = 27,
-    drag_end = 28,
-    drop = 29,
-};
-
 const input_event_prevent_default: u32 = 1 << 0;
 const input_event_schedule_frame: u32 = 1 << 1;
 const input_event_outbox: u32 = 1 << 3;
 const input_event_capture_pointer: u32 = 1 << 4;
 const input_event_release_pointer: u32 = 1 << 5;
 const input_event_error: u32 = 1 << 8;
-const input_event_record_header_bytes: usize = 36;
-const input_event_record_kind_offset: usize = 0;
-const input_event_record_x_offset: usize = 4;
-const input_event_record_y_offset: usize = 8;
-const input_event_record_delta_y_offset: usize = 12;
-const input_event_record_flags_offset: usize = 16;
-const input_event_record_key_len_offset: usize = 20;
-const input_event_record_code_len_offset: usize = 24;
-const input_event_record_input_type_len_offset: usize = 28;
-const input_event_record_data_len_offset: usize = 32;
-const input_event_flag_ctrl: u32 = 1 << 0;
-const input_event_flag_meta: u32 = 1 << 1;
-const input_event_flag_alt: u32 = 1 << 2;
-const input_event_flag_shift: u32 = 1 << 3;
-const input_event_flag_repeat: u32 = 1 << 4;
 
 const CursorKind = app_cursor.Kind;
 
 const AppView = app_navigation.View;
-
-const InputEventRecord = struct {
-    kind: InputEventKind,
-    x: f32,
-    y: f32,
-    delta_y: f32,
-    ctrl: u32,
-    meta: u32,
-    alt: u32,
-    shift: u32,
-    repeat: u32,
-    key: []const u8,
-    code: []const u8,
-    input_type: []const u8,
-    data: []const u8,
-};
+const InputEventKind = app_input_event.Kind;
+const InputEventRecord = app_input_event.Record;
+const input_event_flag_ctrl = app_input_event.flag_ctrl;
+const input_event_record_kind_offset = app_input_event.kind_offset;
 
 const SourceEditorSnapshot = struct {
     bytes: [max_source_editor_bytes]u8 = undefined,
@@ -1067,103 +1009,30 @@ fn appKeyEvent(key: []const u8, ctrl: u32, meta: u32, alt: u32, shift: u32) u32 
 }
 
 export fn er_ui_event(kind_raw: u32, x: f32, y: f32, delta_y: f32, ctrl: u32, meta: u32, alt: u32, text_len: usize, width: f32, height: f32) u32 {
-    const kind: InputEventKind = switch (kind_raw) {
-        @intFromEnum(InputEventKind.resize) => .resize,
-        @intFromEnum(InputEventKind.wheel) => .wheel,
-        @intFromEnum(InputEventKind.pointer_move) => .pointer_move,
-        @intFromEnum(InputEventKind.pointer_leave) => .pointer_leave,
-        @intFromEnum(InputEventKind.pointer_down) => .pointer_down,
-        @intFromEnum(InputEventKind.pointer_up) => .pointer_up,
-        @intFromEnum(InputEventKind.popstate) => .popstate,
-        @intFromEnum(InputEventKind.hashchange) => .hashchange,
-        @intFromEnum(InputEventKind.key_down) => .key_down,
-        @intFromEnum(InputEventKind.context_menu) => .context_menu,
-        else => {
-            _ = finishError(.bad_input);
-            return input_event_error;
-        },
+    const kind = app_input_event.kindFromInt(kind_raw) orelse {
+        _ = finishError(.bad_input);
+        return input_event_error;
     };
-
-    switch (kind) {
-        .resize => return input_event_schedule_frame,
-        .wheel => {
-            pointer_hover_x = x;
-            pointer_hover_y = y;
-            _ = er_ui_pointer_move(x, y);
-            if (scrollSourceEditorByWheel(delta_y)) return input_event_prevent_default | input_event_schedule_frame;
-            const code = er_ui_app_scroll_by(delta_y, width, height);
-            if (code != @intFromEnum(ErrorCode.ok)) return input_event_error;
-            return input_event_prevent_default | input_event_schedule_frame;
+    if (text_len > input_bytes.len) return input_event_error;
+    const text = input_bytes[0..text_len];
+    return handleInputEventRecord(.{
+        .kind = kind,
+        .x = x,
+        .y = y,
+        .delta_y = delta_y,
+        .ctrl = ctrl,
+        .meta = meta,
+        .alt = alt,
+        .shift = 0,
+        .repeat = 0,
+        .key = if (kind == .key_down) text else "",
+        .code = "",
+        .input_type = "",
+        .data = switch (kind) {
+            .popstate, .hashchange => text,
+            else => "",
         },
-        .pointer_move => {
-            pointer_hover_x = x;
-            pointer_hover_y = y;
-            _ = er_ui_pointer_move(x, y);
-            _ = handleSourcePointerMove(x, y, width, height);
-            return input_event_schedule_frame;
-        },
-        .pointer_leave => {
-            pointer_hover_x = -1.0;
-            pointer_hover_y = -1.0;
-            source_pointer_drag_select = false;
-            runtime_state.clearHover();
-            return input_event_schedule_frame;
-        },
-        .pointer_down => {
-            pointer_hover_x = x;
-            pointer_hover_y = y;
-            context_menu_open = false;
-            _ = er_ui_pointer_down(x, y);
-            _ = handleSourcePointerDown(x, y, width, height);
-            return input_event_capture_pointer | input_event_schedule_frame;
-        },
-        .pointer_up => {
-            pointer_hover_x = x;
-            pointer_hover_y = y;
-            source_pointer_drag_select = false;
-            _ = er_ui_app_pointer_up(x, y);
-            queueOutboxMessage(.push_route_hash) catch return input_event_error;
-            const result = input_event_release_pointer | input_event_outbox | input_event_schedule_frame;
-            return result;
-        },
-        .popstate, .hashchange => {
-            const code = er_ui_app_set_route_hash(text_len);
-            if (code != @intFromEnum(ErrorCode.ok)) return input_event_error;
-            return input_event_schedule_frame;
-        },
-        .key_down => {
-            if (text_len > input_bytes.len) return input_event_error;
-            const handled = appKeyEvent(input_bytes[0..text_len], ctrl, meta, alt, 0);
-            if (handled == 0) return 0;
-            if (handled != 1) return input_event_error;
-            return input_event_prevent_default | input_event_schedule_frame;
-        },
-        .context_menu => {
-            const code = er_ui_app_context_menu(x, y);
-            if (code != @intFromEnum(ErrorCode.ok)) return input_event_prevent_default | input_event_schedule_frame;
-            return input_event_prevent_default | input_event_schedule_frame;
-        },
-        .key_up,
-        .input,
-        .change,
-        .click,
-        .dbl_click,
-        .visibility_change,
-        .focus,
-        .blur,
-        .before_input,
-        .composition_start,
-        .composition_update,
-        .composition_end,
-        .touch_start,
-        .touch_move,
-        .touch_end,
-        .touch_cancel,
-        .drag_start,
-        .drag_end,
-        .drop,
-        => return input_event_schedule_frame,
-    }
+    }, width, height);
 }
 
 fn sourceEditorFocused() bool {
@@ -1224,93 +1093,8 @@ export fn er_ui_event_bytes(input_len: usize, width: f32, height: f32, frame_ms:
     _ = frame_ms;
     if (input_len > input_bytes.len) return finishError(.bad_input);
     const envelope = input_bytes[0..input_len];
-    const record = parseInputEventRecordBytes(envelope) catch return finishError(.bad_input);
+    const record = app_input_event.parseBytes(envelope) catch return finishError(.bad_input);
     return handleInputEventRecord(record, width, height);
-}
-
-fn parseInputEventRecordBytes(envelope: []const u8) !InputEventRecord {
-    if (envelope.len < input_event_record_header_bytes) return error.BadInput;
-    const kind = inputEventKindFromInt(loadEventU32(envelope, input_event_record_kind_offset) orelse return error.BadInput) orelse return error.UnknownInputEvent;
-    const x = loadEventF32(envelope, input_event_record_x_offset) orelse return error.BadInput;
-    const y = loadEventF32(envelope, input_event_record_y_offset) orelse return error.BadInput;
-    const delta_y = loadEventF32(envelope, input_event_record_delta_y_offset) orelse return error.BadInput;
-    const flags = loadEventU32(envelope, input_event_record_flags_offset) orelse return error.BadInput;
-    const key_len: usize = @intCast(loadEventU32(envelope, input_event_record_key_len_offset) orelse return error.BadInput);
-    const code_len: usize = @intCast(loadEventU32(envelope, input_event_record_code_len_offset) orelse return error.BadInput);
-    const input_type_len: usize = @intCast(loadEventU32(envelope, input_event_record_input_type_len_offset) orelse return error.BadInput);
-    const data_len: usize = @intCast(loadEventU32(envelope, input_event_record_data_len_offset) orelse return error.BadInput);
-    var offset: usize = input_event_record_header_bytes;
-    const key = nextEventBytes(envelope, &offset, key_len) orelse return error.BadInput;
-    const code = nextEventBytes(envelope, &offset, code_len) orelse return error.BadInput;
-    const input_type = nextEventBytes(envelope, &offset, input_type_len) orelse return error.BadInput;
-    const data = nextEventBytes(envelope, &offset, data_len) orelse return error.BadInput;
-    if (offset != envelope.len) return error.BadInput;
-    return .{
-        .kind = kind,
-        .x = x,
-        .y = y,
-        .delta_y = delta_y,
-        .ctrl = if ((flags & input_event_flag_ctrl) != 0) 1 else 0,
-        .meta = if ((flags & input_event_flag_meta) != 0) 1 else 0,
-        .alt = if ((flags & input_event_flag_alt) != 0) 1 else 0,
-        .shift = if ((flags & input_event_flag_shift) != 0) 1 else 0,
-        .repeat = if ((flags & input_event_flag_repeat) != 0) 1 else 0,
-        .key = key,
-        .code = code,
-        .input_type = input_type,
-        .data = data,
-    };
-}
-
-fn loadEventU32(envelope: []const u8, offset: usize) ?u32 {
-    if (offset > envelope.len or 4 > envelope.len - offset) return null;
-    return bytes.load32(envelope[offset..][0..4]);
-}
-
-fn loadEventF32(envelope: []const u8, offset: usize) ?f32 {
-    return @as(f32, @bitCast(loadEventU32(envelope, offset) orelse return null));
-}
-
-fn nextEventBytes(envelope: []const u8, offset: *usize, len: usize) ?[]const u8 {
-    if (offset.* > envelope.len or len > envelope.len - offset.*) return null;
-    const out = envelope[offset.*..][0..len];
-    offset.* += len;
-    return out;
-}
-
-fn inputEventKindFromInt(value: u32) ?InputEventKind {
-    return switch (value) {
-        @intFromEnum(InputEventKind.resize) => .resize,
-        @intFromEnum(InputEventKind.wheel) => .wheel,
-        @intFromEnum(InputEventKind.pointer_move) => .pointer_move,
-        @intFromEnum(InputEventKind.pointer_leave) => .pointer_leave,
-        @intFromEnum(InputEventKind.pointer_down) => .pointer_down,
-        @intFromEnum(InputEventKind.pointer_up) => .pointer_up,
-        @intFromEnum(InputEventKind.popstate) => .popstate,
-        @intFromEnum(InputEventKind.hashchange) => .hashchange,
-        @intFromEnum(InputEventKind.key_down) => .key_down,
-        @intFromEnum(InputEventKind.context_menu) => .context_menu,
-        @intFromEnum(InputEventKind.key_up) => .key_up,
-        @intFromEnum(InputEventKind.input) => .input,
-        @intFromEnum(InputEventKind.change) => .change,
-        @intFromEnum(InputEventKind.click) => .click,
-        @intFromEnum(InputEventKind.dbl_click) => .dbl_click,
-        @intFromEnum(InputEventKind.visibility_change) => .visibility_change,
-        @intFromEnum(InputEventKind.focus) => .focus,
-        @intFromEnum(InputEventKind.blur) => .blur,
-        @intFromEnum(InputEventKind.before_input) => .before_input,
-        @intFromEnum(InputEventKind.composition_start) => .composition_start,
-        @intFromEnum(InputEventKind.composition_update) => .composition_update,
-        @intFromEnum(InputEventKind.composition_end) => .composition_end,
-        @intFromEnum(InputEventKind.touch_start) => .touch_start,
-        @intFromEnum(InputEventKind.touch_move) => .touch_move,
-        @intFromEnum(InputEventKind.touch_end) => .touch_end,
-        @intFromEnum(InputEventKind.touch_cancel) => .touch_cancel,
-        @intFromEnum(InputEventKind.drag_start) => .drag_start,
-        @intFromEnum(InputEventKind.drag_end) => .drag_end,
-        @intFromEnum(InputEventKind.drop) => .drop,
-        else => null,
-    };
 }
 
 fn handleInputEventRecord(record: InputEventRecord, width: f32, height: f32) u32 {
@@ -3057,29 +2841,7 @@ fn eventBytesForTest(kind: InputEventKind, x: f32, y: f32, delta_y: f32, flags: 
 }
 
 fn writeEventRecordForTest(kind: InputEventKind, x: f32, y: f32, delta_y: f32, flags: u32, key: []const u8, code: []const u8, input_type: []const u8, data: []const u8) usize {
-    _ = bytes.store32(input_bytes[input_event_record_kind_offset..][0..4], @intFromEnum(kind));
-    storeEventF32ForTest(input_event_record_x_offset, x);
-    storeEventF32ForTest(input_event_record_y_offset, y);
-    storeEventF32ForTest(input_event_record_delta_y_offset, delta_y);
-    _ = bytes.store32(input_bytes[input_event_record_flags_offset..][0..4], flags);
-    _ = bytes.store32(input_bytes[input_event_record_key_len_offset..][0..4], @intCast(key.len));
-    _ = bytes.store32(input_bytes[input_event_record_code_len_offset..][0..4], @intCast(code.len));
-    _ = bytes.store32(input_bytes[input_event_record_input_type_len_offset..][0..4], @intCast(input_type.len));
-    _ = bytes.store32(input_bytes[input_event_record_data_len_offset..][0..4], @intCast(data.len));
-    var offset: usize = input_event_record_header_bytes;
-    @memcpy(input_bytes[offset..][0..key.len], key);
-    offset += key.len;
-    @memcpy(input_bytes[offset..][0..code.len], code);
-    offset += code.len;
-    @memcpy(input_bytes[offset..][0..input_type.len], input_type);
-    offset += input_type.len;
-    @memcpy(input_bytes[offset..][0..data.len], data);
-    offset += data.len;
-    return offset;
-}
-
-fn storeEventF32ForTest(offset: usize, value: f32) void {
-    _ = bytes.store32(input_bytes[offset..][0..4], @as(u32, @bitCast(value)));
+    return app_input_event.writeBytes(&input_bytes, kind, x, y, delta_y, flags, key, code, input_type, data) catch unreachable;
 }
 
 fn keyEventForTest(value: []const u8, ctrl: bool, meta: bool, alt: bool) u32 {
