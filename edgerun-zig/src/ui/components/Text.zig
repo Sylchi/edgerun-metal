@@ -36,14 +36,18 @@ pub const Text = struct {
 
     pub fn measure(self: Text, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = options;
-        const measured = layout.measureText(self.value, constraints, .{
+        return measureValue(self.value, constraints, .{
             .line_height = text_line_height,
             .average_char_width = text_metrics.averageWidth(self.value, text_line_height),
             .max_lines = text_max_lines,
         });
+    }
+
+    pub fn measureValue(value: []const u8, constraints: layout.Constraints, metrics: layout.TextMetrics) layout.Measurement {
+        const measured = layout.measureText(value, constraints, metrics);
         const preferred = constrainPreferredSize(measured.preferred, constraints);
         return layout.Measurement.flexible(
-            .{ .w = @min(text_min_width, preferred.w), .h = @min(text_line_height, preferred.h) },
+            .{ .w = @min(text_min_width, preferred.w), .h = @min(metrics.line_height, preferred.h) },
             preferred,
             measured.max,
         ).applyExact(constraints);

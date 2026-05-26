@@ -33,7 +33,7 @@ timeout "$qemu_timeout" qemu-system-x86_64 \
   -serial none \
   -monitor none \
   -no-reboot \
-  -device VGA \
+  -device virtio-gpu-pci \
   -drive if=pflash,format=raw,readonly=on,file="$ovmf_code" \
   -drive if=pflash,format=raw,file="$ovmf_vars" \
   -drive format=raw,file="$esp_img" \

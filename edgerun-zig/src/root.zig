@@ -69,6 +69,8 @@ pub const ui_toast = @import("ui_toast.zig");
 pub const ui_tokens = @import("ui_tokens.zig");
 pub const varfont = @import("varfont.zig");
 pub const vfs = @import("vfs.zig");
+pub const virtio = @import("virtio.zig");
+pub const virtio_gpu = @import("virtio_gpu.zig");
 pub const wasm = @import("wasm/root.zig");
 pub const wasm_app = @import("wasm/app.zig");
 
@@ -143,6 +145,8 @@ test {
     _ = ui_tokens;
     _ = varfont;
     _ = vfs;
+    _ = virtio;
+    _ = virtio_gpu;
     _ = wasm;
     _ = wasm_app;
 }

@@ -234,7 +234,7 @@ fn renderContent(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, text_colo
     const content_w = @min(available_w, label_w + icons_w);
     var cursor_x = bounds.x + margin + @max(0.0, (available_w - content_w) * 0.5);
     const icon_y = bounds.y + (bounds.h - icon_size) * 0.5;
-    const text_y = bounds.y + (bounds.h - label_height) * 0.5;
+    const text_y = labelY(bounds);
 
     switch (icon_slot) {
         .leading => |value| {
@@ -267,7 +267,11 @@ fn renderContent(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, text_colo
 
 fn textBounds(bounds: ui.Rect, padding: f32) ui.Rect {
     const margin = @min(padding, bounds.w * 0.5);
-    return ui.Rect.init(bounds.x + margin, bounds.y + (bounds.h - label_height) * 0.5, @max(1.0, bounds.w - margin * 2.0), label_height);
+    return ui.Rect.init(bounds.x + margin, labelY(bounds), @max(1.0, bounds.w - margin * 2.0), label_height);
+}
+
+fn labelY(bounds: ui.Rect) f32 {
+    return bounds.y + (bounds.h - label_line_height) * 0.5;
 }
 
 fn iconButtonIconBounds(bounds: ui.Rect) ui.Rect {
@@ -310,6 +314,7 @@ pub const label_height: f32 = 17.0;
 pub const label_padding: f32 = 16.0;
 
 const label_min_width: f32 = 8.0;
+const label_line_height: f32 = 20.0;
 const icon_size: f32 = 18.0;
 const icon_gap: f32 = 8.0;
 const min_width: f32 = 44.0;
@@ -468,7 +473,8 @@ test "button component aligns icon slot and label centers" {
 
     const icon_command = component_test.iconCommand(scene.written(), Icon.named(.cpu).tag()).?.icon_quad;
     const text_command = component_test.textCommand(scene.written(), "Compile").?.text;
-    try std.testing.expectEqual(icon_command.bounds.y + icon_command.bounds.h * 0.5, text_command.origin.y + text_command.origin.h * 0.5);
+    try std.testing.expectEqual(bounds.y + (bounds.h - label_line_height) * 0.5, text_command.origin.y);
+    try std.testing.expect(text_command.origin.y + text_command.origin.h * 0.5 < icon_command.bounds.y + icon_command.bounds.h * 0.5);
     try std.testing.expect(icon_command.bounds.x + icon_command.bounds.w <= text_command.origin.x);
 }
 

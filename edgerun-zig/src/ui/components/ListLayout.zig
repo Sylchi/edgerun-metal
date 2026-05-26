@@ -2,6 +2,7 @@ const interaction = @import("../../ui_interaction.zig");
 const layout = @import("../../layouts/Types.zig");
 const ui = @import("../../ui.zig");
 const primitives = @import("Primitives.zig");
+const Text = @import("Text.zig").Text;
 
 pub const SegmentPaint = struct {
     active_fill: ui.Color,
@@ -28,7 +29,6 @@ pub fn renderSegment(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, activ
 
 pub const SegmentMeasure = struct {
     item_count: usize,
-    height: f32,
     padding: f32 = primitives.control_text_padding,
     gap: f32 = 0.0,
     min_width: f32 = 0.0,
@@ -39,29 +39,34 @@ pub const SegmentMeasure = struct {
 pub fn measureSegments(labels: []const []const u8, constraints: layout.Constraints, spec: SegmentMeasure) layout.Measurement {
     const item_count = @max(spec.item_count, labels.len);
     var item_w: f32 = spec.min_width;
-    var item_h: f32 = spec.height;
+    var item_h: f32 = spec.line_height + spec.padding * 2.0;
     for (labels) |label| {
-        const measured = layout.measureText(label, .{ .width = .unconstrained, .text_wrap = .nowrap }, primitives.textMetrics(label, spec.line_height, spec.max_lines));
+        const measured = Text.measureValue(label, .{ .width = .unconstrained, .text_wrap = .nowrap }, primitives.textMetrics(label, spec.line_height, spec.max_lines));
         item_w = @max(item_w, measured.preferred.w + spec.padding * 2.0);
         item_h = @max(item_h, measured.preferred.h + spec.padding * 2.0);
     }
     const count_f = @as(f32, @floatFromInt(item_count));
-    const min_total_w = spec.min_width * count_f + spec.gap * @max(0.0, count_f - 1.0);
+    const min_total_w = @max(spec.min_width, primitives.min_extent) * count_f + spec.gap * @max(0.0, count_f - 1.0);
     const preferred = primitives.constrainPreferredSize(.{
         .w = item_w * count_f + spec.gap * @max(0.0, count_f - 1.0),
         .h = item_h,
     }, constraints);
     return layout.Measurement.flexible(
-        .{ .w = @min(min_total_w, preferred.w), .h = @min(spec.height, preferred.h) },
+        .{ .w = @min(min_total_w, preferred.w), .h = @min(spec.line_height + spec.padding * 2.0, preferred.h) },
         preferred,
-        .{ .w = primitives.measure_max_width, .h = @max(preferred.h, spec.height) },
+        .{ .w = primitives.measure_max_width, .h = preferred.h },
     ).applyExact(constraints);
 }
 
 pub fn equalSegmentBounds(bounds: ui.Rect, index: usize, item_count: usize) ui.Rect {
+    return equalSegmentBoundsWithGap(bounds, index, item_count, 0.0);
+}
+
+pub fn equalSegmentBoundsWithGap(bounds: ui.Rect, index: usize, item_count: usize, gap: f32) ui.Rect {
     const count = @max(@as(f32, @floatFromInt(item_count)), 1.0);
-    const segment_w = @max(primitives.min_extent, bounds.w / count);
-    return ui.Rect.init(bounds.x + @as(f32, @floatFromInt(index)) * segment_w, bounds.y, segment_w, bounds.h);
+    const total_gap = gap * @max(0.0, count - 1.0);
+    const segment_w = @max(primitives.min_extent, (bounds.w - total_gap) / count);
+    return ui.Rect.init(bounds.x + @as(f32, @floatFromInt(index)) * (segment_w + gap), bounds.y, segment_w, bounds.h);
 }
 
 pub fn paddedEqualSegmentBounds(bounds: ui.Rect, index: usize, item_count: usize, padding: f32) ui.Rect {
@@ -69,24 +74,18 @@ pub fn paddedEqualSegmentBounds(bounds: ui.Rect, index: usize, item_count: usize
 }
 
 pub fn collectEqualSegmentHits(collector: *interaction.Collector, bounds: ui.Rect, id: u32, item_count: usize) interaction.Error!void {
+    try collectEqualSegmentHitsWithGap(collector, bounds, id, item_count, 0.0);
+}
+
+pub fn collectEqualSegmentHitsWithGap(collector: *interaction.Collector, bounds: ui.Rect, id: u32, item_count: usize, gap: f32) interaction.Error!void {
     for (0..item_count) |index| {
-        try collector.addHit(equalSegmentBounds(bounds, index, item_count), .button, id + @as(u32, @intCast(index)));
+        try collector.addHit(equalSegmentBoundsWithGap(bounds, index, item_count, gap), .button, id + @as(u32, @intCast(index)));
     }
 }
 
 pub fn collectPaddedEqualSegmentHits(collector: *interaction.Collector, bounds: ui.Rect, id: u32, item_count: usize, padding: f32) interaction.Error!void {
     for (0..item_count) |index| {
         try collector.addHit(paddedEqualSegmentBounds(bounds, index, item_count, padding), .button, id + @as(u32, @intCast(index)));
-    }
-}
-
-pub fn fixedPitchItemBounds(bounds: ui.Rect, index: usize, item_w: f32, item_h: f32, gap: f32) ui.Rect {
-    return ui.Rect.init(bounds.x + @as(f32, @floatFromInt(index)) * (item_w + gap), bounds.y, item_w, @min(bounds.h, item_h));
-}
-
-pub fn collectFixedPitchHits(collector: *interaction.Collector, bounds: ui.Rect, id: u32, item_count: usize, item_w: f32, item_h: f32, gap: f32) interaction.Error!void {
-    for (0..item_count) |index| {
-        try collector.addHit(fixedPitchItemBounds(bounds, index, item_w, item_h, gap), .button, id + @as(u32, @intCast(index)));
     }
 }
 

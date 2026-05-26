@@ -13,8 +13,6 @@ const list_layout = @import("ListLayout.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-const measureFixed = component_primitives.measureFixed;
-
 pub const Pagination = struct {
     id: u32,
     page: u16 = 0,
@@ -34,13 +32,17 @@ pub const Pagination = struct {
     }
 
     pub fn collectInteractions(self: Pagination, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-        try list_layout.collectFixedPitchHits(collector, bounds, self.id, pagination_item_count, pagination_item_w, pagination_item_h, pagination_gap);
+        try list_layout.collectEqualSegmentHitsWithGap(collector, bounds, self.id, pagination_item_count, pagination_gap);
     }
 
     pub fn measure(self: Pagination, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = self;
         _ = options;
-        return measureFixed(preferred_pagination, constraints);
+        return list_layout.measureSegments(&pagination_labels, constraints, .{
+            .item_count = pagination_item_count,
+            .gap = pagination_gap,
+            .padding = pagination_text_padding,
+        });
     }
 
     pub fn toObject(self: Pagination, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -73,24 +75,16 @@ const pagination_page_count: u16 = 3;
 const pagination_item_count: usize = 5;
 
 fn itemBounds(bounds: ui.Rect, index: usize) ui.Rect {
-    return list_layout.fixedPitchItemBounds(bounds, index, pagination_item_w, pagination_item_h, pagination_gap);
+    return list_layout.equalSegmentBoundsWithGap(bounds, index, pagination_item_count, pagination_gap);
 }
 
 fn itemLabel(index: usize) []const u8 {
-    return switch (index) {
-        0 => "<",
-        1 => "1",
-        2 => "2",
-        3 => "3",
-        else => ">",
-    };
+    return pagination_labels[@min(index, pagination_labels.len - 1)];
 }
 
-const pagination_item_w: f32 = 36.0;
-const pagination_item_h: f32 = 36.0;
 const pagination_gap: f32 = 4.0;
 const pagination_text_padding: f32 = 2.0;
-pub const preferred_pagination = ui.Size{ .w = 240.0, .h = 36.0 };
+const pagination_labels = [_][]const u8{ "<", "1", "2", "3", ">" };
 
 test "pagination component serializes to canonical object and deserializes" {
     const pagination = Pagination{ .id = 120, .page = 2 };
@@ -119,4 +113,12 @@ test "pagination component renders pages and hit regions" {
     try std.testing.expect(component_test.hasText(scene.written(), "3"));
     try std.testing.expectEqual(@as(usize, 5), collector.written().len);
     try std.testing.expectEqual(@as(u32, 124), collector.written()[4].id);
+}
+
+test "pagination measurement follows labels and shared segment layout" {
+    const pagination = Pagination{ .id = 120, .page = 1 };
+    const measured = pagination.measure(.{}, .{});
+
+    try std.testing.expect(measured.min.w < measured.preferred.w);
+    try std.testing.expect(measured.preferred.h >= component_primitives.control_label_height);
 }

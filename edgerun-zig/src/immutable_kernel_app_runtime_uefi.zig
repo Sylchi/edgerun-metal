@@ -1,14 +1,20 @@
 const std = @import("std");
 const uefi = std.os.uefi;
+const app_input_event = @import("app_input_event.zig");
 const app_frame = @import("app_frame.zig");
 const app_images = @import("app_images.zig");
+const data_chunk = @import("content/data_chunk.zig");
 const gop_framebuffer = @import("boot/gop_framebuffer.zig");
+const input_i8042_keyboard = @import("input_i8042_keyboard.zig");
 const interaction = @import("ui_interaction.zig");
 const renderer_font_atlas = @import("render/font_atlas.zig");
 const renderer_ir = @import("render/ir.zig");
 const renderer_pipeline = @import("render/pipeline.zig");
 const renderer_software = @import("render/software.zig");
+const resource_contract = @import("content/resource_contract.zig");
+const resource_inventory = @import("content/resource_inventory.zig");
 const ui = @import("ui.zig");
+const virtio_gpu = @import("virtio_gpu.zig");
 const wasm = @import("wasm/root.zig");
 
 const app_runtime_wasm = @import("embedded_app_runtime_wasm").bytes;
@@ -37,6 +43,14 @@ const max_overlay_rects: usize = 512;
 const max_overlay_text_vertices: usize = 8192;
 const max_overlay_icon_vertices: usize = 256;
 const max_overlay_icon_line_vertices: usize = 16384;
+const input_contract_start_tick: u64 = 1;
+const input_contract_end_tick: u64 = 100;
+const input_contract_check_tick: u64 = 2;
+const input_resource_offset: u64 = 0;
+const input_resource_len: u64 = 1;
+const app_runtime_event_error: u32 = 1 << 8;
+const virtio_scanout_resource_id: u32 = 1;
+const virtio_scanout_id: u32 = 0;
 
 const IrStorage = renderer_ir.FixedBuffers(
     max_rects,
@@ -53,8 +67,13 @@ const IrStorage = renderer_ir.FixedBuffers(
 var framebuffer: gop_framebuffer.Framebuffer = undefined;
 var scene_state: SceneState = .{};
 var font_atlas: renderer_font_atlas.Atlas = undefined;
+var virtio_gpu_queue: virtio_gpu.QueueStorage = .{};
 var wasm_storage: wasm.ExecutionStorage = .{};
 var ticks: u64 = app_runtime_ticks;
+var input_resource_slots: [1]resource_inventory.Resource = undefined;
+var input_contract_slots: [1]resource_contract.Contract = undefined;
+var native_keyboard_state: input_i8042_keyboard.State = .{};
+var native_keyboard_event: [128]u8 = undefined;
 
 const SceneState = struct {
     commands: [max_commands]ui.Command = undefined,
@@ -77,7 +96,7 @@ const SceneState = struct {
 };
 
 pub fn main() noreturn {
-    printLine("EdgeRun app-runtime GOP smoke");
+    printLine("EdgeRun app-runtime virtio-gpu smoke");
     run() catch |err| {
         printText("FAIL ");
         printError(err);
@@ -90,19 +109,45 @@ pub fn main() noreturn {
 
 fn run() Error!void {
     const boot_services = uefi.system_table.boot_services orelse return error.BootServicesUnavailable;
-    framebuffer = gop_framebuffer.collect(boot_services) catch |err| return mapFramebufferError(err);
-    framebuffer.drawDebugScreen(.pre_exit);
-    printLine("check: gop framebuffer handoff ok");
+    framebuffer = gop_framebuffer.collect(boot_services) catch .{};
+    if (framebuffer.valid()) {
+        framebuffer.drawDebugScreen(.pre_exit);
+        printLine("check: gop fallback framebuffer ok");
+    } else {
+        printLine("check: gop fallback unavailable");
+    }
+
+    const app_memory = try allocateAppRuntimeMemory(boot_services);
+    var runtime = wasm.Runtime.initWithMemoryPages(app_memory, &ticks, app_runtime_pages);
+    _ = call(&runtime, "er_ui_boot", &.{}) catch |err| return mapWasmError(err);
+    printLine("check: app-runtime boot ok");
+    try installNativeKeyboardAndDeliverInput(&runtime, app_memory);
+    printLine("check: native keyboard input delivered to wasm app");
 
     const width = @min(framebuffer.width, max_boot_width);
     const height = @min(framebuffer.height, max_boot_height);
     const native_pixels = try allocateNativePixels(boot_services, width, height);
+    printLine("check: blessed native app renderer start");
     try renderBlessedNativeApp(width, height, native_pixels);
     printLine("check: blessed native app renderer ok");
 
-    framebuffer.blitUiColorBytes(width, height, std.mem.sliceAsBytes(native_pixels));
-    printLine("check: blessed native pixels copied to gop");
+    const scanout = try allocateVirtioScanout(boot_services, width, height);
+    packBgrxScanout(scanout, native_pixels);
+    try presentVirtioGpu(width, height, scanout);
+    printLine("check: blessed native pixels flushed to virtio-gpu");
+
+    if (framebuffer.valid()) {
+        framebuffer.blitUiColorBytes(width, height, std.mem.sliceAsBytes(native_pixels));
+        printLine("check: blessed native pixels copied to gop fallback");
+    }
     printLine("PASS immutable-kernel-app-runtime-qemu");
+}
+
+fn allocateAppRuntimeMemory(boot_services: *uefi.tables.BootServices) Error![]u8 {
+    const app_pages = boot_services.allocatePages(.any, .loader_data, app_runtime_uefi_pages) catch return error.AppMemoryAllocationFailed;
+    const app_memory = std.mem.sliceAsBytes(app_pages);
+    @memset(app_memory, 0);
+    return app_memory;
 }
 
 fn allocateNativePixels(boot_services: *uefi.tables.BootServices, width: u32, height: u32) Error![]ui.Color {
@@ -116,12 +161,94 @@ fn allocateNativePixels(boot_services: *uefi.tables.BootServices, width: u32, he
     return pixels[0..pixel_count];
 }
 
+fn allocateVirtioScanout(boot_services: *uefi.tables.BootServices, width: u32, height: u32) Error![]u8 {
+    const pixel_count = std.math.mul(usize, width, height) catch return error.VirtioScanoutAllocationFailed;
+    const byte_count = std.math.mul(usize, pixel_count, 4) catch return error.VirtioScanoutAllocationFailed;
+    const pages = (byte_count + uefi_page_bytes - 1) / uefi_page_bytes;
+    const bytes = boot_services.allocatePages(.any, .loader_data, pages) catch return error.VirtioScanoutAllocationFailed;
+    const scanout = std.mem.sliceAsBytes(bytes)[0..byte_count];
+    @memset(scanout, 0);
+    return scanout;
+}
+
+fn installNativeKeyboardAndDeliverInput(runtime: *wasm.Runtime, app_memory: []u8) Error!void {
+    const app = chunk("qemu-input-router-app");
+    const resource = resource_inventory.Resource.init(
+        chunk(input_i8042_keyboard.resource_id),
+        .input,
+        resource_contract.Bounds.init(input_resource_offset, input_resource_len),
+    );
+    var inventory = resource_inventory.Inventory.init(&input_resource_slots);
+    inventory.add(resource) catch return error.NativeKeyboardInventoryFailed;
+    var schedule = resource_contract.Schedule.init(&input_contract_slots);
+    const contract = resource_contract.Contract.init(
+        chunk("qemu-framework13-keyboard-input"),
+        app,
+        resource.id,
+        .input,
+        input_contract_start_tick,
+        input_contract_end_tick,
+        resource_contract.Bounds.init(input_resource_offset, input_resource_len),
+        resource_contract.Pattern.exclusive(),
+    );
+    schedule.installChecked(inventory, contract) catch return error.NativeKeyboardContractFailed;
+    const owner = schedule.ownerAt(resource.id, input_contract_check_tick) orelse return error.NativeKeyboardOwnerMissing;
+    if (!sameChunk(owner, app)) return error.NativeKeyboardOwnerMismatch;
+
+    native_keyboard_state.reset();
+    const event_len = native_keyboard_state.pushByte(0x1e, &native_keyboard_event) catch return error.NativeKeyboardDecodeFailed;
+    if (event_len == 0) return error.NativeKeyboardDecodeFailed;
+    const record = app_input_event.parseBytes(native_keyboard_event[0..event_len]) catch return error.NativeKeyboardDecodeFailed;
+    if (record.kind != .key_down or !std.mem.eql(u8, record.key, "a") or !std.mem.eql(u8, record.code, "KeyA")) return error.NativeKeyboardDecodeFailed;
+
+    const input_ptr = try exportUsize(runtime, "er_ui_input_ptr");
+    const input_capacity = try exportUsize(runtime, "er_ui_input_capacity");
+    if (input_ptr > app_memory.len or input_capacity > app_memory.len - input_ptr) return error.AppInputBufferInvalid;
+    if (event_len > input_capacity) return error.AppInputBufferInvalid;
+    @memcpy(app_memory[input_ptr..][0..event_len], native_keyboard_event[0..event_len]);
+    const result = call(runtime, "er_ui_event_bytes", &.{
+        .{ .i32 = @intCast(event_len) },
+        .{ .f32 = @floatFromInt(max_boot_width) },
+        .{ .f32 = @floatFromInt(max_boot_height) },
+        .{ .f32 = 0.0 },
+    }) catch |err| return mapWasmError(err);
+    const event_result: u32 = @bitCast(try resultI32(result));
+    if ((event_result & app_runtime_event_error) != 0) return error.AppInputRejected;
+}
+
 fn renderBlessedNativeApp(width: u32, height: u32, pixels: []ui.Color) Error!void {
     font_atlas.initWithFontInPlace(renderer_font_atlas.geist_ascii_font.body());
     const buffers = try scene_state.rebuild(width, height, &font_atlas);
     const image_texture = app_images.cloudMeme() catch return error.AppResourceInvalid;
     const surface = renderer_software.Framebuffer.init(width, height, pixels) catch return error.NativeRenderFailed;
     _ = renderer_pipeline.renderSoftwareFrame(surface, buffers, renderer_pipeline.softwareResources(&font_atlas, image_texture), .bg) catch return error.NativeRenderFailed;
+}
+
+fn packBgrxScanout(out: []u8, pixels: []const ui.Color) void {
+    var index: usize = 0;
+    while (index < pixels.len and index * 4 + 3 < out.len) : (index += 1) {
+        const color = pixels[index];
+        const byte_index = index * 4;
+        out[byte_index + 0] = color.b;
+        out[byte_index + 1] = color.g;
+        out[byte_index + 2] = color.r;
+        out[byte_index + 3] = 0xff;
+    }
+}
+
+fn presentVirtioGpu(width: u32, height: u32, scanout: []u8) Error!void {
+    if (scanout.len > std.math.maxInt(u32)) return error.VirtioScanoutTooLarge;
+    var device = virtio_gpu.Device.findAndInit(&virtio_gpu_queue) catch |err| return mapVirtioGpuError(err);
+    const setup = virtio_gpu.Setup2d.init(
+        virtio_scanout_resource_id,
+        virtio_scanout_id,
+        width,
+        height,
+        @intFromPtr(scanout.ptr),
+        @intCast(scanout.len),
+    );
+    device.setup2d(&virtio_gpu_queue, setup) catch |err| return mapVirtioGpuError(err);
+    device.flush2d(&virtio_gpu_queue, virtio_scanout_resource_id, width, height) catch |err| return mapVirtioGpuError(err);
 }
 
 fn renderNativeAppFrame(runtime: *wasm.Runtime, app_memory: []u8, width: u32, height: u32, pixels: []ui.Color) Error!void {
@@ -238,6 +365,20 @@ const Error = error{
     WasmNoMemory,
     WasmUnsupported,
     WasmTrap,
+    AppInputBufferInvalid,
+    AppInputRejected,
+    NativeKeyboardContractFailed,
+    NativeKeyboardDecodeFailed,
+    NativeKeyboardInventoryFailed,
+    NativeKeyboardOwnerMismatch,
+    NativeKeyboardOwnerMissing,
+    VirtioGpuDeviceNotFound,
+    VirtioGpuInvalidResponse,
+    VirtioGpuQueueFailed,
+    VirtioGpuTimeout,
+    VirtioGpuUnsupported,
+    VirtioScanoutAllocationFailed,
+    VirtioScanoutTooLarge,
 };
 
 fn mapFramebufferError(err: gop_framebuffer.Error) Error {
@@ -257,6 +398,22 @@ fn mapWasmError(err: wasm.Error) Error {
         error.NoMemory => error.WasmNoMemory,
         error.Unsupported, error.TableGrowthRequiresAuthority => error.WasmUnsupported,
         error.Trap, error.ArithmeticTrap, error.StackOverflow, error.StackUnderflow, error.MissingImport => error.WasmTrap,
+    };
+}
+
+fn mapVirtioGpuError(err: virtio_gpu.Error) Error {
+    return switch (err) {
+        error.DeviceNotFound => error.VirtioGpuDeviceNotFound,
+        error.DeviceTimeout => error.VirtioGpuTimeout,
+        error.InvalidResponse => error.VirtioGpuInvalidResponse,
+        error.FeatureNegotiationFailed,
+        error.InvalidBar,
+        error.MissingCapability,
+        error.MissingTransport,
+        error.QueueSetupFailed,
+        error.QueueTooSmall,
+        => error.VirtioGpuQueueFailed,
+        error.UnsupportedDevice => error.VirtioGpuUnsupported,
     };
 }
 
@@ -280,6 +437,20 @@ fn printError(err: Error) void {
         error.WasmNoMemory => printText("wasm-no-memory"),
         error.WasmUnsupported => printText("wasm-unsupported"),
         error.WasmTrap => printText("wasm-trap"),
+        error.AppInputBufferInvalid => printText("app-input-buffer-invalid"),
+        error.AppInputRejected => printText("app-input-rejected"),
+        error.NativeKeyboardContractFailed => printText("native-keyboard-contract-failed"),
+        error.NativeKeyboardDecodeFailed => printText("native-keyboard-decode-failed"),
+        error.NativeKeyboardInventoryFailed => printText("native-keyboard-inventory-failed"),
+        error.NativeKeyboardOwnerMismatch => printText("native-keyboard-owner-mismatch"),
+        error.NativeKeyboardOwnerMissing => printText("native-keyboard-owner-missing"),
+        error.VirtioGpuDeviceNotFound => printText("virtio-gpu-device-not-found"),
+        error.VirtioGpuInvalidResponse => printText("virtio-gpu-invalid-response"),
+        error.VirtioGpuQueueFailed => printText("virtio-gpu-queue-failed"),
+        error.VirtioGpuTimeout => printText("virtio-gpu-timeout"),
+        error.VirtioGpuUnsupported => printText("virtio-gpu-unsupported"),
+        error.VirtioScanoutAllocationFailed => printText("virtio-scanout-allocation-failed"),
+        error.VirtioScanoutTooLarge => printText("virtio-scanout-too-large"),
     }
 }
 
@@ -312,6 +483,14 @@ fn writeDebugcon(message: []const u8) void {
     for (message) |byte| {
         outb(debugcon_port, byte);
     }
+}
+
+fn chunk(value: []const u8) data_chunk.DataChunk {
+    return data_chunk.DataChunk.init(value);
+}
+
+fn sameChunk(left: data_chunk.DataChunk, right: data_chunk.DataChunk) bool {
+    return left.valid() and right.valid() and std.mem.eql(u8, left.body(), right.body());
 }
 
 fn outb(port: u16, value: u8) void {
