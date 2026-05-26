@@ -29,10 +29,6 @@ pub const Zoir = @import("zig/Zoir.zig");
 pub const ZonGen = @import("zig/ZonGen.zig");
 pub const BuiltinFn = @import("zig/BuiltinFn.zig");
 pub const AstRlAnnotate = @import("zig/AstRlAnnotate.zig");
-pub const LibCInstallation = @import("zig/LibCInstallation.zig");
-pub const WindowsSdk = @import("zig/WindowsSdk.zig");
-pub const LibCDirs = @import("zig/LibCDirs.zig");
-pub const target = @import("zig/target.zig");
 pub const llvm = @import("zig/llvm.zig");
 
 // Character literal parsing
@@ -1158,15 +1154,11 @@ test {
     _ = BuiltinFn;
     _ = Client;
     _ = ErrorBundle;
-    _ = LibCDirs;
-    _ = LibCInstallation;
     _ = Server;
     _ = TokenSmith;
-    _ = WindowsSdk;
     _ = number_literal;
     _ = primitives;
     _ = string_literal;
-    _ = target;
     _ = c_translation;
     _ = llvm;
 }
