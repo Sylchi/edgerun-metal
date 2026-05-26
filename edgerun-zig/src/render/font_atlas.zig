@@ -20,7 +20,7 @@ const padding: usize = 8;
 const row_gap: usize = 8;
 const bitmap_bytes: usize = 2 * 1024 * 1024;
 const font_weight: f32 = 400.0;
-const device_scale: f32 = 2.0;
+const default_device_scale: f32 = 2.0;
 const raster_samples: usize = 8;
 const quadratic_steps: usize = 10;
 const padding_pixels: i16 = 1;
@@ -121,10 +121,12 @@ pub const Atlas = struct {
     atlas_y: usize,
     atlas_row_h: usize,
     font: ?font_vector.Body,
+    device_scale: f32,
 
     pub fn init() Atlas {
         var atlas: Atlas = undefined;
         atlas.font = null;
+        atlas.device_scale = default_device_scale;
         atlas.clear();
         return atlas;
     }
@@ -132,6 +134,7 @@ pub const Atlas = struct {
     pub fn initWithFont(font: font_vector.Body) Atlas {
         var atlas: Atlas = undefined;
         atlas.font = font;
+        atlas.device_scale = default_device_scale;
         atlas.clear();
         return atlas;
     }
@@ -170,6 +173,16 @@ pub const Atlas = struct {
         return self.glyph_count;
     }
 
+    pub fn setDeviceScale(self: *Atlas, scale: f32) void {
+        if (@abs(self.device_scale - scale) <= 0.001) return;
+        self.device_scale = scale;
+        self.clear();
+    }
+
+    pub fn deviceScale(self: *const Atlas) f32 {
+        return self.device_scale;
+    }
+
     fn resolveGlyph(self: *Atlas, ch: u8, px: u8) renderer_ir.Error!?renderer_ir.Glyph {
         if (self.findGlyph(ch, px)) |found| return found;
         return self.cacheGlyph(ch, px) catch |err| switch (err) {
@@ -199,7 +212,7 @@ pub const Atlas = struct {
         var cache = varfont.Cache.initFormat(face, &self.bitmap, format);
         _ = cache.setAxis("wght", font_weight);
         const glyph_id = face.glyphId(ch);
-        const cached = try cache.bakeGlyph(glyph_id, @as(f32, @floatFromInt(px)) * device_scale);
+        const cached = try cache.bakeGlyph(glyph_id, @as(f32, @floatFromInt(px)) * self.device_scale);
         const view = cache.bitmapView(cached);
         const glyph_width: usize = view.width;
         const glyph_height: usize = view.height;
@@ -233,11 +246,11 @@ pub const Atlas = struct {
             .v0 = atlas_v0,
             .u1 = atlas_u1,
             .v1 = atlas_v1,
-            .w = scaledFontValue(@floatFromInt(glyph_width)),
-            .h = scaledFontValue(@floatFromInt(glyph_height)),
-            .left = scaledFontValue(@floatFromInt(cached.left)),
-            .top = scaledFontValue(@floatFromInt(cached.top)),
-            .advance = scaledFontValue(cached.advance),
+            .w = self.scaledFontValue(@floatFromInt(glyph_width)),
+            .h = self.scaledFontValue(@floatFromInt(glyph_height)),
+            .left = self.scaledFontValue(@floatFromInt(cached.left)),
+            .top = self.scaledFontValue(@floatFromInt(cached.top)),
+            .advance = self.scaledFontValue(cached.advance),
         };
         self.glyphs[self.glyph_count] = .{ .ch = ch, .px = px, .glyph = packed_glyph };
         self.glyph_count += 1;
@@ -246,7 +259,7 @@ pub const Atlas = struct {
 
     fn cacheObjectGlyph(self: *Atlas, font: font_vector.Body, ch: u8, px: u8) varfont.Error!renderer_ir.Glyph {
         const glyph_info = font.glyphForCodepoint(ch) orelse return error.UnsupportedGlyph;
-        const scale = (@as(f32, @floatFromInt(px)) * device_scale) / @as(f32, @floatFromInt(font.metrics.units_per_em));
+        const scale = (@as(f32, @floatFromInt(px)) * self.device_scale) / @as(f32, @floatFromInt(font.metrics.units_per_em));
         const advance = glyph_info.advance * scale;
         var glyph_width: usize = 0;
         var glyph_height: usize = 0;
@@ -296,11 +309,11 @@ pub const Atlas = struct {
             .v0 = atlas_v0,
             .u1 = atlas_u1,
             .v1 = atlas_v1,
-            .w = scaledFontValue(@floatFromInt(glyph_width)),
-            .h = scaledFontValue(@floatFromInt(glyph_height)),
-            .left = scaledFontValue(@floatFromInt(glyph_left)),
-            .top = scaledFontValue(@floatFromInt(glyph_top)),
-            .advance = scaledFontValue(advance),
+            .w = self.scaledFontValue(@floatFromInt(glyph_width)),
+            .h = self.scaledFontValue(@floatFromInt(glyph_height)),
+            .left = self.scaledFontValue(@floatFromInt(glyph_left)),
+            .top = self.scaledFontValue(@floatFromInt(glyph_top)),
+            .advance = self.scaledFontValue(advance),
         };
         self.glyphs[self.glyph_count] = .{ .ch = ch, .px = px, .glyph = packed_glyph };
         self.glyph_count += 1;
@@ -314,6 +327,10 @@ pub const Atlas = struct {
             const src = row * w;
             @memcpy(self.alpha[dst .. dst + w], source_pixels[src .. src + w]);
         }
+    }
+
+    fn scaledFontValue(self: *const Atlas, value: f32) f32 {
+        return value / self.device_scale;
     }
 };
 
@@ -380,10 +397,6 @@ fn objectTextWidth(font: font_vector.Body, value: []const u8, px: u8) f32 {
         }
     }
     return out;
-}
-
-fn scaledFontValue(value: f32) f32 {
-    return value / device_scale;
 }
 
 fn glyph(context: *anyopaque, ch: u8, px: u8) renderer_ir.Error!?renderer_ir.Glyph {
