@@ -1,5 +1,7 @@
 const std = @import("std");
 const gl_contract = @import("render/gl_contract.zig");
+const icon_line_buffer = @import("render/icon_line_buffer.zig");
+const renderer_ir = @import("render/ir.zig");
 
 const output_file_permissions = std.Io.File.Permissions.default_file.setReadOnly(true);
 
@@ -12,6 +14,29 @@ pub const max_total_js_bytes: usize = 8192;
 const attr_pos_location_js = std.fmt.comptimePrint("{d}", .{gl_contract.attr_pos_location});
 const attr_uv_location_js = std.fmt.comptimePrint("{d}", .{gl_contract.attr_uv_location});
 const attr_color_location_js = std.fmt.comptimePrint("{d}", .{gl_contract.attr_color_location});
+const rect_float_stride_js = std.fmt.comptimePrint("{d}", .{renderer_ir.rect_float_stride});
+const rect_x_index_js = std.fmt.comptimePrint("{d}", .{renderer_ir.rect_x_index});
+const rect_y_index_js = std.fmt.comptimePrint("{d}", .{renderer_ir.rect_y_index});
+const rect_w_index_js = std.fmt.comptimePrint("{d}", .{renderer_ir.rect_w_index});
+const rect_h_index_js = std.fmt.comptimePrint("{d}", .{renderer_ir.rect_h_index});
+const rect_radius_index_js = std.fmt.comptimePrint("{d}", .{renderer_ir.rect_radius_index});
+const rect_shadow_index_js = std.fmt.comptimePrint("{d}", .{renderer_ir.rect_shadow_index});
+const rect_color_r_index_js = std.fmt.comptimePrint("{d}", .{renderer_ir.rect_color_r_index});
+const rect_color_g_index_js = std.fmt.comptimePrint("{d}", .{renderer_ir.rect_color_g_index});
+const rect_color_b_index_js = std.fmt.comptimePrint("{d}", .{renderer_ir.rect_color_b_index});
+const rect_color_a_index_js = std.fmt.comptimePrint("{d}", .{renderer_ir.rect_color_a_index});
+const rect_color2_r_index_js = std.fmt.comptimePrint("{d}", .{renderer_ir.rect_color2_r_index});
+const rect_color2_g_index_js = std.fmt.comptimePrint("{d}", .{renderer_ir.rect_color2_g_index});
+const rect_color2_b_index_js = std.fmt.comptimePrint("{d}", .{renderer_ir.rect_color2_b_index});
+const rect_color2_a_index_js = std.fmt.comptimePrint("{d}", .{renderer_ir.rect_color2_a_index});
+const rect_mode_index_js = std.fmt.comptimePrint("{d}", .{renderer_ir.rect_mode_index});
+const text_vertex_float_stride_js = std.fmt.comptimePrint("{d}", .{renderer_ir.text_vertex_float_stride});
+const text_vertex_byte_stride_js = std.fmt.comptimePrint("{d}", .{renderer_ir.text_vertex_float_stride * @sizeOf(f32)});
+const textured_u_byte_offset_js = std.fmt.comptimePrint("{d}", .{renderer_ir.textured_u_index * @sizeOf(f32)});
+const textured_color_byte_offset_js = std.fmt.comptimePrint("{d}", .{renderer_ir.textured_color_r_index * @sizeOf(f32)});
+const icon_line_vertex_float_stride_js = std.fmt.comptimePrint("{d}", .{icon_line_buffer.vertex_float_stride});
+const icon_line_vertex_byte_stride_js = std.fmt.comptimePrint("{d}", .{icon_line_buffer.vertex_float_stride * @sizeOf(f32)});
+const icon_line_color_byte_offset_js = std.fmt.comptimePrint("{d}", .{icon_line_buffer.vertex_color_r_index * @sizeOf(f32)});
 const gl_attr_bindings =
     "G.bindAttribLocation(p," ++ attr_pos_location_js ++ ",`" ++ gl_contract.attr_pos ++ "`);" ++
     "G.bindAttribLocation(p," ++ attr_uv_location_js ++ ",`" ++ gl_contract.attr_uv ++ "`);" ++
@@ -32,7 +57,59 @@ pub const loader_js =
     \\G.linkProgram(p);if(!G.getProgramParameter(p,G.LINK_STATUS))throw G.getProgramInfoLog(p);return p},
 ++ gl_shader_sources ++
     \\;
-    \\let pr=O(V,Rr),pt=O(Tv,Tf),pi=O(Tv,If),pl=O(Lv,Lf),rb=G.createBuffer(),tb=G.createBuffer(),lb=G.createBuffer(),ft=G.createTexture(),it=G.createTexture(),fg=0,up=(x,w,h,fmt)=>{G.bindTexture(G.TEXTURE_2D,x);G.texParameteri(G.TEXTURE_2D,G.TEXTURE_MIN_FILTER,G.LINEAR);G.texParameteri(G.TEXTURE_2D,G.TEXTURE_MAG_FILTER,G.LINEAR);G.texParameteri(G.TEXTURE_2D,G.TEXTURE_WRAP_S,G.CLAMP_TO_EDGE);G.texParameteri(G.TEXTURE_2D,G.TEXTURE_WRAP_T,G.CLAMP_TO_EDGE);G.texImage2D(G.TEXTURE_2D,0,fmt,w,h,0,fmt,G.UNSIGNED_BYTE,new Uint8Array(M,fmt==G.RGBA?W.er_ui_post_image_rgba_ptr():W.er_ui_font_atlas_ptr(),fmt==G.RGBA?W.er_ui_post_image_rgba_len():w*h))},dr=(p,l)=>{let a=new Float32Array(M,p,l);G.bindBuffer(G.ARRAY_BUFFER,rb);G.bufferData(G.ARRAY_BUFFER,new Float32Array([0,0,1,0,0,1,1,1]),G.STATIC_DRAW);G.vertexAttribPointer(0,2,G.FLOAT,0,0,0);G.enableVertexAttribArray(0);G.useProgram(pr);G.uniform2f(G.getUniformLocation(pr,`z`),W.er_ui_width(),W.er_ui_height());G.uniform1f(G.getUniformLocation(pr,`u`),C.width/W.er_ui_width());for(let i=0;i<l;i+=15){let x=a[i],y=a[i+1],w=a[i+2],h=a[i+3],m=a[i+14],sh=a[i+5];G.uniform4f(G.getUniformLocation(pr,`r`),m==1?x-sh:x,m==1?y-sh:y,m==1?w+sh*2:w,m==1?h+sh*2:h);G.uniform4f(G.getUniformLocation(pr,`s`),x,y,w,h);G.uniform1f(G.getUniformLocation(pr,`q`),a[i+4]);G.uniform1f(G.getUniformLocation(pr,`m`),sh);G.uniform1i(G.getUniformLocation(pr,`o`),m);G.uniform4f(G.getUniformLocation(pr,`c`),a[i+6],a[i+7],a[i+8],a[i+9]);G.uniform4f(G.getUniformLocation(pr,`d`),a[i+10],a[i+11],a[i+12],a[i+13]);G.drawArrays(G.TRIANGLE_STRIP,0,4)}};let dt=(p,l,t,g)=>{if(!l)return;G.useProgram(g?pi:pt);G.uniform2f(G.getUniformLocation(g?pi:pt,`z`),W.er_ui_width(),W.er_ui_height());if(!g)G.uniform1i(G.getUniformLocation(pt,`i`),0);G.bindTexture(G.TEXTURE_2D,t);G.bindBuffer(G.ARRAY_BUFFER,tb);G.bufferData(G.ARRAY_BUFFER,new Float32Array(M,p,l),G.DYNAMIC_DRAW);G.vertexAttribPointer(0,2,G.FLOAT,0,32,0);G.vertexAttribPointer(1,2,G.FLOAT,0,32,8);G.vertexAttribPointer(2,4,G.FLOAT,0,32,16);G.enableVertexAttribArray(0);G.enableVertexAttribArray(1);G.enableVertexAttribArray(2);G.drawArrays(G.TRIANGLES,0,l/8)},dl=(p,l)=>{if(!l)return;G.useProgram(pl);G.uniform2f(G.getUniformLocation(pl,`z`),W.er_ui_width(),W.er_ui_height());G.bindBuffer(G.ARRAY_BUFFER,lb);G.bufferData(G.ARRAY_BUFFER,new Float32Array(M,p,l),G.DYNAMIC_DRAW);G.vertexAttribPointer(0,2,G.FLOAT,0,24,0);G.vertexAttribPointer(1,4,G.FLOAT,0,24,8);G.enableVertexAttribArray(0);G.enableVertexAttribArray(1);G.drawArrays(G.TRIANGLES,0,l/6)};
+    \\let pr=O(V,Rr),pt=O(Tv,Tf),pi=O(Tv,If),pl=O(Lv,Lf),rb=G.createBuffer(),tb=G.createBuffer(),lb=G.createBuffer(),ft=G.createTexture(),it=G.createTexture(),fg=0,up=(x,w,h,fmt)=>{G.bindTexture(G.TEXTURE_2D,x);G.texParameteri(G.TEXTURE_2D,G.TEXTURE_MIN_FILTER,G.LINEAR);G.texParameteri(G.TEXTURE_2D,G.TEXTURE_MAG_FILTER,G.LINEAR);G.texParameteri(G.TEXTURE_2D,G.TEXTURE_WRAP_S,G.CLAMP_TO_EDGE);G.texParameteri(G.TEXTURE_2D,G.TEXTURE_WRAP_T,G.CLAMP_TO_EDGE);G.texImage2D(G.TEXTURE_2D,0,fmt,w,h,0,fmt,G.UNSIGNED_BYTE,new Uint8Array(M,fmt==G.RGBA?W.er_ui_post_image_rgba_ptr():W.er_ui_font_atlas_ptr(),fmt==G.RGBA?W.er_ui_post_image_rgba_len():w*h))},dr=(p,l)=>{let a=new Float32Array(M,p,l);G.bindBuffer(G.ARRAY_BUFFER,rb);G.bufferData(G.ARRAY_BUFFER,new Float32Array([0,0,1,0,0,1,1,1]),G.STATIC_DRAW);G.vertexAttribPointer(0,2,G.FLOAT,0,0,0);G.enableVertexAttribArray(0);G.useProgram(pr);G.uniform2f(G.getUniformLocation(pr,`z`),W.er_ui_width(),W.er_ui_height());G.uniform1f(G.getUniformLocation(pr,`u`),C.width/W.er_ui_width());for(let i=0;i<l;i+=
+++ rect_float_stride_js ++
+    \\){let x=a[i+
+++ rect_x_index_js ++
+    \\],y=a[i+
+++ rect_y_index_js ++
+    \\],w=a[i+
+++ rect_w_index_js ++
+    \\],h=a[i+
+++ rect_h_index_js ++
+    \\],m=a[i+
+++ rect_mode_index_js ++
+    \\],sh=a[i+
+++ rect_shadow_index_js ++
+    \\];G.uniform4f(G.getUniformLocation(pr,`r`),m==1?x-sh:x,m==1?y-sh:y,m==1?w+sh*2:w,m==1?h+sh*2:h);G.uniform4f(G.getUniformLocation(pr,`s`),x,y,w,h);G.uniform1f(G.getUniformLocation(pr,`q`),a[i+
+++ rect_radius_index_js ++
+    \\]);G.uniform1f(G.getUniformLocation(pr,`m`),sh);G.uniform1i(G.getUniformLocation(pr,`o`),m);G.uniform4f(G.getUniformLocation(pr,`c`),a[i+
+++ rect_color_r_index_js ++
+    \\],a[i+
+++ rect_color_g_index_js ++
+    \\],a[i+
+++ rect_color_b_index_js ++
+    \\],a[i+
+++ rect_color_a_index_js ++
+    \\]);G.uniform4f(G.getUniformLocation(pr,`d`),a[i+
+++ rect_color2_r_index_js ++
+    \\],a[i+
+++ rect_color2_g_index_js ++
+    \\],a[i+
+++ rect_color2_b_index_js ++
+    \\],a[i+
+++ rect_color2_a_index_js ++
+    \\]);G.drawArrays(G.TRIANGLE_STRIP,0,4)}};let dt=(p,l,t,g)=>{if(!l)return;G.useProgram(g?pi:pt);G.uniform2f(G.getUniformLocation(g?pi:pt,`z`),W.er_ui_width(),W.er_ui_height());if(!g)G.uniform1i(G.getUniformLocation(pt,`i`),0);G.bindTexture(G.TEXTURE_2D,t);G.bindBuffer(G.ARRAY_BUFFER,tb);G.bufferData(G.ARRAY_BUFFER,new Float32Array(M,p,l),G.DYNAMIC_DRAW);G.vertexAttribPointer(0,2,G.FLOAT,0,
+++ text_vertex_byte_stride_js ++
+    \\,0);G.vertexAttribPointer(1,2,G.FLOAT,0,
+++ text_vertex_byte_stride_js ++
+    \\,
+++ textured_u_byte_offset_js ++
+    \\);G.vertexAttribPointer(2,4,G.FLOAT,0,
+++ text_vertex_byte_stride_js ++
+    \\,
+++ textured_color_byte_offset_js ++
+    \\);G.enableVertexAttribArray(0);G.enableVertexAttribArray(1);G.enableVertexAttribArray(2);G.drawArrays(G.TRIANGLES,0,l/
+++ text_vertex_float_stride_js ++
+    \\)},dl=(p,l)=>{if(!l)return;G.useProgram(pl);G.uniform2f(G.getUniformLocation(pl,`z`),W.er_ui_width(),W.er_ui_height());G.bindBuffer(G.ARRAY_BUFFER,lb);G.bufferData(G.ARRAY_BUFFER,new Float32Array(M,p,l),G.DYNAMIC_DRAW);G.vertexAttribPointer(0,2,G.FLOAT,0,
+++ icon_line_vertex_byte_stride_js ++
+    \\,0);G.vertexAttribPointer(1,4,G.FLOAT,0,
+++ icon_line_vertex_byte_stride_js ++
+    \\,
+++ icon_line_color_byte_offset_js ++
+    \\);G.enableVertexAttribArray(0);G.enableVertexAttribArray(1);G.drawArrays(G.TRIANGLES,0,l/
+++ icon_line_vertex_float_stride_js ++
+    \\)};
     \\F=t=>{let w=innerWidth|0,h=innerHeight|0,d=Math.min(devicePixelRatio||1,4,W.er_ui_max_width()/w,W.er_ui_max_height()/h);C.style.width=w+`px`;C.style.height=h+`px`;C.width=w*d;C.height=h*d;G.viewport(0,0,C.width,C.height);G.clearColor(10/255,14/255,20/255,1);G.clear(G.COLOR_BUFFER_BIT);G.enable(G.BLEND);G.blendFunc(G.ONE,G.ONE_MINUS_SRC_ALPHA);W.er_ui_set_device_scale(d);if(W.er_ui_build_frame(w,h,t))throw W.er_ui_last_error();if(fg!=W.er_ui_font_atlas_generation()){up(ft,W.er_ui_font_atlas_width(),W.er_ui_font_atlas_height(),G.LUMINANCE);fg=W.er_ui_font_atlas_generation()}if(!it.w){up(it,W.er_ui_post_image_width(),W.er_ui_post_image_height(),G.RGBA);it.w=1}dr(W.er_ui_packed_rect_buffer_ptr(),W.er_ui_packed_rect_buffer_len());dt(W.er_ui_packed_image_vertex_buffer_ptr(),W.er_ui_packed_image_vertex_buffer_len(),it,1);dt(W.er_ui_packed_text_vertex_buffer_ptr(),W.er_ui_packed_text_vertex_buffer_len(),ft,0);dl(W.er_ui_packed_icon_line_vertex_buffer_ptr(),W.er_ui_packed_icon_line_vertex_buffer_len());dr(W.er_ui_packed_overlay_rect_buffer_ptr(),W.er_ui_packed_overlay_rect_buffer_len());dt(W.er_ui_packed_overlay_text_vertex_buffer_ptr(),W.er_ui_packed_overlay_text_vertex_buffer_len(),ft,0);dl(W.er_ui_packed_overlay_icon_line_vertex_buffer_ptr(),W.er_ui_packed_overlay_icon_line_vertex_buffer_len());R(F)};W=(await WebAssembly.instantiate(await(await fetch`../bin/edgerun-app-runtime.wasm`).arrayBuffer())).instance.exports;M=W.memory.buffer;W.er_ui_boot();P();A({type:`hashchange`},8);F()
 ;
 pub const total_js_bytes: usize = loader_js.len;
@@ -119,6 +196,16 @@ test "generated entry has the only javascript byte bridge" {
     try std.testing.expect(contains(gl_contract.image_fragment_shader));
     try std.testing.expect(contains(gl_contract.line_vertex_shader));
     try std.testing.expect(contains(gl_contract.line_fragment_shader));
+    try std.testing.expect(contains("i+=" ++ rect_float_stride_js));
+    try std.testing.expect(contains("m=a[i+" ++ rect_mode_index_js ++ "]"));
+    try std.testing.expect(contains("sh=a[i+" ++ rect_shadow_index_js ++ "]"));
+    try std.testing.expect(contains("G.vertexAttribPointer(0,2,G.FLOAT,0," ++ text_vertex_byte_stride_js ++ ",0)"));
+    try std.testing.expect(contains("G.vertexAttribPointer(1,2,G.FLOAT,0," ++ text_vertex_byte_stride_js ++ "," ++ textured_u_byte_offset_js ++ ")"));
+    try std.testing.expect(contains("G.vertexAttribPointer(2,4,G.FLOAT,0," ++ text_vertex_byte_stride_js ++ "," ++ textured_color_byte_offset_js ++ ")"));
+    try std.testing.expect(contains("G.drawArrays(G.TRIANGLES,0,l/" ++ text_vertex_float_stride_js ++ ")"));
+    try std.testing.expect(contains("G.vertexAttribPointer(0,2,G.FLOAT,0," ++ icon_line_vertex_byte_stride_js ++ ",0)"));
+    try std.testing.expect(contains("G.vertexAttribPointer(1,4,G.FLOAT,0," ++ icon_line_vertex_byte_stride_js ++ "," ++ icon_line_color_byte_offset_js ++ ")"));
+    try std.testing.expect(contains("G.drawArrays(G.TRIANGLES,0,l/" ++ icon_line_vertex_float_stride_js ++ ")"));
     try std.testing.expect(contains("er_ui_packed_rect_buffer_ptr"));
     try std.testing.expect(contains("er_ui_packed_text_vertex_buffer_ptr"));
     try std.testing.expect(contains("er_ui_packed_image_vertex_buffer_ptr"));
