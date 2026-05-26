@@ -2775,7 +2775,7 @@ fn hasIconId(items: []const ui.Command, icon_id: u32) bool {
 
 fn ensureFontAtlas() !void {
     if (font_atlas_ready) return;
-    font_atlas = renderer_font_atlas.Atlas.initWithFont(renderer_font_atlas.geist_ascii_font.body());
+    font_atlas.initWithFontInPlace(renderer_font_atlas.geist_ascii_font.body());
     font_atlas.setDeviceScale(font_device_scale);
     font_atlas_generation +%= 1;
     font_atlas_ready = true;

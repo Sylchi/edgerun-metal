@@ -58,6 +58,10 @@ pub const ToggleGroup = struct {
 
     pub fn fromView(view: object.View) Error!ToggleGroup {
         const group = try component_codec.nodeView(view, .toggle_group);
+        return fromNode(group);
+    }
+
+    pub fn fromNode(group: @FieldType(ui.Node, "toggle_group")) Error!ToggleGroup {
         return .{ .id = group.id, .first = group.first, .second = group.second, .active = activeIndex(group.active) };
     }
 };

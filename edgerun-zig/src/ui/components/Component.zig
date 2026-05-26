@@ -67,7 +67,6 @@ pub const Error = common.Error;
 pub const RenderOptions = common.RenderOptions;
 pub const Accessibility = common.Accessibility;
 pub const AccessibilityTree = common.AccessibilityTree;
-pub const ButtonVariant = common.ButtonVariant;
 
 const Text = text_component.Text;
 const Accordion = accordion_component.Accordion;
@@ -125,16 +124,6 @@ const Table = table_component.Table;
 const Tooltip = tooltip_component.Tooltip;
 const Toast = toast_component.Toast;
 const RowItem = row_item_component.RowItem;
-
-pub const IconComponent = Icon;
-
-pub fn renderComponent(scene: *ui.Scene, bounds: ui.Rect, component: Component, options: RenderOptions) ui.RenderError!void {
-    return component.render(scene, bounds, options);
-}
-
-pub fn collectComponentInteractions(collector: *interaction.Collector, bounds: ui.Rect, component: Component) interaction.Error!void {
-    return component.collectInteractions(collector, bounds);
-}
 
 pub const Component = union(enum) {
     text: Text,
@@ -267,16 +256,6 @@ pub const Component = union(enum) {
 };
 
 fn componentFromNode(comptime ComponentPayload: type, node_payload: anytype) Error!ComponentPayload {
-    if (comptime @hasDecl(ComponentPayload, "fromNode")) {
-        return ComponentPayload.fromNode(node_payload);
-    }
-    return copyMatchingFields(ComponentPayload, node_payload);
-}
-
-fn copyMatchingFields(comptime ComponentPayload: type, node_payload: anytype) ComponentPayload {
-    var component: ComponentPayload = undefined;
-    inline for (@typeInfo(ComponentPayload).@"struct".fields) |field| {
-        @field(component, field.name) = @field(node_payload, field.name);
-    }
-    return component;
+    if (comptime !@hasDecl(ComponentPayload, "fromNode")) @compileError(@typeName(ComponentPayload) ++ " must own fromNode");
+    return ComponentPayload.fromNode(node_payload);
 }

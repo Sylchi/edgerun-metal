@@ -552,6 +552,7 @@ pub fn batchPrimitiveCount(batch: DrawBatch) Error!usize {
         .rects, .overlay_rects => |rects| rectCount(rects),
         .image, .text, .overlay_text => |vertices| texturedQuadCount(vertices),
         .icon, .overlay_icon => |instances| iconCount(instances),
+        .icon_lines, .overlay_icon_lines => 0,
     };
 }
 
@@ -847,17 +848,21 @@ test "renderer ir packs scene primitives into canonical buffers" {
     var rects: [rect_float_stride * 4]f32 = undefined;
     var text_vertices: [text_vertex_float_stride * textured_quad_vertex_count * 8]f32 = undefined;
     var icon_vertices: [icon_instance_float_stride]f32 = undefined;
+    var icon_line_vertices: [icon_line_vertex_float_stride]f32 = undefined;
     var image_vertices: [image_vertex_float_stride * textured_quad_vertex_count]f32 = undefined;
     var overlay_rects: [rect_float_stride]f32 = undefined;
     var overlay_text_vertices: [text_vertex_float_stride * textured_quad_vertex_count]f32 = undefined;
     var overlay_icon_vertices: [icon_instance_float_stride]f32 = undefined;
+    var overlay_icon_line_vertices: [icon_line_vertex_float_stride]f32 = undefined;
     var rect_len: usize = 77;
     var text_vertex_len: usize = 77;
     var icon_vertex_len: usize = 77;
+    var icon_line_vertex_len: usize = 77;
     var image_vertex_len: usize = 77;
     var overlay_rect_len: usize = 77;
     var overlay_text_vertex_len: usize = 77;
     var overlay_icon_vertex_len: usize = 77;
+    var overlay_icon_line_vertex_len: usize = 77;
     const buffers = Buffers{
         .rects = &rects,
         .rect_len = &rect_len,
@@ -865,6 +870,8 @@ test "renderer ir packs scene primitives into canonical buffers" {
         .text_vertex_len = &text_vertex_len,
         .icon_vertices = &icon_vertices,
         .icon_vertex_len = &icon_vertex_len,
+        .icon_line_vertices = &icon_line_vertices,
+        .icon_line_vertex_len = &icon_line_vertex_len,
         .image_vertices = &image_vertices,
         .image_vertex_len = &image_vertex_len,
         .overlay_rects = &overlay_rects,
@@ -873,6 +880,8 @@ test "renderer ir packs scene primitives into canonical buffers" {
         .overlay_text_vertex_len = &overlay_text_vertex_len,
         .overlay_icon_vertices = &overlay_icon_vertices,
         .overlay_icon_vertex_len = &overlay_icon_vertex_len,
+        .overlay_icon_line_vertices = &overlay_icon_line_vertices,
+        .overlay_icon_line_vertex_len = &overlay_icon_line_vertex_len,
     };
     var source_context: u8 = 0;
     const sources = Sources{
@@ -956,16 +965,18 @@ test "renderer ir iterates rects and textured quads" {
 }
 
 test "renderer ir owns canonical draw batch order" {
-    var storage = FixedBuffers(1, textured_quad_vertex_count, 1, textured_quad_vertex_count, 1, textured_quad_vertex_count, 1, 0, 0){};
+    var storage = FixedBuffers(1, textured_quad_vertex_count, 1, textured_quad_vertex_count, 1, textured_quad_vertex_count, 1, 1, 1){};
     const batches = drawBatches(storage.buffers());
-    try std.testing.expectEqual(@as(usize, 7), batches.len);
+    try std.testing.expectEqual(@as(usize, 9), batches.len);
     try std.testing.expectEqual(DrawBatch{ .rects = storage.rects[0..0] }, batches[0]);
     try std.testing.expectEqual(DrawBatch{ .image = storage.image_vertices[0..0] }, batches[1]);
     try std.testing.expectEqual(DrawBatch{ .text = storage.text_vertices[0..0] }, batches[2]);
     try std.testing.expectEqual(DrawBatch{ .icon = storage.icon_vertices[0..0] }, batches[3]);
-    try std.testing.expectEqual(DrawBatch{ .overlay_rects = storage.overlay_rects[0..0] }, batches[4]);
-    try std.testing.expectEqual(DrawBatch{ .overlay_text = storage.overlay_text_vertices[0..0] }, batches[5]);
-    try std.testing.expectEqual(DrawBatch{ .overlay_icon = storage.overlay_icon_vertices[0..0] }, batches[6]);
+    try std.testing.expectEqual(DrawBatch{ .icon_lines = storage.icon_line_vertices[0..0] }, batches[4]);
+    try std.testing.expectEqual(DrawBatch{ .overlay_rects = storage.overlay_rects[0..0] }, batches[5]);
+    try std.testing.expectEqual(DrawBatch{ .overlay_text = storage.overlay_text_vertices[0..0] }, batches[6]);
+    try std.testing.expectEqual(DrawBatch{ .overlay_icon = storage.overlay_icon_vertices[0..0] }, batches[7]);
+    try std.testing.expectEqual(DrawBatch{ .overlay_icon_lines = storage.overlay_icon_line_vertices[0..0] }, batches[8]);
     try std.testing.expectEqual(storage.image_vertices[0..0], batchValues(batches[1]));
 }
 
@@ -1009,17 +1020,21 @@ test "renderer ir separates overlay commands from base buffers" {
     var rects: [rect_float_stride]f32 = undefined;
     var text_vertices: [text_vertex_float_stride * textured_quad_vertex_count]f32 = undefined;
     var icon_vertices: [icon_instance_float_stride]f32 = undefined;
+    var icon_line_vertices: [icon_line_vertex_float_stride]f32 = undefined;
     var image_vertices: [image_vertex_float_stride * textured_quad_vertex_count]f32 = undefined;
     var overlay_rects: [rect_float_stride]f32 = undefined;
     var overlay_text_vertices: [text_vertex_float_stride * textured_quad_vertex_count]f32 = undefined;
     var overlay_icon_vertices: [icon_instance_float_stride]f32 = undefined;
+    var overlay_icon_line_vertices: [icon_line_vertex_float_stride]f32 = undefined;
     var rect_len: usize = 0;
     var text_vertex_len: usize = 0;
     var icon_vertex_len: usize = 0;
+    var icon_line_vertex_len: usize = 0;
     var image_vertex_len: usize = 0;
     var overlay_rect_len: usize = 0;
     var overlay_text_vertex_len: usize = 0;
     var overlay_icon_vertex_len: usize = 0;
+    var overlay_icon_line_vertex_len: usize = 0;
     const buffers = Buffers{
         .rects = &rects,
         .rect_len = &rect_len,
@@ -1027,6 +1042,8 @@ test "renderer ir separates overlay commands from base buffers" {
         .text_vertex_len = &text_vertex_len,
         .icon_vertices = &icon_vertices,
         .icon_vertex_len = &icon_vertex_len,
+        .icon_line_vertices = &icon_line_vertices,
+        .icon_line_vertex_len = &icon_line_vertex_len,
         .image_vertices = &image_vertices,
         .image_vertex_len = &image_vertex_len,
         .overlay_rects = &overlay_rects,
@@ -1035,6 +1052,8 @@ test "renderer ir separates overlay commands from base buffers" {
         .overlay_text_vertex_len = &overlay_text_vertex_len,
         .overlay_icon_vertices = &overlay_icon_vertices,
         .overlay_icon_vertex_len = &overlay_icon_vertex_len,
+        .overlay_icon_line_vertices = &overlay_icon_line_vertices,
+        .overlay_icon_line_vertex_len = &overlay_icon_line_vertex_len,
     };
     var source_context: u8 = 0;
     const sources = Sources{

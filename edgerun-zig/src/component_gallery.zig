@@ -1,7 +1,10 @@
 const std = @import("std");
 const clock = @import("clock.zig");
 const icon = @import("icon.zig");
-const components = @import("ui/components/Component.zig");
+const badge_component = @import("ui/components/Badge.zig");
+const card_component = @import("ui/components/Card.zig");
+const component_union = @import("ui/components/Component.zig");
+const icon_component = @import("ui/components/Icon.zig");
 const component_common = @import("ui_component_common.zig");
 const ui = @import("ui.zig");
 const interaction = @import("ui_interaction.zig");
@@ -9,7 +12,7 @@ const design = @import("app_design.zig");
 const app_chrome = @import("app_chrome.zig");
 const app_layout = @import("app_layout.zig");
 
-pub const GalleryError = ui.RenderError || interaction.Error || components.Error || error{NoSpace};
+pub const GalleryError = ui.RenderError || interaction.Error || component_union.Error || error{NoSpace};
 
 pub const preview_base_id: u32 = 18_000;
 pub const first_catalog_card_id: u32 = preview_base_id + 2000;
@@ -532,11 +535,11 @@ fn selectedComponentHeight(width_value: f32) f32 {
 }
 
 fn renderSelectedComponent(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, entry: ComponentSpec, index: usize) GalleryError!void {
-    try components.renderComponent(scene, bounds, .{ .card = .{
+    try (card_component.Card{
         .title = "",
         .detail = "",
         .variant = .elevated,
-    } }, .{
+    }).render(scene, bounds, .{
         .style = componentStyle(),
         .control = .{ .active = true },
     });
@@ -564,10 +567,10 @@ fn renderSelectedComponent(scene: *ui.Scene, collector: *interaction.Collector, 
 fn renderOpenedComponentRenderings(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, entry: ComponentSpec, id: u32) GalleryError!void {
     var render_style = componentStyle();
     render_style.panel = palette.code_bg;
-    try components.renderComponent(scene, bounds, .{ .card = .{
+    try (card_component.Card{
         .title = "Rendered component",
         .detail = entry.name,
-    } }, .{ .style = render_style });
+    }).render(scene, bounds, .{ .style = render_style });
 
     const inner = ui.Rect.init(bounds.x + card_content_x, bounds.y + 72, bounds.w - card_content_x * 2, bounds.h - 92);
     if (inner.w < 360.0) {
@@ -586,21 +589,21 @@ fn renderOpenedComponentRenderings(scene: *ui.Scene, collector: *interaction.Col
 }
 
 fn previewSlot(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, entry: ComponentSpec, id: u32) GalleryError!void {
-    try components.renderComponent(scene, bounds, .{ .card = .{
+    try (card_component.Card{
         .title = label,
         .detail = "",
         .variant = .subtle,
-    } }, .{ .style = componentStyle() });
+    }).render(scene, bounds, .{ .style = componentStyle() });
     try renderReferencePreview(scene, collector, bounds.insetLtrb(12.0, 32.0, 12.0, 12.0), entry, id);
 }
 
 fn renderComponentApi(scene: *ui.Scene, bounds: ui.Rect, entry: ComponentSpec) GalleryError!void {
     var api_style = componentStyle();
     api_style.panel = palette.code_bg;
-    try components.renderComponent(scene, bounds, .{ .card = .{
+    try (card_component.Card{
         .title = "API",
         .detail = "",
-    } }, .{ .style = api_style });
+    }).render(scene, bounds, .{ .style = api_style });
     const content_w = @max(1.0, bounds.w - card_content_x * 2);
     var cursor_y = bounds.y + 50;
     cursor_y = try renderApiField(scene, ui.Rect.init(bounds.x + card_content_x, cursor_y, content_w, bounds.h - 50), "route", entry.route);
@@ -616,15 +619,15 @@ fn renderApiField(scene: *ui.Scene, bounds: ui.Rect, label_value: []const u8, va
 }
 
 fn renderComponentContract(scene: *ui.Scene, bounds: ui.Rect, entry: ComponentSpec) GalleryError!void {
-    try components.renderComponent(scene, bounds, .{ .card = .{
+    try (card_component.Card{
         .title = "Contract",
         .detail = "Render through `Component.render`, collect hits through `Component.collectInteractions`, and keep backend concerns out of component code.",
         .variant = .subtle,
-    } }, .{ .style = componentStyle() });
-    try components.renderComponent(scene, contractBadgeBounds(bounds, entry.category.label()), .{ .badge = .{
+    }).render(scene, bounds, .{ .style = componentStyle() });
+    try (badge_component.Badge{
         .label = entry.category.label(),
         .variant = .outline,
-    } }, .{ .style = componentStyle() });
+    }).render(scene, contractBadgeBounds(bounds, entry.category.label()), .{ .style = componentStyle() });
 }
 
 fn renderCatalogCard(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, entry: ComponentSpec, card_id: u32, preview_id: u32, selected: bool) GalleryError!void {
@@ -632,11 +635,11 @@ fn renderCatalogCard(scene: *ui.Scene, collector: *interaction.Collector, bounds
         if (bounds.y < clip_top) return;
     }
     const is_hovered = hovered(bounds);
-    try components.renderComponent(scene, bounds, .{ .card = .{
+    try (card_component.Card{
         .title = entry.name,
         .detail = entry.category.label(),
         .variant = if (is_hovered or selected) .elevated else .panel,
-    } }, .{
+    }).render(scene, bounds, .{
         .style = componentStyle(),
         .control = .{ .active = selected, .hovered = is_hovered },
     });
@@ -651,10 +654,10 @@ fn renderCatalogCard(scene: *ui.Scene, collector: *interaction.Collector, bounds
 }
 
 fn catalogSource(scene: *ui.Scene, bounds: ui.Rect, selected: bool) GalleryError!void {
-    try components.renderComponent(scene, bounds, .{ .badge = .{
+    try (badge_component.Badge{
         .label = if (selected) "selected" else "EdgeRun",
         .variant = if (selected) .default else .outline,
-    } }, .{ .style = componentStyle() });
+    }).render(scene, bounds, .{ .style = componentStyle() });
 }
 
 fn sourceBadgeBounds(inset: ui.Rect, selected: bool) ui.Rect {
@@ -733,7 +736,7 @@ fn renderReferencePreview(scene: *ui.Scene, collector: *interaction.Collector, b
     };
 }
 
-const PrimitivePreview = components.Component;
+const PrimitivePreview = component_union.Component;
 
 fn renderPrimitivePreview(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, kind: PreviewKind, id: u32) GalleryError!void {
     try renderComponentPreview(scene, collector, bounds, primitivePreview(kind, id));
@@ -757,8 +760,8 @@ fn primitivePreview(kind: PreviewKind, id: u32) PrimitivePreview {
         .empty => .{ .empty = .{ .title = "No results", .detail = "Try another filter." } },
         .field => .{ .field = .{ .id = id, .label = "Email", .placeholder = "m@example.com" } },
         .hover_card => .{ .hover_card = .{ .id = id, .trigger = "Hover", .content = "@shadcn" } },
-        .icon => .{ .icon = components.IconComponent.named(.sparkles) },
-        .icon_button => .{ .icon_button = .{ .id = id, .label = "Search", .icon = components.IconComponent.named(.search) } },
+        .icon => .{ .icon = icon_component.Icon.named(.sparkles) },
+        .icon_button => .{ .icon_button = .{ .id = id, .label = "Search", .icon = icon_component.Icon.named(.search) } },
         .checkbox => .{ .checkbox = .{ .id = id, .label = "Accept terms", .checked = true } },
         .combobox => .{ .combobox = .{ .id = id, .placeholder = "Search framework...", .selected = "React" } },
         .command => .{ .command = .{ .id = id, .placeholder = "Type a command..." } },
@@ -802,17 +805,17 @@ fn primitivePreview(kind: PreviewKind, id: u32) PrimitivePreview {
     };
 }
 
-fn renderComponentPreview(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, component: components.Component) GalleryError!void {
+fn renderComponentPreview(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, component: component_union.Component) GalleryError!void {
     try validateCanonicalPreview(component);
     try component.render(scene, bounds, .{ .style = componentStyle() });
     try component.collectInteractions(collector, bounds);
 }
 
-fn validateCanonicalPreview(component: components.Component) GalleryError!void {
+fn validateCanonicalPreview(component: component_union.Component) GalleryError!void {
     var ui_raw: [canonical_ui_buffer_size]u8 = undefined;
     var object_raw: [canonical_object_buffer_size]u8 = undefined;
     const canonical = component.toObject(&ui_raw, &object_raw, galleryEpoch()) orelse return error.NoSpace;
-    _ = try components.Component.fromObject(canonical);
+    _ = try component_union.Component.fromObject(canonical);
 }
 
 fn componentStyle() ui.Style {
@@ -867,7 +870,7 @@ fn fill(scene: *ui.Scene, bounds: ui.Rect, color: ui.Color, radius: f32) Gallery
 }
 
 fn iconQuad(scene: *ui.Scene, bounds: ui.Rect, value: icon.Icon, color: ui.Color) GalleryError!void {
-    try scene.pushIconQuad(.{ .bounds = bounds, .icon_id = icon.id(value), .color = color });
+    try icon_component.renderGlyph(scene, bounds, value, color);
 }
 
 fn text(scene: *ui.Scene, x: f32, y: f32, w: f32, h: f32, value: []const u8, color: ui.Color) GalleryError!void {
@@ -926,7 +929,7 @@ fn hovered(bounds: ui.Rect) bool {
 }
 
 test "component gallery catalog is the authoritative component registry" {
-    try std.testing.expectEqual(@as(usize, 59), component_catalog.len);
+    try std.testing.expectEqual(@as(usize, 60), component_catalog.len);
     try std.testing.expectEqualStrings("/docs/components/input-group", findBySlug("input-group").?.route);
     try std.testing.expectEqualStrings("Button", findBySourceComponent("Button").?.source_component);
     try std.testing.expectEqual(@as(usize, 7), indexBySlug("button").?);
@@ -965,7 +968,7 @@ test "component gallery preview path validates canonical component object" {
     var object_raw: [canonical_object_buffer_size]u8 = undefined;
     const source = primitivePreview(.button, preview_base_id + 33);
     const canonical = source.toObject(&ui_raw, &object_raw, galleryEpoch()).?;
-    const decoded = try components.Component.fromObject(canonical);
+    const decoded = try component_union.Component.fromObject(canonical);
 
     var commands: [16]ui.Command = undefined;
     var clips: [4]ui.Rect = undefined;

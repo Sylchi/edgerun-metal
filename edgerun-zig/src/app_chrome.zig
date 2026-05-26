@@ -1,5 +1,6 @@
 const std = @import("std");
-const components = @import("ui/components/Component.zig");
+const button_component = @import("ui/components/Button.zig");
+const icon_component = @import("ui/components/Icon.zig");
 const icon = @import("icon.zig");
 const interaction = @import("ui_interaction.zig");
 const ui = @import("ui.zig");
@@ -112,31 +113,31 @@ fn renderCompactHeader(scene: *ui.Scene, collector: *interaction.Collector, boun
 }
 
 fn navItem(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id: u32, active: bool) (ui.RenderError || interaction.Error)!void {
-    const component = components.Component{ .button = .{
+    const component = button_component.Button{
         .id = id,
         .label = label,
         .variant = if (active) .secondary else .ghost,
-    } };
-    try components.renderComponent(scene, bounds, component, .{
+    };
+    try component.render(scene, bounds, .{
         .style = style(),
         .control = .{ .active = active },
         .control_size = .small,
     });
-    try components.collectComponentInteractions(collector, bounds, component);
+    try component.collectInteractions(collector, bounds);
 }
 
 fn iconButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, value: icon.Icon, id: u32, active: bool) (ui.RenderError || interaction.Error)!void {
-    const component = components.Component{ .icon_button = .{
+    const component = button_component.IconButton{
         .id = id,
         .label = icon.label(value),
-        .icon = components.IconComponent.named(value),
+        .icon = icon_component.Icon.named(value),
         .variant = if (active) .secondary else .outline,
-    } };
-    try components.renderComponent(scene, bounds, component, .{
+    };
+    try component.render(scene, bounds, .{
         .style = style(),
         .control = .{ .active = active },
     });
-    try components.collectComponentInteractions(collector, bounds, component);
+    try component.collectInteractions(collector, bounds);
 }
 
 pub fn style() ui.Style {
@@ -156,7 +157,7 @@ fn text(scene: *ui.Scene, x: f32, y: f32, w: f32, h: f32, value: []const u8, col
 }
 
 fn iconQuad(scene: *ui.Scene, bounds: ui.Rect, value: icon.Icon, color: ui.Color) ui.RenderError!void {
-    try scene.pushIconQuad(.{ .bounds = bounds, .icon_id = icon.id(value), .color = color });
+    try icon_component.renderGlyph(scene, bounds, value, color);
 }
 
 test "app chrome header exposes canonical navigation hit targets" {

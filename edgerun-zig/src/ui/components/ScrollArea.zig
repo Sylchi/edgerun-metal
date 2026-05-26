@@ -52,7 +52,11 @@ pub const ScrollArea = struct {
     }
 
     pub fn fromView(view: object.View) Error!ScrollArea {
-        _ = try component_codec.nodeView(view, .scroll_area);
+        return fromNode(try component_codec.nodeView(view, .scroll_area));
+    }
+
+    pub fn fromNode(scroll_area: @FieldType(ui.Node, "scroll_area")) Error!ScrollArea {
+        _ = scroll_area;
         return .{};
     }
 };

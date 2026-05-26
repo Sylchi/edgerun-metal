@@ -539,7 +539,7 @@ pub const Node = union(enum) {
     rect: struct { color: Color },
     text: struct { value: []const u8, color: ?Color = null },
     accordion: struct { id: u32, title: []const u8, detail: []const u8, open: bool },
-    alert: struct { title: []const u8, detail: []const u8, destructive: bool = false },
+    alert: struct { title: []const u8, detail: []const u8, destructive: bool = false, icon: u16 = 0 },
     alert_dialog: struct { id: u32, title: []const u8, detail: []const u8 },
     aspect_ratio: struct { ratio_w: u16, ratio_h: u16 },
     calendar: struct { id: u32, month: []const u8, selected_day: u16 },
@@ -547,7 +547,7 @@ pub const Node = union(enum) {
     chart: struct { id: u32, label: []const u8 },
     combobox: struct { id: u32, placeholder: []const u8, selected: []const u8 },
     card: struct { title: []const u8, detail: []const u8, variant: u16 = 0 },
-    empty: struct { title: []const u8, detail: []const u8 },
+    empty: struct { title: []const u8, detail: []const u8, icon: u16 = 0 },
     badge: struct { label: []const u8, variant: u16 = 0 },
     avatar: struct { label: []const u8 },
     kbd: struct { label: []const u8 },
@@ -559,7 +559,7 @@ pub const Node = union(enum) {
     breadcrumb: struct { id: u32, first: []const u8, current: []const u8 },
     menubar: struct { id: u32, first: []const u8, second: []const u8, active: u16 },
     navigation_menu: struct { id: u32, first: []const u8, second: []const u8, active: u16 },
-    command: struct { id: u32, placeholder: []const u8 },
+    command: struct { id: u32, placeholder: []const u8, leading_icon: u16 = 0 },
     context_menu: struct { id: u32, first: []const u8, second: []const u8 },
     dialog: struct { id: u32, title: []const u8, detail: []const u8 },
     direction: struct { id: u32, active: u16 },
@@ -577,7 +577,7 @@ pub const Node = union(enum) {
     input: struct { id: u32, placeholder: []const u8, leading_icon: u16 = 0 },
     input_group: struct { id: u32, addon: []const u8, placeholder: []const u8 },
     textarea: struct { id: u32, placeholder: []const u8 },
-    select: struct { id: u32, label: []const u8 },
+    select: struct { id: u32, label: []const u8, trailing_icon: u16 = 0 },
     checkbox: struct { id: u32, label: []const u8, checked: bool },
     radio_group: struct { id: u32, first: []const u8, second: []const u8, selected: u16 },
     switch_control: struct { id: u32, label: []const u8, checked: bool },
@@ -673,8 +673,8 @@ pub fn accordionNode(id: u32, title: []const u8, detail: []const u8, open: bool)
     return .{ .accordion = .{ .id = id, .title = title, .detail = detail, .open = open } };
 }
 
-pub fn alertNode(title: []const u8, detail: []const u8, destructive: bool) Node {
-    return .{ .alert = .{ .title = title, .detail = detail, .destructive = destructive } };
+pub fn alertNode(title: []const u8, detail: []const u8, destructive: bool, icon_value: u16) Node {
+    return .{ .alert = .{ .title = title, .detail = detail, .destructive = destructive, .icon = icon_value } };
 }
 
 pub fn alertDialogNode(id: u32, title: []const u8, detail: []const u8) Node {
@@ -709,8 +709,8 @@ pub fn cardVariantNode(title: []const u8, detail: []const u8, variant: u16) Node
     return .{ .card = .{ .title = title, .detail = detail, .variant = variant } };
 }
 
-pub fn emptyNode(title: []const u8, detail: []const u8) Node {
-    return .{ .empty = .{ .title = title, .detail = detail } };
+pub fn emptyNode(title: []const u8, detail: []const u8, icon_value: u16) Node {
+    return .{ .empty = .{ .title = title, .detail = detail, .icon = icon_value } };
 }
 
 pub fn badgeNode(label: []const u8) Node {
@@ -761,8 +761,8 @@ pub fn navigationMenuNode(id: u32, first: []const u8, second: []const u8, active
     return .{ .navigation_menu = .{ .id = id, .first = first, .second = second, .active = @min(active, 2) } };
 }
 
-pub fn commandNode(id: u32, placeholder: []const u8) Node {
-    return .{ .command = .{ .id = id, .placeholder = placeholder } };
+pub fn commandNode(id: u32, placeholder: []const u8, leading_icon: u16) Node {
+    return .{ .command = .{ .id = id, .placeholder = placeholder, .leading_icon = leading_icon } };
 }
 
 pub fn contextMenuNode(id: u32, first: []const u8, second: []const u8) Node {
@@ -845,8 +845,8 @@ pub fn textareaNode(id: u32, placeholder: []const u8) Node {
     return .{ .textarea = .{ .id = id, .placeholder = placeholder } };
 }
 
-pub fn selectNode(id: u32, label: []const u8) Node {
-    return .{ .select = .{ .id = id, .label = label } };
+pub fn selectNode(id: u32, label: []const u8, trailing_icon: u16) Node {
+    return .{ .select = .{ .id = id, .label = label, .trailing_icon = trailing_icon } };
 }
 
 pub fn checkboxNode(id: u32, label: []const u8, checked: bool) Node {
@@ -1468,7 +1468,7 @@ test "core renderer rejects component nodes" {
         avatarNode("ER"),
         kbdNode("Meta-K"),
         textareaNode(21, "Describe this app"),
-        selectNode(22, "Production"),
+        selectNode(22, "Production", 0),
     };
 
     for (nodes) |node| {

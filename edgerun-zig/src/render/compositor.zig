@@ -148,6 +148,8 @@ pub const Compositor = struct {
             compose_overlay_rect_budget,
             compose_overlay_text_vertex_budget,
             compose_overlay_icon_budget,
+            0,
+            0,
         ){};
         const buffers = storage.buffers();
         var context: u8 = 0;
@@ -251,6 +253,7 @@ pub const Compositor = struct {
         for (renderer_ir.drawBatches(buffers)) |batch| switch (batch) {
             .rects, .overlay_rects => |rects| try self.markIrRectBuffer(rects),
             .image, .text, .icon, .overlay_text, .overlay_icon => |vertices| try self.markTexturedVertices(vertices),
+            .icon_lines, .overlay_icon_lines => {},
         };
     }
 

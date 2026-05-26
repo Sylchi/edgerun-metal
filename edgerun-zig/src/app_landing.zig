@@ -2,7 +2,10 @@ const std = @import("std");
 const icon = @import("icon.zig");
 const interaction = @import("ui_interaction.zig");
 const ui = @import("ui.zig");
-const components = @import("ui/components/Component.zig");
+const badge_component = @import("ui/components/Badge.zig");
+const button_component = @import("ui/components/Button.zig");
+const card_component = @import("ui/components/Card.zig");
+const icon_component = @import("ui/components/Icon.zig");
 const app_chrome = @import("app_chrome.zig");
 const design = @import("app_design.zig");
 const app_layout = @import("app_layout.zig");
@@ -561,7 +564,7 @@ fn renderNodeMap(scene: *ui.Scene, bounds: ui.Rect, state: State, show_status: b
 fn tag(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, color: ui.Color) ui.RenderError!void {
     var tag_style = appStyle();
     tag_style.accent = color;
-    try components.renderComponent(scene, bounds, .{ .badge = .{ .label = label, .variant = .outline } }, .{ .style = tag_style });
+    try (badge_component.Badge{ .label = label, .variant = .outline }).render(scene, bounds, .{ .style = tag_style });
 }
 
 fn title(scene: *ui.Scene, bounds: ui.Rect, value: []const u8) ui.RenderError!void {
@@ -752,35 +755,35 @@ fn actionButtonBounds(bounds: ui.Rect, y: f32, preferred_w: f32) ui.Rect {
 }
 
 fn primaryButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id: u32) (ui.RenderError || interaction.Error)!void {
-    try nativeComponent(scene, collector, bounds, .{ .button = .{ .id = id, .label = label } });
+    try nativeComponent(scene, collector, bounds, button_component.Button{ .id = id, .label = label });
 }
 
 fn primaryButtonWithTrailingIcon(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, icon_value: icon.Icon, id: u32) (ui.RenderError || interaction.Error)!void {
-    try nativeComponent(scene, collector, bounds, .{ .button = .{ .id = id, .label = label, .icon_slot = .{ .trailing = components.IconComponent.named(icon_value) } } });
+    try nativeComponent(scene, collector, bounds, button_component.Button{ .id = id, .label = label, .icon_slot = icon_component.IconSlot.named(.trailing, icon_value) });
 }
 
 fn outlineButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id: u32) (ui.RenderError || interaction.Error)!void {
-    try nativeComponent(scene, collector, bounds, .{ .button = .{ .id = id, .label = label, .variant = .outline } });
+    try nativeComponent(scene, collector, bounds, button_component.Button{ .id = id, .label = label, .variant = .outline });
 }
 
 fn outlineButtonWithTrailingIcon(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, icon_value: icon.Icon, id: u32) (ui.RenderError || interaction.Error)!void {
-    try nativeComponent(scene, collector, bounds, .{ .button = .{ .id = id, .label = label, .variant = .outline, .icon_slot = .{ .trailing = components.IconComponent.named(icon_value) } } });
+    try nativeComponent(scene, collector, bounds, button_component.Button{ .id = id, .label = label, .variant = .outline, .icon_slot = icon_component.IconSlot.named(.trailing, icon_value) });
 }
 
 fn nativeBadge(scene: *ui.Scene, bounds: ui.Rect, label: []const u8) ui.RenderError!void {
-    try components.renderComponent(scene, bounds, .{ .badge = .{
+    try (badge_component.Badge{
         .label = label,
         .variant = .secondary,
-    } }, .{ .style = appStyle() });
+    }).render(scene, bounds, .{ .style = appStyle() });
 }
 
 fn nativeCard(scene: *ui.Scene, bounds: ui.Rect, title_value: []const u8, detail_value: []const u8) ui.RenderError!void {
-    try components.renderComponent(scene, bounds, .{ .card = .{ .title = title_value, .detail = detail_value, .variant = .elevated } }, .{ .style = appStyle() });
+    try (card_component.Card{ .title = title_value, .detail = detail_value, .variant = .elevated }).render(scene, bounds, .{ .style = appStyle() });
 }
 
-fn nativeComponent(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, component: components.Component) (ui.RenderError || interaction.Error)!void {
-    try components.renderComponent(scene, bounds, component, .{ .style = appStyle() });
-    try components.collectComponentInteractions(collector, bounds, component);
+fn nativeComponent(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, component: anytype) (ui.RenderError || interaction.Error)!void {
+    try component.render(scene, bounds, .{ .style = appStyle() });
+    try component.collectInteractions(collector, bounds);
 }
 
 fn appStyle() ui.Style {
@@ -795,7 +798,7 @@ fn alignedText(scene: *ui.Scene, x: f32, y: f32, w: f32, h: f32, value: []const 
 }
 
 fn iconQuad(scene: *ui.Scene, bounds: ui.Rect, value: icon.Icon, color: ui.Color) ui.RenderError!void {
-    try scene.pushIconQuad(.{ .bounds = bounds, .icon_id = icon.id(value), .color = color });
+    try icon_component.renderGlyph(scene, bounds, value, color);
 }
 
 fn columns(bounds: ui.Rect, desired: usize, gap: f32) usize {

@@ -41,7 +41,11 @@ pub const Separator = struct {
     }
 
     pub fn fromView(view: object.View) Error!Separator {
-        _ = try component_codec.nodeView(view, .separator);
+        return fromNode(try component_codec.nodeView(view, .separator));
+    }
+
+    pub fn fromNode(separator: @FieldType(ui.Node, "separator")) Error!Separator {
+        _ = separator;
         return .{};
     }
 };

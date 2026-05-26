@@ -79,6 +79,10 @@ pub const Toast = struct {
 
     pub fn fromView(view: object.View) Error!Toast {
         const toast = try component_codec.nodeView(view, .toast);
+        return fromNode(toast);
+    }
+
+    pub fn fromNode(toast: @FieldType(ui.Node, "toast")) Error!Toast {
         return .{ .id = toast.id, .title = toast.title, .detail = toast.detail };
     }
 };

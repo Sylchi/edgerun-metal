@@ -63,6 +63,10 @@ pub const Tooltip = struct {
 
     pub fn fromView(view: object.View) Error!Tooltip {
         const tooltip = try component_codec.nodeView(view, .tooltip);
+        return fromNode(tooltip);
+    }
+
+    pub fn fromNode(tooltip: @FieldType(ui.Node, "tooltip")) Error!Tooltip {
         return .{ .id = tooltip.id, .trigger = tooltip.trigger, .content = tooltip.content };
     }
 };

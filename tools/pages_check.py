@@ -181,8 +181,8 @@ const gl = {
   bufferData: () => {}, vertexAttribPointer: () => {}, enableVertexAttribArray: () => {},
   useProgram: () => {}, getUniformLocation: () => ({}), uniform2f: () => {},
   uniform1f: () => {}, uniform1i: () => {}, uniform4f: () => {},
-  viewport: () => {}, clearColor: () => {}, clear: () => {}, enable: () => {},
-  blendFunc: () => {}, drawArrays: () => {},
+  viewport: () => {}, clearColor: () => {}, clear: () => {}, enable: () => {}, disable: () => {},
+  blendFunc: () => {}, blendFuncSeparate: () => {}, drawArrays: () => {},
 };
 globalThis.c = { width: 0, height: 0, style: {}, getContext: name => `${name}` === "webgl" ? gl : null };
 globalThis.document = {

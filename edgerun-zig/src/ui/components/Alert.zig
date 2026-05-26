@@ -13,21 +13,24 @@ const component_primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 const constrainPreferredSize = component_primitives.constrainPreferredSize;
+const Icon = icon_component.Icon;
+const IconSlot = icon_component.IconSlot;
 
 pub const Alert = struct {
     title: []const u8,
     detail: []const u8,
     destructive: bool = false,
+    icon_slot: IconSlot = .none,
 
     pub fn node(self: Alert) ui.Node {
-        return ui.alertNode(self.title, self.detail, self.destructive);
+        return ui.alertNode(self.title, self.detail, self.destructive, statusIconTag(self));
     }
 
     pub fn render(self: Alert, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         const content_color = if (self.destructive) alert_danger else options.style.text;
         try scene.pushRect(bounds, options.style.panel, .fill, alert_radius, 0.0);
         try scene.pushRect(bounds, if (self.destructive) alert_danger else options.style.border, .border, alert_radius, 0.0);
-        try icon_component.renderGlyph(scene, ui.Rect.init(bounds.x + alert_padding_x, bounds.y + alert_padding_y, alert_icon_size, alert_icon_size), if (self.destructive) .warning else .shield, content_color);
+        try icon_component.renderGlyph(scene, ui.Rect.init(bounds.x + alert_padding_x, bounds.y + alert_padding_y, alert_icon_size, alert_icon_size), statusIcon(self).value, content_color);
         const text_w = textWidth(bounds);
         const title_h = component_primitives.measuredTextHeight(self.title, text_w, alert_title_height, alert_title_max_lines);
         try scene.pushWrappedText(ui.Rect.init(bounds.x + alert_text_x, bounds.y + alert_padding_y - 1.0, text_w, title_h), self.title, content_color, component_primitives.textWrap(self.title, alert_title_height, alert_title_max_lines));
@@ -59,8 +62,7 @@ pub const Alert = struct {
     pub fn writeRecord(self: Alert, writer: *component_codec.Writer, index: usize) bool {
         const title_ref = writer.string(self.title) orelse return false;
         const detail_ref = writer.string(self.detail) orelse return false;
-        const destructive_id: u32 = if (self.destructive) 1 else 0;
-        return writer.record(index, .alert, destructive_id, title_ref, detail_ref);
+        return writer.record(index, .alert, packedAlertId(self.destructive, statusIconTag(self)), title_ref, detail_ref);
     }
 
     pub fn fromView(view: object.View) Error!Alert {
@@ -69,9 +71,23 @@ pub const Alert = struct {
     }
 
     pub fn fromNode(alert: @FieldType(ui.Node, "alert")) Error!Alert {
-        return .{ .title = alert.title, .detail = alert.detail, .destructive = alert.destructive };
+        return .{ .title = alert.title, .detail = alert.detail, .destructive = alert.destructive, .icon_slot = try IconSlot.fromTag(.status, alert.icon) };
     }
 };
+
+fn statusIcon(self: Alert) Icon {
+    if (self.icon_slot.optional()) |slot| return slot;
+    return Icon.named(if (self.destructive) .warning else .shield);
+}
+
+fn statusIconTag(self: Alert) u16 {
+    return self.icon_slot.tag();
+}
+
+pub fn packedAlertId(destructive: bool, icon_tag: u16) u32 {
+    const destructive_bit: u32 = if (destructive) 1 else 0;
+    return destructive_bit | (@as(u32, icon_tag) << alert_icon_shift);
+}
 
 fn textWidth(bounds: ui.Rect) f32 {
     return @max(component_primitives.min_extent, bounds.w - alert_text_x - alert_padding_x);
@@ -89,11 +105,12 @@ const alert_detail_height: f32 = 16.0;
 const alert_detail_max_lines: usize = 2;
 const alert_min_width: f32 = 160.0;
 const alert_min_height: f32 = 48.0;
+const alert_icon_shift: u5 = 1;
 const alert_danger = ui.Color{ .r = 239, .g = 68, .b = 68 };
 pub const preferred_alert = ui.Size{ .w = 260.0, .h = 64.0 };
 
-test "alert component serializes to canonical object and deserializes" {
-    const alert = Alert{ .title = "Heads up", .detail = "Status message", .destructive = true };
+test "alert component serializes icon slot to canonical object and deserializes" {
+    const alert = Alert{ .title = "Heads up", .detail = "Status message", .destructive = true, .icon_slot = IconSlot.named(.status, .warning) };
     var ui_raw: [128]u8 = undefined;
     var object_raw: [object.header_size + 128]u8 = undefined;
 
@@ -103,6 +120,7 @@ test "alert component serializes to canonical object and deserializes" {
     try std.testing.expectEqualStrings(alert.title, decoded.title);
     try std.testing.expectEqualStrings(alert.detail, decoded.detail);
     try std.testing.expect(decoded.destructive);
+    try std.testing.expectEqual(icon.Icon.warning, decoded.icon_slot.status.value);
 }
 
 test "alert component renders title detail and destructive variant" {

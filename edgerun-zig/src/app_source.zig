@@ -2,8 +2,12 @@ const std = @import("std");
 const icon = @import("icon.zig");
 const interaction = @import("ui_interaction.zig");
 const ui = @import("ui.zig");
-const components = @import("ui/components/Component.zig");
+const button_component = @import("ui/components/Button.zig");
+const icon_component = @import("ui/components/Icon.zig");
+const progress_component = @import("ui/components/Progress.zig");
+const row_item_component = @import("ui/components/RowItem.zig");
 const textarea_component = @import("ui/components/Textarea.zig");
+const component_common = @import("ui_component_common.zig");
 const app_chrome = @import("app_chrome.zig");
 const design = @import("app_design.zig");
 const app_layout = @import("app_layout.zig");
@@ -230,7 +234,7 @@ fn renderEditorWithChrome(scene: *ui.Scene, collector: *interaction.Collector, b
     if (chrome.activity) try renderActivityRail(scene, ui.Rect.init(bounds.x, body_y, activity_rail_w, body_h));
     if (show_explorer) try renderExplorer(scene, collector, ui.Rect.init(bounds.x + activity_width, body_y, explorer_width, body_h), state);
     try fill(scene, code_view, palette.code_bg, 0.0);
-    try components.collectComponentInteractions(collector, code_view, .{ .textarea = .{ .id = editor_textarea_id, .placeholder = "source editor" } });
+    try (textarea_component.Textarea{ .id = editor_textarea_id, .placeholder = "source editor" }).collectInteractions(collector, code_view);
     try renderBreadcrumb(scene, breadcrumb, state);
     try fill(scene, ui.Rect.init(code_view.x, code_view.y, code_pad + code_gutter_w - 10.0, code_view.h), gutter_bg, 0.0);
 
@@ -285,7 +289,7 @@ fn renderStatus(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
     var progress_style = app_chrome.style();
     progress_style.panel = palette.neutral_soft;
     progress_style.accent = progressColor(state.compile_progress);
-    try components.renderComponent(scene, bar, .{ .progress = .{ .value = state.compile_progress } }, .{ .style = progress_style });
+    try (progress_component.Progress{ .value = state.compile_progress }).render(scene, bar, .{ .style = progress_style });
     try renderCompileStages(scene, ui.Rect.init(bar.x, bar.y - 5.0, bar.w, compiler_stage_h), state.compile_progress);
     if (state.diagnostic.len != 0) {
         try wrappedText(scene, ui.Rect.init(bounds.x + panel_pad, bar.y + compiler_bar_h + 6.0, text_w, compiler_diagnostic_h), state.diagnostic, palette.danger, compiler_diagnostic_h, compiler_text_average_w, 1);
@@ -337,7 +341,7 @@ fn renderExplorer(scene: *ui.Scene, collector: *interaction.Collector, bounds: u
         const row_bounds = ui.Rect.init(bounds.x, y, bounds.w, explorer_row_h);
         const path = entry.path;
         try explorerRow(scene, bounds.x, y, bounds.w, fileName(path), .file, std.mem.eql(u8, state.label, path));
-        try components.collectComponentInteractions(collector, row_bounds, .{ .row_item = .{ .id = explorerFileHitId(index), .title = path, .detail = "" } });
+        try (row_item_component.RowItem{ .id = explorerFileHitId(index), .title = path, .detail = "" }).collectInteractions(collector, row_bounds);
     }
     try text(scene, bounds.x + 14.0, bounds.y + bounds.h - 46.0, bounds.w - 28.0, 12.0, "APP-OWNED VFS", palette.dim);
     try text(scene, bounds.x + 14.0, bounds.y + bounds.h - 26.0, bounds.w - 28.0, 12.0, toolbarDetail(state), toolbarDetailColor(state));
@@ -468,7 +472,7 @@ fn renderSelectionForLine(scene: *ui.Scene, code_view: ui.Rect, y: f32, line_sta
 }
 
 fn iconQuad(scene: *ui.Scene, bounds: ui.Rect, value: icon.Icon, color: ui.Color) ui.RenderError!void {
-    try scene.pushIconQuad(.{ .bounds = bounds, .icon_id = icon.id(value), .color = color });
+    try icon_component.renderGlyph(scene, bounds, value, color);
 }
 
 fn renderCompileStages(scene: *ui.Scene, bounds: ui.Rect, progress: f32) !void {
@@ -483,16 +487,17 @@ fn renderCompileStages(scene: *ui.Scene, bounds: ui.Rect, progress: f32) !void {
     }
 }
 
-fn button(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id: u32, variant: components.ButtonVariant, leading: icon.Icon, enabled: bool) !void {
+fn button(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id: u32, variant: component_common.ButtonVariant, leading: icon.Icon, enabled: bool) !void {
+    const component = button_component.Button{ .id = id, .label = label, .variant = variant, .icon_slot = icon_component.IconSlot.named(.leading, leading) };
     if (!enabled) {
-        try components.renderComponent(scene, bounds, .{ .button = .{ .id = id, .label = label, .variant = variant, .icon_slot = .{ .leading = components.IconComponent.named(leading) } } }, .{
+        try component.render(scene, bounds, .{
             .style = app_chrome.style(),
             .control = .{ .disabled = true },
         });
         return;
     }
-    try components.renderComponent(scene, bounds, .{ .button = .{ .id = id, .label = label, .variant = variant, .icon_slot = .{ .leading = components.IconComponent.named(leading) } } }, .{ .style = app_chrome.style() });
-    try components.collectComponentInteractions(collector, bounds, .{ .button = .{ .id = id, .label = label } });
+    try component.render(scene, bounds, .{ .style = app_chrome.style() });
+    try component.collectInteractions(collector, bounds);
 }
 
 fn canCompile(state: State) bool {

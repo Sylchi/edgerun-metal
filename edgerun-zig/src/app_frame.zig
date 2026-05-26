@@ -1,6 +1,9 @@
 const std = @import("std");
 const component_gallery = @import("component_gallery.zig");
-const components = @import("ui/components/Component.zig");
+const button_component = @import("ui/components/Button.zig");
+const card_component = @import("ui/components/Card.zig");
+const icon_component = @import("ui/components/Icon.zig");
+const row_item_component = @import("ui/components/RowItem.zig");
 const icon = @import("icon.zig");
 const interaction = @import("ui_interaction.zig");
 const app_blog = @import("app_blog.zig");
@@ -105,14 +108,14 @@ fn renderWorkspaceRail(scene: *ui.Scene, collector: *interaction.Collector, boun
     var y = bounds.y + workspace_rail_pad;
     for (items) |item| {
         const item_bounds = ui.Rect.init(bounds.x + 6.0, y, bounds.w - 12.0, workspace_icon_button);
-        const component = components.Component{ .icon_button = .{
+        const component = button_component.IconButton{
             .id = item.id,
             .label = item.label,
-            .icon = components.IconComponent.named(item.icon_value),
+            .icon = icon_component.Icon.named(item.icon_value),
             .variant = if (active == item.view) .secondary else .ghost,
-        } };
-        try components.renderComponent(scene, item_bounds, component, .{ .style = design.style() });
-        try components.collectComponentInteractions(collector, item_bounds, component);
+        };
+        try component.render(scene, item_bounds, .{ .style = design.style() });
+        try component.collectInteractions(collector, item_bounds);
         if (active == item.view) try scene.pushRect(ui.Rect.init(bounds.x, item_bounds.y + 5.0, 2.0, item_bounds.h - 10.0), design.palette.primary, .fill, 0.0, 0.0);
         y += workspace_icon_button + 8.0;
     }
@@ -137,12 +140,12 @@ fn renderWorkspaceSidebar(scene: *ui.Scene, collector: *interaction.Collector, b
     };
     for (rows) |row| {
         const row_bounds = ui.Rect.init(bounds.x + 10.0, y, bounds.w - 20.0, 42.0);
-        const component = components.Component{ .row_item = .{ .id = row.id, .title = row.title, .detail = row.detail } };
-        try components.renderComponent(scene, row_bounds, component, .{
+        const component = row_item_component.RowItem{ .id = row.id, .title = row.title, .detail = row.detail };
+        try component.render(scene, row_bounds, .{
             .style = design.style(),
             .control = .{ .active = route.view == row.view },
         });
-        try components.collectComponentInteractions(collector, row_bounds, component);
+        try component.collectInteractions(collector, row_bounds);
         y += 46.0;
     }
 }
@@ -256,20 +259,20 @@ fn renderContextMenuPanel(scene: *ui.Scene, collector: *interaction.Collector, b
     const y = std.math.clamp(menu.y, bounds.y + pad, bounds.y + @max(pad, bounds.h - menu_h - pad));
     const panel = ui.Rect.init(x, y, menu_w, menu_h);
     try scene.pushRect(panel, palette.shadow, .shadow, design.surface_radius, 16.0);
-    try components.renderComponent(scene, panel, .{ .card = .{
+    try (card_component.Card{
         .title = "",
         .detail = "",
         .variant = .elevated,
-    } }, .{ .style = design.style() });
+    }).render(scene, panel, .{ .style = design.style() });
     try scene.pushAlignedText(ui.Rect.init(panel.x + 14.0, panel.y + 12.0, panel.w - 28.0, 16.0), "Component source", palette.dim, .start);
     const row = ui.Rect.init(panel.x + 8.0, panel.y + 38.0, panel.w - 16.0, 40.0);
-    const row_component = components.Component{ .row_item = .{
+    const row_component = row_item_component.RowItem{
         .id = app_navigation.context_source_button_id,
         .title = "Open exact source",
         .detail = menu.source_path,
-    } };
-    try components.renderComponent(scene, row, row_component, .{ .style = design.style() });
-    try components.collectComponentInteractions(collector, row, row_component);
+    };
+    try row_component.render(scene, row, .{ .style = design.style() });
+    try row_component.collectInteractions(collector, row);
 }
 
 test "app frame renders every top level route through one scene builder" {

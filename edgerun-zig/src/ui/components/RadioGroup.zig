@@ -55,6 +55,10 @@ pub const RadioGroup = struct {
 
     pub fn fromView(view: object.View) Error!RadioGroup {
         const radio = try component_codec.nodeView(view, .radio_group);
+        return fromNode(radio);
+    }
+
+    pub fn fromNode(radio: @FieldType(ui.Node, "radio_group")) Error!RadioGroup {
         return .{ .id = radio.id, .first = radio.first, .second = radio.second, .selected = selectedIndex(radio.selected) };
     }
 };

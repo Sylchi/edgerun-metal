@@ -161,7 +161,7 @@ pub const Surface = struct {
         for (renderer_ir.drawBatches(buffers)) |batch| switch (batch) {
             .rects, .overlay_rects => |rects| try self.rasterizeIrRects(rects),
             .icon, .overlay_icon => |icons| try self.rasterizeIrIcons(icons),
-            .image, .text, .overlay_text => {},
+            .image, .text, .overlay_text, .icon_lines, .overlay_icon_lines => {},
         };
     }
 
@@ -179,6 +179,7 @@ pub const Surface = struct {
             .image => |vertices| if (image_texture) |texture| try self.rasterizeRgbaTexturedQuads(vertices, texture),
             .text, .overlay_text => |vertices| try self.rasterizeBilinearAlphaTexturedQuads(vertices, resources.font),
             .icon, .overlay_icon => |icons| try self.rasterizeIrIcons(icons),
+            .icon_lines, .overlay_icon_lines => {},
         };
     }
 
