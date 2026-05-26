@@ -8,6 +8,7 @@ const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
 const component_primitives = @import("Primitives.zig");
+const list_layout = @import("ListLayout.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
@@ -34,9 +35,7 @@ pub const Menubar = struct {
     }
 
     pub fn collectInteractions(self: Menubar, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-        for (0..menubar_item_count) |index| {
-            try collector.addHit(itemBounds(bounds, index), .button, self.id + @as(u32, @intCast(index)));
-        }
+        try list_layout.collectItemStripHits(collector, bounds, self.id, &menubar_item_widths, menubar_strip_layout);
     }
 
     pub fn measure(self: Menubar, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
@@ -62,11 +61,11 @@ pub const Menubar = struct {
 };
 
 fn activeIndex(value: u16) u16 {
-    return @min(value, menubar_item_count - 1);
+    return list_layout.clampedIndex(value, menubar_item_count);
 }
 
 fn encodedId(id: u32, active: u16) u32 {
-    return id * menubar_id_stride + activeIndex(active);
+    return list_layout.encodedIndexedId(id, active, menubar_item_count);
 }
 
 pub const menubar_id_stride: u32 = menubar_item_count;
@@ -80,24 +79,13 @@ fn renderItem(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, active: bool
 }
 
 fn itemBounds(bounds: ui.Rect, index: usize) ui.Rect {
-    const item_w = switch (index) {
-        0 => menubar_first_w,
-        1 => menubar_second_w,
-        else => menubar_third_w,
-    };
-    const item_x = switch (index) {
-        0 => bounds.x + menubar_padding,
-        1 => bounds.x + menubar_padding + menubar_first_w,
-        else => bounds.x + menubar_padding + menubar_first_w + menubar_second_w,
-    };
-    return ui.Rect.init(item_x, bounds.y + menubar_padding, item_w, @max(component_primitives.min_extent, bounds.h - menubar_padding * 2.0));
+    return list_layout.itemStripBounds(bounds, index, &menubar_item_widths, menubar_strip_layout);
 }
 
-pub const menubar_item_count: u32 = 3;
+pub const menubar_item_count: u16 = 3;
 const menubar_padding: f32 = 4.0;
-const menubar_first_w: f32 = 48.0;
-const menubar_second_w: f32 = 48.0;
-const menubar_third_w: f32 = 48.0;
+const menubar_item_widths = [_]f32{ 48.0, 48.0, 48.0 };
+const menubar_strip_layout = list_layout.ItemStripLayout{ .padding = menubar_padding, .item_h = preferred_menubar.h - menubar_padding * 2.0 };
 const menubar_item_padding_x: f32 = 8.0;
 const menubar_third_label = "View";
 pub const preferred_menubar = ui.Size{ .w = 170.0, .h = 36.0 };

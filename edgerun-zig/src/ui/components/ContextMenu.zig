@@ -12,8 +12,6 @@ const primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 const measureFixed = primitives.measureFixed;
-const renderControlFrame = primitives.renderControlFrame;
-const renderControlText = primitives.renderControlText;
 
 pub const ContextMenu = struct {
     id: u32,
@@ -25,20 +23,12 @@ pub const ContextMenu = struct {
     }
 
     pub fn render(self: ContextMenu, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        const trigger_bounds = triggerBounds(bounds);
-        try renderControlFrame(scene, trigger_bounds, options.style.accent, options.style.border, primitives.control_radius);
-        try renderControlText(scene, trigger_bounds, menu_trigger_padding, primitives.control_label_height, context_menu_trigger, options.style.bg, .center);
-
-        const content = contentBounds(bounds);
-        try scene.pushRect(content, options.style.panel, .fill, menu_radius, 0.0);
-        try scene.pushRect(content, options.style.border, .border, menu_radius, 0.0);
-        try renderMenuItem(scene, itemBounds(content, 0), self.first, options);
-        try renderMenuItem(scene, itemBounds(content, 1), self.second, options);
+        try primitives.renderSidePanelTrigger(scene, bounds, menu_panel_layout, options.style.accent, options.style.border, menu_trigger_padding, context_menu_trigger, options.style.bg);
+        try primitives.renderTwoItemMenuPanel(scene, primitives.sidePanelContentBounds(bounds, menu_panel_layout), self.first, self.second, options, menu_radius, menu_list_layout);
     }
 
     pub fn collectInteractions(self: ContextMenu, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-        try collector.addHit(triggerBounds(bounds), .button, self.id);
-        try primitives.collectMenuListHits(collector, contentBounds(bounds), self.id, menu_list_layout, menu_item_count);
+        try primitives.collectSidePanelMenuHits(collector, bounds, menu_panel_layout, self.id, menu_list_layout, menu_item_count);
     }
 
     pub fn measure(self: ContextMenu, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
@@ -60,22 +50,6 @@ pub const ContextMenu = struct {
         return .{ .id = menu.id, .first = menu.first, .second = menu.second };
     }
 };
-
-fn triggerBounds(bounds: ui.Rect) ui.Rect {
-    return primitives.sidePanelTriggerBounds(bounds, menu_panel_layout);
-}
-
-fn contentBounds(bounds: ui.Rect) ui.Rect {
-    return primitives.sidePanelContentBounds(bounds, menu_panel_layout);
-}
-
-fn itemBounds(content: ui.Rect, index: usize) ui.Rect {
-    return primitives.menuItemBounds(content, index, menu_list_layout);
-}
-
-fn renderMenuItem(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, options: RenderOptions) ui.RenderError!void {
-    try primitives.renderMenuItem(scene, bounds, label, options, menu_list_layout);
-}
 
 const context_menu_trigger = "Context";
 const menu_item_count: usize = 2;

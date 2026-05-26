@@ -100,6 +100,36 @@ pub fn sidePanelContentBounds(bounds: ui.Rect, spec: SidePanelLayout) ui.Rect {
     return ui.Rect.init(x, bounds.y, @max(min_extent, bounds.x + bounds.w - x), bounds.h);
 }
 
+pub fn renderControlTrigger(scene: *ui.Scene, trigger: ui.Rect, fill: ui.Color, border: ui.Color, padding: f32, label: []const u8, text_color: ui.Color) ui.RenderError!void {
+    try renderControlFrame(scene, trigger, fill, border, control_radius);
+    try renderControlText(scene, trigger, padding, control_label_height, label, text_color, .center);
+}
+
+pub fn renderSidePanelTrigger(scene: *ui.Scene, bounds: ui.Rect, spec: SidePanelLayout, fill: ui.Color, border: ui.Color, padding: f32, label: []const u8, text_color: ui.Color) ui.RenderError!void {
+    try renderControlTrigger(scene, sidePanelTriggerBounds(bounds, spec), fill, border, padding, label, text_color);
+}
+
+pub const TitleDetailPanel = struct {
+    radius: f32,
+    padding: f32,
+    title_y: f32,
+    title_h: f32,
+    detail_y: f32,
+    detail_h: f32,
+    title_right_inset: f32 = 0.0,
+};
+
+pub fn renderTitleDetailPanel(scene: *ui.Scene, bounds: ui.Rect, title: []const u8, detail: []const u8, options: common.RenderOptions, spec: TitleDetailPanel, border: ui.Color, title_color: ui.Color) ui.RenderError!void {
+    try scene.pushRect(bounds, options.style.panel, .fill, spec.radius, 0.0);
+    try scene.pushRect(bounds, border, .border, spec.radius, 0.0);
+    try scene.pushText(ui.Rect.init(bounds.x + spec.padding, bounds.y + spec.title_y, @max(min_extent, bounds.w - spec.padding * 2.0 - spec.title_right_inset), spec.title_h), title, title_color);
+    try scene.pushText(ui.Rect.init(bounds.x + spec.padding, bounds.y + spec.detail_y, @max(min_extent, bounds.w - spec.padding * 2.0), spec.detail_h), detail, options.style.muted);
+}
+
+pub fn collectSidePanelLayoutHits(collector: *interaction.Collector, bounds: ui.Rect, spec: SidePanelLayout, id: u32) interaction.Error!void {
+    try collectSidePanelHits(collector, sidePanelTriggerBounds(bounds, spec), sidePanelContentBounds(bounds, spec), id);
+}
+
 pub const MenuListLayout = struct {
     padding: f32,
     item_h: f32,
@@ -118,6 +148,13 @@ pub fn renderMenuItem(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, opti
     try renderControlText(scene, bounds, spec.item_padding, spec.item_text_h, label, options.style.text, .start);
 }
 
+pub fn renderTwoItemMenuPanel(scene: *ui.Scene, content: ui.Rect, first: []const u8, second: []const u8, options: common.RenderOptions, radius: f32, spec: MenuListLayout) ui.RenderError!void {
+    try scene.pushRect(content, options.style.panel, .fill, radius, 0.0);
+    try scene.pushRect(content, options.style.border, .border, radius, 0.0);
+    try renderMenuItem(scene, menuItemBounds(content, 0, spec), first, options, spec);
+    try renderMenuItem(scene, menuItemBounds(content, 1, spec), second, options, spec);
+}
+
 pub fn collectSidePanelHits(collector: *interaction.Collector, trigger: ui.Rect, content: ui.Rect, id: u32) interaction.Error!void {
     try collector.addHit(trigger, .button, id);
     try collector.addHit(content, .button, id + 1);
@@ -127,6 +164,11 @@ pub fn collectMenuListHits(collector: *interaction.Collector, content: ui.Rect, 
     for (0..item_count) |index| {
         try collector.addHit(menuItemBounds(content, index, spec), .row_item, id + @as(u32, @intCast(index + 1)));
     }
+}
+
+pub fn collectSidePanelMenuHits(collector: *interaction.Collector, bounds: ui.Rect, panel: SidePanelLayout, id: u32, spec: MenuListLayout, item_count: usize) interaction.Error!void {
+    try collector.addHit(sidePanelTriggerBounds(bounds, panel), .button, id);
+    try collectMenuListHits(collector, sidePanelContentBounds(bounds, panel), id, spec, item_count);
 }
 
 pub fn renderTextCell(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, fill: ui.Color, border: ui.Color, radius: f32, padding: f32, text_color: ui.Color) ui.RenderError!void {

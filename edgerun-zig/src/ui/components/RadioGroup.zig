@@ -8,6 +8,7 @@ const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
 const component_primitives = @import("Primitives.zig");
+const list_layout = @import("ListLayout.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
@@ -59,14 +60,14 @@ pub const RadioGroup = struct {
 };
 
 fn selectedIndex(value: u16) u16 {
-    return @min(value, 1);
+    return list_layout.clampedIndex(value, radio_item_count);
 }
 
 fn encodedId(id: u32, selected: u16) u32 {
-    return id * radio_id_stride + selectedIndex(selected);
+    return list_layout.encodedIndexedId(id, selected, radio_item_count);
 }
 
-const radio_id_stride: u32 = 2;
+const radio_item_count: u16 = 2;
 
 fn renderOption(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, selected: bool, options: RenderOptions) ui.RenderError!void {
     const outer = ui.Rect.init(bounds.x, bounds.y + (bounds.h - radio_box_size) * 0.5, radio_box_size, radio_box_size);

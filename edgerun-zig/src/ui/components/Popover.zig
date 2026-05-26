@@ -12,8 +12,6 @@ const primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 const measureFixed = primitives.measureFixed;
-const renderControlFrame = primitives.renderControlFrame;
-const renderControlText = primitives.renderControlText;
 
 pub const Popover = struct {
     id: u32,
@@ -25,16 +23,15 @@ pub const Popover = struct {
     }
 
     pub fn render(self: Popover, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        try renderControlFrame(scene, triggerBounds(bounds), options.style.accent, options.style.border, primitives.control_radius);
-        try renderControlText(scene, triggerBounds(bounds), primitives.control_text_padding, primitives.control_label_height, self.trigger, options.style.bg, .center);
-        const content_bounds = contentBounds(bounds);
+        try primitives.renderSidePanelTrigger(scene, bounds, popover_layout, options.style.accent, options.style.border, primitives.control_text_padding, self.trigger, options.style.bg);
+        const content_bounds = primitives.sidePanelContentBounds(bounds, popover_layout);
         try scene.pushRect(content_bounds, options.style.panel, .fill, popover_radius, 0.0);
         try scene.pushRect(content_bounds, options.style.border, .border, popover_radius, 0.0);
-        try renderControlText(scene, content_bounds, popover_padding, primitives.control_label_height, self.content, options.style.text, .start);
+        try primitives.renderControlText(scene, content_bounds, popover_padding, primitives.control_label_height, self.content, options.style.text, .start);
     }
 
     pub fn collectInteractions(self: Popover, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-        try primitives.collectSidePanelHits(collector, triggerBounds(bounds), contentBounds(bounds), self.id);
+        try primitives.collectSidePanelLayoutHits(collector, bounds, popover_layout, self.id);
     }
 
     pub fn measure(self: Popover, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
@@ -56,14 +53,6 @@ pub const Popover = struct {
         return .{ .id = popover.id, .trigger = popover.trigger, .content = popover.content };
     }
 };
-
-fn triggerBounds(bounds: ui.Rect) ui.Rect {
-    return primitives.sidePanelTriggerBounds(bounds, popover_layout);
-}
-
-fn contentBounds(bounds: ui.Rect) ui.Rect {
-    return primitives.sidePanelContentBounds(bounds, popover_layout);
-}
 
 const popover_layout = primitives.SidePanelLayout{ .trigger_y = 6.0, .trigger_w = 64.0, .trigger_h = 30.0, .gap = 10.0 };
 const popover_radius: f32 = 8.0;

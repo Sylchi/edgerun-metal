@@ -65,8 +65,8 @@ pub fn fromPath(path: []const u8) Route {
         .academy => blogIndex(null),
         .source => .{ .view = .source },
         .docs => .{ .view = .docs },
-        .component_catalog => .{ .view = .docs, .selected_doc_index = app_docs.indexBySlug("component-system") },
-        .component_detail => .{ .view = .docs, .selected_doc_index = app_docs.indexBySlug("component-system"), .selected_component_index = component_gallery.indexBySlug(trimmed[RoutePath.component_detail_prefix.len..]) },
+        .component_catalog => .{ .view = .components },
+        .component_detail => .{ .view = .components, .selected_component_index = component_gallery.indexBySlug(trimmed[RoutePath.component_detail_prefix.len..]) },
         .docs_detail => .{ .view = .docs, .selected_doc_index = app_docs.indexBySlug(trimmed[RoutePath.docs_detail_prefix.len..]) },
         .academy_detail => academyPostRoute(trimmed[RoutePath.academy_detail_prefix.len..]),
         .unknown => .{ .view = .source },
@@ -84,7 +84,7 @@ pub fn fromHit(hit_id: u32, current: Route) ?Route {
         => blogIndex(null),
         app_chrome.source_button_id => .{ .view = .source },
         app_docs.source_button_id => .{ .view = .source },
-        app_docs.component_catalog_button_id => .{ .view = .docs, .selected_doc_index = app_docs.indexBySlug("component-system") },
+        app_docs.component_catalog_button_id => .{ .view = .components },
         app_blog.back_button_id => blogIndex(null),
         else => routeFromDynamicHit(hit_id, current),
     };
@@ -157,7 +157,7 @@ fn routeFromDynamicHit(hit_id: u32, current: Route) ?Route {
         },
         .docs => {
             if (component_gallery.indexByCatalogHit(hit_id) orelse component_gallery.indexByPreviewHit(hit_id)) |index| {
-                return .{ .view = .docs, .selected_doc_index = app_docs.indexBySlug("component-system"), .selected_component_index = index };
+                return .{ .view = .components, .selected_component_index = index };
             }
             if (app_docs.indexByHit(hit_id)) |index| {
                 if (app_docs.doc_pages[index].section == .source) return .{ .view = .source };
@@ -234,10 +234,8 @@ test "navigation parses app and native app routes" {
     try std.testing.expectEqual(app_docs.indexBySlug("media").?, fromPath("/docs/media").selected_doc_index.?);
     try std.testing.expectEqual(View.docs, fromPath("/docs/component-system").view);
     try std.testing.expectEqual(app_docs.indexBySlug("component-system").?, fromPath("/docs/component-system").selected_doc_index.?);
-    try std.testing.expectEqual(View.docs, fromPath("/docs/components").view);
-    try std.testing.expectEqual(app_docs.indexBySlug("component-system").?, fromPath("/docs/components").selected_doc_index.?);
-    try std.testing.expectEqual(View.docs, fromPath("/docs/components/button").view);
-    try std.testing.expectEqual(app_docs.indexBySlug("component-system").?, fromPath("/docs/components/button").selected_doc_index.?);
+    try std.testing.expectEqual(View.components, fromPath("/docs/components").view);
+    try std.testing.expectEqual(View.components, fromPath("/docs/components/button").view);
     try std.testing.expectEqual(component_gallery.indexBySlug("button").?, fromPath("/docs/components/button").selected_component_index.?);
     const post_id = app_blog.postIdAt(0);
     var post_path: [route_path_capacity]u8 = undefined;
@@ -291,12 +289,12 @@ test "navigation maps shared hit ids to routes" {
     try std.testing.expectEqual(View.docs, fromHit(app_chrome.docs_button_id, .{}).?.view);
     try std.testing.expectEqual(View.blog, fromHit(app_chrome.blog_button_id, .{}).?.view);
     try std.testing.expectEqual(View.source, fromHit(app_chrome.source_button_id, .{}).?.view);
-    try std.testing.expectEqual(View.docs, fromHit(app_docs.component_catalog_button_id, .{}).?.view);
-    try std.testing.expectEqual(app_docs.indexBySlug("component-system").?, fromHit(app_docs.component_catalog_button_id, .{}).?.selected_doc_index.?);
+    try std.testing.expectEqual(View.components, fromHit(app_docs.component_catalog_button_id, .{}).?.view);
     try std.testing.expectEqual(app_docs.indexBySlug("media").?, fromHit(app_docs.first_doc_page_button_id + @as(u32, @intCast(app_docs.indexBySlug("media").?)), .{ .view = .docs }).?.selected_doc_index.?);
     try std.testing.expectEqual(app_docs.indexBySlug("component-system").?, fromHit(app_docs.first_doc_page_button_id + @as(u32, @intCast(app_docs.indexBySlug("component-system").?)), .{ .view = .docs }).?.selected_doc_index.?);
-    try std.testing.expectEqual(component_gallery.indexBySlug("button").?, fromHit(component_gallery.first_catalog_card_id + 7, .{ .view = .docs, .selected_doc_index = app_docs.indexBySlug("component-system") }).?.selected_component_index.?);
-    try std.testing.expectEqual(component_gallery.indexBySlug("button").?, fromHit(component_gallery.previewHitForIndexForTest(component_gallery.indexBySlug("button").?), .{ .view = .docs, .selected_doc_index = app_docs.indexBySlug("component-system") }).?.selected_component_index.?);
+    try std.testing.expectEqual(View.components, fromHit(component_gallery.first_catalog_card_id + 7, .{ .view = .docs, .selected_doc_index = app_docs.indexBySlug("component-system") }).?.view);
+    try std.testing.expectEqual(component_gallery.indexBySlug("button").?, fromHit(component_gallery.first_catalog_card_id + 7, .{ .view = .components }).?.selected_component_index.?);
+    try std.testing.expectEqual(component_gallery.indexBySlug("button").?, fromHit(component_gallery.previewHitForIndexForTest(component_gallery.indexBySlug("button").?), .{ .view = .components }).?.selected_component_index.?);
     const post_id = app_blog.postIdAt(0);
     try std.testing.expectEqual(post_id, fromHit(post_id, .{ .view = .blog }).?.selected_blog_post_id);
     try std.testing.expect(fromHit(component_gallery.first_catalog_card_id + 7, .{}) == null);

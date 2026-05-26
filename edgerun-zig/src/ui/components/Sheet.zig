@@ -13,8 +13,6 @@ const primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 const measureFixed = primitives.measureFixed;
-const renderControlFrame = primitives.renderControlFrame;
-const renderControlText = primitives.renderControlText;
 
 pub const Sheet = struct {
     id: u32,
@@ -26,15 +24,10 @@ pub const Sheet = struct {
     }
 
     pub fn render(self: Sheet, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        const trigger = triggerBounds(bounds);
-        try renderControlFrame(scene, trigger, options.style.accent, options.style.border, primitives.control_radius);
-        try renderControlText(scene, trigger, sheet_trigger_padding, primitives.control_label_height, overlay_open_label, options.style.bg, .center);
+        try primitives.renderControlTrigger(scene, triggerBounds(bounds), options.style.accent, options.style.border, sheet_trigger_padding, overlay_open_label, options.style.bg);
 
         const content = contentBounds(bounds);
-        try scene.pushRect(content, options.style.panel, .fill, sheet_radius, 0.0);
-        try scene.pushRect(content, options.style.border, .border, sheet_radius, 0.0);
-        try scene.pushText(ui.Rect.init(content.x + sheet_padding, content.y + sheet_title_y, @max(primitives.min_extent, content.w - sheet_padding * 2.0 - sheet_close_space), overlay_title_h), self.title, options.style.text);
-        try scene.pushText(ui.Rect.init(content.x + sheet_padding, content.y + sheet_detail_y, @max(primitives.min_extent, content.w - sheet_padding * 2.0), overlay_detail_h), self.detail, options.style.muted);
+        try primitives.renderTitleDetailPanel(scene, content, self.title, self.detail, options, sheet_panel, options.style.border, options.style.text);
         try scene.pushIconQuad(.{ .bounds = closeBounds(bounds), .icon_id = icon.id(.x), .color = options.style.muted });
     }
 
@@ -78,8 +71,6 @@ fn closeBounds(bounds: ui.Rect) ui.Rect {
 }
 
 const overlay_open_label = "Open";
-const overlay_title_h: f32 = 14.0;
-const overlay_detail_h: f32 = 12.0;
 const sheet_trigger_y: f32 = 4.0;
 const sheet_trigger_w: f32 = 62.0;
 const sheet_trigger_h: f32 = 30.0;
@@ -88,11 +79,10 @@ const sheet_content_w: f32 = 96.0;
 const sheet_content_min_left: f32 = 82.0;
 const sheet_radius: f32 = 8.0;
 const sheet_padding: f32 = 10.0;
-const sheet_title_y: f32 = 10.0;
-const sheet_detail_y: f32 = 29.0;
 const sheet_close_size: f32 = 12.0;
 const sheet_close_inset: f32 = 8.0;
 const sheet_close_space: f32 = 18.0;
+const sheet_panel = primitives.TitleDetailPanel{ .radius = sheet_radius, .padding = sheet_padding, .title_y = 10.0, .title_h = 14.0, .detail_y = 29.0, .detail_h = 12.0, .title_right_inset = sheet_close_space };
 const preferred_sheet = ui.Size{ .w = 240.0, .h = 76.0 };
 
 test "sheet component serializes to canonical object and deserializes" {

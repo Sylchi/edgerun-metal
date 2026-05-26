@@ -12,8 +12,6 @@ const primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 const measureFixed = primitives.measureFixed;
-const renderControlFrame = primitives.renderControlFrame;
-const renderControlText = primitives.renderControlText;
 
 pub const Drawer = struct {
     id: u32,
@@ -25,16 +23,11 @@ pub const Drawer = struct {
     }
 
     pub fn render(self: Drawer, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        const trigger = triggerBounds(bounds);
-        try renderControlFrame(scene, trigger, options.style.accent, options.style.border, primitives.control_radius);
-        try renderControlText(scene, trigger, drawer_trigger_padding, primitives.control_label_height, overlay_open_label, options.style.bg, .center);
+        try primitives.renderControlTrigger(scene, triggerBounds(bounds), options.style.accent, options.style.border, drawer_trigger_padding, overlay_open_label, options.style.bg);
 
         const content = contentBounds(bounds);
-        try scene.pushRect(content, options.style.panel, .fill, drawer_radius, 0.0);
-        try scene.pushRect(content, options.style.border, .border, drawer_radius, 0.0);
+        try primitives.renderTitleDetailPanel(scene, content, self.title, self.detail, options, drawer_panel, options.style.border, options.style.text);
         try scene.pushRect(handleBounds(content), options.style.muted, .fill, drawer_handle_radius, 0.0);
-        try scene.pushText(ui.Rect.init(content.x + drawer_padding, content.y + drawer_title_y, @max(primitives.min_extent, content.w - drawer_padding * 2.0), overlay_title_h), self.title, options.style.text);
-        try scene.pushText(ui.Rect.init(content.x + drawer_padding, content.y + drawer_detail_y, @max(primitives.min_extent, content.w - drawer_padding * 2.0), overlay_detail_h), self.detail, options.style.muted);
     }
 
     pub fn collectInteractions(self: Drawer, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
@@ -75,8 +68,6 @@ fn handleBounds(content: ui.Rect) ui.Rect {
 }
 
 const overlay_open_label = "Open";
-const overlay_title_h: f32 = 14.0;
-const overlay_detail_h: f32 = 12.0;
 const drawer_trigger_y: f32 = 4.0;
 const drawer_trigger_w: f32 = 62.0;
 const drawer_trigger_h: f32 = 30.0;
@@ -89,8 +80,7 @@ const drawer_handle_w: f32 = 58.0;
 const drawer_handle_h: f32 = 4.0;
 const drawer_handle_y: f32 = 5.0;
 const drawer_handle_radius: f32 = 2.0;
-const drawer_title_y: f32 = 14.0;
-const drawer_detail_y: f32 = 31.0;
+const drawer_panel = primitives.TitleDetailPanel{ .radius = drawer_radius, .padding = drawer_padding, .title_y = 14.0, .title_h = 14.0, .detail_y = 31.0, .detail_h = 12.0 };
 const preferred_drawer = ui.Size{ .w = 240.0, .h = 76.0 };
 
 test "drawer component serializes to canonical object and deserializes" {

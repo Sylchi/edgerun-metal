@@ -12,8 +12,6 @@ const primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 const measureFixed = primitives.measureFixed;
-const renderControlFrame = primitives.renderControlFrame;
-const renderControlText = primitives.renderControlText;
 
 pub const HoverCard = struct {
     id: u32,
@@ -25,17 +23,12 @@ pub const HoverCard = struct {
     }
 
     pub fn render(self: HoverCard, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        try renderControlFrame(scene, triggerBounds(bounds), options.style.panel, options.style.border, primitives.control_radius);
-        try renderControlText(scene, triggerBounds(bounds), primitives.control_text_padding, primitives.control_label_height, self.trigger, options.style.text, .center);
-        const content_bounds = contentBounds(bounds);
-        try scene.pushRect(content_bounds, options.style.panel, .fill, hover_card_radius, 0.0);
-        try scene.pushRect(content_bounds, options.style.border, .border, hover_card_radius, 0.0);
-        try scene.pushText(ui.Rect.init(content_bounds.x + hover_card_padding, content_bounds.y + hover_card_title_y, @max(primitives.min_extent, content_bounds.w - hover_card_padding * 2.0), hover_card_title_h), self.content, options.style.text);
-        try scene.pushText(ui.Rect.init(content_bounds.x + hover_card_padding, content_bounds.y + hover_card_detail_y, @max(primitives.min_extent, content_bounds.w - hover_card_padding * 2.0), hover_card_detail_h), hover_card_detail_label, options.style.muted);
+        try primitives.renderSidePanelTrigger(scene, bounds, hover_card_layout, options.style.panel, options.style.border, primitives.control_text_padding, self.trigger, options.style.text);
+        try primitives.renderTitleDetailPanel(scene, primitives.sidePanelContentBounds(bounds, hover_card_layout), self.content, hover_card_detail_label, options, hover_card_panel, options.style.border, options.style.text);
     }
 
     pub fn collectInteractions(self: HoverCard, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-        try primitives.collectSidePanelHits(collector, triggerBounds(bounds), contentBounds(bounds), self.id);
+        try primitives.collectSidePanelLayoutHits(collector, bounds, hover_card_layout, self.id);
     }
 
     pub fn measure(self: HoverCard, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
@@ -58,21 +51,10 @@ pub const HoverCard = struct {
     }
 };
 
-fn triggerBounds(bounds: ui.Rect) ui.Rect {
-    return primitives.sidePanelTriggerBounds(bounds, hover_card_layout);
-}
-
-fn contentBounds(bounds: ui.Rect) ui.Rect {
-    return primitives.sidePanelContentBounds(bounds, hover_card_layout);
-}
-
 const hover_card_layout = primitives.SidePanelLayout{ .trigger_y = 6.0, .trigger_w = 66.0, .trigger_h = 30.0, .gap = 10.0 };
 const hover_card_radius: f32 = 8.0;
 const hover_card_padding: f32 = 10.0;
-const hover_card_title_y: f32 = 8.0;
-const hover_card_title_h: f32 = 14.0;
-const hover_card_detail_y: f32 = 25.0;
-const hover_card_detail_h: f32 = 12.0;
+const hover_card_panel = primitives.TitleDetailPanel{ .radius = hover_card_radius, .padding = hover_card_padding, .title_y = 8.0, .title_h = 14.0, .detail_y = 25.0, .detail_h = 12.0 };
 const hover_card_detail_label = "Hover content";
 const preferred_hover_card = ui.Size{ .w = 240.0, .h = 52.0 };
 

@@ -56,6 +56,10 @@ pub const Badge = struct {
 
     pub fn fromView(view: object.View) Error!Badge {
         const badge = try component_codec.nodeView(view, .badge);
+        return fromNode(badge);
+    }
+
+    pub fn fromNode(badge: @FieldType(ui.Node, "badge")) Error!Badge {
         return .{ .label = badge.label, .variant = try variantFromTag(badge.variant) };
     }
 };
