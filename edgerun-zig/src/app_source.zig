@@ -7,6 +7,7 @@ const display_component = @import("ui/components/Display.zig");
 const row_item_component = @import("ui/components/RowItem.zig");
 const textarea_component = @import("ui/components/Textarea.zig");
 const component_common = @import("ui_component_common.zig");
+const text_metrics = @import("ui_text_metrics.zig");
 const app_chrome = @import("app_chrome.zig");
 const design = @import("app_design.zig");
 const app_layout = @import("app_layout.zig");
@@ -43,6 +44,7 @@ const code_pad: f32 = 18.0;
 const code_line_h: f32 = 18.0;
 const code_gutter_w: f32 = 68.0;
 const code_char_w: f32 = 10.4;
+const code_text_px: f32 = code_line_h;
 const editor_status_h: f32 = 24.0;
 const editor_titlebar_h: f32 = 34.0;
 const editor_breadcrumb_h: f32 = 26.0;
@@ -54,6 +56,7 @@ const explorer_threshold_w: f32 = 900.0;
 const minimap_threshold_w: f32 = 1180.0;
 const explorer_row_h: f32 = 24.0;
 const explorer_heading_h: f32 = 30.0;
+const explorer_footer_h: f32 = 58.0;
 const compile_stage_count: usize = 4;
 const compact_w: f32 = 720.0;
 const max_rendered_lines: usize = 40;
@@ -257,7 +260,7 @@ fn renderEditorWithChrome(scene: *ui.Scene, collector: *interaction.Collector, b
         try renderSyntaxLine(scene, code_view.x + code_pad + code_gutter_w, y, code_view.w - code_pad * 2.0 - code_gutter_w, visible);
         if (is_cursor_line) {
             const column = @min(state.cursor - line_start, visible.len);
-            const caret_x = code_view.x + code_pad + code_gutter_w + @as(f32, @floatFromInt(column)) * code_char_w;
+            const caret_x = code_view.x + code_pad + code_gutter_w + codeColumnWidth(line, column);
             try fill(scene, ui.Rect.init(caret_x, y + 2.0, 2.0, code_line_h - 4.0), palette.primary, 0.0);
         }
         y += code_line_h;
@@ -335,15 +338,18 @@ fn renderExplorer(scene: *ui.Scene, collector: *interaction.Collector, bounds: u
     const rows_y = bounds.y + explorer_heading_h + 38.0;
     try explorerRow(scene, bounds.x, rows_y, bounds.w, "src", icon_component.Icon.named(.chevron_right), false);
     const files = explorerFilesForState(state);
-    for (files, 0..) |entry, index| {
+    const footer_y = bounds.y + @max(0.0, bounds.h - explorer_footer_h);
+    const row_capacity = explorerRowCapacity(rows_y, footer_y);
+    for (files[0..@min(files.len, row_capacity)], 0..) |entry, index| {
         const y = rows_y + explorer_row_h * @as(f32, @floatFromInt(index + 1));
         const row_bounds = ui.Rect.init(bounds.x, y, bounds.w, explorer_row_h);
         const path = entry.path;
         try explorerRow(scene, bounds.x, y, bounds.w, fileName(path), icon_component.Icon.named(.file), std.mem.eql(u8, state.label, path));
         try (row_item_component.RowItem{ .id = explorerFileHitId(index), .title = path, .detail = "" }).collectInteractions(collector, row_bounds);
     }
-    try text(scene, bounds.x + 14.0, bounds.y + bounds.h - 46.0, bounds.w - 28.0, 12.0, "APP-OWNED VFS", palette.dim);
-    try text(scene, bounds.x + 14.0, bounds.y + bounds.h - 26.0, bounds.w - 28.0, 12.0, toolbarDetail(state), toolbarDetailColor(state));
+    try stroke(scene, ui.Rect.init(bounds.x, footer_y, bounds.w, 1.0), vscode_line, 0.0);
+    try text(scene, bounds.x + 14.0, footer_y + 12.0, bounds.w - 28.0, 12.0, "APP-OWNED VFS", palette.dim);
+    try text(scene, bounds.x + 14.0, footer_y + 32.0, bounds.w - 28.0, 12.0, toolbarDetail(state), toolbarDetailColor(state));
 }
 
 fn explorerFilesForState(state: State) []const FileEntry {
@@ -427,6 +433,11 @@ fn explorerRow(scene: *ui.Scene, x: f32, y: f32, w: f32, label: []const u8, icon
     try text(scene, x + 36.0, y + 5.0, w - 44.0, 14.0, label, if (selected) palette.text else palette.dim);
 }
 
+fn explorerRowCapacity(rows_y: f32, footer_y: f32) usize {
+    if (footer_y <= rows_y + explorer_row_h) return 0;
+    return @intFromFloat(@floor((footer_y - rows_y) / explorer_row_h) - 1.0);
+}
+
 fn renderBreadcrumb(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
     try fill(scene, bounds, vscode_editor, 0.0);
     try stroke(scene, ui.Rect.init(bounds.x, bounds.y + bounds.h - 1.0, bounds.w, 1.0), vscode_line, 0.0);
@@ -465,8 +476,11 @@ fn renderSelectionForLine(scene: *ui.Scene, code_view: ui.Rect, y: f32, line_sta
     const start = @max(selection.start, line_start);
     const end = @min(selection.end, visible_end);
     if (start >= end) return;
-    const x = code_view.x + code_pad + code_gutter_w + @as(f32, @floatFromInt(start - line_start)) * code_char_w;
-    const w = @max(2.0, @as(f32, @floatFromInt(end - start)) * code_char_w);
+    const line = state.source[line_start..visible_end];
+    const start_offset = codeColumnWidth(line, start - line_start);
+    const end_offset = codeColumnWidth(line, end - line_start);
+    const x = code_view.x + code_pad + code_gutter_w + start_offset;
+    const w = @max(2.0, end_offset - start_offset);
     try fill(scene, ui.Rect.init(x, y, w, code_line_h), ui.Color{ .r = 9, .g = 71, .b = 113, .a = 210 }, 0.0);
 }
 
@@ -627,11 +641,19 @@ fn toolbarActionsFitOneRow(width: f32) bool {
 
 fn renderSyntaxLine(scene: *ui.Scene, x: f32, y: f32, w: f32, line: []const u8) !void {
     var index: usize = 0;
+    var cursor_x = x;
     while (index < line.len) {
         const token = nextToken(line, index);
-        try text(scene, x + @as(f32, @floatFromInt(token.start)) * code_char_w, y, @max(1.0, w - @as(f32, @floatFromInt(token.start)) * code_char_w), code_line_h, line[token.start..token.end], token.color);
+        cursor_x += text_metrics.width(line[index..token.start], code_text_px);
+        const token_value = line[token.start..token.end];
+        try text(scene, cursor_x, y, @max(1.0, w - (cursor_x - x)), code_line_h, token_value, token.color);
+        cursor_x += text_metrics.width(token_value, code_text_px);
         index = token.end;
     }
+}
+
+fn codeColumnWidth(line: []const u8, column: usize) f32 {
+    return text_metrics.width(line[0..@min(column, line.len)], code_text_px);
 }
 
 const SyntaxToken = struct {
@@ -867,6 +889,49 @@ test "source compact toolbar keeps action hits separated" {
     try expectNoHorizontalOverlap(try hitRect(collector.written(), launch_button_id), try hitRect(collector.written(), reset_button_id));
 }
 
+test "source syntax tokens advance with renderer text metrics" {
+    var commands: [32]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+    const origin_x: f32 = 100.0;
+
+    try renderSyntaxLine(&scene, origin_x, 20.0, 420.0, "const std = @import(\"std\");");
+
+    const const_command = textCommand(scene.written(), "const").?.text;
+    const std_command = textCommand(scene.written(), "std").?.text;
+    try std.testing.expectEqual(origin_x, const_command.origin.x);
+    try std.testing.expectEqual(origin_x + text_metrics.width("const ", code_text_px), std_command.origin.x);
+}
+
+test "source explorer keeps file rows above footer status" {
+    const files = [_]FileEntry{
+        .{ .path = "compiler/zig/lib/std/atomic.zig" },
+        .{ .path = "compiler/zig/lib/std/base64.zig" },
+        .{ .path = "compiler/zig/lib/std/bit_set.zig" },
+        .{ .path = "compiler/zig/lib/std/coff.zig" },
+        .{ .path = "compiler/zig/lib/std/compress.zig" },
+        .{ .path = "compiler/zig/lib/std/crypto.zig" },
+        .{ .path = "compiler/zig/lib/std/debug.zig" },
+        .{ .path = "compiler/zig/lib/std/fmt.zig" },
+    };
+    var commands: [256]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+    var regions: [32]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
+    const bounds = ui.Rect.init(0, 0, explorer_w, 180);
+
+    try renderExplorer(&scene, &collector, bounds, .{
+        .label = files[0].path,
+        .files = &files,
+        .workspace_bytes = 13251406,
+        .file_bytes = 153512,
+    });
+
+    const footer_y = bounds.y + bounds.h - explorer_footer_h;
+    for (collector.written()) |region| {
+        if (region.id >= explorer_file_id_base) try std.testing.expect(region.bounds.y + region.bounds.h <= footer_y);
+    }
+}
+
 test "source page height responds to source and diagnostic content" {
     const long_source =
         "a\n" ++ "a\n" ++ "a\n" ++ "a\n" ++ "a\n" ++ "a\n" ++
@@ -900,4 +965,12 @@ fn hitRect(regions: []const interaction.Region, id: u32) !ui.Rect {
 
 fn expectNoHorizontalOverlap(left: ui.Rect, right: ui.Rect) !void {
     try std.testing.expect(left.x + left.w <= right.x or right.x + right.w <= left.x);
+}
+
+fn textCommand(commands: []const ui.Command, value: []const u8) ?ui.Command {
+    for (commands) |command| switch (command) {
+        .text => |text_value| if (std.mem.eql(u8, text_value.value, value)) return command,
+        else => {},
+    };
+    return null;
 }
