@@ -1,154 +1,162 @@
-.PHONY: all check clean er-build repo-check repo-test repo-check-bin repo-push-check repo-inspect repo-progress repo-agent-swarm erwire-decode erwire-test pi-serial-verify pi-node-update sdcard-probe disk-analyzer pi-usb-boot pi-zero-w-v1_1-ready pi-zero-w-v1_1-usb-boot pi-zero-w-v1_1-update codex-build codex-test crypto-test crypto-bench clock-test identity-test object-test storage-test storage-bench node-test metal-ui-bench tpm-real-bench-uefi qemu-host-tpm-bench os-user-app-smoke edgerun-metal edgerun-os edgerun-check varfont-test ui-core-test ui-core-snapshot
+.PHONY: all check clean \
+	crypto-test crypto-bench \
+	clock-test identity-test object-test storage-test sdk-test \
+	ui-core-test app-runtime \
+	zig-check zig-fmt-check zig-fmt zig-test zig-real-tpm sdk-cli sdk-bench \
+	wayland-window wayland-window-test \
+	pi-zero-w-v1_1-kernel pi-zero-w-v1_1-usb-probe pi-usb-host pi-usb-state \
+	pi-boot-firmware-check pi-usb-reset-controller pi-usb-dry-run pi-usb-boot-dir \
+	pi-usb-load pi-usb-load-probe pi-usb-load-usbflag pi-usb-load-probe-usbflag \
+	pi-usb-recover-load pi-usb-recover-load-probe \
+	pi-usb-control-host pi-usb-control-dry-run pi-usb-control
 
-CC := toolchain/bin/clang
-HOST_CC := toolchain/bin/clang
-HOST_LDFLAGS :=
-HOST_CC_FOR_SUBMAKE := $(if $(findstring /,$(HOST_CC)),$(abspath $(HOST_CC)),$(HOST_CC))
-ER_BUILD_BOOTSTRAP := toolchain/bin/er-build
-ER_BUILD_STAGED := .build/er-build
-ER_BUILD_STAGED_TMP := .build/er-build.tmp
+BUILD_DIR := .build
+CMAKE ?= cmake
+CTEST ?= ctest
+WAYLAND_WIDTH ?= 1280
+WAYLAND_HEIGHT ?= 900
+WAYLAND_SECONDS ?= 3600
+WAYLAND_PATH ?= /docs
+PI_BOOT_DIR := $(BUILD_DIR)/edgerun-metal/pi-zero-w-v1_1/boot
+PI_USB_BOOT_DIR := $(BUILD_DIR)/pi-zero-w-v1_1-usb-boot
+PI_USB_XHCI_DEVICE := 0000:c3:00.4
 
-REPO_PROGRESS_SCOPE := edgerun-ui-core
-REPO_PROGRESS_TEST :=
-USER_APP_PACKAGE_DIR := tests/fixtures/app-package/app
-PI_ZERO_W_V1_1_USB_BOOT_DIR := .build/edgerun-metal/pi-zero-w-v1_1/boot
-PI_ZERO_W_V1_1_KERNEL := .build/edgerun-metal/pi-zero-w-v1_1/kernel.img
-PI_USB_BOOT_DEVICE_ARG := $(if $(PI_USB_DEVICE),--device $(PI_USB_DEVICE),)
+all: check
 
-all: edgerun-metal
+check: crypto-test clock-test identity-test object-test storage-test sdk-test ui-core-test zig-check
 
-check: repo-check repo-test crypto-test clock-test identity-test object-test storage-test node-test edgerun-check varfont-test ui-core-test
+crypto-test:
+	$(CMAKE) -S edgerun-crypto -B $(BUILD_DIR)/edgerun-crypto
+	$(CMAKE) --build $(BUILD_DIR)/edgerun-crypto --target test_blake3
+	$(CTEST) --test-dir $(BUILD_DIR)/edgerun-crypto --output-on-failure
 
-er-build: $(ER_BUILD_BOOTSTRAP)
-	mkdir -p .build
-	tmp="$(ER_BUILD_STAGED_TMP).$$$$"; \
-	cp $(ER_BUILD_BOOTSTRAP) "$$tmp"; \
-	chmod 755 "$$tmp"; \
-	mv "$$tmp" $(ER_BUILD_STAGED)
+crypto-bench:
+	$(CMAKE) -S edgerun-crypto -B $(BUILD_DIR)/edgerun-crypto
+	$(CMAKE) --build $(BUILD_DIR)/edgerun-crypto --target bench
 
-repo-check: er-build
-	$(ER_BUILD_STAGED) repo-check
+clock-test:
+	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig clock-test
 
-repo-test: er-build
-	$(ER_BUILD_STAGED) repo-test
+identity-test:
+	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig identity-test
 
-repo-check-bin: er-build
-	$(ER_BUILD_STAGED) repo-check-bin
+object-test:
+	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig object-test
 
-repo-push-check: er-build
-	$(ER_BUILD_STAGED) repo-push-check
+storage-test:
+	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig storage-test
 
-repo-inspect: er-build
-	$(ER_BUILD_STAGED) repo-inspect
+sdk-test:
+	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig sdk-test
 
-repo-progress: er-build
-	$(ER_BUILD_STAGED) repo-progress $(REPO_PROGRESS_SCOPE) $(REPO_PROGRESS_TEST)
+sdk-cli:
+	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig sdk-cli -- simulate standard
 
-repo-agent-swarm: er-build
-	$(ER_BUILD_STAGED) repo-agent-swarm
+sdk-bench:
+	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig sdk-bench
 
-erwire-decode: er-build
-	$(ER_BUILD_STAGED) erwire-decode
+ui-core-test:
+	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig ui-core-test
 
-erwire-test: er-build
-	$(ER_BUILD_STAGED) erwire-test
+app-runtime:
+	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig app-runtime
 
-pi-serial-verify: er-build
-	$(ER_BUILD_STAGED) pi-serial-verify
+wayland-window: app-runtime
+	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig -Doptimize=ReleaseFast wayland-window -- --width $(WAYLAND_WIDTH) --height $(WAYLAND_HEIGHT) --seconds $(WAYLAND_SECONDS) --path $(WAYLAND_PATH)
 
-pi-node-update: er-build
-	$(ER_BUILD_STAGED) pi-node-update
+wayland-window-test:
+	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig wayland-window-test
 
-sdcard-probe: er-build
-	$(ER_BUILD_STAGED) sdcard-probe
+zig-check: zig-fmt-check zig-test
 
-disk-analyzer: er-build
-	$(ER_BUILD_STAGED) disk-analyzer
+zig-fmt-check:
+	zig fmt --check edgerun-zig
 
-pi-usb-boot: er-build
-	$(ER_BUILD_STAGED) pi-usb-boot
+zig-fmt:
+	zig fmt edgerun-zig
 
-pi-zero-w-v1_1-ready:
-	./tools/pi-zero-w-v1_1-bring-up.sh $(PI_ZERO_W_V1_1_READY_ARGS)
+zig-test:
+	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig test
 
-pi-zero-w-v1_1-usb-boot: er-build
-	$(MAKE) -C edgerun-metal pi-zero-w-v1_1-boot
-	$(ER_BUILD_STAGED) pi-usb-boot
-	./.build/pi-usb-boot --boot-dir $(PI_ZERO_W_V1_1_USB_BOOT_DIR) $(PI_USB_BOOT_DEVICE_ARG) --verbose
+zig-real-tpm:
+	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig real-tpm
 
-pi-zero-w-v1_1-update: er-build
-	test -n "$(PI_UPDATE_IFACE)" || { printf '%s\n' 'PI_UPDATE_IFACE=wlan0 is required for Pi Zero W v1.1 EdgeNet L2 update'; exit 2; }
-	$(MAKE) -C edgerun-metal pi-zero-w-v1_1-kernel
-	$(ER_BUILD_STAGED) pi-node-update
-	./.build/pi-node-update --iface "$(PI_UPDATE_IFACE)" --image "$(PI_ZERO_W_V1_1_KERNEL)"
+pi-zero-w-v1_1-kernel:
+	mkdir -p $(BUILD_DIR)/pi-zero-w-v1_1-zig
+	zig build-exe edgerun-zig/src/pi_zero_w_v1_1_kernel.zig -target arm-freestanding-eabi -mcpu=arm1176jzf_s -O ReleaseSmall -femit-bin=$(BUILD_DIR)/pi-zero-w-v1_1-zig/kernel.elf -fno-entry -T edgerun-zig/pi-zero-w-v1_1-kernel.ld
+	llvm-objcopy -O binary $(BUILD_DIR)/pi-zero-w-v1_1-zig/kernel.elf $(BUILD_DIR)/pi-zero-w-v1_1-zig/kernel.img
+	cp $(BUILD_DIR)/pi-zero-w-v1_1-zig/kernel.img $(BUILD_DIR)/pi-zero-w-v1_1-zig/kernel-padded.img
+	truncate -s 65536 $(BUILD_DIR)/pi-zero-w-v1_1-zig/kernel-padded.img
 
-codex-build:
-	$(MAKE) -C codex CC="$(HOST_CC_FOR_SUBMAKE)"
+pi-zero-w-v1_1-usb-probe:
+	mkdir -p $(BUILD_DIR)/pi-zero-w-v1_1-usb-probe
+	zig build-exe edgerun-zig/src/pi_zero_w_v1_1_usb_probe_kernel.zig -target arm-freestanding-eabi -mcpu=arm1176jzf_s -O ReleaseSmall -femit-bin=$(BUILD_DIR)/pi-zero-w-v1_1-usb-probe/kernel.elf -fno-entry -T edgerun-zig/pi-zero-w-v1_1-kernel.ld
+	llvm-objcopy -O binary $(BUILD_DIR)/pi-zero-w-v1_1-usb-probe/kernel.elf $(BUILD_DIR)/pi-zero-w-v1_1-usb-probe/kernel.img
+	cp $(BUILD_DIR)/pi-zero-w-v1_1-usb-probe/kernel.img $(BUILD_DIR)/pi-zero-w-v1_1-usb-probe/kernel-padded.img
+	truncate -s 65536 $(BUILD_DIR)/pi-zero-w-v1_1-usb-probe/kernel-padded.img
 
-codex-test:
-	$(MAKE) -C codex CC="$(HOST_CC_FOR_SUBMAKE)" test
+pi-usb-host:
+	mkdir -p $(BUILD_DIR)/pi-usb-host
+	zig build-exe edgerun-zig/src/pi_usb_boot_host.zig --cache-dir $(BUILD_DIR)/edgerun-zig -femit-bin=$(BUILD_DIR)/pi-usb-host/edgerun-pi-usb-boot-host
 
-crypto-test: er-build
-	$(ER_BUILD_STAGED) crypto-test
+pi-usb-control-host:
+	mkdir -p $(BUILD_DIR)/pi-usb-host
+	zig build-exe edgerun-zig/src/pi_usb_control_host.zig --cache-dir $(BUILD_DIR)/edgerun-zig -femit-bin=$(BUILD_DIR)/pi-usb-host/edgerun-pi-usb-control-host
 
-crypto-bench: er-build
-	$(ER_BUILD_STAGED) crypto-bench
+pi-usb-state:
+	lsusb -t
+	lsusb | grep -E '0a5c:2763|0a5c:2764|4552:5049|Broadcom|BCM2708|BCM2710|Edgerun' || true
+	sudo dmesg --ctime | tail -n 40
 
-clock-test: er-build
-	$(ER_BUILD_STAGED) clock-test
+pi-boot-firmware-check:
+	@test -f "$(PI_BOOT_DIR)/bootcode.bin" || { printf 'missing Pi Zero W boot firmware: %s\n' '$(PI_BOOT_DIR)/bootcode.bin'; exit 1; }
+	@test -f "$(PI_BOOT_DIR)/start.elf" || { printf 'missing Pi Zero W boot firmware: %s\n' '$(PI_BOOT_DIR)/start.elf'; exit 1; }
+	@test -f "$(PI_BOOT_DIR)/fixup.dat" || { printf 'missing Pi Zero W boot firmware: %s\n' '$(PI_BOOT_DIR)/fixup.dat'; exit 1; }
+	@test -f "$(PI_BOOT_DIR)/cmdline.txt" || { printf 'missing Pi Zero W boot firmware: %s\n' '$(PI_BOOT_DIR)/cmdline.txt'; exit 1; }
 
-identity-test: er-build
-	$(ER_BUILD_STAGED) identity-test
+pi-usb-reset-controller:
+	sudo sh -c 'echo "$(PI_USB_XHCI_DEVICE)" > /sys/bus/pci/drivers/xhci_hcd/unbind'
+	sleep 3
+	sudo sh -c 'echo "$(PI_USB_XHCI_DEVICE)" > /sys/bus/pci/drivers/xhci_hcd/bind'
 
-object-test: er-build
-	$(ER_BUILD_STAGED) object-test
+$(PI_USB_BOOT_DIR)/config.txt: pi-boot-firmware-check
+	mkdir -p $(PI_USB_BOOT_DIR)
+	cp $(PI_BOOT_DIR)/bootcode.bin $(PI_USB_BOOT_DIR)/bootcode.bin
+	cp $(PI_BOOT_DIR)/start.elf $(PI_USB_BOOT_DIR)/start.elf
+	cp $(PI_BOOT_DIR)/fixup.dat $(PI_USB_BOOT_DIR)/fixup.dat
+	cp $(PI_BOOT_DIR)/cmdline.txt $(PI_USB_BOOT_DIR)/cmdline.txt
+	printf 'arm_64bit=0\n' > $(PI_USB_BOOT_DIR)/config.txt
+	printf 'device_tree=\n' >> $(PI_USB_BOOT_DIR)/config.txt
+	printf 'core_freq=250\n' >> $(PI_USB_BOOT_DIR)/config.txt
+	printf 'kernel=kernel.img\n' >> $(PI_USB_BOOT_DIR)/config.txt
+	printf 'boot_load_flags=1\n' >> $(PI_USB_BOOT_DIR)/config.txt
 
-storage-test: er-build
-	$(ER_BUILD_STAGED) storage-test
+pi-usb-boot-dir: $(PI_USB_BOOT_DIR)/config.txt
 
-storage-bench: er-build
-	$(ER_BUILD_STAGED) storage-bench
+pi-usb-load: pi-boot-firmware-check pi-zero-w-v1_1-kernel pi-usb-host
+	sudo $(BUILD_DIR)/pi-usb-host/edgerun-pi-usb-boot-host --wait --wait-ms 120000 --serve-dir $(PI_BOOT_DIR) --kernel-image $(BUILD_DIR)/pi-zero-w-v1_1-zig/kernel-padded.img $(PI_BOOT_DIR)/bootcode.bin
 
-node-test: er-build
-	$(ER_BUILD_STAGED) node-test
+pi-usb-load-probe: pi-boot-firmware-check pi-zero-w-v1_1-usb-probe pi-usb-host
+	sudo $(BUILD_DIR)/pi-usb-host/edgerun-pi-usb-boot-host --wait --wait-ms 120000 --serve-dir $(PI_BOOT_DIR) --kernel-image $(BUILD_DIR)/pi-zero-w-v1_1-usb-probe/kernel-padded.img $(PI_BOOT_DIR)/bootcode.bin
 
-metal-ui-bench:
-	$(MAKE) -C edgerun-metal bench-ui-dirty
+pi-usb-load-usbflag: pi-boot-firmware-check pi-zero-w-v1_1-kernel pi-usb-host pi-usb-boot-dir
+	sudo $(BUILD_DIR)/pi-usb-host/edgerun-pi-usb-boot-host --wait --wait-ms 120000 --serve-dir $(PI_USB_BOOT_DIR) --kernel-image $(BUILD_DIR)/pi-zero-w-v1_1-zig/kernel-padded.img $(PI_USB_BOOT_DIR)/bootcode.bin
 
-tpm-real-bench-uefi:
-	$(MAKE) -C edgerun-metal tpm-real-bench-uefi
+pi-usb-load-probe-usbflag: pi-boot-firmware-check pi-zero-w-v1_1-usb-probe pi-usb-host pi-usb-boot-dir
+	sudo $(BUILD_DIR)/pi-usb-host/edgerun-pi-usb-boot-host --wait --wait-ms 120000 --serve-dir $(PI_USB_BOOT_DIR) --kernel-image $(BUILD_DIR)/pi-zero-w-v1_1-usb-probe/kernel-padded.img $(PI_USB_BOOT_DIR)/bootcode.bin
 
-qemu-host-tpm-bench:
-	$(MAKE) -C edgerun-metal qemu-host-tpm-bench
+pi-usb-recover-load: pi-boot-firmware-check pi-usb-reset-controller pi-usb-load
 
-os-user-app-smoke: er-build
-	$(ER_BUILD_STAGED) app-build $(USER_APP_PACKAGE_DIR)
-	$(ER_BUILD_STAGED) app-verify $(USER_APP_PACKAGE_DIR)
-	$(ER_BUILD_STAGED) app-run $(USER_APP_PACKAGE_DIR)
-	$(MAKE) -C edgerun-metal os
-	$(MAKE) -C edgerun-metal bench-ui-dirty
+pi-usb-recover-load-probe: pi-boot-firmware-check pi-usb-reset-controller pi-usb-load-probe
 
-edgerun-metal:
-	$(MAKE) -C edgerun-metal
+pi-usb-dry-run: pi-boot-firmware-check pi-zero-w-v1_1-kernel
+	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig pi-usb-load -- --dry-run --serve-dir $(PI_BOOT_DIR) --kernel-image $(BUILD_DIR)/pi-zero-w-v1_1-zig/kernel.img $(PI_BOOT_DIR)/bootcode.bin
 
-edgerun-os:
-	$(MAKE) -C edgerun-metal os
+pi-usb-control: pi-usb-control-host
+	sudo $(BUILD_DIR)/pi-usb-host/edgerun-pi-usb-control-host --wait-ms 10000 gpio-read 47
 
-edgerun-check:
-	$(MAKE) -C edgerun-metal check
-
-varfont-test: er-build
-	$(ER_BUILD_STAGED) varfont-test
-
-ui-core-test: er-build
-	$(ER_BUILD_STAGED) ui-core-test
-
-ui-core-snapshot:
-	mkdir -p .build/edgerun-ui-core
-	cmake -S edgerun-ui-core -B .build/edgerun-ui-core -DER_UI_CORE_BUILD_SNAPSHOT_HOST=ON
-	cmake --build .build/edgerun-ui-core --target er_ui_snapshot
-	./.build/edgerun-ui-core/er_ui_snapshot --output .build/edgerun-ui-core/snapshot.bmp
+pi-usb-control-dry-run:
+	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig pi-usb-control -- --dry-run gpio-read 47
 
 clean:
-	$(MAKE) -C edgerun-metal clean
-	rm -rf .build
+	rm -rf $(BUILD_DIR)

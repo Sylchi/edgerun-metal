@@ -1142,7 +1142,7 @@ UINT8 er_tpm_parse_verify_ticket_response(const UINT8* response, UINT32 response
     return 0u;
   }
   cursor = ER_TPM_HEADER_LEN;
-  if (er_tpm_get_be16(response + cursor) != ER_TPM_ST_HASHCHECK) {
+  if (er_tpm_get_be16(response + cursor) != ER_TPM_ST_VERIFIED) {
     return 0u;
   }
   cursor += ER_TPM_U16_BYTES;

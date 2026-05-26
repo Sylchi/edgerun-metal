@@ -1,0 +1,647 @@
+const std = @import("std");
+const object = @import("object.zig");
+const vfs = @import("vfs.zig");
+
+const output_file_permissions = std.Io.File.Permissions.default_file.setReadOnly(true);
+const workspace_manifest_magic = "ERVFSWS1";
+const workspace_manifest_version: u16 = 1;
+const workspace_manifest_reserved: u16 = 0;
+const workspace_manifest_header_bytes: usize = workspace_manifest_magic.len + 2 + 2 + 4;
+const app_source_root = "src";
+const compiler_root = "compiler";
+const compiler_zig_root = "compiler/zig";
+const compiler_zig_lib_root = "compiler/zig/lib";
+const compiler_zig_std_root = "compiler/zig/lib/std";
+const compiler_zig_std_build_root = "compiler/zig/lib/std/Build";
+const compiler_zig_std_c_root = "compiler/zig/lib/std/c";
+const compiler_zig_std_debug_root = "compiler/zig/lib/std/debug";
+const compiler_zig_std_crypto_root = "compiler/zig/lib/std/crypto";
+const compiler_zig_std_http_root = "compiler/zig/lib/std/http";
+const compiler_zig_std_io_root = "compiler/zig/lib/std/Io";
+const compiler_zig_std_os_root = "compiler/zig/lib/std/os";
+const compiler_zig_std_tar_root = "compiler/zig/lib/std/tar";
+const compiler_zig_std_testing_root = "compiler/zig/lib/std/testing";
+const compiler_zig_std_tz_root = "compiler/zig/lib/std/tz";
+const compiler_zig_std_zig_llvm_root = "compiler/zig/lib/std/zig/llvm";
+const compiler_zig_std_test_name = "test.zig";
+const compiler_zig_std_parser_test_name = "parser_test.zig";
+const compiler_zig_compiler_lib_root = "compiler/zig/lib/compiler";
+const embedded_wasm_compiler_label = "embedded_wasm_compiler";
+const embed_file_call = "@embedFile(\"";
+const app_workspace_roots = [_][]const u8{
+    "src/app_runtime.zig",
+    "src/media/root.zig",
+    "src/media/image.zig",
+    "src/media/video.zig",
+    "src/media/audio.zig",
+};
+
+const Mode = enum {
+    file,
+    workspace,
+};
+
+pub fn main(init: std.process.Init) !void {
+    var args = std.process.Args.Iterator.init(init.minimal.args);
+    defer args.deinit();
+
+    _ = args.next();
+    const mode_text = args.next() orelse return error.MissingMode;
+    const mode = parseMode(mode_text) orelse return error.BadMode;
+    const input_path = args.next() orelse return error.MissingInputPath;
+    var output_path = args.next() orelse return error.MissingOutputPath;
+    var embedded_compiler_path: ?[]const u8 = null;
+    if (mode == .workspace) {
+        if (args.next()) |next| {
+            embedded_compiler_path = output_path;
+            output_path = next;
+        }
+    }
+    if (args.next() != null) return error.TooManyArguments;
+
+    const embedded_bytes = switch (mode) {
+        .file => try readFile(init.io, input_path),
+        .workspace => try buildWorkspaceObject(init.io, input_path, embedded_compiler_path),
+    };
+    defer std.heap.page_allocator.free(embedded_bytes);
+    try writeZigBytes(init.io, output_path, embedded_bytes);
+}
+
+fn parseMode(text: []const u8) ?Mode {
+    if (std.mem.eql(u8, text, "file")) return .file;
+    if (std.mem.eql(u8, text, "workspace")) return .workspace;
+    return null;
+}
+
+fn readFile(io: std.Io, input_path: []const u8) ![]u8 {
+    const cwd = std.Io.Dir.cwd();
+    const input = try cwd.openFile(io, input_path, .{});
+    defer input.close(io);
+    const input_stat = try input.stat(io);
+    const input_len: usize = @intCast(input_stat.size);
+    var input_buffer: [4096]u8 = undefined;
+    var reader = input.reader(io, &input_buffer);
+    return try reader.interface.readAlloc(std.heap.page_allocator, input_len);
+}
+
+fn writeZigBytes(io: std.Io, output_path: []const u8, embedded_bytes: []const u8) !void {
+    const cwd = std.Io.Dir.cwd();
+    cwd.deleteFile(io, output_path) catch |err| switch (err) {
+        error.FileNotFound => {},
+        else => return err,
+    };
+    const output = try cwd.createFile(io, output_path, .{ .truncate = true });
+    defer output.close(io);
+
+    var buffer: [4096]u8 = undefined;
+    var writer = output.writer(io, &buffer);
+    try writer.interface.writeAll("pub const bytes = [_]u8{");
+    for (embedded_bytes, 0..) |byte, index| {
+        if (index % 16 == 0) try writer.interface.writeAll("\n    ");
+        try writer.interface.print("0x{x:0>2}, ", .{byte});
+    }
+    try writer.interface.writeAll("\n};\n");
+    try writer.interface.flush();
+    try output.setPermissions(io, output_file_permissions);
+}
+
+fn buildWorkspaceObject(io: std.Io, root_path: []const u8, embedded_compiler_path: ?[]const u8) ![]u8 {
+    const allocator = std.heap.page_allocator;
+    var root = try std.Io.Dir.cwd().openDir(io, root_path, .{ .iterate = true });
+    defer root.close(io);
+
+    var paths: std.ArrayList([]u8) = .empty;
+    defer {
+        for (paths.items) |path| allocator.free(path);
+        paths.deinit(allocator);
+    }
+    try collectSourcePaths(io, allocator, &root, "", &paths);
+    std.mem.sort([]u8, paths.items, {}, pathLessThan);
+    try pruneSourcePathsToAppClosure(io, allocator, &root, &paths);
+
+    var manifest: std.ArrayList(u8) = .empty;
+    defer manifest.deinit(allocator);
+    try manifest.appendSlice(allocator, workspace_manifest_magic);
+    try appendU16(&manifest, allocator, workspace_manifest_version);
+    try appendU16(&manifest, allocator, workspace_manifest_reserved);
+    try appendU32(&manifest, allocator, @intCast(paths.items.len + if (embedded_compiler_path == null) @as(usize, 0) else 1));
+
+    const embedded_compiler_bytes = if (embedded_compiler_path) |path| try readFile(io, path) else null;
+    defer if (embedded_compiler_bytes) |bytes| allocator.free(bytes);
+    var embedded_compiler_written = false;
+    for (paths.items) |path| {
+        if (embedded_compiler_bytes) |bytes| {
+            if (!embedded_compiler_written and pathLessThan({}, embedded_wasm_compiler_label, path)) {
+                try appendWorkspaceFile(allocator, &manifest, embedded_wasm_compiler_label, bytes);
+                embedded_compiler_written = true;
+            }
+        }
+        const file_bytes = try readWorkspaceFile(io, allocator, &root, path);
+        defer allocator.free(file_bytes);
+
+        try appendWorkspaceFile(allocator, &manifest, path, file_bytes);
+    }
+    if (embedded_compiler_bytes) |bytes| {
+        if (!embedded_compiler_written) try appendWorkspaceFile(allocator, &manifest, embedded_wasm_compiler_label, bytes);
+    }
+
+    const raw = try allocator.alloc(u8, object.header_size + manifest.items.len);
+    errdefer allocator.free(raw);
+    const canonical = try (object.NodeWriter{ .out = raw }).bytesNode(sourceObjectRequirements(), sourceObjectEpoch(), manifest.items);
+    return raw[0..canonical.len];
+}
+
+fn appendWorkspaceFile(allocator: std.mem.Allocator, manifest: *std.ArrayList(u8), label: []const u8, file_bytes: []const u8) !void {
+    const file_raw = try allocator.alloc(u8, object.header_size + file_bytes.len);
+    defer allocator.free(file_raw);
+    const file_object = try (object.NodeWriter{ .out = file_raw }).bytesNode(sourceObjectRequirements(), sourceObjectEpoch(), file_bytes);
+    const label_ref = try vfs.prepareObjectLabelRef(label, file_object);
+
+    var label_ref_raw: [vfs.object_label_ref_bytes]u8 = undefined;
+    try vfs.encodeObjectLabelRef(label_ref, &label_ref_raw);
+    try manifest.appendSlice(allocator, &label_ref_raw);
+    try manifest.appendSlice(allocator, file_object);
+}
+
+fn appendU16(out: *std.ArrayList(u8), allocator: std.mem.Allocator, value: u16) !void {
+    var raw: [2]u8 = undefined;
+    std.mem.writeInt(u16, &raw, value, .little);
+    try out.appendSlice(allocator, &raw);
+}
+
+fn appendU32(out: *std.ArrayList(u8), allocator: std.mem.Allocator, value: u32) !void {
+    var raw: [4]u8 = undefined;
+    std.mem.writeInt(u32, &raw, value, .little);
+    try out.appendSlice(allocator, &raw);
+}
+
+fn collectSourcePaths(io: std.Io, allocator: std.mem.Allocator, dir: *std.Io.Dir, prefix: []const u8, paths: *std.ArrayList([]u8)) !void {
+    var iterator = dir.iterate();
+    while (try iterator.next(io)) |entry| {
+        const relative = try relativePath(allocator, prefix, entry.name);
+        errdefer allocator.free(relative);
+        switch (entry.kind) {
+            .file => {
+                if (sourceFileAllowed(relative)) {
+                    try paths.append(allocator, relative);
+                } else {
+                    allocator.free(relative);
+                }
+            },
+            .directory => {
+                if (sourceDirectoryAllowed(relative)) {
+                    var child = try dir.openDir(io, entry.name, .{ .iterate = true });
+                    defer child.close(io);
+                    try collectSourcePaths(io, allocator, &child, relative, paths);
+                }
+                allocator.free(relative);
+            },
+            else => allocator.free(relative),
+        }
+    }
+}
+
+fn pruneSourcePathsToAppClosure(io: std.Io, allocator: std.mem.Allocator, root: *std.Io.Dir, paths: *std.ArrayList([]u8)) !void {
+    var reachable: std.StringHashMap(void) = .init(allocator);
+    defer reachable.deinit();
+    var queue: std.ArrayList([]u8) = .empty;
+    defer {
+        for (queue.items) |label| allocator.free(label);
+        queue.deinit(allocator);
+    }
+
+    for (app_workspace_roots) |root_label| {
+        if (findSourcePath(paths.items, root_label) == null) return error.MissingAppWorkspaceRoot;
+        try enqueueReachable(allocator, &reachable, &queue, root_label);
+    }
+    if (findSourcePath(paths.items, "compiler/zig/lib/std/std.zig") != null) {
+        try enqueueReachable(allocator, &reachable, &queue, "compiler/zig/lib/std/std.zig");
+    }
+
+    var queue_index: usize = 0;
+    while (queue_index < queue.items.len) : (queue_index += 1) {
+        const importer = queue.items[queue_index];
+        if (!std.mem.endsWith(u8, importer, ".zig")) continue;
+        const source = try readWorkspaceFile(io, allocator, root, importer);
+        defer allocator.free(source);
+        try enqueueImportedSourcePaths(allocator, paths.items, importer, source, &reachable, &queue);
+        try enqueueEmbeddedSourcePaths(allocator, paths.items, importer, source, &reachable, &queue);
+    }
+
+    var write_index: usize = 0;
+    for (paths.items) |path| {
+        if (reachable.contains(path)) {
+            paths.items[write_index] = path;
+            write_index += 1;
+        } else {
+            allocator.free(path);
+        }
+    }
+    paths.shrinkRetainingCapacity(write_index);
+}
+
+fn enqueueImportedSourcePaths(
+    allocator: std.mem.Allocator,
+    paths: []const []u8,
+    importer: []const u8,
+    source: []const u8,
+    reachable: *std.StringHashMap(void),
+    queue: *std.ArrayList([]u8),
+) !void {
+    try enqueueStdFieldSourcePaths(allocator, paths, source, reachable, queue);
+    if (std.mem.eql(u8, importer, "compiler/zig/lib/std/std.zig")) return;
+
+    const sentinel_source = try allocator.dupeZ(u8, source);
+    defer allocator.free(sentinel_source);
+    var tree = try std.zig.Ast.parse(allocator, sentinel_source, .zig);
+    defer tree.deinit(allocator);
+    if (tree.errors.len != 0) return error.InvalidWorkspaceZigSource;
+    var zir = try std.zig.AstGen.generate(allocator, tree);
+    defer zir.deinit(allocator);
+    if (zir.hasCompileErrors()) return error.InvalidWorkspaceZigSource;
+
+    const imports_index = zir.extra[@intFromEnum(std.zig.Zir.ExtraIndex.imports)];
+    if (imports_index == 0) return;
+    const extra = zir.extraData(std.zig.Zir.Inst.Imports, imports_index);
+    var extra_index = extra.end;
+    var remaining = extra.data.imports_len;
+    while (remaining > 0) : (remaining -= 1) {
+        const item = zir.extraData(std.zig.Zir.Inst.Imports.Item, extra_index);
+        extra_index = item.end;
+        const import_name = zir.nullTerminatedString(item.data.name);
+        if (virtualImport(import_name)) continue;
+        var resolved_buffer: [vfs.label_max]u8 = undefined;
+        const resolved = resolveImportLabel(importer, import_name, &resolved_buffer) orelse return error.BadWorkspaceImport;
+        if (findSourcePath(paths, resolved) == null) {
+            if (sourceFileAllowed(resolved)) return error.MissingWorkspaceImport;
+            continue;
+        }
+        try enqueueReachable(allocator, reachable, queue, resolved);
+    }
+}
+
+fn enqueueStdFieldSourcePaths(
+    allocator: std.mem.Allocator,
+    paths: []const []u8,
+    source: []const u8,
+    reachable: *std.StringHashMap(void),
+    queue: *std.ArrayList([]u8),
+) !void {
+    const prefix = "std.";
+    var index: usize = 0;
+    while (std.mem.indexOfPos(u8, source, index, prefix)) |prefix_index| {
+        if (prefix_index > 0 and sourceIdentifierByte(source[prefix_index - 1])) {
+            index = prefix_index + prefix.len;
+            continue;
+        }
+        const field_start = prefix_index + prefix.len;
+        var field_end = field_start;
+        while (field_end < source.len and sourceIdentifierByte(source[field_end])) : (field_end += 1) {}
+        if (field_end == field_start) {
+            index = field_start;
+            continue;
+        }
+        const field = source[field_start..field_end];
+        var resolved_buffer: [vfs.label_max]u8 = undefined;
+        const resolved = resolveStdFieldLabel(field, &resolved_buffer) orelse {
+            index = field_end;
+            continue;
+        };
+        if (findSourcePath(paths, resolved) != null) try enqueueReachable(allocator, reachable, queue, resolved);
+        index = field_end;
+    }
+}
+
+fn resolveStdFieldLabel(field: []const u8, out: *[vfs.label_max]u8) ?[]const u8 {
+    const prefix = "compiler/zig/lib/std/";
+    const suffix = ".zig";
+    if (field.len == 0 or field.len > out.len - prefix.len - suffix.len) return null;
+    @memcpy(out[0..prefix.len], prefix);
+    @memcpy(out[prefix.len..][0..field.len], field);
+    @memcpy(out[prefix.len + field.len ..][0..suffix.len], suffix);
+    return out[0 .. prefix.len + field.len + suffix.len];
+}
+
+fn sourceIdentifierByte(byte: u8) bool {
+    return switch (byte) {
+        'A'...'Z', 'a'...'z', '0'...'9', '_' => true,
+        else => false,
+    };
+}
+
+fn enqueueEmbeddedSourcePaths(
+    allocator: std.mem.Allocator,
+    paths: []const []u8,
+    importer: []const u8,
+    source: []const u8,
+    reachable: *std.StringHashMap(void),
+    queue: *std.ArrayList([]u8),
+) !void {
+    var index: usize = 0;
+    while (std.mem.indexOfPos(u8, source, index, embed_file_call)) |call_index| {
+        const name_start = call_index + embed_file_call.len;
+        const name_end = std.mem.indexOfScalarPos(u8, source, name_start, '"') orelse return error.BadWorkspaceEmbedFile;
+        const embed_name = source[name_start..name_end];
+        var resolved_buffer: [vfs.label_max]u8 = undefined;
+        const resolved = resolveImportLabel(importer, embed_name, &resolved_buffer) orelse return error.BadWorkspaceEmbedFile;
+        if (findSourcePath(paths, resolved) != null) {
+            try enqueueReachable(allocator, reachable, queue, resolved);
+        } else if (sourceFileAllowed(resolved)) {
+            return error.MissingWorkspaceEmbedFile;
+        }
+        index = name_end + 1;
+    }
+}
+
+fn enqueueReachable(
+    allocator: std.mem.Allocator,
+    reachable: *std.StringHashMap(void),
+    queue: *std.ArrayList([]u8),
+    label: []const u8,
+) !void {
+    if (reachable.contains(label)) return;
+    const owned = try allocator.dupe(u8, label);
+    errdefer allocator.free(owned);
+    try reachable.put(owned, {});
+    try queue.append(allocator, owned);
+}
+
+fn findSourcePath(paths: []const []u8, label: []const u8) ?[]u8 {
+    var low: usize = 0;
+    var high: usize = paths.len;
+    while (low < high) {
+        const mid = low + (high - low) / 2;
+        switch (std.mem.order(u8, paths[mid], label)) {
+            .eq => return paths[mid],
+            .lt => low = mid + 1,
+            .gt => high = mid,
+        }
+    }
+    return null;
+}
+
+fn virtualImport(import_name: []const u8) bool {
+    return std.mem.eql(u8, import_name, "builtin") or
+        std.mem.eql(u8, import_name, "build_options") or
+        std.mem.eql(u8, import_name, "embedded_source_object") or
+        std.mem.eql(u8, import_name, "embedded_wasm_compiler");
+}
+
+fn resolveImportLabel(importer_label: []const u8, import_name: []const u8, out: *[vfs.label_max]u8) ?[]const u8 {
+    if (std.mem.eql(u8, import_name, "std")) return copyResolved(out, "compiler/zig/lib/std/std.zig");
+    if (std.mem.eql(u8, import_name, "root")) return copyResolved(out, importer_label);
+    if (import_name.len == 0 or import_name.len > vfs.label_max) return null;
+    if (std.mem.startsWith(u8, import_name, "/")) return null;
+
+    var raw: [vfs.label_max]u8 = undefined;
+    var raw_len: usize = 0;
+    if (std.mem.lastIndexOfScalar(u8, importer_label, '/')) |slash| {
+        const prefix = importer_label[0 .. slash + 1];
+        if (prefix.len > raw.len) return null;
+        @memcpy(raw[0..prefix.len], prefix);
+        raw_len = prefix.len;
+    }
+    if (import_name.len > raw.len - raw_len) return null;
+    @memcpy(raw[raw_len .. raw_len + import_name.len], import_name);
+    raw_len += import_name.len;
+    return normalizeLabel(raw[0..raw_len], out);
+}
+
+fn normalizeLabel(raw: []const u8, out: *[vfs.label_max]u8) ?[]const u8 {
+    var len: usize = 0;
+    var index: usize = 0;
+    while (index <= raw.len) {
+        const start = index;
+        while (index < raw.len and raw[index] != '/') : (index += 1) {}
+        const part = raw[start..index];
+        if (part.len == 0 or std.mem.eql(u8, part, ".")) {
+            // Skip empty and current-directory path segments.
+        } else if (std.mem.eql(u8, part, "..")) {
+            if (len == 0) return null;
+            len -= 1;
+            while (len > 0 and out[len - 1] != '/') : (len -= 1) {}
+            if (len > 0 and out[len - 1] == '/') len -= 1;
+        } else {
+            if (len != 0) {
+                if (len >= out.len) return null;
+                out[len] = '/';
+                len += 1;
+            }
+            if (part.len > out.len - len) return null;
+            @memcpy(out[len .. len + part.len], part);
+            len += part.len;
+        }
+        if (index == raw.len) break;
+        index += 1;
+    }
+    if (len == 0) return null;
+    return out[0..len];
+}
+
+fn copyResolved(out: *[vfs.label_max]u8, value: []const u8) ?[]const u8 {
+    if (value.len > out.len) return null;
+    @memcpy(out[0..value.len], value);
+    return out[0..value.len];
+}
+
+fn relativePath(allocator: std.mem.Allocator, prefix: []const u8, name: []const u8) ![]u8 {
+    if (prefix.len == 0) return try allocator.dupe(u8, name);
+    return try std.fs.path.join(allocator, &.{ prefix, name });
+}
+
+fn sourceFileAllowed(path: []const u8) bool {
+    if (std.mem.eql(u8, path, "build.zig")) return true;
+    if (std.mem.eql(u8, path, "compiler/zig/build.zig")) return true;
+    if (std.mem.eql(u8, path, "compiler/zig/build.zig.zon")) return true;
+    if (std.mem.startsWith(u8, path, "src/")) return appSourceFileAllowed(path);
+    if (std.mem.startsWith(u8, path, "compiler/zig/src/")) return false;
+    if (std.mem.startsWith(u8, path, "compiler/zig/lib/std/")) return compilerStdFileAllowed(path);
+    if (std.mem.startsWith(u8, path, "compiler/zig/lib/compiler/")) return false;
+    if (std.mem.startsWith(u8, path, "compiler/zig/lib/") and std.mem.eql(u8, std.fs.path.dirname(path) orelse "", "compiler/zig/lib")) return compilerExtensionAllowed(path);
+    return false;
+}
+
+fn sourceDirectoryAllowed(path: []const u8) bool {
+    if (std.mem.eql(u8, path, app_source_root)) return true;
+    if (std.mem.startsWith(u8, path, "src/")) return !std.mem.eql(u8, std.fs.path.basename(path), ".zig-cache");
+    if (std.mem.eql(u8, path, compiler_root)) return true;
+    if (std.mem.eql(u8, path, compiler_zig_root)) return true;
+    if (std.mem.startsWith(u8, path, "compiler/zig/src/")) return false;
+    if (std.mem.eql(u8, path, compiler_zig_lib_root)) return true;
+    if (std.mem.eql(u8, path, compiler_zig_std_root)) return true;
+    if (std.mem.startsWith(u8, path, "compiler/zig/lib/std/")) return compilerStdDirectoryAllowed(path);
+    if (std.mem.eql(u8, path, compiler_zig_compiler_lib_root)) return false;
+    if (std.mem.startsWith(u8, path, "compiler/zig/lib/compiler/")) return false;
+    return false;
+}
+
+fn sourceExtensionAllowed(path: []const u8) bool {
+    return std.mem.endsWith(u8, path, ".zig") or std.mem.endsWith(u8, path, ".md");
+}
+
+fn appSourceFileAllowed(path: []const u8) bool {
+    if (!sourceExtensionAllowed(path)) return false;
+    if (std.mem.endsWith(u8, path, "_test.zig")) return false;
+    if (std.mem.endsWith(u8, path, "_tests.zig")) return false;
+    if (std.mem.endsWith(u8, path, "/tests.zig")) return false;
+    if (std.mem.endsWith(u8, path, "/test.zig")) return false;
+
+    if (std.mem.eql(u8, path, "src/cheating_app_tests.zig")) return false;
+    if (std.mem.eql(u8, path, "src/render/native_present.zig")) return false;
+    if (std.mem.eql(u8, path, "src/render/gles.zig")) return false;
+    if (std.mem.eql(u8, path, "src/render/gpu.zig")) return false;
+    if (std.mem.eql(u8, path, "src/render/gpu_buffer.zig")) return false;
+    if (std.mem.eql(u8, path, "src/sdk_bench.zig")) return false;
+    if (std.mem.eql(u8, path, "src/sdk_cli.zig")) return false;
+    if (std.mem.eql(u8, path, "src/tpm_real_check.zig")) return false;
+    if (std.mem.eql(u8, path, "src/ui_bench.zig")) return false;
+    if (std.mem.eql(u8, path, "src/ui_core_test.zig")) return false;
+    if (std.mem.eql(u8, path, "src/ui_snapshot.zig")) return false;
+    if (std.mem.eql(u8, path, "src/wasm_compiler_probe.zig")) return false;
+    if (std.mem.eql(u8, path, "src/wasm_compiler_runner_test.zig")) return false;
+    if (std.mem.eql(u8, path, "src/wayland_egl_host.zig")) return false;
+    if (std.mem.eql(u8, path, "src/wayland_window_host.zig")) return false;
+    if (std.mem.eql(u8, path, "src/drm_gbm_host.zig")) return false;
+
+    if (std.mem.startsWith(u8, path, "src/pi_")) return false;
+    if (std.mem.startsWith(u8, path, "src/pi_zero_")) return false;
+    if (std.mem.startsWith(u8, path, "src/render/backends/gles")) return false;
+    if (std.mem.startsWith(u8, path, "src/render/backends/gpu")) return false;
+
+    return true;
+}
+
+fn compilerExtensionAllowed(path: []const u8) bool {
+    return std.mem.endsWith(u8, path, ".zig") or
+        std.mem.endsWith(u8, path, ".zon") or
+        std.mem.endsWith(u8, path, ".h") or
+        std.mem.endsWith(u8, path, ".c");
+}
+
+fn compilerStdFileAllowed(path: []const u8) bool {
+    if (std.mem.endsWith(u8, path, "_test.zig")) return false;
+    if (std.mem.eql(u8, std.fs.path.basename(path), compiler_zig_std_test_name)) return false;
+    if (std.mem.eql(u8, std.fs.path.basename(path), compiler_zig_std_parser_test_name)) return false;
+    if (std.mem.eql(u8, path, "compiler/zig/lib/std/Build.zig")) return false;
+    if (std.mem.eql(u8, path, "compiler/zig/lib/std/c.zig")) return false;
+    if (std.mem.eql(u8, path, "compiler/zig/lib/std/crypto.zig")) return false;
+    if (std.mem.eql(u8, path, "compiler/zig/lib/std/http.zig")) return false;
+    if (std.mem.eql(u8, path, "compiler/zig/lib/std/os.zig")) return false;
+    if (std.mem.eql(u8, path, "compiler/zig/lib/std/tar.zig")) return false;
+    if (std.mem.eql(u8, path, "compiler/zig/lib/std/testing.zig")) return false;
+    if (std.mem.eql(u8, path, "compiler/zig/lib/std/tz.zig")) return false;
+    if (std.mem.eql(u8, path, "compiler/zig/lib/std/valgrind.zig")) return false;
+    if (std.mem.eql(u8, path, "compiler/zig/lib/std/zip.zig")) return false;
+    if (std.mem.startsWith(u8, path, "compiler/zig/lib/std/Build/")) return false;
+    if (std.mem.startsWith(u8, path, "compiler/zig/lib/std/c/")) return false;
+    if (std.mem.startsWith(u8, path, "compiler/zig/lib/std/debug/")) return false;
+    if (std.mem.startsWith(u8, path, "compiler/zig/lib/std/crypto/")) return false;
+    if (std.mem.startsWith(u8, path, "compiler/zig/lib/std/http/")) return false;
+    if (std.mem.eql(u8, path, "compiler/zig/lib/std/Io/Threaded.zig")) return false;
+    if (std.mem.eql(u8, path, "compiler/zig/lib/std/Io/Uring.zig")) return false;
+    if (std.mem.startsWith(u8, path, "compiler/zig/lib/std/os/")) return false;
+    if (std.mem.startsWith(u8, path, "compiler/zig/lib/std/tar/")) return false;
+    if (std.mem.startsWith(u8, path, "compiler/zig/lib/std/testing/")) return false;
+    if (std.mem.startsWith(u8, path, "compiler/zig/lib/std/tz/")) return false;
+    if (std.mem.startsWith(u8, path, "compiler/zig/lib/std/zig/llvm/")) return false;
+    return compilerExtensionAllowed(path);
+}
+
+fn compilerStdDirectoryAllowed(path: []const u8) bool {
+    if (std.mem.eql(u8, std.fs.path.basename(path), ".zig-cache")) return false;
+    if (std.mem.eql(u8, path, compiler_zig_std_build_root) or std.mem.startsWith(u8, path, "compiler/zig/lib/std/Build/")) return false;
+    if (std.mem.eql(u8, path, compiler_zig_std_c_root) or std.mem.startsWith(u8, path, "compiler/zig/lib/std/c/")) return false;
+    if (std.mem.eql(u8, path, compiler_zig_std_debug_root) or std.mem.startsWith(u8, path, "compiler/zig/lib/std/debug/")) return false;
+    if (std.mem.eql(u8, path, compiler_zig_std_crypto_root) or std.mem.startsWith(u8, path, "compiler/zig/lib/std/crypto/")) return false;
+    if (std.mem.eql(u8, path, compiler_zig_std_http_root) or std.mem.startsWith(u8, path, "compiler/zig/lib/std/http/")) return false;
+    if (std.mem.eql(u8, path, compiler_zig_std_os_root) or std.mem.startsWith(u8, path, "compiler/zig/lib/std/os/")) return false;
+    if (std.mem.eql(u8, path, compiler_zig_std_tar_root) or std.mem.startsWith(u8, path, "compiler/zig/lib/std/tar/")) return false;
+    if (std.mem.eql(u8, path, compiler_zig_std_testing_root) or std.mem.startsWith(u8, path, "compiler/zig/lib/std/testing/")) return false;
+    if (std.mem.eql(u8, path, compiler_zig_std_tz_root) or std.mem.startsWith(u8, path, "compiler/zig/lib/std/tz/")) return false;
+    if (std.mem.eql(u8, path, compiler_zig_std_zig_llvm_root) or std.mem.startsWith(u8, path, "compiler/zig/lib/std/zig/llvm/")) return false;
+    if (std.mem.eql(u8, path, compiler_zig_std_io_root)) return true;
+    return true;
+}
+
+fn readWorkspaceFile(io: std.Io, allocator: std.mem.Allocator, root: *std.Io.Dir, path: []const u8) ![]u8 {
+    const file = try root.openFile(io, path, .{});
+    defer file.close(io);
+    const stat = try file.stat(io);
+    const len: usize = @intCast(stat.size);
+    var buffer: [4096]u8 = undefined;
+    var reader = file.reader(io, &buffer);
+    return try reader.interface.readAlloc(allocator, len);
+}
+
+fn pathLessThan(_: void, left: []const u8, right: []const u8) bool {
+    return std.mem.order(u8, left, right) == .lt;
+}
+
+fn sourceObjectRequirements() object.Requirements {
+    return .{
+        .durability = .durable,
+        .confidentiality = .public,
+        .portability = .public_portable,
+        .integrity = .hash_only,
+        .lifetime = .retained,
+        .visibility = .public,
+        .access = .explicit_io,
+    };
+}
+
+fn sourceObjectEpoch() @TypeOf(@as(object.Header, undefined).epoch) {
+    return .{
+        .keeper = .{ .bytes = [_]u8{
+            0x65, 0x64, 0x67, 0x65, 0x72, 0x75, 0x6e, 0x3a,
+            0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x3a, 0x6f,
+            0x62, 0x6a, 0x65, 0x63, 0x74, 0x3a, 0x76, 0x31,
+            0x3a, 0x62, 0x75, 0x69, 0x6c, 0x64, 0x00, 0x01,
+        } },
+    };
+}
+
+test "workspace manifest constants match encoded header width" {
+    try std.testing.expectEqual(@as(usize, 16), workspace_manifest_header_bytes);
+}
+
+test "workspace source filter keeps EdgeRun app and wasm compiler roots" {
+    try std.testing.expect(sourceFileAllowed("src/app_runtime.zig"));
+    try std.testing.expect(sourceFileAllowed("src/blog/one.md"));
+    try std.testing.expect(sourceFileAllowed("src/media/video.zig"));
+    try std.testing.expect(sourceFileAllowed("src/media/video_webm.zig"));
+    try std.testing.expect(sourceFileAllowed("compiler/zig/lib/std/std.zig"));
+    try std.testing.expect(sourceFileAllowed("compiler/zig/lib/std/zig/AstGen.zig"));
+}
+
+test "workspace source filter removes app host tools and tests" {
+    try std.testing.expect(!sourceFileAllowed("src/wasm/tests.zig"));
+    try std.testing.expect(!sourceFileAllowed("src/media/video_tests.zig"));
+    try std.testing.expect(!sourceFileAllowed("src/ui_core_test.zig"));
+    try std.testing.expect(!sourceFileAllowed("src/wasm_compiler_probe.zig"));
+    try std.testing.expect(!sourceFileAllowed("src/wasm_compiler_runner_test.zig"));
+    try std.testing.expect(!sourceFileAllowed("src/wayland_window_host.zig"));
+    try std.testing.expect(!sourceFileAllowed("src/wayland_egl_host.zig"));
+    try std.testing.expect(!sourceFileAllowed("src/render/native_present.zig"));
+    try std.testing.expect(!sourceFileAllowed("src/pi_zero_w_v1_1.zig"));
+}
+
+test "workspace source filter removes host compiler families" {
+    try std.testing.expect(!sourceFileAllowed("compiler/zig/src/edgerun_wasm_compiler.zig"));
+    try std.testing.expect(!sourceFileAllowed("compiler/zig/src/main.zig"));
+    try std.testing.expect(!sourceFileAllowed("compiler/zig/src/codegen/x86_64/CodeGen.zig"));
+    try std.testing.expect(!sourceFileAllowed("compiler/zig/src/codegen/wasm/CodeGen.zig"));
+    try std.testing.expect(!sourceFileAllowed("compiler/zig/src/link/Elf.zig"));
+    try std.testing.expect(!sourceFileAllowed("compiler/zig/src/link/Wasm.zig"));
+    try std.testing.expect(!sourceFileAllowed("compiler/zig/src/libs/wasi_libc.zig"));
+    try std.testing.expect(!sourceFileAllowed("compiler/zig/src/Package/Fetch/git.zig"));
+    try std.testing.expect(!sourceFileAllowed("compiler/zig/lib/compiler/resinator/main.zig"));
+    try std.testing.expect(!sourceFileAllowed("compiler/zig/lib/std/Build.zig"));
+    try std.testing.expect(!sourceFileAllowed("compiler/zig/lib/std/c.zig"));
+    try std.testing.expect(!sourceFileAllowed("compiler/zig/lib/std/crypto.zig"));
+    try std.testing.expect(!sourceFileAllowed("compiler/zig/lib/std/http/Client.zig"));
+    try std.testing.expect(!sourceFileAllowed("compiler/zig/lib/std/os.zig"));
+    try std.testing.expect(!sourceFileAllowed("compiler/zig/lib/std/os/linux.zig"));
+    try std.testing.expect(!sourceFileAllowed("compiler/zig/lib/std/fs/test.zig"));
+    try std.testing.expect(!sourceFileAllowed("compiler/zig/lib/std/zig/parser_test.zig"));
+    try std.testing.expect(!sourceFileAllowed("compiler/zig/lib/std/zig/llvm/Builder.zig"));
+}
