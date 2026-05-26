@@ -31,13 +31,22 @@ const legacy_main_i32_signature = "pub export fn main() i32";
 const return_keyword = "return";
 const export_fn_keyword = "export fn ";
 const const_keyword = "const ";
+const embedded_wasm_compiler_label = "embedded_wasm_compiler";
 const type_index_no_args_i32: u32 = 0;
 const type_index_no_args_void: u32 = 1;
 const type_index_i32_arg_i32: u32 = 2;
 const state_slot_bytes: usize = 4;
+const linked_compiler_runtime_capacity: usize = 96 * 1024 * 1024;
 const wasm_magic_word: i32 = 0x6d736100;
 const error_code_ok: i32 = 0;
 const error_code_bad_input: i32 = 2;
+const error_code_compile_source_empty: i32 = 20;
+const error_code_compile_source_too_large: i32 = 21;
+const error_code_compile_init_failed: i32 = 22;
+const error_code_compile_failed: i32 = 23;
+const error_code_compile_output_short: i32 = 24;
+const error_code_compile_output_too_large: i32 = 25;
+const error_code_compile_output_bad_magic: i32 = 26;
 
 const CompileMode = enum {
     full_source,
@@ -195,9 +204,11 @@ fn compileWithMode(
 
     const result = emitAppWasm(compiler_memory, source, workspace, compiler_output, mode) catch |err| {
         state.status = .output_too_large;
-        state.diagnostic = switch (err) {
-            error.OutputTooLarge => "compiled wasm does not fit compiler output memory",
-        };
+        if (state.diagnostic.len == 0) {
+            state.diagnostic = switch (err) {
+                error.OutputTooLarge => "compiled wasm does not fit compiler output memory",
+            };
+        }
         state.output = &.{};
         output_addr = 0;
         return @intFromEnum(Status.output_too_large);
@@ -264,6 +275,42 @@ const Writer = struct {
     }
 };
 
+const Reader = struct {
+    bytes: []const u8,
+    offset: usize = 0,
+
+    fn done(reader: Reader) bool {
+        return reader.offset == reader.bytes.len;
+    }
+
+    fn readByte(reader: *Reader) error{OutputTooLarge}!u8 {
+        if (reader.offset >= reader.bytes.len) return error.OutputTooLarge;
+        const byte = reader.bytes[reader.offset];
+        reader.offset += 1;
+        return byte;
+    }
+
+    fn readBytes(reader: *Reader, len: usize) error{OutputTooLarge}![]const u8 {
+        if (len > reader.bytes.len - reader.offset) return error.OutputTooLarge;
+        const start = reader.offset;
+        reader.offset += len;
+        return reader.bytes[start..reader.offset];
+    }
+
+    fn readU32Leb(reader: *Reader) error{OutputTooLarge}!u32 {
+        var result: u32 = 0;
+        var shift: u5 = 0;
+        var count: usize = 0;
+        while (count < 5) : (count += 1) {
+            const byte = try reader.readByte();
+            result |= @as(u32, byte & 0x7f) << shift;
+            if ((byte & 0x80) == 0) return result;
+            shift += 7;
+        }
+        return error.OutputTooLarge;
+    }
+};
+
 fn emitAppWasm(output: []u8, source: []const u8, workspace: WorkspaceInfo, compiler_output: CompilerOutputInfo, mode: CompileMode) error{OutputTooLarge}!usize {
     var writer = Writer{ .bytes = output };
     try writer.appendSlice(&.{ 0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00 });
@@ -277,9 +324,17 @@ fn emitAppWasm(output: []u8, source: []const u8, workspace: WorkspaceInfo, compi
     };
     const root_hash = sourceHash(workspace.root_source);
     const lowered_main = lowerMainI32Literal(workspace.root_source);
-    const lowered_data_base = alignForwardUsize(wasm_source_offset + embedded_source_len, memory_alignment);
-    const lowered_exports = collectLoweredExports(workspace.root_source, lowered_data_base);
-    const memory_bytes = if (lowered_exports.memory_end > wasm_source_offset + embedded_source_len) lowered_exports.memory_end else wasm_source_offset + embedded_source_len;
+    const embedded_compiler_wasm = findWorkspaceFile(workspace.manifest, embedded_wasm_compiler_label) orelse &.{};
+    if (embedded_compiler_wasm.len != 0) {
+        return try emitLinkedCompilerAppWasm(output, source, workspace, compiler_output, mode, embedded_compiler_wasm, root_hash, lowered_main, source_hash);
+    }
+    const compiler_wasm_offset = alignForwardUsize(wasm_source_offset + embedded_source_len, memory_alignment);
+    const compiler_wasm_end = compiler_wasm_offset + embedded_compiler_wasm.len;
+    const lowered_data_base = alignForwardUsize(compiler_wasm_end, memory_alignment);
+    const lowered_exports = collectLoweredExports(workspace.root_source, lowered_data_base, @intCast(compiler_wasm_offset), @intCast(embedded_compiler_wasm.len));
+    const source_end = wasm_source_offset + embedded_source_len;
+    var memory_bytes = if (lowered_exports.memory_end > source_end) lowered_exports.memory_end else source_end;
+    if (compiler_wasm_end > memory_bytes) memory_bytes = compiler_wasm_end;
     try emitTypeSection(&writer);
     try emitFunctionSection(&writer, lowered_exports);
     try emitMemorySection(&writer, memoryPagesForBytes(memory_bytes));
@@ -313,7 +368,10 @@ fn emitAppWasm(output: []u8, source: []const u8, workspace: WorkspaceInfo, compi
         lowered_main,
         lowered_exports,
     );
-    if (mode == .full_source) try emitDataSection(&writer, source);
+    try emitDataSection(&writer, switch (mode) {
+        .full_source => source,
+        .metadata_only => &.{},
+    }, embedded_compiler_wasm, @intCast(compiler_wasm_offset));
     return writer.len;
 }
 
@@ -336,6 +394,463 @@ fn emitTypeSection(parent: *Writer) error{OutputTooLarge}!void {
     try emitSection(parent, 1, payload.bytes[0..payload.len]);
 }
 
+const LinkedCompilerInfo = struct {
+    function_count: u32,
+    export_count: u32,
+    code_count: u32,
+    data_count: u32,
+    memory_min_pages: u32,
+    type_no_args_i32: u32,
+    type_no_args_void: u32,
+    type_i32_arg_i32: u32,
+    init_function_index: u32,
+    compile_function_index: u32,
+    output_len_function_index: u32,
+};
+
+const RawSection = struct {
+    id: u8,
+    payload: []const u8,
+};
+
+fn emitLinkedCompilerAppWasm(
+    output: []u8,
+    source: []const u8,
+    workspace: WorkspaceInfo,
+    compiler_output: CompilerOutputInfo,
+    mode: CompileMode,
+    compiler_wasm: []const u8,
+    root_hash: u32,
+    lowered_main: ?i32,
+    source_hash: u32,
+) error{OutputTooLarge}!usize {
+    const embedded_source_len: usize = switch (mode) {
+        .full_source => source.len,
+        .metadata_only => 0,
+    };
+    state.diagnostic = "linked parse compiler info";
+    var compiler_info = parseLinkedCompilerInfo(compiler_wasm) orelse return error.OutputTooLarge;
+    const compiler_reserved_bytes = pagesToBytesUsize(compiler_info.memory_min_pages) orelse return error.OutputTooLarge;
+    const linked_source_offset = alignForwardUsize(compiler_reserved_bytes, memory_alignment);
+    const source_end = linked_source_offset + embedded_source_len;
+    const lowered_data_base = alignForwardUsize(source_end, memory_alignment);
+    const lowered_exports = collectLoweredExports(workspace.root_source, lowered_data_base, 0, 1);
+    const memory_bytes = lowered_exports.memory_end;
+    var writer = Writer{ .bytes = output };
+    try writer.appendSlice(&.{ 0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00 });
+
+    var reader = Reader{ .bytes = compiler_wasm[8..] };
+    while (!reader.done()) {
+        const section_id = try reader.readByte();
+        const section_size = try reader.readU32Leb();
+        const section = RawSection{ .id = section_id, .payload = try reader.readBytes(section_size) };
+        if (section.id == 0) continue;
+        switch (section.id) {
+            1 => {
+                state.diagnostic = "linked type section";
+                try emitSection(&writer, section.id, section.payload);
+            },
+            3 => {
+                state.diagnostic = "linked function section";
+                try emitLinkedFunctionSection(&writer, section.payload, compiler_info, lowered_exports);
+            },
+            5 => {
+                state.diagnostic = "linked memory section";
+                try emitMemorySection(&writer, memoryPagesForBytes(memory_bytes));
+            },
+            7 => {
+                state.diagnostic = "linked export section";
+                try emitLinkedExportSection(&writer, section.payload, compiler_info.function_count, lowered_exports);
+            },
+            10 => {
+                state.diagnostic = "linked code section";
+                try emitLinkedCodeSection(
+                    &writer,
+                    section.payload,
+                    @intCast(source.len),
+                    @intCast(linked_source_offset),
+                    @bitCast(source_hash),
+                    @intCast(workspace.file_count),
+                    @intCast(workspace.root_source.len),
+                    @bitCast(root_hash),
+                    @intCast(compiler_output.zir_instruction_count),
+                    @intCast(compiler_output.zir_extra_count),
+                    @intCast(compiler_output.zir_string_bytes),
+                    @intCast(compiler_output.compiler_memory_used),
+                    @intCast(compiler_output.analyzed_file_count),
+                    @intCast(compiler_output.import_edge_count),
+                    @intCast(compiler_output.unresolved_import_count),
+                    @intCast(compiler_output.truncated_import_count),
+                    @intCast(compiler_output.manifest_file_refs_scanned),
+                    @intCast(compiler_output.file_object_decodes),
+                    @intCast(compiler_output.file_lookup_count),
+                    @intCast(compiler_output.queued_import_count),
+                    @intCast(compiler_output.pruned_import_count),
+                    @intCast(compiler_output.parsed_source_bytes),
+                    @intCast(compiler_output.indexed_file_count),
+                    @intCast(embedded_source_len),
+                    @intCast(compiler_output.lowered_main_count),
+                    @intCast(compiler_output.lowered_export_count),
+                    lowered_main,
+                    lowered_exports,
+                    compiler_info,
+                );
+            },
+            11 => {
+                state.diagnostic = "linked data section";
+                try emitLinkedDataSection(&writer, section.payload, switch (mode) {
+                    .full_source => source,
+                    .metadata_only => &.{},
+                }, @intCast(linked_source_offset));
+            },
+            else => {
+                state.diagnostic = "linked copied section";
+                try emitSection(&writer, section.id, section.payload);
+            },
+        }
+    }
+    _ = &compiler_info;
+    return writer.len;
+}
+
+fn parseLinkedCompilerInfo(wasm: []const u8) ?LinkedCompilerInfo {
+    if (wasm.len < 8 or !std.mem.eql(u8, wasm[0..4], &.{ 0x00, 0x61, 0x73, 0x6d })) return null;
+    var info = LinkedCompilerInfo{
+        .function_count = 0,
+        .export_count = 0,
+        .code_count = 0,
+        .data_count = 0,
+        .memory_min_pages = 0,
+        .type_no_args_i32 = std.math.maxInt(u32),
+        .type_no_args_void = std.math.maxInt(u32),
+        .type_i32_arg_i32 = std.math.maxInt(u32),
+        .init_function_index = std.math.maxInt(u32),
+        .compile_function_index = std.math.maxInt(u32),
+        .output_len_function_index = std.math.maxInt(u32),
+    };
+    var reader = Reader{ .bytes = wasm[8..] };
+    while (!reader.done()) {
+        const id = reader.readByte() catch return null;
+        const size = reader.readU32Leb() catch return null;
+        const payload = reader.readBytes(size) catch return null;
+        switch (id) {
+            1 => parseLinkedTypeInfo(payload, &info) catch return null,
+            3 => info.function_count = parseCount(payload) orelse return null,
+            5 => info.memory_min_pages = parseMemoryMinPages(payload) orelse return null,
+            7 => parseLinkedExportInfo(payload, &info) catch return null,
+            10 => info.code_count = parseCount(payload) orelse return null,
+            11 => info.data_count = parseCount(payload) orelse return null,
+            else => {},
+        }
+    }
+    if (info.function_count == 0 or info.function_count != info.code_count) return null;
+    if (info.memory_min_pages == 0) return null;
+    if (info.type_no_args_i32 == std.math.maxInt(u32)) return null;
+    if (info.type_i32_arg_i32 == std.math.maxInt(u32)) return null;
+    if (info.init_function_index == std.math.maxInt(u32)) return null;
+    if (info.compile_function_index == std.math.maxInt(u32)) return null;
+    if (info.output_len_function_index == std.math.maxInt(u32)) return null;
+    return info;
+}
+
+fn parseCount(payload: []const u8) ?u32 {
+    var reader = Reader{ .bytes = payload };
+    return reader.readU32Leb() catch null;
+}
+
+fn parseMemoryMinPages(payload: []const u8) ?u32 {
+    var reader = Reader{ .bytes = payload };
+    const count = reader.readU32Leb() catch return null;
+    if (count != 1) return null;
+    const flags = reader.readByte() catch return null;
+    const min = reader.readU32Leb() catch return null;
+    if (flags == 1) _ = reader.readU32Leb() catch return null;
+    if (flags > 1 or !reader.done()) return null;
+    return min;
+}
+
+fn parseLinkedTypeInfo(payload: []const u8, info: *LinkedCompilerInfo) error{OutputTooLarge}!void {
+    var reader = Reader{ .bytes = payload };
+    const count = try reader.readU32Leb();
+    var index: u32 = 0;
+    while (index < count) : (index += 1) {
+        if ((try reader.readByte()) != 0x60) return error.OutputTooLarge;
+        const param_count = try reader.readU32Leb();
+        var params = [_]u8{0} ** 2;
+        var param_index: u32 = 0;
+        while (param_index < param_count) : (param_index += 1) {
+            const value_type = try reader.readByte();
+            if (param_index < params.len) params[param_index] = value_type;
+        }
+        const result_count = try reader.readU32Leb();
+        var results = [_]u8{0} ** 1;
+        var result_index: u32 = 0;
+        while (result_index < result_count) : (result_index += 1) {
+            const value_type = try reader.readByte();
+            if (result_index < results.len) results[result_index] = value_type;
+        }
+        if (param_count == 0 and result_count == 1 and results[0] == 0x7f) info.type_no_args_i32 = index;
+        if (param_count == 0 and result_count == 0) info.type_no_args_void = index;
+        if (param_count == 1 and params[0] == 0x7f and result_count == 1 and results[0] == 0x7f) info.type_i32_arg_i32 = index;
+    }
+}
+
+fn parseLinkedExportInfo(payload: []const u8, info: *LinkedCompilerInfo) error{OutputTooLarge}!void {
+    var reader = Reader{ .bytes = payload };
+    const count = try reader.readU32Leb();
+    info.export_count = count;
+    var index: u32 = 0;
+    while (index < count) : (index += 1) {
+        const name_len = try reader.readU32Leb();
+        const name = try reader.readBytes(name_len);
+        const kind = try reader.readByte();
+        const exported_index = try reader.readU32Leb();
+        if (kind != 0) continue;
+        if (std.mem.eql(u8, name, "er_wasm_compiler_init")) info.init_function_index = exported_index;
+        if (std.mem.eql(u8, name, "er_wasm_compiler_compile_wasm")) info.compile_function_index = exported_index;
+        if (std.mem.eql(u8, name, "er_wasm_compiler_output_len")) info.output_len_function_index = exported_index;
+    }
+}
+
+fn emitLinkedFunctionSection(parent: *Writer, payload: []const u8, info: LinkedCompilerInfo, lowered_exports: LoweredExports) error{OutputTooLarge}!void {
+    var reader = Reader{ .bytes = payload };
+    _ = try reader.readU32Leb();
+    var out_buffer: [2048]u8 = undefined;
+    var out = Writer{ .bytes = &out_buffer };
+    try out.appendU32Leb(info.function_count + successor_base_function_count + lowered_exports.count);
+    try out.appendSlice(payload[reader.offset..]);
+    var index: u32 = 0;
+    while (index < successor_base_function_count) : (index += 1) try out.appendU32Leb(info.type_no_args_i32);
+    for (lowered_exports.entries[0..@intCast(lowered_exports.count)]) |lowered| {
+        try out.appendU32Leb(switch (lowered.kind) {
+            .return_i32, .state_load_i32, .compile_workspace => info.type_no_args_i32,
+            .release_artifact_commit, .source_workspace_commit => info.type_i32_arg_i32,
+        });
+    }
+    try emitSection(parent, 3, out.bytes[0..out.len]);
+}
+
+fn emitLinkedExportSection(parent: *Writer, payload: []const u8, base_function_count: u32, lowered_exports: LoweredExports) error{OutputTooLarge}!void {
+    var reader = Reader{ .bytes = payload };
+    const existing_count = try reader.readU32Leb();
+    var out_buffer: [16384]u8 = undefined;
+    var out = Writer{ .bytes = &out_buffer };
+    try out.appendU32Leb(existing_count + successor_base_function_count - 1 + lowered_exports.count);
+    try out.appendSlice(payload[reader.offset..]);
+    try emitExport(&out, "er_app_abi_version", 0, base_function_count + 0);
+    try emitExport(&out, "er_app_source_ptr", 0, base_function_count + 1);
+    try emitExport(&out, "er_app_source_len", 0, base_function_count + 2);
+    try emitExport(&out, "er_app_source_hash", 0, base_function_count + 3);
+    try emitExport(&out, "er_app_main", 0, base_function_count + 4);
+    try emitExport(&out, "er_app_source_file_count", 0, base_function_count + 6);
+    try emitExport(&out, "er_app_root_source_len", 0, base_function_count + 7);
+    try emitExport(&out, "er_app_root_source_hash", 0, base_function_count + 8);
+    try emitExport(&out, "er_app_zir_instruction_count", 0, base_function_count + 9);
+    try emitExport(&out, "er_app_zir_extra_count", 0, base_function_count + 10);
+    try emitExport(&out, "er_app_zir_string_bytes", 0, base_function_count + 11);
+    try emitExport(&out, "er_app_compiler_memory_used", 0, base_function_count + 12);
+    try emitExport(&out, "er_app_analyzed_file_count", 0, base_function_count + 13);
+    try emitExport(&out, "er_app_import_edge_count", 0, base_function_count + 14);
+    try emitExport(&out, "er_app_unresolved_import_count", 0, base_function_count + 15);
+    try emitExport(&out, "er_app_truncated_import_count", 0, base_function_count + 16);
+    try emitExport(&out, "er_app_manifest_file_refs_scanned", 0, base_function_count + 17);
+    try emitExport(&out, "er_app_file_object_decodes", 0, base_function_count + 18);
+    try emitExport(&out, "er_app_file_lookup_count", 0, base_function_count + 19);
+    try emitExport(&out, "er_app_queued_import_count", 0, base_function_count + 20);
+    try emitExport(&out, "er_app_pruned_import_count", 0, base_function_count + 21);
+    try emitExport(&out, "er_app_parsed_source_bytes", 0, base_function_count + 22);
+    try emitExport(&out, "er_app_indexed_file_count", 0, base_function_count + 23);
+    try emitExport(&out, "er_app_embedded_source_len", 0, base_function_count + 24);
+    try emitExport(&out, "er_app_lowered_main_count", 0, base_function_count + 25);
+    try emitExport(&out, "er_app_lowered_export_count", 0, base_function_count + 26);
+    for (lowered_exports.entries[0..@intCast(lowered_exports.count)], 0..) |lowered, index| {
+        try emitExport(&out, lowered.name, 0, base_function_count + successor_base_function_count + @as(u32, @intCast(index)));
+    }
+    try emitSection(parent, 7, out.bytes[0..out.len]);
+}
+
+fn emitLinkedCodeSection(
+    parent: *Writer,
+    payload: []const u8,
+    source_len: i32,
+    source_offset: i32,
+    hash: i32,
+    file_count: i32,
+    root_len: i32,
+    root_hash: i32,
+    zir_instruction_count: i32,
+    zir_extra_count: i32,
+    zir_string_bytes: i32,
+    compiler_memory_used: i32,
+    analyzed_file_count: i32,
+    import_edge_count: i32,
+    unresolved_import_count: i32,
+    truncated_import_count: i32,
+    manifest_file_refs_scanned: i32,
+    file_object_decodes: i32,
+    file_lookup_count: i32,
+    queued_import_count: i32,
+    pruned_import_count: i32,
+    parsed_source_bytes: i32,
+    indexed_file_count: i32,
+    embedded_source_len: i32,
+    lowered_main_count: i32,
+    lowered_export_count: i32,
+    lowered_main: ?i32,
+    lowered_exports: LoweredExports,
+    compiler_info: LinkedCompilerInfo,
+) error{OutputTooLarge}!void {
+    var reader = Reader{ .bytes = payload };
+    const existing_count = try reader.readU32Leb();
+    var out = Writer{ .bytes = parent.bytes[parent.len..] };
+    try out.append(10);
+    const size_offset = out.len;
+    try out.appendSlice(&.{ 0, 0, 0, 0, 0 });
+    const payload_start = out.len;
+    try out.appendU32Leb(existing_count + successor_base_function_count + lowered_exports.count);
+    try out.appendSlice(payload[reader.offset..]);
+    try emitAppCodeBodies(
+        &out,
+        source_len,
+        source_offset,
+        hash,
+        file_count,
+        root_len,
+        root_hash,
+        zir_instruction_count,
+        zir_extra_count,
+        zir_string_bytes,
+        compiler_memory_used,
+        analyzed_file_count,
+        import_edge_count,
+        unresolved_import_count,
+        truncated_import_count,
+        manifest_file_refs_scanned,
+        file_object_decodes,
+        file_lookup_count,
+        queued_import_count,
+        pruned_import_count,
+        parsed_source_bytes,
+        indexed_file_count,
+        embedded_source_len,
+        lowered_main_count,
+        lowered_export_count,
+        lowered_main,
+        lowered_exports,
+        compiler_info,
+    );
+    const payload_len = out.len - payload_start;
+    parent.len += try finishReservedSizeSection(&out, size_offset, payload_start, payload_len);
+}
+
+fn emitAppCodeBodies(
+    payload: *Writer,
+    source_len: i32,
+    source_offset: i32,
+    hash: i32,
+    file_count: i32,
+    root_len: i32,
+    root_hash: i32,
+    zir_instruction_count: i32,
+    zir_extra_count: i32,
+    zir_string_bytes: i32,
+    compiler_memory_used: i32,
+    analyzed_file_count: i32,
+    import_edge_count: i32,
+    unresolved_import_count: i32,
+    truncated_import_count: i32,
+    manifest_file_refs_scanned: i32,
+    file_object_decodes: i32,
+    file_lookup_count: i32,
+    queued_import_count: i32,
+    pruned_import_count: i32,
+    parsed_source_bytes: i32,
+    indexed_file_count: i32,
+    embedded_source_len: i32,
+    lowered_main_count: i32,
+    lowered_export_count: i32,
+    lowered_main: ?i32,
+    lowered_exports: LoweredExports,
+    compiler_info: ?LinkedCompilerInfo,
+) error{OutputTooLarge}!void {
+    try emitReturnI32Function(payload, app_abi_version);
+    try emitReturnI32Function(payload, source_offset);
+    try emitReturnI32Function(payload, source_len);
+    try emitReturnI32Function(payload, hash);
+    try emitLoweredMainFunction(payload, lowered_main);
+    if (compiler_info != null) {
+        try emitReturnI32Function(payload, 0);
+    } else {
+        try emitNoopFunction(payload);
+    }
+    try emitReturnI32Function(payload, file_count);
+    try emitReturnI32Function(payload, root_len);
+    try emitReturnI32Function(payload, root_hash);
+    try emitReturnI32Function(payload, zir_instruction_count);
+    try emitReturnI32Function(payload, zir_extra_count);
+    try emitReturnI32Function(payload, zir_string_bytes);
+    try emitReturnI32Function(payload, compiler_memory_used);
+    try emitReturnI32Function(payload, analyzed_file_count);
+    try emitReturnI32Function(payload, import_edge_count);
+    try emitReturnI32Function(payload, unresolved_import_count);
+    try emitReturnI32Function(payload, truncated_import_count);
+    try emitReturnI32Function(payload, manifest_file_refs_scanned);
+    try emitReturnI32Function(payload, file_object_decodes);
+    try emitReturnI32Function(payload, file_lookup_count);
+    try emitReturnI32Function(payload, queued_import_count);
+    try emitReturnI32Function(payload, pruned_import_count);
+    try emitReturnI32Function(payload, parsed_source_bytes);
+    try emitReturnI32Function(payload, indexed_file_count);
+    try emitReturnI32Function(payload, embedded_source_len);
+    try emitReturnI32Function(payload, lowered_main_count);
+    try emitReturnI32Function(payload, lowered_export_count);
+    for (lowered_exports.entries[0..@intCast(lowered_exports.count)]) |lowered| {
+        switch (lowered.kind) {
+            .return_i32 => try emitReturnI32Function(payload, lowered.value),
+            .state_load_i32 => try emitStateLoadI32Function(payload, lowered.value),
+            .release_artifact_commit => try emitReleaseArtifactCommitFunction(payload, lowered.value, lowered.limit, lowered.state_offset, lowered.error_offset),
+            .source_workspace_commit => try emitSourceWorkspaceCommitFunction(payload, lowered.limit, lowered.state_offset, lowered.ready_offset, lowered.error_offset),
+            .compile_workspace => try emitCompileWorkspaceFunction(payload, lowered, compiler_info orelse return error.OutputTooLarge),
+        }
+    }
+}
+
+fn emitLinkedDataSection(parent: *Writer, payload: []const u8, source: []const u8, source_offset: i32) error{OutputTooLarge}!void {
+    if (source.len == 0) {
+        try emitSection(parent, 11, payload);
+        return;
+    }
+    var reader = Reader{ .bytes = payload };
+    const existing_count = try reader.readU32Leb();
+    var out = Writer{ .bytes = parent.bytes[parent.len..] };
+    try out.append(11);
+    const size_offset = out.len;
+    try out.appendSlice(&.{ 0, 0, 0, 0, 0 });
+    const payload_start = out.len;
+    try out.appendU32Leb(existing_count + 1);
+    try out.appendSlice(payload[reader.offset..]);
+    try appendDataSegmentHeader(&out, source_offset, @intCast(source.len));
+    try out.appendSlice(source);
+    const payload_len = out.len - payload_start;
+    parent.len += try finishReservedSizeSection(&out, size_offset, payload_start, payload_len);
+}
+
+fn finishReservedSizeSection(writer: *Writer, size_offset: usize, payload_start: usize, payload_len: usize) error{OutputTooLarge}!usize {
+    var size_buffer: [8]u8 = undefined;
+    var size_writer = Writer{ .bytes = &size_buffer };
+    try size_writer.appendU32Leb(@intCast(payload_len));
+    const reserved = payload_start - size_offset;
+    if (size_writer.len > reserved) return error.OutputTooLarge;
+    const removed = reserved - size_writer.len;
+    @memcpy(writer.bytes[size_offset..][0..size_writer.len], size_buffer[0..size_writer.len]);
+    if (removed != 0) {
+        const src_start = payload_start;
+        const src_end = writer.len;
+        std.mem.copyForwards(u8, writer.bytes[size_offset + size_writer.len ..], writer.bytes[src_start..src_end]);
+    }
+    return writer.len - removed;
+}
+
 fn emitFunctionSection(parent: *Writer, lowered_exports: LoweredExports) error{OutputTooLarge}!void {
     var payload_buffer: [128]u8 = undefined;
     var payload = Writer{ .bytes = &payload_buffer };
@@ -347,7 +862,7 @@ fn emitFunctionSection(parent: *Writer, lowered_exports: LoweredExports) error{O
     while (index < successor_base_function_count) : (index += 1) try payload.appendU32Leb(type_index_no_args_i32);
     for (lowered_exports.entries[0..@intCast(lowered_exports.count)]) |lowered| {
         try payload.appendU32Leb(switch (lowered.kind) {
-            .return_i32, .state_load_i32 => type_index_no_args_i32,
+            .return_i32, .state_load_i32, .compile_workspace => type_index_no_args_i32,
             .release_artifact_commit, .source_workspace_commit => type_index_i32_arg_i32,
         });
     }
@@ -464,6 +979,7 @@ fn emitCodeSection(
             .state_load_i32 => try emitStateLoadI32Function(&payload, lowered.value),
             .release_artifact_commit => try emitReleaseArtifactCommitFunction(&payload, lowered.value, lowered.limit, lowered.state_offset, lowered.error_offset),
             .source_workspace_commit => try emitSourceWorkspaceCommitFunction(&payload, lowered.limit, lowered.state_offset, lowered.ready_offset, lowered.error_offset),
+            .compile_workspace => return error.OutputTooLarge,
         }
     }
     try emitSection(parent, 10, payload.bytes[0..payload.len]);
@@ -476,19 +992,38 @@ fn emitStartSection(parent: *Writer) error{OutputTooLarge}!void {
     try emitSection(parent, 8, payload.bytes[0..payload.len]);
 }
 
-fn emitDataSection(parent: *Writer, source: []const u8) error{OutputTooLarge}!void {
-    var header_buffer: [32]u8 = undefined;
-    var header = Writer{ .bytes = &header_buffer };
-    try header.appendU32Leb(1);
-    try header.append(0);
-    try header.append(0x41);
-    try header.appendI32Leb(@intCast(wasm_source_offset));
-    try header.append(0x0b);
-    try header.appendU32Leb(@intCast(source.len));
+fn emitDataSection(parent: *Writer, source: []const u8, compiler_wasm: []const u8, compiler_wasm_offset: i32) error{OutputTooLarge}!void {
+    const segment_count: u32 = (if (source.len == 0) @as(u32, 0) else 1) + (if (compiler_wasm.len == 0) @as(u32, 0) else 1);
+    if (segment_count == 0) return;
+    var count_buffer: [8]u8 = undefined;
+    var count = Writer{ .bytes = &count_buffer };
+    try count.appendU32Leb(segment_count);
+    var source_header_buffer: [32]u8 = undefined;
+    var source_header = Writer{ .bytes = &source_header_buffer };
+    if (source.len != 0) try appendDataSegmentHeader(&source_header, @intCast(wasm_source_offset), @intCast(source.len));
+    var compiler_header_buffer: [32]u8 = undefined;
+    var compiler_header = Writer{ .bytes = &compiler_header_buffer };
+    if (compiler_wasm.len != 0) try appendDataSegmentHeader(&compiler_header, compiler_wasm_offset, @intCast(compiler_wasm.len));
+
     try parent.append(11);
-    try parent.appendU32Leb(@intCast(header.len + source.len));
-    try parent.appendSlice(header.bytes[0..header.len]);
-    try parent.appendSlice(source);
+    try parent.appendU32Leb(@intCast(count.len + source_header.len + source.len + compiler_header.len + compiler_wasm.len));
+    try parent.appendSlice(count.bytes[0..count.len]);
+    if (source.len != 0) {
+        try parent.appendSlice(source_header.bytes[0..source_header.len]);
+        try parent.appendSlice(source);
+    }
+    if (compiler_wasm.len != 0) {
+        try parent.appendSlice(compiler_header.bytes[0..compiler_header.len]);
+        try parent.appendSlice(compiler_wasm);
+    }
+}
+
+fn appendDataSegmentHeader(writer: *Writer, offset: i32, len: u32) error{OutputTooLarge}!void {
+    try writer.append(0);
+    try writer.append(0x41);
+    try writer.appendI32Leb(offset);
+    try writer.append(0x0b);
+    try writer.appendU32Leb(len);
 }
 
 fn emitSection(parent: *Writer, section_id: u8, payload: []const u8) error{OutputTooLarge}!void {
@@ -589,9 +1124,94 @@ fn emitSourceWorkspaceCommitFunction(writer: *Writer, capacity: i32, len_offset:
     try writer.appendSlice(body.bytes[0..body.len]);
 }
 
+fn emitCompileWorkspaceFunction(writer: *Writer, lowered: LoweredExport, compiler_info: LinkedCompilerInfo) error{OutputTooLarge}!void {
+    var body_buffer: [512]u8 = undefined;
+    var body = Writer{ .bytes = &body_buffer };
+    try body.appendU32Leb(1);
+    try body.appendU32Leb(1);
+    try body.append(0x7f);
+
+    try emitStateLoadI32(&body, lowered.source_len_offset);
+    try body.append(0x45);
+    try emitErrorIf(&body, lowered.error_offset, error_code_compile_source_empty);
+
+    try emitStateLoadI32(&body, lowered.source_len_offset);
+    try emitI32Const(&body, lowered.source_capacity);
+    try body.append(0x4b);
+    try emitErrorIf(&body, lowered.error_offset, error_code_compile_source_too_large);
+
+    try emitI32Const(&body, lowered.value);
+    try emitI32Const(&body, lowered.limit);
+    try emitCall(&body, compiler_info.init_function_index);
+    try emitErrorIf(&body, lowered.error_offset, error_code_compile_init_failed);
+
+    try emitI32Const(&body, lowered.value);
+    try emitI32Const(&body, lowered.limit);
+    try emitI32Const(&body, 0);
+    try emitI32Const(&body, 0);
+    try emitI32Const(&body, lowered.source_ptr);
+    try emitStateLoadI32(&body, lowered.source_len_offset);
+    try emitCall(&body, compiler_info.compile_function_index);
+    try emitErrorIf(&body, lowered.error_offset, error_code_compile_failed);
+
+    try emitCall(&body, compiler_info.output_len_function_index);
+    try body.append(0x21);
+    try body.appendU32Leb(0);
+
+    try emitLocalGet(&body, 0);
+    try emitI32Const(&body, 4);
+    try body.append(0x49);
+    try emitErrorIf(&body, lowered.error_offset, error_code_compile_output_short);
+
+    try emitLocalGet(&body, 0);
+    try emitI32Const(&body, lowered.release_capacity);
+    try body.append(0x4b);
+    try emitErrorIf(&body, lowered.error_offset, error_code_compile_output_too_large);
+
+    try emitI32Const(&body, lowered.value);
+    try body.append(0x28);
+    try body.appendU32Leb(2);
+    try body.appendU32Leb(0);
+    try emitI32Const(&body, wasm_magic_word);
+    try body.append(0x47);
+    try emitErrorIf(&body, lowered.error_offset, error_code_compile_output_bad_magic);
+
+    try emitI32Const(&body, lowered.release_ptr);
+    try emitI32Const(&body, lowered.value);
+    try emitLocalGet(&body, 0);
+    try body.append(0xfc);
+    try body.appendU32Leb(10);
+    try body.appendU32Leb(0);
+    try body.appendU32Leb(0);
+
+    try emitI32Const(&body, lowered.release_len_offset);
+    try emitLocalGet(&body, 0);
+    try emitI32Store(&body);
+    try emitI32Const(&body, lowered.error_offset);
+    try emitI32Const(&body, error_code_ok);
+    try emitI32Store(&body);
+    try emitI32Const(&body, error_code_ok);
+    try body.append(0x0b);
+
+    try writer.appendU32Leb(@intCast(body.len));
+    try writer.appendSlice(body.bytes[0..body.len]);
+}
+
+fn emitStateLoadI32(writer: *Writer, state_offset: i32) error{OutputTooLarge}!void {
+    try emitI32Const(writer, state_offset);
+    try writer.append(0x28);
+    try writer.appendU32Leb(2);
+    try writer.appendU32Leb(0);
+}
+
 fn emitLocalGet(writer: *Writer, local_index: u32) error{OutputTooLarge}!void {
     try writer.append(0x20);
     try writer.appendU32Leb(local_index);
+}
+
+fn emitCall(writer: *Writer, function_index: u32) error{OutputTooLarge}!void {
+    try writer.append(0x10);
+    try writer.appendU32Leb(function_index);
 }
 
 fn emitI32Const(writer: *Writer, value: i32) error{OutputTooLarge}!void {
@@ -606,12 +1226,16 @@ fn emitI32Store(writer: *Writer) error{OutputTooLarge}!void {
 }
 
 fn emitBadInputIf(writer: *Writer, error_offset: i32) error{OutputTooLarge}!void {
+    try emitErrorIf(writer, error_offset, error_code_bad_input);
+}
+
+fn emitErrorIf(writer: *Writer, error_offset: i32, error_code: i32) error{OutputTooLarge}!void {
     try writer.append(0x04);
     try writer.append(0x40);
     try emitI32Const(writer, error_offset);
-    try emitI32Const(writer, error_code_bad_input);
+    try emitI32Const(writer, error_code);
     try emitI32Store(writer);
-    try emitI32Const(writer, error_code_bad_input);
+    try emitI32Const(writer, error_code);
     try writer.append(0x0f);
     try writer.append(0x0b);
 }
@@ -676,7 +1300,7 @@ fn lowerMainI32Literal(source: []const u8) ?i32 {
     return @intCast(signed_value);
 }
 
-fn collectLoweredExports(source: []const u8, data_base: usize) LoweredExports {
+fn collectLoweredExports(source: []const u8, data_base: usize, compiler_wasm_offset: i32, compiler_wasm_len: i32) LoweredExports {
     var context = collectLoweringContext(source, data_base);
     const stateful_release_artifact = sourceHasReleaseArtifactCommitPattern(source) and context.array_lengths.find("release_artifact") != null;
     const stateful_source_workspace = sourceHasSourceWorkspaceCommitPattern(source) and context.array_lengths.find("source_workspace") != null;
@@ -718,6 +1342,37 @@ fn collectLoweredExports(source: []const u8, data_base: usize) LoweredExports {
         if (stateful_source_workspace and std.mem.eql(u8, name, "er_ui_source_workspace_commit")) {
             const capacity = context.array_lengths.find("source_workspace") orelse continue;
             lowered.appendSourceWorkspaceCommit(name, capacity, source_workspace_len_offset, source_workspace_ready_offset, last_error_offset);
+            continue;
+        }
+        if (compiler_wasm_len > 0 and compiler_wasm_offset > 0 and std.mem.eql(u8, name, "er_ui_compiler_wasm_ptr")) {
+            lowered.append(name, compiler_wasm_offset);
+            continue;
+        }
+        if (compiler_wasm_len > 0 and compiler_wasm_offset > 0 and std.mem.eql(u8, name, "er_ui_compiler_wasm_len")) {
+            lowered.append(name, compiler_wasm_len);
+            continue;
+        }
+        if (compiler_wasm_len > 0 and stateful_source_workspace and stateful_release_artifact and std.mem.eql(u8, name, "er_ui_compile_workspace_wasm")) {
+            const source_ptr = pointerForArray(&context, "source_workspace") orelse continue;
+            const source_capacity = context.array_lengths.find("source_workspace") orelse continue;
+            const release_ptr = pointerForArray(&context, "release_artifact") orelse continue;
+            const release_capacity = context.array_lengths.find("release_artifact") orelse continue;
+            const compiler_runtime_offset_usize = alignForwardUsize(context.next_data_offset, memory_alignment);
+            const compiler_runtime_offset: i32 = @intCast(compiler_runtime_offset_usize);
+            context.next_data_offset = compiler_runtime_offset_usize + linked_compiler_runtime_capacity;
+            lowered.appendCompileWorkspace(.{
+                .name = name,
+                .value = compiler_runtime_offset,
+                .limit = @intCast(linked_compiler_runtime_capacity),
+                .source_ptr = source_ptr,
+                .source_len_offset = source_workspace_len_offset,
+                .source_capacity = source_capacity,
+                .release_ptr = release_ptr,
+                .release_len_offset = release_artifact_len_offset,
+                .release_capacity = release_capacity,
+                .error_offset = last_error_offset,
+                .kind = .compile_workspace,
+            });
             continue;
         }
         if (stateful_release_artifact and std.mem.eql(u8, name, "er_ui_release_artifact_len")) {
@@ -1111,6 +1766,12 @@ fn memoryPagesForBytes(byte_len: usize) u32 {
     return @intCast((needed + wasm_page_mask) >> wasm_page_shift);
 }
 
+fn pagesToBytesUsize(page_count: u32) ?usize {
+    const byte_count = @as(u64, page_count) * wasm_page_bytes;
+    if (byte_count > std.math.maxInt(usize)) return null;
+    return @intCast(byte_count);
+}
+
 fn alignForwardUsize(value: usize, alignment: usize) usize {
     const mask = alignment - 1;
     return (value + mask) & ~mask;
@@ -1204,6 +1865,7 @@ const LoweredFunctionKind = enum {
     state_load_i32,
     release_artifact_commit,
     source_workspace_commit,
+    compile_workspace,
 };
 
 const LoweredExport = struct {
@@ -1213,6 +1875,12 @@ const LoweredExport = struct {
     state_offset: i32 = 0,
     ready_offset: i32 = 0,
     error_offset: i32 = 0,
+    source_ptr: i32 = 0,
+    source_len_offset: i32 = 0,
+    source_capacity: i32 = 0,
+    release_ptr: i32 = 0,
+    release_len_offset: i32 = 0,
+    release_capacity: i32 = 0,
     kind: LoweredFunctionKind = .return_i32,
 };
 
@@ -1250,6 +1918,10 @@ const LoweredExports = struct {
             .error_offset = error_offset,
             .kind = .source_workspace_commit,
         });
+    }
+
+    fn appendCompileWorkspace(exports: *LoweredExports, lowered: LoweredExport) void {
+        exports.appendEntry(lowered);
     }
 
     fn appendEntry(exports: *LoweredExports, lowered: LoweredExport) void {
@@ -1343,7 +2015,7 @@ fn analyzeZigRoot(scratch: []u8, source: []const u8) error{ InvalidZig, OutOfMem
         .parsed_source_bytes = @intCast(source.len),
         .indexed_file_count = 0,
         .lowered_main_count = 0,
-        .lowered_export_count = collectLoweredExports(source, 0).count,
+        .lowered_export_count = collectLoweredExports(source, 0, 0, 0).count,
     };
 }
 
@@ -1410,7 +2082,7 @@ fn analyzeWorkspaceGraph(scratch: []u8, workspace: WorkspaceInfo) error{ Invalid
 
     result.compiler_memory_used = @intCast(fixed.end_index);
     if (lowerMainI32Literal(workspace.root_source) != null) result.lowered_main_count = 1;
-    result.lowered_export_count = collectLoweredExports(workspace.root_source, 0).count;
+    result.lowered_export_count = collectLoweredExports(workspace.root_source, 0, 0, if (findWorkspaceFile(workspace.manifest, embedded_wasm_compiler_label) == null) 0 else 1).count;
     return result;
 }
 
@@ -1804,7 +2476,7 @@ test "simple zero arg integer exports lower to wasm functions" {
         \\export fn er_error() u32 { return @intFromEnum(last_error); }
         \\export fn er_effect() u32 { frame_width = 1; return @intCast(frame_width); }
         \\export fn er_dynamic() usize { return frame_width; }
-    , 0);
+    , 0, 0, 0);
     try std.testing.expectEqual(@as(u32, 7), lowered.count);
     try std.testing.expectEqualStrings("er_ui_max_width", lowered.entries[0].name);
     try std.testing.expectEqual(@as(i32, 4096), lowered.entries[0].value);

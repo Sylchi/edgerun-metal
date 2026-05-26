@@ -1,3 +1,4 @@
+const std = @import("std");
 const backend = @import("backends/software.zig");
 const renderer_ir = @import("ir.zig");
 const renderer_present = @import("present.zig");
@@ -33,10 +34,6 @@ pub const Framebuffer = struct {
         return (backend.Surface{ .width = self.width, .height = self.height, .pixels = self.pixels }).renderIrFrameWithResources(buffers, resources);
     }
 
-    pub fn rasterizeIr(self: Framebuffer, buffers: renderer_ir.Buffers) Error!void {
-        try (backend.Surface{ .width = self.width, .height = self.height, .pixels = self.pixels }).rasterizeIr(buffers);
-    }
-
     pub fn blendPixel(self: Framebuffer, x: usize, y: usize, color: ui.Color, alpha: u8) void {
         (backend.Surface{ .width = self.width, .height = self.height, .pixels = self.pixels }).blendPixel(x, y, color, alpha);
     }
@@ -52,4 +49,11 @@ pub fn resetIconTuningForTest() void {
 
 test {
     _ = backend;
+}
+
+test "software adapter exposes only receipt based ir rendering" {
+    const source = @embedFile("software.zig");
+    const void_raster = "pub fn " ++ "rasterizeIr(";
+    try std.testing.expect(std.mem.indexOf(u8, source, void_raster) == null);
+    try std.testing.expect(std.mem.indexOf(u8, source, "pub fn renderIr(") != null);
 }

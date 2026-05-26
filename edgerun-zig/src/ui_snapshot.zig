@@ -46,7 +46,8 @@ fn renderSnapshot(init: std.process.Init, out_path: []const u8) !void {
 
     const surface = try renderer_software.Framebuffer.init(width, height, pixels);
     surface.clear(.bg);
-    _ = try surface.renderIr(buffers, renderer_pipeline.softwareResources(&font_atlas, null));
+    const receipt = try surface.renderIr(buffers, renderer_pipeline.softwareResources(&font_atlas, null));
+    if (!receipt.valid()) return error.InvalidSoftwareReceipt;
 
     const io = init.io;
     try std.Io.Dir.cwd().createDirPath(io, ".build/edgerun-zig");

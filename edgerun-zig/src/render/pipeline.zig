@@ -1,9 +1,33 @@
 const std = @import("std");
 const renderer_font_atlas = @import("font_atlas.zig");
+const icon_line_buffer = @import("icon_line_buffer.zig");
 const renderer_ir = @import("ir.zig");
 const renderer_present = @import("present.zig");
 const renderer_software = @import("software.zig");
 const ui = @import("../ui.zig");
+
+pub const Error = renderer_present.Error || renderer_software.Error;
+pub const Receipt = renderer_present.Receipt;
+pub const Transport = renderer_present.Transport;
+pub const SoftwareFramebuffer = renderer_software.Framebuffer;
+pub const IconTuning = renderer_software.IconTuning;
+pub const IconTuningError = renderer_software.TuningError;
+pub const IconLineError = icon_line_buffer.Error;
+pub const Buffers = renderer_ir.Buffers;
+pub const Sources = renderer_ir.Sources;
+pub const FontAtlas = renderer_ir.FontAtlas;
+pub const TextMetrics = renderer_ir.TextMetrics;
+pub const Glyph = renderer_ir.Glyph;
+pub const Layer = renderer_ir.Layer;
+pub const IconInstance = renderer_ir.IconInstance;
+pub const IrError = renderer_ir.Error;
+pub const rect_float_stride = renderer_ir.rect_float_stride;
+pub const text_vertex_float_stride = renderer_ir.text_vertex_float_stride;
+pub const icon_instance_float_stride = renderer_ir.icon_instance_float_stride;
+pub const icon_line_vertex_float_stride = icon_line_buffer.vertex_float_stride;
+pub const image_vertex_float_stride = renderer_ir.image_vertex_float_stride;
+pub const font_first_char = renderer_ir.font_first_char;
+pub const font_last_char = renderer_ir.font_last_char;
 
 pub const FontSource = enum {
     atlas,
@@ -85,6 +109,34 @@ pub fn presentPackedFrame(
     });
 }
 
+pub fn softwareFramebuffer(width: usize, height: usize, pixels: []ui.Color) renderer_software.Error!SoftwareFramebuffer {
+    return renderer_software.Framebuffer.init(width, height, pixels);
+}
+
+pub fn setIconTuningForTest(tuning: IconTuning) IconTuningError!void {
+    try renderer_software.setIconTuningForTest(tuning);
+}
+
+pub fn resetIconTuningForTest() void {
+    renderer_software.resetIconTuningForTest();
+}
+
+pub fn pushText(buffers: Buffers, font: FontAtlas, layer: Layer, bounds: ui.Rect, value: []const u8, color: ui.Color, alignment: ui.TextAlign) IrError!void {
+    try renderer_ir.pushText(buffers, font, layer, bounds, value, color, alignment);
+}
+
+pub fn pushIcon(buffers: Buffers, layer: Layer, quad: ui.IconQuad) IrError!void {
+    try renderer_ir.pushIcon(buffers, layer, quad);
+}
+
+pub fn iconAt(values: []const f32, index: usize) IrError!IconInstance {
+    return renderer_ir.iconAt(values, index);
+}
+
+pub fn packIconLines(instances: []const f32, out: []f32, out_len: *usize) icon_line_buffer.Error!void {
+    try icon_line_buffer.packIconInstances(instances, out, out_len);
+}
+
 test "render pipeline builds atlas and object font sources" {
     var font_atlas = renderer_font_atlas.Atlas.init();
     var commands: [1]ui.Command = undefined;
@@ -128,4 +180,15 @@ test "render pipeline owns packed presentation and software resources" {
         .bg,
     );
     try std.testing.expectEqual(renderer_present.Destination.pixel_frame, software_receipt.destination);
+}
+
+test "browser render bridge uses pipeline instead of software and present internals" {
+    const source = @embedFile("../ui_browser.zig");
+    try std.testing.expect(std.mem.indexOf(u8, source, "@import(\"render/ir.zig\")") == null);
+    try std.testing.expect(std.mem.indexOf(u8, source, "@import(\"render/icon_line_buffer.zig\")") == null);
+    try std.testing.expect(std.mem.indexOf(u8, source, "@import(\"render/software.zig\")") == null);
+    try std.testing.expect(std.mem.indexOf(u8, source, "@import(\"render/present.zig\")") == null);
+    try std.testing.expect(std.mem.indexOf(u8, source, "icon_line_buffer") == null);
+    try std.testing.expect(std.mem.indexOf(u8, source, "renderer_ir") == null);
+    try std.testing.expect(std.mem.indexOf(u8, source, "renderer_present") == null);
 }

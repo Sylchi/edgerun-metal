@@ -828,7 +828,7 @@ test "landing page renders site sections and primary actions" {
     try std.testing.expect(hasHit(collector.written(), docs_button_id));
     try std.testing.expect(hasHit(collector.written(), apps_button_id));
     try std.testing.expect(hasIcon(scene.written(), .chevron_right));
-    try std.testing.expect(hasIcon(scene.written(), .github));
+    try std.testing.expect(hasIcon(scene.written(), .code));
 }
 
 test "landing page clips scrolled content below fixed header" {

@@ -3,7 +3,7 @@ const renderer_font_atlas = @import("render/font_atlas.zig");
 const renderer_gles = @import("render/gles.zig");
 const renderer_ir = @import("render/ir.zig");
 const renderer_pipeline = @import("render/pipeline.zig");
-const site_landing = @import("site_landing.zig");
+const site_frame = @import("site_frame.zig");
 const ui = @import("ui.zig");
 const interaction = @import("ui_interaction.zig");
 
@@ -77,12 +77,13 @@ const SceneState = struct {
     fn rebuild(self: *SceneState, width: i32, height: i32, font_atlas: *renderer_font_atlas.Atlas) !renderer_ir.Buffers {
         var scene = ui.Scene.initWithClips(&self.commands, &self.clips);
         var collector = interaction.Collector.init(&self.regions);
-        try site_landing.render(&scene, &collector, .{
+        try site_frame.render(&scene, &collector, .{
             .x = 0,
             .y = 0,
             .w = @floatFromInt(width),
             .h = @floatFromInt(height),
         }, .{
+            .route = .{ .view = .landing },
             .public_identity = "drm-gbm-gpu",
             .public_identity_ready = true,
         });
@@ -118,7 +119,8 @@ pub fn main(init: std.process.Init) !void {
     var scene_state = SceneState{};
     const buffers = try scene_state.rebuild(width, height, &font_atlas);
     gl.refreshFontTexture(&font_atlas);
-    try gl.renderFrame(width, height, buffers);
+    const receipt = try gl.renderFrame(width, height, buffers);
+    if (!receipt.valid()) return error.InvalidGlesReceipt;
     _ = try gl.verifyFrameNonBlank(width, height);
     if (c.eglSwapBuffers(egl.display, egl.surface) != c.EGL_TRUE) return error.EglSwapFailed;
 

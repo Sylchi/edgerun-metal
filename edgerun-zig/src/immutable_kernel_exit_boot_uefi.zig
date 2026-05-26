@@ -1,6 +1,7 @@
 const std = @import("std");
 const uefi = std.os.uefi;
 const boot_resource_map = @import("boot_resource_map.zig");
+const immutable_kernel_post_exit = @import("immutable_kernel_post_exit.zig");
 const resource_inventory = @import("content/resource_inventory.zig");
 const uefi_resource_map = @import("boot/uefi_resource_map.zig");
 
@@ -8,7 +9,6 @@ const debugcon_port: u16 = 0x402;
 const line_max: usize = 192;
 const max_boot_resources: usize = 128;
 const memory_map_bytes: usize = 131072;
-const min_post_exit_memory_bytes: u64 = 4096;
 const max_exit_attempts: usize = 2;
 
 var map_buffer: [memory_map_bytes]u8 align(@alignOf(uefi.tables.MemoryDescriptor)) = undefined;
@@ -18,7 +18,7 @@ var resource_ids: [max_boot_resources]resource_inventory.ResourceIdStorage = und
 var inventory: resource_inventory.Inventory = undefined;
 var boot_map: boot_resource_map.Map = undefined;
 var usable_resource_count: usize = 0;
-var post_exit_marker: u64 = 0;
+var post_exit_state: immutable_kernel_post_exit.State = undefined;
 
 pub fn main() noreturn {
     printLine("EdgeRun immutable kernel ExitBootServices smoke");
@@ -41,16 +41,9 @@ fn run() Error!void {
     try exitBootServicesWithFreshMap(boot_services);
 
     writeDebugconLine("check: exited boot services debugcon alive");
-    post_exit_marker = 0x4544474552554e31;
-    if (post_exit_marker != 0x4544474552554e31) {
-        writeDebugconLine("FAIL post-exit static memory");
+    immutable_kernel_post_exit.run(&post_exit_state, inventory, writeDebugconLine) catch {
         haltForever();
-    }
-    if (usable_resource_count == 0) {
-        writeDebugconLine("FAIL post-exit inventory lost");
-        haltForever();
-    }
-    writeDebugconLine("check: post-exit static kernel state ok");
+    };
     writeDebugconLine("PASS immutable-kernel-exit-boot-qemu");
 }
 
@@ -98,10 +91,7 @@ fn mapFromMemoryMap(memory_map: uefi.tables.MemoryMapSlice) boot_resource_map.Ma
 }
 
 fn hasPostExitMemory(value: resource_inventory.Inventory) bool {
-    for (value.resources[0..value.len]) |resource| {
-        if (resource.kind == .memory and resource.bounds.length >= min_post_exit_memory_bytes) return true;
-    }
-    return false;
+    return immutable_kernel_post_exit.hasMemory(value);
 }
 
 const Error = error{

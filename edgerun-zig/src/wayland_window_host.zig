@@ -10,12 +10,10 @@ const renderer_ir = @import("render/ir.zig");
 const renderer_pipeline = @import("render/pipeline.zig");
 const renderer_native_present = @import("render/native_present.zig");
 const renderer_software = @import("render/software.zig");
-const component_gallery = @import("component_gallery.zig");
-const site_apps = @import("site_apps.zig");
 const site_blog = @import("site_blog.zig");
 const site_chrome = @import("site_chrome.zig");
 const site_cursor = @import("site_cursor.zig");
-const site_docs = @import("site_docs.zig");
+const site_frame = @import("site_frame.zig");
 const site_images = @import("site_images.zig");
 const site_landing = @import("site_landing.zig");
 const site_navigation = @import("site_navigation.zig");
@@ -878,7 +876,8 @@ const NativeApp = struct {
         const buffers = cursor_ir.buffers();
         try renderer_pipeline.packScene(buffers, &self.font_atlas, .object, scene.written());
         const surface = try renderer_software.Framebuffer.init(self.width, self.height, self.pixels);
-        try surface.rasterizeIr(buffers);
+        const receipt = try surface.renderIr(buffers, renderer_pipeline.softwareResources(&self.font_atlas, null));
+        if (!receipt.valid()) return error.InvalidSoftwareReceipt;
         return damage;
     }
 
@@ -925,7 +924,8 @@ const NativeApp = struct {
     fn renderSoftwarePixels(self: *NativeApp, buffers: renderer_ir.Buffers, resources: renderer_software.Resources) !void {
         const software_surface = try renderer_software.Framebuffer.init(self.width, self.height, self.pixels);
         software_surface.clear(siteBackground());
-        _ = try software_surface.renderIr(buffers, resources);
+        const receipt = try software_surface.renderIr(buffers, resources);
+        if (!receipt.valid()) return error.InvalidSoftwareReceipt;
     }
 
     fn handleWaylandInput(self: *NativeApp, client: *WaylandClient, kind: ObjectKind, message: Message) !bool {
@@ -1032,13 +1032,18 @@ fn activateHitForState(state: *AppState, client: ?*WaylandClient) !void {
         state.scroll_y = 0.0;
         return;
     }
-    switch (hover_hit_id) {
-        site_landing.reveal_identity_button_id => {
+    if (site_navigation.actionFromHit(hover_hit_id)) |action| switch (action) {
+        .reveal_identity => {
             state.public_identity_ready = true;
             state.public_identity = "native-wayland";
         },
-        else => {},
-    }
+        .launch_app,
+        .compile_source,
+        .download_source_release,
+        .launch_source_release,
+        .reset_source,
+        => {},
+    };
 }
 
 fn scrollStateBy(state: *AppState, width: u32, height: u32, delta_y: f32) void {
@@ -1128,39 +1133,14 @@ fn renderNativeSiteScene(scene: *ui.Scene, collector: *interaction.Collector, wi
     const content_y = client_decor_h;
     const content_h = @max(1.0, @as(f32, @floatFromInt(height)) - content_y);
     const bounds = ui.Rect.init(0, content_y, @floatFromInt(width), content_h);
-    switch (state.route.view) {
-        .landing => try site_landing.render(scene, collector, bounds, .{
-            .scroll_y = state.scroll_y,
-            .hover_x = state.hover_x,
-            .hover_y = state.hover_y,
-            .frame_ms = 0.0,
-            .public_identity = state.public_identity,
-            .public_identity_ready = state.public_identity_ready,
-        }),
-        .blog => try site_blog.render(scene, collector, bounds, .{
-            .scroll_y = state.scroll_y,
-            .hover_x = state.hover_x,
-            .hover_y = state.hover_y,
-            .selected_post_id = state.route.selected_blog_post_id,
-            .arc_filter_index = state.route.blog_arc_filter_index,
-        }),
-        .apps => try site_apps.render(scene, collector, bounds, .{
-            .scroll_y = state.scroll_y,
-            .hover_x = state.hover_x,
-            .hover_y = state.hover_y,
-        }),
-        .docs => try site_docs.render(scene, collector, bounds, .{
-            .scroll_y = state.scroll_y,
-            .hover_x = state.hover_x,
-            .hover_y = state.hover_y,
-        }),
-        .components => try component_gallery.renderComponentGallery(scene, collector, bounds, .{
-            .scroll_y = state.scroll_y,
-            .hover_x = state.hover_x,
-            .hover_y = state.hover_y,
-            .selected_component_index = state.route.selected_component_index,
-        }),
-    }
+    try site_frame.render(scene, collector, bounds, .{
+        .route = state.route,
+        .scroll_y = state.scroll_y,
+        .hover_x = state.hover_x,
+        .hover_y = state.hover_y,
+        .public_identity = state.public_identity,
+        .public_identity_ready = state.public_identity_ready,
+    });
 }
 
 fn renderClientDecoration(scene: *ui.Scene, collector: *interaction.Collector, width: f32) !void {
@@ -1202,18 +1182,7 @@ fn centeredRect(bounds: ui.Rect, w: f32, h: f32) ui.Rect {
 }
 
 fn contentHeightForRoute(width: f32, route: site_navigation.Route) f32 {
-    return switch (route.view) {
-        .landing => site_landing.contentHeight(width),
-        .blog => if (route.selected_blog_post_id == 0)
-            site_blog.indexContentHeightFiltered(width, route.blog_arc_filter_index)
-        else
-            site_blog.postContentHeight(width, route.selected_blog_post_id),
-        .apps => site_apps.contentHeight(width),
-        .docs => site_docs.contentHeight(width),
-        .components => component_gallery.contentHeightForState(width, .{
-            .selected_component_index = route.selected_component_index,
-        }),
-    };
+    return site_frame.contentHeight(width, .{ .route = route });
 }
 
 fn siteBackground() ui.Color {
@@ -2031,6 +2000,14 @@ test "wayland host renders client side decoration above app content" {
 
     const logo = try hitRect(collector.written(), site_chrome.logo_button_id);
     try std.testing.expect(logo.y >= client_decor_h);
+}
+
+test "wayland cursor overlay renders through software presentation receipt" {
+    const source = @embedFile("wayland_window_host.zig");
+    const direct_raster = "try surface." ++ "rasterizeIr(";
+    try std.testing.expect(std.mem.indexOf(u8, source, direct_raster) == null);
+    try std.testing.expect(std.mem.indexOf(u8, source, "const receipt = try surface.renderIr(") != null);
+    try std.testing.expect(std.mem.indexOf(u8, source, "if (!receipt.valid()) return error.InvalidSoftwareReceipt;") != null);
 }
 
 test "wayland gpu recorder accepts canonical ir frame callbacks" {

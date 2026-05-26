@@ -25,6 +25,7 @@ pub const ActiveNav = enum {
     components,
     blog,
     apps,
+    source,
 };
 
 const palette = struct {
@@ -63,7 +64,7 @@ pub fn renderHeader(scene: *ui.Scene, collector: *interaction.Collector, bounds:
     try button(scene, collector, launch, "Launch Desktop", launch_button_id, .primary, null, null);
 
     const source = ui.Rect.init(launch.x - 46.0, launch.y, 32.0, 32.0);
-    try iconButton(scene, collector, source, .github, source_button_id);
+    try iconButton(scene, collector, source, .code, source_button_id, active == .source);
 }
 
 fn renderCompactHeader(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, content: ui.Rect, active: ActiveNav) (ui.RenderError || interaction.Error)!void {
@@ -76,13 +77,13 @@ fn renderCompactHeader(scene: *ui.Scene, collector: *interaction.Collector, boun
     if (content.w < compact_mobile_w) {
         const menu = ui.Rect.init(content.x + content.w - compact_icon_w, bounds.y + 15.0, compact_icon_w, 34.0);
         const source = ui.Rect.init(menu.x - compact_icon_gap - compact_icon_w, menu.y, compact_icon_w, 34.0);
-        try iconButton(scene, collector, source, .github, source_button_id);
-        try iconButton(scene, collector, menu, .menu, mobile_menu_button_id);
+        try iconButton(scene, collector, source, .code, source_button_id, active == .source);
+        try iconButton(scene, collector, menu, .menu, mobile_menu_button_id, false);
         return;
     }
 
     const source = ui.Rect.init(content.x + content.w - compact_icon_w, bounds.y + 15.0, compact_icon_w, 34.0);
-    try iconButton(scene, collector, source, .github, source_button_id);
+    try iconButton(scene, collector, source, .code, source_button_id, active == .source);
 
     const nav_y = bounds.y + 18.0;
     const nav_right = source.x - compact_nav_gap;
@@ -110,9 +111,9 @@ fn button(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, 
     try components.collectComponentInteractions(collector, bounds, .{ .button = .{ .id = id, .label = label } });
 }
 
-fn iconButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, value: icon.Icon, id: u32) (ui.RenderError || interaction.Error)!void {
-    try fill(scene, bounds, ui.Color.clear, 7.0);
-    try iconQuad(scene, bounds.insetUniform(6.0), value, palette.text);
+fn iconButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, value: icon.Icon, id: u32, active: bool) (ui.RenderError || interaction.Error)!void {
+    if (active) try fill(scene, bounds, palette.active, 7.0) else try fill(scene, bounds, ui.Color.clear, 7.0);
+    try iconQuad(scene, bounds.insetUniform(6.0), value, if (active) palette.primary else palette.text);
     try collector.addHit(bounds, .button, id);
 }
 
