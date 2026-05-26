@@ -41,9 +41,6 @@ jobs:
           set -euo pipefail
           test "$(zig version)" = "0.16.0"
 
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
-
       - name: Build GitHub Pages site
         run: |
           set -euo pipefail
@@ -64,4 +61,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
