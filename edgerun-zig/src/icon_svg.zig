@@ -55,15 +55,20 @@ const Transform = struct {
 };
 
 const Presentation = struct {
+    current_color: SvgPaint = .current_color,
     fill_paint: bool = true,
     stroke_paint: bool = false,
     fill_color: SvgPaint = .{ .solid = .{ .r = 0, .g = 0, .b = 0, .a = 255 } },
     stroke_color: SvgPaint = .current_color,
-    stroke_width: bool = false,
-    stroke_linecap: bool = false,
+    stroke_width_set: bool = false,
+    stroke_width: f32 = default_stroke_width_scale,
+    stroke_linecap_set: bool = false,
+    stroke_cap: icon_vector.StrokeCap = .round,
     stroke_linejoin: bool = false,
     fill_visible: bool = true,
     stroke_visible: bool = true,
+    fill_opacity: u8 = color_component_max,
+    stroke_opacity: u8 = color_component_max,
     fill_rule: FillRule = .nonzero,
 
     fn isSupportedStrokeIcon(self: Presentation) bool {
@@ -73,8 +78,8 @@ const Presentation = struct {
 
     fn isSupportedStrokePaint(self: Presentation) bool {
         return self.stroke_paint and
-            self.stroke_width and
-            self.stroke_linecap and
+            self.stroke_width_set and
+            self.stroke_linecap_set and
             self.stroke_linejoin and
             self.stroke_visible;
     }
@@ -97,6 +102,14 @@ const Presentation = struct {
     fn hasVisiblePaint(self: Presentation) bool {
         return (self.fill_paint and self.fill_visible) or (self.stroke_paint and self.stroke_visible);
     }
+
+    fn fillPaint(self: Presentation) SvgPaint {
+        return svgPaintWithOpacity(self.fill_color, self.fill_opacity);
+    }
+
+    fn strokePaint(self: Presentation) SvgPaint {
+        return svgPaintWithOpacity(self.stroke_color, self.stroke_opacity);
+    }
 };
 
 const PaintMode = enum {
@@ -112,7 +125,10 @@ const FillRule = enum {
 
 const SvgPaint = union(enum) {
     current_color,
+    current_color_alpha: u8,
     solid: icon_vector.Paint,
+    linear_gradient: icon_vector.LinearGradient,
+    radial_gradient: icon_vector.RadialGradient,
 };
 
 const SvgRoot = struct {
@@ -175,6 +191,44 @@ const ReferencedElement = struct {
     content_end: usize,
 };
 
+const GradientKind = enum {
+    linear,
+    radial,
+};
+
+const GradientChain = struct {
+    items: [max_gradient_reference_depth]ReferencedElement = undefined,
+    len: usize = 0,
+
+    fn append(self: *GradientChain, referenced: ReferencedElement) Error!void {
+        if (self.len >= self.items.len) return error.UnsupportedSvgStroke;
+        self.items[self.len] = referenced;
+        self.len += 1;
+    }
+
+    fn attr(self: GradientChain, name: []const u8) Error!?[]const u8 {
+        var index: usize = 0;
+        while (index < self.len) : (index += 1) {
+            if (try attrValueOptional(self.items[index].tag, name)) |value| return value;
+        }
+        return null;
+    }
+
+    fn stops(self: GradientChain, svg: []const u8) Error!GradientStops {
+        var index: usize = 0;
+        while (index < self.len) : (index += 1) {
+            const referenced = self.items[index];
+            if (try parseGradientStopsOptional(svg, referenced.content_start, referenced.content_end)) |values| return values;
+        }
+        return error.UnsupportedSvgStroke;
+    }
+};
+
+const PaintReference = struct {
+    id: ?[]const u8,
+    fallback: ?[]const u8,
+};
+
 pub const Error = error{
     InvalidSvg,
     InvalidPath,
@@ -230,6 +284,8 @@ pub const Iterator = struct {
     path_replay: ?PathIterator = null,
     path_paint_mode: ?PaintMode = null,
     path_stroke_color: SvgPaint = .current_color,
+    path_stroke_width: f32 = default_stroke_width_scale,
+    path_stroke_cap: icon_vector.StrokeCap = .round,
     view_box: ViewBox = default_view_box,
     invalid_svg: bool = false,
     init_error: ?Error = null,
@@ -247,6 +303,8 @@ pub const Iterator = struct {
     root_render_state: RenderState = .{},
     css_rules: CssRules = CssRules.empty(),
     output_paint: SvgPaint = .current_color,
+    output_stroke_width: f32 = default_stroke_width_scale,
+    output_stroke_cap: icon_vector.StrokeCap = .round,
 
     pub fn init(svg: []const u8) Iterator {
         const root = parseSvgRoot(svg) catch |err| return .{ .svg = svg, .invalid_svg = true, .init_error = err };
@@ -272,6 +330,8 @@ pub const Iterator = struct {
                     self.path = self.path_replay;
                     self.path_replay = null;
                     self.path_paint_mode = .stroke;
+                    self.pushStrokeWidth(self.path_stroke_width);
+                    self.pushStrokeCap(self.path_stroke_cap);
                     self.pushPaint(self.path_stroke_color);
                     return .end_fill_path;
                 }
@@ -291,6 +351,8 @@ pub const Iterator = struct {
                     if (element.paint_mode == .fill_then_stroke) {
                         self.path_replay = PathIterator.initWithViewBoxTransform(d, self.view_box, path_transform);
                         self.path_stroke_color = element.stroke_color;
+                        self.path_stroke_width = element.stroke_width;
+                        self.path_stroke_cap = element.stroke_cap;
                         self.pushPaint(element.fill_color);
                         self.pushPending(beginFillPathOp(element.fill_rule));
                         return self.takePending().?;
@@ -301,6 +363,8 @@ pub const Iterator = struct {
                         return self.takePending().?;
                     }
                     if (element.paint_mode == .stroke) {
+                        self.pushStrokeWidth(element.stroke_width);
+                        self.pushStrokeCap(element.stroke_cap);
                         self.pushPaint(element.stroke_color);
                         if (self.takePending()) |op| return op;
                     }
@@ -309,11 +373,11 @@ pub const Iterator = struct {
                 .ellipse => return try self.ellipseOp(element),
                 .line => return try self.lineOp(element),
                 .polyline => {
-                    try self.enqueuePointList(element.tag, element.transform, false, element.paint_mode, element.fill_rule, element.fill_color, element.stroke_color);
+                    try self.enqueuePointList(element.tag, element.transform, false, element.paint_mode, element.fill_rule, element.fill_color, element.stroke_color, element.stroke_width, element.stroke_cap);
                     return self.takePending();
                 },
                 .polygon => {
-                    try self.enqueuePointList(element.tag, element.transform, true, element.paint_mode, element.fill_rule, element.fill_color, element.stroke_color);
+                    try self.enqueuePointList(element.tag, element.transform, true, element.paint_mode, element.fill_rule, element.fill_color, element.stroke_color, element.stroke_width, element.stroke_cap);
                     return self.takePending();
                 },
                 .rect => return try self.rectOp(element),
@@ -367,7 +431,7 @@ pub const Iterator = struct {
             if (isGroupOpenTag(tag)) {
                 const group_render_state = try renderStateForTag(self.currentRenderState(), tag, &self.css_rules);
                 if (!group_render_state.hidesSelf()) try validateSupportedPresentationTag(tag);
-                const group_presentation = if (group_render_state.hidesSelf()) self.currentPresentation() else try presentationForTag(self.currentPresentation(), tag, &self.css_rules);
+                const group_presentation = if (group_render_state.hidesSelf()) self.currentPresentation() else try presentationForTag(self.currentPresentation(), tag, &self.css_rules, self.svg, self.view_box);
                 const group_transform = if (group_render_state.subtree_hidden) self.currentTransform() else try combineElementTransform(self.currentTransform(), tag);
                 try self.pushTransform(group_transform);
                 self.presentation_stack[self.transform_depth - 1] = group_presentation;
@@ -395,12 +459,22 @@ pub const Iterator = struct {
             if (unsupportedElementTag(tag)) return error.UnsupportedSvgElement;
             if (supportedElementKind(tag)) |kind| {
                 try validateSupportedPresentationTag(tag);
-                const presentation = try presentationForTag(self.currentPresentation(), tag, &self.css_rules);
+                const presentation = try presentationForTag(self.currentPresentation(), tag, &self.css_rules, self.svg, self.view_box);
                 const paint_mode = presentation.paintMode(kind) orelse {
                     if (presentation.hasVisiblePaint()) return error.UnsupportedSvgStroke;
                     continue;
                 };
-                return .{ .kind = kind, .tag = tag, .transform = self.currentTransform(), .paint_mode = paint_mode, .fill_rule = presentation.fill_rule, .fill_color = presentation.fill_color, .stroke_color = presentation.stroke_color };
+                return .{
+                    .kind = kind,
+                    .tag = tag,
+                    .transform = self.currentTransform(),
+                    .paint_mode = paint_mode,
+                    .fill_rule = presentation.fill_rule,
+                    .fill_color = presentation.fillPaint(),
+                    .stroke_color = presentation.strokePaint(),
+                    .stroke_width = presentation.stroke_width,
+                    .stroke_cap = presentation.stroke_cap,
+                };
             }
             return error.UnsupportedSvgElement;
         }
@@ -424,11 +498,11 @@ pub const Iterator = struct {
     fn useGraphicElement(self: *Iterator, use_tag: []const u8, reference_tag: []const u8, kind: SvgElementKind) Error!?SvgElement {
         const use_render_state = try renderStateForTag(self.currentRenderState(), use_tag, &self.css_rules);
         if (use_render_state.hidesSelf()) return null;
-        const use_presentation = try presentationForTag(self.currentPresentation(), use_tag, &self.css_rules);
+        const use_presentation = try presentationForTag(self.currentPresentation(), use_tag, &self.css_rules, self.svg, self.view_box);
         const reference_render_state = try renderStateForTag(use_render_state, reference_tag, &self.css_rules);
         if (reference_render_state.hidesSelf()) return null;
         try validateSupportedPresentationTag(reference_tag);
-        const presentation = try presentationForTag(use_presentation, reference_tag, &self.css_rules);
+        const presentation = try presentationForTag(use_presentation, reference_tag, &self.css_rules, self.svg, self.view_box);
         const paint_mode = presentation.paintMode(kind) orelse {
             if (presentation.hasVisiblePaint()) return error.UnsupportedSvgStroke;
             return null;
@@ -441,19 +515,21 @@ pub const Iterator = struct {
             .transform = translated,
             .paint_mode = paint_mode,
             .fill_rule = presentation.fill_rule,
-            .fill_color = presentation.fill_color,
-            .stroke_color = presentation.stroke_color,
+            .fill_color = presentation.fillPaint(),
+            .stroke_color = presentation.strokePaint(),
+            .stroke_width = presentation.stroke_width,
+            .stroke_cap = presentation.stroke_cap,
         };
     }
 
     fn useContainerElement(self: *Iterator, use_tag: []const u8, referenced: ReferencedElement) Error!void {
         const use_render_state = try renderStateForTag(self.currentRenderState(), use_tag, &self.css_rules);
         if (use_render_state.hidesSelf()) return;
-        const use_presentation = try presentationForTag(self.currentPresentation(), use_tag, &self.css_rules);
+        const use_presentation = try presentationForTag(self.currentPresentation(), use_tag, &self.css_rules, self.svg, self.view_box);
         const reference_render_state = try renderStateForTag(use_render_state, referenced.tag, &self.css_rules);
         if (reference_render_state.hidesSelf()) return;
         try validateSupportedPresentationTag(referenced.tag);
-        const presentation = try presentationForTag(use_presentation, referenced.tag, &self.css_rules);
+        const presentation = try presentationForTag(use_presentation, referenced.tag, &self.css_rules, self.svg, self.view_box);
         const use_transform = try combineElementTransform(self.currentTransform(), use_tag);
         const translated = appendTransform(use_transform, try useTranslation(use_tag));
         const reference_transform = try combineElementTransform(translated, referenced.tag);
@@ -472,7 +548,7 @@ pub const Iterator = struct {
         const cy = center.y;
         const fill_op = if (rx == ry) icon_vector.Op{ .filled_circle = .{ .cx = cx, .cy = cy, .radius = rx } } else icon_vector.Op{ .filled_ellipse = .{ .cx = cx, .cy = cy, .rx = rx, .ry = ry, .full = true } };
         const stroke_op = if (rx == ry) icon_vector.Op{ .circle = .{ .cx = cx, .cy = cy, .radius = rx } } else icon_vector.Op{ .ellipse = .{ .cx = cx, .cy = cy, .rx = rx, .ry = ry, .full = true } };
-        return self.opForPaintMode(paint_mode, element.fill_color, element.stroke_color, fill_op, stroke_op);
+        return self.opForPaintMode(paint_mode, element.fill_color, element.stroke_color, element.stroke_width, element.stroke_cap, fill_op, stroke_op);
     }
 
     fn ellipseOp(self: *Iterator, element: SvgElement) Error!icon_vector.Op {
@@ -488,7 +564,7 @@ pub const Iterator = struct {
             .ry = try self.normalizeHeight(transform.scaleY(try attrNumber(tag, "ry"))),
             .full = true,
         };
-        return self.opForPaintMode(paint_mode, element.fill_color, element.stroke_color, .{ .filled_ellipse = ellipse }, .{ .ellipse = ellipse });
+        return self.opForPaintMode(paint_mode, element.fill_color, element.stroke_color, element.stroke_width, element.stroke_cap, .{ .filled_ellipse = ellipse }, .{ .ellipse = ellipse });
     }
 
     fn lineOp(self: *Iterator, element: SvgElement) Error!icon_vector.Op {
@@ -502,6 +578,8 @@ pub const Iterator = struct {
             end.x,
             end.y,
         };
+        self.pushStrokeWidth(element.stroke_width);
+        self.pushStrokeCap(element.stroke_cap);
         self.pushPaint(element.stroke_color);
         self.pushPending(.{ .polyline = self.line_points[0..] });
         return self.takePending().?;
@@ -525,15 +603,15 @@ pub const Iterator = struct {
             .h = try self.normalizeHeight(transform.scaleY(height)),
             .radius = try self.normalizeWidth(transform.scaleX(radius)),
         };
-        return self.opForPaintMode(paint_mode, element.fill_color, element.stroke_color, .{ .filled_round_rect = rect }, .{ .round_rect = rect });
+        return self.opForPaintMode(paint_mode, element.fill_color, element.stroke_color, element.stroke_width, element.stroke_cap, .{ .filled_round_rect = rect }, .{ .round_rect = rect });
     }
 
     fn paintModeForCurrentTag(self: Iterator, tag: []const u8, kind: SvgElementKind) Error!PaintMode {
-        const presentation = try presentationForTag(self.currentPresentation(), tag, &self.css_rules);
+        const presentation = try presentationForTag(self.currentPresentation(), tag, &self.css_rules, self.svg, self.view_box);
         return presentation.paintMode(kind) orelse error.UnsupportedSvgStroke;
     }
 
-    fn opForPaintMode(self: *Iterator, paint_mode: PaintMode, fill_color: SvgPaint, stroke_color: SvgPaint, fill_op: icon_vector.Op, stroke_op: icon_vector.Op) Error!icon_vector.Op {
+    fn opForPaintMode(self: *Iterator, paint_mode: PaintMode, fill_color: SvgPaint, stroke_color: SvgPaint, stroke_width: f32, stroke_cap: icon_vector.StrokeCap, fill_op: icon_vector.Op, stroke_op: icon_vector.Op) Error!icon_vector.Op {
         switch (paint_mode) {
             .fill => {
                 self.pushPaint(fill_color);
@@ -541,6 +619,8 @@ pub const Iterator = struct {
                 return self.takePending().?;
             },
             .stroke => {
+                self.pushStrokeWidth(stroke_width);
+                self.pushStrokeCap(stroke_cap);
                 self.pushPaint(stroke_color);
                 self.pushPending(stroke_op);
                 return self.takePending().?;
@@ -548,6 +628,8 @@ pub const Iterator = struct {
             .fill_then_stroke => {
                 self.pushPaint(fill_color);
                 self.pushPending(fill_op);
+                self.pushStrokeWidth(stroke_width);
+                self.pushStrokeCap(stroke_cap);
                 self.pushPaint(stroke_color);
                 self.pushPending(stroke_op);
                 return self.takePending().?;
@@ -562,7 +644,7 @@ pub const Iterator = struct {
         };
     }
 
-    fn enqueuePointList(self: *Iterator, tag: []const u8, inherited_transform: Transform, close: bool, paint_mode: PaintMode, fill_rule: FillRule, fill_color: SvgPaint, stroke_color: SvgPaint) Error!void {
+    fn enqueuePointList(self: *Iterator, tag: []const u8, inherited_transform: Transform, close: bool, paint_mode: PaintMode, fill_rule: FillRule, fill_color: SvgPaint, stroke_color: SvgPaint, stroke_width: f32, stroke_cap: icon_vector.StrokeCap) Error!void {
         if (self.pending_len != 0) return error.InvalidSvg;
         const points = try attrValue(tag, "points");
         var values = NumberList.init(points);
@@ -574,7 +656,11 @@ pub const Iterator = struct {
             self.pushPaint(fill_color);
             self.pushPending(beginFillPathOp(fill_rule));
         }
-        if (paint_mode == .stroke) self.pushPaint(stroke_color);
+        if (paint_mode == .stroke) {
+            self.pushStrokeWidth(stroke_width);
+            self.pushStrokeCap(stroke_cap);
+            self.pushPaint(stroke_color);
+        }
         self.pushPending(.{ .move_to = first });
         while (try values.hasMore()) {
             const next_x = try values.next();
@@ -589,6 +675,8 @@ pub const Iterator = struct {
         if (close or paint_mode == .fill or paint_mode == .fill_then_stroke) self.pushPending(.close_path);
         if (paint_mode == .fill or paint_mode == .fill_then_stroke) self.pushPending(.end_fill_path);
         if (paint_mode == .fill_then_stroke) {
+            self.pushStrokeWidth(stroke_width);
+            self.pushStrokeCap(stroke_cap);
             self.pushPaint(stroke_color);
             self.pushPending(.{ .move_to = first });
             var stroke_values = NumberList.init(points);
@@ -614,9 +702,24 @@ pub const Iterator = struct {
         if (svgPaintsEqual(self.output_paint, paint)) return;
         switch (paint) {
             .current_color => self.pushPending(.paint_current_color),
+            .current_color_alpha => |alpha| self.pushPending(.{ .paint_current_color_alpha = alpha }),
             .solid => |color| self.pushPending(.{ .paint_rgba = color }),
+            .linear_gradient => |gradient| self.pushPending(.{ .paint_linear_gradient = gradient }),
+            .radial_gradient => |gradient| self.pushPending(.{ .paint_radial_gradient = gradient }),
         }
         self.output_paint = paint;
+    }
+
+    fn pushStrokeWidth(self: *Iterator, width: f32) void {
+        if (@abs(self.output_stroke_width - width) <= transform_epsilon) return;
+        self.pushPending(.{ .stroke_width = width });
+        self.output_stroke_width = width;
+    }
+
+    fn pushStrokeCap(self: *Iterator, cap: icon_vector.StrokeCap) void {
+        if (self.output_stroke_cap == cap) return;
+        self.pushPending(.{ .stroke_cap = cap });
+        self.output_stroke_cap = cap;
     }
 
     fn takePending(self: *Iterator) ?icon_vector.Op {
@@ -950,6 +1053,8 @@ const SvgElement = struct {
     fill_rule: FillRule,
     fill_color: SvgPaint,
     stroke_color: SvgPaint,
+    stroke_width: f32,
+    stroke_cap: icon_vector.StrokeCap,
 };
 
 fn parseSvgRoot(svg: []const u8) Error!SvgRoot {
@@ -965,7 +1070,7 @@ fn parseSvgRoot(svg: []const u8) Error!SvgRoot {
     try validateSupportedPresentationTag(tag);
     return .{
         .view_box = .{ .min_x = min_x, .min_y = min_y, .width = width, .height = height },
-        .presentation = try presentationForTag(.{}, tag, &empty_css_rules),
+        .presentation = try presentationForTag(.{}, tag, &empty_css_rules, svg, .{ .min_x = min_x, .min_y = min_y, .width = width, .height = height }),
         .render_state = try renderStateForTag(.{}, tag, &empty_css_rules),
     };
 }
@@ -1156,6 +1261,9 @@ fn skipAttributeWhitespace(tag: []const u8, index: *usize) void {
 
 fn validateSupportedPresentationTag(tag: []const u8) Error!void {
     if (try attrValueOptional(tag, "style")) |value| try validateSupportedStyle(value);
+    if (try attrValueOptional(tag, "color")) |value| {
+        if (!isSupportedColorValueSyntax(value)) return error.UnsupportedSvgStroke;
+    }
     if (try attrValueOptional(tag, "opacity")) |value| {
         if (!try supportedOpacity(value)) return error.UnsupportedSvgStroke;
     }
@@ -1163,7 +1271,7 @@ fn validateSupportedPresentationTag(tag: []const u8) Error!void {
         if (!try supportedFillOpacity(value)) return error.UnsupportedSvgStroke;
     }
     if (try attrValueOptional(tag, "stroke-opacity")) |value| {
-        if (!try supportedOpacity(value)) return error.UnsupportedSvgStroke;
+        if (!try supportedFillOpacity(value)) return error.UnsupportedSvgStroke;
     }
     if (try attrValueOptional(tag, "display")) |value| {
         if (!supportedDisplay(value)) return error.UnsupportedSvgStroke;
@@ -1180,11 +1288,9 @@ fn validateSupportedPresentationTag(tag: []const u8) Error!void {
     if (try attrValueOptional(tag, "stroke")) |value| {
         if (!supportedKeyword(value, "none") and !isSupportedStrokePaint(value)) return error.UnsupportedSvgStroke;
     }
-    if (try attrValueOptional(tag, "stroke-width")) |value| {
-        if (!try supportedStrokeWidth(value)) return error.UnsupportedSvgStroke;
-    }
+    if (try attrValueOptional(tag, "stroke-width")) |value| _ = try parseStrokeWidth(value);
     if (try attrValueOptional(tag, "stroke-linecap")) |value| {
-        if (!supportedKeyword(value, "round")) return error.UnsupportedSvgStroke;
+        _ = parseStrokeCap(value) orelse return error.UnsupportedSvgStroke;
     }
     if (try attrValueOptional(tag, "stroke-linejoin")) |value| {
         if (!supportedKeyword(value, "round")) return error.UnsupportedSvgStroke;
@@ -1215,36 +1321,63 @@ fn validateSupportedStyle(style: []const u8) Error!void {
     }
 }
 
-fn presentationForTag(inherited: Presentation, tag: []const u8, css_rules: *const CssRules) Error!Presentation {
+fn presentationForTag(inherited: Presentation, tag: []const u8, css_rules: *const CssRules, svg: []const u8, view_box: ViewBox) Error!Presentation {
     var result = inherited;
+    if (try attrValueOptional(tag, "color")) |value| {
+        result.current_color = try parseSvgColorValue(value, result.current_color) orelse return error.UnsupportedSvgStroke;
+    }
     if (try attrValueOptional(tag, "fill")) |value| {
-        result.fill_paint = isSupportedSolidPaint(value);
-        if (result.fill_paint) result.fill_color = parseSvgPaint(value) orelse return error.UnsupportedSvgStroke;
+        if (supportedKeyword(value, "none")) {
+            result.fill_paint = false;
+        } else if (try parseSvgPaint(value, svg, view_box, result.current_color)) |paint| {
+            result.fill_paint = true;
+            result.fill_color = paint;
+        } else {
+            result.fill_paint = false;
+        }
     }
     if (try attrValueOptional(tag, "stroke")) |value| {
-        result.stroke_paint = isSupportedStrokePaint(value);
-        if (result.stroke_paint) result.stroke_color = parseSvgStrokePaint(value) orelse return error.UnsupportedSvgStroke;
+        if (supportedKeyword(value, "none")) {
+            result.stroke_paint = false;
+        } else if (try parseSvgStrokePaint(value, svg, view_box, result.current_color)) |paint| {
+            result.stroke_paint = true;
+            result.stroke_color = paint;
+        } else {
+            result.stroke_paint = false;
+        }
     }
-    if (try attrValueOptional(tag, "fill-opacity")) |value| result.fill_visible = !(try opacityZero(value));
-    if (try attrValueOptional(tag, "stroke-opacity")) |value| result.stroke_visible = !(try opacityZero(value));
+    if (try attrValueOptional(tag, "fill-opacity")) |value| {
+        result.fill_opacity = try parseOpacityByte(value);
+        result.fill_visible = result.fill_opacity != 0;
+    }
+    if (try attrValueOptional(tag, "stroke-opacity")) |value| {
+        result.stroke_opacity = try parseOpacityByte(value);
+        result.stroke_visible = result.stroke_opacity != 0;
+    }
     if (try attrValueOptional(tag, "fill-rule")) |value| result.fill_rule = parseFillRule(value) orelse return error.UnsupportedSvgStroke;
-    if (try attrValueOptional(tag, "stroke-width")) |value| result.stroke_width = try supportedStrokeWidth(value);
-    if (try attrValueOptional(tag, "stroke-linecap")) |value| result.stroke_linecap = supportedKeyword(value, "round");
+    if (try attrValueOptional(tag, "stroke-width")) |value| {
+        result.stroke_width_set = true;
+        result.stroke_width = normalizeStrokeWidth(try parseStrokeWidth(value), view_box);
+    }
+    if (try attrValueOptional(tag, "stroke-linecap")) |value| {
+        result.stroke_linecap_set = true;
+        result.stroke_cap = parseStrokeCap(value) orelse return error.UnsupportedSvgStroke;
+    }
     if (try attrValueOptional(tag, "stroke-linejoin")) |value| result.stroke_linejoin = supportedKeyword(value, "round");
-    try applyMatchingPresentationRules(&result, tag, css_rules);
-    if (try attrValueOptional(tag, "style")) |style| try applyPresentationStyle(&result, style);
+    try applyMatchingPresentationRules(&result, tag, css_rules, svg, view_box);
+    if (try attrValueOptional(tag, "style")) |style| try applyPresentationStyle(&result, style, svg, view_box);
     return result;
 }
 
-fn applyMatchingPresentationRules(result: *Presentation, tag: []const u8, css_rules: *const CssRules) Error!void {
+fn applyMatchingPresentationRules(result: *Presentation, tag: []const u8, css_rules: *const CssRules, svg: []const u8, view_box: ViewBox) Error!void {
     for (css_rules.items()) |rule| {
         if (!try cssRuleMatchesTag(rule.selector, tag)) continue;
         try validateSupportedStyle(rule.declarations);
-        try applyPresentationStyle(result, rule.declarations);
+        try applyPresentationStyle(result, rule.declarations, svg, view_box);
     }
 }
 
-fn applyPresentationStyle(result: *Presentation, style: []const u8) Error!void {
+fn applyPresentationStyle(result: *Presentation, style: []const u8, svg: []const u8, view_box: ViewBox) Error!void {
     var start: usize = 0;
     while (start < style.len) {
         const end = if (std.mem.indexOfScalar(u8, style[start..], ';')) |offset| start + offset else style.len;
@@ -1254,22 +1387,40 @@ fn applyPresentationStyle(result: *Presentation, style: []const u8) Error!void {
         const colon = std.mem.indexOfScalar(u8, declaration, ':') orelse return error.InvalidSvg;
         const property = trimAscii(declaration[0..colon]);
         const value = try styleValue(declaration[colon + 1 ..]);
-        if (asciiEqlIgnoreCase(property, "fill")) {
-            result.fill_paint = isSupportedSolidPaint(value);
-            if (result.fill_paint) result.fill_color = parseSvgPaint(value) orelse return error.UnsupportedSvgStroke;
+        if (asciiEqlIgnoreCase(property, "color")) {
+            result.current_color = try parseSvgColorValue(value, result.current_color) orelse return error.UnsupportedSvgStroke;
+        } else if (asciiEqlIgnoreCase(property, "fill")) {
+            if (supportedKeyword(value, "none")) {
+                result.fill_paint = false;
+            } else if (try parseSvgPaint(value, svg, view_box, result.current_color)) |paint| {
+                result.fill_paint = true;
+                result.fill_color = paint;
+            } else {
+                result.fill_paint = false;
+            }
         } else if (asciiEqlIgnoreCase(property, "fill-rule")) {
             result.fill_rule = parseFillRule(value) orelse return error.UnsupportedSvgStroke;
         } else if (asciiEqlIgnoreCase(property, "stroke")) {
-            result.stroke_paint = isSupportedStrokePaint(value);
-            if (result.stroke_paint) result.stroke_color = parseSvgStrokePaint(value) orelse return error.UnsupportedSvgStroke;
+            if (supportedKeyword(value, "none")) {
+                result.stroke_paint = false;
+            } else if (try parseSvgStrokePaint(value, svg, view_box, result.current_color)) |paint| {
+                result.stroke_paint = true;
+                result.stroke_color = paint;
+            } else {
+                result.stroke_paint = false;
+            }
         } else if (asciiEqlIgnoreCase(property, "fill-opacity")) {
-            result.fill_visible = !(try opacityZero(value));
+            result.fill_opacity = try parseOpacityByte(value);
+            result.fill_visible = result.fill_opacity != 0;
         } else if (asciiEqlIgnoreCase(property, "stroke-opacity")) {
-            result.stroke_visible = !(try opacityZero(value));
+            result.stroke_opacity = try parseOpacityByte(value);
+            result.stroke_visible = result.stroke_opacity != 0;
         } else if (asciiEqlIgnoreCase(property, "stroke-width")) {
-            result.stroke_width = try supportedStrokeWidth(value);
+            result.stroke_width_set = true;
+            result.stroke_width = normalizeStrokeWidth(try parseStrokeWidth(value), view_box);
         } else if (asciiEqlIgnoreCase(property, "stroke-linecap")) {
-            result.stroke_linecap = supportedKeyword(value, "round");
+            result.stroke_linecap_set = true;
+            result.stroke_cap = parseStrokeCap(value) orelse return error.UnsupportedSvgStroke;
         } else if (asciiEqlIgnoreCase(property, "stroke-linejoin")) {
             result.stroke_linejoin = supportedKeyword(value, "round");
         }
@@ -1277,6 +1428,10 @@ fn applyPresentationStyle(result: *Presentation, style: []const u8) Error!void {
 }
 
 fn validateSupportedStyleDeclaration(property: []const u8, value: []const u8) Error!void {
+    if (asciiEqlIgnoreCase(property, "color")) {
+        if (!isSupportedColorValueSyntax(value)) return error.UnsupportedSvgStroke;
+        return;
+    }
     if (asciiEqlIgnoreCase(property, "fill")) {
         if (!supportedKeyword(value, "none") and !isSupportedSolidPaint(value)) return error.UnsupportedSvgStroke;
         return;
@@ -1290,11 +1445,11 @@ fn validateSupportedStyleDeclaration(property: []const u8, value: []const u8) Er
         return;
     }
     if (asciiEqlIgnoreCase(property, "stroke-width")) {
-        if (!try supportedStrokeWidth(value)) return error.UnsupportedSvgStroke;
+        _ = try parseStrokeWidth(value);
         return;
     }
     if (asciiEqlIgnoreCase(property, "stroke-linecap")) {
-        if (!supportedKeyword(value, "round")) return error.UnsupportedSvgStroke;
+        _ = parseStrokeCap(value) orelse return error.UnsupportedSvgStroke;
         return;
     }
     if (asciiEqlIgnoreCase(property, "stroke-linejoin")) {
@@ -1314,7 +1469,7 @@ fn validateSupportedStyleDeclaration(property: []const u8, value: []const u8) Er
         return;
     }
     if (asciiEqlIgnoreCase(property, "stroke-opacity")) {
-        if (!try supportedOpacity(value)) return error.UnsupportedSvgStroke;
+        if (!try supportedFillOpacity(value)) return error.UnsupportedSvgStroke;
         return;
     }
     if (asciiEqlIgnoreCase(property, "fill-opacity")) {
@@ -1393,6 +1548,12 @@ fn opacityZero(value: []const u8) Error!bool {
     return @abs(parsed) <= transform_epsilon;
 }
 
+fn parseOpacityByte(value: []const u8) Error!u8 {
+    const parsed = try parseOpacity(value);
+    if (parsed < 0.0 or parsed > opacity_opaque) return error.UnsupportedSvgStroke;
+    return roundedByte(parsed * color_component_max_float);
+}
+
 fn supportedOpacity(value: []const u8) Error!bool {
     const parsed = try parseOpacity(value);
     return @abs(parsed) <= transform_epsilon or @abs(parsed - opacity_opaque) <= transform_epsilon;
@@ -1411,18 +1572,84 @@ fn parseOpacity(value: []const u8) Error!f32 {
 
 fn isSupportedStrokePaint(value: []const u8) bool {
     const trimmed = trimAscii(value);
-    return !supportedKeyword(trimmed, "none") and parseSvgPaint(trimmed) != null;
+    return !supportedKeyword(trimmed, "none") and isSupportedStrokePaintSyntax(trimmed);
 }
 
 fn isSupportedSolidPaint(value: []const u8) bool {
     const trimmed = trimAscii(value);
     if (supportedKeyword(trimmed, "none")) return false;
-    return parseSvgPaint(trimmed) != null;
+    return isSupportedPaintSyntax(trimmed);
 }
 
-fn parseSvgPaint(value: []const u8) ?SvgPaint {
+fn parseSvgPaint(value: []const u8, svg: []const u8, view_box: ViewBox, current_color: SvgPaint) Error!?SvgPaint {
     const trimmed = trimAscii(value);
-    if (asciiEqlIgnoreCase(trimmed, "currentColor")) return .current_color;
+    if (try parsePaintReference(trimmed)) |reference| {
+        if (reference.id) |id| {
+            const resolved = parseGradientPaint(svg, view_box, id) catch |err| {
+                if (reference.fallback) |fallback| return parseSvgPaintFallback(fallback, false, current_color);
+                return err;
+            };
+            return resolved;
+        }
+        if (reference.fallback) |fallback| return parseSvgPaintFallback(fallback, false, current_color);
+        return null;
+    }
+    return parseSvgPaintFallback(trimmed, false, current_color);
+}
+
+fn parseSvgStrokePaint(value: []const u8, svg: []const u8, view_box: ViewBox, current_color: SvgPaint) Error!?SvgPaint {
+    const trimmed = trimAscii(value);
+    if (!isSupportedStrokePaintSyntax(trimmed)) return null;
+    if (try parsePaintReference(trimmed)) |reference| {
+        if (reference.id) |id| {
+            const resolved = parseGradientPaint(svg, view_box, id) catch |err| {
+                if (reference.fallback) |fallback| return parseSvgPaintFallback(fallback, true, current_color);
+                return err;
+            };
+            return resolved;
+        }
+        if (reference.fallback) |fallback| return parseSvgPaintFallback(fallback, true, current_color);
+        return null;
+    }
+    return parseSvgPaintFallback(trimmed, true, current_color);
+}
+
+fn isSupportedPaintSyntax(value: []const u8) bool {
+    if (parsePaintReference(value) catch null) |reference| {
+        if (reference.id != null and reference.fallback == null) return true;
+        if (reference.id != null and reference.fallback != null) return isSupportedPaintFallbackSyntax(reference.fallback.?);
+        if (reference.fallback) |fallback| return isSupportedPaintFallbackSyntax(fallback);
+        return false;
+    }
+    return isSupportedPaintFallbackSyntax(value);
+}
+
+fn isSupportedPaintFallbackSyntax(value: []const u8) bool {
+    if (asciiEqlIgnoreCase(value, "currentColor")) return true;
+    if (supportedKeyword(value, "none")) return true;
+    if (parseHexColor(value) != null) return true;
+    if (parseFunctionalColor(value) != null) return true;
+    inline for (supported_named_solid_paints) |paint| {
+        if (asciiEqlIgnoreCase(value, paint.name)) return true;
+    }
+    return false;
+}
+
+fn isSupportedStrokePaintSyntax(value: []const u8) bool {
+    return isSupportedPaintSyntax(value);
+}
+
+fn isSupportedColorValueSyntax(value: []const u8) bool {
+    const trimmed = trimAscii(value);
+    if (supportedKeyword(trimmed, "none")) return false;
+    if (parsePaintReference(trimmed) catch null != null) return false;
+    return isSupportedPaintFallbackSyntax(trimmed);
+}
+
+fn parseSvgColorValue(value: []const u8, inherited: SvgPaint) Error!?SvgPaint {
+    const trimmed = trimAscii(value);
+    if (supportedKeyword(trimmed, "none")) return null;
+    if (asciiEqlIgnoreCase(trimmed, "currentColor")) return inherited;
     if (parseHexColor(trimmed)) |color| return .{ .solid = color };
     if (parseFunctionalColor(trimmed)) |color| return .{ .solid = color };
     inline for (supported_named_solid_paints) |paint| {
@@ -1431,23 +1658,549 @@ fn parseSvgPaint(value: []const u8) ?SvgPaint {
     return null;
 }
 
-fn parseSvgStrokePaint(value: []const u8) ?SvgPaint {
+fn parseSvgPaintFallback(value: []const u8, stroke: bool, current_color: SvgPaint) Error!?SvgPaint {
     const trimmed = trimAscii(value);
-    if (asciiEqlIgnoreCase(trimmed, "currentColor") or asciiEqlIgnoreCase(trimmed, "white") or asciiEqlIgnoreCase(trimmed, "#fff") or asciiEqlIgnoreCase(trimmed, "#ffffff")) return .current_color;
-    return parseSvgPaint(trimmed);
+    if (supportedKeyword(trimmed, "none")) return null;
+    if (stroke and (asciiEqlIgnoreCase(trimmed, "currentColor") or asciiEqlIgnoreCase(trimmed, "white") or asciiEqlIgnoreCase(trimmed, "#fff") or asciiEqlIgnoreCase(trimmed, "#ffffff"))) return current_color;
+    if (asciiEqlIgnoreCase(trimmed, "currentColor")) return current_color;
+    if (parseHexColor(trimmed)) |color| return .{ .solid = color };
+    if (parseFunctionalColor(trimmed)) |color| return .{ .solid = color };
+    inline for (supported_named_solid_paints) |paint| {
+        if (asciiEqlIgnoreCase(trimmed, paint.name)) return .{ .solid = paint.color };
+    }
+    return null;
+}
+
+fn parsePaintReference(value: []const u8) Error!?PaintReference {
+    const prefix = "url(";
+    if (!asciiStartsWithIgnoreCase(value, prefix) or value.len <= prefix.len) return null;
+    const close_offset = std.mem.indexOfScalar(u8, value[prefix.len..], ')') orelse return error.UnsupportedSvgStroke;
+    const close_index = prefix.len + close_offset;
+    const body = trimAscii(value[prefix.len..close_index]);
+    const fallback = trimAscii(value[close_index + 1 ..]);
+    const fallback_value: ?[]const u8 = if (fallback.len == 0) null else fallback;
+    if (body.len < 2 or body[0] != '#') return .{ .id = null, .fallback = fallback_value };
+    const id = body[1..];
+    if (!validCssSimpleName(id)) return .{ .id = null, .fallback = fallback_value };
+    return .{ .id = id, .fallback = fallback_value };
+}
+
+fn parseGradientPaint(svg: []const u8, view_box: ViewBox, id: []const u8) Error!SvgPaint {
+    const referenced = findReferencedElement(svg, id) catch |err| return switch (err) {
+        error.InvalidSvg => error.UnsupportedSvgStroke,
+        else => err,
+    };
+    if (isLinearGradientOpenTag(referenced.tag)) return .{ .linear_gradient = try parseLinearGradientPaint(svg, view_box, referenced) };
+    if (isRadialGradientOpenTag(referenced.tag)) return .{ .radial_gradient = try parseRadialGradientPaint(svg, view_box, referenced) };
+    return error.UnsupportedSvgStroke;
+}
+
+fn parseLinearGradientPaint(svg: []const u8, view_box: ViewBox, referenced: ReferencedElement) Error!icon_vector.LinearGradient {
+    const chain = try gradientChain(svg, referenced, .linear);
+    const coordinate_space = try gradientCoordinateSpace(chain);
+    const gradient_transform = try gradientTransform(chain);
+
+    const stops = try chain.stops(svg);
+    const endpoints = try linearGradientEndpoints(chain, coordinate_space, view_box, gradient_transform);
+    return .{
+        .coordinate_space = coordinate_space,
+        .spread = try gradientSpreadMethod(chain),
+        .x1 = endpoints.start.x,
+        .y1 = endpoints.start.y,
+        .x2 = endpoints.end.x,
+        .y2 = endpoints.end.y,
+        .stop_count = stops.count,
+        .stops = stops.values,
+    };
+}
+
+fn parseRadialGradientPaint(svg: []const u8, view_box: ViewBox, referenced: ReferencedElement) Error!icon_vector.RadialGradient {
+    const chain = try gradientChain(svg, referenced, .radial);
+    const coordinate_space = try gradientCoordinateSpace(chain);
+    const gradient_transform = try gradientTransform(chain);
+
+    const stops = try chain.stops(svg);
+    const circle = try radialGradientCircle(chain, coordinate_space, view_box, gradient_transform);
+    return .{
+        .coordinate_space = coordinate_space,
+        .spread = try gradientSpreadMethod(chain),
+        .cx = circle.center.x,
+        .cy = circle.center.y,
+        .radius = circle.radius,
+        .fx = circle.focus.x,
+        .fy = circle.focus.y,
+        .focal_radius = circle.focal_radius,
+        .stop_count = stops.count,
+        .stops = stops.values,
+    };
+}
+
+fn gradientChain(svg: []const u8, referenced: ReferencedElement, kind: GradientKind) Error!GradientChain {
+    var result = GradientChain{};
+    var current = referenced;
+    while (true) {
+        try result.append(current);
+        const reference_id = (try gradientReferenceId(current.tag)) orelse return result;
+        const next = try findReferencedGradient(svg, reference_id, kind);
+        var index: usize = 0;
+        while (index < result.len) : (index += 1) {
+            if (sameReferencedElement(result.items[index], next)) return error.UnsupportedSvgStroke;
+        }
+        current = next;
+    }
+}
+
+fn gradientReferenceId(tag: []const u8) Error!?[]const u8 {
+    const href = (try attrValueOptional(tag, "href")) orelse (try attrValueOptional(tag, "xlink:href")) orelse return null;
+    const trimmed = trimAscii(href);
+    if (trimmed.len < 2 or trimmed[0] != '#') return error.UnsupportedSvgStroke;
+    const id = trimmed[1..];
+    if (!validCssSimpleName(id)) return error.UnsupportedSvgStroke;
+    return id;
+}
+
+fn findReferencedGradient(svg: []const u8, id: []const u8, kind: GradientKind) Error!ReferencedElement {
+    const referenced = findReferencedElement(svg, id) catch |err| return switch (err) {
+        error.InvalidSvg => error.UnsupportedSvgStroke,
+        else => err,
+    };
+    const matches = switch (kind) {
+        .linear => isLinearGradientOpenTag(referenced.tag),
+        .radial => isRadialGradientOpenTag(referenced.tag),
+    };
+    if (!matches) return error.UnsupportedSvgStroke;
+    return referenced;
+}
+
+fn sameReferencedElement(left: ReferencedElement, right: ReferencedElement) bool {
+    return left.tag.ptr == right.tag.ptr and left.tag.len == right.tag.len and left.content_start == right.content_start and left.content_end == right.content_end;
+}
+
+fn gradientCoordinateSpace(chain: GradientChain) Error!icon_vector.GradientCoordinateSpace {
+    if (try chain.attr("gradientUnits")) |units| {
+        if (supportedKeyword(units, "userSpaceOnUse")) return .user_space;
+        if (supportedKeyword(units, "objectBoundingBox")) return .object_bounding_box;
+        return error.UnsupportedSvgStroke;
+    }
+    return .object_bounding_box;
+}
+
+fn gradientSpreadMethod(chain: GradientChain) Error!icon_vector.GradientSpreadMethod {
+    const value = (try chain.attr("spreadMethod")) orelse return .pad;
+    if (supportedKeyword(value, "pad")) return .pad;
+    if (supportedKeyword(value, "repeat")) return .repeat;
+    if (supportedKeyword(value, "reflect")) return .reflect;
+    return error.UnsupportedSvgStroke;
+}
+
+const GradientEndpoints = struct {
+    start: icon_vector.Point,
+    end: icon_vector.Point,
+};
+
+const GradientCircle = struct {
+    center: icon_vector.Point,
+    radius: f32,
+    focus: icon_vector.Point,
+    focal_radius: f32,
+};
+
+const GradientAxis = enum {
+    x,
+    y,
+};
+
+fn gradientTransform(chain: GradientChain) Error!Transform {
+    const raw = (try chain.attr("gradientTransform")) orelse return .{};
+    return parseTransform(raw) catch |err| return switch (err) {
+        error.UnsupportedSvgElement => error.UnsupportedSvgStroke,
+        else => err,
+    };
+}
+
+fn linearGradientEndpoints(
+    chain: GradientChain,
+    coordinate_space: icon_vector.GradientCoordinateSpace,
+    view_box: ViewBox,
+    transform: Transform,
+) Error!GradientEndpoints {
+    const raw_start = try gradientPointDefault(chain, "x1", "y1", 0.0, 0.0, coordinate_space, view_box);
+    const raw_end = try gradientPointDefault(chain, "x2", "y2", 1.0, 0.0, coordinate_space, view_box);
+    return switch (coordinate_space) {
+        .object_bounding_box => .{
+            .start = transform.apply(raw_start),
+            .end = transform.apply(raw_end),
+        },
+        .user_space => .{
+            .start = normalizeGradientUserPoint(transform.apply(raw_start), view_box),
+            .end = normalizeGradientUserPoint(transform.apply(raw_end), view_box),
+        },
+    };
+}
+
+fn gradientPointDefault(
+    chain: GradientChain,
+    x_name: []const u8,
+    y_name: []const u8,
+    x_default: f32,
+    y_default: f32,
+    coordinate_space: icon_vector.GradientCoordinateSpace,
+    view_box: ViewBox,
+) Error!icon_vector.Point {
+    return .{
+        .x = try attrGradientCoordinateDefault(chain, x_name, x_default, coordinate_space, view_box, .x),
+        .y = try attrGradientCoordinateDefault(chain, y_name, y_default, coordinate_space, view_box, .y),
+    };
+}
+
+fn attrGradientCoordinateDefault(
+    chain: GradientChain,
+    name: []const u8,
+    default_value: f32,
+    coordinate_space: icon_vector.GradientCoordinateSpace,
+    view_box: ViewBox,
+    axis: GradientAxis,
+) Error!f32 {
+    const coordinate = if (try chain.attr(name)) |value| try parseGradientCoordinate(value) else GradientCoordinate{ .value = default_value, .percent = true };
+    return gradientCoordinateValue(coordinate, coordinate_space, view_box, axis);
+}
+
+fn gradientCoordinateValue(
+    coordinate: GradientCoordinate,
+    coordinate_space: icon_vector.GradientCoordinateSpace,
+    view_box: ViewBox,
+    axis: GradientAxis,
+) f32 {
+    return switch (coordinate_space) {
+        .object_bounding_box => coordinate.value,
+        .user_space => {
+            const view_origin = switch (axis) {
+                .x => view_box.min_x,
+                .y => view_box.min_y,
+            };
+            const view_size = switch (axis) {
+                .x => view_box.width,
+                .y => view_box.height,
+            };
+            if (coordinate.percent) return view_origin + view_size * coordinate.value;
+            return coordinate.value;
+        },
+    };
+}
+
+fn radialGradientCircle(
+    chain: GradientChain,
+    coordinate_space: icon_vector.GradientCoordinateSpace,
+    view_box: ViewBox,
+    transform: Transform,
+) Error!GradientCircle {
+    if (!transform.isUniformRotationScale() and !transform.isAxisAlignedPositive()) return error.UnsupportedSvgStroke;
+    const raw_center = try gradientPointDefault(chain, "cx", "cy", 0.5, 0.5, coordinate_space, view_box);
+    const raw_focus = icon_vector.Point{
+        .x = (try attrGradientCoordinateOptional(chain, "fx", coordinate_space, view_box, .x)) orelse raw_center.x,
+        .y = (try attrGradientCoordinateOptional(chain, "fy", coordinate_space, view_box, .y)) orelse raw_center.y,
+    };
+    const raw_radius = try radialGradientRadiusDefault(chain, "r", 0.5, coordinate_space, view_box);
+    const raw_focal_radius = try radialGradientRadiusDefault(chain, "fr", 0.0, coordinate_space, view_box);
+    const transformed_center = transform.apply(raw_center);
+    const transformed_focus = transform.apply(raw_focus);
+    const radius = transformedRadius(transform, raw_center, raw_radius);
+    const focal_radius = transformedRadius(transform, raw_focus, raw_focal_radius);
+    return switch (coordinate_space) {
+        .object_bounding_box => .{
+            .center = transformed_center,
+            .radius = radius,
+            .focus = transformed_focus,
+            .focal_radius = focal_radius,
+        },
+        .user_space => .{
+            .center = normalizeGradientUserPoint(transformed_center, view_box),
+            .radius = radius / view_box.width,
+            .focus = normalizeGradientUserPoint(transformed_focus, view_box),
+            .focal_radius = focal_radius / view_box.width,
+        },
+    };
+}
+
+fn attrGradientCoordinateOptional(
+    chain: GradientChain,
+    name: []const u8,
+    coordinate_space: icon_vector.GradientCoordinateSpace,
+    view_box: ViewBox,
+    axis: GradientAxis,
+) Error!?f32 {
+    const value = (try chain.attr(name)) orelse return null;
+    const coordinate = try parseGradientCoordinate(value);
+    return gradientCoordinateValue(coordinate, coordinate_space, view_box, axis);
+}
+
+fn radialGradientRadiusDefault(
+    chain: GradientChain,
+    name: []const u8,
+    default_value: f32,
+    coordinate_space: icon_vector.GradientCoordinateSpace,
+    view_box: ViewBox,
+) Error!f32 {
+    const radius = try attrGradientCoordinateDefault(chain, name, default_value, coordinate_space, view_box, .x);
+    if (radius < 0.0) return error.UnsupportedSvgStroke;
+    return radius;
+}
+
+fn transformedRadius(transform: Transform, origin: icon_vector.Point, radius: f32) f32 {
+    const transformed_origin = transform.apply(origin);
+    const transformed_radius_point = transform.apply(.{ .x = origin.x + radius, .y = origin.y });
+    const dx = transformed_radius_point.x - transformed_origin.x;
+    const dy = transformed_radius_point.y - transformed_origin.y;
+    return @sqrt(dx * dx + dy * dy);
+}
+
+fn normalizeGradientUserPoint(point: icon_vector.Point, view_box: ViewBox) icon_vector.Point {
+    return .{
+        .x = (point.x - view_box.min_x) / view_box.width,
+        .y = (point.y - view_box.min_y) / view_box.height,
+    };
+}
+
+const GradientCoordinate = struct {
+    value: f32,
+    percent: bool,
+};
+
+fn parseGradientCoordinate(value: []const u8) Error!GradientCoordinate {
+    const trimmed = trimAscii(value);
+    if (trimmed.len == 0) return error.InvalidSvg;
+    if (trimmed[trimmed.len - 1] == '%') {
+        const number = try parseFiniteSvgFloat(trimAscii(trimmed[0 .. trimmed.len - 1]), error.InvalidSvg);
+        return .{ .value = number / color_percent_max, .percent = true };
+    }
+    if (std.mem.indexOfAny(u8, trimmed, svg_length_unit_letters) != null) return error.InvalidSvg;
+    return .{ .value = try parseFiniteSvgFloat(trimmed, error.InvalidSvg), .percent = false };
+}
+
+const GradientStops = struct {
+    count: usize,
+    values: [icon_vector.max_linear_gradient_stops]icon_vector.LinearGradientStop,
+};
+
+fn parseLinearGradientStops(svg: []const u8, content_start: usize, content_end: usize) Error!GradientStops {
+    return (try parseGradientStopsOptional(svg, content_start, content_end)) orelse error.UnsupportedSvgStroke;
+}
+
+fn parseGradientStopsOptional(svg: []const u8, content_start: usize, content_end: usize) Error!?GradientStops {
+    var search_index = content_start;
+    var stops = [_]icon_vector.LinearGradientStop{zero_gradient_stop} ** icon_vector.max_linear_gradient_stops;
+    var stop_count: usize = 0;
+    while (search_index < content_end) {
+        const tag_start_offset = std.mem.indexOfScalar(u8, svg[search_index..content_end], '<') orelse break;
+        const tag_start = search_index + tag_start_offset;
+        if (try skipSpecialMarkup(svg, tag_start, &search_index)) continue;
+        const tag_end = try svgTagEnd(svg, tag_start);
+        if (tag_end > content_end) return error.InvalidSvg;
+        const tag = svg[tag_start..tag_end];
+        search_index = tag_end + 1;
+        if (tagCloseHasName(tag, "stop")) continue;
+        if (!tagHasName(tag, "stop")) return error.UnsupportedSvgStroke;
+        if (stop_count >= icon_vector.max_linear_gradient_stops) return error.UnsupportedSvgStroke;
+        stops[stop_count] = try parseGradientStop(tag);
+        stop_count += 1;
+    }
+    if (stop_count == 0) return null;
+    if (stop_count < icon_vector.min_linear_gradient_stops) return error.UnsupportedSvgStroke;
+    var index: usize = 1;
+    while (index < stop_count) : (index += 1) {
+        if (stops[index - 1].offset > stops[index].offset) return error.UnsupportedSvgStroke;
+    }
+    return .{ .count = stop_count, .values = stops };
+}
+
+fn parseGradientStop(tag: []const u8) Error!icon_vector.LinearGradientStop {
+    var color = icon_vector.Paint{ .r = 0, .g = 0, .b = 0, .a = color_component_max };
+    var opacity: f32 = opacity_opaque;
+    if (try attrValueOptional(tag, "stop-color")) |value| color = parseStopColor(value) orelse return error.UnsupportedSvgStroke;
+    if (try attrValueOptional(tag, "stop-opacity")) |value| opacity = try parseStopOpacity(value);
+    if (try attrValueOptional(tag, "style")) |style| {
+        var start: usize = 0;
+        while (start < style.len) {
+            const end = if (std.mem.indexOfScalar(u8, style[start..], ';')) |offset| start + offset else style.len;
+            const declaration = trimAscii(style[start..end]);
+            start = end + 1;
+            if (declaration.len == 0) continue;
+            const colon = std.mem.indexOfScalar(u8, declaration, ':') orelse return error.InvalidSvg;
+            const property = trimAscii(declaration[0..colon]);
+            const value = try styleValue(declaration[colon + 1 ..]);
+            if (asciiEqlIgnoreCase(property, "stop-color")) {
+                color = parseStopColor(value) orelse return error.UnsupportedSvgStroke;
+            } else if (asciiEqlIgnoreCase(property, "stop-opacity")) {
+                opacity = try parseStopOpacity(value);
+            } else return error.UnsupportedSvgStroke;
+        }
+    }
+    color.a = roundedByte(@as(f32, @floatFromInt(color.a)) * opacity);
+    return .{
+        .offset = try parseGradientOffset(try attrValue(tag, "offset")),
+        .color = color,
+    };
+}
+
+fn parseStopColor(value: []const u8) ?icon_vector.Paint {
+    const trimmed = trimAscii(value);
+    if (parseHexColor(trimmed)) |color| return color;
+    if (parseFunctionalColor(trimmed)) |color| return color;
+    inline for (supported_named_solid_paints) |paint| {
+        if (asciiEqlIgnoreCase(trimmed, paint.name)) return paint.color;
+    }
+    return null;
+}
+
+fn parseStopOpacity(value: []const u8) Error!f32 {
+    const opacity = try parseOpacity(value);
+    if (opacity < 0.0 or opacity > opacity_opaque) return error.UnsupportedSvgStroke;
+    return opacity;
+}
+
+fn parseGradientOffset(raw: []const u8) Error!f32 {
+    const value = trimAscii(raw);
+    const offset = if (asciiEndsWithIgnoreCase(value, "%"))
+        ((try parseFiniteSvgFloat(trimAscii(value[0 .. value.len - 1]), error.InvalidSvg)) / color_percent_max)
+    else
+        try parseFiniteSvgFloat(value, error.InvalidSvg);
+    if (offset < 0.0 or offset > opacity_opaque) return error.UnsupportedSvgStroke;
+    return offset;
+}
+
+fn svgPaintWithOpacity(paint: SvgPaint, opacity: u8) SvgPaint {
+    if (opacity == color_component_max) return paint;
+    return switch (paint) {
+        .current_color => .{ .current_color_alpha = opacity },
+        .current_color_alpha => |alpha| .{ .current_color_alpha = scaleOpacityByte(alpha, opacity) },
+        .solid => |color| .{ .solid = paintWithOpacity(color, opacity) },
+        .linear_gradient => |gradient| .{ .linear_gradient = linearGradientWithOpacity(gradient, opacity) },
+        .radial_gradient => |gradient| .{ .radial_gradient = radialGradientWithOpacity(gradient, opacity) },
+    };
+}
+
+fn paintWithOpacity(color: icon_vector.Paint, opacity: u8) icon_vector.Paint {
+    return .{
+        .r = color.r,
+        .g = color.g,
+        .b = color.b,
+        .a = scaleOpacityByte(color.a, opacity),
+    };
+}
+
+fn linearGradientWithOpacity(gradient: icon_vector.LinearGradient, opacity: u8) icon_vector.LinearGradient {
+    var result = gradient;
+    var index: usize = 0;
+    while (index < result.stop_count) : (index += 1) {
+        result.stops[index].color = paintWithOpacity(result.stops[index].color, opacity);
+    }
+    return result;
+}
+
+fn radialGradientWithOpacity(gradient: icon_vector.RadialGradient, opacity: u8) icon_vector.RadialGradient {
+    var result = gradient;
+    var index: usize = 0;
+    while (index < result.stop_count) : (index += 1) {
+        result.stops[index].color = paintWithOpacity(result.stops[index].color, opacity);
+    }
+    return result;
+}
+
+fn scaleOpacityByte(alpha: u8, opacity: u8) u8 {
+    return @intCast((@as(u16, alpha) * @as(u16, opacity) + 127) / 255);
 }
 
 fn svgPaintsEqual(left: SvgPaint, right: SvgPaint) bool {
     return switch (left) {
         .current_color => switch (right) {
             .current_color => true,
+            .current_color_alpha => false,
             .solid => false,
+            .linear_gradient => false,
+            .radial_gradient => false,
+        },
+        .current_color_alpha => |left_alpha| switch (right) {
+            .current_color => false,
+            .current_color_alpha => |right_alpha| left_alpha == right_alpha,
+            .solid => false,
+            .linear_gradient => false,
+            .radial_gradient => false,
         },
         .solid => |left_color| switch (right) {
             .current_color => false,
+            .current_color_alpha => false,
             .solid => |right_color| left_color.r == right_color.r and left_color.g == right_color.g and left_color.b == right_color.b and left_color.a == right_color.a,
+            .linear_gradient => false,
+            .radial_gradient => false,
+        },
+        .linear_gradient => |left_gradient| switch (right) {
+            .current_color, .current_color_alpha, .solid, .radial_gradient => false,
+            .linear_gradient => |right_gradient| linearGradientsEqual(left_gradient, right_gradient),
+        },
+        .radial_gradient => |left_gradient| switch (right) {
+            .current_color, .current_color_alpha, .solid, .linear_gradient => false,
+            .radial_gradient => |right_gradient| radialGradientsEqual(left_gradient, right_gradient),
         },
     };
+}
+
+fn linearGradientsEqual(left: icon_vector.LinearGradient, right: icon_vector.LinearGradient) bool {
+    return left.coordinate_space == right.coordinate_space and
+        left.spread == right.spread and
+        left.x1 == right.x1 and
+        left.y1 == right.y1 and
+        left.x2 == right.x2 and
+        left.y2 == right.y2 and
+        linearGradientStopsEqual(left, right);
+}
+
+fn linearGradientStopsEqual(left: icon_vector.LinearGradient, right: icon_vector.LinearGradient) bool {
+    if (left.stop_count != right.stop_count) return false;
+    var index: usize = 0;
+    while (index < left.stop_count) : (index += 1) {
+        const left_stop = left.stops[index];
+        const right_stop = right.stops[index];
+        if (left_stop.offset != right_stop.offset) return false;
+        if (left_stop.color.r != right_stop.color.r) return false;
+        if (left_stop.color.g != right_stop.color.g) return false;
+        if (left_stop.color.b != right_stop.color.b) return false;
+        if (left_stop.color.a != right_stop.color.a) return false;
+    }
+    return true;
+}
+
+fn radialGradientsEqual(left: icon_vector.RadialGradient, right: icon_vector.RadialGradient) bool {
+    return left.coordinate_space == right.coordinate_space and
+        left.spread == right.spread and
+        left.cx == right.cx and
+        left.cy == right.cy and
+        left.radius == right.radius and
+        left.fx == right.fx and
+        left.fy == right.fy and
+        left.focal_radius == right.focal_radius and
+        radialGradientStopsEqual(left, right);
+}
+
+fn radialGradientStopsEqual(left: icon_vector.RadialGradient, right: icon_vector.RadialGradient) bool {
+    if (left.stop_count != right.stop_count) return false;
+    var index: usize = 0;
+    while (index < left.stop_count) : (index += 1) {
+        const left_stop = left.stops[index];
+        const right_stop = right.stops[index];
+        if (left_stop.offset != right_stop.offset) return false;
+        if (left_stop.color.r != right_stop.color.r) return false;
+        if (left_stop.color.g != right_stop.color.g) return false;
+        if (left_stop.color.b != right_stop.color.b) return false;
+        if (left_stop.color.a != right_stop.color.a) return false;
+    }
+    return true;
+}
+
+fn gradientStopsForTest(stops: []const icon_vector.LinearGradientStop) [icon_vector.max_linear_gradient_stops]icon_vector.LinearGradientStop {
+    var values = [_]icon_vector.LinearGradientStop{zero_gradient_stop} ** icon_vector.max_linear_gradient_stops;
+    var index: usize = 0;
+    while (index < stops.len) : (index += 1) values[index] = stops[index];
+    return values;
 }
 
 fn parseHexColor(value: []const u8) ?icon_vector.Paint {
@@ -1620,9 +2373,21 @@ fn parseFillRule(value: []const u8) ?FillRule {
     return null;
 }
 
-fn supportedStrokeWidth(value: []const u8) Error!bool {
+fn parseStrokeWidth(value: []const u8) Error!f32 {
     const width = parseLengthPx(value) catch return error.UnsupportedSvgStroke;
-    return @abs(width - supported_stroke_width) <= transform_epsilon;
+    if (width <= 0.0) return error.UnsupportedSvgStroke;
+    return width;
+}
+
+fn parseStrokeCap(value: []const u8) ?icon_vector.StrokeCap {
+    if (supportedKeyword(value, "butt")) return .butt;
+    if (supportedKeyword(value, "round")) return .round;
+    if (supportedKeyword(value, "square")) return .square;
+    return null;
+}
+
+fn normalizeStrokeWidth(width: f32, view_box: ViewBox) f32 {
+    return width / @min(view_box.width, view_box.height);
 }
 
 fn parseLengthPx(raw: []const u8) Error!f32 {
@@ -1709,7 +2474,7 @@ fn findReferencedElement(svg: []const u8, id: []const u8) Error!ReferencedElemen
         if (std.mem.startsWith(u8, tag, "</")) continue;
         if (try attrValueOptional(tag, "id")) |candidate| {
             if (std.mem.eql(u8, candidate, id)) {
-                if (isReusableContainerOpenTag(tag)) {
+                if (isReusableContainerOpenTag(tag) or isLinearGradientOpenTag(tag) or isRadialGradientOpenTag(tag)) {
                     if (isSelfClosingTag(tag)) return .{ .tag = tag, .content_start = search_index, .content_end = search_index };
                     const close_start = try containerCloseStart(svg, search_index, tagName(tag));
                     return .{ .tag = tag, .content_start = search_index, .content_end = close_start };
@@ -1900,6 +2665,14 @@ fn isDefsCloseTag(tag: []const u8) bool {
 
 fn isUseTag(tag: []const u8) bool {
     return tagHasName(tag, "use");
+}
+
+fn isLinearGradientOpenTag(tag: []const u8) bool {
+    return tagHasName(tag, "linearGradient");
+}
+
+fn isRadialGradientOpenTag(tag: []const u8) bool {
+    return tagHasName(tag, "radialGradient");
 }
 
 fn styleCloseStart(svg: []const u8, content_start: usize) ?usize {
@@ -2198,9 +2971,7 @@ const svg_element_names = [_]struct {
 };
 const unsupported_svg_elements = [_][]const u8{
     "clipPath",
-    "linearGradient",
     "mask",
-    "radialGradient",
 };
 const supported_display_values = [_][]const u8{
     "inline",
@@ -2234,6 +3005,7 @@ const supported_named_solid_paints = [_]struct {
 const max_pending_ops: usize = 128;
 const max_transform_depth: usize = 16;
 const max_reference_depth: usize = 8;
+const max_gradient_reference_depth: usize = 8;
 const max_css_rules: usize = 48;
 const max_color_function_tokens: usize = 4;
 const color_function_rgb_tokens: usize = 3;
@@ -2241,13 +3013,15 @@ const color_function_alpha_tokens: usize = 4;
 const half_turn_degrees: f32 = 180.0;
 const half_unit: f32 = 0.5;
 const transform_epsilon: f32 = 0.00001;
-const supported_stroke_width: f32 = 2.0;
+const default_stroke_width: f32 = 2.0;
+const default_stroke_width_scale: f32 = default_stroke_width / default_view_box.width;
 const opacity_opaque: f32 = 1.0;
 const color_component_max: u8 = 255;
 const color_component_max_float: f32 = 255.0;
 const color_percent_max: f32 = 100.0;
 const hex_short_multiplier: u8 = 17;
 const hex_base: u8 = 16;
+const zero_gradient_stop = icon_vector.LinearGradientStop{ .offset = 0.0, .color = .{ .r = 0, .g = 0, .b = 0, .a = 0 } };
 const svg_length_unit_letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ%";
 const color_forbidden_number_letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const special_markup_spans = [_]struct {
@@ -2365,6 +3139,7 @@ test "svg iterator normalizes path coordinates through viewBox" {
         \\</svg>
     );
 
+    try std.testing.expectEqual(icon_vector.Op{ .stroke_width = 2.0 / 100.0 }, (try iter.next()).?);
     try std.testing.expectEqual(icon_vector.Op{ .move_to = .{ .x = 0.0, .y = 0.0 } }, (try iter.next()).?);
     try std.testing.expectEqual(icon_vector.Op{ .line_to = .{ .x = 1.0, .y = 1.0 } }, (try iter.next()).?);
     try std.testing.expectEqual(icon_vector.Op{ .arc_to = .{
@@ -2390,6 +3165,7 @@ test "svg iterator lowers basic shape elements" {
         \\</svg>
     );
 
+    try std.testing.expectEqual(icon_vector.Op{ .stroke_width = 2.0 / 10.0 }, (try iter.next()).?);
     try std.testing.expectEqual(icon_vector.Op{ .ellipse = .{ .cx = 0.5, .cy = 0.5, .rx = 0.1, .ry = 0.2, .full = true } }, (try iter.next()).?);
     try std.testing.expectEqual(icon_vector.Op{ .ellipse = .{ .cx = 0.25, .cy = 0.5, .rx = 0.2, .ry = 0.2, .full = true } }, (try iter.next()).?);
     const line = (try iter.next()).?.polyline;
@@ -2518,6 +3294,444 @@ test "svg iterator rejects out of range css color components" {
     try std.testing.expectError(error.UnsupportedSvgStroke, alpha.next());
 }
 
+test "svg iterator resolves user space linear gradients" {
+    var iter = Iterator.init(
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+        \\  <defs>
+        \\    <linearGradient id="paint" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="24" y2="0">
+        \\      <stop offset="0" stop-color="red"/>
+        \\      <stop offset="100%" style="stop-color: blue; stop-opacity: .5"/>
+        \\    </linearGradient>
+        \\  </defs>
+        \\  <rect fill="url(#paint)" x="0" y="0" width="24" height="24"/>
+        \\</svg>
+    );
+
+    try std.testing.expectEqual(icon_vector.Op{ .paint_linear_gradient = .{
+        .coordinate_space = .user_space,
+        .spread = .pad,
+        .x1 = 0.0,
+        .y1 = 0.0,
+        .x2 = 1.0,
+        .y2 = 0.0,
+        .stop_count = 2,
+        .stops = gradientStopsForTest(&.{
+            .{ .offset = 0.0, .color = .{ .r = 255, .g = 0, .b = 0, .a = 255 } },
+            .{ .offset = 1.0, .color = .{ .r = 0, .g = 0, .b = 255, .a = 128 } },
+        }),
+    } }, (try iter.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .filled_round_rect = .{ .x = 0.0, .y = 0.0, .w = 1.0, .h = 1.0, .radius = 0.0 } }, (try iter.next()).?);
+    try std.testing.expectEqual(@as(?icon_vector.Op, null), try iter.next());
+}
+
+test "svg iterator resolves object bounding box linear gradients" {
+    var iter = Iterator.init(
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+        \\  <defs>
+        \\    <linearGradient id="paint" x1="25%" y1="0" x2="75%" y2="100%">
+        \\      <stop offset="0" stop-color="red"/>
+        \\      <stop offset="1" stop-color="blue"/>
+        \\    </linearGradient>
+        \\  </defs>
+        \\  <rect fill="url(#paint)" x="6" y="6" width="12" height="12"/>
+        \\</svg>
+    );
+
+    try std.testing.expectEqual(icon_vector.Op{ .paint_linear_gradient = .{
+        .coordinate_space = .object_bounding_box,
+        .spread = .pad,
+        .x1 = 0.25,
+        .y1 = 0.0,
+        .x2 = 0.75,
+        .y2 = 1.0,
+        .stop_count = 2,
+        .stops = gradientStopsForTest(&.{
+            .{ .offset = 0.0, .color = .{ .r = 255, .g = 0, .b = 0, .a = 255 } },
+            .{ .offset = 1.0, .color = .{ .r = 0, .g = 0, .b = 255, .a = 255 } },
+        }),
+    } }, (try iter.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .filled_round_rect = .{ .x = 0.25, .y = 0.25, .w = 0.5, .h = 0.5, .radius = 0.0 } }, (try iter.next()).?);
+    try std.testing.expectEqual(@as(?icon_vector.Op, null), try iter.next());
+}
+
+test "svg iterator resolves multi stop linear gradients" {
+    var iter = Iterator.init(
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+        \\  <defs>
+        \\    <linearGradient id="paint">
+        \\      <stop offset="0" stop-color="red"/>
+        \\      <stop offset=".5" stop-color="green"/>
+        \\      <stop offset="1" stop-color="blue"/>
+        \\    </linearGradient>
+        \\  </defs>
+        \\  <rect fill="url(#paint)" width="24" height="24"/>
+        \\</svg>
+    );
+
+    try std.testing.expectEqual(icon_vector.Op{ .paint_linear_gradient = .{
+        .coordinate_space = .object_bounding_box,
+        .spread = .pad,
+        .x1 = 0.0,
+        .y1 = 0.0,
+        .x2 = 1.0,
+        .y2 = 0.0,
+        .stop_count = 3,
+        .stops = gradientStopsForTest(&.{
+            .{ .offset = 0.0, .color = .{ .r = 255, .g = 0, .b = 0, .a = 255 } },
+            .{ .offset = 0.5, .color = .{ .r = 0, .g = 128, .b = 0, .a = 255 } },
+            .{ .offset = 1.0, .color = .{ .r = 0, .g = 0, .b = 255, .a = 255 } },
+        }),
+    } }, (try iter.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .filled_round_rect = .{ .x = 0.0, .y = 0.0, .w = 1.0, .h = 1.0, .radius = 0.0 } }, (try iter.next()).?);
+    try std.testing.expectEqual(@as(?icon_vector.Op, null), try iter.next());
+}
+
+test "svg iterator resolves gradient spread methods" {
+    var repeat = Iterator.init(
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+        \\  <defs>
+        \\    <linearGradient id="paint" spreadMethod="repeat">
+        \\      <stop offset="0" stop-color="red"/>
+        \\      <stop offset="1" stop-color="blue"/>
+        \\    </linearGradient>
+        \\  </defs>
+        \\  <rect fill="url(#paint)" width="24" height="24"/>
+        \\</svg>
+    );
+    const repeat_op = (try repeat.next()).?;
+    switch (repeat_op) {
+        .paint_linear_gradient => |gradient| try std.testing.expectEqual(icon_vector.GradientSpreadMethod.repeat, gradient.spread),
+        else => return error.InvalidSvg,
+    }
+
+    var reflect = Iterator.init(
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+        \\  <defs>
+        \\    <radialGradient id="paint" spreadMethod="reflect">
+        \\      <stop offset="0" stop-color="white"/>
+        \\      <stop offset="1" stop-color="black"/>
+        \\    </radialGradient>
+        \\  </defs>
+        \\  <rect fill="url(#paint)" width="24" height="24"/>
+        \\</svg>
+    );
+    const reflect_op = (try reflect.next()).?;
+    switch (reflect_op) {
+        .paint_radial_gradient => |gradient| try std.testing.expectEqual(icon_vector.GradientSpreadMethod.reflect, gradient.spread),
+        else => return error.InvalidSvg,
+    }
+}
+
+test "svg iterator resolves gradient strokes" {
+    var iter = Iterator.init(
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="url(#paint)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        \\  <defs>
+        \\    <linearGradient id="paint" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="24" y2="0">
+        \\      <stop offset="0" stop-color="red"/>
+        \\      <stop offset="1" stop-color="blue"/>
+        \\    </linearGradient>
+        \\  </defs>
+        \\  <path d="M 2 12 L 22 12"/>
+        \\</svg>
+    );
+
+    try std.testing.expectEqual(icon_vector.Op{ .paint_linear_gradient = .{
+        .coordinate_space = .user_space,
+        .spread = .pad,
+        .x1 = 0.0,
+        .y1 = 0.0,
+        .x2 = 1.0,
+        .y2 = 0.0,
+        .stop_count = 2,
+        .stops = gradientStopsForTest(&.{
+            .{ .offset = 0.0, .color = .{ .r = 255, .g = 0, .b = 0, .a = 255 } },
+            .{ .offset = 1.0, .color = .{ .r = 0, .g = 0, .b = 255, .a = 255 } },
+        }),
+    } }, (try iter.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .move_to = .{ .x = 2.0 / 24.0, .y = 0.5 } }, (try iter.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .line_to = .{ .x = 22.0 / 24.0, .y = 0.5 } }, (try iter.next()).?);
+    try std.testing.expectEqual(@as(?icon_vector.Op, null), try iter.next());
+}
+
+test "svg iterator resolves gradient template inheritance" {
+    var href = Iterator.init(
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+        \\  <defs>
+        \\    <linearGradient id="base" spreadMethod="reflect">
+        \\      <stop offset="0" stop-color="red"/>
+        \\      <stop offset="1" stop-color="blue"/>
+        \\    </linearGradient>
+        \\    <linearGradient id="paint" href="#base" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="24" y2="0"/>
+        \\  </defs>
+        \\  <rect fill="url(#paint)" width="24" height="24"/>
+        \\</svg>
+    );
+
+    try std.testing.expectEqual(icon_vector.Op{ .paint_linear_gradient = .{
+        .coordinate_space = .user_space,
+        .spread = .reflect,
+        .x1 = 0.0,
+        .y1 = 0.0,
+        .x2 = 1.0,
+        .y2 = 0.0,
+        .stop_count = 2,
+        .stops = gradientStopsForTest(&.{
+            .{ .offset = 0.0, .color = .{ .r = 255, .g = 0, .b = 0, .a = 255 } },
+            .{ .offset = 1.0, .color = .{ .r = 0, .g = 0, .b = 255, .a = 255 } },
+        }),
+    } }, (try href.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .filled_round_rect = .{ .x = 0.0, .y = 0.0, .w = 1.0, .h = 1.0, .radius = 0.0 } }, (try href.next()).?);
+    try std.testing.expectEqual(@as(?icon_vector.Op, null), try href.next());
+
+    var xlink = Iterator.init(
+        \\<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 24 24">
+        \\  <defs>
+        \\    <radialGradient id="base" cx="25%" cy="75%" r="25%">
+        \\      <stop offset="0" stop-color="white"/>
+        \\      <stop offset="1" stop-color="black"/>
+        \\    </radialGradient>
+        \\    <radialGradient id="paint" xlink:href="#base"/>
+        \\  </defs>
+        \\  <rect fill="url(#paint)" width="24" height="24"/>
+        \\</svg>
+    );
+
+    try std.testing.expectEqual(icon_vector.Op{ .paint_radial_gradient = .{
+        .coordinate_space = .object_bounding_box,
+        .spread = .pad,
+        .cx = 0.25,
+        .cy = 0.75,
+        .radius = 0.25,
+        .fx = 0.25,
+        .fy = 0.75,
+        .focal_radius = 0.0,
+        .stop_count = 2,
+        .stops = gradientStopsForTest(&.{
+            .{ .offset = 0.0, .color = .{ .r = 255, .g = 255, .b = 255, .a = 255 } },
+            .{ .offset = 1.0, .color = .{ .r = 0, .g = 0, .b = 0, .a = 255 } },
+        }),
+    } }, (try xlink.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .filled_round_rect = .{ .x = 0.0, .y = 0.0, .w = 1.0, .h = 1.0, .radius = 0.0 } }, (try xlink.next()).?);
+    try std.testing.expectEqual(@as(?icon_vector.Op, null), try xlink.next());
+}
+
+test "svg iterator rejects invalid gradient template references" {
+    var external = Iterator.init(
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+        \\  <defs>
+        \\    <linearGradient id="paint" href="icons.svg#base"/>
+        \\  </defs>
+        \\  <rect fill="url(#paint)" width="24" height="24"/>
+        \\</svg>
+    );
+    try std.testing.expectError(error.UnsupportedSvgStroke, external.next());
+
+    var wrong_kind = Iterator.init(
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+        \\  <defs>
+        \\    <radialGradient id="base">
+        \\      <stop offset="0" stop-color="white"/>
+        \\      <stop offset="1" stop-color="black"/>
+        \\    </radialGradient>
+        \\    <linearGradient id="paint" href="#base"/>
+        \\  </defs>
+        \\  <rect fill="url(#paint)" width="24" height="24"/>
+        \\</svg>
+    );
+    try std.testing.expectError(error.UnsupportedSvgStroke, wrong_kind.next());
+
+    var cycle = Iterator.init(
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+        \\  <defs>
+        \\    <linearGradient id="a" href="#b"/>
+        \\    <linearGradient id="b" href="#a"/>
+        \\  </defs>
+        \\  <rect fill="url(#a)" width="24" height="24"/>
+        \\</svg>
+    );
+    try std.testing.expectError(error.UnsupportedSvgStroke, cycle.next());
+}
+
+test "svg iterator resolves radial gradients" {
+    var iter = Iterator.init(
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+        \\  <defs>
+        \\    <radialGradient id="paint" cx="50%" cy="50%" r="50%">
+        \\      <stop offset="0" stop-color="white"/>
+        \\      <stop offset="1" stop-color="black"/>
+        \\    </radialGradient>
+        \\  </defs>
+        \\  <rect fill="url(#paint)" width="24" height="24"/>
+        \\</svg>
+    );
+
+    try std.testing.expectEqual(icon_vector.Op{ .paint_radial_gradient = .{
+        .coordinate_space = .object_bounding_box,
+        .spread = .pad,
+        .cx = 0.5,
+        .cy = 0.5,
+        .radius = 0.5,
+        .fx = 0.5,
+        .fy = 0.5,
+        .focal_radius = 0.0,
+        .stop_count = 2,
+        .stops = gradientStopsForTest(&.{
+            .{ .offset = 0.0, .color = .{ .r = 255, .g = 255, .b = 255, .a = 255 } },
+            .{ .offset = 1.0, .color = .{ .r = 0, .g = 0, .b = 0, .a = 255 } },
+        }),
+    } }, (try iter.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .filled_round_rect = .{ .x = 0.0, .y = 0.0, .w = 1.0, .h = 1.0, .radius = 0.0 } }, (try iter.next()).?);
+    try std.testing.expectEqual(@as(?icon_vector.Op, null), try iter.next());
+}
+
+test "svg iterator resolves radial gradient focal circle" {
+    var iter = Iterator.init(
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+        \\  <defs>
+        \\    <radialGradient id="paint" gradientUnits="userSpaceOnUse" cx="12" cy="12" r="12" fx="6" fy="18" fr="3">
+        \\      <stop offset="0" stop-color="white"/>
+        \\      <stop offset="1" stop-color="black"/>
+        \\    </radialGradient>
+        \\  </defs>
+        \\  <rect fill="url(#paint)" width="24" height="24"/>
+        \\</svg>
+    );
+
+    try std.testing.expectEqual(icon_vector.Op{ .paint_radial_gradient = .{
+        .coordinate_space = .user_space,
+        .spread = .pad,
+        .cx = 0.5,
+        .cy = 0.5,
+        .radius = 0.5,
+        .fx = 0.25,
+        .fy = 0.75,
+        .focal_radius = 0.125,
+        .stop_count = 2,
+        .stops = gradientStopsForTest(&.{
+            .{ .offset = 0.0, .color = .{ .r = 255, .g = 255, .b = 255, .a = 255 } },
+            .{ .offset = 1.0, .color = .{ .r = 0, .g = 0, .b = 0, .a = 255 } },
+        }),
+    } }, (try iter.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .filled_round_rect = .{ .x = 0.0, .y = 0.0, .w = 1.0, .h = 1.0, .radius = 0.0 } }, (try iter.next()).?);
+    try std.testing.expectEqual(@as(?icon_vector.Op, null), try iter.next());
+}
+
+test "svg iterator resolves paint server fallback syntax" {
+    var resolved = Iterator.init(
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+        \\  <defs>
+        \\    <linearGradient id="paint">
+        \\      <stop offset="0" stop-color="red"/>
+        \\      <stop offset="1" stop-color="blue"/>
+        \\    </linearGradient>
+        \\  </defs>
+        \\  <rect fill="url(#paint) green" width="24" height="24"/>
+        \\</svg>
+    );
+
+    switch ((try resolved.next()).?) {
+        .paint_linear_gradient => |gradient| {
+            try std.testing.expectEqual(@as(usize, 2), gradient.stop_count);
+            try std.testing.expectEqual(icon_vector.Paint{ .r = 255, .g = 0, .b = 0, .a = 255 }, gradient.stops[0].color);
+        },
+        else => return error.InvalidSvg,
+    }
+    try std.testing.expectEqual(icon_vector.Op{ .filled_round_rect = .{ .x = 0.0, .y = 0.0, .w = 1.0, .h = 1.0, .radius = 0.0 } }, (try resolved.next()).?);
+
+    var missing = Iterator.init(
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+        \\  <rect fill="url(#missing) red" width="24" height="24"/>
+        \\</svg>
+    );
+
+    try std.testing.expectEqual(icon_vector.Op{ .paint_rgba = .{ .r = 255, .g = 0, .b = 0, .a = 255 } }, (try missing.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .filled_round_rect = .{ .x = 0.0, .y = 0.0, .w = 1.0, .h = 1.0, .radius = 0.0 } }, (try missing.next()).?);
+    try std.testing.expectEqual(@as(?icon_vector.Op, null), try missing.next());
+
+    var none = Iterator.init(
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+        \\  <rect fill="url(#missing) none" width="24" height="24"/>
+        \\</svg>
+    );
+    try std.testing.expectEqual(@as(?icon_vector.Op, null), try none.next());
+
+    var stroke = Iterator.init(
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="url(#missing) white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        \\  <path d="M 0 0 L 1 1"/>
+        \\</svg>
+    );
+    try std.testing.expectEqual(icon_vector.Op{ .move_to = .{ .x = 0.0, .y = 0.0 } }, (try stroke.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .line_to = .{ .x = 1.0 / 24.0, .y = 1.0 / 24.0 } }, (try stroke.next()).?);
+    try std.testing.expectEqual(@as(?icon_vector.Op, null), try stroke.next());
+}
+
+test "svg iterator applies linear gradient transforms" {
+    var object_box = Iterator.init(
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+        \\  <defs>
+        \\    <linearGradient id="paint" gradientTransform="translate(.25 0) scale(.5 1)">
+        \\      <stop offset="0" stop-color="red"/>
+        \\      <stop offset="1" stop-color="blue"/>
+        \\    </linearGradient>
+        \\  </defs>
+        \\  <rect fill="url(#paint)" width="24" height="24"/>
+        \\</svg>
+    );
+
+    try std.testing.expectEqual(icon_vector.Op{ .paint_linear_gradient = .{
+        .coordinate_space = .object_bounding_box,
+        .spread = .pad,
+        .x1 = 0.25,
+        .y1 = 0.0,
+        .x2 = 0.75,
+        .y2 = 0.0,
+        .stop_count = 2,
+        .stops = gradientStopsForTest(&.{
+            .{ .offset = 0.0, .color = .{ .r = 255, .g = 0, .b = 0, .a = 255 } },
+            .{ .offset = 1.0, .color = .{ .r = 0, .g = 0, .b = 255, .a = 255 } },
+        }),
+    } }, (try object_box.next()).?);
+
+    var user_space = Iterator.init(
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+        \\  <defs>
+        \\    <linearGradient id="paint" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="24" y2="0" gradientTransform="rotate(90 12 12)">
+        \\      <stop offset="0" stop-color="red"/>
+        \\      <stop offset="1" stop-color="blue"/>
+        \\    </linearGradient>
+        \\  </defs>
+        \\  <rect fill="url(#paint)" width="24" height="24"/>
+        \\</svg>
+    );
+
+    const transformed = (try user_space.next()).?;
+    switch (transformed) {
+        .paint_linear_gradient => |gradient| {
+            try std.testing.expectEqual(icon_vector.GradientCoordinateSpace.user_space, gradient.coordinate_space);
+            try std.testing.expectApproxEqAbs(@as(f32, 1.0), gradient.x1, transform_epsilon);
+            try std.testing.expectApproxEqAbs(@as(f32, 0.0), gradient.y1, transform_epsilon);
+            try std.testing.expectApproxEqAbs(@as(f32, 1.0), gradient.x2, transform_epsilon);
+            try std.testing.expectApproxEqAbs(@as(f32, 1.0), gradient.y2, transform_epsilon);
+        },
+        else => return error.InvalidSvg,
+    }
+}
+
+test "svg iterator rejects unsupported linear gradient forms explicitly" {
+    var transformed_gradient = Iterator.init(
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+        \\  <defs>
+        \\    <linearGradient id="paint" gradientTransform="notARealSvgTransform(45)">
+        \\      <stop offset="0" stop-color="red"/>
+        \\      <stop offset="1" stop-color="blue"/>
+        \\    </linearGradient>
+        \\  </defs>
+        \\  <rect fill="url(#paint)" width="24" height="24"/>
+        \\</svg>
+    );
+    try std.testing.expectError(error.UnsupportedSvgStroke, transformed_gradient.next());
+}
+
 test "svg iterator lowers mixed fill and stroke in paint order" {
     var iter = Iterator.init(
         \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="black" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -2560,6 +3774,7 @@ test "svg iterator applies default zero geometry attributes" {
         \\</svg>
     );
 
+    try std.testing.expectEqual(icon_vector.Op{ .stroke_width = 2.0 / 20.0 }, (try iter.next()).?);
     try std.testing.expectEqual(icon_vector.Op{ .circle = .{ .cx = 0.5, .cy = 0.5, .radius = 0.1 } }, (try iter.next()).?);
     try std.testing.expectEqual(icon_vector.Op{ .ellipse = .{ .cx = 0.5, .cy = 0.5, .rx = 0.2, .ry = 0.1, .full = true } }, (try iter.next()).?);
     const line = (try iter.next()).?.polyline;
@@ -2576,6 +3791,7 @@ test "svg iterator applies translate and scale transforms" {
         \\</svg>
     );
 
+    try std.testing.expectEqual(icon_vector.Op{ .stroke_width = 2.0 / 100.0 }, (try iter.next()).?);
     try std.testing.expectEqual(icon_vector.Op{ .move_to = .{ .x = 0.1, .y = 0.2 } }, (try iter.next()).?);
     try std.testing.expectEqual(icon_vector.Op{ .line_to = .{ .x = 0.2, .y = 0.4 } }, (try iter.next()).?);
     try std.testing.expectEqual(icon_vector.Op{ .circle = .{ .cx = 0.2, .cy = 0.2, .radius = 0.1 } }, (try iter.next()).?);
@@ -2656,6 +3872,7 @@ test "svg iterator supports negative scale transforms for paths" {
         \\</svg>
     );
 
+    try std.testing.expectEqual(icon_vector.Op{ .stroke_width = 2.0 / 20.0 }, (try iter.next()).?);
     try std.testing.expectEqual(icon_vector.Op{ .move_to = .{ .x = 9.0 / 20.0, .y = 2.0 / 20.0 } }, (try iter.next()).?);
     try std.testing.expectEqual(icon_vector.Op{ .line_to = .{ .x = 7.0 / 20.0, .y = 4.0 / 20.0 } }, (try iter.next()).?);
     try std.testing.expectEqual(@as(?icon_vector.Op, null), try iter.next());
@@ -2935,16 +4152,16 @@ test "svg iterator rejects unsupported presentation attributes" {
     );
     try std.testing.expectError(error.UnsupportedSvgStroke, filled.next());
 
-    var square_cap = Iterator.init(
-        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="round">
+    var unsupported_join = Iterator.init(
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="miter">
         \\  <path d="M 0 0 L 1 1"/>
         \\</svg>
     );
-    try std.testing.expectError(error.UnsupportedSvgStroke, square_cap.next());
+    try std.testing.expectError(error.UnsupportedSvgStroke, unsupported_join.next());
 
     var style = Iterator.init(
         \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        \\  <path style="stroke-width: 4" d="M 0 0 L 1 1"/>
+        \\  <path style="stroke-linejoin: bevel" d="M 0 0 L 1 1"/>
         \\</svg>
     );
     try std.testing.expectError(error.UnsupportedSvgStroke, style.next());
@@ -2973,6 +4190,96 @@ test "svg iterator applies inherited group presentation" {
     try std.testing.expectEqual(icon_vector.Op{ .move_to = .{ .x = 0.0, .y = 0.0 } }, (try iter.next()).?);
     try std.testing.expectEqual(icon_vector.Op{ .line_to = .{ .x = 1.0 / 24.0, .y = 1.0 / 24.0 } }, (try iter.next()).?);
     try std.testing.expectEqual(@as(?icon_vector.Op, null), try iter.next());
+
+    var current = Iterator.init(
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-opacity=".5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        \\  <path d="M 0 0 L 1 1"/>
+        \\</svg>
+    );
+
+    try std.testing.expectEqual(icon_vector.Op{ .paint_current_color_alpha = 128 }, (try current.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .move_to = .{ .x = 0.0, .y = 0.0 } }, (try current.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .line_to = .{ .x = 1.0 / 24.0, .y = 1.0 / 24.0 } }, (try current.next()).?);
+    try std.testing.expectEqual(@as(?icon_vector.Op, null), try current.next());
+}
+
+test "svg iterator emits variable inherited stroke widths" {
+    var attr = Iterator.init(
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        \\  <path d="M 0 0 L 12 12"/>
+        \\</svg>
+    );
+
+    try std.testing.expectEqual(icon_vector.Op{ .stroke_width = 1.5 / 24.0 }, (try attr.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .move_to = .{ .x = 0.0, .y = 0.0 } }, (try attr.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .line_to = .{ .x = 0.5, .y = 0.5 } }, (try attr.next()).?);
+    try std.testing.expectEqual(@as(?icon_vector.Op, null), try attr.next());
+
+    var style = Iterator.init(
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        \\  <g style="stroke-width: 4">
+        \\    <line x1="0" y1="12" x2="24" y2="12"/>
+        \\  </g>
+        \\</svg>
+    );
+
+    try std.testing.expectEqual(icon_vector.Op{ .stroke_width = 4.0 / 24.0 }, (try style.next()).?);
+    const line = (try style.next()).?.polyline;
+    try std.testing.expectEqualSlices(f32, &.{ 0.0, 0.5, 1.0, 0.5 }, line);
+    try std.testing.expectEqual(@as(?icon_vector.Op, null), try style.next());
+}
+
+test "svg iterator emits explicit stroke line caps" {
+    var square = Iterator.init(
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="round">
+        \\  <path d="M 0 0 L 12 12"/>
+        \\</svg>
+    );
+
+    try std.testing.expectEqual(icon_vector.Op{ .stroke_cap = .square }, (try square.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .move_to = .{ .x = 0.0, .y = 0.0 } }, (try square.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .line_to = .{ .x = 0.5, .y = 0.5 } }, (try square.next()).?);
+    try std.testing.expectEqual(@as(?icon_vector.Op, null), try square.next());
+
+    var butt = Iterator.init(
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        \\  <path style="stroke-linecap: butt" d="M 0 0 L 12 12"/>
+        \\</svg>
+    );
+
+    try std.testing.expectEqual(icon_vector.Op{ .stroke_cap = .butt }, (try butt.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .move_to = .{ .x = 0.0, .y = 0.0 } }, (try butt.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .line_to = .{ .x = 0.5, .y = 0.5 } }, (try butt.next()).?);
+    try std.testing.expectEqual(@as(?icon_vector.Op, null), try butt.next());
+}
+
+test "svg iterator resolves authored color for currentColor" {
+    var attr = Iterator.init(
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" color="red">
+        \\  <g fill="currentColor">
+        \\    <rect width="24" height="24"/>
+        \\    <g color="blue" fill="currentColor">
+        \\      <rect x="6" y="6" width="12" height="12"/>
+        \\    </g>
+        \\  </g>
+        \\</svg>
+    );
+
+    try std.testing.expectEqual(icon_vector.Op{ .paint_rgba = .{ .r = 255, .g = 0, .b = 0, .a = 255 } }, (try attr.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .filled_round_rect = .{ .x = 0.0, .y = 0.0, .w = 1.0, .h = 1.0, .radius = 0.0 } }, (try attr.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .paint_rgba = .{ .r = 0, .g = 0, .b = 255, .a = 255 } }, (try attr.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .filled_round_rect = .{ .x = 0.25, .y = 0.25, .w = 0.5, .h = 0.5, .radius = 0.0 } }, (try attr.next()).?);
+    try std.testing.expectEqual(@as(?icon_vector.Op, null), try attr.next());
+
+    var style = Iterator.init(
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+        \\  <rect style="color: green; fill: currentColor" width="24" height="24"/>
+        \\</svg>
+    );
+
+    try std.testing.expectEqual(icon_vector.Op{ .paint_rgba = .{ .r = 0, .g = 128, .b = 0, .a = 255 } }, (try style.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .filled_round_rect = .{ .x = 0.0, .y = 0.0, .w = 1.0, .h = 1.0, .radius = 0.0 } }, (try style.next()).?);
+    try std.testing.expectEqual(@as(?icon_vector.Op, null), try style.next());
 }
 
 test "svg iterator applies internal style element rules" {
@@ -3028,7 +4335,7 @@ test "svg iterator rejects unsupported matching stylesheet declarations" {
     var iter = Iterator.init(
         \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
         \\  <style>
-        \\    path { fill: none; stroke: white; stroke-width: 2; stroke-linecap: square; stroke-linejoin: round; }
+        \\    path { fill: none; stroke: white; stroke-width: 2; stroke-linecap: round; stroke-linejoin: miter; }
         \\  </style>
         \\  <path d="M 0 0 L 1 1"/>
         \\</svg>
@@ -3181,13 +4488,17 @@ test "svg iterator accepts opaque fill and stroke opacity as no-op" {
     try std.testing.expectEqual(@as(?icon_vector.Op, null), try iter.next());
 }
 
-test "svg iterator accepts fractional fill opacity under fill none contract" {
+test "svg iterator applies fill and stroke paint opacity" {
     var iter = Iterator.init(
-        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" fill-opacity="0.5" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        \\  <path style="fill-opacity: .25" d="M 0 0 L 1 1"/>
+        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="red" fill-opacity="0.5" stroke="blue" stroke-opacity=".25" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        \\  <rect stroke="none" width="24" height="24"/>
+        \\  <path fill="none" d="M 0 0 L 1 1"/>
         \\</svg>
     );
 
+    try std.testing.expectEqual(icon_vector.Op{ .paint_rgba = .{ .r = 255, .g = 0, .b = 0, .a = 128 } }, (try iter.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .filled_round_rect = .{ .x = 0.0, .y = 0.0, .w = 1.0, .h = 1.0, .radius = 0.0 } }, (try iter.next()).?);
+    try std.testing.expectEqual(icon_vector.Op{ .paint_rgba = .{ .r = 0, .g = 0, .b = 255, .a = 64 } }, (try iter.next()).?);
     try std.testing.expectEqual(icon_vector.Op{ .move_to = .{ .x = 0.0, .y = 0.0 } }, (try iter.next()).?);
     try std.testing.expectEqual(icon_vector.Op{ .line_to = .{ .x = 1.0 / 24.0, .y = 1.0 / 24.0 } }, (try iter.next()).?);
     try std.testing.expectEqual(@as(?icon_vector.Op, null), try iter.next());
@@ -3251,14 +4562,6 @@ test "svg iterator rejects nonzero opacity because alpha compositing is unsuppor
     );
 
     try std.testing.expectError(error.InvalidSvg, unit.next());
-
-    var stroke_partial = Iterator.init(
-        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        \\  <path stroke-opacity="0.5" d="M 0 0 L 1 1"/>
-        \\</svg>
-    );
-
-    try std.testing.expectError(error.UnsupportedSvgStroke, stroke_partial.next());
 
     var fill_out_of_range = Iterator.init(
         \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill-opacity="2" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -3378,6 +4681,7 @@ test "svg iterator supports px length attributes and rejects other units" {
         \\</svg>
     );
 
+    try std.testing.expectEqual(icon_vector.Op{ .stroke_width = 2.0 / 20.0 }, (try iter.next()).?);
     try std.testing.expectEqual(icon_vector.Op{ .round_rect = .{ .x = 0.05, .y = 0.1, .w = 0.5, .h = 0.5, .radius = 0.15 } }, (try iter.next()).?);
     try std.testing.expectEqual(@as(?icon_vector.Op, null), try iter.next());
 
@@ -3479,6 +4783,7 @@ test "svg iterator follows rect corner radius rules it can represent" {
         \\</svg>
     );
 
+    try std.testing.expectEqual(icon_vector.Op{ .stroke_width = 2.0 / 20.0 }, (try iter.next()).?);
     try std.testing.expectEqual(icon_vector.Op{ .round_rect = .{ .x = 0.05, .y = 0.1, .w = 0.5, .h = 0.5, .radius = 0.15 } }, (try iter.next()).?);
     try std.testing.expectEqual(icon_vector.Op{ .round_rect = .{ .x = 0.05, .y = 0.1, .w = 0.5, .h = 0.5, .radius = 0.25 } }, (try iter.next()).?);
     try std.testing.expectEqual(@as(?icon_vector.Op, null), try iter.next());

@@ -1,4 +1,5 @@
 const std = @import("std");
+const bytes = @import("bytes.zig");
 const browser_runtime_js = @import("browser_runtime_js.zig");
 const clock = @import("clock.zig");
 const source_object = @import("embedded_source_object").bytes;
@@ -23,6 +24,7 @@ const site_navigation = @import("site_navigation.zig");
 const ui = @import("ui.zig");
 const ui_codec = @import("ui_codec.zig");
 const ui_components = @import("ui_components.zig");
+const vfs = @import("vfs.zig");
 const ui_runtime = @import("ui_runtime.zig");
 const varfont = @import("varfont.zig");
 const wasm_interpreter = @import("wasm/root.zig");
@@ -1031,7 +1033,9 @@ fn compileWorkspaceInsideWasm() ErrorCode {
     if ((init_result.valueI32(0) catch return finishErrorCode(.render_failed)) != 0) return finishErrorCode(.bad_input);
 
     const compile_args = [_]wasm_interpreter.Value{
-        .{ .i32 = source_ptr },
+        .{ .i32 = 0 },
+        .{ .i32 = output_capacity },
+        .{ .i32 = 0 },
         .{ .i32 = 0 },
         .{ .i32 = source_ptr },
         .{ .i32 = source_len },
@@ -1039,9 +1043,8 @@ fn compileWorkspaceInsideWasm() ErrorCode {
     const compile_result = wasm_interpreter.executeExportValueArgs(&runtime, &compiler_wasm, "er_wasm_compiler_compile_wasm", &compile_args) catch return finishErrorCode(.render_failed);
     if ((compile_result.valueI32(0) catch return finishErrorCode(.render_failed)) != 0) return finishErrorCode(.bad_input);
 
-    const output_ptr_result = wasm_interpreter.executeExportValueArgs(&runtime, &compiler_wasm, "er_wasm_compiler_output_ptr", &.{}) catch return finishErrorCode(.render_failed);
     const output_len_result = wasm_interpreter.executeExportValueArgs(&runtime, &compiler_wasm, "er_wasm_compiler_output_len", &.{}) catch return finishErrorCode(.render_failed);
-    const output_ptr: usize = @intCast(output_ptr_result.valueI32(0) catch return finishErrorCode(.render_failed));
+    const output_ptr: usize = 0;
     const output_len: usize = @intCast(output_len_result.valueI32(0) catch return finishErrorCode(.render_failed));
     if (output_len < 4 or output_len > release_artifact.len) return finishErrorCode(.bad_input);
     if (output_ptr > compiler_runtime_memory.len or output_len > compiler_runtime_memory.len - output_ptr) return finishErrorCode(.bad_input);
@@ -2148,33 +2151,54 @@ test "browser native records host appearance preference" {
 
 test "browser native exposes eval bootstrap javascript bytes" {
     const bootstrap_js: [*]const u8 = @ptrFromInt(er_ui_bootstrap_js_ptr());
-    const bytes = bootstrap_js[0..er_ui_bootstrap_js_len()];
+    const js_bytes = bootstrap_js[0..er_ui_bootstrap_js_len()];
 
-    try std.testing.expectEqualStrings(browser_runtime_js.source, bytes);
-    try std.testing.expect(std.mem.indexOf(u8, bytes, "document.body.innerHTML") != null);
-    try std.testing.expect(std.mem.indexOf(u8, bytes, "WebAssembly.instantiate(") != null);
-    try std.testing.expect(std.mem.indexOf(u8, bytes, "er_ui_compiler_wasm_ptr") == null);
-    try std.testing.expect(std.mem.indexOf(u8, bytes, "er_wasm_compiler_compile_wasm") == null);
-    try std.testing.expect(std.mem.indexOf(u8, bytes, "fetch(") == null);
+    try std.testing.expectEqualStrings(browser_runtime_js.source, js_bytes);
+    try std.testing.expect(std.mem.indexOf(u8, js_bytes, "document.body.innerHTML") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js_bytes, "WebAssembly.instantiate(") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js_bytes, "er_ui_compiler_wasm_ptr") == null);
+    try std.testing.expect(std.mem.indexOf(u8, js_bytes, "er_wasm_compiler_compile_wasm") == null);
+    try std.testing.expect(std.mem.indexOf(u8, js_bytes, "fetch(") == null);
 }
 
 test "browser native exposes repo-owned source as canonical object bytes" {
     const source: [*]const u8 = @ptrFromInt(er_ui_compiler_source_ptr());
-    const bytes = source[0..er_ui_compiler_source_len()];
-    const view = try object.View.decode(bytes);
+    const source_bytes = source[0..er_ui_compiler_source_len()];
+    const view = try object.View.decode(source_bytes);
 
     try std.testing.expectEqual(object.Kind.bytes, view.header.kind);
-    try std.testing.expect(std.mem.indexOf(u8, view.body, "edgerun-source-object-v1") != null);
-    try std.testing.expect(std.mem.indexOf(u8, view.body, "src/ui_browser.zig") != null);
-    try std.testing.expect(std.mem.indexOf(u8, view.body, "src/compiler/wasm_compiler.zig") != null);
+    try std.testing.expect(std.mem.startsWith(u8, view.body, "ERVFSWS1"));
+    const file_count = bytes.load32(view.body[12..16]) orelse return error.Corrupt;
+    try std.testing.expect(file_count > 0);
+
+    var index: usize = 16;
+    var saw_browser = false;
+    var saw_compiler = false;
+    var remaining = file_count;
+    while (remaining > 0) : (remaining -= 1) {
+        const label_ref = try vfs.decodeObjectLabelRef(view.body[index..][0..vfs.object_label_ref_bytes]);
+        index += vfs.object_label_ref_bytes;
+        const file_len: usize = @intCast(label_ref.object_len);
+        const file_object = view.body[index..][0..file_len];
+        const file_view = try object.View.decode(file_object);
+        const file_id = file_view.id();
+        try std.testing.expectEqualSlices(u8, &label_ref.object_id, &file_id);
+        index += file_len;
+
+        if (std.mem.eql(u8, label_ref.labelSlice(), "src/ui_browser.zig")) saw_browser = true;
+        if (std.mem.eql(u8, label_ref.labelSlice(), "compiler/zig/src/edgerun_wasm_compiler.zig")) saw_compiler = true;
+    }
+    try std.testing.expectEqual(view.body.len, index);
+    try std.testing.expect(saw_browser);
+    try std.testing.expect(saw_compiler);
 }
 
 test "browser native embeds compiler wasm bytes into parent app" {
     const wasm_bytes: [*]const u8 = @ptrFromInt(er_ui_compiler_wasm_ptr());
-    const bytes = wasm_bytes[0..er_ui_compiler_wasm_len()];
+    const compiler_bytes = wasm_bytes[0..er_ui_compiler_wasm_len()];
 
-    try std.testing.expect(bytes.len > 0);
-    try std.testing.expectEqualSlices(u8, &.{ 0x00, 0x61, 0x73, 0x6d }, bytes[0..4]);
+    try std.testing.expect(compiler_bytes.len > 0);
+    try std.testing.expectEqualSlices(u8, &.{ 0x00, 0x61, 0x73, 0x6d }, compiler_bytes[0..4]);
 }
 
 test "browser native source workspace is mutable app source" {
@@ -2205,14 +2229,26 @@ test "browser native release artifact slot only commits wasm modules" {
     try std.testing.expectEqual(@as(usize, 0), er_ui_release_artifact_len());
 }
 
-test "browser native compiles workspace through embedded wasm interpreter" {
+test "browser native emits successor artifact with source workspace embedded" {
     try std.testing.expectEqual(@as(u32, 0), er_ui_release_artifact_clear());
     try std.testing.expectEqual(@as(u32, 0), er_ui_source_workspace_reset());
 
     try std.testing.expectEqual(@as(u32, 0), er_ui_compile_workspace_wasm());
     try std.testing.expect(er_ui_release_artifact_len() > er_ui_source_workspace_len());
     const artifact: [*]const u8 = @ptrFromInt(er_ui_release_artifact_ptr());
-    try std.testing.expectEqualSlices(u8, &.{ 0x00, 0x61, 0x73, 0x6d }, artifact[0..4]);
+    const artifact_bytes = artifact[0..er_ui_release_artifact_len()];
+    try std.testing.expectEqualSlices(u8, &.{ 0x00, 0x61, 0x73, 0x6d }, artifact_bytes[0..4]);
+    const source: [*]const u8 = @ptrFromInt(er_ui_compiler_source_ptr());
+    try std.testing.expect(std.mem.indexOf(u8, artifact_bytes, source[0..er_ui_compiler_source_len()]) != null);
+}
+
+test "browser native exports committed wasm artifact through generic byte bridge" {
+    try std.testing.expectEqual(@as(u32, 0), er_ui_release_artifact_clear());
+    const artifact: [*]u8 = @ptrFromInt(er_ui_release_artifact_ptr());
+    const compiler_bytes: [*]const u8 = @ptrFromInt(er_ui_compiler_wasm_ptr());
+    @memcpy(artifact[0..er_ui_compiler_wasm_len()], compiler_bytes[0..er_ui_compiler_wasm_len()]);
+    try std.testing.expectEqual(@as(u32, 0), er_ui_release_artifact_commit(er_ui_compiler_wasm_len()));
+
     try std.testing.expectEqual(@as(u32, 0), er_ui_request_release_artifact_download());
     try std.testing.expectEqual(@as(u32, 1), er_ui_host_command_count());
     try std.testing.expectEqual(@intFromEnum(HostCommandKind.download_wasm), er_ui_host_command_kind(0));

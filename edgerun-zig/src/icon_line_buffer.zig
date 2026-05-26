@@ -64,7 +64,7 @@ fn packIconInstance(instance: renderer_ir.IconInstance, out: []f32, out_len: *us
             .filled_circle => |circle| try filledCircle(out, out_len, bounds, instance.color, circle.cx, circle.cy, circle.radius),
             .filled_ellipse => |value| try ellipse(out, out_len, bounds, instance.color, value.cx, value.cy, value.rx, value.ry, value.full),
             .filled_round_rect => |rect| try box(out, out_len, bounds, instance.color, rect.x, rect.y, rect.w, rect.h),
-            .begin_fill_path, .begin_evenodd_fill_path, .end_fill_path, .paint_rgba, .paint_current_color => {},
+            .begin_fill_path, .begin_evenodd_fill_path, .end_fill_path, .paint_rgba, .paint_current_color, .paint_current_color_alpha, .paint_linear_gradient, .paint_radial_gradient, .stroke_width, .stroke_cap => {},
             .move_to => |point| path.moveTo(point),
             .line_to => |point| {
                 if (path.current) |current| try segment(out, out_len, bounds, instance.color, current, point);
