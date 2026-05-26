@@ -255,7 +255,7 @@ const CursorKind = app_cursor.Kind;
 const AppView = app_navigation.View;
 
 const AppRuntimeState = struct {
-    view: AppView = .landing,
+    view: AppView = .source,
     selected_blog_post_id: u32 = 0,
     blog_arc_filter_index: ?usize = null,
     selected_doc_index: ?usize = null,

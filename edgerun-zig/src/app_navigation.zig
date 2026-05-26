@@ -30,7 +30,7 @@ pub const View = enum(u32) {
 };
 
 pub const Route = struct {
-    view: View = .landing,
+    view: View = .source,
     selected_blog_post_id: u32 = 0,
     blog_arc_filter_index: ?usize = null,
     selected_doc_index: ?usize = null,
@@ -61,7 +61,7 @@ const PathKind = enum {
 pub fn fromPath(path: []const u8) Route {
     const trimmed = trimPath(path);
     return switch (pathKind(trimmed)) {
-        .root => .{},
+        .root => .{ .view = .source },
         .academy => blogIndex(null),
         .source => .{ .view = .source },
         .docs => .{ .view = .docs },
@@ -69,14 +69,14 @@ pub fn fromPath(path: []const u8) Route {
         .component_detail => .{ .view = .docs, .selected_doc_index = app_docs.indexBySlug("component-system"), .selected_component_index = component_gallery.indexBySlug(trimmed[RoutePath.component_detail_prefix.len..]) },
         .docs_detail => .{ .view = .docs, .selected_doc_index = app_docs.indexBySlug(trimmed[RoutePath.docs_detail_prefix.len..]) },
         .academy_detail => academyPostRoute(trimmed[RoutePath.academy_detail_prefix.len..]),
-        .unknown => .{},
+        .unknown => .{ .view = .source },
     };
 }
 
 pub fn fromHit(hit_id: u32, current: Route) ?Route {
     return switch (hit_id) {
         app_chrome.logo_button_id,
-        => .{},
+        => .{ .view = .source },
         app_chrome.docs_button_id => .{ .view = .docs },
         app_chrome.blog_button_id,
         app_blog.all_lessons_button_id,
@@ -225,9 +225,9 @@ fn writeDocPath(out: []u8, index: usize) error{RouteBufferTooSmall}!usize {
 }
 
 test "navigation parses app and native app routes" {
-    try std.testing.expectEqual(View.landing, fromPath("").view);
+    try std.testing.expectEqual(View.source, fromPath("").view);
     try std.testing.expectEqual(View.blog, fromPath("/academy").view);
-    try std.testing.expectEqual(View.landing, fromPath("/apps").view);
+    try std.testing.expectEqual(View.source, fromPath("/apps").view);
     try std.testing.expectEqual(View.source, fromPath("/source").view);
     try std.testing.expectEqual(View.docs, fromPath("/docs").view);
     try std.testing.expectEqual(View.docs, fromPath("/docs/media").view);
@@ -250,9 +250,10 @@ test "navigation writes route hashes from shared state" {
     var path: [route_path_capacity]u8 = undefined;
     var hash: [route_hash_capacity]u8 = undefined;
 
-    try std.testing.expectEqual(@as(usize, 1), try writePath(&path, .{}));
-    try std.testing.expectEqualStrings("/", path[0..1]);
-    try std.testing.expectEqual(@as(usize, 0), try writeHash(&hash, .{}));
+    const default_len = try writePath(&path, .{});
+    try std.testing.expectEqualStrings("/source", path[0..default_len]);
+    const default_hash_len = try writeHash(&hash, .{});
+    try std.testing.expectEqualStrings("#/source", hash[0..default_hash_len]);
 
     const source = Route{ .view = .source };
     const source_len = try writePath(&path, source);
@@ -286,7 +287,7 @@ test "navigation writes route hashes from shared state" {
 }
 
 test "navigation maps shared hit ids to routes" {
-    try std.testing.expectEqual(View.landing, fromHit(app_chrome.logo_button_id, .{}).?.view);
+    try std.testing.expectEqual(View.source, fromHit(app_chrome.logo_button_id, .{}).?.view);
     try std.testing.expectEqual(View.docs, fromHit(app_chrome.docs_button_id, .{}).?.view);
     try std.testing.expectEqual(View.blog, fromHit(app_chrome.blog_button_id, .{}).?.view);
     try std.testing.expectEqual(View.source, fromHit(app_chrome.source_button_id, .{}).?.view);

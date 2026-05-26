@@ -13,20 +13,20 @@ pub const launch_button_id: u32 = 32_003;
 pub const reset_button_id: u32 = 32_004;
 
 const header_h: f32 = app_chrome.header_h;
-const content_wide: f32 = design.content_wide;
+const source_content_wide: f32 = 1600.0;
 const content_pad: f32 = design.content_pad;
-const page_top_pad: f32 = 48.0;
-const page_bottom_pad: f32 = 120.0;
-const panel_radius: f32 = app_chrome.surface_radius;
-const gap: f32 = 18.0;
-const panel_pad: f32 = 18.0;
+const page_top_pad: f32 = 16.0;
+const page_bottom_pad: f32 = 48.0;
+const panel_radius: f32 = 6.0;
+const gap: f32 = 10.0;
+const panel_pad: f32 = 14.0;
 const toolbar_label_h: f32 = 18.0;
 const toolbar_title_h: f32 = 20.0;
 const toolbar_detail_h: f32 = 16.0;
 const toolbar_row_gap: f32 = 10.0;
 const toolbar_action_gap: f32 = 10.0;
 const source_action_h: f32 = design.compact_control_h + 2.0;
-const source_action_min_w: f32 = 92.0;
+const source_action_min_w: f32 = 132.0;
 const toolbar_text_average_w: f32 = 8.8;
 const toolbar_title_max_lines: usize = 2;
 const toolbar_detail_max_lines: usize = 2;
@@ -40,8 +40,18 @@ const compiler_message_max_lines: usize = 2;
 const code_pad: f32 = 18.0;
 const code_line_h: f32 = 18.0;
 const code_gutter_w: f32 = 68.0;
-const code_char_w: f32 = 7.4;
-const editor_status_h: f32 = 30.0;
+const code_char_w: f32 = 10.4;
+const editor_status_h: f32 = 24.0;
+const editor_titlebar_h: f32 = 34.0;
+const editor_breadcrumb_h: f32 = 26.0;
+const activity_rail_w: f32 = 48.0;
+const explorer_w: f32 = 250.0;
+const minimap_w: f32 = 88.0;
+const minimap_gap: f32 = 14.0;
+const explorer_threshold_w: f32 = 900.0;
+const minimap_threshold_w: f32 = 1180.0;
+const explorer_row_h: f32 = 24.0;
+const explorer_heading_h: f32 = 30.0;
 const compile_stage_count: usize = 4;
 const compact_w: f32 = 720.0;
 const max_rendered_lines: usize = 40;
@@ -67,7 +77,16 @@ const syntax_builtin = ui.Color{ .r = 252, .g = 211, .b = 77 };
 const syntax_punctuation = ui.Color{ .r = 148, .g = 163, .b = 184 };
 const active_line = ui.Color{ .r = 22, .g = 30, .b = 38 };
 const gutter_bg = ui.Color{ .r = 10, .g = 12, .b = 16 };
-const status_bg = ui.Color{ .r = 13, .g = 15, .b = 19 };
+const status_bg = ui.Color{ .r = 0, .g = 122, .b = 204 };
+const vscode_titlebar = ui.Color{ .r = 30, .g = 30, .b = 30 };
+const vscode_activity = ui.Color{ .r = 37, .g = 37, .b = 38 };
+const vscode_sidebar = ui.Color{ .r = 24, .g = 24, .b = 24 };
+const vscode_editor = ui.Color{ .r = 30, .g = 30, .b = 30 };
+const vscode_tab = ui.Color{ .r = 30, .g = 30, .b = 30 };
+const vscode_tab_inactive = ui.Color{ .r = 45, .g = 45, .b = 45 };
+const vscode_line = ui.Color{ .r = 63, .g = 63, .b = 70 };
+const vscode_selection = ui.Color{ .r = 9, .g = 71, .b = 113 };
+const vscode_status_text = ui.Color{ .r = 255, .g = 255, .b = 255 };
 
 var line_number_labels: [max_rendered_lines][line_number_label_bytes]u8 = undefined;
 var editor_info_label: [editor_info_label_bytes]u8 = undefined;
@@ -91,12 +110,12 @@ pub const State = struct {
 };
 
 pub fn contentHeight(width: f32, state: State) f32 {
-    const content_w = @min(content_wide, @max(1.0, width - content_pad * 2.0));
+    const content_w = @min(source_content_wide, @max(1.0, width - content_pad * 2.0));
     return header_h + page_top_pad + toolbarHeight(content_w) + gap + editorHeight(content_w, state) + gap + statusHeight(content_w, state) + page_bottom_pad;
 }
 
 pub fn render(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
-    const content_w = @min(content_wide, @max(1.0, bounds.w - content_pad * 2.0));
+    const content_w = @min(source_content_wide, @max(1.0, bounds.w - content_pad * 2.0));
     const content = ui.Rect.init(bounds.x + (bounds.w - content_w) * 0.5, bounds.y, content_w, header_h);
     try fill(scene, bounds, palette.bg, 0.0);
 
@@ -114,14 +133,13 @@ pub fn render(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Re
 }
 
 fn renderToolbar(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
-    try components.renderComponent(scene, bounds, .{ .card = .{
-        .title = "",
-        .detail = "",
-    } }, .{ .style = app_chrome.style() });
+    try fill(scene, bounds, vscode_titlebar, panel_radius);
+    try stroke(scene, bounds, palette.border, panel_radius);
     const text_w = toolbarTextWidth(bounds);
     const title_h = wrappedTextHeight(state.label, text_w, toolbar_title_h, toolbar_title_max_lines, toolbar_text_average_w);
     const detail_h = wrappedTextHeight(toolbarDetail(state), text_w, toolbar_detail_h, toolbar_detail_max_lines, toolbar_text_average_w);
-    try text(scene, bounds.x + panel_pad, bounds.y + panel_pad, text_w, toolbar_label_h, "Source workspace", palette.primary);
+    try iconQuad(scene, ui.Rect.init(bounds.x + panel_pad, bounds.y + panel_pad + 1.0, 18.0, 18.0), .app, palette.primary);
+    try text(scene, bounds.x + panel_pad + 28.0, bounds.y + panel_pad, text_w, toolbar_label_h, "EdgeRun Workspace", palette.primary);
     try wrappedText(scene, ui.Rect.init(bounds.x + panel_pad, bounds.y + panel_pad + toolbar_label_h + toolbar_row_gap, text_w, title_h), state.label, palette.text, toolbar_title_h, toolbar_text_average_w, toolbar_title_max_lines);
     try wrappedText(scene, ui.Rect.init(bounds.x + panel_pad, bounds.y + panel_pad + toolbar_label_h + toolbar_row_gap + title_h + toolbar_row_gap, text_w, detail_h), toolbarDetail(state), toolbarDetailColor(state), toolbar_detail_h, toolbar_text_average_w, toolbar_detail_max_lines);
 
@@ -133,32 +151,48 @@ fn renderToolbar(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui
 }
 
 fn renderEditor(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
-    try fill(scene, bounds, palette.code_bg, panel_radius);
+    try fill(scene, bounds, vscode_editor, panel_radius);
     try stroke(scene, bounds, palette.border, panel_radius);
     const status_y = bounds.y + bounds.h - editor_status_h;
-    try fill(scene, ui.Rect.init(bounds.x, bounds.y, code_pad + code_gutter_w - 10.0, bounds.h - editor_status_h), gutter_bg, panel_radius);
+    const body_y = bounds.y + editor_titlebar_h;
+    const body_h = @max(1.0, status_y - body_y);
+    const show_explorer = bounds.w >= explorer_threshold_w;
+    const show_minimap = bounds.w >= minimap_threshold_w;
+    const explorer_width = if (show_explorer) explorer_w else 0.0;
+    const minimap_width = if (show_minimap) minimap_w else 0.0;
+    const code_x = bounds.x + activity_rail_w + explorer_width;
+    const code_w = @max(1.0, bounds.w - activity_rail_w - explorer_width - minimap_width - minimap_gap);
+    const editor_body = ui.Rect.init(code_x, body_y, code_w, body_h);
+    const breadcrumb = ui.Rect.init(editor_body.x, editor_body.y, editor_body.w, editor_breadcrumb_h);
+    const code_view = ui.Rect.init(editor_body.x, editor_body.y + editor_breadcrumb_h, editor_body.w, @max(1.0, editor_body.h - editor_breadcrumb_h));
+
+    try renderEditorTitlebar(scene, ui.Rect.init(bounds.x, bounds.y, bounds.w, editor_titlebar_h), state);
+    try renderActivityRail(scene, ui.Rect.init(bounds.x, body_y, activity_rail_w, body_h));
+    if (show_explorer) try renderExplorer(scene, ui.Rect.init(bounds.x + activity_rail_w, body_y, explorer_width, body_h), state);
+    try fill(scene, code_view, palette.code_bg, 0.0);
+    try renderBreadcrumb(scene, breadcrumb, state);
+    try fill(scene, ui.Rect.init(code_view.x, code_view.y, code_pad + code_gutter_w - 10.0, code_view.h), gutter_bg, 0.0);
 
     const cursor_line = lineIndexAt(state.source, state.cursor);
-    const code_h = @max(1.0, bounds.h - editor_status_h);
-    const visible_lines = @min(max_rendered_lines, @max(@as(usize, 1), @as(usize, @intFromFloat(@max(1.0, (code_h - code_pad * 2.0) / code_line_h)))));
+    const visible_lines = @min(max_rendered_lines, @max(@as(usize, 1), @as(usize, @intFromFloat(@max(1.0, (code_view.h - code_pad * 2.0) / code_line_h)))));
     const first_line = if (cursor_line > visible_lines / 2) cursor_line - visible_lines / 2 else 0;
     var line_start = lineStartAt(state.source, first_line);
     var line_number = first_line + 1;
     var rendered: usize = 0;
-    var y = bounds.y + code_pad;
-    while (rendered < max_rendered_lines and line_start <= state.source.len and y + code_line_h <= status_y - code_pad) : (rendered += 1) {
+    var y = code_view.y + code_pad;
+    while (rendered < max_rendered_lines and line_start <= state.source.len and y + code_line_h <= code_view.y + code_view.h - code_pad) : (rendered += 1) {
         const line_end = lineEnd(state.source, line_start);
         const line = state.source[line_start..line_end];
-        const visible = line[0..@min(line.len, maxVisibleColumns(bounds.w))];
+        const visible = line[0..@min(line.len, maxVisibleColumns(code_view.w))];
         const is_cursor_line = state.cursor >= line_start and state.cursor <= line_end;
         if (is_cursor_line) {
-            try fill(scene, ui.Rect.init(bounds.x + code_pad + code_gutter_w - 4.0, y - 1.0, bounds.w - code_pad - code_gutter_w, code_line_h + 2.0), active_line, 4.0);
+            try fill(scene, ui.Rect.init(code_view.x + code_pad + code_gutter_w - 4.0, y - 1.0, code_view.w - code_pad - code_gutter_w, code_line_h + 2.0), active_line, 0.0);
         }
-        try text(scene, bounds.x + 12.0, y, code_gutter_w - 18.0, code_line_h, lineNumberLabel(rendered, line_number), if (is_cursor_line) palette.primary else palette.muted);
-        try renderSyntaxLine(scene, bounds.x + code_pad + code_gutter_w, y, bounds.w - code_pad * 2.0 - code_gutter_w, visible);
+        try text(scene, code_view.x + 12.0, y, code_gutter_w - 18.0, code_line_h, lineNumberLabel(rendered, line_number), if (is_cursor_line) palette.primary else palette.muted);
+        try renderSyntaxLine(scene, code_view.x + code_pad + code_gutter_w, y, code_view.w - code_pad * 2.0 - code_gutter_w, visible);
         if (is_cursor_line) {
             const column = @min(state.cursor - line_start, visible.len);
-            const caret_x = bounds.x + code_pad + code_gutter_w + @as(f32, @floatFromInt(column)) * code_char_w;
+            const caret_x = code_view.x + code_pad + code_gutter_w + @as(f32, @floatFromInt(column)) * code_char_w;
             try fill(scene, ui.Rect.init(caret_x, y + 2.0, 2.0, code_line_h - 4.0), palette.primary, 0.0);
         }
         y += code_line_h;
@@ -168,9 +202,10 @@ fn renderEditor(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
     }
 
     if (state.source.len == 0) {
-        try text(scene, bounds.x + code_pad + code_gutter_w, bounds.y + code_pad, bounds.w - code_pad * 2.0 - code_gutter_w, code_line_h, emptyEditorLabel(state), emptyEditorColor(state));
+        try text(scene, code_view.x + code_pad + code_gutter_w, code_view.y + code_pad, code_view.w - code_pad * 2.0 - code_gutter_w, code_line_h, emptyEditorLabel(state), emptyEditorColor(state));
     }
 
+    if (show_minimap) try renderMinimap(scene, ui.Rect.init(bounds.x + bounds.w - minimap_w - 10.0, code_view.y + 8.0, minimap_w, @max(1.0, code_view.h - 16.0)), state);
     try renderEditorStatus(scene, ui.Rect.init(bounds.x, status_y, bounds.w, editor_status_h), state);
 }
 
@@ -206,12 +241,79 @@ fn renderStatus(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
 
 fn renderEditorStatus(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
     try fill(scene, bounds, status_bg, 0.0);
-    try stroke(scene, ui.Rect.init(bounds.x, bounds.y, bounds.w, 1.0), palette.border, 0.0);
     const info = editorInfoLabel(state);
-    try text(scene, bounds.x + 14.0, bounds.y + 7.0, bounds.w - 28.0, 16.0, info, palette.dim);
+    try text(scene, bounds.x + 14.0, bounds.y + 5.0, bounds.w - 28.0, 14.0, info, vscode_status_text);
     const dirty_label = editorSaveLabel(state);
-    const dirty_color = editorSaveColor(state);
-    try text(scene, bounds.x + @max(0.0, bounds.w - 112.0), bounds.y + 7.0, 96.0, 16.0, dirty_label, dirty_color);
+    try text(scene, bounds.x + @max(0.0, bounds.w - 112.0), bounds.y + 5.0, 96.0, 14.0, dirty_label, vscode_status_text);
+}
+
+fn renderEditorTitlebar(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
+    try fill(scene, bounds, vscode_titlebar, panel_radius);
+    try fill(scene, ui.Rect.init(bounds.x + activity_rail_w, bounds.y, @min(260.0, @max(120.0, bounds.w * 0.28)), bounds.h), vscode_tab, 0.0);
+    try text(scene, bounds.x + activity_rail_w + 12.0, bounds.y + 9.0, 220.0, 14.0, fileName(state.label), palette.text);
+    try fill(scene, ui.Rect.init(bounds.x + activity_rail_w, bounds.y + bounds.h - 2.0, @min(260.0, @max(120.0, bounds.w * 0.28)), 2.0), palette.primary, 0.0);
+    try fill(scene, ui.Rect.init(bounds.x + activity_rail_w + @min(260.0, @max(120.0, bounds.w * 0.28)), bounds.y, 132.0, bounds.h), vscode_tab_inactive, 0.0);
+    try text(scene, bounds.x + activity_rail_w + @min(260.0, @max(120.0, bounds.w * 0.28)) + 12.0, bounds.y + 9.0, 112.0, 14.0, "artifact.wasm", palette.muted);
+}
+
+fn renderActivityRail(scene: *ui.Scene, bounds: ui.Rect) !void {
+    try fill(scene, bounds, vscode_activity, 0.0);
+    const icons = [_]icon.Icon{ .file, .search, .route, .terminal, .settings };
+    var y = bounds.y + 14.0;
+    for (icons, 0..) |value, index| {
+        const color = if (index == 0) palette.text else palette.muted;
+        try iconQuad(scene, ui.Rect.init(bounds.x + 13.0, y, 22.0, 22.0), value, color);
+        y += 44.0;
+    }
+    try fill(scene, ui.Rect.init(bounds.x, bounds.y + 8.0, 2.0, 34.0), palette.primary, 0.0);
+}
+
+fn renderExplorer(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
+    try fill(scene, bounds, vscode_sidebar, 0.0);
+    try stroke(scene, ui.Rect.init(bounds.x + bounds.w - 1.0, bounds.y, 1.0, bounds.h), vscode_line, 0.0);
+    try text(scene, bounds.x + 14.0, bounds.y + 10.0, bounds.w - 28.0, 12.0, "EXPLORER", palette.dim);
+    try text(scene, bounds.x + 14.0, bounds.y + explorer_heading_h + 8.0, bounds.w - 28.0, 14.0, "EDGERUN-C", palette.text);
+    const rows_y = bounds.y + explorer_heading_h + 38.0;
+    try explorerRow(scene, bounds.x, rows_y, bounds.w, "src", .chevron_right, false);
+    try explorerRow(scene, bounds.x, rows_y + explorer_row_h, bounds.w, "app_runtime.zig", .file, std.mem.eql(u8, state.label, "src/app_runtime.zig"));
+    try explorerRow(scene, bounds.x, rows_y + explorer_row_h * 2.0, bounds.w, "app_source.zig", .file, std.mem.eql(u8, state.label, "src/app_source.zig"));
+    try explorerRow(scene, bounds.x, rows_y + explorer_row_h * 3.0, bounds.w, "ui_components.zig", .file, std.mem.eql(u8, state.label, "src/ui_components.zig"));
+    try explorerRow(scene, bounds.x, rows_y + explorer_row_h * 4.0, bounds.w, "render/font_atlas.zig", .file, std.mem.eql(u8, state.label, "src/render/font_atlas.zig"));
+    try text(scene, bounds.x + 14.0, bounds.y + bounds.h - 46.0, bounds.w - 28.0, 12.0, "APP-OWNED VFS", palette.dim);
+    try text(scene, bounds.x + 14.0, bounds.y + bounds.h - 26.0, bounds.w - 28.0, 12.0, toolbarDetail(state), toolbarDetailColor(state));
+}
+
+fn explorerRow(scene: *ui.Scene, x: f32, y: f32, w: f32, label: []const u8, icon_value: icon.Icon, selected: bool) !void {
+    if (selected) try fill(scene, ui.Rect.init(x, y, w, explorer_row_h), vscode_selection, 0.0);
+    try iconQuad(scene, ui.Rect.init(x + 14.0, y + 5.0, 14.0, 14.0), icon_value, if (selected) palette.text else palette.muted);
+    try text(scene, x + 36.0, y + 5.0, w - 44.0, 14.0, label, if (selected) palette.text else palette.dim);
+}
+
+fn renderBreadcrumb(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
+    try fill(scene, bounds, vscode_editor, 0.0);
+    try stroke(scene, ui.Rect.init(bounds.x, bounds.y + bounds.h - 1.0, bounds.w, 1.0), vscode_line, 0.0);
+    try text(scene, bounds.x + 14.0, bounds.y + 7.0, bounds.w - 28.0, 12.0, state.label, palette.dim);
+}
+
+fn renderMinimap(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
+    try fill(scene, bounds, ui.Color{ .r = 22, .g = 22, .b = 22, .a = 180 }, 0.0);
+    var y = bounds.y + 6.0;
+    var line_start: usize = 0;
+    var row: usize = 0;
+    while (line_start <= state.source.len and row < max_rendered_lines and y < bounds.y + bounds.h - 4.0) : (row += 1) {
+        const line_end_value = lineEnd(state.source, line_start);
+        const line_len = line_end_value - line_start;
+        const line_w = @min(bounds.w - 12.0, @as(f32, @floatFromInt(line_len)) * 1.2);
+        const color = if (line_len == 0) vscode_line else palette.muted;
+        try fill(scene, ui.Rect.init(bounds.x + 6.0, y, @max(2.0, line_w), 2.0), color, 0.0);
+        if (line_end_value == state.source.len) break;
+        line_start = line_end_value + 1;
+        y += 5.0;
+    }
+}
+
+fn iconQuad(scene: *ui.Scene, bounds: ui.Rect, value: icon.Icon, color: ui.Color) ui.RenderError!void {
+    try scene.pushIconQuad(.{ .bounds = bounds, .icon_id = icon.id(value), .color = color });
 }
 
 fn renderCompileStages(scene: *ui.Scene, bounds: ui.Rect, progress: f32) !void {
@@ -265,6 +367,11 @@ fn toolbarDetailColor(state: State) ui.Color {
     if (state.workspace_bytes == 0 or state.file_bytes == 0 or isErrorStatus(state.status)) return palette.danger;
     if (state.dirty) return palette.amber;
     return palette.dim;
+}
+
+fn fileName(path: []const u8) []const u8 {
+    if (std.mem.lastIndexOfScalar(u8, path, '/')) |index| return path[index + 1 ..];
+    return path;
 }
 
 fn emptyEditorLabel(state: State) []const u8 {
@@ -333,7 +440,8 @@ fn toolbarActions(bounds: ui.Rect) ToolbarActions {
     const action_area = ui.Rect.init(bounds.x + panel_pad, bounds.y + bounds.h - panel_pad - toolbarActionsHeight(bounds.w), @max(1.0, bounds.w - panel_pad * 2.0), toolbarActionsHeight(bounds.w));
     const compact = bounds.w < compact_w;
     const columns: usize = if (compact and !toolbarActionsFitOneRow(bounds.w)) 2 else 4;
-    const button_w = @max(design.min_touch_target, (action_area.w - toolbar_action_gap * @as(f32, @floatFromInt(columns - 1))) / @as(f32, @floatFromInt(columns)));
+    const layout_w = if (compact) action_area.w else toolbarActionsWidth(bounds.w);
+    const button_w = @max(design.min_touch_target, (layout_w - toolbar_action_gap * @as(f32, @floatFromInt(columns - 1))) / @as(f32, @floatFromInt(columns)));
     const row_h = source_action_h;
     const start_x = if (!compact) bounds.x + bounds.w - panel_pad - toolbarActionsWidth(bounds.w) else action_area.x;
     const start_y = if (!compact) bounds.y + panel_pad else action_area.y;
