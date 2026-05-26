@@ -7,7 +7,7 @@ const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
-const component_render = @import("Render.zig");
+const tokens = @import("../../ui_tokens.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
@@ -22,7 +22,13 @@ pub const Switch = struct {
     }
 
     pub fn render(self: Switch, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return component_render.renderSwitch(scene, bounds, self.label, self.checked, options);
+        const pill = ui.Rect.init(bounds.x + bounds.w - switch_width, bounds.y + (bounds.h - switch_height) * 0.5, switch_width, switch_height);
+        try scene.pushRect(pill, if (self.checked) options.style.accent else options.style.row, .fill, switch_height * 0.5, 0.0);
+        try scene.pushRect(pill, options.style.border, .border, switch_height * 0.5, 0.0);
+        const knob_x = if (self.checked) pill.x + pill.w - switch_knob_size - switch_knob_inset else pill.x + switch_knob_inset;
+        const knob = ui.Rect.init(knob_x, pill.y + switch_knob_inset, switch_knob_size, switch_knob_size);
+        try scene.pushRect(knob, options.style.panel, .fill, switch_knob_size * 0.5, 0.0);
+        try scene.pushText(ui.Rect.init(bounds.x, bounds.y, @max(min_extent, pill.x - bounds.x - switch_label_gap), bounds.h).withHeightCentered(control_label_height), self.label, options.style.text);
     }
 
     pub fn collectInteractions(self: Switch, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
@@ -32,7 +38,7 @@ pub const Switch = struct {
     pub fn measure(self: Switch, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = self;
         _ = options;
-        return component_render.measureFixed(component_render.preferred_switch, constraints);
+        return measureFixed(preferred_switch, constraints);
     }
 
     pub fn toObject(self: Switch, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -50,6 +56,32 @@ pub const Switch = struct {
         };
     }
 };
+
+fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
+    const resolved_preferred = constrainPreferredSize(preferred, constraints);
+    return layout.Measurement.flexible(
+        .{ .w = @min(preferred.w, resolved_preferred.w), .h = @min(preferred.h, resolved_preferred.h) },
+        resolved_preferred,
+        .{ .w = measure_max_width, .h = preferred.h },
+    ).applyExact(constraints);
+}
+
+fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {
+    return .{
+        .w = constraints.width.limit(preferred.w),
+        .h = constraints.height.limit(preferred.h),
+    };
+}
+
+const min_extent: f32 = 1.0;
+const measure_max_width: f32 = 4096.0;
+const control_label_height: f32 = tokens.Component.control_label_height;
+const switch_width: f32 = 42.0;
+const switch_height: f32 = 24.0;
+const switch_knob_size: f32 = 18.0;
+const switch_knob_inset: f32 = 3.0;
+const switch_label_gap: f32 = 10.0;
+pub const preferred_switch = ui.Size{ .w = 220.0, .h = 32.0 };
 
 test "switch component serializes to canonical object and deserializes" {
     const switch_control = Switch{ .id = 12, .label = "Public", .checked = false };

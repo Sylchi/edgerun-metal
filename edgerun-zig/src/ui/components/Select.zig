@@ -7,8 +7,8 @@ const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
-const component_render = @import("Render.zig");
 const icon = @import("../../icon.zig");
+const tokens = @import("../../ui_tokens.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
@@ -22,7 +22,14 @@ pub const Select = struct {
     }
 
     pub fn render(self: Select, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return component_render.renderSelect(scene, bounds, self.label, options);
+        try scene.pushRect(bounds, options.style.panel, .fill, control_radius, 0.0);
+        try scene.pushRect(bounds, options.style.border, .border, control_radius, 0.0);
+        if (contentInset(bounds, control_text_padding)) |label_bounds| {
+            const text_bounds = ui.Rect.init(label_bounds.x, label_bounds.y, @max(min_extent, label_bounds.w - select_arrow_w), label_bounds.h);
+            try scene.pushText(text_bounds.withHeightCentered(control_label_height), self.label, options.style.text);
+            const arrow_bounds = ui.Rect.init(label_bounds.x + label_bounds.w - select_icon_size, label_bounds.y + (label_bounds.h - select_icon_size) * 0.5, select_icon_size, select_icon_size);
+            try scene.pushIconQuad(.{ .bounds = arrow_bounds, .icon_id = icon.id(.chevron_right), .color = options.style.muted });
+        }
     }
 
     pub fn collectInteractions(self: Select, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
@@ -32,7 +39,7 @@ pub const Select = struct {
     pub fn measure(self: Select, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = self;
         _ = options;
-        return component_render.measureFixed(component_render.preferred_select, constraints);
+        return measureFixed(preferred_select, constraints);
     }
 
     pub fn toObject(self: Select, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -50,6 +57,37 @@ pub const Select = struct {
         };
     }
 };
+
+fn contentInset(bounds: ui.Rect, padding: f32) ?ui.Rect {
+    const clamped = @min(@max(padding, 0.0), @min(bounds.w, bounds.h) * 0.5);
+    const out = bounds.insetUniform(clamped);
+    return if (out.valid()) out else null;
+}
+
+fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
+    const resolved_preferred = constrainPreferredSize(preferred, constraints);
+    return layout.Measurement.flexible(
+        .{ .w = @min(preferred.w, resolved_preferred.w), .h = @min(preferred.h, resolved_preferred.h) },
+        resolved_preferred,
+        .{ .w = measure_max_width, .h = preferred.h },
+    ).applyExact(constraints);
+}
+
+fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {
+    return .{
+        .w = constraints.width.limit(preferred.w),
+        .h = constraints.height.limit(preferred.h),
+    };
+}
+
+const min_extent: f32 = 1.0;
+const measure_max_width: f32 = 4096.0;
+const control_radius: f32 = tokens.Component.control_radius;
+const control_text_padding: f32 = tokens.Component.control_text_padding;
+const control_label_height: f32 = tokens.Component.control_label_height;
+const select_arrow_w: f32 = 18.0;
+const select_icon_size: f32 = 14.0;
+pub const preferred_select = ui.Size{ .w = 220.0, .h = 40.0 };
 
 test "select component serializes to canonical object and deserializes" {
     const select = Select{ .id = 22, .label = "Production" };

@@ -7,7 +7,7 @@ const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
-const component_render = @import("Render.zig");
+const tokens = @import("../../ui_tokens.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
@@ -23,18 +23,20 @@ pub const RadioGroup = struct {
     }
 
     pub fn render(self: RadioGroup, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return component_render.renderRadioGroup(scene, bounds, self.first, self.second, selectedIndex(self.selected), options);
+        const selected = selectedIndex(self.selected);
+        try renderOption(scene, optionBounds(bounds, 0), self.first, selected == 0, options);
+        try renderOption(scene, optionBounds(bounds, 1), self.second, selected == 1, options);
     }
 
     pub fn collectInteractions(self: RadioGroup, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-        try collector.addHit(component_render.radioOptionBounds(bounds, 0), .button, self.id);
-        try collector.addHit(component_render.radioOptionBounds(bounds, 1), .button, self.id + 1);
+        try collector.addHit(optionBounds(bounds, 0), .button, self.id);
+        try collector.addHit(optionBounds(bounds, 1), .button, self.id + 1);
     }
 
     pub fn measure(self: RadioGroup, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = self;
         _ = options;
-        return component_render.measureFixed(component_render.preferred_radio_group, constraints);
+        return measureFixed(preferred_radio_group, constraints);
     }
 
     pub fn toObject(self: RadioGroup, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -66,6 +68,49 @@ fn encodedId(id: u32, selected: u16) u32 {
 }
 
 const radio_id_stride: u32 = 2;
+
+fn renderOption(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, selected: bool, options: RenderOptions) ui.RenderError!void {
+    const outer = ui.Rect.init(bounds.x, bounds.y + (bounds.h - radio_box_size) * 0.5, radio_box_size, radio_box_size);
+    try scene.pushRect(outer, options.style.panel, .fill, radio_box_size * 0.5, 0.0);
+    try scene.pushRect(outer, options.style.border, .border, radio_box_size * 0.5, 0.0);
+    if (selected) {
+        const dot = ui.Rect.init(outer.x + (outer.w - radio_dot_size) * 0.5, outer.y + (outer.h - radio_dot_size) * 0.5, radio_dot_size, radio_dot_size);
+        try scene.pushRect(dot, options.style.accent, .fill, radio_dot_size * 0.5, 0.0);
+    }
+    const label_x = outer.x + outer.w + radio_text_gap;
+    try scene.pushText(ui.Rect.init(label_x, bounds.y, @max(min_extent, bounds.x + bounds.w - label_x), bounds.h).withHeightCentered(control_label_height), label, options.style.text);
+}
+
+fn optionBounds(bounds: ui.Rect, index: usize) ui.Rect {
+    const y = bounds.y + @as(f32, @floatFromInt(index)) * radio_option_pitch;
+    return ui.Rect.init(bounds.x, y, bounds.w, radio_option_h);
+}
+
+fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
+    const resolved_preferred = constrainPreferredSize(preferred, constraints);
+    return layout.Measurement.flexible(
+        .{ .w = @min(preferred.w, resolved_preferred.w), .h = @min(preferred.h, resolved_preferred.h) },
+        resolved_preferred,
+        .{ .w = measure_max_width, .h = preferred.h },
+    ).applyExact(constraints);
+}
+
+fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {
+    return .{
+        .w = constraints.width.limit(preferred.w),
+        .h = constraints.height.limit(preferred.h),
+    };
+}
+
+const min_extent: f32 = 1.0;
+const measure_max_width: f32 = 4096.0;
+const control_label_height: f32 = tokens.Component.control_label_height;
+const radio_box_size: f32 = 18.0;
+const radio_text_gap: f32 = 10.0;
+const radio_dot_size: f32 = 8.0;
+const radio_option_h: f32 = 20.0;
+const radio_option_pitch: f32 = 26.0;
+pub const preferred_radio_group = ui.Size{ .w = 220.0, .h = 52.0 };
 
 test "radio group component serializes to canonical object and deserializes" {
     const radio = RadioGroup{ .id = 70, .first = "Default", .second = "Comfortable", .selected = 1 };

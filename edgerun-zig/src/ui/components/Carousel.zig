@@ -7,7 +7,7 @@ const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
-const component_render = @import("Render.zig");
+const tokens = @import("../../ui_tokens.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
@@ -21,18 +21,24 @@ pub const Carousel = struct {
     }
 
     pub fn render(self: Carousel, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return component_render.renderCarousel(scene, bounds, self.label, options);
+        try renderButton(scene, buttonBounds(bounds, 0), "<", options);
+        const content = contentBounds(bounds);
+        try scene.pushRect(content, options.style.row, .fill, carousel_radius, 0.0);
+        if (contentInset(content, carousel_text_padding)) |inner| {
+            try scene.pushAlignedText(inner.withHeightCentered(control_label_height), self.label, options.style.muted, .center);
+        }
+        try renderButton(scene, buttonBounds(bounds, 1), ">", options);
     }
 
     pub fn collectInteractions(self: Carousel, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-        try collector.addHit(component_render.carouselButtonBounds(bounds, 0), .button, self.id);
-        try collector.addHit(component_render.carouselButtonBounds(bounds, 1), .button, self.id + 1);
+        try collector.addHit(buttonBounds(bounds, 0), .button, self.id);
+        try collector.addHit(buttonBounds(bounds, 1), .button, self.id + 1);
     }
 
     pub fn measure(self: Carousel, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = self;
         _ = options;
-        return component_render.measureFixed(component_render.preferred_carousel, constraints);
+        return measureFixed(preferred_carousel, constraints);
     }
 
     pub fn toObject(self: Carousel, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -50,6 +56,59 @@ pub const Carousel = struct {
         };
     }
 };
+
+fn renderButton(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, options: RenderOptions) ui.RenderError!void {
+    try scene.pushRect(bounds, ui.Color.clear, .fill, carousel_button_size * 0.5, 0.0);
+    try scene.pushRect(bounds, options.style.border, .border, carousel_button_size * 0.5, 0.0);
+    if (contentInset(bounds, carousel_button_text_padding)) |inner| {
+        try scene.pushAlignedText(inner.withHeightCentered(control_label_height), label, options.style.text, .center);
+    }
+}
+
+fn buttonBounds(bounds: ui.Rect, index: usize) ui.Rect {
+    const y = bounds.y + (bounds.h - carousel_button_size) * 0.5;
+    return switch (index) {
+        0 => ui.Rect.init(bounds.x, y, carousel_button_size, carousel_button_size),
+        else => ui.Rect.init(bounds.x + bounds.w - carousel_button_size, y, carousel_button_size, carousel_button_size),
+    };
+}
+
+fn contentBounds(bounds: ui.Rect) ui.Rect {
+    const x = bounds.x + carousel_button_size + carousel_gap;
+    return ui.Rect.init(x, bounds.y, @max(min_extent, bounds.w - carousel_button_size * 2.0 - carousel_gap * 2.0), bounds.h);
+}
+
+fn contentInset(bounds: ui.Rect, padding: f32) ?ui.Rect {
+    const clamped = @min(@max(padding, 0.0), @min(bounds.w, bounds.h) * 0.5);
+    const out = bounds.insetUniform(clamped);
+    return if (out.valid()) out else null;
+}
+
+fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
+    const resolved_preferred = constrainPreferredSize(preferred, constraints);
+    return layout.Measurement.flexible(
+        .{ .w = @min(preferred.w, resolved_preferred.w), .h = @min(preferred.h, resolved_preferred.h) },
+        resolved_preferred,
+        .{ .w = measure_max_width, .h = preferred.h },
+    ).applyExact(constraints);
+}
+
+fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {
+    return .{
+        .w = constraints.width.limit(preferred.w),
+        .h = constraints.height.limit(preferred.h),
+    };
+}
+
+const min_extent: f32 = 1.0;
+const measure_max_width: f32 = 4096.0;
+const control_label_height: f32 = tokens.Component.control_label_height;
+const carousel_button_size: f32 = 28.0;
+const carousel_gap: f32 = 8.0;
+const carousel_radius: f32 = 8.0;
+const carousel_text_padding: f32 = 8.0;
+const carousel_button_text_padding: f32 = 4.0;
+pub const preferred_carousel = ui.Size{ .w = 240.0, .h = 40.0 };
 
 test "carousel component serializes to canonical object and deserializes" {
     const carousel = Carousel{ .id = 990, .label = "Slide" };

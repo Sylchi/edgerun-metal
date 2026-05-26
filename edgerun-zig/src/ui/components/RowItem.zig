@@ -7,7 +7,7 @@ const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
-const component_render = @import("Render.zig");
+const tokens = @import("../../ui_tokens.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
@@ -22,7 +22,15 @@ pub const RowItem = struct {
     }
 
     pub fn render(self: RowItem, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return component_render.renderRowItem(scene, bounds, self.title, self.detail, options);
+        try scene.pushRect(bounds, options.style.row, .fill, row_radius, 0.0);
+        if (titleBounds(bounds, self.detail.len == 0)) |title_bounds| {
+            try scene.pushText(title_bounds, self.title, options.style.text);
+        }
+        if (self.detail.len != 0) {
+            if (detailBounds(bounds)) |detail_bounds| {
+                try scene.pushText(detail_bounds, self.detail, options.style.muted);
+            }
+        }
     }
 
     pub fn collectInteractions(self: RowItem, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
@@ -32,7 +40,7 @@ pub const RowItem = struct {
     pub fn measure(self: RowItem, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = self;
         _ = options;
-        return component_render.measureFixed(component_render.preferred_row_item, constraints);
+        return measureFixed(preferred_row_item, constraints);
     }
 
     pub fn toObject(self: RowItem, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -50,6 +58,45 @@ pub const RowItem = struct {
         };
     }
 };
+
+fn titleBounds(bounds: ui.Rect, centered: bool) ?ui.Rect {
+    const row_bounds = if (centered) bounds.withHeightCentered(row_title_height) else ui.Rect.init(bounds.x, bounds.y + row_title_offset_y, bounds.w, row_title_height);
+    return textBounds(row_bounds);
+}
+
+fn detailBounds(bounds: ui.Rect) ?ui.Rect {
+    return textBounds(ui.Rect.init(bounds.x, bounds.y + row_detail_offset_y, bounds.w, row_detail_height));
+}
+
+fn textBounds(bounds: ui.Rect) ?ui.Rect {
+    const out = bounds.insetLtrb(row_text_padding_x, 0.0, row_text_padding_x, 0.0);
+    return if (out.valid()) out else null;
+}
+
+fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
+    const resolved_preferred = constrainPreferredSize(preferred, constraints);
+    return layout.Measurement.flexible(
+        .{ .w = @min(preferred.w, resolved_preferred.w), .h = @min(preferred.h, resolved_preferred.h) },
+        resolved_preferred,
+        .{ .w = measure_max_width, .h = preferred.h },
+    ).applyExact(constraints);
+}
+
+fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {
+    return .{
+        .w = constraints.width.limit(preferred.w),
+        .h = constraints.height.limit(preferred.h),
+    };
+}
+
+const measure_max_width: f32 = 4096.0;
+const row_radius: f32 = tokens.Component.row_radius;
+const row_text_padding_x: f32 = 12.0;
+const row_title_offset_y: f32 = 8.0;
+const row_detail_offset_y: f32 = 26.0;
+const row_title_height: f32 = 18.0;
+const row_detail_height: f32 = 16.0;
+pub const preferred_row_item = ui.Size{ .w = 260.0, .h = 48.0 };
 
 test "row item component serializes to canonical object and deserializes" {
     const row = RowItem{ .id = 20, .title = "object graph", .detail = "canonical data" };

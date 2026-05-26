@@ -422,20 +422,6 @@ pub fn renderAlert(scene: *ui.Scene, bounds: ui.Rect, title: []const u8, detail:
     });
 }
 
-pub fn renderAspectRatio(scene: *ui.Scene, bounds: ui.Rect, ratio_w: u16, ratio_h: u16, options: RenderOptions) ui.RenderError!void {
-    const frame = aspectRatioFrame(bounds, ratio_w, ratio_h);
-    try scene.pushRect(frame, options.style.row, .fill, control_radius, 0.0);
-    try scene.pushRect(frame, options.style.border, .border, control_radius, 0.0);
-}
-
-pub fn aspectRatioFrame(bounds: ui.Rect, ratio_w: u16, ratio_h: u16) ui.Rect {
-    const safe_w = @max(@as(f32, @floatFromInt(ratio_w)), min_extent);
-    const safe_h = @max(@as(f32, @floatFromInt(ratio_h)), min_extent);
-    const frame_w = @min(bounds.w, bounds.h * safe_w / safe_h);
-    const frame_h = @min(bounds.h, frame_w * safe_h / safe_w);
-    return ui.Rect.init(bounds.x + (bounds.w - frame_w) * 0.5, bounds.y + (bounds.h - frame_h) * 0.5, frame_w, frame_h);
-}
-
 pub fn renderCalendar(scene: *ui.Scene, bounds: ui.Rect, month: []const u8, selected_day: u16, options: RenderOptions) ui.RenderError!void {
     try scene.pushRect(bounds, options.style.panel, .fill, calendar_radius, 0.0);
     try scene.pushRect(bounds, options.style.border, .border, calendar_radius, 0.0);
@@ -484,51 +470,6 @@ fn calendarWeekdayBounds(bounds: ui.Rect, index: usize) ui.Rect {
 fn calendarGridBounds(bounds: ui.Rect) ui.Rect {
     const grid_w = @as(f32, @floatFromInt(calendar_column_count)) * calendar_cell_size + @as(f32, @floatFromInt(calendar_column_count - 1)) * calendar_cell_gap;
     return ui.Rect.init(bounds.x + (bounds.w - grid_w) * 0.5, bounds.y + calendar_grid_y, grid_w, @max(min_extent, bounds.h - calendar_grid_y - calendar_padding));
-}
-
-pub fn renderCarousel(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, options: RenderOptions) ui.RenderError!void {
-    try renderCarouselButton(scene, carouselButtonBounds(bounds, 0), "<", options);
-    const content = carouselContentBounds(bounds);
-    try scene.pushRect(content, options.style.row, .fill, carousel_radius, 0.0);
-    try renderControlText(scene, content, carousel_text_padding, control_label_height, label, options.style.muted, .center);
-    try renderCarouselButton(scene, carouselButtonBounds(bounds, 1), ">", options);
-}
-
-pub fn carouselButtonBounds(bounds: ui.Rect, index: usize) ui.Rect {
-    const y = bounds.y + (bounds.h - carousel_button_size) * 0.5;
-    return switch (index) {
-        0 => ui.Rect.init(bounds.x, y, carousel_button_size, carousel_button_size),
-        else => ui.Rect.init(bounds.x + bounds.w - carousel_button_size, y, carousel_button_size, carousel_button_size),
-    };
-}
-
-fn carouselContentBounds(bounds: ui.Rect) ui.Rect {
-    const x = bounds.x + carousel_button_size + carousel_gap;
-    return ui.Rect.init(x, bounds.y, @max(min_extent, bounds.w - carousel_button_size * 2.0 - carousel_gap * 2.0), bounds.h);
-}
-
-pub fn renderChart(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, options: RenderOptions) ui.RenderError!void {
-    const plot = chartPlotBounds(bounds);
-    try scene.pushRect(bounds, options.style.panel, .fill, chart_radius, 0.0);
-    try scene.pushRect(bounds, options.style.border, .border, chart_radius, 0.0);
-    try scene.pushText(ui.Rect.init(bounds.x + chart_padding, bounds.y + chart_padding, @max(min_extent, bounds.w - chart_padding * 2.0), chart_label_h), label, options.style.text);
-    try scene.pushRect(ui.Rect.init(plot.x, plot.y + plot.h - separator_height, plot.w, separator_height), options.style.border, .fill, 0.0, 0.0);
-    for (0..chart_bar_count) |index| {
-        const bar = chartBarBounds(bounds, index);
-        try scene.pushRect(bar, if (index == chart_bar_count - 1) options.style.accent else options.style.row, .fill, chart_bar_radius, 0.0);
-    }
-}
-
-pub fn chartBarBounds(bounds: ui.Rect, index: usize) ui.Rect {
-    const plot = chartPlotBounds(bounds);
-    const gap_total = chart_bar_gap * @as(f32, @floatFromInt(chart_bar_count - 1));
-    const bar_w = @max(min_extent, (plot.w - gap_total) / @as(f32, @floatFromInt(chart_bar_count)));
-    const h = @max(min_extent, plot.h * chart_bar_values[index]);
-    return ui.Rect.init(plot.x + @as(f32, @floatFromInt(index)) * (bar_w + chart_bar_gap), plot.y + plot.h - h, bar_w, h);
-}
-
-fn chartPlotBounds(bounds: ui.Rect) ui.Rect {
-    return ui.Rect.init(bounds.x + chart_padding, bounds.y + chart_padding + chart_label_h + chart_label_gap, @max(min_extent, bounds.w - chart_padding * 2.0), @max(min_extent, bounds.h - chart_padding * 2.0 - chart_label_h - chart_label_gap));
 }
 
 pub fn renderCombobox(scene: *ui.Scene, bounds: ui.Rect, placeholder: []const u8, selected: []const u8, options: RenderOptions) ui.RenderError!void {
@@ -602,84 +543,6 @@ pub fn renderInputGroup(scene: *ui.Scene, bounds: ui.Rect, addon: []const u8, pl
     try renderControlText(scene, ui.Rect.init(addon_bounds.x + addon_bounds.w + input_group_control_gap, bounds.y, @max(min_extent, bounds.w - addon_w - input_group_control_gap), bounds.h), control_text_padding, control_label_height, placeholder, options.style.muted, .start);
 }
 
-pub fn renderTextarea(scene: *ui.Scene, bounds: ui.Rect, placeholder: []const u8, options: RenderOptions) ui.RenderError!void {
-    try renderControlFrame(scene, bounds, options.style.panel, options.style.border, control_radius);
-    if (contentInset(bounds, textarea_padding)) |text_bounds| {
-        try scene.pushWrappedText(text_bounds, placeholder, options.style.muted, .{
-            .line_height = control_label_height,
-            .average_char_width = control_average_char_width,
-            .max_lines = textarea_max_lines,
-        });
-    }
-}
-
-pub fn renderSelect(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, options: RenderOptions) ui.RenderError!void {
-    try renderControlFrame(scene, bounds, options.style.panel, options.style.border, control_radius);
-    if (contentInset(bounds, control_text_padding)) |label_bounds| {
-        const text_bounds = ui.Rect.init(label_bounds.x, label_bounds.y, @max(min_extent, label_bounds.w - select_arrow_w), label_bounds.h);
-        try pushControlText(scene, text_bounds, control_label_height, label, options.style.text, .start);
-        const arrow_bounds = ui.Rect.init(label_bounds.x + label_bounds.w - select_icon_size, label_bounds.y + (label_bounds.h - select_icon_size) * 0.5, select_icon_size, select_icon_size);
-        try scene.pushIconQuad(.{ .bounds = arrow_bounds, .icon_id = icon.id(.chevron_right), .color = options.style.muted });
-    }
-}
-
-pub fn renderCheckbox(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, checked: bool, options: RenderOptions) ui.RenderError!void {
-    const box = ui.Rect.init(bounds.x, bounds.y + (bounds.h - checkbox_box_size) * 0.5, checkbox_box_size, checkbox_box_size);
-    try scene.pushRect(box, if (checked) options.style.accent else options.style.panel, .fill, control_radius, 0.0);
-    try scene.pushRect(box, if (checked) options.style.accent else options.style.border, .border, control_radius, 0.0);
-    if (checked) {
-        try scene.pushIconQuad(.{ .bounds = box.insetUniform(checkbox_icon_inset), .icon_id = icon.id(.check), .color = options.style.bg });
-    }
-    const label_x = box.x + box.w + checkbox_text_gap;
-    try renderInlineLabel(scene, ui.Rect.init(label_x, bounds.y, @max(min_extent, bounds.x + bounds.w - label_x), bounds.h), label, options.style.text);
-}
-
-pub fn renderRadioGroup(scene: *ui.Scene, bounds: ui.Rect, first: []const u8, second: []const u8, selected: u16, options: RenderOptions) ui.RenderError!void {
-    try renderRadioOption(scene, radioOptionBounds(bounds, 0), first, selected == 0, options);
-    try renderRadioOption(scene, radioOptionBounds(bounds, 1), second, selected == 1, options);
-}
-
-pub fn radioOptionBounds(bounds: ui.Rect, index: usize) ui.Rect {
-    const y = bounds.y + @as(f32, @floatFromInt(index)) * radio_option_pitch;
-    return ui.Rect.init(bounds.x, y, bounds.w, radio_option_h);
-}
-
-pub fn renderSwitch(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, checked: bool, options: RenderOptions) ui.RenderError!void {
-    const pill = ui.Rect.init(bounds.x + bounds.w - switch_width, bounds.y + (bounds.h - switch_height) * 0.5, switch_width, switch_height);
-    try scene.pushRect(pill, if (checked) options.style.accent else options.style.row, .fill, switch_height * 0.5, 0.0);
-    try scene.pushRect(pill, options.style.border, .border, switch_height * 0.5, 0.0);
-    const knob_x = if (checked) pill.x + pill.w - switch_knob_size - switch_knob_inset else pill.x + switch_knob_inset;
-    const knob = ui.Rect.init(knob_x, pill.y + switch_knob_inset, switch_knob_size, switch_knob_size);
-    try scene.pushRect(knob, options.style.panel, .fill, switch_knob_size * 0.5, 0.0);
-    try renderInlineLabel(scene, ui.Rect.init(bounds.x, bounds.y, @max(min_extent, pill.x - bounds.x - checkbox_text_gap), bounds.h), label, options.style.text);
-}
-
-pub fn renderPagination(scene: *ui.Scene, bounds: ui.Rect, page: u16, options: RenderOptions) ui.RenderError!void {
-    for (0..pagination_item_count) |index| {
-        const item = paginationItemBounds(bounds, index);
-        const active = index == page + 1;
-        const label = paginationLabel(index);
-        try scene.pushRect(item, if (active) options.style.panel else ui.Color.clear, .fill, control_radius, 0.0);
-        try scene.pushRect(item, if (active) options.style.border else ui.Color.clear, .border, control_radius, 0.0);
-        try renderControlText(scene, item, pagination_text_padding, control_label_height, label, if (active) options.style.text else options.style.muted, .center);
-    }
-}
-
-pub fn paginationItemBounds(bounds: ui.Rect, index: usize) ui.Rect {
-    return ui.Rect.init(bounds.x + @as(f32, @floatFromInt(index)) * (pagination_item_w + pagination_gap), bounds.y, pagination_item_w, @min(bounds.h, pagination_item_h));
-}
-
-fn paginationLabel(index: usize) []const u8 {
-    return switch (index) {
-        0 => "<",
-        1 => "1",
-        2 => "2",
-        3 => "3",
-        4 => ">",
-        else => "",
-    };
-}
-
 pub fn renderPopover(scene: *ui.Scene, bounds: ui.Rect, trigger: []const u8, content: []const u8, options: RenderOptions) ui.RenderError!void {
     try renderControlFrame(scene, popoverTriggerBounds(bounds), options.style.accent, options.style.border, control_radius);
     try renderControlText(scene, popoverTriggerBounds(bounds), control_text_padding, control_label_height, trigger, options.style.bg, .center);
@@ -709,12 +572,6 @@ pub fn renderDialog(scene: *ui.Scene, bounds: ui.Rect, title: []const u8, detail
     try scene.pushRect(content, if (destructive) alert_danger else options.style.border, .border, dialog_radius, 0.0);
     try scene.pushText(ui.Rect.init(content.x + dialog_padding, content.y + dialog_title_y, @max(min_extent, content.w - dialog_padding * 2.0), dialog_title_h), title, if (destructive) alert_danger else options.style.text);
     try scene.pushText(ui.Rect.init(content.x + dialog_padding, content.y + dialog_detail_y, @max(min_extent, content.w - dialog_padding * 2.0), dialog_detail_h), detail, options.style.muted);
-}
-
-pub fn renderDirection(scene: *ui.Scene, bounds: ui.Rect, active: u16, options: RenderOptions) ui.RenderError!void {
-    try renderDirectionItem(scene, directionItemBounds(bounds, 0), direction_ltr_label, active == 0, options);
-    try scene.pushIconQuad(.{ .bounds = directionIconBounds(bounds), .icon_id = icon.id(.route), .color = options.style.muted });
-    try renderDirectionItem(scene, directionItemBounds(bounds, 1), direction_rtl_label, active == 1, options);
 }
 
 pub fn renderDrawer(scene: *ui.Scene, bounds: ui.Rect, title: []const u8, detail: []const u8, options: RenderOptions) ui.RenderError!void {
@@ -784,17 +641,6 @@ pub fn dialogContentBounds(bounds: ui.Rect) ui.Rect {
     return ui.Rect.init(x, bounds.y, @max(min_extent, bounds.x + bounds.w - x), bounds.h);
 }
 
-pub fn directionItemBounds(bounds: ui.Rect, index: usize) ui.Rect {
-    return switch (index) {
-        0 => ui.Rect.init(bounds.x, bounds.y + direction_item_y, direction_item_w, direction_item_h),
-        else => ui.Rect.init(bounds.x + direction_second_x, bounds.y + direction_item_y, direction_item_w, direction_item_h),
-    };
-}
-
-fn directionIconBounds(bounds: ui.Rect) ui.Rect {
-    return ui.Rect.init(bounds.x + direction_icon_x, bounds.y + direction_icon_y, direction_icon_size, direction_icon_size);
-}
-
 pub fn drawerTriggerBounds(bounds: ui.Rect) ui.Rect {
     return ui.Rect.init(bounds.x, bounds.y + drawer_trigger_y, drawer_trigger_w, drawer_trigger_h);
 }
@@ -840,24 +686,6 @@ pub fn hoverCardContentBounds(bounds: ui.Rect) ui.Rect {
     return ui.Rect.init(x, bounds.y, @max(min_extent, bounds.x + bounds.w - x), bounds.h);
 }
 
-pub fn renderTooltip(scene: *ui.Scene, bounds: ui.Rect, trigger: []const u8, content: []const u8, options: RenderOptions) ui.RenderError!void {
-    try renderControlFrame(scene, tooltipTriggerBounds(bounds), options.style.panel, options.style.border, control_radius);
-    try renderControlText(scene, tooltipTriggerBounds(bounds), control_text_padding, control_label_height, trigger, options.style.text, .center);
-    const tip = tooltipContentBounds(bounds);
-    try scene.pushRect(tip, options.style.text, .fill, tooltip_radius, 0.0);
-    try renderControlText(scene, tip, tooltip_padding, tooltip_text_h, content, options.style.bg, .center);
-}
-
-pub fn renderToast(scene: *ui.Scene, bounds: ui.Rect, title: []const u8, detail: []const u8, options: RenderOptions) ui.RenderError!void {
-    const toast = toastBounds(bounds);
-    try scene.pushRect(toast, options.style.panel, .fill, toast_radius, 0.0);
-    try scene.pushRect(toast, options.style.border, .border, toast_radius, 0.0);
-    try scene.pushIconQuad(.{ .bounds = toastIconBounds(toast), .icon_id = icon.id(.check), .color = options.style.accent });
-    const text_x = toast.x + toast_text_x;
-    try scene.pushText(ui.Rect.init(text_x, toast.y + toast_title_y, @max(min_extent, toast.x + toast.w - text_x - toast_padding), toast_title_h), title, options.style.text);
-    try scene.pushText(ui.Rect.init(text_x, toast.y + toast_detail_y, @max(min_extent, toast.x + toast.w - text_x - toast_padding), toast_detail_h), detail, options.style.muted);
-}
-
 pub fn renderSidebar(scene: *ui.Scene, bounds: ui.Rect, title: []const u8, item: []const u8, options: RenderOptions) ui.RenderError!void {
     const rail = sidebarRailBounds(bounds);
     try scene.pushRect(rail, options.style.panel, .fill, sidebar_radius, 0.0);
@@ -869,23 +697,6 @@ pub fn renderSidebar(scene: *ui.Scene, bounds: ui.Rect, title: []const u8, item:
     try scene.pushText(sidebarItemTextBounds(item_bounds), item, options.style.text);
     const content = sidebarContentBounds(bounds);
     try scene.pushRect(content, options.style.row, .fill, sidebar_radius, 0.0);
-}
-
-pub fn tooltipTriggerBounds(bounds: ui.Rect) ui.Rect {
-    return ui.Rect.init(bounds.x, bounds.y + tooltip_trigger_y, tooltip_trigger_w, tooltip_trigger_h);
-}
-
-fn tooltipContentBounds(bounds: ui.Rect) ui.Rect {
-    const x = bounds.x + tooltip_trigger_w + tooltip_gap;
-    return ui.Rect.init(x, bounds.y + tooltip_content_y, @max(min_extent, bounds.x + bounds.w - x), tooltip_content_h);
-}
-
-pub fn toastBounds(bounds: ui.Rect) ui.Rect {
-    return ui.Rect.init(bounds.x, bounds.y, bounds.w, @min(bounds.h, toast_h));
-}
-
-fn toastIconBounds(bounds: ui.Rect) ui.Rect {
-    return ui.Rect.init(bounds.x + toast_icon_x, bounds.y + (bounds.h - toast_icon_size) * 0.5, toast_icon_size, toast_icon_size);
 }
 
 fn sidebarRailBounds(bounds: ui.Rect) ui.Rect {
@@ -1087,60 +898,6 @@ fn breadcrumbSeparatorBounds(bounds: ui.Rect, index: usize) ui.Rect {
     return ui.Rect.init(x + breadcrumb_icon_inset, bounds.y + (bounds.h - breadcrumb_icon_size) * 0.5, breadcrumb_icon_size, breadcrumb_icon_size);
 }
 
-pub fn renderToggle(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, pressed: bool, options: RenderOptions) ui.RenderError!void {
-    const fill = if (pressed) options.style.row else ui.Color.clear;
-    const text_color = if (pressed) options.style.text else options.style.muted;
-    try scene.pushRect(bounds, fill, .fill, control_radius, 0.0);
-    try scene.pushRect(bounds, if (pressed) options.style.border else ui.Color.clear, .border, control_radius, 0.0);
-    try renderControlText(scene, bounds, toggle_text_padding, control_label_height, label, text_color, .center);
-}
-
-pub fn renderButtonGroup(scene: *ui.Scene, bounds: ui.Rect, first: []const u8, second: []const u8, active: u16, options: RenderOptions) ui.RenderError!void {
-    try renderButtonGroupSegment(scene, buttonGroupSegmentBounds(bounds, 0), first, active == 0, options);
-    try renderButtonGroupSegment(scene, buttonGroupSegmentBounds(bounds, 1), second, active == 1, options);
-}
-
-pub fn renderMenubar(scene: *ui.Scene, bounds: ui.Rect, first: []const u8, second: []const u8, active: u16, options: RenderOptions) ui.RenderError!void {
-    try renderControlFrame(scene, bounds, options.style.panel, options.style.border, control_radius);
-    try renderMenubarItem(scene, menubarItemBounds(bounds, 0), first, active == 0, options);
-    try renderMenubarItem(scene, menubarItemBounds(bounds, 1), second, active == 1, options);
-    try renderMenubarItem(scene, menubarItemBounds(bounds, 2), menubar_third_label, active == 2, options);
-}
-
-pub fn menubarItemBounds(bounds: ui.Rect, index: usize) ui.Rect {
-    const item_w = switch (index) {
-        0 => menubar_first_w,
-        1 => menubar_second_w,
-        else => menubar_third_w,
-    };
-    const item_x = switch (index) {
-        0 => bounds.x + menubar_padding,
-        1 => bounds.x + menubar_padding + menubar_first_w,
-        else => bounds.x + menubar_padding + menubar_first_w + menubar_second_w,
-    };
-    return ui.Rect.init(item_x, bounds.y + menubar_padding, item_w, @max(min_extent, bounds.h - menubar_padding * 2.0));
-}
-
-pub fn renderNavigationMenu(scene: *ui.Scene, bounds: ui.Rect, first: []const u8, second: []const u8, active: u16, options: RenderOptions) ui.RenderError!void {
-    try renderNavigationMenuItem(scene, navigationMenuItemBounds(bounds, 0), first, active == 0, true, options);
-    try renderNavigationMenuItem(scene, navigationMenuItemBounds(bounds, 1), second, active == 1, true, options);
-    try renderNavigationMenuItem(scene, navigationMenuItemBounds(bounds, 2), navigation_menu_third_label, active == 2, false, options);
-}
-
-pub fn navigationMenuItemBounds(bounds: ui.Rect, index: usize) ui.Rect {
-    const item_w = switch (index) {
-        0 => navigation_menu_first_w,
-        1 => navigation_menu_second_w,
-        else => navigation_menu_third_w,
-    };
-    const item_x = switch (index) {
-        0 => bounds.x,
-        1 => bounds.x + navigation_menu_first_w + navigation_menu_gap,
-        else => bounds.x + navigation_menu_first_w + navigation_menu_second_w + navigation_menu_gap * 2.0,
-    };
-    return ui.Rect.init(item_x, bounds.y, item_w, @min(bounds.h, navigation_menu_item_h));
-}
-
 pub fn renderCommand(scene: *ui.Scene, bounds: ui.Rect, placeholder: []const u8, options: RenderOptions) ui.RenderError!void {
     const input = commandInputBounds(bounds);
     try renderControlFrame(scene, input, options.style.panel, options.style.border, command_radius);
@@ -1240,57 +997,6 @@ fn fieldInputBoundsWithValidation(bounds: ui.Rect) ui.Rect {
     return ui.Rect.init(bounds.x, bounds.y + field_label_h + field_gap, bounds.w, @max(min_extent, @min(field_input_h, bounds.h - field_label_h - field_gap)));
 }
 
-pub fn renderInputOtp(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, options: RenderOptions) ui.RenderError!void {
-    for (0..input_otp_slot_count) |index| {
-        const slot = inputOtpSlotBounds(bounds, index);
-        try renderControlFrame(scene, slot, options.style.panel, options.style.border, control_radius);
-        if (index < value.len) {
-            try renderControlText(scene, slot, input_otp_text_padding, control_label_height, value[index .. index + 1], options.style.text, .center);
-        }
-    }
-}
-
-pub fn inputOtpSlotBounds(bounds: ui.Rect, index: usize) ui.Rect {
-    const x = bounds.x + @as(f32, @floatFromInt(index)) * (input_otp_slot_size + input_otp_slot_gap);
-    return ui.Rect.init(x, bounds.y, input_otp_slot_size, @min(bounds.h, input_otp_slot_size));
-}
-
-pub fn renderToggleGroup(scene: *ui.Scene, bounds: ui.Rect, first: []const u8, second: []const u8, active: u16, options: RenderOptions) ui.RenderError!void {
-    try renderToggleGroupItem(scene, toggleGroupItemBounds(bounds, 0), first, active == 0, options);
-    try renderToggleGroupItem(scene, toggleGroupItemBounds(bounds, 1), second, active == 1, options);
-    try renderToggleGroupItem(scene, toggleGroupItemBounds(bounds, 2), toggle_group_third_label, active == 2, options);
-}
-
-pub fn toggleGroupItemBounds(bounds: ui.Rect, index: usize) ui.Rect {
-    const item_w = switch (index) {
-        1 => toggle_group_middle_w,
-        else => toggle_group_side_w,
-    };
-    const item_x = switch (index) {
-        0 => bounds.x,
-        1 => bounds.x + toggle_group_side_w,
-        else => bounds.x + toggle_group_side_w + toggle_group_middle_w,
-    };
-    return ui.Rect.init(item_x, bounds.y, item_w, bounds.h);
-}
-
-pub fn buttonGroupSegmentBounds(bounds: ui.Rect, index: usize) ui.Rect {
-    const segment_w = @max(min_extent, bounds.w * 0.5);
-    return ui.Rect.init(bounds.x + @as(f32, @floatFromInt(index)) * segment_w, bounds.y, segment_w, bounds.h);
-}
-
-pub fn renderRowItem(scene: *ui.Scene, bounds: ui.Rect, title: []const u8, detail: []const u8, options: RenderOptions) ui.RenderError!void {
-    try scene.pushRect(bounds, options.style.row, .fill, row_radius, 0.0);
-    if (rowTitleBounds(bounds, detail.len == 0)) |title_bounds| {
-        try scene.pushText(title_bounds, title, options.style.text);
-    }
-    if (detail.len != 0) {
-        if (rowDetailBounds(bounds)) |detail_bounds| {
-            try scene.pushText(detail_bounds, detail, options.style.muted);
-        }
-    }
-}
-
 pub fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
     const resolved_preferred = constrainPreferredSize(preferred, constraints);
     return layout.Measurement.flexible(
@@ -1325,35 +1031,12 @@ fn renderInlineLabel(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, color
     try scene.pushText(bounds.withHeightCentered(control_label_height), value, color);
 }
 
-fn renderRadioOption(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, selected: bool, options: RenderOptions) ui.RenderError!void {
-    const outer = ui.Rect.init(bounds.x, bounds.y + (bounds.h - checkbox_box_size) * 0.5, checkbox_box_size, checkbox_box_size);
-    try scene.pushRect(outer, options.style.panel, .fill, checkbox_box_size * 0.5, 0.0);
-    try scene.pushRect(outer, options.style.border, .border, checkbox_box_size * 0.5, 0.0);
-    if (selected) {
-        const dot = ui.Rect.init(outer.x + (outer.w - radio_dot_size) * 0.5, outer.y + (outer.h - radio_dot_size) * 0.5, radio_dot_size, radio_dot_size);
-        try scene.pushRect(dot, options.style.accent, .fill, radio_dot_size * 0.5, 0.0);
-    }
-    const label_x = outer.x + outer.w + checkbox_text_gap;
-    try renderInlineLabel(scene, ui.Rect.init(label_x, bounds.y, @max(min_extent, bounds.x + bounds.w - label_x), bounds.h), label, options.style.text);
-}
-
 fn renderTabsTrigger(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, active: bool, options: RenderOptions) ui.RenderError!void {
     if (active) {
         try scene.pushRect(bounds, options.style.panel, .fill, control_radius, 0.0);
         try scene.pushRect(bounds, options.style.border, .border, control_radius, 0.0);
     }
     try renderControlText(scene, bounds, toggle_text_padding, control_label_height, label, if (active) options.style.text else options.style.muted, .center);
-}
-
-fn renderButtonGroupSegment(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, active: bool, options: RenderOptions) ui.RenderError!void {
-    try scene.pushRect(bounds, if (active) options.style.text else options.style.panel, .fill, 0.0, 0.0);
-    try scene.pushRect(bounds, options.style.border, .border, 0.0, 0.0);
-    try renderControlText(scene, bounds, toggle_text_padding, control_label_height, label, if (active) options.style.panel else options.style.text, .center);
-}
-
-fn renderCarouselButton(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, options: RenderOptions) ui.RenderError!void {
-    try renderControlFrame(scene, bounds, ui.Color.clear, options.style.border, carousel_button_size * 0.5);
-    try renderControlText(scene, bounds, carousel_button_text_padding, control_label_height, label, options.style.text, .center);
 }
 
 fn renderCalendarNav(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, options: RenderOptions) ui.RenderError!void {
@@ -1418,12 +1101,6 @@ fn asciiLower(value: u8) u8 {
     };
 }
 
-fn renderDirectionItem(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, active: bool, options: RenderOptions) ui.RenderError!void {
-    try scene.pushRect(bounds, if (active) options.style.accent else options.style.row, .fill, direction_item_radius, 0.0);
-    try scene.pushRect(bounds, options.style.border, .border, direction_item_radius, 0.0);
-    try renderControlText(scene, bounds, direction_item_padding, direction_item_text_h, label, if (active) options.style.bg else options.style.text, .center);
-}
-
 fn renderComboboxOption(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, selected: bool, options: RenderOptions) ui.RenderError!void {
     try scene.pushRect(bounds, options.style.row, .fill, control_radius, 0.0);
     try renderControlText(scene, ui.Rect.init(bounds.x, bounds.y, @max(min_extent, bounds.w - combobox_option_indicator_w), bounds.h), combobox_option_padding, control_label_height, label, options.style.text, .start);
@@ -1433,26 +1110,6 @@ fn renderComboboxOption(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, se
             .icon_id = icon.id(.check),
             .color = options.style.accent,
         });
-    }
-}
-
-fn renderMenubarItem(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, active: bool, options: RenderOptions) ui.RenderError!void {
-    try scene.pushRect(bounds, if (active) options.style.row else ui.Color.clear, .fill, control_radius, 0.0);
-    try renderControlText(scene, bounds, menubar_item_padding_x, control_label_height, label, if (active) options.style.text else options.style.muted, .center);
-}
-
-fn renderToggleGroupItem(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, active: bool, options: RenderOptions) ui.RenderError!void {
-    try scene.pushRect(bounds, if (active) options.style.row else ui.Color.clear, .fill, 0.0, 0.0);
-    try scene.pushRect(bounds, options.style.border, .border, 0.0, 0.0);
-    try renderControlText(scene, bounds, toggle_text_padding, control_label_height, label, if (active) options.style.text else options.style.muted, .center);
-}
-
-fn renderNavigationMenuItem(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, active: bool, show_chevron: bool, options: RenderOptions) ui.RenderError!void {
-    try scene.pushRect(bounds, if (active) options.style.row else ui.Color.clear, .fill, control_radius, 0.0);
-    const icon_space: f32 = if (show_chevron) navigation_menu_icon_space else 0.0;
-    try renderControlText(scene, ui.Rect.init(bounds.x, bounds.y, @max(min_extent, bounds.w - icon_space), bounds.h), navigation_menu_text_padding, control_label_height, label, if (active) options.style.text else options.style.muted, .center);
-    if (show_chevron) {
-        try scene.pushIconQuad(.{ .bounds = ui.Rect.init(bounds.x + bounds.w - navigation_menu_icon_size - navigation_menu_icon_padding, bounds.y + (bounds.h - navigation_menu_icon_size) * 0.5, navigation_menu_icon_size, navigation_menu_icon_size), .icon_id = icon.id(.chevron_right), .color = options.style.muted });
     }
 }
 
@@ -1491,34 +1148,14 @@ fn renderControlStateOverlay(scene: *ui.Scene, bounds: ui.Rect, options: RenderO
     if (state.disabled) try scene.pushRect(bounds, common.state_disabled_tint, .fill, radius, 0.0);
 }
 
-fn rowTitleBounds(bounds: ui.Rect, centered: bool) ?ui.Rect {
-    const row_bounds = if (centered) bounds.withHeightCentered(row_title_height) else ui.Rect.init(bounds.x, bounds.y + row_title_offset_y, bounds.w, row_title_height);
-    return rowTextBounds(row_bounds);
-}
-
-fn rowDetailBounds(bounds: ui.Rect) ?ui.Rect {
-    return rowTextBounds(ui.Rect.init(bounds.x, bounds.y + row_detail_offset_y, bounds.w, row_detail_height));
-}
-
-fn rowTextBounds(bounds: ui.Rect) ?ui.Rect {
-    const out = bounds.insetLtrb(row_text_padding_x, 0.0, row_text_padding_x, 0.0);
-    return if (out.valid()) out else null;
-}
-
 pub const preferred_alert = ui.Size{ .w = 260.0, .h = 64.0 };
 pub const preferred_accordion = ui.Size{ .w = 260.0, .h = 68.0 };
 pub const preferred_dialog = ui.Size{ .w = 240.0, .h = 52.0 };
-pub const preferred_direction = ui.Size{ .w = 150.0, .h = 36.0 };
-pub const preferred_aspect_ratio = ui.Size{ .w = 220.0, .h = 124.0 };
 pub const preferred_calendar = ui.Size{ .w = 240.0, .h = 152.0 };
-pub const preferred_carousel = ui.Size{ .w = 240.0, .h = 40.0 };
-pub const preferred_chart = ui.Size{ .w = 240.0, .h = 90.0 };
 pub const preferred_combobox = ui.Size{ .w = 240.0, .h = 82.0 };
 pub const preferred_empty = ui.Size{ .w = 260.0, .h = 132.0 };
 pub const preferred_scroll_area = ui.Size{ .w = 220.0, .h = 48.0 };
 pub const preferred_breadcrumb = ui.Size{ .w = 220.0, .h = 36.0 };
-pub const preferred_menubar = ui.Size{ .w = 170.0, .h = 36.0 };
-pub const preferred_navigation_menu = ui.Size{ .w = 220.0, .h = 36.0 };
 pub const preferred_command = ui.Size{ .w = 220.0, .h = 36.0 };
 pub const preferred_command_palette = ui.Size{ .w = 260.0, .h = 130.0 };
 pub const preferred_field = ui.Size{ .w = 220.0, .h = 56.0 };
@@ -1527,33 +1164,14 @@ pub const preferred_hover_card = ui.Size{ .w = 240.0, .h = 52.0 };
 pub const preferred_menu = ui.Size{ .w = 240.0, .h = 52.0 };
 pub const preferred_drawer = ui.Size{ .w = 240.0, .h = 76.0 };
 pub const preferred_sheet = ui.Size{ .w = 240.0, .h = 76.0 };
-pub const preferred_input_otp = ui.Size{ .w = 200.0, .h = 36.0 };
-pub const preferred_button_group = ui.Size{ .w = 160.0, .h = 36.0 };
-pub const preferred_toggle_group = ui.Size{ .w = 180.0, .h = 36.0 };
-pub const preferred_toggle = ui.Size{ .w = 96.0, .h = 36.0 };
 pub const preferred_input = ui.Size{ .w = 220.0, .h = 40.0 };
 pub const preferred_input_group = ui.Size{ .w = 260.0, .h = 40.0 };
-pub const preferred_textarea = ui.Size{ .w = 220.0, .h = 88.0 };
-pub const preferred_select = ui.Size{ .w = 220.0, .h = 40.0 };
-pub const preferred_checkbox = ui.Size{ .w = 220.0, .h = 28.0 };
-pub const preferred_radio_group = ui.Size{ .w = 220.0, .h = 52.0 };
-pub const preferred_switch = ui.Size{ .w = 220.0, .h = 32.0 };
-pub const preferred_pagination = ui.Size{ .w = 240.0, .h = 36.0 };
 pub const preferred_popover = ui.Size{ .w = 240.0, .h = 52.0 };
 pub const preferred_tabs = ui.Size{ .w = 220.0, .h = 84.0 };
 pub const preferred_table = ui.Size{ .w = 260.0, .h = 64.0 };
-pub const preferred_tooltip = ui.Size{ .w = 240.0, .h = 44.0 };
-pub const preferred_toast = ui.Size{ .w = 240.0, .h = 52.0 };
 pub const preferred_sidebar = ui.Size{ .w = 240.0, .h = 64.0 };
-pub const preferred_row_item = ui.Size{ .w = 260.0, .h = 48.0 };
-
 const min_extent: f32 = 1.0;
 const measure_max_width: f32 = 4096.0;
-pub const menubar_item_count: u32 = 3;
-pub const navigation_menu_item_count: u32 = 3;
-pub const input_otp_slot_count: usize = 6;
-pub const toggle_group_item_count: u32 = 3;
-pub const direction_item_count: u32 = 2;
 const accordion_trigger_h: f32 = 36.0;
 const accordion_trigger_text_y: f32 = 10.0;
 const accordion_icon_space: f32 = 22.0;
@@ -1592,18 +1210,6 @@ const calendar_cell_gap: f32 = 2.0;
 const calendar_day_text_h: f32 = 12.0;
 const calendar_day_text_padding: f32 = 2.0;
 const calendar_nav_text_padding: f32 = 4.0;
-const carousel_button_size: f32 = 28.0;
-const carousel_gap: f32 = 8.0;
-const carousel_radius: f32 = 8.0;
-const carousel_text_padding: f32 = 8.0;
-const carousel_button_text_padding: f32 = 4.0;
-pub const chart_bar_count: usize = 5;
-const chart_radius: f32 = 8.0;
-const chart_padding: f32 = 8.0;
-const chart_label_h: f32 = 14.0;
-const chart_label_gap: f32 = 4.0;
-const chart_bar_gap: f32 = 5.0;
-const chart_bar_radius: f32 = 5.0;
 const combobox_input_h: f32 = 36.0;
 const combobox_popup_gap: f32 = 6.0;
 const combobox_popup_radius: f32 = 8.0;
@@ -1612,22 +1218,6 @@ const combobox_icon_size: f32 = 14.0;
 const combobox_icon_space: f32 = 22.0;
 const combobox_option_padding: f32 = 8.0;
 const combobox_option_indicator_w: f32 = 28.0;
-const menubar_padding: f32 = 4.0;
-const menubar_first_w: f32 = 48.0;
-const menubar_second_w: f32 = 48.0;
-const menubar_third_w: f32 = 48.0;
-const menubar_item_padding_x: f32 = 8.0;
-const menubar_third_label = "View";
-const navigation_menu_gap: f32 = 4.0;
-const navigation_menu_item_h: f32 = 36.0;
-const navigation_menu_first_w: f32 = 62.0;
-const navigation_menu_second_w: f32 = 112.0;
-const navigation_menu_third_w: f32 = 56.0;
-const navigation_menu_text_padding: f32 = 10.0;
-const navigation_menu_icon_size: f32 = 12.0;
-const navigation_menu_icon_space: f32 = 16.0;
-const navigation_menu_icon_padding: f32 = 8.0;
-const navigation_menu_third_label = "Blocks";
 const command_radius: f32 = 8.0;
 const command_input_h: f32 = 36.0;
 const command_icon_x: f32 = 8.0;
@@ -1650,12 +1240,6 @@ const field_gap: f32 = 6.0;
 const field_input_h: f32 = 36.0;
 const field_validation_gap: f32 = 6.0;
 const field_validation_h: f32 = 12.0;
-const input_otp_slot_size: f32 = 36.0;
-const input_otp_slot_gap: f32 = 0.0;
-const input_otp_text_padding: f32 = 8.0;
-const toggle_group_side_w: f32 = 48.0;
-const toggle_group_middle_w: f32 = 64.0;
-const toggle_group_third_label = "Right";
 const table_radius: f32 = 6.0;
 const table_padding_x: f32 = 8.0;
 const table_header_h: f32 = 24.0;
@@ -1682,7 +1266,6 @@ const empty_detail_gap: f32 = 4.0;
 const empty_detail_height: f32 = 16.0;
 const empty_detail_average_w: f32 = 7.5;
 const empty_detail_max_lines: usize = 2;
-const row_radius: f32 = tokens.Component.row_radius;
 const control_text_padding: f32 = tokens.Component.control_text_padding;
 const control_label_height: f32 = tokens.Component.control_label_height;
 const control_average_char_width: f32 = tokens.Component.control_average_char_width;
@@ -1709,25 +1292,6 @@ fn inputPadding(size: common.ControlSize) f32 {
         .large => 16.0,
     };
 }
-const textarea_padding: f32 = 12.0;
-const textarea_max_lines: usize = 4;
-const select_arrow_w: f32 = 18.0;
-const select_icon_size: f32 = 14.0;
-const checkbox_box_size: f32 = 18.0;
-const checkbox_icon_inset: f32 = 3.0;
-const checkbox_text_gap: f32 = 10.0;
-const radio_dot_size: f32 = 8.0;
-const radio_option_h: f32 = 20.0;
-const radio_option_pitch: f32 = 26.0;
-const switch_width: f32 = 42.0;
-const switch_height: f32 = 24.0;
-const switch_knob_size: f32 = 18.0;
-const switch_knob_inset: f32 = 3.0;
-const pagination_item_count: usize = 5;
-const pagination_item_w: f32 = 36.0;
-const pagination_item_h: f32 = 36.0;
-const pagination_gap: f32 = 4.0;
-const pagination_text_padding: f32 = 2.0;
 const popover_trigger_y: f32 = 6.0;
 const popover_trigger_w: f32 = 64.0;
 const popover_trigger_h: f32 = 30.0;
@@ -1758,18 +1322,6 @@ const dialog_detail_h: f32 = 12.0;
 const dialog_trigger_padding: f32 = 8.0;
 const dialog_open_label = "Open";
 const dialog_delete_label = "Delete";
-const direction_ltr_label = "LTR";
-const direction_rtl_label = "RTL";
-const direction_item_y: f32 = 8.0;
-const direction_item_w: f32 = 42.0;
-const direction_item_h: f32 = 20.0;
-const direction_item_radius: f32 = 6.0;
-const direction_item_padding: f32 = 5.0;
-const direction_item_text_h: f32 = 12.0;
-const direction_icon_x: f32 = 54.0;
-const direction_icon_y: f32 = 11.0;
-const direction_icon_size: f32 = 18.0;
-const direction_second_x: f32 = 84.0;
 const overlay_open_label = "Open";
 const overlay_title_h: f32 = 14.0;
 const overlay_detail_h: f32 = 12.0;
@@ -1820,25 +1372,6 @@ const tabs_list_padding: f32 = 3.0;
 const tabs_list_radius: f32 = 8.0;
 const tabs_gap: f32 = 8.0;
 const tabs_panel_padding: f32 = 10.0;
-const tooltip_trigger_y: f32 = 8.0;
-const tooltip_trigger_w: f32 = 80.0;
-const tooltip_trigger_h: f32 = 28.0;
-const tooltip_gap: f32 = 10.0;
-const tooltip_content_y: f32 = 7.0;
-const tooltip_content_h: f32 = 24.0;
-const tooltip_radius: f32 = 6.0;
-const tooltip_padding: f32 = 8.0;
-const tooltip_text_h: f32 = 12.0;
-const toast_h: f32 = 52.0;
-const toast_radius: f32 = 8.0;
-const toast_padding: f32 = 10.0;
-const toast_icon_x: f32 = 12.0;
-const toast_icon_size: f32 = 16.0;
-const toast_text_x: f32 = 38.0;
-const toast_title_y: f32 = 10.0;
-const toast_title_h: f32 = 14.0;
-const toast_detail_y: f32 = 27.0;
-const toast_detail_h: f32 = 12.0;
 const sidebar_rail_w: f32 = 62.0;
 const sidebar_content_gap: f32 = 10.0;
 const sidebar_radius: f32 = 8.0;
@@ -1873,11 +1406,5 @@ const breadcrumb_icon_size: f32 = 12.0;
 const breadcrumb_icon_inset: f32 = 3.0;
 const breadcrumb_middle_label = "Docs";
 const toggle_text_padding: f32 = 8.0;
-const row_text_padding_x: f32 = 12.0;
-const row_title_offset_y: f32 = 8.0;
-const row_detail_offset_y: f32 = 26.0;
-const row_title_height: f32 = 18.0;
-const row_detail_height: f32 = 16.0;
 const calendar_weekday_labels = [_][]const u8{ "Su", "Mo", "Tu", "We", "Th", "Fr", "Sa" };
 const calendar_day_labels = [_][]const u8{ "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28" };
-const chart_bar_values = [_]f32{ 0.45, 0.72, 0.38, 0.86, 0.62 };
