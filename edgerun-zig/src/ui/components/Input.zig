@@ -23,6 +23,7 @@ const IconSlot = icon_component.IconSlot;
 pub const Input = struct {
     id: u32,
     placeholder: []const u8,
+    value: []const u8 = "",
     icon_slot: IconSlot = .none,
 
     pub fn node(self: Input) ui.Node {
@@ -41,7 +42,9 @@ pub const Input = struct {
             try slot.renderColor(scene, ui.Rect.init(bounds.x + padding, bounds.y + (bounds.h - input_icon_size) * 0.5, input_icon_size, input_icon_size), options.style.muted);
             break :with_icon ui.Rect.init(bounds.x + padding + input_icon_size + input_icon_gap, bounds.y, @max(primitives.min_extent, bounds.w - padding * 2.0 - input_icon_size - input_icon_gap), bounds.h);
         } else bounds;
-        try renderControlText(scene, text_bounds, padding, primitives.control_label_height, self.placeholder, options.style.muted, .start);
+        const display_value = if (self.value.len == 0) self.placeholder else self.value;
+        const display_color = if (self.value.len == 0) options.style.muted else options.style.text;
+        try renderControlText(scene, text_bounds, padding, primitives.control_label_height, display_value, display_color, .start);
     }
 
     pub fn collectInteractions(self: Input, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
@@ -51,7 +54,8 @@ pub const Input = struct {
     pub fn measure(self: Input, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         const padding = inputPadding(options.control_size);
         const icon_w = if (leadingIcon(self.icon_slot) != null) input_icon_size + input_icon_gap else 0.0;
-        const label = text_component.Text.measureValue(self.placeholder, .{ .width = .unconstrained, .text_wrap = .nowrap }, primitives.textMetrics(self.placeholder, primitives.control_label_height, input_label_max_lines));
+        const display_value = if (self.value.len == 0) self.placeholder else self.value;
+        const label = text_component.Text.measureValue(display_value, .{ .width = .unconstrained, .text_wrap = .nowrap }, primitives.textMetrics(display_value, primitives.control_label_height, input_label_max_lines));
         const height = controlHeight(options.control_size);
         const preferred = primitives.constrainPreferredSize(.{
             .w = label.preferred.w + padding * 2.0 + icon_w,
@@ -158,6 +162,19 @@ test "input component renders leading icon as component state" {
     const placeholder = component_test.textCommand(scene.written(), "Search objects").?;
     try std.testing.expect(component_test.hasIcon(scene.written(), Icon.named(.search).tag()));
     try std.testing.expectEqual(@as(f32, 52.0), placeholder.text.origin.x);
+}
+
+test "input component renders value instead of placeholder" {
+    const input = Input{ .id = 10, .placeholder = "Search objects", .value = "font", .icon_slot = IconSlot.named(.leading, .search) };
+    var commands: [8]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+
+    try input.render(&scene, ui.Rect.init(4, 8, 220, 40), .{});
+
+    const value = component_test.textCommand(scene.written(), "font").?;
+    try std.testing.expect(component_test.textCommand(scene.written(), "Search objects") == null);
+    try std.testing.expectEqual(ui.Color.text, value.text.color);
+    try std.testing.expectEqual(@as(f32, 52.0), value.text.origin.x);
 }
 
 test "input component measurement respects at-most constraints" {

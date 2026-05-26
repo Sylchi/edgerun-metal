@@ -253,6 +253,37 @@ pub const TransferToHost2d = extern struct {
     }
 };
 
+pub const Box3d = extern struct {
+    x: u32,
+    y: u32,
+    z: u32,
+    width: u32,
+    height: u32,
+    depth: u32,
+};
+
+pub const TransferToHost3d = extern struct {
+    header: Header,
+    box: Box3d,
+    offset: u64,
+    resource_id: u32,
+    level: u32,
+    stride: u32,
+    layer_stride: u32,
+
+    pub fn init(context_id: u32, resource_id: u32, width: u32, height: u32, stride: u32) TransferToHost3d {
+        return .{
+            .header = .{ .control_type = .transfer_to_host_3d, .context_id = context_id },
+            .box = .{ .x = 0, .y = 0, .z = 0, .width = width, .height = height, .depth = 1 },
+            .offset = 0,
+            .resource_id = resource_id,
+            .level = 0,
+            .stride = stride,
+            .layer_stride = stride * height,
+        };
+    }
+};
+
 pub const ResourceFlush = extern struct {
     header: Header,
     rect: Rect,
@@ -488,6 +519,10 @@ pub const Device = struct {
         try self.sendNoData(storage, ResourceCreate3d.initColor2d(resource_id, width, height, format));
     }
 
+    pub fn attachResourceBacking(self: *Device, storage: *QueueStorage, resource_id: u32, address: u64, byte_len: u32) Error!void {
+        try self.sendNoData(storage, ResourceAttachBacking.init(resource_id, address, byte_len));
+    }
+
     pub fn attachResourceToContext(self: *Device, storage: *QueueStorage, context_id: u32, resource_id: u32) Error!void {
         if (!self.virglReady()) return error.UnsupportedDevice;
         try self.sendNoData(storage, ContextResource.attach(context_id, resource_id));
@@ -547,6 +582,11 @@ pub const Device = struct {
     pub fn flush2d(self: *Device, storage: *QueueStorage, resource_id: u32, width: u32, height: u32) Error!void {
         try self.sendNoData(storage, TransferToHost2d.init(resource_id, width, height));
         try self.sendNoData(storage, ResourceFlush.init(resource_id, width, height));
+    }
+
+    pub fn transferToHost3d(self: *Device, storage: *QueueStorage, context_id: u32, resource_id: u32, width: u32, height: u32, stride: u32) Error!void {
+        if (!self.virglReady()) return error.UnsupportedDevice;
+        try self.sendNoData(storage, TransferToHost3d.init(context_id, resource_id, width, height, stride));
     }
 
     pub fn setScanout(self: *Device, storage: *QueueStorage, scanout_id: u32, resource_id: u32, width: u32, height: u32) Error!void {
@@ -674,6 +714,84 @@ pub fn packedFullFrameClearColor(width: u32, height: u32, buffers: renderer_ir.B
     return colorToVirglClear(rect.color);
 }
 
+pub fn rasterizePackedRectsToBgra(width: u32, height: u32, pixels: []u8, buffers: renderer_ir.Buffers, background: ui.Color) Error!void {
+    const byte_len = @as(usize, width) * @as(usize, height) * 4;
+    if (pixels.len < byte_len) return error.UnsupportedPackedFrame;
+    if (buffers.liveTextVertices().len != 0 or
+        buffers.liveIconVertices().len != 0 or
+        buffers.liveIconLineVertices().len != 0 or
+        buffers.liveImageVertices().len != 0 or
+        buffers.liveOverlayTextVertices().len != 0 or
+        buffers.liveOverlayIconVertices().len != 0 or
+        buffers.liveOverlayIconLineVertices().len != 0)
+    {
+        return error.UnsupportedPackedFrame;
+    }
+
+    fillBgra(pixels[0..byte_len], background);
+    try rasterizeRectBufferToBgra(width, height, pixels[0..byte_len], buffers.liveRects());
+    try rasterizeRectBufferToBgra(width, height, pixels[0..byte_len], buffers.liveOverlayRects());
+}
+
+pub fn copyRgbaPixelsToBgra(width: u32, height: u32, out_bgra: []u8, in_rgba: []const ui.Color) Error!void {
+    const pixel_count = @as(usize, width) * @as(usize, height);
+    const byte_len = pixel_count * 4;
+    if (out_bgra.len < byte_len or in_rgba.len < pixel_count) return error.UnsupportedPackedFrame;
+    var index: usize = 0;
+    while (index < pixel_count) : (index += 1) {
+        const color = in_rgba[index];
+        const byte_index = index * 4;
+        out_bgra[byte_index + 0] = color.b;
+        out_bgra[byte_index + 1] = color.g;
+        out_bgra[byte_index + 2] = color.r;
+        out_bgra[byte_index + 3] = color.a;
+    }
+}
+
+fn rasterizeRectBufferToBgra(width: u32, height: u32, pixels: []u8, rects: []const f32) Error!void {
+    var iter = renderer_ir.RectIterator.init(rects) catch return error.UnsupportedPackedFrame;
+    while (iter.next() catch return error.UnsupportedPackedFrame) |rect| {
+        if (rect.mode != .fill or rect.radius != 0.0 or rect.shadow != 0.0) return error.UnsupportedPackedFrame;
+        fillRectBgra(width, height, pixels, rect.bounds, rect.color);
+    }
+}
+
+fn fillBgra(pixels: []u8, color: ui.Color) void {
+    var index: usize = 0;
+    while (index + 3 < pixels.len) : (index += 4) {
+        pixels[index + 0] = color.b;
+        pixels[index + 1] = color.g;
+        pixels[index + 2] = color.r;
+        pixels[index + 3] = color.a;
+    }
+}
+
+fn fillRectBgra(width: u32, height: u32, pixels: []u8, bounds: ui.Rect, color: ui.Color) void {
+    const x0 = clampCoord(@intFromFloat(@floor(bounds.x)), width);
+    const y0 = clampCoord(@intFromFloat(@floor(bounds.y)), height);
+    const x1 = clampCoord(@intFromFloat(@ceil(bounds.x + bounds.w)), width);
+    const y1 = clampCoord(@intFromFloat(@ceil(bounds.y + bounds.h)), height);
+    if (x1 <= x0 or y1 <= y0) return;
+
+    var y = y0;
+    while (y < y1) : (y += 1) {
+        var x = x0;
+        while (x < x1) : (x += 1) {
+            const index = (@as(usize, y) * @as(usize, width) + @as(usize, x)) * 4;
+            pixels[index + 0] = color.b;
+            pixels[index + 1] = color.g;
+            pixels[index + 2] = color.r;
+            pixels[index + 3] = color.a;
+        }
+    }
+}
+
+fn clampCoord(value: i32, limit: u32) u32 {
+    if (value <= 0) return 0;
+    const unsigned: u32 = @intCast(value);
+    return @min(unsigned, limit);
+}
+
 fn colorToVirglClear(color: ui.Color) VirglClearColor {
     return .{
         .r = colorChannel(color.r),
@@ -712,6 +830,7 @@ test "virtio gpu command layouts match fixed 2d protocol sizes" {
     try std.testing.expectEqual(@as(usize, 48), @sizeOf(ResourceAttachBacking));
     try std.testing.expectEqual(@as(usize, 48), @sizeOf(SetScanout));
     try std.testing.expectEqual(@as(usize, 56), @sizeOf(TransferToHost2d));
+    try std.testing.expectEqual(@as(usize, 72), @sizeOf(TransferToHost3d));
     try std.testing.expectEqual(@as(usize, 48), @sizeOf(ResourceFlush));
     try std.testing.expectEqual(@as(usize, 72), @sizeOf(ResourceCreate3d));
     try std.testing.expectEqual(@as(usize, 96), @sizeOf(ContextCreate));
@@ -740,6 +859,44 @@ test "frame update commands cover full resource" {
     try std.testing.expectEqual(@as(u32, 600), flush.rect.height);
     try std.testing.expectEqual(@as(u32, 3), transfer.resource_id);
     try std.testing.expectEqual(@as(u32, 3), flush.resource_id);
+}
+
+test "3d transfer command covers full color resource" {
+    const transfer = TransferToHost3d.init(7, 3, 800, 600, 800 * 4);
+    try std.testing.expectEqual(ControlType.transfer_to_host_3d, transfer.header.control_type);
+    try std.testing.expectEqual(@as(u32, 7), transfer.header.context_id);
+    try std.testing.expectEqual(@as(u32, 800), transfer.box.width);
+    try std.testing.expectEqual(@as(u32, 600), transfer.box.height);
+    try std.testing.expectEqual(@as(u32, 1), transfer.box.depth);
+    try std.testing.expectEqual(@as(u32, 3), transfer.resource_id);
+    try std.testing.expectEqual(@as(u32, 800 * 4), transfer.stride);
+    try std.testing.expectEqual(@as(u32, 800 * 600 * 4), transfer.layer_stride);
+}
+
+test "packed rect rasterizer writes bgra scanout bytes" {
+    var storage = renderer_ir.FixedBuffers(2, 0, 0, 0, 0, 0, 0, 0, 0){};
+    const buffers = storage.buffers();
+    try renderer_ir.pushRect(buffers, .base, ui.Rect.init(0, 0, 4, 3), .{ .r = 1, .g = 2, .b = 3, .a = 255 }, .clear, 0, 0, renderer_ir.rectModeCode(.fill));
+    try renderer_ir.pushRect(buffers, .base, ui.Rect.init(1, 1, 2, 1), .{ .r = 9, .g = 8, .b = 7, .a = 255 }, .clear, 0, 0, renderer_ir.rectModeCode(.fill));
+    var pixels: [4 * 3 * 4]u8 = undefined;
+
+    try rasterizePackedRectsToBgra(4, 3, &pixels, buffers, .clear);
+
+    try std.testing.expectEqualSlices(u8, &.{ 3, 2, 1, 255 }, pixels[0..4]);
+    const middle = (1 * 4 + 1) * 4;
+    try std.testing.expectEqualSlices(u8, &.{ 7, 8, 9, 255 }, pixels[middle .. middle + 4]);
+}
+
+test "rgba software pixels copy to virtio bgra backing" {
+    const pixels = [_]ui.Color{
+        .{ .r = 1, .g = 2, .b = 3, .a = 4 },
+        .{ .r = 5, .g = 6, .b = 7, .a = 8 },
+    };
+    var out: [8]u8 = undefined;
+
+    try copyRgbaPixelsToBgra(2, 1, &out, &pixels);
+
+    try std.testing.expectEqualSlices(u8, &.{ 3, 2, 1, 4, 7, 6, 5, 8 }, &out);
 }
 
 test "command descriptor chain sends request then writable response" {

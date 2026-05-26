@@ -1,4 +1,5 @@
 const std = @import("std");
+const app_input_event = @import("app_input_event.zig");
 const gl_contract = @import("render/gl_contract.zig");
 const icon_line_buffer = @import("render/icon_line_buffer.zig");
 const renderer_ir = @import("render/ir.zig");
@@ -38,6 +39,15 @@ const clear_color_b_js = std.fmt.comptimePrint("{d}/255", .{gl_contract.clear_co
 const clear_color_a_js = std.fmt.comptimePrint("{d}/255", .{gl_contract.clear_color_a_u8});
 const text_vertex_float_stride_js = std.fmt.comptimePrint("{d}", .{renderer_ir.text_vertex_float_stride});
 const text_vertex_byte_stride_js = std.fmt.comptimePrint("{d}", .{renderer_ir.text_vertex_float_stride * @sizeOf(f32)});
+const keyboard_capture_event_js =
+    "k==" ++ std.fmt.comptimePrint("{d}", .{@intFromEnum(app_input_event.Kind.key_down)}) ++
+    "||k==" ++ std.fmt.comptimePrint("{d}", .{@intFromEnum(app_input_event.Kind.key_up)}) ++
+    "||k==" ++ std.fmt.comptimePrint("{d}", .{@intFromEnum(app_input_event.Kind.input)}) ++
+    "||k==" ++ std.fmt.comptimePrint("{d}", .{@intFromEnum(app_input_event.Kind.change)}) ++
+    "||k==" ++ std.fmt.comptimePrint("{d}", .{@intFromEnum(app_input_event.Kind.before_input)}) ++
+    "||k==" ++ std.fmt.comptimePrint("{d}", .{@intFromEnum(app_input_event.Kind.composition_start)}) ++
+    "||k==" ++ std.fmt.comptimePrint("{d}", .{@intFromEnum(app_input_event.Kind.composition_update)}) ++
+    "||k==" ++ std.fmt.comptimePrint("{d}", .{@intFromEnum(app_input_event.Kind.composition_end)});
 const textured_u_byte_offset_js = std.fmt.comptimePrint("{d}", .{renderer_ir.textured_u_index * @sizeOf(f32)});
 const textured_color_byte_offset_js = std.fmt.comptimePrint("{d}", .{renderer_ir.textured_color_r_index * @sizeOf(f32)});
 const icon_line_vertex_float_stride_js = std.fmt.comptimePrint("{d}", .{icon_line_buffer.vertex_float_stride});
@@ -57,7 +67,9 @@ const gl_shader_sources =
     "`,Lf=`" ++ gl_contract.line_fragment_shader ++ "`";
 
 pub const loader_js =
-    \\let W,M,I,F,N=0,R=requestAnimationFrame,C=c,G=C.getContext`webgl`,T=new TextEncoder,D=new TextDecoder;if(!G)throw`webgl`;let U=(p,l)=>new Uint8Array(M,p,l).slice(),B=(p,l)=>D.decode(new Uint8Array(M,p,l)),Q=(p,l,t,z)=>{let a=document.createElement`a`,u=URL.createObjectURL(new Blob([U(p,l)]));a.href=u;a.download=B(t,z)||`edgerun-app.wasm`;a.click();URL.revokeObjectURL(u)},P=()=>{for(let i=0,n=W.er_ui_outbox_count();i<n;i++){let k=W.er_ui_outbox_kind(i),p=W.er_ui_outbox_payload_ptr(i),l=W.er_ui_outbox_payload_len(i),t=W.er_ui_outbox_target_ptr(i),z=W.er_ui_outbox_target_len(i);if(k==1)open(B(p,l),`_blank`,`noopener`);else if(k==2)location.hash=B(p,l);else if(k==3)document.title=B(p,l);else if(k==4){let e=document.getElementById(B(t,z));if(e)e.innerHTML=B(p,l)}else if(k==5&&l)Q(p,l,t,z);else if(k==6&&l)I=[I,WebAssembly.instantiate(U(p,l),{})]}W.er_ui_outbox_clear()},A=(e,k)=>{let p=W.er_ui_input_ptr(),m=new Uint8Array(M,p,W.er_ui_input_capacity()),v=new DataView(M,p),o=36,a=[e.key||``,e.code||``,e.inputType||``,e.data||location.hash||``],l=[];for(let i=0;i<4;i++){l[i]=T.encodeInto(a[i],m.subarray(o)).written;o+=l[i]}v.setUint32(0,k,1);v.setFloat32(4,e.clientX||0,1);v.setFloat32(8,e.clientY||0,1);v.setFloat32(12,e.deltaY||0,1);v.setUint32(16,(e.ctrlKey|0)+2*(e.metaKey|0)+4*(e.altKey|0)+8*(e.shiftKey|0)+16*(e.repeat|0),1);for(let i=0;i<4;i++)v.setUint32(20+i*4,l[i],1);let r=W.er_ui_event_bytes(o,innerWidth,innerHeight,performance.now());if(r&1)e.preventDefault();if(r&8)P();if(r&2)N||(N=R(F))};` resize wheel pointermove pointerleave pointerdown pointerup popstate hashchange keydown contextmenu keyup input change click dblclick visibilitychange focus blur beforeinput compositionstart compositionupdate compositionend touchstart touchmove touchend touchcancel dragstart dragend drop`.split` `.map((n,k)=>n&&addEventListener(n,e=>A(e,k),{passive:0}));addEventListener(`scroll`,e=>A(e,2));addEventListener(`pointercancel`,e=>A(e,4));
+    \\let W,M,I,F,N=0,R=requestAnimationFrame,C=c,G=C.getContext`webgl`,T=new TextEncoder,D=new TextDecoder;if(!G)throw`webgl`;let U=(p,l)=>new Uint8Array(M,p,l).slice(),B=(p,l)=>D.decode(new Uint8Array(M,p,l)),Q=(p,l,t,z)=>{let a=document.createElement`a`,u=URL.createObjectURL(new Blob([U(p,l)]));a.href=u;a.download=B(t,z)||`edgerun-app.wasm`;a.click();URL.revokeObjectURL(u)},P=()=>{for(let i=0,n=W.er_ui_outbox_count();i<n;i++){let k=W.er_ui_outbox_kind(i),p=W.er_ui_outbox_payload_ptr(i),l=W.er_ui_outbox_payload_len(i),t=W.er_ui_outbox_target_ptr(i),z=W.er_ui_outbox_target_len(i);if(k==1)open(B(p,l),`_blank`,`noopener`);else if(k==2)location.hash=B(p,l);else if(k==3)document.title=B(p,l);else if(k==4){let e=document.getElementById(B(t,z));if(e)e.innerHTML=B(p,l)}else if(k==5&&l)Q(p,l,t,z);else if(k==6&&l)I=[I,WebAssembly.instantiate(U(p,l),{})]}W.er_ui_outbox_clear()},A=(e,k)=>{let p=W.er_ui_input_ptr(),m=new Uint8Array(M,p,W.er_ui_input_capacity()),v=new DataView(M,p),o=36,a=[e.key||``,e.code||``,e.inputType||``,e.data||location.hash||``],l=[];for(let i=0;i<4;i++){l[i]=T.encodeInto(a[i],m.subarray(o)).written;o+=l[i]}v.setUint32(0,k,1);v.setFloat32(4,e.clientX||0,1);v.setFloat32(8,e.clientY||0,1);v.setFloat32(12,e.deltaY||0,1);v.setUint32(16,(e.ctrlKey|0)+2*(e.metaKey|0)+4*(e.altKey|0)+8*(e.shiftKey|0)+16*(e.repeat|0),1);for(let i=0;i<4;i++)v.setUint32(20+i*4,l[i],1);let r=W.er_ui_event_bytes(o,innerWidth,innerHeight,performance.now());if((r&1)||
++ keyboard_capture_event_js ++
+    \\)e.preventDefault();if(r&8)P();if(r&2)N||(N=R(F))};` resize wheel pointermove pointerleave pointerdown pointerup popstate hashchange keydown contextmenu keyup input change click dblclick visibilitychange focus blur beforeinput compositionstart compositionupdate compositionend touchstart touchmove touchend touchcancel dragstart dragend drop`.split` `.map((n,k)=>n&&addEventListener(n,e=>A(e,k),{passive:0,capture:1}));addEventListener(`scroll`,e=>A(e,2));addEventListener(`pointercancel`,e=>A(e,4));
     \\let S=(t,s)=>{let h=G.createShader(t);G.shaderSource(h,s);G.compileShader(h);if(!G.getShaderParameter(h,G.COMPILE_STATUS))throw G.getShaderInfoLog(h);return h},O=(v,f)=>{let p=G.createProgram();G.attachShader(p,S(G.VERTEX_SHADER,v));G.attachShader(p,S(G.FRAGMENT_SHADER,f));
 ++ gl_attr_bindings ++
     \\G.linkProgram(p);if(!G.getProgramParameter(p,G.LINK_STATUS))throw G.getProgramInfoLog(p);return p},
@@ -301,6 +313,8 @@ test "generated entry has the only javascript byte bridge" {
     try std.testing.expect(contains("I=[I,WebAssembly.instantiate"));
     try std.testing.expect(contains("beforeinput"));
     try std.testing.expect(contains("dblclick"));
+    try std.testing.expect(contains("if((r&1)||" ++ keyboard_capture_event_js ++ ")e.preventDefault()"));
+    try std.testing.expect(contains("{passive:0,capture:1}"));
     try std.testing.expect(contains("if(r&2)N||(N=R(F))"));
     try std.testing.expect(contains("F=t=>{N=0;"));
     try std.testing.expect(contains("A({type:`hashchange`},8);N||(N=R(F))"));
