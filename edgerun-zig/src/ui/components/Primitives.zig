@@ -138,13 +138,22 @@ pub const TitleDetailPanel = struct {
     detail_y: f32,
     detail_h: f32,
     title_right_inset: f32 = 0.0,
+    title_max_lines: usize = 2,
+    detail_max_lines: usize = 2,
 };
 
 pub fn renderTitleDetailPanel(scene: *ui.Scene, bounds: ui.Rect, title: []const u8, detail: []const u8, options: common.RenderOptions, spec: TitleDetailPanel, border: ui.Color, title_color: ui.Color) ui.RenderError!void {
     try scene.pushRect(bounds, options.style.panel, .fill, spec.radius, 0.0);
     try scene.pushRect(bounds, border, .border, spec.radius, 0.0);
-    try scene.pushText(ui.Rect.init(bounds.x + spec.padding, bounds.y + spec.title_y, @max(min_extent, bounds.w - spec.padding * 2.0 - spec.title_right_inset), spec.title_h), title, title_color);
-    try scene.pushText(ui.Rect.init(bounds.x + spec.padding, bounds.y + spec.detail_y, @max(min_extent, bounds.w - spec.padding * 2.0), spec.detail_h), detail, options.style.muted);
+    const title_w = @max(min_extent, bounds.w - spec.padding * 2.0 - spec.title_right_inset);
+    const title_h = @min(measuredTextHeight(title, title_w, spec.title_h, spec.title_max_lines), @max(min_extent, bounds.h - spec.title_y - spec.padding));
+    try scene.pushWrappedText(ui.Rect.init(bounds.x + spec.padding, bounds.y + spec.title_y, title_w, title_h), title, title_color, textWrap(title, spec.title_h, spec.title_max_lines));
+
+    const detail_gap = @max(0.0, spec.detail_y - spec.title_y - spec.title_h);
+    const detail_y = spec.title_y + title_h + detail_gap;
+    const detail_w = @max(min_extent, bounds.w - spec.padding * 2.0);
+    const detail_h = @min(measuredTextHeight(detail, detail_w, spec.detail_h, spec.detail_max_lines), @max(min_extent, bounds.h - detail_y - spec.padding));
+    try scene.pushWrappedText(ui.Rect.init(bounds.x + spec.padding, bounds.y + detail_y, detail_w, detail_h), detail, options.style.muted, textWrap(detail, spec.detail_h, spec.detail_max_lines));
 }
 
 pub fn collectSidePanelLayoutHits(collector: *interaction.Collector, bounds: ui.Rect, spec: SidePanelLayout, id: u32) interaction.Error!void {
@@ -220,4 +229,25 @@ test "component chrome helper emits deterministic frame commands" {
     try std.testing.expectEqual(ui.RectMode.border, scene.written()[2].rect.mode);
     try std.testing.expectEqual(@as(f32, 7.0), scene.written()[1].rect.radius);
     try std.testing.expect(std.meta.eql(border, scene.written()[2].rect.color));
+}
+
+test "title detail panel wraps text inside shared overlay primitive" {
+    var commands: [8]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+    const spec = TitleDetailPanel{
+        .radius = 8.0,
+        .padding = 8.0,
+        .title_y = 6.0,
+        .title_h = 14.0,
+        .detail_y = 24.0,
+        .detail_h = 12.0,
+    };
+
+    try renderTitleDetailPanel(&scene, ui.Rect.init(0, 0, 104, 72), "Runtime authority", "Receipt detail wraps", .{}, spec, ui.Color.border, ui.Color.text);
+
+    try std.testing.expect(scene.written().len > 4);
+    for (scene.written()) |command| switch (command) {
+        .text => |text| try std.testing.expect(text.origin.w <= 88.0),
+        else => {},
+    };
 }

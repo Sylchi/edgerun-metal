@@ -12,8 +12,8 @@ const icon = @import("../../icon.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+const constrainPreferredSize = component_primitives.constrainPreferredSize;
 const contentInset = component_primitives.contentInset;
-const measureFixed = component_primitives.measureFixed;
 
 pub const Select = struct {
     id: u32,
@@ -28,7 +28,8 @@ pub const Select = struct {
         try scene.pushRect(bounds, options.style.border, .border, component_primitives.control_radius, 0.0);
         if (contentInset(bounds, component_primitives.control_text_padding)) |label_bounds| {
             const text_bounds = ui.Rect.init(label_bounds.x, label_bounds.y, @max(component_primitives.min_extent, label_bounds.w - select_arrow_w), label_bounds.h);
-            try scene.pushText(text_bounds.withHeightCentered(component_primitives.control_label_height), self.label, options.style.text);
+            const text_h = @min(text_bounds.h, component_primitives.measuredTextHeight(self.label, text_bounds.w, component_primitives.control_label_height, select_label_max_lines));
+            try scene.pushWrappedText(text_bounds.withHeightCentered(text_h), self.label, options.style.text, component_primitives.textWrap(self.label, component_primitives.control_label_height, select_label_max_lines));
             const arrow_bounds = ui.Rect.init(label_bounds.x + label_bounds.w - select_icon_size, label_bounds.y + (label_bounds.h - select_icon_size) * 0.5, select_icon_size, select_icon_size);
             try scene.pushIconQuad(.{ .bounds = arrow_bounds, .icon_id = icon.id(.chevron_right), .color = options.style.muted });
         }
@@ -39,9 +40,18 @@ pub const Select = struct {
     }
 
     pub fn measure(self: Select, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
-        _ = self;
         _ = options;
-        return measureFixed(preferred_select, constraints);
+        const inner = constraints.inner(.{ .left = component_primitives.control_text_padding, .right = component_primitives.control_text_padding + select_arrow_w });
+        const label = layout.measureText(self.label, inner, component_primitives.textMetrics(self.label, component_primitives.control_label_height, select_label_max_lines));
+        const preferred = constrainPreferredSize(.{
+            .w = @max(select_min_width, label.preferred.w + component_primitives.control_text_padding * 2.0 + select_arrow_w),
+            .h = @max(preferred_select.h, label.preferred.h + component_primitives.control_text_padding * 2.0),
+        }, constraints);
+        return layout.Measurement.flexible(
+            .{ .w = @min(select_min_width, preferred.w), .h = @min(preferred_select.h, preferred.h) },
+            preferred,
+            .{ .w = component_primitives.measure_max_width, .h = @max(preferred.h, preferred_select.h) },
+        ).applyExact(constraints);
     }
 
     pub fn toObject(self: Select, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -60,6 +70,8 @@ pub const Select = struct {
 
 const select_arrow_w: f32 = 18.0;
 const select_icon_size: f32 = 14.0;
+const select_label_max_lines: usize = 2;
+const select_min_width: f32 = 112.0;
 pub const preferred_select = ui.Size{ .w = 220.0, .h = 40.0 };
 
 test "select component serializes to canonical object and deserializes" {
@@ -83,4 +95,13 @@ test "select component renders chevron through icon primitive" {
 
     try std.testing.expect(component_test.hasIcon(scene.written(), icon.id(.chevron_right)));
     try std.testing.expect(!component_test.hasText(scene.written(), "v"));
+}
+
+test "select measurement wraps long labels under narrow constraints" {
+    const select = Select{ .id = 22, .label = "Production runtime authority" };
+
+    const measured = select.measure(.{ .width = .{ .at_most = select_min_width }, .text_wrap = .wrap }, .{});
+
+    try std.testing.expect(measured.preferred.w <= select_min_width);
+    try std.testing.expect(measured.preferred.h > preferred_select.h);
 }

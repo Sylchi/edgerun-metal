@@ -1,4 +1,5 @@
 const interaction = @import("../../ui_interaction.zig");
+const layout = @import("../../layouts/Types.zig");
 const ui = @import("../../ui.zig");
 const primitives = @import("Primitives.zig");
 
@@ -23,6 +24,38 @@ pub fn renderSegment(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, activ
         paint.padding,
         if (active) paint.active_text else paint.inactive_text,
     );
+}
+
+pub const SegmentMeasure = struct {
+    item_count: usize,
+    height: f32,
+    padding: f32 = primitives.control_text_padding,
+    gap: f32 = 0.0,
+    min_width: f32 = 0.0,
+    line_height: f32 = primitives.control_label_height,
+    max_lines: usize = 1,
+};
+
+pub fn measureSegments(labels: []const []const u8, constraints: layout.Constraints, spec: SegmentMeasure) layout.Measurement {
+    const item_count = @max(spec.item_count, labels.len);
+    var item_w: f32 = spec.min_width;
+    var item_h: f32 = spec.height;
+    for (labels) |label| {
+        const measured = layout.measureText(label, .{ .width = .unconstrained, .text_wrap = .nowrap }, primitives.textMetrics(label, spec.line_height, spec.max_lines));
+        item_w = @max(item_w, measured.preferred.w + spec.padding * 2.0);
+        item_h = @max(item_h, measured.preferred.h + spec.padding * 2.0);
+    }
+    const count_f = @as(f32, @floatFromInt(item_count));
+    const min_total_w = spec.min_width * count_f + spec.gap * @max(0.0, count_f - 1.0);
+    const preferred = primitives.constrainPreferredSize(.{
+        .w = item_w * count_f + spec.gap * @max(0.0, count_f - 1.0),
+        .h = item_h,
+    }, constraints);
+    return layout.Measurement.flexible(
+        .{ .w = @min(min_total_w, preferred.w), .h = @min(spec.height, preferred.h) },
+        preferred,
+        .{ .w = primitives.measure_max_width, .h = @max(preferred.h, spec.height) },
+    ).applyExact(constraints);
 }
 
 pub fn equalSegmentBounds(bounds: ui.Rect, index: usize, item_count: usize) ui.Rect {

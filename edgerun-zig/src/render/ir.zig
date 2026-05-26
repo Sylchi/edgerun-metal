@@ -32,11 +32,11 @@ pub const rect_color2_g_index: usize = 11;
 pub const rect_color2_b_index: usize = 12;
 pub const rect_color2_a_index: usize = 13;
 pub const rect_mode_index: usize = 14;
-const rect_mode_fill: u8 = 0;
-const rect_mode_shadow: u8 = 1;
-const rect_mode_border: u8 = 2;
-const rect_mode_linear_gradient: u8 = 3;
-const rect_mode_pie_slice: u8 = 4;
+pub const rect_mode_fill: u8 = 0;
+pub const rect_mode_shadow: u8 = 1;
+pub const rect_mode_border: u8 = 2;
+pub const rect_mode_linear_gradient: u8 = 3;
+pub const rect_mode_pie_slice: u8 = 4;
 pub const textured_x_index: usize = 0;
 pub const textured_y_index: usize = 1;
 pub const textured_u_index: usize = 2;
@@ -780,6 +780,11 @@ test "renderer ir owns svg source lookup and command painting boundaries" {
 test "renderer ir publishes packed frame field layout" {
     try std.testing.expectEqual(@as(usize, 15), rect_float_stride);
     try std.testing.expectEqual(rect_float_stride - 1, rect_mode_index);
+    try std.testing.expectEqual(@as(u8, 0), rect_mode_fill);
+    try std.testing.expectEqual(@as(u8, 1), rect_mode_shadow);
+    try std.testing.expectEqual(@as(u8, 2), rect_mode_border);
+    try std.testing.expectEqual(@as(u8, 3), rect_mode_linear_gradient);
+    try std.testing.expectEqual(@as(u8, 4), rect_mode_pie_slice);
     try std.testing.expectEqual(@as(usize, 8), text_vertex_float_stride);
     try std.testing.expectEqual(text_vertex_float_stride - 1, textured_color_a_index);
     try std.testing.expectEqual(@as(usize, 9), icon_instance_float_stride);
