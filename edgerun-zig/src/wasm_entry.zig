@@ -8,7 +8,7 @@ pub const immutable_marker = "GENERATED FILE. IMMUTABLE.";
 pub const viewport_css = "html,body{margin:0;width:100%;height:100%;overflow:hidden;cursor:none}canvas{display:block}";
 pub const max_loader_js_bytes: usize = 500;
 pub const loader_js =
-    \\let p="../bin/edgerun-app-runtime.wasm";try{let r=await fetch(p+"?v=2",{cache:"no-store"});if(!r.ok)throw Error(r.status);let w=(await WebAssembly.instantiateStreaming(r,{})).instance.exports;__edgerunWasm=w;let s=new TextDecoder().decode(new Uint8Array(w.memory.buffer,w.er_ui_bootstrap_js_ptr(),w.er_ui_bootstrap_js_len()));(0,eval)(s)}catch(e){document.body.textContent="EdgeRun failed: "+e.message;throw e}
+    \\let p="../bin/edgerun-app-runtime.wasm";try{let r=await fetch(p+"?v=3",{cache:"no-store"});if(!r.ok)throw Error(r.status);let w=(await WebAssembly.instantiateStreaming(r,{})).instance.exports;globalThis.__edgerunWasm=w;let s=new TextDecoder().decode(new Uint8Array(w.memory.buffer,w.er_ui_bootstrap_js_ptr(),w.er_ui_bootstrap_js_len()));(0,eval)(s)}catch(e){document.body.textContent="EdgeRun failed: "+e.message;throw e}
 ;
 
 pub const html =
@@ -69,6 +69,7 @@ test "generated entry has a tiny loader for wasm-owned javascript" {
     try std.testing.expect(contains(wasm_path));
     try std.testing.expect(contains("WebAssembly.instantiateStreaming"));
     try std.testing.expect(contains("r.ok"));
+    try std.testing.expect(contains("globalThis.__edgerunWasm=w"));
     try std.testing.expect(contains("w.er_ui_bootstrap_js_ptr()"));
     try std.testing.expect(contains("w.er_ui_bootstrap_js_len()"));
     try std.testing.expect(contains("(0,eval)(s)"));

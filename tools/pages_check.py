@@ -4,6 +4,7 @@ import http.server
 import pathlib
 import posixpath
 import re
+import shutil
 import subprocess
 import threading
 import time
@@ -24,6 +25,7 @@ PUBLIC_RETRY_SECONDS = 120
 PUBLIC_RETRY_INTERVAL_SECONDS = 5
 HTTP_OK = 200
 MAX_PUBLIC_LOADER_JS_BYTES = 500
+BROWSER_NAMES = ("chromium", "chromium-browser", "google-chrome", "google-chrome-stable")
 
 
 class SiteHandler(http.server.SimpleHTTPRequestHandler):
@@ -72,7 +74,9 @@ def verify_local_files(site_dir):
     require("../bin/edgerun-app-runtime.wasm" in entry, "web entry missing runtime path")
     require("WebAssembly.instantiateStreaming" in entry, "web entry missing streaming instantiate")
     require("!r.ok" in entry, "web entry missing HTTP status check")
+    require("globalThis.__edgerunWasm" in entry, "web entry missing module global handoff")
     require("er_ui_bootstrap_js_ptr" in entry, "web entry missing app-owned bootstrap handoff")
+    node_execute_loader(loader)
 
 
 def request(url, method):
@@ -105,6 +109,59 @@ for (const name of ["memory", "er_ui_boot", "er_ui_render_frame", "er_ui_event_b
 }
 """
     subprocess.run(("node", "--input-type=module", "-e", script, url), check=True)
+
+
+def find_browser():
+    for name in BROWSER_NAMES:
+        path = shutil.which(name)
+        if path is not None:
+            return path
+    fail("expected chromium-compatible browser for Pages runtime smoke")
+
+
+def browser_smoke(url):
+    browser = find_browser()
+    result = subprocess.run(
+        (
+            browser,
+            "--headless",
+            "--disable-gpu",
+            "--no-sandbox",
+            "--virtual-time-budget=5000",
+            "--dump-dom",
+            url,
+        ),
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    require('<canvas id="c"' in result.stdout, "browser smoke did not reach app canvas")
+    require("EdgeRun failed:" not in result.stdout, "browser smoke reached failure page")
+
+
+def node_execute_loader(loader):
+    script = """
+const loader = process.argv[1];
+const bridge = "if(!globalThis.__edgerunWasm)throw Error('missing global wasm');document.body.innerHTML='<canvas id=c></canvas>'";
+const encodedBridge = new TextEncoder().encode(bridge);
+const memory = new WebAssembly.Memory({ initial: 1 });
+new Uint8Array(memory.buffer, 0, encodedBridge.length).set(encodedBridge);
+globalThis.document = { body: { textContent: "", innerHTML: "" } };
+globalThis.fetch = async () => ({ ok: true });
+WebAssembly.instantiateStreaming = async () => ({
+  instance: {
+    exports: {
+      memory,
+      er_ui_bootstrap_js_ptr: () => 0,
+      er_ui_bootstrap_js_len: () => encodedBridge.length,
+    },
+  },
+});
+await import(`data:text/javascript,${encodeURIComponent(loader)}`);
+if (document.body.innerHTML !== "<canvas id=c></canvas>") throw new Error("loader did not execute wasm-owned bridge");
+"""
+    subprocess.run(("node", "--input-type=module", "-e", script, loader), check=True)
 
 
 def serve_local(site_dir):
@@ -143,6 +200,7 @@ def check_urls(base_url):
     require_url(web_url)
     require_wasm_header(wasm_url)
     node_instantiate(wasm_url)
+    browser_smoke(web_url)
 
 
 def retry_public(base_url):
