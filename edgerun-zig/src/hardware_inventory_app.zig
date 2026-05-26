@@ -3,8 +3,12 @@ const acpi = @import("acpi.zig");
 const bytes = @import("bytes.zig");
 const hardware_inventory = @import("hardware_inventory.zig");
 const tpm_acpi = @import("tpm_acpi.zig");
+const component_union = @import("ui/components/Component.zig");
+const stack_component = @import("ui/components/Stack.zig");
 const ui = @import("ui.zig");
-const ui_components = @import("ui_components.zig");
+
+const Component = component_union.Component;
+const Stack = stack_component.Stack(Component);
 
 pub const max_rows = 8;
 pub const component_count = max_rows + 1;
@@ -140,7 +144,7 @@ pub const View = struct {
         return raw[0..len];
     }
 
-    pub fn componentStack(self: View, out_components: []ui_components.Component) ?ui_components.Stack {
+    pub fn componentStack(self: View, out_components: []Component) ?Stack {
         if (out_components.len < component_count) return null;
 
         var index: usize = 0;
@@ -155,7 +159,7 @@ pub const View = struct {
         };
     }
 
-    fn componentAt(self: View, index: usize) ?ui_components.Component {
+    fn componentAt(self: View, index: usize) ?Component {
         return switch (index) {
             title_index => .{ .text = .{ .value = "Hardware inventory" } },
             row_id_base...max_rows => |component_index| blk: {
@@ -285,7 +289,7 @@ test "hardware inventory state maps shared bytes into ui rows" {
     try std.testing.expectEqual(@as(u16, 1), state_view.pciCount());
     try std.testing.expect(bytes.eql(state_view.detail(row_status), "ready for UI render"));
 
-    var components: [component_count]ui_components.Component = undefined;
+    var components: [component_count]Component = undefined;
     const stack = state_view.componentStack(&components).?;
     var commands: [48]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
@@ -305,7 +309,7 @@ test "hardware inventory view publishes canonical ui stack through app storage" 
     _ = try writeState(&state_bytes, sampleInventory(2), 11);
     const state_view = try view(&state_bytes);
 
-    var stack_components: [component_count]ui_components.Component = undefined;
+    var stack_components: [component_count]Component = undefined;
     const stack = state_view.componentStack(&stack_components).?;
     try std.testing.expectEqual(@as(usize, component_count), stack.children.len);
     try std.testing.expectEqualStrings("Hardware inventory", stack.children[title_index].text.value);
@@ -319,7 +323,7 @@ test "hardware inventory view publishes canonical ui stack through app storage" 
     var codec_raw: [1024]u8 = undefined;
     var object_raw: [object.header_size + 1024]u8 = undefined;
     var resolved: [1]object.View = undefined;
-    var render_components: [component_count]ui_components.Component = undefined;
+    var render_components: [component_count]Component = undefined;
     var nodes: [component_count]ui.Node = undefined;
     const scratch = app_mod.App.UiScratch{
         .codec = &codec_raw,

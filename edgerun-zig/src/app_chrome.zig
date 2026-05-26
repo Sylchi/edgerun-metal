@@ -1,5 +1,5 @@
 const std = @import("std");
-const components = @import("ui_components.zig");
+const components = @import("ui/components/Component.zig");
 const icon = @import("icon.zig");
 const interaction = @import("ui_interaction.zig");
 const ui = @import("ui.zig");

@@ -21,10 +21,11 @@ const app_images = @import("app_images.zig");
 const app_landing = @import("app_landing.zig");
 const app_navigation = @import("app_navigation.zig");
 const app_source = @import("app_source.zig");
+const component_union = @import("ui/components/Component.zig");
+const node_renderer = @import("ui/components/NodeRenderer.zig");
 const ui = @import("ui.zig");
 const ui_codec = @import("ui_codec.zig");
 const ui_component_common = @import("ui_component_common.zig");
-const ui_components = @import("ui_components.zig");
 const vfs = @import("vfs.zig");
 const ui_runtime = @import("ui_runtime.zig");
 const wasm_interpreter = @import("wasm/root.zig");
@@ -2424,7 +2425,7 @@ export fn er_ui_render_input_object(input_len: usize, width: u32, height: u32) u
 
     const root = ui_codec.decodeObject(input_bytes[0..input_len], &nodes) catch return finishError(.bad_ui);
     var scene = ui.Scene.init(&commands);
-    ui_components.renderNode(&scene, .{
+    node_renderer.renderNode(component_union.Component, &scene, .{
         .x = 0,
         .y = 0,
         .w = @floatFromInt(frame_width),

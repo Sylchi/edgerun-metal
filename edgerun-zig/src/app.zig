@@ -13,9 +13,17 @@ const seal = @import("seal.zig");
 const store = @import("store.zig");
 const object = @import("object.zig");
 const tpmapp = @import("tpmapp.zig");
+const component_common = @import("ui_component_common.zig");
+const component_union = @import("ui/components/Component.zig");
+const stack_component = @import("ui/components/Stack.zig");
+const slot_component = @import("ui/components/Slot.zig");
 const ui = @import("ui.zig");
-const ui_components = @import("ui_components.zig");
 const ui_resolver = @import("ui_resolver.zig");
+
+const Component = component_union.Component;
+const Stack = stack_component.Stack(Component);
+const Slot = slot_component.Slot(Component);
+const RenderOptions = component_common.RenderOptions;
 
 const allocation_count_field_size = @sizeOf(u64);
 const allocation_count_field_count = 6;
@@ -861,7 +869,7 @@ pub const App = struct {
         codec: []u8,
         object: []u8,
         resolved: []object.View,
-        components: []ui_components.Component,
+        components: []Component,
         nodes: []ui.Node,
     };
 
@@ -1359,14 +1367,14 @@ pub const App = struct {
         };
     }
 
-    pub fn publishUiComponent(self: *App, component: ui_components.Component, epoch: clock.Stamp, scratch: UiScratch) UiError!PublishedUi {
+    pub fn publishUiComponent(self: *App, component: Component, epoch: clock.Stamp, scratch: UiScratch) UiError!PublishedUi {
         if (!epoch.valid()) return error.Corrupt;
         const canonical = component.toObject(scratch.codec, scratch.object, epoch) orelse return error.NoSpace;
         const object_id = self.putPublicObject(canonical) orelse return error.NoSpace;
         return .{ .app = self.id, .object_id = object_id, .epoch = epoch };
     }
 
-    pub fn publishUiStack(self: *App, stack: ui_components.Stack, epoch: clock.Stamp, scratch: UiScratch) UiError!PublishedUi {
+    pub fn publishUiStack(self: *App, stack: Stack, epoch: clock.Stamp, scratch: UiScratch) UiError!PublishedUi {
         if (!epoch.valid()) return error.Corrupt;
         const canonical = stack.toObject(scratch.codec, scratch.object, epoch) orelse return error.NoSpace;
         const object_id = self.putPublicObject(canonical) orelse return error.NoSpace;
@@ -1390,7 +1398,7 @@ pub const App = struct {
         try self.renderUiView(view, scratch, scene, bounds, .{ .style = style });
     }
 
-    fn renderUiView(self: App, view: object.View, scratch: UiScratch, scene: *ui.Scene, bounds: ui.Rect, options: ui_components.RenderOptions) UiError!void {
+    fn renderUiView(self: App, view: object.View, scratch: UiScratch, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) UiError!void {
         if (view.header.kind == .tree) {
             const tree = ui_resolver.resolveTree(self.state.storage, self.id.id, view, scratch.resolved, scratch.components) catch |err| return mapResolverError(err);
             return switch (tree) {
@@ -1399,16 +1407,16 @@ pub const App = struct {
             };
         }
 
-        const stack = ui_components.Stack.fromView(view, scratch.components) catch |err| return mapComponentError(err);
+        const stack = Stack.fromView(view, scratch.components) catch |err| return mapComponentError(err);
         return renderUiStack(stack, scene, bounds, options);
     }
 };
 
-fn renderUiStack(stack: ui_components.Stack, scene: *ui.Scene, bounds: ui.Rect, options: ui_components.RenderOptions) App.UiError!void {
+fn renderUiStack(stack: Stack, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) App.UiError!void {
     stack.render(scene, bounds, options) catch |err| return mapUiRenderError(err);
 }
 
-fn renderUiSlot(slot: ui_components.Slot, scene: *ui.Scene, bounds: ui.Rect, options: ui_components.RenderOptions) App.UiError!void {
+fn renderUiSlot(slot: Slot, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) App.UiError!void {
     slot.render(scene, bounds, options) catch |err| return mapUiRenderError(err);
 }
 
@@ -1625,7 +1633,7 @@ fn mapResolverError(err: ui_resolver.Error) App.UiError {
     };
 }
 
-fn mapComponentError(err: ui_components.Error) App.UiError {
+fn mapComponentError(err: component_common.Error) App.UiError {
     return switch (err) {
         error.Corrupt => error.Corrupt,
         error.UnsupportedComponent => error.UnsupportedComponent,
@@ -2863,7 +2871,7 @@ test "app publishes canonical ui component and renders from object storage" {
     var codec_raw: [256]u8 = undefined;
     var object_raw: [object.header_size + 256]u8 = undefined;
     var resolved: [1]object.View = undefined;
-    var component_scratch: [4]ui_components.Component = undefined;
+    var component_scratch: [4]Component = undefined;
     var node_scratch: [4]ui.Node = undefined;
     const scratch = App.UiScratch{
         .codec = &codec_raw,
@@ -2895,17 +2903,17 @@ test "app publishes stack ui as one canonical render object" {
     const app_id = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("stack ui app")).?, epoch).?;
     var app = App.initFromHostSlice(app_id, BoundedArena.init(.{ .base = &host_memory }), 2048, 8).?;
 
-    const children = [_]ui_components.Component{
+    const children = [_]Component{
         .{ .text = .{ .value = "Objects" } },
         .{ .row_item = .{ .id = 7, .title = "Storage", .detail = "canonical" } },
         .{ .button = .{ .id = 8, .label = "Render" } },
     };
-    const stack = ui_components.Stack{ .axis = .column, .gap = 6, .padding = 8, .children = &children };
+    const stack = Stack{ .axis = .column, .gap = 6, .padding = 8, .children = &children };
 
     var codec_raw: [512]u8 = undefined;
     var object_raw: [object.header_size + 512]u8 = undefined;
     var resolved: [1]object.View = undefined;
-    var component_scratch: [4]ui_components.Component = undefined;
+    var component_scratch: [4]Component = undefined;
     var node_scratch: [4]ui.Node = undefined;
     const scratch = App.UiScratch{
         .codec = &codec_raw,

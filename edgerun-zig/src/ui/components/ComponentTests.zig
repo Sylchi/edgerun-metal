@@ -389,7 +389,7 @@ test "component render helper owns button variants and collects hit targets" {
     var collector = interaction.Collector.init(&regions);
 
     const primary = Component{ .button = .{ .id = 501, .label = "Primary" } };
-    const outline = Component{ .button = .{ .id = 502, .label = "Outline", .variant = .outline, .leading_icon = .search } };
+    const outline = Component{ .button = .{ .id = 502, .label = "Outline", .variant = .outline, .icon_slot = .{ .leading = .search } } };
     try renderComponent(&scene, ui.Rect.init(0, 0, 120, 36), primary, .{});
     try collectComponentInteractions(&collector, ui.Rect.init(0, 0, 120, 36), primary);
     try renderComponent(&scene, ui.Rect.init(0, 44, 120, 36), outline, .{});

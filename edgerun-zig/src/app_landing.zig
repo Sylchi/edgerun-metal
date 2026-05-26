@@ -2,7 +2,7 @@ const std = @import("std");
 const icon = @import("icon.zig");
 const interaction = @import("ui_interaction.zig");
 const ui = @import("ui.zig");
-const components = @import("ui_components.zig");
+const components = @import("ui/components/Component.zig");
 const app_chrome = @import("app_chrome.zig");
 const design = @import("app_design.zig");
 const app_layout = @import("app_layout.zig");
@@ -756,7 +756,7 @@ fn primaryButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui
 }
 
 fn primaryButtonWithTrailingIcon(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, icon_value: icon.Icon, id: u32) (ui.RenderError || interaction.Error)!void {
-    try nativeComponent(scene, collector, bounds, .{ .button = .{ .id = id, .label = label, .trailing_icon = icon_value } });
+    try nativeComponent(scene, collector, bounds, .{ .button = .{ .id = id, .label = label, .icon_slot = .{ .trailing = icon_value } } });
 }
 
 fn outlineButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id: u32) (ui.RenderError || interaction.Error)!void {
@@ -764,7 +764,7 @@ fn outlineButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui
 }
 
 fn outlineButtonWithTrailingIcon(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, icon_value: icon.Icon, id: u32) (ui.RenderError || interaction.Error)!void {
-    try nativeComponent(scene, collector, bounds, .{ .button = .{ .id = id, .label = label, .variant = .outline, .trailing_icon = icon_value } });
+    try nativeComponent(scene, collector, bounds, .{ .button = .{ .id = id, .label = label, .variant = .outline, .icon_slot = .{ .trailing = icon_value } } });
 }
 
 fn nativeBadge(scene: *ui.Scene, bounds: ui.Rect, label: []const u8) ui.RenderError!void {

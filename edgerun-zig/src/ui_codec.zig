@@ -1,9 +1,11 @@
 const std = @import("std");
 const bytes = @import("bytes.zig");
 const clock = @import("clock.zig");
+const component_common = @import("ui_component_common.zig");
+const component_union = @import("ui/components/Component.zig");
+const node_renderer = @import("ui/components/NodeRenderer.zig");
 const object = @import("object.zig");
 const ui = @import("ui.zig");
-const ui_components = @import("ui_components.zig");
 
 pub const Error = error{
     Corrupt,
@@ -129,11 +131,11 @@ pub fn decodeBytes(raw: []const u8, out_nodes: []ui.Node) Error!ui.Node {
             .chart => .{ .chart = .{ .id = id, .label = try stringRef(string_table, a, b) } },
             .combobox => .{ .combobox = .{ .id = id, .placeholder = try stringRef(string_table, a, b), .selected = try stringRef(string_table, c, d) } },
             .empty => .{ .empty = .{ .title = try stringRef(string_table, a, b), .detail = try stringRef(string_table, c, d) } },
-            .button => .{ .button = .{ .id = id, .label = try stringRef(string_table, a, b), .variant = try boundedTag(c, button_variant_count), .leading_icon = try boundedTag(d & button_icon_mask, ui_components.encoded_icon_count), .trailing_icon = try boundedTag(d >> button_icon_shift, ui_components.encoded_icon_count) } },
-            .icon_button => .{ .icon_button = .{ .id = id, .label = try stringRef(string_table, a, b), .variant = try boundedTag(c, button_variant_count), .icon = try boundedTag(d, ui_components.encoded_icon_count) } },
+            .button => .{ .button = .{ .id = id, .label = try stringRef(string_table, a, b), .variant = try boundedTag(c, button_variant_count), .leading_icon = try boundedTag(d & button_icon_mask, component_common.encoded_icon_count), .trailing_icon = try boundedTag(d >> button_icon_shift, component_common.encoded_icon_count) } },
+            .icon_button => .{ .icon_button = .{ .id = id, .label = try stringRef(string_table, a, b), .variant = try boundedTag(c, button_variant_count), .icon = try boundedTag(d, component_common.encoded_icon_count) } },
             .button_group => .{ .button_group = .{ .id = id / grouped_id_stride, .first = try stringRef(string_table, a, b), .second = try stringRef(string_table, c, d), .active = @intCast(id % grouped_id_stride) } },
             .toggle_group => .{ .toggle_group = .{ .id = id / toggle_group_id_stride, .first = try stringRef(string_table, a, b), .second = try stringRef(string_table, c, d), .active = @intCast(id % toggle_group_id_stride) } },
-            .input => .{ .input = .{ .id = id, .placeholder = try stringRef(string_table, a, b), .leading_icon = try boundedTag(c, ui_components.encoded_icon_count) } },
+            .input => .{ .input = .{ .id = id, .placeholder = try stringRef(string_table, a, b), .leading_icon = try boundedTag(c, component_common.encoded_icon_count) } },
             .input_group => .{ .input_group = .{ .id = id, .addon = try stringRef(string_table, a, b), .placeholder = try stringRef(string_table, c, d) } },
             .row_item => .{ .row_item = .{ .id = id, .title = try stringRef(string_table, a, b), .detail = try stringRef(string_table, c, d) } },
             .badge => .{ .badge = .{ .label = try stringRef(string_table, a, b), .variant = try boundedTag(c, badge_variant_count) } },
@@ -305,7 +307,7 @@ test "decode ui bytes into borrowed nodes and render paint" {
 
     var commands: [32]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
-    try ui_components.renderNode(&scene, .{ .x = 0, .y = 0, .w = 320, .h = 240 }, root, .{});
+    try node_renderer.renderNode(component_union.Component, &scene, .{ .x = 0, .y = 0, .w = 320, .h = 240 }, root, .{});
 
     try std.testing.expect(hasText(scene.written(), "Render"));
 }
