@@ -2,7 +2,7 @@
 	crypto-test crypto-bench \
 	clock-test identity-test object-test storage-test sdk-test \
 	ui-core-test app-runtime \
-	pages-site pages-check \
+	pages-site pages-check pages-public-check \
 	zig-check zig-fmt-check zig-fmt zig-test zig-real-tpm sdk-cli sdk-bench \
 	wayland-window wayland-window-test \
 	pi-zero-w-v1_1-kernel pi-zero-w-v1_1-usb-probe pi-usb-host pi-usb-state \
@@ -23,7 +23,7 @@ PI_USB_BOOT_DIR := $(BUILD_DIR)/pi-zero-w-v1_1-usb-boot
 PI_USB_XHCI_DEVICE := 0000:c3:00.4
 PAGES_SITE_DIR := $(BUILD_DIR)/github-pages
 PAGES_ZIG_OUT := edgerun-zig/zig-out
-PAGES_CHECK_PORT := 8765
+PAGES_PUBLIC_URL ?= https://sylchi.github.io/edgerun-c/
 
 all: check
 
@@ -68,23 +68,21 @@ app-runtime:
 pages-site: app-runtime
 	rm -rf $(PAGES_SITE_DIR)
 	mkdir -p $(PAGES_SITE_DIR)/web $(PAGES_SITE_DIR)/bin
-	cp -R $(PAGES_ZIG_OUT)/web/. $(PAGES_SITE_DIR)/web/
-	cp -R $(PAGES_ZIG_OUT)/bin/. $(PAGES_SITE_DIR)/bin/
-	printf '%s\n' '<!doctype html>' '<meta charset="utf-8">' '<meta http-equiv="refresh" content="0; url=web/">' '<link rel="canonical" href="web/">' '<title>EdgeRun</title>' > $(PAGES_SITE_DIR)/index.html
-	touch $(PAGES_SITE_DIR)/.nojekyll
+	cp pages/index.html $(PAGES_SITE_DIR)/index.html
+	cp pages/404.html $(PAGES_SITE_DIR)/404.html
+	cp $(PAGES_ZIG_OUT)/web/index.html $(PAGES_SITE_DIR)/web/index.html
+	cp $(PAGES_ZIG_OUT)/bin/edgerun-app-runtime.wasm $(PAGES_SITE_DIR)/bin/edgerun-app-runtime.wasm
+	: > $(PAGES_SITE_DIR)/.nojekyll
 	test -f $(PAGES_SITE_DIR)/web/index.html
 	test -f $(PAGES_SITE_DIR)/bin/edgerun-app-runtime.wasm
 	test -f $(PAGES_SITE_DIR)/index.html
+	test -f $(PAGES_SITE_DIR)/404.html
 
 pages-check: pages-site
-	test "$$(od -An -tx1 -N4 $(PAGES_SITE_DIR)/bin/edgerun-app-runtime.wasm | tr -d ' \n')" = "0061736d"
-	grep -F '../bin/edgerun-app-runtime.wasm' $(PAGES_SITE_DIR)/web/index.html
-	python3 -m http.server $(PAGES_CHECK_PORT) --bind 127.0.0.1 --directory $(PAGES_SITE_DIR) >/tmp/edgerun-pages-check.log 2>&1 & pid=$$!; \
-	trap 'kill $$pid' EXIT; \
-	sleep 1; \
-	curl -fsSI http://127.0.0.1:$(PAGES_CHECK_PORT)/web/index.html >/dev/null; \
-	curl -fsSI http://127.0.0.1:$(PAGES_CHECK_PORT)/bin/edgerun-app-runtime.wasm | grep -F 'Content-type: application/wasm'; \
-	node --input-type=module -e 'const response = await fetch("http://127.0.0.1:$(PAGES_CHECK_PORT)/bin/edgerun-app-runtime.wasm?v=pages-check"); if (!response.ok) throw new Error(`bad response $${response.status}`); if (response.headers.get("content-type") !== "application/wasm") throw new Error(`bad content type $${response.headers.get("content-type")}`); const instance = (await WebAssembly.instantiateStreaming(response, {})).instance; for (const name of ["memory", "er_ui_bootstrap_js_ptr", "er_ui_bootstrap_js_len", "er_ui_boot"]) if (!(name in instance.exports)) throw new Error(`missing export $${name}`); const len = instance.exports.er_ui_bootstrap_js_len(); if (len <= 0) throw new Error(`bad bootstrap js len $${len}`);'
+	python3 tools/pages_check.py --site-dir $(PAGES_SITE_DIR)
+
+pages-public-check:
+	python3 tools/pages_check.py --public-url $(PAGES_PUBLIC_URL)
 
 wayland-window: app-runtime
 	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig -Doptimize=ReleaseFast wayland-window -- --width $(WAYLAND_WIDTH) --height $(WAYLAND_HEIGHT) --seconds $(WAYLAND_SECONDS) --path $(WAYLAND_PATH)
