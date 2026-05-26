@@ -39,22 +39,28 @@ pub fn main() noreturn {
 fn run() Error!void {
     const boot_services = uefi.system_table.boot_services orelse return error.BootServicesUnavailable;
 
-    framebuffer = gop_framebuffer.collect(boot_services) catch |err| return mapFramebufferError(err);
-    framebuffer.drawDebugScreen(.pre_exit);
-    printLine("check: gop framebuffer handoff ok");
+    framebuffer = gop_framebuffer.collect(boot_services) catch emptyFramebuffer();
+    if (framebuffer.valid()) {
+        framebuffer.drawDebugScreen(.pre_exit);
+        printLine("check: gop framebuffer handoff ok");
+    } else {
+        printLine("check: gop framebuffer unavailable");
+    }
 
     try collectAndValidateMap(boot_services);
     printLine("check: pre-exit memory inventory ok");
 
     try exitBootServicesWithFreshMap(boot_services);
 
-    framebuffer.drawDebugScreen(.post_exit);
+    if (framebuffer.valid()) framebuffer.drawDebugScreen(.post_exit);
     writeDebugconLine("check: exited boot services debugcon alive");
     immutable_kernel_post_exit.run(&post_exit_state, inventory, writeDebugconLine) catch {
         haltForever();
     };
-    framebuffer.drawWasmResult(post_exit_state.first_app_result.value);
-    writeDebugconLine("check: wasm-result painted framebuffer");
+    if (framebuffer.valid()) {
+        framebuffer.drawWasmResult(post_exit_state.first_app_result.value);
+        writeDebugconLine("check: wasm-result painted framebuffer");
+    }
     writeDebugconLine("PASS immutable-kernel-exit-boot-qemu");
 }
 
@@ -104,6 +110,7 @@ fn mapFromMemoryMap(memory_map: uefi.tables.MemoryMapSlice) boot_resource_map.Ma
 }
 
 fn installDisplayResource() Error!void {
+    if (!framebuffer.valid()) return;
     const display_resource = resource_inventory.Resource.init(
         data_chunk.DataChunk.init("boot-display-gop"),
         .display,
@@ -112,6 +119,17 @@ fn installDisplayResource() Error!void {
     inventory.add(display_resource) catch |err| switch (err) {
         error.Duplicate => {},
         else => return mapInventoryError(err),
+    };
+}
+
+fn emptyFramebuffer() gop_framebuffer.Framebuffer {
+    return .{
+        .physical_base = 0,
+        .byte_len = 0,
+        .width = 0,
+        .height = 0,
+        .pixels_per_scan_line = 0,
+        .format = .rgbx8888,
     };
 }
 

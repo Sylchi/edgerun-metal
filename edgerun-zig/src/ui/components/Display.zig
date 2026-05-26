@@ -13,7 +13,6 @@ const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 const constrainPreferredSize = component_primitives.constrainPreferredSize;
 const contentInset = component_primitives.contentInset;
-const measureFixed = component_primitives.measureFixed;
 
 pub const Separator = struct {
     pub fn node(self: Separator) ui.Node {
@@ -30,7 +29,7 @@ pub const Separator = struct {
     pub fn measure(self: Separator, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = self;
         _ = options;
-        return measureFixed(preferred_separator, constraints);
+        return measureFlexibleLine(separator_height, constraints);
     }
 
     pub fn toObject(self: Separator, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -69,7 +68,12 @@ pub const Skeleton = struct {
     pub fn measure(self: Skeleton, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = self;
         _ = options;
-        return measureFixed(preferred_skeleton, constraints);
+        const preferred = constrainPreferredSize(.{ .w = skeleton_min_width, .h = skeleton_height }, constraints);
+        return layout.Measurement.flexible(
+            .{ .w = @min(component_primitives.min_extent, preferred.w), .h = @min(skeleton_height, preferred.h) },
+            preferred,
+            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
+        ).applyExact(constraints);
     }
 
     pub fn toObject(self: Skeleton, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -109,7 +113,7 @@ pub const Spinner = struct {
     pub fn measure(self: Spinner, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = self;
         _ = options;
-        return measureFixed(preferred_spinner, constraints);
+        return measureIntrinsic(.{ .w = spinner_size, .h = spinner_size }, constraints);
     }
 
     pub fn toObject(self: Spinner, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -147,7 +151,12 @@ pub const Progress = struct {
     pub fn measure(self: Progress, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = self;
         _ = options;
-        return measureFixed(preferred_progress, constraints);
+        const preferred = constrainPreferredSize(.{ .w = progress_min_width, .h = progress_height }, constraints);
+        return layout.Measurement.flexible(
+            .{ .w = @min(progress_min_width, preferred.w), .h = @min(progress_height, preferred.h) },
+            preferred,
+            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
+        ).applyExact(constraints);
     }
 
     pub fn toObject(self: Progress, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -183,9 +192,8 @@ pub const AspectRatio = struct {
     }
 
     pub fn measure(self: AspectRatio, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
-        _ = self;
         _ = options;
-        return measureFixed(preferred_aspect_ratio, constraints);
+        return measureIntrinsic(aspectRatioIntrinsicSize(self.ratio_w, self.ratio_h), constraints);
     }
 
     pub fn toObject(self: AspectRatio, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -224,9 +232,17 @@ pub const Kbd = struct {
     }
 
     pub fn measure(self: Kbd, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
-        _ = self;
         _ = options;
-        return measureFixed(preferred_kbd, constraints);
+        const label = text_component.Text.measureValue(self.label, constraints.inner(.{ .left = kbd_label_padding, .right = kbd_label_padding }), component_primitives.textMetrics(self.label, kbd_text_height, kbd_label_max_lines));
+        const preferred = constrainPreferredSize(.{
+            .w = @max(kbd_min_width, label.preferred.w + kbd_label_padding * 2.0),
+            .h = @max(kbd_height, label.preferred.h + kbd_label_padding),
+        }, constraints);
+        return layout.Measurement.flexible(
+            .{ .w = @min(kbd_min_width, preferred.w), .h = @min(kbd_height, preferred.h) },
+            preferred,
+            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
+        ).applyExact(constraints);
     }
 
     pub fn toObject(self: Kbd, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -271,7 +287,7 @@ pub const Avatar = struct {
     pub fn measure(self: Avatar, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = self;
         _ = options;
-        return measureFixed(preferred_avatar, constraints);
+        return measureIntrinsic(.{ .w = avatar_size, .h = avatar_size }, constraints);
     }
 
     pub fn toObject(self: Avatar, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -341,6 +357,20 @@ fn renderTrack(scene: *ui.Scene, track: ui.Rect, value: f32, options: RenderOpti
     try scene.pushRect(ui.Rect.init(track.x, track.y, fill_width, track.h), options.style.accent, .fill, progress_height * 0.5, 0.0);
 }
 
+fn measureIntrinsic(size: ui.Size, constraints: layout.Constraints) layout.Measurement {
+    const preferred = constrainPreferredSize(size, constraints);
+    return layout.Measurement.flexible(preferred, preferred, preferred).applyExact(constraints);
+}
+
+fn measureFlexibleLine(height: f32, constraints: layout.Constraints) layout.Measurement {
+    const preferred = constrainPreferredSize(.{ .w = separator_min_width, .h = height }, constraints);
+    return layout.Measurement.flexible(
+        .{ .w = @min(separator_min_width, preferred.w), .h = @min(height, preferred.h) },
+        preferred,
+        .{ .w = component_primitives.measure_max_width, .h = preferred.h },
+    ).applyExact(constraints);
+}
+
 fn frameBounds(bounds: ui.Rect, ratio_w: u16, ratio_h: u16) ui.Rect {
     const safe_w = @max(@as(f32, @floatFromInt(ratio_w)), component_primitives.min_extent);
     const safe_h = @max(@as(f32, @floatFromInt(ratio_h)), component_primitives.min_extent);
@@ -349,31 +379,36 @@ fn frameBounds(bounds: ui.Rect, ratio_w: u16, ratio_h: u16) ui.Rect {
     return ui.Rect.init(bounds.x + (bounds.w - frame_w) * 0.5, bounds.y + (bounds.h - frame_h) * 0.5, frame_w, frame_h);
 }
 
+fn aspectRatioIntrinsicSize(ratio_w: u16, ratio_h: u16) ui.Size {
+    const safe_w = @max(@as(f32, @floatFromInt(ratio_w)), component_primitives.min_extent);
+    const safe_h = @max(@as(f32, @floatFromInt(ratio_h)), component_primitives.min_extent);
+    return .{ .w = aspect_ratio_min_width, .h = aspect_ratio_min_width * safe_h / safe_w };
+}
+
 const separator_height: f32 = 1.0;
-pub const preferred_separator = ui.Size{ .w = 220.0, .h = 1.0 };
+const separator_min_width: f32 = 1.0;
 const skeleton_alpha: u8 = 32;
 const skeleton_radius: f32 = 6.0;
-pub const preferred_skeleton = ui.Size{ .w = 220.0, .h = 20.0 };
+const skeleton_min_width: f32 = 96.0;
+const skeleton_height: f32 = 20.0;
 const spinner_size: f32 = 28.0;
 const spinner_slice_inset: f32 = 3.0;
 const spinner_start_turn: f32 = 0.08;
 const spinner_end_turn: f32 = 0.78;
-pub const preferred_spinner = ui.Size{ .w = 32.0, .h = 32.0 };
 const progress_height: f32 = 8.0;
-pub const preferred_progress = ui.Size{ .w = 220.0, .h = 10.0 };
-pub const preferred_aspect_ratio = ui.Size{ .w = 220.0, .h = 124.0 };
+const progress_min_width: f32 = 96.0;
+const aspect_ratio_min_width: f32 = 160.0;
 const kbd_height: f32 = 24.0;
 const kbd_text_height: f32 = 12.0;
+const kbd_label_max_lines: usize = 1;
 const kbd_label_padding: f32 = 8.0;
-pub const preferred_kbd = ui.Size{ .w = 48.0, .h = 24.0 };
+const kbd_min_width: f32 = 24.0;
 const avatar_size: f32 = 40.0;
 const avatar_text_height: f32 = 14.0;
 const avatar_label_inset: f32 = 6.0;
-pub const preferred_avatar = ui.Size{ .w = 40.0, .h = 40.0 };
 const label_height: f32 = 16.0;
 const label_min_width: f32 = 24.0;
 const label_max_lines: usize = 2;
-pub const preferred_label = ui.Size{ .w = 96.0, .h = 16.0 };
 
 test "separator component serializes to canonical object and deserializes" {
     var ui_raw: [128]u8 = undefined;

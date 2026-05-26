@@ -199,7 +199,11 @@ globalThis.innerHeight = 200;
 globalThis.devicePixelRatio = 2;
 globalThis.performance = { now: () => 16 };
 globalThis.addEventListener = () => {};
-globalThis.requestAnimationFrame = () => {};
+const rafCallbacks = [];
+globalThis.requestAnimationFrame = callback => {
+  rafCallbacks.push(callback);
+  return rafCallbacks.length;
+};
 const exports = {
   memory,
   er_ui_boot: () => { booted = true; },
@@ -241,6 +245,9 @@ const exports = {
 globalThis.fetch = async () => ({ arrayBuffer: async () => new ArrayBuffer(8) });
 WebAssembly.instantiate = async () => ({ instance: { exports } });
 await import(`data:text/javascript,${encodeURIComponent(loader)}`);
+if (rafCallbacks.length !== 1) throw new Error(`loader scheduled ${rafCallbacks.length} initial frames`);
+rafCallbacks.shift()(16);
+if (rafCallbacks.length !== 0) throw new Error("loader rescheduled frame while idle");
 if (!booted) throw new Error("loader did not boot wasm");
 if (!built) throw new Error("loader did not build wasm frame");
 if (!scaled) throw new Error("loader did not apply device scale");
