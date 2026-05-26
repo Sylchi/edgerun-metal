@@ -12,34 +12,24 @@ const Writer = std.Io.Writer;
 const tokenizer = @import("zig/tokenizer.zig");
 
 pub const ErrorBundle = @import("zig/ErrorBundle.zig");
-pub const Server = @import("zig/Server.zig");
-pub const Client = @import("zig/Client.zig");
 pub const Token = tokenizer.Token;
 pub const Tokenizer = tokenizer.Tokenizer;
-pub const TokenSmith = @import("zig/TokenSmith.zig");
 pub const string_literal = @import("zig/string_literal.zig");
 pub const number_literal = @import("zig/number_literal.zig");
 pub const primitives = @import("zig/primitives.zig");
 pub const isPrimitive = primitives.isPrimitive;
 pub const Ast = @import("zig/Ast.zig");
 pub const AstGen = @import("zig/AstGen.zig");
-pub const AstSmith = @import("zig/AstSmith.zig");
 pub const Zir = @import("zig/Zir.zig");
 pub const Zoir = @import("zig/Zoir.zig");
 pub const ZonGen = @import("zig/ZonGen.zig");
 pub const BuiltinFn = @import("zig/BuiltinFn.zig");
 pub const AstRlAnnotate = @import("zig/AstRlAnnotate.zig");
-pub const llvm = @import("zig/llvm.zig");
 
 // Character literal parsing
 pub const ParsedCharLiteral = string_literal.ParsedCharLiteral;
 pub const parseCharLiteral = string_literal.parseCharLiteral;
 pub const parseNumberLiteral = number_literal.parseNumberLiteral;
-
-pub const c_translation = struct {
-    pub const builtins = @import("zig/c_translation/builtins.zig");
-    pub const helpers = @import("zig/c_translation/helpers.zig");
-};
 
 pub const SrcHasher = std.crypto.hash.Blake3;
 pub const SrcHash = [16]u8;
@@ -1150,15 +1140,9 @@ pub const ClangCliParam = struct {
 test {
     _ = Ast;
     _ = AstRlAnnotate;
-    _ = AstSmith;
     _ = BuiltinFn;
-    _ = Client;
     _ = ErrorBundle;
-    _ = Server;
-    _ = TokenSmith;
     _ = number_literal;
     _ = primitives;
     _ = string_literal;
-    _ = c_translation;
-    _ = llvm;
 }
