@@ -3,7 +3,6 @@ const interaction = @import("ui_interaction.zig");
 const ui = @import("ui.zig");
 const button_component = @import("ui/components/Button.zig");
 const icon_component = @import("ui/components/Icon.zig");
-const display_component = @import("ui/components/Display.zig");
 const input_component = @import("ui/components/Input.zig");
 const row_item_component = @import("ui/components/RowItem.zig");
 const textarea_component = @import("ui/components/Textarea.zig");
@@ -35,13 +34,6 @@ const toolbar_detail_h: f32 = 14.0;
 const toolbar_action_gap: f32 = 10.0;
 const source_action_h: f32 = design.compact_control_h + 2.0;
 const source_action_min_w: f32 = 132.0;
-const compiler_panel_h: f32 = 72.0;
-const compiler_title_h: f32 = 16.0;
-const compiler_text_h: f32 = 14.0;
-const compiler_bar_h: f32 = 8.0;
-const compiler_stage_h: f32 = 16.0;
-const compiler_diagnostic_h: f32 = 14.0;
-const compiler_text_average_w: f32 = 8.6;
 const code_pad: f32 = 18.0;
 const code_line_h: f32 = 18.0;
 const code_gutter_w: f32 = 68.0;
@@ -61,7 +53,6 @@ const explorer_heading_h: f32 = 30.0;
 const explorer_search_h: f32 = 32.0;
 const explorer_search_gap: f32 = 8.0;
 const explorer_footer_h: f32 = 58.0;
-const compile_stage_count: usize = 4;
 const compact_w: f32 = 720.0;
 const max_rendered_lines: usize = 40;
 const min_editor_lines_compact: usize = 18;
@@ -89,7 +80,6 @@ const palette = design.palette;
 const fill = app_layout.fill;
 const stroke = app_layout.stroke;
 const text = app_layout.text;
-const wrappedText = app_layout.wrappedTextWith;
 const syntax_keyword = ui.Color{ .r = 125, .g = 211, .b = 252 };
 const syntax_type = ui.Color{ .r = 196, .g = 181, .b = 253 };
 const syntax_string = ui.Color{ .r = 134, .g = 239, .b = 172 };
@@ -219,12 +209,10 @@ fn renderEditorWithChrome(scene: *ui.Scene, collector: *interaction.Collector, b
     try stroke(scene, bounds, palette.border, radius);
     const titlebar_h = if (chrome.titlebar) editor_titlebar_h else 0.0;
     const command_h = if (chrome.toolbar) toolbarHeight(bounds.w) else 0.0;
-    const compiler_h = statusHeight(bounds.w, state);
     const status_bar_h = if (chrome.status_bar) editor_status_h else 0.0;
     const status_y = bounds.y + bounds.h - status_bar_h;
-    const compiler_y = @max(bounds.y + titlebar_h + command_h, status_y - compiler_h);
     const body_y = bounds.y + titlebar_h + command_h;
-    const body_h = @max(1.0, compiler_y - body_y);
+    const body_h = @max(1.0, status_y - body_y);
     const show_explorer = chrome.explorer and bounds.w >= explorer_threshold_w;
     const show_minimap = bounds.w >= minimap_threshold_w;
     const activity_width = if (chrome.activity) activity_rail_w else 0.0;
@@ -279,28 +267,7 @@ fn renderEditorWithChrome(scene: *ui.Scene, collector: *interaction.Collector, b
     }
 
     if (show_minimap) try renderMinimap(scene, ui.Rect.init(bounds.x + bounds.w - minimap_w - 10.0, code_view.y + 8.0, minimap_w, @max(1.0, code_view.h - 16.0)), state, visibleLineCapacity(code_view));
-    try renderStatus(scene, ui.Rect.init(bounds.x, compiler_y, bounds.w, compiler_h), state);
     if (chrome.status_bar) try renderEditorStatus(scene, ui.Rect.init(bounds.x, status_y, bounds.w, status_bar_h), state);
-}
-
-fn renderStatus(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
-    try fill(scene, bounds, vscode_titlebar, 0.0);
-    try stroke(scene, ui.Rect.init(bounds.x, bounds.y, bounds.w, 1.0), vscode_line, 0.0);
-    const text_w = @max(1.0, bounds.w - panel_pad * 2.0);
-    const bar_y = bounds.y + 36.0;
-    try text(scene, bounds.x + panel_pad, bounds.y + 10.0, 110.0, compiler_title_h, "Compiler", palette.cyan);
-    try text(scene, bounds.x + panel_pad + 112.0, bounds.y + 10.0, @max(1.0, text_w - 112.0), compiler_text_h, state.status, palette.text);
-    try text(scene, bounds.x + panel_pad, bounds.y + bounds.h - compiler_text_h - 8.0, text_w, compiler_text_h, state.compile_summary, palette.dim);
-
-    const bar = ui.Rect.init(bounds.x + panel_pad, bar_y, text_w, compiler_bar_h);
-    var progress_style = app_chrome.style();
-    progress_style.panel = palette.neutral_soft;
-    progress_style.accent = progressColor(state.compile_progress);
-    try (display_component.Progress{ .value = state.compile_progress }).render(scene, bar, .{ .style = progress_style });
-    try renderCompileStages(scene, ui.Rect.init(bar.x, bar.y - 5.0, bar.w, compiler_stage_h), state.compile_progress);
-    if (state.diagnostic.len != 0) {
-        try wrappedText(scene, ui.Rect.init(bounds.x + panel_pad, bar.y + compiler_bar_h + 6.0, text_w, compiler_diagnostic_h), state.diagnostic, palette.danger, compiler_diagnostic_h, compiler_text_average_w, 1);
-    }
 }
 
 fn renderEditorStatus(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
@@ -448,12 +415,11 @@ fn explorerFileHitId(index: usize) u32 {
 }
 
 fn editorCodeView(bounds: ui.Rect, state: State) ui.Rect {
+    _ = state;
     const command_h = toolbarHeight(bounds.w);
-    const compiler_h = statusHeight(bounds.w, state);
     const status_y = bounds.y + bounds.h - editor_status_h;
-    const compiler_y = @max(bounds.y + editor_titlebar_h + command_h, status_y - compiler_h);
     const body_y = bounds.y + editor_titlebar_h + command_h;
-    const body_h = @max(1.0, compiler_y - body_y);
+    const body_h = @max(1.0, status_y - body_y);
     const show_explorer = bounds.w >= explorer_threshold_w;
     const show_minimap = bounds.w >= minimap_threshold_w;
     const explorer_width = if (show_explorer) explorer_w else 0.0;
@@ -564,18 +530,6 @@ fn renderSelectionForLine(scene: *ui.Scene, code_view: ui.Rect, y: f32, line_sta
     try fill(scene, ui.Rect.init(x, y, w, code_line_h), ui.Color{ .r = 9, .g = 71, .b = 113, .a = 210 }, 0.0);
 }
 
-fn renderCompileStages(scene: *ui.Scene, bounds: ui.Rect, progress: f32) !void {
-    const labels = [_][]const u8{ "VFS", "INIT", "COMPILE", "ARTIFACT" };
-    const thresholds = [_]f32{ 0.08, 0.18, 0.52, 0.88 };
-    const segment = bounds.w / @as(f32, @floatFromInt(compile_stage_count));
-    for (labels, 0..) |label, index| {
-        const x = bounds.x + segment * @as(f32, @floatFromInt(index));
-        const color = if (progress >= thresholds[index]) palette.primary else palette.muted;
-        try fill(scene, ui.Rect.init(x, bounds.y + 3.0, 2.0, 12.0), color, 0.0);
-        try text(scene, x + 6.0, bounds.y, @max(1.0, segment - 8.0), 12.0, label, color);
-    }
-}
-
 fn button(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id: u32, variant: component_common.ButtonVariant, leading: icon_component.Icon, enabled: bool) !void {
     const component = button_component.Button{ .id = id, .label = label, .variant = variant, .icon_slot = icon_component.IconSlot.of(.leading, leading) };
     if (!enabled) {
@@ -650,16 +604,11 @@ fn editorHeight(content_w: f32, state: State) f32 {
     const max_lines = if (compact) max_editor_lines_compact else max_editor_lines_wide;
     const source_lines = lineCount(state.source);
     const measured_lines = std.math.clamp(source_lines + 2, min_lines, max_lines);
-    return editor_titlebar_h + toolbarHeight(content_w) + code_pad * 2.0 + @as(f32, @floatFromInt(measured_lines)) * code_line_h + statusHeight(content_w, state) + editor_status_h;
+    return editor_titlebar_h + toolbarHeight(content_w) + code_pad * 2.0 + @as(f32, @floatFromInt(measured_lines)) * code_line_h + editor_status_h;
 }
 
 fn toolbarHeight(content_w: f32) f32 {
     return if (content_w >= compact_w) command_bar_h else command_bar_compact_h;
-}
-
-fn statusHeight(_: f32, state: State) f32 {
-    const diagnostic_h = if (state.diagnostic.len == 0) 0.0 else compiler_diagnostic_h;
-    return compiler_panel_h + diagnostic_h;
 }
 
 fn maxVisibleColumns(width: f32) usize {
@@ -853,12 +802,6 @@ fn isTypeWord(word: []const u8) bool {
         std.mem.eql(u8, word, "anyerror");
 }
 
-fn progressColor(progress: f32) ui.Color {
-    if (progress >= 1.0) return palette.primary;
-    if (progress > 0.0) return palette.cyan;
-    return palette.muted;
-}
-
 fn lineNumberLabel(slot: usize, line_number: usize) []const u8 {
     if (slot >= line_number_labels.len) return "";
     return std.fmt.bufPrint(&line_number_labels[slot], "{d}", .{line_number}) catch "";
@@ -930,6 +873,11 @@ test "source page renders editor controls through shared ui" {
     try expectHit(collector.written(), reset_button_id);
     try expectHit(collector.written(), editor_textarea_id);
     try expectHit(collector.written(), explorer_file_id_base);
+    try std.testing.expect(textCommand(scene.written(), "Compiler") == null);
+    try std.testing.expect(textCommand(scene.written(), "INIT") == null);
+    try std.testing.expect(textCommand(scene.written(), "COMPILE") == null);
+    try std.testing.expect(textCommand(scene.written(), "ARTIFACT") == null);
+    try std.testing.expect(textCommand(scene.written(), "ready: editing src/app_runtime.zig inside the app-owned VFS object") == null);
 }
 
 test "source page does not claim empty workspace is loaded" {
@@ -1057,7 +1005,7 @@ test "source explorer search filters by full path" {
     try std.testing.expect(textCommand(scene.written(), "compiler/zig/lib/std/base64.zig") != null);
 }
 
-test "source page height responds to source and diagnostic content" {
+test "source page height responds to source content without compiler strip" {
     const long_source =
         "a\n" ++ "a\n" ++ "a\n" ++ "a\n" ++ "a\n" ++ "a\n" ++
         "a\n" ++ "a\n" ++ "a\n" ++ "a\n" ++ "a\n" ++ "a\n" ++
@@ -1067,10 +1015,8 @@ test "source page height responds to source and diagnostic content" {
         "a\n" ++ "a\n" ++ "a\n" ++ "a\n" ++ "a\n" ++ "a\n";
     const short = State{ .source = "pub fn main() void {}\n" };
     const long = State{ .source = long_source };
-    const diagnostic = State{ .source = "pub fn main() void {}\n", .diagnostic = "compile error" };
 
     try std.testing.expect(editorHeight(1180.0, long) > editorHeight(1180.0, short));
-    try std.testing.expect(statusHeight(1180.0, diagnostic) > statusHeight(1180.0, short));
     try std.testing.expect(toolbarHeight(390.0) > toolbarHeight(1280.0));
 }
 

@@ -1,4 +1,6 @@
 const std = @import("std");
+const renderer_ir = @import("render/ir.zig");
+const ui = @import("ui.zig");
 const virtio = @import("virtio.zig");
 
 pub const device_id = virtio.modern_device_id_gpu;
@@ -371,6 +373,7 @@ pub const Response = extern struct {
 pub const Error = virtio.Error || error{
     DeviceTimeout,
     InvalidResponse,
+    UnsupportedPackedFrame,
 };
 
 pub const QueueStorage = struct {
@@ -520,6 +523,21 @@ pub const Device = struct {
         try self.submit3d(storage, context_id, std.mem.sliceAsBytes(&commands));
     }
 
+    pub fn renderPackedFrameToVirglColorResource(
+        self: *Device,
+        storage: *QueueStorage,
+        context_id: u32,
+        resource_id: u32,
+        surface_handle: u32,
+        format: Format,
+        width: u32,
+        height: u32,
+        buffers: renderer_ir.Buffers,
+    ) Error!void {
+        const color = try packedFullFrameClearColor(width, height, buffers);
+        try self.clearVirglColorResource(storage, context_id, resource_id, surface_handle, format, color);
+    }
+
     pub fn setup2d(self: *Device, storage: *QueueStorage, setup: Setup2d) Error!void {
         try self.sendNoData(storage, setup.resource);
         try self.sendNoData(storage, setup.backing);
@@ -528,6 +546,14 @@ pub const Device = struct {
 
     pub fn flush2d(self: *Device, storage: *QueueStorage, resource_id: u32, width: u32, height: u32) Error!void {
         try self.sendNoData(storage, TransferToHost2d.init(resource_id, width, height));
+        try self.sendNoData(storage, ResourceFlush.init(resource_id, width, height));
+    }
+
+    pub fn setScanout(self: *Device, storage: *QueueStorage, scanout_id: u32, resource_id: u32, width: u32, height: u32) Error!void {
+        try self.sendNoData(storage, SetScanout.init(scanout_id, resource_id, width, height));
+    }
+
+    pub fn flushResource(self: *Device, storage: *QueueStorage, resource_id: u32, width: u32, height: u32) Error!void {
         try self.sendNoData(storage, ResourceFlush.init(resource_id, width, height));
     }
 };
@@ -619,6 +645,50 @@ pub fn writeVirglClearColorCommands(
 
 pub fn virglClearColorCommandByteLen() usize {
     return 19 * @sizeOf(u32);
+}
+
+pub fn packedFullFrameClearColor(width: u32, height: u32, buffers: renderer_ir.Buffers) Error!VirglClearColor {
+    if (buffers.liveTextVertices().len != 0 or
+        buffers.liveIconVertices().len != 0 or
+        buffers.liveIconLineVertices().len != 0 or
+        buffers.liveImageVertices().len != 0 or
+        buffers.liveOverlayRects().len != 0 or
+        buffers.liveOverlayTextVertices().len != 0 or
+        buffers.liveOverlayIconVertices().len != 0 or
+        buffers.liveOverlayIconLineVertices().len != 0)
+    {
+        return error.UnsupportedPackedFrame;
+    }
+
+    const rects = buffers.liveRects();
+    if ((renderer_ir.rectCount(rects) catch return error.UnsupportedPackedFrame) != 1) return error.UnsupportedPackedFrame;
+    const rect = renderer_ir.rectAt(rects, 0) catch return error.UnsupportedPackedFrame;
+    if (rect.mode != .fill or rect.radius != 0.0 or rect.shadow != 0.0) return error.UnsupportedPackedFrame;
+    if (!sameFloat(rect.bounds.x, 0.0) or
+        !sameFloat(rect.bounds.y, 0.0) or
+        !sameFloat(rect.bounds.w, @floatFromInt(width)) or
+        !sameFloat(rect.bounds.h, @floatFromInt(height)))
+    {
+        return error.UnsupportedPackedFrame;
+    }
+    return colorToVirglClear(rect.color);
+}
+
+fn colorToVirglClear(color: ui.Color) VirglClearColor {
+    return .{
+        .r = colorChannel(color.r),
+        .g = colorChannel(color.g),
+        .b = colorChannel(color.b),
+        .a = colorChannel(color.a),
+    };
+}
+
+fn colorChannel(value: u8) f32 {
+    return @as(f32, @floatFromInt(value)) / 255.0;
+}
+
+fn sameFloat(a: f32, b: f32) bool {
+    return @abs(a - b) <= 0.001;
 }
 
 fn waitForCompletion(used: *const virtio.Used, queue_size: u16, last_used_idx: *u16) Error!virtio.UsedElem {
@@ -723,6 +793,26 @@ test "virgl clear color command stream creates surface binds framebuffer and cle
     try std.testing.expectEqual(virglCommand0(.clear, .null, 8), commands[10]);
     try std.testing.expectEqual(@as(u32, pipe_clear_color0), commands[11]);
     try std.testing.expectEqual(@as(u32, 19 * @sizeOf(u32)), virglClearColorCommandByteLen());
+}
+
+test "packed renderer full-frame fill maps to virgl clear color" {
+    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0, 0, 0){};
+    const buffers = storage.buffers();
+    try renderer_ir.pushRect(buffers, .base, ui.Rect.init(0, 0, 640, 360), .{ .r = 33, .g = 212, .b = 237, .a = 255 }, .clear, 0, 0, renderer_ir.rectModeCode(.fill));
+
+    const color = try packedFullFrameClearColor(640, 360, buffers);
+    try std.testing.expectApproxEqAbs(@as(f32, 33.0 / 255.0), color.r, 0.0001);
+    try std.testing.expectApproxEqAbs(@as(f32, 212.0 / 255.0), color.g, 0.0001);
+    try std.testing.expectApproxEqAbs(@as(f32, 237.0 / 255.0), color.b, 0.0001);
+    try std.testing.expectApproxEqAbs(@as(f32, 1.0), color.a, 0.0001);
+}
+
+test "packed renderer scanout bridge rejects unsupported partial frames" {
+    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0, 0, 0){};
+    const buffers = storage.buffers();
+    try renderer_ir.pushRect(buffers, .base, ui.Rect.init(8, 8, 320, 180), .accent, .clear, 0, 0, renderer_ir.rectModeCode(.fill));
+
+    try std.testing.expectError(error.UnsupportedPackedFrame, packedFullFrameClearColor(640, 360, buffers));
 }
 
 test "submit 3d descriptor chain sends header payload then writable response" {
