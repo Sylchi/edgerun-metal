@@ -72,7 +72,7 @@ pub const Skeleton = struct {
         return layout.Measurement.flexible(
             .{ .w = @min(component_primitives.min_extent, preferred.w), .h = @min(skeleton_height, preferred.h) },
             preferred,
-            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
+            .{ .w = component_primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
         ).applyExact(constraints);
     }
 
@@ -155,7 +155,7 @@ pub const Progress = struct {
         return layout.Measurement.flexible(
             .{ .w = @min(progress_min_width, preferred.w), .h = @min(progress_height, preferred.h) },
             preferred,
-            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
+            .{ .w = component_primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
         ).applyExact(constraints);
     }
 
@@ -241,7 +241,7 @@ pub const Kbd = struct {
         return layout.Measurement.flexible(
             .{ .w = @min(kbd_min_width, preferred.w), .h = @min(kbd_height, preferred.h) },
             preferred,
-            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
+            .{ .w = component_primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
         ).applyExact(constraints);
     }
 
@@ -367,7 +367,7 @@ fn measureFlexibleLine(height: f32, constraints: layout.Constraints) layout.Meas
     return layout.Measurement.flexible(
         .{ .w = @min(separator_min_width, preferred.w), .h = @min(height, preferred.h) },
         preferred,
-        .{ .w = component_primitives.measure_max_width, .h = preferred.h },
+        .{ .w = component_primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
     ).applyExact(constraints);
 }
 
@@ -561,7 +561,18 @@ test "label component renders its own text slot" {
 
 test "label measurement wraps long values under narrow constraints" {
     const label = Label{ .value = "Runtime authority label" };
-    const measured = label.measure(.{ .width = .{ .at_most = preferred_label.w * 0.5 }, .text_wrap = .wrap }, .{});
-    try std.testing.expect(measured.preferred.w <= preferred_label.w * 0.5);
-    try std.testing.expect(measured.preferred.h > preferred_label.h);
+    const measured = label.measure(.{ .width = .{ .at_most = label_wrap_test_width }, .text_wrap = .wrap }, .{});
+    try std.testing.expect(measured.preferred.w <= label_wrap_test_width);
+    try std.testing.expect(measured.preferred.h > label_height);
 }
+
+test "display primitive measurements derive from local geometry" {
+    try std.testing.expectEqual(separator_height, (Separator{}).measure(.{}, .{}).preferred.h);
+    try std.testing.expectEqual(skeleton_height, (Skeleton{}).measure(.{}, .{}).preferred.h);
+    try std.testing.expectEqual(spinner_size, (Spinner{}).measure(.{}, .{}).preferred.w);
+    try std.testing.expectEqual(progress_height, (Progress{ .value = 0.5 }).measure(.{}, .{}).preferred.h);
+    try std.testing.expectEqual(aspectRatioIntrinsicSize(16, 9).h, (AspectRatio{ .ratio_w = 16, .ratio_h = 9 }).measure(.{}, .{}).preferred.h);
+    try std.testing.expectEqual(avatar_size, (Avatar{ .label = "ER" }).measure(.{}, .{}).preferred.w);
+}
+
+const label_wrap_test_width: f32 = 48.0;
