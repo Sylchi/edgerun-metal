@@ -54,7 +54,8 @@ const explorer_search_h: f32 = 32.0;
 const explorer_search_gap: f32 = 8.0;
 const explorer_footer_h: f32 = 58.0;
 const compact_w: f32 = 720.0;
-const max_rendered_lines: usize = 40;
+const max_runtime_viewport_h: f32 = 2880.0;
+const line_number_label_slots: usize = @as(usize, @intFromFloat(max_runtime_viewport_h / code_line_h)) + 2;
 const min_editor_lines_compact: usize = 18;
 const min_editor_lines_wide: usize = 24;
 const max_editor_lines_compact: usize = 28;
@@ -100,7 +101,7 @@ const vscode_line = ui.Color{ .r = 63, .g = 63, .b = 70 };
 const vscode_selection = ui.Color{ .r = 9, .g = 71, .b = 113 };
 const vscode_status_text = ui.Color{ .r = 255, .g = 255, .b = 255 };
 
-var line_number_labels: [max_rendered_lines][line_number_label_bytes]u8 = undefined;
+var line_number_labels: [line_number_label_slots][line_number_label_bytes]u8 = undefined;
 var editor_info_label: [editor_info_label_bytes]u8 = undefined;
 
 const explorer_files = [_][]const u8{
@@ -233,12 +234,13 @@ fn renderEditorWithChrome(scene: *ui.Scene, collector: *interaction.Collector, b
     try renderBreadcrumb(scene, breadcrumb, state);
     try fill(scene, ui.Rect.init(code_view.x, code_view.y, code_pad + code_gutter_w - 10.0, code_view.h), gutter_bg, 0.0);
 
-    const first_line = visibleFirstLine(state, visibleLineCapacity(code_view));
+    const visible_lines = visibleLineCapacity(code_view);
+    const first_line = visibleFirstLine(state, visible_lines);
     var line_start = lineStartAt(state.source, first_line);
     var line_number = first_line + 1;
     var rendered: usize = 0;
     var y = code_view.y + code_pad;
-    while (rendered < max_rendered_lines and line_start <= state.source.len and y + code_line_h <= code_view.y + code_view.h - code_pad) : (rendered += 1) {
+    while (rendered < visible_lines and line_start <= state.source.len and y + code_line_h <= code_view.y + code_view.h - code_pad) : (rendered += 1) {
         const line_end = lineEnd(state.source, line_start);
         const line = state.source[line_start..line_end];
         const visible = line[0..@min(line.len, maxVisibleColumns(code_view.w))];
@@ -266,7 +268,7 @@ fn renderEditorWithChrome(scene: *ui.Scene, collector: *interaction.Collector, b
         try text(scene, code_view.x + code_pad + code_gutter_w, code_view.y + code_pad, code_view.w - code_pad * 2.0 - code_gutter_w, code_line_h, emptyEditorLabel(state), emptyEditorColor(state));
     }
 
-    if (show_minimap) try renderMinimap(scene, ui.Rect.init(bounds.x + bounds.w - minimap_w - 10.0, code_view.y + 8.0, minimap_w, @max(1.0, code_view.h - 16.0)), state, visibleLineCapacity(code_view));
+    if (show_minimap) try renderMinimap(scene, ui.Rect.init(bounds.x + bounds.w - minimap_w - 10.0, code_view.y + 8.0, minimap_w, @max(1.0, code_view.h - 16.0)), state, visible_lines);
     if (chrome.status_bar) try renderEditorStatus(scene, ui.Rect.init(bounds.x, status_y, bounds.w, status_bar_h), state);
 }
 
@@ -307,11 +309,9 @@ fn renderExplorer(scene: *ui.Scene, collector: *interaction.Collector, bounds: u
     try stroke(scene, ui.Rect.init(bounds.x + bounds.w - 1.0, bounds.y, 1.0, bounds.h), vscode_line, 0.0);
     try text(scene, bounds.x + 14.0, bounds.y + 10.0, bounds.w - 28.0, 12.0, "EXPLORER", palette.dim);
     const search_bounds = ui.Rect.init(bounds.x + 10.0, bounds.y + explorer_heading_h, @max(1.0, bounds.w - 20.0), explorer_search_h);
-    const search_placeholder = if (state.search_query.len == 0) "Search files" else "";
-    const search_input = input_component.Input{ .id = explorer_search_input_id, .placeholder = search_placeholder, .icon_slot = icon_component.IconSlot.named(.leading, .search) };
+    const search_input = input_component.Input{ .id = explorer_search_input_id, .placeholder = "Search files", .value = state.search_query, .icon_slot = icon_component.IconSlot.named(.leading, .search) };
     try search_input.render(scene, search_bounds, .{ .style = app_chrome.style(), .control_size = .small });
     try search_input.collectInteractions(collector, search_bounds);
-    if (state.search_query.len != 0) try text(scene, search_bounds.x + 36.0, search_bounds.y + 9.0, search_bounds.w - 44.0, 13.0, state.search_query, palette.text);
     const rows_y = search_bounds.y + search_bounds.h + explorer_search_gap;
     const files = explorerFilesForState(state);
     const footer_y = bounds.y + @max(0.0, bounds.h - explorer_footer_h);
@@ -436,7 +436,8 @@ fn visibleFirstLine(state: State, visible_lines: usize) usize {
 }
 
 fn visibleLineCapacity(code_view: ui.Rect) usize {
-    return @min(max_rendered_lines, @max(@as(usize, 1), @as(usize, @intFromFloat(@max(1.0, (code_view.h - code_pad * 2.0) / code_line_h)))));
+    const available_h = @max(1.0, code_view.h - code_pad * 2.0);
+    return @min(line_number_label_slots, @max(@as(usize, 1), @as(usize, @intFromFloat(available_h / code_line_h))));
 }
 
 fn explorerRow(scene: *ui.Scene, x: f32, y: f32, w: f32, label: []const u8, icon_value: icon_component.Icon, selected: bool, depth: usize) !void {
@@ -499,7 +500,7 @@ fn renderMinimap(scene: *ui.Scene, bounds: ui.Rect, state: State, visible_lines:
     var y = bounds.y + 6.0;
     var line_start: usize = 0;
     var row: usize = 0;
-    while (line_start <= state.source.len and row < max_rendered_lines and y < bounds.y + bounds.h - 4.0) : (row += 1) {
+    while (line_start <= state.source.len and y < bounds.y + bounds.h - 4.0) : (row += 1) {
         const line_end_value = lineEnd(state.source, line_start);
         const line_len = line_end_value - line_start;
         const line_w = @min(bounds.w - 12.0, @as(f32, @floatFromInt(line_len)) * 1.2);
@@ -917,6 +918,35 @@ test "source compact toolbar keeps action hits separated" {
     try expectNoHorizontalOverlap(try hitRect(collector.written(), launch_button_id), try hitRect(collector.written(), reset_button_id));
 }
 
+test "source editor fills tall viewport beyond forty code rows" {
+    const source_line = "const value = true;\n";
+    const source_line_count: usize = 80;
+    const tall_editor_h: f32 = 1200.0;
+    const commands_capacity: usize = 4096;
+    var source: [source_line.len * source_line_count]u8 = undefined;
+    var len: usize = 0;
+    for (0..source_line_count) |_| {
+        @memcpy(source[len..][0..source_line.len], source_line);
+        len += source_line.len;
+    }
+
+    var commands: [commands_capacity]ui.Command = undefined;
+    var clips: [8]ui.Rect = undefined;
+    var scene = ui.Scene.initWithClips(&commands, &clips);
+    var regions: [32]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
+    try renderEditorWithChrome(&scene, &collector, ui.Rect.init(0, 0, 1280, tall_editor_h), .{
+        .label = "src/app_runtime.zig",
+        .source = source[0..len],
+        .workspace_bytes = 2048,
+        .file_bytes = len,
+        .release_bytes = 4096,
+        .status = "ready",
+    }, .{});
+
+    try std.testing.expect(textCommand(scene.written(), "50") != null);
+}
+
 test "source syntax tokens advance with renderer text metrics" {
     var commands: [32]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
@@ -1002,6 +1032,8 @@ test "source explorer search filters by full path" {
     try expectNoHit(collector.written(), explorer_file_id_base);
     try expectHit(collector.written(), explorer_file_id_base + 1);
     try expectNoHit(collector.written(), explorer_file_id_base + 2);
+    try std.testing.expect(textCommand(scene.written(), "BASE64") != null);
+    try std.testing.expect(textCommand(scene.written(), "Search files") == null);
     try std.testing.expect(textCommand(scene.written(), "compiler/zig/lib/std/base64.zig") != null);
 }
 

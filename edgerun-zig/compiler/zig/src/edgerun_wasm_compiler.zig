@@ -1,5 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const edgerun_source = @import("edgerun_source.zig");
 
 const abi_version: u32 = 1;
 const app_abi_version: u32 = 1;
@@ -337,7 +338,7 @@ fn emitAppWasm(output: []u8, source: []const u8, workspace: WorkspaceInfo, compi
         .metadata_only => 0,
     };
     const root_hash = sourceHash(workspace.root_source);
-    const lowered_main = lowerMainI32Literal(workspace.root_source);
+    const lowered_main = lowerMainForMode(source_mode, workspace.root_source);
     const embedded_compiler_wasm = findWorkspaceFile(workspace.manifest, embedded_wasm_compiler_label) orelse &.{};
     if (embedded_compiler_wasm.len != 0) {
         return try emitLinkedCompilerAppWasm(output, source, workspace, compiler_output, mode, source_mode, embedded_compiler_wasm, root_hash, lowered_main, source_hash);
@@ -1293,8 +1294,37 @@ fn lowerMainI32Literal(source: []const u8) ?i32 {
     const body_start_relative = std.mem.indexOfScalar(u8, source[signature_start..], '{') orelse return null;
     const body_start = signature_start + body_start_relative + 1;
     const body_end_relative = std.mem.indexOfScalar(u8, source[body_start..], '}') orelse return null;
-    const body = source[body_start .. body_start + body_end_relative];
+    return parseI32ReturnBodyLiteral(source[body_start .. body_start + body_end_relative]);
+}
+
+fn lowerMainForMode(source_mode: SourceMode, source: []const u8) ?i32 {
+    return switch (source_mode) {
+        .zig_compat => lowerMainI32Literal(source),
+        .edgerun => lowerEdgeRunMainI32Literal(source),
+    };
+}
+
+fn lowerEdgeRunMainI32Literal(source: []const u8) ?i32 {
+    var index: usize = 0;
+    while (true) {
+        index = edgerun_source.skipSpace(source, index);
+        if (index == source.len) return null;
+        if (std.mem.startsWith(u8, source[index..], const_keyword)) {
+            index = edgerun_source.parseConst(source, index) orelse return null;
+            continue;
+        }
+        const parsed = edgerun_source.parseExport(source, index) orelse return null;
+        index = parsed.next_index;
+        if (!std.mem.eql(u8, parsed.name, "er_app_main")) continue;
+        if (!allWhitespace(parsed.args)) return null;
+        if (!std.mem.eql(u8, trimAsciiWhitespace(parsed.signature_tail), "i32")) return null;
+        return parseI32ReturnBodyLiteral(parsed.body);
+    }
+}
+
+fn parseI32ReturnBodyLiteral(body: []const u8) ?i32 {
     const return_start_relative = std.mem.indexOf(u8, body, return_keyword) orelse return null;
+    if (!allWhitespace(body[0..return_start_relative])) return null;
     var index = return_start_relative + return_keyword.len;
     while (index < body.len and asciiWhitespace(body[index])) : (index += 1) {}
     const sign: i64 = if (index < body.len and body[index] == '-') sign: {
@@ -1419,19 +1449,19 @@ fn collectLoweredExportsForMode(source_mode: SourceMode, source: []const u8, dat
 }
 
 fn collectEdgeRunLoweredExports(source: []const u8, data_base: usize) LoweredExports {
-    var context = collectLoweringContext(source, data_base);
+    var context = collectEdgeRunLoweringContext(source, data_base);
     var lowered = LoweredExports{
         .memory_end = context.next_data_offset,
     };
     var index: usize = 0;
     while (true) {
-        index = skipEdgeRunSpace(source, index);
+        index = edgerun_source.skipSpace(source, index);
         if (index == source.len) break;
         if (std.mem.startsWith(u8, source[index..], const_keyword)) {
-            index = parseEdgeRunConst(source, index) orelse break;
+            index = edgerun_source.parseConst(source, index) orelse break;
             continue;
         }
-        const parsed = parseEdgeRunExport(source, index) orelse break;
+        const parsed = edgerun_source.parseExport(source, index) orelse break;
         index = parsed.next_index;
         if (reservedExportName(parsed.name)) continue;
         if (!allWhitespace(parsed.args)) continue;
@@ -1489,6 +1519,48 @@ fn collectLoweringContext(source: []const u8, data_base: usize) LoweringContext 
     collectZeroValues(source, &context.zero_values);
     collectEnumInitialValues(source, &context.zero_values);
     return context;
+}
+
+fn collectEdgeRunLoweringContext(source: []const u8, data_base: usize) LoweringContext {
+    var context = LoweringContext{
+        .constants = .{},
+        .array_lengths = .{},
+        .pointer_values = .{},
+        .zero_values = .{},
+        .next_data_offset = data_base,
+    };
+    var index: usize = 0;
+    while (true) {
+        index = edgerun_source.skipSpace(source, index);
+        if (index == source.len) break;
+        if (std.mem.startsWith(u8, source[index..], const_keyword)) {
+            const decl = edgerun_source.parseConstDecl(source, index) orelse break;
+            if (parseI32Expression(decl.value, &context.constants)) |value| {
+                context.constants.append(decl.name, value);
+            }
+            if (parseEdgeRunArrayLength(decl.type_expr, &context.constants)) |len| {
+                context.array_lengths.append(decl.name, len);
+            }
+            index = decl.next_index;
+            continue;
+        }
+        if (edgerun_source.parseExport(source, index)) |parsed| {
+            index = parsed.next_index;
+            continue;
+        }
+        break;
+    }
+    return context;
+}
+
+fn parseEdgeRunArrayLength(type_expr: []const u8, constants: *const ConstIndex) ?i32 {
+    if (type_expr.len == 0 or type_expr[0] != '[') return null;
+    const bracket_end_relative = std.mem.indexOfScalar(u8, type_expr, ']') orelse return null;
+    const len = parseI32Expression(type_expr[1..bracket_end_relative], constants) orelse return null;
+    const element_start = skipWhitespace(type_expr, bracket_end_relative + 1);
+    if (element_start + "u8".len != type_expr.len) return null;
+    if (!std.mem.eql(u8, type_expr[element_start..], "u8")) return null;
+    return len;
 }
 
 fn collectIntegerConsts(source: []const u8, constants: *ConstIndex) void {
@@ -2072,17 +2144,11 @@ const EdgeRunRootAnalysis = struct {
     string_bytes: u32,
 };
 
-const EdgeRunSourceStats = struct {
-    declaration_count: u32 = 0,
-    export_count: u32 = 0,
-    export_name_bytes: u32 = 0,
-};
-
 fn analyzeEdgeRunRoot(source: []const u8) ?EdgeRunRootAnalysis {
     if (std.mem.indexOf(u8, source, "@import(") != null) return null;
-    const parsed = parseEdgeRunSource(source) orelse return null;
+    const parsed = edgerun_source.parse(source) orelse return null;
 
-    const lowered_main_count: u32 = if (lowerMainI32Literal(source) == null) 0 else 1;
+    const lowered_main_count: u32 = if (lowerEdgeRunMainI32Literal(source) == null) 0 else 1;
     const lowered_exports = collectEdgeRunLoweredExports(source, 0);
     if (lowered_main_count + lowered_exports.count != parsed.export_count) return null;
 
@@ -2091,138 +2157,6 @@ fn analyzeEdgeRunRoot(source: []const u8) ?EdgeRunRootAnalysis {
         .extra_count = parsed.declaration_count,
         .string_bytes = parsed.export_name_bytes,
     };
-}
-
-fn parseEdgeRunSource(source: []const u8) ?EdgeRunSourceStats {
-    var stats = EdgeRunSourceStats{};
-    var index: usize = 0;
-    while (true) {
-        index = skipEdgeRunSpace(source, index);
-        if (index == source.len) break;
-        if (std.mem.startsWith(u8, source[index..], const_keyword)) {
-            index = parseEdgeRunConst(source, index) orelse return null;
-            stats.declaration_count += 1;
-            continue;
-        }
-        if (parseEdgeRunExport(source, index)) |parsed| {
-            index = parsed.next_index;
-            stats.declaration_count += 1;
-            stats.export_count += 1;
-            stats.export_name_bytes += @intCast(parsed.name.len);
-            continue;
-        }
-        return null;
-    }
-    if (stats.declaration_count == 0 or stats.export_count == 0) return null;
-    return stats;
-}
-
-const EdgeRunParsedExport = struct {
-    name: []const u8,
-    args: []const u8,
-    signature_tail: []const u8,
-    body: []const u8,
-    next_index: usize,
-};
-
-fn parseEdgeRunConst(source: []const u8, start: usize) ?usize {
-    var index = start + const_keyword.len;
-    index = skipEdgeRunSpace(source, index);
-    const name_end = scanIdentifierEnd(source, index) orelse return null;
-    index = skipEdgeRunSpace(source, name_end);
-    if (index >= source.len or source[index] != ':') return null;
-    index += 1;
-    var paren_depth: usize = 0;
-    var brace_depth: usize = 0;
-    var bracket_depth: usize = 0;
-    while (index < source.len) : (index += 1) {
-        switch (source[index]) {
-            '(' => paren_depth += 1,
-            ')' => {
-                if (paren_depth == 0) return null;
-                paren_depth -= 1;
-            },
-            '{' => brace_depth += 1,
-            '}' => {
-                if (brace_depth == 0) return null;
-                brace_depth -= 1;
-            },
-            '[' => bracket_depth += 1,
-            ']' => {
-                if (bracket_depth == 0) return null;
-                bracket_depth -= 1;
-            },
-            ';' => {
-                if (paren_depth == 0 and brace_depth == 0 and bracket_depth == 0) return index + 1;
-            },
-            else => {},
-        }
-    }
-    return null;
-}
-
-fn parseEdgeRunExport(source: []const u8, start: usize) ?EdgeRunParsedExport {
-    const prefix_len: usize = if (std.mem.startsWith(u8, source[start..], "pub export fn "))
-        "pub export fn ".len
-    else if (std.mem.startsWith(u8, source[start..], export_fn_keyword))
-        export_fn_keyword.len
-    else
-        return null;
-
-    const name_start = start + prefix_len;
-    const name_end = scanIdentifierEnd(source, name_start) orelse return null;
-    var index = skipEdgeRunSpace(source, name_end);
-    if (index >= source.len or source[index] != '(') return null;
-    const args_start = index + 1;
-    index = scanEdgeRunBalanced(source, index, '(', ')') orelse return null;
-    const args = source[args_start .. index - 1];
-    const signature_tail_start = index;
-    index = skipEdgeRunSpace(source, index);
-    while (index < source.len and source[index] != '{') : (index += 1) {
-        if (source[index] == ';' or source[index] == '}') return null;
-    }
-    if (index >= source.len or source[index] != '{') return null;
-    const body_start = index + 1;
-    const next_index = scanEdgeRunBalanced(source, index, '{', '}') orelse return null;
-    return .{
-        .name = source[name_start..name_end],
-        .args = args,
-        .signature_tail = source[signature_tail_start..index],
-        .body = source[body_start .. next_index - 1],
-        .next_index = next_index,
-    };
-}
-
-fn scanEdgeRunBalanced(source: []const u8, start: usize, open: u8, close: u8) ?usize {
-    if (start >= source.len or source[start] != open) return null;
-    var depth: usize = 1;
-    var index = start + 1;
-    while (index < source.len) : (index += 1) {
-        if (source[index] == open) {
-            depth += 1;
-        } else if (source[index] == close) {
-            depth -= 1;
-            if (depth == 0) return index + 1;
-        }
-    }
-    return null;
-}
-
-fn skipEdgeRunSpace(source: []const u8, start: usize) usize {
-    var index = start;
-    while (index < source.len) {
-        if (asciiWhitespace(source[index])) {
-            index += 1;
-            continue;
-        }
-        if (index + 1 < source.len and source[index] == '/' and source[index + 1] == '/') {
-            index += 2;
-            while (index < source.len and source[index] != '\n' and source[index] != '\r') : (index += 1) {}
-            continue;
-        }
-        break;
-    }
-    return index;
 }
 
 fn analyzeWorkspaceGraph(scratch: []u8, workspace: WorkspaceInfo, source_mode: SourceMode) error{ InvalidZig, OutOfMemory }!CompilerOutputInfo {
@@ -2292,12 +2226,17 @@ fn analyzeWorkspaceGraph(scratch: []u8, workspace: WorkspaceInfo, source_mode: S
         }
         result.analyzed_file_count += 1;
 
-        var imports = ImportScanner{ .source = file_source };
-        while (imports.next()) |import_name| enqueueImport(files, queue, &queue_len, label, import_name, &result);
+        switch (source_mode) {
+            .zig_compat => {
+                var imports = ImportScanner{ .source = file_source };
+                while (imports.next()) |import_name| enqueueImport(files, queue, &queue_len, label, import_name, &result);
+            },
+            .edgerun => {},
+        }
     }
 
     result.compiler_memory_used = @intCast(fixed.end_index);
-    if (lowerMainI32Literal(workspace.root_source) != null) result.lowered_main_count = 1;
+    if (lowerMainForMode(source_mode, workspace.root_source) != null) result.lowered_main_count = 1;
     result.lowered_export_count = collectLoweredExportsForMode(source_mode, workspace.root_source, 0, 0, if (findWorkspaceFile(workspace.manifest, embedded_wasm_compiler_label) == null) 0 else 1).count;
     return result;
 }
@@ -2759,11 +2698,59 @@ test "edgerun source lowering only collects parsed top level exports" {
     try std.testing.expectEqual(@as(i32, 4096), lowered.entries[0].value);
 }
 
+test "edgerun source lowering only collects parsed top level constants" {
+    const lowered = collectLoweredExportsForMode(.edgerun,
+        \\const max_width: usize = 4096;
+        \\export fn er_ui_outer() u32 {
+        \\    const hidden_width: usize = 8192;
+        \\    return hidden_width;
+        \\}
+    , 0, 0, 0);
+    try std.testing.expectEqual(@as(u32, 0), lowered.count);
+}
+
+test "edgerun source lowering collects top level const array lengths" {
+    const lowered = collectLoweredExportsForMode(.edgerun,
+        \\const max_width: usize = 4096;
+        \\const source_workspace: [max_width]u8 = undefined;
+        \\export fn er_ui_source_workspace_ptr() u32 { return @intFromPtr(&source_workspace); }
+        \\export fn er_ui_source_workspace_capacity() u32 { return source_workspace.len; }
+    , 256, 0, 0);
+    try std.testing.expectEqual(@as(u32, 2), lowered.count);
+    try std.testing.expectEqualStrings("er_ui_source_workspace_ptr", lowered.entries[0].name);
+    try std.testing.expectEqual(@as(i32, 256), lowered.entries[0].value);
+    try std.testing.expectEqualStrings("er_ui_source_workspace_capacity", lowered.entries[1].name);
+    try std.testing.expectEqual(@as(i32, 4096), lowered.entries[1].value);
+}
+
 test "root main literal lowering is explicit and narrow" {
     try std.testing.expectEqual(@as(?i32, 7), lowerMainI32Literal("pub export fn er_app_main() i32 { return 7; }"));
     try std.testing.expectEqual(@as(?i32, -42), lowerMainI32Literal("pub export fn main() i32 { return -42; }"));
     try std.testing.expectEqual(@as(?i32, null), lowerMainI32Literal("pub export fn er_app_main() void {}"));
     try std.testing.expectEqual(@as(?i32, null), lowerMainI32Literal("pub export fn er_app_main() i32 { return value; }"));
+}
+
+test "edgerun root main lowering only uses parsed top level exports" {
+    try std.testing.expectEqual(@as(?i32, 7), lowerMainForMode(.edgerun,
+        \\const max_width: usize = 4096;
+        \\pub export fn er_app_main() i32 { return 7; }
+    ));
+    try std.testing.expectEqual(@as(?i32, null), lowerMainForMode(.edgerun,
+        \\const max_width: usize = 4096;
+        \\export fn er_ui_outer() u32 {
+        \\    pub export fn er_app_main() i32 { return 7; }
+        \\    return max_width;
+        \\}
+    ));
+    try std.testing.expectEqual(@as(?i32, null), lowerMainForMode(.edgerun,
+        \\pub export fn main() i32 { return 7; }
+    ));
+    try std.testing.expectEqual(@as(?i32, null), lowerMainForMode(.edgerun,
+        \\pub export fn er_app_main() i32 {
+        \\    const value: i32 = 7;
+        \\    return value;
+        \\}
+    ));
 }
 
 test "simple zero arg integer exports lower to wasm functions" {

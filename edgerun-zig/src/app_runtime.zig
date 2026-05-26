@@ -1210,7 +1210,7 @@ fn handleInputEventRecord(record: InputEventRecord, width: f32, height: f32) u32
         .key_down => {
             if (handleSourceSearchKey(record.key, record.ctrl, record.meta, record.alt)) return input_event_prevent_default | input_event_schedule_frame;
             const handled = appKeyEvent(record.key, record.ctrl, record.meta, record.alt, record.shift);
-            if (handled == 0) return 0;
+            if (handled == 0) return input_event_prevent_default;
             if (handled != 1) return input_event_error;
             return input_event_prevent_default | input_event_schedule_frame;
         },
@@ -1220,9 +1220,9 @@ fn handleInputEventRecord(record: InputEventRecord, width: f32, height: f32) u32
         },
         .before_input => {
             if (handleSourceSearchTextInput(record.input_type, record.data)) return input_event_prevent_default | input_event_schedule_frame;
-            if (!sourceEditorFocused()) return 0;
-            if (record.data.len == 0) return 0;
-            if (!handleSourceEditorTextInput(record.input_type, record.data)) return 0;
+            if (!sourceEditorFocused()) return input_event_prevent_default;
+            if (record.data.len == 0) return input_event_prevent_default;
+            if (!handleSourceEditorTextInput(record.input_type, record.data)) return input_event_prevent_default;
             return input_event_prevent_default | input_event_schedule_frame;
         },
         .context_menu => {
@@ -1233,13 +1233,14 @@ fn handleInputEventRecord(record: InputEventRecord, width: f32, height: f32) u32
         .key_up,
         .input,
         .change,
+        .composition_start,
+        .composition_update,
+        .composition_end,
+        => return input_event_prevent_default | input_event_schedule_frame,
         .click,
         .visibility_change,
         .focus,
         .blur,
-        .composition_start,
-        .composition_update,
-        .composition_end,
         .touch_start,
         .touch_move,
         .touch_end,
@@ -2974,7 +2975,9 @@ test "app runtime event bytes keep host event decoding inside wasm" {
     );
     try std.testing.expectEqualStrings("/", route_bytes[0..er_ui_app_route_path_len()]);
 
-    try std.testing.expectEqual(input_event_schedule_frame, eventBytesForTest(.key_up, 0.0, 0.0, 0.0, 0, "k", "KeyK", "", "", 1280.0, 900.0));
+    try std.testing.expectEqual(input_event_prevent_default, eventBytesForTest(.key_down, 0.0, 0.0, 0.0, input_event_flag_ctrl, "l", "KeyL", "", "", 1280.0, 900.0));
+    try std.testing.expectEqual(input_event_prevent_default | input_event_schedule_frame, eventBytesForTest(.key_up, 0.0, 0.0, 0.0, 0, "k", "KeyK", "", "", 1280.0, 900.0));
+    try std.testing.expectEqual(input_event_prevent_default, eventBytesForTest(.before_input, 0.0, 0.0, 0.0, 0, "", "", "insertText", "x", 1280.0, 900.0));
 }
 
 test "app runtime event pump owns dom event interpretation" {

@@ -1,14 +1,19 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const app_mod = @import("app.zig");
+const app_frame = @import("app_frame.zig");
+const app_images = @import("app_images.zig");
 const clock = @import("clock.zig");
 const content_kernel = @import("content/kernel.zig");
 const kernel_runtime = @import("content/kernel_runtime.zig");
 const data_chunk = @import("content/data_chunk.zig");
 const identity = @import("identity.zig");
+const interaction = @import("ui_interaction.zig");
 const preimage = @import("preimage.zig");
 const registry_app = @import("content/registry_app.zig");
+const renderer_font_atlas = @import("render/font_atlas.zig");
 const renderer_ir = @import("render/ir.zig");
+const renderer_pipeline = @import("render/pipeline.zig");
 const resource_contract = @import("content/resource_contract.zig");
 const resource_inventory = @import("content/resource_inventory.zig");
 const ui = @import("ui.zig");
@@ -39,6 +44,30 @@ const virtio_scanout_id: u32 = 0;
 const virtio_gl_context_id: u32 = 1;
 const virtio_gl_resource_id: u32 = 2;
 const virtio_gl_surface_handle: u32 = 1;
+const max_app_commands: usize = 4096;
+const max_app_clips: usize = 64;
+const max_app_interaction_regions: usize = 4096;
+const max_app_rects: usize = 8192;
+const max_app_text_vertices: usize = 24576;
+const max_app_icon_vertices: usize = 4096;
+const max_app_icon_line_vertices: usize = 65536;
+const max_app_image_vertices: usize = 384;
+const max_app_overlay_rects: usize = 512;
+const max_app_overlay_text_vertices: usize = 8192;
+const max_app_overlay_icon_vertices: usize = 256;
+const max_app_overlay_icon_line_vertices: usize = 16384;
+
+const AppIrStorage = renderer_ir.FixedBuffers(
+    max_app_rects,
+    max_app_text_vertices,
+    max_app_icon_vertices,
+    max_app_image_vertices,
+    max_app_overlay_rects,
+    max_app_overlay_text_vertices,
+    max_app_overlay_icon_vertices,
+    max_app_icon_line_vertices,
+    max_app_overlay_icon_line_vertices,
+);
 
 pub const Error = error{
     AllocationReceiverFailed,
@@ -114,6 +143,12 @@ pub const State = struct {
     first_app_runtime: kernel_runtime.Runtime,
     first_app_scratch: kernel_runtime.Scratch,
     wasm_storage: wasm.ExecutionStorage,
+    app_scene_commands: [max_app_commands]ui.Command,
+    app_scene_clips: [max_app_clips]ui.Rect,
+    app_interactions: [max_app_interaction_regions]interaction.Region,
+    app_ir_storage: AppIrStorage,
+    app_font_atlas: renderer_font_atlas.Atlas,
+    app_pixels: [virtio_scanout_width * virtio_scanout_height]ui.Color,
     parent: identity.Identity,
     app: identity.Identity,
     first_app_result: kernel_runtime.RunResult,
@@ -168,6 +203,7 @@ fn runVirtioGpuChecks(state: *State, emit: Reporter) Error!void {
         }
         device.createContext(&state.virtio_queue, virtio_gl_context_id, .virgl, "edgerun-gl") catch |err| return fail(emit, mapVirtioGpuError(err), "FAIL post-exit virtio-gpu context");
         device.create3dColorResource(&state.virtio_queue, virtio_gl_resource_id, virtio_scanout_width, virtio_scanout_height, .b8g8r8a8_unorm) catch |err| return fail(emit, mapVirtioGpuError(err), "FAIL post-exit virtio-gpu resource-3d");
+        device.attachResourceBacking(&state.virtio_queue, virtio_gl_resource_id, @intFromPtr(&state.virtio_scanout), @intCast(state.virtio_scanout.len)) catch |err| return fail(emit, mapVirtioGpuError(err), "FAIL post-exit virtio-gpu backing-3d");
         device.attachResourceToContext(&state.virtio_queue, virtio_gl_context_id, virtio_gl_resource_id) catch |err| return fail(emit, mapVirtioGpuError(err), "FAIL post-exit virtio-gpu context-resource");
         emit("check: post-exit virtio-gpu 3d resource ok");
         device.submitVirglNop(&state.virtio_queue, virtio_gl_context_id) catch |err| return fail(emit, mapVirtioGpuError(err), "FAIL post-exit virtio-gpu submit-3d");
@@ -202,32 +238,47 @@ fn runVirtioGpuChecks(state: *State, emit: Reporter) Error!void {
 }
 
 fn renderVirtioGpuPackedDebugFrame(device: *virtio_gpu.Device, state: *State, emit: Reporter) Error!void {
-    var commands: [1]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-    scene.pushRect(
-        ui.Rect.init(0, 0, @floatFromInt(virtio_scanout_width), @floatFromInt(virtio_scanout_height)),
-        ui.Color{ .r = 33, .g = 212, .b = 237, .a = 255 },
-        .fill,
-        0,
-        0,
-    ) catch return fail(emit, error.RendererIrFailed, "FAIL post-exit virtio-gpu scene");
+    var scene = ui.Scene.initWithClips(&state.app_scene_commands, &state.app_scene_clips);
+    var collector = interaction.Collector.init(&state.app_interactions);
+    app_frame.render(&scene, &collector, ui.Rect.init(0, 0, @floatFromInt(virtio_scanout_width), @floatFromInt(virtio_scanout_height)), .{
+        .route = .{ .view = .source },
+        .public_identity = "post-exit-virtio-renderer",
+        .public_identity_ready = true,
+    }) catch return fail(emit, error.RendererIrFailed, "FAIL post-exit virtio-gpu app-frame");
 
-    var packed_ir = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0, 0, 0){};
-    var font_context: u8 = 0;
-    renderer_ir.packScene(packed_ir.buffers(), .{
-        .font = renderer_ir.commandAdapterFont(&font_context),
-    }, scene.written()) catch return fail(emit, error.RendererIrFailed, "FAIL post-exit virtio-gpu pack");
+    state.app_font_atlas.initWithFontInPlace(renderer_font_atlas.geist_ascii_font.body());
+    const buffers = state.app_ir_storage.buffers();
+    renderer_pipeline.packScene(buffers, &state.app_font_atlas, .object, scene.written()) catch return fail(emit, error.RendererIrFailed, "FAIL post-exit virtio-gpu pack-app");
 
-    device.renderPackedFrameToVirglColorResource(
+    const surface = renderer_pipeline.softwareFramebuffer(
+        virtio_scanout_width,
+        virtio_scanout_height,
+        &state.app_pixels,
+    ) catch return fail(emit, error.RendererIrFailed, "FAIL post-exit virtio-gpu surface");
+    const image_texture = app_images.cloudMeme() catch return fail(emit, error.RendererIrFailed, "FAIL post-exit virtio-gpu image");
+    const receipt = renderer_pipeline.renderSoftwareFrame(
+        surface,
+        buffers,
+        renderer_pipeline.softwareResources(&state.app_font_atlas, image_texture),
+        .bg,
+    ) catch return fail(emit, error.RendererIrFailed, "FAIL post-exit virtio-gpu software-render");
+    if (!receipt.valid()) return fail(emit, error.RendererIrFailed, "FAIL post-exit virtio-gpu render-receipt");
+
+    virtio_gpu.copyRgbaPixelsToBgra(
+        virtio_scanout_width,
+        virtio_scanout_height,
+        &state.virtio_scanout,
+        &state.app_pixels,
+    ) catch |err| return fail(emit, mapVirtioGpuError(err), "FAIL post-exit virtio-gpu copy-app");
+
+    device.transferToHost3d(
         &state.virtio_queue,
         virtio_gl_context_id,
         virtio_gl_resource_id,
-        virtio_gl_surface_handle,
-        .b8g8r8a8_unorm,
         virtio_scanout_width,
         virtio_scanout_height,
-        packed_ir.buffers(),
-    ) catch |err| return fail(emit, mapVirtioGpuError(err), "FAIL post-exit virtio-gpu render-packed");
+        virtio_scanout_width * 4,
+    ) catch |err| return fail(emit, mapVirtioGpuError(err), "FAIL post-exit virtio-gpu transfer-packed");
 }
 
 fn fillVirtioScanout(out: []u8) void {
