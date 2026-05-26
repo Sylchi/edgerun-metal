@@ -57,7 +57,7 @@ timeout "$qemu_timeout" qemu-system-x86_64 \
 qemu_status=$?
 set -e
 
-if ! grep -q "PASS immutable-kernel-exit-boot-qemu" "$debug_log"; then
+if ! grep -q "PASS immutable-kernel-exit-boot-virtio-qemu" "$debug_log"; then
   cat "$debug_log"
   exit 1
 fi

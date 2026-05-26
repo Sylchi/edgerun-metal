@@ -61,7 +61,7 @@ pub const Accordion = struct {
         return layout.Measurement.flexible(
             .{ .w = primitives.min_extent + accordion_icon_space, .h = closed_h },
             preferred,
-            .{ .w = primitives.measure_max_width, .h = @max(preferred.h, open_h) },
+            .{ .w = primitives.maxMeasuredWidth(constraints, preferred.w), .h = @max(preferred.h, open_h) },
         ).applyExact(constraints);
     }
 

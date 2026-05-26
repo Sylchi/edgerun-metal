@@ -55,7 +55,7 @@ pub const NavigationMenu = struct {
         return layout.Measurement.flexible(
             .{ .w = component_primitives.min_extent * 3.0 + navigation_menu_gap * 2.0, .h = navigation_menu_item_h },
             preferred,
-            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
+            .{ .w = component_primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
         ).applyExact(constraints);
     }
 

@@ -46,7 +46,7 @@ pub const ScrollArea = struct {
         return layout.Measurement.flexible(
             .{ .w = primitives.min_extent + scroll_area_padding * 2.0 + scroll_area_scrollbar_w, .h = scroll_area_text_h + scroll_area_track_inset_y * 2.0 },
             preferred,
-            .{ .w = primitives.measure_max_width, .h = @max(preferred.h, text.max.h + scroll_area_track_inset_y * 2.0) },
+            .{ .w = primitives.maxMeasuredWidth(constraints, preferred.w), .h = @max(preferred.h, text.max.h + scroll_area_track_inset_y * 2.0) },
         ).applyExact(constraints);
     }
 

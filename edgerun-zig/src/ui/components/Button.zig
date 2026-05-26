@@ -16,7 +16,6 @@ const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
 const constrainPreferredSize = primitives.constrainPreferredSize;
-const measureFixed = primitives.measureFixed;
 const Icon = icon_component.Icon;
 const IconSlot = icon_component.IconSlot;
 
@@ -131,7 +130,7 @@ pub const IconButton = struct {
     pub fn measure(self: IconButton, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = self;
         const size = iconButtonSize(options.control_size);
-        return measureFixed(.{ .w = size, .h = size }, constraints);
+        return measureIconButton(size, constraints);
     }
 
     pub fn toObject(self: IconButton, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -209,8 +208,13 @@ fn measureButtonWithSize(label: []const u8, icon_slot: IconSlot, size: common.Co
     return layout.Measurement.flexible(
         .{ .w = @min(minWidth(size), preferred.w), .h = @min(preferred_height, preferred.h) },
         preferred,
-        .{ .w = max_width, .h = preferred_height },
+        .{ .w = primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred_height },
     ).applyExact(constraints);
+}
+
+fn measureIconButton(size: f32, constraints: layout.Constraints) layout.Measurement {
+    const preferred = constrainPreferredSize(.{ .w = size, .h = size }, constraints);
+    return layout.Measurement.flexible(preferred, preferred, preferred).applyExact(constraints);
 }
 
 fn renderContent(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, text_color: ui.Color, icon_slot: IconSlot, padding: f32) ui.RenderError!void {
@@ -319,7 +323,6 @@ const icon_size: f32 = 18.0;
 const icon_gap: f32 = 8.0;
 const min_width: f32 = 44.0;
 const icon_button_size: f32 = 36.0;
-const max_width: f32 = 4096.0;
 const button_danger = ui.Color{ .r = 225, .g = 29, .b = 72 };
 const button_danger_text = ui.Color{ .r = 255, .g = 255, .b = 255 };
 const icon_pack_shift: u4 = 8;

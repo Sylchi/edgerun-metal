@@ -55,8 +55,8 @@ pub const Table = struct {
         const width = constraints.width.limit(table_min_width);
         const name_w = @max(primitives.min_extent, width * table_name_column_ratio - table_padding_x);
         const role_w = @max(primitives.min_extent, width * (1.0 - table_name_column_ratio) - table_padding_x);
-        const name = layout.measureText(self.name, .{ .width = .{ .at_most = name_w }, .text_wrap = .wrap }, primitives.textMetrics(self.name, table_body_text_h, table_body_max_lines));
-        const role = layout.measureText(self.role, .{ .width = .{ .at_most = role_w }, .text_wrap = .wrap }, primitives.textMetrics(self.role, table_body_text_h, table_body_max_lines));
+        const name = text_component.Text.measureValue(self.name, .{ .width = .{ .at_most = name_w }, .text_wrap = .wrap }, primitives.textMetrics(self.name, table_body_text_h, table_body_max_lines));
+        const role = text_component.Text.measureValue(self.role, .{ .width = .{ .at_most = role_w }, .text_wrap = .wrap }, primitives.textMetrics(self.role, table_body_text_h, table_body_max_lines));
         const row_h = @max(table_body_text_h, @max(name.preferred.h, role.preferred.h)) + table_row_inset * 2.0;
         const preferred = constrainPreferredSize(.{
             .w = @max(table_min_width, name.preferred.w + role.preferred.w + table_padding_x * 2.0),
@@ -65,7 +65,7 @@ pub const Table = struct {
         return layout.Measurement.flexible(
             .{ .w = @min(table_min_width, preferred.w), .h = @min(table_min_height, preferred.h) },
             preferred,
-            .{ .w = primitives.measure_max_width, .h = preferred.h },
+            .{ .w = primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
         ).applyExact(constraints);
     }
 

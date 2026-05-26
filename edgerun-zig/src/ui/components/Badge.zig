@@ -15,7 +15,6 @@ const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
 const constrainPreferredSize = component_primitives.constrainPreferredSize;
-const measure_max_width = component_primitives.measure_max_width;
 
 pub const Badge = struct {
     label: []const u8,
@@ -41,7 +40,7 @@ pub const Badge = struct {
         return layout.Measurement.flexible(
             .{ .w = @min(badge_min_width, preferred.w), .h = @min(badge_height, preferred.h) },
             preferred,
-            .{ .w = measure_max_width, .h = badge_height },
+            .{ .w = component_primitives.maxMeasuredWidth(constraints, preferred.w), .h = badge_height },
         ).applyExact(constraints);
     }
 

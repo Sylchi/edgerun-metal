@@ -48,9 +48,9 @@ pub const Sidebar = struct {
     pub fn measure(self: Sidebar, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = options;
         const title_inner_width = sidebar_rail_w - sidebar_item_x * 2.0;
-        const title = layout.measureText(self.title, .{ .width = .{ .at_most = title_inner_width }, .text_wrap = .wrap }, primitives.textMetrics(self.title, sidebar_title_h, sidebar_title_max_lines));
+        const title = text_component.Text.measureValue(self.title, .{ .width = .{ .at_most = title_inner_width }, .text_wrap = .wrap }, primitives.textMetrics(self.title, sidebar_title_h, sidebar_title_max_lines));
         const item_inner_width = sidebar_rail_w - sidebar_item_x * 2.0 - sidebar_item_padding * 2.0;
-        const item = layout.measureText(self.item, .{ .width = .{ .at_most = item_inner_width }, .text_wrap = .wrap }, primitives.textMetrics(self.item, sidebar_item_text_h, sidebar_item_max_lines));
+        const item = text_component.Text.measureValue(self.item, .{ .width = .{ .at_most = item_inner_width }, .text_wrap = .wrap }, primitives.textMetrics(self.item, sidebar_item_text_h, sidebar_item_max_lines));
         const rail_h = sidebar_item_y + title.preferred.h - sidebar_title_h + @max(sidebar_item_h, item.preferred.h + sidebar_item_padding * 2.0) + sidebar_item_bottom_padding;
         const preferred = constrainPreferredSize(.{
             .w = @max(sidebar_min_width, sidebar_rail_w + sidebar_content_gap + sidebar_content_min_w),
@@ -59,7 +59,7 @@ pub const Sidebar = struct {
         return layout.Measurement.flexible(
             .{ .w = @min(sidebar_min_width, preferred.w), .h = @min(sidebar_min_height, preferred.h) },
             preferred,
-            .{ .w = primitives.measure_max_width, .h = preferred.h },
+            .{ .w = primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
         ).applyExact(constraints);
     }
 

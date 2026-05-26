@@ -87,7 +87,7 @@ pub const Icon = struct {
     pub fn measure(self: Icon, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = self;
         _ = options;
-        return primitives.measureFixed(.{ .w = default_size, .h = default_size }, constraints);
+        return measureIconIntrinsic(constraints);
     }
 
     pub fn toObject(self: Icon, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -113,6 +113,11 @@ pub const Icon = struct {
         };
     }
 };
+
+fn measureIconIntrinsic(constraints: layout.Constraints) layout.Measurement {
+    const preferred = primitives.constrainPreferredSize(.{ .w = default_size, .h = default_size }, constraints);
+    return layout.Measurement.flexible(preferred, preferred, preferred).applyExact(constraints);
+}
 
 fn renderIconGlyph(scene: *ui.Scene, bounds: ui.Rect, value: icon.Icon, color: ui.Color) ui.RenderError!void {
     const size = @max(1.0, @min(bounds.w, bounds.h));
@@ -154,4 +159,11 @@ test "icon component renders centered glyph" {
     try std.testing.expectEqual(@as(f32, 12.0), command.bounds.y);
     try std.testing.expectEqual(@as(f32, 24.0), command.bounds.w);
     try std.testing.expectEqual(@as(f32, 24.0), command.bounds.h);
+}
+
+test "icon component measurement derives from icon geometry" {
+    const measured = Icon.named(.search).measure(.{}, .{});
+
+    try std.testing.expectEqual(default_size, measured.preferred.w);
+    try std.testing.expectEqual(default_size, measured.preferred.h);
 }

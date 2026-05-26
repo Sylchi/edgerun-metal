@@ -51,7 +51,7 @@ pub const Direction = struct {
         return layout.Measurement.flexible(
             .{ .w = component_primitives.min_extent * 2.0 + direction_gap * 2.0 + direction_icon_size, .h = @max(direction_item_h, direction_icon_size) },
             preferred,
-            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
+            .{ .w = component_primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
         ).applyExact(constraints);
     }
 

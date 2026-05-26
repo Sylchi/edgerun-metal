@@ -57,7 +57,7 @@ pub const Breadcrumb = struct {
                 .h = primitives.control_label_height + breadcrumb_vertical_padding * 2.0,
             },
             preferred,
-            .{ .w = primitives.measure_max_width, .h = preferred.h },
+            .{ .w = primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
         ).applyExact(constraints);
     }
 

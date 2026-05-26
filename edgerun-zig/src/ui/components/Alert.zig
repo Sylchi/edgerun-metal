@@ -41,8 +41,8 @@ pub const Alert = struct {
     pub fn measure(self: Alert, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = options;
         const inner = constraints.inner(.{ .left = alert_text_x, .right = alert_padding_x });
-        const title = layout.measureText(self.title, inner, component_primitives.textMetrics(self.title, alert_title_height, alert_title_max_lines));
-        const detail = layout.measureText(self.detail, inner, component_primitives.textMetrics(self.detail, alert_detail_height, alert_detail_max_lines));
+        const title = text_component.Text.measureValue(self.title, inner, component_primitives.textMetrics(self.title, alert_title_height, alert_title_max_lines));
+        const detail = text_component.Text.measureValue(self.detail, inner, component_primitives.textMetrics(self.detail, alert_detail_height, alert_detail_max_lines));
         const preferred = constrainPreferredSize(.{
             .w = @max(alert_min_width, @max(title.preferred.w, detail.preferred.w) + alert_text_x + alert_padding_x),
             .h = alert_padding_y * 2.0 + @max(alert_icon_size, title.preferred.h + alert_detail_gap + detail.preferred.h),
@@ -50,7 +50,7 @@ pub const Alert = struct {
         return layout.Measurement.flexible(
             .{ .w = @min(alert_min_width, preferred.w), .h = @min(alert_min_height, preferred.h) },
             preferred,
-            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
+            .{ .w = component_primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
         ).applyExact(constraints);
     }
 

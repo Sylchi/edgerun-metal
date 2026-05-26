@@ -7,21 +7,25 @@ const tokens = @import("../../ui_tokens.zig");
 const ui = @import("../../ui.zig");
 const text_component = @import("Text.zig");
 
-pub const measure_max_width: f32 = 4096.0;
-
-pub fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
-    const resolved_preferred = constrainPreferredSize(preferred, constraints);
-    return layout.Measurement.flexible(
-        .{ .w = @min(preferred.w, resolved_preferred.w), .h = @min(preferred.h, resolved_preferred.h) },
-        resolved_preferred,
-        .{ .w = measure_max_width, .h = preferred.h },
-    ).applyExact(constraints);
-}
-
 pub fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {
     return .{
         .w = constraints.width.limit(preferred.w),
         .h = constraints.height.limit(preferred.h),
+    };
+}
+
+pub fn maxMeasuredWidth(constraints: layout.Constraints, preferred_width: f32) f32 {
+    return constraints.width.limit(preferred_width);
+}
+
+pub fn maxMeasuredHeight(constraints: layout.Constraints, preferred_height: f32) f32 {
+    return constraints.height.limit(preferred_height);
+}
+
+pub fn maxMeasuredSize(constraints: layout.Constraints, preferred: ui.Size) ui.Size {
+    return .{
+        .w = maxMeasuredWidth(constraints, preferred.w),
+        .h = maxMeasuredHeight(constraints, preferred.h),
     };
 }
 
@@ -42,7 +46,7 @@ pub fn textWrap(value: []const u8, line_height: f32, max_lines: usize) ui.TextWr
 }
 
 pub fn measuredTextHeight(value: []const u8, width: f32, line_height: f32, max_lines: usize) f32 {
-    return layout.measureText(value, .{ .width = .{ .at_most = width }, .text_wrap = .wrap }, textMetrics(value, line_height, max_lines)).preferred.h;
+    return text_component.Text.measureValue(value, .{ .width = .{ .at_most = width }, .text_wrap = .wrap }, textMetrics(value, line_height, max_lines)).preferred.h;
 }
 
 pub fn renderControlFrame(scene: *ui.Scene, bounds: ui.Rect, fill: ui.Color, border: ui.Color, radius: f32) ui.RenderError!void {
@@ -173,7 +177,7 @@ pub fn measureTitleDetailPanel(title: []const u8, detail: []const u8, constraint
             .h = spec.title_y + spec.title_h + detail_gap + spec.detail_h + spec.padding,
         },
         preferred,
-        .{ .w = measure_max_width, .h = @max(preferred.h, title_text.max.h + detail_gap + detail_text.max.h + spec.title_y + spec.padding) },
+        .{ .w = maxMeasuredWidth(constraints, preferred.w), .h = @max(preferred.h, title_text.max.h + detail_gap + detail_text.max.h + spec.title_y + spec.padding) },
     ).applyExact(constraints);
 }
 
@@ -192,7 +196,7 @@ pub fn measureSidePanelTitleDetail(trigger: []const u8, title: []const u8, detai
             .h = @max(panel.trigger_y + control_label_height + trigger_padding * 2.0, panel_measure.min.h),
         },
         preferred,
-        .{ .w = measure_max_width, .h = @max(preferred.h, panel_measure.max.h) },
+        .{ .w = maxMeasuredWidth(constraints, preferred.w), .h = @max(preferred.h, panel_measure.max.h) },
     ).applyExact(constraints);
 }
 
@@ -236,7 +240,7 @@ pub fn measureTwoItemMenuPanel(first: []const u8, second: []const u8, constraint
     return layout.Measurement.flexible(
         .{ .w = min_extent + (spec.padding + spec.item_padding) * 2.0, .h = spec.padding * 2.0 + spec.item_h * 2.0 },
         preferred,
-        .{ .w = measure_max_width, .h = preferred.h },
+        .{ .w = maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
     ).applyExact(constraints);
 }
 
@@ -255,7 +259,7 @@ pub fn measureSidePanelMenu(trigger: []const u8, first: []const u8, second: []co
             .h = @max(panel.trigger_y + control_label_height + trigger_padding * 2.0, menu_measure.min.h),
         },
         preferred,
-        .{ .w = measure_max_width, .h = @max(preferred.h, menu_measure.max.h) },
+        .{ .w = maxMeasuredWidth(constraints, preferred.w), .h = @max(preferred.h, menu_measure.max.h) },
     ).applyExact(constraints);
 }
 
@@ -303,6 +307,14 @@ test "component chrome helper emits deterministic frame commands" {
     try std.testing.expectEqual(ui.RectMode.border, scene.written()[2].rect.mode);
     try std.testing.expectEqual(@as(f32, 7.0), scene.written()[1].rect.radius);
     try std.testing.expect(std.meta.eql(border, scene.written()[2].rect.color));
+}
+
+test "measurement max helpers follow layout constraints" {
+    const preferred = ui.Size{ .w = 120.0, .h = 40.0 };
+
+    try std.testing.expectEqual(preferred, maxMeasuredSize(.{}, preferred));
+    try std.testing.expectEqual(@as(f32, 240.0), maxMeasuredWidth(.{ .width = .{ .at_most = 240.0 } }, preferred.w));
+    try std.testing.expectEqual(@as(f32, 64.0), maxMeasuredHeight(.{ .height = .{ .exact = 64.0 } }, preferred.h));
 }
 
 test "title detail panel wraps text inside shared overlay primitive" {

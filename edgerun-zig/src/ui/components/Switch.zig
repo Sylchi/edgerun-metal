@@ -47,7 +47,7 @@ pub const Switch = struct {
     pub fn measure(self: Switch, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = options;
         const label_constraints = constraints.inner(.{ .right = switch_width + switch_label_gap });
-        const label = layout.measureText(self.label, label_constraints, component_primitives.textMetrics(self.label, switch_label_height, switch_label_max_lines));
+        const label = text_component.Text.measureValue(self.label, label_constraints, component_primitives.textMetrics(self.label, switch_label_height, switch_label_max_lines));
         const preferred = constrainPreferredSize(.{
             .w = @max(switch_min_width, label.preferred.w + switch_label_gap + switch_width),
             .h = @max(switch_height, label.preferred.h),
@@ -55,7 +55,7 @@ pub const Switch = struct {
         return layout.Measurement.flexible(
             .{ .w = @min(switch_min_width, preferred.w), .h = @min(switch_height, preferred.h) },
             preferred,
-            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
+            .{ .w = component_primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
         ).applyExact(constraints);
     }
 

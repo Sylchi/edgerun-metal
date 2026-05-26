@@ -51,11 +51,11 @@ pub const RowItem = struct {
     pub fn measure(self: RowItem, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = options;
         const inner = constraints.inner(.{ .left = row_text_padding_x, .right = row_text_padding_x });
-        const title = layout.measureText(self.title, inner, titleMetrics(self.title));
+        const title = text_component.Text.measureValue(self.title, inner, titleMetrics(self.title));
         const detail = if (self.detail.len == 0)
             layout.Measurement.fixed(.{ .w = 0.0, .h = 0.0 })
         else
-            layout.measureText(self.detail, inner, detailMetrics(self.detail));
+            text_component.Text.measureValue(self.detail, inner, detailMetrics(self.detail));
         const gap: f32 = if (self.detail.len == 0) 0.0 else row_text_gap;
         const preferred = component_primitives.constrainPreferredSize(.{
             .w = @max(row_min_width, @max(title.preferred.w, detail.preferred.w) + row_text_padding_x * 2.0),
@@ -64,7 +64,7 @@ pub const RowItem = struct {
         return layout.Measurement.flexible(
             .{ .w = @min(row_min_width, preferred.w), .h = @min(row_min_height, preferred.h) },
             preferred,
-            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
+            .{ .w = component_primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
         ).applyExact(constraints);
     }
 
@@ -118,7 +118,7 @@ fn textWidth(bounds: ui.Rect) f32 {
 }
 
 fn measuredTextHeight(value: []const u8, width: f32, metrics: layout.TextMetrics) f32 {
-    return layout.measureText(value, .{ .width = .{ .at_most = width }, .text_wrap = .wrap }, metrics).preferred.h;
+    return text_component.Text.measureValue(value, .{ .width = .{ .at_most = width }, .text_wrap = .wrap }, metrics).preferred.h;
 }
 
 fn titleMetrics(value: []const u8) layout.TextMetrics {

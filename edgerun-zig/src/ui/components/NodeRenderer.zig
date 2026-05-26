@@ -92,7 +92,7 @@ fn primitiveNodeMeasurement(node: ui.Node, constraints: layouts.types.Constraint
     return layouts.types.Measurement.flexible(
         .{ .w = @min(size.w, preferred.w), .h = @min(size.h, preferred.h) },
         preferred,
-        .{ .w = primitives.measure_max_width, .h = size.h },
+        .{ .w = primitives.maxMeasuredWidth(constraints, preferred.w), .h = size.h },
     ).applyExact(constraints);
 }
 
