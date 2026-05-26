@@ -31,6 +31,7 @@ const rect_color2_b_index_js = std.fmt.comptimePrint("{d}", .{renderer_ir.rect_c
 const rect_color2_a_index_js = std.fmt.comptimePrint("{d}", .{renderer_ir.rect_color2_a_index});
 const rect_mode_index_js = std.fmt.comptimePrint("{d}", .{renderer_ir.rect_mode_index});
 const rect_mode_shadow_js = std.fmt.comptimePrint("{d}", .{renderer_ir.rect_mode_shadow});
+const texture_kind_red_js = std.fmt.comptimePrint("{d}", .{gl_contract.texture_kind_red});
 const text_vertex_float_stride_js = std.fmt.comptimePrint("{d}", .{renderer_ir.text_vertex_float_stride});
 const text_vertex_byte_stride_js = std.fmt.comptimePrint("{d}", .{renderer_ir.text_vertex_float_stride * @sizeOf(f32)});
 const textured_u_byte_offset_js = std.fmt.comptimePrint("{d}", .{renderer_ir.textured_u_index * @sizeOf(f32)});
@@ -124,7 +125,9 @@ pub const loader_js =
 ++ gl_contract.uniform_screen ++
     \\`),W.er_ui_width(),W.er_ui_height());if(!g)G.uniform1i(G.getUniformLocation(pt,`
 ++ gl_contract.uniform_texture_kind ++
-    \\`),0);G.bindTexture(G.TEXTURE_2D,t);G.bindBuffer(G.ARRAY_BUFFER,tb);G.bufferData(G.ARRAY_BUFFER,new Float32Array(M,p,l),G.DYNAMIC_DRAW);G.vertexAttribPointer(
+    \\`),
+++ texture_kind_red_js ++
+    \\);G.bindTexture(G.TEXTURE_2D,t);G.bindBuffer(G.ARRAY_BUFFER,tb);G.bufferData(G.ARRAY_BUFFER,new Float32Array(M,p,l),G.DYNAMIC_DRAW);G.vertexAttribPointer(
 ++ attr_pos_location_js ++
     \\,2,G.FLOAT,0,
 ++ text_vertex_byte_stride_js ++
@@ -256,12 +259,14 @@ test "generated entry has the only javascript byte bridge" {
     try std.testing.expect(contains("i+=" ++ rect_float_stride_js));
     try std.testing.expect(contains("m=a[i+" ++ rect_mode_index_js ++ "]"));
     try std.testing.expect(contains("sh=a[i+" ++ rect_shadow_index_js ++ "]"));
-    try std.testing.expect(contains("G.vertexAttribPointer(0,2,G.FLOAT,0," ++ text_vertex_byte_stride_js ++ ",0)"));
-    try std.testing.expect(contains("G.vertexAttribPointer(1,2,G.FLOAT,0," ++ text_vertex_byte_stride_js ++ "," ++ textured_u_byte_offset_js ++ ")"));
-    try std.testing.expect(contains("G.vertexAttribPointer(2,4,G.FLOAT,0," ++ text_vertex_byte_stride_js ++ "," ++ textured_color_byte_offset_js ++ ")"));
+    try std.testing.expect(contains("m==" ++ rect_mode_shadow_js ++ "?x-sh:x"));
+    try std.testing.expect(contains("G.uniform1i(G.getUniformLocation(pt,`" ++ gl_contract.uniform_texture_kind ++ "`)," ++ texture_kind_red_js ++ ")"));
+    try std.testing.expect(contains("G.vertexAttribPointer(" ++ attr_pos_location_js ++ ",2,G.FLOAT,0," ++ text_vertex_byte_stride_js ++ ",0)"));
+    try std.testing.expect(contains("G.vertexAttribPointer(" ++ attr_uv_location_js ++ ",2,G.FLOAT,0," ++ text_vertex_byte_stride_js ++ "," ++ textured_u_byte_offset_js ++ ")"));
+    try std.testing.expect(contains("G.vertexAttribPointer(" ++ attr_color_location_js ++ ",4,G.FLOAT,0," ++ text_vertex_byte_stride_js ++ "," ++ textured_color_byte_offset_js ++ ")"));
     try std.testing.expect(contains("G.drawArrays(G.TRIANGLES,0,l/" ++ text_vertex_float_stride_js ++ ")"));
-    try std.testing.expect(contains("G.vertexAttribPointer(0,2,G.FLOAT,0," ++ icon_line_vertex_byte_stride_js ++ ",0)"));
-    try std.testing.expect(contains("G.vertexAttribPointer(1,4,G.FLOAT,0," ++ icon_line_vertex_byte_stride_js ++ "," ++ icon_line_color_byte_offset_js ++ ")"));
+    try std.testing.expect(contains("G.vertexAttribPointer(" ++ attr_pos_location_js ++ ",2,G.FLOAT,0," ++ icon_line_vertex_byte_stride_js ++ ",0)"));
+    try std.testing.expect(contains("G.vertexAttribPointer(" ++ attr_color_location_js ++ ",4,G.FLOAT,0," ++ icon_line_vertex_byte_stride_js ++ "," ++ icon_line_color_byte_offset_js ++ ")"));
     try std.testing.expect(contains("G.drawArrays(G.TRIANGLES,0,l/" ++ icon_line_vertex_float_stride_js ++ ")"));
     try std.testing.expect(contains("er_ui_packed_rect_buffer_ptr"));
     try std.testing.expect(contains("er_ui_packed_text_vertex_buffer_ptr"));
