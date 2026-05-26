@@ -11,7 +11,7 @@ const component_primitives = @import("Primitives.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
-const measureFixed = component_primitives.measureFixed;
+const constrainPreferredSize = component_primitives.constrainPreferredSize;
 
 pub const Slider = struct {
     id: u32,
@@ -24,8 +24,9 @@ pub const Slider = struct {
 
     pub fn render(self: Slider, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         const clamped = ui.clampUnit(self.value);
-        try scene.pushText(ui.Rect.init(bounds.x, bounds.y, bounds.w, slider_label_height), self.label, options.style.text);
-        const track_y = bounds.y + @min(slider_track_top, @max(0.0, bounds.h - slider_track_height));
+        const label_h = @min(bounds.h, component_primitives.measuredTextHeight(self.label, bounds.w, slider_label_height, slider_label_max_lines));
+        try scene.pushWrappedText(ui.Rect.init(bounds.x, bounds.y, bounds.w, label_h), self.label, options.style.text, component_primitives.textWrap(self.label, slider_label_height, slider_label_max_lines));
+        const track_y = bounds.y + @min(label_h + slider_label_track_gap, @max(0.0, bounds.h - slider_track_height));
         const track = ui.Rect.init(bounds.x, track_y, bounds.w, slider_track_height);
         try renderTrack(scene, track, clamped, options);
         const thumb_center = track.x + track.w * clamped;
@@ -38,9 +39,17 @@ pub const Slider = struct {
     }
 
     pub fn measure(self: Slider, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
-        _ = self;
         _ = options;
-        return measureFixed(preferred_slider, constraints);
+        const label = layout.measureText(self.label, constraints, component_primitives.textMetrics(self.label, slider_label_height, slider_label_max_lines));
+        const preferred = constrainPreferredSize(.{
+            .w = @max(slider_min_width, label.preferred.w),
+            .h = label.preferred.h + slider_label_track_gap + @max(slider_track_height, slider_thumb_size),
+        }, constraints);
+        return layout.Measurement.flexible(
+            .{ .w = @min(slider_min_width, preferred.w), .h = @min(slider_min_height, preferred.h) },
+            preferred,
+            .{ .w = component_primitives.measure_max_width, .h = @max(preferred.h, preferred_slider.h) },
+        ).applyExact(constraints);
     }
 
     pub fn toObject(self: Slider, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -67,9 +76,12 @@ fn renderTrack(scene: *ui.Scene, track: ui.Rect, value: f32, options: RenderOpti
 }
 
 const slider_label_height: f32 = 14.0;
+const slider_label_max_lines: usize = 2;
+const slider_label_track_gap: f32 = 12.0;
 const slider_track_height: f32 = 6.0;
 pub const slider_thumb_size: f32 = 16.0;
-const slider_track_top: f32 = 26.0;
+const slider_min_width: f32 = 120.0;
+const slider_min_height: f32 = 32.0;
 pub const preferred_slider = ui.Size{ .w = 220.0, .h = 42.0 };
 
 test "slider component serializes to canonical object and deserializes" {
@@ -97,4 +109,13 @@ test "slider component clamps rendered fill and thumb to track" {
     try std.testing.expectEqual(@as(f32, 120.0), fill.w);
     const thumb = component_test.lastFillRect(scene.written()).?;
     try std.testing.expect(thumb.x + thumb.w <= bounds.x + bounds.w + slider_thumb_size * 0.5);
+}
+
+test "slider measurement wraps long labels under narrow constraints" {
+    const slider = Slider{ .id = 13, .label = "Runtime memory pressure limit", .value = 0.72 };
+
+    const measured = slider.measure(.{ .width = .{ .at_most = slider_min_width }, .text_wrap = .wrap }, .{});
+
+    try std.testing.expect(measured.preferred.w <= slider_min_width);
+    try std.testing.expect(measured.preferred.h > preferred_slider.h);
 }

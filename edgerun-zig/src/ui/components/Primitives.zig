@@ -2,6 +2,7 @@ const layout = @import("../../layouts/Types.zig");
 const common = @import("../../ui_component_common.zig");
 const interaction = @import("../../ui_interaction.zig");
 const std = @import("std");
+const text_metrics = @import("../../ui_text_metrics.zig");
 const tokens = @import("../../ui_tokens.zig");
 const ui = @import("../../ui.zig");
 
@@ -21,6 +22,26 @@ pub fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraint
         .w = constraints.width.limit(preferred.w),
         .h = constraints.height.limit(preferred.h),
     };
+}
+
+pub fn textMetrics(value: []const u8, line_height: f32, max_lines: usize) layout.TextMetrics {
+    return .{
+        .line_height = line_height,
+        .average_char_width = text_metrics.averageWidth(value, line_height),
+        .max_lines = max_lines,
+    };
+}
+
+pub fn textWrap(value: []const u8, line_height: f32, max_lines: usize) ui.TextWrap {
+    return .{
+        .line_height = line_height,
+        .average_char_width = text_metrics.averageWidth(value, line_height),
+        .max_lines = max_lines,
+    };
+}
+
+pub fn measuredTextHeight(value: []const u8, width: f32, line_height: f32, max_lines: usize) f32 {
+    return layout.measureText(value, .{ .width = .{ .at_most = width }, .text_wrap = .wrap }, textMetrics(value, line_height, max_lines)).preferred.h;
 }
 
 pub fn renderControlFrame(scene: *ui.Scene, bounds: ui.Rect, fill: ui.Color, border: ui.Color, radius: f32) ui.RenderError!void {

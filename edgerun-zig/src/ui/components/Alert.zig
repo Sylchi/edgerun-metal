@@ -11,7 +11,7 @@ const component_primitives = @import("Primitives.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
-const measureFixed = component_primitives.measureFixed;
+const constrainPreferredSize = component_primitives.constrainPreferredSize;
 
 pub const Alert = struct {
     title: []const u8,
@@ -31,18 +31,26 @@ pub const Alert = struct {
             .icon_id = icon.id(if (self.destructive) .warning else .shield),
             .color = content_color,
         });
-        try scene.pushText(ui.Rect.init(bounds.x + alert_text_x, bounds.y + alert_padding_y - 1.0, @max(component_primitives.min_extent, bounds.w - alert_text_x - alert_padding_x), alert_title_height), self.title, content_color);
-        try scene.pushWrappedText(ui.Rect.init(bounds.x + alert_text_x, bounds.y + alert_padding_y + alert_title_height + alert_detail_gap, @max(component_primitives.min_extent, bounds.w - alert_text_x - alert_padding_x), @max(component_primitives.min_extent, bounds.h - alert_padding_y * 2.0 - alert_title_height)), self.detail, if (self.destructive) alert_danger else options.style.muted, .{
-            .line_height = alert_detail_height,
-            .average_char_width = alert_detail_average_w,
-            .max_lines = alert_detail_max_lines,
-        });
+        const text_w = textWidth(bounds);
+        const title_h = component_primitives.measuredTextHeight(self.title, text_w, alert_title_height, alert_title_max_lines);
+        try scene.pushWrappedText(ui.Rect.init(bounds.x + alert_text_x, bounds.y + alert_padding_y - 1.0, text_w, title_h), self.title, content_color, component_primitives.textWrap(self.title, alert_title_height, alert_title_max_lines));
+        try scene.pushWrappedText(ui.Rect.init(bounds.x + alert_text_x, bounds.y + alert_padding_y + title_h + alert_detail_gap, text_w, @max(component_primitives.min_extent, bounds.h - alert_padding_y * 2.0 - title_h)), self.detail, if (self.destructive) alert_danger else options.style.muted, component_primitives.textWrap(self.detail, alert_detail_height, alert_detail_max_lines));
     }
 
     pub fn measure(self: Alert, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
-        _ = self;
         _ = options;
-        return measureFixed(preferred_alert, constraints);
+        const inner = constraints.inner(.{ .left = alert_text_x, .right = alert_padding_x });
+        const title = layout.measureText(self.title, inner, component_primitives.textMetrics(self.title, alert_title_height, alert_title_max_lines));
+        const detail = layout.measureText(self.detail, inner, component_primitives.textMetrics(self.detail, alert_detail_height, alert_detail_max_lines));
+        const preferred = constrainPreferredSize(.{
+            .w = @max(alert_min_width, @max(title.preferred.w, detail.preferred.w) + alert_text_x + alert_padding_x),
+            .h = alert_padding_y * 2.0 + @max(alert_icon_size, title.preferred.h + alert_detail_gap + detail.preferred.h),
+        }, constraints);
+        return layout.Measurement.flexible(
+            .{ .w = @min(alert_min_width, preferred.w), .h = @min(alert_min_height, preferred.h) },
+            preferred,
+            .{ .w = component_primitives.measure_max_width, .h = @max(preferred.h, preferred_alert.h) },
+        ).applyExact(constraints);
     }
 
     pub fn toObject(self: Alert, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -64,16 +72,22 @@ pub const Alert = struct {
     }
 };
 
+fn textWidth(bounds: ui.Rect) f32 {
+    return @max(component_primitives.min_extent, bounds.w - alert_text_x - alert_padding_x);
+}
+
 const alert_radius: f32 = 8.0;
 const alert_padding_x: f32 = 16.0;
 const alert_padding_y: f32 = 12.0;
 const alert_icon_size: f32 = 16.0;
 const alert_text_x: f32 = 44.0;
 const alert_title_height: f32 = 16.0;
+const alert_title_max_lines: usize = 2;
 const alert_detail_gap: f32 = 2.0;
 const alert_detail_height: f32 = 16.0;
-const alert_detail_average_w: f32 = 7.5;
 const alert_detail_max_lines: usize = 2;
+const alert_min_width: f32 = 160.0;
+const alert_min_height: f32 = 48.0;
 const alert_danger = ui.Color{ .r = 239, .g = 68, .b = 68 };
 pub const preferred_alert = ui.Size{ .w = 260.0, .h = 64.0 };
 
@@ -100,4 +114,17 @@ test "alert component renders title detail and destructive variant" {
     try std.testing.expect(component_test.hasText(scene.written(), "Heads up"));
     try std.testing.expect(component_test.hasText(scene.written(), "Status message"));
     try std.testing.expect(component_test.hasBorderAt(scene.written(), ui.Rect.init(0, 0, 260, 64)));
+}
+
+test "alert measurement wraps long title and detail under narrow constraints" {
+    const alert = Alert{
+        .title = "Runtime authority warning",
+        .detail = "The signed runtime path must explain the blocked action",
+        .destructive = true,
+    };
+
+    const measured = alert.measure(.{ .width = .{ .at_most = alert_min_width }, .text_wrap = .wrap }, .{});
+
+    try std.testing.expect(measured.preferred.w <= alert_min_width);
+    try std.testing.expect(measured.preferred.h > preferred_alert.h);
 }

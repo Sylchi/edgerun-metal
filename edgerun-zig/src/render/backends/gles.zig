@@ -1,6 +1,7 @@
 const std = @import("std");
 const icon_vector = @import("../../icon_vector.zig");
 const renderer_font_atlas = @import("../font_atlas.zig");
+const gl_contract = @import("../gl_contract.zig");
 const renderer_icon_mask = @import("../icon_mask.zig");
 const renderer_ir = @import("../ir.zig");
 const ui = @import("../../ui.zig");
@@ -84,14 +85,14 @@ pub fn init(font_atlas: *renderer_font_atlas.Atlas, image: ?RgbaTexture) !State 
         break :blk makeRgbaTexture(texture.width, texture.height, texture.pixels);
     } else null;
     return .{
-        .rect_program = try makeProgram(rect_vertex_shader, rect_fragment_shader),
-        .textured_program = try makeProgram(textured_vertex_shader, textured_fragment_shader),
-        .image_program = try makeProgram(textured_vertex_shader, image_fragment_shader),
-        .line_program = try makeProgram(line_vertex_shader, line_fragment_shader),
+        .rect_program = try makeProgram(gl_contract.rect_vertex_shader, gl_contract.rect_fragment_shader),
+        .textured_program = try makeProgram(gl_contract.textured_vertex_shader, gl_contract.text_fragment_shader),
+        .image_program = try makeProgram(gl_contract.textured_vertex_shader, gl_contract.image_fragment_shader),
+        .line_program = try makeProgram(gl_contract.line_vertex_shader, gl_contract.line_fragment_shader),
         .rect_vbo = makeBuffer(),
         .textured_vbo = makeBuffer(),
         .line_vbo = makeBuffer(),
-        .font_texture = makeNearestAlphaTexture(renderer_font_atlas.width, renderer_font_atlas.height, font_atlas.alphaSlice()),
+        .font_texture = makeAlphaTextureFiltered(renderer_font_atlas.width, renderer_font_atlas.height, font_atlas.alphaSlice(), c.GL_LINEAR),
         .image_texture = image_texture,
     };
 }
@@ -275,22 +276,22 @@ fn viewportScale(logical_width: i32, logical_height: i32, framebuffer_width: i32
 fn drawRects(gl: State, width: i32, height: i32, scale: f32, values: []const f32) !void {
     var iter = renderer_ir.RectIterator.init(values) catch return error.InvalidIrBuffer;
     c.glUseProgram(gl.rect_program);
-    c.glUniform2f(c.glGetUniformLocation(gl.rect_program, "u_screen"), @floatFromInt(width), @floatFromInt(height));
-    c.glUniform1f(c.glGetUniformLocation(gl.rect_program, "u_pixel_scale"), scale);
+    c.glUniform2f(c.glGetUniformLocation(gl.rect_program, gl_contract.uniform_screen), @floatFromInt(width), @floatFromInt(height));
+    c.glUniform1f(c.glGetUniformLocation(gl.rect_program, gl_contract.uniform_pixel_scale), scale);
     c.glBindBuffer(c.GL_ARRAY_BUFFER, gl.rect_vbo);
     const verts = [_]f32{ 0, 0, 1, 0, 0, 1, 1, 1 };
     c.glBufferData(c.GL_ARRAY_BUFFER, @intCast(verts.len * @sizeOf(f32)), &verts, c.GL_STATIC_DRAW);
-    c.glEnableVertexAttribArray(0);
-    c.glVertexAttribPointer(0, 2, c.GL_FLOAT, c.GL_FALSE, 2 * @sizeOf(f32), null);
+    c.glEnableVertexAttribArray(gl_contract.attr_pos_location);
+    c.glVertexAttribPointer(gl_contract.attr_pos_location, 2, c.GL_FLOAT, c.GL_FALSE, 2 * @sizeOf(f32), null);
     while (try iter.next()) |rect| {
         const draw_bounds = rectDrawBounds(rect);
-        c.glUniform4f(c.glGetUniformLocation(gl.rect_program, "u_rect"), draw_bounds.x, draw_bounds.y, draw_bounds.w, draw_bounds.h);
-        c.glUniform4f(c.glGetUniformLocation(gl.rect_program, "u_source_rect"), rect.bounds.x, rect.bounds.y, rect.bounds.w, rect.bounds.h);
-        c.glUniform4f(c.glGetUniformLocation(gl.rect_program, "u_color"), colorF(rect.color.r), colorF(rect.color.g), colorF(rect.color.b), colorF(rect.color.a));
-        c.glUniform4f(c.glGetUniformLocation(gl.rect_program, "u_color2"), colorF(rect.color2.r), colorF(rect.color2.g), colorF(rect.color2.b), colorF(rect.color2.a));
-        c.glUniform1f(c.glGetUniformLocation(gl.rect_program, "u_radius"), rect.radius);
-        c.glUniform1f(c.glGetUniformLocation(gl.rect_program, "u_shadow"), rect.shadow);
-        c.glUniform1i(c.glGetUniformLocation(gl.rect_program, "u_mode"), rectMode(rect.mode));
+        c.glUniform4f(c.glGetUniformLocation(gl.rect_program, gl_contract.uniform_rect), draw_bounds.x, draw_bounds.y, draw_bounds.w, draw_bounds.h);
+        c.glUniform4f(c.glGetUniformLocation(gl.rect_program, gl_contract.uniform_source_rect), rect.bounds.x, rect.bounds.y, rect.bounds.w, rect.bounds.h);
+        c.glUniform4f(c.glGetUniformLocation(gl.rect_program, gl_contract.uniform_color), colorF(rect.color.r), colorF(rect.color.g), colorF(rect.color.b), colorF(rect.color.a));
+        c.glUniform4f(c.glGetUniformLocation(gl.rect_program, gl_contract.uniform_color2), colorF(rect.color2.r), colorF(rect.color2.g), colorF(rect.color2.b), colorF(rect.color2.a));
+        c.glUniform1f(c.glGetUniformLocation(gl.rect_program, gl_contract.uniform_radius), rect.radius);
+        c.glUniform1f(c.glGetUniformLocation(gl.rect_program, gl_contract.uniform_shadow), rect.shadow);
+        c.glUniform1i(c.glGetUniformLocation(gl.rect_program, gl_contract.uniform_mode), rectMode(rect.mode));
         c.glDrawArrays(c.GL_TRIANGLE_STRIP, 0, 4);
     }
 }
@@ -322,30 +323,33 @@ fn drawAlphaTexturedWithProgram(gl: State, width: i32, height: i32, values: []co
     if (values.len == 0) return;
     if (values.len % renderer_ir.text_vertex_float_stride != 0) return error.InvalidIrBuffer;
     c.glUseProgram(program);
-    c.glUniform2f(c.glGetUniformLocation(program, "u_screen"), @floatFromInt(width), @floatFromInt(height));
-    c.glUniform2f(c.glGetUniformLocation(program, "u_tex_size"), @floatFromInt(texture_width), @floatFromInt(texture_height));
-    c.glUniform1i(c.glGetUniformLocation(program, "u_manual_bilinear"), if (manual_bilinear) 1 else 0);
+    _ = manual_bilinear;
+    _ = texture_width;
+    _ = texture_height;
+    c.glUniform2f(c.glGetUniformLocation(program, gl_contract.uniform_screen), @floatFromInt(width), @floatFromInt(height));
     c.glActiveTexture(c.GL_TEXTURE0);
     c.glBindTexture(c.GL_TEXTURE_2D, texture);
-    c.glUniform1i(c.glGetUniformLocation(program, "u_tex"), 0);
+    c.glUniform1i(c.glGetUniformLocation(program, gl_contract.uniform_texture), 0);
+    if (program == gl.textured_program) c.glUniform1i(c.glGetUniformLocation(program, gl_contract.uniform_texture_kind), 1);
     c.glBindBuffer(c.GL_ARRAY_BUFFER, gl.textured_vbo);
     c.glBufferData(c.GL_ARRAY_BUFFER, @intCast(values.len * @sizeOf(f32)), values.ptr, c.GL_DYNAMIC_DRAW);
-    c.glEnableVertexAttribArray(0);
-    c.glEnableVertexAttribArray(1);
-    c.glEnableVertexAttribArray(2);
-    c.glVertexAttribPointer(0, 2, c.GL_FLOAT, c.GL_FALSE, renderer_ir.text_vertex_float_stride * @sizeOf(f32), null);
-    c.glVertexAttribPointer(1, 2, c.GL_FLOAT, c.GL_FALSE, renderer_ir.text_vertex_float_stride * @sizeOf(f32), @ptrFromInt(2 * @sizeOf(f32)));
-    c.glVertexAttribPointer(2, 4, c.GL_FLOAT, c.GL_FALSE, renderer_ir.text_vertex_float_stride * @sizeOf(f32), @ptrFromInt(4 * @sizeOf(f32)));
+    c.glEnableVertexAttribArray(gl_contract.attr_pos_location);
+    c.glEnableVertexAttribArray(gl_contract.attr_uv_location);
+    c.glEnableVertexAttribArray(gl_contract.attr_color_location);
+    c.glVertexAttribPointer(gl_contract.attr_pos_location, 2, c.GL_FLOAT, c.GL_FALSE, renderer_ir.text_vertex_float_stride * @sizeOf(f32), null);
+    c.glVertexAttribPointer(gl_contract.attr_uv_location, 2, c.GL_FLOAT, c.GL_FALSE, renderer_ir.text_vertex_float_stride * @sizeOf(f32), @ptrFromInt(2 * @sizeOf(f32)));
+    c.glVertexAttribPointer(gl_contract.attr_color_location, 4, c.GL_FLOAT, c.GL_FALSE, renderer_ir.text_vertex_float_stride * @sizeOf(f32), @ptrFromInt(4 * @sizeOf(f32)));
     c.glDrawArrays(c.GL_TRIANGLES, 0, @intCast(values.len / renderer_ir.text_vertex_float_stride));
 }
 
 fn drawIcons(gl: State, width: i32, height: i32, values: []const f32) !void {
     var iter = renderer_ir.IconIterator.init(values) catch return error.InvalidIrBuffer;
     c.glUseProgram(gl.line_program);
-    c.glUniform2f(c.glGetUniformLocation(gl.line_program, "u_screen"), @floatFromInt(width), @floatFromInt(height));
+    c.glUniform2f(c.glGetUniformLocation(gl.line_program, gl_contract.uniform_screen), @floatFromInt(width), @floatFromInt(height));
     c.glBindBuffer(c.GL_ARRAY_BUFFER, gl.line_vbo);
-    c.glEnableVertexAttribArray(0);
-    c.glVertexAttribPointer(0, 2, c.GL_FLOAT, c.GL_FALSE, 2 * @sizeOf(f32), null);
+    c.glEnableVertexAttribArray(gl_contract.attr_pos_location);
+    c.glDisableVertexAttribArray(gl_contract.attr_color_location);
+    c.glVertexAttribPointer(gl_contract.attr_pos_location, 2, c.GL_FLOAT, c.GL_FALSE, 2 * @sizeOf(f32), null);
     while (iter.next() catch return error.InvalidIrBuffer) |instance| {
         try drawIconInstance(gl, width, height, instance);
     }
@@ -353,7 +357,7 @@ fn drawIcons(gl: State, width: i32, height: i32, values: []const f32) !void {
 
 fn drawIconInstance(gl: State, screen_width: i32, screen_height: i32, instance: renderer_ir.IconInstance) !void {
     if (try drawIconAlphaMask(gl, screen_width, screen_height, instance)) return;
-    c.glUniform4f(c.glGetUniformLocation(gl.line_program, "u_color"), colorF(instance.color.r), colorF(instance.color.g), colorF(instance.color.b), colorF(instance.color.a));
+    c.glVertexAttrib4f(gl_contract.attr_color_location, colorF(instance.color.r), colorF(instance.color.g), colorF(instance.color.b), colorF(instance.color.a));
     var iter = renderer_ir.iconOpIteratorForId(instance.icon_id);
     var path = IconPathState{};
     while (iter.next() catch return error.InvalidIrBuffer) |op| {
@@ -656,6 +660,9 @@ fn makeProgram(vertex_source: [:0]const u8, fragment_source: [:0]const u8) !c.GL
     const program = c.glCreateProgram();
     c.glAttachShader(program, vertex);
     c.glAttachShader(program, fragment);
+    c.glBindAttribLocation(program, gl_contract.attr_pos_location, gl_contract.attr_pos);
+    c.glBindAttribLocation(program, gl_contract.attr_uv_location, gl_contract.attr_uv);
+    c.glBindAttribLocation(program, gl_contract.attr_color_location, gl_contract.attr_color);
     c.glLinkProgram(program);
     var ok: c.GLint = 0;
     c.glGetProgramiv(program, c.GL_LINK_STATUS, &ok);
@@ -693,140 +700,6 @@ fn rectMode(mode: ui.RectMode) c.GLint {
         .pie_slice => 0,
     };
 }
-
-const rect_vertex_shader =
-    \\attribute vec2 a_pos;
-    \\uniform vec2 u_screen;
-    \\uniform vec4 u_rect;
-    \\void main() {
-    \\  vec2 px = u_rect.xy + a_pos * u_rect.zw;
-    \\  vec2 ndc = vec2(px.x / u_screen.x * 2.0 - 1.0, 1.0 - px.y / u_screen.y * 2.0);
-    \\  gl_Position = vec4(ndc, 0.0, 1.0);
-    \\}
-;
-
-const rect_fragment_shader =
-    \\precision highp float;
-    \\uniform vec2 u_screen;
-    \\uniform vec4 u_rect;
-    \\uniform vec4 u_source_rect;
-    \\uniform vec4 u_color;
-    \\uniform vec4 u_color2;
-    \\uniform float u_radius;
-    \\uniform float u_shadow;
-    \\uniform float u_pixel_scale;
-    \\uniform int u_mode;
-    \\float rounded_box(vec2 p, vec2 b, float r) {
-    \\  vec2 q = abs(p) - b + vec2(r);
-    \\  return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
-    \\}
-    \\vec4 premul(vec4 color, float alpha) {
-    \\  float out_alpha = color.a * alpha;
-    \\  return vec4(color.rgb * out_alpha, out_alpha);
-    \\}
-    \\void main() {
-    \\  float aa = 1.0 / max(u_pixel_scale, 1.0);
-    \\  vec2 px = vec2(gl_FragCoord.x / max(u_pixel_scale, 1.0), u_screen.y - gl_FragCoord.y / max(u_pixel_scale, 1.0));
-    \\  vec2 p = px - u_rect.xy - u_rect.zw * 0.5;
-    \\  float d = rounded_box(p, u_rect.zw * 0.5, u_radius);
-    \\  float alpha = clamp(-d / aa, 0.0, 1.0);
-    \\  if (u_radius <= 0.0) alpha = 1.0;
-    \\  alpha = floor(alpha * 255.0 + 0.5) / 255.0;
-    \\  if (u_mode == 1) {
-    \\    vec2 sp = px - u_source_rect.xy - u_source_rect.zw * 0.5;
-    \\    float sd = rounded_box(sp, u_source_rect.zw * 0.5, u_radius);
-    \\    if (sd <= 0.0 || sd >= u_shadow) discard;
-    \\    float t = 1.0 - sd / max(u_shadow, 0.001);
-    \\    gl_FragColor = premul(u_color, t * t * 0.34);
-    \\  } else if (u_mode == 2) {
-    \\    float inner = rounded_box(p, u_rect.zw * 0.5 - vec2(1.0), max(u_radius - 1.0, 0.0));
-    \\    float border = clamp(-d / aa, 0.0, 1.0) * clamp(inner / aa, 0.0, 1.0);
-    \\    gl_FragColor = premul(u_color, border);
-    \\  } else if (u_mode == 3) {
-    \\    float t = clamp((px.y - u_rect.y) / max(u_rect.w, 1.0), 0.0, 1.0);
-    \\    vec4 color = mix(u_color, u_color2, t);
-    \\    gl_FragColor = premul(color, alpha);
-    \\  } else {
-    \\    gl_FragColor = premul(u_color, alpha);
-    \\  }
-    \\}
-;
-
-const textured_vertex_shader =
-    \\attribute vec2 a_pos;
-    \\attribute vec2 a_uv;
-    \\attribute vec4 a_color;
-    \\uniform vec2 u_screen;
-    \\varying vec2 v_uv;
-    \\varying vec4 v_color;
-    \\void main() {
-    \\  vec2 ndc = vec2(a_pos.x / u_screen.x * 2.0 - 1.0, 1.0 - a_pos.y / u_screen.y * 2.0);
-    \\  gl_Position = vec4(ndc, 0.0, 1.0);
-    \\  v_uv = a_uv;
-    \\  v_color = a_color;
-    \\}
-;
-
-const textured_fragment_shader =
-    \\precision highp float;
-    \\varying vec2 v_uv;
-    \\varying vec4 v_color;
-    \\uniform sampler2D u_tex;
-    \\uniform vec2 u_tex_size;
-    \\uniform int u_manual_bilinear;
-    \\float sample_alpha_nearest(vec2 uv) {
-    \\  return texture2D(u_tex, uv).a;
-    \\}
-    \\float sample_alpha_bilinear(vec2 uv) {
-    \\  vec2 scaled = clamp(clamp(uv, vec2(0.0), vec2(1.0)) * u_tex_size - vec2(0.5), vec2(0.0), u_tex_size - vec2(1.0));
-    \\  vec2 base = floor(scaled);
-    \\  vec2 fracv = scaled - base;
-    \\  vec2 texel = vec2(1.0) / u_tex_size;
-    \\  vec2 uv00 = (base + vec2(0.5, 0.5)) * texel;
-    \\  vec2 uv10 = (min(base + vec2(1.0, 0.0), u_tex_size - vec2(1.0)) + vec2(0.5, 0.5)) * texel;
-    \\  vec2 uv01 = (min(base + vec2(0.0, 1.0), u_tex_size - vec2(1.0)) + vec2(0.5, 0.5)) * texel;
-    \\  vec2 uv11 = (min(base + vec2(1.0, 1.0), u_tex_size - vec2(1.0)) + vec2(0.5, 0.5)) * texel;
-    \\  float a00 = texture2D(u_tex, uv00).a;
-    \\  float a10 = texture2D(u_tex, uv10).a;
-    \\  float a01 = texture2D(u_tex, uv01).a;
-    \\  float a11 = texture2D(u_tex, uv11).a;
-    \\  return mix(mix(a00, a10, fracv.x), mix(a01, a11, fracv.x), fracv.y);
-    \\}
-    \\void main() {
-    \\  float a = u_manual_bilinear == 1 ? sample_alpha_bilinear(v_uv) : sample_alpha_nearest(v_uv);
-    \\  float out_alpha = v_color.a * a;
-    \\  gl_FragColor = vec4(v_color.rgb * out_alpha, out_alpha);
-    \\}
-;
-
-const image_fragment_shader =
-    \\precision highp float;
-    \\varying vec2 v_uv;
-    \\varying vec4 v_color;
-    \\uniform sampler2D u_tex;
-    \\void main() {
-    \\  vec4 texel = texture2D(u_tex, v_uv);
-    \\  float out_alpha = texel.a * v_color.a;
-    \\  gl_FragColor = vec4(texel.rgb * v_color.rgb * out_alpha, out_alpha);
-    \\}
-;
-
-const line_vertex_shader =
-    \\attribute vec2 a_pos;
-    \\uniform vec2 u_screen;
-    \\void main() {
-    \\  vec2 ndc = vec2(a_pos.x / u_screen.x * 2.0 - 1.0, 1.0 - a_pos.y / u_screen.y * 2.0);
-    \\  gl_Position = vec4(ndc, 0.0, 1.0);
-    \\}
-;
-
-const line_fragment_shader =
-    \\precision mediump float;
-    \\uniform vec4 u_color;
-    \\void main() {
-    \\  gl_FragColor = vec4(u_color.rgb * u_color.a, u_color.a);
-    \\}
-;
 
 test "software GL renderer names are rejected" {
     try std.testing.expect(isSoftwareRenderer("llvmpipe (LLVM 22.1.3, 256 bits)"));
