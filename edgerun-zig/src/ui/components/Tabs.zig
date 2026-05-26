@@ -14,7 +14,6 @@ const list_layout = @import("ListLayout.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-const measureFixed = primitives.measureFixed;
 const renderControlText = primitives.renderControlText;
 
 pub const Tabs = struct {
@@ -37,10 +36,14 @@ pub const Tabs = struct {
         try scene.pushRect(list, options.style.row, .fill, tabs_list_radius, 0.0);
         try renderTrigger(scene, triggerBounds(list, 0), self.first, active == 0, options);
         try renderTrigger(scene, triggerBounds(list, 1), self.second, active == 1, options);
-        const panel = ui.Rect.init(bounds.x, bounds.y + tabs_list_h + tabs_gap, bounds.w, @max(primitives.min_extent, bounds.h - tabs_list_h - tabs_gap));
+        const panel = panelBounds(bounds, list);
         try scene.pushRect(panel, options.style.panel, .fill, primitives.control_radius, 0.0);
         try scene.pushRect(panel, options.style.border, .border, primitives.control_radius, 0.0);
-        try text_component.Text.renderPlain(scene, ui.Rect.init(panel.x + tabs_panel_padding, panel.y + tabs_panel_padding, @max(primitives.min_extent, panel.w - tabs_panel_padding * 2.0), primitives.control_label_height), if (active == 1) self.second else self.first, options.style.muted);
+        const label = if (active == 1) self.second else self.first;
+        if (primitives.contentInset(panel, tabs_panel_padding)) |content| {
+            const text_h = @min(content.h, primitives.measuredTextHeight(label, content.w, primitives.control_label_height, tabs_panel_max_lines));
+            try text_component.Text.renderWrapped(scene, content.withHeightCentered(text_h), label, options.style.muted, primitives.textWrap(label, primitives.control_label_height, tabs_panel_max_lines));
+        }
     }
 
     pub fn collectInteractions(self: Tabs, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
@@ -48,9 +51,30 @@ pub const Tabs = struct {
     }
 
     pub fn measure(self: Tabs, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
-        _ = self;
         _ = options;
-        return measureFixed(preferred_tabs, constraints);
+        const labels = [_][]const u8{ self.first, self.second };
+        const list = list_layout.measureSegments(&labels, constraints, .{
+            .item_count = tabs_item_count,
+            .padding = tabs_trigger_padding + tabs_list_padding,
+        });
+        const panel_label = if (activeIndex(self.active) == 1) self.second else self.first;
+        const panel = text_component.Text.measureValue(
+            panel_label,
+            constraints.inner(.{ .left = tabs_panel_padding, .right = tabs_panel_padding, .top = tabs_panel_padding, .bottom = tabs_panel_padding }),
+            primitives.textMetrics(panel_label, primitives.control_label_height, tabs_panel_max_lines),
+        ).withInsets(.{ .left = tabs_panel_padding, .right = tabs_panel_padding, .top = tabs_panel_padding, .bottom = tabs_panel_padding });
+        const preferred = primitives.constrainPreferredSize(.{
+            .w = @max(list.preferred.w, panel.preferred.w),
+            .h = list.preferred.h + tabs_gap + panel.preferred.h,
+        }, constraints);
+        return layout.Measurement.flexible(
+            .{
+                .w = @max(list.min.w, panel.min.w),
+                .h = list.min.h + tabs_gap + panel.min.h,
+            },
+            preferred,
+            .{ .w = primitives.measure_max_width, .h = @max(preferred.h, list.max.h + tabs_gap + panel.max.h) },
+        ).applyExact(constraints);
     }
 
     pub fn toObject(self: Tabs, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -84,7 +108,13 @@ fn encodedId(id: u32, active: u16) u32 {
 }
 
 fn listBounds(bounds: ui.Rect) ui.Rect {
-    return ui.Rect.init(bounds.x, bounds.y, @min(bounds.w, tabs_list_w), tabs_list_h);
+    const height = @min(bounds.h, primitives.control_label_height + (tabs_trigger_padding + tabs_list_padding) * 2.0);
+    return ui.Rect.init(bounds.x, bounds.y, bounds.w, height);
+}
+
+fn panelBounds(bounds: ui.Rect, list: ui.Rect) ui.Rect {
+    const y = list.y + list.h + tabs_gap;
+    return ui.Rect.init(bounds.x, y, bounds.w, @max(primitives.min_extent, bounds.y + bounds.h - y));
 }
 
 fn triggerBounds(list: ui.Rect, index: usize) ui.Rect {
@@ -96,18 +126,16 @@ fn renderTrigger(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, active: b
         try scene.pushRect(bounds, options.style.panel, .fill, primitives.control_radius, 0.0);
         try scene.pushRect(bounds, options.style.border, .border, primitives.control_radius, 0.0);
     }
-    try renderControlText(scene, bounds, toggle_text_padding, primitives.control_label_height, label, if (active) options.style.text else options.style.muted, .center);
+    try renderControlText(scene, bounds, tabs_trigger_padding, primitives.control_label_height, label, if (active) options.style.text else options.style.muted, .center);
 }
 
 const tabs_item_count: u16 = 2;
-const preferred_tabs = ui.Size{ .w = 220.0, .h = 84.0 };
-const tabs_list_w: f32 = 184.0;
-const tabs_list_h: f32 = 36.0;
 const tabs_list_padding: f32 = 3.0;
 const tabs_list_radius: f32 = 8.0;
 const tabs_gap: f32 = 8.0;
 const tabs_panel_padding: f32 = 10.0;
-const toggle_text_padding: f32 = 8.0;
+const tabs_trigger_padding: f32 = 8.0;
+const tabs_panel_max_lines: usize = 2;
 
 test "tabs component serializes to canonical object and deserializes" {
     const tabs = Tabs{ .id = 80, .first = "Account", .second = "Password", .active = 1 };
@@ -137,4 +165,15 @@ test "tabs component renders active trigger and trigger hits" {
     try std.testing.expect(component_test.hasText(scene.written(), "Password"));
     try std.testing.expectEqual(@as(usize, 2), collector.written().len);
     try std.testing.expectEqual(@as(u32, 81), collector.written()[1].id);
+}
+
+test "tabs measurement follows tab and panel labels" {
+    const short = Tabs{ .id = 80, .first = "A", .second = "B", .active = 0 };
+    const long = Tabs{ .id = 80, .first = "Runtime", .second = "Authority Model", .active = 1 };
+
+    const short_measured = short.measure(.{}, .{});
+    const long_measured = long.measure(.{}, .{});
+
+    try std.testing.expect(long_measured.preferred.w > short_measured.preferred.w);
+    try std.testing.expect(long_measured.preferred.h >= short_measured.preferred.h);
 }

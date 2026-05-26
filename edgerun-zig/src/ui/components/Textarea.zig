@@ -15,7 +15,6 @@ const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
 const contentInset = component_primitives.contentInset;
-const measureFixed = component_primitives.measureFixed;
 
 pub const Textarea = struct {
     id: u32,
@@ -46,9 +45,25 @@ pub const Textarea = struct {
     }
 
     pub fn measure(self: Textarea, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
-        _ = self;
         _ = options;
-        return measureFixed(preferred_textarea, constraints);
+        const text = text_component.Text.measureValue(
+            self.placeholder,
+            constraints.inner(.{ .left = textarea_padding, .right = textarea_padding, .top = textarea_padding, .bottom = textarea_padding }),
+            .{
+                .line_height = component_primitives.control_label_height,
+                .average_char_width = control_average_char_width,
+                .max_lines = textarea_max_lines,
+            },
+        ).withInsets(.{ .left = textarea_padding, .right = textarea_padding, .top = textarea_padding, .bottom = textarea_padding });
+        const preferred = component_primitives.constrainPreferredSize(text.preferred, constraints);
+        return layout.Measurement.flexible(
+            .{
+                .w = @min(textarea_min_width, preferred.w),
+                .h = @min(component_primitives.control_label_height + textarea_padding * 2.0, preferred.h),
+            },
+            preferred,
+            .{ .w = component_primitives.measure_max_width, .h = @max(preferred.h, text.max.h) },
+        ).applyExact(constraints);
     }
 
     pub fn toObject(self: Textarea, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -107,7 +122,7 @@ fn lineEndAt(value: []const u8, start: usize) usize {
 const control_average_char_width: f32 = tokens.Component.control_average_char_width;
 const textarea_padding: f32 = 12.0;
 const textarea_max_lines: usize = 4;
-pub const preferred_textarea = ui.Size{ .w = 220.0, .h = 88.0 };
+const textarea_min_width: f32 = 96.0;
 
 test "textarea component serializes to canonical object and deserializes" {
     const textarea = Textarea{ .id = 21, .placeholder = "Describe this app" };
@@ -151,4 +166,11 @@ test "textarea text grid maps pointer position to byte cursor" {
     try std.testing.expectEqual(@as(usize, 4), cursorFromPoint(value, bounds, 68.0, 44.0, grid));
     try std.testing.expectEqual(@as(usize, 7), cursorFromPoint(value, bounds, 200.0, 44.0, grid));
     try std.testing.expectEqual(value.len, cursorFromPoint(value, bounds, 200.0, 80.0, grid));
+}
+
+test "textarea measurement follows placeholder text" {
+    const short = Textarea{ .id = 21, .placeholder = "Note" };
+    const long = Textarea{ .id = 21, .placeholder = "Describe the runtime authority and receipt flow" };
+
+    try std.testing.expect(long.measure(.{}, .{}).preferred.w > short.measure(.{}, .{}).preferred.w);
 }

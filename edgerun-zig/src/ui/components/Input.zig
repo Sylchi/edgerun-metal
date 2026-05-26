@@ -14,7 +14,6 @@ const primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-const measureFixed = primitives.measureFixed;
 const renderControlFrame = primitives.renderControlFrame;
 const renderControlStateOverlay = primitives.renderControlStateOverlay;
 const renderControlText = primitives.renderControlText;
@@ -50,8 +49,19 @@ pub const Input = struct {
     }
 
     pub fn measure(self: Input, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
-        _ = self;
-        return measureFixed(preferredSize(options.control_size), constraints);
+        const padding = inputPadding(options.control_size);
+        const icon_w = if (leadingIcon(self.icon_slot) != null) input_icon_size + input_icon_gap else 0.0;
+        const label = text_component.Text.measureValue(self.placeholder, .{ .width = .unconstrained, .text_wrap = .nowrap }, primitives.textMetrics(self.placeholder, primitives.control_label_height, input_label_max_lines));
+        const height = controlHeight(options.control_size);
+        const preferred = primitives.constrainPreferredSize(.{
+            .w = label.preferred.w + padding * 2.0 + icon_w,
+            .h = @max(height, label.preferred.h + padding * 2.0),
+        }, constraints);
+        return layout.Measurement.flexible(
+            .{ .w = @min(input_min_width, preferred.w), .h = @min(height, preferred.h) },
+            preferred,
+            .{ .w = primitives.measure_max_width, .h = @max(preferred.h, height) },
+        ).applyExact(constraints);
     }
 
     pub fn toObject(self: Input, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -88,10 +98,14 @@ fn leadingIconTag(slot: IconSlot) u16 {
 }
 
 pub fn preferredSize(size: common.ControlSize) ui.Size {
+    return .{ .w = input_min_width, .h = controlHeight(size) };
+}
+
+fn controlHeight(size: common.ControlSize) f32 {
     return switch (size) {
-        .small => .{ .w = 180.0, .h = 32.0 },
-        .default => preferred_input,
-        .large => .{ .w = 260.0, .h = 48.0 },
+        .small => 32.0,
+        .default => 40.0,
+        .large => 48.0,
     };
 }
 
@@ -103,9 +117,10 @@ fn inputPadding(size: common.ControlSize) f32 {
     };
 }
 
-const preferred_input = ui.Size{ .w = 220.0, .h = 40.0 };
+const input_min_width: f32 = 44.0;
 const input_icon_size: f32 = 16.0;
 const input_icon_gap: f32 = 8.0;
+const input_label_max_lines: usize = 1;
 
 test "input component serializes to canonical object and deserializes" {
     const input = Input{ .id = 10, .placeholder = "Search objects", .icon_slot = IconSlot.named(.leading, .search) };
@@ -167,4 +182,11 @@ test "input component size variants adjust preferred height and padding" {
     try std.testing.expect(small.preferred.h < regular.preferred.h);
     try std.testing.expect(large.preferred.h > regular.preferred.h);
     try std.testing.expectEqual(@as(f32, 20.0), placeholder.text.origin.x);
+}
+
+test "input measurement follows placeholder text" {
+    const short = Input{ .id = 10, .placeholder = "IP" };
+    const long = Input{ .id = 10, .placeholder = "Search runtime authority receipts" };
+
+    try std.testing.expect(long.measure(.{}, .{}).preferred.w > short.measure(.{}, .{}).preferred.w);
 }

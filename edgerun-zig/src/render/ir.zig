@@ -699,8 +699,10 @@ fn snapGlyphQuad(x: f32, y: f32, w: f32, h: f32) ui.Rect {
 fn textClipBounds(bounds: ui.Rect, metrics_value: TextMetrics) ui.Rect {
     const top_extra = @max(0.0, metrics_value.ascender - bounds.h);
     const bottom_extra = @max(0.0, -metrics_value.descender);
-    return ui.Rect.init(bounds.x, bounds.y - top_extra, bounds.w, bounds.h + top_extra + bottom_extra);
+    return ui.Rect.init(bounds.x - glyph_clip_pad, bounds.y - top_extra, bounds.w + glyph_clip_pad * 2.0, bounds.h + top_extra + bottom_extra);
 }
+
+const glyph_clip_pad: f32 = 2.0;
 
 fn textAlignOffset(font: FontAtlas, value: []const u8, px: u8, width: f32, alignment: ui.TextAlign) f32 {
     const measured = font.width(font.context, value, px);
@@ -793,6 +795,21 @@ fn testGlyph(_: *anyopaque, ch: u8, _: u8) Error!?Glyph {
         .w = 6.0,
         .h = 9.0,
         .left = 1.0,
+        .top = -8.0,
+        .advance = 8.0,
+    };
+}
+
+fn overhangTestGlyph(_: *anyopaque, ch: u8, _: u8) Error!?Glyph {
+    if (ch == ' ') return null;
+    return .{
+        .u0 = 0.0,
+        .v0 = 0.0,
+        .u1 = 0.5,
+        .v1 = 0.5,
+        .w = 8.0,
+        .h = 9.0,
+        .left = -3.0,
         .top = -8.0,
         .advance = 8.0,
     };
@@ -930,6 +947,17 @@ test "renderer ir fixed buffers expose writable canonical buffer view" {
     try std.testing.expectEqual(@as(usize, 1), try primitiveCount(buffers));
     const rect = try rectAt(storage.rects[0..storage.rect_len], 0);
     try std.testing.expectEqual(ui.Color.accent, rect.color);
+}
+
+test "renderer ir text clip preserves glyph side bearings" {
+    var storage = FixedBuffers(0, textured_quad_vertex_count, 0, 0, 0, 0, 0, 0, 0){};
+    const buffers = storage.buffers();
+    var source_context: u8 = 0;
+
+    try pushText(buffers, .{ .context = &source_context, .metrics = testFontMetrics, .width = testTextWidth, .glyph = overhangTestGlyph }, .base, ui.Rect.init(10, 4, 40, 16), "T", .text, .start);
+
+    try std.testing.expectEqual(text_vertex_float_stride * textured_quad_vertex_count, storage.text_vertex_len);
+    try std.testing.expectEqual(@as(f32, 8.0), storage.text_vertices[textured_x_index]);
 }
 
 test "renderer ir iterates rects and textured quads" {

@@ -14,8 +14,6 @@ const list_layout = @import("ListLayout.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-const measureFixed = component_primitives.measureFixed;
-
 pub const RadioGroup = struct {
     id: u32,
     first: []const u8,
@@ -38,9 +36,19 @@ pub const RadioGroup = struct {
     }
 
     pub fn measure(self: RadioGroup, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
-        _ = self;
         _ = options;
-        return measureFixed(preferred_radio_group, constraints);
+        const first = labelMeasure(self.first);
+        const second = labelMeasure(self.second);
+        const option_h = optionHeight();
+        const preferred = component_primitives.constrainPreferredSize(.{
+            .w = radio_box_size + radio_text_gap + @max(first.preferred.w, second.preferred.w),
+            .h = option_h * @as(f32, @floatFromInt(radio_item_count)) + radio_option_gap * @as(f32, @floatFromInt(radio_item_count - 1)),
+        }, constraints);
+        return layout.Measurement.flexible(
+            .{ .w = radio_box_size + radio_text_gap + component_primitives.min_extent, .h = option_h },
+            preferred,
+            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
+        ).applyExact(constraints);
     }
 
     pub fn toObject(self: RadioGroup, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -88,16 +96,24 @@ fn renderOption(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, selected: 
 }
 
 fn optionBounds(bounds: ui.Rect, index: usize) ui.Rect {
-    const y = bounds.y + @as(f32, @floatFromInt(index)) * radio_option_pitch;
-    return ui.Rect.init(bounds.x, y, bounds.w, radio_option_h);
+    const option_h = optionHeight();
+    const y = bounds.y + @as(f32, @floatFromInt(index)) * (option_h + radio_option_gap);
+    return ui.Rect.init(bounds.x, y, bounds.w, option_h);
+}
+
+fn optionHeight() f32 {
+    return @max(radio_box_size, component_primitives.control_label_height);
+}
+
+fn labelMeasure(value: []const u8) layout.Measurement {
+    return text_component.Text.measureValue(value, .{ .width = .unconstrained, .text_wrap = .nowrap }, component_primitives.textMetrics(value, component_primitives.control_label_height, radio_label_max_lines));
 }
 
 const radio_box_size: f32 = 18.0;
 const radio_text_gap: f32 = 10.0;
 const radio_dot_size: f32 = 8.0;
-const radio_option_h: f32 = 20.0;
-const radio_option_pitch: f32 = 26.0;
-pub const preferred_radio_group = ui.Size{ .w = 220.0, .h = 52.0 };
+const radio_option_gap: f32 = 6.0;
+const radio_label_max_lines: usize = 1;
 
 test "radio group component serializes to canonical object and deserializes" {
     const radio = RadioGroup{ .id = 70, .first = "Default", .second = "Comfortable", .selected = 1 };
@@ -126,4 +142,11 @@ test "radio group component renders selected indicator and option hits" {
     try std.testing.expect(component_test.hasFillColor(scene.written(), ui.Color.accent));
     try std.testing.expectEqual(@as(usize, 2), collector.written().len);
     try std.testing.expectEqual(@as(u32, 71), collector.written()[1].id);
+}
+
+test "radio group measurement follows option labels" {
+    const short = RadioGroup{ .id = 70, .first = "A", .second = "B", .selected = 0 };
+    const long = RadioGroup{ .id = 70, .first = "Default", .second = "Comfortable runtime mode", .selected = 1 };
+
+    try std.testing.expect(long.measure(.{}, .{}).preferred.w > short.measure(.{}, .{}).preferred.w);
 }
