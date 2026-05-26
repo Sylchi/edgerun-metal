@@ -1,9 +1,9 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
-const component_contract = @import("ComponentContract.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
+const text_component = @import("Text.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
@@ -12,7 +12,7 @@ const primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = component_contract.registration("scroll_area", ScrollArea);
+pub const registration = .{ .name = "scroll_area", .Payload = ScrollArea };
 const measureFixed = primitives.measureFixed;
 
 pub const ScrollArea = struct {
@@ -29,7 +29,7 @@ pub const ScrollArea = struct {
         const metrics = scrollAreaMetrics(bounds, options.scroll);
         const viewport = viewportBounds(bounds);
         if (try scene.pushClip(viewport)) {
-            try scene.pushText(ui.Rect.init(viewport.x, viewport.y + scroll_area_content_y - metrics.offset_y, viewport.w, scroll_area_text_h), scroll_area_label, options.style.text);
+            try text_component.Text.renderPlain(scene, ui.Rect.init(viewport.x, viewport.y + scroll_area_content_y - metrics.offset_y, viewport.w, scroll_area_text_h), scroll_area_label, options.style.text);
             scene.popClip();
         }
 

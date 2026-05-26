@@ -1,10 +1,10 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
-const component_contract = @import("ComponentContract.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
+const text_component = @import("Text.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
@@ -14,7 +14,7 @@ const list_layout = @import("ListLayout.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = component_contract.registration("menubar", Menubar);
+pub const registration = .{ .name = "menubar", .Payload = Menubar };
 const contentInset = component_primitives.contentInset;
 const measureFixed = component_primitives.measureFixed;
 
@@ -85,7 +85,7 @@ fn renderItem(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, active: bool
     try scene.pushRect(bounds, if (active) options.style.row else ui.Color.clear, .fill, component_primitives.control_radius, 0.0);
     const text_color = if (active) options.style.text else options.style.muted;
     if (contentInset(bounds, menubar_item_padding_x)) |text_bounds| {
-        try scene.pushAlignedText(text_bounds.withHeightCentered(component_primitives.control_label_height), label, text_color, .center);
+        try text_component.Text.renderAligned(scene, text_bounds.withHeightCentered(component_primitives.control_label_height), label, text_color, .center);
     }
 }
 

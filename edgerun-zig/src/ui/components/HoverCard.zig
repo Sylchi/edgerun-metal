@@ -1,7 +1,6 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
-const component_contract = @import("ComponentContract.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
@@ -13,7 +12,7 @@ const primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = component_contract.registration("hover_card", HoverCard);
+pub const registration = .{ .name = "hover_card", .Payload = HoverCard };
 const measureFixed = primitives.measureFixed;
 
 pub const HoverCard = struct {

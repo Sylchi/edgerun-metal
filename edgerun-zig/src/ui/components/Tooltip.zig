@@ -1,10 +1,10 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
-const component_contract = @import("ComponentContract.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
+const text_component = @import("Text.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
@@ -13,7 +13,7 @@ const component_primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = component_contract.registration("tooltip", Tooltip);
+pub const registration = .{ .name = "tooltip", .Payload = Tooltip };
 const constrainPreferredSize = component_primitives.constrainPreferredSize;
 
 pub const Tooltip = struct {
@@ -32,7 +32,7 @@ pub const Tooltip = struct {
         try scene.pushRect(tip, options.style.text, .fill, tooltip_radius, 0.0);
         if (component_primitives.contentInset(tip, tooltip_padding)) |inner| {
             const text_h = @min(inner.h, component_primitives.measuredTextHeight(self.content, inner.w, tooltip_text_h, tooltip_text_max_lines));
-            try scene.pushWrappedText(inner.withHeightCentered(text_h), self.content, options.style.bg, component_primitives.textWrap(self.content, tooltip_text_h, tooltip_text_max_lines));
+            try text_component.Text.renderWrapped(scene, inner.withHeightCentered(text_h), self.content, options.style.bg, component_primitives.textWrap(self.content, tooltip_text_h, tooltip_text_max_lines));
         }
     }
 

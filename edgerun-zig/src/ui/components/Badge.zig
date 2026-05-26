@@ -1,10 +1,10 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
-const component_contract = @import("ComponentContract.zig");
 const layout = @import("../../layouts/Types.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
+const text_component = @import("Text.zig");
 const text_metrics = @import("../../ui_text_metrics.zig");
 const tokens = @import("../../ui_tokens.zig");
 const component_test = @import("TestSupport.zig");
@@ -14,7 +14,7 @@ const component_primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = component_contract.registration("badge", Badge);
+pub const registration = .{ .name = "badge", .Payload = Badge };
 const constrainPreferredSize = component_primitives.constrainPreferredSize;
 const measure_max_width = component_primitives.measure_max_width;
 
@@ -32,7 +32,7 @@ pub const Badge = struct {
         const badge_bounds = ui.Rect.init(bounds.x, bounds.y + (bounds.h - resolved_height) * 0.5, bounds.w, resolved_height);
         if (paint.fill.a != 0) try scene.pushRect(badge_bounds, paint.fill, .fill, resolved_height * 0.5, 0.0);
         if (paint.border) |border| try scene.pushRect(badge_bounds, border, .border, resolved_height * 0.5, 0.0);
-        try scene.pushAlignedText(labelBounds(badge_bounds), self.label, paint.text, .center);
+        try text_component.Text.renderAligned(scene, labelBounds(badge_bounds), self.label, paint.text, .center);
     }
 
     pub fn measure(self: Badge, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {

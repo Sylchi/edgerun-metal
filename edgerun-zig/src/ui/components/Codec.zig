@@ -122,3 +122,15 @@ fn recordObjectWithWriter(writer: *Writer, kind: codec.RecordKind, id: u32, a: c
 pub fn singleWriter(ui_out: []u8) ?Writer {
     return codec.Writer.init(ui_out, 1, 1, .column, 0, 0);
 }
+
+pub fn writeObject(comptime Component: type, component: Component, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
+    var writer = codec.Writer.init(ui_out, 1, 1, .column, 0, 0) orelse return null;
+    if (!writeRecord(Component, &writer, 0, component)) return null;
+    return writer.objectNode(object_out, requirements(), epoch);
+}
+
+pub fn writeRecord(comptime Component: type, writer: *codec.Writer, index: usize, component: Component) bool {
+    return switch (component) {
+        inline else => |payload| payload.writeRecord(writer, index),
+    };
+}

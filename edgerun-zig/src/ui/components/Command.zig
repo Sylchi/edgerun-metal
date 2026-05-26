@@ -1,10 +1,10 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
-const component_contract = @import("ComponentContract.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
+const text_component = @import("Text.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
@@ -14,7 +14,7 @@ const primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = component_contract.registration("command", Command);
+pub const registration = .{ .name = "command", .Payload = Command };
 const measureFixed = primitives.measureFixed;
 const renderControlFrame = primitives.renderControlFrame;
 const renderControlText = primitives.renderControlText;
@@ -36,7 +36,7 @@ pub const Command = struct {
         try leadingIcon(self).renderColor(scene, ui.Rect.init(input.x + command_icon_x, input.y + (input.h - command_icon_size) * 0.5, command_icon_size, command_icon_size), options.style.muted);
         const input_text = if (options.command_palette) |palette| if (palette.query.len == 0) self.placeholder else palette.query else self.placeholder;
         const input_color = if (options.command_palette) |palette| if (palette.query.len == 0) options.style.muted else options.style.text else options.style.muted;
-        try scene.pushText(ui.Rect.init(input.x + command_text_x, input.y + (input.h - command_text_h) * 0.5, @max(primitives.min_extent, input.w - command_text_x - command_padding_x), command_text_h), input_text, input_color);
+        try text_component.Text.renderPlain(scene, ui.Rect.init(input.x + command_text_x, input.y + (input.h - command_text_h) * 0.5, @max(primitives.min_extent, input.w - command_text_x - command_padding_x), command_text_h), input_text, input_color);
 
         if (options.command_palette) |palette| {
             const list = listBounds(bounds) orelse return;
@@ -51,7 +51,7 @@ pub const Command = struct {
                 visible_index += 1;
             }
             if (visible_index == 0) {
-                try scene.pushText(ui.Rect.init(list.x + command_list_padding, list.y + command_list_padding, @max(primitives.min_extent, list.w - command_list_padding * 2.0), command_empty_text_h), command_empty_label, options.style.muted);
+                try text_component.Text.renderPlain(scene, ui.Rect.init(list.x + command_list_padding, list.y + command_list_padding, @max(primitives.min_extent, list.w - command_list_padding * 2.0), command_empty_text_h), command_empty_label, options.style.muted);
             }
         }
     }

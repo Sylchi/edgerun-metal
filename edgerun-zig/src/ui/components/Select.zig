@@ -1,10 +1,10 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
-const component_contract = @import("ComponentContract.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
+const text_component = @import("Text.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
@@ -14,7 +14,7 @@ const icon_component = @import("Icon.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = component_contract.registration("select", Select);
+pub const registration = .{ .name = "select", .Payload = Select };
 const constrainPreferredSize = component_primitives.constrainPreferredSize;
 const contentInset = component_primitives.contentInset;
 const Icon = icon_component.Icon;
@@ -39,7 +39,7 @@ pub const Select = struct {
         if (contentInset(bounds, component_primitives.control_text_padding)) |label_bounds| {
             const text_bounds = ui.Rect.init(label_bounds.x, label_bounds.y, @max(component_primitives.min_extent, label_bounds.w - select_arrow_w), label_bounds.h);
             const text_h = @min(text_bounds.h, component_primitives.measuredTextHeight(self.label, text_bounds.w, component_primitives.control_label_height, select_label_max_lines));
-            try scene.pushWrappedText(text_bounds.withHeightCentered(text_h), self.label, options.style.text, component_primitives.textWrap(self.label, component_primitives.control_label_height, select_label_max_lines));
+            try text_component.Text.renderWrapped(scene, text_bounds.withHeightCentered(text_h), self.label, options.style.text, component_primitives.textWrap(self.label, component_primitives.control_label_height, select_label_max_lines));
             const arrow_bounds = ui.Rect.init(label_bounds.x + label_bounds.w - select_icon_size, label_bounds.y + (label_bounds.h - select_icon_size) * 0.5, select_icon_size, select_icon_size);
             try trailingIcon(self).renderColor(scene, arrow_bounds, options.style.muted);
         }

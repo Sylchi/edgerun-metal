@@ -1,10 +1,10 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
-const component_contract = @import("ComponentContract.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
+const text_component = @import("Text.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
@@ -14,7 +14,7 @@ const list_layout = @import("ListLayout.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = component_contract.registration("radio_group", RadioGroup);
+pub const registration = .{ .name = "radio_group", .Payload = RadioGroup };
 const measureFixed = component_primitives.measureFixed;
 
 pub const RadioGroup = struct {
@@ -85,7 +85,7 @@ fn renderOption(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, selected: 
         try scene.pushRect(dot, options.style.accent, .fill, radio_dot_size * 0.5, 0.0);
     }
     const label_x = outer.x + outer.w + radio_text_gap;
-    try scene.pushText(ui.Rect.init(label_x, bounds.y, @max(component_primitives.min_extent, bounds.x + bounds.w - label_x), bounds.h).withHeightCentered(component_primitives.control_label_height), label, options.style.text);
+    try text_component.Text.renderPlain(scene, ui.Rect.init(label_x, bounds.y, @max(component_primitives.min_extent, bounds.x + bounds.w - label_x), bounds.h).withHeightCentered(component_primitives.control_label_height), label, options.style.text);
 }
 
 fn optionBounds(bounds: ui.Rect, index: usize) ui.Rect {

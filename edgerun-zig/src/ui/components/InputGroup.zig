@@ -1,10 +1,10 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
-const component_contract = @import("ComponentContract.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
+const text_component = @import("Text.zig");
 const layout = @import("../../layouts/Types.zig");
 const text_metrics = @import("../../ui_text_metrics.zig");
 const component_test = @import("TestSupport.zig");
@@ -14,7 +14,7 @@ const component_primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = component_contract.registration("input_group", InputGroup);
+pub const registration = .{ .name = "input_group", .Payload = InputGroup };
 const constrainPreferredSize = component_primitives.constrainPreferredSize;
 const contentInset = component_primitives.contentInset;
 
@@ -34,13 +34,13 @@ pub const InputGroup = struct {
         const addon_bounds = ui.Rect.init(bounds.x, bounds.y, addon_w, bounds.h);
         if (contentInset(addon_bounds, input_group_addon_padding)) |inner| {
             const addon_h = @min(inner.h, component_primitives.measuredTextHeight(self.addon, inner.w, component_primitives.control_label_height, input_group_text_max_lines));
-            try scene.pushWrappedText(inner.withHeightCentered(addon_h), self.addon, options.style.muted, component_primitives.textWrap(self.addon, component_primitives.control_label_height, input_group_text_max_lines));
+            try text_component.Text.renderWrapped(scene, inner.withHeightCentered(addon_h), self.addon, options.style.muted, component_primitives.textWrap(self.addon, component_primitives.control_label_height, input_group_text_max_lines));
         }
         try scene.pushRect(ui.Rect.init(addon_bounds.x + addon_bounds.w, bounds.y + input_group_separator_inset, separator_height, @max(component_primitives.min_extent, bounds.h - input_group_separator_inset * 2.0)), options.style.border, .fill, 0.0, 0.0);
         const control_bounds = ui.Rect.init(addon_bounds.x + addon_bounds.w + input_group_control_gap, bounds.y, @max(component_primitives.min_extent, bounds.w - addon_w - input_group_control_gap), bounds.h);
         if (contentInset(control_bounds, component_primitives.control_text_padding)) |inner| {
             const placeholder_h = @min(inner.h, component_primitives.measuredTextHeight(self.placeholder, inner.w, component_primitives.control_label_height, input_group_text_max_lines));
-            try scene.pushWrappedText(inner.withHeightCentered(placeholder_h), self.placeholder, options.style.muted, component_primitives.textWrap(self.placeholder, component_primitives.control_label_height, input_group_text_max_lines));
+            try text_component.Text.renderWrapped(scene, inner.withHeightCentered(placeholder_h), self.placeholder, options.style.muted, component_primitives.textWrap(self.placeholder, component_primitives.control_label_height, input_group_text_max_lines));
         }
     }
 

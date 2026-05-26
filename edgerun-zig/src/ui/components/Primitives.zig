@@ -5,6 +5,7 @@ const std = @import("std");
 const text_metrics = @import("../../ui_text_metrics.zig");
 const tokens = @import("../../ui_tokens.zig");
 const ui = @import("../../ui.zig");
+const text_component = @import("Text.zig");
 
 pub const measure_max_width: f32 = 4096.0;
 
@@ -51,7 +52,7 @@ pub fn renderControlFrame(scene: *ui.Scene, bounds: ui.Rect, fill: ui.Color, bor
 
 pub fn renderControlText(scene: *ui.Scene, bounds: ui.Rect, padding: f32, height: f32, value: []const u8, color: ui.Color, alignment: ui.TextAlign) ui.RenderError!void {
     if (contentInset(bounds, padding)) |text_bounds| {
-        try scene.pushAlignedText(text_bounds.withHeightCentered(height), value, color, alignment);
+        try text_component.Text.renderAligned(scene, text_bounds.withHeightCentered(height), value, color, alignment);
     }
 }
 
@@ -147,13 +148,13 @@ pub fn renderTitleDetailPanel(scene: *ui.Scene, bounds: ui.Rect, title: []const 
     try scene.pushRect(bounds, border, .border, spec.radius, 0.0);
     const title_w = @max(min_extent, bounds.w - spec.padding * 2.0 - spec.title_right_inset);
     const title_h = @min(measuredTextHeight(title, title_w, spec.title_h, spec.title_max_lines), @max(min_extent, bounds.h - spec.title_y - spec.padding));
-    try scene.pushWrappedText(ui.Rect.init(bounds.x + spec.padding, bounds.y + spec.title_y, title_w, title_h), title, title_color, textWrap(title, spec.title_h, spec.title_max_lines));
+    try text_component.Text.renderWrapped(scene, ui.Rect.init(bounds.x + spec.padding, bounds.y + spec.title_y, title_w, title_h), title, title_color, textWrap(title, spec.title_h, spec.title_max_lines));
 
     const detail_gap = @max(0.0, spec.detail_y - spec.title_y - spec.title_h);
     const detail_y = spec.title_y + title_h + detail_gap;
     const detail_w = @max(min_extent, bounds.w - spec.padding * 2.0);
     const detail_h = @min(measuredTextHeight(detail, detail_w, spec.detail_h, spec.detail_max_lines), @max(min_extent, bounds.h - detail_y - spec.padding));
-    try scene.pushWrappedText(ui.Rect.init(bounds.x + spec.padding, bounds.y + detail_y, detail_w, detail_h), detail, options.style.muted, textWrap(detail, spec.detail_h, spec.detail_max_lines));
+    try text_component.Text.renderWrapped(scene, ui.Rect.init(bounds.x + spec.padding, bounds.y + detail_y, detail_w, detail_h), detail, options.style.muted, textWrap(detail, spec.detail_h, spec.detail_max_lines));
 }
 
 pub fn collectSidePanelLayoutHits(collector: *interaction.Collector, bounds: ui.Rect, spec: SidePanelLayout, id: u32) interaction.Error!void {

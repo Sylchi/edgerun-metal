@@ -1,10 +1,10 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
-const component_contract = @import("ComponentContract.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
+const text_component = @import("Text.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
@@ -14,7 +14,7 @@ const tokens = @import("../../ui_tokens.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = component_contract.registration("textarea", Textarea);
+pub const registration = .{ .name = "textarea", .Payload = Textarea };
 const contentInset = component_primitives.contentInset;
 const measureFixed = component_primitives.measureFixed;
 
@@ -34,7 +34,7 @@ pub const Textarea = struct {
         try scene.pushRect(bounds, options.style.panel, .fill, component_primitives.control_radius, 0.0);
         try scene.pushRect(bounds, options.style.border, .border, component_primitives.control_radius, 0.0);
         if (contentInset(bounds, textarea_padding)) |text_bounds| {
-            try scene.pushWrappedText(text_bounds, self.placeholder, options.style.muted, .{
+            try text_component.Text.renderWrapped(scene, text_bounds, self.placeholder, options.style.muted, .{
                 .line_height = component_primitives.control_label_height,
                 .average_char_width = control_average_char_width,
                 .max_lines = textarea_max_lines,

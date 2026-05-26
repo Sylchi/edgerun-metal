@@ -1,10 +1,10 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
-const component_contract = @import("ComponentContract.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
+const text_component = @import("Text.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
@@ -14,7 +14,7 @@ const list_layout = @import("ListLayout.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = component_contract.registration("tabs", Tabs);
+pub const registration = .{ .name = "tabs", .Payload = Tabs };
 const measureFixed = primitives.measureFixed;
 const renderControlText = primitives.renderControlText;
 
@@ -41,7 +41,7 @@ pub const Tabs = struct {
         const panel = ui.Rect.init(bounds.x, bounds.y + tabs_list_h + tabs_gap, bounds.w, @max(primitives.min_extent, bounds.h - tabs_list_h - tabs_gap));
         try scene.pushRect(panel, options.style.panel, .fill, primitives.control_radius, 0.0);
         try scene.pushRect(panel, options.style.border, .border, primitives.control_radius, 0.0);
-        try scene.pushText(ui.Rect.init(panel.x + tabs_panel_padding, panel.y + tabs_panel_padding, @max(primitives.min_extent, panel.w - tabs_panel_padding * 2.0), primitives.control_label_height), if (active == 1) self.second else self.first, options.style.muted);
+        try text_component.Text.renderPlain(scene, ui.Rect.init(panel.x + tabs_panel_padding, panel.y + tabs_panel_padding, @max(primitives.min_extent, panel.w - tabs_panel_padding * 2.0), primitives.control_label_height), if (active == 1) self.second else self.first, options.style.muted);
     }
 
     pub fn collectInteractions(self: Tabs, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {

@@ -1,10 +1,10 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
-const component_contract = @import("ComponentContract.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
+const text_component = @import("Text.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
@@ -13,7 +13,7 @@ const primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = component_contract.registration("calendar", Calendar);
+pub const registration = .{ .name = "calendar", .Payload = Calendar };
 const measureFixed = primitives.measureFixed;
 const renderControlText = primitives.renderControlText;
 
@@ -31,10 +31,10 @@ pub const Calendar = struct {
         try scene.pushRect(bounds, options.style.border, .border, calendar_radius, 0.0);
         try renderNav(scene, navBounds(bounds, 0), "<", options);
         try renderNav(scene, navBounds(bounds, 1), ">", options);
-        try scene.pushAlignedText(captionBounds(bounds), self.month, options.style.text, .center);
+        try text_component.Text.renderAligned(scene, captionBounds(bounds), self.month, options.style.text, .center);
 
         for (calendar_weekday_labels, 0..) |label, index| {
-            try scene.pushAlignedText(weekdayBounds(bounds, index), label, options.style.muted, .center);
+            try text_component.Text.renderAligned(scene, weekdayBounds(bounds, index), label, options.style.muted, .center);
         }
         for (calendar_day_labels, 0..) |label, index| {
             const day = @as(u16, @intCast(index + 1));

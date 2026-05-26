@@ -3,7 +3,7 @@ const interaction = @import("ui_interaction.zig");
 const ui = @import("ui.zig");
 const button_component = @import("ui/components/Button.zig");
 const icon_component = @import("ui/components/Icon.zig");
-const progress_component = @import("ui/components/Progress.zig");
+const display_component = @import("ui/components/Display.zig");
 const row_item_component = @import("ui/components/RowItem.zig");
 const textarea_component = @import("ui/components/Textarea.zig");
 const component_common = @import("ui_component_common.zig");
@@ -288,7 +288,7 @@ fn renderStatus(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
     var progress_style = app_chrome.style();
     progress_style.panel = palette.neutral_soft;
     progress_style.accent = progressColor(state.compile_progress);
-    try (progress_component.Progress{ .value = state.compile_progress }).render(scene, bar, .{ .style = progress_style });
+    try (display_component.Progress{ .value = state.compile_progress }).render(scene, bar, .{ .style = progress_style });
     try renderCompileStages(scene, ui.Rect.init(bar.x, bar.y - 5.0, bar.w, compiler_stage_h), state.compile_progress);
     if (state.diagnostic.len != 0) {
         try wrappedText(scene, ui.Rect.init(bounds.x + panel_pad, bar.y + compiler_bar_h + 6.0, text_w, compiler_diagnostic_h), state.diagnostic, palette.danger, compiler_diagnostic_h, compiler_text_average_w, 1);

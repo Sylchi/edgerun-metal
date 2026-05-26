@@ -1,10 +1,10 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
-const component_contract = @import("ComponentContract.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
+const text_component = @import("Text.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
@@ -14,7 +14,7 @@ const primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = component_contract.registration("combobox", Combobox);
+pub const registration = .{ .name = "combobox", .Payload = Combobox };
 const contentInset = primitives.contentInset;
 const measureFixed = primitives.measureFixed;
 const renderControlFrame = primitives.renderControlFrame;
@@ -35,7 +35,7 @@ pub const Combobox = struct {
         try renderControlFrame(scene, input, options.style.panel, options.style.border, primitives.control_radius);
         if (contentInset(input, primitives.control_text_padding)) |input_content| {
             const text_bounds = ui.Rect.init(input_content.x, input_content.y, @max(primitives.min_extent, input_content.w - combobox_icon_space), input_content.h);
-            try scene.pushAlignedText(text_bounds.withHeightCentered(primitives.control_label_height), self.placeholder, options.style.muted, .start);
+            try text_component.Text.renderAligned(scene, text_bounds.withHeightCentered(primitives.control_label_height), self.placeholder, options.style.muted, .start);
             try Icon.named(.chevron_right).renderColor(scene, ui.Rect.init(input_content.x + input_content.w - combobox_icon_size, input_content.y + (input_content.h - combobox_icon_size) * 0.5, combobox_icon_size, combobox_icon_size), options.style.muted);
         }
 

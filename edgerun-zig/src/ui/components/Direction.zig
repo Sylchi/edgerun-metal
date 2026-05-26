@@ -1,10 +1,10 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
-const component_contract = @import("ComponentContract.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
+const text_component = @import("Text.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
@@ -15,7 +15,7 @@ const list_layout = @import("ListLayout.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = component_contract.registration("direction", Direction);
+pub const registration = .{ .name = "direction", .Payload = Direction };
 const contentInset = component_primitives.contentInset;
 const measureFixed = component_primitives.measureFixed;
 const Icon = icon_component.Icon;
@@ -75,7 +75,7 @@ fn renderItem(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, active: bool
     try scene.pushRect(bounds, options.style.border, .border, direction_item_radius, 0.0);
     const text_color = if (active) options.style.bg else options.style.text;
     if (contentInset(bounds, direction_item_padding)) |inner| {
-        try scene.pushAlignedText(inner.withHeightCentered(direction_item_text_h), label, text_color, .center);
+        try text_component.Text.renderAligned(scene, inner.withHeightCentered(direction_item_text_h), label, text_color, .center);
     }
 }
 

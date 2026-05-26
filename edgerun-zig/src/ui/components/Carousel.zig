@@ -1,10 +1,10 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
-const component_contract = @import("ComponentContract.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
+const text_component = @import("Text.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
@@ -13,7 +13,7 @@ const component_primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = component_contract.registration("carousel", Carousel);
+pub const registration = .{ .name = "carousel", .Payload = Carousel };
 const contentInset = component_primitives.contentInset;
 const measureFixed = component_primitives.measureFixed;
 
@@ -30,7 +30,7 @@ pub const Carousel = struct {
         const content = contentBounds(bounds);
         try scene.pushRect(content, options.style.row, .fill, carousel_radius, 0.0);
         if (contentInset(content, carousel_text_padding)) |inner| {
-            try scene.pushAlignedText(inner.withHeightCentered(component_primitives.control_label_height), self.label, options.style.muted, .center);
+            try text_component.Text.renderAligned(scene, inner.withHeightCentered(component_primitives.control_label_height), self.label, options.style.muted, .center);
         }
         try renderButton(scene, buttonBounds(bounds, 1), ">", options);
     }
@@ -68,7 +68,7 @@ fn renderButton(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, options: R
     try scene.pushRect(bounds, ui.Color.clear, .fill, carousel_button_size * 0.5, 0.0);
     try scene.pushRect(bounds, options.style.border, .border, carousel_button_size * 0.5, 0.0);
     if (contentInset(bounds, carousel_button_text_padding)) |inner| {
-        try scene.pushAlignedText(inner.withHeightCentered(component_primitives.control_label_height), label, options.style.text, .center);
+        try text_component.Text.renderAligned(scene, inner.withHeightCentered(component_primitives.control_label_height), label, options.style.text, .center);
     }
 }
 

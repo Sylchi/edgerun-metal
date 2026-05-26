@@ -1,10 +1,10 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
-const component_contract = @import("ComponentContract.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
+const text_component = @import("Text.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
@@ -14,7 +14,7 @@ const primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = component_contract.registration("accordion", Accordion);
+pub const registration = .{ .name = "accordion", .Payload = Accordion };
 const measureFixed = primitives.measureFixed;
 const Icon = icon_component.Icon;
 
@@ -30,11 +30,11 @@ pub const Accordion = struct {
 
     pub fn render(self: Accordion, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         const trigger = triggerBounds(bounds);
-        try scene.pushText(ui.Rect.init(trigger.x, trigger.y + accordion_trigger_text_y, @max(primitives.min_extent, trigger.w - accordion_icon_space), primitives.control_label_height), self.title, options.style.text);
+        try text_component.Text.renderPlain(scene, ui.Rect.init(trigger.x, trigger.y + accordion_trigger_text_y, @max(primitives.min_extent, trigger.w - accordion_icon_space), primitives.control_label_height), self.title, options.style.text);
         try Icon.named(.chevron_right).renderColor(scene, ui.Rect.init(trigger.x + trigger.w - accordion_icon_size, trigger.y + accordion_icon_y, accordion_icon_size, accordion_icon_size), options.style.muted);
         try scene.pushRect(ui.Rect.init(bounds.x, trigger.y + trigger.h, bounds.w, separator_height), options.style.border, .fill, 0.0, 0.0);
         if (self.open) {
-            try scene.pushWrappedText(ui.Rect.init(bounds.x, trigger.y + trigger.h + accordion_content_padding_top, bounds.w, @max(primitives.min_extent, bounds.h - trigger.h - accordion_content_padding_top)), self.detail, options.style.muted, .{
+            try text_component.Text.renderWrapped(scene, ui.Rect.init(bounds.x, trigger.y + trigger.h + accordion_content_padding_top, bounds.w, @max(primitives.min_extent, bounds.h - trigger.h - accordion_content_padding_top)), self.detail, options.style.muted, .{
                 .line_height = accordion_detail_height,
                 .average_char_width = accordion_detail_average_w,
                 .max_lines = accordion_detail_max_lines,

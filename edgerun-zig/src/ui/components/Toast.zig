@@ -1,10 +1,10 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
-const component_contract = @import("ComponentContract.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
+const text_component = @import("Text.zig");
 const layout = @import("../../layouts/Types.zig");
 const text_metrics = @import("../../ui_text_metrics.zig");
 const component_test = @import("TestSupport.zig");
@@ -15,7 +15,7 @@ const component_primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = component_contract.registration("toast", Toast);
+pub const registration = .{ .name = "toast", .Payload = Toast };
 const measureFixed = component_primitives.measureFixed;
 const Icon = icon_component.Icon;
 
@@ -40,11 +40,11 @@ pub const Toast = struct {
         const text_x = toast.x + toast_text_x;
         const text_w = @max(component_primitives.min_extent, toast.x + toast.w - text_x - toast_padding);
         const title_h = measuredTextHeight(self.title, text_w, titleMetrics(self.title));
-        try scene.pushWrappedText(ui.Rect.init(text_x, toast.y + toast_padding, text_w, title_h), self.title, options.style.text, titleWrap(self.title));
+        try text_component.Text.renderWrapped(scene, ui.Rect.init(text_x, toast.y + toast_padding, text_w, title_h), self.title, options.style.text, titleWrap(self.title));
         if (self.detail.len != 0) {
             const detail_y = toast.y + toast_padding + title_h + toast_text_gap;
             const detail_h = @max(component_primitives.min_extent, toast.y + toast.h - detail_y - toast_padding);
-            try scene.pushWrappedText(ui.Rect.init(text_x, detail_y, text_w, detail_h), self.detail, options.style.muted, detailWrap(self.detail));
+            try text_component.Text.renderWrapped(scene, ui.Rect.init(text_x, detail_y, text_w, detail_h), self.detail, options.style.muted, detailWrap(self.detail));
         }
     }
 

@@ -1,10 +1,10 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
-const component_contract = @import("ComponentContract.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
+const text_component = @import("Text.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
@@ -13,7 +13,7 @@ const component_primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = component_contract.registration("slider", Slider);
+pub const registration = .{ .name = "slider", .Payload = Slider };
 const constrainPreferredSize = component_primitives.constrainPreferredSize;
 
 pub const Slider = struct {
@@ -32,7 +32,7 @@ pub const Slider = struct {
     pub fn render(self: Slider, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         const clamped = ui.clampUnit(self.value);
         const label_h = @min(bounds.h, component_primitives.measuredTextHeight(self.label, bounds.w, slider_label_height, slider_label_max_lines));
-        try scene.pushWrappedText(ui.Rect.init(bounds.x, bounds.y, bounds.w, label_h), self.label, options.style.text, component_primitives.textWrap(self.label, slider_label_height, slider_label_max_lines));
+        try text_component.Text.renderWrapped(scene, ui.Rect.init(bounds.x, bounds.y, bounds.w, label_h), self.label, options.style.text, component_primitives.textWrap(self.label, slider_label_height, slider_label_max_lines));
         const track_y = bounds.y + @min(label_h + slider_label_track_gap, @max(0.0, bounds.h - slider_track_height));
         const track = ui.Rect.init(bounds.x, track_y, bounds.w, slider_track_height);
         try renderTrack(scene, track, clamped, options);

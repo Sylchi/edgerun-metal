@@ -1,7 +1,6 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
-const component_contract = @import("ComponentContract.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
@@ -13,7 +12,7 @@ const component_primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = component_contract.registration("text", Text);
+pub const registration = .{ .name = "text", .Payload = Text };
 const constrainPreferredSize = component_primitives.constrainPreferredSize;
 
 pub const Text = struct {
@@ -29,7 +28,7 @@ pub const Text = struct {
 
     pub fn render(self: Text, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         const line_height = @min(text_line_height, @max(component_primitives.min_extent, bounds.h));
-        try scene.pushWrappedText(bounds, self.value, options.style.text, .{
+        try renderWrapped(scene, bounds, self.value, options.style.text, .{
             .line_height = line_height,
             .average_char_width = text_metrics.averageWidth(self.value, line_height),
             .max_lines = text_max_lines,
@@ -66,6 +65,18 @@ pub const Text = struct {
 
     pub fn fromNode(text: @FieldType(ui.Node, "text")) Error!Text {
         return .{ .value = text.value };
+    }
+
+    pub fn renderPlain(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, color: ui.Color) ui.RenderError!void {
+        try scene.pushText(bounds, value, color);
+    }
+
+    pub fn renderAligned(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, color: ui.Color, alignment: ui.TextAlign) ui.RenderError!void {
+        try scene.pushAlignedText(bounds, value, color, alignment);
+    }
+
+    pub fn renderWrapped(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, color: ui.Color, wrap: ui.TextWrap) ui.RenderError!void {
+        try scene.pushWrappedText(bounds, value, color, wrap);
     }
 };
 

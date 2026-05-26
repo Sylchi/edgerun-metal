@@ -1,10 +1,10 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
-const component_contract = @import("ComponentContract.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
+const text_component = @import("Text.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
@@ -15,7 +15,7 @@ const list_layout = @import("ListLayout.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = component_contract.registration("navigation_menu", NavigationMenu);
+pub const registration = .{ .name = "navigation_menu", .Payload = NavigationMenu };
 const contentInset = component_primitives.contentInset;
 const measureFixed = component_primitives.measureFixed;
 const Icon = icon_component.Icon;
@@ -87,7 +87,7 @@ fn renderItem(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, active: bool
     const text_bounds = ui.Rect.init(bounds.x, bounds.y, @max(component_primitives.min_extent, bounds.w - icon_space), bounds.h);
     const text_color = if (active) options.style.text else options.style.muted;
     if (contentInset(text_bounds, navigation_menu_text_padding)) |inner| {
-        try scene.pushAlignedText(inner.withHeightCentered(component_primitives.control_label_height), label, text_color, .center);
+        try text_component.Text.renderAligned(scene, inner.withHeightCentered(component_primitives.control_label_height), label, text_color, .center);
     }
     if (show_chevron) {
         try Icon.named(.chevron_right).renderColor(scene, ui.Rect.init(
