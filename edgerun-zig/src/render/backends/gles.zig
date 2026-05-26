@@ -330,7 +330,7 @@ fn drawAlphaTexturedWithProgram(gl: State, width: i32, height: i32, values: []co
     c.glActiveTexture(c.GL_TEXTURE0);
     c.glBindTexture(c.GL_TEXTURE_2D, texture);
     c.glUniform1i(c.glGetUniformLocation(program, gl_contract.uniform_texture), 0);
-    if (program == gl.textured_program) c.glUniform1i(c.glGetUniformLocation(program, gl_contract.uniform_texture_kind), 1);
+    if (program == gl.textured_program) c.glUniform1i(c.glGetUniformLocation(program, gl_contract.uniform_texture_kind), gl_contract.texture_kind_alpha);
     c.glBindBuffer(c.GL_ARRAY_BUFFER, gl.textured_vbo);
     c.glBufferData(c.GL_ARRAY_BUFFER, @intCast(values.len * @sizeOf(f32)), values.ptr, c.GL_DYNAMIC_DRAW);
     c.glEnableVertexAttribArray(gl_contract.attr_pos_location);
