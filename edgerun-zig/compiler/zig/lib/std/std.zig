@@ -1,6 +1,5 @@
 pub const AutoHashMap = hash_map.AutoHashMap;
 pub const AutoHashMapUnmanaged = hash_map.AutoHashMapUnmanaged;
-pub const BitStack = @import("BitStack.zig");
 pub const Build = @import("Build.zig");
 pub const BufMap = @import("buf_map.zig").BufMap;
 pub const BufSet = @import("buf_set.zig").BufSet;
@@ -99,7 +98,6 @@ pub const testing = @import("testing.zig");
 pub const tz = @import("tz.zig");
 pub const unicode = @import("unicode.zig");
 pub const valgrind = @import("valgrind.zig");
-pub const wasm = @import("wasm.zig");
 pub const zig = @import("zig.zig");
 pub const zip = @import("zip.zig");
 pub const zon = @import("zon.zig");
