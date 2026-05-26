@@ -7,7 +7,7 @@ const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
-const component_render = @import("Render.zig");
+const tokens = @import("../../ui_tokens.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
@@ -23,18 +23,19 @@ pub const ButtonGroup = struct {
     }
 
     pub fn render(self: ButtonGroup, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return component_render.renderButtonGroup(scene, bounds, self.first, self.second, activeIndex(self.active), options);
+        try renderSegment(scene, segmentBounds(bounds, 0), self.first, activeIndex(self.active) == 0, options);
+        try renderSegment(scene, segmentBounds(bounds, 1), self.second, activeIndex(self.active) == 1, options);
     }
 
     pub fn collectInteractions(self: ButtonGroup, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-        try collector.addHit(component_render.buttonGroupSegmentBounds(bounds, 0), .button, self.id);
-        try collector.addHit(component_render.buttonGroupSegmentBounds(bounds, 1), .button, self.id + 1);
+        try collector.addHit(segmentBounds(bounds, 0), .button, self.id);
+        try collector.addHit(segmentBounds(bounds, 1), .button, self.id + 1);
     }
 
     pub fn measure(self: ButtonGroup, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = self;
         _ = options;
-        return component_render.measureFixed(component_render.preferred_button_group, constraints);
+        return measureFixed(preferred_button_group, constraints);
     }
 
     pub fn toObject(self: ButtonGroup, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -66,6 +67,48 @@ fn encodedId(id: u32, active: u16) u32 {
 }
 
 const group_id_stride: u32 = 2;
+
+fn renderSegment(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, active: bool, options: RenderOptions) ui.RenderError!void {
+    try scene.pushRect(bounds, if (active) options.style.text else options.style.panel, .fill, 0.0, 0.0);
+    try scene.pushRect(bounds, options.style.border, .border, 0.0, 0.0);
+    const text_color = if (active) options.style.panel else options.style.text;
+    if (contentInset(bounds, toggle_text_padding)) |text_bounds| {
+        try scene.pushAlignedText(text_bounds.withHeightCentered(control_label_height), label, text_color, .center);
+    }
+}
+
+fn segmentBounds(bounds: ui.Rect, index: usize) ui.Rect {
+    const segment_w = @max(min_extent, bounds.w * 0.5);
+    return ui.Rect.init(bounds.x + @as(f32, @floatFromInt(index)) * segment_w, bounds.y, segment_w, bounds.h);
+}
+
+fn contentInset(bounds: ui.Rect, padding: f32) ?ui.Rect {
+    const clamped = @min(@max(padding, 0.0), @min(bounds.w, bounds.h) * 0.5);
+    const out = bounds.insetUniform(clamped);
+    return if (out.valid()) out else null;
+}
+
+fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
+    const resolved_preferred = constrainPreferredSize(preferred, constraints);
+    return layout.Measurement.flexible(
+        .{ .w = @min(preferred.w, resolved_preferred.w), .h = @min(preferred.h, resolved_preferred.h) },
+        resolved_preferred,
+        .{ .w = measure_max_width, .h = preferred.h },
+    ).applyExact(constraints);
+}
+
+fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {
+    return .{
+        .w = constraints.width.limit(preferred.w),
+        .h = constraints.height.limit(preferred.h),
+    };
+}
+
+const min_extent: f32 = 1.0;
+const measure_max_width: f32 = 4096.0;
+const control_label_height: f32 = tokens.Component.control_label_height;
+const toggle_text_padding: f32 = 8.0;
+pub const preferred_button_group = ui.Size{ .w = 160.0, .h = 36.0 };
 
 test "button group component serializes to canonical object and deserializes" {
     const group = ButtonGroup{ .id = 90, .first = "Left", .second = "Right", .active = 1 };

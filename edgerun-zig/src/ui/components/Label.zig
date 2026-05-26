@@ -6,7 +6,6 @@ const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
-const component_render = @import("Render.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
@@ -19,13 +18,13 @@ pub const Label = struct {
     }
 
     pub fn render(self: Label, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return component_render.renderLabel(scene, bounds, self.value, options);
+        try scene.pushText(bounds.withHeightCentered(label_height), self.value, options.style.text);
     }
 
     pub fn measure(self: Label, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = self;
         _ = options;
-        return component_render.measureFixed(component_render.preferred_label, constraints);
+        return measureFixed(preferred_label, constraints);
     }
 
     pub fn toObject(self: Label, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -44,6 +43,26 @@ pub const Label = struct {
     }
 };
 
+fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
+    const resolved_preferred = constrainPreferredSize(preferred, constraints);
+    return layout.Measurement.flexible(
+        .{ .w = @min(preferred.w, resolved_preferred.w), .h = @min(preferred.h, resolved_preferred.h) },
+        resolved_preferred,
+        .{ .w = measure_max_width, .h = preferred.h },
+    ).applyExact(constraints);
+}
+
+fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {
+    return .{
+        .w = constraints.width.limit(preferred.w),
+        .h = constraints.height.limit(preferred.h),
+    };
+}
+
+const measure_max_width: f32 = 4096.0;
+const label_height: f32 = 16.0;
+pub const preferred_label = ui.Size{ .w = 96.0, .h = 16.0 };
+
 test "label component serializes to canonical object and deserializes" {
     const label = Label{ .value = "Email" };
     var ui_raw: [128]u8 = undefined;
@@ -55,7 +74,7 @@ test "label component serializes to canonical object and deserializes" {
     try std.testing.expectEqualStrings(label.value, decoded.value);
 }
 
-test "label component renders shadcn label text weight slot" {
+test "label component renders its own text slot" {
     const label = Label{ .value = "Email" };
     var commands: [4]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
