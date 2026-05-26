@@ -15,8 +15,6 @@ const tokens = @import("../../ui_tokens.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-const measureFixed = component_primitives.measureFixed;
-
 pub const RowItem = struct {
     id: u32,
     title: []const u8,
@@ -66,7 +64,7 @@ pub const RowItem = struct {
         return layout.Measurement.flexible(
             .{ .w = @min(row_min_width, preferred.w), .h = @min(row_min_height, preferred.h) },
             preferred,
-            .{ .w = component_primitives.measure_max_width, .h = @max(preferred.h, preferred_row_item.h) },
+            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
         ).applyExact(constraints);
     }
 
@@ -148,7 +146,6 @@ const row_min_height: f32 = 32.0;
 const row_title_line_height: f32 = 18.0;
 const row_detail_line_height: f32 = 16.0;
 const row_text_max_lines: usize = 2;
-pub const preferred_row_item = ui.Size{ .w = 260.0, .h = 48.0 };
 
 test "row item component serializes to canonical object and deserializes" {
     const row = RowItem{ .id = 20, .title = "object graph", .detail = "canonical data" };
@@ -183,9 +180,11 @@ test "row item measurement wraps long content under narrow constraints" {
         .title = "object graph title wraps",
         .detail = "canonical data detail wraps",
     };
+    const compact = RowItem{ .id = 20, .title = "object", .detail = "data" };
 
     const measured = row.measure(.{ .width = .{ .at_most = row_min_width }, .text_wrap = .wrap }, .{});
+    const compact_measured = compact.measure(.{ .width = .{ .at_most = row_min_width }, .text_wrap = .wrap }, .{});
 
     try std.testing.expect(measured.preferred.w <= row_min_width);
-    try std.testing.expect(measured.preferred.h > preferred_row_item.h);
+    try std.testing.expect(measured.preferred.h > compact_measured.preferred.h);
 }

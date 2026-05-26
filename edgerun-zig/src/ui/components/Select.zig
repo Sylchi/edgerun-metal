@@ -52,14 +52,15 @@ pub const Select = struct {
         _ = options;
         const inner = constraints.inner(.{ .left = component_primitives.control_text_padding, .right = component_primitives.control_text_padding + select_arrow_w });
         const label = layout.measureText(self.label, inner, component_primitives.textMetrics(self.label, component_primitives.control_label_height, select_label_max_lines));
+        const preferred_h = @max(select_min_height, label.preferred.h + component_primitives.control_text_padding * 2.0);
         const preferred = constrainPreferredSize(.{
             .w = @max(select_min_width, label.preferred.w + component_primitives.control_text_padding * 2.0 + select_arrow_w),
-            .h = @max(preferred_select.h, label.preferred.h + component_primitives.control_text_padding * 2.0),
+            .h = preferred_h,
         }, constraints);
         return layout.Measurement.flexible(
-            .{ .w = @min(select_min_width, preferred.w), .h = @min(preferred_select.h, preferred.h) },
+            .{ .w = @min(select_min_width, preferred.w), .h = @min(select_min_height, preferred.h) },
             preferred,
-            .{ .w = component_primitives.measure_max_width, .h = @max(preferred.h, preferred_select.h) },
+            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
         ).applyExact(constraints);
     }
 
@@ -93,7 +94,7 @@ const select_arrow_w: f32 = 18.0;
 const select_icon_size: f32 = 14.0;
 const select_label_max_lines: usize = 2;
 const select_min_width: f32 = 112.0;
-pub const preferred_select = ui.Size{ .w = 220.0, .h = 40.0 };
+const select_min_height: f32 = 40.0;
 
 test "select component serializes icon slot to canonical object and deserializes" {
     const select = Select{ .id = 22, .label = "Production", .icon_slot = IconSlot.named(.trailing, .chevron_right) };
@@ -121,9 +122,11 @@ test "select component renders chevron through icon primitive" {
 
 test "select measurement wraps long labels under narrow constraints" {
     const select = Select{ .id = 22, .label = "Production runtime authority" };
+    const compact = Select{ .id = 22, .label = "Production" };
 
     const measured = select.measure(.{ .width = .{ .at_most = select_min_width }, .text_wrap = .wrap }, .{});
+    const compact_measured = compact.measure(.{ .width = .{ .at_most = select_min_width }, .text_wrap = .wrap }, .{});
 
     try std.testing.expect(measured.preferred.w <= select_min_width);
-    try std.testing.expect(measured.preferred.h > preferred_select.h);
+    try std.testing.expect(measured.preferred.h > compact_measured.preferred.h);
 }

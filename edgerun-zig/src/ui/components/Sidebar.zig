@@ -53,13 +53,13 @@ pub const Sidebar = struct {
         const item = layout.measureText(self.item, .{ .width = .{ .at_most = item_inner_width }, .text_wrap = .wrap }, primitives.textMetrics(self.item, sidebar_item_text_h, sidebar_item_max_lines));
         const rail_h = sidebar_item_y + title.preferred.h - sidebar_title_h + @max(sidebar_item_h, item.preferred.h + sidebar_item_padding * 2.0) + sidebar_item_bottom_padding;
         const preferred = constrainPreferredSize(.{
-            .w = @max(preferred_sidebar.w, sidebar_rail_w + sidebar_content_gap + sidebar_content_min_w),
-            .h = @max(preferred_sidebar.h, rail_h),
+            .w = @max(sidebar_min_width, sidebar_rail_w + sidebar_content_gap + sidebar_content_min_w),
+            .h = @max(sidebar_min_height, rail_h),
         }, constraints);
         return layout.Measurement.flexible(
             .{ .w = @min(sidebar_min_width, preferred.w), .h = @min(sidebar_min_height, preferred.h) },
             preferred,
-            .{ .w = primitives.measure_max_width, .h = @max(preferred.h, preferred_sidebar.h) },
+            .{ .w = primitives.measure_max_width, .h = preferred.h },
         ).applyExact(constraints);
     }
 
@@ -114,7 +114,6 @@ fn contentBounds(bounds: ui.Rect) ui.Rect {
     return ui.Rect.init(x, bounds.y, @max(primitives.min_extent, bounds.x + bounds.w - x), bounds.h);
 }
 
-const preferred_sidebar = ui.Size{ .w = 240.0, .h = 64.0 };
 const sidebar_rail_w: f32 = 62.0;
 const sidebar_content_gap: f32 = 10.0;
 const sidebar_radius: f32 = 8.0;

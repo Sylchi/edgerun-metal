@@ -58,7 +58,7 @@ pub const Checkbox = struct {
         return layout.Measurement.flexible(
             .{ .w = @min(checkbox_min_width, preferred.w), .h = @min(checkbox_box_size, preferred.h) },
             preferred,
-            .{ .w = component_primitives.measure_max_width, .h = @max(preferred.h, preferred_checkbox.h) },
+            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
         ).applyExact(constraints);
     }
 
@@ -86,7 +86,6 @@ const checkbox_text_gap: f32 = 10.0;
 const checkbox_label_height: f32 = component_primitives.control_label_height;
 const checkbox_label_max_lines: usize = 2;
 const checkbox_min_width: f32 = 96.0;
-pub const preferred_checkbox = ui.Size{ .w = 220.0, .h = 28.0 };
 
 test "checkbox component serializes to canonical object and deserializes" {
     const checkbox = Checkbox{ .id = 11, .label = "Enable sync", .checked = true };
@@ -115,9 +114,11 @@ test "checkbox component renders checked mark through icon primitive" {
 
 test "checkbox measurement wraps long labels under narrow constraints" {
     const checkbox = Checkbox{ .id = 11, .label = "Enable signed runtime synchronization", .checked = true };
+    const compact = Checkbox{ .id = 11, .label = "Enable", .checked = true };
 
     const measured = checkbox.measure(.{ .width = .{ .at_most = checkbox_min_width }, .text_wrap = .wrap }, .{});
+    const compact_measured = compact.measure(.{ .width = .{ .at_most = checkbox_min_width }, .text_wrap = .wrap }, .{});
 
     try std.testing.expect(measured.preferred.w <= checkbox_min_width);
-    try std.testing.expect(measured.preferred.h > preferred_checkbox.h);
+    try std.testing.expect(measured.preferred.h > compact_measured.preferred.h);
 }

@@ -14,7 +14,6 @@ const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
 const contentInset = component_primitives.contentInset;
-const measureFixed = component_primitives.measureFixed;
 
 pub const InputOtp = struct {
     id: u32,
@@ -46,7 +45,8 @@ pub const InputOtp = struct {
     pub fn measure(self: InputOtp, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = self;
         _ = options;
-        return measureFixed(preferred_input_otp, constraints);
+        const preferred = component_primitives.constrainPreferredSize(inputOtpIntrinsicSize(), constraints);
+        return layout.Measurement.flexible(preferred, preferred, preferred).applyExact(constraints);
     }
 
     pub fn toObject(self: InputOtp, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -72,11 +72,19 @@ fn slotBounds(bounds: ui.Rect, index: usize) ui.Rect {
     return ui.Rect.init(x, bounds.y, input_otp_slot_size, @min(bounds.h, input_otp_slot_size));
 }
 
+fn inputOtpIntrinsicSize() ui.Size {
+    const slot_count: f32 = @floatFromInt(input_otp_slot_count);
+    const gap_count: f32 = @floatFromInt(input_otp_slot_count - 1);
+    return .{
+        .w = input_otp_slot_size * slot_count + input_otp_slot_gap * gap_count,
+        .h = input_otp_slot_size,
+    };
+}
+
 pub const input_otp_slot_count: usize = 6;
 const input_otp_slot_size: f32 = 36.0;
 const input_otp_slot_gap: f32 = 0.0;
 const input_otp_text_padding: f32 = 8.0;
-pub const preferred_input_otp = ui.Size{ .w = 200.0, .h = 36.0 };
 
 test "input otp component serializes to canonical object and deserializes" {
     const otp = InputOtp{ .id = 440, .value = "123456" };
@@ -105,4 +113,13 @@ test "input otp component renders slots and hit regions" {
     try std.testing.expect(component_test.hasText(scene.written(), "3"));
     try std.testing.expectEqual(@as(usize, input_otp_slot_count), collector.written().len);
     try std.testing.expectEqual(@as(u32, 445), collector.written()[5].id);
+}
+
+test "input otp measurement derives size from slot geometry" {
+    const otp = InputOtp{ .id = 440, .value = "123456" };
+
+    const measured = otp.measure(.{}, .{});
+
+    try std.testing.expectEqual(inputOtpIntrinsicSize().w, measured.preferred.w);
+    try std.testing.expectEqual(inputOtpIntrinsicSize().h, measured.preferred.h);
 }

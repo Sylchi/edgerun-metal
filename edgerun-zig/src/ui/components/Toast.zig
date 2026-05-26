@@ -15,7 +15,6 @@ const component_primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-const measureFixed = component_primitives.measureFixed;
 const Icon = icon_component.Icon;
 
 pub const Toast = struct {
@@ -67,7 +66,7 @@ pub const Toast = struct {
         return layout.Measurement.flexible(
             .{ .w = @min(toast_min_width, preferred.w), .h = @min(toast_min_height, preferred.h) },
             preferred,
-            .{ .w = component_primitives.measure_max_width, .h = @max(preferred.h, preferred_toast.h) },
+            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
         ).applyExact(constraints);
     }
 
@@ -90,7 +89,7 @@ pub const Toast = struct {
 };
 
 fn toastBounds(bounds: ui.Rect) ui.Rect {
-    return ui.Rect.init(bounds.x, bounds.y, bounds.w, @min(bounds.h, toast_h));
+    return bounds;
 }
 
 fn toastIconBounds(bounds: ui.Rect) ui.Rect {
@@ -117,7 +116,6 @@ fn detailWrap(value: []const u8) ui.TextWrap {
     return .{ .line_height = toast_detail_line_height, .average_char_width = text_metrics.averageWidth(value, toast_detail_line_height), .max_lines = toast_text_max_lines };
 }
 
-const toast_h: f32 = preferred_toast.h;
 const toast_radius: f32 = 8.0;
 const toast_padding: f32 = 10.0;
 const toast_icon_x: f32 = 12.0;
@@ -129,7 +127,6 @@ const toast_min_height: f32 = 40.0;
 const toast_title_line_height: f32 = 14.0;
 const toast_detail_line_height: f32 = 12.0;
 const toast_text_max_lines: usize = 2;
-pub const preferred_toast = ui.Size{ .w = 240.0, .h = 52.0 };
 
 test "toast component serializes to canonical object and deserializes" {
     const toast = Toast{ .id = 1002, .title = "Saved", .detail = "Notification" };
@@ -166,9 +163,11 @@ test "toast measurement wraps long content under narrow constraints" {
         .title = "Saved secure runtime state",
         .detail = "Notification detail wraps inside narrow layouts",
     };
+    const compact = Toast{ .id = 1002, .title = "Saved", .detail = "OK" };
 
     const measured = toast.measure(.{ .width = .{ .at_most = toast_min_width }, .text_wrap = .wrap }, .{});
+    const compact_measured = compact.measure(.{ .width = .{ .at_most = toast_min_width }, .text_wrap = .wrap }, .{});
 
     try std.testing.expect(measured.preferred.w <= toast_min_width);
-    try std.testing.expect(measured.preferred.h > preferred_toast.h);
+    try std.testing.expect(measured.preferred.h > compact_measured.preferred.h);
 }

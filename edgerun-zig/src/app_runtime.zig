@@ -52,8 +52,9 @@ const source_editor_page_lines: usize = 16;
 const source_editor_visible_lines: usize = 32;
 const source_editor_scroll_margin_lines: usize = 3;
 const max_source_editor_undo_entries: usize = 8;
-const max_source_file_entries: usize = 32;
-const max_source_file_label_bytes: usize = 4096;
+const max_source_file_entries: usize = 128;
+const max_source_file_label_bytes: usize = 16 * 1024;
+const max_source_search_bytes: usize = 128;
 const source_editor_wheel_pixels_per_line: f32 = 36.0;
 const max_compiler_diagnostic_bytes: usize = 192;
 const max_source_compile_summary_bytes: usize = 192;
@@ -127,6 +128,8 @@ var source_file_label_bytes: [max_source_file_label_bytes]u8 = undefined;
 var source_file_count: usize = 0;
 var source_file_label_bytes_len: usize = 0;
 var source_file_cache_workspace_len: usize = 0;
+var source_search_bytes: [max_source_search_bytes]u8 = undefined;
+var source_search_len: usize = 0;
 var source_pointer_drag_select = false;
 var context_menu_open = false;
 var context_menu_x: f32 = 0.0;
@@ -734,6 +737,7 @@ export fn er_ui_source_workspace_commit(source_len: usize) u32 {
     source_editor_selection_anchor = 0;
     source_editor_selection_active = false;
     source_editor_scroll_line = 0;
+    source_search_len = 0;
     clearSourceEditorHistory();
     last_error = .ok;
     return @intFromEnum(ErrorCode.ok);
@@ -772,6 +776,7 @@ export fn er_ui_source_workspace_reset() u32 {
     source_editor_selection_anchor = 0;
     source_editor_selection_active = false;
     source_editor_scroll_line = 0;
+    source_search_len = 0;
     clearSourceEditorHistory();
     last_compile_phase = .idle;
     last_compile_progress_permille = 0;
@@ -1039,6 +1044,10 @@ fn sourceEditorFocused() bool {
     return app_state.view == .source and runtime_state.focusKind() == .textarea and runtime_state.focusHitId() == app_source.editor_textarea_id;
 }
 
+fn sourceExplorerSearchFocused() bool {
+    return app_state.view == .source and runtime_state.focusKind() == .input and runtime_state.focusHitId() == app_source.explorer_search_input_id;
+}
+
 fn handleSourcePointerDown(x: f32, y: f32, width: f32, height: f32) bool {
     if (app_state.view != .source) return false;
     const hit_id = currentHoverHitId();
@@ -1053,6 +1062,60 @@ fn handleSourcePointerDown(x: f32, y: f32, width: f32, height: f32) bool {
         return true;
     }
     return false;
+}
+
+fn handleSourceSearchKey(key: []const u8, ctrl: u32, meta: u32, alt: u32) bool {
+    if (!sourceExplorerSearchFocused()) return false;
+    if (alt != 0) return false;
+    if ((ctrl != 0 or meta != 0) and (std.mem.eql(u8, key, "a") or std.mem.eql(u8, key, "A"))) {
+        source_search_len = 0;
+        return true;
+    }
+    if (ctrl != 0 or meta != 0) return false;
+    if (std.mem.eql(u8, key, "Escape")) {
+        source_search_len = 0;
+        _ = runtime_state.clearFocus();
+        return true;
+    }
+    if (std.mem.eql(u8, key, "Backspace")) {
+        source_search_len -|= 1;
+        return true;
+    }
+    if (std.mem.eql(u8, key, "Delete")) {
+        source_search_len = 0;
+        return true;
+    }
+    if (key.len == 1 and key[0] >= 0x20 and key[0] <= 0x7e) return insertSourceSearchText(key);
+    return false;
+}
+
+fn handleSourceSearchTextInput(input_type: []const u8, data: []const u8) bool {
+    if (!sourceExplorerSearchFocused()) return false;
+    if (std.mem.eql(u8, input_type, "deleteContentBackward")) {
+        source_search_len -|= 1;
+        return true;
+    }
+    if (std.mem.eql(u8, input_type, "deleteContentForward")) {
+        source_search_len = 0;
+        return true;
+    }
+    if (data.len == 0) return false;
+    if (std.mem.eql(u8, input_type, "insertText") or std.mem.eql(u8, input_type, "insertCompositionText") or std.mem.eql(u8, input_type, "insertFromPaste")) {
+        var decoded: [max_input_bytes]u8 = undefined;
+        const text = decodeInputEventData(data, &decoded) catch return false;
+        return insertSourceSearchText(text);
+    }
+    return false;
+}
+
+fn insertSourceSearchText(text: []const u8) bool {
+    if (text.len == 0) return true;
+    const available = source_search_bytes.len - source_search_len;
+    const len = @min(text.len, available);
+    if (len == 0) return true;
+    @memcpy(source_search_bytes[source_search_len..][0..len], text[0..len]);
+    source_search_len += len;
+    return true;
 }
 
 fn handleSourcePointerMove(x: f32, y: f32, width: f32, height: f32) bool {
@@ -1145,6 +1208,7 @@ fn handleInputEventRecord(record: InputEventRecord, width: f32, height: f32) u32
             return input_event_schedule_frame;
         },
         .key_down => {
+            if (handleSourceSearchKey(record.key, record.ctrl, record.meta, record.alt)) return input_event_prevent_default | input_event_schedule_frame;
             const handled = appKeyEvent(record.key, record.ctrl, record.meta, record.alt, record.shift);
             if (handled == 0) return 0;
             if (handled != 1) return input_event_error;
@@ -1155,6 +1219,7 @@ fn handleInputEventRecord(record: InputEventRecord, width: f32, height: f32) u32
             return input_event_schedule_frame;
         },
         .before_input => {
+            if (handleSourceSearchTextInput(record.input_type, record.data)) return input_event_prevent_default | input_event_schedule_frame;
             if (!sourceEditorFocused()) return 0;
             if (record.data.len == 0) return 0;
             if (!handleSourceEditorTextInput(record.input_type, record.data)) return 0;
@@ -2396,6 +2461,7 @@ fn currentSourceState(hover_x: f32, hover_y: f32) app_source.State {
         .hover_x = hover_x,
         .hover_y = hover_y,
         .label = source_editor_label,
+        .search_query = source_search_bytes[0..source_search_len],
         .files = currentSourceFiles(),
         .source = source_editor_bytes[0..source_editor_len],
         .cursor = source_editor_cursor,
@@ -3135,6 +3201,34 @@ test "app runtime source explorer rows open real workspace files" {
     try std.testing.expectEqualStrings("src/app_source.zig", source_editor_label);
     try std.testing.expectEqual(SourceEditorStatus.ready, source_editor_status);
     try std.testing.expect(source_editor_len > 0);
+}
+
+test "app runtime source explorer search is edited inside wasm" {
+    try std.testing.expectEqual(@as(u32, 0), er_ui_source_workspace_reset());
+    defer _ = er_ui_source_workspace_reset();
+    app_state = .{};
+    runtime_state = .{};
+    defer app_state = .{};
+    defer runtime_state = .{};
+
+    applyRoute(.{ .view = .source });
+    try storeLastRegions(&.{.{ .slot = 0, .kind = .input, .id = app_source.explorer_search_input_id, .bounds = ui.Rect.init(8, 8, 220, 32) }});
+    const pointer_result = er_ui_event(@intFromEnum(InputEventKind.pointer_down), 12.0, 12.0, 0.0, 0, 0, 0, 0, 1280.0, 800.0);
+    try std.testing.expectEqual(input_event_capture_pointer | input_event_schedule_frame, pointer_result);
+    try std.testing.expectEqual(ui.HitKind.input, runtime_state.focusKind().?);
+    try std.testing.expectEqual(app_source.explorer_search_input_id, runtime_state.focusHitId());
+
+    try std.testing.expectEqual(
+        input_event_prevent_default | input_event_schedule_frame,
+        eventBytesForTest(.before_input, 0.0, 0.0, 0.0, 0, "", "", "insertText", "font", 1280.0, 800.0),
+    );
+    try std.testing.expectEqualStrings("font", source_search_bytes[0..source_search_len]);
+
+    try std.testing.expectEqual(
+        input_event_prevent_default | input_event_schedule_frame,
+        eventBytesForTest(.key_down, 0.0, 0.0, 0.0, 0, "Backspace", "Backspace", "", "", 1280.0, 800.0),
+    );
+    try std.testing.expectEqualStrings("fon", source_search_bytes[0..source_search_len]);
 }
 
 test "app runtime source editor moves by visual lines" {

@@ -46,12 +46,12 @@ pub const Tooltip = struct {
         const content = layout.measureText(self.content, content_constraints, component_primitives.textMetrics(self.content, tooltip_text_h, tooltip_text_max_lines));
         const preferred = constrainPreferredSize(.{
             .w = @max(tooltip_min_width, @max(trigger.preferred.w + component_primitives.control_text_padding * 2.0, tooltip_trigger_w) + tooltip_gap + content.preferred.w + tooltip_padding * 2.0),
-            .h = @max(preferred_tooltip.h, @max(trigger.preferred.h, content.preferred.h + tooltip_padding * 2.0)),
+            .h = @max(tooltip_min_height, @max(trigger.preferred.h, content.preferred.h + tooltip_padding * 2.0)),
         }, constraints);
         return layout.Measurement.flexible(
-            .{ .w = @min(tooltip_min_width, preferred.w), .h = @min(preferred_tooltip.h, preferred.h) },
+            .{ .w = @min(tooltip_min_width, preferred.w), .h = @min(tooltip_min_height, preferred.h) },
             preferred,
-            .{ .w = component_primitives.measure_max_width, .h = @max(preferred.h, preferred_tooltip.h) },
+            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
         ).applyExact(constraints);
     }
 
@@ -97,7 +97,7 @@ const tooltip_text_h: f32 = 12.0;
 const tooltip_text_max_lines: usize = 2;
 const tooltip_trigger_max_lines: usize = 2;
 const tooltip_min_width: f32 = 160.0;
-pub const preferred_tooltip = ui.Size{ .w = 240.0, .h = 44.0 };
+const tooltip_min_height: f32 = 44.0;
 
 test "tooltip component serializes to canonical object and deserializes" {
     const tooltip = Tooltip{ .id = 994, .trigger = "Hover me", .content = "Add to library" };
@@ -132,7 +132,7 @@ test "tooltip measurement wraps long content under narrow constraints" {
     const tooltip = Tooltip{ .id = 994, .trigger = "Hover me", .content = "Inspect the signed runtime authority receipt" };
 
     const measured = tooltip.measure(.{ .width = .{ .at_most = tooltip_wrap_test_width }, .text_wrap = .wrap }, .{});
-    const tip = contentBounds(ui.Rect.init(0, 0, tooltip_wrap_test_width, preferred_tooltip.h), tooltip.content);
+    const tip = contentBounds(ui.Rect.init(0, 0, tooltip_wrap_test_width, tooltip_min_height), tooltip.content);
 
     try std.testing.expect(measured.preferred.w <= tooltip_wrap_test_width);
     try std.testing.expect(tip.h > tooltip_content_h);

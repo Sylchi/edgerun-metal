@@ -13,7 +13,6 @@ const primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-const measureFixed = primitives.measureFixed;
 const renderControlText = primitives.renderControlText;
 
 pub const Calendar = struct {
@@ -52,7 +51,8 @@ pub const Calendar = struct {
     pub fn measure(self: Calendar, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = self;
         _ = options;
-        return measureFixed(preferred_calendar, constraints);
+        const preferred = primitives.constrainPreferredSize(calendarIntrinsicSize(), constraints);
+        return layout.Measurement.flexible(preferred, preferred, preferred).applyExact(constraints);
     }
 
     pub fn toObject(self: Calendar, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -120,10 +120,17 @@ fn renderDay(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, selected: boo
     try renderControlText(scene, bounds, calendar_day_text_padding, calendar_day_text_h, label, if (selected) options.style.bg else options.style.text, .center);
 }
 
-const preferred_calendar = ui.Size{ .w = 240.0, .h = 152.0 };
+fn calendarIntrinsicSize() ui.Size {
+    return .{
+        .w = calendar_padding * 2.0 + @as(f32, @floatFromInt(calendar_column_count)) * calendar_cell_size + @as(f32, @floatFromInt(calendar_column_count - 1)) * calendar_cell_gap,
+        .h = calendar_grid_y + calendar_row_count * calendar_cell_size + (calendar_row_count - 1.0) * calendar_cell_gap + calendar_padding,
+    };
+}
+
 const calendar_day_count: usize = 28;
 const calendar_day_id_offset: u32 = 2;
 const calendar_column_count: usize = 7;
+const calendar_row_count: f32 = 4.0;
 const calendar_radius: f32 = 8.0;
 const calendar_padding: f32 = 8.0;
 const calendar_nav_size: f32 = 24.0;

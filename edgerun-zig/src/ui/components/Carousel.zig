@@ -14,7 +14,6 @@ const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
 const contentInset = component_primitives.contentInset;
-const measureFixed = component_primitives.measureFixed;
 
 pub const Carousel = struct {
     id: u32,
@@ -40,9 +39,17 @@ pub const Carousel = struct {
     }
 
     pub fn measure(self: Carousel, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
-        _ = self;
         _ = options;
-        return measureFixed(preferred_carousel, constraints);
+        const label = text_component.Text.measureValue(self.label, .{ .width = .unconstrained, .text_wrap = .nowrap }, component_primitives.textMetrics(self.label, component_primitives.control_label_height, carousel_label_max_lines));
+        const preferred = component_primitives.constrainPreferredSize(.{
+            .w = carousel_button_size * 2.0 + carousel_gap * 2.0 + label.preferred.w + carousel_text_padding * 2.0,
+            .h = @max(carousel_button_size, label.preferred.h + carousel_text_padding * 2.0),
+        }, constraints);
+        return layout.Measurement.flexible(
+            .{ .w = carousel_button_size * 2.0 + carousel_gap * 2.0 + component_primitives.min_extent, .h = carousel_button_size },
+            preferred,
+            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
+        ).applyExact(constraints);
     }
 
     pub fn toObject(self: Carousel, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -89,7 +96,7 @@ const carousel_gap: f32 = 8.0;
 const carousel_radius: f32 = 8.0;
 const carousel_text_padding: f32 = 8.0;
 const carousel_button_text_padding: f32 = 4.0;
-pub const preferred_carousel = ui.Size{ .w = 240.0, .h = 40.0 };
+const carousel_label_max_lines: usize = 1;
 
 test "carousel component serializes to canonical object and deserializes" {
     const carousel = Carousel{ .id = 990, .label = "Slide" };
@@ -116,4 +123,11 @@ test "carousel component renders content and button hit regions" {
     try std.testing.expect(component_test.hasText(scene.written(), "Slide"));
     try std.testing.expectEqual(@as(usize, 2), collector.written().len);
     try std.testing.expectEqual(@as(u32, 991), collector.written()[1].id);
+}
+
+test "carousel measurement follows label text" {
+    const short = Carousel{ .id = 990, .label = "Slide" };
+    const long = Carousel{ .id = 990, .label = "Runtime authority walkthrough" };
+
+    try std.testing.expect(long.measure(.{}, .{}).preferred.w > short.measure(.{}, .{}).preferred.w);
 }

@@ -15,7 +15,6 @@ const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
 const contentInset = component_primitives.contentInset;
-const measureFixed = component_primitives.measureFixed;
 
 pub const Menubar = struct {
     id: u32,
@@ -35,19 +34,29 @@ pub const Menubar = struct {
         const active = activeIndex(self.active);
         try scene.pushRect(bounds, options.style.panel, .fill, component_primitives.control_radius, 0.0);
         try scene.pushRect(bounds, options.style.border, .border, component_primitives.control_radius, 0.0);
-        try renderItem(scene, itemBounds(bounds, 0), self.first, active == 0, options);
-        try renderItem(scene, itemBounds(bounds, 1), self.second, active == 1, options);
-        try renderItem(scene, itemBounds(bounds, 2), menubar_third_label, active == 2, options);
+        const widths = itemWidths(self);
+        try renderItem(scene, itemBounds(bounds, &widths, 0), self.first, active == 0, options);
+        try renderItem(scene, itemBounds(bounds, &widths, 1), self.second, active == 1, options);
+        try renderItem(scene, itemBounds(bounds, &widths, 2), menubar_third_label, active == 2, options);
     }
 
     pub fn collectInteractions(self: Menubar, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-        try list_layout.collectItemStripHits(collector, bounds, self.id, &menubar_item_widths, menubar_strip_layout);
+        const widths = itemWidths(self);
+        try list_layout.collectItemStripHits(collector, bounds, self.id, &widths, menubar_strip_layout);
     }
 
     pub fn measure(self: Menubar, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
-        _ = self;
         _ = options;
-        return measureFixed(preferred_menubar, constraints);
+        const widths = itemWidths(self);
+        const preferred = component_primitives.constrainPreferredSize(.{
+            .w = widths[0] + widths[1] + widths[2] + menubar_padding * 2.0,
+            .h = menubar_item_h + menubar_padding * 2.0,
+        }, constraints);
+        return layout.Measurement.flexible(
+            .{ .w = component_primitives.min_extent * 3.0 + menubar_padding * 2.0, .h = menubar_item_h + menubar_padding * 2.0 },
+            preferred,
+            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
+        ).applyExact(constraints);
     }
 
     pub fn toObject(self: Menubar, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -88,17 +97,30 @@ fn renderItem(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, active: bool
     }
 }
 
-fn itemBounds(bounds: ui.Rect, index: usize) ui.Rect {
-    return list_layout.itemStripBounds(bounds, index, &menubar_item_widths, menubar_strip_layout);
+fn itemBounds(bounds: ui.Rect, widths: []const f32, index: usize) ui.Rect {
+    return list_layout.itemStripBounds(bounds, index, widths, menubar_strip_layout);
+}
+
+fn itemWidths(self: Menubar) [menubar_item_count]f32 {
+    return .{
+        itemWidth(self.first),
+        itemWidth(self.second),
+        itemWidth(menubar_third_label),
+    };
+}
+
+fn itemWidth(label: []const u8) f32 {
+    const measured = text_component.Text.measureValue(label, .{ .width = .unconstrained, .text_wrap = .nowrap }, component_primitives.textMetrics(label, component_primitives.control_label_height, menubar_label_max_lines));
+    return measured.preferred.w + menubar_item_padding_x * 2.0;
 }
 
 pub const menubar_item_count: u16 = 3;
 const menubar_padding: f32 = 4.0;
-const menubar_item_widths = [_]f32{ 48.0, 48.0, 48.0 };
-const menubar_strip_layout = list_layout.ItemStripLayout{ .padding = menubar_padding, .item_h = preferred_menubar.h - menubar_padding * 2.0 };
+const menubar_item_h: f32 = 28.0;
+const menubar_strip_layout = list_layout.ItemStripLayout{ .padding = menubar_padding, .item_h = menubar_item_h };
 const menubar_item_padding_x: f32 = 8.0;
 const menubar_third_label = "View";
-pub const preferred_menubar = ui.Size{ .w = 170.0, .h = 36.0 };
+const menubar_label_max_lines: usize = 1;
 
 test "menubar component serializes to canonical object and deserializes" {
     const menubar = Menubar{ .id = 120, .first = "File", .second = "Edit", .active = 2 };
@@ -129,4 +151,11 @@ test "menubar component renders items and hit regions" {
     try std.testing.expect(component_test.hasText(scene.written(), "View"));
     try std.testing.expectEqual(@as(usize, menubar_item_count), collector.written().len);
     try std.testing.expectEqual(@as(u32, 122), collector.written()[2].id);
+}
+
+test "menubar measurement follows item labels" {
+    const short = Menubar{ .id = 120, .first = "F", .second = "E", .active = 0 };
+    const long = Menubar{ .id = 120, .first = "Runtime", .second = "Authority", .active = 0 };
+
+    try std.testing.expect(long.measure(.{}, .{}).preferred.w > short.measure(.{}, .{}).preferred.w);
 }

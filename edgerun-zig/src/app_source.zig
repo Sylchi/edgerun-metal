@@ -4,6 +4,7 @@ const ui = @import("ui.zig");
 const button_component = @import("ui/components/Button.zig");
 const icon_component = @import("ui/components/Icon.zig");
 const display_component = @import("ui/components/Display.zig");
+const input_component = @import("ui/components/Input.zig");
 const row_item_component = @import("ui/components/RowItem.zig");
 const textarea_component = @import("ui/components/Textarea.zig");
 const component_common = @import("ui_component_common.zig");
@@ -17,6 +18,7 @@ pub const download_button_id: u32 = 32_002;
 pub const launch_button_id: u32 = 32_003;
 pub const reset_button_id: u32 = 32_004;
 pub const editor_textarea_id: u32 = 32_101;
+pub const explorer_search_input_id: u32 = 32_102;
 pub const explorer_file_id_base: u32 = 32_200;
 
 const header_h: f32 = app_chrome.header_h;
@@ -56,6 +58,8 @@ const explorer_threshold_w: f32 = 900.0;
 const minimap_threshold_w: f32 = 1180.0;
 const explorer_row_h: f32 = 24.0;
 const explorer_heading_h: f32 = 30.0;
+const explorer_search_h: f32 = 32.0;
+const explorer_search_gap: f32 = 8.0;
 const explorer_footer_h: f32 = 58.0;
 const compile_stage_count: usize = 4;
 const compact_w: f32 = 720.0;
@@ -66,7 +70,7 @@ const max_editor_lines_compact: usize = 28;
 const max_editor_lines_wide: usize = 40;
 const line_number_label_bytes: usize = 8;
 const editor_info_label_bytes: usize = 96;
-const explorer_file_count: usize = 4;
+const explorer_file_count: usize = default_file_entries.len;
 
 const EditorChrome = struct {
     titlebar: bool = true,
@@ -128,6 +132,7 @@ pub const State = struct {
     hover_x: f32 = -1.0,
     hover_y: f32 = -1.0,
     label: []const u8 = "",
+    search_query: []const u8 = "",
     files: []const FileEntry = &.{},
     source: []const u8 = "",
     cursor: usize = 0,
@@ -334,22 +339,63 @@ fn renderExplorer(scene: *ui.Scene, collector: *interaction.Collector, bounds: u
     try fill(scene, bounds, vscode_sidebar, 0.0);
     try stroke(scene, ui.Rect.init(bounds.x + bounds.w - 1.0, bounds.y, 1.0, bounds.h), vscode_line, 0.0);
     try text(scene, bounds.x + 14.0, bounds.y + 10.0, bounds.w - 28.0, 12.0, "EXPLORER", palette.dim);
-    try text(scene, bounds.x + 14.0, bounds.y + explorer_heading_h + 8.0, bounds.w - 28.0, 14.0, "EDGERUN-C", palette.text);
-    const rows_y = bounds.y + explorer_heading_h + 38.0;
-    try explorerRow(scene, bounds.x, rows_y, bounds.w, "src", icon_component.Icon.named(.chevron_right), false);
+    const search_bounds = ui.Rect.init(bounds.x + 10.0, bounds.y + explorer_heading_h, @max(1.0, bounds.w - 20.0), explorer_search_h);
+    const search_placeholder = if (state.search_query.len == 0) "Search files" else "";
+    const search_input = input_component.Input{ .id = explorer_search_input_id, .placeholder = search_placeholder, .icon_slot = icon_component.IconSlot.named(.leading, .search) };
+    try search_input.render(scene, search_bounds, .{ .style = app_chrome.style(), .control_size = .small });
+    try search_input.collectInteractions(collector, search_bounds);
+    if (state.search_query.len != 0) try text(scene, search_bounds.x + 36.0, search_bounds.y + 9.0, search_bounds.w - 44.0, 13.0, state.search_query, palette.text);
+    const rows_y = search_bounds.y + search_bounds.h + explorer_search_gap;
     const files = explorerFilesForState(state);
     const footer_y = bounds.y + @max(0.0, bounds.h - explorer_footer_h);
     const row_capacity = explorerRowCapacity(rows_y, footer_y);
-    for (files[0..@min(files.len, row_capacity)], 0..) |entry, index| {
-        const y = rows_y + explorer_row_h * @as(f32, @floatFromInt(index + 1));
-        const row_bounds = ui.Rect.init(bounds.x, y, bounds.w, explorer_row_h);
-        const path = entry.path;
-        try explorerRow(scene, bounds.x, y, bounds.w, fileName(path), icon_component.Icon.named(.file), std.mem.eql(u8, state.label, path));
-        try (row_item_component.RowItem{ .id = explorerFileHitId(index), .title = path, .detail = "" }).collectInteractions(collector, row_bounds);
-    }
+    const visible_rows = try renderExplorerRows(scene, collector, bounds, rows_y, row_capacity, files, state);
+    if (visible_rows == 0) try text(scene, bounds.x + 36.0, rows_y + 5.0, bounds.w - 50.0, 14.0, "No files found", palette.dim);
     try stroke(scene, ui.Rect.init(bounds.x, footer_y, bounds.w, 1.0), vscode_line, 0.0);
     try text(scene, bounds.x + 14.0, footer_y + 12.0, bounds.w - 28.0, 12.0, "APP-OWNED VFS", palette.dim);
     try text(scene, bounds.x + 14.0, footer_y + 32.0, bounds.w - 28.0, 12.0, toolbarDetail(state), toolbarDetailColor(state));
+}
+
+fn renderExplorerRows(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, rows_y: f32, row_capacity: usize, files: []const FileEntry, state: State) !usize {
+    if (row_capacity == 0) return 0;
+    if (state.search_query.len != 0) return renderExplorerSearchResults(scene, collector, bounds, rows_y, row_capacity, files, state);
+
+    var rendered: usize = 0;
+    try explorerRow(scene, bounds.x, rows_y, bounds.w, "edgerun-c", icon_component.Icon.named(.chevron_right), false, 0);
+    rendered += 1;
+    var previous_root: []const u8 = "";
+    for (files, 0..) |entry, file_index| {
+        const root = rootSegment(entry.path);
+        if (!std.mem.eql(u8, root, previous_root)) {
+            if (rendered >= row_capacity) return rendered;
+            const y = rows_y + explorer_row_h * @as(f32, @floatFromInt(rendered));
+            try explorerRow(scene, bounds.x, y, bounds.w, root, icon_component.Icon.named(.chevron_right), false, 1);
+            previous_root = root;
+            rendered += 1;
+        }
+        if (rendered >= row_capacity) return rendered;
+        try explorerFileRow(scene, collector, bounds, rows_y, rendered, entry.path, fileName(entry.path), file_index, std.mem.eql(u8, state.label, entry.path), 2);
+        rendered += 1;
+    }
+    return rendered;
+}
+
+fn renderExplorerSearchResults(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, rows_y: f32, row_capacity: usize, files: []const FileEntry, state: State) !usize {
+    var rendered: usize = 0;
+    for (files, 0..) |entry, file_index| {
+        if (!pathMatchesSearch(entry.path, state.search_query)) continue;
+        if (rendered >= row_capacity) return rendered;
+        try explorerFileRow(scene, collector, bounds, rows_y, rendered, entry.path, entry.path, file_index, std.mem.eql(u8, state.label, entry.path), 1);
+        rendered += 1;
+    }
+    return rendered;
+}
+
+fn explorerFileRow(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, rows_y: f32, row: usize, path: []const u8, label: []const u8, file_index: usize, selected: bool, depth: usize) !void {
+    const y = rows_y + explorer_row_h * @as(f32, @floatFromInt(row));
+    const row_bounds = ui.Rect.init(bounds.x, y, bounds.w, explorer_row_h);
+    try explorerRow(scene, bounds.x, y, bounds.w, label, icon_component.Icon.named(.file), selected, depth);
+    try (row_item_component.RowItem{ .id = explorerFileHitId(file_index), .title = path, .detail = "" }).collectInteractions(collector, row_bounds);
 }
 
 fn explorerFilesForState(state: State) []const FileEntry {
@@ -360,7 +406,7 @@ pub fn sourceLabelFromHit(hit_id: u32) ?[]const u8 {
     if (hit_id < explorer_file_id_base) return null;
     const index: usize = @intCast(hit_id - explorer_file_id_base);
     if (index >= explorer_file_count) return null;
-    return explorer_files[index];
+    return default_file_entries[index].path;
 }
 
 pub fn sourceIndexFromHit(hit_id: u32) ?usize {
@@ -427,15 +473,49 @@ fn visibleLineCapacity(code_view: ui.Rect) usize {
     return @min(max_rendered_lines, @max(@as(usize, 1), @as(usize, @intFromFloat(@max(1.0, (code_view.h - code_pad * 2.0) / code_line_h)))));
 }
 
-fn explorerRow(scene: *ui.Scene, x: f32, y: f32, w: f32, label: []const u8, icon_value: icon_component.Icon, selected: bool) !void {
+fn explorerRow(scene: *ui.Scene, x: f32, y: f32, w: f32, label: []const u8, icon_value: icon_component.Icon, selected: bool, depth: usize) !void {
     if (selected) try fill(scene, ui.Rect.init(x, y, w, explorer_row_h), vscode_selection, 0.0);
-    try icon_value.renderColor(scene, ui.Rect.init(x + 14.0, y + 5.0, 14.0, 14.0), if (selected) palette.text else palette.muted);
-    try text(scene, x + 36.0, y + 5.0, w - 44.0, 14.0, label, if (selected) palette.text else palette.dim);
+    const indent = explorerIndent(depth);
+    try icon_value.renderColor(scene, ui.Rect.init(x + 14.0 + indent, y + 5.0, 14.0, 14.0), if (selected) palette.text else palette.muted);
+    try text(scene, x + 36.0 + indent, y + 5.0, @max(1.0, w - 44.0 - indent), 14.0, label, if (selected) palette.text else palette.dim);
 }
 
 fn explorerRowCapacity(rows_y: f32, footer_y: f32) usize {
-    if (footer_y <= rows_y + explorer_row_h) return 0;
-    return @intFromFloat(@floor((footer_y - rows_y) / explorer_row_h) - 1.0);
+    if (footer_y <= rows_y) return 0;
+    return @intFromFloat(@floor((footer_y - rows_y) / explorer_row_h));
+}
+
+fn explorerIndent(depth: usize) f32 {
+    return 14.0 * @as(f32, @floatFromInt(@min(depth, 4)));
+}
+
+fn rootSegment(path: []const u8) []const u8 {
+    return path[0 .. std.mem.indexOfScalar(u8, path, '/') orelse path.len];
+}
+
+fn pathMatchesSearch(path: []const u8, query: []const u8) bool {
+    if (query.len == 0) return true;
+    if (query.len > path.len) return false;
+    var index: usize = 0;
+    while (index + query.len <= path.len) : (index += 1) {
+        if (asciiEqlIgnoreCase(path[index..][0..query.len], query)) return true;
+    }
+    return false;
+}
+
+fn asciiEqlIgnoreCase(a: []const u8, b: []const u8) bool {
+    if (a.len != b.len) return false;
+    for (a, b) |left, right| {
+        if (asciiLower(left) != asciiLower(right)) return false;
+    }
+    return true;
+}
+
+fn asciiLower(byte: u8) u8 {
+    return switch (byte) {
+        'A'...'Z' => byte + ('a' - 'A'),
+        else => byte,
+    };
 }
 
 fn renderBreadcrumb(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
@@ -930,6 +1010,51 @@ test "source explorer keeps file rows above footer status" {
     for (collector.written()) |region| {
         if (region.id >= explorer_file_id_base) try std.testing.expect(region.bounds.y + region.bounds.h <= footer_y);
     }
+}
+
+test "source explorer starts at workspace root and exposes search input" {
+    const files = [_]FileEntry{
+        .{ .path = "src/app_runtime.zig" },
+        .{ .path = "src/app_source.zig" },
+    };
+    var commands: [256]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+    var regions: [32]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
+
+    try renderExplorer(&scene, &collector, ui.Rect.init(0, 0, explorer_w, 260), .{
+        .label = files[0].path,
+        .files = &files,
+    });
+
+    try expectHit(collector.written(), explorer_search_input_id);
+    try expectHit(collector.written(), explorer_file_id_base);
+    try std.testing.expect(textCommand(scene.written(), "edgerun-c") != null);
+    try std.testing.expect(textCommand(scene.written(), "src") != null);
+    try std.testing.expect(textCommand(scene.written(), "app_runtime.zig") != null);
+}
+
+test "source explorer search filters by full path" {
+    const files = [_]FileEntry{
+        .{ .path = "compiler/zig/lib/std/atomic.zig" },
+        .{ .path = "compiler/zig/lib/std/base64.zig" },
+        .{ .path = "src/app_runtime.zig" },
+    };
+    var commands: [256]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+    var regions: [32]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
+
+    try renderExplorer(&scene, &collector, ui.Rect.init(0, 0, explorer_w, 260), .{
+        .label = files[1].path,
+        .search_query = "BASE64",
+        .files = &files,
+    });
+
+    try expectNoHit(collector.written(), explorer_file_id_base);
+    try expectHit(collector.written(), explorer_file_id_base + 1);
+    try expectNoHit(collector.written(), explorer_file_id_base + 2);
+    try std.testing.expect(textCommand(scene.written(), "compiler/zig/lib/std/base64.zig") != null);
 }
 
 test "source page height responds to source and diagnostic content" {
