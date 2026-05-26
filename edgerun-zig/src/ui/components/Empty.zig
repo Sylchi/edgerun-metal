@@ -11,7 +11,7 @@ const component_primitives = @import("Primitives.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
-const measureFixed = component_primitives.measureFixed;
+const constrainPreferredSize = component_primitives.constrainPreferredSize;
 
 pub const Empty = struct {
     title: []const u8,
@@ -27,18 +27,27 @@ pub const Empty = struct {
         const media = ui.Rect.init(bounds.x + (bounds.w - empty_media_size) * 0.5, bounds.y + empty_padding, empty_media_size, empty_media_size);
         try scene.pushRect(media, options.style.row, .fill, media.w * 0.5, 0.0);
         try scene.pushIconQuad(.{ .bounds = media.insetUniform(empty_media_icon_inset), .icon_id = icon.id(.sparkles), .color = options.style.text });
-        try scene.pushAlignedText(ui.Rect.init(bounds.x + empty_padding, media.y + media.h + empty_gap, @max(component_primitives.min_extent, bounds.w - empty_padding * 2.0), empty_title_height), self.title, options.style.text, .center);
-        try scene.pushWrappedText(ui.Rect.init(bounds.x + empty_padding, media.y + media.h + empty_gap + empty_title_height + empty_detail_gap, @max(component_primitives.min_extent, bounds.w - empty_padding * 2.0), empty_detail_height * empty_detail_max_lines), self.detail, options.style.muted, .{
-            .line_height = empty_detail_height,
-            .average_char_width = empty_detail_average_w,
-            .max_lines = empty_detail_max_lines,
-        });
+        const text_w = textWidth(bounds);
+        const title_y = media.y + media.h + empty_gap;
+        const title_h = component_primitives.measuredTextHeight(self.title, text_w, empty_title_height, empty_title_max_lines);
+        try scene.pushWrappedText(ui.Rect.init(bounds.x + empty_padding, title_y, text_w, title_h), self.title, options.style.text, component_primitives.textWrap(self.title, empty_title_height, empty_title_max_lines));
+        try scene.pushWrappedText(ui.Rect.init(bounds.x + empty_padding, title_y + title_h + empty_detail_gap, text_w, @max(component_primitives.min_extent, bounds.y + bounds.h - title_y - title_h - empty_detail_gap - empty_padding)), self.detail, options.style.muted, component_primitives.textWrap(self.detail, empty_detail_height, empty_detail_max_lines));
     }
 
     pub fn measure(self: Empty, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
-        _ = self;
         _ = options;
-        return measureFixed(preferred_empty, constraints);
+        const inner = constraints.inner(.{ .left = empty_padding, .right = empty_padding });
+        const title = layout.measureText(self.title, inner, component_primitives.textMetrics(self.title, empty_title_height, empty_title_max_lines));
+        const detail = layout.measureText(self.detail, inner, component_primitives.textMetrics(self.detail, empty_detail_height, empty_detail_max_lines));
+        const preferred = constrainPreferredSize(.{
+            .w = @max(empty_min_width, @max(empty_media_size, @max(title.preferred.w, detail.preferred.w)) + empty_padding * 2.0),
+            .h = empty_padding * 2.0 + empty_media_size + empty_gap + title.preferred.h + empty_detail_gap + detail.preferred.h,
+        }, constraints);
+        return layout.Measurement.flexible(
+            .{ .w = @min(empty_min_width, preferred.w), .h = @min(empty_min_height, preferred.h) },
+            preferred,
+            .{ .w = component_primitives.measure_max_width, .h = @max(preferred.h, preferred_empty.h) },
+        ).applyExact(constraints);
     }
 
     pub fn toObject(self: Empty, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -55,16 +64,22 @@ pub const Empty = struct {
     }
 };
 
+fn textWidth(bounds: ui.Rect) f32 {
+    return @max(component_primitives.min_extent, bounds.w - empty_padding * 2.0);
+}
+
 const empty_radius: f32 = 8.0;
 const empty_padding: f32 = 24.0;
 const empty_media_size: f32 = 40.0;
 const empty_media_icon_inset: f32 = 8.0;
 const empty_gap: f32 = 10.0;
 const empty_title_height: f32 = 20.0;
+const empty_title_max_lines: usize = 2;
 const empty_detail_gap: f32 = 4.0;
 const empty_detail_height: f32 = 16.0;
-const empty_detail_average_w: f32 = 7.5;
 const empty_detail_max_lines: usize = 2;
+const empty_min_width: f32 = 144.0;
+const empty_min_height: f32 = 96.0;
 pub const preferred_empty = ui.Size{ .w = 260.0, .h = 132.0 };
 
 test "empty component serializes to canonical object and deserializes" {
@@ -88,4 +103,16 @@ test "empty component renders media title and description" {
 
     try std.testing.expect(component_test.hasText(scene.written(), "No results"));
     try std.testing.expect(component_test.hasText(scene.written(), "Try another filter."));
+}
+
+test "empty measurement wraps long copy under narrow constraints" {
+    const empty = Empty{
+        .title = "No matching runtime objects",
+        .detail = "Try another authority filter or inspect the stored receipt list.",
+    };
+
+    const measured = empty.measure(.{ .width = .{ .at_most = empty_min_width }, .text_wrap = .wrap }, .{});
+
+    try std.testing.expect(measured.preferred.w <= empty_min_width);
+    try std.testing.expect(measured.preferred.h > preferred_empty.h);
 }

@@ -2,6 +2,7 @@ pub const compositor = @import("render/compositor.zig");
 pub const font_atlas = @import("render/font_atlas.zig");
 pub const gpu = @import("render/gpu.zig");
 pub const gpu_buffer = @import("render/gpu_buffer.zig");
+pub const gl_contract = @import("render/gl_contract.zig");
 pub const icon_line_buffer = @import("render/icon_line_buffer.zig");
 pub const icon_mask = @import("render/icon_mask.zig");
 pub const ir = @import("render/ir.zig");
@@ -17,6 +18,7 @@ test {
     _ = font_atlas;
     _ = gpu;
     _ = gpu_buffer;
+    _ = gl_contract;
     _ = icon_line_buffer;
     _ = icon_mask;
     _ = ir;

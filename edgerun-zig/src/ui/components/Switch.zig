@@ -11,7 +11,7 @@ const component_primitives = @import("Primitives.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
-const measureFixed = component_primitives.measureFixed;
+const constrainPreferredSize = component_primitives.constrainPreferredSize;
 
 pub const Switch = struct {
     id: u32,
@@ -29,7 +29,9 @@ pub const Switch = struct {
         const knob_x = if (self.checked) pill.x + pill.w - switch_knob_size - switch_knob_inset else pill.x + switch_knob_inset;
         const knob = ui.Rect.init(knob_x, pill.y + switch_knob_inset, switch_knob_size, switch_knob_size);
         try scene.pushRect(knob, options.style.panel, .fill, switch_knob_size * 0.5, 0.0);
-        try scene.pushText(ui.Rect.init(bounds.x, bounds.y, @max(component_primitives.min_extent, pill.x - bounds.x - switch_label_gap), bounds.h).withHeightCentered(component_primitives.control_label_height), self.label, options.style.text);
+        const label_w = @max(component_primitives.min_extent, pill.x - bounds.x - switch_label_gap);
+        const label_h = @min(bounds.h, component_primitives.measuredTextHeight(self.label, label_w, switch_label_height, switch_label_max_lines));
+        try scene.pushWrappedText(ui.Rect.init(bounds.x, bounds.y, label_w, bounds.h).withHeightCentered(label_h), self.label, options.style.text, component_primitives.textWrap(self.label, switch_label_height, switch_label_max_lines));
     }
 
     pub fn collectInteractions(self: Switch, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
@@ -37,9 +39,18 @@ pub const Switch = struct {
     }
 
     pub fn measure(self: Switch, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
-        _ = self;
         _ = options;
-        return measureFixed(preferred_switch, constraints);
+        const label_constraints = constraints.inner(.{ .right = switch_width + switch_label_gap });
+        const label = layout.measureText(self.label, label_constraints, component_primitives.textMetrics(self.label, switch_label_height, switch_label_max_lines));
+        const preferred = constrainPreferredSize(.{
+            .w = @max(switch_min_width, label.preferred.w + switch_label_gap + switch_width),
+            .h = @max(switch_height, label.preferred.h),
+        }, constraints);
+        return layout.Measurement.flexible(
+            .{ .w = @min(switch_min_width, preferred.w), .h = @min(switch_height, preferred.h) },
+            preferred,
+            .{ .w = component_primitives.measure_max_width, .h = @max(preferred.h, preferred_switch.h) },
+        ).applyExact(constraints);
     }
 
     pub fn toObject(self: Switch, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -61,6 +72,9 @@ const switch_height: f32 = 24.0;
 const switch_knob_size: f32 = 18.0;
 const switch_knob_inset: f32 = 3.0;
 const switch_label_gap: f32 = 10.0;
+const switch_label_height: f32 = component_primitives.control_label_height;
+const switch_label_max_lines: usize = 2;
+const switch_min_width: f32 = 112.0;
 pub const preferred_switch = ui.Size{ .w = 220.0, .h = 32.0 };
 
 test "switch component serializes to canonical object and deserializes" {
@@ -85,4 +99,15 @@ test "switch component uses panel token for knob" {
     try switch_control.render(&scene, ui.Rect.init(0, 0, 220, 32), .{ .style = .{ .panel = panel } });
 
     try std.testing.expect(component_test.hasFillColor(scene.written(), panel));
+}
+
+test "switch measurement wraps long labels under narrow constraints" {
+    const short = Switch{ .id = 12, .label = "Private", .checked = true };
+    const switch_control = Switch{ .id = 12, .label = "Require private runtime approvals", .checked = true };
+
+    const short_measured = short.measure(.{ .width = .{ .at_most = switch_min_width }, .text_wrap = .wrap }, .{});
+    const measured = switch_control.measure(.{ .width = .{ .at_most = switch_min_width }, .text_wrap = .wrap }, .{});
+
+    try std.testing.expect(measured.preferred.w <= switch_min_width);
+    try std.testing.expect(measured.preferred.h > short_measured.preferred.h);
 }

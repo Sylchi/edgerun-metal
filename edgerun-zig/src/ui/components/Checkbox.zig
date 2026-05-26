@@ -12,7 +12,7 @@ const icon = @import("../../icon.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
-const measureFixed = component_primitives.measureFixed;
+const constrainPreferredSize = component_primitives.constrainPreferredSize;
 
 pub const Checkbox = struct {
     id: u32,
@@ -31,7 +31,9 @@ pub const Checkbox = struct {
             try scene.pushIconQuad(.{ .bounds = box.insetUniform(checkbox_icon_inset), .icon_id = icon.id(.check), .color = options.style.bg });
         }
         const label_x = box.x + box.w + checkbox_text_gap;
-        try scene.pushText(ui.Rect.init(label_x, bounds.y, @max(component_primitives.min_extent, bounds.x + bounds.w - label_x), bounds.h).withHeightCentered(component_primitives.control_label_height), self.label, options.style.text);
+        const label_w = @max(component_primitives.min_extent, bounds.x + bounds.w - label_x);
+        const label_h = @min(bounds.h, component_primitives.measuredTextHeight(self.label, label_w, checkbox_label_height, checkbox_label_max_lines));
+        try scene.pushWrappedText(ui.Rect.init(label_x, bounds.y, label_w, bounds.h).withHeightCentered(label_h), self.label, options.style.text, component_primitives.textWrap(self.label, checkbox_label_height, checkbox_label_max_lines));
     }
 
     pub fn collectInteractions(self: Checkbox, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
@@ -39,9 +41,18 @@ pub const Checkbox = struct {
     }
 
     pub fn measure(self: Checkbox, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
-        _ = self;
         _ = options;
-        return measureFixed(preferred_checkbox, constraints);
+        const label_constraints = constraints.inner(.{ .left = checkbox_box_size + checkbox_text_gap });
+        const label = layout.measureText(self.label, label_constraints, component_primitives.textMetrics(self.label, checkbox_label_height, checkbox_label_max_lines));
+        const preferred = constrainPreferredSize(.{
+            .w = @max(checkbox_min_width, checkbox_box_size + checkbox_text_gap + label.preferred.w),
+            .h = @max(checkbox_box_size, label.preferred.h),
+        }, constraints);
+        return layout.Measurement.flexible(
+            .{ .w = @min(checkbox_min_width, preferred.w), .h = @min(checkbox_box_size, preferred.h) },
+            preferred,
+            .{ .w = component_primitives.measure_max_width, .h = @max(preferred.h, preferred_checkbox.h) },
+        ).applyExact(constraints);
     }
 
     pub fn toObject(self: Checkbox, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -61,6 +72,9 @@ pub const Checkbox = struct {
 const checkbox_box_size: f32 = 18.0;
 const checkbox_icon_inset: f32 = 3.0;
 const checkbox_text_gap: f32 = 10.0;
+const checkbox_label_height: f32 = component_primitives.control_label_height;
+const checkbox_label_max_lines: usize = 2;
+const checkbox_min_width: f32 = 96.0;
 pub const preferred_checkbox = ui.Size{ .w = 220.0, .h = 28.0 };
 
 test "checkbox component serializes to canonical object and deserializes" {
@@ -86,4 +100,13 @@ test "checkbox component renders checked mark through icon primitive" {
     try unchecked.render(&scene, ui.Rect.init(0, 36, 220, 28), .{});
 
     try std.testing.expectEqual(@as(usize, 1), component_test.iconCount(scene.written(), icon.id(.check)));
+}
+
+test "checkbox measurement wraps long labels under narrow constraints" {
+    const checkbox = Checkbox{ .id = 11, .label = "Enable signed runtime synchronization", .checked = true };
+
+    const measured = checkbox.measure(.{ .width = .{ .at_most = checkbox_min_width }, .text_wrap = .wrap }, .{});
+
+    try std.testing.expect(measured.preferred.w <= checkbox_min_width);
+    try std.testing.expect(measured.preferred.h > preferred_checkbox.h);
 }
