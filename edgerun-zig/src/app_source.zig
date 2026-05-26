@@ -5,6 +5,7 @@ const ui = @import("ui.zig");
 const components = @import("ui_components.zig");
 const app_chrome = @import("app_chrome.zig");
 const design = @import("app_design.zig");
+const app_layout = @import("app_layout.zig");
 
 pub const compile_button_id: u32 = 32_001;
 pub const download_button_id: u32 = 32_002;
@@ -25,11 +26,17 @@ const toolbar_detail_h: f32 = 16.0;
 const toolbar_row_gap: f32 = 10.0;
 const toolbar_action_gap: f32 = 10.0;
 const source_action_h: f32 = design.compact_control_h + 2.0;
+const source_action_min_w: f32 = 92.0;
+const toolbar_text_average_w: f32 = 8.8;
+const toolbar_title_max_lines: usize = 2;
+const toolbar_detail_max_lines: usize = 2;
 const compiler_title_h: f32 = 18.0;
 const compiler_text_h: f32 = 16.0;
 const compiler_bar_h: f32 = 8.0;
 const compiler_stage_h: f32 = 18.0;
 const compiler_diagnostic_h: f32 = 16.0;
+const compiler_text_average_w: f32 = 8.6;
+const compiler_message_max_lines: usize = 2;
 const code_pad: f32 = 18.0;
 const code_line_h: f32 = 18.0;
 const code_gutter_w: f32 = 68.0;
@@ -46,6 +53,11 @@ const line_number_label_bytes: usize = 8;
 const editor_info_label_bytes: usize = 96;
 
 const palette = design.palette;
+const fill = app_layout.fill;
+const stroke = app_layout.stroke;
+const text = app_layout.text;
+const wrappedText = app_layout.wrappedTextWith;
+const wrappedTextHeight = app_layout.wrappedTextHeightWith;
 const syntax_keyword = ui.Color{ .r = 125, .g = 211, .b = 252 };
 const syntax_type = ui.Color{ .r = 196, .g = 181, .b = 253 };
 const syntax_string = ui.Color{ .r = 134, .g = 239, .b = 172 };
@@ -106,22 +118,18 @@ fn renderToolbar(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui
         .title = "",
         .detail = "",
     } }, .{ .style = app_chrome.style() });
-    try text(scene, bounds.x + panel_pad, bounds.y + panel_pad, bounds.w - panel_pad * 2.0, toolbar_label_h, "Source workspace", palette.primary);
-    try text(scene, bounds.x + panel_pad, bounds.y + panel_pad + toolbar_label_h + toolbar_row_gap, bounds.w - panel_pad * 2.0, toolbar_title_h, state.label, palette.text);
-    try text(scene, bounds.x + panel_pad, bounds.y + panel_pad + toolbar_label_h + toolbar_row_gap + toolbar_title_h + toolbar_row_gap, bounds.w - panel_pad * 2.0, toolbar_detail_h, toolbarDetail(state), toolbarDetailColor(state));
+    const text_w = toolbarTextWidth(bounds);
+    const title_h = wrappedTextHeight(state.label, text_w, toolbar_title_h, toolbar_title_max_lines, toolbar_text_average_w);
+    const detail_h = wrappedTextHeight(toolbarDetail(state), text_w, toolbar_detail_h, toolbar_detail_max_lines, toolbar_text_average_w);
+    try text(scene, bounds.x + panel_pad, bounds.y + panel_pad, text_w, toolbar_label_h, "Source workspace", palette.primary);
+    try wrappedText(scene, ui.Rect.init(bounds.x + panel_pad, bounds.y + panel_pad + toolbar_label_h + toolbar_row_gap, text_w, title_h), state.label, palette.text, toolbar_title_h, toolbar_text_average_w, toolbar_title_max_lines);
+    try wrappedText(scene, ui.Rect.init(bounds.x + panel_pad, bounds.y + panel_pad + toolbar_label_h + toolbar_row_gap + title_h + toolbar_row_gap, text_w, detail_h), toolbarDetail(state), toolbarDetailColor(state), toolbar_detail_h, toolbar_text_average_w, toolbar_detail_max_lines);
 
-    const compact = bounds.w < compact_w;
-    const button_w: f32 = if (compact) @max(design.min_touch_target, (bounds.w - panel_pad * 2.0 - toolbar_action_gap * 3.0) / 4.0) else @min(132.0, @max(design.min_touch_target, (bounds.w - panel_pad * 2.0 - toolbar_action_gap * 3.0) / 4.0));
-    const button_y = if (compact) bounds.y + bounds.h - panel_pad - source_action_h else bounds.y + panel_pad;
-    const icon_only = compact and button_w < 92.0;
-    const reset = ui.Rect.init(bounds.x + bounds.w - panel_pad - button_w, button_y, button_w, source_action_h);
-    const launch = ui.Rect.init(reset.x - toolbar_action_gap - button_w, button_y, button_w, source_action_h);
-    const download = ui.Rect.init(launch.x - toolbar_action_gap - button_w, button_y, button_w, source_action_h);
-    const compile = ui.Rect.init(download.x - toolbar_action_gap - button_w, button_y, button_w, source_action_h);
-    try button(scene, collector, compile, if (icon_only) "" else "Compile", compile_button_id, .primary, .cpu, canCompile(state));
-    try button(scene, collector, download, if (icon_only) "" else "Export", download_button_id, .secondary, .file, canExport(state));
-    try button(scene, collector, launch, if (icon_only) "" else "Run", launch_button_id, .secondary, .send, canRun(state));
-    try button(scene, collector, reset, if (icon_only) "" else "Reset", reset_button_id, .ghost, .trash, true);
+    const actions = toolbarActions(bounds);
+    try button(scene, collector, actions.compile, "Compile", compile_button_id, .primary, .cpu, canCompile(state));
+    try button(scene, collector, actions.download, "Export", download_button_id, .secondary, .file, canExport(state));
+    try button(scene, collector, actions.launch, "Run", launch_button_id, .secondary, .send, canRun(state));
+    try button(scene, collector, actions.reset, "Reset", reset_button_id, .ghost, .trash, true);
 }
 
 fn renderEditor(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
@@ -173,18 +181,27 @@ fn renderStatus(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
         .title = "",
         .detail = "",
     } }, .{ .style = status_style });
-    try text(scene, bounds.x + panel_pad, bounds.y + panel_pad, bounds.w - panel_pad * 2.0, compiler_title_h, "Compiler", palette.cyan);
-    try text(scene, bounds.x + panel_pad, bounds.y + 44.0, bounds.w - panel_pad * 2.0, compiler_text_h, state.status, palette.text);
-    try text(scene, bounds.x + panel_pad, bounds.y + 70.0, bounds.w - panel_pad * 2.0, compiler_text_h, state.compile_summary, palette.dim);
+    const text_w = @max(1.0, bounds.w - panel_pad * 2.0);
+    const status_h = wrappedTextHeight(state.status, text_w, compiler_text_h, compiler_message_max_lines, compiler_text_average_w);
+    const summary_h = wrappedTextHeight(state.compile_summary, text_w, compiler_text_h, compiler_message_max_lines, compiler_text_average_w);
+    const status_y = bounds.y + panel_pad + compiler_title_h + 8.0;
+    const summary_y = status_y + status_h + 10.0;
+    const bar_y = summary_y + summary_h + 14.0;
+    try text(scene, bounds.x + panel_pad, bounds.y + panel_pad, text_w, compiler_title_h, "Compiler", palette.cyan);
+    try wrappedText(scene, ui.Rect.init(bounds.x + panel_pad, status_y, text_w, status_h), state.status, palette.text, compiler_text_h, compiler_text_average_w, compiler_message_max_lines);
+    try wrappedText(scene, ui.Rect.init(bounds.x + panel_pad, summary_y, text_w, summary_h), state.compile_summary, palette.dim, compiler_text_h, compiler_text_average_w, compiler_message_max_lines);
 
-    const bar = ui.Rect.init(bounds.x + panel_pad, bounds.y + 100.0, @max(1.0, bounds.w - panel_pad * 2.0), compiler_bar_h);
+    const bar = ui.Rect.init(bounds.x + panel_pad, bar_y, text_w, compiler_bar_h);
     var progress_style = app_chrome.style();
     progress_style.panel = palette.neutral_soft;
     progress_style.accent = progressColor(state.compile_progress);
     try components.renderComponent(scene, bar, .{ .progress = .{ .value = state.compile_progress } }, .{ .style = progress_style });
     try renderCompileStages(scene, ui.Rect.init(bar.x, bar.y - 5.0, bar.w, compiler_stage_h), state.compile_progress);
-    try text(scene, bounds.x + panel_pad, bounds.y + 116.0, bounds.w - panel_pad * 2.0, compiler_text_h, state.compile_phase, palette.primary);
-    if (state.diagnostic.len != 0) try text(scene, bounds.x + panel_pad, bounds.y + 132.0, bounds.w - panel_pad * 2.0, compiler_diagnostic_h, state.diagnostic, palette.danger);
+    const phase_y = bar.y + compiler_bar_h + 8.0;
+    try text(scene, bounds.x + panel_pad, phase_y, text_w, compiler_text_h, state.compile_phase, palette.primary);
+    if (state.diagnostic.len != 0) {
+        try wrappedText(scene, ui.Rect.init(bounds.x + panel_pad, phase_y + compiler_text_h, text_w, compiler_diagnostic_h), state.diagnostic, palette.danger, compiler_diagnostic_h, compiler_text_average_w, 1);
+    }
 }
 
 fn renderEditorStatus(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
@@ -281,19 +298,73 @@ fn editorHeight(content_w: f32, state: State) f32 {
 }
 
 fn toolbarHeight(content_w: f32) f32 {
-    const text_h = panel_pad + toolbar_label_h + toolbar_row_gap + toolbar_title_h + toolbar_row_gap + toolbar_detail_h + panel_pad;
-    if (content_w >= compact_w) return @max(text_h, panel_pad + source_action_h + panel_pad);
-    return text_h + toolbar_row_gap + source_action_h + panel_pad;
+    const title_h = toolbar_title_h * @as(f32, @floatFromInt(toolbar_title_max_lines));
+    const detail_h = toolbar_detail_h * @as(f32, @floatFromInt(toolbar_detail_max_lines));
+    const text_h = panel_pad + toolbar_label_h + toolbar_row_gap + title_h + toolbar_row_gap + detail_h + panel_pad;
+    const actions_h = toolbarActionsHeight(content_w);
+    if (content_w >= compact_w) return @max(text_h, panel_pad + actions_h + panel_pad);
+    return text_h + toolbar_row_gap + actions_h + panel_pad;
 }
 
 fn statusHeight(_: f32, state: State) f32 {
     const diagnostic_h = if (state.diagnostic.len == 0) 0.0 else compiler_diagnostic_h;
-    return panel_pad + compiler_title_h + 8.0 + compiler_text_h + 10.0 + compiler_text_h + 14.0 + compiler_stage_h + 8.0 + compiler_text_h + diagnostic_h + panel_pad;
+    return panel_pad + compiler_title_h + 8.0 + compiler_text_h * @as(f32, @floatFromInt(compiler_message_max_lines)) + 10.0 + compiler_text_h * @as(f32, @floatFromInt(compiler_message_max_lines)) + 14.0 + compiler_stage_h + 8.0 + compiler_text_h + diagnostic_h + panel_pad;
 }
 
 fn maxVisibleColumns(width: f32) usize {
     const code_w = @max(1.0, width - code_pad * 2.0 - code_gutter_w);
     return @max(1, @as(usize, @intFromFloat(code_w / code_char_w)));
+}
+
+const ToolbarActions = struct {
+    compile: ui.Rect,
+    download: ui.Rect,
+    launch: ui.Rect,
+    reset: ui.Rect,
+};
+
+fn toolbarTextWidth(bounds: ui.Rect) f32 {
+    if (bounds.w < compact_w) return @max(1.0, bounds.w - panel_pad * 2.0);
+    const action_w = toolbarActionsWidth(bounds.w);
+    return @max(1.0, bounds.w - panel_pad * 3.0 - action_w);
+}
+
+fn toolbarActions(bounds: ui.Rect) ToolbarActions {
+    const action_area = ui.Rect.init(bounds.x + panel_pad, bounds.y + bounds.h - panel_pad - toolbarActionsHeight(bounds.w), @max(1.0, bounds.w - panel_pad * 2.0), toolbarActionsHeight(bounds.w));
+    const compact = bounds.w < compact_w;
+    const columns: usize = if (compact and !toolbarActionsFitOneRow(bounds.w)) 2 else 4;
+    const button_w = @max(design.min_touch_target, (action_area.w - toolbar_action_gap * @as(f32, @floatFromInt(columns - 1))) / @as(f32, @floatFromInt(columns)));
+    const row_h = source_action_h;
+    const start_x = if (!compact) bounds.x + bounds.w - panel_pad - toolbarActionsWidth(bounds.w) else action_area.x;
+    const start_y = if (!compact) bounds.y + panel_pad else action_area.y;
+    if (columns == 2) {
+        return .{
+            .compile = ui.Rect.init(start_x, start_y, button_w, row_h),
+            .download = ui.Rect.init(start_x + button_w + toolbar_action_gap, start_y, button_w, row_h),
+            .launch = ui.Rect.init(start_x, start_y + row_h + toolbar_action_gap, button_w, row_h),
+            .reset = ui.Rect.init(start_x + button_w + toolbar_action_gap, start_y + row_h + toolbar_action_gap, button_w, row_h),
+        };
+    }
+    return .{
+        .compile = ui.Rect.init(start_x, start_y, button_w, row_h),
+        .download = ui.Rect.init(start_x + button_w + toolbar_action_gap, start_y, button_w, row_h),
+        .launch = ui.Rect.init(start_x + (button_w + toolbar_action_gap) * 2.0, start_y, button_w, row_h),
+        .reset = ui.Rect.init(start_x + (button_w + toolbar_action_gap) * 3.0, start_y, button_w, row_h),
+    };
+}
+
+fn toolbarActionsHeight(width: f32) f32 {
+    return if (width < compact_w and !toolbarActionsFitOneRow(width)) source_action_h * 2.0 + toolbar_action_gap else source_action_h;
+}
+
+fn toolbarActionsWidth(width: f32) f32 {
+    const inner_w = @max(1.0, width - panel_pad * 2.0);
+    if (width < compact_w) return inner_w;
+    return @min(inner_w, source_action_min_w * 4.0 + toolbar_action_gap * 3.0);
+}
+
+fn toolbarActionsFitOneRow(width: f32) bool {
+    return width - panel_pad * 2.0 >= source_action_min_w * 4.0 + toolbar_action_gap * 3.0;
 }
 
 fn renderSyntaxLine(scene: *ui.Scene, x: f32, y: f32, w: f32, line: []const u8) !void {
@@ -465,18 +536,6 @@ fn lineCount(source: []const u8) usize {
         if (byte == '\n') lines += 1;
     }
     return lines;
-}
-
-fn fill(scene: *ui.Scene, bounds: ui.Rect, color: ui.Color, r: f32) ui.RenderError!void {
-    try scene.pushRect(bounds, color, .fill, r, 0.0);
-}
-
-fn stroke(scene: *ui.Scene, bounds: ui.Rect, color: ui.Color, r: f32) ui.RenderError!void {
-    try scene.pushRect(bounds, color, .border, r, 1.0);
-}
-
-fn text(scene: *ui.Scene, x: f32, y: f32, w: f32, h: f32, value: []const u8, color: ui.Color) ui.RenderError!void {
-    try scene.pushAlignedText(ui.Rect.init(x, y, @max(1.0, w), @max(1.0, h)), value, color, .start);
 }
 
 test "source page renders editor controls through shared ui" {

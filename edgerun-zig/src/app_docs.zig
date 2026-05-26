@@ -7,6 +7,7 @@ const component_gallery = @import("component_gallery.zig");
 const app_blog = @import("app_blog.zig");
 const app_chrome = @import("app_chrome.zig");
 const design = @import("app_design.zig");
+const app_layout = @import("app_layout.zig");
 
 const DocsError = ui.RenderError || interaction.Error || component_gallery.GalleryError;
 
@@ -36,6 +37,7 @@ const hero_summary_line_h: f32 = 20.0;
 const hero_summary_avg_w: f32 = 9.4;
 const hero_summary_max_lines: usize = 4;
 const hero_button_gap: f32 = 22.0;
+const hero_action_min_w: f32 = 132.0;
 const intro_title_h: f32 = 22.0;
 const intro_gap: f32 = 10.0;
 const intro_body_line_h: f32 = 18.0;
@@ -66,6 +68,11 @@ const sample_switch_id: u32 = 31_103;
 const sample_tab_id: u32 = 31_104;
 
 const palette = design.palette;
+const fill = app_layout.fill;
+const stroke = app_layout.stroke;
+const text = app_layout.text;
+const wrappedText = app_layout.wrappedTextWith;
+const wrappedTextHeight = app_layout.wrappedTextHeightWith;
 
 pub const State = struct {
     scroll_y: f32 = 0.0,
@@ -459,7 +466,7 @@ fn renderHero(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Re
         .detail = "",
     } }, .{ .style = app_chrome.style() });
     const inset = bounds.insetUniform(card_pad);
-    try label(scene, ui.Rect.init(inset.x, inset.y, 150.0, 26.0), page.status, page.color);
+    try label(scene, heroLabelBounds(inset, page.status), page.status, page.color);
     const split = bounds.w >= compact_w;
     const copy_w = if (split) inset.w * 0.64 else inset.w;
     const title_y = inset.y + hero_label_h + 20.0;
@@ -479,10 +486,20 @@ fn renderHero(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Re
     }
 
     if (page.section == .source) {
-        try primaryButton(scene, collector, ui.Rect.init(inset.x, bounds.y + bounds.h - 58.0, 150.0, 38.0), "Open source", source_button_id);
+        try primaryButton(scene, collector, heroActionBounds(inset, bounds), "Open source", source_button_id);
     } else if (page.section == .authority) {
-        try outlineButton(scene, collector, ui.Rect.init(inset.x, bounds.y + bounds.h - 58.0, 150.0, 38.0), "Academy", academy_button_id);
+        try outlineButton(scene, collector, heroActionBounds(inset, bounds), "Academy", academy_button_id);
     }
+}
+
+fn heroLabelBounds(inset: ui.Rect, value: []const u8) ui.Rect {
+    const desired_w = @as(f32, @floatFromInt(value.len)) * 8.0 + 34.0;
+    return ui.Rect.init(inset.x, inset.y, @min(inset.w, @max(design.min_touch_target, desired_w)), hero_label_h);
+}
+
+fn heroActionBounds(inset: ui.Rect, bounds: ui.Rect) ui.Rect {
+    const desired_w = @min(178.0, @max(hero_action_min_w, inset.w * 0.42));
+    return ui.Rect.init(inset.x, bounds.y + bounds.h - design.control_h - card_pad, @min(inset.w, desired_w), design.control_h);
 }
 
 fn heroHasAction(page: DocPage) bool {
@@ -874,44 +891,6 @@ fn label(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, color: ui.Color) 
     try components.renderComponent(scene, bounds, .{ .badge = .{
         .label = value,
     } }, .{ .style = label_style });
-}
-
-fn fill(scene: *ui.Scene, bounds: ui.Rect, color: ui.Color, radius: f32) ui.RenderError!void {
-    try scene.pushRect(bounds, color, .fill, radius, 0.0);
-}
-
-fn stroke(scene: *ui.Scene, bounds: ui.Rect, color: ui.Color, radius: f32) ui.RenderError!void {
-    try scene.pushRect(bounds, color, .border, radius, 0.0);
-}
-
-fn text(scene: *ui.Scene, x: f32, y: f32, w: f32, h: f32, value: []const u8, color: ui.Color) ui.RenderError!void {
-    try scene.pushAlignedText(ui.Rect.init(x, y, @max(1.0, w), @max(1.0, h)), value, color, .start);
-}
-
-fn wrappedText(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, color: ui.Color, line_height: f32, average_char_width: f32, max_lines: usize) ui.RenderError!void {
-    try scene.pushWrappedText(bounds, value, color, .{
-        .line_height = line_height,
-        .average_char_width = average_char_width,
-        .max_lines = max_lines,
-    });
-}
-
-fn wrappedTextHeight(value: []const u8, width: f32, line_height: f32, max_lines: usize, average_char_width: f32) f32 {
-    const lines = @max(@as(usize, 1), wrappedLineCount(value, width, average_char_width, max_lines));
-    return line_height * @as(f32, @floatFromInt(lines));
-}
-
-fn wrappedLineCount(value: []const u8, width: f32, average_char_width: f32, max_lines: usize) usize {
-    if (value.len == 0 or max_lines == 0) return 0;
-    const char_capacity = @max(@as(usize, 1), @as(usize, @intFromFloat(@max(1.0, width / average_char_width))));
-    var byte_cursor: usize = 0;
-    var line_count: usize = 0;
-    while (line_count < max_lines) : (line_count += 1) {
-        byte_cursor = ui.skipAsciiSpace(value, byte_cursor);
-        if (byte_cursor >= value.len) return line_count;
-        byte_cursor = ui.wrappedLine(value, byte_cursor, char_capacity).next;
-    }
-    return line_count;
 }
 
 fn iconQuad(scene: *ui.Scene, bounds: ui.Rect, value: icon.Icon, color: ui.Color) ui.RenderError!void {

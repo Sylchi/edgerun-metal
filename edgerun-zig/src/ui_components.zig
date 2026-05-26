@@ -406,7 +406,11 @@ pub fn renderNode(scene: *ui.Scene, bounds: ui.Rect, node: ui.Node, options: Ren
     if (!bounds.valid()) return error.InvalidBounds;
     switch (node) {
         .rect => |rect| try scene.pushRect(bounds, rect.color, .fill, 0.0, 0.0),
-        .text => |text| try scene.pushText(bounds, text.value, text.color orelse options.style.text),
+        .text => |text| {
+            var component_options = options;
+            if (text.color) |color| component_options.style.text = color;
+            try (Text{ .value = text.value }).render(scene, bounds, component_options);
+        },
         .slot => |slot| try renderNode(scene, bounds, slot.child.*, options),
         .stack => |stack| try renderNodeStack(scene, bounds, stack, options),
         else => {
@@ -672,6 +676,18 @@ test "primitive node rendering uses scene command helpers" {
     try std.testing.expectEqual(ui.Color.muted, scene.commandAt(1).?.text.color);
 }
 
+test "raw node text uses responsive wrapped renderer" {
+    var commands: [8]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+
+    try renderNode(&scene, ui.Rect.init(0, 0, 72, 54), ui.textNode("Runtime text wraps cleanly", null), .{});
+
+    try std.testing.expect(scene.written().len > 1);
+    for (scene.written()) |command| {
+        try std.testing.expect(command.text.origin.w <= 72);
+    }
+}
+
 test "slot component wraps a leaf component and renders the child" {
     const slot = Slot{
         .id = 99,
@@ -868,9 +884,9 @@ test "component render helper owns button variants and collects hit targets" {
 }
 
 test "component renderer exports shared sizing tokens for measurements" {
-    try std.testing.expectEqual(ui_tokens.Component.surface_radius, component_render.surface_radius);
-    try std.testing.expectEqual(ui_tokens.Component.surface_padding, component_render.surface_padding);
-    try std.testing.expectEqual(ui_tokens.Component.surface_detail_gap, component_render.surface_detail_gap);
+    try std.testing.expectEqual(ui_tokens.Component.surface_radius, Card.surface_radius);
+    try std.testing.expectEqual(ui_tokens.Component.surface_padding, Card.surface_padding);
+    try std.testing.expectEqual(ui_tokens.Component.surface_detail_gap, Card.surface_detail_gap);
     try std.testing.expectEqual(ui_tokens.Component.badge_height, component_render.badge_height);
     try std.testing.expectEqual(ui_tokens.Component.badge_padding_x, component_render.badge_padding_x);
 }

@@ -5,6 +5,7 @@ const ui = @import("ui.zig");
 const components = @import("ui_components.zig");
 const app_chrome = @import("app_chrome.zig");
 const design = @import("app_design.zig");
+const app_layout = @import("app_layout.zig");
 
 pub const logo_button_id: u32 = app_chrome.logo_button_id;
 pub const docs_button_id: u32 = app_chrome.docs_button_id;
@@ -34,9 +35,10 @@ const hero_stacked_paragraph_max_w: f32 = 560.0;
 const hero_stacked_button_y: f32 = 374.0;
 const hero_stacked_terminal_y: f32 = 444.0;
 const hero_bottom_pad: f32 = 34.0;
-const hero_primary_button_w: f32 = 166.0;
-const hero_outline_button_w: f32 = 138.0;
+const hero_primary_button_weight: f32 = 0.54;
 const hero_button_gap: f32 = 14.0;
+const action_button_h: f32 = 42.0;
+const action_pair_min_w: f32 = 260.0;
 const hero_inline_title_min_w: f32 = 720.0;
 const hero_inline_title_first_w: f32 = 286.0;
 const hero_inline_title_accent_w: f32 = 382.0;
@@ -82,6 +84,9 @@ const node_online_halo_alpha: u8 = 12;
 const node_offline_halo_alpha: u8 = 8;
 
 const palette = design.palette;
+const fill = app_layout.fill;
+const stroke = app_layout.stroke;
+const text = app_layout.text;
 
 pub const State = struct {
     scroll_y: f32 = 0.0,
@@ -147,7 +152,7 @@ pub fn contentHeight(width: f32) f32 {
 pub fn render(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) (ui.RenderError || interaction.Error)!void {
     try fill(scene, bounds, palette.bg, 0.0);
 
-    const content = centered(bounds, content_wide);
+    const content = app_layout.centered(bounds, content_wide, content_pad);
     const page_y = header_h - state.scroll_y;
 
     const map_y = page_y;
@@ -165,7 +170,7 @@ pub fn render(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Re
 }
 
 fn flowSections(scene: ?*ui.Scene, collector: ?*interaction.Collector, bounds: ui.Rect, state: State) (ui.RenderError || interaction.Error)!f32 {
-    const content = centered(bounds, content_wide);
+    const content = app_layout.centered(bounds, content_wide, content_pad);
     var cursor_y = bounds.y + page_top_pad;
     for (sections) |section| {
         const section_h = sectionHeight(content, section.kind);
@@ -195,9 +200,9 @@ fn sectionHeight(content: ui.Rect, kind: SectionKind) f32 {
     return switch (kind) {
         .hero => heroSectionHeight(content.w),
         .stats => if (content.w < stats_compact_w) stats_compact_h else stats_default_h,
-        .problem => 420.0,
+        .problem => if (content.w > 760.0) 420.0 else 720.0,
         .principles => if (content.w > 720.0) 430.0 else 682.0,
-        .architecture => 500.0,
+        .architecture => if (content.w > 760.0) 500.0 else 760.0,
         .impact => impactSectionHeight(content.w),
         .cta => 280.0,
         .footer => 250.0,
@@ -236,10 +241,9 @@ fn renderHero(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Re
     const paragraph_w = if (stacked) @min(layout.copy.w, hero_stacked_paragraph_max_w) else @min(layout.copy.w, 500.0);
     const paragraph_x = if (stacked) layout.copy.x + (layout.copy.w - paragraph_w) * 0.5 else layout.copy.x;
     try heroParagraph(scene, ui.Rect.init(paragraph_x, layout.copy.y + 244.0, paragraph_w, 88.0), "EdgeRun carries its compiler, source object, UI system, object store, and receipts inside the app. Edit source, build, and run the next artifact.");
-    const actions_w = hero_primary_button_w + hero_button_gap + hero_outline_button_w;
-    const actions_x = if (stacked) layout.copy.x + (layout.copy.w - actions_w) * 0.5 else layout.copy.x;
-    try primaryButtonWithTrailingIcon(scene, collector, ui.Rect.init(actions_x, layout.button_y, hero_primary_button_w, 42.0), "View Source", .chevron_right, source_button_id);
-    try outlineButton(scene, collector, ui.Rect.init(actions_x + hero_primary_button_w + hero_button_gap, layout.button_y, hero_outline_button_w, 42.0), "Read Docs", docs_button_id);
+    const actions = actionPairBounds(if (stacked) layout.copy else ui.Rect.init(layout.copy.x, layout.button_y, layout.copy.w, action_button_h), layout.button_y);
+    try primaryButtonWithTrailingIcon(scene, collector, actions.primary, "View Source", .chevron_right, source_button_id);
+    try outlineButton(scene, collector, actions.secondary, "Read Docs", docs_button_id);
 }
 
 const HeroLayout = struct {
@@ -275,7 +279,8 @@ fn heroSectionHeight(width: f32) f32 {
     const bounds = ui.Rect.init(0.0, 0.0, width, 1.0);
     const layout = heroLayout(bounds);
     const terminal_bottom = layout.terminal.y + layout.terminal.h;
-    const actions_bottom = layout.button_y + 42.0;
+    const actions = actionPairBounds(layout.copy, layout.button_y);
+    const actions_bottom = @max(actions.primary.y + actions.primary.h, actions.secondary.y + actions.secondary.h);
     const measured = @max(terminal_bottom, actions_bottom) - bounds.y + hero_bottom_pad;
     return if (width >= hero_split_min_w) @max(measured, hero_split_min_h) else measured;
 }
@@ -339,7 +344,7 @@ fn renderTerminalHint(scene: *ui.Scene, terminal: ui.Rect, state: State, stacked
 fn renderStats(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
     try fill(scene, bounds, palette.card, 0.0);
     try fill(scene, ui.Rect.init(bounds.x, bounds.y, bounds.w, 1.0), palette.border, 0.0);
-    const content = centered(bounds, content_wide);
+    const content = app_layout.centered(bounds, content_wide, content_pad);
     const stats = [_]struct { []const u8, []const u8, []const u8 }{
         .{ "1", "", "App Artifact" },
         .{ "0", "", "Package Installs" },
@@ -352,7 +357,7 @@ fn renderStats(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
     for (stats, 0..) |item, index| {
         const row = index / cols;
         const col = index % cols;
-        const r = colBounds(content, cols, 18.0, col, start_y + @as(f32, @floatFromInt(row)) * stats_row_h, stats_row_h);
+        const r = app_layout.columnBounds(content, cols, 18.0, col, start_y + @as(f32, @floatFromInt(row)) * stats_row_h, stats_row_h);
         try text(scene, r.x, r.y, r.w, 24.0, item[0], palette.text);
         try text(scene, r.x + 74.0, r.y + 4.0, 72.0, 16.0, item[1], palette.primary);
         try text(scene, r.x, r.y + 34.0, r.w, 14.0, item[2], palette.dim);
@@ -360,8 +365,9 @@ fn renderStats(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
 }
 
 fn renderProblem(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
-    const left = ui.Rect.init(bounds.x, bounds.y, bounds.w * 0.48, bounds.h);
-    const right = ui.Rect.init(bounds.x + bounds.w * 0.56, bounds.y, bounds.w * 0.44, bounds.h);
+    const compact = bounds.w <= 760.0;
+    const left = if (compact) ui.Rect.init(bounds.x, bounds.y, bounds.w, 360.0) else ui.Rect.init(bounds.x, bounds.y, bounds.w * 0.48, bounds.h);
+    const right = if (compact) ui.Rect.init(bounds.x, bounds.y + 420.0, bounds.w, 280.0) else ui.Rect.init(bounds.x + bounds.w * 0.56, bounds.y, bounds.w * 0.44, bounds.h);
     try tag(scene, ui.Rect.init(left.x, left.y, 104.0, 24.0), "THE PROBLEM", palette.danger);
     try heading(scene, ui.Rect.init(left.x, left.y + 44.0, left.w, 74.0), "Apps Became", "Dependency Towers");
     try paragraph(scene, ui.Rect.init(left.x, left.y + 138.0, left.w, 82.0), "Modern apps often need clouds, registries, build services, host filesystems, web frameworks, and platform accounts before they can even begin.");
@@ -386,18 +392,21 @@ fn renderPrinciples(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
     for (items, 0..) |item, index| {
         const row: usize = index / cols;
         const col: usize = index % cols;
-        const r = colBounds(bounds, cols, 16.0, col, cards_y + @as(f32, @floatFromInt(row)) * 126.0, 110.0);
+        const r = app_layout.columnBounds(bounds, cols, 16.0, col, cards_y + @as(f32, @floatFromInt(row)) * 126.0, 110.0);
         try principleCard(scene, r, item[0], item[1], item[2], item[3]);
     }
 }
 
 fn renderArchitecture(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect) (ui.RenderError || interaction.Error)!void {
-    const left = ui.Rect.init(bounds.x, bounds.y, bounds.w * 0.36, bounds.h);
-    const right = ui.Rect.init(bounds.x + bounds.w * 0.43, bounds.y, bounds.w * 0.57, bounds.h);
+    const compact = bounds.w <= 760.0;
+    const left = if (compact) ui.Rect.init(bounds.x, bounds.y, bounds.w, 250.0) else ui.Rect.init(bounds.x, bounds.y, bounds.w * 0.36, bounds.h);
+    const right = if (compact) ui.Rect.init(bounds.x, bounds.y + 306.0, bounds.w, 440.0) else ui.Rect.init(bounds.x + bounds.w * 0.43, bounds.y, bounds.w * 0.57, bounds.h);
     try tag(scene, ui.Rect.init(left.x, left.y, 64.0, 24.0), "STACK", palette.primary);
     try heading(scene, ui.Rect.init(left.x, left.y + 44.0, left.w, 74.0), "No Package", "Tower.");
     try paragraph(scene, ui.Rect.init(left.x, left.y + 138.0, left.w, 96.0), "The web host loads one WASM app. That app owns the source workspace, compiler bytes, UI scene, render buffers, and release artifact.");
-    try outlineButtonWithTrailingIcon(scene, collector, ui.Rect.init(left.x, left.y + 264.0, 180.0, 36.0), "Open Source", .chevron_right, source_button_id);
+    const source_button_y: f32 = if (compact) 218.0 else 264.0;
+    const source_button = actionButtonBounds(left, left.y + source_button_y, 180.0);
+    try outlineButtonWithTrailingIcon(scene, collector, source_button, "Open Source", .chevron_right, source_button_id);
     const stack = [_]struct { []const u8, []const u8, ui.Color }{
         .{ "app wasm", "tiny runtime and UI shell", palette.primary },
         .{ "compiler wasm", "embedded Zig-to-WASM path", palette.yellow },
@@ -496,19 +505,29 @@ fn renderCta(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rec
     try nativeCard(scene, bounds, "", "");
     try alignedText(scene, bounds.x + 40.0, bounds.y + 70.0, bounds.w - 80.0, 30.0, "Open The Self-Compiling App", palette.text, .center);
     try alignedText(scene, bounds.x + 40.0, bounds.y + 118.0, bounds.w - 80.0, 18.0, "Read the source object, edit it, and compile the next artifact from inside the app.", palette.dim, .center);
-    const center = bounds.x + bounds.w * 0.5;
-    try primaryButtonWithTrailingIcon(scene, collector, ui.Rect.init(center - 146.0, bounds.y + 168.0, 132.0, 38.0), "View Source", .chevron_right, source_button_id);
-    try outlineButton(scene, collector, ui.Rect.init(center + 14.0, bounds.y + 168.0, 132.0, 38.0), "Read Docs", docs_button_id);
+    const actions = actionPairBounds(bounds.insetLtrb(40.0, 0.0, 40.0, 0.0), bounds.y + 168.0);
+    try primaryButtonWithTrailingIcon(scene, collector, actions.primary, "View Source", .chevron_right, source_button_id);
+    try outlineButton(scene, collector, actions.secondary, "Read Docs", docs_button_id);
 }
 
 fn renderFooter(scene: *ui.Scene, bounds: ui.Rect, content: ui.Rect) ui.RenderError!void {
     try fill(scene, bounds, palette.bg, 0.0);
     try fill(scene, ui.Rect.init(bounds.x, bounds.y, bounds.w, 1.0), palette.border, 0.0);
     try text(scene, content.x, bounds.y + 44.0, 120.0, 18.0, "EdgeRun", palette.text);
-    try paragraph(scene, ui.Rect.init(content.x, bounds.y + 78.0, 260.0, 54.0), "A self-compiling app system with built-in UI, canonical objects, and work receipts.");
-    try footerColumn(scene, ui.Rect.init(content.x + content.w * 0.36, bounds.y + 44.0, 160.0, 150.0), "App", &.{ "Source", "Components", "Docs", "Academy" });
-    try footerColumn(scene, ui.Rect.init(content.x + content.w * 0.58, bounds.y + 44.0, 180.0, 150.0), "Runtime", &.{ "WASM", "Objects", "Receipts", "Renderer" });
-    try footerColumn(scene, ui.Rect.init(content.x + content.w * 0.81, bounds.y + 44.0, 140.0, 150.0), "Hardware", &.{ "QEMU", "TPM", "Pi Zero", "DRM" });
+    try paragraph(scene, ui.Rect.init(content.x, bounds.y + 78.0, @min(content.w, 360.0), 54.0), "A self-compiling app system with built-in UI, canonical objects, and work receipts.");
+
+    const compact = content.w < 720.0;
+    const column_y_offset: f32 = if (compact) 150.0 else 44.0;
+    const column_y = bounds.y + column_y_offset;
+    const column_area = if (compact)
+        ui.Rect.init(content.x, column_y, content.w, 90.0)
+    else
+        ui.Rect.init(content.x + content.w * 0.36, column_y, content.w * 0.64, 150.0);
+    const gap: f32 = if (compact) 12.0 else 24.0;
+    const column_w = @max(1.0, (column_area.w - gap * 2.0) / 3.0);
+    try footerColumn(scene, ui.Rect.init(column_area.x, column_area.y, column_w, column_area.h), "App", &.{ "Source", "Components", "Docs", "Academy" });
+    try footerColumn(scene, ui.Rect.init(column_area.x + column_w + gap, column_area.y, column_w, column_area.h), "Runtime", &.{ "WASM", "Objects", "Receipts", "Renderer" });
+    try footerColumn(scene, ui.Rect.init(column_area.x + (column_w + gap) * 2.0, column_area.y, column_w, column_area.h), "Hardware", &.{ "QEMU", "TPM", "Pi Zero", "DRM" });
 }
 
 fn renderNodeMap(scene: *ui.Scene, bounds: ui.Rect, state: State, show_status: bool) ui.RenderError!void {
@@ -703,6 +722,35 @@ fn footerColumn(scene: *ui.Scene, bounds: ui.Rect, heading_value: []const u8, it
     }
 }
 
+const ActionPair = struct {
+    primary: ui.Rect,
+    secondary: ui.Rect,
+};
+
+fn actionPairBounds(bounds: ui.Rect, y: f32) ActionPair {
+    const row = bounds.w >= action_pair_min_w;
+    if (row) {
+        const available = @max(1.0, bounds.w - hero_button_gap);
+        const primary_w = @max(design.min_touch_target, available * hero_primary_button_weight);
+        const secondary_w = @max(design.min_touch_target, available - primary_w);
+        const total_w = primary_w + hero_button_gap + secondary_w;
+        const x = bounds.x + @max(0.0, (bounds.w - total_w) * 0.5);
+        return .{
+            .primary = ui.Rect.init(x, y, primary_w, action_button_h),
+            .secondary = ui.Rect.init(x + primary_w + hero_button_gap, y, secondary_w, action_button_h),
+        };
+    }
+    const width = @max(design.min_touch_target, bounds.w);
+    return .{
+        .primary = ui.Rect.init(bounds.x, y, width, action_button_h),
+        .secondary = ui.Rect.init(bounds.x, y + action_button_h + hero_button_gap, width, action_button_h),
+    };
+}
+
+fn actionButtonBounds(bounds: ui.Rect, y: f32, preferred_w: f32) ui.Rect {
+    return ui.Rect.init(bounds.x, y, @min(preferred_w, @max(design.min_touch_target, bounds.w)), 36.0);
+}
+
 fn primaryButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id: u32) (ui.RenderError || interaction.Error)!void {
     try nativeComponent(scene, collector, bounds, .{ .button = .{ .id = id, .label = label } });
 }
@@ -742,18 +790,6 @@ fn appStyle() ui.Style {
     return resolved;
 }
 
-fn fill(scene: *ui.Scene, bounds: ui.Rect, color: ui.Color, r: f32) ui.RenderError!void {
-    try scene.pushRect(bounds, color, .fill, r, 0.0);
-}
-
-fn stroke(scene: *ui.Scene, bounds: ui.Rect, color: ui.Color, r: f32) ui.RenderError!void {
-    try scene.pushRect(bounds, color, .border, r, 0.0);
-}
-
-fn text(scene: *ui.Scene, x: f32, y: f32, w: f32, h: f32, value: []const u8, color: ui.Color) ui.RenderError!void {
-    try scene.pushAlignedText(ui.Rect.init(x, y, @max(1.0, w), @max(1.0, h)), value, color, .start);
-}
-
 fn alignedText(scene: *ui.Scene, x: f32, y: f32, w: f32, h: f32, value: []const u8, color: ui.Color, alignment: ui.TextAlign) ui.RenderError!void {
     try scene.pushAlignedText(ui.Rect.init(x, y, @max(1.0, w), @max(1.0, h)), value, color, alignment);
 }
@@ -762,20 +798,10 @@ fn iconQuad(scene: *ui.Scene, bounds: ui.Rect, value: icon.Icon, color: ui.Color
     try scene.pushIconQuad(.{ .bounds = bounds, .icon_id = icon.id(value), .color = color });
 }
 
-fn centered(bounds: ui.Rect, max_w: f32) ui.Rect {
-    const width = @min(max_w, @max(1.0, bounds.w - content_pad * 2.0));
-    return ui.Rect.init(bounds.x + (bounds.w - width) * 0.5, bounds.y, width, bounds.h);
-}
-
 fn columns(bounds: ui.Rect, desired: usize, gap: f32) usize {
     const by_width: usize = if (bounds.w >= 920.0) desired else if (bounds.w >= 620.0) @min(desired, 2) else 1;
     _ = gap;
     return @max(@as(usize, 1), @min(max_columns, by_width));
-}
-
-fn colBounds(bounds: ui.Rect, cols: usize, gap: f32, col: usize, y: f32, h: f32) ui.Rect {
-    const width = (bounds.w - gap * @as(f32, @floatFromInt(cols - 1))) / @as(f32, @floatFromInt(cols));
-    return ui.Rect.init(bounds.x + @as(f32, @floatFromInt(col)) * (width + gap), y, width, h);
 }
 
 const Point = struct { x: f32, y: f32 };

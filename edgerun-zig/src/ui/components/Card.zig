@@ -4,7 +4,7 @@ const common = @import("../../ui_component_common.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
-const component_render = @import("Render.zig");
+const tokens = @import("../../ui_tokens.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
 
@@ -21,12 +21,63 @@ pub const Card = struct {
     }
 
     pub fn render(self: Card, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return component_render.renderSurface(scene, bounds, self.title, self.detail, self.variant, options);
+        try renderFrame(scene, bounds, self.variant, options);
+        if (self.title.len == 0 and self.detail.len == 0) return;
+
+        const content_x = bounds.x + surface_padding;
+        const content_w = @max(min_extent, bounds.w - surface_padding * 2.0);
+        var cursor_y = bounds.y + surface_padding;
+        if (self.title.len != 0) {
+            const remaining_h = @max(min_extent, bounds.y + bounds.h - cursor_y - surface_padding);
+            const title_h = @min(remaining_h, titleHeightFor(content_w, self.title));
+            try scene.pushWrappedText(ui.Rect.init(content_x, cursor_y, content_w, title_h), self.title, options.style.text, .{
+                .line_height = surface_title_height,
+                .average_char_width = surface_title_average_w,
+                .max_lines = surface_title_max_lines,
+            });
+            cursor_y += title_h;
+        }
+        if (self.detail.len != 0) {
+            if (self.title.len != 0) cursor_y += surface_detail_gap;
+            try scene.pushWrappedText(ui.Rect.init(content_x, cursor_y, content_w, @max(min_extent, bounds.y + bounds.h - cursor_y - surface_padding)), self.detail, options.style.muted, .{
+                .line_height = surface_detail_height,
+                .average_char_width = surface_detail_average_w,
+                .max_lines = surface_detail_max_lines,
+            });
+        }
     }
 
     pub fn measure(self: Card, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = options;
-        return component_render.measureSurface(self.title, self.detail, constraints);
+        const inner = constraints.inner(layout.Insets.uniform(surface_padding));
+        const title_measure = if (self.title.len == 0)
+            layout.Measurement.fixed(.{ .w = 0.0, .h = 0.0 })
+        else
+            layout.measureText(self.title, inner, .{
+                .line_height = surface_title_height,
+                .average_char_width = surface_title_average_w,
+                .max_lines = surface_title_max_lines,
+            });
+        const detail_measure = if (self.detail.len == 0)
+            layout.Measurement.fixed(.{ .w = 0.0, .h = 0.0 })
+        else
+            layout.measureText(self.detail, inner, .{
+                .line_height = surface_detail_height,
+                .average_char_width = surface_detail_average_w,
+                .max_lines = surface_detail_max_lines,
+            });
+        const content_width = @max(title_measure.preferred.w, detail_measure.preferred.w);
+        const content_gap: f32 = if (self.title.len != 0 and self.detail.len != 0) surface_detail_gap else 0.0;
+        const content_height = title_measure.preferred.h + content_gap + detail_measure.preferred.h;
+        const preferred = constrainPreferredSize(.{
+            .w = content_width + surface_padding * 2.0,
+            .h = @max(minHeight(self.title.len != 0, self.detail.len != 0), content_height + surface_padding * 2.0),
+        }, constraints);
+        return layout.Measurement.flexible(
+            .{ .w = @min(surface_min_width, preferred.w), .h = @min(surface_padding * 2.0, preferred.h) },
+            preferred,
+            .{ .w = measure_max_width, .h = measure_max_height },
+        ).applyExact(constraints);
     }
 
     pub fn toObject(self: Card, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -48,6 +99,76 @@ pub const Card = struct {
         };
     }
 };
+
+fn renderFrame(scene: *ui.Scene, bounds: ui.Rect, variant: common.SurfaceVariant, options: RenderOptions) ui.RenderError!void {
+    const frame_radius = radiusFor(variant);
+    if (variant == .elevated) {
+        try scene.pushRect(bounds.insetUniform(-surface_shadow_inset), surface_shadow, .shadow, frame_radius, surface_shadow_size);
+    }
+    const fill_color = switch (variant) {
+        .panel, .elevated => options.style.panel,
+        .subtle => options.style.row,
+    };
+    try scene.pushRect(bounds, fill_color, .fill, frame_radius, 0.0);
+    try scene.pushRect(bounds, options.style.border, .border, frame_radius, 0.0);
+}
+
+fn radiusFor(variant: common.SurfaceVariant) f32 {
+    return switch (variant) {
+        .panel, .subtle => surface_radius,
+        .elevated => surface_radius + surface_elevated_radius_extra,
+    };
+}
+
+fn minHeight(has_title: bool, has_detail: bool) f32 {
+    const content_height = if (has_title and has_detail)
+        surface_title_height + surface_detail_gap + surface_detail_height
+    else if (has_title)
+        surface_title_height
+    else if (has_detail)
+        surface_detail_height
+    else
+        0.0;
+    return surface_padding * 2.0 + content_height;
+}
+
+fn titleHeightFor(width: f32, title: []const u8) f32 {
+    if (title.len == 0) return 0.0;
+    const capacity = @max(@as(usize, 1), @as(usize, @intFromFloat(@max(1.0, width / surface_title_average_w))));
+    var byte_cursor: usize = 0;
+    var line_count: usize = 0;
+    while (line_count < surface_title_max_lines) : (line_count += 1) {
+        byte_cursor = ui.skipAsciiSpace(title, byte_cursor);
+        if (byte_cursor >= title.len) break;
+        byte_cursor = ui.wrappedLine(title, byte_cursor, capacity).next;
+    }
+    return @as(f32, @floatFromInt(@max(@as(usize, 1), line_count))) * surface_title_height;
+}
+
+fn constrainPreferredSize(size: ui.Size, constraints: layout.Constraints) ui.Size {
+    return .{
+        .w = constraints.width.limit(size.w),
+        .h = constraints.height.limit(size.h),
+    };
+}
+
+const min_extent: f32 = 1.0;
+pub const surface_padding: f32 = tokens.Component.surface_padding;
+pub const surface_title_height: f32 = tokens.Component.surface_title_height;
+pub const surface_detail_height: f32 = tokens.Component.surface_detail_height;
+pub const surface_detail_gap: f32 = tokens.Component.surface_detail_gap;
+pub const surface_radius: f32 = tokens.Component.surface_radius;
+const surface_elevated_radius_extra: f32 = 2.0;
+const surface_shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 96 };
+const surface_shadow_size: f32 = 8.0;
+const surface_shadow_inset: f32 = 1.0;
+const surface_title_average_w: f32 = 8.5;
+const surface_title_max_lines: usize = 2;
+const surface_detail_average_w: f32 = 8.0;
+const surface_detail_max_lines: usize = 3;
+const surface_min_width: f32 = 160.0;
+const measure_max_width: f32 = 4096.0;
+const measure_max_height: f32 = 4096.0;
 
 pub fn variantTag(variant: common.SurfaceVariant) u16 {
     return switch (variant) {
@@ -87,13 +208,13 @@ test "card component lays out detail-only content without empty title gap" {
     try card.render(&scene, ui.Rect.init(0, 0, 220, 80), .{});
 
     const detail = component_test.textCommandPrefix(scene.written(), "Only").?;
-    try std.testing.expectEqual(component_render.surface_padding, detail.text.origin.y);
+    try std.testing.expectEqual(surface_padding, detail.text.origin.y);
     const measured = card.measure(.{}, .{});
-    try std.testing.expectEqual(component_render.surface_padding * 2.0 + component_render.surface_detail_height, measured.preferred.h);
+    try std.testing.expectEqual(surface_padding * 2.0 + surface_detail_height, measured.preferred.h);
     try std.testing.expect(measured.preferred.h < (Card{ .title = "Title", .detail = "Only detail" }).measure(.{}, .{}).preferred.h);
 }
 
-test "card component renders surface variants through one renderer" {
+test "card component renders its own surface variants" {
     var commands: [16]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
 
@@ -102,6 +223,29 @@ test "card component renders surface variants through one renderer" {
 
     try std.testing.expect(component_test.hasShadow(scene.written()));
     try std.testing.expect(component_test.hasRectColor(scene.written(), ui.Color.row));
+}
+
+test "card component title can occupy responsive wrapped lines" {
+    const card = Card{ .title = "Runtime authority model", .detail = "Receipts stay readable.", .variant = .panel };
+    var commands: [16]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+
+    try card.render(&scene, ui.Rect.init(0, 0, 132, 96), .{});
+
+    var title_lines: usize = 0;
+    var detail_y: f32 = 0.0;
+    for (scene.written()) |command| {
+        switch (command) {
+            .text => |text| {
+                if (std.mem.eql(u8, text.value, "Runtime")) title_lines += 1;
+                if (std.mem.startsWith(u8, text.value, "Receipts")) detail_y = text.origin.y;
+            },
+            else => {},
+        }
+    }
+
+    try std.testing.expect(title_lines == 1);
+    try std.testing.expect(detail_y > surface_padding + surface_title_height);
 }
 
 test "card component measurement respects at-most constraints" {
