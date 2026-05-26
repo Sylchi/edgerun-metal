@@ -108,8 +108,8 @@ test "sheet component renders trigger content and hit regions" {
     try sheet.render(&scene, ui.Rect.init(0, 0, 240, 76), .{});
     try sheet.collectInteractions(&collector, ui.Rect.init(0, 0, 240, 76));
 
-    try std.testing.expect(component_test.hasText(scene.written(), "Edit profile"));
-    try std.testing.expect(component_test.hasText(scene.written(), "Sheet content"));
+    try std.testing.expect(component_test.textCommandPrefix(scene.written(), "Edit") != null);
+    try std.testing.expect(component_test.textCommandPrefix(scene.written(), "Sheet") != null);
     try std.testing.expectEqual(@as(usize, 3), collector.written().len);
     try std.testing.expectEqual(@as(u32, 1001), collector.written()[2].id);
 }

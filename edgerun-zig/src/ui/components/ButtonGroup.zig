@@ -7,12 +7,10 @@ const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
-const component_primitives = @import("Primitives.zig");
 const list_layout = @import("ListLayout.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
-const measureFixed = component_primitives.measureFixed;
 
 pub const ButtonGroup = struct {
     id: u32,
@@ -35,9 +33,14 @@ pub const ButtonGroup = struct {
     }
 
     pub fn measure(self: ButtonGroup, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
-        _ = self;
         _ = options;
-        return measureFixed(preferred_button_group, constraints);
+        const labels = [_][]const u8{ self.first, self.second };
+        return list_layout.measureSegments(&labels, constraints, .{
+            .item_count = @intCast(group_item_count),
+            .height = preferred_button_group.h,
+            .padding = toggle_text_padding,
+            .min_width = preferred_button_group.w / @as(f32, @floatFromInt(group_item_count)),
+        });
     }
 
     pub fn toObject(self: ButtonGroup, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -112,4 +115,15 @@ test "button group component renders segments and hit regions" {
     try std.testing.expect(component_test.hasText(scene.written(), "Left"));
     try std.testing.expect(component_test.hasText(scene.written(), "Right"));
     try std.testing.expectEqual(@as(u32, 91), collector.written()[1].id);
+}
+
+test "button group measurement follows segment labels" {
+    const short = ButtonGroup{ .id = 90, .first = "L", .second = "R", .active = 0 };
+    const long = ButtonGroup{ .id = 90, .first = "Runtime", .second = "Authority", .active = 0 };
+
+    const short_measured = short.measure(.{}, .{});
+    const long_measured = long.measure(.{}, .{});
+
+    try std.testing.expectEqual(preferred_button_group.w, short_measured.min.w);
+    try std.testing.expect(long_measured.preferred.w > short_measured.preferred.w);
 }

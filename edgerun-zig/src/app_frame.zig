@@ -15,6 +15,7 @@ const ui_overlay = @import("ui_overlay.zig");
 
 const workspace_rail_w: f32 = 48.0;
 const workspace_sidebar_w: f32 = 260.0;
+const workspace_top_h: f32 = 56.0;
 const workspace_status_h: f32 = 24.0;
 const workspace_rail_pad: f32 = 12.0;
 const workspace_icon_button: f32 = 36.0;
@@ -70,14 +71,27 @@ pub fn contentHeight(width: f32, state: State) f32 {
 
 fn renderWorkspace(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
     try scene.pushRect(bounds, design.palette.bg, .fill, 0.0, 0.0);
-    const rail = ui.Rect.init(bounds.x, bounds.y, workspace_rail_w, bounds.h);
-    const sidebar = ui.Rect.init(rail.x + rail.w, bounds.y, workspace_sidebar_w, bounds.h);
-    const main = ui.Rect.init(sidebar.x + sidebar.w, bounds.y, @max(1.0, bounds.w - rail.w - sidebar.w), @max(1.0, bounds.h - workspace_status_h));
-    const status = ui.Rect.init(main.x, bounds.y + bounds.h - workspace_status_h, main.w, workspace_status_h);
+    const rail = ui.Rect.init(bounds.x, bounds.y, workspace_rail_w, @max(1.0, bounds.h - workspace_status_h));
+    const top = ui.Rect.init(rail.x + rail.w, bounds.y, @max(1.0, bounds.w - rail.w), workspace_top_h);
+    const sidebar = ui.Rect.init(rail.x + rail.w, bounds.y + workspace_top_h, workspace_sidebar_w, @max(1.0, bounds.h - workspace_top_h - workspace_status_h));
+    const main = ui.Rect.init(sidebar.x + sidebar.w, bounds.y + workspace_top_h, @max(1.0, bounds.w - rail.w - sidebar.w), @max(1.0, bounds.h - workspace_top_h - workspace_status_h));
+    const status = ui.Rect.init(bounds.x, bounds.y + bounds.h - workspace_status_h, bounds.w, workspace_status_h);
     try renderWorkspaceRail(scene, collector, rail, state.route.view);
-    try renderWorkspaceSidebar(scene, collector, sidebar, state.route);
+    try renderWorkspaceTop(scene, collector, top, state);
+    try renderWorkspaceSidebar(scene, collector, sidebar, state);
     try renderWorkspaceMain(scene, collector, main, state);
     try renderWorkspaceStatus(scene, status, state);
+}
+
+fn renderWorkspaceTop(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
+    switch (state.route.view) {
+        .source => try app_source.renderWorkspaceTopBar(scene, collector, bounds, state.source),
+        else => {
+            try scene.pushRect(bounds, workspace_sidebar_bg, .fill, 0.0, 0.0);
+            try scene.pushRect(ui.Rect.init(bounds.x, bounds.y + bounds.h - 1.0, bounds.w, 1.0), design.palette.border, .fill, 0.0, 0.0);
+            try scene.pushAlignedText(ui.Rect.init(bounds.x + 16.0, bounds.y + 18.0, bounds.w - 32.0, 16.0), statusText(state.route), design.palette.text, .start);
+        },
+    }
 }
 
 fn renderWorkspaceRail(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, active: app_navigation.View) !void {
@@ -104,7 +118,12 @@ fn renderWorkspaceRail(scene: *ui.Scene, collector: *interaction.Collector, boun
     }
 }
 
-fn renderWorkspaceSidebar(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, route: app_navigation.Route) !void {
+fn renderWorkspaceSidebar(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
+    const route = state.route;
+    if (route.view == .source) {
+        try app_source.renderWorkspaceSidebar(scene, collector, bounds, state.source);
+        return;
+    }
     try scene.pushRect(bounds, workspace_sidebar_bg, .fill, 0.0, 0.0);
     try scene.pushRect(ui.Rect.init(bounds.x + bounds.w - 1.0, bounds.y, 1.0, bounds.h), design.palette.border, .fill, 0.0, 0.0);
     try scene.pushAlignedText(ui.Rect.init(bounds.x + 16.0, bounds.y + 14.0, bounds.w - 32.0, 16.0), "EDGERUN", design.palette.text, .start);
@@ -169,6 +188,10 @@ fn renderWorkspaceMain(scene: *ui.Scene, collector: *interaction.Collector, boun
 }
 
 fn renderWorkspaceStatus(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
+    if (state.route.view == .source) {
+        try app_source.renderWorkspaceStatus(scene, bounds, state.source);
+        return;
+    }
     try scene.pushRect(bounds, workspace_status_bg, .fill, 0.0, 0.0);
     try scene.pushAlignedText(ui.Rect.init(bounds.x + 12.0, bounds.y + 5.0, bounds.w - 24.0, 14.0), statusText(state.route), ui.Color{ .r = 255, .g = 255, .b = 255 }, .start);
 }
@@ -291,6 +314,43 @@ test "app frame routes through workspace sidebar instead of top navbar" {
     try expectNoHit(collector.written(), app_chrome.logo_button_id);
 }
 
+test "app frame uses source editor as workspace shell without nested chrome" {
+    var commands: [8192]ui.Command = undefined;
+    var regions: [4096]interaction.Region = undefined;
+    var clips: [64]ui.Rect = undefined;
+    var scene = ui.Scene.initWithClips(&commands, &clips);
+    var collector = interaction.Collector.init(&regions);
+
+    try render(&scene, &collector, ui.Rect.init(0, 0, 1280, 800), .{
+        .route = .{ .view = .source },
+        .source = .{
+            .label = "src/app_runtime.zig",
+            .source = "const std = @import(\"std\");\n",
+            .workspace_bytes = 2048,
+            .file_bytes = 28,
+            .release_bytes = 4096,
+            .status = "ready: editing src/app_runtime.zig inside the app-owned VFS object",
+        },
+    });
+
+    const sidebar_x = workspace_rail_w;
+    const main_x = workspace_rail_w + workspace_sidebar_w;
+    const top_bottom = workspace_top_h;
+    const status_top = 800.0 - workspace_status_h;
+
+    try std.testing.expectEqual(@as(usize, 1), countText(scene.written(), "EXPLORER"));
+    try std.testing.expectEqual(@as(usize, 1), countText(scene.written(), "EdgeRun Workspace"));
+    try std.testing.expectEqual(@as(usize, 1), countText(scene.written(), "APP-OWNED VFS"));
+    try std.testing.expectEqual(@as(usize, 0), countText(scene.written(), "artifact.wasm"));
+
+    try expectHitWithin(collector.written(), app_source.compile_button_id, ui.Rect.init(workspace_rail_w, 0.0, 1280.0 - workspace_rail_w, workspace_top_h));
+    try expectHitWithin(collector.written(), app_source.download_button_id, ui.Rect.init(workspace_rail_w, 0.0, 1280.0 - workspace_rail_w, workspace_top_h));
+    try expectHitWithin(collector.written(), app_source.launch_button_id, ui.Rect.init(workspace_rail_w, 0.0, 1280.0 - workspace_rail_w, workspace_top_h));
+    try expectHitWithin(collector.written(), app_source.reset_button_id, ui.Rect.init(workspace_rail_w, 0.0, 1280.0 - workspace_rail_w, workspace_top_h));
+    try expectHitWithin(collector.written(), app_source.explorer_file_id_base, ui.Rect.init(sidebar_x, top_bottom, workspace_sidebar_w, status_top - top_bottom));
+    try expectHitWithin(collector.written(), app_source.editor_textarea_id, ui.Rect.init(main_x, top_bottom, 1280.0 - main_x, status_top - top_bottom));
+}
+
 test "app frame renders source jump context menu as shared ui" {
     var commands: [4096]ui.Command = undefined;
     var regions: [256]interaction.Region = undefined;
@@ -377,8 +437,31 @@ fn hasText(commands: []const ui.Command, value: []const u8) bool {
     return false;
 }
 
+fn countText(commands: []const ui.Command, value: []const u8) usize {
+    var count: usize = 0;
+    for (commands) |command| switch (command) {
+        .text => |text| {
+            if (std.mem.eql(u8, text.value, value)) count += 1;
+        },
+        else => {},
+    };
+    return count;
+}
+
 fn expectHit(regions: []const interaction.Region, id: u32) !void {
     for (regions) |region| if (region.id == id) return;
+    return error.MissingHit;
+}
+
+fn expectHitWithin(regions: []const interaction.Region, id: u32, bounds: ui.Rect) !void {
+    for (regions) |region| {
+        if (region.id != id) continue;
+        try std.testing.expect(region.bounds.x >= bounds.x);
+        try std.testing.expect(region.bounds.y >= bounds.y);
+        try std.testing.expect(region.bounds.x + region.bounds.w <= bounds.x + bounds.w);
+        try std.testing.expect(region.bounds.y + region.bounds.h <= bounds.y + bounds.h);
+        return;
+    }
     return error.MissingHit;
 }
 

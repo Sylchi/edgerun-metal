@@ -7,12 +7,10 @@ const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
-const component_primitives = @import("Primitives.zig");
 const list_layout = @import("ListLayout.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
-const measureFixed = component_primitives.measureFixed;
 
 pub const ToggleGroup = struct {
     id: u32,
@@ -38,9 +36,14 @@ pub const ToggleGroup = struct {
     }
 
     pub fn measure(self: ToggleGroup, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
-        _ = self;
         _ = options;
-        return measureFixed(preferred_toggle_group, constraints);
+        const labels = [_][]const u8{ self.first, self.second, toggle_group_third_label };
+        return list_layout.measureSegments(&labels, constraints, .{
+            .item_count = @intCast(toggle_group_item_count),
+            .height = preferred_toggle_group.h,
+            .padding = toggle_text_padding,
+            .min_width = preferred_toggle_group.w / @as(f32, @floatFromInt(toggle_group_item_count)),
+        });
     }
 
     pub fn toObject(self: ToggleGroup, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -129,4 +132,15 @@ test "toggle group component renders toggles and hit regions" {
     try std.testing.expect(component_test.hasText(scene.written(), "Right"));
     try std.testing.expectEqual(@as(usize, toggle_group_item_count), collector.written().len);
     try std.testing.expectEqual(@as(u32, 552), collector.written()[2].id);
+}
+
+test "toggle group measurement follows segment labels" {
+    const short = ToggleGroup{ .id = 550, .first = "L", .second = "C", .active = 0 };
+    const long = ToggleGroup{ .id = 550, .first = "Runtime", .second = "Authority", .active = 0 };
+
+    const short_measured = short.measure(.{}, .{});
+    const long_measured = long.measure(.{}, .{});
+
+    try std.testing.expectEqual(preferred_toggle_group.w, short_measured.min.w);
+    try std.testing.expect(long_measured.preferred.w > short_measured.preferred.w);
 }

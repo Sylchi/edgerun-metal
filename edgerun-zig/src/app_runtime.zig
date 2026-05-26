@@ -1169,7 +1169,7 @@ fn handleSourcePointerDown(x: f32, y: f32, width: f32, height: f32) bool {
     if (app_state.view != .source) return false;
     const hit_id = currentHoverHitId();
     if (hit_id == app_source.editor_textarea_id) {
-        setSourceEditorCursor(app_source.cursorFromPoint(ui.Rect.init(0.0, 0.0, width, height), currentSourceState(x, y), x, y));
+        setSourceEditorCursor(sourceCursorFromPoint(x, y, width, height));
         source_pointer_drag_select = true;
         return true;
     }
@@ -1183,7 +1183,7 @@ fn handleSourcePointerDown(x: f32, y: f32, width: f32, height: f32) bool {
 
 fn handleSourcePointerMove(x: f32, y: f32, width: f32, height: f32) bool {
     if (!source_pointer_drag_select or app_state.view != .source) return false;
-    const cursor = app_source.cursorFromPoint(ui.Rect.init(0.0, 0.0, width, height), currentSourceState(x, y), x, y);
+    const cursor = sourceCursorFromPoint(x, y, width, height);
     moveSourceEditorCursor(cursor, true);
     return true;
 }
@@ -1192,9 +1192,15 @@ fn handleSourceDoubleClick(x: f32, y: f32, width: f32, height: f32) bool {
     if (app_state.view != .source) return false;
     runtime_state.refreshHover(lastRegions(), x, y);
     if (currentHoverHitId() != app_source.editor_textarea_id) return false;
-    const cursor = app_source.cursorFromPoint(ui.Rect.init(0.0, 0.0, width, height), currentSourceState(x, y), x, y);
+    const cursor = sourceCursorFromPoint(x, y, width, height);
     selectSourceEditorWordAt(cursor);
     return true;
+}
+
+fn sourceCursorFromPoint(x: f32, y: f32, width: f32, height: f32) usize {
+    const state = currentSourceState(x, y);
+    const editor_bounds = lastRegionBounds(app_source.editor_textarea_id) catch return app_source.cursorFromPoint(ui.Rect.init(0.0, 0.0, width, height), state, x, y);
+    return app_source.cursorFromTextAreaBounds(editor_bounds, state, x, y);
 }
 
 fn scrollSourceEditorByWheel(delta_y: f32) bool {

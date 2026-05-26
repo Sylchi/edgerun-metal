@@ -62,6 +62,15 @@ const line_number_label_bytes: usize = 8;
 const editor_info_label_bytes: usize = 96;
 const explorer_file_count: usize = 4;
 
+const EditorChrome = struct {
+    titlebar: bool = true,
+    toolbar: bool = true,
+    activity: bool = true,
+    explorer: bool = true,
+    status_bar: bool = true,
+    rounded: bool = true,
+};
+
 pub const FileEntry = struct {
     path: []const u8,
 };
@@ -152,7 +161,26 @@ pub fn render(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Re
 
 pub fn renderWorkspace(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
     try fill(scene, bounds, palette.bg, 0.0);
-    try renderEditor(scene, collector, bounds, state);
+    try renderEditorWithChrome(scene, collector, bounds, state, .{
+        .titlebar = false,
+        .toolbar = false,
+        .activity = false,
+        .explorer = false,
+        .status_bar = false,
+        .rounded = false,
+    });
+}
+
+pub fn renderWorkspaceTopBar(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
+    try renderToolbar(scene, collector, bounds, state);
+}
+
+pub fn renderWorkspaceSidebar(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
+    try renderExplorer(scene, collector, bounds, state);
+}
+
+pub fn renderWorkspaceStatus(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
+    try renderEditorStatus(scene, bounds, state);
 }
 
 fn renderToolbar(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
@@ -171,28 +199,36 @@ fn renderToolbar(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui
 }
 
 fn renderEditor(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
-    try fill(scene, bounds, vscode_editor, panel_radius);
-    try stroke(scene, bounds, palette.border, panel_radius);
-    const command_h = toolbarHeight(bounds.w);
+    try renderEditorWithChrome(scene, collector, bounds, state, .{});
+}
+
+fn renderEditorWithChrome(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State, chrome: EditorChrome) !void {
+    const radius = if (chrome.rounded) panel_radius else 0.0;
+    try fill(scene, bounds, vscode_editor, radius);
+    try stroke(scene, bounds, palette.border, radius);
+    const titlebar_h = if (chrome.titlebar) editor_titlebar_h else 0.0;
+    const command_h = if (chrome.toolbar) toolbarHeight(bounds.w) else 0.0;
     const compiler_h = statusHeight(bounds.w, state);
-    const status_y = bounds.y + bounds.h - editor_status_h;
-    const compiler_y = @max(bounds.y + editor_titlebar_h + command_h, status_y - compiler_h);
-    const body_y = bounds.y + editor_titlebar_h + command_h;
+    const status_bar_h = if (chrome.status_bar) editor_status_h else 0.0;
+    const status_y = bounds.y + bounds.h - status_bar_h;
+    const compiler_y = @max(bounds.y + titlebar_h + command_h, status_y - compiler_h);
+    const body_y = bounds.y + titlebar_h + command_h;
     const body_h = @max(1.0, compiler_y - body_y);
-    const show_explorer = bounds.w >= explorer_threshold_w;
+    const show_explorer = chrome.explorer and bounds.w >= explorer_threshold_w;
     const show_minimap = bounds.w >= minimap_threshold_w;
+    const activity_width = if (chrome.activity) activity_rail_w else 0.0;
     const explorer_width = if (show_explorer) explorer_w else 0.0;
     const minimap_width = if (show_minimap) minimap_w else 0.0;
-    const code_x = bounds.x + activity_rail_w + explorer_width;
-    const code_w = @max(1.0, bounds.w - activity_rail_w - explorer_width - minimap_width - minimap_gap);
+    const code_x = bounds.x + activity_width + explorer_width;
+    const code_w = @max(1.0, bounds.w - activity_width - explorer_width - minimap_width - minimap_gap);
     const editor_body = ui.Rect.init(code_x, body_y, code_w, body_h);
     const breadcrumb = ui.Rect.init(editor_body.x, editor_body.y, editor_body.w, editor_breadcrumb_h);
     const code_view = ui.Rect.init(editor_body.x, editor_body.y + editor_breadcrumb_h, editor_body.w, @max(1.0, editor_body.h - editor_breadcrumb_h));
 
-    try renderEditorTitlebar(scene, ui.Rect.init(bounds.x, bounds.y, bounds.w, editor_titlebar_h), state);
-    try renderToolbar(scene, collector, ui.Rect.init(bounds.x, bounds.y + editor_titlebar_h, bounds.w, command_h), state);
-    try renderActivityRail(scene, ui.Rect.init(bounds.x, body_y, activity_rail_w, body_h));
-    if (show_explorer) try renderExplorer(scene, collector, ui.Rect.init(bounds.x + activity_rail_w, body_y, explorer_width, body_h), state);
+    if (chrome.titlebar) try renderEditorTitlebar(scene, ui.Rect.init(bounds.x, bounds.y, bounds.w, titlebar_h), state, activity_width);
+    if (chrome.toolbar) try renderToolbar(scene, collector, ui.Rect.init(bounds.x, bounds.y + titlebar_h, bounds.w, command_h), state);
+    if (chrome.activity) try renderActivityRail(scene, ui.Rect.init(bounds.x, body_y, activity_rail_w, body_h));
+    if (show_explorer) try renderExplorer(scene, collector, ui.Rect.init(bounds.x + activity_width, body_y, explorer_width, body_h), state);
     try fill(scene, code_view, palette.code_bg, 0.0);
     try components.collectComponentInteractions(collector, code_view, .{ .textarea = .{ .id = editor_textarea_id, .placeholder = "source editor" } });
     try renderBreadcrumb(scene, breadcrumb, state);
@@ -233,7 +269,7 @@ fn renderEditor(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.
 
     if (show_minimap) try renderMinimap(scene, ui.Rect.init(bounds.x + bounds.w - minimap_w - 10.0, code_view.y + 8.0, minimap_w, @max(1.0, code_view.h - 16.0)), state, visibleLineCapacity(code_view));
     try renderStatus(scene, ui.Rect.init(bounds.x, compiler_y, bounds.w, compiler_h), state);
-    try renderEditorStatus(scene, ui.Rect.init(bounds.x, status_y, bounds.w, editor_status_h), state);
+    if (chrome.status_bar) try renderEditorStatus(scene, ui.Rect.init(bounds.x, status_y, bounds.w, status_bar_h), state);
 }
 
 fn renderStatus(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
@@ -264,14 +300,16 @@ fn renderEditorStatus(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
     try text(scene, bounds.x + @max(0.0, bounds.w - 112.0), bounds.y + 5.0, 96.0, 14.0, dirty_label, vscode_status_text);
 }
 
-fn renderEditorTitlebar(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
+fn renderEditorTitlebar(scene: *ui.Scene, bounds: ui.Rect, state: State, activity_width: f32) !void {
     try fill(scene, bounds, vscode_titlebar, panel_radius);
-    try fill(scene, ui.Rect.init(bounds.x + activity_rail_w, bounds.y, @min(260.0, @max(120.0, bounds.w * 0.28)), bounds.h), vscode_tab, 0.0);
-    try text(scene, bounds.x + activity_rail_w + 12.0, bounds.y + 9.0, 220.0, 14.0, fileName(state.label), palette.text);
-    if (state.dirty) try fill(scene, ui.Rect.init(bounds.x + activity_rail_w + @min(236.0, @max(96.0, bounds.w * 0.28 - 24.0)), bounds.y + 14.0, 6.0, 6.0), palette.amber, 3.0);
-    try fill(scene, ui.Rect.init(bounds.x + activity_rail_w, bounds.y + bounds.h - 2.0, @min(260.0, @max(120.0, bounds.w * 0.28)), 2.0), palette.primary, 0.0);
-    try fill(scene, ui.Rect.init(bounds.x + activity_rail_w + @min(260.0, @max(120.0, bounds.w * 0.28)), bounds.y, 132.0, bounds.h), vscode_tab_inactive, 0.0);
-    try text(scene, bounds.x + activity_rail_w + @min(260.0, @max(120.0, bounds.w * 0.28)) + 12.0, bounds.y + 9.0, 112.0, 14.0, "artifact.wasm", palette.muted);
+    const tab_x = bounds.x + activity_width;
+    const tab_w = @min(260.0, @max(120.0, bounds.w * 0.28));
+    try fill(scene, ui.Rect.init(tab_x, bounds.y, tab_w, bounds.h), vscode_tab, 0.0);
+    try text(scene, tab_x + 12.0, bounds.y + 9.0, 220.0, 14.0, fileName(state.label), palette.text);
+    if (state.dirty) try fill(scene, ui.Rect.init(tab_x + @min(236.0, @max(96.0, bounds.w * 0.28 - 24.0)), bounds.y + 14.0, 6.0, 6.0), palette.amber, 3.0);
+    try fill(scene, ui.Rect.init(tab_x, bounds.y + bounds.h - 2.0, tab_w, 2.0), palette.primary, 0.0);
+    try fill(scene, ui.Rect.init(tab_x + tab_w, bounds.y, 132.0, bounds.h), vscode_tab_inactive, 0.0);
+    try text(scene, tab_x + tab_w + 12.0, bounds.y + 9.0, 112.0, 14.0, "artifact.wasm", palette.muted);
 }
 
 fn renderActivityRail(scene: *ui.Scene, bounds: ui.Rect) !void {
@@ -327,6 +365,18 @@ pub fn cursorFromPoint(bounds: ui.Rect, state: State, x: f32, y: f32) usize {
     const top = bounds.y + header_h + page_top_pad - state.scroll_y;
     const editor = ui.Rect.init(content.x, top, content.w, editorHeight(content.w, state));
     const code_view = editorCodeView(editor, state);
+    const first_line = visibleFirstLine(state, visibleLineCapacity(code_view));
+    return textarea_component.cursorFromPoint(state.source, code_view, x, y, .{
+        .first_line = first_line,
+        .line_height = code_line_h,
+        .char_width = code_char_w,
+        .gutter_width = code_gutter_w,
+        .padding_left = code_pad,
+        .padding_top = code_pad,
+    });
+}
+
+pub fn cursorFromTextAreaBounds(code_view: ui.Rect, state: State, x: f32, y: f32) usize {
     const first_line = visibleFirstLine(state, visibleLineCapacity(code_view));
     return textarea_component.cursorFromPoint(state.source, code_view, x, y, .{
         .first_line = first_line,
