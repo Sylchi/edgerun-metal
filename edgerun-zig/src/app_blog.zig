@@ -1025,11 +1025,16 @@ fn renderArcOverview(scene: *ui.Scene, collector: *interaction.Collector, bounds
         const col = index % cols;
         const card = colBounds(bounds, cols, arc_overview_gap, col, bounds.y + @as(f32, @floatFromInt(row)) * (card_h + arc_overview_gap), card_h);
         const active = if (active_index) |found| found == index else false;
-        try fill(scene, card, if (active) palette.neutral_soft else palette.card_alt, app_chrome.surface_radius);
-        try scene.pushRect(card, if (active) palette.primary else palette.border, .border, app_chrome.surface_radius, 0.0);
-        try text(scene, card.x + 14.0, card.y + 12.0, card.w - 28.0, 12.0, section.count_label, palette.primary);
-        try text(scene, card.x + 14.0, card.y + 34.0, card.w - 28.0, 14.0, section.card_title, palette.text);
-        try text(scene, card.x + 14.0, card.y + 58.0, card.w - 28.0, 11.0, section.card_detail, palette.dim);
+        try nativeComponentVisual(scene, card, .{ .card = .{
+            .title = section.card_title,
+            .detail = section.card_detail,
+            .variant = if (active) .elevated else .subtle,
+        } });
+        if (active) try scene.pushRect(card, palette.primary, .border, app_chrome.surface_radius, 0.0);
+        try nativeComponentVisual(scene, ui.Rect.init(card.x + @max(14.0, card.w - 106.0), card.y + @max(10.0, card.h - 30.0), 92.0, 22.0), .{ .badge = .{
+            .label = section.count_label,
+            .variant = if (active) .default else .outline,
+        } });
         try hit(collector, card, .button, arcFilterButtonId(index));
     }
 }
@@ -1075,13 +1080,12 @@ fn flowPostSection(scene: ?*ui.Scene, collector: ?*interaction.Collector, bounds
 }
 
 fn renderCloudMeme(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
-    try fill(scene, bounds, palette.card, app_chrome.surface_radius);
+    try nativeCard(scene, bounds, "", "");
     try scene.pushImageQuad(.{
         .bounds = bounds.insetUniform(1.0),
         .atlas_id = cloud_meme_image_id,
         .color = ui.Color{ .r = 255, .g = 255, .b = 255 },
     });
-    try scene.pushRect(bounds, palette.border, .border, app_chrome.surface_radius, 0.0);
 }
 
 fn renderWorkflow(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
@@ -1104,6 +1108,11 @@ fn renderWorkflow(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
 }
 
 fn renderPostListItem(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, index: usize, post: Post) (ui.RenderError || interaction.Error)!void {
+    try nativeComponentVisual(scene, bounds, .{ .card = .{
+        .title = "",
+        .detail = "",
+        .variant = .subtle,
+    } });
     const text_x = bounds.x + post_list_padding_x;
     const text_w = postListTextWidth(bounds.w);
     const meta_y = bounds.y + post_list_padding_y;
@@ -1128,7 +1137,6 @@ fn renderPostListItem(scene: *ui.Scene, collector: *interaction.Collector, bound
         .max_lines = post_list_summary_max_lines,
     });
 
-    try fill(scene, ui.Rect.init(bounds.x, bounds.y + bounds.h - post_list_divider_h, bounds.w, post_list_divider_h), palette.border, 0.0);
     try iconQuad(scene, ui.Rect.init(bounds.x + bounds.w - 22.0, bounds.y + (bounds.h - 16.0) * 0.5, 16.0, 16.0), .chevron_right, palette.primary);
     try hit(collector, bounds, .button, postIdAt(index));
 }
@@ -3398,8 +3406,12 @@ fn episodeLabel(episode: usize) []const u8 {
 
 fn codeBlock(scene: *ui.Scene, bounds: ui.Rect, lines: []const []const u8) ui.RenderError!void {
     const style = appStyle();
-    try fill(scene, bounds, style.bg, code_radius);
-    try scene.pushRect(bounds, style.border, .border, code_radius, 0.0);
+    var code_style = style;
+    code_style.panel = style.bg;
+    try components.renderComponent(scene, bounds, .{ .card = .{
+        .title = "",
+        .detail = "",
+    } }, .{ .style = code_style });
     if (try scene.pushClip(bounds.insetUniform(code_clip_inset))) {
         defer scene.popClip();
         var y = bounds.y + code_pad_y;
@@ -3424,8 +3436,11 @@ fn renderNodeMap(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
 }
 
 fn tag(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, color: ui.Color) ui.RenderError!void {
-    try fill(scene, bounds, palette.neutral_soft, 5.0);
-    try alignedText(scene, bounds.x + 8.0, bounds.y + 6.0, bounds.w - 16.0, 10.0, label, color, .center);
+    var tag_style = appStyle();
+    tag_style.accent = color;
+    try components.renderComponent(scene, bounds, .{ .badge = .{
+        .label = label,
+    } }, .{ .style = tag_style });
 }
 
 fn paragraph(scene: *ui.Scene, bounds: ui.Rect, value: []const u8) ui.RenderError!void {
