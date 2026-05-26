@@ -14,7 +14,6 @@ const primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-const measureFixed = primitives.measureFixed;
 const Icon = icon_component.Icon;
 
 pub const Accordion = struct {
@@ -46,9 +45,24 @@ pub const Accordion = struct {
     }
 
     pub fn measure(self: Accordion, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
-        _ = self;
         _ = options;
-        return measureFixed(preferred_accordion, constraints);
+        const title = text_component.Text.measureValue(self.title, .{ .width = .unconstrained, .text_wrap = .nowrap }, primitives.textMetrics(self.title, primitives.control_label_height, accordion_title_max_lines));
+        const detail = text_component.Text.measureValue(self.detail, constraints, .{
+            .line_height = accordion_detail_height,
+            .average_char_width = accordion_detail_average_w,
+            .max_lines = accordion_detail_max_lines,
+        });
+        const closed_h = accordion_trigger_h + separator_height;
+        const open_h = closed_h + accordion_content_padding_top + detail.preferred.h;
+        const preferred = primitives.constrainPreferredSize(.{
+            .w = title.preferred.w + accordion_icon_space,
+            .h = if (self.open) open_h else closed_h,
+        }, constraints);
+        return layout.Measurement.flexible(
+            .{ .w = primitives.min_extent + accordion_icon_space, .h = closed_h },
+            preferred,
+            .{ .w = primitives.measure_max_width, .h = @max(preferred.h, open_h) },
+        ).applyExact(constraints);
     }
 
     pub fn toObject(self: Accordion, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -83,7 +97,6 @@ fn triggerBounds(bounds: ui.Rect) ui.Rect {
 }
 
 const accordion_id_stride: u32 = 2;
-const preferred_accordion = ui.Size{ .w = 260.0, .h = 68.0 };
 const accordion_trigger_h: f32 = 36.0;
 const accordion_trigger_text_y: f32 = 10.0;
 const accordion_icon_space: f32 = 22.0;
@@ -93,6 +106,7 @@ const accordion_content_padding_top: f32 = 8.0;
 const accordion_detail_height: f32 = 16.0;
 const accordion_detail_average_w: f32 = 7.5;
 const accordion_detail_max_lines: usize = 2;
+const accordion_title_max_lines: usize = 1;
 const separator_height: f32 = 1.0;
 
 test "accordion component serializes to canonical object and deserializes" {
@@ -133,4 +147,13 @@ test "accordion component hides content when closed" {
 
     try std.testing.expect(component_test.hasText(scene.written(), "Is it accessible?"));
     try std.testing.expect(!component_test.hasText(scene.written(), "Hidden answer."));
+}
+
+test "accordion measurement follows title and open detail text" {
+    const short = Accordion{ .id = 101, .title = "A", .detail = "B", .open = true };
+    const long = Accordion{ .id = 101, .title = "Runtime authority section", .detail = "Receipt details wrap here", .open = true };
+    const closed = long;
+
+    try std.testing.expect(long.measure(.{}, .{}).preferred.w > short.measure(.{}, .{}).preferred.w);
+    try std.testing.expect((Accordion{ .id = closed.id, .title = closed.title, .detail = closed.detail, .open = false }).measure(.{}, .{}).preferred.h < long.measure(.{}, .{}).preferred.h);
 }
