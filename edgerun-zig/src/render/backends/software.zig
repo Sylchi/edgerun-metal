@@ -3,9 +3,10 @@ const icon_vector = @import("../../icon_vector.zig");
 const renderer_icon_mask = @import("../icon_mask.zig");
 const renderer_ir = @import("../ir.zig");
 const renderer_present = @import("../present.zig");
+const component_union = @import("../../ui/components/Component.zig");
+const node_renderer = @import("../../ui/components/NodeRenderer.zig");
 const ui = @import("../../ui.zig");
 const builtin = @import("builtin");
-const ui_components = if (builtin.is_test) @import("../../ui_components.zig") else struct {};
 const varfont = @import("../../varfont.zig");
 
 pub const Error = renderer_present.Error || error{
@@ -2264,7 +2265,7 @@ test "software renderer rasterizes ui commands to nonblank pixels" {
 
     var commands: [32]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
-    try ui_components.renderNode(&scene, .{ .x = 0, .y = 0, .w = 320, .h = 240 }, root, .{});
+    try node_renderer.renderNode(component_union.Component, &scene, .{ .x = 0, .y = 0, .w = 320, .h = 240 }, root, .{});
 
     var pixels: [320 * 240]ui.Color = undefined;
     const surface = try Surface.init(320, 240, &pixels);

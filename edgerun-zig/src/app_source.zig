@@ -2,7 +2,7 @@ const std = @import("std");
 const icon = @import("icon.zig");
 const interaction = @import("ui_interaction.zig");
 const ui = @import("ui.zig");
-const components = @import("ui_components.zig");
+const components = @import("ui/components/Component.zig");
 const textarea_component = @import("ui/components/Textarea.zig");
 const app_chrome = @import("app_chrome.zig");
 const design = @import("app_design.zig");
@@ -106,7 +106,7 @@ var editor_info_label: [editor_info_label_bytes]u8 = undefined;
 const explorer_files = [_][]const u8{
     "src/app_runtime.zig",
     "src/app_source.zig",
-    "src/ui_components.zig",
+    "src/ui/components/Component.zig",
     "src/render/font_atlas.zig",
 };
 
@@ -485,13 +485,13 @@ fn renderCompileStages(scene: *ui.Scene, bounds: ui.Rect, progress: f32) !void {
 
 fn button(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id: u32, variant: components.ButtonVariant, leading: icon.Icon, enabled: bool) !void {
     if (!enabled) {
-        try components.renderComponent(scene, bounds, .{ .button = .{ .id = id, .label = label, .variant = variant, .leading_icon = leading } }, .{
+        try components.renderComponent(scene, bounds, .{ .button = .{ .id = id, .label = label, .variant = variant, .icon_slot = .{ .leading = leading } } }, .{
             .style = app_chrome.style(),
             .control = .{ .disabled = true },
         });
         return;
     }
-    try components.renderComponent(scene, bounds, .{ .button = .{ .id = id, .label = label, .variant = variant, .leading_icon = leading } }, .{ .style = app_chrome.style() });
+    try components.renderComponent(scene, bounds, .{ .button = .{ .id = id, .label = label, .variant = variant, .icon_slot = .{ .leading = leading } } }, .{ .style = app_chrome.style() });
     try components.collectComponentInteractions(collector, bounds, .{ .button = .{ .id = id, .label = label } });
 }
 

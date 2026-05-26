@@ -2,7 +2,7 @@ const std = @import("std");
 const icon = @import("icon.zig");
 const interaction = @import("ui_interaction.zig");
 const ui = @import("ui.zig");
-const components = @import("ui_components.zig");
+const components = @import("ui/components/Component.zig");
 const component_gallery = @import("component_gallery.zig");
 const app_blog = @import("app_blog.zig");
 const app_chrome = @import("app_chrome.zig");
@@ -261,7 +261,7 @@ pub const doc_pages = [_]DocPage{
         .status = "one contract",
         .primary = "The software, web host, GPU, and native hosts should agree because they are adapters for the same scene and IR path.",
         .secondary = "Backend-specific code owns presentation, not product UI decisions.",
-        .api = "scene: ui.Scene\ncomponents: ui_components.zig\nrender: render.zig\nbackends: render/*",
+        .api = "scene: ui.Scene\ncomponents: ui/components/*.zig\nrender: render.zig\nbackends: render/*",
         .icon_value = .code,
         .color = palette.blue,
     },
@@ -429,7 +429,7 @@ fn renderSidebarRow(scene: *ui.Scene, collector: *interaction.Collector, bounds:
         .id = id,
         .label = page.section.label(),
         .variant = if (active) .secondary else .ghost,
-        .leading_icon = page.icon_value,
+        .icon_slot = .{ .leading = page.icon_value },
     } };
     try components.renderComponent(scene, bounds, row_component, .{
         .style = app_chrome.style(),
@@ -861,7 +861,7 @@ fn renderGrid(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
 }
 
 fn primaryButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label_value: []const u8, id: u32) (ui.RenderError || interaction.Error)!void {
-    try components.renderComponent(scene, bounds, .{ .button = .{ .id = id, .label = label_value, .trailing_icon = .chevron_right } }, .{
+    try components.renderComponent(scene, bounds, .{ .button = .{ .id = id, .label = label_value, .icon_slot = .{ .trailing = .chevron_right } } }, .{
         .style = appStyle(),
     });
     try components.collectComponentInteractions(collector, bounds, .{ .button = .{ .id = id, .label = label_value } });

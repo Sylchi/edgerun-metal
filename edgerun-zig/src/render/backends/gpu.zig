@@ -2,8 +2,9 @@ const std = @import("std");
 const renderer_ir = @import("../ir.zig");
 const renderer_present = @import("../present.zig");
 const renderer_surface = @import("../surface.zig");
+const component_union = @import("../../ui/components/Component.zig");
+const node_renderer = @import("../../ui/components/NodeRenderer.zig");
 const ui = @import("../../ui.zig");
-const ui_components = @import("../../ui_components.zig");
 
 pub const Error = renderer_present.Error || error{
     InvalidMode,
@@ -556,7 +557,7 @@ fn testScene(out: []ui.Command) !ui.Scene {
     nodes[1] = .{ .button = .{ .id = 3, .label = "Go" } };
     const root = ui.Node{ .stack = .{ .axis = .column, .children = &nodes } };
     var scene = ui.Scene.init(out);
-    try ui_components.renderNode(&scene, .{ .x = 0, .y = 0, .w = 320, .h = 240 }, root, .{});
+    try node_renderer.renderNode(component_union.Component, &scene, .{ .x = 0, .y = 0, .w = 320, .h = 240 }, root, .{});
     return scene;
 }
 

@@ -56,7 +56,7 @@ pub fn packIconInstances(instances: []const f32, out: []f32, out_len: *usize) Er
     }
 }
 
-fn packIconInstance(instance: renderer_ir.IconInstance, out: []f32, out_len: *usize) Error!void {
+pub fn packIconInstance(instance: renderer_ir.IconInstance, out: []f32, out_len: *usize) Error!void {
     const bounds = instance.bounds;
     var iter = renderer_ir.iconOpIteratorForId(instance.icon_id);
     var path = PathState{};

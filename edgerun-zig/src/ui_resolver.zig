@@ -4,8 +4,24 @@ const identity = @import("identity.zig");
 const object = @import("object.zig");
 const preimage = @import("preimage.zig");
 const store = @import("store.zig");
+const button_component = @import("ui/components/Button.zig");
+const component_union = @import("ui/components/Component.zig");
+const node_renderer = @import("ui/components/NodeRenderer.zig");
+const slot_component = @import("ui/components/Slot.zig");
+const stack_component = @import("ui/components/Stack.zig");
+const text_component = @import("ui/components/Text.zig");
+const tree_component = @import("ui/components/Tree.zig");
 const ui = @import("ui.zig");
-const components = @import("ui_components.zig");
+
+const Component = component_union.Component;
+const Stack = stack_component.Stack(Component);
+const StackTree = stack_component.StackTree(Component);
+const Slot = slot_component.Slot(Component);
+const SlotTree = slot_component.SlotTree(Component);
+const Tree = tree_component.Tree(Component);
+const TreeObjects = tree_component.TreeObjects;
+const Button = button_component.Button;
+const Text = text_component.Text;
 
 pub const Error = error{
     Corrupt,
@@ -17,16 +33,16 @@ pub const Error = error{
     ChildMismatch,
 };
 
-pub fn storeTreeObjects(target: *store.Store, owner: identity.Id, objects: components.TreeObjects) Error![store.hash_size]u8 {
+pub fn storeTreeObjects(target: *store.Store, owner: identity.Id, objects: TreeObjects) Error![store.hash_size]u8 {
     if (!owner.valid()) return error.Corrupt;
     _ = target.putObject(owner, objects.layout) orelse return error.NoSpace;
     return target.putObject(owner, objects.tree) orelse return error.NoSpace;
 }
 
-pub fn resolveStackTree(source: store.Store, owner: identity.Id, tree: object.View, resolved: []object.View, out_components: []components.Component) Error!components.Stack {
+pub fn resolveStackTree(source: store.Store, owner: identity.Id, tree: object.View, resolved: []object.View, out_components: []Component) Error!Stack {
     const resolved_children = try resolveTreeChildren(source, owner, tree, resolved, null);
 
-    return components.StackTree.fromTree(tree, resolved_children, out_components) catch |err| switch (err) {
+    return StackTree.fromTree(tree, resolved_children, out_components) catch |err| switch (err) {
         error.Corrupt => error.Corrupt,
         error.UnsupportedComponent => error.UnsupportedComponent,
         error.ComponentBudgetExceeded => error.ComponentBudgetExceeded,
@@ -34,10 +50,10 @@ pub fn resolveStackTree(source: store.Store, owner: identity.Id, tree: object.Vi
     };
 }
 
-pub fn resolveSlotTree(source: store.Store, owner: identity.Id, tree: object.View, resolved: []object.View) Error!components.Slot {
+pub fn resolveSlotTree(source: store.Store, owner: identity.Id, tree: object.View, resolved: []object.View) Error!Slot {
     const resolved_children = try resolveTreeChildren(source, owner, tree, resolved, 2);
 
-    return components.SlotTree.fromTree(tree, resolved_children) catch |err| switch (err) {
+    return SlotTree.fromTree(tree, resolved_children) catch |err| switch (err) {
         error.Corrupt => error.Corrupt,
         error.UnsupportedComponent => error.UnsupportedComponent,
         error.ComponentBudgetExceeded => error.ComponentBudgetExceeded,
@@ -45,10 +61,10 @@ pub fn resolveSlotTree(source: store.Store, owner: identity.Id, tree: object.Vie
     };
 }
 
-pub fn resolveTree(source: store.Store, owner: identity.Id, tree: object.View, resolved: []object.View, out_components: []components.Component) Error!components.Tree {
+pub fn resolveTree(source: store.Store, owner: identity.Id, tree: object.View, resolved: []object.View, out_components: []Component) Error!Tree {
     const resolved_children = try resolveTreeChildren(source, owner, tree, resolved, null);
 
-    return components.Tree.fromTree(tree, resolved_children, out_components) catch |err| switch (err) {
+    return Tree.fromTree(tree, resolved_children, out_components) catch |err| switch (err) {
         error.Corrupt => error.Corrupt,
         error.UnsupportedComponent => error.UnsupportedComponent,
         error.ComponentBudgetExceeded => error.ComponentBudgetExceeded,
@@ -88,19 +104,19 @@ test "resolver hydrates stack tree children from store" {
 
     var text_ui: [128]u8 = undefined;
     var text_object_raw: [object.header_size + 128]u8 = undefined;
-    const text_object = (components.Text{ .value = "Stored" }).toObject(&text_ui, &text_object_raw, testEpoch()).?;
+    const text_object = (Text{ .value = "Stored" }).toObject(&text_ui, &text_object_raw, testEpoch()).?;
     const text_id = source.putObject(app.id, text_object).?;
 
     var button_ui: [128]u8 = undefined;
     var button_object_raw: [object.header_size + 128]u8 = undefined;
-    const button_object = (components.Button{ .id = 8, .label = "Load" }).toObject(&button_ui, &button_object_raw, testEpoch()).?;
+    const button_object = (Button{ .id = 8, .label = "Load" }).toObject(&button_ui, &button_object_raw, testEpoch()).?;
     const button_id = source.putObject(app.id, button_object).?;
 
     const child_views = [_]object.View{
         source.getObject(app.id, text_id).?,
         source.getObject(app.id, button_id).?,
     };
-    const tree_builder = components.StackTree{ .axis = .column, .gap = 4, .padding = 6, .children = &child_views };
+    const tree_builder = StackTree{ .axis = .column, .gap = 4, .padding = 6, .children = &child_views };
 
     var layout_raw: [object.header_size + 16]u8 = undefined;
     var tree_raw: [object.header_size + object.child_size * 3]u8 = undefined;
@@ -109,7 +125,7 @@ test "resolver hydrates stack tree children from store" {
     const tree_view = source.getObject(app.id, tree_id).?;
 
     var resolved: [3]object.View = undefined;
-    var out_components: [2]components.Component = undefined;
+    var out_components: [2]Component = undefined;
     const stack = try resolveStackTree(source, app.id, tree_view, &resolved, &out_components);
 
     try std.testing.expectEqual(@as(u16, 4), stack.gap);
@@ -121,7 +137,7 @@ test "resolver hydrates stack tree children from store" {
     const root = stack.node(&nodes).?;
     var commands: [16]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
-    try components.renderNode(&scene, .{ .x = 0, .y = 0, .w = 240, .h = 160 }, root, .{});
+    try node_renderer.renderNode(Component, &scene, .{ .x = 0, .y = 0, .w = 240, .h = 160 }, root, .{});
     try std.testing.expect(scene.commandCount() != 0);
 }
 
@@ -133,9 +149,9 @@ test "resolver rejects unresolved tree children" {
 
     var text_ui: [128]u8 = undefined;
     var text_object_raw: [object.header_size + 128]u8 = undefined;
-    const text_object = (components.Text{ .value = "Only child" }).toObject(&text_ui, &text_object_raw, testEpoch()).?;
+    const text_object = (Text{ .value = "Only child" }).toObject(&text_ui, &text_object_raw, testEpoch()).?;
     const text_view = try object.View.decode(text_object);
-    const tree_builder = components.StackTree{ .axis = .column, .children = &.{text_view} };
+    const tree_builder = StackTree{ .axis = .column, .children = &.{text_view} };
 
     var layout_raw: [object.header_size + 16]u8 = undefined;
     var tree_raw: [object.header_size + object.child_size * 2]u8 = undefined;
@@ -144,7 +160,7 @@ test "resolver rejects unresolved tree children" {
     const tree_view = source.getObject(app.id, tree_id).?;
 
     var resolved: [2]object.View = undefined;
-    var out_components: [1]components.Component = undefined;
+    var out_components: [1]Component = undefined;
     try std.testing.expectError(error.MissingObject, resolveStackTree(source, app.id, tree_view, &resolved, &out_components));
 }
 
@@ -156,13 +172,13 @@ test "resolver hydrates slot tree child from store" {
 
     var button_ui: [128]u8 = undefined;
     var button_object_raw: [object.header_size + 128]u8 = undefined;
-    const button_object = (components.Button{ .id = 12, .label = "Slot" }).toObject(&button_ui, &button_object_raw, testEpoch()).?;
+    const button_object = (Button{ .id = 12, .label = "Slot" }).toObject(&button_ui, &button_object_raw, testEpoch()).?;
     const button_id = source.putObject(app.id, button_object).?;
     const button_view = source.getObject(app.id, button_id).?;
 
     var layout_raw: [object.header_size + 16]u8 = undefined;
     var tree_raw: [object.header_size + object.child_size * 2]u8 = undefined;
-    const tree_objects = (components.SlotTree{ .id = 77, .child = button_view }).toTreeObjects(&layout_raw, &tree_raw, testEpoch()).?;
+    const tree_objects = (SlotTree{ .id = 77, .child = button_view }).toTreeObjects(&layout_raw, &tree_raw, testEpoch()).?;
     const tree_id = try storeTreeObjects(&source, app.id, tree_objects);
     const tree_view = source.getObject(app.id, tree_id).?;
 
@@ -175,7 +191,7 @@ test "resolver hydrates slot tree child from store" {
     const root = slot.node(&nodes).?;
     var commands: [8]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
-    try components.renderNode(&scene, .{ .x = 0, .y = 0, .w = 120, .h = 40 }, root, .{});
+    try node_renderer.renderNode(Component, &scene, .{ .x = 0, .y = 0, .w = 120, .h = 40 }, root, .{});
     try std.testing.expect(hasText(scene.written(), "Slot"));
 }
 
@@ -187,18 +203,18 @@ test "generic resolver detects stored tree layout type" {
 
     var button_ui: [128]u8 = undefined;
     var button_object_raw: [object.header_size + 128]u8 = undefined;
-    const button_object = (components.Button{ .id = 31, .label = "Generic" }).toObject(&button_ui, &button_object_raw, testEpoch()).?;
+    const button_object = (Button{ .id = 31, .label = "Generic" }).toObject(&button_ui, &button_object_raw, testEpoch()).?;
     const button_id = source.putObject(app.id, button_object).?;
     const button_view = source.getObject(app.id, button_id).?;
 
     var layout_raw: [object.header_size + 16]u8 = undefined;
     var tree_raw: [object.header_size + object.child_size * 2]u8 = undefined;
-    const tree_objects = (components.SlotTree{ .id = 17, .child = button_view }).toTreeObjects(&layout_raw, &tree_raw, testEpoch()).?;
+    const tree_objects = (SlotTree{ .id = 17, .child = button_view }).toTreeObjects(&layout_raw, &tree_raw, testEpoch()).?;
     const tree_id = try storeTreeObjects(&source, app.id, tree_objects);
     const tree_view = source.getObject(app.id, tree_id).?;
 
     var resolved: [2]object.View = undefined;
-    var out_components: [1]components.Component = undefined;
+    var out_components: [1]Component = undefined;
     const tree = try resolveTree(source, app.id, tree_view, &resolved, &out_components);
     try std.testing.expectEqual(@as(u32, 17), tree.slot.id);
     try std.testing.expectEqual(@as(u32, 31), tree.slot.child.button.id);
@@ -207,7 +223,7 @@ test "generic resolver detects stored tree layout type" {
     const root = tree.node(&nodes).?;
     var commands: [8]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
-    try components.renderNode(&scene, .{ .x = 0, .y = 0, .w = 120, .h = 40 }, root, .{});
+    try node_renderer.renderNode(Component, &scene, .{ .x = 0, .y = 0, .w = 120, .h = 40 }, root, .{});
     try std.testing.expect(scene.commandCount() != 0);
 }
 
@@ -219,12 +235,12 @@ test "tree object storage helper rejects insufficient storage" {
 
     var button_ui: [128]u8 = undefined;
     var button_object_raw: [object.header_size + 128]u8 = undefined;
-    const button_object = (components.Button{ .id = 1, .label = "x" }).toObject(&button_ui, &button_object_raw, testEpoch()).?;
+    const button_object = (Button{ .id = 1, .label = "x" }).toObject(&button_ui, &button_object_raw, testEpoch()).?;
     const button_view = try object.View.decode(button_object);
 
     var layout_raw: [object.header_size + 16]u8 = undefined;
     var tree_raw: [object.header_size + object.child_size * 2]u8 = undefined;
-    const tree_objects = (components.SlotTree{ .id = 1, .child = button_view }).toTreeObjects(&layout_raw, &tree_raw, testEpoch()).?;
+    const tree_objects = (SlotTree{ .id = 1, .child = button_view }).toTreeObjects(&layout_raw, &tree_raw, testEpoch()).?;
 
     try std.testing.expectError(error.NoSpace, storeTreeObjects(&source, app.id, tree_objects));
 }

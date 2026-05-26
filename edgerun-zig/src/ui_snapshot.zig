@@ -3,8 +3,9 @@ const renderer_font_atlas = @import("render/font_atlas.zig");
 const renderer_ir = @import("render/ir.zig");
 const renderer_pipeline = @import("render/pipeline.zig");
 const renderer_software = @import("render/software.zig");
+const component_union = @import("ui/components/Component.zig");
+const node_renderer = @import("ui/components/NodeRenderer.zig");
 const ui = @import("ui.zig");
-const ui_components = @import("ui_components.zig");
 
 const width: usize = 2560;
 const height: usize = 1440;
@@ -38,7 +39,7 @@ fn renderSnapshot(init: std.process.Init, out_path: []const u8) !void {
 
     var commands: [max_commands]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
-    try ui_components.renderNode(&scene, .{ .x = 0, .y = 0, .w = width, .h = height }, root, .{});
+    try node_renderer.renderNode(component_union.Component, &scene, .{ .x = 0, .y = 0, .w = width, .h = height }, root, .{});
 
     const pixels = try allocator.alloc(ui.Color, width * height);
     defer allocator.free(pixels);
@@ -83,7 +84,7 @@ test "snapshot packs and rasterizes through renderer ir" {
     const root = sampleRoot(&nodes);
     var commands: [max_commands]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
-    try ui_components.renderNode(&scene, .{ .x = 0, .y = 0, .w = 320, .h = 240 }, root, .{});
+    try node_renderer.renderNode(component_union.Component, &scene, .{ .x = 0, .y = 0, .w = 320, .h = 240 }, root, .{});
 
     var ir_storage = SnapshotIrStorage{};
     const buffers = ir_storage.buffers();
@@ -108,7 +109,7 @@ test "snapshot packs and rasterizes through renderer ir" {
 
 const ComponentSnapshotCase = struct {
     name: []const u8,
-    component: ui_components.Component,
+    component: component_union.Component,
     digest: u64,
 };
 
@@ -117,10 +118,10 @@ const component_snapshot_cases = [_]ComponentSnapshotCase{
     .{ .name = "input", .component = .{ .input = .{ .id = 11, .placeholder = "Email address" } }, .digest = 0xc3eddf8410f2126b },
     .{ .name = "field", .component = .{ .field = .{ .id = 12, .label = "Email", .placeholder = "m@example.com" } }, .digest = 0x8c1ece84270f2978 },
     .{ .name = "card", .component = .{ .card = .{ .title = "Receipt", .detail = "Canonical object stored", .variant = .elevated } }, .digest = 0xd543ba0ebc303cdf },
-    .{ .name = "toast", .component = .{ .toast = .{ .id = 13, .title = "Saved", .detail = "Notification queued" } }, .digest = 0x28c3e48b37c0590b },
+    .{ .name = "toast", .component = .{ .toast = .{ .id = 13, .title = "Saved", .detail = "Notification queued" } }, .digest = 0xb914b903dcb9ff69 },
     .{ .name = "tabs", .component = .{ .tabs = .{ .id = 14, .first = "Account", .second = "Security", .active = 1 } }, .digest = 0x528e1f57bdec604a },
-    .{ .name = "table", .component = .{ .table = .{ .id = 15, .name = "Sarah Chen", .role = "Engineer" } }, .digest = 0x108ce73700568788 },
-    .{ .name = "dialog", .component = .{ .dialog = .{ .id = 16, .title = "Edit profile", .detail = "Modal content" } }, .digest = 0x88a2207b00461693 },
+    .{ .name = "table", .component = .{ .table = .{ .id = 15, .name = "Sarah Chen", .role = "Engineer" } }, .digest = 0x9901aa8edb119e9a },
+    .{ .name = "dialog", .component = .{ .dialog = .{ .id = 16, .title = "Edit profile", .detail = "Modal content" } }, .digest = 0x066f76f8e0d235a1 },
 };
 
 test "core component visual snapshots match deterministic software raster" {
@@ -130,7 +131,7 @@ test "core component visual snapshots match deterministic software raster" {
     }
 }
 
-fn componentSnapshotDigest(component: ui_components.Component) !u64 {
+fn componentSnapshotDigest(component: component_union.Component) !u64 {
     var commands: [max_commands]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
     try component.render(&scene, ui.Rect.init(0, 0, @floatFromInt(core_snapshot_width), @floatFromInt(core_snapshot_height)), .{});

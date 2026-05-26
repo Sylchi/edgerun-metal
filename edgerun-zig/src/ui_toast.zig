@@ -1,7 +1,7 @@
 const std = @import("std");
 const interaction = @import("ui_interaction.zig");
 const ui = @import("ui.zig");
-const components = @import("ui_components.zig");
+const Toast = @import("ui/components/Toast.zig").Toast;
 const design = @import("app_design.zig");
 const ui_overlay = @import("ui_overlay.zig");
 
@@ -84,7 +84,7 @@ pub const Manager = struct {
             const entry = self.entries[index];
             if (!entry.alive(frame_ms)) continue;
             const rect = stackedBounds(bounds, visible_index);
-            const toast = components.Toast{ .id = entry.id, .title = entry.title, .detail = entry.detail };
+            const toast = Toast{ .id = entry.id, .title = entry.title, .detail = entry.detail };
             try toast.render(&surface.scene, rect, .{ .style = design.style() });
             try toast.collectInteractions(&surface.collector, rect);
             visible_index += 1;

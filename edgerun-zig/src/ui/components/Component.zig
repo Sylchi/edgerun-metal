@@ -62,10 +62,11 @@ const tooltip_component = @import("Tooltip.zig");
 const toast_component = @import("Toast.zig");
 const row_item_component = @import("RowItem.zig");
 
-const Error = common.Error;
-const RenderOptions = common.RenderOptions;
-const Accessibility = common.Accessibility;
-const AccessibilityTree = common.AccessibilityTree;
+pub const Error = common.Error;
+pub const RenderOptions = common.RenderOptions;
+pub const Accessibility = common.Accessibility;
+pub const AccessibilityTree = common.AccessibilityTree;
+pub const ButtonVariant = common.ButtonVariant;
 
 const Text = text_component.Text;
 const Accordion = accordion_component.Accordion;
@@ -122,6 +123,14 @@ const Table = table_component.Table;
 const Tooltip = tooltip_component.Tooltip;
 const Toast = toast_component.Toast;
 const RowItem = row_item_component.RowItem;
+
+pub fn renderComponent(scene: *ui.Scene, bounds: ui.Rect, component: Component, options: RenderOptions) ui.RenderError!void {
+    return component.render(scene, bounds, options);
+}
+
+pub fn collectComponentInteractions(collector: *interaction.Collector, bounds: ui.Rect, component: Component) interaction.Error!void {
+    return component.collectInteractions(collector, bounds);
+}
 
 pub const Component = union(enum) {
     text: Text,
