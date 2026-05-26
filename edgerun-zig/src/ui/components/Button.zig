@@ -17,6 +17,7 @@ const RenderOptions = common.RenderOptions;
 const constrainPreferredSize = primitives.constrainPreferredSize;
 const measureFixed = primitives.measureFixed;
 const Icon = icon_component.Icon;
+const IconSlot = icon_component.IconSlot;
 
 pub const Button = struct {
     id: u32,
@@ -25,7 +26,7 @@ pub const Button = struct {
     icon_slot: IconSlot = .none,
 
     pub fn node(self: Button) ui.Node {
-        const tags = self.icon_slot.tags();
+        const tags = iconSlotTags(self.icon_slot);
         return ui.buttonDetailNode(self.id, self.label, variantTag(self.variant), tags.leading, tags.trailing);
     }
 
@@ -53,7 +54,7 @@ pub const Button = struct {
 
     pub fn writeRecord(self: Button, writer: *component_codec.Writer, index: usize) bool {
         const label_ref = writer.string(self.label) orelse return false;
-        return writer.record(index, .button, self.id, label_ref, .{ .offset = variantTag(self.variant), .len = self.icon_slot.pack() });
+        return writer.record(index, .button, self.id, label_ref, .{ .offset = variantTag(self.variant), .len = packIconSlot(self.icon_slot) });
     }
 
     pub fn fromView(view: object.View) Error!Button {
@@ -62,49 +63,44 @@ pub const Button = struct {
     }
 
     pub fn fromNode(button: @FieldType(ui.Node, "button")) Error!Button {
-        return .{ .id = button.id, .label = button.label, .variant = try variantFromTag(button.variant), .icon_slot = try IconSlot.fromTags(button.leading_icon, button.trailing_icon) };
+        return .{ .id = button.id, .label = button.label, .variant = try variantFromTag(button.variant), .icon_slot = try iconSlotFromTags(button.leading_icon, button.trailing_icon) };
     }
 };
 
-pub const IconSlot = union(enum) {
-    none,
-    leading: Icon,
-    trailing: Icon,
+const IconSlotTags = struct {
+    leading: u16 = 0,
+    trailing: u16 = 0,
+};
 
-    const Tags = struct {
-        leading: u16 = 0,
-        trailing: u16 = 0,
+fn iconSlotTags(slot: IconSlot) IconSlotTags {
+    return switch (slot) {
+        .none => .{},
+        .leading => |value| .{ .leading = common.optionalIconTag(value.value) },
+        .trailing => |value| .{ .trailing = common.optionalIconTag(value.value) },
+        .status, .media => .{},
     };
+}
 
-    fn tags(self: IconSlot) Tags {
-        return switch (self) {
-            .none => .{},
-            .leading => |slot| .{ .leading = common.optionalIconTag(slot.value) },
-            .trailing => |slot| .{ .trailing = common.optionalIconTag(slot.value) },
-        };
-    }
+fn packIconSlot(slot: IconSlot) u16 {
+    const encoded = iconSlotTags(slot);
+    return encoded.leading | (encoded.trailing << icon_pack_shift);
+}
 
-    fn pack(self: IconSlot) u16 {
-        const encoded = self.tags();
-        return encoded.leading | (encoded.trailing << icon_pack_shift);
-    }
+fn iconSlotFromTags(leading_tag: u16, trailing_tag: u16) Error!IconSlot {
+    const leading = try common.optionalIconFromTag(leading_tag);
+    const trailing = try common.optionalIconFromTag(trailing_tag);
+    if (leading != null and trailing != null) return error.Corrupt;
+    if (leading) |value| return IconSlot.named(.leading, value);
+    if (trailing) |value| return IconSlot.named(.trailing, value);
+    return .none;
+}
 
-    fn fromTags(leading_tag: u16, trailing_tag: u16) Error!IconSlot {
-        const leading = try common.optionalIconFromTag(leading_tag);
-        const trailing = try common.optionalIconFromTag(trailing_tag);
-        if (leading != null and trailing != null) return error.Corrupt;
-        if (leading) |value| return .{ .leading = Icon.named(value) };
-        if (trailing) |value| return .{ .trailing = Icon.named(value) };
-        return .none;
-    }
-
-    fn iconCount(self: IconSlot) usize {
-        return switch (self) {
-            .none => 0,
-            .leading, .trailing => 1,
-        };
-    }
-};
+fn iconSlotCount(slot: IconSlot) usize {
+    return switch (slot) {
+        .none => 0,
+        .leading, .trailing, .status, .media => 1,
+    };
+}
 
 pub const IconButton = struct {
     id: u32,
@@ -197,7 +193,7 @@ pub fn preferredWidth(label: []const u8, icon_slot: IconSlot) f32 {
 }
 
 pub fn preferredWidthForSize(label: []const u8, icon_slot: IconSlot, size: common.ControlSize) f32 {
-    const icon_count = icon_slot.iconCount();
+    const icon_count = iconSlotCount(icon_slot);
     return @max(minWidth(size), estimatedLabelWidth(label) + iconClusterWidth(icon_count, label.len != 0) + labelPadding(size) * 2.0);
 }
 
@@ -224,10 +220,11 @@ fn renderContent(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, text_colo
             return;
         },
         .leading, .trailing => {},
+        .status, .media => return error.UnsupportedComponent,
     }
 
     const has_label = label.len != 0;
-    const icon_count = icon_slot.iconCount();
+    const icon_count = iconSlotCount(icon_slot);
     const margin = if (has_label) @min(padding, bounds.w * 0.5) else 0.0;
     const available_w = @max(1.0, bounds.w - margin * 2.0);
     const icons_w = iconClusterWidth(icon_count, has_label);
@@ -245,6 +242,7 @@ fn renderContent(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, text_colo
             if (has_label) cursor_x += icon_gap;
         },
         .none, .trailing => {},
+        .status, .media => return error.UnsupportedComponent,
     }
 
     if (has_label) {
@@ -253,6 +251,7 @@ fn renderContent(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, text_colo
         switch (icon_slot) {
             .trailing => cursor_x += icon_gap,
             .none, .leading => {},
+            .status, .media => return error.UnsupportedComponent,
         }
     }
 
@@ -261,6 +260,7 @@ fn renderContent(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, text_colo
             try icon_component.renderGlyph(scene, ui.Rect.init(cursor_x, icon_y, icon_size, icon_size), value.value, text_color);
         },
         .none, .leading => {},
+        .status, .media => return error.UnsupportedComponent,
     }
 }
 
@@ -351,7 +351,7 @@ fn iconButtonSize(size: common.ControlSize) f32 {
 }
 
 test "button component serializes to canonical object and deserializes" {
-    const button = Button{ .id = 7, .label = "Run", .variant = .secondary, .icon_slot = .{ .leading = Icon.named(.search) } };
+    const button = Button{ .id = 7, .label = "Run", .variant = .secondary, .icon_slot = IconSlot.named(.leading, .search) };
     var ui_raw: [128]u8 = undefined;
     var object_raw: [object.header_size + 128]u8 = undefined;
 
@@ -443,7 +443,7 @@ test "button component constrains icon label content to button bounds" {
     var scene = ui.Scene.init(&commands);
     const bounds = ui.Rect.init(10, 10, 72, height);
 
-    try renderButton(&scene, bounds, .{ .id = 8, .label = "Impossible label", .variant = .secondary, .icon_slot = .{ .leading = Icon.named(.search) } }, .{});
+    try renderButton(&scene, bounds, .{ .id = 8, .label = "Impossible label", .variant = .secondary, .icon_slot = IconSlot.named(.leading, .search) }, .{});
 
     for (scene.written()) |command| switch (command) {
         .text => |text_command| {
@@ -463,7 +463,7 @@ test "button component aligns icon slot and label centers" {
     var scene = ui.Scene.init(&commands);
     const bounds = ui.Rect.init(10, 10, 132, height);
 
-    try renderButton(&scene, bounds, .{ .id = 8, .label = "Compile", .variant = .secondary, .icon_slot = .{ .leading = Icon.named(.cpu) } }, .{});
+    try renderButton(&scene, bounds, .{ .id = 8, .label = "Compile", .variant = .secondary, .icon_slot = IconSlot.named(.leading, .cpu) }, .{});
 
     const icon_command = component_test.iconCommand(scene.written(), icon.id(.cpu)).?.icon_quad;
     const text_command = component_test.textCommand(scene.written(), "Compile").?.text;
@@ -488,7 +488,7 @@ test "button component centers icon only content" {
     var scene = ui.Scene.init(&commands);
     const bounds = ui.Rect.init(10, 10, 44, height);
 
-    try renderButton(&scene, bounds, .{ .id = 8, .label = "", .variant = .secondary, .icon_slot = .{ .leading = Icon.named(.search) } }, .{});
+    try renderButton(&scene, bounds, .{ .id = 8, .label = "", .variant = .secondary, .icon_slot = IconSlot.named(.leading, .search) }, .{});
 
     var found = false;
     for (scene.written()) |command| switch (command) {
@@ -508,7 +508,7 @@ test "button component renders extended reference variants" {
     var scene = ui.Scene.init(&commands);
 
     try renderButton(&scene, ui.Rect.init(0, 0, 120, height), .{ .id = 1, .label = "Delete", .variant = .destructive }, .{});
-    try renderButton(&scene, ui.Rect.init(0, 44, 120, height), .{ .id = 2, .label = "Docs", .variant = .link, .icon_slot = .{ .leading = Icon.named(.search) } }, .{});
+    try renderButton(&scene, ui.Rect.init(0, 44, 120, height), .{ .id = 2, .label = "Docs", .variant = .link, .icon_slot = IconSlot.named(.leading, .search) }, .{});
 
     try std.testing.expect(component_test.hasRectColor(scene.written(), button_danger));
     try std.testing.expect(!component_test.hasRectBounds(scene.written(), ui.Rect.init(0, 44, 120, height)));

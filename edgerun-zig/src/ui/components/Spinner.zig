@@ -43,7 +43,11 @@ pub const Spinner = struct {
     }
 
     pub fn fromView(view: object.View) Error!Spinner {
-        _ = try component_codec.nodeView(view, .spinner);
+        return fromNode(try component_codec.nodeView(view, .spinner));
+    }
+
+    pub fn fromNode(spinner: @FieldType(ui.Node, "spinner")) Error!Spinner {
+        _ = spinner;
         return .{};
     }
 };

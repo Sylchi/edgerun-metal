@@ -36,12 +36,12 @@ const max_interaction_regions: usize = 1024;
 const max_rects: usize = 8192;
 const max_text_vertices: usize = 24576;
 const max_icon_vertices: usize = 4096;
-const max_icon_line_vertices: usize = 262144;
+const max_icon_line_vertices: usize = 65536;
 const max_image_vertices: usize = 384;
 const max_overlay_rects: usize = 512;
 const max_overlay_text_vertices: usize = 8192;
 const max_overlay_icon_vertices: usize = 256;
-const max_overlay_icon_line_vertices: usize = 65536;
+const max_overlay_icon_line_vertices: usize = 16384;
 const max_tiles: usize = 512;
 const max_gpu_primitives: usize = 32768;
 const max_registry_globals: usize = 128;
@@ -746,7 +746,7 @@ const NativeApp = struct {
         self.gpu_primitives = gpu_primitives;
         self.region_len = 0;
         self.ir_storage = .{};
-        self.font_atlas = renderer_font_atlas.Atlas.initWithFont(renderer_font_atlas.geist_ascii_font.body());
+        self.font_atlas.initWithFontInPlace(renderer_font_atlas.geist_ascii_font.body());
         self.state = .{ .route = app_navigation.fromPath(options.path) };
         self.gpu_recorder = .{};
         self.gpu_buffer_device = .{};
@@ -878,7 +878,7 @@ const NativeApp = struct {
         var cursor_commands: [cursor_scene_budget]ui.Command = undefined;
         var scene = ui.Scene.init(&cursor_commands);
         try app_cursor.render(&scene, self.state.hover_x, self.state.hover_y, kind);
-        var cursor_ir = renderer_ir.FixedBuffers(cursor_scene_budget, 0, cursor_overlay_icon_vertices, 0, 0, 0, 0, 0, 0){};
+        var cursor_ir = renderer_ir.FixedBuffers(cursor_scene_budget, 0, cursor_overlay_icon_vertices, 0, 0, 0, 0, 0, cursor_overlay_icon_vertices * 256){};
         const buffers = cursor_ir.buffers();
         try renderer_pipeline.packScene(buffers, &self.font_atlas, .object, scene.written());
         const surface = try renderer_software.Framebuffer.init(self.width, self.height, self.pixels);
@@ -1849,9 +1849,10 @@ test "wayland native app builds dmabuf surface only in explicit fd mode" {
         .shm = undefined,
         .pixels = &.{},
         .base_pixels = &.{},
-        .font_atlas = renderer_font_atlas.Atlas.initWithFont(renderer_font_atlas.geist_ascii_font.body()),
+        .font_atlas = undefined,
         .gpu_primitives = &.{},
     };
+    app.font_atlas.initWithFontInPlace(renderer_font_atlas.geist_ascii_font.body());
     const surface = try app.dmabufSurface();
     const import = try DmabufImport.fromNativeSurface(surface);
     try std.testing.expectEqual(@as(posix.fd_t, 19), import.fd);
@@ -1871,7 +1872,7 @@ test "wayland native app builds dmabuf surface from owned drm buffer" {
         .shm = undefined,
         .pixels = &.{},
         .base_pixels = &.{},
-        .font_atlas = renderer_font_atlas.Atlas.initWithFont(renderer_font_atlas.geist_ascii_font.body()),
+        .font_atlas = undefined,
         .gpu_primitives = &.{},
         .drm_buffer = .{
             .drm_fd = 18,
@@ -1883,6 +1884,7 @@ test "wayland native app builds dmabuf surface from owned drm buffer" {
             .size = 320 * 240 * @sizeOf(u32),
         },
     };
+    app.font_atlas.initWithFontInPlace(renderer_font_atlas.geist_ascii_font.body());
     const surface = try app.dmabufSurface();
     const import = try DmabufImport.fromNativeSurface(surface);
     try std.testing.expectEqual(@as(posix.fd_t, 19), import.fd);
@@ -1967,7 +1969,8 @@ test "wayland host renders the source app through canonical ir" {
 
     var ir_storage = IrStorage{};
     const buffers = ir_storage.buffers();
-    var font_atlas = renderer_font_atlas.Atlas.initWithFont(renderer_font_atlas.geist_ascii_font.body());
+    var font_atlas: renderer_font_atlas.Atlas = undefined;
+    font_atlas.initWithFontInPlace(renderer_font_atlas.geist_ascii_font.body());
     try renderer_pipeline.packScene(buffers, &font_atlas, .object, scene.written());
     try std.testing.expect(ir_storage.rect_len > 0);
     try std.testing.expect(ir_storage.text_vertex_len > 0);
@@ -2114,9 +2117,10 @@ test "wayland host appends scene cursor from native hover state" {
         .shm = undefined,
         .pixels = &.{},
         .base_pixels = &.{},
-        .font_atlas = renderer_font_atlas.Atlas.initWithFont(renderer_font_atlas.geist_ascii_font.body()),
+        .font_atlas = undefined,
         .gpu_primitives = &.{},
     };
+    app.font_atlas.initWithFontInPlace(renderer_font_atlas.geist_ascii_font.body());
     var scene = ui.Scene.initWithClips(&app.commands, &app.clips);
     var collector = interaction.Collector.init(&app.regions);
     try renderNativeAppScene(&scene, &collector, app.width, app.height, app.state);

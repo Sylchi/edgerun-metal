@@ -133,18 +133,26 @@ pub const Atlas = struct {
 
     pub fn init() Atlas {
         var atlas: Atlas = undefined;
-        atlas.font = null;
-        atlas.device_scale = default_device_scale;
-        atlas.clear();
+        atlas.initEmpty();
         return atlas;
     }
 
     pub fn initWithFont(font: font_vector.Body) Atlas {
         var atlas: Atlas = undefined;
-        atlas.font = font;
-        atlas.device_scale = default_device_scale;
-        atlas.clear();
+        atlas.initWithFontInPlace(font);
         return atlas;
+    }
+
+    pub fn initEmpty(self: *Atlas) void {
+        self.font = null;
+        self.device_scale = default_device_scale;
+        self.clear();
+    }
+
+    pub fn initWithFontInPlace(self: *Atlas, font: font_vector.Body) void {
+        self.font = font;
+        self.device_scale = default_device_scale;
+        self.clear();
     }
 
     pub fn clear(self: *Atlas) void {
@@ -637,7 +645,8 @@ fn fillSpanSamples(row: []u8, glyph_left: i16, glyph_right: f32, span_a: f32, sp
 }
 
 test "font atlas supplies renderer ir text vertices" {
-    var atlas = Atlas.init();
+    var atlas: Atlas = undefined;
+    atlas.initEmpty();
     var storage = renderer_ir.FixedBuffers(1, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     const sources = renderer_ir.Sources{
@@ -649,7 +658,8 @@ test "font atlas supplies renderer ir text vertices" {
 }
 
 test "font atlas caches ascii glyphs across common sizes" {
-    var atlas = Atlas.init();
+    var atlas: Atlas = undefined;
+    atlas.initEmpty();
     const source = atlas.source();
     const px_sizes = [_]u8{ 11, 16, 24, 32 };
 
@@ -685,7 +695,8 @@ test "font atlas renders text from canonical font object body" {
         .commands = &commands,
     };
 
-    var atlas = Atlas.initWithFont(font);
+    var atlas: Atlas = undefined;
+    atlas.initWithFontInPlace(font);
     const source = atlas.source();
     try std.testing.expectApproxEqAbs(@as(f32, 30.4), source.width(source.context, "AV", 16), 0.001);
 

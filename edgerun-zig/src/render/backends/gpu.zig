@@ -304,6 +304,8 @@ pub fn encodeFrame(
         scene_overlay_rect_budget,
         scene_overlay_text_vertex_budget,
         scene_overlay_icon_budget,
+        0,
+        0,
     ){};
     const buffers = storage.buffers();
     var context: u8 = 0;
@@ -374,6 +376,7 @@ fn encodeIrBuffers(
         .image => |vertices| try encodeIrTextured(.image_quad, vertices, out),
         .text, .overlay_text => |vertices| try encodeIrTextured(.text_quad, vertices, out),
         .icon, .overlay_icon => |instances| try encodeIrIcons(instances, out),
+        .icon_lines, .overlay_icon_lines => {},
     };
 }
 

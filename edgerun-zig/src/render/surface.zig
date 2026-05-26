@@ -290,6 +290,7 @@ pub fn dirtyTilesMarkIrBuffers(plan: TilePlan, buffers: renderer_ir.Buffers, til
             .rects, .overlay_rects => |rects| dirtyTilesMarkIrRects(plan, rects, tile_marks, list),
             .image, .text, .overlay_text => |vertices| dirtyTilesMarkIrTextured(plan, vertices, tile_marks, list),
             .icon, .overlay_icon => |icons| dirtyTilesMarkIrIcons(plan, icons, tile_marks, list),
+            .icon_lines, .overlay_icon_lines => true,
         };
         if (!marked) return false;
     }

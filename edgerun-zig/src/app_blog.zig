@@ -1,7 +1,10 @@
 const std = @import("std");
 const icon = @import("icon.zig");
 const ui = @import("ui.zig");
-const components = @import("ui/components/Component.zig");
+const badge_component = @import("ui/components/Badge.zig");
+const button_component = @import("ui/components/Button.zig");
+const card_component = @import("ui/components/Card.zig");
+const icon_component = @import("ui/components/Icon.zig");
 const app_chrome = @import("app_chrome.zig");
 const design = @import("app_design.zig");
 const interaction = @import("ui_interaction.zig");
@@ -1030,16 +1033,16 @@ fn renderArcOverview(scene: *ui.Scene, collector: *interaction.Collector, bounds
         const col = index % cols;
         const card = app_layout.columnBounds(bounds, cols, arc_overview_gap, col, bounds.y + @as(f32, @floatFromInt(row)) * (card_h + arc_overview_gap), card_h);
         const active = if (active_index) |found| found == index else false;
-        try nativeComponentVisual(scene, card, .{ .card = .{
+        try nativeComponentVisual(scene, card, card_component.Card{
             .title = section.card_title,
             .detail = section.card_detail,
             .variant = if (active) .elevated else .subtle,
-        } });
+        });
         if (active) try scene.pushRect(card, palette.primary, .border, app_chrome.surface_radius, 0.0);
-        try nativeComponentVisual(scene, ui.Rect.init(card.x + @max(14.0, card.w - 106.0), card.y + @max(10.0, card.h - 30.0), 92.0, 22.0), .{ .badge = .{
+        try nativeComponentVisual(scene, ui.Rect.init(card.x + @max(14.0, card.w - 106.0), card.y + @max(10.0, card.h - 30.0), 92.0, 22.0), badge_component.Badge{
             .label = section.count_label,
             .variant = if (active) .default else .outline,
-        } });
+        });
         try hit(collector, card, .button, arcFilterButtonId(index));
     }
 }
@@ -1113,11 +1116,11 @@ fn renderWorkflow(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
 }
 
 fn renderPostListItem(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, index: usize, post: Post) (ui.RenderError || interaction.Error)!void {
-    try nativeComponentVisual(scene, bounds, .{ .card = .{
+    try nativeComponentVisual(scene, bounds, card_component.Card{
         .title = "",
         .detail = "",
         .variant = .subtle,
-    } });
+    });
     const text_x = bounds.x + post_list_padding_x;
     const text_w = postListTextWidth(bounds.w);
     const meta_y = bounds.y + post_list_padding_y;
@@ -3360,11 +3363,11 @@ fn calloutHeight(value: []const u8, width: f32) f32 {
 fn callout(scene: *ui.Scene, bounds: ui.Rect, value: []const u8) ui.RenderError!void {
     var callout_style = appStyle();
     callout_style.panel = palette.card_alt;
-    try components.renderComponent(scene, bounds, .{ .card = .{
+    try (card_component.Card{
         .title = "",
         .detail = "",
         .variant = .subtle,
-    } }, .{ .style = callout_style });
+    }).render(scene, bounds, .{ .style = callout_style });
     try fill(scene, ui.Rect.init(bounds.x, bounds.y, 3.0, bounds.h), palette.primary, 2.0);
     try scene.pushWrappedText(ui.Rect.init(bounds.x + callout_pad_x, bounds.y + callout_pad_y, bounds.w - callout_pad_x * 2.0, bounds.h - callout_pad_y * 2.0), value, palette.text, .{
         .line_height = callout_line_h,
@@ -3382,10 +3385,10 @@ fn codeBlock(scene: *ui.Scene, bounds: ui.Rect, lines: []const []const u8) ui.Re
     const style = appStyle();
     var code_style = style;
     code_style.panel = style.bg;
-    try components.renderComponent(scene, bounds, .{ .card = .{
+    try (card_component.Card{
         .title = "",
         .detail = "",
-    } }, .{ .style = code_style });
+    }).render(scene, bounds, .{ .style = code_style });
     if (try scene.pushClip(bounds.insetUniform(code_clip_inset))) {
         defer scene.popClip();
         var y = bounds.y + code_pad_y;
@@ -3412,9 +3415,9 @@ fn renderNodeMap(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
 fn tag(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, color: ui.Color) ui.RenderError!void {
     var tag_style = appStyle();
     tag_style.accent = color;
-    try components.renderComponent(scene, bounds, .{ .badge = .{
+    try (badge_component.Badge{
         .label = label,
-    } }, .{ .style = tag_style });
+    }).render(scene, bounds, .{ .style = tag_style });
 }
 
 fn paragraph(scene: *ui.Scene, bounds: ui.Rect, value: []const u8) ui.RenderError!void {
@@ -3422,28 +3425,28 @@ fn paragraph(scene: *ui.Scene, bounds: ui.Rect, value: []const u8) ui.RenderErro
 }
 
 fn outlineButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id: u32) (ui.RenderError || interaction.Error)!void {
-    try nativeComponent(scene, collector, bounds, .{ .button = .{ .id = id, .label = label, .variant = .outline } });
+    try nativeComponent(scene, collector, bounds, button_component.Button{ .id = id, .label = label, .variant = .outline });
 }
 
 fn nativeBadge(scene: *ui.Scene, bounds: ui.Rect, label: []const u8) ui.RenderError!void {
-    try nativeComponentVisual(scene, bounds, .{ .badge = .{ .label = label } });
+    try nativeComponentVisual(scene, bounds, badge_component.Badge{ .label = label });
 }
 
 fn nativeCard(scene: *ui.Scene, bounds: ui.Rect, title_value: []const u8, detail_value: []const u8) ui.RenderError!void {
-    try nativeComponentVisual(scene, bounds, .{ .card = .{ .title = title_value, .detail = detail_value, .variant = .elevated } });
+    try nativeComponentVisual(scene, bounds, card_component.Card{ .title = title_value, .detail = detail_value, .variant = .elevated });
 }
 
 fn demoFrame(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
-    try nativeComponentVisual(scene, bounds, .{ .card = .{ .title = "", .detail = "" } });
+    try nativeComponentVisual(scene, bounds, card_component.Card{ .title = "", .detail = "" });
 }
 
-fn nativeComponent(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, component: components.Component) (ui.RenderError || interaction.Error)!void {
-    try components.renderComponent(scene, bounds, component, .{ .style = appStyle() });
-    try components.collectComponentInteractions(collector, bounds, component);
+fn nativeComponent(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, component: anytype) (ui.RenderError || interaction.Error)!void {
+    try component.render(scene, bounds, .{ .style = appStyle() });
+    try component.collectInteractions(collector, bounds);
 }
 
-fn nativeComponentVisual(scene: *ui.Scene, bounds: ui.Rect, component: components.Component) ui.RenderError!void {
-    try components.renderComponent(scene, bounds, component, .{ .style = appStyle() });
+fn nativeComponentVisual(scene: *ui.Scene, bounds: ui.Rect, component: anytype) ui.RenderError!void {
+    try component.render(scene, bounds, .{ .style = appStyle() });
 }
 
 fn appStyle() ui.Style {
@@ -3458,7 +3461,7 @@ fn alignedText(scene: *ui.Scene, x: f32, y: f32, w: f32, h: f32, value: []const 
 }
 
 fn iconQuad(scene: *ui.Scene, bounds: ui.Rect, value: icon.Icon, color: ui.Color) ui.RenderError!void {
-    try scene.pushIconQuad(.{ .bounds = bounds, .icon_id = icon.id(value), .color = color });
+    try icon_component.renderGlyph(scene, bounds, value, color);
 }
 
 fn hit(collector: *interaction.Collector, bounds: ui.Rect, kind: ui.HitKind, id: u32) interaction.Error!void {

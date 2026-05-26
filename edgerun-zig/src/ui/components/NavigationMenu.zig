@@ -60,6 +60,10 @@ pub const NavigationMenu = struct {
 
     pub fn fromView(view: object.View) Error!NavigationMenu {
         const menu = try component_codec.nodeView(view, .navigation_menu);
+        return fromNode(menu);
+    }
+
+    pub fn fromNode(menu: @FieldType(ui.Node, "navigation_menu")) Error!NavigationMenu {
         return .{ .id = menu.id, .first = menu.first, .second = menu.second, .active = activeIndex(menu.active) };
     }
 };

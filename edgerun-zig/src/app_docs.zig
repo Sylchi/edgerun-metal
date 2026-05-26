@@ -2,7 +2,10 @@ const std = @import("std");
 const icon = @import("icon.zig");
 const interaction = @import("ui_interaction.zig");
 const ui = @import("ui.zig");
-const components = @import("ui/components/Component.zig");
+const badge_component = @import("ui/components/Badge.zig");
+const button_component = @import("ui/components/Button.zig");
+const card_component = @import("ui/components/Card.zig");
+const icon_component = @import("ui/components/Icon.zig");
 const component_gallery = @import("component_gallery.zig");
 const app_blog = @import("app_blog.zig");
 const app_chrome = @import("app_chrome.zig");
@@ -158,13 +161,13 @@ const rendering_blocks = [_]DocBlock{
 
 const component_blocks = [_]DocBlock{
     .{ .title = "Catalog as public vocabulary", .body = "component_gallery.component_catalog is the visible list of components compiled into the app. Catalog cards and opened component pages render from the same component specifications.", .code = "route: /docs/components\nsubsection: /docs/components/<slug>\nsource: component_gallery.component_catalog" },
-    .{ .title = "Component object path", .body = "Components serialize to canonical component objects, render through shared component render helpers, and collect hit targets through component interaction helpers." },
+    .{ .title = "Component object path", .body = "Components serialize to canonical component objects. Concrete component files own rendering, hit collection, node decoding, and accessibility metadata; the union is only the heterogeneous catalog/object boundary." },
     .{ .title = "Opened component page", .body = "Each /docs/components/<slug> page shows the actual component renderings plus the API and contract. It is not a static screenshot or separate demo renderer." },
 };
 
 const media_blocks = [_]DocBlock{
     .{ .title = "Owned decode", .body = "Media should be decoded by repo-owned code into EdgeRun drawing data. The host may present pixels, but hidden host decoders should not become part of the app contract.", .code = "src/media/png.zig\nsrc/media/jpeg.zig\nsrc/media/tga.zig\nsrc/media/webp/root.zig" },
-    .{ .title = "Icons", .body = "Icon names map to semantic icon ids. SVG/vector parsing turns repo assets into renderer data so the same icon appears in web host and native paths.", .code = "icon_svg.Iterator\nicon_vector.Iterator\nui.Scene.pushIconQuad(...)" },
+    .{ .title = "Icons", .body = "Icon names map to semantic icon ids. SVG/vector parsing turns repo assets into renderer data so the same icon appears in web host and native paths.", .code = "icon_component.Icon.named(...)\nicon_component.renderGlyph(...)\nicon_svg.Iterator" },
     .{ .title = "Images and video", .body = "Images move through image decode and renderer image vertices. Video work is staged around deterministic frame decode so media can be demonstrated without depending on platform players.", .code = "src/media/video_ivf.zig\nsrc/media/video_webm.zig\nsrc/media/vp8.zig\nui.Scene.pushImageQuad(...)" },
 };
 
@@ -412,7 +415,7 @@ fn docBodyHeight(width: f32, compact: bool, page: DocPage, state: State) f32 {
 }
 
 fn renderSidebar(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, selected_index: ?usize) (ui.RenderError || interaction.Error)!void {
-    try components.renderComponent(scene, bounds, .{ .card = .{ .title = "", .detail = "" } }, .{ .style = app_chrome.style() });
+    try (card_component.Card{ .title = "", .detail = "" }).render(scene, bounds, .{ .style = app_chrome.style() });
     try text(scene, bounds.x + card_pad, bounds.y + 18.0, bounds.w - card_pad * 2.0, 16.0, "Docs", palette.text);
     try text(scene, bounds.x + card_pad, bounds.y + 38.0, bounds.w - card_pad * 2.0, 14.0, "Feature map", palette.muted);
     var y = bounds.y + 64.0;
@@ -425,18 +428,18 @@ fn renderSidebar(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui
 }
 
 fn renderSidebarRow(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, page: DocPage, id: u32, active: bool) (ui.RenderError || interaction.Error)!void {
-    const row_component = components.Component{ .button = .{
+    const row_component = button_component.Button{
         .id = id,
         .label = page.section.label(),
         .variant = if (active) .secondary else .ghost,
-        .icon_slot = .{ .leading = components.IconComponent.named(page.icon_value) },
-    } };
-    try components.renderComponent(scene, bounds, row_component, .{
+        .icon_slot = icon_component.IconSlot.named(.leading, page.icon_value),
+    };
+    try row_component.render(scene, bounds, .{
         .style = app_chrome.style(),
         .control = .{ .active = active },
         .control_size = .small,
     });
-    try components.collectComponentInteractions(collector, bounds, row_component);
+    try row_component.collectInteractions(collector, bounds);
 }
 
 fn renderDocBody(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, compact: bool, page: DocPage, state: State) DocsError!void {
@@ -461,10 +464,10 @@ fn renderDocBody(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui
 }
 
 fn renderHero(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, page: DocPage) (ui.RenderError || interaction.Error)!void {
-    try components.renderComponent(scene, bounds, .{ .card = .{
+    try (card_component.Card{
         .title = "",
         .detail = "",
-    } }, .{ .style = app_chrome.style() });
+    }).render(scene, bounds, .{ .style = app_chrome.style() });
     const inset = bounds.insetUniform(card_pad);
     try label(scene, heroLabelBounds(inset, page.status), page.status, page.color);
     const split = bounds.w >= compact_w;
@@ -523,11 +526,11 @@ fn heroHeight(width: f32, page: DocPage) f32 {
 
 fn renderFeatureGlyph(scene: *ui.Scene, bounds: ui.Rect, page: DocPage) ui.RenderError!void {
     if (bounds.w < 90.0) return;
-    try components.renderComponent(scene, bounds, .{ .card = .{
+    try (card_component.Card{
         .title = "",
         .detail = "",
         .variant = .subtle,
-    } }, .{ .style = app_chrome.style() });
+    }).render(scene, bounds, .{ .style = app_chrome.style() });
     try stroke(scene, bounds, page.color, panel_radius);
     const icon_size = @min(design.Icon.hero_max, bounds.w * 0.42);
     try iconQuad(scene, ui.Rect.init(bounds.x + bounds.w * 0.5 - icon_size * 0.5, bounds.y + 42.0, icon_size, icon_size), page.icon_value, page.color);
@@ -659,10 +662,10 @@ fn renderMediaDemo(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
 }
 
 fn renderMediaCard(scene: *ui.Scene, bounds: ui.Rect, demo: MediaDemo) ui.RenderError!void {
-    try components.renderComponent(scene, bounds, .{ .card = .{
+    try (card_component.Card{
         .title = "",
         .detail = "",
-    } }, .{ .style = app_chrome.style() });
+    }).render(scene, bounds, .{ .style = app_chrome.style() });
     const preview = ui.Rect.init(bounds.x + card_pad, bounds.y + card_pad, bounds.w - card_pad * 2.0, media_preview_h);
     switch (demo.kind) {
         .image => try renderImageDemo(scene, preview, demo),
@@ -699,10 +702,10 @@ fn docBlockHeight(width: f32, block: DocBlock) f32 {
 }
 
 fn renderDocBlock(scene: *ui.Scene, bounds: ui.Rect, block: DocBlock) ui.RenderError!void {
-    try components.renderComponent(scene, bounds, .{ .card = .{
+    try (card_component.Card{
         .title = "",
         .detail = "",
-    } }, .{ .style = app_chrome.style() });
+    }).render(scene, bounds, .{ .style = app_chrome.style() });
     try text(scene, bounds.x + card_pad, bounds.y + card_pad, bounds.w - card_pad * 2.0, section_block_title_h, block.title, palette.text);
     const body_y = bounds.y + card_pad + section_block_title_h + 10.0;
     const body_h = wrappedTextHeight(block.body, bounds.w - card_pad * 2.0, section_block_body_line_h, section_block_body_max_lines, section_block_body_avg_w);
@@ -765,11 +768,11 @@ fn renderFeatureGrid(scene: *ui.Scene, collector: *interaction.Collector, bounds
 }
 
 fn renderFeatureCard(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, page: DocPage, id: u32, active: bool) (ui.RenderError || interaction.Error)!void {
-    try components.renderComponent(scene, bounds, .{ .card = .{
+    try (card_component.Card{
         .title = page.title,
         .detail = page.summary,
         .variant = if (active) .elevated else .subtle,
-    } }, .{ .style = app_chrome.style() });
+    }).render(scene, bounds, .{ .style = app_chrome.style() });
     try stroke(scene, bounds, if (active) page.color else palette.border, panel_radius);
     try collector.addHit(bounds, .button, id);
 }
@@ -808,10 +811,10 @@ fn detailCardHeight(width: f32, detail: []const u8) f32 {
 }
 
 fn renderDetailCard(scene: *ui.Scene, bounds: ui.Rect, title_value: []const u8, detail: []const u8) ui.RenderError!void {
-    try components.renderComponent(scene, bounds, .{ .card = .{
+    try (card_component.Card{
         .title = "",
         .detail = "",
-    } }, .{ .style = app_chrome.style() });
+    }).render(scene, bounds, .{ .style = app_chrome.style() });
     try text(scene, bounds.x + card_pad, bounds.y + 18.0, bounds.w - card_pad * 2.0, 16.0, title_value, palette.text);
     try wrappedText(scene, ui.Rect.init(bounds.x + card_pad, bounds.y + 44.0, bounds.w - card_pad * 2.0, @max(1.0, bounds.h - 44.0 - card_pad)), detail, palette.dim, detail_body_line_h, detail_body_avg_w, detail_body_max_lines);
 }
@@ -833,10 +836,10 @@ fn lineCount(value: []const u8) usize {
 fn renderCodeCard(scene: *ui.Scene, bounds: ui.Rect, value: []const u8) ui.RenderError!void {
     var code_style = app_chrome.style();
     code_style.panel = palette.code_bg;
-    try components.renderComponent(scene, bounds, .{ .card = .{
+    try (card_component.Card{
         .title = "",
         .detail = "",
-    } }, .{ .style = code_style });
+    }).render(scene, bounds, .{ .style = code_style });
     try text(scene, bounds.x + card_pad, bounds.y + 18.0, bounds.w - card_pad * 2.0, 14.0, "API surface", palette.primary);
     var line_cursor: usize = 0;
     var y = bounds.y + 48.0;
@@ -861,17 +864,19 @@ fn renderGrid(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
 }
 
 fn primaryButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label_value: []const u8, id: u32) (ui.RenderError || interaction.Error)!void {
-    try components.renderComponent(scene, bounds, .{ .button = .{ .id = id, .label = label_value, .icon_slot = .{ .trailing = components.IconComponent.named(.chevron_right) } } }, .{
+    const component = button_component.Button{ .id = id, .label = label_value, .icon_slot = icon_component.IconSlot.named(.trailing, .chevron_right) };
+    try component.render(scene, bounds, .{
         .style = appStyle(),
     });
-    try components.collectComponentInteractions(collector, bounds, .{ .button = .{ .id = id, .label = label_value } });
+    try component.collectInteractions(collector, bounds);
 }
 
 fn outlineButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label_value: []const u8, id: u32) (ui.RenderError || interaction.Error)!void {
-    try components.renderComponent(scene, bounds, .{ .button = .{ .id = id, .label = label_value, .variant = .outline } }, .{
+    const component = button_component.Button{ .id = id, .label = label_value, .variant = .outline };
+    try component.render(scene, bounds, .{
         .style = appStyle(),
     });
-    try components.collectComponentInteractions(collector, bounds, .{ .button = .{ .id = id, .label = label_value } });
+    try component.collectInteractions(collector, bounds);
 }
 
 fn appStyle() ui.Style {
@@ -888,13 +893,13 @@ fn appStyle() ui.Style {
 fn label(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, color: ui.Color) ui.RenderError!void {
     var label_style = appStyle();
     label_style.accent = color;
-    try components.renderComponent(scene, bounds, .{ .badge = .{
+    try (badge_component.Badge{
         .label = value,
-    } }, .{ .style = label_style });
+    }).render(scene, bounds, .{ .style = label_style });
 }
 
 fn iconQuad(scene: *ui.Scene, bounds: ui.Rect, value: icon.Icon, color: ui.Color) ui.RenderError!void {
-    try scene.pushIconQuad(.{ .bounds = bounds, .icon_id = icon.id(value), .color = color });
+    try icon_component.renderGlyph(scene, bounds, value, color);
 }
 
 test "docs page renders sidebar feature documentation" {

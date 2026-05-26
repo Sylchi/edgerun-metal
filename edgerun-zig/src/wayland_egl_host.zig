@@ -40,12 +40,12 @@ const max_interaction_regions: usize = 1024;
 const max_rects: usize = 8192;
 const max_text_vertices: usize = 24576;
 const max_icon_vertices: usize = 4096;
-const max_icon_line_vertices: usize = 262144;
+const max_icon_line_vertices: usize = 65536;
 const max_image_vertices: usize = 384;
 const max_overlay_rects: usize = 512;
 const max_overlay_text_vertices: usize = 8192;
 const max_overlay_icon_vertices: usize = 256;
-const max_overlay_icon_line_vertices: usize = 65536;
+const max_overlay_icon_line_vertices: usize = 16384;
 
 const IrStorage = renderer_ir.FixedBuffers(
     max_rects,
@@ -204,7 +204,8 @@ pub fn main(init: std.process.Init) !void {
     defer deinitWayland(&wl);
     var egl = try initEgl(&wl);
     defer deinitEgl(&egl);
-    var font_atlas = renderer_font_atlas.Atlas.initWithFont(renderer_font_atlas.geist_ascii_font.body());
+    var font_atlas: renderer_font_atlas.Atlas = undefined;
+    font_atlas.initWithFontInPlace(renderer_font_atlas.geist_ascii_font.body());
     const cloud_meme = try app_images.cloudMeme();
     var gl = try renderer_gles.Adapter.init(&font_atlas, .{
         .width = cloud_meme.width,

@@ -124,14 +124,14 @@ pub fn decodeBytes(raw: []const u8, out_nodes: []ui.Node) Error!ui.Node {
         out_nodes[index] = switch (kind) {
             .text => .{ .text = .{ .value = try stringRef(string_table, a, b) } },
             .accordion => .{ .accordion = .{ .id = id / accordion_id_stride, .title = try stringRef(string_table, a, b), .detail = try stringRef(string_table, c, d), .open = (id % accordion_id_stride) != 0 } },
-            .alert => .{ .alert = .{ .title = try stringRef(string_table, a, b), .detail = try stringRef(string_table, c, d), .destructive = id != 0 } },
+            .alert => .{ .alert = .{ .title = try stringRef(string_table, a, b), .detail = try stringRef(string_table, c, d), .destructive = (id & alert_destructive_mask) != 0, .icon = try boundedU32Tag(id >> alert_icon_shift, component_common.encoded_icon_count) } },
             .alert_dialog => .{ .alert_dialog = .{ .id = id, .title = try stringRef(string_table, a, b), .detail = try stringRef(string_table, c, d) } },
             .aspect_ratio => .{ .aspect_ratio = .{ .ratio_w = c, .ratio_h = d } },
             .calendar => .{ .calendar = .{ .id = id, .month = try stringRef(string_table, a, b), .selected_day = c } },
             .carousel => .{ .carousel = .{ .id = id, .label = try stringRef(string_table, a, b) } },
             .chart => .{ .chart = .{ .id = id, .label = try stringRef(string_table, a, b) } },
             .combobox => .{ .combobox = .{ .id = id, .placeholder = try stringRef(string_table, a, b), .selected = try stringRef(string_table, c, d) } },
-            .empty => .{ .empty = .{ .title = try stringRef(string_table, a, b), .detail = try stringRef(string_table, c, d) } },
+            .empty => .{ .empty = .{ .title = try stringRef(string_table, a, b), .detail = try stringRef(string_table, c, d), .icon = try boundedU32Tag(id, component_common.encoded_icon_count) } },
             .button => .{ .button = .{ .id = id, .label = try stringRef(string_table, a, b), .variant = try boundedTag(c, button_variant_count), .leading_icon = try boundedTag(d & button_icon_mask, component_common.encoded_icon_count), .trailing_icon = try boundedTag(d >> button_icon_shift, component_common.encoded_icon_count) } },
             .icon_button => .{ .icon_button = .{ .id = id, .label = try stringRef(string_table, a, b), .variant = try boundedTag(c, button_variant_count), .icon = try boundedTag(d, component_common.encoded_icon_count) } },
             .button_group => .{ .button_group = .{ .id = id / grouped_id_stride, .first = try stringRef(string_table, a, b), .second = try stringRef(string_table, c, d), .active = @intCast(id % grouped_id_stride) } },
@@ -158,7 +158,7 @@ pub fn decodeBytes(raw: []const u8, out_nodes: []ui.Node) Error!ui.Node {
             .breadcrumb => .{ .breadcrumb = .{ .id = id, .first = try stringRef(string_table, a, b), .current = try stringRef(string_table, c, d) } },
             .menubar => .{ .menubar = .{ .id = id / menubar_id_stride, .first = try stringRef(string_table, a, b), .second = try stringRef(string_table, c, d), .active = @intCast(id % menubar_id_stride) } },
             .navigation_menu => .{ .navigation_menu = .{ .id = id / navigation_menu_id_stride, .first = try stringRef(string_table, a, b), .second = try stringRef(string_table, c, d), .active = @intCast(id % navigation_menu_id_stride) } },
-            .command => .{ .command = .{ .id = id, .placeholder = try stringRef(string_table, a, b) } },
+            .command => .{ .command = .{ .id = id, .placeholder = try stringRef(string_table, a, b), .leading_icon = try boundedTag(c, component_common.encoded_icon_count) } },
             .context_menu => .{ .context_menu = .{ .id = id, .first = try stringRef(string_table, a, b), .second = try stringRef(string_table, c, d) } },
             .dialog => .{ .dialog = .{ .id = id, .title = try stringRef(string_table, a, b), .detail = try stringRef(string_table, c, d) } },
             .direction => .{ .direction = .{ .id = id / direction_id_stride, .active = @intCast(id % direction_id_stride) } },
@@ -170,7 +170,7 @@ pub fn decodeBytes(raw: []const u8, out_nodes: []ui.Node) Error!ui.Node {
             .input_otp => .{ .input_otp = .{ .id = id, .value = try stringRef(string_table, a, b) } },
             .toggle => .{ .toggle = .{ .id = id, .label = try stringRef(string_table, a, b), .pressed = decodeBool(c) orelse return error.Corrupt } },
             .textarea => .{ .textarea = .{ .id = id, .placeholder = try stringRef(string_table, a, b) } },
-            .select => .{ .select = .{ .id = id, .label = try stringRef(string_table, a, b) } },
+            .select => .{ .select = .{ .id = id, .label = try stringRef(string_table, a, b), .trailing_icon = try boundedTag(c, component_common.encoded_icon_count) } },
             .radio_group => .{ .radio_group = .{ .id = id / radio_id_stride, .first = try stringRef(string_table, a, b), .second = try stringRef(string_table, c, d), .selected = @intCast(id % radio_id_stride) } },
             .tabs => .{ .tabs = .{ .id = id / tabs_id_stride, .first = try stringRef(string_table, a, b), .second = try stringRef(string_table, c, d), .active = @intCast(id % tabs_id_stride) } },
             .table => .{ .table = .{ .id = id, .name = try stringRef(string_table, a, b), .role = try stringRef(string_table, c, d) } },
@@ -280,6 +280,8 @@ const radio_id_stride: u32 = 2;
 const tabs_id_stride: u32 = 2;
 const grouped_id_stride: u32 = 2;
 const direction_id_stride: u32 = 2;
+const alert_destructive_mask: u32 = 1;
+const alert_icon_shift: u5 = 1;
 const toggle_group_id_stride: u32 = 3;
 const accordion_id_stride: u32 = 2;
 const pagination_id_stride: u32 = 3;

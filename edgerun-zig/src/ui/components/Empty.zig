@@ -13,13 +13,16 @@ const component_primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 const constrainPreferredSize = component_primitives.constrainPreferredSize;
+const Icon = icon_component.Icon;
+const IconSlot = icon_component.IconSlot;
 
 pub const Empty = struct {
     title: []const u8,
     detail: []const u8,
+    icon_slot: IconSlot = IconSlot.named(.media, .sparkles),
 
     pub fn node(self: Empty) ui.Node {
-        return ui.emptyNode(self.title, self.detail);
+        return ui.emptyNode(self.title, self.detail, self.icon_slot.tag());
     }
 
     pub fn render(self: Empty, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
@@ -27,7 +30,7 @@ pub const Empty = struct {
         try scene.pushRect(bounds, options.style.border, .border, empty_radius, 0.0);
         const media = ui.Rect.init(bounds.x + (bounds.w - empty_media_size) * 0.5, bounds.y + empty_padding, empty_media_size, empty_media_size);
         try scene.pushRect(media, options.style.row, .fill, media.w * 0.5, 0.0);
-        try icon_component.renderGlyph(scene, media.insetUniform(empty_media_icon_inset), .sparkles, options.style.text);
+        try icon_component.renderGlyph(scene, media.insetUniform(empty_media_icon_inset), mediaIcon(self).value, options.style.text);
         const text_w = textWidth(bounds);
         const title_y = media.y + media.h + empty_gap;
         const title_h = component_primitives.measuredTextHeight(self.title, text_w, empty_title_height, empty_title_max_lines);
@@ -52,11 +55,11 @@ pub const Empty = struct {
     }
 
     pub fn toObject(self: Empty, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
-        return component_codec.twoStringObject(.empty, 0, self.title, self.detail, ui_out, object_out, epoch);
+        return component_codec.twoStringObject(.empty, self.icon_slot.tag(), self.title, self.detail, ui_out, object_out, epoch);
     }
 
     pub fn writeRecord(self: Empty, writer: *component_codec.Writer, index: usize) bool {
-        return component_codec.twoStringRecord(writer, index, .empty, 0, self.title, self.detail);
+        return component_codec.twoStringRecord(writer, index, .empty, self.icon_slot.tag(), self.title, self.detail);
     }
 
     pub fn fromView(view: object.View) Error!Empty {
@@ -65,9 +68,14 @@ pub const Empty = struct {
     }
 
     pub fn fromNode(empty: @FieldType(ui.Node, "empty")) Error!Empty {
-        return .{ .title = empty.title, .detail = empty.detail };
+        return .{ .title = empty.title, .detail = empty.detail, .icon_slot = try IconSlot.fromTag(.media, empty.icon) };
     }
 };
+
+fn mediaIcon(self: Empty) Icon {
+    if (self.icon_slot.optional()) |slot| return slot;
+    return Icon.named(.sparkles);
+}
 
 fn textWidth(bounds: ui.Rect) f32 {
     return @max(component_primitives.min_extent, bounds.w - empty_padding * 2.0);
@@ -87,8 +95,8 @@ const empty_min_width: f32 = 144.0;
 const empty_min_height: f32 = 96.0;
 pub const preferred_empty = ui.Size{ .w = 260.0, .h = 132.0 };
 
-test "empty component serializes to canonical object and deserializes" {
-    const empty = Empty{ .title = "No results", .detail = "Try another filter." };
+test "empty component serializes icon slot to canonical object and deserializes" {
+    const empty = Empty{ .title = "No results", .detail = "Try another filter.", .icon_slot = IconSlot.named(.media, .search) };
     var ui_raw: [160]u8 = undefined;
     var object_raw: [object.header_size + 160]u8 = undefined;
 
@@ -97,6 +105,7 @@ test "empty component serializes to canonical object and deserializes" {
 
     try std.testing.expectEqualStrings(empty.title, decoded.title);
     try std.testing.expectEqualStrings(empty.detail, decoded.detail);
+    try std.testing.expectEqual(icon.Icon.search, decoded.icon_slot.media.value);
 }
 
 test "empty component renders media title and description" {

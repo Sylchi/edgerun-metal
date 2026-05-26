@@ -524,7 +524,8 @@ test "viewport scale follows the EGL framebuffer backing size" {
 }
 
 test "font atlas refresh API accepts populated variable font atlas" {
-    var atlas = renderer_font_atlas.Atlas.init();
+    var atlas: renderer_font_atlas.Atlas = undefined;
+    atlas.initEmpty();
     var storage = renderer_ir.FixedBuffers(1, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     try renderer_ir.pushText(buffers, atlas.source(), .base, .{ .x = 0, .y = 0, .w = 64, .h = 18 }, "A", .text, .start);

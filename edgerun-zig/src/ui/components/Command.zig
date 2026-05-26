@@ -16,19 +16,22 @@ const RenderOptions = common.RenderOptions;
 const measureFixed = primitives.measureFixed;
 const renderControlFrame = primitives.renderControlFrame;
 const renderControlText = primitives.renderControlText;
+const Icon = icon_component.Icon;
+const IconSlot = icon_component.IconSlot;
 
 pub const Command = struct {
     id: u32,
     placeholder: []const u8,
+    icon_slot: IconSlot = IconSlot.named(.leading, .search),
 
     pub fn node(self: Command) ui.Node {
-        return ui.commandNode(self.id, self.placeholder);
+        return ui.commandNode(self.id, self.placeholder, self.icon_slot.tag());
     }
 
     pub fn render(self: Command, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         const input = inputBounds(bounds);
         try renderControlFrame(scene, input, options.style.panel, options.style.border, command_radius);
-        try icon_component.renderGlyph(scene, ui.Rect.init(input.x + command_icon_x, input.y + (input.h - command_icon_size) * 0.5, command_icon_size, command_icon_size), .search, options.style.muted);
+        try icon_component.renderGlyph(scene, ui.Rect.init(input.x + command_icon_x, input.y + (input.h - command_icon_size) * 0.5, command_icon_size, command_icon_size), leadingIcon(self).value, options.style.muted);
         const input_text = if (options.command_palette) |palette| if (palette.query.len == 0) self.placeholder else palette.query else self.placeholder;
         const input_color = if (options.command_palette) |palette| if (palette.query.len == 0) options.style.muted else options.style.text else options.style.muted;
         try scene.pushText(ui.Rect.init(input.x + command_text_x, input.y + (input.h - command_text_h) * 0.5, @max(primitives.min_extent, input.w - command_text_x - command_padding_x), command_text_h), input_text, input_color);
@@ -68,11 +71,14 @@ pub const Command = struct {
     }
 
     pub fn toObject(self: Command, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
-        return component_codec.oneStringObject(.command, self.id, self.placeholder, ui_out, object_out, epoch);
+        var writer = component_codec.singleWriter(ui_out) orelse return null;
+        if (!self.writeRecord(&writer, 0)) return null;
+        return writer.objectNode(object_out, component_codec.requirements(), epoch);
     }
 
     pub fn writeRecord(self: Command, writer: *component_codec.Writer, index: usize) bool {
-        return component_codec.oneStringRecord(writer, index, .command, self.id, self.placeholder);
+        const placeholder_ref = writer.string(self.placeholder) orelse return false;
+        return writer.record(index, .command, self.id, placeholder_ref, .{ .offset = self.icon_slot.tag(), .len = 0 });
     }
 
     pub fn fromView(view: object.View) Error!Command {
@@ -81,9 +87,14 @@ pub const Command = struct {
     }
 
     pub fn fromNode(command: @FieldType(ui.Node, "command")) Error!Command {
-        return .{ .id = command.id, .placeholder = command.placeholder };
+        return .{ .id = command.id, .placeholder = command.placeholder, .icon_slot = try IconSlot.fromTag(.leading, command.leading_icon) };
     }
 };
+
+fn leadingIcon(self: Command) Icon {
+    if (self.icon_slot.optional()) |slot| return slot;
+    return Icon.named(.search);
+}
 
 fn inputBounds(bounds: ui.Rect) ui.Rect {
     return ui.Rect.init(bounds.x, bounds.y, bounds.w, @min(bounds.h, command_input_h));

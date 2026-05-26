@@ -53,6 +53,10 @@ pub const Sheet = struct {
 
     pub fn fromView(view: object.View) Error!Sheet {
         const sheet = try component_codec.nodeView(view, .sheet);
+        return fromNode(sheet);
+    }
+
+    pub fn fromNode(sheet: @FieldType(ui.Node, "sheet")) Error!Sheet {
         return .{ .id = sheet.id, .title = sheet.title, .detail = sheet.detail };
     }
 };

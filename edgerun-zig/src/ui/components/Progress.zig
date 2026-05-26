@@ -40,6 +40,10 @@ pub const Progress = struct {
 
     pub fn fromView(view: object.View) Error!Progress {
         const progress = try component_codec.nodeView(view, .progress);
+        return fromNode(progress);
+    }
+
+    pub fn fromNode(progress: @FieldType(ui.Node, "progress")) Error!Progress {
         return .{ .value = progress.value };
     }
 };

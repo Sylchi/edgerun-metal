@@ -15,13 +15,16 @@ const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 const constrainPreferredSize = component_primitives.constrainPreferredSize;
 const contentInset = component_primitives.contentInset;
+const Icon = icon_component.Icon;
+const IconSlot = icon_component.IconSlot;
 
 pub const Select = struct {
     id: u32,
     label: []const u8,
+    icon_slot: IconSlot = IconSlot.named(.trailing, .chevron_right),
 
     pub fn node(self: Select) ui.Node {
-        return ui.selectNode(self.id, self.label);
+        return ui.selectNode(self.id, self.label, self.icon_slot.tag());
     }
 
     pub fn accessibility(self: Select) common.Accessibility {
@@ -36,7 +39,7 @@ pub const Select = struct {
             const text_h = @min(text_bounds.h, component_primitives.measuredTextHeight(self.label, text_bounds.w, component_primitives.control_label_height, select_label_max_lines));
             try scene.pushWrappedText(text_bounds.withHeightCentered(text_h), self.label, options.style.text, component_primitives.textWrap(self.label, component_primitives.control_label_height, select_label_max_lines));
             const arrow_bounds = ui.Rect.init(label_bounds.x + label_bounds.w - select_icon_size, label_bounds.y + (label_bounds.h - select_icon_size) * 0.5, select_icon_size, select_icon_size);
-            try icon_component.renderGlyph(scene, arrow_bounds, .chevron_right, options.style.muted);
+            try icon_component.renderGlyph(scene, arrow_bounds, trailingIcon(self).value, options.style.muted);
         }
     }
 
@@ -60,18 +63,30 @@ pub const Select = struct {
     }
 
     pub fn toObject(self: Select, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
-        return component_codec.oneStringObject(.select, self.id, self.label, ui_out, object_out, epoch);
+        var writer = component_codec.singleWriter(ui_out) orelse return null;
+        if (!self.writeRecord(&writer, 0)) return null;
+        return writer.objectNode(object_out, component_codec.requirements(), epoch);
     }
 
     pub fn writeRecord(self: Select, writer: *component_codec.Writer, index: usize) bool {
-        return component_codec.oneStringRecord(writer, index, .select, self.id, self.label);
+        const label_ref = writer.string(self.label) orelse return false;
+        return writer.record(index, .select, self.id, label_ref, .{ .offset = self.icon_slot.tag(), .len = 0 });
     }
 
     pub fn fromView(view: object.View) Error!Select {
         const select = try component_codec.nodeView(view, .select);
-        return .{ .id = select.id, .label = select.label };
+        return fromNode(select);
+    }
+
+    pub fn fromNode(select: @FieldType(ui.Node, "select")) Error!Select {
+        return .{ .id = select.id, .label = select.label, .icon_slot = try IconSlot.fromTag(.trailing, select.trailing_icon) };
     }
 };
+
+fn trailingIcon(self: Select) Icon {
+    if (self.icon_slot.optional()) |slot| return slot;
+    return Icon.named(.chevron_right);
+}
 
 const select_arrow_w: f32 = 18.0;
 const select_icon_size: f32 = 14.0;

@@ -12,6 +12,46 @@ const primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
+pub const IconSlot = union(enum) {
+    none,
+    leading: Icon,
+    trailing: Icon,
+    status: Icon,
+    media: Icon,
+
+    pub fn named(kind: SlotKind, value: icon.Icon) IconSlot {
+        const slot = Icon.named(value);
+        return switch (kind) {
+            .leading => .{ .leading = slot },
+            .trailing => .{ .trailing = slot },
+            .status => .{ .status = slot },
+            .media => .{ .media = slot },
+        };
+    }
+
+    pub fn optional(self: IconSlot) ?Icon {
+        return switch (self) {
+            .none => null,
+            .leading, .trailing, .status, .media => |slot| slot,
+        };
+    }
+
+    pub fn tag(self: IconSlot) u16 {
+        return common.optionalIconTag(if (self.optional()) |slot| slot.value else null);
+    }
+
+    pub fn fromTag(kind: SlotKind, encoded_tag: u16) Error!IconSlot {
+        return if (try common.optionalIconFromTag(encoded_tag)) |value| named(kind, value) else .none;
+    }
+};
+
+pub const SlotKind = enum {
+    leading,
+    trailing,
+    status,
+    media,
+};
+
 pub const Icon = struct {
     value: icon.Icon,
     label: []const u8,
@@ -29,7 +69,7 @@ pub const Icon = struct {
     }
 
     pub fn render(self: Icon, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        try renderGlyph(scene, bounds, self.value, options.style.text);
+        try renderIconGlyph(scene, bounds, self.value, options.style.text);
     }
 
     pub fn measure(self: Icon, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
@@ -60,9 +100,17 @@ pub const Icon = struct {
             .label = node_value.label,
         };
     }
+
+    pub fn renderGlyph(scene: *ui.Scene, bounds: ui.Rect, value: icon.Icon, color: ui.Color) ui.RenderError!void {
+        try renderIconGlyph(scene, bounds, value, color);
+    }
 };
 
 pub fn renderGlyph(scene: *ui.Scene, bounds: ui.Rect, value: icon.Icon, color: ui.Color) ui.RenderError!void {
+    try renderIconGlyph(scene, bounds, value, color);
+}
+
+fn renderIconGlyph(scene: *ui.Scene, bounds: ui.Rect, value: icon.Icon, color: ui.Color) ui.RenderError!void {
     const size = @max(1.0, @min(bounds.w, bounds.h));
     const centered = ui.Rect.init(bounds.x + (bounds.w - size) * 0.5, bounds.y + (bounds.h - size) * 0.5, size, size);
     try scene.pushIconQuad(.{ .bounds = centered, .icon_id = icon.id(value), .color = color });

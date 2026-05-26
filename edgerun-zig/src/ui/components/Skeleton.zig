@@ -42,7 +42,11 @@ pub const Skeleton = struct {
     }
 
     pub fn fromView(view: object.View) Error!Skeleton {
-        _ = try component_codec.nodeView(view, .skeleton);
+        return fromNode(try component_codec.nodeView(view, .skeleton));
+    }
+
+    pub fn fromNode(skeleton: @FieldType(ui.Node, "skeleton")) Error!Skeleton {
+        _ = skeleton;
         return .{};
     }
 };

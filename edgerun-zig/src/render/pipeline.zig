@@ -144,7 +144,8 @@ pub fn packBufferIconLines(buffers: renderer_ir.Buffers) icon_line_buffer.Error!
 }
 
 test "render pipeline builds atlas and object font sources" {
-    var font_atlas = renderer_font_atlas.Atlas.init();
+    var font_atlas: renderer_font_atlas.Atlas = undefined;
+    font_atlas.initEmpty();
     var commands: [1]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
     try scene.push(.{ .text = .{
@@ -162,7 +163,8 @@ test "render pipeline builds atlas and object font sources" {
 }
 
 test "render pipeline owns packed presentation and software resources" {
-    var font_atlas = renderer_font_atlas.Atlas.init();
+    var font_atlas: renderer_font_atlas.Atlas = undefined;
+    font_atlas.initEmpty();
     var commands: [1]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
     try scene.push(.{ .rect = .{

@@ -21,9 +21,11 @@ const text_component = @import("Text.zig");
 const button_component = @import("Button.zig");
 const badge_component = @import("Badge.zig");
 const card_component = @import("Card.zig");
+const icon_component = @import("Icon.zig");
 
 const Component = component_union.Component;
-const IconComponent = component_union.IconComponent;
+const Icon = icon_component.Icon;
+const IconSlot = icon_component.IconSlot;
 const Text = text_component.Text;
 const Button = button_component.Button;
 const Stack = stack_component.Stack(Component);
@@ -37,16 +39,8 @@ const RenderOptions = component_common.RenderOptions;
 const tree_layout_size = tree_codec.tree_layout_size;
 const slot_layout_size = tree_codec.slot_layout_size;
 
-fn renderComponent(scene: *ui.Scene, bounds: ui.Rect, component: Component, options: RenderOptions) ui.RenderError!void {
-    return component.render(scene, bounds, options);
-}
-
 fn renderNode(scene: *ui.Scene, bounds: ui.Rect, node: ui.Node, options: RenderOptions) ui.RenderError!void {
     return node_renderer.renderNode(Component, scene, bounds, node, options);
-}
-
-fn collectComponentInteractions(collector: *interaction.Collector, bounds: ui.Rect, component: Component) interaction.Error!void {
-    return component.collectInteractions(collector, bounds);
 }
 
 fn accessibility(component: Component) component_common.Accessibility {
@@ -81,7 +75,7 @@ test "component deserializer rejects wrong component kind" {
 }
 
 test "component union roundtrips concrete component objects" {
-    const component = Component{ .icon_button = .{ .id = 14, .label = "Search", .icon = IconComponent.named(.search) } };
+    const component = Component{ .icon_button = .{ .id = 14, .label = "Search", .icon = Icon.named(.search) } };
     var ui_raw: [128]u8 = undefined;
     var object_raw: [object.header_size + 128]u8 = undefined;
 
@@ -390,11 +384,11 @@ test "component render helper owns button variants and collects hit targets" {
     var collector = interaction.Collector.init(&regions);
 
     const primary = Component{ .button = .{ .id = 501, .label = "Primary" } };
-    const outline = Component{ .button = .{ .id = 502, .label = "Outline", .variant = .outline, .icon_slot = .{ .leading = IconComponent.named(.search) } } };
-    try renderComponent(&scene, ui.Rect.init(0, 0, 120, 36), primary, .{});
-    try collectComponentInteractions(&collector, ui.Rect.init(0, 0, 120, 36), primary);
-    try renderComponent(&scene, ui.Rect.init(0, 44, 120, 36), outline, .{});
-    try collectComponentInteractions(&collector, ui.Rect.init(0, 44, 120, 36), outline);
+    const outline = Component{ .button = .{ .id = 502, .label = "Outline", .variant = .outline, .icon_slot = IconSlot.named(.leading, .search) } };
+    try primary.render(&scene, ui.Rect.init(0, 0, 120, 36), .{});
+    try primary.collectInteractions(&collector, ui.Rect.init(0, 0, 120, 36));
+    try outline.render(&scene, ui.Rect.init(0, 44, 120, 36), .{});
+    try outline.collectInteractions(&collector, ui.Rect.init(0, 44, 120, 36));
     const primary_hit = ui_input.hitTest(collector.written(), 12, 12).?;
     try std.testing.expectEqual(@as(u32, 501), primary_hit.id);
     const outline_hit = ui_input.hitTest(collector.written(), 12, 56).?;
@@ -467,7 +461,7 @@ test "component render helper applies shared interactive states by component id"
     var commands: [32]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
     const button = Component{ .button = .{ .id = 701, .label = "Save" } };
-    try renderComponent(&scene, ui.Rect.init(10, 12, 120, 36), button, .{
+    try button.render(&scene, ui.Rect.init(10, 12, 120, 36), .{
         .interaction = .{
             .hovered_id = 701,
             .active_id = 701,
@@ -490,7 +484,7 @@ test "component render helper does not leak interactive state to other ids" {
     var commands: [16]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
     const button = Component{ .button = .{ .id = 702, .label = "Save" } };
-    try renderComponent(&scene, ui.Rect.init(10, 12, 120, 36), button, .{
+    try button.render(&scene, ui.Rect.init(10, 12, 120, 36), .{
         .interaction = .{ .focused_id = 701 },
     });
 
@@ -513,7 +507,7 @@ test "component interaction collection covers primitive controls" {
 
     for (primitives, 0..) |component, index| {
         const y = @as(f32, @floatFromInt(index)) * 48.0;
-        try collectComponentInteractions(&collector, ui.Rect.init(0, y, 240, 40), component);
+        try component.collectInteractions(&collector, ui.Rect.init(0, y, 240, 40));
     }
 
     try std.testing.expectEqual(primitives.len, collector.written().len);

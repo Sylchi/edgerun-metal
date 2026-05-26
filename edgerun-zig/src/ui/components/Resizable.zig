@@ -51,6 +51,10 @@ pub const Resizable = struct {
 
     pub fn fromView(view: object.View) Error!Resizable {
         const resizable = try component_codec.nodeView(view, .resizable);
+        return fromNode(resizable);
+    }
+
+    pub fn fromNode(resizable: @FieldType(ui.Node, "resizable")) Error!Resizable {
         return .{ .id = resizable.id, .ratio = resizable.ratio };
     }
 };
