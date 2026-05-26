@@ -52,10 +52,8 @@ pub const ScrollArea = struct {
     }
 
     pub fn fromView(view: object.View) Error!ScrollArea {
-        return switch (try component_codec.singleNode(view)) {
-            .scroll_area => .{},
-            else => error.UnsupportedComponent,
-        };
+        _ = try component_codec.nodeView(view, .scroll_area);
+        return .{};
     }
 };
 

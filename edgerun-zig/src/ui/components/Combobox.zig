@@ -65,10 +65,8 @@ pub const Combobox = struct {
     }
 
     pub fn fromView(view: object.View) Error!Combobox {
-        return switch (try component_codec.singleNode(view)) {
-            .combobox => |combobox| .{ .id = combobox.id, .placeholder = combobox.placeholder, .selected = combobox.selected },
-            else => error.UnsupportedComponent,
-        };
+        const combobox = try component_codec.nodeView(view, .combobox);
+        return .{ .id = combobox.id, .placeholder = combobox.placeholder, .selected = combobox.selected };
     }
 };
 

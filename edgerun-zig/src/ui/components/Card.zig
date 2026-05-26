@@ -96,10 +96,8 @@ pub const Card = struct {
     }
 
     pub fn fromView(view: object.View) Error!Card {
-        return switch (try component_codec.singleNode(view)) {
-            .card => |card| .{ .title = card.title, .detail = card.detail, .variant = try variantFromTag(card.variant) },
-            else => error.UnsupportedComponent,
-        };
+        const card = try component_codec.nodeView(view, .card);
+        return .{ .title = card.title, .detail = card.detail, .variant = try variantFromTag(card.variant) };
     }
 };
 

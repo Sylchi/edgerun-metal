@@ -53,10 +53,8 @@ pub const HoverCard = struct {
     }
 
     pub fn fromView(view: object.View) Error!HoverCard {
-        return switch (try component_codec.singleNode(view)) {
-            .hover_card => |hover_card| .{ .id = hover_card.id, .trigger = hover_card.trigger, .content = hover_card.content },
-            else => error.UnsupportedComponent,
-        };
+        const hover_card = try component_codec.nodeView(view, .hover_card);
+        return .{ .id = hover_card.id, .trigger = hover_card.trigger, .content = hover_card.content };
     }
 };
 

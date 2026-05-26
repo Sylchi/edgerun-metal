@@ -41,10 +41,8 @@ pub const Separator = struct {
     }
 
     pub fn fromView(view: object.View) Error!Separator {
-        return switch (try component_codec.singleNode(view)) {
-            .separator => .{},
-            else => error.UnsupportedComponent,
-        };
+        _ = try component_codec.nodeView(view, .separator);
+        return .{};
     }
 };
 

@@ -51,10 +51,8 @@ pub const Switch = struct {
     }
 
     pub fn fromView(view: object.View) Error!Switch {
-        return switch (try component_codec.singleNode(view)) {
-            .switch_control => |switch_control| .{ .id = switch_control.id, .label = switch_control.label, .checked = switch_control.checked },
-            else => error.UnsupportedComponent,
-        };
+        const switch_control = try component_codec.nodeView(view, .switch_control);
+        return .{ .id = switch_control.id, .label = switch_control.label, .checked = switch_control.checked };
     }
 };
 

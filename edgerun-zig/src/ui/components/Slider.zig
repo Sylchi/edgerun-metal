@@ -52,10 +52,8 @@ pub const Slider = struct {
     }
 
     pub fn fromView(view: object.View) Error!Slider {
-        return switch (try component_codec.singleNode(view)) {
-            .slider => |slider| .{ .id = slider.id, .label = slider.label, .value = slider.value },
-            else => error.UnsupportedComponent,
-        };
+        const slider = try component_codec.nodeView(view, .slider);
+        return .{ .id = slider.id, .label = slider.label, .value = slider.value };
     }
 };
 

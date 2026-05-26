@@ -54,10 +54,8 @@ pub const RowItem = struct {
     }
 
     pub fn fromView(view: object.View) Error!RowItem {
-        return switch (try component_codec.singleNode(view)) {
-            .row_item => |row| .{ .id = row.id, .title = row.title, .detail = row.detail },
-            else => error.UnsupportedComponent,
-        };
+        const row = try component_codec.nodeView(view, .row_item);
+        return .{ .id = row.id, .title = row.title, .detail = row.detail };
     }
 };
 

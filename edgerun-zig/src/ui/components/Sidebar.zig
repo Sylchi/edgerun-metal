@@ -56,10 +56,8 @@ pub const Sidebar = struct {
     }
 
     pub fn fromView(view: object.View) Error!Sidebar {
-        return switch (try component_codec.singleNode(view)) {
-            .sidebar => |sidebar| .{ .id = sidebar.id, .title = sidebar.title, .item = sidebar.item },
-            else => error.UnsupportedComponent,
-        };
+        const sidebar = try component_codec.nodeView(view, .sidebar);
+        return .{ .id = sidebar.id, .title = sidebar.title, .item = sidebar.item };
     }
 };
 

@@ -66,10 +66,8 @@ pub const Calendar = struct {
     }
 
     pub fn fromView(view: object.View) Error!Calendar {
-        return switch (try component_codec.singleNode(view)) {
-            .calendar => |calendar| .{ .id = calendar.id, .month = calendar.month, .selected_day = calendar.selected_day },
-            else => error.UnsupportedComponent,
-        };
+        const calendar = try component_codec.nodeView(view, .calendar);
+        return .{ .id = calendar.id, .month = calendar.month, .selected_day = calendar.selected_day };
     }
 };
 

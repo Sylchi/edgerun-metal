@@ -58,10 +58,8 @@ pub const Sheet = struct {
     }
 
     pub fn fromView(view: object.View) Error!Sheet {
-        return switch (try component_codec.singleNode(view)) {
-            .sheet => |sheet| .{ .id = sheet.id, .title = sheet.title, .detail = sheet.detail },
-            else => error.UnsupportedComponent,
-        };
+        const sheet = try component_codec.nodeView(view, .sheet);
+        return .{ .id = sheet.id, .title = sheet.title, .detail = sheet.detail };
     }
 };
 

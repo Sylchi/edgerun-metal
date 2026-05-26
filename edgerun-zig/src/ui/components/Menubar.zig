@@ -56,10 +56,8 @@ pub const Menubar = struct {
     }
 
     pub fn fromView(view: object.View) Error!Menubar {
-        return switch (try component_codec.singleNode(view)) {
-            .menubar => |menubar| .{ .id = menubar.id, .first = menubar.first, .second = menubar.second, .active = activeIndex(menubar.active) },
-            else => error.UnsupportedComponent,
-        };
+        const menubar = try component_codec.nodeView(view, .menubar);
+        return .{ .id = menubar.id, .first = menubar.first, .second = menubar.second, .active = activeIndex(menubar.active) };
     }
 };
 

@@ -43,10 +43,8 @@ pub const Spinner = struct {
     }
 
     pub fn fromView(view: object.View) Error!Spinner {
-        return switch (try component_codec.singleNode(view)) {
-            .spinner => .{},
-            else => error.UnsupportedComponent,
-        };
+        _ = try component_codec.nodeView(view, .spinner);
+        return .{};
     }
 };
 

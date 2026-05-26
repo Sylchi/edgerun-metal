@@ -55,10 +55,8 @@ pub const Badge = struct {
     }
 
     pub fn fromView(view: object.View) Error!Badge {
-        return switch (try component_codec.singleNode(view)) {
-            .badge => |badge| .{ .label = badge.label, .variant = try variantFromTag(badge.variant) },
-            else => error.UnsupportedComponent,
-        };
+        const badge = try component_codec.nodeView(view, .badge);
+        return .{ .label = badge.label, .variant = try variantFromTag(badge.variant) };
     }
 };
 

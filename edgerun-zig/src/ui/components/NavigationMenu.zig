@@ -55,10 +55,8 @@ pub const NavigationMenu = struct {
     }
 
     pub fn fromView(view: object.View) Error!NavigationMenu {
-        return switch (try component_codec.singleNode(view)) {
-            .navigation_menu => |menu| .{ .id = menu.id, .first = menu.first, .second = menu.second, .active = activeIndex(menu.active) },
-            else => error.UnsupportedComponent,
-        };
+        const menu = try component_codec.nodeView(view, .navigation_menu);
+        return .{ .id = menu.id, .first = menu.first, .second = menu.second, .active = activeIndex(menu.active) };
     }
 };
 

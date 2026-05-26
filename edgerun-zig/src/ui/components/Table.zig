@@ -59,10 +59,8 @@ pub const Table = struct {
     }
 
     pub fn fromView(view: object.View) Error!Table {
-        return switch (try component_codec.singleNode(view)) {
-            .table => |table| .{ .id = table.id, .name = table.name, .role = table.role },
-            else => error.UnsupportedComponent,
-        };
+        const table = try component_codec.nodeView(view, .table);
+        return .{ .id = table.id, .name = table.name, .role = table.role };
     }
 };
 

@@ -50,10 +50,8 @@ pub const Resizable = struct {
     }
 
     pub fn fromView(view: object.View) Error!Resizable {
-        return switch (try component_codec.singleNode(view)) {
-            .resizable => |resizable| .{ .id = resizable.id, .ratio = resizable.ratio },
-            else => error.UnsupportedComponent,
-        };
+        const resizable = try component_codec.nodeView(view, .resizable);
+        return .{ .id = resizable.id, .ratio = resizable.ratio };
     }
 };
 

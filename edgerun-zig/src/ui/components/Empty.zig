@@ -50,10 +50,8 @@ pub const Empty = struct {
     }
 
     pub fn fromView(view: object.View) Error!Empty {
-        return switch (try component_codec.singleNode(view)) {
-            .empty => |empty| .{ .title = empty.title, .detail = empty.detail },
-            else => error.UnsupportedComponent,
-        };
+        const empty = try component_codec.nodeView(view, .empty);
+        return .{ .title = empty.title, .detail = empty.detail };
     }
 };
 

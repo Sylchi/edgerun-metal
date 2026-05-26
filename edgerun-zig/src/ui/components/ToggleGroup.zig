@@ -53,10 +53,8 @@ pub const ToggleGroup = struct {
     }
 
     pub fn fromView(view: object.View) Error!ToggleGroup {
-        return switch (try component_codec.singleNode(view)) {
-            .toggle_group => |group| .{ .id = group.id, .first = group.first, .second = group.second, .active = activeIndex(group.active) },
-            else => error.UnsupportedComponent,
-        };
+        const group = try component_codec.nodeView(view, .toggle_group);
+        return .{ .id = group.id, .first = group.first, .second = group.second, .active = activeIndex(group.active) };
     }
 };
 

@@ -2,7 +2,6 @@ const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
 const codec = @import("../../ui_codec.zig");
 const component_io = @import("ComponentIO.zig");
-const component_render = @import("Render.zig");
 const interaction = @import("../../ui_interaction.zig");
 const layouts = @import("../../layouts.zig");
 const object = @import("../../object.zig");
@@ -13,6 +12,7 @@ const ui = @import("../../ui.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 const codec_max_children: usize = 64;
+const max_children: usize = codec_max_children;
 
 pub fn Stack(comptime Component: type) type {
     return struct {
@@ -24,19 +24,19 @@ pub fn Stack(comptime Component: type) type {
         const Self = @This();
 
         pub fn measure(self: Self, constraints: layouts.types.Constraints, options: RenderOptions) layouts.types.Measurement {
-            return component_render.measureStack(Component, self, constraints, options);
+            return measureStack(Component, self, constraints, options);
         }
 
         pub fn render(self: Self, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-            return component_render.renderStack(Component, scene, bounds, self, options);
+            return renderStack(Component, scene, bounds, self, options);
         }
 
         pub fn collectInteractions(self: Self, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) interaction.Error!void {
-            return component_render.collectStackInteractions(Component, collector, bounds, self, options);
+            return collectStackInteractions(Component, collector, bounds, self, options);
         }
 
         pub fn collectAccessibility(self: Self, tree: *common.AccessibilityTree, bounds: ui.Rect, options: RenderOptions) common.AccessibilityError!void {
-            return component_render.collectStackAccessibility(Component, tree, bounds, self, options);
+            return collectStackAccessibility(Component, tree, bounds, self, options);
         }
 
         pub fn node(self: Self, out_nodes: []ui.Node) ?ui.Node {
@@ -83,6 +83,105 @@ pub fn Stack(comptime Component: type) type {
                 .children = out_components[0..layout.children.len],
             };
         }
+    };
+}
+
+pub fn measureStack(comptime Component: type, stack: anytype, constraints: layouts.types.Constraints, options: RenderOptions) layouts.types.Measurement {
+    var child_measurements: [max_children]layouts.types.Measurement = undefined;
+    const measured_children = measureChildren(Component, stack.children, stackChildConstraints(stack, constraints), options, &child_measurements);
+    return layouts.Flex.measure(measured_children, constraints, stackLayoutOptions(stack));
+}
+
+pub fn renderStack(comptime Component: type, scene: *ui.Scene, bounds: ui.Rect, stack: anytype, options: RenderOptions) ui.RenderError!void {
+    if (stack.children.len == 0) return;
+    if (stack.children.len > max_children) return error.CommandBudgetExceeded;
+
+    var child_measurements: [max_children]layouts.types.Measurement = undefined;
+    var child_bounds: [max_children]ui.Rect = undefined;
+    const placed_children = placeStackChildren(Component, bounds, stack, options, &child_measurements, &child_bounds);
+    for (stack.children[0..placed_children.len], placed_children) |child, child_rect| {
+        if (!child_rect.valid()) return error.InvalidBounds;
+        try child.render(scene, child_rect, options);
+    }
+}
+
+pub fn collectStackInteractions(comptime Component: type, collector: *interaction.Collector, bounds: ui.Rect, stack: anytype, options: RenderOptions) interaction.Error!void {
+    if (stack.children.len == 0) return;
+    if (stack.children.len > max_children) return error.InteractionBudgetExceeded;
+
+    var child_measurements: [max_children]layouts.types.Measurement = undefined;
+    var child_bounds: [max_children]ui.Rect = undefined;
+    const placed_children = placeStackChildren(Component, bounds, stack, options, &child_measurements, &child_bounds);
+    for (stack.children[0..placed_children.len], placed_children) |child, child_rect| {
+        if (!child_rect.valid()) return error.InvalidInteractionBounds;
+        try child.collectInteractions(collector, child_rect);
+    }
+}
+
+pub fn collectStackAccessibility(comptime Component: type, tree: *common.AccessibilityTree, bounds: ui.Rect, stack: anytype, options: RenderOptions) common.AccessibilityError!void {
+    if (stack.children.len == 0) return;
+    if (stack.children.len > max_children) return error.AccessibilityBudgetExceeded;
+
+    var child_measurements: [max_children]layouts.types.Measurement = undefined;
+    var child_bounds: [max_children]ui.Rect = undefined;
+    const placed_children = placeStackChildren(Component, bounds, stack, options, &child_measurements, &child_bounds);
+    for (stack.children[0..placed_children.len], placed_children) |child, child_rect| {
+        if (!child_rect.valid()) return error.InvalidAccessibilityBounds;
+        try child.collectAccessibility(tree, child_rect, options);
+    }
+}
+
+fn placeStackChildren(comptime Component: type, bounds: ui.Rect, stack: anytype, options: RenderOptions, measurements: *[max_children]layouts.types.Measurement, out: *[max_children]ui.Rect) []ui.Rect {
+    const constraints = constraintsFromBounds(bounds);
+    const measured_children = measureChildren(Component, stack.children, stackChildConstraints(stack, constraints), options, measurements);
+    return layouts.Flex.place(bounds, measured_children, stackLayoutOptions(stack), out);
+}
+
+fn measureChildren(comptime Component: type, children: []const Component, constraints: layouts.types.Constraints, options: RenderOptions, out: []layouts.types.Measurement) []layouts.types.Measurement {
+    const count = @min(children.len, @min(out.len, max_children));
+    for (children[0..count], 0..) |child, index| {
+        out[index] = child.measure(constraints, options);
+    }
+    return out[0..count];
+}
+
+fn stackChildConstraints(stack: anytype, constraints: layouts.types.Constraints) layouts.types.Constraints {
+    return stackChildConstraintsFor(stack.axis, @floatFromInt(stack.padding), constraints);
+}
+
+fn stackLayoutOptions(stack: anytype) layouts.Flex.Options {
+    return stackLayoutOptionsFor(stack.axis, @floatFromInt(stack.gap), @floatFromInt(stack.padding), .stretch);
+}
+
+pub fn stackChildConstraintsFor(axis: ui.Axis, padding: f32, constraints: layouts.types.Constraints) layouts.types.Constraints {
+    const inner = constraints.inner(layouts.types.Insets.uniform(padding));
+    return switch (axis) {
+        .column => .{ .width = inner.width, .height = .unconstrained, .text_wrap = constraints.text_wrap },
+        .row => .{ .width = .unconstrained, .height = inner.height, .text_wrap = constraints.text_wrap },
+    };
+}
+
+pub fn stackLayoutOptionsFor(axis: ui.Axis, gap: f32, padding: f32, cross_align: layouts.Flex.Align) layouts.Flex.Options {
+    return .{
+        .axis = layoutAxis(axis),
+        .gap = gap,
+        .padding = layouts.types.Insets.uniform(padding),
+        .cross_align = cross_align,
+    };
+}
+
+pub fn layoutAxis(axis: ui.Axis) layouts.types.Axis {
+    return switch (axis) {
+        .row => .horizontal,
+        .column => .vertical,
+    };
+}
+
+pub fn constraintsFromBounds(bounds: ui.Rect) layouts.types.Constraints {
+    return .{
+        .width = .{ .exact = bounds.w },
+        .height = .{ .exact = bounds.h },
+        .text_wrap = .wrap,
     };
 }
 

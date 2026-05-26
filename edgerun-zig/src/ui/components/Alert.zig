@@ -59,10 +59,8 @@ pub const Alert = struct {
     }
 
     pub fn fromView(view: object.View) Error!Alert {
-        return switch (try component_codec.singleNode(view)) {
-            .alert => |alert| .{ .title = alert.title, .detail = alert.detail, .destructive = alert.destructive },
-            else => error.UnsupportedComponent,
-        };
+        const alert = try component_codec.nodeView(view, .alert);
+        return .{ .title = alert.title, .detail = alert.detail, .destructive = alert.destructive };
     }
 };
 

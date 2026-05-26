@@ -53,10 +53,8 @@ pub const RadioGroup = struct {
     }
 
     pub fn fromView(view: object.View) Error!RadioGroup {
-        return switch (try component_codec.singleNode(view)) {
-            .radio_group => |radio| .{ .id = radio.id, .first = radio.first, .second = radio.second, .selected = selectedIndex(radio.selected) },
-            else => error.UnsupportedComponent,
-        };
+        const radio = try component_codec.nodeView(view, .radio_group);
+        return .{ .id = radio.id, .first = radio.first, .second = radio.second, .selected = selectedIndex(radio.selected) };
     }
 };
 

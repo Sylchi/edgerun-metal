@@ -47,10 +47,8 @@ pub const Toggle = struct {
     }
 
     pub fn fromView(view: object.View) Error!Toggle {
-        return switch (try component_codec.singleNode(view)) {
-            .toggle => |toggle| .{ .id = toggle.id, .label = toggle.label, .pressed = toggle.pressed },
-            else => error.UnsupportedComponent,
-        };
+        const toggle = try component_codec.nodeView(view, .toggle);
+        return .{ .id = toggle.id, .label = toggle.label, .pressed = toggle.pressed };
     }
 };
 

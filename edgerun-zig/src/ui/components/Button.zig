@@ -51,10 +51,8 @@ pub const Button = struct {
     }
 
     pub fn fromView(view: object.View) Error!Button {
-        return switch (try component_codec.singleNode(view)) {
-            .button => |button| .{ .id = button.id, .label = button.label, .variant = try variantFromTag(button.variant), .leading_icon = try common.optionalIconFromTag(button.leading_icon), .trailing_icon = try common.optionalIconFromTag(button.trailing_icon) },
-            else => error.UnsupportedComponent,
-        };
+        const button = try component_codec.nodeView(view, .button);
+        return .{ .id = button.id, .label = button.label, .variant = try variantFromTag(button.variant), .leading_icon = try common.optionalIconFromTag(button.leading_icon), .trailing_icon = try common.optionalIconFromTag(button.trailing_icon) };
     }
 };
 
@@ -101,10 +99,8 @@ pub const IconButton = struct {
     }
 
     pub fn fromView(view: object.View) Error!IconButton {
-        return switch (try component_codec.singleNode(view)) {
-            .icon_button => |button| .{ .id = button.id, .label = button.label, .variant = try variantFromTag(button.variant), .icon_value = (try common.optionalIconFromTag(button.icon)) orelse return error.Corrupt },
-            else => error.UnsupportedComponent,
-        };
+        const button = try component_codec.nodeView(view, .icon_button);
+        return .{ .id = button.id, .label = button.label, .variant = try variantFromTag(button.variant), .icon_value = (try common.optionalIconFromTag(button.icon)) orelse return error.Corrupt };
     }
 };
 

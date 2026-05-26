@@ -55,10 +55,8 @@ pub const Dialog = struct {
     }
 
     pub fn fromView(view: object.View) Error!Dialog {
-        return switch (try component_codec.singleNode(view)) {
-            .dialog => |dialog| .{ .id = dialog.id, .title = dialog.title, .detail = dialog.detail },
-            else => error.UnsupportedComponent,
-        };
+        const dialog = try component_codec.nodeView(view, .dialog);
+        return .{ .id = dialog.id, .title = dialog.title, .detail = dialog.detail };
     }
 };
 

@@ -43,6 +43,14 @@ pub fn singleNode(view: object.View) Error!ui.Node {
     };
 }
 
+pub fn nodeView(view: object.View, comptime tag: std.meta.Tag(ui.Node)) Error!@FieldType(ui.Node, @tagName(tag)) {
+    const node = try singleNode(view);
+    return switch (node) {
+        tag => |payload| payload,
+        else => error.UnsupportedComponent,
+    };
+}
+
 pub fn emptyObject(kind: codec.RecordKind, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
     return recordObject(kind, 0, .{}, .{}, ui_out, object_out, epoch);
 }

@@ -61,10 +61,8 @@ pub const Accordion = struct {
     }
 
     pub fn fromView(view: object.View) Error!Accordion {
-        return switch (try component_codec.singleNode(view)) {
-            .accordion => |accordion| .{ .id = accordion.id, .title = accordion.title, .detail = accordion.detail, .open = accordion.open },
-            else => error.UnsupportedComponent,
-        };
+        const accordion = try component_codec.nodeView(view, .accordion);
+        return .{ .id = accordion.id, .title = accordion.title, .detail = accordion.detail, .open = accordion.open };
     }
 };
 

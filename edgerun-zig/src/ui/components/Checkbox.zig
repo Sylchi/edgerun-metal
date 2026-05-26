@@ -53,10 +53,8 @@ pub const Checkbox = struct {
     }
 
     pub fn fromView(view: object.View) Error!Checkbox {
-        return switch (try component_codec.singleNode(view)) {
-            .checkbox => |checkbox| .{ .id = checkbox.id, .label = checkbox.label, .checked = checkbox.checked },
-            else => error.UnsupportedComponent,
-        };
+        const checkbox = try component_codec.nodeView(view, .checkbox);
+        return .{ .id = checkbox.id, .label = checkbox.label, .checked = checkbox.checked };
     }
 };
 

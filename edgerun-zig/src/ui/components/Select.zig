@@ -53,10 +53,8 @@ pub const Select = struct {
     }
 
     pub fn fromView(view: object.View) Error!Select {
-        return switch (try component_codec.singleNode(view)) {
-            .select => |select| .{ .id = select.id, .label = select.label },
-            else => error.UnsupportedComponent,
-        };
+        const select = try component_codec.nodeView(view, .select);
+        return .{ .id = select.id, .label = select.label };
     }
 };
 

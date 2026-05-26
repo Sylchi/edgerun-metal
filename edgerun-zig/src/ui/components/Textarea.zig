@@ -54,10 +54,8 @@ pub const Textarea = struct {
     }
 
     pub fn fromView(view: object.View) Error!Textarea {
-        return switch (try component_codec.singleNode(view)) {
-            .textarea => |textarea| .{ .id = textarea.id, .placeholder = textarea.placeholder },
-            else => error.UnsupportedComponent,
-        };
+        const textarea = try component_codec.nodeView(view, .textarea);
+        return .{ .id = textarea.id, .placeholder = textarea.placeholder };
     }
 };
 

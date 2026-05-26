@@ -62,10 +62,8 @@ pub const Input = struct {
     }
 
     pub fn fromView(view: object.View) Error!Input {
-        return switch (try component_codec.singleNode(view)) {
-            .input => |input| .{ .id = input.id, .placeholder = input.placeholder, .leading_icon = try common.optionalIconFromTag(input.leading_icon) },
-            else => error.UnsupportedComponent,
-        };
+        const input = try component_codec.nodeView(view, .input);
+        return .{ .id = input.id, .placeholder = input.placeholder, .leading_icon = try common.optionalIconFromTag(input.leading_icon) };
     }
 };
 
