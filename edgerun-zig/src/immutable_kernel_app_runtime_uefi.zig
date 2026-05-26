@@ -1,6 +1,7 @@
 const std = @import("std");
 const uefi = std.os.uefi;
 const app_frame = @import("app_frame.zig");
+const app_images = @import("app_images.zig");
 const gop_framebuffer = @import("boot/gop_framebuffer.zig");
 const interaction = @import("ui_interaction.zig");
 const renderer_font_atlas = @import("render/font_atlas.zig");
@@ -13,8 +14,10 @@ const virtio_gpu = @import("virtio_gpu.zig");
 const debugcon_port: u16 = 0x402;
 const line_max: usize = 192;
 const uefi_page_bytes: usize = 4096;
-const max_boot_width: u32 = 640;
-const max_boot_height: u32 = 360;
+// Keep the first full-app UEFI frame deliberately small: QEMU/OVMF runs the
+// software renderer slowly, while virtio-gpu scanout is already proven.
+const max_boot_width: u32 = 320;
+const max_boot_height: u32 = 180;
 const max_commands: usize = 4096;
 const max_clips: usize = 64;
 const max_interaction_regions: usize = 4096;
@@ -45,7 +48,6 @@ const IrStorage = renderer_ir.FixedBuffers(
 var framebuffer: gop_framebuffer.Framebuffer = undefined;
 var scene_state: SceneState = .{};
 var font_atlas: renderer_font_atlas.Atlas = undefined;
-var dummy_font_alpha: [1]u8 = .{0};
 var virtio_gpu_queue: virtio_gpu.QueueStorage = .{};
 
 const SceneState = struct {
@@ -182,14 +184,73 @@ fn allocateVirtioScanout(boot_services: *uefi.tables.BootServices, width: u32, h
 }
 
 fn renderBlessedNativeApp(width: u32, height: u32, pixels: []ui.Color) Error!void {
-    font_atlas.initEmpty();
-    const buffers = try scene_state.rebuildBootPanel(width, height);
+    writeDebugconLine("diag: font atlas init start");
+    font_atlas.initWithFontInPlace(renderer_font_atlas.geist_ascii_font.body());
+    writeDebugconLine("diag: font atlas init ok");
+
+    writeDebugconLine("diag: app frame pack start");
+    const buffers = try scene_state.rebuild(width, height, &font_atlas);
+    writeDebugconLine("diag: app frame pack ok");
+
+    writeDebugconLine("diag: app image decode start");
+    const image_texture = app_images.cloudMeme() catch return error.AppResourceInvalid;
+    writeDebugconLine("diag: app image decode ok");
+
+    writeDebugconLine("diag: software render start");
     const surface = renderer_software.Framebuffer.init(width, height, pixels) catch return error.NativeRenderFailed;
-    _ = renderer_pipeline.renderSoftwareFrame(surface, buffers, renderer_pipeline.softwareResourcesFromAlphaAtlas(.{
-        .width = 1,
-        .height = 1,
-        .alpha = &dummy_font_alpha,
-    }, null), .bg) catch return error.NativeRenderFailed;
+    try renderDiagnosticBatch(surface, buffers, image_texture, .rects);
+    try renderDiagnosticBatch(surface, buffers, image_texture, .text);
+    try renderDiagnosticBatch(surface, buffers, image_texture, .icons);
+    _ = renderer_pipeline.renderSoftwareFrame(surface, buffers, renderer_pipeline.softwareResources(&font_atlas, image_texture), .bg) catch return error.NativeRenderFailed;
+    writeDebugconLine("diag: software render ok");
+}
+
+const DiagnosticBatch = enum { rects, text, icons };
+
+fn renderDiagnosticBatch(
+    surface: renderer_software.Framebuffer,
+    buffers: renderer_ir.Buffers,
+    image_texture: renderer_software.RgbaTexture,
+    batch: DiagnosticBatch,
+) Error!void {
+    const text_len = buffers.text_vertex_len.*;
+    const icon_len = buffers.icon_vertex_len.*;
+    const icon_line_len = buffers.icon_line_vertex_len.*;
+    const image_len = buffers.image_vertex_len.*;
+    const overlay_rect_len = buffers.overlay_rect_len.*;
+    const overlay_text_len = buffers.overlay_text_vertex_len.*;
+    const overlay_icon_len = buffers.overlay_icon_vertex_len.*;
+    const overlay_icon_line_len = buffers.overlay_icon_line_vertex_len.*;
+
+    buffers.text_vertex_len.* = if (batch == .text or batch == .icons) text_len else 0;
+    buffers.icon_vertex_len.* = if (batch == .icons) icon_len else 0;
+    buffers.icon_line_vertex_len.* = if (batch == .icons) icon_line_len else 0;
+    buffers.image_vertex_len.* = if (batch == .icons) image_len else 0;
+    buffers.overlay_rect_len.* = if (batch == .icons) overlay_rect_len else 0;
+    buffers.overlay_text_vertex_len.* = if (batch == .icons) overlay_text_len else 0;
+    buffers.overlay_icon_vertex_len.* = if (batch == .icons) overlay_icon_len else 0;
+    buffers.overlay_icon_line_vertex_len.* = if (batch == .icons) overlay_icon_line_len else 0;
+
+    switch (batch) {
+        .rects => writeDebugconLine("diag: software rect batch start"),
+        .text => writeDebugconLine("diag: software text batch start"),
+        .icons => writeDebugconLine("diag: software icon batch start"),
+    }
+    _ = renderer_pipeline.renderSoftwareFrame(surface, buffers, renderer_pipeline.softwareResources(&font_atlas, image_texture), .bg) catch return error.NativeRenderFailed;
+    switch (batch) {
+        .rects => writeDebugconLine("diag: software rect batch ok"),
+        .text => writeDebugconLine("diag: software text batch ok"),
+        .icons => writeDebugconLine("diag: software icon batch ok"),
+    }
+
+    buffers.text_vertex_len.* = text_len;
+    buffers.icon_vertex_len.* = icon_len;
+    buffers.icon_line_vertex_len.* = icon_line_len;
+    buffers.image_vertex_len.* = image_len;
+    buffers.overlay_rect_len.* = overlay_rect_len;
+    buffers.overlay_text_vertex_len.* = overlay_text_len;
+    buffers.overlay_icon_vertex_len.* = overlay_icon_len;
+    buffers.overlay_icon_line_vertex_len.* = overlay_icon_line_len;
 }
 
 fn packBgrxScanout(out: []u8, pixels: []const ui.Color) void {

@@ -50,7 +50,7 @@ pub const Alert = struct {
         return layout.Measurement.flexible(
             .{ .w = @min(alert_min_width, preferred.w), .h = @min(alert_min_height, preferred.h) },
             preferred,
-            .{ .w = component_primitives.measure_max_width, .h = @max(preferred.h, preferred_alert.h) },
+            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
         ).applyExact(constraints);
     }
 
@@ -108,7 +108,6 @@ const alert_min_width: f32 = 160.0;
 const alert_min_height: f32 = 48.0;
 const alert_icon_shift: u5 = 1;
 const alert_danger = ui.Color{ .r = 239, .g = 68, .b = 68 };
-pub const preferred_alert = ui.Size{ .w = 260.0, .h = 64.0 };
 
 test "alert component serializes icon slot to canonical object and deserializes" {
     const alert = Alert{ .title = "Heads up", .detail = "Status message", .destructive = true, .icon_slot = IconSlot.named(.status, .warning) };
@@ -142,9 +141,11 @@ test "alert measurement wraps long title and detail under narrow constraints" {
         .detail = "The signed runtime path must explain the blocked action",
         .destructive = true,
     };
+    const compact = Alert{ .title = "Heads up", .detail = "Status message", .destructive = true };
 
     const measured = alert.measure(.{ .width = .{ .at_most = alert_min_width }, .text_wrap = .wrap }, .{});
+    const compact_measured = compact.measure(.{ .width = .{ .at_most = alert_min_width }, .text_wrap = .wrap }, .{});
 
     try std.testing.expect(measured.preferred.w <= alert_min_width);
-    try std.testing.expect(measured.preferred.h > preferred_alert.h);
+    try std.testing.expect(measured.preferred.h > compact_measured.preferred.h);
 }

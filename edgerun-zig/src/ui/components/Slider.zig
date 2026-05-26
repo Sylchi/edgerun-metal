@@ -54,7 +54,7 @@ pub const Slider = struct {
         return layout.Measurement.flexible(
             .{ .w = @min(slider_min_width, preferred.w), .h = @min(slider_min_height, preferred.h) },
             preferred,
-            .{ .w = component_primitives.measure_max_width, .h = @max(preferred.h, preferred_slider.h) },
+            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
         ).applyExact(constraints);
     }
 
@@ -92,7 +92,6 @@ const slider_track_height: f32 = 6.0;
 pub const slider_thumb_size: f32 = 16.0;
 const slider_min_width: f32 = 120.0;
 const slider_min_height: f32 = 32.0;
-pub const preferred_slider = ui.Size{ .w = 220.0, .h = 42.0 };
 
 test "slider component serializes to canonical object and deserializes" {
     const slider = Slider{ .id = 13, .label = "Brightness", .value = 0.72 };
@@ -123,9 +122,11 @@ test "slider component clamps rendered fill and thumb to track" {
 
 test "slider measurement wraps long labels under narrow constraints" {
     const slider = Slider{ .id = 13, .label = "Runtime memory pressure limit", .value = 0.72 };
+    const compact = Slider{ .id = 13, .label = "Brightness", .value = 0.72 };
 
     const measured = slider.measure(.{ .width = .{ .at_most = slider_min_width }, .text_wrap = .wrap }, .{});
+    const compact_measured = compact.measure(.{ .width = .{ .at_most = slider_min_width }, .text_wrap = .wrap }, .{});
 
     try std.testing.expect(measured.preferred.w <= slider_min_width);
-    try std.testing.expect(measured.preferred.h > preferred_slider.h);
+    try std.testing.expect(measured.preferred.h > compact_measured.preferred.h);
 }

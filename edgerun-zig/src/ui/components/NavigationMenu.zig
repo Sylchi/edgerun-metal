@@ -16,7 +16,6 @@ const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
 const contentInset = component_primitives.contentInset;
-const measureFixed = component_primitives.measureFixed;
 const Icon = icon_component.Icon;
 
 pub const NavigationMenu = struct {
@@ -35,19 +34,29 @@ pub const NavigationMenu = struct {
 
     pub fn render(self: NavigationMenu, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         const active = activeIndex(self.active);
-        try renderItem(scene, itemBounds(bounds, 0), self.first, active == 0, true, options);
-        try renderItem(scene, itemBounds(bounds, 1), self.second, active == 1, true, options);
-        try renderItem(scene, itemBounds(bounds, 2), navigation_menu_third_label, active == 2, false, options);
+        const widths = itemWidths(self);
+        try renderItem(scene, itemBounds(bounds, &widths, 0), self.first, active == 0, true, options);
+        try renderItem(scene, itemBounds(bounds, &widths, 1), self.second, active == 1, true, options);
+        try renderItem(scene, itemBounds(bounds, &widths, 2), navigation_menu_third_label, active == 2, false, options);
     }
 
     pub fn collectInteractions(self: NavigationMenu, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-        try list_layout.collectItemStripHits(collector, bounds, self.id, &navigation_menu_item_widths, navigation_menu_strip_layout);
+        const widths = itemWidths(self);
+        try list_layout.collectItemStripHits(collector, bounds, self.id, &widths, navigation_menu_strip_layout);
     }
 
     pub fn measure(self: NavigationMenu, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
-        _ = self;
         _ = options;
-        return measureFixed(preferred_navigation_menu, constraints);
+        const widths = itemWidths(self);
+        const preferred = component_primitives.constrainPreferredSize(.{
+            .w = widths[0] + widths[1] + widths[2] + navigation_menu_gap * 2.0,
+            .h = navigation_menu_item_h,
+        }, constraints);
+        return layout.Measurement.flexible(
+            .{ .w = component_primitives.min_extent * 3.0 + navigation_menu_gap * 2.0, .h = navigation_menu_item_h },
+            preferred,
+            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
+        ).applyExact(constraints);
     }
 
     pub fn toObject(self: NavigationMenu, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -98,21 +107,34 @@ fn renderItem(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, active: bool
     }
 }
 
-fn itemBounds(bounds: ui.Rect, index: usize) ui.Rect {
-    return list_layout.itemStripBounds(bounds, index, &navigation_menu_item_widths, navigation_menu_strip_layout);
+fn itemBounds(bounds: ui.Rect, widths: []const f32, index: usize) ui.Rect {
+    return list_layout.itemStripBounds(bounds, index, widths, navigation_menu_strip_layout);
+}
+
+fn itemWidths(self: NavigationMenu) [navigation_menu_item_count]f32 {
+    return .{
+        itemWidth(self.first, true),
+        itemWidth(self.second, true),
+        itemWidth(navigation_menu_third_label, false),
+    };
+}
+
+fn itemWidth(label: []const u8, show_chevron: bool) f32 {
+    const measured = text_component.Text.measureValue(label, .{ .width = .unconstrained, .text_wrap = .nowrap }, component_primitives.textMetrics(label, component_primitives.control_label_height, navigation_menu_label_max_lines));
+    const icon_space: f32 = if (show_chevron) navigation_menu_icon_space else 0.0;
+    return measured.preferred.w + navigation_menu_text_padding * 2.0 + icon_space;
 }
 
 pub const navigation_menu_item_count: u16 = 3;
 const navigation_menu_gap: f32 = 4.0;
 const navigation_menu_item_h: f32 = 36.0;
-const navigation_menu_item_widths = [_]f32{ 62.0, 112.0, 56.0 };
 const navigation_menu_strip_layout = list_layout.ItemStripLayout{ .gap = navigation_menu_gap, .item_h = navigation_menu_item_h };
 const navigation_menu_text_padding: f32 = 10.0;
 const navigation_menu_icon_size: f32 = 12.0;
 const navigation_menu_icon_space: f32 = 16.0;
 const navigation_menu_icon_padding: f32 = 8.0;
 const navigation_menu_third_label = "Blocks";
-pub const preferred_navigation_menu = ui.Size{ .w = 220.0, .h = 36.0 };
+const navigation_menu_label_max_lines: usize = 1;
 
 test "navigation menu component serializes to canonical object and deserializes" {
     const menu = NavigationMenu{ .id = 210, .first = "Docs", .second = "Components", .active = 1 };
@@ -143,4 +165,11 @@ test "navigation menu component renders triggers and hit regions" {
     try std.testing.expect(component_test.hasText(scene.written(), "Blocks"));
     try std.testing.expectEqual(@as(usize, navigation_menu_item_count), collector.written().len);
     try std.testing.expectEqual(@as(u32, 211), collector.written()[1].id);
+}
+
+test "navigation menu measurement follows item labels" {
+    const short = NavigationMenu{ .id = 210, .first = "D", .second = "C", .active = 0 };
+    const long = NavigationMenu{ .id = 210, .first = "Runtime docs", .second = "Authority components", .active = 0 };
+
+    try std.testing.expect(long.measure(.{}, .{}).preferred.w > short.measure(.{}, .{}).preferred.w);
 }

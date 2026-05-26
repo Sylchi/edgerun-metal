@@ -12,8 +12,6 @@ const component_primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-const measureFixed = component_primitives.measureFixed;
-
 pub const Resizable = struct {
     id: u32,
     ratio: f32 = 0.58,
@@ -39,7 +37,12 @@ pub const Resizable = struct {
     pub fn measure(self: Resizable, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = self;
         _ = options;
-        return measureFixed(preferred_resizable, constraints);
+        const preferred = component_primitives.constrainPreferredSize(resizableIntrinsicSize(), constraints);
+        return layout.Measurement.flexible(
+            .{ .w = @min(resizable_min_width, preferred.w), .h = @min(resizable_min_height, preferred.h) },
+            preferred,
+            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
+        ).applyExact(constraints);
     }
 
     pub fn toObject(self: Resizable, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -66,10 +69,15 @@ fn handleBounds(bounds: ui.Rect, ratio: f32) ui.Rect {
     return ui.Rect.init(center_x - resizable_handle_w * 0.5, bounds.y, resizable_handle_w, bounds.h);
 }
 
+fn resizableIntrinsicSize() ui.Size {
+    return .{ .w = resizable_min_width, .h = resizable_min_height };
+}
+
 const resizable_handle_w: f32 = 6.0;
 const resizable_handle_radius: f32 = 3.0;
 const resizable_handle_hit_outset: f32 = 6.0;
-pub const preferred_resizable = ui.Size{ .w = 240.0, .h = 36.0 };
+const resizable_min_width: f32 = 96.0;
+const resizable_min_height: f32 = 36.0;
 
 test "resizable component serializes to canonical object and deserializes" {
     const resizable = Resizable{ .id = 770, .ratio = 0.62 };
@@ -97,4 +105,13 @@ test "resizable component renders panels and handle hit region" {
     try std.testing.expectEqual(@as(usize, 1), collector.written().len);
     try std.testing.expectEqual(ui.HitKind.slider, collector.written()[0].kind);
     try std.testing.expectEqual(@as(u32, 770), collector.written()[0].id);
+}
+
+test "resizable measurement derives from handle geometry" {
+    const resizable = Resizable{ .id = 770, .ratio = 0.58 };
+
+    const measured = resizable.measure(.{}, .{});
+
+    try std.testing.expectEqual(resizableIntrinsicSize().w, measured.preferred.w);
+    try std.testing.expectEqual(resizableIntrinsicSize().h, measured.preferred.h);
 }

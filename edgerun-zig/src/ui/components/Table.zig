@@ -52,20 +52,20 @@ pub const Table = struct {
 
     pub fn measure(self: Table, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = options;
-        const width = constraints.width.limit(preferred_table.w);
+        const width = constraints.width.limit(table_min_width);
         const name_w = @max(primitives.min_extent, width * table_name_column_ratio - table_padding_x);
         const role_w = @max(primitives.min_extent, width * (1.0 - table_name_column_ratio) - table_padding_x);
         const name = layout.measureText(self.name, .{ .width = .{ .at_most = name_w }, .text_wrap = .wrap }, primitives.textMetrics(self.name, table_body_text_h, table_body_max_lines));
         const role = layout.measureText(self.role, .{ .width = .{ .at_most = role_w }, .text_wrap = .wrap }, primitives.textMetrics(self.role, table_body_text_h, table_body_max_lines));
         const row_h = @max(table_body_text_h, @max(name.preferred.h, role.preferred.h)) + table_row_inset * 2.0;
         const preferred = constrainPreferredSize(.{
-            .w = @max(table_min_width, @max(name.preferred.w + role.preferred.w + table_padding_x * 2.0, preferred_table.w)),
+            .w = @max(table_min_width, name.preferred.w + role.preferred.w + table_padding_x * 2.0),
             .h = table_header_h + separator_height + row_h,
         }, constraints);
         return layout.Measurement.flexible(
             .{ .w = @min(table_min_width, preferred.w), .h = @min(table_min_height, preferred.h) },
             preferred,
-            .{ .w = primitives.measure_max_width, .h = @max(preferred.h, preferred_table.h) },
+            .{ .w = primitives.measure_max_width, .h = preferred.h },
         ).applyExact(constraints);
     }
 
@@ -145,7 +145,6 @@ fn columnIndex(column: common.TableColumn) usize {
     };
 }
 
-const preferred_table = ui.Size{ .w = 260.0, .h = 64.0 };
 const table_radius: f32 = 6.0;
 const table_padding_x: f32 = 8.0;
 const table_header_h: f32 = 24.0;

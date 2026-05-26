@@ -16,7 +16,6 @@ const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
 const contentInset = component_primitives.contentInset;
-const measureFixed = component_primitives.measureFixed;
 const Icon = icon_component.Icon;
 
 pub const Direction = struct {
@@ -29,20 +28,31 @@ pub const Direction = struct {
 
     pub fn render(self: Direction, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         const active = activeIndex(self.active);
-        try renderItem(scene, itemBounds(bounds, 0), direction_ltr_label, active == 0, options);
-        try Icon.named(.route).renderColor(scene, iconBounds(bounds), options.style.muted);
-        try renderItem(scene, itemBounds(bounds, 1), direction_rtl_label, active == 1, options);
+        const widths = itemWidths();
+        try renderItem(scene, itemBounds(bounds, &widths, 0), direction_ltr_label, active == 0, options);
+        try Icon.named(.route).renderColor(scene, iconBounds(bounds, widths[0]), options.style.muted);
+        try renderItem(scene, itemBounds(bounds, &widths, 1), direction_rtl_label, active == 1, options);
     }
 
     pub fn collectInteractions(self: Direction, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-        try collector.addHit(itemBounds(bounds, 0), .button, self.id);
-        try collector.addHit(itemBounds(bounds, 1), .button, self.id + 1);
+        const widths = itemWidths();
+        try collector.addHit(itemBounds(bounds, &widths, 0), .button, self.id);
+        try collector.addHit(itemBounds(bounds, &widths, 1), .button, self.id + 1);
     }
 
     pub fn measure(self: Direction, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = self;
         _ = options;
-        return measureFixed(preferred_direction, constraints);
+        const widths = itemWidths();
+        const preferred = component_primitives.constrainPreferredSize(.{
+            .w = widths[0] + direction_gap + direction_icon_size + direction_gap + widths[1],
+            .h = @max(direction_item_h, direction_icon_size) + direction_vertical_padding * 2.0,
+        }, constraints);
+        return layout.Measurement.flexible(
+            .{ .w = component_primitives.min_extent * 2.0 + direction_gap * 2.0 + direction_icon_size, .h = @max(direction_item_h, direction_icon_size) },
+            preferred,
+            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
+        ).applyExact(constraints);
     }
 
     pub fn toObject(self: Direction, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -78,31 +88,39 @@ fn renderItem(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, active: bool
     }
 }
 
-fn itemBounds(bounds: ui.Rect, index: usize) ui.Rect {
+fn itemBounds(bounds: ui.Rect, widths: []const f32, index: usize) ui.Rect {
+    const y = bounds.y + (bounds.h - direction_item_h) * 0.5;
+    const second_x = bounds.x + widths[0] + direction_gap + direction_icon_size + direction_gap;
     return switch (index) {
-        0 => ui.Rect.init(bounds.x, bounds.y + direction_item_y, direction_item_w, direction_item_h),
-        else => ui.Rect.init(bounds.x + direction_second_x, bounds.y + direction_item_y, direction_item_w, direction_item_h),
+        0 => ui.Rect.init(bounds.x, y, widths[0], direction_item_h),
+        else => ui.Rect.init(second_x, y, widths[1], direction_item_h),
     };
 }
 
-fn iconBounds(bounds: ui.Rect) ui.Rect {
-    return ui.Rect.init(bounds.x + direction_icon_x, bounds.y + direction_icon_y, direction_icon_size, direction_icon_size);
+fn iconBounds(bounds: ui.Rect, first_w: f32) ui.Rect {
+    return ui.Rect.init(bounds.x + first_w + direction_gap, bounds.y + (bounds.h - direction_icon_size) * 0.5, direction_icon_size, direction_icon_size);
+}
+
+fn itemWidths() [direction_item_count]f32 {
+    return .{ itemWidth(direction_ltr_label), itemWidth(direction_rtl_label) };
+}
+
+fn itemWidth(label: []const u8) f32 {
+    const measured = text_component.Text.measureValue(label, .{ .width = .unconstrained, .text_wrap = .nowrap }, component_primitives.textMetrics(label, direction_item_text_h, direction_label_max_lines));
+    return measured.preferred.w + direction_item_padding * 2.0;
 }
 
 pub const direction_item_count: u16 = 2;
 const direction_ltr_label = "LTR";
 const direction_rtl_label = "RTL";
-const direction_item_y: f32 = 8.0;
-const direction_item_w: f32 = 42.0;
 const direction_item_h: f32 = 20.0;
 const direction_item_radius: f32 = 6.0;
 const direction_item_padding: f32 = 5.0;
 const direction_item_text_h: f32 = 12.0;
-const direction_icon_x: f32 = 54.0;
-const direction_icon_y: f32 = 11.0;
 const direction_icon_size: f32 = 18.0;
-const direction_second_x: f32 = 84.0;
-pub const preferred_direction = ui.Size{ .w = 150.0, .h = 36.0 };
+const direction_gap: f32 = 12.0;
+const direction_vertical_padding: f32 = 8.0;
+const direction_label_max_lines: usize = 1;
 
 test "direction component serializes to canonical object and deserializes" {
     const direction = Direction{ .id = 1004, .active = 1 };

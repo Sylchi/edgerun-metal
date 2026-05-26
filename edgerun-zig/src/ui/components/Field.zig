@@ -61,7 +61,7 @@ pub const Field = struct {
         return layout.Measurement.flexible(
             .{ .w = @min(field_min_width, preferred.w), .h = @min(field_min_height, preferred.h) },
             preferred,
-            .{ .w = primitives.measure_max_width, .h = @max(preferred.h, preferred_field_with_validation.h) },
+            .{ .w = primitives.measure_max_width, .h = preferred.h },
         ).applyExact(constraints);
     }
 
@@ -147,8 +147,6 @@ fn labelHeight(bounds: ui.Rect, label: []const u8) f32 {
     return @min(bounds.h, primitives.measuredTextHeight(label, bounds.w, field_label_h, field_label_max_lines));
 }
 
-const preferred_field = ui.Size{ .w = 220.0, .h = 56.0 };
-const preferred_field_with_validation = ui.Size{ .w = 220.0, .h = 74.0 };
 const field_label_h: f32 = 14.0;
 const field_label_max_lines: usize = 2;
 const field_gap: f32 = 6.0;
@@ -210,8 +208,8 @@ test "field component measurement reserves helper text height" {
         .validation = .{ .state = .helper, .message = "Visible to your team" },
     });
 
-    try std.testing.expectEqual(preferred_field.h, plain.preferred.h);
-    try std.testing.expectEqual(preferred_field_with_validation.h, helper.preferred.h);
+    try std.testing.expect(helper.preferred.h > plain.preferred.h);
+    try std.testing.expect(plain.preferred.h >= field_min_height);
 }
 
 test "field component measurement wraps long visible text under narrow constraints" {
@@ -223,6 +221,6 @@ test "field component measurement wraps long visible text under narrow constrain
     });
 
     try std.testing.expect(plain.preferred.w <= field_min_width);
-    try std.testing.expect(plain.preferred.h > preferred_field.h);
+    try std.testing.expect(plain.preferred.h > field_min_height);
     try std.testing.expect(helper.preferred.h > plain.preferred.h);
 }

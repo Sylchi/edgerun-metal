@@ -12,8 +12,6 @@ const primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-const measureFixed = primitives.measureFixed;
-
 pub const ScrollArea = struct {
     pub fn node(self: ScrollArea) ui.Node {
         _ = self;
@@ -40,7 +38,16 @@ pub const ScrollArea = struct {
     pub fn measure(self: ScrollArea, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = self;
         _ = options;
-        return measureFixed(preferred_scroll_area, constraints);
+        const text = text_component.Text.measureValue(scroll_area_label, .{ .width = .unconstrained, .text_wrap = .nowrap }, primitives.textMetrics(scroll_area_label, scroll_area_text_h, scroll_area_label_max_lines));
+        const preferred = primitives.constrainPreferredSize(.{
+            .w = text.preferred.w + scroll_area_padding * 2.0 + scroll_area_scrollbar_w,
+            .h = text.preferred.h + scroll_area_track_inset_y * 2.0,
+        }, constraints);
+        return layout.Measurement.flexible(
+            .{ .w = primitives.min_extent + scroll_area_padding * 2.0 + scroll_area_scrollbar_w, .h = scroll_area_text_h + scroll_area_track_inset_y * 2.0 },
+            preferred,
+            .{ .w = primitives.measure_max_width, .h = @max(preferred.h, text.max.h + scroll_area_track_inset_y * 2.0) },
+        ).applyExact(constraints);
     }
 
     pub fn toObject(self: ScrollArea, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -108,7 +115,6 @@ fn thumbBounds(track: ui.Rect, metrics: ScrollAreaMetrics) ui.Rect {
     return ui.Rect.init(track.x, track.y + travel * offset_ratio, track.w, thumb_h);
 }
 
-const preferred_scroll_area = ui.Size{ .w = 220.0, .h = 48.0 };
 const scroll_area_radius: f32 = 7.0;
 const scroll_area_padding: f32 = 8.0;
 const scroll_area_content_y: f32 = 6.0;
@@ -121,6 +127,7 @@ const scroll_area_track_radius: f32 = 2.0;
 const scroll_area_thumb_min_h: f32 = 12.0;
 const scroll_area_thumb_ratio: f32 = 0.45;
 const scroll_area_label = "Scrollable content";
+const scroll_area_label_max_lines: usize = 1;
 
 test "scroll area component serializes to canonical object and deserializes" {
     const scroll_area = ScrollArea{};

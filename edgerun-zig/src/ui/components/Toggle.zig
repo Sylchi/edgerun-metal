@@ -13,8 +13,6 @@ const component_primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-const measureFixed = component_primitives.measureFixed;
-
 pub const Toggle = struct {
     id: u32,
     label: []const u8,
@@ -35,9 +33,17 @@ pub const Toggle = struct {
     }
 
     pub fn measure(self: Toggle, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
-        _ = self;
         _ = options;
-        return measureFixed(preferred_toggle, constraints);
+        const label = text_component.Text.measureValue(self.label, .{ .width = .unconstrained, .text_wrap = .nowrap }, component_primitives.textMetrics(self.label, component_primitives.control_label_height, toggle_label_max_lines));
+        const preferred = component_primitives.constrainPreferredSize(.{
+            .w = label.preferred.w + toggle_text_padding * 2.0,
+            .h = label.preferred.h + toggle_text_padding * 2.0,
+        }, constraints);
+        return layout.Measurement.flexible(
+            .{ .w = component_primitives.min_extent + toggle_text_padding * 2.0, .h = component_primitives.control_label_height + toggle_text_padding * 2.0 },
+            preferred,
+            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
+        ).applyExact(constraints);
     }
 
     pub fn toObject(self: Toggle, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -59,7 +65,7 @@ pub const Toggle = struct {
 };
 
 const toggle_text_padding: f32 = 8.0;
-pub const preferred_toggle = ui.Size{ .w = 96.0, .h = 36.0 };
+const toggle_label_max_lines: usize = 1;
 
 test "toggle component serializes to canonical object and deserializes" {
     const toggle = Toggle{ .id = 44, .label = "Bold", .pressed = true };
@@ -86,4 +92,11 @@ test "toggle component renders pressed state and collects button hit" {
 
     try std.testing.expect(component_test.hasFillColor(scene.written(), ui.Color.row));
     try std.testing.expectEqual(@as(u32, 44), collector.written()[0].id);
+}
+
+test "toggle measurement follows label text" {
+    const short = Toggle{ .id = 44, .label = "B", .pressed = true };
+    const long = Toggle{ .id = 44, .label = "Runtime authority", .pressed = true };
+
+    try std.testing.expect(long.measure(.{}, .{}).preferred.w > short.measure(.{}, .{}).preferred.w);
 }

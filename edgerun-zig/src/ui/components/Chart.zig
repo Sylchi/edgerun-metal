@@ -53,7 +53,7 @@ pub const Chart = struct {
         return layout.Measurement.flexible(
             .{ .w = @min(chart_min_width, preferred.w), .h = @min(chart_min_height, preferred.h) },
             preferred,
-            .{ .w = component_primitives.measure_max_width, .h = @max(preferred.h, preferred_chart.h) },
+            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
         ).applyExact(constraints);
     }
 
@@ -111,7 +111,6 @@ const chart_bar_radius: f32 = 5.0;
 const chart_plot_min_h: f32 = 64.0;
 const chart_min_width: f32 = 120.0;
 const chart_min_height: f32 = 72.0;
-pub const preferred_chart = ui.Size{ .w = 240.0, .h = 90.0 };
 const chart_bar_values = [_]f32{ 0.45, 0.72, 0.38, 0.86, 0.62 };
 
 test "chart component serializes to canonical object and deserializes" {
@@ -143,9 +142,11 @@ test "chart component renders bars and hit regions" {
 
 test "chart component measurement wraps long labels under narrow constraints" {
     const chart = Chart{ .id = 993, .label = "Runtime authority decisions" };
+    const compact = Chart{ .id = 993, .label = "Visitors" };
 
     const measured = chart.measure(.{ .width = .{ .at_most = chart_min_width }, .text_wrap = .wrap }, .{});
+    const compact_measured = compact.measure(.{ .width = .{ .at_most = chart_min_width }, .text_wrap = .wrap }, .{});
 
     try std.testing.expect(measured.preferred.w <= chart_min_width);
-    try std.testing.expect(measured.preferred.h > preferred_chart.h);
+    try std.testing.expect(measured.preferred.h > compact_measured.preferred.h);
 }

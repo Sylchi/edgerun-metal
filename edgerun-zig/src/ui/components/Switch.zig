@@ -55,7 +55,7 @@ pub const Switch = struct {
         return layout.Measurement.flexible(
             .{ .w = @min(switch_min_width, preferred.w), .h = @min(switch_height, preferred.h) },
             preferred,
-            .{ .w = component_primitives.measure_max_width, .h = @max(preferred.h, preferred_switch.h) },
+            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
         ).applyExact(constraints);
     }
 
@@ -85,7 +85,6 @@ const switch_label_gap: f32 = 10.0;
 const switch_label_height: f32 = component_primitives.control_label_height;
 const switch_label_max_lines: usize = 2;
 const switch_min_width: f32 = 112.0;
-pub const preferred_switch = ui.Size{ .w = 220.0, .h = 32.0 };
 
 test "switch component serializes to canonical object and deserializes" {
     const switch_control = Switch{ .id = 12, .label = "Public", .checked = false };

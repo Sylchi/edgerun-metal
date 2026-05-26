@@ -51,7 +51,7 @@ pub const Empty = struct {
         return layout.Measurement.flexible(
             .{ .w = @min(empty_min_width, preferred.w), .h = @min(empty_min_height, preferred.h) },
             preferred,
-            .{ .w = component_primitives.measure_max_width, .h = @max(preferred.h, preferred_empty.h) },
+            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
         ).applyExact(constraints);
     }
 
@@ -94,7 +94,6 @@ const empty_detail_height: f32 = 16.0;
 const empty_detail_max_lines: usize = 2;
 const empty_min_width: f32 = 144.0;
 const empty_min_height: f32 = 96.0;
-pub const preferred_empty = ui.Size{ .w = 260.0, .h = 132.0 };
 
 test "empty component serializes icon slot to canonical object and deserializes" {
     const empty = Empty{ .title = "No results", .detail = "Try another filter.", .icon_slot = IconSlot.named(.media, .search) };
@@ -125,9 +124,11 @@ test "empty measurement wraps long copy under narrow constraints" {
         .title = "No matching runtime objects",
         .detail = "Try another authority filter or inspect the stored receipt list.",
     };
+    const compact = Empty{ .title = "No results", .detail = "Try another filter." };
 
     const measured = empty.measure(.{ .width = .{ .at_most = empty_min_width }, .text_wrap = .wrap }, .{});
+    const compact_measured = compact.measure(.{ .width = .{ .at_most = empty_min_width }, .text_wrap = .wrap }, .{});
 
     try std.testing.expect(measured.preferred.w <= empty_min_width);
-    try std.testing.expect(measured.preferred.h > preferred_empty.h);
+    try std.testing.expect(measured.preferred.h > compact_measured.preferred.h);
 }
