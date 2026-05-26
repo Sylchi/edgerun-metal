@@ -12,6 +12,10 @@ const component_render = @import("Render.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
+pub const row_id_offset: u32 = 0;
+pub const name_header_id_offset: u32 = 1;
+pub const role_header_id_offset: u32 = 2;
+
 pub const Table = struct {
     id: u32,
     name: []const u8,
@@ -26,7 +30,9 @@ pub const Table = struct {
     }
 
     pub fn collectInteractions(self: Table, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-        try collector.addHit(component_render.tableRowBounds(bounds), .row_item, self.id);
+        try collector.addHit(component_render.tableHeaderBounds(bounds, .name), .button, self.id + name_header_id_offset);
+        try collector.addHit(component_render.tableHeaderBounds(bounds, .role), .button, self.id + role_header_id_offset);
+        try collector.addHit(component_render.tableRowBounds(bounds), .row_item, self.id + row_id_offset);
     }
 
     pub fn measure(self: Table, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
@@ -68,7 +74,7 @@ test "table component renders header row and hit region" {
     const table = Table{ .id = 660, .name = "Sarah Chen", .role = "Engineer" };
     var commands: [24]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
-    var regions: [1]interaction.Region = undefined;
+    var regions: [3]interaction.Region = undefined;
     var collector = interaction.Collector.init(&regions);
 
     try table.render(&scene, ui.Rect.init(0, 0, 240, 64), .{});
@@ -78,6 +84,26 @@ test "table component renders header row and hit region" {
     try std.testing.expect(component_test.hasText(scene.written(), "Role"));
     try std.testing.expect(component_test.hasText(scene.written(), "Sarah Chen"));
     try std.testing.expect(component_test.hasText(scene.written(), "Engineer"));
-    try std.testing.expectEqual(@as(usize, 1), collector.written().len);
-    try std.testing.expectEqual(@as(u32, 660), collector.written()[0].id);
+    try std.testing.expectEqual(@as(usize, 3), collector.written().len);
+    try std.testing.expectEqual(@as(u32, 660 + name_header_id_offset), collector.written()[0].id);
+    try std.testing.expectEqual(@as(u32, 660 + role_header_id_offset), collector.written()[1].id);
+    try std.testing.expectEqual(@as(u32, 660 + row_id_offset), collector.written()[2].id);
+}
+
+test "table component renders sorted column state without changing row hit" {
+    const table = Table{ .id = 660, .name = "Sarah Chen", .role = "Engineer" };
+    var commands: [32]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+    var regions: [3]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
+
+    try table.render(&scene, ui.Rect.init(0, 0, 240, 64), .{
+        .table_sort = .{ .column = .role, .direction = .descending },
+    });
+    try table.collectInteractions(&collector, ui.Rect.init(0, 0, 240, 64));
+
+    try std.testing.expect(component_test.hasText(scene.written(), "Role v"));
+    try std.testing.expectEqual(@as(u32, 660 + row_id_offset), collector.written()[2].id);
+    try std.testing.expect(collector.written()[0].bounds.x < collector.written()[1].bounds.x);
+    try std.testing.expect(collector.written()[2].bounds.y > collector.written()[0].bounds.y);
 }

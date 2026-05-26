@@ -38,6 +38,10 @@ pub fn Slot(comptime Component: type) type {
             return component_render.collectComponentInteractions(Component, collector, bounds, self.child);
         }
 
+        pub fn collectAccessibility(self: Self, tree: *common.AccessibilityTree, bounds: ui.Rect, options: RenderOptions) common.AccessibilityError!void {
+            return component_render.collectAccessibility(Component, tree, bounds, self.child, options);
+        }
+
         pub fn toObject(self: Self, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
             var writer = codec.Writer.init(ui_out, 2, 1, .column, 0, 0) orelse return null;
             if (!writer.record(0, .slot, self.id, .{ .offset = 1, .len = 0 }, .{})) return null;

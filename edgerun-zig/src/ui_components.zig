@@ -108,6 +108,7 @@ pub const Component = union(enum) {
     hover_card: HoverCard,
     input_otp: InputOtp,
     button: Button,
+    icon_button: IconButton,
     button_group: ButtonGroup,
     toggle_group: ToggleGroup,
     toggle: Toggle,
@@ -165,6 +166,7 @@ pub const Component = union(enum) {
             .hover_card => |component| component.node(),
             .input_otp => |component| component.node(),
             .button => |component| component.node(),
+            .icon_button => |component| component.node(),
             .button_group => |component| component.node(),
             .toggle_group => |component| component.node(),
             .toggle => |component| component.node(),
@@ -249,6 +251,7 @@ pub const Component = union(enum) {
             .hover_card => |hover_card| .{ .hover_card = .{ .id = hover_card.id, .trigger = hover_card.trigger, .content = hover_card.content } },
             .input_otp => |otp| .{ .input_otp = .{ .id = otp.id, .value = otp.value } },
             .button => |button| .{ .button = .{ .id = button.id, .label = button.label, .variant = button_component.variantFromTag(button.variant) catch return error.Corrupt, .leading_icon = component_common.optionalIconFromTag(button.leading_icon) catch return error.Corrupt, .trailing_icon = component_common.optionalIconFromTag(button.trailing_icon) catch return error.Corrupt } },
+            .icon_button => |button| .{ .icon_button = .{ .id = button.id, .label = button.label, .variant = button_component.variantFromTag(button.variant) catch return error.Corrupt, .icon_value = (component_common.optionalIconFromTag(button.icon) catch return error.Corrupt) orelse return error.Corrupt } },
             .button_group => |group| .{ .button_group = .{ .id = group.id, .first = group.first, .second = group.second, .active = group.active } },
             .toggle_group => |group| .{ .toggle_group = .{ .id = group.id, .first = group.first, .second = group.second, .active = group.active } },
             .toggle => |toggle| .{ .toggle = .{ .id = toggle.id, .label = toggle.label, .pressed = toggle.pressed } },
@@ -281,6 +284,8 @@ pub const BadgeVariant = component_common.BadgeVariant;
 pub const SurfaceVariant = component_common.SurfaceVariant;
 pub const RenderOptions = component_common.RenderOptions;
 pub const Accessibility = component_common.Accessibility;
+pub const AccessibilityNode = component_common.AccessibilityNode;
+pub const AccessibilityTree = component_common.AccessibilityTree;
 pub const encoded_icon_count = component_common.encoded_icon_count;
 
 pub const Text = text_component.Text;
@@ -306,6 +311,8 @@ pub const Card = card_component.Card;
 pub const Empty = empty_component.Empty;
 
 pub const Button = button_component.Button;
+
+pub const IconButton = button_component.IconButton;
 
 pub const ButtonGroup = button_group_component.ButtonGroup;
 
@@ -415,6 +422,10 @@ pub fn collectComponentInteractions(collector: *interaction.Collector, bounds: u
 
 pub fn accessibility(component: Component) Accessibility {
     return component_render.accessibility(Component, component);
+}
+
+pub fn collectAccessibility(tree: *AccessibilityTree, bounds: ui.Rect, component: Component, options: RenderOptions) component_common.AccessibilityError!void {
+    return component_render.collectAccessibility(Component, tree, bounds, component, options);
 }
 
 pub fn measureNode(node: ui.Node, constraints: layouts.types.Constraints, options: RenderOptions) layouts.types.Measurement {
@@ -545,15 +556,16 @@ test "component deserializer rejects wrong component kind" {
 }
 
 test "component union roundtrips concrete component objects" {
-    const component = Component{ .button = .{ .id = 14, .label = "Commit" } };
+    const component = Component{ .icon_button = .{ .id = 14, .label = "Search", .icon_value = .search } };
     var ui_raw: [128]u8 = undefined;
     var object_raw: [object.header_size + 128]u8 = undefined;
 
     const canonical = component.toObject(&ui_raw, &object_raw, testEpoch()).?;
     const decoded = try Component.fromObject(canonical);
 
-    try std.testing.expectEqual(@as(u32, 14), decoded.button.id);
-    try std.testing.expectEqualStrings("Commit", decoded.button.label);
+    try std.testing.expectEqual(@as(u32, 14), decoded.icon_button.id);
+    try std.testing.expectEqualStrings("Search", decoded.icon_button.label);
+    try std.testing.expectEqual(icon.Icon.search, decoded.icon_button.icon_value);
 }
 
 test "component union decodes only canonical component objects" {
@@ -878,6 +890,40 @@ test "component accessibility metadata comes from component identity and labels"
     try std.testing.expectEqual(component_common.AccessibilityRole.table, table_meta.role);
     try std.testing.expectEqual(@as(u32, 93), table_meta.control_id.?);
     try std.testing.expectEqualStrings("Ada", table_meta.label);
+}
+
+test "component accessibility tree emitter follows stack layout bounds" {
+    const children = [_]Component{
+        .{ .text = .{ .value = "Intro" } },
+        .{ .button = .{ .id = 94, .label = "Continue" } },
+        .{ .input = .{ .id = 95, .placeholder = "Filter" } },
+    };
+    const stack = Stack{ .axis = .column, .gap = 6, .padding = 8, .children = &children };
+    var raw_nodes: [4]AccessibilityNode = undefined;
+    var tree = AccessibilityTree.init(&raw_nodes);
+
+    try stack.collectAccessibility(&tree, ui.Rect.init(0, 0, 160, 120), .{});
+
+    try std.testing.expectEqual(@as(usize, 3), tree.written().len);
+    try std.testing.expectEqual(component_common.AccessibilityRole.text, tree.written()[0].metadata.role);
+    try std.testing.expectEqualStrings("Intro", tree.written()[0].metadata.label);
+    try std.testing.expectEqual(component_common.AccessibilityRole.button, tree.written()[1].metadata.role);
+    try std.testing.expectEqual(@as(u32, 94), tree.written()[1].metadata.control_id.?);
+    try std.testing.expect(tree.written()[1].bounds.y > tree.written()[0].bounds.y);
+    try std.testing.expectEqual(component_common.AccessibilityRole.input, tree.written()[2].metadata.role);
+    try std.testing.expectEqual(@as(u32, 95), tree.written()[2].metadata.control_id.?);
+}
+
+test "component accessibility tree emitter enforces caller budget" {
+    const children = [_]Component{
+        .{ .button = .{ .id = 96, .label = "One" } },
+        .{ .button = .{ .id = 97, .label = "Two" } },
+    };
+    const stack = Stack{ .axis = .column, .children = &children };
+    var raw_nodes: [1]AccessibilityNode = undefined;
+    var tree = AccessibilityTree.init(&raw_nodes);
+
+    try std.testing.expectError(error.AccessibilityBudgetExceeded, stack.collectAccessibility(&tree, ui.Rect.init(0, 0, 120, 80), .{}));
 }
 
 test "component render helper applies shared interactive states by component id" {

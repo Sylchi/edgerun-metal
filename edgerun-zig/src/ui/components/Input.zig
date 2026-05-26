@@ -32,8 +32,7 @@ pub const Input = struct {
 
     pub fn measure(self: Input, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = self;
-        _ = options;
-        return component_render.measureFixed(component_render.preferred_input, constraints);
+        return component_render.measureFixed(component_render.inputPreferredSize(options.control_size), constraints);
     }
 
     pub fn toObject(self: Input, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -99,4 +98,20 @@ test "input component measurement respects at-most constraints" {
 
     try std.testing.expectEqual(@as(f32, 96.0), measured.preferred.w);
     try std.testing.expectEqual(@as(f32, 32.0), measured.preferred.h);
+}
+
+test "input component size variants adjust preferred height and padding" {
+    const input = Input{ .id = 10, .placeholder = "Search objects" };
+    const small = input.measure(.{}, .{ .control_size = .small });
+    const regular = input.measure(.{}, .{});
+    const large = input.measure(.{}, .{ .control_size = .large });
+    var commands: [8]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+
+    try input.render(&scene, ui.Rect.init(4, 8, 220, 48), .{ .control_size = .large });
+
+    const placeholder = component_test.textCommand(scene.written(), "Search objects").?;
+    try std.testing.expect(small.preferred.h < regular.preferred.h);
+    try std.testing.expect(large.preferred.h > regular.preferred.h);
+    try std.testing.expectEqual(@as(f32, 20.0), placeholder.text.origin.x);
 }

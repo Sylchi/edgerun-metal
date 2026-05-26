@@ -58,10 +58,54 @@ test "scroll area component serializes to canonical object and deserializes" {
 test "scroll area component renders viewport and scrollbar" {
     const scroll_area = ScrollArea{};
     var commands: [16]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
+    var clips: [2]ui.Rect = undefined;
+    var scene = ui.Scene.initWithClips(&commands, &clips);
 
     try scroll_area.render(&scene, ui.Rect.init(0, 0, 220, 48), .{});
 
     try std.testing.expect(component_test.hasText(scene.written(), "Scrollable content"));
     try std.testing.expect(scene.written().len >= 4);
+}
+
+test "scroll area component computes thumb from content offset" {
+    const bounds = ui.Rect.init(0, 0, 220, 100);
+    const track = component_render.scrollAreaTrackBounds(bounds);
+    const metrics = component_render.scrollAreaMetrics(bounds, .{
+        .viewport_h = 80.0,
+        .content_h = 240.0,
+        .offset_y = 80.0,
+    });
+    const thumb = component_render.scrollAreaThumbBounds(track, metrics);
+
+    try std.testing.expectEqual(@as(f32, 80.0), metrics.offset_y);
+    try std.testing.expectEqual(@as(f32, 160.0), metrics.maxOffset());
+    try std.testing.expect(thumb.h >= 12.0);
+    try std.testing.expect(thumb.y > track.y);
+    try std.testing.expect(thumb.y + thumb.h < track.y + track.h);
+}
+
+test "scroll area component clamps overscroll and clips content" {
+    const scroll_area = ScrollArea{};
+    var commands: [16]ui.Command = undefined;
+    var clips: [2]ui.Rect = undefined;
+    var scene = ui.Scene.initWithClips(&commands, &clips);
+
+    const bounds = ui.Rect.init(0, 0, 220, 64);
+    try scroll_area.render(&scene, bounds, .{
+        .scroll = .{
+            .viewport_h = 40.0,
+            .content_h = 120.0,
+            .offset_y = 999.0,
+        },
+    });
+
+    const metrics = component_render.scrollAreaMetrics(bounds, .{
+        .viewport_h = 40.0,
+        .content_h = 120.0,
+        .offset_y = 999.0,
+    });
+    try std.testing.expectEqual(@as(f32, 80.0), metrics.offset_y);
+    const thumb = component_render.scrollAreaThumbBounds(component_render.scrollAreaTrackBounds(bounds), metrics);
+    const track = component_render.scrollAreaTrackBounds(bounds);
+    try std.testing.expectEqual(track.y + track.h, thumb.y + thumb.h);
 }

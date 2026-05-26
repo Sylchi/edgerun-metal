@@ -14,8 +14,8 @@ pub const source_button_id: u32 = 30_012;
 
 pub const header_h: f32 = design.header_h;
 pub const surface_radius: f32 = design.surface_radius;
-const compact_header_w: f32 = 720.0;
-const compact_mobile_w: f32 = 520.0;
+pub const compact_header_breakpoint_w: f32 = 720.0;
+pub const mobile_header_breakpoint_w: f32 = 520.0;
 const compact_nav_gap: f32 = 6.0;
 const compact_icon_w: f32 = design.Icon.button_box;
 const compact_icon_gap: f32 = 8.0;
@@ -26,6 +26,12 @@ const nav_average_w: f32 = 7.8;
 const header_control_gap: f32 = 12.0;
 const launch_label = "Launch Desktop";
 
+pub const HeaderMode = enum {
+    desktop,
+    compact,
+    mobile,
+};
+
 pub const ActiveNav = enum {
     none,
     docs,
@@ -35,13 +41,22 @@ pub const ActiveNav = enum {
 
 const palette = design.palette;
 
+pub fn headerMode(content_w: f32) HeaderMode {
+    if (content_w < mobile_header_breakpoint_w) return .mobile;
+    if (content_w < compact_header_breakpoint_w) return .compact;
+    return .desktop;
+}
+
 pub fn renderHeader(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, content: ui.Rect, active: ActiveNav) (ui.RenderError || interaction.Error)!void {
     try fill(scene, bounds, palette.bg, 0.0);
     try fill(scene, ui.Rect.init(bounds.x, bounds.y + bounds.h - 1.0, bounds.w, 1.0), palette.border, 0.0);
 
-    if (content.w < compact_header_w) {
-        try renderCompactHeader(scene, collector, bounds, content, active);
-        return;
+    switch (headerMode(content.w)) {
+        .desktop => {},
+        .compact, .mobile => {
+            try renderCompactHeader(scene, collector, bounds, content, active);
+            return;
+        },
     }
 
     const logo = ui.Rect.init(content.x, bounds.y + 16.0, design.Icon.logo_box, design.Icon.logo_box);
@@ -75,12 +90,16 @@ fn renderCompactHeader(scene: *ui.Scene, collector: *interaction.Collector, boun
     try text(scene, logo.x + 40.0, bounds.y + 23.0, 78.0, 18.0, "EdgeRun", palette.text);
     try collector.addHit(ui.Rect.init(logo.x, logo.y, 118.0, logo.h), .button, logo_button_id);
 
-    if (content.w < compact_mobile_w) {
-        const docs = ui.Rect.init(content.x + content.w - compact_icon_w, bounds.y + 15.0, compact_icon_w, design.Icon.button_box);
-        const source = ui.Rect.init(docs.x - compact_icon_gap - compact_icon_w, docs.y, compact_icon_w, design.Icon.button_box);
-        try iconButton(scene, collector, source, .code, source_button_id, active == .source);
-        try iconButton(scene, collector, docs, .file, docs_button_id, active == .docs);
-        return;
+    switch (headerMode(content.w)) {
+        .mobile => {
+            const docs = ui.Rect.init(content.x + content.w - compact_icon_w, bounds.y + 15.0, compact_icon_w, design.Icon.button_box);
+            const source = ui.Rect.init(docs.x - compact_icon_gap - compact_icon_w, docs.y, compact_icon_w, design.Icon.button_box);
+            try iconButton(scene, collector, source, .code, source_button_id, active == .source);
+            try iconButton(scene, collector, docs, .file, docs_button_id, active == .docs);
+            return;
+        },
+        .compact => {},
+        .desktop => unreachable,
     }
 
     const source = ui.Rect.init(content.x + content.w - compact_icon_w, bounds.y + 15.0, compact_icon_w, design.Icon.button_box);
@@ -154,6 +173,13 @@ test "app chrome header exposes canonical navigation hit targets" {
     try expectHit(collector.written(), launch_button_id);
 }
 
+test "app chrome header mode follows mobile and compact breakpoints" {
+    try std.testing.expectEqual(HeaderMode.mobile, headerMode(mobile_header_breakpoint_w - 1.0));
+    try std.testing.expectEqual(HeaderMode.compact, headerMode(mobile_header_breakpoint_w));
+    try std.testing.expectEqual(HeaderMode.compact, headerMode(compact_header_breakpoint_w - 1.0));
+    try std.testing.expectEqual(HeaderMode.desktop, headerMode(compact_header_breakpoint_w));
+}
+
 test "app chrome compact header keeps hit targets separated" {
     var commands: [128]ui.Command = undefined;
     var clips: [4]ui.Rect = undefined;
@@ -167,6 +193,7 @@ test "app chrome compact header keeps hit targets separated" {
     try expectNoHorizontalOverlap(logo, source);
     if (hitRect(collector.written(), docs_button_id)) |docs| try expectNoHorizontalOverlap(logo, docs);
     if (hitRect(collector.written(), blog_button_id)) |blog| try expectNoHorizontalOverlap(blog, source);
+    try expectMissingHit(collector.written(), launch_button_id);
 }
 
 test "app chrome mobile header uses reference icon controls" {
@@ -182,12 +209,20 @@ test "app chrome mobile header uses reference icon controls" {
     const docs = expectHitRect(collector.written(), docs_button_id);
     try expectNoHorizontalOverlap(logo, source);
     try expectNoHorizontalOverlap(source, docs);
+    try expectTouchTarget(source);
+    try expectTouchTarget(docs);
+    try expectMissingHit(collector.written(), blog_button_id);
+    try expectMissingHit(collector.written(), launch_button_id);
     try std.testing.expectEqual(@as(usize, 3), collector.written().len);
 }
 
 fn expectHit(regions: []const interaction.Region, id: u32) !void {
     for (regions) |region| if (region.id == id) return;
     return error.MissingHit;
+}
+
+fn expectMissingHit(regions: []const interaction.Region, id: u32) !void {
+    for (regions) |region| if (region.id == id) return error.UnexpectedHit;
 }
 
 fn expectHitRect(regions: []const interaction.Region, id: u32) ui.Rect {
@@ -201,4 +236,9 @@ fn hitRect(regions: []const interaction.Region, id: u32) ?ui.Rect {
 
 fn expectNoHorizontalOverlap(left: ui.Rect, right: ui.Rect) !void {
     try std.testing.expect(left.x + left.w <= right.x or right.x + right.w <= left.x);
+}
+
+fn expectTouchTarget(bounds: ui.Rect) !void {
+    try std.testing.expect(bounds.w >= design.min_touch_target);
+    try std.testing.expect(bounds.h >= design.min_touch_target);
 }

@@ -25,13 +25,13 @@ pub const Command = struct {
     }
 
     pub fn collectInteractions(self: Command, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-        try collector.addHit(bounds, .input, self.id);
+        try component_render.collectCommandInteractions(collector, bounds, self.id);
     }
 
     pub fn measure(self: Command, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = self;
-        _ = options;
-        return component_render.measureFixed(component_render.preferred_command, constraints);
+        const preferred = if (options.command_palette == null) component_render.preferred_command else component_render.preferred_command_palette;
+        return component_render.measureFixed(preferred, constraints);
     }
 
     pub fn toObject(self: Command, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -76,4 +76,53 @@ test "command component renders search input and hit region" {
     try std.testing.expect(component_test.hasIcon(scene.written(), @import("../../icon.zig").id(.search)));
     try std.testing.expectEqual(@as(usize, 1), collector.written().len);
     try std.testing.expectEqual(ui.HitKind.input, collector.written()[0].kind);
+}
+
+test "command component filters palette results and exposes row hits" {
+    const command = Command{ .id = 880, .placeholder = "Type a command..." };
+    const items = [_]common.CommandItem{
+        .{ .label = "Open settings", .shortcut = "Ctrl+," },
+        .{ .label = "Launch app", .shortcut = "Ctrl+L" },
+        .{ .label = "Show receipts", .shortcut = "Ctrl+R" },
+    };
+    const options = RenderOptions{ .command_palette = .{
+        .query = "launch",
+        .items = &items,
+        .selected_index = 1,
+    } };
+    var commands: [32]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+    var regions: [4]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
+    const bounds = ui.Rect.init(0, 0, 260, 130);
+
+    try command.render(&scene, bounds, options);
+    try command.collectInteractions(&collector, bounds);
+
+    try std.testing.expect(component_test.hasText(scene.written(), "launch"));
+    try std.testing.expect(component_test.hasText(scene.written(), "Launch app"));
+    try std.testing.expect(component_test.hasText(scene.written(), "Ctrl+L"));
+    try std.testing.expect(!component_test.hasText(scene.written(), "Open settings"));
+    try std.testing.expectEqual(@as(usize, 4), collector.written().len);
+    try std.testing.expectEqual(ui.HitKind.input, collector.written()[0].kind);
+    try std.testing.expectEqual(ui.HitKind.row_item, collector.written()[1].kind);
+    try std.testing.expectEqual(command.id + component_render.command_item_id_offset, collector.written()[1].id);
+}
+
+test "command component renders deterministic empty result state" {
+    const command = Command{ .id = 880, .placeholder = "Type a command..." };
+    const items = [_]common.CommandItem{
+        .{ .label = "Open settings" },
+        .{ .label = "Launch app" },
+    };
+    var commands: [24]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+
+    try command.render(&scene, ui.Rect.init(0, 0, 260, 130), .{ .command_palette = .{
+        .query = "missing",
+        .items = &items,
+    } });
+
+    try std.testing.expect(component_test.hasText(scene.written(), "No commands found"));
+    try std.testing.expect(!component_test.hasText(scene.written(), "Open settings"));
 }

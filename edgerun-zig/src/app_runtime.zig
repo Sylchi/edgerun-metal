@@ -1794,7 +1794,7 @@ export fn er_ui_render_input_object(input_len: usize, width: u32, height: u32) u
     const surface = beginFrame(width, height) orelse return finishError(.bad_size);
 
     const root = ui_codec.decodeObject(input_bytes[0..input_len], &nodes) catch return finishError(.bad_ui);
-    var scene = ui.Scene.init(&commands);
+    const scene = ui.Scene.init(&commands);
     ui_components.renderNode(&scene, .{
         .x = 0,
         .y = 0,

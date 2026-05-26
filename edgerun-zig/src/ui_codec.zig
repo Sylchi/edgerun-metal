@@ -71,6 +71,7 @@ pub const RecordKind = enum(u16) {
     toast = 53,
     sidebar = 54,
     direction = 55,
+    icon_button = 56,
 };
 
 pub fn decodeObject(canonical: []const u8, out_nodes: []ui.Node) Error!ui.Node {
@@ -129,6 +130,7 @@ pub fn decodeBytes(raw: []const u8, out_nodes: []ui.Node) Error!ui.Node {
             .combobox => .{ .combobox = .{ .id = id, .placeholder = try stringRef(string_table, a, b), .selected = try stringRef(string_table, c, d) } },
             .empty => .{ .empty = .{ .title = try stringRef(string_table, a, b), .detail = try stringRef(string_table, c, d) } },
             .button => .{ .button = .{ .id = id, .label = try stringRef(string_table, a, b), .variant = try boundedTag(c, button_variant_count), .leading_icon = try boundedTag(d & button_icon_mask, ui_components.encoded_icon_count), .trailing_icon = try boundedTag(d >> button_icon_shift, ui_components.encoded_icon_count) } },
+            .icon_button => .{ .icon_button = .{ .id = id, .label = try stringRef(string_table, a, b), .variant = try boundedTag(c, button_variant_count), .icon = try boundedTag(d, ui_components.encoded_icon_count) } },
             .button_group => .{ .button_group = .{ .id = id / grouped_id_stride, .first = try stringRef(string_table, a, b), .second = try stringRef(string_table, c, d), .active = @intCast(id % grouped_id_stride) } },
             .toggle_group => .{ .toggle_group = .{ .id = id / toggle_group_id_stride, .first = try stringRef(string_table, a, b), .second = try stringRef(string_table, c, d), .active = @intCast(id % toggle_group_id_stride) } },
             .input => .{ .input = .{ .id = id, .placeholder = try stringRef(string_table, a, b), .leading_icon = try boundedTag(c, ui_components.encoded_icon_count) } },
@@ -238,6 +240,7 @@ fn recordKind(value: u16) ?RecordKind {
         @intFromEnum(RecordKind.context_menu) => .context_menu,
         @intFromEnum(RecordKind.dialog) => .dialog,
         @intFromEnum(RecordKind.direction) => .direction,
+        @intFromEnum(RecordKind.icon_button) => .icon_button,
         @intFromEnum(RecordKind.drawer) => .drawer,
         @intFromEnum(RecordKind.dropdown_menu) => .dropdown_menu,
         @intFromEnum(RecordKind.sheet) => .sheet,

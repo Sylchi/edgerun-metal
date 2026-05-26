@@ -34,6 +34,12 @@ pub const SurfaceVariant = enum {
     subtle,
 };
 
+pub const ControlSize = enum {
+    small,
+    default,
+    large,
+};
+
 pub const AccessibilityRole = enum {
     text,
     button,
@@ -56,10 +62,88 @@ pub const Accessibility = struct {
     control_id: ?u32 = null,
 };
 
+pub const ValidationState = enum {
+    helper,
+    invalid,
+};
+
+pub const Validation = struct {
+    state: ValidationState = .helper,
+    message: []const u8,
+};
+
+pub const ScrollState = struct {
+    viewport_h: f32,
+    content_h: f32,
+    offset_y: f32 = 0.0,
+};
+
+pub const TableColumn = enum {
+    name,
+    role,
+};
+
+pub const SortDirection = enum {
+    ascending,
+    descending,
+};
+
+pub const TableSort = struct {
+    column: TableColumn,
+    direction: SortDirection,
+};
+
+pub const CommandItem = struct {
+    label: []const u8,
+    detail: []const u8 = "",
+    shortcut: []const u8 = "",
+};
+
+pub const CommandPalette = struct {
+    query: []const u8 = "",
+    items: []const CommandItem = &.{},
+    selected_index: usize = 0,
+};
+
+pub const AccessibilityNode = struct {
+    metadata: Accessibility,
+    bounds: ui.Rect,
+};
+
+pub const AccessibilityError = error{
+    AccessibilityBudgetExceeded,
+    InvalidAccessibilityBounds,
+};
+
+pub const AccessibilityTree = struct {
+    nodes: []AccessibilityNode,
+    len: usize = 0,
+
+    pub fn init(nodes: []AccessibilityNode) AccessibilityTree {
+        return .{ .nodes = nodes };
+    }
+
+    pub fn append(self: *AccessibilityTree, node: AccessibilityNode) AccessibilityError!void {
+        if (!node.bounds.valid()) return error.InvalidAccessibilityBounds;
+        if (self.len == self.nodes.len) return error.AccessibilityBudgetExceeded;
+        self.nodes[self.len] = node;
+        self.len += 1;
+    }
+
+    pub fn written(self: AccessibilityTree) []const AccessibilityNode {
+        return self.nodes[0..self.len];
+    }
+};
+
 pub const RenderOptions = struct {
     style: ui.Style = .{},
     control: ControlState = .{},
     interaction: InteractionState = .{},
+    validation: ?Validation = null,
+    scroll: ?ScrollState = null,
+    table_sort: ?TableSort = null,
+    command_palette: ?CommandPalette = null,
+    control_size: ControlSize = .default,
 
     pub fn withControlId(self: RenderOptions, id: ?u32) RenderOptions {
         const value = id orelse return self;

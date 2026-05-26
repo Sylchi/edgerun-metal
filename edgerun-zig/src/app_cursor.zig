@@ -63,7 +63,7 @@ const hand_highlight_h: f32 = 5.0;
 pub fn fromState(action: ui_runtime.ActionKind, hover: ?ui.HitKind) Kind {
     switch (action) {
         .drag_started, .drag_moved => return .grabbing,
-        .none, .hovered, .focused, .activated, .dropped, .reordered => {},
+        .none, .hovered, .focused, .activated, .dropped, .reordered, .dismissed => {},
     }
 
     return switch (hover orelse return .default) {
