@@ -15,7 +15,6 @@ const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
 const contentInset = primitives.contentInset;
-const measureFixed = primitives.measureFixed;
 const renderControlFrame = primitives.renderControlFrame;
 const renderControlText = primitives.renderControlText;
 const Icon = icon_component.Icon;
@@ -50,9 +49,20 @@ pub const Combobox = struct {
     }
 
     pub fn measure(self: Combobox, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
-        _ = self;
         _ = options;
-        return measureFixed(preferred_combobox, constraints);
+        const placeholder = text_component.Text.measureValue(self.placeholder, .{ .width = .unconstrained, .text_wrap = .nowrap }, primitives.textMetrics(self.placeholder, primitives.control_label_height, combobox_text_max_lines));
+        const selected = text_component.Text.measureValue(self.selected, .{ .width = .unconstrained, .text_wrap = .nowrap }, primitives.textMetrics(self.selected, primitives.control_label_height, combobox_text_max_lines));
+        const input_w = placeholder.preferred.w + primitives.control_text_padding * 2.0 + combobox_icon_space;
+        const option_w = selected.preferred.w + combobox_popup_padding * 2.0 + combobox_option_indicator_w;
+        const preferred = primitives.constrainPreferredSize(.{
+            .w = @max(input_w, option_w),
+            .h = combobox_input_h + combobox_popup_gap + combobox_popup_padding * 2.0 + @max(primitives.control_label_height, selected.preferred.h),
+        }, constraints);
+        return layout.Measurement.flexible(
+            .{ .w = primitives.min_extent + primitives.control_text_padding * 2.0 + combobox_icon_space, .h = combobox_input_h },
+            preferred,
+            .{ .w = primitives.measure_max_width, .h = preferred.h },
+        ).applyExact(constraints);
     }
 
     pub fn toObject(self: Combobox, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -95,7 +105,6 @@ fn renderOption(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, selected: 
     }
 }
 
-const preferred_combobox = ui.Size{ .w = 240.0, .h = 82.0 };
 const combobox_input_h: f32 = 36.0;
 const combobox_popup_gap: f32 = 6.0;
 const combobox_popup_radius: f32 = 8.0;
@@ -104,6 +113,7 @@ const combobox_icon_size: f32 = 14.0;
 const combobox_icon_space: f32 = 22.0;
 const combobox_option_padding: f32 = 8.0;
 const combobox_option_indicator_w: f32 = 28.0;
+const combobox_text_max_lines: usize = 1;
 
 test "combobox component serializes to canonical object and deserializes" {
     const combobox = Combobox{ .id = 991, .placeholder = "Search framework", .selected = "React" };
@@ -134,4 +144,11 @@ test "combobox component renders input option and hit regions" {
     try std.testing.expectEqual(@as(usize, 2), collector.written().len);
     try std.testing.expectEqual(ui.HitKind.input, collector.written()[0].kind);
     try std.testing.expectEqual(ui.HitKind.button, collector.written()[1].kind);
+}
+
+test "combobox measurement follows placeholder and selected text" {
+    const short = Combobox{ .id = 991, .placeholder = "Find", .selected = "Zig" };
+    const long = Combobox{ .id = 991, .placeholder = "Search runtime framework", .selected = "Component authority model" };
+
+    try std.testing.expect(long.measure(.{}, .{}).preferred.w > short.measure(.{}, .{}).preferred.w);
 }

@@ -14,7 +14,6 @@ const primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-const measureFixed = primitives.measureFixed;
 const renderControlFrame = primitives.renderControlFrame;
 const renderControlText = primitives.renderControlText;
 const Icon = icon_component.Icon;
@@ -66,9 +65,32 @@ pub const Command = struct {
     }
 
     pub fn measure(self: Command, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
-        _ = self;
-        const preferred = if (options.command_palette == null) preferred_command else preferred_command_palette;
-        return measureFixed(preferred, constraints);
+        const input_text = text_component.Text.measureValue(self.placeholder, .{ .width = .unconstrained, .text_wrap = .nowrap }, primitives.textMetrics(self.placeholder, command_text_h, command_text_max_lines));
+        var preferred_w = command_text_x + input_text.preferred.w + command_padding_x;
+        var preferred_h = command_input_h;
+        if (options.command_palette) |palette| {
+            var item_index: usize = 0;
+            var visible_index: usize = 0;
+            while (item_index < palette.items.len and visible_index < command_max_visible_items) : (item_index += 1) {
+                const item = palette.items[item_index];
+                if (!itemMatches(palette.query, item)) continue;
+                const label = text_component.Text.measureValue(item.label, .{ .width = .unconstrained, .text_wrap = .nowrap }, primitives.textMetrics(item.label, primitives.control_label_height, command_item_max_lines));
+                const shortcut = text_component.Text.measureValue(item.shortcut, .{ .width = .unconstrained, .text_wrap = .nowrap }, primitives.textMetrics(item.shortcut, primitives.control_label_height, command_item_max_lines));
+                preferred_w = @max(preferred_w, label.preferred.w + shortcut.preferred.w + command_item_padding_x * 4.0 + command_shortcut_gap);
+                visible_index += 1;
+            }
+            if (visible_index == 0) {
+                const empty = text_component.Text.measureValue(command_empty_label, .{ .width = .unconstrained, .text_wrap = .nowrap }, primitives.textMetrics(command_empty_label, command_empty_text_h, command_item_max_lines));
+                preferred_w = @max(preferred_w, empty.preferred.w + command_list_padding * 2.0);
+            }
+            preferred_h += command_list_gap + command_list_padding * 2.0 + @as(f32, @floatFromInt(@max(visible_index, 1))) * command_item_h + @as(f32, @floatFromInt(@max(visible_index, 1) - 1)) * command_item_gap;
+        }
+        const preferred = primitives.constrainPreferredSize(.{ .w = preferred_w, .h = preferred_h }, constraints);
+        return layout.Measurement.flexible(
+            .{ .w = command_text_x + primitives.min_extent + command_padding_x, .h = command_input_h },
+            preferred,
+            .{ .w = primitives.measure_max_width, .h = preferred.h },
+        ).applyExact(constraints);
     }
 
     pub fn toObject(self: Command, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -109,14 +131,15 @@ fn listBounds(bounds: ui.Rect) ?ui.Rect {
 fn itemBounds(bounds: ui.Rect, index: usize) ?ui.Rect {
     if (index >= command_max_visible_items) return null;
     const list = listBounds(bounds) orelse return null;
-    const y = list.y + command_list_padding + @as(f32, @floatFromInt(index)) * command_item_pitch;
+    const y = list.y + command_list_padding + @as(f32, @floatFromInt(index)) * (command_item_h + command_item_gap);
     if (y + command_item_h > list.y + list.h - command_list_padding) return null;
     return ui.Rect.init(list.x + command_list_padding, y, @max(primitives.min_extent, list.w - command_list_padding * 2.0), command_item_h);
 }
 
 fn renderItem(scene: *ui.Scene, bounds: ui.Rect, item: common.CommandItem, selected: bool, options: RenderOptions) ui.RenderError!void {
     try scene.pushRect(bounds, if (selected) options.style.row else ui.Color.clear, .fill, command_radius, 0.0);
-    const detail_w: f32 = if (item.shortcut.len == 0) 0.0 else command_item_detail_w;
+    const shortcut = text_component.Text.measureValue(item.shortcut, .{ .width = .unconstrained, .text_wrap = .nowrap }, primitives.textMetrics(item.shortcut, primitives.control_label_height, command_item_max_lines));
+    const detail_w: f32 = if (item.shortcut.len == 0) 0.0 else shortcut.preferred.w + command_item_padding_x * 2.0;
     const label_bounds = ui.Rect.init(bounds.x, bounds.y, @max(primitives.min_extent, bounds.w - detail_w), bounds.h);
     try renderControlText(scene, label_bounds, command_item_padding_x, primitives.control_label_height, item.label, if (selected) options.style.text else options.style.muted, .start);
     if (item.shortcut.len != 0) {
@@ -127,7 +150,7 @@ fn renderItem(scene: *ui.Scene, bounds: ui.Rect, item: common.CommandItem, selec
 fn visibleItemCapacity(bounds: ui.Rect) usize {
     const list = listBounds(bounds) orelse return 0;
     const available_h = @max(0.0, list.h - command_list_padding * 2.0);
-    const raw_count: usize = @intFromFloat(@floor((available_h + command_item_pitch - command_item_h) / command_item_pitch));
+    const raw_count: usize = @intFromFloat(@floor((available_h + command_item_gap) / (command_item_h + command_item_gap)));
     return @min(command_max_visible_items, raw_count);
 }
 
@@ -161,8 +184,6 @@ fn asciiLower(value: u8) u8 {
     };
 }
 
-const preferred_command = ui.Size{ .w = 220.0, .h = 36.0 };
-const preferred_command_palette = ui.Size{ .w = 260.0, .h = 130.0 };
 const command_radius: f32 = 8.0;
 const command_input_h: f32 = 36.0;
 const command_icon_x: f32 = 8.0;
@@ -170,13 +191,15 @@ const command_icon_size: f32 = 14.0;
 const command_text_x: f32 = 28.0;
 const command_padding_x: f32 = 8.0;
 const command_text_h: f32 = 13.0;
+const command_text_max_lines: usize = 1;
 const command_item_id_offset: u32 = 1;
 const command_list_gap: f32 = 6.0;
 const command_list_padding: f32 = 4.0;
 const command_item_h: f32 = 24.0;
-const command_item_pitch: f32 = 28.0;
+const command_item_gap: f32 = 4.0;
 const command_item_padding_x: f32 = 8.0;
-const command_item_detail_w: f32 = 72.0;
+const command_shortcut_gap: f32 = 12.0;
+const command_item_max_lines: usize = 1;
 const command_max_visible_items: usize = 3;
 const command_empty_label = "No commands found";
 const command_empty_text_h: f32 = 14.0;
@@ -239,6 +262,19 @@ test "command component filters palette results and exposes row hits" {
     try std.testing.expectEqual(ui.HitKind.input, collector.written()[0].kind);
     try std.testing.expectEqual(ui.HitKind.row_item, collector.written()[1].kind);
     try std.testing.expectEqual(command.id + command_item_id_offset, collector.written()[1].id);
+}
+
+test "command measurement follows placeholder and palette text" {
+    const short = Command{ .id = 880, .placeholder = "Run" };
+    const long = Command{ .id = 880, .placeholder = "Search runtime authority receipts" };
+    const items = [_]common.CommandItem{
+        .{ .label = "Open", .shortcut = "O" },
+        .{ .label = "Inspect runtime authority", .shortcut = "Ctrl+Shift+A" },
+    };
+    const palette = RenderOptions{ .command_palette = .{ .items = &items } };
+
+    try std.testing.expect(long.measure(.{}, .{}).preferred.w > short.measure(.{}, .{}).preferred.w);
+    try std.testing.expect(short.measure(.{}, palette).preferred.w > short.measure(.{}, .{}).preferred.w);
 }
 
 test "command component renders deterministic empty result state" {
