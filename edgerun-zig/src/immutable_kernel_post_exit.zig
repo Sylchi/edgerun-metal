@@ -9,6 +9,8 @@ const preimage = @import("preimage.zig");
 const registry_app = @import("content/registry_app.zig");
 const resource_contract = @import("content/resource_contract.zig");
 const resource_inventory = @import("content/resource_inventory.zig");
+const ui = @import("ui.zig");
+const virtio_gpu = @import("virtio_gpu.zig");
 const wasm = @import("wasm/root.zig");
 
 const App = app_mod.App;
@@ -28,6 +30,10 @@ const post_exit_private_memory_len: u64 = 256;
 const post_exit_app_execution_ticks: u64 = 8;
 const post_exit_expected_execution_used: u64 = 2;
 const post_exit_expected_value: i64 = 42;
+const virtio_scanout_width: u32 = 640;
+const virtio_scanout_height: u32 = 360;
+const virtio_scanout_resource_id: u32 = 1;
+const virtio_scanout_id: u32 = 0;
 
 pub const Error = error{
     AllocationReceiverFailed,
@@ -59,6 +65,12 @@ pub const Error = error{
     SpawnReceiptInvalid,
     StaticMemoryLost,
     ValidRangeRejected,
+    VirtioGpuDeviceNotFound,
+    VirtioGpuInvalidResponse,
+    VirtioGpuQueueFailed,
+    VirtioGpuTimeout,
+    VirtioGpuUnsupported,
+    VirtioScanoutTooLarge,
     ViewCreateFailed,
     ViewReadRejected,
     WasmAppAllocationFailed,
@@ -104,6 +116,8 @@ pub const State = struct {
     registry_allocator: content_kernel.Allocator,
     registry: registry_app.Registry,
     registry_view: content_kernel.MemoryView,
+    virtio_queue: virtio_gpu.QueueStorage,
+    virtio_scanout: [virtio_scanout_width * virtio_scanout_height * 4]u8,
 };
 
 const return_forty_two_wasm = [_]u8{
@@ -129,6 +143,69 @@ pub fn run(state: *State, inventory: resource_inventory.Inventory, emit: Reporte
     try runResourceContractChecks(state, inventory, emit);
     try runWasmAppChecks(state, emit);
     try runRegistryChecks(state, emit);
+    try runVirtioGpuChecks(state, emit);
+}
+
+fn runVirtioGpuChecks(state: *State, emit: Reporter) Error!void {
+    emit("check: post-exit virtio-gpu init start");
+    var device = virtio_gpu.Device.findAndInit(&state.virtio_queue) catch |err| return fail(emit, mapVirtioGpuError(err), "FAIL post-exit virtio-gpu init");
+    if (device.virglReady()) {
+        if (device.contextInitReady()) {
+            emit("check: post-exit virtio-gpu virgl/context-init ok");
+        } else {
+            emit("check: post-exit virtio-gpu virgl ok");
+        }
+    } else {
+        emit("check: post-exit virtio-gpu 2d-only");
+    }
+
+    fillVirtioScanout(&state.virtio_scanout);
+    const setup = virtio_gpu.Setup2d.init(
+        virtio_scanout_resource_id,
+        virtio_scanout_id,
+        virtio_scanout_width,
+        virtio_scanout_height,
+        @intFromPtr(&state.virtio_scanout),
+        @intCast(state.virtio_scanout.len),
+    );
+    device.setup2d(&state.virtio_queue, setup) catch |err| return fail(emit, mapVirtioGpuError(err), "FAIL post-exit virtio-gpu setup");
+    device.flush2d(&state.virtio_queue, virtio_scanout_resource_id, virtio_scanout_width, virtio_scanout_height) catch |err| return fail(emit, mapVirtioGpuError(err), "FAIL post-exit virtio-gpu flush");
+    emit("check: post-exit virtio-gpu scanout flushed");
+}
+
+fn fillVirtioScanout(out: []u8) void {
+    var y: u32 = 0;
+    while (y < virtio_scanout_height) : (y += 1) {
+        var x: u32 = 0;
+        while (x < virtio_scanout_width) : (x += 1) {
+            const index: usize = (@as(usize, y) * virtio_scanout_width + x) * 4;
+            const accent = ((x / 32) + (y / 32)) % 2 == 0;
+            const color = if (accent)
+                ui.Color{ .r = 34, .g = 211, .b = 238, .a = 255 }
+            else
+                ui.Color{ .r = 18, .g = 26, .b = 38, .a = 255 };
+            out[index + 0] = color.b;
+            out[index + 1] = color.g;
+            out[index + 2] = color.r;
+            out[index + 3] = 0xff;
+        }
+    }
+}
+
+fn mapVirtioGpuError(err: virtio_gpu.Error) Error {
+    return switch (err) {
+        error.DeviceNotFound => error.VirtioGpuDeviceNotFound,
+        error.DeviceTimeout => error.VirtioGpuTimeout,
+        error.InvalidResponse => error.VirtioGpuInvalidResponse,
+        error.FeatureNegotiationFailed,
+        error.InvalidBar,
+        error.MissingCapability,
+        error.MissingTransport,
+        error.QueueSetupFailed,
+        error.QueueTooSmall,
+        error.UnsupportedDevice,
+        => error.VirtioGpuUnsupported,
+    };
 }
 
 fn runKernelChecks(state: *State, emit: Reporter) Error!void {

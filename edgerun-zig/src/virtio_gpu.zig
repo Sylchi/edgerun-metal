@@ -3,6 +3,11 @@ const virtio = @import("virtio.zig");
 
 pub const device_id = virtio.modern_device_id_gpu;
 pub const device_type = virtio.device_type_gpu;
+pub const feature_virgl: u64 = 1 << 0;
+pub const feature_edid: u64 = 1 << 1;
+pub const feature_resource_uuid: u64 = 1 << 2;
+pub const feature_resource_blob: u64 = 1 << 3;
+pub const feature_context_init: u64 = 1 << 4;
 
 pub const control_queue: u16 = 0;
 pub const cursor_queue: u16 = 1;
@@ -181,13 +186,18 @@ pub const QueueStorage = struct {
 
 pub const Device = struct {
     transport: virtio.Transport,
+    features: virtio.NegotiatedFeatures,
     queue_notify_off: u16,
     queue_size: u16,
     last_used_idx: u16 = 0,
 
     pub fn initFromTransport(transport: virtio.Transport, storage: *QueueStorage) Error!Device {
+        return initFromTransportWithFeatures(transport, storage, feature_virgl | feature_context_init);
+    }
+
+    pub fn initFromTransportWithFeatures(transport: virtio.Transport, storage: *QueueStorage, optional_features: u64) Error!Device {
         storage.reset();
-        _ = try transport.negotiateFeatures(virtio.feature_version_1);
+        const features = try transport.negotiateFeatures(virtio.feature_version_1 | optional_features);
         transport.selectQueue(control_queue);
         const queue_notify_off = transport.readQueueNotifyOff();
         const queue_size = try transport.configureSplitQueue(
@@ -201,6 +211,7 @@ pub const Device = struct {
         transport.writeStatus(transport.status() | virtio.status_driver_ok);
         return .{
             .transport = transport,
+            .features = features,
             .queue_notify_off = queue_notify_off,
             .queue_size = queue_size,
         };
@@ -209,6 +220,14 @@ pub const Device = struct {
     pub fn findAndInit(storage: *QueueStorage) Error!Device {
         const pci_device = findPciDevice() orelse return error.DeviceNotFound;
         return initFromTransport(try pci_device.map(), storage);
+    }
+
+    pub fn virglReady(self: Device) bool {
+        return self.features.driver & feature_virgl != 0;
+    }
+
+    pub fn contextInitReady(self: Device) bool {
+        return self.features.driver & feature_context_init != 0;
     }
 
     pub fn sendNoData(self: *Device, storage: *QueueStorage, command: anytype) Error!void {

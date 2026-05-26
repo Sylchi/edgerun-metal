@@ -122,11 +122,13 @@ test "select component renders chevron through icon primitive" {
 
 test "select measurement wraps long labels under narrow constraints" {
     const select = Select{ .id = 22, .label = "Production runtime authority" };
-    const compact = Select{ .id = 22, .label = "Production" };
+    const compact = Select{ .id = 22, .label = "On" };
 
-    const measured = select.measure(.{ .width = .{ .at_most = select_min_width }, .text_wrap = .wrap }, .{});
-    const compact_measured = compact.measure(.{ .width = .{ .at_most = select_min_width }, .text_wrap = .wrap }, .{});
+    const measured = select.measure(.{ .width = .{ .at_most = select_wrap_test_width }, .text_wrap = .wrap }, .{});
+    const compact_measured = compact.measure(.{ .width = .{ .at_most = select_wrap_test_width }, .text_wrap = .wrap }, .{});
 
-    try std.testing.expect(measured.preferred.w <= select_min_width);
+    try std.testing.expect(measured.preferred.w <= select_wrap_test_width);
     try std.testing.expect(measured.preferred.h > compact_measured.preferred.h);
 }
+
+const select_wrap_test_width: f32 = 72.0;

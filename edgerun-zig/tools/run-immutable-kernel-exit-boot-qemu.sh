@@ -8,6 +8,7 @@ efi_app="$efi_dir/BOOTX64.EFI"
 debug_log="$build_dir/qemu-debug.log"
 qemu_display="${EDGERUN_QEMU_DISPLAY:-gtk}"
 qemu_timeout="${EDGERUN_QEMU_TIMEOUT:-15}"
+qemu_virgl="${EDGERUN_QEMU_VIRGL:-0}"
 ovmf_code="/usr/share/edk2/x64/OVMF_CODE.4m.fd"
 ovmf_vars_src="/usr/share/edk2/x64/OVMF_VARS.4m.fd"
 ovmf_vars="$build_dir/OVMF_VARS.4m.fd"
@@ -15,7 +16,7 @@ ovmf_vars="$build_dir/OVMF_VARS.4m.fd"
 mkdir -p "$efi_dir"
 zig build-exe src/immutable_kernel_exit_boot_uefi.zig \
   -target x86_64-uefi \
-  -O ReleaseSmall \
+  -O ReleaseFast \
   -femit-bin="$efi_app"
 
 rm -f "$esp_img" "$debug_log"
@@ -26,15 +27,28 @@ mcopy -i "$esp_img" "$efi_app" ::/EFI/BOOT/BOOTX64.EFI
 
 cp "$ovmf_vars_src" "$ovmf_vars"
 
+gpu_device="virtio-gpu-pci"
+display_arg="$qemu_display"
+if [ "$qemu_virgl" = "1" ]; then
+  gpu_device="virtio-gpu-gl-pci"
+  case "$qemu_display" in
+    gtk*) display_arg="$qemu_display,gl=on" ;;
+    egl-headless*) display_arg="$qemu_display" ;;
+    none) display_arg="egl-headless" ;;
+    *) display_arg="$qemu_display,gl=on" ;;
+  esac
+fi
+
 set +e
 timeout "$qemu_timeout" qemu-system-x86_64 \
   -machine q35 \
+  -m 2048 \
   -nodefaults \
-  -display "$qemu_display" \
+  -display "$display_arg" \
   -serial none \
   -monitor none \
   -no-reboot \
-  -device VGA \
+  -device "$gpu_device" \
   -drive if=pflash,format=raw,readonly=on,file="$ovmf_code" \
   -drive if=pflash,format=raw,file="$ovmf_vars" \
   -drive format=raw,file="$esp_img" \
