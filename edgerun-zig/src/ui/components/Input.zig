@@ -60,7 +60,7 @@ pub const Input = struct {
         return layout.Measurement.flexible(
             .{ .w = @min(input_min_width, preferred.w), .h = @min(height, preferred.h) },
             preferred,
-            .{ .w = primitives.measure_max_width, .h = @max(preferred.h, height) },
+            .{ .w = primitives.maxMeasuredWidth(constraints, preferred.w), .h = @max(preferred.h, height) },
         ).applyExact(constraints);
     }
 

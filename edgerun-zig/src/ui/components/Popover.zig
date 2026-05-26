@@ -46,7 +46,7 @@ pub const Popover = struct {
         return layout.Measurement.flexible(
             .{ .w = primitives.min_extent * 2.0 + popover_layout.gap, .h = primitives.control_label_height + popover_padding * 2.0 },
             preferred,
-            .{ .w = primitives.measure_max_width, .h = preferred.h },
+            .{ .w = primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
         ).applyExact(constraints);
     }
 

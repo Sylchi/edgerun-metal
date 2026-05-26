@@ -41,9 +41,9 @@ pub const Tooltip = struct {
 
     pub fn measure(self: Tooltip, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = options;
-        const trigger = layout.measureText(self.trigger, constraints, component_primitives.textMetrics(self.trigger, component_primitives.control_label_height, tooltip_trigger_max_lines));
+        const trigger = text_component.Text.measureValue(self.trigger, constraints, component_primitives.textMetrics(self.trigger, component_primitives.control_label_height, tooltip_trigger_max_lines));
         const content_constraints = constraints.inner(.{ .left = tooltip_trigger_w + tooltip_gap + tooltip_padding, .right = tooltip_padding });
-        const content = layout.measureText(self.content, content_constraints, component_primitives.textMetrics(self.content, tooltip_text_h, tooltip_text_max_lines));
+        const content = text_component.Text.measureValue(self.content, content_constraints, component_primitives.textMetrics(self.content, tooltip_text_h, tooltip_text_max_lines));
         const preferred = constrainPreferredSize(.{
             .w = @max(tooltip_min_width, @max(trigger.preferred.w + component_primitives.control_text_padding * 2.0, tooltip_trigger_w) + tooltip_gap + content.preferred.w + tooltip_padding * 2.0),
             .h = @max(tooltip_min_height, @max(trigger.preferred.h, content.preferred.h + tooltip_padding * 2.0)),
@@ -51,7 +51,7 @@ pub const Tooltip = struct {
         return layout.Measurement.flexible(
             .{ .w = @min(tooltip_min_width, preferred.w), .h = @min(tooltip_min_height, preferred.h) },
             preferred,
-            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
+            .{ .w = component_primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
         ).applyExact(constraints);
     }
 

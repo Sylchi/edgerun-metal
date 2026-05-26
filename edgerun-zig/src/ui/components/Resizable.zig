@@ -41,7 +41,7 @@ pub const Resizable = struct {
         return layout.Measurement.flexible(
             .{ .w = @min(resizable_min_width, preferred.w), .h = @min(resizable_min_height, preferred.h) },
             preferred,
-            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
+            .{ .w = component_primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
         ).applyExact(constraints);
     }
 

@@ -48,7 +48,7 @@ pub const Carousel = struct {
         return layout.Measurement.flexible(
             .{ .w = carousel_button_size * 2.0 + carousel_gap * 2.0 + component_primitives.min_extent, .h = carousel_button_size },
             preferred,
-            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
+            .{ .w = component_primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
         ).applyExact(constraints);
     }
 

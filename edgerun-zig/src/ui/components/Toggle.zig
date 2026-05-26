@@ -42,7 +42,7 @@ pub const Toggle = struct {
         return layout.Measurement.flexible(
             .{ .w = component_primitives.min_extent + toggle_text_padding * 2.0, .h = component_primitives.control_label_height + toggle_text_padding * 2.0 },
             preferred,
-            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
+            .{ .w = component_primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
         ).applyExact(constraints);
     }
 

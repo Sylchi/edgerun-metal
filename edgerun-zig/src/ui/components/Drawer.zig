@@ -45,7 +45,7 @@ pub const Drawer = struct {
         return layout.Measurement.flexible(
             .{ .w = primitives.min_extent + drawer_content_inset_x * 2.0, .h = drawer_content_y + panel.min.h },
             preferred,
-            .{ .w = primitives.measure_max_width, .h = @max(preferred.h, drawer_content_y + panel.max.h) },
+            .{ .w = primitives.maxMeasuredWidth(constraints, preferred.w), .h = @max(preferred.h, drawer_content_y + panel.max.h) },
         ).applyExact(constraints);
     }
 

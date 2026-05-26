@@ -50,7 +50,7 @@ pub const Checkbox = struct {
     pub fn measure(self: Checkbox, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = options;
         const label_constraints = constraints.inner(.{ .left = checkbox_box_size + checkbox_text_gap });
-        const label = layout.measureText(self.label, label_constraints, component_primitives.textMetrics(self.label, checkbox_label_height, checkbox_label_max_lines));
+        const label = text_component.Text.measureValue(self.label, label_constraints, component_primitives.textMetrics(self.label, checkbox_label_height, checkbox_label_max_lines));
         const preferred = constrainPreferredSize(.{
             .w = @max(checkbox_min_width, checkbox_box_size + checkbox_text_gap + label.preferred.w),
             .h = @max(checkbox_box_size, label.preferred.h),
@@ -58,7 +58,7 @@ pub const Checkbox = struct {
         return layout.Measurement.flexible(
             .{ .w = @min(checkbox_min_width, preferred.w), .h = @min(checkbox_box_size, preferred.h) },
             preferred,
-            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
+            .{ .w = component_primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
         ).applyExact(constraints);
     }
 

@@ -61,7 +61,7 @@ pub const Combobox = struct {
         return layout.Measurement.flexible(
             .{ .w = primitives.min_extent + primitives.control_text_padding * 2.0 + combobox_icon_space, .h = combobox_input_h },
             preferred,
-            .{ .w = primitives.measure_max_width, .h = preferred.h },
+            .{ .w = primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
         ).applyExact(constraints);
     }
 

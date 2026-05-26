@@ -46,7 +46,7 @@ pub const Slider = struct {
 
     pub fn measure(self: Slider, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = options;
-        const label = layout.measureText(self.label, constraints, component_primitives.textMetrics(self.label, slider_label_height, slider_label_max_lines));
+        const label = text_component.Text.measureValue(self.label, constraints, component_primitives.textMetrics(self.label, slider_label_height, slider_label_max_lines));
         const preferred = constrainPreferredSize(.{
             .w = @max(slider_min_width, label.preferred.w),
             .h = label.preferred.h + slider_label_track_gap + @max(slider_track_height, slider_thumb_size),
@@ -54,7 +54,7 @@ pub const Slider = struct {
         return layout.Measurement.flexible(
             .{ .w = @min(slider_min_width, preferred.w), .h = @min(slider_min_height, preferred.h) },
             preferred,
-            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
+            .{ .w = component_primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
         ).applyExact(constraints);
     }
 

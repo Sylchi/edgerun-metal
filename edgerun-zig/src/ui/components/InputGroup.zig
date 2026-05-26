@@ -49,10 +49,10 @@ pub const InputGroup = struct {
 
     pub fn measure(self: InputGroup, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = options;
-        const addon = layout.measureText(self.addon, constraints, component_primitives.textMetrics(self.addon, component_primitives.control_label_height, input_group_text_max_lines));
+        const addon = text_component.Text.measureValue(self.addon, constraints, component_primitives.textMetrics(self.addon, component_primitives.control_label_height, input_group_text_max_lines));
         const addon_w = @min(input_group_addon_max_w, @max(input_group_addon_min_w, addon.preferred.w + input_group_addon_padding * 2.0));
         const placeholder_constraints = constraints.inner(.{ .left = addon_w + input_group_control_gap + component_primitives.control_text_padding, .right = component_primitives.control_text_padding });
-        const placeholder = layout.measureText(self.placeholder, placeholder_constraints, component_primitives.textMetrics(self.placeholder, component_primitives.control_label_height, input_group_text_max_lines));
+        const placeholder = text_component.Text.measureValue(self.placeholder, placeholder_constraints, component_primitives.textMetrics(self.placeholder, component_primitives.control_label_height, input_group_text_max_lines));
         const preferred_h = @max(input_group_min_height, @max(addon.preferred.h, placeholder.preferred.h) + component_primitives.control_text_padding * 2.0);
         const preferred = constrainPreferredSize(.{
             .w = @max(input_group_min_width, addon_w + input_group_control_gap + component_primitives.control_text_padding * 2.0 + placeholder.preferred.w),
@@ -61,7 +61,7 @@ pub const InputGroup = struct {
         return layout.Measurement.flexible(
             .{ .w = @min(input_group_min_width, preferred.w), .h = @min(input_group_min_height, preferred.h) },
             preferred,
-            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
+            .{ .w = component_primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
         ).applyExact(constraints);
     }
 

@@ -55,7 +55,7 @@ pub const Menubar = struct {
         return layout.Measurement.flexible(
             .{ .w = component_primitives.min_extent * 3.0 + menubar_padding * 2.0, .h = menubar_item_h + menubar_padding * 2.0 },
             preferred,
-            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
+            .{ .w = component_primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
         ).applyExact(constraints);
     }
 

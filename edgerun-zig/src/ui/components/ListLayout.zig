@@ -54,7 +54,7 @@ pub fn measureSegments(labels: []const []const u8, constraints: layout.Constrain
     return layout.Measurement.flexible(
         .{ .w = @min(min_total_w, preferred.w), .h = @min(spec.line_height + spec.padding * 2.0, preferred.h) },
         preferred,
-        .{ .w = primitives.measure_max_width, .h = preferred.h },
+        .{ .w = primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
     ).applyExact(constraints);
 }
 

@@ -14,7 +14,6 @@ const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
 const constrainPreferredSize = component_primitives.constrainPreferredSize;
-const measure_max_width = component_primitives.measure_max_width;
 
 pub const Card = struct {
     title: []const u8,
@@ -59,7 +58,7 @@ pub const Card = struct {
         const title_measure = if (self.title.len == 0)
             layout.Measurement.fixed(.{ .w = 0.0, .h = 0.0 })
         else
-            layout.measureText(self.title, inner, .{
+            text_component.Text.measureValue(self.title, inner, .{
                 .line_height = surface_title_height,
                 .average_char_width = surface_title_average_w,
                 .max_lines = surface_title_max_lines,
@@ -67,7 +66,7 @@ pub const Card = struct {
         const detail_measure = if (self.detail.len == 0)
             layout.Measurement.fixed(.{ .w = 0.0, .h = 0.0 })
         else
-            layout.measureText(self.detail, inner, .{
+            text_component.Text.measureValue(self.detail, inner, .{
                 .line_height = surface_detail_height,
                 .average_char_width = surface_detail_average_w,
                 .max_lines = surface_detail_max_lines,
@@ -82,7 +81,7 @@ pub const Card = struct {
         return layout.Measurement.flexible(
             .{ .w = @min(surface_min_width, preferred.w), .h = @min(surface_padding * 2.0, preferred.h) },
             preferred,
-            .{ .w = measure_max_width, .h = measure_max_height },
+            component_primitives.maxMeasuredSize(constraints, preferred),
         ).applyExact(constraints);
     }
 
@@ -167,7 +166,6 @@ const surface_title_max_lines: usize = 2;
 const surface_detail_average_w: f32 = 8.0;
 const surface_detail_max_lines: usize = 3;
 const surface_min_width: f32 = 160.0;
-const measure_max_height: f32 = 4096.0;
 
 pub fn variantTag(variant: common.SurfaceVariant) u16 {
     return switch (variant) {

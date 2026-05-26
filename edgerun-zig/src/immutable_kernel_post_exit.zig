@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const app_mod = @import("app.zig");
 const clock = @import("clock.zig");
 const content_kernel = @import("content/kernel.zig");
@@ -141,9 +142,13 @@ pub fn run(state: *State, inventory: resource_inventory.Inventory, emit: Reporte
 
     try runKernelChecks(state, emit);
     try runResourceContractChecks(state, inventory, emit);
+    if (builtin.is_test) {
+        emit("check: post-exit virtio-gpu skipped in host test");
+    } else {
+        try runVirtioGpuChecks(state, emit);
+    }
     try runWasmAppChecks(state, emit);
     try runRegistryChecks(state, emit);
-    try runVirtioGpuChecks(state, emit);
 }
 
 fn runVirtioGpuChecks(state: *State, emit: Reporter) Error!void {
@@ -171,6 +176,7 @@ fn runVirtioGpuChecks(state: *State, emit: Reporter) Error!void {
     device.setup2d(&state.virtio_queue, setup) catch |err| return fail(emit, mapVirtioGpuError(err), "FAIL post-exit virtio-gpu setup");
     device.flush2d(&state.virtio_queue, virtio_scanout_resource_id, virtio_scanout_width, virtio_scanout_height) catch |err| return fail(emit, mapVirtioGpuError(err), "FAIL post-exit virtio-gpu flush");
     emit("check: post-exit virtio-gpu scanout flushed");
+    emit("PASS immutable-kernel-exit-boot-virtio-qemu");
 }
 
 fn fillVirtioScanout(out: []u8) void {

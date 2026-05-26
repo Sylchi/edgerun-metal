@@ -51,7 +51,7 @@ pub const Select = struct {
     pub fn measure(self: Select, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = options;
         const inner = constraints.inner(.{ .left = component_primitives.control_text_padding, .right = component_primitives.control_text_padding + select_arrow_w });
-        const label = layout.measureText(self.label, inner, component_primitives.textMetrics(self.label, component_primitives.control_label_height, select_label_max_lines));
+        const label = text_component.Text.measureValue(self.label, inner, component_primitives.textMetrics(self.label, component_primitives.control_label_height, select_label_max_lines));
         const preferred_h = @max(select_min_height, label.preferred.h + component_primitives.control_text_padding * 2.0);
         const preferred = constrainPreferredSize(.{
             .w = @max(select_min_width, label.preferred.w + component_primitives.control_text_padding * 2.0 + select_arrow_w),
@@ -60,7 +60,7 @@ pub const Select = struct {
         return layout.Measurement.flexible(
             .{ .w = @min(select_min_width, preferred.w), .h = @min(select_min_height, preferred.h) },
             preferred,
-            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
+            .{ .w = component_primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
         ).applyExact(constraints);
     }
 

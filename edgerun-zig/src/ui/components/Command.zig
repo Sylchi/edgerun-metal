@@ -89,7 +89,7 @@ pub const Command = struct {
         return layout.Measurement.flexible(
             .{ .w = command_text_x + primitives.min_extent + command_padding_x, .h = command_input_h },
             preferred,
-            .{ .w = primitives.measure_max_width, .h = preferred.h },
+            .{ .w = primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
         ).applyExact(constraints);
     }
 

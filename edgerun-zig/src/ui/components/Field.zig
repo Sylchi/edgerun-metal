@@ -47,10 +47,10 @@ pub const Field = struct {
     }
 
     pub fn measure(self: Field, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
-        const label = layout.measureText(self.label, constraints, primitives.textMetrics(self.label, field_label_h, field_label_max_lines));
+        const label = text_component.Text.measureValue(self.label, constraints, primitives.textMetrics(self.label, field_label_h, field_label_max_lines));
         const input = measureInput(self.placeholder, constraints);
         const validation = if (options.validation) |validation|
-            layout.measureText(validation.message, constraints, primitives.textMetrics(validation.message, field_validation_line_h, field_validation_max_lines))
+            text_component.Text.measureValue(validation.message, constraints, primitives.textMetrics(validation.message, field_validation_line_h, field_validation_max_lines))
         else
             layout.Measurement.fixed(.{ .w = 0.0, .h = 0.0 });
         const validation_gap: f32 = if (options.validation == null) 0.0 else field_validation_gap;
@@ -61,7 +61,7 @@ pub const Field = struct {
         return layout.Measurement.flexible(
             .{ .w = @min(field_min_width, preferred.w), .h = @min(field_min_height, preferred.h) },
             preferred,
-            .{ .w = primitives.measure_max_width, .h = preferred.h },
+            .{ .w = primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
         ).applyExact(constraints);
     }
 
@@ -94,7 +94,7 @@ fn renderInput(scene: *ui.Scene, bounds: ui.Rect, placeholder: []const u8, optio
 
 fn measureInput(placeholder: []const u8, constraints: layout.Constraints) layout.Measurement {
     const inner = constraints.inner(.{ .left = primitives.control_text_padding, .right = primitives.control_text_padding });
-    const text = layout.measureText(placeholder, inner, primitives.textMetrics(placeholder, primitives.control_label_height, field_placeholder_max_lines));
+    const text = text_component.Text.measureValue(placeholder, inner, primitives.textMetrics(placeholder, primitives.control_label_height, field_placeholder_max_lines));
     const preferred = constrainPreferredSize(.{
         .w = text.preferred.w + primitives.control_text_padding * 2.0,
         .h = @max(field_input_h, text.preferred.h),
@@ -102,7 +102,7 @@ fn measureInput(placeholder: []const u8, constraints: layout.Constraints) layout
     return layout.Measurement.flexible(
         .{ .w = @min(field_min_width, preferred.w), .h = @min(field_input_h, preferred.h) },
         preferred,
-        .{ .w = primitives.measure_max_width, .h = @max(preferred.h, field_input_h) },
+        .{ .w = primitives.maxMeasuredWidth(constraints, preferred.w), .h = @max(preferred.h, field_input_h) },
     ).applyExact(constraints);
 }
 

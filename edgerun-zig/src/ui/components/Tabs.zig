@@ -73,7 +73,7 @@ pub const Tabs = struct {
                 .h = list.min.h + tabs_gap + panel.min.h,
             },
             preferred,
-            .{ .w = primitives.measure_max_width, .h = @max(preferred.h, list.max.h + tabs_gap + panel.max.h) },
+            .{ .w = primitives.maxMeasuredWidth(constraints, preferred.w), .h = @max(preferred.h, list.max.h + tabs_gap + panel.max.h) },
         ).applyExact(constraints);
     }
 

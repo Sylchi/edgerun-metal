@@ -49,7 +49,7 @@ pub const Sheet = struct {
         return layout.Measurement.flexible(
             .{ .w = primitives.min_extent + sheet_content_min_left, .h = panel.min.h },
             preferred,
-            .{ .w = primitives.measure_max_width, .h = @max(preferred.h, panel.max.h) },
+            .{ .w = primitives.maxMeasuredWidth(constraints, preferred.w), .h = @max(preferred.h, panel.max.h) },
         ).applyExact(constraints);
     }
 

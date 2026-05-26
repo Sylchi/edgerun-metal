@@ -47,7 +47,7 @@ pub const RadioGroup = struct {
         return layout.Measurement.flexible(
             .{ .w = radio_box_size + radio_text_gap + component_primitives.min_extent, .h = option_h },
             preferred,
-            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
+            .{ .w = component_primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
         ).applyExact(constraints);
     }
 

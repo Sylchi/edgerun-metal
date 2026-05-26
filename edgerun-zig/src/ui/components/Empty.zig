@@ -42,8 +42,8 @@ pub const Empty = struct {
     pub fn measure(self: Empty, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = options;
         const inner = constraints.inner(.{ .left = empty_padding, .right = empty_padding });
-        const title = layout.measureText(self.title, inner, component_primitives.textMetrics(self.title, empty_title_height, empty_title_max_lines));
-        const detail = layout.measureText(self.detail, inner, component_primitives.textMetrics(self.detail, empty_detail_height, empty_detail_max_lines));
+        const title = text_component.Text.measureValue(self.title, inner, component_primitives.textMetrics(self.title, empty_title_height, empty_title_max_lines));
+        const detail = text_component.Text.measureValue(self.detail, inner, component_primitives.textMetrics(self.detail, empty_detail_height, empty_detail_max_lines));
         const preferred = constrainPreferredSize(.{
             .w = @max(empty_min_width, @max(empty_media_size, @max(title.preferred.w, detail.preferred.w)) + empty_padding * 2.0),
             .h = empty_padding * 2.0 + empty_media_size + empty_gap + title.preferred.h + empty_detail_gap + detail.preferred.h,
@@ -51,7 +51,7 @@ pub const Empty = struct {
         return layout.Measurement.flexible(
             .{ .w = @min(empty_min_width, preferred.w), .h = @min(empty_min_height, preferred.h) },
             preferred,
-            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
+            .{ .w = component_primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
         ).applyExact(constraints);
     }
 

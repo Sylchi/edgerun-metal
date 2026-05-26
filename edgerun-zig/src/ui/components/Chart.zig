@@ -45,7 +45,7 @@ pub const Chart = struct {
     pub fn measure(self: Chart, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = options;
         const inner = constraints.inner(.{ .left = chart_padding, .right = chart_padding });
-        const label = layout.measureText(self.label, inner, component_primitives.textMetrics(self.label, chart_label_h, chart_label_max_lines));
+        const label = text_component.Text.measureValue(self.label, inner, component_primitives.textMetrics(self.label, chart_label_h, chart_label_max_lines));
         const preferred = constrainPreferredSize(.{
             .w = @max(chart_min_width, label.preferred.w + chart_padding * 2.0),
             .h = chart_padding * 2.0 + label.preferred.h + chart_label_gap + chart_plot_min_h,
@@ -53,7 +53,7 @@ pub const Chart = struct {
         return layout.Measurement.flexible(
             .{ .w = @min(chart_min_width, preferred.w), .h = @min(chart_min_height, preferred.h) },
             preferred,
-            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
+            .{ .w = component_primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
         ).applyExact(constraints);
     }
 

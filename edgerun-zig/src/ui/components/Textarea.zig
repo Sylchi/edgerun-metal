@@ -62,7 +62,7 @@ pub const Textarea = struct {
                 .h = @min(component_primitives.control_label_height + textarea_padding * 2.0, preferred.h),
             },
             preferred,
-            .{ .w = component_primitives.measure_max_width, .h = @max(preferred.h, text.max.h) },
+            .{ .w = component_primitives.maxMeasuredWidth(constraints, preferred.w), .h = @max(preferred.h, text.max.h) },
         ).applyExact(constraints);
     }
 
