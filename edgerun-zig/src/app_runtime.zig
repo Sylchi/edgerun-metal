@@ -1794,7 +1794,7 @@ export fn er_ui_render_input_object(input_len: usize, width: u32, height: u32) u
     const surface = beginFrame(width, height) orelse return finishError(.bad_size);
 
     const root = ui_codec.decodeObject(input_bytes[0..input_len], &nodes) catch return finishError(.bad_ui);
-    const scene = ui.Scene.init(&commands);
+    var scene = ui.Scene.init(&commands);
     ui_components.renderNode(&scene, .{
         .x = 0,
         .y = 0,
@@ -2338,7 +2338,7 @@ test "app runtime draws deterministic focus ring from runtime focus state" {
     try collector.addHit(ui.Rect.init(8, 12, 80, 32), .button, 77);
     var local_pixels: [4096]ui.Color = undefined;
     const surface = try renderer_pipeline.softwareFramebuffer(64, 64, &local_pixels);
-    var scene = ui.Scene.init(&commands);
+    const scene = ui.Scene.init(&commands);
 
     try std.testing.expectEqual(@as(u32, 0), finishCpuSceneFrame(surface, scene, collector.written(), .{ .enabled = false }, .bg));
     try std.testing.expect(hasFocusRingCommand(commands[0..last_command_count]));
