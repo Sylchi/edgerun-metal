@@ -21,8 +21,6 @@ pub const isPrimitive = primitives.isPrimitive;
 pub const Ast = @import("zig/Ast.zig");
 pub const AstGen = @import("zig/AstGen.zig");
 pub const Zir = @import("zig/Zir.zig");
-pub const Zoir = @import("zig/Zoir.zig");
-pub const ZonGen = @import("zig/ZonGen.zig");
 pub const BuiltinFn = @import("zig/BuiltinFn.zig");
 pub const AstRlAnnotate = @import("zig/AstRlAnnotate.zig");
 
@@ -639,20 +637,11 @@ pub fn putAstErrorsIntoBundle(
     path: []const u8,
     wip_errors: *std.zig.ErrorBundle.Wip,
 ) Allocator.Error!void {
-    switch (tree.mode) {
-        .zig => {
-            var zir = try AstGen.generate(gpa, tree);
-            defer zir.deinit(gpa);
+    assert(tree.mode == .zig);
+    var zir = try AstGen.generate(gpa, tree);
+    defer zir.deinit(gpa);
 
-            try wip_errors.addZirErrorMessages(zir, tree, tree.source, path);
-        },
-        .zon => {
-            var zoir = try ZonGen.generate(gpa, tree, .{});
-            defer zoir.deinit(gpa);
-
-            try wip_errors.addZoirErrorMessages(zoir, tree, tree.source, path);
-        },
-    }
+    try wip_errors.addZirErrorMessages(zir, tree, tree.source, path);
 }
 
 pub fn parseTargetQueryOrReportFatalError(
