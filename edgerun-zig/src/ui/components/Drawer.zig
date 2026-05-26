@@ -3,14 +3,17 @@ const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
-const tokens = @import("../../ui_tokens.zig");
 const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
+const primitives = @import("Primitives.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+const measureFixed = primitives.measureFixed;
+const renderControlFrame = primitives.renderControlFrame;
+const renderControlText = primitives.renderControlText;
 
 pub const Drawer = struct {
     id: u32,
@@ -23,20 +26,19 @@ pub const Drawer = struct {
 
     pub fn render(self: Drawer, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         const trigger = triggerBounds(bounds);
-        try renderControlFrame(scene, trigger, options.style.accent, options.style.border, control_radius);
-        try renderControlText(scene, trigger, drawer_trigger_padding, control_label_height, overlay_open_label, options.style.bg, .center);
+        try renderControlFrame(scene, trigger, options.style.accent, options.style.border, primitives.control_radius);
+        try renderControlText(scene, trigger, drawer_trigger_padding, primitives.control_label_height, overlay_open_label, options.style.bg, .center);
 
         const content = contentBounds(bounds);
         try scene.pushRect(content, options.style.panel, .fill, drawer_radius, 0.0);
         try scene.pushRect(content, options.style.border, .border, drawer_radius, 0.0);
         try scene.pushRect(handleBounds(content), options.style.muted, .fill, drawer_handle_radius, 0.0);
-        try scene.pushText(ui.Rect.init(content.x + drawer_padding, content.y + drawer_title_y, @max(min_extent, content.w - drawer_padding * 2.0), overlay_title_h), self.title, options.style.text);
-        try scene.pushText(ui.Rect.init(content.x + drawer_padding, content.y + drawer_detail_y, @max(min_extent, content.w - drawer_padding * 2.0), overlay_detail_h), self.detail, options.style.muted);
+        try scene.pushText(ui.Rect.init(content.x + drawer_padding, content.y + drawer_title_y, @max(primitives.min_extent, content.w - drawer_padding * 2.0), overlay_title_h), self.title, options.style.text);
+        try scene.pushText(ui.Rect.init(content.x + drawer_padding, content.y + drawer_detail_y, @max(primitives.min_extent, content.w - drawer_padding * 2.0), overlay_detail_h), self.detail, options.style.muted);
     }
 
     pub fn collectInteractions(self: Drawer, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-        try collector.addHit(triggerBounds(bounds), .button, self.id);
-        try collector.addHit(contentBounds(bounds), .button, self.id + 1);
+        try primitives.collectSidePanelHits(collector, triggerBounds(bounds), contentBounds(bounds), self.id);
     }
 
     pub fn measure(self: Drawer, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
@@ -67,44 +69,13 @@ fn triggerBounds(bounds: ui.Rect) ui.Rect {
 
 fn contentBounds(bounds: ui.Rect) ui.Rect {
     const y = bounds.y + drawer_content_y;
-    return ui.Rect.init(bounds.x + drawer_content_inset_x, y, @max(min_extent, bounds.w - drawer_content_inset_x * 2.0), @max(min_extent, bounds.y + bounds.h - y));
+    return ui.Rect.init(bounds.x + drawer_content_inset_x, y, @max(primitives.min_extent, bounds.w - drawer_content_inset_x * 2.0), @max(primitives.min_extent, bounds.y + bounds.h - y));
 }
 
 fn handleBounds(content: ui.Rect) ui.Rect {
     return ui.Rect.init(content.x + (content.w - drawer_handle_w) * 0.5, content.y + drawer_handle_y, drawer_handle_w, drawer_handle_h);
 }
 
-fn renderControlFrame(scene: *ui.Scene, bounds: ui.Rect, fill: ui.Color, border: ui.Color, radius: f32) ui.RenderError!void {
-    try scene.pushRect(bounds, fill, .fill, radius, 0.0);
-    try scene.pushRect(bounds, border, .border, radius, 0.0);
-}
-
-fn renderControlText(scene: *ui.Scene, bounds: ui.Rect, padding: f32, height: f32, value: []const u8, color: ui.Color, alignment: ui.TextAlign) ui.RenderError!void {
-    const clamped = @min(@max(padding, 0.0), @min(bounds.w, bounds.h) * 0.5);
-    const text_bounds = bounds.insetUniform(clamped);
-    if (text_bounds.valid()) try scene.pushAlignedText(text_bounds.withHeightCentered(height), value, color, alignment);
-}
-
-fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
-    const resolved_preferred = constrainPreferredSize(preferred, constraints);
-    return layout.Measurement.flexible(
-        .{ .w = @min(preferred.w, resolved_preferred.w), .h = @min(preferred.h, resolved_preferred.h) },
-        resolved_preferred,
-        .{ .w = measure_max_width, .h = preferred.h },
-    ).applyExact(constraints);
-}
-
-fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {
-    return .{
-        .w = constraints.width.limit(preferred.w),
-        .h = constraints.height.limit(preferred.h),
-    };
-}
-
-const min_extent: f32 = 1.0;
-const measure_max_width: f32 = 4096.0;
-const control_radius: f32 = tokens.Component.control_radius;
-const control_label_height: f32 = tokens.Component.control_label_height;
 const overlay_open_label = "Open";
 const overlay_title_h: f32 = 14.0;
 const overlay_detail_h: f32 = 12.0;

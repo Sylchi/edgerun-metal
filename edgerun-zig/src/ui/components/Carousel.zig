@@ -7,10 +7,12 @@ const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
-const tokens = @import("../../ui_tokens.zig");
+const component_primitives = @import("Primitives.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+const contentInset = component_primitives.contentInset;
+const measureFixed = component_primitives.measureFixed;
 
 pub const Carousel = struct {
     id: u32,
@@ -25,7 +27,7 @@ pub const Carousel = struct {
         const content = contentBounds(bounds);
         try scene.pushRect(content, options.style.row, .fill, carousel_radius, 0.0);
         if (contentInset(content, carousel_text_padding)) |inner| {
-            try scene.pushAlignedText(inner.withHeightCentered(control_label_height), self.label, options.style.muted, .center);
+            try scene.pushAlignedText(inner.withHeightCentered(component_primitives.control_label_height), self.label, options.style.muted, .center);
         }
         try renderButton(scene, buttonBounds(bounds, 1), ">", options);
     }
@@ -61,7 +63,7 @@ fn renderButton(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, options: R
     try scene.pushRect(bounds, ui.Color.clear, .fill, carousel_button_size * 0.5, 0.0);
     try scene.pushRect(bounds, options.style.border, .border, carousel_button_size * 0.5, 0.0);
     if (contentInset(bounds, carousel_button_text_padding)) |inner| {
-        try scene.pushAlignedText(inner.withHeightCentered(control_label_height), label, options.style.text, .center);
+        try scene.pushAlignedText(inner.withHeightCentered(component_primitives.control_label_height), label, options.style.text, .center);
     }
 }
 
@@ -75,34 +77,9 @@ fn buttonBounds(bounds: ui.Rect, index: usize) ui.Rect {
 
 fn contentBounds(bounds: ui.Rect) ui.Rect {
     const x = bounds.x + carousel_button_size + carousel_gap;
-    return ui.Rect.init(x, bounds.y, @max(min_extent, bounds.w - carousel_button_size * 2.0 - carousel_gap * 2.0), bounds.h);
+    return ui.Rect.init(x, bounds.y, @max(component_primitives.min_extent, bounds.w - carousel_button_size * 2.0 - carousel_gap * 2.0), bounds.h);
 }
 
-fn contentInset(bounds: ui.Rect, padding: f32) ?ui.Rect {
-    const clamped = @min(@max(padding, 0.0), @min(bounds.w, bounds.h) * 0.5);
-    const out = bounds.insetUniform(clamped);
-    return if (out.valid()) out else null;
-}
-
-fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
-    const resolved_preferred = constrainPreferredSize(preferred, constraints);
-    return layout.Measurement.flexible(
-        .{ .w = @min(preferred.w, resolved_preferred.w), .h = @min(preferred.h, resolved_preferred.h) },
-        resolved_preferred,
-        .{ .w = measure_max_width, .h = preferred.h },
-    ).applyExact(constraints);
-}
-
-fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {
-    return .{
-        .w = constraints.width.limit(preferred.w),
-        .h = constraints.height.limit(preferred.h),
-    };
-}
-
-const min_extent: f32 = 1.0;
-const measure_max_width: f32 = 4096.0;
-const control_label_height: f32 = tokens.Component.control_label_height;
 const carousel_button_size: f32 = 28.0;
 const carousel_gap: f32 = 8.0;
 const carousel_radius: f32 = 8.0;

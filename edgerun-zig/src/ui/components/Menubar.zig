@@ -7,10 +7,12 @@ const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
-const tokens = @import("../../ui_tokens.zig");
+const component_primitives = @import("Primitives.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+const contentInset = component_primitives.contentInset;
+const measureFixed = component_primitives.measureFixed;
 
 pub const Menubar = struct {
     id: u32,
@@ -24,8 +26,8 @@ pub const Menubar = struct {
 
     pub fn render(self: Menubar, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         const active = activeIndex(self.active);
-        try scene.pushRect(bounds, options.style.panel, .fill, control_radius, 0.0);
-        try scene.pushRect(bounds, options.style.border, .border, control_radius, 0.0);
+        try scene.pushRect(bounds, options.style.panel, .fill, component_primitives.control_radius, 0.0);
+        try scene.pushRect(bounds, options.style.border, .border, component_primitives.control_radius, 0.0);
         try renderItem(scene, itemBounds(bounds, 0), self.first, active == 0, options);
         try renderItem(scene, itemBounds(bounds, 1), self.second, active == 1, options);
         try renderItem(scene, itemBounds(bounds, 2), menubar_third_label, active == 2, options);
@@ -72,10 +74,10 @@ fn encodedId(id: u32, active: u16) u32 {
 pub const menubar_id_stride: u32 = menubar_item_count;
 
 fn renderItem(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, active: bool, options: RenderOptions) ui.RenderError!void {
-    try scene.pushRect(bounds, if (active) options.style.row else ui.Color.clear, .fill, control_radius, 0.0);
+    try scene.pushRect(bounds, if (active) options.style.row else ui.Color.clear, .fill, component_primitives.control_radius, 0.0);
     const text_color = if (active) options.style.text else options.style.muted;
     if (contentInset(bounds, menubar_item_padding_x)) |text_bounds| {
-        try scene.pushAlignedText(text_bounds.withHeightCentered(control_label_height), label, text_color, .center);
+        try scene.pushAlignedText(text_bounds.withHeightCentered(component_primitives.control_label_height), label, text_color, .center);
     }
 }
 
@@ -90,35 +92,9 @@ fn itemBounds(bounds: ui.Rect, index: usize) ui.Rect {
         1 => bounds.x + menubar_padding + menubar_first_w,
         else => bounds.x + menubar_padding + menubar_first_w + menubar_second_w,
     };
-    return ui.Rect.init(item_x, bounds.y + menubar_padding, item_w, @max(min_extent, bounds.h - menubar_padding * 2.0));
+    return ui.Rect.init(item_x, bounds.y + menubar_padding, item_w, @max(component_primitives.min_extent, bounds.h - menubar_padding * 2.0));
 }
 
-fn contentInset(bounds: ui.Rect, padding: f32) ?ui.Rect {
-    const clamped = @min(@max(padding, 0.0), @min(bounds.w, bounds.h) * 0.5);
-    const out = bounds.insetUniform(clamped);
-    return if (out.valid()) out else null;
-}
-
-fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
-    const resolved_preferred = constrainPreferredSize(preferred, constraints);
-    return layout.Measurement.flexible(
-        .{ .w = @min(preferred.w, resolved_preferred.w), .h = @min(preferred.h, resolved_preferred.h) },
-        resolved_preferred,
-        .{ .w = measure_max_width, .h = preferred.h },
-    ).applyExact(constraints);
-}
-
-fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {
-    return .{
-        .w = constraints.width.limit(preferred.w),
-        .h = constraints.height.limit(preferred.h),
-    };
-}
-
-const min_extent: f32 = 1.0;
-const measure_max_width: f32 = 4096.0;
-const control_radius: f32 = tokens.Component.control_radius;
-const control_label_height: f32 = tokens.Component.control_label_height;
 pub const menubar_item_count: u32 = 3;
 const menubar_padding: f32 = 4.0;
 const menubar_first_w: f32 = 48.0;

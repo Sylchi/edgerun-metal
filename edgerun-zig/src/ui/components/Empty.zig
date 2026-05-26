@@ -7,9 +7,11 @@ const icon = @import("../../icon.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
+const component_primitives = @import("Primitives.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+const measureFixed = component_primitives.measureFixed;
 
 pub const Empty = struct {
     title: []const u8,
@@ -25,8 +27,8 @@ pub const Empty = struct {
         const media = ui.Rect.init(bounds.x + (bounds.w - empty_media_size) * 0.5, bounds.y + empty_padding, empty_media_size, empty_media_size);
         try scene.pushRect(media, options.style.row, .fill, media.w * 0.5, 0.0);
         try scene.pushIconQuad(.{ .bounds = media.insetUniform(empty_media_icon_inset), .icon_id = icon.id(.sparkles), .color = options.style.text });
-        try scene.pushAlignedText(ui.Rect.init(bounds.x + empty_padding, media.y + media.h + empty_gap, @max(min_extent, bounds.w - empty_padding * 2.0), empty_title_height), self.title, options.style.text, .center);
-        try scene.pushWrappedText(ui.Rect.init(bounds.x + empty_padding, media.y + media.h + empty_gap + empty_title_height + empty_detail_gap, @max(min_extent, bounds.w - empty_padding * 2.0), empty_detail_height * empty_detail_max_lines), self.detail, options.style.muted, .{
+        try scene.pushAlignedText(ui.Rect.init(bounds.x + empty_padding, media.y + media.h + empty_gap, @max(component_primitives.min_extent, bounds.w - empty_padding * 2.0), empty_title_height), self.title, options.style.text, .center);
+        try scene.pushWrappedText(ui.Rect.init(bounds.x + empty_padding, media.y + media.h + empty_gap + empty_title_height + empty_detail_gap, @max(component_primitives.min_extent, bounds.w - empty_padding * 2.0), empty_detail_height * empty_detail_max_lines), self.detail, options.style.muted, .{
             .line_height = empty_detail_height,
             .average_char_width = empty_detail_average_w,
             .max_lines = empty_detail_max_lines,
@@ -55,24 +57,6 @@ pub const Empty = struct {
     }
 };
 
-fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
-    const resolved_preferred = constrainPreferredSize(preferred, constraints);
-    return layout.Measurement.flexible(
-        .{ .w = @min(preferred.w, resolved_preferred.w), .h = @min(preferred.h, resolved_preferred.h) },
-        resolved_preferred,
-        .{ .w = measure_max_width, .h = preferred.h },
-    ).applyExact(constraints);
-}
-
-fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {
-    return .{
-        .w = constraints.width.limit(preferred.w),
-        .h = constraints.height.limit(preferred.h),
-    };
-}
-
-const min_extent: f32 = 1.0;
-const measure_max_width: f32 = 4096.0;
 const empty_radius: f32 = 8.0;
 const empty_padding: f32 = 24.0;
 const empty_media_size: f32 = 40.0;

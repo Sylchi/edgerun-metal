@@ -7,10 +7,11 @@ const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
-const tokens = @import("../../ui_tokens.zig");
+const component_primitives = @import("Primitives.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+const measureFixed = component_primitives.measureFixed;
 
 pub const RadioGroup = struct {
     id: u32,
@@ -78,7 +79,7 @@ fn renderOption(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, selected: 
         try scene.pushRect(dot, options.style.accent, .fill, radio_dot_size * 0.5, 0.0);
     }
     const label_x = outer.x + outer.w + radio_text_gap;
-    try scene.pushText(ui.Rect.init(label_x, bounds.y, @max(min_extent, bounds.x + bounds.w - label_x), bounds.h).withHeightCentered(control_label_height), label, options.style.text);
+    try scene.pushText(ui.Rect.init(label_x, bounds.y, @max(component_primitives.min_extent, bounds.x + bounds.w - label_x), bounds.h).withHeightCentered(component_primitives.control_label_height), label, options.style.text);
 }
 
 fn optionBounds(bounds: ui.Rect, index: usize) ui.Rect {
@@ -86,25 +87,6 @@ fn optionBounds(bounds: ui.Rect, index: usize) ui.Rect {
     return ui.Rect.init(bounds.x, y, bounds.w, radio_option_h);
 }
 
-fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
-    const resolved_preferred = constrainPreferredSize(preferred, constraints);
-    return layout.Measurement.flexible(
-        .{ .w = @min(preferred.w, resolved_preferred.w), .h = @min(preferred.h, resolved_preferred.h) },
-        resolved_preferred,
-        .{ .w = measure_max_width, .h = preferred.h },
-    ).applyExact(constraints);
-}
-
-fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {
-    return .{
-        .w = constraints.width.limit(preferred.w),
-        .h = constraints.height.limit(preferred.h),
-    };
-}
-
-const min_extent: f32 = 1.0;
-const measure_max_width: f32 = 4096.0;
-const control_label_height: f32 = tokens.Component.control_label_height;
 const radio_box_size: f32 = 18.0;
 const radio_text_gap: f32 = 10.0;
 const radio_dot_size: f32 = 8.0;

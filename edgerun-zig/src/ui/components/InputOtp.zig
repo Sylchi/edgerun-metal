@@ -7,10 +7,12 @@ const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
-const tokens = @import("../../ui_tokens.zig");
+const component_primitives = @import("Primitives.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+const contentInset = component_primitives.contentInset;
+const measureFixed = component_primitives.measureFixed;
 
 pub const InputOtp = struct {
     id: u32,
@@ -23,11 +25,11 @@ pub const InputOtp = struct {
     pub fn render(self: InputOtp, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         for (0..input_otp_slot_count) |index| {
             const slot = slotBounds(bounds, index);
-            try scene.pushRect(slot, options.style.panel, .fill, control_radius, 0.0);
-            try scene.pushRect(slot, options.style.border, .border, control_radius, 0.0);
+            try scene.pushRect(slot, options.style.panel, .fill, component_primitives.control_radius, 0.0);
+            try scene.pushRect(slot, options.style.border, .border, component_primitives.control_radius, 0.0);
             if (index < self.value.len) {
                 if (contentInset(slot, input_otp_text_padding)) |text_bounds| {
-                    try scene.pushAlignedText(text_bounds.withHeightCentered(control_label_height), self.value[index .. index + 1], options.style.text, .center);
+                    try scene.pushAlignedText(text_bounds.withHeightCentered(component_primitives.control_label_height), self.value[index .. index + 1], options.style.text, .center);
                 }
             }
         }
@@ -66,31 +68,6 @@ fn slotBounds(bounds: ui.Rect, index: usize) ui.Rect {
     return ui.Rect.init(x, bounds.y, input_otp_slot_size, @min(bounds.h, input_otp_slot_size));
 }
 
-fn contentInset(bounds: ui.Rect, padding: f32) ?ui.Rect {
-    const clamped = @min(@max(padding, 0.0), @min(bounds.w, bounds.h) * 0.5);
-    const out = bounds.insetUniform(clamped);
-    return if (out.valid()) out else null;
-}
-
-fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
-    const resolved_preferred = constrainPreferredSize(preferred, constraints);
-    return layout.Measurement.flexible(
-        .{ .w = @min(preferred.w, resolved_preferred.w), .h = @min(preferred.h, resolved_preferred.h) },
-        resolved_preferred,
-        .{ .w = measure_max_width, .h = preferred.h },
-    ).applyExact(constraints);
-}
-
-fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {
-    return .{
-        .w = constraints.width.limit(preferred.w),
-        .h = constraints.height.limit(preferred.h),
-    };
-}
-
-const measure_max_width: f32 = 4096.0;
-const control_radius: f32 = tokens.Component.control_radius;
-const control_label_height: f32 = tokens.Component.control_label_height;
 pub const input_otp_slot_count: usize = 6;
 const input_otp_slot_size: f32 = 36.0;
 const input_otp_slot_gap: f32 = 0.0;

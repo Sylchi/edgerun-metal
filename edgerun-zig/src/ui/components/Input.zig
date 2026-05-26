@@ -8,10 +8,14 @@ const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
-const component_render = @import("Render.zig");
+const primitives = @import("Primitives.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+const measureFixed = primitives.measureFixed;
+const renderControlFrame = primitives.renderControlFrame;
+const renderControlStateOverlay = primitives.renderControlStateOverlay;
+const renderControlText = primitives.renderControlText;
 
 pub const Input = struct {
     id: u32,
@@ -23,7 +27,18 @@ pub const Input = struct {
     }
 
     pub fn render(self: Input, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return component_render.renderInput(scene, bounds, self.placeholder, self.leading_icon, options);
+        const padding = inputPadding(options.control_size);
+        try renderControlFrame(scene, bounds, options.style.panel, options.style.border, primitives.control_radius);
+        try renderControlStateOverlay(scene, bounds, options, primitives.control_radius);
+        const text_bounds = if (self.leading_icon) |value| with_icon: {
+            try scene.pushIconQuad(.{
+                .bounds = ui.Rect.init(bounds.x + padding, bounds.y + (bounds.h - input_icon_size) * 0.5, input_icon_size, input_icon_size),
+                .icon_id = icon.id(value),
+                .color = options.style.muted,
+            });
+            break :with_icon ui.Rect.init(bounds.x + padding + input_icon_size + input_icon_gap, bounds.y, @max(primitives.min_extent, bounds.w - padding * 2.0 - input_icon_size - input_icon_gap), bounds.h);
+        } else bounds;
+        try renderControlText(scene, text_bounds, padding, primitives.control_label_height, self.placeholder, options.style.muted, .start);
     }
 
     pub fn collectInteractions(self: Input, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
@@ -32,7 +47,7 @@ pub const Input = struct {
 
     pub fn measure(self: Input, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = self;
-        return component_render.measureFixed(component_render.inputPreferredSize(options.control_size), constraints);
+        return measureFixed(preferredSize(options.control_size), constraints);
     }
 
     pub fn toObject(self: Input, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -53,6 +68,26 @@ pub const Input = struct {
         };
     }
 };
+
+pub fn preferredSize(size: common.ControlSize) ui.Size {
+    return switch (size) {
+        .small => .{ .w = 180.0, .h = 32.0 },
+        .default => preferred_input,
+        .large => .{ .w = 260.0, .h = 48.0 },
+    };
+}
+
+fn inputPadding(size: common.ControlSize) f32 {
+    return switch (size) {
+        .small => 10.0,
+        .default => primitives.control_text_padding,
+        .large => 16.0,
+    };
+}
+
+const preferred_input = ui.Size{ .w = 220.0, .h = 40.0 };
+const input_icon_size: f32 = 16.0;
+const input_icon_gap: f32 = 8.0;
 
 test "input component serializes to canonical object and deserializes" {
     const input = Input{ .id = 10, .placeholder = "Search objects", .leading_icon = .search };

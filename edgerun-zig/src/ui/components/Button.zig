@@ -9,10 +9,12 @@ const ui = @import("../../ui.zig");
 const text_metrics = @import("../../ui_text_metrics.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
-const component_render = @import("Render.zig");
+const primitives = @import("Primitives.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+const constrainPreferredSize = primitives.constrainPreferredSize;
+const measureFixed = primitives.measureFixed;
 
 pub const Button = struct {
     id: u32,
@@ -84,7 +86,7 @@ pub const IconButton = struct {
     pub fn measure(self: IconButton, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = self;
         const size = iconButtonSize(options.control_size);
-        return component_render.measureFixed(.{ .w = size, .h = size }, constraints);
+        return measureFixed(.{ .w = size, .h = size }, constraints);
     }
 
     pub fn toObject(self: IconButton, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -160,7 +162,7 @@ fn measureButton(label: []const u8, leading_icon: ?icon.Icon, trailing_icon: ?ic
 fn measureButtonWithSize(label: []const u8, leading_icon: ?icon.Icon, trailing_icon: ?icon.Icon, size: common.ControlSize, constraints: layout.Constraints) layout.Measurement {
     const preferred_width = preferredWidthForSize(label, leading_icon, trailing_icon, size);
     const preferred_height = buttonHeight(size);
-    const preferred = component_render.constrainPreferredSize(.{ .w = preferred_width, .h = preferred_height }, constraints);
+    const preferred = constrainPreferredSize(.{ .w = preferred_width, .h = preferred_height }, constraints);
     return layout.Measurement.flexible(
         .{ .w = @min(minWidth(size), preferred.w), .h = @min(preferred_height, preferred.h) },
         preferred,

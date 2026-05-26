@@ -7,10 +7,11 @@ const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
-const tokens = @import("../../ui_tokens.zig");
+const component_primitives = @import("Primitives.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+const measureFixed = component_primitives.measureFixed;
 
 pub const ToggleGroup = struct {
     id: u32,
@@ -70,12 +71,7 @@ fn encodedId(id: u32, active: u16) u32 {
 pub const toggle_group_id_stride: u32 = toggle_group_item_count;
 
 fn renderItem(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, active: bool, options: RenderOptions) ui.RenderError!void {
-    try scene.pushRect(bounds, if (active) options.style.row else ui.Color.clear, .fill, 0.0, 0.0);
-    try scene.pushRect(bounds, options.style.border, .border, 0.0, 0.0);
-    const text_color = if (active) options.style.text else options.style.muted;
-    if (contentInset(bounds, toggle_text_padding)) |text_bounds| {
-        try scene.pushAlignedText(text_bounds.withHeightCentered(control_label_height), label, text_color, .center);
-    }
+    try component_primitives.renderTextCell(scene, bounds, label, if (active) options.style.row else ui.Color.clear, options.style.border, 0.0, toggle_text_padding, if (active) options.style.text else options.style.muted);
 }
 
 fn itemBounds(bounds: ui.Rect, index: usize) ui.Rect {
@@ -91,30 +87,6 @@ fn itemBounds(bounds: ui.Rect, index: usize) ui.Rect {
     return ui.Rect.init(item_x, bounds.y, item_w, bounds.h);
 }
 
-fn contentInset(bounds: ui.Rect, padding: f32) ?ui.Rect {
-    const clamped = @min(@max(padding, 0.0), @min(bounds.w, bounds.h) * 0.5);
-    const out = bounds.insetUniform(clamped);
-    return if (out.valid()) out else null;
-}
-
-fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
-    const resolved_preferred = constrainPreferredSize(preferred, constraints);
-    return layout.Measurement.flexible(
-        .{ .w = @min(preferred.w, resolved_preferred.w), .h = @min(preferred.h, resolved_preferred.h) },
-        resolved_preferred,
-        .{ .w = measure_max_width, .h = preferred.h },
-    ).applyExact(constraints);
-}
-
-fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {
-    return .{
-        .w = constraints.width.limit(preferred.w),
-        .h = constraints.height.limit(preferred.h),
-    };
-}
-
-const measure_max_width: f32 = 4096.0;
-const control_label_height: f32 = tokens.Component.control_label_height;
 pub const toggle_group_item_count: u32 = 3;
 const toggle_group_side_w: f32 = 48.0;
 const toggle_group_middle_w: f32 = 64.0;

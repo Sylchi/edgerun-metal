@@ -7,10 +7,11 @@ const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
-const tokens = @import("../../ui_tokens.zig");
+const component_primitives = @import("Primitives.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+const measureFixed = component_primitives.measureFixed;
 
 pub const Switch = struct {
     id: u32,
@@ -28,7 +29,7 @@ pub const Switch = struct {
         const knob_x = if (self.checked) pill.x + pill.w - switch_knob_size - switch_knob_inset else pill.x + switch_knob_inset;
         const knob = ui.Rect.init(knob_x, pill.y + switch_knob_inset, switch_knob_size, switch_knob_size);
         try scene.pushRect(knob, options.style.panel, .fill, switch_knob_size * 0.5, 0.0);
-        try scene.pushText(ui.Rect.init(bounds.x, bounds.y, @max(min_extent, pill.x - bounds.x - switch_label_gap), bounds.h).withHeightCentered(control_label_height), self.label, options.style.text);
+        try scene.pushText(ui.Rect.init(bounds.x, bounds.y, @max(component_primitives.min_extent, pill.x - bounds.x - switch_label_gap), bounds.h).withHeightCentered(component_primitives.control_label_height), self.label, options.style.text);
     }
 
     pub fn collectInteractions(self: Switch, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
@@ -57,25 +58,6 @@ pub const Switch = struct {
     }
 };
 
-fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
-    const resolved_preferred = constrainPreferredSize(preferred, constraints);
-    return layout.Measurement.flexible(
-        .{ .w = @min(preferred.w, resolved_preferred.w), .h = @min(preferred.h, resolved_preferred.h) },
-        resolved_preferred,
-        .{ .w = measure_max_width, .h = preferred.h },
-    ).applyExact(constraints);
-}
-
-fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {
-    return .{
-        .w = constraints.width.limit(preferred.w),
-        .h = constraints.height.limit(preferred.h),
-    };
-}
-
-const min_extent: f32 = 1.0;
-const measure_max_width: f32 = 4096.0;
-const control_label_height: f32 = tokens.Component.control_label_height;
 const switch_width: f32 = 42.0;
 const switch_height: f32 = 24.0;
 const switch_knob_size: f32 = 18.0;

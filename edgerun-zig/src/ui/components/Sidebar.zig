@@ -8,9 +8,11 @@ const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
+const primitives = @import("Primitives.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+const measureFixed = primitives.measureFixed;
 
 pub const Sidebar = struct {
     id: u32,
@@ -70,40 +72,22 @@ fn triggerBounds(bounds: ui.Rect) ui.Rect {
 }
 
 fn itemBounds(bounds: ui.Rect) ui.Rect {
-    return ui.Rect.init(bounds.x + sidebar_item_x, bounds.y + sidebar_item_y, @max(min_extent, sidebar_rail_w - sidebar_item_x * 2.0), sidebar_item_h);
+    return ui.Rect.init(bounds.x + sidebar_item_x, bounds.y + sidebar_item_y, @max(primitives.min_extent, sidebar_rail_w - sidebar_item_x * 2.0), sidebar_item_h);
 }
 
 fn titleBounds(bounds: ui.Rect) ui.Rect {
-    return ui.Rect.init(bounds.x + sidebar_item_x, bounds.y + sidebar_title_y, @max(min_extent, sidebar_rail_w - sidebar_item_x * 2.0), sidebar_title_h);
+    return ui.Rect.init(bounds.x + sidebar_item_x, bounds.y + sidebar_title_y, @max(primitives.min_extent, sidebar_rail_w - sidebar_item_x * 2.0), sidebar_title_h);
 }
 
 fn itemTextBounds(bounds: ui.Rect) ui.Rect {
-    return ui.Rect.init(bounds.x + sidebar_item_padding, bounds.y + (bounds.h - sidebar_item_text_h) * 0.5, @max(min_extent, bounds.w - sidebar_item_padding * 2.0), sidebar_item_text_h);
+    return ui.Rect.init(bounds.x + sidebar_item_padding, bounds.y + (bounds.h - sidebar_item_text_h) * 0.5, @max(primitives.min_extent, bounds.w - sidebar_item_padding * 2.0), sidebar_item_text_h);
 }
 
 fn contentBounds(bounds: ui.Rect) ui.Rect {
     const x = bounds.x + sidebar_rail_w + sidebar_content_gap;
-    return ui.Rect.init(x, bounds.y, @max(min_extent, bounds.x + bounds.w - x), bounds.h);
+    return ui.Rect.init(x, bounds.y, @max(primitives.min_extent, bounds.x + bounds.w - x), bounds.h);
 }
 
-fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
-    const resolved_preferred = constrainPreferredSize(preferred, constraints);
-    return layout.Measurement.flexible(
-        .{ .w = @min(preferred.w, resolved_preferred.w), .h = @min(preferred.h, resolved_preferred.h) },
-        resolved_preferred,
-        .{ .w = measure_max_width, .h = preferred.h },
-    ).applyExact(constraints);
-}
-
-fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {
-    return .{
-        .w = constraints.width.limit(preferred.w),
-        .h = constraints.height.limit(preferred.h),
-    };
-}
-
-const min_extent: f32 = 1.0;
-const measure_max_width: f32 = 4096.0;
 const preferred_sidebar = ui.Size{ .w = 240.0, .h = 64.0 };
 const sidebar_rail_w: f32 = 62.0;
 const sidebar_content_gap: f32 = 10.0;

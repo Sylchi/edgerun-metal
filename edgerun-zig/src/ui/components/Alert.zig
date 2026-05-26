@@ -7,9 +7,11 @@ const icon = @import("../../icon.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
+const component_primitives = @import("Primitives.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+const measureFixed = component_primitives.measureFixed;
 
 pub const Alert = struct {
     title: []const u8,
@@ -29,8 +31,8 @@ pub const Alert = struct {
             .icon_id = icon.id(if (self.destructive) .warning else .shield),
             .color = content_color,
         });
-        try scene.pushText(ui.Rect.init(bounds.x + alert_text_x, bounds.y + alert_padding_y - 1.0, @max(min_extent, bounds.w - alert_text_x - alert_padding_x), alert_title_height), self.title, content_color);
-        try scene.pushWrappedText(ui.Rect.init(bounds.x + alert_text_x, bounds.y + alert_padding_y + alert_title_height + alert_detail_gap, @max(min_extent, bounds.w - alert_text_x - alert_padding_x), @max(min_extent, bounds.h - alert_padding_y * 2.0 - alert_title_height)), self.detail, if (self.destructive) alert_danger else options.style.muted, .{
+        try scene.pushText(ui.Rect.init(bounds.x + alert_text_x, bounds.y + alert_padding_y - 1.0, @max(component_primitives.min_extent, bounds.w - alert_text_x - alert_padding_x), alert_title_height), self.title, content_color);
+        try scene.pushWrappedText(ui.Rect.init(bounds.x + alert_text_x, bounds.y + alert_padding_y + alert_title_height + alert_detail_gap, @max(component_primitives.min_extent, bounds.w - alert_text_x - alert_padding_x), @max(component_primitives.min_extent, bounds.h - alert_padding_y * 2.0 - alert_title_height)), self.detail, if (self.destructive) alert_danger else options.style.muted, .{
             .line_height = alert_detail_height,
             .average_char_width = alert_detail_average_w,
             .max_lines = alert_detail_max_lines,
@@ -64,24 +66,6 @@ pub const Alert = struct {
     }
 };
 
-fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
-    const resolved_preferred = constrainPreferredSize(preferred, constraints);
-    return layout.Measurement.flexible(
-        .{ .w = @min(preferred.w, resolved_preferred.w), .h = @min(preferred.h, resolved_preferred.h) },
-        resolved_preferred,
-        .{ .w = measure_max_width, .h = preferred.h },
-    ).applyExact(constraints);
-}
-
-fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {
-    return .{
-        .w = constraints.width.limit(preferred.w),
-        .h = constraints.height.limit(preferred.h),
-    };
-}
-
-const min_extent: f32 = 1.0;
-const measure_max_width: f32 = 4096.0;
 const alert_radius: f32 = 8.0;
 const alert_padding_x: f32 = 16.0;
 const alert_padding_y: f32 = 12.0;
