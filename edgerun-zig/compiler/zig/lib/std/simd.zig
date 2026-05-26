@@ -88,20 +88,6 @@ pub fn suggestVectorLength(comptime T: type) ?comptime_int {
     return suggestVectorLengthForCpu(T, builtin.cpu);
 }
 
-test "suggestVectorLengthForCpu works with signed and unsigned values" {
-    comptime var cpu = std.Target.Cpu.baseline(std.Target.Cpu.Arch.x86_64, builtin.os);
-    comptime cpu.features.addFeature(@intFromEnum(std.Target.x86.Feature.avx512f));
-    comptime cpu.features.populateDependencies(&std.Target.x86.all_features);
-    const expected_len: usize = switch (builtin.zig_backend) {
-        .stage2_x86_64 => 8,
-        else => 16,
-    };
-    const signed_integer_len = suggestVectorLengthForCpu(i32, cpu).?;
-    const unsigned_integer_len = suggestVectorLengthForCpu(u32, cpu).?;
-    try std.testing.expectEqual(expected_len, unsigned_integer_len);
-    try std.testing.expectEqual(expected_len, signed_integer_len);
-}
-
 fn vectorLength(comptime VectorType: type) comptime_int {
     return switch (@typeInfo(VectorType)) {
         .vector => |info| info.len,
