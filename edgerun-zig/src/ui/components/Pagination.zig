@@ -8,6 +8,7 @@ const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
 const component_primitives = @import("Primitives.zig");
+const list_layout = @import("ListLayout.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
@@ -32,9 +33,7 @@ pub const Pagination = struct {
     }
 
     pub fn collectInteractions(self: Pagination, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-        for (0..pagination_item_count) |index| {
-            try collector.addHit(itemBounds(bounds, index), .button, self.id + @as(u32, @intCast(index)));
-        }
+        try list_layout.collectFixedPitchHits(collector, bounds, self.id, pagination_item_count, pagination_item_w, pagination_item_h, pagination_gap);
     }
 
     pub fn measure(self: Pagination, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
@@ -58,18 +57,18 @@ pub const Pagination = struct {
 };
 
 fn selectedPage(page: u16) u16 {
-    return @min(page, 2);
+    return list_layout.clampedIndex(page, pagination_page_count);
 }
 
 fn encodedId(id: u32, page: u16) u32 {
-    return id * pagination_id_stride + selectedPage(page);
+    return list_layout.encodedIndexedId(id, page, pagination_page_count);
 }
 
-const pagination_id_stride: u32 = 3;
+const pagination_page_count: u16 = 3;
 const pagination_item_count: usize = 5;
 
 fn itemBounds(bounds: ui.Rect, index: usize) ui.Rect {
-    return ui.Rect.init(bounds.x + @as(f32, @floatFromInt(index)) * (pagination_item_w + pagination_gap), bounds.y, pagination_item_w, @min(bounds.h, pagination_item_h));
+    return list_layout.fixedPitchItemBounds(bounds, index, pagination_item_w, pagination_item_h, pagination_gap);
 }
 
 fn itemLabel(index: usize) []const u8 {

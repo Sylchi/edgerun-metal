@@ -5,6 +5,7 @@ const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
+const text_metrics = @import("../../ui_text_metrics.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
 const component_primitives = @import("Primitives.zig");
@@ -25,13 +26,17 @@ pub const RowItem = struct {
 
     pub fn render(self: RowItem, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         try scene.pushRect(bounds, options.style.row, .fill, row_radius, 0.0);
-        if (titleBounds(bounds, self.detail.len == 0)) |title_bounds| {
-            try scene.pushText(title_bounds, self.title, options.style.text);
-        }
-        if (self.detail.len != 0) {
-            if (detailBounds(bounds)) |detail_bounds| {
-                try scene.pushText(detail_bounds, self.detail, options.style.muted);
+        if (self.detail.len == 0) {
+            if (centeredTitleBounds(bounds, self.title)) |title_bounds| {
+                try scene.pushWrappedText(title_bounds, self.title, options.style.text, titleWrap(self.title));
             }
+            return;
+        }
+        if (stackedTitleBounds(bounds, self.title)) |title_bounds| {
+            try scene.pushWrappedText(title_bounds, self.title, options.style.text, titleWrap(self.title));
+        }
+        if (detailBounds(bounds, self.title, self.detail)) |detail_bounds| {
+            try scene.pushWrappedText(detail_bounds, self.detail, options.style.muted, detailWrap(self.detail));
         }
     }
 
@@ -40,9 +45,23 @@ pub const RowItem = struct {
     }
 
     pub fn measure(self: RowItem, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
-        _ = self;
         _ = options;
-        return measureFixed(preferred_row_item, constraints);
+        const inner = constraints.inner(.{ .left = row_text_padding_x, .right = row_text_padding_x });
+        const title = layout.measureText(self.title, inner, titleMetrics(self.title));
+        const detail = if (self.detail.len == 0)
+            layout.Measurement.fixed(.{ .w = 0.0, .h = 0.0 })
+        else
+            layout.measureText(self.detail, inner, detailMetrics(self.detail));
+        const gap: f32 = if (self.detail.len == 0) 0.0 else row_text_gap;
+        const preferred = component_primitives.constrainPreferredSize(.{
+            .w = @max(row_min_width, @max(title.preferred.w, detail.preferred.w) + row_text_padding_x * 2.0),
+            .h = row_padding_y * 2.0 + title.preferred.h + gap + detail.preferred.h,
+        }, constraints);
+        return layout.Measurement.flexible(
+            .{ .w = @min(row_min_width, preferred.w), .h = @min(row_min_height, preferred.h) },
+            preferred,
+            .{ .w = component_primitives.measure_max_width, .h = @max(preferred.h, preferred_row_item.h) },
+        ).applyExact(constraints);
     }
 
     pub fn toObject(self: RowItem, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -59,13 +78,26 @@ pub const RowItem = struct {
     }
 };
 
-fn titleBounds(bounds: ui.Rect, centered: bool) ?ui.Rect {
-    const row_bounds = if (centered) bounds.withHeightCentered(row_title_height) else ui.Rect.init(bounds.x, bounds.y + row_title_offset_y, bounds.w, row_title_height);
-    return textBounds(row_bounds);
+fn centeredTitleBounds(bounds: ui.Rect, title: []const u8) ?ui.Rect {
+    const text_w = textWidth(bounds);
+    const text_h = @min(bounds.h, measuredTextHeight(title, text_w, titleMetrics(title)));
+    return textBounds(bounds.withHeightCentered(text_h));
 }
 
-fn detailBounds(bounds: ui.Rect) ?ui.Rect {
-    return textBounds(ui.Rect.init(bounds.x, bounds.y + row_detail_offset_y, bounds.w, row_detail_height));
+fn stackedTitleBounds(bounds: ui.Rect, title: []const u8) ?ui.Rect {
+    const text_w = textWidth(bounds);
+    const available_h = @max(component_primitives.min_extent, bounds.h - row_padding_y * 2.0);
+    const text_h = @min(available_h, measuredTextHeight(title, text_w, titleMetrics(title)));
+    return textBounds(ui.Rect.init(bounds.x, bounds.y + row_padding_y, bounds.w, text_h));
+}
+
+fn detailBounds(bounds: ui.Rect, title: []const u8, detail: []const u8) ?ui.Rect {
+    const text_w = textWidth(bounds);
+    const title_h = measuredTextHeight(title, text_w, titleMetrics(title));
+    const y = bounds.y + row_padding_y + title_h + row_text_gap;
+    const available_h = @max(component_primitives.min_extent, bounds.y + bounds.h - y - row_padding_y);
+    const detail_h = @min(available_h, measuredTextHeight(detail, text_w, detailMetrics(detail)));
+    return textBounds(ui.Rect.init(bounds.x, y, bounds.w, detail_h));
 }
 
 fn textBounds(bounds: ui.Rect) ?ui.Rect {
@@ -73,12 +105,39 @@ fn textBounds(bounds: ui.Rect) ?ui.Rect {
     return if (out.valid()) out else null;
 }
 
+fn textWidth(bounds: ui.Rect) f32 {
+    return @max(component_primitives.min_extent, bounds.w - row_text_padding_x * 2.0);
+}
+
+fn measuredTextHeight(value: []const u8, width: f32, metrics: layout.TextMetrics) f32 {
+    return layout.measureText(value, .{ .width = .{ .at_most = width }, .text_wrap = .wrap }, metrics).preferred.h;
+}
+
+fn titleMetrics(value: []const u8) layout.TextMetrics {
+    return .{ .line_height = row_title_line_height, .average_char_width = text_metrics.averageWidth(value, row_title_line_height), .max_lines = row_text_max_lines };
+}
+
+fn detailMetrics(value: []const u8) layout.TextMetrics {
+    return .{ .line_height = row_detail_line_height, .average_char_width = text_metrics.averageWidth(value, row_detail_line_height), .max_lines = row_text_max_lines };
+}
+
+fn titleWrap(value: []const u8) ui.TextWrap {
+    return .{ .line_height = row_title_line_height, .average_char_width = text_metrics.averageWidth(value, row_title_line_height), .max_lines = row_text_max_lines };
+}
+
+fn detailWrap(value: []const u8) ui.TextWrap {
+    return .{ .line_height = row_detail_line_height, .average_char_width = text_metrics.averageWidth(value, row_detail_line_height), .max_lines = row_text_max_lines };
+}
+
 const row_radius: f32 = tokens.Component.row_radius;
 const row_text_padding_x: f32 = 12.0;
-const row_title_offset_y: f32 = 8.0;
-const row_detail_offset_y: f32 = 26.0;
-const row_title_height: f32 = 18.0;
-const row_detail_height: f32 = 16.0;
+const row_padding_y: f32 = 8.0;
+const row_text_gap: f32 = 2.0;
+const row_min_width: f32 = 96.0;
+const row_min_height: f32 = 32.0;
+const row_title_line_height: f32 = 18.0;
+const row_detail_line_height: f32 = 16.0;
+const row_text_max_lines: usize = 2;
 pub const preferred_row_item = ui.Size{ .w = 260.0, .h = 48.0 };
 
 test "row item component serializes to canonical object and deserializes" {
@@ -106,4 +165,17 @@ test "row item component renders title and detail through shared row renderer" {
     try std.testing.expectEqual(ui.Color.text, title.text.color);
     try std.testing.expectEqual(ui.Color.muted, detail.text.color);
     try std.testing.expect(detail.text.origin.y > title.text.origin.y);
+}
+
+test "row item measurement wraps long content under narrow constraints" {
+    const row = RowItem{
+        .id = 20,
+        .title = "object graph title wraps",
+        .detail = "canonical data detail wraps",
+    };
+
+    const measured = row.measure(.{ .width = .{ .at_most = row_min_width }, .text_wrap = .wrap }, .{});
+
+    try std.testing.expect(measured.preferred.w <= row_min_width);
+    try std.testing.expect(measured.preferred.h > preferred_row_item.h);
 }

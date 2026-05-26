@@ -11,7 +11,6 @@ const component_primitives = @import("Primitives.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
-const contentInset = component_primitives.contentInset;
 const measureFixed = component_primitives.measureFixed;
 
 pub const Tooltip = struct {
@@ -25,14 +24,10 @@ pub const Tooltip = struct {
 
     pub fn render(self: Tooltip, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         const trigger_bounds = triggerBounds(bounds);
-        try scene.pushRect(trigger_bounds, options.style.panel, .fill, component_primitives.control_radius, 0.0);
-        try scene.pushRect(trigger_bounds, options.style.border, .border, component_primitives.control_radius, 0.0);
-        if (contentInset(trigger_bounds, component_primitives.control_text_padding)) |inner| {
-            try scene.pushAlignedText(inner.withHeightCentered(component_primitives.control_label_height), self.trigger, options.style.text, .center);
-        }
+        try component_primitives.renderControlTrigger(scene, trigger_bounds, options.style.panel, options.style.border, component_primitives.control_text_padding, self.trigger, options.style.text);
         const tip = contentBounds(bounds);
         try scene.pushRect(tip, options.style.text, .fill, tooltip_radius, 0.0);
-        if (contentInset(tip, tooltip_padding)) |inner| {
+        if (component_primitives.contentInset(tip, tooltip_padding)) |inner| {
             try scene.pushAlignedText(inner.withHeightCentered(tooltip_text_h), self.content, options.style.bg, .center);
         }
     }

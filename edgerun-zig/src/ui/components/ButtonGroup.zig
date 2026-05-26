@@ -8,6 +8,7 @@ const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
 const component_primitives = @import("Primitives.zig");
+const list_layout = @import("ListLayout.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
@@ -24,13 +25,13 @@ pub const ButtonGroup = struct {
     }
 
     pub fn render(self: ButtonGroup, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        try renderSegment(scene, segmentBounds(bounds, 0), self.first, activeIndex(self.active) == 0, options);
-        try renderSegment(scene, segmentBounds(bounds, 1), self.second, activeIndex(self.active) == 1, options);
+        const active = activeIndex(self.active);
+        try list_layout.renderSegment(scene, segmentBounds(bounds, 0), self.first, active == 0, segmentPaint(options));
+        try list_layout.renderSegment(scene, segmentBounds(bounds, 1), self.second, active == 1, segmentPaint(options));
     }
 
     pub fn collectInteractions(self: ButtonGroup, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-        try collector.addHit(segmentBounds(bounds, 0), .button, self.id);
-        try collector.addHit(segmentBounds(bounds, 1), .button, self.id + 1);
+        try list_layout.collectEqualSegmentHits(collector, bounds, self.id, group_item_count);
     }
 
     pub fn measure(self: ButtonGroup, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
@@ -58,24 +59,29 @@ pub const ButtonGroup = struct {
 };
 
 fn activeIndex(value: u16) u16 {
-    return @min(value, 1);
+    return list_layout.clampedIndex(value, group_item_count);
 }
 
 fn encodedId(id: u32, active: u16) u32 {
-    return id * group_id_stride + activeIndex(active);
+    return list_layout.encodedIndexedId(id, active, group_item_count);
 }
 
-const group_id_stride: u32 = 2;
-
-fn renderSegment(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, active: bool, options: RenderOptions) ui.RenderError!void {
-    try component_primitives.renderTextCell(scene, bounds, label, if (active) options.style.text else options.style.panel, options.style.border, 0.0, toggle_text_padding, if (active) options.style.panel else options.style.text);
+fn segmentPaint(options: RenderOptions) list_layout.SegmentPaint {
+    return .{
+        .active_fill = options.style.text,
+        .inactive_fill = options.style.panel,
+        .border = options.style.border,
+        .active_text = options.style.panel,
+        .inactive_text = options.style.text,
+        .padding = toggle_text_padding,
+    };
 }
 
 fn segmentBounds(bounds: ui.Rect, index: usize) ui.Rect {
-    const segment_w = @max(component_primitives.min_extent, bounds.w * 0.5);
-    return ui.Rect.init(bounds.x + @as(f32, @floatFromInt(index)) * segment_w, bounds.y, segment_w, bounds.h);
+    return list_layout.equalSegmentBounds(bounds, index, group_item_count);
 }
 
+const group_item_count: u16 = 2;
 const toggle_text_padding: f32 = 8.0;
 pub const preferred_button_group = ui.Size{ .w = 160.0, .h = 36.0 };
 

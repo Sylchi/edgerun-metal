@@ -18,6 +18,7 @@ const workspace_sidebar_w: f32 = 260.0;
 const workspace_status_h: f32 = 24.0;
 const workspace_rail_pad: f32 = 12.0;
 const workspace_icon_button: f32 = 36.0;
+const workspace_content_pad: f32 = 24.0;
 const workspace_rail_bg = ui.Color{ .r = 37, .g = 37, .b = 38 };
 const workspace_sidebar_bg = ui.Color{ .r = 24, .g = 24, .b = 24 };
 const workspace_main_bg = ui.Color{ .r = 10, .g = 12, .b = 16 };
@@ -62,10 +63,7 @@ pub fn contentHeight(width: f32, state: State) f32 {
         else
             app_blog.postContentHeight(width, state.route.selected_blog_post_id),
         .docs => app_docs.contentHeightForState(width, .{ .selected_doc_index = state.route.selected_doc_index, .selected_component_index = state.route.selected_component_index }),
-        .components => app_docs.contentHeightForState(width, .{
-            .selected_doc_index = app_docs.indexBySlug("component-system"),
-            .selected_component_index = state.route.selected_component_index,
-        }),
+        .components => workspace_content_pad * 2.0 + component_gallery.docsContentHeight(@max(1.0, width - workspace_content_pad * 2.0), state.route.selected_component_index),
         .source => app_source.contentHeight(width, state.source),
     };
 }
@@ -86,6 +84,7 @@ fn renderWorkspaceRail(scene: *ui.Scene, collector: *interaction.Collector, boun
     try scene.pushRect(bounds, workspace_rail_bg, .fill, 0.0, 0.0);
     const items = [_]struct { id: u32, icon_value: icon.Icon, label: []const u8, view: app_navigation.View }{
         .{ .id = app_chrome.source_button_id, .icon_value = .code, .label = "Source", .view = .source },
+        .{ .id = app_docs.component_catalog_button_id, .icon_value = .app, .label = "Components", .view = .components },
         .{ .id = app_chrome.docs_button_id, .icon_value = .file, .label = "Docs", .view = .docs },
         .{ .id = app_chrome.blog_button_id, .icon_value = .terminal, .label = "Academy", .view = .blog },
     };
@@ -113,6 +112,7 @@ fn renderWorkspaceSidebar(scene: *ui.Scene, collector: *interaction.Collector, b
     var y = bounds.y + 68.0;
     const rows = [_]struct { id: u32, title: []const u8, detail: []const u8, view: app_navigation.View }{
         .{ .id = app_chrome.source_button_id, .title = "Source", .detail = "edit app workspace", .view = .source },
+        .{ .id = app_docs.component_catalog_button_id, .title = "Components", .detail = "edit and preview system", .view = .components },
         .{ .id = app_chrome.docs_button_id, .title = "Docs", .detail = "manual inside workspace", .view = .docs },
         .{ .id = app_chrome.blog_button_id, .title = "Academy", .detail = "lessons inside workspace", .view = .blog },
     };
@@ -156,13 +156,14 @@ fn renderWorkspaceMain(scene: *ui.Scene, collector: *interaction.Collector, boun
                 .selected_doc_index = state.route.selected_doc_index,
                 .selected_component_index = state.route.selected_component_index,
             }),
-            .components => try app_docs.render(scene, collector, shiftedPageBounds(bounds), .{
-                .scroll_y = state.scroll_y,
-                .hover_x = state.hover_x,
-                .hover_y = state.hover_y,
-                .selected_doc_index = app_docs.indexBySlug("component-system"),
-                .selected_component_index = state.route.selected_component_index,
-            }),
+            .components => try component_gallery.renderDocsContent(
+                scene,
+                collector,
+                workspaceContentBounds(bounds, state.scroll_y),
+                state.route.selected_component_index,
+                state.hover_x,
+                state.hover_y,
+            ),
         }
     }
 }
@@ -174,6 +175,15 @@ fn renderWorkspaceStatus(scene: *ui.Scene, bounds: ui.Rect, state: State) !void 
 
 fn shiftedPageBounds(bounds: ui.Rect) ui.Rect {
     return ui.Rect.init(bounds.x, bounds.y - app_chrome.header_h, bounds.w, bounds.h + app_chrome.header_h);
+}
+
+fn workspaceContentBounds(bounds: ui.Rect, scroll_y: f32) ui.Rect {
+    return ui.Rect.init(
+        bounds.x + workspace_content_pad,
+        bounds.y + workspace_content_pad - scroll_y,
+        @max(1.0, bounds.w - workspace_content_pad * 2.0),
+        @max(1.0, bounds.h + scroll_y - workspace_content_pad * 2.0),
+    );
 }
 
 fn sidebarDetail(route: app_navigation.Route) []const u8 {
@@ -246,6 +256,7 @@ test "app frame renders every top level route through one scene builder" {
         .{ .view = .docs },
         .{ .view = .docs, .selected_doc_index = app_docs.indexBySlug("media") },
         .{ .view = .docs, .selected_doc_index = app_docs.indexBySlug("component-system") },
+        .{ .view = .components },
         .{ .view = .source },
     };
     for (routes) |route| {
@@ -261,6 +272,23 @@ test "app frame renders every top level route through one scene builder" {
         });
         try std.testing.expect(scene.written().len != 0);
     }
+}
+
+test "app frame routes through workspace sidebar instead of top navbar" {
+    var commands: [4096]ui.Command = undefined;
+    var regions: [4096]interaction.Region = undefined;
+    var clips: [64]ui.Rect = undefined;
+    var scene = ui.Scene.initWithClips(&commands, &clips);
+    var collector = interaction.Collector.init(&regions);
+
+    try render(&scene, &collector, ui.Rect.init(0, 0, 1280, 800), .{ .route = .{ .view = .components } });
+
+    try std.testing.expect(hasText(scene.written(), "Components"));
+    try expectHit(collector.written(), app_chrome.source_button_id);
+    try expectHit(collector.written(), app_docs.component_catalog_button_id);
+    try expectHit(collector.written(), app_chrome.docs_button_id);
+    try expectHit(collector.written(), app_chrome.blog_button_id);
+    try expectNoHit(collector.written(), app_chrome.logo_button_id);
 }
 
 test "app frame renders source jump context menu as shared ui" {
@@ -317,8 +345,8 @@ test "app frame owns content height for route state" {
 
     const button_index = component_gallery.indexBySlug("button").?;
     try std.testing.expectEqual(
-        app_docs.contentHeightForState(width, .{ .selected_doc_index = app_docs.indexBySlug("component-system"), .selected_component_index = button_index }),
-        contentHeight(width, .{ .route = .{ .view = .docs, .selected_doc_index = app_docs.indexBySlug("component-system"), .selected_component_index = button_index } }),
+        workspace_content_pad * 2.0 + component_gallery.docsContentHeight(width - workspace_content_pad * 2.0, button_index),
+        contentHeight(width, .{ .route = .{ .view = .components, .selected_component_index = button_index } }),
     );
 }
 
@@ -352,4 +380,8 @@ fn hasText(commands: []const ui.Command, value: []const u8) bool {
 fn expectHit(regions: []const interaction.Region, id: u32) !void {
     for (regions) |region| if (region.id == id) return;
     return error.MissingHit;
+}
+
+fn expectNoHit(regions: []const interaction.Region, id: u32) !void {
+    for (regions) |region| if (region.id == id) return error.UnexpectedHit;
 }

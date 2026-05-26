@@ -63,6 +63,10 @@ pub const Input = struct {
 
     pub fn fromView(view: object.View) Error!Input {
         const input = try component_codec.nodeView(view, .input);
+        return fromNode(input);
+    }
+
+    pub fn fromNode(input: @FieldType(ui.Node, "input")) Error!Input {
         return .{ .id = input.id, .placeholder = input.placeholder, .leading_icon = try common.optionalIconFromTag(input.leading_icon) };
     }
 };

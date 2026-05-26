@@ -12,8 +12,6 @@ const primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 const measureFixed = primitives.measureFixed;
-const renderControlFrame = primitives.renderControlFrame;
-const renderControlText = primitives.renderControlText;
 
 pub const Dialog = struct {
     id: u32,
@@ -25,19 +23,12 @@ pub const Dialog = struct {
     }
 
     pub fn render(self: Dialog, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        const trigger = triggerBounds(bounds);
-        try renderControlFrame(scene, trigger, options.style.accent, options.style.border, primitives.control_radius);
-        try renderControlText(scene, trigger, dialog_trigger_padding, primitives.control_label_height, dialog_open_label, options.style.bg, .center);
-
-        const content = contentBounds(bounds);
-        try scene.pushRect(content, options.style.panel, .fill, dialog_radius, 0.0);
-        try scene.pushRect(content, options.style.border, .border, dialog_radius, 0.0);
-        try scene.pushText(ui.Rect.init(content.x + dialog_padding, content.y + dialog_title_y, @max(primitives.min_extent, content.w - dialog_padding * 2.0), dialog_title_h), self.title, options.style.text);
-        try scene.pushText(ui.Rect.init(content.x + dialog_padding, content.y + dialog_detail_y, @max(primitives.min_extent, content.w - dialog_padding * 2.0), dialog_detail_h), self.detail, options.style.muted);
+        try primitives.renderSidePanelTrigger(scene, bounds, dialog_layout, options.style.accent, options.style.border, dialog_trigger_padding, dialog_open_label, options.style.bg);
+        try primitives.renderTitleDetailPanel(scene, primitives.sidePanelContentBounds(bounds, dialog_layout), self.title, self.detail, options, dialog_panel, options.style.border, options.style.text);
     }
 
     pub fn collectInteractions(self: Dialog, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-        try primitives.collectSidePanelHits(collector, triggerBounds(bounds), contentBounds(bounds), self.id);
+        try primitives.collectSidePanelLayoutHits(collector, bounds, dialog_layout, self.id);
     }
 
     pub fn measure(self: Dialog, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
@@ -60,21 +51,8 @@ pub const Dialog = struct {
     }
 };
 
-fn triggerBounds(bounds: ui.Rect) ui.Rect {
-    return primitives.sidePanelTriggerBounds(bounds, dialog_layout);
-}
-
-fn contentBounds(bounds: ui.Rect) ui.Rect {
-    return primitives.sidePanelContentBounds(bounds, dialog_layout);
-}
-
 const dialog_layout = primitives.SidePanelLayout{ .trigger_y = 6.0, .trigger_w = 66.0, .trigger_h = 30.0, .gap = 12.0 };
-const dialog_radius: f32 = 10.0;
-const dialog_padding: f32 = 10.0;
-const dialog_title_y: f32 = 6.0;
-const dialog_title_h: f32 = 14.0;
-const dialog_detail_y: f32 = 22.0;
-const dialog_detail_h: f32 = 12.0;
+const dialog_panel = primitives.TitleDetailPanel{ .radius = 10.0, .padding = 10.0, .title_y = 6.0, .title_h = 14.0, .detail_y = 22.0, .detail_h = 12.0 };
 const dialog_trigger_padding: f32 = 8.0;
 const dialog_open_label = "Open";
 const preferred_dialog = ui.Size{ .w = 240.0, .h = 52.0 };

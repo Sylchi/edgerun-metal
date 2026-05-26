@@ -8,6 +8,7 @@ const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
 const primitives = @import("Primitives.zig");
+const list_layout = @import("ListLayout.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
@@ -37,9 +38,7 @@ pub const Tabs = struct {
     }
 
     pub fn collectInteractions(self: Tabs, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-        const list = listBounds(bounds);
-        try collector.addHit(triggerBounds(list, 0), .button, self.id);
-        try collector.addHit(triggerBounds(list, 1), .button, self.id + 1);
+        try list_layout.collectPaddedEqualSegmentHits(collector, listBounds(bounds), self.id, tabs_item_count, tabs_list_padding);
     }
 
     pub fn measure(self: Tabs, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
@@ -67,11 +66,11 @@ pub const Tabs = struct {
 };
 
 fn activeIndex(value: u16) u16 {
-    return @min(value, 1);
+    return list_layout.clampedIndex(value, tabs_item_count);
 }
 
 fn encodedId(id: u32, active: u16) u32 {
-    return id * tabs_id_stride + activeIndex(active);
+    return list_layout.encodedIndexedId(id, active, tabs_item_count);
 }
 
 fn listBounds(bounds: ui.Rect) ui.Rect {
@@ -79,8 +78,7 @@ fn listBounds(bounds: ui.Rect) ui.Rect {
 }
 
 fn triggerBounds(list: ui.Rect, index: usize) ui.Rect {
-    const trigger_w = @max(primitives.min_extent, (list.w - tabs_list_padding * 2.0) / 2.0);
-    return ui.Rect.init(list.x + tabs_list_padding + @as(f32, @floatFromInt(index)) * trigger_w, list.y + tabs_list_padding, trigger_w, @max(primitives.min_extent, list.h - tabs_list_padding * 2.0));
+    return list_layout.paddedEqualSegmentBounds(list, index, tabs_item_count, tabs_list_padding);
 }
 
 fn renderTrigger(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, active: bool, options: RenderOptions) ui.RenderError!void {
@@ -91,7 +89,7 @@ fn renderTrigger(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, active: b
     try renderControlText(scene, bounds, toggle_text_padding, primitives.control_label_height, label, if (active) options.style.text else options.style.muted, .center);
 }
 
-const tabs_id_stride: u32 = 2;
+const tabs_item_count: u16 = 2;
 const preferred_tabs = ui.Size{ .w = 220.0, .h = 84.0 };
 const tabs_list_w: f32 = 184.0;
 const tabs_list_h: f32 = 36.0;

@@ -97,6 +97,10 @@ pub const Card = struct {
 
     pub fn fromView(view: object.View) Error!Card {
         const card = try component_codec.nodeView(view, .card);
+        return fromNode(card);
+    }
+
+    pub fn fromNode(card: @FieldType(ui.Node, "card")) Error!Card {
         return .{ .title = card.title, .detail = card.detail, .variant = try variantFromTag(card.variant) };
     }
 };

@@ -8,6 +8,7 @@ const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
 const component_primitives = @import("Primitives.zig");
+const list_layout = @import("ListLayout.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
@@ -25,9 +26,9 @@ pub const ToggleGroup = struct {
 
     pub fn render(self: ToggleGroup, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         const active = activeIndex(self.active);
-        try renderItem(scene, itemBounds(bounds, 0), self.first, active == 0, options);
-        try renderItem(scene, itemBounds(bounds, 1), self.second, active == 1, options);
-        try renderItem(scene, itemBounds(bounds, 2), toggle_group_third_label, active == 2, options);
+        try list_layout.renderSegment(scene, itemBounds(bounds, 0), self.first, active == 0, segmentPaint(options));
+        try list_layout.renderSegment(scene, itemBounds(bounds, 1), self.second, active == 1, segmentPaint(options));
+        try list_layout.renderSegment(scene, itemBounds(bounds, 2), toggle_group_third_label, active == 2, segmentPaint(options));
     }
 
     pub fn collectInteractions(self: ToggleGroup, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
@@ -59,17 +60,24 @@ pub const ToggleGroup = struct {
 };
 
 fn activeIndex(value: u16) u16 {
-    return @min(value, toggle_group_item_count - 1);
+    return list_layout.clampedIndex(value, toggle_group_item_count);
 }
 
 fn encodedId(id: u32, active: u16) u32 {
-    return id * toggle_group_id_stride + activeIndex(active);
+    return list_layout.encodedIndexedId(id, active, toggle_group_item_count);
 }
 
 pub const toggle_group_id_stride: u32 = toggle_group_item_count;
 
-fn renderItem(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, active: bool, options: RenderOptions) ui.RenderError!void {
-    try component_primitives.renderTextCell(scene, bounds, label, if (active) options.style.row else ui.Color.clear, options.style.border, 0.0, toggle_text_padding, if (active) options.style.text else options.style.muted);
+fn segmentPaint(options: RenderOptions) list_layout.SegmentPaint {
+    return .{
+        .active_fill = options.style.row,
+        .inactive_fill = ui.Color.clear,
+        .border = options.style.border,
+        .active_text = options.style.text,
+        .inactive_text = options.style.muted,
+        .padding = toggle_text_padding,
+    };
 }
 
 fn itemBounds(bounds: ui.Rect, index: usize) ui.Rect {

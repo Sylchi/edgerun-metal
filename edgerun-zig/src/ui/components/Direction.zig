@@ -9,6 +9,7 @@ const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
 const component_primitives = @import("Primitives.zig");
+const list_layout = @import("ListLayout.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
@@ -48,7 +49,7 @@ pub const Direction = struct {
     }
 
     pub fn writeRecord(self: Direction, writer: *component_codec.Writer, index: usize) bool {
-        return writer.record(index, .direction, self.id * direction_item_count + activeIndex(self.active), .{}, .{});
+        return writer.record(index, .direction, list_layout.encodedIndexedId(self.id, self.active, direction_item_count), .{}, .{});
     }
 
     pub fn fromView(view: object.View) Error!Direction {
@@ -57,8 +58,8 @@ pub const Direction = struct {
     }
 };
 
-fn activeIndex(value: u16) u32 {
-    return @min(@as(u32, value), direction_item_count - 1);
+fn activeIndex(value: u16) u16 {
+    return list_layout.clampedIndex(value, direction_item_count);
 }
 
 fn renderItem(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, active: bool, options: RenderOptions) ui.RenderError!void {
@@ -81,7 +82,7 @@ fn iconBounds(bounds: ui.Rect) ui.Rect {
     return ui.Rect.init(bounds.x + direction_icon_x, bounds.y + direction_icon_y, direction_icon_size, direction_icon_size);
 }
 
-pub const direction_item_count: u32 = 2;
+pub const direction_item_count: u16 = 2;
 const direction_ltr_label = "LTR";
 const direction_rtl_label = "RTL";
 const direction_item_y: f32 = 8.0;

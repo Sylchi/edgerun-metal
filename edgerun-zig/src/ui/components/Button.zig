@@ -52,6 +52,10 @@ pub const Button = struct {
 
     pub fn fromView(view: object.View) Error!Button {
         const button = try component_codec.nodeView(view, .button);
+        return fromNode(button);
+    }
+
+    pub fn fromNode(button: @FieldType(ui.Node, "button")) Error!Button {
         return .{ .id = button.id, .label = button.label, .variant = try variantFromTag(button.variant), .leading_icon = try common.optionalIconFromTag(button.leading_icon), .trailing_icon = try common.optionalIconFromTag(button.trailing_icon) };
     }
 };
@@ -100,6 +104,10 @@ pub const IconButton = struct {
 
     pub fn fromView(view: object.View) Error!IconButton {
         const button = try component_codec.nodeView(view, .icon_button);
+        return fromNode(button);
+    }
+
+    pub fn fromNode(button: @FieldType(ui.Node, "icon_button")) Error!IconButton {
         return .{ .id = button.id, .label = button.label, .variant = try variantFromTag(button.variant), .icon_value = (try common.optionalIconFromTag(button.icon)) orelse return error.Corrupt };
     }
 };

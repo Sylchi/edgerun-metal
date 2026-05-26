@@ -9,6 +9,7 @@ const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
 const component_primitives = @import("Primitives.zig");
+const list_layout = @import("ListLayout.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
@@ -33,9 +34,7 @@ pub const NavigationMenu = struct {
     }
 
     pub fn collectInteractions(self: NavigationMenu, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-        for (0..navigation_menu_item_count) |index| {
-            try collector.addHit(itemBounds(bounds, index), .button, self.id + @as(u32, @intCast(index)));
-        }
+        try list_layout.collectItemStripHits(collector, bounds, self.id, &navigation_menu_item_widths, navigation_menu_strip_layout);
     }
 
     pub fn measure(self: NavigationMenu, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
@@ -61,11 +60,11 @@ pub const NavigationMenu = struct {
 };
 
 fn activeIndex(value: u16) u16 {
-    return @min(value, navigation_menu_item_count - 1);
+    return list_layout.clampedIndex(value, navigation_menu_item_count);
 }
 
 fn encodedId(id: u32, active: u16) u32 {
-    return id * navigation_menu_id_stride + activeIndex(active);
+    return list_layout.encodedIndexedId(id, active, navigation_menu_item_count);
 }
 
 pub const navigation_menu_id_stride: u32 = navigation_menu_item_count;
@@ -93,25 +92,14 @@ fn renderItem(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, active: bool
 }
 
 fn itemBounds(bounds: ui.Rect, index: usize) ui.Rect {
-    const item_w = switch (index) {
-        0 => navigation_menu_first_w,
-        1 => navigation_menu_second_w,
-        else => navigation_menu_third_w,
-    };
-    const item_x = switch (index) {
-        0 => bounds.x,
-        1 => bounds.x + navigation_menu_first_w + navigation_menu_gap,
-        else => bounds.x + navigation_menu_first_w + navigation_menu_second_w + navigation_menu_gap * 2.0,
-    };
-    return ui.Rect.init(item_x, bounds.y, item_w, @min(bounds.h, navigation_menu_item_h));
+    return list_layout.itemStripBounds(bounds, index, &navigation_menu_item_widths, navigation_menu_strip_layout);
 }
 
-pub const navigation_menu_item_count: u32 = 3;
+pub const navigation_menu_item_count: u16 = 3;
 const navigation_menu_gap: f32 = 4.0;
 const navigation_menu_item_h: f32 = 36.0;
-const navigation_menu_first_w: f32 = 62.0;
-const navigation_menu_second_w: f32 = 112.0;
-const navigation_menu_third_w: f32 = 56.0;
+const navigation_menu_item_widths = [_]f32{ 62.0, 112.0, 56.0 };
+const navigation_menu_strip_layout = list_layout.ItemStripLayout{ .gap = navigation_menu_gap, .item_h = navigation_menu_item_h };
 const navigation_menu_text_padding: f32 = 10.0;
 const navigation_menu_icon_size: f32 = 12.0;
 const navigation_menu_icon_space: f32 = 16.0;
