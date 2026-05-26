@@ -12,6 +12,7 @@ pub const Error = error{
     SoftwareGlRendererRejected,
     InvalidFramebufferSize,
     BlankGpuFrame,
+    GlFramebufferIncomplete,
 };
 pub const RgbaTexture = backend.RgbaTexture;
 pub const FrameProof = backend.FrameProof;
@@ -51,6 +52,12 @@ pub const Adapter = struct {
 
     pub fn readFramePixels(_: Adapter, width: i32, height: i32, out: []ui.Color) !void {
         try backend.readFramePixels(width, height, out);
+    }
+
+    pub fn renderFrameToRgbaPixels(self: Adapter, width: i32, height: i32, buffers: renderer_ir.Buffers, out: []ui.Color) !Receipt {
+        const receipt = try self.receiptForFrame(width, height, buffers);
+        try backend.renderFrameToRgbaPixels(self.state, width, height, buffers, out);
+        return receipt;
     }
 
     fn receiptForFrame(self: Adapter, width: i32, height: i32, buffers: renderer_ir.Buffers) renderer_present.Error!Receipt {

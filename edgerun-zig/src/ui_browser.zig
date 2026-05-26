@@ -34,14 +34,17 @@ const max_pixels: usize = max_width * max_height;
 const max_input_bytes: usize = 8192;
 const max_source_workspace_bytes: usize = 32 * 1024 * 1024;
 const max_release_artifact_bytes: usize = 64 * 1024 * 1024;
-const max_compiler_runtime_bytes: usize = max_source_workspace_bytes + max_release_artifact_bytes + 2 * 1024 * 1024;
+const compiler_memory_offset_bytes: usize = 16 * 1024 * 1024;
+const compiler_work_memory_bytes: usize = 288 * 1024 * 1024;
 const compiler_source_gap_bytes: usize = 64 * 1024;
+const max_compiler_runtime_bytes: usize = compiler_memory_offset_bytes + compiler_work_memory_bytes + compiler_source_gap_bytes + max_source_workspace_bytes;
 const compiler_execution_tick_budget: u64 = 1_000_000_000;
 const wasm_page_bytes: usize = 64 * 1024;
 const workspace_manifest_header_bytes: usize = 16;
 const source_editor_label = "src/ui_browser.zig";
 const max_source_editor_bytes: usize = 512 * 1024;
 const source_editor_tab = "    ";
+const max_compiler_diagnostic_bytes: usize = 192;
 const max_nodes: usize = 256;
 const max_commands: usize = 4096;
 const max_interaction_regions: usize = 4096;
@@ -99,6 +102,9 @@ var source_editor_cursor: usize = 0;
 var source_editor_loaded = false;
 var source_editor_dirty = false;
 var source_editor_status: SourceEditorStatus = .not_loaded;
+var last_compiler_status: u32 = 0;
+var last_compiler_diagnostic: [max_compiler_diagnostic_bytes]u8 = undefined;
+var last_compiler_diagnostic_len: usize = 0;
 var release_artifact: [max_release_artifact_bytes]u8 = undefined;
 var release_artifact_len: usize = 0;
 var compiler_runtime_memory: [max_compiler_runtime_bytes]u8 align(16) = undefined;
@@ -787,6 +793,18 @@ export fn er_ui_source_editor_status() u32 {
     return @intFromEnum(source_editor_status);
 }
 
+export fn er_ui_last_compiler_status() u32 {
+    return last_compiler_status;
+}
+
+export fn er_ui_last_compiler_diagnostic_ptr() usize {
+    return @intFromPtr(&last_compiler_diagnostic);
+}
+
+export fn er_ui_last_compiler_diagnostic_len() usize {
+    return last_compiler_diagnostic_len;
+}
+
 export fn er_ui_compiler_wasm_ptr() usize {
     return @intFromPtr(&compiler_wasm);
 }
@@ -1236,7 +1254,7 @@ fn compileWorkspaceInsideWasm() ErrorCode {
     ensureSourceWorkspace();
     if (source_workspace_len == 0 or source_workspace_len > source_workspace.len) return finishErrorCode(.bad_input);
 
-    const source_offset = alignForward(release_artifact.len + compiler_source_gap_bytes, 16);
+    const source_offset = alignForward(compiler_memory_offset_bytes + compiler_work_memory_bytes + compiler_source_gap_bytes, 16);
     if (source_offset > compiler_runtime_memory.len) return finishErrorCode(.bad_input);
     if (source_workspace_len > compiler_runtime_memory.len - source_offset) return finishErrorCode(.bad_input);
 
@@ -1245,29 +1263,39 @@ fn compileWorkspaceInsideWasm() ErrorCode {
 
     var execution_ticks: u64 = compiler_execution_tick_budget;
     var runtime = wasm_interpreter.Runtime.initWithMemoryPages(&compiler_runtime_memory, &execution_ticks, pagesForBytes(source_offset + source_workspace_len));
-    const output_capacity: i32 = @intCast(source_offset);
+    const compiler_memory_ptr: i32 = @intCast(compiler_memory_offset_bytes);
+    const compiler_memory_len: i32 = @intCast(compiler_work_memory_bytes);
     const source_ptr: i32 = @intCast(source_offset);
     const source_len: i32 = @intCast(source_workspace_len);
     const init_args = [_]wasm_interpreter.Value{
-        .{ .i32 = 0 },
-        .{ .i32 = output_capacity },
+        .{ .i32 = compiler_memory_ptr },
+        .{ .i32 = compiler_memory_len },
     };
     const init_result = wasm_interpreter.executeExportValueArgs(&runtime, &compiler_wasm, "er_wasm_compiler_init", &init_args) catch return finishErrorCode(.render_failed);
-    if ((init_result.valueI32(0) catch return finishErrorCode(.render_failed)) != 0) return finishErrorCode(.bad_input);
+    last_compiler_status = @intCast(init_result.valueI32(0) catch return finishErrorCode(.render_failed));
+    if (last_compiler_status != 0) {
+        recordCompilerDiagnostic(&runtime);
+        return finishErrorCode(.bad_input);
+    }
 
     const compile_args = [_]wasm_interpreter.Value{
-        .{ .i32 = 0 },
-        .{ .i32 = output_capacity },
+        .{ .i32 = compiler_memory_ptr },
+        .{ .i32 = compiler_memory_len },
         .{ .i32 = 0 },
         .{ .i32 = 0 },
         .{ .i32 = source_ptr },
         .{ .i32 = source_len },
     };
     const compile_result = wasm_interpreter.executeExportValueArgs(&runtime, &compiler_wasm, "er_wasm_compiler_compile_wasm", &compile_args) catch return finishErrorCode(.render_failed);
-    if ((compile_result.valueI32(0) catch return finishErrorCode(.render_failed)) != 0) return finishErrorCode(.bad_input);
+    last_compiler_status = @intCast(compile_result.valueI32(0) catch return finishErrorCode(.render_failed));
+    if (last_compiler_status != 0) {
+        recordCompilerDiagnostic(&runtime);
+        return finishErrorCode(.bad_input);
+    }
 
     const output_len_result = wasm_interpreter.executeExportValueArgs(&runtime, &compiler_wasm, "er_wasm_compiler_output_len", &.{}) catch return finishErrorCode(.render_failed);
-    const output_ptr: usize = 0;
+    const output_ptr_result = wasm_interpreter.executeExportValueArgs(&runtime, &compiler_wasm, "er_wasm_compiler_output_ptr", &.{}) catch return finishErrorCode(.render_failed);
+    const output_ptr: usize = @intCast(output_ptr_result.valueI32(0) catch return finishErrorCode(.render_failed));
     const output_len: usize = @intCast(output_len_result.valueI32(0) catch return finishErrorCode(.render_failed));
     if (output_len < 4 or output_len > release_artifact.len) return finishErrorCode(.bad_input);
     if (output_ptr > compiler_runtime_memory.len or output_len > compiler_runtime_memory.len - output_ptr) return finishErrorCode(.bad_input);
@@ -1275,8 +1303,36 @@ fn compileWorkspaceInsideWasm() ErrorCode {
 
     @memcpy(release_artifact[0..output_len], compiler_runtime_memory[output_ptr .. output_ptr + output_len]);
     release_artifact_len = output_len;
+    last_compiler_status = 0;
+    last_compiler_diagnostic_len = 0;
     last_error = .ok;
     return .ok;
+}
+
+fn recordCompilerDiagnostic(runtime: *wasm_interpreter.Runtime) void {
+    const ptr_result = wasm_interpreter.executeExportValueArgs(runtime, &compiler_wasm, "er_wasm_compiler_diagnostic_ptr", &.{}) catch {
+        last_compiler_diagnostic_len = 0;
+        return;
+    };
+    const len_result = wasm_interpreter.executeExportValueArgs(runtime, &compiler_wasm, "er_wasm_compiler_diagnostic_len", &.{}) catch {
+        last_compiler_diagnostic_len = 0;
+        return;
+    };
+    const ptr: usize = @intCast(ptr_result.valueI32(0) catch {
+        last_compiler_diagnostic_len = 0;
+        return;
+    });
+    const len: usize = @intCast(len_result.valueI32(0) catch {
+        last_compiler_diagnostic_len = 0;
+        return;
+    });
+    if (ptr > runtime.memory.len) {
+        last_compiler_diagnostic_len = 0;
+        return;
+    }
+    const bounded_len = @min(len, @min(last_compiler_diagnostic.len, runtime.memory.len - ptr));
+    if (bounded_len > 0) @memcpy(last_compiler_diagnostic[0..bounded_len], runtime.memory[ptr..][0..bounded_len]);
+    last_compiler_diagnostic_len = bounded_len;
 }
 
 fn finishErrorCode(code: ErrorCode) ErrorCode {

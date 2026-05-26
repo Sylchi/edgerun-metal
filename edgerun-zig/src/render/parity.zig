@@ -2,6 +2,7 @@ const std = @import("std");
 const ui = @import("../ui.zig");
 
 pub const exact_tolerance: u8 = 0;
+pub const hardware_tolerance: u8 = 2;
 pub const missing_mismatch: usize = std.math.maxInt(usize);
 
 pub const PixelDiff = struct {
@@ -16,6 +17,7 @@ pub const PixelDiff = struct {
     worst_mismatch_index: usize = missing_mismatch,
     worst_expected: ui.Color = .clear,
     worst_actual: ui.Color = .clear,
+    actual_minus_expected: [signed_delta_bucket_count]usize = [_]usize{0} ** signed_delta_bucket_count,
 
     pub fn valid(self: PixelDiff) bool {
         return self.pixel_count != 0 and self.mismatch_count == 0 and self.max_channel_delta == 0;
@@ -36,10 +38,30 @@ pub const PixelDiff = struct {
     pub fn worstMismatchY(self: PixelDiff) usize {
         return if (self.worst_mismatch_index == missing_mismatch or self.width == 0) 0 else self.worst_mismatch_index / self.width;
     }
+
+    fn recordSignedDelta(self: *PixelDiff, expected: ui.Color, actual: ui.Color) void {
+        self.recordChannelDelta(expected.r, actual.r);
+        self.recordChannelDelta(expected.g, actual.g);
+        self.recordChannelDelta(expected.b, actual.b);
+        self.recordChannelDelta(expected.a, actual.a);
+    }
+
+    fn recordChannelDelta(self: *PixelDiff, expected: u8, actual: u8) void {
+        const delta = @as(i16, @intCast(actual)) - @as(i16, @intCast(expected));
+        if (signedDeltaBucket(delta)) |bucket| self.actual_minus_expected[bucket] += 1;
+    }
 };
+
+const signed_delta_min: i16 = -8;
+const signed_delta_max: i16 = 8;
+const signed_delta_bucket_count: usize = @intCast(signed_delta_max - signed_delta_min + 1);
 
 pub fn compareExact(width: usize, height: usize, expected: []const ui.Color, actual: []const ui.Color) !PixelDiff {
     return compare(width, height, expected, actual, exact_tolerance);
+}
+
+pub fn compareHardware(width: usize, height: usize, expected: []const ui.Color, actual: []const ui.Color) !PixelDiff {
+    return compare(width, height, expected, actual, hardware_tolerance);
 }
 
 pub fn compare(width: usize, height: usize, expected: []const ui.Color, actual: []const ui.Color, tolerance: u8) !PixelDiff {
@@ -63,6 +85,7 @@ pub fn compare(width: usize, height: usize, expected: []const ui.Color, actual: 
         }
         if (delta > tolerance) {
             diff.mismatch_count += 1;
+            diff.recordSignedDelta(want, got);
             if (diff.first_mismatch_index == missing_mismatch) {
                 diff.first_mismatch_index = index;
                 diff.first_expected = want;
@@ -71,6 +94,11 @@ pub fn compare(width: usize, height: usize, expected: []const ui.Color, actual: 
         }
     }
     return diff;
+}
+
+fn signedDeltaBucket(delta: i16) ?usize {
+    if (delta < signed_delta_min or delta > signed_delta_max) return null;
+    return @intCast(delta - signed_delta_min);
 }
 
 fn maxPixelDelta(a: ui.Color, b: ui.Color) u8 {

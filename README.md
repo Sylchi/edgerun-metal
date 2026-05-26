@@ -1,57 +1,114 @@
-# edgerun-c
+# EdgeRun
 
-`edgerun-c` is the current EdgeRun implementation workspace. The repository name
-is historical: the active core implementation has moved to Zig, while the
-BLAKE3 crypto package remains C/CMake.
+EdgeRun is an experiment in making computers trustworthy again.
 
-The project model is documented in [EDGE_MODEL.md](EDGE_MODEL.md). The short
-version is that canonical objects, identities, deterministic clock coordinates,
-append-only storage, seals, grants, and explicit admission records are the
-system boundary. Transport, UI, storage media, and hardware bring-up paths move
-or present those records; they do not become authority roots.
+Today, most apps borrow trust from clouds, app stores, operating systems,
+accounts, permissions, and invisible background services. EdgeRun tries a
+stricter idea:
 
-## Current Layout
+```text
+If an app does work, it should be able to prove what it used,
+what it touched, who allowed it, and what came out.
+```
 
-- `edgerun-zig/`: primary implementation workspace.
-  - `src/clock.zig`: deterministic epoch coordinates.
-  - `src/identity.zig`: canonical identity derivation and identity ids.
-  - `src/object.zig`: canonical object bytes, ids, requirements, and
-    verification.
-  - `src/store.zig`: append-only accepted-object storage and replay state.
-  - `src/seal.zig`, `src/sync.zig`, `src/relay.zig`: sealed object movement and
-    receipt-shaped transfer paths.
-  - `src/wasm/`: deterministic WASM interpreter path used for EdgeRun app
-    authoring, parent-visible preview, release, and allocator-scoped execution.
-  - `src/tpm.zig`, `src/tls_tpm.zig`, `src/tpm_acpi.zig`: TPM-backed authority
-    and TLS-adjacent primitives.
-  - `src/ui.zig`, `src/ui_components.zig`, `src/ui_resolver.zig`,
-    `src/renderer_*.zig`: current UI core, component, resolver, and renderer
-    work.
-  - `src/pi_zero_w_v1_1*.zig`, `src/pi_mmc.zig`, `src/bcm2708_usb_boot.zig`,
-    `src/pi_usb_*`: Raspberry Pi Zero W v1.1 bring-up and USB boot tooling.
-- `edgerun-crypto/`: C/CMake BLAKE3 implementation, tests, and benchmark.
+That proof is built from small records: objects, identities, clocks, grants,
+sealed messages, and receipts.
+
+## Why This Deserves Attention
+
+EdgeRun is not another app framework. It is a way to run software where authority
+is explicit instead of ambient.
+
+- Apps do not automatically inherit your files, network, devices, identity, or
+  another app's memory.
+- Important data is stored as canonical objects, not vague files or hidden app
+  state.
+- Work produces receipts, so execution can be replayed, checked, and explained.
+- A parent app can help create a child app, but a released child owns its own
+  memory unless it explicitly shares something back.
+- The same UI is being pushed through browser, CPU, GPU, Wayland, and DRM paths
+  instead of becoming five separate app models.
+- The project includes real boot, TPM, WASM, rendering, media, and Pi bring-up
+  work, not just a whitepaper.
+
+The simple promise is this: software should come with an audit trail ordinary
+people can understand.
+
+## The Short Version
+
+EdgeRun treats apps as object graphs plus requirements.
+
+When an app wants to run, the local machine grants exact slices of memory,
+storage, identity, and device authority. The app does its work inside those
+bounds and emits receipts. Those receipts can explain, in concrete terms, what
+was allowed and what happened.
+
+That makes sharing software different. Instead of "install this package and hope
+it behaves," the goal is closer to:
+
+```text
+Here is the app object.
+Here is what it asks for.
+Here is what your machine granted.
+Here is the receipt for the work it performed.
+```
+
+## What Is Real In This Repo
+
+- A Zig core for canonical objects, identities, deterministic clocks,
+  append-only storage, sealed movement, grants, manifests, and receipts.
+- A deterministic EdgeRun WASM interpreter for running app code without WASI or
+  a fake host filesystem.
+- App containment tests for host-mediated spawn, reclaim, and child-memory
+  boundaries.
+- A browser app that embeds repo source as an object, edits it in WASM-owned
+  memory, and runs an embedded compiler path toward successor WASM.
+- A shared UI/render contract consumed by browser, CPU software rendering,
+  Wayland, GLES, and DRM/GBM host paths.
+- Repo-owned font, SVG icon, image, video, and audio decode/render paths.
+- QEMU-smoked immutable-kernel work for boot resources, memory contracts, WASM
+  launch, work receipts, registry routing, `ExitBootServices`, and TPM/swtpm
+  verification.
+- Raspberry Pi Zero W v1.1 kernel and USB boot tooling for real hardware
+  bring-up.
+
+The long-form model is in [EDGE_MODEL.md](EDGE_MODEL.md).
+
+## Repository Map
+
+- `edgerun-zig/`: active implementation workspace.
+- `edgerun-zig/src/clock.zig`: deterministic clock coordinates.
+- `edgerun-zig/src/identity.zig`: user, device, app, and delegated identities.
+- `edgerun-zig/src/object.zig`: canonical object bytes, ids, requirements, and
+  verification.
+- `edgerun-zig/src/store.zig`: accepted-object storage and replay state.
+- `edgerun-zig/src/app.zig`: app manifests, execution receipts, and containment
+  tests.
+- `edgerun-zig/src/wasm/`: deterministic EdgeRun WASM interpreter.
+- `edgerun-zig/src/render/`: shared render IR, presentation receipts, software
+  and GPU paths.
+- `edgerun-zig/src/ui_browser.zig`: browser app entry point.
+- `edgerun-zig/src/content/`: kernel resource inventory, contracts, authority,
+  and WASM launch work.
+- `edgerun-zig/src/immutable_kernel_*.zig`: QEMU UEFI kernel smokes.
+- `edgerun-zig/src/pi_zero_w_v1_1*.zig`: Pi Zero W v1.1 bring-up.
+- `edgerun-crypto/`: C/CMake BLAKE3 package.
 - `edgerun-clock/`, `edgerun-identity/`, `edgerun-object/`,
-  `edgerun-storage/`: package shells kept during the C-to-Zig transition. The
-  current implementations are the Zig modules listed above.
-- `edgerun-metal/`: older C metal primitives still present in the tree. Do not
-  treat this as the authoritative core for clock, identity, object, storage, or
-  UI work unless the task explicitly targets it.
-- `.build/`: local build output. Keep generated artifacts here and out of Git.
+  `edgerun-storage/`: transition-era package shells; the current
+  implementations are in Zig.
 
-## Build And Test
-
-Use the top-level `Makefile` for normal checks:
+## Try The Important Checks
 
 ```sh
 make check
+```
+
+Focused checks:
+
+```sh
 make zig-fmt-check
 make zig-test
 make crypto-test
-```
-
-Focused Zig module tests:
-
-```sh
 make clock-test
 make identity-test
 make object-test
@@ -59,79 +116,43 @@ make storage-test
 make ui-core-test
 ```
 
-The same Zig steps are available directly through `edgerun-zig/build.zig`:
+Build the browser app:
 
 ```sh
-zig build --build-file edgerun-zig/build.zig --cache-dir .build/edgerun-zig test
-zig build --build-file edgerun-zig/build.zig --cache-dir .build/edgerun-zig clock-test
-zig build --build-file edgerun-zig/build.zig --cache-dir .build/edgerun-zig identity-test
-zig build --build-file edgerun-zig/build.zig --cache-dir .build/edgerun-zig object-test
-zig build --build-file edgerun-zig/build.zig --cache-dir .build/edgerun-zig storage-test
-zig build --build-file edgerun-zig/build.zig --cache-dir .build/edgerun-zig ui-core-test
-```
-
-Other useful Zig build steps:
-
-```sh
-zig build --build-file edgerun-zig/build.zig --cache-dir .build/edgerun-zig sdk-test
-zig build --build-file edgerun-zig/build.zig --cache-dir .build/edgerun-zig sdk-cli -- simulate standard
-zig build --build-file edgerun-zig/build.zig --cache-dir .build/edgerun-zig component-gallery-test
-zig build --build-file edgerun-zig/build.zig --cache-dir .build/edgerun-zig ui-snapshot
 zig build --build-file edgerun-zig/build.zig --cache-dir .build/edgerun-zig ui-browser
+cd edgerun-zig/zig-out
+python3 -m http.server 8765 --bind 127.0.0.1
 ```
 
-The real TPM check only belongs on a machine with the expected TPM device:
+Then open:
+
+```text
+http://127.0.0.1:8765/web/index.html
+```
+
+Run the main kernel smokes:
 
 ```sh
-make zig-real-tpm
+cd edgerun-zig
+./tools/run-immutable-kernel-qemu.sh
+./tools/run-immutable-kernel-runtime-qemu.sh
+./tools/run-immutable-kernel-exit-boot-qemu.sh
+./tools/run-immutable-kernel-swtpm-qemu.sh
 ```
 
-## Pi Zero W v1.1 Bring-Up
-
-Build the kernel image:
+Pi Zero W v1.1 bring-up:
 
 ```sh
 make pi-zero-w-v1_1-kernel
-```
-
-Load over USB:
-
-```sh
 make pi-usb-load
 ```
 
-The Pi USB bring-up path uses the repo-owned Zig host loader and the explicit
-boot-firmware exception needed for the Broadcom mask-ROM/GPU boot chain to load
-repo-owned `kernel.img` on Pi Zero W v1.1 hardware. That exception does not
-permit vendor drivers, protocol stacks, control planes, compatibility layers, or
-general binary dependencies.
+## Working Rule
 
-## Repository Rules
+The repository rule is simple: implementation is truth.
 
-The operational rules for agents and contributors are in [AGENTS.md](AGENTS.md).
-The important defaults are:
+Do not add fallbacks, compatibility shims, hidden alternate paths, or broad
+authority. If behavior matters, encode it as deterministic objects, explicit
+requirements, and receipts.
 
-- No fallbacks, shims, compatibility layers, or hidden alternate paths.
-- Warnings are errors; errors are fatal.
-- Production code must be freestanding and must not depend on host libc.
-- Tests must cover touched behavior.
-- Canonical object bytes are the object boundary.
-- Prefer deleting stale parallel code over keeping competing implementations.
-- Keep one Git repository with no nested `.git` directories or submodules.
-
-When changing core behavior, update the code and tests first. Documentation
-should describe the implementation that exists, not an intended parallel design.
-
-## App Authoring Model
-
-EdgeRun apps are meant to author and share other EdgeRun apps. A draft app can
-run under the WASM interpreter inside its parent with parent-visible memory for
-preview and debugging. Releasing the draft promotes it into canonical app
-objects and a manifest; allocator admission then moves memory and storage into
-child-owned slices. The parent keeps handles and receipts, not direct memory
-visibility, unless the child explicitly shares a view back.
-
-Shared executables are object graphs plus requirements and receipts. They do not
-inherit network, storage, device, identity, or parent memory authority. The
-recipient user's allocator grants the slices and capabilities needed to run the
-app.
+Contributor and agent rules are in [AGENTS.md](AGENTS.md).

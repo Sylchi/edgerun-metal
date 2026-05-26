@@ -1,5 +1,6 @@
 const std = @import("std");
 const icon_vector = @import("../../icon_vector.zig");
+const renderer_icon_mask = @import("../icon_mask.zig");
 const renderer_ir = @import("../ir.zig");
 const renderer_present = @import("../present.zig");
 const ui = @import("../../ui.zig");
@@ -305,7 +306,7 @@ pub const Surface = struct {
             while (x < px1) : (x += 1) {
                 const u = quad.u0 + (@as(f32, @floatFromInt(x)) + pixel_center - quad.bounds.x) * u_step;
                 const sample_x = bilinearAxis(u, atlas_w, atlas.width);
-                var sampled_alpha = bilinearAlphaByte(
+                const sampled_alpha = bilinearAlphaFloat(
                     atlas.alpha[row0 + sample_x.index0],
                     atlas.alpha[row0 + sample_x.index1],
                     atlas.alpha[row1 + sample_x.index0],
@@ -313,9 +314,8 @@ pub const Surface = struct {
                     sample_x.fraction,
                     sample_y.fraction,
                 );
-                if (quad.bounds.h <= small_text_sharpen_max_glyph_h) sampled_alpha = sharpenSmallTextAlpha(sampled_alpha);
-                const alpha = scaleAlphaByte(quad.color.a, sampled_alpha);
-                if (alpha != 0) self.blendPixelAt(y * self.width + x, color, alpha);
+                const alpha = colorF(quad.color.a) * sampled_alpha;
+                if (alpha > 0.0) self.blendPixelFloatAlpha(y * self.width + x, color, alpha);
             }
         }
     }
@@ -349,6 +349,18 @@ pub const Surface = struct {
         };
     }
 
+    fn blendPixelFloatAlpha(self: Surface, index: usize, color: ui.Color, alpha: f32) void {
+        const dst = self.pixels[index];
+        const a = std.math.clamp(alpha, 0.0, 1.0);
+        const inv = 1.0 - a;
+        self.pixels[index] = .{
+            .r = blendChannelFloat(color.r, dst.r, a, inv),
+            .g = blendChannelFloat(color.g, dst.g, a, inv),
+            .b = blendChannelFloat(color.b, dst.b, a, inv),
+            .a = @intFromFloat(@round(std.math.clamp(@as(f32, @floatFromInt(color.a)) * a + @as(f32, @floatFromInt(dst.a)) * inv, 0.0, 255.0))),
+        };
+    }
+
     fn blendPixelMaxAlpha(self: Surface, x: usize, y: usize, color: ui.Color, alpha: u8) void {
         const index = y * self.width + x;
         if (alpha <= self.pixels[index].a) return;
@@ -364,11 +376,13 @@ pub const Surface = struct {
         const index = y * self.width + x;
         const src_a: u16 = scaleByte(color.a, @as(f32, @floatFromInt(alpha)) / byte_unit_scale);
         const dst_a: u16 = self.pixels[index].a;
+        const inv_a: u16 = 255 - src_a;
+        const dst = self.pixels[index];
         const out_a = src_a + (dst_a * (255 - src_a)) / 255;
         self.pixels[index] = .{
-            .r = color.r,
-            .g = color.g,
-            .b = color.b,
+            .r = blendChannel(color.r, dst.r, src_a, inv_a),
+            .g = blendChannel(color.g, dst.g, src_a, inv_a),
+            .b = blendChannel(color.b, dst.b, src_a, inv_a),
             .a = @intCast(@min(@as(u16, 255), out_a)),
         };
     }
@@ -390,10 +404,6 @@ pub const Surface = struct {
     fn fillRounded(self: Surface, bounds: ui.Rect, top_color: ui.Color, bottom_color: ui.Color, radius: f32) void {
         if (radius <= 0.0 and colorsEqual(top_color, bottom_color) and top_color.a == max_alpha) {
             self.fill(bounds, top_color);
-            return;
-        }
-        if (radius > 0.0 and colorsEqual(top_color, bottom_color) and top_color.a == max_alpha) {
-            self.fillRoundedSolid(bounds, top_color, radius);
             return;
         }
         const x0 = clampCoord(@intFromFloat(@floor(bounds.x)), self.width);
@@ -486,8 +496,7 @@ pub const Surface = struct {
             while (x < x1) : (x += 1) {
                 const px = @as(f32, @floatFromInt(x)) + pixel_center;
                 const outer_alpha = roundedAlpha(outer, radius, px, py);
-                const inner_alpha = if (inner.valid()) roundedAlpha(inner, @max(0.0, radius - width), px, py) else 0;
-                const alpha = outer_alpha -| inner_alpha;
+                const alpha = roundedBorderAlpha(outer_alpha, inner, @max(0.0, radius - width), px, py);
                 if (alpha != 0) self.blendPixel(x, y, color, alpha);
             }
         }
@@ -509,8 +518,7 @@ pub const Surface = struct {
             while (x < x1) : (x += 1) {
                 const px = @as(f32, @floatFromInt(x)) + pixel_center;
                 const outer_alpha = roundedAlpha(outer, radius, px, py);
-                const inner_alpha = if (inner.valid()) roundedAlpha(inner, @max(0.0, radius - width), px, py) else 0;
-                const alpha = outer_alpha -| inner_alpha;
+                const alpha = roundedBorderAlpha(outer_alpha, inner, @max(0.0, radius - width), px, py);
                 if (alpha != 0) self.blendPixel(x, y, paint.colorAt(icon_bounds, bounds, x, y), alpha);
             }
         }
@@ -575,8 +583,32 @@ pub const Surface = struct {
 
     fn drawIconInstance(self: Surface, icon_bounds: ui.Rect, color: ui.Color, icon_id: u32, scale: f32) void {
         const bounds = scaleRect(icon_bounds, scale);
+        if (self.drawMappedIconMask(bounds, color, icon_id)) return;
         var iter = renderer_ir.iconOpIteratorForId(icon_id);
         self.drawIconOps(bounds, color, &iter);
+    }
+
+    fn drawMappedIconMask(self: Surface, bounds: ui.Rect, color: ui.Color, icon_id: u32) bool {
+        const width = iconMaskAxis(bounds.w);
+        const height = iconMaskAxis(bounds.h);
+        var alpha: [renderer_icon_mask.max_pixels]u8 = undefined;
+        const mask = renderer_icon_mask.rasterizeIconAlpha(icon_id, width, height, &alpha) catch return false;
+        if (!mask.painted) return false;
+        const x0 = clampCoord(@intFromFloat(@floor(bounds.x)), self.width);
+        const y0 = clampCoord(@intFromFloat(@floor(bounds.y)), self.height);
+        var row: usize = 0;
+        while (row < mask.height) : (row += 1) {
+            const y = y0 + row;
+            if (y >= self.height) break;
+            var col: usize = 0;
+            while (col < mask.width) : (col += 1) {
+                const x = x0 + col;
+                if (x >= self.width) break;
+                const alpha_value = mask.alpha[row * mask.width + col];
+                if (alpha_value > icon_alpha_floor) self.blendPixelPathAlpha(x, y, color, alpha_value);
+            }
+        }
+        return true;
     }
 
     fn drawIconSvg(self: Surface, bounds: ui.Rect, color: ui.Color, svg: []const u8) void {
@@ -1552,6 +1584,11 @@ fn iconStroke(bounds: ui.Rect, stroke_width: f32) f32 {
     return @max(icon_stroke_min_px, @min(bounds.w, bounds.h) * stroke_width);
 }
 
+fn iconMaskAxis(value: f32) usize {
+    if (value <= 1.0) return 1;
+    return @min(renderer_icon_mask.max_width, @max(@as(usize, 1), @as(usize, @intFromFloat(@ceil(value)))));
+}
+
 const icon_stroke_scale: f32 = 2.0 / 24.0;
 const icon_stroke_min_px: f32 = 1.5;
 const icon_mask_pad_scale: f32 = 1.0;
@@ -1892,22 +1929,17 @@ fn isLeftOfEdge(start: icon_vector.Point, end: icon_vector.Point, point: icon_ve
 }
 
 fn roundedAlpha(bounds: ui.Rect, radius: f32, x: f32, y: f32) u8 {
-    const max_radius = @max(0.0, @min(bounds.w, bounds.h) * 0.5);
-    const r = @min(@max(radius, 0.0), max_radius);
-    if (r <= 0.0) return max_alpha;
-    const left = bounds.x + r;
-    const right = bounds.x + bounds.w - r;
-    const top = bounds.y + r;
-    const bottom = bounds.y + bounds.h - r;
-    const cx = clampRange(x, left, right);
-    const cy = clampRange(y, top, bottom);
-    const dx = x - cx;
-    const dy = y - cy;
-    const distance = @sqrt(dx * dx + dy * dy);
-    if (distance <= r - antialias_width) return max_alpha;
-    if (distance >= r) return 0;
-    const coverage = (r - distance) / antialias_width;
-    return @intFromFloat(@round(std.math.clamp(coverage, 0.0, 1.0) * 255.0));
+    const distance = roundedOutsideDistance(bounds, radius, x, y);
+    const coverage = std.math.clamp(-distance / antialias_width, 0.0, 1.0);
+    return @intFromFloat(@floor(coverage * 255.0 + 0.5));
+}
+
+fn roundedBorderAlpha(outer_alpha: u8, inner: ui.Rect, inner_radius: f32, x: f32, y: f32) u8 {
+    if (outer_alpha == 0) return 0;
+    if (!inner.valid()) return outer_alpha;
+    const inner_distance = roundedOutsideDistance(inner, inner_radius, x, y);
+    const gate = std.math.clamp(inner_distance / antialias_width, 0.0, 1.0);
+    return scaleByte(outer_alpha, gate);
 }
 
 fn roundedOutsideDistance(bounds: ui.Rect, radius: f32, x: f32, y: f32) f32 {
@@ -2080,8 +2112,18 @@ fn blendChannel(src: u8, dst: u8, src_alpha: u16, inv_alpha: u16) u8 {
     return @intCast((@as(u16, src) * src_alpha + @as(u16, dst) * inv_alpha + 127) / 255);
 }
 
+fn blendChannelFloat(src: u8, dst: u8, src_alpha: f32, inv_alpha: f32) u8 {
+    const value = @as(f32, @floatFromInt(src)) * src_alpha + @as(f32, @floatFromInt(dst)) * inv_alpha;
+    return @intFromFloat(@round(std.math.clamp(value, 0.0, 255.0)));
+}
+
+fn colorF(value: u8) f32 {
+    return @as(f32, @floatFromInt(value)) / 255.0;
+}
+
 fn nearestSampleIndex(value: f32, max_index_float: f32, len: usize) usize {
-    const scaled = std.math.clamp(value, 0.0, 1.0) * max_index_float;
+    _ = max_index_float;
+    const scaled = std.math.clamp(std.math.clamp(value, 0.0, 1.0) * @as(f32, @floatFromInt(len)) - 0.5, 0.0, @as(f32, @floatFromInt(len - 1)));
     const index: usize = @intFromFloat(@round(scaled));
     return @min(index, len - 1);
 }
@@ -2093,7 +2135,8 @@ const BilinearAxis = struct {
 };
 
 fn bilinearAxis(value: f32, max_index_float: f32, len: usize) BilinearAxis {
-    const scaled = std.math.clamp(value, 0.0, 1.0) * max_index_float;
+    _ = max_index_float;
+    const scaled = std.math.clamp(std.math.clamp(value, 0.0, 1.0) * @as(f32, @floatFromInt(len)) - 0.5, 0.0, @as(f32, @floatFromInt(len - 1)));
     const index0: usize = @intFromFloat(@floor(scaled));
     return .{
         .index0 = index0,
@@ -2103,11 +2146,15 @@ fn bilinearAxis(value: f32, max_index_float: f32, len: usize) BilinearAxis {
 }
 
 fn bilinearAlphaByte(a00: u8, a10: u8, a01: u8, a11: u8, tx: f32, ty: f32) u8 {
-    return @intFromFloat(@round(lerp(
+    return @intFromFloat(@round(bilinearAlphaFloat(a00, a10, a01, a11, tx, ty) * 255.0));
+}
+
+fn bilinearAlphaFloat(a00: u8, a10: u8, a01: u8, a11: u8, tx: f32, ty: f32) f32 {
+    return lerp(
         lerp(@as(f32, @floatFromInt(a00)), @as(f32, @floatFromInt(a10)), tx),
         lerp(@as(f32, @floatFromInt(a01)), @as(f32, @floatFromInt(a11)), tx),
         ty,
-    )));
+    ) / 255.0;
 }
 
 fn scaleAlphaByte(tint: u8, sample: u8) u8 {

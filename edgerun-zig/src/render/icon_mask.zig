@@ -644,6 +644,13 @@ test "icon mask rasterizes mapped svg strokes" {
     }
 }
 
+test "icon mask covers code slash parity pixel" {
+    var alpha: [max_pixels]u8 = undefined;
+    const mask = try rasterizeIconAlpha(7, 22, 22, &alpha);
+    try std.testing.expect(mask.painted);
+    try std.testing.expectEqual(@as(u8, 21), mask.alpha[6 * 22 + 13]);
+}
+
 test "icon mask rasterizes filled path geometry" {
     var alpha: [max_pixels]u8 = undefined;
     @memset(&alpha, 0);

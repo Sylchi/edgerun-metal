@@ -335,15 +335,18 @@ fn verifyGpuCpuParity(
     software_surface.clear(siteBackground());
     const software_receipt = try software_surface.renderIr(buffers, renderer_pipeline.softwareResources(font_atlas, image_texture));
     if (!software_receipt.valid()) return error.InvalidSoftwareReceipt;
-    try gl.readFramePixels(framebuffer_width, framebuffer_height, actual);
+    const gpu_receipt = try gl.renderFrameToRgbaPixels(logical_width, logical_height, buffers, actual);
+    if (!gpu_receipt.valid()) return error.InvalidGlesReceipt;
     const diff = try renderer_parity.compareExact(width, height, expected, actual);
     if (!diff.valid()) {
+        const hardware_diff = try renderer_parity.compareHardware(width, height, expected, actual);
         std.debug.print(
-            "render parity mismatch: pixels={} mismatches={} max_delta={} first=({}, {}) expected=rgba({},{},{},{}) actual=rgba({},{},{},{}) worst=({}, {}) expected=rgba({},{},{},{}) actual=rgba({},{},{},{})\n",
+            "render parity mismatch: pixels={} mismatches={} max_delta={} hardware_tolerance_mismatches={} first=({}, {}) expected=rgba({},{},{},{}) actual=rgba({},{},{},{}) worst=({}, {}) expected=rgba({},{},{},{}) actual=rgba({},{},{},{})\n",
             .{
                 diff.pixel_count,
                 diff.mismatch_count,
                 diff.max_channel_delta,
+                hardware_diff.mismatch_count,
                 diff.firstMismatchX(),
                 diff.firstMismatchY(),
                 diff.first_expected.r,
@@ -368,8 +371,19 @@ fn verifyGpuCpuParity(
         );
         printParityPrimitiveAt(buffers, @floatFromInt(diff.firstMismatchX()), @floatFromInt(diff.firstMismatchY()));
         printParityPrimitiveAt(buffers, @floatFromInt(diff.worstMismatchX()), @floatFromInt(diff.worstMismatchY()));
+        printParityDeltaBuckets(diff);
         return error.RenderParityMismatch;
     }
+}
+
+fn printParityDeltaBuckets(diff: renderer_parity.PixelDiff) void {
+    std.debug.print("signed actual-expected channel deltas:", .{});
+    for (diff.actual_minus_expected, 0..) |count, index| {
+        if (count == 0) continue;
+        const delta = @as(i32, @intCast(index)) - 8;
+        std.debug.print(" {d}:{}", .{ delta, count });
+    }
+    std.debug.print("\n", .{});
 }
 
 fn printParityPrimitiveAt(buffers: renderer_ir.Buffers, x: f32, y: f32) void {
