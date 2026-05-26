@@ -13,8 +13,6 @@ const primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-const measureFixed = primitives.measureFixed;
-
 pub const Drawer = struct {
     id: u32,
     title: []const u8,
@@ -37,9 +35,18 @@ pub const Drawer = struct {
     }
 
     pub fn measure(self: Drawer, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
-        _ = self;
         _ = options;
-        return measureFixed(preferred_drawer, constraints);
+        const trigger = text_component.Text.measureValue(overlay_open_label, .{ .width = .unconstrained, .text_wrap = .nowrap }, primitives.textMetrics(overlay_open_label, primitives.control_label_height, 1));
+        const panel = primitives.measureTitleDetailPanel(self.title, self.detail, constraints.inner(.{ .left = drawer_content_inset_x, .right = drawer_content_inset_x, .top = drawer_content_y }), drawer_panel);
+        const preferred = primitives.constrainPreferredSize(.{
+            .w = @max(trigger.preferred.w + drawer_trigger_padding * 2.0, panel.preferred.w + drawer_content_inset_x * 2.0),
+            .h = drawer_content_y + panel.preferred.h,
+        }, constraints);
+        return layout.Measurement.flexible(
+            .{ .w = primitives.min_extent + drawer_content_inset_x * 2.0, .h = drawer_content_y + panel.min.h },
+            preferred,
+            .{ .w = primitives.measure_max_width, .h = @max(preferred.h, drawer_content_y + panel.max.h) },
+        ).applyExact(constraints);
     }
 
     pub fn toObject(self: Drawer, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -87,7 +94,6 @@ const drawer_handle_h: f32 = 4.0;
 const drawer_handle_y: f32 = 5.0;
 const drawer_handle_radius: f32 = 2.0;
 const drawer_panel = primitives.TitleDetailPanel{ .radius = drawer_radius, .padding = drawer_padding, .title_y = 14.0, .title_h = 14.0, .detail_y = 31.0, .detail_h = 12.0 };
-const preferred_drawer = ui.Size{ .w = 240.0, .h = 76.0 };
 
 test "drawer component serializes to canonical object and deserializes" {
     const drawer = Drawer{ .id = 998, .title = "Edit profile", .detail = "Drawer content" };
@@ -116,4 +122,11 @@ test "drawer component renders trigger content and hit regions" {
     try std.testing.expect(component_test.hasText(scene.written(), "Drawer content"));
     try std.testing.expectEqual(@as(usize, 2), collector.written().len);
     try std.testing.expectEqual(@as(u32, 999), collector.written()[1].id);
+}
+
+test "drawer measurement follows title and detail text" {
+    const short = Drawer{ .id = 998, .title = "Edit", .detail = "Body" };
+    const long = Drawer{ .id = 998, .title = "Edit runtime authority", .detail = "Drawer content with receipt controls" };
+
+    try std.testing.expect(long.measure(.{}, .{}).preferred.w > short.measure(.{}, .{}).preferred.w);
 }

@@ -13,8 +13,6 @@ const primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-const measureFixed = primitives.measureFixed;
-
 pub const Popover = struct {
     id: u32,
     trigger: []const u8,
@@ -37,9 +35,19 @@ pub const Popover = struct {
     }
 
     pub fn measure(self: Popover, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
-        _ = self;
         _ = options;
-        return measureFixed(preferred_popover, constraints);
+        const trigger = text_component.Text.measureValue(self.trigger, .{ .width = .unconstrained, .text_wrap = .nowrap }, primitives.textMetrics(self.trigger, primitives.control_label_height, 1));
+        const content_constraints = constraints.inner(.{ .left = trigger.preferred.w + primitives.control_text_padding * 2.0 + popover_layout.gap + popover_padding, .right = popover_padding });
+        const content = text_component.Text.measureValue(self.content, content_constraints, primitives.textMetrics(self.content, primitives.control_label_height, 1));
+        const preferred = primitives.constrainPreferredSize(.{
+            .w = trigger.preferred.w + primitives.control_text_padding * 2.0 + popover_layout.gap + content.preferred.w + popover_padding * 2.0,
+            .h = @max(popover_layout.trigger_y + @max(popover_layout.trigger_h, trigger.preferred.h + primitives.control_text_padding * 2.0), content.preferred.h + popover_padding * 2.0),
+        }, constraints);
+        return layout.Measurement.flexible(
+            .{ .w = primitives.min_extent * 2.0 + popover_layout.gap, .h = primitives.control_label_height + popover_padding * 2.0 },
+            preferred,
+            .{ .w = primitives.measure_max_width, .h = preferred.h },
+        ).applyExact(constraints);
     }
 
     pub fn toObject(self: Popover, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -63,7 +71,6 @@ pub const Popover = struct {
 const popover_layout = primitives.SidePanelLayout{ .trigger_y = 6.0, .trigger_w = 64.0, .trigger_h = 30.0, .gap = 10.0 };
 const popover_radius: f32 = 8.0;
 const popover_padding: f32 = 10.0;
-const preferred_popover = ui.Size{ .w = 240.0, .h = 52.0 };
 
 test "popover component serializes to canonical object and deserializes" {
     const popover = Popover{ .id = 995, .trigger = "Open", .content = "Place content" };
@@ -92,4 +99,11 @@ test "popover component renders trigger content and hit regions" {
     try std.testing.expect(component_test.hasText(scene.written(), "Place content"));
     try std.testing.expectEqual(@as(usize, 2), collector.written().len);
     try std.testing.expectEqual(@as(u32, 996), collector.written()[1].id);
+}
+
+test "popover measurement follows trigger and content text" {
+    const short = Popover{ .id = 995, .trigger = "Open", .content = "Body" };
+    const long = Popover{ .id = 995, .trigger = "Open authority", .content = "Runtime receipt controls" };
+
+    try std.testing.expect(long.measure(.{}, .{}).preferred.w > short.measure(.{}, .{}).preferred.w);
 }

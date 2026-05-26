@@ -13,8 +13,6 @@ const primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-const measureFixed = primitives.measureFixed;
-
 pub const HoverCard = struct {
     id: u32,
     trigger: []const u8,
@@ -34,9 +32,8 @@ pub const HoverCard = struct {
     }
 
     pub fn measure(self: HoverCard, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
-        _ = self;
         _ = options;
-        return measureFixed(preferred_hover_card, constraints);
+        return primitives.measureSidePanelTitleDetail(self.trigger, self.content, hover_card_detail_label, constraints, hover_card_layout, primitives.control_text_padding, hover_card_panel);
     }
 
     pub fn toObject(self: HoverCard, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -62,7 +59,6 @@ const hover_card_radius: f32 = 8.0;
 const hover_card_padding: f32 = 10.0;
 const hover_card_panel = primitives.TitleDetailPanel{ .radius = hover_card_radius, .padding = hover_card_padding, .title_y = 8.0, .title_h = 14.0, .detail_y = 25.0, .detail_h = 12.0 };
 const hover_card_detail_label = "Hover content";
-const preferred_hover_card = ui.Size{ .w = 240.0, .h = 52.0 };
 
 test "hover card component serializes to canonical object and deserializes" {
     const hover_card = HoverCard{ .id = 997, .trigger = "Hover", .content = "@shadcn" };
@@ -91,4 +87,11 @@ test "hover card component renders trigger content and hit regions" {
     try std.testing.expect(component_test.hasText(scene.written(), "@shadcn"));
     try std.testing.expectEqual(@as(usize, 2), collector.written().len);
     try std.testing.expectEqual(@as(u32, 998), collector.written()[1].id);
+}
+
+test "hover card measurement follows trigger and content text" {
+    const short = HoverCard{ .id = 997, .trigger = "Hover", .content = "@ui" };
+    const long = HoverCard{ .id = 997, .trigger = "Inspect authority", .content = "@runtime-receipts" };
+
+    try std.testing.expect(long.measure(.{}, .{}).preferred.w > short.measure(.{}, .{}).preferred.w);
 }
