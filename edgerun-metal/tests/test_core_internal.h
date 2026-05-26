@@ -61,9 +61,7 @@
 #include "er_gfx_console.h"
 #include "er_ui_surface_renderer.h"
 #include "er_ui_frame_timing.h"
-#include "er_ui_tabler_icon_atlas.h"
 #include "er_ui_ledger_app.h"
-#include "er_ui_text.h"
 #include "er_virtio.h"
 #include "er_virtio_blk.h"
 #include "er_virtio_gpu.h"
@@ -94,33 +92,6 @@
 
 static int g_failed = 0;
 static int g_total = 0;
-
-//@optimizer-ignore-function fake test hash must visit each supplied byte span deterministically
-static UINT8 test_hash(void* ctx, const UINT8* domain, UINTN domain_len,
-                       const ErByteSpan* spans, UINTN span_count, ErHash* out_hash) {
-  UINTN i;
-  UINTN j;
-  UINT8 acc = (UINT8)(UINTN)ctx;
-
-  if (domain == 0 || out_hash == 0) {
-    return 0;
-  }
-  for (i = 0; i < domain_len; ++i) {
-    acc = (UINT8)(acc + domain[i] + 1u);
-  }
-  for (i = 0; i < span_count; ++i) {
-    if (spans[i].len > 0u && spans[i].bytes == 0) {
-      return 0;
-    }
-    for (j = 0; j < spans[i].len; ++j) {
-      acc = (UINT8)(acc + spans[i].bytes[j] + (UINT8)i + 3u);
-    }
-  }
-  for (i = 0; i < ER_HASH_LEN; ++i) {
-    out_hash->bytes[i] = (UINT8)(acc + (UINT8)i);
-  }
-  return 1;
-}
 
 static void check_int64(const char* name, INT64 actual, INT64 expected) {
   ++g_total;
@@ -358,15 +329,6 @@ static er_ui_allocator_t test_ui_allocator(void) {
   er_ui_allocator_t allocator;
   allocator.user = 0;
   allocator.alloc = test_alloc;
-  allocator.free = test_free;
-  return allocator;
-}
-
-static vr_font_allocator_t test_vr_allocator(void) {
-  vr_font_allocator_t allocator;
-  allocator.user = 0;
-  allocator.alloc = test_alloc;
-  allocator.realloc = test_realloc;
   allocator.free = test_free;
   return allocator;
 }
