@@ -1,14 +1,14 @@
 const byte_utils = @import("../bytes.zig");
 
-const max_functions = 64;
+const max_functions = 1024;
 const max_imports = 16;
 const max_types = 64;
-const max_type_params = 5;
+const max_type_params = 16;
 const max_type_results = 4;
-const max_locals = 16;
+const max_locals = 256;
 const max_stack = 32;
-const max_call_depth = 8;
-const max_control_depth = 16;
+const max_call_depth = 256;
+const max_control_depth = 256;
 const max_globals = 16;
 const max_table_entries = 32;
 const max_data_segments = 8;
@@ -1226,7 +1226,7 @@ const Module = struct {
         }
     }
 
-    fn readElementFunctionRef(self: Module, reader: *Reader, payload: ElementPayload) Error!usize {
+    fn readElementFunctionRef(self: *const Module, reader: *Reader, payload: ElementPayload) Error!usize {
         const function_ref = switch (payload) {
             .function_index_vector, .element_kind => try reader.readU32Leb(),
             .ref_func_expression_vector => try readRefFuncExpression(reader),
@@ -1235,32 +1235,32 @@ const Module = struct {
         return function_ref;
     }
 
-    fn findExport(self: Module, name: []const u8) Error!usize {
+    fn findExport(self: *const Module, name: []const u8) Error!usize {
         for (self.exports[0..self.export_count]) |exp| {
             if (exp.kind == .function and exp.matches(name)) return exp.index;
         }
         return error.MissingExport;
     }
 
-    fn totalFunctionCount(self: Module) usize {
+    fn totalFunctionCount(self: *const Module) usize {
         return self.import_count + self.function_count;
     }
 
-    fn typeIndexForFunction(self: Module, function_index: usize) Error!usize {
+    fn typeIndexForFunction(self: *const Module, function_index: usize) Error!usize {
         if (function_index < self.import_count) return self.imports[function_index].type_index;
         const defined_index = function_index - self.import_count;
         if (defined_index >= self.function_count) return error.Corrupt;
         return self.functions[defined_index].type_index;
     }
 
-    fn codeIndexForFunction(self: Module, function_index: usize) Error!usize {
+    fn codeIndexForFunction(self: *const Module, function_index: usize) Error!usize {
         if (function_index < self.import_count) return error.MissingImport;
         const defined_index = function_index - self.import_count;
         if (defined_index >= self.function_count) return error.Corrupt;
         return self.functions[defined_index].code_index;
     }
 
-    fn requiredMemoryBytes(self: Module) Error!usize {
+    fn requiredMemoryBytes(self: *const Module) Error!usize {
         return checkedMul(self.memory_min_pages, wasm_page_bytes) orelse error.Unsupported;
     }
 
@@ -1286,7 +1286,7 @@ const Module = struct {
         global.value = host.global_value;
     }
 
-    fn applyDataSegments(self: Module, runtime: *Runtime, memory_pages: usize) Error!void {
+    fn applyDataSegments(self: *const Module, runtime: *Runtime, memory_pages: usize) Error!void {
         const limit = checkedMul(memory_pages, wasm_page_bytes) orelse return error.Unsupported;
         for (self.data_segments[0..self.data_segment_count]) |segment| {
             if (!segment.active) continue;
@@ -2106,7 +2106,7 @@ pub fn executeExportValuesArgs(runtime: *Runtime, wasm_bytes: []const u8, export
     if (args.len > max_type_params) return error.BadArgument;
     var executor = try executorFor(runtime, wasm_bytes);
     var value_args: [max_type_params]Value = undefined;
-    const prepared_args = try integerArgsForExport(executor.module, export_name, args, &value_args);
+    const prepared_args = try integerArgsForExport(&executor.module, export_name, args, &value_args);
     try executor.runStart();
     return executor.runExport(export_name, prepared_args);
 }
@@ -2121,7 +2121,7 @@ pub fn executeExportValueArgs(runtime: *Runtime, wasm_bytes: []const u8, export_
 fn executorFor(runtime: *Runtime, wasm_bytes: []const u8) Error!Executor {
     var module = try Module.parse(wasm_bytes);
     try module.resolveImports(runtime.*);
-    const memory_pages = try initialMemoryPages(runtime.*, module);
+    const memory_pages = try initialMemoryPages(runtime.*, &module);
     const required_memory = checkedMul(memory_pages, wasm_page_bytes) orelse return error.Unsupported;
     if (required_memory > runtime.memoryLen()) return error.NoMemory;
     try module.applyDataSegments(runtime, memory_pages);
@@ -2132,7 +2132,7 @@ fn executorFor(runtime: *Runtime, wasm_bytes: []const u8) Error!Executor {
     };
 }
 
-fn initialMemoryPages(runtime: Runtime, module: Module) Error!usize {
+fn initialMemoryPages(runtime: Runtime, module: *const Module) Error!usize {
     const pages = runtime.initial_memory_pages orelse return module.memory_min_pages;
     if (pages < module.memory_min_pages) return error.NoMemory;
     if (module.memory_max_pages) |max_pages| {
@@ -2141,7 +2141,7 @@ fn initialMemoryPages(runtime: Runtime, module: Module) Error!usize {
     return pages;
 }
 
-fn integerArgsForExport(module: Module, export_name: []const u8, args: []const i64, out: *[max_type_params]Value) Error![]const Value {
+fn integerArgsForExport(module: *const Module, export_name: []const u8, args: []const i64, out: *[max_type_params]Value) Error![]const Value {
     if (export_name.len == 0) return error.BadArgument;
     const function_index = try module.findExport(export_name);
     const function_type = module.types[try module.typeIndexForFunction(function_index)];

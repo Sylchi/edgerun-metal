@@ -1,4 +1,8 @@
 pub const bytes = @import("bytes.zig");
+pub const content = @import("content.zig");
+pub const data_chunk = @import("content/data_chunk.zig");
+pub const data_definition = @import("content/data_definition.zig");
+pub const data_object = @import("content/data_object.zig");
 pub const preimage = @import("preimage.zig");
 pub const bounded = @import("bounded.zig");
 pub const Region = @import("region.zig").Region;
@@ -68,6 +72,10 @@ pub const wasm_app = @import("wasm/app.zig");
 
 test {
     _ = bytes;
+    _ = content;
+    _ = data_chunk;
+    _ = data_definition;
+    _ = data_object;
     _ = preimage;
     _ = bounded;
     _ = Region;
