@@ -3,11 +3,11 @@ const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
+const tokens = @import("../../ui_tokens.zig");
 const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
-const component_render = @import("Render.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
@@ -23,19 +23,27 @@ pub const Tabs = struct {
     }
 
     pub fn render(self: Tabs, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return component_render.renderTabs(scene, bounds, self.first, self.second, activeIndex(self.active), options);
+        const active = activeIndex(self.active);
+        const list = listBounds(bounds);
+        try scene.pushRect(list, options.style.row, .fill, tabs_list_radius, 0.0);
+        try renderTrigger(scene, triggerBounds(list, 0), self.first, active == 0, options);
+        try renderTrigger(scene, triggerBounds(list, 1), self.second, active == 1, options);
+        const panel = ui.Rect.init(bounds.x, bounds.y + tabs_list_h + tabs_gap, bounds.w, @max(min_extent, bounds.h - tabs_list_h - tabs_gap));
+        try scene.pushRect(panel, options.style.panel, .fill, control_radius, 0.0);
+        try scene.pushRect(panel, options.style.border, .border, control_radius, 0.0);
+        try scene.pushText(ui.Rect.init(panel.x + tabs_panel_padding, panel.y + tabs_panel_padding, @max(min_extent, panel.w - tabs_panel_padding * 2.0), control_label_height), if (active == 1) self.second else self.first, options.style.muted);
     }
 
     pub fn collectInteractions(self: Tabs, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-        const list = component_render.tabsListBounds(bounds);
-        try collector.addHit(component_render.tabsTriggerBounds(list, 0), .button, self.id);
-        try collector.addHit(component_render.tabsTriggerBounds(list, 1), .button, self.id + 1);
+        const list = listBounds(bounds);
+        try collector.addHit(triggerBounds(list, 0), .button, self.id);
+        try collector.addHit(triggerBounds(list, 1), .button, self.id + 1);
     }
 
     pub fn measure(self: Tabs, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = self;
         _ = options;
-        return component_render.measureFixed(component_render.preferred_tabs, constraints);
+        return measureFixed(preferred_tabs, constraints);
     }
 
     pub fn toObject(self: Tabs, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -66,7 +74,58 @@ fn encodedId(id: u32, active: u16) u32 {
     return id * tabs_id_stride + activeIndex(active);
 }
 
+fn listBounds(bounds: ui.Rect) ui.Rect {
+    return ui.Rect.init(bounds.x, bounds.y, @min(bounds.w, tabs_list_w), tabs_list_h);
+}
+
+fn triggerBounds(list: ui.Rect, index: usize) ui.Rect {
+    const trigger_w = @max(min_extent, (list.w - tabs_list_padding * 2.0) / 2.0);
+    return ui.Rect.init(list.x + tabs_list_padding + @as(f32, @floatFromInt(index)) * trigger_w, list.y + tabs_list_padding, trigger_w, @max(min_extent, list.h - tabs_list_padding * 2.0));
+}
+
+fn renderTrigger(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, active: bool, options: RenderOptions) ui.RenderError!void {
+    if (active) {
+        try scene.pushRect(bounds, options.style.panel, .fill, control_radius, 0.0);
+        try scene.pushRect(bounds, options.style.border, .border, control_radius, 0.0);
+    }
+    try renderControlText(scene, bounds, toggle_text_padding, control_label_height, label, if (active) options.style.text else options.style.muted, .center);
+}
+
+fn renderControlText(scene: *ui.Scene, bounds: ui.Rect, padding: f32, height: f32, value: []const u8, color: ui.Color, alignment: ui.TextAlign) ui.RenderError!void {
+    const clamped = @min(@max(padding, 0.0), @min(bounds.w, bounds.h) * 0.5);
+    const text_bounds = bounds.insetUniform(clamped);
+    if (text_bounds.valid()) try scene.pushAlignedText(text_bounds.withHeightCentered(height), value, color, alignment);
+}
+
+fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
+    const resolved_preferred = constrainPreferredSize(preferred, constraints);
+    return layout.Measurement.flexible(
+        .{ .w = @min(preferred.w, resolved_preferred.w), .h = @min(preferred.h, resolved_preferred.h) },
+        resolved_preferred,
+        .{ .w = measure_max_width, .h = preferred.h },
+    ).applyExact(constraints);
+}
+
+fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {
+    return .{
+        .w = constraints.width.limit(preferred.w),
+        .h = constraints.height.limit(preferred.h),
+    };
+}
+
 const tabs_id_stride: u32 = 2;
+const min_extent: f32 = 1.0;
+const measure_max_width: f32 = 4096.0;
+const preferred_tabs = ui.Size{ .w = 220.0, .h = 84.0 };
+const control_radius: f32 = tokens.Component.control_radius;
+const control_label_height: f32 = tokens.Component.control_label_height;
+const tabs_list_w: f32 = 184.0;
+const tabs_list_h: f32 = 36.0;
+const tabs_list_padding: f32 = 3.0;
+const tabs_list_radius: f32 = 8.0;
+const tabs_gap: f32 = 8.0;
+const tabs_panel_padding: f32 = 10.0;
+const toggle_text_padding: f32 = 8.0;
 
 test "tabs component serializes to canonical object and deserializes" {
     const tabs = Tabs{ .id = 80, .first = "Account", .second = "Password", .active = 1 };

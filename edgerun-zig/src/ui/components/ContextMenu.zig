@@ -3,11 +3,11 @@ const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
+const tokens = @import("../../ui_tokens.zig");
 const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
-const component_render = @import("Render.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
@@ -22,17 +22,28 @@ pub const ContextMenu = struct {
     }
 
     pub fn render(self: ContextMenu, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return component_render.renderMenu(scene, bounds, component_render.context_menu_trigger, self.first, self.second, options);
+        const trigger_bounds = triggerBounds(bounds);
+        try renderControlFrame(scene, trigger_bounds, options.style.accent, options.style.border, control_radius);
+        try renderControlText(scene, trigger_bounds, menu_trigger_padding, control_label_height, context_menu_trigger, options.style.bg, .center);
+
+        const content = contentBounds(bounds);
+        try scene.pushRect(content, options.style.panel, .fill, menu_radius, 0.0);
+        try scene.pushRect(content, options.style.border, .border, menu_radius, 0.0);
+        try renderMenuItem(scene, itemBounds(content, 0), self.first, options);
+        try renderMenuItem(scene, itemBounds(content, 1), self.second, options);
     }
 
     pub fn collectInteractions(self: ContextMenu, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-        try component_render.collectMenuInteractions(collector, bounds, self.id);
+        try collector.addHit(triggerBounds(bounds), .button, self.id);
+        const content = contentBounds(bounds);
+        try collector.addHit(itemBounds(content, 0), .row_item, self.id + 1);
+        try collector.addHit(itemBounds(content, 1), .row_item, self.id + 2);
     }
 
     pub fn measure(self: ContextMenu, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = self;
         _ = options;
-        return component_render.measureFixed(component_render.preferred_menu, constraints);
+        return measureFixed(preferred_context_menu, constraints);
     }
 
     pub fn toObject(self: ContextMenu, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -50,6 +61,70 @@ pub const ContextMenu = struct {
         };
     }
 };
+
+fn triggerBounds(bounds: ui.Rect) ui.Rect {
+    return ui.Rect.init(bounds.x, bounds.y + menu_trigger_y, menu_trigger_w, menu_trigger_h);
+}
+
+fn contentBounds(bounds: ui.Rect) ui.Rect {
+    const x = bounds.x + menu_trigger_w + menu_gap;
+    return ui.Rect.init(x, bounds.y, @max(min_extent, bounds.x + bounds.w - x), bounds.h);
+}
+
+fn itemBounds(content: ui.Rect, index: usize) ui.Rect {
+    return ui.Rect.init(content.x + menu_padding, content.y + menu_padding + @as(f32, @floatFromInt(index)) * menu_item_pitch, @max(min_extent, content.w - menu_padding * 2.0), menu_item_h);
+}
+
+fn renderMenuItem(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, options: RenderOptions) ui.RenderError!void {
+    try scene.pushRect(bounds, options.style.row, .fill, menu_item_radius, 0.0);
+    try renderControlText(scene, bounds, menu_item_padding, menu_item_text_h, label, options.style.text, .start);
+}
+
+fn renderControlFrame(scene: *ui.Scene, bounds: ui.Rect, fill: ui.Color, border: ui.Color, radius: f32) ui.RenderError!void {
+    try scene.pushRect(bounds, fill, .fill, radius, 0.0);
+    try scene.pushRect(bounds, border, .border, radius, 0.0);
+}
+
+fn renderControlText(scene: *ui.Scene, bounds: ui.Rect, padding: f32, height: f32, value: []const u8, color: ui.Color, alignment: ui.TextAlign) ui.RenderError!void {
+    const clamped = @min(@max(padding, 0.0), @min(bounds.w, bounds.h) * 0.5);
+    const text_bounds = bounds.insetUniform(clamped);
+    if (text_bounds.valid()) try scene.pushAlignedText(text_bounds.withHeightCentered(height), value, color, alignment);
+}
+
+fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
+    const resolved_preferred = constrainPreferredSize(preferred, constraints);
+    return layout.Measurement.flexible(
+        .{ .w = @min(preferred.w, resolved_preferred.w), .h = @min(preferred.h, resolved_preferred.h) },
+        resolved_preferred,
+        .{ .w = measure_max_width, .h = preferred.h },
+    ).applyExact(constraints);
+}
+
+fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {
+    return .{
+        .w = constraints.width.limit(preferred.w),
+        .h = constraints.height.limit(preferred.h),
+    };
+}
+
+const min_extent: f32 = 1.0;
+const measure_max_width: f32 = 4096.0;
+const control_radius: f32 = tokens.Component.control_radius;
+const control_label_height: f32 = tokens.Component.control_label_height;
+const context_menu_trigger = "Context";
+const menu_trigger_y: f32 = 4.0;
+const menu_trigger_w: f32 = 64.0;
+const menu_trigger_h: f32 = 30.0;
+const menu_gap: f32 = 8.0;
+const menu_radius: f32 = 8.0;
+const menu_padding: f32 = 5.0;
+const menu_item_h: f32 = 14.0;
+const menu_item_pitch: f32 = 16.0;
+const menu_item_radius: f32 = 4.0;
+const menu_item_padding: f32 = 5.0;
+const menu_item_text_h: f32 = 12.0;
+const menu_trigger_padding: f32 = 8.0;
+const preferred_context_menu = ui.Size{ .w = 240.0, .h = 52.0 };
 
 test "context menu component serializes to canonical object and deserializes" {
     const menu = ContextMenu{ .id = 999, .first = "Profile", .second = "Settings" };

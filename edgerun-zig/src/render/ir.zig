@@ -584,10 +584,16 @@ pub const IconIterator = struct {
 };
 
 pub fn texturedQuadAt(values: []const f32, index: usize) Error!TexturedQuad {
-    const a = try texturedVertexAt(values, index);
-    const b = try texturedVertexAt(values, index + 1);
-    const c = try texturedVertexAt(values, index + 2);
-    const f = try texturedVertexAt(values, index + 5);
+    const count = try texturedVertexCount(values);
+    if (index > count or count - index < textured_quad_vertex_count) return error.InvalidBuffer;
+    return texturedQuadAtUnchecked(values, index);
+}
+
+fn texturedQuadAtUnchecked(values: []const f32, index: usize) Error!TexturedQuad {
+    const a = texturedVertexAtUnchecked(values, index);
+    const b = texturedVertexAtUnchecked(values, index + 1);
+    const c = texturedVertexAtUnchecked(values, index + 2);
+    const f = texturedVertexAtUnchecked(values, index + 5);
     const x0 = @min(@min(a.x, b.x), @min(c.x, f.x));
     const y0 = @min(@min(a.y, b.y), @min(c.y, f.y));
     const x1 = @max(@max(a.x, b.x), @max(c.x, f.x));
@@ -608,6 +614,18 @@ pub fn texturedQuadAt(values: []const f32, index: usize) Error!TexturedQuad {
     };
 }
 
+fn texturedVertexAtUnchecked(values: []const f32, index: usize) TexturedVertex {
+    const start = index * text_vertex_float_stride;
+    const vertex = values[start .. start + text_vertex_float_stride];
+    return .{
+        .x = vertex[textured_x_index],
+        .y = vertex[textured_y_index],
+        .u = vertex[textured_u_index],
+        .v = vertex[textured_v_index],
+        .color = colorFromChannels(vertex[textured_color_r_index], vertex[textured_color_g_index], vertex[textured_color_b_index], vertex[textured_color_a_index]),
+    };
+}
+
 pub const TexturedQuadIterator = struct {
     values: []const f32,
     quad_index: usize,
@@ -624,7 +642,7 @@ pub const TexturedQuadIterator = struct {
     pub fn next(self: *TexturedQuadIterator) Error!?TexturedQuad {
         if (self.quad_index >= self.quad_count) return null;
         const vertex_index = self.quad_index * textured_quad_vertex_count;
-        const quad = try texturedQuadAt(self.values, vertex_index);
+        const quad = try texturedQuadAtUnchecked(self.values, vertex_index);
         self.quad_index += 1;
         return quad;
     }
@@ -879,6 +897,9 @@ test "renderer ir iterates rects and textured quads" {
     try std.testing.expectEqual(ui.Rect.init(9, 10, 11, 12), image_quad.bounds);
     try std.testing.expectEqual(ui.Color.muted, image_quad.color);
     try std.testing.expectEqual(@as(?TexturedQuad, null), try quad_iter.next());
+
+    try std.testing.expectError(error.InvalidBuffer, texturedQuadAt(buffers.liveImageVertices()[0..text_vertex_float_stride], 0));
+    try std.testing.expectError(error.InvalidBuffer, TexturedQuadIterator.init(buffers.liveImageVertices()[0..text_vertex_float_stride]));
 }
 
 test "renderer ir owns canonical draw batch order" {

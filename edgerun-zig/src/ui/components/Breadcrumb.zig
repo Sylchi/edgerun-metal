@@ -1,13 +1,14 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
+const icon = @import("../../icon.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
+const tokens = @import("../../ui_tokens.zig");
 const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
-const component_render = @import("Render.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
@@ -22,18 +23,25 @@ pub const Breadcrumb = struct {
     }
 
     pub fn render(self: Breadcrumb, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return component_render.renderBreadcrumb(scene, bounds, self.first, self.current, options);
+        const first_bounds = itemBounds(bounds, 0);
+        const middle_bounds = itemBounds(bounds, 1);
+        const current_bounds = itemBounds(bounds, 2);
+        try scene.pushText(first_bounds.withHeightCentered(control_label_height), self.first, options.style.muted);
+        try scene.pushIconQuad(.{ .bounds = separatorBounds(bounds, 0), .icon_id = icon.id(.chevron_right), .color = options.style.muted });
+        try scene.pushText(middle_bounds.withHeightCentered(control_label_height), breadcrumb_middle_label, options.style.muted);
+        try scene.pushIconQuad(.{ .bounds = separatorBounds(bounds, 1), .icon_id = icon.id(.chevron_right), .color = options.style.muted });
+        try scene.pushText(current_bounds.withHeightCentered(control_label_height), self.current, options.style.text);
     }
 
     pub fn collectInteractions(self: Breadcrumb, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-        try collector.addHit(component_render.breadcrumbItemBounds(bounds, 0), .button, self.id);
-        try collector.addHit(component_render.breadcrumbItemBounds(bounds, 1), .button, self.id + 1);
+        try collector.addHit(itemBounds(bounds, 0), .button, self.id);
+        try collector.addHit(itemBounds(bounds, 1), .button, self.id + 1);
     }
 
     pub fn measure(self: Breadcrumb, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = self;
         _ = options;
-        return component_render.measureFixed(component_render.preferred_breadcrumb, constraints);
+        return measureFixed(preferred_breadcrumb, constraints);
     }
 
     pub fn toObject(self: Breadcrumb, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -51,6 +59,49 @@ pub const Breadcrumb = struct {
         };
     }
 };
+
+fn itemBounds(bounds: ui.Rect, index: usize) ui.Rect {
+    return switch (index) {
+        0 => ui.Rect.init(bounds.x, bounds.y, breadcrumb_first_w, bounds.h),
+        1 => ui.Rect.init(bounds.x + breadcrumb_first_w + breadcrumb_separator_w, bounds.y, breadcrumb_middle_w, bounds.h),
+        else => ui.Rect.init(bounds.x + breadcrumb_first_w + breadcrumb_middle_w + breadcrumb_separator_w * 2.0, bounds.y, @max(min_extent, bounds.w - breadcrumb_first_w - breadcrumb_middle_w - breadcrumb_separator_w * 2.0), bounds.h),
+    };
+}
+
+fn separatorBounds(bounds: ui.Rect, index: usize) ui.Rect {
+    const x = switch (index) {
+        0 => bounds.x + breadcrumb_first_w,
+        else => bounds.x + breadcrumb_first_w + breadcrumb_separator_w + breadcrumb_middle_w,
+    };
+    return ui.Rect.init(x + breadcrumb_icon_inset, bounds.y + (bounds.h - breadcrumb_icon_size) * 0.5, breadcrumb_icon_size, breadcrumb_icon_size);
+}
+
+fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
+    const resolved_preferred = constrainPreferredSize(preferred, constraints);
+    return layout.Measurement.flexible(
+        .{ .w = @min(preferred.w, resolved_preferred.w), .h = @min(preferred.h, resolved_preferred.h) },
+        resolved_preferred,
+        .{ .w = measure_max_width, .h = preferred.h },
+    ).applyExact(constraints);
+}
+
+fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {
+    return .{
+        .w = constraints.width.limit(preferred.w),
+        .h = constraints.height.limit(preferred.h),
+    };
+}
+
+const min_extent: f32 = 1.0;
+const measure_max_width: f32 = 4096.0;
+const preferred_breadcrumb = ui.Size{ .w = 220.0, .h = 36.0 };
+const control_label_height: f32 = tokens.Component.control_label_height;
+const breadcrumb_first_w: f32 = 44.0;
+const breadcrumb_middle_w: f32 = 42.0;
+const breadcrumb_separator_w: f32 = 18.0;
+const breadcrumb_icon_size: f32 = 12.0;
+const breadcrumb_icon_inset: f32 = 3.0;
+const breadcrumb_middle_label = "Docs";
 
 test "breadcrumb component serializes to canonical object and deserializes" {
     const breadcrumb = Breadcrumb{ .id = 130, .first = "Home", .current = "Button" };
