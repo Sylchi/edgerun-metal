@@ -2226,7 +2226,7 @@ fn cacheFontGlyph(ch: u8, px: u8) varfont.Error!FontGlyph {
     if (font_glyph_count >= font_glyphs.len) return error.GlyphCacheFull;
     const face = try varfont.Face.geist();
     var cache = varfont.Cache.init(face, &font_bitmap);
-    _ = cache.setAxis("wght", 560.0);
+    _ = cache.setAxis("wght", 400.0);
 
     const glyph_id = face.glyphId(ch);
     const bake_px = @as(f32, @floatFromInt(px)) * font_atlas_device_scale;

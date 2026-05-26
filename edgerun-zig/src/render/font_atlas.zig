@@ -19,7 +19,7 @@ pub const geist_ascii_font: CompiledFont(ascii_codepoint_count, 0, geist_ascii_c
 const padding: usize = 8;
 const row_gap: usize = 8;
 const bitmap_bytes: usize = 2 * 1024 * 1024;
-const font_weight: f32 = 560.0;
+const font_weight: f32 = 400.0;
 const device_scale: f32 = 2.0;
 const raster_samples: usize = 8;
 const quadratic_steps: usize = 10;
