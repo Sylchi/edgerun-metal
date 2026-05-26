@@ -526,7 +526,11 @@ fn selectedComponentHeight(width_value: f32) f32 {
 
 fn renderSelectedComponent(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, entry: ComponentSpec, index: usize) GalleryError!void {
     try scene.pushRect(bounds.insetUniform(-1), palette.shadow, .shadow, card_radius, card_shadow);
-    try fill(scene, bounds, palette.panel, card_radius);
+    try components.renderComponent(scene, bounds, .{ .card = .{
+        .title = "",
+        .detail = "",
+        .variant = .elevated,
+    } }, .{ .style = componentStyle() });
     try stroke(scene, bounds, palette.accent, card_radius);
 
     const inset = bounds.insetUniform(18);
@@ -550,10 +554,12 @@ fn renderSelectedComponent(scene: *ui.Scene, collector: *interaction.Collector, 
 }
 
 fn renderOpenedComponentRenderings(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, entry: ComponentSpec, id: u32) GalleryError!void {
-    try fill(scene, bounds, palette.code_bg, card_radius);
-    try stroke(scene, bounds, palette.border, card_radius);
-    try text(scene, bounds.x + card_content_x, bounds.y + 18, bounds.w - card_content_x * 2, 16, "Rendered component", palette.text);
-    try text(scene, bounds.x + card_content_x, bounds.y + 42, bounds.w - card_content_x * 2, 14, entry.name, palette.muted);
+    var render_style = componentStyle();
+    render_style.panel = palette.code_bg;
+    try components.renderComponent(scene, bounds, .{ .card = .{
+        .title = "Rendered component",
+        .detail = entry.name,
+    } }, .{ .style = render_style });
 
     const inner = ui.Rect.init(bounds.x + card_content_x, bounds.y + 72, bounds.w - card_content_x * 2, bounds.h - 92);
     if (inner.w < 360.0) {
@@ -572,16 +578,21 @@ fn renderOpenedComponentRenderings(scene: *ui.Scene, collector: *interaction.Col
 }
 
 fn previewSlot(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, entry: ComponentSpec, id: u32) GalleryError!void {
-    try fill(scene, bounds, palette.panel_alt, 7.0);
-    try stroke(scene, bounds, palette.border, 7.0);
-    try text(scene, bounds.x + 12.0, bounds.y + 10.0, bounds.w - 24.0, 12.0, label, palette.muted);
+    try components.renderComponent(scene, bounds, .{ .card = .{
+        .title = label,
+        .detail = "",
+        .variant = .subtle,
+    } }, .{ .style = componentStyle() });
     try renderReferencePreview(scene, collector, bounds.insetLtrb(12.0, 32.0, 12.0, 12.0), entry, id);
 }
 
 fn renderComponentApi(scene: *ui.Scene, bounds: ui.Rect, entry: ComponentSpec) GalleryError!void {
-    try fill(scene, bounds, palette.code_bg, card_radius);
-    try stroke(scene, bounds, palette.border, card_radius);
-    try text(scene, bounds.x + card_content_x, bounds.y + 18, bounds.w - card_content_x * 2, 14, "API", palette.accent);
+    var api_style = componentStyle();
+    api_style.panel = palette.code_bg;
+    try components.renderComponent(scene, bounds, .{ .card = .{
+        .title = "API",
+        .detail = "",
+    } }, .{ .style = api_style });
     try text(scene, bounds.x + card_content_x, bounds.y + 50, bounds.w - card_content_x * 2, 14, "route", palette.muted);
     try text(scene, bounds.x + card_content_x, bounds.y + 70, bounds.w - card_content_x * 2, 14, entry.route, palette.text);
     try text(scene, bounds.x + card_content_x, bounds.y + 102, bounds.w - card_content_x * 2, 14, "source component", palette.muted);
@@ -591,11 +602,15 @@ fn renderComponentApi(scene: *ui.Scene, bounds: ui.Rect, entry: ComponentSpec) G
 }
 
 fn renderComponentContract(scene: *ui.Scene, bounds: ui.Rect, entry: ComponentSpec) GalleryError!void {
-    try fill(scene, bounds, palette.panel_alt, card_radius);
-    try stroke(scene, bounds, palette.border, card_radius);
-    try text(scene, bounds.x + card_content_x, bounds.y + 18, bounds.w - card_content_x * 2, 16, "Contract", palette.text);
-    try wrappedText(scene, ui.Rect.init(bounds.x + card_content_x, bounds.y + 48, bounds.w - card_content_x * 2, 50), "Render through `Component.render`, collect hits through `Component.collectInteractions`, and keep backend concerns out of component code.", palette.muted, 17, 8.5, 3);
-    try text(scene, bounds.x + card_content_x, bounds.y + 116, bounds.w - card_content_x * 2, 14, entry.category.label(), palette.accent);
+    try components.renderComponent(scene, bounds, .{ .card = .{
+        .title = "Contract",
+        .detail = "Render through `Component.render`, collect hits through `Component.collectInteractions`, and keep backend concerns out of component code.",
+        .variant = .subtle,
+    } }, .{ .style = componentStyle() });
+    try components.renderComponent(scene, ui.Rect.init(bounds.x + card_content_x, bounds.y + bounds.h - 32, 128, 24), .{ .badge = .{
+        .label = entry.category.label(),
+        .variant = .outline,
+    } }, .{ .style = componentStyle() });
 }
 
 fn renderCatalogCard(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, entry: ComponentSpec, card_id: u32, preview_id: u32, selected: bool) GalleryError!void {
@@ -620,10 +635,10 @@ fn renderCatalogCard(scene: *ui.Scene, collector: *interaction.Collector, bounds
 }
 
 fn catalogSource(scene: *ui.Scene, bounds: ui.Rect, selected: bool) GalleryError!void {
-    const color = if (selected) palette.green else palette.accent;
-    try fill(scene, bounds, palette.panel_alt, 6);
-    try stroke(scene, bounds, color, 6);
-    try centeredText(scene, bounds, if (selected) "selected" else "EdgeRun", color);
+    try components.renderComponent(scene, bounds, .{ .badge = .{
+        .label = if (selected) "selected" else "EdgeRun",
+        .variant = if (selected) .default else .outline,
+    } }, .{ .style = componentStyle() });
 }
 
 fn renderReferencePreview(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, spec_value: ComponentSpec, id: u32) GalleryError!void {
@@ -858,10 +873,6 @@ fn wrappedText(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, color: ui.C
         .average_char_width = average_char_width,
         .max_lines = max_lines,
     });
-}
-
-fn centeredText(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, color: ui.Color) GalleryError!void {
-    try alignedText(scene, bounds.x + 8.0, bounds.y + (bounds.h - 14.0) * 0.5, @max(1.0, bounds.w - 16.0), 14.0, value, color, .center);
 }
 
 fn centered(bounds: ui.Rect, max_w: f32) ui.Rect {

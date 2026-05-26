@@ -102,8 +102,10 @@ pub fn render(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Re
 }
 
 fn renderToolbar(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
-    try fill(scene, bounds, palette.panel, panel_radius);
-    try stroke(scene, bounds, palette.border, panel_radius);
+    try components.renderComponent(scene, bounds, .{ .card = .{
+        .title = "",
+        .detail = "",
+    } }, .{ .style = app_chrome.style() });
     try text(scene, bounds.x + panel_pad, bounds.y + panel_pad, bounds.w - panel_pad * 2.0, toolbar_label_h, "Source workspace", palette.primary);
     try text(scene, bounds.x + panel_pad, bounds.y + panel_pad + toolbar_label_h + toolbar_row_gap, bounds.w - panel_pad * 2.0, toolbar_title_h, state.label, palette.text);
     try text(scene, bounds.x + panel_pad, bounds.y + panel_pad + toolbar_label_h + toolbar_row_gap + toolbar_title_h + toolbar_row_gap, bounds.w - panel_pad * 2.0, toolbar_detail_h, toolbarDetail(state), toolbarDetailColor(state));
@@ -165,8 +167,12 @@ fn renderEditor(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
 }
 
 fn renderStatus(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
-    try fill(scene, bounds, palette.panel_alt, panel_radius);
-    try stroke(scene, bounds, palette.border, panel_radius);
+    var status_style = app_chrome.style();
+    status_style.panel = palette.panel_alt;
+    try components.renderComponent(scene, bounds, .{ .card = .{
+        .title = "",
+        .detail = "",
+    } }, .{ .style = status_style });
     try text(scene, bounds.x + panel_pad, bounds.y + panel_pad, bounds.w - panel_pad * 2.0, compiler_title_h, "Compiler", palette.cyan);
     try text(scene, bounds.x + panel_pad, bounds.y + 44.0, bounds.w - panel_pad * 2.0, compiler_text_h, state.status, palette.text);
     try text(scene, bounds.x + panel_pad, bounds.y + 70.0, bounds.w - panel_pad * 2.0, compiler_text_h, state.compile_summary, palette.dim);

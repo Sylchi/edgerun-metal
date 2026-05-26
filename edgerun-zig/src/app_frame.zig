@@ -116,8 +116,11 @@ fn renderContextMenuPanel(scene: *ui.Scene, collector: *interaction.Collector, b
     const y = std.math.clamp(menu.y, bounds.y + pad, bounds.y + @max(pad, bounds.h - menu_h - pad));
     const panel = ui.Rect.init(x, y, menu_w, menu_h);
     try scene.pushRect(panel, palette.shadow, .shadow, design.surface_radius, 16.0);
-    try scene.pushRect(panel, palette.panel, .fill, design.surface_radius, 0.0);
-    try scene.pushRect(panel, palette.border, .border, design.surface_radius, 1.0);
+    try components.renderComponent(scene, panel, .{ .card = .{
+        .title = "",
+        .detail = "",
+        .variant = .elevated,
+    } }, .{ .style = design.style() });
     try scene.pushAlignedText(ui.Rect.init(panel.x + 14.0, panel.y + 12.0, panel.w - 28.0, 16.0), "Component source", palette.dim, .start);
     const row = ui.Rect.init(panel.x + 8.0, panel.y + 38.0, panel.w - 16.0, 40.0);
     const row_component = components.Component{ .row_item = .{

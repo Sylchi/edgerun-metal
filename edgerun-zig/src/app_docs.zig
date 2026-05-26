@@ -455,8 +455,10 @@ fn renderDocBody(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui
 }
 
 fn renderHero(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, page: DocPage) (ui.RenderError || interaction.Error)!void {
-    try fill(scene, bounds, palette.panel, panel_radius);
-    try stroke(scene, bounds, palette.border, panel_radius);
+    try components.renderComponent(scene, bounds, .{ .card = .{
+        .title = "",
+        .detail = "",
+    } }, .{ .style = app_chrome.style() });
     const inset = bounds.insetUniform(card_pad);
     try label(scene, ui.Rect.init(inset.x, inset.y, 150.0, 26.0), page.status, page.color);
     const split = bounds.w >= compact_w;
@@ -505,7 +507,11 @@ fn heroHeight(width: f32, page: DocPage) f32 {
 
 fn renderFeatureGlyph(scene: *ui.Scene, bounds: ui.Rect, page: DocPage) ui.RenderError!void {
     if (bounds.w < 90.0) return;
-    try fill(scene, bounds, palette.panel_alt, panel_radius);
+    try components.renderComponent(scene, bounds, .{ .card = .{
+        .title = "",
+        .detail = "",
+        .variant = .subtle,
+    } }, .{ .style = app_chrome.style() });
     try stroke(scene, bounds, page.color, panel_radius);
     const icon_size = @min(design.Icon.hero_max, bounds.w * 0.42);
     try iconQuad(scene, ui.Rect.init(bounds.x + bounds.w * 0.5 - icon_size * 0.5, bounds.y + 42.0, icon_size, icon_size), page.icon_value, page.color);
@@ -637,8 +643,10 @@ fn renderMediaDemo(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
 }
 
 fn renderMediaCard(scene: *ui.Scene, bounds: ui.Rect, demo: MediaDemo) ui.RenderError!void {
-    try fill(scene, bounds, palette.panel, panel_radius);
-    try stroke(scene, bounds, palette.border, panel_radius);
+    try components.renderComponent(scene, bounds, .{ .card = .{
+        .title = "",
+        .detail = "",
+    } }, .{ .style = app_chrome.style() });
     const preview = ui.Rect.init(bounds.x + card_pad, bounds.y + card_pad, bounds.w - card_pad * 2.0, media_preview_h);
     switch (demo.kind) {
         .image => try renderImageDemo(scene, preview, demo),
@@ -675,8 +683,10 @@ fn docBlockHeight(width: f32, block: DocBlock) f32 {
 }
 
 fn renderDocBlock(scene: *ui.Scene, bounds: ui.Rect, block: DocBlock) ui.RenderError!void {
-    try fill(scene, bounds, palette.panel, panel_radius);
-    try stroke(scene, bounds, palette.border, panel_radius);
+    try components.renderComponent(scene, bounds, .{ .card = .{
+        .title = "",
+        .detail = "",
+    } }, .{ .style = app_chrome.style() });
     try text(scene, bounds.x + card_pad, bounds.y + card_pad, bounds.w - card_pad * 2.0, section_block_title_h, block.title, palette.text);
     const body_y = bounds.y + card_pad + section_block_title_h + 10.0;
     const body_h = wrappedTextHeight(block.body, bounds.w - card_pad * 2.0, section_block_body_line_h, section_block_body_max_lines, section_block_body_avg_w);
@@ -782,8 +792,10 @@ fn detailCardHeight(width: f32, detail: []const u8) f32 {
 }
 
 fn renderDetailCard(scene: *ui.Scene, bounds: ui.Rect, title_value: []const u8, detail: []const u8) ui.RenderError!void {
-    try fill(scene, bounds, palette.panel, panel_radius);
-    try stroke(scene, bounds, palette.border, panel_radius);
+    try components.renderComponent(scene, bounds, .{ .card = .{
+        .title = "",
+        .detail = "",
+    } }, .{ .style = app_chrome.style() });
     try text(scene, bounds.x + card_pad, bounds.y + 18.0, bounds.w - card_pad * 2.0, 16.0, title_value, palette.text);
     try wrappedText(scene, ui.Rect.init(bounds.x + card_pad, bounds.y + 44.0, bounds.w - card_pad * 2.0, @max(1.0, bounds.h - 44.0 - card_pad)), detail, palette.dim, detail_body_line_h, detail_body_avg_w, detail_body_max_lines);
 }
@@ -803,8 +815,12 @@ fn lineCount(value: []const u8) usize {
 }
 
 fn renderCodeCard(scene: *ui.Scene, bounds: ui.Rect, value: []const u8) ui.RenderError!void {
-    try fill(scene, bounds, palette.code_bg, panel_radius);
-    try stroke(scene, bounds, palette.border, panel_radius);
+    var code_style = app_chrome.style();
+    code_style.panel = palette.code_bg;
+    try components.renderComponent(scene, bounds, .{ .card = .{
+        .title = "",
+        .detail = "",
+    } }, .{ .style = code_style });
     try text(scene, bounds.x + card_pad, bounds.y + 18.0, bounds.w - card_pad * 2.0, 14.0, "API surface", palette.primary);
     var line_cursor: usize = 0;
     var y = bounds.y + 48.0;
@@ -854,8 +870,11 @@ fn appStyle() ui.Style {
 }
 
 fn label(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, color: ui.Color) ui.RenderError!void {
-    try fill(scene, bounds, palette.row, 5.0);
-    try scene.pushAlignedText(ui.Rect.init(bounds.x + 8.0, bounds.y + 7.0, bounds.w - 16.0, 10.0), value, color, .center);
+    var label_style = appStyle();
+    label_style.accent = color;
+    try components.renderComponent(scene, bounds, .{ .badge = .{
+        .label = value,
+    } }, .{ .style = label_style });
 }
 
 fn fill(scene: *ui.Scene, bounds: ui.Rect, color: ui.Color, radius: f32) ui.RenderError!void {
