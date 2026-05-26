@@ -1951,15 +1951,15 @@ test "wayland xrgb rect pack updates only cursor damage bytes" {
     try std.testing.expectEqualSlices(u8, &.{ 0xaa, 0xaa, 0xaa, 0xaa }, out[60..64]);
 }
 
-test "wayland host renders the landing app through canonical ir" {
+test "wayland host renders the source app through canonical ir" {
     var commands: [max_commands]ui.Command = undefined;
     var clips: [max_clips]ui.Rect = undefined;
     var regions: [max_interaction_regions]interaction.Region = undefined;
     var scene = ui.Scene.initWithClips(&commands, &clips);
     var collector = interaction.Collector.init(&regions);
     try renderNativeAppScene(&scene, &collector, 1280, 800, .{});
-    try std.testing.expect(hasText(scene.written(), "The App"));
-    try std.testing.expect(hasText(scene.written(), "Builds Itself"));
+    try std.testing.expect(hasText(scene.written(), "EdgeRun Workspace"));
+    try std.testing.expect(hasText(scene.written(), "EXPLORER"));
 
     var ir_storage = IrStorage{};
     const buffers = ir_storage.buffers();
