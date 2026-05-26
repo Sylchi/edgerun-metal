@@ -28,6 +28,14 @@ const small_text_sharpen_max_px: u8 = 16;
 const small_text_sharpen_midpoint: f32 = 128.0;
 const small_text_sharpen_contrast: f32 = 1.14;
 const small_text_sharpen_lift: f32 = 6.0;
+const upright_shape_test_codepoint: u21 = 'H';
+const upright_shape_test_px: u8 = 32;
+const upright_shape_top_begin_numerator: usize = 1;
+const upright_shape_top_end_numerator: usize = 3;
+const upright_shape_bottom_begin_numerator: usize = 5;
+const upright_shape_bottom_end_numerator: usize = 7;
+const upright_shape_range_denominator: usize = 8;
+const upright_shape_max_center_drift_px: f32 = 3.0;
 
 const CachedGlyph = struct {
     ch: u8,
@@ -703,9 +711,68 @@ test "font atlas storage compiles a codepoint set into object font renderer inpu
     try std.testing.expect(atlasHasCoverage(atlas.alphaSlice()));
 }
 
+test "object font atlas keeps upright glyphs from shearing" {
+    const codepoints = [_]u21{upright_shape_test_codepoint};
+    var storage = FontObjectStorage(codepoints.len, 0, font_vector.max_commands){};
+    _ = try storage.compileGeist(&codepoints);
+    var atlas = storage.atlas().?;
+    const source = atlas.source();
+    const rendered_glyph = (try source.glyph(source.context, @intCast(upright_shape_test_codepoint), upright_shape_test_px)).?;
+    const bounds = glyphAtlasBounds(rendered_glyph);
+    const glyph_height = bounds.y1 - bounds.y0;
+    const top_center = try coverageCenterX(
+        atlas.alphaSlice(),
+        bounds,
+        bounds.y0 + glyph_height * upright_shape_top_begin_numerator / upright_shape_range_denominator,
+        bounds.y0 + glyph_height * upright_shape_top_end_numerator / upright_shape_range_denominator,
+    );
+    const bottom_center = try coverageCenterX(
+        atlas.alphaSlice(),
+        bounds,
+        bounds.y0 + glyph_height * upright_shape_bottom_begin_numerator / upright_shape_range_denominator,
+        bounds.y0 + glyph_height * upright_shape_bottom_end_numerator / upright_shape_range_denominator,
+    );
+
+    try std.testing.expect(@abs(top_center - bottom_center) <= upright_shape_max_center_drift_px);
+}
+
 fn atlasHasCoverage(alpha: []const u8) bool {
     for (alpha) |pixel| {
         if (pixel != 0) return true;
     }
     return false;
+}
+
+const GlyphAtlasBounds = struct {
+    x0: usize,
+    y0: usize,
+    x1: usize,
+    y1: usize,
+};
+
+fn glyphAtlasBounds(rendered_glyph: renderer_ir.Glyph) GlyphAtlasBounds {
+    return .{
+        .x0 = @intFromFloat(@floor(rendered_glyph.u0 * @as(f32, @floatFromInt(width)))),
+        .y0 = @intFromFloat(@floor(rendered_glyph.v0 * @as(f32, @floatFromInt(height)))),
+        .x1 = @intFromFloat(@ceil(rendered_glyph.u1 * @as(f32, @floatFromInt(width)))),
+        .y1 = @intFromFloat(@ceil(rendered_glyph.v1 * @as(f32, @floatFromInt(height)))),
+    };
+}
+
+fn coverageCenterX(alpha: []const u8, bounds: GlyphAtlasBounds, y_begin: usize, y_end: usize) !f32 {
+    var weighted_x: f32 = 0;
+    var weight_total: f32 = 0;
+    var y = y_begin;
+    while (y < y_end) : (y += 1) {
+        var x = bounds.x0;
+        while (x < bounds.x1) : (x += 1) {
+            const value = alpha[y * width + x];
+            if (value == 0) continue;
+            const weight: f32 = @floatFromInt(value);
+            weighted_x += @as(f32, @floatFromInt(x)) * weight;
+            weight_total += weight;
+        }
+    }
+    try std.testing.expect(weight_total > 0);
+    return weighted_x / weight_total;
 }
