@@ -157,6 +157,45 @@ pub fn renderTitleDetailPanel(scene: *ui.Scene, bounds: ui.Rect, title: []const 
     try text_component.Text.renderWrapped(scene, ui.Rect.init(bounds.x + spec.padding, bounds.y + detail_y, detail_w, detail_h), detail, options.style.muted, textWrap(detail, spec.detail_h, spec.detail_max_lines));
 }
 
+pub fn measureTitleDetailPanel(title: []const u8, detail: []const u8, constraints: layout.Constraints, spec: TitleDetailPanel) layout.Measurement {
+    const title_constraints = constraints.inner(.{ .left = spec.padding, .right = spec.padding + spec.title_right_inset });
+    const detail_constraints = constraints.inner(.{ .left = spec.padding, .right = spec.padding });
+    const title_text = text_component.Text.measureValue(title, title_constraints, textMetrics(title, spec.title_h, spec.title_max_lines));
+    const detail_text = text_component.Text.measureValue(detail, detail_constraints, textMetrics(detail, spec.detail_h, spec.detail_max_lines));
+    const detail_gap = @max(0.0, spec.detail_y - spec.title_y - spec.title_h);
+    const preferred = constrainPreferredSize(.{
+        .w = @max(title_text.preferred.w + spec.title_right_inset, detail_text.preferred.w) + spec.padding * 2.0,
+        .h = spec.title_y + title_text.preferred.h + detail_gap + detail_text.preferred.h + spec.padding,
+    }, constraints);
+    return layout.Measurement.flexible(
+        .{
+            .w = min_extent + spec.padding * 2.0 + spec.title_right_inset,
+            .h = spec.title_y + spec.title_h + detail_gap + spec.detail_h + spec.padding,
+        },
+        preferred,
+        .{ .w = measure_max_width, .h = @max(preferred.h, title_text.max.h + detail_gap + detail_text.max.h + spec.title_y + spec.padding) },
+    ).applyExact(constraints);
+}
+
+pub fn measureSidePanelTitleDetail(trigger: []const u8, title: []const u8, detail: []const u8, constraints: layout.Constraints, panel: SidePanelLayout, trigger_padding: f32, content: TitleDetailPanel) layout.Measurement {
+    const trigger_text = text_component.Text.measureValue(trigger, .{ .width = .unconstrained, .text_wrap = .nowrap }, textMetrics(trigger, control_label_height, 1));
+    const trigger_w = trigger_text.preferred.w + trigger_padding * 2.0;
+    const content_constraints = constraints.inner(.{ .left = trigger_w + panel.gap });
+    const panel_measure = measureTitleDetailPanel(title, detail, content_constraints, content);
+    const preferred = constrainPreferredSize(.{
+        .w = trigger_w + panel.gap + panel_measure.preferred.w,
+        .h = @max(panel.trigger_y + @max(panel.trigger_h, trigger_text.preferred.h + trigger_padding * 2.0), panel_measure.preferred.h),
+    }, constraints);
+    return layout.Measurement.flexible(
+        .{
+            .w = min_extent * 2.0 + panel.gap,
+            .h = @max(panel.trigger_y + control_label_height + trigger_padding * 2.0, panel_measure.min.h),
+        },
+        preferred,
+        .{ .w = measure_max_width, .h = @max(preferred.h, panel_measure.max.h) },
+    ).applyExact(constraints);
+}
+
 pub fn collectSidePanelLayoutHits(collector: *interaction.Collector, bounds: ui.Rect, spec: SidePanelLayout, id: u32) interaction.Error!void {
     try collectSidePanelHits(collector, sidePanelTriggerBounds(bounds, spec), sidePanelContentBounds(bounds, spec), id);
 }
@@ -184,6 +223,40 @@ pub fn renderTwoItemMenuPanel(scene: *ui.Scene, content: ui.Rect, first: []const
     try scene.pushRect(content, options.style.border, .border, radius, 0.0);
     try renderMenuItem(scene, menuItemBounds(content, 0, spec), first, options, spec);
     try renderMenuItem(scene, menuItemBounds(content, 1, spec), second, options, spec);
+}
+
+pub fn measureTwoItemMenuPanel(first: []const u8, second: []const u8, constraints: layout.Constraints, spec: MenuListLayout) layout.Measurement {
+    const item_constraints = constraints.inner(.{ .left = spec.padding + spec.item_padding, .right = spec.padding + spec.item_padding, .top = spec.padding, .bottom = spec.padding });
+    const first_text = text_component.Text.measureValue(first, item_constraints, textMetrics(first, spec.item_text_h, 1));
+    const second_text = text_component.Text.measureValue(second, item_constraints, textMetrics(second, spec.item_text_h, 1));
+    const preferred = constrainPreferredSize(.{
+        .w = @max(first_text.preferred.w, second_text.preferred.w) + (spec.padding + spec.item_padding) * 2.0,
+        .h = spec.padding * 2.0 + spec.item_h + spec.item_pitch,
+    }, constraints);
+    return layout.Measurement.flexible(
+        .{ .w = min_extent + (spec.padding + spec.item_padding) * 2.0, .h = spec.padding * 2.0 + spec.item_h * 2.0 },
+        preferred,
+        .{ .w = measure_max_width, .h = preferred.h },
+    ).applyExact(constraints);
+}
+
+pub fn measureSidePanelMenu(trigger: []const u8, first: []const u8, second: []const u8, constraints: layout.Constraints, panel: SidePanelLayout, trigger_padding: f32, menu: MenuListLayout) layout.Measurement {
+    const trigger_text = text_component.Text.measureValue(trigger, .{ .width = .unconstrained, .text_wrap = .nowrap }, textMetrics(trigger, control_label_height, 1));
+    const trigger_w = trigger_text.preferred.w + trigger_padding * 2.0;
+    const menu_constraints = constraints.inner(.{ .left = trigger_w + panel.gap });
+    const menu_measure = measureTwoItemMenuPanel(first, second, menu_constraints, menu);
+    const preferred = constrainPreferredSize(.{
+        .w = trigger_w + panel.gap + menu_measure.preferred.w,
+        .h = @max(panel.trigger_y + @max(panel.trigger_h, trigger_text.preferred.h + trigger_padding * 2.0), menu_measure.preferred.h),
+    }, constraints);
+    return layout.Measurement.flexible(
+        .{
+            .w = min_extent * 2.0 + panel.gap,
+            .h = @max(panel.trigger_y + control_label_height + trigger_padding * 2.0, menu_measure.min.h),
+        },
+        preferred,
+        .{ .w = measure_max_width, .h = @max(preferred.h, menu_measure.max.h) },
+    ).applyExact(constraints);
 }
 
 pub fn collectSidePanelHits(collector: *interaction.Collector, trigger: ui.Rect, content: ui.Rect, id: u32) interaction.Error!void {

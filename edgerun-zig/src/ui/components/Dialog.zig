@@ -13,8 +13,6 @@ const primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-const measureFixed = primitives.measureFixed;
-
 pub const Dialog = struct {
     id: u32,
     title: []const u8,
@@ -38,9 +36,8 @@ pub const Dialog = struct {
     }
 
     pub fn measure(self: Dialog, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
-        _ = self;
         _ = options;
-        return measureFixed(preferred_dialog, constraints);
+        return primitives.measureSidePanelTitleDetail(dialog_open_label, self.title, self.detail, constraints, dialog_layout, dialog_trigger_padding, dialog_panel);
     }
 
     pub fn toObject(self: Dialog, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -65,7 +62,6 @@ const dialog_layout = primitives.SidePanelLayout{ .trigger_y = 6.0, .trigger_w =
 const dialog_panel = primitives.TitleDetailPanel{ .radius = 10.0, .padding = 10.0, .title_y = 6.0, .title_h = 14.0, .detail_y = 22.0, .detail_h = 12.0 };
 const dialog_trigger_padding: f32 = 8.0;
 const dialog_open_label = "Open";
-const preferred_dialog = ui.Size{ .w = 240.0, .h = 52.0 };
 
 test "dialog component serializes to canonical object and deserializes" {
     const dialog = Dialog{ .id = 996, .title = "Edit profile", .detail = "Modal content" };
@@ -94,4 +90,11 @@ test "dialog component renders trigger content and hit regions" {
     try std.testing.expect(component_test.hasText(scene.written(), "Modal content"));
     try std.testing.expectEqual(@as(usize, 2), collector.written().len);
     try std.testing.expectEqual(@as(u32, 997), collector.written()[1].id);
+}
+
+test "dialog measurement follows title and detail text" {
+    const short = Dialog{ .id = 996, .title = "Edit", .detail = "Body" };
+    const long = Dialog{ .id = 996, .title = "Edit runtime authority", .detail = "Modal content with receipts" };
+
+    try std.testing.expect(long.measure(.{}, .{}).preferred.w > short.measure(.{}, .{}).preferred.w);
 }

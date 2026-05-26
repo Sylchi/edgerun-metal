@@ -13,8 +13,6 @@ const primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-const measureFixed = primitives.measureFixed;
-
 pub const ContextMenu = struct {
     id: u32,
     first: []const u8,
@@ -38,9 +36,8 @@ pub const ContextMenu = struct {
     }
 
     pub fn measure(self: ContextMenu, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
-        _ = self;
         _ = options;
-        return measureFixed(preferred_context_menu, constraints);
+        return primitives.measureSidePanelMenu(context_menu_trigger, self.first, self.second, constraints, menu_panel_layout, menu_trigger_padding, menu_list_layout);
     }
 
     pub fn toObject(self: ContextMenu, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -67,7 +64,6 @@ const menu_panel_layout = primitives.SidePanelLayout{ .trigger_y = 4.0, .trigger
 const menu_radius: f32 = 8.0;
 const menu_list_layout = primitives.MenuListLayout{ .padding = 5.0, .item_h = 14.0, .item_pitch = 16.0, .item_radius = 4.0, .item_padding = 5.0, .item_text_h = 12.0 };
 const menu_trigger_padding: f32 = 8.0;
-const preferred_context_menu = ui.Size{ .w = 240.0, .h = 52.0 };
 
 test "context menu component serializes to canonical object and deserializes" {
     const menu = ContextMenu{ .id = 999, .first = "Profile", .second = "Settings" };
@@ -96,4 +92,11 @@ test "context menu component renders menu rows and hit regions" {
     try std.testing.expect(component_test.hasText(scene.written(), "Profile"));
     try std.testing.expectEqual(@as(usize, 3), collector.written().len);
     try std.testing.expectEqual(@as(u32, 1001), collector.written()[2].id);
+}
+
+test "context menu measurement follows item text" {
+    const short = ContextMenu{ .id = 999, .first = "One", .second = "Two" };
+    const long = ContextMenu{ .id = 999, .first = "Runtime profile", .second = "Authority settings" };
+
+    try std.testing.expect(long.measure(.{}, .{}).preferred.w > short.measure(.{}, .{}).preferred.w);
 }

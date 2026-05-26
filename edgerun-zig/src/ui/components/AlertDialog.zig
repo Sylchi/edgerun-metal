@@ -13,8 +13,6 @@ const primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-const measureFixed = primitives.measureFixed;
-
 pub const AlertDialog = struct {
     id: u32,
     title: []const u8,
@@ -38,9 +36,8 @@ pub const AlertDialog = struct {
     }
 
     pub fn measure(self: AlertDialog, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
-        _ = self;
         _ = options;
-        return measureFixed(preferred_alert_dialog, constraints);
+        return primitives.measureSidePanelTitleDetail(dialog_delete_label, self.title, self.detail, constraints, dialog_layout, dialog_trigger_padding, dialog_panel);
     }
 
     pub fn toObject(self: AlertDialog, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -66,7 +63,6 @@ const dialog_layout = primitives.SidePanelLayout{ .trigger_y = 6.0, .trigger_w =
 const dialog_panel = primitives.TitleDetailPanel{ .radius = 10.0, .padding = 10.0, .title_y = 6.0, .title_h = 14.0, .detail_y = 22.0, .detail_h = 12.0 };
 const dialog_trigger_padding: f32 = 8.0;
 const dialog_delete_label = "Delete";
-const preferred_alert_dialog = ui.Size{ .w = 240.0, .h = 52.0 };
 
 test "alert dialog component serializes to canonical object and deserializes" {
     const dialog = AlertDialog{ .id = 997, .title = "Are you sure?", .detail = "Modal content" };
@@ -95,4 +91,11 @@ test "alert dialog component renders destructive trigger and hit regions" {
     try std.testing.expect(component_test.hasText(scene.written(), "Are you sure?"));
     try std.testing.expectEqual(@as(usize, 2), collector.written().len);
     try std.testing.expectEqual(@as(u32, 998), collector.written()[1].id);
+}
+
+test "alert dialog measurement follows title and detail text" {
+    const short = AlertDialog{ .id = 997, .title = "Delete?", .detail = "Body" };
+    const long = AlertDialog{ .id = 997, .title = "Delete runtime authority?", .detail = "This action changes receipt state" };
+
+    try std.testing.expect(long.measure(.{}, .{}).preferred.w > short.measure(.{}, .{}).preferred.w);
 }

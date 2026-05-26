@@ -14,7 +14,6 @@ const primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-const measureFixed = primitives.measureFixed;
 const Icon = icon_component.Icon;
 
 pub const Sheet = struct {
@@ -40,9 +39,18 @@ pub const Sheet = struct {
     }
 
     pub fn measure(self: Sheet, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
-        _ = self;
         _ = options;
-        return measureFixed(preferred_sheet, constraints);
+        const trigger = text_component.Text.measureValue(overlay_open_label, .{ .width = .unconstrained, .text_wrap = .nowrap }, primitives.textMetrics(overlay_open_label, primitives.control_label_height, 1));
+        const panel = primitives.measureTitleDetailPanel(self.title, self.detail, constraints, sheet_panel);
+        const preferred = primitives.constrainPreferredSize(.{
+            .w = @max(trigger.preferred.w + sheet_trigger_padding * 2.0, panel.preferred.w + sheet_content_min_left),
+            .h = @max(sheet_trigger_y + @max(sheet_trigger_h, trigger.preferred.h + sheet_trigger_padding * 2.0), panel.preferred.h),
+        }, constraints);
+        return layout.Measurement.flexible(
+            .{ .w = primitives.min_extent + sheet_content_min_left, .h = panel.min.h },
+            preferred,
+            .{ .w = primitives.measure_max_width, .h = @max(preferred.h, panel.max.h) },
+        ).applyExact(constraints);
     }
 
     pub fn toObject(self: Sheet, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -90,7 +98,6 @@ const sheet_close_size: f32 = 12.0;
 const sheet_close_inset: f32 = 8.0;
 const sheet_close_space: f32 = 18.0;
 const sheet_panel = primitives.TitleDetailPanel{ .radius = sheet_radius, .padding = sheet_padding, .title_y = 10.0, .title_h = 14.0, .detail_y = 29.0, .detail_h = 12.0, .title_right_inset = sheet_close_space };
-const preferred_sheet = ui.Size{ .w = 240.0, .h = 76.0 };
 
 test "sheet component serializes to canonical object and deserializes" {
     const sheet = Sheet{ .id = 999, .title = "Edit profile", .detail = "Sheet content" };
@@ -119,4 +126,11 @@ test "sheet component renders trigger content and hit regions" {
     try std.testing.expect(component_test.textCommandPrefix(scene.written(), "Sheet") != null);
     try std.testing.expectEqual(@as(usize, 3), collector.written().len);
     try std.testing.expectEqual(@as(u32, 1001), collector.written()[2].id);
+}
+
+test "sheet measurement follows title and detail text" {
+    const short = Sheet{ .id = 999, .title = "Edit", .detail = "Body" };
+    const long = Sheet{ .id = 999, .title = "Edit runtime authority", .detail = "Sheet content with receipt controls" };
+
+    try std.testing.expect(long.measure(.{}, .{}).preferred.w > short.measure(.{}, .{}).preferred.w);
 }
