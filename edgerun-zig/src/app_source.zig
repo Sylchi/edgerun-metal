@@ -122,7 +122,7 @@ pub const State = struct {
 
 pub fn contentHeight(width: f32, state: State) f32 {
     const content_w = @min(source_content_wide, @max(1.0, width - content_pad * 2.0));
-    return header_h + page_top_pad + toolbarHeight(content_w) + gap + editorHeight(content_w, state) + gap + statusHeight(content_w, state) + page_bottom_pad;
+    return header_h + page_top_pad + editorHeight(content_w, state) + page_bottom_pad;
 }
 
 pub fn render(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
@@ -131,21 +131,15 @@ pub fn render(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Re
     try fill(scene, bounds, palette.bg, 0.0);
 
     const top = bounds.y + header_h + page_top_pad - state.scroll_y;
-    const toolbar = ui.Rect.init(content.x, top, content.w, toolbarHeight(content.w));
-    try renderToolbar(scene, collector, toolbar, state);
-
-    const editor = ui.Rect.init(content.x, toolbar.y + toolbar.h + gap, content.w, editorHeight(content.w, state));
+    const editor = ui.Rect.init(content.x, top, content.w, editorHeight(content.w, state));
     try renderEditor(scene, collector, editor, state);
-
-    const status = ui.Rect.init(content.x, editor.y + editor.h + gap, content.w, statusHeight(content.w, state));
-    try renderStatus(scene, status, state);
 
     try app_chrome.renderHeader(scene, collector, ui.Rect.init(bounds.x, bounds.y, bounds.w, header_h), content, .source);
 }
 
 fn renderToolbar(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
-    try fill(scene, bounds, vscode_titlebar, panel_radius);
-    try stroke(scene, bounds, palette.border, panel_radius);
+    try fill(scene, bounds, vscode_titlebar, 0.0);
+    try stroke(scene, ui.Rect.init(bounds.x, bounds.y + bounds.h - 1.0, bounds.w, 1.0), vscode_line, 0.0);
     const text_w = toolbarTextWidth(bounds);
     const title_h = wrappedTextHeight(state.label, text_w, toolbar_title_h, toolbar_title_max_lines, toolbar_text_average_w);
     const detail_h = wrappedTextHeight(toolbarDetail(state), text_w, toolbar_detail_h, toolbar_detail_max_lines, toolbar_text_average_w);
@@ -164,9 +158,12 @@ fn renderToolbar(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui
 fn renderEditor(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
     try fill(scene, bounds, vscode_editor, panel_radius);
     try stroke(scene, bounds, palette.border, panel_radius);
+    const command_h = toolbarHeight(bounds.w);
+    const compiler_h = statusHeight(bounds.w, state);
     const status_y = bounds.y + bounds.h - editor_status_h;
-    const body_y = bounds.y + editor_titlebar_h;
-    const body_h = @max(1.0, status_y - body_y);
+    const compiler_y = @max(bounds.y + editor_titlebar_h + command_h, status_y - compiler_h);
+    const body_y = bounds.y + editor_titlebar_h + command_h;
+    const body_h = @max(1.0, compiler_y - body_y);
     const show_explorer = bounds.w >= explorer_threshold_w;
     const show_minimap = bounds.w >= minimap_threshold_w;
     const explorer_width = if (show_explorer) explorer_w else 0.0;
@@ -178,6 +175,7 @@ fn renderEditor(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.
     const code_view = ui.Rect.init(editor_body.x, editor_body.y + editor_breadcrumb_h, editor_body.w, @max(1.0, editor_body.h - editor_breadcrumb_h));
 
     try renderEditorTitlebar(scene, ui.Rect.init(bounds.x, bounds.y, bounds.w, editor_titlebar_h), state);
+    try renderToolbar(scene, collector, ui.Rect.init(bounds.x, bounds.y + editor_titlebar_h, bounds.w, command_h), state);
     try renderActivityRail(scene, ui.Rect.init(bounds.x, body_y, activity_rail_w, body_h));
     if (show_explorer) try renderExplorer(scene, collector, ui.Rect.init(bounds.x + activity_rail_w, body_y, explorer_width, body_h), state);
     try fill(scene, code_view, palette.code_bg, 0.0);
@@ -216,16 +214,13 @@ fn renderEditor(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.
     }
 
     if (show_minimap) try renderMinimap(scene, ui.Rect.init(bounds.x + bounds.w - minimap_w - 10.0, code_view.y + 8.0, minimap_w, @max(1.0, code_view.h - 16.0)), state);
+    try renderStatus(scene, ui.Rect.init(bounds.x, compiler_y, bounds.w, compiler_h), state);
     try renderEditorStatus(scene, ui.Rect.init(bounds.x, status_y, bounds.w, editor_status_h), state);
 }
 
 fn renderStatus(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
-    var status_style = app_chrome.style();
-    status_style.panel = palette.panel_alt;
-    try components.renderComponent(scene, bounds, .{ .card = .{
-        .title = "",
-        .detail = "",
-    } }, .{ .style = status_style });
+    try fill(scene, bounds, vscode_titlebar, 0.0);
+    try stroke(scene, ui.Rect.init(bounds.x, bounds.y, bounds.w, 1.0), vscode_line, 0.0);
     const text_w = @max(1.0, bounds.w - panel_pad * 2.0);
     const status_h = wrappedTextHeight(state.status, text_w, compiler_text_h, compiler_message_max_lines, compiler_text_average_w);
     const summary_h = wrappedTextHeight(state.compile_summary, text_w, compiler_text_h, compiler_message_max_lines, compiler_text_average_w);
@@ -306,9 +301,8 @@ pub fn cursorFromPoint(bounds: ui.Rect, state: State, x: f32, y: f32) usize {
     const content_w = @min(source_content_wide, @max(1.0, bounds.w - content_pad * 2.0));
     const content = ui.Rect.init(bounds.x + (bounds.w - content_w) * 0.5, bounds.y, content_w, header_h);
     const top = bounds.y + header_h + page_top_pad - state.scroll_y;
-    const toolbar = ui.Rect.init(content.x, top, content.w, toolbarHeight(content.w));
-    const editor = ui.Rect.init(content.x, toolbar.y + toolbar.h + gap, content.w, editorHeight(content.w, state));
-    const code_view = editorCodeView(editor);
+    const editor = ui.Rect.init(content.x, top, content.w, editorHeight(content.w, state));
+    const code_view = editorCodeView(editor, state);
     const first_line = visibleFirstLine(state, visibleLineCapacity(code_view));
     return textarea_component.cursorFromPoint(state.source, code_view, x, y, .{
         .first_line = first_line,
@@ -324,10 +318,13 @@ fn explorerFileHitId(index: usize) u32 {
     return explorer_file_id_base + @as(u32, @intCast(index));
 }
 
-fn editorCodeView(bounds: ui.Rect) ui.Rect {
+fn editorCodeView(bounds: ui.Rect, state: State) ui.Rect {
+    const command_h = toolbarHeight(bounds.w);
+    const compiler_h = statusHeight(bounds.w, state);
     const status_y = bounds.y + bounds.h - editor_status_h;
-    const body_y = bounds.y + editor_titlebar_h;
-    const body_h = @max(1.0, status_y - body_y);
+    const compiler_y = @max(bounds.y + editor_titlebar_h + command_h, status_y - compiler_h);
+    const body_y = bounds.y + editor_titlebar_h + command_h;
+    const body_h = @max(1.0, compiler_y - body_y);
     const show_explorer = bounds.w >= explorer_threshold_w;
     const show_minimap = bounds.w >= minimap_threshold_w;
     const explorer_width = if (show_explorer) explorer_w else 0.0;
@@ -465,7 +462,7 @@ fn editorHeight(content_w: f32, state: State) f32 {
     const max_lines = if (compact) max_editor_lines_compact else max_editor_lines_wide;
     const source_lines = lineCount(state.source);
     const measured_lines = std.math.clamp(source_lines + 2, min_lines, max_lines);
-    return editor_status_h + code_pad * 2.0 + @as(f32, @floatFromInt(measured_lines)) * code_line_h;
+    return editor_titlebar_h + toolbarHeight(content_w) + code_pad * 2.0 + @as(f32, @floatFromInt(measured_lines)) * code_line_h + statusHeight(content_w, state) + editor_status_h;
 }
 
 fn toolbarHeight(content_w: f32) f32 {
