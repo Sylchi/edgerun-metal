@@ -8,6 +8,7 @@ fn contains(needle: []const u8) bool {
 
 test "web host javascript is empty because the browser bridge is the loader" {
     try std.testing.expectEqual(@as(usize, 0), source.len);
+    try std.testing.expect(!contains("globalThis.__edgerunWasm"));
     try std.testing.expect(!contains("er_ui_event_bytes"));
     try std.testing.expect(!contains("TextEncoder"));
     try std.testing.expect(!contains("TextDecoder"));
@@ -21,7 +22,7 @@ test "web host javascript is empty because the browser bridge is the loader" {
     try std.testing.expect(!contains("er_ui_release_artifact_commit"));
     try std.testing.expect(!contains("er_wasm_compiler_compile_wasm"));
     try std.testing.expect(!contains("er_wasm_compiler_init"));
-    try std.testing.expect(!contains("fetch("));
+    try std.testing.expect(!contains("fetch"));
     try std.testing.expect(!contains("putImageData"));
     try std.testing.expect(!contains("shiftKey"));
     try std.testing.expect(!contains("inputType"));

@@ -24,7 +24,7 @@ LOCAL_HOST = "127.0.0.1"
 PUBLIC_RETRY_SECONDS = 120
 PUBLIC_RETRY_INTERVAL_SECONDS = 5
 HTTP_OK = 200
-MAX_PUBLIC_LOADER_JS_BYTES = 500
+MAX_PUBLIC_LOADER_JS_BYTES = 8192
 BROWSER_NAMES = ("chromium", "chromium-browser", "google-chrome", "google-chrome-stable")
 BROWSER_SMOKE_SCALE = 2
 
@@ -71,12 +71,25 @@ def verify_local_files(site_dir):
     scripts = re.findall(r"<script[^>]*>(.*?)</script>", entry, re.DOTALL)
     require(len(scripts) == 1, "web entry must have exactly one inline script")
     loader = scripts[0].strip()
-    require(len(loader.encode("utf-8")) <= MAX_PUBLIC_LOADER_JS_BYTES, "web entry loader exceeds 500 bytes")
+    require(
+        len(loader.encode("utf-8")) <= MAX_PUBLIC_LOADER_JS_BYTES,
+        f"web entry loader exceeds {MAX_PUBLIC_LOADER_JS_BYTES} bytes",
+    )
     require("../bin/edgerun-app-runtime.wasm" in entry, "web entry missing runtime path")
-    require("WebAssembly.instantiateStreaming" in entry, "web entry missing streaming instantiate")
-    require("!r.ok" in entry, "web entry missing HTTP status check")
-    require("globalThis.__edgerunWasm" in entry, "web entry missing module global handoff")
-    require("er_ui_bootstrap_js_ptr" in entry, "web entry missing app-owned bootstrap handoff")
+    require("WebAssembly.instantiate" in entry, "web entry missing wasm instantiate")
+    require("arrayBuffer" in entry, "web entry missing deterministic wasm bytes load")
+    require("instantiateStreaming" not in entry, "web entry depends on wasm MIME streaming instantiate")
+    require("getContext`webgl`" in entry, "web entry missing WebGL bridge")
+    require("er_ui_build_frame" in entry, "web entry missing packed frame build")
+    require("er_ui_packed_rect_buffer_ptr" in entry, "web entry missing packed rect bridge")
+    require("er_ui_packed_text_vertex_buffer_ptr" in entry, "web entry missing packed text bridge")
+    require("er_ui_packed_image_vertex_buffer_ptr" in entry, "web entry missing packed image bridge")
+    require("er_ui_packed_icon_line_vertex_buffer_ptr" in entry, "web entry missing packed icon bridge")
+    require("putImageData" not in entry, "web entry regressed to CPU pixel upload")
+    require("er_ui_render_frame_hd" not in entry, "web entry regressed to CPU frame render")
+    require("globalThis.__edgerunWasm" not in entry, "web entry regressed to module global handoff")
+    require("er_ui_bootstrap_js_ptr" not in entry, "web entry regressed to secondary bootstrap handoff")
+    require("er_ui_bootstrap_js_len" not in entry, "web entry regressed to secondary bootstrap length")
     node_execute_loader(loader)
 
 
@@ -105,7 +118,7 @@ const response = await fetch(url);
 if (!response.ok) throw new Error(`bad response ${response.status}`);
 if (response.headers.get("content-type") !== "application/wasm") throw new Error(`bad content type ${response.headers.get("content-type")}`);
 const instance = (await WebAssembly.instantiateStreaming(response, {})).instance;
-for (const name of ["memory", "er_ui_boot", "er_ui_render_frame", "er_ui_event_bytes", "er_ui_pixels_ptr", "er_ui_last_error"]) {
+for (const name of ["memory", "er_ui_boot", "er_ui_build_frame", "er_ui_event_bytes", "er_ui_packed_rect_buffer_ptr", "er_ui_last_error"]) {
   if (!(name in instance.exports)) throw new Error(`missing export ${name}`);
 }
 """
@@ -126,8 +139,9 @@ def browser_smoke(url):
         (
             browser,
             "--headless",
-            "--disable-gpu",
             "--no-sandbox",
+            "--disable-gpu-sandbox",
+            "--enable-webgl",
             f"--force-device-scale-factor={BROWSER_SMOKE_SCALE}",
             "--virtual-time-budget=5000",
             "--dump-dom",
@@ -150,23 +164,90 @@ def browser_smoke(url):
 def node_execute_loader(loader):
     script = """
 const loader = process.argv[1];
-const bridge = "if(!globalThis.__edgerunWasm)throw Error('missing global wasm');document.body.innerHTML='<canvas id=c></canvas>'";
-const encodedBridge = new TextEncoder().encode(bridge);
 const memory = new WebAssembly.Memory({ initial: 1 });
-new Uint8Array(memory.buffer, 0, encodedBridge.length).set(encodedBridge);
-globalThis.document = { body: { textContent: "", innerHTML: "" } };
-globalThis.fetch = async () => ({ ok: true });
-WebAssembly.instantiateStreaming = async () => ({
-  instance: {
-    exports: {
-      memory,
-      er_ui_bootstrap_js_ptr: () => 0,
-      er_ui_bootstrap_js_len: () => encodedBridge.length,
-    },
-  },
-});
+let booted = false;
+let built = false;
+let scaled = false;
+const gl = {
+  VERTEX_SHADER: 1, FRAGMENT_SHADER: 2, COMPILE_STATUS: 3, LINK_STATUS: 4,
+  TEXTURE_2D: 5, TEXTURE_MIN_FILTER: 6, TEXTURE_MAG_FILTER: 7, LINEAR: 8,
+  TEXTURE_WRAP_S: 9, TEXTURE_WRAP_T: 10, CLAMP_TO_EDGE: 11, RGBA: 12,
+  LUMINANCE: 13, UNSIGNED_BYTE: 14, ARRAY_BUFFER: 15, STATIC_DRAW: 16,
+  DYNAMIC_DRAW: 17, FLOAT: 18, TRIANGLE_STRIP: 19, TRIANGLES: 20,
+  COLOR_BUFFER_BIT: 21, BLEND: 22, ONE: 23, ONE_MINUS_SRC_ALPHA: 24,
+  createShader: () => ({}), shaderSource: () => {}, compileShader: () => {},
+  getShaderParameter: () => true, getShaderInfoLog: () => "",
+  createProgram: () => ({}), attachShader: () => {}, linkProgram: () => {},
+  getProgramParameter: () => true, getProgramInfoLog: () => "",
+  createBuffer: () => ({}), createTexture: () => ({}), bindTexture: () => {},
+  texParameteri: () => {}, texImage2D: () => {}, bindBuffer: () => {},
+  bufferData: () => {}, vertexAttribPointer: () => {}, enableVertexAttribArray: () => {},
+  useProgram: () => {}, getUniformLocation: () => ({}), uniform2f: () => {},
+  uniform1f: () => {}, uniform1i: () => {}, uniform4f: () => {},
+  viewport: () => {}, clearColor: () => {}, clear: () => {}, enable: () => {},
+  blendFunc: () => {}, drawArrays: () => {},
+};
+globalThis.c = { width: 0, height: 0, style: {}, getContext: name => `${name}` === "webgl" ? gl : null };
+globalThis.document = {
+  body: { textContent: "", innerHTML: "" },
+  createElement: () => ({ click: () => {} }),
+  getElementById: () => null,
+};
+globalThis.URL = { createObjectURL: () => "blob:edgerun", revokeObjectURL: () => {} };
+globalThis.Blob = class {};
+globalThis.open = () => {};
+globalThis.location = { hash: "" };
+globalThis.innerWidth = 320;
+globalThis.innerHeight = 200;
+globalThis.devicePixelRatio = 2;
+globalThis.performance = { now: () => 16 };
+globalThis.addEventListener = () => {};
+globalThis.requestAnimationFrame = () => {};
+const exports = {
+  memory,
+  er_ui_boot: () => { booted = true; },
+  er_ui_max_width: () => 4096,
+  er_ui_max_height: () => 4096,
+  er_ui_width: () => 640,
+  er_ui_height: () => 400,
+  er_ui_set_device_scale: value => { if (value === 2) scaled = true; },
+  er_ui_build_frame: () => { built = true; return 0; },
+  er_ui_last_error: () => 0,
+  er_ui_font_atlas_generation: () => 1,
+  er_ui_font_atlas_width: () => 1,
+  er_ui_font_atlas_height: () => 1,
+  er_ui_font_atlas_ptr: () => 1024,
+  er_ui_post_image_width: () => 1,
+  er_ui_post_image_height: () => 1,
+  er_ui_post_image_rgba_ptr: () => 2048,
+  er_ui_post_image_rgba_len: () => 4,
+  er_ui_packed_rect_buffer_ptr: () => 0,
+  er_ui_packed_rect_buffer_len: () => 0,
+  er_ui_packed_image_vertex_buffer_ptr: () => 0,
+  er_ui_packed_image_vertex_buffer_len: () => 0,
+  er_ui_packed_text_vertex_buffer_ptr: () => 0,
+  er_ui_packed_text_vertex_buffer_len: () => 0,
+  er_ui_packed_icon_line_vertex_buffer_ptr: () => 0,
+  er_ui_packed_icon_line_vertex_buffer_len: () => 0,
+  er_ui_packed_overlay_rect_buffer_ptr: () => 0,
+  er_ui_packed_overlay_rect_buffer_len: () => 0,
+  er_ui_packed_overlay_text_vertex_buffer_ptr: () => 0,
+  er_ui_packed_overlay_text_vertex_buffer_len: () => 0,
+  er_ui_packed_overlay_icon_line_vertex_buffer_ptr: () => 0,
+  er_ui_packed_overlay_icon_line_vertex_buffer_len: () => 0,
+  er_ui_outbox_count: () => 0,
+  er_ui_outbox_clear: () => {},
+  er_ui_input_ptr: () => 4096,
+  er_ui_input_capacity: () => 1024,
+  er_ui_event_bytes: () => 0,
+};
+globalThis.fetch = async () => ({ arrayBuffer: async () => new ArrayBuffer(8) });
+WebAssembly.instantiate = async () => ({ instance: { exports } });
 await import(`data:text/javascript,${encodeURIComponent(loader)}`);
-if (document.body.innerHTML !== "<canvas id=c></canvas>") throw new Error("loader did not execute wasm-owned bridge");
+if (!booted) throw new Error("loader did not boot wasm");
+if (!built) throw new Error("loader did not build wasm frame");
+if (!scaled) throw new Error("loader did not apply device scale");
+if (c.width !== 640 || c.height !== 400) throw new Error("loader did not size high-dpi canvas");
 """
     subprocess.run(("node", "--input-type=module", "-e", script, loader), check=True)
 
