@@ -8,7 +8,7 @@ fn contains(needle: []const u8) bool {
     return std.mem.indexOf(u8, source, needle) != null;
 }
 
-test "browser runtime javascript stays below byte bridge budget" {
+test "web host javascript stays below byte bridge budget" {
     try std.testing.expect(source.len < 2800);
     try std.testing.expect(contains("er_ui_event_bytes"));
     try std.testing.expect(contains("TextEncoder"));

@@ -3,18 +3,18 @@ const icon = @import("icon.zig");
 const interaction = @import("ui_interaction.zig");
 const ui = @import("ui.zig");
 const components = @import("ui_components.zig");
-const site_chrome = @import("site_chrome.zig");
-const design = @import("site_design.zig");
+const app_chrome = @import("app_chrome.zig");
+const design = @import("app_design.zig");
 
-pub const logo_button_id: u32 = site_chrome.logo_button_id;
-pub const docs_button_id: u32 = site_chrome.docs_button_id;
-pub const launch_button_id: u32 = site_chrome.launch_button_id;
-pub const blog_button_id: u32 = site_chrome.blog_button_id;
-pub const source_button_id: u32 = site_chrome.source_button_id;
+pub const logo_button_id: u32 = app_chrome.logo_button_id;
+pub const docs_button_id: u32 = app_chrome.docs_button_id;
+pub const launch_button_id: u32 = app_chrome.launch_button_id;
+pub const blog_button_id: u32 = app_chrome.blog_button_id;
+pub const source_button_id: u32 = app_chrome.source_button_id;
 pub const reveal_identity_button_id: u32 = 20_001;
 
 const max_columns: usize = 4;
-const header_h: f32 = site_chrome.header_h;
+const header_h: f32 = app_chrome.header_h;
 const section_gap: f32 = 72.0;
 const content_wide: f32 = design.content_wide;
 const content_pad: f32 = design.content_pad;
@@ -106,9 +106,9 @@ const terminal_lines = [_]TerminalLine{
     .{ .value = "ui system: repo-owned", .color = palette.text },
     .{ .value = "npm packages: 0", .color = palette.primary },
     .{ .value = "host filesystem: none", .color = palette.primary },
-    .{ .value = "browser shell: byte bridge only", .color = palette.dim },
+    .{ .value = "web host: byte bridge only", .color = palette.dim },
     .{ .value = "ready to compile next artifact", .color = palette.primary },
-    .{ .value = "runs through browser/native/cpu/gpu", .color = palette.text },
+    .{ .value = "runs through web/native/cpu/gpu", .color = palette.text },
 };
 const terminal_identity_line_index: usize = 8;
 const terminal_line_count: usize = terminal_lines.len + 1;
@@ -206,7 +206,7 @@ fn sectionHeight(content: ui.Rect, kind: SectionKind) f32 {
 }
 
 fn renderHeader(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, content: ui.Rect) (ui.RenderError || interaction.Error)!void {
-    try site_chrome.renderHeader(scene, collector, bounds, content, .none);
+    try app_chrome.renderHeader(scene, collector, bounds, content, .none);
 }
 
 fn renderHero(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) (ui.RenderError || interaction.Error)!void {
@@ -327,9 +327,9 @@ fn renderTerminalHint(scene: *ui.Scene, terminal: ui.Rect, state: State, stacked
     const hint_w = if (stacked) terminal.w else @min(terminal.w, 480.0);
     const hint_x = if (stacked) terminal.x + (terminal.w - hint_w) * 0.5 else terminal.x;
     const message = if (state.public_identity_ready)
-        "This browser app has a live identity, embedded compiler bytes, and a source workspace in its own memory."
+        "This app runtime has a live identity, embedded compiler bytes, and a source workspace in its own memory."
     else
-        "Reveal creates an ephemeral identity inside the WASM app. The browser is only the host surface.";
+        "Reveal creates an ephemeral identity inside the WASM app. The host only presents the surface.";
     try scene.pushWrappedText(ui.Rect.init(hint_x, hint_y, hint_w, 36.0), message, palette.dim, .{
         .line_height = 18.0,
         .average_char_width = 8.5,
@@ -365,7 +365,7 @@ fn renderProblem(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
     const right = ui.Rect.init(bounds.x + bounds.w * 0.56, bounds.y, bounds.w * 0.44, bounds.h);
     try tag(scene, ui.Rect.init(left.x, left.y, 104.0, 24.0), "THE PROBLEM", palette.danger);
     try heading(scene, ui.Rect.init(left.x, left.y + 44.0, left.w, 74.0), "Apps Became", "Dependency Towers");
-    try paragraph(scene, ui.Rect.init(left.x, left.y + 138.0, left.w, 82.0), "Modern apps often need clouds, registries, build services, host filesystems, browser frameworks, and platform accounts before they can even begin.");
+    try paragraph(scene, ui.Rect.init(left.x, left.y + 138.0, left.w, 82.0), "Modern apps often need clouds, registries, build services, host filesystems, web frameworks, and platform accounts before they can even begin.");
     try problemItem(scene, ui.Rect.init(left.x, left.y + 250.0, left.w, 48.0), "1", "Builds Live Elsewhere", "The compiler, source, and release path are usually outside the app.");
     try problemItem(scene, ui.Rect.init(left.x, left.y + 310.0, left.w, 48.0), "2", "UI Is Borrowed", "The surface depends on framework and host behavior.");
     try problemItem(scene, ui.Rect.init(left.x, left.y + 370.0, left.w, 48.0), "3", "Trust Is Ambient", "Permissions and updates are hard to explain after the fact.");
@@ -382,7 +382,7 @@ fn renderPrinciples(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
         .{ .code, "Compiler Inside", "The app ships with compiler bytes.", "compile(source_object)" },
         .{ .app, "Built-In UI", "Components render through one IR.", "scene -> render_ir" },
         .{ .shield, "Receipts For Work", "Execution leaves a checkable trail.", "work -> receipt" },
-        .{ .cpu, "Runs Across Targets", "Browser, native, CPU, GPU, hardware.", "present(target)" },
+        .{ .cpu, "Runs Across Targets", "Web, native, CPU, GPU, hardware.", "present(target)" },
     };
     for (items, 0..) |item, index| {
         const row: usize = index / cols;
@@ -397,14 +397,14 @@ fn renderArchitecture(scene: *ui.Scene, collector: *interaction.Collector, bound
     const right = ui.Rect.init(bounds.x + bounds.w * 0.43, bounds.y, bounds.w * 0.57, bounds.h);
     try tag(scene, ui.Rect.init(left.x, left.y, 64.0, 24.0), "STACK", palette.primary);
     try heading(scene, ui.Rect.init(left.x, left.y + 44.0, left.w, 74.0), "No Package", "Tower.");
-    try paragraph(scene, ui.Rect.init(left.x, left.y + 138.0, left.w, 96.0), "The browser page loads one WASM app. That app owns the bootstrap JavaScript, source workspace, compiler bytes, UI scene, render buffers, and release artifact.");
+    try paragraph(scene, ui.Rect.init(left.x, left.y + 138.0, left.w, 96.0), "The web host loads one WASM app. That app owns the source workspace, compiler bytes, UI scene, render buffers, and release artifact.");
     try outlineButtonWithTrailingIcon(scene, collector, ui.Rect.init(left.x, left.y + 264.0, 180.0, 36.0), "Open Source", .chevron_right, source_button_id);
     const stack = [_]struct { []const u8, []const u8, ui.Color }{
         .{ "app wasm", "tiny runtime and UI shell", palette.primary },
         .{ "compiler wasm", "embedded Zig-to-WASM path", palette.yellow },
         .{ "source object", "canonical editable workspace", palette.blue },
         .{ "ui components", "built-in app surface", palette.cyan },
-        .{ "render ir", "browser cpu gpu native", palette.cyan },
+        .{ "render ir", "web cpu gpu native", palette.cyan },
         .{ "object store", "canonical bytes and ids", palette.primary },
         .{ "receipts", "work can be explained", palette.violet },
         .{ "boot path", "QEMU TPM Pi bring-up", palette.orange },
@@ -726,16 +726,16 @@ fn nativeBadge(scene: *ui.Scene, bounds: ui.Rect, label: []const u8) ui.RenderEr
 }
 
 fn nativeCard(scene: *ui.Scene, bounds: ui.Rect, title_value: []const u8, detail_value: []const u8) ui.RenderError!void {
-    try components.renderComponent(scene, bounds, .{ .card = .{ .title = title_value, .detail = detail_value, .variant = .elevated } }, .{ .style = siteStyle() });
+    try components.renderComponent(scene, bounds, .{ .card = .{ .title = title_value, .detail = detail_value, .variant = .elevated } }, .{ .style = appStyle() });
 }
 
 fn nativeComponent(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, component: components.Component) (ui.RenderError || interaction.Error)!void {
-    try components.renderComponent(scene, bounds, component, .{ .style = siteStyle() });
+    try components.renderComponent(scene, bounds, component, .{ .style = appStyle() });
     try components.collectComponentInteractions(collector, bounds, component);
 }
 
-fn siteStyle() ui.Style {
-    var resolved = site_chrome.style();
+fn appStyle() ui.Style {
+    var resolved = app_chrome.style();
     resolved.panel = palette.card;
     resolved.row = palette.card_alt;
     return resolved;
@@ -797,7 +797,7 @@ fn isLand(lat: f32, lng: f32) bool {
     return false;
 }
 
-test "landing page renders site sections and primary actions" {
+test "landing page renders app sections and primary actions" {
     var commands: [4096]ui.Command = undefined;
     var clips: [8]ui.Rect = undefined;
     var scene = ui.Scene.initWithClips(&commands, &clips);

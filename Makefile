@@ -1,7 +1,7 @@
 .PHONY: all check clean \
 	crypto-test crypto-bench \
 	clock-test identity-test object-test storage-test sdk-test \
-	ui-core-test ui-browser \
+	ui-core-test app-runtime \
 	zig-check zig-fmt-check zig-fmt zig-test zig-real-tpm sdk-cli sdk-bench \
 	wayland-window wayland-window-test \
 	pi-zero-w-v1_1-kernel pi-zero-w-v1_1-usb-probe pi-usb-host pi-usb-state \
@@ -58,10 +58,10 @@ sdk-bench:
 ui-core-test:
 	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig ui-core-test
 
-ui-browser:
-	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig ui-browser
+app-runtime:
+	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig app-runtime
 
-wayland-window: ui-browser
+wayland-window: app-runtime
 	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig -Doptimize=ReleaseFast wayland-window -- --width $(WAYLAND_WIDTH) --height $(WAYLAND_HEIGHT) --seconds $(WAYLAND_SECONDS) --path $(WAYLAND_PATH)
 
 wayland-window-test:

@@ -11,13 +11,13 @@ const renderer_ir = @import("render/ir.zig");
 const renderer_pipeline = @import("render/pipeline.zig");
 const renderer_native_present = @import("render/native_present.zig");
 const renderer_software = @import("render/software.zig");
-const site_blog = @import("site_blog.zig");
-const site_chrome = @import("site_chrome.zig");
-const site_cursor = @import("site_cursor.zig");
-const site_frame = @import("site_frame.zig");
-const site_images = @import("site_images.zig");
-const site_landing = @import("site_landing.zig");
-const site_navigation = @import("site_navigation.zig");
+const app_blog = @import("app_blog.zig");
+const app_chrome = @import("app_chrome.zig");
+const app_cursor = @import("app_cursor.zig");
+const app_frame = @import("app_frame.zig");
+const app_images = @import("app_images.zig");
+const app_landing = @import("app_landing.zig");
+const app_navigation = @import("app_navigation.zig");
 const ui = @import("ui.zig");
 const ui_runtime = @import("ui_runtime.zig");
 
@@ -270,7 +270,7 @@ const AppState = struct {
     runtime: ui_runtime.State = .{},
     public_identity_ready: bool = true,
     public_identity: []const u8 = "native-wayland",
-    route: site_navigation.Route = .{},
+    route: app_navigation.Route = .{},
 };
 
 const Message = struct {
@@ -743,7 +743,7 @@ const NativeApp = struct {
         self.region_len = 0;
         self.ir_storage = .{};
         self.font_atlas = renderer_font_atlas.Atlas.initWithFont(renderer_font_atlas.geist_ascii_font.body());
-        self.state = .{ .route = site_navigation.fromPath(options.path) };
+        self.state = .{ .route = app_navigation.fromPath(options.path) };
         self.gpu_recorder = .{};
         self.gpu_buffer_device = .{};
         self.drm_buffer = drm_buffer;
@@ -767,17 +767,17 @@ const NativeApp = struct {
     fn render(self: *NativeApp, client: *WaylandClient) !void {
         var scene = ui.Scene.initWithClips(&self.commands, &self.clips);
         var collector = interaction.Collector.init(&self.regions);
-        try renderNativeSiteScene(&scene, &collector, self.width, self.height, self.state);
+        try renderNativeAppScene(&scene, &collector, self.width, self.height, self.state);
         self.region_len = collector.written().len;
         self.updateHoverHit(self.regionSlice());
-        const cursor_kind = site_cursor.fromState(.none, self.state.runtime.hoverKind());
-        if (self.present != .cpu) try site_cursor.render(&scene, self.state.hover_x, self.state.hover_y, cursor_kind);
+        const cursor_kind = app_cursor.fromState(.none, self.state.runtime.hoverKind());
+        if (self.present != .cpu) try app_cursor.render(&scene, self.state.hover_x, self.state.hover_y, cursor_kind);
 
         const buffers = self.ir_storage.buffers();
         try renderer_pipeline.packScene(buffers, &self.font_atlas, .object, scene.written());
 
         var sink_state = WaylandCommitSink{};
-        const resources = renderer_pipeline.softwareResources(&self.font_atlas, try site_images.cloudMeme());
+        const resources = renderer_pipeline.softwareResources(&self.font_atlas, try app_images.cloudMeme());
         switch (self.present) {
             .cpu => {
                 const receipt = try renderer_native_present.renderCpuAndSubmit(
@@ -785,7 +785,7 @@ const NativeApp = struct {
                     buffers,
                     resources,
                     .{ .width = self.width, .height = self.height, .pixels = self.pixels },
-                    siteBackground(),
+                    appBackground(),
                     default_refresh_hz,
                     tile_width,
                     tile_height,
@@ -856,10 +856,10 @@ const NativeApp = struct {
         try client.attachCommit(self.width, self.height);
     }
 
-    fn renderCursorOnly(self: *NativeApp, client: *WaylandClient, old_x: f32, old_y: f32, old_kind: site_cursor.Kind) !void {
+    fn renderCursorOnly(self: *NativeApp, client: *WaylandClient, old_x: f32, old_y: f32, old_kind: app_cursor.Kind) !void {
         if (self.present != .cpu or !self.base_pixels_ready) return error.CursorOverlayUnavailable;
         const old_damage = cursorPixelRect(self.width, self.height, old_x, old_y, old_kind);
-        const next_kind = site_cursor.fromState(.none, self.state.runtime.hoverKind());
+        const next_kind = app_cursor.fromState(.none, self.state.runtime.hoverKind());
         const next_damage = cursorPixelRect(self.width, self.height, self.state.hover_x, self.state.hover_y, next_kind);
         const damage = unionPixelRect(old_damage, next_damage) orelse return;
         self.restoreBasePixels(damage);
@@ -869,11 +869,11 @@ const NativeApp = struct {
         try client.attachCommitRect(final_damage);
     }
 
-    fn renderCursorOverlay(self: *NativeApp, kind: site_cursor.Kind) !?PixelRect {
+    fn renderCursorOverlay(self: *NativeApp, kind: app_cursor.Kind) !?PixelRect {
         const damage = cursorPixelRect(self.width, self.height, self.state.hover_x, self.state.hover_y, kind) orelse return null;
         var cursor_commands: [cursor_scene_budget]ui.Command = undefined;
         var scene = ui.Scene.init(&cursor_commands);
-        try site_cursor.render(&scene, self.state.hover_x, self.state.hover_y, kind);
+        try app_cursor.render(&scene, self.state.hover_x, self.state.hover_y, kind);
         var cursor_ir = renderer_ir.FixedBuffers(cursor_scene_budget, 0, cursor_overlay_icon_vertices, 0, 0, 0, 0){};
         const buffers = cursor_ir.buffers();
         try renderer_pipeline.packScene(buffers, &self.font_atlas, .object, scene.written());
@@ -925,7 +925,7 @@ const NativeApp = struct {
 
     fn renderSoftwarePixels(self: *NativeApp, buffers: renderer_ir.Buffers, resources: renderer_software.Resources) !void {
         const software_surface = try renderer_software.Framebuffer.init(self.width, self.height, self.pixels);
-        software_surface.clear(siteBackground());
+        software_surface.clear(appBackground());
         const receipt = try software_surface.renderIr(buffers, resources);
         if (!receipt.valid()) return error.InvalidSoftwareReceipt;
     }
@@ -945,7 +945,7 @@ const NativeApp = struct {
             wl_pointer_leave_event => {
                 const old_x = self.state.hover_x;
                 const old_y = self.state.hover_y;
-                const old_kind = site_cursor.fromState(.none, self.state.runtime.hoverKind());
+                const old_kind = app_cursor.fromState(.none, self.state.runtime.hoverKind());
                 self.state.hover_x = -1.0;
                 self.state.hover_y = -1.0;
                 self.state.runtime.clearHover();
@@ -960,7 +960,7 @@ const NativeApp = struct {
                 const old_x = self.state.hover_x;
                 const old_y = self.state.hover_y;
                 const old_hit = self.state.runtime.hoverHitId();
-                const old_kind = site_cursor.fromState(.none, self.state.runtime.hoverKind());
+                const old_kind = app_cursor.fromState(.none, self.state.runtime.hoverKind());
                 self.state.hover_x = fixedToFloat(std.mem.readInt(i32, message.payload[4..8], .little));
                 self.state.hover_y = fixedToFloat(std.mem.readInt(i32, message.payload[8..12], .little));
                 self.updateHoverHit(self.regionSlice());
@@ -1029,12 +1029,12 @@ fn activateHitForState(state: *AppState, client: ?*WaylandClient) !void {
         },
         else => {},
     }
-    if (site_navigation.fromHit(hover_hit_id, state.route)) |route| {
+    if (app_navigation.fromHit(hover_hit_id, state.route)) |route| {
         state.route = route;
         state.scroll_y = 0.0;
         return;
     }
-    if (site_navigation.actionFromHit(hover_hit_id)) |action| switch (action) {
+    if (app_navigation.actionFromHit(hover_hit_id)) |action| switch (action) {
         .reveal_identity => {
             state.public_identity_ready = true;
             state.public_identity = "native-wayland";
@@ -1044,6 +1044,7 @@ fn activateHitForState(state: *AppState, client: ?*WaylandClient) !void {
         .download_source_release,
         .launch_source_release,
         .reset_source,
+        .open_context_source,
         => {},
     };
 }
@@ -1130,12 +1131,12 @@ const GpuRecorder = struct {
     }
 };
 
-fn renderNativeSiteScene(scene: *ui.Scene, collector: *interaction.Collector, width: u32, height: u32, state: AppState) !void {
+fn renderNativeAppScene(scene: *ui.Scene, collector: *interaction.Collector, width: u32, height: u32, state: AppState) !void {
     try renderClientDecoration(scene, collector, @floatFromInt(width));
     const content_y = client_decor_h;
     const content_h = @max(1.0, @as(f32, @floatFromInt(height)) - content_y);
     const bounds = ui.Rect.init(0, content_y, @floatFromInt(width), content_h);
-    try site_frame.render(scene, collector, bounds, .{
+    try app_frame.render(scene, collector, bounds, .{
         .route = state.route,
         .scroll_y = state.scroll_y,
         .hover_x = state.hover_x,
@@ -1183,11 +1184,11 @@ fn centeredRect(bounds: ui.Rect, w: f32, h: f32) ui.Rect {
     );
 }
 
-fn contentHeightForRoute(width: f32, route: site_navigation.Route) f32 {
-    return site_frame.contentHeight(width, .{ .route = route });
+fn contentHeightForRoute(width: f32, route: app_navigation.Route) f32 {
+    return app_frame.contentHeight(width, .{ .route = route });
 }
 
-fn siteBackground() ui.Color {
+fn appBackground() ui.Color {
     return .{ .r = 11, .g = 11, .b = 11 };
 }
 
@@ -1234,8 +1235,8 @@ fn packXrgb8888Strided(out: []u8, stride_bytes: u32, width: u32, height: u32, pi
     }
 }
 
-fn cursorPixelRect(width: u32, height: u32, x: f32, y: f32, kind: site_cursor.Kind) ?PixelRect {
-    const bounds = site_cursor.damageBounds(x, y, kind) orelse return null;
+fn cursorPixelRect(width: u32, height: u32, x: f32, y: f32, kind: app_cursor.Kind) ?PixelRect {
+    const bounds = app_cursor.damageBounds(x, y, kind) orelse return null;
     return clampPixelRect(width, height, bounds);
 }
 
@@ -1951,13 +1952,13 @@ test "wayland xrgb rect pack updates only cursor damage bytes" {
     try std.testing.expectEqualSlices(u8, &.{ 0xaa, 0xaa, 0xaa, 0xaa }, out[60..64]);
 }
 
-test "wayland host renders the browser landing app through canonical ir" {
+test "wayland host renders the landing app through canonical ir" {
     var commands: [max_commands]ui.Command = undefined;
     var clips: [max_clips]ui.Rect = undefined;
     var regions: [max_interaction_regions]interaction.Region = undefined;
     var scene = ui.Scene.initWithClips(&commands, &clips);
     var collector = interaction.Collector.init(&regions);
-    try renderNativeSiteScene(&scene, &collector, 1280, 800, .{});
+    try renderNativeAppScene(&scene, &collector, 1280, 800, .{});
     try std.testing.expect(hasText(scene.written(), "The App"));
     try std.testing.expect(hasText(scene.written(), "Builds Itself"));
 
@@ -1976,10 +1977,10 @@ test "wayland host renders academy post route through canonical ir" {
     var regions: [max_interaction_regions]interaction.Region = undefined;
     var scene = ui.Scene.initWithClips(&commands, &clips);
     var collector = interaction.Collector.init(&regions);
-    const post_id = site_blog.postIdAt(site_blog.posts.len - 1);
-    var path: [site_navigation.route_path_capacity]u8 = undefined;
+    const post_id = app_blog.postIdAt(app_blog.posts.len - 1);
+    var path: [app_navigation.route_path_capacity]u8 = undefined;
     const route_path = try std.fmt.bufPrint(&path, "/academy/{d}", .{post_id});
-    try renderNativeSiteScene(&scene, &collector, 1280, 1800, .{ .route = site_navigation.fromPath(route_path) });
+    try renderNativeAppScene(&scene, &collector, 1280, 1800, .{ .route = app_navigation.fromPath(route_path) });
     try std.testing.expect(hasText(scene.written(), "AUTHORITY FLOW"));
     try std.testing.expect(hasText(scene.written(), "Relay"));
     try std.testing.expect(hasText(scene.written(), "TPM"));
@@ -1991,7 +1992,7 @@ test "wayland host renders current docs routes through the shared app frame" {
     var regions: [max_interaction_regions]interaction.Region = undefined;
     var scene = ui.Scene.initWithClips(&commands, &clips);
     var collector = interaction.Collector.init(&regions);
-    try renderNativeSiteScene(&scene, &collector, 1280, 1800, .{ .route = site_navigation.fromPath("/docs/fonts") });
+    try renderNativeAppScene(&scene, &collector, 1280, 1800, .{ .route = app_navigation.fromPath("/docs/fonts") });
 
     try std.testing.expect(hasText(scene.written(), "EdgeRun Native"));
     try std.testing.expect(hasText(scene.written(), "Fonts"));
@@ -2001,20 +2002,20 @@ test "wayland host renders current docs routes through the shared app frame" {
 
 test "wayland host renders client side decoration above app content" {
     var state = AppState{};
-    state.route = site_navigation.fromPath("/academy");
+    state.route = app_navigation.fromPath("/academy");
     var commands: [max_commands]ui.Command = undefined;
     var clips: [max_clips]ui.Rect = undefined;
     var regions: [max_interaction_regions]interaction.Region = undefined;
     var scene = ui.Scene.initWithClips(&commands, &clips);
     var collector = interaction.Collector.init(&regions);
-    try renderNativeSiteScene(&scene, &collector, 1280, 800, state);
+    try renderNativeAppScene(&scene, &collector, 1280, 800, state);
 
     try std.testing.expect(hasText(scene.written(), "EdgeRun Native"));
     try std.testing.expect(hasIcon(scene.written(), .x));
     try std.testing.expectEqual(@as(f32, 0.0), (try hitRect(collector.written(), client_decor_drag_id)).y);
     try std.testing.expect((try hitRect(collector.written(), client_decor_close_id)).x > 1200.0);
 
-    const logo = try hitRect(collector.written(), site_chrome.logo_button_id);
+    const logo = try hitRect(collector.written(), app_chrome.logo_button_id);
     try std.testing.expect(logo.y >= client_decor_h);
 }
 
@@ -2078,16 +2079,16 @@ test "wayland host pointer input updates hover activation and scroll state" {
     var regions: [max_interaction_regions]interaction.Region = undefined;
     var scene = ui.Scene.initWithClips(&commands, &clips);
     var collector = interaction.Collector.init(&regions);
-    try renderNativeSiteScene(&scene, &collector, 1280, 800, state);
+    try renderNativeAppScene(&scene, &collector, 1280, 800, state);
     updateHoverHitForState(&state, collector.written());
     try std.testing.expect(state.runtime.hovered == null);
 
-    const docs = try hitRect(collector.written(), site_landing.docs_button_id);
+    const docs = try hitRect(collector.written(), app_landing.docs_button_id);
     state.hover_x = docs.x + docs.w * 0.5;
     state.hover_y = docs.y + docs.h * 0.5;
     updateHoverHitForState(&state, collector.written());
     try std.testing.expect(state.runtime.hovered != null);
-    try std.testing.expectEqual(site_cursor.Kind.pointer, site_cursor.fromState(.none, state.runtime.hovered.?.kind));
+    try std.testing.expectEqual(app_cursor.Kind.pointer, app_cursor.fromState(.none, state.runtime.hovered.?.kind));
 
     const old_hit = state.runtime.hovered.?.id;
     try activateHitForState(&state, null);
@@ -2114,15 +2115,15 @@ test "wayland host appends scene cursor from native hover state" {
     };
     var scene = ui.Scene.initWithClips(&app.commands, &app.clips);
     var collector = interaction.Collector.init(&app.regions);
-    try renderNativeSiteScene(&scene, &collector, app.width, app.height, app.state);
+    try renderNativeAppScene(&scene, &collector, app.width, app.height, app.state);
     app.region_len = collector.written().len;
-    const docs = try hitRect(app.regionSlice(), site_landing.docs_button_id);
+    const docs = try hitRect(app.regionSlice(), app_landing.docs_button_id);
     app.state.hover_x = docs.x + docs.w * 0.5;
     app.state.hover_y = docs.y + docs.h * 0.5;
     app.updateHoverHit(app.regionSlice());
-    try site_cursor.render(&scene, app.state.hover_x, app.state.hover_y, site_cursor.fromState(.none, app.state.runtime.hoverKind()));
+    try app_cursor.render(&scene, app.state.hover_x, app.state.hover_y, app_cursor.fromState(.none, app.state.runtime.hoverKind()));
 
-    try std.testing.expectEqual(site_cursor.Kind.pointer, site_cursor.fromState(.none, app.state.runtime.hoverKind()));
+    try std.testing.expectEqual(app_cursor.Kind.pointer, app_cursor.fromState(.none, app.state.runtime.hoverKind()));
     try std.testing.expect(hasIconId(scene.written(), icon_svg.cursor_hand_finger_icon_id));
 }
 

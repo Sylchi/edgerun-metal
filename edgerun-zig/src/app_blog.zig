@@ -2,8 +2,8 @@ const std = @import("std");
 const icon = @import("icon.zig");
 const ui = @import("ui.zig");
 const components = @import("ui_components.zig");
-const site_chrome = @import("site_chrome.zig");
-const design = @import("site_design.zig");
+const app_chrome = @import("app_chrome.zig");
+const design = @import("app_design.zig");
 const interaction = @import("ui_interaction.zig");
 
 pub const back_button_id: u32 = 40_001;
@@ -11,7 +11,7 @@ pub const first_post_button_id: u32 = 40_100;
 pub const all_lessons_button_id: u32 = 40_899;
 pub const first_arc_filter_button_id: u32 = 40_900;
 
-const header_h: f32 = site_chrome.header_h;
+const header_h: f32 = app_chrome.header_h;
 const content_wide: f32 = design.content_wide;
 const content_pad: f32 = design.content_pad;
 const workflow_w: f32 = 380.0;
@@ -954,7 +954,7 @@ fn episodeAt(index: usize) usize {
 }
 
 fn renderHeader(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, content: ui.Rect) (ui.RenderError || interaction.Error)!void {
-    try site_chrome.renderHeader(scene, collector, bounds, content, .blog);
+    try app_chrome.renderHeader(scene, collector, bounds, content, .blog);
 }
 
 fn renderIndex(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, arc_filter_index: ?usize) (ui.RenderError || interaction.Error)!void {
@@ -1025,8 +1025,8 @@ fn renderArcOverview(scene: *ui.Scene, collector: *interaction.Collector, bounds
         const col = index % cols;
         const card = colBounds(bounds, cols, arc_overview_gap, col, bounds.y + @as(f32, @floatFromInt(row)) * (card_h + arc_overview_gap), card_h);
         const active = if (active_index) |found| found == index else false;
-        try fill(scene, card, if (active) palette.neutral_soft else palette.card_alt, site_chrome.surface_radius);
-        try scene.pushRect(card, if (active) palette.primary else palette.border, .border, site_chrome.surface_radius, 0.0);
+        try fill(scene, card, if (active) palette.neutral_soft else palette.card_alt, app_chrome.surface_radius);
+        try scene.pushRect(card, if (active) palette.primary else palette.border, .border, app_chrome.surface_radius, 0.0);
         try text(scene, card.x + 14.0, card.y + 12.0, card.w - 28.0, 12.0, section.count_label, palette.primary);
         try text(scene, card.x + 14.0, card.y + 34.0, card.w - 28.0, 14.0, section.card_title, palette.text);
         try text(scene, card.x + 14.0, card.y + 58.0, card.w - 28.0, 11.0, section.card_detail, palette.dim);
@@ -1075,13 +1075,13 @@ fn flowPostSection(scene: ?*ui.Scene, collector: ?*interaction.Collector, bounds
 }
 
 fn renderCloudMeme(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
-    try fill(scene, bounds, palette.card, site_chrome.surface_radius);
+    try fill(scene, bounds, palette.card, app_chrome.surface_radius);
     try scene.pushImageQuad(.{
         .bounds = bounds.insetUniform(1.0),
         .atlas_id = cloud_meme_image_id,
         .color = ui.Color{ .r = 255, .g = 255, .b = 255 },
     });
-    try scene.pushRect(bounds, palette.border, .border, site_chrome.surface_radius, 0.0);
+    try scene.pushRect(bounds, palette.border, .border, app_chrome.surface_radius, 0.0);
 }
 
 fn renderWorkflow(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
@@ -1709,7 +1709,7 @@ const VpnActorRole = enum {
     local_network,
     isp,
     vpn_provider,
-    website,
+    webapp,
     relay,
     recipient,
 };
@@ -1728,13 +1728,13 @@ const VpnLane = struct {
 const vpn_lanes = [_]VpnLane{
     .{
         .label = "No VPN",
-        .detail = "The ISP sees destinations and timing. The website sees your ISP-facing address.",
+        .detail = "The ISP sees destinations and timing. The webapp sees your ISP-facing address.",
         .actors = .{
             .{ .label = "You", .role = .user },
             .{ .label = "Router", .role = .local_network },
             .{ .label = "ISP", .role = .isp },
             .{ .label = "Internet", .role = .relay },
-            .{ .label = "Website", .role = .website },
+            .{ .label = "Webapp", .role = .webapp },
         },
     },
     .{
@@ -1745,7 +1745,7 @@ const vpn_lanes = [_]VpnLane{
             .{ .label = "Router", .role = .local_network },
             .{ .label = "ISP", .role = .isp },
             .{ .label = "VPN Co.", .role = .vpn_provider },
-            .{ .label = "Website", .role = .website },
+            .{ .label = "Webapp", .role = .webapp },
         },
     },
     .{
@@ -1827,7 +1827,7 @@ fn vpnActorColor(role: VpnActorRole) ui.Color {
         .local_network, .relay => ui.Color{ .r = 26, .g = 36, .b = 52, .a = 238 },
         .isp => ui.Color{ .r = 56, .g = 42, .b = 24, .a = 238 },
         .vpn_provider => ui.Color{ .r = 72, .g = 36, .b = 36, .a = 238 },
-        .website => ui.Color{ .r = 44, .g = 44, .b = 44, .a = 238 },
+        .webapp => ui.Color{ .r = 44, .g = 44, .b = 44, .a = 238 },
     };
 }
 
@@ -1837,7 +1837,7 @@ fn vpnActorExposure(role: VpnActorRole) []const u8 {
         .local_network => "local path",
         .isp => "route + time",
         .vpn_provider => "new middleman",
-        .website => "account + IP",
+        .webapp => "account + IP",
         .relay => "sealed route",
         .recipient => "decrypts",
     };
@@ -1849,7 +1849,7 @@ fn vpnActorDetailTitle(role: VpnActorRole) []const u8 {
         .local_network => "Local network",
         .isp => "ISP",
         .vpn_provider => "VPN provider",
-        .website => "Website",
+        .webapp => "Webapp",
         .relay => "Relay",
         .recipient => "Recipient",
     };
@@ -1861,7 +1861,7 @@ fn vpnActorDetail(role: VpnActorRole) []const u8 {
         .local_network => "Wi-Fi and routers see local traffic shape unless another layer hides it. They are transport, not identity.",
         .isp => "The ISP may lose final destination detail with a VPN, but it still sees the VPN endpoint and timing.",
         .vpn_provider => "The commercial VPN becomes the concentrated metadata observer. Trust moved; it did not vanish.",
-        .website => "The service still sees account behavior, cookies, fingerprinting signals, and whatever plaintext reaches it.",
+        .webapp => "The service still sees account behavior, cookies, fingerprinting signals, and whatever plaintext reaches it.",
         .relay => "A good relay carries sealed objects and minimal routing data. It should not need content or account identity.",
         .recipient => "Only the intended recipient should decrypt message content. Transport should not become authority.",
     };
@@ -3362,8 +3362,8 @@ fn calloutHeight(value: []const u8, width: f32) f32 {
 }
 
 fn callout(scene: *ui.Scene, bounds: ui.Rect, value: []const u8) ui.RenderError!void {
-    try fill(scene, bounds, palette.card_alt, site_chrome.surface_radius);
-    try scene.pushRect(bounds, palette.border, .border, site_chrome.surface_radius, 0.0);
+    try fill(scene, bounds, palette.card_alt, app_chrome.surface_radius);
+    try scene.pushRect(bounds, palette.border, .border, app_chrome.surface_radius, 0.0);
     try fill(scene, ui.Rect.init(bounds.x, bounds.y, 3.0, bounds.h), palette.primary, 2.0);
     try scene.pushWrappedText(ui.Rect.init(bounds.x + callout_pad_x, bounds.y + callout_pad_y, bounds.w - callout_pad_x * 2.0, bounds.h - callout_pad_y * 2.0), value, palette.text, .{
         .line_height = callout_line_h,
@@ -3397,7 +3397,7 @@ fn episodeLabel(episode: usize) []const u8 {
 }
 
 fn codeBlock(scene: *ui.Scene, bounds: ui.Rect, lines: []const []const u8) ui.RenderError!void {
-    const style = siteStyle();
+    const style = appStyle();
     try fill(scene, bounds, style.bg, code_radius);
     try scene.pushRect(bounds, style.border, .border, code_radius, 0.0);
     if (try scene.pushClip(bounds.insetUniform(code_clip_inset))) {
@@ -3445,16 +3445,16 @@ fn nativeCard(scene: *ui.Scene, bounds: ui.Rect, title_value: []const u8, detail
 }
 
 fn nativeComponent(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, component: components.Component) (ui.RenderError || interaction.Error)!void {
-    try components.renderComponent(scene, bounds, component, .{ .style = siteStyle() });
+    try components.renderComponent(scene, bounds, component, .{ .style = appStyle() });
     try components.collectComponentInteractions(collector, bounds, component);
 }
 
 fn nativeComponentVisual(scene: *ui.Scene, bounds: ui.Rect, component: components.Component) ui.RenderError!void {
-    try components.renderComponent(scene, bounds, component, .{ .style = siteStyle() });
+    try components.renderComponent(scene, bounds, component, .{ .style = appStyle() });
 }
 
-fn siteStyle() ui.Style {
-    var resolved = site_chrome.style();
+fn appStyle() ui.Style {
+    var resolved = app_chrome.style();
     resolved.panel = palette.card;
     resolved.row = palette.card_alt;
     return resolved;
@@ -3514,8 +3514,8 @@ test "blog renders committed post index through native components" {
     try std.testing.expectEqualStrings(arc_control, posts[34].arc);
     try std.testing.expectEqualStrings(arc_accounting, posts[61].arc);
     try std.testing.expect(hasHit(collector.written(), postIdAt(0)));
-    try std.testing.expect(hasHit(collector.written(), site_chrome.blog_button_id));
-    try std.testing.expect(hasHit(collector.written(), site_chrome.logo_button_id));
+    try std.testing.expect(hasHit(collector.written(), app_chrome.blog_button_id));
+    try std.testing.expect(hasHit(collector.written(), app_chrome.logo_button_id));
     try std.testing.expect(hasHit(collector.written(), all_lessons_button_id));
     try std.testing.expect(hasHit(collector.written(), arcFilterButtonId(0)));
     try std.testing.expect(hasImage(scene.written(), cloud_meme_image_id));

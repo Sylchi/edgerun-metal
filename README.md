@@ -3,7 +3,7 @@
 EdgeRun is a self-compiling app system with zero dependency chains.
 
 No package manager. No npm install. No WASI filesystem trick. No cloud compiler.
-No browser framework. No pile of native dependencies.
+No web framework. No pile of native dependencies.
 
 ```text
 one app
@@ -11,7 +11,7 @@ with its own compiler
 with its own UI system
 with its own object store
 with its own runtime receipts
-that runs through browser, native, CPU, GPU, and real-hardware paths
+that runs through web host, native, CPU, GPU, and real-hardware paths
 ```
 
 The crazy part is not that it renders a page. The crazy part is that the app can
@@ -23,7 +23,7 @@ next app artifact, and keep the whole chain explainable.
 Most software today is a stack of rented trust:
 
 ```text
-cloud account -> package registry -> OS permissions -> browser APIs -> app store -> opaque update
+cloud account -> package registry -> OS permissions -> host APIs -> app store -> opaque update
 ```
 
 EdgeRun is trying to collapse that into something a person can actually reason
@@ -47,7 +47,7 @@ That makes the project interesting even before it is finished:
   machine ritual.
 - Important data is stored as canonical objects, not vague files or hidden state.
 - Work produces receipts, so execution can be replayed, checked, and explained.
-- The same UI is being pushed through browser, CPU, GPU, Wayland, and DRM paths
+- The same UI is being pushed through web host, CPU, GPU, Wayland, and DRM paths
   instead of becoming five separate app models.
 - The codebase includes real boot, TPM, WASM, rendering, media, compiler, and Pi
   bring-up work, not just a whitepaper.
@@ -86,9 +86,9 @@ verify the receipt
   a fake host filesystem.
 - App containment tests for host-mediated spawn, reclaim, and child-memory
   boundaries.
-- A browser app that embeds repo source as an object, edits it in WASM-owned
+- An app runtime that embeds repo source as an object, edits it in WASM-owned
   memory, and runs an embedded compiler path toward successor WASM.
-- A shared UI/render contract consumed by browser, CPU software rendering,
+- A shared app render contract consumed by web host, CPU software rendering,
   Wayland, GLES, and DRM/GBM host paths.
 - Repo-owned font, SVG icon, image, video, and audio decode/render paths.
 - QEMU-smoked immutable-kernel work for boot resources, memory contracts, WASM
@@ -112,7 +112,7 @@ The long-form model is in [EDGE_MODEL.md](EDGE_MODEL.md).
 - `edgerun-zig/src/wasm/`: deterministic EdgeRun WASM interpreter.
 - `edgerun-zig/src/render/`: shared render IR, presentation receipts, software
   and GPU paths.
-- `edgerun-zig/src/ui_browser.zig`: browser app entry point.
+- `edgerun-zig/src/app_runtime.zig`: app runtime entry point.
 - `edgerun-zig/src/content/`: kernel resource inventory, contracts, authority,
   and WASM launch work.
 - `edgerun-zig/src/immutable_kernel_*.zig`: QEMU UEFI kernel smokes.
@@ -141,10 +141,10 @@ make storage-test
 make ui-core-test
 ```
 
-Build the browser app:
+Build the app runtime:
 
 ```sh
-zig build --build-file edgerun-zig/build.zig --cache-dir .build/edgerun-zig ui-browser
+zig build --build-file edgerun-zig/build.zig --cache-dir .build/edgerun-zig app-runtime
 cd edgerun-zig/zig-out
 python3 -m http.server 8765 --bind 127.0.0.1
 ```

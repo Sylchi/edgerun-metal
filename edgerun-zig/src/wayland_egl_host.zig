@@ -6,13 +6,13 @@ const renderer_ir = @import("render/ir.zig");
 const renderer_parity = @import("render/parity.zig");
 const renderer_pipeline = @import("render/pipeline.zig");
 const renderer_software = @import("render/software.zig");
-const site_blog = @import("site_blog.zig");
-const site_chrome = @import("site_chrome.zig");
-const site_cursor = @import("site_cursor.zig");
-const site_frame = @import("site_frame.zig");
-const site_images = @import("site_images.zig");
-const site_landing = @import("site_landing.zig");
-const site_navigation = @import("site_navigation.zig");
+const app_blog = @import("app_blog.zig");
+const app_chrome = @import("app_chrome.zig");
+const app_cursor = @import("app_cursor.zig");
+const app_frame = @import("app_frame.zig");
+const app_images = @import("app_images.zig");
+const app_landing = @import("app_landing.zig");
+const app_navigation = @import("app_navigation.zig");
 const ui = @import("ui.zig");
 const ui_runtime = @import("ui_runtime.zig");
 
@@ -134,9 +134,9 @@ const SceneState = struct {
     fn rebuild(self: *SceneState, width: i32, height: i32, app: *AppState, font_atlas: *renderer_font_atlas.Atlas) !renderer_ir.Buffers {
         var scene = ui.Scene.initWithClips(&self.commands, &self.clips);
         var collector = interaction.Collector.init(&self.regions);
-        try site_frame.render(&scene, &collector, ui.Rect.init(0, 0, @floatFromInt(width), @floatFromInt(height)), app.frameState());
+        try app_frame.render(&scene, &collector, ui.Rect.init(0, 0, @floatFromInt(width), @floatFromInt(height)), app.frameState());
         updateHoverHit(app, collector.written());
-        try site_cursor.render(&scene, app.hover_x, app.hover_y, app.cursorKind());
+        try app_cursor.render(&scene, app.hover_x, app.hover_y, app.cursorKind());
         self.command_len = scene.written().len;
         self.region_len = collector.written().len;
         const buffers = self.ir_storage.buffers();
@@ -154,7 +154,7 @@ const SceneState = struct {
 };
 
 const AppState = struct {
-    route: site_navigation.Route = .{},
+    route: app_navigation.Route = .{},
     scroll_y: f32 = 0.0,
     hover_x: f32 = -1.0,
     hover_y: f32 = -1.0,
@@ -163,7 +163,7 @@ const AppState = struct {
     public_identity_ready: bool = true,
     public_identity: []const u8 = "native-egl-gpu",
 
-    fn frameState(self: AppState) site_frame.State {
+    fn frameState(self: AppState) app_frame.State {
         return .{
             .route = self.route,
             .scroll_y = self.scroll_y,
@@ -175,16 +175,16 @@ const AppState = struct {
     }
 
     fn contentHeight(self: AppState, width: f32) f32 {
-        return site_frame.contentHeight(width, self.frameState());
+        return app_frame.contentHeight(width, self.frameState());
     }
 
-    fn applyRoute(self: *AppState, route: site_navigation.Route) void {
+    fn applyRoute(self: *AppState, route: app_navigation.Route) void {
         self.route = route;
         self.scroll_y = 0.0;
     }
 
-    fn cursorKind(self: AppState) site_cursor.Kind {
-        return site_cursor.fromState(self.last_action_kind, self.runtime.hoverKind());
+    fn cursorKind(self: AppState) app_cursor.Kind {
+        return app_cursor.fromState(self.last_action_kind, self.runtime.hoverKind());
     }
 };
 
@@ -201,7 +201,7 @@ pub fn main(init: std.process.Init) !void {
     var egl = try initEgl(&wl);
     defer deinitEgl(&egl);
     var font_atlas = renderer_font_atlas.Atlas.initWithFont(renderer_font_atlas.geist_ascii_font.body());
-    const cloud_meme = try site_images.cloudMeme();
+    const cloud_meme = try app_images.cloudMeme();
     var gl = try renderer_gles.Adapter.init(&font_atlas, .{
         .width = cloud_meme.width,
         .height = cloud_meme.height,
@@ -276,7 +276,7 @@ fn sleepFrame() void {
     _ = linux.nanosleep(&req, null);
 }
 
-fn siteBackground() ui.Color {
+fn appBackground() ui.Color {
     return .{ .r = 11, .g = 11, .b = 11 };
 }
 
@@ -332,7 +332,7 @@ fn verifyGpuCpuParity(
     defer allocator.free(actual);
 
     const software_surface = try renderer_software.Framebuffer.init(width, height, expected);
-    software_surface.clear(siteBackground());
+    software_surface.clear(appBackground());
     const software_receipt = try software_surface.renderIr(buffers, renderer_pipeline.softwareResources(font_atlas, image_texture));
     if (!software_receipt.valid()) return error.InvalidSoftwareReceipt;
     const gpu_receipt = try gl.renderFrameToRgbaPixels(logical_width, logical_height, buffers, actual);
@@ -578,11 +578,11 @@ fn processPointerEvent(wl: *WaylandState, commands: []const ui.Command, regions:
 
 fn activateHit(app: *AppState) void {
     const hover_hit_id = app.runtime.hoverHitId();
-    if (site_navigation.fromHit(hover_hit_id, app.route)) |route| {
+    if (app_navigation.fromHit(hover_hit_id, app.route)) |route| {
         app.applyRoute(route);
         return;
     }
-    if (site_navigation.actionFromHit(hover_hit_id)) |action| switch (action) {
+    if (app_navigation.actionFromHit(hover_hit_id)) |action| switch (action) {
         .reveal_identity => {
             app.public_identity_ready = true;
             app.public_identity = "native-egl-gpu";
@@ -720,14 +720,14 @@ test "egl host input helpers update hover activation and scroll state" {
     var app = AppState{ .public_identity_ready = false, .public_identity = "pending" };
     var regions: [1]interaction.Region = undefined;
     var collector = interaction.Collector.init(&regions);
-    try collector.add(.{ .kind = .button, .id = site_landing.reveal_identity_button_id, .bounds = ui.Rect.init(8, 8, 80, 32) });
+    try collector.add(.{ .kind = .button, .id = app_landing.reveal_identity_button_id, .bounds = ui.Rect.init(8, 8, 80, 32) });
     updateHoverHit(&app, collector.written());
     try std.testing.expectEqual(@as(u32, 0), app.runtime.hoverHitId());
 
     app.hover_x = 16.0;
     app.hover_y = 16.0;
     updateHoverHit(&app, collector.written());
-    try std.testing.expectEqual(site_landing.reveal_identity_button_id, app.runtime.hoverHitId());
+    try std.testing.expectEqual(app_landing.reveal_identity_button_id, app.runtime.hoverHitId());
 
     activateHit(&app);
     try std.testing.expect(app.public_identity_ready);
@@ -761,31 +761,31 @@ test "egl host parses explicit parity verification mode" {
     try std.testing.expect(options.verify_parity);
 }
 
-test "egl host activation uses shared site navigation routes" {
+test "egl host activation uses shared app navigation routes" {
     var app = AppState{};
 
-    app.runtime.hovered = .{ .kind = .button, .id = site_chrome.blog_button_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
+    app.runtime.hovered = .{ .kind = .button, .id = app_chrome.blog_button_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
     activateHit(&app);
-    try std.testing.expectEqual(site_navigation.View.blog, app.route.view);
+    try std.testing.expectEqual(app_navigation.View.blog, app.route.view);
     try std.testing.expectEqual(@as(f32, 0.0), app.scroll_y);
 
-    const post_id = site_blog.postIdAt(0);
+    const post_id = app_blog.postIdAt(0);
     app.scroll_y = 120.0;
     app.runtime.hovered = .{ .kind = .button, .id = post_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
     activateHit(&app);
-    try std.testing.expectEqual(site_navigation.View.blog, app.route.view);
+    try std.testing.expectEqual(app_navigation.View.blog, app.route.view);
     try std.testing.expectEqual(post_id, app.route.selected_blog_post_id);
     try std.testing.expectEqual(@as(f32, 0.0), app.scroll_y);
 
-    app.runtime.hovered = .{ .kind = .button, .id = site_chrome.docs_button_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
+    app.runtime.hovered = .{ .kind = .button, .id = app_chrome.docs_button_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
     activateHit(&app);
-    try std.testing.expectEqual(site_navigation.View.docs, app.route.view);
+    try std.testing.expectEqual(app_navigation.View.docs, app.route.view);
 
-    app.runtime.hovered = .{ .kind = .button, .id = site_chrome.docs_button_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
+    app.runtime.hovered = .{ .kind = .button, .id = app_chrome.docs_button_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
     activateHit(&app);
-    try std.testing.expectEqual(site_navigation.View.docs, app.route.view);
+    try std.testing.expectEqual(app_navigation.View.docs, app.route.view);
 
-    app.runtime.hovered = .{ .kind = .button, .id = site_chrome.logo_button_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
+    app.runtime.hovered = .{ .kind = .button, .id = app_chrome.logo_button_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
     activateHit(&app);
-    try std.testing.expectEqual(site_navigation.View.landing, app.route.view);
+    try std.testing.expectEqual(app_navigation.View.landing, app.route.view);
 }

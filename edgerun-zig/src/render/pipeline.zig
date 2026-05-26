@@ -182,8 +182,8 @@ test "render pipeline owns packed presentation and software resources" {
     try std.testing.expectEqual(renderer_present.Destination.pixel_frame, software_receipt.destination);
 }
 
-test "browser render bridge uses pipeline instead of software and present internals" {
-    const source = @embedFile("../ui_browser.zig");
+test "app render bridge uses pipeline instead of software and present internals" {
+    const source = @embedFile("../app_runtime.zig");
     try std.testing.expect(std.mem.indexOf(u8, source, "@import(\"render/ir.zig\")") == null);
     try std.testing.expect(std.mem.indexOf(u8, source, "@import(\"render/icon_line_buffer.zig\")") == null);
     try std.testing.expect(std.mem.indexOf(u8, source, "@import(\"render/software.zig\")") == null);

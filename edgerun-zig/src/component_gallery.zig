@@ -3,14 +3,17 @@ const icon = @import("icon.zig");
 const components = @import("ui_components.zig");
 const ui = @import("ui.zig");
 const interaction = @import("ui_interaction.zig");
-const design = @import("site_design.zig");
-const site_chrome = @import("site_chrome.zig");
+const design = @import("app_design.zig");
+const app_chrome = @import("app_chrome.zig");
 
 const GalleryError = ui.RenderError || interaction.Error;
 
 pub const preview_base_id: u32 = 18_000;
 pub const first_catalog_card_id: u32 = preview_base_id + 2000;
-const header_h: f32 = site_chrome.header_h;
+const catalog_preview_id_base: u32 = preview_base_id + 5000;
+const selected_preview_id_base: u32 = preview_base_id + 7000;
+const preview_id_stride: u32 = 32;
+const header_h: f32 = app_chrome.header_h;
 const page_top_pad: f32 = 48;
 const page_bottom_pad: f32 = 120;
 const card_radius: f32 = design.surface_radius;
@@ -257,6 +260,23 @@ pub fn indexByCatalogHit(hit_id: u32) ?usize {
     return if (index < component_catalog.len) index else null;
 }
 
+pub fn indexByPreviewHit(hit_id: u32) ?usize {
+    return indexByPreviewIdBase(hit_id, catalog_preview_id_base) orelse indexByPreviewIdBase(hit_id, selected_preview_id_base);
+}
+
+pub fn sourcePathForIndex(index: usize, out: []u8) ?[]const u8 {
+    if (index >= component_catalog.len) return null;
+    return std.fmt.bufPrint(out, "src/ui/components/{s}.zig", .{component_catalog[index].source_component}) catch null;
+}
+
+fn indexByPreviewIdBase(hit_id: u32, base: u32) ?usize {
+    if (hit_id < base) return null;
+    const relative = hit_id - base;
+    const index: usize = @intCast(relative / preview_id_stride);
+    if (relative % preview_id_stride >= preview_id_stride or index >= component_catalog.len) return null;
+    return index;
+}
+
 pub fn countByCategory(category: Category) usize {
     var count: usize = 0;
     for (component_catalog) |entry| {
@@ -360,9 +380,7 @@ pub fn contentHeight(width: f32) f32 {
 pub fn contentHeightForState(width: f32, state: ComponentGalleryState) f32 {
     const bounds = ui.Rect.init(0, 0, @max(1.0, width), 1);
     const layout = galleryLayout(bounds, state);
-    const catalog_h = catalogSectionHeight(layout.columns, layout.gap);
-    const selected_h: f32 = if (selectedComponent(state.selected_component_index) != null) selectedComponentHeight(layout.board.w) + selected_component_gap else 0;
-    return header_h + page_top_pad + selected_h + catalog_h + page_bottom_pad;
+    return header_h + page_top_pad + galleryBodyHeight(layout.board.w, layout.columns, layout.gap, state.selected_component_index) + page_bottom_pad;
 }
 
 pub const LayoutMode = enum(u32) {
@@ -405,11 +423,11 @@ pub fn renderComponentGallery(scene: *ui.Scene, collector: *interaction.Collecto
         defer gallery_text_clip_top = previous_text_clip_top;
 
         _ = state.layout;
-        const catalog_h = catalogSectionHeight(layout.columns, layout.gap);
+        const catalog_h = galleryBodyHeight(layout.board.w, layout.columns, layout.gap, state.selected_component_index);
         try renderCatalogSection(scene, collector, ui.Rect.init(layout.board.x, layout.board.y, layout.board.w, catalog_h), layout.columns, layout.gap, state.selected_component_index);
     }
 
-    try site_chrome.renderHeader(scene, collector, ui.Rect.init(bounds.x, bounds.y, bounds.w, header_h), content, .docs);
+    try app_chrome.renderHeader(scene, collector, ui.Rect.init(bounds.x, bounds.y, bounds.w, header_h), content, .docs);
 }
 
 const GalleryLayout = struct {
@@ -434,6 +452,11 @@ fn catalogSectionHeight(columns: usize, gap: f32) f32 {
     return catalog_intro_h + @as(f32, @floatFromInt(rows)) * catalog_card_h + @as(f32, @floatFromInt(rows - 1)) * gap;
 }
 
+fn galleryBodyHeight(width: f32, columns: usize, gap: f32, selected_index: ?usize) f32 {
+    const selected_h = if (selectedComponent(selected_index) != null) selectedComponentHeight(width) + selected_component_gap else 0.0;
+    return selected_h + catalogSectionHeight(columns, gap);
+}
+
 fn renderCatalogSection(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, columns: usize, gap: f32, selected_index: ?usize) GalleryError!void {
     var cursor_y = bounds.y;
     if (selectedComponent(selected_index)) |entry| {
@@ -443,7 +466,7 @@ fn renderCatalogSection(scene: *ui.Scene, collector: *interaction.Collector, bou
     }
 
     try text(scene, bounds.x, cursor_y, bounds.w, 22, "Component Catalog", palette.text);
-    try wrappedText(scene, ui.Rect.init(bounds.x, cursor_y + 32, bounds.w, 42), "Every public component starts here. Catalog cards are rendered as EdgeRun component objects, through the same scene commands used by browser, CPU, and GPU hosts.", palette.muted, 18, 9.4, 2);
+    try wrappedText(scene, ui.Rect.init(bounds.x, cursor_y + 32, bounds.w, 42), "Every public component starts here. Catalog cards are rendered as EdgeRun component objects, through the same scene commands used by web host, CPU, and GPU hosts.", palette.muted, 18, 9.4, 2);
 
     const card_w = (bounds.w - gap * @as(f32, @floatFromInt(columns - 1))) / @as(f32, @floatFromInt(columns));
     for (component_catalog, 0..) |entry, index| {
@@ -456,9 +479,29 @@ fn renderCatalogSection(scene: *ui.Scene, collector: *interaction.Collector, bou
             catalog_card_h,
         );
         const card_id = first_catalog_card_id + @as(u32, @intCast(index));
-        const preview_id = preview_base_id + 5000 + @as(u32, @intCast(index)) * 32;
+        const preview_id = catalog_preview_id_base + @as(u32, @intCast(index)) * preview_id_stride;
         try renderCatalogCard(scene, collector, card_bounds, entry, card_id, preview_id, selected_index == index);
     }
+}
+
+pub fn docsContentHeight(width: f32, selected_index: ?usize) f32 {
+    const gap = grid_gap_default;
+    const columns = galleryColumnCount(width, gap);
+    const selected_h: f32 = if (selectedComponent(selected_index) != null) selectedComponentHeight(width) + selected_component_gap else 0.0;
+    return selected_h + catalogSectionHeight(columns, gap);
+}
+
+pub fn renderDocsContent(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, selected_index: ?usize, hover_x: f32, hover_y: f32) GalleryError!void {
+    const previous_hover_point = gallery_hover_point;
+    gallery_hover_point = if (hover_x >= hover_disabled_coord + 1 and hover_y >= hover_disabled_coord + 1)
+        .{ .x = hover_x, .y = hover_y }
+    else
+        null;
+    defer gallery_hover_point = previous_hover_point;
+
+    const gap = grid_gap_default;
+    const columns = galleryColumnCount(bounds.w, gap);
+    try renderCatalogSection(scene, collector, bounds, columns, gap, selected_index);
 }
 
 fn selectedComponent(selected_index: ?usize) ?ComponentSpec {
@@ -481,7 +524,7 @@ fn renderSelectedComponent(scene: *ui.Scene, collector: *interaction.Collector, 
     if (inset.w < 720.0) {
         try text(scene, inset.x, inset.y + 38, inset.w, 26, entry.name, palette.text);
         try wrappedText(scene, ui.Rect.init(inset.x, inset.y + 76, inset.w, 54), "This component page is generated from the shared catalog entry and renders the real component preview beside its API surface.", palette.muted, 18, 8.8, 3);
-        try renderOpenedComponentRenderings(scene, collector, ui.Rect.init(inset.x, inset.y + 148, inset.w, selected_preview_compact_surface_h), entry, preview_base_id + 7000 + @as(u32, @intCast(index)) * 32);
+        try renderOpenedComponentRenderings(scene, collector, ui.Rect.init(inset.x, inset.y + 148, inset.w, selected_preview_compact_surface_h), entry, selected_preview_id_base + @as(u32, @intCast(index)) * preview_id_stride);
         try renderComponentApi(scene, ui.Rect.init(inset.x, inset.y + 490, inset.w, 210), entry);
         try renderComponentContract(scene, ui.Rect.init(inset.x, inset.y + 718, inset.w, 64), entry);
     } else {
@@ -491,7 +534,7 @@ fn renderSelectedComponent(scene: *ui.Scene, collector: *interaction.Collector, 
         try renderComponentApi(scene, ui.Rect.init(inset.x, inset.y + 154, inset.w * 0.42, inset.h - 154), entry);
 
         const preview_bounds = ui.Rect.init(inset.x + inset.w * 0.48, inset.y + 10, inset.w * 0.52, selected_preview_surface_h);
-        try renderOpenedComponentRenderings(scene, collector, preview_bounds, entry, preview_base_id + 7000 + @as(u32, @intCast(index)) * 32);
+        try renderOpenedComponentRenderings(scene, collector, preview_bounds, entry, selected_preview_id_base + @as(u32, @intCast(index)) * preview_id_stride);
         try renderComponentContract(scene, ui.Rect.init(preview_bounds.x, preview_bounds.y + selected_preview_surface_h + 22, preview_bounds.w, inset.h - selected_preview_surface_h - 32), entry);
     }
 }
@@ -889,10 +932,13 @@ test "component gallery selected route renders selected component panel" {
     try std.testing.expect(hasText(scene.written(), "default"));
     try std.testing.expect(hasText(scene.written(), "compact"));
     try std.testing.expect(hasText(scene.written(), "small"));
-    const selected_preview_id = preview_base_id + 7000 + @as(u32, @intCast(index)) * 32;
+    const selected_preview_id = selected_preview_id_base + @as(u32, @intCast(index)) * preview_id_stride;
     try std.testing.expect(hasHit(collector.written(), selected_preview_id));
     try std.testing.expect(hasHit(collector.written(), selected_preview_id + 1));
     try std.testing.expect(hasHit(collector.written(), selected_preview_id + 2));
+    try std.testing.expectEqual(index, indexByPreviewHit(selected_preview_id + 2).?);
+    var source_path: [96]u8 = undefined;
+    try std.testing.expectEqualStrings("src/ui/components/Button.zig", sourcePathForIndex(index, &source_path).?);
     try std.testing.expect(contentHeightForState(1440, .{ .selected_component_index = index }) > contentHeight(1440));
 }
 

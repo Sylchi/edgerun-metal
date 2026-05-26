@@ -4,7 +4,7 @@ const interaction = @import("ui_interaction.zig");
 const ui = @import("ui.zig");
 const components = @import("ui_components.zig");
 const button_component = @import("ui/components/Button.zig");
-const design = @import("site_design.zig");
+const design = @import("app_design.zig");
 
 pub const logo_button_id: u32 = 30_000;
 pub const docs_button_id: u32 = 30_001;
@@ -139,7 +139,7 @@ fn iconQuad(scene: *ui.Scene, bounds: ui.Rect, value: icon.Icon, color: ui.Color
     try scene.pushIconQuad(.{ .bounds = bounds, .icon_id = icon.id(value), .color = color });
 }
 
-test "site chrome header exposes canonical navigation hit targets" {
+test "app chrome header exposes canonical navigation hit targets" {
     var commands: [128]ui.Command = undefined;
     var clips: [4]ui.Rect = undefined;
     var scene = ui.Scene.initWithClips(&commands, &clips);
@@ -154,7 +154,7 @@ test "site chrome header exposes canonical navigation hit targets" {
     try expectHit(collector.written(), launch_button_id);
 }
 
-test "site chrome compact header keeps hit targets separated" {
+test "app chrome compact header keeps hit targets separated" {
     var commands: [128]ui.Command = undefined;
     var clips: [4]ui.Rect = undefined;
     var scene = ui.Scene.initWithClips(&commands, &clips);
@@ -169,7 +169,7 @@ test "site chrome compact header keeps hit targets separated" {
     if (hitRect(collector.written(), blog_button_id)) |blog| try expectNoHorizontalOverlap(blog, source);
 }
 
-test "site chrome mobile header uses reference icon controls" {
+test "app chrome mobile header uses reference icon controls" {
     var commands: [128]ui.Command = undefined;
     var clips: [4]ui.Rect = undefined;
     var scene = ui.Scene.initWithClips(&commands, &clips);
