@@ -3,18 +3,17 @@ const icon = @import("icon.zig");
 const components = @import("ui_components.zig");
 const ui = @import("ui.zig");
 const interaction = @import("ui_interaction.zig");
+const design = @import("site_design.zig");
+const site_chrome = @import("site_chrome.zig");
 
 const GalleryError = ui.RenderError || interaction.Error;
 
 pub const preview_base_id: u32 = 18_000;
-pub const layout_masonry_id: u32 = preview_base_id + 970;
-pub const layout_grid_id: u32 = preview_base_id + 971;
-pub const gap_compact_id: u32 = preview_base_id + 974;
-pub const gap_default_id: u32 = preview_base_id + 975;
-pub const gap_wide_id: u32 = preview_base_id + 976;
 pub const first_catalog_card_id: u32 = preview_base_id + 2000;
-const gallery_topbar_h: f32 = 56;
-const card_radius: f32 = 12;
+const header_h: f32 = site_chrome.header_h;
+const page_top_pad: f32 = 48;
+const page_bottom_pad: f32 = 120;
+const card_radius: f32 = design.surface_radius;
 const card_shadow: f32 = 8;
 const card_hover_shadow: f32 = 16;
 const card_content_x: f32 = 18;
@@ -22,10 +21,9 @@ const card_header_y: f32 = 18;
 const card_detail_y: f32 = 42;
 const card_body_top: f32 = 78;
 const card_body_bottom: f32 = 18;
-const control_radius: f32 = 7;
-const text_char_w: f32 = 8.3;
+const text_char_w: f32 = design.Type.average_body_w;
 const compact_text_height: f32 = 14;
-const body_text_height: f32 = 16;
+const body_text_height: f32 = design.Type.body_h;
 const title_text_height: f32 = 18;
 const hover_disabled_coord: f32 = -1;
 const min_column_width: f32 = 300;
@@ -36,8 +34,11 @@ const catalog_preview_h: f32 = 38;
 const catalog_status_w: f32 = 116;
 const catalog_card_pad: f32 = 14;
 const catalog_source_w: f32 = 108;
-const selected_component_h: f32 = 164;
+const selected_component_h: f32 = 500;
+const selected_component_compact_h: f32 = 820;
 const selected_component_gap: f32 = 32;
+const selected_preview_surface_h: f32 = 266;
+const selected_preview_compact_surface_h: f32 = 320;
 pub const grid_gap_compact: f32 = 28;
 pub const grid_gap_default: f32 = 40;
 pub const grid_gap_wide: f32 = 56;
@@ -360,8 +361,8 @@ pub fn contentHeightForState(width: f32, state: ComponentGalleryState) f32 {
     const bounds = ui.Rect.init(0, 0, @max(1.0, width), 1);
     const layout = galleryLayout(bounds, state);
     const catalog_h = catalogSectionHeight(layout.columns, layout.gap);
-    const selected_h: f32 = if (selectedComponent(state.selected_component_index) != null) selected_component_h + selected_component_gap else 0;
-    return gallery_topbar_h + 40 + selected_h + catalog_h + 120;
+    const selected_h: f32 = if (selectedComponent(state.selected_component_index) != null) selectedComponentHeight(layout.board.w) + selected_component_gap else 0;
+    return header_h + page_top_pad + selected_h + catalog_h + page_bottom_pad;
 }
 
 pub const LayoutMode = enum(u32) {
@@ -383,26 +384,7 @@ pub const LayoutMode = enum(u32) {
     }
 };
 
-const palette = struct {
-    const bg = ui.Color{ .r = 9, .g = 9, .b = 11 };
-    const sidebar = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 219 };
-    const panel = ui.Color{ .r = 24, .g = 24, .b = 27, .a = 224 };
-    const panel_hover = ui.Color{ .r = 32, .g = 32, .b = 36, .a = 238 };
-    const panel_hover_bottom = ui.Color{ .r = 47, .g = 47, .b = 52, .a = 176 };
-    const panel_alt = ui.Color{ .r = 39, .g = 39, .b = 42, .a = 107 };
-    const panel_alt_hover = ui.Color{ .r = 50, .g = 50, .b = 55, .a = 170 };
-    const row = ui.Color{ .r = 39, .g = 39, .b = 42, .a = 158 };
-    const row_hover = ui.Color{ .r = 55, .g = 55, .b = 61, .a = 186 };
-    const border = ui.Color{ .r = 63, .g = 63, .b = 70, .a = 82 };
-    const border_hover = ui.Color{ .r = 8, .g = 145, .b = 178, .a = 140 };
-    const text = ui.Color{ .r = 250, .g = 250, .b = 250 };
-    const muted = ui.Color{ .r = 161, .g = 161, .b = 170 };
-    const accent = ui.Color{ .r = 8, .g = 145, .b = 178 };
-    const green = ui.Color{ .r = 16, .g = 185, .b = 129 };
-    const danger = ui.Color{ .r = 225, .g = 29, .b = 72 };
-    const shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 96 };
-    const shadow_hover = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 160 };
-};
+const palette = design.palette;
 
 pub fn renderComponentGallery(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: ComponentGalleryState) GalleryError!void {
     const previous_hover_point = gallery_hover_point;
@@ -414,13 +396,12 @@ pub fn renderComponentGallery(scene: *ui.Scene, collector: *interaction.Collecto
 
     try fill(scene, bounds, palette.bg, 0);
 
+    const content = centered(bounds, design.content_wide);
     const layout = galleryLayout(bounds, state);
-    if (layout.rail.w > 0) try renderRail(scene, collector, layout.rail, layout.gap);
-    if (layout.frame) |frame| try stroke(scene, frame, palette.border, card_radius);
 
     {
         const previous_text_clip_top = gallery_text_clip_top;
-        gallery_text_clip_top = bounds.y + gallery_topbar_h;
+        gallery_text_clip_top = bounds.y + header_h;
         defer gallery_text_clip_top = previous_text_clip_top;
 
         _ = state.layout;
@@ -428,12 +409,10 @@ pub fn renderComponentGallery(scene: *ui.Scene, collector: *interaction.Collecto
         try renderCatalogSection(scene, collector, ui.Rect.init(layout.board.x, layout.board.y, layout.board.w, catalog_h), layout.columns, layout.gap, state.selected_component_index);
     }
 
-    try renderTopbar(scene, collector, .{ .x = bounds.x, .y = bounds.y, .w = bounds.w, .h = gallery_topbar_h }, state.layout);
+    try site_chrome.renderHeader(scene, collector, ui.Rect.init(bounds.x, bounds.y, bounds.w, header_h), content, .docs);
 }
 
 const GalleryLayout = struct {
-    rail: ui.Rect,
-    frame: ?ui.Rect,
     board: ui.Rect,
     gap: f32,
     columns: usize,
@@ -441,15 +420,13 @@ const GalleryLayout = struct {
 };
 
 fn galleryLayout(bounds: ui.Rect, state: ComponentGalleryState) GalleryLayout {
-    const rail_w: f32 = if (bounds.w < 760) 0 else 246;
-    const rail = ui.Rect.init(bounds.x, bounds.y, rail_w, bounds.h);
+    const content = centered(bounds, design.content_wide);
     const scroll_y = std.math.clamp(state.scroll_y, 0.0, 4096.0);
     const gap = normalizedGridGap(state.grid_gap);
-    const board = ui.Rect.init(bounds.x + rail_w, bounds.y + gallery_topbar_h + 40 - scroll_y, @max(320, bounds.w - rail_w - 24), @max(240, bounds.h - gallery_topbar_h - 64 + scroll_y));
+    const board = ui.Rect.init(content.x, bounds.y + header_h + page_top_pad - scroll_y, content.w, @max(240, bounds.h - header_h - page_top_pad + scroll_y));
     const columns = galleryColumnCount(board.w, gap);
     const card_w = (board.w - gap * @as(f32, @floatFromInt(columns - 1))) / @as(f32, @floatFromInt(columns));
-    const frame = if (rail_w > 0) ui.Rect.init(board.x, bounds.y + gallery_topbar_h, bounds.w - rail_w - 20, bounds.h - gallery_topbar_h - 24) else null;
-    return .{ .rail = rail, .frame = frame, .board = board, .gap = gap, .columns = columns, .card_w = card_w };
+    return .{ .board = board, .gap = gap, .columns = columns, .card_w = card_w };
 }
 
 fn catalogSectionHeight(columns: usize, gap: f32) f32 {
@@ -460,12 +437,13 @@ fn catalogSectionHeight(columns: usize, gap: f32) f32 {
 fn renderCatalogSection(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, columns: usize, gap: f32, selected_index: ?usize) GalleryError!void {
     var cursor_y = bounds.y;
     if (selectedComponent(selected_index)) |entry| {
-        try renderSelectedComponent(scene, collector, ui.Rect.init(bounds.x, cursor_y, bounds.w, selected_component_h), entry, selected_index.?);
-        cursor_y += selected_component_h + selected_component_gap;
+        const selected_h = selectedComponentHeight(bounds.w);
+        try renderSelectedComponent(scene, collector, ui.Rect.init(bounds.x, cursor_y, bounds.w, selected_h), entry, selected_index.?);
+        cursor_y += selected_h + selected_component_gap;
     }
 
     try text(scene, bounds.x, cursor_y, bounds.w, 22, "Component Catalog", palette.text);
-    try wrappedText(scene, ui.Rect.init(bounds.x, cursor_y + 32, bounds.w, 42), "Every public component starts here. Catalog cards are rendered from the base-nova reference structure, through the same scene commands used by browser, CPU, and GPU hosts.", palette.muted, 18, 9.4, 2);
+    try wrappedText(scene, ui.Rect.init(bounds.x, cursor_y + 32, bounds.w, 42), "Every public component starts here. Catalog cards are rendered as EdgeRun component objects, through the same scene commands used by browser, CPU, and GPU hosts.", palette.muted, 18, 9.4, 2);
 
     const card_w = (bounds.w - gap * @as(f32, @floatFromInt(columns - 1))) / @as(f32, @floatFromInt(columns));
     for (component_catalog, 0..) |entry, index| {
@@ -489,6 +467,10 @@ fn selectedComponent(selected_index: ?usize) ?ComponentSpec {
     return component_catalog[index];
 }
 
+fn selectedComponentHeight(width_value: f32) f32 {
+    return if (width_value < 760.0) selected_component_compact_h else selected_component_h;
+}
+
 fn renderSelectedComponent(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, entry: ComponentSpec, index: usize) GalleryError!void {
     try scene.pushRect(bounds.insetUniform(-1), palette.shadow, .shadow, card_radius, card_shadow);
     try fill(scene, bounds, palette.panel, card_radius);
@@ -496,12 +478,71 @@ fn renderSelectedComponent(scene: *ui.Scene, collector: *interaction.Collector, 
 
     const inset = bounds.insetUniform(18);
     try catalogSource(scene, ui.Rect.init(inset.x, inset.y, catalog_source_w, 24), true);
-    try text(scene, inset.x, inset.y + 38, inset.w * 0.42, 26, entry.name, palette.text);
-    try text(scene, inset.x, inset.y + 72, inset.w * 0.42, body_text_height, entry.route, palette.muted);
-    try text(scene, inset.x, inset.y + 96, inset.w * 0.42, body_text_height, entry.edge_builder, palette.muted);
+    if (inset.w < 720.0) {
+        try text(scene, inset.x, inset.y + 38, inset.w, 26, entry.name, palette.text);
+        try wrappedText(scene, ui.Rect.init(inset.x, inset.y + 76, inset.w, 54), "This component page is generated from the shared catalog entry and renders the real component preview beside its API surface.", palette.muted, 18, 8.8, 3);
+        try renderOpenedComponentRenderings(scene, collector, ui.Rect.init(inset.x, inset.y + 148, inset.w, selected_preview_compact_surface_h), entry, preview_base_id + 7000 + @as(u32, @intCast(index)) * 32);
+        try renderComponentApi(scene, ui.Rect.init(inset.x, inset.y + 490, inset.w, 210), entry);
+        try renderComponentContract(scene, ui.Rect.init(inset.x, inset.y + 718, inset.w, 64), entry);
+    } else {
+        try text(scene, inset.x, inset.y + 38, inset.w * 0.42, 26, entry.name, palette.text);
+        try wrappedText(scene, ui.Rect.init(inset.x, inset.y + 76, inset.w * 0.42, 54), "This component page is generated from the shared catalog entry and renders the real component preview beside its API surface.", palette.muted, 18, 8.8, 3);
 
-    const preview_bounds = ui.Rect.init(inset.x + inset.w * 0.48, inset.y + 10, inset.w * 0.52, inset.h - 20);
-    try renderReferencePreview(scene, collector, preview_bounds, entry, preview_base_id + 7000 + @as(u32, @intCast(index)) * 32);
+        try renderComponentApi(scene, ui.Rect.init(inset.x, inset.y + 154, inset.w * 0.42, inset.h - 154), entry);
+
+        const preview_bounds = ui.Rect.init(inset.x + inset.w * 0.48, inset.y + 10, inset.w * 0.52, selected_preview_surface_h);
+        try renderOpenedComponentRenderings(scene, collector, preview_bounds, entry, preview_base_id + 7000 + @as(u32, @intCast(index)) * 32);
+        try renderComponentContract(scene, ui.Rect.init(preview_bounds.x, preview_bounds.y + selected_preview_surface_h + 22, preview_bounds.w, inset.h - selected_preview_surface_h - 32), entry);
+    }
+}
+
+fn renderOpenedComponentRenderings(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, entry: ComponentSpec, id: u32) GalleryError!void {
+    try fill(scene, bounds, palette.code_bg, card_radius);
+    try stroke(scene, bounds, palette.border, card_radius);
+    try text(scene, bounds.x + card_content_x, bounds.y + 18, bounds.w - card_content_x * 2, 16, "Rendered component", palette.text);
+    try text(scene, bounds.x + card_content_x, bounds.y + 42, bounds.w - card_content_x * 2, 14, entry.name, palette.muted);
+
+    const inner = ui.Rect.init(bounds.x + card_content_x, bounds.y + 72, bounds.w - card_content_x * 2, bounds.h - 92);
+    if (inner.w < 360.0) {
+        const main_h = @min(112.0, inner.h * 0.45);
+        const second_h = @min(88.0, inner.h * 0.32);
+        try previewSlot(scene, collector, ui.Rect.init(inner.x, inner.y, inner.w, main_h), "default", entry, id);
+        try previewSlot(scene, collector, ui.Rect.init(inner.x, inner.y + main_h + 14.0, inner.w, second_h), "compact", entry, id + 1);
+        try previewSlot(scene, collector, ui.Rect.init(inner.x, inner.y + main_h + second_h + 28.0, inner.w, second_h), "small", entry, id + 2);
+    } else {
+        const large_w = inner.w * 0.58;
+        const side_w = inner.w - large_w - 14.0;
+        try previewSlot(scene, collector, ui.Rect.init(inner.x, inner.y, large_w, inner.h), "default", entry, id);
+        try previewSlot(scene, collector, ui.Rect.init(inner.x + large_w + 14.0, inner.y, side_w, (inner.h - 14.0) * 0.5), "compact", entry, id + 1);
+        try previewSlot(scene, collector, ui.Rect.init(inner.x + large_w + 14.0, inner.y + (inner.h + 14.0) * 0.5, side_w, (inner.h - 14.0) * 0.5), "small", entry, id + 2);
+    }
+}
+
+fn previewSlot(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, entry: ComponentSpec, id: u32) GalleryError!void {
+    try fill(scene, bounds, palette.panel_alt, 7.0);
+    try stroke(scene, bounds, palette.border, 7.0);
+    try text(scene, bounds.x + 12.0, bounds.y + 10.0, bounds.w - 24.0, 12.0, label, palette.muted);
+    try renderReferencePreview(scene, collector, bounds.insetLtrb(12.0, 32.0, 12.0, 12.0), entry, id);
+}
+
+fn renderComponentApi(scene: *ui.Scene, bounds: ui.Rect, entry: ComponentSpec) GalleryError!void {
+    try fill(scene, bounds, palette.code_bg, card_radius);
+    try stroke(scene, bounds, palette.border, card_radius);
+    try text(scene, bounds.x + card_content_x, bounds.y + 18, bounds.w - card_content_x * 2, 14, "API", palette.accent);
+    try text(scene, bounds.x + card_content_x, bounds.y + 50, bounds.w - card_content_x * 2, 14, "route", palette.muted);
+    try text(scene, bounds.x + card_content_x, bounds.y + 70, bounds.w - card_content_x * 2, 14, entry.route, palette.text);
+    try text(scene, bounds.x + card_content_x, bounds.y + 102, bounds.w - card_content_x * 2, 14, "source component", palette.muted);
+    try text(scene, bounds.x + card_content_x, bounds.y + 122, bounds.w - card_content_x * 2, 14, entry.source_component, palette.text);
+    try text(scene, bounds.x + card_content_x, bounds.y + 154, bounds.w - card_content_x * 2, 14, "builder", palette.muted);
+    try text(scene, bounds.x + card_content_x, bounds.y + 174, bounds.w - card_content_x * 2, 14, entry.edge_builder, palette.text);
+}
+
+fn renderComponentContract(scene: *ui.Scene, bounds: ui.Rect, entry: ComponentSpec) GalleryError!void {
+    try fill(scene, bounds, palette.panel_alt, card_radius);
+    try stroke(scene, bounds, palette.border, card_radius);
+    try text(scene, bounds.x + card_content_x, bounds.y + 18, bounds.w - card_content_x * 2, 16, "Contract", palette.text);
+    try wrappedText(scene, ui.Rect.init(bounds.x + card_content_x, bounds.y + 48, bounds.w - card_content_x * 2, 50), "Render through `Component.render`, collect hits through `Component.collectInteractions`, and keep backend concerns out of component code.", palette.muted, 17, 8.5, 3);
+    try text(scene, bounds.x + card_content_x, bounds.y + 116, bounds.w - card_content_x * 2, 14, entry.category.label(), palette.accent);
 }
 
 fn renderCatalogCard(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, entry: ComponentSpec, card_id: u32, preview_id: u32, selected: bool) GalleryError!void {
@@ -527,7 +568,7 @@ fn catalogSource(scene: *ui.Scene, bounds: ui.Rect, selected: bool) GalleryError
     const color = if (selected) palette.green else palette.accent;
     try fill(scene, bounds, palette.panel_alt, 6);
     try stroke(scene, bounds, color, 6);
-    try centeredText(scene, bounds, if (selected) "selected" else "base-nova", color);
+    try centeredText(scene, bounds, if (selected) "selected" else "EdgeRun", color);
 }
 
 fn renderReferencePreview(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, spec_value: ComponentSpec, id: u32) GalleryError!void {
@@ -690,171 +731,10 @@ fn renderButtonVariants(scene: *ui.Scene, collector: *interaction.Collector, bou
     try renderComponentPreview(scene, collector, cursor.take(54), .{ .button = .{ .id = id + 2, .label = "Link", .variant = .link } });
 }
 
-fn menuRow(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id: u32) GalleryError!void {
-    try fill(scene, bounds, if (hovered(bounds)) palette.row_hover else palette.row, 4);
-    try text(scene, bounds.x + 5, bounds.y + 1, bounds.w - 10, 12, label, palette.text);
-    try collector.addHit(bounds, .row_item, id);
-}
-
-fn renderRail(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, grid_gap: f32) GalleryError!void {
-    const panel_bounds = ui.Rect.init(bounds.x + 20, bounds.y + gallery_topbar_h, bounds.w - 40, bounds.h - gallery_topbar_h - 16);
-    try scene.pushRect(panel_bounds.insetUniform(-1), palette.shadow, .shadow, 16, 18);
-    try panel(scene, panel_bounds, 14);
-
-    const menu = ui.Rect.init(panel_bounds.x + 12, panel_bounds.y + 12, panel_bounds.w - 24, 36);
-    try fill(scene, menu, palette.panel_alt, 8);
-    try stroke(scene, menu, palette.border, 8);
-    try text(scene, menu.x + 10, menu.y + 11, 80, 14, "Menu", palette.text);
-    try iconQuad(scene, ui.Rect.init(menu.x + menu.w - 28, menu.y + 10, 16, 16), .menu, palette.text);
-
-    const labels = [_]struct { []const u8, []const u8 }{
-        .{ "Style", "Nova" },
-        .{ "Base Color", "Neutral" },
-        .{ "Theme", "Neutral" },
-        .{ "Chart Color", "Neutral" },
-        .{ "Heading", "Geist VF" },
-        .{ "Font", "Geist VF" },
-        .{ "Icon Library", "Tabler" },
-        .{ "Radius", "Default" },
-        .{ "Menu", "Solid" },
-        .{ "Grid Gap", gapLabel(grid_gap) },
-    };
-    var rows = ui.LinearCursor.init(ui.Rect.init(panel_bounds.x + 12, menu.y + menu.h + 22, panel_bounds.w - 24, panel_bounds.h), .column, 10);
-    for (labels, 0..) |item, index| {
-        const row = rows.take(50);
-        try fill(scene, row, if (index == 0) palette.panel_alt else palette.panel, 8);
-        try stroke(scene, row, palette.border, 8);
-        try text(scene, row.x + 12, row.y + 9, row.w - 24, 14, item[0], palette.muted);
-        if (index == 9) {
-            try renderGridGapControls(scene, collector, row, grid_gap);
-        } else {
-            try text(scene, row.x + 12, row.y + 27, row.w - 24, 14, item[1], palette.text);
-            try renderRailTrailing(scene, row, index);
-        }
-    }
-
-    const button_w = panel_bounds.w - 24;
-    const button_x = panel_bounds.x + 12;
-    try button(scene, collector, ui.Rect.init(button_x, panel_bounds.y + panel_bounds.h - 166, button_w, 30), "--preset b0", preview_base_id + 931, false);
-    try button(scene, collector, ui.Rect.init(button_x, panel_bounds.y + panel_bounds.h - 126, button_w, 30), "Open Preset", preview_base_id + 932, false);
-    try button(scene, collector, ui.Rect.init(button_x, panel_bounds.y + panel_bounds.h - 86, button_w, 30), "Shuffle", preview_base_id + 933, false);
-    try buttonWithIcon(scene, collector, ui.Rect.init(button_x, panel_bounds.y + panel_bounds.h - 36, button_w, 30), "Get Code", .code, preview_base_id + 934, true);
-}
-
-fn renderTopbar(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, layout: LayoutMode) GalleryError!void {
-    try fill(scene, bounds, palette.bg, 0);
-    try iconQuad(scene, ui.Rect.init(bounds.x + 26, bounds.y + 18, 20, 20), .sparkles, palette.text);
-    if (bounds.w < 540) {
-        try buttonWithIcon(scene, collector, ui.Rect.init(bounds.x + bounds.w - 132, bounds.y + 12, 112, 34), "Get Code", .code, preview_base_id + 908, true);
-        return;
-    }
-    var tabs_cursor = ui.LinearCursor.init(ui.Rect.init(bounds.x + 60, bounds.y + 12, bounds.w, 32), .row, 2);
-    const tabs = [_][]const u8{ "Docs", "Components", "Blocks", "Charts", "Directory", "Create" };
-    for (tabs, 0..) |label, index| {
-        const w: f32 = switch (index) {
-            1 => 112,
-            4 => 92,
-            5 => 76,
-            else => 76,
-        };
-        try ghostButton(scene, collector, tabs_cursor.take(w), label, preview_base_id + 900 + @as(u32, @intCast(index)));
-    }
-    if (bounds.w >= 920) {
-        const action_widths = TopbarActionWidths.init(bounds.w);
-        var actions = ui.LinearCursor.init(bounds.right(action_widths.total()).withHeightCentered(34), .row, 8);
-        if (bounds.w >= 1500) {
-            try layoutSwitcher(scene, collector, actions.take(action_widths.layout), layout);
-        }
-        try searchField(scene, collector, actions.take(action_widths.search), "Search documentation...", preview_base_id + 905);
-        try buttonWithIcon(scene, collector, actions.take(action_widths.stars), "115k", .network, preview_base_id + 906, false);
-        try button(scene, collector, actions.take(action_widths.open), "Open in", preview_base_id + 907, false);
-        try buttonWithIcon(scene, collector, actions.take(action_widths.code), "Get Code", .code, preview_base_id + 908, true);
-        return;
-    }
-    try buttonWithIcon(scene, collector, ui.Rect.init(bounds.x + bounds.w - 132, bounds.y + 12, 112, 34), "Get Code", .code, preview_base_id + 908, true);
-}
-
-const TopbarActionWidths = struct {
-    layout: f32,
-    search: f32,
-    stars: f32,
-    open: f32,
-    code: f32,
-
-    fn init(available_width: f32) TopbarActionWidths {
-        return .{
-            .layout = if (available_width >= 1500) 186 else 0,
-            .search = @min(320, @max(160, available_width - 1020)),
-            .stars = 84,
-            .open = 104,
-            .code = 112,
-        };
-    }
-
-    fn total(self: TopbarActionWidths) f32 {
-        const layout_gap: f32 = if (self.layout > 0) 8 else 0;
-        return self.layout + layout_gap + self.search + 8 + self.stars + 8 + self.open + 8 + self.code + 20;
-    }
-};
-
-fn renderRailTrailing(scene: *ui.Scene, row: ui.Rect, index: usize) GalleryError!void {
-    const center_y = row.y + row.h - 18;
-    switch (index) {
-        0 => try iconQuad(scene, ui.Rect.init(row.x + row.w - 29, center_y - 10, 20, 20), .app, palette.text),
-        1, 2, 3 => try fill(scene, ui.Rect.init(row.x + row.w - 24, center_y - 7, 14, 14), palette.muted, 7),
-        4, 5 => try text(scene, row.x + row.w - 34, center_y - 7, 28, 14, "Aa", palette.text),
-        6 => try iconQuad(scene, ui.Rect.init(row.x + row.w - 29, center_y - 10, 20, 20), .sparkles, palette.text),
-        7 => try iconQuad(scene, ui.Rect.init(row.x + row.w - 29, center_y - 10, 20, 20), .route, palette.text),
-        8 => try iconQuad(scene, ui.Rect.init(row.x + row.w - 29, center_y - 10, 20, 20), .menu, palette.text),
-        else => {},
-    }
-}
-
-fn renderGridGapControls(scene: *ui.Scene, collector: *interaction.Collector, row: ui.Rect, grid_gap: f32) GalleryError!void {
-    const control_w: f32 = 28;
-    const control_h: f32 = 20;
-    const control_gap: f32 = 6;
-    const group_w = control_w * 3.0 + control_gap * 2.0 + 10.0;
-    const group = ui.Rect.init(row.x + row.w - group_w, row.y + 25.0, group_w, control_h);
-    var controls = ui.LinearCursor.init(group.insetLtrb(0, 0, 10, 0), .row, control_gap);
-    try gridGapButton(scene, collector, controls.take(control_w), "S", gap_compact_id, grid_gap == grid_gap_compact);
-    try gridGapButton(scene, collector, controls.take(control_w), "M", gap_default_id, grid_gap == grid_gap_default);
-    try gridGapButton(scene, collector, controls.take(control_w), "L", gap_wide_id, grid_gap == grid_gap_wide);
-    try text(scene, row.x + 12, group.y + 4.0, @max(1.0, group.x - row.x - 18.0), 12, gapLabel(grid_gap), palette.text);
-}
-
-fn gridGapButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id_value: u32, selected: bool) GalleryError!void {
-    try renderComponentPreview(scene, collector, bounds, .{ .button = .{ .id = id_value, .label = label, .variant = if (selected) .primary else .secondary } });
-}
-
 fn normalizedGridGap(value: f32) f32 {
     if (value <= (grid_gap_compact + grid_gap_default) * 0.5) return grid_gap_compact;
     if (value >= (grid_gap_default + grid_gap_wide) * 0.5) return grid_gap_wide;
     return grid_gap_default;
-}
-
-fn gapLabel(value: f32) []const u8 {
-    return switch (@as(u8, if (normalizedGridGap(value) == grid_gap_compact) 0 else if (normalizedGridGap(value) == grid_gap_wide) 2 else 1)) {
-        0 => "Compact",
-        2 => "Wide",
-        else => "Default",
-    };
-}
-
-fn layoutSwitcher(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, layout: LayoutMode) GalleryError!void {
-    try fill(scene, bounds, palette.panel_alt, control_radius);
-    try stroke(scene, bounds, palette.border, control_radius);
-    const item_gap: f32 = 4;
-    const item_w = (bounds.w - item_gap - 8) * 0.5;
-    const masonry = ui.Rect.init(bounds.x + 4, bounds.y + 4, item_w, bounds.h - 8);
-    const grid = ui.Rect.init(masonry.x + masonry.w + item_gap, bounds.y + 4, item_w, bounds.h - 8);
-    try layoutSwitchItem(scene, collector, masonry, "Masonry", layout_masonry_id, layout == .masonry);
-    try layoutSwitchItem(scene, collector, grid, "Grid", layout_grid_id, layout == .grid);
-}
-
-fn layoutSwitchItem(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id_value: u32, selected: bool) GalleryError!void {
-    if (!selected and hovered(bounds)) try fill(scene, bounds, palette.panel_alt_hover, control_radius);
-    try renderComponentPreview(scene, collector, bounds, .{ .button = .{ .id = id_value, .label = label, .variant = if (selected) .primary else .ghost } });
 }
 
 fn galleryColumnCount(width: f32, gap: f32) usize {
@@ -866,29 +746,6 @@ fn galleryColumnCount(width: f32, gap: f32) usize {
         columns = next;
     }
     return columns;
-}
-
-fn searchField(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id_value: u32) GalleryError!void {
-    if (hovered(bounds)) try fill(scene, bounds, palette.panel_alt_hover, control_radius);
-    try renderComponentPreview(scene, collector, bounds, .{ .input = .{ .id = id_value, .placeholder = label, .leading_icon = .search } });
-}
-
-fn button(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id_value: u32, primary: bool) GalleryError!void {
-    try renderComponentPreview(scene, collector, bounds, .{ .button = .{ .id = id_value, .label = label, .variant = if (primary) .primary else .secondary } });
-}
-
-fn buttonWithIcon(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, value: icon.Icon, id_value: u32, primary: bool) GalleryError!void {
-    try renderComponentPreview(scene, collector, bounds, .{ .button = .{ .id = id_value, .label = label, .variant = if (primary) .primary else .secondary, .leading_icon = value } });
-}
-
-fn ghostButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id_value: u32) GalleryError!void {
-    if (hovered(bounds)) try fill(scene, bounds, palette.panel_alt_hover, control_radius);
-    try renderComponentPreview(scene, collector, bounds, .{ .button = .{ .id = id_value, .label = label, .variant = .ghost } });
-}
-
-fn panel(scene: *ui.Scene, bounds: ui.Rect, radius: f32) GalleryError!void {
-    try fill(scene, bounds, palette.panel, radius);
-    try stroke(scene, bounds, palette.border, radius);
 }
 
 fn fill(scene: *ui.Scene, bounds: ui.Rect, color: ui.Color, radius: f32) GalleryError!void {
@@ -936,6 +793,11 @@ fn wrappedText(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, color: ui.C
 
 fn centeredText(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, color: ui.Color) GalleryError!void {
     try alignedText(scene, bounds.x + 8.0, bounds.y + (bounds.h - 14.0) * 0.5, @max(1.0, bounds.w - 16.0), 14.0, value, color, .center);
+}
+
+fn centered(bounds: ui.Rect, max_w: f32) ui.Rect {
+    const width = @min(max_w, @max(1.0, bounds.w - design.content_pad * 2.0));
+    return ui.Rect.init(bounds.x + (bounds.w - width) * 0.5, bounds.y, width, bounds.h);
 }
 
 fn centeredWrappedText(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, color: ui.Color, max_lines: usize) GalleryError!void {
@@ -1008,7 +870,6 @@ test "component gallery renders component wall commands and interaction regions"
     try std.testing.expect(stats.text_quads > 120);
     try std.testing.expect(stats.icon_quads >= 2);
     try std.testing.expect(collector.written().len > 60);
-    try std.testing.expect(hasHit(collector.written(), preview_base_id + 908));
     try std.testing.expect(hasText(scene.written(), "Component Catalog"));
     try std.testing.expect(hasText(scene.written(), "Accordion"));
     try std.testing.expect(hasText(scene.written(), "Tooltip"));
@@ -1024,7 +885,14 @@ test "component gallery selected route renders selected component panel" {
 
     try std.testing.expect(hasText(scene.written(), "/docs/components/button"));
     try std.testing.expect(hasText(scene.written(), "button"));
-    try std.testing.expect(hasHit(collector.written(), preview_base_id + 7000 + @as(u32, @intCast(index)) * 32));
+    try std.testing.expect(hasText(scene.written(), "Rendered component"));
+    try std.testing.expect(hasText(scene.written(), "default"));
+    try std.testing.expect(hasText(scene.written(), "compact"));
+    try std.testing.expect(hasText(scene.written(), "small"));
+    const selected_preview_id = preview_base_id + 7000 + @as(u32, @intCast(index)) * 32;
+    try std.testing.expect(hasHit(collector.written(), selected_preview_id));
+    try std.testing.expect(hasHit(collector.written(), selected_preview_id + 1));
+    try std.testing.expect(hasHit(collector.written(), selected_preview_id + 2));
     try std.testing.expect(contentHeightForState(1440, .{ .selected_component_index = index }) > contentHeight(1440));
 }
 
@@ -1063,55 +931,13 @@ test "component gallery hover raises card shadow without changing interaction co
     try std.testing.expectEqual(base_collector.written().len, hover_collector.written().len);
 }
 
-test "component gallery exposes layout switcher as interaction regions" {
-    var commands: [4096]ui.Command = undefined;
-    var regions: [512]interaction.Region = undefined;
-    var scene = ui.Scene.init(&commands);
-    var collector = interaction.Collector.init(&regions);
-    try renderComponentGallery(&scene, &collector, ui.Rect.init(0, 0, 1840, 940), .{ .layout = .grid });
-
-    try std.testing.expect(hasHit(collector.written(), layout_masonry_id));
-    try std.testing.expect(hasHit(collector.written(), layout_grid_id));
-    try std.testing.expect(hasText(scene.written(), "Masonry"));
-    try std.testing.expect(hasText(scene.written(), "Grid"));
-}
-
-test "component gallery icon buttons emit visible icon quads" {
-    var commands: [32]ui.Command = undefined;
-    var regions: [8]interaction.Region = undefined;
-    var scene = ui.Scene.init(&commands);
-    var collector = interaction.Collector.init(&regions);
-    try buttonWithIcon(&scene, &collector, ui.Rect.init(0, 0, 128, 34), "Get Code", .code, preview_base_id + 7000, true);
-
-    try std.testing.expect(hasIcon(scene.written(), icon.id(.code)));
-    try std.testing.expect(hasHit(collector.written(), preview_base_id + 7000));
-}
-
-test "component gallery rail exposes Tabler semantic icons" {
-    var commands: [512]ui.Command = undefined;
-    var regions: [64]interaction.Region = undefined;
-    var scene = ui.Scene.init(&commands);
-    var collector = interaction.Collector.init(&regions);
-    try renderRail(&scene, &collector, ui.Rect.init(0, 0, 160, 720), grid_gap_wide);
-
-    try std.testing.expect(hasText(scene.written(), "Tabler"));
-    try std.testing.expect(hasText(scene.written(), "Wide"));
-    try std.testing.expect(hasIcon(scene.written(), icon.id(.menu)));
-    try std.testing.expect(hasIcon(scene.written(), icon.id(.sparkles)));
-    try std.testing.expect(hasIcon(scene.written(), icon.id(.app)));
-    try std.testing.expect(hasIcon(scene.written(), icon.id(.route)));
-    try std.testing.expect(hasHit(collector.written(), gap_compact_id));
-    try std.testing.expect(hasHit(collector.written(), gap_default_id));
-    try std.testing.expect(hasHit(collector.written(), gap_wide_id));
-}
-
 test "component gallery buttons center labels through shared primitive" {
     var commands: [16]ui.Command = undefined;
     var regions: [8]interaction.Region = undefined;
     var scene = ui.Scene.init(&commands);
     var collector = interaction.Collector.init(&regions);
     const bounds = ui.Rect.init(10, 20, 140, 34);
-    try button(&scene, &collector, bounds, "Continue", preview_base_id + 5010, true);
+    try renderComponentPreview(&scene, &collector, bounds, .{ .button = .{ .id = preview_base_id + 5010, .label = "Continue" } });
 
     const label = textCommand(scene.written(), "Continue").?.text;
     const center_delta = @abs((label.origin.x + label.origin.w * 0.5) - (bounds.x + bounds.w * 0.5));
@@ -1132,14 +958,6 @@ fn hasHit(regions: []const interaction.Region, id_value: u32) bool {
 fn hasText(commands: []const ui.Command, value: []const u8) bool {
     for (commands) |command| switch (command) {
         .text => |text_command| if (std.mem.eql(u8, text_command.value, value)) return true,
-        else => {},
-    };
-    return false;
-}
-
-fn hasIcon(commands: []const ui.Command, icon_id: u32) bool {
-    for (commands) |command| switch (command) {
-        .icon_quad => |quad| if (quad.icon_id == icon_id) return true,
         else => {},
     };
     return false;

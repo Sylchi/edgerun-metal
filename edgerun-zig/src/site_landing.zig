@@ -4,39 +4,39 @@ const interaction = @import("ui_interaction.zig");
 const ui = @import("ui.zig");
 const components = @import("ui_components.zig");
 const site_chrome = @import("site_chrome.zig");
+const design = @import("site_design.zig");
 
 pub const logo_button_id: u32 = site_chrome.logo_button_id;
 pub const docs_button_id: u32 = site_chrome.docs_button_id;
-pub const apps_button_id: u32 = site_chrome.apps_button_id;
 pub const launch_button_id: u32 = site_chrome.launch_button_id;
 pub const blog_button_id: u32 = site_chrome.blog_button_id;
 pub const source_button_id: u32 = site_chrome.source_button_id;
-pub const mobile_menu_button_id: u32 = site_chrome.mobile_menu_button_id;
 pub const reveal_identity_button_id: u32 = 20_001;
 
 const max_columns: usize = 4;
 const header_h: f32 = site_chrome.header_h;
 const section_gap: f32 = 72.0;
-const content_wide: f32 = 1180.0;
-const content_pad: f32 = 28.0;
-const radius: f32 = 10.0;
+const content_wide: f32 = design.content_wide;
+const content_pad: f32 = design.content_pad;
+const radius: f32 = design.surface_radius;
 const terminal_h: f32 = 338.0;
 const page_top_pad: f32 = 48.0;
 const hero_copy_min_w: f32 = 460.0;
-const hero_terminal_min_w: f32 = 460.0;
+const hero_terminal_min_w: f32 = 420.0;
+const hero_terminal_max_w: f32 = 520.0;
 const hero_split_gap: f32 = 92.0;
 const hero_split_min_w: f32 = hero_terminal_min_w + hero_split_gap + hero_copy_min_w;
-const hero_split_terminal_y: f32 = 84.0;
-const hero_split_copy_y: f32 = 92.0;
-const hero_split_min_h: f32 = 760.0;
+const hero_split_terminal_y: f32 = 76.0;
+const hero_split_copy_y: f32 = 78.0;
+const hero_split_min_h: f32 = 612.0;
 const hero_stacked_copy_y: f32 = 44.0;
 const hero_stacked_copy_max_w: f32 = 860.0;
 const hero_stacked_paragraph_max_w: f32 = 560.0;
 const hero_stacked_button_y: f32 = 374.0;
 const hero_stacked_terminal_y: f32 = 444.0;
-const hero_bottom_pad: f32 = 48.0;
-const hero_primary_button_w: f32 = 142.0;
-const hero_outline_button_w: f32 = 126.0;
+const hero_bottom_pad: f32 = 34.0;
+const hero_primary_button_w: f32 = 166.0;
+const hero_outline_button_w: f32 = 138.0;
 const hero_button_gap: f32 = 14.0;
 const hero_inline_title_min_w: f32 = 720.0;
 const hero_inline_title_first_w: f32 = 286.0;
@@ -78,27 +78,11 @@ const stats_default_h: f32 = 138.0;
 const stats_compact_y: f32 = 32.0;
 const stats_default_y: f32 = 38.0;
 const stats_row_h: f32 = 66.0;
-const node_land_alpha: u8 = 8;
-const node_online_halo_alpha: u8 = 18;
-const node_offline_halo_alpha: u8 = 12;
+const node_land_alpha: u8 = 5;
+const node_online_halo_alpha: u8 = 12;
+const node_offline_halo_alpha: u8 = 8;
 
-const palette = struct {
-    const bg = ui.Color{ .r = 11, .g = 11, .b = 11 };
-    const card = ui.Color{ .r = 18, .g = 18, .b = 18 };
-    const card_alt = ui.Color{ .r = 24, .g = 24, .b = 24 };
-    const muted = ui.Color{ .r = 92, .g = 92, .b = 92 };
-    const border = ui.Color{ .r = 56, .g = 56, .b = 56 };
-    const text = ui.Color{ .r = 242, .g = 242, .b = 242 };
-    const dim = ui.Color{ .r = 154, .g = 154, .b = 154 };
-    const primary = ui.Color{ .r = 74, .g = 222, .b = 128 };
-    const neutral_soft = ui.Color{ .r = 32, .g = 32, .b = 32 };
-    const danger = ui.Color{ .r = 239, .g = 68, .b = 68 };
-    const orange = ui.Color{ .r = 249, .g = 115, .b = 22 };
-    const blue = ui.Color{ .r = 96, .g = 165, .b = 250 };
-    const cyan = ui.Color{ .r = 34, .g = 211, .b = 238 };
-    const yellow = ui.Color{ .r = 250, .g = 204, .b = 21 };
-    const violet = ui.Color{ .r = 167, .g = 139, .b = 250 };
-};
+const palette = design.palette;
 
 pub const State = struct {
     scroll_y: f32 = 0.0,
@@ -115,17 +99,16 @@ const TerminalLine = struct {
 };
 
 const terminal_lines = [_]TerminalLine{
-    .{ .value = "$ edgerun start", .color = palette.dim },
-    .{ .value = "EdgeRun v0.4.2-alpha", .color = palette.text },
-    .{ .value = "initializing wasm runtime...", .color = palette.dim },
-    .{ .value = "runtime loaded (2.1mb)", .color = palette.primary },
-    .{ .value = "waiting for click entropy...", .color = palette.dim },
-    .{ .value = "click reveal to create identity", .color = palette.primary },
-    .{ .value = "identity source: ed25519_public", .color = palette.dim },
-    .{ .value = "public identity:", .color = palette.text },
-    .{ .value = "bootstrapping local app runtime...", .color = palette.dim },
-    .{ .value = "mesh network active", .color = palette.primary },
-    .{ .value = "your browser app is live", .color = palette.text },
+    .{ .value = "$ edgerun boot", .color = palette.dim },
+    .{ .value = "app wasm loaded", .color = palette.primary },
+    .{ .value = "compiler wasm embedded", .color = palette.primary },
+    .{ .value = "source object mounted", .color = palette.text },
+    .{ .value = "ui system: repo-owned", .color = palette.text },
+    .{ .value = "npm packages: 0", .color = palette.primary },
+    .{ .value = "host filesystem: none", .color = palette.primary },
+    .{ .value = "browser shell: byte bridge only", .color = palette.dim },
+    .{ .value = "ready to compile next artifact", .color = palette.primary },
+    .{ .value = "runs through browser/native/cpu/gpu", .color = palette.text },
 };
 const terminal_identity_line_index: usize = 8;
 const terminal_line_count: usize = terminal_lines.len + 1;
@@ -233,31 +216,31 @@ fn renderHero(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Re
     try renderTerminal(scene, collector, layout.terminal, state);
     try renderTerminalHint(scene, layout.terminal, state, stacked);
 
-    const badge_w = @min(330.0, layout.copy.w);
+    const badge_w = @min(300.0, layout.copy.w);
     const badge_x = if (stacked) layout.copy.x + (layout.copy.w - badge_w) * 0.5 else layout.copy.x;
     const badge = ui.Rect.init(badge_x, layout.copy.y, badge_w, 28.0);
-    try nativeBadge(scene, badge, "Written in Zig. Zero dependencies.");
+    try nativeBadge(scene, badge, "Self-compiling. Zero dependency chain.");
     try iconQuad(scene, ui.Rect.init(badge.x + 12.0, badge.y + 5.0, 18.0, 18.0), .terminal, palette.primary);
 
     if (stacked and layout.copy.w < hero_mobile_title_max_w) {
-        try titleMobile(scene, ui.Rect.init(layout.copy.x, layout.copy.y + 58.0, layout.copy.w, 54.0), "Your Node is", palette.text);
-        try titleMobile(scene, ui.Rect.init(layout.copy.x, layout.copy.y + 118.0, layout.copy.w, 102.0), "Already Running", palette.primary);
+        try titleMobile(scene, ui.Rect.init(layout.copy.x, layout.copy.y + 58.0, layout.copy.w, 54.0), "The App", palette.text);
+        try titleMobile(scene, ui.Rect.init(layout.copy.x, layout.copy.y + 118.0, layout.copy.w, 102.0), "Builds Itself", palette.primary);
     } else if (stacked and layout.copy.w >= hero_inline_title_min_w) {
         const title_w = hero_inline_title_first_w + hero_inline_title_gap + hero_inline_title_accent_w;
         const title_x = layout.copy.x + (layout.copy.w - title_w) * 0.5;
-        try titleLine(scene, ui.Rect.init(title_x, layout.copy.y + 58.0, hero_inline_title_first_w, 58.0), "Your Node is", palette.text);
-        try titleLine(scene, ui.Rect.init(title_x + hero_inline_title_first_w + hero_inline_title_gap, layout.copy.y + 58.0, hero_inline_title_accent_w, 58.0), "Already Running", palette.primary);
+        try titleLine(scene, ui.Rect.init(title_x, layout.copy.y + 58.0, hero_inline_title_first_w, 58.0), "The App", palette.text);
+        try titleLine(scene, ui.Rect.init(title_x + hero_inline_title_first_w + hero_inline_title_gap, layout.copy.y + 58.0, hero_inline_title_accent_w, 58.0), "Builds Itself", palette.primary);
     } else {
-        try title(scene, ui.Rect.init(layout.copy.x, layout.copy.y + 58.0, layout.copy.w, 92.0), "Your Node is");
-        try titleAccent(scene, ui.Rect.init(layout.copy.x, layout.copy.y + 118.0, layout.copy.w, 116.0), "Already Running");
+        try title(scene, ui.Rect.init(layout.copy.x, layout.copy.y + 58.0, layout.copy.w, 92.0), "The App");
+        try titleAccent(scene, ui.Rect.init(layout.copy.x, layout.copy.y + 118.0, layout.copy.w, 116.0), "Builds Itself");
     }
-    const paragraph_w = if (stacked) @min(layout.copy.w, hero_stacked_paragraph_max_w) else layout.copy.w;
+    const paragraph_w = if (stacked) @min(layout.copy.w, hero_stacked_paragraph_max_w) else @min(layout.copy.w, 500.0);
     const paragraph_x = if (stacked) layout.copy.x + (layout.copy.w - paragraph_w) * 0.5 else layout.copy.x;
-    try heroParagraph(scene, ui.Rect.init(paragraph_x, layout.copy.y + 244.0, paragraph_w, 88.0), "No signup. No account. No middlemen. EdgeRun starts a node in your browser the moment you arrive. Share your ID, connect directly, communicate privately.");
+    try heroParagraph(scene, ui.Rect.init(paragraph_x, layout.copy.y + 244.0, paragraph_w, 88.0), "EdgeRun carries its compiler, source object, UI system, object store, and receipts inside the app. Edit source, build, and run the next artifact.");
     const actions_w = hero_primary_button_w + hero_button_gap + hero_outline_button_w;
     const actions_x = if (stacked) layout.copy.x + (layout.copy.w - actions_w) * 0.5 else layout.copy.x;
-    try primaryButtonWithTrailingIcon(scene, collector, ui.Rect.init(actions_x, layout.button_y, hero_primary_button_w, 42.0), "Read the Docs", .chevron_right, docs_button_id);
-    try outlineButton(scene, collector, ui.Rect.init(actions_x + hero_primary_button_w + hero_button_gap, layout.button_y, hero_outline_button_w, 42.0), "Browse Apps", apps_button_id);
+    try primaryButtonWithTrailingIcon(scene, collector, ui.Rect.init(actions_x, layout.button_y, hero_primary_button_w, 42.0), "View Source", .chevron_right, source_button_id);
+    try outlineButton(scene, collector, ui.Rect.init(actions_x + hero_primary_button_w + hero_button_gap, layout.button_y, hero_outline_button_w, 42.0), "Read Docs", docs_button_id);
 }
 
 const HeroLayout = struct {
@@ -268,8 +251,11 @@ const HeroLayout = struct {
 
 fn heroLayout(bounds: ui.Rect) HeroLayout {
     if (bounds.w >= hero_split_min_w) {
-        const terminal = ui.Rect.init(bounds.x, bounds.y + hero_split_terminal_y, bounds.w * 0.46, terminal_h);
-        const copy = ui.Rect.init(bounds.x + bounds.w * 0.54, bounds.y + hero_split_copy_y, bounds.w * 0.46, 360.0);
+        const terminal_w = @min(hero_terminal_max_w, @max(hero_terminal_min_w, bounds.w * 0.44));
+        const copy_x = bounds.x + terminal_w + hero_split_gap;
+        const copy_w = @max(hero_copy_min_w, bounds.x + bounds.w - copy_x);
+        const terminal = ui.Rect.init(bounds.x, bounds.y + hero_split_terminal_y, terminal_w, terminal_h);
+        const copy = ui.Rect.init(copy_x, bounds.y + hero_split_copy_y, copy_w, 360.0);
         return .{
             .terminal = terminal,
             .copy = copy,
@@ -341,9 +327,9 @@ fn renderTerminalHint(scene: *ui.Scene, terminal: ui.Rect, state: State, stacked
     const hint_w = if (stacked) terminal.w else @min(terminal.w, 480.0);
     const hint_x = if (stacked) terminal.x + (terminal.w - hint_w) * 0.5 else terminal.x;
     const message = if (state.public_identity_ready)
-        "Your browser app is running. Share this public ID to connect with others. No account needed."
+        "This browser app has a live identity, embedded compiler bytes, and a source workspace in its own memory."
     else
-        "Reveal creates an ephemeral browser identity inside the WASM app. No account needed.";
+        "Reveal creates an ephemeral identity inside the WASM app. The browser is only the host surface.";
     try scene.pushWrappedText(ui.Rect.init(hint_x, hint_y, hint_w, 36.0), message, palette.dim, .{
         .line_height = 18.0,
         .average_char_width = 8.5,
@@ -356,10 +342,10 @@ fn renderStats(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
     try fill(scene, ui.Rect.init(bounds.x, bounds.y, bounds.w, 1.0), palette.border, 0.0);
     const content = centered(bounds, content_wide);
     const stats = [_]struct { []const u8, []const u8, []const u8 }{
-        .{ "12,847", "", "Active Nodes" },
-        .{ "847.3", " TB/s", "Mesh Bandwidth" },
-        .{ "2.4", "M", "Messages Today" },
-        .{ "0", "", "Zero Accounts Created" },
+        .{ "1", "", "App Artifact" },
+        .{ "0", "", "Package Installs" },
+        .{ "5", "", "Render Targets" },
+        .{ "1", "", "Compiler Loop" },
     };
     const compact = content.w < stats_compact_w;
     const cols: usize = if (compact) 2 else columns(content, 4, 18.0);
@@ -378,25 +364,25 @@ fn renderProblem(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
     const left = ui.Rect.init(bounds.x, bounds.y, bounds.w * 0.48, bounds.h);
     const right = ui.Rect.init(bounds.x + bounds.w * 0.56, bounds.y, bounds.w * 0.44, bounds.h);
     try tag(scene, ui.Rect.init(left.x, left.y, 104.0, 24.0), "THE PROBLEM", palette.danger);
-    try heading(scene, ui.Rect.init(left.x, left.y + 44.0, left.w, 74.0), "The Web's", "Centralization Crisis");
-    try paragraph(scene, ui.Rect.init(left.x, left.y + 138.0, left.w, 82.0), "Every message, every file, every connection is routed through corporate servers that decrypt, inspect, and monetize your data.");
-    try problemItem(scene, ui.Rect.init(left.x, left.y + 250.0, left.w, 48.0), "1", "TLS Termination", "CDNs and load balancers decrypt traffic at every hop.");
-    try problemItem(scene, ui.Rect.init(left.x, left.y + 310.0, left.w, 48.0), "2", "Identity Silos", "Your identity exists at the pleasure of platforms.");
-    try problemItem(scene, ui.Rect.init(left.x, left.y + 370.0, left.w, 48.0), "3", "Surveillance by Default", "Metadata is logged, analyzed, and sold.");
+    try heading(scene, ui.Rect.init(left.x, left.y + 44.0, left.w, 74.0), "Apps Became", "Dependency Towers");
+    try paragraph(scene, ui.Rect.init(left.x, left.y + 138.0, left.w, 82.0), "Modern apps often need clouds, registries, build services, host filesystems, browser frameworks, and platform accounts before they can even begin.");
+    try problemItem(scene, ui.Rect.init(left.x, left.y + 250.0, left.w, 48.0), "1", "Builds Live Elsewhere", "The compiler, source, and release path are usually outside the app.");
+    try problemItem(scene, ui.Rect.init(left.x, left.y + 310.0, left.w, 48.0), "2", "UI Is Borrowed", "The surface depends on framework and host behavior.");
+    try problemItem(scene, ui.Rect.init(left.x, left.y + 370.0, left.w, 48.0), "3", "Trust Is Ambient", "Permissions and updates are hard to explain after the fact.");
     try traffic(scene, right);
 }
 
 fn renderPrinciples(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
     try tag(scene, ui.Rect.init(bounds.x + bounds.w * 0.5 - 52.0, bounds.y, 104.0, 24.0), "ARCHITECTURE", palette.primary);
-    try alignedText(scene, bounds.x, bounds.y + 44.0, bounds.w, 26.0, "Principles, Not Features", palette.text, .center);
-    try alignedText(scene, bounds.x, bounds.y + 82.0, bounds.w, 16.0, "Architectural guarantees enforced by code.", palette.dim, .center);
+    try alignedText(scene, bounds.x, bounds.y + 44.0, bounds.w, 26.0, "One App Loop", palette.text, .center);
+    try alignedText(scene, bounds.x, bounds.y + 82.0, bounds.w, 16.0, "Source, compiler, UI, runtime, receipts.", palette.dim, .center);
     const cards_y = bounds.y + 140.0;
     const cols = columns(bounds, if (bounds.w > 720.0) 2 else 1, 16.0);
     const items = [_]struct { icon.Icon, []const u8, []const u8, []const u8 }{
-        .{ .shield, "Identity-Routed Work", "Work is addressed by cryptographic identity.", "send(peer_id, encrypted_payload)" },
-        .{ .lock, "Sealed Work Objects", "Data is encrypted at the source.", "seal(data, recipient_pubkey)" },
-        .{ .user, "User-Governed Resources", "Your devices, your rules.", "policy.admit(request)" },
-        .{ .network, "Local Admission Policy", "Each node decides what to accept.", "node.set_policy(my_rules)" },
+        .{ .code, "Compiler Inside", "The app ships with compiler bytes.", "compile(source_object)" },
+        .{ .app, "Built-In UI", "Components render through one IR.", "scene -> render_ir" },
+        .{ .shield, "Receipts For Work", "Execution leaves a checkable trail.", "work -> receipt" },
+        .{ .cpu, "Runs Across Targets", "Browser, native, CPU, GPU, hardware.", "present(target)" },
     };
     for (items, 0..) |item, index| {
         const row: usize = index / cols;
@@ -410,18 +396,18 @@ fn renderArchitecture(scene: *ui.Scene, collector: *interaction.Collector, bound
     const left = ui.Rect.init(bounds.x, bounds.y, bounds.w * 0.36, bounds.h);
     const right = ui.Rect.init(bounds.x + bounds.w * 0.43, bounds.y, bounds.w * 0.57, bounds.h);
     try tag(scene, ui.Rect.init(left.x, left.y, 64.0, 24.0), "STACK", palette.primary);
-    try heading(scene, ui.Rect.init(left.x, left.y + 44.0, left.w, 74.0), "Pure Zig.", "Zero Dependencies.");
-    try paragraph(scene, ui.Rect.init(left.x, left.y + 138.0, left.w, 96.0), "Every component written from scratch. No inherited vulnerabilities. No black boxes. Compiles to WebAssembly for browser, native for desktop.");
-    try outlineButtonWithTrailingIcon(scene, collector, ui.Rect.init(left.x, left.y + 264.0, 180.0, 36.0), "Explore Architecture", .chevron_right, docs_button_id);
+    try heading(scene, ui.Rect.init(left.x, left.y + 44.0, left.w, 74.0), "No Package", "Tower.");
+    try paragraph(scene, ui.Rect.init(left.x, left.y + 138.0, left.w, 96.0), "The browser page loads one WASM app. That app owns the bootstrap JavaScript, source workspace, compiler bytes, UI scene, render buffers, and release artifact.");
+    try outlineButtonWithTrailingIcon(scene, collector, ui.Rect.init(left.x, left.y + 264.0, 180.0, 36.0), "Open Source", .chevron_right, source_button_id);
     const stack = [_]struct { []const u8, []const u8, ui.Color }{
-        .{ "edgerun-metal", "Bare metal bootloader", palette.orange },
-        .{ "edgerun-clock", "Distributed time sync", palette.yellow },
-        .{ "edgerun-crypto", "BLAKE3, Ed25519, X25519", palette.primary },
-        .{ "edgerun-identity", "Key derivation and management", palette.primary },
-        .{ "edgerun-object", "Content-addressed storage", palette.blue },
-        .{ "edgerun-admission", "Policy engine", palette.cyan },
-        .{ "edgerun-relay", "NAT traversal and relay", palette.cyan },
-        .{ "edgerun-node", "Runtime orchestration", palette.violet },
+        .{ "app wasm", "tiny runtime and UI shell", palette.primary },
+        .{ "compiler wasm", "embedded Zig-to-WASM path", palette.yellow },
+        .{ "source object", "canonical editable workspace", palette.blue },
+        .{ "ui components", "built-in app surface", palette.cyan },
+        .{ "render ir", "browser cpu gpu native", palette.cyan },
+        .{ "object store", "canonical bytes and ids", palette.primary },
+        .{ "receipts", "work can be explained", palette.violet },
+        .{ "boot path", "QEMU TPM Pi bring-up", palette.orange },
     };
     var y = right.y;
     for (stack, 0..) |item, index| {
@@ -433,12 +419,12 @@ fn renderArchitecture(scene: *ui.Scene, collector: *interaction.Collector, bound
 fn renderImpact(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
     const layout = impactLayout(bounds);
     try tag(scene, ui.Rect.init(layout.copy.x, layout.copy.y, 72.0, 24.0), "IMPACT", palette.primary);
-    try heading(scene, ui.Rect.init(layout.copy.x, layout.copy.y + impact_heading_y, layout.copy.w, impact_heading_h), "What If We Didn't Need", "All Those Data Centers?");
-    try impactParagraph(scene, ui.Rect.init(layout.copy.x, layout.copy.y + impact_copy_y, layout.copy.w, impact_copy_h), "Global data centers consume 500+ TWh annually. Edge computing on consumer devices could reduce this footprint while improving privacy and resilience.");
+    try heading(scene, ui.Rect.init(layout.copy.x, layout.copy.y + impact_heading_y, layout.copy.w, impact_heading_h), "Software That", "Carries Its Tools");
+    try impactParagraph(scene, ui.Rect.init(layout.copy.x, layout.copy.y + impact_copy_y, layout.copy.w, impact_copy_h), "If the app carries its compiler, UI, source object, and receipt model, sharing software becomes less like installing a mystery bundle and more like running a checkable object.");
     const scenarios = [_]struct { []const u8, []const u8, []const u8 }{
-        .{ "10%", "50 TWh/yr", "Belgium" },
-        .{ "30%", "150 TWh/yr", "NL + DK" },
-        .{ "50%", "250 TWh/yr", "UK" },
+        .{ "0", "npm installs", "for the app" },
+        .{ "1", "ui contract", "all targets" },
+        .{ "1", "receipt trail", "per run" },
     };
     for (scenarios, 0..) |item, index| {
         const r = layout.card(index);
@@ -509,21 +495,21 @@ fn impactCardColumns(width: f32) usize {
 
 fn renderCta(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect) (ui.RenderError || interaction.Error)!void {
     try nativeCard(scene, bounds, "", "");
-    try alignedText(scene, bounds.x + 40.0, bounds.y + 70.0, bounds.w - 80.0, 30.0, "Cut Out the Middlemen", palette.text, .center);
-    try alignedText(scene, bounds.x + 40.0, bounds.y + 118.0, bounds.w - 80.0, 18.0, "Start with the docs. Explore the architecture. Build apps that respect users.", palette.dim, .center);
+    try alignedText(scene, bounds.x + 40.0, bounds.y + 70.0, bounds.w - 80.0, 30.0, "Open The Self-Compiling App", palette.text, .center);
+    try alignedText(scene, bounds.x + 40.0, bounds.y + 118.0, bounds.w - 80.0, 18.0, "Read the source object, edit it, and compile the next artifact from inside the app.", palette.dim, .center);
     const center = bounds.x + bounds.w * 0.5;
-    try primaryButtonWithTrailingIcon(scene, collector, ui.Rect.init(center - 146.0, bounds.y + 168.0, 132.0, 38.0), "Get Started", .chevron_right, docs_button_id);
-    try outlineButton(scene, collector, ui.Rect.init(center + 14.0, bounds.y + 168.0, 132.0, 38.0), "Browse Apps", apps_button_id);
+    try primaryButtonWithTrailingIcon(scene, collector, ui.Rect.init(center - 146.0, bounds.y + 168.0, 132.0, 38.0), "View Source", .chevron_right, source_button_id);
+    try outlineButton(scene, collector, ui.Rect.init(center + 14.0, bounds.y + 168.0, 132.0, 38.0), "Read Docs", docs_button_id);
 }
 
 fn renderFooter(scene: *ui.Scene, bounds: ui.Rect, content: ui.Rect) ui.RenderError!void {
     try fill(scene, bounds, palette.bg, 0.0);
     try fill(scene, ui.Rect.init(bounds.x, bounds.y, bounds.w, 1.0), palette.border, 0.0);
     try text(scene, content.x, bounds.y + 44.0, 120.0, 18.0, "EdgeRun", palette.text);
-    try paragraph(scene, ui.Rect.init(content.x, bounds.y + 78.0, 260.0, 54.0), "A decentralized runtime for user sovereignty. Own your digital identity.");
-    try footerColumn(scene, ui.Rect.init(content.x + content.w * 0.36, bounds.y + 44.0, 160.0, 150.0), "Product", &.{ "Documentation", "Academy", "App Store", "Roadmap" });
-    try footerColumn(scene, ui.Rect.init(content.x + content.w * 0.58, bounds.y + 44.0, 180.0, 150.0), "Resources", &.{ "Getting Started", "Architecture", "Security Model", "API Reference" });
-    try footerColumn(scene, ui.Rect.init(content.x + content.w * 0.81, bounds.y + 44.0, 140.0, 150.0), "Community", &.{ "GitHub", "Discord", "Contributing" });
+    try paragraph(scene, ui.Rect.init(content.x, bounds.y + 78.0, 260.0, 54.0), "A self-compiling app system with built-in UI, canonical objects, and work receipts.");
+    try footerColumn(scene, ui.Rect.init(content.x + content.w * 0.36, bounds.y + 44.0, 160.0, 150.0), "App", &.{ "Source", "Components", "Docs", "Academy" });
+    try footerColumn(scene, ui.Rect.init(content.x + content.w * 0.58, bounds.y + 44.0, 180.0, 150.0), "Runtime", &.{ "WASM", "Objects", "Receipts", "Renderer" });
+    try footerColumn(scene, ui.Rect.init(content.x + content.w * 0.81, bounds.y + 44.0, 140.0, 150.0), "Hardware", &.{ "QEMU", "TPM", "Pi Zero", "DRM" });
 }
 
 fn renderNodeMap(scene: *ui.Scene, bounds: ui.Rect, state: State, show_status: bool) ui.RenderError!void {
@@ -667,13 +653,15 @@ fn percentLabel(value: f32) []const u8 {
 
 fn principleCard(scene: *ui.Scene, bounds: ui.Rect, icon_value: icon.Icon, name: []const u8, detail: []const u8, code: []const u8) ui.RenderError!void {
     try nativeCard(scene, bounds, "", "");
-    const icon_box = ui.Rect.init(bounds.x + 18.0, bounds.y + 18.0, 40.0, 40.0);
+    const icon_box = ui.Rect.init(bounds.x + 18.0, bounds.y + 18.0, design.Icon.tile_box, design.Icon.tile_box);
+    const text_x = icon_box.x + icon_box.w + design.Icon.tile_text_gap;
+    const text_w = bounds.x + bounds.w - text_x - 18.0;
     try fill(scene, icon_box, palette.neutral_soft, 9.0);
-    try iconQuad(scene, icon_box.insetUniform(10.0), icon_value, palette.primary);
-    try text(scene, bounds.x + 74.0, bounds.y + 18.0, bounds.w - 92.0, 16.0, name, palette.text);
-    try paragraph(scene, ui.Rect.init(bounds.x + 74.0, bounds.y + 40.0, bounds.w - 92.0, 28.0), detail);
-    try fill(scene, ui.Rect.init(bounds.x + 74.0, bounds.y + 76.0, @min(bounds.w - 92.0, 210.0), 24.0), palette.neutral_soft, 4.0);
-    try text(scene, bounds.x + 82.0, bounds.y + 83.0, bounds.w - 108.0, 11.0, code, palette.primary);
+    try iconQuad(scene, icon_box.insetUniform(design.Icon.tile_inset), icon_value, palette.primary);
+    try text(scene, text_x, bounds.y + 18.0, text_w, 16.0, name, palette.text);
+    try paragraph(scene, ui.Rect.init(text_x, bounds.y + 40.0, text_w, 28.0), detail);
+    try fill(scene, ui.Rect.init(text_x, bounds.y + 76.0, @min(text_w, 210.0), 24.0), palette.neutral_soft, 4.0);
+    try text(scene, text_x + 8.0, bounds.y + 83.0, @max(1.0, text_w - 16.0), 11.0, code, palette.primary);
 }
 
 fn stackRow(scene: *ui.Scene, bounds: ui.Rect, index: usize, name: []const u8, detail: []const u8, color: ui.Color) ui.RenderError!void {
@@ -732,8 +720,8 @@ fn outlineButtonWithTrailingIcon(scene: *ui.Scene, collector: *interaction.Colle
 }
 
 fn nativeBadge(scene: *ui.Scene, bounds: ui.Rect, label: []const u8) ui.RenderError!void {
-    try fill(scene, bounds, palette.card_alt, 12.0);
-    try stroke(scene, bounds, palette.border, 12.0);
+    try fill(scene, bounds, palette.row, 10.0);
+    try stroke(scene, bounds, ui.Color{ .r = 74, .g = 222, .b = 128, .a = 70 }, 10.0);
     try alignedText(scene, bounds.x + 28.0, bounds.y + 8.0, bounds.w - 40.0, 12.0, label, palette.primary, .center);
 }
 
@@ -818,15 +806,15 @@ test "landing page renders site sections and primary actions" {
     try render(&scene, &collector, ui.Rect.init(0, 0, 1280, 3600), .{});
 
     try std.testing.expect(hasText(scene.written(), "EdgeRun"));
-    try std.testing.expect(hasText(scene.written(), "Already Running"));
-    try std.testing.expect(hasText(scene.written(), "Centralization Crisis"));
-    try std.testing.expect(hasText(scene.written(), "Pure Zig."));
+    try std.testing.expect(hasText(scene.written(), "Builds Itself"));
+    try std.testing.expect(hasText(scene.written(), "Dependency Towers"));
+    try std.testing.expect(hasText(scene.written(), "No Package"));
     try std.testing.expect(hasText(scene.written(), "Others"));
     try std.testing.expect(hasText(scene.written(), "Click to Reveal ID"));
     try std.testing.expect(!hasText(scene.written(), "113 nodes online"));
     try std.testing.expect(hasPieSlice(scene.written()));
     try std.testing.expect(hasHit(collector.written(), docs_button_id));
-    try std.testing.expect(hasHit(collector.written(), apps_button_id));
+    try std.testing.expect(hasHit(collector.written(), source_button_id));
     try std.testing.expect(hasIcon(scene.written(), .chevron_right));
     try std.testing.expect(hasIcon(scene.written(), .code));
 }
@@ -839,9 +827,9 @@ test "landing page clips scrolled content below fixed header" {
     var collector = interaction.Collector.init(&regions);
     try render(&scene, &collector, ui.Rect.init(0, 0, 1280, 900), .{ .scroll_y = 2300.0 });
 
-    const cta = textOrigin(scene.written(), "Cut Out the Middlemen").?;
+    const cta = textOrigin(scene.written(), "Open The Self-Compiling App").?;
     try std.testing.expect(cta.y >= header_h);
-    try std.testing.expect(!contentTextAboveHeader(scene.written(), "What If We Didn't Need"));
+    try std.testing.expect(!contentTextAboveHeader(scene.written(), "Software That"));
 }
 
 test "landing page content height reaches footer without extra scroll space" {
@@ -855,12 +843,12 @@ test "compact stats render as two reference columns" {
     var scene = ui.Scene.initWithClips(&commands, &clips);
     try renderStats(&scene, ui.Rect.init(0.0, 0.0, 390.0, stats_compact_h));
 
-    const active = textOrigin(scene.written(), "Active Nodes").?;
-    const bandwidth = textOrigin(scene.written(), "Mesh Bandwidth").?;
-    const messages = textOrigin(scene.written(), "Messages Today").?;
-    try std.testing.expect(bandwidth.x > active.x);
-    try std.testing.expect(messages.y > active.y);
-    try std.testing.expect(messages.x == active.x);
+    const artifact = textOrigin(scene.written(), "App Artifact").?;
+    const installs = textOrigin(scene.written(), "Package Installs").?;
+    const targets = textOrigin(scene.written(), "Render Targets").?;
+    try std.testing.expect(installs.x > artifact.x);
+    try std.testing.expect(targets.y > artifact.y);
+    try std.testing.expect(targets.x == artifact.x);
 }
 
 test "impact section cards stay inside measured section" {

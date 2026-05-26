@@ -1,7 +1,7 @@
 .PHONY: all check clean \
 	crypto-test crypto-bench \
 	clock-test identity-test object-test storage-test sdk-test \
-	ui-core-test \
+	ui-core-test ui-browser \
 	zig-check zig-fmt-check zig-fmt zig-test zig-real-tpm sdk-cli sdk-bench \
 	wayland-window wayland-window-test \
 	pi-zero-w-v1_1-kernel pi-zero-w-v1_1-usb-probe pi-usb-host pi-usb-state \
@@ -13,6 +13,10 @@
 BUILD_DIR := .build
 CMAKE ?= cmake
 CTEST ?= ctest
+WAYLAND_WIDTH ?= 1280
+WAYLAND_HEIGHT ?= 900
+WAYLAND_SECONDS ?= 3600
+WAYLAND_PATH ?= /docs
 PI_BOOT_DIR := $(BUILD_DIR)/edgerun-metal/pi-zero-w-v1_1/boot
 PI_USB_BOOT_DIR := $(BUILD_DIR)/pi-zero-w-v1_1-usb-boot
 PI_USB_XHCI_DEVICE := 0000:c3:00.4
@@ -54,8 +58,11 @@ sdk-bench:
 ui-core-test:
 	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig ui-core-test
 
-wayland-window:
-	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig -Doptimize=ReleaseFast wayland-window -- --width 1280 --height 900 --path /academy/40166
+ui-browser:
+	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig ui-browser
+
+wayland-window: ui-browser
+	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig -Doptimize=ReleaseFast wayland-window -- --width $(WAYLAND_WIDTH) --height $(WAYLAND_HEIGHT) --seconds $(WAYLAND_SECONDS) --path $(WAYLAND_PATH)
 
 wayland-window-test:
 	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig wayland-window-test

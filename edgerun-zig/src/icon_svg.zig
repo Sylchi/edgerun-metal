@@ -238,7 +238,15 @@ pub const Error = error{
     UnsupportedSvgStroke,
 };
 
+pub const cursor_pointer_2_icon_id: u32 = 40_001;
+pub const cursor_hand_finger_icon_id: u32 = 40_002;
+
 pub fn sourceForIconId(icon_id: u32) []const u8 {
+    switch (icon_id) {
+        cursor_pointer_2_icon_id => return @embedFile("icons/tabler/pointer-2.svg"),
+        cursor_hand_finger_icon_id => return @embedFile("icons/tabler/hand-finger.svg"),
+        else => {},
+    }
     const value = icon.fromId(icon_id) orelse return "";
     return source(value);
 }
@@ -5123,6 +5131,16 @@ test "smooth quadratic resets after non quadratic command" {
 test "all mapped tabler svgs parse without invalid path data" {
     inline for (std.meta.fields(icon.Icon)) |field| {
         var iter = Iterator.init(source(@enumFromInt(field.value)));
+        var count: usize = 0;
+        while (try iter.next()) |_| count += 1;
+        try std.testing.expect(count > 0);
+    }
+}
+
+test "cursor tabler svgs parse through the shared icon iterator" {
+    const ids = [_]u32{ cursor_pointer_2_icon_id, cursor_hand_finger_icon_id };
+    for (ids) |icon_id| {
+        var iter = Iterator.init(sourceForIconId(icon_id));
         var count: usize = 0;
         while (try iter.next()) |_| count += 1;
         try std.testing.expect(count > 0);

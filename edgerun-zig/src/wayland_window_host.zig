@@ -1,5 +1,6 @@
 const std = @import("std");
 const icon = @import("icon.zig");
+const icon_svg = @import("icon_svg.zig");
 const input = @import("input.zig");
 const interaction = @import("ui_interaction.zig");
 const linux_drm = @import("linux_drm.zig");
@@ -46,6 +47,7 @@ const socket_read_bytes: usize = 8192;
 const message_bytes: usize = 512;
 const pointer_motion_render_step: f32 = 8.0;
 const cursor_scene_budget: usize = 32;
+const cursor_overlay_icon_vertices: usize = renderer_ir.icon_instance_float_stride * 2;
 
 const display_id: u32 = 1;
 const registry_id: u32 = 2;
@@ -872,7 +874,7 @@ const NativeApp = struct {
         var cursor_commands: [cursor_scene_budget]ui.Command = undefined;
         var scene = ui.Scene.init(&cursor_commands);
         try site_cursor.render(&scene, self.state.hover_x, self.state.hover_y, kind);
-        var cursor_ir = renderer_ir.FixedBuffers(cursor_scene_budget, 0, 0, 0, 0, 0, 0){};
+        var cursor_ir = renderer_ir.FixedBuffers(cursor_scene_budget, 0, cursor_overlay_icon_vertices, 0, 0, 0, 0){};
         const buffers = cursor_ir.buffers();
         try renderer_pipeline.packScene(buffers, &self.font_atlas, .object, scene.written());
         const surface = try renderer_software.Framebuffer.init(self.width, self.height, self.pixels);
@@ -1956,8 +1958,8 @@ test "wayland host renders the browser landing app through canonical ir" {
     var scene = ui.Scene.initWithClips(&commands, &clips);
     var collector = interaction.Collector.init(&regions);
     try renderNativeSiteScene(&scene, &collector, 1280, 800, .{});
-    try std.testing.expect(hasText(scene.written(), "Your Node is"));
-    try std.testing.expect(hasText(scene.written(), "Already Running"));
+    try std.testing.expect(hasText(scene.written(), "The App"));
+    try std.testing.expect(hasText(scene.written(), "Builds Itself"));
 
     var ir_storage = IrStorage{};
     const buffers = ir_storage.buffers();
@@ -1981,6 +1983,20 @@ test "wayland host renders academy post route through canonical ir" {
     try std.testing.expect(hasText(scene.written(), "AUTHORITY FLOW"));
     try std.testing.expect(hasText(scene.written(), "Relay"));
     try std.testing.expect(hasText(scene.written(), "TPM"));
+}
+
+test "wayland host renders current docs routes through the shared app frame" {
+    var commands: [max_commands]ui.Command = undefined;
+    var clips: [max_clips]ui.Rect = undefined;
+    var regions: [max_interaction_regions]interaction.Region = undefined;
+    var scene = ui.Scene.initWithClips(&commands, &clips);
+    var collector = interaction.Collector.init(&regions);
+    try renderNativeSiteScene(&scene, &collector, 1280, 1800, .{ .route = site_navigation.fromPath("/docs/fonts") });
+
+    try std.testing.expect(hasText(scene.written(), "EdgeRun Native"));
+    try std.testing.expect(hasText(scene.written(), "Fonts"));
+    try std.testing.expect(hasText(scene.written(), "asset: varfont.geist_bytes"));
+    try std.testing.expect(hasText(scene.written(), "atlas: 2048x2048 alpha8, 1280 glyphs"));
 }
 
 test "wayland host renders client side decoration above app content" {
@@ -2107,7 +2123,7 @@ test "wayland host appends scene cursor from native hover state" {
     try site_cursor.render(&scene, app.state.hover_x, app.state.hover_y, site_cursor.fromState(.none, app.state.runtime.hoverKind()));
 
     try std.testing.expectEqual(site_cursor.Kind.pointer, site_cursor.fromState(.none, app.state.runtime.hoverKind()));
-    try std.testing.expect(hasRectColor(scene.written(), site_cursor.accent));
+    try std.testing.expect(hasIconId(scene.written(), icon_svg.cursor_hand_finger_icon_id));
 }
 
 fn hasText(commands: []const ui.Command, value: []const u8) bool {
@@ -2127,6 +2143,10 @@ fn hasRectColor(commands: []const ui.Command, color: ui.Color) bool {
 
 fn hasIcon(commands: []const ui.Command, value: icon.Icon) bool {
     const icon_id = icon.id(value);
+    return hasIconId(commands, icon_id);
+}
+
+fn hasIconId(commands: []const ui.Command, icon_id: u32) bool {
     for (commands) |command| switch (command) {
         .icon_quad => |quad| if (quad.icon_id == icon_id) return true,
         else => {},

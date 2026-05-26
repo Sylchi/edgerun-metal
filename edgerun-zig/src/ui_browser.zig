@@ -5,12 +5,12 @@ const clock = @import("clock.zig");
 const source_object = @import("embedded_source_object").bytes;
 const compiler_wasm = @import("embedded_wasm_compiler").bytes;
 const icon = @import("icon.zig");
+const icon_svg = @import("icon_svg.zig");
 const identity = @import("identity.zig");
 const interaction = @import("ui_interaction.zig");
 const object = @import("object.zig");
 const renderer_pipeline = @import("render/pipeline.zig");
 const component_gallery = @import("component_gallery.zig");
-const site_apps = @import("site_apps.zig");
 const site_blog = @import("site_blog.zig");
 const site_chrome = @import("site_chrome.zig");
 const site_cursor = @import("site_cursor.zig");
@@ -45,6 +45,7 @@ const source_editor_label = "src/ui_browser.zig";
 const max_source_editor_bytes: usize = 512 * 1024;
 const source_editor_tab = "    ";
 const max_compiler_diagnostic_bytes: usize = 192;
+const max_source_compile_summary_bytes: usize = 192;
 const max_nodes: usize = 256;
 const max_commands: usize = 4096;
 const max_interaction_regions: usize = 4096;
@@ -72,6 +73,10 @@ const font_last_char: u8 = renderer_pipeline.font_last_char;
 const font_padding: usize = 8;
 const font_row_gap: usize = 8;
 const font_bitmap_bytes: usize = 8 * 1024 * 1024;
+const small_text_sharpen_max_px: u8 = 16;
+const small_text_sharpen_midpoint: f32 = 128.0;
+const small_text_sharpen_contrast: f32 = 1.14;
+const small_text_sharpen_lift: f32 = 6.0;
 const site_source_url = "https://github.com/edgerun";
 const route_bytes_capacity: usize = site_navigation.route_path_capacity;
 const route_hash_bytes_capacity: usize = site_navigation.route_hash_capacity;
@@ -99,12 +104,20 @@ var source_workspace_ready = false;
 var source_editor_bytes: [max_source_editor_bytes]u8 = undefined;
 var source_editor_len: usize = 0;
 var source_editor_cursor: usize = 0;
+var source_editor_preferred_column: usize = 0;
 var source_editor_loaded = false;
 var source_editor_dirty = false;
 var source_editor_status: SourceEditorStatus = .not_loaded;
 var last_compiler_status: u32 = 0;
 var last_compiler_diagnostic: [max_compiler_diagnostic_bytes]u8 = undefined;
 var last_compiler_diagnostic_len: usize = 0;
+var last_compile_phase: CompilePhase = .idle;
+var last_compile_progress_permille: u32 = 0;
+var last_compile_instructions: u64 = 0;
+var last_compile_function_entries: u64 = 0;
+var last_compile_memory_loads: u64 = 0;
+var source_compile_summary: [max_source_compile_summary_bytes]u8 = undefined;
+var source_compile_summary_len: usize = 0;
 var release_artifact: [max_release_artifact_bytes]u8 = undefined;
 var release_artifact_len: usize = 0;
 var compiler_runtime_memory: [max_compiler_runtime_bytes]u8 align(16) = undefined;
@@ -192,6 +205,16 @@ const SourceEditorStatus = enum(u32) {
     workspace_full = 6,
 };
 
+const CompilePhase = enum(u32) {
+    idle = 0,
+    loading_workspace = 1,
+    init_compiler = 2,
+    compiling = 3,
+    collecting_artifact = 4,
+    complete = 5,
+    failed = 6,
+};
+
 const UiAction = enum(u32) {
     none = 0,
     open_url = 1,
@@ -239,6 +262,7 @@ const SiteState = struct {
     view: SiteView = .landing,
     selected_blog_post_id: u32 = 0,
     blog_arc_filter_index: ?usize = null,
+    selected_doc_index: ?usize = null,
     selected_component_index: ?usize = null,
     scroll_y: f32 = 0.0,
     queued_action: UiAction = .none,
@@ -585,32 +609,8 @@ export fn er_ui_site_pointer_up(x: f32, y: f32) u32 {
     return er_ui_site_activate_hit(currentHoverHitId());
 }
 
-export fn er_ui_component_gallery_layout_masonry_id() u32 {
-    return component_gallery.layout_masonry_id;
-}
-
-export fn er_ui_component_gallery_layout_grid_id() u32 {
-    return component_gallery.layout_grid_id;
-}
-
-export fn er_ui_component_gallery_gap_compact_id() u32 {
-    return component_gallery.gap_compact_id;
-}
-
-export fn er_ui_component_gallery_gap_default_id() u32 {
-    return component_gallery.gap_default_id;
-}
-
-export fn er_ui_component_gallery_gap_wide_id() u32 {
-    return component_gallery.gap_wide_id;
-}
-
 export fn er_ui_site_docs_button_id() u32 {
     return site_chrome.docs_button_id;
-}
-
-export fn er_ui_site_apps_button_id() u32 {
-    return site_chrome.apps_button_id;
 }
 
 export fn er_ui_site_launch_button_id() u32 {
@@ -755,6 +755,7 @@ export fn er_ui_source_workspace_commit(source_len: usize) u32 {
     source_editor_loaded = false;
     source_editor_dirty = false;
     source_editor_status = .not_loaded;
+    source_editor_preferred_column = 0;
     last_error = .ok;
     return @intFromEnum(ErrorCode.ok);
 }
@@ -765,6 +766,13 @@ export fn er_ui_source_workspace_reset() u32 {
     source_editor_loaded = false;
     source_editor_dirty = false;
     source_editor_status = .not_loaded;
+    last_compile_phase = .idle;
+    last_compile_progress_permille = 0;
+    last_compile_instructions = 0;
+    last_compile_function_entries = 0;
+    last_compile_memory_loads = 0;
+    release_artifact_len = 0;
+    setSourceCompileSummary() catch {};
     last_error = .ok;
     return @intFromEnum(ErrorCode.ok);
 }
@@ -803,6 +811,18 @@ export fn er_ui_last_compiler_diagnostic_ptr() usize {
 
 export fn er_ui_last_compiler_diagnostic_len() usize {
     return last_compiler_diagnostic_len;
+}
+
+export fn er_ui_last_compile_phase() u32 {
+    return @intFromEnum(last_compile_phase);
+}
+
+export fn er_ui_last_compile_progress_permille() u32 {
+    return last_compile_progress_permille;
+}
+
+export fn er_ui_last_compile_instructions() u64 {
+    return last_compile_instructions;
 }
 
 export fn er_ui_compiler_wasm_ptr() usize {
@@ -1092,6 +1112,7 @@ fn ensureSourceEditor() void {
     source_editor_dirty = false;
     source_editor_len = 0;
     source_editor_cursor = 0;
+    source_editor_preferred_column = 0;
     source_editor_status = loadSourceEditorFromWorkspace();
 }
 
@@ -1103,6 +1124,7 @@ fn loadSourceEditorFromWorkspace() SourceEditorStatus {
     @memcpy(source_editor_bytes[0..body.len], body);
     source_editor_len = body.len;
     source_editor_cursor = 0;
+    source_editor_preferred_column = 0;
     return .ready;
 }
 
@@ -1133,24 +1155,45 @@ fn findWorkspaceFileBody(workspace_bytes: []const u8, label: []const u8) ![]cons
 }
 
 fn handleSourceEditorKey(key: []const u8, ctrl: u32, meta: u32, alt: u32) bool {
-    if (ctrl != 0 or meta != 0 or alt != 0) return false;
+    if (alt != 0) return false;
     ensureSourceEditor();
     if (source_editor_status != .ready and source_editor_status != .dirty) return false;
+    if ((ctrl != 0 or meta != 0) and std.mem.eql(u8, key, "s")) {
+        _ = compileWorkspaceInsideWasm();
+        return true;
+    }
+    if ((ctrl != 0 or meta != 0) and std.mem.eql(u8, key, "Enter")) {
+        _ = compileWorkspaceInsideWasm();
+        return true;
+    }
+    if (ctrl != 0 or meta != 0) return false;
 
     if (std.mem.eql(u8, key, "ArrowLeft")) {
         if (source_editor_cursor > 0) source_editor_cursor -= 1;
+        source_editor_preferred_column = sourceEditorColumn(source_editor_cursor);
         return true;
     }
     if (std.mem.eql(u8, key, "ArrowRight")) {
         if (source_editor_cursor < source_editor_len) source_editor_cursor += 1;
+        source_editor_preferred_column = sourceEditorColumn(source_editor_cursor);
+        return true;
+    }
+    if (std.mem.eql(u8, key, "ArrowUp")) {
+        moveSourceEditorVertical(.up);
+        return true;
+    }
+    if (std.mem.eql(u8, key, "ArrowDown")) {
+        moveSourceEditorVertical(.down);
         return true;
     }
     if (std.mem.eql(u8, key, "Home")) {
-        source_editor_cursor = 0;
+        source_editor_cursor = currentSourceEditorLineStart();
+        source_editor_preferred_column = 0;
         return true;
     }
     if (std.mem.eql(u8, key, "End")) {
-        source_editor_cursor = source_editor_len;
+        source_editor_cursor = currentSourceEditorLineEnd();
+        source_editor_preferred_column = sourceEditorColumn(source_editor_cursor);
         return true;
     }
     if (std.mem.eql(u8, key, "Backspace")) {
@@ -1158,6 +1201,7 @@ fn handleSourceEditorKey(key: []const u8, ctrl: u32, meta: u32, alt: u32) bool {
             std.mem.copyForwards(u8, source_editor_bytes[source_editor_cursor - 1 .. source_editor_len - 1], source_editor_bytes[source_editor_cursor..source_editor_len]);
             source_editor_cursor -= 1;
             source_editor_len -= 1;
+            source_editor_preferred_column = sourceEditorColumn(source_editor_cursor);
             commitSourceEditorBytes();
         }
         return true;
@@ -1166,6 +1210,7 @@ fn handleSourceEditorKey(key: []const u8, ctrl: u32, meta: u32, alt: u32) bool {
         if (source_editor_cursor < source_editor_len) {
             std.mem.copyForwards(u8, source_editor_bytes[source_editor_cursor .. source_editor_len - 1], source_editor_bytes[source_editor_cursor + 1 .. source_editor_len]);
             source_editor_len -= 1;
+            source_editor_preferred_column = sourceEditorColumn(source_editor_cursor);
             commitSourceEditorBytes();
         }
         return true;
@@ -1186,8 +1231,55 @@ fn insertSourceEditorText(text: []const u8) bool {
     @memcpy(source_editor_bytes[source_editor_cursor..][0..text.len], text);
     source_editor_cursor += text.len;
     source_editor_len += text.len;
+    source_editor_preferred_column = sourceEditorColumn(source_editor_cursor);
     commitSourceEditorBytes();
     return true;
+}
+
+const VerticalMove = enum {
+    up,
+    down,
+};
+
+fn moveSourceEditorVertical(direction: VerticalMove) void {
+    const line_start = currentSourceEditorLineStart();
+    const line_end = currentSourceEditorLineEnd();
+    const column = source_editor_preferred_column;
+    const target_start = switch (direction) {
+        .up => previousSourceEditorLineStart(line_start) orelse return,
+        .down => if (line_end < source_editor_len) line_end + 1 else return,
+    };
+    const target_end = sourceEditorLineEnd(target_start);
+    source_editor_cursor = target_start + @min(column, target_end - target_start);
+}
+
+fn currentSourceEditorLineStart() usize {
+    var index = source_editor_cursor;
+    while (index > 0 and source_editor_bytes[index - 1] != '\n') : (index -= 1) {}
+    return index;
+}
+
+fn currentSourceEditorLineEnd() usize {
+    return sourceEditorLineEnd(source_editor_cursor);
+}
+
+fn sourceEditorLineEnd(start_or_cursor: usize) usize {
+    var index = start_or_cursor;
+    while (index < source_editor_len and source_editor_bytes[index] != '\n') : (index += 1) {}
+    return index;
+}
+
+fn previousSourceEditorLineStart(line_start: usize) ?usize {
+    if (line_start == 0) return null;
+    var index = line_start - 1;
+    while (index > 0 and source_editor_bytes[index - 1] != '\n') : (index -= 1) {}
+    return index;
+}
+
+fn sourceEditorColumn(cursor: usize) usize {
+    var index = @min(cursor, source_editor_len);
+    while (index > 0 and source_editor_bytes[index - 1] != '\n') : (index -= 1) {}
+    return @min(cursor, source_editor_len) - index;
 }
 
 fn commitSourceEditorBytes() void {
@@ -1247,22 +1339,29 @@ fn rebuildSourceWorkspaceFromEditor() SourceEditorStatus {
     source_workspace_len = canonical.len;
     source_workspace_ready = true;
     release_artifact_len = 0;
+    last_compile_phase = .idle;
+    last_compile_progress_permille = 0;
+    setSourceCompileSummary() catch {};
     return .dirty;
 }
 
 fn compileWorkspaceInsideWasm() ErrorCode {
     ensureSourceWorkspace();
-    if (source_workspace_len == 0 or source_workspace_len > source_workspace.len) return finishErrorCode(.bad_input);
+    setCompileProgress(.loading_workspace);
+    if (source_workspace_len == 0 or source_workspace_len > source_workspace.len) return finishCompileError(.bad_input);
 
     const source_offset = alignForward(compiler_memory_offset_bytes + compiler_work_memory_bytes + compiler_source_gap_bytes, 16);
-    if (source_offset > compiler_runtime_memory.len) return finishErrorCode(.bad_input);
-    if (source_workspace_len > compiler_runtime_memory.len - source_offset) return finishErrorCode(.bad_input);
+    if (source_offset > compiler_runtime_memory.len) return finishCompileError(.bad_input);
+    if (source_workspace_len > compiler_runtime_memory.len - source_offset) return finishCompileError(.bad_input);
 
     @memset(&compiler_runtime_memory, 0);
     @memcpy(compiler_runtime_memory[source_offset .. source_offset + source_workspace_len], source_workspace[0..source_workspace_len]);
 
+    setCompileProgress(.init_compiler);
     var execution_ticks: u64 = compiler_execution_tick_budget;
     var runtime = wasm_interpreter.Runtime.initWithMemoryPages(&compiler_runtime_memory, &execution_ticks, pagesForBytes(source_offset + source_workspace_len));
+    var trace: wasm_interpreter.ExecutionTrace = .{};
+    runtime.trace = &trace;
     const compiler_memory_ptr: i32 = @intCast(compiler_memory_offset_bytes);
     const compiler_memory_len: i32 = @intCast(compiler_work_memory_bytes);
     const source_ptr: i32 = @intCast(source_offset);
@@ -1271,13 +1370,14 @@ fn compileWorkspaceInsideWasm() ErrorCode {
         .{ .i32 = compiler_memory_ptr },
         .{ .i32 = compiler_memory_len },
     };
-    const init_result = wasm_interpreter.executeExportValueArgs(&runtime, &compiler_wasm, "er_wasm_compiler_init", &init_args) catch return finishErrorCode(.render_failed);
-    last_compiler_status = @intCast(init_result.valueI32(0) catch return finishErrorCode(.render_failed));
+    const init_result = wasm_interpreter.executeExportValueArgs(&runtime, &compiler_wasm, "er_wasm_compiler_init", &init_args) catch return finishCompileError(.render_failed);
+    last_compiler_status = @intCast(init_result.valueI32(0) catch return finishCompileError(.render_failed));
     if (last_compiler_status != 0) {
         recordCompilerDiagnostic(&runtime);
-        return finishErrorCode(.bad_input);
+        return finishCompileError(.bad_input);
     }
 
+    setCompileProgress(.compiling);
     const compile_args = [_]wasm_interpreter.Value{
         .{ .i32 = compiler_memory_ptr },
         .{ .i32 = compiler_memory_len },
@@ -1286,27 +1386,69 @@ fn compileWorkspaceInsideWasm() ErrorCode {
         .{ .i32 = source_ptr },
         .{ .i32 = source_len },
     };
-    const compile_result = wasm_interpreter.executeExportValueArgs(&runtime, &compiler_wasm, "er_wasm_compiler_compile_wasm", &compile_args) catch return finishErrorCode(.render_failed);
-    last_compiler_status = @intCast(compile_result.valueI32(0) catch return finishErrorCode(.render_failed));
+    const compile_result = wasm_interpreter.executeExportValueArgs(&runtime, &compiler_wasm, "er_wasm_compiler_compile_wasm", &compile_args) catch return finishCompileError(.render_failed);
+    last_compiler_status = @intCast(compile_result.valueI32(0) catch return finishCompileError(.render_failed));
     if (last_compiler_status != 0) {
         recordCompilerDiagnostic(&runtime);
-        return finishErrorCode(.bad_input);
+        last_compile_instructions = trace.instructions;
+        last_compile_function_entries = trace.function_entries;
+        last_compile_memory_loads = trace.memory_loads;
+        return finishCompileError(.bad_input);
     }
 
-    const output_len_result = wasm_interpreter.executeExportValueArgs(&runtime, &compiler_wasm, "er_wasm_compiler_output_len", &.{}) catch return finishErrorCode(.render_failed);
-    const output_ptr_result = wasm_interpreter.executeExportValueArgs(&runtime, &compiler_wasm, "er_wasm_compiler_output_ptr", &.{}) catch return finishErrorCode(.render_failed);
-    const output_ptr: usize = @intCast(output_ptr_result.valueI32(0) catch return finishErrorCode(.render_failed));
-    const output_len: usize = @intCast(output_len_result.valueI32(0) catch return finishErrorCode(.render_failed));
-    if (output_len < 4 or output_len > release_artifact.len) return finishErrorCode(.bad_input);
-    if (output_ptr > compiler_runtime_memory.len or output_len > compiler_runtime_memory.len - output_ptr) return finishErrorCode(.bad_input);
-    if (!std.mem.eql(u8, compiler_runtime_memory[output_ptr..][0..4], &.{ 0x00, 0x61, 0x73, 0x6d })) return finishErrorCode(.bad_input);
+    setCompileProgress(.collecting_artifact);
+    const output_len_result = wasm_interpreter.executeExportValueArgs(&runtime, &compiler_wasm, "er_wasm_compiler_output_len", &.{}) catch return finishCompileError(.render_failed);
+    const output_ptr_result = wasm_interpreter.executeExportValueArgs(&runtime, &compiler_wasm, "er_wasm_compiler_output_ptr", &.{}) catch return finishCompileError(.render_failed);
+    const output_ptr: usize = @intCast(output_ptr_result.valueI32(0) catch return finishCompileError(.render_failed));
+    const output_len: usize = @intCast(output_len_result.valueI32(0) catch return finishCompileError(.render_failed));
+    if (output_len < 4 or output_len > release_artifact.len) return finishCompileError(.bad_input);
+    if (output_ptr > compiler_runtime_memory.len or output_len > compiler_runtime_memory.len - output_ptr) return finishCompileError(.bad_input);
+    if (!std.mem.eql(u8, compiler_runtime_memory[output_ptr..][0..4], &.{ 0x00, 0x61, 0x73, 0x6d })) return finishCompileError(.bad_input);
 
     @memcpy(release_artifact[0..output_len], compiler_runtime_memory[output_ptr .. output_ptr + output_len]);
     release_artifact_len = output_len;
+    last_compile_instructions = trace.instructions;
+    last_compile_function_entries = trace.function_entries;
+    last_compile_memory_loads = trace.memory_loads;
+    setCompileProgress(.complete);
+    setSourceCompileSummary() catch {};
     last_compiler_status = 0;
     last_compiler_diagnostic_len = 0;
     last_error = .ok;
     return .ok;
+}
+
+fn setCompileProgress(phase: CompilePhase) void {
+    last_compile_phase = phase;
+    last_compile_progress_permille = switch (phase) {
+        .idle => 0,
+        .loading_workspace => 80,
+        .init_compiler => 180,
+        .compiling => 520,
+        .collecting_artifact => 880,
+        .complete => 1000,
+        .failed => last_compile_progress_permille,
+    };
+    setSourceCompileSummary() catch {};
+}
+
+fn finishCompileError(code: ErrorCode) ErrorCode {
+    last_compile_phase = .failed;
+    if (last_compile_progress_permille == 0) last_compile_progress_permille = 1;
+    setSourceCompileSummary() catch {};
+    return finishErrorCode(code);
+}
+
+fn setSourceCompileSummary() !void {
+    const rendered = try std.fmt.bufPrint(&source_compile_summary, "workspace {d} bytes | file {d} bytes | release {d} bytes | {d} instructions | {d} calls | {d} loads", .{
+        source_workspace_len,
+        source_editor_len,
+        release_artifact_len,
+        last_compile_instructions,
+        last_compile_function_entries,
+        last_compile_memory_loads,
+    });
+    source_compile_summary_len = rendered.len;
 }
 
 fn recordCompilerDiagnostic(runtime: *wasm_interpreter.Runtime) void {
@@ -1375,10 +1517,6 @@ export fn er_ui_site_blog_post_content_height(width: f32, post_id: u32) f32 {
     return site_frame.contentHeight(width, .{ .route = .{ .view = .blog, .selected_blog_post_id = post_id } });
 }
 
-export fn er_ui_site_apps_content_height(width: f32) f32 {
-    return site_frame.contentHeight(width, .{ .route = .{ .view = .apps } });
-}
-
 export fn er_ui_site_docs_content_height(width: f32) f32 {
     return site_frame.contentHeight(width, .{ .route = .{ .view = .docs } });
 }
@@ -1442,15 +1580,6 @@ export fn er_ui_build_site_landing_frame(width: u32, height: u32, scroll_y: f32,
 export fn er_ui_build_site_blog_frame(width: u32, height: u32, scroll_y: f32, hover_x: f32, hover_y: f32, selected_post_id: u32) u32 {
     return buildPackedSiteFrame(width, height, .{
         .route = .{ .view = .blog, .selected_blog_post_id = selected_post_id },
-        .scroll_y = scroll_y,
-        .hover_x = hover_x,
-        .hover_y = hover_y,
-    });
-}
-
-export fn er_ui_build_site_apps_frame(width: u32, height: u32, scroll_y: f32, hover_x: f32, hover_y: f32) u32 {
-    return buildPackedSiteFrame(width, height, .{
-        .route = .{ .view = .apps },
         .scroll_y = scroll_y,
         .hover_x = hover_x,
         .hover_y = hover_y,
@@ -1772,6 +1901,10 @@ fn currentSourceFrameState(hover_x: f32, hover_y: f32) site_source.State {
         .release_bytes = release_artifact_len,
         .dirty = source_editor_dirty,
         .status = sourceEditorStatusText(source_editor_status),
+        .compile_phase = compilePhaseText(last_compile_phase),
+        .compile_progress = @as(f32, @floatFromInt(last_compile_progress_permille)) / 1000.0,
+        .compile_summary = sourceCompileSummaryText(),
+        .diagnostic = last_compiler_diagnostic[0..last_compiler_diagnostic_len],
     };
 }
 
@@ -1787,6 +1920,25 @@ fn sourceEditorStatusText(status: SourceEditorStatus) []const u8 {
     };
 }
 
+fn compilePhaseText(phase: CompilePhase) []const u8 {
+    return switch (phase) {
+        .idle => "idle",
+        .loading_workspace => "loading workspace into compiler memory",
+        .init_compiler => "initializing embedded Zig-to-wasm compiler",
+        .compiling => "compiling app workspace",
+        .collecting_artifact => "collecting release wasm artifact",
+        .complete => "compile complete",
+        .failed => "compile failed",
+    };
+}
+
+fn sourceCompileSummaryText() []const u8 {
+    if (source_compile_summary_len == 0) {
+        setSourceCompileSummary() catch return "";
+    }
+    return source_compile_summary[0..source_compile_summary_len];
+}
+
 fn frameBounds() ui.Rect {
     return ui.Rect.init(0, 0, @floatFromInt(frame_width), @floatFromInt(frame_height));
 }
@@ -1800,6 +1952,7 @@ fn applyRoute(route: site_navigation.Route) void {
     site_state.view = route.view;
     site_state.selected_blog_post_id = route.selected_blog_post_id;
     site_state.blog_arc_filter_index = route.blog_arc_filter_index;
+    site_state.selected_doc_index = route.selected_doc_index;
     site_state.selected_component_index = route.selected_component_index;
 }
 
@@ -1824,6 +1977,7 @@ fn currentRoute() site_navigation.Route {
         .view = site_state.view,
         .selected_blog_post_id = site_state.selected_blog_post_id,
         .blog_arc_filter_index = site_state.blog_arc_filter_index,
+        .selected_doc_index = site_state.selected_doc_index,
         .selected_component_index = site_state.selected_component_index,
     };
 }
@@ -1852,6 +2006,14 @@ fn recordAction(action: ui_runtime.Action) void {
 fn hasRectColor(items: []const ui.Command, color: ui.Color) bool {
     for (items) |command| switch (command) {
         .rect => |rect| if (std.meta.eql(rect.color, color)) return true,
+        else => {},
+    };
+    return false;
+}
+
+fn hasIconId(items: []const ui.Command, icon_id: u32) bool {
+    for (items) |command| switch (command) {
+        .icon_quad => |quad| if (quad.icon_id == icon_id) return true,
         else => {},
     };
     return false;
@@ -1913,6 +2075,7 @@ fn cacheFontGlyph(ch: u8, px: u8) varfont.Error!FontGlyph {
         atlas_x = font_atlas_x;
         atlas_y = font_atlas_y;
         copyFontGlyphBitmap(atlas_x, atlas_y, gw, gh, view.pixels);
+        if (px <= small_text_sharpen_max_px) sharpenFontGlyphBitmap(atlas_x, atlas_y, gw, gh);
         font_atlas_row_h = @max(font_atlas_row_h, gh);
         font_atlas_x += gw + font_row_gap;
         atlas_u0 = (@as(f32, @floatFromInt(atlas_x)) + 0.5) / @as(f32, @floatFromInt(font_atlas_width));
@@ -1949,6 +2112,21 @@ fn copyFontGlyphBitmap(x: usize, y: usize, w: usize, h: usize, source: []const u
         const src = row * w;
         @memcpy(font_atlas_alpha[dst .. dst + w], source[src .. src + w]);
     }
+}
+
+fn sharpenFontGlyphBitmap(x: usize, y: usize, w: usize, h: usize) void {
+    var row: usize = 0;
+    while (row < h) : (row += 1) {
+        const dst = (y + row) * font_atlas_width + x;
+        for (font_atlas_alpha[dst .. dst + w]) |*sample| sample.* = sharpenFontAlpha(sample.*);
+    }
+}
+
+fn sharpenFontAlpha(sample: u8) u8 {
+    if (sample == 0 or sample == std.math.maxInt(u8)) return sample;
+    const centered = (@as(f32, @floatFromInt(sample)) - small_text_sharpen_midpoint) * small_text_sharpen_contrast;
+    const lifted = small_text_sharpen_midpoint + centered + small_text_sharpen_lift;
+    return @intFromFloat(std.math.clamp(lifted, 0.0, 255.0));
 }
 
 fn findFontGlyph(ch: u8, px: u8) ?FontGlyph {
@@ -2107,19 +2285,6 @@ test "browser site blog builds packed browser buffers and post hit state" {
     try std.testing.expectEqual(site_blog.postIdAt(0), er_ui_hover_hit_id());
 }
 
-test "browser site apps builds packed browser buffers and hit state" {
-    const code = er_ui_build_site_apps_frame(1280, 900, 0.0, 360.0, 700.0);
-    try std.testing.expectEqual(@as(u32, 0), code);
-    try std.testing.expect(packed_rect_float_len > 0);
-    try std.testing.expect(packed_text_vertex_float_len > 0);
-    try std.testing.expect(packed_icon_vertex_float_len > 0);
-    try std.testing.expectEqual(site_apps.contentHeight(1280.0), er_ui_site_apps_content_height(1280.0));
-    try std.testing.expectEqual(@intFromEnum(ui.HitKind.button), er_ui_hover_hit_kind());
-    try std.testing.expectEqual(site_apps.first_app_button_id, er_ui_hover_hit_id());
-    try std.testing.expectEqual(@intFromEnum(CursorKind.pointer), er_ui_cursor_kind());
-    try std.testing.expect(hasRectColor(lastCommands(), site_cursor.accent));
-}
-
 test "browser site activation keeps page state in wasm" {
     site_state = .{};
     defer site_state = .{};
@@ -2149,8 +2314,6 @@ test "browser site activation keeps page state in wasm" {
     try std.testing.expectEqual(site_blog.indexContentHeightFiltered(1280.0, 3), er_ui_site_content_height(1280.0));
     try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_site_activate_hit(site_blog.all_lessons_button_id));
     try std.testing.expectEqual(site_blog.indexContentHeight(1280.0), er_ui_site_content_height(1280.0));
-    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_site_activate_hit(site_chrome.apps_button_id));
-    try std.testing.expectEqual(site_apps.contentHeight(1280.0), er_ui_site_content_height(1280.0));
     try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_site_activate_hit(site_chrome.docs_button_id));
     try std.testing.expectEqual(site_docs.contentHeight(1280.0), er_ui_site_content_height(1280.0));
     try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_site_activate_hit(site_docs.component_catalog_button_id));
@@ -2178,13 +2341,27 @@ test "browser native route sync owns URL path state" {
     try std.testing.expectEqualStrings("", route_hash_bytes[0..er_ui_site_route_hash_len()]);
 
     try std.testing.expectEqual(@as(u32, 0), er_ui_site_set_route_hash(writeInputForTest("#/apps")));
-    try std.testing.expectEqual(site_apps.contentHeight(1280.0), er_ui_site_content_height(1280.0));
-    try std.testing.expectEqualStrings("/apps", route_bytes[0..er_ui_site_route_path_len()]);
+    try std.testing.expectEqual(site_landing.contentHeight(1280.0), er_ui_site_content_height(1280.0));
+    try std.testing.expectEqualStrings("/", route_bytes[0..er_ui_site_route_path_len()]);
+
+    try std.testing.expectEqual(@as(u32, 0), er_ui_site_set_route_hash(writeInputForTest("#/docs/media")));
+    const media_index = site_docs.indexBySlug("media").?;
+    try std.testing.expectEqual(media_index, site_state.selected_doc_index.?);
+    try std.testing.expectEqual(site_docs.contentHeightForState(1280.0, .{ .selected_doc_index = media_index }), er_ui_site_content_height(1280.0));
+    try std.testing.expectEqualStrings("/docs/media", route_bytes[0..er_ui_site_route_path_len()]);
+    try std.testing.expectEqualStrings("#/docs/media", route_hash_bytes[0..er_ui_site_route_hash_len()]);
 
     try std.testing.expectEqual(@as(u32, 0), er_ui_site_set_route_hash(writeInputForTest("#/docs")));
     try std.testing.expectEqual(site_docs.contentHeight(1280.0), er_ui_site_content_height(1280.0));
     try std.testing.expectEqualStrings("/docs", route_bytes[0..er_ui_site_route_path_len()]);
     try std.testing.expectEqualStrings("#/docs", route_hash_bytes[0..er_ui_site_route_hash_len()]);
+
+    try std.testing.expectEqual(@as(u32, 0), er_ui_site_set_route_hash(writeInputForTest("#/docs/component-system")));
+    const component_system_index = site_docs.indexBySlug("component-system").?;
+    try std.testing.expectEqual(component_system_index, site_state.selected_doc_index.?);
+    try std.testing.expectEqual(site_docs.contentHeightForState(1280.0, .{ .selected_doc_index = component_system_index }), er_ui_site_content_height(1280.0));
+    try std.testing.expectEqualStrings("/docs/component-system", route_bytes[0..er_ui_site_route_path_len()]);
+    try std.testing.expectEqualStrings("#/docs/component-system", route_hash_bytes[0..er_ui_site_route_hash_len()]);
 
     try std.testing.expectEqual(@as(u32, 0), er_ui_site_set_route_hash(writeInputForTest("#/docs/components/button")));
     const button_index = component_gallery.indexBySlug("button").?;
@@ -2250,7 +2427,7 @@ test "browser native event bytes keep browser decoding inside wasm" {
         input_event_schedule_frame,
         eventBytesForTest("hashchange\n0\n0\n0\n0\n0\n0\n#/apps", 1280.0, 900.0),
     );
-    try std.testing.expectEqualStrings("/apps", route_bytes[0..er_ui_site_route_path_len()]);
+    try std.testing.expectEqualStrings("/", route_bytes[0..er_ui_site_route_path_len()]);
 
     try std.testing.expectEqual(@as(u32, 0), eventBytesForTest("keyup\n0\n0\n0\n0\n0\n0\nk", 1280.0, 900.0));
 }
@@ -2282,11 +2459,11 @@ test "browser native event pump owns dom event interpretation" {
     try std.testing.expectEqual(@as(u32, 0), er_ui_event(@intFromEnum(InputEventKind.key_down), 0, 0, 0, 0, 0, 0, writeInputForTest("/"), 1280.0, 900.0));
 
     try std.testing.expectEqual(input_event_schedule_frame, er_ui_event(@intFromEnum(InputEventKind.hashchange), 0, 0, 0, 0, 0, 0, writeInputForTest("#/apps"), 1280.0, 900.0));
-    try std.testing.expectEqualStrings("/apps", route_bytes[0..er_ui_site_route_path_len()]);
+    try std.testing.expectEqualStrings("/", route_bytes[0..er_ui_site_route_path_len()]);
 
     try std.testing.expectEqual(input_event_error, er_ui_event(@intFromEnum(InputEventKind.hashchange), 0, 0, 0, 0, 0, 0, writeInputForTest("#apps"), 1280.0, 900.0));
     try std.testing.expectEqual(@intFromEnum(ErrorCode.bad_input), er_ui_last_error());
-    try std.testing.expectEqualStrings("/apps", route_bytes[0..er_ui_site_route_path_len()]);
+    try std.testing.expectEqualStrings("/", route_bytes[0..er_ui_site_route_path_len()]);
 
     site_state.queued_action = .none;
     last_command_count = 0;
@@ -2414,6 +2591,36 @@ test "browser native source editor rewrites a canonical vfs file" {
     try std.testing.expectEqualStrings(original, restored);
 }
 
+test "browser native source editor moves by visual lines" {
+    const sample = "aa\nbbbb\nc";
+    @memcpy(source_editor_bytes[0..sample.len], sample);
+    source_editor_len = sample.len;
+    source_editor_cursor = 1;
+    source_editor_preferred_column = 1;
+    source_editor_loaded = true;
+    source_editor_status = .ready;
+    source_editor_dirty = false;
+    defer {
+        source_editor_loaded = false;
+        source_editor_len = 0;
+        source_editor_cursor = 0;
+        source_editor_preferred_column = 0;
+        source_editor_status = .not_loaded;
+        source_editor_dirty = false;
+    }
+
+    try std.testing.expect(handleSourceEditorKey("ArrowDown", 0, 0, 0));
+    try std.testing.expectEqual(@as(usize, 4), source_editor_cursor);
+    try std.testing.expect(handleSourceEditorKey("ArrowDown", 0, 0, 0));
+    try std.testing.expectEqual(@as(usize, 9), source_editor_cursor);
+    try std.testing.expect(handleSourceEditorKey("ArrowUp", 0, 0, 0));
+    try std.testing.expectEqual(@as(usize, 4), source_editor_cursor);
+    try std.testing.expect(handleSourceEditorKey("Home", 0, 0, 0));
+    try std.testing.expectEqual(@as(usize, 3), source_editor_cursor);
+    try std.testing.expect(handleSourceEditorKey("End", 0, 0, 0));
+    try std.testing.expectEqual(@as(usize, 7), source_editor_cursor);
+}
+
 test "browser native release artifact slot only commits wasm modules" {
     const artifact: [*]u8 = @ptrFromInt(er_ui_release_artifact_ptr());
     try std.testing.expect(er_ui_release_artifact_capacity() >= er_ui_compiler_wasm_len());
@@ -2495,7 +2702,7 @@ test "browser native cursor is scene-drawn from runtime pointer state" {
     const regions = [_]interaction.Region{.{ .slot = 0, .kind = .button, .id = 4, .bounds = ui.Rect.init(0, 0, 8, 8) }};
     try std.testing.expectEqual(@as(u32, 0), finishCpuSceneFrame(surface, scene, &regions, .{ .enabled = true, .x = 4.0, .y = 4.0 }, .bg));
     try std.testing.expectEqual(@intFromEnum(CursorKind.pointer), er_ui_cursor_kind());
-    try std.testing.expect(hasRectColor(local_commands[0..last_command_count], site_cursor.accent));
+    try std.testing.expect(hasIconId(local_commands[0..last_command_count], icon_svg.cursor_hand_finger_icon_id));
 }
 
 test "browser native pointer up owns activation suppression policy" {
@@ -2517,7 +2724,7 @@ test "browser native pointer up owns activation suppression policy" {
     try drag_scene.pushDropTarget(.{ .scope_id = 81, .index = 2, .bounds = ui.Rect.init(0, 70, 40, 40) });
     last_command_count = drag_scene.written().len;
     @memcpy(commands[0..last_command_count], drag_scene.written());
-    try storeLastRegions(&.{.{ .slot = 0, .kind = .button, .id = site_chrome.apps_button_id, .bounds = ui.Rect.init(0, 70, 40, 40) }});
+    try storeLastRegions(&.{.{ .slot = 0, .kind = .button, .id = site_chrome.docs_button_id, .bounds = ui.Rect.init(0, 70, 40, 40) }});
     runtime_state = .{};
     site_state = .{};
 

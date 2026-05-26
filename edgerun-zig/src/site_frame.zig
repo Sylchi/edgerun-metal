@@ -1,7 +1,6 @@
 const std = @import("std");
 const component_gallery = @import("component_gallery.zig");
 const interaction = @import("ui_interaction.zig");
-const site_apps = @import("site_apps.zig");
 const site_blog = @import("site_blog.zig");
 const site_docs = @import("site_docs.zig");
 const site_landing = @import("site_landing.zig");
@@ -39,15 +38,11 @@ pub fn render(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Re
             .selected_post_id = state.route.selected_blog_post_id,
             .arc_filter_index = state.route.blog_arc_filter_index,
         }),
-        .apps => try site_apps.render(scene, collector, bounds, .{
-            .scroll_y = state.scroll_y,
-            .hover_x = state.hover_x,
-            .hover_y = state.hover_y,
-        }),
         .docs => try site_docs.render(scene, collector, bounds, .{
             .scroll_y = state.scroll_y,
             .hover_x = state.hover_x,
             .hover_y = state.hover_y,
+            .selected_doc_index = state.route.selected_doc_index,
         }),
         .components => try component_gallery.renderComponentGallery(scene, collector, bounds, .{
             .layout = state.component_layout,
@@ -68,8 +63,7 @@ pub fn contentHeight(width: f32, state: State) f32 {
             site_blog.indexContentHeightFiltered(width, state.route.blog_arc_filter_index)
         else
             site_blog.postContentHeight(width, state.route.selected_blog_post_id),
-        .apps => site_apps.contentHeight(width),
-        .docs => site_docs.contentHeight(width),
+        .docs => site_docs.contentHeightForState(width, .{ .selected_doc_index = state.route.selected_doc_index }),
         .components => component_gallery.contentHeightForState(width, .{
             .layout = state.component_layout,
             .grid_gap = state.component_grid_gap,
@@ -86,8 +80,8 @@ test "site frame renders every top level route through one scene builder" {
     const routes = [_]site_navigation.Route{
         .{ .view = .landing },
         .{ .view = .blog },
-        .{ .view = .apps },
         .{ .view = .docs },
+        .{ .view = .docs, .selected_doc_index = site_docs.indexBySlug("media") },
         .{ .view = .components },
         .{ .view = .source },
     };
@@ -128,8 +122,11 @@ test "site frame owns content height for route state" {
     try std.testing.expectEqual(site_landing.contentHeight(width), contentHeight(width, .{ .route = .{ .view = .landing } }));
     try std.testing.expectEqual(site_blog.indexContentHeight(width), contentHeight(width, .{ .route = .{ .view = .blog } }));
     try std.testing.expectEqual(site_blog.postContentHeight(width, site_blog.postIdAt(0)), contentHeight(width, .{ .route = .{ .view = .blog, .selected_blog_post_id = site_blog.postIdAt(0) } }));
-    try std.testing.expectEqual(site_apps.contentHeight(width), contentHeight(width, .{ .route = .{ .view = .apps } }));
     try std.testing.expectEqual(site_docs.contentHeight(width), contentHeight(width, .{ .route = .{ .view = .docs } }));
+    try std.testing.expectEqual(
+        site_docs.contentHeightForState(width, .{ .selected_doc_index = site_docs.indexBySlug("media") }),
+        contentHeight(width, .{ .route = .{ .view = .docs, .selected_doc_index = site_docs.indexBySlug("media") } }),
+    );
     try std.testing.expectEqual(site_source.contentHeight(width, .{}), contentHeight(width, .{ .route = .{ .view = .source } }));
 
     const button_index = component_gallery.indexBySlug("button").?;
@@ -150,7 +147,6 @@ fn expectNoDirectSiteRenderImports(source: []const u8) !void {
     const forbidden = [_][]const u8{
         "site_landing.render(",
         "site_blog.render(",
-        "site_apps.render(",
         "site_docs.render(",
         "component_gallery.renderComponentGallery(",
     };

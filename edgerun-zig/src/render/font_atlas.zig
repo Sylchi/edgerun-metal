@@ -24,6 +24,10 @@ const device_scale: f32 = 2.0;
 const raster_samples: usize = 8;
 const quadratic_steps: usize = 10;
 const padding_pixels: i16 = 1;
+const small_text_sharpen_max_px: u8 = 16;
+const small_text_sharpen_midpoint: f32 = 128.0;
+const small_text_sharpen_contrast: f32 = 1.14;
+const small_text_sharpen_lift: f32 = 6.0;
 
 const CachedGlyph = struct {
     ch: u8,
@@ -277,6 +281,7 @@ pub const Atlas = struct {
                 atlas_x = self.atlas_x;
                 atlas_y = self.atlas_y;
                 bakeAlphaBitmap(self.alpha[atlas_y * width + atlas_x ..], glyph_width, glyph_height, glyph_left, glyph_top, edges[0..edge_count]);
+                if (px <= small_text_sharpen_max_px) sharpenAlphaBitmap(self.alpha[atlas_y * width + atlas_x ..], glyph_width, glyph_height);
                 self.atlas_row_h = @max(self.atlas_row_h, glyph_height);
                 self.atlas_x += glyph_width + row_gap;
                 atlas_u0 = (@as(f32, @floatFromInt(atlas_x)) + 0.5) / @as(f32, @floatFromInt(width));
@@ -535,6 +540,22 @@ fn bakeAlphaBitmap(atlas_alpha: []u8, glyph_width: usize, glyph_height: usize, g
             row[px] = @intCast((@as(u16, row[px]) * 255) / sample_count);
         }
     }
+}
+
+fn sharpenAlphaBitmap(atlas_alpha: []u8, glyph_width: usize, glyph_height: usize) void {
+    var py: usize = 0;
+    while (py < glyph_height) : (py += 1) {
+        const row = atlas_alpha[py * width .. py * width + glyph_width];
+        for (row) |*sample| sample.* = sharpenAlpha(sample.*);
+    }
+}
+
+fn sharpenAlpha(sample: u8) u8 {
+    if (sample == 0 or sample == 255) return sample;
+    const value = small_text_sharpen_midpoint +
+        (@as(f32, @floatFromInt(sample)) - small_text_sharpen_midpoint) * small_text_sharpen_contrast +
+        small_text_sharpen_lift;
+    return @intFromFloat(@round(std.math.clamp(value, 0.0, 255.0)));
 }
 
 fn sampleOffset(index: usize) f32 {
