@@ -451,8 +451,6 @@ fn relativePath(allocator: std.mem.Allocator, prefix: []const u8, name: []const 
 
 fn sourceFileAllowed(path: []const u8) bool {
     if (std.mem.eql(u8, path, "build.zig")) return true;
-    if (std.mem.eql(u8, path, "compiler/zig/build.zig")) return true;
-    if (std.mem.eql(u8, path, "compiler/zig/build.zig.zon")) return true;
     if (std.mem.startsWith(u8, path, "src/")) return appSourceFileAllowed(path);
     if (std.mem.startsWith(u8, path, "compiler/zig/src/")) return false;
     if (std.mem.startsWith(u8, path, "compiler/zig/lib/std/")) return compilerStdFileAllowed(path);
@@ -626,6 +624,8 @@ test "workspace source filter removes app host tools and tests" {
 }
 
 test "workspace source filter removes host compiler families" {
+    try std.testing.expect(!sourceFileAllowed("compiler/zig/build.zig"));
+    try std.testing.expect(!sourceFileAllowed("compiler/zig/build.zig.zon"));
     try std.testing.expect(!sourceFileAllowed("compiler/zig/src/edgerun_wasm_compiler.zig"));
     try std.testing.expect(!sourceFileAllowed("compiler/zig/src/main.zig"));
     try std.testing.expect(!sourceFileAllowed("compiler/zig/src/codegen/x86_64/CodeGen.zig"));
