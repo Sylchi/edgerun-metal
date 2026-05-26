@@ -9,6 +9,7 @@ const icon_svg = @import("icon_svg.zig");
 const identity = @import("identity.zig");
 const interaction = @import("ui_interaction.zig");
 const object = @import("object.zig");
+const renderer_font_atlas = @import("render/font_atlas.zig");
 const renderer_pipeline = @import("render/pipeline.zig");
 const component_gallery = @import("component_gallery.zig");
 const app_blog = @import("app_blog.zig");
@@ -26,7 +27,6 @@ const ui_component_common = @import("ui_component_common.zig");
 const ui_components = @import("ui_components.zig");
 const vfs = @import("vfs.zig");
 const ui_runtime = @import("ui_runtime.zig");
-const varfont = @import("varfont.zig");
 const wasm_interpreter = @import("wasm/root.zig");
 
 const max_width: usize = 4096;
@@ -68,19 +68,8 @@ const max_packed_overlay_icon_line_vertices: usize = 1048576;
 const max_clips: usize = 64;
 const focus_ring_outset: f32 = 3.0;
 const focus_ring_radius: f32 = 8.0;
-const font_atlas_width: usize = 4096;
-const font_atlas_height: usize = 4096;
-const font_atlas_bytes: usize = font_atlas_width * font_atlas_height;
-const font_glyph_capacity: usize = 1280;
-const font_first_char: u8 = renderer_pipeline.font_first_char;
-const font_last_char: u8 = renderer_pipeline.font_last_char;
-const font_padding: usize = 8;
-const font_row_gap: usize = 8;
-const font_bitmap_bytes: usize = 8 * 1024 * 1024;
-const small_text_sharpen_max_px: u8 = 16;
-const small_text_sharpen_midpoint: f32 = 128.0;
-const small_text_sharpen_contrast: f32 = 1.14;
-const small_text_sharpen_lift: f32 = 6.0;
+const font_atlas_width: usize = renderer_font_atlas.width;
+const font_atlas_height: usize = renderer_font_atlas.height;
 const min_device_scale: f32 = 1.0;
 const default_device_scale: f32 = 1.0;
 const max_device_scale: f32 = 4.0;
@@ -157,16 +146,9 @@ var packed_overlay_icon_vertex_floats: [max_packed_overlay_icon_vertices * packe
 var packed_overlay_icon_vertex_float_len: usize = 0;
 var packed_overlay_icon_line_vertex_floats: [max_packed_overlay_icon_line_vertices * packed_icon_line_vertex_float_stride]f32 = undefined;
 var packed_overlay_icon_line_vertex_float_len: usize = 0;
-var font_atlas_alpha: [font_atlas_bytes]u8 = [_]u8{0} ** font_atlas_bytes;
-var font_bitmap: [font_bitmap_bytes]u8 = undefined;
-var font_glyphs: [font_glyph_capacity]FontGlyph = undefined;
-var font_glyph_count: usize = 0;
+var font_atlas: renderer_font_atlas.Atlas = undefined;
 var font_atlas_ready = false;
 var font_device_scale: f32 = 1.0;
-var font_atlas_device_scale: f32 = 0.0;
-var font_atlas_x: usize = font_padding;
-var font_atlas_y: usize = font_padding;
-var font_atlas_row_h: usize = 0;
 var font_atlas_generation: u32 = 0;
 var frame_width: usize = 0;
 var frame_height: usize = 0;
@@ -198,7 +180,6 @@ var ephemeral_public_key: [identity.ed25519_public_size]u8 = [_]u8{0} ** identit
 var ephemeral_identity_id: [identity.id_size]u8 = [_]u8{0} ** identity.id_size;
 var public_identity_text: [public_identity_text_len]u8 = [_]u8{0} ** public_identity_text_len;
 var ephemeral_identity_ready = false;
-var packed_source_context: u8 = 0;
 var environment_appearance: EnvironmentAppearance = .unknown;
 
 const hover_hit_kind_none: u32 = 255;
@@ -302,22 +283,6 @@ const ErrorCode = enum(u32) {
     identity_failed = 7,
 };
 
-const FontGlyph = struct {
-    ch: u8,
-    px: u8,
-    u0: f32,
-    v0: f32,
-    u1: f32,
-    v1: f32,
-    w: f32,
-    h: f32,
-    source_w: u16,
-    source_h: u16,
-    left: f32,
-    top: f32,
-    advance: f32,
-};
-
 fn packedBuffers() renderer_pipeline.Buffers {
     return .{
         .rects = packed_rect_floats[0..],
@@ -338,37 +303,7 @@ fn packedBuffers() renderer_pipeline.Buffers {
 }
 
 fn packedSources() renderer_pipeline.Sources {
-    return .{
-        .font = .{
-            .context = &packed_source_context,
-            .metrics = fontMetricsForIr,
-            .width = textWidthForIr,
-            .glyph = fontGlyphForIr,
-        },
-    };
-}
-
-fn fontMetricsForIr(_: *anyopaque, px: u8) renderer_pipeline.TextMetrics {
-    return fontMetrics(px);
-}
-
-fn textWidthForIr(_: *anyopaque, value: []const u8, px: u8) f32 {
-    return textWidth(value, px);
-}
-
-fn fontGlyphForIr(_: *anyopaque, ch: u8, px: u8) renderer_pipeline.IrError!?renderer_pipeline.Glyph {
-    const glyph = (getFontGlyph(ch, px) catch return error.Budget) orelse return null;
-    return .{
-        .u0 = glyph.u0,
-        .v0 = glyph.v0,
-        .u1 = glyph.u1,
-        .v1 = glyph.v1,
-        .w = glyph.w,
-        .h = glyph.h,
-        .left = glyph.left,
-        .top = glyph.top,
-        .advance = glyph.advance,
-    };
+    return renderer_pipeline.sources(&font_atlas, .object);
 }
 
 export fn er_ui_max_width() u32 {
@@ -505,7 +440,7 @@ export fn er_ui_font_atlas_height() u32 {
 
 export fn er_ui_font_atlas_ptr() usize {
     ensureFontAtlas() catch return 0;
-    return @intFromPtr(font_atlas_alpha[0..].ptr);
+    return @intFromPtr(font_atlas.alphaSlice().ptr);
 }
 
 export fn er_ui_font_atlas_generation() u32 {
@@ -1596,20 +1531,8 @@ export fn er_ui_app_scroll_y() f32 {
     return app_state.scroll_y;
 }
 
-export fn er_ui_app_landing_content_height(width: f32) f32 {
-    return app_frame.contentHeight(width, .{ .route = .{ .view = .landing } });
-}
-
-export fn er_ui_app_blog_content_height(width: f32) f32 {
-    return app_frame.contentHeight(width, .{ .route = .{ .view = .blog } });
-}
-
 export fn er_ui_app_blog_post_content_height(width: f32, post_id: u32) f32 {
     return app_frame.contentHeight(width, .{ .route = .{ .view = .blog, .selected_blog_post_id = post_id } });
-}
-
-export fn er_ui_app_docs_content_height(width: f32) f32 {
-    return app_frame.contentHeight(width, .{ .route = .{ .view = .docs } });
 }
 
 export fn er_ui_app_content_height(width: f32) f32 {
@@ -1627,66 +1550,11 @@ export fn er_ui_clear(width: u32, height: u32) u32 {
     return @intFromEnum(ErrorCode.ok);
 }
 
-export fn er_ui_render_component_gallery(width: u32, height: u32) u32 {
-    return er_ui_render_component_gallery_scroll(width, height, 0.0);
-}
-
-export fn er_ui_render_component_gallery_scroll(width: u32, height: u32, scroll_y: f32) u32 {
-    return er_ui_render_component_gallery_layout_gap_hover(width, height, scroll_y, @intFromEnum(component_gallery.LayoutMode.masonry), component_gallery.grid_gap_default, -1.0, -1.0);
-}
-
-export fn er_ui_render_component_gallery_layout_gap_hover(width: u32, height: u32, scroll_y: f32, layout_raw: u32, grid_gap: f32, hover_x: f32, hover_y: f32) u32 {
-    const surface = beginFrame(width, height) orelse return finishError(.bad_size);
-
-    var scene = ui.Scene.init(&commands);
-    var frame_regions: [max_interaction_regions]interaction.Region = undefined;
-    var collector = interaction.Collector.init(&frame_regions);
-    app_frame.render(&scene, &collector, frameBounds(), componentCatalogFrameState(layout_raw, grid_gap, scroll_y, hover_x, hover_y)) catch return finishError(.render_failed);
-
-    return finishCpuSceneFrame(surface, scene, collector.written(), .{ .enabled = true, .x = hover_x, .y = hover_y }, .bg);
-}
-
-export fn er_ui_build_component_gallery_frame(width: u32, height: u32, scroll_y: f32) u32 {
-    return er_ui_build_component_gallery_frame_layout_gap_hover(width, height, scroll_y, @intFromEnum(component_gallery.LayoutMode.masonry), component_gallery.grid_gap_default, -1.0, -1.0);
-}
-
-export fn er_ui_build_component_gallery_frame_layout_gap_hover(width: u32, height: u32, scroll_y: f32, layout_raw: u32, grid_gap: f32, hover_x: f32, hover_y: f32) u32 {
-    if (!setFrameSize(width, height)) return finishError(.bad_size);
-
-    return buildPackedAppFrameFromPreparedSize(componentCatalogFrameState(layout_raw, grid_gap, scroll_y, hover_x, hover_y));
-}
-
-export fn er_ui_build_app_landing_frame(width: u32, height: u32, scroll_y: f32, hover_x: f32, hover_y: f32, frame_ms: f32) u32 {
-    return buildPackedAppFrame(width, height, .{
-        .route = .{ .view = .landing },
-        .scroll_y = scroll_y,
-        .hover_x = hover_x,
-        .hover_y = hover_y,
-        .frame_ms = frame_ms,
-        .public_identity = publicIdentityText(),
-        .public_identity_ready = ephemeral_identity_ready,
-    });
-}
-
-export fn er_ui_build_app_blog_frame(width: u32, height: u32, scroll_y: f32, hover_x: f32, hover_y: f32, selected_post_id: u32) u32 {
-    return buildPackedAppFrame(width, height, .{
-        .route = .{ .view = .blog, .selected_blog_post_id = selected_post_id },
-        .scroll_y = scroll_y,
-        .hover_x = hover_x,
-        .hover_y = hover_y,
-    });
-}
-
 export fn er_ui_build_app_frame(width: u32, height: u32, hover_x: f32, hover_y: f32, frame_ms: f32) u32 {
     if (!setFrameSize(width, height)) return finishError(.bad_size);
     app_state.scroll_y = @min(app_state.scroll_y, appScrollLimit(@floatFromInt(frame_width), @floatFromInt(frame_height)));
 
     return buildPackedAppFrameFromPreparedSize(currentAppFrameState(hover_x, hover_y, frame_ms));
-}
-
-fn buildPackedAppFrame(width: u32, height: u32, state: app_frame.State) u32 {
-    if (!setFrameSize(width, height)) return finishError(.bad_size);
-    return buildPackedAppFrameFromPreparedSize(state);
 }
 
 fn buildPackedAppFrameFromPreparedSize(state: app_frame.State) u32 {
@@ -1874,7 +1742,7 @@ fn renderSceneIr(surface: renderer_pipeline.SoftwareFramebuffer, scene_commands:
     const receipt = try renderer_pipeline.renderSoftwareFrame(surface, buffers, renderer_pipeline.softwareResourcesFromAlphaAtlas(.{
         .width = font_atlas_width,
         .height = font_atlas_height,
-        .alpha = &font_atlas_alpha,
+        .alpha = font_atlas.alphaSlice(),
     }, image_texture), background);
     recordPresentation(receipt);
 }
@@ -2017,20 +1885,6 @@ fn storeLastRegions(regions: []const interaction.Region) error{InteractionBudget
     if (regions.len > interaction_regions.len) return error.InteractionBudgetExceeded;
     @memcpy(interaction_regions[0..regions.len], regions);
     last_region_count = regions.len;
-}
-
-fn componentCatalogFrameState(layout_raw: u32, grid_gap: f32, scroll_y: f32, hover_x: f32, hover_y: f32) app_frame.State {
-    return .{
-        .route = .{
-            .view = .components,
-            .selected_component_index = app_state.selected_component_index,
-        },
-        .scroll_y = scroll_y,
-        .hover_x = hover_x,
-        .hover_y = hover_y,
-        .component_layout = component_gallery.LayoutMode.fromRaw(layout_raw),
-        .component_grid_gap = grid_gap,
-    };
 }
 
 fn currentAppFrameState(hover_x: f32, hover_y: f32, frame_ms: f32) app_frame.State {
@@ -2197,123 +2051,10 @@ fn hasIconId(items: []const ui.Command, icon_id: u32) bool {
 
 fn ensureFontAtlas() !void {
     if (font_atlas_ready) return;
-    @memset(&font_atlas_alpha, 0);
-    font_glyph_count = 0;
-    font_atlas_x = font_padding;
-    font_atlas_y = font_padding;
-    font_atlas_row_h = 0;
-    font_atlas_device_scale = font_device_scale;
+    font_atlas = renderer_font_atlas.Atlas.initWithFont(renderer_font_atlas.geist_ascii_font.body());
+    font_atlas.setDeviceScale(font_device_scale);
     font_atlas_generation +%= 1;
     font_atlas_ready = true;
-}
-
-fn getFontGlyph(ch: u8, px: u8) error{Budget}!?FontGlyph {
-    try ensureFontAtlas();
-    if (findFontGlyph(ch, px)) |glyph| return glyph;
-    return cacheFontGlyph(ch, px) catch |err| switch (err) {
-        error.GlyphBitmapBudgetExceeded, error.GlyphCacheFull => error.Budget,
-        error.InvalidFont,
-        error.MissingTable,
-        error.UnsupportedCmap,
-        error.UnsupportedGlyph,
-        error.GlyphPointBudgetExceeded,
-        error.GlyphEdgeBudgetExceeded,
-        => null,
-    };
-}
-
-fn cacheFontGlyph(ch: u8, px: u8) varfont.Error!FontGlyph {
-    if (font_glyph_count >= font_glyphs.len) return error.GlyphCacheFull;
-    const face = try varfont.Face.geist();
-    var cache = varfont.Cache.init(face, &font_bitmap);
-    _ = cache.setAxis("wght", 400.0);
-
-    const glyph_id = face.glyphId(ch);
-    const bake_px = @as(f32, @floatFromInt(px)) * font_atlas_device_scale;
-    const cached = try cache.bakeGlyph(glyph_id, bake_px);
-    const view = cache.bitmapView(cached);
-    const gw: usize = view.width;
-    const gh: usize = view.height;
-    var atlas_x = font_atlas_x;
-    var atlas_y = font_atlas_y;
-    var atlas_u0: f32 = 0.0;
-    var atlas_v0: f32 = 0.0;
-    var atlas_u1: f32 = 0.0;
-    var atlas_v1: f32 = 0.0;
-
-    if (gw > 0 and gh > 0) {
-        if (font_atlas_x + gw + font_padding >= font_atlas_width) {
-            font_atlas_x = font_padding;
-            font_atlas_y += font_atlas_row_h + font_row_gap;
-            font_atlas_row_h = 0;
-        }
-        if (font_atlas_y + gh + font_padding >= font_atlas_height) return error.GlyphBitmapBudgetExceeded;
-        atlas_x = font_atlas_x;
-        atlas_y = font_atlas_y;
-        copyFontGlyphBitmap(atlas_x, atlas_y, gw, gh, view.pixels);
-        if (px <= small_text_sharpen_max_px) sharpenFontGlyphBitmap(atlas_x, atlas_y, gw, gh);
-        font_atlas_row_h = @max(font_atlas_row_h, gh);
-        font_atlas_x += gw + font_row_gap;
-        atlas_u0 = (@as(f32, @floatFromInt(atlas_x)) + 0.5) / @as(f32, @floatFromInt(font_atlas_width));
-        atlas_v0 = (@as(f32, @floatFromInt(atlas_y)) + 0.5) / @as(f32, @floatFromInt(font_atlas_height));
-        atlas_u1 = (@as(f32, @floatFromInt(atlas_x + gw)) - 0.5) / @as(f32, @floatFromInt(font_atlas_width));
-        atlas_v1 = (@as(f32, @floatFromInt(atlas_y + gh)) - 0.5) / @as(f32, @floatFromInt(font_atlas_height));
-        font_atlas_generation +%= 1;
-    }
-
-    const glyph: FontGlyph = .{
-        .ch = ch,
-        .px = px,
-        .u0 = atlas_u0,
-        .v0 = atlas_v0,
-        .u1 = atlas_u1,
-        .v1 = atlas_v1,
-        .w = scaledFontValue(@floatFromInt(gw)),
-        .h = scaledFontValue(@floatFromInt(gh)),
-        .source_w = view.width,
-        .source_h = view.height,
-        .left = scaledFontValue(@floatFromInt(cached.left)),
-        .top = scaledFontValue(@floatFromInt(cached.top)),
-        .advance = scaledFontValue(cached.advance),
-    };
-    font_glyphs[font_glyph_count] = glyph;
-    font_glyph_count += 1;
-    return glyph;
-}
-
-fn copyFontGlyphBitmap(x: usize, y: usize, w: usize, h: usize, source: []const u8) void {
-    var row: usize = 0;
-    while (row < h) : (row += 1) {
-        const dst = (y + row) * font_atlas_width + x;
-        const src = row * w;
-        @memcpy(font_atlas_alpha[dst .. dst + w], source[src .. src + w]);
-    }
-}
-
-fn sharpenFontGlyphBitmap(x: usize, y: usize, w: usize, h: usize) void {
-    var row: usize = 0;
-    while (row < h) : (row += 1) {
-        const dst = (y + row) * font_atlas_width + x;
-        for (font_atlas_alpha[dst .. dst + w]) |*sample| sample.* = sharpenFontAlpha(sample.*);
-    }
-}
-
-fn sharpenFontAlpha(sample: u8) u8 {
-    if (sample == 0 or sample == std.math.maxInt(u8)) return sample;
-    const centered = (@as(f32, @floatFromInt(sample)) - small_text_sharpen_midpoint) * small_text_sharpen_contrast;
-    const lifted = small_text_sharpen_midpoint + centered + small_text_sharpen_lift;
-    return @intFromFloat(std.math.clamp(lifted, 0.0, 255.0));
-}
-
-fn findFontGlyph(ch: u8, px: u8) ?FontGlyph {
-    for (font_glyphs[0..font_glyph_count]) |glyph| {
-        if (glyph.ch == ch and glyph.px == px) return glyph;
-    }
-    return null;
-}
-
-fn scaledFontValue(value: f32) f32 {
-    return value / font_atlas_device_scale;
 }
 
 fn normalizedDeviceScale(scale: f32) f32 {
@@ -2334,27 +2075,6 @@ fn scaledFrameDimension(value: u32, scale: f32) ?u32 {
     const scaled = @ceil(@as(f32, @floatFromInt(value)) * scale);
     if (scaled < 1.0 or scaled > @as(f32, @floatFromInt(std.math.maxInt(u32)))) return null;
     return @intFromFloat(scaled);
-}
-
-fn fontMetrics(px: u8) renderer_pipeline.TextMetrics {
-    const face = varfont.Face.geist() catch unreachable;
-    const metrics = face.metrics(@floatFromInt(px));
-    return .{ .ascender = metrics.ascender, .descender = metrics.descender };
-}
-
-fn textWidth(value: []const u8, px: u8) f32 {
-    const face = varfont.Face.geist() catch return 0.0;
-    const px_size: f32 = @floatFromInt(px);
-    var out: f32 = 0.0;
-    var previous: u16 = 0;
-    for (value) |byte| {
-        if (byte < font_first_char or byte > font_last_char) continue;
-        const glyph_id = face.glyphId(byte);
-        if (previous != 0) out += face.kern(previous, glyph_id, px_size);
-        out += face.advance(glyph_id, px_size);
-        previous = glyph_id;
-    }
-    return out;
 }
 
 fn expectSourceDoesNotContain(needle: []const u8) !void {
@@ -2415,7 +2135,8 @@ test "app runtime draws deterministic focus ring from runtime focus state" {
 
 test "app runtime component catalog builds packed app buffers and app-ready icon lines" {
     font_atlas_ready = false;
-    const code = er_ui_build_component_gallery_frame_layout_gap_hover(960, 640, 0.0, @intFromEnum(component_gallery.LayoutMode.masonry), component_gallery.grid_gap_default, -1.0, -1.0);
+    applyRoute(.{ .view = .docs, .selected_doc_index = app_docs.indexBySlug("component-system") });
+    const code = er_ui_build_app_frame(960, 640, -1.0, -1.0, 0.0);
     try std.testing.expectEqual(@as(u32, 0), code);
     try std.testing.expect(font_atlas_ready);
     try std.testing.expectEqual(renderer_pipeline.Transport.packed_buffers, last_present_transport);
@@ -2428,7 +2149,8 @@ test "app runtime component catalog builds packed app buffers and app-ready icon
 }
 
 test "app runtime component catalog render uses canonical ir buffers" {
-    const code = er_ui_render_component_gallery_layout_gap_hover(480, 360, 0.0, @intFromEnum(component_gallery.LayoutMode.masonry), component_gallery.grid_gap_default, -1.0, -1.0);
+    applyRoute(.{ .view = .docs, .selected_doc_index = app_docs.indexBySlug("component-system") });
+    const code = er_ui_render_frame(480, 360, 0.0);
     try std.testing.expectEqual(@as(u32, 0), code);
     try std.testing.expectEqual(renderer_pipeline.Transport.pixel_bytes, last_present_transport);
     try std.testing.expect(last_present_primitive_count > 0);
@@ -2443,12 +2165,13 @@ test "app runtime component catalog render uses canonical ir buffers" {
 }
 
 test "app runtime landing builds packed app buffers and hit state" {
-    const code = er_ui_build_app_landing_frame(1280, 800, 0.0, 1065.0, 32.0, 0.0);
+    applyRoute(.{});
+    const code = er_ui_build_app_frame(1280, 800, 1065.0, 32.0, 0.0);
     try std.testing.expectEqual(@as(u32, 0), code);
     try std.testing.expect(packed_rect_float_len > 0);
     try std.testing.expect(packed_text_vertex_float_len > 0);
     try std.testing.expect(packed_icon_vertex_float_len > 0);
-    try std.testing.expectEqual(app_landing.contentHeight(1280.0), er_ui_app_landing_content_height(1280.0));
+    try std.testing.expectEqual(app_landing.contentHeight(1280.0), er_ui_app_content_height(1280.0));
     try std.testing.expectEqual(@intFromEnum(ui.HitKind.button), er_ui_hover_hit_kind());
     try std.testing.expectEqual(app_chrome.source_button_id, er_ui_hover_hit_id());
 }
@@ -2465,7 +2188,8 @@ test "app runtime reveal derives public identity inside wasm from interaction" {
 
     const before = publicIdentityText();
     try std.testing.expectEqualStrings("click reveal", before);
-    _ = er_ui_build_app_landing_frame(1280, 800, 0.0, 108.0, 500.0, 333.0);
+    applyRoute(.{});
+    _ = er_ui_build_app_frame(1280, 800, 108.0, 500.0, 333.0);
     _ = er_ui_pointer_down(108.0, 500.0);
     _ = er_ui_pointer_up(108.0, 500.0);
     try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_activate_hit(app_landing.reveal_identity_button_id));
@@ -2476,7 +2200,8 @@ test "app runtime reveal derives public identity inside wasm from interaction" {
 }
 
 test "app runtime blog builds packed app buffers and post hit state" {
-    const code = er_ui_build_app_blog_frame(1280, 800, 0.0, 340.0, 700.0, 0);
+    applyRoute(.{ .view = .blog });
+    const code = er_ui_build_app_frame(1280, 800, 340.0, 700.0, 0.0);
     try std.testing.expectEqual(@as(u32, 0), code);
     try std.testing.expect(packed_rect_float_len > 0);
     try std.testing.expect(packed_text_vertex_float_len > 0);
@@ -2487,7 +2212,7 @@ test "app runtime blog builds packed app buffers and post hit state" {
     try std.testing.expectEqual(app_images.cloud_meme_height, er_ui_post_image_height());
     try std.testing.expectEqual(app_images.cloud_meme_pixel_count * @sizeOf(ui.Color), er_ui_post_image_rgba_len());
     try std.testing.expectEqual(@as(u32, @intCast(app_blog.posts.len)), er_ui_blog_post_count());
-    try std.testing.expect(er_ui_app_blog_content_height(1280.0) > 5200.0);
+    try std.testing.expect(er_ui_app_content_height(1280.0) > 5200.0);
     try std.testing.expect(er_ui_app_blog_post_content_height(1280.0, app_blog.postIdAt(16)) > 1200.0);
     try std.testing.expectEqual(@intFromEnum(ui.HitKind.button), er_ui_hover_hit_kind());
     try std.testing.expectEqual(app_blog.postIdAt(0), er_ui_hover_hit_id());
@@ -2990,13 +2715,13 @@ test "app runtime pointer up owns activation suppression policy" {
 test "app packed text preserves variable font descenders" {
     font_atlas_ready = false;
     try ensureFontAtlas();
-    try std.testing.expectEqual(@as(usize, 0), font_glyph_count);
+    try std.testing.expectEqual(@as(usize, 0), font_atlas.cachedGlyphCount());
     packed_text_vertex_float_len = 0;
     const bounds = ui.Rect.init(0, 0, 64, 14);
     try renderer_pipeline.pushText(packedBuffers(), packedSources().font, .base, bounds, "y", .text, .start);
     try std.testing.expect(packed_text_vertex_float_len > 0);
-    try std.testing.expect(font_glyph_count > 0);
-    try std.testing.expect(font_glyph_count < 8);
+    try std.testing.expect(font_atlas.cachedGlyphCount() > 0);
+    try std.testing.expect(font_atlas.cachedGlyphCount() < 8);
 
     var max_y: f32 = 0.0;
     var index: usize = 1;
@@ -3010,15 +2735,17 @@ test "app variable font atlas separates css size from raster scale" {
     font_atlas_ready = false;
     _ = er_ui_set_device_scale(2.0);
     try ensureFontAtlas();
-    try std.testing.expectEqual(@as(usize, 0), font_glyph_count);
-    const glyph_2x = (try getFontGlyph('M', 14)).?;
+    try std.testing.expectEqual(@as(usize, 0), font_atlas.cachedGlyphCount());
+    const source_2x = packedSources().font;
+    const glyph_2x = (try source_2x.glyph(source_2x.context, 'M', 14)).?;
 
     _ = er_ui_set_device_scale(3.0);
     try ensureFontAtlas();
-    try std.testing.expectEqual(@as(usize, 0), font_glyph_count);
-    const glyph_3x = (try getFontGlyph('M', 14)).?;
+    try std.testing.expectEqual(@as(usize, 0), font_atlas.cachedGlyphCount());
+    const source_3x = packedSources().font;
+    const glyph_3x = (try source_3x.glyph(source_3x.context, 'M', 14)).?;
 
-    try std.testing.expect(glyph_3x.source_w > glyph_2x.source_w);
+    try std.testing.expect((glyph_3x.u1 - glyph_3x.u0) > (glyph_2x.u1 - glyph_2x.u0));
     try std.testing.expectApproxEqAbs(glyph_2x.w, glyph_3x.w, 1.5);
     try std.testing.expectApproxEqAbs(glyph_2x.advance, glyph_3x.advance, 0.75);
 }
@@ -3030,21 +2757,19 @@ test "app hd browser frame keeps logical layout and physical pixels separate" {
     try std.testing.expectEqual(@as(u32, 0), code);
     try std.testing.expectEqual(@as(u32, 640), er_ui_width());
     try std.testing.expectEqual(@as(u32, 400), er_ui_height());
-    try std.testing.expectEqual(@as(f32, 2.0), font_atlas_device_scale);
+    try std.testing.expectEqual(@as(f32, 2.0), font_atlas.deviceScale());
 }
 
 test "app font atlas populates glyphs on demand" {
     font_atlas_ready = false;
     try ensureFontAtlas();
-    const initialized_generation = font_atlas_generation;
-    try std.testing.expectEqual(@as(usize, 0), font_glyph_count);
+    try std.testing.expectEqual(@as(usize, 0), font_atlas.cachedGlyphCount());
 
     packed_text_vertex_float_len = 0;
     try renderer_pipeline.pushText(packedBuffers(), packedSources().font, .base, ui.Rect.init(0, 0, 160, 18), "EdgeRun", .text, .start);
     try std.testing.expect(packed_text_vertex_float_len > 0);
-    try std.testing.expect(font_glyph_count > 0);
-    try std.testing.expect(font_glyph_count < 16);
-    try std.testing.expect(font_atlas_generation > initialized_generation);
+    try std.testing.expect(font_atlas.cachedGlyphCount() > 0);
+    try std.testing.expect(font_atlas.cachedGlyphCount() < 16);
 }
 
 test "app icon buffer stores semantic icon instances" {
