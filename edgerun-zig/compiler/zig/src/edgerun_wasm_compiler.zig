@@ -27,6 +27,7 @@ const default_root_label = "src/ui_browser.zig";
 const successor_base_function_count: u32 = 27;
 const max_lowered_exports: usize = 64;
 const max_lowered_consts: usize = 128;
+const max_edgerun_top_level_names: usize = max_lowered_exports + max_lowered_consts;
 const lowered_main_i32_signature = "pub export fn er_app_main() i32";
 const legacy_main_i32_signature = "pub export fn main() i32";
 const return_keyword = "return";
@@ -1971,6 +1972,21 @@ const ConstIndex = struct {
     }
 };
 
+const NameIndex = struct {
+    entries: [max_edgerun_top_level_names][]const u8 = undefined,
+    count: usize = 0,
+
+    fn appendUnique(index: *NameIndex, name: []const u8) bool {
+        for (index.entries[0..index.count]) |entry| {
+            if (std.mem.eql(u8, entry, name)) return false;
+        }
+        if (index.count >= index.entries.len) return false;
+        index.entries[index.count] = name;
+        index.count += 1;
+        return true;
+    }
+};
+
 const LoweringContext = struct {
     constants: ConstIndex,
     array_lengths: ConstIndex,
@@ -2147,6 +2163,7 @@ const EdgeRunRootAnalysis = struct {
 fn analyzeEdgeRunRoot(source: []const u8) ?EdgeRunRootAnalysis {
     if (std.mem.indexOf(u8, source, "@import(") != null) return null;
     const parsed = edgerun_source.parse(source) orelse return null;
+    if (!edgeRunTopLevelNamesUnique(source)) return null;
 
     const lowered_main_count: u32 = if (lowerEdgeRunMainI32Literal(source) == null) 0 else 1;
     const lowered_exports = collectEdgeRunLoweredExports(source, 0);
@@ -2157,6 +2174,27 @@ fn analyzeEdgeRunRoot(source: []const u8) ?EdgeRunRootAnalysis {
         .extra_count = parsed.declaration_count,
         .string_bytes = parsed.export_name_bytes,
     };
+}
+
+fn edgeRunTopLevelNamesUnique(source: []const u8) bool {
+    var names = NameIndex{};
+    var index: usize = 0;
+    while (true) {
+        index = edgerun_source.skipSpace(source, index);
+        if (index == source.len) return true;
+        if (std.mem.startsWith(u8, source[index..], const_keyword)) {
+            const decl = edgerun_source.parseConstDecl(source, index) orelse return false;
+            if (!names.appendUnique(decl.name)) return false;
+            index = decl.next_index;
+            continue;
+        }
+        if (edgerun_source.parseExport(source, index)) |parsed| {
+            if (!names.appendUnique(parsed.name)) return false;
+            index = parsed.next_index;
+            continue;
+        }
+        return false;
+    }
 }
 
 fn analyzeWorkspaceGraph(scratch: []u8, workspace: WorkspaceInfo, source_mode: SourceMode) error{ InvalidZig, OutOfMemory }!CompilerOutputInfo {
@@ -2677,6 +2715,23 @@ test "edgerun source parser rejects unsupported top level declarations" {
         \\const max_width: usize = 4096;
         \\export fn er_ui_max_width() u32 { return max_width; }
     ) != null);
+}
+
+test "edgerun source rejects duplicate top level names" {
+    try std.testing.expect(analyzeEdgeRunRoot(
+        \\const max_width: usize = 4096;
+        \\const max_width: usize = 8192;
+        \\export fn er_ui_max_width() u32 { return max_width; }
+    ) == null);
+    try std.testing.expect(analyzeEdgeRunRoot(
+        \\const max_width: usize = 4096;
+        \\export fn er_ui_max_width() u32 { return max_width; }
+        \\export fn er_ui_max_width() u32 { return 7; }
+    ) == null);
+    try std.testing.expect(analyzeEdgeRunRoot(
+        \\const er_ui_max_width: usize = 4096;
+        \\export fn er_ui_max_width() u32 { return er_ui_max_width; }
+    ) == null);
 }
 
 test "edgerun source lowering only collects parsed top level exports" {
