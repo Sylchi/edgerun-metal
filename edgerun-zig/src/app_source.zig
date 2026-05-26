@@ -178,8 +178,10 @@ fn renderStatus(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
     try text(scene, bounds.x + panel_pad, bounds.y + 70.0, bounds.w - panel_pad * 2.0, compiler_text_h, state.compile_summary, palette.dim);
 
     const bar = ui.Rect.init(bounds.x + panel_pad, bounds.y + 100.0, @max(1.0, bounds.w - panel_pad * 2.0), compiler_bar_h);
-    try fill(scene, bar, palette.neutral_soft, 4.0);
-    try fill(scene, ui.Rect.init(bar.x, bar.y, bar.w * std.math.clamp(state.compile_progress, 0.0, 1.0), bar.h), progressColor(state.compile_progress), 4.0);
+    var progress_style = app_chrome.style();
+    progress_style.panel = palette.neutral_soft;
+    progress_style.accent = progressColor(state.compile_progress);
+    try components.renderComponent(scene, bar, .{ .progress = .{ .value = state.compile_progress } }, .{ .style = progress_style });
     try renderCompileStages(scene, ui.Rect.init(bar.x, bar.y - 5.0, bar.w, compiler_stage_h), state.compile_progress);
     try text(scene, bounds.x + panel_pad, bounds.y + 116.0, bounds.w - panel_pad * 2.0, compiler_text_h, state.compile_phase, palette.primary);
     if (state.diagnostic.len != 0) try text(scene, bounds.x + panel_pad, bounds.y + 132.0, bounds.w - panel_pad * 2.0, compiler_diagnostic_h, state.diagnostic, palette.danger);

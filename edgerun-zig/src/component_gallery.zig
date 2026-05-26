@@ -2,6 +2,7 @@ const std = @import("std");
 const clock = @import("clock.zig");
 const icon = @import("icon.zig");
 const components = @import("ui_components.zig");
+const component_common = @import("ui_component_common.zig");
 const ui = @import("ui.zig");
 const interaction = @import("ui_interaction.zig");
 const design = @import("app_design.zig");
@@ -17,9 +18,6 @@ const preview_id_stride: u32 = 32;
 const header_h: f32 = app_chrome.header_h;
 const page_top_pad: f32 = 48;
 const page_bottom_pad: f32 = 120;
-const card_radius: f32 = design.surface_radius;
-const card_shadow: f32 = 8;
-const card_hover_shadow: f32 = 16;
 const card_content_x: f32 = 18;
 const card_header_y: f32 = 18;
 const card_detail_y: f32 = 42;
@@ -525,13 +523,14 @@ fn selectedComponentHeight(width_value: f32) f32 {
 }
 
 fn renderSelectedComponent(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, entry: ComponentSpec, index: usize) GalleryError!void {
-    try scene.pushRect(bounds.insetUniform(-1), palette.shadow, .shadow, card_radius, card_shadow);
     try components.renderComponent(scene, bounds, .{ .card = .{
         .title = "",
         .detail = "",
         .variant = .elevated,
-    } }, .{ .style = componentStyle() });
-    try stroke(scene, bounds, palette.accent, card_radius);
+    } }, .{
+        .style = componentStyle(),
+        .control = .{ .active = true },
+    });
 
     const inset = bounds.insetUniform(18);
     try catalogSource(scene, ui.Rect.init(inset.x, inset.y, catalog_source_w, 24), true);
@@ -618,13 +617,14 @@ fn renderCatalogCard(scene: *ui.Scene, collector: *interaction.Collector, bounds
         if (bounds.y < clip_top) return;
     }
     const is_hovered = hovered(bounds);
-    try scene.pushRect(bounds.insetUniform(-1), if (is_hovered) palette.shadow_hover else palette.shadow, .shadow, card_radius, if (is_hovered) card_hover_shadow else card_shadow);
     try components.renderComponent(scene, bounds, .{ .card = .{
         .title = entry.name,
         .detail = entry.category.label(),
         .variant = if (is_hovered or selected) .elevated else .panel,
-    } }, .{ .style = componentStyle() });
-    try stroke(scene, bounds, if (selected) palette.accent else if (is_hovered) palette.border_hover else palette.border, card_radius);
+    } }, .{
+        .style = componentStyle(),
+        .control = .{ .active = selected, .hovered = is_hovered },
+    });
     try collector.addHit(bounds, .button, card_id);
 
     const inset = bounds.insetUniform(catalog_card_pad);
@@ -836,10 +836,6 @@ fn fill(scene: *ui.Scene, bounds: ui.Rect, color: ui.Color, radius: f32) Gallery
     try scene.pushRect(bounds, color, .fill, radius, 0);
 }
 
-fn stroke(scene: *ui.Scene, bounds: ui.Rect, color: ui.Color, radius: f32) GalleryError!void {
-    try scene.pushRect(bounds, color, .border, radius, 0);
-}
-
 fn iconQuad(scene: *ui.Scene, bounds: ui.Rect, value: icon.Icon, color: ui.Color) GalleryError!void {
     try scene.pushIconQuad(.{ .bounds = bounds, .icon_id = icon.id(value), .color = color });
 }
@@ -1022,7 +1018,7 @@ test "component gallery scrolls through later catalog cards" {
     try std.testing.expect(hasText(scene.written(), "Tooltip"));
 }
 
-test "component gallery hover raises card shadow without changing interaction coverage" {
+test "component gallery hover uses canonical card control state without changing interaction coverage" {
     var base_commands: [4096]ui.Command = undefined;
     var base_clips: [128]ui.Rect = undefined;
     var base_regions: [512]interaction.Region = undefined;
@@ -1037,8 +1033,8 @@ test "component gallery hover raises card shadow without changing interaction co
     var hover_collector = interaction.Collector.init(&hover_regions);
     try renderComponentGallery(&hover_scene, &hover_collector, ui.Rect.init(0, 0, 1440, 940), .{ .hover_x = 260, .hover_y = 210 });
 
-    try std.testing.expect(!hasRectShadow(base_scene.written(), card_hover_shadow));
-    try std.testing.expect(hasRectShadow(hover_scene.written(), card_hover_shadow));
+    try std.testing.expect(!hasRectColor(base_scene.written(), component_common.state_hover_border));
+    try std.testing.expect(hasRectColor(hover_scene.written(), component_common.state_hover_border));
     try std.testing.expectEqual(base_collector.written().len, hover_collector.written().len);
 }
 
@@ -1083,9 +1079,9 @@ fn textCommand(commands: []const ui.Command, value: []const u8) ?ui.Command {
     return null;
 }
 
-fn hasRectShadow(commands: []const ui.Command, shadow: f32) bool {
+fn hasRectColor(commands: []const ui.Command, color: ui.Color) bool {
     for (commands) |command| switch (command) {
-        .rect => |rect| if (rect.mode == .shadow and rect.shadow == shadow) return true,
+        .rect => |rect| if (std.meta.eql(rect.color, color)) return true,
         else => {},
     };
     return false;
