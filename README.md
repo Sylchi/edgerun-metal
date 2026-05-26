@@ -155,6 +155,17 @@ Then open:
 http://127.0.0.1:8765/web/index.html
 ```
 
+Build the GitHub Pages artifact locally:
+
+```sh
+make pages-check
+```
+
+The Pages artifact is written to `.build/github-pages`. The GitHub workflow
+publishes that directory only after serving the artifact locally and
+instantiating the generated runtime WASM through the `/bin/` URL shape that the
+browser entry point uses.
+
 Run the main kernel smokes:
 
 ```sh
