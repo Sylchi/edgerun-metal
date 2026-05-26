@@ -3,6 +3,7 @@ const icon = @import("icon.zig");
 const interaction = @import("ui_interaction.zig");
 const ui = @import("ui.zig");
 const components = @import("ui_components.zig");
+const textarea_component = @import("ui/components/Textarea.zig");
 const app_chrome = @import("app_chrome.zig");
 const design = @import("app_design.zig");
 const app_layout = @import("app_layout.zig");
@@ -11,6 +12,8 @@ pub const compile_button_id: u32 = 32_001;
 pub const download_button_id: u32 = 32_002;
 pub const launch_button_id: u32 = 32_003;
 pub const reset_button_id: u32 = 32_004;
+pub const editor_textarea_id: u32 = 32_101;
+pub const explorer_file_id_base: u32 = 32_200;
 
 const header_h: f32 = app_chrome.header_h;
 const source_content_wide: f32 = 1600.0;
@@ -61,6 +64,7 @@ const max_editor_lines_compact: usize = 28;
 const max_editor_lines_wide: usize = 40;
 const line_number_label_bytes: usize = 8;
 const editor_info_label_bytes: usize = 96;
+const explorer_file_count: usize = 4;
 
 const palette = design.palette;
 const fill = app_layout.fill;
@@ -90,6 +94,13 @@ const vscode_status_text = ui.Color{ .r = 255, .g = 255, .b = 255 };
 
 var line_number_labels: [max_rendered_lines][line_number_label_bytes]u8 = undefined;
 var editor_info_label: [editor_info_label_bytes]u8 = undefined;
+
+const explorer_files = [_][]const u8{
+    "src/app_runtime.zig",
+    "src/app_source.zig",
+    "src/ui_components.zig",
+    "src/render/font_atlas.zig",
+};
 
 pub const State = struct {
     scroll_y: f32 = 0.0,
@@ -124,7 +135,7 @@ pub fn render(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Re
     try renderToolbar(scene, collector, toolbar, state);
 
     const editor = ui.Rect.init(content.x, toolbar.y + toolbar.h + gap, content.w, editorHeight(content.w, state));
-    try renderEditor(scene, editor, state);
+    try renderEditor(scene, collector, editor, state);
 
     const status = ui.Rect.init(content.x, editor.y + editor.h + gap, content.w, statusHeight(content.w, state));
     try renderStatus(scene, status, state);
@@ -150,7 +161,7 @@ fn renderToolbar(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui
     try button(scene, collector, actions.reset, "Reset", reset_button_id, .ghost, .trash, true);
 }
 
-fn renderEditor(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
+fn renderEditor(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
     try fill(scene, bounds, vscode_editor, panel_radius);
     try stroke(scene, bounds, palette.border, panel_radius);
     const status_y = bounds.y + bounds.h - editor_status_h;
@@ -168,14 +179,13 @@ fn renderEditor(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
 
     try renderEditorTitlebar(scene, ui.Rect.init(bounds.x, bounds.y, bounds.w, editor_titlebar_h), state);
     try renderActivityRail(scene, ui.Rect.init(bounds.x, body_y, activity_rail_w, body_h));
-    if (show_explorer) try renderExplorer(scene, ui.Rect.init(bounds.x + activity_rail_w, body_y, explorer_width, body_h), state);
+    if (show_explorer) try renderExplorer(scene, collector, ui.Rect.init(bounds.x + activity_rail_w, body_y, explorer_width, body_h), state);
     try fill(scene, code_view, palette.code_bg, 0.0);
+    try components.collectComponentInteractions(collector, code_view, .{ .textarea = .{ .id = editor_textarea_id, .placeholder = "source editor" } });
     try renderBreadcrumb(scene, breadcrumb, state);
     try fill(scene, ui.Rect.init(code_view.x, code_view.y, code_pad + code_gutter_w - 10.0, code_view.h), gutter_bg, 0.0);
 
-    const cursor_line = lineIndexAt(state.source, state.cursor);
-    const visible_lines = @min(max_rendered_lines, @max(@as(usize, 1), @as(usize, @intFromFloat(@max(1.0, (code_view.h - code_pad * 2.0) / code_line_h)))));
-    const first_line = if (cursor_line > visible_lines / 2) cursor_line - visible_lines / 2 else 0;
+    const first_line = visibleFirstLine(state, visibleLineCapacity(code_view));
     var line_start = lineStartAt(state.source, first_line);
     var line_number = first_line + 1;
     var rendered: usize = 0;
@@ -268,19 +278,73 @@ fn renderActivityRail(scene: *ui.Scene, bounds: ui.Rect) !void {
     try fill(scene, ui.Rect.init(bounds.x, bounds.y + 8.0, 2.0, 34.0), palette.primary, 0.0);
 }
 
-fn renderExplorer(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
+fn renderExplorer(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
     try fill(scene, bounds, vscode_sidebar, 0.0);
     try stroke(scene, ui.Rect.init(bounds.x + bounds.w - 1.0, bounds.y, 1.0, bounds.h), vscode_line, 0.0);
     try text(scene, bounds.x + 14.0, bounds.y + 10.0, bounds.w - 28.0, 12.0, "EXPLORER", palette.dim);
     try text(scene, bounds.x + 14.0, bounds.y + explorer_heading_h + 8.0, bounds.w - 28.0, 14.0, "EDGERUN-C", palette.text);
     const rows_y = bounds.y + explorer_heading_h + 38.0;
     try explorerRow(scene, bounds.x, rows_y, bounds.w, "src", .chevron_right, false);
-    try explorerRow(scene, bounds.x, rows_y + explorer_row_h, bounds.w, "app_runtime.zig", .file, std.mem.eql(u8, state.label, "src/app_runtime.zig"));
-    try explorerRow(scene, bounds.x, rows_y + explorer_row_h * 2.0, bounds.w, "app_source.zig", .file, std.mem.eql(u8, state.label, "src/app_source.zig"));
-    try explorerRow(scene, bounds.x, rows_y + explorer_row_h * 3.0, bounds.w, "ui_components.zig", .file, std.mem.eql(u8, state.label, "src/ui_components.zig"));
-    try explorerRow(scene, bounds.x, rows_y + explorer_row_h * 4.0, bounds.w, "render/font_atlas.zig", .file, std.mem.eql(u8, state.label, "src/render/font_atlas.zig"));
+    for (explorer_files, 0..) |path, index| {
+        const y = rows_y + explorer_row_h * @as(f32, @floatFromInt(index + 1));
+        const row_bounds = ui.Rect.init(bounds.x, y, bounds.w, explorer_row_h);
+        try explorerRow(scene, bounds.x, y, bounds.w, fileName(path), .file, std.mem.eql(u8, state.label, path));
+        try components.collectComponentInteractions(collector, row_bounds, .{ .row_item = .{ .id = explorerFileHitId(index), .title = path, .detail = "" } });
+    }
     try text(scene, bounds.x + 14.0, bounds.y + bounds.h - 46.0, bounds.w - 28.0, 12.0, "APP-OWNED VFS", palette.dim);
     try text(scene, bounds.x + 14.0, bounds.y + bounds.h - 26.0, bounds.w - 28.0, 12.0, toolbarDetail(state), toolbarDetailColor(state));
+}
+
+pub fn sourceLabelFromHit(hit_id: u32) ?[]const u8 {
+    if (hit_id < explorer_file_id_base) return null;
+    const index: usize = @intCast(hit_id - explorer_file_id_base);
+    if (index >= explorer_file_count) return null;
+    return explorer_files[index];
+}
+
+pub fn cursorFromPoint(bounds: ui.Rect, state: State, x: f32, y: f32) usize {
+    const content_w = @min(source_content_wide, @max(1.0, bounds.w - content_pad * 2.0));
+    const content = ui.Rect.init(bounds.x + (bounds.w - content_w) * 0.5, bounds.y, content_w, header_h);
+    const top = bounds.y + header_h + page_top_pad - state.scroll_y;
+    const toolbar = ui.Rect.init(content.x, top, content.w, toolbarHeight(content.w));
+    const editor = ui.Rect.init(content.x, toolbar.y + toolbar.h + gap, content.w, editorHeight(content.w, state));
+    const code_view = editorCodeView(editor);
+    const first_line = visibleFirstLine(state, visibleLineCapacity(code_view));
+    return textarea_component.cursorFromPoint(state.source, code_view, x, y, .{
+        .first_line = first_line,
+        .line_height = code_line_h,
+        .char_width = code_char_w,
+        .gutter_width = code_gutter_w,
+        .padding_left = code_pad,
+        .padding_top = code_pad,
+    });
+}
+
+fn explorerFileHitId(index: usize) u32 {
+    return explorer_file_id_base + @as(u32, @intCast(index));
+}
+
+fn editorCodeView(bounds: ui.Rect) ui.Rect {
+    const status_y = bounds.y + bounds.h - editor_status_h;
+    const body_y = bounds.y + editor_titlebar_h;
+    const body_h = @max(1.0, status_y - body_y);
+    const show_explorer = bounds.w >= explorer_threshold_w;
+    const show_minimap = bounds.w >= minimap_threshold_w;
+    const explorer_width = if (show_explorer) explorer_w else 0.0;
+    const minimap_width = if (show_minimap) minimap_w else 0.0;
+    const code_x = bounds.x + activity_rail_w + explorer_width;
+    const code_w = @max(1.0, bounds.w - activity_rail_w - explorer_width - minimap_width - minimap_gap);
+    const editor_body = ui.Rect.init(code_x, body_y, code_w, body_h);
+    return ui.Rect.init(editor_body.x, editor_body.y + editor_breadcrumb_h, editor_body.w, @max(1.0, editor_body.h - editor_breadcrumb_h));
+}
+
+fn visibleFirstLine(state: State, visible_lines: usize) usize {
+    const cursor_line = lineIndexAt(state.source, state.cursor);
+    return if (cursor_line > visible_lines / 2) cursor_line - visible_lines / 2 else 0;
+}
+
+fn visibleLineCapacity(code_view: ui.Rect) usize {
+    return @min(max_rendered_lines, @max(@as(usize, 1), @as(usize, @intFromFloat(@max(1.0, (code_view.h - code_pad * 2.0) / code_line_h)))));
 }
 
 fn explorerRow(scene: *ui.Scene, x: f32, y: f32, w: f32, label: []const u8, icon_value: icon.Icon, selected: bool) !void {
@@ -664,6 +728,8 @@ test "source page renders editor controls through shared ui" {
     try expectHit(collector.written(), download_button_id);
     try expectHit(collector.written(), launch_button_id);
     try expectHit(collector.written(), reset_button_id);
+    try expectHit(collector.written(), editor_textarea_id);
+    try expectHit(collector.written(), explorer_file_id_base);
 }
 
 test "source page does not claim empty workspace is loaded" {
