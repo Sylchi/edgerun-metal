@@ -241,7 +241,7 @@ fn renderVirtioGpuPackedDebugFrame(device: *virtio_gpu.Device, state: *State, em
     var scene = ui.Scene.initWithClips(&state.app_scene_commands, &state.app_scene_clips);
     var collector = interaction.Collector.init(&state.app_interactions);
     app_frame.render(&scene, &collector, ui.Rect.init(0, 0, @floatFromInt(virtio_scanout_width), @floatFromInt(virtio_scanout_height)), .{
-        .route = .{ .view = .landing },
+        .route = .{ .view = .source },
         .public_identity = "post-exit-virtio-renderer",
         .public_identity_ready = true,
     }) catch return fail(emit, error.RendererIrFailed, "FAIL post-exit virtio-gpu app-frame");
@@ -257,7 +257,10 @@ fn renderVirtioGpuPackedDebugFrame(device: *virtio_gpu.Device, state: *State, em
         virtio_scanout_height,
         &state.app_pixels,
     ) catch return fail(emit, error.RendererIrFailed, "FAIL post-exit virtio-gpu surface");
-    const image_texture = app_images.cloudMeme() catch return fail(emit, error.RendererIrFailed, "FAIL post-exit virtio-gpu image");
+    const image_texture = if (buffers.hasImageVertices())
+        app_images.cloudMeme() catch return fail(emit, error.RendererIrFailed, "FAIL post-exit virtio-gpu image")
+    else
+        null;
     const receipt = renderer_pipeline.renderSoftwareFrame(
         surface,
         buffers,
@@ -616,6 +619,12 @@ test "post-exit kernel state machine runs without firmware services" {
     try testing.expectEqual(@as(i64, post_exit_expected_value), state.first_app_result.value);
     try testing.expect(state.first_app_result.receipt.valid());
     try testing.expectEqual(@as(usize, 2), state.first_app_runtime.schedule.len);
+}
+
+test "post-exit virtio renderer keeps packed icon line batches" {
+    const source = @embedFile("immutable_kernel_post_exit.zig");
+    try std.testing.expect(std.mem.indexOf(u8, source, "buffers.icon_line_vertex_len" ++ ".* = 0") == null);
+    try std.testing.expect(std.mem.indexOf(u8, source, "buffers.overlay_icon_line_vertex_len" ++ ".* = 0") == null);
 }
 
 test "post-exit kernel state machine rejects empty handoff inventory" {

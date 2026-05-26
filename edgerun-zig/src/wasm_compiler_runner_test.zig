@@ -1,5 +1,7 @@
 const std = @import("std");
 const object = @import("object.zig");
+const ui = @import("ui.zig");
+const ui_codec = @import("ui_codec.zig");
 const vfs = @import("vfs.zig");
 const wasm = @import("wasm/root.zig");
 const wasm_compiler = @import("embedded_wasm_compiler").bytes;
@@ -72,6 +74,11 @@ const runner_root_source =
 ;
 const edgerun_runner_root_source =
     \\const max_width: usize = 4096;
+    \\const root_layout: stack = row(6, 10);
+    \\const title_view: text = "Compiled without Zig";
+    \\const search_view: input = "Search objects";
+    \\const status_view: badge = "Ready";
+    \\const action_view: button = "Run app";
     \\pub export fn er_app_main() i32 {
     \\    const base: usize = 4;
     \\    const result: usize = base * 2 + 1;
@@ -81,6 +88,14 @@ const edgerun_runner_root_source =
     \\    const doubled: usize = max_width * 2;
     \\    const padded: usize = doubled + 17;
     \\    return padded;
+    \\}
+    \\export fn er_scale(value: i32) i32 {
+    \\    const tripled: i32 = value * 3;
+    \\    const shifted: i32 = tripled + 5;
+    \\    return shifted;
+    \\}
+    \\export fn er_non_negative(value: i32) i32 {
+    \\    return if (value < 0) 0 else value;
     \\}
 ;
 
@@ -280,11 +295,33 @@ test "embedded compiler compiles edgerun source root through interpreter" {
     const lowered_main_count_result = try wasm.executeExportValueArgs(&successor, output, "er_app_lowered_main_count", &.{});
     try std.testing.expectEqual(@as(i32, 1), try lowered_main_count_result.valueI32(0));
     const lowered_export_count_result = try wasm.executeExportValueArgs(&successor, output, "er_app_lowered_export_count", &.{});
-    try std.testing.expectEqual(@as(i32, 1), try lowered_export_count_result.valueI32(0));
+    try std.testing.expectEqual(@as(i32, 5), try lowered_export_count_result.valueI32(0));
     const main_result = try wasm.executeExportValueArgs(&successor, output, "er_app_main", &.{});
     try std.testing.expectEqual(@as(i32, 9), try main_result.valueI32(0));
     const const_result = try wasm.executeExportValueArgs(&successor, output, "er_smoke_const", &.{});
     try std.testing.expectEqual(@as(i32, 8209), try const_result.valueI32(0));
+    const scale_five_result = try wasm.executeExportValueArgs(&successor, output, "er_scale", &.{.{ .i32 = 5 }});
+    try std.testing.expectEqual(@as(i32, 20), try scale_five_result.valueI32(0));
+    const scale_neg_result = try wasm.executeExportValueArgs(&successor, output, "er_scale", &.{.{ .i32 = -4 }});
+    try std.testing.expectEqual(@as(i32, -7), try scale_neg_result.valueI32(0));
+    const non_negative_positive_result = try wasm.executeExportValueArgs(&successor, output, "er_non_negative", &.{.{ .i32 = 7 }});
+    try std.testing.expectEqual(@as(i32, 7), try non_negative_positive_result.valueI32(0));
+    const non_negative_negative_result = try wasm.executeExportValueArgs(&successor, output, "er_non_negative", &.{.{ .i32 = -9 }});
+    try std.testing.expectEqual(@as(i32, 0), try non_negative_negative_result.valueI32(0));
+    const ui_ptr: usize = @intCast(try (try wasm.executeExportValueArgs(&successor, output, "er_ui_root_ptr", &.{})).valueI32(0));
+    const ui_len: usize = @intCast(try (try wasm.executeExportValueArgs(&successor, output, "er_ui_root_len", &.{})).valueI32(0));
+    try std.testing.expect(ui_len > ui_codec.header_size);
+    var nodes: [4]ui.Node = undefined;
+    const root = try ui_codec.decodeBytes(successor_memory[ui_ptr..][0..ui_len], &nodes);
+    try std.testing.expectEqual(ui.Axis.row, root.stack.axis);
+    try std.testing.expectEqual(@as(f32, 6), root.stack.gap);
+    try std.testing.expectEqual(@as(f32, 10), root.stack.padding);
+    try std.testing.expectEqual(@as(usize, 4), root.stack.children.len);
+    try std.testing.expectEqualStrings("Compiled without Zig", root.stack.children[0].text.value);
+    try std.testing.expectEqualStrings("Search objects", root.stack.children[1].input.placeholder);
+    try std.testing.expectEqual(@as(u32, 2), root.stack.children[1].input.id);
+    try std.testing.expectEqualStrings("Ready", root.stack.children[2].badge.label);
+    try std.testing.expectEqualStrings("Run app", root.stack.children[3].button.label);
 }
 
 fn buildTestWorkspace(workspace_raw: []u8, file_raw: []u8, label: []const u8, source: []const u8) ![]u8 {
