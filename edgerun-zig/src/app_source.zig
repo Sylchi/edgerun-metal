@@ -203,31 +203,14 @@ fn renderCompileStages(scene: *ui.Scene, bounds: ui.Rect, progress: f32) !void {
 
 fn button(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id: u32, variant: components.ButtonVariant, leading: icon.Icon, enabled: bool) !void {
     if (!enabled) {
-        try disabledButton(scene, bounds, label, leading);
+        try components.renderComponent(scene, bounds, .{ .button = .{ .id = id, .label = label, .variant = variant, .leading_icon = leading } }, .{
+            .style = app_chrome.style(),
+            .control = .{ .disabled = true },
+        });
         return;
     }
     try components.renderComponent(scene, bounds, .{ .button = .{ .id = id, .label = label, .variant = variant, .leading_icon = leading } }, .{ .style = app_chrome.style() });
     try components.collectComponentInteractions(collector, bounds, .{ .button = .{ .id = id, .label = label } });
-}
-
-fn disabledButton(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, leading: icon.Icon) !void {
-    try fill(scene, bounds, palette.neutral_soft, panel_radius);
-    try stroke(scene, bounds, palette.border, panel_radius);
-    const icon_size: f32 = 16.0;
-    const label_h: f32 = 18.0;
-    const gap_w: f32 = if (label.len == 0) 0.0 else 8.0;
-    const label_w = @as(f32, @floatFromInt(label.len)) * 8.0;
-    const content_w = icon_size + gap_w + label_w;
-    var x = bounds.x + @max(0.0, (bounds.w - content_w) * 0.5);
-    try scene.pushIconQuad(.{
-        .bounds = ui.Rect.init(x, bounds.y + (bounds.h - icon_size) * 0.5, icon_size, icon_size),
-        .icon_id = icon.id(leading),
-        .color = palette.muted,
-    });
-    x += icon_size + gap_w;
-    if (label.len != 0) {
-        try scene.pushAlignedText(ui.Rect.init(x, bounds.y + (bounds.h - label_h) * 0.5, @max(1.0, label_w), label_h), label, palette.muted, .start);
-    }
 }
 
 fn canCompile(state: State) bool {

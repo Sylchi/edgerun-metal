@@ -145,7 +145,7 @@ const authority_blocks = [_]DocBlock{
 
 const rendering_blocks = [_]DocBlock{
     .{ .title = "Scene first", .body = "UI code emits ui.Scene commands and interaction regions. The scene is the product UI contract; it is independent of whether pixels are eventually produced by software, GPU buffers, GLES, or native presentation.", .code = "ui.Scene.pushRect(...)\nui.Scene.pushWrappedText(...)\nui.Scene.pushImageQuad(...)" },
-    .{ .title = "Renderer IR", .body = "renderer_pipeline.packScene converts scene commands into packed rectangles, text vertices, icon vertices, image vertices, and overlay buffers. Backends consume those buffers and declared resources." },
+    .{ .title = "Render IR", .body = "render.pipeline.packScene converts scene commands into packed rectangles, text vertices, icon vertices, image vertices, and overlay buffers. Backends consume those buffers and declared resources." },
     .{ .title = "Backend boundary", .body = "Backends own storage, textures, damage, and presentation receipts. They must not duplicate product UI decisions, docs pages, components, or route logic." },
 };
 
@@ -166,7 +166,7 @@ const font_blocks = [_]DocBlock{
     .{ .title = "Parser and metrics", .body = "varfont.Face.geist parses the TTF tables that EdgeRun supports, including glyph outlines, metrics, variation axes, and kerning. Text measurement uses those metrics before any backend sees a vertex." },
     .{ .title = "Compiled font object", .body = "render/font_atlas can compile the supported ASCII codepoints into a font_vector.Body. That gives the renderer an object-font path where glyph commands, metrics, and advances are owned data." },
     .{ .title = "Atlas bake", .body = "The atlas path rasterizes glyphs into a 2048x2048 alpha8 texture with room for 1280 cached glyphs. Glyphs are cached by character and pixel size; small text alpha is sharpened during bake." },
-    .{ .title = "Renderer consumption", .body = "renderer_ir.FontAtlas exposes metrics, text width, and glyph lookup callbacks. packScene turns text commands into textured glyph quads. Software, GLES, web, and native hosts consume the same alpha atlas resource.", .code = "ui.Scene text\n-> renderer_ir.FontAtlas callbacks\n-> packed text vertices\n-> alpha texture in backend" },
+    .{ .title = "Render consumption", .body = "render.ir.FontAtlas exposes metrics, text width, and glyph lookup callbacks. packScene turns text commands into textured glyph quads. Software, GLES, web, and native hosts consume the same alpha atlas resource.", .code = "ui.Scene text\n-> render.ir.FontAtlas callbacks\n-> packed text vertices\n-> alpha texture in backend" },
 };
 
 const wasm_blocks = [_]DocBlock{
@@ -254,7 +254,7 @@ pub const doc_pages = [_]DocPage{
         .status = "one contract",
         .primary = "The software, web host, GPU, and native hosts should agree because they are adapters for the same scene and IR path.",
         .secondary = "Backend-specific code owns presentation, not product UI decisions.",
-        .api = "scene: ui.Scene\ncomponents: ui_components.zig\nir: renderer_ir.zig\nbackends: render/backends",
+        .api = "scene: ui.Scene\ncomponents: ui_components.zig\nrender: render.zig\nbackends: render/*",
         .icon_value = .code,
         .color = palette.blue,
     },
@@ -293,7 +293,7 @@ pub const doc_pages = [_]DocPage{
         .status = "owned atlas",
         .primary = "UI code emits text commands only. Font parsing, glyph metrics, kerning, rasterization, atlas packing, and backend upload stay inside the EdgeRun render pipeline.",
         .secondary = "The current path supports embedded Geist bytes and compiled font objects. Small text is sharpened during atlas bake, and software/GPU/web hosts consume the same alpha atlas resource.",
-        .api = "asset: varfont.geist_bytes\nparse: varfont.Face.geist\nobject font: font_vector -> render/font_atlas\natlas: 2048x2048 alpha8, 1280 glyphs\nir: renderer_ir.FontAtlas -> text quads\nbackends: software/GLES/web alpha texture",
+        .api = "asset: varfont.geist_bytes\nparse: varfont.Face.geist\nobject font: font_vector -> render/font_atlas\natlas: 2048x2048 alpha8, 1280 glyphs\nir: render.ir.FontAtlas -> text quads\nbackends: software/GLES/web alpha texture",
         .icon_value = .activity,
         .color = palette.green,
     },
@@ -419,13 +419,18 @@ fn renderSidebar(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui
 }
 
 fn renderSidebarRow(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, page: DocPage, id: u32, active: bool) (ui.RenderError || interaction.Error)!void {
-    try fill(scene, bounds, if (active) palette.active else palette.panel, 6.0);
-    if (active) try stroke(scene, bounds, page.color, 6.0);
-    const icon_bounds = sidebarRowIconBounds(bounds);
-    const text_x = icon_bounds.x + icon_bounds.w + design.Icon.text_gap;
-    try iconQuad(scene, icon_bounds, page.icon_value, page.color);
-    try text(scene, text_x, bounds.y + 8.0, bounds.x + bounds.w - text_x - 10.0, 14.0, page.section.label(), if (active) palette.text else palette.dim);
-    try collector.addHit(bounds, .button, id);
+    const row_component = components.Component{ .button = .{
+        .id = id,
+        .label = page.section.label(),
+        .variant = if (active) .secondary else .ghost,
+        .leading_icon = page.icon_value,
+    } };
+    try components.renderComponent(scene, bounds, row_component, .{
+        .style = app_chrome.style(),
+        .control = .{ .active = active },
+        .control_size = .small,
+    });
+    try components.collectComponentInteractions(collector, bounds, row_component);
 }
 
 fn renderDocBody(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, compact: bool, page: DocPage, state: State) DocsError!void {
@@ -734,23 +739,13 @@ fn renderFeatureGrid(scene: *ui.Scene, collector: *interaction.Collector, bounds
 }
 
 fn renderFeatureCard(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, page: DocPage, id: u32, active: bool) (ui.RenderError || interaction.Error)!void {
-    try fill(scene, bounds, if (active) palette.panel_hover else palette.panel_alt, panel_radius);
+    try components.renderComponent(scene, bounds, .{ .card = .{
+        .title = page.title,
+        .detail = page.summary,
+        .variant = if (active) .elevated else .subtle,
+    } }, .{ .style = app_chrome.style() });
     try stroke(scene, bounds, if (active) page.color else palette.border, panel_radius);
-    const icon_bounds = featureCardIconBounds(bounds);
-    const text_x = icon_bounds.x + icon_bounds.w + design.Icon.text_gap;
-    try iconQuad(scene, icon_bounds, page.icon_value, page.color);
-    try text(scene, text_x, bounds.y + 20.0, bounds.x + bounds.w - text_x - card_pad, 16.0, page.title, palette.text);
-    const summary_y = bounds.y + card_pad + design.Icon.card + 14.0;
-    try wrappedText(scene, ui.Rect.init(bounds.x + card_pad, summary_y, bounds.w - card_pad * 2.0, @max(1.0, bounds.y + bounds.h - summary_y - card_pad)), page.summary, palette.dim, feature_summary_line_h, feature_summary_avg_w, feature_summary_max_lines);
     try collector.addHit(bounds, .button, id);
-}
-
-fn sidebarRowIconBounds(bounds: ui.Rect) ui.Rect {
-    return ui.Rect.init(bounds.x + 10.0, bounds.y + 8.0, design.Icon.sidebar, design.Icon.sidebar);
-}
-
-fn featureCardIconBounds(bounds: ui.Rect) ui.Rect {
-    return ui.Rect.init(bounds.x + card_pad, bounds.y + card_pad, design.Icon.card, design.Icon.card);
 }
 
 fn apiSectionHeight(width: f32, page: DocPage) f32 {
@@ -1060,18 +1055,21 @@ test "docs media page renders image and video format demos" {
     try std.testing.expect(hasImageQuad(scene.written()));
 }
 
-test "docs icon rhythm uses shared design tokens" {
-    const row = ui.Rect.init(20.0, 40.0, 240.0, row_h - 6.0);
-    const sidebar_icon = sidebarRowIconBounds(row);
-    try std.testing.expectEqual(design.Icon.sidebar, sidebar_icon.w);
-    try std.testing.expectEqual(design.Icon.sidebar, sidebar_icon.h);
+test "docs navigation surfaces render through shared components" {
+    var commands: [256]ui.Command = undefined;
+    var clips: [8]ui.Rect = undefined;
+    var scene = ui.Scene.initWithClips(&commands, &clips);
+    var regions: [32]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
+    const page = doc_pages[0];
 
-    const card = ui.Rect.init(20.0, 40.0, 420.0, featureCardHeight(420.0));
-    const card_icon = featureCardIconBounds(card);
-    try std.testing.expectEqual(design.Icon.card, card_icon.w);
-    try std.testing.expectEqual(design.Icon.card, card_icon.h);
-    const title_x = card_icon.x + card_icon.w + design.Icon.text_gap;
-    try std.testing.expectEqual(card.x + card_pad + design.Icon.card + design.Icon.text_gap, title_x);
+    try renderSidebarRow(&scene, &collector, ui.Rect.init(20.0, 40.0, 240.0, row_h - 6.0), page, first_doc_page_button_id, true);
+    try renderFeatureCard(&scene, &collector, ui.Rect.init(20.0, 90.0, 420.0, featureCardHeight(420.0)), page, first_doc_page_button_id + 1, false);
+
+    try std.testing.expect(hasText(scene.written(), page.section.label()));
+    try std.testing.expect(hasText(scene.written(), page.title));
+    try std.testing.expect(hasHit(collector.written(), first_doc_page_button_id));
+    try std.testing.expect(hasHit(collector.written(), first_doc_page_button_id + 1));
 }
 
 fn hasText(commands: []const ui.Command, value: []const u8) bool {

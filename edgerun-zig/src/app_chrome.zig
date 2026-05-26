@@ -1,14 +1,12 @@
 const std = @import("std");
+const components = @import("ui_components.zig");
 const icon = @import("icon.zig");
 const interaction = @import("ui_interaction.zig");
 const ui = @import("ui.zig");
-const components = @import("ui_components.zig");
-const button_component = @import("ui/components/Button.zig");
 const design = @import("app_design.zig");
 
 pub const logo_button_id: u32 = 30_000;
 pub const docs_button_id: u32 = 30_001;
-pub const launch_button_id: u32 = 30_003;
 pub const blog_button_id: u32 = 30_011;
 pub const source_button_id: u32 = 30_012;
 
@@ -23,8 +21,6 @@ const nav_text_h: f32 = 13.0;
 const nav_item_h: f32 = 30.0;
 const nav_item_pad: f32 = 28.0;
 const nav_average_w: f32 = 7.8;
-const header_control_gap: f32 = 12.0;
-const launch_label = "Launch Desktop";
 
 pub const HeaderMode = enum {
     desktop,
@@ -40,6 +36,7 @@ pub const ActiveNav = enum {
 };
 
 const palette = design.palette;
+const retired_desktop_launch_button_id: u32 = 30_003;
 
 pub fn headerMode(content_w: f32) HeaderMode {
     if (content_w < mobile_header_breakpoint_w) return .mobile;
@@ -75,11 +72,7 @@ pub fn renderHeader(scene: *ui.Scene, collector: *interaction.Collector, bounds:
     nav_x += docs_w + compact_nav_gap;
     try navItem(scene, collector, ui.Rect.init(nav_x, nav_y, academy_w, nav_item_h), "Academy", blog_button_id, active == .blog);
 
-    const launch_w = button_component.preferredWidth(launch_label, null, null);
-    const launch = ui.Rect.init(content.x + content.w - launch_w, bounds.y + 16.0, launch_w, design.compact_control_h);
-    try button(scene, collector, launch, launch_label, launch_button_id, .primary, null, null);
-
-    const source = ui.Rect.init(launch.x - header_control_gap - design.Icon.logo_box, launch.y, design.Icon.logo_box, design.Icon.logo_box);
+    const source = ui.Rect.init(content.x + content.w - design.Icon.logo_box, bounds.y + 16.0, design.Icon.logo_box, design.Icon.logo_box);
     try iconButton(scene, collector, source, .code, source_button_id, active == .source);
 }
 
@@ -119,23 +112,31 @@ fn renderCompactHeader(scene: *ui.Scene, collector: *interaction.Collector, boun
 }
 
 fn navItem(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id: u32, active: bool) (ui.RenderError || interaction.Error)!void {
-    if (active) try fill(scene, bounds, palette.active, 6.0);
-    try scene.pushAlignedText(ui.Rect.init(bounds.x, bounds.y + 7.0, bounds.w, nav_text_h), label, if (active) palette.primary else palette.dim, .center);
-    try collector.addHit(bounds, .button, id);
-}
-
-fn button(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id: u32, variant: components.ButtonVariant, leading: ?icon.Icon, trailing: ?icon.Icon) (ui.RenderError || interaction.Error)!void {
-    try components.renderComponent(scene, bounds, .{ .button = .{ .id = id, .label = label, .variant = variant, .leading_icon = leading, .trailing_icon = trailing } }, .{
+    const component = components.Component{ .button = .{
+        .id = id,
+        .label = label,
+        .variant = if (active) .secondary else .ghost,
+    } };
+    try components.renderComponent(scene, bounds, component, .{
         .style = style(),
+        .control = .{ .active = active },
+        .control_size = .small,
     });
-    try components.collectComponentInteractions(collector, bounds, .{ .button = .{ .id = id, .label = label } });
+    try components.collectComponentInteractions(collector, bounds, component);
 }
 
 fn iconButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, value: icon.Icon, id: u32, active: bool) (ui.RenderError || interaction.Error)!void {
-    try fill(scene, bounds, if (active) palette.active else palette.row, 7.0);
-    try scene.pushRect(bounds, if (active) palette.primary else palette.border, .border, 7.0, 0.0);
-    try iconQuad(scene, bounds.insetUniform(design.Icon.button_inset), value, if (active) palette.primary else palette.text);
-    try collector.addHit(bounds, .button, id);
+    const component = components.Component{ .icon_button = .{
+        .id = id,
+        .label = icon.label(value),
+        .icon_value = value,
+        .variant = if (active) .secondary else .outline,
+    } };
+    try components.renderComponent(scene, bounds, component, .{
+        .style = style(),
+        .control = .{ .active = active },
+    });
+    try components.collectComponentInteractions(collector, bounds, component);
 }
 
 pub fn style() ui.Style {
@@ -170,7 +171,7 @@ test "app chrome header exposes canonical navigation hit targets" {
     try expectHit(collector.written(), docs_button_id);
     try expectHit(collector.written(), blog_button_id);
     try expectHit(collector.written(), source_button_id);
-    try expectHit(collector.written(), launch_button_id);
+    try expectMissingHit(collector.written(), retired_desktop_launch_button_id);
 }
 
 test "app chrome header mode follows mobile and compact breakpoints" {
@@ -193,7 +194,7 @@ test "app chrome compact header keeps hit targets separated" {
     try expectNoHorizontalOverlap(logo, source);
     if (hitRect(collector.written(), docs_button_id)) |docs| try expectNoHorizontalOverlap(logo, docs);
     if (hitRect(collector.written(), blog_button_id)) |blog| try expectNoHorizontalOverlap(blog, source);
-    try expectMissingHit(collector.written(), launch_button_id);
+    try expectMissingHit(collector.written(), retired_desktop_launch_button_id);
 }
 
 test "app chrome mobile header uses reference icon controls" {
@@ -212,7 +213,7 @@ test "app chrome mobile header uses reference icon controls" {
     try expectTouchTarget(source);
     try expectTouchTarget(docs);
     try expectMissingHit(collector.written(), blog_button_id);
-    try expectMissingHit(collector.written(), launch_button_id);
+    try expectMissingHit(collector.written(), retired_desktop_launch_button_id);
     try std.testing.expectEqual(@as(usize, 3), collector.written().len);
 }
 

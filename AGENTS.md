@@ -97,7 +97,7 @@
 - Use the actual component system and renderer paths that are meant to ship. Do not create a separate demo-only surface that bypasses the real UI architecture.
 - For shadcn-style work, port the component structure, spacing, states, icons, and theme values from the canonical source instead of making approximate lookalikes.
 - Run the relevant render path, snapshot, screenshot, or QEMU check when visual output is changed. If visual verification cannot run, report that explicitly.
-- For Zig UI work, prefer `ui.zig`, `ui_codec.zig`, `ui_components.zig`, `ui_resolver.zig`, `renderer_software.zig`, and `renderer_surface.zig` over one-off rendering paths.
+- For Zig UI work, prefer `ui.zig`, `ui_codec.zig`, `ui_components.zig`, `ui_resolver.zig`, `render.zig`, `render/software.zig`, and `render/surface.zig` over one-off rendering paths.
 
 ## Enforcement
 

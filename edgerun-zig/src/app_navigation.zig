@@ -38,7 +38,6 @@ pub const Route = struct {
 };
 
 pub const Action = enum(u32) {
-    launch_app,
     reveal_identity,
     compile_source,
     download_source_release,
@@ -93,7 +92,6 @@ pub fn fromHit(hit_id: u32, current: Route) ?Route {
 
 pub fn actionFromHit(hit_id: u32) ?Action {
     return switch (hit_id) {
-        app_chrome.launch_button_id => .launch_app,
         app_landing.reveal_identity_button_id => .reveal_identity,
         app_source.compile_button_id => .compile_source,
         app_source.download_button_id => .download_source_release,
@@ -146,7 +144,7 @@ pub fn trimPath(path: []const u8) []const u8 {
 
 fn routeFromDynamicHit(hit_id: u32, current: Route) ?Route {
     switch (current.view) {
-        .components => if (component_gallery.indexByCatalogHit(hit_id)) |index| {
+        .components => if (component_gallery.indexByCatalogHit(hit_id) orelse component_gallery.indexByPreviewHit(hit_id)) |index| {
             return .{ .view = .components, .selected_component_index = index };
         },
         .blog => {
@@ -158,7 +156,7 @@ fn routeFromDynamicHit(hit_id: u32, current: Route) ?Route {
             }
         },
         .docs => {
-            if (component_gallery.indexByCatalogHit(hit_id)) |index| {
+            if (component_gallery.indexByCatalogHit(hit_id) orelse component_gallery.indexByPreviewHit(hit_id)) |index| {
                 return .{ .view = .docs, .selected_doc_index = app_docs.indexBySlug("component-system"), .selected_component_index = index };
             }
             if (app_docs.indexByHit(hit_id)) |index| {
@@ -297,6 +295,7 @@ test "navigation maps shared hit ids to routes" {
     try std.testing.expectEqual(app_docs.indexBySlug("media").?, fromHit(app_docs.first_doc_page_button_id + @as(u32, @intCast(app_docs.indexBySlug("media").?)), .{ .view = .docs }).?.selected_doc_index.?);
     try std.testing.expectEqual(app_docs.indexBySlug("component-system").?, fromHit(app_docs.first_doc_page_button_id + @as(u32, @intCast(app_docs.indexBySlug("component-system").?)), .{ .view = .docs }).?.selected_doc_index.?);
     try std.testing.expectEqual(component_gallery.indexBySlug("button").?, fromHit(component_gallery.first_catalog_card_id + 7, .{ .view = .docs, .selected_doc_index = app_docs.indexBySlug("component-system") }).?.selected_component_index.?);
+    try std.testing.expectEqual(component_gallery.indexBySlug("button").?, fromHit(component_gallery.previewHitForIndexForTest(component_gallery.indexBySlug("button").?), .{ .view = .docs, .selected_doc_index = app_docs.indexBySlug("component-system") }).?.selected_component_index.?);
     const post_id = app_blog.postIdAt(0);
     try std.testing.expectEqual(post_id, fromHit(post_id, .{ .view = .blog }).?.selected_blog_post_id);
     try std.testing.expect(fromHit(component_gallery.first_catalog_card_id + 7, .{}) == null);
@@ -304,7 +303,6 @@ test "navigation maps shared hit ids to routes" {
 }
 
 test "navigation maps shared hit ids to app actions" {
-    try std.testing.expectEqual(Action.launch_app, actionFromHit(app_chrome.launch_button_id).?);
     try std.testing.expectEqual(Action.reveal_identity, actionFromHit(app_landing.reveal_identity_button_id).?);
     try std.testing.expectEqual(Action.compile_source, actionFromHit(app_source.compile_button_id).?);
     try std.testing.expectEqual(Action.download_source_release, actionFromHit(app_source.download_button_id).?);
