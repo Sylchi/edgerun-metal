@@ -4,68 +4,118 @@ const layout = @import("../../layouts/Types.zig");
 const interaction = @import("../../ui_interaction.zig");
 const layouts = @import("../../layouts.zig");
 const ui = @import("../../ui.zig");
+const text_metrics = @import("../../ui_text_metrics.zig");
+const tokens = @import("../../ui_tokens.zig");
 
 const RenderOptions = common.RenderOptions;
 
 const max_children: usize = 64;
 
 pub fn renderComponent(comptime Component: type, scene: *ui.Scene, bounds: ui.Rect, component: Component, options: RenderOptions) ui.RenderError!void {
+    const resolved_options = options.withControlId(componentControlId(component));
     switch (component) {
-        .text => |text| try text.render(scene, bounds, options),
-        .accordion => |accordion| try accordion.render(scene, bounds, options),
-        .alert => |alert| try alert.render(scene, bounds, options),
-        .alert_dialog => |dialog| try dialog.render(scene, bounds, options),
-        .aspect_ratio => |aspect_ratio| try aspect_ratio.render(scene, bounds, options),
-        .calendar => |calendar| try calendar.render(scene, bounds, options),
-        .carousel => |carousel| try carousel.render(scene, bounds, options),
-        .chart => |chart| try chart.render(scene, bounds, options),
-        .combobox => |combobox| try combobox.render(scene, bounds, options),
-        .card => |card| try card.render(scene, bounds, options),
-        .empty => |empty| try empty.render(scene, bounds, options),
-        .badge => |badge| try badge.render(scene, bounds, options),
-        .avatar => |avatar| try avatar.render(scene, bounds, options),
-        .kbd => |kbd| try kbd.render(scene, bounds, options),
-        .label => |label| try label.render(scene, bounds, options),
-        .separator => |separator| try separator.render(scene, bounds, options),
-        .scroll_area => |scroll_area| try scroll_area.render(scene, bounds, options),
-        .skeleton => |skeleton| try skeleton.render(scene, bounds, options),
-        .spinner => |spinner| try spinner.render(scene, bounds, options),
-        .breadcrumb => |breadcrumb| try breadcrumb.render(scene, bounds, options),
-        .menubar => |menubar| try menubar.render(scene, bounds, options),
-        .navigation_menu => |menu| try menu.render(scene, bounds, options),
-        .command => |command| try command.render(scene, bounds, options),
-        .context_menu => |menu| try menu.render(scene, bounds, options),
-        .dialog => |dialog| try dialog.render(scene, bounds, options),
-        .direction => |direction| try direction.render(scene, bounds, options),
-        .drawer => |drawer| try drawer.render(scene, bounds, options),
-        .dropdown_menu => |menu| try menu.render(scene, bounds, options),
-        .field => |field| try field.render(scene, bounds, options),
-        .hover_card => |hover_card| try hover_card.render(scene, bounds, options),
-        .input_otp => |otp| try otp.render(scene, bounds, options),
-        .button => |button| try button.render(scene, bounds, options),
-        .button_group => |group| try group.render(scene, bounds, options),
-        .toggle_group => |group| try group.render(scene, bounds, options),
-        .toggle => |toggle| try toggle.render(scene, bounds, options),
-        .input => |input| try input.render(scene, bounds, options),
-        .input_group => |input_group| try input_group.render(scene, bounds, options),
-        .textarea => |textarea| try textarea.render(scene, bounds, options),
-        .select => |select| try select.render(scene, bounds, options),
-        .checkbox => |checkbox| try checkbox.render(scene, bounds, options),
-        .radio_group => |radio| try radio.render(scene, bounds, options),
-        .switch_control => |switch_control| try switch_control.render(scene, bounds, options),
-        .pagination => |pagination| try pagination.render(scene, bounds, options),
-        .popover => |popover| try popover.render(scene, bounds, options),
-        .resizable => |resizable| try resizable.render(scene, bounds, options),
-        .sheet => |sheet| try sheet.render(scene, bounds, options),
-        .sidebar => |sidebar| try sidebar.render(scene, bounds, options),
-        .progress => |progress| try progress.render(scene, bounds, options),
-        .slider => |slider| try slider.render(scene, bounds, options),
-        .tabs => |tabs| try tabs.render(scene, bounds, options),
-        .table => |table| try table.render(scene, bounds, options),
-        .tooltip => |tooltip| try tooltip.render(scene, bounds, options),
-        .toast => |toast| try toast.render(scene, bounds, options),
-        .row_item => |row| try row.render(scene, bounds, options),
+        .text => |text| try text.render(scene, bounds, resolved_options),
+        .accordion => |accordion| try accordion.render(scene, bounds, resolved_options),
+        .alert => |alert| try alert.render(scene, bounds, resolved_options),
+        .alert_dialog => |dialog| try dialog.render(scene, bounds, resolved_options),
+        .aspect_ratio => |aspect_ratio| try aspect_ratio.render(scene, bounds, resolved_options),
+        .calendar => |calendar| try calendar.render(scene, bounds, resolved_options),
+        .carousel => |carousel| try carousel.render(scene, bounds, resolved_options),
+        .chart => |chart| try chart.render(scene, bounds, resolved_options),
+        .combobox => |combobox| try combobox.render(scene, bounds, resolved_options),
+        .card => |card| try card.render(scene, bounds, resolved_options),
+        .empty => |empty| try empty.render(scene, bounds, resolved_options),
+        .badge => |badge| try badge.render(scene, bounds, resolved_options),
+        .avatar => |avatar| try avatar.render(scene, bounds, resolved_options),
+        .kbd => |kbd| try kbd.render(scene, bounds, resolved_options),
+        .label => |label| try label.render(scene, bounds, resolved_options),
+        .separator => |separator| try separator.render(scene, bounds, resolved_options),
+        .scroll_area => |scroll_area| try scroll_area.render(scene, bounds, resolved_options),
+        .skeleton => |skeleton| try skeleton.render(scene, bounds, resolved_options),
+        .spinner => |spinner| try spinner.render(scene, bounds, resolved_options),
+        .breadcrumb => |breadcrumb| try breadcrumb.render(scene, bounds, resolved_options),
+        .menubar => |menubar| try menubar.render(scene, bounds, resolved_options),
+        .navigation_menu => |menu| try menu.render(scene, bounds, resolved_options),
+        .command => |command| try command.render(scene, bounds, resolved_options),
+        .context_menu => |menu| try menu.render(scene, bounds, resolved_options),
+        .dialog => |dialog| try dialog.render(scene, bounds, resolved_options),
+        .direction => |direction| try direction.render(scene, bounds, resolved_options),
+        .drawer => |drawer| try drawer.render(scene, bounds, resolved_options),
+        .dropdown_menu => |menu| try menu.render(scene, bounds, resolved_options),
+        .field => |field| try field.render(scene, bounds, resolved_options),
+        .hover_card => |hover_card| try hover_card.render(scene, bounds, resolved_options),
+        .input_otp => |otp| try otp.render(scene, bounds, resolved_options),
+        .button => |button| try button.render(scene, bounds, resolved_options),
+        .button_group => |group| try group.render(scene, bounds, resolved_options),
+        .toggle_group => |group| try group.render(scene, bounds, resolved_options),
+        .toggle => |toggle| try toggle.render(scene, bounds, resolved_options),
+        .input => |input| try input.render(scene, bounds, resolved_options),
+        .input_group => |input_group| try input_group.render(scene, bounds, resolved_options),
+        .textarea => |textarea| try textarea.render(scene, bounds, resolved_options),
+        .select => |select| try select.render(scene, bounds, resolved_options),
+        .checkbox => |checkbox| try checkbox.render(scene, bounds, resolved_options),
+        .radio_group => |radio| try radio.render(scene, bounds, resolved_options),
+        .switch_control => |switch_control| try switch_control.render(scene, bounds, resolved_options),
+        .pagination => |pagination| try pagination.render(scene, bounds, resolved_options),
+        .popover => |popover| try popover.render(scene, bounds, resolved_options),
+        .resizable => |resizable| try resizable.render(scene, bounds, resolved_options),
+        .sheet => |sheet| try sheet.render(scene, bounds, resolved_options),
+        .sidebar => |sidebar| try sidebar.render(scene, bounds, resolved_options),
+        .progress => |progress| try progress.render(scene, bounds, resolved_options),
+        .slider => |slider| try slider.render(scene, bounds, resolved_options),
+        .tabs => |tabs| try tabs.render(scene, bounds, resolved_options),
+        .table => |table| try table.render(scene, bounds, resolved_options),
+        .tooltip => |tooltip| try tooltip.render(scene, bounds, resolved_options),
+        .toast => |toast| try toast.render(scene, bounds, resolved_options),
+        .row_item => |row| try row.render(scene, bounds, resolved_options),
     }
+    try renderControlStateOverlay(scene, bounds, resolved_options, control_radius);
+}
+
+fn componentControlId(component: anytype) ?u32 {
+    return switch (component) {
+        .text, .alert, .aspect_ratio, .card, .empty, .badge, .avatar, .kbd, .label, .separator, .scroll_area, .skeleton, .spinner, .progress => null,
+        .accordion => |value| value.id,
+        .alert_dialog => |value| value.id,
+        .calendar => |value| value.id,
+        .carousel => |value| value.id,
+        .chart => |value| value.id,
+        .combobox => |value| value.id,
+        .breadcrumb => |value| value.id,
+        .menubar => |value| value.id,
+        .navigation_menu => |value| value.id,
+        .command => |value| value.id,
+        .context_menu => |value| value.id,
+        .dialog => |value| value.id,
+        .direction => |value| value.id,
+        .drawer => |value| value.id,
+        .dropdown_menu => |value| value.id,
+        .field => |value| value.id,
+        .hover_card => |value| value.id,
+        .input_otp => |value| value.id,
+        .button => |value| value.id,
+        .button_group => |value| value.id,
+        .toggle_group => |value| value.id,
+        .toggle => |value| value.id,
+        .input => |value| value.id,
+        .input_group => |value| value.id,
+        .textarea => |value| value.id,
+        .select => |value| value.id,
+        .checkbox => |value| value.id,
+        .radio_group => |value| value.id,
+        .switch_control => |value| value.id,
+        .pagination => |value| value.id,
+        .popover => |value| value.id,
+        .resizable => |value| value.id,
+        .sheet => |value| value.id,
+        .sidebar => |value| value.id,
+        .slider => |value| value.id,
+        .tabs => |value| value.id,
+        .table => |value| value.id,
+        .tooltip => |value| value.id,
+        .toast => |value| value.id,
+        .row_item => |value| value.id,
+    };
 }
 
 pub fn collectComponentInteractions(comptime Component: type, collector: *interaction.Collector, bounds: ui.Rect, component: Component) interaction.Error!void {
@@ -112,6 +162,32 @@ pub fn collectComponentInteractions(comptime Component: type, collector: *intera
         .row_item => |row| try row.collectInteractions(collector, bounds),
         else => {},
     }
+}
+
+pub fn accessibility(comptime Component: type, component: Component) common.Accessibility {
+    return switch (component) {
+        .text => |text| .{ .role = .text, .label = text.value },
+        .button => |button| .{ .role = .button, .label = button.label, .control_id = button.id },
+        .input => |input| .{ .role = .input, .label = input.placeholder, .control_id = input.id },
+        .field => |field| .{ .role = .input, .label = field.label, .control_id = field.id },
+        .textarea => |textarea| .{ .role = .input, .label = textarea.placeholder, .control_id = textarea.id },
+        .select => |select| .{ .role = .input, .label = select.label, .control_id = select.id },
+        .checkbox => |checkbox| .{ .role = .checkbox, .label = checkbox.label, .control_id = checkbox.id },
+        .switch_control => |switch_control| .{ .role = .switch_control, .label = switch_control.label, .control_id = switch_control.id },
+        .slider => |slider| .{ .role = .slider, .label = slider.label, .control_id = slider.id },
+        .tabs => |tabs| .{ .role = .tab, .label = tabs.first, .control_id = tabs.id },
+        .table => |table| .{ .role = .table, .label = table.name, .control_id = table.id },
+        .dialog => |dialog| .{ .role = .dialog, .label = dialog.title, .control_id = dialog.id },
+        .alert_dialog => |dialog| .{ .role = .dialog, .label = dialog.title, .control_id = dialog.id },
+        .dropdown_menu => |menu| .{ .role = .menu, .label = menu.first, .control_id = menu.id },
+        .context_menu => |menu| .{ .role = .menu, .label = menu.first, .control_id = menu.id },
+        .menubar => |menubar| .{ .role = .menu, .label = menubar.first, .control_id = menubar.id },
+        .navigation_menu => |menu| .{ .role = .menu, .label = menu.first, .control_id = menu.id },
+        .avatar => |avatar| .{ .role = .image, .label = avatar.label },
+        .toast => |toast| .{ .role = .status, .label = toast.title, .control_id = toast.id },
+        .row_item => |row| .{ .role = .button, .label = row.title, .control_id = row.id },
+        else => .{ .role = .generic },
+    };
 }
 
 pub fn measureComponent(comptime Component: type, component: Component, constraints: layouts.types.Constraints, options: RenderOptions) layouts.types.Measurement {
@@ -506,7 +582,7 @@ pub fn renderInput(scene: *ui.Scene, bounds: ui.Rect, placeholder: []const u8, l
 
 pub fn renderInputGroup(scene: *ui.Scene, bounds: ui.Rect, addon: []const u8, placeholder: []const u8, options: RenderOptions) ui.RenderError!void {
     try renderControlFrame(scene, bounds, options.style.panel, options.style.border, control_radius);
-    const addon_w = @min(input_group_addon_max_w, @max(input_group_addon_min_w, @as(f32, @floatFromInt(addon.len)) * control_average_char_width + input_group_addon_padding * 2.0));
+    const addon_w = @min(input_group_addon_max_w, @max(input_group_addon_min_w, text_metrics.width(addon, control_label_height) + input_group_addon_padding * 2.0));
     const addon_bounds = ui.Rect.init(bounds.x, bounds.y, addon_w, bounds.h);
     try renderControlText(scene, addon_bounds, input_group_addon_padding, control_label_height, addon, options.style.muted, .center);
     try scene.pushRect(ui.Rect.init(addon_bounds.x + addon_bounds.w, bounds.y + input_group_separator_inset, separator_height, @max(min_extent, bounds.h - input_group_separator_inset * 2.0)), options.style.border, .fill, 0.0, 0.0);
@@ -1106,7 +1182,7 @@ pub fn renderRowItem(scene: *ui.Scene, bounds: ui.Rect, title: []const u8, detai
 pub fn measureText(value: []const u8, constraints: layout.Constraints) layout.Measurement {
     const measured = layout.measureText(value, constraints, .{
         .line_height = text_line_height,
-        .average_char_width = text_average_w,
+        .average_char_width = text_metrics.averageWidth(value, text_line_height),
         .max_lines = text_max_lines,
     });
     const preferred = constrainPreferredSize(measured.preferred, constraints);
@@ -1118,7 +1194,7 @@ pub fn measureText(value: []const u8, constraints: layout.Constraints) layout.Me
 }
 
 pub fn measureBadge(label: []const u8, constraints: layout.Constraints) layout.Measurement {
-    const preferred_width = @max(badge_min_width, @as(f32, @floatFromInt(label.len)) * badge_label_average_w + badge_padding_x * 2.0);
+    const preferred_width = @max(badge_min_width, text_metrics.width(label, text_metrics.badge_label_px) + badge_padding_x * 2.0);
     const preferred = constrainPreferredSize(.{ .w = preferred_width, .h = badge_height }, constraints);
     return layout.Measurement.flexible(
         .{ .w = @min(badge_min_width, preferred.w), .h = @min(badge_height, preferred.h) },
@@ -1283,6 +1359,20 @@ fn renderControlFrame(scene: *ui.Scene, bounds: ui.Rect, fill: ui.Color, border:
     try scene.pushRect(bounds, border, .border, radius, 0.0);
 }
 
+fn renderControlStateOverlay(scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions, radius: f32) ui.RenderError!void {
+    const state = options.control;
+    if (!state.any()) return;
+    if (state.hovered) try scene.pushRect(bounds, common.state_hover_border, .border, radius, 0.0);
+    if (state.active) try scene.pushRect(bounds, common.state_active_border, .border, radius, 0.0);
+    if (state.focused) try scene.pushRect(bounds.insetUniform(-focus_ring_outset), common.state_focus_border, .border, radius + focus_ring_outset, 0.0);
+    if (state.invalid) try scene.pushRect(bounds, common.state_invalid_border, .border, radius, 0.0);
+    if (state.loading) {
+        const bar = ui.Rect.init(bounds.x, bounds.y + @max(0.0, bounds.h - state_loading_h), @max(min_extent, bounds.w), state_loading_h);
+        try scene.pushRect(bar, common.state_loading_fill, .fill, state_loading_h * 0.5, 0.0);
+    }
+    if (state.disabled) try scene.pushRect(bounds, common.state_disabled_tint, .fill, radius, 0.0);
+}
+
 fn rowTitleBounds(bounds: ui.Rect, centered: bool) ?ui.Rect {
     const row_bounds = if (centered) bounds.withHeightCentered(row_title_height) else ui.Rect.init(bounds.x, bounds.y + row_title_offset_y, bounds.w, row_title_height);
     return rowTextBounds(row_bounds);
@@ -1438,7 +1528,9 @@ const alert_detail_height: f32 = 16.0;
 const alert_detail_average_w: f32 = 7.5;
 const alert_detail_max_lines: usize = 2;
 const alert_danger = ui.Color{ .r = 239, .g = 68, .b = 68 };
-const control_radius: f32 = 6.0;
+const control_radius: f32 = tokens.Component.control_radius;
+const focus_ring_outset: f32 = tokens.Component.focus_ring_outset;
+const state_loading_h: f32 = tokens.Component.state_loading_h;
 pub const calendar_day_count: usize = 28;
 pub const calendar_day_id_offset: u32 = 2;
 const calendar_column_count: usize = 7;
@@ -1529,10 +1621,10 @@ const empty_detail_gap: f32 = 4.0;
 const empty_detail_height: f32 = 16.0;
 const empty_detail_average_w: f32 = 7.5;
 const empty_detail_max_lines: usize = 2;
-const row_radius: f32 = 4.0;
-const control_text_padding: f32 = 12.0;
-const control_label_height: f32 = 16.0;
-const control_average_char_width: f32 = 8.5;
+const row_radius: f32 = tokens.Component.row_radius;
+const control_text_padding: f32 = tokens.Component.control_text_padding;
+const control_label_height: f32 = tokens.Component.control_label_height;
+const control_average_char_width: f32 = tokens.Component.control_average_char_width;
 const input_icon_size: f32 = 16.0;
 const input_icon_gap: f32 = 8.0;
 const input_group_addon_min_w: f32 = 42.0;
@@ -1728,17 +1820,16 @@ const row_detail_offset_y: f32 = 26.0;
 const row_title_height: f32 = 18.0;
 const row_detail_height: f32 = 16.0;
 const text_line_height: f32 = 18.0;
-const text_average_w: f32 = 8.0;
 const text_max_lines: usize = 8;
 const text_min_width: f32 = 24.0;
 const calendar_weekday_labels = [_][]const u8{ "Su", "Mo", "Tu", "We", "Th", "Fr", "Sa" };
 const calendar_day_labels = [_][]const u8{ "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28" };
 const chart_bar_values = [_]f32{ 0.45, 0.72, 0.38, 0.86, 0.62 };
-pub const surface_radius: f32 = 10.0;
-pub const surface_padding: f32 = 16.0;
-pub const surface_title_height: f32 = 18.0;
-pub const surface_detail_height: f32 = 16.0;
-pub const surface_detail_gap: f32 = 8.0;
+pub const surface_radius: f32 = tokens.Component.surface_radius;
+pub const surface_padding: f32 = tokens.Component.surface_padding;
+pub const surface_title_height: f32 = tokens.Component.surface_title_height;
+pub const surface_detail_height: f32 = tokens.Component.surface_detail_height;
+pub const surface_detail_gap: f32 = tokens.Component.surface_detail_gap;
 const surface_elevated_radius_extra: f32 = 2.0;
 const surface_shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 96 };
 const surface_shadow_size: f32 = 8.0;
@@ -1748,10 +1839,9 @@ const surface_title_max_lines: usize = 1;
 const surface_detail_average_w: f32 = 8.0;
 const surface_detail_max_lines: usize = 3;
 const surface_min_width: f32 = 160.0;
-pub const badge_height: f32 = 24.0;
-pub const badge_text_height: f32 = 13.0;
-pub const badge_padding_x: f32 = 12.0;
+pub const badge_height: f32 = tokens.Component.badge_height;
+pub const badge_text_height: f32 = tokens.Component.badge_text_height;
+pub const badge_padding_x: f32 = tokens.Component.badge_padding_x;
 const badge_fill_alpha: u8 = 48;
-const badge_label_average_w: f32 = 8.0;
 const badge_min_width: f32 = 28.0;
 const badge_danger = ui.Color{ .r = 239, .g = 68, .b = 68 };
