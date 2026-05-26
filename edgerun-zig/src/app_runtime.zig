@@ -81,6 +81,9 @@ const small_text_sharpen_max_px: u8 = 16;
 const small_text_sharpen_midpoint: f32 = 128.0;
 const small_text_sharpen_contrast: f32 = 1.14;
 const small_text_sharpen_lift: f32 = 6.0;
+const min_device_scale: f32 = 1.0;
+const default_device_scale: f32 = 1.0;
+const max_device_scale: f32 = 4.0;
 const app_source_url = "https://github.com/edgerun";
 const route_bytes_capacity: usize = app_navigation.route_path_capacity;
 const route_hash_bytes_capacity: usize = app_navigation.route_hash_capacity;
@@ -1703,6 +1706,15 @@ export fn er_ui_render_frame(width: u32, height: u32, frame_ms: f32) u32 {
     return renderAppPixels(surface, pointer_hover_x, pointer_hover_y, frame_ms);
 }
 
+export fn er_ui_render_frame_hd(width: u32, height: u32, scale_raw: f32, frame_ms: f32) u32 {
+    const scale = framebufferDeviceScale(width, height, scale_raw);
+    const physical_width = scaledFrameDimension(width, scale) orelse return finishError(.bad_size);
+    const physical_height = scaledFrameDimension(height, scale) orelse return finishError(.bad_size);
+    const surface = beginFrame(physical_width, physical_height) orelse return finishError(.bad_size);
+    _ = er_ui_set_device_scale(scale);
+    return renderAppPixelsScaled(surface, width, height, scale, pointer_hover_x, pointer_hover_y, frame_ms);
+}
+
 export fn er_ui_render_icon_svg_test(icon_id: u32, width: u32, height: u32) u32 {
     const surface = beginFrame(width, height) orelse return finishError(.bad_size);
     var scene = ui.Scene.initWithClips(&commands, &clips);
@@ -1737,6 +1749,27 @@ fn renderAppPixels(surface: renderer_pipeline.SoftwareFramebuffer, hover_x: f32,
     var collector = interaction.Collector.init(&frame_regions);
     app_frame.render(&scene, &collector, frameBounds(), currentAppFrameState(hover_x, hover_y, frame_ms)) catch return finishError(.render_failed);
     return finishCpuSceneFrame(surface, scene, collector.written(), .{ .enabled = true, .x = hover_x, .y = hover_y }, .bg);
+}
+
+fn renderAppPixelsScaled(surface: renderer_pipeline.SoftwareFramebuffer, logical_width: u32, logical_height: u32, scale: f32, hover_x: f32, hover_y: f32, frame_ms: f32) u32 {
+    const physical_width = frame_width;
+    const physical_height = frame_height;
+    frame_width = @intCast(logical_width);
+    frame_height = @intCast(logical_height);
+    defer {
+        frame_width = physical_width;
+        frame_height = physical_height;
+    }
+
+    var scene = ui.Scene.initWithClips(&commands, &clips);
+    var frame_regions: [max_interaction_regions]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&frame_regions);
+    app_frame.render(&scene, &collector, frameBounds(), currentAppFrameState(hover_x, hover_y, frame_ms)) catch return finishError(.render_failed);
+    const frame_scene = prepareFrameScene(scene, collector.written(), .{ .enabled = true, .x = hover_x, .y = hover_y }) catch return finishError(.render_failed);
+    scaleSceneCommands(commands[0..frame_scene.commandCount()], scale);
+    renderSceneIr(surface, frame_scene.written(), .bg) catch return finishError(.render_failed);
+    last_error = .ok;
+    return @intFromEnum(ErrorCode.ok);
 }
 
 fn finishPackedFrame(scene: ui.Scene, regions: []const interaction.Region, hover_x: f32, hover_y: f32) u32 {
@@ -1778,6 +1811,36 @@ fn renderRuntimeFocusRing(scene: *ui.Scene) ui.RenderError!void {
     if (runtime_state.focused) |hit| {
         try scene.pushRect(hit.bounds.insetUniform(-focus_ring_outset), ui_component_common.state_focus_border, .border, focus_ring_radius, 0.0);
     }
+}
+
+fn scaleSceneCommands(scene_commands: []ui.Command, scale: f32) void {
+    if (@abs(scale - 1.0) <= 0.001) return;
+    for (scene_commands) |*command| scaleSceneCommand(command, scale);
+}
+
+fn scaleSceneCommand(command: *ui.Command, scale: f32) void {
+    switch (command.*) {
+        .rect => |*rect| {
+            scaleRect(&rect.bounds, scale);
+            rect.radius *= scale;
+            rect.shadow *= scale;
+        },
+        .border => |*border| scaleRect(&border.bounds, scale),
+        .text => |*text| scaleRect(&text.origin, scale),
+        .drag_source => |*source| scaleRect(&source.bounds, scale),
+        .drop_target => |*target| scaleRect(&target.bounds, scale),
+        .icon_quad => |*quad| scaleRect(&quad.bounds, scale),
+        .text_quad => |*quad| scaleRect(&quad.bounds, scale),
+        .image_quad => |*quad| scaleRect(&quad.bounds, scale),
+        .transition => {},
+    }
+}
+
+fn scaleRect(rect: *ui.Rect, scale: f32) void {
+    rect.x *= scale;
+    rect.y *= scale;
+    rect.w *= scale;
+    rect.h *= scale;
 }
 
 export fn er_ui_render_input_object(input_len: usize, width: u32, height: u32) u32 {
@@ -2254,8 +2317,23 @@ fn scaledFontValue(value: f32) f32 {
 }
 
 fn normalizedDeviceScale(scale: f32) f32 {
-    if (!std.math.isFinite(scale)) return 2.0;
-    return std.math.clamp(scale, 2.0, 4.0);
+    if (!std.math.isFinite(scale)) return default_device_scale;
+    return std.math.clamp(scale, min_device_scale, max_device_scale);
+}
+
+fn framebufferDeviceScale(width: u32, height: u32, scale_raw: f32) f32 {
+    const requested = normalizedDeviceScale(scale_raw);
+    if (width == 0 or height == 0) return requested;
+    const width_limit = @as(f32, @floatFromInt(max_width)) / @as(f32, @floatFromInt(width));
+    const height_limit = @as(f32, @floatFromInt(max_height)) / @as(f32, @floatFromInt(height));
+    return std.math.clamp(@min(requested, width_limit, height_limit), min_device_scale, max_device_scale);
+}
+
+fn scaledFrameDimension(value: u32, scale: f32) ?u32 {
+    if (value == 0 or !std.math.isFinite(scale)) return null;
+    const scaled = @ceil(@as(f32, @floatFromInt(value)) * scale);
+    if (scaled < 1.0 or scaled > @as(f32, @floatFromInt(std.math.maxInt(u32)))) return null;
+    return @intFromFloat(scaled);
 }
 
 fn fontMetrics(px: u8) renderer_pipeline.TextMetrics {
@@ -2943,6 +3021,16 @@ test "app variable font atlas separates css size from raster scale" {
     try std.testing.expect(glyph_3x.source_w > glyph_2x.source_w);
     try std.testing.expectApproxEqAbs(glyph_2x.w, glyph_3x.w, 1.5);
     try std.testing.expectApproxEqAbs(glyph_2x.advance, glyph_3x.advance, 0.75);
+}
+
+test "app hd browser frame keeps logical layout and physical pixels separate" {
+    font_atlas_ready = false;
+    const code = er_ui_render_frame_hd(320, 200, 2.0, 0.0);
+
+    try std.testing.expectEqual(@as(u32, 0), code);
+    try std.testing.expectEqual(@as(u32, 640), er_ui_width());
+    try std.testing.expectEqual(@as(u32, 400), er_ui_height());
+    try std.testing.expectEqual(@as(f32, 2.0), font_atlas_device_scale);
 }
 
 test "app font atlas populates glyphs on demand" {

@@ -26,6 +26,7 @@ PUBLIC_RETRY_INTERVAL_SECONDS = 5
 HTTP_OK = 200
 MAX_PUBLIC_LOADER_JS_BYTES = 500
 BROWSER_NAMES = ("chromium", "chromium-browser", "google-chrome", "google-chrome-stable")
+BROWSER_SMOKE_SCALE = 2
 
 
 class SiteHandler(http.server.SimpleHTTPRequestHandler):
@@ -127,6 +128,7 @@ def browser_smoke(url):
             "--headless",
             "--disable-gpu",
             "--no-sandbox",
+            f"--force-device-scale-factor={BROWSER_SMOKE_SCALE}",
             "--virtual-time-budget=5000",
             "--dump-dom",
             url,
@@ -138,6 +140,11 @@ def browser_smoke(url):
     )
     require('<canvas id="c"' in result.stdout, "browser smoke did not reach app canvas")
     require("EdgeRun failed:" not in result.stdout, "browser smoke reached failure page")
+    canvas = re.search(r'<canvas id="c" width="([0-9]+)" height="([0-9]+)" style="width: ([0-9]+)px; height: ([0-9]+)px;', result.stdout)
+    require(canvas is not None, "browser smoke missing high-dpi canvas sizing")
+    pixel_width, pixel_height, css_width, css_height = (int(value) for value in canvas.groups())
+    require(pixel_width == css_width * BROWSER_SMOKE_SCALE, "browser smoke did not use high-dpi canvas width")
+    require(pixel_height == css_height * BROWSER_SMOKE_SCALE, "browser smoke did not use high-dpi canvas height")
 
 
 def node_execute_loader(loader):

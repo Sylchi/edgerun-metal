@@ -466,6 +466,7 @@ pub fn build(b: *std.Build) void {
         "er_ui_request_release_artifact_launch",
         "er_ui_build_frame",
         "er_ui_render_frame",
+        "er_ui_render_frame_hd",
         "er_ui_render_icon_svg_test",
         "er_ui_render_icon_svg_tuning_test",
     };
