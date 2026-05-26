@@ -455,7 +455,6 @@ fn sourceFileAllowed(path: []const u8) bool {
     if (std.mem.startsWith(u8, path, "compiler/zig/src/")) return false;
     if (std.mem.startsWith(u8, path, "compiler/zig/lib/std/")) return compilerStdFileAllowed(path);
     if (std.mem.startsWith(u8, path, "compiler/zig/lib/compiler/")) return false;
-    if (std.mem.startsWith(u8, path, "compiler/zig/lib/") and std.mem.eql(u8, std.fs.path.dirname(path) orelse "", "compiler/zig/lib")) return compilerExtensionAllowed(path);
     return false;
 }
 
@@ -509,13 +508,6 @@ fn appSourceFileAllowed(path: []const u8) bool {
     return true;
 }
 
-fn compilerExtensionAllowed(path: []const u8) bool {
-    return std.mem.endsWith(u8, path, ".zig") or
-        std.mem.endsWith(u8, path, ".zon") or
-        std.mem.endsWith(u8, path, ".h") or
-        std.mem.endsWith(u8, path, ".c");
-}
-
 fn compilerStdFileAllowed(path: []const u8) bool {
     if (std.mem.endsWith(u8, path, "_test.zig")) return false;
     if (std.mem.eql(u8, std.fs.path.basename(path), compiler_zig_std_test_name)) return false;
@@ -542,7 +534,7 @@ fn compilerStdFileAllowed(path: []const u8) bool {
     if (std.mem.startsWith(u8, path, "compiler/zig/lib/std/testing/")) return false;
     if (std.mem.startsWith(u8, path, "compiler/zig/lib/std/tz/")) return false;
     if (std.mem.startsWith(u8, path, "compiler/zig/lib/std/zig/llvm/")) return false;
-    return compilerExtensionAllowed(path);
+    return std.mem.endsWith(u8, path, ".zig") or std.mem.endsWith(u8, path, ".md");
 }
 
 fn compilerStdDirectoryAllowed(path: []const u8) bool {
@@ -626,6 +618,7 @@ test "workspace source filter removes app host tools and tests" {
 test "workspace source filter removes host compiler families" {
     try std.testing.expect(!sourceFileAllowed("compiler/zig/build.zig"));
     try std.testing.expect(!sourceFileAllowed("compiler/zig/build.zig.zon"));
+    try std.testing.expect(!sourceFileAllowed("compiler/zig/lib/zig.h"));
     try std.testing.expect(!sourceFileAllowed("compiler/zig/src/edgerun_wasm_compiler.zig"));
     try std.testing.expect(!sourceFileAllowed("compiler/zig/src/main.zig"));
     try std.testing.expect(!sourceFileAllowed("compiler/zig/src/codegen/x86_64/CodeGen.zig"));

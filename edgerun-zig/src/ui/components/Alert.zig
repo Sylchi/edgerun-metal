@@ -3,10 +3,10 @@ const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
+const icon = @import("../../icon.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
-const component_render = @import("Render.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
@@ -21,13 +21,26 @@ pub const Alert = struct {
     }
 
     pub fn render(self: Alert, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return component_render.renderAlert(scene, bounds, self.title, self.detail, self.destructive, options);
+        const content_color = if (self.destructive) alert_danger else options.style.text;
+        try scene.pushRect(bounds, options.style.panel, .fill, alert_radius, 0.0);
+        try scene.pushRect(bounds, if (self.destructive) alert_danger else options.style.border, .border, alert_radius, 0.0);
+        try scene.pushIconQuad(.{
+            .bounds = ui.Rect.init(bounds.x + alert_padding_x, bounds.y + alert_padding_y, alert_icon_size, alert_icon_size),
+            .icon_id = icon.id(if (self.destructive) .warning else .shield),
+            .color = content_color,
+        });
+        try scene.pushText(ui.Rect.init(bounds.x + alert_text_x, bounds.y + alert_padding_y - 1.0, @max(min_extent, bounds.w - alert_text_x - alert_padding_x), alert_title_height), self.title, content_color);
+        try scene.pushWrappedText(ui.Rect.init(bounds.x + alert_text_x, bounds.y + alert_padding_y + alert_title_height + alert_detail_gap, @max(min_extent, bounds.w - alert_text_x - alert_padding_x), @max(min_extent, bounds.h - alert_padding_y * 2.0 - alert_title_height)), self.detail, if (self.destructive) alert_danger else options.style.muted, .{
+            .line_height = alert_detail_height,
+            .average_char_width = alert_detail_average_w,
+            .max_lines = alert_detail_max_lines,
+        });
     }
 
     pub fn measure(self: Alert, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = self;
         _ = options;
-        return component_render.measureFixed(component_render.preferred_alert, constraints);
+        return measureFixed(preferred_alert, constraints);
     }
 
     pub fn toObject(self: Alert, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -50,6 +63,37 @@ pub const Alert = struct {
         };
     }
 };
+
+fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
+    const resolved_preferred = constrainPreferredSize(preferred, constraints);
+    return layout.Measurement.flexible(
+        .{ .w = @min(preferred.w, resolved_preferred.w), .h = @min(preferred.h, resolved_preferred.h) },
+        resolved_preferred,
+        .{ .w = measure_max_width, .h = preferred.h },
+    ).applyExact(constraints);
+}
+
+fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {
+    return .{
+        .w = constraints.width.limit(preferred.w),
+        .h = constraints.height.limit(preferred.h),
+    };
+}
+
+const min_extent: f32 = 1.0;
+const measure_max_width: f32 = 4096.0;
+const alert_radius: f32 = 8.0;
+const alert_padding_x: f32 = 16.0;
+const alert_padding_y: f32 = 12.0;
+const alert_icon_size: f32 = 16.0;
+const alert_text_x: f32 = 44.0;
+const alert_title_height: f32 = 16.0;
+const alert_detail_gap: f32 = 2.0;
+const alert_detail_height: f32 = 16.0;
+const alert_detail_average_w: f32 = 7.5;
+const alert_detail_max_lines: usize = 2;
+const alert_danger = ui.Color{ .r = 239, .g = 68, .b = 68 };
+pub const preferred_alert = ui.Size{ .w = 260.0, .h = 64.0 };
 
 test "alert component serializes to canonical object and deserializes" {
     const alert = Alert{ .title = "Heads up", .detail = "Status message", .destructive = true };

@@ -3,10 +3,10 @@ const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
+const icon = @import("../../icon.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
-const component_render = @import("Render.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
@@ -20,13 +20,23 @@ pub const Empty = struct {
     }
 
     pub fn render(self: Empty, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return component_render.renderEmpty(scene, bounds, self.title, self.detail, options);
+        try scene.pushRect(bounds, ui.Color.clear, .fill, empty_radius, 0.0);
+        try scene.pushRect(bounds, options.style.border, .border, empty_radius, 0.0);
+        const media = ui.Rect.init(bounds.x + (bounds.w - empty_media_size) * 0.5, bounds.y + empty_padding, empty_media_size, empty_media_size);
+        try scene.pushRect(media, options.style.row, .fill, media.w * 0.5, 0.0);
+        try scene.pushIconQuad(.{ .bounds = media.insetUniform(empty_media_icon_inset), .icon_id = icon.id(.sparkles), .color = options.style.text });
+        try scene.pushAlignedText(ui.Rect.init(bounds.x + empty_padding, media.y + media.h + empty_gap, @max(min_extent, bounds.w - empty_padding * 2.0), empty_title_height), self.title, options.style.text, .center);
+        try scene.pushWrappedText(ui.Rect.init(bounds.x + empty_padding, media.y + media.h + empty_gap + empty_title_height + empty_detail_gap, @max(min_extent, bounds.w - empty_padding * 2.0), empty_detail_height * empty_detail_max_lines), self.detail, options.style.muted, .{
+            .line_height = empty_detail_height,
+            .average_char_width = empty_detail_average_w,
+            .max_lines = empty_detail_max_lines,
+        });
     }
 
     pub fn measure(self: Empty, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = self;
         _ = options;
-        return component_render.measureFixed(component_render.preferred_empty, constraints);
+        return measureFixed(preferred_empty, constraints);
     }
 
     pub fn toObject(self: Empty, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -44,6 +54,36 @@ pub const Empty = struct {
         };
     }
 };
+
+fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
+    const resolved_preferred = constrainPreferredSize(preferred, constraints);
+    return layout.Measurement.flexible(
+        .{ .w = @min(preferred.w, resolved_preferred.w), .h = @min(preferred.h, resolved_preferred.h) },
+        resolved_preferred,
+        .{ .w = measure_max_width, .h = preferred.h },
+    ).applyExact(constraints);
+}
+
+fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {
+    return .{
+        .w = constraints.width.limit(preferred.w),
+        .h = constraints.height.limit(preferred.h),
+    };
+}
+
+const min_extent: f32 = 1.0;
+const measure_max_width: f32 = 4096.0;
+const empty_radius: f32 = 8.0;
+const empty_padding: f32 = 24.0;
+const empty_media_size: f32 = 40.0;
+const empty_media_icon_inset: f32 = 8.0;
+const empty_gap: f32 = 10.0;
+const empty_title_height: f32 = 20.0;
+const empty_detail_gap: f32 = 4.0;
+const empty_detail_height: f32 = 16.0;
+const empty_detail_average_w: f32 = 7.5;
+const empty_detail_max_lines: usize = 2;
+pub const preferred_empty = ui.Size{ .w = 260.0, .h = 132.0 };
 
 test "empty component serializes to canonical object and deserializes" {
     const empty = Empty{ .title = "No results", .detail = "Try another filter." };

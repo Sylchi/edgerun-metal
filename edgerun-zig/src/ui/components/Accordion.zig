@@ -1,13 +1,14 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
+const icon = @import("../../icon.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
+const tokens = @import("../../ui_tokens.zig");
 const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
-const component_render = @import("Render.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
@@ -23,17 +24,27 @@ pub const Accordion = struct {
     }
 
     pub fn render(self: Accordion, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return component_render.renderAccordion(scene, bounds, self.title, self.detail, self.open, options);
+        const trigger = triggerBounds(bounds);
+        try scene.pushText(ui.Rect.init(trigger.x, trigger.y + accordion_trigger_text_y, @max(min_extent, trigger.w - accordion_icon_space), control_label_height), self.title, options.style.text);
+        try scene.pushIconQuad(.{ .bounds = ui.Rect.init(trigger.x + trigger.w - accordion_icon_size, trigger.y + accordion_icon_y, accordion_icon_size, accordion_icon_size), .icon_id = icon.id(.chevron_right), .color = options.style.muted });
+        try scene.pushRect(ui.Rect.init(bounds.x, trigger.y + trigger.h, bounds.w, separator_height), options.style.border, .fill, 0.0, 0.0);
+        if (self.open) {
+            try scene.pushWrappedText(ui.Rect.init(bounds.x, trigger.y + trigger.h + accordion_content_padding_top, bounds.w, @max(min_extent, bounds.h - trigger.h - accordion_content_padding_top)), self.detail, options.style.muted, .{
+                .line_height = accordion_detail_height,
+                .average_char_width = accordion_detail_average_w,
+                .max_lines = accordion_detail_max_lines,
+            });
+        }
     }
 
     pub fn collectInteractions(self: Accordion, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-        return common.collectHit(collector, component_render.accordionTriggerBounds(bounds), .button, self.id);
+        return common.collectHit(collector, triggerBounds(bounds), .button, self.id);
     }
 
     pub fn measure(self: Accordion, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = self;
         _ = options;
-        return component_render.measureFixed(component_render.preferred_accordion, constraints);
+        return measureFixed(preferred_accordion, constraints);
     }
 
     pub fn toObject(self: Accordion, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -61,7 +72,41 @@ fn encodedId(id: u32, open: bool) u32 {
     return id * accordion_id_stride + open_value;
 }
 
+fn triggerBounds(bounds: ui.Rect) ui.Rect {
+    return ui.Rect.init(bounds.x, bounds.y, bounds.w, accordion_trigger_h);
+}
+
+fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
+    const resolved_preferred = constrainPreferredSize(preferred, constraints);
+    return layout.Measurement.flexible(
+        .{ .w = @min(preferred.w, resolved_preferred.w), .h = @min(preferred.h, resolved_preferred.h) },
+        resolved_preferred,
+        .{ .w = measure_max_width, .h = preferred.h },
+    ).applyExact(constraints);
+}
+
+fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {
+    return .{
+        .w = constraints.width.limit(preferred.w),
+        .h = constraints.height.limit(preferred.h),
+    };
+}
+
 const accordion_id_stride: u32 = 2;
+const min_extent: f32 = 1.0;
+const measure_max_width: f32 = 4096.0;
+const preferred_accordion = ui.Size{ .w = 260.0, .h = 68.0 };
+const accordion_trigger_h: f32 = 36.0;
+const accordion_trigger_text_y: f32 = 10.0;
+const accordion_icon_space: f32 = 22.0;
+const accordion_icon_size: f32 = 14.0;
+const accordion_icon_y: f32 = 11.0;
+const accordion_content_padding_top: f32 = 8.0;
+const accordion_detail_height: f32 = 16.0;
+const accordion_detail_average_w: f32 = 7.5;
+const accordion_detail_max_lines: usize = 2;
+const control_label_height: f32 = tokens.Component.control_label_height;
+const separator_height: f32 = 1.0;
 
 test "accordion component serializes to canonical object and deserializes" {
     const accordion = Accordion{ .id = 101, .title = "Is it accessible?", .detail = "Yes. It follows the pattern.", .open = true };
