@@ -80,6 +80,7 @@ def verify_local_files(site_dir):
     require("arrayBuffer" in entry, "web entry missing deterministic wasm bytes load")
     require("instantiateStreaming" not in entry, "web entry depends on wasm MIME streaming instantiate")
     require("getContext`webgl`" in entry, "web entry missing WebGL bridge")
+    require("bindAttribLocation" in entry, "web entry missing explicit WebGL attribute binding")
     require("er_ui_build_frame" in entry, "web entry missing packed frame build")
     require("er_ui_packed_rect_buffer_ptr" in entry, "web entry missing packed rect bridge")
     require("er_ui_packed_text_vertex_buffer_ptr" in entry, "web entry missing packed text bridge")
@@ -173,7 +174,7 @@ const gl = {
   COLOR_BUFFER_BIT: 21, BLEND: 22, ONE: 23, ONE_MINUS_SRC_ALPHA: 24,
   createShader: () => ({}), shaderSource: () => {}, compileShader: () => {},
   getShaderParameter: () => true, getShaderInfoLog: () => "",
-  createProgram: () => ({}), attachShader: () => {}, linkProgram: () => {},
+  createProgram: () => ({}), attachShader: () => {}, bindAttribLocation: () => {}, linkProgram: () => {},
   getProgramParameter: () => true, getProgramInfoLog: () => "",
   createBuffer: () => ({}), createTexture: () => ({}), bindTexture: () => {},
   texParameteri: () => {}, texImage2D: () => {}, bindBuffer: () => {},
