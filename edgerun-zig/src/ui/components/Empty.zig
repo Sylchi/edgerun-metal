@@ -13,7 +13,6 @@ const component_primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = .{ .name = "empty", .Payload = Empty };
 const constrainPreferredSize = component_primitives.constrainPreferredSize;
 const Icon = icon_component.Icon;
 const IconSlot = icon_component.IconSlot;

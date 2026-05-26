@@ -19,6 +19,7 @@ const app_navigation = @import("app_navigation.zig");
 const app_native_input = @import("app_native_input.zig");
 const icon_component = @import("ui/components/Icon.zig");
 const ui = @import("ui.zig");
+const text_component = @import("ui/components/Text.zig");
 
 const linux = std.os.linux;
 const posix = std.posix;
@@ -1132,7 +1133,7 @@ fn renderClientDecoration(scene: *ui.Scene, collector: *interaction.Collector, w
     const bounds = ui.Rect.init(0.0, 0.0, width, client_decor_h);
     try scene.pushRect(bounds, client_decor_bg, .fill, 0.0, 0.0);
     try scene.pushRect(ui.Rect.init(0.0, client_decor_h - 1.0, width, 1.0), client_decor_border, .fill, 0.0, 0.0);
-    try scene.pushAlignedText(ui.Rect.init(14.0, 8.0, @max(1.0, width - 168.0), 15.0), "EdgeRun Native", client_decor_text, .start);
+    try text_component.Text.renderAligned(scene, ui.Rect.init(14.0, 8.0, @max(1.0, width - 168.0), 15.0), "EdgeRun Native", client_decor_text, .start);
 
     const close = clientDecorButton(width, 0);
     const minimize = clientDecorButton(width, 1);

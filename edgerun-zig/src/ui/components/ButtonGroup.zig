@@ -1,6 +1,7 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
+const text_component = @import("Text.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
@@ -11,8 +12,6 @@ const list_layout = @import("ListLayout.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
-
-pub const registration = .{ .name = "button_group", .Payload = ButtonGroup };
 
 pub const ButtonGroup = struct {
     id: u32,

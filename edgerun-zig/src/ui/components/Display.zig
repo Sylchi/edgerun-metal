@@ -15,15 +15,6 @@ const constrainPreferredSize = component_primitives.constrainPreferredSize;
 const contentInset = component_primitives.contentInset;
 const measureFixed = component_primitives.measureFixed;
 
-pub const aspect_ratio_registration = .{ .name = "aspect_ratio", .Payload = AspectRatio };
-pub const avatar_registration = .{ .name = "avatar", .Payload = Avatar };
-pub const kbd_registration = .{ .name = "kbd", .Payload = Kbd };
-pub const label_registration = .{ .name = "label", .Payload = Label };
-pub const progress_registration = .{ .name = "progress", .Payload = Progress };
-pub const separator_registration = .{ .name = "separator", .Payload = Separator };
-pub const skeleton_registration = .{ .name = "skeleton", .Payload = Skeleton };
-pub const spinner_registration = .{ .name = "spinner", .Payload = Spinner };
-
 pub const Separator = struct {
     pub fn node(self: Separator) ui.Node {
         _ = self;

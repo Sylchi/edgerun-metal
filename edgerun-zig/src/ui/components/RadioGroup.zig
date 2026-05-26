@@ -14,7 +14,6 @@ const list_layout = @import("ListLayout.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = .{ .name = "radio_group", .Payload = RadioGroup };
 const measureFixed = component_primitives.measureFixed;
 
 pub const RadioGroup = struct {

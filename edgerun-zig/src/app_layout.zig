@@ -1,6 +1,7 @@
 const std = @import("std");
 const layouts = @import("layouts.zig");
 const ui = @import("ui.zig");
+const text_component = @import("ui/components/Text.zig");
 
 pub fn fill(scene: *ui.Scene, bounds: ui.Rect, color: ui.Color, radius: f32) ui.RenderError!void {
     try scene.pushRect(bounds, color, .fill, radius, 0.0);
@@ -15,11 +16,11 @@ pub fn text(scene: *ui.Scene, x: f32, y: f32, width: f32, height: f32, value: []
 }
 
 pub fn alignedText(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, color: ui.Color, alignment: ui.TextAlign) ui.RenderError!void {
-    try scene.pushAlignedText(bounds, value, color, alignment);
+    try text_component.Text.renderAligned(scene, bounds, value, color, alignment);
 }
 
 pub fn wrappedText(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, color: ui.Color, metrics: layouts.types.TextMetrics) ui.RenderError!void {
-    try scene.pushWrappedText(bounds, value, color, .{
+    try text_component.Text.renderWrapped(scene, bounds, value, color, .{
         .line_height = metrics.line_height,
         .average_char_width = metrics.average_char_width,
         .max_lines = metrics.max_lines,

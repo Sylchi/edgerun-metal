@@ -1,11 +1,15 @@
 const clock = @import("../../clock.zig");
+const ui_input = @import("../../input.zig");
 const interaction = @import("../../ui_interaction.zig");
 const layouts = @import("../../layouts.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
 const common = @import("../../ui_component_common.zig");
 const component_codec = @import("Codec.zig");
+const component_test = @import("TestSupport.zig");
 const primitives = @import("Primitives.zig");
+const std = @import("std");
+const ui_tokens = @import("../../ui_tokens.zig");
 
 const accordion_component = @import("Accordion.zig");
 const alert_component = @import("Alert.zig");
@@ -199,15 +203,176 @@ fn componentFromNode(comptime ComponentPayload: type, node_payload: anytype) Err
 }
 
 comptime {
-    comptime {
-        @setEvalBranchQuota(10000);
-        for (registrations) |entry| {
-            if (entry.name.len == 0) @compileError("component union fields must have stable names");
-            if (!@hasDecl(entry.type, "node")) @compileError(@typeName(entry.type) ++ " must own node");
-            if (!@hasDecl(entry.type, "render")) @compileError(@typeName(entry.type) ++ " must own render");
-            if (!@hasDecl(entry.type, "measure")) @compileError(@typeName(entry.type) ++ " must own measure");
-            if (!@hasDecl(entry.type, "writeRecord")) @compileError(@typeName(entry.type) ++ " must own writeRecord");
-            if (!@hasDecl(entry.type, "fromNode")) @compileError(@typeName(entry.type) ++ " must own fromNode");
-        }
+    @setEvalBranchQuota(10000);
+    for (registrations) |entry| {
+        if (entry.name.len == 0) @compileError("component union fields must have stable names");
+        if (!@hasDecl(entry.type, "node")) @compileError(@typeName(entry.type) ++ " must own node");
+        if (!@hasDecl(entry.type, "render")) @compileError(@typeName(entry.type) ++ " must own render");
+        if (!@hasDecl(entry.type, "measure")) @compileError(@typeName(entry.type) ++ " must own measure");
+        if (!@hasDecl(entry.type, "writeRecord")) @compileError(@typeName(entry.type) ++ " must own writeRecord");
+        if (!@hasDecl(entry.type, "fromNode")) @compileError(@typeName(entry.type) ++ " must own fromNode");
+    }
+}
+
+test "component union is the component list source of truth" {
+    const fields = @typeInfo(Component).@"union".fields;
+    try std.testing.expectEqual(registrations.len, fields.len);
+    inline for (registrations, 0..) |entry, index| {
+        const field = fields[index];
+        try std.testing.expectEqualStrings(entry.name, field.name);
+        try std.testing.expect(field.type == entry.type);
+        try std.testing.expect(comptime @hasDecl(entry.type, "node"));
+        try std.testing.expect(comptime @hasDecl(entry.type, "render"));
+        try std.testing.expect(comptime @hasDecl(entry.type, "measure"));
+        try std.testing.expect(comptime @hasDecl(entry.type, "writeRecord"));
+        try std.testing.expect(comptime @hasDecl(entry.type, "fromNode"));
+    }
+}
+
+test "component union roundtrips concrete component objects" {
+    const Icon = icon_component.Icon;
+    const component = Component{ .icon_button = .{ .id = 14, .label = "Search", .icon = Icon.named(.search) } };
+    var ui_raw: [128]u8 = undefined;
+    var object_raw: [object.header_size + 128]u8 = undefined;
+
+    const canonical = component.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
+    const decoded = try Component.fromObject(canonical);
+
+    try std.testing.expectEqual(@as(u32, 14), decoded.icon_button.id);
+    try std.testing.expectEqualStrings("Search", decoded.icon_button.label);
+    try std.testing.expectEqual(Icon.named(.search).value, decoded.icon_button.icon.value);
+}
+
+test "component union decodes only canonical component objects" {
+    const component = Component{ .badge = .{ .label = "Object", .variant = .secondary } };
+    var ui_raw: [128]u8 = undefined;
+    var object_raw: [object.header_size + 128]u8 = undefined;
+
+    const canonical = component.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
+    const view = try object.View.decode(canonical);
+
+    try std.testing.expectEqual(object.Kind.bytes, view.header.kind);
+    try std.testing.expect(std.meta.eql(component_codec.requirements(), view.header.requirements));
+    try std.testing.expectError(error.Corrupt, Component.fromObject(view.body));
+}
+
+test "component union rejects objects without component requirements" {
+    const component = Component{ .button = .{ .id = 7, .label = "Wrong req" } };
+    var req = component_codec.requirements();
+    req.visibility = .private;
+    var ui_raw: [128]u8 = undefined;
+    var object_raw: [object.header_size + 128]u8 = undefined;
+
+    var writer = component_codec.Writer.init(&ui_raw, 1, 1, .column, 0, 0).?;
+    try std.testing.expect(component_codec.writeRecord(Component, &writer, 0, component));
+    const canonical = writer.objectNode(&object_raw, req, component_test.epoch()).?;
+
+    try std.testing.expectError(error.Corrupt, Component.fromObject(canonical));
+}
+
+test "component union dispatches button variants and collects hit targets" {
+    const Icon = icon_component.Icon;
+    const IconSlot = icon_component.IconSlot;
+    var commands: [16]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+    var regions: [4]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
+
+    const primary = Component{ .button = .{ .id = 501, .label = "Primary" } };
+    const outline = Component{ .button = .{ .id = 502, .label = "Outline", .variant = .outline, .icon_slot = IconSlot.named(.leading, .search) } };
+    try primary.render(&scene, ui.Rect.init(0, 0, 120, 36), .{});
+    try primary.collectInteractions(&collector, ui.Rect.init(0, 0, 120, 36));
+    try outline.render(&scene, ui.Rect.init(0, 44, 120, 36), .{});
+    try outline.collectInteractions(&collector, ui.Rect.init(0, 44, 120, 36));
+
+    try std.testing.expectEqual(@as(u32, 501), ui_input.hitTest(collector.written(), 12, 12).?.id);
+    try std.testing.expectEqual(@as(u32, 502), ui_input.hitTest(collector.written(), 12, 56).?.id);
+    try std.testing.expect(component_test.hasText(scene.written(), "Primary"));
+    try std.testing.expect(component_test.hasText(scene.written(), "Outline"));
+    try std.testing.expect(component_test.hasIcon(scene.written(), Icon.named(.search).tag()));
+}
+
+test "component renderer exports shared sizing tokens for measurements" {
+    try std.testing.expectEqual(ui_tokens.Component.surface_radius, card_component.surface_radius);
+    try std.testing.expectEqual(ui_tokens.Component.surface_padding, card_component.surface_padding);
+    try std.testing.expectEqual(ui_tokens.Component.surface_detail_gap, card_component.surface_detail_gap);
+    try std.testing.expectEqual(ui_tokens.Component.badge_height, badge_component.badge_height);
+    try std.testing.expectEqual(ui_tokens.Component.badge_padding_x, badge_component.badge_padding_x);
+}
+
+test "component accessibility metadata comes from component identity and labels" {
+    const button_meta = (Component{ .button = .{ .id = 91, .label = "Save" } }).accessibility();
+    try std.testing.expectEqual(common.AccessibilityRole.button, button_meta.role);
+    try std.testing.expectEqual(@as(u32, 91), button_meta.control_id.?);
+    try std.testing.expectEqualStrings("Save", button_meta.label);
+
+    const input_meta = (Component{ .input = .{ .id = 92, .placeholder = "Email" } }).accessibility();
+    try std.testing.expectEqual(common.AccessibilityRole.input, input_meta.role);
+    try std.testing.expectEqual(@as(u32, 92), input_meta.control_id.?);
+    try std.testing.expectEqualStrings("Email", input_meta.label);
+
+    const table_meta = (Component{ .table = .{ .id = 93, .name = "Ada", .role = "Engineer" } }).accessibility();
+    try std.testing.expectEqual(common.AccessibilityRole.table, table_meta.role);
+    try std.testing.expectEqual(@as(u32, 93), table_meta.control_id.?);
+    try std.testing.expectEqualStrings("Ada", table_meta.label);
+}
+
+test "component union applies shared interactive states by component id" {
+    var commands: [32]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+    const button = Component{ .button = .{ .id = 701, .label = "Save" } };
+    try button.render(&scene, ui.Rect.init(10, 12, 120, 36), .{
+        .interaction = .{
+            .hovered_id = 701,
+            .active_id = 701,
+            .focused_id = 701,
+            .disabled_id = 701,
+            .loading_id = 701,
+            .invalid_id = 701,
+        },
+    });
+
+    try std.testing.expect(component_test.hasRectColor(scene.written(), common.state_hover_border));
+    try std.testing.expect(component_test.hasRectColor(scene.written(), common.state_active_border));
+    try std.testing.expect(component_test.hasRectColor(scene.written(), common.state_focus_border));
+    try std.testing.expect(component_test.hasRectColor(scene.written(), common.state_invalid_border));
+    try std.testing.expect(component_test.hasFillColor(scene.written(), common.state_disabled_tint));
+    try std.testing.expect(component_test.hasFillColor(scene.written(), common.state_loading_fill));
+}
+
+test "component union does not leak interactive state to other ids" {
+    var commands: [16]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+    const button = Component{ .button = .{ .id = 702, .label = "Save" } };
+    try button.render(&scene, ui.Rect.init(10, 12, 120, 36), .{
+        .interaction = .{ .focused_id = 701 },
+    });
+
+    try std.testing.expect(!component_test.hasRectColor(scene.written(), common.state_focus_border));
+}
+
+test "component interaction collection covers primitive controls" {
+    const controls = [_]Component{
+        .{ .input = .{ .id = 601, .placeholder = "Filter" } },
+        .{ .textarea = .{ .id = 602, .placeholder = "Explain" } },
+        .{ .select = .{ .id = 603, .label = "Mode" } },
+        .{ .checkbox = .{ .id = 604, .label = "Receipts", .checked = true } },
+        .{ .switch_control = .{ .id = 605, .label = "Public", .checked = false } },
+        .{ .slider = .{ .id = 606, .label = "Brightness", .value = 0.5 } },
+        .{ .row_item = .{ .id = 607, .title = "DNS", .detail = "Lookup" } },
+    };
+    const expected = [_]ui.HitKind{ .input, .textarea, .select, .checkbox, .switch_control, .slider, .row_item };
+    var regions: [controls.len]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
+
+    for (controls, 0..) |component, index| {
+        const y = @as(f32, @floatFromInt(index)) * 48.0;
+        try component.collectInteractions(&collector, ui.Rect.init(0, y, 240, 40));
+    }
+
+    try std.testing.expectEqual(controls.len, collector.written().len);
+    for (collector.written(), 0..) |region, index| {
+        try std.testing.expectEqual(@as(u32, 601 + @as(u32, @intCast(index))), region.id);
+        try std.testing.expectEqual(expected[index], region.kind);
     }
 }

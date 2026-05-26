@@ -1,11 +1,15 @@
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
 const codec = @import("../../ui_codec.zig");
+const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
+const component_union = @import("Component.zig");
+const ui_input = @import("../../input.zig");
 const interaction = @import("../../ui_interaction.zig");
 const layouts = @import("../../layouts.zig");
 const object = @import("../../object.zig");
 const std = @import("std");
+const Text = @import("Text.zig").Text;
 const tree_codec = @import("TreeCodec.zig");
 const ui = @import("../../ui.zig");
 
@@ -245,4 +249,163 @@ pub fn StackTree(comptime Component: type) type {
             };
         }
     };
+}
+
+const TestComponent = component_union.Component;
+const TestStack = Stack(TestComponent);
+const TestStackTree = StackTree(TestComponent);
+
+test "stack component serializes leaf composition to canonical object" {
+    const children = [_]TestComponent{
+        .{ .text = Text{ .value = "Title" } },
+        .{ .badge = .{ .label = "Ready" } },
+        .{ .input = .{ .id = 1, .placeholder = "Filter" } },
+        .{ .checkbox = .{ .id = 3, .label = "Only active", .checked = true } },
+        .{ .button = .{ .id = 2, .label = "Apply" } },
+    };
+    const stack = TestStack{ .axis = .column, .gap = 10, .padding = 16, .children = &children };
+    var ui_raw: [256]u8 = undefined;
+    var object_raw: [object.header_size + 256]u8 = undefined;
+
+    const canonical = stack.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
+    const view = try object.View.decode(canonical);
+
+    var decoded_children: [5]TestComponent = undefined;
+    const decoded = try TestStack.fromView(view, &decoded_children);
+    try std.testing.expectEqual(ui.Axis.column, decoded.axis);
+    try std.testing.expectEqual(@as(u16, 10), decoded.gap);
+    try std.testing.expectEqual(@as(u16, 16), decoded.padding);
+    try std.testing.expectEqual(@as(usize, 5), decoded.children.len);
+    try std.testing.expectEqualStrings("Title", decoded.children[0].text.value);
+    try std.testing.expectEqualStrings("Ready", decoded.children[1].badge.label);
+    try std.testing.expectEqual(@as(u32, 1), decoded.children[2].input.id);
+    try std.testing.expect(decoded.children[3].checkbox.checked);
+    try std.testing.expectEqualStrings("Apply", decoded.children[4].button.label);
+}
+
+test "stack measure render and interaction collection use layout placement" {
+    const children = [_]TestComponent{
+        .{ .text = Text{ .value = "Intro" } },
+        .{ .button = .{ .id = 41002, .label = "Continue" } },
+    };
+    const stack = TestStack{ .axis = .column, .gap = 6, .padding = 8, .children = &children };
+    const measured = stack.measure(.{ .width = .{ .exact = 160 }, .text_wrap = .wrap }, .{});
+    var commands: [32]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+    var regions: [2]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
+
+    try std.testing.expectEqual(@as(f32, 160), measured.preferred.w);
+    try std.testing.expect(measured.preferred.h > 0);
+    try stack.render(&scene, ui.Rect.init(0, 0, 160, measured.preferred.h), .{});
+    try stack.collectInteractions(&collector, ui.Rect.init(0, 0, 160, measured.preferred.h), .{});
+    const hit = ui_input.hitTest(collector.written(), 16, 40).?;
+    try std.testing.expectEqual(@as(u32, 41002), hit.id);
+}
+
+test "stack tree composes child component objects with explicit resolver input" {
+    var title_ui: [128]u8 = undefined;
+    var title_object_raw: [object.header_size + 128]u8 = undefined;
+    const title_object = (TestComponent{ .text = .{ .value = "Tree" } }).toObject(&title_ui, &title_object_raw, component_test.epoch()).?;
+
+    var button_ui: [128]u8 = undefined;
+    var button_object_raw: [object.header_size + 128]u8 = undefined;
+    const button_object = (TestComponent{ .button = .{ .id = 77, .label = "Open" } }).toObject(&button_ui, &button_object_raw, component_test.epoch()).?;
+
+    const child_views = [_]object.View{
+        try object.View.decode(title_object),
+        try object.View.decode(button_object),
+    };
+    const tree_builder = TestStackTree{ .axis = .column, .gap = 6, .padding = 10, .children = &child_views };
+
+    var layout_raw: [object.header_size + tree_codec.tree_layout_size]u8 = undefined;
+    var tree_raw: [object.header_size + object.child_size * 3]u8 = undefined;
+    const tree_objects = tree_builder.toTreeObjects(&layout_raw, &tree_raw, component_test.epoch()).?;
+    const tree_view = try object.View.decode(tree_objects.tree);
+    const layout_view = try object.View.decode(tree_objects.layout);
+
+    const resolved = [_]object.View{ layout_view, child_views[0], child_views[1] };
+    var components: [2]TestComponent = undefined;
+    const stack = try TestStackTree.fromTree(tree_view, &resolved, &components);
+
+    try std.testing.expectEqual(ui.Axis.column, stack.axis);
+    try std.testing.expectEqual(@as(u16, 6), stack.gap);
+    try std.testing.expectEqual(@as(u16, 10), stack.padding);
+    try std.testing.expectEqual(@as(usize, 2), stack.children.len);
+    try std.testing.expectEqualStrings("Tree", stack.children[0].text.value);
+    try std.testing.expectEqual(@as(u32, 77), stack.children[1].button.id);
+}
+
+test "stack tree rejects resolved children that do not match tree records" {
+    var left_ui: [128]u8 = undefined;
+    var left_object_raw: [object.header_size + 128]u8 = undefined;
+    const left_object = (TestComponent{ .text = .{ .value = "Left" } }).toObject(&left_ui, &left_object_raw, component_test.epoch()).?;
+
+    var right_ui: [128]u8 = undefined;
+    var right_object_raw: [object.header_size + 128]u8 = undefined;
+    const right_object = (TestComponent{ .button = .{ .id = 1, .label = "Right" } }).toObject(&right_ui, &right_object_raw, component_test.epoch()).?;
+
+    const tree_children = [_]object.View{try object.View.decode(left_object)};
+    const tree_builder = TestStackTree{ .axis = .column, .children = &tree_children };
+
+    var layout_raw: [object.header_size + tree_codec.tree_layout_size]u8 = undefined;
+    var tree_raw: [object.header_size + object.child_size * 2]u8 = undefined;
+    const tree_objects = tree_builder.toTreeObjects(&layout_raw, &tree_raw, component_test.epoch()).?;
+
+    const resolved = [_]object.View{
+        try object.View.decode(tree_objects.layout),
+        try object.View.decode(right_object),
+    };
+    var components: [1]TestComponent = undefined;
+    try std.testing.expectError(error.ChildMismatch, TestStackTree.fromTree(try object.View.decode(tree_objects.tree), &resolved, &components));
+}
+
+test "stack tree writer rejects non component child objects" {
+    const component = TestComponent{ .button = .{ .id = 19, .label = "Wrong child" } };
+    var req = component_codec.requirements();
+    req.visibility = .private;
+    var ui_raw: [128]u8 = undefined;
+    var object_raw: [object.header_size + 128]u8 = undefined;
+    var writer = component_codec.Writer.init(&ui_raw, 1, 1, .column, 0, 0).?;
+    try std.testing.expect(component_codec.writeRecord(TestComponent, &writer, 0, component));
+    const child = writer.objectNode(&object_raw, req, component_test.epoch()).?;
+    const child_view = try object.View.decode(child);
+
+    var layout_raw: [object.header_size + tree_codec.tree_layout_size]u8 = undefined;
+    var tree_raw: [object.header_size + object.child_size * 2]u8 = undefined;
+    try std.testing.expect((TestStackTree{ .axis = .column, .children = &.{child_view} }).toTreeObjects(&layout_raw, &tree_raw, component_test.epoch()) == null);
+}
+
+test "stack accessibility tree emitter follows layout bounds" {
+    const children = [_]TestComponent{
+        .{ .text = Text{ .value = "Intro" } },
+        .{ .button = .{ .id = 94, .label = "Continue" } },
+        .{ .input = .{ .id = 95, .placeholder = "Filter" } },
+    };
+    const stack = TestStack{ .axis = .column, .gap = 6, .padding = 8, .children = &children };
+    var raw_nodes: [4]common.AccessibilityNode = undefined;
+    var tree = common.AccessibilityTree.init(&raw_nodes);
+
+    try stack.collectAccessibility(&tree, ui.Rect.init(0, 0, 160, 120), .{});
+
+    try std.testing.expectEqual(@as(usize, 3), tree.written().len);
+    try std.testing.expectEqual(common.AccessibilityRole.text, tree.written()[0].metadata.role);
+    try std.testing.expectEqualStrings("Intro", tree.written()[0].metadata.label);
+    try std.testing.expectEqual(common.AccessibilityRole.button, tree.written()[1].metadata.role);
+    try std.testing.expectEqual(@as(u32, 94), tree.written()[1].metadata.control_id.?);
+    try std.testing.expect(tree.written()[1].bounds.y > tree.written()[0].bounds.y);
+    try std.testing.expectEqual(common.AccessibilityRole.input, tree.written()[2].metadata.role);
+    try std.testing.expectEqual(@as(u32, 95), tree.written()[2].metadata.control_id.?);
+}
+
+test "stack accessibility tree emitter enforces caller budget" {
+    const children = [_]TestComponent{
+        .{ .button = .{ .id = 96, .label = "One" } },
+        .{ .button = .{ .id = 97, .label = "Two" } },
+    };
+    const stack = TestStack{ .axis = .column, .children = &children };
+    var raw_nodes: [1]common.AccessibilityNode = undefined;
+    var tree = common.AccessibilityTree.init(&raw_nodes);
+
+    try std.testing.expectError(error.AccessibilityBudgetExceeded, stack.collectAccessibility(&tree, ui.Rect.init(0, 0, 120, 80), .{}));
 }

@@ -14,7 +14,6 @@ const icon_component = @import("Icon.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = .{ .name = "select", .Payload = Select };
 const constrainPreferredSize = component_primitives.constrainPreferredSize;
 const contentInset = component_primitives.contentInset;
 const Icon = icon_component.Icon;

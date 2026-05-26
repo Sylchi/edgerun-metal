@@ -13,7 +13,6 @@ const component_primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = .{ .name = "switch_control", .Payload = Switch };
 const constrainPreferredSize = component_primitives.constrainPreferredSize;
 
 pub const Switch = struct {

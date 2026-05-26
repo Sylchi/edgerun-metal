@@ -14,7 +14,6 @@ const primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = .{ .name = "combobox", .Payload = Combobox };
 const contentInset = primitives.contentInset;
 const measureFixed = primitives.measureFixed;
 const renderControlFrame = primitives.renderControlFrame;

@@ -2479,6 +2479,8 @@ pub const ExecutionStorage = struct {
     module: Module = .{},
     executor: Executor = undefined,
     value_args: [max_type_params]Value = undefined,
+    prepared: bool = false,
+    start_ran: bool = false,
 };
 
 pub fn executeExportI64(runtime: *Runtime, wasm_bytes: []const u8, export_name: []const u8) Error!i64 {
@@ -2517,7 +2519,7 @@ pub fn executeExportValuesArgsWithStorage(runtime: *Runtime, wasm_bytes: []const
     if (args.len > max_type_params) return error.BadArgument;
     const executor = try executorForWithStorage(runtime, wasm_bytes, storage);
     const prepared_args = try integerArgsForExport(executor.module, export_name, args, &storage.value_args);
-    try executor.runStart();
+    try runStartOnce(storage, executor);
     return executor.runExport(export_name, prepared_args);
 }
 
@@ -2530,17 +2532,22 @@ pub fn executeExportValueArgs(runtime: *Runtime, wasm_bytes: []const u8, export_
 pub fn executeExportValueArgsWithStorage(runtime: *Runtime, wasm_bytes: []const u8, export_name: []const u8, args: []const Value, storage: *ExecutionStorage) Error!ExecutionResult {
     if (export_name.len == 0) return error.BadArgument;
     const executor = try executorForWithStorage(runtime, wasm_bytes, storage);
-    try executor.runStart();
+    try runStartOnce(storage, executor);
     return executor.runExport(export_name, args);
 }
 
 fn executorForWithStorage(runtime: *Runtime, wasm_bytes: []const u8, storage: *ExecutionStorage) Error!*Executor {
-    try Module.parseInto(&storage.module, wasm_bytes);
-    try storage.module.resolveImports(runtime.*);
+    if (!storage.prepared) {
+        try Module.parseInto(&storage.module, wasm_bytes);
+        try storage.module.resolveImports(runtime.*);
+    }
     const memory_pages = try initialMemoryPages(runtime.*, &storage.module);
     const required_memory = pagesToBytes(memory_pages) orelse return error.Unsupported;
     if (required_memory > runtime.memoryLen()) return error.NoMemory;
-    try storage.module.applyDataSegments(runtime, memory_pages);
+    if (!storage.prepared) {
+        try storage.module.applyDataSegments(runtime, memory_pages);
+        storage.prepared = true;
+    }
     storage.executor = .{
         .runtime = runtime,
         .module = &storage.module,
@@ -2548,6 +2555,12 @@ fn executorForWithStorage(runtime: *Runtime, wasm_bytes: []const u8, storage: *E
         .memory_limit = required_memory,
     };
     return &storage.executor;
+}
+
+fn runStartOnce(storage: *ExecutionStorage, executor: *Executor) Error!void {
+    if (storage.start_ran) return;
+    try executor.runStart();
+    storage.start_ran = true;
 }
 
 fn initialMemoryPages(runtime: Runtime, module: *const Module) Error!usize {

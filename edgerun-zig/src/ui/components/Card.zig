@@ -13,7 +13,6 @@ const component_primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = .{ .name = "card", .Payload = Card };
 const constrainPreferredSize = component_primitives.constrainPreferredSize;
 const measure_max_width = component_primitives.measure_max_width;
 

@@ -12,7 +12,6 @@ const primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = .{ .name = "scroll_area", .Payload = ScrollArea };
 const measureFixed = primitives.measureFixed;
 
 pub const ScrollArea = struct {

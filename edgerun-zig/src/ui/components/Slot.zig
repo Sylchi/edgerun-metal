@@ -1,10 +1,13 @@
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
 const codec = @import("../../ui_codec.zig");
+const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
+const component_union = @import("Component.zig");
 const interaction = @import("../../ui_interaction.zig");
 const layouts = @import("../../layouts.zig");
 const object = @import("../../object.zig");
+const std = @import("std");
 const tree_codec = @import("TreeCodec.zig");
 const ui = @import("../../ui.zig");
 
@@ -67,6 +70,57 @@ pub fn Slot(comptime Component: type) type {
             };
         }
     };
+}
+
+const TestComponent = component_union.Component;
+const TestSlot = Slot(TestComponent);
+const TestSlotTree = SlotTree(TestComponent);
+
+test "slot component wraps a leaf component and renders the child" {
+    const slot = TestSlot{
+        .id = 99,
+        .child = .{ .button = .{ .id = 12, .label = "Inside" } },
+    };
+    var ui_raw: [128]u8 = undefined;
+    var object_raw: [object.header_size + 128]u8 = undefined;
+
+    const canonical = slot.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
+    const decoded = try TestSlot.fromView(try object.View.decode(canonical));
+    try std.testing.expectEqual(@as(u32, 99), decoded.id);
+    try std.testing.expectEqual(@as(u32, 12), decoded.child.button.id);
+
+    var commands: [8]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+    try decoded.render(&scene, .{ .x = 0, .y = 0, .w = 140, .h = 40 }, .{});
+
+    try std.testing.expect(component_test.hasText(scene.written(), "Inside"));
+}
+
+test "slot component rejects non-slot object roots" {
+    var ui_raw: [128]u8 = undefined;
+    var object_raw: [object.header_size + 128]u8 = undefined;
+    const canonical = (TestComponent{ .button = .{ .id = 12, .label = "Plain" } }).toObject(&ui_raw, &object_raw, component_test.epoch()).?;
+
+    try std.testing.expectError(error.UnsupportedComponent, TestSlot.fromView(try object.View.decode(canonical)));
+}
+
+test "slot tree composes one child component object" {
+    var button_ui: [128]u8 = undefined;
+    var button_object_raw: [object.header_size + 128]u8 = undefined;
+    const button_object = (TestComponent{ .button = .{ .id = 3, .label = "Slot child" } }).toObject(&button_ui, &button_object_raw, component_test.epoch()).?;
+    const button_view = try object.View.decode(button_object);
+
+    var layout_raw: [object.header_size + tree_codec.slot_layout_size]u8 = undefined;
+    var tree_raw: [object.header_size + object.child_size * 2]u8 = undefined;
+    const tree_objects = (TestSlotTree{ .id = 44, .child = button_view }).toTreeObjects(&layout_raw, &tree_raw, component_test.epoch()).?;
+
+    const resolved = [_]object.View{
+        try object.View.decode(tree_objects.layout),
+        button_view,
+    };
+    const slot = try TestSlotTree.fromTree(try object.View.decode(tree_objects.tree), &resolved);
+    try std.testing.expectEqual(@as(u32, 44), slot.id);
+    try std.testing.expectEqual(@as(u32, 3), slot.child.button.id);
 }
 
 pub fn SlotTree(comptime Component: type) type {

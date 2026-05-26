@@ -15,8 +15,6 @@ const primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = .{ .name = "button", .Payload = Button };
-pub const icon_button_registration = .{ .name = "icon_button", .Payload = IconButton };
 const constrainPreferredSize = primitives.constrainPreferredSize;
 const measureFixed = primitives.measureFixed;
 const Icon = icon_component.Icon;
@@ -517,4 +515,15 @@ test "button component renders extended reference variants" {
     try std.testing.expect(!component_test.hasRectBounds(scene.written(), ui.Rect.init(0, 44, 120, height)));
     try std.testing.expect(component_test.hasTextColor(scene.written(), ui.Color.accent));
     try std.testing.expect(component_test.hasIcon(scene.written(), Icon.named(.search).tag()));
+}
+
+test "button deserializer rejects wrong component kind" {
+    const text = text_component.Text{ .value = "not a button" };
+    var ui_raw: [128]u8 = undefined;
+    var object_raw: [object.header_size + 128]u8 = undefined;
+
+    const canonical = text.toObject(&ui_raw, &object_raw, component_test.epoch()).?;
+    const view = try object.View.decode(canonical);
+
+    try std.testing.expectError(error.UnsupportedComponent, Button.fromView(view));
 }

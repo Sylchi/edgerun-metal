@@ -14,7 +14,6 @@ const tokens = @import("../../ui_tokens.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = .{ .name = "textarea", .Payload = Textarea };
 const contentInset = component_primitives.contentInset;
 const measureFixed = component_primitives.measureFixed;
 
