@@ -142,6 +142,7 @@ def browser_smoke(url):
             "--no-sandbox",
             "--disable-gpu-sandbox",
             "--enable-webgl",
+            "--enable-unsafe-swiftshader",
             f"--force-device-scale-factor={BROWSER_SMOKE_SCALE}",
             "--virtual-time-budget=5000",
             "--dump-dom",
@@ -154,11 +155,27 @@ def browser_smoke(url):
     )
     require('<canvas id="c"' in result.stdout, "browser smoke did not reach app canvas")
     require("EdgeRun failed:" not in result.stdout, "browser smoke reached failure page")
-    canvas = re.search(r'<canvas id="c" width="([0-9]+)" height="([0-9]+)" style="width: ([0-9]+)px; height: ([0-9]+)px;', result.stdout)
-    require(canvas is not None, "browser smoke missing high-dpi canvas sizing")
-    pixel_width, pixel_height, css_width, css_height = (int(value) for value in canvas.groups())
+    canvas = re.search(r'<canvas\b[^>]*\bid="c"[^>]*>', result.stdout)
+    require(canvas is not None, "browser smoke missing app canvas tag")
+    tag = canvas.group(0)
+    pixel_width = canvas_int_attr(tag, "width")
+    pixel_height = canvas_int_attr(tag, "height")
+    css_width = canvas_style_px(tag, "width")
+    css_height = canvas_style_px(tag, "height")
     require(pixel_width == css_width * BROWSER_SMOKE_SCALE, "browser smoke did not use high-dpi canvas width")
     require(pixel_height == css_height * BROWSER_SMOKE_SCALE, "browser smoke did not use high-dpi canvas height")
+
+
+def canvas_int_attr(tag, name):
+    match = re.search(rf'\b{name}="([0-9]+)"', tag)
+    require(match is not None, f"browser smoke missing canvas {name}")
+    return int(match.group(1))
+
+
+def canvas_style_px(tag, name):
+    match = re.search(rf'\b{name}:\s*([0-9]+)px\b', tag)
+    require(match is not None, f"browser smoke missing canvas CSS {name}")
+    return int(match.group(1))
 
 
 def node_execute_loader(loader):
