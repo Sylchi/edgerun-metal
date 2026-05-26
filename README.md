@@ -118,9 +118,6 @@ The long-form model is in [EDGE_MODEL.md](EDGE_MODEL.md).
 - `edgerun-zig/src/immutable_kernel_*.zig`: QEMU UEFI kernel smokes.
 - `edgerun-zig/src/pi_zero_w_v1_1*.zig`: Pi Zero W v1.1 bring-up.
 - `edgerun-crypto/`: C/CMake BLAKE3 package.
-- `edgerun-clock/`, `edgerun-identity/`, `edgerun-object/`,
-  `edgerun-storage/`: transition-era package shells; the current
-  implementations are in Zig.
 
 ## Try The Important Checks
 
