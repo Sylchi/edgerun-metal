@@ -76,8 +76,9 @@ const shader_log_capacity: usize = 1024;
 pub fn init(font_atlas: *renderer_font_atlas.Atlas, image: ?RgbaTexture) !State {
     try requireHardwareGl();
     c.glClearColor(0.043, 0.043, 0.043, 1.0);
+    c.glDisable(c.GL_DITHER);
     c.glEnable(c.GL_BLEND);
-    c.glBlendFuncSeparate(c.GL_SRC_ALPHA, c.GL_ONE_MINUS_SRC_ALPHA, c.GL_ONE, c.GL_ONE_MINUS_SRC_ALPHA);
+    c.glBlendFuncSeparate(c.GL_ONE, c.GL_ONE_MINUS_SRC_ALPHA, c.GL_ONE, c.GL_ONE_MINUS_SRC_ALPHA);
     const image_texture = if (image) |texture| blk: {
         if (!texture.valid()) return error.InvalidImageTexture;
         break :blk makeRgbaTexture(texture.width, texture.height, texture.pixels);
@@ -90,7 +91,7 @@ pub fn init(font_atlas: *renderer_font_atlas.Atlas, image: ?RgbaTexture) !State 
         .rect_vbo = makeBuffer(),
         .textured_vbo = makeBuffer(),
         .line_vbo = makeBuffer(),
-        .font_texture = makeAlphaTexture(renderer_font_atlas.width, renderer_font_atlas.height, font_atlas.alphaSlice()),
+        .font_texture = makeNearestAlphaTexture(renderer_font_atlas.width, renderer_font_atlas.height, font_atlas.alphaSlice()),
         .image_texture = image_texture,
     };
 }
@@ -121,10 +122,10 @@ pub fn renderFrameToViewport(gl: State, logical_width: i32, logical_height: i32,
     const scale = viewportScale(logical_width, logical_height, framebuffer_width, framebuffer_height);
     try drawRects(gl, logical_width, logical_height, scale, buffers.liveRects());
     try drawImage(gl, logical_width, logical_height, buffers.liveImageVertices());
-    try drawTextured(gl, logical_width, logical_height, buffers.liveTextVertices(), gl.font_texture);
+    try drawFontTextured(gl, logical_width, logical_height, buffers.liveTextVertices(), gl.font_texture);
     try drawIcons(gl, logical_width, logical_height, buffers.liveIconVertices());
     try drawRects(gl, logical_width, logical_height, scale, buffers.liveOverlayRects());
-    try drawTextured(gl, logical_width, logical_height, buffers.liveOverlayTextVertices(), gl.font_texture);
+    try drawFontTextured(gl, logical_width, logical_height, buffers.liveOverlayTextVertices(), gl.font_texture);
     try drawIcons(gl, logical_width, logical_height, buffers.liveOverlayIconVertices());
 }
 
@@ -144,6 +145,25 @@ pub fn verifyFrameNonBlank(width: i32, height: i32) !FrameProof {
 }
 
 pub fn readFramePixels(width: i32, height: i32, out: []ui.Color) !void {
+    try readBoundFramePixels(width, height, out);
+}
+
+pub fn renderFrameToRgbaPixels(gl: State, width: i32, height: i32, buffers: renderer_ir.Buffers, out: []ui.Color) !void {
+    if (width <= 0 or height <= 0) return error.InvalidFramebufferSize;
+    const texture = makeEmptyRgbaTexture(@intCast(width), @intCast(height));
+    defer c.glDeleteTextures(1, &texture);
+    var framebuffer: c.GLuint = 0;
+    c.glGenFramebuffers(1, &framebuffer);
+    defer c.glDeleteFramebuffers(1, &framebuffer);
+    c.glBindFramebuffer(c.GL_FRAMEBUFFER, framebuffer);
+    defer c.glBindFramebuffer(c.GL_FRAMEBUFFER, 0);
+    c.glFramebufferTexture2D(c.GL_FRAMEBUFFER, c.GL_COLOR_ATTACHMENT0, c.GL_TEXTURE_2D, texture, 0);
+    if (c.glCheckFramebufferStatus(c.GL_FRAMEBUFFER) != c.GL_FRAMEBUFFER_COMPLETE) return error.GlFramebufferIncomplete;
+    try renderFrameToViewport(gl, width, height, width, height, buffers);
+    try readBoundFramePixels(width, height, out);
+}
+
+fn readBoundFramePixels(width: i32, height: i32, out: []ui.Color) !void {
     if (width <= 0 or height <= 0) return error.InvalidFramebufferSize;
     const width_usize: usize = @intCast(width);
     const height_usize: usize = @intCast(height);
@@ -283,14 +303,28 @@ fn rectDrawBounds(rect: anytype) ui.Rect {
 }
 
 fn drawTextured(gl: State, width: i32, height: i32, values: []const f32, texture: c.GLuint) !void {
-    try drawTexturedWithProgram(gl, width, height, values, texture, gl.textured_program);
+    try drawAlphaTextured(gl, width, height, values, texture, false, 1, 1);
+}
+
+fn drawFontTextured(gl: State, width: i32, height: i32, values: []const f32, texture: c.GLuint) !void {
+    try drawAlphaTextured(gl, width, height, values, texture, true, renderer_font_atlas.width, renderer_font_atlas.height);
+}
+
+fn drawAlphaTextured(gl: State, width: i32, height: i32, values: []const f32, texture: c.GLuint, manual_bilinear: bool, texture_width: usize, texture_height: usize) !void {
+    try drawAlphaTexturedWithProgram(gl, width, height, values, texture, gl.textured_program, manual_bilinear, texture_width, texture_height);
 }
 
 fn drawTexturedWithProgram(gl: State, width: i32, height: i32, values: []const f32, texture: c.GLuint, program: c.GLuint) !void {
+    try drawAlphaTexturedWithProgram(gl, width, height, values, texture, program, false, 1, 1);
+}
+
+fn drawAlphaTexturedWithProgram(gl: State, width: i32, height: i32, values: []const f32, texture: c.GLuint, program: c.GLuint, manual_bilinear: bool, texture_width: usize, texture_height: usize) !void {
     if (values.len == 0) return;
     if (values.len % renderer_ir.text_vertex_float_stride != 0) return error.InvalidIrBuffer;
     c.glUseProgram(program);
     c.glUniform2f(c.glGetUniformLocation(program, "u_screen"), @floatFromInt(width), @floatFromInt(height));
+    c.glUniform2f(c.glGetUniformLocation(program, "u_tex_size"), @floatFromInt(texture_width), @floatFromInt(texture_height));
+    c.glUniform1i(c.glGetUniformLocation(program, "u_manual_bilinear"), if (manual_bilinear) 1 else 0);
     c.glActiveTexture(c.GL_TEXTURE0);
     c.glBindTexture(c.GL_TEXTURE_2D, texture);
     c.glUniform1i(c.glGetUniformLocation(program, "u_tex"), 0);
@@ -388,7 +422,7 @@ fn drawIconAlphaMask(gl: State, screen_width: i32, screen_height: i32, instance:
     var alpha: [renderer_icon_mask.max_pixels]u8 = undefined;
     const mask = try renderer_icon_mask.rasterizeIconAlpha(instance.icon_id, width, height, &alpha);
     if (!mask.painted) return false;
-    const texture = makeIconAlphaTexture(mask.width, mask.height, mask.alpha);
+    const texture = makeNearestAlphaTexture(mask.width, mask.height, mask.alpha);
     defer c.glDeleteTextures(1, &texture);
     var values: [icon_texture_float_count]f32 = undefined;
     writeIconTextureQuad(&values, instance);
@@ -562,11 +596,11 @@ fn makeBuffer() c.GLuint {
 }
 
 fn makeAlphaTexture(width: usize, height: usize, alpha: []const u8) c.GLuint {
-    return makeAlphaTextureFiltered(width, height, alpha, c.GL_LINEAR);
+    return makeAlphaTextureFiltered(width, height, alpha, c.GL_NEAREST);
 }
 
-fn makeIconAlphaTexture(width: usize, height: usize, alpha: []const u8) c.GLuint {
-    return makeAlphaTextureFiltered(width, height, alpha, c.GL_NEAREST);
+fn makeNearestAlphaTexture(width: usize, height: usize, alpha: []const u8) c.GLuint {
+    return makeAlphaTexture(width, height, alpha);
 }
 
 fn makeAlphaTextureFiltered(width: usize, height: usize, alpha: []const u8, filter: c.GLint) c.GLuint {
@@ -592,6 +626,19 @@ fn makeRgbaTexture(width: usize, height: usize, pixels: []const ui.Color) c.GLui
     c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_WRAP_T, c.GL_CLAMP_TO_EDGE);
     c.glPixelStorei(c.GL_UNPACK_ALIGNMENT, 1);
     c.glTexImage2D(c.GL_TEXTURE_2D, 0, c.GL_RGBA, @intCast(width), @intCast(height), 0, c.GL_RGBA, c.GL_UNSIGNED_BYTE, pixels.ptr);
+    return texture;
+}
+
+fn makeEmptyRgbaTexture(width: usize, height: usize) c.GLuint {
+    var texture: c.GLuint = 0;
+    c.glGenTextures(1, &texture);
+    c.glBindTexture(c.GL_TEXTURE_2D, texture);
+    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_MIN_FILTER, c.GL_NEAREST);
+    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_MAG_FILTER, c.GL_NEAREST);
+    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_WRAP_S, c.GL_CLAMP_TO_EDGE);
+    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_WRAP_T, c.GL_CLAMP_TO_EDGE);
+    c.glPixelStorei(c.GL_UNPACK_ALIGNMENT, 1);
+    c.glTexImage2D(c.GL_TEXTURE_2D, 0, c.GL_RGBA, @intCast(width), @intCast(height), 0, c.GL_RGBA, c.GL_UNSIGNED_BYTE, null);
     return texture;
 }
 
@@ -673,6 +720,10 @@ const rect_fragment_shader =
     \\  vec2 q = abs(p) - b + vec2(r);
     \\  return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
     \\}
+    \\vec4 premul(vec4 color, float alpha) {
+    \\  float out_alpha = color.a * alpha;
+    \\  return vec4(color.rgb * out_alpha, out_alpha);
+    \\}
     \\void main() {
     \\  float aa = 1.0 / max(u_pixel_scale, 1.0);
     \\  vec2 px = vec2(gl_FragCoord.x / max(u_pixel_scale, 1.0), u_screen.y - gl_FragCoord.y / max(u_pixel_scale, 1.0));
@@ -686,17 +737,17 @@ const rect_fragment_shader =
     \\    float sd = rounded_box(sp, u_source_rect.zw * 0.5, u_radius);
     \\    if (sd <= 0.0 || sd >= u_shadow) discard;
     \\    float t = 1.0 - sd / max(u_shadow, 0.001);
-    \\    gl_FragColor = vec4(u_color.rgb, u_color.a * t * t * 0.34);
+    \\    gl_FragColor = premul(u_color, t * t * 0.34);
     \\  } else if (u_mode == 2) {
-    \\    float inner = rounded_box(p, u_rect.zw * 0.5 - vec2(1.25), max(u_radius - 1.25, 0.0));
+    \\    float inner = rounded_box(p, u_rect.zw * 0.5 - vec2(1.0), max(u_radius - 1.0, 0.0));
     \\    float border = clamp(-d / aa, 0.0, 1.0) * clamp(inner / aa, 0.0, 1.0);
-    \\    gl_FragColor = vec4(u_color.rgb, u_color.a * border);
+    \\    gl_FragColor = premul(u_color, border);
     \\  } else if (u_mode == 3) {
     \\    float t = clamp((px.y - u_rect.y) / max(u_rect.w, 1.0), 0.0, 1.0);
     \\    vec4 color = mix(u_color, u_color2, t);
-    \\    gl_FragColor = vec4(color.rgb, color.a * alpha);
+    \\    gl_FragColor = premul(color, alpha);
     \\  } else {
-    \\    gl_FragColor = vec4(u_color.rgb, u_color.a * alpha);
+    \\    gl_FragColor = premul(u_color, alpha);
     \\  }
     \\}
 ;
@@ -717,24 +768,46 @@ const textured_vertex_shader =
 ;
 
 const textured_fragment_shader =
-    \\precision mediump float;
+    \\precision highp float;
     \\varying vec2 v_uv;
     \\varying vec4 v_color;
     \\uniform sampler2D u_tex;
+    \\uniform vec2 u_tex_size;
+    \\uniform int u_manual_bilinear;
+    \\float sample_alpha_nearest(vec2 uv) {
+    \\  return texture2D(u_tex, uv).a;
+    \\}
+    \\float sample_alpha_bilinear(vec2 uv) {
+    \\  vec2 scaled = clamp(clamp(uv, vec2(0.0), vec2(1.0)) * u_tex_size - vec2(0.5), vec2(0.0), u_tex_size - vec2(1.0));
+    \\  vec2 base = floor(scaled);
+    \\  vec2 fracv = scaled - base;
+    \\  vec2 texel = vec2(1.0) / u_tex_size;
+    \\  vec2 uv00 = (base + vec2(0.5, 0.5)) * texel;
+    \\  vec2 uv10 = (min(base + vec2(1.0, 0.0), u_tex_size - vec2(1.0)) + vec2(0.5, 0.5)) * texel;
+    \\  vec2 uv01 = (min(base + vec2(0.0, 1.0), u_tex_size - vec2(1.0)) + vec2(0.5, 0.5)) * texel;
+    \\  vec2 uv11 = (min(base + vec2(1.0, 1.0), u_tex_size - vec2(1.0)) + vec2(0.5, 0.5)) * texel;
+    \\  float a00 = texture2D(u_tex, uv00).a;
+    \\  float a10 = texture2D(u_tex, uv10).a;
+    \\  float a01 = texture2D(u_tex, uv01).a;
+    \\  float a11 = texture2D(u_tex, uv11).a;
+    \\  return mix(mix(a00, a10, fracv.x), mix(a01, a11, fracv.x), fracv.y);
+    \\}
     \\void main() {
-    \\  float a = texture2D(u_tex, v_uv).a;
-    \\  gl_FragColor = vec4(v_color.rgb, v_color.a * a);
+    \\  float a = u_manual_bilinear == 1 ? sample_alpha_bilinear(v_uv) : sample_alpha_nearest(v_uv);
+    \\  float out_alpha = v_color.a * a;
+    \\  gl_FragColor = vec4(v_color.rgb * out_alpha, out_alpha);
     \\}
 ;
 
 const image_fragment_shader =
-    \\precision mediump float;
+    \\precision highp float;
     \\varying vec2 v_uv;
     \\varying vec4 v_color;
     \\uniform sampler2D u_tex;
     \\void main() {
     \\  vec4 texel = texture2D(u_tex, v_uv);
-    \\  gl_FragColor = vec4(texel.rgb * v_color.rgb, texel.a * v_color.a);
+    \\  float out_alpha = texel.a * v_color.a;
+    \\  gl_FragColor = vec4(texel.rgb * v_color.rgb * out_alpha, out_alpha);
     \\}
 ;
 
@@ -751,7 +824,7 @@ const line_fragment_shader =
     \\precision mediump float;
     \\uniform vec4 u_color;
     \\void main() {
-    \\  gl_FragColor = u_color;
+    \\  gl_FragColor = vec4(u_color.rgb * u_color.a, u_color.a);
     \\}
 ;
 
