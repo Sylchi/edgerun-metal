@@ -1,9 +1,9 @@
 const std = @import("std");
-const renderer_ir = @import("renderer_ir.zig");
-const renderer_present = @import("renderer_present.zig");
-const renderer_surface = @import("renderer_surface.zig");
-const ui = @import("ui.zig");
-const ui_components = @import("ui_components.zig");
+const renderer_ir = @import("../ir.zig");
+const renderer_present = @import("../present.zig");
+const renderer_surface = @import("../surface.zig");
+const ui = @import("../../ui.zig");
+const ui_components = @import("../../ui_components.zig");
 
 pub const Error = renderer_present.Error || error{
     InvalidMode,
@@ -25,6 +25,14 @@ pub const Rasterization = enum(u8) {
     cpu_filled_gpu_buffer,
     hardware_gpu,
 };
+
+const scene_rect_budget: usize = 4096;
+const scene_text_vertex_budget: usize = 24576;
+const scene_icon_budget: usize = 4096;
+const scene_image_vertex_budget: usize = 384;
+const scene_overlay_rect_budget: usize = 512;
+const scene_overlay_text_vertex_budget: usize = 8192;
+const scene_overlay_icon_budget: usize = 256;
 
 pub const SurfaceFormat = enum(u32) {
     xrgb8888 = 0x34325258,
@@ -145,7 +153,7 @@ pub const Receipt = struct {
     primitive_count: usize,
     dirty_tile_count: usize,
     presentation_primitive_count: usize = 0,
-    presentation_transport: renderer_present.Transport = .gpu_command_stream,
+    presentation_transport: renderer_present.Transport = .command_stream,
     rasterization: Rasterization = .recorded_commands,
 
     pub fn valid(self: Receipt) bool {
@@ -237,7 +245,7 @@ pub const Renderer = struct {
         self.sequence += 1;
         const presentation = try renderer_present.present(.{
             .target = .{
-                .kind = .gpu,
+                .destination = .command_frame,
                 .width = self.mode.width,
                 .height = self.mode.height,
             },
@@ -287,29 +295,20 @@ pub fn encodeFrame(
     dirty_ids: []u32,
     out: *CommandBuffer,
 ) Error!Frame {
-    if (sequence == 0) return error.InvalidMode;
-    const plan = renderer_surface.tilePlanFromMode(mode, tile_width, tile_height, @intCast(dirty_ids.len)) orelse return error.InvalidMode;
-    var dirty = renderer_surface.DirtyTileList{ .tile_ids = dirty_ids };
-    if (!renderer_surface.dirtyTilesReset(plan, tile_marks, &dirty)) return error.DirtyTileBudgetExceeded;
-    out.clear();
-
-    for (surfaces) |surface| {
-        try encodeSurface(surface, out);
-        try markDirtyRect(plan, @floatFromInt(surface.x), @floatFromInt(surface.y), @floatFromInt(surface.width), @floatFromInt(surface.height), tile_marks, &dirty);
-    }
-
-    for (scene.written()) |command| {
-        try encodeCommand(command, out);
-    }
-    if (!renderer_surface.dirtyTilesMarkScene(plan, scene, tile_marks, &dirty)) return error.DirtyTileBudgetExceeded;
-
-    return .{
-        .sequence = sequence,
-        .mode = mode,
-        .tile_plan = plan,
-        .dirty_tiles = dirty.written(),
-        .primitives = out.written(),
-    };
+    var storage = renderer_ir.FixedBuffers(
+        scene_rect_budget,
+        scene_text_vertex_budget,
+        scene_icon_budget,
+        scene_image_vertex_budget,
+        scene_overlay_rect_budget,
+        scene_overlay_text_vertex_budget,
+        scene_overlay_icon_budget,
+    ){};
+    const buffers = storage.buffers();
+    var context: u8 = 0;
+    const sources = renderer_ir.Sources{ .font = renderer_ir.commandAdapterFont(&context) };
+    renderer_ir.packScene(buffers, sources, scene.written()) catch return error.InvalidIrBuffer;
+    return encodeIrFrame(sequence, mode, tile_width, tile_height, surfaces, buffers, tile_marks, dirty_ids, out);
 }
 
 pub fn encodeIrFrame(
@@ -451,32 +450,13 @@ fn markDirtyRect(
 }
 
 fn encodeCommand(command: ui.Command, out: *CommandBuffer) Error!void {
-    switch (command) {
-        .rect => |rect_cmd| try out.append(.{
-            .kind = .rect,
-            .bounds = rect_cmd.bounds,
-            .color = rect_cmd.color,
-            .color2 = rect_cmd.color2,
-            .rect_mode = rect_cmd.mode,
-            .radius = rect_cmd.radius,
-            .shadow = rect_cmd.shadow,
-        }),
-        .border => |border_cmd| try out.append(.{
-            .kind = .border,
-            .bounds = border_cmd.bounds,
-            .color = border_cmd.color,
-            .rect_mode = .border,
-        }),
-        .text => |text_cmd| try out.append(.{
-            .kind = .text,
-            .bounds = text_cmd.origin,
-            .color = text_cmd.color,
-        }),
-        .icon_quad => |quad| try out.append(iconPrimitive(quad)),
-        .text_quad => |quad| try out.append(quadPrimitive(.text_quad, quad)),
-        .image_quad => |quad| try out.append(quadPrimitive(.image_quad, quad)),
-        .drag_source, .drop_target, .transition => {},
-    }
+    var storage = renderer_ir.FixedBuffers(1, renderer_ir.textured_quad_vertex_count, 1, renderer_ir.textured_quad_vertex_count, 0, 0, 0){};
+    const buffers = storage.buffers();
+    var context: u8 = 0;
+    const sources = renderer_ir.Sources{ .font = renderer_ir.commandAdapterFont(&context) };
+    const commands = [_]ui.Command{command};
+    renderer_ir.packScene(buffers, sources, &commands) catch return error.InvalidIrBuffer;
+    try encodeIrBuffers(buffers, out);
 }
 
 fn quadPrimitive(kind: PrimitiveKind, quad: ui.Quad) Primitive {
@@ -669,7 +649,7 @@ test "gpu renderer encodes canonical ir frames" {
     try std.testing.expect(receipt.valid());
     try std.testing.expectEqual(ui.RectMode.fill, primitives[1].rect_mode);
     try std.testing.expect(primitives[1].radius > 0.0);
-    try std.testing.expectEqual(renderer_present.Transport.gpu_command_stream, receipt.presentation_transport);
+    try std.testing.expectEqual(renderer_present.Transport.command_stream, receipt.presentation_transport);
     try std.testing.expectEqual(@as(usize, 2), receipt.presentation_primitive_count);
     try std.testing.expectEqual(@as(usize, 1), test_device.began);
     try std.testing.expect(test_device.uploaded == receipt.primitive_count);

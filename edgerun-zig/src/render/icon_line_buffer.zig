@@ -1,8 +1,7 @@
 const std = @import("std");
-const icon_svg = @import("icon_svg.zig");
-const icon_vector = @import("icon_vector.zig");
-const renderer_ir = @import("renderer_ir.zig");
-const ui = @import("ui.zig");
+const icon_vector = @import("../icon_vector.zig");
+const renderer_ir = @import("ir.zig");
+const ui = @import("../ui.zig");
 
 pub const vertex_float_stride: usize = 6;
 pub const line_vertex_count: usize = 6;
@@ -53,7 +52,7 @@ pub fn packIconInstances(instances: []const f32, out: []f32, out_len: *usize) Er
 
 fn packIconInstance(instance: renderer_ir.IconInstance, out: []f32, out_len: *usize) Error!void {
     const bounds = instance.bounds;
-    var iter = icon_svg.Iterator.init(icon_svg.sourceForIconId(instance.icon_id));
+    var iter = renderer_ir.iconOpIteratorForId(instance.icon_id);
     var path = PathState{};
     while (iter.next() catch return error.InvalidIconSvg) |op| {
         switch (op) {
@@ -64,7 +63,7 @@ fn packIconInstance(instance: renderer_ir.IconInstance, out: []f32, out_len: *us
             .filled_circle => |circle| try filledCircle(out, out_len, bounds, instance.color, circle.cx, circle.cy, circle.radius),
             .filled_ellipse => |value| try ellipse(out, out_len, bounds, instance.color, value.cx, value.cy, value.rx, value.ry, value.full),
             .filled_round_rect => |rect| try box(out, out_len, bounds, instance.color, rect.x, rect.y, rect.w, rect.h),
-            .begin_fill_path, .begin_evenodd_fill_path, .end_fill_path, .paint_rgba, .paint_current_color, .paint_current_color_alpha, .paint_linear_gradient, .paint_radial_gradient, .stroke_width, .stroke_cap => {},
+            .begin_fill_path, .begin_evenodd_fill_path, .end_fill_path, .paint_rgba, .paint_current_color, .paint_current_color_alpha, .paint_linear_gradient, .paint_radial_gradient, .stroke_width, .stroke_cap, .stroke_join, .stroke_miter_limit, .begin_clip_path, .end_clip_path, .clear_clip_path => {},
             .move_to => |point| path.moveTo(point),
             .line_to => |point| {
                 if (path.current) |current| try segment(out, out_len, bounds, instance.color, current, point);
@@ -267,7 +266,7 @@ test "icon line buffer packs browser-ready vertices" {
     try renderer_ir.pushIcon(instances_storage.buffers(), .base, .{
         .bounds = ui.Rect.init(10, 20, 24, 24),
         .color = .accent,
-        .icon_id = @intFromEnum(@import("icon.zig").Icon.search) + 1,
+        .icon_id = @intFromEnum(@import("../icon.zig").Icon.search) + 1,
     });
     var out: [line_vertex_count * vertex_float_stride * filled_circle_segments * 8]f32 = undefined;
     var out_len: usize = 0;

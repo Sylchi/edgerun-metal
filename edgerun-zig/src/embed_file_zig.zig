@@ -15,11 +15,20 @@ const compiler_zig_src_codegen_root = "compiler/zig/src/codegen";
 const compiler_zig_src_codegen_wasm_root = "compiler/zig/src/codegen/wasm";
 const compiler_zig_src_link_root = "compiler/zig/src/link";
 const compiler_zig_src_link_wasm_root = "compiler/zig/src/link/Wasm";
+const compiler_zig_src_libs_root = "compiler/zig/src/libs";
+const compiler_zig_src_package_fetch_root = "compiler/zig/src/Package/Fetch";
 const compiler_zig_lib_root = "compiler/zig/lib";
 const compiler_zig_std_root = "compiler/zig/lib/std";
+const compiler_zig_std_build_root = "compiler/zig/lib/std/Build";
+const compiler_zig_std_c_root = "compiler/zig/lib/std/c";
+const compiler_zig_std_debug_root = "compiler/zig/lib/std/debug";
 const compiler_zig_std_crypto_root = "compiler/zig/lib/std/crypto";
+const compiler_zig_std_http_root = "compiler/zig/lib/std/http";
 const compiler_zig_std_io_root = "compiler/zig/lib/std/Io";
 const compiler_zig_std_os_root = "compiler/zig/lib/std/os";
+const compiler_zig_std_tar_root = "compiler/zig/lib/std/tar";
+const compiler_zig_std_testing_root = "compiler/zig/lib/std/testing";
+const compiler_zig_std_tz_root = "compiler/zig/lib/std/tz";
 const compiler_zig_std_zig_llvm_root = "compiler/zig/lib/std/zig/llvm";
 const compiler_zig_compiler_lib_root = "compiler/zig/lib/compiler";
 
@@ -176,7 +185,7 @@ fn sourceFileAllowed(path: []const u8) bool {
     if (std.mem.startsWith(u8, path, "src/")) return sourceExtensionAllowed(path);
     if (std.mem.startsWith(u8, path, "compiler/zig/src/")) return compilerSrcFileAllowed(path);
     if (std.mem.startsWith(u8, path, "compiler/zig/lib/std/")) return compilerStdFileAllowed(path);
-    if (std.mem.startsWith(u8, path, "compiler/zig/lib/compiler/")) return compilerLibFileAllowed(path);
+    if (std.mem.startsWith(u8, path, "compiler/zig/lib/compiler/")) return false;
     if (std.mem.startsWith(u8, path, "compiler/zig/lib/") and std.mem.eql(u8, std.fs.path.dirname(path) orelse "", "compiler/zig/lib")) return compilerExtensionAllowed(path);
     return false;
 }
@@ -191,8 +200,8 @@ fn sourceDirectoryAllowed(path: []const u8) bool {
     if (std.mem.eql(u8, path, compiler_zig_lib_root)) return true;
     if (std.mem.eql(u8, path, compiler_zig_std_root)) return true;
     if (std.mem.startsWith(u8, path, "compiler/zig/lib/std/")) return compilerStdDirectoryAllowed(path);
-    if (std.mem.eql(u8, path, compiler_zig_compiler_lib_root)) return true;
-    if (std.mem.startsWith(u8, path, "compiler/zig/lib/compiler/")) return compilerLibDirectoryAllowed(path);
+    if (std.mem.eql(u8, path, compiler_zig_compiler_lib_root)) return false;
+    if (std.mem.startsWith(u8, path, "compiler/zig/lib/compiler/")) return false;
     return false;
 }
 
@@ -209,9 +218,17 @@ fn compilerExtensionAllowed(path: []const u8) bool {
 
 fn compilerSrcFileAllowed(path: []const u8) bool {
     if (!compilerExtensionAllowed(path)) return false;
+    if (std.mem.eql(u8, path, "compiler/zig/src/IncrementalDebugServer.zig")) return false;
+    if (std.mem.eql(u8, path, "compiler/zig/src/clang_options.zon")) return false;
+    if (std.mem.eql(u8, path, "compiler/zig/src/fmt.zig")) return false;
+    if (std.mem.eql(u8, path, "compiler/zig/src/main.zig")) return false;
+    if (std.mem.eql(u8, path, "compiler/zig/src/print_env.zig")) return false;
+    if (std.mem.eql(u8, path, "compiler/zig/src/print_targets.zig")) return false;
     if (std.mem.startsWith(u8, path, "compiler/zig/src/codegen/")) return std.mem.startsWith(u8, path, "compiler/zig/src/codegen/wasm/");
     if (std.mem.startsWith(u8, path, "compiler/zig/src/link/")) return std.mem.eql(u8, path, "compiler/zig/src/link/Wasm.zig") or
         std.mem.startsWith(u8, path, "compiler/zig/src/link/Wasm/");
+    if (std.mem.startsWith(u8, path, "compiler/zig/src/libs/")) return false;
+    if (std.mem.startsWith(u8, path, "compiler/zig/src/Package/Fetch/")) return false;
     return true;
 }
 
@@ -223,40 +240,51 @@ fn compilerSrcDirectoryAllowed(path: []const u8) bool {
     if (std.mem.eql(u8, path, compiler_zig_src_link_root)) return true;
     if (std.mem.startsWith(u8, path, "compiler/zig/src/link/")) return std.mem.eql(u8, path, compiler_zig_src_link_wasm_root) or
         std.mem.startsWith(u8, path, "compiler/zig/src/link/Wasm/");
+    if (std.mem.eql(u8, path, compiler_zig_src_libs_root) or std.mem.startsWith(u8, path, "compiler/zig/src/libs/")) return false;
+    if (std.mem.eql(u8, path, compiler_zig_src_package_fetch_root) or std.mem.startsWith(u8, path, "compiler/zig/src/Package/Fetch/")) return false;
     return true;
 }
 
 fn compilerStdFileAllowed(path: []const u8) bool {
     if (std.mem.endsWith(u8, path, "_test.zig")) return false;
+    if (std.mem.eql(u8, path, "compiler/zig/lib/std/Build.zig")) return false;
+    if (std.mem.eql(u8, path, "compiler/zig/lib/std/c.zig")) return false;
+    if (std.mem.eql(u8, path, "compiler/zig/lib/std/crypto.zig")) return false;
+    if (std.mem.eql(u8, path, "compiler/zig/lib/std/http.zig")) return false;
+    if (std.mem.eql(u8, path, "compiler/zig/lib/std/os.zig")) return false;
+    if (std.mem.eql(u8, path, "compiler/zig/lib/std/tar.zig")) return false;
+    if (std.mem.eql(u8, path, "compiler/zig/lib/std/testing.zig")) return false;
+    if (std.mem.eql(u8, path, "compiler/zig/lib/std/tz.zig")) return false;
+    if (std.mem.eql(u8, path, "compiler/zig/lib/std/valgrind.zig")) return false;
+    if (std.mem.eql(u8, path, "compiler/zig/lib/std/zip.zig")) return false;
+    if (std.mem.startsWith(u8, path, "compiler/zig/lib/std/Build/")) return false;
+    if (std.mem.startsWith(u8, path, "compiler/zig/lib/std/c/")) return false;
+    if (std.mem.startsWith(u8, path, "compiler/zig/lib/std/debug/")) return false;
     if (std.mem.startsWith(u8, path, "compiler/zig/lib/std/crypto/")) return false;
+    if (std.mem.startsWith(u8, path, "compiler/zig/lib/std/http/")) return false;
     if (std.mem.eql(u8, path, "compiler/zig/lib/std/Io/Threaded.zig")) return false;
     if (std.mem.eql(u8, path, "compiler/zig/lib/std/Io/Uring.zig")) return false;
     if (std.mem.startsWith(u8, path, "compiler/zig/lib/std/os/")) return false;
+    if (std.mem.startsWith(u8, path, "compiler/zig/lib/std/tar/")) return false;
+    if (std.mem.startsWith(u8, path, "compiler/zig/lib/std/testing/")) return false;
+    if (std.mem.startsWith(u8, path, "compiler/zig/lib/std/tz/")) return false;
     if (std.mem.startsWith(u8, path, "compiler/zig/lib/std/zig/llvm/")) return false;
     return compilerExtensionAllowed(path);
 }
 
 fn compilerStdDirectoryAllowed(path: []const u8) bool {
     if (std.mem.eql(u8, std.fs.path.basename(path), ".zig-cache")) return false;
+    if (std.mem.eql(u8, path, compiler_zig_std_build_root) or std.mem.startsWith(u8, path, "compiler/zig/lib/std/Build/")) return false;
+    if (std.mem.eql(u8, path, compiler_zig_std_c_root) or std.mem.startsWith(u8, path, "compiler/zig/lib/std/c/")) return false;
+    if (std.mem.eql(u8, path, compiler_zig_std_debug_root) or std.mem.startsWith(u8, path, "compiler/zig/lib/std/debug/")) return false;
     if (std.mem.eql(u8, path, compiler_zig_std_crypto_root) or std.mem.startsWith(u8, path, "compiler/zig/lib/std/crypto/")) return false;
+    if (std.mem.eql(u8, path, compiler_zig_std_http_root) or std.mem.startsWith(u8, path, "compiler/zig/lib/std/http/")) return false;
     if (std.mem.eql(u8, path, compiler_zig_std_os_root) or std.mem.startsWith(u8, path, "compiler/zig/lib/std/os/")) return false;
+    if (std.mem.eql(u8, path, compiler_zig_std_tar_root) or std.mem.startsWith(u8, path, "compiler/zig/lib/std/tar/")) return false;
+    if (std.mem.eql(u8, path, compiler_zig_std_testing_root) or std.mem.startsWith(u8, path, "compiler/zig/lib/std/testing/")) return false;
+    if (std.mem.eql(u8, path, compiler_zig_std_tz_root) or std.mem.startsWith(u8, path, "compiler/zig/lib/std/tz/")) return false;
     if (std.mem.eql(u8, path, compiler_zig_std_zig_llvm_root) or std.mem.startsWith(u8, path, "compiler/zig/lib/std/zig/llvm/")) return false;
     if (std.mem.eql(u8, path, compiler_zig_std_io_root)) return true;
-    return true;
-}
-
-fn compilerLibFileAllowed(path: []const u8) bool {
-    if (std.mem.startsWith(u8, path, "compiler/zig/lib/compiler/aro/")) return false;
-    if (std.mem.startsWith(u8, path, "compiler/zig/lib/compiler/translate-c/")) return false;
-    return compilerExtensionAllowed(path);
-}
-
-fn compilerLibDirectoryAllowed(path: []const u8) bool {
-    if (std.mem.eql(u8, std.fs.path.basename(path), ".zig-cache")) return false;
-    if (std.mem.eql(u8, path, "compiler/zig/lib/compiler/aro")) return false;
-    if (std.mem.startsWith(u8, path, "compiler/zig/lib/compiler/aro/")) return false;
-    if (std.mem.eql(u8, path, "compiler/zig/lib/compiler/translate-c")) return false;
-    if (std.mem.startsWith(u8, path, "compiler/zig/lib/compiler/translate-c/")) return false;
     return true;
 }
 
@@ -299,4 +327,30 @@ fn sourceObjectEpoch() @TypeOf(@as(object.Header, undefined).epoch) {
 
 test "workspace manifest constants match encoded header width" {
     try std.testing.expectEqual(@as(usize, 16), workspace_manifest_header_bytes);
+}
+
+test "workspace source filter keeps EdgeRun app and wasm compiler roots" {
+    try std.testing.expect(sourceFileAllowed("src/ui_browser.zig"));
+    try std.testing.expect(sourceFileAllowed("src/blog/one.md"));
+    try std.testing.expect(sourceFileAllowed("compiler/zig/src/edgerun_wasm_compiler.zig"));
+    try std.testing.expect(sourceFileAllowed("compiler/zig/src/codegen/wasm/CodeGen.zig"));
+    try std.testing.expect(sourceFileAllowed("compiler/zig/src/link/Wasm.zig"));
+    try std.testing.expect(sourceFileAllowed("compiler/zig/lib/std/std.zig"));
+    try std.testing.expect(sourceFileAllowed("compiler/zig/lib/std/zig/AstGen.zig"));
+}
+
+test "workspace source filter removes host compiler families" {
+    try std.testing.expect(!sourceFileAllowed("compiler/zig/src/main.zig"));
+    try std.testing.expect(!sourceFileAllowed("compiler/zig/src/codegen/x86_64/CodeGen.zig"));
+    try std.testing.expect(!sourceFileAllowed("compiler/zig/src/link/Elf.zig"));
+    try std.testing.expect(!sourceFileAllowed("compiler/zig/src/libs/wasi_libc.zig"));
+    try std.testing.expect(!sourceFileAllowed("compiler/zig/src/Package/Fetch/git.zig"));
+    try std.testing.expect(!sourceFileAllowed("compiler/zig/lib/compiler/resinator/main.zig"));
+    try std.testing.expect(!sourceFileAllowed("compiler/zig/lib/std/Build.zig"));
+    try std.testing.expect(!sourceFileAllowed("compiler/zig/lib/std/c.zig"));
+    try std.testing.expect(!sourceFileAllowed("compiler/zig/lib/std/crypto.zig"));
+    try std.testing.expect(!sourceFileAllowed("compiler/zig/lib/std/http/Client.zig"));
+    try std.testing.expect(!sourceFileAllowed("compiler/zig/lib/std/os.zig"));
+    try std.testing.expect(!sourceFileAllowed("compiler/zig/lib/std/os/linux.zig"));
+    try std.testing.expect(!sourceFileAllowed("compiler/zig/lib/std/zig/llvm/Builder.zig"));
 }

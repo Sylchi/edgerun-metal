@@ -1,7 +1,7 @@
 const std = @import("std");
-const font_vector = @import("font_vector.zig");
-const renderer_ir = @import("renderer_ir.zig");
-const varfont = @import("varfont.zig");
+const font_vector = @import("../font_vector.zig");
+const renderer_ir = @import("ir.zig");
+const varfont = @import("../varfont.zig");
 
 pub const width: usize = 2048;
 pub const height: usize = 2048;

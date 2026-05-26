@@ -1,5 +1,6 @@
 const std = @import("std");
-const ui = @import("ui.zig");
+const icon_svg = @import("../icon_svg.zig");
+const ui = @import("../ui.zig");
 
 pub const rect_float_stride: usize = 15;
 pub const text_vertex_float_stride: usize = 8;
@@ -108,6 +109,16 @@ pub const IconInstance = struct {
     icon_id: u32,
 };
 
+pub const IconOpIterator = icon_svg.Iterator;
+
+pub fn iconOpIteratorForId(icon_id: u32) IconOpIterator {
+    return icon_svg.Iterator.init(icon_svg.sourceForIconId(icon_id));
+}
+
+pub fn iconOpIteratorFromSource(source: []const u8) IconOpIterator {
+    return icon_svg.Iterator.init(source);
+}
+
 pub const DrawBatch = union(enum) {
     rects: []const f32,
     image: []const f32,
@@ -124,6 +135,15 @@ pub const FontAtlas = struct {
     width: *const fn (context: *anyopaque, value: []const u8, px: u8) f32,
     glyph: *const fn (context: *anyopaque, ch: u8, px: u8) Error!?Glyph,
 };
+
+pub fn commandAdapterFont(context: *anyopaque) FontAtlas {
+    return .{
+        .context = context,
+        .metrics = commandAdapterFontMetrics,
+        .width = commandAdapterTextWidth,
+        .glyph = commandAdapterGlyph,
+    };
+}
 
 pub const Sources = struct {
     font: FontAtlas,
@@ -666,6 +686,37 @@ fn lerp(a: f32, b: f32, t: f32) f32 {
     return a + (b - a) * t;
 }
 
+const command_adapter_ascender: f32 = 10.0;
+const command_adapter_descender: f32 = -3.0;
+const command_adapter_glyph_width: f32 = 6.0;
+const command_adapter_glyph_height: f32 = 9.0;
+const command_adapter_glyph_left: f32 = 1.0;
+const command_adapter_glyph_top: f32 = -8.0;
+const command_adapter_advance: f32 = 8.0;
+
+fn commandAdapterFontMetrics(_: *anyopaque, _: u8) TextMetrics {
+    return .{ .ascender = command_adapter_ascender, .descender = command_adapter_descender };
+}
+
+fn commandAdapterTextWidth(_: *anyopaque, value: []const u8, _: u8) f32 {
+    return @as(f32, @floatFromInt(value.len)) * command_adapter_advance;
+}
+
+fn commandAdapterGlyph(_: *anyopaque, ch: u8, _: u8) Error!?Glyph {
+    if (ch == ' ') return null;
+    return .{
+        .u0 = 0.0,
+        .v0 = 0.0,
+        .u1 = 1.0,
+        .v1 = 1.0,
+        .w = command_adapter_glyph_width,
+        .h = command_adapter_glyph_height,
+        .left = command_adapter_glyph_left,
+        .top = command_adapter_glyph_top,
+        .advance = command_adapter_advance,
+    };
+}
+
 fn testFontMetrics(_: *anyopaque, _: u8) TextMetrics {
     return .{ .ascender = 10.0, .descender = -3.0 };
 }
@@ -687,6 +738,38 @@ fn testGlyph(_: *anyopaque, ch: u8, _: u8) Error!?Glyph {
         .top = -8.0,
         .advance = 8.0,
     };
+}
+
+fn expectSourceDoesNotContain(source: []const u8, needle: []const u8) !void {
+    try std.testing.expectEqual(@as(?usize, null), std.mem.indexOf(u8, source, needle));
+}
+
+test "renderer ir owns svg source lookup and command painting boundaries" {
+    try expectSourceDoesNotContain(@embedFile("backends/software.zig"), "@import(\"icon_svg.zig\")");
+    try expectSourceDoesNotContain(@embedFile("icon_line_buffer.zig"), "@import(\"icon_svg.zig\")");
+    try expectSourceDoesNotContain(@embedFile("backends/gles.zig"), "dataForIconId");
+    try expectSourceDoesNotContain(@embedFile("backends/software.zig"), "sourceForIconId");
+    try expectSourceDoesNotContain(@embedFile("icon_line_buffer.zig"), "sourceForIconId");
+    try expectSourceDoesNotContain(@embedFile("../wayland_window_host.zig"), ".rasterize(scene.written())");
+    try expectSourceDoesNotContain(@embedFile("compositor.zig"), ".rasterize(scene.written())");
+    try expectSourceDoesNotContain(@embedFile("../ui_browser.zig"), "renderer_ir.packScene(");
+    try expectSourceDoesNotContain(@embedFile("../wayland_window_host.zig"), "renderer_ir.packScene(");
+    try expectSourceDoesNotContain(@embedFile("../wayland_egl_host.zig"), "renderer_ir.packScene(");
+    try expectSourceDoesNotContain(@embedFile("../drm_gbm_host.zig"), "renderer_ir.packScene(");
+    try expectSourceDoesNotContain(@embedFile("../ui_browser.zig"), "renderer_present.present(");
+}
+
+test "renderer backends stay behind adapter imports" {
+    const backend_import = "render/backends/";
+    try expectSourceDoesNotContain(@embedFile("../root.zig"), backend_import);
+    try expectSourceDoesNotContain(@embedFile("../ui_core_test.zig"), backend_import);
+    try expectSourceDoesNotContain(@embedFile("../ui_browser.zig"), backend_import);
+    try expectSourceDoesNotContain(@embedFile("../wayland_window_host.zig"), backend_import);
+    try expectSourceDoesNotContain(@embedFile("../wayland_egl_host.zig"), backend_import);
+    try expectSourceDoesNotContain(@embedFile("../drm_gbm_host.zig"), backend_import);
+    try expectSourceDoesNotContain(@embedFile("../site_images.zig"), backend_import);
+    try expectSourceDoesNotContain(@embedFile("../ui_bench.zig"), backend_import);
+    try expectSourceDoesNotContain(@embedFile("../ui_snapshot.zig"), backend_import);
 }
 
 test "renderer ir packs scene primitives into canonical buffers" {

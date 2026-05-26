@@ -12,7 +12,10 @@ const max_control_depth = 256;
 const max_globals = 16;
 const max_table_entries = 32;
 const max_data_segments = 8;
+const byte_load_bytes = 1;
+const i32_load_bytes = 4;
 const wasm_page_bytes = 65536;
+const wasm_page_shift = 16;
 const leb32_max_bytes = 5;
 const leb64_max_bytes = 10;
 const leb_payload_mask = 0x7f;
@@ -416,6 +419,7 @@ pub const Runtime = struct {
     memory_grow_authority: ?MemoryGrowAuthority = null,
     table_grow_authority: ?TableGrowAuthority = null,
     initial_memory_pages: ?usize = null,
+    trace: ?*ExecutionTrace = null,
 
     pub fn init(memory: []u8, execution_ticks: *u64) Runtime {
         return initWithImports(memory, execution_ticks, &.{});
@@ -444,7 +448,52 @@ pub const Runtime = struct {
     fn consumeExecution(self: Runtime, ticks: u64) bool {
         if (ticks == 0 or ticks > self.execution_ticks.*) return false;
         self.execution_ticks.* -= ticks;
+        if (self.trace) |trace| trace.execution_ticks_consumed += ticks;
         return true;
+    }
+};
+
+pub const ExecutionTrace = struct {
+    execution_ticks_consumed: u64 = 0,
+    instructions: u64 = 0,
+    extended_instructions: u64 = 0,
+    function_entries: u64 = 0,
+    imported_calls: u64 = 0,
+    direct_calls: u64 = 0,
+    indirect_calls: u64 = 0,
+    branch_instructions: u64 = 0,
+    memory_loads: u64 = 0,
+    memory_stores: u64 = 0,
+    local_accesses: u64 = 0,
+    constants: u64 = 0,
+    max_call_depth: u64 = 0,
+    opcode_counts: [256]u64 = [_]u64{0} ** 256,
+
+    fn recordOpcode(self: *ExecutionTrace, opcode_byte: u8, opcode: Opcode) void {
+        self.instructions += 1;
+        self.opcode_counts[opcode_byte] += 1;
+        switch (opcode) {
+            .call => self.direct_calls += 1,
+            .call_indirect => self.indirect_calls += 1,
+            .br, .br_if, .br_table => self.branch_instructions += 1,
+            .i32_load, .i64_load, .f32_load, .f64_load, .i32_load8_s, .i32_load8_u, .i32_load16_s, .i32_load16_u, .i64_load8_s, .i64_load8_u, .i64_load16_s, .i64_load16_u, .i64_load32_s, .i64_load32_u => self.memory_loads += 1,
+            .i32_store, .i64_store, .f32_store, .f64_store, .i32_store8, .i32_store16, .i64_store8, .i64_store16, .i64_store32 => self.memory_stores += 1,
+            .local_get, .local_set, .local_tee, .global_get, .global_set => self.local_accesses += 1,
+            .i32_const, .i64_const, .f32_const, .f64_const => self.constants += 1,
+            else => {},
+        }
+    }
+
+    fn recordExtendedOpcode(self: *ExecutionTrace) void {
+        self.instructions += 1;
+        self.extended_instructions += 1;
+        self.opcode_counts[wasm_extended_prefix] += 1;
+    }
+
+    fn enterFunction(self: *ExecutionTrace, depth: usize) void {
+        self.function_entries += 1;
+        const depth_value: u64 = @intCast(depth + 1);
+        if (depth_value > self.max_call_depth) self.max_call_depth = depth_value;
     }
 };
 
@@ -455,8 +504,8 @@ pub const MemoryGrowRequest = struct {
     requested_bytes: usize,
 
     pub fn valid(self: MemoryGrowRequest) bool {
-        const expected_previous = checkedMul(self.previous_pages, wasm_page_bytes) orelse return false;
-        const expected_requested = checkedMul(self.requested_pages, wasm_page_bytes) orelse return false;
+        const expected_previous = pagesToBytes(self.previous_pages) orelse return false;
+        const expected_requested = pagesToBytes(self.requested_pages) orelse return false;
         return self.requested_pages >= self.previous_pages and
             self.requested_bytes >= self.previous_bytes and
             self.previous_bytes == expected_previous and
@@ -534,6 +583,12 @@ const Reader = struct {
     }
 
     fn readU32Leb(self: *Reader) Error!u32 {
+        if (self.offset >= self.bytes.len) return error.Corrupt;
+        const first = self.bytes[self.offset];
+        if ((first & leb_continue_mask) == 0) {
+            self.offset += 1;
+            return first;
+        }
         var result: u32 = 0;
         var count: usize = 0;
         while (count < leb32_max_bytes) : (count += 1) {
@@ -546,6 +601,14 @@ const Reader = struct {
     }
 
     fn readI32Leb(self: *Reader) Error!i32 {
+        if (self.offset >= self.bytes.len) return error.Corrupt;
+        const first = self.bytes[self.offset];
+        if ((first & leb_continue_mask) == 0) {
+            self.offset += 1;
+            var result: i32 = first & leb_payload_mask;
+            if ((first & leb_sign_mask) != 0) result |= @as(i32, -1) << leb_bits_per_byte;
+            return result;
+        }
         var result: i32 = 0;
         var count: usize = 0;
         var byte: u8 = 0;
@@ -565,6 +628,14 @@ const Reader = struct {
     }
 
     fn readI64Leb(self: *Reader) Error!i64 {
+        if (self.offset >= self.bytes.len) return error.Corrupt;
+        const first = self.bytes[self.offset];
+        if ((first & leb_continue_mask) == 0) {
+            self.offset += 1;
+            var result: i64 = first & leb_payload_mask;
+            if ((first & leb_sign_mask) != 0) result |= @as(i64, -1) << leb_bits_per_byte;
+            return result;
+        }
         var result: i64 = 0;
         var count: usize = 0;
         var byte: u8 = 0;
@@ -868,11 +939,17 @@ const Module = struct {
     start_function_index: ?usize = null,
 
     fn parse(bytes: []const u8) Error!Module {
+        var module: Module = undefined;
+        try parseInto(&module, bytes);
+        return module;
+    }
+
+    fn parseInto(module: *Module, bytes: []const u8) Error!void {
+        module.* = .{};
         var reader = Reader{ .bytes = bytes };
         if (!byte_utils.eql(try reader.readBytes(wasm_magic.len), &wasm_magic)) return error.Corrupt;
         if (!byte_utils.eql(try reader.readBytes(wasm_version.len), &wasm_version)) return error.Corrupt;
 
-        var module = Module{};
         var previous_section_order: u8 = 0;
         while (!reader.done()) {
             const section_id_raw = try reader.readByte();
@@ -904,7 +981,6 @@ const Module = struct {
         if (module.declared_data_count) |declared| {
             if (declared != module.data_segment_count) return error.Corrupt;
         }
-        return module;
     }
 
     fn parseTypeSection(self: *Module, reader: *Reader) Error!void {
@@ -1261,7 +1337,7 @@ const Module = struct {
     }
 
     fn requiredMemoryBytes(self: *const Module) Error!usize {
-        return checkedMul(self.memory_min_pages, wasm_page_bytes) orelse error.Unsupported;
+        return pagesToBytes(self.memory_min_pages) orelse error.Unsupported;
     }
 
     fn resolveImports(self: *Module, runtime: Runtime) Error!void {
@@ -1287,7 +1363,7 @@ const Module = struct {
     }
 
     fn applyDataSegments(self: *const Module, runtime: *Runtime, memory_pages: usize) Error!void {
-        const limit = checkedMul(memory_pages, wasm_page_bytes) orelse return error.Unsupported;
+        const limit = pagesToBytes(memory_pages) orelse return error.Unsupported;
         for (self.data_segments[0..self.data_segment_count]) |segment| {
             if (!segment.active) continue;
             const end = checkedAdd(segment.offset, segment.bytes.len) orelse return error.NoMemory;
@@ -1299,8 +1375,9 @@ const Module = struct {
 
 const Executor = struct {
     runtime: *Runtime,
-    module: Module,
+    module: *Module,
     memory_pages: usize,
+    memory_limit: usize,
 
     const ControlKind = enum {
         block,
@@ -1347,27 +1424,51 @@ const Executor = struct {
         }
 
         fn pushI32(self: *Frame, value: i32) Error!void {
-            try self.push(.{ .i32 = value });
+            if (self.stack_len >= max_stack) return error.StackOverflow;
+            self.stack[self.stack_len] = .{ .i32 = value };
+            self.stack_len += 1;
         }
 
         fn pushI64(self: *Frame, value: i64) Error!void {
-            try self.push(.{ .i64 = value });
+            if (self.stack_len >= max_stack) return error.StackOverflow;
+            self.stack[self.stack_len] = .{ .i64 = value };
+            self.stack_len += 1;
         }
 
         fn popI32(self: *Frame) Error!i32 {
-            return (try self.pop()).asI32();
+            if (self.stack_len == 0) return error.StackUnderflow;
+            self.stack_len -= 1;
+            return switch (self.stack[self.stack_len]) {
+                .i32 => |value| value,
+                else => error.Corrupt,
+            };
         }
 
         fn popI64(self: *Frame) Error!i64 {
-            return (try self.pop()).asI64();
+            if (self.stack_len == 0) return error.StackUnderflow;
+            self.stack_len -= 1;
+            return switch (self.stack[self.stack_len]) {
+                .i64 => |value| value,
+                else => error.Corrupt,
+            };
         }
 
         fn popF32(self: *Frame) Error!f32 {
-            return (try self.pop()).asF32();
+            if (self.stack_len == 0) return error.StackUnderflow;
+            self.stack_len -= 1;
+            return switch (self.stack[self.stack_len]) {
+                .f32 => |value| value,
+                else => error.Corrupt,
+            };
         }
 
         fn popF64(self: *Frame) Error!f64 {
-            return (try self.pop()).asF64();
+            if (self.stack_len == 0) return error.StackUnderflow;
+            self.stack_len -= 1;
+            return switch (self.stack[self.stack_len]) {
+                .f64 => |value| value,
+                else => error.Corrupt,
+            };
         }
 
         fn popFuncref(self: *Frame) Error!?usize {
@@ -1391,6 +1492,7 @@ const Executor = struct {
 
     fn runFunction(self: *Executor, function_index: usize, depth: usize, args: []const Value) Error!ExecutionResult {
         if (depth >= max_call_depth) return error.Unsupported;
+        if (self.runtime.trace) |trace| trace.enterFunction(depth);
         if (function_index < self.module.import_count) return try self.runImportedFunction(function_index, args);
         if (function_index >= self.module.totalFunctionCount()) return error.Corrupt;
         const function_type = self.module.types[try self.module.typeIndexForFunction(function_index)];
@@ -1406,10 +1508,77 @@ const Executor = struct {
             if (!self.runtime.consumeExecution(1)) return error.NoExecution;
             const opcode_byte = try reader.readByte();
             if (opcode_byte == wasm_extended_prefix) {
+                if (self.runtime.trace) |trace| trace.recordExtendedOpcode();
                 try self.executeExtendedOpcode(&frame, &reader);
                 continue;
             }
+            switch (opcode_byte) {
+                @intFromEnum(Opcode.local_get) => {
+                    if (self.runtime.trace) |trace| trace.recordOpcode(opcode_byte, .local_get);
+                    const index = try reader.readU32Leb();
+                    if (index >= local_limit) return error.Corrupt;
+                    if (frame.stack_len >= max_stack) return error.StackOverflow;
+                    frame.stack[frame.stack_len] = frame.locals[index];
+                    frame.stack_len += 1;
+                    continue;
+                },
+                @intFromEnum(Opcode.local_set) => {
+                    if (self.runtime.trace) |trace| trace.recordOpcode(opcode_byte, .local_set);
+                    const index = try reader.readU32Leb();
+                    if (index >= local_limit) return error.Corrupt;
+                    if (frame.stack_len == 0) return error.StackUnderflow;
+                    frame.stack_len -= 1;
+                    frame.locals[index] = frame.stack[frame.stack_len];
+                    continue;
+                },
+                @intFromEnum(Opcode.local_tee) => {
+                    if (self.runtime.trace) |trace| trace.recordOpcode(opcode_byte, .local_tee);
+                    const index = try reader.readU32Leb();
+                    if (index >= local_limit or frame.stack_len == 0) return error.Corrupt;
+                    frame.locals[index] = frame.stack[frame.stack_len - 1];
+                    continue;
+                },
+                @intFromEnum(Opcode.i32_const) => {
+                    if (self.runtime.trace) |trace| trace.recordOpcode(opcode_byte, .i32_const);
+                    try frame.pushI32(try reader.readI32Leb());
+                    continue;
+                },
+                @intFromEnum(Opcode.i32_add) => {
+                    if (self.runtime.trace) |trace| trace.recordOpcode(opcode_byte, .i32_add);
+                    if (frame.stack_len < 2) return error.StackUnderflow;
+                    frame.stack_len -= 1;
+                    const right = switch (frame.stack[frame.stack_len]) {
+                        .i32 => |value| value,
+                        else => return error.Corrupt,
+                    };
+                    const left_index = frame.stack_len - 1;
+                    const left = switch (frame.stack[left_index]) {
+                        .i32 => |value| value,
+                        else => return error.Corrupt,
+                    };
+                    frame.stack[left_index] = .{ .i32 = left +% right };
+                    continue;
+                },
+                @intFromEnum(Opcode.i32_load) => {
+                    if (self.runtime.trace) |trace| trace.recordOpcode(opcode_byte, .i32_load);
+                    const offset = try readMemoryImmediate(&reader);
+                    const address = try popAddress(&frame, offset);
+                    const range = try self.memoryRange(address, i32_load_bytes);
+                    try frame.pushI32(@bitCast(byte_utils.load32(range).?));
+                    continue;
+                },
+                @intFromEnum(Opcode.i32_load8_u) => {
+                    if (self.runtime.trace) |trace| trace.recordOpcode(opcode_byte, .i32_load8_u);
+                    const offset = try readMemoryImmediate(&reader);
+                    const address = try popAddress(&frame, offset);
+                    const range = try self.memoryRange(address, byte_load_bytes);
+                    try frame.pushI32(range[0]);
+                    continue;
+                },
+                else => {},
+            }
             const opcode = opcodeFromByte(opcode_byte) orelse return error.Unsupported;
+            if (self.runtime.trace) |trace| trace.recordOpcode(opcode_byte, opcode);
             switch (opcode) {
                 .@"unreachable" => return error.Trap,
                 .nop => {},
@@ -1796,6 +1965,7 @@ const Executor = struct {
     }
 
     fn runImportedFunction(self: *Executor, function_index: usize, args: []const Value) Error!ExecutionResult {
+        if (self.runtime.trace) |trace| trace.imported_calls += 1;
         const imported = self.module.imports[function_index];
         const function_type = self.module.types[imported.type_index];
         if (!function_type.supportedWithArgs(args)) return error.Unsupported;
@@ -1866,7 +2036,7 @@ const Executor = struct {
         const delta = try frame.popI32();
         if (delta < 0) return error.Corrupt;
         const previous_pages = self.memory_pages;
-        const previous_bytes = checkedMul(previous_pages, wasm_page_bytes) orelse return error.Unsupported;
+        const previous_bytes = self.memory_limit;
         const requested_pages = checkedAdd(previous_pages, @intCast(delta)) orelse {
             try frame.pushI32(-1);
             return;
@@ -1877,7 +2047,7 @@ const Executor = struct {
                 return;
             }
         }
-        const requested_bytes = checkedMul(requested_pages, wasm_page_bytes) orelse {
+        const requested_bytes = pagesToBytes(requested_pages) orelse {
             try frame.pushI32(-1);
             return;
         };
@@ -1898,6 +2068,7 @@ const Executor = struct {
             if (requested_bytes > self.runtime.memoryLen()) return error.NoMemory;
         }
         self.memory_pages = requested_pages;
+        self.memory_limit = requested_bytes;
         try frame.pushI32(@intCast(previous_pages));
     }
 
@@ -2052,9 +2223,8 @@ const Executor = struct {
     }
 
     fn memoryRange(self: *Executor, address: usize, size: usize) Error![]u8 {
-        const limit = checkedMul(self.memory_pages, wasm_page_bytes) orelse return error.Unsupported;
         const end = checkedAdd(address, size) orelse return error.NoMemory;
-        if (end > limit or end > self.runtime.memory.len) return error.NoMemory;
+        if (end > self.memory_limit or end > self.runtime.memory.len) return error.NoMemory;
         return self.runtime.memory[address..end];
     }
 
@@ -2081,12 +2251,22 @@ const Executor = struct {
     }
 };
 
+pub const ExecutionStorage = struct {
+    module: Module = .{},
+    executor: Executor = undefined,
+    value_args: [max_type_params]Value = undefined,
+};
+
 pub fn executeExportI64(runtime: *Runtime, wasm_bytes: []const u8, export_name: []const u8) Error!i64 {
     return executeExportI64Args(runtime, wasm_bytes, export_name, &.{});
 }
 
 pub fn executeExportI64Args(runtime: *Runtime, wasm_bytes: []const u8, export_name: []const u8, args: []const i64) Error!i64 {
     return (try executeExportValuesArgs(runtime, wasm_bytes, export_name, args)).onlyI64();
+}
+
+pub fn executeExportI64ArgsWithStorage(runtime: *Runtime, wasm_bytes: []const u8, export_name: []const u8, args: []const i64, storage: *ExecutionStorage) Error!i64 {
+    return (try executeExportValuesArgsWithStorage(runtime, wasm_bytes, export_name, args, storage)).onlyI64();
 }
 
 pub fn executeExport(runtime: *Runtime, wasm_bytes: []const u8, export_name: []const u8) Error!?i64 {
@@ -2104,32 +2284,41 @@ pub fn executeExportValues(runtime: *Runtime, wasm_bytes: []const u8, export_nam
 pub fn executeExportValuesArgs(runtime: *Runtime, wasm_bytes: []const u8, export_name: []const u8, args: []const i64) Error!ExecutionResult {
     if (export_name.len == 0) return error.BadArgument;
     if (args.len > max_type_params) return error.BadArgument;
-    var executor = try executorFor(runtime, wasm_bytes);
-    var value_args: [max_type_params]Value = undefined;
-    const prepared_args = try integerArgsForExport(&executor.module, export_name, args, &value_args);
+    var storage = ExecutionStorage{};
+    return executeExportValuesArgsWithStorage(runtime, wasm_bytes, export_name, args, &storage);
+}
+
+pub fn executeExportValuesArgsWithStorage(runtime: *Runtime, wasm_bytes: []const u8, export_name: []const u8, args: []const i64, storage: *ExecutionStorage) Error!ExecutionResult {
+    if (export_name.len == 0) return error.BadArgument;
+    if (args.len > max_type_params) return error.BadArgument;
+    const executor = try executorForWithStorage(runtime, wasm_bytes, storage);
+    const prepared_args = try integerArgsForExport(executor.module, export_name, args, &storage.value_args);
     try executor.runStart();
     return executor.runExport(export_name, prepared_args);
 }
 
 pub fn executeExportValueArgs(runtime: *Runtime, wasm_bytes: []const u8, export_name: []const u8, args: []const Value) Error!ExecutionResult {
     if (export_name.len == 0) return error.BadArgument;
-    var executor = try executorFor(runtime, wasm_bytes);
+    var storage = ExecutionStorage{};
+    const executor = try executorForWithStorage(runtime, wasm_bytes, &storage);
     try executor.runStart();
     return executor.runExport(export_name, args);
 }
 
-fn executorFor(runtime: *Runtime, wasm_bytes: []const u8) Error!Executor {
-    var module = try Module.parse(wasm_bytes);
-    try module.resolveImports(runtime.*);
-    const memory_pages = try initialMemoryPages(runtime.*, &module);
-    const required_memory = checkedMul(memory_pages, wasm_page_bytes) orelse return error.Unsupported;
+fn executorForWithStorage(runtime: *Runtime, wasm_bytes: []const u8, storage: *ExecutionStorage) Error!*Executor {
+    try Module.parseInto(&storage.module, wasm_bytes);
+    try storage.module.resolveImports(runtime.*);
+    const memory_pages = try initialMemoryPages(runtime.*, &storage.module);
+    const required_memory = pagesToBytes(memory_pages) orelse return error.Unsupported;
     if (required_memory > runtime.memoryLen()) return error.NoMemory;
-    try module.applyDataSegments(runtime, memory_pages);
-    return Executor{
+    try storage.module.applyDataSegments(runtime, memory_pages);
+    storage.executor = .{
         .runtime = runtime,
-        .module = module,
+        .module = &storage.module,
         .memory_pages = memory_pages,
+        .memory_limit = required_memory,
     };
+    return &storage.executor;
 }
 
 fn initialMemoryPages(runtime: Runtime, module: *const Module) Error!usize {
@@ -2201,10 +2390,9 @@ fn checkedAdd(left: usize, right: usize) ?usize {
     return result[0];
 }
 
-fn checkedMul(left: usize, right: usize) ?usize {
-    const result = @mulWithOverflow(left, right);
-    if (result[1] != 0) return null;
-    return result[0];
+fn pagesToBytes(pages: usize) ?usize {
+    if (pages > (maxUnsigned(usize) >> wasm_page_shift)) return null;
+    return pages << wasm_page_shift;
 }
 
 fn minSigned(comptime Int: type) Int {
@@ -2337,10 +2525,18 @@ fn valueTypeFromByte(value: u8) ?ValueType {
 }
 
 fn opcodeFromByte(value: u8) ?Opcode {
-    inline for (@typeInfo(Opcode).@"enum".fields) |field| {
-        if (value == field.value) return @enumFromInt(field.value);
+    return opcode_table[value];
+}
+
+const opcode_table = buildOpcodeTable();
+
+fn buildOpcodeTable() [256]?Opcode {
+    @setEvalBranchQuota(4096);
+    var table = [_]?Opcode{null} ** 256;
+    for (@typeInfo(Opcode).@"enum".fields) |field| {
+        table[@intCast(field.value)] = @enumFromInt(field.value);
     }
-    return null;
+    return table;
 }
 
 fn parseEmptySection(reader: *Reader) Error!void {

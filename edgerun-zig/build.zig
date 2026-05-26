@@ -318,7 +318,7 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("compiler/zig/src/edgerun_wasm_compiler.zig"),
             .target = ui_browser_target,
-            .optimize = .ReleaseSmall,
+            .optimize = .ReleaseFast,
             .single_threaded = true,
         }),
     });
@@ -329,6 +329,7 @@ pub fn build(b: *std.Build) void {
         "er_wasm_compiler_init",
         "er_wasm_compiler_status",
         "er_wasm_compiler_compile_wasm",
+        "er_wasm_compiler_compile_wasm_metadata",
         "er_wasm_compiler_output_ptr",
         "er_wasm_compiler_output_len",
         "er_wasm_compiler_diagnostic_ptr",

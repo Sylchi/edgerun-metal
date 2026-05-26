@@ -7,6 +7,7 @@ const wasm = @import("wasm/root.zig");
 const wasm_compiler = @import("embedded_wasm_compiler").bytes;
 
 const source_gap_bytes: usize = 64 * 1024;
+const successor_validation_memory_bytes: usize = 64 * 1024 * 1024;
 const compiler_memory_offset: usize = 16 * 1024 * 1024;
 const compiler_memory_extra_bytes: usize = 256 * 1024 * 1024;
 const execution_tick_budget: u64 = 16_000_000_000;
@@ -15,9 +16,14 @@ const default_root_label = "src/root.zig";
 const workspace_magic = "ERVFSWS1";
 const workspace_header_bytes: usize = 16;
 const top_file_count: usize = 16;
-const graph_max_files: usize = 1024;
 const unresolved_sample_count: usize = 8;
 const host_graph_only_arg = "--host-graph";
+const synthetic_arg = "--synthetic";
+const metadata_only_arg = "--metadata-only";
+const synthetic_root_label = "src/synthetic_000000.zig";
+const workspace_manifest_version: u16 = 1;
+const workspace_manifest_reserved: u16 = 0;
+const wasm_magic = [_]u8{ 0x00, 0x61, 0x73, 0x6d };
 
 const FileStat = struct {
     label: [vfs.label_max]u8 = [_]u8{0} ** vfs.label_max,
@@ -109,14 +115,38 @@ pub fn main(init: std.process.Init) !void {
 
     _ = args.next();
     var host_graph_only = false;
+    var metadata_only = false;
+    var synthetic_file_count: ?usize = null;
     var root_label = args.next() orelse default_root_label;
     if (std.mem.eql(u8, root_label, host_graph_only_arg)) {
         host_graph_only = true;
         root_label = args.next() orelse default_root_label;
     }
+    if (std.mem.eql(u8, root_label, metadata_only_arg)) {
+        metadata_only = true;
+        root_label = args.next() orelse default_root_label;
+    }
+    if (std.mem.eql(u8, root_label, synthetic_arg)) {
+        const count_text = args.next() orelse return error.MissingSyntheticFileCount;
+        synthetic_file_count = try std.fmt.parseInt(usize, count_text, 10);
+        root_label = synthetic_root_label;
+    }
+    if (std.mem.eql(u8, root_label, metadata_only_arg)) {
+        metadata_only = true;
+        root_label = args.next() orelse default_root_label;
+    }
+    if (std.mem.eql(u8, root_label, synthetic_arg)) {
+        const count_text = args.next() orelse return error.MissingSyntheticFileCount;
+        synthetic_file_count = try std.fmt.parseInt(usize, count_text, 10);
+        root_label = synthetic_root_label;
+    }
     if (args.next() != null) return error.TooManyArguments;
 
-    const source_bytes = source_object[0..];
+    const allocator = std.heap.page_allocator;
+    var synthetic_source: ?[]u8 = null;
+    defer if (synthetic_source) |bytes_to_free| allocator.free(bytes_to_free);
+    if (synthetic_file_count) |file_count| synthetic_source = try buildSyntheticWorkspace(allocator, file_count);
+    const source_bytes = synthetic_source orelse source_object[0..];
     const compiler_memory_len = alignForward(source_bytes.len + compiler_memory_extra_bytes, 16);
     const source_offset = compiler_memory_offset + compiler_memory_len;
     const root_label_offset = source_offset + source_bytes.len;
@@ -131,7 +161,6 @@ pub fn main(init: std.process.Init) !void {
         return;
     }
 
-    const allocator = std.heap.page_allocator;
     const memory = try allocator.alloc(u8, memory_len);
     defer allocator.free(memory);
     @memset(memory, 0);
@@ -140,6 +169,8 @@ pub fn main(init: std.process.Init) !void {
 
     var execution_ticks: u64 = execution_tick_budget;
     var runtime = wasm.Runtime.initWithMemoryPages(memory, &execution_ticks, memory_pages);
+    var compile_trace: wasm.ExecutionTrace = .{};
+    runtime.trace = &compile_trace;
 
     const init_start = nowNs();
     const init_result = try wasm.executeExportValueArgs(&runtime, &wasm_compiler, "er_wasm_compiler_init", &.{
@@ -151,7 +182,8 @@ pub fn main(init: std.process.Init) !void {
 
     const ticks_before_compile = execution_ticks;
     const compile_start = nowNs();
-    const compile_result = try wasm.executeExportValueArgs(&runtime, &wasm_compiler, "er_wasm_compiler_compile_wasm", &.{
+    const compile_export = if (metadata_only) "er_wasm_compiler_compile_wasm_metadata" else "er_wasm_compiler_compile_wasm";
+    const compile_result = try wasm.executeExportValueArgs(&runtime, &wasm_compiler, compile_export, &.{
         .{ .i32 = @intCast(compiler_memory_offset) },
         .{ .i32 = @intCast(compiler_memory_len) },
         .{ .i32 = @intCast(root_label_offset) },
@@ -165,12 +197,20 @@ pub fn main(init: std.process.Init) !void {
 
     const reported_output_ptr: usize = @intCast(try (try wasm.executeExportValueArgs(&runtime, &wasm_compiler, "er_wasm_compiler_output_ptr", &.{})).valueI32(0));
     const output_len: usize = @intCast(try (try wasm.executeExportValueArgs(&runtime, &wasm_compiler, "er_wasm_compiler_output_len", &.{})).valueI32(0));
+    if (compile_status != 0 or output_len == 0) {
+        std.debug.print("run.compile_status={d} output.ptr={d} output.len={d}\n", .{ compile_status, reported_output_ptr, output_len });
+        return error.CompilerDidNotEmitOutput;
+    }
     const output_ptr = findSuccessorWasm(memory, output_len, reported_output_ptr) orelse return error.MissingSuccessorWasm;
     if (output_ptr != compiler_memory_offset) return error.WrongCompilerOutputAddress;
     const output = memory[output_ptr..][0..output_len];
 
     var successor_ticks: u64 = execution_tick_budget;
-    const successor_memory = try allocator.alloc(u8, source_bytes.len + source_gap_bytes);
+    const successor_memory_len = if (source_bytes.len + source_gap_bytes > successor_validation_memory_bytes)
+        source_bytes.len + source_gap_bytes
+    else
+        successor_validation_memory_bytes;
+    const successor_memory = try allocator.alloc(u8, successor_memory_len);
     defer allocator.free(successor_memory);
     @memset(successor_memory, 0);
     var successor = wasm.Runtime.init(successor_memory, &successor_ticks);
@@ -189,10 +229,75 @@ pub fn main(init: std.process.Init) !void {
     const import_edge_count = try exportI32(&successor, output, "er_app_import_edge_count");
     const unresolved_import_count = try exportI32(&successor, output, "er_app_unresolved_import_count");
     const truncated_import_count = try exportI32(&successor, output, "er_app_truncated_import_count");
+    const manifest_file_refs_scanned = try exportI32(&successor, output, "er_app_manifest_file_refs_scanned");
+    const file_object_decodes = try exportI32(&successor, output, "er_app_file_object_decodes");
+    const file_lookup_count = try exportI32(&successor, output, "er_app_file_lookup_count");
+    const queued_import_count = try exportI32(&successor, output, "er_app_queued_import_count");
+    const pruned_import_count = try exportI32(&successor, output, "er_app_pruned_import_count");
+    const parsed_source_bytes = try exportI32(&successor, output, "er_app_parsed_source_bytes");
+    const indexed_file_count = try exportI32(&successor, output, "er_app_indexed_file_count");
+    const embedded_source_len = try exportI32(&successor, output, "er_app_embedded_source_len");
+    const lowered_main_count = try exportI32(&successor, output, "er_app_lowered_main_count");
+    const lowered_export_count = try exportI32(&successor, output, "er_app_lowered_export_count");
+    const lowered_main_result: ?i32 = if (lowered_main_count != 0)
+        try (try wasm.executeExportValueArgs(&successor, output, "er_app_main", &.{})).valueI32(0)
+    else
+        null;
+    const lowered_ui_max_width = try exportI32Optional(&successor, output, "er_ui_max_width");
+    const lowered_ui_max_height = try exportI32Optional(&successor, output, "er_ui_max_height");
+    const lowered_ui_width = try exportI32Optional(&successor, output, "er_ui_width");
+    const lowered_ui_height = try exportI32Optional(&successor, output, "er_ui_height");
+    const lowered_input_ptr = try exportI32Optional(&successor, output, "er_ui_input_ptr");
+    const lowered_input_capacity = try exportI32Optional(&successor, output, "er_ui_input_capacity");
+    const lowered_source_workspace_ptr = try exportI32Optional(&successor, output, "er_ui_source_workspace_ptr");
+    const lowered_source_workspace_capacity = try exportI32Optional(&successor, output, "er_ui_source_workspace_capacity");
+    const lowered_release_artifact_ptr = try exportI32Optional(&successor, output, "er_ui_release_artifact_ptr");
+    const lowered_release_artifact_capacity = try exportI32Optional(&successor, output, "er_ui_release_artifact_capacity");
+    const lowered_last_error = try exportI32Optional(&successor, output, "er_ui_last_error");
+    var source_commit_ok: ?i32 = null;
+    var source_len_after_commit: ?i32 = null;
+    var source_commit_oversized: ?i32 = null;
+    var source_len_after_oversized: ?i32 = null;
+    if (lowered_source_workspace_ptr) |source_ptr_i32| {
+        if (source_ptr_i32 >= 0) {
+            if (lowered_source_workspace_capacity) |capacity_i32| {
+                const source_ptr: usize = @intCast(source_ptr_i32);
+                const sample = "probe successor source";
+                if (source_ptr + sample.len <= successor_memory.len) {
+                    @memcpy(successor_memory[source_ptr..][0..sample.len], sample);
+                    source_commit_ok = try exportI32ArgOptional(&successor, output, "er_ui_source_workspace_commit", @intCast(sample.len));
+                    source_len_after_commit = try exportI32Optional(&successor, output, "er_ui_source_workspace_len");
+                    if (capacity_i32 < std.math.maxInt(i32)) {
+                        source_commit_oversized = try exportI32ArgOptional(&successor, output, "er_ui_source_workspace_commit", capacity_i32 + 1);
+                        source_len_after_oversized = try exportI32Optional(&successor, output, "er_ui_source_workspace_len");
+                    }
+                }
+            }
+        }
+    }
+    var release_commit_short: ?i32 = null;
+    var release_last_error_after_short: ?i32 = null;
+    var release_commit_ok: ?i32 = null;
+    var release_len_after_commit: ?i32 = null;
+    var release_last_error_after_commit: ?i32 = null;
+    if (lowered_release_artifact_ptr) |artifact_ptr_i32| {
+        if (artifact_ptr_i32 >= 0 and lowered_release_artifact_capacity != null) {
+            const artifact_ptr: usize = @intCast(artifact_ptr_i32);
+            if (artifact_ptr + wasm_magic.len <= successor_memory.len) {
+                release_commit_short = try exportI32ArgOptional(&successor, output, "er_ui_release_artifact_commit", 3);
+                release_last_error_after_short = try exportI32Optional(&successor, output, "er_ui_last_error");
+                @memcpy(successor_memory[artifact_ptr..][0..wasm_magic.len], &wasm_magic);
+                release_commit_ok = try exportI32ArgOptional(&successor, output, "er_ui_release_artifact_commit", @intCast(wasm_magic.len));
+                release_len_after_commit = try exportI32Optional(&successor, output, "er_ui_release_artifact_len");
+                release_last_error_after_commit = try exportI32Optional(&successor, output, "er_ui_last_error");
+            }
+        }
+    }
     const successor_end = nowNs();
 
     std.debug.print("edgerun wasm compiler probe\n", .{});
     std.debug.print("root_label={s}\n", .{root_label});
+    std.debug.print("mode.metadata_only={}\n", .{metadata_only});
     std.debug.print("input.compiler_wasm_bytes={d}\n", .{wasm_compiler.len});
     std.debug.print("input.source_object_bytes={d}\n", .{source_bytes.len});
     std.debug.print("input.source_hash=0x{x:0>8}\n", .{sourceHash(source_bytes)});
@@ -223,6 +328,7 @@ pub fn main(init: std.process.Init) !void {
     std.debug.print("run.compile_status={d} compile_ms={d}\n", .{ compile_status, elapsedMs(compile_start, compile_end) });
     std.debug.print("run.ticks_compile={d}\n", .{ticks_before_compile - ticks_after_compile});
     std.debug.print("run.ticks_remaining={d}\n", .{ticks_after_compile});
+    printRuntimeTrace("run.trace", compile_trace);
     std.debug.print("output.reported_ptr={d}\n", .{reported_output_ptr});
     std.debug.print("output.actual_ptr={d}\n", .{output_ptr});
     std.debug.print("output.bytes={d}\n", .{output_len});
@@ -241,8 +347,144 @@ pub fn main(init: std.process.Init) !void {
     std.debug.print("successor.import_edge_count={d}\n", .{import_edge_count});
     std.debug.print("successor.unresolved_import_count={d}\n", .{unresolved_import_count});
     std.debug.print("successor.truncated_import_count={d}\n", .{truncated_import_count});
+    std.debug.print("successor.manifest_file_refs_scanned={d}\n", .{manifest_file_refs_scanned});
+    std.debug.print("successor.file_object_decodes={d}\n", .{file_object_decodes});
+    std.debug.print("successor.file_lookup_count={d}\n", .{file_lookup_count});
+    std.debug.print("successor.queued_import_count={d}\n", .{queued_import_count});
+    std.debug.print("successor.pruned_import_count={d}\n", .{pruned_import_count});
+    std.debug.print("successor.parsed_source_bytes={d}\n", .{parsed_source_bytes});
+    std.debug.print("successor.indexed_file_count={d}\n", .{indexed_file_count});
+    std.debug.print("successor.embedded_source_len={d}\n", .{embedded_source_len});
+    std.debug.print("successor.lowered_main_count={d}\n", .{lowered_main_count});
+    std.debug.print("successor.lowered_export_count={d}\n", .{lowered_export_count});
+    std.debug.print("successor.lowered_main_result={?d}\n", .{lowered_main_result});
+    std.debug.print("successor.lowered.er_ui_max_width={?d}\n", .{lowered_ui_max_width});
+    std.debug.print("successor.lowered.er_ui_max_height={?d}\n", .{lowered_ui_max_height});
+    std.debug.print("successor.lowered.er_ui_width={?d}\n", .{lowered_ui_width});
+    std.debug.print("successor.lowered.er_ui_height={?d}\n", .{lowered_ui_height});
+    std.debug.print("successor.lowered.er_ui_input_ptr={?d}\n", .{lowered_input_ptr});
+    std.debug.print("successor.lowered.er_ui_input_capacity={?d}\n", .{lowered_input_capacity});
+    std.debug.print("successor.lowered.er_ui_source_workspace_ptr={?d}\n", .{lowered_source_workspace_ptr});
+    std.debug.print("successor.lowered.er_ui_source_workspace_capacity={?d}\n", .{lowered_source_workspace_capacity});
+    std.debug.print("successor.lowered.er_ui_release_artifact_ptr={?d}\n", .{lowered_release_artifact_ptr});
+    std.debug.print("successor.lowered.er_ui_release_artifact_capacity={?d}\n", .{lowered_release_artifact_capacity});
+    std.debug.print("successor.lowered.er_ui_last_error={?d}\n", .{lowered_last_error});
+    std.debug.print("successor.source_commit.ok={?d}\n", .{source_commit_ok});
+    std.debug.print("successor.source_commit.len_after_ok={?d}\n", .{source_len_after_commit});
+    std.debug.print("successor.source_commit.oversized={?d}\n", .{source_commit_oversized});
+    std.debug.print("successor.source_commit.len_after_oversized={?d}\n", .{source_len_after_oversized});
+    std.debug.print("successor.release_commit.short={?d}\n", .{release_commit_short});
+    std.debug.print("successor.release_commit.last_error_after_short={?d}\n", .{release_last_error_after_short});
+    std.debug.print("successor.release_commit.ok={?d}\n", .{release_commit_ok});
+    std.debug.print("successor.release_commit.len_after_ok={?d}\n", .{release_len_after_commit});
+    std.debug.print("successor.release_commit.last_error_after_ok={?d}\n", .{release_last_error_after_commit});
     std.debug.print("successor.read_exports_ms={d}\n", .{elapsedMs(successor_start, successor_end)});
     std.debug.print("successor.ticks_used={d}\n", .{execution_tick_budget - successor_ticks});
+}
+
+fn printRuntimeTrace(prefix: []const u8, trace: wasm.ExecutionTrace) void {
+    std.debug.print("{s}.instructions={d}\n", .{ prefix, trace.instructions });
+    std.debug.print("{s}.extended_instructions={d}\n", .{ prefix, trace.extended_instructions });
+    std.debug.print("{s}.function_entries={d}\n", .{ prefix, trace.function_entries });
+    std.debug.print("{s}.imported_calls={d}\n", .{ prefix, trace.imported_calls });
+    std.debug.print("{s}.direct_calls={d}\n", .{ prefix, trace.direct_calls });
+    std.debug.print("{s}.indirect_calls={d}\n", .{ prefix, trace.indirect_calls });
+    std.debug.print("{s}.branch_instructions={d}\n", .{ prefix, trace.branch_instructions });
+    std.debug.print("{s}.memory_loads={d}\n", .{ prefix, trace.memory_loads });
+    std.debug.print("{s}.memory_stores={d}\n", .{ prefix, trace.memory_stores });
+    std.debug.print("{s}.local_accesses={d}\n", .{ prefix, trace.local_accesses });
+    std.debug.print("{s}.constants={d}\n", .{ prefix, trace.constants });
+    std.debug.print("{s}.max_call_depth={d}\n", .{ prefix, trace.max_call_depth });
+    std.debug.print("{s}.ticks_consumed={d}\n", .{ prefix, trace.execution_ticks_consumed });
+    printTopOpcodes(prefix, trace);
+}
+
+fn printTopOpcodes(prefix: []const u8, trace: wasm.ExecutionTrace) void {
+    var used = [_]bool{false} ** 256;
+    var rank: usize = 0;
+    while (rank < 8) : (rank += 1) {
+        var best_opcode: usize = 0;
+        var best_count: u64 = 0;
+        for (trace.opcode_counts, 0..) |count, opcode| {
+            if (used[opcode] or count <= best_count) continue;
+            best_opcode = opcode;
+            best_count = count;
+        }
+        if (best_count == 0) return;
+        used[best_opcode] = true;
+        std.debug.print("{s}.opcode_top.{d}.opcode=0x{x:0>2} count={d}\n", .{ prefix, rank + 1, best_opcode, best_count });
+    }
+}
+
+fn buildSyntheticWorkspace(allocator: std.mem.Allocator, file_count: usize) ![]u8 {
+    if (file_count == 0) return error.BadSyntheticFileCount;
+    var manifest: std.ArrayList(u8) = .empty;
+    defer manifest.deinit(allocator);
+    try manifest.appendSlice(allocator, workspace_magic);
+    try appendU16(&manifest, allocator, workspace_manifest_version);
+    try appendU16(&manifest, allocator, workspace_manifest_reserved);
+    try appendU32(&manifest, allocator, @intCast(file_count));
+
+    var index: usize = 0;
+    while (index < file_count) : (index += 1) {
+        var label_buffer: [vfs.label_max]u8 = undefined;
+        const label = try std.fmt.bufPrint(&label_buffer, "src/synthetic_{d:0>6}.zig", .{index});
+
+        var source_buffer: [128]u8 = undefined;
+        const source = if (index == 0)
+            "pub export fn er_synthetic() i32 { return 7; }"
+        else
+            try std.fmt.bufPrint(&source_buffer, "pub const synthetic_value_{d}: u32 = {d};", .{ index, index });
+
+        const file_raw = try allocator.alloc(u8, object.header_size + source.len);
+        defer allocator.free(file_raw);
+        const file_object = try (object.NodeWriter{ .out = file_raw }).bytesNode(sourceObjectRequirements(), sourceObjectEpoch(), source);
+        const label_ref = try vfs.prepareObjectLabelRef(label, file_object);
+        var label_ref_raw: [vfs.object_label_ref_bytes]u8 = undefined;
+        try vfs.encodeObjectLabelRef(label_ref, &label_ref_raw);
+        try manifest.appendSlice(allocator, &label_ref_raw);
+        try manifest.appendSlice(allocator, file_object);
+    }
+
+    const raw = try allocator.alloc(u8, object.header_size + manifest.items.len);
+    errdefer allocator.free(raw);
+    const canonical = try (object.NodeWriter{ .out = raw }).bytesNode(sourceObjectRequirements(), sourceObjectEpoch(), manifest.items);
+    return raw[0..canonical.len];
+}
+
+fn appendU16(out: *std.ArrayList(u8), allocator: std.mem.Allocator, value: u16) !void {
+    var raw: [2]u8 = undefined;
+    std.mem.writeInt(u16, &raw, value, .little);
+    try out.appendSlice(allocator, &raw);
+}
+
+fn appendU32(out: *std.ArrayList(u8), allocator: std.mem.Allocator, value: u32) !void {
+    var raw: [4]u8 = undefined;
+    std.mem.writeInt(u32, &raw, value, .little);
+    try out.appendSlice(allocator, &raw);
+}
+
+fn sourceObjectRequirements() object.Requirements {
+    return .{
+        .durability = .durable,
+        .confidentiality = .public,
+        .portability = .public_portable,
+        .integrity = .hash_only,
+        .lifetime = .retained,
+        .visibility = .public,
+        .access = .explicit_io,
+    };
+}
+
+fn sourceObjectEpoch() @TypeOf(@as(object.Header, undefined).epoch) {
+    return .{
+        .keeper = .{ .bytes = [_]u8{
+            0x65, 0x64, 0x67, 0x65, 0x72, 0x75, 0x6e, 0x3a,
+            0x73, 0x79, 0x6e, 0x74, 0x68, 0x65, 0x74, 0x69,
+            0x63, 0x3a, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65,
+            0x3a, 0x74, 0x65, 0x73, 0x74, 0x00, 0x00, 0x01,
+        } },
+    };
 }
 
 fn inspectVfs(source_bytes: []const u8, root_label: []const u8) !VfsStats {
@@ -348,7 +590,8 @@ fn printHostGraphFields(graph_stats: GraphStats) void {
 
 fn inspectImportGraph(source_bytes: []const u8, root_label: []const u8) !GraphStats {
     const allocator = std.heap.page_allocator;
-    const files = try allocator.alloc(HostFileEntry, graph_max_files);
+    const manifest_file_count = try workspaceFileCount(source_bytes);
+    const files = try allocator.alloc(HostFileEntry, manifest_file_count);
     defer allocator.free(files);
     const file_count = try buildHostFileIndex(source_bytes, files);
 
@@ -393,6 +636,7 @@ fn inspectImportGraph(source_bytes: []const u8, root_label: []const u8) !GraphSt
                 continue;
             };
             if (findHostFile(files[0..file_count], resolved) == null) {
+                if (prunedSourceImport(resolved)) continue;
                 stats.recordUnresolved(importer, import_name, resolved);
                 continue;
             }
@@ -406,6 +650,13 @@ fn inspectImportGraph(source_bytes: []const u8, root_label: []const u8) !GraphSt
         }
     }
     return stats;
+}
+
+fn workspaceFileCount(source_bytes: []const u8) !usize {
+    const view = try object.View.decode(source_bytes);
+    if (!std.mem.startsWith(u8, view.body, workspace_magic)) return error.NotWorkspace;
+    const file_count = bytes.load32(view.body[12..16]) orelse return error.Corrupt;
+    return @intCast(file_count);
 }
 
 fn buildHostFileIndex(source_bytes: []const u8, files: []HostFileEntry) !usize {
@@ -456,6 +707,36 @@ fn virtualImport(import_name: []const u8) bool {
         std.mem.eql(u8, import_name, "embedded_wasm_compiler");
 }
 
+fn prunedSourceImport(resolved_label: []const u8) bool {
+    if (std.mem.endsWith(u8, resolved_label, "_test.zig")) return true;
+    if (std.mem.eql(u8, resolved_label, "compiler/zig/lib/std/Build.zig")) return true;
+    if (std.mem.eql(u8, resolved_label, "compiler/zig/lib/std/c.zig")) return true;
+    if (std.mem.eql(u8, resolved_label, "compiler/zig/lib/std/crypto.zig")) return true;
+    if (std.mem.eql(u8, resolved_label, "compiler/zig/lib/std/http.zig")) return true;
+    if (std.mem.eql(u8, resolved_label, "compiler/zig/lib/std/Io/Threaded.zig")) return true;
+    if (std.mem.eql(u8, resolved_label, "compiler/zig/lib/std/Io/Uring.zig")) return true;
+    if (std.mem.eql(u8, resolved_label, "compiler/zig/lib/std/os.zig")) return true;
+    if (std.mem.eql(u8, resolved_label, "compiler/zig/lib/std/tar.zig")) return true;
+    if (std.mem.eql(u8, resolved_label, "compiler/zig/lib/std/testing.zig")) return true;
+    if (std.mem.eql(u8, resolved_label, "compiler/zig/lib/std/tz.zig")) return true;
+    if (std.mem.eql(u8, resolved_label, "compiler/zig/lib/std/valgrind.zig")) return true;
+    if (std.mem.eql(u8, resolved_label, "compiler/zig/lib/std/zip.zig")) return true;
+    if (std.mem.startsWith(u8, resolved_label, "compiler/zig/lib/std/Build/")) return true;
+    if (std.mem.startsWith(u8, resolved_label, "compiler/zig/lib/std/c/")) return true;
+    if (std.mem.startsWith(u8, resolved_label, "compiler/zig/lib/std/crypto/")) return true;
+    if (std.mem.startsWith(u8, resolved_label, "compiler/zig/lib/std/debug/")) return true;
+    if (std.mem.startsWith(u8, resolved_label, "compiler/zig/lib/std/http/")) return true;
+    if (std.mem.startsWith(u8, resolved_label, "compiler/zig/lib/std/os/")) return true;
+    if (std.mem.startsWith(u8, resolved_label, "compiler/zig/lib/std/tar/")) return true;
+    if (std.mem.startsWith(u8, resolved_label, "compiler/zig/lib/std/testing/")) return true;
+    if (std.mem.startsWith(u8, resolved_label, "compiler/zig/lib/std/tz/")) return true;
+    if (std.mem.startsWith(u8, resolved_label, "compiler/zig/lib/std/zig/llvm/")) return true;
+    if (std.mem.startsWith(u8, resolved_label, "compiler/zig/lib/compiler/")) return true;
+    if (std.mem.startsWith(u8, resolved_label, "compiler/zig/src/libs/")) return true;
+    if (std.mem.startsWith(u8, resolved_label, "compiler/zig/src/Package/Fetch/")) return true;
+    return false;
+}
+
 fn resolveImportLabel(importer_label: []const u8, import_name: []const u8, out: *[vfs.label_max]u8) ?[]const u8 {
     if (std.mem.eql(u8, import_name, "std")) return copyResolved(out, "compiler/zig/lib/std/std.zig");
     if (std.mem.eql(u8, import_name, "root")) return copyResolved(out, importer_label);
@@ -489,6 +770,7 @@ fn normalizeLabel(raw: []const u8, out: *[vfs.label_max]u8) ?[]const u8 {
             if (len == 0) return null;
             len -= 1;
             while (len > 0 and out[len - 1] != '/') : (len -= 1) {}
+            if (len > 0 and out[len - 1] == '/') len -= 1;
         } else {
             if (len != 0) {
                 if (len >= out.len) return null;
@@ -535,6 +817,22 @@ fn exportI32(runtime: *wasm.Runtime, module: []const u8, name: []const u8) !i32 
     return try (try wasm.executeExportValueArgs(runtime, module, name, &.{})).valueI32(0);
 }
 
+fn exportI32Optional(runtime: *wasm.Runtime, module: []const u8, name: []const u8) !?i32 {
+    const result = wasm.executeExportValueArgs(runtime, module, name, &.{}) catch |err| switch (err) {
+        error.MissingExport => return null,
+        else => return err,
+    };
+    return try result.valueI32(0);
+}
+
+fn exportI32ArgOptional(runtime: *wasm.Runtime, module: []const u8, name: []const u8, arg: i32) !?i32 {
+    const result = wasm.executeExportValueArgs(runtime, module, name, &.{.{ .i32 = arg }}) catch |err| switch (err) {
+        error.MissingExport => return null,
+        else => return err,
+    };
+    return try result.valueI32(0);
+}
+
 fn findSuccessorWasm(memory: []u8, output_len: usize, reported_output_ptr: usize) ?usize {
     if (validSuccessorAt(memory, output_len, reported_output_ptr)) return reported_output_ptr;
     var index: usize = 0;
@@ -549,7 +847,10 @@ fn findSuccessorWasm(memory: []u8, output_len: usize, reported_output_ptr: usize
 fn validSuccessorAt(memory: []u8, output_len: usize, offset: usize) bool {
     if (offset > memory.len or output_len > memory.len - offset) return false;
     const candidate = memory[offset..][0..output_len];
-    const scratch_len = output_len + source_gap_bytes;
+    const scratch_len = if (output_len + source_gap_bytes > successor_validation_memory_bytes)
+        output_len + source_gap_bytes
+    else
+        successor_validation_memory_bytes;
     const scratch = std.heap.page_allocator.alloc(u8, scratch_len) catch return false;
     defer std.heap.page_allocator.free(scratch);
     @memset(scratch, 0);

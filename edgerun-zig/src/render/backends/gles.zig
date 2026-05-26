@@ -1,8 +1,8 @@
 const std = @import("std");
-const icon_vector = @import("icon_vector.zig");
-const renderer_font_atlas = @import("renderer_font_atlas.zig");
-const renderer_ir = @import("renderer_ir.zig");
-const ui = @import("ui.zig");
+const icon_vector = @import("../../icon_vector.zig");
+const renderer_font_atlas = @import("../font_atlas.zig");
+const renderer_ir = @import("../ir.zig");
+const ui = @import("../../ui.zig");
 
 pub const c = @cImport({
     @cInclude("GLES2/gl2.h");
@@ -290,7 +290,8 @@ fn drawIcons(gl: State, width: i32, height: i32, values: []const f32) !void {
 
 fn drawIconInstance(gl: State, instance: renderer_ir.IconInstance) !void {
     c.glUniform4f(c.glGetUniformLocation(gl.line_program, "u_color"), colorF(instance.color.r), colorF(instance.color.g), colorF(instance.color.b), colorF(instance.color.a));
-    var iter = icon_vector.Iterator.init(icon_vector.dataForIconId(instance.icon_id));
+    var iter = renderer_ir.iconOpIteratorForId(instance.icon_id);
+    var path = IconPathState{};
     while (iter.next() catch return error.InvalidIrBuffer) |op| {
         switch (op) {
             .polyline => |points| try drawIconPolyline(gl, instance.bounds, points),
@@ -303,7 +304,99 @@ fn drawIconInstance(gl: State, instance: renderer_ir.IconInstance) !void {
                 instance.bounds.h * rect.h,
             )),
             .filled_circle => |circle| try drawIconFilledCircle(gl, instance.bounds, circle.cx, circle.cy, circle.radius),
+            .filled_ellipse => |ellipse| try drawIconEllipse(gl, instance.bounds, ellipse.cx, ellipse.cy, ellipse.rx, ellipse.ry, ellipse.full),
+            .filled_round_rect => |rect| try drawIconBox(gl, ui.Rect.init(
+                instance.bounds.x + instance.bounds.w * rect.x,
+                instance.bounds.y + instance.bounds.h * rect.y,
+                instance.bounds.w * rect.w,
+                instance.bounds.h * rect.h,
+            )),
+            .move_to => |point| path.moveTo(point),
+            .line_to => |point| {
+                if (path.current) |current| try drawIconSegment(gl, instance.bounds, current, point);
+                path.lineTo(point);
+            },
+            .quad_to => |quad| {
+                if (path.current) |current| try drawIconQuadratic(gl, instance.bounds, current, quad.control, quad.end);
+                path.lineTo(quad.end);
+            },
+            .cubic_to => |curve| {
+                if (path.current) |current| try drawIconCubic(gl, instance.bounds, current, curve.control0, curve.control1, curve.end);
+                path.lineTo(curve.end);
+            },
+            .arc_to => |arc| {
+                if (path.current) |current| try drawIconSegment(gl, instance.bounds, current, arc.end);
+                path.lineTo(arc.end);
+            },
+            .close_path => if (path.current) |current| if (path.start) |start| {
+                try drawIconSegment(gl, instance.bounds, current, start);
+                path.lineTo(start);
+            },
+            .begin_fill_path,
+            .begin_evenodd_fill_path,
+            .end_fill_path,
+            .paint_rgba,
+            .paint_current_color,
+            .paint_current_color_alpha,
+            .paint_linear_gradient,
+            .paint_radial_gradient,
+            .stroke_width,
+            .stroke_cap,
+            .stroke_join,
+            .stroke_miter_limit,
+            .begin_clip_path,
+            .end_clip_path,
+            .clear_clip_path,
+            => {},
         }
+    }
+}
+
+const IconPathState = struct {
+    current: ?icon_vector.Point = null,
+    start: ?icon_vector.Point = null,
+
+    fn moveTo(self: *IconPathState, point: icon_vector.Point) void {
+        self.current = point;
+        self.start = point;
+    }
+
+    fn lineTo(self: *IconPathState, point: icon_vector.Point) void {
+        self.current = point;
+    }
+};
+
+fn drawIconSegment(gl: State, bounds: ui.Rect, a: icon_vector.Point, b: icon_vector.Point) !void {
+    try drawIconLine(gl, bounds, a.x, a.y, b.x, b.y);
+}
+
+fn drawIconQuadratic(gl: State, bounds: ui.Rect, p0: icon_vector.Point, p1: icon_vector.Point, p2: icon_vector.Point) !void {
+    var previous = p0;
+    var index: usize = 1;
+    while (index <= icon_circle_segments) : (index += 1) {
+        const t = @as(f32, @floatFromInt(index)) / @as(f32, @floatFromInt(icon_circle_segments));
+        const inv = 1.0 - t;
+        const next = icon_vector.Point{
+            .x = inv * inv * p0.x + 2.0 * inv * t * p1.x + t * t * p2.x,
+            .y = inv * inv * p0.y + 2.0 * inv * t * p1.y + t * t * p2.y,
+        };
+        try drawIconSegment(gl, bounds, previous, next);
+        previous = next;
+    }
+}
+
+fn drawIconCubic(gl: State, bounds: ui.Rect, p0: icon_vector.Point, p1: icon_vector.Point, p2: icon_vector.Point, p3: icon_vector.Point) !void {
+    var previous = p0;
+    var index: usize = 1;
+    while (index <= icon_circle_segments) : (index += 1) {
+        const t = @as(f32, @floatFromInt(index)) / @as(f32, @floatFromInt(icon_circle_segments));
+        const inv = 1.0 - t;
+        const next = icon_vector.Point{
+            .x = inv * inv * inv * p0.x + 3.0 * inv * inv * t * p1.x + 3.0 * inv * t * t * p2.x + t * t * t * p3.x,
+            .y = inv * inv * inv * p0.y + 3.0 * inv * inv * t * p1.y + 3.0 * inv * t * t * p2.y + t * t * t * p3.y,
+        };
+        try drawIconSegment(gl, bounds, previous, next);
+        previous = next;
     }
 }
 

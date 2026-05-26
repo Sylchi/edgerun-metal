@@ -3,12 +3,13 @@ const icon = @import("icon.zig");
 const input = @import("input.zig");
 const interaction = @import("ui_interaction.zig");
 const linux_drm = @import("linux_drm.zig");
-const renderer_font_atlas = @import("renderer_font_atlas.zig");
-const renderer_gpu = @import("renderer_gpu.zig");
-const renderer_gpu_buffer = @import("renderer_gpu_buffer.zig");
-const renderer_ir = @import("renderer_ir.zig");
-const renderer_native_present = @import("renderer_native_present.zig");
-const renderer_software = @import("renderer_software.zig");
+const renderer_font_atlas = @import("render/font_atlas.zig");
+const renderer_gpu = @import("render/gpu.zig");
+const renderer_gpu_buffer = @import("render/gpu_buffer.zig");
+const renderer_ir = @import("render/ir.zig");
+const renderer_pipeline = @import("render/pipeline.zig");
+const renderer_native_present = @import("render/native_present.zig");
+const renderer_software = @import("render/software.zig");
 const component_gallery = @import("component_gallery.zig");
 const site_apps = @import("site_apps.zig");
 const site_blog = @import("site_blog.zig");
@@ -773,13 +774,10 @@ const NativeApp = struct {
         if (self.present != .cpu) try site_cursor.render(&scene, self.state.hover_x, self.state.hover_y, cursor_kind);
 
         const buffers = self.ir_storage.buffers();
-        try renderer_ir.packScene(buffers, sources(&self.font_atlas), scene.written());
+        try renderer_pipeline.packScene(buffers, &self.font_atlas, .object, scene.written());
 
         var sink_state = WaylandCommitSink{};
-        const resources = renderer_software.IrResources{
-            .font = .{ .width = renderer_font_atlas.width, .height = renderer_font_atlas.height, .alpha = self.font_atlas.alphaSlice() },
-            .image = try site_images.cloudMeme(),
-        };
+        const resources = renderer_pipeline.softwareResources(&self.font_atlas, try site_images.cloudMeme());
         switch (self.present) {
             .cpu => {
                 const receipt = try renderer_native_present.renderCpuAndSubmit(
@@ -876,8 +874,11 @@ const NativeApp = struct {
         var cursor_commands: [cursor_scene_budget]ui.Command = undefined;
         var scene = ui.Scene.init(&cursor_commands);
         try site_cursor.render(&scene, self.state.hover_x, self.state.hover_y, kind);
-        const surface = try renderer_software.Surface.init(self.width, self.height, self.pixels);
-        surface.rasterize(scene.written());
+        var cursor_ir = renderer_ir.FixedBuffers(cursor_scene_budget, 0, 0, 0, 0, 0, 0){};
+        const buffers = cursor_ir.buffers();
+        try renderer_pipeline.packScene(buffers, &self.font_atlas, .object, scene.written());
+        const surface = try renderer_software.Framebuffer.init(self.width, self.height, self.pixels);
+        try surface.rasterizeIr(buffers);
         return damage;
     }
 
@@ -921,10 +922,10 @@ const NativeApp = struct {
         } };
     }
 
-    fn renderSoftwarePixels(self: *NativeApp, buffers: renderer_ir.Buffers, resources: renderer_software.IrResources) !void {
-        const software_surface = try renderer_software.Surface.init(self.width, self.height, self.pixels);
+    fn renderSoftwarePixels(self: *NativeApp, buffers: renderer_ir.Buffers, resources: renderer_software.Resources) !void {
+        const software_surface = try renderer_software.Framebuffer.init(self.width, self.height, self.pixels);
         software_surface.clear(siteBackground());
-        _ = try software_surface.renderIrFrameWithResources(buffers, resources);
+        _ = try software_surface.renderIr(buffers, resources);
     }
 
     fn handleWaylandInput(self: *NativeApp, client: *WaylandClient, kind: ObjectKind, message: Message) !bool {
@@ -1212,12 +1213,6 @@ fn contentHeightForRoute(width: f32, route: site_navigation.Route) f32 {
         .components => component_gallery.contentHeightForState(width, .{
             .selected_component_index = route.selected_component_index,
         }),
-    };
-}
-
-fn sources(font_atlas: *renderer_font_atlas.Atlas) renderer_ir.Sources {
-    return .{
-        .font = font_atlas.objectSource(),
     };
 }
 
@@ -1998,7 +1993,7 @@ test "wayland host renders the browser landing app through canonical ir" {
     var ir_storage = IrStorage{};
     const buffers = ir_storage.buffers();
     var font_atlas = renderer_font_atlas.Atlas.initWithFont(renderer_font_atlas.geist_ascii_font.body());
-    try renderer_ir.packScene(buffers, sources(&font_atlas), scene.written());
+    try renderer_pipeline.packScene(buffers, &font_atlas, .object, scene.written());
     try std.testing.expect(ir_storage.rect_len > 0);
     try std.testing.expect(ir_storage.text_vertex_len > 0);
     try std.testing.expect(ir_storage.icon_vertex_len > 0);

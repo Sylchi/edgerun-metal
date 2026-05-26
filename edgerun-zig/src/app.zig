@@ -733,6 +733,18 @@ pub const App = struct {
         }
     };
 
+    pub const WorkCompletionContext = struct {
+        parent: identity.Identity,
+        input: preimage.Hash,
+        output: preimage.Hash,
+        app_hash: preimage.Hash,
+        manifest: preimage.Hash,
+        clock_start: clock.Stamp,
+        clock_end: clock.Stamp,
+        allocation: DeclaredAllocation,
+        spawn_receipt: grant.SpawnReceipt,
+    };
+
     pub const SigningCapability = struct {
         signer: identity.Identity,
         authorization: intent.Receipt,
@@ -990,11 +1002,8 @@ pub const App = struct {
     }
 
     pub fn completeWork(self: App, parent: identity.Identity, input: preimage.Hash, output: preimage.Hash, app_hash: preimage.Hash, manifest: preimage.Hash, clock_start: clock.Stamp, clock_end: clock.Stamp, allocation: DeclaredAllocation, spawn_receipt: grant.SpawnReceipt) ?WorkReceipt {
-        const parent_principal = authority.Principal.app(parent) orelse return null;
-        if (self.state.execution_ticks > allocation.execution_ticks) return null;
-        const receipt = WorkReceipt{
-            .parent = parent_principal.id,
-            .app = self.id.id,
+        return (&self).completeWorkContext(&.{
+            .parent = parent,
             .input = input,
             .output = output,
             .app_hash = app_hash,
@@ -1002,8 +1011,25 @@ pub const App = struct {
             .clock_start = clock_start,
             .clock_end = clock_end,
             .allocation = allocation,
-            .execution_used = allocation.execution_ticks - self.state.execution_ticks,
             .spawn_receipt = spawn_receipt,
+        });
+    }
+
+    pub fn completeWorkContext(self: *const App, context: *const WorkCompletionContext) ?WorkReceipt {
+        const parent_principal = authority.Principal.app(context.parent) orelse return null;
+        if (self.state.execution_ticks > context.allocation.execution_ticks) return null;
+        const receipt = WorkReceipt{
+            .parent = parent_principal.id,
+            .app = self.id.id,
+            .input = context.input,
+            .output = context.output,
+            .app_hash = context.app_hash,
+            .manifest = context.manifest,
+            .clock_start = context.clock_start,
+            .clock_end = context.clock_end,
+            .allocation = context.allocation,
+            .execution_used = context.allocation.execution_ticks - self.state.execution_ticks,
+            .spawn_receipt = context.spawn_receipt,
         };
         if (!receipt.valid()) return null;
         return receipt;

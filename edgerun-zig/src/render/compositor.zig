@@ -1,7 +1,7 @@
 const std = @import("std");
-const renderer_ir = @import("renderer_ir.zig");
-const renderer_software = @import("renderer_software.zig");
-const ui = @import("ui.zig");
+const renderer_ir = @import("ir.zig");
+const renderer_software = @import("software.zig");
+const ui = @import("../ui.zig");
 
 pub const Error = error{
     InvalidTarget,
@@ -13,6 +13,14 @@ pub const Error = error{
     UnsupportedIrPrimitive,
     DamageBudgetExceeded,
 };
+
+const compose_rect_budget: usize = 4096;
+const compose_text_vertex_budget: usize = 24576;
+const compose_icon_budget: usize = 4096;
+const compose_image_vertex_budget: usize = 384;
+const compose_overlay_rect_budget: usize = 512;
+const compose_overlay_text_vertex_budget: usize = 8192;
+const compose_overlay_icon_budget: usize = 256;
 
 pub const PixelFormat = enum(u8) {
     xrgb8888,
@@ -120,10 +128,10 @@ const DamageList = struct {
 };
 
 pub const Compositor = struct {
-    target: renderer_software.Surface,
+    target: renderer_software.Framebuffer,
     damage: DamageList,
 
-    pub fn init(target: renderer_software.Surface, damage_rects: []PixelRect) Error!Compositor {
+    pub fn init(target: renderer_software.Framebuffer, damage_rects: []PixelRect) Error!Compositor {
         if (target.width == 0 or target.height == 0 or target.pixels.len < target.width * target.height) return error.InvalidTarget;
         return .{
             .target = target,
@@ -132,32 +140,30 @@ pub const Compositor = struct {
     }
 
     pub fn compose(self: *Compositor, surfaces: []const Surface, scene: ui.Scene, background: ui.Color) Error!Receipt {
-        self.target.clear(background);
-        self.damage.reset();
-
-        var pixels_written: u64 = 0;
-        for (surfaces) |surface| {
-            pixels_written += try self.compositeSurface(surface);
-        }
-
-        for (scene.written()) |command| {
-            try self.markCommandDamage(command);
-        }
-        self.target.rasterize(scene.written());
-
-        return .{
-            .surface_count = surfaces.len,
-            .ui_command_count = scene.written().len,
-            .damage_count = self.damage.written().len,
-            .pixels_written = pixels_written,
-        };
+        var storage = renderer_ir.FixedBuffers(
+            compose_rect_budget,
+            compose_text_vertex_budget,
+            compose_icon_budget,
+            compose_image_vertex_budget,
+            compose_overlay_rect_budget,
+            compose_overlay_text_vertex_budget,
+            compose_overlay_icon_budget,
+        ){};
+        const buffers = storage.buffers();
+        var context: u8 = 0;
+        const sources = renderer_ir.Sources{ .font = renderer_ir.commandAdapterFont(&context) };
+        renderer_ir.packScene(buffers, sources, scene.written()) catch return error.InvalidIrBuffer;
+        const alpha = [_]u8{255};
+        return self.composeIr(surfaces, buffers, .{
+            .font = .{ .width = 1, .height = 1, .alpha = &alpha },
+        }, background);
     }
 
     pub fn composeIr(
         self: *Compositor,
         surfaces: []const Surface,
         buffers: renderer_ir.Buffers,
-        resources: renderer_software.IrResources,
+        resources: renderer_software.Resources,
         background: ui.Color,
     ) Error!Receipt {
         self.target.clear(background);
@@ -170,7 +176,7 @@ pub const Compositor = struct {
         }
 
         try self.markIrDamage(buffers);
-        const presentation = self.target.renderIrFrameWithResources(buffers, resources) catch |err| return switch (err) {
+        const presentation = self.target.renderIr(buffers, resources) catch |err| return switch (err) {
             error.InvalidIrBuffer => error.InvalidIrBuffer,
             error.InvalidBuffer => error.InvalidIrBuffer,
             error.InvalidIrResource => error.InvalidIrResource,
@@ -272,7 +278,7 @@ pub const Compositor = struct {
     }
 };
 
-fn clipSurface(surface: Surface, target: renderer_software.Surface) ?PixelRect {
+fn clipSurface(surface: Surface, target: renderer_software.Framebuffer) ?PixelRect {
     const x1 = @as(i64, surface.x) + @as(i64, surface.width);
     const y1 = @as(i64, surface.y) + @as(i64, surface.height);
     return clipEdges(
@@ -285,7 +291,7 @@ fn clipSurface(surface: Surface, target: renderer_software.Surface) ?PixelRect {
     );
 }
 
-fn clipRect(rect: ui.Rect, target: renderer_software.Surface) ?PixelRect {
+fn clipRect(rect: ui.Rect, target: renderer_software.Framebuffer) ?PixelRect {
     if (!rect.valid()) return null;
     return clipEdges(
         @intFromFloat(@floor(rect.x)),
@@ -342,7 +348,7 @@ test "compositor composites app surface pixels into the target" {
     };
 
     var pixels: [4 * 4]ui.Color = undefined;
-    const target = try renderer_software.Surface.init(4, 4, &pixels);
+    const target = try renderer_software.Framebuffer.init(4, 4, &pixels);
     var damage: [4]PixelRect = undefined;
     var compositor = try Compositor.init(target, &damage);
     var commands: [1]ui.Command = undefined;
@@ -374,7 +380,7 @@ test "compositor renders ui scene above app surfaces" {
     };
 
     var pixels: [4 * 4]ui.Color = undefined;
-    const target = try renderer_software.Surface.init(4, 4, &pixels);
+    const target = try renderer_software.Framebuffer.init(4, 4, &pixels);
     var damage: [4]PixelRect = undefined;
     var compositor = try Compositor.init(target, &damage);
     var commands: [2]ui.Command = undefined;
@@ -409,7 +415,7 @@ test "compositor renders canonical ir above app surfaces" {
     try scene.pushRect(ui.Rect.init(1, 1, 2, 2), red, .fill, 0.0, 0.0);
 
     var command_pixels: [4 * 4]ui.Color = undefined;
-    const command_target = try renderer_software.Surface.init(4, 4, &command_pixels);
+    const command_target = try renderer_software.Framebuffer.init(4, 4, &command_pixels);
     var command_damage: [4]PixelRect = undefined;
     var command_compositor = try Compositor.init(command_target, &command_damage);
     const command_receipt = try command_compositor.compose(&.{app_surface}, scene, .clear);
@@ -423,7 +429,7 @@ test "compositor renders canonical ir above app surfaces" {
     try renderer_ir.packScene(buffers, sources, scene.written());
 
     var ir_pixels: [4 * 4]ui.Color = undefined;
-    const ir_target = try renderer_software.Surface.init(4, 4, &ir_pixels);
+    const ir_target = try renderer_software.Framebuffer.init(4, 4, &ir_pixels);
     var ir_damage: [4]PixelRect = undefined;
     var ir_compositor = try Compositor.init(ir_target, &ir_damage);
     const alpha = [_]u8{255};

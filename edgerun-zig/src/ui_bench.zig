@@ -1,8 +1,9 @@
 const std = @import("std");
 const linux = std.os.linux;
-const renderer_font_atlas = @import("renderer_font_atlas.zig");
-const renderer_ir = @import("renderer_ir.zig");
-const renderer_software = @import("renderer_software.zig");
+const renderer_font_atlas = @import("render/font_atlas.zig");
+const renderer_ir = @import("render/ir.zig");
+const renderer_pipeline = @import("render/pipeline.zig");
+const renderer_software = @import("render/software.zig");
 const ui = @import("ui.zig");
 
 const width = 3840;
@@ -48,27 +49,22 @@ pub fn main() !void {
     ir_storage = IrStorage{};
     const ir_buffers = ir_storage.buffers();
     atlas_font_atlas = renderer_font_atlas.Atlas.init();
-    const atlas_sources = renderer_ir.Sources{
-        .font = atlas_font_atlas.source(),
-    };
     std.debug.print("ui bench stage: atlas pack\n", .{});
     const atlas_pack_start = nowNs();
     i = 0;
     while (i < ir_pack_iterations) : (i += 1) {
-        try renderer_ir.packScene(ir_buffers, atlas_sources, scene.written());
+        try renderer_pipeline.packScene(ir_buffers, &atlas_font_atlas, .atlas, scene.written());
     }
     const atlas_pack_ns = nowNs() - atlas_pack_start;
 
-    const surface = try renderer_software.Surface.init(width, height, &frame_pixels);
-    const atlas_resources = renderer_software.IrResources{
-        .font = .{ .width = renderer_font_atlas.width, .height = renderer_font_atlas.height, .alpha = atlas_font_atlas.alphaSlice() },
-    };
+    const surface = try renderer_software.Framebuffer.init(width, height, &frame_pixels);
+    const atlas_resources = renderer_pipeline.softwareResources(&atlas_font_atlas, null);
     std.debug.print("ui bench stage: atlas render\n", .{});
     const atlas_render_start = nowNs();
     i = 0;
     while (i < ir_render_iterations) : (i += 1) {
         surface.clear(.bg);
-        _ = try surface.renderIrFrameWithResources(ir_buffers, atlas_resources);
+        _ = try surface.renderIr(ir_buffers, atlas_resources);
     }
     const atlas_render_ns = nowNs() - atlas_render_start;
     const atlas_packed_checksum = irChecksum(ir_buffers);
@@ -82,25 +78,20 @@ pub fn main() !void {
     const object_font_body_len = @import("font_vector.zig").serializedLen(object_font.glyphs.len, object_font.kerns.len, object_font.commands.len).?;
 
     object_font_atlas = font_storage.atlas().?;
-    const object_sources = renderer_ir.Sources{
-        .font = object_font_atlas.source(),
-    };
     std.debug.print("ui bench stage: object pack\n", .{});
     const object_pack_start = nowNs();
     i = 0;
     while (i < ir_pack_iterations) : (i += 1) {
-        try renderer_ir.packScene(ir_buffers, object_sources, scene.written());
+        try renderer_pipeline.packScene(ir_buffers, &object_font_atlas, .atlas, scene.written());
     }
     const object_pack_ns = nowNs() - object_pack_start;
-    const object_resources = renderer_software.IrResources{
-        .font = .{ .width = renderer_font_atlas.width, .height = renderer_font_atlas.height, .alpha = object_font_atlas.alphaSlice() },
-    };
+    const object_resources = renderer_pipeline.softwareResources(&object_font_atlas, null);
     std.debug.print("ui bench stage: object render\n", .{});
     const object_render_start = nowNs();
     i = 0;
     while (i < ir_render_iterations) : (i += 1) {
         surface.clear(.bg);
-        _ = try surface.renderIrFrameWithResources(ir_buffers, object_resources);
+        _ = try surface.renderIr(ir_buffers, object_resources);
     }
     const object_render_ns = nowNs() - object_render_start;
 

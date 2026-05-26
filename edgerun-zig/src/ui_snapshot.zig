@@ -1,7 +1,8 @@
 const std = @import("std");
-const renderer_font_atlas = @import("renderer_font_atlas.zig");
-const renderer_ir = @import("renderer_ir.zig");
-const renderer_software = @import("renderer_software.zig");
+const renderer_font_atlas = @import("render/font_atlas.zig");
+const renderer_ir = @import("render/ir.zig");
+const renderer_pipeline = @import("render/pipeline.zig");
+const renderer_software = @import("render/software.zig");
 const ui = @import("ui.zig");
 const ui_components = @import("ui_components.zig");
 
@@ -41,16 +42,11 @@ fn renderSnapshot(init: std.process.Init, out_path: []const u8) !void {
     const buffers = ir_storage.buffers();
 
     var font_atlas = renderer_font_atlas.Atlas.init();
-    const sources = renderer_ir.Sources{
-        .font = font_atlas.source(),
-    };
-    try renderer_ir.packScene(buffers, sources, scene.written());
+    try renderer_pipeline.packScene(buffers, &font_atlas, .atlas, scene.written());
 
-    const surface = try renderer_software.Surface.init(width, height, pixels);
+    const surface = try renderer_software.Framebuffer.init(width, height, pixels);
     surface.clear(.bg);
-    _ = try surface.renderIrFrameWithResources(buffers, .{
-        .font = .{ .width = renderer_font_atlas.width, .height = renderer_font_atlas.height, .alpha = font_atlas.alphaSlice() },
-    });
+    _ = try surface.renderIr(buffers, renderer_pipeline.softwareResources(&font_atlas, null));
 
     const io = init.io;
     try std.Io.Dir.cwd().createDirPath(io, ".build/edgerun-zig");
@@ -87,19 +83,14 @@ test "snapshot packs and rasterizes through renderer ir" {
     const buffers = ir_storage.buffers();
 
     var font_atlas = renderer_font_atlas.Atlas.init();
-    const sources = renderer_ir.Sources{
-        .font = font_atlas.source(),
-    };
-    try renderer_ir.packScene(buffers, sources, scene.written());
+    try renderer_pipeline.packScene(buffers, &font_atlas, .atlas, scene.written());
     try std.testing.expect(ir_storage.rect_len > 0);
     try std.testing.expect(ir_storage.text_vertex_len > 0);
 
     var pixels: [320 * 240]ui.Color = undefined;
-    const surface = try renderer_software.Surface.init(320, 240, &pixels);
+    const surface = try renderer_software.Framebuffer.init(320, 240, &pixels);
     surface.clear(.bg);
-    const receipt = try surface.renderIrFrameWithResources(buffers, .{
-        .font = .{ .width = renderer_font_atlas.width, .height = renderer_font_atlas.height, .alpha = font_atlas.alphaSlice() },
-    });
+    const receipt = try surface.renderIr(buffers, renderer_pipeline.softwareResources(&font_atlas, null));
     try std.testing.expect(receipt.valid());
 
     var painted: usize = 0;

@@ -24,6 +24,11 @@ pub const op_paint_radial_gradient: f32 = 20.0;
 pub const op_paint_current_color_alpha: f32 = 21.0;
 pub const op_stroke_width: f32 = 22.0;
 pub const op_stroke_cap: f32 = 23.0;
+pub const op_stroke_join: f32 = 24.0;
+pub const op_stroke_miter_limit: f32 = 25.0;
+pub const op_begin_clip_path: f32 = 26.0;
+pub const op_end_clip_path: f32 = 27.0;
+pub const op_clear_clip_path: f32 = 28.0;
 
 pub const min_op_len: usize = 1;
 pub const polyline_header_len: usize = 2;
@@ -49,6 +54,11 @@ pub const paint_current_color_len: usize = 1;
 pub const paint_current_color_alpha_len: usize = 2;
 pub const stroke_width_len: usize = 2;
 pub const stroke_cap_len: usize = 2;
+pub const stroke_join_len: usize = 2;
+pub const stroke_miter_limit_len: usize = 2;
+pub const begin_clip_path_len: usize = 1;
+pub const end_clip_path_len: usize = 1;
+pub const clear_clip_path_len: usize = 1;
 pub const paint_linear_gradient_base_len: usize = 8;
 pub const paint_radial_gradient_base_len: usize = 10;
 pub const linear_gradient_stop_len: usize = 5;
@@ -248,6 +258,35 @@ pub const Iterator = struct {
             self.index += stroke_cap_len;
             return .{ .stroke_cap = strokeCapFromFloat(self.values[start]) orelse return error.InvalidIconVector };
         }
+        if (kind == op_stroke_join) {
+            if (self.index + stroke_join_len > self.values.len) return error.InvalidIconVector;
+            const start = self.index + 1;
+            self.index += stroke_join_len;
+            return .{ .stroke_join = strokeJoinFromFloat(self.values[start]) orelse return error.InvalidIconVector };
+        }
+        if (kind == op_stroke_miter_limit) {
+            if (self.index + stroke_miter_limit_len > self.values.len) return error.InvalidIconVector;
+            const start = self.index + 1;
+            self.index += stroke_miter_limit_len;
+            const limit = self.values[start];
+            if (!std.math.isFinite(limit) or limit < 1.0) return error.InvalidIconVector;
+            return .{ .stroke_miter_limit = limit };
+        }
+        if (kind == op_begin_clip_path) {
+            if (self.index + begin_clip_path_len > self.values.len) return error.InvalidIconVector;
+            self.index += begin_clip_path_len;
+            return .begin_clip_path;
+        }
+        if (kind == op_end_clip_path) {
+            if (self.index + end_clip_path_len > self.values.len) return error.InvalidIconVector;
+            self.index += end_clip_path_len;
+            return .end_clip_path;
+        }
+        if (kind == op_clear_clip_path) {
+            if (self.index + clear_clip_path_len > self.values.len) return error.InvalidIconVector;
+            self.index += clear_clip_path_len;
+            return .clear_clip_path;
+        }
         if (kind == op_paint_linear_gradient) {
             if (self.index + paint_linear_gradient_base_len > self.values.len) return error.InvalidIconVector;
             const start = self.index + 1;
@@ -350,6 +389,11 @@ pub const Op = union(enum) {
     paint_radial_gradient: RadialGradient,
     stroke_width: f32,
     stroke_cap: StrokeCap,
+    stroke_join: StrokeJoin,
+    stroke_miter_limit: f32,
+    begin_clip_path,
+    end_clip_path,
+    clear_clip_path,
 };
 
 pub const Paint = struct {
@@ -405,6 +449,12 @@ pub const StrokeCap = enum(u8) {
     square = 2,
 };
 
+pub const StrokeJoin = enum(u8) {
+    miter = 0,
+    round = 1,
+    bevel = 2,
+};
+
 pub const min_linear_gradient_stops: usize = 2;
 
 fn gradientCoordinateSpaceFromFloat(value: f32) ?GradientCoordinateSpace {
@@ -424,6 +474,13 @@ fn strokeCapFromFloat(value: f32) ?StrokeCap {
     if (value == @as(f32, @floatFromInt(@intFromEnum(StrokeCap.butt)))) return .butt;
     if (value == @as(f32, @floatFromInt(@intFromEnum(StrokeCap.round)))) return .round;
     if (value == @as(f32, @floatFromInt(@intFromEnum(StrokeCap.square)))) return .square;
+    return null;
+}
+
+fn strokeJoinFromFloat(value: f32) ?StrokeJoin {
+    if (value == @as(f32, @floatFromInt(@intFromEnum(StrokeJoin.miter)))) return .miter;
+    if (value == @as(f32, @floatFromInt(@intFromEnum(StrokeJoin.round)))) return .round;
+    if (value == @as(f32, @floatFromInt(@intFromEnum(StrokeJoin.bevel)))) return .bevel;
     return null;
 }
 
@@ -704,6 +761,42 @@ test "iterator decodes stroke cap op" {
     var iter = Iterator.init(&values);
 
     try std.testing.expectEqual(Op{ .stroke_cap = .square }, (try iter.next()).?);
+    try std.testing.expectEqual(@as(?Op, null), try iter.next());
+}
+
+test "iterator decodes stroke join op" {
+    const values = [_]f32{
+        op_stroke_join,
+        @floatFromInt(@intFromEnum(StrokeJoin.bevel)),
+    };
+    var iter = Iterator.init(&values);
+
+    try std.testing.expectEqual(Op{ .stroke_join = .bevel }, (try iter.next()).?);
+    try std.testing.expectEqual(@as(?Op, null), try iter.next());
+}
+
+test "iterator decodes stroke miter limit op" {
+    const values = [_]f32{
+        op_stroke_miter_limit,
+        2.5,
+    };
+    var iter = Iterator.init(&values);
+
+    try std.testing.expectEqual(Op{ .stroke_miter_limit = 2.5 }, (try iter.next()).?);
+    try std.testing.expectEqual(@as(?Op, null), try iter.next());
+}
+
+test "iterator decodes clip path control ops" {
+    const values = [_]f32{
+        op_begin_clip_path,
+        op_end_clip_path,
+        op_clear_clip_path,
+    };
+    var iter = Iterator.init(&values);
+
+    try std.testing.expectEqual(Op.begin_clip_path, (try iter.next()).?);
+    try std.testing.expectEqual(Op.end_clip_path, (try iter.next()).?);
+    try std.testing.expectEqual(Op.clear_clip_path, (try iter.next()).?);
     try std.testing.expectEqual(@as(?Op, null), try iter.next());
 }
 
