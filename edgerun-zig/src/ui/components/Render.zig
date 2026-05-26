@@ -391,10 +391,6 @@ pub fn constraintsFromBounds(bounds: ui.Rect) layouts.types.Constraints {
     };
 }
 
-pub fn renderText(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, options: RenderOptions) ui.RenderError!void {
-    try scene.pushText(bounds, value, options.style.text);
-}
-
 pub fn renderAccordion(scene: *ui.Scene, bounds: ui.Rect, title: []const u8, detail: []const u8, open: bool, options: RenderOptions) ui.RenderError!void {
     const trigger = accordionTriggerBounds(bounds);
     try scene.pushText(ui.Rect.init(trigger.x, trigger.y + accordion_trigger_text_y, @max(min_extent, trigger.w - accordion_icon_space), control_label_height), title, options.style.text);
@@ -577,29 +573,6 @@ pub fn renderBadge(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, variant
     try scene.pushAlignedText(badgeLabelBounds(badge_bounds), label, paint.text, .center);
 }
 
-pub fn renderSurface(scene: *ui.Scene, bounds: ui.Rect, title: []const u8, detail: []const u8, variant: common.SurfaceVariant, options: RenderOptions) ui.RenderError!void {
-    try renderSurfaceFrame(scene, bounds, variant, options);
-    if (title.len == 0 and detail.len == 0) return;
-
-    const content_x = bounds.x + surface_padding;
-    const content_w = @max(min_extent, bounds.w - surface_padding * 2.0);
-    var cursor_y = bounds.y + surface_padding;
-    if (title.len != 0) {
-        const title_bounds = ui.Rect.init(content_x, cursor_y, content_w, surface_title_height);
-        try scene.pushAlignedText(title_bounds, title, options.style.text, .start);
-        cursor_y += surface_title_height;
-    }
-    if (detail.len != 0) {
-        if (title.len != 0) cursor_y += surface_detail_gap;
-        const detail_bounds = ui.Rect.init(content_x, cursor_y, content_w, @max(min_extent, bounds.y + bounds.h - cursor_y - surface_padding));
-        try scene.pushWrappedText(detail_bounds, detail, options.style.muted, .{
-            .line_height = surface_detail_height,
-            .average_char_width = surface_detail_average_w,
-            .max_lines = surface_detail_max_lines,
-        });
-    }
-}
-
 pub fn renderEmpty(scene: *ui.Scene, bounds: ui.Rect, title: []const u8, detail: []const u8, options: RenderOptions) ui.RenderError!void {
     try scene.pushRect(bounds, ui.Color.clear, .fill, empty_radius, 0.0);
     try scene.pushRect(bounds, options.style.border, .border, empty_radius, 0.0);
@@ -612,14 +585,6 @@ pub fn renderEmpty(scene: *ui.Scene, bounds: ui.Rect, title: []const u8, detail:
         .average_char_width = empty_detail_average_w,
         .max_lines = empty_detail_max_lines,
     });
-}
-
-pub fn renderSurfaceFrame(scene: *ui.Scene, bounds: ui.Rect, variant: common.SurfaceVariant, options: RenderOptions) ui.RenderError!void {
-    const frame_radius = surfaceRadiusFor(variant);
-    if (variant == .elevated) {
-        try renderChrome(scene, bounds.insetUniform(-surface_shadow_inset), .shadowOnly(surface_shadow, frame_radius, surface_shadow_size));
-    }
-    try renderChrome(scene, bounds, .panel(surfaceFillColor(variant, options), options.style.border, frame_radius));
 }
 
 pub fn renderInput(scene: *ui.Scene, bounds: ui.Rect, placeholder: []const u8, leading_icon: ?icon.Icon, options: RenderOptions) ui.RenderError!void {
@@ -1404,20 +1369,6 @@ pub fn renderRowItem(scene: *ui.Scene, bounds: ui.Rect, title: []const u8, detai
     }
 }
 
-pub fn measureText(value: []const u8, constraints: layout.Constraints) layout.Measurement {
-    const measured = layout.measureText(value, constraints, .{
-        .line_height = text_line_height,
-        .average_char_width = text_metrics.averageWidth(value, text_line_height),
-        .max_lines = text_max_lines,
-    });
-    const preferred = constrainPreferredSize(measured.preferred, constraints);
-    return layout.Measurement.flexible(
-        .{ .w = @min(text_min_width, preferred.w), .h = @min(text_line_height, preferred.h) },
-        preferred,
-        measured.max,
-    ).applyExact(constraints);
-}
-
 pub fn measureBadge(label: []const u8, constraints: layout.Constraints) layout.Measurement {
     const preferred_width = @max(badge_min_width, text_metrics.width(label, text_metrics.badge_label_px) + badge_padding_x * 2.0);
     const preferred = constrainPreferredSize(.{ .w = preferred_width, .h = badge_height }, constraints);
@@ -1425,39 +1376,6 @@ pub fn measureBadge(label: []const u8, constraints: layout.Constraints) layout.M
         .{ .w = @min(badge_min_width, preferred.w), .h = @min(badge_height, preferred.h) },
         preferred,
         .{ .w = measure_max_width, .h = badge_height },
-    ).applyExact(constraints);
-}
-
-pub fn measureSurface(title: []const u8, detail: []const u8, constraints: layout.Constraints) layout.Measurement {
-    const inner = constraints.inner(layout.Insets.uniform(surface_padding));
-    const title_measure = if (title.len == 0)
-        layout.Measurement.fixed(.{ .w = 0.0, .h = 0.0 })
-    else
-        layout.measureText(title, inner, .{
-            .line_height = surface_title_height,
-            .average_char_width = surface_title_average_w,
-            .max_lines = surface_title_max_lines,
-        });
-    const detail_measure = if (detail.len == 0)
-        layout.Measurement.fixed(.{ .w = 0.0, .h = 0.0 })
-    else
-        layout.measureText(detail, inner, .{
-            .line_height = surface_detail_height,
-            .average_char_width = surface_detail_average_w,
-            .max_lines = surface_detail_max_lines,
-        });
-    const content_width = @max(title_measure.preferred.w, detail_measure.preferred.w);
-    const content_gap: f32 = if (title.len != 0 and detail.len != 0) surface_detail_gap else 0.0;
-    const content_height = title_measure.preferred.h + content_gap + detail_measure.preferred.h;
-    const minimum_height = surfaceMinHeight(title.len != 0, detail.len != 0);
-    const preferred = constrainPreferredSize(.{
-        .w = content_width + surface_padding * 2.0,
-        .h = content_height + surface_padding * 2.0,
-    }, constraints);
-    return layout.Measurement.flexible(
-        .{ .w = @min(surface_min_width, preferred.w), .h = @min(minimum_height, preferred.h) },
-        preferred,
-        .{ .w = measure_max_width, .h = content_height + surface_padding * 2.0 },
     ).applyExact(constraints);
 }
 
@@ -1710,33 +1628,6 @@ fn alphaPaint(color: ui.Color, text_color: ui.Color) BadgePaint {
 fn badgeLabelBounds(bounds: ui.Rect) ui.Rect {
     const resolved_padding = @min(badge_padding_x, bounds.w * 0.5);
     return ui.Rect.init(bounds.x + resolved_padding, bounds.y + (bounds.h - badge_text_height) * 0.5, @max(min_extent, bounds.w - resolved_padding * 2.0), badge_text_height);
-}
-
-pub fn surfaceRadiusFor(variant: common.SurfaceVariant) f32 {
-    return switch (variant) {
-        .panel => surface_radius,
-        .elevated => surface_radius + surface_elevated_radius_extra,
-        .subtle => surface_radius,
-    };
-}
-
-fn surfaceFillColor(variant: common.SurfaceVariant, options: RenderOptions) ui.Color {
-    return switch (variant) {
-        .panel, .elevated => options.style.panel,
-        .subtle => options.style.row,
-    };
-}
-
-fn surfaceMinHeight(has_title: bool, has_detail: bool) f32 {
-    const content_height: f32 = if (has_title and has_detail)
-        surface_title_height + surface_detail_gap + surface_detail_height
-    else if (has_title)
-        surface_title_height
-    else if (has_detail)
-        surface_detail_height
-    else
-        0.0;
-    return surface_padding * 2.0 + content_height;
 }
 
 pub const preferred_badge = ui.Size{ .w = 96.0, .h = 24.0 };
@@ -2143,26 +2034,9 @@ const row_title_offset_y: f32 = 8.0;
 const row_detail_offset_y: f32 = 26.0;
 const row_title_height: f32 = 18.0;
 const row_detail_height: f32 = 16.0;
-const text_line_height: f32 = 18.0;
-const text_max_lines: usize = 8;
-const text_min_width: f32 = 24.0;
 const calendar_weekday_labels = [_][]const u8{ "Su", "Mo", "Tu", "We", "Th", "Fr", "Sa" };
 const calendar_day_labels = [_][]const u8{ "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28" };
 const chart_bar_values = [_]f32{ 0.45, 0.72, 0.38, 0.86, 0.62 };
-pub const surface_radius: f32 = tokens.Component.surface_radius;
-pub const surface_padding: f32 = tokens.Component.surface_padding;
-pub const surface_title_height: f32 = tokens.Component.surface_title_height;
-pub const surface_detail_height: f32 = tokens.Component.surface_detail_height;
-pub const surface_detail_gap: f32 = tokens.Component.surface_detail_gap;
-const surface_elevated_radius_extra: f32 = 2.0;
-const surface_shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 96 };
-const surface_shadow_size: f32 = 8.0;
-const surface_shadow_inset: f32 = 1.0;
-const surface_title_average_w: f32 = 8.5;
-const surface_title_max_lines: usize = 1;
-const surface_detail_average_w: f32 = 8.0;
-const surface_detail_max_lines: usize = 3;
-const surface_min_width: f32 = 160.0;
 pub const badge_height: f32 = tokens.Component.badge_height;
 pub const badge_text_height: f32 = tokens.Component.badge_text_height;
 pub const badge_padding_x: f32 = tokens.Component.badge_padding_x;

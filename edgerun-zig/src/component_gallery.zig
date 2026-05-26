@@ -7,6 +7,7 @@ const ui = @import("ui.zig");
 const interaction = @import("ui_interaction.zig");
 const design = @import("app_design.zig");
 const app_chrome = @import("app_chrome.zig");
+const app_layout = @import("app_layout.zig");
 
 pub const GalleryError = ui.RenderError || interaction.Error || components.Error || error{NoSpace};
 
@@ -36,6 +37,7 @@ const catalog_preview_h: f32 = 38;
 const catalog_status_w: f32 = 116;
 const catalog_card_pad: f32 = 14;
 const catalog_source_w: f32 = 108;
+const catalog_source_min_w: f32 = 82;
 const canonical_ui_buffer_size: usize = 2048;
 const canonical_object_buffer_size: usize = 4096;
 const selected_component_h: f32 = 500;
@@ -43,6 +45,10 @@ const selected_component_compact_h: f32 = 820;
 const selected_component_gap: f32 = 32;
 const selected_preview_surface_h: f32 = 266;
 const selected_preview_compact_surface_h: f32 = 320;
+const api_label_h: f32 = 14;
+const api_value_line_h: f32 = 16;
+const api_value_avg_w: f32 = 7.8;
+const api_value_max_lines: usize = 2;
 pub const grid_gap_compact: f32 = 28;
 pub const grid_gap_default: f32 = 40;
 pub const grid_gap_wide: f32 = 56;
@@ -422,7 +428,7 @@ pub fn renderComponentGallery(scene: *ui.Scene, collector: *interaction.Collecto
 
     try fill(scene, bounds, palette.bg, 0);
 
-    const content = centered(bounds, design.content_wide);
+    const content = app_layout.centered(bounds, design.content_wide, design.content_pad);
     const layout = galleryLayout(bounds, state);
 
     {
@@ -446,7 +452,7 @@ const GalleryLayout = struct {
 };
 
 fn galleryLayout(bounds: ui.Rect, state: ComponentGalleryState) GalleryLayout {
-    const content = centered(bounds, design.content_wide);
+    const content = app_layout.centered(bounds, design.content_wide, design.content_pad);
     const scroll_y = std.math.clamp(state.scroll_y, 0.0, 4096.0);
     const gap = normalizedGridGap(state.grid_gap);
     const board = ui.Rect.init(content.x, bounds.y + header_h + page_top_pad - scroll_y, content.w, @max(240, bounds.h - header_h - page_top_pad + scroll_y));
@@ -533,7 +539,7 @@ fn renderSelectedComponent(scene: *ui.Scene, collector: *interaction.Collector, 
     });
 
     const inset = bounds.insetUniform(18);
-    try catalogSource(scene, ui.Rect.init(inset.x, inset.y, catalog_source_w, 24), true);
+    try catalogSource(scene, sourceBadgeBounds(inset, true), true);
     if (inset.w < 720.0) {
         try text(scene, inset.x, inset.y + 38, inset.w, 26, entry.name, palette.text);
         try wrappedText(scene, ui.Rect.init(inset.x, inset.y + 76, inset.w, 54), "This component page is generated from the shared catalog entry and renders the real component preview beside its API surface.", palette.muted, 18, 8.8, 3);
@@ -592,12 +598,18 @@ fn renderComponentApi(scene: *ui.Scene, bounds: ui.Rect, entry: ComponentSpec) G
         .title = "API",
         .detail = "",
     } }, .{ .style = api_style });
-    try text(scene, bounds.x + card_content_x, bounds.y + 50, bounds.w - card_content_x * 2, 14, "route", palette.muted);
-    try text(scene, bounds.x + card_content_x, bounds.y + 70, bounds.w - card_content_x * 2, 14, entry.route, palette.text);
-    try text(scene, bounds.x + card_content_x, bounds.y + 102, bounds.w - card_content_x * 2, 14, "source component", palette.muted);
-    try text(scene, bounds.x + card_content_x, bounds.y + 122, bounds.w - card_content_x * 2, 14, entry.source_component, palette.text);
-    try text(scene, bounds.x + card_content_x, bounds.y + 154, bounds.w - card_content_x * 2, 14, "builder", palette.muted);
-    try text(scene, bounds.x + card_content_x, bounds.y + 174, bounds.w - card_content_x * 2, 14, entry.edge_builder, palette.text);
+    const content_w = @max(1.0, bounds.w - card_content_x * 2);
+    var cursor_y = bounds.y + 50;
+    cursor_y = try renderApiField(scene, ui.Rect.init(bounds.x + card_content_x, cursor_y, content_w, bounds.h - 50), "route", entry.route);
+    cursor_y = try renderApiField(scene, ui.Rect.init(bounds.x + card_content_x, cursor_y + 12, content_w, bounds.h - cursor_y), "source component", entry.source_component);
+    _ = try renderApiField(scene, ui.Rect.init(bounds.x + card_content_x, cursor_y + 12, content_w, bounds.h - cursor_y), "builder", entry.edge_builder);
+}
+
+fn renderApiField(scene: *ui.Scene, bounds: ui.Rect, label_value: []const u8, value: []const u8) GalleryError!f32 {
+    try text(scene, bounds.x, bounds.y, bounds.w, api_label_h, label_value, palette.muted);
+    const value_h = app_layout.wrappedTextHeightWith(value, bounds.w, api_value_line_h, api_value_max_lines, api_value_avg_w);
+    try wrappedText(scene, ui.Rect.init(bounds.x, bounds.y + 20, bounds.w, value_h), value, palette.text, api_value_line_h, api_value_avg_w, api_value_max_lines);
+    return bounds.y + 20 + value_h;
 }
 
 fn renderComponentContract(scene: *ui.Scene, bounds: ui.Rect, entry: ComponentSpec) GalleryError!void {
@@ -606,7 +618,7 @@ fn renderComponentContract(scene: *ui.Scene, bounds: ui.Rect, entry: ComponentSp
         .detail = "Render through `Component.render`, collect hits through `Component.collectInteractions`, and keep backend concerns out of component code.",
         .variant = .subtle,
     } }, .{ .style = componentStyle() });
-    try components.renderComponent(scene, ui.Rect.init(bounds.x + card_content_x, bounds.y + bounds.h - 32, 128, 24), .{ .badge = .{
+    try components.renderComponent(scene, contractBadgeBounds(bounds, entry.category.label()), .{ .badge = .{
         .label = entry.category.label(),
         .variant = .outline,
     } }, .{ .style = componentStyle() });
@@ -628,7 +640,8 @@ fn renderCatalogCard(scene: *ui.Scene, collector: *interaction.Collector, bounds
     try collector.addHit(bounds, .button, card_id);
 
     const inset = bounds.insetUniform(catalog_card_pad);
-    try catalogSource(scene, ui.Rect.init(inset.x + inset.w - catalog_source_w, inset.y - 1, catalog_source_w, 24), selected);
+    const source_bounds = sourceBadgeBounds(inset, selected);
+    try catalogSource(scene, ui.Rect.init(inset.x + inset.w - source_bounds.w, inset.y - 1, source_bounds.w, source_bounds.h), selected);
     try text(scene, inset.x, inset.y + 48, inset.w, body_text_height, entry.edge_builder, palette.muted);
 
     try renderReferencePreview(scene, collector, ui.Rect.init(inset.x, inset.y + 76, inset.w, catalog_preview_h), entry, preview_id);
@@ -639,6 +652,18 @@ fn catalogSource(scene: *ui.Scene, bounds: ui.Rect, selected: bool) GalleryError
         .label = if (selected) "selected" else "EdgeRun",
         .variant = if (selected) .default else .outline,
     } }, .{ .style = componentStyle() });
+}
+
+fn sourceBadgeBounds(inset: ui.Rect, selected: bool) ui.Rect {
+    const label_value = if (selected) "selected" else "EdgeRun";
+    const desired_w = @as(f32, @floatFromInt(label_value.len)) * 7.5 + 34.0;
+    return ui.Rect.init(inset.x, inset.y, @min(inset.w, @max(catalog_source_min_w, desired_w)), 24.0);
+}
+
+fn contractBadgeBounds(bounds: ui.Rect, label_value: []const u8) ui.Rect {
+    const desired_w = @as(f32, @floatFromInt(label_value.len)) * 7.5 + 34.0;
+    const width = @min(@max(1.0, bounds.w - card_content_x * 2.0), @max(catalog_source_min_w, desired_w));
+    return ui.Rect.init(bounds.x + card_content_x, bounds.y + bounds.h - 32, width, 24);
 }
 
 fn renderReferencePreview(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, spec_value: ComponentSpec, id: u32) GalleryError!void {
@@ -869,11 +894,6 @@ fn wrappedText(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, color: ui.C
         .average_char_width = average_char_width,
         .max_lines = max_lines,
     });
-}
-
-fn centered(bounds: ui.Rect, max_w: f32) ui.Rect {
-    const width = @min(max_w, @max(1.0, bounds.w - design.content_pad * 2.0));
-    return ui.Rect.init(bounds.x + (bounds.w - width) * 0.5, bounds.y, width, bounds.h);
 }
 
 fn centeredWrappedText(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, color: ui.Color, max_lines: usize) GalleryError!void {

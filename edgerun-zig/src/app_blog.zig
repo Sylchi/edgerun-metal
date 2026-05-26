@@ -5,6 +5,7 @@ const components = @import("ui_components.zig");
 const app_chrome = @import("app_chrome.zig");
 const design = @import("app_design.zig");
 const interaction = @import("ui_interaction.zig");
+const app_layout = @import("app_layout.zig");
 
 pub const back_button_id: u32 = 40_001;
 pub const first_post_button_id: u32 = 40_100;
@@ -268,6 +269,10 @@ const arc_sections = [_]ArcSection{
 };
 
 const palette = design.palette;
+const fill = app_layout.fill;
+const text = app_layout.text;
+const wrappedTextHeight = app_layout.wrappedTextHeightWith;
+const wrappedLineCount = app_layout.wrappedLineCount;
 
 pub const Post = struct {
     arc: []const u8,
@@ -904,7 +909,7 @@ pub const State = struct {
 pub fn render(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) (ui.RenderError || interaction.Error)!void {
     try fill(scene, bounds, palette.bg, 0.0);
 
-    const content = centered(bounds, content_wide);
+    const content = app_layout.centered(bounds, content_wide, content_pad);
     const page_y = header_h - state.scroll_y;
     try renderNodeMap(scene, ui.Rect.init(bounds.x, page_y, bounds.w, @max(bounds.h, node_map_min_h)));
 
@@ -1023,7 +1028,7 @@ fn renderArcOverview(scene: *ui.Scene, collector: *interaction.Collector, bounds
     for (arc_sections, 0..) |section, index| {
         const row = index / cols;
         const col = index % cols;
-        const card = colBounds(bounds, cols, arc_overview_gap, col, bounds.y + @as(f32, @floatFromInt(row)) * (card_h + arc_overview_gap), card_h);
+        const card = app_layout.columnBounds(bounds, cols, arc_overview_gap, col, bounds.y + @as(f32, @floatFromInt(row)) * (card_h + arc_overview_gap), card_h);
         const active = if (active_index) |found| found == index else false;
         try nativeComponentVisual(scene, card, .{ .card = .{
             .title = section.card_title,
@@ -3368,25 +3373,6 @@ fn callout(scene: *ui.Scene, bounds: ui.Rect, value: []const u8) ui.RenderError!
     });
 }
 
-fn wrappedTextHeight(value: []const u8, width: f32, line_height_value: f32, max_lines: usize, average_char_width: f32) f32 {
-    const chars_per_line = @max(@as(usize, 1), @as(usize, @intFromFloat(width / average_char_width)));
-    const lines = @max(@as(usize, 1), @min(max_lines, (value.len + chars_per_line - 1) / chars_per_line));
-    return line_height_value * @as(f32, @floatFromInt(lines));
-}
-
-fn wrappedLineCount(value: []const u8, width: f32, average_char_width: f32, max_lines: usize) usize {
-    if (value.len == 0 or max_lines == 0) return 0;
-    const char_capacity = @max(@as(usize, 1), @as(usize, @intFromFloat(@max(1.0, width / average_char_width))));
-    var byte_cursor: usize = 0;
-    var line_count: usize = 0;
-    while (line_count < max_lines) : (line_count += 1) {
-        byte_cursor = ui.skipAsciiSpace(value, byte_cursor);
-        if (byte_cursor >= value.len) return line_count;
-        byte_cursor = ui.wrappedLine(value, byte_cursor, char_capacity).next;
-    }
-    return line_count;
-}
-
 fn episodeLabel(episode: usize) []const u8 {
     if (episode == 0 or episode > episode_labels.len) return "Episode";
     return episode_labels[episode - 1];
@@ -3467,14 +3453,6 @@ fn appStyle() ui.Style {
     return resolved;
 }
 
-fn fill(scene: *ui.Scene, bounds: ui.Rect, color: ui.Color, r: f32) ui.RenderError!void {
-    try scene.pushRect(bounds, color, .fill, r, 0.0);
-}
-
-fn text(scene: *ui.Scene, x: f32, y: f32, w: f32, h: f32, value: []const u8, color: ui.Color) ui.RenderError!void {
-    try scene.pushAlignedText(ui.Rect.init(x, y, @max(1.0, w), @max(1.0, h)), value, color, .start);
-}
-
 fn alignedText(scene: *ui.Scene, x: f32, y: f32, w: f32, h: f32, value: []const u8, color: ui.Color, alignment: ui.TextAlign) ui.RenderError!void {
     try scene.pushAlignedText(ui.Rect.init(x, y, @max(1.0, w), @max(1.0, h)), value, color, alignment);
 }
@@ -3485,16 +3463,6 @@ fn iconQuad(scene: *ui.Scene, bounds: ui.Rect, value: icon.Icon, color: ui.Color
 
 fn hit(collector: *interaction.Collector, bounds: ui.Rect, kind: ui.HitKind, id: u32) interaction.Error!void {
     try collector.add(.{ .slot = 0, .kind = kind, .id = id, .bounds = bounds });
-}
-
-fn centered(bounds: ui.Rect, max_w: f32) ui.Rect {
-    const width = @min(max_w, @max(1.0, bounds.w - content_pad * 2.0));
-    return ui.Rect.init(bounds.x + (bounds.w - width) * 0.5, bounds.y, width, bounds.h);
-}
-
-fn colBounds(bounds: ui.Rect, cols: usize, gap: f32, col: usize, y: f32, h: f32) ui.Rect {
-    const width = (bounds.w - gap * @as(f32, @floatFromInt(cols - 1))) / @as(f32, @floatFromInt(cols));
-    return ui.Rect.init(bounds.x + @as(f32, @floatFromInt(col)) * (width + gap), y, width, h);
 }
 
 test "blog renders committed post index through native components" {

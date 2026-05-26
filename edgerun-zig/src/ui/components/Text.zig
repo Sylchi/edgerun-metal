@@ -4,9 +4,9 @@ const common = @import("../../ui_component_common.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
+const text_metrics = @import("../../ui_text_metrics.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
-const component_render = @import("Render.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
@@ -19,12 +19,27 @@ pub const Text = struct {
     }
 
     pub fn render(self: Text, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return component_render.renderText(scene, bounds, self.value, options);
+        const line_height = @min(text_line_height, @max(min_extent, bounds.h));
+        try scene.pushWrappedText(bounds, self.value, options.style.text, .{
+            .line_height = line_height,
+            .average_char_width = text_metrics.averageWidth(self.value, line_height),
+            .max_lines = text_max_lines,
+        });
     }
 
     pub fn measure(self: Text, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = options;
-        return component_render.measureText(self.value, constraints);
+        const measured = layout.measureText(self.value, constraints, .{
+            .line_height = text_line_height,
+            .average_char_width = text_metrics.averageWidth(self.value, text_line_height),
+            .max_lines = text_max_lines,
+        });
+        const preferred = constrainPreferredSize(measured.preferred, constraints);
+        return layout.Measurement.flexible(
+            .{ .w = @min(text_min_width, preferred.w), .h = @min(text_line_height, preferred.h) },
+            preferred,
+            measured.max,
+        ).applyExact(constraints);
     }
 
     pub fn toObject(self: Text, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -43,6 +58,18 @@ pub const Text = struct {
     }
 };
 
+fn constrainPreferredSize(size: ui.Size, constraints: layout.Constraints) ui.Size {
+    return .{
+        .w = constraints.width.limit(size.w),
+        .h = constraints.height.limit(size.h),
+    };
+}
+
+const min_extent: f32 = 1.0;
+const text_line_height: f32 = 18.0;
+const text_max_lines: usize = 8;
+const text_min_width: f32 = 24.0;
+
 test "text component serializes to canonical object and deserializes" {
     const text = Text{ .value = "DNS asks, resolver answers." };
     var ui_raw: [128]u8 = undefined;
@@ -54,7 +81,7 @@ test "text component serializes to canonical object and deserializes" {
     try std.testing.expectEqualStrings(text.value, decoded.value);
 }
 
-test "text component renders through shared text renderer" {
+test "text component renders its own text commands" {
     const text = Text{ .value = "DNS asks" };
     var commands: [4]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
@@ -65,6 +92,19 @@ test "text component renders through shared text renderer" {
     const command = component_test.textCommand(scene.written(), "DNS asks").?;
     try std.testing.expectEqual(color, command.text.color);
     try std.testing.expectEqual(ui.Rect.init(10, 20, 90, 18), command.text.origin);
+}
+
+test "text component wraps instead of clipping narrow bounds" {
+    const text = Text{ .value = "Secure app runtime text wraps" };
+    var commands: [8]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+
+    try text.render(&scene, ui.Rect.init(0, 0, 72, 54), .{});
+
+    try std.testing.expect(scene.written().len > 1);
+    for (scene.written()) |command| {
+        try std.testing.expect(command.text.origin.w <= 72.0);
+    }
 }
 
 test "text component measurement respects at-most height" {
