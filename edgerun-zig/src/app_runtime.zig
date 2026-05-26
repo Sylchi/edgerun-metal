@@ -2472,6 +2472,8 @@ fn currentSourceState(hover_x: f32, hover_y: f32) app_source.State {
         .workspace_bytes = source_workspace_len,
         .file_bytes = source_editor_len,
         .release_bytes = release_artifact_len,
+        .resource_memory_bytes = sourceRuntimeMemoryBytes(),
+        .resource_cpu_instructions = last_compile_instructions,
         .dirty = source_editor_dirty,
         .can_undo = source_editor_undo_len != 0,
         .can_redo = source_editor_redo_len != 0,
@@ -2482,6 +2484,10 @@ fn currentSourceState(hover_x: f32, hover_y: f32) app_source.State {
         .diagnostic = last_compiler_diagnostic[0..last_compiler_diagnostic_len],
         .diagnostic_line = sourceDiagnosticLine(last_compiler_diagnostic[0..last_compiler_diagnostic_len]),
     };
+}
+
+fn sourceRuntimeMemoryBytes() usize {
+    return er_ui_pixels_len() + source_workspace_len + source_editor_len + release_artifact_len + source_search_len;
 }
 
 fn sourceEditorStatusText(status: SourceEditorStatus) []const u8 {
@@ -3135,6 +3141,10 @@ test "app runtime source route initializes embedded editor state" {
     try std.testing.expect(source_workspace_len > 0);
     try std.testing.expect(source_editor_len > 0);
     try std.testing.expectEqual(SourceEditorStatus.ready, source_editor_status);
+
+    const state = currentSourceState(-1.0, -1.0);
+    try std.testing.expectEqual(sourceRuntimeMemoryBytes(), state.resource_memory_bytes);
+    try std.testing.expectEqual(last_compile_instructions, state.resource_cpu_instructions);
 }
 
 test "app runtime source editor rewrites a canonical vfs file" {

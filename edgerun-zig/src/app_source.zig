@@ -62,7 +62,12 @@ const max_editor_lines_compact: usize = 28;
 const max_editor_lines_wide: usize = 40;
 const line_number_label_bytes: usize = 8;
 const editor_info_label_bytes: usize = 96;
+const editor_resource_label_bytes: usize = 96;
 const explorer_file_count: usize = default_file_entries.len;
+const bytes_per_kib: usize = 1024;
+const bytes_per_mib: usize = bytes_per_kib * 1024;
+const count_per_kilo: u64 = 1000;
+const count_per_mega: u64 = count_per_kilo * 1000;
 
 const EditorChrome = struct {
     titlebar: bool = true,
@@ -103,6 +108,7 @@ const vscode_status_text = ui.Color{ .r = 255, .g = 255, .b = 255 };
 
 var line_number_labels: [line_number_label_slots][line_number_label_bytes]u8 = undefined;
 var editor_info_label: [editor_info_label_bytes]u8 = undefined;
+var editor_resource_label: [editor_resource_label_bytes]u8 = undefined;
 
 const explorer_files = [_][]const u8{
     "src/app_runtime.zig",
@@ -133,6 +139,8 @@ pub const State = struct {
     workspace_bytes: usize = 0,
     file_bytes: usize = 0,
     release_bytes: usize = 0,
+    resource_memory_bytes: usize = 0,
+    resource_cpu_instructions: u64 = 0,
     dirty: bool = false,
     can_undo: bool = false,
     can_redo: bool = false,
@@ -275,9 +283,11 @@ fn renderEditorWithChrome(scene: *ui.Scene, collector: *interaction.Collector, b
 fn renderEditorStatus(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
     try fill(scene, bounds, status_bg, 0.0);
     const info = editorInfoLabel(state);
-    try text(scene, bounds.x + 14.0, bounds.y + 5.0, bounds.w - 28.0, 14.0, info, vscode_status_text);
-    const dirty_label = editorSaveLabel(state);
-    try text(scene, bounds.x + @max(0.0, bounds.w - 112.0), bounds.y + 5.0, 96.0, 14.0, dirty_label, vscode_status_text);
+    const resource_label = editorResourceLabel(state);
+    const resource_w = @min(@max(bounds.w * 0.34, 220.0), 360.0);
+    const info_w = @max(1.0, bounds.w - resource_w - 28.0);
+    try text(scene, bounds.x + 14.0, bounds.y + 5.0, info_w, 14.0, info, vscode_status_text);
+    try text(scene, bounds.x + @max(0.0, bounds.w - resource_w - 14.0), bounds.y + 5.0, resource_w, 14.0, resource_label, vscode_status_text);
 }
 
 fn renderEditorTitlebar(scene: *ui.Scene, bounds: ui.Rect, state: State, activity_width: f32) !void {
@@ -589,16 +599,6 @@ fn emptyEditorColor(state: State) ui.Color {
     return palette.muted;
 }
 
-fn editorSaveLabel(state: State) []const u8 {
-    if (state.workspace_bytes == 0 or state.file_bytes == 0 or isErrorStatus(state.status)) return "unavailable";
-    return if (state.dirty) "modified" else "saved";
-}
-
-fn editorSaveColor(state: State) ui.Color {
-    if (state.workspace_bytes == 0 or state.file_bytes == 0 or isErrorStatus(state.status)) return palette.danger;
-    return if (state.dirty) palette.amber else palette.primary;
-}
-
 fn editorHeight(content_w: f32, state: State) f32 {
     const compact = content_w < compact_w;
     const min_lines = if (compact) min_editor_lines_compact else min_editor_lines_wide;
@@ -822,6 +822,38 @@ fn editorInfoLabel(state: State) []const u8 {
     }) catch "";
 }
 
+fn editorResourceLabel(state: State) []const u8 {
+    var ram_buf: [24]u8 = undefined;
+    var cpu_buf: [24]u8 = undefined;
+    const ram = formatByteCount(&ram_buf, state.resource_memory_bytes);
+    const cpu = formatCount(&cpu_buf, state.resource_cpu_instructions);
+    return std.fmt.bufPrint(&editor_resource_label, "RAM {s} | CPU {s} instr", .{ ram, cpu }) catch "";
+}
+
+fn formatByteCount(out: []u8, bytes: usize) []const u8 {
+    if (bytes >= bytes_per_mib) {
+        const tenths = (bytes * 10) / bytes_per_mib;
+        return std.fmt.bufPrint(out, "{d}.{d} MiB", .{ tenths / 10, tenths % 10 }) catch "";
+    }
+    if (bytes >= bytes_per_kib) {
+        const tenths = (bytes * 10) / bytes_per_kib;
+        return std.fmt.bufPrint(out, "{d}.{d} KiB", .{ tenths / 10, tenths % 10 }) catch "";
+    }
+    return std.fmt.bufPrint(out, "{d} B", .{bytes}) catch "";
+}
+
+fn formatCount(out: []u8, count: u64) []const u8 {
+    if (count >= count_per_mega) {
+        const tenths = (count * 10) / count_per_mega;
+        return std.fmt.bufPrint(out, "{d}.{d}M", .{ tenths / 10, tenths % 10 }) catch "";
+    }
+    if (count >= count_per_kilo) {
+        const tenths = (count * 10) / count_per_kilo;
+        return std.fmt.bufPrint(out, "{d}.{d}K", .{ tenths / 10, tenths % 10 }) catch "";
+    }
+    return std.fmt.bufPrint(out, "{d}", .{count}) catch "";
+}
+
 fn lineEnd(source: []const u8, start: usize) usize {
     if (start >= source.len) return source.len;
     return start + (std.mem.indexOfScalar(u8, source[start..], '\n') orelse (source.len - start));
@@ -866,6 +898,8 @@ test "source page renders editor controls through shared ui" {
         .workspace_bytes = 2048,
         .file_bytes = 28,
         .release_bytes = 4096,
+        .resource_memory_bytes = 3 * bytes_per_mib + 512 * bytes_per_kib,
+        .resource_cpu_instructions = 1_250_000,
         .status = "ready: editing src/app_runtime.zig inside the app-owned VFS object",
     });
     try expectHit(collector.written(), compile_button_id);
@@ -879,6 +913,8 @@ test "source page renders editor controls through shared ui" {
     try std.testing.expect(textCommand(scene.written(), "COMPILE") == null);
     try std.testing.expect(textCommand(scene.written(), "ARTIFACT") == null);
     try std.testing.expect(textCommand(scene.written(), "ready: editing src/app_runtime.zig inside the app-owned VFS object") == null);
+    try std.testing.expect(textCommand(scene.written(), "saved") == null);
+    try std.testing.expect(textCommand(scene.written(), "RAM 3.5 MiB | CPU 1.2M instr") != null);
 }
 
 test "source page does not claim empty workspace is loaded" {

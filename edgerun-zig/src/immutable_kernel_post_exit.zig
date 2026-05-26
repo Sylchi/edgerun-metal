@@ -37,8 +37,8 @@ const post_exit_private_memory_len: u64 = 256;
 const post_exit_app_execution_ticks: u64 = 8;
 const post_exit_expected_execution_used: u64 = 2;
 const post_exit_expected_value: i64 = 42;
-const virtio_scanout_width: u32 = 640;
-const virtio_scanout_height: u32 = 360;
+const virtio_scanout_width: u32 = 320;
+const virtio_scanout_height: u32 = 180;
 const virtio_scanout_resource_id: u32 = 1;
 const virtio_scanout_id: u32 = 0;
 const virtio_gl_context_id: u32 = 1;
@@ -241,7 +241,7 @@ fn renderVirtioGpuPackedDebugFrame(device: *virtio_gpu.Device, state: *State, em
     var scene = ui.Scene.initWithClips(&state.app_scene_commands, &state.app_scene_clips);
     var collector = interaction.Collector.init(&state.app_interactions);
     app_frame.render(&scene, &collector, ui.Rect.init(0, 0, @floatFromInt(virtio_scanout_width), @floatFromInt(virtio_scanout_height)), .{
-        .route = .{ .view = .source },
+        .route = .{ .view = .landing },
         .public_identity = "post-exit-virtio-renderer",
         .public_identity_ready = true,
     }) catch return fail(emit, error.RendererIrFailed, "FAIL post-exit virtio-gpu app-frame");

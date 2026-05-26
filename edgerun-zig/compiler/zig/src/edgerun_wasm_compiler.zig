@@ -28,6 +28,7 @@ const successor_base_function_count: u32 = 27;
 const max_lowered_exports: usize = 64;
 const max_lowered_consts: usize = 128;
 const max_edgerun_top_level_names: usize = max_lowered_exports + max_lowered_consts;
+const max_edgerun_function_locals: usize = 32;
 const lowered_main_i32_signature = "pub export fn er_app_main() i32";
 const legacy_main_i32_signature = "pub export fn main() i32";
 const return_keyword = "return";
@@ -1306,6 +1307,7 @@ fn lowerMainForMode(source_mode: SourceMode, source: []const u8) ?i32 {
 }
 
 fn lowerEdgeRunMainI32Literal(source: []const u8) ?i32 {
+    const base_context = collectEdgeRunLoweringContext(source, 0);
     var index: usize = 0;
     while (true) {
         index = edgerun_source.skipSpace(source, index);
@@ -1319,7 +1321,7 @@ fn lowerEdgeRunMainI32Literal(source: []const u8) ?i32 {
         if (!std.mem.eql(u8, parsed.name, "er_app_main")) continue;
         if (!allWhitespace(parsed.args)) return null;
         if (!std.mem.eql(u8, trimAsciiWhitespace(parsed.signature_tail), "i32")) return null;
-        return parseI32ReturnBodyLiteral(parsed.body);
+        return compileEdgeRunReturnBody(parsed.body, &base_context);
     }
 }
 
@@ -1344,6 +1346,74 @@ fn parseI32ReturnBodyLiteral(body: []const u8) ?i32 {
     const signed_value = value * sign;
     if (signed_value < std.math.minInt(i32) or signed_value > std.math.maxInt(i32)) return null;
     return @intCast(signed_value);
+}
+
+fn compileEdgeRunReturnBody(body: []const u8, base_context: *const LoweringContext) ?i32 {
+    var context = base_context.*;
+    var local_count: usize = 0;
+    var index: usize = 0;
+    while (true) {
+        index = edgerun_source.skipSpace(body, index);
+        if (index == body.len) return null;
+        if (std.mem.startsWith(u8, body[index..], const_keyword)) {
+            if (local_count >= max_edgerun_function_locals) return null;
+            const decl = edgerun_source.parseConstDecl(body, index) orelse return null;
+            if (context.constants.find(decl.name) != null) return null;
+            const value = parseI32Expression(decl.value, &context.constants) orelse return null;
+            context.constants.append(decl.name, value);
+            local_count += 1;
+            index = decl.next_index;
+            continue;
+        }
+        if (!std.mem.startsWith(u8, body[index..], return_keyword)) return null;
+        const parsed = parseEdgeRunReturnStatement(body, index, &context) orelse return null;
+        const end = edgerun_source.skipSpace(body, parsed.next_index);
+        if (end != body.len) return null;
+        return parsed.value;
+    }
+}
+
+const ParsedReturnValue = struct {
+    value: i32,
+    next_index: usize,
+};
+
+fn parseEdgeRunReturnStatement(body: []const u8, start: usize, context: *LoweringContext) ?ParsedReturnValue {
+    var index = start + return_keyword.len;
+    if (index < body.len and identifierContinue(body[index])) return null;
+    index = skipWhitespace(body, index);
+    const value_start = index;
+    const semicolon_relative = std.mem.indexOfScalar(u8, body[value_start..], ';') orelse return null;
+    const value_end = value_start + semicolon_relative;
+    const value = parseReturnExpressionValue(body[value_start..value_end], context) orelse return null;
+    return .{
+        .value = value,
+        .next_index = value_end + 1,
+    };
+}
+
+fn parseReturnExpressionValue(raw: []const u8, context: *LoweringContext) ?i32 {
+    const text = trimAsciiWhitespace(raw);
+    if (text.len == 0) return null;
+    if (std.mem.startsWith(u8, text, "@intCast(")) {
+        const value = unwrapCallArgument(text, "@intCast(") orelse return null;
+        return parseValueExpression(value, context);
+    }
+    if (std.mem.startsWith(u8, text, "@intFromEnum(")) {
+        const value = unwrapCallArgument(text, "@intFromEnum(") orelse return null;
+        return parseValueExpression(value, context);
+    }
+    if (std.mem.startsWith(u8, text, "@intFromPtr(")) {
+        const value = unwrapCallArgument(text, "@intFromPtr(") orelse return null;
+        return parsePointerExpression(value, context);
+    }
+    return parseValueExpression(text, context);
+}
+
+fn unwrapCallArgument(text: []const u8, prefix: []const u8) ?[]const u8 {
+    if (!std.mem.startsWith(u8, text, prefix)) return null;
+    if (text.len <= prefix.len or text[text.len - 1] != ')') return null;
+    return text[prefix.len .. text.len - 1];
 }
 
 fn collectLoweredExports(source: []const u8, data_base: usize, compiler_wasm_offset: i32, compiler_wasm_len: i32) LoweredExports {
@@ -1467,7 +1537,7 @@ fn collectEdgeRunLoweredExports(source: []const u8, data_base: usize) LoweredExp
         if (reservedExportName(parsed.name)) continue;
         if (!allWhitespace(parsed.args)) continue;
         if (!integerReturnType(parsed.signature_tail)) continue;
-        const value = parseReturnValue(parsed.body, &context) orelse continue;
+        const value = compileEdgeRunReturnBody(parsed.body, &context) orelse continue;
         lowered.append(parsed.name, value);
     }
     lowered.memory_end = context.next_data_offset;
@@ -2778,6 +2848,31 @@ test "edgerun source lowering collects top level const array lengths" {
     try std.testing.expectEqual(@as(i32, 4096), lowered.entries[1].value);
 }
 
+test "edgerun source compiles local const return bodies" {
+    const lowered = collectLoweredExportsForMode(.edgerun,
+        \\const base_width: usize = 2048;
+        \\export fn er_ui_local_width() u32 {
+        \\    const doubled: usize = base_width * 2;
+        \\    const padded: usize = doubled + 17;
+        \\    return padded;
+        \\}
+    , 0, 0, 0);
+    try std.testing.expectEqual(@as(u32, 1), lowered.count);
+    try std.testing.expectEqualStrings("er_ui_local_width", lowered.entries[0].name);
+    try std.testing.expectEqual(@as(i32, 4113), lowered.entries[0].value);
+}
+
+test "edgerun app main compiles local const return bodies" {
+    try std.testing.expectEqual(@as(?i32, 19), lowerMainForMode(.edgerun,
+        \\const seed: usize = 7;
+        \\pub export fn er_app_main() i32 {
+        \\    const doubled: usize = seed * 2;
+        \\    const result: usize = doubled + 5;
+        \\    return result;
+        \\}
+    ));
+}
+
 test "root main literal lowering is explicit and narrow" {
     try std.testing.expectEqual(@as(?i32, 7), lowerMainI32Literal("pub export fn er_app_main() i32 { return 7; }"));
     try std.testing.expectEqual(@as(?i32, -42), lowerMainI32Literal("pub export fn main() i32 { return -42; }"));
@@ -2802,8 +2897,8 @@ test "edgerun root main lowering only uses parsed top level exports" {
     ));
     try std.testing.expectEqual(@as(?i32, null), lowerMainForMode(.edgerun,
         \\pub export fn er_app_main() i32 {
-        \\    const value: i32 = 7;
-        \\    return value;
+        \\    var value: i32 = 7;
+        \\    return 7;
         \\}
     ));
 }
