@@ -7,7 +7,7 @@ const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
-const component_render = @import("Render.zig");
+const tokens = @import("../../ui_tokens.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
@@ -21,19 +21,28 @@ pub const InputOtp = struct {
     }
 
     pub fn render(self: InputOtp, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return component_render.renderInputOtp(scene, bounds, self.value, options);
+        for (0..input_otp_slot_count) |index| {
+            const slot = slotBounds(bounds, index);
+            try scene.pushRect(slot, options.style.panel, .fill, control_radius, 0.0);
+            try scene.pushRect(slot, options.style.border, .border, control_radius, 0.0);
+            if (index < self.value.len) {
+                if (contentInset(slot, input_otp_text_padding)) |text_bounds| {
+                    try scene.pushAlignedText(text_bounds.withHeightCentered(control_label_height), self.value[index .. index + 1], options.style.text, .center);
+                }
+            }
+        }
     }
 
     pub fn collectInteractions(self: InputOtp, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-        for (0..component_render.input_otp_slot_count) |index| {
-            try collector.addHit(component_render.inputOtpSlotBounds(bounds, index), .input, self.id + @as(u32, @intCast(index)));
+        for (0..input_otp_slot_count) |index| {
+            try collector.addHit(slotBounds(bounds, index), .input, self.id + @as(u32, @intCast(index)));
         }
     }
 
     pub fn measure(self: InputOtp, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = self;
         _ = options;
-        return component_render.measureFixed(component_render.preferred_input_otp, constraints);
+        return measureFixed(preferred_input_otp, constraints);
     }
 
     pub fn toObject(self: InputOtp, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -52,6 +61,42 @@ pub const InputOtp = struct {
     }
 };
 
+fn slotBounds(bounds: ui.Rect, index: usize) ui.Rect {
+    const x = bounds.x + @as(f32, @floatFromInt(index)) * (input_otp_slot_size + input_otp_slot_gap);
+    return ui.Rect.init(x, bounds.y, input_otp_slot_size, @min(bounds.h, input_otp_slot_size));
+}
+
+fn contentInset(bounds: ui.Rect, padding: f32) ?ui.Rect {
+    const clamped = @min(@max(padding, 0.0), @min(bounds.w, bounds.h) * 0.5);
+    const out = bounds.insetUniform(clamped);
+    return if (out.valid()) out else null;
+}
+
+fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
+    const resolved_preferred = constrainPreferredSize(preferred, constraints);
+    return layout.Measurement.flexible(
+        .{ .w = @min(preferred.w, resolved_preferred.w), .h = @min(preferred.h, resolved_preferred.h) },
+        resolved_preferred,
+        .{ .w = measure_max_width, .h = preferred.h },
+    ).applyExact(constraints);
+}
+
+fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {
+    return .{
+        .w = constraints.width.limit(preferred.w),
+        .h = constraints.height.limit(preferred.h),
+    };
+}
+
+const measure_max_width: f32 = 4096.0;
+const control_radius: f32 = tokens.Component.control_radius;
+const control_label_height: f32 = tokens.Component.control_label_height;
+pub const input_otp_slot_count: usize = 6;
+const input_otp_slot_size: f32 = 36.0;
+const input_otp_slot_gap: f32 = 0.0;
+const input_otp_text_padding: f32 = 8.0;
+pub const preferred_input_otp = ui.Size{ .w = 200.0, .h = 36.0 };
+
 test "input otp component serializes to canonical object and deserializes" {
     const otp = InputOtp{ .id = 440, .value = "123456" };
     var ui_raw: [160]u8 = undefined;
@@ -68,7 +113,7 @@ test "input otp component renders slots and hit regions" {
     const otp = InputOtp{ .id = 440, .value = "123" };
     var commands: [32]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
-    var regions: [component_render.input_otp_slot_count]interaction.Region = undefined;
+    var regions: [input_otp_slot_count]interaction.Region = undefined;
     var collector = interaction.Collector.init(&regions);
 
     try otp.render(&scene, ui.Rect.init(0, 0, 200, 36), .{});
@@ -77,6 +122,6 @@ test "input otp component renders slots and hit regions" {
     try std.testing.expect(component_test.hasText(scene.written(), "1"));
     try std.testing.expect(component_test.hasText(scene.written(), "2"));
     try std.testing.expect(component_test.hasText(scene.written(), "3"));
-    try std.testing.expectEqual(@as(usize, component_render.input_otp_slot_count), collector.written().len);
+    try std.testing.expectEqual(@as(usize, input_otp_slot_count), collector.written().len);
     try std.testing.expectEqual(@as(u32, 445), collector.written()[5].id);
 }
