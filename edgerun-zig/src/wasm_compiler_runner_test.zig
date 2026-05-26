@@ -72,8 +72,16 @@ const runner_root_source =
 ;
 const edgerun_runner_root_source =
     \\const max_width: usize = 4096;
-    \\pub export fn er_app_main() i32 { return 9; }
-    \\export fn er_smoke_const() usize { return max_width; }
+    \\pub export fn er_app_main() i32 {
+    \\    const base: usize = 4;
+    \\    const result: usize = base * 2 + 1;
+    \\    return result;
+    \\}
+    \\export fn er_smoke_const() usize {
+    \\    const doubled: usize = max_width * 2;
+    \\    const padded: usize = doubled + 17;
+    \\    return padded;
+    \\}
 ;
 
 test "embedded compiler emits workspace successor wasm with source object embedded" {
@@ -276,7 +284,7 @@ test "embedded compiler compiles edgerun source root through interpreter" {
     const main_result = try wasm.executeExportValueArgs(&successor, output, "er_app_main", &.{});
     try std.testing.expectEqual(@as(i32, 9), try main_result.valueI32(0));
     const const_result = try wasm.executeExportValueArgs(&successor, output, "er_smoke_const", &.{});
-    try std.testing.expectEqual(@as(i32, 4096), try const_result.valueI32(0));
+    try std.testing.expectEqual(@as(i32, 8209), try const_result.valueI32(0));
 }
 
 fn buildTestWorkspace(workspace_raw: []u8, file_raw: []u8, label: []const u8, source: []const u8) ![]u8 {

@@ -29,6 +29,7 @@ const max_lowered_exports: usize = 64;
 const max_lowered_consts: usize = 128;
 const max_edgerun_top_level_names: usize = max_lowered_exports + max_lowered_consts;
 const max_edgerun_function_locals: usize = 32;
+const max_edgerun_expr_code_bytes: usize = 64;
 const lowered_main_i32_signature = "pub export fn er_app_main() i32";
 const legacy_main_i32_signature = "pub export fn main() i32";
 const return_keyword = "return";
@@ -882,6 +883,7 @@ fn emitFunctionSection(parent: *Writer, lowered_exports: LoweredExports) error{O
         try payload.appendU32Leb(switch (lowered.kind) {
             .return_i32, .state_load_i32, .compile_workspace => type_index_no_args_i32,
             .release_artifact_commit, .source_workspace_commit => type_index_i32_arg_i32,
+            .dynamic_i32_arg_i32 => type_index_i32_arg_i32,
         });
     }
     try emitSection(parent, 3, payload.bytes[0..payload.len]);
@@ -2823,15 +2825,18 @@ test "edgerun source lowering only collects parsed top level exports" {
     try std.testing.expectEqual(@as(i32, 4096), lowered.entries[0].value);
 }
 
-test "edgerun source lowering only collects parsed top level constants" {
+test "edgerun source function locals do not leak between exports" {
     const lowered = collectLoweredExportsForMode(.edgerun,
         \\const max_width: usize = 4096;
-        \\export fn er_ui_outer() u32 {
+        \\export fn er_ui_define_hidden() u32 {
         \\    const hidden_width: usize = 8192;
         \\    return hidden_width;
         \\}
+        \\export fn er_ui_use_hidden() u32 { return hidden_width; }
     , 0, 0, 0);
-    try std.testing.expectEqual(@as(u32, 0), lowered.count);
+    try std.testing.expectEqual(@as(u32, 1), lowered.count);
+    try std.testing.expectEqualStrings("er_ui_define_hidden", lowered.entries[0].name);
+    try std.testing.expectEqual(@as(i32, 8192), lowered.entries[0].value);
 }
 
 test "edgerun source lowering collects top level const array lengths" {

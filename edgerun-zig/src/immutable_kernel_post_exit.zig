@@ -245,10 +245,12 @@ fn renderVirtioGpuPackedDebugFrame(device: *virtio_gpu.Device, state: *State, em
         .public_identity = "post-exit-virtio-renderer",
         .public_identity_ready = true,
     }) catch return fail(emit, error.RendererIrFailed, "FAIL post-exit virtio-gpu app-frame");
+    emit("check: post-exit virtio-gpu app-frame built");
 
     state.app_font_atlas.initWithFontInPlace(renderer_font_atlas.geist_ascii_font.body());
     const buffers = state.app_ir_storage.buffers();
     renderer_pipeline.packScene(buffers, &state.app_font_atlas, .object, scene.written()) catch return fail(emit, error.RendererIrFailed, "FAIL post-exit virtio-gpu pack-app");
+    emit("check: post-exit virtio-gpu app-frame packed");
 
     const surface = renderer_pipeline.softwareFramebuffer(
         virtio_scanout_width,
@@ -263,6 +265,7 @@ fn renderVirtioGpuPackedDebugFrame(device: *virtio_gpu.Device, state: *State, em
         .bg,
     ) catch return fail(emit, error.RendererIrFailed, "FAIL post-exit virtio-gpu software-render");
     if (!receipt.valid()) return fail(emit, error.RendererIrFailed, "FAIL post-exit virtio-gpu render-receipt");
+    emit("check: post-exit virtio-gpu app-frame rasterized");
 
     virtio_gpu.copyRgbaPixelsToBgra(
         virtio_scanout_width,
@@ -270,6 +273,7 @@ fn renderVirtioGpuPackedDebugFrame(device: *virtio_gpu.Device, state: *State, em
         &state.virtio_scanout,
         &state.app_pixels,
     ) catch |err| return fail(emit, mapVirtioGpuError(err), "FAIL post-exit virtio-gpu copy-app");
+    emit("check: post-exit virtio-gpu app-frame copied");
 
     device.transferToHost3d(
         &state.virtio_queue,
