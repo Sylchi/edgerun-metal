@@ -884,11 +884,11 @@ test "component render helper owns button variants and collects hit targets" {
 }
 
 test "component renderer exports shared sizing tokens for measurements" {
-    try std.testing.expectEqual(ui_tokens.Component.surface_radius, Card.surface_radius);
-    try std.testing.expectEqual(ui_tokens.Component.surface_padding, Card.surface_padding);
-    try std.testing.expectEqual(ui_tokens.Component.surface_detail_gap, Card.surface_detail_gap);
-    try std.testing.expectEqual(ui_tokens.Component.badge_height, component_render.badge_height);
-    try std.testing.expectEqual(ui_tokens.Component.badge_padding_x, component_render.badge_padding_x);
+    try std.testing.expectEqual(ui_tokens.Component.surface_radius, card_component.surface_radius);
+    try std.testing.expectEqual(ui_tokens.Component.surface_padding, card_component.surface_padding);
+    try std.testing.expectEqual(ui_tokens.Component.surface_detail_gap, card_component.surface_detail_gap);
+    try std.testing.expectEqual(ui_tokens.Component.badge_height, badge_component.badge_height);
+    try std.testing.expectEqual(ui_tokens.Component.badge_padding_x, badge_component.badge_padding_x);
 }
 
 test "component accessibility metadata comes from component identity and labels" {

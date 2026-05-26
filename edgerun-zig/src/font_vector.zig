@@ -4,7 +4,7 @@ const clock = @import("clock.zig");
 const object = @import("object.zig");
 const varfont = @import("varfont.zig");
 
-pub const default_weight: f32 = 560.0;
+pub const default_weight: f32 = 400.0;
 
 pub const max_commands = varfont.max_contour_points;
 pub const body_magic = "ERFNTV1\n".*;
@@ -498,7 +498,9 @@ test "fixed vector face exposes pinned geist metrics and spacing" {
     const face = try varfont.Face.geist();
     const glyph_id = face.glyphId('A');
     const next_id = face.glyphId('V');
+    const expected_axis_values = face.fixedAxisValues("wght", default_weight);
 
+    try std.testing.expectEqual(expected_axis_values, fixed.axis_values);
     try std.testing.expectEqual(glyph_id, fixed.glyphId('A'));
     try std.testing.expectEqual(face.advance(glyph_id, 18.0), fixed.advance(glyph_id, 18.0));
     try std.testing.expectEqual(face.kern(glyph_id, next_id, 18.0), fixed.kern(glyph_id, next_id, 18.0));

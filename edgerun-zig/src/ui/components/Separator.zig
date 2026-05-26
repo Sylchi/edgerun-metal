@@ -6,7 +6,6 @@ const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
-const component_render = @import("Render.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
@@ -19,13 +18,14 @@ pub const Separator = struct {
 
     pub fn render(self: Separator, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         _ = self;
-        return component_render.renderSeparator(scene, bounds, options);
+        const line = ui.Rect.init(bounds.x, bounds.y + (bounds.h - separator_height) * 0.5, bounds.w, separator_height);
+        try scene.pushRect(line, options.style.border, .fill, 0.0, 0.0);
     }
 
     pub fn measure(self: Separator, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = self;
         _ = options;
-        return component_render.measureFixed(component_render.preferred_separator, constraints);
+        return measureFixed(preferred_separator, constraints);
     }
 
     pub fn toObject(self: Separator, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -45,6 +45,26 @@ pub const Separator = struct {
         };
     }
 };
+
+fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
+    const resolved_preferred = constrainPreferredSize(preferred, constraints);
+    return layout.Measurement.flexible(
+        .{ .w = @min(preferred.w, resolved_preferred.w), .h = @min(preferred.h, resolved_preferred.h) },
+        resolved_preferred,
+        .{ .w = measure_max_width, .h = preferred.h },
+    ).applyExact(constraints);
+}
+
+fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {
+    return .{
+        .w = constraints.width.limit(preferred.w),
+        .h = constraints.height.limit(preferred.h),
+    };
+}
+
+const measure_max_width: f32 = 4096.0;
+const separator_height: f32 = 1.0;
+pub const preferred_separator = ui.Size{ .w = 220.0, .h = 1.0 };
 
 test "separator component serializes to canonical object and deserializes" {
     var ui_raw: [128]u8 = undefined;

@@ -7,7 +7,6 @@ const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
-const component_render = @import("Render.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
@@ -22,7 +21,14 @@ pub const Slider = struct {
     }
 
     pub fn render(self: Slider, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return component_render.renderSlider(scene, bounds, self.label, self.value, options);
+        const clamped = ui.clampUnit(self.value);
+        try scene.pushText(ui.Rect.init(bounds.x, bounds.y, bounds.w, slider_label_height), self.label, options.style.text);
+        const track_y = bounds.y + @min(slider_track_top, @max(0.0, bounds.h - slider_track_height));
+        const track = ui.Rect.init(bounds.x, track_y, bounds.w, slider_track_height);
+        try renderTrack(scene, track, clamped, options);
+        const thumb_center = track.x + track.w * clamped;
+        const thumb = ui.Rect.init(thumb_center - slider_thumb_size * 0.5, track.y + (track.h - slider_thumb_size) * 0.5, slider_thumb_size, slider_thumb_size);
+        try scene.pushRect(thumb, options.style.text, .fill, slider_thumb_size * 0.5, 0.0);
     }
 
     pub fn collectInteractions(self: Slider, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
@@ -32,7 +38,7 @@ pub const Slider = struct {
     pub fn measure(self: Slider, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = self;
         _ = options;
-        return component_render.measureFixed(component_render.preferred_slider, constraints);
+        return measureFixed(preferred_slider, constraints);
     }
 
     pub fn toObject(self: Slider, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -50,6 +56,38 @@ pub const Slider = struct {
         };
     }
 };
+
+fn renderTrack(scene: *ui.Scene, track: ui.Rect, value: f32, options: RenderOptions) ui.RenderError!void {
+    if (track.w <= 0.0 or track.h <= 0.0) return;
+    try scene.pushRect(track, options.style.row, .fill, slider_track_height * 0.5, 0.0);
+    const clamped = ui.clampUnit(value);
+    if (clamped <= 0.0) return;
+    const fill_width = @min(track.w, @max(0.0, track.w * clamped));
+    try scene.pushRect(ui.Rect.init(track.x, track.y, fill_width, track.h), options.style.accent, .fill, slider_track_height * 0.5, 0.0);
+}
+
+fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
+    const resolved_preferred = constrainPreferredSize(preferred, constraints);
+    return layout.Measurement.flexible(
+        .{ .w = @min(preferred.w, resolved_preferred.w), .h = @min(preferred.h, resolved_preferred.h) },
+        resolved_preferred,
+        .{ .w = measure_max_width, .h = preferred.h },
+    ).applyExact(constraints);
+}
+
+fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {
+    return .{
+        .w = constraints.width.limit(preferred.w),
+        .h = constraints.height.limit(preferred.h),
+    };
+}
+
+const measure_max_width: f32 = 4096.0;
+const slider_label_height: f32 = 14.0;
+const slider_track_height: f32 = 6.0;
+pub const slider_thumb_size: f32 = 16.0;
+const slider_track_top: f32 = 26.0;
+pub const preferred_slider = ui.Size{ .w = 220.0, .h = 42.0 };
 
 test "slider component serializes to canonical object and deserializes" {
     const slider = Slider{ .id = 13, .label = "Brightness", .value = 0.72 };
@@ -75,5 +113,5 @@ test "slider component clamps rendered fill and thumb to track" {
     const fill = component_test.fillRectColor(scene.written(), ui.Color.accent).?;
     try std.testing.expectEqual(@as(f32, 120.0), fill.w);
     const thumb = component_test.lastFillRect(scene.written()).?;
-    try std.testing.expect(thumb.x + thumb.w <= bounds.x + bounds.w + component_render.slider_thumb_size * 0.5);
+    try std.testing.expect(thumb.x + thumb.w <= bounds.x + bounds.w + slider_thumb_size * 0.5);
 }

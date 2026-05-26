@@ -7,7 +7,7 @@ const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
-const component_render = @import("Render.zig");
+const tokens = @import("../../ui_tokens.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
@@ -21,17 +21,23 @@ pub const Resizable = struct {
     }
 
     pub fn render(self: Resizable, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return component_render.renderResizable(scene, bounds, self.ratio, options);
+        const handle = handleBounds(bounds, self.ratio);
+        const left = ui.Rect.init(bounds.x, bounds.y, @max(min_extent, handle.x - bounds.x), bounds.h);
+        const right_x = handle.x + handle.w;
+        const right = ui.Rect.init(right_x, bounds.y, @max(min_extent, bounds.x + bounds.w - right_x), bounds.h);
+        try scene.pushRect(left, options.style.panel, .fill, control_radius, 0.0);
+        try scene.pushRect(right, options.style.row, .fill, control_radius, 0.0);
+        try scene.pushRect(handle, options.style.border, .fill, resizable_handle_radius, 0.0);
     }
 
     pub fn collectInteractions(self: Resizable, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-        try collector.addHit(component_render.resizableHandleBounds(bounds, self.ratio).insetUniform(-component_render.resizable_handle_hit_outset), .slider, self.id);
+        try collector.addHit(handleBounds(bounds, self.ratio).insetUniform(-resizable_handle_hit_outset), .slider, self.id);
     }
 
     pub fn measure(self: Resizable, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = self;
         _ = options;
-        return component_render.measureFixed(component_render.preferred_resizable, constraints);
+        return measureFixed(preferred_resizable, constraints);
     }
 
     pub fn toObject(self: Resizable, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -49,6 +55,36 @@ pub const Resizable = struct {
         };
     }
 };
+
+fn handleBounds(bounds: ui.Rect, ratio: f32) ui.Rect {
+    const clamped_ratio = @min(@max(ratio, 0.0), 1.0);
+    const center_x = bounds.x + bounds.w * clamped_ratio;
+    return ui.Rect.init(center_x - resizable_handle_w * 0.5, bounds.y, resizable_handle_w, bounds.h);
+}
+
+fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
+    const resolved_preferred = constrainPreferredSize(preferred, constraints);
+    return layout.Measurement.flexible(
+        .{ .w = @min(preferred.w, resolved_preferred.w), .h = @min(preferred.h, resolved_preferred.h) },
+        resolved_preferred,
+        .{ .w = measure_max_width, .h = preferred.h },
+    ).applyExact(constraints);
+}
+
+fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {
+    return .{
+        .w = constraints.width.limit(preferred.w),
+        .h = constraints.height.limit(preferred.h),
+    };
+}
+
+const min_extent: f32 = 1.0;
+const measure_max_width: f32 = 4096.0;
+const control_radius: f32 = tokens.Component.control_radius;
+const resizable_handle_w: f32 = 6.0;
+const resizable_handle_radius: f32 = 3.0;
+const resizable_handle_hit_outset: f32 = 6.0;
+pub const preferred_resizable = ui.Size{ .w = 240.0, .h = 36.0 };
 
 test "resizable component serializes to canonical object and deserializes" {
     const resizable = Resizable{ .id = 770, .ratio = 0.62 };

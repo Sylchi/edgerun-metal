@@ -564,15 +564,6 @@ fn comboboxPopupBounds(bounds: ui.Rect) ui.Rect {
     return ui.Rect.init(bounds.x, y, bounds.w, @max(min_extent, bounds.y + bounds.h - y));
 }
 
-pub fn renderBadge(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, variant: common.BadgeVariant, options: RenderOptions) ui.RenderError!void {
-    const paint = badgePaint(variant, options);
-    const resolved_height = @min(badge_height, bounds.h);
-    const badge_bounds = ui.Rect.init(bounds.x, bounds.y + (bounds.h - resolved_height) * 0.5, bounds.w, resolved_height);
-    if (paint.fill.a != 0) try scene.pushRect(badge_bounds, paint.fill, .fill, resolved_height * 0.5, 0.0);
-    if (paint.border) |border| try scene.pushRect(badge_bounds, border, .border, resolved_height * 0.5, 0.0);
-    try scene.pushAlignedText(badgeLabelBounds(badge_bounds), label, paint.text, .center);
-}
-
 pub fn renderEmpty(scene: *ui.Scene, bounds: ui.Rect, title: []const u8, detail: []const u8, options: RenderOptions) ui.RenderError!void {
     try scene.pushRect(bounds, ui.Color.clear, .fill, empty_radius, 0.0);
     try scene.pushRect(bounds, options.style.border, .border, empty_radius, 0.0);
@@ -922,22 +913,6 @@ fn sidebarContentBounds(bounds: ui.Rect) ui.Rect {
     return ui.Rect.init(x, bounds.y, @max(min_extent, bounds.x + bounds.w - x), bounds.h);
 }
 
-pub fn renderProgress(scene: *ui.Scene, bounds: ui.Rect, value: f32, options: RenderOptions) ui.RenderError!void {
-    const track = ui.Rect.init(bounds.x, bounds.y + (bounds.h - progress_height) * 0.5, bounds.w, progress_height);
-    try renderProgressTrack(scene, track, value, options, progress_height * 0.5, 0.0, false);
-}
-
-pub fn renderSlider(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, value: f32, options: RenderOptions) ui.RenderError!void {
-    const clamped = ui.clampUnit(value);
-    try scene.pushText(ui.Rect.init(bounds.x, bounds.y, bounds.w, slider_label_height), label, options.style.text);
-    const track_y = bounds.y + @min(slider_track_top, @max(0.0, bounds.h - slider_track_height));
-    const track = ui.Rect.init(bounds.x, track_y, bounds.w, slider_track_height);
-    try renderProgressTrack(scene, track, clamped, options, slider_track_height * 0.5, 0.0, true);
-    const thumb_center = track.x + track.w * clamped;
-    const thumb = ui.Rect.init(thumb_center - slider_thumb_size * 0.5, track.y + (track.h - slider_thumb_size) * 0.5, slider_thumb_size, slider_thumb_size);
-    try scene.pushRect(thumb, options.style.text, .fill, slider_thumb_size * 0.5, 0.0);
-}
-
 pub fn renderTabs(scene: *ui.Scene, bounds: ui.Rect, first: []const u8, second: []const u8, active: u16, options: RenderOptions) ui.RenderError!void {
     const list = tabsListBounds(bounds);
     try scene.pushRect(list, options.style.row, .fill, tabs_list_radius, 0.0);
@@ -1027,46 +1002,6 @@ fn tableColumnIndex(column: common.TableColumn) usize {
     };
 }
 
-pub fn renderResizable(scene: *ui.Scene, bounds: ui.Rect, ratio: f32, options: RenderOptions) ui.RenderError!void {
-    const handle = resizableHandleBounds(bounds, ratio);
-    const left = ui.Rect.init(bounds.x, bounds.y, @max(min_extent, handle.x - bounds.x), bounds.h);
-    const right_x = handle.x + handle.w;
-    const right = ui.Rect.init(right_x, bounds.y, @max(min_extent, bounds.x + bounds.w - right_x), bounds.h);
-    try scene.pushRect(left, options.style.panel, .fill, control_radius, 0.0);
-    try scene.pushRect(right, options.style.row, .fill, control_radius, 0.0);
-    try scene.pushRect(handle, options.style.border, .fill, resizable_handle_radius, 0.0);
-}
-
-pub fn resizableHandleBounds(bounds: ui.Rect, ratio: f32) ui.Rect {
-    const clamped_ratio = @min(@max(ratio, 0.0), 1.0);
-    const center_x = bounds.x + bounds.w * clamped_ratio;
-    return ui.Rect.init(center_x - resizable_handle_w * 0.5, bounds.y, resizable_handle_w, bounds.h);
-}
-
-pub fn renderAvatar(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, options: RenderOptions) ui.RenderError!void {
-    const size = @min(avatar_size, @max(min_extent, @min(bounds.w, bounds.h)));
-    const avatar_bounds = ui.Rect.init(bounds.x + (bounds.w - size) * 0.5, bounds.y + (bounds.h - size) * 0.5, size, size);
-    try scene.pushRect(avatar_bounds, options.style.row, .fill, size * 0.5, 0.0);
-    try scene.pushRect(avatar_bounds, options.style.border, .border, size * 0.5, 0.0);
-    try renderControlText(scene, avatar_bounds, avatar_label_inset, avatar_text_height, label, options.style.text, .center);
-}
-
-pub fn renderKbd(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, options: RenderOptions) ui.RenderError!void {
-    const height = @min(kbd_height, @max(min_extent, bounds.h));
-    const kbd_bounds = ui.Rect.init(bounds.x, bounds.y + (bounds.h - height) * 0.5, bounds.w, height);
-    try renderControlFrame(scene, kbd_bounds, options.style.row, options.style.border, control_radius);
-    try renderControlText(scene, kbd_bounds, kbd_label_padding, kbd_text_height, label, options.style.text, .center);
-}
-
-pub fn renderLabel(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, options: RenderOptions) ui.RenderError!void {
-    try scene.pushText(bounds.withHeightCentered(label_height), value, options.style.text);
-}
-
-pub fn renderSeparator(scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-    const line = ui.Rect.init(bounds.x, bounds.y + (bounds.h - separator_height) * 0.5, bounds.w, separator_height);
-    try scene.pushRect(line, options.style.border, .fill, 0.0, 0.0);
-}
-
 pub fn renderScrollArea(scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
     try scene.pushRect(bounds, options.style.panel, .fill, scroll_area_radius, 0.0);
     try scene.pushRect(bounds, options.style.border, .border, scroll_area_radius, 0.0);
@@ -1126,19 +1061,6 @@ pub fn scrollAreaThumbBounds(track: ui.Rect, metrics: ScrollAreaMetrics) ui.Rect
     const travel = @max(0.0, track.h - thumb_h);
     const offset_ratio = if (metrics.maxOffset() == 0.0) 0.0 else metrics.offset_y / metrics.maxOffset();
     return ui.Rect.init(track.x, track.y + travel * offset_ratio, track.w, thumb_h);
-}
-
-pub fn renderSkeleton(scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-    var fill = options.style.accent;
-    fill.a = skeleton_alpha;
-    try scene.pushRect(bounds, fill, .fill, skeleton_radius, 0.0);
-}
-
-pub fn renderSpinner(scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-    const size = @min(spinner_size, @max(min_extent, @min(bounds.w, bounds.h)));
-    const spinner = ui.Rect.init(bounds.x + (bounds.w - size) * 0.5, bounds.y + (bounds.h - size) * 0.5, size, size);
-    try scene.pushRect(spinner, options.style.border, .border, size * 0.5, 0.0);
-    try scene.pushPieSlice(spinner.insetUniform(spinner_slice_inset), options.style.accent, spinner_start_turn, spinner_end_turn);
 }
 
 pub fn renderBreadcrumb(scene: *ui.Scene, bounds: ui.Rect, first: []const u8, current: []const u8, options: RenderOptions) ui.RenderError!void {
@@ -1369,16 +1291,6 @@ pub fn renderRowItem(scene: *ui.Scene, bounds: ui.Rect, title: []const u8, detai
     }
 }
 
-pub fn measureBadge(label: []const u8, constraints: layout.Constraints) layout.Measurement {
-    const preferred_width = @max(badge_min_width, text_metrics.width(label, text_metrics.badge_label_px) + badge_padding_x * 2.0);
-    const preferred = constrainPreferredSize(.{ .w = preferred_width, .h = badge_height }, constraints);
-    return layout.Measurement.flexible(
-        .{ .w = @min(badge_min_width, preferred.w), .h = @min(badge_height, preferred.h) },
-        preferred,
-        .{ .w = measure_max_width, .h = badge_height },
-    ).applyExact(constraints);
-}
-
 pub fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
     const resolved_preferred = constrainPreferredSize(preferred, constraints);
     return layout.Measurement.flexible(
@@ -1593,44 +1505,6 @@ fn rowTextBounds(bounds: ui.Rect) ?ui.Rect {
     return if (out.valid()) out else null;
 }
 
-fn renderProgressTrack(scene: *ui.Scene, track: ui.Rect, value: f32, options: RenderOptions, radius: f32, min_fill_width: f32, omit_empty_fill: bool) ui.RenderError!void {
-    if (track.w <= 0.0 or track.h <= 0.0) return;
-    try scene.pushRect(track, options.style.row, .fill, radius, 0.0);
-    const clamped = ui.clampUnit(value);
-    if (omit_empty_fill and clamped <= 0.0) return;
-    const fill_width = @min(track.w, @max(min_fill_width, track.w * clamped));
-    try scene.pushRect(ui.Rect.init(track.x, track.y, fill_width, track.h), options.style.accent, .fill, radius, 0.0);
-}
-
-const BadgePaint = struct {
-    fill: ui.Color,
-    text: ui.Color,
-    border: ?ui.Color = null,
-};
-
-fn badgePaint(variant: common.BadgeVariant, options: RenderOptions) BadgePaint {
-    return switch (variant) {
-        .default => alphaPaint(options.style.accent, options.style.accent),
-        .secondary => .{ .fill = options.style.row, .text = options.style.text },
-        .destructive => alphaPaint(badge_danger, badge_danger),
-        .outline => .{ .fill = ui.Color.clear, .text = options.style.text, .border = options.style.border },
-        .ghost => .{ .fill = ui.Color.clear, .text = options.style.muted },
-        .link => .{ .fill = ui.Color.clear, .text = options.style.accent },
-    };
-}
-
-fn alphaPaint(color: ui.Color, text_color: ui.Color) BadgePaint {
-    var fill = color;
-    fill.a = badge_fill_alpha;
-    return .{ .fill = fill, .text = text_color };
-}
-
-fn badgeLabelBounds(bounds: ui.Rect) ui.Rect {
-    const resolved_padding = @min(badge_padding_x, bounds.w * 0.5);
-    return ui.Rect.init(bounds.x + resolved_padding, bounds.y + (bounds.h - badge_text_height) * 0.5, @max(min_extent, bounds.w - resolved_padding * 2.0), badge_text_height);
-}
-
-pub const preferred_badge = ui.Size{ .w = 96.0, .h = 24.0 };
 pub const preferred_alert = ui.Size{ .w = 260.0, .h = 64.0 };
 pub const preferred_accordion = ui.Size{ .w = 260.0, .h = 68.0 };
 pub const preferred_dialog = ui.Size{ .w = 240.0, .h = 52.0 };
@@ -1640,14 +1514,8 @@ pub const preferred_calendar = ui.Size{ .w = 240.0, .h = 152.0 };
 pub const preferred_carousel = ui.Size{ .w = 240.0, .h = 40.0 };
 pub const preferred_chart = ui.Size{ .w = 240.0, .h = 90.0 };
 pub const preferred_combobox = ui.Size{ .w = 240.0, .h = 82.0 };
-pub const preferred_avatar = ui.Size{ .w = 40.0, .h = 40.0 };
 pub const preferred_empty = ui.Size{ .w = 260.0, .h = 132.0 };
-pub const preferred_kbd = ui.Size{ .w = 48.0, .h = 24.0 };
-pub const preferred_label = ui.Size{ .w = 96.0, .h = 16.0 };
-pub const preferred_separator = ui.Size{ .w = 220.0, .h = 1.0 };
 pub const preferred_scroll_area = ui.Size{ .w = 220.0, .h = 48.0 };
-pub const preferred_skeleton = ui.Size{ .w = 220.0, .h = 20.0 };
-pub const preferred_spinner = ui.Size{ .w = 32.0, .h = 32.0 };
 pub const preferred_breadcrumb = ui.Size{ .w = 220.0, .h = 36.0 };
 pub const preferred_menubar = ui.Size{ .w = 170.0, .h = 36.0 };
 pub const preferred_navigation_menu = ui.Size{ .w = 220.0, .h = 36.0 };
@@ -1672,9 +1540,6 @@ pub const preferred_radio_group = ui.Size{ .w = 220.0, .h = 52.0 };
 pub const preferred_switch = ui.Size{ .w = 220.0, .h = 32.0 };
 pub const preferred_pagination = ui.Size{ .w = 240.0, .h = 36.0 };
 pub const preferred_popover = ui.Size{ .w = 240.0, .h = 52.0 };
-pub const preferred_resizable = ui.Size{ .w = 240.0, .h = 36.0 };
-pub const preferred_progress = ui.Size{ .w = 220.0, .h = 10.0 };
-pub const preferred_slider = ui.Size{ .w = 220.0, .h = 42.0 };
 pub const preferred_tabs = ui.Size{ .w = 220.0, .h = 84.0 };
 pub const preferred_table = ui.Size{ .w = 260.0, .h = 64.0 };
 pub const preferred_tooltip = ui.Size{ .w = 240.0, .h = 44.0 };
@@ -1807,9 +1672,6 @@ const table_header_name_asc = "Name ^";
 const table_header_name_desc = "Name v";
 const table_header_role_asc = "Role ^";
 const table_header_role_desc = "Role v";
-const resizable_handle_w: f32 = 6.0;
-const resizable_handle_radius: f32 = 3.0;
-pub const resizable_handle_hit_outset: f32 = 8.0;
 const empty_radius: f32 = 8.0;
 const empty_padding: f32 = 24.0;
 const empty_media_size: f32 = 40.0;
@@ -1952,11 +1814,6 @@ const menu_item_radius: f32 = 4.0;
 const menu_item_padding: f32 = 5.0;
 const menu_item_text_h: f32 = 12.0;
 const menu_trigger_padding: f32 = 8.0;
-const progress_height: f32 = 8.0;
-const slider_label_height: f32 = 14.0;
-const slider_track_height: f32 = 6.0;
-pub const slider_thumb_size: f32 = 16.0;
-const slider_track_top: f32 = 26.0;
 const tabs_list_w: f32 = 184.0;
 const tabs_list_h: f32 = 36.0;
 const tabs_list_padding: f32 = 3.0;
@@ -1996,13 +1853,6 @@ const sidebar_item_h: f32 = 20.0;
 const sidebar_item_radius: f32 = 4.0;
 const sidebar_item_padding: f32 = 5.0;
 const sidebar_item_text_h: f32 = 12.0;
-const avatar_size: f32 = 40.0;
-const avatar_text_height: f32 = 14.0;
-const avatar_label_inset: f32 = 6.0;
-const kbd_height: f32 = 24.0;
-const kbd_text_height: f32 = 12.0;
-const kbd_label_padding: f32 = 8.0;
-const label_height: f32 = 16.0;
 const separator_height: f32 = 1.0;
 const scroll_area_radius: f32 = 7.0;
 const scroll_area_padding: f32 = 8.0;
@@ -2016,12 +1866,6 @@ const scroll_area_track_radius: f32 = 2.0;
 const scroll_area_thumb_min_h: f32 = 12.0;
 const scroll_area_thumb_ratio: f32 = 0.45;
 const scroll_area_label = "Scrollable content";
-const skeleton_alpha: u8 = 32;
-const skeleton_radius: f32 = 6.0;
-const spinner_size: f32 = 28.0;
-const spinner_slice_inset: f32 = 3.0;
-const spinner_start_turn: f32 = 0.08;
-const spinner_end_turn: f32 = 0.78;
 const breadcrumb_first_w: f32 = 44.0;
 const breadcrumb_middle_w: f32 = 42.0;
 const breadcrumb_separator_w: f32 = 18.0;
@@ -2037,9 +1881,3 @@ const row_detail_height: f32 = 16.0;
 const calendar_weekday_labels = [_][]const u8{ "Su", "Mo", "Tu", "We", "Th", "Fr", "Sa" };
 const calendar_day_labels = [_][]const u8{ "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28" };
 const chart_bar_values = [_]f32{ 0.45, 0.72, 0.38, 0.86, 0.62 };
-pub const badge_height: f32 = tokens.Component.badge_height;
-pub const badge_text_height: f32 = tokens.Component.badge_text_height;
-pub const badge_padding_x: f32 = tokens.Component.badge_padding_x;
-const badge_fill_alpha: u8 = 48;
-const badge_min_width: f32 = 28.0;
-const badge_danger = ui.Color{ .r = 239, .g = 68, .b = 68 };

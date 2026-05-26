@@ -6,7 +6,6 @@ const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
-const component_render = @import("Render.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
@@ -19,13 +18,14 @@ pub const Progress = struct {
     }
 
     pub fn render(self: Progress, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return component_render.renderProgress(scene, bounds, self.value, options);
+        const track = ui.Rect.init(bounds.x, bounds.y + (bounds.h - progress_height) * 0.5, bounds.w, progress_height);
+        try renderTrack(scene, track, self.value, options);
     }
 
     pub fn measure(self: Progress, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = self;
         _ = options;
-        return component_render.measureFixed(component_render.preferred_progress, constraints);
+        return measureFixed(preferred_progress, constraints);
     }
 
     pub fn toObject(self: Progress, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -43,6 +43,34 @@ pub const Progress = struct {
         };
     }
 };
+
+fn renderTrack(scene: *ui.Scene, track: ui.Rect, value: f32, options: RenderOptions) ui.RenderError!void {
+    if (track.w <= 0.0 or track.h <= 0.0) return;
+    try scene.pushRect(track, options.style.row, .fill, progress_height * 0.5, 0.0);
+    const clamped = ui.clampUnit(value);
+    const fill_width = @min(track.w, @max(0.0, track.w * clamped));
+    try scene.pushRect(ui.Rect.init(track.x, track.y, fill_width, track.h), options.style.accent, .fill, progress_height * 0.5, 0.0);
+}
+
+fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
+    const resolved_preferred = constrainPreferredSize(preferred, constraints);
+    return layout.Measurement.flexible(
+        .{ .w = @min(preferred.w, resolved_preferred.w), .h = @min(preferred.h, resolved_preferred.h) },
+        resolved_preferred,
+        .{ .w = measure_max_width, .h = preferred.h },
+    ).applyExact(constraints);
+}
+
+fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {
+    return .{
+        .w = constraints.width.limit(preferred.w),
+        .h = constraints.height.limit(preferred.h),
+    };
+}
+
+const measure_max_width: f32 = 4096.0;
+const progress_height: f32 = 8.0;
+pub const preferred_progress = ui.Size{ .w = 220.0, .h = 10.0 };
 
 test "progress component serializes to canonical object and deserializes" {
     const progress = Progress{ .value = 0.64 };
