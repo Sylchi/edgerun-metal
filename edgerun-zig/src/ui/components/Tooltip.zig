@@ -7,10 +7,12 @@ const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
-const tokens = @import("../../ui_tokens.zig");
+const component_primitives = @import("Primitives.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+const contentInset = component_primitives.contentInset;
+const measureFixed = component_primitives.measureFixed;
 
 pub const Tooltip = struct {
     id: u32,
@@ -23,10 +25,10 @@ pub const Tooltip = struct {
 
     pub fn render(self: Tooltip, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         const trigger_bounds = triggerBounds(bounds);
-        try scene.pushRect(trigger_bounds, options.style.panel, .fill, control_radius, 0.0);
-        try scene.pushRect(trigger_bounds, options.style.border, .border, control_radius, 0.0);
-        if (contentInset(trigger_bounds, control_text_padding)) |inner| {
-            try scene.pushAlignedText(inner.withHeightCentered(control_label_height), self.trigger, options.style.text, .center);
+        try scene.pushRect(trigger_bounds, options.style.panel, .fill, component_primitives.control_radius, 0.0);
+        try scene.pushRect(trigger_bounds, options.style.border, .border, component_primitives.control_radius, 0.0);
+        if (contentInset(trigger_bounds, component_primitives.control_text_padding)) |inner| {
+            try scene.pushAlignedText(inner.withHeightCentered(component_primitives.control_label_height), self.trigger, options.style.text, .center);
         }
         const tip = contentBounds(bounds);
         try scene.pushRect(tip, options.style.text, .fill, tooltip_radius, 0.0);
@@ -67,36 +69,9 @@ fn triggerBounds(bounds: ui.Rect) ui.Rect {
 
 fn contentBounds(bounds: ui.Rect) ui.Rect {
     const x = bounds.x + tooltip_trigger_w + tooltip_gap;
-    return ui.Rect.init(x, bounds.y + tooltip_content_y, @max(min_extent, bounds.x + bounds.w - x), tooltip_content_h);
+    return ui.Rect.init(x, bounds.y + tooltip_content_y, @max(component_primitives.min_extent, bounds.x + bounds.w - x), tooltip_content_h);
 }
 
-fn contentInset(bounds: ui.Rect, padding: f32) ?ui.Rect {
-    const clamped = @min(@max(padding, 0.0), @min(bounds.w, bounds.h) * 0.5);
-    const out = bounds.insetUniform(clamped);
-    return if (out.valid()) out else null;
-}
-
-fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
-    const resolved_preferred = constrainPreferredSize(preferred, constraints);
-    return layout.Measurement.flexible(
-        .{ .w = @min(preferred.w, resolved_preferred.w), .h = @min(preferred.h, resolved_preferred.h) },
-        resolved_preferred,
-        .{ .w = measure_max_width, .h = preferred.h },
-    ).applyExact(constraints);
-}
-
-fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {
-    return .{
-        .w = constraints.width.limit(preferred.w),
-        .h = constraints.height.limit(preferred.h),
-    };
-}
-
-const min_extent: f32 = 1.0;
-const measure_max_width: f32 = 4096.0;
-const control_radius: f32 = tokens.Component.control_radius;
-const control_text_padding: f32 = tokens.Component.control_text_padding;
-const control_label_height: f32 = tokens.Component.control_label_height;
 const tooltip_trigger_y: f32 = 8.0;
 const tooltip_trigger_w: f32 = 80.0;
 const tooltip_trigger_h: f32 = 28.0;

@@ -7,10 +7,13 @@ const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
+const component_primitives = @import("Primitives.zig");
 const tokens = @import("../../ui_tokens.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+const contentInset = component_primitives.contentInset;
+const measureFixed = component_primitives.measureFixed;
 
 pub const Textarea = struct {
     id: u32,
@@ -21,11 +24,11 @@ pub const Textarea = struct {
     }
 
     pub fn render(self: Textarea, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        try scene.pushRect(bounds, options.style.panel, .fill, control_radius, 0.0);
-        try scene.pushRect(bounds, options.style.border, .border, control_radius, 0.0);
+        try scene.pushRect(bounds, options.style.panel, .fill, component_primitives.control_radius, 0.0);
+        try scene.pushRect(bounds, options.style.border, .border, component_primitives.control_radius, 0.0);
         if (contentInset(bounds, textarea_padding)) |text_bounds| {
             try scene.pushWrappedText(text_bounds, self.placeholder, options.style.muted, .{
-                .line_height = control_label_height,
+                .line_height = component_primitives.control_label_height,
                 .average_char_width = control_average_char_width,
                 .max_lines = textarea_max_lines,
             });
@@ -93,31 +96,6 @@ fn lineEndAt(value: []const u8, start: usize) usize {
     return index;
 }
 
-fn contentInset(bounds: ui.Rect, padding: f32) ?ui.Rect {
-    const clamped = @min(@max(padding, 0.0), @min(bounds.w, bounds.h) * 0.5);
-    const out = bounds.insetUniform(clamped);
-    return if (out.valid()) out else null;
-}
-
-fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
-    const resolved_preferred = constrainPreferredSize(preferred, constraints);
-    return layout.Measurement.flexible(
-        .{ .w = @min(preferred.w, resolved_preferred.w), .h = @min(preferred.h, resolved_preferred.h) },
-        resolved_preferred,
-        .{ .w = measure_max_width, .h = preferred.h },
-    ).applyExact(constraints);
-}
-
-fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {
-    return .{
-        .w = constraints.width.limit(preferred.w),
-        .h = constraints.height.limit(preferred.h),
-    };
-}
-
-const measure_max_width: f32 = 4096.0;
-const control_radius: f32 = tokens.Component.control_radius;
-const control_label_height: f32 = tokens.Component.control_label_height;
 const control_average_char_width: f32 = tokens.Component.control_average_char_width;
 const textarea_padding: f32 = 12.0;
 const textarea_max_lines: usize = 4;

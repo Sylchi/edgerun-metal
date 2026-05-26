@@ -8,9 +8,12 @@ const icon = @import("../../icon.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
+const component_primitives = @import("Primitives.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+const contentInset = component_primitives.contentInset;
+const measureFixed = component_primitives.measureFixed;
 
 pub const Direction = struct {
     id: u32,
@@ -80,29 +83,6 @@ fn iconBounds(bounds: ui.Rect) ui.Rect {
     return ui.Rect.init(bounds.x + direction_icon_x, bounds.y + direction_icon_y, direction_icon_size, direction_icon_size);
 }
 
-fn contentInset(bounds: ui.Rect, padding: f32) ?ui.Rect {
-    const clamped = @min(@max(padding, 0.0), @min(bounds.w, bounds.h) * 0.5);
-    const out = bounds.insetUniform(clamped);
-    return if (out.valid()) out else null;
-}
-
-fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
-    const resolved_preferred = constrainPreferredSize(preferred, constraints);
-    return layout.Measurement.flexible(
-        .{ .w = @min(preferred.w, resolved_preferred.w), .h = @min(preferred.h, resolved_preferred.h) },
-        resolved_preferred,
-        .{ .w = measure_max_width, .h = preferred.h },
-    ).applyExact(constraints);
-}
-
-fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {
-    return .{
-        .w = constraints.width.limit(preferred.w),
-        .h = constraints.height.limit(preferred.h),
-    };
-}
-
-const measure_max_width: f32 = 4096.0;
 pub const direction_item_count: u32 = 2;
 const direction_ltr_label = "LTR";
 const direction_rtl_label = "RTL";

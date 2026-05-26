@@ -12,6 +12,7 @@ const component_io = @import("ui/components/ComponentIO.zig");
 const component_test = @import("ui/components/TestSupport.zig");
 const tree_codec = @import("ui/components/TreeCodec.zig");
 const component_render = @import("ui/components/Render.zig");
+const component_primitives = @import("ui/components/Primitives.zig");
 const stack_component = @import("ui/components/Stack.zig");
 const slot_component = @import("ui/components/Slot.zig");
 const text_component = @import("ui/components/Text.zig");
@@ -493,7 +494,7 @@ fn nodeStackCrossAlign(value: ui.Align) layouts.Flex.Align {
 
 fn primitiveNodeMeasurement(node: ui.Node, constraints: layouts.types.Constraints) layouts.types.Measurement {
     const size = node.preferredSize();
-    const preferred = component_render.constrainPreferredSize(size, constraints);
+    const preferred = component_primitives.constrainPreferredSize(size, constraints);
     return layouts.types.Measurement.flexible(
         .{ .w = @min(size.w, preferred.w), .h = @min(size.h, preferred.h) },
         preferred,

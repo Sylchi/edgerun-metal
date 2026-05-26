@@ -62,6 +62,10 @@ const line_number_label_bytes: usize = 8;
 const editor_info_label_bytes: usize = 96;
 const explorer_file_count: usize = 4;
 
+pub const FileEntry = struct {
+    path: []const u8,
+};
+
 const palette = design.palette;
 const fill = app_layout.fill;
 const stroke = app_layout.stroke;
@@ -97,22 +101,36 @@ const explorer_files = [_][]const u8{
     "src/render/font_atlas.zig",
 };
 
+const default_file_entries = [_]FileEntry{
+    .{ .path = explorer_files[0] },
+    .{ .path = explorer_files[1] },
+    .{ .path = explorer_files[2] },
+    .{ .path = explorer_files[3] },
+};
+
 pub const State = struct {
     scroll_y: f32 = 0.0,
     hover_x: f32 = -1.0,
     hover_y: f32 = -1.0,
     label: []const u8 = "",
+    files: []const FileEntry = &.{},
     source: []const u8 = "",
     cursor: usize = 0,
+    selection_anchor: usize = 0,
+    selection_active: bool = false,
+    scroll_line: usize = 0,
     workspace_bytes: usize = 0,
     file_bytes: usize = 0,
     release_bytes: usize = 0,
     dirty: bool = false,
+    can_undo: bool = false,
+    can_redo: bool = false,
     status: []const u8 = "",
     compile_phase: []const u8 = "idle",
     compile_progress: f32 = 0.0,
     compile_summary: []const u8 = "",
     diagnostic: []const u8 = "",
+    diagnostic_line: usize = 0,
 };
 
 pub fn contentHeight(width: f32, state: State) f32 {
@@ -185,9 +203,12 @@ fn renderEditor(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.
         const line = state.source[line_start..line_end];
         const visible = line[0..@min(line.len, maxVisibleColumns(code_view.w))];
         const is_cursor_line = state.cursor >= line_start and state.cursor <= line_end;
+        const is_diagnostic_line = state.diagnostic_line != 0 and state.diagnostic_line == line_number;
         if (is_cursor_line) {
             try fill(scene, ui.Rect.init(code_view.x + code_pad + code_gutter_w - 4.0, y - 1.0, code_view.w - code_pad - code_gutter_w, code_line_h + 2.0), active_line, 0.0);
         }
+        if (is_diagnostic_line) try diagnosticMarker(scene, ui.Rect.init(code_view.x + code_pad + code_gutter_w - 16.0, y + 5.0, 6.0, 6.0));
+        try renderSelectionForLine(scene, code_view, y, line_start, line_start + visible.len, state);
         try text(scene, code_view.x + 12.0, y, code_gutter_w - 18.0, code_line_h, lineNumberLabel(rendered, line_number), if (is_cursor_line) palette.primary else palette.muted);
         try renderSyntaxLine(scene, code_view.x + code_pad + code_gutter_w, y, code_view.w - code_pad * 2.0 - code_gutter_w, visible);
         if (is_cursor_line) {
@@ -205,7 +226,7 @@ fn renderEditor(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.
         try text(scene, code_view.x + code_pad + code_gutter_w, code_view.y + code_pad, code_view.w - code_pad * 2.0 - code_gutter_w, code_line_h, emptyEditorLabel(state), emptyEditorColor(state));
     }
 
-    if (show_minimap) try renderMinimap(scene, ui.Rect.init(bounds.x + bounds.w - minimap_w - 10.0, code_view.y + 8.0, minimap_w, @max(1.0, code_view.h - 16.0)), state);
+    if (show_minimap) try renderMinimap(scene, ui.Rect.init(bounds.x + bounds.w - minimap_w - 10.0, code_view.y + 8.0, minimap_w, @max(1.0, code_view.h - 16.0)), state, visibleLineCapacity(code_view));
     try renderStatus(scene, ui.Rect.init(bounds.x, compiler_y, bounds.w, compiler_h), state);
     try renderEditorStatus(scene, ui.Rect.init(bounds.x, status_y, bounds.w, editor_status_h), state);
 }
@@ -242,6 +263,7 @@ fn renderEditorTitlebar(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
     try fill(scene, bounds, vscode_titlebar, panel_radius);
     try fill(scene, ui.Rect.init(bounds.x + activity_rail_w, bounds.y, @min(260.0, @max(120.0, bounds.w * 0.28)), bounds.h), vscode_tab, 0.0);
     try text(scene, bounds.x + activity_rail_w + 12.0, bounds.y + 9.0, 220.0, 14.0, fileName(state.label), palette.text);
+    if (state.dirty) try fill(scene, ui.Rect.init(bounds.x + activity_rail_w + @min(236.0, @max(96.0, bounds.w * 0.28 - 24.0)), bounds.y + 14.0, 6.0, 6.0), palette.amber, 3.0);
     try fill(scene, ui.Rect.init(bounds.x + activity_rail_w, bounds.y + bounds.h - 2.0, @min(260.0, @max(120.0, bounds.w * 0.28)), 2.0), palette.primary, 0.0);
     try fill(scene, ui.Rect.init(bounds.x + activity_rail_w + @min(260.0, @max(120.0, bounds.w * 0.28)), bounds.y, 132.0, bounds.h), vscode_tab_inactive, 0.0);
     try text(scene, bounds.x + activity_rail_w + @min(260.0, @max(120.0, bounds.w * 0.28)) + 12.0, bounds.y + 9.0, 112.0, 14.0, "artifact.wasm", palette.muted);
@@ -266,9 +288,11 @@ fn renderExplorer(scene: *ui.Scene, collector: *interaction.Collector, bounds: u
     try text(scene, bounds.x + 14.0, bounds.y + explorer_heading_h + 8.0, bounds.w - 28.0, 14.0, "EDGERUN-C", palette.text);
     const rows_y = bounds.y + explorer_heading_h + 38.0;
     try explorerRow(scene, bounds.x, rows_y, bounds.w, "src", .chevron_right, false);
-    for (explorer_files, 0..) |path, index| {
+    const files = explorerFilesForState(state);
+    for (files, 0..) |entry, index| {
         const y = rows_y + explorer_row_h * @as(f32, @floatFromInt(index + 1));
         const row_bounds = ui.Rect.init(bounds.x, y, bounds.w, explorer_row_h);
+        const path = entry.path;
         try explorerRow(scene, bounds.x, y, bounds.w, fileName(path), .file, std.mem.eql(u8, state.label, path));
         try components.collectComponentInteractions(collector, row_bounds, .{ .row_item = .{ .id = explorerFileHitId(index), .title = path, .detail = "" } });
     }
@@ -276,11 +300,20 @@ fn renderExplorer(scene: *ui.Scene, collector: *interaction.Collector, bounds: u
     try text(scene, bounds.x + 14.0, bounds.y + bounds.h - 26.0, bounds.w - 28.0, 12.0, toolbarDetail(state), toolbarDetailColor(state));
 }
 
+fn explorerFilesForState(state: State) []const FileEntry {
+    return if (state.files.len == 0) &default_file_entries else state.files;
+}
+
 pub fn sourceLabelFromHit(hit_id: u32) ?[]const u8 {
     if (hit_id < explorer_file_id_base) return null;
     const index: usize = @intCast(hit_id - explorer_file_id_base);
     if (index >= explorer_file_count) return null;
     return explorer_files[index];
+}
+
+pub fn sourceIndexFromHit(hit_id: u32) ?usize {
+    if (hit_id < explorer_file_id_base) return null;
+    return @intCast(hit_id - explorer_file_id_base);
 }
 
 pub fn cursorFromPoint(bounds: ui.Rect, state: State, x: f32, y: f32) usize {
@@ -322,8 +355,8 @@ fn editorCodeView(bounds: ui.Rect, state: State) ui.Rect {
 }
 
 fn visibleFirstLine(state: State, visible_lines: usize) usize {
-    const cursor_line = lineIndexAt(state.source, state.cursor);
-    return if (cursor_line > visible_lines / 2) cursor_line - visible_lines / 2 else 0;
+    const max_first = lineCount(state.source) -| visible_lines;
+    return @min(state.scroll_line, max_first);
 }
 
 fn visibleLineCapacity(code_view: ui.Rect) usize {
@@ -342,8 +375,12 @@ fn renderBreadcrumb(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
     try text(scene, bounds.x + 14.0, bounds.y + 7.0, bounds.w - 28.0, 12.0, state.label, palette.dim);
 }
 
-fn renderMinimap(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
+fn renderMinimap(scene: *ui.Scene, bounds: ui.Rect, state: State, visible_lines: usize) !void {
     try fill(scene, bounds, ui.Color{ .r = 22, .g = 22, .b = 22, .a = 180 }, 0.0);
+    const total_lines = lineCount(state.source);
+    const viewport_y = bounds.y + (@as(f32, @floatFromInt(@min(state.scroll_line, total_lines))) / @as(f32, @floatFromInt(@max(total_lines, 1)))) * bounds.h;
+    const viewport_h = @max(12.0, (@as(f32, @floatFromInt(@max(visible_lines, 1))) / @as(f32, @floatFromInt(@max(total_lines, 1)))) * bounds.h);
+    try fill(scene, ui.Rect.init(bounds.x, viewport_y, bounds.w, @min(bounds.h, viewport_h)), ui.Color{ .r = 38, .g = 79, .b = 120, .a = 150 }, 0.0);
     var y = bounds.y + 6.0;
     var line_start: usize = 0;
     var row: usize = 0;
@@ -353,10 +390,26 @@ fn renderMinimap(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
         const line_w = @min(bounds.w - 12.0, @as(f32, @floatFromInt(line_len)) * 1.2);
         const color = if (line_len == 0) vscode_line else palette.muted;
         try fill(scene, ui.Rect.init(bounds.x + 6.0, y, @max(2.0, line_w), 2.0), color, 0.0);
+        if (state.diagnostic_line != 0 and state.diagnostic_line == row + 1) try fill(scene, ui.Rect.init(bounds.x + bounds.w - 8.0, y - 1.0, 4.0, 4.0), palette.danger, 2.0);
         if (line_end_value == state.source.len) break;
         line_start = line_end_value + 1;
         y += 5.0;
     }
+}
+
+fn diagnosticMarker(scene: *ui.Scene, bounds: ui.Rect) !void {
+    try fill(scene, bounds, palette.danger, 3.0);
+}
+
+fn renderSelectionForLine(scene: *ui.Scene, code_view: ui.Rect, y: f32, line_start: usize, visible_end: usize, state: State) !void {
+    if (!state.selection_active or state.selection_anchor == state.cursor) return;
+    const selection = selectionBounds(state);
+    const start = @max(selection.start, line_start);
+    const end = @min(selection.end, visible_end);
+    if (start >= end) return;
+    const x = code_view.x + code_pad + code_gutter_w + @as(f32, @floatFromInt(start - line_start)) * code_char_w;
+    const w = @max(2.0, @as(f32, @floatFromInt(end - start)) * code_char_w);
+    try fill(scene, ui.Rect.init(x, y, w, code_line_h), ui.Color{ .r = 9, .g = 71, .b = 113, .a = 210 }, 0.0);
 }
 
 fn iconQuad(scene: *ui.Scene, bounds: ui.Rect, value: icon.Icon, color: ui.Color) ui.RenderError!void {
@@ -531,6 +584,18 @@ const SyntaxToken = struct {
     end: usize,
     color: ui.Color,
 };
+
+const SelectionBounds = struct {
+    start: usize,
+    end: usize,
+};
+
+fn selectionBounds(state: State) SelectionBounds {
+    return if (state.selection_anchor <= state.cursor)
+        .{ .start = state.selection_anchor, .end = state.cursor }
+    else
+        .{ .start = state.cursor, .end = state.selection_anchor };
+}
 
 fn nextToken(line: []const u8, start: usize) SyntaxToken {
     if (start >= line.len) return .{ .start = start, .end = start, .color = palette.text };

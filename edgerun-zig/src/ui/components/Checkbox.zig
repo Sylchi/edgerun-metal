@@ -7,11 +7,12 @@ const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
+const component_primitives = @import("Primitives.zig");
 const icon = @import("../../icon.zig");
-const tokens = @import("../../ui_tokens.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+const measureFixed = component_primitives.measureFixed;
 
 pub const Checkbox = struct {
     id: u32,
@@ -24,13 +25,13 @@ pub const Checkbox = struct {
 
     pub fn render(self: Checkbox, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         const box = ui.Rect.init(bounds.x, bounds.y + (bounds.h - checkbox_box_size) * 0.5, checkbox_box_size, checkbox_box_size);
-        try scene.pushRect(box, if (self.checked) options.style.accent else options.style.panel, .fill, control_radius, 0.0);
-        try scene.pushRect(box, if (self.checked) options.style.accent else options.style.border, .border, control_radius, 0.0);
+        try scene.pushRect(box, if (self.checked) options.style.accent else options.style.panel, .fill, component_primitives.control_radius, 0.0);
+        try scene.pushRect(box, if (self.checked) options.style.accent else options.style.border, .border, component_primitives.control_radius, 0.0);
         if (self.checked) {
             try scene.pushIconQuad(.{ .bounds = box.insetUniform(checkbox_icon_inset), .icon_id = icon.id(.check), .color = options.style.bg });
         }
         const label_x = box.x + box.w + checkbox_text_gap;
-        try scene.pushText(ui.Rect.init(label_x, bounds.y, @max(min_extent, bounds.x + bounds.w - label_x), bounds.h).withHeightCentered(control_label_height), self.label, options.style.text);
+        try scene.pushText(ui.Rect.init(label_x, bounds.y, @max(component_primitives.min_extent, bounds.x + bounds.w - label_x), bounds.h).withHeightCentered(component_primitives.control_label_height), self.label, options.style.text);
     }
 
     pub fn collectInteractions(self: Checkbox, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
@@ -59,26 +60,6 @@ pub const Checkbox = struct {
     }
 };
 
-fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
-    const resolved_preferred = constrainPreferredSize(preferred, constraints);
-    return layout.Measurement.flexible(
-        .{ .w = @min(preferred.w, resolved_preferred.w), .h = @min(preferred.h, resolved_preferred.h) },
-        resolved_preferred,
-        .{ .w = measure_max_width, .h = preferred.h },
-    ).applyExact(constraints);
-}
-
-fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {
-    return .{
-        .w = constraints.width.limit(preferred.w),
-        .h = constraints.height.limit(preferred.h),
-    };
-}
-
-const min_extent: f32 = 1.0;
-const measure_max_width: f32 = 4096.0;
-const control_radius: f32 = tokens.Component.control_radius;
-const control_label_height: f32 = tokens.Component.control_label_height;
 const checkbox_box_size: f32 = 18.0;
 const checkbox_icon_inset: f32 = 3.0;
 const checkbox_text_gap: f32 = 10.0;

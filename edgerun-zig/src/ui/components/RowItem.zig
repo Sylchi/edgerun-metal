@@ -7,10 +7,12 @@ const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
+const component_primitives = @import("Primitives.zig");
 const tokens = @import("../../ui_tokens.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+const measureFixed = component_primitives.measureFixed;
 
 pub const RowItem = struct {
     id: u32,
@@ -73,23 +75,6 @@ fn textBounds(bounds: ui.Rect) ?ui.Rect {
     return if (out.valid()) out else null;
 }
 
-fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
-    const resolved_preferred = constrainPreferredSize(preferred, constraints);
-    return layout.Measurement.flexible(
-        .{ .w = @min(preferred.w, resolved_preferred.w), .h = @min(preferred.h, resolved_preferred.h) },
-        resolved_preferred,
-        .{ .w = measure_max_width, .h = preferred.h },
-    ).applyExact(constraints);
-}
-
-fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {
-    return .{
-        .w = constraints.width.limit(preferred.w),
-        .h = constraints.height.limit(preferred.h),
-    };
-}
-
-const measure_max_width: f32 = 4096.0;
 const row_radius: f32 = tokens.Component.row_radius;
 const row_text_padding_x: f32 = 12.0;
 const row_title_offset_y: f32 = 8.0;

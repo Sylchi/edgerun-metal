@@ -6,10 +6,11 @@ const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
-const tokens = @import("../../ui_tokens.zig");
+const component_primitives = @import("Primitives.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+const measureFixed = component_primitives.measureFixed;
 
 pub const AspectRatio = struct {
     ratio_w: u16 = 16,
@@ -21,8 +22,8 @@ pub const AspectRatio = struct {
 
     pub fn render(self: AspectRatio, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         const frame = frameBounds(bounds, self.ratio_w, self.ratio_h);
-        try scene.pushRect(frame, options.style.row, .fill, control_radius, 0.0);
-        try scene.pushRect(frame, options.style.border, .border, control_radius, 0.0);
+        try scene.pushRect(frame, options.style.row, .fill, component_primitives.control_radius, 0.0);
+        try scene.pushRect(frame, options.style.border, .border, component_primitives.control_radius, 0.0);
     }
 
     pub fn measure(self: AspectRatio, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
@@ -48,32 +49,13 @@ pub const AspectRatio = struct {
 };
 
 fn frameBounds(bounds: ui.Rect, ratio_w: u16, ratio_h: u16) ui.Rect {
-    const safe_w = @max(@as(f32, @floatFromInt(ratio_w)), min_extent);
-    const safe_h = @max(@as(f32, @floatFromInt(ratio_h)), min_extent);
+    const safe_w = @max(@as(f32, @floatFromInt(ratio_w)), component_primitives.min_extent);
+    const safe_h = @max(@as(f32, @floatFromInt(ratio_h)), component_primitives.min_extent);
     const frame_w = @min(bounds.w, bounds.h * safe_w / safe_h);
     const frame_h = @min(bounds.h, frame_w * safe_h / safe_w);
     return ui.Rect.init(bounds.x + (bounds.w - frame_w) * 0.5, bounds.y + (bounds.h - frame_h) * 0.5, frame_w, frame_h);
 }
 
-fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
-    const resolved_preferred = constrainPreferredSize(preferred, constraints);
-    return layout.Measurement.flexible(
-        .{ .w = @min(preferred.w, resolved_preferred.w), .h = @min(preferred.h, resolved_preferred.h) },
-        resolved_preferred,
-        .{ .w = measure_max_width, .h = preferred.h },
-    ).applyExact(constraints);
-}
-
-fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {
-    return .{
-        .w = constraints.width.limit(preferred.w),
-        .h = constraints.height.limit(preferred.h),
-    };
-}
-
-const min_extent: f32 = 1.0;
-const measure_max_width: f32 = 4096.0;
-const control_radius: f32 = tokens.Component.control_radius;
 pub const preferred_aspect_ratio = ui.Size{ .w = 220.0, .h = 124.0 };
 
 test "aspect ratio component serializes to canonical object and deserializes" {

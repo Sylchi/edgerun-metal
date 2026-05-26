@@ -8,9 +8,12 @@ const text_metrics = @import("../../ui_text_metrics.zig");
 const tokens = @import("../../ui_tokens.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
+const component_primitives = @import("Primitives.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+const constrainPreferredSize = component_primitives.constrainPreferredSize;
+const measure_max_width = component_primitives.measure_max_width;
 
 pub const Badge = struct {
     label: []const u8,
@@ -84,18 +87,9 @@ fn alphaPaint(color: ui.Color, text_color: ui.Color) BadgePaint {
 
 fn labelBounds(bounds: ui.Rect) ui.Rect {
     const resolved_padding = @min(badge_padding_x, bounds.w * 0.5);
-    return ui.Rect.init(bounds.x + resolved_padding, bounds.y + (bounds.h - badge_text_height) * 0.5, @max(min_extent, bounds.w - resolved_padding * 2.0), badge_text_height);
+    return ui.Rect.init(bounds.x + resolved_padding, bounds.y + (bounds.h - badge_text_height) * 0.5, @max(component_primitives.min_extent, bounds.w - resolved_padding * 2.0), badge_text_height);
 }
 
-fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {
-    return .{
-        .w = constraints.width.limit(preferred.w),
-        .h = constraints.height.limit(preferred.h),
-    };
-}
-
-const min_extent: f32 = 1.0;
-const measure_max_width: f32 = 4096.0;
 pub const badge_height: f32 = tokens.Component.badge_height;
 pub const badge_text_height: f32 = tokens.Component.badge_text_height;
 pub const badge_padding_x: f32 = tokens.Component.badge_padding_x;

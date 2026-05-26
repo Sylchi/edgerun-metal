@@ -7,9 +7,12 @@ const layout = @import("../../layouts/Types.zig");
 const tokens = @import("../../ui_tokens.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
+const component_primitives = @import("Primitives.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+const constrainPreferredSize = component_primitives.constrainPreferredSize;
+const measure_max_width = component_primitives.measure_max_width;
 
 pub const Card = struct {
     title: []const u8,
@@ -25,10 +28,10 @@ pub const Card = struct {
         if (self.title.len == 0 and self.detail.len == 0) return;
 
         const content_x = bounds.x + surface_padding;
-        const content_w = @max(min_extent, bounds.w - surface_padding * 2.0);
+        const content_w = @max(component_primitives.min_extent, bounds.w - surface_padding * 2.0);
         var cursor_y = bounds.y + surface_padding;
         if (self.title.len != 0) {
-            const remaining_h = @max(min_extent, bounds.y + bounds.h - cursor_y - surface_padding);
+            const remaining_h = @max(component_primitives.min_extent, bounds.y + bounds.h - cursor_y - surface_padding);
             const title_h = @min(remaining_h, titleHeightFor(content_w, self.title));
             try scene.pushWrappedText(ui.Rect.init(content_x, cursor_y, content_w, title_h), self.title, options.style.text, .{
                 .line_height = surface_title_height,
@@ -39,7 +42,7 @@ pub const Card = struct {
         }
         if (self.detail.len != 0) {
             if (self.title.len != 0) cursor_y += surface_detail_gap;
-            try scene.pushWrappedText(ui.Rect.init(content_x, cursor_y, content_w, @max(min_extent, bounds.y + bounds.h - cursor_y - surface_padding)), self.detail, options.style.muted, .{
+            try scene.pushWrappedText(ui.Rect.init(content_x, cursor_y, content_w, @max(component_primitives.min_extent, bounds.y + bounds.h - cursor_y - surface_padding)), self.detail, options.style.muted, .{
                 .line_height = surface_detail_height,
                 .average_char_width = surface_detail_average_w,
                 .max_lines = surface_detail_max_lines,
@@ -145,14 +148,6 @@ fn titleHeightFor(width: f32, title: []const u8) f32 {
     return @as(f32, @floatFromInt(@max(@as(usize, 1), line_count))) * surface_title_height;
 }
 
-fn constrainPreferredSize(size: ui.Size, constraints: layout.Constraints) ui.Size {
-    return .{
-        .w = constraints.width.limit(size.w),
-        .h = constraints.height.limit(size.h),
-    };
-}
-
-const min_extent: f32 = 1.0;
 pub const surface_padding: f32 = tokens.Component.surface_padding;
 pub const surface_title_height: f32 = tokens.Component.surface_title_height;
 pub const surface_detail_height: f32 = tokens.Component.surface_detail_height;
@@ -167,7 +162,6 @@ const surface_title_max_lines: usize = 2;
 const surface_detail_average_w: f32 = 8.0;
 const surface_detail_max_lines: usize = 3;
 const surface_min_width: f32 = 160.0;
-const measure_max_width: f32 = 4096.0;
 const measure_max_height: f32 = 4096.0;
 
 pub fn variantTag(variant: common.SurfaceVariant) u16 {

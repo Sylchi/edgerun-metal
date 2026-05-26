@@ -7,9 +7,11 @@ const layout = @import("../../layouts/Types.zig");
 const text_metrics = @import("../../ui_text_metrics.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
+const component_primitives = @import("Primitives.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+const constrainPreferredSize = component_primitives.constrainPreferredSize;
 
 pub const Text = struct {
     value: []const u8,
@@ -19,7 +21,7 @@ pub const Text = struct {
     }
 
     pub fn render(self: Text, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        const line_height = @min(text_line_height, @max(min_extent, bounds.h));
+        const line_height = @min(text_line_height, @max(component_primitives.min_extent, bounds.h));
         try scene.pushWrappedText(bounds, self.value, options.style.text, .{
             .line_height = line_height,
             .average_char_width = text_metrics.averageWidth(self.value, line_height),
@@ -58,14 +60,6 @@ pub const Text = struct {
     }
 };
 
-fn constrainPreferredSize(size: ui.Size, constraints: layout.Constraints) ui.Size {
-    return .{
-        .w = constraints.width.limit(size.w),
-        .h = constraints.height.limit(size.h),
-    };
-}
-
-const min_extent: f32 = 1.0;
 const text_line_height: f32 = 18.0;
 const text_max_lines: usize = 8;
 const text_min_width: f32 = 24.0;

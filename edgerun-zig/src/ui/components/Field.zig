@@ -7,10 +7,14 @@ const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
-const component_render = @import("Render.zig");
+const primitives = @import("Primitives.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+const measureFixed = primitives.measureFixed;
+const renderControlFrame = primitives.renderControlFrame;
+const renderControlStateOverlay = primitives.renderControlStateOverlay;
+const renderControlText = primitives.renderControlText;
 
 pub const Field = struct {
     id: u32,
@@ -22,16 +26,25 @@ pub const Field = struct {
     }
 
     pub fn render(self: Field, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return component_render.renderField(scene, bounds, self.label, self.placeholder, options);
+        try scene.pushText(labelBounds(bounds), self.label, options.style.text);
+        try renderInput(scene, inputBoundsFor(bounds, options), self.placeholder, inputOptions(options));
+        if (options.validation) |validation| {
+            const color = switch (validation.state) {
+                .helper => options.style.muted,
+                .invalid => common.state_invalid_border,
+            };
+            try scene.pushText(validationBounds(bounds), validation.message, color);
+        }
     }
 
     pub fn collectInteractions(self: Field, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-        try collector.addHit(component_render.fieldInputBounds(bounds), .input, self.id);
+        try collector.addHit(inputBounds(bounds), .input, self.id);
     }
 
     pub fn measure(self: Field, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = self;
-        return component_render.measureField(constraints, options);
+        const preferred = if (options.validation == null) preferred_field else preferred_field_with_validation;
+        return measureFixed(preferred, constraints);
     }
 
     pub fn toObject(self: Field, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -49,6 +62,49 @@ pub const Field = struct {
         };
     }
 };
+
+fn renderInput(scene: *ui.Scene, bounds: ui.Rect, placeholder: []const u8, options: RenderOptions) ui.RenderError!void {
+    try renderControlFrame(scene, bounds, options.style.panel, options.style.border, primitives.control_radius);
+    try renderControlStateOverlay(scene, bounds, options, primitives.control_radius);
+    try renderControlText(scene, bounds, primitives.control_text_padding, primitives.control_label_height, placeholder, options.style.muted, .start);
+}
+
+fn labelBounds(bounds: ui.Rect) ui.Rect {
+    return ui.Rect.init(bounds.x, bounds.y, bounds.w, field_label_h);
+}
+
+fn inputBounds(bounds: ui.Rect) ui.Rect {
+    return ui.Rect.init(bounds.x, bounds.y + field_label_h + field_gap, bounds.w, @max(primitives.min_extent, bounds.h - field_label_h - field_gap));
+}
+
+fn validationBounds(bounds: ui.Rect) ui.Rect {
+    const input = inputBoundsWithValidation(bounds);
+    return ui.Rect.init(bounds.x, input.y + input.h + field_validation_gap, bounds.w, field_validation_h);
+}
+
+fn inputOptions(options: RenderOptions) RenderOptions {
+    var next = options;
+    if (options.validation) |validation| {
+        next.control.invalid = next.control.invalid or validation.state == .invalid;
+    }
+    return next;
+}
+
+fn inputBoundsFor(bounds: ui.Rect, options: RenderOptions) ui.Rect {
+    return if (options.validation == null) inputBounds(bounds) else inputBoundsWithValidation(bounds);
+}
+
+fn inputBoundsWithValidation(bounds: ui.Rect) ui.Rect {
+    return ui.Rect.init(bounds.x, bounds.y + field_label_h + field_gap, bounds.w, @max(primitives.min_extent, @min(field_input_h, bounds.h - field_label_h - field_gap)));
+}
+
+const preferred_field = ui.Size{ .w = 220.0, .h = 56.0 };
+const preferred_field_with_validation = ui.Size{ .w = 220.0, .h = 74.0 };
+const field_label_h: f32 = 14.0;
+const field_gap: f32 = 6.0;
+const field_input_h: f32 = 36.0;
+const field_validation_gap: f32 = 6.0;
+const field_validation_h: f32 = 12.0;
 
 test "field component serializes to canonical object and deserializes" {
     const field = Field{ .id = 330, .label = "Email", .placeholder = "m@example.com" };
@@ -100,6 +156,6 @@ test "field component measurement reserves helper text height" {
         .validation = .{ .state = .helper, .message = "Visible to your team" },
     });
 
-    try std.testing.expectEqual(component_render.preferred_field.h, plain.preferred.h);
-    try std.testing.expectEqual(component_render.preferred_field_with_validation.h, helper.preferred.h);
+    try std.testing.expectEqual(preferred_field.h, plain.preferred.h);
+    try std.testing.expectEqual(preferred_field_with_validation.h, helper.preferred.h);
 }

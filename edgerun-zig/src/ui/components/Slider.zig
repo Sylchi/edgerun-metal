@@ -7,9 +7,11 @@ const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
+const component_primitives = @import("Primitives.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+const measureFixed = component_primitives.measureFixed;
 
 pub const Slider = struct {
     id: u32,
@@ -66,23 +68,6 @@ fn renderTrack(scene: *ui.Scene, track: ui.Rect, value: f32, options: RenderOpti
     try scene.pushRect(ui.Rect.init(track.x, track.y, fill_width, track.h), options.style.accent, .fill, slider_track_height * 0.5, 0.0);
 }
 
-fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
-    const resolved_preferred = constrainPreferredSize(preferred, constraints);
-    return layout.Measurement.flexible(
-        .{ .w = @min(preferred.w, resolved_preferred.w), .h = @min(preferred.h, resolved_preferred.h) },
-        resolved_preferred,
-        .{ .w = measure_max_width, .h = preferred.h },
-    ).applyExact(constraints);
-}
-
-fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {
-    return .{
-        .w = constraints.width.limit(preferred.w),
-        .h = constraints.height.limit(preferred.h),
-    };
-}
-
-const measure_max_width: f32 = 4096.0;
 const slider_label_height: f32 = 14.0;
 const slider_track_height: f32 = 6.0;
 pub const slider_thumb_size: f32 = 16.0;

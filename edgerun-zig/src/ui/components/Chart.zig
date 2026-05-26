@@ -7,9 +7,11 @@ const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
+const component_primitives = @import("Primitives.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+const measureFixed = component_primitives.measureFixed;
 
 pub const Chart = struct {
     id: u32,
@@ -23,7 +25,7 @@ pub const Chart = struct {
         const plot = plotBounds(bounds);
         try scene.pushRect(bounds, options.style.panel, .fill, chart_radius, 0.0);
         try scene.pushRect(bounds, options.style.border, .border, chart_radius, 0.0);
-        try scene.pushText(ui.Rect.init(bounds.x + chart_padding, bounds.y + chart_padding, @max(min_extent, bounds.w - chart_padding * 2.0), chart_label_h), self.label, options.style.text);
+        try scene.pushText(ui.Rect.init(bounds.x + chart_padding, bounds.y + chart_padding, @max(component_primitives.min_extent, bounds.w - chart_padding * 2.0), chart_label_h), self.label, options.style.text);
         try scene.pushRect(ui.Rect.init(plot.x, plot.y + plot.h - separator_height, plot.w, separator_height), options.style.border, .fill, 0.0, 0.0);
         for (0..chart_bar_count) |index| {
             const bar = barBounds(bounds, index);
@@ -62,8 +64,8 @@ pub const Chart = struct {
 fn barBounds(bounds: ui.Rect, index: usize) ui.Rect {
     const plot = plotBounds(bounds);
     const gap_total = chart_bar_gap * @as(f32, @floatFromInt(chart_bar_count - 1));
-    const bar_w = @max(min_extent, (plot.w - gap_total) / @as(f32, @floatFromInt(chart_bar_count)));
-    const h = @max(min_extent, plot.h * chart_bar_values[index]);
+    const bar_w = @max(component_primitives.min_extent, (plot.w - gap_total) / @as(f32, @floatFromInt(chart_bar_count)));
+    const h = @max(component_primitives.min_extent, plot.h * chart_bar_values[index]);
     return ui.Rect.init(plot.x + @as(f32, @floatFromInt(index)) * (bar_w + chart_bar_gap), plot.y + plot.h - h, bar_w, h);
 }
 
@@ -71,29 +73,11 @@ fn plotBounds(bounds: ui.Rect) ui.Rect {
     return ui.Rect.init(
         bounds.x + chart_padding,
         bounds.y + chart_padding + chart_label_h + chart_label_gap,
-        @max(min_extent, bounds.w - chart_padding * 2.0),
-        @max(min_extent, bounds.h - chart_padding * 2.0 - chart_label_h - chart_label_gap),
+        @max(component_primitives.min_extent, bounds.w - chart_padding * 2.0),
+        @max(component_primitives.min_extent, bounds.h - chart_padding * 2.0 - chart_label_h - chart_label_gap),
     );
 }
 
-fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
-    const resolved_preferred = constrainPreferredSize(preferred, constraints);
-    return layout.Measurement.flexible(
-        .{ .w = @min(preferred.w, resolved_preferred.w), .h = @min(preferred.h, resolved_preferred.h) },
-        resolved_preferred,
-        .{ .w = measure_max_width, .h = preferred.h },
-    ).applyExact(constraints);
-}
-
-fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {
-    return .{
-        .w = constraints.width.limit(preferred.w),
-        .h = constraints.height.limit(preferred.h),
-    };
-}
-
-const min_extent: f32 = 1.0;
-const measure_max_width: f32 = 4096.0;
 const separator_height: f32 = 1.0;
 pub const chart_bar_count: usize = 5;
 const chart_radius: f32 = 8.0;

@@ -8,10 +8,12 @@ const layout = @import("../../layouts/Types.zig");
 const text_metrics = @import("../../ui_text_metrics.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
-const tokens = @import("../../ui_tokens.zig");
+const component_primitives = @import("Primitives.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+const contentInset = component_primitives.contentInset;
+const measureFixed = component_primitives.measureFixed;
 
 pub const InputGroup = struct {
     id: u32,
@@ -23,17 +25,17 @@ pub const InputGroup = struct {
     }
 
     pub fn render(self: InputGroup, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        try scene.pushRect(bounds, options.style.panel, .fill, control_radius, 0.0);
-        try scene.pushRect(bounds, options.style.border, .border, control_radius, 0.0);
-        const addon_w = @min(input_group_addon_max_w, @max(input_group_addon_min_w, text_metrics.width(self.addon, control_label_height) + input_group_addon_padding * 2.0));
+        try scene.pushRect(bounds, options.style.panel, .fill, component_primitives.control_radius, 0.0);
+        try scene.pushRect(bounds, options.style.border, .border, component_primitives.control_radius, 0.0);
+        const addon_w = @min(input_group_addon_max_w, @max(input_group_addon_min_w, text_metrics.width(self.addon, component_primitives.control_label_height) + input_group_addon_padding * 2.0));
         const addon_bounds = ui.Rect.init(bounds.x, bounds.y, addon_w, bounds.h);
         if (contentInset(addon_bounds, input_group_addon_padding)) |inner| {
-            try scene.pushAlignedText(inner.withHeightCentered(control_label_height), self.addon, options.style.muted, .center);
+            try scene.pushAlignedText(inner.withHeightCentered(component_primitives.control_label_height), self.addon, options.style.muted, .center);
         }
-        try scene.pushRect(ui.Rect.init(addon_bounds.x + addon_bounds.w, bounds.y + input_group_separator_inset, separator_height, @max(min_extent, bounds.h - input_group_separator_inset * 2.0)), options.style.border, .fill, 0.0, 0.0);
-        const control_bounds = ui.Rect.init(addon_bounds.x + addon_bounds.w + input_group_control_gap, bounds.y, @max(min_extent, bounds.w - addon_w - input_group_control_gap), bounds.h);
-        if (contentInset(control_bounds, control_text_padding)) |inner| {
-            try scene.pushText(inner.withHeightCentered(control_label_height), self.placeholder, options.style.muted);
+        try scene.pushRect(ui.Rect.init(addon_bounds.x + addon_bounds.w, bounds.y + input_group_separator_inset, separator_height, @max(component_primitives.min_extent, bounds.h - input_group_separator_inset * 2.0)), options.style.border, .fill, 0.0, 0.0);
+        const control_bounds = ui.Rect.init(addon_bounds.x + addon_bounds.w + input_group_control_gap, bounds.y, @max(component_primitives.min_extent, bounds.w - addon_w - input_group_control_gap), bounds.h);
+        if (contentInset(control_bounds, component_primitives.control_text_padding)) |inner| {
+            try scene.pushText(inner.withHeightCentered(component_primitives.control_label_height), self.placeholder, options.style.muted);
         }
     }
 
@@ -63,34 +65,7 @@ pub const InputGroup = struct {
     }
 };
 
-fn contentInset(bounds: ui.Rect, padding: f32) ?ui.Rect {
-    const clamped = @min(@max(padding, 0.0), @min(bounds.w, bounds.h) * 0.5);
-    const out = bounds.insetUniform(clamped);
-    return if (out.valid()) out else null;
-}
-
-fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
-    const resolved_preferred = constrainPreferredSize(preferred, constraints);
-    return layout.Measurement.flexible(
-        .{ .w = @min(preferred.w, resolved_preferred.w), .h = @min(preferred.h, resolved_preferred.h) },
-        resolved_preferred,
-        .{ .w = measure_max_width, .h = preferred.h },
-    ).applyExact(constraints);
-}
-
-fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {
-    return .{
-        .w = constraints.width.limit(preferred.w),
-        .h = constraints.height.limit(preferred.h),
-    };
-}
-
-const min_extent: f32 = 1.0;
-const measure_max_width: f32 = 4096.0;
 const separator_height: f32 = 1.0;
-const control_radius: f32 = tokens.Component.control_radius;
-const control_text_padding: f32 = tokens.Component.control_text_padding;
-const control_label_height: f32 = tokens.Component.control_label_height;
 const input_group_addon_min_w: f32 = 42.0;
 const input_group_addon_max_w: f32 = 96.0;
 const input_group_addon_padding: f32 = 10.0;

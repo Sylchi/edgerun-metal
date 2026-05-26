@@ -8,10 +8,12 @@ const icon = @import("../../icon.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
-const tokens = @import("../../ui_tokens.zig");
+const component_primitives = @import("Primitives.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+const contentInset = component_primitives.contentInset;
+const measureFixed = component_primitives.measureFixed;
 
 pub const NavigationMenu = struct {
     id: u32,
@@ -71,12 +73,12 @@ fn encodedId(id: u32, active: u16) u32 {
 pub const navigation_menu_id_stride: u32 = navigation_menu_item_count;
 
 fn renderItem(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, active: bool, show_chevron: bool, options: RenderOptions) ui.RenderError!void {
-    try scene.pushRect(bounds, if (active) options.style.row else ui.Color.clear, .fill, control_radius, 0.0);
+    try scene.pushRect(bounds, if (active) options.style.row else ui.Color.clear, .fill, component_primitives.control_radius, 0.0);
     const icon_space: f32 = if (show_chevron) navigation_menu_icon_space else 0.0;
-    const text_bounds = ui.Rect.init(bounds.x, bounds.y, @max(min_extent, bounds.w - icon_space), bounds.h);
+    const text_bounds = ui.Rect.init(bounds.x, bounds.y, @max(component_primitives.min_extent, bounds.w - icon_space), bounds.h);
     const text_color = if (active) options.style.text else options.style.muted;
     if (contentInset(text_bounds, navigation_menu_text_padding)) |inner| {
-        try scene.pushAlignedText(inner.withHeightCentered(control_label_height), label, text_color, .center);
+        try scene.pushAlignedText(inner.withHeightCentered(component_primitives.control_label_height), label, text_color, .center);
     }
     if (show_chevron) {
         try scene.pushIconQuad(.{
@@ -106,32 +108,6 @@ fn itemBounds(bounds: ui.Rect, index: usize) ui.Rect {
     return ui.Rect.init(item_x, bounds.y, item_w, @min(bounds.h, navigation_menu_item_h));
 }
 
-fn contentInset(bounds: ui.Rect, padding: f32) ?ui.Rect {
-    const clamped = @min(@max(padding, 0.0), @min(bounds.w, bounds.h) * 0.5);
-    const out = bounds.insetUniform(clamped);
-    return if (out.valid()) out else null;
-}
-
-fn measureFixed(preferred: ui.Size, constraints: layout.Constraints) layout.Measurement {
-    const resolved_preferred = constrainPreferredSize(preferred, constraints);
-    return layout.Measurement.flexible(
-        .{ .w = @min(preferred.w, resolved_preferred.w), .h = @min(preferred.h, resolved_preferred.h) },
-        resolved_preferred,
-        .{ .w = measure_max_width, .h = preferred.h },
-    ).applyExact(constraints);
-}
-
-fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {
-    return .{
-        .w = constraints.width.limit(preferred.w),
-        .h = constraints.height.limit(preferred.h),
-    };
-}
-
-const min_extent: f32 = 1.0;
-const measure_max_width: f32 = 4096.0;
-const control_radius: f32 = tokens.Component.control_radius;
-const control_label_height: f32 = tokens.Component.control_label_height;
 pub const navigation_menu_item_count: u32 = 3;
 const navigation_menu_gap: f32 = 4.0;
 const navigation_menu_item_h: f32 = 36.0;
