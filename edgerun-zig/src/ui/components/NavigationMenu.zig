@@ -8,6 +8,7 @@ const icon = @import("../../icon.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
+const icon_component = @import("Icon.zig");
 const component_primitives = @import("Primitives.zig");
 const list_layout = @import("ListLayout.zig");
 
@@ -24,6 +25,10 @@ pub const NavigationMenu = struct {
 
     pub fn node(self: NavigationMenu) ui.Node {
         return ui.navigationMenuNode(self.id, self.first, self.second, activeIndex(self.active));
+    }
+
+    pub fn accessibility(self: NavigationMenu) common.Accessibility {
+        return .{ .role = .menu, .label = self.first, .control_id = self.id };
     }
 
     pub fn render(self: NavigationMenu, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
@@ -78,16 +83,12 @@ fn renderItem(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, active: bool
         try scene.pushAlignedText(inner.withHeightCentered(component_primitives.control_label_height), label, text_color, .center);
     }
     if (show_chevron) {
-        try scene.pushIconQuad(.{
-            .bounds = ui.Rect.init(
-                bounds.x + bounds.w - navigation_menu_icon_size - navigation_menu_icon_padding,
-                bounds.y + (bounds.h - navigation_menu_icon_size) * 0.5,
-                navigation_menu_icon_size,
-                navigation_menu_icon_size,
-            ),
-            .icon_id = icon.id(.chevron_right),
-            .color = options.style.muted,
-        });
+        try icon_component.renderGlyph(scene, ui.Rect.init(
+            bounds.x + bounds.w - navigation_menu_icon_size - navigation_menu_icon_padding,
+            bounds.y + (bounds.h - navigation_menu_icon_size) * 0.5,
+            navigation_menu_icon_size,
+            navigation_menu_icon_size,
+        ), .chevron_right, options.style.muted);
     }
 }
 

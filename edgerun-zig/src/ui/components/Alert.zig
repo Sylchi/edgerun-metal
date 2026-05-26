@@ -7,6 +7,7 @@ const icon = @import("../../icon.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
+const icon_component = @import("Icon.zig");
 const component_primitives = @import("Primitives.zig");
 
 const Error = common.Error;
@@ -26,11 +27,7 @@ pub const Alert = struct {
         const content_color = if (self.destructive) alert_danger else options.style.text;
         try scene.pushRect(bounds, options.style.panel, .fill, alert_radius, 0.0);
         try scene.pushRect(bounds, if (self.destructive) alert_danger else options.style.border, .border, alert_radius, 0.0);
-        try scene.pushIconQuad(.{
-            .bounds = ui.Rect.init(bounds.x + alert_padding_x, bounds.y + alert_padding_y, alert_icon_size, alert_icon_size),
-            .icon_id = icon.id(if (self.destructive) .warning else .shield),
-            .color = content_color,
-        });
+        try icon_component.renderGlyph(scene, ui.Rect.init(bounds.x + alert_padding_x, bounds.y + alert_padding_y, alert_icon_size, alert_icon_size), if (self.destructive) .warning else .shield, content_color);
         const text_w = textWidth(bounds);
         const title_h = component_primitives.measuredTextHeight(self.title, text_w, alert_title_height, alert_title_max_lines);
         try scene.pushWrappedText(ui.Rect.init(bounds.x + alert_text_x, bounds.y + alert_padding_y - 1.0, text_w, title_h), self.title, content_color, component_primitives.textWrap(self.title, alert_title_height, alert_title_max_lines));
@@ -68,6 +65,10 @@ pub const Alert = struct {
 
     pub fn fromView(view: object.View) Error!Alert {
         const alert = try component_codec.nodeView(view, .alert);
+        return fromNode(alert);
+    }
+
+    pub fn fromNode(alert: @FieldType(ui.Node, "alert")) Error!Alert {
         return .{ .title = alert.title, .detail = alert.detail, .destructive = alert.destructive };
     }
 };

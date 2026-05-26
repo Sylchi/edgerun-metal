@@ -8,6 +8,7 @@ const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
 const component_primitives = @import("Primitives.zig");
+const icon_component = @import("Icon.zig");
 const icon = @import("../../icon.zig");
 
 const Error = common.Error;
@@ -23,6 +24,10 @@ pub const Select = struct {
         return ui.selectNode(self.id, self.label);
     }
 
+    pub fn accessibility(self: Select) common.Accessibility {
+        return .{ .role = .input, .label = self.label, .control_id = self.id };
+    }
+
     pub fn render(self: Select, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         try scene.pushRect(bounds, options.style.panel, .fill, component_primitives.control_radius, 0.0);
         try scene.pushRect(bounds, options.style.border, .border, component_primitives.control_radius, 0.0);
@@ -31,7 +36,7 @@ pub const Select = struct {
             const text_h = @min(text_bounds.h, component_primitives.measuredTextHeight(self.label, text_bounds.w, component_primitives.control_label_height, select_label_max_lines));
             try scene.pushWrappedText(text_bounds.withHeightCentered(text_h), self.label, options.style.text, component_primitives.textWrap(self.label, component_primitives.control_label_height, select_label_max_lines));
             const arrow_bounds = ui.Rect.init(label_bounds.x + label_bounds.w - select_icon_size, label_bounds.y + (label_bounds.h - select_icon_size) * 0.5, select_icon_size, select_icon_size);
-            try scene.pushIconQuad(.{ .bounds = arrow_bounds, .icon_id = icon.id(.chevron_right), .color = options.style.muted });
+            try icon_component.renderGlyph(scene, arrow_bounds, .chevron_right, options.style.muted);
         }
     }
 

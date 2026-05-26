@@ -420,7 +420,7 @@ test "compositor renders canonical ir above app surfaces" {
     var command_compositor = try Compositor.init(command_target, &command_damage);
     const command_receipt = try command_compositor.compose(&.{app_surface}, scene, .clear);
 
-    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     var source_context: u8 = 0;
     const sources = renderer_ir.Sources{

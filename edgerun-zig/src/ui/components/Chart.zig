@@ -65,6 +65,10 @@ pub const Chart = struct {
 
     pub fn fromView(view: object.View) Error!Chart {
         const chart = try component_codec.nodeView(view, .chart);
+        return fromNode(chart);
+    }
+
+    pub fn fromNode(chart: @FieldType(ui.Node, "chart")) Error!Chart {
         return .{ .id = chart.id, .label = chart.label };
     }
 };

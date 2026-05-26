@@ -370,6 +370,8 @@ fn packedBuffers() renderer_pipeline.Buffers {
         .text_vertex_len = &packed_text_vertex_float_len,
         .icon_vertices = packed_icon_vertex_floats[0..],
         .icon_vertex_len = &packed_icon_vertex_float_len,
+        .icon_line_vertices = packed_icon_line_vertex_floats[0..],
+        .icon_line_vertex_len = &packed_icon_line_vertex_float_len,
         .image_vertices = packed_image_vertex_floats[0..],
         .image_vertex_len = &packed_image_vertex_float_len,
         .overlay_rects = packed_overlay_rect_floats[0..],
@@ -378,6 +380,8 @@ fn packedBuffers() renderer_pipeline.Buffers {
         .overlay_text_vertex_len = &packed_overlay_text_vertex_float_len,
         .overlay_icon_vertices = packed_overlay_icon_vertex_floats[0..],
         .overlay_icon_vertex_len = &packed_overlay_icon_vertex_float_len,
+        .overlay_icon_line_vertices = packed_overlay_icon_line_vertex_floats[0..],
+        .overlay_icon_line_vertex_len = &packed_overlay_icon_line_vertex_float_len,
     };
 }
 
@@ -2353,7 +2357,6 @@ fn finishPackedFrame(scene: ui.Scene, regions: []const interaction.Region, hover
     ensureFontAtlas() catch return finishError(.font_atlas);
     const buffers = packedBuffers();
     renderer_pipeline.packSceneWithSources(buffers, packedSources(), frame_scene.written()) catch return finishError(.packed_budget);
-    packPackedIconLines() catch return finishError(.packed_budget);
     presentPackedBuffers(buffers) catch return finishError(.render_failed);
     last_error = .ok;
     return @intFromEnum(ErrorCode.ok);
@@ -2463,19 +2466,6 @@ fn presentPackedBuffers(buffers: renderer_pipeline.Buffers) renderer_pipeline.Er
         renderer_pipeline.presentationResources(true, true),
     );
     recordPresentation(receipt);
-}
-
-fn packPackedIconLines() renderer_pipeline.IconLineError!void {
-    try renderer_pipeline.packIconLines(
-        packed_icon_vertex_floats[0..packed_icon_vertex_float_len],
-        &packed_icon_line_vertex_floats,
-        &packed_icon_line_vertex_float_len,
-    );
-    try renderer_pipeline.packIconLines(
-        packed_overlay_icon_vertex_floats[0..packed_overlay_icon_vertex_float_len],
-        &packed_overlay_icon_line_vertex_floats,
-        &packed_overlay_icon_line_vertex_float_len,
-    );
 }
 
 fn recordPresentation(receipt: renderer_pipeline.Receipt) void {

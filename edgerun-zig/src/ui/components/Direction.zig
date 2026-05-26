@@ -8,6 +8,7 @@ const icon = @import("../../icon.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
+const icon_component = @import("Icon.zig");
 const component_primitives = @import("Primitives.zig");
 const list_layout = @import("ListLayout.zig");
 
@@ -27,7 +28,7 @@ pub const Direction = struct {
     pub fn render(self: Direction, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         const active = activeIndex(self.active);
         try renderItem(scene, itemBounds(bounds, 0), direction_ltr_label, active == 0, options);
-        try scene.pushIconQuad(.{ .bounds = iconBounds(bounds), .icon_id = icon.id(.route), .color = options.style.muted });
+        try icon_component.renderGlyph(scene, iconBounds(bounds), .route, options.style.muted);
         try renderItem(scene, itemBounds(bounds, 1), direction_rtl_label, active == 1, options);
     }
 
@@ -54,6 +55,10 @@ pub const Direction = struct {
 
     pub fn fromView(view: object.View) Error!Direction {
         const direction = try component_codec.nodeView(view, .direction);
+        return fromNode(direction);
+    }
+
+    pub fn fromNode(direction: @FieldType(ui.Node, "direction")) Error!Direction {
         return .{ .id = direction.id, .active = direction.active };
     }
 };

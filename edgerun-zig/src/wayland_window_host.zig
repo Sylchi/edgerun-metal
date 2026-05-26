@@ -36,10 +36,12 @@ const max_interaction_regions: usize = 1024;
 const max_rects: usize = 8192;
 const max_text_vertices: usize = 24576;
 const max_icon_vertices: usize = 4096;
+const max_icon_line_vertices: usize = 262144;
 const max_image_vertices: usize = 384;
 const max_overlay_rects: usize = 512;
 const max_overlay_text_vertices: usize = 8192;
 const max_overlay_icon_vertices: usize = 256;
+const max_overlay_icon_line_vertices: usize = 65536;
 const max_tiles: usize = 512;
 const max_gpu_primitives: usize = 32768;
 const max_registry_globals: usize = 128;
@@ -139,6 +141,8 @@ const IrStorage = renderer_ir.FixedBuffers(
     max_overlay_rects,
     max_overlay_text_vertices,
     max_overlay_icon_vertices,
+    max_icon_line_vertices,
+    max_overlay_icon_line_vertices,
 );
 
 const Options = struct {
@@ -874,7 +878,7 @@ const NativeApp = struct {
         var cursor_commands: [cursor_scene_budget]ui.Command = undefined;
         var scene = ui.Scene.init(&cursor_commands);
         try app_cursor.render(&scene, self.state.hover_x, self.state.hover_y, kind);
-        var cursor_ir = renderer_ir.FixedBuffers(cursor_scene_budget, 0, cursor_overlay_icon_vertices, 0, 0, 0, 0){};
+        var cursor_ir = renderer_ir.FixedBuffers(cursor_scene_budget, 0, cursor_overlay_icon_vertices, 0, 0, 0, 0, 0, 0){};
         const buffers = cursor_ir.buffers();
         try renderer_pipeline.packScene(buffers, &self.font_atlas, .object, scene.written());
         const surface = try renderer_software.Framebuffer.init(self.width, self.height, self.pixels);
@@ -2028,7 +2032,7 @@ test "wayland cursor overlay renders through software presentation receipt" {
 }
 
 test "wayland gpu recorder accepts canonical ir frame callbacks" {
-    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     try renderer_ir.pushRect(buffers, .base, .{ .x = 0, .y = 0, .w = 32, .h = 32 }, .accent, .clear, 0, 0, 0);
 

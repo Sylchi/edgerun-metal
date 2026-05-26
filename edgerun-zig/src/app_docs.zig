@@ -429,7 +429,7 @@ fn renderSidebarRow(scene: *ui.Scene, collector: *interaction.Collector, bounds:
         .id = id,
         .label = page.section.label(),
         .variant = if (active) .secondary else .ghost,
-        .icon_slot = .{ .leading = page.icon_value },
+        .icon_slot = .{ .leading = components.IconComponent.named(page.icon_value) },
     } };
     try components.renderComponent(scene, bounds, row_component, .{
         .style = app_chrome.style(),
@@ -861,7 +861,7 @@ fn renderGrid(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
 }
 
 fn primaryButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label_value: []const u8, id: u32) (ui.RenderError || interaction.Error)!void {
-    try components.renderComponent(scene, bounds, .{ .button = .{ .id = id, .label = label_value, .icon_slot = .{ .trailing = .chevron_right } } }, .{
+    try components.renderComponent(scene, bounds, .{ .button = .{ .id = id, .label = label_value, .icon_slot = .{ .trailing = components.IconComponent.named(.chevron_right) } } }, .{
         .style = appStyle(),
     });
     try components.collectComponentInteractions(collector, bounds, .{ .button = .{ .id = id, .label = label_value } });

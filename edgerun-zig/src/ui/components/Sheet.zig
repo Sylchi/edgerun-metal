@@ -8,6 +8,7 @@ const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
+const icon_component = @import("Icon.zig");
 const primitives = @import("Primitives.zig");
 
 const Error = common.Error;
@@ -28,7 +29,7 @@ pub const Sheet = struct {
 
         const content = contentBounds(bounds);
         try primitives.renderTitleDetailPanel(scene, content, self.title, self.detail, options, sheet_panel, options.style.border, options.style.text);
-        try scene.pushIconQuad(.{ .bounds = closeBounds(bounds), .icon_id = icon.id(.x), .color = options.style.muted });
+        try icon_component.renderGlyph(scene, closeBounds(bounds), .x, options.style.muted);
     }
 
     pub fn collectInteractions(self: Sheet, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {

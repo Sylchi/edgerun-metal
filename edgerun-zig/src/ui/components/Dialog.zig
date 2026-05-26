@@ -22,6 +22,10 @@ pub const Dialog = struct {
         return ui.dialogNode(self.id, self.title, self.detail);
     }
 
+    pub fn accessibility(self: Dialog) common.Accessibility {
+        return .{ .role = .dialog, .label = self.title, .control_id = self.id };
+    }
+
     pub fn render(self: Dialog, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         try primitives.renderSidePanelTrigger(scene, bounds, dialog_layout, options.style.accent, options.style.border, dialog_trigger_padding, dialog_open_label, options.style.bg);
         try primitives.renderTitleDetailPanel(scene, primitives.sidePanelContentBounds(bounds, dialog_layout), self.title, self.detail, options, dialog_panel, options.style.border, options.style.text);
@@ -47,6 +51,10 @@ pub const Dialog = struct {
 
     pub fn fromView(view: object.View) Error!Dialog {
         const dialog = try component_codec.nodeView(view, .dialog);
+        return fromNode(dialog);
+    }
+
+    pub fn fromNode(dialog: @FieldType(ui.Node, "dialog")) Error!Dialog {
         return .{ .id = dialog.id, .title = dialog.title, .detail = dialog.detail };
     }
 };

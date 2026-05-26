@@ -108,7 +108,7 @@ fn renderWorkspaceRail(scene: *ui.Scene, collector: *interaction.Collector, boun
         const component = components.Component{ .icon_button = .{
             .id = item.id,
             .label = item.label,
-            .icon_value = item.icon_value,
+            .icon = components.IconComponent.named(item.icon_value),
             .variant = if (active == item.view) .secondary else .ghost,
         } };
         try components.renderComponent(scene, item_bounds, component, .{ .style = design.style() });

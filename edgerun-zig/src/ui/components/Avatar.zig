@@ -20,6 +20,10 @@ pub const Avatar = struct {
         return ui.avatarNode(self.label);
     }
 
+    pub fn accessibility(self: Avatar) common.Accessibility {
+        return .{ .role = .image, .label = self.label };
+    }
+
     pub fn render(self: Avatar, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         const size = @min(avatar_size, @max(component_primitives.min_extent, @min(bounds.w, bounds.h)));
         const avatar_bounds = ui.Rect.init(bounds.x + (bounds.w - size) * 0.5, bounds.y + (bounds.h - size) * 0.5, size, size);
@@ -46,6 +50,10 @@ pub const Avatar = struct {
 
     pub fn fromView(view: object.View) Error!Avatar {
         const avatar = try component_codec.nodeView(view, .avatar);
+        return fromNode(avatar);
+    }
+
+    pub fn fromNode(avatar: @FieldType(ui.Node, "avatar")) Error!Avatar {
         return .{ .label = avatar.label };
     }
 };

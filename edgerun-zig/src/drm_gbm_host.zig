@@ -29,10 +29,12 @@ const max_interaction_regions: usize = 1024;
 const max_rects: usize = 8192;
 const max_text_vertices: usize = 24576;
 const max_icon_vertices: usize = 4096;
+const max_icon_line_vertices: usize = 262144;
 const max_image_vertices: usize = 384;
 const max_overlay_rects: usize = 512;
 const max_overlay_text_vertices: usize = 8192;
 const max_overlay_icon_vertices: usize = 256;
+const max_overlay_icon_line_vertices: usize = 65536;
 
 const IrStorage = renderer_ir.FixedBuffers(
     max_rects,
@@ -42,6 +44,8 @@ const IrStorage = renderer_ir.FixedBuffers(
     max_overlay_rects,
     max_overlay_text_vertices,
     max_overlay_icon_vertices,
+    max_icon_line_vertices,
+    max_overlay_icon_line_vertices,
 );
 
 const Options = struct {

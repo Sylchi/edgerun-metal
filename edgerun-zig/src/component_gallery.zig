@@ -121,6 +121,7 @@ pub const PreviewKind = enum {
     empty,
     field,
     hover_card,
+    icon,
     icon_button,
     input,
     input_group,
@@ -195,6 +196,7 @@ pub const component_catalog = blk: {
         componentSpec("Empty", "empty", .feedback, "Empty", "empty_state", .empty),
         componentSpec("Field", "field", .form, "Field", "field_node", .field),
         componentSpec("Hover Card", "hover-card", .overlay, "HoverCard", "hover_card_node", .hover_card),
+        componentSpec("Icon", "icon", .foundation, "Icon", "icon_node", .icon),
         componentSpec("Icon Button", "icon-button", .foundation, "IconButton", "icon_button_node", .icon_button),
         componentSpec("Input", "input", .form, "Input", "field_node", .input),
         componentSpec("Input Group", "input-group", .form, "InputGroup", "input_group_node", .input_group),
@@ -314,7 +316,7 @@ const Route = struct {
     route: []const u8,
 };
 
-const component_route_count: u32 = 57;
+const component_route_count: u32 = 58;
 
 const component_routes = [_]Route{
     .{ .slug = "accordion", .route = "/docs/components/accordion" },
@@ -344,6 +346,7 @@ const component_routes = [_]Route{
     .{ .slug = "empty", .route = "/docs/components/empty" },
     .{ .slug = "field", .route = "/docs/components/field" },
     .{ .slug = "hover-card", .route = "/docs/components/hover-card" },
+    .{ .slug = "icon", .route = "/docs/components/icon" },
     .{ .slug = "icon-button", .route = "/docs/components/icon-button" },
     .{ .slug = "input", .route = "/docs/components/input" },
     .{ .slug = "input-group", .route = "/docs/components/input-group" },
@@ -676,6 +679,7 @@ fn renderReferencePreview(scene: *ui.Scene, collector: *interaction.Collector, b
         .card,
         .empty,
         .checkbox,
+        .icon,
         .icon_button,
         .input,
         .item,
@@ -753,7 +757,8 @@ fn primitivePreview(kind: PreviewKind, id: u32) PrimitivePreview {
         .empty => .{ .empty = .{ .title = "No results", .detail = "Try another filter." } },
         .field => .{ .field = .{ .id = id, .label = "Email", .placeholder = "m@example.com" } },
         .hover_card => .{ .hover_card = .{ .id = id, .trigger = "Hover", .content = "@shadcn" } },
-        .icon_button => .{ .icon_button = .{ .id = id, .label = "Search", .icon_value = .search } },
+        .icon => .{ .icon = components.IconComponent.named(.sparkles) },
+        .icon_button => .{ .icon_button = .{ .id = id, .label = "Search", .icon = components.IconComponent.named(.search) } },
         .checkbox => .{ .checkbox = .{ .id = id, .label = "Accept terms", .checked = true } },
         .combobox => .{ .combobox = .{ .id = id, .placeholder = "Search framework...", .selected = "React" } },
         .command => .{ .command = .{ .id = id, .placeholder = "Type a command..." } },

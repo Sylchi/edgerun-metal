@@ -24,6 +24,10 @@ pub const Field = struct {
         return ui.fieldNode(self.id, self.label, self.placeholder);
     }
 
+    pub fn accessibility(self: Field) common.Accessibility {
+        return .{ .role = .input, .label = self.label, .control_id = self.id };
+    }
+
     pub fn render(self: Field, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         try scene.pushWrappedText(labelBounds(bounds, self.label), self.label, options.style.text, primitives.textWrap(self.label, field_label_h, field_label_max_lines));
         try renderInput(scene, inputBoundsFor(bounds, self.label, options), self.placeholder, inputOptions(options));
@@ -69,6 +73,10 @@ pub const Field = struct {
 
     pub fn fromView(view: object.View) Error!Field {
         const field = try component_codec.nodeView(view, .field);
+        return fromNode(field);
+    }
+
+    pub fn fromNode(field: @FieldType(ui.Node, "field")) Error!Field {
         return .{ .id = field.id, .label = field.label, .placeholder = field.placeholder };
     }
 };

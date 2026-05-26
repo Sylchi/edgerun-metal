@@ -53,6 +53,10 @@ pub const Carousel = struct {
 
     pub fn fromView(view: object.View) Error!Carousel {
         const carousel = try component_codec.nodeView(view, .carousel);
+        return fromNode(carousel);
+    }
+
+    pub fn fromNode(carousel: @FieldType(ui.Node, "carousel")) Error!Carousel {
         return .{ .id = carousel.id, .label = carousel.label };
     }
 };

@@ -485,13 +485,13 @@ fn renderCompileStages(scene: *ui.Scene, bounds: ui.Rect, progress: f32) !void {
 
 fn button(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id: u32, variant: components.ButtonVariant, leading: icon.Icon, enabled: bool) !void {
     if (!enabled) {
-        try components.renderComponent(scene, bounds, .{ .button = .{ .id = id, .label = label, .variant = variant, .icon_slot = .{ .leading = leading } } }, .{
+        try components.renderComponent(scene, bounds, .{ .button = .{ .id = id, .label = label, .variant = variant, .icon_slot = .{ .leading = components.IconComponent.named(leading) } } }, .{
             .style = app_chrome.style(),
             .control = .{ .disabled = true },
         });
         return;
     }
-    try components.renderComponent(scene, bounds, .{ .button = .{ .id = id, .label = label, .variant = variant, .icon_slot = .{ .leading = leading } } }, .{ .style = app_chrome.style() });
+    try components.renderComponent(scene, bounds, .{ .button = .{ .id = id, .label = label, .variant = variant, .icon_slot = .{ .leading = components.IconComponent.named(leading) } } }, .{ .style = app_chrome.style() });
     try components.collectComponentInteractions(collector, bounds, .{ .button = .{ .id = id, .label = label } });
 }
 

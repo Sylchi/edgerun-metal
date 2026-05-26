@@ -72,6 +72,10 @@ pub const InputGroup = struct {
 
     pub fn fromView(view: object.View) Error!InputGroup {
         const input_group = try component_codec.nodeView(view, .input_group);
+        return fromNode(input_group);
+    }
+
+    pub fn fromNode(input_group: @FieldType(ui.Node, "input_group")) Error!InputGroup {
         return .{ .id = input_group.id, .addon = input_group.addon, .placeholder = input_group.placeholder };
     }
 };

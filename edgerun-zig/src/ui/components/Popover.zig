@@ -50,6 +50,10 @@ pub const Popover = struct {
 
     pub fn fromView(view: object.View) Error!Popover {
         const popover = try component_codec.nodeView(view, .popover);
+        return fromNode(popover);
+    }
+
+    pub fn fromNode(popover: @FieldType(ui.Node, "popover")) Error!Popover {
         return .{ .id = popover.id, .trigger = popover.trigger, .content = popover.content };
     }
 };

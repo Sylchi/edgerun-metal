@@ -638,7 +638,7 @@ fn fillSpanSamples(row: []u8, glyph_left: i16, glyph_right: f32, span_a: f32, sp
 
 test "font atlas supplies renderer ir text vertices" {
     var atlas = Atlas.init();
-    var storage = renderer_ir.FixedBuffers(1, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(1, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     const sources = renderer_ir.Sources{
         .font = atlas.source(),
@@ -689,7 +689,7 @@ test "font atlas renders text from canonical font object body" {
     const source = atlas.source();
     try std.testing.expectApproxEqAbs(@as(f32, 30.4), source.width(source.context, "AV", 16), 0.001);
 
-    var storage = renderer_ir.FixedBuffers(1, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(1, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0, 0, 0){};
     try renderer_ir.pushText(storage.buffers(), source, .base, .{ .x = 0, .y = 0, .w = 64, .h = 18 }, "A", .text, .start);
 
     try std.testing.expectEqual(@as(usize, 1), atlas.cachedGlyphCount());
@@ -704,7 +704,7 @@ test "font atlas storage compiles a codepoint set into object font renderer inpu
     var atlas = storage.atlas().?;
     const source = atlas.source();
 
-    var buffers_storage = renderer_ir.FixedBuffers(1, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0){};
+    var buffers_storage = renderer_ir.FixedBuffers(1, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0, 0, 0){};
     try renderer_ir.pushText(buffers_storage.buffers(), source, .base, .{ .x = 0, .y = 0, .w = 64, .h = 18 }, " !", .text, .start);
 
     try std.testing.expect(atlas.cachedGlyphCount() > 0);

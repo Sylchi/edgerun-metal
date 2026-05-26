@@ -129,7 +129,7 @@ fn iconButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Re
     const component = components.Component{ .icon_button = .{
         .id = id,
         .label = icon.label(value),
-        .icon_value = value,
+        .icon = components.IconComponent.named(value),
         .variant = if (active) .secondary else .outline,
     } };
     try components.renderComponent(scene, bounds, component, .{

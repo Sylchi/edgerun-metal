@@ -57,6 +57,10 @@ pub const ButtonGroup = struct {
 
     pub fn fromView(view: object.View) Error!ButtonGroup {
         const group = try component_codec.nodeView(view, .button_group);
+        return fromNode(group);
+    }
+
+    pub fn fromNode(group: @FieldType(ui.Node, "button_group")) Error!ButtonGroup {
         return .{ .id = group.id, .first = group.first, .second = group.second, .active = activeIndex(group.active) };
     }
 };

@@ -5,6 +5,7 @@ const ui = @import("../ui.zig");
 pub const rect_float_stride: usize = 15;
 pub const text_vertex_float_stride: usize = 8;
 pub const icon_instance_float_stride: usize = 9;
+pub const icon_line_vertex_float_stride: usize = 6;
 pub const image_vertex_float_stride: usize = 8;
 pub const font_first_px: u8 = 11;
 pub const font_last_px: u8 = 48;
@@ -54,6 +55,12 @@ pub const icon_color_g_index: usize = 5;
 pub const icon_color_b_index: usize = 6;
 pub const icon_color_a_index: usize = 7;
 pub const icon_id_index: usize = 8;
+pub const icon_line_x_index: usize = 0;
+pub const icon_line_y_index: usize = 1;
+pub const icon_line_color_r_index: usize = 2;
+pub const icon_line_color_g_index: usize = 3;
+pub const icon_line_color_b_index: usize = 4;
+pub const icon_line_color_a_index: usize = 5;
 
 pub const Layer = enum {
     base,
@@ -124,9 +131,11 @@ pub const DrawBatch = union(enum) {
     image: []const f32,
     text: []const f32,
     icon: []const f32,
+    icon_lines: []const f32,
     overlay_rects: []const f32,
     overlay_text: []const f32,
     overlay_icon: []const f32,
+    overlay_icon_lines: []const f32,
 };
 
 pub const FontAtlas = struct {
@@ -156,6 +165,8 @@ pub const Buffers = struct {
     text_vertex_len: *usize,
     icon_vertices: []f32,
     icon_vertex_len: *usize,
+    icon_line_vertices: []f32,
+    icon_line_vertex_len: *usize,
     image_vertices: []f32,
     image_vertex_len: *usize,
     overlay_rects: []f32,
@@ -164,11 +175,14 @@ pub const Buffers = struct {
     overlay_text_vertex_len: *usize,
     overlay_icon_vertices: []f32,
     overlay_icon_vertex_len: *usize,
+    overlay_icon_line_vertices: []f32,
+    overlay_icon_line_vertex_len: *usize,
 
     pub fn clearBase(self: Buffers) void {
         self.rect_len.* = 0;
         self.text_vertex_len.* = 0;
         self.icon_vertex_len.* = 0;
+        self.icon_line_vertex_len.* = 0;
         self.image_vertex_len.* = 0;
     }
 
@@ -176,6 +190,7 @@ pub const Buffers = struct {
         self.overlay_rect_len.* = 0;
         self.overlay_text_vertex_len.* = 0;
         self.overlay_icon_vertex_len.* = 0;
+        self.overlay_icon_line_vertex_len.* = 0;
     }
 
     pub fn liveRects(self: Buffers) []const f32 {
@@ -188,6 +203,10 @@ pub const Buffers = struct {
 
     pub fn liveIconVertices(self: Buffers) []const f32 {
         return self.icon_vertices[0..self.icon_vertex_len.*];
+    }
+
+    pub fn liveIconLineVertices(self: Buffers) []const f32 {
+        return self.icon_line_vertices[0..self.icon_line_vertex_len.*];
     }
 
     pub fn liveImageVertices(self: Buffers) []const f32 {
@@ -206,6 +225,10 @@ pub const Buffers = struct {
         return self.overlay_icon_vertices[0..self.overlay_icon_vertex_len.*];
     }
 
+    pub fn liveOverlayIconLineVertices(self: Buffers) []const f32 {
+        return self.overlay_icon_line_vertices[0..self.overlay_icon_line_vertex_len.*];
+    }
+
     pub fn hasImageVertices(self: Buffers) bool {
         return self.image_vertex_len.* != 0;
     }
@@ -221,24 +244,28 @@ pub fn validateBuffers(buffers: Buffers) Error!void {
     if (buffers.rect_len.* > buffers.rects.len or
         buffers.text_vertex_len.* > buffers.text_vertices.len or
         buffers.icon_vertex_len.* > buffers.icon_vertices.len or
+        buffers.icon_line_vertex_len.* > buffers.icon_line_vertices.len or
         buffers.image_vertex_len.* > buffers.image_vertices.len or
         buffers.overlay_rect_len.* > buffers.overlay_rects.len or
         buffers.overlay_text_vertex_len.* > buffers.overlay_text_vertices.len or
-        buffers.overlay_icon_vertex_len.* > buffers.overlay_icon_vertices.len)
+        buffers.overlay_icon_vertex_len.* > buffers.overlay_icon_vertices.len or
+        buffers.overlay_icon_line_vertex_len.* > buffers.overlay_icon_line_vertices.len)
     {
         return error.InvalidBuffer;
     }
 }
 
-pub fn drawBatches(buffers: Buffers) [7]DrawBatch {
+pub fn drawBatches(buffers: Buffers) [9]DrawBatch {
     return .{
         .{ .rects = buffers.liveRects() },
         .{ .image = buffers.liveImageVertices() },
         .{ .text = buffers.liveTextVertices() },
         .{ .icon = buffers.liveIconVertices() },
+        .{ .icon_lines = buffers.liveIconLineVertices() },
         .{ .overlay_rects = buffers.liveOverlayRects() },
         .{ .overlay_text = buffers.liveOverlayTextVertices() },
         .{ .overlay_icon = buffers.liveOverlayIconVertices() },
+        .{ .overlay_icon_lines = buffers.liveOverlayIconLineVertices() },
     };
 }
 
@@ -248,9 +275,11 @@ pub fn batchValues(batch: DrawBatch) []const f32 {
         .image,
         .text,
         .icon,
+        .icon_lines,
         .overlay_rects,
         .overlay_text,
         .overlay_icon,
+        .overlay_icon_lines,
         => |values| values,
     };
 }
@@ -263,22 +292,28 @@ pub fn FixedBuffers(
     comptime overlay_rect_instances: usize,
     comptime overlay_text_vertices_count: usize,
     comptime overlay_icon_vertices_count: usize,
+    comptime icon_line_vertices_count: usize,
+    comptime overlay_icon_line_vertices_count: usize,
 ) type {
     return struct {
         rects: [rect_instances * rect_float_stride]f32 = undefined,
         text_vertices: [text_vertices_count * text_vertex_float_stride]f32 = undefined,
         icon_vertices: [icon_vertices_count * icon_instance_float_stride]f32 = undefined,
+        icon_line_vertices: [icon_line_vertices_count * icon_line_vertex_float_stride]f32 = undefined,
         image_vertices: [image_vertices_count * image_vertex_float_stride]f32 = undefined,
         overlay_rects: [overlay_rect_instances * rect_float_stride]f32 = undefined,
         overlay_text_vertices: [overlay_text_vertices_count * text_vertex_float_stride]f32 = undefined,
         overlay_icon_vertices: [overlay_icon_vertices_count * icon_instance_float_stride]f32 = undefined,
+        overlay_icon_line_vertices: [overlay_icon_line_vertices_count * icon_line_vertex_float_stride]f32 = undefined,
         rect_len: usize = 0,
         text_vertex_len: usize = 0,
         icon_vertex_len: usize = 0,
+        icon_line_vertex_len: usize = 0,
         image_vertex_len: usize = 0,
         overlay_rect_len: usize = 0,
         overlay_text_vertex_len: usize = 0,
         overlay_icon_vertex_len: usize = 0,
+        overlay_icon_line_vertex_len: usize = 0,
 
         pub fn buffers(self: *@This()) Buffers {
             return .{
@@ -288,6 +323,8 @@ pub fn FixedBuffers(
                 .text_vertex_len = &self.text_vertex_len,
                 .icon_vertices = &self.icon_vertices,
                 .icon_vertex_len = &self.icon_vertex_len,
+                .icon_line_vertices = &self.icon_line_vertices,
+                .icon_line_vertex_len = &self.icon_line_vertex_len,
                 .image_vertices = &self.image_vertices,
                 .image_vertex_len = &self.image_vertex_len,
                 .overlay_rects = &self.overlay_rects,
@@ -296,6 +333,8 @@ pub fn FixedBuffers(
                 .overlay_text_vertex_len = &self.overlay_text_vertex_len,
                 .overlay_icon_vertices = &self.overlay_icon_vertices,
                 .overlay_icon_vertex_len = &self.overlay_icon_vertex_len,
+                .overlay_icon_line_vertices = &self.overlay_icon_line_vertices,
+                .overlay_icon_line_vertex_len = &self.overlay_icon_line_vertex_len,
             };
         }
     };
@@ -872,7 +911,7 @@ test "renderer ir packs scene primitives into canonical buffers" {
 }
 
 test "renderer ir fixed buffers expose writable canonical buffer view" {
-    var storage = FixedBuffers(1, 0, 0, 0, 0, 0, 0){};
+    var storage = FixedBuffers(1, 0, 0, 0, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     try pushRect(buffers, .base, ui.Rect.init(1, 2, 3, 4), .accent, .clear, 0, 0, rectModeCode(.fill));
     try std.testing.expectEqual(rect_float_stride, storage.rect_len);
@@ -885,7 +924,7 @@ test "renderer ir fixed buffers expose writable canonical buffer view" {
 }
 
 test "renderer ir iterates rects and textured quads" {
-    var storage = FixedBuffers(2, 0, 0, textured_quad_vertex_count, 0, 0, 0){};
+    var storage = FixedBuffers(2, 0, 0, textured_quad_vertex_count, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     try pushRect(buffers, .base, ui.Rect.init(1, 2, 3, 4), .accent, .clear, 0, 0, rectModeCode(.fill));
     try pushRect(buffers, .base, ui.Rect.init(5, 6, 7, 8), .text, .clear, 0, 0, rectModeCode(.border));
@@ -917,7 +956,7 @@ test "renderer ir iterates rects and textured quads" {
 }
 
 test "renderer ir owns canonical draw batch order" {
-    var storage = FixedBuffers(1, textured_quad_vertex_count, 1, textured_quad_vertex_count, 1, textured_quad_vertex_count, 1){};
+    var storage = FixedBuffers(1, textured_quad_vertex_count, 1, textured_quad_vertex_count, 1, textured_quad_vertex_count, 1, 0, 0){};
     const batches = drawBatches(storage.buffers());
     try std.testing.expectEqual(@as(usize, 7), batches.len);
     try std.testing.expectEqual(DrawBatch{ .rects = storage.rects[0..0] }, batches[0]);
@@ -931,7 +970,7 @@ test "renderer ir owns canonical draw batch order" {
 }
 
 test "renderer ir counts primitives from draw batches" {
-    var storage = FixedBuffers(2, textured_quad_vertex_count, 0, textured_quad_vertex_count, 1, 0, 0){};
+    var storage = FixedBuffers(2, textured_quad_vertex_count, 0, textured_quad_vertex_count, 1, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     try pushRect(buffers, .base, ui.Rect.init(1, 2, 3, 4), .accent, .clear, 0, 0, rectModeCode(.fill));
     try pushRect(buffers, .base, ui.Rect.init(5, 6, 7, 8), .text, .clear, 0, 0, rectModeCode(.border));
@@ -960,7 +999,7 @@ test "renderer ir counts primitives from draw batches" {
 }
 
 test "renderer ir validates live buffer lengths before slicing" {
-    var storage = FixedBuffers(1, 0, 0, 0, 0, 0, 0){};
+    var storage = FixedBuffers(1, 0, 0, 0, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     storage.rect_len = storage.rects.len + 1;
     try std.testing.expectError(error.InvalidBuffer, validateBuffers(buffers));

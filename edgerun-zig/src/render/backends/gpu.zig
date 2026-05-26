@@ -451,7 +451,7 @@ fn markDirtyRect(
 }
 
 fn encodeCommand(command: ui.Command, out: *CommandBuffer) Error!void {
-    var storage = renderer_ir.FixedBuffers(1, renderer_ir.textured_quad_vertex_count, 1, renderer_ir.textured_quad_vertex_count, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(1, renderer_ir.textured_quad_vertex_count, 1, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     var context: u8 = 0;
     const sources = renderer_ir.Sources{ .font = renderer_ir.commandAdapterFont(&context) };
@@ -623,7 +623,7 @@ test "gpu renderer submits encoded frame to required device callbacks" {
 test "gpu renderer encodes canonical ir frames" {
     var commands: [16]ui.Command = undefined;
     const scene = try testScene(&commands);
-    var storage = renderer_ir.FixedBuffers(8, renderer_ir.textured_quad_vertex_count * 8, renderer_ir.textured_quad_vertex_count * 8, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(8, renderer_ir.textured_quad_vertex_count * 8, renderer_ir.textured_quad_vertex_count * 8, 0, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     var source_context: u8 = 0;
     const sources = renderer_ir.Sources{
@@ -660,7 +660,7 @@ test "gpu renderer encodes canonical ir frames" {
 
 test "gpu renderer keeps semantic icon ids separate from texture atlas ids" {
     const expected_icon_id: u32 = 7;
-    var storage = renderer_ir.FixedBuffers(0, 0, 1, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(0, 0, 1, 0, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     try renderer_ir.pushIcon(buffers, .base, .{
         .bounds = .{ .x = 8, .y = 8, .w = 16, .h = 16 },
@@ -691,7 +691,7 @@ test "gpu renderer keeps semantic icon ids separate from texture atlas ids" {
 }
 
 test "gpu renderer receipts carry hardware rasterization capability" {
-    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     try renderer_ir.pushRect(buffers, .base, .{ .x = 0, .y = 0, .w = 32, .h = 32 }, .accent, .clear, 0, 0, 0);
 
@@ -715,7 +715,7 @@ test "gpu renderer receipts carry hardware rasterization capability" {
 }
 
 test "gpu renderer rejects textured canonical ir without declared resources" {
-    var storage = renderer_ir.FixedBuffers(0, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(0, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0, 0, 0){};
     storage.text_vertex_len = renderer_ir.textured_quad_vertex_count * renderer_ir.text_vertex_float_stride;
     const buffers = storage.buffers();
 

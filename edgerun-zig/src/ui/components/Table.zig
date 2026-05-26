@@ -26,6 +26,10 @@ pub const Table = struct {
         return ui.tableNode(self.id, self.name, self.role);
     }
 
+    pub fn accessibility(self: Table) common.Accessibility {
+        return .{ .role = .table, .label = self.name, .control_id = self.id };
+    }
+
     pub fn render(self: Table, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         try scene.pushRect(bounds, options.style.panel, .fill, table_radius, 0.0);
         try scene.pushRect(bounds, options.style.border, .border, table_radius, 0.0);
@@ -73,6 +77,10 @@ pub const Table = struct {
 
     pub fn fromView(view: object.View) Error!Table {
         const table = try component_codec.nodeView(view, .table);
+        return fromNode(table);
+    }
+
+    pub fn fromNode(table: @FieldType(ui.Node, "table")) Error!Table {
         return .{ .id = table.id, .name = table.name, .role = table.role };
     }
 };

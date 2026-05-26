@@ -9,6 +9,7 @@ const layout = @import("../../layouts/Types.zig");
 const text_metrics = @import("../../ui_text_metrics.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
+const icon_component = @import("Icon.zig");
 const component_primitives = @import("Primitives.zig");
 
 const Error = common.Error;
@@ -24,11 +25,15 @@ pub const Toast = struct {
         return ui.toastNode(self.id, self.title, self.detail);
     }
 
+    pub fn accessibility(self: Toast) common.Accessibility {
+        return .{ .role = .status, .label = self.title, .control_id = self.id };
+    }
+
     pub fn render(self: Toast, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         const toast = toastBounds(bounds);
         try scene.pushRect(toast, options.style.panel, .fill, toast_radius, 0.0);
         try scene.pushRect(toast, options.style.border, .border, toast_radius, 0.0);
-        try scene.pushIconQuad(.{ .bounds = toastIconBounds(toast), .icon_id = icon.id(.check), .color = options.style.accent });
+        try icon_component.renderGlyph(scene, toastIconBounds(toast), .check, options.style.accent);
         const text_x = toast.x + toast_text_x;
         const text_w = @max(component_primitives.min_extent, toast.x + toast.w - text_x - toast_padding);
         const title_h = measuredTextHeight(self.title, text_w, titleMetrics(self.title));

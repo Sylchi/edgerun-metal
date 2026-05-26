@@ -8,6 +8,7 @@ const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
+const icon_component = @import("Icon.zig");
 const primitives = @import("Primitives.zig");
 
 const Error = common.Error;
@@ -32,11 +33,7 @@ pub const Combobox = struct {
         if (contentInset(input, primitives.control_text_padding)) |input_content| {
             const text_bounds = ui.Rect.init(input_content.x, input_content.y, @max(primitives.min_extent, input_content.w - combobox_icon_space), input_content.h);
             try scene.pushAlignedText(text_bounds.withHeightCentered(primitives.control_label_height), self.placeholder, options.style.muted, .start);
-            try scene.pushIconQuad(.{
-                .bounds = ui.Rect.init(input_content.x + input_content.w - combobox_icon_size, input_content.y + (input_content.h - combobox_icon_size) * 0.5, combobox_icon_size, combobox_icon_size),
-                .icon_id = icon.id(.chevron_right),
-                .color = options.style.muted,
-            });
+            try icon_component.renderGlyph(scene, ui.Rect.init(input_content.x + input_content.w - combobox_icon_size, input_content.y + (input_content.h - combobox_icon_size) * 0.5, combobox_icon_size, combobox_icon_size), .chevron_right, options.style.muted);
         }
 
         const popup = popupBounds(bounds);
@@ -66,6 +63,10 @@ pub const Combobox = struct {
 
     pub fn fromView(view: object.View) Error!Combobox {
         const combobox = try component_codec.nodeView(view, .combobox);
+        return fromNode(combobox);
+    }
+
+    pub fn fromNode(combobox: @FieldType(ui.Node, "combobox")) Error!Combobox {
         return .{ .id = combobox.id, .placeholder = combobox.placeholder, .selected = combobox.selected };
     }
 };
@@ -88,11 +89,7 @@ fn renderOption(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, selected: 
     try scene.pushRect(bounds, options.style.row, .fill, primitives.control_radius, 0.0);
     try renderControlText(scene, ui.Rect.init(bounds.x, bounds.y, @max(primitives.min_extent, bounds.w - combobox_option_indicator_w), bounds.h), combobox_option_padding, primitives.control_label_height, label, options.style.text, .start);
     if (selected) {
-        try scene.pushIconQuad(.{
-            .bounds = ui.Rect.init(bounds.x + bounds.w - combobox_icon_size - combobox_option_padding, bounds.y + (bounds.h - combobox_icon_size) * 0.5, combobox_icon_size, combobox_icon_size),
-            .icon_id = icon.id(.check),
-            .color = options.style.accent,
-        });
+        try icon_component.renderGlyph(scene, ui.Rect.init(bounds.x + bounds.w - combobox_icon_size - combobox_option_padding, bounds.y + (bounds.h - combobox_icon_size) * 0.5, combobox_icon_size, combobox_icon_size), .check, options.style.accent);
     }
 }
 

@@ -24,7 +24,7 @@ pub const IrError = renderer_ir.Error;
 pub const rect_float_stride = renderer_ir.rect_float_stride;
 pub const text_vertex_float_stride = renderer_ir.text_vertex_float_stride;
 pub const icon_instance_float_stride = renderer_ir.icon_instance_float_stride;
-pub const icon_line_vertex_float_stride = icon_line_buffer.vertex_float_stride;
+pub const icon_line_vertex_float_stride = renderer_ir.icon_line_vertex_float_stride;
 pub const image_vertex_float_stride = renderer_ir.image_vertex_float_stride;
 pub const font_first_char = renderer_ir.font_first_char;
 pub const font_last_char = renderer_ir.font_last_char;
@@ -48,7 +48,7 @@ pub fn packScene(
     font_atlas: *renderer_font_atlas.Atlas,
     font_source: FontSource,
     commands: []const ui.Command,
-) renderer_ir.Error!void {
+) (renderer_ir.Error || icon_line_buffer.Error)!void {
     try packSceneWithSources(buffers, sources(font_atlas, font_source), commands);
 }
 
@@ -56,8 +56,9 @@ pub fn packSceneWithSources(
     buffers: renderer_ir.Buffers,
     source_set: renderer_ir.Sources,
     commands: []const ui.Command,
-) renderer_ir.Error!void {
+) (renderer_ir.Error || icon_line_buffer.Error)!void {
     try renderer_ir.packScene(buffers, source_set, commands);
+    try packBufferIconLines(buffers);
 }
 
 pub fn softwareResources(font_atlas: *const renderer_font_atlas.Atlas, image: ?renderer_software.RgbaTexture) renderer_software.Resources {
@@ -137,6 +138,11 @@ pub fn packIconLines(instances: []const f32, out: []f32, out_len: *usize) icon_l
     try icon_line_buffer.packIconInstances(instances, out, out_len);
 }
 
+pub fn packBufferIconLines(buffers: renderer_ir.Buffers) icon_line_buffer.Error!void {
+    try packIconLines(buffers.liveIconVertices(), buffers.icon_line_vertices, buffers.icon_line_vertex_len);
+    try packIconLines(buffers.liveOverlayIconVertices(), buffers.overlay_icon_line_vertices, buffers.overlay_icon_line_vertex_len);
+}
+
 test "render pipeline builds atlas and object font sources" {
     var font_atlas = renderer_font_atlas.Atlas.init();
     var commands: [1]ui.Command = undefined;
@@ -147,7 +153,7 @@ test "render pipeline builds atlas and object font sources" {
         .color = .text,
     } });
 
-    var atlas_storage = renderer_ir.FixedBuffers(0, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0){};
+    var atlas_storage = renderer_ir.FixedBuffers(0, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0, 0, 0){};
     try packScene(atlas_storage.buffers(), &font_atlas, .atlas, scene.written());
     try std.testing.expect(atlas_storage.text_vertex_len != 0);
 
@@ -164,7 +170,7 @@ test "render pipeline owns packed presentation and software resources" {
         .color = .text,
     } });
 
-    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     try packScene(buffers, &font_atlas, .atlas, scene.written());
 

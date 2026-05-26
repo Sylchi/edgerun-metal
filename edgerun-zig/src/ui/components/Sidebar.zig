@@ -8,6 +8,7 @@ const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
+const icon_component = @import("Icon.zig");
 const primitives = @import("Primitives.zig");
 
 const Error = common.Error;
@@ -27,7 +28,7 @@ pub const Sidebar = struct {
         const rail = railBounds(bounds);
         try scene.pushRect(rail, options.style.panel, .fill, sidebar_radius, 0.0);
         try scene.pushRect(rail, options.style.border, .border, sidebar_radius, 0.0);
-        try scene.pushIconQuad(.{ .bounds = triggerBounds(bounds), .icon_id = icon.id(.menu), .color = options.style.text });
+        try icon_component.renderGlyph(scene, triggerBounds(bounds), .menu, options.style.text);
         try scene.pushWrappedText(titleBounds(bounds, self.title), self.title, options.style.muted, primitives.textWrap(self.title, sidebar_title_h, sidebar_title_max_lines));
         const item_bounds = itemBounds(bounds, self.title, self.item);
         try scene.pushRect(item_bounds, options.style.row, .fill, sidebar_item_radius, 0.0);

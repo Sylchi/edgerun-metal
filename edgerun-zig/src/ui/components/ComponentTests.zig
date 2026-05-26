@@ -23,6 +23,7 @@ const badge_component = @import("Badge.zig");
 const card_component = @import("Card.zig");
 
 const Component = component_union.Component;
+const IconComponent = component_union.IconComponent;
 const Text = text_component.Text;
 const Button = button_component.Button;
 const Stack = stack_component.Stack(Component);
@@ -80,7 +81,7 @@ test "component deserializer rejects wrong component kind" {
 }
 
 test "component union roundtrips concrete component objects" {
-    const component = Component{ .icon_button = .{ .id = 14, .label = "Search", .icon_value = .search } };
+    const component = Component{ .icon_button = .{ .id = 14, .label = "Search", .icon = IconComponent.named(.search) } };
     var ui_raw: [128]u8 = undefined;
     var object_raw: [object.header_size + 128]u8 = undefined;
 
@@ -89,7 +90,7 @@ test "component union roundtrips concrete component objects" {
 
     try std.testing.expectEqual(@as(u32, 14), decoded.icon_button.id);
     try std.testing.expectEqualStrings("Search", decoded.icon_button.label);
-    try std.testing.expectEqual(icon.Icon.search, decoded.icon_button.icon_value);
+    try std.testing.expectEqual(icon.Icon.search, decoded.icon_button.icon.value);
 }
 
 test "component union decodes only canonical component objects" {
@@ -389,7 +390,7 @@ test "component render helper owns button variants and collects hit targets" {
     var collector = interaction.Collector.init(&regions);
 
     const primary = Component{ .button = .{ .id = 501, .label = "Primary" } };
-    const outline = Component{ .button = .{ .id = 502, .label = "Outline", .variant = .outline, .icon_slot = .{ .leading = .search } } };
+    const outline = Component{ .button = .{ .id = 502, .label = "Outline", .variant = .outline, .icon_slot = .{ .leading = IconComponent.named(.search) } } };
     try renderComponent(&scene, ui.Rect.init(0, 0, 120, 36), primary, .{});
     try collectComponentInteractions(&collector, ui.Rect.init(0, 0, 120, 36), primary);
     try renderComponent(&scene, ui.Rect.init(0, 44, 120, 36), outline, .{});

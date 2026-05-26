@@ -22,6 +22,10 @@ pub const DropdownMenu = struct {
         return ui.dropdownMenuNode(self.id, self.first, self.second);
     }
 
+    pub fn accessibility(self: DropdownMenu) common.Accessibility {
+        return .{ .role = .menu, .label = self.first, .control_id = self.id };
+    }
+
     pub fn render(self: DropdownMenu, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         try primitives.renderSidePanelTrigger(scene, bounds, menu_panel_layout, options.style.accent, options.style.border, menu_trigger_padding, dropdown_menu_trigger, options.style.bg);
         try primitives.renderTwoItemMenuPanel(scene, primitives.sidePanelContentBounds(bounds, menu_panel_layout), self.first, self.second, options, menu_radius, menu_list_layout);
@@ -47,6 +51,10 @@ pub const DropdownMenu = struct {
 
     pub fn fromView(view: object.View) Error!DropdownMenu {
         const menu = try component_codec.nodeView(view, .dropdown_menu);
+        return fromNode(menu);
+    }
+
+    pub fn fromNode(menu: @FieldType(ui.Node, "dropdown_menu")) Error!DropdownMenu {
         return .{ .id = menu.id, .first = menu.first, .second = menu.second };
     }
 };

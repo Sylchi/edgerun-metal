@@ -22,6 +22,10 @@ pub const AlertDialog = struct {
         return ui.alertDialogNode(self.id, self.title, self.detail);
     }
 
+    pub fn accessibility(self: AlertDialog) common.Accessibility {
+        return .{ .role = .dialog, .label = self.title, .control_id = self.id };
+    }
+
     pub fn render(self: AlertDialog, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         try primitives.renderSidePanelTrigger(scene, bounds, dialog_layout, alert_danger, options.style.border, dialog_trigger_padding, dialog_delete_label, options.style.bg);
         try primitives.renderTitleDetailPanel(scene, primitives.sidePanelContentBounds(bounds, dialog_layout), self.title, self.detail, options, dialog_panel, alert_danger, alert_danger);
@@ -47,6 +51,10 @@ pub const AlertDialog = struct {
 
     pub fn fromView(view: object.View) Error!AlertDialog {
         const dialog = try component_codec.nodeView(view, .alert_dialog);
+        return fromNode(dialog);
+    }
+
+    pub fn fromNode(dialog: @FieldType(ui.Node, "alert_dialog")) Error!AlertDialog {
         return .{ .id = dialog.id, .title = dialog.title, .detail = dialog.detail };
     }
 };

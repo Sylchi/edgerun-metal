@@ -42,6 +42,10 @@ pub const AspectRatio = struct {
 
     pub fn fromView(view: object.View) Error!AspectRatio {
         const aspect_ratio = try component_codec.nodeView(view, .aspect_ratio);
+        return fromNode(aspect_ratio);
+    }
+
+    pub fn fromNode(aspect_ratio: @FieldType(ui.Node, "aspect_ratio")) Error!AspectRatio {
         return .{ .ratio_w = aspect_ratio.ratio_w, .ratio_h = aspect_ratio.ratio_h };
     }
 };
