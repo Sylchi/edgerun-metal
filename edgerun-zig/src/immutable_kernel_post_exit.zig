@@ -8,6 +8,7 @@ const data_chunk = @import("content/data_chunk.zig");
 const identity = @import("identity.zig");
 const preimage = @import("preimage.zig");
 const registry_app = @import("content/registry_app.zig");
+const renderer_ir = @import("render/ir.zig");
 const resource_contract = @import("content/resource_contract.zig");
 const resource_inventory = @import("content/resource_inventory.zig");
 const ui = @import("ui.zig");
@@ -65,6 +66,7 @@ pub const Error = error{
     RegistryStateMismatch,
     RegistryViewFailed,
     RegistryWrongSenderError,
+    RendererIrFailed,
     SpawnReceiptFailed,
     SpawnReceiptInvalid,
     StaticMemoryLost,
@@ -170,13 +172,11 @@ fn runVirtioGpuChecks(state: *State, emit: Reporter) Error!void {
         emit("check: post-exit virtio-gpu 3d resource ok");
         device.submitVirglNop(&state.virtio_queue, virtio_gl_context_id) catch |err| return fail(emit, mapVirtioGpuError(err), "FAIL post-exit virtio-gpu submit-3d");
         emit("check: post-exit virtio-gpu submit-3d ok");
-        device.clearVirglColorResource(&state.virtio_queue, virtio_gl_context_id, virtio_gl_resource_id, virtio_gl_surface_handle, .b8g8r8a8_unorm, .{
-            .r = 0.13,
-            .g = 0.83,
-            .b = 0.93,
-            .a = 1.0,
-        }) catch |err| return fail(emit, mapVirtioGpuError(err), "FAIL post-exit virtio-gpu clear-3d");
-        emit("check: post-exit virtio-gpu clear-3d ok");
+        try renderVirtioGpuPackedDebugFrame(&device, state, emit);
+        emit("check: post-exit virtio-gpu packed-renderer frame ok");
+        device.setScanout(&state.virtio_queue, virtio_scanout_id, virtio_gl_resource_id, virtio_scanout_width, virtio_scanout_height) catch |err| return fail(emit, mapVirtioGpuError(err), "FAIL post-exit virtio-gpu scanout-3d");
+        device.flushResource(&state.virtio_queue, virtio_gl_resource_id, virtio_scanout_width, virtio_scanout_height) catch |err| return fail(emit, mapVirtioGpuError(err), "FAIL post-exit virtio-gpu flush-3d");
+        emit("check: post-exit virtio-gpu scanout-3d flushed");
         if (device.contextInitReady()) {
             emit("check: post-exit virtio-gpu virgl/context-init ok");
         } else {
@@ -184,21 +184,50 @@ fn runVirtioGpuChecks(state: *State, emit: Reporter) Error!void {
         }
     } else {
         emit("check: post-exit virtio-gpu 2d-only");
-    }
 
-    fillVirtioScanout(&state.virtio_scanout);
-    const setup = virtio_gpu.Setup2d.init(
-        virtio_scanout_resource_id,
-        virtio_scanout_id,
+        fillVirtioScanout(&state.virtio_scanout);
+        const setup = virtio_gpu.Setup2d.init(
+            virtio_scanout_resource_id,
+            virtio_scanout_id,
+            virtio_scanout_width,
+            virtio_scanout_height,
+            @intFromPtr(&state.virtio_scanout),
+            @intCast(state.virtio_scanout.len),
+        );
+        device.setup2d(&state.virtio_queue, setup) catch |err| return fail(emit, mapVirtioGpuError(err), "FAIL post-exit virtio-gpu setup");
+        device.flush2d(&state.virtio_queue, virtio_scanout_resource_id, virtio_scanout_width, virtio_scanout_height) catch |err| return fail(emit, mapVirtioGpuError(err), "FAIL post-exit virtio-gpu flush");
+        emit("check: post-exit virtio-gpu scanout flushed");
+    }
+    emit("PASS immutable-kernel-exit-boot-virtio-qemu");
+}
+
+fn renderVirtioGpuPackedDebugFrame(device: *virtio_gpu.Device, state: *State, emit: Reporter) Error!void {
+    var commands: [1]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+    scene.pushRect(
+        ui.Rect.init(0, 0, @floatFromInt(virtio_scanout_width), @floatFromInt(virtio_scanout_height)),
+        ui.Color{ .r = 33, .g = 212, .b = 237, .a = 255 },
+        .fill,
+        0,
+        0,
+    ) catch return fail(emit, error.RendererIrFailed, "FAIL post-exit virtio-gpu scene");
+
+    var packed_ir = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0, 0, 0){};
+    var font_context: u8 = 0;
+    renderer_ir.packScene(packed_ir.buffers(), .{
+        .font = renderer_ir.commandAdapterFont(&font_context),
+    }, scene.written()) catch return fail(emit, error.RendererIrFailed, "FAIL post-exit virtio-gpu pack");
+
+    device.renderPackedFrameToVirglColorResource(
+        &state.virtio_queue,
+        virtio_gl_context_id,
+        virtio_gl_resource_id,
+        virtio_gl_surface_handle,
+        .b8g8r8a8_unorm,
         virtio_scanout_width,
         virtio_scanout_height,
-        @intFromPtr(&state.virtio_scanout),
-        @intCast(state.virtio_scanout.len),
-    );
-    device.setup2d(&state.virtio_queue, setup) catch |err| return fail(emit, mapVirtioGpuError(err), "FAIL post-exit virtio-gpu setup");
-    device.flush2d(&state.virtio_queue, virtio_scanout_resource_id, virtio_scanout_width, virtio_scanout_height) catch |err| return fail(emit, mapVirtioGpuError(err), "FAIL post-exit virtio-gpu flush");
-    emit("check: post-exit virtio-gpu scanout flushed");
-    emit("PASS immutable-kernel-exit-boot-virtio-qemu");
+        packed_ir.buffers(),
+    ) catch |err| return fail(emit, mapVirtioGpuError(err), "FAIL post-exit virtio-gpu render-packed");
 }
 
 fn fillVirtioScanout(out: []u8) void {
@@ -225,6 +254,7 @@ fn mapVirtioGpuError(err: virtio_gpu.Error) Error {
         error.DeviceNotFound => error.VirtioGpuDeviceNotFound,
         error.DeviceTimeout => error.VirtioGpuTimeout,
         error.InvalidResponse => error.VirtioGpuInvalidResponse,
+        error.UnsupportedPackedFrame => error.VirtioGpuUnsupported,
         error.FeatureNegotiationFailed,
         error.InvalidBar,
         error.MissingCapability,

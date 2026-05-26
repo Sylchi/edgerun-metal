@@ -13,6 +13,7 @@ const workspace_manifest_magic = "ERVFSWS1";
 const workspace_manifest_version: u16 = 1;
 const workspace_manifest_reserved: u16 = 0;
 const runner_root_label = "src/smoke.zig";
+const edgerun_runner_root_label = "src/smoke.er";
 const runner_root_source =
     \\const max_width: usize = 4096;
     \\const buffer_len: usize = 8 * 1024;
@@ -68,6 +69,11 @@ const runner_root_source =
     \\    return @intFromEnum(ErrorCode.ok);
     \\}
     \\fn ensureSourceWorkspace() void {}
+;
+const edgerun_runner_root_source =
+    \\const max_width: usize = 4096;
+    \\pub export fn er_app_main() i32 { return 9; }
+    \\export fn er_smoke_const() usize { return max_width; }
 ;
 
 test "embedded compiler emits workspace successor wasm with source object embedded" {
@@ -209,6 +215,68 @@ test "embedded compiler emits workspace successor wasm with source object embedd
     try std.testing.expectEqual(@as(i32, 2), try oversized_commit_result.valueI32(0));
     const artifact_len_after_oversized_result = try wasm.executeExportValueArgs(&successor, output, "er_ui_release_artifact_len", &.{});
     try std.testing.expectEqual(@as(i32, 4), try artifact_len_after_oversized_result.valueI32(0));
+}
+
+test "embedded compiler compiles edgerun source root through interpreter" {
+    var file_raw: [2048]u8 = undefined;
+    var workspace_raw: [4096]u8 = undefined;
+    const source_bytes = try buildTestWorkspace(&workspace_raw, &file_raw, edgerun_runner_root_label, edgerun_runner_root_source);
+    const compiler_memory_len = alignForward(source_bytes.len + compiler_memory_extra_bytes, 16);
+    const source_offset = compiler_memory_offset + compiler_memory_len;
+    const requested_memory_len = source_offset + source_bytes.len + edgerun_runner_root_label.len + source_gap_bytes;
+    const memory_pages = pagesForBytes(requested_memory_len);
+    const memory_len = memory_pages * wasm_page_bytes;
+    const allocator = std.testing.allocator;
+    const memory = try allocator.alloc(u8, memory_len);
+    defer allocator.free(memory);
+    @memset(memory, 0);
+    @memcpy(memory[source_offset .. source_offset + source_bytes.len], source_bytes);
+    const root_label_offset = source_offset + source_bytes.len;
+    @memcpy(memory[root_label_offset..][0..edgerun_runner_root_label.len], edgerun_runner_root_label);
+
+    var execution_ticks: u64 = execution_tick_budget;
+    var runtime = wasm.Runtime.initWithMemoryPages(memory, &execution_ticks, memory_pages);
+    const init_result = try wasm.executeExportValueArgs(&runtime, &wasm_compiler, "er_wasm_compiler_init", &.{
+        .{ .i32 = @intCast(compiler_memory_offset) },
+        .{ .i32 = @intCast(compiler_memory_len) },
+    });
+    try std.testing.expectEqual(@as(i32, 0), try init_result.valueI32(0));
+
+    const compile_result = try wasm.executeExportValueArgs(&runtime, &wasm_compiler, "er_wasm_compiler_compile_wasm", &.{
+        .{ .i32 = @intCast(compiler_memory_offset) },
+        .{ .i32 = @intCast(compiler_memory_len) },
+        .{ .i32 = @intCast(root_label_offset) },
+        .{ .i32 = @intCast(edgerun_runner_root_label.len) },
+        .{ .i32 = @intCast(source_offset) },
+        .{ .i32 = @intCast(source_bytes.len) },
+    });
+    try std.testing.expectEqual(@as(i32, 0), try compile_result.valueI32(0));
+
+    const output_len: usize = @intCast(try (try wasm.executeExportValueArgs(&runtime, &wasm_compiler, "er_wasm_compiler_output_len", &.{})).valueI32(0));
+    try std.testing.expect(output_len > source_bytes.len);
+    const output_ptr: usize = @intCast(try (try wasm.executeExportValueArgs(&runtime, &wasm_compiler, "er_wasm_compiler_output_ptr", &.{})).valueI32(0));
+    try std.testing.expectEqual(@as(usize, compiler_memory_offset), output_ptr);
+    const output = memory[output_ptr..][0..output_len];
+    try std.testing.expectEqualSlices(u8, &.{ 0x00, 0x61, 0x73, 0x6d }, output[0..4]);
+
+    const successor_memory = try allocator.alloc(u8, source_bytes.len + source_gap_bytes);
+    defer allocator.free(successor_memory);
+    @memset(successor_memory, 0);
+    var successor_ticks: u64 = execution_tick_budget;
+    var successor = wasm.Runtime.init(successor_memory, &successor_ticks);
+
+    const source_len_result = try wasm.executeExportValueArgs(&successor, output, "er_app_source_len", &.{});
+    try std.testing.expectEqual(@as(i32, @intCast(source_bytes.len)), try source_len_result.valueI32(0));
+    const analyzed_file_count_result = try wasm.executeExportValueArgs(&successor, output, "er_app_analyzed_file_count", &.{});
+    try std.testing.expectEqual(@as(i32, 1), try analyzed_file_count_result.valueI32(0));
+    const lowered_main_count_result = try wasm.executeExportValueArgs(&successor, output, "er_app_lowered_main_count", &.{});
+    try std.testing.expectEqual(@as(i32, 1), try lowered_main_count_result.valueI32(0));
+    const lowered_export_count_result = try wasm.executeExportValueArgs(&successor, output, "er_app_lowered_export_count", &.{});
+    try std.testing.expectEqual(@as(i32, 1), try lowered_export_count_result.valueI32(0));
+    const main_result = try wasm.executeExportValueArgs(&successor, output, "er_app_main", &.{});
+    try std.testing.expectEqual(@as(i32, 9), try main_result.valueI32(0));
+    const const_result = try wasm.executeExportValueArgs(&successor, output, "er_smoke_const", &.{});
+    try std.testing.expectEqual(@as(i32, 4096), try const_result.valueI32(0));
 }
 
 fn buildTestWorkspace(workspace_raw: []u8, file_raw: []u8, label: []const u8, source: []const u8) ![]u8 {
