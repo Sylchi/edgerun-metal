@@ -1543,6 +1543,10 @@ fn appScrollLimit(width: f32, height: f32) f32 {
     return @max(0.0, er_ui_app_content_height(width) - height);
 }
 
+fn clampAppScrollToViewport(width: u32, height: u32) void {
+    app_state.scroll_y = @min(app_state.scroll_y, appScrollLimit(@floatFromInt(width), @floatFromInt(height)));
+}
+
 export fn er_ui_clear(width: u32, height: u32) u32 {
     const surface = beginFrame(width, height) orelse return finishError(.bad_size);
     surface.clear(.bg);
@@ -1552,7 +1556,7 @@ export fn er_ui_clear(width: u32, height: u32) u32 {
 
 export fn er_ui_build_app_frame(width: u32, height: u32, hover_x: f32, hover_y: f32, frame_ms: f32) u32 {
     if (!setFrameSize(width, height)) return finishError(.bad_size);
-    app_state.scroll_y = @min(app_state.scroll_y, appScrollLimit(@floatFromInt(frame_width), @floatFromInt(frame_height)));
+    clampAppScrollToViewport(width, height);
 
     return buildPackedAppFrameFromPreparedSize(currentAppFrameState(hover_x, hover_y, frame_ms));
 }
@@ -1571,6 +1575,7 @@ export fn er_ui_build_frame(width: u32, height: u32, frame_ms: f32) u32 {
 
 export fn er_ui_render_frame(width: u32, height: u32, frame_ms: f32) u32 {
     const surface = beginFrame(width, height) orelse return finishError(.bad_size);
+    clampAppScrollToViewport(width, height);
     return renderAppPixels(surface, pointer_hover_x, pointer_hover_y, frame_ms);
 }
 
@@ -1579,6 +1584,7 @@ export fn er_ui_render_frame_hd(width: u32, height: u32, scale_raw: f32, frame_m
     const physical_width = scaledFrameDimension(width, scale) orelse return finishError(.bad_size);
     const physical_height = scaledFrameDimension(height, scale) orelse return finishError(.bad_size);
     const surface = beginFrame(physical_width, physical_height) orelse return finishError(.bad_size);
+    clampAppScrollToViewport(width, height);
     _ = er_ui_set_device_scale(scale);
     return renderAppPixelsScaled(surface, width, height, scale, pointer_hover_x, pointer_hover_y, frame_ms);
 }
@@ -2652,6 +2658,19 @@ test "app runtime app state owns scroll position" {
     try std.testing.expectEqual(@as(u32, 0), er_ui_app_activate_hit(app_chrome.blog_button_id));
     try std.testing.expectEqual(@as(f32, 0.0), er_ui_app_scroll_y());
     try std.testing.expectEqual(@as(u32, 0), er_ui_app_scroll_by(200000.0, 1280.0, 900.0));
+    try std.testing.expectEqual(appScrollLimit(1280.0, 900.0), er_ui_app_scroll_y());
+}
+
+test "app render clamps stale scroll after viewport resize" {
+    app_state = .{};
+    defer app_state = .{};
+
+    try std.testing.expectEqual(@as(u32, 0), er_ui_app_scroll_by(200000.0, 360.0, 320.0));
+    const narrow_limit = appScrollLimit(360.0, 320.0);
+    try std.testing.expectEqual(narrow_limit, er_ui_app_scroll_y());
+    try std.testing.expect(narrow_limit > appScrollLimit(1280.0, 900.0));
+
+    try std.testing.expectEqual(@as(u32, 0), er_ui_render_frame_hd(1280, 900, 2.0, 0.0));
     try std.testing.expectEqual(appScrollLimit(1280.0, 900.0), er_ui_app_scroll_y());
 }
 
