@@ -35,6 +35,9 @@ const virtio_scanout_width: u32 = 640;
 const virtio_scanout_height: u32 = 360;
 const virtio_scanout_resource_id: u32 = 1;
 const virtio_scanout_id: u32 = 0;
+const virtio_gl_context_id: u32 = 1;
+const virtio_gl_resource_id: u32 = 2;
+const virtio_gl_surface_handle: u32 = 1;
 
 pub const Error = error{
     AllocationReceiverFailed,
@@ -155,6 +158,25 @@ fn runVirtioGpuChecks(state: *State, emit: Reporter) Error!void {
     emit("check: post-exit virtio-gpu init start");
     var device = virtio_gpu.Device.findAndInit(&state.virtio_queue) catch |err| return fail(emit, mapVirtioGpuError(err), "FAIL post-exit virtio-gpu init");
     if (device.virglReady()) {
+        const capset = device.getCapsetInfo(&state.virtio_queue, 0) catch |err| return fail(emit, mapVirtioGpuError(err), "FAIL post-exit virtio-gpu capset");
+        if (capset.capset_id == @intFromEnum(virtio_gpu.CapsetId.virgl) or capset.capset_id == @intFromEnum(virtio_gpu.CapsetId.virgl2)) {
+            emit("check: post-exit virtio-gpu virgl capset ok");
+        } else {
+            return fail(emit, error.VirtioGpuUnsupported, "FAIL post-exit virtio-gpu unexpected capset");
+        }
+        device.createContext(&state.virtio_queue, virtio_gl_context_id, .virgl, "edgerun-gl") catch |err| return fail(emit, mapVirtioGpuError(err), "FAIL post-exit virtio-gpu context");
+        device.create3dColorResource(&state.virtio_queue, virtio_gl_resource_id, virtio_scanout_width, virtio_scanout_height, .b8g8r8a8_unorm) catch |err| return fail(emit, mapVirtioGpuError(err), "FAIL post-exit virtio-gpu resource-3d");
+        device.attachResourceToContext(&state.virtio_queue, virtio_gl_context_id, virtio_gl_resource_id) catch |err| return fail(emit, mapVirtioGpuError(err), "FAIL post-exit virtio-gpu context-resource");
+        emit("check: post-exit virtio-gpu 3d resource ok");
+        device.submitVirglNop(&state.virtio_queue, virtio_gl_context_id) catch |err| return fail(emit, mapVirtioGpuError(err), "FAIL post-exit virtio-gpu submit-3d");
+        emit("check: post-exit virtio-gpu submit-3d ok");
+        device.clearVirglColorResource(&state.virtio_queue, virtio_gl_context_id, virtio_gl_resource_id, virtio_gl_surface_handle, .b8g8r8a8_unorm, .{
+            .r = 0.13,
+            .g = 0.83,
+            .b = 0.93,
+            .a = 1.0,
+        }) catch |err| return fail(emit, mapVirtioGpuError(err), "FAIL post-exit virtio-gpu clear-3d");
+        emit("check: post-exit virtio-gpu clear-3d ok");
         if (device.contextInitReady()) {
             emit("check: post-exit virtio-gpu virgl/context-init ok");
         } else {

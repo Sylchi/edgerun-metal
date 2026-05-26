@@ -22,8 +22,27 @@ pub const ControlType = enum(u32) {
     transfer_to_host_2d = 0x0105,
     resource_attach_backing = 0x0106,
     resource_detach_backing = 0x0107,
+    get_capset_info = 0x0108,
+    get_capset = 0x0109,
+    get_edid = 0x010a,
+    resource_assign_uuid = 0x010b,
+    resource_create_blob = 0x010c,
+    set_scanout_blob = 0x010d,
+    ctx_create = 0x0200,
+    ctx_destroy = 0x0201,
+    ctx_attach_resource = 0x0202,
+    ctx_detach_resource = 0x0203,
+    resource_create_3d = 0x0204,
+    transfer_to_host_3d = 0x0205,
+    transfer_from_host_3d = 0x0206,
+    submit_3d = 0x0207,
     resp_ok_nodata = 0x1100,
     resp_ok_display_info = 0x1101,
+    resp_ok_capset_info = 0x1102,
+    resp_ok_capset = 0x1103,
+    resp_ok_edid = 0x1104,
+    resp_ok_resource_uuid = 0x1105,
+    resp_ok_map_info = 0x1106,
     resp_err_unspec = 0x1200,
     resp_err_out_of_memory = 0x1201,
     resp_err_invalid_scanout_id = 0x1202,
@@ -41,6 +60,62 @@ pub const Format = enum(u32) {
     x8b8g8r8_unorm = 68,
     a8b8g8r8_unorm = 121,
     r8g8b8x8_unorm = 134,
+};
+
+pub const ResourceTarget = enum(u32) {
+    buffer = 0,
+    texture_1d = 1,
+    texture_2d = 2,
+    texture_3d = 3,
+    texture_cube = 4,
+    texture_rect = 5,
+    texture_1d_array = 6,
+    texture_2d_array = 7,
+    texture_cube_array = 8,
+};
+
+pub const resource_bind_render_target: u32 = 1 << 1;
+pub const resource_bind_sampler_view: u32 = 1 << 3;
+pub const resource_flag_y_0_top: u32 = 1 << 0;
+pub const pipe_clear_color0: u32 = 1 << 2;
+
+pub const VirglCommand = enum(u8) {
+    nop = 0,
+    create_object = 1,
+    bind_object = 2,
+    destroy_object = 3,
+    set_viewport_state = 4,
+    set_framebuffer_state = 5,
+    set_vertex_buffers = 6,
+    clear = 7,
+    draw_vbo = 8,
+};
+
+pub const VirglObject = enum(u8) {
+    null = 0,
+    blend = 1,
+    rasterizer = 2,
+    dsa = 3,
+    shader = 4,
+    vertex_elements = 5,
+    sampler_view = 6,
+    sampler_state = 7,
+    surface = 8,
+    query = 9,
+    streamout_target = 10,
+};
+
+pub fn virglCommand0(command: VirglCommand, object: VirglObject, dword_len: u16) u32 {
+    return @as(u32, @intFromEnum(command)) |
+        (@as(u32, @intFromEnum(object)) << 8) |
+        (@as(u32, dword_len) << 16);
+}
+
+pub const VirglClearColor = extern struct {
+    r: f32,
+    g: f32,
+    b: f32,
+    a: f32,
 };
 
 pub const Header = extern struct {
@@ -67,6 +142,40 @@ pub const Display = extern struct {
 pub const DisplayInfoResponse = extern struct {
     header: Header,
     displays: [16]Display,
+};
+
+pub const CapsetId = enum(u32) {
+    virgl = 1,
+    virgl2 = 2,
+    gfxstream_vulkan = 3,
+    venus = 4,
+    cross_domain = 5,
+    drm = 6,
+};
+
+pub const GetCapsetInfo = extern struct {
+    header: Header,
+    capset_index: u32,
+    padding: u32 = 0,
+
+    pub fn init(capset_index: u32) GetCapsetInfo {
+        return .{
+            .header = .{ .control_type = .get_capset_info },
+            .capset_index = capset_index,
+        };
+    }
+};
+
+pub const CapsetInfoResponse = extern struct {
+    header: Header,
+    capset_id: u32,
+    capset_max_version: u32,
+    capset_max_size: u32,
+    padding: u32 = 0,
+
+    pub fn ok(self: CapsetInfoResponse) bool {
+        return self.header.control_type == .resp_ok_capset_info;
+    }
 };
 
 pub const ResourceCreate2d = extern struct {
@@ -157,6 +266,100 @@ pub const ResourceFlush = extern struct {
     }
 };
 
+pub const ResourceCreate3d = extern struct {
+    header: Header,
+    resource_id: u32,
+    target: ResourceTarget,
+    format: Format,
+    bind: u32,
+    width: u32,
+    height: u32,
+    depth: u32,
+    array_size: u32,
+    last_level: u32,
+    sample_count: u32,
+    flags: u32,
+    padding: u32 = 0,
+
+    pub fn initColor2d(resource_id: u32, width: u32, height: u32, format: Format) ResourceCreate3d {
+        return .{
+            .header = .{ .control_type = .resource_create_3d },
+            .resource_id = resource_id,
+            .target = .texture_2d,
+            .format = format,
+            .bind = resource_bind_render_target | resource_bind_sampler_view,
+            .width = width,
+            .height = height,
+            .depth = 1,
+            .array_size = 1,
+            .last_level = 0,
+            .sample_count = 0,
+            .flags = resource_flag_y_0_top,
+        };
+    }
+};
+
+pub const ContextCreate = extern struct {
+    header: Header,
+    name_len: u32,
+    context_init: u32,
+    debug_name: [64]u8 = [_]u8{0} ** 64,
+
+    pub fn init(context_id: u32, capset_id: CapsetId, name: []const u8) ContextCreate {
+        var command = ContextCreate{
+            .header = .{
+                .control_type = .ctx_create,
+                .context_id = context_id,
+            },
+            .name_len = @intCast(@min(name.len, 64)),
+            .context_init = @intFromEnum(capset_id) & 0x000000ff,
+        };
+        @memcpy(command.debug_name[0..command.name_len], name[0..command.name_len]);
+        return command;
+    }
+};
+
+pub const ContextDestroy = extern struct {
+    header: Header,
+
+    pub fn init(context_id: u32) ContextDestroy {
+        return .{ .header = .{ .control_type = .ctx_destroy, .context_id = context_id } };
+    }
+};
+
+pub const ContextResource = extern struct {
+    header: Header,
+    resource_id: u32,
+    padding: u32 = 0,
+
+    pub fn attach(context_id: u32, resource_id: u32) ContextResource {
+        return .{
+            .header = .{ .control_type = .ctx_attach_resource, .context_id = context_id },
+            .resource_id = resource_id,
+        };
+    }
+
+    pub fn detach(context_id: u32, resource_id: u32) ContextResource {
+        return .{
+            .header = .{ .control_type = .ctx_detach_resource, .context_id = context_id },
+            .resource_id = resource_id,
+        };
+    }
+};
+
+pub const Submit3d = extern struct {
+    header: Header,
+    size: u32,
+    padding: u32 = 0,
+
+    pub fn init(context_id: u32, command_byte_len: u32) Submit3d {
+        return .{
+            .header = .{ .control_type = .submit_3d, .context_id = context_id },
+            .size = command_byte_len,
+        };
+    }
+};
+
 pub const Response = extern struct {
     header: Header,
 
@@ -175,12 +378,14 @@ pub const QueueStorage = struct {
     avail: virtio.Avail align(2) = .{ .flags = 0, .idx = 0, .ring = [_]u16{0} ** virtio.QueueSize, .used_event = 0 },
     used: virtio.Used align(4) = .{ .flags = 0, .idx = 0, .ring = [_]virtio.UsedElem{.{ .id = 0, .len = 0 }} ** virtio.QueueSize, .avail_event = 0 },
     response: Response align(8) = .{ .header = .{ .control_type = .resp_err_unspec } },
+    capset_info_response: CapsetInfoResponse align(8) = .{ .header = .{ .control_type = .resp_err_unspec }, .capset_id = 0, .capset_max_version = 0, .capset_max_size = 0 },
 
     fn reset(self: *QueueStorage) void {
         @memset(&self.desc, .{ .addr = 0, .len = 0, .flags = 0, .next = 0 });
         self.avail = .{ .flags = 0, .idx = 0, .ring = [_]u16{0} ** virtio.QueueSize, .used_event = 0 };
         self.used = .{ .flags = 0, .idx = 0, .ring = [_]virtio.UsedElem{.{ .id = 0, .len = 0 }} ** virtio.QueueSize, .avail_event = 0 };
         self.response = .{ .header = .{ .control_type = .resp_err_unspec } };
+        self.capset_info_response = .{ .header = .{ .control_type = .resp_err_unspec }, .capset_id = 0, .capset_max_version = 0, .capset_max_size = 0 };
     }
 };
 
@@ -236,13 +441,83 @@ pub const Device = struct {
     }
 
     pub fn send(self: *Device, storage: *QueueStorage, command_bytes: []const u8) Error!Response {
-        if (command_bytes.len == 0 or command_bytes.len > std.math.maxInt(u32)) return error.InvalidResponse;
         storage.response = .{ .header = .{ .control_type = .resp_err_unspec } };
-        prepareCommandDescriptors(storage, command_bytes, std.mem.asBytes(&storage.response));
+        _ = try self.sendWithResponse(storage, command_bytes, std.mem.asBytes(&storage.response));
+        return storage.response;
+    }
+
+    pub fn sendWithResponse(self: *Device, storage: *QueueStorage, command_bytes: []const u8, response_bytes: []u8) Error!void {
+        if (command_bytes.len == 0 or command_bytes.len > std.math.maxInt(u32)) return error.InvalidResponse;
+        if (response_bytes.len == 0 or response_bytes.len > std.math.maxInt(u32)) return error.InvalidResponse;
+        prepareCommandDescriptors(storage, command_bytes, response_bytes);
+        virtio.postDescriptor(&storage.avail, self.queue_size, 0);
+        self.transport.notifyQueue(self.queue_notify_off, control_queue);
+        _ = try waitForCompletion(&storage.used, self.queue_size, &self.last_used_idx);
+    }
+
+    pub fn sendWithPayload(self: *Device, storage: *QueueStorage, command_bytes: []const u8, payload: []const u8) Error!Response {
+        if (command_bytes.len == 0 or command_bytes.len > std.math.maxInt(u32)) return error.InvalidResponse;
+        if (payload.len == 0 or payload.len > std.math.maxInt(u32)) return error.InvalidResponse;
+        storage.response = .{ .header = .{ .control_type = .resp_err_unspec } };
+        prepareCommandWithPayloadDescriptors(storage, command_bytes, payload, std.mem.asBytes(&storage.response));
         virtio.postDescriptor(&storage.avail, self.queue_size, 0);
         self.transport.notifyQueue(self.queue_notify_off, control_queue);
         _ = try waitForCompletion(&storage.used, self.queue_size, &self.last_used_idx);
         return storage.response;
+    }
+
+    pub fn getCapsetInfo(self: *Device, storage: *QueueStorage, capset_index: u32) Error!CapsetInfoResponse {
+        storage.capset_info_response = .{ .header = .{ .control_type = .resp_err_unspec }, .capset_id = 0, .capset_max_version = 0, .capset_max_size = 0 };
+        const command = GetCapsetInfo.init(capset_index);
+        try self.sendWithResponse(storage, std.mem.asBytes(&command), std.mem.asBytes(&storage.capset_info_response));
+        if (!storage.capset_info_response.ok()) return error.InvalidResponse;
+        return storage.capset_info_response;
+    }
+
+    pub fn createContext(self: *Device, storage: *QueueStorage, context_id: u32, capset_id: CapsetId, name: []const u8) Error!void {
+        if (capset_id == .virgl and !self.virglReady()) return error.UnsupportedDevice;
+        const command = ContextCreate.init(context_id, capset_id, name);
+        try self.sendNoData(storage, command);
+    }
+
+    pub fn create3dColorResource(self: *Device, storage: *QueueStorage, resource_id: u32, width: u32, height: u32, format: Format) Error!void {
+        if (!self.virglReady()) return error.UnsupportedDevice;
+        try self.sendNoData(storage, ResourceCreate3d.initColor2d(resource_id, width, height, format));
+    }
+
+    pub fn attachResourceToContext(self: *Device, storage: *QueueStorage, context_id: u32, resource_id: u32) Error!void {
+        if (!self.virglReady()) return error.UnsupportedDevice;
+        try self.sendNoData(storage, ContextResource.attach(context_id, resource_id));
+    }
+
+    pub fn destroyContext(self: *Device, storage: *QueueStorage, context_id: u32) Error!void {
+        try self.sendNoData(storage, ContextDestroy.init(context_id));
+    }
+
+    pub fn submit3d(self: *Device, storage: *QueueStorage, context_id: u32, command_buffer: []const u8) Error!void {
+        if (!self.virglReady()) return error.UnsupportedDevice;
+        const submit = Submit3d.init(context_id, @intCast(command_buffer.len));
+        const response = try self.sendWithPayload(storage, std.mem.asBytes(&submit), command_buffer);
+        if (!response.okNoData()) return error.InvalidResponse;
+    }
+
+    pub fn submitVirglNop(self: *Device, storage: *QueueStorage, context_id: u32) Error!void {
+        const command_word = virglCommand0(.nop, .null, 0);
+        try self.submit3d(storage, context_id, std.mem.asBytes(&command_word));
+    }
+
+    pub fn clearVirglColorResource(
+        self: *Device,
+        storage: *QueueStorage,
+        context_id: u32,
+        resource_id: u32,
+        surface_handle: u32,
+        format: Format,
+        color: VirglClearColor,
+    ) Error!void {
+        var commands: [19]u32 = undefined;
+        writeVirglClearColorCommands(&commands, resource_id, surface_handle, format, color);
+        try self.submit3d(storage, context_id, std.mem.sliceAsBytes(&commands));
     }
 
     pub fn setup2d(self: *Device, storage: *QueueStorage, setup: Setup2d) Error!void {
@@ -290,6 +565,62 @@ fn prepareCommandDescriptors(storage: *QueueStorage, command_bytes: []const u8, 
     };
 }
 
+fn prepareCommandWithPayloadDescriptors(storage: *QueueStorage, command_bytes: []const u8, payload: []const u8, response_bytes: []u8) void {
+    storage.desc[0] = .{
+        .addr = @intFromPtr(command_bytes.ptr),
+        .len = @intCast(command_bytes.len),
+        .flags = virtio.desc_flag_next,
+        .next = 1,
+    };
+    storage.desc[1] = .{
+        .addr = @intFromPtr(payload.ptr),
+        .len = @intCast(payload.len),
+        .flags = virtio.desc_flag_next,
+        .next = 2,
+    };
+    storage.desc[2] = .{
+        .addr = @intFromPtr(response_bytes.ptr),
+        .len = @intCast(response_bytes.len),
+        .flags = virtio.desc_flag_write,
+        .next = 0,
+    };
+}
+
+pub fn writeVirglClearColorCommands(
+    out: *[19]u32,
+    resource_id: u32,
+    surface_handle: u32,
+    format: Format,
+    color: VirglClearColor,
+) void {
+    out[0] = virglCommand0(.create_object, .surface, 5);
+    out[1] = surface_handle;
+    out[2] = resource_id;
+    out[3] = @intFromEnum(format);
+    out[4] = 0;
+    out[5] = 0;
+
+    out[6] = virglCommand0(.set_framebuffer_state, .null, 3);
+    out[7] = 1;
+    out[8] = 0;
+    out[9] = surface_handle;
+
+    out[10] = virglCommand0(.clear, .null, 8);
+    out[11] = pipe_clear_color0;
+    out[12] = @bitCast(color.r);
+    out[13] = @bitCast(color.g);
+    out[14] = @bitCast(color.b);
+    out[15] = @bitCast(color.a);
+    const depth_bits: u64 = @bitCast(@as(f64, 1.0));
+    out[16] = @truncate(depth_bits);
+    out[17] = @truncate(depth_bits >> 32);
+    out[18] = 0;
+}
+
+pub fn virglClearColorCommandByteLen() usize {
+    return 19 * @sizeOf(u32);
+}
+
 fn waitForCompletion(used: *const virtio.Used, queue_size: u16, last_used_idx: *u16) Error!virtio.UsedElem {
     var spins: usize = 0;
     while (virtio.nextUsed(used, queue_size, last_used_idx)) |elem| {
@@ -305,11 +636,18 @@ fn waitForCompletion(used: *const virtio.Used, queue_size: u16, last_used_idx: *
 
 test "virtio gpu command layouts match fixed 2d protocol sizes" {
     try std.testing.expectEqual(@as(usize, 24), @sizeOf(Header));
+    try std.testing.expectEqual(@as(usize, 32), @sizeOf(GetCapsetInfo));
+    try std.testing.expectEqual(@as(usize, 40), @sizeOf(CapsetInfoResponse));
     try std.testing.expectEqual(@as(usize, 40), @sizeOf(ResourceCreate2d));
     try std.testing.expectEqual(@as(usize, 48), @sizeOf(ResourceAttachBacking));
     try std.testing.expectEqual(@as(usize, 48), @sizeOf(SetScanout));
     try std.testing.expectEqual(@as(usize, 56), @sizeOf(TransferToHost2d));
     try std.testing.expectEqual(@as(usize, 48), @sizeOf(ResourceFlush));
+    try std.testing.expectEqual(@as(usize, 72), @sizeOf(ResourceCreate3d));
+    try std.testing.expectEqual(@as(usize, 96), @sizeOf(ContextCreate));
+    try std.testing.expectEqual(@as(usize, 24), @sizeOf(ContextDestroy));
+    try std.testing.expectEqual(@as(usize, 32), @sizeOf(ContextResource));
+    try std.testing.expectEqual(@as(usize, 32), @sizeOf(Submit3d));
 }
 
 test "setup 2d sequence targets one resource and scanout" {
@@ -343,4 +681,61 @@ test "command descriptor chain sends request then writable response" {
     try std.testing.expectEqual(@as(u16, 1), storage.desc[0].next);
     try std.testing.expectEqual(@intFromPtr(std.mem.asBytes(&storage.response).ptr), storage.desc[1].addr);
     try std.testing.expectEqual(@as(u16, virtio.desc_flag_write), storage.desc[1].flags);
+}
+
+test "virgl context create encodes capset id and bounded debug name" {
+    const command = ContextCreate.init(7, .virgl, "edgerun-gl-context-name-that-is-longer-than-the-fixed-debug-name-buffer-by-design");
+    try std.testing.expectEqual(ControlType.ctx_create, command.header.control_type);
+    try std.testing.expectEqual(@as(u32, 7), command.header.context_id);
+    try std.testing.expectEqual(@as(u32, 64), command.name_len);
+    try std.testing.expectEqual(@as(u32, 1), command.context_init);
+    try std.testing.expectEqualStrings("edgerun-gl", command.debug_name[0..10]);
+}
+
+test "virgl 3d resource create encodes a 2d color target" {
+    const command = ResourceCreate3d.initColor2d(9, 640, 360, .b8g8r8a8_unorm);
+    try std.testing.expectEqual(ControlType.resource_create_3d, command.header.control_type);
+    try std.testing.expectEqual(@as(u32, 9), command.resource_id);
+    try std.testing.expectEqual(ResourceTarget.texture_2d, command.target);
+    try std.testing.expectEqual(Format.b8g8r8a8_unorm, command.format);
+    try std.testing.expect(command.bind & resource_bind_render_target != 0);
+    try std.testing.expect(command.bind & resource_bind_sampler_view != 0);
+    try std.testing.expectEqual(@as(u32, 1), command.depth);
+    try std.testing.expectEqual(@as(u32, 1), command.array_size);
+    try std.testing.expectEqual(@as(u32, resource_flag_y_0_top), command.flags);
+}
+
+test "virgl command header packs command object and dword length" {
+    try std.testing.expectEqual(@as(u32, 0), virglCommand0(.nop, .null, 0));
+    try std.testing.expectEqual(@as(u32, 7 | (8 << 8) | (13 << 16)), virglCommand0(.clear, .surface, 13));
+}
+
+test "virgl clear color command stream creates surface binds framebuffer and clears" {
+    var commands: [19]u32 = undefined;
+    writeVirglClearColorCommands(&commands, 2, 77, .b8g8r8a8_unorm, .{ .r = 0.1, .g = 0.2, .b = 0.3, .a = 1.0 });
+    try std.testing.expectEqual(virglCommand0(.create_object, .surface, 5), commands[0]);
+    try std.testing.expectEqual(@as(u32, 77), commands[1]);
+    try std.testing.expectEqual(@as(u32, 2), commands[2]);
+    try std.testing.expectEqual(@intFromEnum(Format.b8g8r8a8_unorm), commands[3]);
+    try std.testing.expectEqual(virglCommand0(.set_framebuffer_state, .null, 3), commands[6]);
+    try std.testing.expectEqual(@as(u32, 1), commands[7]);
+    try std.testing.expectEqual(@as(u32, 77), commands[9]);
+    try std.testing.expectEqual(virglCommand0(.clear, .null, 8), commands[10]);
+    try std.testing.expectEqual(@as(u32, pipe_clear_color0), commands[11]);
+    try std.testing.expectEqual(@as(u32, 19 * @sizeOf(u32)), virglClearColorCommandByteLen());
+}
+
+test "submit 3d descriptor chain sends header payload then writable response" {
+    var storage = QueueStorage{};
+    const submit = Submit3d.init(4, 8);
+    const payload = [_]u8{ 1, 2, 3, 4, 5, 6, 7, 8 };
+    prepareCommandWithPayloadDescriptors(&storage, std.mem.asBytes(&submit), &payload, std.mem.asBytes(&storage.response));
+    try std.testing.expectEqual(@intFromPtr(std.mem.asBytes(&submit).ptr), storage.desc[0].addr);
+    try std.testing.expectEqual(@as(u16, virtio.desc_flag_next), storage.desc[0].flags);
+    try std.testing.expectEqual(@as(u16, 1), storage.desc[0].next);
+    try std.testing.expectEqual(@intFromPtr(payload[0..].ptr), storage.desc[1].addr);
+    try std.testing.expectEqual(@as(u16, virtio.desc_flag_next), storage.desc[1].flags);
+    try std.testing.expectEqual(@as(u16, 2), storage.desc[1].next);
+    try std.testing.expectEqual(@intFromPtr(std.mem.asBytes(&storage.response).ptr), storage.desc[2].addr);
+    try std.testing.expectEqual(@as(u16, virtio.desc_flag_write), storage.desc[2].flags);
 }

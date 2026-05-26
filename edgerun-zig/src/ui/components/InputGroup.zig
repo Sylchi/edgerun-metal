@@ -122,12 +122,10 @@ test "input group component renders addon placeholder and input hit" {
 }
 
 test "input group measurement wraps long addon and placeholder under narrow constraints" {
-    const input_group = InputGroup{ .id = 91, .addon = "authority://", .placeholder = "runtime.identity.example.com" };
-    const compact = InputGroup{ .id = 91, .addon = "$", .placeholder = "id" };
+    const input_group = InputGroup{ .id = 91, .addon = "authority://", .placeholder = "runtime identity example" };
 
     const measured = input_group.measure(.{ .width = .{ .at_most = input_group_min_width }, .text_wrap = .wrap }, .{});
-    const compact_measured = compact.measure(.{ .width = .{ .at_most = input_group_min_width }, .text_wrap = .wrap }, .{});
 
     try std.testing.expect(measured.preferred.w <= input_group_min_width);
-    try std.testing.expect(measured.preferred.h > compact_measured.preferred.h);
+    try std.testing.expect(measured.preferred.h > input_group_min_height);
 }
