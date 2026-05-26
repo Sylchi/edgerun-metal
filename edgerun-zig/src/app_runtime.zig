@@ -940,7 +940,7 @@ export fn er_ui_app_context_menu(x: f32, y: f32) u32 {
 
 export fn er_ui_app_key_event(key_len: usize, ctrl: u32, meta: u32, alt: u32) u32 {
     if (key_len > input_bytes.len) return finishError(.bad_input);
-    if (app_state.view == .source and handleSourceEditorKey(input_bytes[0..key_len], ctrl, meta, alt)) {
+    if (sourceEditorFocused() and handleSourceEditorKey(input_bytes[0..key_len], ctrl, meta, alt)) {
         last_error = .ok;
         return 1;
     }
@@ -1007,6 +1007,7 @@ export fn er_ui_event(kind_raw: u32, x: f32, y: f32, delta_y: f32, ctrl: u32, me
             pointer_hover_y = y;
             context_menu_open = false;
             _ = er_ui_pointer_down(x, y);
+            _ = handleSourcePointerDown(x, y, width, height);
             return input_event_capture_pointer | input_event_schedule_frame;
         },
         .pointer_up => {
@@ -1034,6 +1035,25 @@ export fn er_ui_event(kind_raw: u32, x: f32, y: f32, delta_y: f32, ctrl: u32, me
             return input_event_prevent_default | input_event_schedule_frame;
         },
     }
+}
+
+fn sourceEditorFocused() bool {
+    return app_state.view == .source and runtime_state.focusKind() == .textarea and runtime_state.focusHitId() == app_source.editor_textarea_id;
+}
+
+fn handleSourcePointerDown(x: f32, y: f32, width: f32, height: f32) bool {
+    if (app_state.view != .source) return false;
+    const hit_id = currentHoverHitId();
+    if (hit_id == app_source.editor_textarea_id) {
+        setSourceEditorCursor(app_source.cursorFromPoint(ui.Rect.init(0.0, 0.0, width, height), currentSourceState(x, y), x, y));
+        return true;
+    }
+    if (app_source.sourceLabelFromHit(hit_id)) |label| {
+        if (selectSourceEditorLabel(label) != .ok) return false;
+        ensureSourceEditor();
+        return true;
+    }
+    return false;
 }
 
 export fn er_ui_event_bytes(input_len: usize, width: f32, height: f32, frame_ms: f32) u32 {
@@ -1306,6 +1326,12 @@ fn sourceEditorColumn(cursor: usize) usize {
     var index = @min(cursor, source_editor_len);
     while (index > 0 and source_editor_bytes[index - 1] != '\n') : (index -= 1) {}
     return @min(cursor, source_editor_len) - index;
+}
+
+fn setSourceEditorCursor(cursor: usize) void {
+    ensureSourceEditor();
+    source_editor_cursor = @min(cursor, source_editor_len);
+    source_editor_preferred_column = sourceEditorColumn(source_editor_cursor);
 }
 
 fn commitSourceEditorBytes() void {
@@ -2346,6 +2372,13 @@ fn keyEventForTest(value: []const u8, ctrl: bool, meta: bool, alt: bool) u32 {
     );
 }
 
+fn lastRegionBounds(id: u32) !ui.Rect {
+    for (lastRegions()) |region| {
+        if (region.id == id) return region.bounds;
+    }
+    return error.MissingHit;
+}
+
 fn hasFocusRingCommand(items: []const ui.Command) bool {
     for (items) |command| switch (command) {
         .rect => |rect| {
@@ -2557,6 +2590,8 @@ test "app runtime source editor rewrites a canonical vfs file" {
     try std.testing.expectEqual(@as(u32, 0), er_ui_source_workspace_reset());
     defer _ = er_ui_source_workspace_reset();
     applyRoute(.{ .view = .source });
+    runtime_state.focused = .{ .kind = .textarea, .id = app_source.editor_textarea_id, .bounds = ui.Rect.init(0.0, 0.0, 1.0, 1.0) };
+    defer runtime_state = .{};
 
     const original = try findWorkspaceFileBody(source_object[0..], source_editor_label);
     const editor: [*]const u8 = @ptrFromInt(er_ui_source_editor_ptr());
@@ -2573,6 +2608,51 @@ test "app runtime source editor rewrites a canonical vfs file" {
     try std.testing.expectEqual(@as(u32, 1), er_ui_app_key_event(writeInputForTest("Backspace"), 0, 0, 0));
     const restored = try findWorkspaceFileBody(source_workspace[0..source_workspace_len], source_editor_label);
     try std.testing.expectEqualStrings(original, restored);
+}
+
+test "app runtime source editor pointer focus places caret before editing" {
+    try std.testing.expectEqual(@as(u32, 0), er_ui_source_workspace_reset());
+    defer _ = er_ui_source_workspace_reset();
+    app_state = .{};
+    runtime_state = .{};
+    defer app_state = .{};
+    defer runtime_state = .{};
+
+    applyRoute(.{ .view = .source });
+    const code = er_ui_build_app_frame(1280, 800, -1.0, -1.0, 0.0);
+    try std.testing.expectEqual(@as(u32, 0), code);
+    const editor_bounds = try lastRegionBounds(app_source.editor_textarea_id);
+    const click_x = editor_bounds.x + 90.0;
+    const click_y = editor_bounds.y + 20.0;
+
+    const pointer_result = er_ui_event(@intFromEnum(InputEventKind.pointer_down), click_x, click_y, 0.0, 0, 0, 0, 0, 1280.0, 800.0);
+    try std.testing.expectEqual(input_event_capture_pointer | input_event_schedule_frame, pointer_result);
+    try std.testing.expectEqual(ui.HitKind.textarea, runtime_state.focusKind().?);
+    try std.testing.expectEqual(app_source.editor_textarea_id, runtime_state.focusHitId());
+    try std.testing.expectEqual(@as(usize, 0), source_editor_cursor);
+
+    try std.testing.expectEqual(@as(u32, 1), er_ui_app_key_event(writeInputForTest("z"), 0, 0, 0));
+    try std.testing.expectEqual(@as(u8, 'z'), source_editor_bytes[0]);
+}
+
+test "app runtime source explorer rows open real workspace files" {
+    try std.testing.expectEqual(@as(u32, 0), er_ui_source_workspace_reset());
+    defer _ = er_ui_source_workspace_reset();
+    app_state = .{};
+    runtime_state = .{};
+    defer app_state = .{};
+    defer runtime_state = .{};
+
+    applyRoute(.{ .view = .source });
+    const code = er_ui_build_app_frame(1280, 800, -1.0, -1.0, 0.0);
+    try std.testing.expectEqual(@as(u32, 0), code);
+    const row_bounds = try lastRegionBounds(app_source.explorer_file_id_base + 1);
+    const pointer_result = er_ui_event(@intFromEnum(InputEventKind.pointer_down), row_bounds.x + 12.0, row_bounds.y + 12.0, 0.0, 0, 0, 0, 0, 1280.0, 800.0);
+
+    try std.testing.expectEqual(input_event_capture_pointer | input_event_schedule_frame, pointer_result);
+    try std.testing.expectEqualStrings("src/app_source.zig", source_editor_label);
+    try std.testing.expectEqual(SourceEditorStatus.ready, source_editor_status);
+    try std.testing.expect(source_editor_len > 0);
 }
 
 test "app runtime source editor moves by visual lines" {
