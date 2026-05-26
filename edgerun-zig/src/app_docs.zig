@@ -405,8 +405,7 @@ fn docBodyHeight(width: f32, compact: bool, page: DocPage, state: State) f32 {
 }
 
 fn renderSidebar(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, selected_index: ?usize) (ui.RenderError || interaction.Error)!void {
-    try fill(scene, bounds, palette.panel, panel_radius);
-    try stroke(scene, bounds, palette.border, panel_radius);
+    try components.renderComponent(scene, bounds, .{ .card = .{ .title = "", .detail = "" } }, .{ .style = app_chrome.style() });
     try text(scene, bounds.x + card_pad, bounds.y + 18.0, bounds.w - card_pad * 2.0, 16.0, "Docs", palette.text);
     try text(scene, bounds.x + card_pad, bounds.y + 38.0, bounds.w - card_pad * 2.0, 14.0, "Feature map", palette.muted);
     var y = bounds.y + 64.0;

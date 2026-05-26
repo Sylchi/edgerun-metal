@@ -540,8 +540,9 @@ fn renderNodeMap(scene: *ui.Scene, bounds: ui.Rect, state: State, show_status: b
 }
 
 fn tag(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, color: ui.Color) ui.RenderError!void {
-    try fill(scene, bounds, palette.neutral_soft, 5.0);
-    try alignedText(scene, bounds.x + 8.0, bounds.y + 6.0, bounds.w - 16.0, 10.0, label, color, .center);
+    var tag_style = appStyle();
+    tag_style.accent = color;
+    try components.renderComponent(scene, bounds, .{ .badge = .{ .label = label, .variant = .outline } }, .{ .style = tag_style });
 }
 
 fn title(scene: *ui.Scene, bounds: ui.Rect, value: []const u8) ui.RenderError!void {
