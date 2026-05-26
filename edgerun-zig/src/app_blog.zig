@@ -1509,8 +1509,7 @@ const AuthorityFlowStage = enum {
 };
 
 fn renderAuthorityFlowDemo(scene: *ui.Scene, bounds: ui.Rect, hover_x: f32, hover_y: f32) ui.RenderError!void {
-    try fill(scene, bounds, palette.card, 8.0);
-    try scene.pushRect(bounds, palette.border, .border, 8.0, 0.0);
+    try demoFrame(scene, bounds);
     const inner = bounds.insetUniform(authority_flow_demo_pad);
     try tag(scene, ui.Rect.init(inner.x, inner.y, 152.0, 24.0), "AUTHORITY FLOW", palette.blue);
     try paragraph(scene, ui.Rect.init(inner.x + 176.0, inner.y + 2.0, @max(1.0, inner.w - 176.0), 48.0), "Follow one request without letting any participant become another participant.");
@@ -1599,8 +1598,7 @@ fn authorityFlowStageColor(stage: AuthorityFlowStage) ui.Color {
 
 fn renderPostModelDemo(scene: *ui.Scene, bounds: ui.Rect, post_index: usize, hover_x: f32, hover_y: f32) ui.RenderError!void {
     const post = posts[post_index];
-    try fill(scene, bounds, palette.card, 8.0);
-    try scene.pushRect(bounds, palette.border, .border, 8.0, 0.0);
+    try demoFrame(scene, bounds);
     const inner = bounds.insetUniform(post_model_demo_pad);
     try tag(scene, ui.Rect.init(inner.x, inner.y, 150.0, 24.0), "INTERACTIVE MODEL", palette.blue);
     try text(scene, inner.x, inner.y + 38.0, inner.w, 18.0, post.category, palette.text);
@@ -1770,8 +1768,7 @@ const vpn_lanes = [_]VpnLane{
 };
 
 fn renderVpnWhoSeesWhatDemo(scene: *ui.Scene, bounds: ui.Rect, hover_x: f32, hover_y: f32) ui.RenderError!void {
-    try fill(scene, bounds, palette.card, 8.0);
-    try scene.pushRect(bounds, palette.border, .border, 8.0, 0.0);
+    try demoFrame(scene, bounds);
     const inner = bounds.insetUniform(vpn_demo_pad);
     try tag(scene, ui.Rect.init(inner.x, inner.y, 126.0, 24.0), "NATIVE DEMO", palette.blue);
     try text(scene, inner.x, inner.y + 38.0, inner.w, 18.0, "Who sees what?", palette.text);
@@ -1898,8 +1895,7 @@ const tls_actors = [_]TlsActor{
 };
 
 fn renderTlsEndpointDemo(scene: *ui.Scene, bounds: ui.Rect, hover_x: f32, hover_y: f32) ui.RenderError!void {
-    try fill(scene, bounds, palette.card, 8.0);
-    try scene.pushRect(bounds, palette.border, .border, 8.0, 0.0);
+    try demoFrame(scene, bounds);
     const inner = bounds.insetUniform(tls_demo_pad);
     try tag(scene, ui.Rect.init(inner.x, inner.y, 120.0, 24.0), "TLS DEMO", palette.blue);
     try text(scene, inner.x, inner.y + 38.0, inner.w, 18.0, "The tunnel ends at the endpoint.", palette.text);
@@ -2004,8 +2000,7 @@ const data_copy_nodes = [_]DataCopyNode{
 };
 
 fn renderDataCopyMapDemo(scene: *ui.Scene, bounds: ui.Rect, hover_x: f32, hover_y: f32) ui.RenderError!void {
-    try fill(scene, bounds, palette.card, 8.0);
-    try scene.pushRect(bounds, palette.border, .border, 8.0, 0.0);
+    try demoFrame(scene, bounds);
     const inner = bounds.insetUniform(data_copy_demo_pad);
     try tag(scene, ui.Rect.init(inner.x, inner.y, 128.0, 24.0), "COPY MAP", palette.blue);
     try text(scene, inner.x, inner.y + 38.0, inner.w, 18.0, "Deleting the UI copy is not deleting every copy.", palette.text);
@@ -2119,8 +2114,7 @@ const identity_signals = [_]IdentitySignal{
 };
 
 fn renderPhoneIdentityStackDemo(scene: *ui.Scene, bounds: ui.Rect, hover_x: f32, hover_y: f32) ui.RenderError!void {
-    try fill(scene, bounds, palette.card, 8.0);
-    try scene.pushRect(bounds, palette.border, .border, 8.0, 0.0);
+    try demoFrame(scene, bounds);
     const inner = bounds.insetUniform(identity_demo_pad);
     try tag(scene, ui.Rect.init(inner.x, inner.y, 142.0, 24.0), "IDENTITY STACK", palette.blue);
     try text(scene, inner.x, inner.y + 38.0, inner.w, 18.0, "Your phone correlates signals. It does not own you.", palette.text);
@@ -2226,8 +2220,7 @@ const permission_steps = [_]PermissionStep{
 };
 
 fn renderPermissionLadderDemo(scene: *ui.Scene, bounds: ui.Rect, hover_x: f32, hover_y: f32) ui.RenderError!void {
-    try fill(scene, bounds, palette.card, 8.0);
-    try scene.pushRect(bounds, palette.border, .border, 8.0, 0.0);
+    try demoFrame(scene, bounds);
     const inner = bounds.insetUniform(permission_demo_pad);
     try tag(scene, ui.Rect.init(inner.x, inner.y, 154.0, 24.0), "PERMISSION LADDER", palette.blue);
     try text(scene, inner.x, inner.y + 38.0, inner.w, 18.0, "Powerful hardware, gated authority.", palette.text);
@@ -2326,8 +2319,7 @@ const dns_steps = [_]DnsStep{
 };
 
 fn renderDnsLookupPathDemo(scene: *ui.Scene, bounds: ui.Rect, hover_x: f32, hover_y: f32) ui.RenderError!void {
-    try fill(scene, bounds, palette.card, 8.0);
-    try scene.pushRect(bounds, palette.border, .border, 8.0, 0.0);
+    try demoFrame(scene, bounds);
     const inner = bounds.insetUniform(dns_demo_pad);
     try tag(scene, ui.Rect.init(inner.x, inner.y, 118.0, 24.0), "DNS PATH", palette.blue);
     try text(scene, inner.x, inner.y + 38.0, inner.w, 18.0, "A name is a lookup, not an identity.", palette.text);
@@ -2420,8 +2412,7 @@ const account_path = [_]AccountBox{
 };
 
 fn renderAccountVsKeyDemo(scene: *ui.Scene, bounds: ui.Rect, hover_x: f32, hover_y: f32) ui.RenderError!void {
-    try fill(scene, bounds, palette.card, 8.0);
-    try scene.pushRect(bounds, palette.border, .border, 8.0, 0.0);
+    try demoFrame(scene, bounds);
     const inner = bounds.insetUniform(account_demo_pad);
     try tag(scene, ui.Rect.init(inner.x, inner.y, 132.0, 24.0), "IDENTITY DEMO", palette.blue);
     try text(scene, inner.x, inner.y + 38.0, inner.w, 18.0, "Account permission is not portable identity.", palette.text);
@@ -2530,8 +2521,7 @@ const server_stages = [_]ServerStage{
 };
 
 fn renderServerPipelineDemo(scene: *ui.Scene, bounds: ui.Rect, hover_x: f32, hover_y: f32) ui.RenderError!void {
-    try fill(scene, bounds, palette.card, 8.0);
-    try scene.pushRect(bounds, palette.border, .border, 8.0, 0.0);
+    try demoFrame(scene, bounds);
     const inner = bounds.insetUniform(server_demo_pad);
     try tag(scene, ui.Rect.init(inner.x, inner.y, 142.0, 24.0), "SERVER PIPELINE", palette.blue);
     try text(scene, inner.x, inner.y + 38.0, inner.w, 18.0, "The server is code, policy, queues, logs, and memory.", palette.text);
@@ -2638,8 +2628,7 @@ const push_steps = [_]PushStep{
 };
 
 fn renderPushWakePathDemo(scene: *ui.Scene, bounds: ui.Rect, hover_x: f32, hover_y: f32) ui.RenderError!void {
-    try fill(scene, bounds, palette.card, 8.0);
-    try scene.pushRect(bounds, palette.border, .border, 8.0, 0.0);
+    try demoFrame(scene, bounds);
     const inner = bounds.insetUniform(push_demo_pad);
     try tag(scene, ui.Rect.init(inner.x, inner.y, 128.0, 24.0), "WAKE PATH", palette.blue);
     try text(scene, inner.x, inner.y + 38.0, inner.w, 18.0, "A notification is delivery plus a wakeup.", palette.text);
@@ -2740,8 +2729,7 @@ const dependency_nodes = [_]DependencyNode{
 };
 
 fn renderDependencyGraphDemo(scene: *ui.Scene, bounds: ui.Rect, hover_x: f32, hover_y: f32) ui.RenderError!void {
-    try fill(scene, bounds, palette.card, 8.0);
-    try scene.pushRect(bounds, palette.border, .border, 8.0, 0.0);
+    try demoFrame(scene, bounds);
     const inner = bounds.insetUniform(dependency_demo_pad);
     try tag(scene, ui.Rect.init(inner.x, inner.y, 150.0, 24.0), "DEPENDENCY GRAPH", palette.blue);
     try text(scene, inner.x, inner.y + 38.0, inner.w, 18.0, "One app icon can hide many trust paths.", palette.text);
@@ -2865,8 +2853,7 @@ const router_steps = [_]RouterStep{
 };
 
 fn renderRouterBoundaryDemo(scene: *ui.Scene, bounds: ui.Rect, hover_x: f32, hover_y: f32) ui.RenderError!void {
-    try fill(scene, bounds, palette.card, 8.0);
-    try scene.pushRect(bounds, palette.border, .border, 8.0, 0.0);
+    try demoFrame(scene, bounds);
     const inner = bounds.insetUniform(router_demo_pad);
     try tag(scene, ui.Rect.init(inner.x, inner.y, 142.0, 24.0), "ROUTER BOUNDARY", palette.blue);
     try text(scene, inner.x, inner.y + 38.0, inner.w, 18.0, "Wi-Fi protects local air, not every later boundary.", palette.text);
@@ -2968,8 +2955,7 @@ const keypress_steps = [_]KeypressStep{
 };
 
 fn renderKeypressCommitPathDemo(scene: *ui.Scene, bounds: ui.Rect, hover_x: f32, hover_y: f32) ui.RenderError!void {
-    try fill(scene, bounds, palette.card, 8.0);
-    try scene.pushRect(bounds, palette.border, .border, 8.0, 0.0);
+    try demoFrame(scene, bounds);
     const inner = bounds.insetUniform(keypress_demo_pad);
     try tag(scene, ui.Rect.init(inner.x, inner.y, 142.0, 24.0), "COMMIT PATH", palette.blue);
     try text(scene, inner.x, inner.y + 38.0, inner.w, 18.0, "Typing is not the same as sending.", palette.text);
@@ -3069,8 +3055,7 @@ const compute_tasks = [_]ComputeTask{
 };
 
 fn renderLocalComputeCapacityDemo(scene: *ui.Scene, bounds: ui.Rect, hover_x: f32, hover_y: f32) ui.RenderError!void {
-    try fill(scene, bounds, palette.card, 8.0);
-    try scene.pushRect(bounds, palette.border, .border, 8.0, 0.0);
+    try demoFrame(scene, bounds);
     const inner = bounds.insetUniform(compute_demo_pad);
     try tag(scene, ui.Rect.init(inner.x, inner.y, 150.0, 24.0), "LOCAL COMPUTE", palette.blue);
     try text(scene, inner.x, inner.y + 38.0, inner.w, 18.0, "Small personal workloads fit on the device.", palette.text);
@@ -3176,8 +3161,7 @@ const storage_stages = [_]StorageStage{
 };
 
 fn renderStorageSealedObjectsDemo(scene: *ui.Scene, bounds: ui.Rect, hover_x: f32, hover_y: f32) ui.RenderError!void {
-    try fill(scene, bounds, palette.card, 8.0);
-    try scene.pushRect(bounds, palette.border, .border, 8.0, 0.0);
+    try demoFrame(scene, bounds);
     const inner = bounds.insetUniform(storage_demo_pad);
     try tag(scene, ui.Rect.init(inner.x, inner.y, 142.0, 24.0), "SEALED STORAGE", palette.blue);
     try text(scene, inner.x, inner.y + 38.0, inner.w, 18.0, "Bytes need ownership rules.", palette.text);
@@ -3275,8 +3259,7 @@ const trust_steps = [_]TrustStep{
 };
 
 fn renderSecureBootRootDemo(scene: *ui.Scene, bounds: ui.Rect, hover_x: f32, hover_y: f32) ui.RenderError!void {
-    try fill(scene, bounds, palette.card, 8.0);
-    try scene.pushRect(bounds, palette.border, .border, 8.0, 0.0);
+    try demoFrame(scene, bounds);
     const inner = bounds.insetUniform(trust_demo_pad);
     try tag(scene, ui.Rect.init(inner.x, inner.y, 146.0, 24.0), "ROOT OF TRUST", palette.blue);
     try text(scene, inner.x, inner.y + 38.0, inner.w, 18.0, "A root of trust must answer: root for whom?", palette.text);
@@ -3370,8 +3353,13 @@ fn calloutHeight(value: []const u8, width: f32) f32 {
 }
 
 fn callout(scene: *ui.Scene, bounds: ui.Rect, value: []const u8) ui.RenderError!void {
-    try fill(scene, bounds, palette.card_alt, app_chrome.surface_radius);
-    try scene.pushRect(bounds, palette.border, .border, app_chrome.surface_radius, 0.0);
+    var callout_style = appStyle();
+    callout_style.panel = palette.card_alt;
+    try components.renderComponent(scene, bounds, .{ .card = .{
+        .title = "",
+        .detail = "",
+        .variant = .subtle,
+    } }, .{ .style = callout_style });
     try fill(scene, ui.Rect.init(bounds.x, bounds.y, 3.0, bounds.h), palette.primary, 2.0);
     try scene.pushWrappedText(ui.Rect.init(bounds.x + callout_pad_x, bounds.y + callout_pad_y, bounds.w - callout_pad_x * 2.0, bounds.h - callout_pad_y * 2.0), value, palette.text, .{
         .line_height = callout_line_h,
@@ -3457,6 +3445,10 @@ fn nativeBadge(scene: *ui.Scene, bounds: ui.Rect, label: []const u8) ui.RenderEr
 
 fn nativeCard(scene: *ui.Scene, bounds: ui.Rect, title_value: []const u8, detail_value: []const u8) ui.RenderError!void {
     try nativeComponentVisual(scene, bounds, .{ .card = .{ .title = title_value, .detail = detail_value, .variant = .elevated } });
+}
+
+fn demoFrame(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
+    try nativeComponentVisual(scene, bounds, .{ .card = .{ .title = "", .detail = "" } });
 }
 
 fn nativeComponent(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, component: components.Component) (ui.RenderError || interaction.Error)!void {
@@ -3777,9 +3769,32 @@ test "blog renders native demo directives inside post markup" {
     try std.testing.expect(hasText(scene.written(), "TPM"));
 }
 
+test "blog demo and callout frames use canonical card surfaces" {
+    var commands: [256]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+
+    try renderAuthorityFlowDemo(&scene, ui.Rect.init(0, 0, 640, 260), -1.0, -1.0);
+    try std.testing.expect(hasRectColor(scene.written(), appStyle().panel));
+    try std.testing.expect(hasRectColor(scene.written(), appStyle().border));
+    try std.testing.expect(hasText(scene.written(), "AUTHORITY FLOW"));
+
+    scene.clear();
+    try callout(&scene, ui.Rect.init(0, 0, 420, 82), "A receipt has to say who asked and what changed.");
+    try std.testing.expect(hasRectColor(scene.written(), palette.card_alt));
+    try std.testing.expect(hasRectColor(scene.written(), palette.primary));
+}
+
 fn hasText(commands: []const ui.Command, value: []const u8) bool {
     for (commands) |command| switch (command) {
         .text => |text_command| if (std.mem.eql(u8, text_command.value, value)) return true,
+        else => {},
+    };
+    return false;
+}
+
+fn hasRectColor(commands: []const ui.Command, color: ui.Color) bool {
+    for (commands) |command| switch (command) {
+        .rect => |rect| if (std.meta.eql(rect.color, color)) return true,
         else => {},
     };
     return false;
