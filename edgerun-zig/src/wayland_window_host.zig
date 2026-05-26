@@ -2009,13 +2009,14 @@ test "wayland host renders client side decoration above app content" {
     var collector = interaction.Collector.init(&regions);
     try renderNativeAppScene(&scene, &collector, 1280, 800, state);
 
-    try std.testing.expect(hasText(scene.written(), "EdgeRun Native"));
+    try std.testing.expect(hasText(scene.written(), "EDGERUN"));
+    try std.testing.expect(hasText(scene.written(), "Academy"));
     try std.testing.expect(hasIcon(scene.written(), .x));
     try std.testing.expectEqual(@as(f32, 0.0), (try hitRect(collector.written(), client_decor_drag_id)).y);
     try std.testing.expect((try hitRect(collector.written(), client_decor_close_id)).x > 1200.0);
 
-    const logo = try hitRect(collector.written(), app_chrome.logo_button_id);
-    try std.testing.expect(logo.y >= client_decor_h);
+    const academy = try hitRect(collector.written(), app_chrome.blog_button_id);
+    try std.testing.expect(academy.y >= client_decor_h);
 }
 
 test "wayland cursor overlay renders through software presentation receipt" {

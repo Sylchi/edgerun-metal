@@ -1,8 +1,10 @@
 const std = @import("std");
 const component_gallery = @import("component_gallery.zig");
 const components = @import("ui_components.zig");
+const icon = @import("icon.zig");
 const interaction = @import("ui_interaction.zig");
 const app_blog = @import("app_blog.zig");
+const app_chrome = @import("app_chrome.zig");
 const app_docs = @import("app_docs.zig");
 const app_landing = @import("app_landing.zig");
 const app_navigation = @import("app_navigation.zig");
@@ -10,6 +12,16 @@ const app_source = @import("app_source.zig");
 const design = @import("app_design.zig");
 const ui = @import("ui.zig");
 const ui_overlay = @import("ui_overlay.zig");
+
+const workspace_rail_w: f32 = 48.0;
+const workspace_sidebar_w: f32 = 260.0;
+const workspace_status_h: f32 = 24.0;
+const workspace_rail_pad: f32 = 12.0;
+const workspace_icon_button: f32 = 36.0;
+const workspace_rail_bg = ui.Color{ .r = 37, .g = 37, .b = 38 };
+const workspace_sidebar_bg = ui.Color{ .r = 24, .g = 24, .b = 24 };
+const workspace_main_bg = ui.Color{ .r = 10, .g = 12, .b = 16 };
+const workspace_status_bg = ui.Color{ .r = 0, .g = 122, .b = 204 };
 
 pub const State = struct {
     route: app_navigation.Route = .{},
@@ -33,38 +45,7 @@ pub const ContextMenu = struct {
 };
 
 pub fn render(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
-    switch (state.route.view) {
-        .landing => try app_landing.render(scene, collector, bounds, .{
-            .scroll_y = state.scroll_y,
-            .hover_x = state.hover_x,
-            .hover_y = state.hover_y,
-            .frame_ms = state.frame_ms,
-            .public_identity = state.public_identity,
-            .public_identity_ready = state.public_identity_ready,
-        }),
-        .blog => try app_blog.render(scene, collector, bounds, .{
-            .scroll_y = state.scroll_y,
-            .hover_x = state.hover_x,
-            .hover_y = state.hover_y,
-            .selected_post_id = state.route.selected_blog_post_id,
-            .arc_filter_index = state.route.blog_arc_filter_index,
-        }),
-        .docs => try app_docs.render(scene, collector, bounds, .{
-            .scroll_y = state.scroll_y,
-            .hover_x = state.hover_x,
-            .hover_y = state.hover_y,
-            .selected_doc_index = state.route.selected_doc_index,
-            .selected_component_index = state.route.selected_component_index,
-        }),
-        .components => try app_docs.render(scene, collector, bounds, .{
-            .scroll_y = state.scroll_y,
-            .hover_x = state.hover_x,
-            .hover_y = state.hover_y,
-            .selected_doc_index = app_docs.indexBySlug("component-system"),
-            .selected_component_index = state.route.selected_component_index,
-        }),
-        .source => try app_source.render(scene, collector, bounds, state.source),
-    }
+    try renderWorkspace(scene, collector, bounds, state);
     var overlay_commands: [overlay_command_capacity]ui.Command = undefined;
     var overlay_regions: [overlay_region_capacity]interaction.Region = undefined;
     var overlay_entries: [overlay_entry_capacity]ui_overlay.Entry = undefined;
@@ -86,6 +67,132 @@ pub fn contentHeight(width: f32, state: State) f32 {
             .selected_component_index = state.route.selected_component_index,
         }),
         .source => app_source.contentHeight(width, state.source),
+    };
+}
+
+fn renderWorkspace(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
+    try scene.pushRect(bounds, design.palette.bg, .fill, 0.0, 0.0);
+    const rail = ui.Rect.init(bounds.x, bounds.y, workspace_rail_w, bounds.h);
+    const sidebar = ui.Rect.init(rail.x + rail.w, bounds.y, workspace_sidebar_w, bounds.h);
+    const main = ui.Rect.init(sidebar.x + sidebar.w, bounds.y, @max(1.0, bounds.w - rail.w - sidebar.w), @max(1.0, bounds.h - workspace_status_h));
+    const status = ui.Rect.init(main.x, bounds.y + bounds.h - workspace_status_h, main.w, workspace_status_h);
+    try renderWorkspaceRail(scene, collector, rail, state.route.view);
+    try renderWorkspaceSidebar(scene, collector, sidebar, state.route);
+    try renderWorkspaceMain(scene, collector, main, state);
+    try renderWorkspaceStatus(scene, status, state);
+}
+
+fn renderWorkspaceRail(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, active: app_navigation.View) !void {
+    try scene.pushRect(bounds, workspace_rail_bg, .fill, 0.0, 0.0);
+    const items = [_]struct { id: u32, icon_value: icon.Icon, label: []const u8, view: app_navigation.View }{
+        .{ .id = app_chrome.source_button_id, .icon_value = .code, .label = "Source", .view = .source },
+        .{ .id = app_chrome.docs_button_id, .icon_value = .file, .label = "Docs", .view = .docs },
+        .{ .id = app_chrome.blog_button_id, .icon_value = .terminal, .label = "Academy", .view = .blog },
+    };
+    var y = bounds.y + workspace_rail_pad;
+    for (items) |item| {
+        const item_bounds = ui.Rect.init(bounds.x + 6.0, y, bounds.w - 12.0, workspace_icon_button);
+        const component = components.Component{ .icon_button = .{
+            .id = item.id,
+            .label = item.label,
+            .icon_value = item.icon_value,
+            .variant = if (active == item.view) .secondary else .ghost,
+        } };
+        try components.renderComponent(scene, item_bounds, component, .{ .style = design.style() });
+        try components.collectComponentInteractions(collector, item_bounds, component);
+        if (active == item.view) try scene.pushRect(ui.Rect.init(bounds.x, item_bounds.y + 5.0, 2.0, item_bounds.h - 10.0), design.palette.primary, .fill, 0.0, 0.0);
+        y += workspace_icon_button + 8.0;
+    }
+}
+
+fn renderWorkspaceSidebar(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, route: app_navigation.Route) !void {
+    try scene.pushRect(bounds, workspace_sidebar_bg, .fill, 0.0, 0.0);
+    try scene.pushRect(ui.Rect.init(bounds.x + bounds.w - 1.0, bounds.y, 1.0, bounds.h), design.palette.border, .fill, 0.0, 0.0);
+    try scene.pushAlignedText(ui.Rect.init(bounds.x + 16.0, bounds.y + 14.0, bounds.w - 32.0, 16.0), "EDGERUN", design.palette.text, .start);
+    try scene.pushAlignedText(ui.Rect.init(bounds.x + 16.0, bounds.y + 36.0, bounds.w - 32.0, 14.0), sidebarDetail(route), design.palette.muted, .start);
+    var y = bounds.y + 68.0;
+    const rows = [_]struct { id: u32, title: []const u8, detail: []const u8, view: app_navigation.View }{
+        .{ .id = app_chrome.source_button_id, .title = "Source", .detail = "edit app workspace", .view = .source },
+        .{ .id = app_chrome.docs_button_id, .title = "Docs", .detail = "manual inside workspace", .view = .docs },
+        .{ .id = app_chrome.blog_button_id, .title = "Academy", .detail = "lessons inside workspace", .view = .blog },
+    };
+    for (rows) |row| {
+        const row_bounds = ui.Rect.init(bounds.x + 10.0, y, bounds.w - 20.0, 42.0);
+        const component = components.Component{ .row_item = .{ .id = row.id, .title = row.title, .detail = row.detail } };
+        try components.renderComponent(scene, row_bounds, component, .{
+            .style = design.style(),
+            .control = .{ .active = route.view == row.view },
+        });
+        try components.collectComponentInteractions(collector, row_bounds, component);
+        y += 46.0;
+    }
+}
+
+fn renderWorkspaceMain(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
+    try scene.pushRect(bounds, workspace_main_bg, .fill, 0.0, 0.0);
+    if (try scene.pushClip(bounds)) {
+        defer scene.popClip();
+        switch (state.route.view) {
+            .source => try app_source.renderWorkspace(scene, collector, bounds, state.source),
+            .landing => try app_landing.render(scene, collector, shiftedPageBounds(bounds), .{
+                .scroll_y = state.scroll_y,
+                .hover_x = state.hover_x,
+                .hover_y = state.hover_y,
+                .frame_ms = state.frame_ms,
+                .public_identity = state.public_identity,
+                .public_identity_ready = state.public_identity_ready,
+            }),
+            .blog => try app_blog.render(scene, collector, shiftedPageBounds(bounds), .{
+                .scroll_y = state.scroll_y,
+                .hover_x = state.hover_x,
+                .hover_y = state.hover_y,
+                .selected_post_id = state.route.selected_blog_post_id,
+                .arc_filter_index = state.route.blog_arc_filter_index,
+            }),
+            .docs => try app_docs.render(scene, collector, shiftedPageBounds(bounds), .{
+                .scroll_y = state.scroll_y,
+                .hover_x = state.hover_x,
+                .hover_y = state.hover_y,
+                .selected_doc_index = state.route.selected_doc_index,
+                .selected_component_index = state.route.selected_component_index,
+            }),
+            .components => try app_docs.render(scene, collector, shiftedPageBounds(bounds), .{
+                .scroll_y = state.scroll_y,
+                .hover_x = state.hover_x,
+                .hover_y = state.hover_y,
+                .selected_doc_index = app_docs.indexBySlug("component-system"),
+                .selected_component_index = state.route.selected_component_index,
+            }),
+        }
+    }
+}
+
+fn renderWorkspaceStatus(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
+    try scene.pushRect(bounds, workspace_status_bg, .fill, 0.0, 0.0);
+    try scene.pushAlignedText(ui.Rect.init(bounds.x + 12.0, bounds.y + 5.0, bounds.w - 24.0, 14.0), statusText(state.route), ui.Color{ .r = 255, .g = 255, .b = 255 }, .start);
+}
+
+fn shiftedPageBounds(bounds: ui.Rect) ui.Rect {
+    return ui.Rect.init(bounds.x, bounds.y - app_chrome.header_h, bounds.w, bounds.h + app_chrome.header_h);
+}
+
+fn sidebarDetail(route: app_navigation.Route) []const u8 {
+    return switch (route.view) {
+        .source => "workspace",
+        .docs => "documentation",
+        .blog => "academy",
+        .components => "components",
+        .landing => "overview",
+    };
+}
+
+fn statusText(route: app_navigation.Route) []const u8 {
+    return switch (route.view) {
+        .source => "Source | app-owned VFS | compiler ready",
+        .docs => "Docs | contained workspace tab",
+        .blog => "Academy | contained workspace tab",
+        .components => "Components | edit and preview workspace",
+        .landing => "Overview | contained workspace tab",
     };
 }
 

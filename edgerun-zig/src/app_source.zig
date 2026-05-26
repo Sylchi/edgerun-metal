@@ -150,6 +150,11 @@ pub fn render(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Re
     try app_chrome.renderHeader(scene, collector, ui.Rect.init(bounds.x, bounds.y, bounds.w, header_h), content, .source);
 }
 
+pub fn renderWorkspace(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
+    try fill(scene, bounds, palette.bg, 0.0);
+    try renderEditor(scene, collector, bounds, state);
+}
+
 fn renderToolbar(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
     try fill(scene, bounds, vscode_titlebar, 0.0);
     try stroke(scene, ui.Rect.init(bounds.x, bounds.y + bounds.h - 1.0, bounds.w, 1.0), vscode_line, 0.0);
