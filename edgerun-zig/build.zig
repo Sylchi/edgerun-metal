@@ -310,14 +310,14 @@ pub fn build(b: *std.Build) void {
     drm_gbm_test_step.dependOn(&run_drm_gbm_tests.step);
     test_step.dependOn(&run_drm_gbm_tests.step);
 
-    const ui_browser_target = b.resolveTargetQuery(std.Target.Query.parse(.{
+    const app_runtime_target = b.resolveTargetQuery(std.Target.Query.parse(.{
         .arch_os_abi = "wasm32-freestanding",
     }) catch unreachable);
     const wasm_compiler = b.addExecutable(.{
         .name = "edgerun-wasm-compiler",
         .root_module = b.createModule(.{
             .root_source_file = b.path("compiler/zig/src/edgerun_wasm_compiler.zig"),
-            .target = ui_browser_target,
+            .target = app_runtime_target,
             .optimize = .ReleaseFast,
             .single_threaded = true,
         }),
@@ -354,19 +354,19 @@ pub fn build(b: *std.Build) void {
     run_embed_source_object.addDirectoryArg(b.path("."));
     run_embed_source_object.addFileArg(wasm_compiler.getEmittedBin());
     const embedded_source_object = run_embed_source_object.addOutputFileArg("embedded_source_object.zig");
-    const ui_browser = b.addExecutable(.{
-        .name = "edgerun-ui-browser",
+    const app_runtime = b.addExecutable(.{
+        .name = "edgerun-app-runtime",
         .root_module = b.createModule(.{
-            .root_source_file = b.path("src/ui_browser.zig"),
-            .target = ui_browser_target,
+            .root_source_file = b.path("src/app_runtime.zig"),
+            .target = app_runtime_target,
             .optimize = .ReleaseSmall,
             .single_threaded = true,
         }),
     });
-    ui_browser.root_module.addAnonymousImport("embedded_wasm_compiler", .{
+    app_runtime.root_module.addAnonymousImport("embedded_wasm_compiler", .{
         .root_source_file = embedded_wasm_compiler,
     });
-    ui_browser.root_module.addAnonymousImport("embedded_source_object", .{
+    app_runtime.root_module.addAnonymousImport("embedded_source_object", .{
         .root_source_file = embedded_source_object,
     });
     const wasm_compiler_runner_tests = b.addTest(.{
@@ -404,10 +404,10 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| run_wasm_compiler_probe.addArgs(args);
     const wasm_compiler_probe_step = b.step("wasm-compiler-probe", "Print embedded compiler runtime metrics");
     wasm_compiler_probe_step.dependOn(&run_wasm_compiler_probe.step);
-    ui_browser.entry = .disabled;
-    ui_browser.export_memory = true;
-    ui_browser.stack_size = 8 * 1024 * 1024;
-    ui_browser.root_module.export_symbol_names = &.{
+    app_runtime.entry = .disabled;
+    app_runtime.export_memory = true;
+    app_runtime.stack_size = 8 * 1024 * 1024;
+    app_runtime.root_module.export_symbol_names = &.{
         "er_ui_max_width",
         "er_ui_max_height",
         "er_ui_pixels_ptr",
@@ -469,7 +469,7 @@ pub fn build(b: *std.Build) void {
         "er_ui_render_icon_svg_test",
         "er_ui_render_icon_svg_tuning_test",
     };
-    const install_ui_browser = b.addInstallArtifact(ui_browser, .{});
+    const install_app_runtime = b.addInstallArtifact(app_runtime, .{});
     const wasm_entry = b.addExecutable(.{
         .name = "edgerun-wasm-entry",
         .root_module = b.createModule(.{
@@ -481,13 +481,13 @@ pub fn build(b: *std.Build) void {
     const run_wasm_entry = b.addRunArtifact(wasm_entry);
     const wasm_entry_html = run_wasm_entry.addOutputFileArg("index.html");
     const install_wasm_entry = b.addInstallFile(wasm_entry_html, "web/index.html");
-    const wasm_entry_step = b.step("wasm-entry", "Generate the immutable browser WASM entry point");
+    const wasm_entry_step = b.step("wasm-entry", "Generate the minimal web host entry point");
     wasm_entry_step.dependOn(&install_wasm_entry.step);
 
-    const ui_browser_step = b.step("ui-browser", "Build browser-renderable Zig UI wasm");
-    ui_browser_step.dependOn(&install_ui_browser.step);
-    ui_browser_step.dependOn(&install_wasm_compiler.step);
-    ui_browser_step.dependOn(&install_wasm_entry.step);
+    const app_runtime_step = b.step("app-runtime", "Build the host-agnostic app runtime wasm");
+    app_runtime_step.dependOn(&install_app_runtime.step);
+    app_runtime_step.dependOn(&install_wasm_compiler.step);
+    app_runtime_step.dependOn(&install_wasm_entry.step);
 
     const tpm_real_check = b.addExecutable(.{
         .name = "edgerun-tpm-real-check-zig",

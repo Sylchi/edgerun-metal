@@ -752,22 +752,22 @@ test "renderer ir owns svg source lookup and command painting boundaries" {
     try expectSourceDoesNotContain(@embedFile("icon_line_buffer.zig"), "sourceForIconId");
     try expectSourceDoesNotContain(@embedFile("../wayland_window_host.zig"), ".rasterize(scene.written())");
     try expectSourceDoesNotContain(@embedFile("compositor.zig"), ".rasterize(scene.written())");
-    try expectSourceDoesNotContain(@embedFile("../ui_browser.zig"), "renderer_ir.packScene(");
+    try expectSourceDoesNotContain(@embedFile("../app_runtime.zig"), "renderer_ir.packScene(");
     try expectSourceDoesNotContain(@embedFile("../wayland_window_host.zig"), "renderer_ir.packScene(");
     try expectSourceDoesNotContain(@embedFile("../wayland_egl_host.zig"), "renderer_ir.packScene(");
     try expectSourceDoesNotContain(@embedFile("../drm_gbm_host.zig"), "renderer_ir.packScene(");
-    try expectSourceDoesNotContain(@embedFile("../ui_browser.zig"), "renderer_present.present(");
+    try expectSourceDoesNotContain(@embedFile("../app_runtime.zig"), "renderer_present.present(");
 }
 
 test "renderer backends stay behind adapter imports" {
     const backend_import = "render/backends/";
     try expectSourceDoesNotContain(@embedFile("../root.zig"), backend_import);
     try expectSourceDoesNotContain(@embedFile("../ui_core_test.zig"), backend_import);
-    try expectSourceDoesNotContain(@embedFile("../ui_browser.zig"), backend_import);
+    try expectSourceDoesNotContain(@embedFile("../app_runtime.zig"), backend_import);
     try expectSourceDoesNotContain(@embedFile("../wayland_window_host.zig"), backend_import);
     try expectSourceDoesNotContain(@embedFile("../wayland_egl_host.zig"), backend_import);
     try expectSourceDoesNotContain(@embedFile("../drm_gbm_host.zig"), backend_import);
-    try expectSourceDoesNotContain(@embedFile("../site_images.zig"), backend_import);
+    try expectSourceDoesNotContain(@embedFile("../app_images.zig"), backend_import);
     try expectSourceDoesNotContain(@embedFile("../ui_bench.zig"), backend_import);
     try expectSourceDoesNotContain(@embedFile("../ui_snapshot.zig"), backend_import);
 }

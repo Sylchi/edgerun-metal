@@ -3,20 +3,20 @@ const icon = @import("icon.zig");
 const interaction = @import("ui_interaction.zig");
 const ui = @import("ui.zig");
 const components = @import("ui_components.zig");
-const site_chrome = @import("site_chrome.zig");
-const design = @import("site_design.zig");
+const app_chrome = @import("app_chrome.zig");
+const design = @import("app_design.zig");
 
 pub const compile_button_id: u32 = 32_001;
 pub const download_button_id: u32 = 32_002;
 pub const launch_button_id: u32 = 32_003;
 pub const reset_button_id: u32 = 32_004;
 
-const header_h: f32 = site_chrome.header_h;
+const header_h: f32 = app_chrome.header_h;
 const content_wide: f32 = design.content_wide;
 const content_pad: f32 = design.content_pad;
 const page_top_pad: f32 = 48.0;
 const page_bottom_pad: f32 = 120.0;
-const panel_radius: f32 = site_chrome.surface_radius;
+const panel_radius: f32 = app_chrome.surface_radius;
 const gap: f32 = 18.0;
 const panel_pad: f32 = 18.0;
 const toolbar_label_h: f32 = 18.0;
@@ -98,7 +98,7 @@ pub fn render(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Re
     const status = ui.Rect.init(content.x, editor.y + editor.h + gap, content.w, statusHeight(content.w, state));
     try renderStatus(scene, status, state);
 
-    try site_chrome.renderHeader(scene, collector, ui.Rect.init(bounds.x, bounds.y, bounds.w, header_h), content, .source);
+    try app_chrome.renderHeader(scene, collector, ui.Rect.init(bounds.x, bounds.y, bounds.w, header_h), content, .source);
 }
 
 fn renderToolbar(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
@@ -106,7 +106,7 @@ fn renderToolbar(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui
     try stroke(scene, bounds, palette.border, panel_radius);
     try text(scene, bounds.x + panel_pad, bounds.y + panel_pad, bounds.w - panel_pad * 2.0, toolbar_label_h, "Source workspace", palette.primary);
     try text(scene, bounds.x + panel_pad, bounds.y + panel_pad + toolbar_label_h + toolbar_row_gap, bounds.w - panel_pad * 2.0, toolbar_title_h, state.label, palette.text);
-    try text(scene, bounds.x + panel_pad, bounds.y + panel_pad + toolbar_label_h + toolbar_row_gap + toolbar_title_h + toolbar_row_gap, bounds.w - panel_pad * 2.0, toolbar_detail_h, if (state.dirty) "edited canonical workspace" else "canonical workspace loaded", if (state.dirty) palette.amber else palette.dim);
+    try text(scene, bounds.x + panel_pad, bounds.y + panel_pad + toolbar_label_h + toolbar_row_gap + toolbar_title_h + toolbar_row_gap, bounds.w - panel_pad * 2.0, toolbar_detail_h, toolbarDetail(state), toolbarDetailColor(state));
 
     const compact = bounds.w < compact_w;
     const button_w: f32 = if (compact) @max(design.min_touch_target, (bounds.w - panel_pad * 2.0 - toolbar_action_gap * 3.0) / 4.0) else @min(132.0, @max(design.min_touch_target, (bounds.w - panel_pad * 2.0 - toolbar_action_gap * 3.0) / 4.0));
@@ -116,10 +116,10 @@ fn renderToolbar(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui
     const launch = ui.Rect.init(reset.x - toolbar_action_gap - button_w, button_y, button_w, source_action_h);
     const download = ui.Rect.init(launch.x - toolbar_action_gap - button_w, button_y, button_w, source_action_h);
     const compile = ui.Rect.init(download.x - toolbar_action_gap - button_w, button_y, button_w, source_action_h);
-    try button(scene, collector, compile, if (icon_only) "" else "Compile", compile_button_id, .primary, .cpu);
-    try button(scene, collector, download, if (icon_only) "" else "Export", download_button_id, .secondary, .file);
-    try button(scene, collector, launch, if (icon_only) "" else "Run", launch_button_id, .secondary, .send);
-    try button(scene, collector, reset, if (icon_only) "" else "Reset", reset_button_id, .ghost, .trash);
+    try button(scene, collector, compile, if (icon_only) "" else "Compile", compile_button_id, .primary, .cpu, canCompile(state));
+    try button(scene, collector, download, if (icon_only) "" else "Export", download_button_id, .secondary, .file, canExport(state));
+    try button(scene, collector, launch, if (icon_only) "" else "Run", launch_button_id, .secondary, .send, canRun(state));
+    try button(scene, collector, reset, if (icon_only) "" else "Reset", reset_button_id, .ghost, .trash, true);
 }
 
 fn renderEditor(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
@@ -158,7 +158,7 @@ fn renderEditor(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
     }
 
     if (state.source.len == 0) {
-        try text(scene, bounds.x + code_pad + code_gutter_w, bounds.y + code_pad, bounds.w - code_pad * 2.0 - code_gutter_w, code_line_h, "empty source file", palette.muted);
+        try text(scene, bounds.x + code_pad + code_gutter_w, bounds.y + code_pad, bounds.w - code_pad * 2.0 - code_gutter_w, code_line_h, emptyEditorLabel(state), emptyEditorColor(state));
     }
 
     try renderEditorStatus(scene, ui.Rect.init(bounds.x, status_y, bounds.w, editor_status_h), state);
@@ -184,8 +184,8 @@ fn renderEditorStatus(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
     try stroke(scene, ui.Rect.init(bounds.x, bounds.y, bounds.w, 1.0), palette.border, 0.0);
     const info = editorInfoLabel(state);
     try text(scene, bounds.x + 14.0, bounds.y + 7.0, bounds.w - 28.0, 16.0, info, palette.dim);
-    const dirty_label = if (state.dirty) "modified" else "saved";
-    const dirty_color = if (state.dirty) palette.amber else palette.primary;
+    const dirty_label = editorSaveLabel(state);
+    const dirty_color = editorSaveColor(state);
     try text(scene, bounds.x + @max(0.0, bounds.w - 112.0), bounds.y + 7.0, 96.0, 16.0, dirty_label, dirty_color);
 }
 
@@ -201,9 +201,83 @@ fn renderCompileStages(scene: *ui.Scene, bounds: ui.Rect, progress: f32) !void {
     }
 }
 
-fn button(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id: u32, variant: components.ButtonVariant, leading: icon.Icon) !void {
-    try components.renderComponent(scene, bounds, .{ .button = .{ .id = id, .label = label, .variant = variant, .leading_icon = leading } }, .{ .style = site_chrome.style() });
+fn button(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id: u32, variant: components.ButtonVariant, leading: icon.Icon, enabled: bool) !void {
+    if (!enabled) {
+        try disabledButton(scene, bounds, label, leading);
+        return;
+    }
+    try components.renderComponent(scene, bounds, .{ .button = .{ .id = id, .label = label, .variant = variant, .leading_icon = leading } }, .{ .style = app_chrome.style() });
     try components.collectComponentInteractions(collector, bounds, .{ .button = .{ .id = id, .label = label } });
+}
+
+fn disabledButton(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, leading: icon.Icon) !void {
+    try fill(scene, bounds, palette.neutral_soft, panel_radius);
+    try stroke(scene, bounds, palette.border, panel_radius);
+    const icon_size: f32 = 16.0;
+    const label_h: f32 = 18.0;
+    const gap_w: f32 = if (label.len == 0) 0.0 else 8.0;
+    const label_w = @as(f32, @floatFromInt(label.len)) * 8.0;
+    const content_w = icon_size + gap_w + label_w;
+    var x = bounds.x + @max(0.0, (bounds.w - content_w) * 0.5);
+    try scene.pushIconQuad(.{
+        .bounds = ui.Rect.init(x, bounds.y + (bounds.h - icon_size) * 0.5, icon_size, icon_size),
+        .icon_id = icon.id(leading),
+        .color = palette.muted,
+    });
+    x += icon_size + gap_w;
+    if (label.len != 0) {
+        try scene.pushAlignedText(ui.Rect.init(x, bounds.y + (bounds.h - label_h) * 0.5, @max(1.0, label_w), label_h), label, palette.muted, .start);
+    }
+}
+
+fn canCompile(state: State) bool {
+    return state.workspace_bytes != 0 and state.file_bytes != 0 and !isErrorStatus(state.status);
+}
+
+fn canExport(state: State) bool {
+    return state.release_bytes != 0;
+}
+
+fn canRun(state: State) bool {
+    return state.release_bytes != 0;
+}
+
+fn isErrorStatus(status: []const u8) bool {
+    return std.mem.startsWith(u8, status, "error:") or std.mem.indexOf(u8, status, "not loaded") != null;
+}
+
+fn toolbarDetail(state: State) []const u8 {
+    if (state.workspace_bytes == 0) return "workspace not loaded";
+    if (state.file_bytes == 0) return state.status;
+    if (state.dirty) return "edited canonical workspace";
+    return "canonical workspace loaded";
+}
+
+fn toolbarDetailColor(state: State) ui.Color {
+    if (state.workspace_bytes == 0 or state.file_bytes == 0 or isErrorStatus(state.status)) return palette.danger;
+    if (state.dirty) return palette.amber;
+    return palette.dim;
+}
+
+fn emptyEditorLabel(state: State) []const u8 {
+    if (state.workspace_bytes == 0) return "workspace not loaded";
+    if (state.status.len != 0) return state.status;
+    return "empty source file";
+}
+
+fn emptyEditorColor(state: State) ui.Color {
+    if (state.workspace_bytes == 0 or isErrorStatus(state.status)) return palette.danger;
+    return palette.muted;
+}
+
+fn editorSaveLabel(state: State) []const u8 {
+    if (state.workspace_bytes == 0 or state.file_bytes == 0 or isErrorStatus(state.status)) return "unavailable";
+    return if (state.dirty) "modified" else "saved";
+}
+
+fn editorSaveColor(state: State) ui.Color {
+    if (state.workspace_bytes == 0 or state.file_bytes == 0 or isErrorStatus(state.status)) return palette.danger;
+    return if (state.dirty) palette.amber else palette.primary;
 }
 
 fn editorHeight(content_w: f32, state: State) f32 {
@@ -421,13 +495,33 @@ test "source page renders editor controls through shared ui" {
     var regions: [32]interaction.Region = undefined;
     var collector = interaction.Collector.init(&regions);
     try render(&scene, &collector, ui.Rect.init(0, 0, 1280, contentHeight(1280.0, .{})), .{
-        .label = "src/ui_browser.zig",
+        .label = "src/app_runtime.zig",
         .source = "const std = @import(\"std\");\n",
-        .status = "ready",
+        .workspace_bytes = 2048,
+        .file_bytes = 28,
+        .release_bytes = 4096,
+        .status = "ready: editing src/app_runtime.zig inside the app-owned VFS object",
     });
     try expectHit(collector.written(), compile_button_id);
     try expectHit(collector.written(), download_button_id);
     try expectHit(collector.written(), launch_button_id);
+    try expectHit(collector.written(), reset_button_id);
+}
+
+test "source page does not claim empty workspace is loaded" {
+    var commands: [256]ui.Command = undefined;
+    var clips: [8]ui.Rect = undefined;
+    var scene = ui.Scene.initWithClips(&commands, &clips);
+    var regions: [32]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
+    try render(&scene, &collector, ui.Rect.init(0, 0, 1280, contentHeight(1280.0, .{})), .{
+        .label = "src/app_runtime.zig",
+        .status = "source editor not loaded",
+    });
+
+    try expectNoHit(collector.written(), compile_button_id);
+    try expectNoHit(collector.written(), download_button_id);
+    try expectNoHit(collector.written(), launch_button_id);
     try expectHit(collector.written(), reset_button_id);
 }
 
@@ -440,7 +534,10 @@ test "source compact toolbar keeps action hits separated" {
     try render(&scene, &collector, ui.Rect.init(0, 0, 390, contentHeight(390.0, .{})), .{
         .label = "src/app.zig",
         .source = "pub fn main() void {}\n",
-        .status = "ready",
+        .workspace_bytes = 2048,
+        .file_bytes = 22,
+        .release_bytes = 4096,
+        .status = "ready: editing src/app_runtime.zig inside the app-owned VFS object",
     });
 
     try expectNoHorizontalOverlap(try hitRect(collector.written(), compile_button_id), try hitRect(collector.written(), download_button_id));
@@ -468,6 +565,10 @@ test "source page height responds to source and diagnostic content" {
 fn expectHit(regions: []const interaction.Region, id: u32) !void {
     for (regions) |region| if (region.id == id) return;
     return error.MissingHit;
+}
+
+fn expectNoHit(regions: []const interaction.Region, id: u32) !void {
+    for (regions) |region| if (region.id == id) return error.UnexpectedHit;
 }
 
 fn hitRect(regions: []const interaction.Region, id: u32) !ui.Rect {

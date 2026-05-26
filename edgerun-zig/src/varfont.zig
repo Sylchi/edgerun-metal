@@ -998,10 +998,10 @@ pub const Face = struct {
             const point_count = try parseSimpleGlyph(glyph, @intCast(contours), points, contour_ends);
             return .{ .points = point_count, .contours = @intCast(contours) };
         }
-        return self.loadCompositeGlyph(glyph, points, contour_ends, depth);
+        return self.loadCompoappGlyph(glyph, points, contour_ends, depth);
     }
 
-    fn loadCompositeGlyph(self: Face, glyph: []const u8, points: *[max_points]Point, contour_ends: *[max_contours]u16, depth: usize) Error!OutlineCounts {
+    fn loadCompoappGlyph(self: Face, glyph: []const u8, points: *[max_points]Point, contour_ends: *[max_contours]u16, depth: usize) Error!OutlineCounts {
         var cursor: usize = 10;
         var out_points: usize = 0;
         var out_contours: usize = 0;

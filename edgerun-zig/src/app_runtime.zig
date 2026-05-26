@@ -1,6 +1,6 @@
 const std = @import("std");
 const bytes = @import("bytes.zig");
-const browser_runtime_js = @import("browser_runtime_js.zig");
+const web_host_js = @import("web_host_js.zig");
 const clock = @import("clock.zig");
 const source_object = @import("embedded_source_object").bytes;
 const compiler_wasm = @import("embedded_wasm_compiler").bytes;
@@ -11,15 +11,15 @@ const interaction = @import("ui_interaction.zig");
 const object = @import("object.zig");
 const renderer_pipeline = @import("render/pipeline.zig");
 const component_gallery = @import("component_gallery.zig");
-const site_blog = @import("site_blog.zig");
-const site_chrome = @import("site_chrome.zig");
-const site_cursor = @import("site_cursor.zig");
-const site_docs = @import("site_docs.zig");
-const site_frame = @import("site_frame.zig");
-const site_images = @import("site_images.zig");
-const site_landing = @import("site_landing.zig");
-const site_navigation = @import("site_navigation.zig");
-const site_source = @import("site_source.zig");
+const app_blog = @import("app_blog.zig");
+const app_chrome = @import("app_chrome.zig");
+const app_cursor = @import("app_cursor.zig");
+const app_docs = @import("app_docs.zig");
+const app_frame = @import("app_frame.zig");
+const app_images = @import("app_images.zig");
+const app_landing = @import("app_landing.zig");
+const app_navigation = @import("app_navigation.zig");
+const app_source = @import("app_source.zig");
 const ui = @import("ui.zig");
 const ui_codec = @import("ui_codec.zig");
 const ui_components = @import("ui_components.zig");
@@ -41,7 +41,8 @@ const max_compiler_runtime_bytes: usize = compiler_memory_offset_bytes + compile
 const compiler_execution_tick_budget: u64 = 1_000_000_000;
 const wasm_page_bytes: usize = 64 * 1024;
 const workspace_manifest_header_bytes: usize = 16;
-const source_editor_label = "src/ui_browser.zig";
+const default_source_editor_label = "src/app_runtime.zig";
+const max_source_editor_label_bytes: usize = 128;
 const max_source_editor_bytes: usize = 512 * 1024;
 const source_editor_tab = "    ";
 const max_compiler_diagnostic_bytes: usize = 192;
@@ -77,9 +78,9 @@ const small_text_sharpen_max_px: u8 = 16;
 const small_text_sharpen_midpoint: f32 = 128.0;
 const small_text_sharpen_contrast: f32 = 1.14;
 const small_text_sharpen_lift: f32 = 6.0;
-const site_source_url = "https://github.com/edgerun";
-const route_bytes_capacity: usize = site_navigation.route_path_capacity;
-const route_hash_bytes_capacity: usize = site_navigation.route_hash_capacity;
+const app_source_url = "https://github.com/edgerun";
+const route_bytes_capacity: usize = app_navigation.route_path_capacity;
+const route_hash_bytes_capacity: usize = app_navigation.route_hash_capacity;
 const outbox_capacity: usize = 4;
 const title_text = "EdgeRun Academy";
 const dom_surface_id = "edgerun-dom";
@@ -108,6 +109,13 @@ var source_editor_preferred_column: usize = 0;
 var source_editor_loaded = false;
 var source_editor_dirty = false;
 var source_editor_status: SourceEditorStatus = .not_loaded;
+var source_editor_label: []const u8 = default_source_editor_label;
+var source_editor_label_bytes: [max_source_editor_label_bytes]u8 = undefined;
+var context_menu_open = false;
+var context_menu_x: f32 = 0.0;
+var context_menu_y: f32 = 0.0;
+var context_source_label: []const u8 = "";
+var context_source_label_bytes: [max_source_editor_label_bytes]u8 = undefined;
 var last_compiler_status: u32 = 0;
 var last_compiler_diagnostic: [max_compiler_diagnostic_bytes]u8 = undefined;
 var last_compiler_diagnostic_len: usize = 0;
@@ -167,7 +175,7 @@ var last_action_hit_id: u32 = 0;
 var last_action_scope_id: u32 = 0;
 var last_action_from_index: u32 = 0;
 var last_action_to_index: u32 = 0;
-var site_state = SiteState{};
+var app_state = AppRuntimeState{};
 var route_bytes: [route_bytes_capacity]u8 = undefined;
 var route_len: usize = 0;
 var route_hash_bytes: [route_hash_bytes_capacity]u8 = undefined;
@@ -245,6 +253,7 @@ const InputEventKind = enum(u32) {
     popstate = 7,
     hashchange = 8,
     key_down = 9,
+    context_menu = 10,
 };
 
 const input_event_prevent_default: u32 = 1 << 0;
@@ -254,12 +263,12 @@ const input_event_capture_pointer: u32 = 1 << 4;
 const input_event_release_pointer: u32 = 1 << 5;
 const input_event_error: u32 = 1 << 8;
 
-const CursorKind = site_cursor.Kind;
+const CursorKind = app_cursor.Kind;
 
-const SiteView = site_navigation.View;
+const AppView = app_navigation.View;
 
-const SiteState = struct {
-    view: SiteView = .landing,
+const AppRuntimeState = struct {
+    view: AppView = .landing,
     selected_blog_post_id: u32 = 0,
     blog_arc_filter_index: ?usize = null,
     selected_doc_index: ?usize = null,
@@ -267,11 +276,11 @@ const SiteState = struct {
     scroll_y: f32 = 0.0,
     queued_action: UiAction = .none,
 
-    fn resetUiAction(state: *SiteState) void {
+    fn resetUiAction(state: *AppRuntimeState) void {
         state.queued_action = .none;
     }
 
-    fn resetScroll(state: *SiteState) void {
+    fn resetScroll(state: *AppRuntimeState) void {
         state.scroll_y = 0.0;
     }
 };
@@ -465,19 +474,19 @@ export fn er_ui_packed_overlay_icon_line_vertex_buffer_len() usize {
 }
 
 export fn er_ui_post_image_rgba_ptr() usize {
-    return site_images.cloudMemeRgbaPtr();
+    return app_images.cloudMemeRgbaPtr();
 }
 
 export fn er_ui_post_image_rgba_len() usize {
-    return site_images.cloudMemeRgbaLen();
+    return app_images.cloudMemeRgbaLen();
 }
 
 export fn er_ui_post_image_width() u32 {
-    return site_images.cloud_meme_width;
+    return app_images.cloud_meme_width;
 }
 
 export fn er_ui_post_image_height() u32 {
-    return site_images.cloud_meme_height;
+    return app_images.cloud_meme_height;
 }
 
 export fn er_ui_font_atlas_width() u32 {
@@ -518,11 +527,11 @@ export fn er_ui_last_error() u32 {
     return @intFromEnum(last_error);
 }
 
-export fn er_ui_site_public_identity_ptr() usize {
+export fn er_ui_app_public_identity_ptr() usize {
     return @intFromPtr(publicIdentityText().ptr);
 }
 
-export fn er_ui_site_public_identity_len() usize {
+export fn er_ui_app_public_identity_len() usize {
     return publicIdentityText().len;
 }
 
@@ -601,52 +610,52 @@ export fn er_ui_pointer_up(x: f32, y: f32) u32 {
     return last_action_kind;
 }
 
-export fn er_ui_site_pointer_up(x: f32, y: f32) u32 {
+export fn er_ui_app_pointer_up(x: f32, y: f32) u32 {
     const action_kind = er_ui_pointer_up(x, y);
     if (action_kind == @intFromEnum(ui_runtime.ActionKind.reordered)) {
         return @intFromEnum(UiAction.none);
     }
-    return er_ui_site_activate_hit(currentHoverHitId());
+    return er_ui_app_activate_hit(currentHoverHitId());
 }
 
-export fn er_ui_site_docs_button_id() u32 {
-    return site_chrome.docs_button_id;
+export fn er_ui_app_docs_button_id() u32 {
+    return app_chrome.docs_button_id;
 }
 
-export fn er_ui_site_launch_button_id() u32 {
-    return site_chrome.launch_button_id;
+export fn er_ui_app_launch_button_id() u32 {
+    return app_chrome.launch_button_id;
 }
 
-export fn er_ui_site_source_button_id() u32 {
-    return site_chrome.source_button_id;
+export fn er_ui_app_source_button_id() u32 {
+    return app_chrome.source_button_id;
 }
 
-export fn er_ui_site_blog_button_id() u32 {
-    return site_chrome.blog_button_id;
+export fn er_ui_app_blog_button_id() u32 {
+    return app_chrome.blog_button_id;
 }
 
 export fn er_ui_blog_back_button_id() u32 {
-    return site_blog.back_button_id;
+    return app_blog.back_button_id;
 }
 
 export fn er_ui_blog_first_post_button_id() u32 {
-    return site_blog.first_post_button_id;
+    return app_blog.first_post_button_id;
 }
 
 export fn er_ui_blog_post_count() u32 {
-    return site_blog.posts.len;
+    return app_blog.posts.len;
 }
 
-export fn er_ui_site_action_kind() u32 {
-    return @intFromEnum(site_state.queued_action);
+export fn er_ui_app_action_kind() u32 {
+    return @intFromEnum(app_state.queued_action);
 }
 
-export fn er_ui_site_action_url_ptr() usize {
-    return @intFromPtr(site_source_url.ptr);
+export fn er_ui_app_action_url_ptr() usize {
+    return @intFromPtr(app_source_url.ptr);
 }
 
-export fn er_ui_site_action_url_len() usize {
-    return site_source_url.len;
+export fn er_ui_app_action_url_len() usize {
+    return app_source_url.len;
 }
 
 export fn er_ui_outbox_count() u32 {
@@ -685,7 +694,7 @@ export fn er_ui_outbox_payload_ptr(index: u32) usize {
     if (index >= outbox_message_len) return 0;
     return switch (outbox_messages[index].kind) {
         .none => 0,
-        .open_url => @intFromPtr(site_source_url.ptr),
+        .open_url => @intFromPtr(app_source_url.ptr),
         .download_wasm, .launch_wasm => if (release_artifact_len == 0) 0 else @intFromPtr(&release_artifact),
         .push_route_hash => {
             refreshRouteHash();
@@ -700,7 +709,7 @@ export fn er_ui_outbox_payload_len(index: u32) usize {
     if (index >= outbox_message_len) return 0;
     return switch (outbox_messages[index].kind) {
         .none => 0,
-        .open_url => site_source_url.len,
+        .open_url => app_source_url.len,
         .download_wasm, .launch_wasm => release_artifact_len,
         .push_route_hash => {
             refreshRouteHash();
@@ -713,17 +722,17 @@ export fn er_ui_outbox_payload_len(index: u32) usize {
 
 export fn er_ui_outbox_clear() u32 {
     clearOutboxMessages();
-    site_state.resetUiAction();
+    app_state.resetUiAction();
     last_error = .ok;
     return @intFromEnum(ErrorCode.ok);
 }
 
 export fn er_ui_bootstrap_js_ptr() usize {
-    return @intFromPtr(browser_runtime_js.source.ptr);
+    return @intFromPtr(web_host_js.source.ptr);
 }
 
 export fn er_ui_bootstrap_js_len() usize {
-    return browser_runtime_js.source.len;
+    return web_host_js.source.len;
 }
 
 export fn er_ui_compiler_source_ptr() usize {
@@ -750,6 +759,9 @@ export fn er_ui_source_workspace_capacity() usize {
 
 export fn er_ui_source_workspace_commit(source_len: usize) u32 {
     if (source_len > source_workspace.len) return finishError(.bad_input);
+    if (source_len == 0) return finishError(.bad_input);
+    const source_body = findWorkspaceFileBody(source_workspace[0..source_len], source_editor_label) catch return finishError(.bad_input);
+    if (source_body.len == 0) return finishError(.bad_input);
     source_workspace_len = source_len;
     source_workspace_ready = true;
     source_editor_loaded = false;
@@ -758,6 +770,25 @@ export fn er_ui_source_workspace_commit(source_len: usize) u32 {
     source_editor_preferred_column = 0;
     last_error = .ok;
     return @intFromEnum(ErrorCode.ok);
+}
+
+export fn er_ui_source_editor_select_label(label_len: usize) u32 {
+    if (label_len == 0 or label_len > input_bytes.len or label_len > source_editor_label_bytes.len) return finishError(.bad_input);
+    return @intFromEnum(selectSourceEditorLabel(input_bytes[0..label_len]));
+}
+
+fn selectSourceEditorLabel(label: []const u8) ErrorCode {
+    if (label.len == 0 or label.len > source_editor_label_bytes.len) return finishErrorCode(.bad_input);
+    const source_body = findWorkspaceFileBody(source_workspace[0..er_ui_source_workspace_len()], label) catch return finishErrorCode(.bad_input);
+    if (source_body.len == 0) return finishErrorCode(.bad_input);
+    @memcpy(source_editor_label_bytes[0..label.len], label);
+    source_editor_label = source_editor_label_bytes[0..label.len];
+    source_editor_loaded = false;
+    source_editor_dirty = false;
+    source_editor_status = .not_loaded;
+    source_editor_preferred_column = 0;
+    last_error = .ok;
+    return .ok;
 }
 
 export fn er_ui_source_workspace_reset() u32 {
@@ -878,34 +909,34 @@ export fn er_ui_request_release_artifact_launch() u32 {
     return @intFromEnum(ErrorCode.ok);
 }
 
-export fn er_ui_site_route_hash_ptr() usize {
+export fn er_ui_app_route_hash_ptr() usize {
     refreshRouteHash();
     return @intFromPtr(route_hash_bytes[0..].ptr);
 }
 
-export fn er_ui_site_route_hash_len() usize {
+export fn er_ui_app_route_hash_len() usize {
     refreshRouteHash();
     return route_hash_len;
 }
 
-export fn er_ui_site_route_path_ptr() usize {
+export fn er_ui_app_route_path_ptr() usize {
     refreshRoutePath();
     return @intFromPtr(route_bytes[0..].ptr);
 }
 
-export fn er_ui_site_route_path_len() usize {
+export fn er_ui_app_route_path_len() usize {
     refreshRoutePath();
     return route_len;
 }
 
-export fn er_ui_site_set_route_path(path_len: usize) u32 {
+export fn er_ui_app_set_route_path(path_len: usize) u32 {
     if (path_len > input_bytes.len) return finishError(.bad_input);
     applyRoutePath(input_bytes[0..path_len]);
     last_error = .ok;
     return @intFromEnum(ErrorCode.ok);
 }
 
-export fn er_ui_site_set_route_hash(hash_len: usize) u32 {
+export fn er_ui_app_set_route_hash(hash_len: usize) u32 {
     if (hash_len > input_bytes.len) return finishError(.bad_input);
     const route_path = routePathFromHash(input_bytes[0..hash_len]) catch return finishError(.bad_input);
     applyRoutePath(route_path);
@@ -913,14 +944,15 @@ export fn er_ui_site_set_route_hash(hash_len: usize) u32 {
     return @intFromEnum(ErrorCode.ok);
 }
 
-export fn er_ui_site_activate_hit(hit_id: u32) u32 {
-    site_state.resetUiAction();
+export fn er_ui_app_activate_hit(hit_id: u32) u32 {
+    app_state.resetUiAction();
     clearOutboxMessages();
-    if (site_navigation.fromHit(hit_id, currentRoute())) |route| {
+    if (hit_id != app_navigation.context_source_button_id) context_menu_open = false;
+    if (app_navigation.fromHit(hit_id, currentRoute())) |route| {
         applyRoute(route);
-        return @intFromEnum(site_state.queued_action);
+        return @intFromEnum(app_state.queued_action);
     }
-    if (site_navigation.actionFromHit(hit_id)) |action| switch (action) {
+    if (app_navigation.actionFromHit(hit_id)) |action| switch (action) {
         .launch_app => {
             if (compileWorkspaceInsideWasm() == .ok) {
                 queueOutboxMessage(.launch_wasm) catch return finishError(.bad_input);
@@ -935,23 +967,48 @@ export fn er_ui_site_activate_hit(hit_id: u32) u32 {
             _ = compileWorkspaceInsideWasm();
         },
         .download_source_release => {
-            if (release_artifact_len == 0 and compileWorkspaceInsideWasm() != .ok) return @intFromEnum(site_state.queued_action);
+            if (release_artifact_len == 0 and compileWorkspaceInsideWasm() != .ok) return @intFromEnum(app_state.queued_action);
             queueOutboxMessage(.download_wasm) catch return finishError(.bad_input);
         },
         .launch_source_release => {
-            if (release_artifact_len == 0 and compileWorkspaceInsideWasm() != .ok) return @intFromEnum(site_state.queued_action);
+            if (release_artifact_len == 0 and compileWorkspaceInsideWasm() != .ok) return @intFromEnum(app_state.queued_action);
             queueOutboxMessage(.launch_wasm) catch return finishError(.bad_input);
         },
         .reset_source => {
             _ = er_ui_source_workspace_reset();
         },
+        .open_context_source => {
+            if (context_source_label.len == 0) return @intFromEnum(app_state.queued_action);
+            if (selectSourceEditorLabel(context_source_label) == .ok) {
+                applyRoute(.{ .view = .source });
+            }
+            context_menu_open = false;
+        },
     };
-    return @intFromEnum(site_state.queued_action);
+    return @intFromEnum(app_state.queued_action);
 }
 
-export fn er_ui_site_key_event(key_len: usize, ctrl: u32, meta: u32, alt: u32) u32 {
+export fn er_ui_app_context_menu(x: f32, y: f32) u32 {
+    pointer_hover_x = x;
+    pointer_hover_y = y;
+    runtime_state.refreshHover(lastRegions(), x, y);
+    const hit_id = currentHoverHitId();
+    if (sourceLabelForHit(currentRoute(), hit_id, &context_source_label_bytes)) |label| {
+        context_menu_open = true;
+        context_menu_x = x;
+        context_menu_y = y;
+        context_source_label = label;
+        last_error = .ok;
+        return @intFromEnum(ErrorCode.ok);
+    }
+    context_menu_open = false;
+    context_source_label = "";
+    return finishError(.bad_input);
+}
+
+export fn er_ui_app_key_event(key_len: usize, ctrl: u32, meta: u32, alt: u32) u32 {
     if (key_len > input_bytes.len) return finishError(.bad_input);
-    if (site_state.view == .source and handleSourceEditorKey(input_bytes[0..key_len], ctrl, meta, alt)) {
+    if (app_state.view == .source and handleSourceEditorKey(input_bytes[0..key_len], ctrl, meta, alt)) {
         last_error = .ok;
         return 1;
     }
@@ -970,6 +1027,7 @@ export fn er_ui_event(kind_raw: u32, x: f32, y: f32, delta_y: f32, ctrl: u32, me
         @intFromEnum(InputEventKind.popstate) => .popstate,
         @intFromEnum(InputEventKind.hashchange) => .hashchange,
         @intFromEnum(InputEventKind.key_down) => .key_down,
+        @intFromEnum(InputEventKind.context_menu) => .context_menu,
         else => {
             _ = finishError(.bad_input);
             return input_event_error;
@@ -979,7 +1037,7 @@ export fn er_ui_event(kind_raw: u32, x: f32, y: f32, delta_y: f32, ctrl: u32, me
     switch (kind) {
         .resize => return input_event_schedule_frame,
         .wheel => {
-            const code = er_ui_site_scroll_by(delta_y, width, height);
+            const code = er_ui_app_scroll_by(delta_y, width, height);
             if (code != @intFromEnum(ErrorCode.ok)) return input_event_error;
             return input_event_prevent_default | input_event_schedule_frame;
         },
@@ -998,26 +1056,32 @@ export fn er_ui_event(kind_raw: u32, x: f32, y: f32, delta_y: f32, ctrl: u32, me
         .pointer_down => {
             pointer_hover_x = x;
             pointer_hover_y = y;
+            context_menu_open = false;
             _ = er_ui_pointer_down(x, y);
             return input_event_capture_pointer | input_event_schedule_frame;
         },
         .pointer_up => {
             pointer_hover_x = x;
             pointer_hover_y = y;
-            _ = er_ui_site_pointer_up(x, y);
+            _ = er_ui_app_pointer_up(x, y);
             queueOutboxMessage(.push_route_hash) catch return input_event_error;
             const result = input_event_release_pointer | input_event_outbox | input_event_schedule_frame;
             return result;
         },
         .popstate, .hashchange => {
-            const code = er_ui_site_set_route_hash(text_len);
+            const code = er_ui_app_set_route_hash(text_len);
             if (code != @intFromEnum(ErrorCode.ok)) return input_event_error;
             return input_event_schedule_frame;
         },
         .key_down => {
-            const handled = er_ui_site_key_event(text_len, ctrl, meta, alt);
+            const handled = er_ui_app_key_event(text_len, ctrl, meta, alt);
             if (handled == 0) return 0;
             if (handled != 1) return input_event_error;
+            return input_event_prevent_default | input_event_schedule_frame;
+        },
+        .context_menu => {
+            const code = er_ui_app_context_menu(x, y);
+            if (code != @intFromEnum(ErrorCode.ok)) return input_event_prevent_default | input_event_schedule_frame;
             return input_event_prevent_default | input_event_schedule_frame;
         },
     }
@@ -1065,7 +1129,7 @@ fn inputEventKindFromName(name: []const u8) ?InputEventKind {
     if (std.mem.eql(u8, name, "popstate")) return .popstate;
     if (std.mem.eql(u8, name, "hashchange")) return .hashchange;
     if (std.mem.eql(u8, name, "keydown")) return .key_down;
-    if (std.mem.eql(u8, name, "contextmenu")) return .pointer_leave;
+    if (std.mem.eql(u8, name, "contextmenu")) return .context_menu;
     return null;
 }
 
@@ -1492,41 +1556,41 @@ fn pagesForBytes(value: usize) usize {
     return (value + wasm_page_bytes - 1) / wasm_page_bytes;
 }
 
-export fn er_ui_site_scroll_by(delta_y: f32, width: f32, height: f32) u32 {
+export fn er_ui_app_scroll_by(delta_y: f32, width: f32, height: f32) u32 {
     if (!std.math.isFinite(delta_y) or !std.math.isFinite(width) or !std.math.isFinite(height)) return finishError(.bad_input);
     if (width <= 0.0 or height <= 0.0) return finishError(.bad_input);
-    const limit = siteScrollLimit(width, height);
-    site_state.scroll_y = std.math.clamp(site_state.scroll_y + delta_y, 0.0, limit);
+    const limit = appScrollLimit(width, height);
+    app_state.scroll_y = std.math.clamp(app_state.scroll_y + delta_y, 0.0, limit);
     last_error = .ok;
     return @intFromEnum(ErrorCode.ok);
 }
 
-export fn er_ui_site_scroll_y() f32 {
-    return site_state.scroll_y;
+export fn er_ui_app_scroll_y() f32 {
+    return app_state.scroll_y;
 }
 
-export fn er_ui_site_landing_content_height(width: f32) f32 {
-    return site_frame.contentHeight(width, .{ .route = .{ .view = .landing } });
+export fn er_ui_app_landing_content_height(width: f32) f32 {
+    return app_frame.contentHeight(width, .{ .route = .{ .view = .landing } });
 }
 
-export fn er_ui_site_blog_content_height(width: f32) f32 {
-    return site_frame.contentHeight(width, .{ .route = .{ .view = .blog } });
+export fn er_ui_app_blog_content_height(width: f32) f32 {
+    return app_frame.contentHeight(width, .{ .route = .{ .view = .blog } });
 }
 
-export fn er_ui_site_blog_post_content_height(width: f32, post_id: u32) f32 {
-    return site_frame.contentHeight(width, .{ .route = .{ .view = .blog, .selected_blog_post_id = post_id } });
+export fn er_ui_app_blog_post_content_height(width: f32, post_id: u32) f32 {
+    return app_frame.contentHeight(width, .{ .route = .{ .view = .blog, .selected_blog_post_id = post_id } });
 }
 
-export fn er_ui_site_docs_content_height(width: f32) f32 {
-    return site_frame.contentHeight(width, .{ .route = .{ .view = .docs } });
+export fn er_ui_app_docs_content_height(width: f32) f32 {
+    return app_frame.contentHeight(width, .{ .route = .{ .view = .docs } });
 }
 
-export fn er_ui_site_content_height(width: f32) f32 {
-    return site_frame.contentHeight(width, currentSiteFrameState(pointer_hover_x, pointer_hover_y, 0.0));
+export fn er_ui_app_content_height(width: f32) f32 {
+    return app_frame.contentHeight(width, currentAppFrameState(pointer_hover_x, pointer_hover_y, 0.0));
 }
 
-fn siteScrollLimit(width: f32, height: f32) f32 {
-    return @max(0.0, er_ui_site_content_height(width) - height);
+fn appScrollLimit(width: f32, height: f32) f32 {
+    return @max(0.0, er_ui_app_content_height(width) - height);
 }
 
 export fn er_ui_clear(width: u32, height: u32) u32 {
@@ -1550,7 +1614,7 @@ export fn er_ui_render_component_gallery_layout_gap_hover(width: u32, height: u3
     var scene = ui.Scene.init(&commands);
     var frame_regions: [max_interaction_regions]interaction.Region = undefined;
     var collector = interaction.Collector.init(&frame_regions);
-    site_frame.render(&scene, &collector, frameBounds(), componentGalleryFrameState(layout_raw, grid_gap, scroll_y, hover_x, hover_y)) catch return finishError(.render_failed);
+    app_frame.render(&scene, &collector, frameBounds(), componentCatalogFrameState(layout_raw, grid_gap, scroll_y, hover_x, hover_y)) catch return finishError(.render_failed);
 
     return finishCpuSceneFrame(surface, scene, collector.written(), .{ .enabled = true, .x = hover_x, .y = hover_y }, .bg);
 }
@@ -1562,11 +1626,11 @@ export fn er_ui_build_component_gallery_frame(width: u32, height: u32, scroll_y:
 export fn er_ui_build_component_gallery_frame_layout_gap_hover(width: u32, height: u32, scroll_y: f32, layout_raw: u32, grid_gap: f32, hover_x: f32, hover_y: f32) u32 {
     if (!setFrameSize(width, height)) return finishError(.bad_size);
 
-    return buildPackedSiteFrameFromPreparedSize(componentGalleryFrameState(layout_raw, grid_gap, scroll_y, hover_x, hover_y));
+    return buildPackedAppFrameFromPreparedSize(componentCatalogFrameState(layout_raw, grid_gap, scroll_y, hover_x, hover_y));
 }
 
-export fn er_ui_build_site_landing_frame(width: u32, height: u32, scroll_y: f32, hover_x: f32, hover_y: f32, frame_ms: f32) u32 {
-    return buildPackedSiteFrame(width, height, .{
+export fn er_ui_build_app_landing_frame(width: u32, height: u32, scroll_y: f32, hover_x: f32, hover_y: f32, frame_ms: f32) u32 {
+    return buildPackedAppFrame(width, height, .{
         .route = .{ .view = .landing },
         .scroll_y = scroll_y,
         .hover_x = hover_x,
@@ -1577,8 +1641,8 @@ export fn er_ui_build_site_landing_frame(width: u32, height: u32, scroll_y: f32,
     });
 }
 
-export fn er_ui_build_site_blog_frame(width: u32, height: u32, scroll_y: f32, hover_x: f32, hover_y: f32, selected_post_id: u32) u32 {
-    return buildPackedSiteFrame(width, height, .{
+export fn er_ui_build_app_blog_frame(width: u32, height: u32, scroll_y: f32, hover_x: f32, hover_y: f32, selected_post_id: u32) u32 {
+    return buildPackedAppFrame(width, height, .{
         .route = .{ .view = .blog, .selected_blog_post_id = selected_post_id },
         .scroll_y = scroll_y,
         .hover_x = hover_x,
@@ -1586,33 +1650,33 @@ export fn er_ui_build_site_blog_frame(width: u32, height: u32, scroll_y: f32, ho
     });
 }
 
-export fn er_ui_build_site_frame(width: u32, height: u32, hover_x: f32, hover_y: f32, frame_ms: f32) u32 {
+export fn er_ui_build_app_frame(width: u32, height: u32, hover_x: f32, hover_y: f32, frame_ms: f32) u32 {
     if (!setFrameSize(width, height)) return finishError(.bad_size);
-    site_state.scroll_y = @min(site_state.scroll_y, siteScrollLimit(@floatFromInt(frame_width), @floatFromInt(frame_height)));
+    app_state.scroll_y = @min(app_state.scroll_y, appScrollLimit(@floatFromInt(frame_width), @floatFromInt(frame_height)));
 
-    return buildPackedSiteFrameFromPreparedSize(currentSiteFrameState(hover_x, hover_y, frame_ms));
+    return buildPackedAppFrameFromPreparedSize(currentAppFrameState(hover_x, hover_y, frame_ms));
 }
 
-fn buildPackedSiteFrame(width: u32, height: u32, state: site_frame.State) u32 {
+fn buildPackedAppFrame(width: u32, height: u32, state: app_frame.State) u32 {
     if (!setFrameSize(width, height)) return finishError(.bad_size);
-    return buildPackedSiteFrameFromPreparedSize(state);
+    return buildPackedAppFrameFromPreparedSize(state);
 }
 
-fn buildPackedSiteFrameFromPreparedSize(state: site_frame.State) u32 {
+fn buildPackedAppFrameFromPreparedSize(state: app_frame.State) u32 {
     var scene = ui.Scene.initWithClips(&commands, &clips);
     var frame_regions: [max_interaction_regions]interaction.Region = undefined;
     var collector = interaction.Collector.init(&frame_regions);
-    site_frame.render(&scene, &collector, frameBounds(), state) catch return finishError(.render_failed);
+    app_frame.render(&scene, &collector, frameBounds(), state) catch return finishError(.render_failed);
     return finishPackedFrame(scene, collector.written(), state.hover_x, state.hover_y);
 }
 
 export fn er_ui_build_frame(width: u32, height: u32, frame_ms: f32) u32 {
-    return er_ui_build_site_frame(width, height, pointer_hover_x, pointer_hover_y, frame_ms);
+    return er_ui_build_app_frame(width, height, pointer_hover_x, pointer_hover_y, frame_ms);
 }
 
 export fn er_ui_render_frame(width: u32, height: u32, frame_ms: f32) u32 {
     const surface = beginFrame(width, height) orelse return finishError(.bad_size);
-    return renderSitePixels(surface, pointer_hover_x, pointer_hover_y, frame_ms);
+    return renderAppPixels(surface, pointer_hover_x, pointer_hover_y, frame_ms);
 }
 
 export fn er_ui_render_icon_svg_test(icon_id: u32, width: u32, height: u32) u32 {
@@ -1643,11 +1707,11 @@ export fn er_ui_render_icon_svg_tuning_test(icon_id: u32, width: u32, height: u3
     return er_ui_render_icon_svg_test(icon_id, width, height);
 }
 
-fn renderSitePixels(surface: renderer_pipeline.SoftwareFramebuffer, hover_x: f32, hover_y: f32, frame_ms: f32) u32 {
+fn renderAppPixels(surface: renderer_pipeline.SoftwareFramebuffer, hover_x: f32, hover_y: f32, frame_ms: f32) u32 {
     var scene = ui.Scene.initWithClips(&commands, &clips);
     var frame_regions: [max_interaction_regions]interaction.Region = undefined;
     var collector = interaction.Collector.init(&frame_regions);
-    site_frame.render(&scene, &collector, frameBounds(), currentSiteFrameState(hover_x, hover_y, frame_ms)) catch return finishError(.render_failed);
+    app_frame.render(&scene, &collector, frameBounds(), currentAppFrameState(hover_x, hover_y, frame_ms)) catch return finishError(.render_failed);
     return finishCpuSceneFrame(surface, scene, collector.written(), .{ .enabled = true, .x = hover_x, .y = hover_y }, .bg);
 }
 
@@ -1679,7 +1743,7 @@ fn prepareFrameScene(scene: ui.Scene, regions: []const interaction.Region, hover
     try storeLastRegions(regions);
     if (hover.enabled) runtime_state.refreshHover(lastRegions(), hover.x, hover.y);
     var frame_scene = scene;
-    if (hover.enabled) try site_cursor.render(&frame_scene, hover.x, hover.y, currentCursorKind());
+    if (hover.enabled) try app_cursor.render(&frame_scene, hover.x, hover.y, currentCursorKind());
     last_command_count = frame_scene.written().len;
     return frame_scene;
 }
@@ -1711,7 +1775,7 @@ fn renderSceneIr(surface: renderer_pipeline.SoftwareFramebuffer, scene_commands:
     try ensureFontAtlas();
     const buffers = packedBuffers();
     try renderer_pipeline.packSceneWithSources(buffers, packedSources(), scene_commands);
-    const image_texture = try site_images.cloudMeme();
+    const image_texture = try app_images.cloudMeme();
     const receipt = try renderer_pipeline.renderSoftwareFrame(surface, buffers, renderer_pipeline.softwareResourcesFromAlphaAtlas(.{
         .width = font_atlas_width,
         .height = font_atlas_height,
@@ -1773,7 +1837,7 @@ fn initialEntropyPool() [entropy_pool_size]u8 {
 fn mixInteractionEntropy(event: EntropyEvent, x: f32, y: f32) void {
     entropy_event_count +%= 1;
     var hasher = std.crypto.hash.Blake3.init(.{});
-    hasher.update("edgerun:zig:wasm-site:interaction-event:v1");
+    hasher.update("edgerun:zig:wasm-app:interaction-event:v1");
     hasher.update(&entropy_pool);
     var record: [21]u8 = undefined;
     record[0] = @intFromEnum(event);
@@ -1787,7 +1851,7 @@ fn mixInteractionEntropy(event: EntropyEvent, x: f32, y: f32) void {
 
 fn generateEphemeralIdentity() !void {
     var hasher = std.crypto.hash.Blake3.init(.{});
-    hasher.update("edgerun:zig:wasm-site:ephemeral-ed25519-seed:v1");
+    hasher.update("edgerun:zig:wasm-app:ephemeral-ed25519-seed:v1");
     hasher.update(&entropy_pool);
     var event_bytes: [8]u8 = undefined;
     writeU64(&event_bytes, entropy_event_count);
@@ -1860,11 +1924,11 @@ fn storeLastRegions(regions: []const interaction.Region) error{InteractionBudget
     last_region_count = regions.len;
 }
 
-fn componentGalleryFrameState(layout_raw: u32, grid_gap: f32, scroll_y: f32, hover_x: f32, hover_y: f32) site_frame.State {
+fn componentCatalogFrameState(layout_raw: u32, grid_gap: f32, scroll_y: f32, hover_x: f32, hover_y: f32) app_frame.State {
     return .{
         .route = .{
             .view = .components,
-            .selected_component_index = site_state.selected_component_index,
+            .selected_component_index = app_state.selected_component_index,
         },
         .scroll_y = scroll_y,
         .hover_x = hover_x,
@@ -1874,23 +1938,30 @@ fn componentGalleryFrameState(layout_raw: u32, grid_gap: f32, scroll_y: f32, hov
     };
 }
 
-fn currentSiteFrameState(hover_x: f32, hover_y: f32, frame_ms: f32) site_frame.State {
+fn currentAppFrameState(hover_x: f32, hover_y: f32, frame_ms: f32) app_frame.State {
     return .{
         .route = currentRoute(),
-        .scroll_y = site_state.scroll_y,
+        .scroll_y = app_state.scroll_y,
         .hover_x = hover_x,
         .hover_y = hover_y,
         .frame_ms = frame_ms,
         .public_identity = publicIdentityText(),
         .public_identity_ready = ephemeral_identity_ready,
-        .source = if (site_state.view == .source) currentSourceFrameState(hover_x, hover_y) else .{},
+        .source = if (app_state.view == .source) currentSourceState(hover_x, hover_y) else .{},
+        .context_menu = .{
+            .open = context_menu_open,
+            .x = context_menu_x,
+            .y = context_menu_y,
+            .source_path = context_source_label,
+        },
     };
 }
 
-fn currentSourceFrameState(hover_x: f32, hover_y: f32) site_source.State {
+fn currentSourceState(hover_x: f32, hover_y: f32) app_source.State {
+    ensureSourceWorkspace();
     ensureSourceEditor();
     return .{
-        .scroll_y = site_state.scroll_y,
+        .scroll_y = app_state.scroll_y,
         .hover_x = hover_x,
         .hover_y = hover_y,
         .label = source_editor_label,
@@ -1911,7 +1982,7 @@ fn currentSourceFrameState(hover_x: f32, hover_y: f32) site_source.State {
 fn sourceEditorStatusText(status: SourceEditorStatus) []const u8 {
     return switch (status) {
         .not_loaded => "source editor not loaded",
-        .ready => "ready: editing src/ui_browser.zig inside the app-owned VFS object",
+        .ready => "ready: editing selected file inside the app-owned VFS object",
         .dirty => "dirty: canonical workspace rebuilt in wasm memory",
         .missing_file => "error: source file missing from workspace object",
         .corrupt_workspace => "error: source workspace object is corrupt",
@@ -1944,47 +2015,57 @@ fn frameBounds() ui.Rect {
 }
 
 fn applyRoutePath(path: []const u8) void {
-    applyRoute(site_navigation.fromPath(path));
+    applyRoute(app_navigation.fromPath(path));
 }
 
-fn applyRoute(route: site_navigation.Route) void {
-    site_state.resetScroll();
-    site_state.view = route.view;
-    site_state.selected_blog_post_id = route.selected_blog_post_id;
-    site_state.blog_arc_filter_index = route.blog_arc_filter_index;
-    site_state.selected_doc_index = route.selected_doc_index;
-    site_state.selected_component_index = route.selected_component_index;
+fn applyRoute(route: app_navigation.Route) void {
+    context_menu_open = false;
+    app_state.resetScroll();
+    app_state.view = route.view;
+    app_state.selected_blog_post_id = route.selected_blog_post_id;
+    app_state.blog_arc_filter_index = route.blog_arc_filter_index;
+    app_state.selected_doc_index = route.selected_doc_index;
+    app_state.selected_component_index = route.selected_component_index;
 }
 
 fn trimRoute(path: []const u8) []const u8 {
-    return site_navigation.trimPath(path);
+    return app_navigation.trimPath(path);
 }
 
 fn routePathFromHash(hash: []const u8) error{InvalidRouteHash}![]const u8 {
-    return site_navigation.pathFromHash(hash);
+    return app_navigation.pathFromHash(hash);
 }
 
 fn refreshRoutePath() void {
-    route_len = site_navigation.writePath(&route_bytes, currentRoute()) catch unreachable;
+    route_len = app_navigation.writePath(&route_bytes, currentRoute()) catch unreachable;
 }
 
 fn refreshRouteHash() void {
-    route_hash_len = site_navigation.writeHash(&route_hash_bytes, currentRoute()) catch unreachable;
+    route_hash_len = app_navigation.writeHash(&route_hash_bytes, currentRoute()) catch unreachable;
 }
 
-fn currentRoute() site_navigation.Route {
+fn currentRoute() app_navigation.Route {
     return .{
-        .view = site_state.view,
-        .selected_blog_post_id = site_state.selected_blog_post_id,
-        .blog_arc_filter_index = site_state.blog_arc_filter_index,
-        .selected_doc_index = site_state.selected_doc_index,
-        .selected_component_index = site_state.selected_component_index,
+        .view = app_state.view,
+        .selected_blog_post_id = app_state.selected_blog_post_id,
+        .blog_arc_filter_index = app_state.blog_arc_filter_index,
+        .selected_doc_index = app_state.selected_doc_index,
+        .selected_component_index = app_state.selected_component_index,
     };
+}
+
+fn sourceLabelForHit(route: app_navigation.Route, hit_id: u32, out: []u8) ?[]const u8 {
+    if (hit_id == 0) return null;
+    const index = switch (route.view) {
+        .components, .docs => component_gallery.indexByCatalogHit(hit_id) orelse component_gallery.indexByPreviewHit(hit_id),
+        else => null,
+    } orelse return null;
+    return component_gallery.sourcePathForIndex(index, out);
 }
 
 fn currentCursorKind() CursorKind {
     const action_kind: ui_runtime.ActionKind = @enumFromInt(@as(u8, @intCast(last_action_kind)));
-    return site_cursor.fromState(action_kind, runtime_state.hoverKind());
+    return app_cursor.fromState(action_kind, runtime_state.hoverKind());
 }
 
 fn currentHoverHitKind() u32 {
@@ -2167,19 +2248,19 @@ fn textWidth(value: []const u8, px: u8) f32 {
 }
 
 fn expectSourceDoesNotContain(needle: []const u8) !void {
-    const source = @embedFile("ui_browser.zig");
+    const source = @embedFile("app_runtime.zig");
     try std.testing.expect(std.mem.indexOf(u8, source, needle) == null);
 }
 
 test "wasm render bridge exports neutral frame and outbox names" {
     try expectSourceDoesNotContain("er_ui_" ++ "gpu_");
-    try expectSourceDoesNotContain("er_ui_" ++ "browser_");
+    try expectSourceDoesNotContain("er_ui_" ++ "web_");
     try expectSourceDoesNotContain("er_ui_" ++ "host_");
     try expectSourceDoesNotContain("gpu_" ++ "budget");
-    try expectSourceDoesNotContain("present" ++ "BrowserFrame");
+    try expectSourceDoesNotContain("present" ++ "HostFrame");
 }
 
-test "browser hover state exposes interaction region kind and id" {
+test "app runtime hover state exposes interaction region kind and id" {
     var regions: [1]interaction.Region = undefined;
     var collector = interaction.Collector.init(&regions);
     try collector.addHit(ui.Rect.init(10, 20, 40, 30), .button, 42);
@@ -2193,7 +2274,7 @@ test "browser hover state exposes interaction region kind and id" {
     try std.testing.expectEqual(@as(u32, 0), er_ui_hover_hit_id());
 }
 
-test "browser ir finish preserves hover state when disabled" {
+test "app runtime ir finish preserves hover state when disabled" {
     runtime_state.hovered = .{ .kind = .button, .id = 99, .bounds = ui.Rect.init(0, 0, 1, 1) };
     var local_commands: [1]ui.Command = undefined;
     const scene = ui.Scene.init(&local_commands);
@@ -2205,7 +2286,7 @@ test "browser ir finish preserves hover state when disabled" {
     try std.testing.expectEqual(@as(u32, 99), er_ui_hover_hit_id());
 }
 
-test "browser component gallery builds packed browser buffers and browser-ready icon lines" {
+test "app runtime component catalog builds packed app buffers and app-ready icon lines" {
     font_atlas_ready = false;
     const code = er_ui_build_component_gallery_frame_layout_gap_hover(960, 640, 0.0, @intFromEnum(component_gallery.LayoutMode.masonry), component_gallery.grid_gap_default, -1.0, -1.0);
     try std.testing.expectEqual(@as(u32, 0), code);
@@ -2219,7 +2300,7 @@ test "browser component gallery builds packed browser buffers and browser-ready 
     try std.testing.expect(er_ui_font_atlas_ptr() != 0);
 }
 
-test "browser component gallery render uses canonical ir buffers" {
+test "app runtime component catalog render uses canonical ir buffers" {
     const code = er_ui_render_component_gallery_layout_gap_hover(480, 360, 0.0, @intFromEnum(component_gallery.LayoutMode.masonry), component_gallery.grid_gap_default, -1.0, -1.0);
     try std.testing.expectEqual(@as(u32, 0), code);
     try std.testing.expectEqual(renderer_pipeline.Transport.pixel_bytes, last_present_transport);
@@ -2234,18 +2315,18 @@ test "browser component gallery render uses canonical ir buffers" {
     try std.testing.expect(painted > 0);
 }
 
-test "browser site landing builds packed browser buffers and hit state" {
-    const code = er_ui_build_site_landing_frame(1280, 800, 0.0, 1065.0, 32.0, 0.0);
+test "app runtime landing builds packed app buffers and hit state" {
+    const code = er_ui_build_app_landing_frame(1280, 800, 0.0, 1065.0, 32.0, 0.0);
     try std.testing.expectEqual(@as(u32, 0), code);
     try std.testing.expect(packed_rect_float_len > 0);
     try std.testing.expect(packed_text_vertex_float_len > 0);
     try std.testing.expect(packed_icon_vertex_float_len > 0);
-    try std.testing.expectEqual(site_landing.contentHeight(1280.0), er_ui_site_landing_content_height(1280.0));
+    try std.testing.expectEqual(app_landing.contentHeight(1280.0), er_ui_app_landing_content_height(1280.0));
     try std.testing.expectEqual(@intFromEnum(ui.HitKind.button), er_ui_hover_hit_kind());
-    try std.testing.expectEqual(site_chrome.source_button_id, er_ui_hover_hit_id());
+    try std.testing.expectEqual(app_chrome.source_button_id, er_ui_hover_hit_id());
 }
 
-test "browser site reveal derives public identity inside wasm from interaction" {
+test "app runtime reveal derives public identity inside wasm from interaction" {
     ephemeral_identity_ready = false;
     entropy_pool = initialEntropyPool();
     entropy_event_count = 0;
@@ -2257,120 +2338,143 @@ test "browser site reveal derives public identity inside wasm from interaction" 
 
     const before = publicIdentityText();
     try std.testing.expectEqualStrings("click reveal", before);
-    _ = er_ui_build_site_landing_frame(1280, 800, 0.0, 108.0, 500.0, 333.0);
+    _ = er_ui_build_app_landing_frame(1280, 800, 0.0, 108.0, 500.0, 333.0);
     _ = er_ui_pointer_down(108.0, 500.0);
     _ = er_ui_pointer_up(108.0, 500.0);
-    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_site_activate_hit(site_landing.reveal_identity_button_id));
+    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_activate_hit(app_landing.reveal_identity_button_id));
     try std.testing.expect(ephemeral_identity_ready);
     try std.testing.expectEqual(@as(usize, public_identity_text_len), publicIdentityText().len);
     try std.testing.expect(std.mem.startsWith(u8, publicIdentityText(), public_identity_prefix));
     try std.testing.expect(identity.Source.prepare(.ed25519_public, &ephemeral_public_key) != null);
 }
 
-test "browser site blog builds packed browser buffers and post hit state" {
-    const code = er_ui_build_site_blog_frame(1280, 800, 0.0, 340.0, 700.0, 0);
+test "app runtime blog builds packed app buffers and post hit state" {
+    const code = er_ui_build_app_blog_frame(1280, 800, 0.0, 340.0, 700.0, 0);
     try std.testing.expectEqual(@as(u32, 0), code);
     try std.testing.expect(packed_rect_float_len > 0);
     try std.testing.expect(packed_text_vertex_float_len > 0);
     try std.testing.expect(packed_icon_vertex_float_len > 0);
     try std.testing.expect(packed_image_vertex_float_len > 0);
     try std.testing.expect(er_ui_post_image_rgba_ptr() != 0);
-    try std.testing.expectEqual(site_images.cloud_meme_width, er_ui_post_image_width());
-    try std.testing.expectEqual(site_images.cloud_meme_height, er_ui_post_image_height());
-    try std.testing.expectEqual(site_images.cloud_meme_pixel_count * @sizeOf(ui.Color), er_ui_post_image_rgba_len());
-    try std.testing.expectEqual(@as(u32, @intCast(site_blog.posts.len)), er_ui_blog_post_count());
-    try std.testing.expect(er_ui_site_blog_content_height(1280.0) > 5200.0);
-    try std.testing.expect(er_ui_site_blog_post_content_height(1280.0, site_blog.postIdAt(16)) > 1200.0);
+    try std.testing.expectEqual(app_images.cloud_meme_width, er_ui_post_image_width());
+    try std.testing.expectEqual(app_images.cloud_meme_height, er_ui_post_image_height());
+    try std.testing.expectEqual(app_images.cloud_meme_pixel_count * @sizeOf(ui.Color), er_ui_post_image_rgba_len());
+    try std.testing.expectEqual(@as(u32, @intCast(app_blog.posts.len)), er_ui_blog_post_count());
+    try std.testing.expect(er_ui_app_blog_content_height(1280.0) > 5200.0);
+    try std.testing.expect(er_ui_app_blog_post_content_height(1280.0, app_blog.postIdAt(16)) > 1200.0);
     try std.testing.expectEqual(@intFromEnum(ui.HitKind.button), er_ui_hover_hit_kind());
-    try std.testing.expectEqual(site_blog.postIdAt(0), er_ui_hover_hit_id());
+    try std.testing.expectEqual(app_blog.postIdAt(0), er_ui_hover_hit_id());
 }
 
-test "browser site activation keeps page state in wasm" {
-    site_state = .{};
-    defer site_state = .{};
+test "app runtime activation keeps page state in wasm" {
+    app_state = .{};
+    defer app_state = .{};
 
-    try std.testing.expectEqual(site_landing.contentHeight(1280.0), er_ui_site_content_height(1280.0));
-    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_site_activate_hit(site_chrome.blog_button_id));
-    try std.testing.expectEqual(site_blog.indexContentHeight(1280.0), er_ui_site_content_height(1280.0));
-    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_site_activate_hit(site_blog.postIdAt(0)));
-    try std.testing.expectEqual(site_blog.postContentHeight(1280.0, site_blog.postIdAt(0)), er_ui_site_content_height(1280.0));
-    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_site_activate_hit(site_chrome.source_button_id));
-    try std.testing.expectEqualStrings("/source", route_bytes[0..er_ui_site_route_path_len()]);
-    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_site_action_kind());
+    try std.testing.expectEqual(app_landing.contentHeight(1280.0), er_ui_app_content_height(1280.0));
+    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_activate_hit(app_chrome.blog_button_id));
+    try std.testing.expectEqual(app_blog.indexContentHeight(1280.0), er_ui_app_content_height(1280.0));
+    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_activate_hit(app_blog.postIdAt(0)));
+    try std.testing.expectEqual(app_blog.postContentHeight(1280.0, app_blog.postIdAt(0)), er_ui_app_content_height(1280.0));
+    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_activate_hit(app_chrome.source_button_id));
+    try std.testing.expectEqualStrings("/source", route_bytes[0..er_ui_app_route_path_len()]);
+    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_action_kind());
     try std.testing.expectEqual(@as(u32, 0), er_ui_outbox_count());
     try std.testing.expectEqual(@as(u32, 0), er_ui_outbox_clear());
     try std.testing.expectEqual(@as(u32, 0), er_ui_outbox_count());
-    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_site_activate_hit(site_chrome.launch_button_id));
+    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_activate_hit(app_chrome.launch_button_id));
     try std.testing.expectEqual(@as(u32, 1), er_ui_outbox_count());
     try std.testing.expectEqual(@intFromEnum(OutboxKind.launch_wasm), er_ui_outbox_kind(0));
     try std.testing.expectEqual(er_ui_release_artifact_len(), er_ui_outbox_payload_len(0));
     try std.testing.expect(er_ui_outbox_payload_ptr(0) != 0);
     try std.testing.expectEqual(@as(usize, 0), er_ui_outbox_target_len(0));
     try std.testing.expectEqual(@as(u32, 0), er_ui_outbox_clear());
-    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_site_activate_hit(site_chrome.logo_button_id));
-    try std.testing.expectEqual(site_landing.contentHeight(1280.0), er_ui_site_content_height(1280.0));
-    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_site_activate_hit(site_chrome.blog_button_id));
-    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_site_activate_hit(site_blog.arcFilterButtonId(3)));
-    try std.testing.expectEqual(site_blog.indexContentHeightFiltered(1280.0, 3), er_ui_site_content_height(1280.0));
-    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_site_activate_hit(site_blog.all_lessons_button_id));
-    try std.testing.expectEqual(site_blog.indexContentHeight(1280.0), er_ui_site_content_height(1280.0));
-    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_site_activate_hit(site_chrome.docs_button_id));
-    try std.testing.expectEqual(site_docs.contentHeight(1280.0), er_ui_site_content_height(1280.0));
-    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_site_activate_hit(site_docs.component_catalog_button_id));
-    try std.testing.expectEqual(component_gallery.contentHeightForState(1280.0, .{}), er_ui_site_content_height(1280.0));
+    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_activate_hit(app_chrome.logo_button_id));
+    try std.testing.expectEqual(app_landing.contentHeight(1280.0), er_ui_app_content_height(1280.0));
+    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_activate_hit(app_chrome.blog_button_id));
+    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_activate_hit(app_blog.arcFilterButtonId(3)));
+    try std.testing.expectEqual(app_blog.indexContentHeightFiltered(1280.0, 3), er_ui_app_content_height(1280.0));
+    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_activate_hit(app_blog.all_lessons_button_id));
+    try std.testing.expectEqual(app_blog.indexContentHeight(1280.0), er_ui_app_content_height(1280.0));
+    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_activate_hit(app_chrome.docs_button_id));
+    try std.testing.expectEqual(app_docs.contentHeight(1280.0), er_ui_app_content_height(1280.0));
+    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_activate_hit(app_docs.component_catalog_button_id));
+    try std.testing.expectEqual(component_gallery.contentHeightForState(1280.0, .{}), er_ui_app_content_height(1280.0));
 }
 
-test "browser native route sync owns URL path state" {
-    site_state = .{};
-    defer site_state = .{};
+test "app runtime route sync owns URL path state" {
+    app_state = .{};
+    defer app_state = .{};
 
-    try std.testing.expectEqual(@as(u32, 0), er_ui_site_set_route_hash(writeInputForTest("#/academy")));
-    try std.testing.expectEqual(site_blog.indexContentHeight(1280.0), er_ui_site_content_height(1280.0));
-    try std.testing.expectEqualStrings("/academy", route_bytes[0..er_ui_site_route_path_len()]);
-    try std.testing.expectEqualStrings("#/academy", route_hash_bytes[0..er_ui_site_route_hash_len()]);
+    try std.testing.expectEqual(@as(u32, 0), er_ui_app_set_route_hash(writeInputForTest("#/academy")));
+    try std.testing.expectEqual(app_blog.indexContentHeight(1280.0), er_ui_app_content_height(1280.0));
+    try std.testing.expectEqualStrings("/academy", route_bytes[0..er_ui_app_route_path_len()]);
+    try std.testing.expectEqualStrings("#/academy", route_hash_bytes[0..er_ui_app_route_hash_len()]);
 
     const route = "#/academy/40100";
-    try std.testing.expectEqual(@as(u32, 0), er_ui_site_set_route_hash(writeInputForTest(route)));
-    try std.testing.expectEqual(site_blog.postContentHeight(1280.0, site_blog.postIdAt(0)), er_ui_site_content_height(1280.0));
-    try std.testing.expectEqualStrings("/academy/40100", route_bytes[0..er_ui_site_route_path_len()]);
-    try std.testing.expectEqualStrings("#/academy/40100", route_hash_bytes[0..er_ui_site_route_hash_len()]);
+    try std.testing.expectEqual(@as(u32, 0), er_ui_app_set_route_hash(writeInputForTest(route)));
+    try std.testing.expectEqual(app_blog.postContentHeight(1280.0, app_blog.postIdAt(0)), er_ui_app_content_height(1280.0));
+    try std.testing.expectEqualStrings("/academy/40100", route_bytes[0..er_ui_app_route_path_len()]);
+    try std.testing.expectEqualStrings("#/academy/40100", route_hash_bytes[0..er_ui_app_route_hash_len()]);
 
-    try std.testing.expectEqual(@as(u32, 0), er_ui_site_set_route_hash(writeInputForTest("")));
-    try std.testing.expectEqual(site_landing.contentHeight(1280.0), er_ui_site_content_height(1280.0));
-    try std.testing.expectEqualStrings("/", route_bytes[0..er_ui_site_route_path_len()]);
-    try std.testing.expectEqualStrings("", route_hash_bytes[0..er_ui_site_route_hash_len()]);
+    try std.testing.expectEqual(@as(u32, 0), er_ui_app_set_route_hash(writeInputForTest("")));
+    try std.testing.expectEqual(app_landing.contentHeight(1280.0), er_ui_app_content_height(1280.0));
+    try std.testing.expectEqualStrings("/", route_bytes[0..er_ui_app_route_path_len()]);
+    try std.testing.expectEqualStrings("", route_hash_bytes[0..er_ui_app_route_hash_len()]);
 
-    try std.testing.expectEqual(@as(u32, 0), er_ui_site_set_route_hash(writeInputForTest("#/apps")));
-    try std.testing.expectEqual(site_landing.contentHeight(1280.0), er_ui_site_content_height(1280.0));
-    try std.testing.expectEqualStrings("/", route_bytes[0..er_ui_site_route_path_len()]);
+    try std.testing.expectEqual(@as(u32, 0), er_ui_app_set_route_hash(writeInputForTest("#/apps")));
+    try std.testing.expectEqual(app_landing.contentHeight(1280.0), er_ui_app_content_height(1280.0));
+    try std.testing.expectEqualStrings("/", route_bytes[0..er_ui_app_route_path_len()]);
 
-    try std.testing.expectEqual(@as(u32, 0), er_ui_site_set_route_hash(writeInputForTest("#/docs/media")));
-    const media_index = site_docs.indexBySlug("media").?;
-    try std.testing.expectEqual(media_index, site_state.selected_doc_index.?);
-    try std.testing.expectEqual(site_docs.contentHeightForState(1280.0, .{ .selected_doc_index = media_index }), er_ui_site_content_height(1280.0));
-    try std.testing.expectEqualStrings("/docs/media", route_bytes[0..er_ui_site_route_path_len()]);
-    try std.testing.expectEqualStrings("#/docs/media", route_hash_bytes[0..er_ui_site_route_hash_len()]);
+    try std.testing.expectEqual(@as(u32, 0), er_ui_app_set_route_hash(writeInputForTest("#/docs/media")));
+    const media_index = app_docs.indexBySlug("media").?;
+    try std.testing.expectEqual(media_index, app_state.selected_doc_index.?);
+    try std.testing.expectEqual(app_docs.contentHeightForState(1280.0, .{ .selected_doc_index = media_index }), er_ui_app_content_height(1280.0));
+    try std.testing.expectEqualStrings("/docs/media", route_bytes[0..er_ui_app_route_path_len()]);
+    try std.testing.expectEqualStrings("#/docs/media", route_hash_bytes[0..er_ui_app_route_hash_len()]);
 
-    try std.testing.expectEqual(@as(u32, 0), er_ui_site_set_route_hash(writeInputForTest("#/docs")));
-    try std.testing.expectEqual(site_docs.contentHeight(1280.0), er_ui_site_content_height(1280.0));
-    try std.testing.expectEqualStrings("/docs", route_bytes[0..er_ui_site_route_path_len()]);
-    try std.testing.expectEqualStrings("#/docs", route_hash_bytes[0..er_ui_site_route_hash_len()]);
+    try std.testing.expectEqual(@as(u32, 0), er_ui_app_set_route_hash(writeInputForTest("#/docs")));
+    try std.testing.expectEqual(app_docs.contentHeight(1280.0), er_ui_app_content_height(1280.0));
+    try std.testing.expectEqualStrings("/docs", route_bytes[0..er_ui_app_route_path_len()]);
+    try std.testing.expectEqualStrings("#/docs", route_hash_bytes[0..er_ui_app_route_hash_len()]);
 
-    try std.testing.expectEqual(@as(u32, 0), er_ui_site_set_route_hash(writeInputForTest("#/docs/component-system")));
-    const component_system_index = site_docs.indexBySlug("component-system").?;
-    try std.testing.expectEqual(component_system_index, site_state.selected_doc_index.?);
-    try std.testing.expectEqual(site_docs.contentHeightForState(1280.0, .{ .selected_doc_index = component_system_index }), er_ui_site_content_height(1280.0));
-    try std.testing.expectEqualStrings("/docs/component-system", route_bytes[0..er_ui_site_route_path_len()]);
-    try std.testing.expectEqualStrings("#/docs/component-system", route_hash_bytes[0..er_ui_site_route_hash_len()]);
+    try std.testing.expectEqual(@as(u32, 0), er_ui_app_set_route_hash(writeInputForTest("#/docs/component-system")));
+    const component_system_index = app_docs.indexBySlug("component-system").?;
+    try std.testing.expectEqual(component_system_index, app_state.selected_doc_index.?);
+    try std.testing.expectEqual(app_docs.contentHeightForState(1280.0, .{ .selected_doc_index = component_system_index }), er_ui_app_content_height(1280.0));
+    try std.testing.expectEqualStrings("/docs/component-system", route_bytes[0..er_ui_app_route_path_len()]);
+    try std.testing.expectEqualStrings("#/docs/component-system", route_hash_bytes[0..er_ui_app_route_hash_len()]);
 
-    try std.testing.expectEqual(@as(u32, 0), er_ui_site_set_route_hash(writeInputForTest("#/docs/components/button")));
+    try std.testing.expectEqual(@as(u32, 0), er_ui_app_set_route_hash(writeInputForTest("#/docs/components/button")));
     const button_index = component_gallery.indexBySlug("button").?;
-    try std.testing.expectEqual(button_index, site_state.selected_component_index.?);
-    try std.testing.expectEqual(component_gallery.contentHeightForState(1280.0, .{ .selected_component_index = button_index }), er_ui_site_content_height(1280.0));
-    try std.testing.expectEqualStrings("/docs/components/button", route_bytes[0..er_ui_site_route_path_len()]);
+    try std.testing.expectEqual(button_index, app_state.selected_component_index.?);
+    try std.testing.expectEqual(component_gallery.contentHeightForState(1280.0, .{ .selected_component_index = button_index }), er_ui_app_content_height(1280.0));
+    try std.testing.expectEqualStrings("/docs/components/button", route_bytes[0..er_ui_app_route_path_len()]);
 
-    try std.testing.expectEqual(@as(u32, @intFromEnum(ErrorCode.bad_input)), er_ui_site_set_route_hash(writeInputForTest("#academy")));
-    try std.testing.expectEqualStrings("/docs/components/button", route_bytes[0..er_ui_site_route_path_len()]);
+    try std.testing.expectEqual(@as(u32, @intFromEnum(ErrorCode.bad_input)), er_ui_app_set_route_hash(writeInputForTest("#academy")));
+    try std.testing.expectEqualStrings("/docs/components/button", route_bytes[0..er_ui_app_route_path_len()]);
+}
+
+test "app runtime context source jump opens exact component file" {
+    app_state = .{};
+    runtime_state = .{};
+    context_menu_open = false;
+    context_source_label = "";
+    defer app_state = .{};
+    defer runtime_state = .{};
+    defer _ = er_ui_source_workspace_reset();
+
+    const button_index = component_gallery.indexBySlug("button").?;
+    const preview_id = component_gallery.preview_base_id + 7000 + @as(u32, @intCast(button_index)) * 32;
+    applyRoute(.{ .view = .docs, .selected_doc_index = app_docs.indexBySlug("component-system"), .selected_component_index = button_index });
+    try storeLastRegions(&.{.{ .slot = 0, .kind = .button, .id = preview_id, .bounds = ui.Rect.init(40, 40, 200, 80) }});
+
+    try std.testing.expectEqual(@as(u32, 0), er_ui_app_context_menu(80.0, 60.0));
+    try std.testing.expect(context_menu_open);
+    try std.testing.expectEqualStrings("src/ui/components/Button.zig", context_source_label);
+    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_activate_hit(app_navigation.context_source_button_id));
+    try std.testing.expectEqualStrings("/source", route_bytes[0..er_ui_app_route_path_len()]);
+    try std.testing.expectEqualStrings("src/ui/components/Button.zig", source_editor_label);
+    try std.testing.expectEqual(@intFromEnum(SourceEditorStatus.ready), er_ui_source_editor_status());
 }
 
 fn writeInputForTest(value: []const u8) usize {
@@ -2383,7 +2487,7 @@ fn eventBytesForTest(value: []const u8, width: f32, height: f32) u32 {
 }
 
 fn keyEventForTest(value: []const u8, ctrl: bool, meta: bool, alt: bool) u32 {
-    return er_ui_site_key_event(
+    return er_ui_app_key_event(
         writeInputForTest(value),
         if (ctrl) 1 else 0,
         if (meta) 1 else 0,
@@ -2391,9 +2495,9 @@ fn keyEventForTest(value: []const u8, ctrl: bool, meta: bool, alt: bool) u32 {
     );
 }
 
-test "browser native key policy stays inert until an app owns text input" {
-    site_state = .{};
-    defer site_state = .{};
+test "app runtime key policy stays inert until an app owns text input" {
+    app_state = .{};
+    defer app_state = .{};
 
     try std.testing.expectEqual(@as(u32, 0), keyEventForTest("/", false, false, false));
     try std.testing.expectEqual(@as(u32, 0), keyEventForTest("k", true, false, false));
@@ -2402,12 +2506,12 @@ test "browser native key policy stays inert until an app owns text input" {
     try std.testing.expectEqual(@as(u32, 0), keyEventForTest("ArrowDown", false, false, false));
 }
 
-test "browser native event bytes keep browser decoding inside wasm" {
-    site_state = .{};
+test "app runtime event bytes keep host event decoding inside wasm" {
+    app_state = .{};
     runtime_state = .{};
     pointer_hover_x = -1.0;
     pointer_hover_y = -1.0;
-    defer site_state = .{};
+    defer app_state = .{};
     defer runtime_state = .{};
 
     try std.testing.expectEqual(
@@ -2421,25 +2525,25 @@ test "browser native event bytes keep browser decoding inside wasm" {
         input_event_prevent_default | input_event_schedule_frame,
         eventBytesForTest("wheel\n0\n0\n120\n0\n0\n0\n", 1280.0, 900.0),
     );
-    try std.testing.expectEqual(@as(f32, 120.0), site_state.scroll_y);
+    try std.testing.expectEqual(@as(f32, 120.0), app_state.scroll_y);
 
     try std.testing.expectEqual(
         input_event_schedule_frame,
         eventBytesForTest("hashchange\n0\n0\n0\n0\n0\n0\n#/apps", 1280.0, 900.0),
     );
-    try std.testing.expectEqualStrings("/", route_bytes[0..er_ui_site_route_path_len()]);
+    try std.testing.expectEqualStrings("/", route_bytes[0..er_ui_app_route_path_len()]);
 
     try std.testing.expectEqual(@as(u32, 0), eventBytesForTest("keyup\n0\n0\n0\n0\n0\n0\nk", 1280.0, 900.0));
 }
 
-test "browser native event pump owns dom event interpretation" {
-    site_state = .{};
+test "app runtime event pump owns dom event interpretation" {
+    app_state = .{};
     runtime_state = .{};
     clearOutboxMessages();
     pointer_hover_x = -1.0;
     pointer_hover_y = -1.0;
     last_command_count = 0;
-    defer site_state = .{};
+    defer app_state = .{};
     defer runtime_state = .{};
     defer clearOutboxMessages();
 
@@ -2447,7 +2551,7 @@ test "browser native event pump owns dom event interpretation" {
 
     const wheel_result = er_ui_event(@intFromEnum(InputEventKind.wheel), 0, 0, 320.0, 0, 0, 0, 0, 1280.0, 900.0);
     try std.testing.expectEqual(input_event_prevent_default | input_event_schedule_frame, wheel_result);
-    try std.testing.expectEqual(@as(f32, 320.0), site_state.scroll_y);
+    try std.testing.expectEqual(@as(f32, 320.0), app_state.scroll_y);
 
     try std.testing.expectEqual(input_event_schedule_frame, er_ui_event(@intFromEnum(InputEventKind.pointer_move), 42.0, 88.0, 0, 0, 0, 0, 0, 1280.0, 900.0));
     try std.testing.expectEqual(@as(f32, 42.0), pointer_hover_x);
@@ -2459,15 +2563,15 @@ test "browser native event pump owns dom event interpretation" {
     try std.testing.expectEqual(@as(u32, 0), er_ui_event(@intFromEnum(InputEventKind.key_down), 0, 0, 0, 0, 0, 0, writeInputForTest("/"), 1280.0, 900.0));
 
     try std.testing.expectEqual(input_event_schedule_frame, er_ui_event(@intFromEnum(InputEventKind.hashchange), 0, 0, 0, 0, 0, 0, writeInputForTest("#/apps"), 1280.0, 900.0));
-    try std.testing.expectEqualStrings("/", route_bytes[0..er_ui_site_route_path_len()]);
+    try std.testing.expectEqualStrings("/", route_bytes[0..er_ui_app_route_path_len()]);
 
     try std.testing.expectEqual(input_event_error, er_ui_event(@intFromEnum(InputEventKind.hashchange), 0, 0, 0, 0, 0, 0, writeInputForTest("#apps"), 1280.0, 900.0));
     try std.testing.expectEqual(@intFromEnum(ErrorCode.bad_input), er_ui_last_error());
-    try std.testing.expectEqualStrings("/", route_bytes[0..er_ui_site_route_path_len()]);
+    try std.testing.expectEqualStrings("/", route_bytes[0..er_ui_app_route_path_len()]);
 
-    site_state.queued_action = .none;
+    app_state.queued_action = .none;
     last_command_count = 0;
-    try storeLastRegions(&.{.{ .slot = 0, .kind = .button, .id = site_chrome.source_button_id, .bounds = ui.Rect.init(0, 0, 40, 40) }});
+    try storeLastRegions(&.{.{ .slot = 0, .kind = .button, .id = app_chrome.source_button_id, .bounds = ui.Rect.init(0, 0, 40, 40) }});
     const pointer_result = er_ui_event(@intFromEnum(InputEventKind.pointer_up), 8.0, 8.0, 0, 0, 0, 0, 0, 1280.0, 900.0);
     try std.testing.expectEqual(input_event_release_pointer | input_event_schedule_frame | input_event_outbox, pointer_result);
     try std.testing.expectEqual(@as(u32, 1), er_ui_outbox_count());
@@ -2476,7 +2580,7 @@ test "browser native event pump owns dom event interpretation" {
     try std.testing.expectEqualStrings("#/source", (@as([*]const u8, @ptrFromInt(er_ui_outbox_payload_ptr(0))))[0..er_ui_outbox_payload_len(0)]);
 }
 
-test "browser native boot emits document title host command" {
+test "app runtime boot emits document title host command" {
     clearOutboxMessages();
     defer clearOutboxMessages();
 
@@ -2494,7 +2598,7 @@ test "browser native boot emits document title host command" {
     try std.testing.expectEqualStrings(boot_dom_html, (@as([*]const u8, @ptrFromInt(er_ui_outbox_payload_ptr(1))))[0..er_ui_outbox_payload_len(1)]);
 }
 
-test "browser native records host appearance preference" {
+test "app runtime records host appearance preference" {
     try std.testing.expectEqual(@as(u32, 1), er_ui_set_environment_appearance(1));
     try std.testing.expectEqual(@as(u32, 1), er_ui_environment_appearance());
     try std.testing.expectEqual(@as(u32, 2), er_ui_set_environment_appearance(2));
@@ -2503,11 +2607,11 @@ test "browser native records host appearance preference" {
     try std.testing.expectEqual(@as(u32, 0), er_ui_environment_appearance());
 }
 
-test "browser native exposes eval bootstrap javascript bytes" {
+test "app runtime exposes eval bootstrap javascript bytes" {
     const bootstrap_js: [*]const u8 = @ptrFromInt(er_ui_bootstrap_js_ptr());
     const js_bytes = bootstrap_js[0..er_ui_bootstrap_js_len()];
 
-    try std.testing.expectEqualStrings(browser_runtime_js.source, js_bytes);
+    try std.testing.expectEqualStrings(web_host_js.source, js_bytes);
     try std.testing.expect(std.mem.indexOf(u8, js_bytes, "document.body.innerHTML") != null);
     try std.testing.expect(std.mem.indexOf(u8, js_bytes, "WebAssembly.instantiate(") != null);
     try std.testing.expect(std.mem.indexOf(u8, js_bytes, "er_ui_compiler_wasm_ptr") == null);
@@ -2515,7 +2619,7 @@ test "browser native exposes eval bootstrap javascript bytes" {
     try std.testing.expect(std.mem.indexOf(u8, js_bytes, "fetch(") == null);
 }
 
-test "browser native exposes repo-owned source as canonical object bytes" {
+test "app runtime exposes repo-owned source as canonical object bytes" {
     const source: [*]const u8 = @ptrFromInt(er_ui_compiler_source_ptr());
     const source_bytes = source[0..er_ui_compiler_source_len()];
     const view = try object.View.decode(source_bytes);
@@ -2526,7 +2630,7 @@ test "browser native exposes repo-owned source as canonical object bytes" {
     try std.testing.expect(file_count > 0);
 
     var index: usize = 16;
-    var saw_browser = false;
+    var saw_runtime = false;
     var saw_compiler = false;
     var remaining = file_count;
     while (remaining > 0) : (remaining -= 1) {
@@ -2539,15 +2643,15 @@ test "browser native exposes repo-owned source as canonical object bytes" {
         try std.testing.expectEqualSlices(u8, &label_ref.object_id, &file_id);
         index += file_len;
 
-        if (std.mem.eql(u8, label_ref.labelSlice(), "src/ui_browser.zig")) saw_browser = true;
+        if (std.mem.eql(u8, label_ref.labelSlice(), "src/app_runtime.zig")) saw_runtime = true;
         if (std.mem.eql(u8, label_ref.labelSlice(), "compiler/zig/src/edgerun_wasm_compiler.zig")) saw_compiler = true;
     }
     try std.testing.expectEqual(view.body.len, index);
-    try std.testing.expect(saw_browser);
+    try std.testing.expect(saw_runtime);
     try std.testing.expect(saw_compiler);
 }
 
-test "browser native embeds compiler wasm bytes into parent app" {
+test "app runtime embeds compiler wasm bytes into parent app" {
     const wasm_bytes: [*]const u8 = @ptrFromInt(er_ui_compiler_wasm_ptr());
     const compiler_bytes = wasm_bytes[0..er_ui_compiler_wasm_len()];
 
@@ -2555,7 +2659,7 @@ test "browser native embeds compiler wasm bytes into parent app" {
     try std.testing.expectEqualSlices(u8, &.{ 0x00, 0x61, 0x73, 0x6d }, compiler_bytes[0..4]);
 }
 
-test "browser native source workspace is mutable app source" {
+test "app runtime source workspace is mutable app source" {
     try std.testing.expectEqual(@as(u32, 0), er_ui_source_workspace_reset());
     defer _ = er_ui_source_workspace_reset();
     const workspace: [*]u8 = @ptrFromInt(er_ui_source_workspace_ptr());
@@ -2565,11 +2669,30 @@ test "browser native source workspace is mutable app source" {
 
     const edited = "pub export fn edited() void {}";
     @memcpy(workspace[0..edited.len], edited);
-    try std.testing.expectEqual(@as(u32, 0), er_ui_source_workspace_commit(edited.len));
-    try std.testing.expectEqualStrings(edited, workspace[0..er_ui_source_workspace_len()]);
+    try std.testing.expectEqual(@intFromEnum(ErrorCode.bad_input), er_ui_source_workspace_commit(edited.len));
+    try std.testing.expectEqual(initial.len, er_ui_source_workspace_len());
+    @memcpy(workspace[0..source_object.len], source_object[0..]);
+    try std.testing.expectEqual(@as(u32, 0), er_ui_source_workspace_commit(source_object.len));
+    try std.testing.expectEqual(source_object.len, er_ui_source_workspace_len());
 }
 
-test "browser native source editor rewrites a canonical vfs file" {
+test "app runtime source route initializes embedded editor state" {
+    source_workspace_ready = false;
+    source_workspace_len = 0;
+    source_editor_loaded = false;
+    source_editor_len = 0;
+    source_editor_status = .not_loaded;
+    applyRoute(.{ .view = .source });
+    defer _ = er_ui_source_workspace_reset();
+
+    const code = er_ui_build_app_frame(960, 640, -1.0, -1.0, 0.0);
+    try std.testing.expectEqual(@as(u32, 0), code);
+    try std.testing.expect(source_workspace_len > 0);
+    try std.testing.expect(source_editor_len > 0);
+    try std.testing.expectEqual(SourceEditorStatus.ready, source_editor_status);
+}
+
+test "app runtime source editor rewrites a canonical vfs file" {
     try std.testing.expectEqual(@as(u32, 0), er_ui_source_workspace_reset());
     defer _ = er_ui_source_workspace_reset();
     applyRoute(.{ .view = .source });
@@ -2579,19 +2702,19 @@ test "browser native source editor rewrites a canonical vfs file" {
     try std.testing.expectEqual(@intFromEnum(SourceEditorStatus.ready), er_ui_source_editor_status());
     try std.testing.expectEqualStrings(original, editor[0..er_ui_source_editor_len()]);
 
-    try std.testing.expectEqual(@as(u32, 1), er_ui_site_key_event(writeInputForTest("/"), 0, 0, 0));
+    try std.testing.expectEqual(@as(u32, 1), er_ui_app_key_event(writeInputForTest("/"), 0, 0, 0));
     try std.testing.expectEqual(@intFromEnum(SourceEditorStatus.dirty), er_ui_source_editor_status());
     const edited = try findWorkspaceFileBody(source_workspace[0..source_workspace_len], source_editor_label);
     try std.testing.expectEqual(original.len + 1, edited.len);
     try std.testing.expectEqual(@as(u8, '/'), edited[0]);
     try std.testing.expectEqualStrings(original, edited[1..]);
 
-    try std.testing.expectEqual(@as(u32, 1), er_ui_site_key_event(writeInputForTest("Backspace"), 0, 0, 0));
+    try std.testing.expectEqual(@as(u32, 1), er_ui_app_key_event(writeInputForTest("Backspace"), 0, 0, 0));
     const restored = try findWorkspaceFileBody(source_workspace[0..source_workspace_len], source_editor_label);
     try std.testing.expectEqualStrings(original, restored);
 }
 
-test "browser native source editor moves by visual lines" {
+test "app runtime source editor moves by visual lines" {
     const sample = "aa\nbbbb\nc";
     @memcpy(source_editor_bytes[0..sample.len], sample);
     source_editor_len = sample.len;
@@ -2621,7 +2744,7 @@ test "browser native source editor moves by visual lines" {
     try std.testing.expectEqual(@as(usize, 7), source_editor_cursor);
 }
 
-test "browser native release artifact slot only commits wasm modules" {
+test "app runtime release artifact slot only commits wasm modules" {
     const artifact: [*]u8 = @ptrFromInt(er_ui_release_artifact_ptr());
     try std.testing.expect(er_ui_release_artifact_capacity() >= er_ui_compiler_wasm_len());
     try std.testing.expectEqual(@as(u32, @intFromEnum(ErrorCode.bad_input)), er_ui_release_artifact_commit(0));
@@ -2635,7 +2758,7 @@ test "browser native release artifact slot only commits wasm modules" {
     try std.testing.expectEqual(@as(usize, 0), er_ui_release_artifact_len());
 }
 
-test "browser native emits successor artifact with source workspace embedded" {
+test "app runtime emits successor artifact with source workspace embedded" {
     try std.testing.expectEqual(@as(u32, 0), er_ui_release_artifact_clear());
     try std.testing.expectEqual(@as(u32, 0), er_ui_source_workspace_reset());
 
@@ -2648,7 +2771,7 @@ test "browser native emits successor artifact with source workspace embedded" {
     try std.testing.expect(std.mem.indexOf(u8, artifact_bytes, source[0..er_ui_compiler_source_len()]) != null);
 }
 
-test "browser native exports committed wasm artifact through generic byte bridge" {
+test "app runtime exports committed wasm artifact through generic byte bridge" {
     try std.testing.expectEqual(@as(u32, 0), er_ui_release_artifact_clear());
     const artifact: [*]u8 = @ptrFromInt(er_ui_release_artifact_ptr());
     const compiler_bytes: [*]const u8 = @ptrFromInt(er_ui_compiler_wasm_ptr());
@@ -2665,19 +2788,19 @@ test "browser native exports committed wasm artifact through generic byte bridge
     try std.testing.expectEqual(@intFromEnum(OutboxKind.launch_wasm), er_ui_outbox_kind(0));
 }
 
-test "browser native site state owns scroll position" {
-    site_state = .{};
-    defer site_state = .{};
+test "app runtime app state owns scroll position" {
+    app_state = .{};
+    defer app_state = .{};
 
-    try std.testing.expectEqual(@as(u32, 0), er_ui_site_scroll_by(320.0, 1280.0, 900.0));
-    try std.testing.expectEqual(@as(f32, 320.0), er_ui_site_scroll_y());
-    try std.testing.expectEqual(@as(u32, 0), er_ui_site_activate_hit(site_chrome.blog_button_id));
-    try std.testing.expectEqual(@as(f32, 0.0), er_ui_site_scroll_y());
-    try std.testing.expectEqual(@as(u32, 0), er_ui_site_scroll_by(200000.0, 1280.0, 900.0));
-    try std.testing.expectEqual(siteScrollLimit(1280.0, 900.0), er_ui_site_scroll_y());
+    try std.testing.expectEqual(@as(u32, 0), er_ui_app_scroll_by(320.0, 1280.0, 900.0));
+    try std.testing.expectEqual(@as(f32, 320.0), er_ui_app_scroll_y());
+    try std.testing.expectEqual(@as(u32, 0), er_ui_app_activate_hit(app_chrome.blog_button_id));
+    try std.testing.expectEqual(@as(f32, 0.0), er_ui_app_scroll_y());
+    try std.testing.expectEqual(@as(u32, 0), er_ui_app_scroll_by(200000.0, 1280.0, 900.0));
+    try std.testing.expectEqual(appScrollLimit(1280.0, 900.0), er_ui_app_scroll_y());
 }
 
-test "browser native cursor intent owns hit and drag cursor policy" {
+test "app runtime cursor intent owns hit and drag cursor policy" {
     runtime_state.clearHover();
     last_action_kind = @intFromEnum(ui_runtime.ActionKind.none);
     try std.testing.expectEqual(@intFromEnum(CursorKind.default), er_ui_cursor_kind());
@@ -2692,7 +2815,7 @@ test "browser native cursor intent owns hit and drag cursor policy" {
     try std.testing.expectEqual(@intFromEnum(CursorKind.grabbing), er_ui_cursor_kind());
 }
 
-test "browser native cursor is scene-drawn from runtime pointer state" {
+test "app runtime cursor is scene-drawn from runtime pointer state" {
     var local_commands: [16]ui.Command = undefined;
     const scene = ui.Scene.init(&local_commands);
     var local_pixels: [64]ui.Color = undefined;
@@ -2705,18 +2828,18 @@ test "browser native cursor is scene-drawn from runtime pointer state" {
     try std.testing.expect(hasIconId(local_commands[0..last_command_count], icon_svg.cursor_hand_finger_icon_id));
 }
 
-test "browser native pointer up owns activation suppression policy" {
+test "app runtime pointer up owns activation suppression policy" {
     last_command_count = 0;
-    try storeLastRegions(&.{.{ .slot = 0, .kind = .button, .id = site_chrome.blog_button_id, .bounds = ui.Rect.init(0, 0, 40, 40) }});
+    try storeLastRegions(&.{.{ .slot = 0, .kind = .button, .id = app_chrome.blog_button_id, .bounds = ui.Rect.init(0, 0, 40, 40) }});
 
-    site_state = .{};
+    app_state = .{};
     runtime_state = .{};
-    defer site_state = .{};
+    defer app_state = .{};
     defer runtime_state = .{};
 
     _ = er_ui_pointer_down(8, 8);
-    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_site_pointer_up(8, 8));
-    try std.testing.expectEqual(site_blog.indexContentHeight(1280.0), er_ui_site_content_height(1280.0));
+    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_pointer_up(8, 8));
+    try std.testing.expectEqual(app_blog.indexContentHeight(1280.0), er_ui_app_content_height(1280.0));
 
     var drag_commands: [2]ui.Command = undefined;
     var drag_scene = ui.Scene.init(&drag_commands);
@@ -2724,17 +2847,17 @@ test "browser native pointer up owns activation suppression policy" {
     try drag_scene.pushDropTarget(.{ .scope_id = 81, .index = 2, .bounds = ui.Rect.init(0, 70, 40, 40) });
     last_command_count = drag_scene.written().len;
     @memcpy(commands[0..last_command_count], drag_scene.written());
-    try storeLastRegions(&.{.{ .slot = 0, .kind = .button, .id = site_chrome.docs_button_id, .bounds = ui.Rect.init(0, 70, 40, 40) }});
+    try storeLastRegions(&.{.{ .slot = 0, .kind = .button, .id = app_chrome.docs_button_id, .bounds = ui.Rect.init(0, 70, 40, 40) }});
     runtime_state = .{};
-    site_state = .{};
+    app_state = .{};
 
     _ = er_ui_pointer_down(8, 8);
     _ = er_ui_pointer_move(8, 88);
-    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_site_pointer_up(8, 88));
-    try std.testing.expectEqual(site_landing.contentHeight(1280.0), er_ui_site_content_height(1280.0));
+    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_pointer_up(8, 88));
+    try std.testing.expectEqual(app_landing.contentHeight(1280.0), er_ui_app_content_height(1280.0));
 }
 
-test "browser packed text preserves variable font descenders" {
+test "app packed text preserves variable font descenders" {
     font_atlas_ready = false;
     try ensureFontAtlas();
     try std.testing.expectEqual(@as(usize, 0), font_glyph_count);
@@ -2753,7 +2876,7 @@ test "browser packed text preserves variable font descenders" {
     try std.testing.expect(max_y > bounds.y + bounds.h);
 }
 
-test "browser variable font atlas separates css size from raster scale" {
+test "app variable font atlas separates css size from raster scale" {
     font_atlas_ready = false;
     _ = er_ui_set_device_scale(2.0);
     try ensureFontAtlas();
@@ -2770,7 +2893,7 @@ test "browser variable font atlas separates css size from raster scale" {
     try std.testing.expectApproxEqAbs(glyph_2x.advance, glyph_3x.advance, 0.75);
 }
 
-test "browser font atlas populates glyphs on demand" {
+test "app font atlas populates glyphs on demand" {
     font_atlas_ready = false;
     try ensureFontAtlas();
     const initialized_generation = font_atlas_generation;
@@ -2784,7 +2907,7 @@ test "browser font atlas populates glyphs on demand" {
     try std.testing.expect(font_atlas_generation > initialized_generation);
 }
 
-test "browser icon buffer stores semantic icon instances" {
+test "app icon buffer stores semantic icon instances" {
     packed_icon_vertex_float_len = 0;
     try renderer_pipeline.pushIcon(packedBuffers(), .base, .{
         .bounds = ui.Rect.init(1, 2, 3, 4),
@@ -2796,7 +2919,7 @@ test "browser icon buffer stores semantic icon instances" {
     try std.testing.expectEqual(icon.id(.search), instance.icon_id);
 }
 
-test "browser render frame writes pixels for byte bridge" {
+test "app render frame writes pixels for byte bridge" {
     const code = er_ui_render_frame(640, 480, 0.0);
     try std.testing.expectEqual(@as(u32, 0), code);
     try std.testing.expectEqual(renderer_pipeline.Transport.pixel_bytes, last_present_transport);

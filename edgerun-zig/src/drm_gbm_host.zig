@@ -3,7 +3,7 @@ const renderer_font_atlas = @import("render/font_atlas.zig");
 const renderer_gles = @import("render/gles.zig");
 const renderer_ir = @import("render/ir.zig");
 const renderer_pipeline = @import("render/pipeline.zig");
-const site_frame = @import("site_frame.zig");
+const app_frame = @import("app_frame.zig");
 const ui = @import("ui.zig");
 const interaction = @import("ui_interaction.zig");
 
@@ -77,7 +77,7 @@ const SceneState = struct {
     fn rebuild(self: *SceneState, width: i32, height: i32, font_atlas: *renderer_font_atlas.Atlas) !renderer_ir.Buffers {
         var scene = ui.Scene.initWithClips(&self.commands, &self.clips);
         var collector = interaction.Collector.init(&self.regions);
-        try site_frame.render(&scene, &collector, .{
+        try app_frame.render(&scene, &collector, .{
             .x = 0,
             .y = 0,
             .w = @floatFromInt(width),

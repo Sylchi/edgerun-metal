@@ -29,7 +29,7 @@ const compiler_zig_compiler_lib_root = "compiler/zig/lib/compiler";
 const embedded_wasm_compiler_label = "embedded_wasm_compiler";
 const embed_file_call = "@embedFile(\"";
 const app_workspace_roots = [_][]const u8{
-    "src/ui_browser.zig",
+    "src/app_runtime.zig",
     "src/media/root.zig",
     "src/media/image.zig",
     "src/media/video.zig",
@@ -605,7 +605,7 @@ test "workspace manifest constants match encoded header width" {
 }
 
 test "workspace source filter keeps EdgeRun app and wasm compiler roots" {
-    try std.testing.expect(sourceFileAllowed("src/ui_browser.zig"));
+    try std.testing.expect(sourceFileAllowed("src/app_runtime.zig"));
     try std.testing.expect(sourceFileAllowed("src/blog/one.md"));
     try std.testing.expect(sourceFileAllowed("src/media/video.zig"));
     try std.testing.expect(sourceFileAllowed("src/media/video_webm.zig"));

@@ -3,7 +3,7 @@ const std = @import("std");
 const output_file_permissions = std.Io.File.Permissions.default_file.setReadOnly(true);
 
 pub const output_name = "index.html";
-pub const wasm_path = "../bin/edgerun-ui-browser.wasm";
+pub const wasm_path = "../bin/edgerun-app-runtime.wasm";
 pub const immutable_marker = "GENERATED FILE. IMMUTABLE.";
 pub const viewport_css = "html,body{margin:0;width:100%;height:100%;overflow:hidden;cursor:none}canvas{display:block}";
 
@@ -20,7 +20,7 @@ pub const html =
     \\<body>
     \\  <script type="module">
     \\const wasmBuildVersion = "index-eval-1";
-    \\const wasmPath = "../bin/edgerun-ui-browser.wasm";
+    \\const wasmPath = "../bin/edgerun-app-runtime.wasm";
     \\async function main() {
     \\  const response = await fetch(`${wasmPath}?v=${wasmBuildVersion}`, { cache: "no-store" });
     \\  const module = await WebAssembly.instantiateStreaming(response, {});
