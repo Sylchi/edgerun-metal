@@ -322,6 +322,7 @@ fn mapVirtioGpuError(err: virtio_gpu.Error) Error {
         error.QueueTooSmall,
         => error.VirtioGpuQueueFailed,
         error.UnsupportedDevice => error.VirtioGpuUnsupported,
+        error.UnsupportedPackedFrame => error.VirtioGpuUnsupported,
     };
 }
 

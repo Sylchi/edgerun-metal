@@ -63,7 +63,7 @@ ui-core-test:
 	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig ui-core-test
 
 app-runtime:
-	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig app-runtime
+	zig build --build-file edgerun-zig/build.zig --cache-dir $(BUILD_DIR)/edgerun-zig -Doptimize=ReleaseFast app-runtime
 
 pages-site: app-runtime
 	rm -rf $(PAGES_SITE_DIR)
