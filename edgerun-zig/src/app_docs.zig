@@ -8,6 +8,8 @@ const app_blog = @import("app_blog.zig");
 const app_chrome = @import("app_chrome.zig");
 const design = @import("app_design.zig");
 
+const DocsError = ui.RenderError || interaction.Error || component_gallery.GalleryError;
+
 pub const component_catalog_button_id: u32 = 31_001;
 pub const academy_button_id: u32 = 31_002;
 pub const source_button_id: u32 = 31_003;
@@ -367,7 +369,7 @@ pub fn contentHeightForState(width: f32, state: State) f32 {
     return header_h + page_top_pad + sidebar_h + body_h + page_bottom_pad;
 }
 
-pub fn render(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) (ui.RenderError || interaction.Error)!void {
+pub fn render(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) DocsError!void {
     try fill(scene, bounds, palette.bg, 0.0);
     try renderGrid(scene, ui.Rect.init(bounds.x, bounds.y + header_h - state.scroll_y, bounds.w, contentHeightForState(bounds.w, state)));
 
@@ -426,7 +428,7 @@ fn renderSidebarRow(scene: *ui.Scene, collector: *interaction.Collector, bounds:
     try collector.addHit(bounds, .button, id);
 }
 
-fn renderDocBody(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, compact: bool, page: DocPage, state: State) (ui.RenderError || interaction.Error)!void {
+fn renderDocBody(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, compact: bool, page: DocPage, state: State) DocsError!void {
     var cursor_y = bounds.y;
     const hero_h = heroHeight(bounds.w, page);
     try renderHero(scene, collector, ui.Rect.init(bounds.x, cursor_y, bounds.w, hero_h), page);
@@ -541,7 +543,7 @@ fn sectionPageHeight(width: f32, page: DocPage, selected_component_index: ?usize
     return height;
 }
 
-fn renderSectionPage(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, page: DocPage, state: State) (ui.RenderError || interaction.Error)!void {
+fn renderSectionPage(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, page: DocPage, state: State) DocsError!void {
     try text(scene, bounds.x, bounds.y, bounds.w, 22.0, page.section.label(), palette.text);
     const intro_body_y = bounds.y + intro_title_h + intro_gap;
     const intro_text = sectionIntro(page.section);

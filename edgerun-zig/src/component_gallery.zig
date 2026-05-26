@@ -1,4 +1,5 @@
 const std = @import("std");
+const clock = @import("clock.zig");
 const icon = @import("icon.zig");
 const components = @import("ui_components.zig");
 const ui = @import("ui.zig");
@@ -6,7 +7,7 @@ const interaction = @import("ui_interaction.zig");
 const design = @import("app_design.zig");
 const app_chrome = @import("app_chrome.zig");
 
-const GalleryError = ui.RenderError || interaction.Error;
+pub const GalleryError = ui.RenderError || interaction.Error || components.Error || error{NoSpace};
 
 pub const preview_base_id: u32 = 18_000;
 pub const first_catalog_card_id: u32 = preview_base_id + 2000;
@@ -37,6 +38,8 @@ const catalog_preview_h: f32 = 38;
 const catalog_status_w: f32 = 116;
 const catalog_card_pad: f32 = 14;
 const catalog_source_w: f32 = 108;
+const canonical_ui_buffer_size: usize = 2048;
+const canonical_object_buffer_size: usize = 4096;
 const selected_component_h: f32 = 500;
 const selected_component_compact_h: f32 = 820;
 const selected_component_gap: f32 = 32;
@@ -744,8 +747,16 @@ fn primitivePreview(kind: PreviewKind, id: u32) PrimitivePreview {
 }
 
 fn renderComponentPreview(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, component: components.Component) GalleryError!void {
+    try validateCanonicalPreview(component);
     try component.render(scene, bounds, .{ .style = componentStyle() });
     try component.collectInteractions(collector, bounds);
+}
+
+fn validateCanonicalPreview(component: components.Component) GalleryError!void {
+    var ui_raw: [canonical_ui_buffer_size]u8 = undefined;
+    var object_raw: [canonical_object_buffer_size]u8 = undefined;
+    const canonical = component.toObject(&ui_raw, &object_raw, galleryEpoch()) orelse return error.NoSpace;
+    _ = try components.Component.fromObject(canonical);
 }
 
 fn componentStyle() ui.Style {
@@ -758,6 +769,10 @@ fn componentStyle() ui.Style {
         .muted = palette.muted,
         .accent = palette.accent,
     };
+}
+
+fn galleryEpoch() clock.Stamp {
+    return .{ .keeper = .{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 } };
 }
 
 fn renderBadgeVariants(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect) GalleryError!void {
@@ -899,6 +914,27 @@ test "component gallery catalog entries render reference previews with canonical
     try std.testing.expect(hasText(scene.written(), "Is it accessible?"));
     try std.testing.expect(hasText(scene.written(), "Edit profile"));
     try std.testing.expect(hasText(scene.written(), "Account"));
+}
+
+test "component gallery preview path validates canonical component object" {
+    var ui_raw: [canonical_ui_buffer_size]u8 = undefined;
+    var object_raw: [canonical_object_buffer_size]u8 = undefined;
+    const source = primitivePreview(.button, preview_base_id + 33);
+    const canonical = source.toObject(&ui_raw, &object_raw, galleryEpoch()).?;
+    const decoded = try components.Component.fromObject(canonical);
+
+    var commands: [16]ui.Command = undefined;
+    var regions: [4]interaction.Region = undefined;
+    var scene = ui.Scene.init(&commands);
+    var collector = interaction.Collector.init(&regions);
+    try renderComponentPreview(&scene, &collector, ui.Rect.init(0, 0, 140, 36), source);
+
+    try std.testing.expectEqualStrings("Default", switch (decoded) {
+        .button => |button| button.label,
+        else => unreachable,
+    });
+    try std.testing.expect(hasText(scene.written(), "Default"));
+    try std.testing.expect(hasHit(collector.written(), preview_base_id + 33));
 }
 
 test "component gallery renders component wall commands and interaction regions" {

@@ -6,6 +6,7 @@ const layout = @import("../../layouts/Types.zig");
 const object = @import("../../object.zig");
 const std = @import("std");
 const ui = @import("../../ui.zig");
+const text_metrics = @import("../../ui_text_metrics.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
 const component_render = @import("Render.zig");
@@ -113,7 +114,8 @@ fn renderContent(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, text_colo
     const has_leading = leading_icon != null;
     const has_trailing = trailing_icon != null;
     if (!has_leading and !has_trailing) {
-        try scene.pushAlignedText(textBounds(bounds), label, text_color, .center);
+        const text_bounds = textBounds(bounds);
+        try scene.pushAlignedText(text_bounds, text_metrics.fitPrefix(label, text_metrics.button_label_px, text_bounds.w), text_color, .center);
         return;
     }
 
@@ -123,6 +125,7 @@ fn renderContent(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, text_colo
     const available_w = @max(1.0, bounds.w - margin * 2.0);
     const icons_w = iconClusterWidth(icon_count, has_label);
     const label_w = if (has_label) @max(1.0, @min(estimatedLabelWidth(label), @max(1.0, available_w - icons_w))) else 0.0;
+    const visible_label = text_metrics.fitPrefix(label, text_metrics.button_label_px, label_w);
     const content_w = @min(available_w, label_w + icons_w);
     var cursor_x = bounds.x + margin + @max(0.0, (available_w - content_w) * 0.5);
     const icon_y = bounds.y + (bounds.h - icon_size) * 0.5;
@@ -139,7 +142,7 @@ fn renderContent(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, text_colo
     }
 
     if (has_label) {
-        try scene.pushAlignedText(ui.Rect.init(cursor_x, text_y, label_w, label_height), label, text_color, .start);
+        try scene.pushAlignedText(ui.Rect.init(cursor_x, text_y, label_w, label_height), visible_label, text_color, .start);
         cursor_x += label_w;
         if (has_trailing) cursor_x += icon_gap;
     }
@@ -160,7 +163,7 @@ fn textBounds(bounds: ui.Rect) ui.Rect {
 
 fn estimatedLabelWidth(label: []const u8) f32 {
     if (label.len == 0) return 0.0;
-    return @max(label_min_width, @as(f32, @floatFromInt(label.len)) * label_average_w);
+    return @max(label_min_width, text_metrics.width(label, text_metrics.button_label_px));
 }
 
 fn iconClusterWidth(icon_count: usize, has_label: bool) f32 {
@@ -193,7 +196,6 @@ pub const height: f32 = 36.0;
 pub const label_height: f32 = 17.0;
 pub const label_padding: f32 = 16.0;
 
-const label_average_w: f32 = 9.1;
 const label_min_width: f32 = 8.0;
 const icon_size: f32 = 18.0;
 const icon_gap: f32 = 8.0;
@@ -232,6 +234,13 @@ test "button component measurement follows label width" {
     try std.testing.expectEqual(@as(f32, 24.0), constrained.preferred.h);
 }
 
+test "button component measurement uses font glyph widths" {
+    const wide = measureButton("WWW", null, null, .{});
+    const narrow = measureButton("iii", null, null, .{});
+
+    try std.testing.expect(wide.preferred.w > narrow.preferred.w);
+}
+
 test "button component constrains icon label content to button bounds" {
     var commands: [16]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
@@ -250,6 +259,18 @@ test "button component constrains icon label content to button bounds" {
         },
         else => {},
     };
+}
+
+test "button component truncates overfull plain labels deterministically" {
+    var commands: [8]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+    const label = "WWWWWWWWWW";
+
+    try renderButton(&scene, ui.Rect.init(0, 0, 72, height), .{ .id = 9, .label = label }, .{});
+
+    const command = component_test.firstTextCommand(scene.written()).?.text;
+    try std.testing.expect(command.value.len < label.len);
+    try std.testing.expect(std.mem.startsWith(u8, label, command.value));
 }
 
 test "button component centers icon only content" {

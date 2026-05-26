@@ -5,6 +5,7 @@ const ui_input = @import("input.zig");
 const interaction = @import("ui_interaction.zig");
 const object = @import("object.zig");
 const ui = @import("ui.zig");
+const ui_tokens = @import("ui_tokens.zig");
 const component_common = @import("ui_component_common.zig");
 const component_codec = @import("ui/components/Codec.zig");
 const component_io = @import("ui/components/ComponentIO.zig");
@@ -279,6 +280,7 @@ pub const ButtonVariant = component_common.ButtonVariant;
 pub const BadgeVariant = component_common.BadgeVariant;
 pub const SurfaceVariant = component_common.SurfaceVariant;
 pub const RenderOptions = component_common.RenderOptions;
+pub const Accessibility = component_common.Accessibility;
 pub const encoded_icon_count = component_common.encoded_icon_count;
 
 pub const Text = text_component.Text;
@@ -409,6 +411,10 @@ pub fn renderNode(scene: *ui.Scene, bounds: ui.Rect, node: ui.Node, options: Ren
 
 pub fn collectComponentInteractions(collector: *interaction.Collector, bounds: ui.Rect, component: Component) interaction.Error!void {
     return component_render.collectComponentInteractions(Component, collector, bounds, component);
+}
+
+pub fn accessibility(component: Component) Accessibility {
+    return component_render.accessibility(Component, component);
 }
 
 pub fn measureNode(node: ui.Node, constraints: layouts.types.Constraints, options: RenderOptions) layouts.types.Measurement {
@@ -847,6 +853,65 @@ test "component render helper owns button variants and collects hit targets" {
     try std.testing.expect(component_test.hasText(scene.written(), "Primary"));
     try std.testing.expect(component_test.hasText(scene.written(), "Outline"));
     try std.testing.expect(component_test.hasIcon(scene.written(), icon.id(.search)));
+}
+
+test "component renderer exports shared sizing tokens for measurements" {
+    try std.testing.expectEqual(ui_tokens.Component.surface_radius, component_render.surface_radius);
+    try std.testing.expectEqual(ui_tokens.Component.surface_padding, component_render.surface_padding);
+    try std.testing.expectEqual(ui_tokens.Component.surface_detail_gap, component_render.surface_detail_gap);
+    try std.testing.expectEqual(ui_tokens.Component.badge_height, component_render.badge_height);
+    try std.testing.expectEqual(ui_tokens.Component.badge_padding_x, component_render.badge_padding_x);
+}
+
+test "component accessibility metadata comes from component identity and labels" {
+    const button_meta = accessibility(.{ .button = .{ .id = 91, .label = "Save" } });
+    try std.testing.expectEqual(component_common.AccessibilityRole.button, button_meta.role);
+    try std.testing.expectEqual(@as(u32, 91), button_meta.control_id.?);
+    try std.testing.expectEqualStrings("Save", button_meta.label);
+
+    const input_meta = accessibility(.{ .input = .{ .id = 92, .placeholder = "Email" } });
+    try std.testing.expectEqual(component_common.AccessibilityRole.input, input_meta.role);
+    try std.testing.expectEqual(@as(u32, 92), input_meta.control_id.?);
+    try std.testing.expectEqualStrings("Email", input_meta.label);
+
+    const table_meta = accessibility(.{ .table = .{ .id = 93, .name = "Ada", .role = "Engineer" } });
+    try std.testing.expectEqual(component_common.AccessibilityRole.table, table_meta.role);
+    try std.testing.expectEqual(@as(u32, 93), table_meta.control_id.?);
+    try std.testing.expectEqualStrings("Ada", table_meta.label);
+}
+
+test "component render helper applies shared interactive states by component id" {
+    var commands: [32]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+    const button = Component{ .button = .{ .id = 701, .label = "Save" } };
+    try renderComponent(&scene, ui.Rect.init(10, 12, 120, 36), button, .{
+        .interaction = .{
+            .hovered_id = 701,
+            .active_id = 701,
+            .focused_id = 701,
+            .disabled_id = 701,
+            .loading_id = 701,
+            .invalid_id = 701,
+        },
+    });
+
+    try std.testing.expect(component_test.hasRectColor(scene.written(), component_common.state_hover_border));
+    try std.testing.expect(component_test.hasRectColor(scene.written(), component_common.state_active_border));
+    try std.testing.expect(component_test.hasRectColor(scene.written(), component_common.state_focus_border));
+    try std.testing.expect(component_test.hasRectColor(scene.written(), component_common.state_invalid_border));
+    try std.testing.expect(component_test.hasFillColor(scene.written(), component_common.state_disabled_tint));
+    try std.testing.expect(component_test.hasFillColor(scene.written(), component_common.state_loading_fill));
+}
+
+test "component render helper does not leak interactive state to other ids" {
+    var commands: [16]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+    const button = Component{ .button = .{ .id = 702, .label = "Save" } };
+    try renderComponent(&scene, ui.Rect.init(10, 12, 120, 36), button, .{
+        .interaction = .{ .focused_id = 701 },
+    });
+
+    try std.testing.expect(!component_test.hasRectColor(scene.written(), component_common.state_focus_border));
 }
 
 test "component interaction collection covers primitive controls" {

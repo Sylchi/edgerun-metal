@@ -22,6 +22,7 @@ const app_navigation = @import("app_navigation.zig");
 const app_source = @import("app_source.zig");
 const ui = @import("ui.zig");
 const ui_codec = @import("ui_codec.zig");
+const ui_component_common = @import("ui_component_common.zig");
 const ui_components = @import("ui_components.zig");
 const vfs = @import("vfs.zig");
 const ui_runtime = @import("ui_runtime.zig");
@@ -65,6 +66,8 @@ const max_packed_overlay_text_vertices: usize = 8192;
 const max_packed_overlay_icon_vertices: usize = 1024;
 const max_packed_overlay_icon_line_vertices: usize = 1048576;
 const max_clips: usize = 64;
+const focus_ring_outset: f32 = 3.0;
+const focus_ring_radius: f32 = 8.0;
 const font_atlas_width: usize = 4096;
 const font_atlas_height: usize = 4096;
 const font_atlas_bytes: usize = font_atlas_width * font_atlas_height;
@@ -1012,6 +1015,23 @@ export fn er_ui_app_key_event(key_len: usize, ctrl: u32, meta: u32, alt: u32) u3
         last_error = .ok;
         return 1;
     }
+    if (ctrl != 0 or meta != 0 or alt != 0) {
+        last_error = .ok;
+        return 0;
+    }
+    if (keyFromText(input_bytes[0..key_len])) |key| {
+        const focused_before = runtime_state.focusHitId();
+        const action = runtime_state.keyDown(lastRegions(), key);
+        recordAction(action);
+        if (action.kind == .activated) {
+            _ = er_ui_app_activate_hit(runtime_state.focusHitId());
+            last_error = .ok;
+            return 1;
+        }
+        last_error = .ok;
+        if (action.kind == .focused or focused_before != runtime_state.focusHitId()) return 1;
+        return 0;
+    }
     last_error = .ok;
     return 0;
 }
@@ -1142,6 +1162,19 @@ fn parseInputEventFlag(value: []const u8) !u32 {
     if (std.mem.eql(u8, value, "1")) return 1;
     if (std.mem.eql(u8, value, "0") or value.len == 0) return 0;
     return error.InvalidInputEventFlag;
+}
+
+fn keyFromText(value: []const u8) ?ui_runtime.Key {
+    if (std.mem.eql(u8, value, "Tab")) return .tab;
+    if (std.mem.eql(u8, value, "Shift+Tab")) return .shift_tab;
+    if (std.mem.eql(u8, value, "Enter")) return .enter;
+    if (std.mem.eql(u8, value, " ") or std.mem.eql(u8, value, "Spacebar")) return .space;
+    if (std.mem.eql(u8, value, "ArrowUp")) return .arrow_up;
+    if (std.mem.eql(u8, value, "ArrowDown")) return .arrow_down;
+    if (std.mem.eql(u8, value, "ArrowLeft")) return .arrow_left;
+    if (std.mem.eql(u8, value, "ArrowRight")) return .arrow_right;
+    if (std.mem.eql(u8, value, "Escape")) return .escape;
+    return null;
 }
 
 fn queueOutboxMessage(kind: OutboxKind) error{OutboxMessageBudget}!void {
@@ -1743,9 +1776,17 @@ fn prepareFrameScene(scene: ui.Scene, regions: []const interaction.Region, hover
     try storeLastRegions(regions);
     if (hover.enabled) runtime_state.refreshHover(lastRegions(), hover.x, hover.y);
     var frame_scene = scene;
+    runtime_state.refreshFocus(lastRegions());
+    try renderRuntimeFocusRing(&frame_scene);
     if (hover.enabled) try app_cursor.render(&frame_scene, hover.x, hover.y, currentCursorKind());
     last_command_count = frame_scene.written().len;
     return frame_scene;
+}
+
+fn renderRuntimeFocusRing(scene: *ui.Scene) ui.RenderError!void {
+    if (runtime_state.focused) |hit| {
+        try scene.pushRect(hit.bounds.insetUniform(-focus_ring_outset), ui_component_common.state_focus_border, .border, focus_ring_radius, 0.0);
+    }
 }
 
 export fn er_ui_render_input_object(input_len: usize, width: u32, height: u32) u32 {
@@ -2286,6 +2327,23 @@ test "app runtime ir finish preserves hover state when disabled" {
     try std.testing.expectEqual(@as(u32, 99), er_ui_hover_hit_id());
 }
 
+test "app runtime draws deterministic focus ring from runtime focus state" {
+    runtime_state = .{ .focused = .{ .kind = .button, .id = 77, .bounds = ui.Rect.init(8, 12, 80, 32) } };
+    defer runtime_state = .{};
+    last_command_count = 0;
+    defer last_command_count = 0;
+
+    var regions: [1]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
+    try collector.addHit(ui.Rect.init(8, 12, 80, 32), .button, 77);
+    var local_pixels: [4096]ui.Color = undefined;
+    const surface = try renderer_pipeline.softwareFramebuffer(64, 64, &local_pixels);
+    var scene = ui.Scene.init(&commands);
+
+    try std.testing.expectEqual(@as(u32, 0), finishCpuSceneFrame(surface, scene, collector.written(), .{ .enabled = false }, .bg));
+    try std.testing.expect(hasFocusRingCommand(commands[0..last_command_count]));
+}
+
 test "app runtime component catalog builds packed app buffers and app-ready icon lines" {
     font_atlas_ready = false;
     const code = er_ui_build_component_gallery_frame_layout_gap_hover(960, 640, 0.0, @intFromEnum(component_gallery.LayoutMode.masonry), component_gallery.grid_gap_default, -1.0, -1.0);
@@ -2493,6 +2551,16 @@ fn keyEventForTest(value: []const u8, ctrl: bool, meta: bool, alt: bool) u32 {
         if (meta) 1 else 0,
         if (alt) 1 else 0,
     );
+}
+
+fn hasFocusRingCommand(items: []const ui.Command) bool {
+    for (items) |command| switch (command) {
+        .rect => |rect| {
+            if (rect.mode == .border and std.meta.eql(rect.color, ui_component_common.state_focus_border)) return true;
+        },
+        else => {},
+    };
+    return false;
 }
 
 test "app runtime key policy stays inert until an app owns text input" {

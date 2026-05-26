@@ -70,6 +70,8 @@ pub const app_frame = @import("app_frame.zig");
 pub const ui = @import("ui.zig");
 pub const ui_components = @import("ui_components.zig");
 pub const ui_resolver = @import("ui_resolver.zig");
+pub const ui_text_metrics = @import("ui_text_metrics.zig");
+pub const ui_tokens = @import("ui_tokens.zig");
 pub const varfont = @import("varfont.zig");
 pub const vfs = @import("vfs.zig");
 pub const wasm = @import("wasm/root.zig");
@@ -147,6 +149,8 @@ test {
     _ = ui;
     _ = ui_components;
     _ = ui_resolver;
+    _ = ui_text_metrics;
+    _ = ui_tokens;
     _ = varfont;
     _ = vfs;
     _ = wasm;
