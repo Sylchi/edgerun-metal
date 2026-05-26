@@ -591,7 +591,6 @@ fn activateHit(app: *AppState) void {
         .download_source_release,
         .launch_source_release,
         .reset_source,
-        .launch_app,
         => {},
     };
 }

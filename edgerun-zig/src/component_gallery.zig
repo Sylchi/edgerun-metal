@@ -269,6 +269,10 @@ pub fn indexByPreviewHit(hit_id: u32) ?usize {
     return indexByPreviewIdBase(hit_id, catalog_preview_id_base) orelse indexByPreviewIdBase(hit_id, selected_preview_id_base);
 }
 
+pub fn previewHitForIndexForTest(index: usize) u32 {
+    return catalog_preview_id_base + @as(u32, @intCast(index)) * preview_id_stride;
+}
+
 pub fn sourcePathForIndex(index: usize, out: []u8) ?[]const u8 {
     if (index >= component_catalog.len) return null;
     return std.fmt.bufPrint(out, "src/ui/components/{s}.zig", .{component_catalog[index].source_component}) catch null;
@@ -472,7 +476,7 @@ fn renderCatalogSection(scene: *ui.Scene, collector: *interaction.Collector, bou
     }
 
     try text(scene, bounds.x, cursor_y, bounds.w, 22, "Component Catalog", palette.text);
-    try wrappedText(scene, ui.Rect.init(bounds.x, cursor_y + 32, bounds.w, 42), "Every public component starts here. Catalog cards are rendered as EdgeRun component objects, through the same scene commands used by web host, CPU, and GPU hosts.", palette.muted, 18, 9.4, 2);
+    try wrappedText(scene, ui.Rect.init(bounds.x, cursor_y + 32, bounds.w, 42), "Every public component starts here. Cards, previews, and opened component pages route through the shared component system used by web host, CPU, and GPU hosts.", palette.muted, 18, 9.4, 2);
 
     const card_w = (bounds.w - gap * @as(f32, @floatFromInt(columns - 1))) / @as(f32, @floatFromInt(columns));
     for (component_catalog, 0..) |entry, index| {
@@ -600,14 +604,16 @@ fn renderCatalogCard(scene: *ui.Scene, collector: *interaction.Collector, bounds
     }
     const is_hovered = hovered(bounds);
     try scene.pushRect(bounds.insetUniform(-1), if (is_hovered) palette.shadow_hover else palette.shadow, .shadow, card_radius, if (is_hovered) card_hover_shadow else card_shadow);
-    try fill(scene, bounds, if (is_hovered) palette.panel_hover else palette.panel, card_radius);
+    try components.renderComponent(scene, bounds, .{ .card = .{
+        .title = entry.name,
+        .detail = entry.category.label(),
+        .variant = if (is_hovered or selected) .elevated else .panel,
+    } }, .{ .style = componentStyle() });
     try stroke(scene, bounds, if (selected) palette.accent else if (is_hovered) palette.border_hover else palette.border, card_radius);
     try collector.addHit(bounds, .button, card_id);
 
     const inset = bounds.insetUniform(catalog_card_pad);
-    try text(scene, inset.x, inset.y, inset.w - catalog_source_w, title_text_height, entry.name, palette.text);
     try catalogSource(scene, ui.Rect.init(inset.x + inset.w - catalog_source_w, inset.y - 1, catalog_source_w, 24), selected);
-    try text(scene, inset.x, inset.y + 28, inset.w, body_text_height, entry.category.label(), palette.muted);
     try text(scene, inset.x, inset.y + 48, inset.w, body_text_height, entry.edge_builder, palette.muted);
 
     try renderReferencePreview(scene, collector, ui.Rect.init(inset.x, inset.y + 76, inset.w, catalog_preview_h), entry, preview_id);

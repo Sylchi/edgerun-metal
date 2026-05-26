@@ -1039,7 +1039,6 @@ fn activateHitForState(state: *AppState, client: ?*WaylandClient) !void {
             state.public_identity_ready = true;
             state.public_identity = "native-wayland";
         },
-        .launch_app,
         .compile_source,
         .download_source_release,
         .launch_source_release,

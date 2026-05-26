@@ -625,10 +625,6 @@ export fn er_ui_app_docs_button_id() u32 {
     return app_chrome.docs_button_id;
 }
 
-export fn er_ui_app_launch_button_id() u32 {
-    return app_chrome.launch_button_id;
-}
-
 export fn er_ui_app_source_button_id() u32 {
     return app_chrome.source_button_id;
 }
@@ -956,11 +952,6 @@ export fn er_ui_app_activate_hit(hit_id: u32) u32 {
         return @intFromEnum(app_state.queued_action);
     }
     if (app_navigation.actionFromHit(hit_id)) |action| switch (action) {
-        .launch_app => {
-            if (compileWorkspaceInsideWasm() == .ok) {
-                queueOutboxMessage(.launch_wasm) catch return finishError(.bad_input);
-            }
-        },
         .reveal_identity => {
             if (!ephemeral_identity_ready) {
                 generateEphemeralIdentity() catch return finishError(.identity_failed);
@@ -2439,13 +2430,6 @@ test "app runtime activation keeps page state in wasm" {
     try std.testing.expectEqual(@as(u32, 0), er_ui_outbox_count());
     try std.testing.expectEqual(@as(u32, 0), er_ui_outbox_clear());
     try std.testing.expectEqual(@as(u32, 0), er_ui_outbox_count());
-    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_activate_hit(app_chrome.launch_button_id));
-    try std.testing.expectEqual(@as(u32, 1), er_ui_outbox_count());
-    try std.testing.expectEqual(@intFromEnum(OutboxKind.launch_wasm), er_ui_outbox_kind(0));
-    try std.testing.expectEqual(er_ui_release_artifact_len(), er_ui_outbox_payload_len(0));
-    try std.testing.expect(er_ui_outbox_payload_ptr(0) != 0);
-    try std.testing.expectEqual(@as(usize, 0), er_ui_outbox_target_len(0));
-    try std.testing.expectEqual(@as(u32, 0), er_ui_outbox_clear());
     try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_activate_hit(app_chrome.logo_button_id));
     try std.testing.expectEqual(app_landing.contentHeight(1280.0), er_ui_app_content_height(1280.0));
     try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_activate_hit(app_chrome.blog_button_id));

@@ -1,12 +1,12 @@
 const std = @import("std");
 const component_gallery = @import("component_gallery.zig");
+const components = @import("ui_components.zig");
 const interaction = @import("ui_interaction.zig");
 const app_blog = @import("app_blog.zig");
 const app_docs = @import("app_docs.zig");
 const app_landing = @import("app_landing.zig");
 const app_navigation = @import("app_navigation.zig");
 const app_source = @import("app_source.zig");
-const icon = @import("icon.zig");
 const design = @import("app_design.zig");
 const ui = @import("ui.zig");
 const ui_overlay = @import("ui_overlay.zig");
@@ -120,11 +120,13 @@ fn renderContextMenuPanel(scene: *ui.Scene, collector: *interaction.Collector, b
     try scene.pushRect(panel, palette.border, .border, design.surface_radius, 1.0);
     try scene.pushAlignedText(ui.Rect.init(panel.x + 14.0, panel.y + 12.0, panel.w - 28.0, 16.0), "Component source", palette.dim, .start);
     const row = ui.Rect.init(panel.x + 8.0, panel.y + 38.0, panel.w - 16.0, 40.0);
-    try scene.pushRect(row, palette.row, .fill, 6.0, 0.0);
-    try scene.pushIconQuad(.{ .bounds = ui.Rect.init(row.x + 10.0, row.y + 12.0, 16.0, 16.0), .icon_id = icon.id(.code), .color = palette.primary });
-    try scene.pushAlignedText(ui.Rect.init(row.x + 34.0, row.y + 8.0, row.w - 44.0, 14.0), "Open exact source", palette.text, .start);
-    try scene.pushAlignedText(ui.Rect.init(row.x + 34.0, row.y + 23.0, row.w - 44.0, 12.0), menu.source_path, palette.muted, .start);
-    try collector.addHit(row, .button, app_navigation.context_source_button_id);
+    const row_component = components.Component{ .row_item = .{
+        .id = app_navigation.context_source_button_id,
+        .title = "Open exact source",
+        .detail = menu.source_path,
+    } };
+    try components.renderComponent(scene, row, row_component, .{ .style = design.style() });
+    try components.collectComponentInteractions(collector, row, row_component);
 }
 
 test "app frame renders every top level route through one scene builder" {

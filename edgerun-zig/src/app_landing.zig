@@ -8,7 +8,6 @@ const design = @import("app_design.zig");
 
 pub const logo_button_id: u32 = app_chrome.logo_button_id;
 pub const docs_button_id: u32 = app_chrome.docs_button_id;
-pub const launch_button_id: u32 = app_chrome.launch_button_id;
 pub const blog_button_id: u32 = app_chrome.blog_button_id;
 pub const source_button_id: u32 = app_chrome.source_button_id;
 pub const reveal_identity_button_id: u32 = 20_001;
@@ -720,9 +719,10 @@ fn outlineButtonWithTrailingIcon(scene: *ui.Scene, collector: *interaction.Colle
 }
 
 fn nativeBadge(scene: *ui.Scene, bounds: ui.Rect, label: []const u8) ui.RenderError!void {
-    try fill(scene, bounds, palette.row, 10.0);
-    try stroke(scene, bounds, ui.Color{ .r = 74, .g = 222, .b = 128, .a = 70 }, 10.0);
-    try alignedText(scene, bounds.x + 28.0, bounds.y + 8.0, bounds.w - 40.0, 12.0, label, palette.primary, .center);
+    try components.renderComponent(scene, bounds, .{ .badge = .{
+        .label = label,
+        .variant = .secondary,
+    } }, .{ .style = appStyle() });
 }
 
 fn nativeCard(scene: *ui.Scene, bounds: ui.Rect, title_value: []const u8, detail_value: []const u8) ui.RenderError!void {
