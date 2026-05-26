@@ -2,7 +2,7 @@ const byte_utils = @import("../bytes.zig");
 
 const max_functions = 1024;
 const max_imports = 16;
-const max_types = 64;
+const max_types = 128;
 const max_type_params = 16;
 const max_type_results = 4;
 const max_locals = 1024;
@@ -2524,7 +2524,12 @@ pub fn executeExportValuesArgsWithStorage(runtime: *Runtime, wasm_bytes: []const
 pub fn executeExportValueArgs(runtime: *Runtime, wasm_bytes: []const u8, export_name: []const u8, args: []const Value) Error!ExecutionResult {
     if (export_name.len == 0) return error.BadArgument;
     var storage = ExecutionStorage{};
-    const executor = try executorForWithStorage(runtime, wasm_bytes, &storage);
+    return executeExportValueArgsWithStorage(runtime, wasm_bytes, export_name, args, &storage);
+}
+
+pub fn executeExportValueArgsWithStorage(runtime: *Runtime, wasm_bytes: []const u8, export_name: []const u8, args: []const Value, storage: *ExecutionStorage) Error!ExecutionResult {
+    if (export_name.len == 0) return error.BadArgument;
+    const executor = try executorForWithStorage(runtime, wasm_bytes, storage);
     try executor.runStart();
     return executor.runExport(export_name, args);
 }

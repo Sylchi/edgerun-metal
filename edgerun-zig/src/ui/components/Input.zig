@@ -1,7 +1,7 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
-const icon = @import("../../icon.zig");
+const component_contract = @import("ComponentContract.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
@@ -13,6 +13,8 @@ const primitives = @import("Primitives.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+
+pub const registration = component_contract.registration("input", Input);
 const measureFixed = primitives.measureFixed;
 const renderControlFrame = primitives.renderControlFrame;
 const renderControlStateOverlay = primitives.renderControlStateOverlay;
@@ -38,7 +40,7 @@ pub const Input = struct {
         try renderControlFrame(scene, bounds, options.style.panel, options.style.border, primitives.control_radius);
         try renderControlStateOverlay(scene, bounds, options, primitives.control_radius);
         const text_bounds = if (leadingIcon(self.icon_slot)) |slot| with_icon: {
-            try icon_component.renderGlyph(scene, ui.Rect.init(bounds.x + padding, bounds.y + (bounds.h - input_icon_size) * 0.5, input_icon_size, input_icon_size), slot.value, options.style.muted);
+            try slot.renderColor(scene, ui.Rect.init(bounds.x + padding, bounds.y + (bounds.h - input_icon_size) * 0.5, input_icon_size, input_icon_size), options.style.muted);
             break :with_icon ui.Rect.init(bounds.x + padding + input_icon_size + input_icon_gap, bounds.y, @max(primitives.min_extent, bounds.w - padding * 2.0 - input_icon_size - input_icon_gap), bounds.h);
         } else bounds;
         try renderControlText(scene, text_bounds, padding, primitives.control_label_height, self.placeholder, options.style.muted, .start);
@@ -116,7 +118,7 @@ test "input component serializes to canonical object and deserializes" {
 
     try std.testing.expectEqual(input.id, decoded.id);
     try std.testing.expectEqualStrings(input.placeholder, decoded.placeholder);
-    try std.testing.expectEqual(icon.Icon.search, decoded.icon_slot.leading.value);
+    try std.testing.expectEqual(Icon.named(.search).value, decoded.icon_slot.leading.value);
 }
 
 test "input component renders placeholder through shared control text" {
@@ -140,7 +142,7 @@ test "input component renders leading icon as component state" {
     try input.render(&scene, ui.Rect.init(4, 8, 220, 40), .{});
 
     const placeholder = component_test.textCommand(scene.written(), "Search objects").?;
-    try std.testing.expect(component_test.hasIcon(scene.written(), icon.id(.search)));
+    try std.testing.expect(component_test.hasIcon(scene.written(), Icon.named(.search).tag()));
     try std.testing.expectEqual(@as(f32, 52.0), placeholder.text.origin.x);
 }
 

@@ -1,7 +1,6 @@
 const std = @import("std");
 const icon = @import("icon.zig");
 const icon_svg = @import("icon_svg.zig");
-const input = @import("input.zig");
 const interaction = @import("ui_interaction.zig");
 const linux_drm = @import("linux_drm.zig");
 const renderer_font_atlas = @import("render/font_atlas.zig");
@@ -18,8 +17,9 @@ const app_frame = @import("app_frame.zig");
 const app_images = @import("app_images.zig");
 const app_landing = @import("app_landing.zig");
 const app_navigation = @import("app_navigation.zig");
+const app_native_input = @import("app_native_input.zig");
+const icon_component = @import("ui/components/Icon.zig");
 const ui = @import("ui.zig");
-const ui_runtime = @import("ui_runtime.zig");
 
 const linux = std.os.linux;
 const posix = std.posix;
@@ -267,15 +267,7 @@ const DmabufImport = struct {
     }
 };
 
-const AppState = struct {
-    scroll_y: f32 = 0.0,
-    hover_x: f32 = -1.0,
-    hover_y: f32 = -1.0,
-    runtime: ui_runtime.State = .{},
-    public_identity_ready: bool = true,
-    public_identity: []const u8 = "native-wayland",
-    route: app_navigation.Route = .{},
-};
+const AppState = app_native_input.State;
 
 const Message = struct {
     object_id: u32,
@@ -708,7 +700,7 @@ const NativeApp = struct {
     gpu_dirty_ids: [max_tiles]u32 = undefined,
     tile_marks: [max_tiles]u8 = undefined,
     dirty_ids: [max_tiles]u32 = undefined,
-    state: AppState = .{},
+    state: AppState = .{ .public_identity = "native-wayland", .reveal_identity = "native-wayland" },
     gpu_recorder: GpuRecorder = .{},
     gpu_buffer_device: renderer_gpu_buffer.CpuFilledDevice = .{},
     drm_buffer: ?linux_drm.DumbBuffer = null,
@@ -747,7 +739,11 @@ const NativeApp = struct {
         self.region_len = 0;
         self.ir_storage = .{};
         self.font_atlas.initWithFontInPlace(renderer_font_atlas.geist_ascii_font.body());
-        self.state = .{ .route = app_navigation.fromPath(options.path) };
+        self.state = .{
+            .route = app_navigation.fromPath(options.path),
+            .public_identity = "native-wayland",
+            .reveal_identity = "native-wayland",
+        };
         self.gpu_recorder = .{};
         self.gpu_buffer_device = .{};
         self.drm_buffer = drm_buffer;
@@ -774,7 +770,7 @@ const NativeApp = struct {
         try renderNativeAppScene(&scene, &collector, self.width, self.height, self.state);
         self.region_len = collector.written().len;
         self.updateHoverHit(self.regionSlice());
-        const cursor_kind = app_cursor.fromState(.none, self.state.runtime.hoverKind());
+        const cursor_kind = self.state.cursorKind();
         if (self.present != .cpu) try app_cursor.render(&scene, self.state.hover_x, self.state.hover_y, cursor_kind);
 
         const buffers = self.ir_storage.buffers();
@@ -863,7 +859,7 @@ const NativeApp = struct {
     fn renderCursorOnly(self: *NativeApp, client: *WaylandClient, old_x: f32, old_y: f32, old_kind: app_cursor.Kind) !void {
         if (self.present != .cpu or !self.base_pixels_ready) return error.CursorOverlayUnavailable;
         const old_damage = cursorPixelRect(self.width, self.height, old_x, old_y, old_kind);
-        const next_kind = app_cursor.fromState(.none, self.state.runtime.hoverKind());
+        const next_kind = self.state.cursorKind();
         const next_damage = cursorPixelRect(self.width, self.height, self.state.hover_x, self.state.hover_y, next_kind);
         const damage = unionPixelRect(old_damage, next_damage) orelse return;
         self.restoreBasePixels(damage);
@@ -943,16 +939,14 @@ const NativeApp = struct {
                 try client.sendHidePointerCursor(serial);
                 self.state.hover_x = fixedToFloat(std.mem.readInt(i32, message.payload[8..12], .little));
                 self.state.hover_y = fixedToFloat(std.mem.readInt(i32, message.payload[12..16], .little));
-                self.updateHoverHit(self.regionSlice());
+                app_native_input.processPointerEvent(&self.state, &.{}, self.regionSlice(), .pointer_move);
                 return true;
             },
             wl_pointer_leave_event => {
                 const old_x = self.state.hover_x;
                 const old_y = self.state.hover_y;
-                const old_kind = app_cursor.fromState(.none, self.state.runtime.hoverKind());
-                self.state.hover_x = -1.0;
-                self.state.hover_y = -1.0;
-                self.state.runtime.clearHover();
+                const old_kind = self.state.cursorKind();
+                app_native_input.clearHover(&self.state);
                 if (self.present == .cpu and self.base_pixels_ready) {
                     try self.renderCursorOnly(client, old_x, old_y, old_kind);
                     return false;
@@ -964,10 +958,10 @@ const NativeApp = struct {
                 const old_x = self.state.hover_x;
                 const old_y = self.state.hover_y;
                 const old_hit = self.state.runtime.hoverHitId();
-                const old_kind = app_cursor.fromState(.none, self.state.runtime.hoverKind());
+                const old_kind = self.state.cursorKind();
                 self.state.hover_x = fixedToFloat(std.mem.readInt(i32, message.payload[4..8], .little));
                 self.state.hover_y = fixedToFloat(std.mem.readInt(i32, message.payload[8..12], .little));
-                self.updateHoverHit(self.regionSlice());
+                app_native_input.processPointerEvent(&self.state, &.{}, self.regionSlice(), .pointer_move);
                 if (self.state.runtime.hoverHitId() != old_hit) return true;
                 if (self.present == .cpu and self.base_pixels_ready) {
                     try self.renderCursorOnly(client, old_x, old_y, old_kind);
@@ -982,8 +976,13 @@ const NativeApp = struct {
                 const button = std.mem.readInt(u32, message.payload[8..12], .little);
                 const state = std.mem.readInt(u32, message.payload[12..16], .little);
                 if (button == wl_pointer_button_left) {
-                    if (state == wl_pointer_button_released) try self.activateHit(client);
-                    if (state != wl_pointer_button_released and self.state.runtime.hoverHitId() == client_decor_drag_id) try client.sendMove(serial);
+                    if (state == wl_pointer_button_released) {
+                        app_native_input.processPointerEvent(&self.state, &.{}, self.regionSlice(), .pointer_up);
+                        try self.activateClientDecoration(client);
+                    } else {
+                        app_native_input.processPointerEvent(&self.state, &.{}, self.regionSlice(), .pointer_down);
+                        if (self.state.runtime.hoverHitId() == client_decor_drag_id) try client.sendMove(serial);
+                    }
                 }
                 return true;
             },
@@ -999,15 +998,15 @@ const NativeApp = struct {
     }
 
     fn updateHoverHit(self: *NativeApp, regions: []const interaction.Region) void {
-        self.state.runtime.refreshHover(regions, self.state.hover_x, self.state.hover_y);
+        app_native_input.refreshHover(&self.state, regions);
     }
 
     fn regionSlice(self: *const NativeApp) []const interaction.Region {
         return self.regions[0..self.region_len];
     }
 
-    fn activateHit(self: *NativeApp, client: *WaylandClient) !void {
-        try activateHitForState(&self.state, client);
+    fn activateClientDecoration(self: *NativeApp, client: *WaylandClient) !void {
+        try activateClientDecorationForState(&self.state, client);
     }
 
     fn scrollBy(self: *NativeApp, delta_y: f32) void {
@@ -1016,14 +1015,14 @@ const NativeApp = struct {
 };
 
 fn updateHoverHitForState(state: *AppState, regions: []const interaction.Region) void {
-    state.runtime.refreshHover(regions, state.hover_x, state.hover_y);
+    app_native_input.refreshHover(state, regions);
 }
 
-fn activateHitForState(state: *AppState, client: ?*WaylandClient) !void {
+fn activateClientDecorationForState(state: *AppState, client: ?*WaylandClient) !void {
     const hover_hit_id = state.runtime.hoverHitId();
     switch (hover_hit_id) {
         client_decor_close_id => {
-            state.runtime.clearHover();
+            app_native_input.clearHover(state);
             if (client) |value| value.state.closed = true;
             return;
         },
@@ -1033,30 +1032,11 @@ fn activateHitForState(state: *AppState, client: ?*WaylandClient) !void {
         },
         else => {},
     }
-    if (app_navigation.fromHit(hover_hit_id, state.route)) |route| {
-        state.route = route;
-        state.scroll_y = 0.0;
-        return;
-    }
-    if (app_navigation.actionFromHit(hover_hit_id)) |action| switch (action) {
-        .reveal_identity => {
-            state.public_identity_ready = true;
-            state.public_identity = "native-wayland";
-        },
-        .compile_source,
-        .download_source_release,
-        .launch_source_release,
-        .reset_source,
-        .open_context_source,
-        => {},
-    };
 }
 
 fn scrollStateBy(state: *AppState, width: u32, height: u32, delta_y: f32) void {
-    if (!std.math.isFinite(delta_y)) return;
     const viewport_h = @max(1.0, @as(f32, @floatFromInt(height)) - client_decor_h);
-    const limit = @max(0.0, contentHeightForRoute(@floatFromInt(width), state.route) - viewport_h);
-    state.scroll_y = std.math.clamp(state.scroll_y + delta_y, 0.0, limit);
+    app_native_input.scrollBy(state, @floatFromInt(width), viewport_h, delta_y);
 }
 
 const WaylandCommitSink = struct {
@@ -1162,11 +1142,7 @@ fn renderClientDecoration(scene: *ui.Scene, collector: *interaction.Collector, w
     try collector.addHit(minimize, .button, client_decor_minimize_id);
 
     try scene.pushRect(close, client_decor_border, .border, 12.0, 0.0);
-    try scene.pushIconQuad(.{
-        .bounds = centeredRect(close, client_decor_icon_size, client_decor_icon_size),
-        .icon_id = icon.id(.x),
-        .color = client_decor_dim,
-    });
+    try icon_component.Icon.named(.x).renderColor(scene, centeredRect(close, client_decor_icon_size, client_decor_icon_size), client_decor_dim);
     try collector.addHit(close, .button, client_decor_close_id);
 
     const drag_w = @max(1.0, minimize.x - client_decor_button_gap - 140.0);
@@ -1185,10 +1161,6 @@ fn centeredRect(bounds: ui.Rect, w: f32, h: f32) ui.Rect {
         w,
         h,
     );
-}
-
-fn contentHeightForRoute(width: f32, route: app_navigation.Route) f32 {
-    return app_frame.contentHeight(width, .{ .route = route });
 }
 
 fn appBackground() ui.Color {
@@ -2095,16 +2067,16 @@ test "wayland host pointer input updates hover activation and scroll state" {
     state.hover_y = docs.y + docs.h * 0.5;
     updateHoverHitForState(&state, collector.written());
     try std.testing.expect(state.runtime.hovered != null);
-    try std.testing.expectEqual(app_cursor.Kind.pointer, app_cursor.fromState(.none, state.runtime.hovered.?.kind));
+    try std.testing.expectEqual(app_cursor.Kind.pointer, state.cursorKind());
 
     const old_hit = state.runtime.hovered.?.id;
-    try activateHitForState(&state, null);
+    app_native_input.activateHovered(&state);
     try std.testing.expectEqual(old_hit, state.runtime.hovered.?.id);
 
     scrollStateBy(&state, 1280, 800, 320.0);
     try std.testing.expectEqual(@as(f32, 320.0), state.scroll_y);
     scrollStateBy(&state, 1280, 800, 200000.0);
-    try std.testing.expect(state.scroll_y <= contentHeightForRoute(1280.0, state.route));
+    try std.testing.expect(state.scroll_y <= state.contentHeight(1280.0));
 }
 
 test "wayland host appends scene cursor from native hover state" {
@@ -2129,9 +2101,9 @@ test "wayland host appends scene cursor from native hover state" {
     app.state.hover_x = docs.x + docs.w * 0.5;
     app.state.hover_y = docs.y + docs.h * 0.5;
     app.updateHoverHit(app.regionSlice());
-    try app_cursor.render(&scene, app.state.hover_x, app.state.hover_y, app_cursor.fromState(.none, app.state.runtime.hoverKind()));
+    try app_cursor.render(&scene, app.state.hover_x, app.state.hover_y, app.state.cursorKind());
 
-    try std.testing.expectEqual(app_cursor.Kind.pointer, app_cursor.fromState(.none, app.state.runtime.hoverKind()));
+    try std.testing.expectEqual(app_cursor.Kind.pointer, app.state.cursorKind());
     try std.testing.expect(hasIconId(scene.written(), icon_svg.cursor_hand_finger_icon_id));
 }
 

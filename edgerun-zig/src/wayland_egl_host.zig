@@ -11,10 +11,11 @@ const app_chrome = @import("app_chrome.zig");
 const app_cursor = @import("app_cursor.zig");
 const app_frame = @import("app_frame.zig");
 const app_images = @import("app_images.zig");
+const app_input_event = @import("app_input_event.zig");
 const app_landing = @import("app_landing.zig");
 const app_navigation = @import("app_navigation.zig");
+const app_native_input = @import("app_native_input.zig");
 const ui = @import("ui.zig");
-const ui_runtime = @import("ui_runtime.zig");
 
 const linux = std.os.linux;
 const posix = std.posix;
@@ -67,15 +68,6 @@ const Options = struct {
     verify_parity: bool = false,
 };
 
-const PointerEvent = enum {
-    none,
-    enter,
-    leave,
-    move,
-    down,
-    up,
-};
-
 const WaylandState = struct {
     display: *c.wl_display,
     registry: *c.wl_registry,
@@ -91,7 +83,7 @@ const WaylandState = struct {
     resized: bool = false,
     input_dirty: bool = false,
     pointer_serial: u32 = 0,
-    pointer_event: PointerEvent = .none,
+    pointer_event: ?app_input_event.Kind = null,
     app: *AppState,
     width: i32,
     height: i32,
@@ -140,7 +132,7 @@ const SceneState = struct {
         var collector = interaction.Collector.init(&self.regions);
         try app_frame.render(&scene, &collector, ui.Rect.init(0, 0, @floatFromInt(width), @floatFromInt(height)), app.frameState());
         updateHoverHit(app, collector.written());
-        try app_cursor.render(&scene, app.hover_x, app.hover_y, app.cursorKind());
+        try app_cursor.render(&scene, app.input.hover_x, app.input.hover_y, app.cursorKind());
         self.command_len = scene.written().len;
         self.region_len = collector.written().len;
         const buffers = self.ir_storage.buffers();
@@ -158,37 +150,18 @@ const SceneState = struct {
 };
 
 const AppState = struct {
-    route: app_navigation.Route = .{},
-    scroll_y: f32 = 0.0,
-    hover_x: f32 = -1.0,
-    hover_y: f32 = -1.0,
-    runtime: ui_runtime.State = .{},
-    last_action_kind: ui_runtime.ActionKind = .none,
-    public_identity_ready: bool = true,
-    public_identity: []const u8 = "native-egl-gpu",
+    input: app_native_input.State = .{ .public_identity = "native-egl-gpu", .reveal_identity = "native-egl-gpu" },
 
     fn frameState(self: AppState) app_frame.State {
-        return .{
-            .route = self.route,
-            .scroll_y = self.scroll_y,
-            .hover_x = self.hover_x,
-            .hover_y = self.hover_y,
-            .public_identity_ready = self.public_identity_ready,
-            .public_identity = self.public_identity,
-        };
+        return self.input.frameState();
     }
 
     fn contentHeight(self: AppState, width: f32) f32 {
-        return app_frame.contentHeight(width, self.frameState());
-    }
-
-    fn applyRoute(self: *AppState, route: app_navigation.Route) void {
-        self.route = route;
-        self.scroll_y = 0.0;
+        return self.input.contentHeight(width);
     }
 
     fn cursorKind(self: AppState) app_cursor.Kind {
-        return app_cursor.fromState(self.last_action_kind, self.runtime.hoverKind());
+        return self.input.cursorKind();
     }
 };
 
@@ -559,51 +532,16 @@ fn deinitEgl(egl: *EglState) void {
 }
 
 fn updateHoverHit(app: *AppState, regions: []const interaction.Region) void {
-    app.runtime.refreshHover(regions, app.hover_x, app.hover_y);
+    app_native_input.refreshHover(&app.input, regions);
 }
 
 fn processPointerEvent(wl: *WaylandState, commands: []const ui.Command, regions: []const interaction.Region) void {
-    const app = wl.app;
-    app.last_action_kind = switch (wl.pointer_event) {
-        .none => app.last_action_kind,
-        .enter, .move => app.runtime.pointerMove(commands, regions, app.hover_x, app.hover_y).kind,
-        .leave => blk: {
-            app.runtime.clearHover();
-            break :blk ui_runtime.ActionKind.none;
-        },
-        .down => app.runtime.pointerDown(commands, regions, app.hover_x, app.hover_y).kind,
-        .up => blk: {
-            const action = app.runtime.pointerUp(commands, regions, app.hover_x, app.hover_y);
-            if (action.kind != .reordered) activateHit(app);
-            break :blk action.kind;
-        },
-    };
-    wl.pointer_event = .none;
-}
-
-fn activateHit(app: *AppState) void {
-    const hover_hit_id = app.runtime.hoverHitId();
-    if (app_navigation.fromHit(hover_hit_id, app.route)) |route| {
-        app.applyRoute(route);
-        return;
-    }
-    if (app_navigation.actionFromHit(hover_hit_id)) |action| switch (action) {
-        .reveal_identity => {
-            app.public_identity_ready = true;
-            app.public_identity = "native-egl-gpu";
-        },
-        .compile_source,
-        .download_source_release,
-        .launch_source_release,
-        .reset_source,
-        => {},
-    };
+    if (wl.pointer_event) |event| app_native_input.processPointerEvent(&wl.app.input, commands, regions, event);
+    wl.pointer_event = null;
 }
 
 fn scrollBy(app: *AppState, width: i32, height: i32, delta_y: f32) void {
-    if (!std.math.isFinite(delta_y)) return;
-    const limit = @max(0.0, app.contentHeight(@floatFromInt(width)) - @as(f32, @floatFromInt(height)));
-    app.scroll_y = std.math.clamp(app.scroll_y + delta_y, 0.0, limit);
+    app_native_input.scrollBy(&app.input, @floatFromInt(width), @floatFromInt(height), delta_y);
 }
 
 fn fixedToFloat(value: c.wl_fixed_t) f32 {
@@ -651,24 +589,22 @@ fn pointerEnter(data: ?*anyopaque, pointer: ?*c.wl_pointer, serial: u32, _: ?*c.
     const state: *WaylandState = @ptrCast(@alignCast(data.?));
     state.pointer_serial = serial;
     hideHostCursor(pointer, serial);
-    state.app.hover_x = fixedToFloat(sx);
-    state.app.hover_y = fixedToFloat(sy);
-    state.pointer_event = .enter;
+    state.app.input.hover_x = fixedToFloat(sx);
+    state.app.input.hover_y = fixedToFloat(sy);
+    state.pointer_event = .pointer_move;
     state.input_dirty = true;
 }
 fn pointerLeave(data: ?*anyopaque, _: ?*c.wl_pointer, _: u32, _: ?*c.wl_surface) callconv(.c) void {
     const state: *WaylandState = @ptrCast(@alignCast(data.?));
-    state.app.hover_x = -1.0;
-    state.app.hover_y = -1.0;
-    state.app.runtime.clearHover();
-    state.pointer_event = .leave;
+    app_native_input.clearHover(&state.app.input);
+    state.pointer_event = .pointer_leave;
     state.input_dirty = true;
 }
 fn pointerMotion(data: ?*anyopaque, _: ?*c.wl_pointer, _: u32, sx: c.wl_fixed_t, sy: c.wl_fixed_t) callconv(.c) void {
     const state: *WaylandState = @ptrCast(@alignCast(data.?));
-    state.app.hover_x = fixedToFloat(sx);
-    state.app.hover_y = fixedToFloat(sy);
-    state.pointer_event = .move;
+    state.app.input.hover_x = fixedToFloat(sx);
+    state.app.input.hover_y = fixedToFloat(sy);
+    state.pointer_event = .pointer_move;
     state.input_dirty = true;
 }
 fn pointerButton(data: ?*anyopaque, pointer: ?*c.wl_pointer, serial: u32, _: u32, button: u32, button_state: u32) callconv(.c) void {
@@ -676,9 +612,9 @@ fn pointerButton(data: ?*anyopaque, pointer: ?*c.wl_pointer, serial: u32, _: u32
     state.pointer_serial = serial;
     hideHostCursor(pointer, serial);
     if (button == pointer_button_left and button_state == c.WL_POINTER_BUTTON_STATE_PRESSED) {
-        state.pointer_event = .down;
+        state.pointer_event = .pointer_down;
     } else if (button == pointer_button_left and button_state == c.WL_POINTER_BUTTON_STATE_RELEASED) {
-        state.pointer_event = .up;
+        state.pointer_event = .pointer_up;
     }
     state.input_dirty = true;
 }
@@ -721,27 +657,27 @@ fn xdgToplevelClose(data: ?*anyopaque, _: ?*c.xdg_toplevel) callconv(.c) void {
 }
 
 test "egl host input helpers update hover activation and scroll state" {
-    var app = AppState{ .public_identity_ready = false, .public_identity = "pending" };
+    var app = AppState{ .input = .{ .public_identity_ready = false, .public_identity = "pending", .reveal_identity = "native-egl-gpu" } };
     var regions: [1]interaction.Region = undefined;
     var collector = interaction.Collector.init(&regions);
     try collector.add(.{ .kind = .button, .id = app_landing.reveal_identity_button_id, .bounds = ui.Rect.init(8, 8, 80, 32) });
     updateHoverHit(&app, collector.written());
-    try std.testing.expectEqual(@as(u32, 0), app.runtime.hoverHitId());
+    try std.testing.expectEqual(@as(u32, 0), app.input.runtime.hoverHitId());
 
-    app.hover_x = 16.0;
-    app.hover_y = 16.0;
+    app.input.hover_x = 16.0;
+    app.input.hover_y = 16.0;
     updateHoverHit(&app, collector.written());
-    try std.testing.expectEqual(app_landing.reveal_identity_button_id, app.runtime.hoverHitId());
+    try std.testing.expectEqual(app_landing.reveal_identity_button_id, app.input.runtime.hoverHitId());
 
-    activateHit(&app);
-    try std.testing.expect(app.public_identity_ready);
-    try std.testing.expectEqualStrings("native-egl-gpu", app.public_identity);
+    app_native_input.activateHovered(&app.input);
+    try std.testing.expect(app.input.public_identity_ready);
+    try std.testing.expectEqualStrings("native-egl-gpu", app.input.public_identity);
 
     scrollBy(&app, default_width, 200, 120.0);
-    try std.testing.expect(app.scroll_y > 0.0);
-    const before = app.scroll_y;
+    try std.testing.expect(app.input.scroll_y > 0.0);
+    const before = app.input.scroll_y;
     scrollBy(&app, default_width, 200, std.math.nan(f32));
-    try std.testing.expectEqual(before, app.scroll_y);
+    try std.testing.expectEqual(before, app.input.scroll_y);
 }
 
 test "egl host parses explicit parity verification mode" {
@@ -768,28 +704,28 @@ test "egl host parses explicit parity verification mode" {
 test "egl host activation uses shared app navigation routes" {
     var app = AppState{};
 
-    app.runtime.hovered = .{ .kind = .button, .id = app_chrome.blog_button_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
-    activateHit(&app);
-    try std.testing.expectEqual(app_navigation.View.blog, app.route.view);
-    try std.testing.expectEqual(@as(f32, 0.0), app.scroll_y);
+    app.input.runtime.hovered = .{ .kind = .button, .id = app_chrome.blog_button_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
+    app_native_input.activateHovered(&app.input);
+    try std.testing.expectEqual(app_navigation.View.blog, app.input.route.view);
+    try std.testing.expectEqual(@as(f32, 0.0), app.input.scroll_y);
 
     const post_id = app_blog.postIdAt(0);
-    app.scroll_y = 120.0;
-    app.runtime.hovered = .{ .kind = .button, .id = post_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
-    activateHit(&app);
-    try std.testing.expectEqual(app_navigation.View.blog, app.route.view);
-    try std.testing.expectEqual(post_id, app.route.selected_blog_post_id);
-    try std.testing.expectEqual(@as(f32, 0.0), app.scroll_y);
+    app.input.scroll_y = 120.0;
+    app.input.runtime.hovered = .{ .kind = .button, .id = post_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
+    app_native_input.activateHovered(&app.input);
+    try std.testing.expectEqual(app_navigation.View.blog, app.input.route.view);
+    try std.testing.expectEqual(post_id, app.input.route.selected_blog_post_id);
+    try std.testing.expectEqual(@as(f32, 0.0), app.input.scroll_y);
 
-    app.runtime.hovered = .{ .kind = .button, .id = app_chrome.docs_button_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
-    activateHit(&app);
-    try std.testing.expectEqual(app_navigation.View.docs, app.route.view);
+    app.input.runtime.hovered = .{ .kind = .button, .id = app_chrome.docs_button_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
+    app_native_input.activateHovered(&app.input);
+    try std.testing.expectEqual(app_navigation.View.docs, app.input.route.view);
 
-    app.runtime.hovered = .{ .kind = .button, .id = app_chrome.docs_button_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
-    activateHit(&app);
-    try std.testing.expectEqual(app_navigation.View.docs, app.route.view);
+    app.input.runtime.hovered = .{ .kind = .button, .id = app_chrome.docs_button_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
+    app_native_input.activateHovered(&app.input);
+    try std.testing.expectEqual(app_navigation.View.docs, app.input.route.view);
 
-    app.runtime.hovered = .{ .kind = .button, .id = app_chrome.logo_button_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
-    activateHit(&app);
-    try std.testing.expectEqual(app_navigation.View.landing, app.route.view);
+    app.input.runtime.hovered = .{ .kind = .button, .id = app_chrome.logo_button_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
+    app_native_input.activateHovered(&app.input);
+    try std.testing.expectEqual(app_navigation.View.source, app.input.route.view);
 }

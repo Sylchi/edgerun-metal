@@ -493,6 +493,30 @@ pub fn build(b: *std.Build) void {
     app_runtime_step.dependOn(&install_wasm_compiler.step);
     app_runtime_step.dependOn(&install_wasm_entry.step);
 
+    const run_embed_app_runtime_boot = b.addRunArtifact(embed_file_zig);
+    run_embed_app_runtime_boot.addArg("file");
+    run_embed_app_runtime_boot.addFileArg(app_runtime.getEmittedBin());
+    const embedded_app_runtime_wasm = run_embed_app_runtime_boot.addOutputFileArg("embedded_app_runtime_wasm.zig");
+    const uefi_target = b.resolveTargetQuery(std.Target.Query.parse(.{
+        .arch_os_abi = "x86_64-uefi",
+    }) catch unreachable);
+    const immutable_kernel_app_runtime = b.addExecutable(.{
+        .name = "BOOTX64.EFI",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/immutable_kernel_app_runtime_uefi.zig"),
+            .target = uefi_target,
+            .optimize = .ReleaseFast,
+        }),
+    });
+    immutable_kernel_app_runtime.root_module.addAnonymousImport("embedded_app_runtime_wasm", .{
+        .root_source_file = embedded_app_runtime_wasm,
+    });
+    const install_immutable_kernel_app_runtime = b.addInstallArtifact(immutable_kernel_app_runtime, .{
+        .dest_dir = .{ .override = .{ .custom = "immutable-kernel-app-runtime" } },
+    });
+    const immutable_kernel_app_runtime_step = b.step("immutable-kernel-app-runtime-efi", "Build the UEFI app-runtime GOP smoke");
+    immutable_kernel_app_runtime_step.dependOn(&install_immutable_kernel_app_runtime.step);
+
     const tpm_real_check = b.addExecutable(.{
         .name = "edgerun-tpm-real-check-zig",
         .root_module = b.createModule(.{

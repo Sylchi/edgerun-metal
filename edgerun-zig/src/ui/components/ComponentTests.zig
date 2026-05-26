@@ -1,6 +1,5 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
-const icon = @import("../../icon.zig");
 const ui_input = @import("../../input.zig");
 const interaction = @import("../../ui_interaction.zig");
 const layouts = @import("../../layouts.zig");
@@ -10,6 +9,7 @@ const ui_tokens = @import("../../ui_tokens.zig");
 const component_common = @import("../../ui_component_common.zig");
 const component_codec = @import("Codec.zig");
 const component_io = @import("ComponentIO.zig");
+const component_registry = @import("ComponentRegistry.zig");
 const component_test = @import("TestSupport.zig");
 const component_union = @import("Component.zig");
 const node_renderer = @import("NodeRenderer.zig");
@@ -63,6 +63,21 @@ fn testEpoch() clock.Stamp {
     return .{ .keeper = .{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 } };
 }
 
+test "component registry is the component union source of truth" {
+    const fields = @typeInfo(Component).@"union".fields;
+    try std.testing.expectEqual(component_registry.registrations.len, fields.len);
+    inline for (component_registry.registrations, 0..) |entry, index| {
+        const field = fields[index];
+        try std.testing.expectEqualStrings(entry.name, field.name);
+        try std.testing.expect(field.type == entry.Payload);
+        try std.testing.expect(comptime @hasDecl(entry.Payload, "node"));
+        try std.testing.expect(comptime @hasDecl(entry.Payload, "render"));
+        try std.testing.expect(comptime @hasDecl(entry.Payload, "measure"));
+        try std.testing.expect(comptime @hasDecl(entry.Payload, "writeRecord"));
+        try std.testing.expect(comptime @hasDecl(entry.Payload, "fromNode"));
+    }
+}
+
 test "component deserializer rejects wrong component kind" {
     const text = Text{ .value = "not a button" };
     var ui_raw: [128]u8 = undefined;
@@ -84,7 +99,7 @@ test "component union roundtrips concrete component objects" {
 
     try std.testing.expectEqual(@as(u32, 14), decoded.icon_button.id);
     try std.testing.expectEqualStrings("Search", decoded.icon_button.label);
-    try std.testing.expectEqual(icon.Icon.search, decoded.icon_button.icon.value);
+    try std.testing.expectEqual(Icon.named(.search).value, decoded.icon_button.icon.value);
 }
 
 test "component union decodes only canonical component objects" {
@@ -377,7 +392,7 @@ test "tree union detects stack and slot descriptors" {
     try std.testing.expectEqual(@as(u32, 10), slot_tree.slot.child.button.id);
 }
 
-test "component render helper owns button variants and collects hit targets" {
+test "component union dispatches button variants and collects hit targets" {
     var commands: [16]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
     var regions: [4]interaction.Region = undefined;
@@ -395,7 +410,7 @@ test "component render helper owns button variants and collects hit targets" {
     try std.testing.expectEqual(@as(u32, 502), outline_hit.id);
     try std.testing.expect(component_test.hasText(scene.written(), "Primary"));
     try std.testing.expect(component_test.hasText(scene.written(), "Outline"));
-    try std.testing.expect(component_test.hasIcon(scene.written(), icon.id(.search)));
+    try std.testing.expect(component_test.hasIcon(scene.written(), Icon.named(.search).tag()));
 }
 
 test "component renderer exports shared sizing tokens for measurements" {
@@ -457,7 +472,7 @@ test "component accessibility tree emitter enforces caller budget" {
     try std.testing.expectError(error.AccessibilityBudgetExceeded, stack.collectAccessibility(&tree, ui.Rect.init(0, 0, 120, 80), .{}));
 }
 
-test "component render helper applies shared interactive states by component id" {
+test "component union applies shared interactive states by component id" {
     var commands: [32]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
     const button = Component{ .button = .{ .id = 701, .label = "Save" } };
@@ -480,7 +495,7 @@ test "component render helper applies shared interactive states by component id"
     try std.testing.expect(component_test.hasFillColor(scene.written(), component_common.state_loading_fill));
 }
 
-test "component render helper does not leak interactive state to other ids" {
+test "component union does not leak interactive state to other ids" {
     var commands: [16]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
     const button = Component{ .button = .{ .id = 702, .label = "Save" } };

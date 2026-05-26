@@ -1,6 +1,6 @@
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
-const icon = @import("../../icon.zig");
+const component_contract = @import("ComponentContract.zig");
 const interaction = @import("../../ui_interaction.zig");
 const layout = @import("../../layouts/Types.zig");
 const object = @import("../../object.zig");
@@ -14,6 +14,9 @@ const primitives = @import("Primitives.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+
+pub const registration = component_contract.registration("button", Button);
+pub const icon_button_registration = component_contract.registration("icon_button", IconButton);
 const constrainPreferredSize = primitives.constrainPreferredSize;
 const measureFixed = primitives.measureFixed;
 const Icon = icon_component.Icon;
@@ -120,7 +123,7 @@ pub const IconButton = struct {
         const paint = buttonPaint(self.variant, options);
         if (paint.fill) |fill| try scene.pushRect(bounds, fill, .fill, radius, 0.0);
         if (paint.border) |border| try scene.pushRect(bounds, border, .border, radius, 0.0);
-        try icon_component.renderGlyph(scene, iconButtonIconBounds(bounds), self.icon.value, paint.text);
+        try self.icon.renderColor(scene, iconButtonIconBounds(bounds), paint.text);
     }
 
     pub fn collectInteractions(self: IconButton, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
@@ -237,7 +240,7 @@ fn renderContent(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, text_colo
 
     switch (icon_slot) {
         .leading => |value| {
-            try icon_component.renderGlyph(scene, ui.Rect.init(cursor_x, icon_y, icon_size, icon_size), value.value, text_color);
+            try value.renderColor(scene, ui.Rect.init(cursor_x, icon_y, icon_size, icon_size), text_color);
             cursor_x += icon_size;
             if (has_label) cursor_x += icon_gap;
         },
@@ -257,7 +260,7 @@ fn renderContent(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, text_colo
 
     switch (icon_slot) {
         .trailing => |value| {
-            try icon_component.renderGlyph(scene, ui.Rect.init(cursor_x, icon_y, icon_size, icon_size), value.value, text_color);
+            try value.renderColor(scene, ui.Rect.init(cursor_x, icon_y, icon_size, icon_size), text_color);
         },
         .none, .leading => {},
         .status, .media => return error.UnsupportedComponent,
@@ -361,11 +364,11 @@ test "button component serializes to canonical object and deserializes" {
     try @import("std").testing.expectEqual(@as(u32, 7), decoded.id);
     try @import("std").testing.expectEqualStrings("Run", decoded.label);
     try @import("std").testing.expectEqual(common.ButtonVariant.secondary, decoded.variant);
-    try @import("std").testing.expectEqual(icon.Icon.search, decoded.icon_slot.leading.value);
+    try @import("std").testing.expectEqual(Icon.named(.search).value, decoded.icon_slot.leading.value);
 }
 
 test "button component rejects ambiguous dual icon slots" {
-    const node = ui.buttonDetailNode(7, "Run", variantTag(.secondary), common.optionalIconTag(icon.Icon.search), common.optionalIconTag(icon.Icon.chevron_right));
+    const node = ui.buttonDetailNode(7, "Run", variantTag(.secondary), Icon.named(.search).tag(), Icon.named(.chevron_right).tag());
 
     try std.testing.expectError(error.Corrupt, Button.fromNode(node.button));
 }
@@ -381,7 +384,7 @@ test "icon button component serializes to canonical object and deserializes" {
     try std.testing.expectEqual(@as(u32, 17), decoded.id);
     try std.testing.expectEqualStrings("Search", decoded.label);
     try std.testing.expectEqual(common.ButtonVariant.ghost, decoded.variant);
-    try std.testing.expectEqual(icon.Icon.search, decoded.icon.value);
+    try std.testing.expectEqual(Icon.named(.search).value, decoded.icon.value);
 }
 
 test "icon button component renders centered icon and hit region" {
@@ -395,7 +398,7 @@ test "icon button component renders centered icon and hit region" {
     try button.render(&scene, bounds, .{});
     try button.collectInteractions(&collector, bounds);
 
-    const icon_command = component_test.iconCommand(scene.written(), icon.id(.search)).?;
+    const icon_command = component_test.iconCommand(scene.written(), Icon.named(.search).tag()).?;
     try std.testing.expectEqual(bounds.x + (bounds.w - icon_size) * 0.5, icon_command.icon_quad.bounds.x);
     try std.testing.expectEqual(bounds.y + (bounds.h - icon_size) * 0.5, icon_command.icon_quad.bounds.y);
     try std.testing.expectEqual(@as(usize, 1), collector.written().len);
@@ -465,7 +468,7 @@ test "button component aligns icon slot and label centers" {
 
     try renderButton(&scene, bounds, .{ .id = 8, .label = "Compile", .variant = .secondary, .icon_slot = IconSlot.named(.leading, .cpu) }, .{});
 
-    const icon_command = component_test.iconCommand(scene.written(), icon.id(.cpu)).?.icon_quad;
+    const icon_command = component_test.iconCommand(scene.written(), Icon.named(.cpu).tag()).?.icon_quad;
     const text_command = component_test.textCommand(scene.written(), "Compile").?.text;
     try std.testing.expectEqual(icon_command.bounds.y + icon_command.bounds.h * 0.5, text_command.origin.y + text_command.origin.h * 0.5);
     try std.testing.expect(icon_command.bounds.x + icon_command.bounds.w <= text_command.origin.x);
@@ -513,5 +516,5 @@ test "button component renders extended reference variants" {
     try std.testing.expect(component_test.hasRectColor(scene.written(), button_danger));
     try std.testing.expect(!component_test.hasRectBounds(scene.written(), ui.Rect.init(0, 44, 120, height)));
     try std.testing.expect(component_test.hasTextColor(scene.written(), ui.Color.accent));
-    try std.testing.expect(component_test.hasIcon(scene.written(), icon.id(.search)));
+    try std.testing.expect(component_test.hasIcon(scene.written(), Icon.named(.search).tag()));
 }

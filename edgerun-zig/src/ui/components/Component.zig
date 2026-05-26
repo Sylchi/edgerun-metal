@@ -7,181 +7,70 @@ const common = @import("../../ui_component_common.zig");
 const component_codec = @import("Codec.zig");
 const component_io = @import("ComponentIO.zig");
 const primitives = @import("Primitives.zig");
-const text_component = @import("Text.zig");
-const accordion_component = @import("Accordion.zig");
-const alert_component = @import("Alert.zig");
-const alert_dialog_component = @import("AlertDialog.zig");
-const aspect_ratio_component = @import("AspectRatio.zig");
-const calendar_component = @import("Calendar.zig");
-const carousel_component = @import("Carousel.zig");
-const chart_component = @import("Chart.zig");
-const combobox_component = @import("Combobox.zig");
-const card_component = @import("Card.zig");
-const empty_component = @import("Empty.zig");
-const button_component = @import("Button.zig");
-const button_group_component = @import("ButtonGroup.zig");
-const toggle_group_component = @import("ToggleGroup.zig");
-const badge_component = @import("Badge.zig");
-const avatar_component = @import("Avatar.zig");
-const kbd_component = @import("Kbd.zig");
-const label_component = @import("Label.zig");
-const separator_component = @import("Separator.zig");
-const scroll_area_component = @import("ScrollArea.zig");
-const skeleton_component = @import("Skeleton.zig");
-const spinner_component = @import("Spinner.zig");
-const breadcrumb_component = @import("Breadcrumb.zig");
-const menubar_component = @import("Menubar.zig");
-const navigation_menu_component = @import("NavigationMenu.zig");
-const command_component = @import("Command.zig");
-const context_menu_component = @import("ContextMenu.zig");
-const dialog_component = @import("Dialog.zig");
-const direction_component = @import("Direction.zig");
-const drawer_component = @import("Drawer.zig");
-const dropdown_menu_component = @import("DropdownMenu.zig");
-const field_component = @import("Field.zig");
-const hover_card_component = @import("HoverCard.zig");
-const input_otp_component = @import("InputOtp.zig");
-const icon_component = @import("Icon.zig");
-const input_component = @import("Input.zig");
-const input_group_component = @import("InputGroup.zig");
-const textarea_component = @import("Textarea.zig");
-const select_component = @import("Select.zig");
-const checkbox_component = @import("Checkbox.zig");
-const radio_group_component = @import("RadioGroup.zig");
-const switch_component = @import("Switch.zig");
-const pagination_component = @import("Pagination.zig");
-const popover_component = @import("Popover.zig");
-const resizable_component = @import("Resizable.zig");
-const sheet_component = @import("Sheet.zig");
-const sidebar_component = @import("Sidebar.zig");
-const toggle_component = @import("Toggle.zig");
-const progress_component = @import("Progress.zig");
-const slider_component = @import("Slider.zig");
-const tabs_component = @import("Tabs.zig");
-const table_component = @import("Table.zig");
-const tooltip_component = @import("Tooltip.zig");
-const toast_component = @import("Toast.zig");
-const row_item_component = @import("RowItem.zig");
+const registry = @import("ComponentRegistry.zig");
 
 pub const Error = common.Error;
 pub const RenderOptions = common.RenderOptions;
 pub const Accessibility = common.Accessibility;
 pub const AccessibilityTree = common.AccessibilityTree;
 
-const Text = text_component.Text;
-const Accordion = accordion_component.Accordion;
-const Alert = alert_component.Alert;
-const AlertDialog = alert_dialog_component.AlertDialog;
-const AspectRatio = aspect_ratio_component.AspectRatio;
-const Calendar = calendar_component.Calendar;
-const Carousel = carousel_component.Carousel;
-const Chart = chart_component.Chart;
-const Combobox = combobox_component.Combobox;
-const Card = card_component.Card;
-const Empty = empty_component.Empty;
-const Button = button_component.Button;
-const IconButton = button_component.IconButton;
-const ButtonGroup = button_group_component.ButtonGroup;
-const ToggleGroup = toggle_group_component.ToggleGroup;
-const Badge = badge_component.Badge;
-const Avatar = avatar_component.Avatar;
-const Kbd = kbd_component.Kbd;
-const Label = label_component.Label;
-const Separator = separator_component.Separator;
-const ScrollArea = scroll_area_component.ScrollArea;
-const Skeleton = skeleton_component.Skeleton;
-const Spinner = spinner_component.Spinner;
-const Breadcrumb = breadcrumb_component.Breadcrumb;
-const Menubar = menubar_component.Menubar;
-const NavigationMenu = navigation_menu_component.NavigationMenu;
-const Command = command_component.Command;
-const ContextMenu = context_menu_component.ContextMenu;
-const Dialog = dialog_component.Dialog;
-const Direction = direction_component.Direction;
-const Drawer = drawer_component.Drawer;
-const DropdownMenu = dropdown_menu_component.DropdownMenu;
-const Field = field_component.Field;
-const HoverCard = hover_card_component.HoverCard;
-const InputOtp = input_otp_component.InputOtp;
-const Icon = icon_component.Icon;
-const Input = input_component.Input;
-const InputGroup = input_group_component.InputGroup;
-const Textarea = textarea_component.Textarea;
-const Select = select_component.Select;
-const Checkbox = checkbox_component.Checkbox;
-const RadioGroup = radio_group_component.RadioGroup;
-const Switch = switch_component.Switch;
-const Pagination = pagination_component.Pagination;
-const Popover = popover_component.Popover;
-const Resizable = resizable_component.Resizable;
-const Sheet = sheet_component.Sheet;
-const Sidebar = sidebar_component.Sidebar;
-const Toggle = toggle_component.Toggle;
-const Progress = progress_component.Progress;
-const Slider = slider_component.Slider;
-const Tabs = tabs_component.Tabs;
-const Table = table_component.Table;
-const Tooltip = tooltip_component.Tooltip;
-const Toast = toast_component.Toast;
-const RowItem = row_item_component.RowItem;
-
 pub const Component = union(enum) {
-    text: Text,
-    accordion: Accordion,
-    alert: Alert,
-    alert_dialog: AlertDialog,
-    aspect_ratio: AspectRatio,
-    calendar: Calendar,
-    carousel: Carousel,
-    chart: Chart,
-    combobox: Combobox,
-    card: Card,
-    empty: Empty,
-    badge: Badge,
-    avatar: Avatar,
-    kbd: Kbd,
-    label: Label,
-    separator: Separator,
-    scroll_area: ScrollArea,
-    skeleton: Skeleton,
-    spinner: Spinner,
-    breadcrumb: Breadcrumb,
-    menubar: Menubar,
-    navigation_menu: NavigationMenu,
-    command: Command,
-    context_menu: ContextMenu,
-    dialog: Dialog,
-    direction: Direction,
-    drawer: Drawer,
-    dropdown_menu: DropdownMenu,
-    field: Field,
-    hover_card: HoverCard,
-    input_otp: InputOtp,
-    icon: Icon,
-    button: Button,
-    icon_button: IconButton,
-    button_group: ButtonGroup,
-    toggle_group: ToggleGroup,
-    toggle: Toggle,
-    input: Input,
-    input_group: InputGroup,
-    textarea: Textarea,
-    select: Select,
-    checkbox: Checkbox,
-    radio_group: RadioGroup,
-    switch_control: Switch,
-    pagination: Pagination,
-    popover: Popover,
-    resizable: Resizable,
-    sheet: Sheet,
-    sidebar: Sidebar,
-    progress: Progress,
-    slider: Slider,
-    tabs: Tabs,
-    table: Table,
-    tooltip: Tooltip,
-    toast: Toast,
-    row_item: RowItem,
+    text: registry.Payload("text"),
+    accordion: registry.Payload("accordion"),
+    alert: registry.Payload("alert"),
+    alert_dialog: registry.Payload("alert_dialog"),
+    aspect_ratio: registry.Payload("aspect_ratio"),
+    calendar: registry.Payload("calendar"),
+    carousel: registry.Payload("carousel"),
+    chart: registry.Payload("chart"),
+    combobox: registry.Payload("combobox"),
+    card: registry.Payload("card"),
+    empty: registry.Payload("empty"),
+    badge: registry.Payload("badge"),
+    avatar: registry.Payload("avatar"),
+    kbd: registry.Payload("kbd"),
+    label: registry.Payload("label"),
+    separator: registry.Payload("separator"),
+    scroll_area: registry.Payload("scroll_area"),
+    skeleton: registry.Payload("skeleton"),
+    spinner: registry.Payload("spinner"),
+    breadcrumb: registry.Payload("breadcrumb"),
+    menubar: registry.Payload("menubar"),
+    navigation_menu: registry.Payload("navigation_menu"),
+    command: registry.Payload("command"),
+    context_menu: registry.Payload("context_menu"),
+    dialog: registry.Payload("dialog"),
+    direction: registry.Payload("direction"),
+    drawer: registry.Payload("drawer"),
+    dropdown_menu: registry.Payload("dropdown_menu"),
+    field: registry.Payload("field"),
+    hover_card: registry.Payload("hover_card"),
+    input_otp: registry.Payload("input_otp"),
+    icon: registry.Payload("icon"),
+    button: registry.Payload("button"),
+    icon_button: registry.Payload("icon_button"),
+    button_group: registry.Payload("button_group"),
+    toggle_group: registry.Payload("toggle_group"),
+    toggle: registry.Payload("toggle"),
+    input: registry.Payload("input"),
+    input_group: registry.Payload("input_group"),
+    textarea: registry.Payload("textarea"),
+    select: registry.Payload("select"),
+    checkbox: registry.Payload("checkbox"),
+    radio_group: registry.Payload("radio_group"),
+    switch_control: registry.Payload("switch_control"),
+    pagination: registry.Payload("pagination"),
+    popover: registry.Payload("popover"),
+    resizable: registry.Payload("resizable"),
+    sheet: registry.Payload("sheet"),
+    sidebar: registry.Payload("sidebar"),
+    progress: registry.Payload("progress"),
+    slider: registry.Payload("slider"),
+    tabs: registry.Payload("tabs"),
+    table: registry.Payload("table"),
+    tooltip: registry.Payload("tooltip"),
+    toast: registry.Payload("toast"),
+    row_item: registry.Payload("row_item"),
 
     pub fn node(self: Component) ui.Node {
         return switch (self) {
@@ -258,4 +147,8 @@ pub const Component = union(enum) {
 fn componentFromNode(comptime ComponentPayload: type, node_payload: anytype) Error!ComponentPayload {
     if (comptime !@hasDecl(ComponentPayload, "fromNode")) @compileError(@typeName(ComponentPayload) ++ " must own fromNode");
     return ComponentPayload.fromNode(node_payload);
+}
+
+comptime {
+    registry.assertMatches(Component);
 }

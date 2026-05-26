@@ -1,7 +1,7 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
-const icon = @import("../../icon.zig");
+const component_contract = @import("ComponentContract.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
@@ -13,10 +13,13 @@ const primitives = @import("Primitives.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+
+pub const registration = component_contract.registration("combobox", Combobox);
 const contentInset = primitives.contentInset;
 const measureFixed = primitives.measureFixed;
 const renderControlFrame = primitives.renderControlFrame;
 const renderControlText = primitives.renderControlText;
+const Icon = icon_component.Icon;
 
 pub const Combobox = struct {
     id: u32,
@@ -33,7 +36,7 @@ pub const Combobox = struct {
         if (contentInset(input, primitives.control_text_padding)) |input_content| {
             const text_bounds = ui.Rect.init(input_content.x, input_content.y, @max(primitives.min_extent, input_content.w - combobox_icon_space), input_content.h);
             try scene.pushAlignedText(text_bounds.withHeightCentered(primitives.control_label_height), self.placeholder, options.style.muted, .start);
-            try icon_component.renderGlyph(scene, ui.Rect.init(input_content.x + input_content.w - combobox_icon_size, input_content.y + (input_content.h - combobox_icon_size) * 0.5, combobox_icon_size, combobox_icon_size), .chevron_right, options.style.muted);
+            try Icon.named(.chevron_right).renderColor(scene, ui.Rect.init(input_content.x + input_content.w - combobox_icon_size, input_content.y + (input_content.h - combobox_icon_size) * 0.5, combobox_icon_size, combobox_icon_size), options.style.muted);
         }
 
         const popup = popupBounds(bounds);
@@ -89,7 +92,7 @@ fn renderOption(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, selected: 
     try scene.pushRect(bounds, options.style.row, .fill, primitives.control_radius, 0.0);
     try renderControlText(scene, ui.Rect.init(bounds.x, bounds.y, @max(primitives.min_extent, bounds.w - combobox_option_indicator_w), bounds.h), combobox_option_padding, primitives.control_label_height, label, options.style.text, .start);
     if (selected) {
-        try icon_component.renderGlyph(scene, ui.Rect.init(bounds.x + bounds.w - combobox_icon_size - combobox_option_padding, bounds.y + (bounds.h - combobox_icon_size) * 0.5, combobox_icon_size, combobox_icon_size), .check, options.style.accent);
+        try Icon.named(.check).renderColor(scene, ui.Rect.init(bounds.x + bounds.w - combobox_icon_size - combobox_option_padding, bounds.y + (bounds.h - combobox_icon_size) * 0.5, combobox_icon_size, combobox_icon_size), options.style.accent);
     }
 }
 
@@ -128,7 +131,7 @@ test "combobox component renders input option and hit regions" {
 
     try std.testing.expect(component_test.hasText(scene.written(), "Search framework"));
     try std.testing.expect(component_test.hasText(scene.written(), "React"));
-    try std.testing.expect(component_test.hasIcon(scene.written(), @import("../../icon.zig").id(.check)));
+    try std.testing.expect(component_test.hasIcon(scene.written(), Icon.named(.check).tag()));
     try std.testing.expectEqual(@as(usize, 2), collector.written().len);
     try std.testing.expectEqual(ui.HitKind.input, collector.written()[0].kind);
     try std.testing.expectEqual(ui.HitKind.button, collector.written()[1].kind);

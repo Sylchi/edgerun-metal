@@ -1,9 +1,9 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
+const component_contract = @import("ComponentContract.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
-const icon = @import("../../icon.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
@@ -12,6 +12,8 @@ const component_primitives = @import("Primitives.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+
+pub const registration = component_contract.registration("alert", Alert);
 const constrainPreferredSize = component_primitives.constrainPreferredSize;
 const Icon = icon_component.Icon;
 const IconSlot = icon_component.IconSlot;
@@ -30,7 +32,7 @@ pub const Alert = struct {
         const content_color = if (self.destructive) alert_danger else options.style.text;
         try scene.pushRect(bounds, options.style.panel, .fill, alert_radius, 0.0);
         try scene.pushRect(bounds, if (self.destructive) alert_danger else options.style.border, .border, alert_radius, 0.0);
-        try icon_component.renderGlyph(scene, ui.Rect.init(bounds.x + alert_padding_x, bounds.y + alert_padding_y, alert_icon_size, alert_icon_size), statusIcon(self).value, content_color);
+        try statusIcon(self).renderColor(scene, ui.Rect.init(bounds.x + alert_padding_x, bounds.y + alert_padding_y, alert_icon_size, alert_icon_size), content_color);
         const text_w = textWidth(bounds);
         const title_h = component_primitives.measuredTextHeight(self.title, text_w, alert_title_height, alert_title_max_lines);
         try scene.pushWrappedText(ui.Rect.init(bounds.x + alert_text_x, bounds.y + alert_padding_y - 1.0, text_w, title_h), self.title, content_color, component_primitives.textWrap(self.title, alert_title_height, alert_title_max_lines));
@@ -120,7 +122,7 @@ test "alert component serializes icon slot to canonical object and deserializes"
     try std.testing.expectEqualStrings(alert.title, decoded.title);
     try std.testing.expectEqualStrings(alert.detail, decoded.detail);
     try std.testing.expect(decoded.destructive);
-    try std.testing.expectEqual(icon.Icon.warning, decoded.icon_slot.status.value);
+    try std.testing.expectEqual(Icon.named(.warning).value, decoded.icon_slot.status.value);
 }
 
 test "alert component renders title detail and destructive variant" {

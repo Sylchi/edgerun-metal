@@ -1,6 +1,7 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
+const component_contract = @import("ComponentContract.zig");
 const layout = @import("../../layouts/Types.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
@@ -12,6 +13,8 @@ const component_primitives = @import("Primitives.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+
+pub const registration = component_contract.registration("badge", Badge);
 const constrainPreferredSize = component_primitives.constrainPreferredSize;
 const measure_max_width = component_primitives.measure_max_width;
 

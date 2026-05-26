@@ -1,10 +1,10 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
+const component_contract = @import("ComponentContract.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
-const icon = @import("../../icon.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
@@ -14,8 +14,11 @@ const list_layout = @import("ListLayout.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+
+pub const registration = component_contract.registration("direction", Direction);
 const contentInset = component_primitives.contentInset;
 const measureFixed = component_primitives.measureFixed;
+const Icon = icon_component.Icon;
 
 pub const Direction = struct {
     id: u32,
@@ -28,7 +31,7 @@ pub const Direction = struct {
     pub fn render(self: Direction, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         const active = activeIndex(self.active);
         try renderItem(scene, itemBounds(bounds, 0), direction_ltr_label, active == 0, options);
-        try icon_component.renderGlyph(scene, iconBounds(bounds), .route, options.style.muted);
+        try Icon.named(.route).renderColor(scene, iconBounds(bounds), options.style.muted);
         try renderItem(scene, itemBounds(bounds, 1), direction_rtl_label, active == 1, options);
     }
 

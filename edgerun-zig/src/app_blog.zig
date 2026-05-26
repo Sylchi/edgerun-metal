@@ -1,5 +1,4 @@
 const std = @import("std");
-const icon = @import("icon.zig");
 const ui = @import("ui.zig");
 const badge_component = @import("ui/components/Badge.zig");
 const button_component = @import("ui/components/Button.zig");
@@ -1099,16 +1098,16 @@ fn renderCloudMeme(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
 fn renderWorkflow(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
     try nativeCard(scene, bounds, "", "");
     try text(scene, bounds.x + 20.0, bounds.y + 18.0, bounds.w - 40.0, 16.0, "Season Path", palette.text);
-    const rows = [_]struct { icon.Icon, []const u8, []const u8 }{
-        .{ .key, "Keypress", "hardware -> OS -> app" },
-        .{ .network, "Network", "router -> VPN -> DNS -> TLS" },
-        .{ .user, "Authority", "identity -> storage -> execution" },
+    const rows = [_]struct { icon_component.Icon, []const u8, []const u8 }{
+        .{ icon_component.Icon.named(.key), "Keypress", "hardware -> OS -> app" },
+        .{ icon_component.Icon.named(.network), "Network", "router -> VPN -> DNS -> TLS" },
+        .{ icon_component.Icon.named(.user), "Authority", "identity -> storage -> execution" },
     };
     var y = bounds.y + 54.0;
     for (rows) |row| {
         const box = ui.Rect.init(bounds.x + 20.0, y, 28.0, 28.0);
         try fill(scene, box, palette.neutral_soft, 7.0);
-        try iconQuad(scene, box.insetUniform(7.0), row[0], palette.primary);
+        try row[0].renderColor(scene, box.insetUniform(7.0), palette.primary);
         try text(scene, bounds.x + 60.0, y + 1.0, bounds.w - 80.0, 13.0, row[1], palette.text);
         try text(scene, bounds.x + 60.0, y + 20.0, bounds.w - 80.0, 11.0, row[2], palette.dim);
         y += 42.0;
@@ -1145,7 +1144,7 @@ fn renderPostListItem(scene: *ui.Scene, collector: *interaction.Collector, bound
         .max_lines = post_list_summary_max_lines,
     });
 
-    try iconQuad(scene, ui.Rect.init(bounds.x + bounds.w - 22.0, bounds.y + (bounds.h - 16.0) * 0.5, 16.0, 16.0), .chevron_right, palette.primary);
+    try icon_component.Icon.named(.chevron_right).renderColor(scene, ui.Rect.init(bounds.x + bounds.w - 22.0, bounds.y + (bounds.h - 16.0) * 0.5, 16.0, 16.0), palette.primary);
     try hit(collector, bounds, .button, postIdAt(index));
 }
 
@@ -3458,10 +3457,6 @@ fn appStyle() ui.Style {
 
 fn alignedText(scene: *ui.Scene, x: f32, y: f32, w: f32, h: f32, value: []const u8, color: ui.Color, alignment: ui.TextAlign) ui.RenderError!void {
     try scene.pushAlignedText(ui.Rect.init(x, y, @max(1.0, w), @max(1.0, h)), value, color, alignment);
-}
-
-fn iconQuad(scene: *ui.Scene, bounds: ui.Rect, value: icon.Icon, color: ui.Color) ui.RenderError!void {
-    try icon_component.renderGlyph(scene, bounds, value, color);
 }
 
 fn hit(collector: *interaction.Collector, bounds: ui.Rect, kind: ui.HitKind, id: u32) interaction.Error!void {

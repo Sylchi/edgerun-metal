@@ -1,5 +1,4 @@
 const std = @import("std");
-const icon = @import("icon.zig");
 const interaction = @import("ui_interaction.zig");
 const ui = @import("ui.zig");
 const button_component = @import("ui/components/Button.zig");
@@ -191,15 +190,15 @@ fn renderToolbar(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui
     try fill(scene, bounds, vscode_titlebar, 0.0);
     try stroke(scene, ui.Rect.init(bounds.x, bounds.y + bounds.h - 1.0, bounds.w, 1.0), vscode_line, 0.0);
     const text_w = toolbarTextWidth(bounds);
-    try iconQuad(scene, ui.Rect.init(bounds.x + panel_pad, bounds.y + 14.0, 18.0, 18.0), .app, palette.primary);
+    try icon_component.Icon.named(.app).renderColor(scene, ui.Rect.init(bounds.x + panel_pad, bounds.y + 14.0, 18.0, 18.0), palette.primary);
     try text(scene, bounds.x + panel_pad + 28.0, bounds.y + 8.0, text_w, toolbar_label_h, "EdgeRun Workspace", palette.primary);
     try text(scene, bounds.x + panel_pad + 28.0, bounds.y + 26.0, text_w, toolbar_detail_h, state.label, palette.text);
 
     const actions = toolbarActions(bounds);
-    try button(scene, collector, actions.compile, "Compile", compile_button_id, .primary, .cpu, canCompile(state));
-    try button(scene, collector, actions.download, "Export", download_button_id, .secondary, .file, canExport(state));
-    try button(scene, collector, actions.launch, "Run", launch_button_id, .secondary, .send, canRun(state));
-    try button(scene, collector, actions.reset, "Reset", reset_button_id, .ghost, .trash, true);
+    try button(scene, collector, actions.compile, "Compile", compile_button_id, .primary, icon_component.Icon.named(.cpu), canCompile(state));
+    try button(scene, collector, actions.download, "Export", download_button_id, .secondary, icon_component.Icon.named(.file), canExport(state));
+    try button(scene, collector, actions.launch, "Run", launch_button_id, .secondary, icon_component.Icon.named(.send), canRun(state));
+    try button(scene, collector, actions.reset, "Reset", reset_button_id, .ghost, icon_component.Icon.named(.trash), true);
 }
 
 fn renderEditor(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
@@ -318,11 +317,11 @@ fn renderEditorTitlebar(scene: *ui.Scene, bounds: ui.Rect, state: State, activit
 
 fn renderActivityRail(scene: *ui.Scene, bounds: ui.Rect) !void {
     try fill(scene, bounds, vscode_activity, 0.0);
-    const icons = [_]icon.Icon{ .file, .search, .route, .terminal, .settings };
+    const icons = [_]icon_component.Icon{ icon_component.Icon.named(.file), icon_component.Icon.named(.search), icon_component.Icon.named(.route), icon_component.Icon.named(.terminal), icon_component.Icon.named(.settings) };
     var y = bounds.y + 14.0;
     for (icons, 0..) |value, index| {
         const color = if (index == 0) palette.text else palette.muted;
-        try iconQuad(scene, ui.Rect.init(bounds.x + 13.0, y, 22.0, 22.0), value, color);
+        try value.renderColor(scene, ui.Rect.init(bounds.x + 13.0, y, 22.0, 22.0), color);
         y += 44.0;
     }
     try fill(scene, ui.Rect.init(bounds.x, bounds.y + 8.0, 2.0, 34.0), palette.primary, 0.0);
@@ -334,13 +333,13 @@ fn renderExplorer(scene: *ui.Scene, collector: *interaction.Collector, bounds: u
     try text(scene, bounds.x + 14.0, bounds.y + 10.0, bounds.w - 28.0, 12.0, "EXPLORER", palette.dim);
     try text(scene, bounds.x + 14.0, bounds.y + explorer_heading_h + 8.0, bounds.w - 28.0, 14.0, "EDGERUN-C", palette.text);
     const rows_y = bounds.y + explorer_heading_h + 38.0;
-    try explorerRow(scene, bounds.x, rows_y, bounds.w, "src", .chevron_right, false);
+    try explorerRow(scene, bounds.x, rows_y, bounds.w, "src", icon_component.Icon.named(.chevron_right), false);
     const files = explorerFilesForState(state);
     for (files, 0..) |entry, index| {
         const y = rows_y + explorer_row_h * @as(f32, @floatFromInt(index + 1));
         const row_bounds = ui.Rect.init(bounds.x, y, bounds.w, explorer_row_h);
         const path = entry.path;
-        try explorerRow(scene, bounds.x, y, bounds.w, fileName(path), .file, std.mem.eql(u8, state.label, path));
+        try explorerRow(scene, bounds.x, y, bounds.w, fileName(path), icon_component.Icon.named(.file), std.mem.eql(u8, state.label, path));
         try (row_item_component.RowItem{ .id = explorerFileHitId(index), .title = path, .detail = "" }).collectInteractions(collector, row_bounds);
     }
     try text(scene, bounds.x + 14.0, bounds.y + bounds.h - 46.0, bounds.w - 28.0, 12.0, "APP-OWNED VFS", palette.dim);
@@ -422,9 +421,9 @@ fn visibleLineCapacity(code_view: ui.Rect) usize {
     return @min(max_rendered_lines, @max(@as(usize, 1), @as(usize, @intFromFloat(@max(1.0, (code_view.h - code_pad * 2.0) / code_line_h)))));
 }
 
-fn explorerRow(scene: *ui.Scene, x: f32, y: f32, w: f32, label: []const u8, icon_value: icon.Icon, selected: bool) !void {
+fn explorerRow(scene: *ui.Scene, x: f32, y: f32, w: f32, label: []const u8, icon_value: icon_component.Icon, selected: bool) !void {
     if (selected) try fill(scene, ui.Rect.init(x, y, w, explorer_row_h), vscode_selection, 0.0);
-    try iconQuad(scene, ui.Rect.init(x + 14.0, y + 5.0, 14.0, 14.0), icon_value, if (selected) palette.text else palette.muted);
+    try icon_value.renderColor(scene, ui.Rect.init(x + 14.0, y + 5.0, 14.0, 14.0), if (selected) palette.text else palette.muted);
     try text(scene, x + 36.0, y + 5.0, w - 44.0, 14.0, label, if (selected) palette.text else palette.dim);
 }
 
@@ -471,10 +470,6 @@ fn renderSelectionForLine(scene: *ui.Scene, code_view: ui.Rect, y: f32, line_sta
     try fill(scene, ui.Rect.init(x, y, w, code_line_h), ui.Color{ .r = 9, .g = 71, .b = 113, .a = 210 }, 0.0);
 }
 
-fn iconQuad(scene: *ui.Scene, bounds: ui.Rect, value: icon.Icon, color: ui.Color) ui.RenderError!void {
-    try icon_component.renderGlyph(scene, bounds, value, color);
-}
-
 fn renderCompileStages(scene: *ui.Scene, bounds: ui.Rect, progress: f32) !void {
     const labels = [_][]const u8{ "VFS", "INIT", "COMPILE", "ARTIFACT" };
     const thresholds = [_]f32{ 0.08, 0.18, 0.52, 0.88 };
@@ -487,8 +482,8 @@ fn renderCompileStages(scene: *ui.Scene, bounds: ui.Rect, progress: f32) !void {
     }
 }
 
-fn button(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id: u32, variant: component_common.ButtonVariant, leading: icon.Icon, enabled: bool) !void {
-    const component = button_component.Button{ .id = id, .label = label, .variant = variant, .icon_slot = icon_component.IconSlot.named(.leading, leading) };
+fn button(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id: u32, variant: component_common.ButtonVariant, leading: icon_component.Icon, enabled: bool) !void {
+    const component = button_component.Button{ .id = id, .label = label, .variant = variant, .icon_slot = icon_component.IconSlot.of(.leading, leading) };
     if (!enabled) {
         try component.render(scene, bounds, .{
             .style = app_chrome.style(),

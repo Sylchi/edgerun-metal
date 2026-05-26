@@ -1,10 +1,10 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
+const component_contract = @import("ComponentContract.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
-const icon = @import("../../icon.zig");
 const layout = @import("../../layouts/Types.zig");
 const text_metrics = @import("../../ui_text_metrics.zig");
 const component_test = @import("TestSupport.zig");
@@ -14,7 +14,10 @@ const component_primitives = @import("Primitives.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+
+pub const registration = component_contract.registration("toast", Toast);
 const measureFixed = component_primitives.measureFixed;
+const Icon = icon_component.Icon;
 
 pub const Toast = struct {
     id: u32,
@@ -33,7 +36,7 @@ pub const Toast = struct {
         const toast = toastBounds(bounds);
         try scene.pushRect(toast, options.style.panel, .fill, toast_radius, 0.0);
         try scene.pushRect(toast, options.style.border, .border, toast_radius, 0.0);
-        try icon_component.renderGlyph(scene, toastIconBounds(toast), .check, options.style.accent);
+        try Icon.named(.check).renderColor(scene, toastIconBounds(toast), options.style.accent);
         const text_x = toast.x + toast_text_x;
         const text_w = @max(component_primitives.min_extent, toast.x + toast.w - text_x - toast_padding);
         const title_h = measuredTextHeight(self.title, text_w, titleMetrics(self.title));

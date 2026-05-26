@@ -1,5 +1,4 @@
 const std = @import("std");
-const icon = @import("icon.zig");
 const interaction = @import("ui_interaction.zig");
 const ui = @import("ui.zig");
 const badge_component = @import("ui/components/Badge.zig");
@@ -125,7 +124,7 @@ pub const DocPage = struct {
     primary: []const u8,
     secondary: []const u8,
     api: []const u8,
-    icon_value: icon.Icon,
+    icon_value: icon_component.Icon,
     color: ui.Color,
 };
 
@@ -167,7 +166,7 @@ const component_blocks = [_]DocBlock{
 
 const media_blocks = [_]DocBlock{
     .{ .title = "Owned decode", .body = "Media should be decoded by repo-owned code into EdgeRun drawing data. The host may present pixels, but hidden host decoders should not become part of the app contract.", .code = "src/media/png.zig\nsrc/media/jpeg.zig\nsrc/media/tga.zig\nsrc/media/webp/root.zig" },
-    .{ .title = "Icons", .body = "Icon names map to semantic icon ids. SVG/vector parsing turns repo assets into renderer data so the same icon appears in web host and native paths.", .code = "icon_component.Icon.named(...)\nicon_component.renderGlyph(...)\nicon_svg.Iterator" },
+    .{ .title = "Icons", .body = "Icon names map to semantic icon ids. SVG/vector parsing turns repo assets into renderer data so the same icon appears in web host and native paths.", .code = "icon_component.Icon.named(...)\nIcon.renderColor(...)\nicon_svg.Iterator" },
     .{ .title = "Images and video", .body = "Images move through image decode and renderer image vertices. Video work is staged around deterministic frame decode so media can be demonstrated without depending on platform players.", .code = "src/media/video_ivf.zig\nsrc/media/video_webm.zig\nsrc/media/vp8.zig\nui.Scene.pushImageQuad(...)" },
 };
 
@@ -213,7 +212,7 @@ pub const doc_pages = [_]DocPage{
         .primary = "Use the sidebar as the app manual. Each row is a real feature surface or shipped subsystem, not a placeholder page.",
         .secondary = "Components have their own route per component because their API belongs beside the rendered preview.",
         .api = "route: /docs\nframe: app_frame.render -> app_docs.render\nnavigation: app_navigation.Route.selected_doc_index",
-        .icon_value = .file,
+        .icon_value = icon_component.Icon.named(.file),
         .color = palette.primary,
     },
     .{
@@ -226,7 +225,7 @@ pub const doc_pages = [_]DocPage{
         .primary = "Runtime pages emit EdgeRun scene commands and interaction regions. Browser, native CPU, GPU, and Wayland hosts consume the same frame contract.",
         .secondary = "The app should never decide whether it is on CPU or GPU; the host chooses the backend after the scene is produced.",
         .api = "entry: app_frame.render\nheight: app_frame.contentHeight\nroute: app_navigation.Route",
-        .icon_value = .terminal,
+        .icon_value = icon_component.Icon.named(.terminal),
         .color = palette.cyan,
     },
     .{
@@ -239,7 +238,7 @@ pub const doc_pages = [_]DocPage{
         .primary = "Every opened surface is represented as a typed route before the frame renders. Host glue only carries route bytes; it does not choose the app view.",
         .secondary = "The component catalog is a docs subsection: `/docs/components` opens the catalog and `/docs/components/<slug>` opens the selected component inside Docs.",
         .api = "/ -> landing\n/academy[/id] -> Academy\n/docs[/slug] -> Docs\n/docs/components[/slug] -> Docs component subsection\n/source -> Source",
-        .icon_value = .route,
+        .icon_value = icon_component.Icon.named(.route),
         .color = palette.green,
     },
     .{
@@ -252,7 +251,7 @@ pub const doc_pages = [_]DocPage{
         .primary = "The current model keeps resource movement explicit: allocator grants resources, apps receive handles, storage receives canonical objects, and crossings leave receipts.",
         .secondary = "This page links the docs to the Academy path because the learning material explains why each boundary exists.",
         .api = "objects: object.zig canonical bytes\nidentity: identity.zig principal material\nreceipts: typed object receipt nodes",
-        .icon_value = .shield,
+        .icon_value = icon_component.Icon.named(.shield),
         .color = palette.violet,
     },
     .{
@@ -265,7 +264,7 @@ pub const doc_pages = [_]DocPage{
         .primary = "The software, web host, GPU, and native hosts should agree because they are adapters for the same scene and IR path.",
         .secondary = "Backend-specific code owns presentation, not product UI decisions.",
         .api = "scene: ui.Scene\ncomponents: ui/components/*.zig\nrender: render.zig\nbackends: render/*",
-        .icon_value = .code,
+        .icon_value = icon_component.Icon.named(.code),
         .color = palette.blue,
     },
     .{
@@ -278,7 +277,7 @@ pub const doc_pages = [_]DocPage{
         .primary = "The catalog is rendered inline on this page from component_gallery.component_catalog, so Docs is the manual and the live component catalog.",
         .secondary = "Each `/docs/components/<slug>` route keeps the Docs chrome, opens the selected subsection, and renders the component through the same shared component path.",
         .api = "catalog: /docs/components\nsubsection: /docs/components/<slug>\nrender: Component.render\ninteractions: Component.collectInteractions",
-        .icon_value = .app,
+        .icon_value = icon_component.Icon.named(.app),
         .color = palette.primary,
     },
     .{
@@ -291,7 +290,7 @@ pub const doc_pages = [_]DocPage{
         .primary = "Icons and media are decoded into EdgeRun-owned drawing data so hosts do not become hidden rendering dependencies.",
         .secondary = "The media docs now render image and video-format cards as real scene image quads, not just a list of files.",
         .api = "svg: icon_svg.zig\nimages: media/image.zig + png/jpeg/tga/webp\nvideo: media/video_ivf.zig + video_webm.zig + vp8.zig\nrender: ui.Scene.pushImageQuad -> renderer IR image vertices",
-        .icon_value = .file,
+        .icon_value = icon_component.Icon.named(.file),
         .color = palette.amber,
     },
     .{
@@ -304,7 +303,7 @@ pub const doc_pages = [_]DocPage{
         .primary = "UI code emits text commands only. Font parsing, glyph metrics, kerning, rasterization, atlas packing, and backend upload stay inside the EdgeRun render pipeline.",
         .secondary = "The current path supports embedded Geist bytes and compiled font objects. Small text is sharpened during atlas bake, and software/GPU/web hosts consume the same alpha atlas resource.",
         .api = "asset: varfont.geist_bytes\nparse: varfont.Face.geist\nobject font: font_vector -> render/font_atlas\natlas: 2048x2048 alpha8, 1280 glyphs\nir: render.ir.FontAtlas -> text quads\nbackends: software/GLES/web alpha texture",
-        .icon_value = .activity,
+        .icon_value = icon_component.Icon.named(.activity),
         .color = palette.green,
     },
     .{
@@ -317,7 +316,7 @@ pub const doc_pages = [_]DocPage{
         .primary = "The source workspace and release flow are the visible app authoring path; runtime authority is granted by manifest and receipt.",
         .secondary = "Native execution remains special. Normal app logic should prove itself through deterministic WASM behavior.",
         .api = "source: app_source.zig\nruntime: wasm/root.zig\nroute: /source",
-        .icon_value = .terminal,
+        .icon_value = icon_component.Icon.named(.terminal),
         .color = palette.cyan,
     },
     .{
@@ -330,7 +329,7 @@ pub const doc_pages = [_]DocPage{
         .primary = "Stored data should cross boundaries as validated EdgeRun objects, not raw buffers with invented identity.",
         .secondary = "The storage docs intentionally point at object identity and receipt semantics because those are the authority boundary.",
         .api = "object: object.View.decode\nstore: store.zig\nindex: owner-scoped app keys",
-        .icon_value = .database,
+        .icon_value = icon_component.Icon.named(.database),
         .color = palette.yellow,
     },
     .{
@@ -343,7 +342,7 @@ pub const doc_pages = [_]DocPage{
         .primary = "Source is linked from Docs because it is not a marketing promise; it is a route you can open now.",
         .secondary = "The docs describe the path, while the Source route owns the editor, compile action, release download, and launch action.",
         .api = "route: /source\nstate: app_source.State\nactions: compile, download, launch, reset",
-        .icon_value = .code,
+        .icon_value = icon_component.Icon.named(.code),
         .color = palette.blue,
     },
 };
@@ -432,7 +431,7 @@ fn renderSidebarRow(scene: *ui.Scene, collector: *interaction.Collector, bounds:
         .id = id,
         .label = page.section.label(),
         .variant = if (active) .secondary else .ghost,
-        .icon_slot = icon_component.IconSlot.named(.leading, page.icon_value),
+        .icon_slot = icon_component.IconSlot.of(.leading, page.icon_value),
     };
     try row_component.render(scene, bounds, .{
         .style = app_chrome.style(),
@@ -533,7 +532,7 @@ fn renderFeatureGlyph(scene: *ui.Scene, bounds: ui.Rect, page: DocPage) ui.Rende
     }).render(scene, bounds, .{ .style = app_chrome.style() });
     try stroke(scene, bounds, page.color, panel_radius);
     const icon_size = @min(design.Icon.hero_max, bounds.w * 0.42);
-    try iconQuad(scene, ui.Rect.init(bounds.x + bounds.w * 0.5 - icon_size * 0.5, bounds.y + 42.0, icon_size, icon_size), page.icon_value, page.color);
+    try page.icon_value.renderColor(scene, ui.Rect.init(bounds.x + bounds.w * 0.5 - icon_size * 0.5, bounds.y + 42.0, icon_size, icon_size), page.color);
     try scene.pushAlignedText(ui.Rect.init(bounds.x + 12.0, bounds.y + bounds.h - 42.0, bounds.w - 24.0, 16.0), page.section.label(), palette.text, .center);
 }
 
@@ -678,7 +677,7 @@ fn renderMediaCard(scene: *ui.Scene, bounds: ui.Rect, demo: MediaDemo) ui.Render
 fn renderImageDemo(scene: *ui.Scene, bounds: ui.Rect, demo: MediaDemo) ui.RenderError!void {
     try fill(scene, bounds, palette.code_bg, 6.0);
     try scene.pushImageQuad(.{ .bounds = bounds.insetUniform(8.0), .atlas_id = demo.atlas_id, .color = demo.color });
-    try iconQuad(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 16.0, 24.0, 24.0), .file, palette.text);
+    try icon_component.Icon.named(.file).renderColor(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 16.0, 24.0, 24.0), palette.text);
 }
 
 fn renderVideoDemo(scene: *ui.Scene, bounds: ui.Rect, demo: MediaDemo) ui.RenderError!void {
@@ -691,7 +690,7 @@ fn renderVideoDemo(scene: *ui.Scene, bounds: ui.Rect, demo: MediaDemo) ui.Render
         try scene.pushImageQuad(.{ .bounds = ui.Rect.init(x, bounds.y + 10.0, frame_w, bounds.h - 20.0), .atlas_id = demo.atlas_id + @as(u32, @intCast(index)), .color = color });
         x += frame_w + media_frame_gap;
     }
-    try iconQuad(scene, ui.Rect.init(bounds.x + bounds.w - 36.0, bounds.y + 14.0, 22.0, 22.0), .activity, palette.text);
+    try icon_component.Icon.named(.activity).renderColor(scene, ui.Rect.init(bounds.x + bounds.w - 36.0, bounds.y + 14.0, 22.0, 22.0), palette.text);
 }
 
 fn docBlockHeight(width: f32, block: DocBlock) f32 {
@@ -864,7 +863,7 @@ fn renderGrid(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
 }
 
 fn primaryButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label_value: []const u8, id: u32) (ui.RenderError || interaction.Error)!void {
-    const component = button_component.Button{ .id = id, .label = label_value, .icon_slot = icon_component.IconSlot.named(.trailing, .chevron_right) };
+    const component = button_component.Button{ .id = id, .label = label_value, .icon_slot = icon_component.IconSlot.of(.trailing, icon_component.Icon.named(.chevron_right)) };
     try component.render(scene, bounds, .{
         .style = appStyle(),
     });
@@ -896,10 +895,6 @@ fn label(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, color: ui.Color) 
     try (badge_component.Badge{
         .label = value,
     }).render(scene, bounds, .{ .style = label_style });
-}
-
-fn iconQuad(scene: *ui.Scene, bounds: ui.Rect, value: icon.Icon, color: ui.Color) ui.RenderError!void {
-    try icon_component.renderGlyph(scene, bounds, value, color);
 }
 
 test "docs page renders sidebar feature documentation" {

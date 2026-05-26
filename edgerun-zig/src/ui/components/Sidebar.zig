@@ -1,7 +1,7 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
-const icon = @import("../../icon.zig");
+const component_contract = @import("ComponentContract.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
@@ -13,7 +13,10 @@ const primitives = @import("Primitives.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
+
+pub const registration = component_contract.registration("sidebar", Sidebar);
 const constrainPreferredSize = primitives.constrainPreferredSize;
+const Icon = icon_component.Icon;
 
 pub const Sidebar = struct {
     id: u32,
@@ -28,7 +31,7 @@ pub const Sidebar = struct {
         const rail = railBounds(bounds);
         try scene.pushRect(rail, options.style.panel, .fill, sidebar_radius, 0.0);
         try scene.pushRect(rail, options.style.border, .border, sidebar_radius, 0.0);
-        try icon_component.renderGlyph(scene, triggerBounds(bounds), .menu, options.style.text);
+        try Icon.named(.menu).renderColor(scene, triggerBounds(bounds), options.style.text);
         try scene.pushWrappedText(titleBounds(bounds, self.title), self.title, options.style.muted, primitives.textWrap(self.title, sidebar_title_h, sidebar_title_max_lines));
         const item_bounds = itemBounds(bounds, self.title, self.item);
         try scene.pushRect(item_bounds, options.style.row, .fill, sidebar_item_radius, 0.0);

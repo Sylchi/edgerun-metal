@@ -4,7 +4,6 @@ const button_component = @import("ui/components/Button.zig");
 const card_component = @import("ui/components/Card.zig");
 const icon_component = @import("ui/components/Icon.zig");
 const row_item_component = @import("ui/components/RowItem.zig");
-const icon = @import("icon.zig");
 const interaction = @import("ui_interaction.zig");
 const app_blog = @import("app_blog.zig");
 const app_chrome = @import("app_chrome.zig");
@@ -99,11 +98,11 @@ fn renderWorkspaceTop(scene: *ui.Scene, collector: *interaction.Collector, bound
 
 fn renderWorkspaceRail(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, active: app_navigation.View) !void {
     try scene.pushRect(bounds, workspace_rail_bg, .fill, 0.0, 0.0);
-    const items = [_]struct { id: u32, icon_value: icon.Icon, label: []const u8, view: app_navigation.View }{
-        .{ .id = app_chrome.source_button_id, .icon_value = .code, .label = "Source", .view = .source },
-        .{ .id = app_docs.component_catalog_button_id, .icon_value = .app, .label = "Components", .view = .components },
-        .{ .id = app_chrome.docs_button_id, .icon_value = .file, .label = "Docs", .view = .docs },
-        .{ .id = app_chrome.blog_button_id, .icon_value = .terminal, .label = "Academy", .view = .blog },
+    const items = [_]struct { id: u32, icon_value: icon_component.Icon, label: []const u8, view: app_navigation.View }{
+        .{ .id = app_chrome.source_button_id, .icon_value = icon_component.Icon.named(.code), .label = "Source", .view = .source },
+        .{ .id = app_docs.component_catalog_button_id, .icon_value = icon_component.Icon.named(.app), .label = "Components", .view = .components },
+        .{ .id = app_chrome.docs_button_id, .icon_value = icon_component.Icon.named(.file), .label = "Docs", .view = .docs },
+        .{ .id = app_chrome.blog_button_id, .icon_value = icon_component.Icon.named(.terminal), .label = "Academy", .view = .blog },
     };
     var y = bounds.y + workspace_rail_pad;
     for (items) |item| {
@@ -111,7 +110,7 @@ fn renderWorkspaceRail(scene: *ui.Scene, collector: *interaction.Collector, boun
         const component = button_component.IconButton{
             .id = item.id,
             .label = item.label,
-            .icon = icon_component.Icon.named(item.icon_value),
+            .icon = item.icon_value,
             .variant = if (active == item.view) .secondary else .ghost,
         };
         try component.render(scene, item_bounds, .{ .style = design.style() });

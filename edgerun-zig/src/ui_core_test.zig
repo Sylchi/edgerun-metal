@@ -9,7 +9,7 @@ pub const component_gallery = @import("component_gallery.zig");
 pub const app_frame = @import("app_frame.zig");
 pub const ui = @import("ui.zig");
 pub const ui_codec = @import("ui_codec.zig");
-pub const ui_components = @import("ui_components.zig");
+const ui_component_tests = @import("ui/components/ComponentTests.zig");
 pub const ui_resolver = @import("ui_resolver.zig");
 pub const varfont = @import("varfont.zig");
 
@@ -24,7 +24,7 @@ test {
     _ = component_gallery;
     _ = ui;
     _ = ui_codec;
-    _ = ui_components;
+    _ = ui_component_tests;
     _ = ui_resolver;
     _ = varfont;
 }
