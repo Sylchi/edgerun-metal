@@ -50,6 +50,10 @@ pub const Drawer = struct {
 
     pub fn fromView(view: object.View) Error!Drawer {
         const drawer = try component_codec.nodeView(view, .drawer);
+        return fromNode(drawer);
+    }
+
+    pub fn fromNode(drawer: @FieldType(ui.Node, "drawer")) Error!Drawer {
         return .{ .id = drawer.id, .title = drawer.title, .detail = drawer.detail };
     }
 };

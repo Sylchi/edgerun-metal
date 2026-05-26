@@ -91,7 +91,7 @@ test {
 }
 
 test "gles adapter records canonical presentation receipt for ir frame" {
-    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     try renderer_ir.pushRect(buffers, .base, ui.Rect.init(0, 0, 8, 8), .accent, .clear, 0, 0, 0);
     const adapter = Adapter{

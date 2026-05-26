@@ -2924,7 +2924,7 @@ test "software renderer rasterizes rect ir deterministically" {
     try scene.pushRect(ui.Rect.init(42.0, 18.0, 12.0, 12.0), .{ .r = 0, .g = 0, .b = 0, .a = 120 }, .shadow, 4.0, 5.0);
     try scene.pushRect(ui.Rect.init(44.0, 20.0, 10.0, 10.0), .accent, .border, 3.0, 0.0);
 
-    var storage = renderer_ir.FixedBuffers(3, 0, 0, 0, 1, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(3, 0, 0, 0, 1, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     var source_context: u8 = 0;
     const sources = renderer_ir.Sources{
@@ -2945,7 +2945,7 @@ test "software renderer rasterizes rect ir deterministically" {
 test "software renderer rejects textured ir without resources" {
     var pixels: [4]ui.Color = undefined;
     const surface = try Surface.init(2, 2, &pixels);
-    var storage = renderer_ir.FixedBuffers(0, 1, 0, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(0, 1, 0, 0, 0, 0, 0, 0, 0){};
     storage.text_vertex_len = 1;
     const buffers = storage.buffers();
     try std.testing.expectError(error.UnsupportedIrPrimitive, surface.rasterizeIr(buffers));
@@ -2956,7 +2956,7 @@ test "software renderer rasterizes alpha textured ir with supplied resources" {
     const surface = try Surface.init(8, 8, &pixels);
     surface.clear(.clear);
 
-    var storage = renderer_ir.FixedBuffers(0, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(0, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
 
     try renderer_ir.pushClippedTexturedQuad(
@@ -2999,7 +2999,7 @@ test "software renderer rasterizes image ir with supplied rgba texture" {
     const surface = try Surface.init(8, 8, &pixels);
     surface.clear(.clear);
 
-    var storage = renderer_ir.FixedBuffers(0, 0, 0, renderer_ir.textured_quad_vertex_count, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(0, 0, 0, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
 
     try renderer_ir.pushClippedTexturedQuad(
@@ -3039,7 +3039,7 @@ test "software renderer frame rejects missing image texture through presentation
     var pixels: [8 * 8]ui.Color = undefined;
     const surface = try Surface.init(8, 8, &pixels);
 
-    var storage = renderer_ir.FixedBuffers(0, 0, 0, renderer_ir.textured_quad_vertex_count, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(0, 0, 0, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     try renderer_ir.pushClippedTexturedQuad(
         buffers.image_vertices,
@@ -3071,7 +3071,7 @@ fn sampleRoot(children: []ui.Node) ui.Node {
 }
 
 fn renderTestSceneIr(surface: Surface, commands: []const ui.Command) !void {
-    var storage = renderer_ir.FixedBuffers(64, 1024, 64, 64, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(64, 1024, 64, 64, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     var source_context: u8 = 0;
     const sources = renderer_ir.Sources{

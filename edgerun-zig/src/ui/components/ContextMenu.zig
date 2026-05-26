@@ -22,6 +22,10 @@ pub const ContextMenu = struct {
         return ui.contextMenuNode(self.id, self.first, self.second);
     }
 
+    pub fn accessibility(self: ContextMenu) common.Accessibility {
+        return .{ .role = .menu, .label = self.first, .control_id = self.id };
+    }
+
     pub fn render(self: ContextMenu, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         try primitives.renderSidePanelTrigger(scene, bounds, menu_panel_layout, options.style.accent, options.style.border, menu_trigger_padding, context_menu_trigger, options.style.bg);
         try primitives.renderTwoItemMenuPanel(scene, primitives.sidePanelContentBounds(bounds, menu_panel_layout), self.first, self.second, options, menu_radius, menu_list_layout);
@@ -47,6 +51,10 @@ pub const ContextMenu = struct {
 
     pub fn fromView(view: object.View) Error!ContextMenu {
         const menu = try component_codec.nodeView(view, .context_menu);
+        return fromNode(menu);
+    }
+
+    pub fn fromNode(menu: @FieldType(ui.Node, "context_menu")) Error!ContextMenu {
         return .{ .id = menu.id, .first = menu.first, .second = menu.second };
     }
 };

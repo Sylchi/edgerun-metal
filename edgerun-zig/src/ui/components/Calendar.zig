@@ -67,6 +67,10 @@ pub const Calendar = struct {
 
     pub fn fromView(view: object.View) Error!Calendar {
         const calendar = try component_codec.nodeView(view, .calendar);
+        return fromNode(calendar);
+    }
+
+    pub fn fromNode(calendar: @FieldType(ui.Node, "calendar")) Error!Calendar {
         return .{ .id = calendar.id, .month = calendar.month, .selected_day = calendar.selected_day };
     }
 };

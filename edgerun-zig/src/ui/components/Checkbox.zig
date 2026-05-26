@@ -8,6 +8,7 @@ const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
 const component_primitives = @import("Primitives.zig");
+const icon_component = @import("Icon.zig");
 const icon = @import("../../icon.zig");
 
 const Error = common.Error;
@@ -23,12 +24,16 @@ pub const Checkbox = struct {
         return ui.checkboxNode(self.id, self.label, self.checked);
     }
 
+    pub fn accessibility(self: Checkbox) common.Accessibility {
+        return .{ .role = .checkbox, .label = self.label, .control_id = self.id };
+    }
+
     pub fn render(self: Checkbox, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         const box = ui.Rect.init(bounds.x, bounds.y + (bounds.h - checkbox_box_size) * 0.5, checkbox_box_size, checkbox_box_size);
         try scene.pushRect(box, if (self.checked) options.style.accent else options.style.panel, .fill, component_primitives.control_radius, 0.0);
         try scene.pushRect(box, if (self.checked) options.style.accent else options.style.border, .border, component_primitives.control_radius, 0.0);
         if (self.checked) {
-            try scene.pushIconQuad(.{ .bounds = box.insetUniform(checkbox_icon_inset), .icon_id = icon.id(.check), .color = options.style.bg });
+            try icon_component.renderGlyph(scene, box.insetUniform(checkbox_icon_inset), .check, options.style.bg);
         }
         const label_x = box.x + box.w + checkbox_text_gap;
         const label_w = @max(component_primitives.min_extent, bounds.x + bounds.w - label_x);

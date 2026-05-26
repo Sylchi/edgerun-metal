@@ -24,6 +24,10 @@ pub const RowItem = struct {
         return .{ .row_item = .{ .id = self.id, .title = self.title, .detail = self.detail } };
     }
 
+    pub fn accessibility(self: RowItem) common.Accessibility {
+        return .{ .role = .button, .label = self.title, .control_id = self.id };
+    }
+
     pub fn render(self: RowItem, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         try scene.pushRect(bounds, options.style.row, .fill, row_radius, 0.0);
         if (self.detail.len == 0) {
@@ -74,6 +78,10 @@ pub const RowItem = struct {
 
     pub fn fromView(view: object.View) Error!RowItem {
         const row = try component_codec.nodeView(view, .row_item);
+        return fromNode(row);
+    }
+
+    pub fn fromNode(row: @FieldType(ui.Node, "row_item")) Error!RowItem {
         return .{ .id = row.id, .title = row.title, .detail = row.detail };
     }
 };

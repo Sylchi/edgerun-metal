@@ -42,6 +42,7 @@ const dropdown_menu_component = @import("ui/components/DropdownMenu.zig");
 const field_component = @import("ui/components/Field.zig");
 const hover_card_component = @import("ui/components/HoverCard.zig");
 const input_otp_component = @import("ui/components/InputOtp.zig");
+const icon_component = @import("ui/components/Icon.zig");
 const input_component = @import("ui/components/Input.zig");
 const input_group_component = @import("ui/components/InputGroup.zig");
 const textarea_component = @import("ui/components/Textarea.zig");
@@ -146,6 +147,10 @@ pub const Field = field_component.Field;
 pub const HoverCard = hover_card_component.HoverCard;
 
 pub const InputOtp = input_otp_component.InputOtp;
+
+pub const Icon = icon_component.Icon;
+
+pub const IconComponent = icon_component.Icon;
 
 pub const Input = input_component.Input;
 

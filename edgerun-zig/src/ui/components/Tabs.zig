@@ -25,6 +25,10 @@ pub const Tabs = struct {
         return ui.tabsNode(self.id, self.first, self.second, activeIndex(self.active));
     }
 
+    pub fn accessibility(self: Tabs) common.Accessibility {
+        return .{ .role = .tab, .label = self.first, .control_id = self.id };
+    }
+
     pub fn render(self: Tabs, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         const active = activeIndex(self.active);
         const list = listBounds(bounds);
@@ -61,6 +65,10 @@ pub const Tabs = struct {
 
     pub fn fromView(view: object.View) Error!Tabs {
         const tabs = try component_codec.nodeView(view, .tabs);
+        return fromNode(tabs);
+    }
+
+    pub fn fromNode(tabs: @FieldType(ui.Node, "tabs")) Error!Tabs {
         return .{ .id = tabs.id, .first = tabs.first, .second = tabs.second, .active = activeIndex(tabs.active) };
     }
 };

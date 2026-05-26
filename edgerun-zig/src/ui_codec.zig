@@ -74,6 +74,7 @@ pub const RecordKind = enum(u16) {
     sidebar = 54,
     direction = 55,
     icon_button = 56,
+    icon = 57,
 };
 
 pub fn decodeObject(canonical: []const u8, out_nodes: []ui.Node) Error!ui.Node {
@@ -161,6 +162,7 @@ pub fn decodeBytes(raw: []const u8, out_nodes: []ui.Node) Error!ui.Node {
             .context_menu => .{ .context_menu = .{ .id = id, .first = try stringRef(string_table, a, b), .second = try stringRef(string_table, c, d) } },
             .dialog => .{ .dialog = .{ .id = id, .title = try stringRef(string_table, a, b), .detail = try stringRef(string_table, c, d) } },
             .direction => .{ .direction = .{ .id = id / direction_id_stride, .active = @intCast(id % direction_id_stride) } },
+            .icon => .{ .icon = .{ .label = try stringRef(string_table, a, b), .icon = try boundedTag(d, component_common.encoded_icon_count) } },
             .drawer => .{ .drawer = .{ .id = id, .title = try stringRef(string_table, a, b), .detail = try stringRef(string_table, c, d) } },
             .dropdown_menu => .{ .dropdown_menu = .{ .id = id, .first = try stringRef(string_table, a, b), .second = try stringRef(string_table, c, d) } },
             .field => .{ .field = .{ .id = id, .label = try stringRef(string_table, a, b), .placeholder = try stringRef(string_table, c, d) } },
@@ -243,6 +245,7 @@ fn recordKind(value: u16) ?RecordKind {
         @intFromEnum(RecordKind.dialog) => .dialog,
         @intFromEnum(RecordKind.direction) => .direction,
         @intFromEnum(RecordKind.icon_button) => .icon_button,
+        @intFromEnum(RecordKind.icon) => .icon,
         @intFromEnum(RecordKind.drawer) => .drawer,
         @intFromEnum(RecordKind.dropdown_menu) => .dropdown_menu,
         @intFromEnum(RecordKind.sheet) => .sheet,

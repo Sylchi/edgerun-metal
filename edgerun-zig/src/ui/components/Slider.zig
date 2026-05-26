@@ -22,6 +22,10 @@ pub const Slider = struct {
         return ui.sliderNode(self.id, self.label, self.value);
     }
 
+    pub fn accessibility(self: Slider) common.Accessibility {
+        return .{ .role = .slider, .label = self.label, .control_id = self.id };
+    }
+
     pub fn render(self: Slider, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         const clamped = ui.clampUnit(self.value);
         const label_h = @min(bounds.h, component_primitives.measuredTextHeight(self.label, bounds.w, slider_label_height, slider_label_max_lines));
@@ -62,6 +66,10 @@ pub const Slider = struct {
 
     pub fn fromView(view: object.View) Error!Slider {
         const slider = try component_codec.nodeView(view, .slider);
+        return fromNode(slider);
+    }
+
+    pub fn fromNode(slider: @FieldType(ui.Node, "slider")) Error!Slider {
         return .{ .id = slider.id, .label = slider.label, .value = slider.value };
     }
 };

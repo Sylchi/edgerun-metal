@@ -3,13 +3,13 @@ const icon_vector = @import("../icon_vector.zig");
 const renderer_ir = @import("ir.zig");
 const ui = @import("../ui.zig");
 
-pub const vertex_float_stride: usize = 6;
-pub const vertex_x_index: usize = 0;
-pub const vertex_y_index: usize = 1;
-pub const vertex_color_r_index: usize = 2;
-pub const vertex_color_g_index: usize = 3;
-pub const vertex_color_b_index: usize = 4;
-pub const vertex_color_a_index: usize = 5;
+pub const vertex_float_stride: usize = renderer_ir.icon_line_vertex_float_stride;
+pub const vertex_x_index: usize = renderer_ir.icon_line_x_index;
+pub const vertex_y_index: usize = renderer_ir.icon_line_y_index;
+pub const vertex_color_r_index: usize = renderer_ir.icon_line_color_r_index;
+pub const vertex_color_g_index: usize = renderer_ir.icon_line_color_g_index;
+pub const vertex_color_b_index: usize = renderer_ir.icon_line_color_b_index;
+pub const vertex_color_a_index: usize = renderer_ir.icon_line_color_a_index;
 pub const line_vertex_count: usize = 6;
 pub const filled_circle_segments: usize = 32;
 pub const curve_segments: usize = 32;
@@ -21,6 +21,8 @@ pub const quarter_arc_step: f32 = std.math.pi / 32.0;
 pub const min_arc_segments: usize = 4;
 pub const min_arc_denominator: f32 = 0.000001;
 pub const color_channel_max: f32 = 255.0;
+pub const max_instance_vertex_count: usize = 16384;
+pub const max_instance_float_count: usize = max_instance_vertex_count * vertex_float_stride;
 
 pub const Error = error{
     Budget,
@@ -268,7 +270,7 @@ fn channel(value: u8) f32 {
 }
 
 test "icon line buffer packs browser-ready vertices" {
-    var instances_storage = renderer_ir.FixedBuffers(0, 0, 1, 0, 0, 0, 0){};
+    var instances_storage = renderer_ir.FixedBuffers(0, 0, 1, 0, 0, 0, 0, 0, 0){};
     try renderer_ir.pushIcon(instances_storage.buffers(), .base, .{
         .bounds = ui.Rect.init(10, 20, 24, 24),
         .color = .accent,
@@ -289,4 +291,20 @@ test "icon line buffer publishes packed vertex layout" {
     try std.testing.expectEqual(@as(usize, 3), vertex_color_g_index);
     try std.testing.expectEqual(@as(usize, 4), vertex_color_b_index);
     try std.testing.expectEqual(vertex_float_stride - 1, vertex_color_a_index);
+}
+
+test "single icon line buffer budget fits built in icons" {
+    const icon = @import("../icon.zig");
+    var out: [max_instance_float_count]f32 = undefined;
+    inline for (@typeInfo(icon.Icon).@"enum".fields) |field| {
+        const value: icon.Icon = @enumFromInt(field.value);
+        var out_len: usize = 0;
+        try packIconInstance(.{
+            .bounds = ui.Rect.init(0, 0, 24, 24),
+            .color = .accent,
+            .icon_id = @intFromEnum(value) + 1,
+        }, &out, &out_len);
+        try std.testing.expectEqual(@as(usize, 0), out_len % vertex_float_stride);
+        try std.testing.expect(out_len <= max_instance_float_count);
+    }
 }

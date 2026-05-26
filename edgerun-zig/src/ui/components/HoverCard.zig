@@ -47,6 +47,10 @@ pub const HoverCard = struct {
 
     pub fn fromView(view: object.View) Error!HoverCard {
         const hover_card = try component_codec.nodeView(view, .hover_card);
+        return fromNode(hover_card);
+    }
+
+    pub fn fromNode(hover_card: @FieldType(ui.Node, "hover_card")) Error!HoverCard {
         return .{ .id = hover_card.id, .trigger = hover_card.trigger, .content = hover_card.content };
     }
 };

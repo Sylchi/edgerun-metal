@@ -1,8 +1,6 @@
 const std = @import("std");
-const icon_vector = @import("../../icon_vector.zig");
 const renderer_font_atlas = @import("../font_atlas.zig");
 const gl_contract = @import("../gl_contract.zig");
-const renderer_icon_mask = @import("../icon_mask.zig");
 const renderer_ir = @import("../ir.zig");
 const ui = @import("../../ui.zig");
 
@@ -63,20 +61,11 @@ const verification_grid_denominator: i32 = @intCast(verification_sample_axis + 1
 const opaque_alpha_min: u8 = 16;
 const fnv64_offset_basis: u64 = 0xcbf29ce484222325;
 const fnv64_prime: u64 = 0x100000001b3;
-const icon_circle_segments: usize = 12;
-const icon_line_vertex_count: usize = 6;
-const icon_position_components: usize = 2;
-const icon_line_float_count: usize = icon_line_vertex_count * icon_position_components;
-const icon_texture_vertex_count: usize = renderer_ir.textured_quad_vertex_count;
-const icon_texture_float_count: usize = icon_texture_vertex_count * renderer_ir.text_vertex_float_stride;
-const icon_min_line_len: f32 = 0.001;
-const icon_min_stroke_px: f32 = 1.5;
-const icon_stroke_scale: f32 = 0.085;
 const shader_log_capacity: usize = 1024;
 
 pub fn init(font_atlas: *renderer_font_atlas.Atlas, image: ?RgbaTexture) !State {
     try requireHardwareGl();
-    c.glClearColor(0.043, 0.043, 0.043, 1.0);
+    c.glClearColor(gl_contract.clear_color_r, gl_contract.clear_color_g, gl_contract.clear_color_b, gl_contract.clear_color_a);
     c.glDisable(c.GL_DITHER);
     c.glEnable(c.GL_BLEND);
     c.glBlendFuncSeparate(c.GL_ONE, c.GL_ONE_MINUS_SRC_ALPHA, c.GL_ONE, c.GL_ONE_MINUS_SRC_ALPHA);
@@ -124,10 +113,10 @@ pub fn renderFrameToViewport(gl: State, logical_width: i32, logical_height: i32,
     try drawRects(gl, logical_width, logical_height, scale, buffers.liveRects());
     try drawImage(gl, logical_width, logical_height, buffers.liveImageVertices());
     try drawFontTextured(gl, logical_width, logical_height, buffers.liveTextVertices(), gl.font_texture);
-    try drawIcons(gl, logical_width, logical_height, buffers.liveIconVertices());
+    try drawIconLines(gl, logical_width, logical_height, buffers.liveIconLineVertices());
     try drawRects(gl, logical_width, logical_height, scale, buffers.liveOverlayRects());
     try drawFontTextured(gl, logical_width, logical_height, buffers.liveOverlayTextVertices(), gl.font_texture);
-    try drawIcons(gl, logical_width, logical_height, buffers.liveOverlayIconVertices());
+    try drawIconLines(gl, logical_width, logical_height, buffers.liveOverlayIconLineVertices());
 }
 
 fn drawImage(gl: State, width: i32, height: i32, values: []const f32) !void {
@@ -303,10 +292,6 @@ fn rectDrawBounds(rect: anytype) ui.Rect {
     };
 }
 
-fn drawTextured(gl: State, width: i32, height: i32, values: []const f32, texture: c.GLuint) !void {
-    try drawAlphaTextured(gl, width, height, values, texture, false, 1, 1);
-}
-
 fn drawFontTextured(gl: State, width: i32, height: i32, values: []const f32, texture: c.GLuint) !void {
     try drawAlphaTextured(gl, width, height, values, texture, true, renderer_font_atlas.width, renderer_font_atlas.height);
 }
@@ -342,269 +327,24 @@ fn drawAlphaTexturedWithProgram(gl: State, width: i32, height: i32, values: []co
     c.glDrawArrays(c.GL_TRIANGLES, 0, @intCast(values.len / renderer_ir.text_vertex_float_stride));
 }
 
-fn drawIcons(gl: State, width: i32, height: i32, values: []const f32) !void {
-    var iter = renderer_ir.IconIterator.init(values) catch return error.InvalidIrBuffer;
+fn drawIconLines(gl: State, width: i32, height: i32, values: []const f32) !void {
+    if (values.len == 0) return;
+    if (values.len % renderer_ir.icon_line_vertex_float_stride != 0) return error.InvalidIrBuffer;
     c.glUseProgram(gl.line_program);
     c.glUniform2f(c.glGetUniformLocation(gl.line_program, gl_contract.uniform_screen), @floatFromInt(width), @floatFromInt(height));
     c.glBindBuffer(c.GL_ARRAY_BUFFER, gl.line_vbo);
     c.glEnableVertexAttribArray(gl_contract.attr_pos_location);
-    c.glDisableVertexAttribArray(gl_contract.attr_color_location);
-    c.glVertexAttribPointer(gl_contract.attr_pos_location, 2, c.GL_FLOAT, c.GL_FALSE, 2 * @sizeOf(f32), null);
-    while (iter.next() catch return error.InvalidIrBuffer) |instance| {
-        try drawIconInstance(gl, width, height, instance);
-    }
-}
-
-fn drawIconInstance(gl: State, screen_width: i32, screen_height: i32, instance: renderer_ir.IconInstance) !void {
-    if (try drawIconAlphaMask(gl, screen_width, screen_height, instance)) return;
-    c.glVertexAttrib4f(gl_contract.attr_color_location, colorF(instance.color.r), colorF(instance.color.g), colorF(instance.color.b), colorF(instance.color.a));
-    var iter = renderer_ir.iconOpIteratorForId(instance.icon_id);
-    var path = IconPathState{};
-    while (iter.next() catch return error.InvalidIrBuffer) |op| {
-        switch (op) {
-            .polyline => |points| try drawIconPolyline(gl, instance.bounds, points),
-            .circle => |circle| try drawIconCircle(gl, instance.bounds, circle.cx, circle.cy, circle.radius),
-            .ellipse => |ellipse| try drawIconEllipse(gl, instance.bounds, ellipse.cx, ellipse.cy, ellipse.rx, ellipse.ry, ellipse.full),
-            .round_rect => |rect| try drawIconBox(gl, ui.Rect.init(
-                instance.bounds.x + instance.bounds.w * rect.x,
-                instance.bounds.y + instance.bounds.h * rect.y,
-                instance.bounds.w * rect.w,
-                instance.bounds.h * rect.h,
-            )),
-            .filled_circle => |circle| try drawIconFilledCircle(gl, instance.bounds, circle.cx, circle.cy, circle.radius),
-            .filled_ellipse => |ellipse| try drawIconEllipse(gl, instance.bounds, ellipse.cx, ellipse.cy, ellipse.rx, ellipse.ry, ellipse.full),
-            .filled_round_rect => |rect| try drawIconBox(gl, ui.Rect.init(
-                instance.bounds.x + instance.bounds.w * rect.x,
-                instance.bounds.y + instance.bounds.h * rect.y,
-                instance.bounds.w * rect.w,
-                instance.bounds.h * rect.h,
-            )),
-            .move_to => |point| path.moveTo(point),
-            .line_to => |point| {
-                if (path.current) |current| try drawIconSegment(gl, instance.bounds, current, point);
-                path.lineTo(point);
-            },
-            .quad_to => |quad| {
-                if (path.current) |current| try drawIconQuadratic(gl, instance.bounds, current, quad.control, quad.end);
-                path.lineTo(quad.end);
-            },
-            .cubic_to => |curve| {
-                if (path.current) |current| try drawIconCubic(gl, instance.bounds, current, curve.control0, curve.control1, curve.end);
-                path.lineTo(curve.end);
-            },
-            .arc_to => |arc| {
-                if (path.current) |current| try drawIconSegment(gl, instance.bounds, current, arc.end);
-                path.lineTo(arc.end);
-            },
-            .close_path => if (path.current) |current| if (path.start) |start| {
-                try drawIconSegment(gl, instance.bounds, current, start);
-                path.lineTo(start);
-            },
-            .begin_fill_path,
-            .begin_evenodd_fill_path,
-            .end_fill_path,
-            .paint_rgba,
-            .paint_current_color,
-            .paint_current_color_alpha,
-            .paint_linear_gradient,
-            .paint_radial_gradient,
-            .stroke_width,
-            .stroke_cap,
-            .stroke_join,
-            .stroke_miter_limit,
-            .begin_clip_path,
-            .end_clip_path,
-            .clear_clip_path,
-            => {},
-        }
-    }
-}
-
-fn drawIconAlphaMask(gl: State, screen_width: i32, screen_height: i32, instance: renderer_ir.IconInstance) !bool {
-    const width = iconMaskAxis(instance.bounds.w);
-    const height = iconMaskAxis(instance.bounds.h);
-    var alpha: [renderer_icon_mask.max_pixels]u8 = undefined;
-    const mask = try renderer_icon_mask.rasterizeIconAlpha(instance.icon_id, width, height, &alpha);
-    if (!mask.painted) return false;
-    const texture = makeNearestAlphaTexture(mask.width, mask.height, mask.alpha);
-    defer c.glDeleteTextures(1, &texture);
-    var values: [icon_texture_float_count]f32 = undefined;
-    writeIconTextureQuad(&values, instance);
-    try drawTextured(gl, screen_width, screen_height, &values, texture);
-    return true;
-}
-
-fn iconMaskAxis(value: f32) usize {
-    if (value <= 1.0) return 1;
-    return @min(renderer_icon_mask.max_width, @max(@as(usize, 1), @as(usize, @intFromFloat(@ceil(value)))));
-}
-
-fn writeIconTextureQuad(out: *[icon_texture_float_count]f32, instance: renderer_ir.IconInstance) void {
-    const x0 = instance.bounds.x;
-    const y0 = instance.bounds.y;
-    const x1 = instance.bounds.x + instance.bounds.w;
-    const y1 = instance.bounds.y + instance.bounds.h;
-    writeTexturedVertex(out, 0, x0, y0, 0.0, 0.0, instance.color);
-    writeTexturedVertex(out, 1, x1, y0, 1.0, 0.0, instance.color);
-    writeTexturedVertex(out, 2, x0, y1, 0.0, 1.0, instance.color);
-    writeTexturedVertex(out, 3, x1, y0, 1.0, 0.0, instance.color);
-    writeTexturedVertex(out, 4, x1, y1, 1.0, 1.0, instance.color);
-    writeTexturedVertex(out, 5, x0, y1, 0.0, 1.0, instance.color);
-}
-
-fn writeTexturedVertex(out: *[icon_texture_float_count]f32, vertex_index: usize, x: f32, y: f32, u: f32, v: f32, color: ui.Color) void {
-    const base = vertex_index * renderer_ir.text_vertex_float_stride;
-    out[base + 0] = x;
-    out[base + 1] = y;
-    out[base + 2] = u;
-    out[base + 3] = v;
-    out[base + 4] = colorF(color.r);
-    out[base + 5] = colorF(color.g);
-    out[base + 6] = colorF(color.b);
-    out[base + 7] = colorF(color.a);
-}
-
-const IconPathState = struct {
-    current: ?icon_vector.Point = null,
-    start: ?icon_vector.Point = null,
-
-    fn moveTo(self: *IconPathState, point: icon_vector.Point) void {
-        self.current = point;
-        self.start = point;
-    }
-
-    fn lineTo(self: *IconPathState, point: icon_vector.Point) void {
-        self.current = point;
-    }
-};
-
-fn drawIconSegment(gl: State, bounds: ui.Rect, a: icon_vector.Point, b: icon_vector.Point) !void {
-    try drawIconLine(gl, bounds, a.x, a.y, b.x, b.y);
-}
-
-fn drawIconQuadratic(gl: State, bounds: ui.Rect, p0: icon_vector.Point, p1: icon_vector.Point, p2: icon_vector.Point) !void {
-    var previous = p0;
-    var index: usize = 1;
-    while (index <= icon_circle_segments) : (index += 1) {
-        const t = @as(f32, @floatFromInt(index)) / @as(f32, @floatFromInt(icon_circle_segments));
-        const inv = 1.0 - t;
-        const next = icon_vector.Point{
-            .x = inv * inv * p0.x + 2.0 * inv * t * p1.x + t * t * p2.x,
-            .y = inv * inv * p0.y + 2.0 * inv * t * p1.y + t * t * p2.y,
-        };
-        try drawIconSegment(gl, bounds, previous, next);
-        previous = next;
-    }
-}
-
-fn drawIconCubic(gl: State, bounds: ui.Rect, p0: icon_vector.Point, p1: icon_vector.Point, p2: icon_vector.Point, p3: icon_vector.Point) !void {
-    var previous = p0;
-    var index: usize = 1;
-    while (index <= icon_circle_segments) : (index += 1) {
-        const t = @as(f32, @floatFromInt(index)) / @as(f32, @floatFromInt(icon_circle_segments));
-        const inv = 1.0 - t;
-        const next = icon_vector.Point{
-            .x = inv * inv * inv * p0.x + 3.0 * inv * inv * t * p1.x + 3.0 * inv * t * t * p2.x + t * t * t * p3.x,
-            .y = inv * inv * inv * p0.y + 3.0 * inv * inv * t * p1.y + 3.0 * inv * t * t * p2.y + t * t * t * p3.y,
-        };
-        try drawIconSegment(gl, bounds, previous, next);
-        previous = next;
-    }
-}
-
-fn drawIconBox(gl: State, bounds: ui.Rect) !void {
-    try drawIconLine(gl, bounds, 0.22, 0.22, 0.78, 0.22);
-    try drawIconLine(gl, bounds, 0.78, 0.22, 0.78, 0.78);
-    try drawIconLine(gl, bounds, 0.78, 0.78, 0.22, 0.78);
-    try drawIconLine(gl, bounds, 0.22, 0.78, 0.22, 0.22);
-}
-
-fn drawIconPolyline(gl: State, bounds: ui.Rect, points: []const f32) !void {
-    if (points.len < icon_vector.polyline_min_points * icon_vector.point_float_count) return;
-    var index: usize = icon_vector.point_float_count;
-    while (index < points.len) : (index += icon_vector.point_float_count) {
-        try drawIconLine(gl, bounds, points[index - 2], points[index - 1], points[index], points[index + 1]);
-    }
-}
-
-fn drawIconCircle(gl: State, bounds: ui.Rect, cx: f32, cy: f32, radius: f32) !void {
-    try drawIconEllipse(gl, bounds, cx, cy, radius, radius, true);
-}
-
-fn drawIconEllipse(gl: State, bounds: ui.Rect, cx: f32, cy: f32, rx: f32, ry: f32, full: bool) !void {
-    const start: f32 = if (full) 0.0 else 0.5;
-    const end: f32 = 1.0;
-    const span = end - start;
-    var prev_x = cx + @cos(start * std.math.tau) * rx;
-    var prev_y = cy + @sin(start * std.math.tau) * ry;
-    var index: usize = 1;
-    while (index <= icon_circle_segments) : (index += 1) {
-        const turn = start + @as(f32, @floatFromInt(index)) * span / @as(f32, @floatFromInt(icon_circle_segments));
-        const angle = turn * std.math.tau;
-        const next_x = cx + @cos(angle) * rx;
-        const next_y = cy + @sin(angle) * ry;
-        try drawIconLine(gl, bounds, prev_x, prev_y, next_x, next_y);
-        prev_x = next_x;
-        prev_y = next_y;
-    }
-}
-
-fn drawIconFilledCircle(gl: State, bounds: ui.Rect, cx: f32, cy: f32, radius: f32) !void {
-    _ = gl;
-    var values: [(icon_circle_segments + 2) * 2]f32 = undefined;
-    const center_x = bounds.x + bounds.w * cx;
-    const center_y = bounds.y + bounds.h * cy;
-    const pixel_radius = @min(bounds.w, bounds.h) * radius;
-    values[0] = center_x;
-    values[1] = center_y;
-    var index: usize = 0;
-    while (index <= icon_circle_segments) : (index += 1) {
-        const angle = @as(f32, @floatFromInt(index)) * std.math.tau / @as(f32, @floatFromInt(icon_circle_segments));
-        const offset = (index + 1) * 2;
-        values[offset] = center_x + @cos(angle) * pixel_radius;
-        values[offset + 1] = center_y + @sin(angle) * pixel_radius;
-    }
-    c.glBufferData(c.GL_ARRAY_BUFFER, @intCast(values.len * @sizeOf(f32)), &values, c.GL_DYNAMIC_DRAW);
-    c.glDrawArrays(c.GL_TRIANGLE_FAN, 0, @intCast(values.len / 2));
-}
-
-fn drawIconLine(gl: State, bounds: ui.Rect, x0n: f32, y0n: f32, x1n: f32, y1n: f32) !void {
-    _ = gl;
-    const x0 = bounds.x + bounds.w * x0n;
-    const y0 = bounds.y + bounds.h * y0n;
-    const x1 = bounds.x + bounds.w * x1n;
-    const y1 = bounds.y + bounds.h * y1n;
-    const dx = x1 - x0;
-    const dy = y1 - y0;
-    const len = @sqrt(dx * dx + dy * dy);
-    if (len <= icon_min_line_len) return;
-    const half_width = @max(icon_min_stroke_px, @min(bounds.w, bounds.h) * icon_stroke_scale) * 0.5;
-    const nx = -dy / len * half_width;
-    const ny = dx / len * half_width;
-    const values: [icon_line_float_count]f32 = .{
-        x0 + nx, y0 + ny,
-        x1 + nx, y1 + ny,
-        x1 - nx, y1 - ny,
-        x0 + nx, y0 + ny,
-        x1 - nx, y1 - ny,
-        x0 - nx, y0 - ny,
-    };
-    c.glBufferData(c.GL_ARRAY_BUFFER, @intCast(values.len * @sizeOf(f32)), &values, c.GL_DYNAMIC_DRAW);
-    c.glDrawArrays(c.GL_TRIANGLES, 0, icon_line_vertex_count);
+    c.glEnableVertexAttribArray(gl_contract.attr_color_location);
+    c.glVertexAttribPointer(gl_contract.attr_pos_location, 2, c.GL_FLOAT, c.GL_FALSE, renderer_ir.icon_line_vertex_float_stride * @sizeOf(f32), null);
+    c.glVertexAttribPointer(gl_contract.attr_color_location, 4, c.GL_FLOAT, c.GL_FALSE, renderer_ir.icon_line_vertex_float_stride * @sizeOf(f32), @ptrFromInt(renderer_ir.icon_line_color_r_index * @sizeOf(f32)));
+    c.glBufferData(c.GL_ARRAY_BUFFER, @intCast(values.len * @sizeOf(f32)), values.ptr, c.GL_DYNAMIC_DRAW);
+    c.glDrawArrays(c.GL_TRIANGLES, 0, @intCast(values.len / renderer_ir.icon_line_vertex_float_stride));
 }
 
 fn makeBuffer() c.GLuint {
     var buffer: c.GLuint = 0;
     c.glGenBuffers(1, &buffer);
     return buffer;
-}
-
-fn makeAlphaTexture(width: usize, height: usize, alpha: []const u8) c.GLuint {
-    return makeAlphaTextureFiltered(width, height, alpha, c.GL_NEAREST);
-}
-
-fn makeNearestAlphaTexture(width: usize, height: usize, alpha: []const u8) c.GLuint {
-    return makeAlphaTexture(width, height, alpha);
 }
 
 fn makeAlphaTextureFiltered(width: usize, height: usize, alpha: []const u8, filter: c.GLint) c.GLuint {
@@ -716,6 +456,22 @@ test "rect modes map to stable shader mode ids" {
     try std.testing.expectEqual(@as(c.GLint, 0), rectMode(.pie_slice));
 }
 
+test "gles icons use the shared IR packed line contract" {
+    const source = @embedFile("gles.zig");
+    try std.testing.expect(std.mem.indexOf(u8, source, "@import(\"../../icon_vector.zig\")") == null);
+    try std.testing.expect(std.mem.indexOf(u8, source, "@import(\"../icon_mask.zig\")") == null);
+    try std.testing.expect(std.mem.indexOf(u8, source, "@import(\"../icon_line_buffer.zig\")") == null);
+    try std.testing.expect(std.mem.indexOf(u8, source, "iconOpIteratorForId") == null);
+    try std.testing.expect(std.mem.indexOf(u8, source, "liveIconLineVertices") != null);
+    try std.testing.expect(std.mem.indexOf(u8, source, "drawIconLines") != null);
+}
+
+test "gles clear color comes from the shared GL contract" {
+    const source = @embedFile("gles.zig");
+    try std.testing.expect(std.mem.indexOf(u8, source, "glClearColor(gl_contract.clear_color_r") != null);
+    try std.testing.expect(std.mem.indexOf(u8, source, "glClearColor(0.043") == null);
+}
+
 test "gles shadow rect expands draw bounds but keeps source bounds" {
     const rect = renderer_ir.Rect{
         .bounds = ui.Rect.init(10, 20, 30, 40),
@@ -769,7 +525,7 @@ test "viewport scale follows the EGL framebuffer backing size" {
 
 test "font atlas refresh API accepts populated variable font atlas" {
     var atlas = renderer_font_atlas.Atlas.init();
-    var storage = renderer_ir.FixedBuffers(1, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(1, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     try renderer_ir.pushText(buffers, atlas.source(), .base, .{ .x = 0, .y = 0, .w = 64, .h = 18 }, "A", .text, .start);
     try std.testing.expect(atlas.cachedGlyphCount() > 0);

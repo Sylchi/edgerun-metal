@@ -23,6 +23,10 @@ pub const Textarea = struct {
         return ui.textareaNode(self.id, self.placeholder);
     }
 
+    pub fn accessibility(self: Textarea) common.Accessibility {
+        return .{ .role = .input, .label = self.placeholder, .control_id = self.id };
+    }
+
     pub fn render(self: Textarea, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         try scene.pushRect(bounds, options.style.panel, .fill, component_primitives.control_radius, 0.0);
         try scene.pushRect(bounds, options.style.border, .border, component_primitives.control_radius, 0.0);
@@ -55,6 +59,10 @@ pub const Textarea = struct {
 
     pub fn fromView(view: object.View) Error!Textarea {
         const textarea = try component_codec.nodeView(view, .textarea);
+        return fromNode(textarea);
+    }
+
+    pub fn fromNode(textarea: @FieldType(ui.Node, "textarea")) Error!Textarea {
         return .{ .id = textarea.id, .placeholder = textarea.placeholder };
     }
 };

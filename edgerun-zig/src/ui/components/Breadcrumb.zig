@@ -8,6 +8,7 @@ const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
+const icon_component = @import("Icon.zig");
 const primitives = @import("Primitives.zig");
 
 const Error = common.Error;
@@ -28,9 +29,9 @@ pub const Breadcrumb = struct {
         const middle_bounds = itemBounds(bounds, 1);
         const current_bounds = itemBounds(bounds, 2);
         try scene.pushText(first_bounds.withHeightCentered(primitives.control_label_height), self.first, options.style.muted);
-        try scene.pushIconQuad(.{ .bounds = separatorBounds(bounds, 0), .icon_id = icon.id(.chevron_right), .color = options.style.muted });
+        try icon_component.renderGlyph(scene, separatorBounds(bounds, 0), .chevron_right, options.style.muted);
         try scene.pushText(middle_bounds.withHeightCentered(primitives.control_label_height), breadcrumb_middle_label, options.style.muted);
-        try scene.pushIconQuad(.{ .bounds = separatorBounds(bounds, 1), .icon_id = icon.id(.chevron_right), .color = options.style.muted });
+        try icon_component.renderGlyph(scene, separatorBounds(bounds, 1), .chevron_right, options.style.muted);
         try scene.pushText(current_bounds.withHeightCentered(primitives.control_label_height), self.current, options.style.text);
     }
 
@@ -55,6 +56,10 @@ pub const Breadcrumb = struct {
 
     pub fn fromView(view: object.View) Error!Breadcrumb {
         const breadcrumb = try component_codec.nodeView(view, .breadcrumb);
+        return fromNode(breadcrumb);
+    }
+
+    pub fn fromNode(breadcrumb: @FieldType(ui.Node, "breadcrumb")) Error!Breadcrumb {
         return .{ .id = breadcrumb.id, .first = breadcrumb.first, .current = breadcrumb.current };
     }
 };

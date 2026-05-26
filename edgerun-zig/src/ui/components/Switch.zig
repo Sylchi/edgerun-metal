@@ -22,6 +22,10 @@ pub const Switch = struct {
         return ui.switchNode(self.id, self.label, self.checked);
     }
 
+    pub fn accessibility(self: Switch) common.Accessibility {
+        return .{ .role = .switch_control, .label = self.label, .control_id = self.id };
+    }
+
     pub fn render(self: Switch, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         const pill = ui.Rect.init(bounds.x + bounds.w - switch_width, bounds.y + (bounds.h - switch_height) * 0.5, switch_width, switch_height);
         try scene.pushRect(pill, if (self.checked) options.style.accent else options.style.row, .fill, switch_height * 0.5, 0.0);
@@ -63,6 +67,10 @@ pub const Switch = struct {
 
     pub fn fromView(view: object.View) Error!Switch {
         const switch_control = try component_codec.nodeView(view, .switch_control);
+        return fromNode(switch_control);
+    }
+
+    pub fn fromNode(switch_control: @FieldType(ui.Node, "switch_control")) Error!Switch {
         return .{ .id = switch_control.id, .label = switch_control.label, .checked = switch_control.checked };
     }
 };

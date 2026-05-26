@@ -7,6 +7,7 @@ const icon = @import("../../icon.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
+const icon_component = @import("Icon.zig");
 const component_primitives = @import("Primitives.zig");
 
 const Error = common.Error;
@@ -26,7 +27,7 @@ pub const Empty = struct {
         try scene.pushRect(bounds, options.style.border, .border, empty_radius, 0.0);
         const media = ui.Rect.init(bounds.x + (bounds.w - empty_media_size) * 0.5, bounds.y + empty_padding, empty_media_size, empty_media_size);
         try scene.pushRect(media, options.style.row, .fill, media.w * 0.5, 0.0);
-        try scene.pushIconQuad(.{ .bounds = media.insetUniform(empty_media_icon_inset), .icon_id = icon.id(.sparkles), .color = options.style.text });
+        try icon_component.renderGlyph(scene, media.insetUniform(empty_media_icon_inset), .sparkles, options.style.text);
         const text_w = textWidth(bounds);
         const title_y = media.y + media.h + empty_gap;
         const title_h = component_primitives.measuredTextHeight(self.title, text_w, empty_title_height, empty_title_max_lines);
@@ -60,6 +61,10 @@ pub const Empty = struct {
 
     pub fn fromView(view: object.View) Error!Empty {
         const empty = try component_codec.nodeView(view, .empty);
+        return fromNode(empty);
+    }
+
+    pub fn fromNode(empty: @FieldType(ui.Node, "empty")) Error!Empty {
         return .{ .title = empty.title, .detail = empty.detail };
     }
 };

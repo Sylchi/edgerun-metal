@@ -25,6 +25,10 @@ pub const Menubar = struct {
         return ui.menubarNode(self.id, self.first, self.second, activeIndex(self.active));
     }
 
+    pub fn accessibility(self: Menubar) common.Accessibility {
+        return .{ .role = .menu, .label = self.first, .control_id = self.id };
+    }
+
     pub fn render(self: Menubar, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         const active = activeIndex(self.active);
         try scene.pushRect(bounds, options.style.panel, .fill, component_primitives.control_radius, 0.0);
@@ -56,6 +60,10 @@ pub const Menubar = struct {
 
     pub fn fromView(view: object.View) Error!Menubar {
         const menubar = try component_codec.nodeView(view, .menubar);
+        return fromNode(menubar);
+    }
+
+    pub fn fromNode(menubar: @FieldType(ui.Node, "menubar")) Error!Menubar {
         return .{ .id = menubar.id, .first = menubar.first, .second = menubar.second, .active = activeIndex(menubar.active) };
     }
 };

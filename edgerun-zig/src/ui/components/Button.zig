@@ -9,12 +9,14 @@ const ui = @import("../../ui.zig");
 const text_metrics = @import("../../ui_text_metrics.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
+const icon_component = @import("Icon.zig");
 const primitives = @import("Primitives.zig");
 
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 const constrainPreferredSize = primitives.constrainPreferredSize;
 const measureFixed = primitives.measureFixed;
+const Icon = icon_component.Icon;
 
 pub const Button = struct {
     id: u32,
@@ -25,6 +27,10 @@ pub const Button = struct {
     pub fn node(self: Button) ui.Node {
         const tags = self.icon_slot.tags();
         return ui.buttonDetailNode(self.id, self.label, variantTag(self.variant), tags.leading, tags.trailing);
+    }
+
+    pub fn accessibility(self: Button) common.Accessibility {
+        return .{ .role = .button, .label = self.label, .control_id = self.id };
     }
 
     pub fn render(self: Button, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
@@ -62,8 +68,8 @@ pub const Button = struct {
 
 pub const IconSlot = union(enum) {
     none,
-    leading: icon.Icon,
-    trailing: icon.Icon,
+    leading: Icon,
+    trailing: Icon,
 
     const Tags = struct {
         leading: u16 = 0,
@@ -73,8 +79,8 @@ pub const IconSlot = union(enum) {
     fn tags(self: IconSlot) Tags {
         return switch (self) {
             .none => .{},
-            .leading => |value| .{ .leading = common.optionalIconTag(value) },
-            .trailing => |value| .{ .trailing = common.optionalIconTag(value) },
+            .leading => |slot| .{ .leading = common.optionalIconTag(slot.value) },
+            .trailing => |slot| .{ .trailing = common.optionalIconTag(slot.value) },
         };
     }
 
@@ -87,8 +93,8 @@ pub const IconSlot = union(enum) {
         const leading = try common.optionalIconFromTag(leading_tag);
         const trailing = try common.optionalIconFromTag(trailing_tag);
         if (leading != null and trailing != null) return error.Corrupt;
-        if (leading) |value| return .{ .leading = value };
-        if (trailing) |value| return .{ .trailing = value };
+        if (leading) |value| return .{ .leading = Icon.named(value) };
+        if (trailing) |value| return .{ .trailing = Icon.named(value) };
         return .none;
     }
 
@@ -103,22 +109,22 @@ pub const IconSlot = union(enum) {
 pub const IconButton = struct {
     id: u32,
     label: []const u8,
-    icon_value: icon.Icon,
+    icon: Icon,
     variant: common.ButtonVariant = .outline,
 
     pub fn node(self: IconButton) ui.Node {
-        return ui.iconButtonNode(self.id, self.label, common.optionalIconTag(self.icon_value), variantTag(self.variant));
+        return ui.iconButtonNode(self.id, self.label, common.optionalIconTag(self.icon.value), variantTag(self.variant));
+    }
+
+    pub fn accessibility(self: IconButton) common.Accessibility {
+        return .{ .role = .button, .label = self.label, .control_id = self.id };
     }
 
     pub fn render(self: IconButton, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         const paint = buttonPaint(self.variant, options);
         if (paint.fill) |fill| try scene.pushRect(bounds, fill, .fill, radius, 0.0);
         if (paint.border) |border| try scene.pushRect(bounds, border, .border, radius, 0.0);
-        try scene.pushIconQuad(.{
-            .bounds = iconButtonIconBounds(bounds),
-            .icon_id = icon.id(self.icon_value),
-            .color = paint.text,
-        });
+        try icon_component.renderGlyph(scene, iconButtonIconBounds(bounds), self.icon.value, paint.text);
     }
 
     pub fn collectInteractions(self: IconButton, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
@@ -139,7 +145,7 @@ pub const IconButton = struct {
 
     pub fn writeRecord(self: IconButton, writer: *component_codec.Writer, index: usize) bool {
         const label_ref = writer.string(self.label) orelse return false;
-        return writer.record(index, .icon_button, self.id, label_ref, .{ .offset = variantTag(self.variant), .len = common.optionalIconTag(self.icon_value) });
+        return writer.record(index, .icon_button, self.id, label_ref, .{ .offset = variantTag(self.variant), .len = common.optionalIconTag(self.icon.value) });
     }
 
     pub fn fromView(view: object.View) Error!IconButton {
@@ -148,7 +154,7 @@ pub const IconButton = struct {
     }
 
     pub fn fromNode(button: @FieldType(ui.Node, "icon_button")) Error!IconButton {
-        return .{ .id = button.id, .label = button.label, .variant = try variantFromTag(button.variant), .icon_value = (try common.optionalIconFromTag(button.icon)) orelse return error.Corrupt };
+        return .{ .id = button.id, .label = button.label, .variant = try variantFromTag(button.variant), .icon = Icon.named((try common.optionalIconFromTag(button.icon)) orelse return error.Corrupt) };
     }
 };
 
@@ -234,11 +240,7 @@ fn renderContent(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, text_colo
 
     switch (icon_slot) {
         .leading => |value| {
-            try scene.pushIconQuad(.{
-                .bounds = ui.Rect.init(cursor_x, icon_y, icon_size, icon_size),
-                .icon_id = icon.id(value),
-                .color = text_color,
-            });
+            try icon_component.renderGlyph(scene, ui.Rect.init(cursor_x, icon_y, icon_size, icon_size), value.value, text_color);
             cursor_x += icon_size;
             if (has_label) cursor_x += icon_gap;
         },
@@ -256,11 +258,7 @@ fn renderContent(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, text_colo
 
     switch (icon_slot) {
         .trailing => |value| {
-            try scene.pushIconQuad(.{
-                .bounds = ui.Rect.init(cursor_x, icon_y, icon_size, icon_size),
-                .icon_id = icon.id(value),
-                .color = text_color,
-            });
+            try icon_component.renderGlyph(scene, ui.Rect.init(cursor_x, icon_y, icon_size, icon_size), value.value, text_color);
         },
         .none, .leading => {},
     }
@@ -353,7 +351,7 @@ fn iconButtonSize(size: common.ControlSize) f32 {
 }
 
 test "button component serializes to canonical object and deserializes" {
-    const button = Button{ .id = 7, .label = "Run", .variant = .secondary, .icon_slot = .{ .leading = .search } };
+    const button = Button{ .id = 7, .label = "Run", .variant = .secondary, .icon_slot = .{ .leading = Icon.named(.search) } };
     var ui_raw: [128]u8 = undefined;
     var object_raw: [object.header_size + 128]u8 = undefined;
 
@@ -363,7 +361,7 @@ test "button component serializes to canonical object and deserializes" {
     try @import("std").testing.expectEqual(@as(u32, 7), decoded.id);
     try @import("std").testing.expectEqualStrings("Run", decoded.label);
     try @import("std").testing.expectEqual(common.ButtonVariant.secondary, decoded.variant);
-    try @import("std").testing.expectEqual(icon.Icon.search, decoded.icon_slot.leading);
+    try @import("std").testing.expectEqual(icon.Icon.search, decoded.icon_slot.leading.value);
 }
 
 test "button component rejects ambiguous dual icon slots" {
@@ -373,7 +371,7 @@ test "button component rejects ambiguous dual icon slots" {
 }
 
 test "icon button component serializes to canonical object and deserializes" {
-    const button = IconButton{ .id = 17, .label = "Search", .icon_value = .search, .variant = .ghost };
+    const button = IconButton{ .id = 17, .label = "Search", .icon = Icon.named(.search), .variant = .ghost };
     var ui_raw: [128]u8 = undefined;
     var object_raw: [object.header_size + 128]u8 = undefined;
 
@@ -383,11 +381,11 @@ test "icon button component serializes to canonical object and deserializes" {
     try std.testing.expectEqual(@as(u32, 17), decoded.id);
     try std.testing.expectEqualStrings("Search", decoded.label);
     try std.testing.expectEqual(common.ButtonVariant.ghost, decoded.variant);
-    try std.testing.expectEqual(icon.Icon.search, decoded.icon_value);
+    try std.testing.expectEqual(icon.Icon.search, decoded.icon.value);
 }
 
 test "icon button component renders centered icon and hit region" {
-    const button = IconButton{ .id = 18, .label = "Search", .icon_value = .search, .variant = .outline };
+    const button = IconButton{ .id = 18, .label = "Search", .icon = Icon.named(.search), .variant = .outline };
     var commands: [8]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
     var regions: [1]interaction.Region = undefined;
@@ -408,7 +406,7 @@ test "icon button component renders centered icon and hit region" {
 test "button component measurement follows label width" {
     const short = measureButton("Go", .none, .{});
     const long = measureButton("Continue lesson", .none, .{});
-    const with_icon = measureButton("Continue lesson", .{ .leading = .search }, .{});
+    const with_icon = measureButton("Continue lesson", .{ .leading = Icon.named(.search) }, .{});
     const constrained = measureButton("Continue lesson", .none, .{ .width = .{ .at_most = 72.0 }, .height = .{ .at_most = 24.0 } });
 
     try std.testing.expect(long.preferred.w > short.preferred.w);
@@ -423,8 +421,8 @@ test "button component size variants adjust preferred height and padding" {
     const small = button.measure(.{}, .{ .control_size = .small });
     const regular = button.measure(.{}, .{});
     const large = button.measure(.{}, .{ .control_size = .large });
-    const small_icon = (IconButton{ .id = 8, .label = "Search", .icon_value = .search }).measure(.{}, .{ .control_size = .small });
-    const large_icon = (IconButton{ .id = 9, .label = "Search", .icon_value = .search }).measure(.{}, .{ .control_size = .large });
+    const small_icon = (IconButton{ .id = 8, .label = "Search", .icon = Icon.named(.search) }).measure(.{}, .{ .control_size = .small });
+    const large_icon = (IconButton{ .id = 9, .label = "Search", .icon = Icon.named(.search) }).measure(.{}, .{ .control_size = .large });
 
     try std.testing.expect(small.preferred.h < regular.preferred.h);
     try std.testing.expect(large.preferred.h > regular.preferred.h);
@@ -445,7 +443,7 @@ test "button component constrains icon label content to button bounds" {
     var scene = ui.Scene.init(&commands);
     const bounds = ui.Rect.init(10, 10, 72, height);
 
-    try renderButton(&scene, bounds, .{ .id = 8, .label = "Impossible label", .variant = .secondary, .icon_slot = .{ .leading = .search } }, .{});
+    try renderButton(&scene, bounds, .{ .id = 8, .label = "Impossible label", .variant = .secondary, .icon_slot = .{ .leading = Icon.named(.search) } }, .{});
 
     for (scene.written()) |command| switch (command) {
         .text => |text_command| {
@@ -465,7 +463,7 @@ test "button component aligns icon slot and label centers" {
     var scene = ui.Scene.init(&commands);
     const bounds = ui.Rect.init(10, 10, 132, height);
 
-    try renderButton(&scene, bounds, .{ .id = 8, .label = "Compile", .variant = .secondary, .icon_slot = .{ .leading = .cpu } }, .{});
+    try renderButton(&scene, bounds, .{ .id = 8, .label = "Compile", .variant = .secondary, .icon_slot = .{ .leading = Icon.named(.cpu) } }, .{});
 
     const icon_command = component_test.iconCommand(scene.written(), icon.id(.cpu)).?.icon_quad;
     const text_command = component_test.textCommand(scene.written(), "Compile").?.text;
@@ -490,7 +488,7 @@ test "button component centers icon only content" {
     var scene = ui.Scene.init(&commands);
     const bounds = ui.Rect.init(10, 10, 44, height);
 
-    try renderButton(&scene, bounds, .{ .id = 8, .label = "", .variant = .secondary, .icon_slot = .{ .leading = .search } }, .{});
+    try renderButton(&scene, bounds, .{ .id = 8, .label = "", .variant = .secondary, .icon_slot = .{ .leading = Icon.named(.search) } }, .{});
 
     var found = false;
     for (scene.written()) |command| switch (command) {
@@ -510,7 +508,7 @@ test "button component renders extended reference variants" {
     var scene = ui.Scene.init(&commands);
 
     try renderButton(&scene, ui.Rect.init(0, 0, 120, height), .{ .id = 1, .label = "Delete", .variant = .destructive }, .{});
-    try renderButton(&scene, ui.Rect.init(0, 44, 120, height), .{ .id = 2, .label = "Docs", .variant = .link, .icon_slot = .{ .leading = .search } }, .{});
+    try renderButton(&scene, ui.Rect.init(0, 44, 120, height), .{ .id = 2, .label = "Docs", .variant = .link, .icon_slot = .{ .leading = Icon.named(.search) } }, .{});
 
     try std.testing.expect(component_test.hasRectColor(scene.written(), button_danger));
     try std.testing.expect(!component_test.hasRectBounds(scene.written(), ui.Rect.init(0, 44, 120, height)));

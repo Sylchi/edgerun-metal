@@ -592,7 +592,7 @@ fn surfaceFormat(format: PixelFormat) renderer_surface.PixelFormat {
 }
 
 test "native drm presentation plans canonical ir frame" {
-    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     try renderer_ir.pushRect(buffers, .base, .{ .x = 4, .y = 4, .w = 32, .h = 24 }, .text, .clear, 0, 0, 0);
 
@@ -633,7 +633,7 @@ test "native drm presentation plans canonical ir frame" {
 }
 
 test "native wayland presentation plans canonical ir frame" {
-    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     try renderer_ir.pushRect(buffers, .base, .{ .x = 10, .y = 12, .w = 8, .h = 8 }, .accent, .clear, 0, 0, 0);
 
@@ -673,7 +673,7 @@ test "native wayland presentation plans canonical ir frame" {
 }
 
 test "native presentation rejects invalid surfaces and missing resources" {
-    var storage = renderer_ir.FixedBuffers(0, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(0, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0, 0, 0){};
     storage.text_vertex_len = renderer_ir.textured_quad_vertex_count * renderer_ir.text_vertex_float_stride;
 
     var tile_marks: [16]u8 = undefined;
@@ -715,7 +715,7 @@ test "native presentation rejects invalid surfaces and missing resources" {
 }
 
 test "native presentation submits only matching drm sink" {
-    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     try renderer_ir.pushRect(buffers, .base, .{ .x = 4, .y = 4, .w = 32, .h = 24 }, .text, .clear, 0, 0, 0);
 
@@ -749,7 +749,7 @@ test "native presentation submits only matching drm sink" {
 }
 
 test "native presentation rejects mismatched and failing sinks" {
-    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     try renderer_ir.pushRect(buffers, .base, .{ .x = 0, .y = 0, .w = 16, .h = 16 }, .accent, .clear, 0, 0, 0);
 
@@ -770,7 +770,7 @@ test "native presentation rejects mismatched and failing sinks" {
 }
 
 test "native cpu render submits drm commit from canonical ir" {
-    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     try renderer_ir.pushRect(buffers, .base, .{ .x = 0, .y = 0, .w = 32, .h = 32 }, .accent, .clear, 0, 0, 0);
 
@@ -821,7 +821,7 @@ test "native cpu render retains software presentation receipt" {
 }
 
 test "native cpu render rejects framebuffer size mismatch" {
-    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     try renderer_ir.pushRect(buffers, .base, .{ .x = 0, .y = 0, .w = 16, .h = 16 }, .accent, .clear, 0, 0, 0);
 
@@ -856,7 +856,7 @@ test "native cpu render rejects framebuffer size mismatch" {
 }
 
 test "native gpu render submits wayland commit from canonical ir" {
-    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     try renderer_ir.pushRect(buffers, .base, .{ .x = 0, .y = 0, .w = 32, .h = 32 }, .accent, .clear, 0, 0, 0);
 
@@ -907,7 +907,7 @@ test "native gpu render submits wayland commit from canonical ir" {
 }
 
 test "native cpu and gpu render paths agree on canonical ir presentation" {
-    var storage = renderer_ir.FixedBuffers(1, 0, 1, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(1, 0, 1, 0, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     try renderer_ir.pushRect(buffers, .base, .{ .x = 0, .y = 0, .w = 16, .h = 16 }, .accent, .clear, 0, 0, 0);
     try renderer_ir.pushIcon(buffers, .base, .{
@@ -995,7 +995,7 @@ test "native cpu and gpu render paths agree on canonical ir presentation" {
 }
 
 test "native gpu backed render binds scanout surface before native commit" {
-    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     try renderer_ir.pushRect(buffers, .base, .{ .x = 4, .y = 4, .w = 24, .h = 24 }, .accent, .clear, 0, 0, 0);
 
@@ -1050,7 +1050,7 @@ test "native gpu backed render binds scanout surface before native commit" {
 }
 
 test "native gpu backed render rejects shared memory as gpu output" {
-    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     try renderer_ir.pushRect(buffers, .base, .{ .x = 0, .y = 0, .w = 16, .h = 16 }, .accent, .clear, 0, 0, 0);
 
@@ -1091,7 +1091,7 @@ test "native gpu backed render rejects shared memory as gpu output" {
 }
 
 test "native gpu backed receipt distinguishes hardware gpu rasterization" {
-    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     try renderer_ir.pushRect(buffers, .base, .{ .x = 4, .y = 4, .w = 24, .h = 24 }, .accent, .clear, 0, 0, 0);
 
@@ -1133,7 +1133,7 @@ test "native gpu backed receipt distinguishes hardware gpu rasterization" {
 }
 
 test "native gpu backed wayland render requires dma buf surface" {
-    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     try renderer_ir.pushRect(buffers, .base, .{ .x = 0, .y = 0, .w = 16, .h = 16 }, .accent, .clear, 0, 0, 0);
 
@@ -1174,7 +1174,7 @@ test "native gpu backed wayland render requires dma buf surface" {
 }
 
 test "native gpu backed wayland render accepts dma buf surface" {
-    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     try renderer_ir.pushRect(buffers, .base, .{ .x = 4, .y = 4, .w = 24, .h = 24 }, .accent, .clear, 0, 0, 0);
 
@@ -1223,7 +1223,7 @@ test "native gpu backed wayland render accepts dma buf surface" {
 }
 
 test "native gpu render rejects missing resources before native submit" {
-    var storage = renderer_ir.FixedBuffers(0, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(0, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0, 0, 0){};
     storage.text_vertex_len = renderer_ir.textured_quad_vertex_count * renderer_ir.text_vertex_float_stride;
 
     var primitives: [16]renderer_gpu.Primitive = undefined;
@@ -1263,7 +1263,7 @@ test "native gpu render rejects missing resources before native submit" {
 }
 
 test "native gpu render fails when gpu device rejects frame" {
-    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     try renderer_ir.pushRect(buffers, .base, .{ .x = 0, .y = 0, .w = 16, .h = 16 }, .accent, .clear, 0, 0, 0);
 

@@ -20,6 +20,10 @@ pub const Text = struct {
         return .{ .text = .{ .value = self.value } };
     }
 
+    pub fn accessibility(self: Text) common.Accessibility {
+        return .{ .role = .text, .label = self.value };
+    }
+
     pub fn render(self: Text, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         const line_height = @min(text_line_height, @max(component_primitives.min_extent, bounds.h));
         try scene.pushWrappedText(bounds, self.value, options.style.text, .{
@@ -54,6 +58,10 @@ pub const Text = struct {
 
     pub fn fromView(view: object.View) Error!Text {
         const text = try component_codec.nodeView(view, .text);
+        return fromNode(text);
+    }
+
+    pub fn fromNode(text: @FieldType(ui.Node, "text")) Error!Text {
         return .{ .value = text.value };
     }
 };

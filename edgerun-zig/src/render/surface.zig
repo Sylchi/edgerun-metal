@@ -486,7 +486,7 @@ test "dirty tile tracking marks canonical ir buffers" {
     var ids: [8]u32 = undefined;
     var list = DirtyTileList{ .tile_ids = &ids };
 
-    var storage = renderer_ir.FixedBuffers(1, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(1, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     try renderer_ir.pushRect(buffers, .base, ui.Rect.init(15.5, 0, 2, 16), .text, .clear, 0, 0, renderer_ir.rectModeCode(.fill));
     try renderer_ir.pushClippedTexturedQuad(buffers.text_vertices, buffers.text_vertex_len, ui.Rect.init(32, 32, 8, 8), ui.Rect.init(32, 32, 8, 8), 0, 0, 1, 1, .accent);

@@ -8,6 +8,7 @@ const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
+const icon_component = @import("Icon.zig");
 const primitives = @import("Primitives.zig");
 
 const Error = common.Error;
@@ -27,7 +28,7 @@ pub const Accordion = struct {
     pub fn render(self: Accordion, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         const trigger = triggerBounds(bounds);
         try scene.pushText(ui.Rect.init(trigger.x, trigger.y + accordion_trigger_text_y, @max(primitives.min_extent, trigger.w - accordion_icon_space), primitives.control_label_height), self.title, options.style.text);
-        try scene.pushIconQuad(.{ .bounds = ui.Rect.init(trigger.x + trigger.w - accordion_icon_size, trigger.y + accordion_icon_y, accordion_icon_size, accordion_icon_size), .icon_id = icon.id(.chevron_right), .color = options.style.muted });
+        try icon_component.renderGlyph(scene, ui.Rect.init(trigger.x + trigger.w - accordion_icon_size, trigger.y + accordion_icon_y, accordion_icon_size, accordion_icon_size), .chevron_right, options.style.muted);
         try scene.pushRect(ui.Rect.init(bounds.x, trigger.y + trigger.h, bounds.w, separator_height), options.style.border, .fill, 0.0, 0.0);
         if (self.open) {
             try scene.pushWrappedText(ui.Rect.init(bounds.x, trigger.y + trigger.h + accordion_content_padding_top, bounds.w, @max(primitives.min_extent, bounds.h - trigger.h - accordion_content_padding_top)), self.detail, options.style.muted, .{
@@ -62,6 +63,10 @@ pub const Accordion = struct {
 
     pub fn fromView(view: object.View) Error!Accordion {
         const accordion = try component_codec.nodeView(view, .accordion);
+        return fromNode(accordion);
+    }
+
+    pub fn fromNode(accordion: @FieldType(ui.Node, "accordion")) Error!Accordion {
         return .{ .id = accordion.id, .title = accordion.title, .detail = accordion.detail, .open = accordion.open };
     }
 };

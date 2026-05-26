@@ -41,6 +41,7 @@ const dropdown_menu_component = @import("DropdownMenu.zig");
 const field_component = @import("Field.zig");
 const hover_card_component = @import("HoverCard.zig");
 const input_otp_component = @import("InputOtp.zig");
+const icon_component = @import("Icon.zig");
 const input_component = @import("Input.zig");
 const input_group_component = @import("InputGroup.zig");
 const textarea_component = @import("Textarea.zig");
@@ -103,6 +104,7 @@ const DropdownMenu = dropdown_menu_component.DropdownMenu;
 const Field = field_component.Field;
 const HoverCard = hover_card_component.HoverCard;
 const InputOtp = input_otp_component.InputOtp;
+const Icon = icon_component.Icon;
 const Input = input_component.Input;
 const InputGroup = input_group_component.InputGroup;
 const Textarea = textarea_component.Textarea;
@@ -123,6 +125,8 @@ const Table = table_component.Table;
 const Tooltip = tooltip_component.Tooltip;
 const Toast = toast_component.Toast;
 const RowItem = row_item_component.RowItem;
+
+pub const IconComponent = Icon;
 
 pub fn renderComponent(scene: *ui.Scene, bounds: ui.Rect, component: Component, options: RenderOptions) ui.RenderError!void {
     return component.render(scene, bounds, options);
@@ -164,6 +168,7 @@ pub const Component = union(enum) {
     field: Field,
     hover_card: HoverCard,
     input_otp: InputOtp,
+    icon: Icon,
     button: Button,
     icon_button: IconButton,
     button_group: ButtonGroup,
@@ -221,28 +226,7 @@ pub const Component = union(enum) {
 
     pub fn accessibility(self: Component) Accessibility {
         return switch (self) {
-            .text => |component| .{ .role = .text, .label = component.value },
-            .button => |component| .{ .role = .button, .label = component.label, .control_id = component.id },
-            .icon_button => |component| .{ .role = .button, .label = component.label, .control_id = component.id },
-            .input => |component| .{ .role = .input, .label = component.placeholder, .control_id = component.id },
-            .field => |component| .{ .role = .input, .label = component.label, .control_id = component.id },
-            .textarea => |component| .{ .role = .input, .label = component.placeholder, .control_id = component.id },
-            .select => |component| .{ .role = .input, .label = component.label, .control_id = component.id },
-            .checkbox => |component| .{ .role = .checkbox, .label = component.label, .control_id = component.id },
-            .switch_control => |component| .{ .role = .switch_control, .label = component.label, .control_id = component.id },
-            .slider => |component| .{ .role = .slider, .label = component.label, .control_id = component.id },
-            .tabs => |component| .{ .role = .tab, .label = component.first, .control_id = component.id },
-            .table => |component| .{ .role = .table, .label = component.name, .control_id = component.id },
-            .dialog => |component| .{ .role = .dialog, .label = component.title, .control_id = component.id },
-            .alert_dialog => |component| .{ .role = .dialog, .label = component.title, .control_id = component.id },
-            .dropdown_menu => |component| .{ .role = .menu, .label = component.first, .control_id = component.id },
-            .context_menu => |component| .{ .role = .menu, .label = component.first, .control_id = component.id },
-            .menubar => |component| .{ .role = .menu, .label = component.first, .control_id = component.id },
-            .navigation_menu => |component| .{ .role = .menu, .label = component.first, .control_id = component.id },
-            .avatar => |component| .{ .role = .image, .label = component.label },
-            .toast => |component| .{ .role = .status, .label = component.title, .control_id = component.id },
-            .row_item => |component| .{ .role = .button, .label = component.title, .control_id = component.id },
-            else => .{ .role = .generic },
+            inline else => |component| if (comptime @hasDecl(@TypeOf(component), "accessibility")) component.accessibility() else .{ .role = .generic },
         };
     }
 
@@ -254,9 +238,7 @@ pub const Component = union(enum) {
     }
 
     fn controlId(self: Component) ?u32 {
-        return switch (self) {
-            inline else => |component| if (comptime @hasField(@TypeOf(component), "id")) component.id else null,
-        };
+        return self.accessibility().control_id;
     }
 
     pub fn toObject(self: Component, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {

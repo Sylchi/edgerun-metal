@@ -8,6 +8,7 @@ const ui = @import("../../ui.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
+const icon_component = @import("Icon.zig");
 const primitives = @import("Primitives.zig");
 
 const Error = common.Error;
@@ -27,7 +28,7 @@ pub const Command = struct {
     pub fn render(self: Command, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         const input = inputBounds(bounds);
         try renderControlFrame(scene, input, options.style.panel, options.style.border, command_radius);
-        try scene.pushIconQuad(.{ .bounds = ui.Rect.init(input.x + command_icon_x, input.y + (input.h - command_icon_size) * 0.5, command_icon_size, command_icon_size), .icon_id = icon.id(.search), .color = options.style.muted });
+        try icon_component.renderGlyph(scene, ui.Rect.init(input.x + command_icon_x, input.y + (input.h - command_icon_size) * 0.5, command_icon_size, command_icon_size), .search, options.style.muted);
         const input_text = if (options.command_palette) |palette| if (palette.query.len == 0) self.placeholder else palette.query else self.placeholder;
         const input_color = if (options.command_palette) |palette| if (palette.query.len == 0) options.style.muted else options.style.text else options.style.muted;
         try scene.pushText(ui.Rect.init(input.x + command_text_x, input.y + (input.h - command_text_h) * 0.5, @max(primitives.min_extent, input.w - command_text_x - command_padding_x), command_text_h), input_text, input_color);
@@ -76,6 +77,10 @@ pub const Command = struct {
 
     pub fn fromView(view: object.View) Error!Command {
         const command = try component_codec.nodeView(view, .command);
+        return fromNode(command);
+    }
+
+    pub fn fromNode(command: @FieldType(ui.Node, "command")) Error!Command {
         return .{ .id = command.id, .placeholder = command.placeholder };
     }
 };

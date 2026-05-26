@@ -32,6 +32,10 @@ const rect_color2_a_index_js = std.fmt.comptimePrint("{d}", .{renderer_ir.rect_c
 const rect_mode_index_js = std.fmt.comptimePrint("{d}", .{renderer_ir.rect_mode_index});
 const rect_mode_shadow_js = std.fmt.comptimePrint("{d}", .{renderer_ir.rect_mode_shadow});
 const texture_kind_red_js = std.fmt.comptimePrint("{d}", .{gl_contract.texture_kind_red});
+const clear_color_r_js = std.fmt.comptimePrint("{d}/255", .{gl_contract.clear_color_r_u8});
+const clear_color_g_js = std.fmt.comptimePrint("{d}/255", .{gl_contract.clear_color_g_u8});
+const clear_color_b_js = std.fmt.comptimePrint("{d}/255", .{gl_contract.clear_color_b_u8});
+const clear_color_a_js = std.fmt.comptimePrint("{d}/255", .{gl_contract.clear_color_a_u8});
 const text_vertex_float_stride_js = std.fmt.comptimePrint("{d}", .{renderer_ir.text_vertex_float_stride});
 const text_vertex_byte_stride_js = std.fmt.comptimePrint("{d}", .{renderer_ir.text_vertex_float_stride * @sizeOf(f32)});
 const textured_u_byte_offset_js = std.fmt.comptimePrint("{d}", .{renderer_ir.textured_u_index * @sizeOf(f32)});
@@ -170,7 +174,15 @@ pub const loader_js =
     \\);G.drawArrays(G.TRIANGLES,0,l/
 ++ icon_line_vertex_float_stride_js ++
     \\)};
-    \\F=t=>{let w=innerWidth|0,h=innerHeight|0,d=Math.min(devicePixelRatio||1,4,W.er_ui_max_width()/w,W.er_ui_max_height()/h);C.style.width=w+`px`;C.style.height=h+`px`;C.width=w*d;C.height=h*d;G.viewport(0,0,C.width,C.height);G.clearColor(10/255,14/255,20/255,1);G.clear(G.COLOR_BUFFER_BIT);G.enable(G.BLEND);G.blendFunc(G.ONE,G.ONE_MINUS_SRC_ALPHA);W.er_ui_set_device_scale(d);if(W.er_ui_build_frame(w,h,t))throw W.er_ui_last_error();if(fg!=W.er_ui_font_atlas_generation()){up(ft,W.er_ui_font_atlas_width(),W.er_ui_font_atlas_height(),G.LUMINANCE);fg=W.er_ui_font_atlas_generation()}if(!it.w){up(it,W.er_ui_post_image_width(),W.er_ui_post_image_height(),G.RGBA);it.w=1}dr(W.er_ui_packed_rect_buffer_ptr(),W.er_ui_packed_rect_buffer_len());dt(W.er_ui_packed_image_vertex_buffer_ptr(),W.er_ui_packed_image_vertex_buffer_len(),it,1);dt(W.er_ui_packed_text_vertex_buffer_ptr(),W.er_ui_packed_text_vertex_buffer_len(),ft,0);dl(W.er_ui_packed_icon_line_vertex_buffer_ptr(),W.er_ui_packed_icon_line_vertex_buffer_len());dr(W.er_ui_packed_overlay_rect_buffer_ptr(),W.er_ui_packed_overlay_rect_buffer_len());dt(W.er_ui_packed_overlay_text_vertex_buffer_ptr(),W.er_ui_packed_overlay_text_vertex_buffer_len(),ft,0);dl(W.er_ui_packed_overlay_icon_line_vertex_buffer_ptr(),W.er_ui_packed_overlay_icon_line_vertex_buffer_len());R(F)};W=(await WebAssembly.instantiate(await(await fetch`../bin/edgerun-app-runtime.wasm`).arrayBuffer())).instance.exports;M=W.memory.buffer;W.er_ui_boot();P();A({type:`hashchange`},8);F()
+    \\F=t=>{let w=innerWidth|0,h=innerHeight|0,d=Math.min(devicePixelRatio||1,4,W.er_ui_max_width()/w,W.er_ui_max_height()/h);C.style.width=w+`px`;C.style.height=h+`px`;C.width=w*d;C.height=h*d;G.viewport(0,0,C.width,C.height);G.clearColor(
+++ clear_color_r_js ++
+    \\,
+++ clear_color_g_js ++
+    \\,
+++ clear_color_b_js ++
+    \\,
+++ clear_color_a_js ++
+    \\);G.clear(G.COLOR_BUFFER_BIT);G.disable(G.DITHER);G.enable(G.BLEND);G.blendFunc(G.ONE,G.ONE_MINUS_SRC_ALPHA);W.er_ui_set_device_scale(d);if(W.er_ui_build_frame(w,h,t))throw W.er_ui_last_error();if(fg!=W.er_ui_font_atlas_generation()){up(ft,W.er_ui_font_atlas_width(),W.er_ui_font_atlas_height(),G.LUMINANCE);fg=W.er_ui_font_atlas_generation()}if(!it.w){up(it,W.er_ui_post_image_width(),W.er_ui_post_image_height(),G.RGBA);it.w=1}dr(W.er_ui_packed_rect_buffer_ptr(),W.er_ui_packed_rect_buffer_len());dt(W.er_ui_packed_image_vertex_buffer_ptr(),W.er_ui_packed_image_vertex_buffer_len(),it,1);dt(W.er_ui_packed_text_vertex_buffer_ptr(),W.er_ui_packed_text_vertex_buffer_len(),ft,0);dl(W.er_ui_packed_icon_line_vertex_buffer_ptr(),W.er_ui_packed_icon_line_vertex_buffer_len());dr(W.er_ui_packed_overlay_rect_buffer_ptr(),W.er_ui_packed_overlay_rect_buffer_len());dt(W.er_ui_packed_overlay_text_vertex_buffer_ptr(),W.er_ui_packed_overlay_text_vertex_buffer_len(),ft,0);dl(W.er_ui_packed_overlay_icon_line_vertex_buffer_ptr(),W.er_ui_packed_overlay_icon_line_vertex_buffer_len());R(F)};W=(await WebAssembly.instantiate(await(await fetch`../bin/edgerun-app-runtime.wasm`).arrayBuffer())).instance.exports;M=W.memory.buffer;W.er_ui_boot();P();A({type:`hashchange`},8);F()
 ;
 pub const total_js_bytes: usize = loader_js.len;
 
@@ -260,6 +272,9 @@ test "generated entry has the only javascript byte bridge" {
     try std.testing.expect(contains("m=a[i+" ++ rect_mode_index_js ++ "]"));
     try std.testing.expect(contains("sh=a[i+" ++ rect_shadow_index_js ++ "]"));
     try std.testing.expect(contains("m==" ++ rect_mode_shadow_js ++ "?x-sh:x"));
+    try std.testing.expect(contains("G.clearColor(" ++ clear_color_r_js ++ "," ++ clear_color_g_js ++ "," ++ clear_color_b_js ++ "," ++ clear_color_a_js ++ ")"));
+    try std.testing.expect(!contains("G.clearColor(10/255,14/255,20/255,1)"));
+    try std.testing.expect(contains("G.disable(G.DITHER)"));
     try std.testing.expect(contains("G.uniform1i(G.getUniformLocation(pt,`" ++ gl_contract.uniform_texture_kind ++ "`)," ++ texture_kind_red_js ++ ")"));
     try std.testing.expect(contains("G.vertexAttribPointer(" ++ attr_pos_location_js ++ ",2,G.FLOAT,0," ++ text_vertex_byte_stride_js ++ ",0)"));
     try std.testing.expect(contains("G.vertexAttribPointer(" ++ attr_uv_location_js ++ ",2,G.FLOAT,0," ++ text_vertex_byte_stride_js ++ "," ++ textured_u_byte_offset_js ++ ")"));

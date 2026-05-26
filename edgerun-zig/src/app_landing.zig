@@ -756,7 +756,7 @@ fn primaryButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui
 }
 
 fn primaryButtonWithTrailingIcon(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, icon_value: icon.Icon, id: u32) (ui.RenderError || interaction.Error)!void {
-    try nativeComponent(scene, collector, bounds, .{ .button = .{ .id = id, .label = label, .icon_slot = .{ .trailing = icon_value } } });
+    try nativeComponent(scene, collector, bounds, .{ .button = .{ .id = id, .label = label, .icon_slot = .{ .trailing = components.IconComponent.named(icon_value) } } });
 }
 
 fn outlineButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id: u32) (ui.RenderError || interaction.Error)!void {
@@ -764,7 +764,7 @@ fn outlineButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui
 }
 
 fn outlineButtonWithTrailingIcon(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, icon_value: icon.Icon, id: u32) (ui.RenderError || interaction.Error)!void {
-    try nativeComponent(scene, collector, bounds, .{ .button = .{ .id = id, .label = label, .variant = .outline, .icon_slot = .{ .trailing = icon_value } } });
+    try nativeComponent(scene, collector, bounds, .{ .button = .{ .id = id, .label = label, .variant = .outline, .icon_slot = .{ .trailing = components.IconComponent.named(icon_value) } } });
 }
 
 fn nativeBadge(scene: *ui.Scene, bounds: ui.Rect, label: []const u8) ui.RenderError!void {

@@ -46,6 +46,10 @@ pub const Kbd = struct {
 
     pub fn fromView(view: object.View) Error!Kbd {
         const kbd = try component_codec.nodeView(view, .kbd);
+        return fromNode(kbd);
+    }
+
+    pub fn fromNode(kbd: @FieldType(ui.Node, "kbd")) Error!Kbd {
         return .{ .label = kbd.label };
     }
 };
