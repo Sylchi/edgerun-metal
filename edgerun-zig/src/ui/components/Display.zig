@@ -72,7 +72,7 @@ pub const Skeleton = struct {
         return layout.Measurement.flexible(
             .{ .w = @min(component_primitives.min_extent, preferred.w), .h = @min(skeleton_height, preferred.h) },
             preferred,
-            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
+            .{ .w = component_primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
         ).applyExact(constraints);
     }
 
@@ -155,7 +155,7 @@ pub const Progress = struct {
         return layout.Measurement.flexible(
             .{ .w = @min(progress_min_width, preferred.w), .h = @min(progress_height, preferred.h) },
             preferred,
-            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
+            .{ .w = component_primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
         ).applyExact(constraints);
     }
 
@@ -241,7 +241,7 @@ pub const Kbd = struct {
         return layout.Measurement.flexible(
             .{ .w = @min(kbd_min_width, preferred.w), .h = @min(kbd_height, preferred.h) },
             preferred,
-            .{ .w = component_primitives.measure_max_width, .h = preferred.h },
+            .{ .w = component_primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
         ).applyExact(constraints);
     }
 
@@ -367,7 +367,7 @@ fn measureFlexibleLine(height: f32, constraints: layout.Constraints) layout.Meas
     return layout.Measurement.flexible(
         .{ .w = @min(separator_min_width, preferred.w), .h = @min(height, preferred.h) },
         preferred,
-        .{ .w = component_primitives.measure_max_width, .h = preferred.h },
+        .{ .w = component_primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
     ).applyExact(constraints);
 }
 

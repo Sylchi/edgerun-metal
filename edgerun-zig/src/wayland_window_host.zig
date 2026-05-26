@@ -2,6 +2,7 @@ const std = @import("std");
 const icon_svg = @import("icon_svg.zig");
 const interaction = @import("ui_interaction.zig");
 const linux_drm = @import("linux_drm.zig");
+const icon_line_buffer = @import("render/icon_line_buffer.zig");
 const renderer_font_atlas = @import("render/font_atlas.zig");
 const renderer_gpu = @import("render/gpu.zig");
 const renderer_gpu_buffer = @import("render/gpu_buffer.zig");
@@ -49,7 +50,8 @@ const socket_read_bytes: usize = 8192;
 const message_bytes: usize = 512;
 const pointer_motion_render_step: f32 = 8.0;
 const cursor_scene_budget: usize = 32;
-const cursor_overlay_icon_vertices: usize = renderer_ir.icon_instance_float_stride * 2;
+const cursor_overlay_icon_instances: usize = 2;
+const cursor_overlay_icon_line_vertices: usize = icon_line_buffer.max_instance_vertex_count * cursor_overlay_icon_instances;
 
 const display_id: u32 = 1;
 const registry_id: u32 = 2;
@@ -874,7 +876,7 @@ const NativeApp = struct {
         var cursor_commands: [cursor_scene_budget]ui.Command = undefined;
         var scene = ui.Scene.init(&cursor_commands);
         try app_cursor.render(&scene, self.state.hover_x, self.state.hover_y, kind);
-        var cursor_ir = renderer_ir.FixedBuffers(cursor_scene_budget, 0, cursor_overlay_icon_vertices, 0, 0, 0, 0, 0, cursor_overlay_icon_vertices * 256){};
+        var cursor_ir = renderer_ir.FixedBuffers(cursor_scene_budget, 0, cursor_overlay_icon_instances, 0, 0, 0, 0, cursor_overlay_icon_line_vertices, 0){};
         const buffers = cursor_ir.buffers();
         try renderer_pipeline.packScene(buffers, &self.font_atlas, .object, scene.written());
         const surface = try renderer_software.Framebuffer.init(self.width, self.height, self.pixels);
@@ -1978,6 +1980,25 @@ test "wayland host renders current docs routes through the shared app frame" {
     try std.testing.expect(hasText(scene.written(), "atlas: 2048x2048 alpha8, 1280 glyphs"));
 }
 
+test "wayland host packs docs overview route at launch size" {
+    var commands: [max_commands]ui.Command = undefined;
+    var clips: [max_clips]ui.Rect = undefined;
+    var regions: [max_interaction_regions]interaction.Region = undefined;
+    var scene = ui.Scene.initWithClips(&commands, &clips);
+    var collector = interaction.Collector.init(&regions);
+    try renderNativeAppScene(&scene, &collector, 1280, 900, .{ .route = app_navigation.fromPath("/docs") });
+
+    var ir_storage = IrStorage{};
+    const buffers = ir_storage.buffers();
+    var font_atlas: renderer_font_atlas.Atlas = undefined;
+    font_atlas.initWithFontInPlace(renderer_font_atlas.geist_ascii_font.body());
+    try renderer_pipeline.packScene(buffers, &font_atlas, .object, scene.written());
+
+    try std.testing.expect(hasText(scene.written(), "EdgeRun Native"));
+    try std.testing.expect(hasText(scene.written(), "Overview"));
+    try std.testing.expect(ir_storage.text_vertex_len > 0);
+}
+
 test "wayland host renders client side decoration above app content" {
     var state = AppState{};
     state.route = app_navigation.fromPath("/academy");
@@ -2105,6 +2126,37 @@ test "wayland host appends scene cursor from native hover state" {
 
     try std.testing.expectEqual(app_cursor.Kind.pointer, app.state.cursorKind());
     try std.testing.expect(hasIconId(scene.written(), icon_svg.cursor_hand_finger_icon_id));
+}
+
+test "wayland host renders vector cursor overlay through native pipeline" {
+    var pixels: [64 * 64]ui.Color = [_]ui.Color{ui.Color.clear} ** (64 * 64);
+    var app = NativeApp{
+        .allocator = std.testing.allocator,
+        .width = 64,
+        .height = 64,
+        .present = .cpu,
+        .dmabuf_fd = null,
+        .shm = undefined,
+        .pixels = &pixels,
+        .base_pixels = &.{},
+        .font_atlas = undefined,
+        .gpu_primitives = &.{},
+    };
+    app.font_atlas.initWithFontInPlace(renderer_font_atlas.geist_ascii_font.body());
+    app.state.hover_x = 24.0;
+    app.state.hover_y = 24.0;
+
+    const damage = try app.renderCursorOverlay(.pointer);
+
+    try std.testing.expect(damage != null);
+    try std.testing.expect(pixelBufferHasPaint(&pixels));
+}
+
+fn pixelBufferHasPaint(pixels: []const ui.Color) bool {
+    for (pixels) |pixel| {
+        if (pixel.a != 0) return true;
+    }
+    return false;
 }
 
 fn hasText(commands: []const ui.Command, value: []const u8) bool {
