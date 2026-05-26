@@ -1,10 +1,10 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
-const component_contract = @import("ComponentContract.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
+const text_component = @import("Text.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
@@ -13,7 +13,7 @@ const primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = component_contract.registration("field", Field);
+pub const registration = .{ .name = "field", .Payload = Field };
 const constrainPreferredSize = primitives.constrainPreferredSize;
 const renderControlFrame = primitives.renderControlFrame;
 const renderControlStateOverlay = primitives.renderControlStateOverlay;
@@ -32,14 +32,14 @@ pub const Field = struct {
     }
 
     pub fn render(self: Field, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        try scene.pushWrappedText(labelBounds(bounds, self.label), self.label, options.style.text, primitives.textWrap(self.label, field_label_h, field_label_max_lines));
+        try text_component.Text.renderWrapped(scene, labelBounds(bounds, self.label), self.label, options.style.text, primitives.textWrap(self.label, field_label_h, field_label_max_lines));
         try renderInput(scene, inputBoundsFor(bounds, self.label, options), self.placeholder, inputOptions(options));
         if (options.validation) |validation| {
             const color = switch (validation.state) {
                 .helper => options.style.muted,
                 .invalid => common.state_invalid_border,
             };
-            try scene.pushWrappedText(validationBounds(bounds, self.label, validation.message), validation.message, color, primitives.textWrap(validation.message, field_validation_line_h, field_validation_max_lines));
+            try text_component.Text.renderWrapped(scene, validationBounds(bounds, self.label, validation.message), validation.message, color, primitives.textWrap(validation.message, field_validation_line_h, field_validation_max_lines));
         }
     }
 
@@ -89,7 +89,7 @@ fn renderInput(scene: *ui.Scene, bounds: ui.Rect, placeholder: []const u8, optio
     try renderControlStateOverlay(scene, bounds, options, primitives.control_radius);
     if (primitives.contentInset(bounds, primitives.control_text_padding)) |inner| {
         const text_h = @min(inner.h, primitives.measuredTextHeight(placeholder, inner.w, primitives.control_label_height, field_placeholder_max_lines));
-        try scene.pushWrappedText(inner.withHeightCentered(text_h), placeholder, options.style.muted, primitives.textWrap(placeholder, primitives.control_label_height, field_placeholder_max_lines));
+        try text_component.Text.renderWrapped(scene, inner.withHeightCentered(text_h), placeholder, options.style.muted, primitives.textWrap(placeholder, primitives.control_label_height, field_placeholder_max_lines));
     }
 }
 

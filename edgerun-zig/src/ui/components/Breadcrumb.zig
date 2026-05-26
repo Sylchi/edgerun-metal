@@ -1,10 +1,10 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
-const component_contract = @import("ComponentContract.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
+const text_component = @import("Text.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
@@ -14,7 +14,7 @@ const primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = component_contract.registration("breadcrumb", Breadcrumb);
+pub const registration = .{ .name = "breadcrumb", .Payload = Breadcrumb };
 const measureFixed = primitives.measureFixed;
 const Icon = icon_component.Icon;
 
@@ -31,11 +31,11 @@ pub const Breadcrumb = struct {
         const first_bounds = itemBounds(bounds, 0);
         const middle_bounds = itemBounds(bounds, 1);
         const current_bounds = itemBounds(bounds, 2);
-        try scene.pushText(first_bounds.withHeightCentered(primitives.control_label_height), self.first, options.style.muted);
+        try text_component.Text.renderPlain(scene, first_bounds.withHeightCentered(primitives.control_label_height), self.first, options.style.muted);
         try Icon.named(.chevron_right).renderColor(scene, separatorBounds(bounds, 0), options.style.muted);
-        try scene.pushText(middle_bounds.withHeightCentered(primitives.control_label_height), breadcrumb_middle_label, options.style.muted);
+        try text_component.Text.renderPlain(scene, middle_bounds.withHeightCentered(primitives.control_label_height), breadcrumb_middle_label, options.style.muted);
         try Icon.named(.chevron_right).renderColor(scene, separatorBounds(bounds, 1), options.style.muted);
-        try scene.pushText(current_bounds.withHeightCentered(primitives.control_label_height), self.current, options.style.text);
+        try text_component.Text.renderPlain(scene, current_bounds.withHeightCentered(primitives.control_label_height), self.current, options.style.text);
     }
 
     pub fn collectInteractions(self: Breadcrumb, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {

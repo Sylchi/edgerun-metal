@@ -1,10 +1,10 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
-const component_contract = @import("ComponentContract.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
+const text_component = @import("Text.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
@@ -14,7 +14,7 @@ const primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = component_contract.registration("sidebar", Sidebar);
+pub const registration = .{ .name = "sidebar", .Payload = Sidebar };
 const constrainPreferredSize = primitives.constrainPreferredSize;
 const Icon = icon_component.Icon;
 
@@ -32,11 +32,11 @@ pub const Sidebar = struct {
         try scene.pushRect(rail, options.style.panel, .fill, sidebar_radius, 0.0);
         try scene.pushRect(rail, options.style.border, .border, sidebar_radius, 0.0);
         try Icon.named(.menu).renderColor(scene, triggerBounds(bounds), options.style.text);
-        try scene.pushWrappedText(titleBounds(bounds, self.title), self.title, options.style.muted, primitives.textWrap(self.title, sidebar_title_h, sidebar_title_max_lines));
+        try text_component.Text.renderWrapped(scene, titleBounds(bounds, self.title), self.title, options.style.muted, primitives.textWrap(self.title, sidebar_title_h, sidebar_title_max_lines));
         const item_bounds = itemBounds(bounds, self.title, self.item);
         try scene.pushRect(item_bounds, options.style.row, .fill, sidebar_item_radius, 0.0);
         const item_text = itemTextBounds(item_bounds, self.item);
-        try scene.pushWrappedText(item_text, self.item, options.style.text, primitives.textWrap(self.item, sidebar_item_text_h, sidebar_item_max_lines));
+        try text_component.Text.renderWrapped(scene, item_text, self.item, options.style.text, primitives.textWrap(self.item, sidebar_item_text_h, sidebar_item_max_lines));
         const content = contentBounds(bounds);
         try scene.pushRect(content, options.style.row, .fill, sidebar_radius, 0.0);
     }

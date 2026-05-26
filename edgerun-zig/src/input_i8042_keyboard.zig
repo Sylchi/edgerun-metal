@@ -397,4 +397,3 @@ test "i8042 keyboard toggles caps lock deterministically" {
     const lower = (try decodeOne(&state, sc_a, &out)).?;
     try std.testing.expectEqualStrings("a", lower.key);
 }
-

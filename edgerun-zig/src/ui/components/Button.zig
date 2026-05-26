@@ -1,11 +1,11 @@
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
-const component_contract = @import("ComponentContract.zig");
 const interaction = @import("../../ui_interaction.zig");
 const layout = @import("../../layouts/Types.zig");
 const object = @import("../../object.zig");
 const std = @import("std");
 const ui = @import("../../ui.zig");
+const text_component = @import("Text.zig");
 const text_metrics = @import("../../ui_text_metrics.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
@@ -15,8 +15,8 @@ const primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = component_contract.registration("button", Button);
-pub const icon_button_registration = component_contract.registration("icon_button", IconButton);
+pub const registration = .{ .name = "button", .Payload = Button };
+pub const icon_button_registration = .{ .name = "icon_button", .Payload = IconButton };
 const constrainPreferredSize = primitives.constrainPreferredSize;
 const measureFixed = primitives.measureFixed;
 const Icon = icon_component.Icon;
@@ -219,7 +219,7 @@ fn renderContent(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, text_colo
     switch (icon_slot) {
         .none => {
             const text_bounds = textBounds(bounds, padding);
-            try scene.pushAlignedText(text_bounds, text_metrics.fitPrefix(label, text_metrics.button_label_px, text_bounds.w), text_color, .center);
+            try text_component.Text.renderAligned(scene, text_bounds, text_metrics.fitPrefix(label, text_metrics.button_label_px, text_bounds.w), text_color, .center);
             return;
         },
         .leading, .trailing => {},
@@ -249,7 +249,7 @@ fn renderContent(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, text_colo
     }
 
     if (has_label) {
-        try scene.pushAlignedText(ui.Rect.init(cursor_x, text_y, label_w, label_height), visible_label, text_color, .start);
+        try text_component.Text.renderAligned(scene, ui.Rect.init(cursor_x, text_y, label_w, label_height), visible_label, text_color, .start);
         cursor_x += label_w;
         switch (icon_slot) {
             .trailing => cursor_x += icon_gap,

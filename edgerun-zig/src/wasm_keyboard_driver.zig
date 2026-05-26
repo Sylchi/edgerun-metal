@@ -23,7 +23,7 @@ export fn er_keyboard_driver_source_name_len() usize {
 }
 
 export fn er_keyboard_driver_event_ptr() usize {
-    return @intFromPtr(&event_bytes);
+    return @intFromPtr(event_bytes[0..].ptr);
 }
 
 export fn er_keyboard_driver_event_len() usize {
@@ -50,4 +50,3 @@ export fn er_keyboard_driver_push_i8042_byte(byte: u32) u32 {
     };
     return status_ok;
 }
-

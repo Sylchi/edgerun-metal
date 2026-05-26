@@ -1,5 +1,4 @@
 const std = @import("std");
-const icon = @import("icon.zig");
 const icon_svg = @import("icon_svg.zig");
 const interaction = @import("ui_interaction.zig");
 const linux_drm = @import("linux_drm.zig");
@@ -1990,7 +1989,7 @@ test "wayland host renders client side decoration above app content" {
 
     try std.testing.expect(hasText(scene.written(), "EDGERUN"));
     try std.testing.expect(hasText(scene.written(), "Academy"));
-    try std.testing.expect(hasIcon(scene.written(), .x));
+    try std.testing.expect(hasIcon(scene.written(), icon_component.Icon.named(.x)));
     try std.testing.expectEqual(@as(f32, 0.0), (try hitRect(collector.written(), client_decor_drag_id)).y);
     try std.testing.expect((try hitRect(collector.written(), client_decor_close_id)).x > 1200.0);
 
@@ -2122,9 +2121,8 @@ fn hasRectColor(commands: []const ui.Command, color: ui.Color) bool {
     return false;
 }
 
-fn hasIcon(commands: []const ui.Command, value: icon.Icon) bool {
-    const icon_id = icon.id(value);
-    return hasIconId(commands, icon_id);
+fn hasIcon(commands: []const ui.Command, value: icon_component.Icon) bool {
+    return hasIconId(commands, value.tag());
 }
 
 fn hasIconId(commands: []const ui.Command, icon_id: u32) bool {

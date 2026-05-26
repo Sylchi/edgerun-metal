@@ -1,10 +1,10 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
-const component_contract = @import("ComponentContract.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
+const text_component = @import("Text.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
@@ -13,7 +13,7 @@ const primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = component_contract.registration("table", Table);
+pub const registration = .{ .name = "table", .Payload = Table };
 const constrainPreferredSize = primitives.constrainPreferredSize;
 
 pub const row_id_offset: u32 = 0;
@@ -41,8 +41,8 @@ pub const Table = struct {
         try scene.pushRect(ui.Rect.init(bounds.x, bounds.y + table_header_h, bounds.w, separator_height), options.style.border, .fill, 0.0, 0.0);
         const row = rowBounds(bounds);
         try scene.pushRect(row.insetUniform(table_row_inset), options.style.row, .fill, table_row_radius, 0.0);
-        try scene.pushWrappedText(bodyCellBounds(bounds, 0, self.name), self.name, options.style.text, primitives.textWrap(self.name, table_body_text_h, table_body_max_lines));
-        try scene.pushWrappedText(bodyCellBounds(bounds, 1, self.role), self.role, options.style.muted, primitives.textWrap(self.role, table_body_text_h, table_body_max_lines));
+        try text_component.Text.renderWrapped(scene, bodyCellBounds(bounds, 0, self.name), self.name, options.style.text, primitives.textWrap(self.name, table_body_text_h, table_body_max_lines));
+        try text_component.Text.renderWrapped(scene, bodyCellBounds(bounds, 1, self.role), self.role, options.style.muted, primitives.textWrap(self.role, table_body_text_h, table_body_max_lines));
     }
 
     pub fn collectInteractions(self: Table, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
@@ -94,8 +94,8 @@ fn renderHeader(scene: *ui.Scene, bounds: ui.Rect, column: common.TableColumn, o
     if (active) try scene.pushRect(headerBounds(bounds, column, label).insetLtrb(table_row_inset, table_row_inset, table_row_inset, table_row_inset), options.style.row, .fill, table_row_radius, 0.0);
     const text_color = if (active) options.style.text else options.style.muted;
     switch (column) {
-        .name => try scene.pushWrappedText(headerBounds(bounds, column, label), label, text_color, primitives.textWrap(label, table_header_text_h, table_header_max_lines)),
-        .role => try scene.pushWrappedText(headerBounds(bounds, column, label), label, text_color, primitives.textWrap(label, table_header_text_h, table_header_max_lines)),
+        .name => try text_component.Text.renderWrapped(scene, headerBounds(bounds, column, label), label, text_color, primitives.textWrap(label, table_header_text_h, table_header_max_lines)),
+        .role => try text_component.Text.renderWrapped(scene, headerBounds(bounds, column, label), label, text_color, primitives.textWrap(label, table_header_text_h, table_header_max_lines)),
     }
 }
 

@@ -1,9 +1,9 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
-const component_contract = @import("ComponentContract.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
+const text_component = @import("Text.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
@@ -13,7 +13,7 @@ const component_primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = component_contract.registration("alert", Alert);
+pub const registration = .{ .name = "alert", .Payload = Alert };
 const constrainPreferredSize = component_primitives.constrainPreferredSize;
 const Icon = icon_component.Icon;
 const IconSlot = icon_component.IconSlot;
@@ -35,8 +35,8 @@ pub const Alert = struct {
         try statusIcon(self).renderColor(scene, ui.Rect.init(bounds.x + alert_padding_x, bounds.y + alert_padding_y, alert_icon_size, alert_icon_size), content_color);
         const text_w = textWidth(bounds);
         const title_h = component_primitives.measuredTextHeight(self.title, text_w, alert_title_height, alert_title_max_lines);
-        try scene.pushWrappedText(ui.Rect.init(bounds.x + alert_text_x, bounds.y + alert_padding_y - 1.0, text_w, title_h), self.title, content_color, component_primitives.textWrap(self.title, alert_title_height, alert_title_max_lines));
-        try scene.pushWrappedText(ui.Rect.init(bounds.x + alert_text_x, bounds.y + alert_padding_y + title_h + alert_detail_gap, text_w, @max(component_primitives.min_extent, bounds.h - alert_padding_y * 2.0 - title_h)), self.detail, if (self.destructive) alert_danger else options.style.muted, component_primitives.textWrap(self.detail, alert_detail_height, alert_detail_max_lines));
+        try text_component.Text.renderWrapped(scene, ui.Rect.init(bounds.x + alert_text_x, bounds.y + alert_padding_y - 1.0, text_w, title_h), self.title, content_color, component_primitives.textWrap(self.title, alert_title_height, alert_title_max_lines));
+        try text_component.Text.renderWrapped(scene, ui.Rect.init(bounds.x + alert_text_x, bounds.y + alert_padding_y + title_h + alert_detail_gap, text_w, @max(component_primitives.min_extent, bounds.h - alert_padding_y * 2.0 - title_h)), self.detail, if (self.destructive) alert_danger else options.style.muted, component_primitives.textWrap(self.detail, alert_detail_height, alert_detail_max_lines));
     }
 
     pub fn measure(self: Alert, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {

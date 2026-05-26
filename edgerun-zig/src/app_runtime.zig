@@ -4,7 +4,6 @@ const web_host_js = @import("web_host_js.zig");
 const clock = @import("clock.zig");
 const source_object = @import("embedded_source_object").bytes;
 const compiler_wasm = @import("embedded_wasm_compiler").bytes;
-const icon = @import("icon.zig");
 const icon_svg = @import("icon_svg.zig");
 const identity = @import("identity.zig");
 const interaction = @import("ui_interaction.zig");
@@ -23,6 +22,7 @@ const app_landing = @import("app_landing.zig");
 const app_navigation = @import("app_navigation.zig");
 const app_source = @import("app_source.zig");
 const component_union = @import("ui/components/Component.zig");
+const icon_component = @import("ui/components/Icon.zig");
 const node_renderer = @import("ui/components/NodeRenderer.zig");
 const ui = @import("ui.zig");
 const ui_codec = @import("ui_codec.zig");
@@ -3481,14 +3481,15 @@ test "app font atlas populates glyphs on demand" {
 
 test "app icon buffer stores semantic icon instances" {
     packed_icon_vertex_float_len = 0;
+    const search = icon_component.Icon.named(.search);
     try renderer_pipeline.pushIcon(packedBuffers(), .base, .{
         .bounds = ui.Rect.init(1, 2, 3, 4),
         .color = .accent,
-        .icon_id = icon.id(.search),
+        .icon_id = search.tag(),
     });
     const instance = try renderer_pipeline.iconAt(packed_icon_vertex_floats[0..packed_icon_vertex_float_len], 0);
     try std.testing.expectEqual(ui.Rect.init(1, 2, 3, 4), instance.bounds);
-    try std.testing.expectEqual(icon.id(.search), instance.icon_id);
+    try std.testing.expectEqual(search.tag(), instance.icon_id);
 }
 
 test "app render frame writes pixels for byte bridge" {

@@ -1,5 +1,5 @@
 const common = @import("../../ui_component_common.zig");
-const component_io = @import("ComponentIO.zig");
+const component_codec = @import("Codec.zig");
 const object = @import("../../object.zig");
 const slot_component = @import("Slot.zig");
 const stack_component = @import("Stack.zig");
@@ -25,7 +25,7 @@ pub fn Tree(comptime Component: type) type {
         }
 
         pub fn fromTree(tree: object.View, resolved_children: []const object.View, out_components: []Component) Error!Self {
-            try component_io.validateTreeView(tree);
+            try component_codec.validateTreeView(tree);
             if (tree.header.kind != .tree or resolved_children.len == 0) return error.Corrupt;
             if (tree_codec.isTreeLayout(resolved_children[0])) {
                 return .{ .stack = try StackTree.fromTree(tree, resolved_children, out_components) };

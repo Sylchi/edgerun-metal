@@ -1,10 +1,10 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
-const component_contract = @import("ComponentContract.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
+const text_component = @import("Text.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
@@ -14,7 +14,7 @@ const icon_component = @import("Icon.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = component_contract.registration("checkbox", Checkbox);
+pub const registration = .{ .name = "checkbox", .Payload = Checkbox };
 const constrainPreferredSize = component_primitives.constrainPreferredSize;
 const Icon = icon_component.Icon;
 
@@ -41,7 +41,7 @@ pub const Checkbox = struct {
         const label_x = box.x + box.w + checkbox_text_gap;
         const label_w = @max(component_primitives.min_extent, bounds.x + bounds.w - label_x);
         const label_h = @min(bounds.h, component_primitives.measuredTextHeight(self.label, label_w, checkbox_label_height, checkbox_label_max_lines));
-        try scene.pushWrappedText(ui.Rect.init(label_x, bounds.y, label_w, bounds.h).withHeightCentered(label_h), self.label, options.style.text, component_primitives.textWrap(self.label, checkbox_label_height, checkbox_label_max_lines));
+        try text_component.Text.renderWrapped(scene, ui.Rect.init(label_x, bounds.y, label_w, bounds.h).withHeightCentered(label_h), self.label, options.style.text, component_primitives.textWrap(self.label, checkbox_label_height, checkbox_label_max_lines));
     }
 
     pub fn collectInteractions(self: Checkbox, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {

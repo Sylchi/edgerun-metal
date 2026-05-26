@@ -1,9 +1,9 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
-const component_contract = @import("ComponentContract.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
+const text_component = @import("Text.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
@@ -13,7 +13,7 @@ const component_primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = component_contract.registration("empty", Empty);
+pub const registration = .{ .name = "empty", .Payload = Empty };
 const constrainPreferredSize = component_primitives.constrainPreferredSize;
 const Icon = icon_component.Icon;
 const IconSlot = icon_component.IconSlot;
@@ -36,8 +36,8 @@ pub const Empty = struct {
         const text_w = textWidth(bounds);
         const title_y = media.y + media.h + empty_gap;
         const title_h = component_primitives.measuredTextHeight(self.title, text_w, empty_title_height, empty_title_max_lines);
-        try scene.pushWrappedText(ui.Rect.init(bounds.x + empty_padding, title_y, text_w, title_h), self.title, options.style.text, component_primitives.textWrap(self.title, empty_title_height, empty_title_max_lines));
-        try scene.pushWrappedText(ui.Rect.init(bounds.x + empty_padding, title_y + title_h + empty_detail_gap, text_w, @max(component_primitives.min_extent, bounds.y + bounds.h - title_y - title_h - empty_detail_gap - empty_padding)), self.detail, options.style.muted, component_primitives.textWrap(self.detail, empty_detail_height, empty_detail_max_lines));
+        try text_component.Text.renderWrapped(scene, ui.Rect.init(bounds.x + empty_padding, title_y, text_w, title_h), self.title, options.style.text, component_primitives.textWrap(self.title, empty_title_height, empty_title_max_lines));
+        try text_component.Text.renderWrapped(scene, ui.Rect.init(bounds.x + empty_padding, title_y + title_h + empty_detail_gap, text_w, @max(component_primitives.min_extent, bounds.y + bounds.h - title_y - title_h - empty_detail_gap - empty_padding)), self.detail, options.style.muted, component_primitives.textWrap(self.detail, empty_detail_height, empty_detail_max_lines));
     }
 
     pub fn measure(self: Empty, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {

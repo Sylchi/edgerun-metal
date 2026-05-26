@@ -8,8 +8,6 @@ const ui = @import("../../ui.zig");
 const ui_tokens = @import("../../ui_tokens.zig");
 const component_common = @import("../../ui_component_common.zig");
 const component_codec = @import("Codec.zig");
-const component_io = @import("ComponentIO.zig");
-const component_registry = @import("ComponentRegistry.zig");
 const component_test = @import("TestSupport.zig");
 const component_union = @import("Component.zig");
 const node_renderer = @import("NodeRenderer.zig");
@@ -52,7 +50,7 @@ fn measureNode(node: ui.Node, constraints: layouts.types.Constraints, options: R
 }
 
 fn objectRequirements() object.Requirements {
-    return component_io.requirements();
+    return component_codec.requirements();
 }
 
 fn testReq() object.Requirements {
@@ -63,18 +61,18 @@ fn testEpoch() clock.Stamp {
     return .{ .keeper = .{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 } };
 }
 
-test "component registry is the component union source of truth" {
+test "component union is the component list source of truth" {
     const fields = @typeInfo(Component).@"union".fields;
-    try std.testing.expectEqual(component_registry.registrations.len, fields.len);
-    inline for (component_registry.registrations, 0..) |entry, index| {
+    try std.testing.expectEqual(component_union.registrations.len, fields.len);
+    inline for (component_union.registrations, 0..) |entry, index| {
         const field = fields[index];
         try std.testing.expectEqualStrings(entry.name, field.name);
-        try std.testing.expect(field.type == entry.Payload);
-        try std.testing.expect(comptime @hasDecl(entry.Payload, "node"));
-        try std.testing.expect(comptime @hasDecl(entry.Payload, "render"));
-        try std.testing.expect(comptime @hasDecl(entry.Payload, "measure"));
-        try std.testing.expect(comptime @hasDecl(entry.Payload, "writeRecord"));
-        try std.testing.expect(comptime @hasDecl(entry.Payload, "fromNode"));
+        try std.testing.expect(field.type == entry.type);
+        try std.testing.expect(comptime @hasDecl(entry.type, "node"));
+        try std.testing.expect(comptime @hasDecl(entry.type, "render"));
+        try std.testing.expect(comptime @hasDecl(entry.type, "measure"));
+        try std.testing.expect(comptime @hasDecl(entry.type, "writeRecord"));
+        try std.testing.expect(comptime @hasDecl(entry.type, "fromNode"));
     }
 }
 
@@ -111,7 +109,7 @@ test "component union decodes only canonical component objects" {
     const view = try object.View.decode(canonical);
 
     try std.testing.expectEqual(object.Kind.bytes, view.header.kind);
-    try std.testing.expect(std.meta.eql(component_io.requirements(), view.header.requirements));
+    try std.testing.expect(std.meta.eql(component_codec.requirements(), view.header.requirements));
     try std.testing.expectError(error.Corrupt, Component.fromObject(view.body));
 }
 
@@ -123,7 +121,7 @@ test "component union rejects objects without component requirements" {
     var object_raw: [object.header_size + 128]u8 = undefined;
 
     var writer = component_codec.Writer.init(&ui_raw, 1, 1, .column, 0, 0).?;
-    try std.testing.expect(component_io.writeRecord(Component, &writer, 0, component));
+    try std.testing.expect(component_codec.writeRecord(Component, &writer, 0, component));
     const canonical = writer.objectNode(&object_raw, req, testEpoch()).?;
 
     try std.testing.expectError(error.Corrupt, Component.fromObject(canonical));
@@ -341,7 +339,7 @@ test "stack tree writer rejects non component child objects" {
     var ui_raw: [128]u8 = undefined;
     var object_raw: [object.header_size + 128]u8 = undefined;
     var writer = component_codec.Writer.init(&ui_raw, 1, 1, .column, 0, 0).?;
-    try std.testing.expect(component_io.writeRecord(Component, &writer, 0, component));
+    try std.testing.expect(component_codec.writeRecord(Component, &writer, 0, component));
     const child = writer.objectNode(&object_raw, req, testEpoch()).?;
     const child_view = try object.View.decode(child);
 

@@ -4,7 +4,6 @@ const ui = @import("ui.zig");
 
 pub const Error = error{
     InvalidScene,
-    InvalidIcon,
     CommandBudgetExceeded,
     ClipBudgetExceeded,
     UnsupportedComponent,
@@ -84,12 +83,6 @@ pub const Painter = struct {
         value.renderColor(scene, bounds, color) catch |err| return mapRenderError(err);
     }
 
-    pub fn iconId(self: Painter, bounds: ui.Rect, icon_id: u32, color: ui.Color) Error!void {
-        if (icon_id == 0) return error.InvalidIcon;
-        const scene = try self.activeScene();
-        scene.pushIconQuad(.{ .bounds = bounds, .icon_id = icon_id, .color = color }) catch |err| return mapRenderError(err);
-    }
-
     pub fn textQuad(self: Painter, bounds: ui.Rect, tex_u0: f32, tex_v0: f32, tex_u1: f32, tex_v1: f32, color: ui.Color) Error!void {
         const scene = try self.activeScene();
         scene.pushTextQuad(.{ .bounds = bounds, .u0 = tex_u0, .v0 = tex_v0, .u1 = tex_u1, .v1 = tex_v1, .color = color }) catch |err| return mapRenderError(err);
@@ -114,14 +107,9 @@ fn mapRenderError(err: ui.RenderError) Error {
     };
 }
 
-test "painter rejects missing scene and invalid icon ids" {
+test "painter rejects missing scene" {
     const painter = Painter.init(null);
     try std.testing.expectError(error.InvalidScene, painter.fillRect(ui.Rect.init(0, 0, 1, 1), 0, .text));
-
-    var commands: [4]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-    const valid = Painter.init(&scene);
-    try std.testing.expectError(error.InvalidIcon, valid.iconId(ui.Rect.init(0, 0, 16, 16), 0, .text));
 }
 
 test "painter facade pushes scene commands" {

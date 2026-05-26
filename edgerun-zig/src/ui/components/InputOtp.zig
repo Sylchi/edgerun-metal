@@ -1,10 +1,10 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
-const component_contract = @import("ComponentContract.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
+const text_component = @import("Text.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
@@ -13,7 +13,7 @@ const component_primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = component_contract.registration("input_otp", InputOtp);
+pub const registration = .{ .name = "input_otp", .Payload = InputOtp };
 const contentInset = component_primitives.contentInset;
 const measureFixed = component_primitives.measureFixed;
 
@@ -32,7 +32,7 @@ pub const InputOtp = struct {
             try scene.pushRect(slot, options.style.border, .border, component_primitives.control_radius, 0.0);
             if (index < self.value.len) {
                 if (contentInset(slot, input_otp_text_padding)) |text_bounds| {
-                    try scene.pushAlignedText(text_bounds.withHeightCentered(component_primitives.control_label_height), self.value[index .. index + 1], options.style.text, .center);
+                    try text_component.Text.renderAligned(scene, text_bounds.withHeightCentered(component_primitives.control_label_height), self.value[index .. index + 1], options.style.text, .center);
                 }
             }
         }

@@ -1,6 +1,5 @@
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
-const component_contract = @import("ComponentContract.zig");
 const icon = @import("../../icon.zig");
 const layout = @import("../../layouts/Types.zig");
 const object = @import("../../object.zig");
@@ -13,7 +12,7 @@ const primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = component_contract.registration("icon", Icon);
+pub const registration = .{ .name = "icon", .Payload = Icon };
 
 pub const IconSlot = union(enum) {
     none,

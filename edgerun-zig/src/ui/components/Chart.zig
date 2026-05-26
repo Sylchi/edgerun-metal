@@ -1,10 +1,10 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
-const component_contract = @import("ComponentContract.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
+const text_component = @import("Text.zig");
 const layout = @import("../../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
@@ -13,7 +13,7 @@ const component_primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = component_contract.registration("chart", Chart);
+pub const registration = .{ .name = "chart", .Payload = Chart };
 const constrainPreferredSize = component_primitives.constrainPreferredSize;
 
 pub const Chart = struct {
@@ -29,7 +29,7 @@ pub const Chart = struct {
         try scene.pushRect(bounds, options.style.panel, .fill, chart_radius, 0.0);
         try scene.pushRect(bounds, options.style.border, .border, chart_radius, 0.0);
         const label = labelBounds(bounds, self.label);
-        try scene.pushWrappedText(label, self.label, options.style.text, component_primitives.textWrap(self.label, chart_label_h, chart_label_max_lines));
+        try text_component.Text.renderWrapped(scene, label, self.label, options.style.text, component_primitives.textWrap(self.label, chart_label_h, chart_label_max_lines));
         try scene.pushRect(ui.Rect.init(plot.x, plot.y + plot.h - separator_height, plot.w, separator_height), options.style.border, .fill, 0.0, 0.0);
         for (0..chart_bar_count) |index| {
             const bar = barBounds(bounds, self.label, index);

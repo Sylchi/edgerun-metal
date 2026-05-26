@@ -1,10 +1,10 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
-const component_contract = @import("ComponentContract.zig");
 const interaction = @import("../../ui_interaction.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
+const text_component = @import("Text.zig");
 const layout = @import("../../layouts/Types.zig");
 const text_metrics = @import("../../ui_text_metrics.zig");
 const component_test = @import("TestSupport.zig");
@@ -15,7 +15,7 @@ const tokens = @import("../../ui_tokens.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = component_contract.registration("row_item", RowItem);
+pub const registration = .{ .name = "row_item", .Payload = RowItem };
 const measureFixed = component_primitives.measureFixed;
 
 pub const RowItem = struct {
@@ -35,15 +35,15 @@ pub const RowItem = struct {
         try scene.pushRect(bounds, options.style.row, .fill, row_radius, 0.0);
         if (self.detail.len == 0) {
             if (centeredTitleBounds(bounds, self.title)) |title_bounds| {
-                try scene.pushWrappedText(title_bounds, self.title, options.style.text, titleWrap(self.title));
+                try text_component.Text.renderWrapped(scene, title_bounds, self.title, options.style.text, titleWrap(self.title));
             }
             return;
         }
         if (stackedTitleBounds(bounds, self.title)) |title_bounds| {
-            try scene.pushWrappedText(title_bounds, self.title, options.style.text, titleWrap(self.title));
+            try text_component.Text.renderWrapped(scene, title_bounds, self.title, options.style.text, titleWrap(self.title));
         }
         if (detailBounds(bounds, self.title, self.detail)) |detail_bounds| {
-            try scene.pushWrappedText(detail_bounds, self.detail, options.style.muted, detailWrap(self.detail));
+            try text_component.Text.renderWrapped(scene, detail_bounds, self.detail, options.style.muted, detailWrap(self.detail));
         }
     }
 
