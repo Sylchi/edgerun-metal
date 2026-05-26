@@ -38,10 +38,8 @@ pub const Label = struct {
     }
 
     pub fn fromView(view: object.View) Error!Label {
-        return switch (try component_codec.singleNode(view)) {
-            .label => |label| .{ .value = label.value },
-            else => error.UnsupportedComponent,
-        };
+        const label = try component_codec.nodeView(view, .label);
+        return .{ .value = label.value };
     }
 };
 

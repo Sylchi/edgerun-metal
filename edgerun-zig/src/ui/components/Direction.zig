@@ -52,10 +52,8 @@ pub const Direction = struct {
     }
 
     pub fn fromView(view: object.View) Error!Direction {
-        return switch (try component_codec.singleNode(view)) {
-            .direction => |direction| .{ .id = direction.id, .active = direction.active },
-            else => error.UnsupportedComponent,
-        };
+        const direction = try component_codec.nodeView(view, .direction);
+        return .{ .id = direction.id, .active = direction.active };
     }
 };
 

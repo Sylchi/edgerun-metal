@@ -39,10 +39,8 @@ pub const Progress = struct {
     }
 
     pub fn fromView(view: object.View) Error!Progress {
-        return switch (try component_codec.singleNode(view)) {
-            .progress => |progress| .{ .value = progress.value },
-            else => error.UnsupportedComponent,
-        };
+        const progress = try component_codec.nodeView(view, .progress);
+        return .{ .value = progress.value };
     }
 };
 

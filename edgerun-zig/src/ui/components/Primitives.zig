@@ -1,6 +1,7 @@
 const layout = @import("../../layouts/Types.zig");
 const common = @import("../../ui_component_common.zig");
 const interaction = @import("../../ui_interaction.zig");
+const std = @import("std");
 const tokens = @import("../../ui_tokens.zig");
 const ui = @import("../../ui.zig");
 
@@ -51,6 +52,36 @@ pub fn renderControlStateOverlay(scene: *ui.Scene, bounds: ui.Rect, options: com
         try scene.pushRect(bar, common.state_loading_fill, .fill, state_loading_h * 0.5, 0.0);
     }
     if (state.disabled) try scene.pushRect(bounds, common.state_disabled_tint, .fill, radius, 0.0);
+}
+
+pub const Chrome = struct {
+    fill: ?ui.Color = null,
+    border: ?ui.Color = null,
+    shadow_color: ?ui.Color = null,
+    radius: f32 = 0.0,
+    shadow: f32 = 0.0,
+
+    pub fn control(fill: ui.Color, border: ui.Color, radius: f32) Chrome {
+        return .{ .fill = fill, .border = border, .radius = radius };
+    }
+
+    pub fn panel(fill: ui.Color, border: ui.Color, radius: f32) Chrome {
+        return .{ .fill = fill, .border = border, .radius = radius };
+    }
+
+    pub fn elevated(fill: ui.Color, border: ?ui.Color, radius: f32, shadow: f32) Chrome {
+        return .{ .fill = fill, .border = border, .shadow_color = fill, .radius = radius, .shadow = shadow };
+    }
+
+    pub fn shadowOnly(color: ui.Color, radius: f32, shadow: f32) Chrome {
+        return .{ .shadow_color = color, .radius = radius, .shadow = shadow };
+    }
+};
+
+pub fn renderChrome(scene: *ui.Scene, bounds: ui.Rect, chrome: Chrome) ui.RenderError!void {
+    if (chrome.shadow > 0.0) try scene.pushRect(bounds, chrome.shadow_color orelse chrome.fill orelse ui.Color.clear, .shadow, chrome.radius, chrome.shadow);
+    if (chrome.fill) |fill| try scene.pushRect(bounds, fill, .fill, chrome.radius, 0.0);
+    if (chrome.border) |border| try scene.pushRect(bounds, border, .border, chrome.radius, 0.0);
 }
 
 pub const SidePanelLayout = struct {
@@ -110,3 +141,20 @@ pub const control_text_padding: f32 = tokens.Component.control_text_padding;
 pub const control_label_height: f32 = tokens.Component.control_label_height;
 const focus_ring_outset: f32 = tokens.Component.focus_ring_outset;
 const state_loading_h: f32 = tokens.Component.state_loading_h;
+
+test "component chrome helper emits deterministic frame commands" {
+    var commands: [3]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+    const bounds = ui.Rect.init(1, 2, 30, 40);
+    const fill = ui.Color{ .r = 1, .g = 2, .b = 3 };
+    const border = ui.Color{ .r = 4, .g = 5, .b = 6 };
+
+    try renderChrome(&scene, bounds, .elevated(fill, border, 7.0, 3.0));
+
+    try std.testing.expectEqual(@as(usize, 3), scene.written().len);
+    try std.testing.expectEqual(ui.RectMode.shadow, scene.written()[0].rect.mode);
+    try std.testing.expectEqual(ui.RectMode.fill, scene.written()[1].rect.mode);
+    try std.testing.expectEqual(ui.RectMode.border, scene.written()[2].rect.mode);
+    try std.testing.expectEqual(@as(f32, 7.0), scene.written()[1].rect.radius);
+    try std.testing.expect(std.meta.eql(border, scene.written()[2].rect.color));
+}

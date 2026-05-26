@@ -56,10 +56,8 @@ pub const Drawer = struct {
     }
 
     pub fn fromView(view: object.View) Error!Drawer {
-        return switch (try component_codec.singleNode(view)) {
-            .drawer => |drawer| .{ .id = drawer.id, .title = drawer.title, .detail = drawer.detail },
-            else => error.UnsupportedComponent,
-        };
+        const drawer = try component_codec.nodeView(view, .drawer);
+        return .{ .id = drawer.id, .title = drawer.title, .detail = drawer.detail };
     }
 };
 

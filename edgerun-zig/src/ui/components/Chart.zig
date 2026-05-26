@@ -54,10 +54,8 @@ pub const Chart = struct {
     }
 
     pub fn fromView(view: object.View) Error!Chart {
-        return switch (try component_codec.singleNode(view)) {
-            .chart => |chart| .{ .id = chart.id, .label = chart.label },
-            else => error.UnsupportedComponent,
-        };
+        const chart = try component_codec.nodeView(view, .chart);
+        return .{ .id = chart.id, .label = chart.label };
     }
 };
 

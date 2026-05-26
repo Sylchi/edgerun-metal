@@ -471,6 +471,7 @@ pub fn build(b: *std.Build) void {
         "er_ui_render_icon_svg_tuning_test",
     };
     const install_app_runtime = b.addInstallArtifact(app_runtime, .{});
+    const install_web_app_runtime = b.addInstallFile(app_runtime.getEmittedBin(), "web/a.wasm");
     const wasm_entry = b.addExecutable(.{
         .name = "edgerun-wasm-entry",
         .root_module = b.createModule(.{
@@ -484,9 +485,11 @@ pub fn build(b: *std.Build) void {
     const install_wasm_entry = b.addInstallFile(wasm_entry_html, "web/index.html");
     const wasm_entry_step = b.step("wasm-entry", "Generate the minimal web host entry point");
     wasm_entry_step.dependOn(&install_wasm_entry.step);
+    wasm_entry_step.dependOn(&install_web_app_runtime.step);
 
     const app_runtime_step = b.step("app-runtime", "Build the host-agnostic app runtime wasm");
     app_runtime_step.dependOn(&install_app_runtime.step);
+    app_runtime_step.dependOn(&install_web_app_runtime.step);
     app_runtime_step.dependOn(&install_wasm_compiler.step);
     app_runtime_step.dependOn(&install_wasm_entry.step);
 

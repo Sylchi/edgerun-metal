@@ -41,10 +41,8 @@ pub const AspectRatio = struct {
     }
 
     pub fn fromView(view: object.View) Error!AspectRatio {
-        return switch (try component_codec.singleNode(view)) {
-            .aspect_ratio => |aspect_ratio| .{ .ratio_w = aspect_ratio.ratio_w, .ratio_h = aspect_ratio.ratio_h },
-            else => error.UnsupportedComponent,
-        };
+        const aspect_ratio = try component_codec.nodeView(view, .aspect_ratio);
+        return .{ .ratio_w = aspect_ratio.ratio_w, .ratio_h = aspect_ratio.ratio_h };
     }
 };
 

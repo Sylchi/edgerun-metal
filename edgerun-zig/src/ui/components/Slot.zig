@@ -2,7 +2,6 @@ const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
 const codec = @import("../../ui_codec.zig");
 const component_io = @import("ComponentIO.zig");
-const component_render = @import("Render.zig");
 const interaction = @import("../../ui_interaction.zig");
 const layouts = @import("../../layouts.zig");
 const object = @import("../../object.zig");
@@ -26,20 +25,20 @@ pub fn Slot(comptime Component: type) type {
         }
 
         pub fn measure(self: Self, constraints: layouts.types.Constraints, options: RenderOptions) layouts.types.Measurement {
-            return component_render.measureComponent(Component, self.child, constraints, options);
+            return self.child.measure(constraints, options);
         }
 
         pub fn render(self: Self, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-            return component_render.renderComponent(Component, scene, bounds, self.child, options);
+            return self.child.render(scene, bounds, options);
         }
 
         pub fn collectInteractions(self: Self, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) interaction.Error!void {
             _ = options;
-            return component_render.collectComponentInteractions(Component, collector, bounds, self.child);
+            return self.child.collectInteractions(collector, bounds);
         }
 
         pub fn collectAccessibility(self: Self, tree: *common.AccessibilityTree, bounds: ui.Rect, options: RenderOptions) common.AccessibilityError!void {
-            return component_render.collectAccessibility(Component, tree, bounds, self.child, options);
+            return self.child.collectAccessibility(tree, bounds, options);
         }
 
         pub fn toObject(self: Self, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {

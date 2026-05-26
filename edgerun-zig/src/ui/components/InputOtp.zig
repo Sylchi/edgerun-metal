@@ -56,10 +56,8 @@ pub const InputOtp = struct {
     }
 
     pub fn fromView(view: object.View) Error!InputOtp {
-        return switch (try component_codec.singleNode(view)) {
-            .input_otp => |otp| .{ .id = otp.id, .value = otp.value },
-            else => error.UnsupportedComponent,
-        };
+        const input_otp = try component_codec.nodeView(view, .input_otp);
+        return .{ .id = input_otp.id, .value = input_otp.value };
     }
 };
 

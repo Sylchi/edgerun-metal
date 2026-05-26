@@ -45,10 +45,8 @@ pub const Avatar = struct {
     }
 
     pub fn fromView(view: object.View) Error!Avatar {
-        return switch (try component_codec.singleNode(view)) {
-            .avatar => |avatar| .{ .label = avatar.label },
-            else => error.UnsupportedComponent,
-        };
+        const avatar = try component_codec.nodeView(view, .avatar);
+        return .{ .label = avatar.label };
     }
 };
 

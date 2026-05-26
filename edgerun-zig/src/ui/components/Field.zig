@@ -56,10 +56,8 @@ pub const Field = struct {
     }
 
     pub fn fromView(view: object.View) Error!Field {
-        return switch (try component_codec.singleNode(view)) {
-            .field => |field| .{ .id = field.id, .label = field.label, .placeholder = field.placeholder },
-            else => error.UnsupportedComponent,
-        };
+        const field = try component_codec.nodeView(view, .field);
+        return .{ .id = field.id, .label = field.label, .placeholder = field.placeholder };
     }
 };
 

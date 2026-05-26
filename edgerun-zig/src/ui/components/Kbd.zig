@@ -45,10 +45,8 @@ pub const Kbd = struct {
     }
 
     pub fn fromView(view: object.View) Error!Kbd {
-        return switch (try component_codec.singleNode(view)) {
-            .kbd => |kbd| .{ .label = kbd.label },
-            else => error.UnsupportedComponent,
-        };
+        const kbd = try component_codec.nodeView(view, .kbd);
+        return .{ .label = kbd.label };
     }
 };
 

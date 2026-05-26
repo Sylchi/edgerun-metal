@@ -53,10 +53,8 @@ pub const Text = struct {
     }
 
     pub fn fromView(view: object.View) Error!Text {
-        return switch (try component_codec.singleNode(view)) {
-            .text => |text| .{ .value = text.value },
-            else => error.UnsupportedComponent,
-        };
+        const text = try component_codec.nodeView(view, .text);
+        return .{ .value = text.value };
     }
 };
 

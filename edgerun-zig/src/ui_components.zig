@@ -11,7 +11,6 @@ const component_codec = @import("ui/components/Codec.zig");
 const component_io = @import("ui/components/ComponentIO.zig");
 const component_test = @import("ui/components/TestSupport.zig");
 const tree_codec = @import("ui/components/TreeCodec.zig");
-const component_render = @import("ui/components/Render.zig");
 const component_primitives = @import("ui/components/Primitives.zig");
 const stack_component = @import("ui/components/Stack.zig");
 const slot_component = @import("ui/components/Slot.zig");
@@ -194,15 +193,253 @@ pub const Component = union(enum) {
     }
 
     pub fn render(self: Component, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return renderComponent(scene, bounds, self, options);
+        const resolved_options = options.withControlId(self.controlId());
+        switch (self) {
+            .text => |component| try component.render(scene, bounds, resolved_options),
+            .accordion => |component| try component.render(scene, bounds, resolved_options),
+            .alert => |component| try component.render(scene, bounds, resolved_options),
+            .alert_dialog => |component| try component.render(scene, bounds, resolved_options),
+            .aspect_ratio => |component| try component.render(scene, bounds, resolved_options),
+            .calendar => |component| try component.render(scene, bounds, resolved_options),
+            .carousel => |component| try component.render(scene, bounds, resolved_options),
+            .chart => |component| try component.render(scene, bounds, resolved_options),
+            .combobox => |component| try component.render(scene, bounds, resolved_options),
+            .card => |component| try component.render(scene, bounds, resolved_options),
+            .empty => |component| try component.render(scene, bounds, resolved_options),
+            .badge => |component| try component.render(scene, bounds, resolved_options),
+            .avatar => |component| try component.render(scene, bounds, resolved_options),
+            .kbd => |component| try component.render(scene, bounds, resolved_options),
+            .label => |component| try component.render(scene, bounds, resolved_options),
+            .separator => |component| try component.render(scene, bounds, resolved_options),
+            .scroll_area => |component| try component.render(scene, bounds, resolved_options),
+            .skeleton => |component| try component.render(scene, bounds, resolved_options),
+            .spinner => |component| try component.render(scene, bounds, resolved_options),
+            .breadcrumb => |component| try component.render(scene, bounds, resolved_options),
+            .menubar => |component| try component.render(scene, bounds, resolved_options),
+            .navigation_menu => |component| try component.render(scene, bounds, resolved_options),
+            .command => |component| try component.render(scene, bounds, resolved_options),
+            .context_menu => |component| try component.render(scene, bounds, resolved_options),
+            .dialog => |component| try component.render(scene, bounds, resolved_options),
+            .direction => |component| try component.render(scene, bounds, resolved_options),
+            .drawer => |component| try component.render(scene, bounds, resolved_options),
+            .dropdown_menu => |component| try component.render(scene, bounds, resolved_options),
+            .field => |component| try component.render(scene, bounds, resolved_options),
+            .hover_card => |component| try component.render(scene, bounds, resolved_options),
+            .input_otp => |component| try component.render(scene, bounds, resolved_options),
+            .button => |component| try component.render(scene, bounds, resolved_options),
+            .icon_button => |component| try component.render(scene, bounds, resolved_options),
+            .button_group => |component| try component.render(scene, bounds, resolved_options),
+            .toggle_group => |component| try component.render(scene, bounds, resolved_options),
+            .toggle => |component| try component.render(scene, bounds, resolved_options),
+            .input => |component| try component.render(scene, bounds, resolved_options),
+            .input_group => |component| try component.render(scene, bounds, resolved_options),
+            .textarea => |component| try component.render(scene, bounds, resolved_options),
+            .select => |component| try component.render(scene, bounds, resolved_options),
+            .checkbox => |component| try component.render(scene, bounds, resolved_options),
+            .radio_group => |component| try component.render(scene, bounds, resolved_options),
+            .switch_control => |component| try component.render(scene, bounds, resolved_options),
+            .pagination => |component| try component.render(scene, bounds, resolved_options),
+            .popover => |component| try component.render(scene, bounds, resolved_options),
+            .resizable => |component| try component.render(scene, bounds, resolved_options),
+            .sheet => |component| try component.render(scene, bounds, resolved_options),
+            .sidebar => |component| try component.render(scene, bounds, resolved_options),
+            .progress => |component| try component.render(scene, bounds, resolved_options),
+            .slider => |component| try component.render(scene, bounds, resolved_options),
+            .tabs => |component| try component.render(scene, bounds, resolved_options),
+            .table => |component| try component.render(scene, bounds, resolved_options),
+            .tooltip => |component| try component.render(scene, bounds, resolved_options),
+            .toast => |component| try component.render(scene, bounds, resolved_options),
+            .row_item => |component| try component.render(scene, bounds, resolved_options),
+        }
+        try component_primitives.renderControlStateOverlay(scene, bounds, resolved_options, component_primitives.control_radius);
     }
 
     pub fn collectInteractions(self: Component, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-        return collectComponentInteractions(collector, bounds, self);
+        switch (self) {
+            .accordion => |component| try component.collectInteractions(collector, bounds),
+            .alert_dialog => |component| try component.collectInteractions(collector, bounds),
+            .calendar => |component| try component.collectInteractions(collector, bounds),
+            .carousel => |component| try component.collectInteractions(collector, bounds),
+            .chart => |component| try component.collectInteractions(collector, bounds),
+            .combobox => |component| try component.collectInteractions(collector, bounds),
+            .breadcrumb => |component| try component.collectInteractions(collector, bounds),
+            .menubar => |component| try component.collectInteractions(collector, bounds),
+            .navigation_menu => |component| try component.collectInteractions(collector, bounds),
+            .command => |component| try component.collectInteractions(collector, bounds),
+            .context_menu => |component| try component.collectInteractions(collector, bounds),
+            .dialog => |component| try component.collectInteractions(collector, bounds),
+            .direction => |component| try component.collectInteractions(collector, bounds),
+            .drawer => |component| try component.collectInteractions(collector, bounds),
+            .dropdown_menu => |component| try component.collectInteractions(collector, bounds),
+            .field => |component| try component.collectInteractions(collector, bounds),
+            .hover_card => |component| try component.collectInteractions(collector, bounds),
+            .input_otp => |component| try component.collectInteractions(collector, bounds),
+            .button => |component| try component.collectInteractions(collector, bounds),
+            .icon_button => |component| try component.collectInteractions(collector, bounds),
+            .button_group => |component| try component.collectInteractions(collector, bounds),
+            .toggle_group => |component| try component.collectInteractions(collector, bounds),
+            .input => |component| try component.collectInteractions(collector, bounds),
+            .input_group => |component| try component.collectInteractions(collector, bounds),
+            .textarea => |component| try component.collectInteractions(collector, bounds),
+            .select => |component| try component.collectInteractions(collector, bounds),
+            .checkbox => |component| try component.collectInteractions(collector, bounds),
+            .radio_group => |component| try component.collectInteractions(collector, bounds),
+            .switch_control => |component| try component.collectInteractions(collector, bounds),
+            .pagination => |component| try component.collectInteractions(collector, bounds),
+            .popover => |component| try component.collectInteractions(collector, bounds),
+            .resizable => |component| try component.collectInteractions(collector, bounds),
+            .sheet => |component| try component.collectInteractions(collector, bounds),
+            .sidebar => |component| try component.collectInteractions(collector, bounds),
+            .toggle => |component| try component.collectInteractions(collector, bounds),
+            .slider => |component| try component.collectInteractions(collector, bounds),
+            .tabs => |component| try component.collectInteractions(collector, bounds),
+            .table => |component| try component.collectInteractions(collector, bounds),
+            .tooltip => |component| try component.collectInteractions(collector, bounds),
+            .toast => |component| try component.collectInteractions(collector, bounds),
+            .row_item => |component| try component.collectInteractions(collector, bounds),
+            else => {},
+        }
     }
 
     pub fn measure(self: Component, constraints: layouts.types.Constraints, options: RenderOptions) layouts.types.Measurement {
-        return component_render.measureComponent(Component, self, constraints, options);
+        return switch (self) {
+            .text => |component| component.measure(constraints, options),
+            .accordion => |component| component.measure(constraints, options),
+            .alert => |component| component.measure(constraints, options),
+            .alert_dialog => |component| component.measure(constraints, options),
+            .aspect_ratio => |component| component.measure(constraints, options),
+            .calendar => |component| component.measure(constraints, options),
+            .carousel => |component| component.measure(constraints, options),
+            .chart => |component| component.measure(constraints, options),
+            .combobox => |component| component.measure(constraints, options),
+            .card => |component| component.measure(constraints, options),
+            .empty => |component| component.measure(constraints, options),
+            .badge => |component| component.measure(constraints, options),
+            .avatar => |component| component.measure(constraints, options),
+            .kbd => |component| component.measure(constraints, options),
+            .label => |component| component.measure(constraints, options),
+            .separator => |component| component.measure(constraints, options),
+            .scroll_area => |component| component.measure(constraints, options),
+            .skeleton => |component| component.measure(constraints, options),
+            .spinner => |component| component.measure(constraints, options),
+            .breadcrumb => |component| component.measure(constraints, options),
+            .menubar => |component| component.measure(constraints, options),
+            .navigation_menu => |component| component.measure(constraints, options),
+            .command => |component| component.measure(constraints, options),
+            .context_menu => |component| component.measure(constraints, options),
+            .dialog => |component| component.measure(constraints, options),
+            .direction => |component| component.measure(constraints, options),
+            .drawer => |component| component.measure(constraints, options),
+            .dropdown_menu => |component| component.measure(constraints, options),
+            .field => |component| component.measure(constraints, options),
+            .hover_card => |component| component.measure(constraints, options),
+            .input_otp => |component| component.measure(constraints, options),
+            .button => |component| component.measure(constraints, options),
+            .icon_button => |component| component.measure(constraints, options),
+            .button_group => |component| component.measure(constraints, options),
+            .toggle_group => |component| component.measure(constraints, options),
+            .toggle => |component| component.measure(constraints, options),
+            .input => |component| component.measure(constraints, options),
+            .input_group => |component| component.measure(constraints, options),
+            .textarea => |component| component.measure(constraints, options),
+            .select => |component| component.measure(constraints, options),
+            .checkbox => |component| component.measure(constraints, options),
+            .radio_group => |component| component.measure(constraints, options),
+            .switch_control => |component| component.measure(constraints, options),
+            .pagination => |component| component.measure(constraints, options),
+            .popover => |component| component.measure(constraints, options),
+            .resizable => |component| component.measure(constraints, options),
+            .sheet => |component| component.measure(constraints, options),
+            .sidebar => |component| component.measure(constraints, options),
+            .progress => |component| component.measure(constraints, options),
+            .slider => |component| component.measure(constraints, options),
+            .tabs => |component| component.measure(constraints, options),
+            .table => |component| component.measure(constraints, options),
+            .tooltip => |component| component.measure(constraints, options),
+            .toast => |component| component.measure(constraints, options),
+            .row_item => |component| component.measure(constraints, options),
+        };
+    }
+
+    pub fn accessibility(self: Component) Accessibility {
+        return switch (self) {
+            .text => |component| .{ .role = .text, .label = component.value },
+            .button => |component| .{ .role = .button, .label = component.label, .control_id = component.id },
+            .icon_button => |component| .{ .role = .button, .label = component.label, .control_id = component.id },
+            .input => |component| .{ .role = .input, .label = component.placeholder, .control_id = component.id },
+            .field => |component| .{ .role = .input, .label = component.label, .control_id = component.id },
+            .textarea => |component| .{ .role = .input, .label = component.placeholder, .control_id = component.id },
+            .select => |component| .{ .role = .input, .label = component.label, .control_id = component.id },
+            .checkbox => |component| .{ .role = .checkbox, .label = component.label, .control_id = component.id },
+            .switch_control => |component| .{ .role = .switch_control, .label = component.label, .control_id = component.id },
+            .slider => |component| .{ .role = .slider, .label = component.label, .control_id = component.id },
+            .tabs => |component| .{ .role = .tab, .label = component.first, .control_id = component.id },
+            .table => |component| .{ .role = .table, .label = component.name, .control_id = component.id },
+            .dialog => |component| .{ .role = .dialog, .label = component.title, .control_id = component.id },
+            .alert_dialog => |component| .{ .role = .dialog, .label = component.title, .control_id = component.id },
+            .dropdown_menu => |component| .{ .role = .menu, .label = component.first, .control_id = component.id },
+            .context_menu => |component| .{ .role = .menu, .label = component.first, .control_id = component.id },
+            .menubar => |component| .{ .role = .menu, .label = component.first, .control_id = component.id },
+            .navigation_menu => |component| .{ .role = .menu, .label = component.first, .control_id = component.id },
+            .avatar => |component| .{ .role = .image, .label = component.label },
+            .toast => |component| .{ .role = .status, .label = component.title, .control_id = component.id },
+            .row_item => |component| .{ .role = .button, .label = component.title, .control_id = component.id },
+            else => .{ .role = .generic },
+        };
+    }
+
+    pub fn collectAccessibility(self: Component, tree: *AccessibilityTree, bounds: ui.Rect, options: RenderOptions) component_common.AccessibilityError!void {
+        _ = options;
+        const metadata = self.accessibility();
+        if (metadata.role == .generic and metadata.label.len == 0 and metadata.control_id == null) return;
+        try tree.append(.{ .metadata = metadata, .bounds = bounds });
+    }
+
+    fn controlId(self: Component) ?u32 {
+        return switch (self) {
+            .text, .alert, .aspect_ratio, .card, .empty, .badge, .avatar, .kbd, .label, .separator, .scroll_area, .skeleton, .spinner, .progress => null,
+            .accordion => |component| component.id,
+            .alert_dialog => |component| component.id,
+            .calendar => |component| component.id,
+            .carousel => |component| component.id,
+            .chart => |component| component.id,
+            .combobox => |component| component.id,
+            .breadcrumb => |component| component.id,
+            .menubar => |component| component.id,
+            .navigation_menu => |component| component.id,
+            .command => |component| component.id,
+            .context_menu => |component| component.id,
+            .dialog => |component| component.id,
+            .direction => |component| component.id,
+            .drawer => |component| component.id,
+            .dropdown_menu => |component| component.id,
+            .field => |component| component.id,
+            .hover_card => |component| component.id,
+            .input_otp => |component| component.id,
+            .button => |component| component.id,
+            .icon_button => |component| component.id,
+            .button_group => |component| component.id,
+            .toggle_group => |component| component.id,
+            .toggle => |component| component.id,
+            .input => |component| component.id,
+            .input_group => |component| component.id,
+            .textarea => |component| component.id,
+            .select => |component| component.id,
+            .checkbox => |component| component.id,
+            .radio_group => |component| component.id,
+            .switch_control => |component| component.id,
+            .pagination => |component| component.id,
+            .popover => |component| component.id,
+            .resizable => |component| component.id,
+            .sheet => |component| component.id,
+            .sidebar => |component| component.id,
+            .slider => |component| component.id,
+            .tabs => |component| component.id,
+            .table => |component| component.id,
+            .tooltip => |component| component.id,
+            .toast => |component| component.id,
+            .row_item => |component| component.id,
+        };
     }
 
     pub fn toObject(self: Component, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -400,7 +637,7 @@ pub const Toast = toast_component.Toast;
 pub const RowItem = row_item_component.RowItem;
 
 pub fn renderComponent(scene: *ui.Scene, bounds: ui.Rect, component: Component, options: RenderOptions) ui.RenderError!void {
-    return component_render.renderComponent(Component, scene, bounds, component, options);
+    return component.render(scene, bounds, options);
 }
 
 pub fn renderNode(scene: *ui.Scene, bounds: ui.Rect, node: ui.Node, options: RenderOptions) ui.RenderError!void {
@@ -422,15 +659,15 @@ pub fn renderNode(scene: *ui.Scene, bounds: ui.Rect, node: ui.Node, options: Ren
 }
 
 pub fn collectComponentInteractions(collector: *interaction.Collector, bounds: ui.Rect, component: Component) interaction.Error!void {
-    return component_render.collectComponentInteractions(Component, collector, bounds, component);
+    return component.collectInteractions(collector, bounds);
 }
 
 pub fn accessibility(component: Component) Accessibility {
-    return component_render.accessibility(Component, component);
+    return component.accessibility();
 }
 
 pub fn collectAccessibility(tree: *AccessibilityTree, bounds: ui.Rect, component: Component, options: RenderOptions) component_common.AccessibilityError!void {
-    return component_render.collectAccessibility(Component, tree, bounds, component, options);
+    return component.collectAccessibility(tree, bounds, options);
 }
 
 pub fn measureNode(node: ui.Node, constraints: layouts.types.Constraints, options: RenderOptions) layouts.types.Measurement {
@@ -439,7 +676,7 @@ pub fn measureNode(node: ui.Node, constraints: layouts.types.Constraints, option
         .slot => |slot| measureNode(slot.child.*, constraints, options),
         .stack => |stack| measureNodeStack(stack, constraints, options),
         else => if (Component.fromNode(node)) |component|
-            component_render.measureComponent(Component, component, constraints, options)
+            component.measure(constraints, options)
         else |_|
             primitiveNodeMeasurement(node, constraints),
     };
@@ -460,14 +697,14 @@ fn renderNodeStack(scene: *ui.Scene, bounds: ui.Rect, stack: ui.Layout, options:
 
 fn measureNodeStack(stack: ui.Layout, constraints: layouts.types.Constraints, options: RenderOptions) layouts.types.Measurement {
     var child_measurements: [node_stack_max_children]layouts.types.Measurement = undefined;
-    const child_constraints = component_render.stackChildConstraintsFor(stack.axis, stack.padding, constraints);
+    const child_constraints = stack_component.stackChildConstraintsFor(stack.axis, stack.padding, constraints);
     const measured_children = measureNodeChildren(stack.children, child_constraints, options, &child_measurements);
     return layouts.Flex.measure(measured_children, constraints, nodeStackLayoutOptionsFor(stack));
 }
 
 fn placeNodeStackChildren(bounds: ui.Rect, stack: ui.Layout, options: RenderOptions, measurements: *[node_stack_max_children]layouts.types.Measurement, out: *[node_stack_max_children]ui.Rect) []ui.Rect {
-    const constraints = component_render.constraintsFromBounds(bounds);
-    const child_constraints = component_render.stackChildConstraintsFor(stack.axis, stack.padding, constraints);
+    const constraints = stack_component.constraintsFromBounds(bounds);
+    const child_constraints = stack_component.stackChildConstraintsFor(stack.axis, stack.padding, constraints);
     const measured_children = measureNodeChildren(stack.children, child_constraints, options, measurements);
     return layouts.Flex.place(bounds, measured_children, nodeStackLayoutOptionsFor(stack), out);
 }
@@ -481,7 +718,7 @@ fn measureNodeChildren(children: []const ui.Node, constraints: layouts.types.Con
 }
 
 fn nodeStackLayoutOptionsFor(stack: ui.Layout) layouts.Flex.Options {
-    return component_render.stackLayoutOptionsFor(stack.axis, stack.gap, stack.padding, nodeStackCrossAlign(stack.cross_align));
+    return stack_component.stackLayoutOptionsFor(stack.axis, stack.gap, stack.padding, nodeStackCrossAlign(stack.cross_align));
 }
 
 fn nodeStackCrossAlign(value: ui.Align) layouts.Flex.Align {

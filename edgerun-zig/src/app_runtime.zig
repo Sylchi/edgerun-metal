@@ -288,6 +288,21 @@ const input_event_outbox: u32 = 1 << 3;
 const input_event_capture_pointer: u32 = 1 << 4;
 const input_event_release_pointer: u32 = 1 << 5;
 const input_event_error: u32 = 1 << 8;
+const input_event_record_header_bytes: usize = 36;
+const input_event_record_kind_offset: usize = 0;
+const input_event_record_x_offset: usize = 4;
+const input_event_record_y_offset: usize = 8;
+const input_event_record_delta_y_offset: usize = 12;
+const input_event_record_flags_offset: usize = 16;
+const input_event_record_key_len_offset: usize = 20;
+const input_event_record_code_len_offset: usize = 24;
+const input_event_record_input_type_len_offset: usize = 28;
+const input_event_record_data_len_offset: usize = 32;
+const input_event_flag_ctrl: u32 = 1 << 0;
+const input_event_flag_meta: u32 = 1 << 1;
+const input_event_flag_alt: u32 = 1 << 2;
+const input_event_flag_shift: u32 = 1 << 3;
+const input_event_flag_repeat: u32 = 1 << 4;
 
 const CursorKind = app_cursor.Kind;
 
@@ -1198,36 +1213,92 @@ export fn er_ui_event_bytes(input_len: usize, width: f32, height: f32, frame_ms:
     _ = frame_ms;
     if (input_len > input_bytes.len) return finishError(.bad_input);
     const envelope = input_bytes[0..input_len];
-    const record = parseInputEventRecord(envelope) catch return finishError(.bad_input);
+    const record = parseInputEventRecordBytes(envelope) catch return finishError(.bad_input);
     return handleInputEventRecord(record, width, height);
 }
 
-fn parseInputEventRecord(envelope: []const u8) !InputEventRecord {
-    var fields = std.mem.splitScalar(u8, envelope, '\n');
-    const event_name = fields.next() orelse return error.BadInput;
-    const kind = inputEventKindFromName(event_name) orelse return error.UnknownInputEvent;
-    const x = parseInputEventFloat(fields.next() orelse "") catch return error.BadInput;
-    const y = parseInputEventFloat(fields.next() orelse "") catch return error.BadInput;
-    const delta_y = parseInputEventFloat(fields.next() orelse "") catch return error.BadInput;
-    const ctrl = parseInputEventFlag(fields.next() orelse "") catch return error.BadInput;
-    const meta = parseInputEventFlag(fields.next() orelse "") catch return error.BadInput;
-    const alt = parseInputEventFlag(fields.next() orelse "") catch return error.BadInput;
-    const shift = parseInputEventFlag(fields.next() orelse "") catch return error.BadInput;
-    const repeat = parseInputEventFlag(fields.next() orelse "") catch return error.BadInput;
+fn parseInputEventRecordBytes(envelope: []const u8) !InputEventRecord {
+    if (envelope.len < input_event_record_header_bytes) return error.BadInput;
+    const kind = inputEventKindFromInt(loadEventU32(envelope, input_event_record_kind_offset) orelse return error.BadInput) orelse return error.UnknownInputEvent;
+    const x = loadEventF32(envelope, input_event_record_x_offset) orelse return error.BadInput;
+    const y = loadEventF32(envelope, input_event_record_y_offset) orelse return error.BadInput;
+    const delta_y = loadEventF32(envelope, input_event_record_delta_y_offset) orelse return error.BadInput;
+    const flags = loadEventU32(envelope, input_event_record_flags_offset) orelse return error.BadInput;
+    const key_len: usize = @intCast(loadEventU32(envelope, input_event_record_key_len_offset) orelse return error.BadInput);
+    const code_len: usize = @intCast(loadEventU32(envelope, input_event_record_code_len_offset) orelse return error.BadInput);
+    const input_type_len: usize = @intCast(loadEventU32(envelope, input_event_record_input_type_len_offset) orelse return error.BadInput);
+    const data_len: usize = @intCast(loadEventU32(envelope, input_event_record_data_len_offset) orelse return error.BadInput);
+    var offset: usize = input_event_record_header_bytes;
+    const key = nextEventBytes(envelope, &offset, key_len) orelse return error.BadInput;
+    const code = nextEventBytes(envelope, &offset, code_len) orelse return error.BadInput;
+    const input_type = nextEventBytes(envelope, &offset, input_type_len) orelse return error.BadInput;
+    const data = nextEventBytes(envelope, &offset, data_len) orelse return error.BadInput;
+    if (offset != envelope.len) return error.BadInput;
     return .{
         .kind = kind,
         .x = x,
         .y = y,
         .delta_y = delta_y,
-        .ctrl = ctrl,
-        .meta = meta,
-        .alt = alt,
-        .shift = shift,
-        .repeat = repeat,
-        .key = fields.next() orelse "",
-        .code = fields.next() orelse "",
-        .input_type = fields.next() orelse "",
-        .data = fields.next() orelse "",
+        .ctrl = if ((flags & input_event_flag_ctrl) != 0) 1 else 0,
+        .meta = if ((flags & input_event_flag_meta) != 0) 1 else 0,
+        .alt = if ((flags & input_event_flag_alt) != 0) 1 else 0,
+        .shift = if ((flags & input_event_flag_shift) != 0) 1 else 0,
+        .repeat = if ((flags & input_event_flag_repeat) != 0) 1 else 0,
+        .key = key,
+        .code = code,
+        .input_type = input_type,
+        .data = data,
+    };
+}
+
+fn loadEventU32(envelope: []const u8, offset: usize) ?u32 {
+    if (offset > envelope.len or 4 > envelope.len - offset) return null;
+    return bytes.load32(envelope[offset..][0..4]);
+}
+
+fn loadEventF32(envelope: []const u8, offset: usize) ?f32 {
+    return @as(f32, @bitCast(loadEventU32(envelope, offset) orelse return null));
+}
+
+fn nextEventBytes(envelope: []const u8, offset: *usize, len: usize) ?[]const u8 {
+    if (offset.* > envelope.len or len > envelope.len - offset.*) return null;
+    const out = envelope[offset.*..][0..len];
+    offset.* += len;
+    return out;
+}
+
+fn inputEventKindFromInt(value: u32) ?InputEventKind {
+    return switch (value) {
+        @intFromEnum(InputEventKind.resize) => .resize,
+        @intFromEnum(InputEventKind.wheel) => .wheel,
+        @intFromEnum(InputEventKind.pointer_move) => .pointer_move,
+        @intFromEnum(InputEventKind.pointer_leave) => .pointer_leave,
+        @intFromEnum(InputEventKind.pointer_down) => .pointer_down,
+        @intFromEnum(InputEventKind.pointer_up) => .pointer_up,
+        @intFromEnum(InputEventKind.popstate) => .popstate,
+        @intFromEnum(InputEventKind.hashchange) => .hashchange,
+        @intFromEnum(InputEventKind.key_down) => .key_down,
+        @intFromEnum(InputEventKind.context_menu) => .context_menu,
+        @intFromEnum(InputEventKind.key_up) => .key_up,
+        @intFromEnum(InputEventKind.input) => .input,
+        @intFromEnum(InputEventKind.change) => .change,
+        @intFromEnum(InputEventKind.click) => .click,
+        @intFromEnum(InputEventKind.dbl_click) => .dbl_click,
+        @intFromEnum(InputEventKind.visibility_change) => .visibility_change,
+        @intFromEnum(InputEventKind.focus) => .focus,
+        @intFromEnum(InputEventKind.blur) => .blur,
+        @intFromEnum(InputEventKind.before_input) => .before_input,
+        @intFromEnum(InputEventKind.composition_start) => .composition_start,
+        @intFromEnum(InputEventKind.composition_update) => .composition_update,
+        @intFromEnum(InputEventKind.composition_end) => .composition_end,
+        @intFromEnum(InputEventKind.touch_start) => .touch_start,
+        @intFromEnum(InputEventKind.touch_move) => .touch_move,
+        @intFromEnum(InputEventKind.touch_end) => .touch_end,
+        @intFromEnum(InputEventKind.touch_cancel) => .touch_cancel,
+        @intFromEnum(InputEventKind.drag_start) => .drag_start,
+        @intFromEnum(InputEventKind.drag_end) => .drag_end,
+        @intFromEnum(InputEventKind.drop) => .drop,
+        else => null,
     };
 }
 
@@ -1326,52 +1397,6 @@ export fn er_ui_boot() u32 {
     queueOutboxMessage(.set_element_html) catch return finishError(.bad_input);
     last_error = .ok;
     return input_event_outbox | input_event_schedule_frame;
-}
-
-fn inputEventKindFromName(name: []const u8) ?InputEventKind {
-    if (std.mem.eql(u8, name, "resize")) return .resize;
-    if (std.mem.eql(u8, name, "wheel")) return .wheel;
-    if (std.mem.eql(u8, name, "scroll")) return .wheel;
-    if (std.mem.eql(u8, name, "pointermove")) return .pointer_move;
-    if (std.mem.eql(u8, name, "pointerleave")) return .pointer_leave;
-    if (std.mem.eql(u8, name, "pointercancel")) return .pointer_leave;
-    if (std.mem.eql(u8, name, "pointerdown")) return .pointer_down;
-    if (std.mem.eql(u8, name, "pointerup")) return .pointer_up;
-    if (std.mem.eql(u8, name, "popstate")) return .popstate;
-    if (std.mem.eql(u8, name, "hashchange")) return .hashchange;
-    if (std.mem.eql(u8, name, "keydown")) return .key_down;
-    if (std.mem.eql(u8, name, "keyup")) return .key_up;
-    if (std.mem.eql(u8, name, "input")) return .input;
-    if (std.mem.eql(u8, name, "change")) return .change;
-    if (std.mem.eql(u8, name, "click")) return .click;
-    if (std.mem.eql(u8, name, "dblclick")) return .dbl_click;
-    if (std.mem.eql(u8, name, "visibilitychange")) return .visibility_change;
-    if (std.mem.eql(u8, name, "focus")) return .focus;
-    if (std.mem.eql(u8, name, "blur")) return .blur;
-    if (std.mem.eql(u8, name, "contextmenu")) return .context_menu;
-    if (std.mem.eql(u8, name, "beforeinput")) return .before_input;
-    if (std.mem.eql(u8, name, "compositionstart")) return .composition_start;
-    if (std.mem.eql(u8, name, "compositionupdate")) return .composition_update;
-    if (std.mem.eql(u8, name, "compositionend")) return .composition_end;
-    if (std.mem.eql(u8, name, "touchstart")) return .touch_start;
-    if (std.mem.eql(u8, name, "touchmove")) return .touch_move;
-    if (std.mem.eql(u8, name, "touchend")) return .touch_end;
-    if (std.mem.eql(u8, name, "touchcancel")) return .touch_cancel;
-    if (std.mem.eql(u8, name, "dragstart")) return .drag_start;
-    if (std.mem.eql(u8, name, "dragend")) return .drag_end;
-    if (std.mem.eql(u8, name, "drop")) return .drop;
-    return null;
-}
-
-fn parseInputEventFloat(value: []const u8) !f32 {
-    if (value.len == 0) return 0.0;
-    return std.fmt.parseFloat(f32, value);
-}
-
-fn parseInputEventFlag(value: []const u8) !u32 {
-    if (std.mem.eql(u8, value, "1")) return 1;
-    if (std.mem.eql(u8, value, "0") or value.len == 0) return 0;
-    return error.InvalidInputEventFlag;
 }
 
 fn keyFromText(value: []const u8, shift: u32) ?ui_runtime.Key {
@@ -3029,8 +3054,35 @@ fn writeInputForTest(value: []const u8) usize {
     return value.len;
 }
 
-fn eventBytesForTest(value: []const u8, width: f32, height: f32) u32 {
-    return er_ui_event_bytes(writeInputForTest(value), width, height, 0);
+fn eventBytesForTest(kind: InputEventKind, x: f32, y: f32, delta_y: f32, flags: u32, key: []const u8, code: []const u8, input_type: []const u8, data: []const u8, width: f32, height: f32) u32 {
+    const input_len = writeEventRecordForTest(kind, x, y, delta_y, flags, key, code, input_type, data);
+    return er_ui_event_bytes(input_len, width, height, 0);
+}
+
+fn writeEventRecordForTest(kind: InputEventKind, x: f32, y: f32, delta_y: f32, flags: u32, key: []const u8, code: []const u8, input_type: []const u8, data: []const u8) usize {
+    _ = bytes.store32(input_bytes[input_event_record_kind_offset..][0..4], @intFromEnum(kind));
+    storeEventF32ForTest(input_event_record_x_offset, x);
+    storeEventF32ForTest(input_event_record_y_offset, y);
+    storeEventF32ForTest(input_event_record_delta_y_offset, delta_y);
+    _ = bytes.store32(input_bytes[input_event_record_flags_offset..][0..4], flags);
+    _ = bytes.store32(input_bytes[input_event_record_key_len_offset..][0..4], @intCast(key.len));
+    _ = bytes.store32(input_bytes[input_event_record_code_len_offset..][0..4], @intCast(code.len));
+    _ = bytes.store32(input_bytes[input_event_record_input_type_len_offset..][0..4], @intCast(input_type.len));
+    _ = bytes.store32(input_bytes[input_event_record_data_len_offset..][0..4], @intCast(data.len));
+    var offset: usize = input_event_record_header_bytes;
+    @memcpy(input_bytes[offset..][0..key.len], key);
+    offset += key.len;
+    @memcpy(input_bytes[offset..][0..code.len], code);
+    offset += code.len;
+    @memcpy(input_bytes[offset..][0..input_type.len], input_type);
+    offset += input_type.len;
+    @memcpy(input_bytes[offset..][0..data.len], data);
+    offset += data.len;
+    return offset;
+}
+
+fn storeEventF32ForTest(offset: usize, value: f32) void {
+    _ = bytes.store32(input_bytes[offset..][0..4], @as(u32, @bitCast(value)));
 }
 
 fn keyEventForTest(value: []const u8, ctrl: bool, meta: bool, alt: bool) u32 {
@@ -3080,24 +3132,24 @@ test "app runtime event bytes keep host event decoding inside wasm" {
 
     try std.testing.expectEqual(
         input_event_schedule_frame,
-        eventBytesForTest("pointermove\n42\n88\n0\n0\n0\n0\n0\n0\n\n\n\n", 1280.0, 900.0),
+        eventBytesForTest(.pointer_move, 42.0, 88.0, 0.0, 0, "", "", "", "", 1280.0, 900.0),
     );
     try std.testing.expectEqual(@as(f32, 42.0), pointer_hover_x);
     try std.testing.expectEqual(@as(f32, 88.0), pointer_hover_y);
 
     try std.testing.expectEqual(
         input_event_prevent_default | input_event_schedule_frame,
-        eventBytesForTest("wheel\n0\n0\n120\n0\n0\n0\n0\n0\n\n\n\n", 1280.0, 900.0),
+        eventBytesForTest(.wheel, 0.0, 0.0, 120.0, 0, "", "", "", "", 1280.0, 900.0),
     );
     try std.testing.expectEqual(@as(f32, 120.0), app_state.scroll_y);
 
     try std.testing.expectEqual(
         input_event_schedule_frame,
-        eventBytesForTest("hashchange\n0\n0\n0\n0\n0\n0\n0\n0\n\n\n\n#/apps", 1280.0, 900.0),
+        eventBytesForTest(.hashchange, 0.0, 0.0, 0.0, 0, "", "", "", "#/apps", 1280.0, 900.0),
     );
     try std.testing.expectEqualStrings("/", route_bytes[0..er_ui_app_route_path_len()]);
 
-    try std.testing.expectEqual(input_event_schedule_frame, eventBytesForTest("keyup\n0\n0\n0\n0\n0\n0\n0\n0\nk\nKeyK\n\n", 1280.0, 900.0));
+    try std.testing.expectEqual(input_event_schedule_frame, eventBytesForTest(.key_up, 0.0, 0.0, 0.0, 0, "k", "KeyK", "", "", 1280.0, 900.0));
 }
 
 test "app runtime event pump owns dom event interpretation" {
@@ -3372,7 +3424,7 @@ test "app runtime source editor handles full event records and edit history" {
 
     try std.testing.expectEqual(
         input_event_prevent_default | input_event_schedule_frame,
-        eventBytesForTest("beforeinput\n0\n0\n0\n0\n0\n0\n0\n0\n\n\ninsertText\nq", 1280.0, 900.0),
+        eventBytesForTest(.before_input, 0.0, 0.0, 0.0, 0, "", "", "insertText", "q", 1280.0, 900.0),
     );
     try std.testing.expectEqual(original_len + 1, source_editor_len);
     try std.testing.expectEqual(@as(u8, 'q'), source_editor_bytes[0]);
@@ -3380,7 +3432,7 @@ test "app runtime source editor handles full event records and edit history" {
 
     try std.testing.expectEqual(
         input_event_prevent_default | input_event_schedule_frame,
-        eventBytesForTest("keydown\n0\n0\n0\n1\n0\n0\n0\n0\nz\nKeyZ\n\n", 1280.0, 900.0),
+        eventBytesForTest(.key_down, 0.0, 0.0, 0.0, input_event_flag_ctrl, "z", "KeyZ", "", "", 1280.0, 900.0),
     );
     try std.testing.expectEqual(original_len, source_editor_len);
     try std.testing.expectEqual(original_first, source_editor_bytes[0]);
@@ -3388,14 +3440,14 @@ test "app runtime source editor handles full event records and edit history" {
 
     try std.testing.expectEqual(
         input_event_prevent_default | input_event_schedule_frame,
-        eventBytesForTest("keydown\n0\n0\n0\n1\n0\n0\n0\n0\ny\nKeyY\n\n", 1280.0, 900.0),
+        eventBytesForTest(.key_down, 0.0, 0.0, 0.0, input_event_flag_ctrl, "y", "KeyY", "", "", 1280.0, 900.0),
     );
     try std.testing.expectEqual(original_len + 1, source_editor_len);
     try std.testing.expectEqual(@as(u8, 'q'), source_editor_bytes[0]);
 
     try std.testing.expectEqual(
         input_event_prevent_default | input_event_schedule_frame,
-        eventBytesForTest("keydown\n0\n0\n0\n1\n0\n0\n0\n0\na\nKeyA\n\n", 1280.0, 900.0),
+        eventBytesForTest(.key_down, 0.0, 0.0, 0.0, input_event_flag_ctrl, "a", "KeyA", "", "", 1280.0, 900.0),
     );
     try std.testing.expect(source_editor_selection_active);
     try std.testing.expectEqual(@as(usize, 0), source_editor_selection_anchor);

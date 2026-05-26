@@ -52,10 +52,8 @@ pub const Toast = struct {
     }
 
     pub fn fromView(view: object.View) Error!Toast {
-        return switch (try component_codec.singleNode(view)) {
-            .toast => |toast| .{ .id = toast.id, .title = toast.title, .detail = toast.detail },
-            else => error.UnsupportedComponent,
-        };
+        const toast = try component_codec.nodeView(view, .toast);
+        return .{ .id = toast.id, .title = toast.title, .detail = toast.detail };
     }
 };
 

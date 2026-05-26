@@ -61,10 +61,8 @@ pub const Tabs = struct {
     }
 
     pub fn fromView(view: object.View) Error!Tabs {
-        return switch (try component_codec.singleNode(view)) {
-            .tabs => |tabs| .{ .id = tabs.id, .first = tabs.first, .second = tabs.second, .active = activeIndex(tabs.active) },
-            else => error.UnsupportedComponent,
-        };
+        const tabs = try component_codec.nodeView(view, .tabs);
+        return .{ .id = tabs.id, .first = tabs.first, .second = tabs.second, .active = activeIndex(tabs.active) };
     }
 };
 

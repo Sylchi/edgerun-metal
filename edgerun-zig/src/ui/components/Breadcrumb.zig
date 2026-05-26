@@ -54,10 +54,8 @@ pub const Breadcrumb = struct {
     }
 
     pub fn fromView(view: object.View) Error!Breadcrumb {
-        return switch (try component_codec.singleNode(view)) {
-            .breadcrumb => |breadcrumb| .{ .id = breadcrumb.id, .first = breadcrumb.first, .current = breadcrumb.current },
-            else => error.UnsupportedComponent,
-        };
+        const breadcrumb = try component_codec.nodeView(view, .breadcrumb);
+        return .{ .id = breadcrumb.id, .first = breadcrumb.first, .current = breadcrumb.current };
     }
 };
 

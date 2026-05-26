@@ -56,10 +56,8 @@ pub const DropdownMenu = struct {
     }
 
     pub fn fromView(view: object.View) Error!DropdownMenu {
-        return switch (try component_codec.singleNode(view)) {
-            .dropdown_menu => |menu| .{ .id = menu.id, .first = menu.first, .second = menu.second },
-            else => error.UnsupportedComponent,
-        };
+        const menu = try component_codec.nodeView(view, .dropdown_menu);
+        return .{ .id = menu.id, .first = menu.first, .second = menu.second };
     }
 };
 

@@ -56,10 +56,8 @@ pub const Tooltip = struct {
     }
 
     pub fn fromView(view: object.View) Error!Tooltip {
-        return switch (try component_codec.singleNode(view)) {
-            .tooltip => |tooltip| .{ .id = tooltip.id, .trigger = tooltip.trigger, .content = tooltip.content },
-            else => error.UnsupportedComponent,
-        };
+        const tooltip = try component_codec.nodeView(view, .tooltip);
+        return .{ .id = tooltip.id, .trigger = tooltip.trigger, .content = tooltip.content };
     }
 };
 

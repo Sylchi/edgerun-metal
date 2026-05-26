@@ -52,10 +52,8 @@ pub const Carousel = struct {
     }
 
     pub fn fromView(view: object.View) Error!Carousel {
-        return switch (try component_codec.singleNode(view)) {
-            .carousel => |carousel| .{ .id = carousel.id, .label = carousel.label },
-            else => error.UnsupportedComponent,
-        };
+        const carousel = try component_codec.nodeView(view, .carousel);
+        return .{ .id = carousel.id, .label = carousel.label };
     }
 };
 

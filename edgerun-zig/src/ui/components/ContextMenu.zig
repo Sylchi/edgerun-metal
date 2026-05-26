@@ -56,10 +56,8 @@ pub const ContextMenu = struct {
     }
 
     pub fn fromView(view: object.View) Error!ContextMenu {
-        return switch (try component_codec.singleNode(view)) {
-            .context_menu => |menu| .{ .id = menu.id, .first = menu.first, .second = menu.second },
-            else => error.UnsupportedComponent,
-        };
+        const menu = try component_codec.nodeView(view, .context_menu);
+        return .{ .id = menu.id, .first = menu.first, .second = menu.second };
     }
 };
 

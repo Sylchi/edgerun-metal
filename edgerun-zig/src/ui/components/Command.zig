@@ -75,10 +75,8 @@ pub const Command = struct {
     }
 
     pub fn fromView(view: object.View) Error!Command {
-        return switch (try component_codec.singleNode(view)) {
-            .command => |command| .{ .id = command.id, .placeholder = command.placeholder },
-            else => error.UnsupportedComponent,
-        };
+        const command = try component_codec.nodeView(view, .command);
+        return .{ .id = command.id, .placeholder = command.placeholder };
     }
 };
 

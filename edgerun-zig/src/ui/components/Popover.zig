@@ -52,10 +52,8 @@ pub const Popover = struct {
     }
 
     pub fn fromView(view: object.View) Error!Popover {
-        return switch (try component_codec.singleNode(view)) {
-            .popover => |popover| .{ .id = popover.id, .trigger = popover.trigger, .content = popover.content },
-            else => error.UnsupportedComponent,
-        };
+        const popover = try component_codec.nodeView(view, .popover);
+        return .{ .id = popover.id, .trigger = popover.trigger, .content = popover.content };
     }
 };
 

@@ -58,10 +58,8 @@ pub const InputGroup = struct {
     }
 
     pub fn fromView(view: object.View) Error!InputGroup {
-        return switch (try component_codec.singleNode(view)) {
-            .input_group => |input_group| .{ .id = input_group.id, .addon = input_group.addon, .placeholder = input_group.placeholder },
-            else => error.UnsupportedComponent,
-        };
+        const input_group = try component_codec.nodeView(view, .input_group);
+        return .{ .id = input_group.id, .addon = input_group.addon, .placeholder = input_group.placeholder };
     }
 };
 

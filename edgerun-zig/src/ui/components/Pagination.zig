@@ -52,10 +52,8 @@ pub const Pagination = struct {
     }
 
     pub fn fromView(view: object.View) Error!Pagination {
-        return switch (try component_codec.singleNode(view)) {
-            .pagination => |pagination| .{ .id = pagination.id, .page = selectedPage(pagination.page) },
-            else => error.UnsupportedComponent,
-        };
+        const pagination = try component_codec.nodeView(view, .pagination);
+        return .{ .id = pagination.id, .page = selectedPage(pagination.page) };
     }
 };
 
