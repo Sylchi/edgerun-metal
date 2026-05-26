@@ -27,7 +27,6 @@ pub const AstSmith = @import("zig/AstSmith.zig");
 pub const Zir = @import("zig/Zir.zig");
 pub const Zoir = @import("zig/Zoir.zig");
 pub const ZonGen = @import("zig/ZonGen.zig");
-pub const system = @import("zig/system.zig");
 pub const BuiltinFn = @import("zig/BuiltinFn.zig");
 pub const AstRlAnnotate = @import("zig/AstRlAnnotate.zig");
 pub const LibCInstallation = @import("zig/LibCInstallation.zig");
@@ -670,11 +669,6 @@ pub fn putAstErrorsIntoBundle(
     }
 }
 
-pub fn resolveTargetQueryOrFatal(io: Io, target_query: std.Target.Query) std.Target {
-    return std.zig.system.resolveTargetQuery(io, target_query) catch |err|
-        std.process.fatal("unable to resolve target: {s}", .{@errorName(err)});
-}
-
 pub fn parseTargetQueryOrReportFatalError(
     allocator: Allocator,
     opts: std.Target.Query.ParseOptions,
@@ -1172,7 +1166,6 @@ test {
     _ = number_literal;
     _ = primitives;
     _ = string_literal;
-    _ = system;
     _ = target;
     _ = c_translation;
     _ = llvm;
