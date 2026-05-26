@@ -21,25 +21,21 @@ const content_pad: f32 = design.content_pad;
 const page_top_pad: f32 = 16.0;
 const page_bottom_pad: f32 = 48.0;
 const panel_radius: f32 = 6.0;
-const gap: f32 = 10.0;
 const panel_pad: f32 = 14.0;
-const toolbar_label_h: f32 = 18.0;
-const toolbar_title_h: f32 = 20.0;
-const toolbar_detail_h: f32 = 16.0;
-const toolbar_row_gap: f32 = 10.0;
+const command_bar_h: f32 = 48.0;
+const command_bar_compact_h: f32 = 92.0;
+const toolbar_label_h: f32 = 16.0;
+const toolbar_detail_h: f32 = 14.0;
 const toolbar_action_gap: f32 = 10.0;
 const source_action_h: f32 = design.compact_control_h + 2.0;
 const source_action_min_w: f32 = 132.0;
-const toolbar_text_average_w: f32 = 8.8;
-const toolbar_title_max_lines: usize = 2;
-const toolbar_detail_max_lines: usize = 2;
-const compiler_title_h: f32 = 18.0;
-const compiler_text_h: f32 = 16.0;
+const compiler_panel_h: f32 = 72.0;
+const compiler_title_h: f32 = 16.0;
+const compiler_text_h: f32 = 14.0;
 const compiler_bar_h: f32 = 8.0;
-const compiler_stage_h: f32 = 18.0;
-const compiler_diagnostic_h: f32 = 16.0;
+const compiler_stage_h: f32 = 16.0;
+const compiler_diagnostic_h: f32 = 14.0;
 const compiler_text_average_w: f32 = 8.6;
-const compiler_message_max_lines: usize = 2;
 const code_pad: f32 = 18.0;
 const code_line_h: f32 = 18.0;
 const code_gutter_w: f32 = 68.0;
@@ -71,7 +67,6 @@ const fill = app_layout.fill;
 const stroke = app_layout.stroke;
 const text = app_layout.text;
 const wrappedText = app_layout.wrappedTextWith;
-const wrappedTextHeight = app_layout.wrappedTextHeightWith;
 const syntax_keyword = ui.Color{ .r = 125, .g = 211, .b = 252 };
 const syntax_type = ui.Color{ .r = 196, .g = 181, .b = 253 };
 const syntax_string = ui.Color{ .r = 134, .g = 239, .b = 172 };
@@ -141,12 +136,9 @@ fn renderToolbar(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui
     try fill(scene, bounds, vscode_titlebar, 0.0);
     try stroke(scene, ui.Rect.init(bounds.x, bounds.y + bounds.h - 1.0, bounds.w, 1.0), vscode_line, 0.0);
     const text_w = toolbarTextWidth(bounds);
-    const title_h = wrappedTextHeight(state.label, text_w, toolbar_title_h, toolbar_title_max_lines, toolbar_text_average_w);
-    const detail_h = wrappedTextHeight(toolbarDetail(state), text_w, toolbar_detail_h, toolbar_detail_max_lines, toolbar_text_average_w);
-    try iconQuad(scene, ui.Rect.init(bounds.x + panel_pad, bounds.y + panel_pad + 1.0, 18.0, 18.0), .app, palette.primary);
-    try text(scene, bounds.x + panel_pad + 28.0, bounds.y + panel_pad, text_w, toolbar_label_h, "EdgeRun Workspace", palette.primary);
-    try wrappedText(scene, ui.Rect.init(bounds.x + panel_pad, bounds.y + panel_pad + toolbar_label_h + toolbar_row_gap, text_w, title_h), state.label, palette.text, toolbar_title_h, toolbar_text_average_w, toolbar_title_max_lines);
-    try wrappedText(scene, ui.Rect.init(bounds.x + panel_pad, bounds.y + panel_pad + toolbar_label_h + toolbar_row_gap + title_h + toolbar_row_gap, text_w, detail_h), toolbarDetail(state), toolbarDetailColor(state), toolbar_detail_h, toolbar_text_average_w, toolbar_detail_max_lines);
+    try iconQuad(scene, ui.Rect.init(bounds.x + panel_pad, bounds.y + 14.0, 18.0, 18.0), .app, palette.primary);
+    try text(scene, bounds.x + panel_pad + 28.0, bounds.y + 8.0, text_w, toolbar_label_h, "EdgeRun Workspace", palette.primary);
+    try text(scene, bounds.x + panel_pad + 28.0, bounds.y + 26.0, text_w, toolbar_detail_h, state.label, palette.text);
 
     const actions = toolbarActions(bounds);
     try button(scene, collector, actions.compile, "Compile", compile_button_id, .primary, .cpu, canCompile(state));
@@ -222,14 +214,10 @@ fn renderStatus(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
     try fill(scene, bounds, vscode_titlebar, 0.0);
     try stroke(scene, ui.Rect.init(bounds.x, bounds.y, bounds.w, 1.0), vscode_line, 0.0);
     const text_w = @max(1.0, bounds.w - panel_pad * 2.0);
-    const status_h = wrappedTextHeight(state.status, text_w, compiler_text_h, compiler_message_max_lines, compiler_text_average_w);
-    const summary_h = wrappedTextHeight(state.compile_summary, text_w, compiler_text_h, compiler_message_max_lines, compiler_text_average_w);
-    const status_y = bounds.y + panel_pad + compiler_title_h + 8.0;
-    const summary_y = status_y + status_h + 10.0;
-    const bar_y = summary_y + summary_h + 14.0;
-    try text(scene, bounds.x + panel_pad, bounds.y + panel_pad, text_w, compiler_title_h, "Compiler", palette.cyan);
-    try wrappedText(scene, ui.Rect.init(bounds.x + panel_pad, status_y, text_w, status_h), state.status, palette.text, compiler_text_h, compiler_text_average_w, compiler_message_max_lines);
-    try wrappedText(scene, ui.Rect.init(bounds.x + panel_pad, summary_y, text_w, summary_h), state.compile_summary, palette.dim, compiler_text_h, compiler_text_average_w, compiler_message_max_lines);
+    const bar_y = bounds.y + 36.0;
+    try text(scene, bounds.x + panel_pad, bounds.y + 10.0, 110.0, compiler_title_h, "Compiler", palette.cyan);
+    try text(scene, bounds.x + panel_pad + 112.0, bounds.y + 10.0, @max(1.0, text_w - 112.0), compiler_text_h, state.status, palette.text);
+    try text(scene, bounds.x + panel_pad, bounds.y + bounds.h - compiler_text_h - 8.0, text_w, compiler_text_h, state.compile_summary, palette.dim);
 
     const bar = ui.Rect.init(bounds.x + panel_pad, bar_y, text_w, compiler_bar_h);
     var progress_style = app_chrome.style();
@@ -237,10 +225,8 @@ fn renderStatus(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
     progress_style.accent = progressColor(state.compile_progress);
     try components.renderComponent(scene, bar, .{ .progress = .{ .value = state.compile_progress } }, .{ .style = progress_style });
     try renderCompileStages(scene, ui.Rect.init(bar.x, bar.y - 5.0, bar.w, compiler_stage_h), state.compile_progress);
-    const phase_y = bar.y + compiler_bar_h + 8.0;
-    try text(scene, bounds.x + panel_pad, phase_y, text_w, compiler_text_h, state.compile_phase, palette.primary);
     if (state.diagnostic.len != 0) {
-        try wrappedText(scene, ui.Rect.init(bounds.x + panel_pad, phase_y + compiler_text_h, text_w, compiler_diagnostic_h), state.diagnostic, palette.danger, compiler_diagnostic_h, compiler_text_average_w, 1);
+        try wrappedText(scene, ui.Rect.init(bounds.x + panel_pad, bar.y + compiler_bar_h + 6.0, text_w, compiler_diagnostic_h), state.diagnostic, palette.danger, compiler_diagnostic_h, compiler_text_average_w, 1);
     }
 }
 
@@ -466,17 +452,12 @@ fn editorHeight(content_w: f32, state: State) f32 {
 }
 
 fn toolbarHeight(content_w: f32) f32 {
-    const title_h = toolbar_title_h * @as(f32, @floatFromInt(toolbar_title_max_lines));
-    const detail_h = toolbar_detail_h * @as(f32, @floatFromInt(toolbar_detail_max_lines));
-    const text_h = panel_pad + toolbar_label_h + toolbar_row_gap + title_h + toolbar_row_gap + detail_h + panel_pad;
-    const actions_h = toolbarActionsHeight(content_w);
-    if (content_w >= compact_w) return @max(text_h, panel_pad + actions_h + panel_pad);
-    return text_h + toolbar_row_gap + actions_h + panel_pad;
+    return if (content_w >= compact_w) command_bar_h else command_bar_compact_h;
 }
 
 fn statusHeight(_: f32, state: State) f32 {
     const diagnostic_h = if (state.diagnostic.len == 0) 0.0 else compiler_diagnostic_h;
-    return panel_pad + compiler_title_h + 8.0 + compiler_text_h * @as(f32, @floatFromInt(compiler_message_max_lines)) + 10.0 + compiler_text_h * @as(f32, @floatFromInt(compiler_message_max_lines)) + 14.0 + compiler_stage_h + 8.0 + compiler_text_h + diagnostic_h + panel_pad;
+    return compiler_panel_h + diagnostic_h;
 }
 
 fn maxVisibleColumns(width: f32) usize {
@@ -505,7 +486,7 @@ fn toolbarActions(bounds: ui.Rect) ToolbarActions {
     const button_w = @max(design.min_touch_target, (layout_w - toolbar_action_gap * @as(f32, @floatFromInt(columns - 1))) / @as(f32, @floatFromInt(columns)));
     const row_h = source_action_h;
     const start_x = if (!compact) bounds.x + bounds.w - panel_pad - toolbarActionsWidth(bounds.w) else action_area.x;
-    const start_y = if (!compact) bounds.y + panel_pad else action_area.y;
+    const start_y = if (!compact) bounds.y + (bounds.h - row_h) * 0.5 else action_area.y;
     if (columns == 2) {
         return .{
             .compile = ui.Rect.init(start_x, start_y, button_w, row_h),
