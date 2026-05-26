@@ -14,7 +14,6 @@ const list_layout = @import("ListLayout.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = .{ .name = "menubar", .Payload = Menubar };
 const contentInset = component_primitives.contentInset;
 const measureFixed = component_primitives.measureFixed;
 

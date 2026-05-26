@@ -1,6 +1,7 @@
 const std = @import("std");
 const interaction = @import("ui_interaction.zig");
 const ui = @import("ui.zig");
+const text_component = @import("ui/components/Text.zig");
 const badge_component = @import("ui/components/Badge.zig");
 const button_component = @import("ui/components/Button.zig");
 const card_component = @import("ui/components/Card.zig");
@@ -305,7 +306,7 @@ fn renderTerminal(scene: *ui.Scene, collector: *interaction.Collector, bounds: u
     }
     if (visible > terminal_identity_line_index) {
         const identity_h: f32 = if (state.public_identity_ready) 36.0 else 14.0;
-        try scene.pushWrappedText(ui.Rect.init(bounds.x + 24.0, y, bounds.w - 48.0, identity_h), state.public_identity, palette.primary, .{
+        try text_component.Text.renderWrapped(scene, ui.Rect.init(bounds.x + 24.0, y, bounds.w - 48.0, identity_h), state.public_identity, palette.primary, .{
             .line_height = 16.0,
             .average_char_width = 8.2,
             .max_lines = 2,
@@ -336,7 +337,7 @@ fn renderTerminalHint(scene: *ui.Scene, terminal: ui.Rect, state: State, stacked
         "This app runtime has a live identity, embedded compiler bytes, and a source workspace in its own memory."
     else
         "Reveal creates an ephemeral identity inside the WASM app. The host only presents the surface.";
-    try scene.pushWrappedText(ui.Rect.init(hint_x, hint_y, hint_w, 36.0), message, palette.dim, .{
+    try text_component.Text.renderWrapped(scene, ui.Rect.init(hint_x, hint_y, hint_w, 36.0), message, palette.dim, .{
         .line_height = 18.0,
         .average_char_width = 8.5,
         .max_lines = 2,
@@ -575,20 +576,20 @@ fn titleAccent(scene: *ui.Scene, bounds: ui.Rect, value: []const u8) ui.RenderEr
 }
 
 fn titleLine(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, color: ui.Color) ui.RenderError!void {
-    try scene.pushAlignedText(ui.Rect.init(bounds.x + title_weight_offset, bounds.y, bounds.w, bounds.h), value, color, .start);
-    try scene.pushAlignedText(bounds, value, color, .start);
+    try text_component.Text.renderAligned(scene, ui.Rect.init(bounds.x + title_weight_offset, bounds.y, bounds.w, bounds.h), value, color, .start);
+    try text_component.Text.renderAligned(scene, bounds, value, color, .start);
 }
 
 fn titleMobile(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, color: ui.Color) ui.RenderError!void {
     const wrap = ui.TextWrap{ .line_height = hero_mobile_title_line_h, .average_char_width = hero_mobile_title_average_w, .max_lines = 2 };
-    try scene.pushWrappedText(ui.Rect.init(bounds.x + title_weight_offset, bounds.y, bounds.w, bounds.h), value, color, wrap);
-    try scene.pushWrappedText(bounds, value, color, wrap);
+    try text_component.Text.renderWrapped(scene, ui.Rect.init(bounds.x + title_weight_offset, bounds.y, bounds.w, bounds.h), value, color, wrap);
+    try text_component.Text.renderWrapped(scene, bounds, value, color, wrap);
 }
 
 fn titleWrapped(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, color: ui.Color) ui.RenderError!void {
     const wrap = ui.TextWrap{ .line_height = 58.0, .average_char_width = 27.0, .max_lines = 2 };
-    try scene.pushWrappedText(ui.Rect.init(bounds.x + title_weight_offset, bounds.y, bounds.w, bounds.h), value, color, wrap);
-    try scene.pushWrappedText(bounds, value, color, wrap);
+    try text_component.Text.renderWrapped(scene, ui.Rect.init(bounds.x + title_weight_offset, bounds.y, bounds.w, bounds.h), value, color, wrap);
+    try text_component.Text.renderWrapped(scene, bounds, value, color, wrap);
 }
 
 fn terminalVisibleLineCount(frame_ms: f32) usize {
@@ -607,15 +608,15 @@ fn heading(scene: *ui.Scene, bounds: ui.Rect, first: []const u8, second: []const
 }
 
 fn paragraph(scene: *ui.Scene, bounds: ui.Rect, value: []const u8) ui.RenderError!void {
-    try scene.pushWrappedText(bounds, value, palette.dim, .{ .line_height = 18.0, .average_char_width = 8.3, .max_lines = 6 });
+    try text_component.Text.renderWrapped(scene, bounds, value, palette.dim, .{ .line_height = 18.0, .average_char_width = 8.3, .max_lines = 6 });
 }
 
 fn heroParagraph(scene: *ui.Scene, bounds: ui.Rect, value: []const u8) ui.RenderError!void {
-    try scene.pushWrappedText(bounds, value, palette.dim, .{ .line_height = 18.0, .average_char_width = 11.5, .max_lines = 6 });
+    try text_component.Text.renderWrapped(scene, bounds, value, palette.dim, .{ .line_height = 18.0, .average_char_width = 11.5, .max_lines = 6 });
 }
 
 fn impactParagraph(scene: *ui.Scene, bounds: ui.Rect, value: []const u8) ui.RenderError!void {
-    try scene.pushWrappedText(bounds, value, palette.dim, .{ .line_height = 18.0, .average_char_width = 10.6, .max_lines = 6 });
+    try text_component.Text.renderWrapped(scene, bounds, value, palette.dim, .{ .line_height = 18.0, .average_char_width = 10.6, .max_lines = 6 });
 }
 
 fn problemItem(scene: *ui.Scene, bounds: ui.Rect, number: []const u8, title_value: []const u8, detail: []const u8) ui.RenderError!void {
@@ -793,7 +794,7 @@ fn appStyle() ui.Style {
 }
 
 fn alignedText(scene: *ui.Scene, x: f32, y: f32, w: f32, h: f32, value: []const u8, color: ui.Color, alignment: ui.TextAlign) ui.RenderError!void {
-    try scene.pushAlignedText(ui.Rect.init(x, y, @max(1.0, w), @max(1.0, h)), value, color, alignment);
+    try text_component.Text.renderAligned(scene, ui.Rect.init(x, y, @max(1.0, w), @max(1.0, h)), value, color, alignment);
 }
 
 fn columns(bounds: ui.Rect, desired: usize, gap: f32) usize {

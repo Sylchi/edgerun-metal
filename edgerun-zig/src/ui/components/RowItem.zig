@@ -15,7 +15,6 @@ const tokens = @import("../../ui_tokens.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = .{ .name = "row_item", .Payload = RowItem };
 const measureFixed = component_primitives.measureFixed;
 
 pub const RowItem = struct {

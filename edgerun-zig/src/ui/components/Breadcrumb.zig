@@ -14,7 +14,6 @@ const primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = .{ .name = "breadcrumb", .Payload = Breadcrumb };
 const measureFixed = primitives.measureFixed;
 const Icon = icon_component.Icon;
 

@@ -923,7 +923,7 @@ fn hovered(bounds: ui.Rect) bool {
     return bounds.containsExclusive(point.x, point.y);
 }
 
-test "component gallery catalog is the authoritative component registry" {
+test "component gallery catalog is the authoritative component list" {
     try std.testing.expectEqual(@as(usize, 60), component_catalog.len);
     try std.testing.expectEqualStrings("/docs/components/input-group", findBySlug("input-group").?.route);
     try std.testing.expectEqualStrings("Button", findBySourceComponent("Button").?.source_component);

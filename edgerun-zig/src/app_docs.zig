@@ -1,6 +1,7 @@
 const std = @import("std");
 const interaction = @import("ui_interaction.zig");
 const ui = @import("ui.zig");
+const text_component = @import("ui/components/Text.zig");
 const badge_component = @import("ui/components/Badge.zig");
 const button_component = @import("ui/components/Button.zig");
 const card_component = @import("ui/components/Card.zig");
@@ -473,7 +474,7 @@ fn renderHero(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Re
     const copy_w = if (split) inset.w * 0.64 else inset.w;
     const title_y = inset.y + hero_label_h + 20.0;
     const title_h = wrappedTextHeight(page.title, copy_w, hero_title_line_h, hero_title_max_lines, hero_title_avg_w);
-    try scene.pushWrappedText(ui.Rect.init(inset.x, title_y, copy_w, title_h), page.title, palette.text, .{
+    try text_component.Text.renderWrapped(scene, ui.Rect.init(inset.x, title_y, copy_w, title_h), page.title, palette.text, .{
         .line_height = hero_title_line_h,
         .average_char_width = hero_title_avg_w,
         .max_lines = hero_title_max_lines,
@@ -533,7 +534,7 @@ fn renderFeatureGlyph(scene: *ui.Scene, bounds: ui.Rect, page: DocPage) ui.Rende
     try stroke(scene, bounds, page.color, panel_radius);
     const icon_size = @min(design.Icon.hero_max, bounds.w * 0.42);
     try page.icon_value.renderColor(scene, ui.Rect.init(bounds.x + bounds.w * 0.5 - icon_size * 0.5, bounds.y + 42.0, icon_size, icon_size), page.color);
-    try scene.pushAlignedText(ui.Rect.init(bounds.x + 12.0, bounds.y + bounds.h - 42.0, bounds.w - 24.0, 16.0), page.section.label(), palette.text, .center);
+    try text_component.Text.renderAligned(scene, ui.Rect.init(bounds.x + 12.0, bounds.y + bounds.h - 42.0, bounds.w - 24.0, 16.0), page.section.label(), palette.text, .center);
 }
 
 const docs_intro_text = "This sidebar is the docs index for the app as it exists now. Feature cards are route-backed and can become deeper pages without changing navigation shape.";

@@ -12,7 +12,6 @@ const component_primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = .{ .name = "text", .Payload = Text };
 const constrainPreferredSize = component_primitives.constrainPreferredSize;
 
 pub const Text = struct {

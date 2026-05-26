@@ -13,6 +13,7 @@ const app_navigation = @import("app_navigation.zig");
 const app_source = @import("app_source.zig");
 const design = @import("app_design.zig");
 const ui = @import("ui.zig");
+const text_component = @import("ui/components/Text.zig");
 const ui_overlay = @import("ui_overlay.zig");
 
 const workspace_rail_w: f32 = 48.0;
@@ -91,7 +92,7 @@ fn renderWorkspaceTop(scene: *ui.Scene, collector: *interaction.Collector, bound
         else => {
             try scene.pushRect(bounds, workspace_sidebar_bg, .fill, 0.0, 0.0);
             try scene.pushRect(ui.Rect.init(bounds.x, bounds.y + bounds.h - 1.0, bounds.w, 1.0), design.palette.border, .fill, 0.0, 0.0);
-            try scene.pushAlignedText(ui.Rect.init(bounds.x + 16.0, bounds.y + 18.0, bounds.w - 32.0, 16.0), statusText(state.route), design.palette.text, .start);
+            try text_component.Text.renderAligned(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 18.0, bounds.w - 32.0, 16.0), statusText(state.route), design.palette.text, .start);
         },
     }
 }
@@ -128,8 +129,8 @@ fn renderWorkspaceSidebar(scene: *ui.Scene, collector: *interaction.Collector, b
     }
     try scene.pushRect(bounds, workspace_sidebar_bg, .fill, 0.0, 0.0);
     try scene.pushRect(ui.Rect.init(bounds.x + bounds.w - 1.0, bounds.y, 1.0, bounds.h), design.palette.border, .fill, 0.0, 0.0);
-    try scene.pushAlignedText(ui.Rect.init(bounds.x + 16.0, bounds.y + 14.0, bounds.w - 32.0, 16.0), "EDGERUN", design.palette.text, .start);
-    try scene.pushAlignedText(ui.Rect.init(bounds.x + 16.0, bounds.y + 36.0, bounds.w - 32.0, 14.0), sidebarDetail(route), design.palette.muted, .start);
+    try text_component.Text.renderAligned(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 14.0, bounds.w - 32.0, 16.0), "EDGERUN", design.palette.text, .start);
+    try text_component.Text.renderAligned(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 36.0, bounds.w - 32.0, 14.0), sidebarDetail(route), design.palette.muted, .start);
     var y = bounds.y + 68.0;
     const rows = [_]struct { id: u32, title: []const u8, detail: []const u8, view: app_navigation.View }{
         .{ .id = app_chrome.source_button_id, .title = "Source", .detail = "edit app workspace", .view = .source },
@@ -195,7 +196,7 @@ fn renderWorkspaceStatus(scene: *ui.Scene, bounds: ui.Rect, state: State) !void 
         return;
     }
     try scene.pushRect(bounds, workspace_status_bg, .fill, 0.0, 0.0);
-    try scene.pushAlignedText(ui.Rect.init(bounds.x + 12.0, bounds.y + 5.0, bounds.w - 24.0, 14.0), statusText(state.route), ui.Color{ .r = 255, .g = 255, .b = 255 }, .start);
+    try text_component.Text.renderAligned(scene, ui.Rect.init(bounds.x + 12.0, bounds.y + 5.0, bounds.w - 24.0, 14.0), statusText(state.route), ui.Color{ .r = 255, .g = 255, .b = 255 }, .start);
 }
 
 fn shiftedPageBounds(bounds: ui.Rect) ui.Rect {
@@ -263,7 +264,7 @@ fn renderContextMenuPanel(scene: *ui.Scene, collector: *interaction.Collector, b
         .detail = "",
         .variant = .elevated,
     }).render(scene, panel, .{ .style = design.style() });
-    try scene.pushAlignedText(ui.Rect.init(panel.x + 14.0, panel.y + 12.0, panel.w - 28.0, 16.0), "Component source", palette.dim, .start);
+    try text_component.Text.renderAligned(scene, ui.Rect.init(panel.x + 14.0, panel.y + 12.0, panel.w - 28.0, 16.0), "Component source", palette.dim, .start);
     const row = ui.Rect.init(panel.x + 8.0, panel.y + 38.0, panel.w - 16.0, 40.0);
     const row_component = row_item_component.RowItem{
         .id = app_navigation.context_source_button_id,

@@ -1,7 +1,9 @@
 const layouts = @import("../../layouts.zig");
 const common = @import("../../ui_component_common.zig");
+const component_union = @import("Component.zig");
 const primitives = @import("Primitives.zig");
 const stack_component = @import("Stack.zig");
+const std = @import("std");
 const Text = @import("Text.zig").Text;
 const ui = @import("../../ui.zig");
 
@@ -95,3 +97,48 @@ fn primitiveNodeMeasurement(node: ui.Node, constraints: layouts.types.Constraint
 }
 
 const node_stack_max_children: usize = 64;
+
+const TestComponent = component_union.Component;
+
+test "primitive node measurement respects at-most constraints" {
+    const node = ui.inputNode(1, "Filter");
+    const measured = measureNode(TestComponent, node, .{ .width = .{ .at_most = 96.0 }, .height = .{ .at_most = 28.0 } }, .{});
+
+    try std.testing.expectEqual(@as(f32, 96.0), measured.preferred.w);
+    try std.testing.expectEqual(@as(f32, 28.0), measured.preferred.h);
+}
+
+test "node stack layout keeps existing cross alignment policy" {
+    try std.testing.expectEqual(layouts.Flex.Align.start, nodeStackCrossAlign(.start));
+    try std.testing.expectEqual(layouts.Flex.Align.start, nodeStackCrossAlign(.center));
+    try std.testing.expectEqual(layouts.Flex.Align.start, nodeStackCrossAlign(.end));
+    try std.testing.expectEqual(layouts.Flex.Align.stretch, nodeStackCrossAlign(.stretch));
+}
+
+test "primitive node rendering uses scene command helpers" {
+    var commands: [4]ui.Command = undefined;
+    var clips: [1]ui.Rect = undefined;
+    var scene = ui.Scene.initWithClips(&commands, &clips);
+    try std.testing.expect(try scene.pushClip(ui.Rect.init(0, 0, 40, 40)));
+
+    try renderNode(TestComponent, &scene, ui.Rect.init(30, 30, 20, 20), .{ .rect = .{ .color = .accent } }, .{});
+    var text_node = (Text{ .value = "node" }).node();
+    text_node.text.color = .muted;
+    try renderNode(TestComponent, &scene, ui.Rect.init(2, 4, 20, 12), text_node, .{});
+
+    try std.testing.expectEqual(ui.Rect.init(30, 30, 10, 10), scene.commandAt(0).?.rect.bounds);
+    try std.testing.expectEqual(ui.Rect.init(2, 4, 20, 12), scene.commandAt(1).?.text.origin);
+    try std.testing.expectEqual(ui.Color.muted, scene.commandAt(1).?.text.color);
+}
+
+test "raw node text uses responsive wrapped renderer" {
+    var commands: [8]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+
+    try renderNode(TestComponent, &scene, ui.Rect.init(0, 0, 72, 54), (Text{ .value = "Runtime text wraps cleanly" }).node(), .{});
+
+    try std.testing.expect(scene.written().len > 1);
+    for (scene.written()) |command| {
+        try std.testing.expect(command.text.origin.w <= 72);
+    }
+}

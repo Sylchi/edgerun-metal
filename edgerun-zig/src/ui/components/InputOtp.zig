@@ -13,7 +13,6 @@ const component_primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = .{ .name = "input_otp", .Payload = InputOtp };
 const contentInset = component_primitives.contentInset;
 const measureFixed = component_primitives.measureFixed;
 

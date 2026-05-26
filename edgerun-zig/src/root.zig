@@ -60,7 +60,7 @@ pub const app_frame = @import("app_frame.zig");
 pub const app_input_event = @import("app_input_event.zig");
 pub const app_native_input = @import("app_native_input.zig");
 pub const ui = @import("ui.zig");
-const ui_component_tests = @import("ui/components/ComponentTests.zig");
+const ui_components = @import("ui/components/Component.zig");
 pub const ui_overlay = @import("ui_overlay.zig");
 pub const ui_resolver = @import("ui_resolver.zig");
 pub const ui_text_edit = @import("ui_text_edit.zig");
@@ -134,7 +134,7 @@ test {
     _ = app_input_event;
     _ = app_native_input;
     _ = ui;
-    _ = ui_component_tests;
+    _ = ui_components;
     _ = ui_overlay;
     _ = ui_resolver;
     _ = ui_text_edit;

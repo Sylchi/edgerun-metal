@@ -13,7 +13,6 @@ const primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = .{ .name = "table", .Payload = Table };
 const constrainPreferredSize = primitives.constrainPreferredSize;
 
 pub const row_id_offset: u32 = 0;

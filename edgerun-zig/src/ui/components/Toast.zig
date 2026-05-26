@@ -15,7 +15,6 @@ const component_primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = .{ .name = "toast", .Payload = Toast };
 const measureFixed = component_primitives.measureFixed;
 const Icon = icon_component.Icon;
 

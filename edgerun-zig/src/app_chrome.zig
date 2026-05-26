@@ -3,6 +3,7 @@ const button_component = @import("ui/components/Button.zig");
 const icon_component = @import("ui/components/Icon.zig");
 const interaction = @import("ui_interaction.zig");
 const ui = @import("ui.zig");
+const text_component = @import("ui/components/Text.zig");
 const design = @import("app_design.zig");
 
 pub const logo_button_id: u32 = 30_000;
@@ -152,7 +153,7 @@ fn fill(scene: *ui.Scene, bounds: ui.Rect, color: ui.Color, r: f32) ui.RenderErr
 }
 
 fn text(scene: *ui.Scene, x: f32, y: f32, w: f32, h: f32, value: []const u8, color: ui.Color) ui.RenderError!void {
-    try scene.pushAlignedText(ui.Rect.init(x, y, @max(1.0, w), @max(1.0, h)), value, color, .start);
+    try text_component.Text.renderAligned(scene, ui.Rect.init(x, y, @max(1.0, w), @max(1.0, h)), value, color, .start);
 }
 
 test "app chrome header exposes canonical navigation hit targets" {

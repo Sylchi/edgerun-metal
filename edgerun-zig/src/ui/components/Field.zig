@@ -13,7 +13,6 @@ const primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = .{ .name = "field", .Payload = Field };
 const constrainPreferredSize = primitives.constrainPreferredSize;
 const renderControlFrame = primitives.renderControlFrame;
 const renderControlStateOverlay = primitives.renderControlStateOverlay;

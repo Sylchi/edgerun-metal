@@ -13,7 +13,6 @@ const list_layout = @import("ListLayout.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = .{ .name = "pagination", .Payload = Pagination };
 const measureFixed = component_primitives.measureFixed;
 
 pub const Pagination = struct {

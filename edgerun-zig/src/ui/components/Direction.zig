@@ -15,7 +15,6 @@ const list_layout = @import("ListLayout.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = .{ .name = "direction", .Payload = Direction };
 const contentInset = component_primitives.contentInset;
 const measureFixed = component_primitives.measureFixed;
 const Icon = icon_component.Icon;

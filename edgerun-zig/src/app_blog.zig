@@ -1,5 +1,6 @@
 const std = @import("std");
 const ui = @import("ui.zig");
+const text_component = @import("ui/components/Text.zig");
 const badge_component = @import("ui/components/Badge.zig");
 const button_component = @import("ui/components/Button.zig");
 const card_component = @import("ui/components/Card.zig");
@@ -1129,7 +1130,7 @@ fn renderPostListItem(scene: *ui.Scene, collector: *interaction.Collector, bound
     const title_y = meta_y + post_list_meta_h + post_list_meta_gap;
     const title_lines = wrappedLineCount(post.title, text_w, post_list_title_avg_char_w, post_list_title_max_lines);
     const title_h = post_list_title_h * @as(f32, @floatFromInt(title_lines));
-    try scene.pushWrappedText(ui.Rect.init(text_x, title_y, text_w, title_h), post.title, palette.text, .{
+    try text_component.Text.renderWrapped(scene, ui.Rect.init(text_x, title_y, text_w, title_h), post.title, palette.text, .{
         .line_height = post_list_title_h,
         .average_char_width = post_list_title_avg_char_w,
         .max_lines = post_list_title_max_lines,
@@ -1138,7 +1139,7 @@ fn renderPostListItem(scene: *ui.Scene, collector: *interaction.Collector, bound
     const summary_y = title_y + title_h + post_list_summary_gap;
     const summary_lines = wrappedLineCount(post.summary, text_w, post_list_summary_avg_char_w, post_list_summary_max_lines);
     const summary_h = post_list_summary_h * @as(f32, @floatFromInt(summary_lines));
-    try scene.pushWrappedText(ui.Rect.init(text_x, summary_y, text_w, summary_h), post.summary, palette.dim, .{
+    try text_component.Text.renderWrapped(scene, ui.Rect.init(text_x, summary_y, text_w, summary_h), post.summary, palette.dim, .{
         .line_height = post_list_summary_h,
         .average_char_width = post_list_summary_avg_char_w,
         .max_lines = post_list_summary_max_lines,
@@ -1205,7 +1206,7 @@ fn flowPostContent(scene: ?*ui.Scene, collector: ?*interaction.Collector, bounds
         try outlineButton(target, collector.?, ui.Rect.init(bounds.x, bounds.y, 134.0, 34.0), "All Lessons", back_button_id);
         try nativeBadge(target, ui.Rect.init(bounds.x, bounds.y + 62.0, 118.0, 24.0), episodeLabel(episodeAt(index)));
         try text(target, bounds.x + 136.0, bounds.y + 68.0, 280.0, 12.0, post.arc, palette.dim);
-        try target.pushWrappedText(ui.Rect.init(bounds.x, bounds.y + post_header_top_h, title_w, title_h), post.title, palette.text, .{
+        try text_component.Text.renderWrapped(target, ui.Rect.init(bounds.x, bounds.y + post_header_top_h, title_w, title_h), post.title, palette.text, .{
             .line_height = post_title_line_h,
             .average_char_width = post_title_average_char_w,
             .max_lines = post_title_max_lines,
@@ -1332,7 +1333,7 @@ fn renderSidebar(scene: *ui.Scene, bounds: ui.Rect, index: usize) ui.RenderError
     try fill(scene, ui.Rect.init(bounds.x + 20.0, bounds.y + 250.0, bounds.w - 40.0, 1.0), palette.border, 0.0);
     if (neighborIndex(index, .previous, 0)) |previous_index| {
         try text(scene, bounds.x + 20.0, bounds.y + 272.0, bounds.w - 40.0, 12.0, "Builds on", palette.dim);
-        try scene.pushWrappedText(ui.Rect.init(bounds.x + 20.0, bounds.y + 294.0, bounds.w - 40.0, 36.0), posts[previous_index].title, palette.text, .{
+        try text_component.Text.renderWrapped(scene, ui.Rect.init(bounds.x + 20.0, bounds.y + 294.0, bounds.w - 40.0, 36.0), posts[previous_index].title, palette.text, .{
             .line_height = 18.0,
             .average_char_width = 8.8,
             .max_lines = 2,
@@ -1343,7 +1344,7 @@ fn renderSidebar(scene: *ui.Scene, bounds: ui.Rect, index: usize) ui.RenderError
     }
     if (neighborIndex(index, .next, 0)) |next_index| {
         try text(scene, bounds.x + 20.0, bounds.y + 342.0, bounds.w - 40.0, 12.0, "Next", palette.dim);
-        try scene.pushWrappedText(ui.Rect.init(bounds.x + 20.0, bounds.y + 364.0, bounds.w - 40.0, 36.0), posts[next_index].title, palette.text, .{
+        try text_component.Text.renderWrapped(scene, ui.Rect.init(bounds.x + 20.0, bounds.y + 364.0, bounds.w - 40.0, 36.0), posts[next_index].title, palette.text, .{
             .line_height = 18.0,
             .average_char_width = 8.8,
             .max_lines = 2,
@@ -1407,7 +1408,7 @@ fn flowMarkdown(scene: ?*ui.Scene, bounds: ui.Rect, post_index: usize, source: [
         if (line_value.len == 0) {
             y += 12.0;
         } else if (std.mem.startsWith(u8, line_value, "# ")) {
-            if (scene) |target| try target.pushWrappedText(ui.Rect.init(bounds.x, y, bounds.w, 84.0), line_value[2..], palette.text, .{
+            if (scene) |target| try text_component.Text.renderWrapped(target, ui.Rect.init(bounds.x, y, bounds.w, 84.0), line_value[2..], palette.text, .{
                 .line_height = 34.0,
                 .average_char_width = 15.0,
                 .max_lines = 2,
@@ -3368,7 +3369,7 @@ fn callout(scene: *ui.Scene, bounds: ui.Rect, value: []const u8) ui.RenderError!
         .variant = .subtle,
     }).render(scene, bounds, .{ .style = callout_style });
     try fill(scene, ui.Rect.init(bounds.x, bounds.y, 3.0, bounds.h), palette.primary, 2.0);
-    try scene.pushWrappedText(ui.Rect.init(bounds.x + callout_pad_x, bounds.y + callout_pad_y, bounds.w - callout_pad_x * 2.0, bounds.h - callout_pad_y * 2.0), value, palette.text, .{
+    try text_component.Text.renderWrapped(scene, ui.Rect.init(bounds.x + callout_pad_x, bounds.y + callout_pad_y, bounds.w - callout_pad_x * 2.0, bounds.h - callout_pad_y * 2.0), value, palette.text, .{
         .line_height = callout_line_h,
         .average_char_width = callout_avg_char_w,
         .max_lines = 4,
@@ -3420,7 +3421,7 @@ fn tag(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, color: ui.Color) ui
 }
 
 fn paragraph(scene: *ui.Scene, bounds: ui.Rect, value: []const u8) ui.RenderError!void {
-    try scene.pushWrappedText(bounds, value, palette.dim, .{ .line_height = line_h, .average_char_width = 10.0, .max_lines = 6 });
+    try text_component.Text.renderWrapped(scene, bounds, value, palette.dim, .{ .line_height = line_h, .average_char_width = 10.0, .max_lines = 6 });
 }
 
 fn outlineButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id: u32) (ui.RenderError || interaction.Error)!void {
@@ -3456,7 +3457,7 @@ fn appStyle() ui.Style {
 }
 
 fn alignedText(scene: *ui.Scene, x: f32, y: f32, w: f32, h: f32, value: []const u8, color: ui.Color, alignment: ui.TextAlign) ui.RenderError!void {
-    try scene.pushAlignedText(ui.Rect.init(x, y, @max(1.0, w), @max(1.0, h)), value, color, alignment);
+    try text_component.Text.renderAligned(scene, ui.Rect.init(x, y, @max(1.0, w), @max(1.0, h)), value, color, alignment);
 }
 
 fn hit(collector: *interaction.Collector, bounds: ui.Rect, kind: ui.HitKind, id: u32) interaction.Error!void {

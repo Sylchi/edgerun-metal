@@ -14,7 +14,6 @@ const primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = .{ .name = "sidebar", .Payload = Sidebar };
 const constrainPreferredSize = primitives.constrainPreferredSize;
 const Icon = icon_component.Icon;
 

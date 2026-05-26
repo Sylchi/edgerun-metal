@@ -14,7 +14,6 @@ const list_layout = @import("ListLayout.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = .{ .name = "tabs", .Payload = Tabs };
 const measureFixed = primitives.measureFixed;
 const renderControlText = primitives.renderControlText;
 

@@ -12,7 +12,6 @@ const component_primitives = @import("Primitives.zig");
 const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
-pub const registration = .{ .name = "resizable", .Payload = Resizable };
 const measureFixed = component_primitives.measureFixed;
 
 pub const Resizable = struct {

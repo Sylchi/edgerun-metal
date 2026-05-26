@@ -1,7 +1,12 @@
 const std = @import("std");
 const uefi = std.os.uefi;
+const app_frame = @import("app_frame.zig");
+const app_images = @import("app_images.zig");
 const gop_framebuffer = @import("boot/gop_framebuffer.zig");
+const interaction = @import("ui_interaction.zig");
+const renderer_font_atlas = @import("render/font_atlas.zig");
 const renderer_ir = @import("render/ir.zig");
+const renderer_pipeline = @import("render/pipeline.zig");
 const renderer_software = @import("render/software.zig");
 const ui = @import("ui.zig");
 const wasm = @import("wasm/root.zig");
@@ -20,10 +25,56 @@ const app_runtime_uefi_pages: usize = app_runtime_pages * uefi_pages_per_wasm_pa
 const app_runtime_ticks: u64 = 200_000_000;
 const max_boot_width: u32 = 640;
 const max_boot_height: u32 = 360;
+const max_commands: usize = 4096;
+const max_clips: usize = 64;
+const max_interaction_regions: usize = 4096;
+const max_rects: usize = 8192;
+const max_text_vertices: usize = 24576;
+const max_icon_vertices: usize = 4096;
+const max_icon_line_vertices: usize = 65536;
+const max_image_vertices: usize = 384;
+const max_overlay_rects: usize = 512;
+const max_overlay_text_vertices: usize = 8192;
+const max_overlay_icon_vertices: usize = 256;
+const max_overlay_icon_line_vertices: usize = 16384;
+
+const IrStorage = renderer_ir.FixedBuffers(
+    max_rects,
+    max_text_vertices,
+    max_icon_vertices,
+    max_image_vertices,
+    max_overlay_rects,
+    max_overlay_text_vertices,
+    max_overlay_icon_vertices,
+    max_icon_line_vertices,
+    max_overlay_icon_line_vertices,
+);
 
 var framebuffer: gop_framebuffer.Framebuffer = undefined;
+var scene_state: SceneState = .{};
+var font_atlas: renderer_font_atlas.Atlas = undefined;
 var wasm_storage: wasm.ExecutionStorage = .{};
 var ticks: u64 = app_runtime_ticks;
+
+const SceneState = struct {
+    commands: [max_commands]ui.Command = undefined,
+    clips: [max_clips]ui.Rect = undefined,
+    regions: [max_interaction_regions]interaction.Region = undefined,
+    ir_storage: IrStorage = .{},
+
+    fn rebuild(self: *SceneState, width: u32, height: u32, atlas: *renderer_font_atlas.Atlas) Error!renderer_ir.Buffers {
+        var scene = ui.Scene.initWithClips(&self.commands, &self.clips);
+        var collector = interaction.Collector.init(&self.regions);
+        app_frame.render(&scene, &collector, ui.Rect.init(0, 0, @floatFromInt(width), @floatFromInt(height)), .{
+            .route = .{ .view = .landing },
+            .public_identity = "blessed-native-renderer",
+            .public_identity_ready = true,
+        }) catch return error.AppFrameBuildFailed;
+        const buffers = self.ir_storage.buffers();
+        renderer_pipeline.packScene(buffers, atlas, .object, scene.written()) catch return error.AppIrInvalid;
+        return buffers;
+    }
+};
 
 pub fn main() noreturn {
     printLine("EdgeRun app-runtime GOP smoke");
@@ -43,28 +94,11 @@ fn run() Error!void {
     framebuffer.drawDebugScreen(.pre_exit);
     printLine("check: gop framebuffer handoff ok");
 
-    const app_pages = boot_services.allocatePages(.any, .loader_data, app_runtime_uefi_pages) catch return error.AppMemoryAllocationFailed;
-    const app_memory = std.mem.sliceAsBytes(app_pages);
-    @memset(app_memory, 0);
-    printLine("check: app-runtime memory allocated");
-
-    var runtime = wasm.Runtime.initWithMemoryPages(app_memory, &ticks, app_runtime_pages);
-    _ = call(&runtime, "er_ui_boot", &.{}) catch |err| return mapWasmError(err);
-    printLine("check: app-runtime boot ok");
-
     const width = @min(framebuffer.width, max_boot_width);
     const height = @min(framebuffer.height, max_boot_height);
-    const build_result = call(&runtime, "er_ui_build_frame", &.{
-        .{ .i32 = @intCast(width) },
-        .{ .i32 = @intCast(height) },
-        .{ .f32 = 0.0 },
-    }) catch |err| return mapWasmError(err);
-    if (try resultI32(build_result) != 0) return error.AppFrameBuildFailed;
-    printLine("check: app-runtime frame ir built");
-
     const native_pixels = try allocateNativePixels(boot_services, width, height);
-    try renderNativeAppFrame(&runtime, app_memory, width, height, native_pixels);
-    printLine("check: blessed native renderer ok");
+    try renderBlessedNativeApp(width, height, native_pixels);
+    printLine("check: blessed native app renderer ok");
 
     framebuffer.blitUiColorBytes(width, height, std.mem.sliceAsBytes(native_pixels));
     printLine("check: blessed native pixels copied to gop");
@@ -80,6 +114,14 @@ fn allocateNativePixels(boot_services: *uefi.tables.BootServices, width: u32, he
     @memset(pixel_bytes, 0);
     const pixels: [*]ui.Color = @ptrCast(pixel_bytes.ptr);
     return pixels[0..pixel_count];
+}
+
+fn renderBlessedNativeApp(width: u32, height: u32, pixels: []ui.Color) Error!void {
+    font_atlas.initWithFontInPlace(renderer_font_atlas.geist_ascii_font.body());
+    const buffers = try scene_state.rebuild(width, height, &font_atlas);
+    const image_texture = app_images.cloudMeme() catch return error.AppResourceInvalid;
+    const surface = renderer_software.Framebuffer.init(width, height, pixels) catch return error.NativeRenderFailed;
+    _ = renderer_pipeline.renderSoftwareFrame(surface, buffers, renderer_pipeline.softwareResources(&font_atlas, image_texture), .bg) catch return error.NativeRenderFailed;
 }
 
 fn renderNativeAppFrame(runtime: *wasm.Runtime, app_memory: []u8, width: u32, height: u32, pixels: []ui.Color) Error!void {
@@ -125,7 +167,8 @@ fn renderNativeAppFrame(runtime: *wasm.Runtime, app_memory: []u8, width: u32, he
     const image_len_bytes = try exportUsize(runtime, "er_ui_post_image_rgba_len");
     const image_bytes = try exportedBytes(runtime, app_memory, "er_ui_post_image_rgba_ptr", image_len_bytes);
     if (image_len_bytes % @sizeOf(ui.Color) != 0) return error.AppResourceInvalid;
-    const image_pixels: [*]const ui.Color = @ptrCast(image_bytes.ptr);
+    if (@intFromPtr(image_bytes.ptr) % @alignOf(ui.Color) != 0) return error.AppResourceInvalid;
+    const image_pixels: [*]const ui.Color = @ptrCast(@alignCast(image_bytes.ptr));
 
     const surface = renderer_software.Framebuffer.init(width, height, pixels) catch return error.NativeRenderFailed;
     surface.clear(.bg);
