@@ -60,8 +60,9 @@ pub const compiled = blk: {
 
 pub fn discoverCodepoints(face: font_vector.FixedFace, out: *[max_codepoints]u21) []const u21 {
     var count: usize = 0;
-    var cp: u21 = 0;
-    while (cp <= std.math.maxInt(u21)) : (cp += 1) {
+    var cp_raw: usize = 0;
+    while (cp_raw <= std.math.maxInt(u21)) : (cp_raw += 1) {
+        const cp: u21 = @intCast(cp_raw);
         if (isSurrogate(cp)) continue;
         if (face.glyphId(cp) == 0) continue;
         put(out, &count, cp);
