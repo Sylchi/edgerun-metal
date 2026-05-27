@@ -1,9 +1,10 @@
 # EdgeRun
 
-EdgeRun is a self-compiling app system with zero dependency chains.
+EdgeRun is a self-compiling app system with zero dependency chains. Current prodcution asset in about 5MB expected to shrink while still a lot of the features will be added. Goal is simple, computers do what they are good at which is determenistically moving bytes, data is controlled by its real owners, zero waste. 
 
-No package manager. No npm install. No WASI filesystem trick. No cloud compiler.
-No web framework. No pile of native dependencies.
+No package manager. No npm install. No hidden authority. No cloud compiler. Disk IO is only to store userful work results everything else is compiled in and if your carbage needs terabytes of storage then good luck getting user permission. Your cache belongs to memory which is 1000x faster anyway. This philosophy comes from literally creating this same work. Terabyte of disk writes per day is not inevitable cause this is how compilers work. This repo is here to prove that we dont need this way of thinking. Your OS should fit in your nvram and shouldnt be able to spy on you, we are giving it authority over everything and then software is trying to claw it back. Edgerun is giving authority to user.
+
+No web framework. No pile of native dependencies. 
 
 ```text
 one app
@@ -50,7 +51,7 @@ That makes the project interesting even before it is finished:
 - The same UI is being pushed through web host, CPU, GPU, Wayland, and DRM paths
   instead of becoming five separate app models.
 - The codebase includes real boot, TPM, WASM, rendering, media, compiler, and Pi
-  bring-up work, not just a whitepaper.
+  bring-up work, not just a whitepaper. Just open the link provided in the repo, open devtools to see nothing else is loaded after the initial load. Page navigation is instant, fonts are compiled in, icons are compiled in, image support is compiled in, video support is compiled in. Browser is just easy way to showcase, runs the same in native and work in progress to run on bare metal and replace your firmware too so you can have minimal amount of unaudited code. 
 
 The promise is simple: an app should be able to carry its own tools, build its
 own next version, run wherever it is granted resources, and explain what it did.
