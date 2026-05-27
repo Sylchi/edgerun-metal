@@ -29,6 +29,7 @@ const compiler_zig_compiler_lib_root = "compiler/zig/lib/compiler";
 const embedded_wasm_compiler_label = "embedded_wasm_compiler";
 const embed_file_call = "@embedFile(\"";
 const app_workspace_roots = [_][]const u8{
+    "src/er/self_host/main.er",
     "src/app_runtime.zig",
     "src/media/root.zig",
     "src/media/image.zig",
@@ -221,11 +222,14 @@ fn pruneSourcePathsToAppClosure(io: std.Io, allocator: std.mem.Allocator, root: 
     var queue_index: usize = 0;
     while (queue_index < queue.items.len) : (queue_index += 1) {
         const importer = queue.items[queue_index];
-        if (!std.mem.endsWith(u8, importer, ".zig")) continue;
         const source = try readWorkspaceFile(io, allocator, root, importer);
         defer allocator.free(source);
-        try enqueueImportedSourcePaths(allocator, paths.items, importer, source, &reachable, &queue);
-        try enqueueEmbeddedSourcePaths(allocator, paths.items, importer, source, &reachable, &queue);
+        if (std.mem.endsWith(u8, importer, ".zig")) {
+            try enqueueImportedSourcePaths(allocator, paths.items, importer, source, &reachable, &queue);
+            try enqueueEmbeddedSourcePaths(allocator, paths.items, importer, source, &reachable, &queue);
+        } else if (std.mem.endsWith(u8, importer, ".er")) {
+            try enqueueEdgeRunImportedSourcePaths(allocator, paths.items, importer, source, &reachable, &queue);
+        }
     }
 
     var write_index: usize = 0;
@@ -238,6 +242,34 @@ fn pruneSourcePathsToAppClosure(io: std.Io, allocator: std.mem.Allocator, root: 
         }
     }
     paths.shrinkRetainingCapacity(write_index);
+}
+
+fn enqueueEdgeRunImportedSourcePaths(
+    allocator: std.mem.Allocator,
+    paths: []const []u8,
+    importer: []const u8,
+    source: []const u8,
+    reachable: *std.StringHashMap(void),
+    queue: *std.ArrayList([]u8),
+) !void {
+    const import_call = "@import(\"";
+    var index: usize = 0;
+    while (std.mem.indexOfPos(u8, source, index, import_call)) |call_index| {
+        const name_start = call_index + import_call.len;
+        const name_end = std.mem.indexOfScalarPos(u8, source, name_start, '"') orelse return error.BadWorkspaceImport;
+        const import_name = source[name_start..name_end];
+        var resolved_buffer: [vfs.label_max]u8 = undefined;
+        const resolved = resolveEdgeRunImportLabel(importer, import_name, &resolved_buffer) orelse return error.BadWorkspaceImport;
+        if (!std.mem.endsWith(u8, resolved, ".er")) return error.BadWorkspaceImport;
+        if (findSourcePath(paths, resolved) == null) return error.MissingWorkspaceImport;
+        try enqueueReachable(allocator, reachable, queue, resolved);
+        index = name_end + 1;
+    }
+}
+
+fn resolveEdgeRunImportLabel(importer_label: []const u8, import_name: []const u8, out: *[vfs.label_max]u8) ?[]const u8 {
+    if (std.mem.startsWith(u8, import_name, "src/")) return normalizeLabel(import_name, out);
+    return resolveImportLabel(importer_label, import_name, out);
 }
 
 fn enqueueImportedSourcePaths(
@@ -473,7 +505,7 @@ fn sourceDirectoryAllowed(path: []const u8) bool {
 }
 
 fn sourceExtensionAllowed(path: []const u8) bool {
-    return std.mem.endsWith(u8, path, ".zig") or std.mem.endsWith(u8, path, ".md");
+    return std.mem.endsWith(u8, path, ".zig") or std.mem.endsWith(u8, path, ".er") or std.mem.endsWith(u8, path, ".md");
 }
 
 fn appSourceFileAllowed(path: []const u8) bool {
@@ -595,12 +627,53 @@ test "workspace manifest constants match encoded header width" {
 }
 
 test "workspace source filter keeps EdgeRun app and wasm compiler roots" {
+    try std.testing.expect(sourceFileAllowed("src/er/self_host/main.er"));
     try std.testing.expect(sourceFileAllowed("src/app_runtime.zig"));
     try std.testing.expect(sourceFileAllowed("src/blog/one.md"));
     try std.testing.expect(sourceFileAllowed("src/media/video.zig"));
     try std.testing.expect(sourceFileAllowed("src/media/video_webm.zig"));
     try std.testing.expect(sourceFileAllowed("compiler/zig/lib/std/std.zig"));
     try std.testing.expect(sourceFileAllowed("compiler/zig/lib/std/zig/AstGen.zig"));
+}
+
+test "workspace source closure follows EdgeRun typed imports" {
+    const allocator = std.testing.allocator;
+    var paths = [_][]u8{
+        try allocator.dupe(u8, "src/er/self_host/helper.er"),
+        try allocator.dupe(u8, "src/er/self_host/math.er"),
+    };
+    defer {
+        for (paths) |path| allocator.free(path);
+    }
+    var reachable: std.StringHashMap(void) = .init(allocator);
+    defer reachable.deinit();
+    var queue: std.ArrayList([]u8) = .empty;
+    defer {
+        for (queue.items) |label| allocator.free(label);
+        queue.deinit(allocator);
+    }
+
+    try enqueueEdgeRunImportedSourcePaths(
+        allocator,
+        &paths,
+        "src/er/self_host/main.er",
+        "const helper: module = @import(\"src/er/self_host/helper.er\");",
+        &reachable,
+        &queue,
+    );
+    try std.testing.expect(reachable.contains("src/er/self_host/helper.er"));
+    try std.testing.expectEqual(@as(usize, 1), queue.items.len);
+    try std.testing.expectEqualStrings("src/er/self_host/helper.er", queue.items[0]);
+}
+
+test "workspace source closure accepts absolute EdgeRun labels" {
+    var out: [vfs.label_max]u8 = undefined;
+    const resolved = resolveEdgeRunImportLabel(
+        "src/er/self_host/main.er",
+        "src/er/self_host/helper.er",
+        &out,
+    ).?;
+    try std.testing.expectEqualStrings("src/er/self_host/helper.er", resolved);
 }
 
 test "workspace source filter removes app host tools and tests" {

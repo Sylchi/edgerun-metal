@@ -44,7 +44,7 @@ const max_compiler_runtime_bytes: usize = compiler_memory_offset_bytes + compile
 const compiler_execution_tick_budget: u64 = 1_000_000_000;
 const wasm_page_bytes: usize = 64 * 1024;
 const workspace_manifest_header_bytes: usize = 16;
-const default_source_editor_label = "src/app_runtime.zig";
+const default_source_editor_label = "src/er/self_host/main.er";
 const max_source_editor_label_bytes: usize = 128;
 const max_source_editor_bytes: usize = 512 * 1024;
 const source_editor_tab = "    ";
@@ -1948,6 +1948,10 @@ fn compileWorkspaceInsideWasm() ErrorCode {
     const compiler_memory_len: i32 = @intCast(compiler_work_memory_bytes);
     const source_ptr: i32 = @intCast(source_offset);
     const source_len: i32 = @intCast(source_workspace_len);
+    const source_name_offset = source_offset + source_workspace_len;
+    if (source_name_offset > compiler_runtime_memory.len) return finishCompileError(.bad_input);
+    if (source_editor_label.len > compiler_runtime_memory.len - source_name_offset) return finishCompileError(.bad_input);
+    @memcpy(compiler_runtime_memory[source_name_offset..][0..source_editor_label.len], source_editor_label);
     const init_args = [_]wasm_interpreter.Value{
         .{ .i32 = compiler_memory_ptr },
         .{ .i32 = compiler_memory_len },
@@ -1963,8 +1967,8 @@ fn compileWorkspaceInsideWasm() ErrorCode {
     const compile_args = [_]wasm_interpreter.Value{
         .{ .i32 = compiler_memory_ptr },
         .{ .i32 = compiler_memory_len },
-        .{ .i32 = 0 },
-        .{ .i32 = 0 },
+        .{ .i32 = @intCast(source_name_offset) },
+        .{ .i32 = @intCast(source_editor_label.len) },
         .{ .i32 = source_ptr },
         .{ .i32 = source_len },
     };
@@ -2632,7 +2636,7 @@ fn hasIconId(items: []const ui.Command, icon_id: u32) bool {
 
 fn ensureFontAtlas() !void {
     if (font_atlas_ready) return;
-    font_atlas.initWithFontInPlace(renderer_font_atlas.geist_ascii_font.body());
+    font_atlas.initUtf8();
     font_atlas.setDeviceScale(font_device_scale);
     font_atlas_generation +%= 1;
     font_atlas_ready = true;

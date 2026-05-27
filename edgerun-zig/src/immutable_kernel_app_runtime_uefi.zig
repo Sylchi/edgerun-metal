@@ -185,7 +185,7 @@ fn allocateVirtioScanout(boot_services: *uefi.tables.BootServices, width: u32, h
 
 fn renderBlessedNativeApp(width: u32, height: u32, pixels: []ui.Color) Error!void {
     writeDebugconLine("diag: font atlas init start");
-    font_atlas.initWithFontInPlace(renderer_font_atlas.geist_ascii_font.body());
+    font_atlas.initUtf8();
     writeDebugconLine("diag: font atlas init ok");
 
     writeDebugconLine("diag: app frame pack start");

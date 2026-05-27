@@ -178,7 +178,7 @@ pub fn main(init: std.process.Init) !void {
     var egl = try initEgl(&wl);
     defer deinitEgl(&egl);
     var font_atlas: renderer_font_atlas.Atlas = undefined;
-    font_atlas.initWithFontInPlace(renderer_font_atlas.geist_ascii_font.body());
+    font_atlas.initUtf8();
     const cloud_meme = try app_images.cloudMeme();
     var gl = try renderer_gles.Adapter.init(&font_atlas, .{
         .width = cloud_meme.width,

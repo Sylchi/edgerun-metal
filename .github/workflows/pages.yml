@@ -3,7 +3,7 @@ name: GitHub Pages
 on:
   push:
     branches:
-      - main
+      - gh-pages
   workflow_dispatch:
 
 concurrency:
@@ -11,46 +11,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
-    name: Build Pages Artifact
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3
-
-      - name: Install pinned Zig
-        env:
-          ZIG_URL: https://ziglang.org/download/0.16.0/zig-x86_64-linux-0.16.0.tar.xz
-          ZIG_SHA256: 70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00
-          ZIG_DIR: .build/zig-0.16.0
-        run: |
-          set -euo pipefail
-          mkdir -p "${ZIG_DIR}"
-          curl -fsSLo .build/zig-0.16.0.tar.xz "${ZIG_URL}"
-          printf '%s  %s\n' "${ZIG_SHA256}" .build/zig-0.16.0.tar.xz | sha256sum -c -
-          tar -C "${ZIG_DIR}" --strip-components=1 -xf .build/zig-0.16.0.tar.xz
-          printf '%s/%s\n' "${PWD}" "${ZIG_DIR}" >> "${GITHUB_PATH}"
-
-      - name: Verify Zig version
-        run: |
-          set -euo pipefail
-          test "$(zig version)" = "0.16.0"
-
-      - name: Build GitHub Pages site
-        run: |
-          set -euo pipefail
-          make pages-check
-
-      - name: Upload GitHub Pages artifact
-        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9
-        with:
-          path: .build/github-pages
-
   deploy:
     name: Deploy Pages
-    needs: build
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -62,6 +24,14 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3
+        with:
+          ref: gh-pages
+          fetch-depth: 0
+
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9
+        with:
+          path: .
 
       - name: Deploy to GitHub Pages
         id: deployment
@@ -72,4 +42,5 @@ jobs:
           PAGES_PUBLIC_URL: ${{ steps.deployment.outputs.page_url }}
         run: |
           set -euo pipefail
-          make pages-public-check
+          test -n "${PAGES_PUBLIC_URL}"
+          test -f index.html

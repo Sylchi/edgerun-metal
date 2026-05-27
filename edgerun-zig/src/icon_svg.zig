@@ -1454,6 +1454,7 @@ fn presentationForTag(inherited: Presentation, tag: []const u8, css_rules: *cons
     if (try attrValueOptional(tag, "fill")) |value| {
         if (supportedKeyword(value, "none")) {
             result.fill_paint = false;
+            result.fill_visible = false;
         } else if (try parseSvgPaint(value, svg, view_box, result.current_color)) |paint| {
             result.fill_paint = true;
             result.fill_color = paint;
@@ -1464,6 +1465,7 @@ fn presentationForTag(inherited: Presentation, tag: []const u8, css_rules: *cons
     if (try attrValueOptional(tag, "stroke")) |value| {
         if (supportedKeyword(value, "none")) {
             result.stroke_paint = false;
+            result.stroke_visible = false;
         } else if (try parseSvgStrokePaint(value, svg, view_box, result.current_color)) |paint| {
             result.stroke_paint = true;
             result.stroke_color = paint;
@@ -1523,6 +1525,7 @@ fn applyPresentationStyle(result: *Presentation, style: []const u8, svg: []const
         } else if (asciiEqlIgnoreCase(property, "fill")) {
             if (supportedKeyword(value, "none")) {
                 result.fill_paint = false;
+                result.fill_visible = false;
             } else if (try parseSvgPaint(value, svg, view_box, result.current_color)) |paint| {
                 result.fill_paint = true;
                 result.fill_color = paint;
@@ -1534,6 +1537,7 @@ fn applyPresentationStyle(result: *Presentation, style: []const u8, svg: []const
         } else if (asciiEqlIgnoreCase(property, "stroke")) {
             if (supportedKeyword(value, "none")) {
                 result.stroke_paint = false;
+                result.stroke_visible = false;
             } else if (try parseSvgStrokePaint(value, svg, view_box, result.current_color)) |paint| {
                 result.stroke_paint = true;
                 result.stroke_color = paint;
@@ -4847,6 +4851,35 @@ test "svg iterator treats stroke none as an inherited paint override" {
         \\</svg>
     );
     try std.testing.expectEqual(@as(?icon_vector.Op, null), try style.next());
+}
+
+test "svg iterator ignores explicit fill and stroke none helper paths" {
+    var iter = Iterator.init(sourceForIconId(cursor_pointer_2_icon_id));
+    var first_move: ?icon_vector.Point = null;
+    while (first_move == null) {
+        const op = try iter.next() orelse break;
+        switch (op) {
+            .move_to => |point| first_move = point,
+            else => {},
+        }
+    }
+
+    const pointer_first_move = first_move orelse return error.InvalidSvg;
+    try std.testing.expectApproxEqAbs(14.185 / 24.0, pointer_first_move.x, transform_epsilon);
+    try std.testing.expectApproxEqAbs(13.14 / 24.0, pointer_first_move.y, transform_epsilon);
+
+    iter = Iterator.init(sourceForIconId(cursor_hand_finger_icon_id));
+    first_move = null;
+    while (first_move == null) {
+        const op = try iter.next() orelse break;
+        switch (op) {
+            .move_to => |point| first_move = point,
+            else => {},
+        }
+    }
+    const hand_first_move = first_move orelse return error.InvalidSvg;
+    try std.testing.expectApproxEqAbs(8.0 / 24.0, hand_first_move.x, transform_epsilon);
+    try std.testing.expectApproxEqAbs(13.0 / 24.0, hand_first_move.y, transform_epsilon);
 }
 
 test "svg iterator supports inline style for stroke icon presentation" {

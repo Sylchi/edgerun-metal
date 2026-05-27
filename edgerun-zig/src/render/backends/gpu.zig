@@ -746,9 +746,9 @@ fn testFontMetrics(_: *anyopaque, _: u8) renderer_ir.TextMetrics {
 }
 
 fn testTextWidth(_: *anyopaque, value: []const u8, _: u8) f32 {
-    return @floatFromInt(value.len * 8);
+    return @as(f32, @floatFromInt(ui.utf8CodepointCount(value))) * 8.0;
 }
 
-fn testGlyph(_: *anyopaque, _: u8, _: u8) renderer_ir.Error!?renderer_ir.Glyph {
+fn testGlyph(_: *anyopaque, _: u21, _: u8) renderer_ir.Error!?renderer_ir.Glyph {
     return null;
 }

@@ -1379,32 +1379,84 @@ pub const WrappedLine = struct {
 
 pub fn skipAsciiSpace(value: []const u8, start: usize) usize {
     var index = start;
-    while (index < value.len and isAsciiSpace(value[index])) : (index += 1) {}
+    while (index < value.len) {
+        const codepoint_start = index;
+        const codepoint = nextUtf8Codepoint(value, &index) orelse break;
+        if (!isAsciiSpace(codepoint)) return codepoint_start;
+    }
     return index;
 }
 
-pub fn wrappedLine(value: []const u8, start: usize, char_capacity: usize) WrappedLine {
-    const limit = @min(value.len, start + char_capacity);
-    var index = start;
-    var last_space: ?usize = null;
-    while (index < limit) : (index += 1) {
-        if (value[index] == '\n') return .{ .start = start, .end = index, .next = index + 1 };
-        if (isAsciiSpace(value[index])) last_space = index;
-    }
-    if (limit >= value.len) return .{ .start = start, .end = value.len, .next = value.len };
-    if (value[limit] == '\n') return .{ .start = start, .end = limit, .next = limit + 1 };
-    if (isAsciiSpace(value[limit])) return .{ .start = start, .end = limit, .next = limit + 1 };
-    if (last_space) |space| {
-        if (space > start) return .{ .start = start, .end = space, .next = space + 1 };
-    }
-    return .{ .start = start, .end = limit, .next = limit };
+pub fn utf8CodepointCount(value: []const u8) usize {
+    var index: usize = 0;
+    var count: usize = 0;
+    while (nextUtf8Codepoint(value, &index)) |_| count += 1;
+    return count;
 }
 
-fn isAsciiSpace(value: u8) bool {
+pub fn wrappedLine(value: []const u8, start: usize, char_capacity: usize) WrappedLine {
+    if (char_capacity == 0) return .{ .start = start, .end = start, .next = start };
+
+    var index = start;
+    var consumed: usize = 0;
+    var last_space: ?usize = null;
+    var last_space_next: ?usize = null;
+    while (index < value.len and consumed < char_capacity) {
+        const codepoint_start = index;
+        const codepoint = nextUtf8Codepoint(value, &index) orelse break;
+        if (codepoint == '\n') return .{ .start = start, .end = codepoint_start, .next = index };
+        if (isAsciiSpace(codepoint)) {
+            last_space = codepoint_start;
+            last_space_next = index;
+        }
+        consumed += 1;
+    }
+
+    if (index >= value.len) return .{ .start = start, .end = value.len, .next = value.len };
+
+    var next_index = index;
+    if (nextUtf8Codepoint(value, &next_index)) |next_codepoint| {
+        if (next_codepoint == '\n') return .{ .start = start, .end = index, .next = next_index };
+        if (isAsciiSpace(next_codepoint)) return .{ .start = start, .end = index, .next = next_index };
+    }
+
+    if (last_space) |space| {
+        if (space > start) {
+            if (last_space_next) |space_next| return .{ .start = start, .end = space, .next = space_next };
+        }
+    }
+
+    return .{ .start = start, .end = index, .next = index };
+}
+
+fn isAsciiSpace(value: u21) bool {
     return switch (value) {
         ' ', '\t', '\n', '\r' => true,
         else => false,
     };
+}
+
+fn nextUtf8Codepoint(value: []const u8, index: *usize) ?u21 {
+    if (index.* >= value.len) return null;
+    const start = index.*;
+
+    const codepoint_len = std.unicode.utf8ByteSequenceLength(value[start]) catch {
+        index.* = start + 1;
+        return std.unicode.replacement_character;
+    };
+
+    const end = start + codepoint_len;
+    if (end > value.len) {
+        index.* = value.len;
+        return std.unicode.replacement_character;
+    }
+
+    const codepoint = std.unicode.utf8Decode(value[start..end]) catch {
+        index.* = start + 1;
+        return std.unicode.replacement_character;
+    };
+    index.* = end;
+    return codepoint;
 }
 
 fn stackPreferredSize(layout: Layout) Size {
@@ -1644,6 +1696,15 @@ test "scene wrapped text splits long words and clips line count to height" {
     try std.testing.expectEqual(@as(usize, 2), scene.commandCount());
     try std.testing.expectEqualStrings("supe", scene.commandAt(0).?.text.value);
     try std.testing.expectEqualStrings("rlon", scene.commandAt(1).?.text.value);
+}
+
+test "wrapped line splits at utf8 codepoint boundaries" {
+    const boundary = wrappedLine("éx", 0, 1);
+    try std.testing.expectEqual(@as(usize, 2), boundary.end);
+    try std.testing.expectEqual(@as(usize, 2), boundary.next);
+    const full = wrappedLine("éx", 0, 2);
+    try std.testing.expectEqual(@as(usize, 3), full.end);
+    try std.testing.expectEqual(@as(usize, 3), full.next);
 }
 
 test "linear cursor lays out row and column slots" {

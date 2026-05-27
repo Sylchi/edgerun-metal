@@ -496,7 +496,7 @@ fn renderHero(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Re
 }
 
 fn heroLabelBounds(inset: ui.Rect, value: []const u8) ui.Rect {
-    const desired_w = @as(f32, @floatFromInt(value.len)) * 8.0 + 34.0;
+    const desired_w = @as(f32, @floatFromInt(ui.utf8CodepointCount(value))) * 8.0 + 34.0;
     return ui.Rect.init(inset.x, inset.y, @min(inset.w, @max(design.min_touch_target, desired_w)), hero_label_h);
 }
 

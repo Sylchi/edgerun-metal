@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const const_keyword = "const ";
+const var_keyword = "var ";
 const fn_keyword = "fn ";
 const export_fn_keyword = "export fn ";
 const pub_export_fn_keyword = "pub export fn ";
@@ -38,6 +39,11 @@ pub fn parse(source: []const u8) ?Stats {
             stats.declaration_count += 1;
             continue;
         }
+        if (std.mem.startsWith(u8, source[index..], var_keyword)) {
+            index = parseVar(source, index) orelse return null;
+            stats.declaration_count += 1;
+            continue;
+        }
         if (parseFunction(source, index)) |parsed| {
             index = parsed.next_index;
             stats.declaration_count += 1;
@@ -57,8 +63,21 @@ pub fn parseConst(source: []const u8, start: usize) ?usize {
     return if (parseConstDecl(source, start)) |decl| decl.next_index else null;
 }
 
+pub fn parseVar(source: []const u8, start: usize) ?usize {
+    return if (parseVarDecl(source, start)) |decl| decl.next_index else null;
+}
+
 pub fn parseConstDecl(source: []const u8, start: usize) ?ParsedConst {
-    var index = start + const_keyword.len;
+    return parseTypedValueDecl(source, start, const_keyword);
+}
+
+pub fn parseVarDecl(source: []const u8, start: usize) ?ParsedConst {
+    return parseTypedValueDecl(source, start, var_keyword);
+}
+
+fn parseTypedValueDecl(source: []const u8, start: usize, keyword: []const u8) ?ParsedConst {
+    if (!std.mem.startsWith(u8, source[start..], keyword)) return null;
+    var index = start + keyword.len;
     index = skipSpace(source, index);
     const name_end = scanIdentifierEnd(source, index) orelse return null;
     const name = source[index..name_end];
@@ -269,8 +288,23 @@ test "parser accepts private top level functions without counting exports" {
     try std.testing.expect(exported.exported);
 }
 
+test "parser accepts top level vars without counting exports" {
+    const source =
+        \\var committed_len: usize = 0;
+        \\pub export fn er_app_main() i32 { return committed_len; }
+    ;
+    const stats = parse(source).?;
+    try std.testing.expectEqual(@as(u32, 2), stats.declaration_count);
+    try std.testing.expectEqual(@as(u32, 1), stats.export_count);
+
+    const parsed = parseVarDecl(source, 0).?;
+    try std.testing.expectEqualStrings("committed_len", parsed.name);
+    try std.testing.expectEqualStrings("usize", parsed.type_expr);
+    try std.testing.expectEqualStrings("0", parsed.value);
+}
+
 test "parser rejects unsupported top level source" {
-    try std.testing.expect(parse("var counter: i32 = 0;") == null);
+    try std.testing.expect(parse("var counter = 0;") == null);
     try std.testing.expect(parse("const max_width = 4096;") == null);
     try std.testing.expect(parse("const max_width: usize;") == null);
     try std.testing.expect(parse("pub fn helper() i32 { return 7; }") == null);
