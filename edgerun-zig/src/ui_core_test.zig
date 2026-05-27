@@ -11,6 +11,9 @@ pub const ui = @import("ui.zig");
 pub const ui_codec = @import("ui_codec.zig");
 const ui_components = @import("ui/components/Component.zig");
 pub const ui_resolver = @import("ui_resolver.zig");
+pub const ui_stream = @import("ui_stream.zig");
+pub const ui_device_tree = @import("ui_device_tree.zig");
+pub const ui_dashboard = @import("ui_dashboard.zig");
 pub const varfont = @import("varfont.zig");
 
 test {
@@ -26,5 +29,8 @@ test {
     _ = ui_codec;
     _ = ui_components;
     _ = ui_resolver;
+    _ = ui_stream;
+    _ = ui_device_tree;
+    _ = ui_dashboard;
     _ = varfont;
 }

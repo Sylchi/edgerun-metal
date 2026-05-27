@@ -9,7 +9,8 @@
 	pi-boot-firmware-check pi-usb-reset-controller pi-usb-dry-run pi-usb-boot-dir \
 	pi-usb-load pi-usb-load-probe pi-usb-load-usbflag pi-usb-load-probe-usbflag \
 	pi-usb-recover-load pi-usb-recover-load-probe \
-	pi-usb-control-host pi-usb-control-dry-run pi-usb-control
+	pi-usb-control-host pi-usb-control-dry-run pi-usb-control \
+	ifstatus
 
 BUILD_DIR := .build
 CMAKE ?= cmake
@@ -148,6 +149,10 @@ pi-usb-host:
 pi-usb-control-host:
 	mkdir -p $(BUILD_DIR)/pi-usb-host
 	zig build-exe edgerun-zig/src/pi_usb_control_host.zig --cache-dir $(BUILD_DIR)/edgerun-zig -femit-bin=$(BUILD_DIR)/pi-usb-host/edgerun-pi-usb-control-host
+
+ifstatus:
+	mkdir -p $(BUILD_DIR)/edgerun-zig
+	zig build-exe edgerun-zig/src/ifstatus.zig --cache-dir $(BUILD_DIR)/edgerun-zig -femit-bin=$(BUILD_DIR)/edgerun-zig/edgerun-ifstatus
 
 pi-usb-state:
 	lsusb -t

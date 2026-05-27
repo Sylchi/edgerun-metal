@@ -18,6 +18,7 @@ const app_images = @import("app_images.zig");
 const app_landing = @import("app_landing.zig");
 const app_navigation = @import("app_navigation.zig");
 const app_native_input = @import("app_native_input.zig");
+const app_dashboard = @import("app_dashboard.zig");
 const icon_component = @import("ui/components/Icon.zig");
 const ui = @import("ui.zig");
 const text_component = @import("ui/components/Text.zig");
@@ -155,6 +156,7 @@ const Options = struct {
     drm_device: []const u8 = linux_drm.default_device_path,
     dmabuf_fd: ?posix.fd_t = null,
     path: []const u8 = "/",
+    dashboard: bool = false,
 };
 
 const PresentMode = enum {
@@ -370,6 +372,8 @@ fn parseOptions(args: []const [:0]const u8) !Options {
             index += 1;
             if (index >= args.len) return error.InvalidArguments;
             options.path = args[index];
+        } else if (std.mem.eql(u8, arg, "--dashboard")) {
+            options.dashboard = true;
         } else {
             return error.InvalidArguments;
         }
@@ -703,9 +707,11 @@ const NativeApp = struct {
     tile_marks: [max_tiles]u8 = undefined,
     dirty_ids: [max_tiles]u32 = undefined,
     state: AppState = .{ .public_identity = "native-wayland", .reveal_identity = "native-wayland" },
+    dashboard_app: app_dashboard.State = .{},
     gpu_recorder: GpuRecorder = .{},
     gpu_buffer_device: renderer_gpu_buffer.CpuFilledDevice = .{},
     drm_buffer: ?linux_drm.DumbBuffer = null,
+    dashboard: bool = false,
 
     fn create(client: *WaylandClient, allocator: std.mem.Allocator, options: Options) !*NativeApp {
         const width = options.width;
@@ -749,6 +755,7 @@ const NativeApp = struct {
         self.gpu_recorder = .{};
         self.gpu_buffer_device = .{};
         self.drm_buffer = drm_buffer;
+        self.dashboard = options.dashboard;
         return self;
     }
 
@@ -769,7 +776,7 @@ const NativeApp = struct {
     fn render(self: *NativeApp, client: *WaylandClient) !void {
         var scene = ui.Scene.initWithClips(&self.commands, &self.clips);
         var collector = interaction.Collector.init(&self.regions);
-        try renderNativeAppScene(&scene, &collector, self.width, self.height, self.state);
+        try renderNativeAppScene(&scene, &collector, self.width, self.height, self.state, &self.dashboard_app, self.dashboard);
         self.region_len = collector.written().len;
         self.updateHoverHit(self.regionSlice());
         const cursor_kind = self.state.cursorKind();
@@ -1116,11 +1123,16 @@ const GpuRecorder = struct {
     }
 };
 
-fn renderNativeAppScene(scene: *ui.Scene, collector: *interaction.Collector, width: u32, height: u32, state: AppState) !void {
+fn renderNativeAppScene(scene: *ui.Scene, collector: *interaction.Collector, width: u32, height: u32, state: AppState, dashboard_state: *app_dashboard.State, dashboard_mode: bool) !void {
     try renderClientDecoration(scene, collector, @floatFromInt(width));
     const content_y = client_decor_h;
     const content_h = @max(1.0, @as(f32, @floatFromInt(height)) - content_y);
     const bounds = ui.Rect.init(0, content_y, @floatFromInt(width), content_h);
+    if (dashboard_mode) {
+        try dashboard_state.refresh();
+        try dashboard_state.render(scene, bounds, .{});
+        return;
+    }
     try app_frame.render(scene, collector, bounds, .{
         .route = state.route,
         .scroll_y = state.scroll_y,
@@ -1937,7 +1949,8 @@ test "wayland host renders the source app through canonical ir" {
     var regions: [max_interaction_regions]interaction.Region = undefined;
     var scene = ui.Scene.initWithClips(&commands, &clips);
     var collector = interaction.Collector.init(&regions);
-    try renderNativeAppScene(&scene, &collector, 1280, 800, .{});
+    var dash_state: app_dashboard.State = .{};
+    try renderNativeAppScene(&scene, &collector, 1280, 800, .{}, &dash_state, false);
     try std.testing.expect(hasText(scene.written(), "EdgeRun Workspace"));
     try std.testing.expect(hasText(scene.written(), "EXPLORER"));
 
@@ -1960,7 +1973,8 @@ test "wayland host renders academy post route through canonical ir" {
     const post_id = app_blog.postIdAt(app_blog.posts.len - 1);
     var path: [app_navigation.route_path_capacity]u8 = undefined;
     const route_path = try std.fmt.bufPrint(&path, "/academy/{d}", .{post_id});
-    try renderNativeAppScene(&scene, &collector, 1280, 1800, .{ .route = app_navigation.fromPath(route_path) });
+    var dash_b: app_dashboard.State = .{};
+    try renderNativeAppScene(&scene, &collector, 1280, 1800, .{ .route = app_navigation.fromPath(route_path) }, &dash_b, false);
     try std.testing.expect(hasText(scene.written(), "AUTHORITY FLOW"));
     try std.testing.expect(hasText(scene.written(), "Relay"));
     try std.testing.expect(hasText(scene.written(), "TPM"));
@@ -1972,7 +1986,8 @@ test "wayland host renders current docs routes through the shared app frame" {
     var regions: [max_interaction_regions]interaction.Region = undefined;
     var scene = ui.Scene.initWithClips(&commands, &clips);
     var collector = interaction.Collector.init(&regions);
-    try renderNativeAppScene(&scene, &collector, 1280, 1800, .{ .route = app_navigation.fromPath("/docs/fonts") });
+    var dash_c: app_dashboard.State = .{};
+    try renderNativeAppScene(&scene, &collector, 1280, 1800, .{ .route = app_navigation.fromPath("/docs/fonts") }, &dash_c, false);
 
     try std.testing.expect(hasText(scene.written(), "EdgeRun Native"));
     try std.testing.expect(hasText(scene.written(), "Fonts"));
@@ -1986,7 +2001,8 @@ test "wayland host packs docs overview route at launch size" {
     var regions: [max_interaction_regions]interaction.Region = undefined;
     var scene = ui.Scene.initWithClips(&commands, &clips);
     var collector = interaction.Collector.init(&regions);
-    try renderNativeAppScene(&scene, &collector, 1280, 900, .{ .route = app_navigation.fromPath("/docs") });
+    var dash_d: app_dashboard.State = .{};
+    try renderNativeAppScene(&scene, &collector, 1280, 900, .{ .route = app_navigation.fromPath("/docs") }, &dash_d, false);
 
     var ir_storage = IrStorage{};
     const buffers = ir_storage.buffers();
@@ -2007,7 +2023,8 @@ test "wayland host renders client side decoration above app content" {
     var regions: [max_interaction_regions]interaction.Region = undefined;
     var scene = ui.Scene.initWithClips(&commands, &clips);
     var collector = interaction.Collector.init(&regions);
-    try renderNativeAppScene(&scene, &collector, 1280, 800, state);
+    var dash_c: app_dashboard.State = .{};
+    try renderNativeAppScene(&scene, &collector, 1280, 800, state, &dash_c, false);
 
     try std.testing.expect(hasText(scene.written(), "EDGERUN"));
     try std.testing.expect(hasText(scene.written(), "Academy"));
@@ -2079,7 +2096,8 @@ test "wayland host pointer input updates hover activation and scroll state" {
     var regions: [max_interaction_regions]interaction.Region = undefined;
     var scene = ui.Scene.initWithClips(&commands, &clips);
     var collector = interaction.Collector.init(&regions);
-    try renderNativeAppScene(&scene, &collector, 1280, 800, state);
+    var dash_c: app_dashboard.State = .{};
+    try renderNativeAppScene(&scene, &collector, 1280, 800, state, &dash_c, false);
     updateHoverHitForState(&state, collector.written());
     try std.testing.expect(state.runtime.hovered == null);
 
@@ -2116,7 +2134,7 @@ test "wayland host appends scene cursor from native hover state" {
     app.font_atlas.initUtf8();
     var scene = ui.Scene.initWithClips(&app.commands, &app.clips);
     var collector = interaction.Collector.init(&app.regions);
-    try renderNativeAppScene(&scene, &collector, app.width, app.height, app.state);
+    try renderNativeAppScene(&scene, &collector, app.width, app.height, app.state, &app.dashboard_app, app.dashboard);
     app.region_len = collector.written().len;
     const docs = try hitRect(app.regionSlice(), app_landing.docs_button_id);
     app.state.hover_x = docs.x + docs.w * 0.5;

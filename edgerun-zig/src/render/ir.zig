@@ -842,7 +842,6 @@ fn nextCodepoint(value: []const u8, index: *usize) ?u21 {
     return codepoint;
 }
 
-
 test "renderer ir owns svg source lookup and command painting boundaries" {
     try expectSourceDoesNotContain(@embedFile("backends/software.zig"), "@import(\"icon_svg.zig\")");
     try expectSourceDoesNotContain(@embedFile("icon_line_buffer.zig"), "@import(\"icon_svg.zig\")");

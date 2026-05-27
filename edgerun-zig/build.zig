@@ -525,6 +525,20 @@ pub fn build(b: *std.Build) void {
     const tpm_real_check_step = b.step("real-tpm", "Run TPM checks against /dev/tpmrm0");
     tpm_real_check_step.dependOn(&run_tpm_real_check.step);
 
+    const ifstatus = b.addExecutable(.{
+        .name = "edgerun-ifstatus",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/ifstatus.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+
+    const run_ifstatus = b.addRunArtifact(ifstatus);
+    if (b.args) |args| run_ifstatus.addArgs(args);
+    const ifstatus_step = b.step("ifstatus", "Publish network interface status as codec bytes to stdout");
+    ifstatus_step.dependOn(&run_ifstatus.step);
+
     const pi_usb_boot_host = b.addExecutable(.{
         .name = "edgerun-pi-usb-boot-host",
         .root_module = b.createModule(.{
