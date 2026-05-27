@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const const_keyword = "const ";
+const fn_keyword = "fn ";
 const export_fn_keyword = "export fn ";
 const pub_export_fn_keyword = "pub export fn ";
 
@@ -16,6 +17,7 @@ pub const ParsedExport = struct {
     signature_tail: []const u8,
     body: []const u8,
     next_index: usize,
+    exported: bool,
 };
 
 pub const ParsedConst = struct {
@@ -36,11 +38,13 @@ pub fn parse(source: []const u8) ?Stats {
             stats.declaration_count += 1;
             continue;
         }
-        if (parseExport(source, index)) |parsed| {
+        if (parseFunction(source, index)) |parsed| {
             index = parsed.next_index;
             stats.declaration_count += 1;
-            stats.export_count += 1;
-            stats.export_name_bytes += @intCast(parsed.name.len);
+            if (parsed.exported) {
+                stats.export_count += 1;
+                stats.export_name_bytes += @intCast(parsed.name.len);
+            }
             continue;
         }
         return null;
@@ -130,14 +134,25 @@ pub fn parseConstDecl(source: []const u8, start: usize) ?ParsedConst {
 }
 
 pub fn parseExport(source: []const u8, start: usize) ?ParsedExport {
-    const prefix_len: usize = if (std.mem.startsWith(u8, source[start..], pub_export_fn_keyword))
-        pub_export_fn_keyword.len
+    const parsed = parseFunction(source, start) orelse return null;
+    return if (parsed.exported) parsed else null;
+}
+
+pub fn parseFunction(source: []const u8, start: usize) ?ParsedExport {
+    const FnPrefix = struct {
+        len: usize,
+        exported: bool,
+    };
+    const prefix: FnPrefix = if (std.mem.startsWith(u8, source[start..], pub_export_fn_keyword))
+        .{ .len = pub_export_fn_keyword.len, .exported = true }
     else if (std.mem.startsWith(u8, source[start..], export_fn_keyword))
-        export_fn_keyword.len
+        .{ .len = export_fn_keyword.len, .exported = true }
+    else if (std.mem.startsWith(u8, source[start..], fn_keyword))
+        .{ .len = fn_keyword.len, .exported = false }
     else
         return null;
 
-    const name_start = start + prefix_len;
+    const name_start = start + prefix.len;
     const name_end = scanIdentifierEnd(source, name_start) orelse return null;
     var index = skipSpace(source, name_end);
     if (index >= source.len or source[index] != '(') return null;
@@ -158,6 +173,7 @@ pub fn parseExport(source: []const u8, start: usize) ?ParsedExport {
         .signature_tail = source[signature_tail_start..index],
         .body = source[body_start .. next_index - 1],
         .next_index = next_index,
+        .exported = prefix.exported,
     };
 }
 
@@ -234,6 +250,23 @@ test "parser accepts typed constants and top level exports" {
     try std.testing.expectEqual(@as(u32, 3), stats.declaration_count);
     try std.testing.expectEqual(@as(u32, 2), stats.export_count);
     try std.testing.expect(stats.export_name_bytes > 0);
+}
+
+test "parser accepts private top level functions without counting exports" {
+    const source =
+        \\fn helper(value: i32) i32 { return value * 2; }
+        \\export fn er_scale(value: i32) i32 { return helper(value); }
+    ;
+    const stats = parse(source).?;
+    try std.testing.expectEqual(@as(u32, 2), stats.declaration_count);
+    try std.testing.expectEqual(@as(u32, 1), stats.export_count);
+
+    const helper = parseFunction(source, 0).?;
+    try std.testing.expectEqualStrings("helper", helper.name);
+    try std.testing.expect(!helper.exported);
+    const exported = parseExport(source, skipSpace(source, helper.next_index)).?;
+    try std.testing.expectEqualStrings("er_scale", exported.name);
+    try std.testing.expect(exported.exported);
 }
 
 test "parser rejects unsupported top level source" {

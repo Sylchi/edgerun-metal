@@ -44,18 +44,25 @@ const wasm_opcode_if: u8 = 0x04;
 const wasm_opcode_else: u8 = 0x05;
 const wasm_opcode_end: u8 = 0x0b;
 const wasm_opcode_i32_eq: u8 = 0x46;
+const wasm_opcode_i32_ne: u8 = 0x47;
 const wasm_opcode_i32_lt_s: u8 = 0x48;
+const wasm_opcode_i32_gt_s: u8 = 0x4a;
+const wasm_opcode_i32_le_s: u8 = 0x4c;
+const wasm_opcode_i32_ge_s: u8 = 0x4e;
 const wasm_opcode_i32_add: u8 = 0x6a;
+const wasm_opcode_i32_sub: u8 = 0x6b;
 const wasm_opcode_i32_mul: u8 = 0x6c;
 const lowered_main_i32_signature = "pub export fn er_app_main() i32";
 const legacy_main_i32_signature = "pub export fn main() i32";
 const return_keyword = "return";
 const export_fn_keyword = "export fn ";
 const const_keyword = "const ";
+const var_keyword = "var ";
 const embedded_wasm_compiler_label = "embedded_wasm_compiler";
 const type_index_no_args_i32: u32 = 0;
 const type_index_no_args_void: u32 = 1;
 const type_index_i32_arg_i32: u32 = 2;
+const type_index_i32_i32_arg_i32: u32 = 3;
 const state_slot_bytes: usize = 4;
 const linked_compiler_runtime_capacity: usize = 96 * 1024 * 1024;
 const wasm_magic_word: i32 = 0x6d736100;
@@ -366,7 +373,7 @@ fn emitAppWasm(output: []u8, source: []const u8, workspace: WorkspaceInfo, compi
     const compiler_wasm_offset = alignForwardUsize(wasm_source_offset + embedded_source_len, memory_alignment);
     const compiler_wasm_end = compiler_wasm_offset + embedded_compiler_wasm.len;
     const lowered_data_base = alignForwardUsize(compiler_wasm_end, memory_alignment);
-    const lowered_exports = collectLoweredExportsForMode(source_mode, workspace.root_source, lowered_data_base, @intCast(compiler_wasm_offset), @intCast(embedded_compiler_wasm.len));
+    const lowered_exports = collectLoweredExportsForMode(source_mode, workspace.root_source, lowered_data_base, @intCast(compiler_wasm_offset), @intCast(embedded_compiler_wasm.len), successor_base_function_count);
     const source_end = wasm_source_offset + embedded_source_len;
     var memory_bytes = if (lowered_exports.memory_end > source_end) lowered_exports.memory_end else source_end;
     if (compiler_wasm_end > memory_bytes) memory_bytes = compiler_wasm_end;
@@ -411,9 +418,9 @@ fn emitAppWasm(output: []u8, source: []const u8, workspace: WorkspaceInfo, compi
 }
 
 fn emitTypeSection(parent: *Writer) error{OutputTooLarge}!void {
-    var payload_buffer: [24]u8 = undefined;
+    var payload_buffer: [32]u8 = undefined;
     var payload = Writer{ .bytes = &payload_buffer };
-    try payload.appendU32Leb(3);
+    try payload.appendU32Leb(4);
     try payload.append(0x60);
     try payload.appendU32Leb(0);
     try payload.appendU32Leb(1);
@@ -423,6 +430,12 @@ fn emitTypeSection(parent: *Writer) error{OutputTooLarge}!void {
     try payload.appendU32Leb(0);
     try payload.append(0x60);
     try payload.appendU32Leb(1);
+    try payload.append(0x7f);
+    try payload.appendU32Leb(1);
+    try payload.append(0x7f);
+    try payload.append(0x60);
+    try payload.appendU32Leb(2);
+    try payload.append(0x7f);
     try payload.append(0x7f);
     try payload.appendU32Leb(1);
     try payload.append(0x7f);
@@ -435,9 +448,11 @@ const LinkedCompilerInfo = struct {
     code_count: u32,
     data_count: u32,
     memory_min_pages: u32,
+    type_count: u32,
     type_no_args_i32: u32,
     type_no_args_void: u32,
     type_i32_arg_i32: u32,
+    type_i32_i32_arg_i32: u32,
     init_function_index: u32,
     compile_function_index: u32,
     output_len_function_index: u32,
@@ -470,7 +485,7 @@ fn emitLinkedCompilerAppWasm(
     const linked_source_offset = alignForwardUsize(compiler_reserved_bytes, memory_alignment);
     const source_end = linked_source_offset + embedded_source_len;
     const lowered_data_base = alignForwardUsize(source_end, memory_alignment);
-    const lowered_exports = collectLoweredExportsForMode(source_mode, workspace.root_source, lowered_data_base, 0, 1);
+    const lowered_exports = collectLoweredExportsForMode(source_mode, workspace.root_source, lowered_data_base, 0, 1, compiler_info.function_count + successor_base_function_count);
     const memory_bytes = lowered_exports.memory_end;
     var writer = Writer{ .bytes = output };
     try writer.appendSlice(&.{ 0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00 });
@@ -484,7 +499,7 @@ fn emitLinkedCompilerAppWasm(
         switch (section.id) {
             1 => {
                 state.diagnostic = "linked type section";
-                try emitSection(&writer, section.id, section.payload);
+                try emitLinkedTypeSection(&writer, section.payload, &compiler_info);
             },
             3 => {
                 state.diagnostic = "linked function section";
@@ -557,9 +572,11 @@ fn parseLinkedCompilerInfo(wasm: []const u8) ?LinkedCompilerInfo {
         .code_count = 0,
         .data_count = 0,
         .memory_min_pages = 0,
+        .type_count = 0,
         .type_no_args_i32 = std.math.maxInt(u32),
         .type_no_args_void = std.math.maxInt(u32),
         .type_i32_arg_i32 = std.math.maxInt(u32),
+        .type_i32_i32_arg_i32 = std.math.maxInt(u32),
         .init_function_index = std.math.maxInt(u32),
         .compile_function_index = std.math.maxInt(u32),
         .output_len_function_index = std.math.maxInt(u32),
@@ -583,6 +600,7 @@ fn parseLinkedCompilerInfo(wasm: []const u8) ?LinkedCompilerInfo {
     if (info.memory_min_pages == 0) return null;
     if (info.type_no_args_i32 == std.math.maxInt(u32)) return null;
     if (info.type_i32_arg_i32 == std.math.maxInt(u32)) return null;
+    if (info.type_count == 0) return null;
     if (info.init_function_index == std.math.maxInt(u32)) return null;
     if (info.compile_function_index == std.math.maxInt(u32)) return null;
     if (info.output_len_function_index == std.math.maxInt(u32)) return null;
@@ -608,6 +626,7 @@ fn parseMemoryMinPages(payload: []const u8) ?u32 {
 fn parseLinkedTypeInfo(payload: []const u8, info: *LinkedCompilerInfo) error{OutputTooLarge}!void {
     var reader = Reader{ .bytes = payload };
     const count = try reader.readU32Leb();
+    info.type_count = count;
     var index: u32 = 0;
     while (index < count) : (index += 1) {
         if ((try reader.readByte()) != 0x60) return error.OutputTooLarge;
@@ -628,7 +647,29 @@ fn parseLinkedTypeInfo(payload: []const u8, info: *LinkedCompilerInfo) error{Out
         if (param_count == 0 and result_count == 1 and results[0] == 0x7f) info.type_no_args_i32 = index;
         if (param_count == 0 and result_count == 0) info.type_no_args_void = index;
         if (param_count == 1 and params[0] == 0x7f and result_count == 1 and results[0] == 0x7f) info.type_i32_arg_i32 = index;
+        if (param_count == 2 and params[0] == 0x7f and params[1] == 0x7f and result_count == 1 and results[0] == 0x7f) info.type_i32_i32_arg_i32 = index;
     }
+}
+
+fn emitLinkedTypeSection(parent: *Writer, payload: []const u8, info: *LinkedCompilerInfo) error{OutputTooLarge}!void {
+    var reader = Reader{ .bytes = payload };
+    const existing_count = try reader.readU32Leb();
+    var out_buffer: [4096]u8 = undefined;
+    var out = Writer{ .bytes = &out_buffer };
+    const add_two_arg_type = info.type_i32_i32_arg_i32 == std.math.maxInt(u32);
+    try out.appendU32Leb(existing_count + if (add_two_arg_type) @as(u32, 1) else 0);
+    try out.appendSlice(payload[reader.offset..]);
+    if (add_two_arg_type) {
+        info.type_i32_i32_arg_i32 = existing_count;
+        info.type_count = existing_count + 1;
+        try out.append(0x60);
+        try out.appendU32Leb(2);
+        try out.append(0x7f);
+        try out.append(0x7f);
+        try out.appendU32Leb(1);
+        try out.append(0x7f);
+    }
+    try emitSection(parent, 1, out.bytes[0..out.len]);
 }
 
 fn parseLinkedExportInfo(payload: []const u8, info: *LinkedCompilerInfo) error{OutputTooLarge}!void {
@@ -661,7 +702,7 @@ fn emitLinkedFunctionSection(parent: *Writer, payload: []const u8, info: LinkedC
         try out.appendU32Leb(switch (lowered.kind) {
             .return_i32, .state_load_i32, .compile_workspace => info.type_no_args_i32,
             .release_artifact_commit, .source_workspace_commit => info.type_i32_arg_i32,
-            .dynamic_i32_arg_i32 => info.type_i32_arg_i32,
+            .dynamic_i32_arg_i32 => if (lowered.arg_count == 2) info.type_i32_i32_arg_i32 else info.type_i32_arg_i32,
         });
     }
     try emitSection(parent, 3, out.bytes[0..out.len]);
@@ -672,7 +713,7 @@ fn emitLinkedExportSection(parent: *Writer, payload: []const u8, base_function_c
     const existing_count = try reader.readU32Leb();
     var out_buffer: [16384]u8 = undefined;
     var out = Writer{ .bytes = &out_buffer };
-    try out.appendU32Leb(existing_count + successor_base_function_count - 1 + lowered_exports.count);
+    try out.appendU32Leb(existing_count + successor_base_function_count - 1 + lowered_exports.exportedCount());
     try out.appendSlice(payload[reader.offset..]);
     try emitExport(&out, "er_app_abi_version", 0, base_function_count + 0);
     try emitExport(&out, "er_app_source_ptr", 0, base_function_count + 1);
@@ -701,6 +742,7 @@ fn emitLinkedExportSection(parent: *Writer, payload: []const u8, base_function_c
     try emitExport(&out, "er_app_lowered_main_count", 0, base_function_count + 25);
     try emitExport(&out, "er_app_lowered_export_count", 0, base_function_count + 26);
     for (lowered_exports.entries[0..@intCast(lowered_exports.count)], 0..) |lowered, index| {
+        if (!lowered.exported) continue;
         try emitExport(&out, lowered.name, 0, base_function_count + successor_base_function_count + @as(u32, @intCast(index)));
     }
     try emitSection(parent, 7, out.bytes[0..out.len]);
@@ -844,7 +886,11 @@ fn emitAppCodeBodies(
     for (lowered_exports.entries[0..@intCast(lowered_exports.count)]) |lowered| {
         switch (lowered.kind) {
             .return_i32 => try emitReturnI32Function(payload, lowered.value),
-            .dynamic_i32_arg_i32 => try emitDynamicI32Function(payload, lowered.exprCode()),
+            .dynamic_i32_arg_i32 => try emitDynamicI32Function(payload, .{
+                .bytes = lowered.expr_code,
+                .len = lowered.expr_code_len,
+                .local_count = lowered.local_count,
+            }),
             .state_load_i32 => try emitStateLoadI32Function(payload, lowered.value),
             .release_artifact_commit => try emitReleaseArtifactCommitFunction(payload, lowered.value, lowered.limit, lowered.state_offset, lowered.error_offset),
             .source_workspace_commit => try emitSourceWorkspaceCommitFunction(payload, lowered.limit, lowered.state_offset, lowered.ready_offset, lowered.error_offset),
@@ -909,7 +955,7 @@ fn emitFunctionSection(parent: *Writer, lowered_exports: LoweredExports) error{O
         try payload.appendU32Leb(switch (lowered.kind) {
             .return_i32, .state_load_i32, .compile_workspace => type_index_no_args_i32,
             .release_artifact_commit, .source_workspace_commit => type_index_i32_arg_i32,
-            .dynamic_i32_arg_i32 => type_index_i32_arg_i32,
+            .dynamic_i32_arg_i32 => if (lowered.arg_count == 2) type_index_i32_i32_arg_i32 else type_index_i32_arg_i32,
         });
     }
     try emitSection(parent, 3, payload.bytes[0..payload.len]);
@@ -927,7 +973,7 @@ fn emitMemorySection(parent: *Writer, min_pages: u32) error{OutputTooLarge}!void
 fn emitExportSection(parent: *Writer, lowered_exports: LoweredExports) error{OutputTooLarge}!void {
     var payload_buffer: [8192]u8 = undefined;
     var payload = Writer{ .bytes = &payload_buffer };
-    try payload.appendU32Leb(successor_base_function_count + lowered_exports.count);
+    try payload.appendU32Leb(successor_base_function_count + lowered_exports.exportedCount());
     try emitExport(&payload, "memory", 2, 0);
     try emitExport(&payload, "er_app_abi_version", 0, 0);
     try emitExport(&payload, "er_app_source_ptr", 0, 1);
@@ -956,6 +1002,7 @@ fn emitExportSection(parent: *Writer, lowered_exports: LoweredExports) error{Out
     try emitExport(&payload, "er_app_lowered_main_count", 0, 25);
     try emitExport(&payload, "er_app_lowered_export_count", 0, 26);
     for (lowered_exports.entries[0..@intCast(lowered_exports.count)], 0..) |lowered, index| {
+        if (!lowered.exported) continue;
         try emitExport(&payload, lowered.name, 0, successor_base_function_count + @as(u32, @intCast(index)));
     }
     try emitSection(parent, 7, payload.bytes[0..payload.len]);
@@ -1022,7 +1069,11 @@ fn emitCodeSection(
     for (lowered_exports.entries[0..@intCast(lowered_exports.count)]) |lowered| {
         switch (lowered.kind) {
             .return_i32 => try emitReturnI32Function(&payload, lowered.value),
-            .dynamic_i32_arg_i32 => try emitDynamicI32Function(&payload, lowered.exprCode()),
+            .dynamic_i32_arg_i32 => try emitDynamicI32Function(&payload, .{
+                .bytes = lowered.expr_code,
+                .len = lowered.expr_code_len,
+                .local_count = lowered.local_count,
+            }),
             .state_load_i32 => try emitStateLoadI32Function(&payload, lowered.value),
             .release_artifact_commit => try emitReleaseArtifactCommitFunction(&payload, lowered.value, lowered.limit, lowered.state_offset, lowered.error_offset),
             .source_workspace_commit => try emitSourceWorkspaceCommitFunction(&payload, lowered.limit, lowered.state_offset, lowered.ready_offset, lowered.error_offset),
@@ -1103,11 +1154,17 @@ fn emitReturnI32Function(writer: *Writer, value: i32) error{OutputTooLarge}!void
     try writer.appendSlice(body.bytes[0..body.len]);
 }
 
-fn emitDynamicI32Function(writer: *Writer, expr_code: []const u8) error{OutputTooLarge}!void {
-    var body_buffer: [max_edgerun_expr_code_bytes + 8]u8 = undefined;
+fn emitDynamicI32Function(writer: *Writer, compiled: CompiledExpr) error{OutputTooLarge}!void {
+    var body_buffer: [max_edgerun_expr_code_bytes + 16]u8 = undefined;
     var body = Writer{ .bytes = &body_buffer };
-    try body.appendU32Leb(0);
-    try body.appendSlice(expr_code);
+    if (compiled.local_count == 0) {
+        try body.appendU32Leb(0);
+    } else {
+        try body.appendU32Leb(1);
+        try body.appendU32Leb(compiled.local_count);
+        try body.append(0x7f);
+    }
+    try body.appendSlice(compiled.slice());
     try body.append(0x0b);
     try writer.appendU32Leb(@intCast(body.len));
     try writer.appendSlice(body.bytes[0..body.len]);
@@ -1273,6 +1330,11 @@ fn emitLocalGet(writer: *Writer, local_index: u32) error{OutputTooLarge}!void {
     try writer.appendU32Leb(local_index);
 }
 
+fn emitLocalSet(writer: *Writer, local_index: u32) error{OutputTooLarge}!void {
+    try writer.append(0x21);
+    try writer.appendU32Leb(local_index);
+}
+
 fn emitCall(writer: *Writer, function_index: u32) error{OutputTooLarge}!void {
     try writer.append(0x10);
     try writer.appendU32Leb(function_index);
@@ -1362,9 +1424,9 @@ fn lowerEdgeRunMainI32Literal(source: []const u8) ?i32 {
             index = edgerun_source.parseConst(source, index) orelse return null;
             continue;
         }
-        const parsed = edgerun_source.parseExport(source, index) orelse return null;
+        const parsed = edgerun_source.parseFunction(source, index) orelse return null;
         index = parsed.next_index;
-        if (!std.mem.eql(u8, parsed.name, "er_app_main")) continue;
+        if (!parsed.exported or !std.mem.eql(u8, parsed.name, "er_app_main")) continue;
         if (!allWhitespace(parsed.args)) return null;
         if (!std.mem.eql(u8, trimAsciiWhitespace(parsed.signature_tail), "i32")) return null;
         return compileEdgeRunReturnBody(parsed.body, &base_context);
@@ -1427,14 +1489,23 @@ const ParsedReturnValue = struct {
 const CompiledExpr = struct {
     bytes: [max_edgerun_expr_code_bytes]u8 = [_]u8{0} ** max_edgerun_expr_code_bytes,
     len: u8 = 0,
+    local_count: u8 = 0,
 
     fn slice(expr: *const CompiledExpr) []const u8 {
         return expr.bytes[0..expr.len];
     }
 };
 
-const EdgeRunArg = struct {
-    name: []const u8,
+const EdgeRunArgs = struct {
+    names: [2][]const u8 = .{ "", "" },
+    count: u8 = 0,
+
+    fn find(args: *const EdgeRunArgs, name: []const u8) ?u32 {
+        for (args.names[0..args.count], 0..) |arg_name, index| {
+            if (std.mem.eql(u8, arg_name, name)) return @intCast(index);
+        }
+        return null;
+    }
 };
 
 const ExprBinding = struct {
@@ -1462,8 +1533,35 @@ const ExprIndex = struct {
     }
 };
 
-fn compileEdgeRunDynamicReturnBody(body: []const u8, base_context: *const LoweringContext, arg: EdgeRunArg) ?CompiledExpr {
+const LocalVar = struct {
+    name: []const u8,
+    local_index: u32,
+};
+
+const LocalVarIndex = struct {
+    entries: [max_edgerun_function_locals]LocalVar = undefined,
+    count: usize = 0,
+
+    fn appendUnique(index: *LocalVarIndex, name: []const u8, local_index: u32) bool {
+        if (index.find(name) != null) return false;
+        if (index.count >= index.entries.len) return false;
+        index.entries[index.count] = .{ .name = name, .local_index = local_index };
+        index.count += 1;
+        return true;
+    }
+
+    fn find(index: *const LocalVarIndex, name: []const u8) ?u32 {
+        for (index.entries[0..index.count]) |entry| {
+            if (std.mem.eql(u8, entry.name, name)) return entry.local_index;
+        }
+        return null;
+    }
+};
+
+fn compileEdgeRunDynamicReturnBody(body: []const u8, base_context: *const LoweringContext, args: EdgeRunArgs, calls: *const LoweredExports, function_index_base: u32) ?CompiledExpr {
     var locals = ExprIndex{};
+    var vars = LocalVarIndex{};
+    var local_count: u8 = 0;
     var index: usize = 0;
     while (true) {
         index = edgerun_source.skipSpace(body, index);
@@ -1471,18 +1569,22 @@ fn compileEdgeRunDynamicReturnBody(body: []const u8, base_context: *const Loweri
         if (std.mem.startsWith(u8, body[index..], const_keyword)) {
             const decl = edgerun_source.parseConstDecl(body, index) orelse return null;
             if (!edgeRunIntegerType(decl.type_expr)) return null;
-            if (std.mem.eql(u8, decl.name, arg.name)) return null;
+            if (args.find(decl.name) != null) return null;
             if (base_context.constants.find(decl.name) != null) return null;
             var code = CompiledExpr{};
             var writer = Writer{ .bytes = &code.bytes };
-            compileEdgeRunExprCode(decl.value, base_context, arg, &locals, &writer) catch return null;
+            compileEdgeRunExprCode(decl.value, base_context, args, &locals, &vars, calls, function_index_base, &writer) catch return null;
             code.len = @intCast(writer.len);
             if (!locals.appendUnique(decl.name, code)) return null;
             index = decl.next_index;
             continue;
         }
-        if (!std.mem.startsWith(u8, body[index..], return_keyword)) return null;
-        const parsed = compileEdgeRunReturnStatementCode(body, index, base_context, arg, &locals) orelse return null;
+        const parsed = if (std.mem.startsWith(u8, body[index..], "if ("))
+            compileEdgeRunIfReturnStatementCode(body, index, base_context, args, &locals, calls, function_index_base) orelse return null
+        else if (std.mem.startsWith(u8, body[index..], return_keyword))
+            compileEdgeRunReturnStatementCode(body, index, base_context, args, &locals, calls, function_index_base) orelse return null
+        else
+            return null;
         index = edgerun_source.skipSpace(body, parsed.next_index);
         if (index != body.len) return null;
         return parsed.code;
@@ -1494,7 +1596,48 @@ const ParsedReturnCode = struct {
     next_index: usize,
 };
 
-fn compileEdgeRunReturnStatementCode(body: []const u8, start: usize, context: *const LoweringContext, arg: EdgeRunArg, locals: *const ExprIndex) ?ParsedReturnCode {
+fn compileEdgeRunIfReturnStatementCode(body: []const u8, start: usize, context: *const LoweringContext, args: EdgeRunArgs, locals: *const ExprIndex, calls: *const LoweredExports, function_index_base: u32) ?ParsedReturnCode {
+    const condition_end = findMatchingParen(body, start + "if ".len) orelse return null;
+    const condition = body[start + "if (".len .. condition_end];
+    var index = skipWhitespace(body, condition_end + 1);
+    if (index >= body.len or body[index] != '{') return null;
+    const then_end = findMatchingBrace(body, index) orelse return null;
+    const then_code = compileEdgeRunReturnBlockCode(body[index + 1 .. then_end], context, args, locals, calls, function_index_base) orelse return null;
+    index = skipWhitespace(body, then_end + 1);
+    if (!std.mem.startsWith(u8, body[index..], "else")) return null;
+    const after_else = index + "else".len;
+    if (after_else < body.len and identifierContinue(body[after_else])) return null;
+    index = skipWhitespace(body, after_else);
+    if (index >= body.len or body[index] != '{') return null;
+    const else_end = findMatchingBrace(body, index) orelse return null;
+    const else_code = compileEdgeRunReturnBlockCode(body[index + 1 .. else_end], context, args, locals, calls, function_index_base) orelse return null;
+
+    var compiled = CompiledExpr{};
+    var writer = Writer{ .bytes = &compiled.bytes };
+    compileEdgeRunConditionCode(condition, context, args, locals, vars, calls, function_index_base, &writer) catch return null;
+    writer.append(wasm_opcode_if) catch return null;
+    writer.append(wasm_block_type_i32) catch return null;
+    writer.appendSlice(then_code.code.slice()) catch return null;
+    writer.append(wasm_opcode_else) catch return null;
+    writer.appendSlice(else_code.code.slice()) catch return null;
+    writer.append(wasm_opcode_end) catch return null;
+    compiled.len = @intCast(writer.len);
+    return .{
+        .code = compiled,
+        .next_index = else_end + 1,
+    };
+}
+
+fn compileEdgeRunReturnBlockCode(block: []const u8, context: *const LoweringContext, args: EdgeRunArgs, locals: *const ExprIndex, calls: *const LoweredExports, function_index_base: u32) ?ParsedReturnCode {
+    var index = edgerun_source.skipSpace(block, 0);
+    if (!std.mem.startsWith(u8, block[index..], return_keyword)) return null;
+    const parsed = compileEdgeRunReturnStatementCode(block, index, context, args, locals, calls, function_index_base) orelse return null;
+    index = edgerun_source.skipSpace(block, parsed.next_index);
+    if (index != block.len) return null;
+    return parsed;
+}
+
+fn compileEdgeRunReturnStatementCode(body: []const u8, start: usize, context: *const LoweringContext, args: EdgeRunArgs, locals: *const ExprIndex, calls: *const LoweredExports, function_index_base: u32) ?ParsedReturnCode {
     var index = start + return_keyword.len;
     if (index < body.len and identifierContinue(body[index])) return null;
     index = skipWhitespace(body, index);
@@ -1503,7 +1646,7 @@ fn compileEdgeRunReturnStatementCode(body: []const u8, start: usize, context: *c
     const value_end = value_start + semicolon_relative;
     var compiled = CompiledExpr{};
     var writer = Writer{ .bytes = &compiled.bytes };
-    compileEdgeRunExprCode(body[value_start..value_end], context, arg, locals, &writer) catch return null;
+    compileEdgeRunExprCode(body[value_start..value_end], context, args, locals, vars, calls, function_index_base, &writer) catch return null;
     compiled.len = @intCast(writer.len);
     return .{
         .code = compiled,
@@ -1511,34 +1654,47 @@ fn compileEdgeRunReturnStatementCode(body: []const u8, start: usize, context: *c
     };
 }
 
-fn compileEdgeRunExprCode(raw: []const u8, context: *const LoweringContext, arg: EdgeRunArg, locals: *const ExprIndex, writer: *Writer) error{ OutputTooLarge, InvalidZig }!void {
+fn compileEdgeRunExprCode(raw: []const u8, context: *const LoweringContext, args: EdgeRunArgs, locals: *const ExprIndex, calls: *const LoweredExports, function_index_base: u32, writer: *Writer) error{ OutputTooLarge, InvalidZig }!void {
     const text = trimAsciiWhitespace(raw);
     if (text.len == 0) return error.InvalidZig;
     if (std.mem.startsWith(u8, text, "@intCast(")) {
         const value = unwrapCallArgument(text, "@intCast(") orelse return error.InvalidZig;
-        return compileEdgeRunExprCode(value, context, arg, locals, writer);
+        return compileEdgeRunExprCode(value, context, args, locals, vars, calls, function_index_base, writer);
     }
     if (std.mem.startsWith(u8, text, "if (")) {
-        return compileEdgeRunIfExprCode(text, context, arg, locals, writer);
+        return compileEdgeRunIfExprCode(text, context, args, locals, vars, calls, function_index_base, writer);
     }
     if (splitTopLevelOperator(text, '+')) |split| {
-        try compileEdgeRunExprCode(split.left, context, arg, locals, writer);
-        try compileEdgeRunExprCode(split.right, context, arg, locals, writer);
+        try compileEdgeRunExprCode(split.left, context, args, locals, vars, calls, function_index_base, writer);
+        try compileEdgeRunExprCode(split.right, context, args, locals, vars, calls, function_index_base, writer);
         try writer.append(wasm_opcode_i32_add);
         return;
     }
+    if (splitTopLevelOperator(text, '-')) |split| {
+        try compileEdgeRunExprCode(split.left, context, args, locals, vars, calls, function_index_base, writer);
+        try compileEdgeRunExprCode(split.right, context, args, locals, vars, calls, function_index_base, writer);
+        try writer.append(wasm_opcode_i32_sub);
+        return;
+    }
     if (splitTopLevelOperator(text, '*')) |split| {
-        try compileEdgeRunExprCode(split.left, context, arg, locals, writer);
-        try compileEdgeRunExprCode(split.right, context, arg, locals, writer);
+        try compileEdgeRunExprCode(split.left, context, args, locals, vars, calls, function_index_base, writer);
+        try compileEdgeRunExprCode(split.right, context, args, locals, vars, calls, function_index_base, writer);
         try writer.append(wasm_opcode_i32_mul);
         return;
     }
-    if (std.mem.eql(u8, text, arg.name)) {
-        try emitLocalGet(writer, 0);
+    if (args.find(text)) |arg_index| {
+        try emitLocalGet(writer, arg_index);
         return;
     }
     if (locals.find(text)) |code| {
         try writer.appendSlice(code.slice());
+        return;
+    }
+    if (parseEdgeRunCallExpr(text)) |call| {
+        const target = calls.findCall(call.name, call.arg_count, function_index_base) orelse return error.InvalidZig;
+        if (call.arg_count >= 1) try compileEdgeRunExprCode(call.args[0], context, args, locals, vars, calls, function_index_base, writer);
+        if (call.arg_count == 2) try compileEdgeRunExprCode(call.args[1], context, args, locals, vars, calls, function_index_base, writer);
+        try emitCall(writer, target);
         return;
     }
     if (parseValueExpression(text, context)) |value| {
@@ -1548,34 +1704,58 @@ fn compileEdgeRunExprCode(raw: []const u8, context: *const LoweringContext, arg:
     return error.InvalidZig;
 }
 
-fn compileEdgeRunIfExprCode(text: []const u8, context: *const LoweringContext, arg: EdgeRunArg, locals: *const ExprIndex, writer: *Writer) error{ OutputTooLarge, InvalidZig }!void {
+fn compileEdgeRunIfExprCode(text: []const u8, context: *const LoweringContext, args: EdgeRunArgs, locals: *const ExprIndex, calls: *const LoweredExports, function_index_base: u32, writer: *Writer) error{ OutputTooLarge, InvalidZig }!void {
     const condition_end = findMatchingParen(text, "if ".len) orelse return error.InvalidZig;
     const condition = text["if (".len..condition_end];
     const after_condition = trimAsciiWhitespace(text[condition_end + 1 ..]);
     const else_index = findElseKeyword(after_condition) orelse return error.InvalidZig;
     const then_expr = after_condition[0..else_index];
     const else_expr = after_condition[else_index + "else".len ..];
-    try compileEdgeRunConditionCode(condition, context, arg, locals, writer);
+    try compileEdgeRunConditionCode(condition, context, args, locals, vars, calls, function_index_base, writer);
     try writer.append(wasm_opcode_if);
     try writer.append(wasm_block_type_i32);
-    try compileEdgeRunExprCode(then_expr, context, arg, locals, writer);
+    try compileEdgeRunExprCode(then_expr, context, args, locals, vars, calls, function_index_base, writer);
     try writer.append(wasm_opcode_else);
-    try compileEdgeRunExprCode(else_expr, context, arg, locals, writer);
+    try compileEdgeRunExprCode(else_expr, context, args, locals, vars, calls, function_index_base, writer);
     try writer.append(wasm_opcode_end);
 }
 
-fn compileEdgeRunConditionCode(raw: []const u8, context: *const LoweringContext, arg: EdgeRunArg, locals: *const ExprIndex, writer: *Writer) error{ OutputTooLarge, InvalidZig }!void {
+fn compileEdgeRunConditionCode(raw: []const u8, context: *const LoweringContext, args: EdgeRunArgs, locals: *const ExprIndex, calls: *const LoweredExports, function_index_base: u32, writer: *Writer) error{ OutputTooLarge, InvalidZig }!void {
     const text = trimAsciiWhitespace(raw);
+    if (splitTopLevelToken(text, "!=")) |split| {
+        try compileEdgeRunExprCode(split.left, context, args, locals, vars, calls, function_index_base, writer);
+        try compileEdgeRunExprCode(split.right, context, args, locals, vars, calls, function_index_base, writer);
+        try writer.append(wasm_opcode_i32_ne);
+        return;
+    }
     if (splitTopLevelToken(text, "==")) |split| {
-        try compileEdgeRunExprCode(split.left, context, arg, locals, writer);
-        try compileEdgeRunExprCode(split.right, context, arg, locals, writer);
+        try compileEdgeRunExprCode(split.left, context, args, locals, vars, calls, function_index_base, writer);
+        try compileEdgeRunExprCode(split.right, context, args, locals, vars, calls, function_index_base, writer);
         try writer.append(wasm_opcode_i32_eq);
         return;
     }
+    if (splitTopLevelToken(text, "<=")) |split| {
+        try compileEdgeRunExprCode(split.left, context, args, locals, vars, calls, function_index_base, writer);
+        try compileEdgeRunExprCode(split.right, context, args, locals, vars, calls, function_index_base, writer);
+        try writer.append(wasm_opcode_i32_le_s);
+        return;
+    }
+    if (splitTopLevelToken(text, ">=")) |split| {
+        try compileEdgeRunExprCode(split.left, context, args, locals, vars, calls, function_index_base, writer);
+        try compileEdgeRunExprCode(split.right, context, args, locals, vars, calls, function_index_base, writer);
+        try writer.append(wasm_opcode_i32_ge_s);
+        return;
+    }
     if (splitTopLevelToken(text, "<")) |split| {
-        try compileEdgeRunExprCode(split.left, context, arg, locals, writer);
-        try compileEdgeRunExprCode(split.right, context, arg, locals, writer);
+        try compileEdgeRunExprCode(split.left, context, args, locals, vars, calls, function_index_base, writer);
+        try compileEdgeRunExprCode(split.right, context, args, locals, vars, calls, function_index_base, writer);
         try writer.append(wasm_opcode_i32_lt_s);
+        return;
+    }
+    if (splitTopLevelToken(text, ">")) |split| {
+        try compileEdgeRunExprCode(split.left, context, args, locals, vars, calls, function_index_base, writer);
+        try compileEdgeRunExprCode(split.right, context, args, locals, vars, calls, function_index_base, writer);
+        try writer.append(wasm_opcode_i32_gt_s);
         return;
     }
     return error.InvalidZig;
@@ -1585,6 +1765,35 @@ const ExprSplit = struct {
     left: []const u8,
     right: []const u8,
 };
+
+const EdgeRunCallExpr = struct {
+    name: []const u8,
+    args: [2][]const u8 = .{ "", "" },
+    arg_count: u8 = 0,
+};
+
+fn parseEdgeRunCallExpr(text: []const u8) ?EdgeRunCallExpr {
+    const name_end = scanIdentifierEnd(text, 0) orelse return null;
+    const name = text[0..name_end];
+    const index = skipWhitespace(text, name_end);
+    if (index >= text.len or text[index] != '(') return null;
+    const close = findMatchingParen(text, index) orelse return null;
+    if (skipWhitespace(text, close + 1) != text.len) return null;
+    const raw_args = trimAsciiWhitespace(text[index + 1 .. close]);
+    var args = EdgeRunCallExpr{ .name = name };
+    if (raw_args.len != 0) {
+        if (splitTopLevelToken(raw_args, ",")) |split| {
+            if (splitTopLevelToken(split.right, ",") != null) return null;
+            args.args = .{ trimAsciiWhitespace(split.left), trimAsciiWhitespace(split.right) };
+            if (args.args[0].len == 0 or args.args[1].len == 0) return null;
+            args.arg_count = 2;
+        } else {
+            args.args[0] = raw_args;
+            args.arg_count = 1;
+        }
+    }
+    return args;
+}
 
 fn splitTopLevelToken(text: []const u8, token: []const u8) ?ExprSplit {
     if (token.len == 0 or token.len > text.len) return null;
@@ -1624,14 +1833,24 @@ fn splitTopLevelOperator(text: []const u8, operator: u8) ?ExprSplit {
         }
         if (paren_depth != 0) continue;
         if (text[index] != operator) continue;
-        if (operator == '+' and index == 0) continue;
-        if (operator == '*' and (index == 0 or index + 1 == text.len)) return null;
+        if (!binaryOperatorAt(text, index)) continue;
         return .{
             .left = text[0..index],
             .right = text[index + 1 ..],
         };
     }
     return null;
+}
+
+fn binaryOperatorAt(text: []const u8, index: usize) bool {
+    if (index == 0 or index + 1 >= text.len) return false;
+    var before = index;
+    while (before > 0 and asciiWhitespace(text[before - 1])) : (before -= 1) {}
+    if (before == 0) return false;
+    return switch (text[before - 1]) {
+        '+', '-', '*', '(', ',', '<', '>', '=' => false,
+        else => true,
+    };
 }
 
 fn findMatchingParen(text: []const u8, open_index: usize) ?usize {
@@ -1642,6 +1861,23 @@ fn findMatchingParen(text: []const u8, open_index: usize) ?usize {
         switch (text[index]) {
             '(' => depth += 1,
             ')' => {
+                depth -= 1;
+                if (depth == 0) return index;
+            },
+            else => {},
+        }
+    }
+    return null;
+}
+
+fn findMatchingBrace(text: []const u8, open_index: usize) ?usize {
+    if (open_index >= text.len or text[open_index] != '{') return null;
+    var depth: usize = 1;
+    var index = open_index + 1;
+    while (index < text.len) : (index += 1) {
+        switch (text[index]) {
+            '{' => depth += 1,
+            '}' => {
                 depth -= 1;
                 if (depth == 0) return index;
             },
@@ -1673,15 +1909,32 @@ fn findElseKeyword(text: []const u8) ?usize {
     return null;
 }
 
-fn parseEdgeRunI32Arg(args: []const u8) ?EdgeRunArg {
+fn parseEdgeRunI32Args(args: []const u8) ?EdgeRunArgs {
     const text = trimAsciiWhitespace(args);
-    const colon_relative = std.mem.indexOfScalar(u8, text, ':') orelse return null;
+    if (text.len == 0) return null;
+    var result = EdgeRunArgs{};
+    if (splitTopLevelToken(text, ",")) |split| {
+        if (!appendEdgeRunI32Arg(&result, split.left)) return null;
+        if (!appendEdgeRunI32Arg(&result, split.right)) return null;
+    } else if (!appendEdgeRunI32Arg(&result, text)) {
+        return null;
+    }
+    return result;
+}
+
+fn appendEdgeRunI32Arg(args: *EdgeRunArgs, raw: []const u8) bool {
+    if (args.count >= args.names.len) return false;
+    const text = trimAsciiWhitespace(raw);
+    const colon_relative = std.mem.indexOfScalar(u8, text, ':') orelse return false;
     const name = trimAsciiWhitespace(text[0..colon_relative]);
     const type_name = trimAsciiWhitespace(text[colon_relative + 1 ..]);
-    const name_end = scanIdentifierEnd(name, 0) orelse return null;
-    if (name_end != name.len) return null;
-    if (!std.mem.eql(u8, type_name, "i32")) return null;
-    return .{ .name = name };
+    const name_end = scanIdentifierEnd(name, 0) orelse return false;
+    if (name_end != name.len) return false;
+    if (!std.mem.eql(u8, type_name, "i32")) return false;
+    if (args.find(name) != null) return false;
+    args.names[args.count] = name;
+    args.count += 1;
+    return true;
 }
 
 fn edgeRunIntegerType(type_expr: []const u8) bool {
@@ -1825,18 +2078,19 @@ fn collectLoweredExports(source: []const u8, data_base: usize, compiler_wasm_off
     return lowered;
 }
 
-fn collectLoweredExportsForMode(source_mode: SourceMode, source: []const u8, data_base: usize, compiler_wasm_offset: i32, compiler_wasm_len: i32) LoweredExports {
+fn collectLoweredExportsForMode(source_mode: SourceMode, source: []const u8, data_base: usize, compiler_wasm_offset: i32, compiler_wasm_len: i32, function_index_base: u32) LoweredExports {
     return switch (source_mode) {
         .zig_compat => collectLoweredExports(source, data_base, compiler_wasm_offset, compiler_wasm_len),
-        .edgerun => collectEdgeRunLoweredExports(source, data_base),
+        .edgerun => collectEdgeRunLoweredExports(source, data_base, function_index_base),
     };
 }
 
-fn collectEdgeRunLoweredExports(source: []const u8, data_base: usize) LoweredExports {
+fn collectEdgeRunLoweredExports(source: []const u8, data_base: usize, function_index_base: u32) LoweredExports {
     var context = collectEdgeRunLoweringContext(source, data_base);
     var lowered = LoweredExports{
         .memory_end = context.next_data_offset,
     };
+    var decls = EdgeRunFunctionDecls{};
     var index: usize = 0;
     while (true) {
         index = edgerun_source.skipSpace(source, index);
@@ -1845,18 +2099,35 @@ fn collectEdgeRunLoweredExports(source: []const u8, data_base: usize) LoweredExp
             index = edgerun_source.parseConst(source, index) orelse break;
             continue;
         }
-        const parsed = edgerun_source.parseExport(source, index) orelse break;
+        const parsed = edgerun_source.parseFunction(source, index) orelse break;
         index = parsed.next_index;
         if (reservedExportName(parsed.name)) continue;
         if (!integerReturnType(parsed.signature_tail)) continue;
-        if (parseEdgeRunI32Arg(parsed.args)) |arg| {
-            const compiled = compileEdgeRunDynamicReturnBody(parsed.body, &context, arg) orelse continue;
-            lowered.appendDynamicI32Arg(parsed.name, compiled);
+        if (parseEdgeRunI32Args(parsed.args)) |args| {
+            if (parsed.exported) {
+                lowered.appendDynamicI32Arg(parsed.name, .{}, args.count);
+            } else {
+                lowered.appendInternalDynamicI32Arg(parsed.name, .{}, args.count);
+            }
+            if (!decls.append(.{ .parsed = parsed, .args = args, .dynamic = true })) return invalidEdgeRunLowered(context.next_data_offset);
             continue;
         }
         if (!allWhitespace(parsed.args)) continue;
-        const value = compileEdgeRunReturnBody(parsed.body, &context) orelse continue;
-        lowered.append(parsed.name, value);
+        if (parsed.exported) {
+            lowered.append(parsed.name, 0);
+        } else {
+            lowered.appendInternal(parsed.name, 0);
+        }
+        if (!decls.append(.{ .parsed = parsed, .args = .{}, .dynamic = false })) return invalidEdgeRunLowered(context.next_data_offset);
+    }
+    for (decls.items[0..decls.count]) |decl| {
+        const entry_index = lowered.findEntryIndex(decl.parsed.name) orelse return invalidEdgeRunLowered(context.next_data_offset);
+        if (decl.dynamic) {
+            const compiled = compileEdgeRunDynamicReturnBody(decl.parsed.body, &context, decl.args, &lowered, function_index_base) orelse return invalidEdgeRunLowered(context.next_data_offset);
+            lowered.fillDynamic(entry_index, compiled) orelse return invalidEdgeRunLowered(context.next_data_offset);
+        } else {
+            lowered.entries[entry_index].value = compileEdgeRunReturnBody(decl.parsed.body, &context) orelse return invalidEdgeRunLowered(context.next_data_offset);
+        }
     }
     collectEdgeRunUiData(source, &lowered);
     lowered.memory_end = context.next_data_offset;
@@ -1867,6 +2138,28 @@ fn collectEdgeRunLoweredExports(source: []const u8, data_base: usize) LoweredExp
         lowered.appendGenerated("er_ui_root_len", @intCast(lowered.data_len));
     }
     return lowered;
+}
+
+const EdgeRunFunctionDecl = struct {
+    parsed: edgerun_source.ParsedExport,
+    args: EdgeRunArgs,
+    dynamic: bool,
+};
+
+const EdgeRunFunctionDecls = struct {
+    items: [max_lowered_exports]EdgeRunFunctionDecl = undefined,
+    count: usize = 0,
+
+    fn append(decls: *EdgeRunFunctionDecls, decl: EdgeRunFunctionDecl) bool {
+        if (decls.count >= decls.items.len) return false;
+        decls.items[decls.count] = decl;
+        decls.count += 1;
+        return true;
+    }
+};
+
+fn invalidEdgeRunLowered(memory_end: usize) LoweredExports {
+    return .{ .memory_end = memory_end };
 }
 
 fn collectEdgeRunUiData(source: []const u8, lowered: *LoweredExports) void {
@@ -1897,7 +2190,7 @@ fn collectEdgeRunUiData(source: []const u8, lowered: *LoweredExports) void {
             index = decl.next_index;
             continue;
         }
-        if (edgerun_source.parseExport(source, index)) |parsed| {
+        if (edgerun_source.parseFunction(source, index)) |parsed| {
             index = parsed.next_index;
             continue;
         }
@@ -2075,7 +2368,7 @@ fn collectEdgeRunLoweringContext(source: []const u8, data_base: usize) LoweringC
             index = decl.next_index;
             continue;
         }
-        if (edgerun_source.parseExport(source, index)) |parsed| {
+        if (edgerun_source.parseFunction(source, index)) |parsed| {
             index = parsed.next_index;
             continue;
         }
@@ -2549,10 +2842,19 @@ const LoweredExport = struct {
     release_capacity: i32 = 0,
     expr_code: [max_edgerun_expr_code_bytes]u8 = [_]u8{0} ** max_edgerun_expr_code_bytes,
     expr_code_len: u8 = 0,
+    local_count: u8 = 0,
+    arg_count: u8 = 0,
     kind: LoweredFunctionKind = .return_i32,
+    exported: bool = true,
 
     fn exprCode(lowered: *const LoweredExport) []const u8 {
         return lowered.expr_code[0..lowered.expr_code_len];
+    }
+
+    fn compiledExpr(lowered: *const LoweredExport) CompiledExpr {
+        var result = CompiledExpr{ .len = lowered.expr_code_len, .local_count = lowered.local_count };
+        @memcpy(result.bytes[0..lowered.expr_code_len], lowered.expr_code[0..lowered.expr_code_len]);
+        return result;
     }
 };
 
@@ -2566,18 +2868,37 @@ const LoweredExports = struct {
     data_len: u16 = 0,
 
     fn append(exports: *LoweredExports, name: []const u8, value: i32) void {
-        exports.appendEntry(.{ .name = name, .value = value }, true);
+        exports.appendFunction(name, value, true);
     }
 
-    fn appendDynamicI32Arg(exports: *LoweredExports, name: []const u8, code: CompiledExpr) void {
+    fn appendDynamicI32Arg(exports: *LoweredExports, name: []const u8, code: CompiledExpr, arg_count: u8) void {
+        exports.appendDynamicI32ArgFunction(name, code, arg_count, true);
+    }
+
+    fn appendInternal(exports: *LoweredExports, name: []const u8, value: i32) void {
+        exports.appendFunction(name, value, false);
+    }
+
+    fn appendInternalDynamicI32Arg(exports: *LoweredExports, name: []const u8, code: CompiledExpr, arg_count: u8) void {
+        exports.appendDynamicI32ArgFunction(name, code, arg_count, false);
+    }
+
+    fn appendFunction(exports: *LoweredExports, name: []const u8, value: i32, exported: bool) void {
+        exports.appendEntry(.{ .name = name, .value = value, .exported = exported }, exported);
+    }
+
+    fn appendDynamicI32ArgFunction(exports: *LoweredExports, name: []const u8, code: CompiledExpr, arg_count: u8, exported: bool) void {
         var lowered = LoweredExport{
             .name = name,
             .value = 0,
             .kind = .dynamic_i32_arg_i32,
+            .arg_count = arg_count,
+            .exported = exported,
         };
         @memcpy(lowered.expr_code[0..code.len], code.bytes[0..code.len]);
         lowered.expr_code_len = code.len;
-        exports.appendEntry(lowered, true);
+        lowered.local_count = code.local_count;
+        exports.appendEntry(lowered, exported);
     }
 
     fn appendStateLoad(exports: *LoweredExports, name: []const u8, state_offset: i32) void {
@@ -2628,6 +2949,41 @@ const LoweredExports = struct {
 
     fn dataSlice(exports: *const LoweredExports) []const u8 {
         return exports.data[0..exports.data_len];
+    }
+
+    fn fillDynamic(exports: *LoweredExports, index: usize, code: CompiledExpr) ?void {
+        if (index >= exports.count) return null;
+        if (exports.entries[index].kind != .dynamic_i32_arg_i32) return null;
+        @memcpy(exports.entries[index].expr_code[0..code.len], code.bytes[0..code.len]);
+        exports.entries[index].expr_code_len = code.len;
+        exports.entries[index].local_count = code.local_count;
+    }
+
+    fn findEntryIndex(exports: *const LoweredExports, name: []const u8) ?usize {
+        for (exports.entries[0..@intCast(exports.count)], 0..) |entry, index| {
+            if (std.mem.eql(u8, entry.name, name)) return index;
+        }
+        return null;
+    }
+
+    fn exportedCount(exports: *const LoweredExports) u32 {
+        var result: u32 = 0;
+        for (exports.entries[0..@intCast(exports.count)]) |entry| {
+            if (entry.exported) result += 1;
+        }
+        return result;
+    }
+
+    fn findCall(exports: *const LoweredExports, name: []const u8, arg_count: u8, function_index_base: u32) ?u32 {
+        for (exports.entries[0..@intCast(exports.count)], 0..) |entry, index| {
+            if (!std.mem.eql(u8, entry.name, name)) continue;
+            return switch (entry.kind) {
+                .return_i32, .state_load_i32 => if (arg_count == 0) function_index_base + @as(u32, @intCast(index)) else null,
+                .dynamic_i32_arg_i32 => if (arg_count == entry.arg_count) function_index_base + @as(u32, @intCast(index)) else null,
+                .release_artifact_commit, .source_workspace_commit, .compile_workspace => null,
+            };
+        }
+        return null;
     }
 };
 
@@ -2727,7 +3083,7 @@ fn analyzeEdgeRunRoot(source: []const u8) ?EdgeRunRootAnalysis {
     if (!edgeRunTopLevelNamesUnique(source)) return null;
 
     const lowered_main_count: u32 = if (lowerEdgeRunMainI32Literal(source) == null) 0 else 1;
-    const lowered_exports = collectEdgeRunLoweredExports(source, 0);
+    const lowered_exports = collectEdgeRunLoweredExports(source, 0, successor_base_function_count);
     if (lowered_main_count + lowered_exports.declared_count != parsed.export_count) return null;
 
     return .{
@@ -2749,7 +3105,7 @@ fn edgeRunTopLevelNamesUnique(source: []const u8) bool {
             index = decl.next_index;
             continue;
         }
-        if (edgerun_source.parseExport(source, index)) |parsed| {
+        if (edgerun_source.parseFunction(source, index)) |parsed| {
             if (!names.appendUnique(parsed.name)) return false;
             index = parsed.next_index;
             continue;
@@ -2836,7 +3192,7 @@ fn analyzeWorkspaceGraph(scratch: []u8, workspace: WorkspaceInfo, source_mode: S
 
     result.compiler_memory_used = @intCast(fixed.end_index);
     if (lowerMainForMode(source_mode, workspace.root_source) != null) result.lowered_main_count = 1;
-    result.lowered_export_count = collectLoweredExportsForMode(source_mode, workspace.root_source, 0, 0, if (findWorkspaceFile(workspace.manifest, embedded_wasm_compiler_label) == null) 0 else 1).count;
+    result.lowered_export_count = collectLoweredExportsForMode(source_mode, workspace.root_source, 0, 0, if (findWorkspaceFile(workspace.manifest, embedded_wasm_compiler_label) == null) 0 else 1, successor_base_function_count).exportedCount();
     return result;
 }
 
@@ -3308,13 +3664,13 @@ test "edgerun source lowering only collects parsed top level exports" {
     const lowered = collectLoweredExportsForMode(.edgerun,
         \\const max_width: usize = 4096;
         \\export fn er_ui_max_width() u32 { return max_width; }
-    , 0, 0, 0);
+    , 0, 0, 0, successor_base_function_count);
     try std.testing.expectEqual(@as(u32, 1), lowered.count);
     try std.testing.expectEqualStrings("er_ui_max_width", lowered.entries[0].name);
     try std.testing.expectEqual(@as(i32, 4096), lowered.entries[0].value);
 }
 
-test "edgerun source function locals do not leak between exports" {
+test "edgerun source rejects leaked function locals between exports" {
     const lowered = collectLoweredExportsForMode(.edgerun,
         \\const max_width: usize = 4096;
         \\export fn er_ui_define_hidden() u32 {
@@ -3322,10 +3678,8 @@ test "edgerun source function locals do not leak between exports" {
         \\    return hidden_width;
         \\}
         \\export fn er_ui_use_hidden() u32 { return hidden_width; }
-    , 0, 0, 0);
-    try std.testing.expectEqual(@as(u32, 1), lowered.count);
-    try std.testing.expectEqualStrings("er_ui_define_hidden", lowered.entries[0].name);
-    try std.testing.expectEqual(@as(i32, 8192), lowered.entries[0].value);
+    , 0, 0, 0, successor_base_function_count);
+    try std.testing.expectEqual(@as(u32, 0), lowered.count);
 }
 
 test "edgerun source lowering collects top level const array lengths" {
@@ -3334,7 +3688,7 @@ test "edgerun source lowering collects top level const array lengths" {
         \\const source_workspace: [max_width]u8 = undefined;
         \\export fn er_ui_source_workspace_ptr() u32 { return @intFromPtr(&source_workspace); }
         \\export fn er_ui_source_workspace_capacity() u32 { return source_workspace.len; }
-    , 256, 0, 0);
+    , 256, 0, 0, successor_base_function_count);
     try std.testing.expectEqual(@as(u32, 2), lowered.count);
     try std.testing.expectEqualStrings("er_ui_source_workspace_ptr", lowered.entries[0].name);
     try std.testing.expectEqual(@as(i32, 256), lowered.entries[0].value);
@@ -3350,7 +3704,7 @@ test "edgerun source compiles local const return bodies" {
         \\    const padded: usize = doubled + 17;
         \\    return padded;
         \\}
-    , 0, 0, 0);
+    , 0, 0, 0, successor_base_function_count);
     try std.testing.expectEqual(@as(u32, 1), lowered.count);
     try std.testing.expectEqualStrings("er_ui_local_width", lowered.entries[0].name);
     try std.testing.expectEqual(@as(i32, 4113), lowered.entries[0].value);
@@ -3364,7 +3718,7 @@ test "edgerun source compiles dynamic i32 argument expressions" {
         \\    const shifted: i32 = tripled + bias;
         \\    return shifted;
         \\}
-    , 0, 0, 0);
+    , 0, 0, 0, successor_base_function_count);
     try std.testing.expectEqual(@as(u32, 1), lowered.count);
     try std.testing.expectEqualStrings("er_scale", lowered.entries[0].name);
     try std.testing.expectEqual(LoweredFunctionKind.dynamic_i32_arg_i32, lowered.entries[0].kind);
@@ -3376,11 +3730,86 @@ test "edgerun source compiles dynamic if else expressions" {
         \\export fn er_non_negative(value: i32) i32 {
         \\    return if (value < 0) 0 else value;
         \\}
-    , 0, 0, 0);
+    , 0, 0, 0, successor_base_function_count);
     try std.testing.expectEqual(@as(u32, 1), lowered.count);
     try std.testing.expectEqualStrings("er_non_negative", lowered.entries[0].name);
     try std.testing.expectEqual(LoweredFunctionKind.dynamic_i32_arg_i32, lowered.entries[0].kind);
     try std.testing.expect(lowered.entries[0].expr_code_len > 0);
+}
+
+test "edgerun source compiles block if else returns" {
+    const lowered = collectLoweredExportsForMode(.edgerun,
+        \\export fn er_max(left: i32, right: i32) i32 {
+        \\    if (left < right) {
+        \\        return right;
+        \\    } else {
+        \\        return left;
+        \\    }
+        \\}
+    , 0, 0, 0, successor_base_function_count);
+    try std.testing.expectEqual(@as(u32, 1), lowered.count);
+    try std.testing.expectEqualStrings("er_max", lowered.entries[0].name);
+    try std.testing.expectEqual(@as(u8, 2), lowered.entries[0].arg_count);
+    try std.testing.expectEqual(LoweredFunctionKind.dynamic_i32_arg_i32, lowered.entries[0].kind);
+    try std.testing.expect(std.mem.indexOfScalar(u8, lowered.entries[0].exprCode(), wasm_opcode_if) != null);
+}
+
+test "edgerun source compiles subtraction and comparison operators" {
+    const lowered = collectLoweredExportsForMode(.edgerun,
+        \\export fn er_delta(left: i32, right: i32) i32 {
+        \\    return left - right;
+        \\}
+        \\export fn er_ge(left: i32, right: i32) i32 {
+        \\    if (left >= right) {
+        \\        return 1;
+        \\    } else {
+        \\        return 0;
+        \\    }
+        \\}
+        \\export fn er_ne(left: i32, right: i32) i32 {
+        \\    if (left != right) {
+        \\        return left - right;
+        \\    } else {
+        \\        return 0;
+        \\    }
+        \\}
+    , 0, 0, 0, successor_base_function_count);
+    try std.testing.expectEqual(@as(u32, 3), lowered.count);
+    try std.testing.expect(std.mem.indexOfScalar(u8, lowered.entries[0].exprCode(), wasm_opcode_i32_sub) != null);
+    try std.testing.expect(std.mem.indexOfScalar(u8, lowered.entries[1].exprCode(), wasm_opcode_i32_ge_s) != null);
+    try std.testing.expect(std.mem.indexOfScalar(u8, lowered.entries[2].exprCode(), wasm_opcode_i32_ne) != null);
+}
+
+test "edgerun source compiles calls to private dynamic functions" {
+    const lowered = collectLoweredExportsForMode(.edgerun,
+        \\export fn er_scale(value: i32) i32 {
+        \\    const doubled: i32 = er_double(value);
+        \\    return er_add(doubled, 5);
+        \\}
+        \\export fn er_mix(left: i32, right: i32) i32 {
+        \\    return er_add(left, right) * 2;
+        \\}
+        \\fn er_double(value: i32) i32 {
+        \\    return value * 2;
+        \\}
+        \\fn er_add(left: i32, right: i32) i32 {
+        \\    return left + right;
+        \\}
+    , 0, 0, 0, successor_base_function_count);
+    try std.testing.expectEqual(@as(u32, 4), lowered.count);
+    try std.testing.expectEqual(@as(u32, 2), lowered.exportedCount());
+    try std.testing.expectEqualStrings("er_scale", lowered.entries[0].name);
+    try std.testing.expect(lowered.entries[0].exported);
+    try std.testing.expectEqualStrings("er_mix", lowered.entries[1].name);
+    try std.testing.expectEqual(@as(u8, 2), lowered.entries[1].arg_count);
+    try std.testing.expect(lowered.entries[1].exported);
+    try std.testing.expectEqualStrings("er_double", lowered.entries[2].name);
+    try std.testing.expect(!lowered.entries[2].exported);
+    try std.testing.expectEqualStrings("er_add", lowered.entries[3].name);
+    try std.testing.expectEqual(@as(u8, 2), lowered.entries[3].arg_count);
+    try std.testing.expect(!lowered.entries[3].exported);
+    try std.testing.expectEqual(LoweredFunctionKind.dynamic_i32_arg_i32, lowered.entries[0].kind);
+    try std.testing.expect(std.mem.indexOfScalar(u8, lowered.entries[0].exprCode(), 0x10) != null);
 }
 
 test "edgerun app main compiles local const return bodies" {

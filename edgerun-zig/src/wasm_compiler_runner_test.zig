@@ -90,12 +90,49 @@ const edgerun_runner_root_source =
     \\    return padded;
     \\}
     \\export fn er_scale(value: i32) i32 {
-    \\    const tripled: i32 = value * 3;
-    \\    const shifted: i32 = tripled + 5;
+    \\    const doubled: i32 = er_double(value);
+    \\    const shifted: i32 = er_add(doubled, 5);
     \\    return shifted;
     \\}
+    \\export fn er_mix(left: i32, right: i32) i32 {
+    \\    return er_add(left, right) * 2;
+    \\}
     \\export fn er_non_negative(value: i32) i32 {
-    \\    return if (value < 0) 0 else value;
+    \\    if (value < 0) {
+    \\        return 0;
+    \\    } else {
+    \\        return value;
+    \\    }
+    \\}
+    \\export fn er_max(left: i32, right: i32) i32 {
+    \\    if (left < right) {
+    \\        return right;
+    \\    } else {
+    \\        return left;
+    \\    }
+    \\}
+    \\fn er_double(value: i32) i32 {
+    \\    return value * 2;
+    \\}
+    \\fn er_add(left: i32, right: i32) i32 {
+    \\    return left + right;
+    \\}
+    \\export fn er_delta(left: i32, right: i32) i32 {
+    \\    return left - right;
+    \\}
+    \\export fn er_compare_code(left: i32, right: i32) i32 {
+    \\    if (left >= right) {
+    \\        return 100;
+    \\    } else {
+    \\        return 7;
+    \\    }
+    \\}
+    \\export fn er_not_same(left: i32, right: i32) i32 {
+    \\    if (left != right) {
+    \\        return left - right;
+    \\    } else {
+    \\        return 0;
+    \\    }
     \\}
 ;
 
@@ -295,19 +332,35 @@ test "embedded compiler compiles edgerun source root through interpreter" {
     const lowered_main_count_result = try wasm.executeExportValueArgs(&successor, output, "er_app_lowered_main_count", &.{});
     try std.testing.expectEqual(@as(i32, 1), try lowered_main_count_result.valueI32(0));
     const lowered_export_count_result = try wasm.executeExportValueArgs(&successor, output, "er_app_lowered_export_count", &.{});
-    try std.testing.expectEqual(@as(i32, 5), try lowered_export_count_result.valueI32(0));
+    try std.testing.expectEqual(@as(i32, 10), try lowered_export_count_result.valueI32(0));
     const main_result = try wasm.executeExportValueArgs(&successor, output, "er_app_main", &.{});
     try std.testing.expectEqual(@as(i32, 9), try main_result.valueI32(0));
     const const_result = try wasm.executeExportValueArgs(&successor, output, "er_smoke_const", &.{});
     try std.testing.expectEqual(@as(i32, 8209), try const_result.valueI32(0));
     const scale_five_result = try wasm.executeExportValueArgs(&successor, output, "er_scale", &.{.{ .i32 = 5 }});
-    try std.testing.expectEqual(@as(i32, 20), try scale_five_result.valueI32(0));
+    try std.testing.expectEqual(@as(i32, 15), try scale_five_result.valueI32(0));
     const scale_neg_result = try wasm.executeExportValueArgs(&successor, output, "er_scale", &.{.{ .i32 = -4 }});
-    try std.testing.expectEqual(@as(i32, -7), try scale_neg_result.valueI32(0));
+    try std.testing.expectEqual(@as(i32, -3), try scale_neg_result.valueI32(0));
+    const mix_result = try wasm.executeExportValueArgs(&successor, output, "er_mix", &.{ .{ .i32 = 8 }, .{ .i32 = 3 } });
+    try std.testing.expectEqual(@as(i32, 22), try mix_result.valueI32(0));
     const non_negative_positive_result = try wasm.executeExportValueArgs(&successor, output, "er_non_negative", &.{.{ .i32 = 7 }});
     try std.testing.expectEqual(@as(i32, 7), try non_negative_positive_result.valueI32(0));
     const non_negative_negative_result = try wasm.executeExportValueArgs(&successor, output, "er_non_negative", &.{.{ .i32 = -9 }});
     try std.testing.expectEqual(@as(i32, 0), try non_negative_negative_result.valueI32(0));
+    const max_left_result = try wasm.executeExportValueArgs(&successor, output, "er_max", &.{ .{ .i32 = 12 }, .{ .i32 = 4 } });
+    try std.testing.expectEqual(@as(i32, 12), try max_left_result.valueI32(0));
+    const max_right_result = try wasm.executeExportValueArgs(&successor, output, "er_max", &.{ .{ .i32 = -3 }, .{ .i32 = 8 } });
+    try std.testing.expectEqual(@as(i32, 8), try max_right_result.valueI32(0));
+    const delta_result = try wasm.executeExportValueArgs(&successor, output, "er_delta", &.{ .{ .i32 = 8 }, .{ .i32 = 13 } });
+    try std.testing.expectEqual(@as(i32, -5), try delta_result.valueI32(0));
+    const compare_high_result = try wasm.executeExportValueArgs(&successor, output, "er_compare_code", &.{ .{ .i32 = 9 }, .{ .i32 = 9 } });
+    try std.testing.expectEqual(@as(i32, 100), try compare_high_result.valueI32(0));
+    const compare_low_result = try wasm.executeExportValueArgs(&successor, output, "er_compare_code", &.{ .{ .i32 = 2 }, .{ .i32 = 9 } });
+    try std.testing.expectEqual(@as(i32, 7), try compare_low_result.valueI32(0));
+    const not_same_result = try wasm.executeExportValueArgs(&successor, output, "er_not_same", &.{ .{ .i32 = 2 }, .{ .i32 = 9 } });
+    try std.testing.expectEqual(@as(i32, -7), try not_same_result.valueI32(0));
+    const same_result = try wasm.executeExportValueArgs(&successor, output, "er_not_same", &.{ .{ .i32 = 9 }, .{ .i32 = 9 } });
+    try std.testing.expectEqual(@as(i32, 0), try same_result.valueI32(0));
     const ui_ptr: usize = @intCast(try (try wasm.executeExportValueArgs(&successor, output, "er_ui_root_ptr", &.{})).valueI32(0));
     const ui_len: usize = @intCast(try (try wasm.executeExportValueArgs(&successor, output, "er_ui_root_len", &.{})).valueI32(0));
     try std.testing.expect(ui_len > ui_codec.header_size);

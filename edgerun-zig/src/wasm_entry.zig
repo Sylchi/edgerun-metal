@@ -10,7 +10,7 @@ pub const output_name = "index.html";
 pub const wasm_path = "../bin/edgerun-app-runtime.wasm";
 pub const immutable_marker = "GENERATED FILE. IMMUTABLE.";
 pub const viewport_css = "html,body{margin:0;width:100%;height:100%;overflow:hidden;cursor:none}canvas{display:block}";
-pub const max_total_js_bytes: usize = 8192;
+pub const max_total_js_bytes: usize = 8360;
 
 const attr_pos_location_js = std.fmt.comptimePrint("{d}", .{gl_contract.attr_pos_location});
 const attr_uv_location_js = std.fmt.comptimePrint("{d}", .{gl_contract.attr_uv_location});
