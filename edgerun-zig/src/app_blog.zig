@@ -3349,14 +3349,16 @@ fn bodyWithoutTitle(source: []const u8) []const u8 {
 
 fn paragraphHeight(value: []const u8, width: f32) f32 {
     const chars_per_line = @max(@as(usize, 24), @as(usize, @intFromFloat(width / 10.0)));
-    const lines = (value.len + chars_per_line - 1) / chars_per_line;
+    const value_len = ui.utf8CodepointCount(value);
+    const lines = (value_len + chars_per_line - 1) / chars_per_line;
     return line_h * @as(f32, @floatFromInt(@max(@as(usize, 1), @min(@as(usize, 5), lines))));
 }
 
 fn calloutHeight(value: []const u8, width: f32) f32 {
     const text_w = @max(1.0, width - callout_pad_x * 2.0 - 18.0);
     const chars_per_line = @max(@as(usize, 18), @as(usize, @intFromFloat(text_w / callout_avg_char_w)));
-    const lines = @max(@as(usize, 1), @min(@as(usize, 4), (value.len + chars_per_line - 1) / chars_per_line));
+    const value_len = ui.utf8CodepointCount(value);
+    const lines = @max(@as(usize, 1), @min(@as(usize, 4), (value_len + chars_per_line - 1) / chars_per_line));
     return callout_pad_y * 2.0 + callout_line_h * @as(f32, @floatFromInt(lines));
 }
 

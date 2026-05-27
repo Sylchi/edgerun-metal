@@ -111,8 +111,9 @@ pub fn measureText(value: []const u8, constraints: Constraints, metrics: TextMet
     if (value.len == 0 or metrics.max_lines == 0) return Measurement.fixed(.{ .w = 0, .h = 0 });
     const line_height = sanitizePositive(metrics.line_height, default_line_height);
     const average_char_width = sanitizePositive(metrics.average_char_width, default_average_char_width);
-    const natural_width = @as(f32, @floatFromInt(value.len)) * average_char_width;
-    const min_width = @max(average_char_width, @as(f32, @floatFromInt(longestAsciiRun(value))) * average_char_width);
+    const char_count = @as(f32, @floatFromInt(utf8CodepointCount(value)));
+    const natural_width = char_count * average_char_width;
+    const min_width = @max(average_char_width, @as(f32, @floatFromInt(longestUtf8Run(value))) * average_char_width);
     const wrap_width = constraints.width.limit(natural_width);
     const should_wrap = switch (constraints.text_wrap) {
         .wrap => true,
@@ -211,11 +212,19 @@ fn wrappedLineCount(value: []const u8, width: f32, average_char_width: f32, max_
     return line_count;
 }
 
-fn longestAsciiRun(value: []const u8) usize {
+fn utf8CodepointCount(value: []const u8) usize {
+    var index: usize = 0;
+    var count: usize = 0;
+    while (nextCodepoint(value, &index)) |_| count += 1;
+    return count;
+}
+
+fn longestUtf8Run(value: []const u8) usize {
     var longest: usize = 0;
     var current: usize = 0;
-    for (value) |byte| {
-        if (byte == ' ' or byte == '\t' or byte == '\n' or byte == '\r') {
+    var index: usize = 0;
+    while (nextCodepoint(value, &index)) |codepoint| {
+        if (isAsciiSpace(codepoint)) {
             longest = @max(longest, current);
             current = 0;
         } else {
@@ -223,6 +232,36 @@ fn longestAsciiRun(value: []const u8) usize {
         }
     }
     return @max(longest, current);
+}
+
+fn isAsciiSpace(value: u21) bool {
+    return switch (value) {
+        ' ', '\t', '\n', '\r' => true,
+        else => false,
+    };
+}
+
+fn nextCodepoint(value: []const u8, index: *usize) ?u21 {
+    if (index.* >= value.len) return null;
+    const start = index.*;
+
+    const codepoint_len = std.unicode.utf8ByteSequenceLength(value[start]) catch {
+        index.* = start + 1;
+        return std.unicode.replacement_character;
+    };
+
+    const end = start + codepoint_len;
+    if (end > value.len) {
+        index.* = value.len;
+        return std.unicode.replacement_character;
+    }
+
+    const codepoint = std.unicode.utf8Decode(value[start..end]) catch {
+        index.* = start + 1;
+        return std.unicode.replacement_character;
+    };
+    index.* = end;
+    return codepoint;
 }
 
 const default_line_height: f32 = 16.0;

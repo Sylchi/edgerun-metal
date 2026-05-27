@@ -142,7 +142,7 @@ pub const FontAtlas = struct {
     context: *anyopaque,
     metrics: *const fn (context: *anyopaque, px: u8) TextMetrics,
     width: *const fn (context: *anyopaque, value: []const u8, px: u8) f32,
-    glyph: *const fn (context: *anyopaque, ch: u8, px: u8) Error!?Glyph,
+    glyph: *const fn (context: *anyopaque, ch: u21, px: u8) Error!?Glyph,
 };
 
 pub fn commandAdapterFont(context: *anyopaque) FontAtlas {
@@ -411,9 +411,9 @@ pub fn pushText(buffers: Buffers, font: FontAtlas, layer: Layer, bounds: ui.Rect
     const metrics_value = font.metrics(font.context, px);
     const baseline = bounds.y + metrics_value.ascender;
     const clip = textClipBounds(bounds, metrics_value);
-    for (value) |byte| {
-        if (byte < font_first_char or byte > font_last_char) continue;
-        const glyph_value = (try font.glyph(font.context, byte, px)) orelse continue;
+    var index: usize = 0;
+    while (nextCodepoint(value, &index)) |codepoint| {
+        const glyph_value = (try font.glyph(font.context, codepoint, px)) orelse continue;
         if (glyph_value.w > 0.0 and glyph_value.h > 0.0) {
             const quad = snapGlyphQuad(pen_x + glyph_value.left, baseline + glyph_value.top, glyph_value.w, glyph_value.h);
             try pushClippedTexturedQuad(buffer, len, clip, quad, glyph_value.u0, glyph_value.v0, glyph_value.u1, glyph_value.v1, color);
@@ -759,10 +759,10 @@ fn commandAdapterFontMetrics(_: *anyopaque, _: u8) TextMetrics {
 }
 
 fn commandAdapterTextWidth(_: *anyopaque, value: []const u8, _: u8) f32 {
-    return @as(f32, @floatFromInt(value.len)) * command_adapter_advance;
+    return @as(f32, @floatFromInt(ui.utf8CodepointCount(value))) * command_adapter_advance;
 }
 
-fn commandAdapterGlyph(_: *anyopaque, ch: u8, _: u8) Error!?Glyph {
+fn commandAdapterGlyph(_: *anyopaque, ch: u21, _: u8) Error!?Glyph {
     if (ch == ' ') return null;
     return .{
         .u0 = 0.0,
@@ -782,10 +782,10 @@ fn testFontMetrics(_: *anyopaque, _: u8) TextMetrics {
 }
 
 fn testTextWidth(_: *anyopaque, value: []const u8, _: u8) f32 {
-    return @floatFromInt(value.len * 8);
+    return @as(f32, @floatFromInt(ui.utf8CodepointCount(value))) * 8.0;
 }
 
-fn testGlyph(_: *anyopaque, ch: u8, _: u8) Error!?Glyph {
+fn testGlyph(_: *anyopaque, ch: u21, _: u8) Error!?Glyph {
     if (ch == ' ') return null;
     return .{
         .u0 = 0.0,
@@ -800,7 +800,7 @@ fn testGlyph(_: *anyopaque, ch: u8, _: u8) Error!?Glyph {
     };
 }
 
-fn overhangTestGlyph(_: *anyopaque, ch: u8, _: u8) Error!?Glyph {
+fn overhangTestGlyph(_: *anyopaque, ch: u21, _: u8) Error!?Glyph {
     if (ch == ' ') return null;
     return .{
         .u0 = 0.0,
@@ -818,6 +818,30 @@ fn overhangTestGlyph(_: *anyopaque, ch: u8, _: u8) Error!?Glyph {
 fn expectSourceDoesNotContain(source: []const u8, needle: []const u8) !void {
     try std.testing.expectEqual(@as(?usize, null), std.mem.indexOf(u8, source, needle));
 }
+
+fn nextCodepoint(value: []const u8, index: *usize) ?u21 {
+    if (index.* >= value.len) return null;
+    const start = index.*;
+
+    const codepoint_len = std.unicode.utf8ByteSequenceLength(value[start]) catch {
+        index.* = start + 1;
+        return std.unicode.replacement_character;
+    };
+
+    const end = start + codepoint_len;
+    if (end > value.len) {
+        index.* = value.len;
+        return std.unicode.replacement_character;
+    }
+
+    const codepoint = std.unicode.utf8Decode(value[start..end]) catch {
+        index.* = start + 1;
+        return std.unicode.replacement_character;
+    };
+    index.* = end;
+    return codepoint;
+}
+
 
 test "renderer ir owns svg source lookup and command painting boundaries" {
     try expectSourceDoesNotContain(@embedFile("backends/software.zig"), "@import(\"icon_svg.zig\")");
@@ -958,6 +982,32 @@ test "renderer ir text clip preserves glyph side bearings" {
 
     try std.testing.expectEqual(text_vertex_float_stride * textured_quad_vertex_count, storage.text_vertex_len);
     try std.testing.expectEqual(@as(f32, 8.0), storage.text_vertices[textured_x_index]);
+}
+
+test "renderer ir text rendering iterates utf8 codepoints" {
+    var storage = FixedBuffers(0, textured_quad_vertex_count * 3, 0, 0, 0, 0, 0, 0, 0){};
+    const buffers = storage.buffers();
+    var source_context: u8 = 0;
+    const sources = Sources{
+        .font = .{
+            .context = &source_context,
+            .metrics = testFontMetrics,
+            .width = testTextWidth,
+            .glyph = testGlyph,
+        },
+    };
+
+    try pushText(
+        buffers,
+        sources.font,
+        .base,
+        ui.Rect.init(0, 0, 120, 16),
+        "AéB",
+        .text,
+        .start,
+    );
+
+    try std.testing.expectEqual(text_vertex_float_stride * textured_quad_vertex_count * 3, storage.text_vertex_len);
 }
 
 test "renderer ir iterates rects and textured quads" {

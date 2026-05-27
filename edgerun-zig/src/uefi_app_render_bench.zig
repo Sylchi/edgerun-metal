@@ -44,7 +44,7 @@ var font_atlas: renderer_font_atlas.Atlas = undefined;
 var pixels: [max_width * max_height]ui.Color = undefined;
 
 pub fn main() !void {
-    font_atlas.initWithFontInPlace(renderer_font_atlas.geist_ascii_font.body());
+    font_atlas.initUtf8();
     const image_texture = try app_images.cloudMeme();
 
     try runFrame(320, 180, image_texture);

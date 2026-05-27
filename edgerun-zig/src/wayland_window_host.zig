@@ -740,7 +740,7 @@ const NativeApp = struct {
         self.gpu_primitives = gpu_primitives;
         self.region_len = 0;
         self.ir_storage = .{};
-        self.font_atlas.initWithFontInPlace(renderer_font_atlas.geist_ascii_font.body());
+        self.font_atlas.initUtf8();
         self.state = .{
             .route = app_navigation.fromPath(options.path),
             .public_identity = "native-wayland",
@@ -1826,7 +1826,7 @@ test "wayland native app builds dmabuf surface only in explicit fd mode" {
         .font_atlas = undefined,
         .gpu_primitives = &.{},
     };
-    app.font_atlas.initWithFontInPlace(renderer_font_atlas.geist_ascii_font.body());
+    app.font_atlas.initUtf8();
     const surface = try app.dmabufSurface();
     const import = try DmabufImport.fromNativeSurface(surface);
     try std.testing.expectEqual(@as(posix.fd_t, 19), import.fd);
@@ -1858,7 +1858,7 @@ test "wayland native app builds dmabuf surface from owned drm buffer" {
             .size = 320 * 240 * @sizeOf(u32),
         },
     };
-    app.font_atlas.initWithFontInPlace(renderer_font_atlas.geist_ascii_font.body());
+    app.font_atlas.initUtf8();
     const surface = try app.dmabufSurface();
     const import = try DmabufImport.fromNativeSurface(surface);
     try std.testing.expectEqual(@as(posix.fd_t, 19), import.fd);
@@ -1944,7 +1944,7 @@ test "wayland host renders the source app through canonical ir" {
     var ir_storage = IrStorage{};
     const buffers = ir_storage.buffers();
     var font_atlas: renderer_font_atlas.Atlas = undefined;
-    font_atlas.initWithFontInPlace(renderer_font_atlas.geist_ascii_font.body());
+    font_atlas.initUtf8();
     try renderer_pipeline.packScene(buffers, &font_atlas, .object, scene.written());
     try std.testing.expect(ir_storage.rect_len > 0);
     try std.testing.expect(ir_storage.text_vertex_len > 0);
@@ -1991,7 +1991,7 @@ test "wayland host packs docs overview route at launch size" {
     var ir_storage = IrStorage{};
     const buffers = ir_storage.buffers();
     var font_atlas: renderer_font_atlas.Atlas = undefined;
-    font_atlas.initWithFontInPlace(renderer_font_atlas.geist_ascii_font.body());
+    font_atlas.initUtf8();
     try renderer_pipeline.packScene(buffers, &font_atlas, .object, scene.written());
 
     try std.testing.expect(hasText(scene.written(), "EdgeRun Native"));
@@ -2113,7 +2113,7 @@ test "wayland host appends scene cursor from native hover state" {
         .font_atlas = undefined,
         .gpu_primitives = &.{},
     };
-    app.font_atlas.initWithFontInPlace(renderer_font_atlas.geist_ascii_font.body());
+    app.font_atlas.initUtf8();
     var scene = ui.Scene.initWithClips(&app.commands, &app.clips);
     var collector = interaction.Collector.init(&app.regions);
     try renderNativeAppScene(&scene, &collector, app.width, app.height, app.state);
@@ -2142,7 +2142,7 @@ test "wayland host renders vector cursor overlay through native pipeline" {
         .font_atlas = undefined,
         .gpu_primitives = &.{},
     };
-    app.font_atlas.initWithFontInPlace(renderer_font_atlas.geist_ascii_font.body());
+    app.font_atlas.initUtf8();
     app.state.hover_x = 24.0;
     app.state.hover_y = 24.0;
 

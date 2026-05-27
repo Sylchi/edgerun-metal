@@ -1,0 +1,5 @@
+const math: module = @import("src/er/self_host/math.er");
+
+export fn er_helper_marker() i32 {
+    return math.er_math_marker() + 1;
+}

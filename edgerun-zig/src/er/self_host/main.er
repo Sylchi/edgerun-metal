@@ -1,0 +1,65 @@
+const helper: module = @import("src/er/self_host/helper.er");
+const buffer_len: usize = 16 * 1024 * 1024;
+const ErrorCode: enum(u32) = enum(u32) { ok = 0, bad_input = 2 };
+const source_workspace: [buffer_len]u8 = undefined;
+var source_workspace_len: usize = 0;
+var source_workspace_ready: usize = 0;
+const release_artifact: [buffer_len]u8 = undefined;
+var release_artifact_len: usize = 0;
+var last_error: u32 = 0;
+
+pub export fn er_app_main() i32 { return 7; }
+
+export fn er_self_host_score(seed: i32) i32 {
+    var total: i32 = seed;
+    var index: i32 = 0;
+    while (index < 4) {
+        total = total + index * 3;
+        index = index + 1;
+    }
+    return total;
+}
+
+export fn er_self_host_guard(value: i32) i32 {
+    if (value < 0) {
+        return 0;
+    } else {
+        return value + 5;
+    }
+}
+
+export fn er_self_host_imported_marker() i32 {
+    return helper.er_helper_marker() + 1;
+}
+
+export fn er_self_host_capacity_echo() usize {
+    return source_workspace.len + release_artifact.len;
+}
+
+export fn er_ui_last_error() u32 { return @intFromEnum(last_error); }
+export fn er_ui_source_workspace_ptr() usize { return @intFromPtr(&source_workspace); }
+export fn er_ui_source_workspace_len() usize { return source_workspace_len; }
+export fn er_ui_source_workspace_capacity() usize { return source_workspace.len; }
+
+export fn er_ui_source_workspace_commit(source_len: usize) u32 {
+    if (source_len > source_workspace.len) return finishError(.bad_input);
+    source_workspace_len = source_len;
+    source_workspace_ready = true;
+    last_error = .ok;
+    return @intFromEnum(ErrorCode.ok);
+}
+
+export fn er_ui_release_artifact_ptr() usize { return @intFromPtr(&release_artifact); }
+export fn er_ui_release_artifact_len() usize { return release_artifact_len; }
+export fn er_ui_release_artifact_capacity() usize { return release_artifact.len; }
+
+export fn er_ui_release_artifact_commit(artifact_len: usize) u32 {
+    if (artifact_len > release_artifact.len) return finishError(.bad_input);
+    if (artifact_len < 4) return finishError(.bad_input);
+    if (!std.mem.eql(u8, release_artifact[0..4], &.{ 0x00, 0x61, 0x73, 0x6d })) return finishError(.bad_input);
+    release_artifact_len = artifact_len;
+    last_error = .ok;
+    return @intFromEnum(ErrorCode.ok);
+}
+
+export fn er_ui_compile_workspace_wasm() u32 { return 0; }

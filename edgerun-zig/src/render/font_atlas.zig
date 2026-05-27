@@ -38,7 +38,7 @@ const upright_shape_range_denominator: usize = 8;
 const upright_shape_max_center_drift_px: f32 = 3.0;
 
 const CachedGlyph = struct {
-    ch: u8,
+    ch: u21,
     px: u8,
     glyph: renderer_ir.Glyph,
 };
@@ -149,6 +149,10 @@ pub const Atlas = struct {
         self.clear();
     }
 
+    pub fn initUtf8(self: *Atlas) void {
+        self.initWithFontInPlace(geist_ascii_font.body());
+    }
+
     pub fn initWithFontInPlace(self: *Atlas, font: font_vector.Body) void {
         self.font = font;
         self.device_scale = default_device_scale;
@@ -199,7 +203,7 @@ pub const Atlas = struct {
         return self.device_scale;
     }
 
-    fn resolveGlyph(self: *Atlas, ch: u8, px: u8) renderer_ir.Error!?renderer_ir.Glyph {
+    fn resolveGlyph(self: *Atlas, ch: u21, px: u8) renderer_ir.Error!?renderer_ir.Glyph {
         if (self.findGlyph(ch, px)) |found| return found;
         return self.cacheGlyph(ch, px) catch |err| switch (err) {
             error.GlyphBitmapBudgetExceeded, error.GlyphCacheFull => error.Budget,
@@ -213,17 +217,26 @@ pub const Atlas = struct {
         };
     }
 
-    fn findGlyph(self: *const Atlas, ch: u8, px: u8) ?renderer_ir.Glyph {
+    fn findGlyph(self: *const Atlas, ch: u21, px: u8) ?renderer_ir.Glyph {
         for (self.glyphs[0..self.glyph_count]) |entry| {
             if (entry.ch == ch and entry.px == px) return entry.glyph;
         }
         return null;
     }
 
-    fn cacheGlyph(self: *Atlas, ch: u8, px: u8) varfont.Error!renderer_ir.Glyph {
+    fn cacheGlyph(self: *Atlas, ch: u21, px: u8) varfont.Error!renderer_ir.Glyph {
         if (self.glyph_count >= self.glyphs.len) return error.GlyphCacheFull;
-        if (self.font) |font| return try self.cacheObjectGlyph(font, ch, px);
+        if (self.font) |font| {
+            return self.cacheObjectGlyph(font, ch, px) catch |err| switch (err) {
+                error.UnsupportedGlyph => self.cacheDynamicGlyph(ch, px),
+                else => return err,
+            };
+        }
 
+        return self.cacheDynamicGlyph(ch, px);
+    }
+
+    fn cacheDynamicGlyph(self: *Atlas, ch: u21, px: u8) varfont.Error!renderer_ir.Glyph {
         const face = try varfont.Face.geist();
         var cache = varfont.Cache.initFormat(face, &self.bitmap, format);
         _ = cache.setAxis("wght", font_weight);
@@ -273,7 +286,7 @@ pub const Atlas = struct {
         return packed_glyph;
     }
 
-    fn cacheObjectGlyph(self: *Atlas, font: font_vector.Body, ch: u8, px: u8) varfont.Error!renderer_ir.Glyph {
+    fn cacheObjectGlyph(self: *Atlas, font: font_vector.Body, ch: u21, px: u8) varfont.Error!renderer_ir.Glyph {
         const glyph_info = font.glyphForCodepoint(ch) orelse return error.UnsupportedGlyph;
         const scale = (@as(f32, @floatFromInt(px)) * self.device_scale) / @as(f32, @floatFromInt(font.metrics.units_per_em));
         const advance = glyph_info.advance * scale;
@@ -382,11 +395,11 @@ fn textWidth(context: *anyopaque, value: []const u8, px: u8) f32 {
     const face = varfont.Face.geist() catch return 0.0;
     const px_size: f32 = @floatFromInt(px);
     var out: f32 = 0.0;
-    var previous: u16 = 0;
-    for (value) |byte| {
-        if (byte < renderer_ir.font_first_char or byte > renderer_ir.font_last_char) continue;
-        const glyph_id = face.glyphId(byte);
-        if (previous != 0) out += face.kern(previous, glyph_id, px_size);
+    var previous: ?u16 = null;
+    var index: usize = 0;
+    while (nextCodepoint(value, &index)) |codepoint| {
+        const glyph_id = face.glyphId(codepoint);
+        if (previous) |left| out += face.kern(left, glyph_id, px_size);
         out += face.advance(glyph_id, px_size);
         previous = glyph_id;
     }
@@ -400,30 +413,59 @@ fn objectTextWidthCallback(context: *anyopaque, value: []const u8, px: u8) f32 {
 }
 
 fn objectTextWidth(font: font_vector.Body, value: []const u8, px: u8) f32 {
-    const scale = @as(f32, @floatFromInt(px)) / @as(f32, @floatFromInt(font.metrics.units_per_em));
+    const px_size = @as(f32, @floatFromInt(px));
+    const scale = px_size / @as(f32, @floatFromInt(font.metrics.units_per_em));
     var out: f32 = 0;
     var previous: ?u21 = null;
-    for (value) |byte| {
-        if (byte < renderer_ir.font_first_char or byte > renderer_ir.font_last_char) continue;
-        const codepoint: u21 = @intCast(byte);
-        if (previous) |left| out += font.kern(left, codepoint) * scale;
+    var index: usize = 0;
+    while (nextCodepoint(value, &index)) |codepoint| {
         if (font.glyphForCodepoint(codepoint)) |info| {
+            if (previous) |left| out += font.kern(left, codepoint) * scale;
             out += info.advance * scale;
             previous = codepoint;
+            continue;
         }
+        const fallback_face = varfont.Face.geist() catch return out;
+        if (previous) |left| out += fallback_face.kern(fallback_face.glyphId(left), fallback_face.glyphId(codepoint), px_size);
+        const fallback_id = fallback_face.glyphId(codepoint);
+        out += fallback_face.advance(fallback_id, px_size);
+        previous = codepoint;
     }
     return out;
 }
 
-fn glyph(context: *anyopaque, ch: u8, px: u8) renderer_ir.Error!?renderer_ir.Glyph {
+fn glyph(context: *anyopaque, ch: u21, px: u8) renderer_ir.Error!?renderer_ir.Glyph {
     const atlas: *Atlas = @ptrCast(@alignCast(context));
     return atlas.resolveGlyph(ch, px);
 }
 
-fn objectGlyph(context: *anyopaque, ch: u8, px: u8) renderer_ir.Error!?renderer_ir.Glyph {
+fn objectGlyph(context: *anyopaque, ch: u21, px: u8) renderer_ir.Error!?renderer_ir.Glyph {
     const atlas: *Atlas = @ptrCast(@alignCast(context));
     if (atlas.font == null) return null;
     return atlas.resolveGlyph(ch, px);
+}
+
+fn nextCodepoint(value: []const u8, index: *usize) ?u21 {
+    if (index.* >= value.len) return null;
+    const start = index.*;
+
+    const codepoint_len = std.unicode.utf8ByteSequenceLength(value[start]) catch {
+        index.* = start + 1;
+        return std.unicode.replacement_character;
+    };
+
+    const end = start + codepoint_len;
+    if (end > value.len) {
+        index.* = value.len;
+        return std.unicode.replacement_character;
+    }
+
+    const codepoint = std.unicode.utf8Decode(value[start..end]) catch {
+        index.* = start + 1;
+        return std.unicode.replacement_character;
+    };
+    index.* = end;
+    return codepoint;
 }
 
 const Point = struct {

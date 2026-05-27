@@ -155,13 +155,13 @@ http://127.0.0.1:8765/web/index.html
 Build the GitHub Pages artifact locally:
 
 ```sh
-make pages-check
+make pages-site
 ```
 
-The Pages artifact is written to `.build/github-pages`. The GitHub workflow
-publishes that directory only after serving the artifact locally and
-instantiating the generated runtime WASM through the `/bin/` URL shape that the
-browser entry point uses.
+The Pages artifact is written to `.build/github-pages`.
+Run `make pages-release` to publish `.build/github-pages` to the `gh-pages` branch.
+The workflow then deploys that branch, and no longer builds the Pages artifact
+inside GitHub Actions.
 
 Run the main kernel smokes:
 
