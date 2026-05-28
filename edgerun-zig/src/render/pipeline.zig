@@ -41,6 +41,7 @@ pub fn packScene(buffers: renderer_ir.Buffers, font_atlas: *renderer_font_atlas.
 }
 
 pub fn packSceneWithSources(buffers: renderer_ir.Buffers, source_set: renderer_ir.Sources, commands: []const ui.Command) (renderer_ir.Error || icon_line_buffer.Error)!void {
+    try prepareSceneAssetsWithSources(source_set, commands);
     try renderer_ir.packScene(buffers, source_set, commands);
     try packBufferIconLines(buffers);
 }
@@ -50,6 +51,18 @@ pub fn prepareSceneAssets(font_atlas: *renderer_font_atlas.Atlas, commands: []co
         .text => |text_command| try font_atlas.prepareText(text_command.value, renderer_ir.textPx(text_command.origin.h), fontWeightForText(text_command.weight, text_command.origin.h)),
         else => {},
     };
+}
+
+fn prepareSceneAssetsWithSources(source_set: renderer_ir.Sources, commands: []const ui.Command) renderer_ir.Error!void {
+    for (commands) |command| switch (command) {
+        .text => |text_command| try prepareTextWithSource(source_set.font, text_command.value, renderer_ir.textPx(text_command.origin.h)),
+        else => {},
+    };
+}
+
+fn prepareTextWithSource(font: renderer_ir.FontAtlas, value: []const u8, px: u8) renderer_ir.Error!void {
+    var index: usize = 0;
+    while (nextCodepoint(value, &index)) |codepoint| _ = try font.glyph(font.context, codepoint, px);
 }
 
 fn fontWeightForText(weight: ui.FontWeight, height: f32) @import("../font_builtin.zig").Weight {
@@ -94,12 +107,22 @@ pub fn pushText(buffers: Buffers, font: FontAtlas, layer: Layer, bounds: ui.Rect
 
 pub fn pushIcon(buffers: Buffers, layer: Layer, quad: ui.IconQuad) IrError!void { try renderer_ir.pushIcon(buffers, layer, quad); }
 pub fn iconAt(values: []const f32, index: usize) IrError!IconInstance { return renderer_ir.iconAt(values, index); }
-
 pub fn packIconLines(instances: []const f32, out: []f32, out_len: *usize) icon_line_buffer.Error!void { try icon_line_buffer.packIconInstances(instances, out, out_len); }
 
 pub fn packBufferIconLines(buffers: renderer_ir.Buffers) icon_line_buffer.Error!void {
     try packIconLines(buffers.liveIconVertices(), buffers.icon_line_vertices, buffers.icon_line_vertex_len);
     try packIconLines(buffers.liveOverlayIconVertices(), buffers.overlay_icon_line_vertices, buffers.overlay_icon_line_vertex_len);
+}
+
+fn nextCodepoint(value: []const u8, index: *usize) ?u21 {
+    if (index.* >= value.len) return null;
+    const start = index.*;
+    const len = std.unicode.utf8ByteSequenceLength(value[start]) catch { index.* = start + 1; return std.unicode.replacement_character; };
+    const end = start + len;
+    if (end > value.len) { index.* = value.len; return std.unicode.replacement_character; }
+    const cp = std.unicode.utf8Decode(value[start..end]) catch { index.* = start + 1; return std.unicode.replacement_character; };
+    index.* = end;
+    return cp;
 }
 
 test "render pipeline builds atlas and object font sources" {
