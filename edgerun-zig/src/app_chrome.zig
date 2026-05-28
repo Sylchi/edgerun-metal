@@ -79,10 +79,9 @@ pub const ActionRouteNavProps = struct {
 };
 
 pub fn renderActionItem(scene: *ui.Scene, collector: *interaction.Collector, props: ActionNavProps) (ui.RenderError || interaction.Error)!void {
-    const control = .{
+    const control: ui_component_common.ControlState = .{
         .active = props.active,
         .disabled = !props.enabled,
-        .control_size = props.control_size orelse .default,
     };
     const button = button_component.Button{
         .id = props.id,
@@ -93,6 +92,7 @@ pub fn renderActionItem(scene: *ui.Scene, collector: *interaction.Collector, pro
     try button.render(scene, props.bounds, .{
         .style = design.style(),
         .control = control,
+        .control_size = props.control_size orelse .default,
     });
     try button.collectInteractions(collector, props.bounds);
 }

@@ -38,6 +38,14 @@ pub const Size = struct { w: f32, h: f32 };
 pub const Axis = enum { row, column };
 pub const Align = enum { start, center, end, stretch };
 
+pub const Layout = struct {
+    axis: Axis = .column,
+    gap: f32 = 0.0,
+    padding: f32 = 0.0,
+    cross_align: Align = .stretch,
+    children: []const Node = &.{},
+};
+
 pub const LinearCursor = struct {
     bounds: Rect,
     axis: Axis,
@@ -414,9 +422,9 @@ pub fn skipAsciiSpace(value: []const u8, start: usize) usize {
     return index;
 }
 
-const WrappedLine = struct { start: usize, end: usize, next: usize };
+pub const WrappedLine = struct { start: usize, end: usize, next: usize };
 
-fn wrappedLine(value: []const u8, start: usize, char_capacity: usize) WrappedLine {
+pub fn wrappedLine(value: []const u8, start: usize, char_capacity: usize) WrappedLine {
     var index = start;
     var chars: usize = 0;
     var last_space: ?usize = null;

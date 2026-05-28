@@ -732,8 +732,6 @@ test "app_navigation route contract is deterministic for top-level and dynamic f
         try std.testing.expectEqualStrings(snapshot.hash, hash[0..hash_len]);
     }
 
-    const post_id = app_blog.postIdAt(0);
-    const docs_index = docIndexBySlug("component-system").?;
     for (dynamicRouteFixtures()) |entry| {
         const route = fromHit(entry.hit_id, .{ .view = .source }) orelse unreachable;
         try std.testing.expectEqual(entry.expected, route);

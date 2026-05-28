@@ -39,7 +39,6 @@ const input_component = @import("Input.zig");
 const input_group_component = @import("InputGroup.zig");
 const input_otp_component = @import("InputOtp.zig");
 const menubar_component = @import("Menubar.zig");
-const nav_component = @import("Nav.zig");
 const navigation_menu_component = @import("NavigationMenu.zig");
 const pagination_component = @import("Pagination.zig");
 const popover_component = @import("Popover.zig");
@@ -89,7 +88,6 @@ pub const Component = union(enum) {
     breadcrumb: breadcrumb_component.Breadcrumb,
     menubar: menubar_component.Menubar,
     navigation_menu: navigation_menu_component.NavigationMenu,
-    nav: nav_component.Nav,
     command: command_component.Command,
     context_menu: context_menu_component.ContextMenu,
     dialog: dialog_component.Dialog,

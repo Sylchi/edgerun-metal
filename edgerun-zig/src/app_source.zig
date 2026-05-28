@@ -8,6 +8,7 @@ const ui = @import("ui.zig");
 
 pub const editor_textarea_id: u32 = 32_100;
 pub const explorer_search_input_id: u32 = 32_101;
+pub const source_file_hit_base: u32 = 32_200;
 
 pub const State = struct {
     scroll_y: f32 = 0.0,
@@ -341,4 +342,36 @@ fn basename(path: []const u8) []const u8 {
         if (path[index - 1] == '/') return path[index..];
     }
     return path;
+}
+
+pub fn sourceIndexFromHit(hit_id: u32) ?usize {
+    if (hit_id < source_file_hit_base) return null;
+    const index: usize = @intCast(hit_id - source_file_hit_base);
+    return index;
+}
+
+pub fn cursorFromPoint(bounds: ui.Rect, state: State, x: f32, y: f32) usize {
+    if (state.source.len == 0) return 0;
+    const local_x = @max(0.0, x - bounds.x - code_gutter_w - code_pad);
+    const local_y = @max(0.0, y - bounds.y - toolbar_h - code_pad);
+    const line_index: usize = @intFromFloat(@max(0.0, local_y / code_line_h));
+    const column: usize = @intFromFloat(@max(0.0, local_x / code_char_w));
+
+    var line: usize = 0;
+    var i: usize = 0;
+    while (i < state.source.len and line < line_index) : (i += 1) {
+        if (state.source[i] == '\n') line += 1;
+    }
+
+    var col: usize = 0;
+    while (i < state.source.len and state.source[i] != '\n' and col < column) : ({
+        i += 1;
+        col += 1;
+    }) {}
+
+    return @min(i, state.source.len);
+}
+
+pub fn cursorFromTextAreaBounds(bounds: ui.Rect, state: State, x: f32, y: f32) usize {
+    return cursorFromPoint(bounds, state, x, y);
 }
