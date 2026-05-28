@@ -23,6 +23,11 @@ PAGES_REMOTE ?= origin
 PAGES_WORKTREE_DIR := $(BUILD_DIR)/pages-worktree
 PAGES_ZIG_OUT := edgerun-zig/zig-out
 PAGES_PUBLIC_URL ?= https://sylchi.github.io/edgerun-c/
+APP_RUNTIME_WASM := $(PAGES_ZIG_OUT)/bin/edgerun-app-runtime.wasm
+FONT_ATLAS_WIDTH := 2048
+FONT_ATLAS_HEIGHT := 2048
+FONT_ATLAS_CHANNELS := 1
+FONT_ATLAS_BYTES := $(shell expr $(FONT_ATLAS_WIDTH) \* $(FONT_ATLAS_HEIGHT) \* $(FONT_ATLAS_CHANNELS))
 
 help:
 	@printf '%s\n' \
@@ -30,7 +35,7 @@ help:
 		'  make check              fmt-check + tests' \
 		'  make fmt                format Zig code' \
 		'  make test               run Zig tests' \
-		'  make app-runtime        build wasm runtime' \
+		'  make app-runtime        build wasm runtime and print artifact sizes' \
 		'  make wayland-window     build wasm runtime and open native Wayland host' \
 		'  make pages-site         build local GitHub Pages artifact' \
 		'  make pages-check        validate local pages artifact' \
@@ -73,6 +78,8 @@ ifstatus:
 
 app-runtime:
 	$(ZIG_BUILD) -Doptimize=$(OPT) app-runtime
+	@printf 'font atlas: %sx%s alpha%s = %s bytes\n' '$(FONT_ATLAS_WIDTH)' '$(FONT_ATLAS_HEIGHT)' '$(FONT_ATLAS_CHANNELS)' '$(FONT_ATLAS_BYTES)'
+	@stat -c 'wasm runtime: %s bytes (%n)' '$(APP_RUNTIME_WASM)' 2>/dev/null || true
 
 wayland-window: app-runtime
 	$(ZIG_BUILD) -Doptimize=$(OPT) wayland-window -- --width $(WAYLAND_WIDTH) --height $(WAYLAND_HEIGHT) --seconds $(WAYLAND_SECONDS) --path $(WAYLAND_PATH)
@@ -86,7 +93,7 @@ pages-site: app-runtime
 	cp pages/index.html $(PAGES_SITE_DIR)/index.html
 	cp pages/404.html $(PAGES_SITE_DIR)/404.html
 	cp $(PAGES_ZIG_OUT)/web/index.html $(PAGES_SITE_DIR)/web/index.html
-	cp $(PAGES_ZIG_OUT)/bin/edgerun-app-runtime.wasm $(PAGES_SITE_DIR)/bin/edgerun-app-runtime.wasm
+	cp $(APP_RUNTIME_WASM) $(PAGES_SITE_DIR)/bin/edgerun-app-runtime.wasm
 	: > $(PAGES_SITE_DIR)/.nojekyll
 	test -f $(PAGES_SITE_DIR)/web/index.html
 	test -f $(PAGES_SITE_DIR)/bin/edgerun-app-runtime.wasm
