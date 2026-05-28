@@ -5,6 +5,7 @@ const card_component = @import("ui/components/Card.zig");
 const icon_component = @import("ui/components/Icon.zig");
 const row_item_component = @import("ui/components/RowItem.zig");
 const interaction = @import("ui_interaction.zig");
+const app_agent = @import("app_agent.zig");
 const app_blog = @import("app_blog.zig");
 const app_chrome = @import("app_chrome.zig");
 const app_docs = @import("app_docs.zig");
@@ -39,6 +40,7 @@ pub const State = struct {
     component_layout: component_gallery.LayoutMode = .masonry,
     component_grid_gap: f32 = component_gallery.grid_gap_default,
     source: app_source.State = .{},
+    agent: app_agent.State = .{},
     context_menu: ContextMenu = .{},
 };
 
@@ -69,6 +71,7 @@ pub fn contentHeight(width: f32, state: State) f32 {
         .docs => app_docs.contentHeightForState(width, .{ .selected_doc_index = state.route.selected_doc_index, .selected_component_index = state.route.selected_component_index }),
         .components => workspace_content_pad * 2.0 + component_gallery.docsContentHeight(@max(1.0, width - workspace_content_pad * 2.0), state.route.selected_component_index),
         .source => app_source.contentHeight(width, state.source),
+        .agent => app_agent.contentHeight(width, state.agent),
     };
 }
 
@@ -101,6 +104,7 @@ fn renderWorkspaceRail(scene: *ui.Scene, collector: *interaction.Collector, boun
     try scene.pushRect(bounds, workspace_rail_bg, .fill, 0.0, 0.0);
     const items = [_]struct { id: u32, icon_value: icon_component.Icon, label: []const u8, view: app_navigation.View }{
         .{ .id = app_chrome.source_button_id, .icon_value = icon_component.Icon.named(.code), .label = "Source", .view = .source },
+        .{ .id = app_chrome.agent_button_id, .icon_value = icon_component.Icon.named(.sparkles), .label = "Agent", .view = .agent },
         .{ .id = app_docs.component_catalog_button_id, .icon_value = icon_component.Icon.named(.app), .label = "Components", .view = .components },
         .{ .id = app_chrome.docs_button_id, .icon_value = icon_component.Icon.named(.file), .label = "Docs", .view = .docs },
         .{ .id = app_chrome.blog_button_id, .icon_value = icon_component.Icon.named(.terminal), .label = "Academy", .view = .blog },
@@ -134,6 +138,7 @@ fn renderWorkspaceSidebar(scene: *ui.Scene, collector: *interaction.Collector, b
     var y = bounds.y + 68.0;
     const rows = [_]struct { id: u32, title: []const u8, detail: []const u8, view: app_navigation.View }{
         .{ .id = app_chrome.source_button_id, .title = "Source", .detail = "edit app workspace", .view = .source },
+        .{ .id = app_chrome.agent_button_id, .title = "Agent", .detail = "local model and tools", .view = .agent },
         .{ .id = app_docs.component_catalog_button_id, .title = "Components", .detail = "edit and preview system", .view = .components },
         .{ .id = app_chrome.docs_button_id, .title = "Docs", .detail = "manual inside workspace", .view = .docs },
         .{ .id = app_chrome.blog_button_id, .title = "Academy", .detail = "lessons inside workspace", .view = .blog },
@@ -156,6 +161,7 @@ fn renderWorkspaceMain(scene: *ui.Scene, collector: *interaction.Collector, boun
         defer scene.popClip();
         switch (state.route.view) {
             .source => try app_source.renderWorkspace(scene, collector, bounds, state.source),
+            .agent => try app_agent.render(scene, collector, bounds, state.agent),
             .landing => try app_landing.render(scene, collector, shiftedPageBounds(bounds), .{
                 .scroll_y = state.scroll_y,
                 .hover_x = state.hover_x,
@@ -215,6 +221,7 @@ fn workspaceContentBounds(bounds: ui.Rect, scroll_y: f32) ui.Rect {
 fn sidebarDetail(route: app_navigation.Route) []const u8 {
     return switch (route.view) {
         .source => "workspace",
+        .agent => "local agent",
         .docs => "documentation",
         .blog => "academy",
         .components => "components",
@@ -225,6 +232,7 @@ fn sidebarDetail(route: app_navigation.Route) []const u8 {
 fn statusText(route: app_navigation.Route) []const u8 {
     return switch (route.view) {
         .source => "Source | app-owned VFS | compiler ready",
+        .agent => "Agent | local model | host-owned tools | ui_stream native pipe",
         .docs => "Docs | contained workspace tab",
         .blog => "Academy | contained workspace tab",
         .components => "Components | edit and preview workspace",
@@ -284,6 +292,7 @@ test "app frame renders every top level route through one scene builder" {
         .{ .view = .docs, .selected_doc_index = app_docs.indexBySlug("component-system") },
         .{ .view = .components },
         .{ .view = .source },
+        .{ .view = .agent },
     };
     for (routes) |route| {
         var commands: [4096]ui.Command = undefined;
@@ -311,6 +320,7 @@ test "app frame routes through workspace sidebar instead of top navbar" {
 
     try std.testing.expect(hasText(scene.written(), "Components"));
     try expectHit(collector.written(), app_chrome.source_button_id);
+    try expectHit(collector.written(), app_chrome.agent_button_id);
     try expectHit(collector.written(), app_docs.component_catalog_button_id);
     try expectHit(collector.written(), app_chrome.docs_button_id);
     try expectHit(collector.written(), app_chrome.blog_button_id);
@@ -352,6 +362,20 @@ test "app frame uses source editor as workspace shell without nested chrome" {
     try expectHitWithin(collector.written(), app_source.reset_button_id, ui.Rect.init(workspace_rail_w, 0.0, 1280.0 - workspace_rail_w, workspace_top_h));
     try expectHitWithin(collector.written(), app_source.explorer_file_id_base, ui.Rect.init(sidebar_x, top_bottom, workspace_sidebar_w, status_top - top_bottom));
     try expectHitWithin(collector.written(), app_source.editor_textarea_id, ui.Rect.init(main_x, top_bottom, 1280.0 - main_x, status_top - top_bottom));
+}
+
+test "app frame renders agent as a usable workspace tab" {
+    var commands: [4096]ui.Command = undefined;
+    var regions: [4096]interaction.Region = undefined;
+    var clips: [64]ui.Rect = undefined;
+    var scene = ui.Scene.initWithClips(&commands, &clips);
+    var collector = interaction.Collector.init(&regions);
+
+    try render(&scene, &collector, ui.Rect.init(0, 0, 1280, 800), .{ .route = .{ .view = .agent } });
+
+    try std.testing.expect(hasText(scene.written(), "Owned local agent"));
+    try expectHit(collector.written(), app_agent.run_hit_id);
+    try expectHit(collector.written(), app_agent.input_hit_id);
 }
 
 test "app frame renders source jump context menu as shared ui" {
@@ -405,6 +429,7 @@ test "app frame owns content height for route state" {
         contentHeight(width, .{ .route = .{ .view = .docs, .selected_doc_index = app_docs.indexBySlug("media") } }),
     );
     try std.testing.expectEqual(app_source.contentHeight(width, .{}), contentHeight(width, .{ .route = .{ .view = .source } }));
+    try std.testing.expectEqual(app_agent.contentHeight(width, .{}), contentHeight(width, .{ .route = .{ .view = .agent } }));
 
     const button_index = component_gallery.indexBySlug("button").?;
     try std.testing.expectEqual(
