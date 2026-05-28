@@ -1,4 +1,5 @@
 const std = @import("std");
+const app_hit = @import("app_hit.zig");
 const ui = @import("ui.zig");
 
 pub const Error = error{
@@ -10,6 +11,7 @@ pub const Region = struct {
     slot: u32 = 0,
     kind: ui.HitKind,
     id: u32,
+    hit: ?app_hit.Hit = null,
     bounds: ui.Rect,
 };
 
@@ -36,6 +38,10 @@ pub const Collector = struct {
         try self.add(.{ .kind = kind, .id = id, .bounds = bounds });
     }
 
+    pub fn addSemanticHit(self: *Collector, bounds: ui.Rect, hit: app_hit.Hit) Error!void {
+        try self.add(.{ .kind = hit.kind, .id = hit.id, .hit = hit, .bounds = bounds });
+    }
+
     pub fn written(self: Collector) []const Region {
         return self.regions[0..self.len];
     }
@@ -60,6 +66,20 @@ test "interaction collector records regions outside render commands" {
 
     try std.testing.expectEqual(@as(usize, 2), collector.written().len);
     try std.testing.expectEqual(@as(u32, 2), hitTest(collector.written(), 4, 4).?.id);
+}
+
+test "interaction collector records semantic hit payloads" {
+    var regions: [1]Region = undefined;
+    var collector = Collector.init(&regions);
+    const source = app_hit.scope("source");
+    try collector.addSemanticHit(ui.Rect.init(0, 0, 10, 10), .{
+        .kind = .textarea,
+        .id = source.id(.editor, "main"),
+        .source = .editor,
+    });
+    const region = hitTest(collector.written(), 4, 4).?;
+    try std.testing.expect(region.hit != null);
+    try std.testing.expectEqual(app_hit.SourceHit.editor, region.hit.?.source.?);
 }
 
 test "interaction collector rejects invalid regions before consuming budget" {
