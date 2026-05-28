@@ -94,7 +94,7 @@ pub const Atlas = struct {
         const ay = self.atlas_y;
         self.atlas_row_h = @max(self.atlas_row_h, bitmap.height);
         self.atlas_x += bitmap.width + row_gap;
-        const packed = ir.Glyph{
+        const glyph_value = ir.Glyph{
             .u0 = if (bitmap.width == 0) 0 else (@as(f32, @floatFromInt(ax)) + 0.5) / @as(f32, @floatFromInt(width)),
             .v0 = if (bitmap.height == 0) 0 else (@as(f32, @floatFromInt(ay)) + 0.5) / @as(f32, @floatFromInt(height)),
             .u1 = if (bitmap.width == 0) 0 else (@as(f32, @floatFromInt(ax + bitmap.width)) - 0.5) / @as(f32, @floatFromInt(width)),
@@ -105,9 +105,9 @@ pub const Atlas = struct {
             .top = self.s(@floatFromInt(bitmap.top)),
             .advance = self.s(info.advance * scale),
         };
-        self.glyphs[self.glyph_count] = .{ .ch = cp, .px = px, .glyph = packed };
+        self.glyphs[self.glyph_count] = .{ .ch = cp, .px = px, .glyph = glyph_value };
         self.glyph_count += 1;
-        return packed;
+        return glyph_value;
     }
 
     fn s(self: *const Atlas, v: f32) f32 { return v / self.device_scale; }
