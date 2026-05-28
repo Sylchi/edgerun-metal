@@ -230,3 +230,42 @@ fn nextCodepointLenient(value: []const u8, index: *usize) ?u21 {
     index.* = end;
     return cp;
 }
+
+test "font atlas starts as an empty runtime cache" {
+    var atlas: Atlas = undefined;
+    atlas.initUtf8();
+    try std.testing.expectEqual(@as(usize, 0), atlas.cachedGlyphCount());
+    try std.testing.expect(atlas.cacheRevision() != 0);
+}
+
+test "prepareText mutates cache and lookup does not" {
+    var atlas: Atlas = undefined;
+    atlas.initUtf8();
+    try atlas.prepareText("A", 18, .regular);
+    const glyphs_after_prepare = atlas.cachedGlyphCount();
+    const revision_after_prepare = atlas.cacheRevision();
+    try std.testing.expect(glyphs_after_prepare > 0);
+    atlas.setTextWeight(.regular);
+    const source = atlas.source();
+    const maybe_glyph = try source.glyph(source.context, 'A', 18);
+    try std.testing.expect(maybe_glyph != null);
+    try std.testing.expectEqual(glyphs_after_prepare, atlas.cachedGlyphCount());
+    try std.testing.expectEqual(revision_after_prepare, atlas.cacheRevision());
+}
+
+test "prepareText rejects invalid utf8 without replacement fallback" {
+    var atlas: Atlas = undefined;
+    atlas.initUtf8();
+    const invalid = [_]u8{0xff};
+    try std.testing.expectError(error.InvalidBuffer, atlas.prepareText(&invalid, 18, .regular));
+    try std.testing.expectEqual(@as(usize, 0), atlas.cachedGlyphCount());
+}
+
+test "prepareText rejects missing font coverage instead of substituting" {
+    var atlas: Atlas = undefined;
+    atlas.initUtf8();
+    const max_scalar = "\xF4\x8F\xBF\xBF";
+    if (font_builtin.body(.regular).glyphForCodepoint(0x10ffff) == null) {
+        try std.testing.expectError(error.InvalidBuffer, atlas.prepareText(max_scalar, 18, .regular));
+    }
+}
