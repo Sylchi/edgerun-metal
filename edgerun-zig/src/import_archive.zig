@@ -5,8 +5,8 @@ const vfs = @import("vfs.zig");
 
 pub const magic = "ERARC001";
 pub const version: u16 = 1;
-pub const header_size: usize = 24;
-pub const entry_header_size: usize = 80;
+pub const header_size: usize = 56;
+pub const entry_header_size: usize = 108;
 pub const max_entries: usize = 1_000_000;
 pub const max_label_len: usize = vfs.label_max;
 
@@ -109,17 +109,17 @@ pub fn encode(entries: []const EntrySpec, out: []u8) Error![]u8 {
 }
 
 pub fn decode(canonical: []const u8) Error!Archive {
-    if (canonical.len < header_size + preimage.hash_size) return error.Corrupt;
+    if (canonical.len < header_size) return error.Corrupt;
     if (!bytes.eql(canonical[0..magic.len], magic)) return error.Corrupt;
     if ((bytes.load16(canonical[8..10]) orelse return error.Corrupt) != version) return error.Corrupt;
     if ((bytes.load16(canonical[10..12]) orelse return error.Corrupt) != 0) return error.Corrupt;
     const entry_count = bytes.load32(canonical[12..16]) orelse return error.Corrupt;
     if (entry_count > max_entries) return error.Corrupt;
     const body_len = bytes.load64(canonical[16..24]) orelse return error.Corrupt;
-    if (body_len != canonical.len - header_size - preimage.hash_size) return error.Corrupt;
+    if (body_len != canonical.len - header_size) return error.Corrupt;
     var archive_hash: preimage.Hash = undefined;
     @memcpy(&archive_hash, canonical[24..56]);
-    const body = canonical[56..];
+    const body = canonical[header_size..];
     const archive = Archive{
         .header = .{ .entry_count = entry_count, .body_len = body_len, .archive_hash = archive_hash },
         .body = body,
@@ -144,7 +144,7 @@ pub fn decodeEntryPrefix(bytes_in: []const u8) Error!DecodedEntry {
     @memcpy(&label_hash, bytes_in[12..44]);
     @memcpy(&payload_hash, bytes_in[44..76]);
     @memcpy(&entry_hash, bytes_in[76..108]);
-    const label_start = entry_header_size + preimage.hash_size - 4;
+    const label_start = entry_header_size;
     const label_end = try checkedAdd(label_start, label_len);
     const payload_end = try checkedAdd(label_end, @intCast(payload_len));
     if (payload_end > bytes_in.len) return error.Corrupt;
@@ -181,9 +181,8 @@ fn encodeEntry(entry: EntrySpec, out: []u8) Error![]u8 {
     @memcpy(out[12..44], &label_hash);
     @memcpy(out[44..76], &payload_hash);
     @memcpy(out[76..108], &entry_hash);
-    const label_start = entry_header_size + preimage.hash_size - 4;
-    @memcpy(out[label_start..][0..entry.label.len], entry.label);
-    @memcpy(out[label_start + entry.label.len ..][0..entry.payload.len], entry.payload);
+    @memcpy(out[entry_header_size..][0..entry.label.len], entry.label);
+    @memcpy(out[entry_header_size + entry.label.len ..][0..entry.payload.len], entry.payload);
     return out[0..needed];
 }
 
