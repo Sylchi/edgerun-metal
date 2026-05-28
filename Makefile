@@ -93,6 +93,19 @@ pages-site: app-runtime
 	cp pages/index.html $(PAGES_SITE_DIR)/index.html
 	cp pages/404.html $(PAGES_SITE_DIR)/404.html
 	cp $(PAGES_ZIG_OUT)/web/index.html $(PAGES_SITE_DIR)/web/index.html
+	python3 - <<'PY'
+from pathlib import Path
+path = Path('$(PAGES_SITE_DIR)/web/index.html')
+text = path.read_text()
+old = 'A=(e,k)=>{let p=W.er_ui_input_ptr()'
+new = 'A=(e,k)=>{if(!W)return;let p=W.er_ui_input_ptr()'
+if new not in text:
+    if old not in text:
+        raise SystemExit('generated bootstrap input bridge shape changed')
+    text = text.replace(old, new, 1)
+path.write_text(text)
+PY
+	grep -q 'A=(e,k)=>{if(!W)return;' $(PAGES_SITE_DIR)/web/index.html
 	cp $(APP_RUNTIME_WASM) $(PAGES_SITE_DIR)/bin/edgerun-app-runtime.wasm
 	: > $(PAGES_SITE_DIR)/.nojekyll
 	test -f $(PAGES_SITE_DIR)/web/index.html
