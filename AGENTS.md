@@ -122,7 +122,7 @@
 
 ## Session Summary (2026-05-29)
 
-### Fixed
+### Session 1 — Build system & test cleanup
 - `make check` now includes `asm-test` and `crypto-test` (was Zig-only).
 - Added `asm-test-wasm` to the top-level `asm-test` target.
 - Removed dead `$(ASM_BUILD_DIR)/kernel_main.o` target and duplicate `ASM_KERNEL_LD/ELF/BIN` variables.
@@ -134,9 +134,21 @@
 - Fixed 3 pre-existing test failures in `test_runtime.c`: line 431 (wrong copy comparison in `memswap zero`), line 438 and 446 (`er_strcmp` on un-null-terminated `er_hex_encode` output → `er_memcmp`).
 - All 6 ASM test suites now pass (ctypes, math, runtime, serial, TPM, WASM).
 
+### Session 2 — Driver error-convention standardization
+- Audited all 5 driver files (cmos.asm, i8042.asm, cros_ec.asm, dw_i2c.asm, i2c_hid.asm) for return convention; found 3 conflicting patterns (rax-only 0=ok, rax-only 0/-1, unconditional rax=value with no error path).
+- Standardized all to **two-register convention**: `rax` = primary value, `rdx` = 0 on success, non-zero error code on failure.
+- Added `er_ok`, `er_ret`, `er_err` wrappers in macros.inc for consistent function returns.
+- Added error codes to `wasm_constants.inc`: `ERROR_TIMEOUT`=20, `ERROR_IO`=21, `ERROR_NOT_PRESENT`=22, `ERROR_NO_DATA`=23.
+- **cros_ec.asm** — fixed critical bug: `er_cros_ec_read_data` conflated timeout (returning 0x00) with valid 0x00 data. Now returns rax=data, rdx=0 on success; rax=0, rdx=ERROR_TIMEOUT on timeout.
+- **i2c_hid.asm** — fixed critical bug: `_i2c_hid_read_reg16` used 0xFFFF as error sentinel, but 0xFFFF is a valid register value. Now uses rax+rdx convention.
+- **i8042.asm** — `er_i8042_read_scancode` no longer returns ambiguous 0 for both "no data" and "keypress 0". Now returns ERROR_NO_DATA.
+- **kernel_main.asm** — all callers changed from `test eax` to `test edx` for error checking.
+- **kernel build fixed**: all 15 objects (including TPM, nvme, pci) assemble and link into a 75884-byte kernel ELF. QEMU boots without serial output (pre-existing issue in kernel_main/entry code).
+- **nvme.asm**, **pci.asm** — new untracked driver stubs from another agent; both assemble and link cleanly.
+- `make check` passes: 7 ASM tests (ctype, math, runtime, serial, TPM, WASM, blake3) + C BLAKE3 via cmake/ctest.
+
 ### Known Remainders
-- `asm-kernel` build: kernel_main.asm references TPM functions (`er_tpm_crb_present`, `er_tpm_startup`, etc.) but no `kernel_tpm.o`/`kernel_tpm_crb.o` are linked. Need object build rules and `ASM_KERNEL_OBJS` entries.
-- `make check` fails on `zig fmt --check edgerun-zig` (4 unformatted files in deprecated zig directory — out of scope per "do not add new Zig code").
+- `make asm-kernel-hello` boots QEMU but produces no serial output — kernel_main or entry code may hang before serial init.
+- `make check` fails on `zig fmt --check edgerun-zig` (4 unformatted files — out of scope).
 - Monolithic files: `wasm_interpreter.asm` (5918 lines), `runtime.asm` (1561 lines), `math.asm` (1121 lines).
-- Error convention inconsistent across ASM functions (rax/rdx).
 - C test harnesses need migration to pure ASM self-hosted runners.

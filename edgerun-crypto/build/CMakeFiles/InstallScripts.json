@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"/home/ken/edgerun-c/edgerun-crypto/build/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

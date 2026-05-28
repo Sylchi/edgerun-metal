@@ -160,7 +160,7 @@ extern er_memcpy
 wasm_magic: db 0x00, 0x61, 0x73, 0x6d
 wasm_version: db 0x01, 0x00, 0x00, 0x00
 
-; Error codes (returned in rax on error, or stored in error_code)
+; Error codes (returned in rdx on error; rdx=0 on success, per macros.inc convention)
 ERROR_BAD_ARGUMENT     equ 1
 ERROR_CORRUPT          equ 2
 ERROR_UNSUPPORTED      equ 3
@@ -175,6 +175,13 @@ ERROR_STACK_UNDERFLOW  equ 11
 ERROR_TRAP             equ 12
 ERROR_ARITHMETIC_TRAP  equ 13
 ERROR_IMPORT_NOT_FOUND equ 14
+
+; Driver error codes (shared across all hardware drivers)
+ERROR_TIMEOUT          equ 20
+ERROR_IO               equ 21
+ERROR_NOT_PRESENT      equ 22
+ERROR_NO_DATA          equ 23
+
 ERROR_OK               equ 0
 
 ; ==================================================================

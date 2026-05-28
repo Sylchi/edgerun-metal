@@ -43,6 +43,7 @@ crypto-bench:
 	$(CMAKE) --build $(BUILD_DIR)/edgerun-crypto --target bench
 
 ASM_OBJS := \
+	$(ASM_BUILD_DIR)/blake3.o \
 	$(ASM_BUILD_DIR)/ctype.o \
 	$(ASM_BUILD_DIR)/math.o \
 	$(ASM_BUILD_DIR)/runtime.o \
@@ -55,6 +56,15 @@ ASM_KERNEL_OBJS := \
 	$(ASM_BUILD_DIR)/kernel_math.o \
 	$(ASM_BUILD_DIR)/kernel_runtime.o \
 	$(ASM_BUILD_DIR)/kernel_serial.o \
+	$(ASM_BUILD_DIR)/kernel_tpm.o \
+	$(ASM_BUILD_DIR)/kernel_tpm_crb.o \
+	$(ASM_BUILD_DIR)/kernel_cmos.o \
+	$(ASM_BUILD_DIR)/kernel_i8042.o \
+	$(ASM_BUILD_DIR)/kernel_cros_ec.o \
+	$(ASM_BUILD_DIR)/kernel_dw_i2c.o \
+	$(ASM_BUILD_DIR)/kernel_i2c_hid.o \
+	$(ASM_BUILD_DIR)/kernel_pci.o \
+	$(ASM_BUILD_DIR)/kernel_nvme.o \
 	$(ASM_BUILD_DIR)/kernel_entry.o \
 	$(ASM_BUILD_DIR)/kernel_main_elf32.o
 
@@ -73,13 +83,13 @@ asm-build: $(ASM_OBJS)
 # ─── Static pattern rules ─────────────────────────────────────────────
 
 # Standard elf64 objects from asm/x86_64/
-STD_ASM_OBJS := $(ASM_BUILD_DIR)/ctype.o $(ASM_BUILD_DIR)/math.o \
-	$(ASM_BUILD_DIR)/runtime.o $(ASM_BUILD_DIR)/serial.o \
-	$(ASM_BUILD_DIR)/wasm_interpreter.o
+STD_ASM_OBJS := $(ASM_BUILD_DIR)/blake3.o $(ASM_BUILD_DIR)/ctype.o \
+	$(ASM_BUILD_DIR)/math.o $(ASM_BUILD_DIR)/runtime.o \
+	$(ASM_BUILD_DIR)/serial.o $(ASM_BUILD_DIR)/wasm_interpreter.o
 
 $(STD_ASM_OBJS): $(ASM_BUILD_DIR)/%.o: $(ASM_X86_64_DIR)/%.asm $(ASM_X86_64_DIR)/macros.inc
 	@mkdir -p $(ASM_BUILD_DIR)
-	$(YASM) -f elf64 $(ASM_INC) $< -o $@ 2>/dev/null && test -f $@
+	$(YASM) -f elf64 $(ASM_INC) $< -o $@ && test -f $@
 
 $(ASM_BUILD_DIR)/math.o: $(ASM_X86_64_DIR)/simd.inc
 
@@ -89,7 +99,7 @@ HOSTED_ASM_OBJS := $(ASM_BUILD_DIR)/serial_test.o $(ASM_BUILD_DIR)/tpm_test.o \
 
 $(HOSTED_ASM_OBJS): $(ASM_BUILD_DIR)/%_test.o: $(ASM_X86_64_DIR)/%.asm $(ASM_X86_64_DIR)/macros.inc
 	@mkdir -p $(ASM_BUILD_DIR)
-	$(YASM) -f elf64 $(ASM_INC) -DHOSTED_TEST $< -o $@ 2>/dev/null && test -f $@
+	$(YASM) -f elf64 $(ASM_INC) -DHOSTED_TEST $< -o $@ && test -f $@
 
 # test_entry.o from a different source directory
 $(ASM_BUILD_DIR)/test_entry.o: $(ASM_TEST_DIR)/test_entry.asm
@@ -99,18 +109,22 @@ $(ASM_BUILD_DIR)/test_entry.o: $(ASM_TEST_DIR)/test_entry.asm
 # Kernel objects (elf32) from asm/x86_64/
 KERNEL_ASM_OBJS := $(ASM_BUILD_DIR)/kernel_ctype.o $(ASM_BUILD_DIR)/kernel_entry.o \
 	$(ASM_BUILD_DIR)/kernel_math.o $(ASM_BUILD_DIR)/kernel_runtime.o \
-	$(ASM_BUILD_DIR)/kernel_serial.o
+	$(ASM_BUILD_DIR)/kernel_serial.o $(ASM_BUILD_DIR)/kernel_tpm.o \
+	$(ASM_BUILD_DIR)/kernel_tpm_crb.o $(ASM_BUILD_DIR)/kernel_cmos.o \
+	$(ASM_BUILD_DIR)/kernel_i8042.o $(ASM_BUILD_DIR)/kernel_cros_ec.o \
+	$(ASM_BUILD_DIR)/kernel_dw_i2c.o $(ASM_BUILD_DIR)/kernel_i2c_hid.o \
+	$(ASM_BUILD_DIR)/kernel_pci.o $(ASM_BUILD_DIR)/kernel_nvme.o
 
 $(KERNEL_ASM_OBJS): $(ASM_BUILD_DIR)/kernel_%.o: $(ASM_X86_64_DIR)/%.asm $(ASM_X86_64_DIR)/macros.inc
 	@mkdir -p $(ASM_BUILD_DIR)
-	$(YASM) -f $(ASM_KERNEL_FORMAT) $(ASM_INC) $< -o $@ 2>/dev/null && test -f $@
+	$(YASM) -f $(ASM_KERNEL_FORMAT) $(ASM_INC) $< -o $@ && test -f $@
 
 $(ASM_BUILD_DIR)/kernel_math.o: $(ASM_X86_64_DIR)/simd.inc
 
 # kernel_main_elf32.o — source name differs from target, so explicit rule
 $(ASM_BUILD_DIR)/kernel_main_elf32.o: $(ASM_X86_64_DIR)/kernel_main.asm $(ASM_X86_64_DIR)/macros.inc
 	@mkdir -p $(ASM_BUILD_DIR)
-	$(YASM) -f $(ASM_KERNEL_FORMAT) $(ASM_INC) $< -o $@ 2>/dev/null && test -f $@
+	$(YASM) -f $(ASM_KERNEL_FORMAT) $(ASM_INC) $< -o $@ && test -f $@
 
 asm-test-math: $(ASM_BUILD_DIR)/math.o $(ASM_BUILD_DIR)/runtime.o $(ASM_BUILD_DIR)/test_entry.o
 	$(CC) -ffreestanding -nostdlib -static -fno-stack-protector -g -o $(ASM_BUILD_DIR)/test_math $(ASM_TEST_DIR)/test_math.c $(ASM_BUILD_DIR)/test_entry.o $(ASM_BUILD_DIR)/runtime.o $(ASM_BUILD_DIR)/math.o
@@ -151,7 +165,11 @@ asm-test-wasm: $(ASM_BUILD_DIR)/wasm_interpreter.o $(ASM_BUILD_DIR)/runtime.o $(
 	$(CC) -ffreestanding -nostdlib -static -fno-stack-protector -g -o $(ASM_BUILD_DIR)/test_wasm $(ASM_TEST_DIR)/test_wasm.c $(ASM_BUILD_DIR)/test_entry.o $(ASM_BUILD_DIR)/runtime.o $(ASM_BUILD_DIR)/wasm_interpreter.o
 	$(ASM_BUILD_DIR)/test_wasm
 
-asm-test: asm-test-ctype asm-test-math asm-test-runtime asm-test-serial asm-test-tpm asm-test-wasm
+asm-test-blake3: $(ASM_BUILD_DIR)/blake3.o $(ASM_BUILD_DIR)/runtime.o $(ASM_BUILD_DIR)/test_entry.o
+	$(CC) -ffreestanding -nostdlib -static -fno-stack-protector -g -o $(ASM_BUILD_DIR)/test_blake3 $(ASM_TEST_DIR)/test_blake3.c $(ASM_BUILD_DIR)/test_entry.o $(ASM_BUILD_DIR)/runtime.o $(ASM_BUILD_DIR)/blake3.o
+	$(ASM_BUILD_DIR)/test_blake3
+
+asm-test: asm-test-ctype asm-test-math asm-test-runtime asm-test-serial asm-test-tpm asm-test-wasm asm-test-blake3
 
 clean:
 	rm -rf $(BUILD_DIR)

@@ -100,7 +100,6 @@ pub fn currentSourceFiles() []const app_source.FileEntry {
         index += vfs.object_label_ref_bytes;
         const file_len: usize = @intCast(label_ref.object_len);
         if (index > body.len or file_len > body.len - index) return state.source_file_entries[0..state.source_file_count];
-        const file_body = body[index..][0..file_len];
         index += file_len;
         const label_bytes = label_ref.labelSlice();
         const path = if (label_bytes.len > 0 and label_bytes[0] == '/')
@@ -115,11 +114,7 @@ pub fn currentSourceFiles() []const app_source.FileEntry {
             state.source_file_label_bytes_len += prefix.len + label_bytes.len;
             break :brk full;
         };
-        state.source_file_entries[state.source_file_count] = .{
-            .path = path,
-            .size = file_body.len,
-            .is_current = bytes.eql(label_bytes, state.source_editor_label),
-        };
+        state.source_file_entries[state.source_file_count] = .{ .path = path };
         state.source_file_count += 1;
     }
     state.source_file_cache_workspace_len = state.source_workspace_len;
@@ -765,10 +760,13 @@ pub fn handleSourceDoubleClick(x: f32, y: f32, width: f32, height: f32) bool {
 pub fn scrollSourceEditorByWheel(delta_y: f32) bool {
     ensureSourceEditor();
     if (state.source_editor_status != .ready and state.source_editor_status != .dirty) return false;
-    const max_scroll = sourceEditorLineCount() -| state.source_editor_visible_lines;
-    const lines = @as(i64, @intFromFloat(delta_y / state.source_editor_wheel_pixels_per_line));
-    const target = @as(i64, @intCast(state.source_editor_scroll_line)) + lines;
-    state.source_editor_scroll_line = @min(@max(0, target), @as(i64, @intCast(max_scroll)));
+    const magnitude = @abs(delta_y);
+    const lines: usize = @max(1, @as(usize, @intFromFloat(magnitude / state.source_editor_wheel_pixels_per_line)));
+    if (delta_y > 0) {
+        state.source_editor_scroll_line = @min(sourceEditorLineCount() -| 1, state.source_editor_scroll_line + lines);
+    } else if (delta_y < 0) {
+        state.source_editor_scroll_line -|= lines;
+    }
     return true;
 }
 

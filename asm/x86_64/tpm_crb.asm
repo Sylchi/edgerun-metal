@@ -5,6 +5,9 @@
 
 %include "x86_64/macros.inc"
 
+extern er_mmio_read32
+extern er_mmio_write32
+
 ; ─── CRB register offsets (from base) ─────────────────────────────────
 %define CRB_BASE                0xFED40000
 
@@ -41,7 +44,7 @@ er_crb_shadow: resb 4096        ; Simulated CRB register block
 ; MMIO read (32-bit) — inline sequence since we alias the 64-bit helper
 ; =================================================================
 %macro crb_mmio_read32 2
-    mov     rdi, %1
+    lea     rdi, [%1]
     call    er_mmio_read32
     mov     %2, eax
 %endmacro
@@ -50,7 +53,7 @@ er_crb_shadow: resb 4096        ; Simulated CRB register block
 ; MMIO write (32-bit) — inline sequence
 ; =================================================================
 %macro crb_mmio_write32 2
-    mov     rdi, %1
+    lea     rdi, [%1]
     mov     esi, %2
     call    er_mmio_write32
 %endmacro

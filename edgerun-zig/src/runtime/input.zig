@@ -99,13 +99,13 @@ pub fn handleInputEventRecord(record: state.InputEventRecord, width: f32, height
             }
         },
         .key_down => {
-            if (record.ctrl or record.meta) {
+            if (record.ctrl != 0 or record.meta != 0) {
                 if (record.key.len == 1 and record.key[0] == 's') {
                     _ = compiler.compileWorkspaceInsideWasm();
                     return state.input_event_prevent_default;
                 }
             }
-            result = appKeyEvent(record.key, @intFromBool(record.ctrl), @intFromBool(record.meta), @intFromBool(record.alt), @intFromBool(record.shift));
+            result = appKeyEvent(record.key, record.ctrl, record.meta, record.alt, record.shift);
         },
         .key_up => {
             result = state.input_event_prevent_default;

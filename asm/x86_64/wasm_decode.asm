@@ -276,7 +276,7 @@ er_wasm_pages_to_bytes:
 ; ==================================================================
 ; Module parser entry point
 ; er_wasm_parse_module(bytes_ptr=rdi, bytes_len=rsi)
-; Returns: rax = 0 on success, error code otherwise
+; Returns: rdx = 0 on success, otherwise error code (per macros.inc convention)
 ; Destroys current module state, re-parses into global structures
 ; =================================================================+
 er_wasm_parse_module:
@@ -515,16 +515,16 @@ er_wasm_parse_module:
     cmp     rax, [data_segment_count]
     jne     .corrupt
 .success:
-    xor     eax, eax
+    er_ok
     jmp     .done
 .corrupt:
-    mov     eax, ERROR_CORRUPT
+    er_err  ERROR_CORRUPT
     jmp     .done
 .unsupported:
-    mov     eax, ERROR_UNSUPPORTED
+    er_err  ERROR_UNSUPPORTED
     jmp     .done
 .error:
-    mov     eax, edx
+    ; rdx already has error from called function — pass through
 .done:
     lea     rsp, [rbp - 40]
     pop     r15
@@ -2178,13 +2178,13 @@ er_wasm_apply_data_segments:
     jmp     .seg_loop
 
 .done:
-    xor     eax, eax
+    er_ok
     jmp     .out
 .nomemory:
-    mov     eax, ERROR_NO_MEMORY
+    er_err  ERROR_NO_MEMORY
     jmp     .out
 .error:
-    mov     eax, edx
+    ; rdx already has error from called function — pass through
 .out:
     pop     r13
     pop     r12

@@ -52,7 +52,7 @@ er_fn er_fn_run
     mov     rdi, r13
     mov     rsi, r14
     call    er_wasm_parse_module
-    test    rax, rax
+    test    rdx, rdx
     jnz     .error
 
     mov     byte [exec_storage_module_valid], 1

@@ -16,6 +16,7 @@ er_fn er_fn_pop
     ret
 
 .underflow:
+    er_err  ERROR_STACK_UNDERFLOW
     mov     rax, -1
     pop     rbp
     ret
@@ -41,6 +42,7 @@ er_fn er_fn_push
     ret
 
 .overflow:
+    er_err  ERROR_STACK_OVERFLOW
     mov     rax, -1
     pop     rbp
     ret
@@ -248,7 +250,6 @@ er_fn exec_stack_pop
     pop     rbp
     ret
 .underflow:
-    mov     eax, ERROR_STACK_UNDERFLOW
     er_err  ERROR_STACK_UNDERFLOW
     stc
     pop     rbp
@@ -268,7 +269,6 @@ er_fn exec_stack_push
     pop     rbp
     ret
 .overflow:
-    mov     eax, ERROR_STACK_OVERFLOW
     er_err  ERROR_STACK_OVERFLOW
     stc
     pop     rbp
