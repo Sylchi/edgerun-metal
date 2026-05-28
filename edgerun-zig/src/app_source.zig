@@ -81,13 +81,13 @@ pub fn renderWorkspaceTopBar(scene: *ui.Scene, collector: *interaction.Collector
 
     const button_y = bounds.y + 10.0;
     var x = bounds.x + bounds.w - 408.0;
-    try button(scene, collector, ui.Rect.init(x, button_y, 92.0, 32.0), "Compile", compile_button_id, .primary, icon_component.Icon.named(.play), canCompile(state));
+    try button(scene, collector, ui.Rect.init(x, button_y, 92.0, 32.0), "Compile", compile_button_id, .primary, icon_component.Icon.named(.check), canCompile(state));
     x += 100.0;
-    try button(scene, collector, ui.Rect.init(x, button_y, 92.0, 32.0), "Export", download_button_id, .secondary, icon_component.Icon.named(.download), canExport(state));
+    try button(scene, collector, ui.Rect.init(x, button_y, 92.0, 32.0), "Export", download_button_id, .secondary, icon_component.Icon.named(.storage), canExport(state));
     x += 100.0;
-    try button(scene, collector, ui.Rect.init(x, button_y, 84.0, 32.0), "Launch", launch_button_id, .secondary, icon_component.Icon.named(.external_link), canExport(state));
+    try button(scene, collector, ui.Rect.init(x, button_y, 84.0, 32.0), "Launch", launch_button_id, .secondary, icon_component.Icon.named(.route), canExport(state));
     x += 92.0;
-    try button(scene, collector, ui.Rect.init(x, button_y, 84.0, 32.0), "Reset", reset_button_id, .ghost, icon_component.Icon.named(.refresh), true);
+    try button(scene, collector, ui.Rect.init(x, button_y, 84.0, 32.0), "Reset", reset_button_id, .ghost, icon_component.Icon.named(.trash), true);
 }
 
 pub fn renderWorkspaceSidebar(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
