@@ -1,14 +1,16 @@
 const std = @import("std");
 const app_chrome = @import("app_chrome.zig");
 const app_design = @import("app_design.zig");
+const app_hit = @import("app_hit.zig");
 const app_navigation = @import("app_navigation.zig");
 const icon_component = @import("ui/components/Icon.zig");
 const interaction = @import("ui_interaction.zig");
 const ui = @import("ui.zig");
 
-pub const editor_textarea_id: u32 = 32_100;
-pub const explorer_search_input_id: u32 = 32_101;
-pub const source_file_hit_base: u32 = 32_200;
+const source_scope = app_hit.scope("source");
+pub const editor_textarea_id: u32 = source_scope.id(.editor, "main");
+pub const explorer_search_input_id: u32 = source_scope.id(.search, "explorer");
+const max_source_hit_files: usize = 4096;
 
 pub const State = struct {
     scroll_y: f32 = 0.0,
@@ -135,7 +137,7 @@ pub fn renderWorkspaceSidebar(scene: *ui.Scene, collector: *interaction.Collecto
     const search = ui.Rect.init(bounds.x + 12.0, bounds.y + 58.0, bounds.w - 24.0, search_h);
     try fill(scene, search, ui.Color{ .r = 12, .g = 16, .b = 23 }, 8.0);
     try fill(scene, search, border, .border, 8.0);
-    try collector.addHit(search, .input, explorer_search_input_id);
+    try collector.addSemanticHit(search, sourceSearchHit());
     const search_text = if (state.search_query.len == 0) "search files" else state.search_query;
     try textAt(scene, search.x + 10.0, search.y + 8.0, search.w - 20.0, 14.0, search_text, if (state.search_query.len == 0) muted else text);
 
@@ -145,7 +147,7 @@ pub fn renderWorkspaceSidebar(scene: *ui.Scene, collector: *interaction.Collecto
         const selected = std.mem.eql(u8, file.path, state.label) or std.mem.eql(u8, file.displayLabel(), state.label);
         try fill(scene, row, if (selected) ui.Color{ .r = 34, .g = 47, .b = 66 } else ui.Color.clear, 8.0);
         try textAt(scene, row.x + 10.0, row.y + 9.0, row.w - 20.0, 16.0, file.displayLabel(), if (file.dirty) accent else text);
-        try collector.addHit(row, .row_item, sourceFileHitId(index));
+        try collector.addSemanticHit(row, sourceFileHit(index));
         y += 42.0;
     }
 }
@@ -193,7 +195,7 @@ fn renderEditorToolbar(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
 
 fn renderCodeEditor(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
     try fill(scene, bounds, code_bg, 0.0);
-    try collector.addHit(bounds, .textarea, editor_textarea_id);
+    try collector.addSemanticHit(bounds, sourceEditorHit());
     const first_line = state.scroll_line;
     const visible_lines = @max(@as(usize, 1), @as(usize, @intFromFloat(@max(1.0, bounds.h / code_line_h))));
     var line_index: usize = 0;
@@ -361,14 +363,40 @@ fn basename(path: []const u8) []const u8 {
     return path;
 }
 
+fn sourceEditorHit() app_hit.Hit {
+    return .{
+        .kind = .textarea,
+        .id = editor_textarea_id,
+        .source = .editor,
+    };
+}
+
+fn sourceSearchHit() app_hit.Hit {
+    return .{
+        .kind = .input,
+        .id = explorer_search_input_id,
+        .source = .search,
+    };
+}
+
+fn sourceFileHit(index: usize) app_hit.Hit {
+    return .{
+        .kind = .row_item,
+        .id = sourceFileHitId(index),
+        .source = .{ .file = index },
+    };
+}
+
 fn sourceFileHitId(index: usize) u32 {
-    return source_file_hit_base + @as(u32, @intCast(index));
+    return source_scope.indexed(.file, index);
 }
 
 pub fn sourceIndexFromHit(hit_id: u32) ?usize {
-    if (hit_id < source_file_hit_base) return null;
-    const index: usize = @intCast(hit_id - source_file_hit_base);
-    return index;
+    var index: usize = 0;
+    while (index < max_source_hit_files) : (index += 1) {
+        if (sourceFileHitId(index) == hit_id) return index;
+    }
+    return null;
 }
 
 pub fn cursorFromPoint(bounds: ui.Rect, state: State, x: f32, y: f32) usize {
