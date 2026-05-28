@@ -12,7 +12,6 @@ pub const channels: usize = 1;
 pub const glyph_capacity: usize = 32768;
 pub const format: varfont.AtlasFormat = .alpha8;
 
-const replacement = font_builtin.replacement_codepoint;
 const pad: usize = 8;
 const row_gap: usize = 8;
 const default_scale: f32 = 2.0;
@@ -84,9 +83,8 @@ pub const Atlas = struct {
 
     pub fn prepareText(self: *Atlas, value: []const u8, px: u8, weight: font_builtin.Weight) ir.Error!void {
         var index: usize = 0;
-        while (nextCodepoint(value, &index)) |raw| {
-            const font = self.body(weight);
-            const cp = resolve(font, raw) orelse continue;
+        while (nextCodepoint(value, &index)) |cp| {
+            if (self.body(weight).glyphForCodepoint(cp) == null) continue;
             _ = self.ensureGlyph(weight, cp, px) catch |err| switch (err) {
                 error.GlyphBitmapBudgetExceeded, error.GlyphCacheFull => return error.Budget,
                 else => continue,
@@ -108,11 +106,8 @@ pub const Atlas = struct {
     fn resolveGlyph(self: *Atlas, raw: u21, px: u8) ir.Error!?ir.Glyph {
         const weight = self.weightForPx(px);
         const font = self.body(weight);
-        const cp = resolve(font, raw) orelse return null;
-        return self.lookupGlyph(weight, cp, px) orelse self.ensureGlyph(weight, cp, px) catch |err| switch (err) {
-            error.GlyphBitmapBudgetExceeded, error.GlyphCacheFull => return error.Budget,
-            else => null,
-        };
+        if (font.glyphForCodepoint(raw) == null) return null;
+        return self.lookupGlyph(weight, raw, px);
     }
 
     fn lookupGlyph(self: *const Atlas, weight: font_builtin.Weight, cp: u21, px: u8) ?ir.Glyph {
@@ -183,8 +178,7 @@ fn textWidth(context: *anyopaque, value: []const u8, px: u8) f32 {
     var out: f32 = 0;
     var prev: ?u21 = null;
     var index: usize = 0;
-    while (nextCodepoint(value, &index)) |raw| {
-        const cp = resolve(font, raw) orelse continue;
+    while (nextCodepoint(value, &index)) |cp| {
         if (font.glyphForCodepoint(cp)) |info| {
             if (prev) |left| out += font.kern(left, cp) * scale;
             out += info.advance * scale;
@@ -199,19 +193,22 @@ fn glyph(context: *anyopaque, ch: u21, px: u8) ir.Error!?ir.Glyph {
     return atlas.resolveGlyph(ch, px);
 }
 
-fn resolve(font: font_vector.Body, raw: u21) ?u21 {
-    if (font.glyphForCodepoint(raw) != null) return raw;
-    if (font.glyphForCodepoint(replacement) != null) return replacement;
-    return null;
-}
-
 fn nextCodepoint(value: []const u8, index: *usize) ?u21 {
     if (index.* >= value.len) return null;
     const start = index.*;
-    const len = std.unicode.utf8ByteSequenceLength(value[start]) catch { index.* = start + 1; return replacement; };
+    const len = std.unicode.utf8ByteSequenceLength(value[start]) catch {
+        index.* = start + 1;
+        return null;
+    };
     const end = start + len;
-    if (end > value.len) { index.* = value.len; return replacement; }
-    const cp = std.unicode.utf8Decode(value[start..end]) catch { index.* = start + 1; return replacement; };
+    if (end > value.len) {
+        index.* = value.len;
+        return null;
+    }
+    const cp = std.unicode.utf8Decode(value[start..end]) catch {
+        index.* = start + 1;
+        return null;
+    };
     index.* = end;
     return cp;
 }
