@@ -318,7 +318,7 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("compiler/zig/src/edgerun_wasm_compiler.zig"),
             .target = app_runtime_target,
-            .optimize = .ReleaseFast,
+            .optimize = optimize,
             .single_threaded = true,
         }),
     });
@@ -359,7 +359,7 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/app_runtime.zig"),
             .target = app_runtime_target,
-            .optimize = .ReleaseSmall,
+            .optimize = optimize,
             .single_threaded = true,
         }),
     });
