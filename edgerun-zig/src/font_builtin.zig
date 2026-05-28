@@ -7,7 +7,7 @@ const source_face = font_vector.FixedFace.geistDefault() catch @compileError("fa
 
 pub const codepoint_count: usize = countCoveredCodepoints(source_face);
 pub const codepoints: [codepoint_count]u21 = buildCodepoints(source_face);
-pub const counts: font_vector.Counts = font_vector.countCodepoints(source_face, &codepoints) catch @compileError("failed to count built-in vector font");
+pub const counts: font_vector.Counts = countExactVectorStorage(source_face, &codepoints);
 
 pub const Compiled = CompiledFont(counts.glyphs, counts.kerns, counts.commands);
 pub const compiled: Compiled = compileBuiltIn(source_face, &codepoints, counts);
@@ -23,6 +23,11 @@ pub fn CompiledFont(comptime glyph_count: usize, comptime kern_count: usize, com
             return .{ .metrics = self.metrics, .glyphs = &self.glyphs, .kerns = &self.kerns, .commands = &self.commands };
         }
     };
+}
+
+fn countExactVectorStorage(comptime face: font_vector.FixedFace, comptime cps: []const u21) font_vector.Counts {
+    @setEvalBranchQuota(400_000_000);
+    return font_vector.countCodepoints(face, cps) catch @compileError("failed to count built-in vector font");
 }
 
 fn compileBuiltIn(comptime face: font_vector.FixedFace, comptime cps: []const u21, comptime expected: font_vector.Counts) CompiledFont(expected.glyphs, expected.kerns, expected.commands) {
