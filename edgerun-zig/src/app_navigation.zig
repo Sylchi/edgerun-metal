@@ -2,14 +2,36 @@ const std = @import("std");
 const component_gallery = @import("component_gallery.zig");
 const app_blog = @import("app_blog.zig");
 const app_docs = @import("app_docs.zig");
-const app_source = @import("app_source.zig");
-const route_ids = @import("app_routing_ids.zig");
 const icon_component = @import("ui/components/Icon.zig");
 
 pub const route_path_capacity: usize = 96;
 pub const route_hash_capacity: usize = route_path_capacity + 1;
+pub const logo_button_id: u32 = 30_000;
+pub const docs_button_id: u32 = 30_001;
+pub const blog_button_id: u32 = 30_011;
+pub const source_button_id: u32 = 30_012;
+pub const agent_button_id: u32 = 30_013;
+pub const component_catalog_button_id: u32 = 31_001;
+pub const academy_button_id: u32 = 31_002;
+pub const docs_source_button_id: u32 = 31_003;
+pub const first_doc_page_button_id: u32 = 31_200;
+pub const source_compile_button_id: u32 = 32_001;
+pub const source_download_button_id: u32 = 32_002;
+pub const source_launch_button_id: u32 = 32_003;
+pub const source_reset_button_id: u32 = 32_004;
+pub const blog_back_button_id: u32 = 40_001;
+pub const first_post_button_id: u32 = 40_100;
+pub const all_lessons_button_id: u32 = 40_899;
+pub const first_arc_filter_button_id: u32 = 40_900;
 pub const context_source_button_id: u32 = 33_001;
 pub const reveal_identity_button_id: u32 = 20_001;
+
+pub const SourceAction = enum(u32) {
+    compile,
+    download,
+    launch,
+    reset,
+};
 
 pub const MainButton = enum(u32) {
     logo = 0,
@@ -42,7 +64,7 @@ pub const View = enum(u32) {
 };
 
 pub const Route = struct {
-    view: View = .source,
+    view: View = .landing,
     selected_blog_post_id: u32 = 0,
     blog_arc_filter_index: ?usize = null,
     selected_doc_index: ?usize = null,
@@ -57,6 +79,69 @@ pub const Action = enum(u32) {
     reset_source,
     open_context_source,
 };
+
+const ResolveRouteFromHit = *const fn (u32, Route) ?Route;
+const MatchesRouteHit = *const fn (u32) bool;
+const ResolveDynamicFallback = *const fn (Route) Route;
+
+pub const RouteFixture = struct {
+    name: []const u8,
+    route: Route,
+    path: []const u8,
+    hash: []const u8,
+};
+
+pub const route_fixtures = [_]RouteFixture{
+    .{ .name = "landing", .route = .{ .view = .landing }, .path = RoutePath.root, .hash = "" },
+    .{ .name = "blog", .route = .{ .view = .blog }, .path = RoutePath.academy, .hash = "#/academy" },
+    .{ .name = "docs", .route = .{ .view = .docs }, .path = RoutePath.docs, .hash = "#/docs" },
+    .{ .name = "components", .route = .{ .view = .components }, .path = RoutePath.component_catalog, .hash = "#/docs/components" },
+    .{ .name = "source", .route = .{ .view = .source }, .path = RoutePath.source, .hash = "#/source" },
+    .{ .name = "agent", .route = .{ .view = .agent }, .path = RoutePath.agent, .hash = "#/agent" },
+};
+
+pub const RouteFor = union(enum) {
+    button: MainButton,
+    action: Action,
+    slug: []const u8,
+};
+
+pub fn routeFor(target: RouteFor) ?Route {
+    return switch (target) {
+        .button => |button| routeForButton(button),
+        .action => |action| routeForAction(action),
+        .slug => |slug| routeForSlug(slug),
+    };
+}
+
+pub fn routeForButton(button: MainButton) Route {
+    return topLevelBinding(button).route;
+}
+
+pub fn routeForAction(action: Action) ?Route {
+    return switch (action) {
+        .open_context_source => .{ .view = .source },
+        .reveal_identity,
+        .compile_source,
+        .download_source_release,
+        .launch_source_release,
+        .reset_source,
+        => null,
+    };
+}
+
+fn fallbackCurrentRoute(current: Route) Route {
+    return current;
+}
+
+pub fn routeForSlug(slug: []const u8) Route {
+    if (slug.len == 0) return fromPath(RoutePath.root);
+    var path: [route_path_capacity]u8 = undefined;
+    if (slug.len >= path.len) return .{ .view = .landing };
+    path[0] = '/';
+    @memcpy(path[1 .. slug.len + 1], slug);
+    return fromPath(path[0 .. slug.len + 1]);
+}
 
 const PathKind = enum {
     root,
@@ -74,7 +159,7 @@ const PathKind = enum {
 pub fn fromPath(path: []const u8) Route {
     const trimmed = trimPath(path);
     return switch (pathKind(trimmed)) {
-        .root => .{ .view = .source },
+        .root => .{ .view = .landing },
         .academy => blogIndex(null),
         .source => .{ .view = .source },
         .agent => .{ .view = .agent },
@@ -83,8 +168,42 @@ pub fn fromPath(path: []const u8) Route {
         .component_detail => .{ .view = .components, .selected_component_index = component_gallery.indexBySlug(trimmed[RoutePath.component_detail_prefix.len..]) },
         .docs_detail => .{ .view = .docs, .selected_doc_index = app_docs.indexBySlug(trimmed[RoutePath.docs_detail_prefix.len..]) },
         .academy_detail => academyPostRoute(trimmed[RoutePath.academy_detail_prefix.len..]),
-        .unknown => .{ .view = .source },
+        .unknown => .{ .view = .landing },
     };
+}
+
+pub fn sourceActionButtonId(action: SourceAction) u32 {
+    return source_compile_button_id + @as(u32, @intCast(@intFromEnum(action)));
+}
+
+pub fn docsPageButtonId(index: usize) u32 {
+    return first_doc_page_button_id + @as(u32, @intCast(index));
+}
+
+pub fn docsPageIndexFromButton(hit_id: u32) ?usize {
+    if (hit_id < first_doc_page_button_id) return null;
+    const index: usize = hit_id - first_doc_page_button_id;
+    return if (index < app_docs.doc_pages.len) index else null;
+}
+
+pub fn blogPostButtonId(index: usize) u32 {
+    return first_post_button_id + @as(u32, @intCast(index));
+}
+
+pub fn blogPostIndexFromButton(hit_id: u32) ?usize {
+    if (hit_id < first_post_button_id) return null;
+    const index: usize = hit_id - first_post_button_id;
+    return if (index < app_blog.posts.len) index else null;
+}
+
+pub fn blogArcFilterButtonId(index: usize) u32 {
+    return first_arc_filter_button_id + @as(u32, @intCast(index));
+}
+
+pub fn blogArcFilterIndexFromButton(hit_id: u32) ?usize {
+    if (hit_id < first_arc_filter_button_id) return null;
+    const index: usize = hit_id - first_arc_filter_button_id;
+    return if (index < app_blog.arc_sections.len) index else null;
 }
 
 pub fn fromHit(hit_id: u32, current: Route) ?Route {
@@ -147,19 +266,60 @@ fn pathKind(path: []const u8) PathKind {
 
 fn routeFromDynamicHit(hit_id: u32, current: Route) ?Route {
     for (dynamic_route_resolvers) |resolve| {
-        if (resolve(hit_id, current)) |route| return route;
+        if (!resolve.match(hit_id)) continue;
+        if (resolve.resolve(hit_id, current)) |route| return route;
+        return resolve.fallback(current);
     }
     return null;
 }
 
 pub const HitRoute = struct { id: u32, route: Route };
 pub const ActionBinding = struct { id: u32, action: Action };
-const ResolveRouteFromHit = *const fn (u32, Route) ?Route;
+
+pub const DynamicRouteResolver = struct {
+    name: []const u8,
+    match: MatchesRouteHit,
+    resolve: ResolveRouteFromHit,
+    fallback: ResolveDynamicFallback,
+};
 
 pub const Contract = struct {
     static_routes: []const HitRoute,
     action_bindings: []const ActionBinding,
+    dynamic_route_resolvers: []const DynamicRouteResolver,
 };
+
+pub const DynamicRouteFixture = struct {
+    name: []const u8,
+    hit_id: u32,
+    expected: Route,
+};
+
+const dynamic_route_fixtures = blk: {
+    const post_id = app_blog.postIdAt(0);
+    const docs_index = app_docs.indexBySlug("component-system") orelse 0;
+    const docs_expected: Route = if (app_docs.slugByIndex(docs_index)) |slug|
+        if (std.mem.eql(u8, slug, "component-system"))
+            .{ .view = .components }
+        else
+            .{ .view = .docs, .selected_doc_index = docs_index }
+    else
+        .{ .view = .docs };
+
+    break :blk [_]DynamicRouteFixture{
+        .{ .name = "blog-post", .hit_id = app_blog.postIdAt(0), .expected = .{ .view = .blog, .selected_blog_post_id = post_id } },
+        .{ .name = "component-docs-tab", .hit_id = docsPageButtonId(docs_index), .expected = docs_expected },
+        .{ .name = "arc-filter", .hit_id = app_blog.arcFilterButtonId(0), .expected = .{ .view = .blog, .blog_arc_filter_index = 0 } },
+        .{ .name = "component-catalog-card", .hit_id = component_gallery.first_catalog_card_id, .expected = .{ .view = .components, .selected_component_index = 0 } },
+        .{ .name = "component-preview", .hit_id = component_gallery.previewHitForIndexForTest(0), .expected = .{ .view = .components, .selected_component_index = 0 } },
+    };
+};
+
+pub const dynamic_route_fixture_count: usize = dynamic_route_fixtures.len;
+
+pub fn dynamicRouteFixtures() []const DynamicRouteFixture {
+    return &dynamic_route_fixtures;
+}
 
 pub const TopLevelBinding = struct {
     button: MainButton,
@@ -174,8 +334,8 @@ pub const TopLevelBinding = struct {
 const top_level_bindings = [_]TopLevelBinding{
     .{
         .button = .logo,
-        .id = route_ids.logo_button_id,
-        .route = .{ .view = .source },
+        .id = logo_button_id,
+        .route = .{ .view = .landing },
         .icon = icon_component.Icon.named(.terminal),
         .rail_label = "Overview",
         .row_title = "Overview",
@@ -183,7 +343,7 @@ const top_level_bindings = [_]TopLevelBinding{
     },
     .{
         .button = .source,
-        .id = route_ids.source_button_id,
+        .id = source_button_id,
         .route = .{ .view = .source },
         .icon = icon_component.Icon.named(.code),
         .rail_label = "Source",
@@ -192,7 +352,7 @@ const top_level_bindings = [_]TopLevelBinding{
     },
     .{
         .button = .agent,
-        .id = route_ids.agent_button_id,
+        .id = agent_button_id,
         .route = .{ .view = .agent },
         .icon = icon_component.Icon.named(.sparkles),
         .rail_label = "Agent",
@@ -201,7 +361,7 @@ const top_level_bindings = [_]TopLevelBinding{
     },
     .{
         .button = .components,
-        .id = route_ids.component_catalog_button_id,
+        .id = component_catalog_button_id,
         .route = .{ .view = .components },
         .icon = icon_component.Icon.named(.app),
         .rail_label = "Components",
@@ -210,7 +370,7 @@ const top_level_bindings = [_]TopLevelBinding{
     },
     .{
         .button = .docs,
-        .id = route_ids.docs_button_id,
+        .id = docs_button_id,
         .route = .{ .view = .docs },
         .icon = icon_component.Icon.named(.file),
         .rail_label = "Docs",
@@ -219,7 +379,7 @@ const top_level_bindings = [_]TopLevelBinding{
     },
     .{
         .button = .blog,
-        .id = route_ids.blog_button_id,
+        .id = blog_button_id,
         .route = .{ .view = .blog },
         .icon = icon_component.Icon.named(.terminal),
         .rail_label = "Academy",
@@ -230,10 +390,6 @@ const top_level_bindings = [_]TopLevelBinding{
 
 pub fn topLevelButtonId(button: MainButton) u32 {
     return topLevelBinding(button).id;
-}
-
-pub fn topLevelRoute(button: MainButton) Route {
-    return topLevelBinding(button).route;
 }
 
 pub fn topLevelBindings() []const TopLevelBinding {
@@ -253,24 +409,24 @@ pub fn topLevelWorkspaceBindings() []const TopLevelBinding {
 
 pub const action_bindings = [_]ActionBinding{
     .{ .id = reveal_identity_button_id, .action = .reveal_identity },
-    .{ .id = app_source.compile_button_id, .action = .compile_source },
-    .{ .id = app_source.download_button_id, .action = .download_source_release },
-    .{ .id = app_source.launch_button_id, .action = .launch_source_release },
-    .{ .id = app_source.reset_button_id, .action = .reset_source },
+    .{ .id = sourceActionButtonId(.compile), .action = .compile_source },
+    .{ .id = sourceActionButtonId(.download), .action = .download_source_release },
+    .{ .id = sourceActionButtonId(.launch), .action = .launch_source_release },
+    .{ .id = sourceActionButtonId(.reset), .action = .reset_source },
     .{ .id = context_source_button_id, .action = .open_context_source },
 };
 
 pub const static_routes = [_]HitRoute{
-    .{ .id = route_ids.logo_button_id, .route = .{ .view = .source } },
-    .{ .id = route_ids.docs_button_id, .route = .{ .view = .docs } },
-    .{ .id = route_ids.blog_button_id, .route = .{ .view = .blog } },
-    .{ .id = route_ids.all_lessons_button_id, .route = .{ .view = .blog } },
-    .{ .id = route_ids.academy_button_id, .route = .{ .view = .blog } },
-    .{ .id = route_ids.source_button_id, .route = .{ .view = .source } },
-    .{ .id = route_ids.agent_button_id, .route = .{ .view = .agent } },
-    .{ .id = route_ids.docs_source_button_id, .route = .{ .view = .source } },
-    .{ .id = route_ids.component_catalog_button_id, .route = .{ .view = .components } },
-    .{ .id = app_blog.back_button_id, .route = .{ .view = .blog } },
+    .{ .id = logo_button_id, .route = .{ .view = .landing } },
+    .{ .id = docs_button_id, .route = .{ .view = .docs } },
+    .{ .id = blog_button_id, .route = .{ .view = .blog } },
+    .{ .id = all_lessons_button_id, .route = .{ .view = .blog } },
+    .{ .id = academy_button_id, .route = .{ .view = .blog } },
+    .{ .id = source_button_id, .route = .{ .view = .source } },
+    .{ .id = agent_button_id, .route = .{ .view = .agent } },
+    .{ .id = docs_source_button_id, .route = .{ .view = .source } },
+    .{ .id = component_catalog_button_id, .route = .{ .view = .components } },
+    .{ .id = blog_back_button_id, .route = .{ .view = .blog } },
 };
 
 fn routeFromStaticHit(hit_id: u32) ?Route {
@@ -280,13 +436,33 @@ fn routeFromStaticHit(hit_id: u32) ?Route {
     return null;
 }
 
-const dynamic_route_resolvers = [_]ResolveRouteFromHit{
-    blogPostFromHit,
-    arcFilterFromHit,
-    componentCatalogFromHit,
-    componentPreviewFromHit,
-    docsOrCatalogFromHit,
+const dynamic_route_resolvers = [_]DynamicRouteResolver{
+    .{ .name = "blog-post", .match = isBlogPostHit, .resolve = blogPostFromHit, .fallback = fallbackCurrentRoute },
+    .{ .name = "arc-filter", .match = isArcFilterHit, .resolve = arcFilterFromHit, .fallback = fallbackCurrentRoute },
+    .{ .name = "catalog-card", .match = isCatalogCardHit, .resolve = componentCatalogFromHit, .fallback = fallbackCurrentRoute },
+    .{ .name = "component-preview", .match = isComponentPreviewHit, .resolve = componentPreviewFromHit, .fallback = fallbackCurrentRoute },
+    .{ .name = "docs", .match = isDocsFamilyHit, .resolve = docsOrCatalogFromHit, .fallback = fallbackCurrentRoute },
 };
+
+fn isBlogPostHit(hit_id: u32) bool {
+    return app_blog.postIdFromHit(hit_id) != null;
+}
+
+fn isArcFilterHit(hit_id: u32) bool {
+    return app_blog.arcFilterIndexById(hit_id) != null;
+}
+
+fn isCatalogCardHit(hit_id: u32) bool {
+    return component_gallery.indexByCatalogHit(hit_id) != null;
+}
+
+fn isComponentPreviewHit(hit_id: u32) bool {
+    return component_gallery.indexByPreviewHit(hit_id) != null;
+}
+
+fn isDocsFamilyHit(hit_id: u32) bool {
+    return app_docs.indexFromHit(hit_id) != null;
+}
 
 fn blogPostFromHit(hit_id: u32, current: Route) ?Route {
     if (app_blog.postIdFromHit(hit_id)) |post_id| {
@@ -328,6 +504,7 @@ pub fn contract() Contract {
     return .{
         .static_routes = &static_routes,
         .action_bindings = &action_bindings,
+        .dynamic_route_resolvers = &dynamic_route_resolvers,
     };
 }
 
@@ -381,5 +558,162 @@ fn writePrefixPath(out: []u8, prefix: []const u8, suffix: []const u8) error{Rout
 }
 
 fn isComponentDocIndex(index: usize) bool {
-    return index == app_docs.component_catalog_doc_index;
+    const slug = app_docs.slugByIndex(index) orelse return false;
+    return std.mem.eql(u8, slug, "component-system");
+}
+
+comptime {
+    if (top_level_bindings.len != @typeInfo(MainButton).Enum.fields.len) {
+        @compileError("top_level_bindings must cover every MainButton enum value");
+    }
+    var seen_buttons: [@typeInfo(MainButton).Enum.fields.len]bool = [_]bool{false} ** @typeInfo(MainButton).Enum.fields.len;
+    for (top_level_bindings) |entry| {
+        const idx = @intFromEnum(entry.button);
+        if (idx >= seen_buttons.len) @compileError("top_level_bindings contains unknown MainButton");
+        if (seen_buttons[idx]) @compileError("top_level_bindings contains duplicate MainButton entries");
+        seen_buttons[idx] = true;
+    }
+    for (seen_buttons) |seen| {
+        if (!seen) @compileError("top_level_bindings missing a MainButton entry");
+    }
+}
+
+comptime {
+    var seen_actions: [@typeInfo(Action).Enum.fields.len]bool = [_]bool{false} ** @typeInfo(Action).Enum.fields.len;
+    for (action_bindings) |entry| {
+        const idx = @intFromEnum(entry.action);
+        if (idx >= seen_actions.len) @compileError("action_bindings contains unknown Action");
+        if (seen_actions[idx]) @compileError("action_bindings contains duplicate actions");
+        seen_actions[idx] = true;
+    }
+    for (seen_actions) |seen| {
+        if (!seen) @compileError("action_bindings missing binding for Action");
+    }
+}
+
+comptime {
+    if (dynamic_route_resolvers.len == 0) {
+        @compileError("dynamic_route_resolvers must not be empty");
+    }
+}
+
+comptime {
+    for (static_routes, 0..) |left, i| {
+        var j: usize = i + 1;
+        while (j < static_routes.len) : (j += 1) {
+            if (left.id == static_routes[j].id) {
+                @compileError("static_routes contains duplicate hit id");
+            }
+        }
+    }
+
+    for (action_bindings, 0..) |left, i| {
+        var j: usize = i + 1;
+        while (j < action_bindings.len) : (j += 1) {
+            if (left.action == action_bindings[j].action) {
+                @compileError("action_bindings contains duplicate action");
+            }
+            if (left.id == action_bindings[j].id) {
+                @compileError("action_bindings contains duplicate hit id");
+            }
+        }
+    }
+
+    for (action_bindings) |entry| {
+        var i: usize = 0;
+        while (i < top_level_bindings.len) : (i += 1) {
+            if (entry.id == top_level_bindings[i].id) {
+                @compileError("action id collides with top-level route id");
+            }
+        }
+        i = 0;
+        while (i < static_routes.len) : (i += 1) {
+            if (entry.id == static_routes[i].id) {
+                @compileError("action id collides with static route id");
+            }
+        }
+    }
+
+    for (dynamic_route_resolvers, 0..) |left, i| {
+        var j: usize = i + 1;
+        while (j < dynamic_route_resolvers.len) : (j += 1) {
+            if (std.mem.eql(u8, left.name, dynamic_route_resolvers[j].name)) {
+                @compileError("dynamic_route_resolvers contains duplicate name");
+            }
+        }
+    }
+}
+
+test "app_navigation route contract is deterministic for top-level and dynamic families" {
+    for (route_fixtures) |snapshot| {
+        var path: [route_path_capacity]u8 = undefined;
+        var hash: [route_hash_capacity]u8 = undefined;
+
+        const path_len = try writePath(&path, snapshot.route);
+        try std.testing.expectEqualStrings(snapshot.path, path[0..path_len]);
+        try std.testing.expectEqual(snapshot.route, fromPath(snapshot.path));
+
+        const hash_len = try writeHash(&hash, snapshot.route);
+        try std.testing.expectEqualStrings(snapshot.hash, hash[0..hash_len]);
+    }
+
+    const post_id = app_blog.postIdAt(0);
+    const docs_index = app_docs.indexBySlug("component-system").?;
+    for (app_navigation.dynamicRouteFixtures()) |entry| {
+        const route = fromHit(entry.hit_id, .{ .view = .source }) orelse unreachable;
+        try std.testing.expectEqual(entry.expected, route);
+    }
+
+    for (top_level_bindings) |binding| {
+        try std.testing.expectEqual(binding.route, routeFor(.{ .button = binding.button }).?);
+        try std.testing.expectEqual(binding.id, fromHit(topLevelButtonId(binding.button), .{}) orelse unreachable);
+    }
+
+    for (action_bindings) |entry| {
+        if (entry.action == .open_context_source) {
+            try std.testing.expectEqual(.{ .view = .source }, routeFor(.{ .action = entry.action }) orelse unreachable);
+        } else {
+            try std.testing.expectEqual(@as(?Route, null), routeFor(.{ .action = entry.action }));
+        }
+        try std.testing.expectEqual(entry.action, actionFromHit(entry.id).?);
+    }
+}
+
+test "app_navigation static route and action ids are deterministic through shared contract" {
+    for (static_routes) |entry| {
+        if (fromHit(entry.id, .{})) |actual| {
+            try std.testing.expectEqual(entry.route, actual);
+        } else {
+            try std.testing.expect(false);
+        }
+    }
+
+    for (action_bindings) |entry| {
+        if (actionFromHit(entry.id)) |actual| {
+            try std.testing.expectEqual(entry.action, actual);
+        } else {
+            try std.testing.expect(false);
+        }
+    }
+}
+
+test "app_navigation dynamic fallback routes keep current state" {
+    const samples = [_]Route{
+        .{},
+        .{ .view = .blog, .selected_blog_post_id = app_blog.postIdAt(0) },
+        .{ .view = .docs, .selected_doc_index = app_docs.indexBySlug("media") },
+        .{ .view = .components, .selected_component_index = 0 },
+        .{ .view = .source },
+    };
+
+    for (dynamic_route_resolvers) |resolver| {
+        for (samples) |sample| {
+            const fallback = resolver.fallback(sample);
+            try std.testing.expectEqual(sample.view, fallback.view);
+            try std.testing.expectEqual(sample.selected_blog_post_id, fallback.selected_blog_post_id);
+            try std.testing.expectEqual(sample.blog_arc_filter_index, fallback.blog_arc_filter_index);
+            try std.testing.expectEqual(sample.selected_doc_index, fallback.selected_doc_index);
+            try std.testing.expectEqual(sample.selected_component_index, fallback.selected_component_index);
+        }
+    }
 }

@@ -133,3 +133,59 @@ test "native input pointer path uses shared runtime activation" {
     try std.testing.expectEqual(ui_runtime.ActionKind.activated, state.last_action_kind);
     try std.testing.expectEqual(app_navigation.View.blog, state.route.view);
 }
+
+test "native input routes all canonical fixtures through shared top-level binding path" {
+    for (app_navigation.route_fixtures) |fixture| {
+        var state = State{ .route = fixture.route };
+        var matching_binding: ?app_navigation.TopLevelBinding = null;
+
+        for (app_navigation.topLevelBindings()) |binding| {
+            if (std.meta.eql(binding.route, fixture.route)) {
+                matching_binding = binding;
+                break;
+            }
+        }
+        const binding = matching_binding orelse continue;
+        state.runtime.hovered = .{ .kind = .button, .id = binding.id, .bounds = ui.Rect.init(0, 0, 1, 1) };
+
+        activateHovered(&state);
+
+        try expectRoute(state.route, fixture.route);
+    }
+}
+
+test "native input route fixtures keep deterministic path/hash mapping" {
+    for (app_navigation.route_fixtures) |fixture| {
+        try expectRoutePathHash(fixture.route, fixture.path, fixture.hash);
+    }
+}
+
+test "native input resolves dynamic hit families using shared navigation logic" {
+    for (app_navigation.dynamicRouteFixtures()) |entry| {
+        var state = State{ .route = .{ .view = .source } };
+        state.runtime.hovered = .{ .kind = .button, .id = entry.hit_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
+
+        activateHovered(&state);
+
+        try expectRoute(state.route, entry.expected);
+    }
+}
+
+fn expectRoute(actual: app_navigation.Route, expected: app_navigation.Route) !void {
+    try std.testing.expectEqual(expected.view, actual.view);
+    try std.testing.expectEqual(expected.selected_blog_post_id, actual.selected_blog_post_id);
+    try std.testing.expectEqual(expected.blog_arc_filter_index, actual.blog_arc_filter_index);
+    try std.testing.expectEqual(expected.selected_doc_index, actual.selected_doc_index);
+    try std.testing.expectEqual(expected.selected_component_index, actual.selected_component_index);
+}
+
+fn expectRoutePathHash(route: app_navigation.Route, expected_path: []const u8, expected_hash: []const u8) !void {
+    var path_buf: [app_navigation.route_path_capacity]u8 = undefined;
+    var hash_buf: [app_navigation.route_hash_capacity]u8 = undefined;
+
+    const path_len = try app_navigation.writePath(&path_buf, route);
+    const hash_len = try app_navigation.writeHash(&hash_buf, route);
+
+    try std.testing.expectEqualStrings(expected_path, path_buf[0..path_len]);
+    try std.testing.expectEqualStrings(expected_hash, hash_buf[0..hash_len]);
+}

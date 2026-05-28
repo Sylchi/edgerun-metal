@@ -588,26 +588,6 @@ export fn er_ui_app_pointer_up(x: f32, y: f32) u32 {
     return er_ui_app_activate_hit(currentHoverHitId());
 }
 
-export fn er_ui_app_docs_button_id() u32 {
-    return app_navigation.topLevelButtonId(.docs);
-}
-
-export fn er_ui_app_source_button_id() u32 {
-    return app_navigation.topLevelButtonId(.source);
-}
-
-export fn er_ui_app_blog_button_id() u32 {
-    return app_navigation.topLevelButtonId(.blog);
-}
-
-export fn er_ui_blog_back_button_id() u32 {
-    return app_blog.back_button_id;
-}
-
-export fn er_ui_blog_first_post_button_id() u32 {
-    return app_blog.first_post_button_id;
-}
-
 export fn er_ui_blog_post_count() u32 {
     return app_blog.posts.len;
 }
@@ -911,47 +891,17 @@ export fn er_ui_app_route_path_len() usize {
     return route_len;
 }
 
-export fn er_ui_route_ptr() usize {
-    return er_ui_app_route_path_ptr();
-}
-
-export fn er_ui_route_len() usize {
-    return er_ui_app_route_path_len();
-}
-
-export fn er_ui_set_route_hash_len(len: usize) u32 {
-    if (len > route_hash_bytes.len) return 0;
-    route_hash_len = len;
-    return 1;
-}
-
-export fn er_ui_route_hash_ptr() usize {
-    return er_ui_app_route_hash_ptr();
-}
-
-export fn er_ui_route_hash_len() usize {
-    return er_ui_app_route_hash_len();
-}
-
-export fn er_ui_set_route_path(path_len: usize) u32 {
-    return er_ui_app_set_route_path(path_len);
-}
-
-export fn er_ui_set_route_hash(hash_len: usize) u32 {
-    return er_ui_app_set_route_hash(hash_len);
-}
-
 export fn er_ui_app_set_route_path(path_len: usize) u32 {
     if (path_len > input_bytes.len) return finishError(.bad_input);
-    applyRoutePath(input_bytes[0..path_len]);
+    applyRoute(app_navigation.fromPath(input_bytes[0..path_len]));
     last_error = .ok;
     return @intFromEnum(ErrorCode.ok);
 }
 
 export fn er_ui_app_set_route_hash(hash_len: usize) u32 {
     if (hash_len > input_bytes.len) return finishError(.bad_input);
-    const route_path = routePathFromHash(input_bytes[0..hash_len]) catch return finishError(.bad_input);
-    applyRoutePath(route_path);
+    const route_path = app_navigation.pathFromHash(input_bytes[0..hash_len]) catch return finishError(.bad_input);
+    applyRoute(app_navigation.fromPath(route_path));
     last_error = .ok;
     return @intFromEnum(ErrorCode.ok);
 }
@@ -1234,8 +1184,8 @@ fn handleInputEventRecord(record: InputEventRecord, width: f32, height: f32) u32
             return input_event_release_pointer | input_event_outbox | input_event_schedule_frame;
         },
         .popstate, .hashchange => {
-            const code = applyRouteHashBytes(record.data);
-            if (code != @intFromEnum(ErrorCode.ok)) return input_event_error;
+            const route_path = app_navigation.pathFromHash(record.data) catch return input_event_error;
+            applyRoute(app_navigation.fromPath(route_path));
             return input_event_schedule_frame;
         },
         .key_down => {
@@ -1302,12 +1252,6 @@ fn keyFromText(value: []const u8, shift: u32) ?ui_runtime.Key {
     if (std.mem.eql(u8, value, "ArrowRight")) return .arrow_right;
     if (std.mem.eql(u8, value, "Escape")) return .escape;
     return null;
-}
-
-fn applyRouteHashBytes(hash: []const u8) u32 {
-    if (hash.len > input_bytes.len) return finishError(.bad_input);
-    std.mem.copyForwards(u8, input_bytes[0..hash.len], hash);
-    return er_ui_app_set_route_hash(hash.len);
 }
 
 fn queueOutboxMessage(kind: OutboxKind) error{OutboxMessageBudget}!void {
@@ -2579,10 +2523,6 @@ fn frameBounds() ui.Rect {
     return ui.Rect.init(0, 0, @floatFromInt(frame_width), @floatFromInt(frame_height));
 }
 
-fn applyRoutePath(path: []const u8) void {
-    applyRoute(app_navigation.fromPath(path));
-}
-
 fn applyRoute(route: app_navigation.Route) void {
     context_menu_open = false;
     app_state.resetScroll();
@@ -2591,14 +2531,6 @@ fn applyRoute(route: app_navigation.Route) void {
     app_state.blog_arc_filter_index = route.blog_arc_filter_index;
     app_state.selected_doc_index = route.selected_doc_index;
     app_state.selected_component_index = route.selected_component_index;
-}
-
-fn trimRoute(path: []const u8) []const u8 {
-    return app_navigation.trimPath(path);
-}
-
-fn routePathFromHash(hash: []const u8) error{InvalidRouteHash}![]const u8 {
-    return app_navigation.pathFromHash(hash);
 }
 
 fn refreshRoutePath() void {
@@ -2792,6 +2724,22 @@ test "app runtime landing builds packed app buffers and hit state" {
     try std.testing.expectEqual(app_navigation.topLevelButtonId(.source), er_ui_hover_hit_id());
 }
 
+test "app runtime route snapshots cover canonical fixtures and dynamic families" {
+    for (app_navigation.route_fixtures) |fixture| {
+        applyRoute(fixture.route);
+        try expectRouteFixture(fixture);
+        try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, 111.0, 32.0, 0.0));
+    }
+
+    const dynamic_cases = app_navigation.dynamicRouteFixtures();
+
+    for (dynamic_cases) |entry| {
+        applyRoute(.{ .view = .source });
+        _ = er_ui_app_activate_hit(entry.hit_id);
+        try expectRouteState(entry.expected);
+    }
+}
+
 test "app runtime reveal derives public identity inside wasm from interaction" {
     ephemeral_identity_ready = false;
     entropy_pool = initialEntropyPool();
@@ -2813,6 +2761,21 @@ test "app runtime reveal derives public identity inside wasm from interaction" {
     try std.testing.expectEqual(@as(usize, public_identity_text_len), publicIdentityText().len);
     try std.testing.expect(std.mem.startsWith(u8, publicIdentityText(), public_identity_prefix));
     try std.testing.expect(identity.Source.prepare(.ed25519_public, &ephemeral_public_key) != null);
+}
+
+fn expectRouteFixture(fixture: app_navigation.RouteFixture) !void {
+    refreshRoutePath();
+    refreshRouteHash();
+    try std.testing.expectEqualStrings(fixture.path, route_bytes[0..route_len]);
+    try std.testing.expectEqualStrings(fixture.hash, route_hash_bytes[0..route_hash_len]);
+}
+
+fn expectRouteState(expected: app_navigation.Route) !void {
+    try std.testing.expectEqual(expected.view, app_state.view);
+    try std.testing.expectEqual(expected.selected_blog_post_id, app_state.selected_blog_post_id);
+    try std.testing.expectEqual(expected.blog_arc_filter_index, app_state.blog_arc_filter_index);
+    try std.testing.expectEqual(expected.selected_doc_index, app_state.selected_doc_index);
+    try std.testing.expectEqual(expected.selected_component_index, app_state.selected_component_index);
 }
 
 test "app runtime blog builds packed app buffers and post hit state" {
@@ -2854,7 +2817,7 @@ test "app runtime activation keeps page state in wasm" {
     try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_activate_hit(app_navigation.topLevelButtonId(.blog)));
     try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_activate_hit(app_blog.arcFilterButtonId(3)));
     try std.testing.expectEqual(app_blog.indexContentHeightFiltered(1280.0, 3), er_ui_app_content_height(1280.0));
-    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_activate_hit(app_blog.all_lessons_button_id));
+    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_activate_hit(app_navigation.all_lessons_button_id));
     try std.testing.expectEqual(app_blog.indexContentHeight(1280.0), er_ui_app_content_height(1280.0));
     try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_activate_hit(app_navigation.topLevelButtonId(.docs)));
     try std.testing.expectEqual(app_docs.contentHeight(1280.0), er_ui_app_content_height(1280.0));

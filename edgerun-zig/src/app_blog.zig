@@ -2,19 +2,13 @@ const std = @import("std");
 const ui = @import("ui.zig");
 const text_component = @import("ui/components/Text.zig");
 const badge_component = @import("ui/components/Badge.zig");
-const button_component = @import("ui/components/Button.zig");
 const card_component = @import("ui/components/Card.zig");
 const icon_component = @import("ui/components/Icon.zig");
 const app_chrome = @import("app_chrome.zig");
 const design = @import("app_design.zig");
 const interaction = @import("ui_interaction.zig");
 const app_layout = @import("app_layout.zig");
-const route_ids = @import("app_routing_ids.zig");
-
-pub const back_button_id: u32 = 40_001;
-pub const first_post_button_id: u32 = 40_100;
-pub const all_lessons_button_id: u32 = route_ids.all_lessons_button_id;
-pub const first_arc_filter_button_id: u32 = 40_900;
+const app_navigation = @import("app_navigation.zig");
 
 const header_h: f32 = app_chrome.header_h;
 const content_wide: f32 = design.content_wide;
@@ -937,25 +931,19 @@ pub fn postById(id: u32) ?Post {
 }
 
 fn postIndexById(id: u32) ?usize {
-    if (id < first_post_button_id) return null;
-    const index: usize = @intCast(id - first_post_button_id);
-    if (index >= posts.len) return null;
-    return index;
+    return app_navigation.blogPostIndexFromButton(id);
 }
 
 pub fn postIdAt(index: usize) u32 {
-    return first_post_button_id + @as(u32, @intCast(index));
+    return app_navigation.blogPostButtonId(index);
 }
 
 pub fn arcFilterButtonId(index: usize) u32 {
-    return first_arc_filter_button_id + @as(u32, @intCast(index));
+    return app_navigation.blogArcFilterButtonId(index);
 }
 
 pub fn arcFilterIndexById(id: u32) ?usize {
-    if (id < first_arc_filter_button_id) return null;
-    const index: usize = @intCast(id - first_arc_filter_button_id);
-    if (index >= arc_sections.len) return null;
-    return index;
+    return app_navigation.blogArcFilterIndexFromButton(id);
 }
 
 fn episodeAt(index: usize) usize {
@@ -1052,7 +1040,14 @@ fn renderLessonRhythm(scene: *ui.Scene, collector: *interaction.Collector, bound
     try nativeCard(scene, bounds, "", "");
     try tag(scene, ui.Rect.init(bounds.x + 18.0, bounds.y + 18.0, 92.0, 24.0), "HOW TO READ", palette.blue);
     try text(scene, bounds.x + 128.0, bounds.y + 23.0, bounds.w - 286.0, 14.0, "Every lesson has a job: notice the ordinary action, name the hidden authority, then ask what the user can own.", palette.text);
-    try outlineButton(scene, collector, ui.Rect.init(bounds.x + bounds.w - 140.0, bounds.y + 14.0, 122.0, 32.0), "All Lessons", all_lessons_button_id);
+        try app_chrome.renderNavItem(scene, collector, .{
+            .kind = .top_text,
+            .binding = app_navigation.topLevelBinding(.blog),
+            .bounds = ui.Rect.init(bounds.x + bounds.w - 140.0, bounds.y + 14.0, 122.0, 32.0),
+            .active = false,
+            .label = "All Lessons",
+            .variant = .outline,
+        });
 
     const gap: f32 = 14.0;
     const item_title_y = bounds.y + 58.0;
@@ -1204,7 +1199,14 @@ fn flowPostContent(scene: ?*ui.Scene, collector: ?*interaction.Collector, bounds
     const demo_y = focus_y + post_focus_h + post_demo_gap;
     const body_y = demo_y + post_demo_h + post_body_gap;
     if (scene) |target| {
-        try outlineButton(target, collector.?, ui.Rect.init(bounds.x, bounds.y, 134.0, 34.0), "All Lessons", back_button_id);
+        try app_chrome.renderNavItem(target, collector.?, .{
+            .kind = .top_text,
+            .binding = app_navigation.topLevelBinding(.blog),
+            .bounds = ui.Rect.init(bounds.x, bounds.y, 134.0, 34.0),
+            .active = false,
+            .label = "All Lessons",
+            .variant = .outline,
+        });
         try nativeBadge(target, ui.Rect.init(bounds.x, bounds.y + 62.0, 118.0, 24.0), episodeLabel(episodeAt(index)));
         try text(target, bounds.x + 136.0, bounds.y + 68.0, 280.0, 12.0, post.arc, palette.dim);
         try text_component.Text.renderWrapped(target, ui.Rect.init(bounds.x, bounds.y + post_header_top_h, title_w, title_h), post.title, palette.text, .{
@@ -3427,10 +3429,6 @@ fn paragraph(scene: *ui.Scene, bounds: ui.Rect, value: []const u8) ui.RenderErro
     try text_component.Text.renderWrapped(scene, bounds, value, palette.dim, .{ .line_height = line_h, .average_char_width = 10.0, .max_lines = 6 });
 }
 
-fn outlineButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id: u32) (ui.RenderError || interaction.Error)!void {
-    try nativeComponent(scene, collector, bounds, button_component.Button{ .id = id, .label = label, .variant = .outline });
-}
-
 fn nativeBadge(scene: *ui.Scene, bounds: ui.Rect, label: []const u8) ui.RenderError!void {
     try nativeComponentVisual(scene, bounds, badge_component.Badge{ .label = label });
 }
@@ -3491,9 +3489,9 @@ test "blog renders committed post index through native components" {
     try std.testing.expectEqualStrings(arc_control, posts[34].arc);
     try std.testing.expectEqualStrings(arc_accounting, posts[61].arc);
     try std.testing.expect(hasHit(collector.written(), postIdAt(0)));
-    try std.testing.expect(hasHit(collector.written(), route_ids.blog_button_id));
-    try std.testing.expect(hasHit(collector.written(), route_ids.logo_button_id));
-    try std.testing.expect(hasHit(collector.written(), all_lessons_button_id));
+    try std.testing.expect(hasHit(collector.written(), app_navigation.blog_button_id));
+    try std.testing.expect(hasHit(collector.written(), app_navigation.logo_button_id));
+    try std.testing.expect(hasHit(collector.written(), app_navigation.all_lessons_button_id));
     try std.testing.expect(hasHit(collector.written(), arcFilterButtonId(0)));
     try std.testing.expect(hasImage(scene.written(), cloud_meme_image_id));
 }
@@ -3603,7 +3601,7 @@ test "blog renders selected markdown post body" {
     try std.testing.expect(hasText(scene.written(), "User-owned shape"));
     try std.testing.expect(hasText(scene.written(), "Starts with"));
     try std.testing.expect(hasText(scene.written(), "Next"));
-    try std.testing.expect(hasHit(collector.written(), back_button_id));
+    try std.testing.expect(hasHit(collector.written(), app_navigation.blog_back_button_id));
 }
 
 test "blog selected post footer links previous and next posts" {

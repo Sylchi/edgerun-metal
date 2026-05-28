@@ -3,16 +3,12 @@ const interaction = @import("ui_interaction.zig");
 const ui = @import("ui.zig");
 const text_component = @import("ui/components/Text.zig");
 const badge_component = @import("ui/components/Badge.zig");
-const button_component = @import("ui/components/Button.zig");
 const card_component = @import("ui/components/Card.zig");
 const icon_component = @import("ui/components/Icon.zig");
 const app_chrome = @import("app_chrome.zig");
 const design = @import("app_design.zig");
 const app_layout = @import("app_layout.zig");
 const app_navigation = @import("app_navigation.zig");
-
-const source_button_id = app_navigation.topLevelButtonId(.source);
-const docs_button_id = app_navigation.topLevelButtonId(.docs);
 
 const max_columns: usize = 4;
 const header_h: f32 = app_chrome.header_h;
@@ -243,8 +239,25 @@ fn renderHero(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Re
     const paragraph_x = if (stacked) layout.copy.x + (layout.copy.w - paragraph_w) * 0.5 else layout.copy.x;
     try heroParagraph(scene, ui.Rect.init(paragraph_x, layout.copy.y + 244.0, paragraph_w, 88.0), "EdgeRun carries its compiler, source object, UI system, object store, and receipts inside the app. Edit source, build, and run the next artifact.");
     const actions = actionPairBounds(if (stacked) layout.copy else ui.Rect.init(layout.copy.x, layout.button_y, layout.copy.w, action_button_h), layout.button_y);
-    try primaryButtonWithTrailingIcon(scene, collector, actions.primary, "View Source", icon_component.Icon.named(.chevron_right), source_button_id);
-    try outlineButton(scene, collector, actions.secondary, "Read Docs", docs_button_id);
+    const source = app_navigation.topLevelBinding(.source);
+    const docs = app_navigation.topLevelBinding(.docs);
+    try app_chrome.renderNavItem(scene, collector, .{
+        .kind = .top_text,
+        .binding = source,
+        .bounds = actions.primary,
+        .active = false,
+        .label = "View Source",
+        .variant = .primary,
+        .icon_slot = icon_component.IconSlot.of(.trailing, icon_component.Icon.named(.chevron_right)),
+    });
+    try app_chrome.renderNavItem(scene, collector, .{
+        .kind = .top_text,
+        .binding = docs,
+        .bounds = actions.secondary,
+        .active = false,
+        .label = "Read Docs",
+        .variant = .outline,
+    });
 }
 
 const HeroLayout = struct {
@@ -323,7 +336,12 @@ fn renderTerminal(scene: *ui.Scene, collector: *interaction.Collector, bounds: u
 
     if (!state.public_identity_ready) {
         const reveal = ui.Rect.init(bounds.x + 24.0, bounds.y + bounds.h - 54.0, 196.0, 32.0);
-        try outlineButton(scene, collector, reveal, "Click to Reveal ID", app_navigation.reveal_identity_button_id);
+        try app_chrome.renderActionItem(scene, collector, .{
+            .id = app_navigation.reveal_identity_button_id,
+            .bounds = reveal,
+            .label = "Click to Reveal ID",
+            .variant = .outline,
+        });
     }
 }
 
@@ -407,7 +425,16 @@ fn renderArchitecture(scene: *ui.Scene, collector: *interaction.Collector, bound
     try paragraph(scene, ui.Rect.init(left.x, left.y + 138.0, left.w, 96.0), "The web host loads one WASM app. That app owns the source workspace, compiler bytes, UI scene, render buffers, and release artifact.");
     const source_button_y: f32 = if (compact) 218.0 else 264.0;
     const source_button = actionButtonBounds(left, left.y + source_button_y, 180.0);
-    try outlineButtonWithTrailingIcon(scene, collector, source_button, "Open Source", icon_component.Icon.named(.chevron_right), source_button_id);
+    const source = app_navigation.topLevelBinding(.source);
+    try app_chrome.renderNavItem(scene, collector, .{
+        .kind = .top_text,
+        .binding = source,
+        .bounds = source_button,
+        .active = false,
+        .label = "Open Source",
+        .variant = .outline,
+        .icon_slot = icon_component.IconSlot.of(.trailing, icon_component.Icon.named(.chevron_right)),
+    });
     const stack = [_]struct { []const u8, []const u8, ui.Color }{
         .{ "app wasm", "tiny runtime and UI shell", palette.primary },
         .{ "compiler wasm", "embedded Zig-to-WASM path", palette.yellow },
@@ -507,8 +534,25 @@ fn renderCta(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rec
     try alignedText(scene, bounds.x + 40.0, bounds.y + 70.0, bounds.w - 80.0, 30.0, "Open The Self-Compiling App", palette.text, .center);
     try alignedText(scene, bounds.x + 40.0, bounds.y + 118.0, bounds.w - 80.0, 18.0, "Read the source object, edit it, and compile the next artifact from inside the app.", palette.dim, .center);
     const actions = actionPairBounds(bounds.insetLtrb(40.0, 0.0, 40.0, 0.0), bounds.y + 168.0);
-    try primaryButtonWithTrailingIcon(scene, collector, actions.primary, "View Source", icon_component.Icon.named(.chevron_right), source_button_id);
-    try outlineButton(scene, collector, actions.secondary, "Read Docs", docs_button_id);
+    const source = app_navigation.topLevelBinding(.source);
+    const docs = app_navigation.topLevelBinding(.docs);
+    try app_chrome.renderNavItem(scene, collector, .{
+        .kind = .top_text,
+        .binding = source,
+        .bounds = actions.primary,
+        .active = false,
+        .label = "View Source",
+        .variant = .primary,
+        .icon_slot = icon_component.IconSlot.of(.trailing, icon_component.Icon.named(.chevron_right)),
+    });
+    try app_chrome.renderNavItem(scene, collector, .{
+        .kind = .top_text,
+        .binding = docs,
+        .bounds = actions.secondary,
+        .active = false,
+        .label = "Read Docs",
+        .variant = .outline,
+    });
 }
 
 fn renderFooter(scene: *ui.Scene, bounds: ui.Rect, content: ui.Rect) ui.RenderError!void {
@@ -752,22 +796,6 @@ fn actionButtonBounds(bounds: ui.Rect, y: f32, preferred_w: f32) ui.Rect {
     return ui.Rect.init(bounds.x, y, @min(preferred_w, @max(design.min_touch_target, bounds.w)), 36.0);
 }
 
-fn primaryButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id: u32) (ui.RenderError || interaction.Error)!void {
-    try nativeComponent(scene, collector, bounds, button_component.Button{ .id = id, .label = label });
-}
-
-fn primaryButtonWithTrailingIcon(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, icon_value: icon_component.Icon, id: u32) (ui.RenderError || interaction.Error)!void {
-    try nativeComponent(scene, collector, bounds, button_component.Button{ .id = id, .label = label, .icon_slot = icon_component.IconSlot.of(.trailing, icon_value) });
-}
-
-fn outlineButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id: u32) (ui.RenderError || interaction.Error)!void {
-    try nativeComponent(scene, collector, bounds, button_component.Button{ .id = id, .label = label, .variant = .outline });
-}
-
-fn outlineButtonWithTrailingIcon(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, icon_value: icon_component.Icon, id: u32) (ui.RenderError || interaction.Error)!void {
-    try nativeComponent(scene, collector, bounds, button_component.Button{ .id = id, .label = label, .variant = .outline, .icon_slot = icon_component.IconSlot.of(.trailing, icon_value) });
-}
-
 fn nativeBadge(scene: *ui.Scene, bounds: ui.Rect, label: []const u8) ui.RenderError!void {
     try (badge_component.Badge{
         .label = label,
@@ -837,8 +865,8 @@ test "landing page renders app sections and primary actions" {
     try std.testing.expect(hasText(scene.written(), "Click to Reveal ID"));
     try std.testing.expect(!hasText(scene.written(), "113 nodes online"));
     try std.testing.expect(hasPieSlice(scene.written()));
-    try std.testing.expect(hasHit(collector.written(), docs_button_id));
-    try std.testing.expect(hasHit(collector.written(), source_button_id));
+    try std.testing.expect(hasHit(collector.written(), app_navigation.topLevelButtonId(.docs)));
+    try std.testing.expect(hasHit(collector.written(), app_navigation.topLevelButtonId(.source)));
     try std.testing.expect(hasIcon(scene.written(), icon_component.Icon.named(.chevron_right)));
     try std.testing.expect(hasIcon(scene.written(), icon_component.Icon.named(.code)));
 }

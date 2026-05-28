@@ -1,6 +1,5 @@
 const std = @import("std");
 const component_gallery = @import("component_gallery.zig");
-const button_component = @import("ui/components/Button.zig");
 const card_component = @import("ui/components/Card.zig");
 const row_item_component = @import("ui/components/RowItem.zig");
 const interaction = @import("ui_interaction.zig");
@@ -28,42 +27,6 @@ const workspace_rail_bg = ui.Color{ .r = 37, .g = 37, .b = 38 };
 const workspace_sidebar_bg = ui.Color{ .r = 24, .g = 24, .b = 24 };
 const workspace_main_bg = ui.Color{ .r = 10, .g = 12, .b = 16 };
 const workspace_status_bg = ui.Color{ .r = 0, .g = 122, .b = 204 };
-
-const WorkspaceNavItem = struct {
-    binding: app_navigation.TopLevelBinding,
-
-    fn renderRail(self: WorkspaceNavItem, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, active_view: app_navigation.View, y: f32) !f32 {
-        const item = self.binding;
-        const item_bounds = ui.Rect.init(bounds.x + 6.0, y, bounds.w - 12.0, workspace_icon_button);
-        const active = active_view == item.route.view;
-        const component = button_component.IconButton{
-            .id = item.id,
-            .label = item.rail_label,
-            .icon = item.icon,
-            .variant = if (active) .secondary else .ghost,
-        };
-        try component.render(scene, item_bounds, .{ .style = design.style() });
-        try component.collectInteractions(collector, item_bounds);
-        if (active) try scene.pushRect(ui.Rect.init(bounds.x, item_bounds.y + 5.0, 2.0, item_bounds.h - 10.0), design.palette.primary, .fill, 0.0, 0.0);
-        return y + workspace_icon_button + 8.0;
-    }
-
-    fn renderSidebar(self: WorkspaceNavItem, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, active_view: app_navigation.View, y: f32) !f32 {
-        const item = self.binding;
-        const row_bounds = ui.Rect.init(bounds.x + 10.0, y, bounds.w - 20.0, 42.0);
-        const row = row_item_component.RowItem{
-            .id = item.id,
-            .title = item.row_title,
-            .detail = item.row_detail,
-        };
-        try row.render(scene, row_bounds, .{
-            .style = design.style(),
-            .control = .{ .active = active_view == item.route.view },
-        });
-        try row.collectInteractions(collector, row_bounds);
-        return y + 46.0;
-    }
-};
 
 pub const State = struct {
     route: app_navigation.Route = .{},
@@ -141,8 +104,15 @@ fn renderWorkspaceRail(scene: *ui.Scene, collector: *interaction.Collector, boun
     const items = app_navigation.topLevelWorkspaceBindings();
     var y = bounds.y + workspace_rail_pad;
     for (items) |item| {
-        const route_item = WorkspaceNavItem{ .binding = item };
-        y = try route_item.renderRail(scene, collector, bounds, active, y);
+        const item_bounds = ui.Rect.init(bounds.x + 6.0, y, bounds.w - 12.0, workspace_icon_button);
+        try app_chrome.renderNavItem(scene, collector, .{
+            .kind = .workspace_rail,
+            .binding = item,
+            .bounds = item_bounds,
+            .active = active == item.route.view,
+        });
+        if (active == item.route.view) try scene.pushRect(ui.Rect.init(bounds.x, item_bounds.y + 5.0, 2.0, item_bounds.h - 10.0), design.palette.primary, .fill, 0.0, 0.0);
+        y += workspace_icon_button + 8.0;
     }
 }
 
@@ -159,8 +129,14 @@ fn renderWorkspaceSidebar(scene: *ui.Scene, collector: *interaction.Collector, b
     var y = bounds.y + 68.0;
     const rows = app_navigation.topLevelWorkspaceBindings();
     for (rows) |row| {
-        const route_item = WorkspaceNavItem{ .binding = row };
-        y = try route_item.renderSidebar(scene, collector, bounds, route.view, y);
+        const row_bounds = ui.Rect.init(bounds.x + 10.0, y, bounds.w - 20.0, 42.0);
+        try app_chrome.renderNavItem(scene, collector, .{
+            .kind = .workspace_sidebar,
+            .binding = row,
+            .bounds = row_bounds,
+            .active = route.view == row.route.view,
+        });
+        y += 46.0;
     }
 }
 
@@ -365,10 +341,10 @@ test "app frame uses source editor as workspace shell without nested chrome" {
     try std.testing.expectEqual(@as(usize, 1), countText(scene.written(), "APP-OWNED VFS"));
     try std.testing.expectEqual(@as(usize, 0), countText(scene.written(), "artifact.wasm"));
 
-    try expectHitWithin(collector.written(), app_source.compile_button_id, ui.Rect.init(workspace_rail_w, 0.0, 1280.0 - workspace_rail_w, workspace_top_h));
-    try expectHitWithin(collector.written(), app_source.download_button_id, ui.Rect.init(workspace_rail_w, 0.0, 1280.0 - workspace_rail_w, workspace_top_h));
-    try expectHitWithin(collector.written(), app_source.launch_button_id, ui.Rect.init(workspace_rail_w, 0.0, 1280.0 - workspace_rail_w, workspace_top_h));
-    try expectHitWithin(collector.written(), app_source.reset_button_id, ui.Rect.init(workspace_rail_w, 0.0, 1280.0 - workspace_rail_w, workspace_top_h));
+    try expectHitWithin(collector.written(), app_navigation.sourceActionButtonId(.compile), ui.Rect.init(workspace_rail_w, 0.0, 1280.0 - workspace_rail_w, workspace_top_h));
+    try expectHitWithin(collector.written(), app_navigation.sourceActionButtonId(.download), ui.Rect.init(workspace_rail_w, 0.0, 1280.0 - workspace_rail_w, workspace_top_h));
+    try expectHitWithin(collector.written(), app_navigation.sourceActionButtonId(.launch), ui.Rect.init(workspace_rail_w, 0.0, 1280.0 - workspace_rail_w, workspace_top_h));
+    try expectHitWithin(collector.written(), app_navigation.sourceActionButtonId(.reset), ui.Rect.init(workspace_rail_w, 0.0, 1280.0 - workspace_rail_w, workspace_top_h));
     try expectHitWithin(collector.written(), app_source.explorer_file_id_base, ui.Rect.init(sidebar_x, top_bottom, workspace_sidebar_w, status_top - top_bottom));
     try expectHitWithin(collector.written(), app_source.editor_textarea_id, ui.Rect.init(main_x, top_bottom, 1280.0 - main_x, status_top - top_bottom));
 }

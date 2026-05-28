@@ -1,16 +1,10 @@
 const std = @import("std");
 const app_chrome = @import("app_chrome.zig");
 const app_design = @import("app_design.zig");
+const app_navigation = @import("app_navigation.zig");
 const icon_component = @import("ui/components/Icon.zig");
-const button_component = @import("ui/components/Button.zig");
-const component_common = @import("ui_component_common.zig");
 const interaction = @import("ui_interaction.zig");
 const ui = @import("ui.zig");
-
-pub const compile_button_id: u32 = 32_001;
-pub const download_button_id: u32 = 32_002;
-pub const launch_button_id: u32 = 32_003;
-pub const reset_button_id: u32 = 32_004;
 
 pub const State = struct {
     scroll_y: f32 = 0.0,
@@ -81,13 +75,41 @@ pub fn renderWorkspaceTopBar(scene: *ui.Scene, collector: *interaction.Collector
 
     const button_y = bounds.y + 10.0;
     var x = bounds.x + bounds.w - 408.0;
-    try button(scene, collector, ui.Rect.init(x, button_y, 92.0, 32.0), "Compile", compile_button_id, .primary, icon_component.Icon.named(.check), canCompile(state));
+    try app_chrome.renderActionItem(scene, collector, .{
+        .id = app_navigation.sourceActionButtonId(.compile),
+        .bounds = ui.Rect.init(x, button_y, 92.0, 32.0),
+        .label = "Compile",
+        .variant = .primary,
+        .icon_slot = icon_component.IconSlot.of(.leading, icon_component.Icon.named(.check)),
+        .enabled = canCompile(state),
+    });
     x += 100.0;
-    try button(scene, collector, ui.Rect.init(x, button_y, 92.0, 32.0), "Export", download_button_id, .secondary, icon_component.Icon.named(.storage), canExport(state));
+    try app_chrome.renderActionItem(scene, collector, .{
+        .id = app_navigation.sourceActionButtonId(.download),
+        .bounds = ui.Rect.init(x, button_y, 92.0, 32.0),
+        .label = "Export",
+        .variant = .secondary,
+        .icon_slot = icon_component.IconSlot.of(.leading, icon_component.Icon.named(.storage)),
+        .enabled = canExport(state),
+    });
     x += 100.0;
-    try button(scene, collector, ui.Rect.init(x, button_y, 84.0, 32.0), "Launch", launch_button_id, .secondary, icon_component.Icon.named(.route), canExport(state));
+    try app_chrome.renderActionItem(scene, collector, .{
+        .id = app_navigation.sourceActionButtonId(.launch),
+        .bounds = ui.Rect.init(x, button_y, 84.0, 32.0),
+        .label = "Launch",
+        .variant = .secondary,
+        .icon_slot = icon_component.IconSlot.of(.leading, icon_component.Icon.named(.route)),
+        .enabled = canExport(state),
+    });
     x += 92.0;
-    try button(scene, collector, ui.Rect.init(x, button_y, 84.0, 32.0), "Reset", reset_button_id, .ghost, icon_component.Icon.named(.trash), true);
+    try app_chrome.renderActionItem(scene, collector, .{
+        .id = app_navigation.sourceActionButtonId(.reset),
+        .bounds = ui.Rect.init(x, button_y, 84.0, 32.0),
+        .label = "Reset",
+        .variant = .ghost,
+        .icon_slot = icon_component.IconSlot.of(.leading, icon_component.Icon.named(.trash)),
+        .enabled = true,
+    });
 }
 
 pub fn renderWorkspaceSidebar(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
@@ -284,12 +306,6 @@ fn fill(scene: *ui.Scene, bounds: ui.Rect, color: ui.Color, radius: f32) ui.Rend
 
 fn textAt(scene: *ui.Scene, x: f32, y: f32, w: f32, h: f32, value: []const u8, color: ui.Color) ui.RenderError!void {
     try scene.pushText(ui.Rect.init(x, y, w, h), value, color);
-}
-
-fn button(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id: u32, variant: component_common.ButtonVariant, icon: icon_component.Icon, enabled: bool) !void {
-    const component = button_component.Button{ .id = id, .label = label, .variant = variant, .icon_slot = icon_component.IconSlot.named(.leading, icon.value) };
-    try component.render(scene, bounds, .{ .style = app_design.style(), .control = .{ .disabled = !enabled } });
-    try component.collectInteractions(collector, bounds);
 }
 
 fn isDigit(c: u8) bool {

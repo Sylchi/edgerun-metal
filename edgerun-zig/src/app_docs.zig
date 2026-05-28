@@ -3,22 +3,16 @@ const interaction = @import("ui_interaction.zig");
 const ui = @import("ui.zig");
 const text_component = @import("ui/components/Text.zig");
 const badge_component = @import("ui/components/Badge.zig");
-const button_component = @import("ui/components/Button.zig");
 const card_component = @import("ui/components/Card.zig");
 const icon_component = @import("ui/components/Icon.zig");
+const app_navigation = @import("app_navigation.zig");
 const component_gallery = @import("component_gallery.zig");
 const app_blog = @import("app_blog.zig");
 const app_chrome = @import("app_chrome.zig");
 const design = @import("app_design.zig");
 const app_layout = @import("app_layout.zig");
-const route_ids = @import("app_routing_ids.zig");
 
 const DocsError = ui.RenderError || interaction.Error || component_gallery.GalleryError;
-
-pub const component_catalog_button_id: u32 = route_ids.component_catalog_button_id;
-pub const academy_button_id: u32 = route_ids.academy_button_id;
-pub const source_button_id: u32 = route_ids.docs_source_button_id;
-pub const first_doc_page_button_id: u32 = route_ids.first_doc_page_button_id;
 
 const header_h: f32 = app_chrome.header_h;
 const content_wide: f32 = design.content_wide;
@@ -66,10 +60,6 @@ const media_card_min_w: f32 = 220.0;
 const media_card_h: f32 = 168.0;
 const media_preview_h: f32 = 74.0;
 const media_frame_gap: f32 = 8.0;
-const sample_button_id: u32 = 31_101;
-const sample_input_id: u32 = 31_102;
-const sample_switch_id: u32 = 31_103;
-const sample_tab_id: u32 = 31_104;
 
 const palette = design.palette;
 const fill = app_layout.fill;
@@ -357,9 +347,7 @@ pub fn indexBySlug(slug: []const u8) ?usize {
 }
 
 pub fn indexByHit(hit_id: u32) ?usize {
-    if (hit_id < first_doc_page_button_id) return null;
-    const index: usize = @intCast(hit_id - first_doc_page_button_id);
-    return if (index < doc_pages.len) index else null;
+    return app_navigation.docsPageIndexFromButton(hit_id);
 }
 
 pub fn pageAt(index: ?usize) DocPage {
@@ -423,24 +411,21 @@ fn renderSidebar(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui
     for (doc_pages, 0..) |page, index| {
         const active = (selected_index orelse 0) == index;
         const row = ui.Rect.init(bounds.x + 10.0, y, bounds.w - 20.0, row_h - 6.0);
-        try renderSidebarRow(scene, collector, row, page, first_doc_page_button_id + @as(u32, @intCast(index)), active);
+        try renderSidebarRow(scene, collector, row, page, app_navigation.docsPageButtonId(index), active);
         y += row_h;
     }
 }
 
 fn renderSidebarRow(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, page: DocPage, id: u32, active: bool) (ui.RenderError || interaction.Error)!void {
-    const row_component = button_component.Button{
+    try app_chrome.renderActionItem(scene, collector, .{
         .id = id,
+        .bounds = bounds,
         .label = page.section.label(),
+        .active = active,
         .variant = if (active) .secondary else .ghost,
-        .icon_slot = icon_component.IconSlot.of(.leading, page.icon_value),
-    };
-    try row_component.render(scene, bounds, .{
-        .style = app_chrome.style(),
-        .control = .{ .active = active },
         .control_size = .small,
+        .icon_slot = icon_component.IconSlot.of(.leading, page.icon_value),
     });
-    try row_component.collectInteractions(collector, bounds);
 }
 
 fn renderDocBody(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, compact: bool, page: DocPage, state: State) DocsError!void {
@@ -490,9 +475,26 @@ fn renderHero(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Re
     }
 
     if (page.section == .source) {
-        try primaryButton(scene, collector, heroActionBounds(inset, bounds), "Open source", source_button_id);
+        const source = app_navigation.topLevelBinding(.source);
+        try app_chrome.renderNavItem(scene, collector, .{
+            .kind = .top_text,
+            .binding = source,
+            .bounds = heroActionBounds(inset, bounds),
+            .active = false,
+            .label = "Open source",
+            .variant = .primary,
+            .icon_slot = icon_component.IconSlot.of(.trailing, icon_component.Icon.named(.chevron_right)),
+        });
     } else if (page.section == .authority) {
-        try outlineButton(scene, collector, heroActionBounds(inset, bounds), "Academy", academy_button_id);
+        const academy = app_navigation.topLevelBinding(.blog);
+        try app_chrome.renderNavItem(scene, collector, .{
+            .kind = .top_text,
+            .binding = academy,
+            .bounds = heroActionBounds(inset, bounds),
+            .active = false,
+            .label = "Academy",
+            .variant = .outline,
+        });
     }
 }
 
@@ -764,7 +766,7 @@ fn renderFeatureGrid(scene: *ui.Scene, collector: *interaction.Collector, bounds
             card_w,
             card_h,
         );
-        try renderFeatureCard(scene, collector, card, page, first_doc_page_button_id + @as(u32, @intCast(index)), page.section == active_section);
+        try renderFeatureCard(scene, collector, card, page, app_navigation.docsPageButtonId(index), page.section == active_section);
     }
 }
 
@@ -864,22 +866,6 @@ fn renderGrid(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
     }
 }
 
-fn primaryButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label_value: []const u8, id: u32) (ui.RenderError || interaction.Error)!void {
-    const component = button_component.Button{ .id = id, .label = label_value, .icon_slot = icon_component.IconSlot.of(.trailing, icon_component.Icon.named(.chevron_right)) };
-    try component.render(scene, bounds, .{
-        .style = appStyle(),
-    });
-    try component.collectInteractions(collector, bounds);
-}
-
-fn outlineButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label_value: []const u8, id: u32) (ui.RenderError || interaction.Error)!void {
-    const component = button_component.Button{ .id = id, .label = label_value, .variant = .outline };
-    try component.render(scene, bounds, .{
-        .style = appStyle(),
-    });
-    try component.collectInteractions(collector, bounds);
-}
-
 fn appStyle() ui.Style {
     var resolved = app_chrome.style();
     resolved.panel = palette.panel_alt;
@@ -911,8 +897,8 @@ test "docs page renders sidebar feature documentation" {
     try std.testing.expect(hasText(scene.written(), "Feature map"));
     try std.testing.expect(hasText(scene.written(), "Feature sections"));
     try std.testing.expect(hasText(scene.written(), "Contract and API"));
-    try std.testing.expect(hasHit(collector.written(), first_doc_page_button_id + @as(u32, @intCast(indexBySlug("media").?))));
-    try std.testing.expect(hasHit(collector.written(), first_doc_page_button_id + @as(u32, @intCast(indexBySlug("component-system").?))));
+        try std.testing.expect(hasHit(collector.written(), app_navigation.docsPageButtonId(indexBySlug("media").?)));
+        try std.testing.expect(hasHit(collector.written(), app_navigation.docsPageButtonId(indexBySlug("component-system").?)));
     try std.testing.expect(component_gallery.component_catalog.len > 0);
     try std.testing.expect(app_blog.posts.len > 0);
 }
@@ -1004,7 +990,7 @@ test "docs routing page documents the shared route table" {
 
     try std.testing.expect(hasText(scene.written(), "Routing"));
     try std.testing.expect(hasText(scene.written(), "/docs/components[/slug] -> Docs component subsection"));
-    try std.testing.expect(hasHit(collector.written(), first_doc_page_button_id + @as(u32, @intCast(routing_index))));
+    try std.testing.expect(hasHit(collector.written(), app_navigation.docsPageButtonId(routing_index)));
 }
 
 test "docs sidebar sections render their own page bodies" {
@@ -1062,13 +1048,13 @@ test "docs navigation surfaces render through shared components" {
     var collector = interaction.Collector.init(&regions);
     const page = doc_pages[0];
 
-    try renderSidebarRow(&scene, &collector, ui.Rect.init(20.0, 40.0, 240.0, row_h - 6.0), page, first_doc_page_button_id, true);
-    try renderFeatureCard(&scene, &collector, ui.Rect.init(20.0, 90.0, 420.0, featureCardHeight(420.0)), page, first_doc_page_button_id + 1, false);
+        try renderSidebarRow(&scene, &collector, ui.Rect.init(20.0, 40.0, 240.0, row_h - 6.0), page, app_navigation.docsPageButtonId(0), true);
+        try renderFeatureCard(&scene, &collector, ui.Rect.init(20.0, 90.0, 420.0, featureCardHeight(420.0)), page, app_navigation.docsPageButtonId(1), false);
 
     try std.testing.expect(hasText(scene.written(), page.section.label()));
     try std.testing.expect(hasText(scene.written(), page.title));
-    try std.testing.expect(hasHit(collector.written(), first_doc_page_button_id));
-    try std.testing.expect(hasHit(collector.written(), first_doc_page_button_id + 1));
+    try std.testing.expect(hasHit(collector.written(), app_navigation.docsPageButtonId(0)));
+    try std.testing.expect(hasHit(collector.written(), app_navigation.docsPageButtonId(1)));
 }
 
 fn hasText(commands: []const ui.Command, value: []const u8) bool {
