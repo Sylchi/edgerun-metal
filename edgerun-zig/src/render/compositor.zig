@@ -253,7 +253,7 @@ pub const Compositor = struct {
     fn markIrDamage(self: *Compositor, buffers: renderer_ir.Buffers) Error!void {
         for (renderer_ir.drawBatches(buffers)) |batch| switch (batch) {
             .rects, .overlay_rects => |rects| try self.markIrRectBuffer(rects),
-            .image, .text, .icon, .svg, .overlay_text, .overlay_icon => |vertices| try self.markTexturedVertices(vertices),
+            .image, .text, .svg, .overlay_text, .overlay_icon => |vertices| try self.markTexturedVertices(vertices),
             .icon_lines, .overlay_icon_lines => {},
         };
     }

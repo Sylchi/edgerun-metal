@@ -5119,6 +5119,7 @@ pub fn fromId(icon_id: u32) ?Icon {
 }
 
 pub fn providerName(value: Icon, provider: Provider) []const u8 {
+    @setEvalBranchQuota(30000);
     _ = provider;
     return tablerName(value);
 }

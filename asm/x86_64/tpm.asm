@@ -154,30 +154,20 @@ er_fn er_tpm_header_build
     push    rdx
 
     ; Store tag (16-bit big-endian)
-    mov     byte [rdi + 0], sil
-    shr     esi, 8
-    mov     byte [rdi + 1], sil
+    mov     eax, esi
+    xchg    al, ah
+    mov     [rdi], ax
 
     ; Store command size (32-bit big-endian)
     mov     eax, edx
-    mov     byte [rdi + 2], al
-    shr     eax, 8
-    mov     byte [rdi + 3], al
-    shr     eax, 8
-    mov     byte [rdi + 4], al
-    shr     eax, 8
-    mov     byte [rdi + 5], al
+    bswap   eax
+    mov     [rdi + 2], eax
 
     ; Store command code (32-bit big-endian)
     pop     rdx
     pop     rax
-    mov     byte [rdi + 6], al
-    shr     eax, 8
-    mov     byte [rdi + 7], al
-    shr     eax, 8
-    mov     byte [rdi + 8], al
-    shr     eax, 8
-    mov     byte [rdi + 9], al
+    bswap   eax
+    mov     [rdi + 6], eax
 
     pop     rax             ; return original buffer pointer
     ret
@@ -211,7 +201,9 @@ er_fn er_tpm_startup
 
 %ifdef HOSTED_TEST
     pop     rdi
+    push    rax
     call    _tpm_capture_tx
+    pop     rax
 %endif
     ret
 
@@ -235,21 +227,24 @@ er_fn er_tpm_get_random
     push    rdi
     push    rsi
 %endif
+    mov     esi, TPM_ST_NO_SESSIONS
     mov     edx, TPM_CMD_GET_RANDOM_LEN
     mov     ecx, TPM_CC_GET_RANDOM
     call    er_tpm_header_build
     test    rax, rax
     jz      .err
 
-    ; Store bytes requested at offset 10
-    pop     rcx        ; esi value
-    mov     byte [rax + 10], cl
+    ; Store bytes requested at offset 10 (big-endian)
+    pop     rcx        ; esi value = bytes_req
+    mov     byte [rax + 11], cl    ; LSB
     shr     ecx, 8
-    mov     byte [rax + 11], cl
+    mov     byte [rax + 10], cl    ; MSB
 
 %ifdef HOSTED_TEST
     pop     rdi
+    push    rax
     call    _tpm_capture_tx
+    pop     rax
 %endif
     ret
 
@@ -285,6 +280,9 @@ er_fn er_tpm_get_capability
     test    rax, rax
     jz      .err_pop3
 
+%ifdef HOSTED_TEST
+    pop     rdi             ; pop buf off stack before data-field pops
+%endif
     ; Offset 10: capability
     pop     rcx
     mov     byte [rax + 10], cl
@@ -316,15 +314,18 @@ er_fn er_tpm_get_capability
     mov     byte [rax + 21], cl
 
 %ifdef HOSTED_TEST
-    pop     rdi
     push    rax
-    call    _tpm_capture_tx
+    call    _tpm_capture_tx   ; rdi already = buf from earlier pop
     pop     rax
 %endif
     ret
 
 .err_pop3:
+%ifdef HOSTED_TEST
+    add     rsp, 32     ; pop rdi, rsi, rdx, rcx
+%else
     add     rsp, 24     ; pop rsi, rdx, rcx
+%endif
 .err:
     xor     eax, eax
     ret
@@ -409,7 +410,9 @@ er_fn er_tpm_parse_get_random
     pop     rcx        ; ecx = output buffer size
 
     ; Validate length fits both response and output
-    cmp     eax, esi - 12
+    mov     edx, esi
+    sub     edx, 12
+    cmp     eax, edx
     ja      .err_now2
     cmp     eax, ecx
     ja      .err_now2
@@ -461,9 +464,9 @@ er_fn er_tpm_has_algorithm
     cmp     esi, 19
     jb      .err
 
-    push    rdx             ; save algorithm to find
-    push    rdi
+    push    rdx
     push    rsi
+    push    rdi
 
     ; Verify capability field = TPM_CAP_ALGS
     add     rdi, 11
@@ -486,18 +489,15 @@ er_fn er_tpm_has_algorithm
     test    ecx, ecx
     jz      .not_found
 
-    ; Read algorithm ID from entry
     push    rdx
     push    rcx
     mov     rdi, rsi
     call    _tpm_get_be16
-    mov     dx, ax
     pop     rcx
-    pop     rdi             ; rdi = algorithm to find
-    cmp     dx, di
+    pop     rdi
+    cmp     ax, di
     je      .found
 
-    ; Next entry (6 bytes each)
     add     rsi, 6
     dec     ecx
     jmp     .loop
@@ -511,7 +511,7 @@ er_fn er_tpm_has_algorithm
     ret
 
 .err_pop4:
-    add     rsp, 32
+    add     rsp, 24
     jmp     .err
 .err_pop3:
     add     rsp, 24
@@ -542,8 +542,8 @@ er_fn er_tpm_has_command
     jb      .err
 
     push    rdx
-    push    rdi
     push    rsi
+    push    rdi
 
     ; Verify capability = TPM_CAP_COMMANDS
     add     rdi, 11
@@ -570,10 +570,9 @@ er_fn er_tpm_has_command
     mov     rdi, rsi
     call    _tpm_get_be32
     and     eax, 0x0000FFFF    ; low 16 bits = command index
-    mov     ecx, eax
+    pop     rcx
     pop     rdi
-    pop     rsi
-    cmp     rcx, rsi
+    cmp     ax, di
     je      .found
 
     add     rsi, 4
@@ -589,7 +588,7 @@ er_fn er_tpm_has_command
     ret
 
 .err_pop4:
-    add     rsp, 32
+    add     rsp, 24
 .err_pop3:
     add     rsp, 24
 .err:
@@ -610,18 +609,20 @@ _tpm_capture_tx:
     add     rdi, 2
     call    _tpm_get_be32
     mov     ecx, eax            ; ecx = command size
-    pop     rsi                 ; rsi = source (original command pointer)
 
-    push    rcx
     mov     rdi, er_tpm_tx_buffer
+    push    rcx
     mov     rsi, [er_tpm_tx_count]
     add     rdi, rsi
     pop     rcx
 
+    mov     rsi, [rsp]          ; rsi = saved rdi = cmd_buf pointer
+
     rep     movsb
 
+    sub     rdi, er_tpm_tx_buffer
     mov     [er_tpm_tx_count], rdi
-    sub     [er_tpm_tx_count], rsi
+    pop     rdi
     pop     rcx
     pop     rsi
     ret

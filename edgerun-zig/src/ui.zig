@@ -728,8 +728,7 @@ pub const Scene = struct {
     }
 
     pub fn pushIconQuad(self: *Scene, quad: IconQuad) RenderError!void {
-        if (quad.icon_id == 0) return;
-        if (self.clipRect(quad.bounds)) |clipped| try self.push(.{ .icon_quad = .{ .bounds = clipped, .icon_id = quad.icon_id, .color = quad.color } });
+        try self.pushSvgQuad(SvgQuad.fromIconQuad(quad));
     }
 
     pub fn pushSvgQuad(self: *Scene, quad: SvgQuad) RenderError!void {

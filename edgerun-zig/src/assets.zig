@@ -206,6 +206,7 @@ fn validateName(name: []const u8, limits: Limits) Status {
 }
 
 fn iconEntries(comptime provider: icon.Provider) [std.enums.values(icon.Icon).len]IconPackEntry {
+    @setEvalBranchQuota(30000);
     const values = std.enums.values(icon.Icon);
     var entries: [values.len]IconPackEntry = undefined;
     for (values, 0..) |value, i| {
@@ -250,7 +251,7 @@ test "icon font and emoji validation reject incomplete packs" {
     pack = tablerInterPack();
     const mismatched = [_]IconPackEntry{
         .{ .value = .activity, .provider_name = "activity" },
-        .{ .value = .app, .provider_name = "apps" },
+        .{ .value = .apps, .provider_name = "apps" },
     };
     pack.icons.provider = .lucide;
     pack.icons.entries = &mismatched;

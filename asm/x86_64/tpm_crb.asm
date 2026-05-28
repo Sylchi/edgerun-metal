@@ -61,6 +61,7 @@ er_crb_shadow: resb 4096        ; Simulated CRB register block
 ; Returns: rax = 0 on timeout, 1 on success
 ; =================================================================
 er_fn er_tpm_crb_wait
+%ifndef HOSTED_TEST
     mov     ecx, 20000000        ; ~10ms spin budget
 
 .loop:
@@ -78,6 +79,10 @@ er_fn er_tpm_crb_wait
 .done:
     mov     eax, 1
     ret
+%else
+    mov     eax, 1               ; hosted test: assume ready
+    ret
+%endif
 
 ; ==================================================================
 ; Send command buffer to CRB and receive response
@@ -159,25 +164,40 @@ er_fn er_tpm_crb_transfer
 
 %else
     ; HOSTED_TEST: simulate CRB transfer using shadow buffer.
-    ; Copy command to shadow DATA_BUFFER, then simulate a response.
-    ; For testing, we set up a known response in the shadow buffer
-    ; and copy it back.
-    push    rdx
-    mov     rdi, er_crb_shadow + CRB_DATA_BUFFER
+    ; Copy command to shadow CMD area (separate from response area).
+    ; The test pre-fills the response at CRB_DATA_BUFFER.
+    mov     rdi, er_crb_shadow + CRB_DATA_BUFFER + 0x1000
     mov     rsi, r12
     mov     rcx, r13
     rep     movsb
-    pop     rdx
 
-    ; Simulate response: copy shadow DATA_BUFFER to output
-    ; (the test must pre-fill the shadow response)
+    ; Read response size from shadow header (big-endian at +2)
+    mov     rdi, er_crb_shadow + CRB_DATA_BUFFER + 2
+    movzx   eax, byte [rdi]
+    shl     eax, 8
+    movzx   ecx, byte [rdi + 1]
+    or      eax, ecx
+    shl     eax, 8
+    movzx   ecx, byte [rdi + 2]
+    or      eax, ecx
+    shl     eax, 8
+    movzx   ecx, byte [rdi + 3]
+    or      eax, ecx
+    mov     ebx, eax            ; ebx = response size
+
+    ; Validate response size fits in output buffer
+    test    ebx, ebx
+    jz      .err_pop
+    cmp     ebx, r15d
+    ja      .err_pop
+
+    ; Copy actual response from shadow to output
     mov     rsi, er_crb_shadow + CRB_DATA_BUFFER
     mov     rdi, r14
-    mov     rcx, r15
+    mov     rcx, rbx
     rep     movsb
 
-    ; Return response size (from shadow RSP_SIZE or default to max)
-    mov     eax, r15d
+    mov     eax, ebx             ; return actual response size
 %endif
 
 .pop:

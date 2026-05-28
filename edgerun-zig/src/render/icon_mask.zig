@@ -22,7 +22,7 @@ const curve_stroke_coverage_boost: f32 = 0.05;
 const arc_stroke_coverage_boost: f32 = 1.4;
 const stroke_coverage_boost_floor: f32 = 0.5;
 const axis_epsilon: f32 = 0.00001;
-
+const svg_arc_denominator_min: f32 = 0.000001;
 const max_alpha: u8 = 255;
 const fill_sample_offsets = [_]icon_vector.Point{
     .{ .x = 0.25, .y = 0.25 },
@@ -262,7 +262,11 @@ fn flattenQuadratic(path: *Path, p0: icon_vector.Point, p1: icon_vector.Point, p
     var index: usize = 1;
     while (index <= curve_segments) : (index += 1) {
         const t = @as(f32, @floatFromInt(index)) / @as(f32, @floatFromInt(curve_segments));
-        path.append(icon_vector.bezierQuadraticPoint(p0, p1, p2, t));
+        const inv = 1.0 - t;
+        path.append(.{
+            .x = inv * inv * p0.x + 2.0 * inv * t * p1.x + t * t * p2.x,
+            .y = inv * inv * p0.y + 2.0 * inv * t * p1.y + t * t * p2.y,
+        });
     }
 }
 
@@ -270,17 +274,20 @@ fn flattenCubic(path: *Path, p0: icon_vector.Point, p1: icon_vector.Point, p2: i
     var index: usize = 1;
     while (index <= curve_segments) : (index += 1) {
         const t = @as(f32, @floatFromInt(index)) / @as(f32, @floatFromInt(curve_segments));
-        path.append(icon_vector.bezierCubicPoint(p0, p1, p2, p3, t));
+        const inv = 1.0 - t;
+        path.append(.{
+            .x = inv * inv * inv * p0.x + 3.0 * inv * inv * t * p1.x + 3.0 * inv * t * t * p2.x + t * t * t * p3.x,
+            .y = inv * inv * inv * p0.y + 3.0 * inv * inv * t * p1.y + 3.0 * inv * t * t * p2.y + t * t * t * p3.y,
+        });
     }
 }
 
 fn flattenArc(path: *Path, start: icon_vector.Point, arc: icon_vector.Arc) void {
-    const geometry = icon_vector.svgArcGeometry(start, arc) orelse {
+    const geometry = svgArcGeometry(start, arc) orelse {
         path.append(arc.end);
         return;
     };
-    const divisor: f32 = if (arc.large_arc) stroke_large_arc_step_divisor else stroke_arc_step_divisor;
-    const steps = @max(4, @as(usize, @intFromFloat(@ceil(@abs(geometry.delta) * divisor / math.pi))));
+    const steps = arcStepCount(geometry.delta, arc);
     var step: usize = 1;
     while (step <= steps) : (step += 1) path.append(geometry.pointAt(step, steps));
 }
@@ -332,12 +339,11 @@ fn strokeCubic(width: usize, height: usize, out: []u8, stroke_width: f32, stroke
 }
 
 fn strokeArc(width: usize, height: usize, out: []u8, stroke_width: f32, stroke_cap: icon_vector.StrokeCap, start: icon_vector.Point, arc: icon_vector.Arc) void {
-    const geometry = icon_vector.svgArcGeometry(start, arc) orelse {
+    const geometry = svgArcGeometry(start, arc) orelse {
         strokeSegment(width, height, out, stroke_width, start, arc.end, stroke_antialias_width, line_stroke_coverage_boost);
         return;
     };
-    const divisor: f32 = if (arc.large_arc) stroke_large_arc_step_divisor else stroke_arc_step_divisor;
-    const steps = @max(4, @as(usize, @intFromFloat(@ceil(@abs(geometry.delta) * divisor / math.pi))));
+    const steps = arcStepCount(geometry.delta, arc);
     var previous = start;
     var step: usize = 1;
     while (step <= steps) : (step += 1) {
@@ -378,10 +384,10 @@ fn strokeSegment(width: usize, height: usize, out: []u8, stroke_width: f32, star
     const x1 = end.x * @as(f32, @floatFromInt(width));
     const y1 = end.y * @as(f32, @floatFromInt(height));
     const radius = iconStroke(width, height, stroke_width) * 0.5;
-    const x_start = clampCoord(@intFromFloat(@floor(@min(x0, x1) - radius - antialias_width_value)), width);
-    const y_start = clampCoord(@intFromFloat(@floor(@min(y0, y1) - radius - antialias_width_value)), height);
-    const x_end = clampCoord(@intFromFloat(@ceil(@max(x0, x1) + radius + antialias_width_value)), width);
-    const y_end = clampCoord(@intFromFloat(@ceil(@max(y0, y1) + radius + antialias_width_value)), height);
+    const x_start = clampCoord(@intFromFloat(math.floorF(@min(x0, x1) - radius - antialias_width_value)), width);
+    const y_start = clampCoord(@intFromFloat(math.floorF(@min(y0, y1) - radius - antialias_width_value)), height);
+    const x_end = clampCoord(@intFromFloat(math.ceilF(@max(x0, x1) + radius + antialias_width_value)), width);
+    const y_end = clampCoord(@intFromFloat(math.ceilF(@max(y0, y1) + radius + antialias_width_value)), height);
     const dx = x1 - x0;
     const dy = y1 - y0;
     const denom = dx * dx + dy * dy;
@@ -397,7 +403,7 @@ fn strokeSegment(width: usize, height: usize, out: []u8, stroke_width: f32, star
             if (t < 0.0 or t > 1.0) continue;
             const cx = x0 + dx * t;
             const cy = y0 + dy * t;
-            const dist = @sqrt((px - cx) * (px - cx) + (py - cy) * (py - cy));
+            const dist = math.sqrtF((px - cx) * (px - cx) + (py - cy) * (py - cy));
             writeMax(out, width, x, y, strokeCoverageAlpha(radius, dist, antialias_width_value, boost_coverage, coverage_boost));
         }
     }
@@ -407,17 +413,17 @@ fn strokeRoundPoint(width: usize, height: usize, out: []u8, stroke_width: f32, p
     const cx = point.x * @as(f32, @floatFromInt(width));
     const cy = point.y * @as(f32, @floatFromInt(height));
     const radius = iconStroke(width, height, stroke_width) * 0.5;
-    const x_start = clampCoord(@intFromFloat(@floor(cx - radius - antialias_width_value)), width);
-    const y_start = clampCoord(@intFromFloat(@floor(cy - radius - antialias_width_value)), height);
-    const x_end = clampCoord(@intFromFloat(@ceil(cx + radius + antialias_width_value)), width);
-    const y_end = clampCoord(@intFromFloat(@ceil(cy + radius + antialias_width_value)), height);
+    const x_start = clampCoord(@intFromFloat(math.floorF(cx - radius - antialias_width_value)), width);
+    const y_start = clampCoord(@intFromFloat(math.floorF(cy - radius - antialias_width_value)), height);
+    const x_end = clampCoord(@intFromFloat(math.ceilF(cx + radius + antialias_width_value)), width);
+    const y_end = clampCoord(@intFromFloat(math.ceilF(cy + radius + antialias_width_value)), height);
     var y = y_start;
     while (y < y_end) : (y += 1) {
         var x = x_start;
         while (x < x_end) : (x += 1) {
             const px = @as(f32, @floatFromInt(x)) + 0.5 - cx;
             const py = @as(f32, @floatFromInt(y)) + 0.5 - cy;
-            const dist = @sqrt(px * px + py * py);
+            const dist = math.sqrtF(px * px + py * py);
             writeMax(out, width, x, y, strokeCoverageAlpha(radius, dist, antialias_width_value, true, coverage_boost));
         }
     }
@@ -501,7 +507,82 @@ fn isLeftOfEdge(start: icon_vector.Point, end: icon_vector.Point, point: icon_ve
     return (end.x - start.x) * (point.y - start.y) - (point.x - start.x) * (end.y - start.y);
 }
 
+const SvgArcGeometry = struct {
+    center: icon_vector.Point,
+    rx: f32,
+    ry: f32,
+    cos_phi: f32,
+    sin_phi: f32,
+    start_angle: f32,
+    delta: f32,
 
+    fn pointAt(self: SvgArcGeometry, step: usize, steps: usize) icon_vector.Point {
+        const angle = self.start_angle + self.delta * @as(f32, @floatFromInt(step)) / @as(f32, @floatFromInt(steps));
+        const xp = self.rx * @cos(angle);
+        const yp = self.ry * @sin(angle);
+        return .{
+            .x = self.center.x + self.cos_phi * xp - self.sin_phi * yp,
+            .y = self.center.y + self.sin_phi * xp + self.cos_phi * yp,
+        };
+    }
+};
+
+fn svgArcGeometry(start: icon_vector.Point, arc: icon_vector.Arc) ?SvgArcGeometry {
+    const rx_start = math.absF(arc.rx);
+    const ry_start = math.absF(arc.ry);
+    if (rx_start <= 0.0 or ry_start <= 0.0) return null;
+    const phi = arc.x_axis_rotation * math.pi / 180.0;
+    const cos_phi = @cos(phi);
+    const sin_phi = @sin(phi);
+    const dx = (start.x - arc.end.x) * 0.5;
+    const dy = (start.y - arc.end.y) * 0.5;
+    const x1p = cos_phi * dx + sin_phi * dy;
+    const y1p = -sin_phi * dx + cos_phi * dy;
+    var rx = rx_start;
+    var ry = ry_start;
+    const radius_scale = x1p * x1p / (rx * rx) + y1p * y1p / (ry * ry);
+    if (radius_scale > 1.0) {
+        const scale = math.sqrtF(radius_scale);
+        rx *= scale;
+        ry *= scale;
+    }
+    const numerator = rx * rx * ry * ry - rx * rx * y1p * y1p - ry * ry * x1p * x1p;
+    const denominator = rx * rx * y1p * y1p + ry * ry * x1p * x1p;
+    const sign: f32 = if (arc.large_arc == arc.sweep) -1.0 else 1.0;
+    const coefficient = sign * math.sqrtF(@max(0.0, numerator / @max(denominator, svg_arc_denominator_min)));
+    const cxp = coefficient * rx * y1p / ry;
+    const cyp = coefficient * -ry * x1p / rx;
+    const center = icon_vector.Point{
+        .x = cos_phi * cxp - sin_phi * cyp + (start.x + arc.end.x) * 0.5,
+        .y = sin_phi * cxp + cos_phi * cyp + (start.y + arc.end.y) * 0.5,
+    };
+    const v0 = icon_vector.Point{ .x = (x1p - cxp) / rx, .y = (y1p - cyp) / ry };
+    const v1 = icon_vector.Point{ .x = (-x1p - cxp) / rx, .y = (-y1p - cyp) / ry };
+    const start_angle = vectorAngle(.{ .x = 1.0, .y = 0.0 }, v0);
+    var delta = vectorAngle(v0, v1);
+    if (!arc.sweep and delta > 0.0) delta -= math.tau;
+    if (arc.sweep and delta < 0.0) delta += math.tau;
+    return .{
+        .center = center,
+        .rx = rx,
+        .ry = ry,
+        .cos_phi = cos_phi,
+        .sin_phi = sin_phi,
+        .start_angle = start_angle,
+        .delta = delta,
+    };
+}
+
+fn arcStepCount(delta: f32, arc: icon_vector.Arc) usize {
+    const divisor = if (arc.large_arc) stroke_large_arc_step_divisor else stroke_arc_step_divisor;
+    return @max(4, @as(usize, @intFromFloat(math.ceilF(math.absF(delta) * divisor / math.pi))));
+}
+
+fn vectorAngle(left: icon_vector.Point, right: icon_vector.Point) f32 {
+    const dot = left.x * right.x + left.y * right.y;
+    const det = left.x * right.y - left.y * right.x;
+    return math.atan2F(det, dot);
+}
 
 fn iconStroke(width: usize, height: usize, stroke_width: f32) f32 {
     return @max(min_stroke_px, @as(f32, @floatFromInt(@min(width, height))) * stroke_width);
@@ -520,7 +601,7 @@ fn writeMax(out: []u8, width: usize, x: usize, y: usize, alpha: u8) void {
 }
 
 fn isSlopedSegment(dx: f32, dy: f32) bool {
-    return @abs(dx) > axis_epsilon and @abs(dy) > axis_epsilon;
+    return math.absF(dx) > axis_epsilon and math.absF(dy) > axis_epsilon;
 }
 
 fn strokeCoverageAlpha(radius: f32, distance: f32, antialias_width_value: f32, boost_coverage: bool, coverage_boost: f32) u8 {
@@ -531,7 +612,7 @@ fn strokeCoverageAlpha(radius: f32, distance: f32, antialias_width_value: f32, b
         t + coverage_boost * (t - stroke_coverage_boost_floor) * (1.0 - t)
     else
         t;
-    return @intFromFloat(@round(math.clampF(coverage, 0.0, 1.0) * 255.0));
+    return @intCast(math.lrintF(math.clampF(coverage, 0.0, 1.0) * 255.0));
 }
 
 test "icon mask leaves github outline path unpainted" {

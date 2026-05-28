@@ -375,7 +375,7 @@ fn encodeIrBuffers(
         .rects, .overlay_rects => |rects| try encodeIrRects(rects, out),
         .image => |vertices| try encodeIrTextured(.image_quad, vertices, out),
         .text, .overlay_text => |vertices| try encodeIrTextured(.text_quad, vertices, out),
-        .icon, .svg, .overlay_icon => |instances| try encodeIrIcons(instances, out),
+        .svg, .overlay_icon => |instances| try encodeIrIcons(instances, out),
         .icon_lines, .overlay_icon_lines => {},
     };
 }
@@ -665,11 +665,11 @@ test "gpu renderer keeps semantic icon ids separate from texture atlas ids" {
     const expected_icon_id: u32 = 7;
     var storage = renderer_ir.FixedBuffers(0, 0, 1, 0, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
-    try renderer_ir.pushIcon(buffers, .base, .{
+    try renderer_ir.pushSvgQuad(buffers, .base, ui.SvgQuad.fromIconQuad(.{
         .bounds = .{ .x = 8, .y = 8, .w = 16, .h = 16 },
         .icon_id = expected_icon_id,
         .color = .accent,
-    });
+    }));
 
     var primitives: [4]Primitive = undefined;
     var tile_marks: [16]u8 = undefined;

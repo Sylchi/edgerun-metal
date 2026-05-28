@@ -10,6 +10,8 @@ pub const icon_line_vertex_float_stride: usize = 6;
 pub const image_vertex_float_stride: usize = 8;
 pub const font_first_px: u8 = 11;
 pub const font_last_px: u8 = 48;
+pub const font_first_char: u8 = 32;
+pub const font_last_char: u8 = 126;
 pub const textured_quad_vertex_count: usize = 6;
 
 pub const Error = error{
@@ -139,7 +141,6 @@ pub const DrawBatch = union(enum) {
     rects: []const f32,
     image: []const f32,
     text: []const f32,
-    icon: []const f32,
     svg: []const f32,
     icon_lines: []const f32,
     overlay_rects: []const f32,
@@ -265,12 +266,11 @@ pub fn validateBuffers(buffers: Buffers) Error!void {
     }
 }
 
-pub fn drawBatches(buffers: Buffers) [10]DrawBatch {
+pub fn drawBatches(buffers: Buffers) [9]DrawBatch {
     return .{
         .{ .rects = buffers.liveRects() },
         .{ .image = buffers.liveImageVertices() },
         .{ .text = buffers.liveTextVertices() },
-        .{ .icon = buffers.liveIconVertices() },
         .{ .svg = buffers.liveIconVertices() },
         .{ .icon_lines = buffers.liveIconLineVertices() },
         .{ .overlay_rects = buffers.liveOverlayRects() },
@@ -285,7 +285,6 @@ pub fn batchValues(batch: DrawBatch) []const f32 {
         .rects,
         .image,
         .text,
-        .icon,
         .svg,
         .icon_lines,
         .overlay_rects,
@@ -370,7 +369,7 @@ pub fn packSceneRange(buffers: Buffers, sources: Sources, scene_commands: []cons
         .rect => |rect| try pushRect(buffers, layer, rect.bounds, rect.color, rect.color2, rect.radius, rect.shadow, rectModeCode(rect.mode)),
         .border => |border| try pushRect(buffers, layer, border.bounds, border.color, .clear, 0, 0, rectModeCode(.border)),
         .text => |text_command| try pushText(buffers, sources.font, layer, text_command.origin, text_command.value, text_command.color, text_command.alignment),
-        .icon_quad => |quad| try pushIcon(buffers, layer, quad),
+        .icon_quad => |quad| try pushSvgQuad(buffers, layer, ui.SvgQuad.fromIconQuad(quad)),
         .svg_quad => |quad| try pushSvgQuad(buffers, layer, quad),
         .image_quad => |quad| if (layer == .base) try pushImage(buffers, quad),
         .drag_source, .drop_target, .text_quad, .transition => {},
@@ -425,7 +424,7 @@ pub fn pushText(buffers: Buffers, font: FontAtlas, layer: Layer, bounds: ui.Rect
     const baseline = bounds.y + metrics_value.ascender;
     const clip = textClipBounds(bounds, metrics_value);
     var index: usize = 0;
-    while (ui.nextCodepoint(value, &index)) |codepoint| {
+    while (nextCodepoint(value, &index)) |codepoint| {
         const glyph_value = (try font.glyph(font.context, codepoint, px)) orelse continue;
         if (glyph_value.w > 0.0 and glyph_value.h > 0.0) {
             const quad = snapGlyphQuad(pen_x + glyph_value.left, baseline + glyph_value.top, glyph_value.w, glyph_value.h);
@@ -434,37 +433,6 @@ pub fn pushText(buffers: Buffers, font: FontAtlas, layer: Layer, bounds: ui.Rect
         pen_x += glyph_value.advance;
         if (pen_x > bounds.x + bounds.w) break;
     }
-}
-
-pub fn pushIcon(buffers: Buffers, layer: Layer, quad: ui.IconQuad) Error!void {
-    if (!quad.bounds.valid() or quad.icon_id == 0) return;
-    const buffer = switch (layer) {
-        .base => buffers.icon_vertices,
-        .overlay => buffers.overlay_icon_vertices,
-    };
-    const len = switch (layer) {
-        .base => buffers.icon_vertex_len,
-        .overlay => buffers.overlay_icon_vertex_len,
-    };
-    if (len.* + icon_instance_float_stride > buffer.len) return error.Budget;
-    const values = [_]f32{
-        quad.bounds.x,
-        quad.bounds.y,
-        quad.bounds.w,
-        quad.bounds.h,
-        channel(quad.color.r),
-        channel(quad.color.g),
-        channel(quad.color.b),
-        channel(quad.color.a),
-        @floatFromInt(quad.icon_id),
-    };
-    @memcpy(buffer[len.* .. len.* + icon_instance_float_stride], &values);
-    len.* += icon_instance_float_stride;
-}
-
-pub fn pushImage(buffers: Buffers, quad: ui.Quad) Error!void {
-    if (!quad.bounds.valid() or quad.atlas_id == 0) return;
-    try pushClippedTexturedQuad(buffers.image_vertices, buffers.image_vertex_len, quad.bounds, quad.bounds, quad.u0, quad.v0, quad.u1, quad.v1, quad.color);
 }
 
 pub fn pushSvgQuad(buffers: Buffers, layer: Layer, quad: ui.SvgQuad) Error!void {
@@ -491,6 +459,11 @@ pub fn pushSvgQuad(buffers: Buffers, layer: Layer, quad: ui.SvgQuad) Error!void 
     };
     @memcpy(buffer[len.* .. len.* + icon_instance_float_stride], &values);
     len.* += icon_instance_float_stride;
+}
+
+pub fn pushImage(buffers: Buffers, quad: ui.Quad) Error!void {
+    if (!quad.bounds.valid() or quad.atlas_id == 0) return;
+    try pushClippedTexturedQuad(buffers.image_vertices, buffers.image_vertex_len, quad.bounds, quad.bounds, quad.u0, quad.v0, quad.u1, quad.v1, quad.color);
 }
 
 pub fn pushClippedTexturedQuad(buffer: []f32, len: *usize, clip: ui.Rect, bounds: ui.Rect, tex_u0: f32, tex_v0: f32, tex_u1: f32, tex_v1: f32, color: ui.Color) Error!void {
@@ -590,7 +563,7 @@ pub fn batchPrimitiveCount(batch: DrawBatch) Error!usize {
     return switch (batch) {
         .rects, .overlay_rects => |rects| rectCount(rects),
         .image, .text, .overlay_text => |vertices| texturedQuadCount(vertices),
-        .icon, .svg, .overlay_icon => |instances| iconCount(instances),
+        .svg, .overlay_icon => |instances| iconCount(instances),
         .icon_lines, .overlay_icon_lines => 0,
     };
 }
@@ -858,6 +831,29 @@ fn expectSourceDoesNotContain(source: []const u8, needle: []const u8) !void {
     try std.testing.expectEqual(@as(?usize, null), std.mem.indexOf(u8, source, needle));
 }
 
+fn nextCodepoint(value: []const u8, index: *usize) ?u21 {
+    if (index.* >= value.len) return null;
+    const start = index.*;
+
+    const codepoint_len = std.unicode.utf8ByteSequenceLength(value[start]) catch {
+        index.* = start + 1;
+        return std.unicode.replacement_character;
+    };
+
+    const end = start + codepoint_len;
+    if (end > value.len) {
+        index.* = value.len;
+        return std.unicode.replacement_character;
+    }
+
+    const codepoint = std.unicode.utf8Decode(value[start..end]) catch {
+        index.* = start + 1;
+        return std.unicode.replacement_character;
+    };
+    index.* = end;
+    return codepoint;
+}
+
 test "renderer ir owns svg source lookup and command painting boundaries" {
     try expectSourceDoesNotContain(@embedFile("backends/software.zig"), "@import(\"icon_svg.zig\")");
     try expectSourceDoesNotContain(@embedFile("icon_line_buffer.zig"), "@import(\"icon_svg.zig\")");
@@ -1060,17 +1056,16 @@ test "renderer ir iterates rects and textured quads" {
 test "renderer ir owns canonical draw batch order" {
     var storage = FixedBuffers(1, textured_quad_vertex_count, 1, textured_quad_vertex_count, 1, textured_quad_vertex_count, 1, 1, 1){};
     const batches = drawBatches(storage.buffers());
-    try std.testing.expectEqual(@as(usize, 10), batches.len);
+    try std.testing.expectEqual(@as(usize, 9), batches.len);
     try std.testing.expectEqual(DrawBatch{ .rects = storage.rects[0..0] }, batches[0]);
     try std.testing.expectEqual(DrawBatch{ .image = storage.image_vertices[0..0] }, batches[1]);
     try std.testing.expectEqual(DrawBatch{ .text = storage.text_vertices[0..0] }, batches[2]);
-    try std.testing.expectEqual(DrawBatch{ .icon = storage.icon_vertices[0..0] }, batches[3]);
-    try std.testing.expectEqual(DrawBatch{ .svg = storage.icon_vertices[0..0] }, batches[4]);
-    try std.testing.expectEqual(DrawBatch{ .icon_lines = storage.icon_line_vertices[0..0] }, batches[5]);
-    try std.testing.expectEqual(DrawBatch{ .overlay_rects = storage.overlay_rects[0..0] }, batches[6]);
-    try std.testing.expectEqual(DrawBatch{ .overlay_text = storage.overlay_text_vertices[0..0] }, batches[7]);
-    try std.testing.expectEqual(DrawBatch{ .overlay_icon = storage.overlay_icon_vertices[0..0] }, batches[8]);
-    try std.testing.expectEqual(DrawBatch{ .overlay_icon_lines = storage.overlay_icon_line_vertices[0..0] }, batches[9]);
+    try std.testing.expectEqual(DrawBatch{ .svg = storage.icon_vertices[0..0] }, batches[3]);
+    try std.testing.expectEqual(DrawBatch{ .icon_lines = storage.icon_line_vertices[0..0] }, batches[4]);
+    try std.testing.expectEqual(DrawBatch{ .overlay_rects = storage.overlay_rects[0..0] }, batches[5]);
+    try std.testing.expectEqual(DrawBatch{ .overlay_text = storage.overlay_text_vertices[0..0] }, batches[6]);
+    try std.testing.expectEqual(DrawBatch{ .overlay_icon = storage.overlay_icon_vertices[0..0] }, batches[7]);
+    try std.testing.expectEqual(DrawBatch{ .overlay_icon_lines = storage.overlay_icon_line_vertices[0..0] }, batches[8]);
     try std.testing.expectEqual(storage.image_vertices[0..0], batchValues(batches[1]));
 }
 

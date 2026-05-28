@@ -20,6 +20,7 @@ pub const stroke_scale: f32 = 2.0 / 24.0;
 pub const half: f32 = 0.5;
 pub const quarter_arc_step: f32 = math.pi / 32.0;
 pub const min_arc_segments: usize = 4;
+pub const min_arc_denominator: f32 = 0.000001;
 pub const color_channel_max: f32 = 255.0;
 pub const max_instance_vertex_count: usize = 16384;
 pub const max_instance_float_count: usize = max_instance_vertex_count * vertex_float_stride;
@@ -226,7 +227,11 @@ fn quadratic(out: []f32, out_len: *usize, bounds: ui.Rect, color: ui.Color, star
     var step: usize = 1;
     while (step <= curve_segments) : (step += 1) {
         const t = @as(f32, @floatFromInt(step)) / @as(f32, @floatFromInt(curve_segments));
-        const next = icon_vector.bezierQuadraticPoint(start, control, end, t);
+        const mt = 1.0 - t;
+        const next = icon_vector.Point{
+            .x = mt * mt * start.x + 2.0 * mt * t * control.x + t * t * end.x,
+            .y = mt * mt * start.y + 2.0 * mt * t * control.y + t * t * end.y,
+        };
         try segment(out, out_len, bounds, color, previous, next);
         previous = next;
     }
@@ -246,7 +251,11 @@ fn quadraticPath(
     var step: usize = 1;
     while (step <= curve_segments) : (step += 1) {
         const t = @as(f32, @floatFromInt(step)) / @as(f32, @floatFromInt(curve_segments));
-        const next = icon_vector.bezierQuadraticPoint(start, control, end, t);
+        const mt = 1.0 - t;
+        const next = icon_vector.Point{
+            .x = mt * mt * start.x + 2.0 * mt * t * control.x + t * t * end.x,
+            .y = mt * mt * start.y + 2.0 * mt * t * control.y + t * t * end.y,
+        };
         try path.appendSegment(out, out_len, bounds, color, previous, next);
         previous = next;
     }
@@ -257,7 +266,11 @@ fn cubic(out: []f32, out_len: *usize, bounds: ui.Rect, color: ui.Color, start: i
     var step: usize = 1;
     while (step <= curve_segments) : (step += 1) {
         const t = @as(f32, @floatFromInt(step)) / @as(f32, @floatFromInt(curve_segments));
-        const next = icon_vector.bezierCubicPoint(start, control0, control1, end, t);
+        const mt = 1.0 - t;
+        const next = icon_vector.Point{
+            .x = mt * mt * mt * start.x + 3.0 * mt * mt * t * control0.x + 3.0 * mt * t * t * control1.x + t * t * t * end.x,
+            .y = mt * mt * mt * start.y + 3.0 * mt * mt * t * control0.y + 3.0 * mt * t * t * control1.y + t * t * t * end.y,
+        };
         try segment(out, out_len, bounds, color, previous, next);
         previous = next;
     }
@@ -278,22 +291,63 @@ fn cubicPath(
     var step: usize = 1;
     while (step <= curve_segments) : (step += 1) {
         const t = @as(f32, @floatFromInt(step)) / @as(f32, @floatFromInt(curve_segments));
-        const next = icon_vector.bezierCubicPoint(start, control0, control1, end, t);
+        const mt = 1.0 - t;
+        const next = icon_vector.Point{
+            .x = mt * mt * mt * start.x + 3.0 * mt * mt * t * control0.x + 3.0 * mt * t * t * control1.x + t * t * t * end.x,
+            .y = mt * mt * mt * start.y + 3.0 * mt * mt * t * control0.y + 3.0 * mt * t * t * control1.y + t * t * t * end.y,
+        };
         try path.appendSegment(out, out_len, bounds, color, previous, next);
         previous = next;
     }
 }
 
 fn arc(out: []f32, out_len: *usize, bounds: ui.Rect, color: ui.Color, start: icon_vector.Point, value: icon_vector.Arc) Error!void {
-    const geometry = icon_vector.svgArcGeometry(start, value) orelse {
+    var rx = math.absF(value.rx);
+    var ry = math.absF(value.ry);
+    if (rx == 0.0 or ry == 0.0) {
         try segment(out, out_len, bounds, color, start, value.end);
         return;
+    }
+    const phi = value.x_axis_rotation * math.pi / 180.0;
+    const cos_phi = @cos(phi);
+    const sin_phi = @sin(phi);
+    const dx = (start.x - value.end.x) * half;
+    const dy = (start.y - value.end.y) * half;
+    const x1p = cos_phi * dx + sin_phi * dy;
+    const y1p = -sin_phi * dx + cos_phi * dy;
+    const radius_scale = x1p * x1p / (rx * rx) + y1p * y1p / (ry * ry);
+    if (radius_scale > 1.0) {
+        const scale = math.sqrtF(radius_scale);
+        rx *= scale;
+        ry *= scale;
+    }
+    const numerator = rx * rx * ry * ry - rx * rx * y1p * y1p - ry * ry * x1p * x1p;
+    const denominator = rx * rx * y1p * y1p + ry * ry * x1p * x1p;
+    const sign: f32 = if (value.large_arc == value.sweep) 1.0 else -1.0;
+    const coefficient = sign * math.sqrtF(@max(0.0, numerator / @max(denominator, min_arc_denominator)));
+    const cxp = coefficient * rx * y1p / ry;
+    const cyp = coefficient * -ry * x1p / rx;
+    const center = icon_vector.Point{
+        .x = cos_phi * cxp - sin_phi * cyp + (start.x + value.end.x) * half,
+        .y = sin_phi * cxp + cos_phi * cyp + (start.y + value.end.y) * half,
     };
-    const steps: usize = @max(min_arc_segments, @as(usize, @intFromFloat(@ceil(@abs(geometry.delta) / quarter_arc_step))));
+    const v0 = icon_vector.Point{ .x = (x1p - cxp) / rx, .y = (y1p - cyp) / ry };
+    const v1 = icon_vector.Point{ .x = (-x1p - cxp) / rx, .y = (-y1p - cyp) / ry };
+    const start_angle = vectorAngle(.{ .x = 1.0, .y = 0.0 }, v0);
+    var delta = vectorAngle(v0, v1);
+    if (!value.sweep and delta > 0.0) delta -= math.tau;
+    if (value.sweep and delta < 0.0) delta += math.tau;
+    const steps: usize = @max(min_arc_segments, @as(usize, @intFromFloat(math.ceilF(math.absF(delta) / quarter_arc_step))));
     var previous = start;
     var step: usize = 1;
     while (step <= steps) : (step += 1) {
-        const next = geometry.pointAt(step, steps);
+        const angle = start_angle + delta * @as(f32, @floatFromInt(step)) / @as(f32, @floatFromInt(steps));
+        const xp = rx * @cos(angle);
+        const yp = ry * @sin(angle);
+        const next = icon_vector.Point{
+            .x = center.x + cos_phi * xp - sin_phi * yp,
+            .y = center.y + sin_phi * xp + cos_phi * yp,
+        };
         try segment(out, out_len, bounds, color, previous, next);
         previous = next;
     }
@@ -308,15 +362,52 @@ fn arcPath(
     start: icon_vector.Point,
     value: icon_vector.Arc,
 ) Error!void {
-    const geometry = icon_vector.svgArcGeometry(start, value) orelse {
+    var rx = math.absF(value.rx);
+    var ry = math.absF(value.ry);
+    if (rx == 0.0 or ry == 0.0) {
         try path.appendSegment(out, out_len, bounds, color, start, value.end);
         return;
+    }
+    const phi = value.x_axis_rotation * math.pi / 180.0;
+    const cos_phi = @cos(phi);
+    const sin_phi = @sin(phi);
+    const dx = (start.x - value.end.x) * half;
+    const dy = (start.y - value.end.y) * half;
+    const x1p = cos_phi * dx + sin_phi * dy;
+    const y1p = -sin_phi * dx + cos_phi * dy;
+    const radius_scale = x1p * x1p / (rx * rx) + y1p * y1p / (ry * ry);
+    if (radius_scale > 1.0) {
+        const scale = math.sqrtF(radius_scale);
+        rx *= scale;
+        ry *= scale;
+    }
+    const numerator = rx * rx * ry * ry - rx * rx * y1p * y1p - ry * ry * x1p * x1p;
+    const denominator = rx * rx * y1p * y1p + ry * ry * x1p * x1p;
+    const sign: f32 = if (value.large_arc == value.sweep) 1.0 else -1.0;
+    const coefficient = sign * math.sqrtF(@max(0.0, numerator / @max(denominator, min_arc_denominator)));
+    const cxp = coefficient * rx * y1p / ry;
+    const cyp = coefficient * -ry * x1p / rx;
+    const center = icon_vector.Point{
+        .x = cos_phi * cxp - sin_phi * cyp + (start.x + value.end.x) * half,
+        .y = sin_phi * cxp + cos_phi * cyp + (start.y + value.end.y) * half,
     };
-    const steps: usize = @max(min_arc_segments, @as(usize, @intFromFloat(@ceil(@abs(geometry.delta) / quarter_arc_step))));
+    const v0 = icon_vector.Point{ .x = (x1p - cxp) / rx, .y = (y1p - cyp) / ry };
+    const v1 = icon_vector.Point{ .x = (-x1p - cxp) / rx, .y = (-y1p - cyp) / ry };
+    const start_angle = vectorAngle(.{ .x = 1.0, .y = 0.0 }, v0);
+    var delta = vectorAngle(v0, v1);
+    if (!value.sweep and delta > 0.0) delta -= math.tau;
+    if (value.sweep and delta < 0.0) delta += math.tau;
+    const steps: usize = @max(min_arc_segments, @as(usize, @intFromFloat(math.ceilF(math.absF(delta) / quarter_arc_step))));
     var previous = start;
     var step: usize = 1;
     while (step <= steps) : (step += 1) {
-        const next = geometry.pointAt(step, steps);
+        const angle = start_angle + delta * @as(f32, @floatFromInt(step)) / @as(f32, @floatFromInt(steps));
+        const xp = rx * @cos(angle);
+        const yp = ry * @sin(angle);
+        const next = icon_vector.Point{
+            .x = center.x + cos_phi * xp - sin_phi * yp,
+            .y = center.y + sin_phi * xp + cos_phi * yp,
+        };
         try path.appendSegment(out, out_len, bounds, color, previous, next);
         previous = next;
     }
@@ -343,7 +434,7 @@ fn segmentWithNormals(
     const y1 = bounds.y + bounds.h * end.y;
     const dx = x1 - x0;
     const dy = y1 - y0;
-    const length = @sqrt(dx * dx + dy * dy);
+    const length = math.sqrtF(dx * dx + dy * dy);
     if (length <= min_line_length) return;
     const width = @max(min_stroke_width, @min(bounds.w, bounds.h) * stroke_scale) * half;
     const start_nx = start_normal.x * width;
@@ -361,7 +452,7 @@ fn segmentWithNormals(
 fn unitNormal(start: icon_vector.Point, end: icon_vector.Point) ?Point {
     const dx = end.x - start.x;
     const dy = end.y - start.y;
-    const length = @sqrt(dx * dx + dy * dy);
+    const length = math.sqrtF(dx * dx + dy * dy);
     if (length <= min_line_length) return null;
     return .{ .x = -dy / length, .y = dx / length };
 }
@@ -369,7 +460,7 @@ fn unitNormal(start: icon_vector.Point, end: icon_vector.Point) ?Point {
 fn mergeNormals(first: Point, second: Point) Point {
     const nx = first.x + second.x;
     const ny = first.y + second.y;
-    const length = @sqrt(nx * nx + ny * ny);
+    const length = math.sqrtF(nx * nx + ny * ny);
     if (length <= min_line_length) return second;
     return .{ .x = nx / length, .y = ny / length };
 }
@@ -400,11 +491,11 @@ fn channel(value: u8) f32 {
 
 test "icon line buffer packs browser-ready vertices" {
     var instances_storage = renderer_ir.FixedBuffers(0, 0, 1, 0, 0, 0, 0, 0, 0){};
-    try renderer_ir.pushIcon(instances_storage.buffers(), .base, .{
+    try renderer_ir.pushSvgQuad(instances_storage.buffers(), .base, ui.SvgQuad.fromIconQuad(.{
         .bounds = ui.Rect.init(10, 20, 24, 24),
         .color = .accent,
         .icon_id = @intFromEnum(@import("../icon.zig").Icon.search) + 1,
-    });
+    }));
     var out: [line_vertex_count * vertex_float_stride * filled_circle_segments * 8]f32 = undefined;
     var out_len: usize = 0;
     try packIconInstances(instances_storage.buffers().liveIconVertices(), &out, &out_len);
@@ -423,6 +514,7 @@ test "icon line buffer publishes packed vertex layout" {
 }
 
 test "single icon line buffer budget fits built in icons" {
+    @setEvalBranchQuota(20000);
     const icon = @import("../icon.zig");
     var out: [max_instance_float_count]f32 = undefined;
     inline for (@typeInfo(icon.Icon).@"enum".fields) |field| {

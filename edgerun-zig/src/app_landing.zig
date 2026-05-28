@@ -405,7 +405,7 @@ fn renderPrinciples(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
     const cols = columns(bounds, if (bounds.w > 720.0) 2 else 1, 16.0);
     const items = [_]struct { icon_component.Icon, []const u8, []const u8, []const u8 }{
         .{ icon_component.Icon.named(.code), "Compiler Inside", "The app ships with compiler bytes.", "compile(source_object)" },
-        .{ icon_component.Icon.named(.app), "Built-In UI", "Components render through one IR.", "scene -> render_ir" },
+        .{ icon_component.Icon.named(.apps), "Built-In UI", "Components render through one IR.", "scene -> render_ir" },
         .{ icon_component.Icon.named(.shield), "Receipts For Work", "Execution leaves a checkable trail.", "work -> receipt" },
         .{ icon_component.Icon.named(.cpu), "Runs Across Targets", "Web, native, CPU, GPU, hardware.", "present(target)" },
     };

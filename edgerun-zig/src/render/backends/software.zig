@@ -153,7 +153,7 @@ pub const Surface = struct {
         if (buffers.hasTexturedVertices()) return error.UnsupportedIrPrimitive;
         for (renderer_ir.drawBatches(buffers)) |batch| switch (batch) {
             .rects, .overlay_rects => |rects| try self.rasterizeIrRects(rects),
-            .icon, .svg, .overlay_icon => |icons| try self.rasterizeIrIcons(icons),
+            .svg, .overlay_icon => |icons| try self.rasterizeIrIcons(icons),
             .image, .text, .overlay_text, .icon_lines, .overlay_icon_lines => {},
         };
     }
@@ -171,7 +171,7 @@ pub const Surface = struct {
             .rects, .overlay_rects => |rects| try self.rasterizeIrRects(rects),
             .image => |vertices| if (image_texture) |texture| try self.rasterizeRgbaTexturedQuads(vertices, texture),
             .text, .overlay_text => |vertices| try self.rasterizeBilinearAlphaTexturedQuads(vertices, resources.font),
-            .icon, .svg, .overlay_icon => |icons| try self.rasterizeIrIcons(icons),
+            .svg, .overlay_icon => |icons| try self.rasterizeIrIcons(icons),
             .icon_lines, .overlay_icon_lines => {},
         };
     }
@@ -215,10 +215,10 @@ pub const Surface = struct {
     }
 
     fn rasterizeRgbaTexturedQuad(self: Surface, quad: renderer_ir.TexturedQuad, texture: RgbaTexture) Error!void {
-        const px0 = clampCoord(@intFromFloat(@floor(quad.bounds.x)), self.width);
-        const py0 = clampCoord(@intFromFloat(@floor(quad.bounds.y)), self.height);
-        const px1 = clampCoord(@intFromFloat(@ceil(quad.bounds.x + quad.bounds.w)), self.width);
-        const py1 = clampCoord(@intFromFloat(@ceil(quad.bounds.y + quad.bounds.h)), self.height);
+        const px0 = clampCoord(@intFromFloat(math.floorF(quad.bounds.x)), self.width);
+        const py0 = clampCoord(@intFromFloat(math.floorF(quad.bounds.y)), self.height);
+        const px1 = clampCoord(@intFromFloat(math.ceilF(quad.bounds.x + quad.bounds.w)), self.width);
+        const py1 = clampCoord(@intFromFloat(math.ceilF(quad.bounds.y + quad.bounds.h)), self.height);
         if (px1 <= px0 or py1 <= py0) return;
 
         var y = py0;
@@ -245,10 +245,10 @@ pub const Surface = struct {
     }
 
     fn rasterizeBilinearAlphaTexturedQuad(self: Surface, quad: renderer_ir.TexturedQuad, atlas: AlphaAtlas) Error!void {
-        const px0 = clampCoord(@intFromFloat(@floor(quad.bounds.x)), self.width);
-        const py0 = clampCoord(@intFromFloat(@floor(quad.bounds.y)), self.height);
-        const px1 = clampCoord(@intFromFloat(@ceil(quad.bounds.x + quad.bounds.w)), self.width);
-        const py1 = clampCoord(@intFromFloat(@ceil(quad.bounds.y + quad.bounds.h)), self.height);
+        const px0 = clampCoord(@intFromFloat(math.floorF(quad.bounds.x)), self.width);
+        const py0 = clampCoord(@intFromFloat(math.floorF(quad.bounds.y)), self.height);
+        const px1 = clampCoord(@intFromFloat(math.ceilF(quad.bounds.x + quad.bounds.w)), self.width);
+        const py1 = clampCoord(@intFromFloat(math.ceilF(quad.bounds.y + quad.bounds.h)), self.height);
         if (px1 <= px0 or py1 <= py0) return;
 
         const u_step = (quad.u1 - quad.u0) / quad.bounds.w;
@@ -316,7 +316,7 @@ pub const Surface = struct {
             .r = blendChannelFloat(color.r, dst.r, a, inv),
             .g = blendChannelFloat(color.g, dst.g, a, inv),
             .b = blendChannelFloat(color.b, dst.b, a, inv),
-            .a = @intFromFloat(@round(math.clampF(@as(f32, @floatFromInt(color.a)) * a + @as(f32, @floatFromInt(dst.a)) * inv, 0.0, 255.0))),
+            .a = @intCast(math.lrintF(math.clampF(@as(f32, @floatFromInt(color.a)) * a + @as(f32, @floatFromInt(dst.a)) * inv, 0.0, 255.0))),
         };
     }
 
@@ -347,10 +347,10 @@ pub const Surface = struct {
     }
 
     fn fill(self: Surface, bounds: ui.Rect, color: ui.Color) void {
-        const x0 = clampCoord(@intFromFloat(@floor(bounds.x)), self.width);
-        const y0 = clampCoord(@intFromFloat(@floor(bounds.y)), self.height);
-        const x1 = clampCoord(@intFromFloat(@ceil(bounds.x + bounds.w)), self.width);
-        const y1 = clampCoord(@intFromFloat(@ceil(bounds.y + bounds.h)), self.height);
+        const x0 = clampCoord(@intFromFloat(math.floorF(bounds.x)), self.width);
+        const y0 = clampCoord(@intFromFloat(math.floorF(bounds.y)), self.height);
+        const x1 = clampCoord(@intFromFloat(math.ceilF(bounds.x + bounds.w)), self.width);
+        const y1 = clampCoord(@intFromFloat(math.ceilF(bounds.y + bounds.h)), self.height);
         if (x1 <= x0 or y1 <= y0) return;
 
         var y = y0;
@@ -365,10 +365,10 @@ pub const Surface = struct {
             self.fill(bounds, top_color);
             return;
         }
-        const x0 = clampCoord(@intFromFloat(@floor(bounds.x)), self.width);
-        const y0 = clampCoord(@intFromFloat(@floor(bounds.y)), self.height);
-        const x1 = clampCoord(@intFromFloat(@ceil(bounds.x + bounds.w)), self.width);
-        const y1 = clampCoord(@intFromFloat(@ceil(bounds.y + bounds.h)), self.height);
+        const x0 = clampCoord(@intFromFloat(math.floorF(bounds.x)), self.width);
+        const y0 = clampCoord(@intFromFloat(math.floorF(bounds.y)), self.height);
+        const x1 = clampCoord(@intFromFloat(math.ceilF(bounds.x + bounds.w)), self.width);
+        const y1 = clampCoord(@intFromFloat(math.ceilF(bounds.y + bounds.h)), self.height);
         if (x1 <= x0 or y1 <= y0) return;
 
         var y = y0;
@@ -386,10 +386,10 @@ pub const Surface = struct {
     }
 
     fn fillRoundedPaint(self: Surface, icon_bounds: ui.Rect, bounds: ui.Rect, paint: IconPaint, radius: f32) void {
-        const x0 = clampCoord(@intFromFloat(@floor(bounds.x)), self.width);
-        const y0 = clampCoord(@intFromFloat(@floor(bounds.y)), self.height);
-        const x1 = clampCoord(@intFromFloat(@ceil(bounds.x + bounds.w)), self.width);
-        const y1 = clampCoord(@intFromFloat(@ceil(bounds.y + bounds.h)), self.height);
+        const x0 = clampCoord(@intFromFloat(math.floorF(bounds.x)), self.width);
+        const y0 = clampCoord(@intFromFloat(math.floorF(bounds.y)), self.height);
+        const x1 = clampCoord(@intFromFloat(math.ceilF(bounds.x + bounds.w)), self.width);
+        const y1 = clampCoord(@intFromFloat(math.ceilF(bounds.y + bounds.h)), self.height);
         var y = y0;
         while (y < y1) : (y += 1) {
             var x = x0;
@@ -422,10 +422,10 @@ pub const Surface = struct {
     }
 
     fn fillRoundedCorner(self: Surface, bounds: ui.Rect, corner: ui.Rect, color: ui.Color, radius: f32) void {
-        const x0 = clampCoord(@intFromFloat(@floor(corner.x)), self.width);
-        const y0 = clampCoord(@intFromFloat(@floor(corner.y)), self.height);
-        const x1 = clampCoord(@intFromFloat(@ceil(corner.x + corner.w)), self.width);
-        const y1 = clampCoord(@intFromFloat(@ceil(corner.y + corner.h)), self.height);
+        const x0 = clampCoord(@intFromFloat(math.floorF(corner.x)), self.width);
+        const y0 = clampCoord(@intFromFloat(math.floorF(corner.y)), self.height);
+        const x1 = clampCoord(@intFromFloat(math.ceilF(corner.x + corner.w)), self.width);
+        const y1 = clampCoord(@intFromFloat(math.ceilF(corner.y + corner.h)), self.height);
         if (x1 <= x0 or y1 <= y0) return;
 
         var y = y0;
@@ -442,10 +442,10 @@ pub const Surface = struct {
     fn strokeRounded(self: Surface, bounds: ui.Rect, color: ui.Color, radius: f32, width: f32) void {
         const outer = bounds;
         const inner = bounds.insetUniform(width);
-        const x0 = clampCoord(@intFromFloat(@floor(outer.x)), self.width);
-        const y0 = clampCoord(@intFromFloat(@floor(outer.y)), self.height);
-        const x1 = clampCoord(@intFromFloat(@ceil(outer.x + outer.w)), self.width);
-        const y1 = clampCoord(@intFromFloat(@ceil(outer.y + outer.h)), self.height);
+        const x0 = clampCoord(@intFromFloat(math.floorF(outer.x)), self.width);
+        const y0 = clampCoord(@intFromFloat(math.floorF(outer.y)), self.height);
+        const x1 = clampCoord(@intFromFloat(math.ceilF(outer.x + outer.w)), self.width);
+        const y1 = clampCoord(@intFromFloat(math.ceilF(outer.y + outer.h)), self.height);
         if (x1 <= x0 or y1 <= y0) return;
 
         var y = y0;
@@ -464,10 +464,10 @@ pub const Surface = struct {
     fn strokeRoundedPaint(self: Surface, icon_bounds: ui.Rect, bounds: ui.Rect, paint: IconPaint, radius: f32, width: f32) void {
         const outer = bounds;
         const inner = bounds.insetUniform(width);
-        const x0 = clampCoord(@intFromFloat(@floor(outer.x)), self.width);
-        const y0 = clampCoord(@intFromFloat(@floor(outer.y)), self.height);
-        const x1 = clampCoord(@intFromFloat(@ceil(outer.x + outer.w)), self.width);
-        const y1 = clampCoord(@intFromFloat(@ceil(outer.y + outer.h)), self.height);
+        const x0 = clampCoord(@intFromFloat(math.floorF(outer.x)), self.width);
+        const y0 = clampCoord(@intFromFloat(math.floorF(outer.y)), self.height);
+        const x1 = clampCoord(@intFromFloat(math.ceilF(outer.x + outer.w)), self.width);
+        const y1 = clampCoord(@intFromFloat(math.ceilF(outer.y + outer.h)), self.height);
         if (x1 <= x0 or y1 <= y0) return;
 
         var y = y0;
@@ -489,10 +489,10 @@ pub const Surface = struct {
         shadow_color.a = scaleByte(color.a, cpu_shadow_alpha);
         if (shadow_color.a == 0) return;
         const outer = bounds.insetUniform(-spread);
-        const x0 = clampCoord(@intFromFloat(@floor(outer.x)), self.width);
-        const y0 = clampCoord(@intFromFloat(@floor(outer.y)), self.height);
-        const x1 = clampCoord(@intFromFloat(@ceil(outer.x + outer.w)), self.width);
-        const y1 = clampCoord(@intFromFloat(@ceil(outer.y + outer.h)), self.height);
+        const x0 = clampCoord(@intFromFloat(math.floorF(outer.x)), self.width);
+        const y0 = clampCoord(@intFromFloat(math.floorF(outer.y)), self.height);
+        const x1 = clampCoord(@intFromFloat(math.ceilF(outer.x + outer.w)), self.width);
+        const y1 = clampCoord(@intFromFloat(math.ceilF(outer.y + outer.h)), self.height);
         if (x1 <= x0 or y1 <= y0) return;
 
         var y = y0;
@@ -539,8 +539,8 @@ pub const Surface = struct {
         var alpha: [renderer_icon_mask.max_pixels]u8 = undefined;
         const mask = renderer_icon_mask.rasterizeIconAlpha(icon_id, width, height, &alpha) catch return false;
         if (!mask.painted) return false;
-        const x0 = clampCoord(@intFromFloat(@floor(bounds.x)), self.width);
-        const y0 = clampCoord(@intFromFloat(@floor(bounds.y)), self.height);
+        const x0 = clampCoord(@intFromFloat(math.floorF(bounds.x)), self.width);
+        const y0 = clampCoord(@intFromFloat(math.floorF(bounds.y)), self.height);
         var row: usize = 0;
         while (row < mask.height) : (row += 1) {
             const y = y0 + row;
@@ -759,10 +759,10 @@ pub const Surface = struct {
         if (radius_x <= 0.0 or radius_y <= 0.0) return;
         const object_bounds = ui.Rect.init(cx - radius_x, cy - radius_y, radius_x * 2.0, radius_y * 2.0);
         const area = ui.Rect.init(cx - radius_x - antialias_width, cy - radius_y - antialias_width, (radius_x + antialias_width) * 2.0, (radius_y + antialias_width) * 2.0);
-        const x_start = clampCoord(@intFromFloat(@floor(area.x)), self.width);
-        const y_start = clampCoord(@intFromFloat(@floor(area.y)), self.height);
-        const x_end = clampCoord(@intFromFloat(@ceil(area.x + area.w)), self.width);
-        const y_end = clampCoord(@intFromFloat(@ceil(area.y + area.h)), self.height);
+        const x_start = clampCoord(@intFromFloat(math.floorF(area.x)), self.width);
+        const y_start = clampCoord(@intFromFloat(math.floorF(area.y)), self.height);
+        const x_end = clampCoord(@intFromFloat(math.ceilF(area.x + area.w)), self.width);
+        const y_end = clampCoord(@intFromFloat(math.ceilF(area.y + area.h)), self.height);
         var py_i = y_start;
         while (py_i < y_end) : (py_i += 1) {
             var px_i = x_start;
@@ -771,7 +771,7 @@ pub const Surface = struct {
                 const py = @as(f32, @floatFromInt(py_i)) + pixel_center;
                 const nx = (px - cx) / radius_x;
                 const ny = (py - cy) / radius_y;
-                const distance = (1.0 - @sqrt(nx * nx + ny * ny)) * @min(radius_x, radius_y);
+                const distance = (1.0 - math.sqrtF(nx * nx + ny * ny)) * @min(radius_x, radius_y);
                 const alpha = coverageAlpha(0.0, -distance);
                 if (alpha != 0) self.blendPixel(px_i, py_i, paint.colorAt(bounds, object_bounds, px_i, py_i), alpha);
             }
@@ -801,10 +801,10 @@ pub const Surface = struct {
         const top = @min(y0, y1) - radius;
         const right = @max(x0, x1) + radius;
         const bottom = @max(y0, y1) + radius;
-        const x_start = clampCoord(@intFromFloat(@floor(left)), self.width);
-        const y_start = clampCoord(@intFromFloat(@floor(top)), self.height);
-        const x_end = clampCoord(@intFromFloat(@ceil(right)), self.width);
-        const y_end = clampCoord(@intFromFloat(@ceil(bottom)), self.height);
+        const x_start = clampCoord(@intFromFloat(math.floorF(left)), self.width);
+        const y_start = clampCoord(@intFromFloat(math.floorF(top)), self.height);
+        const x_end = clampCoord(@intFromFloat(math.ceilF(right)), self.width);
+        const y_end = clampCoord(@intFromFloat(math.ceilF(bottom)), self.height);
         const dx = x1 - x0;
         const dy = y1 - y0;
         const denom = dx * dx + dy * dy;
@@ -819,7 +819,7 @@ pub const Surface = struct {
                 const t = math.clampF(((px - x0) * dx + (py - y0) * dy) / denom, 0.0, 1.0);
                 const cx = x0 + dx * t;
                 const cy = y0 + dy * t;
-                const dist = @sqrt((px - cx) * (px - cx) + (py - cy) * (py - cy));
+                const dist = math.sqrtF((px - cx) * (px - cx) + (py - cy) * (py - cy));
                 const alpha = strokeCoverageAlpha(radius, dist, active_icon_tuning.stroke_antialias_width, boost_coverage, active_icon_tuning.line_stroke_coverage_boost);
                 if (alpha != 0) self.blendPixelMaxAlpha(x, y, color, alpha);
             }
@@ -832,11 +832,11 @@ pub const Surface = struct {
         const x1 = bounds.x + bounds.w * x1n;
         const y1 = bounds.y + bounds.h * y1n;
         const radius = iconStroke(bounds, stroke_width) * 0.5;
-        const object_bounds = ui.Rect.init(@min(x0, x1) - radius, @min(y0, y1) - radius, @abs(x1 - x0) + radius * 2.0, @abs(y1 - y0) + radius * 2.0);
-        const x_start = clampCoord(@intFromFloat(@floor(object_bounds.x)), self.width);
-        const y_start = clampCoord(@intFromFloat(@floor(object_bounds.y)), self.height);
-        const x_end = clampCoord(@intFromFloat(@ceil(object_bounds.x + object_bounds.w)), self.width);
-        const y_end = clampCoord(@intFromFloat(@ceil(object_bounds.y + object_bounds.h)), self.height);
+        const object_bounds = ui.Rect.init(@min(x0, x1) - radius, @min(y0, y1) - radius, math.absF(x1 - x0) + radius * 2.0, math.absF(y1 - y0) + radius * 2.0);
+        const x_start = clampCoord(@intFromFloat(math.floorF(object_bounds.x)), self.width);
+        const y_start = clampCoord(@intFromFloat(math.floorF(object_bounds.y)), self.height);
+        const x_end = clampCoord(@intFromFloat(math.ceilF(object_bounds.x + object_bounds.w)), self.width);
+        const y_end = clampCoord(@intFromFloat(math.ceilF(object_bounds.y + object_bounds.h)), self.height);
         const dx = x1 - x0;
         const dy = y1 - y0;
         const denom = dx * dx + dy * dy;
@@ -851,7 +851,7 @@ pub const Surface = struct {
                 const t = math.clampF(((px - x0) * dx + (py - y0) * dy) / denom, 0.0, 1.0);
                 const cx = x0 + dx * t;
                 const cy = y0 + dy * t;
-                const dist = @sqrt((px - cx) * (px - cx) + (py - cy) * (py - cy));
+                const dist = math.sqrtF((px - cx) * (px - cx) + (py - cy) * (py - cy));
                 const alpha = strokeCoverageAlpha(radius, dist, active_icon_tuning.stroke_antialias_width, boost_coverage, active_icon_tuning.line_stroke_coverage_boost);
                 if (alpha != 0) self.blendPixelMaxAlpha(x, y, paint.colorAt(bounds, object_bounds, x, y), alpha);
             }
@@ -877,10 +877,10 @@ pub const Surface = struct {
         const cy = bounds.y + bounds.h * yn;
         const radius = iconStroke(bounds, stroke_width) * 0.5;
         const object_bounds = ui.Rect.init(cx - radius, cy - radius, radius * 2.0, radius * 2.0);
-        const x_start = clampCoord(@intFromFloat(@floor(object_bounds.x)), self.width);
-        const y_start = clampCoord(@intFromFloat(@floor(object_bounds.y)), self.height);
-        const x_end = clampCoord(@intFromFloat(@ceil(object_bounds.x + object_bounds.w)), self.width);
-        const y_end = clampCoord(@intFromFloat(@ceil(object_bounds.y + object_bounds.h)), self.height);
+        const x_start = clampCoord(@intFromFloat(math.floorF(object_bounds.x)), self.width);
+        const y_start = clampCoord(@intFromFloat(math.floorF(object_bounds.y)), self.height);
+        const x_end = clampCoord(@intFromFloat(math.ceilF(object_bounds.x + object_bounds.w)), self.width);
+        const y_end = clampCoord(@intFromFloat(math.ceilF(object_bounds.y + object_bounds.h)), self.height);
         var y = y_start;
         while (y < y_end) : (y += 1) {
             var x = x_start;
@@ -889,7 +889,7 @@ pub const Surface = struct {
                 const py = @as(f32, @floatFromInt(y)) + pixel_center;
                 const dx = px - cx;
                 const dy = py - cy;
-                const alpha = strokeCoverageAlpha(radius, @sqrt(dx * dx + dy * dy), active_icon_tuning.round_cap_antialias_width, true, 0.0);
+                const alpha = strokeCoverageAlpha(radius, math.sqrtF(dx * dx + dy * dy), active_icon_tuning.round_cap_antialias_width, true, 0.0);
                 if (alpha != 0) self.blendPixelMaxAlpha(x, y, paint.colorAt(bounds, object_bounds, x, y), alpha);
             }
         }
@@ -902,7 +902,7 @@ pub const Surface = struct {
         const y_cap = bounds.y + bounds.h * cap_yn;
         const dx = x_cap - x_inner;
         const dy = y_cap - y_inner;
-        const length = @sqrt(dx * dx + dy * dy);
+        const length = math.sqrtF(dx * dx + dy * dy);
         if (length <= icon_axis_epsilon) return;
         const ux = dx / length;
         const uy = dy / length;
@@ -911,10 +911,10 @@ pub const Surface = struct {
         const cy = y_cap + uy * radius * 0.5;
         const span = radius + antialias_width;
         const object_bounds = ui.Rect.init(cx - span, cy - span, span * 2.0, span * 2.0);
-        const x_start = clampCoord(@intFromFloat(@floor(object_bounds.x)), self.width);
-        const y_start = clampCoord(@intFromFloat(@floor(object_bounds.y)), self.height);
-        const x_end = clampCoord(@intFromFloat(@ceil(object_bounds.x + object_bounds.w)), self.width);
-        const y_end = clampCoord(@intFromFloat(@ceil(object_bounds.y + object_bounds.h)), self.height);
+        const x_start = clampCoord(@intFromFloat(math.floorF(object_bounds.x)), self.width);
+        const y_start = clampCoord(@intFromFloat(math.floorF(object_bounds.y)), self.height);
+        const x_end = clampCoord(@intFromFloat(math.ceilF(object_bounds.x + object_bounds.w)), self.width);
+        const y_end = clampCoord(@intFromFloat(math.ceilF(object_bounds.y + object_bounds.h)), self.height);
         var y = y_start;
         while (y < y_end) : (y += 1) {
             var x = x_start;
@@ -922,8 +922,8 @@ pub const Surface = struct {
                 const px = @as(f32, @floatFromInt(x)) + pixel_center - cx;
                 const py = @as(f32, @floatFromInt(y)) + pixel_center - cy;
                 const along = px * ux + py * uy;
-                const across = @abs(px * -uy + py * ux);
-                const outside = @max(@abs(along) - radius * 0.5, across - radius);
+                const across = math.absF(px * -uy + py * ux);
+                const outside = @max(math.absF(along) - radius * 0.5, across - radius);
                 const alpha = coverageAlpha(0.0, outside);
                 if (alpha != 0) self.blendPixelMaxAlpha(x, y, paint.colorAt(bounds, object_bounds, x, y), alpha);
             }
@@ -994,10 +994,10 @@ pub const Surface = struct {
         const top = @min(y0, y1) - radius;
         const right = @max(x0, x1) + radius;
         const bottom = @max(y0, y1) + radius;
-        const x_start = mask.clampX(@intFromFloat(@floor(left)));
-        const y_start = mask.clampY(@intFromFloat(@floor(top)));
-        const x_end = mask.clampX(@intFromFloat(@ceil(right)));
-        const y_end = mask.clampY(@intFromFloat(@ceil(bottom)));
+        const x_start = mask.clampX(@intFromFloat(math.floorF(left)));
+        const y_start = mask.clampY(@intFromFloat(math.floorF(top)));
+        const x_end = mask.clampX(@intFromFloat(math.ceilF(right)));
+        const y_end = mask.clampY(@intFromFloat(math.ceilF(bottom)));
         const dx = x1 - x0;
         const dy = y1 - y0;
         const denom = dx * dx + dy * dy;
@@ -1013,7 +1013,7 @@ pub const Surface = struct {
                 if (t < 0.0 or t > 1.0) continue;
                 const cx = x0 + dx * t;
                 const cy = y0 + dy * t;
-                const dist = @sqrt((px - cx) * (px - cx) + (py - cy) * (py - cy));
+                const dist = math.sqrtF((px - cx) * (px - cx) + (py - cy) * (py - cy));
                 const alpha = strokeCoverageAlpha(radius, dist, antialias_width_value, boost_coverage, coverage_boost);
                 if (alpha != 0) mask.writeMax(x, y, alpha);
             }
@@ -1026,10 +1026,10 @@ pub const Surface = struct {
         const cx = bounds.x + bounds.w * point.x;
         const cy = bounds.y + bounds.h * point.y;
         const radius = iconStroke(bounds, stroke_width) * 0.5;
-        const x_start = mask.clampX(@intFromFloat(@floor(cx - radius)));
-        const y_start = mask.clampY(@intFromFloat(@floor(cy - radius)));
-        const x_end = mask.clampX(@intFromFloat(@ceil(cx + radius)));
-        const y_end = mask.clampY(@intFromFloat(@ceil(cy + radius)));
+        const x_start = mask.clampX(@intFromFloat(math.floorF(cx - radius)));
+        const y_start = mask.clampY(@intFromFloat(math.floorF(cy - radius)));
+        const x_end = mask.clampX(@intFromFloat(math.ceilF(cx + radius)));
+        const y_end = mask.clampY(@intFromFloat(math.ceilF(cy + radius)));
         var y = y_start;
         while (y < y_end) : (y += 1) {
             var x = x_start;
@@ -1038,7 +1038,7 @@ pub const Surface = struct {
                 const py = @as(f32, @floatFromInt(y)) + icon_pixel_center;
                 const dx = px - cx;
                 const dy = py - cy;
-                const dist = @sqrt(dx * dx + dy * dy);
+                const dist = math.sqrtF(dx * dx + dy * dy);
                 const alpha = strokeCoverageAlpha(radius, dist, antialias_width_value, true, coverage_boost);
                 if (alpha != 0) mask.writeMax(x, y, alpha);
             }
@@ -1054,7 +1054,7 @@ pub const Surface = struct {
         const y_cap = bounds.y + bounds.h * cap.y;
         const dx = x_cap - x_inner;
         const dy = y_cap - y_inner;
-        const length = @sqrt(dx * dx + dy * dy);
+        const length = math.sqrtF(dx * dx + dy * dy);
         if (length <= icon_axis_epsilon) return;
         const ux = dx / length;
         const uy = dy / length;
@@ -1062,10 +1062,10 @@ pub const Surface = struct {
         const cx = x_cap + ux * radius * 0.5;
         const cy = y_cap + uy * radius * 0.5;
         const span = radius + antialias_width_value;
-        const x_start = mask.clampX(@intFromFloat(@floor(cx - span)));
-        const y_start = mask.clampY(@intFromFloat(@floor(cy - span)));
-        const x_end = mask.clampX(@intFromFloat(@ceil(cx + span)));
-        const y_end = mask.clampY(@intFromFloat(@ceil(cy + span)));
+        const x_start = mask.clampX(@intFromFloat(math.floorF(cx - span)));
+        const y_start = mask.clampY(@intFromFloat(math.floorF(cy - span)));
+        const x_end = mask.clampX(@intFromFloat(math.ceilF(cx + span)));
+        const y_end = mask.clampY(@intFromFloat(math.ceilF(cy + span)));
         var y = y_start;
         while (y < y_end) : (y += 1) {
             var x = x_start;
@@ -1073,9 +1073,9 @@ pub const Surface = struct {
                 const px = @as(f32, @floatFromInt(x)) + icon_pixel_center - cx;
                 const py = @as(f32, @floatFromInt(y)) + icon_pixel_center - cy;
                 const along = px * ux + py * uy;
-                const across = @abs(px * -uy + py * ux);
+                const across = math.absF(px * -uy + py * ux);
                 _ = coverage_boost;
-                const outside = @max(@abs(along) - radius * 0.5, across - radius);
+                const outside = @max(math.absF(along) - radius * 0.5, across - radius);
                 const alpha = coverageAlpha(0.0, outside);
                 if (alpha != 0) mask.writeMax(x, y, alpha);
             }
@@ -1097,7 +1097,7 @@ pub const Surface = struct {
         const incoming = unitVector(p1, p0) orelse return;
         const outgoing = unitVector(p2, p1) orelse return;
         const turn = cross2(incoming, outgoing);
-        if (@abs(turn) <= icon_axis_epsilon) return;
+        if (math.absF(turn) <= icon_axis_epsilon) return;
         const side: f32 = if (turn > 0.0) -1.0 else 1.0;
         const n0 = icon_vector.Point{ .x = -incoming.y * side, .y = incoming.x * side };
         const n1 = icon_vector.Point{ .x = -outgoing.y * side, .y = outgoing.x * side };
@@ -1118,10 +1118,10 @@ pub const Surface = struct {
         const top = @min(a.y, @min(b.y, c.y));
         const right = @max(a.x, @max(b.x, c.x));
         const bottom = @max(a.y, @max(b.y, c.y));
-        const x_start = mask.clampX(@intFromFloat(@floor(left - antialias_width)));
-        const y_start = mask.clampY(@intFromFloat(@floor(top - antialias_width)));
-        const x_end = mask.clampX(@intFromFloat(@ceil(right + antialias_width)));
-        const y_end = mask.clampY(@intFromFloat(@ceil(bottom + antialias_width)));
+        const x_start = mask.clampX(@intFromFloat(math.floorF(left - antialias_width)));
+        const y_start = mask.clampY(@intFromFloat(math.floorF(top - antialias_width)));
+        const x_end = mask.clampX(@intFromFloat(math.ceilF(right + antialias_width)));
+        const y_end = mask.clampY(@intFromFloat(math.ceilF(bottom + antialias_width)));
         var y = y_start;
         while (y < y_end) : (y += 1) {
             var x = x_start;
@@ -1221,10 +1221,10 @@ pub const Surface = struct {
     fn fillIconPath(self: Surface, bounds: ui.Rect, paint: IconPaint, path: *const IconPathState, clip: *const IconClipState) void {
         if (path.fill_point_len < min_fill_path_points) return;
         const paint_bounds = fillPathPaintBounds(bounds, path);
-        const x_start = clampCoord(@intFromFloat(@floor(bounds.x)), self.width);
-        const y_start = clampCoord(@intFromFloat(@floor(bounds.y)), self.height);
-        const x_end = clampCoord(@intFromFloat(@ceil(bounds.x + bounds.w)), self.width);
-        const y_end = clampCoord(@intFromFloat(@ceil(bounds.y + bounds.h)), self.height);
+        const x_start = clampCoord(@intFromFloat(math.floorF(bounds.x)), self.width);
+        const y_start = clampCoord(@intFromFloat(math.floorF(bounds.y)), self.height);
+        const x_end = clampCoord(@intFromFloat(math.ceilF(bounds.x + bounds.w)), self.width);
+        const y_end = clampCoord(@intFromFloat(math.ceilF(bounds.y + bounds.h)), self.height);
         var y = y_start;
         while (y < y_end) : (y += 1) {
             var x = x_start;
@@ -1237,10 +1237,10 @@ pub const Surface = struct {
 
     fn fillClipPathMask(self: Surface, bounds: ui.Rect, path: *const IconPathState, clip_mask: *IconAlphaMask) void {
         if (path.fill_point_len < min_fill_path_points) return;
-        const x_start = clampCoord(@intFromFloat(@floor(bounds.x)), self.width);
-        const y_start = clampCoord(@intFromFloat(@floor(bounds.y)), self.height);
-        const x_end = clampCoord(@intFromFloat(@ceil(bounds.x + bounds.w)), self.width);
-        const y_end = clampCoord(@intFromFloat(@ceil(bounds.y + bounds.h)), self.height);
+        const x_start = clampCoord(@intFromFloat(math.floorF(bounds.x)), self.width);
+        const y_start = clampCoord(@intFromFloat(math.floorF(bounds.y)), self.height);
+        const x_end = clampCoord(@intFromFloat(math.ceilF(bounds.x + bounds.w)), self.width);
+        const y_end = clampCoord(@intFromFloat(math.ceilF(bounds.y + bounds.h)), self.height);
         var y = y_start;
         while (y < y_end) : (y += 1) {
             var x = x_start;
@@ -1309,10 +1309,10 @@ pub const Surface = struct {
         const radius_y = bounds.h * ry;
         const stroke = iconStroke(bounds, stroke_width);
         const area = ui.Rect.init(cx - radius_x - stroke, cy - radius_y - stroke, (radius_x + stroke) * 2.0, (radius_y + stroke) * 2.0);
-        const x_start = clampCoord(@intFromFloat(@floor(area.x)), self.width);
-        const y_start = clampCoord(@intFromFloat(@floor(area.y)), self.height);
-        const x_end = clampCoord(@intFromFloat(@ceil(area.x + area.w)), self.width);
-        const y_end = clampCoord(@intFromFloat(@ceil(area.y + area.h)), self.height);
+        const x_start = clampCoord(@intFromFloat(math.floorF(area.x)), self.width);
+        const y_start = clampCoord(@intFromFloat(math.floorF(area.y)), self.height);
+        const x_end = clampCoord(@intFromFloat(math.ceilF(area.x + area.w)), self.width);
+        const y_end = clampCoord(@intFromFloat(math.ceilF(area.y + area.h)), self.height);
         var py_i = y_start;
         while (py_i < y_end) : (py_i += 1) {
             var px_i = x_start;
@@ -1322,7 +1322,7 @@ pub const Surface = struct {
                 if (!full and py < cy) continue;
                 const nx = (px - cx) / @max(1.0, radius_x);
                 const ny = (py - cy) / @max(1.0, radius_y);
-                const distance = @abs(@sqrt(nx * nx + ny * ny) - 1.0) * @min(radius_x, radius_y);
+                const distance = math.absF(math.sqrtF(nx * nx + ny * ny) - 1.0) * @min(radius_x, radius_y);
                 const alpha = coverageAlpha(stroke * 0.5, distance);
                 if (alpha != 0) self.blendPixel(px_i, py_i, color, alpha);
             }
@@ -1336,10 +1336,10 @@ pub const Surface = struct {
         const radius_y = bounds.h * ry;
         const stroke = iconStroke(bounds, stroke_width);
         const object_bounds = ui.Rect.init(cx - radius_x - stroke, cy - radius_y - stroke, (radius_x + stroke) * 2.0, (radius_y + stroke) * 2.0);
-        const x_start = clampCoord(@intFromFloat(@floor(object_bounds.x)), self.width);
-        const y_start = clampCoord(@intFromFloat(@floor(object_bounds.y)), self.height);
-        const x_end = clampCoord(@intFromFloat(@ceil(object_bounds.x + object_bounds.w)), self.width);
-        const y_end = clampCoord(@intFromFloat(@ceil(object_bounds.y + object_bounds.h)), self.height);
+        const x_start = clampCoord(@intFromFloat(math.floorF(object_bounds.x)), self.width);
+        const y_start = clampCoord(@intFromFloat(math.floorF(object_bounds.y)), self.height);
+        const x_end = clampCoord(@intFromFloat(math.ceilF(object_bounds.x + object_bounds.w)), self.width);
+        const y_end = clampCoord(@intFromFloat(math.ceilF(object_bounds.y + object_bounds.h)), self.height);
         var py_i = y_start;
         while (py_i < y_end) : (py_i += 1) {
             var px_i = x_start;
@@ -1349,7 +1349,7 @@ pub const Surface = struct {
                 if (!full and py < cy) continue;
                 const nx = (px - cx) / @max(1.0, radius_x);
                 const ny = (py - cy) / @max(1.0, radius_y);
-                const distance = @abs(@sqrt(nx * nx + ny * ny) - 1.0) * @min(radius_x, radius_y);
+                const distance = math.absF(math.sqrtF(nx * nx + ny * ny) - 1.0) * @min(radius_x, radius_y);
                 const alpha = coverageAlpha(stroke * 0.5, distance);
                 if (alpha != 0) self.blendPixel(px_i, py_i, paint.colorAt(bounds, object_bounds, px_i, py_i), alpha);
             }
@@ -1357,10 +1357,10 @@ pub const Surface = struct {
     }
 
     fn fillPieSlice(self: Surface, bounds: ui.Rect, color: ui.Color, encoded_angles: ui.Color) void {
-        const x0 = clampCoord(@intFromFloat(@floor(bounds.x)), self.width);
-        const y0 = clampCoord(@intFromFloat(@floor(bounds.y)), self.height);
-        const x1 = clampCoord(@intFromFloat(@ceil(bounds.x + bounds.w)), self.width);
-        const y1 = clampCoord(@intFromFloat(@ceil(bounds.y + bounds.h)), self.height);
+        const x0 = clampCoord(@intFromFloat(math.floorF(bounds.x)), self.width);
+        const y0 = clampCoord(@intFromFloat(math.floorF(bounds.y)), self.height);
+        const x1 = clampCoord(@intFromFloat(math.ceilF(bounds.x + bounds.w)), self.width);
+        const y1 = clampCoord(@intFromFloat(math.ceilF(bounds.y + bounds.h)), self.height);
         if (x1 <= x0 or y1 <= y0) return;
 
         const start_turn = byteUnit(encoded_angles.r);
@@ -1377,7 +1377,7 @@ pub const Surface = struct {
                 const py = @as(f32, @floatFromInt(y)) + pixel_center;
                 const dx = px - cx;
                 const dy = py - cy;
-                const distance = @sqrt(dx * dx + dy * dy);
+                const distance = math.sqrtF(dx * dx + dy * dy);
                 if (distance > radius) continue;
                 const turn = clockwiseTurn(dx, dy);
                 if (turn < start_turn or turn > end_turn) continue;
@@ -1399,10 +1399,10 @@ const IconAlphaMask = struct {
     fn init(bounds: ui.Rect, surface_width: usize, surface_height: usize, buffer: []u8) IconAlphaMask {
         @setRuntimeSafety(false);
         const pad = iconStroke(bounds, icon_mask_pad_scale);
-        const x0 = clampCoord(@intFromFloat(@floor(bounds.x - pad)), surface_width);
-        const y0 = clampCoord(@intFromFloat(@floor(bounds.y - pad)), surface_height);
-        const x1 = clampCoord(@intFromFloat(@ceil(bounds.x + bounds.w + pad)), surface_width);
-        const y1 = clampCoord(@intFromFloat(@ceil(bounds.y + bounds.h + pad)), surface_height);
+        const x0 = clampCoord(@intFromFloat(math.floorF(bounds.x - pad)), surface_width);
+        const y0 = clampCoord(@intFromFloat(math.floorF(bounds.y - pad)), surface_height);
+        const x1 = clampCoord(@intFromFloat(math.ceilF(bounds.x + bounds.w + pad)), surface_width);
+        const y1 = clampCoord(@intFromFloat(math.ceilF(bounds.y + bounds.h + pad)), surface_height);
         const width = x1 - x0;
         const height = y1 - y0;
         const length = width * height;
@@ -1490,7 +1490,7 @@ fn iconStroke(bounds: ui.Rect, stroke_width: f32) f32 {
 
 fn iconMaskAxis(value: f32) usize {
     if (value <= 1.0) return 1;
-    return @min(renderer_icon_mask.max_width, @max(@as(usize, 1), @as(usize, @intFromFloat(@ceil(value)))));
+    return @min(renderer_icon_mask.max_width, @max(@as(usize, 1), @as(usize, @intFromFloat(math.ceilF(value)))));
 }
 
 const icon_stroke_scale: f32 = 2.0 / 24.0;
@@ -1655,8 +1655,8 @@ const SvgArcGeometry = struct {
 };
 
 fn svgArcGeometry(start: icon_vector.Point, arc: icon_vector.Arc) ?SvgArcGeometry {
-    const rx_start = @abs(arc.rx);
-    const ry_start = @abs(arc.ry);
+    const rx_start = math.absF(arc.rx);
+    const ry_start = math.absF(arc.ry);
     if (rx_start <= 0.0 or ry_start <= 0.0) return null;
     const phi = arc.x_axis_rotation * math.pi / 180.0;
     const cos_phi = @cos(phi);
@@ -1669,14 +1669,14 @@ fn svgArcGeometry(start: icon_vector.Point, arc: icon_vector.Arc) ?SvgArcGeometr
     var ry = ry_start;
     const radius_scale = x1p * x1p / (rx * rx) + y1p * y1p / (ry * ry);
     if (radius_scale > 1.0) {
-        const scale = @sqrt(radius_scale);
+        const scale = math.sqrtF(radius_scale);
         rx *= scale;
         ry *= scale;
     }
     const numerator = rx * rx * ry * ry - rx * rx * y1p * y1p - ry * ry * x1p * x1p;
     const denominator = rx * rx * y1p * y1p + ry * ry * x1p * x1p;
     const sign: f32 = if (arc.large_arc == arc.sweep) -1.0 else 1.0;
-    const coefficient = sign * @sqrt(@max(0.0, numerator / @max(denominator, svg_arc_denominator_min)));
+    const coefficient = sign * math.sqrtF(@max(0.0, numerator / @max(denominator, svg_arc_denominator_min)));
     const cxp = coefficient * rx * y1p / ry;
     const cyp = coefficient * -ry * x1p / rx;
     const center = icon_vector.Point{
@@ -1702,7 +1702,7 @@ fn svgArcGeometry(start: icon_vector.Point, arc: icon_vector.Arc) ?SvgArcGeometr
 
 fn arcStepCount(delta: f32, arc: icon_vector.Arc) usize {
     const divisor = if (arc.large_arc) active_icon_tuning.large_arc_step_divisor else active_icon_tuning.arc_step_divisor;
-    return @max(4, @as(usize, @intFromFloat(@ceil(@abs(delta) * divisor / math.pi))));
+    return @max(4, @as(usize, @intFromFloat(math.ceilF(math.absF(delta) * divisor / math.pi))));
 }
 
 fn arcAntialiasWidth(arc: icon_vector.Arc) f32 {
@@ -1726,7 +1726,7 @@ fn pointToPixels(bounds: ui.Rect, point: icon_vector.Point) icon_vector.Point {
 fn unitVector(to: icon_vector.Point, from: icon_vector.Point) ?icon_vector.Point {
     const dx = to.x - from.x;
     const dy = to.y - from.y;
-    const length = @sqrt(dx * dx + dy * dy);
+    const length = math.sqrtF(dx * dx + dy * dy);
     if (length <= icon_axis_epsilon) return null;
     return .{ .x = dx / length, .y = dy / length };
 }
@@ -1739,7 +1739,7 @@ fn miterPoint(joint: icon_vector.Point, incoming: icon_vector.Point, outgoing: i
     const a = icon_vector.Point{ .x = joint.x + incoming_normal.x * radius, .y = joint.y + incoming_normal.y * radius };
     const b = icon_vector.Point{ .x = joint.x + outgoing_normal.x * radius, .y = joint.y + outgoing_normal.y * radius };
     const denom = cross2(incoming, outgoing);
-    if (@abs(denom) <= icon_axis_epsilon) return null;
+    if (math.absF(denom) <= icon_axis_epsilon) return null;
     const delta = icon_vector.Point{ .x = b.x - a.x, .y = b.y - a.y };
     const t = cross2(delta, outgoing) / denom;
     const point = icon_vector.Point{ .x = a.x + incoming.x * t, .y = a.y + incoming.y * t };
@@ -1760,11 +1760,11 @@ fn coverageAlpha(radius: f32, distance: f32) u8 {
     if (distance <= radius - antialias_width) return max_alpha;
     if (distance >= radius + antialias_width) return 0;
     const coverage = (radius + antialias_width - distance) / (antialias_width * 2.0);
-    return @intFromFloat(@round(math.clampF(coverage, 0.0, 1.0) * 255.0));
+    return @intCast(math.lrintF(math.clampF(coverage, 0.0, 1.0) * 255.0));
 }
 
 fn isSlopedSegment(dx: f32, dy: f32) bool {
-    return @abs(dx) > icon_axis_epsilon and @abs(dy) > icon_axis_epsilon;
+    return math.absF(dx) > icon_axis_epsilon and math.absF(dy) > icon_axis_epsilon;
 }
 
 fn strokeCoverageAlpha(radius: f32, distance: f32, antialias_width_value: f32, boost_coverage: bool, coverage_boost: f32) u8 {
@@ -1775,7 +1775,7 @@ fn strokeCoverageAlpha(radius: f32, distance: f32, antialias_width_value: f32, b
         t + coverage_boost * (t - icon_stroke_coverage_boost_floor) * (1.0 - t)
     else
         t;
-    return @intFromFloat(@round(math.clampF(coverage, 0.0, 1.0) * 255.0));
+    return @intCast(math.lrintF(math.clampF(coverage, 0.0, 1.0) * 255.0));
 }
 
 fn pathContainsPoint(path: *const IconPathState, point: icon_vector.Point) bool {
@@ -1835,7 +1835,7 @@ fn isLeftOfEdge(start: icon_vector.Point, end: icon_vector.Point, point: icon_ve
 fn roundedAlpha(bounds: ui.Rect, radius: f32, x: f32, y: f32) u8 {
     const distance = roundedOutsideDistance(bounds, radius, x, y);
     const coverage = math.clampF(-distance / antialias_width, 0.0, 1.0);
-    return @intFromFloat(@floor(coverage * 255.0 + 0.5));
+    return @intFromFloat(math.floorF(coverage * 255.0 + 0.5));
 }
 
 fn roundedBorderAlpha(outer_alpha: u8, inner: ui.Rect, inner_radius: f32, x: f32, y: f32) u8 {
@@ -1852,11 +1852,11 @@ fn roundedOutsideDistance(bounds: ui.Rect, radius: f32, x: f32, y: f32) f32 {
     const half_h = bounds.h * 0.5;
     const center_x = bounds.x + half_w;
     const center_y = bounds.y + half_h;
-    const qx = @abs(x - center_x) - @max(0.0, half_w - r);
-    const qy = @abs(y - center_y) - @max(0.0, half_h - r);
+    const qx = math.absF(x - center_x) - @max(0.0, half_w - r);
+    const qy = math.absF(y - center_y) - @max(0.0, half_h - r);
     const outside_x = @max(qx, 0.0);
     const outside_y = @max(qy, 0.0);
-    const outside = @sqrt(outside_x * outside_x + outside_y * outside_y);
+    const outside = math.sqrtF(outside_x * outside_x + outside_y * outside_y);
     const inside = @min(@max(qx, qy), 0.0);
     return outside + inside - r;
 }
@@ -1912,26 +1912,26 @@ fn radialGradientMix(cx: f32, cy: f32, radius: f32, fx: f32, fy: f32, focal_radi
     if (radius <= icon_axis_epsilon) return 1.0;
     const focus_to_center_x = cx - fx;
     const focus_to_center_y = cy - fy;
-    const focus_to_center_distance = @sqrt(focus_to_center_x * focus_to_center_x + focus_to_center_y * focus_to_center_y);
+    const focus_to_center_distance = math.sqrtF(focus_to_center_x * focus_to_center_x + focus_to_center_y * focus_to_center_y);
     if (focus_to_center_distance + radius <= focal_radius + icon_axis_epsilon) return null;
 
     const point_x = px - fx;
     const point_y = py - fy;
-    const point_distance = @sqrt(point_x * point_x + point_y * point_y);
+    const point_distance = math.sqrtF(point_x * point_x + point_y * point_y);
     if (point_distance <= focal_radius + icon_axis_epsilon) return 0.0;
 
     const radius_delta = radius - focal_radius;
     const a = focus_to_center_x * focus_to_center_x + focus_to_center_y * focus_to_center_y - radius_delta * radius_delta;
     const b = -2.0 * (point_x * focus_to_center_x + point_y * focus_to_center_y + focal_radius * radius_delta);
     const c = point_x * point_x + point_y * point_y - focal_radius * focal_radius;
-    if (@abs(a) <= icon_axis_epsilon) {
-        if (@abs(b) <= icon_axis_epsilon) return null;
+    if (math.absF(a) <= icon_axis_epsilon) {
+        if (math.absF(b) <= icon_axis_epsilon) return null;
         const linear = -c / b;
         return if (linear >= 0.0) linear else null;
     }
     const discriminant = b * b - 4.0 * a * c;
     if (discriminant < -icon_axis_epsilon) return null;
-    const root = @sqrt(@max(0.0, discriminant));
+    const root = math.sqrtF(@max(0.0, discriminant));
     const t0 = (-b - root) / (2.0 * a);
     const t1 = (-b + root) / (2.0 * a);
     return positiveGradientRoot(t0, t1);
@@ -1958,7 +1958,7 @@ fn gradientStopsColorAt(stops: []const icon_vector.LinearGradientStop, spread: i
         const next = stops[index];
         if (mix > next.offset) continue;
         const offset_range = next.offset - previous.offset;
-        const t = if (@abs(offset_range) <= icon_axis_epsilon) 1.0 else (mix - previous.offset) / offset_range;
+        const t = if (math.absF(offset_range) <= icon_axis_epsilon) 1.0 else (mix - previous.offset) / offset_range;
         return mixColor(paintToColor(previous.color), paintToColor(next.color), t);
     }
     return paintToColor(last_stop.color);
@@ -1976,7 +1976,7 @@ fn applyGradientSpread(spread: icon_vector.GradientSpreadMethod, value: f32) f32
 }
 
 fn fractionalPart(value: f32) f32 {
-    const floor_value = @floor(value);
+    const floor_value = math.floorF(value);
     return value - floor_value;
 }
 
@@ -1997,7 +1997,7 @@ fn mixColor(a: ui.Color, b: ui.Color, t: f32) ui.Color {
 fn mixByte(a: u8, b: u8, t: f32) u8 {
     const af: f32 = @floatFromInt(a);
     const bf: f32 = @floatFromInt(b);
-    return @intFromFloat(@round(af + (bf - af) * t));
+    return @intCast(math.lrintF(af + (bf - af) * t));
 }
 
 fn colorsEqual(a: ui.Color, b: ui.Color) bool {
@@ -2009,7 +2009,7 @@ fn lerp(a: f32, b: f32, t: f32) f32 {
 }
 
 fn scaleByte(value: u8, factor: f32) u8 {
-    return @intFromFloat(@round(math.clampF(@as(f32, @floatFromInt(value)) * factor, 0.0, 255.0)));
+    return @intCast(math.lrintF(math.clampF(@as(f32, @floatFromInt(value)) * factor, 0.0, 255.0)));
 }
 
 fn blendChannel(src: u8, dst: u8, src_alpha: u16, inv_alpha: u16) u8 {
@@ -2018,7 +2018,7 @@ fn blendChannel(src: u8, dst: u8, src_alpha: u16, inv_alpha: u16) u8 {
 
 fn blendChannelFloat(src: u8, dst: u8, src_alpha: f32, inv_alpha: f32) u8 {
     const value = @as(f32, @floatFromInt(src)) * src_alpha + @as(f32, @floatFromInt(dst)) * inv_alpha;
-    return @intFromFloat(@round(math.clampF(value, 0.0, 255.0)));
+    return @intCast(math.lrintF(math.clampF(value, 0.0, 255.0)));
 }
 
 fn colorF(value: u8) f32 {
@@ -2033,7 +2033,7 @@ const BilinearAxis = struct {
 
 fn bilinearAxis(value: f32, len: usize) BilinearAxis {
     const scaled = math.clampF(math.clampF(value, 0.0, 1.0) * @as(f32, @floatFromInt(len)) - 0.5, 0.0, @as(f32, @floatFromInt(len - 1)));
-    const index0: usize = @intFromFloat(@floor(scaled));
+    const index0: usize = @intFromFloat(math.floorF(scaled));
     return .{
         .index0 = index0,
         .index1 = @min(index0 + 1, len - 1),
@@ -2042,7 +2042,7 @@ fn bilinearAxis(value: f32, len: usize) BilinearAxis {
 }
 
 fn bilinearAlphaByte(a00: u8, a10: u8, a01: u8, a11: u8, tx: f32, ty: f32) u8 {
-    return @intFromFloat(@round(bilinearAlphaFloat(a00, a10, a01, a11, tx, ty) * 255.0));
+    return @intCast(math.lrintF(bilinearAlphaFloat(a00, a10, a01, a11, tx, ty) * 255.0));
 }
 
 fn bilinearAlphaFloat(a00: u8, a10: u8, a01: u8, a11: u8, tx: f32, ty: f32) f32 {
@@ -2061,8 +2061,8 @@ fn scaleAlphaByte(tint: u8, sample: u8) u8 {
 fn sampleRgba(texture: RgbaTexture, u: f32, v: f32) ui.Color {
     const x = math.clampF(u, 0.0, 1.0) * @as(f32, @floatFromInt(texture.width - 1));
     const y = math.clampF(v, 0.0, 1.0) * @as(f32, @floatFromInt(texture.height - 1));
-    const x0: usize = @intFromFloat(@floor(x));
-    const y0: usize = @intFromFloat(@floor(y));
+    const x0: usize = @intFromFloat(math.floorF(x));
+    const y0: usize = @intFromFloat(math.floorF(y));
     const x1 = @min(x0 + 1, texture.width - 1);
     const y1 = @min(y0 + 1, texture.height - 1);
     const tx = x - @as(f32, @floatFromInt(x0));
@@ -2082,7 +2082,7 @@ fn sampleRgba(texture: RgbaTexture, u: f32, v: f32) ui.Color {
 fn sampleChannel(a00: u8, a10: u8, a01: u8, a11: u8, tx: f32, ty: f32) u8 {
     const top = lerp(@floatFromInt(a00), @floatFromInt(a10), tx);
     const bottom = lerp(@floatFromInt(a01), @floatFromInt(a11), tx);
-    return @intFromFloat(@round(lerp(top, bottom, ty)));
+    return @intCast(math.lrintF(lerp(top, bottom, ty)));
 }
 
 fn multiplyRgb(texel: ui.Color, tint: ui.Color) ui.Color {

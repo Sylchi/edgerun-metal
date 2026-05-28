@@ -910,11 +910,11 @@ test "native cpu and gpu render paths agree on canonical ir presentation" {
     var storage = renderer_ir.FixedBuffers(1, 0, 1, 0, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     try renderer_ir.pushRect(buffers, .base, .{ .x = 0, .y = 0, .w = 16, .h = 16 }, .accent, .clear, 0, 0, 0);
-    try renderer_ir.pushIcon(buffers, .base, .{
+    try renderer_ir.pushSvgQuad(buffers, .base, ui.SvgQuad.fromIconQuad(.{
         .bounds = .{ .x = 32, .y = 32, .w = 16, .h = 16 },
         .icon_id = 1,
         .color = .text,
-    });
+    }));
     const expected_primitives = try renderer_ir.primitiveCount(buffers);
 
     var pixels: [64 * 64]ui.Color = undefined;

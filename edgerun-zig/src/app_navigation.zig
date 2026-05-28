@@ -371,7 +371,7 @@ const top_level_bindings = [_]TopLevelBinding{
         .button = .components,
         .id = component_catalog_button_id,
         .route = .{ .view = .components },
-        .icon = icon_component.Icon.named(.app),
+        .icon = icon_component.Icon.named(.apps),
         .rail_label = "Components",
         .row_title = "Components",
         .row_detail = "edit and preview system",

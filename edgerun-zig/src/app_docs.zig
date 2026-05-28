@@ -270,7 +270,7 @@ pub const doc_pages = [_]DocPage{
         .primary = "The catalog is rendered inline on this page from component_gallery.component_catalog, so Docs is the manual and the live component catalog.",
         .secondary = "Each `/docs/components/<slug>` route keeps the Docs chrome, opens the selected subsection, and renders the component through the same shared component path.",
         .api = "catalog: /docs/components\nsubsection: /docs/components/<slug>\nrender: Component.render\ninteractions: Component.collectInteractions",
-        .icon_value = icon_component.Icon.named(.app),
+        .icon_value = icon_component.Icon.named(.apps),
         .color = palette.primary,
     },
     .{

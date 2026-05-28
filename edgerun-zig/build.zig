@@ -4,6 +4,21 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const is_x86_64 = target.result.cpu.arch == .x86_64;
+
+    var math_obj: ?std.Build.LazyPath = null;
+    var runtime_obj: ?std.Build.LazyPath = null;
+    if (is_x86_64) {
+        {
+            const cmd = b.addSystemCommand(&.{ "yasm", "-f", "elf64", "-I", "asm", "asm/x86_64/math.asm", "-o" });
+            math_obj = cmd.addOutputFileArg("math.o");
+        }
+        {
+            const cmd = b.addSystemCommand(&.{ "yasm", "-f", "elf64", "-I", "asm", "asm/x86_64/runtime.asm", "-o" });
+            runtime_obj = cmd.addOutputFileArg("runtime.o");
+        }
+    }
+
     const tests = b.addTest(.{
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/root.zig"),
@@ -11,6 +26,9 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    if (math_obj) |obj| tests.root_module.addObjectFile(obj);
+    if (runtime_obj) |obj| tests.root_module.addObjectFile(obj);
+
 
     const run_tests = b.addRunArtifact(tests);
     const test_step = b.step("test", "Run Zig prototype tests");
@@ -23,6 +41,8 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    if (math_obj) |obj| pi_usb_boot_host_tests.root_module.addObjectFile(obj);
+    if (runtime_obj) |obj| pi_usb_boot_host_tests.root_module.addObjectFile(obj);
 
     const run_pi_usb_boot_host_tests = b.addRunArtifact(pi_usb_boot_host_tests);
     test_step.dependOn(&run_pi_usb_boot_host_tests.step);
@@ -34,6 +54,8 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    if (math_obj) |obj| pi_usb_control_host_tests.root_module.addObjectFile(obj);
+    if (runtime_obj) |obj| pi_usb_control_host_tests.root_module.addObjectFile(obj);
 
     const run_pi_usb_control_host_tests = b.addRunArtifact(pi_usb_control_host_tests);
     test_step.dependOn(&run_pi_usb_control_host_tests.step);
@@ -45,6 +67,8 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    if (math_obj) |obj| clock_tests.root_module.addObjectFile(obj);
+    if (runtime_obj) |obj| clock_tests.root_module.addObjectFile(obj);
 
     const run_clock_tests = b.addRunArtifact(clock_tests);
     const clock_test_step = b.step("clock-test", "Run Zig clock tests");
@@ -57,6 +81,8 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    if (math_obj) |obj| identity_tests.root_module.addObjectFile(obj);
+    if (runtime_obj) |obj| identity_tests.root_module.addObjectFile(obj);
 
     const run_identity_tests = b.addRunArtifact(identity_tests);
     const identity_test_step = b.step("identity-test", "Run Zig identity tests");
@@ -69,6 +95,8 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    if (math_obj) |obj| object_tests.root_module.addObjectFile(obj);
+    if (runtime_obj) |obj| object_tests.root_module.addObjectFile(obj);
 
     const run_object_tests = b.addRunArtifact(object_tests);
     const object_test_step = b.step("object-test", "Run Zig object tests");
@@ -81,6 +109,8 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    if (math_obj) |obj| storage_tests.root_module.addObjectFile(obj);
+    if (runtime_obj) |obj| storage_tests.root_module.addObjectFile(obj);
 
     const run_storage_tests = b.addRunArtifact(storage_tests);
     const storage_test_step = b.step("storage-test", "Run Zig storage tests");
@@ -93,6 +123,8 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    if (math_obj) |obj| sdk_tests.root_module.addObjectFile(obj);
+    if (runtime_obj) |obj| sdk_tests.root_module.addObjectFile(obj);
 
     const run_sdk_tests = b.addRunArtifact(sdk_tests);
     const sdk_test_step = b.step("sdk-test", "Run Zig SDK tests");
@@ -106,6 +138,8 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    if (math_obj) |obj| sdk_cli.root_module.addObjectFile(obj);
+    if (runtime_obj) |obj| sdk_cli.root_module.addObjectFile(obj);
 
     const run_sdk_cli = b.addRunArtifact(sdk_cli);
     if (b.args) |args| run_sdk_cli.addArgs(args);
@@ -120,6 +154,8 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    if (math_obj) |obj| sdk_bench.root_module.addObjectFile(obj);
+    if (runtime_obj) |obj| sdk_bench.root_module.addObjectFile(obj);
 
     const run_sdk_bench = b.addRunArtifact(sdk_bench);
     const sdk_bench_step = b.step("sdk-bench", "Benchmark deterministic Edgerun SDK setup and simulation");
@@ -133,6 +169,8 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    if (math_obj) |obj| media_video_dump.root_module.addObjectFile(obj);
+    if (runtime_obj) |obj| media_video_dump.root_module.addObjectFile(obj);
 
     const run_media_video_dump = b.addRunArtifact(media_video_dump);
     if (b.args) |args| run_media_video_dump.addArgs(args);
@@ -146,6 +184,8 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    if (math_obj) |obj| media_video_dump_tests.root_module.addObjectFile(obj);
+    if (runtime_obj) |obj| media_video_dump_tests.root_module.addObjectFile(obj);
 
     const run_media_video_dump_tests = b.addRunArtifact(media_video_dump_tests);
     const media_video_dump_test_step = b.step("media-video-dump-test", "Run media video dump host-tool tests");
@@ -158,6 +198,8 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    if (math_obj) |obj| ui_core_tests.root_module.addObjectFile(obj);
+    if (runtime_obj) |obj| ui_core_tests.root_module.addObjectFile(obj);
 
     const run_ui_core_tests = b.addRunArtifact(ui_core_tests);
     const ui_core_test_step = b.step("ui-core-test", "Run Zig UI core tests");
@@ -170,6 +212,8 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    if (math_obj) |obj| wasm_compiler_tests.root_module.addObjectFile(obj);
+    if (runtime_obj) |obj| wasm_compiler_tests.root_module.addObjectFile(obj);
     const run_wasm_compiler_tests = b.addRunArtifact(wasm_compiler_tests);
     const wasm_compiler_test_step = b.step("wasm-compiler-test", "Run EdgeRun freestanding compiler ABI tests");
     wasm_compiler_test_step.dependOn(&run_wasm_compiler_tests.step);
@@ -182,6 +226,8 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    if (math_obj) |obj| component_gallery_tests.root_module.addObjectFile(obj);
+    if (runtime_obj) |obj| component_gallery_tests.root_module.addObjectFile(obj);
 
     const run_component_gallery_tests = b.addRunArtifact(component_gallery_tests);
     const component_gallery_test_step = b.step("component-gallery-test", "Run canonical component gallery tests");
@@ -195,6 +241,8 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    if (math_obj) |obj| ui_snapshot.root_module.addObjectFile(obj);
+    if (runtime_obj) |obj| ui_snapshot.root_module.addObjectFile(obj);
 
     const run_ui_snapshot = b.addRunArtifact(ui_snapshot);
     const ui_snapshot_step = b.step("ui-snapshot", "Render the Zig UI prototype snapshot");
@@ -208,6 +256,8 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    if (math_obj) |obj| ui_bench.root_module.addObjectFile(obj);
+    if (runtime_obj) |obj| ui_bench.root_module.addObjectFile(obj);
 
     const run_ui_bench = b.addRunArtifact(ui_bench);
     const ui_bench_step = b.step("ui-bench", "Benchmark the Zig UI software renderer");
@@ -221,6 +271,8 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    if (math_obj) |obj| wayland_window.root_module.addObjectFile(obj);
+    if (runtime_obj) |obj| wayland_window.root_module.addObjectFile(obj);
 
     const run_wayland_window = b.addRunArtifact(wayland_window);
     if (b.args) |args| run_wayland_window.addArgs(args);
@@ -234,6 +286,8 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    if (math_obj) |obj| wayland_window_tests.root_module.addObjectFile(obj);
+    if (runtime_obj) |obj| wayland_window_tests.root_module.addObjectFile(obj);
     const run_wayland_window_tests = b.addRunArtifact(wayland_window_tests);
     const wayland_window_test_step = b.step("wayland-window-test", "Run native Wayland host protocol tests");
     wayland_window_test_step.dependOn(&run_wayland_window_tests.step);
@@ -259,6 +313,8 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    if (math_obj) |obj| wayland_egl_window.root_module.addObjectFile(obj);
+    if (runtime_obj) |obj| wayland_egl_window.root_module.addObjectFile(obj);
     wayland_egl_window.root_module.addIncludePath(xdg_shell_header.dirname());
     wayland_egl_window.root_module.addCSourceFile(.{ .file = xdg_shell_code });
     wayland_egl_window.root_module.linkSystemLibrary("c", .{});
@@ -281,6 +337,8 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    if (math_obj) |obj| drm_gbm_window.root_module.addObjectFile(obj);
+    if (runtime_obj) |obj| drm_gbm_window.root_module.addObjectFile(obj);
     drm_gbm_window.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/libdrm" });
     drm_gbm_window.root_module.linkSystemLibrary("c", .{});
     drm_gbm_window.root_module.linkSystemLibrary("gbm", .{});
@@ -299,6 +357,8 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    if (math_obj) |obj| drm_gbm_tests.root_module.addObjectFile(obj);
+    if (runtime_obj) |obj| drm_gbm_tests.root_module.addObjectFile(obj);
     drm_gbm_tests.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/libdrm" });
     drm_gbm_tests.root_module.linkSystemLibrary("c", .{});
     drm_gbm_tests.root_module.linkSystemLibrary("gbm", .{});
@@ -376,6 +436,8 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    if (math_obj) |obj| wasm_compiler_runner_tests.root_module.addObjectFile(obj);
+    if (runtime_obj) |obj| wasm_compiler_runner_tests.root_module.addObjectFile(obj);
     wasm_compiler_runner_tests.root_module.addAnonymousImport("embedded_wasm_compiler", .{
         .root_source_file = embedded_wasm_compiler,
     });
@@ -394,6 +456,8 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    if (math_obj) |obj| wasm_compiler_probe.root_module.addObjectFile(obj);
+    if (runtime_obj) |obj| wasm_compiler_probe.root_module.addObjectFile(obj);
     wasm_compiler_probe.root_module.addAnonymousImport("embedded_wasm_compiler", .{
         .root_source_file = embedded_wasm_compiler,
     });
@@ -520,6 +584,8 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    if (math_obj) |obj| tpm_real_check.root_module.addObjectFile(obj);
+    if (runtime_obj) |obj| tpm_real_check.root_module.addObjectFile(obj);
 
     const run_tpm_real_check = b.addRunArtifact(tpm_real_check);
     const tpm_real_check_step = b.step("real-tpm", "Run TPM checks against /dev/tpmrm0");
@@ -533,6 +599,8 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    if (math_obj) |obj| ifstatus.root_module.addObjectFile(obj);
+    if (runtime_obj) |obj| ifstatus.root_module.addObjectFile(obj);
 
     const run_ifstatus = b.addRunArtifact(ifstatus);
     if (b.args) |args| run_ifstatus.addArgs(args);
@@ -547,6 +615,8 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    if (math_obj) |obj| pi_usb_boot_host.root_module.addObjectFile(obj);
+    if (runtime_obj) |obj| pi_usb_boot_host.root_module.addObjectFile(obj);
 
     const pi_usb_load = b.addRunArtifact(pi_usb_boot_host);
     if (b.args) |args| pi_usb_load.addArgs(args);
@@ -561,6 +631,8 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    if (math_obj) |obj| pi_usb_control_host.root_module.addObjectFile(obj);
+    if (runtime_obj) |obj| pi_usb_control_host.root_module.addObjectFile(obj);
 
     const pi_usb_control = b.addRunArtifact(pi_usb_control_host);
     if (b.args) |args| pi_usb_control.addArgs(args);

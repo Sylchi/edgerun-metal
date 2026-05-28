@@ -104,7 +104,7 @@ pub fn renderWorkspaceTopBar(scene: *ui.Scene, collector: *interaction.Collector
         .bounds = ui.Rect.init(x, button_y, 92.0, 32.0),
         .label = "Export",
         .variant = .secondary,
-        .icon_slot = icon_component.IconSlot.of(.leading, icon_component.Icon.named(.storage)),
+        .icon_slot = icon_component.IconSlot.of(.leading, icon_component.Icon.named(.database)),
         .enabled = canExport(state),
     });
     x += 100.0;
