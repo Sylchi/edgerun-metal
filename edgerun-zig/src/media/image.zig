@@ -12,6 +12,7 @@ pub const EncodeError = common.EncodeError;
 pub const RuntimeImageError = DecodeError || EncodeError;
 pub const RuntimeImageHeader = runtime_image.Header;
 pub const RuntimeImageView = runtime_image.View;
+pub const defaultRuntimeTileEdge = runtime_image.default_tile_edge;
 
 pub const Format = enum {
     jpeg,
@@ -72,11 +73,24 @@ pub fn runtimeCanonicalLenForHeader(header: Header) RuntimeImageError!usize {
     return try runtime_image.rgbaCanonicalLen(header.width, header.height);
 }
 
+pub fn runtimeCanonicalLenForTiling(header: Header, tile_w: usize, tile_h: usize) RuntimeImageError!usize {
+    return try runtime_image.rgbaCanonicalLenForTiling(header.width, header.height, tile_w, tile_h);
+}
+
 pub fn runtimeCanonicalLen(bytes: []const u8) RuntimeImageError!usize {
     return try runtimeCanonicalLenForHeader(try decodeHeader(bytes));
 }
 
+pub fn runtimeCanonicalLenTiled(bytes: []const u8, tile_w: usize, tile_h: usize) RuntimeImageError!usize {
+    return try runtimeCanonicalLenForTiling(try decodeHeader(bytes), tile_w, tile_h);
+}
+
 pub fn decodeToRuntimeWithScratch(bytes: []const u8, pixels: []ui.Color, scratch: []u8, out: []u8) RuntimeImageError![]u8 {
+    const header = try decodeHeader(bytes);
+    return try decodeToRuntimeTiledWithScratch(bytes, header.width, header.height, pixels, scratch, out);
+}
+
+pub fn decodeToRuntimeTiledWithScratch(bytes: []const u8, tile_w: usize, tile_h: usize, pixels: []ui.Color, scratch: []u8, out: []u8) RuntimeImageError![]u8 {
     const format = detectFormat(bytes) catch |err| return err;
     if (format == .erimg) {
         _ = try runtime_image.decode(bytes);
@@ -85,7 +99,14 @@ pub fn decodeToRuntimeWithScratch(bytes: []const u8, pixels: []ui.Color, scratch
         return out[0..bytes.len];
     }
     const decoded = try decodeWithScratch(bytes, pixels, scratch);
-    return try runtime_image.encodeRgba(decoded.width, decoded.height, pixels, out);
+    return try runtime_image.encodeRgbaTiled(decoded.width, decoded.height, tile_w, tile_h, pixels, out);
+}
+
+pub fn decodeToRuntimeDefaultTiledWithScratch(bytes: []const u8, pixels: []ui.Color, scratch: []u8, out: []u8) RuntimeImageError![]u8 {
+    const header = try decodeHeader(bytes);
+    const tile_w = @min(defaultRuntimeTileEdge, header.width);
+    const tile_h = @min(defaultRuntimeTileEdge, header.height);
+    return try decodeToRuntimeTiledWithScratch(bytes, tile_w, tile_h, pixels, scratch, out);
 }
 
 pub fn decodeRuntimeImage(bytes: []const u8) DecodeError!RuntimeImageView {
@@ -115,7 +136,9 @@ pub const encodeTgaRgba = tga.encodeTgaRgba;
 pub const runtimeImageMagic = runtime_image.magic;
 pub const runtimeImageHeaderSize = runtime_image.header_size;
 pub const runtimeImageRgbaCanonicalLen = runtime_image.rgbaCanonicalLen;
+pub const runtimeImageRgbaCanonicalLenForTiling = runtime_image.rgbaCanonicalLenForTiling;
 pub const encodeRuntimeRgba = runtime_image.encodeRgba;
+pub const encodeRuntimeRgbaTiled = runtime_image.encodeRgbaTiled;
 pub const decodeRuntimeRgbaObject = runtime_image.decodeRgbaInto;
 
 pub const webpScratchByteLen = webp.webpScratchByteLen;
@@ -155,6 +178,21 @@ test "generic decoder converts imported images into runtime objects" {
     var out: [runtime_image.header_size + @sizeOf(ui.Color)]u8 = undefined;
     var decoded_pixels: [1]ui.Color = undefined;
     const roundtrip = try decodeToRuntimeWithScratch(encoded, &decoded_pixels, &.{}, &out);
+    try @import("std").testing.expectEqualSlices(u8, encoded, roundtrip);
+}
+
+test "generic decoder preserves existing ERIMG when tiled import is requested" {
+    const pixels = [_]ui.Color{
+        .{ .r = 1, .g = 0, .b = 0, .a = 255 },
+        .{ .r = 2, .g = 0, .b = 0, .a = 255 },
+        .{ .r = 3, .g = 0, .b = 0, .a = 255 },
+        .{ .r = 4, .g = 0, .b = 0, .a = 255 },
+    };
+    var canonical: [runtime_image.header_size + pixels.len * @sizeOf(ui.Color)]u8 = undefined;
+    const encoded = try runtime_image.encodeRgbaTiled(2, 2, 1, 1, &pixels, &canonical);
+    var out: [runtime_image.header_size + pixels.len * @sizeOf(ui.Color)]u8 = undefined;
+    var decoded_pixels: [pixels.len]ui.Color = undefined;
+    const roundtrip = try decodeToRuntimeTiledWithScratch(encoded, 2, 2, &decoded_pixels, &.{}, &out);
     try @import("std").testing.expectEqualSlices(u8, encoded, roundtrip);
 }
 
