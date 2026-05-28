@@ -57,6 +57,7 @@ const code_line_h: f32 = 20.0;
 const code_char_w: f32 = 8.4;
 const toolbar_h: f32 = 52.0;
 const status_h: f32 = 24.0;
+const search_h: f32 = 30.0;
 const panel_bg = ui.Color{ .r = 12, .g = 16, .b = 23 };
 const sidebar_bg = ui.Color{ .r = 18, .g = 23, .b = 33 };
 const border = ui.Color{ .r = 42, .g = 52, .b = 68 };
@@ -126,26 +127,43 @@ pub fn renderWorkspaceSidebar(scene: *ui.Scene, collector: *interaction.Collecto
     try fill(scene, bounds, sidebar_bg, 0.0);
     try fill(scene, ui.Rect.init(bounds.x + bounds.w - 1.0, bounds.y, 1.0, bounds.h), border, 0.0);
     try textAt(scene, bounds.x + 16.0, bounds.y + 14.0, bounds.w - 32.0, 16.0, "WORKSPACE", text);
-    try textAt(scene, bounds.x + 16.0, bounds.y + 36.0, bounds.w - 32.0, 14.0, formatBytes(state.workspace_bytes), muted);
 
-    var y = bounds.y + 70.0;
+    var workspace_buf: [32]u8 = undefined;
+    const workspace_label = formatBytes(&workspace_buf, state.workspace_bytes);
+    try textAt(scene, bounds.x + 16.0, bounds.y + 36.0, bounds.w - 32.0, 14.0, workspace_label, muted);
+
+    const search = ui.Rect.init(bounds.x + 12.0, bounds.y + 58.0, bounds.w - 24.0, search_h);
+    try fill(scene, search, ui.Color{ .r = 12, .g = 16, .b = 23 }, 8.0);
+    try fill(scene, search, border, .border, 8.0);
+    try collector.addHit(search, .input, explorer_search_input_id);
+    const search_text = if (state.search_query.len == 0) "search files" else state.search_query;
+    try textAt(scene, search.x + 10.0, search.y + 8.0, search.w - 20.0, 14.0, search_text, if (state.search_query.len == 0) muted else text);
+
+    var y = bounds.y + 100.0;
     for (state.files, 0..) |file, index| {
         const row = ui.Rect.init(bounds.x + 8.0, y, bounds.w - 16.0, 38.0);
-        try fill(scene, row, if (std.mem.eql(u8, file.displayLabel(), state.label)) ui.Color{ .r = 34, .g = 47, .b = 66 } else ui.Color.clear, 8.0);
+        const selected = std.mem.eql(u8, file.path, state.label) or std.mem.eql(u8, file.displayLabel(), state.label);
+        try fill(scene, row, if (selected) ui.Color{ .r = 34, .g = 47, .b = 66 } else ui.Color.clear, 8.0);
         try textAt(scene, row.x + 10.0, row.y + 9.0, row.w - 20.0, 16.0, file.displayLabel(), if (file.dirty) accent else text);
-        try collector.addHit(row, .row_item, @intCast(40_000 + index));
+        try collector.addHit(row, .row_item, sourceFileHitId(index));
         y += 42.0;
     }
 }
 
 pub fn renderWorkspaceStatus(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
     try fill(scene, bounds, ui.Color{ .r = 0, .g = 92, .b = 160 }, 0.0);
+    var file_buf: [32]u8 = undefined;
+    var release_buf: [32]u8 = undefined;
+    var memory_buf: [32]u8 = undefined;
+    const file_label = formatBytes(&file_buf, state.file_bytes);
+    const release_label = formatBytes(&release_buf, state.release_bytes);
+    const memory_label = formatBytes(&memory_buf, state.resource_memory_bytes);
     var status_buf: [192]u8 = undefined;
     const status = std.fmt.bufPrint(&status_buf, "{s} | file {s} | release {s} | memory {s} | instructions {}", .{
         state.compile_phase,
-        formatBytes(state.file_bytes),
-        formatBytes(state.release_bytes),
-        formatBytes(state.resource_memory_bytes),
+        file_label,
+        release_label,
+        memory_label,
         state.resource_cpu_instructions,
     }) catch state.compile_phase;
     try textAt(scene, bounds.x + 12.0, bounds.y + 5.0, bounds.w - 24.0, 14.0, status, ui.Color{ .r = 255, .g = 255, .b = 255 });
@@ -175,7 +193,7 @@ fn renderEditorToolbar(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
 
 fn renderCodeEditor(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
     try fill(scene, bounds, code_bg, 0.0);
-    try collector.addHit(bounds, .textarea, 45_000);
+    try collector.addHit(bounds, .textarea, editor_textarea_id);
     const first_line = state.scroll_line;
     const visible_lines = @max(@as(usize, 1), @as(usize, @intFromFloat(@max(1.0, bounds.h / code_line_h))));
     var line_index: usize = 0;
@@ -303,11 +321,10 @@ fn countLines(text_value: []const u8) usize {
     return count;
 }
 
-fn formatBytes(value: usize) []const u8 {
-    var buf: [32]u8 = undefined;
-    if (value < 1024) return std.fmt.bufPrint(&buf, "{} B", .{value}) catch "0 B";
-    if (value < 1024 * 1024) return std.fmt.bufPrint(&buf, "{} KB", .{value / 1024}) catch "0 KB";
-    return std.fmt.bufPrint(&buf, "{} MB", .{value / (1024 * 1024)}) catch "0 MB";
+fn formatBytes(out: []u8, value: usize) []const u8 {
+    if (value < 1024) return std.fmt.bufPrint(out, "{} B", .{value}) catch "0 B";
+    if (value < 1024 * 1024) return std.fmt.bufPrint(out, "{} KB", .{value / 1024}) catch "0 KB";
+    return std.fmt.bufPrint(out, "{} MB", .{value / (1024 * 1024)}) catch "0 MB";
 }
 
 fn fill(scene: *ui.Scene, bounds: ui.Rect, color: ui.Color, radius: f32) ui.RenderError!void {
@@ -344,6 +361,10 @@ fn basename(path: []const u8) []const u8 {
     return path;
 }
 
+fn sourceFileHitId(index: usize) u32 {
+    return source_file_hit_base + @as(u32, @intCast(index));
+}
+
 pub fn sourceIndexFromHit(hit_id: u32) ?usize {
     if (hit_id < source_file_hit_base) return null;
     const index: usize = @intCast(hit_id - source_file_hit_base);
@@ -351,10 +372,15 @@ pub fn sourceIndexFromHit(hit_id: u32) ?usize {
 }
 
 pub fn cursorFromPoint(bounds: ui.Rect, state: State, x: f32, y: f32) usize {
+    const editor = ui.Rect.init(bounds.x, bounds.y + toolbar_h, bounds.w, @max(1.0, bounds.h - toolbar_h - status_h));
+    return cursorFromTextAreaBounds(editor, state, x, y);
+}
+
+pub fn cursorFromTextAreaBounds(bounds: ui.Rect, state: State, x: f32, y: f32) usize {
     if (state.source.len == 0) return 0;
     const local_x = @max(0.0, x - bounds.x - code_gutter_w - code_pad);
-    const local_y = @max(0.0, y - bounds.y - toolbar_h - code_pad);
-    const line_index: usize = @intFromFloat(@max(0.0, local_y / code_line_h));
+    const local_y = @max(0.0, y - bounds.y);
+    const line_index: usize = state.scroll_line + @as(usize, @intFromFloat(@max(0.0, local_y / code_line_h)));
     const column: usize = @intFromFloat(@max(0.0, local_x / code_char_w));
 
     var line: usize = 0;
@@ -370,8 +396,4 @@ pub fn cursorFromPoint(bounds: ui.Rect, state: State, x: f32, y: f32) usize {
     }) {}
 
     return @min(i, state.source.len);
-}
-
-pub fn cursorFromTextAreaBounds(bounds: ui.Rect, state: State, x: f32, y: f32) usize {
-    return cursorFromPoint(bounds, state, x, y);
 }
