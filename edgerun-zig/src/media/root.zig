@@ -11,6 +11,7 @@ pub const RuntimeImageHeader = image.RuntimeImageHeader;
 pub const RuntimeImageView = image.RuntimeImageView;
 pub const Format = image.Format;
 pub const ImportFormat = image.ImportFormat;
+pub const JxlKind = image.JxlKind;
 
 pub const detectFormat = image.detectFormat;
 pub const decodeHeader = image.decodeHeader;
@@ -31,6 +32,7 @@ pub const encodeRuntimeRgbaTiled = image.encodeRuntimeRgbaTiled;
 pub const decodeRuntimeRgbaObject = image.decodeRuntimeRgbaObject;
 
 pub const importDetectFormat = image.importDetectFormat;
+pub const importJxlKind = image.importJxlKind;
 pub const importHeader = image.importHeader;
 pub const importScratchByteLen = image.importScratchByteLen;
 pub const importToRuntimeWithScratch = image.importToRuntimeWithScratch;
