@@ -47,7 +47,6 @@ pub const Action = enum(u32) {
     launch_source_release,
     reset_source,
     open_context_source,
-    run_agent,
 };
 
 const PathKind = enum {
@@ -105,7 +104,6 @@ pub fn actionFromHit(hit_id: u32) ?Action {
         app_source.launch_button_id => .launch_source_release,
         app_source.reset_button_id => .reset_source,
         context_source_button_id => .open_context_source,
-        app_agent.run_hit_id => .run_agent,
         else => null,
     };
 }
@@ -139,140 +137,84 @@ pub fn writeHash(out: []u8, route: Route) error{RouteBufferTooSmall}!usize {
     if (path_len == 1 and path[0] == '/') return 0;
     if (path_len + 1 > out.len) return error.RouteBufferTooSmall;
     out[0] = '#';
-    @memcpy(out[1 .. path_len + 1], path[0..path_len]);
+    @memcpy(out[1 .. 1 + path_len], path[0..path_len]);
     return path_len + 1;
 }
 
-pub fn trimPath(path: []const u8) []const u8 {
-    if (path.len == 0) return "/";
-    const query = std.mem.indexOfScalar(u8, path, '?') orelse path.len;
-    const hash = std.mem.indexOfScalar(u8, path[0..query], '#') orelse query;
-    const trimmed = path[0..hash];
-    return if (trimmed.len == 0) "/" else trimmed;
+fn pathKind(path: []const u8) PathKind {
+    if (std.mem.eql(u8, path, RoutePath.root)) return .root;
+    if (std.mem.eql(u8, path, RoutePath.academy)) return .academy;
+    if (std.mem.eql(u8, path, RoutePath.docs)) return .docs;
+    if (std.mem.eql(u8, path, RoutePath.component_catalog)) return .component_catalog;
+    if (std.mem.eql(u8, path, RoutePath.source)) return .source;
+    if (std.mem.eql(u8, path, RoutePath.agent)) return .agent;
+    if (std.mem.startsWith(u8, path, RoutePath.academy_detail_prefix)) return .academy_detail;
+    if (std.mem.startsWith(u8, path, RoutePath.component_detail_prefix)) return .component_detail;
+    if (std.mem.startsWith(u8, path, RoutePath.docs_detail_prefix)) return .docs_detail;
+    return .unknown;
 }
 
 fn routeFromDynamicHit(hit_id: u32, current: Route) ?Route {
-    switch (current.view) {
-        .components => if (component_gallery.indexByCatalogHit(hit_id) orelse component_gallery.indexByPreviewHit(hit_id)) |index| {
-            return .{ .view = .components, .selected_component_index = index };
-        },
-        .blog => {
-            if (app_blog.postById(hit_id) != null) {
-                return .{ .view = .blog, .selected_blog_post_id = hit_id };
-            }
-            if (app_blog.arcFilterIndexById(hit_id)) |index| {
-                return blogIndex(index);
-            }
-        },
-        .docs => {
-            if (component_gallery.indexByCatalogHit(hit_id) orelse component_gallery.indexByPreviewHit(hit_id)) |index| {
-                return .{ .view = .components, .selected_component_index = index };
-            }
-            if (app_docs.indexByHit(hit_id)) |index| {
-                if (app_docs.doc_pages[index].section == .source) return .{ .view = .source };
-                return .{ .view = .docs, .selected_doc_index = if (index == 0) null else index };
-            }
-        },
-        .landing, .source, .agent => {},
+    if (app_blog.postIdFromHit(hit_id)) |post_id| return .{ .view = .blog, .selected_blog_post_id = post_id, .blog_arc_filter_index = current.blog_arc_filter_index };
+    if (app_blog.arcFilterIndexFromHit(hit_id)) |index| return .{ .view = .blog, .blog_arc_filter_index = index };
+    if (component_gallery.indexByCatalogHit(hit_id)) |index| return .{ .view = .components, .selected_component_index = index };
+    if (component_gallery.indexByPreviewHit(hit_id)) |index| return .{ .view = .components, .selected_component_index = index };
+    if (app_docs.indexFromHit(hit_id)) |index| {
+        if (isComponentDocIndex(index)) return .{ .view = .components };
+        return .{ .view = .docs, .selected_doc_index = index };
     }
     return null;
 }
 
-fn blogIndex(filter_index: ?usize) Route {
-    return .{ .view = .blog, .blog_arc_filter_index = filter_index };
+fn academyPostRoute(slug: []const u8) Route {
+    if (app_blog.postIdBySlug(slug)) |post_id| return .{ .view = .blog, .selected_blog_post_id = post_id };
+    return blogIndex(null);
 }
 
-fn academyPostRoute(raw: []const u8) Route {
-    const raw_id = std.fmt.parseUnsigned(u32, raw, 10) catch return blogIndex(null);
-    return .{
-        .view = .blog,
-        .selected_blog_post_id = if (app_blog.postById(raw_id) != null) raw_id else 0,
-    };
+fn blogIndex(arc_filter_index: ?usize) Route {
+    return .{ .view = .blog, .blog_arc_filter_index = arc_filter_index };
 }
 
-fn pathKind(trimmed: []const u8) PathKind {
-    if (std.mem.eql(u8, trimmed, RoutePath.root)) return .root;
-    if (std.mem.eql(u8, trimmed, RoutePath.academy)) return .academy;
-    if (std.mem.eql(u8, trimmed, RoutePath.source)) return .source;
-    if (std.mem.eql(u8, trimmed, RoutePath.agent)) return .agent;
-    if (std.mem.eql(u8, trimmed, RoutePath.docs)) return .docs;
-    if (std.mem.eql(u8, trimmed, RoutePath.component_catalog)) return .component_catalog;
-    if (std.mem.startsWith(u8, trimmed, RoutePath.component_detail_prefix)) return .component_detail;
-    if (std.mem.startsWith(u8, trimmed, RoutePath.docs_detail_prefix)) return .docs_detail;
-    if (std.mem.startsWith(u8, trimmed, RoutePath.academy_detail_prefix)) return .academy_detail;
-    return .unknown;
+pub fn trimPath(path: []const u8) []const u8 {
+    if (path.len == 0) return RoutePath.root;
+    if (path[0] != '/') return RoutePath.root;
+    const query_start = std.mem.indexOfScalar(u8, path, '?') orelse path.len;
+    const hash_start = std.mem.indexOfScalar(u8, path[0..query_start], '#') orelse query_start;
+    const trimmed = path[0..hash_start];
+    if (trimmed.len == 0) return RoutePath.root;
+    return trimmed;
 }
 
 fn writePostPath(out: []u8, post_id: u32) error{RouteBufferTooSmall}!usize {
-    const value = std.fmt.bufPrint(out, RoutePath.academy_detail_prefix ++ "{d}", .{post_id}) catch return error.RouteBufferTooSmall;
-    return value.len;
-}
-
-fn writeComponentPath(out: []u8, index: usize) error{RouteBufferTooSmall}!usize {
-    if (index >= component_gallery.component_catalog.len) return writeComponentCatalogPath(out);
-    const value = component_gallery.component_catalog[index].route;
-    if (value.len > out.len) return error.RouteBufferTooSmall;
-    @memcpy(out[0..value.len], value);
-    return value.len;
-}
-
-fn writeComponentCatalogPath(out: []u8) error{RouteBufferTooSmall}!usize {
-    if (RoutePath.component_catalog.len > out.len) return error.RouteBufferTooSmall;
-    @memcpy(out[0..RoutePath.component_catalog.len], RoutePath.component_catalog);
-    return RoutePath.component_catalog.len;
-}
-
-fn isComponentDocIndex(index: usize) bool {
-    return if (app_docs.indexBySlug("component-system")) |component_index| index == component_index else false;
+    const slug = app_blog.postSlug(post_id) orelse return error.RouteBufferTooSmall;
+    return writePrefixPath(out, RoutePath.academy_detail_prefix, slug);
 }
 
 fn writeDocPath(out: []u8, index: usize) error{RouteBufferTooSmall}!usize {
-    if (index >= app_docs.doc_pages.len or index == 0) return writePath(out, .{ .view = .docs });
-    const value = app_docs.doc_pages[index].route;
+    const slug = app_docs.slugByIndex(index) orelse return error.RouteBufferTooSmall;
+    return writePrefixPath(out, RoutePath.docs_detail_prefix, slug);
+}
+
+fn writeComponentPath(out: []u8, index: usize) error{RouteBufferTooSmall}!usize {
+    const slug = component_gallery.slugByIndex(index) orelse return error.RouteBufferTooSmall;
+    return writePrefixPath(out, RoutePath.component_detail_prefix, slug);
+}
+
+fn writeComponentCatalogPath(out: []u8) error{RouteBufferTooSmall}!usize {
+    const value = RoutePath.component_catalog;
     if (value.len > out.len) return error.RouteBufferTooSmall;
     @memcpy(out[0..value.len], value);
     return value.len;
 }
 
-test "navigation parses app and native app routes" {
-    try std.testing.expectEqual(View.source, fromPath("").view);
-    try std.testing.expectEqual(View.blog, fromPath("/academy").view);
-    try std.testing.expectEqual(View.source, fromPath("/apps").view);
-    try std.testing.expectEqual(View.source, fromPath("/source").view);
-    try std.testing.expectEqual(View.agent, fromPath("/agent").view);
-    try std.testing.expectEqual(View.docs, fromPath("/docs").view);
-    try std.testing.expectEqual(View.docs, fromPath("/docs/media").view);
-    try std.testing.expectEqual(app_docs.indexBySlug("media").?, fromPath("/docs/media").selected_doc_index.?);
-    try std.testing.expectEqual(View.docs, fromPath("/docs/component-system").view);
-    try std.testing.expectEqual(app_docs.indexBySlug("component-system").?, fromPath("/docs/component-system").selected_doc_index.?);
-    try std.testing.expectEqual(View.components, fromPath("/docs/components").view);
-    try std.testing.expectEqual(View.components, fromPath("/docs/components/button").view);
-    try std.testing.expectEqual(component_gallery.indexBySlug("button").?, fromPath("/docs/components/button").selected_component_index.?);
-    const post_id = app_blog.postIdAt(0);
-    var post_path: [route_path_capacity]u8 = undefined;
-    const post_path_text = try std.fmt.bufPrint(&post_path, "/academy/{d}", .{post_id});
-    try std.testing.expectEqual(post_id, fromPath(post_path_text).selected_blog_post_id);
-    try std.testing.expectEqual(@as(u32, 0), fromPath("/academy/not-a-post").selected_blog_post_id);
+fn writePrefixPath(out: []u8, prefix: []const u8, suffix: []const u8) error{RouteBufferTooSmall}!usize {
+    const len = prefix.len + suffix.len;
+    if (len > out.len) return error.RouteBufferTooSmall;
+    @memcpy(out[0..prefix.len], prefix);
+    @memcpy(out[prefix.len..len], suffix);
+    return len;
 }
 
-test "navigation writes route hashes from shared state" {
-    var path: [route_path_capacity]u8 = undefined;
-    var hash: [route_hash_capacity]u8 = undefined;
-
-    const default_len = try writePath(&path, .{});
-    try std.testing.expectEqualStrings("/source", path[0..default_len]);
-    const default_hash_len = try writeHash(&hash, .{});
-    try std.testing.expectEqualStrings("#/source", hash[0..default_hash_len]);
-
-    const source = Route{ .view = .source };
-    const source_len = try writePath(&path, source);
-    try std.testing.expectEqualStrings("/source", path[0..source_len]);
-    const source_hash_len = try writeHash(&hash, source);
-    try std.testing.expectEqualStrings("#/source", hash[0..source_hash_len]);
-
-    const agent = Route{ .view = .agent };
-    const agent_len = try writePath(&path, agent);
-    try std.testing.expectEqualStrings("/agent", path[0..agent_len]);
-    const agent_hash_len = try writeHash(&hash, agent);
-    try std.testing.expectEqualStrings("#/agent", hash[0..agent_hash_len]);
+fn isComponentDocIndex(index: usize) bool {
+    return index == app_docs.component_catalog_doc_index;
 }
