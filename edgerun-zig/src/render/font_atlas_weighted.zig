@@ -5,16 +5,19 @@ const ir = @import("ir.zig");
 const raster = @import("vector_raster.zig");
 const varfont = @import("../varfont.zig");
 
-pub const width: usize = 4096;
-pub const height: usize = 4096;
+pub const width: usize = 8192;
+pub const height: usize = 8192;
 pub const bytes: usize = width * height;
 pub const channels: usize = 1;
-pub const glyph_capacity: usize = 32768;
+pub const glyph_capacity: usize = 196608;
 pub const format: varfont.AtlasFormat = .alpha8;
 
 const pad: usize = 8;
 const row_gap: usize = 8;
 const default_scale: f32 = 2.0;
+const first_px: u8 = ir.font_first_px;
+const last_px: u8 = ir.font_last_px;
+const weights = [_]font_builtin.Weight{ .regular, .semibold, .bold };
 const Cached = struct { weight: font_builtin.Weight, ch: u21, px: u8, glyph: ir.Glyph };
 
 pub const Atlas = struct {
@@ -30,15 +33,15 @@ pub const Atlas = struct {
     revision: u32,
 
     pub fn init() Atlas {
-        var a: Atlas = undefined;
-        a.initUtf8();
-        return a;
+        var atlas: Atlas = undefined;
+        atlas.initUtf8();
+        return atlas;
     }
 
     pub fn initWithFont(font: font_vector.Body) Atlas {
-        var a: Atlas = undefined;
-        a.initWithFontInPlace(font);
-        return a;
+        var atlas: Atlas = undefined;
+        atlas.initWithFontInPlace(font);
+        return atlas;
     }
 
     pub fn initEmpty(self: *Atlas) void { self.initUtf8(); }
@@ -48,7 +51,9 @@ pub const Atlas = struct {
         self.builtin = true;
         self.device_scale = default_scale;
         self.revision = 0;
-        self.clear();
+        self.clearWithoutRevision();
+        self.prebuildDeterministicCache() catch @panic("font atlas cache build failed");
+        self.bumpRevision();
     }
 
     pub fn initWithFontInPlace(self: *Atlas, font: font_vector.Body) void {
@@ -56,16 +61,22 @@ pub const Atlas = struct {
         self.builtin = false;
         self.device_scale = default_scale;
         self.revision = 0;
-        self.clear();
+        self.clearWithoutRevision();
+        self.prebuildDeterministicCache() catch @panic("font atlas cache build failed");
+        self.bumpRevision();
     }
 
     pub fn clear(self: *Atlas) void {
+        self.clearWithoutRevision();
+        self.bumpRevision();
+    }
+
+    fn clearWithoutRevision(self: *Atlas) void {
         @memset(&self.alpha, 0);
         self.glyph_count = 0;
         self.atlas_x = pad;
         self.atlas_y = pad;
         self.atlas_row_h = 0;
-        self.bumpRevision();
     }
 
     pub fn source(self: *Atlas) ir.FontAtlas { return .{ .context = self, .metrics = metrics, .width = textWidth, .glyph = glyph }; }
@@ -78,17 +89,35 @@ pub const Atlas = struct {
     pub fn setDeviceScale(self: *Atlas, scale: f32) void {
         if (@abs(self.device_scale - scale) <= 0.001) return;
         self.device_scale = scale;
-        self.clear();
+        self.clearWithoutRevision();
+        self.prebuildDeterministicCache() catch @panic("font atlas cache rebuild failed");
+        self.bumpRevision();
     }
 
     pub fn prepareText(self: *Atlas, value: []const u8, px: u8, weight: font_builtin.Weight) ir.Error!void {
         var index: usize = 0;
         while (nextCodepoint(value, &index)) |cp| {
             if (self.body(weight).glyphForCodepoint(cp) == null) continue;
-            _ = self.ensureGlyph(weight, cp, px) catch |err| switch (err) {
-                error.GlyphBitmapBudgetExceeded, error.GlyphCacheFull => return error.Budget,
-                else => continue,
-            };
+            if (self.lookupGlyph(weight, cp, px) == null) return error.Budget;
+        }
+    }
+
+    fn prebuildDeterministicCache(self: *Atlas) varfont.Error!void {
+        if (self.builtin) {
+            for (weights) |weight| {
+                const font = self.body(weight);
+                var px: u8 = first_px;
+                while (px <= last_px) : (px += 1) {
+                    for (font.glyphs) |record| _ = try self.cacheGlyph(weight, record.codepoint, px);
+                    if (px == last_px) break;
+                }
+            }
+        } else {
+            var px: u8 = first_px;
+            while (px <= last_px) : (px += 1) {
+                for (self.font.glyphs) |record| _ = try self.cacheGlyph(.regular, record.codepoint, px);
+                if (px == last_px) break;
+            }
         }
     }
 
@@ -115,11 +144,6 @@ pub const Atlas = struct {
             if (entry.weight == weight and entry.ch == cp and entry.px == px) return entry.glyph;
         }
         return null;
-    }
-
-    fn ensureGlyph(self: *Atlas, weight: font_builtin.Weight, cp: u21, px: u8) varfont.Error!ir.Glyph {
-        if (self.lookupGlyph(weight, cp, px)) |found| return found;
-        return self.cacheGlyph(weight, cp, px);
     }
 
     fn cacheGlyph(self: *Atlas, weight: font_builtin.Weight, cp: u21, px: u8) varfont.Error!ir.Glyph {
@@ -152,7 +176,6 @@ pub const Atlas = struct {
         };
         self.glyphs[self.glyph_count] = .{ .weight = weight, .ch = cp, .px = px, .glyph = out };
         self.glyph_count += 1;
-        self.bumpRevision();
         return out;
     }
 
