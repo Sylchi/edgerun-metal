@@ -9,6 +9,7 @@ pub const Region = @import("region.zig").Region;
 pub const BoundedArena = @import("arena.zig").BoundedArena;
 pub const clock = @import("clock.zig");
 pub const identity = @import("identity.zig");
+pub const file_probe = @import("file_probe.zig");
 pub const firmware = @import("firmware.zig");
 pub const font_vector = @import("font_vector.zig");
 pub const geometry = @import("geometry.zig");
@@ -89,6 +90,7 @@ test {
     _ = BoundedArena;
     _ = clock;
     _ = identity;
+    _ = file_probe;
     _ = firmware;
     _ = font_vector;
     _ = geometry;
