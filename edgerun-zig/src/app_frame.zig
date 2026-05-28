@@ -2,7 +2,6 @@ const std = @import("std");
 const component_gallery = @import("component_gallery.zig");
 const button_component = @import("ui/components/Button.zig");
 const card_component = @import("ui/components/Card.zig");
-const icon_component = @import("ui/components/Icon.zig");
 const row_item_component = @import("ui/components/RowItem.zig");
 const interaction = @import("ui_interaction.zig");
 const app_bundle = @import("app_bundle.zig");
@@ -29,6 +28,42 @@ const workspace_rail_bg = ui.Color{ .r = 37, .g = 37, .b = 38 };
 const workspace_sidebar_bg = ui.Color{ .r = 24, .g = 24, .b = 24 };
 const workspace_main_bg = ui.Color{ .r = 10, .g = 12, .b = 16 };
 const workspace_status_bg = ui.Color{ .r = 0, .g = 122, .b = 204 };
+
+const WorkspaceNavItem = struct {
+    binding: app_navigation.TopLevelBinding,
+
+    fn renderRail(self: WorkspaceNavItem, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, active_view: app_navigation.View, y: f32) !f32 {
+        const item = self.binding;
+        const item_bounds = ui.Rect.init(bounds.x + 6.0, y, bounds.w - 12.0, workspace_icon_button);
+        const active = active_view == item.route.view;
+        const component = button_component.IconButton{
+            .id = item.id,
+            .label = item.rail_label,
+            .icon = item.icon,
+            .variant = if (active) .secondary else .ghost,
+        };
+        try component.render(scene, item_bounds, .{ .style = design.style() });
+        try component.collectInteractions(collector, item_bounds);
+        if (active) try scene.pushRect(ui.Rect.init(bounds.x, item_bounds.y + 5.0, 2.0, item_bounds.h - 10.0), design.palette.primary, .fill, 0.0, 0.0);
+        return y + workspace_icon_button + 8.0;
+    }
+
+    fn renderSidebar(self: WorkspaceNavItem, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, active_view: app_navigation.View, y: f32) !f32 {
+        const item = self.binding;
+        const row_bounds = ui.Rect.init(bounds.x + 10.0, y, bounds.w - 20.0, 42.0);
+        const row = row_item_component.RowItem{
+            .id = item.id,
+            .title = item.row_title,
+            .detail = item.row_detail,
+        };
+        try row.render(scene, row_bounds, .{
+            .style = design.style(),
+            .control = .{ .active = active_view == item.route.view },
+        });
+        try row.collectInteractions(collector, row_bounds);
+        return y + 46.0;
+    }
+};
 
 pub const State = struct {
     route: app_navigation.Route = .{},
@@ -103,26 +138,11 @@ fn renderWorkspaceTop(scene: *ui.Scene, collector: *interaction.Collector, bound
 
 fn renderWorkspaceRail(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, active: app_navigation.View) !void {
     try scene.pushRect(bounds, workspace_rail_bg, .fill, 0.0, 0.0);
-    const items = [_]struct { id: u32, icon_value: icon_component.Icon, label: []const u8, view: app_navigation.View }{
-        .{ .id = app_navigation.topLevelButtonId(.source), .icon_value = icon_component.Icon.named(.code), .label = "Source", .view = .source },
-        .{ .id = app_navigation.topLevelButtonId(.agent), .icon_value = icon_component.Icon.named(.sparkles), .label = "Agent", .view = .agent },
-        .{ .id = app_navigation.topLevelButtonId(.components), .icon_value = icon_component.Icon.named(.app), .label = "Components", .view = .components },
-        .{ .id = app_navigation.topLevelButtonId(.docs), .icon_value = icon_component.Icon.named(.file), .label = "Docs", .view = .docs },
-        .{ .id = app_navigation.topLevelButtonId(.blog), .icon_value = icon_component.Icon.named(.terminal), .label = "Academy", .view = .blog },
-    };
+    const items = app_navigation.topLevelWorkspaceBindings();
     var y = bounds.y + workspace_rail_pad;
     for (items) |item| {
-        const item_bounds = ui.Rect.init(bounds.x + 6.0, y, bounds.w - 12.0, workspace_icon_button);
-        const component = button_component.IconButton{
-            .id = item.id,
-            .label = item.label,
-            .icon = item.icon_value,
-            .variant = if (active == item.view) .secondary else .ghost,
-        };
-        try component.render(scene, item_bounds, .{ .style = design.style() });
-        try component.collectInteractions(collector, item_bounds);
-        if (active == item.view) try scene.pushRect(ui.Rect.init(bounds.x, item_bounds.y + 5.0, 2.0, item_bounds.h - 10.0), design.palette.primary, .fill, 0.0, 0.0);
-        y += workspace_icon_button + 8.0;
+        const route_item = WorkspaceNavItem{ .binding = item };
+        y = try route_item.renderRail(scene, collector, bounds, active, y);
     }
 }
 
@@ -137,22 +157,10 @@ fn renderWorkspaceSidebar(scene: *ui.Scene, collector: *interaction.Collector, b
     try text_component.Text.renderAligned(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 14.0, bounds.w - 32.0, 16.0), "EDGERUN", design.palette.text, .start);
     try text_component.Text.renderAligned(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 36.0, bounds.w - 32.0, 14.0), sidebarDetail(route), design.palette.muted, .start);
     var y = bounds.y + 68.0;
-    const rows = [_]struct { id: u32, title: []const u8, detail: []const u8, view: app_navigation.View }{
-        .{ .id = app_navigation.topLevelButtonId(.source), .title = "Source", .detail = "edit app workspace", .view = .source },
-        .{ .id = app_navigation.topLevelButtonId(.agent), .title = "Agent", .detail = "local model and tools", .view = .agent },
-        .{ .id = app_navigation.topLevelButtonId(.components), .title = "Components", .detail = "edit and preview system", .view = .components },
-        .{ .id = app_navigation.topLevelButtonId(.docs), .title = "Docs", .detail = "manual inside workspace", .view = .docs },
-        .{ .id = app_navigation.topLevelButtonId(.blog), .title = "Academy", .detail = "lessons inside workspace", .view = .blog },
-    };
+    const rows = app_navigation.topLevelWorkspaceBindings();
     for (rows) |row| {
-        const row_bounds = ui.Rect.init(bounds.x + 10.0, y, bounds.w - 20.0, 42.0);
-        const component = row_item_component.RowItem{ .id = row.id, .title = row.title, .detail = row.detail };
-        try component.render(scene, row_bounds, .{
-            .style = design.style(),
-            .control = .{ .active = route.view == row.view },
-        });
-        try component.collectInteractions(collector, row_bounds);
-        y += 46.0;
+        const route_item = WorkspaceNavItem{ .binding = row };
+        y = try route_item.renderSidebar(scene, collector, bounds, route.view, y);
     }
 }
 
@@ -322,7 +330,7 @@ test "app frame routes through workspace sidebar instead of top navbar" {
     try std.testing.expect(hasText(scene.written(), "Components"));
     try expectHit(collector.written(), app_navigation.topLevelButtonId(.source));
     try expectHit(collector.written(), app_navigation.topLevelButtonId(.agent));
-    try expectHit(collector.written(), app_docs.component_catalog_button_id);
+    try expectHit(collector.written(), app_navigation.topLevelButtonId(.components));
     try expectHit(collector.written(), app_navigation.topLevelButtonId(.docs));
     try expectHit(collector.written(), app_navigation.topLevelButtonId(.blog));
     try expectNoHit(collector.written(), app_navigation.topLevelButtonId(.logo));

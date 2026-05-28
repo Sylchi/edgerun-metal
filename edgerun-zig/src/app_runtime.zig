@@ -2858,7 +2858,7 @@ test "app runtime activation keeps page state in wasm" {
     try std.testing.expectEqual(app_blog.indexContentHeight(1280.0), er_ui_app_content_height(1280.0));
     try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_activate_hit(app_navigation.topLevelButtonId(.docs)));
     try std.testing.expectEqual(app_docs.contentHeight(1280.0), er_ui_app_content_height(1280.0));
-    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_activate_hit(app_docs.component_catalog_button_id));
+    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_activate_hit(app_navigation.topLevelButtonId(.components)));
     try std.testing.expectEqual(component_gallery.contentHeightForState(1280.0, .{}), er_ui_app_content_height(1280.0));
 }
 

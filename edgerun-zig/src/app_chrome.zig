@@ -5,12 +5,13 @@ const interaction = @import("ui_interaction.zig");
 const ui = @import("ui.zig");
 const text_component = @import("ui/components/Text.zig");
 const design = @import("app_design.zig");
+const app_navigation = @import("app_navigation.zig");
 
-pub const logo_button_id: u32 = 30_000;
-pub const docs_button_id: u32 = 30_001;
-pub const blog_button_id: u32 = 30_011;
-pub const source_button_id: u32 = 30_012;
-pub const agent_button_id: u32 = 30_013;
+pub const logo_button_id: u32 = app_navigation.topLevelButtonId(.logo);
+pub const docs_button_id: u32 = app_navigation.topLevelButtonId(.docs);
+pub const blog_button_id: u32 = app_navigation.topLevelButtonId(.blog);
+pub const source_button_id: u32 = app_navigation.topLevelButtonId(.source);
+pub const agent_button_id: u32 = app_navigation.topLevelButtonId(.agent);
 
 pub const header_h: f32 = design.header_h;
 pub const surface_radius: f32 = design.surface_radius;

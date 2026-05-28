@@ -11,6 +11,9 @@ const design = @import("app_design.zig");
 const app_layout = @import("app_layout.zig");
 const app_navigation = @import("app_navigation.zig");
 
+const source_button_id = app_navigation.topLevelButtonId(.source);
+const docs_button_id = app_navigation.topLevelButtonId(.docs);
+
 const max_columns: usize = 4;
 const header_h: f32 = app_chrome.header_h;
 const section_gap: f32 = 72.0;

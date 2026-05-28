@@ -2031,7 +2031,7 @@ test "wayland host renders client side decoration above app content" {
     try std.testing.expectEqual(@as(f32, 0.0), (try hitRect(collector.written(), client_decor_drag_id)).y);
     try std.testing.expect((try hitRect(collector.written(), client_decor_close_id)).x > 1200.0);
 
-    const academy = try hitRect(collector.written(), app_chrome.blog_button_id);
+    const academy = try hitRect(collector.written(), app_navigation.topLevelButtonId(.blog));
     try std.testing.expect(academy.y >= client_decor_h);
 }
 
@@ -2100,7 +2100,7 @@ test "wayland host pointer input updates hover activation and scroll state" {
     updateHoverHitForState(&state, collector.written());
     try std.testing.expect(state.runtime.hovered == null);
 
-    const docs = try hitRect(collector.written(), app_chrome.docs_button_id);
+    const docs = try hitRect(collector.written(), app_navigation.topLevelButtonId(.docs));
     state.hover_x = docs.x + docs.w * 0.5;
     state.hover_y = docs.y + docs.h * 0.5;
     updateHoverHitForState(&state, collector.written());
@@ -2135,7 +2135,7 @@ test "wayland host appends scene cursor from native hover state" {
     var collector = interaction.Collector.init(&app.regions);
     try renderNativeAppScene(&scene, &collector, app.width, app.height, app.state, &app.dashboard_app, app.dashboard);
     app.region_len = collector.written().len;
-    const docs = try hitRect(app.regionSlice(), app_chrome.docs_button_id);
+    const docs = try hitRect(app.regionSlice(), app_navigation.topLevelButtonId(.docs));
     app.state.hover_x = docs.x + docs.w * 0.5;
     app.state.hover_y = docs.y + docs.h * 0.5;
     app.updateHoverHit(app.regionSlice());

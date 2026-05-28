@@ -9,10 +9,11 @@ const app_chrome = @import("app_chrome.zig");
 const design = @import("app_design.zig");
 const interaction = @import("ui_interaction.zig");
 const app_layout = @import("app_layout.zig");
+const route_ids = @import("app_routing_ids.zig");
 
 pub const back_button_id: u32 = 40_001;
 pub const first_post_button_id: u32 = 40_100;
-pub const all_lessons_button_id: u32 = 40_899;
+pub const all_lessons_button_id: u32 = route_ids.all_lessons_button_id;
 pub const first_arc_filter_button_id: u32 = 40_900;
 
 const header_h: f32 = app_chrome.header_h;
@@ -3490,8 +3491,8 @@ test "blog renders committed post index through native components" {
     try std.testing.expectEqualStrings(arc_control, posts[34].arc);
     try std.testing.expectEqualStrings(arc_accounting, posts[61].arc);
     try std.testing.expect(hasHit(collector.written(), postIdAt(0)));
-    try std.testing.expect(hasHit(collector.written(), app_chrome.blog_button_id));
-    try std.testing.expect(hasHit(collector.written(), app_chrome.logo_button_id));
+    try std.testing.expect(hasHit(collector.written(), route_ids.blog_button_id));
+    try std.testing.expect(hasHit(collector.written(), route_ids.logo_button_id));
     try std.testing.expect(hasHit(collector.written(), all_lessons_button_id));
     try std.testing.expect(hasHit(collector.written(), arcFilterButtonId(0)));
     try std.testing.expect(hasImage(scene.written(), cloud_meme_image_id));

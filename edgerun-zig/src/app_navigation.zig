@@ -1,9 +1,10 @@
 const std = @import("std");
 const component_gallery = @import("component_gallery.zig");
 const app_blog = @import("app_blog.zig");
-const app_chrome = @import("app_chrome.zig");
 const app_docs = @import("app_docs.zig");
 const app_source = @import("app_source.zig");
+const route_ids = @import("app_routing_ids.zig");
+const icon_component = @import("ui/components/Icon.zig");
 
 pub const route_path_capacity: usize = 96;
 pub const route_hash_capacity: usize = route_path_capacity + 1;
@@ -160,15 +161,94 @@ pub const Contract = struct {
     action_bindings: []const ActionBinding,
 };
 
+pub const TopLevelBinding = struct {
+    button: MainButton,
+    id: u32,
+    route: Route,
+    icon: icon_component.Icon,
+    rail_label: []const u8,
+    row_title: []const u8,
+    row_detail: []const u8,
+};
+
+const top_level_bindings = [_]TopLevelBinding{
+    .{
+        .button = .logo,
+        .id = route_ids.logo_button_id,
+        .route = .{ .view = .source },
+        .icon = icon_component.Icon.named(.terminal),
+        .rail_label = "Overview",
+        .row_title = "Overview",
+        .row_detail = "top-level app view",
+    },
+    .{
+        .button = .source,
+        .id = route_ids.source_button_id,
+        .route = .{ .view = .source },
+        .icon = icon_component.Icon.named(.code),
+        .rail_label = "Source",
+        .row_title = "Source",
+        .row_detail = "edit app workspace",
+    },
+    .{
+        .button = .agent,
+        .id = route_ids.agent_button_id,
+        .route = .{ .view = .agent },
+        .icon = icon_component.Icon.named(.sparkles),
+        .rail_label = "Agent",
+        .row_title = "Agent",
+        .row_detail = "local model and tools",
+    },
+    .{
+        .button = .components,
+        .id = route_ids.component_catalog_button_id,
+        .route = .{ .view = .components },
+        .icon = icon_component.Icon.named(.app),
+        .rail_label = "Components",
+        .row_title = "Components",
+        .row_detail = "edit and preview system",
+    },
+    .{
+        .button = .docs,
+        .id = route_ids.docs_button_id,
+        .route = .{ .view = .docs },
+        .icon = icon_component.Icon.named(.file),
+        .rail_label = "Docs",
+        .row_title = "Docs",
+        .row_detail = "manual inside workspace",
+    },
+    .{
+        .button = .blog,
+        .id = route_ids.blog_button_id,
+        .route = .{ .view = .blog },
+        .icon = icon_component.Icon.named(.terminal),
+        .rail_label = "Academy",
+        .row_title = "Academy",
+        .row_detail = "lessons inside workspace",
+    },
+};
+
 pub fn topLevelButtonId(button: MainButton) u32 {
-    return switch (button) {
-        .logo => app_chrome.logo_button_id,
-        .docs => app_chrome.docs_button_id,
-        .blog => app_chrome.blog_button_id,
-        .source => app_chrome.source_button_id,
-        .agent => app_chrome.agent_button_id,
-        .components => app_docs.component_catalog_button_id,
-    };
+    return topLevelBinding(button).id;
+}
+
+pub fn topLevelRoute(button: MainButton) Route {
+    return topLevelBinding(button).route;
+}
+
+pub fn topLevelBindings() []const TopLevelBinding {
+    return &top_level_bindings;
+}
+
+pub fn topLevelBinding(button: MainButton) TopLevelBinding {
+    for (top_level_bindings) |entry| {
+        if (entry.button == button) return entry;
+    }
+    unreachable;
+}
+
+pub fn topLevelWorkspaceBindings() []const TopLevelBinding {
+    return top_level_bindings[1..];
 }
 
 pub const action_bindings = [_]ActionBinding{
@@ -181,15 +261,15 @@ pub const action_bindings = [_]ActionBinding{
 };
 
 pub const static_routes = [_]HitRoute{
-    .{ .id = app_chrome.logo_button_id, .route = .{ .view = .source } },
-    .{ .id = app_chrome.docs_button_id, .route = .{ .view = .docs } },
-    .{ .id = app_chrome.blog_button_id, .route = .{ .view = .blog } },
-    .{ .id = app_blog.all_lessons_button_id, .route = .{ .view = .blog } },
-    .{ .id = app_docs.academy_button_id, .route = .{ .view = .blog } },
-    .{ .id = app_chrome.source_button_id, .route = .{ .view = .source } },
-    .{ .id = app_chrome.agent_button_id, .route = .{ .view = .agent } },
-    .{ .id = app_docs.source_button_id, .route = .{ .view = .source } },
-    .{ .id = app_docs.component_catalog_button_id, .route = .{ .view = .components } },
+    .{ .id = route_ids.logo_button_id, .route = .{ .view = .source } },
+    .{ .id = route_ids.docs_button_id, .route = .{ .view = .docs } },
+    .{ .id = route_ids.blog_button_id, .route = .{ .view = .blog } },
+    .{ .id = route_ids.all_lessons_button_id, .route = .{ .view = .blog } },
+    .{ .id = route_ids.academy_button_id, .route = .{ .view = .blog } },
+    .{ .id = route_ids.source_button_id, .route = .{ .view = .source } },
+    .{ .id = route_ids.agent_button_id, .route = .{ .view = .agent } },
+    .{ .id = route_ids.docs_source_button_id, .route = .{ .view = .source } },
+    .{ .id = route_ids.component_catalog_button_id, .route = .{ .view = .components } },
     .{ .id = app_blog.back_button_id, .route = .{ .view = .blog } },
 };
 

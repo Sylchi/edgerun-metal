@@ -11,13 +11,14 @@ const app_blog = @import("app_blog.zig");
 const app_chrome = @import("app_chrome.zig");
 const design = @import("app_design.zig");
 const app_layout = @import("app_layout.zig");
+const route_ids = @import("app_routing_ids.zig");
 
 const DocsError = ui.RenderError || interaction.Error || component_gallery.GalleryError;
 
-pub const component_catalog_button_id: u32 = 31_001;
-pub const academy_button_id: u32 = 31_002;
-pub const source_button_id: u32 = 31_003;
-pub const first_doc_page_button_id: u32 = 31_200;
+pub const component_catalog_button_id: u32 = route_ids.component_catalog_button_id;
+pub const academy_button_id: u32 = route_ids.academy_button_id;
+pub const source_button_id: u32 = route_ids.docs_source_button_id;
+pub const first_doc_page_button_id: u32 = route_ids.first_doc_page_button_id;
 
 const header_h: f32 = app_chrome.header_h;
 const content_wide: f32 = design.content_wide;

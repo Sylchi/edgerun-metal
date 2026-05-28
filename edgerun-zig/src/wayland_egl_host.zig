@@ -703,7 +703,7 @@ test "egl host parses explicit parity verification mode" {
 test "egl host activation uses shared app navigation routes" {
     var app = AppState{};
 
-    app.input.runtime.hovered = .{ .kind = .button, .id = app_chrome.blog_button_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
+    app.input.runtime.hovered = .{ .kind = .button, .id = app_navigation.topLevelButtonId(.blog), .bounds = ui.Rect.init(0, 0, 1, 1) };
     app_native_input.activateHovered(&app.input);
     try std.testing.expectEqual(app_navigation.View.blog, app.input.route.view);
     try std.testing.expectEqual(@as(f32, 0.0), app.input.scroll_y);
@@ -716,15 +716,15 @@ test "egl host activation uses shared app navigation routes" {
     try std.testing.expectEqual(post_id, app.input.route.selected_blog_post_id);
     try std.testing.expectEqual(@as(f32, 0.0), app.input.scroll_y);
 
-    app.input.runtime.hovered = .{ .kind = .button, .id = app_chrome.docs_button_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
+    app.input.runtime.hovered = .{ .kind = .button, .id = app_navigation.topLevelButtonId(.docs), .bounds = ui.Rect.init(0, 0, 1, 1) };
     app_native_input.activateHovered(&app.input);
     try std.testing.expectEqual(app_navigation.View.docs, app.input.route.view);
 
-    app.input.runtime.hovered = .{ .kind = .button, .id = app_chrome.docs_button_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
+    app.input.runtime.hovered = .{ .kind = .button, .id = app_navigation.topLevelButtonId(.docs), .bounds = ui.Rect.init(0, 0, 1, 1) };
     app_native_input.activateHovered(&app.input);
     try std.testing.expectEqual(app_navigation.View.docs, app.input.route.view);
 
-    app.input.runtime.hovered = .{ .kind = .button, .id = app_chrome.logo_button_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
+    app.input.runtime.hovered = .{ .kind = .button, .id = app_navigation.topLevelButtonId(.logo), .bounds = ui.Rect.init(0, 0, 1, 1) };
     app_native_input.activateHovered(&app.input);
     try std.testing.expectEqual(app_navigation.View.source, app.input.route.view);
 }
