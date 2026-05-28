@@ -1,5 +1,4 @@
 const std = @import("std");
-const app_navigation = @import("app_navigation.zig");
 const ui = @import("ui.zig");
 
 pub const HitId = u32;
@@ -15,6 +14,20 @@ pub const Role = enum {
     search,
 };
 
+pub const RouteHit = union(enum) {
+    top_level: u32,
+    path: []const u8,
+};
+
+pub const ActionHit = union(enum) {
+    source_compile,
+    source_download,
+    source_launch,
+    source_reset,
+    open_context_source,
+    reveal_identity,
+};
+
 pub const SourceHit = union(enum) {
     editor,
     search,
@@ -24,8 +37,8 @@ pub const SourceHit = union(enum) {
 pub const Hit = struct {
     kind: ui.HitKind,
     id: HitId,
-    route: ?app_navigation.Route = null,
-    action: ?app_navigation.Action = null,
+    route: ?RouteHit = null,
+    action: ?ActionHit = null,
     source: ?SourceHit = null,
 };
 
