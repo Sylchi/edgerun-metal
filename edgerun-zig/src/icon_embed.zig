@@ -5099,6 +5099,8 @@ pub fn source(value: icon.Icon) []const u8 {
 }
 
 test "all mapped tabler svgs parse without invalid path data" {
+    const std = @import("std");
+    @setEvalBranchQuota(6000);
     const icon_svg = @import("icon_svg.zig");
     inline for (std.meta.fields(icon.Icon)) |field| {
         var iter = icon_svg.Iterator.init(source(@enumFromInt(field.value)));
@@ -5109,6 +5111,8 @@ test "all mapped tabler svgs parse without invalid path data" {
 }
 
 test "all mapped tabler svgs match supported stroke contract" {
+    const std = @import("std");
+    @setEvalBranchQuota(6000);
     const icon_svg = @import("icon_svg.zig");
     inline for (std.meta.fields(icon.Icon)) |field| {
         try icon_svg.validateSupportedTablerStroke(source(@enumFromInt(field.value)));

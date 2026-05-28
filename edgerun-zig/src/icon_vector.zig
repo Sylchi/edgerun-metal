@@ -531,6 +531,90 @@ pub const Arc = struct {
     end: Point,
 };
 
+pub const SvgArcGeometry = struct {
+    center: Point,
+    rx: f32,
+    ry: f32,
+    cos_phi: f32,
+    sin_phi: f32,
+    start_angle: f32,
+    delta: f32,
+
+    pub fn pointAt(self: SvgArcGeometry, step: usize, steps: usize) Point {
+        const angle = self.start_angle + self.delta * @as(f32, @floatFromInt(step)) / @as(f32, @floatFromInt(steps));
+        const xp = self.rx * @cos(angle);
+        const yp = self.ry * @sin(angle);
+        return .{
+            .x = self.center.x + self.cos_phi * xp - self.sin_phi * yp,
+            .y = self.center.y + self.sin_phi * xp + self.cos_phi * yp,
+        };
+    }
+};
+
+pub fn svgArcGeometry(start: Point, arc: Arc) ?SvgArcGeometry {
+    const rx_start = @abs(arc.rx);
+    const ry_start = @abs(arc.ry);
+    if (rx_start <= 0.0 or ry_start <= 0.0) return null;
+    const phi = arc.x_axis_rotation * math.pi / 180.0;
+    const cos_phi = @cos(phi);
+    const sin_phi = @sin(phi);
+    const dx = (start.x - arc.end.x) * 0.5;
+    const dy = (start.y - arc.end.y) * 0.5;
+    const x1p = cos_phi * dx + sin_phi * dy;
+    const y1p = -sin_phi * dx + cos_phi * dy;
+    var rx = rx_start;
+    var ry = ry_start;
+    const radius_scale = x1p * x1p / (rx * rx) + y1p * y1p / (ry * ry);
+    if (radius_scale > 1.0) {
+        const scale = @sqrt(radius_scale);
+        rx *= scale;
+        ry *= scale;
+    }
+    const numerator = rx * rx * ry * ry - rx * rx * y1p * y1p - ry * ry * x1p * x1p;
+    const denominator = rx * rx * y1p * y1p + ry * ry * x1p * x1p;
+    const sign: f32 = if (arc.large_arc == arc.sweep) 1.0 else -1.0;
+    const coefficient = sign * @sqrt(@max(0.0, numerator / @max(denominator, @as(f32, 0.000001))));
+    const cxp = coefficient * rx * y1p / ry;
+    const cyp = coefficient * -ry * x1p / rx;
+    const center = Point{
+        .x = cos_phi * cxp - sin_phi * cyp + (start.x + arc.end.x) * 0.5,
+        .y = sin_phi * cxp + cos_phi * cyp + (start.y + arc.end.y) * 0.5,
+    };
+    const v0 = Point{ .x = (x1p - cxp) / rx, .y = (y1p - cyp) / ry };
+    const v1 = Point{ .x = (-x1p - cxp) / rx, .y = (-y1p - cyp) / ry };
+    const start_angle = math.atan2F(v0.y, v0.x);
+    const dot = v0.x * v1.x + v0.y * v1.y;
+    const det = v0.x * v1.y - v0.y * v1.x;
+    var delta = math.atan2F(det, dot);
+    if (!arc.sweep and delta > 0.0) delta -= math.tau;
+    if (arc.sweep and delta < 0.0) delta += math.tau;
+    return .{
+        .center = center,
+        .rx = rx,
+        .ry = ry,
+        .cos_phi = cos_phi,
+        .sin_phi = sin_phi,
+        .start_angle = start_angle,
+        .delta = delta,
+    };
+}
+
+pub fn bezierQuadraticPoint(p0: Point, p1: Point, p2: Point, t: f32) Point {
+    const inv = 1.0 - t;
+    return .{
+        .x = inv * inv * p0.x + 2.0 * inv * t * p1.x + t * t * p2.x,
+        .y = inv * inv * p0.y + 2.0 * inv * t * p1.y + t * t * p2.y,
+    };
+}
+
+pub fn bezierCubicPoint(p0: Point, p1: Point, p2: Point, p3: Point, t: f32) Point {
+    const inv = 1.0 - t;
+    return .{
+        .x = inv * inv * inv * p0.x + 3.0 * inv * inv * t * p1.x + 3.0 * inv * t * t * p2.x + t * t * t * p3.x,
+        .y = inv * inv * inv * p0.y + 3.0 * inv * inv * t * p1.y + 3.0 * inv * t * t * p2.y + t * t * t * p3.y,
+    };
+}
+
 fn byteFromFloat(value: f32) ?u8 {
     if (value < 0.0 or value > 255.0) return null;
     const as_int: u8 = @intFromFloat(value);

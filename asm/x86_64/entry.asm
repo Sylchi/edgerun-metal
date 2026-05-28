@@ -8,6 +8,7 @@
 
 extern __bss_start
 extern __bss_end
+extern er_bss_zero
 extern er_kernel_main
 
 ; Stack in .bss (zeroed by _start before use)
@@ -125,18 +126,6 @@ _start:
     jmp     .halt
 
 ; ==================================================================
-; er_bss_zero — zero memory from rdi to rsi
-; void er_bss_zero(void* start, void* end)
-; ==================================================================
-er_fn er_bss_zero
-    mov     rcx, rsi
-    sub     rcx, rdi
-    xor     eax, eax
-    cld
-    rep     stosb
-    ret
-
-; ==================================================================
 ; er_halt — stop execution
 ; void er_halt(void)
 ; ==================================================================
@@ -148,6 +137,10 @@ er_fn er_halt
 
 ; ==================================================================
 ; er_cpu_id — get CPU identification
+; uint64_t er_cpu_id(void)
+; Returns: CPU signature from CPUID
+; ==================================================================
+er_fn er_cpu_id
     push    rbx
     xor     eax, eax            ; CPUID function 0
     cpuid

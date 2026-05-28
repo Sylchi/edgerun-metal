@@ -20,7 +20,6 @@ pub const stroke_scale: f32 = 2.0 / 24.0;
 pub const half: f32 = 0.5;
 pub const quarter_arc_step: f32 = math.pi / 32.0;
 pub const min_arc_segments: usize = 4;
-pub const min_arc_denominator: f32 = 0.000001;
 pub const color_channel_max: f32 = 255.0;
 pub const max_instance_vertex_count: usize = 16384;
 pub const max_instance_float_count: usize = max_instance_vertex_count * vertex_float_stride;
@@ -227,11 +226,7 @@ fn quadratic(out: []f32, out_len: *usize, bounds: ui.Rect, color: ui.Color, star
     var step: usize = 1;
     while (step <= curve_segments) : (step += 1) {
         const t = @as(f32, @floatFromInt(step)) / @as(f32, @floatFromInt(curve_segments));
-        const mt = 1.0 - t;
-        const next = icon_vector.Point{
-            .x = mt * mt * start.x + 2.0 * mt * t * control.x + t * t * end.x,
-            .y = mt * mt * start.y + 2.0 * mt * t * control.y + t * t * end.y,
-        };
+        const next = icon_vector.bezierQuadraticPoint(start, control, end, t);
         try segment(out, out_len, bounds, color, previous, next);
         previous = next;
     }
@@ -251,11 +246,7 @@ fn quadraticPath(
     var step: usize = 1;
     while (step <= curve_segments) : (step += 1) {
         const t = @as(f32, @floatFromInt(step)) / @as(f32, @floatFromInt(curve_segments));
-        const mt = 1.0 - t;
-        const next = icon_vector.Point{
-            .x = mt * mt * start.x + 2.0 * mt * t * control.x + t * t * end.x,
-            .y = mt * mt * start.y + 2.0 * mt * t * control.y + t * t * end.y,
-        };
+        const next = icon_vector.bezierQuadraticPoint(start, control, end, t);
         try path.appendSegment(out, out_len, bounds, color, previous, next);
         previous = next;
     }
@@ -266,11 +257,7 @@ fn cubic(out: []f32, out_len: *usize, bounds: ui.Rect, color: ui.Color, start: i
     var step: usize = 1;
     while (step <= curve_segments) : (step += 1) {
         const t = @as(f32, @floatFromInt(step)) / @as(f32, @floatFromInt(curve_segments));
-        const mt = 1.0 - t;
-        const next = icon_vector.Point{
-            .x = mt * mt * mt * start.x + 3.0 * mt * mt * t * control0.x + 3.0 * mt * t * t * control1.x + t * t * t * end.x,
-            .y = mt * mt * mt * start.y + 3.0 * mt * mt * t * control0.y + 3.0 * mt * t * t * control1.y + t * t * t * end.y,
-        };
+        const next = icon_vector.bezierCubicPoint(start, control0, control1, end, t);
         try segment(out, out_len, bounds, color, previous, next);
         previous = next;
     }
@@ -291,63 +278,22 @@ fn cubicPath(
     var step: usize = 1;
     while (step <= curve_segments) : (step += 1) {
         const t = @as(f32, @floatFromInt(step)) / @as(f32, @floatFromInt(curve_segments));
-        const mt = 1.0 - t;
-        const next = icon_vector.Point{
-            .x = mt * mt * mt * start.x + 3.0 * mt * mt * t * control0.x + 3.0 * mt * t * t * control1.x + t * t * t * end.x,
-            .y = mt * mt * mt * start.y + 3.0 * mt * mt * t * control0.y + 3.0 * mt * t * t * control1.y + t * t * t * end.y,
-        };
+        const next = icon_vector.bezierCubicPoint(start, control0, control1, end, t);
         try path.appendSegment(out, out_len, bounds, color, previous, next);
         previous = next;
     }
 }
 
 fn arc(out: []f32, out_len: *usize, bounds: ui.Rect, color: ui.Color, start: icon_vector.Point, value: icon_vector.Arc) Error!void {
-    var rx = @abs(value.rx);
-    var ry = @abs(value.ry);
-    if (rx == 0.0 or ry == 0.0) {
+    const geometry = icon_vector.svgArcGeometry(start, value) orelse {
         try segment(out, out_len, bounds, color, start, value.end);
         return;
-    }
-    const phi = value.x_axis_rotation * math.pi / 180.0;
-    const cos_phi = @cos(phi);
-    const sin_phi = @sin(phi);
-    const dx = (start.x - value.end.x) * half;
-    const dy = (start.y - value.end.y) * half;
-    const x1p = cos_phi * dx + sin_phi * dy;
-    const y1p = -sin_phi * dx + cos_phi * dy;
-    const radius_scale = x1p * x1p / (rx * rx) + y1p * y1p / (ry * ry);
-    if (radius_scale > 1.0) {
-        const scale = @sqrt(radius_scale);
-        rx *= scale;
-        ry *= scale;
-    }
-    const numerator = rx * rx * ry * ry - rx * rx * y1p * y1p - ry * ry * x1p * x1p;
-    const denominator = rx * rx * y1p * y1p + ry * ry * x1p * x1p;
-    const sign: f32 = if (value.large_arc == value.sweep) 1.0 else -1.0;
-    const coefficient = sign * @sqrt(@max(0.0, numerator / @max(denominator, min_arc_denominator)));
-    const cxp = coefficient * rx * y1p / ry;
-    const cyp = coefficient * -ry * x1p / rx;
-    const center = icon_vector.Point{
-        .x = cos_phi * cxp - sin_phi * cyp + (start.x + value.end.x) * half,
-        .y = sin_phi * cxp + cos_phi * cyp + (start.y + value.end.y) * half,
     };
-    const v0 = icon_vector.Point{ .x = (x1p - cxp) / rx, .y = (y1p - cyp) / ry };
-    const v1 = icon_vector.Point{ .x = (-x1p - cxp) / rx, .y = (-y1p - cyp) / ry };
-    const start_angle = vectorAngle(.{ .x = 1.0, .y = 0.0 }, v0);
-    var delta = vectorAngle(v0, v1);
-    if (!value.sweep and delta > 0.0) delta -= math.tau;
-    if (value.sweep and delta < 0.0) delta += math.tau;
-    const steps: usize = @max(min_arc_segments, @as(usize, @intFromFloat(@ceil(@abs(delta) / quarter_arc_step))));
+    const steps: usize = @max(min_arc_segments, @as(usize, @intFromFloat(@ceil(@abs(geometry.delta) / quarter_arc_step))));
     var previous = start;
     var step: usize = 1;
     while (step <= steps) : (step += 1) {
-        const angle = start_angle + delta * @as(f32, @floatFromInt(step)) / @as(f32, @floatFromInt(steps));
-        const xp = rx * @cos(angle);
-        const yp = ry * @sin(angle);
-        const next = icon_vector.Point{
-            .x = center.x + cos_phi * xp - sin_phi * yp,
-            .y = center.y + sin_phi * xp + cos_phi * yp,
-        };
+        const next = geometry.pointAt(step, steps);
         try segment(out, out_len, bounds, color, previous, next);
         previous = next;
     }
@@ -362,52 +308,15 @@ fn arcPath(
     start: icon_vector.Point,
     value: icon_vector.Arc,
 ) Error!void {
-    var rx = @abs(value.rx);
-    var ry = @abs(value.ry);
-    if (rx == 0.0 or ry == 0.0) {
+    const geometry = icon_vector.svgArcGeometry(start, value) orelse {
         try path.appendSegment(out, out_len, bounds, color, start, value.end);
         return;
-    }
-    const phi = value.x_axis_rotation * math.pi / 180.0;
-    const cos_phi = @cos(phi);
-    const sin_phi = @sin(phi);
-    const dx = (start.x - value.end.x) * half;
-    const dy = (start.y - value.end.y) * half;
-    const x1p = cos_phi * dx + sin_phi * dy;
-    const y1p = -sin_phi * dx + cos_phi * dy;
-    const radius_scale = x1p * x1p / (rx * rx) + y1p * y1p / (ry * ry);
-    if (radius_scale > 1.0) {
-        const scale = @sqrt(radius_scale);
-        rx *= scale;
-        ry *= scale;
-    }
-    const numerator = rx * rx * ry * ry - rx * rx * y1p * y1p - ry * ry * x1p * x1p;
-    const denominator = rx * rx * y1p * y1p + ry * ry * x1p * x1p;
-    const sign: f32 = if (value.large_arc == value.sweep) 1.0 else -1.0;
-    const coefficient = sign * @sqrt(@max(0.0, numerator / @max(denominator, min_arc_denominator)));
-    const cxp = coefficient * rx * y1p / ry;
-    const cyp = coefficient * -ry * x1p / rx;
-    const center = icon_vector.Point{
-        .x = cos_phi * cxp - sin_phi * cyp + (start.x + value.end.x) * half,
-        .y = sin_phi * cxp + cos_phi * cyp + (start.y + value.end.y) * half,
     };
-    const v0 = icon_vector.Point{ .x = (x1p - cxp) / rx, .y = (y1p - cyp) / ry };
-    const v1 = icon_vector.Point{ .x = (-x1p - cxp) / rx, .y = (-y1p - cyp) / ry };
-    const start_angle = vectorAngle(.{ .x = 1.0, .y = 0.0 }, v0);
-    var delta = vectorAngle(v0, v1);
-    if (!value.sweep and delta > 0.0) delta -= math.tau;
-    if (value.sweep and delta < 0.0) delta += math.tau;
-    const steps: usize = @max(min_arc_segments, @as(usize, @intFromFloat(@ceil(@abs(delta) / quarter_arc_step))));
+    const steps: usize = @max(min_arc_segments, @as(usize, @intFromFloat(@ceil(@abs(geometry.delta) / quarter_arc_step))));
     var previous = start;
     var step: usize = 1;
     while (step <= steps) : (step += 1) {
-        const angle = start_angle + delta * @as(f32, @floatFromInt(step)) / @as(f32, @floatFromInt(steps));
-        const xp = rx * @cos(angle);
-        const yp = ry * @sin(angle);
-        const next = icon_vector.Point{
-            .x = center.x + cos_phi * xp - sin_phi * yp,
-            .y = center.y + sin_phi * xp + cos_phi * yp,
-        };
+        const next = geometry.pointAt(step, steps);
         try path.appendSegment(out, out_len, bounds, color, previous, next);
         previous = next;
     }
