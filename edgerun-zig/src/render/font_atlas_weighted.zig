@@ -27,6 +27,7 @@ pub const Atlas = struct {
     font: font_vector.Body,
     builtin: bool,
     device_scale: f32,
+    active_weight: font_builtin.Weight,
     revision: u32,
 
     pub fn init() Atlas {
@@ -47,6 +48,7 @@ pub const Atlas = struct {
         self.font = font_builtin.body(.regular);
         self.builtin = true;
         self.device_scale = default_scale;
+        self.active_weight = .regular;
         self.revision = 0;
         self.clearWithoutRevision();
         self.bumpRevision();
@@ -56,6 +58,7 @@ pub const Atlas = struct {
         self.font = font;
         self.builtin = false;
         self.device_scale = default_scale;
+        self.active_weight = .regular;
         self.revision = 0;
         self.clearWithoutRevision();
         self.bumpRevision();
@@ -81,6 +84,10 @@ pub const Atlas = struct {
     pub fn deviceScale(self: *const Atlas) f32 { return self.device_scale; }
     pub fn cacheRevision(self: *const Atlas) u32 { return self.revision; }
 
+    pub fn setTextWeight(self: *Atlas, weight: font_builtin.Weight) void {
+        self.active_weight = weight;
+    }
+
     pub fn setDeviceScale(self: *Atlas, scale: f32) void {
         if (@abs(self.device_scale - scale) <= 0.001) return;
         self.device_scale = scale;
@@ -103,20 +110,11 @@ pub const Atlas = struct {
         return font_builtin.body(weight);
     }
 
-    fn weightForPx(_: *const Atlas, px: u8) font_builtin.Weight {
-        if (px >= 24) return .bold;
-        if (px >= 16) return .semibold;
-        return .regular;
-    }
-
     fn resolveGlyph(self: *Atlas, raw: u21, px: u8) ir.Error!?ir.Glyph {
-        const weight = self.weightForPx(px);
+        const weight = self.active_weight;
         const font = self.body(weight);
         if (font.glyphForCodepoint(raw) == null) return null;
-        return self.ensureGlyph(weight, raw, px) catch |err| switch (err) {
-            error.GlyphBitmapBudgetExceeded, error.GlyphCacheFull => return error.Budget,
-            else => null,
-        };
+        return self.lookupGlyph(weight, raw, px);
     }
 
     fn lookupGlyph(self: *const Atlas, weight: font_builtin.Weight, cp: u21, px: u8) ?ir.Glyph {
@@ -175,14 +173,14 @@ pub const Atlas = struct {
 
 fn metrics(context: *anyopaque, px: u8) ir.TextMetrics {
     const atlas: *Atlas = @ptrCast(@alignCast(context));
-    const font = atlas.body(atlas.weightForPx(px));
+    const font = atlas.body(atlas.active_weight);
     const scale = @as(f32, @floatFromInt(px)) / @as(f32, @floatFromInt(font.metrics.units_per_em));
     return .{ .ascender = font.metrics.ascender * scale, .descender = font.metrics.descender * scale };
 }
 
 fn textWidth(context: *anyopaque, value: []const u8, px: u8) f32 {
     const atlas: *Atlas = @ptrCast(@alignCast(context));
-    const font = atlas.body(atlas.weightForPx(px));
+    const font = atlas.body(atlas.active_weight);
     const scale = @as(f32, @floatFromInt(px)) / @as(f32, @floatFromInt(font.metrics.units_per_em));
     var out: f32 = 0;
     var prev: ?u21 = null;
