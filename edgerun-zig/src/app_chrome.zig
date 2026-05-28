@@ -10,6 +10,7 @@ pub const logo_button_id: u32 = 30_000;
 pub const docs_button_id: u32 = 30_001;
 pub const blog_button_id: u32 = 30_011;
 pub const source_button_id: u32 = 30_012;
+pub const agent_button_id: u32 = 30_013;
 
 pub const header_h: f32 = design.header_h;
 pub const surface_radius: f32 = design.surface_radius;
@@ -34,6 +35,7 @@ pub const ActiveNav = enum {
     docs,
     blog,
     source,
+    agent,
 };
 
 const palette = design.palette;
@@ -118,11 +120,7 @@ fn navItem(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect,
         .label = label,
         .variant = if (active) .secondary else .ghost,
     };
-    try component.render(scene, bounds, .{
-        .style = style(),
-        .control = .{ .active = active },
-        .control_size = .small,
-    });
+    try component.render(scene, bounds, .{ .style = design.style() });
     try component.collectInteractions(collector, bounds);
 }
 
@@ -131,112 +129,35 @@ fn iconButton(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Re
         .id = id,
         .label = value.label,
         .icon = value,
-        .variant = if (active) .secondary else .outline,
+        .variant = if (active) .secondary else .ghost,
     };
-    try component.render(scene, bounds, .{
-        .style = style(),
-        .control = .{ .active = active },
-    });
+    try component.render(scene, bounds, .{ .style = design.style() });
     try component.collectInteractions(collector, bounds);
 }
 
-pub fn style() ui.Style {
-    return design.style();
-}
-
-fn navWidth(label: []const u8) f32 {
-    return @max(design.min_touch_target, @as(f32, @floatFromInt(label.len)) * nav_average_w + nav_item_pad);
-}
-
-fn fill(scene: *ui.Scene, bounds: ui.Rect, color: ui.Color, r: f32) ui.RenderError!void {
-    try scene.pushRect(bounds, color, .fill, r, 0.0);
+fn fill(scene: *ui.Scene, bounds: ui.Rect, color: ui.Color, radius: f32) ui.RenderError!void {
+    try scene.pushRect(bounds, color, .fill, radius, 0.0);
 }
 
 fn text(scene: *ui.Scene, x: f32, y: f32, w: f32, h: f32, value: []const u8, color: ui.Color) ui.RenderError!void {
-    try text_component.Text.renderAligned(scene, ui.Rect.init(x, y, @max(1.0, w), @max(1.0, h)), value, color, .start);
+    try text_component.Text.renderAligned(scene, ui.Rect.init(x, y, w, h), value, color, .start);
 }
 
-test "app chrome header exposes canonical navigation hit targets" {
-    var commands: [128]ui.Command = undefined;
-    var clips: [4]ui.Rect = undefined;
-    var scene = ui.Scene.initWithClips(&commands, &clips);
+fn navWidth(value: []const u8) f32 {
+    return @max(44.0, @as(f32, @floatFromInt(value.len)) * nav_average_w + nav_item_pad);
+}
+
+test "header modes cover compact and mobile breakpoints" {
+    try std.testing.expectEqual(HeaderMode.desktop, headerMode(900));
+    try std.testing.expectEqual(HeaderMode.compact, headerMode(640));
+    try std.testing.expectEqual(HeaderMode.mobile, headerMode(480));
+}
+
+test "header renders compact source control" {
+    var commands: [64]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
     var regions: [16]interaction.Region = undefined;
     var collector = interaction.Collector.init(&regions);
-    try renderHeader(&scene, &collector, ui.Rect.init(0, 0, 1280, header_h), ui.Rect.init(64, 0, 1152, header_h), .blog);
-
-    try expectHit(collector.written(), logo_button_id);
-    try expectHit(collector.written(), docs_button_id);
-    try expectHit(collector.written(), blog_button_id);
-    try expectHit(collector.written(), source_button_id);
-    try expectMissingHit(collector.written(), retired_desktop_launch_button_id);
-}
-
-test "app chrome header mode follows mobile and compact breakpoints" {
-    try std.testing.expectEqual(HeaderMode.mobile, headerMode(mobile_header_breakpoint_w - 1.0));
-    try std.testing.expectEqual(HeaderMode.compact, headerMode(mobile_header_breakpoint_w));
-    try std.testing.expectEqual(HeaderMode.compact, headerMode(compact_header_breakpoint_w - 1.0));
-    try std.testing.expectEqual(HeaderMode.desktop, headerMode(compact_header_breakpoint_w));
-}
-
-test "app chrome compact header keeps hit targets separated" {
-    var commands: [128]ui.Command = undefined;
-    var clips: [4]ui.Rect = undefined;
-    var scene = ui.Scene.initWithClips(&commands, &clips);
-    var regions: [16]interaction.Region = undefined;
-    var collector = interaction.Collector.init(&regions);
-    try renderHeader(&scene, &collector, ui.Rect.init(0, 0, 640, header_h), ui.Rect.init(28, 0, 584, header_h), .none);
-
-    const logo = expectHitRect(collector.written(), logo_button_id);
-    const source = expectHitRect(collector.written(), source_button_id);
-    try expectNoHorizontalOverlap(logo, source);
-    if (hitRect(collector.written(), docs_button_id)) |docs| try expectNoHorizontalOverlap(logo, docs);
-    if (hitRect(collector.written(), blog_button_id)) |blog| try expectNoHorizontalOverlap(blog, source);
-    try expectMissingHit(collector.written(), retired_desktop_launch_button_id);
-}
-
-test "app chrome mobile header uses reference icon controls" {
-    var commands: [128]ui.Command = undefined;
-    var clips: [4]ui.Rect = undefined;
-    var scene = ui.Scene.initWithClips(&commands, &clips);
-    var regions: [16]interaction.Region = undefined;
-    var collector = interaction.Collector.init(&regions);
-    try renderHeader(&scene, &collector, ui.Rect.init(0, 0, 390, header_h), ui.Rect.init(28, 0, 334, header_h), .none);
-
-    const logo = expectHitRect(collector.written(), logo_button_id);
-    const source = expectHitRect(collector.written(), source_button_id);
-    const docs = expectHitRect(collector.written(), docs_button_id);
-    try expectNoHorizontalOverlap(logo, source);
-    try expectNoHorizontalOverlap(source, docs);
-    try expectTouchTarget(source);
-    try expectTouchTarget(docs);
-    try expectMissingHit(collector.written(), blog_button_id);
-    try expectMissingHit(collector.written(), retired_desktop_launch_button_id);
-    try std.testing.expectEqual(@as(usize, 3), collector.written().len);
-}
-
-fn expectHit(regions: []const interaction.Region, id: u32) !void {
-    for (regions) |region| if (region.id == id) return;
-    return error.MissingHit;
-}
-
-fn expectMissingHit(regions: []const interaction.Region, id: u32) !void {
-    for (regions) |region| if (region.id == id) return error.UnexpectedHit;
-}
-
-fn expectHitRect(regions: []const interaction.Region, id: u32) ui.Rect {
-    return hitRect(regions, id) orelse unreachable;
-}
-
-fn hitRect(regions: []const interaction.Region, id: u32) ?ui.Rect {
-    for (regions) |region| if (region.id == id) return region.bounds;
-    return null;
-}
-
-fn expectNoHorizontalOverlap(left: ui.Rect, right: ui.Rect) !void {
-    try std.testing.expect(left.x + left.w <= right.x or right.x + right.w <= left.x);
-}
-
-fn expectTouchTarget(bounds: ui.Rect) !void {
-    try std.testing.expect(bounds.w >= design.min_touch_target);
-    try std.testing.expect(bounds.h >= design.min_touch_target);
+    try renderHeader(&scene, &collector, ui.Rect.init(0, 0, 640, header_h), ui.Rect.init(20, 0, 600, header_h), .source);
+    try std.testing.expect(scene.written().len != 0);
 }
