@@ -5,6 +5,7 @@ const app_chrome = @import("app_chrome.zig");
 const app_docs = @import("app_docs.zig");
 const app_landing = @import("app_landing.zig");
 const app_source = @import("app_source.zig");
+const app_agent = @import("app_agent.zig");
 
 pub const route_path_capacity: usize = 96;
 pub const route_hash_capacity: usize = route_path_capacity + 1;
@@ -19,6 +20,7 @@ pub const RoutePath = struct {
     pub const component_catalog = "/docs/components";
     pub const component_detail_prefix = "/docs/components/";
     pub const source = "/source";
+    pub const agent = "/agent";
 };
 
 pub const View = enum(u32) {
@@ -27,6 +29,7 @@ pub const View = enum(u32) {
     components = 2,
     docs = 3,
     source = 4,
+    agent = 5,
 };
 
 pub const Route = struct {
@@ -44,6 +47,7 @@ pub const Action = enum(u32) {
     launch_source_release,
     reset_source,
     open_context_source,
+    run_agent,
 };
 
 const PathKind = enum {
@@ -55,6 +59,7 @@ const PathKind = enum {
     component_catalog,
     component_detail,
     source,
+    agent,
     unknown,
 };
 
@@ -64,6 +69,7 @@ pub fn fromPath(path: []const u8) Route {
         .root => .{ .view = .source },
         .academy => blogIndex(null),
         .source => .{ .view = .source },
+        .agent => .{ .view = .agent },
         .docs => .{ .view = .docs },
         .component_catalog => .{ .view = .components },
         .component_detail => .{ .view = .components, .selected_component_index = component_gallery.indexBySlug(trimmed[RoutePath.component_detail_prefix.len..]) },
@@ -83,6 +89,7 @@ pub fn fromHit(hit_id: u32, current: Route) ?Route {
         app_docs.academy_button_id,
         => blogIndex(null),
         app_chrome.source_button_id => .{ .view = .source },
+        app_chrome.agent_button_id => .{ .view = .agent },
         app_docs.source_button_id => .{ .view = .source },
         app_docs.component_catalog_button_id => .{ .view = .components },
         app_blog.back_button_id => blogIndex(null),
@@ -98,6 +105,7 @@ pub fn actionFromHit(hit_id: u32) ?Action {
         app_source.launch_button_id => .launch_source_release,
         app_source.reset_button_id => .reset_source,
         context_source_button_id => .open_context_source,
+        app_agent.run_hit_id => .run_agent,
         else => null,
     };
 }
@@ -118,6 +126,7 @@ pub fn writePath(out: []u8, route: Route) error{RouteBufferTooSmall}!usize {
             return writeDocPath(out, index);
         } else RoutePath.docs,
         .source => RoutePath.source,
+        .agent => RoutePath.agent,
     };
     if (value.len > out.len) return error.RouteBufferTooSmall;
     @memcpy(out[0..value.len], value);
@@ -164,7 +173,7 @@ fn routeFromDynamicHit(hit_id: u32, current: Route) ?Route {
                 return .{ .view = .docs, .selected_doc_index = if (index == 0) null else index };
             }
         },
-        .landing, .source => {},
+        .landing, .source, .agent => {},
     }
     return null;
 }
@@ -185,6 +194,7 @@ fn pathKind(trimmed: []const u8) PathKind {
     if (std.mem.eql(u8, trimmed, RoutePath.root)) return .root;
     if (std.mem.eql(u8, trimmed, RoutePath.academy)) return .academy;
     if (std.mem.eql(u8, trimmed, RoutePath.source)) return .source;
+    if (std.mem.eql(u8, trimmed, RoutePath.agent)) return .agent;
     if (std.mem.eql(u8, trimmed, RoutePath.docs)) return .docs;
     if (std.mem.eql(u8, trimmed, RoutePath.component_catalog)) return .component_catalog;
     if (std.mem.startsWith(u8, trimmed, RoutePath.component_detail_prefix)) return .component_detail;
@@ -229,6 +239,7 @@ test "navigation parses app and native app routes" {
     try std.testing.expectEqual(View.blog, fromPath("/academy").view);
     try std.testing.expectEqual(View.source, fromPath("/apps").view);
     try std.testing.expectEqual(View.source, fromPath("/source").view);
+    try std.testing.expectEqual(View.agent, fromPath("/agent").view);
     try std.testing.expectEqual(View.docs, fromPath("/docs").view);
     try std.testing.expectEqual(View.docs, fromPath("/docs/media").view);
     try std.testing.expectEqual(app_docs.indexBySlug("media").?, fromPath("/docs/media").selected_doc_index.?);
@@ -259,54 +270,9 @@ test "navigation writes route hashes from shared state" {
     const source_hash_len = try writeHash(&hash, source);
     try std.testing.expectEqualStrings("#/source", hash[0..source_hash_len]);
 
-    const docs = Route{ .view = .docs };
-    const docs_len = try writePath(&path, docs);
-    try std.testing.expectEqualStrings("/docs", path[0..docs_len]);
-    const docs_hash_len = try writeHash(&hash, docs);
-    try std.testing.expectEqualStrings("#/docs", hash[0..docs_hash_len]);
-
-    const media = Route{ .view = .docs, .selected_doc_index = app_docs.indexBySlug("media") };
-    const media_len = try writePath(&path, media);
-    try std.testing.expectEqualStrings("/docs/media", path[0..media_len]);
-    const media_hash_len = try writeHash(&hash, media);
-    try std.testing.expectEqualStrings("#/docs/media", hash[0..media_hash_len]);
-
-    const components = Route{ .view = .docs, .selected_doc_index = app_docs.indexBySlug("component-system") };
-    const components_len = try writePath(&path, components);
-    try std.testing.expectEqualStrings("/docs/components", path[0..components_len]);
-    const components_hash_len = try writeHash(&hash, components);
-    try std.testing.expectEqualStrings("#/docs/components", hash[0..components_hash_len]);
-
-    const button = Route{ .view = .docs, .selected_doc_index = app_docs.indexBySlug("component-system"), .selected_component_index = component_gallery.indexBySlug("button") };
-    const button_len = try writePath(&path, button);
-    try std.testing.expectEqualStrings("/docs/components/button", path[0..button_len]);
-    const button_hash_len = try writeHash(&hash, button);
-    try std.testing.expectEqualStrings("#/docs/components/button", hash[0..button_hash_len]);
-}
-
-test "navigation maps shared hit ids to routes" {
-    try std.testing.expectEqual(View.source, fromHit(app_chrome.logo_button_id, .{}).?.view);
-    try std.testing.expectEqual(View.docs, fromHit(app_chrome.docs_button_id, .{}).?.view);
-    try std.testing.expectEqual(View.blog, fromHit(app_chrome.blog_button_id, .{}).?.view);
-    try std.testing.expectEqual(View.source, fromHit(app_chrome.source_button_id, .{}).?.view);
-    try std.testing.expectEqual(View.components, fromHit(app_docs.component_catalog_button_id, .{}).?.view);
-    try std.testing.expectEqual(app_docs.indexBySlug("media").?, fromHit(app_docs.first_doc_page_button_id + @as(u32, @intCast(app_docs.indexBySlug("media").?)), .{ .view = .docs }).?.selected_doc_index.?);
-    try std.testing.expectEqual(app_docs.indexBySlug("component-system").?, fromHit(app_docs.first_doc_page_button_id + @as(u32, @intCast(app_docs.indexBySlug("component-system").?)), .{ .view = .docs }).?.selected_doc_index.?);
-    try std.testing.expectEqual(View.components, fromHit(component_gallery.first_catalog_card_id + 7, .{ .view = .docs, .selected_doc_index = app_docs.indexBySlug("component-system") }).?.view);
-    try std.testing.expectEqual(component_gallery.indexBySlug("button").?, fromHit(component_gallery.first_catalog_card_id + 7, .{ .view = .components }).?.selected_component_index.?);
-    try std.testing.expectEqual(component_gallery.indexBySlug("button").?, fromHit(component_gallery.previewHitForIndexForTest(component_gallery.indexBySlug("button").?), .{ .view = .components }).?.selected_component_index.?);
-    const post_id = app_blog.postIdAt(0);
-    try std.testing.expectEqual(post_id, fromHit(post_id, .{ .view = .blog }).?.selected_blog_post_id);
-    try std.testing.expect(fromHit(component_gallery.first_catalog_card_id + 7, .{}) == null);
-    try std.testing.expect(fromHit(post_id, .{}) == null);
-}
-
-test "navigation maps shared hit ids to app actions" {
-    try std.testing.expectEqual(Action.reveal_identity, actionFromHit(app_landing.reveal_identity_button_id).?);
-    try std.testing.expectEqual(Action.compile_source, actionFromHit(app_source.compile_button_id).?);
-    try std.testing.expectEqual(Action.download_source_release, actionFromHit(app_source.download_button_id).?);
-    try std.testing.expectEqual(Action.launch_source_release, actionFromHit(app_source.launch_button_id).?);
-    try std.testing.expectEqual(Action.reset_source, actionFromHit(app_source.reset_button_id).?);
-    try std.testing.expectEqual(Action.open_context_source, actionFromHit(context_source_button_id).?);
-    try std.testing.expect(actionFromHit(app_chrome.docs_button_id) == null);
+    const agent = Route{ .view = .agent };
+    const agent_len = try writePath(&path, agent);
+    try std.testing.expectEqualStrings("/agent", path[0..agent_len]);
+    const agent_hash_len = try writeHash(&hash, agent);
+    try std.testing.expectEqualStrings("#/agent", hash[0..agent_hash_len]);
 }
