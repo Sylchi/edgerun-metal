@@ -9,7 +9,7 @@
 ; combined write-then-read I2C transfer to access registers.
 
 %include "x86_64/macros.inc"
-%include "x86_64/wasm_constants.inc"
+%include "x86_64/wasm_defines.inc"
 
 extern er_dw_i2c_xfer
 
@@ -44,14 +44,12 @@ extern er_dw_i2c_xfer
 
 %define HID_DESC_EXPECTED_LEN   30
 
-; ─── HOSTED_TEST shadow ──────────────────────────────────────────
-%ifdef HOSTED_TEST
+; ─── HOSTED_TEST shadow (unconditional) ──────────────────────────
 section .bss
 global er_i2c_hid_desc
 er_i2c_hid_desc: resb HID_DESC_SIZE
 global er_i2c_hid_probed
 er_i2c_hid_probed: resq 1
-%endif
 
 SECTION .text
 

@@ -7,7 +7,7 @@
 ; Bit 7 of the index register disables NMI when set.
 
 %include "x86_64/macros.inc"
-%include "x86_64/wasm_constants.inc"
+%include "x86_64/wasm_defines.inc"
 
 ; CMOS/RTC register addresses
 %define CMOS_RTC_SEC        0x00
@@ -55,12 +55,10 @@
 %define CMOS_NVRAM_START    0x10
 %define CMOS_NVRAM_END      0x7f
 
-; HOSTED_TEST shadow buffer
-%ifdef HOSTED_TEST
+; HOSTED_TEST shadow buffer (unconditional — small, harmless for kernel)
 section .bss
 global er_cmos_shadow
 er_cmos_shadow: resb 256       ; Simulated CMOS NVRAM (256 bytes)
-%endif
 
 SECTION .text
 

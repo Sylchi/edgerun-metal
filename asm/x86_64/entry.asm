@@ -26,36 +26,26 @@ mb_header:
     dd 0x00000003
     dd -(0x1BADB002 + 0x00000003)
 
-; ─── Boot page tables (identity map low 4 MB + MMIO 0xFEC00000) ─────────
+; ─── Boot page tables (1GB huge pages identity-map the full low 4GB) ─────
+; CPU must support pdpe1gb (AMD Ryzen 7840U does).
 align 4096
 boot_pml4:
-    dd boot_pdpt + 0x07           ; low 32 bits: present + writable
-    dd 0                          ; upper 32 bits: zero
-    times 510 dq 0                ; remaining 510 entries (zeros)
+    dd boot_pdpt + 0x07           ; entry 0: present + writable
+    dd 0
+    times 510 dq 0                ; remaining 510 entries
     dd 0, 0                       ; entry 511
 
 boot_pdpt:
-    dd boot_pd + 0x07
+    ; 1GB huge pages identity-map 0 – 4GB
+    dd 0x00000083                 ; [0G, 1G): present + writable + 1G page
     dd 0
-    times 2 dq 0               ; entries 1-2: empty
-    dd mmio_pd + 0x07          ; entry 3: 1 GB range 0xC0000000-0xFFFFFFFF
+    dd 0x40000083                 ; [1G, 2G)
+    dd 0
+    dd 0x80000083                 ; [2G, 3G)
+    dd 0
+    dd 0xC0000083                 ; [3G, 4G)
     dd 0
     times 508 dq 0
-
-boot_pd:
-    dd 0x00000083                 ; 0 – 2 MiB: present + writable + huge
-    dd 0
-    dd 0x00002083                 ; 2 – 4 MiB
-    dd 0
-    times 510 dq 0
-
-; Page directory for MMIO region (2MB page covers 0xFEC00000-0xFEDFFFFF)
-align 4096
-mmio_pd:
-    times 0x1F6 dq 0              ; entries 0 to 0x1F5
-    dd 0x0FEC00083                ; 0xFEC00000: present + writable + huge
-    dd 0
-    times (511 - 0x1F6) dq 0
 
 ; ─── Temporary 64-bit GDT ─────────────────────────────────────────────
 align 16

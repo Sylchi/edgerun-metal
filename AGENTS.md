@@ -33,7 +33,7 @@
 - `asm/x86_64/` — canonical hardware-near implementation of all core modules: math, runtime, serial, ctype, TPM, WASM interpreter, kernel entry, kernel main.
 - `asm/test/` — test files. Must be migrated from C to self-hosted ASM runners. Currently C test harnesses provide the `main()` entry point and link against ASM `.o` files for freestanding testing.
 - `edgerun-zig/` — DEPRECATED. Being removed as part of the Zig toolchain elimination. Do not add new Zig code.
-- `edgerun-crypto/` — C BLAKE3 implementation. Needs to be ported to ASM or replaced with a project-owned implementation.
+- `asm/x86_64/blake3.asm` — project-owned x86_64 ASM BLAKE3 implementation. Replaces the former C implementation.
 - `Makefile` — owns x86_64 ASM builds and kernel images.
 
 ## External Dependencies (to eliminate)
@@ -47,26 +47,34 @@
 - `cc` (gcc/clang) — used to compile C test harness + link ASM objects into freestanding static binaries.
 - C startup crt0 stubs via `-ffreestanding -nostdlib`.
 - `zig` — full Zig compiler + std lib (DEPRECATED, remove).
-- `cmake` / `ctest` — only needed for edgerun-crypto (remove with C crypto).
-- `python3` — only needed for pages tooling.
+
 - `qemu-system-x86_64` — kernel test environment.
 
 ## Required Commands
 
+All targets are in `build.sh`. No Makefile, no C, no Zig in production paths.
+
 - Full repository check:
-  - `make check`
+  - `./build.sh test` (all ASM tests)
 - ASM module tests (builds and runs):
-  - `make asm-test-math`
-  - `make asm-test-runtime`
-  - `make asm-test-serial`
-  - `make asm-test-wasm`
-  - `make asm-test-tpm`
-  - `make asm-test` (all of the above)
+  - `./build.sh test-ctype`
+  - `./build.sh test-math`
+  - `./build.sh test-runtime`
+  - `./build.sh test-serial`
+  - `./build.sh test-wasm`
+  - `./build.sh test-tpm`
+  - `./build.sh test-blake3`
+  - `./build.sh test-acpi`
+  - `./build.sh test-preimage`
+  - `./build.sh test-bytes`
+  - `./build.sh test` (all of the above)
 - ASM kernel build:
-  - `make asm-kernel`
-  - `make asm-kernel-hello` (build + QEMU launch)
+  - `./build.sh kernel`
+  - `./build.sh kernel-hello` (build + QEMU launch)
 - Clean:
-  - `make clean`
+  - `./build.sh clean`
+- View targets:
+  - `./build.sh help`
 
 ## C To ASM Porting Rules
 
@@ -143,12 +151,26 @@
 - **i2c_hid.asm** — fixed critical bug: `_i2c_hid_read_reg16` used 0xFFFF as error sentinel, but 0xFFFF is a valid register value. Now uses rax+rdx convention.
 - **i8042.asm** — `er_i8042_read_scancode` no longer returns ambiguous 0 for both "no data" and "keypress 0". Now returns ERROR_NO_DATA.
 - **kernel_main.asm** — all callers changed from `test eax` to `test edx` for error checking.
-- **kernel build fixed**: all 15 objects (including TPM, nvme, pci) assemble and link into a 75884-byte kernel ELF. QEMU boots without serial output (pre-existing issue in kernel_main/entry code).
+- **kernel build fixed**: all 15 objects assemble and link into a 75884-byte kernel ELF.
+- **QEMU boot fixed**: kernel boots and produces full serial output. All subsystems verified (CPUID, serial, RDTSC, CMOS RTC, i8042 keyboard, EC probe, touchpad probe, NVMe probe).
 - **nvme.asm**, **pci.asm** — new untracked driver stubs from another agent; both assemble and link cleanly.
-- `make check` passes: 7 ASM tests (ctype, math, runtime, serial, TPM, WASM, blake3) + C BLAKE3 via cmake/ctest.
+- `make check` passes: 7 ASM tests (ctype, math, runtime, serial, TPM, WASM, blake3).
+
+### Session 3 — WASM compiler pipeline wiring
+- Added extern `export_name_count`/`ptrs`/`lens` storage to `wasm_compiler_source.asm` — `source_parse` now stores parsed export names in a 64-entry array, making them available to the compiler for user export emission
+- Added 6 section emission functions to `wasm_compiler.asm`:
+  - `emit_types_section` — section 1 with 5 base WASM types `()→i32`, `()→()`, `(i32)→i32`, `(i32,i32)→i32`, `(i32,i32,i32)→i32`
+  - `emit_function_section` — section 3: 27 base + N user functions
+  - `emit_memory_section` — section 5: 1 linear memory (1 page, max 1)
+  - `emit_base_exports` — section 7: memory export + 27 base function exports via table-driven loop (16-byte entries in .rodata)
+  - `emit_start_section` — section 8: calls function index 5 (noop init)
+  - `emit_code_section` — section 10: 27 noop bodies + N return-i32-const(0) user bodies
+- Replaced skeleton `compile_wasm` with full pipeline: validate → `source_parse` → check output capacity → write WASM header → emit all 6 sections → store output ptr/len
+- Fixed bugs: `source_parse` calling convention (rdi/rsi, carry flag return), stack cleanup consistency, `emit_base_exports` table layout
+- Both `wasm_compiler.asm` (1925 lines) and `wasm_compiler_source.asm` (928 lines) assemble and link cleanly
+- Kernel builds (82688 bytes), all 7 original ASM test suites pass
 
 ### Known Remainders
-- `make asm-kernel-hello` boots QEMU but produces no serial output — kernel_main or entry code may hang before serial init.
 - `make check` fails on `zig fmt --check edgerun-zig` (4 unformatted files — out of scope).
 - Monolithic files: `wasm_interpreter.asm` (5918 lines), `runtime.asm` (1561 lines), `math.asm` (1121 lines).
 - C test harnesses need migration to pure ASM self-hosted runners.

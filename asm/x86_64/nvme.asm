@@ -3,12 +3,14 @@
 ; Freestanding — no libc, no external dependencies.
 
 %include "x86_64/macros.inc"
+%include "x86_64/wasm_defines.inc"
 
 extern er_pci_read32
 extern er_mmio_read32
 extern er_mmio_write32
 extern er_serial_puts
 extern er_serial_puthex32
+extern er_serial_putdec32
 extern er_serial_crlf
 
 ; PCI config registers (reused from pci.asm context)
@@ -44,10 +46,13 @@ extern er_serial_crlf
 %define NVME_ADM_IDENTIFY  0x06
 %define IDENTIFY_CTRL      0x01
 
-; Fixed buffer addresses (identity-mapped low 4MB)
+; Fixed buffer addresses (identity-mapped, safe range above kernel)
 %define NVME_ADMIN_SQ   0x300000
 %define NVME_ADMIN_CQ   0x301000
 %define NVME_ID_BUF     0x302000
+%define NVME_IO_CQ      0x303000       ; IO completion queue (4K)
+%define NVME_IO_SQ      0x304000       ; IO submission queue (4K)
+%define NVME_IO_BUF     0x305000       ; IO data buffer (4K)
 
 SECTION .text
 
@@ -94,8 +99,7 @@ er_fn er_nvme_probe
     test    al, 1
     jz      .mmio_bar
     ; I/O BAR — not supported
-    xor     eax, eax
-    mov     eax, -1
+    er_err  ERROR_UNSUPPORTED
     jmp     .out
 
 .mmio_bar:
@@ -118,11 +122,11 @@ er_fn er_nvme_probe
     jz      .skip_store
     mov     [r8], rax
 .skip_store:
-    mov     eax, 0
+    er_ok
     jmp     .out
 
 .no_dev:
-    mov     eax, -1
+    er_err  ERROR_NOT_PRESENT
 .out:
     pop     rbx
     pop     r10
@@ -159,7 +163,7 @@ er_fn er_nvme_init
     pause
     dec     ebx
     jnz     .wait_rdy0
-    mov     eax, -1
+    er_err  ERROR_TIMEOUT
     jmp     .out
 
 .rdy0_clear:
@@ -200,11 +204,11 @@ er_fn er_nvme_init
     pause
     dec     ebx
     jnz     .wait_rdy1
-    mov     eax, -1
+    er_err  ERROR_TIMEOUT
     jmp     .out
 
 .rdy1_set:
-    mov     eax, 0
+    er_ok
 .out:
     pop     r12
     pop     rbx
@@ -278,7 +282,7 @@ er_fn er_nvme_identify_controller
     dec     ebx
     jnz     .poll
 
-    mov     eax, -1
+    er_err  ERROR_TIMEOUT
     jmp     .out
 
 .completed:
@@ -288,15 +292,15 @@ er_fn er_nvme_identify_controller
     and     eax, 0x7FFE
     jnz     .cmd_fail
 
-    mov     eax, 0
+    er_ok
     jmp     .out
 
 .cmd_fail:
-    mov     eax, -1
+    er_err  ERROR_IO
     jmp     .out
 
 .fatal:
-    mov     eax, -1
+    er_err  ERROR_IO
 .out:
     pop     r15
     pop     r14
@@ -328,8 +332,8 @@ er_fn er_nvme_print_info
     mov     rdi, r13
     mov     esi, ebx
     call    er_serial_puthex32
-    lea     rdi, [r13]
-    call    .crlf
+    mov     rdi, r13
+    call    er_serial_crlf
 
     ; Read Capabilities low (CAP)
     lea     rdi, [r12 + NVME_CAP_LO]
@@ -348,16 +352,293 @@ er_fn er_nvme_print_info
     mov     rdi, r13
     mov     esi, eax
     call    er_serial_puthex32
-    call    .crlf
+    mov     rdi, r13
+    call    er_serial_crlf
 
     pop     r13
     pop     r12
     pop     rbx
+    er_ok
     ret
-
-.crlf:
-    mov     rdi, r13
-    jmp     er_serial_crlf
 
 .ver_str: db "nvme: vs 0x", 0
 .cap_str: db "nvme: cap 0x", 0
+
+; ==================================================================
+; er_nvme_io_setup — create IO Completion Queue + Submission Queue
+; int er_nvme_io_setup(uint64_t bar0)
+;
+; Uses fixed IO queue buffers. Creates CQ 1 with 64 entries,
+; then SQ 1 with 64 entries.
+; Returns: eax = 0 on success, -1 on failure
+; ==================================================================
+er_fn er_nvme_io_setup
+    push    r12
+    push    r13
+    push    r14
+    push    rbx
+
+    mov     r12, rdi            ; BAR0
+    mov     r13, NVME_ADMIN_SQ  ; admin SQ
+    mov     r14, NVME_ADMIN_CQ  ; admin CQ
+
+    ; ─── Create IO Completion Queue (qid=1) ───────────────────
+    ; CQE size = 16 bytes (per CC.IOCQES)
+    ; Queue size = 64 entries
+
+    ; Clear SQE entry
+    xor     eax, eax
+    mov     ecx, 16
+    mov     rdi, r13
+.clr1:
+    mov     [rdi], eax
+    add     rdi, 4
+    dec     ecx
+    jnz     .clr1
+
+    ; CDW0 = opcode 5 (Create IO CQ)
+    mov     dword [r13], 5
+
+    ; PRP1 = physical address of IO CQ buffer
+    mov     dword [r13 + 40], NVME_IO_CQ
+    mov     dword [r13 + 44], 0
+
+    ; CDW10: QID = 1 (bits 15:0), QSIZE = 63 (bits 31:16) (entries-1)
+    mov     dword [r13 + 16], (63 << 16) | 1
+
+    ; CDW11: PC = 1 (physically contiguous, bit 0), IEN = 0,
+    ;        IV = 0 (interrupt vector)
+    mov     dword [r13 + 20], 1
+
+    ; NSID = 0
+    mov     dword [r13 + 4], 0
+
+    ; Reset CQ phase
+    mov     dword [r14], 0
+
+    ; Ring admin SQ doorbell
+    lea     rdi, [r12 + SQ0TDBL]
+    mov     esi, 1
+    call    er_mmio_write32
+
+    ; Poll
+    mov     ebx, 100000000
+.poll_cq:
+    mov     eax, [r14]
+    test    eax, 1
+    jnz     .cq_done
+    pause
+    dec     ebx
+    jnz     .poll_cq
+    er_err  ERROR_TIMEOUT
+    jmp     .out
+
+.cq_done:
+    movzx   eax, word [r14 + 6]
+    and     eax, 0x7FFE
+    jnz     .fail
+
+    ; ─── Create IO Submission Queue (qid=1) ──────────────────
+    ; SQE size = 64 bytes (per CC.IOSQES)
+
+    xor     eax, eax
+    mov     ecx, 16
+    mov     rdi, r13
+.clr2:
+    mov     [rdi], eax
+    add     rdi, 4
+    dec     ecx
+    jnz     .clr2
+
+    ; CDW0 = opcode 1 (Create IO SQ)
+    mov     dword [r13], 1
+
+    ; PRP1 = physical address of IO SQ buffer
+    mov     dword [r13 + 40], NVME_IO_SQ
+    mov     dword [r13 + 44], 0
+
+    ; CDW10: QID = 1, QSIZE = 63
+    mov     dword [r13 + 16], (63 << 16) | 1
+
+    ; CDW11: PC = 1, QPRIO = 1 (high priority, bits 1:0)
+    mov     dword [r13 + 20], 1   ; PC = 1, no CQ overlap info
+
+    ; NSID = 0
+    mov     dword [r13 + 4], 0
+
+    ; Reset CQ phase
+    mov     dword [r14], 0
+
+    ; Ring admin SQ doorbell (SQ head pointer was incremented)
+    lea     rdi, [r12 + SQ0TDBL]
+    mov     esi, 1
+    call    er_mmio_write32
+
+    ; Poll
+    mov     ebx, 100000000
+.poll_sq:
+    mov     eax, [r14]
+    test    eax, 1
+    jnz     .sq_done
+    pause
+    dec     ebx
+    jnz     .poll_sq
+    er_err  ERROR_TIMEOUT
+    jmp     .out
+
+.sq_done:
+    movzx   eax, word [r14 + 6]
+    and     eax, 0x7FFE
+    jnz     .fail
+
+    er_ok
+    jmp     .out
+
+.fail:
+    er_err  ERROR_IO
+.out:
+    pop     rbx
+    pop     r14
+    pop     r13
+    pop     r12
+    ret
+
+; ==================================================================
+; er_nvme_identify_ns — identify namespace 1
+; int er_nvme_identify_ns(uint64_t bar0)
+;
+; Sends Identify CNS=0 for NSID=1 into NVME_ID_BUF.
+; Returns: eax = 0 on success, -1 on failure
+; ==================================================================
+er_fn er_nvme_identify_ns
+    push    r12
+    push    r13
+    push    r14
+
+    mov     r12, rdi            ; BAR0
+    mov     r13, NVME_ADMIN_SQ
+    mov     r14, NVME_ADMIN_CQ
+
+    ; Clear SQE
+    xor     eax, eax
+    mov     ecx, 16
+    mov     rdi, r13
+.clr:
+    mov     [rdi], eax
+    add     rdi, 4
+    dec     ecx
+    jnz     .clr
+
+    ; CDW0 = opcode 6 (Identify)
+    mov     dword [r13], NVME_ADM_IDENTIFY
+
+    ; NSID = 1 (namespace 1)
+    mov     dword [r13 + 4], 1
+
+    ; PRP1 = NVME_ID_BUF
+    mov     dword [r13 + 40], NVME_ID_BUF
+    mov     dword [r13 + 44], 0
+
+    ; CDW10 = CNS 0 (namespace struct)
+    mov     dword [r13 + 16], 0
+
+    ; Reset CQ phase
+    mov     dword [r14], 0
+
+    lea     rdi, [r12 + SQ0TDBL]
+    mov     esi, 1
+    call    er_mmio_write32
+
+    mov     ebx, 100000000
+.poll:
+    mov     eax, [r14]
+    test    eax, 1
+    jnz     .done
+    pause
+    dec     ebx
+    jnz     .poll
+    er_err  ERROR_TIMEOUT
+    jmp     .out
+
+.done:
+    movzx   eax, word [r14 + 6]
+    and     eax, 0x7FFE
+    jnz     .fail
+    er_ok
+    jmp     .out
+
+.fail:
+    er_err  ERROR_IO
+.out:
+    pop     r14
+    pop     r13
+    pop     r12
+    ret
+
+; ==================================================================
+; er_nvme_print_ns_info — print namespace 1 info from NVME_ID_BUF
+; void er_nvme_print_ns_info(uint64_t com_port)
+; ==================================================================
+er_fn er_nvme_print_ns_info
+    push    rbx
+    push    r12
+    push    r13
+
+    mov     r12, NVME_ID_BUF
+    mov     r13w, di
+
+    ; NSZE: bytes 0-7 = namespace size (in LBAs)
+    mov     eax, [r12]          ; low 32 bits of NSZE
+    mov     ebx, [r12 + 4]      ; high 32 bits of NSZE
+
+    mov     rdi, r13
+    lea     rsi, [rel .nsze_s]
+    call    er_serial_puts
+    mov     rdi, r13
+    mov     esi, eax
+    call    er_serial_puthex32
+    mov     rdi, r13
+    mov     esi, ebx
+    call    er_serial_puthex32
+    mov     rdi, r13
+    call    er_serial_crlf
+
+    ; LBA format: bytes 128+ = LBAF[]. LBAF[0] at offset 128
+    ; byte 132+3 = LBADS (LBA data size, 2^LBADS bytes)
+    movzx   ecx, byte [r12 + 131]   ; LBAF0[3] = LBADS
+    mov     edx, 1
+    shl     edx, cl                 ; data size per LBA
+
+    mov     rdi, r13
+    lea     rsi, [rel .lbads_s]
+    call    er_serial_puts
+    mov     rdi, r13
+    mov     esi, edx
+    call    er_serial_putdec32
+    mov     rdi, r13
+    lea     rsi, [rel .bytes_s]
+    call    er_serial_puts
+    mov     rdi, r13
+    call    er_serial_crlf
+
+    ; FLBAS (Formatted LBA size): byte 128
+    movzx   eax, byte [r12 + 128]
+    mov     rdi, r13
+    lea     rsi, [rel .flbas_s]
+    call    er_serial_puts
+    mov     rdi, r13
+    mov     esi, eax
+    call    er_serial_puthex32
+    mov     rdi, r13
+    call    er_serial_crlf
+
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ok
+    ret
+
+.nsze_s:  db "nsze: 0x", 0
+.lbads_s: db "lbads: ", 0
+.bytes_s: db " bytes/lba", 0
+.flbas_s: db "flbas: ", 0

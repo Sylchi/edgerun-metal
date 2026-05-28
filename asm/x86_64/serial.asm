@@ -122,6 +122,7 @@ er_fn er_serial_init
 
     ; Disable interrupts (IER = 0)
     mov     dx, r8w
+    add     dx, UART_IER
     xor     al, al
     out     dx, al
 

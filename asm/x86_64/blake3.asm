@@ -1,5 +1,4 @@
 ; EdgeRun BLAKE3 hash — pure x86_64 scalar assembly
-; Faithful port of edgerun-crypto/src/er_blake3.c scalar path
 ; System V AMD64 ABI: rdi, rsi, rdx, rcx, r8, r9
 ; No libc, no SIMD, no external dependencies.
 

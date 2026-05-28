@@ -20,7 +20,7 @@
 ;   Bit 7: Parity error
 
 %include "x86_64/macros.inc"
-%include "x86_64/wasm_constants.inc"
+%include "x86_64/wasm_defines.inc"
 
 ; I/O ports
 %define I8042_DATA      0x60
@@ -53,8 +53,7 @@
 %define KBD_CMD_ACK            0xFA
 %define KBD_CMD_BAT_DONE       0xAA    ; Basic Assurance Test passed
 
-; HOSTED_TEST capture/response buffers
-%ifdef HOSTED_TEST
+; HOSTED_TEST capture/response buffers (unconditional)
 section .bss
 global er_i8042_tx_buffer, er_i8042_tx_count
 global er_i8042_rx_buffer, er_i8042_rx_count, er_i8042_rx_read
@@ -63,7 +62,6 @@ er_i8042_tx_count:  resq 1
 er_i8042_rx_buffer: resb 4096   ; Pre-loaded response data
 er_i8042_rx_count:  resq 1
 er_i8042_rx_read:   resq 1
-%endif
 
 SECTION .text
 

@@ -1,1 +1,0 @@
-/usr/bin/cc -g -Wl,--dependency-file=CMakeFiles/bench_blake3.dir/link.d CMakeFiles/bench_blake3.dir/bench/bench_blake3.c.o -o bench_blake3  libedgerun_crypto.a

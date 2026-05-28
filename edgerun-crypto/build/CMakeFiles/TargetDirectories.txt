@@ -1,7 +1,0 @@
-/home/ken/edgerun-c/edgerun-crypto/build/CMakeFiles/edgerun_crypto.dir
-/home/ken/edgerun-c/edgerun-crypto/build/CMakeFiles/test_blake3.dir
-/home/ken/edgerun-c/edgerun-crypto/build/CMakeFiles/bench_blake3.dir
-/home/ken/edgerun-c/edgerun-crypto/build/CMakeFiles/bench.dir
-/home/ken/edgerun-c/edgerun-crypto/build/CMakeFiles/test.dir
-/home/ken/edgerun-c/edgerun-crypto/build/CMakeFiles/edit_cache.dir
-/home/ken/edgerun-c/edgerun-crypto/build/CMakeFiles/rebuild_cache.dir

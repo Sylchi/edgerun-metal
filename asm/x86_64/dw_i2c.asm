@@ -8,7 +8,7 @@
 ; Polling-mode master only — no interrupts, no slave mode.
 
 %include "x86_64/macros.inc"
-%include "x86_64/wasm_constants.inc"
+%include "x86_64/wasm_defines.inc"
 
 extern er_mmio_read32
 extern er_mmio_write32
@@ -176,15 +176,13 @@ _dw_check_abort:
     er_ok
     er_ret
 
-; ─── HOSTED_TEST shadow buffer ────────────────────────────────────
-%ifdef HOSTED_TEST
+; ─── HOSTED_TEST shadow buffer (unconditional) ────────────────────
 section .bss
 global er_dw_i2c_shadow
 er_dw_i2c_shadow: resb 256
 global er_dw_i2c_enabled, er_dw_i2c_tar
 er_dw_i2c_enabled: resq 1
 er_dw_i2c_tar:     resq 1
-%endif
 
 SECTION .text
 

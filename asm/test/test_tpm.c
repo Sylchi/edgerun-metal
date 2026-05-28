@@ -34,6 +34,41 @@ extern uint32_t er_tpm_crb_transfer(uint8_t* cmd, uint32_t cmd_size,
 extern uint32_t er_tpm_crb_command(uint8_t* cmd, uint32_t cmd_size,
                                    uint8_t* rsp, uint32_t rsp_max);
 
+// New command builders
+extern uint8_t* er_tpm_shutdown(uint8_t* buf, uint16_t shutdown_type);
+extern uint8_t* er_tpm_flush_context(uint8_t* buf, uint32_t handle);
+extern uint8_t* er_tpm_read_public(uint8_t* buf, uint32_t handle);
+extern uint8_t* er_tpm_hash_sha256(uint8_t* buf, const uint8_t* data,
+                                   uint32_t data_len, uint32_t hierarchy);
+extern uint8_t* er_tpm_hash_sequence_start(uint8_t* buf);
+extern uint8_t* er_tpm_sequence_update(uint8_t* buf, uint32_t handle,
+                                       const uint8_t* data, uint32_t data_len);
+extern uint8_t* er_tpm_sequence_complete(uint8_t* buf, uint32_t handle,
+                                         const uint8_t* data, uint32_t data_len,
+                                         uint32_t hierarchy);
+extern uint8_t* er_tpm_hmac_sha256(uint8_t* buf, uint32_t handle,
+                                   const uint8_t* data, uint32_t data_len);
+extern uint8_t* er_tpm_sign_p256_sha256(uint8_t* buf, uint32_t handle,
+                                        const uint8_t* digest);
+extern uint8_t* er_tpm_verify_p256_sha256(uint8_t* buf, uint32_t handle,
+                                          const uint8_t* digest,
+                                          const uint8_t* sig_r,
+                                          const uint8_t* sig_s);
+extern uint8_t* er_tpm_create_primary_p256_signing(uint8_t* buf);
+extern uint8_t* er_tpm_create_primary_p256_ecdh(uint8_t* buf);
+extern uint8_t* er_tpm_load_external_p256_verify(uint8_t* buf,
+                                                  const uint8_t* public_key);
+extern uint8_t* er_tpm_ecdh_zgen_p256(uint8_t* buf, uint32_t handle,
+                                       const uint8_t* peer_point);
+extern uint8_t* er_tpm_encrypt_decrypt2(uint8_t* buf, uint32_t handle,
+                                        const uint8_t* input, uint32_t input_len,
+                                        const uint8_t* iv, uint16_t mode);
+
+// New response parsers
+extern uint32_t er_tpm_parse_handle(uint8_t* response, uint32_t length);
+extern uint32_t er_tpm_parse_sha256_digest(uint8_t* response, uint32_t length,
+                                           uint8_t* out);
+
 static void store_be16(uint8_t* p, uint16_t v) {
     p[0] = (v >> 8) & 0xFF;
     p[1] = v & 0xFF;
@@ -211,6 +246,188 @@ int main(void) {
         TEST("crb transfer returns > 0", n > 0);
         uint8_t ok = er_tpm_response_success(rsp_buf, n);
         TEST("crb response success", ok == 1);
+    }
+
+    // ─── New command builder tests ────────────────────────────────
+
+    {
+        uint8_t* result = er_tpm_flush_context(cmd_buf, 0x80000001);
+        TEST("flush_context returns non-null", result != 0);
+        TEST("flush_context tag = 0x8001", load_be16(cmd_buf + 0) == 0x8001);
+        TEST("flush_context size = 14", load_be32(cmd_buf + 2) == 14);
+        TEST("flush_context cc = 0x165", load_be32(cmd_buf + 6) == 0x00000165);
+        TEST("flush_context handle = 0x80000001",
+             load_be32(cmd_buf + 10) == 0x80000001);
+
+        result = er_tpm_flush_context(cmd_buf, 0);
+        TEST("flush_context zero handle returns null", result == 0);
+    }
+
+    {
+        uint8_t* result = er_tpm_read_public(cmd_buf, 0x80000001);
+        TEST("read_public returns non-null", result != 0);
+        TEST("read_public size = 14", load_be32(cmd_buf + 2) == 14);
+        TEST("read_public cc = 0x173", load_be32(cmd_buf + 6) == 0x00000173);
+    }
+
+    {
+        uint8_t* result = er_tpm_hash_sequence_start(cmd_buf);
+        TEST("hash_sequence_start returns non-null", result != 0);
+        TEST("hash_sequence_start size = 18",
+             load_be32(cmd_buf + 2) == 18);
+        TEST("hash_sequence_start cc = 0x186",
+             load_be32(cmd_buf + 6) == 0x00000186);
+        TEST("hash_sequence_start alg = SHA256",
+             load_be16(cmd_buf + 10) == 0x000B);
+        TEST("hash_sequence_start hierarchy = RH_NULL",
+             load_be32(cmd_buf + 12) == 0x40000007);
+    }
+
+    {
+        uint8_t data[4] = {0x01, 0x02, 0x03, 0x04};
+        uint8_t* result = er_tpm_hash_sha256(cmd_buf, data, 4, 0x40000007);
+        TEST("hash_sha256 returns non-null", result != 0);
+        TEST("hash_sha256 size = 24", load_be32(cmd_buf + 2) == 24);
+        TEST("hash_sha256 cc = 0x17d",
+             load_be32(cmd_buf + 6) == 0x0000017d);
+        TEST("hash_sha256 data len = 4", load_be16(cmd_buf + 10) == 4);
+        TEST("hash_sha256 data[0] = 0x01", cmd_buf[12] == 0x01);
+        TEST("hash_sha256 data[3] = 0x04", cmd_buf[15] == 0x04);
+        TEST("hash_sha256 alg = SHA256",
+             load_be16(cmd_buf + 16) == 0x000B);
+        TEST("hash_sha256 hierarchy = RH_NULL",
+             load_be32(cmd_buf + 18) == 0x40000007);
+
+        result = er_tpm_hash_sha256(cmd_buf, data, 0, 0x40000007);
+        TEST("hash_sha256 zero data returns null", result == 0);
+    }
+
+    {
+        uint8_t data[4] = {0x01, 0x02, 0x03, 0x04};
+        uint8_t* result = er_tpm_sequence_update(cmd_buf, 0x80000001,
+                                                  data, 4);
+        TEST("sequence_update returns non-null", result != 0);
+        TEST("sequence_update size = 33",
+             load_be32(cmd_buf + 2) == 33);
+        TEST("sequence_update cc = 0x15c",
+             load_be32(cmd_buf + 6) == 0x0000015c);
+        TEST("sequence_update tag = 0x8002",
+             load_be16(cmd_buf + 0) == 0x8002);
+    }
+
+    {
+        uint8_t data[4] = {0x01, 0x02, 0x03, 0x04};
+        uint8_t* result = er_tpm_hmac_sha256(cmd_buf, 0x80000001, data, 4);
+        TEST("hmac_sha256 returns non-null", result != 0);
+        TEST("hmac_sha256 size = 35",
+             load_be32(cmd_buf + 2) == 35);
+        TEST("hmac_sha256 cc = 0x155",
+             load_be32(cmd_buf + 6) == 0x00000155);
+    }
+
+    {
+        uint8_t digest[32];
+        er_memset(digest, 0xAB, 32);
+        uint8_t* result = er_tpm_sign_p256_sha256(cmd_buf, 0x80000001,
+                                                    digest);
+        TEST("sign_p256 returns non-null", result != 0);
+        TEST("sign_p256 size = 73", load_be32(cmd_buf + 2) == 73);
+        TEST("sign_p256 cc = 0x15d",
+             load_be32(cmd_buf + 6) == 0x0000015d);
+        TEST("sign_p256 tag = 0x8002",
+             load_be16(cmd_buf + 0) == 0x8002);
+    }
+
+    {
+        uint8_t digest[32];
+        uint8_t sig_r[32], sig_s[32];
+        er_memset(digest, 0xAB, 32);
+        er_memset(sig_r, 0xCD, 32);
+        er_memset(sig_s, 0xEF, 32);
+        uint8_t* result = er_tpm_verify_p256_sha256(cmd_buf, 0x80000001,
+                                                     digest, sig_r, sig_s);
+        TEST("verify_p256 returns non-null", result != 0);
+        TEST("verify_p256 size = 120",
+             load_be32(cmd_buf + 2) == 120);
+        TEST("verify_p256 cc = 0x177",
+             load_be32(cmd_buf + 6) == 0x00000177);
+    }
+
+    {
+        uint8_t* result = er_tpm_create_primary_p256_signing(cmd_buf);
+        TEST("create_primary_signing returns non-null", result != 0);
+        TEST("create_primary size = 65",
+             load_be32(cmd_buf + 2) == 65);
+        TEST("create_primary cc = 0x131",
+             load_be32(cmd_buf + 6) == 0x00000131);
+        TEST("create_primary rh_owner = 0x40000001",
+             load_be32(cmd_buf + 10) == 0x40000001);
+
+        result = er_tpm_create_primary_p256_ecdh(cmd_buf);
+        TEST("create_primary_ecdh returns non-null", result != 0);
+        TEST("create_primary_ecdh size = 65",
+             load_be32(cmd_buf + 2) == 65);
+    }
+
+    {
+        uint8_t pub_key[64];
+        er_memset(pub_key, 0x42, 64);
+        uint8_t* result = er_tpm_load_external_p256_verify(cmd_buf, pub_key);
+        TEST("load_ext_p256 returns non-null", result != 0);
+        TEST("load_ext_p256 size = 106",
+             load_be32(cmd_buf + 2) == 106);
+        TEST("load_ext_p256 cc = 0x167",
+             load_be32(cmd_buf + 6) == 0x00000167);
+        TEST("load_ext_p256 X[0] = 0x42", cmd_buf[36] == 0x42);
+        TEST("load_ext_p256 X[31] = 0x42", cmd_buf[67] == 0x42);
+        TEST("load_ext_p256 Y[0] = 0x42", cmd_buf[70] == 0x42);
+        TEST("load_ext_p256 Y[31] = 0x42", cmd_buf[101] == 0x42);
+    }
+
+    {
+        uint8_t point[64];
+        er_memset(point, 0x77, 64);
+        uint8_t* result = er_tpm_ecdh_zgen_p256(cmd_buf, 0x80000001, point);
+        TEST("ecdh_zgen returns non-null", result != 0);
+        TEST("ecdh_zgen size = 97",
+             load_be32(cmd_buf + 2) == 97);
+        TEST("ecdh_zgen cc = 0x154",
+             load_be32(cmd_buf + 6) == 0x00000154);
+        TEST("ecdh_zgen X[0] = 0x77", cmd_buf[31] == 0x77);
+        TEST("ecdh_zgen Y[0] = 0x77", cmd_buf[65] == 0x77);
+    }
+
+    {
+        uint8_t iv[16];
+        uint8_t input[8] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
+        er_memset(iv, 0xAA, 16);
+        uint8_t* result = er_tpm_encrypt_decrypt2(cmd_buf, 0x80000001,
+                                                   input, 8, iv, 0x0043);
+        TEST("encrypt_decrypt2 returns non-null", result != 0);
+        TEST("encrypt_decrypt2 size = 60"
+             "(34+16+8+2)", load_be32(cmd_buf + 2) == 60);
+        TEST("encrypt_decrypt2 cc = 0x193",
+             load_be32(cmd_buf + 6) == 0x00000193);
+    }
+
+    // ─── Response parser tests ────────────────────────────────────
+
+    {
+        uint8_t rsp[26];
+        store_be16(rsp + 0, 0x8001);
+        store_be32(rsp + 2, 26);
+        store_be32(rsp + 6, 0x00000000);
+        store_be32(rsp + 10, 0x80000001);
+        store_be16(rsp + 14, 32);
+        er_memset(rsp + 16, 0xBB, 32);
+
+        uint32_t handle = er_tpm_parse_handle(rsp, 26);
+        TEST("parse_handle = 0x80000001", handle == 0x80000001);
+
+        uint32_t n = er_tpm_parse_sha256_digest(rsp, 26, out_buf);
+        TEST("parse_sha256_digest count = 32", n == 32);
+        TEST("parse_sha256_digest data[0] = 0xBB", out_buf[0] == 0xBB);
+        TEST("parse_sha256_digest data[31] = 0xBB", out_buf[31] == 0xBB);
     }
 
     return (passed_tests == total_tests) ? 0 : 1;

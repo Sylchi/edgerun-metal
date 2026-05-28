@@ -52,6 +52,7 @@ er_fn er_pci_read32
     out     dx, eax
     mov     dx, PCI_DATA_PORT
     in      eax, dx
+    er_ok
     ret
 
 ; ==================================================================
@@ -86,6 +87,7 @@ er_fn er_pci_write32
     out     dx, eax
 
     pop     r8
+    er_ok
     ret
 
 ; ==================================================================
@@ -169,6 +171,7 @@ er_fn er_pci_find_class
     mov     byte [rax], r10b
 
     mov     eax, 1
+    er_ok
     jmp     .out
 
 .next_func:
@@ -183,6 +186,7 @@ er_fn er_pci_find_class
     jb      .bus_loop
 
     xor     eax, eax
+    er_ok
 .out:
     pop     r9
     pop     r8

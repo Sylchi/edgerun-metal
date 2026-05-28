@@ -13,7 +13,7 @@
 ; over the ACPI EC read/write interface.
 
 %include "x86_64/macros.inc"
-%include "x86_64/wasm_constants.inc"
+%include "x86_64/wasm_defines.inc"
 
 ; ACPI EC I/O ports
 %define EC_SC        0x66    ; Status/command
@@ -44,15 +44,13 @@
 ; Timeout for EC operations (spin count)
 %define EC_TIMEOUT    1000000
 
-; ─── HOSTED_TEST shadow buffer ────────────────────────────────────────
-%ifdef HOSTED_TEST
+; ─── HOSTED_TEST shadow buffer (unconditional) ────────────────────────
 section .bss
 global er_ec_shadow
 er_ec_shadow: resb 4096        ; Simulated EC memory (offsets 0-4095)
 global er_ec_cmd_log, er_ec_cmd_count
 er_ec_cmd_log: resb 256        ; Command log
 er_ec_cmd_count: resq 1
-%endif
 
 SECTION .text
 

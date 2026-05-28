@@ -1,2 +1,0 @@
-/usr/bin/ar qc libedgerun_crypto.a CMakeFiles/edgerun_crypto.dir/src/er_blake3.c.o
-/usr/bin/ranlib libedgerun_crypto.a
