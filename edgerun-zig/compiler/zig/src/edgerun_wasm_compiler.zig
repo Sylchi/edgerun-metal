@@ -210,7 +210,8 @@ fn compileWithMode(
     source_len: usize,
 ) u32 {
     if (compiler_memory_len == 0 or compiler_memory_ptr & memory_alignment_mask != 0) return fail(.invalid_memory, "compiler memory slice is invalid");
-    state.diagnostic = "";
+    state.diagnostic = "ZZZZ_enter_compileWithMode_ZZZZ";
+    state.status = .ok;
     const compiler_memory = (@as([*]u8, @ptrFromInt(compiler_memory_ptr)))[0..compiler_memory_len];
     if (source_len == 0 or source_len > max_source_bytes) {
         state.status = .source_too_large;
@@ -241,11 +242,13 @@ fn compileWithMode(
             error.MissingRootSource => .missing_root_source,
             else => .corrupt_source_object,
         };
-        state.diagnostic = switch (err) {
-            error.MissingRootSource => "VFS workspace does not contain requested root source label",
-            error.NotWorkspace => "compiler input is not an EdgeRun VFS workspace object",
-            else => "compiler input has a corrupt EdgeRun VFS workspace",
-        };
+        if (state.diagnostic.len == 0) {
+            state.diagnostic = switch (err) {
+                error.MissingRootSource => "wFSO: missing root source",
+                error.NotWorkspace => "compiler input is not an EdgeRun VFS workspace object",
+                else => "compiler input has a corrupt EdgeRun VFS workspace",
+            };
+        }
         state.output = &.{};
         output_addr = 0;
         return @intFromEnum(state.status);
@@ -255,12 +258,14 @@ fn compileWithMode(
             error.OutOfMemory => .compiler_memory_too_small,
             error.InvalidSource => .invalid_source,
         };
-        state.diagnostic = switch (err) {
-            error.OutOfMemory => "compiler memory slice is too small for EdgeRun lowering",
-            error.InvalidSource => switch (source_mode) {
-                .edgerun => "VFS root source is outside the supported EdgeRun source subset",
-            },
-        };
+        if (state.diagnostic.len == 0) {
+            state.diagnostic = switch (err) {
+                error.OutOfMemory => "compiler memory slice is too small for EdgeRun lowering",
+                error.InvalidSource => switch (source_mode) {
+                    .edgerun => "VFS root source is outside the supported EdgeRun source subset",
+                },
+            };
+        }
         state.output = &.{};
         output_addr = 0;
         return @intFromEnum(state.status);
@@ -3854,37 +3859,42 @@ fn workspaceFromSourceObject(source: []const u8, root_label: []const u8) Compile
     };
 }
 
+fn aewgFail(diag: []const u8) error{InvalidSource}!CompilerOutputInfo {
+    if (state.diagnostic.len == 0) state.diagnostic = diag;
+    return error.InvalidSource;
+}
+
 fn analyzeEdgeRunWorkspaceGraph(workspace: WorkspaceInfo) error{InvalidSource}!CompilerOutputInfo {
     var result = emptyCompilerOutputInfo();
-    if (workspace.manifest.len < workspace_manifest_header_bytes) return error.InvalidSource;
-    const file_count = load32(workspace.manifest[12..16]) orelse return error.InvalidSource;
-    if (file_count != workspace.file_count) return error.InvalidSource;
+    if (workspace.manifest.len < workspace_manifest_header_bytes) return aewgFail("aEWG: short manifest");
+    const file_count = load32(workspace.manifest[12..16]) orelse return aewgFail("aEWG: no file_count");
+    if (file_count != workspace.file_count) return aewgFail("aEWG: file_count mismatch");
 
     var index: usize = workspace_manifest_header_bytes;
     var remaining = file_count;
     var root_source: ?[]const u8 = null;
     while (remaining > 0) : (remaining -= 1) {
-        if (index > workspace.manifest.len or vfs_label_ref_bytes > workspace.manifest.len - index) return error.InvalidSource;
-        const label_ref = decodeLabelRef(workspace.manifest[index..][0..vfs_label_ref_bytes]) catch return error.InvalidSource;
+        if (index > workspace.manifest.len or vfs_label_ref_bytes > workspace.manifest.len - index) return aewgFail("aEWG: label_ref bounds");
+        const label_ref = decodeLabelRef(workspace.manifest[index..][0..vfs_label_ref_bytes]) catch return aewgFail("aEWG: decodeLabelRef fail");
         result.manifest_file_refs_scanned += 1;
         index += vfs_label_ref_bytes;
 
-        if (index > workspace.manifest.len or label_ref.object_len > workspace.manifest.len - index) return error.InvalidSource;
+        if (index > workspace.manifest.len or label_ref.object_len > workspace.manifest.len - index) return aewgFail("aEWG: object bounds");
         const file_object = workspace.manifest[index..][0..label_ref.object_len];
         index += label_ref.object_len;
         if (!std.mem.eql(u8, label_ref.label, workspace.root_label)) continue;
 
-        const file_view = decodeObject(file_object) catch return error.InvalidSource;
+        const file_view = decodeObject(file_object) catch return aewgFail("aEWG: decodeObject fail");
         result.file_object_decodes += 1;
         root_source = file_view.body;
     }
-    if (index != workspace.manifest.len) return error.InvalidSource;
-    const source = root_source orelse return error.InvalidSource;
-    const root_stats = parseEdgeRunRootStats(source) orelse return error.InvalidSource;
+    if (index != workspace.manifest.len) return aewgFail("aEWG: index off");
+    const source = root_source orelse return aewgFail("aEWG: no root source");
+    const root_stats = parseEdgeRunRootStats(source) orelse return aewgFail("aEWG: parseEdgeRunRootStats fail");
     const lowered_exports = collectWorkspaceLoweredExportsForMode(.edgerun, workspace, 0, 0, if (workspaceHasFileLabel(workspace.manifest, embedded_wasm_compiler_label)) 1 else 0, successor_base_function_count);
-    const imports = scanEdgeRunImports(source) orelse return error.InvalidSource;
+    const imports = scanEdgeRunImports(source) orelse return aewgFail("aEWG: scanEdgeRunImports fail");
     const lowered_main_count: u32 = if (lowerMainForMode(.edgerun, source, 0, &lowered_exports, successor_base_function_count).found) 1 else 0;
-    if (lowered_main_count + lowered_exports.declared_count != root_stats.export_count) return error.InvalidSource;
+    if (lowered_main_count + lowered_exports.declared_count != root_stats.export_count) return aewgFail("aEWG: count mismatch");
 
     result.edgerun_instruction_count = lowered_main_count + lowered_exports.count;
     result.edgerun_declaration_count = root_stats.declaration_count;
@@ -3899,7 +3909,7 @@ fn analyzeEdgeRunWorkspaceGraph(workspace: WorkspaceInfo) error{InvalidSource}!C
     result.lowered_export_count = lowered_exports.exportedCount();
     var stack = ImportStack{};
     try analyzeEdgeRunImportsRecursive(workspace, workspace.root_label, source, &result, &stack, 0);
-    if (result.unresolved_import_count != 0 or result.truncated_import_count != 0) return error.InvalidSource;
+    if (result.unresolved_import_count != 0 or result.truncated_import_count != 0) return aewgFail("aEWG: unresolved/truncated imports");
     return result;
 }
 
@@ -3929,9 +3939,15 @@ fn analyzeEdgeRunImportsRecursive(workspace: WorkspaceInfo, label: []const u8, s
         result.truncated_import_count += 1;
         return;
     }
-    if (!stack.push(label)) return error.InvalidSource;
+    if (!stack.push(label)) {
+        state.diagnostic = "aERI: stack push fail";
+        return error.InvalidSource;
+    }
     defer stack.pop();
-    const imports = scanEdgeRunImports(source) orelse return error.InvalidSource;
+    const imports = scanEdgeRunImports(source) orelse {
+        if (state.diagnostic.len == 0) state.diagnostic = "aERI: scanEdgeRunImports fail";
+        return error.InvalidSource;
+    };
     if (depth != 0) {
         result.import_edge_count += imports.edge_count;
         result.truncated_import_count += imports.truncated_count;
@@ -3942,7 +3958,10 @@ fn analyzeEdgeRunImportsRecursive(workspace: WorkspaceInfo, label: []const u8, s
             result.unresolved_import_count += 1;
             continue;
         };
-        const imported_stats = parseEdgeRunRootStats(imported_source) orelse return error.InvalidSource;
+        const imported_stats = parseEdgeRunRootStats(imported_source) orelse {
+            if (state.diagnostic.len == 0) state.diagnostic = "aERI: parseEdgeRunRootStats fail";
+            return error.InvalidSource;
+        };
         result.queued_import_count += 1;
         result.analyzed_file_count += 1;
         result.file_object_decodes += 1;
@@ -3968,9 +3987,18 @@ fn analyzeEdgeRunRoot(source: []const u8) ?EdgeRunRootAnalysis {
 }
 
 fn parseEdgeRunRootStats(source: []const u8) ?edgerun_source.Stats {
-    _ = scanEdgeRunImports(source) orelse return null;
-    const parsed = edgerun_source.parse(source) orelse return null;
-    if (!edgeRunTopLevelNamesUnique(source)) return null;
+    _ = scanEdgeRunImports(source) orelse {
+        if (state.diagnostic.len == 0) state.diagnostic = "pERR: scanEdgeRunImports fail";
+        return null;
+    };
+    const parsed = edgerun_source.parse(source) orelse {
+        if (state.diagnostic.len == 0) state.diagnostic = "pERR: parse fail";
+        return null;
+    };
+    if (!edgeRunTopLevelNamesUnique(source)) {
+        if (state.diagnostic.len == 0) state.diagnostic = "pERR: names not unique";
+        return null;
+    }
     return parsed;
 }
 
@@ -3988,7 +4016,10 @@ fn scanEdgeRunImports(source: []const u8) ?EdgeRunImportScan {
         index = edgerun_source.skipSpace(source, index);
         if (index == source.len) break;
         if (std.mem.startsWith(u8, source[index..], const_keyword)) {
-            const decl = edgerun_source.parseConstDecl(source, index) orelse return null;
+            const decl = edgerun_source.parseConstDecl(source, index) orelse {
+                if (state.diagnostic.len == 0) state.diagnostic = "sERI: parseConstDecl fail";
+                return null;
+            };
             if (parseEdgeRunImportLabel(decl)) |label| {
                 scan.edge_count += 1;
                 if (scan.label_count < scan.labels.len) {
@@ -4003,16 +4034,34 @@ fn scanEdgeRunImports(source: []const u8) ?EdgeRunImportScan {
             continue;
         }
         if (std.mem.startsWith(u8, source[index..], var_keyword)) {
-            index = edgerun_source.parseVar(source, index) orelse return null;
+            index = edgerun_source.parseVar(source, index) orelse {
+                if (state.diagnostic.len == 0) state.diagnostic = "sERI: parseVar fail";
+                return null;
+            };
             continue;
         }
         if (edgerun_source.parseFunction(source, index)) |parsed| {
             index = parsed.next_index;
             continue;
         }
+        if (index < source.len) {
+            if (state.diagnostic.len == 0) {
+                const c = source[index];
+                if (c >= ' ' and c <= '~') {
+                    state.diagnostic = "sERI: stmt fail";
+                } else {
+                    state.diagnostic = "sERI: corr";
+                }
+            }
+        } else {
+            if (state.diagnostic.len == 0) state.diagnostic = "sERI: end";
+        }
         return null;
     }
-    if (scan.edge_count != import_occurrences) return null;
+    if (scan.edge_count != import_occurrences) {
+        if (state.diagnostic.len == 0) state.diagnostic = "sERI: mismatch";
+        return null;
+    }
     return scan;
 }
 

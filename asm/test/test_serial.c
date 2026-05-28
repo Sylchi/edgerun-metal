@@ -2,8 +2,11 @@
 // Uses HOSTED_TEST build: serial output goes to a global buffer.
 // Freestanding — no libc.
 
-typedef unsigned char uint8_t;
-typedef unsigned long size_t;
+typedef unsigned char      uint8_t;
+typedef unsigned short     uint16_t;
+typedef unsigned int       uint32_t;
+typedef unsigned long long uint64_t;
+typedef unsigned long      size_t;
 
 extern void* er_memset(void* dst, int value, size_t num);
 extern int   er_strcmp(const char* str1, const char* str2);

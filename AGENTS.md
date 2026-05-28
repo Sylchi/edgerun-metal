@@ -119,3 +119,24 @@
 - Check `git status --short --branch` before edits, before staging, and before committing.
 - If a needed change overlaps another agent's work, stop and coordinate instead of resolving by force.
 - Keep commits scoped to one coherent task and mention any intentionally touched shared files.
+
+## Session Summary (2026-05-29)
+
+### Fixed
+- `make check` now includes `asm-test` and `crypto-test` (was Zig-only).
+- Added `asm-test-wasm` to the top-level `asm-test` target.
+- Removed dead `$(ASM_BUILD_DIR)/kernel_main.o` target and duplicate `ASM_KERNEL_LD/ELF/BIN` variables.
+- Created `asm/x86_64/tpm_constants.inc` as canonical source for shared TPM constants; `tpm.asm` and `kernel_main.asm` now use `%include` instead of duplicating `%define`s.
+- Removed reference to undefined string `check_tpm_alg_fail_details` in `kernel_main.asm` (pre-existing assembly-time bug that was silently hidden by `2>/dev/null`).
+- Factored 3x duplicated `.putchar` (11 lines each) in `serial.asm` into a single `_serial_putchar` helper.
+- Replaced 11 repetitive per-file ASM build rules in Makefile with 5 static pattern rules (54 lines → 30 lines).
+- Added missing `uint16_t`/`uint32_t`/`uint64_t` typedefs to `asm/test/test_serial.c` (freestanding compilation fix).
+- Fixed 3 pre-existing test failures in `test_runtime.c`: line 431 (wrong copy comparison in `memswap zero`), line 438 and 446 (`er_strcmp` on un-null-terminated `er_hex_encode` output → `er_memcmp`).
+- All 6 ASM test suites now pass (ctypes, math, runtime, serial, TPM, WASM).
+
+### Known Remainders
+- `asm-kernel` build: kernel_main.asm references TPM functions (`er_tpm_crb_present`, `er_tpm_startup`, etc.) but no `kernel_tpm.o`/`kernel_tpm_crb.o` are linked. Need object build rules and `ASM_KERNEL_OBJS` entries.
+- `make check` fails on `zig fmt --check edgerun-zig` (4 unformatted files in deprecated zig directory — out of scope per "do not add new Zig code").
+- Monolithic files: `wasm_interpreter.asm` (5918 lines), `runtime.asm` (1561 lines), `math.asm` (1121 lines).
+- Error convention inconsistent across ASM functions (rax/rdx).
+- C test harnesses need migration to pure ASM self-hosted runners.

@@ -227,9 +227,9 @@ er_fn er_serial_puthex32
 
     ; Write "0x" prefix
     mov     sil, '0'
-    call    .putchar
+call _serial_putchar
     mov     sil, 'x'
-    call    .putchar
+call _serial_putchar
 
     ; Write 8 hex digits (most significant first)
     mov     ecx, 8              ; 8 nybbles
@@ -245,25 +245,13 @@ er_fn er_serial_puthex32
 .digit:
     add     eax, '0'
     mov     sil, al
-    call    .putchar
+call _serial_putchar
     shl     r9d, 4              ; shift next nybble into position
     dec     ecx
     jnz     .loop
 
     pop     rcx
     pop     rbx
-    ret
-
-.putchar:
-    mov     dx, r8w
-    add     dx, UART_LSR
-.wait:
-    er_in_al_dx
-    test    al, LSR_THR_EMPTY
-    jz      .wait
-    mov     dx, r8w
-    mov     al, sil
-    er_out_dx_al
     ret
 
 ; ==================================================================
@@ -278,9 +266,9 @@ er_fn er_serial_puthex64
 
     ; Write "0x" prefix
     mov     sil, '0'
-    call    .putchar
+call _serial_putchar
     mov     sil, 'x'
-    call    .putchar
+call _serial_putchar
 
     ; Write 16 hex digits (most significant first)
     mov     ecx, 16
@@ -296,25 +284,13 @@ er_fn er_serial_puthex64
 .digit:
     add     eax, '0'
     mov     sil, al
-    call    .putchar
+call _serial_putchar
     shl     r9, 4
     dec     ecx
     jnz     .loop
 
     pop     rcx
     pop     rbx
-    ret
-
-.putchar:
-    mov     dx, r8w
-    add     dx, UART_LSR
-.wait:
-    er_in_al_dx
-    test    al, LSR_THR_EMPTY
-    jz      .wait
-    mov     dx, r8w
-    mov     al, sil
-    er_out_dx_al
     ret
 
 ; ==================================================================
@@ -333,7 +309,7 @@ er_fn er_serial_putdec32
     jnz     .nonzero
 
     mov     sil, '0'
-    call    .putchar
+call _serial_putchar
     jmp     .done
 
 .nonzero:
@@ -359,7 +335,7 @@ er_fn er_serial_putdec32
     inc     ecx
 .print:
     mov     sil, [rsp + rcx]
-    call    .putchar
+call _serial_putchar
     inc     ecx
     cmp     ecx, 10
     jb      .print
@@ -372,7 +348,7 @@ er_fn er_serial_putdec32
     pop     rbx
     ret
 
-.putchar:
+_serial_putchar:
     mov     dx, r8w
     add     dx, UART_LSR
 .wait:

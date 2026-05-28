@@ -7,36 +7,25 @@
 ; for test verification (same pattern as serial.asm).
 
 %include "x86_64/macros.inc"
+%include "x86_64/tpm_constants.inc"
 
-; ─── TPM2 protocol constants ──────────────────────────────────────────
+; ─── TPM2 protocol constants (extended, not in shared inc) ────────────
 
 ; Tags
-%define TPM_ST_NO_SESSIONS      0x8001
 %define TPM_ST_SESSIONS          0x8002
 
-; Response codes
-%define TPM_RC_SUCCESS          0x00000000
-
 ; Command codes
-%define TPM_CC_STARTUP          0x00000144
-%define TPM_CC_GET_RANDOM       0x0000017b
-%define TPM_CC_GET_CAPABILITY   0x0000017a
 %define TPM_CC_SHUTDOWN         0x00000145
 
 ; Startup types
-%define TPM_SU_CLEAR            0x0000
 %define TPM_SU_STATE            0x0001
 
 ; Capability types
-%define TPM_CAP_ALGS            0x00000000
-%define TPM_CAP_COMMANDS        0x00000002
 %define TPM_CAP_TPM_PROPERTIES  0x00000006
 
 ; Algorithm IDs
-%define TPM_ALG_SHA256          0x000b
 %define TPM_ALG_HMAC            0x0005
 %define TPM_ALG_KEYEDHASH       0x0008
-%define TPM_ALG_ECC             0x0023
 %define TPM_ALG_ECDH            0x0019
 %define TPM_ALG_ECDSA           0x0018
 %define TPM_ALG_AES             0x0006
@@ -61,15 +50,11 @@
 %define TPM_OA_DECRYPT          0x00020000
 
 ; Protocol sizes
-%define TPM_HEADER_LEN          10
 %define TPM_SHA256_DIGEST_LEN   32
 %define TPM_P256_PUBLIC_KEY_LEN 64
 %define TPM_CRB_MAX_BUFFER_SIZE 4096
 
 ; Command size constants
-%define TPM_CMD_STARTUP_LEN     12
-%define TPM_CMD_GET_RANDOM_LEN  12
-%define TPM_CMD_GET_CAP_LEN     22
 %define TPM_CMD_SHUTDOWN_LEN    12
 
 ; ─── HOSTED_TEST capture buffer ───────────────────────────────────────

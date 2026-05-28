@@ -821,7 +821,7 @@ fn renderComponentPreview(scene: *ui.Scene, collector: *interaction.Collector, b
     const meta = component.accessibility();
     const open_ids = if (meta.control_id) |id| (&[_]u32{id})[0..] else &.{};
     const drag_value = if (meta.control_id) |id| if (gallery_drag_override) |drag| if (drag.id == id) drag.value else null else null else null;
-    const options = .{ .style = componentStyle(), .overlay = .{ .open_ids = open_ids }, .drag_value = drag_value };
+    const options: component_common.RenderOptions = .{ .style = componentStyle(), .overlay = .{ .open_ids = open_ids }, .drag_value = drag_value };
     try component.render(scene, bounds, options);
     try component.collectInteractions(collector, bounds, options);
 }

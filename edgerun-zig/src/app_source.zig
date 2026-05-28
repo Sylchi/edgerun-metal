@@ -1,9 +1,8 @@
 const std = @import("std");
 const bytes = @import("bytes.zig");
-const app_chrome = @import("app_chrome.zig");
-const app_design = @import("app_design.zig");
 const app_hit = @import("app_hit.zig");
 const app_navigation = @import("app_navigation.zig");
+const button_component = @import("ui/components/Button.zig");
 const icon_component = @import("ui/components/Icon.zig");
 const interaction = @import("ui_interaction.zig");
 const ui = @import("ui.zig");
@@ -79,52 +78,36 @@ const error_color = ui.Color{ .r = 248, .g = 113, .b = 113 };
 pub fn contentHeight(width: f32, state: State) f32 {
     _ = width;
     const visible_lines = @max(@as(usize, 1), countLines(state.source));
-    return toolbar_h + status_h + @as(f32, @floatFromInt(visible_lines)) * code_line_h + 96.0;
+    return 34.0 + toolbar_h + @as(f32, @floatFromInt(visible_lines)) * code_line_h + 96.0;
 }
 
 pub fn renderWorkspaceTopBar(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
     try fill(scene, bounds, sidebar_bg, 0.0);
     try fill(scene, ui.Rect.init(bounds.x, bounds.y + bounds.h - 1.0, bounds.w, 1.0), border, 0.0);
     try textAt(scene, bounds.x + 16.0, bounds.y + 16.0, 360.0, 18.0, state.label, text);
-    try textAt(scene, bounds.x + 390.0, bounds.y + 17.0, 260.0, 14.0, state.status, muted);
 
     const button_y = bounds.y + 10.0;
-    var x = bounds.x + bounds.w - 408.0;
-    try app_chrome.renderActionItem(scene, collector, .{
-        .id = app_navigation.sourceActionButtonId(.compile),
-        .bounds = ui.Rect.init(x, button_y, 92.0, 32.0),
-        .label = "Compile",
-        .variant = .primary,
-        .icon_slot = icon_component.IconSlot.of(.leading, icon_component.Icon.named(.check)),
-        .enabled = canCompile(state),
-    });
-    x += 100.0;
-    try app_chrome.renderActionItem(scene, collector, .{
-        .id = app_navigation.sourceActionButtonId(.download),
-        .bounds = ui.Rect.init(x, button_y, 92.0, 32.0),
-        .label = "Export",
-        .variant = .secondary,
-        .icon_slot = icon_component.IconSlot.of(.leading, icon_component.Icon.named(.database)),
-        .enabled = canExport(state),
-    });
-    x += 100.0;
-    try app_chrome.renderActionItem(scene, collector, .{
-        .id = app_navigation.sourceActionButtonId(.launch),
-        .bounds = ui.Rect.init(x, button_y, 84.0, 32.0),
-        .label = "Launch",
-        .variant = .secondary,
-        .icon_slot = icon_component.IconSlot.of(.leading, icon_component.Icon.named(.route)),
-        .enabled = canExport(state),
-    });
-    x += 92.0;
-    try app_chrome.renderActionItem(scene, collector, .{
-        .id = app_navigation.sourceActionButtonId(.reset),
-        .bounds = ui.Rect.init(x, button_y, 84.0, 32.0),
-        .label = "Reset",
+    var x = bounds.x + bounds.w - 184.0;
+    try renderGhostIconButton(scene, collector, app_navigation.sourceActionButtonId(.reset), ui.Rect.init(x, button_y, 32.0, 32.0), icon_component.Icon.named(.trash), true);
+    x += 38.0;
+    try renderGhostIconButton(scene, collector, app_navigation.sourceActionButtonId(.launch), ui.Rect.init(x, button_y, 32.0, 32.0), icon_component.Icon.named(.route), canExport(state));
+    x += 38.0;
+    try renderGhostIconButton(scene, collector, app_navigation.sourceActionButtonId(.download), ui.Rect.init(x, button_y, 32.0, 32.0), icon_component.Icon.named(.database), canExport(state));
+    x += 38.0;
+    try renderGhostIconButton(scene, collector, app_navigation.sourceActionButtonId(.compile), ui.Rect.init(x, button_y, 32.0, 32.0), icon_component.Icon.named(.check), canCompile(state));
+}
+
+fn renderGhostIconButton(scene: *ui.Scene, collector: *interaction.Collector, id: u32, bounds: ui.Rect, icon: icon_component.Icon, enabled: bool) !void {
+    const button = button_component.IconButton{
+        .id = id,
+        .label = "",
+        .icon = icon,
         .variant = .ghost,
-        .icon_slot = icon_component.IconSlot.of(.leading, icon_component.Icon.named(.trash)),
-        .enabled = true,
+    };
+    try button.render(scene, bounds, .{
+        .control = .{ .disabled = !enabled },
     });
+    try button.collectInteractions(collector, bounds);
 }
 
 pub fn renderWorkspaceSidebar(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
@@ -175,12 +158,24 @@ pub fn renderWorkspaceStatus(scene: *ui.Scene, bounds: ui.Rect, state: State) !v
 
 pub fn renderWorkspace(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
     try fill(scene, bounds, panel_bg, 0.0);
-    const toolbar = ui.Rect.init(bounds.x, bounds.y, bounds.w, toolbar_h);
-    const editor = ui.Rect.init(bounds.x, bounds.y + toolbar_h, bounds.w, @max(1.0, bounds.h - toolbar_h - status_h));
-    const status = ui.Rect.init(bounds.x, bounds.y + bounds.h - status_h, bounds.w, status_h);
+    const tab_h: f32 = 34.0;
+    var y = bounds.y;
+    const tab_bar = ui.Rect.init(bounds.x, y, bounds.w, tab_h);
+    try renderEditorTabBar(scene, tab_bar, state);
+    y += tab_h;
+    const toolbar = ui.Rect.init(bounds.x, y, bounds.w, toolbar_h);
     try renderEditorToolbar(scene, toolbar, state);
+    y += toolbar_h;
+    const editor = ui.Rect.init(bounds.x, y, bounds.w, @max(1.0, bounds.h - tab_h - toolbar_h));
     try renderCodeEditor(scene, collector, editor, state);
-    try renderWorkspaceStatus(scene, status, state);
+}
+
+fn renderEditorTabBar(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
+    try fill(scene, bounds, panel_bg, 0.0);
+    const tab = ui.Rect.init(bounds.x, bounds.y, 200.0, bounds.h);
+    try fill(scene, tab, ui.Color{ .r = 24, .g = 28, .b = 36 }, 0.0);
+    try textAt(scene, tab.x + 14.0, tab.y + 8.0, tab.w - 20.0, 16.0, state.label, text);
+    try fill(scene, ui.Rect.init(bounds.x, bounds.y + bounds.h - 1.0, bounds.w, 1.0), border, 0.0);
 }
 
 fn renderEditorToolbar(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
@@ -406,7 +401,8 @@ pub fn sourceIndexFromHit(hit_id: u32) ?usize {
 }
 
 pub fn cursorFromPoint(bounds: ui.Rect, state: State, x: f32, y: f32) usize {
-    const editor = ui.Rect.init(bounds.x, bounds.y + toolbar_h, bounds.w, @max(1.0, bounds.h - toolbar_h - status_h));
+    const editor_top_offset: f32 = 34.0 + toolbar_h;
+    const editor = ui.Rect.init(bounds.x, bounds.y + editor_top_offset, bounds.w, @max(1.0, bounds.h - editor_top_offset));
     return cursorFromTextAreaBounds(editor, state, x, y);
 }
 

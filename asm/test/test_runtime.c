@@ -426,14 +426,14 @@ int main(void) {
         TEST("memswap partial b", d[0] == 1 && d[1] == 2 && d[2] == 3 && d[3] == 8);
 
         er_memswap(a, b, 0);
-        TEST("memswap zero", a[0] == a_copy[0]);
+        TEST("memswap zero", a[0] == b_copy[0]);
     }
 
     {
         char hex[32];
         uint8_t data[16] = {0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0xBA, 0xBE, 0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF};
         er_hex_encode(data, 16, hex);
-        TEST("hex_encode result", er_strcmp(hex, "deadbeefcafebabe0123456789abcdef") == 0);
+        TEST("hex_encode result", er_memcmp(hex, "deadbeefcafebabe0123456789abcdef", 32) == 0);
 
         uint8_t decoded[16];
         size_t n = er_hex_decode(hex, 32, decoded);
@@ -441,7 +441,7 @@ int main(void) {
         TEST("hex_decode roundtrip", er_memcmp(decoded, data, 16) == 0);
 
         er_hex_encode((const uint8_t*)"\x01\x02", 2, hex);
-        TEST("hex_encode short", er_strcmp(hex, "0102") == 0);
+        TEST("hex_encode short", er_memcmp(hex, "0102", 4) == 0);
 
         n = er_hex_decode("", 0, decoded);
         TEST_EQ("hex_decode empty", n, 0);

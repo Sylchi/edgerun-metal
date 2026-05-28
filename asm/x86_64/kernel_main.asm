@@ -3,6 +3,7 @@
 ; Follows the project kernel pattern: banner → checks → PASS.
 
 %include "x86_64/macros.inc"
+%include "x86_64/tpm_constants.inc"
 
 extern er_serial_init
 extern er_serial_puts
@@ -21,14 +22,6 @@ extern er_tpm_get_random
 extern er_tpm_get_capability
 extern er_tpm_response_success
 extern er_tpm_has_algorithm
-
-; TPM constants (mirrored from tpm.asm for kernel_main use)
-%define TPM_CAP_ALGS            0x00000000
-%define TPM_CMD_GET_CAP_LEN     22
-%define TPM_CMD_STARTUP_LEN     12
-%define TPM_CMD_GET_RANDOM_LEN  12
-%define TPM_ALG_SHA256          0x000b
-%define TPM_ALG_ECC             0x0023
 
 ; QEMU debugcon port and ISA debugcon device registers
 %define COM1_PORT      0x3f8
@@ -224,9 +217,6 @@ er_fn er_kernel_main
 .tpm_alg_fail:
     mov     rdi, COM1_PORT
     mov     rsi, check_tpm_fail
-    call    er_serial_puts
-    mov     rdi, COM1_PORT
-    mov     rsi, check_tpm_alg_fail_details
     call    er_serial_puts
     jmp     .tpm_done
 

@@ -242,6 +242,7 @@ fn makeProgram(vertex_source: [:0]const u8, fragment_source: [:0]const u8) wasm_
     const vertex = makeShader(wasm_gl.gl_vertex_shader, vertex_source);
     const fragment = makeShader(wasm_gl.gl_fragment_shader, fragment_source);
     const program = wasm_gl.glCreateProgram();
+    if (program == 0) @panic("GL program creation failed");
     wasm_gl.glAttachShader(program, vertex);
     wasm_gl.glAttachShader(program, fragment);
     glBindAttribLocation(program, gl_contract.attr_pos_location, gl_contract.attr_pos);
@@ -257,6 +258,7 @@ fn makeProgram(vertex_source: [:0]const u8, fragment_source: [:0]const u8) wasm_
 
 fn makeShader(kind: wasm_gl.GLenum, source: [:0]const u8) wasm_gl.GLuint {
     const shader = wasm_gl.glCreateShader(kind);
+    if (shader == 0) @panic("GL shader creation failed");
     wasm_gl.glShaderSource(shader, 1, @intFromPtr(source.ptr), @intCast(source.len));
     wasm_gl.glCompileShader(shader);
     const ok = wasm_gl.glGetShaderiv(shader, wasm_gl.gl_compile_status);

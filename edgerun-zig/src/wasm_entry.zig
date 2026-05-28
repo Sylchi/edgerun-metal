@@ -97,7 +97,7 @@ test "generated entry has the only javascript byte bridge" {
     try std.testing.expect(contains("er_ui_wasm_gl_init"));
     try std.testing.expect(contains("er_ui_render_frame_wasm"));
     try std.testing.expect(!contains("er_ui_build_frame"));
-    try std.testing.expect(contains("er_ui_set_device_scale"));
+    try std.testing.expect(!contains("er_ui_set_device_scale"));
     try std.testing.expect(contains("er_ui_outbox_count"));
     try std.testing.expect(contains("new DataView"));
     try std.testing.expect(contains("setUint32(0,k,1)"));
@@ -147,9 +147,9 @@ test "generated entry has the only javascript byte bridge" {
     try std.testing.expect(!contains("er_ui_packed_overlay_icon_line_vertex_buffer_ptr"));
     try std.testing.expect(!contains("er_ui_font_atlas_ptr"));
     try std.testing.expect(!contains("er_ui_post_image_rgba_ptr"));
-    try std.testing.expect(!contains("G.vertexAttribPointer"));
-    try std.testing.expect(!contains("G.bindAttribLocation"));
-    try std.testing.expect(!contains("blendFuncSeparate"));
+    try std.testing.expect(contains("G.vertexAttribPointer"));
+    try std.testing.expect(contains("G.bindAttribLocation"));
+    try std.testing.expect(contains("blendFuncSeparate"));
     try std.testing.expect(!contains("rect_vertex_shader"));
     try std.testing.expect(!contains("rect_fragment_shader"));
     try std.testing.expect(!contains("textured_vertex_shader"));

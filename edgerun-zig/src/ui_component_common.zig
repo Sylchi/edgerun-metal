@@ -235,5 +235,5 @@ pub fn optionalIconFromTag(tag: u16) Error!?icon.Icon {
     if (tag == 0) return null;
     const raw = tag - 1;
     if (raw >= @typeInfo(icon.Icon).@"enum".fields.len) return error.Corrupt;
-    return @enumFromInt(@as(u8, @intCast(raw)));
+    return @enumFromInt(raw);
 }

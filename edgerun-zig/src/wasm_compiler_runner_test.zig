@@ -348,6 +348,53 @@ test "embedded compiler emits workspace successor wasm with source object embedd
     try std.testing.expectEqual(@as(i32, 4), try artifact_len_after_oversized_result.valueI32(0));
 }
 
+test "minimal .er compiles through wasm compiler" {
+    var file_raw: [4096]u8 = undefined;
+    var workspace_raw: [8192]u8 = undefined;
+    const label = "src/min.er";
+    const source =
+        \\pub export fn er_app_main() i32 { return 42; }
+        \\export fn er_val() u32 { return 7; }
+    ;
+    const source_bytes = try buildTestWorkspace(&workspace_raw, &file_raw, label, source);
+    const compiler_memory_len = alignForward(source_bytes.len + compiler_memory_extra_bytes, 16);
+    const source_offset = compiler_memory_offset + compiler_memory_len;
+    const requested_memory_len = source_offset + source_bytes.len + label.len + source_gap_bytes;
+    const memory_pages = pagesForBytes(requested_memory_len);
+    const memory_len = memory_pages * wasm_page_bytes;
+    const allocator = std.testing.allocator;
+    const memory = try allocator.alloc(u8, memory_len);
+    defer allocator.free(memory);
+    @memset(memory, 0);
+    @memcpy(memory[source_offset .. source_offset + source_bytes.len], source_bytes);
+    const root_label_offset = source_offset + source_bytes.len;
+    @memcpy(memory[root_label_offset..][0..label.len], label);
+
+    var execution_ticks: u64 = execution_tick_budget;
+    var runtime = wasm.Runtime.initWithMemoryPages(memory, &execution_ticks, memory_pages);
+    var compiler_storage = wasm.ExecutionStorage{};
+    const init_result = try wasm.executeExportValueArgsWithStorage(&runtime, &wasm_compiler, "er_wasm_compiler_init", &.{
+        .{ .i32 = @intCast(compiler_memory_offset) },
+        .{ .i32 = @intCast(compiler_memory_len) },
+    }, &compiler_storage);
+    try std.testing.expectEqual(@as(i32, 0), try init_result.valueI32(0));
+
+    const compile_result = try wasm.executeExportValueArgsWithStorage(&runtime, &wasm_compiler, "er_wasm_compiler_compile_wasm", &.{
+        .{ .i32 = @intCast(compiler_memory_offset) },
+        .{ .i32 = @intCast(compiler_memory_len) },
+        .{ .i32 = @intCast(root_label_offset) },
+        .{ .i32 = @intCast(label.len) },
+        .{ .i32 = @intCast(source_offset) },
+        .{ .i32 = @intCast(source_bytes.len) },
+    }, &compiler_storage);
+    const cs = try compile_result.valueI32(0);
+    const diag_len = try (try wasm.executeExportValueArgsWithStorage(&runtime, &wasm_compiler, "er_wasm_compiler_diagnostic_len", &.{}, &compiler_storage)).valueI32(0);
+    const diag_ptr = try (try wasm.executeExportValueArgsWithStorage(&runtime, &wasm_compiler, "er_wasm_compiler_diagnostic_ptr", &.{}, &compiler_storage)).valueI32(0);
+    const diag = memory[@as(usize, @intCast(diag_ptr))..][0..@as(usize, @intCast(diag_len))];
+    std.debug.print("\n  min compile_status={d} diag=\"{s}\"", .{cs, diag});
+    try std.testing.expectEqual(@as(i32, 0), cs);
+}
+
 test "compiled app compiles its own workspace and reproduces wasm hash" {
     const allocator = std.testing.allocator;
     var source_bytes_allocation: []u8 = &.{};
@@ -538,10 +585,11 @@ fn compileWorkspaceWithEmbeddedCompiler(allocator: std.mem.Allocator, source_byt
         .{ .i32 = @intCast(source_bytes.len) },
     }, &compiler_storage);
     const compile_status = try compile_result.valueI32(0);
+    const cwEC_state_status = try (try wasm.executeExportValueArgsWithStorage(&runtime, &wasm_compiler, "er_wasm_compiler_status", &.{}, &compiler_storage)).valueI32(0);
     const cwEC_diag_len = try (try wasm.executeExportValueArgsWithStorage(&runtime, &wasm_compiler, "er_wasm_compiler_diagnostic_len", &.{}, &compiler_storage)).valueI32(0);
     const cwEC_diag_ptr = try (try wasm.executeExportValueArgsWithStorage(&runtime, &wasm_compiler, "er_wasm_compiler_diagnostic_ptr", &.{}, &compiler_storage)).valueI32(0);
     const cwEC_diag_slice = memory[@as(usize, @intCast(cwEC_diag_ptr))..][0..@as(usize, @intCast(cwEC_diag_len))];
-    std.debug.print("\n  cwEC compile_status={d} diagnostic=\"{s}\"", .{ compile_status, cwEC_diag_slice });
+    std.debug.print("\n  cwEC compile_status={d} state_status={d} diagnostic=\"{s}\"", .{ compile_status, cwEC_state_status, cwEC_diag_slice });
     try std.testing.expectEqual(@as(i32, 0), compile_status);
 
     const output_len: usize = @intCast(try (try wasm.executeExportValueArgsWithStorage(&runtime, &wasm_compiler, "er_wasm_compiler_output_len", &.{}, &compiler_storage)).valueI32(0));

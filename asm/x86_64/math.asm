@@ -16,7 +16,7 @@ neg_inf_f32:    dd FLOAT_NEG_INF
 ; sqrtF constants
 align 16
 sqrt_seed_bias_f32:   dd 0x1fc00000
-half_f32:             dd 0x3f000000     ; 0.5f
+half_f32:             dd FLOAT_HALF
 
 ; rsqrtF constants
 align 16
@@ -25,10 +25,10 @@ rsqrt_refine_f32:     dd 0x3fc00000     ; 1.5f
 
 ; clamp01F / u8FromUnitF constants
 align 16
-zero_f32:             dd 0x00000000
-one_f32:              dd 0x3f800000
+zero_f32:             dd FLOAT_ZERO
+one_f32:              dd FLOAT_ONE
 u8_max_f32:           dd 0x437f0000     ; 255.0f
-rounding_half_f32:    dd 0x3f000000     ; 0.5f
+rounding_half_f32:    dd FLOAT_HALF
 
 ; isFiniteF constants
 align 16

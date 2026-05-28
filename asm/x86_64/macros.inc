@@ -67,6 +67,16 @@
     ret
 %endm
 
+; Set success (rdx = 0, no error)
+%macro er_ok 0
+    xor     edx, edx
+%endm
+
+; Set error code in rdx
+%macro er_err 1
+    mov     edx, %1
+%endm
+
 ; ------------------------------------------------------------------
 ; Stack frame macros
 ; ------------------------------------------------------------------
