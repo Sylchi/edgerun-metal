@@ -5,13 +5,15 @@ const ir = @import("ir.zig");
 const raster = @import("vector_raster.zig");
 const varfont = @import("../varfont.zig");
 
-/// Atlas footprint is derived from the chosen font pack policy at compile time.
 pub const width: usize = font_builtin.atlas_width;
 pub const height: usize = font_builtin.atlas_height;
 pub const bytes: usize = width * height;
 pub const channels: usize = 1;
-pub const glyph_capacity: usize = 32768;
 pub const format: varfont.AtlasFormat = .alpha8;
+
+const weight_count = @typeInfo(font_builtin.Weight).@"enum".fields.len;
+const px_range = ir.font_last_px - ir.font_first_px + 1;
+const glyph_capacity: usize = font_builtin.codepoint_count * weight_count * px_range;
 
 const pad: usize = 8;
 const row_gap: usize = 8;
@@ -32,22 +34,6 @@ pub const Atlas = struct {
     device_scale: f32,
     active_weight: font_builtin.Weight,
     revision: u32,
-
-    pub fn init() Atlas {
-        var atlas: Atlas = undefined;
-        atlas.initUtf8();
-        return atlas;
-    }
-
-    pub fn initWithFont(font: font_vector.Body) Atlas {
-        var atlas: Atlas = undefined;
-        atlas.initWithFontInPlace(font);
-        return atlas;
-    }
-
-    pub fn initEmpty(self: *Atlas) void {
-        self.initUtf8();
-    }
 
     pub fn initUtf8(self: *Atlas) void {
         self.font = font_builtin.body(.regular);

@@ -8,6 +8,8 @@ pub const c = @cImport({
     @cInclude("GLES2/gl2.h");
 });
 
+pub const RgbaTexture = renderer_ir.RgbaTexture;
+
 pub const State = struct {
     rect_program: c.GLuint,
     textured_program: c.GLuint,
@@ -18,16 +20,6 @@ pub const State = struct {
     line_vbo: c.GLuint,
     font_texture: c.GLuint,
     image_texture: ?c.GLuint,
-};
-
-pub const RgbaTexture = struct {
-    width: usize,
-    height: usize,
-    pixels: []const ui.Color,
-
-    pub fn valid(self: RgbaTexture) bool {
-        return self.width != 0 and self.height != 0 and self.pixels.len >= self.width * self.height;
-    }
 };
 
 pub const Pixel = struct {
@@ -293,22 +285,13 @@ fn rectDrawBounds(rect: anytype) ui.Rect {
 }
 
 fn drawFontTextured(gl: State, width: i32, height: i32, values: []const f32, texture: c.GLuint) !void {
-    try drawAlphaTextured(gl, width, height, values, texture, true);
-}
-
-fn drawAlphaTextured(gl: State, width: i32, height: i32, values: []const f32, texture: c.GLuint, manual_bilinear: bool) !void {
-    try drawAlphaTexturedWithProgram(gl, width, height, values, texture, gl.textured_program, manual_bilinear);
+    try drawTexturedWithProgram(gl, width, height, values, texture, gl.textured_program);
 }
 
 fn drawTexturedWithProgram(gl: State, width: i32, height: i32, values: []const f32, texture: c.GLuint, program: c.GLuint) !void {
-    try drawAlphaTexturedWithProgram(gl, width, height, values, texture, program, false);
-}
-
-fn drawAlphaTexturedWithProgram(gl: State, width: i32, height: i32, values: []const f32, texture: c.GLuint, program: c.GLuint, manual_bilinear: bool) !void {
     if (values.len == 0) return;
     if (values.len % renderer_ir.text_vertex_float_stride != 0) return error.InvalidIrBuffer;
     c.glUseProgram(program);
-    _ = manual_bilinear;
     c.glUniform2f(c.glGetUniformLocation(program, gl_contract.uniform_screen), @floatFromInt(width), @floatFromInt(height));
     c.glActiveTexture(c.GL_TEXTURE0);
     c.glBindTexture(c.GL_TEXTURE_2D, texture);
@@ -523,7 +506,7 @@ test "viewport scale follows the EGL framebuffer backing size" {
 
 test "font atlas refresh API accepts populated variable font atlas" {
     var atlas: renderer_font_atlas.Atlas = undefined;
-    atlas.initEmpty();
+    atlas.initUtf8();
     var storage = renderer_ir.FixedBuffers(1, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     try renderer_ir.pushText(buffers, atlas.source(), .base, .{ .x = 0, .y = 0, .w = 64, .h = 18 }, "A", .text, .start);

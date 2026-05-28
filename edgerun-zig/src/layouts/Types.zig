@@ -216,7 +216,7 @@ fn wrappedLineCount(value: []const u8, width: f32, average_char_width: f32, max_
 fn utf8CodepointCount(value: []const u8) usize {
     var index: usize = 0;
     var count: usize = 0;
-    while (nextCodepoint(value, &index)) |_| count += 1;
+    while (ui.nextCodepoint(value, &index)) |_| count += 1;
     return count;
 }
 
@@ -224,7 +224,7 @@ fn longestUtf8Run(value: []const u8) usize {
     var longest: usize = 0;
     var current: usize = 0;
     var index: usize = 0;
-    while (nextCodepoint(value, &index)) |codepoint| {
+    while (ui.nextCodepoint(value, &index)) |codepoint| {
         if (isAsciiSpace(codepoint)) {
             longest = @max(longest, current);
             current = 0;
@@ -240,29 +240,6 @@ fn isAsciiSpace(value: u21) bool {
         ' ', '\t', '\n', '\r' => true,
         else => false,
     };
-}
-
-fn nextCodepoint(value: []const u8, index: *usize) ?u21 {
-    if (index.* >= value.len) return null;
-    const start = index.*;
-
-    const codepoint_len = std.unicode.utf8ByteSequenceLength(value[start]) catch {
-        index.* = start + 1;
-        return std.unicode.replacement_character;
-    };
-
-    const end = start + codepoint_len;
-    if (end > value.len) {
-        index.* = value.len;
-        return std.unicode.replacement_character;
-    }
-
-    const codepoint = std.unicode.utf8Decode(value[start..end]) catch {
-        index.* = start + 1;
-        return std.unicode.replacement_character;
-    };
-    index.* = end;
-    return codepoint;
 }
 
 const default_line_height: f32 = 16.0;

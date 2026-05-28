@@ -122,13 +122,13 @@ fn fillFormat4(comptime face: font_vector.FixedFace, out: *[codepoint_count]u21,
 
 fn walkFormat4(comptime face: font_vector.FixedFace, out: anytype, out_count: *usize, counted: *usize, comptime write: bool) void {
     const sub = face.face.cmap_offset;
-    const seg_count = readU16(face.face.data, sub + 6) / 2;
+    const seg_count = varfont.readU16(face.face.data, sub + 6) / 2;
     const end_codes = sub + 14;
     const start_codes = end_codes + @as(usize, seg_count) * 2 + 2;
     var i: usize = 0;
     while (i < seg_count) : (i += 1) {
-        const start = readU16(face.face.data, start_codes + i * 2);
-        const end = readU16(face.face.data, end_codes + i * 2);
+        const start = varfont.readU16(face.face.data, start_codes + i * 2);
+        const end = varfont.readU16(face.face.data, end_codes + i * 2);
         var raw: usize = start;
         while (raw <= end and raw <= std.math.maxInt(u21)) : (raw += 1) {
             const cp: u21 = @intCast(raw);
@@ -154,12 +154,12 @@ fn fillFormat12(comptime face: font_vector.FixedFace, out: *[codepoint_count]u21
 }
 
 fn walkFormat12(comptime face: font_vector.FixedFace, out: anytype, out_count: *usize, counted: *usize, comptime write: bool) void {
-    const group_count = readU32(face.face.data, face.face.cmap_offset + 12);
+    const group_count = varfont.readU32(face.face.data, face.face.cmap_offset + 12);
     var group_index: usize = 0;
     while (group_index < group_count) : (group_index += 1) {
         const group = face.face.cmap_offset + 16 + group_index * 12;
-        const start = readU32(face.face.data, group);
-        const end = readU32(face.face.data, group + 4);
+        const start = varfont.readU32(face.face.data, group);
+        const end = varfont.readU32(face.face.data, group + 4);
         var raw: usize = start;
         while (raw <= end and raw <= std.math.maxInt(u21)) : (raw += 1) {
             const cp: u21 = @intCast(raw);
@@ -174,17 +174,6 @@ fn walkFormat12(comptime face: font_vector.FixedFace, out: anytype, out_count: *
 fn put(out: anytype, count: *usize, cp: u21) void {
     out[count.*] = cp;
     count.* += 1;
-}
-
-fn readU16(data: []const u8, offset: usize) u16 {
-    return (@as(u16, data[offset]) << 8) | data[offset + 1];
-}
-
-fn readU32(data: []const u8, offset: usize) u32 {
-    return (@as(u32, data[offset]) << 24) |
-        (@as(u32, data[offset + 1]) << 16) |
-        (@as(u32, data[offset + 2]) << 8) |
-        data[offset + 3];
 }
 
 fn isSurrogate(cp: u21) bool {

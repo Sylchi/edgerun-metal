@@ -118,7 +118,7 @@ pub fn main(init: std.process.Init) !void {
     var egl = try initEgl(&gbm);
     defer deinitEgl(&egl);
     var font_atlas: renderer_font_atlas.Atlas = undefined;
-    font_atlas.initEmpty();
+    font_atlas.initUtf8();
     var gl = try renderer_gles.Adapter.init(&font_atlas, null);
     defer gl.deinit();
 

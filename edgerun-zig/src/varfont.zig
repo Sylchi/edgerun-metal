@@ -2045,7 +2045,7 @@ fn square(value: f32) f32 {
     return value * value;
 }
 
-fn readU16(data: []const u8, offset: usize) u16 {
+pub fn readU16(data: []const u8, offset: usize) u16 {
     return (@as(u16, data[offset]) << 8) | data[offset + 1];
 }
 
@@ -2053,7 +2053,7 @@ fn readI16(data: []const u8, offset: usize) i16 {
     return @bitCast(readU16(data, offset));
 }
 
-fn readU32(data: []const u8, offset: usize) u32 {
+pub fn readU32(data: []const u8, offset: usize) u32 {
     return (@as(u32, data[offset]) << 24) | (@as(u32, data[offset + 1]) << 16) | (@as(u32, data[offset + 2]) << 8) | data[offset + 3];
 }
 

@@ -50,7 +50,7 @@ pub fn main() !void {
 
     ir_storage = IrStorage{};
     const ir_buffers = ir_storage.buffers();
-    atlas_font_atlas.initEmpty();
+    atlas_font_atlas.initUtf8();
     std.debug.print("ui bench stage: atlas pack\n", .{});
     const atlas_pack_start = nowNs();
     i = 0;

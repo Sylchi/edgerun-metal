@@ -1,6 +1,7 @@
 const std = @import("std");
 const font_builtin = @import("font_builtin.zig");
 const font_vector = @import("font_vector.zig");
+const ui = @import("ui.zig");
 
 pub const default_text_px: f32 = 16.0;
 pub const button_label_px: f32 = 17.0;
@@ -30,7 +31,7 @@ pub fn width(value: []const u8, px_size: f32) f32 {
     var out: f32 = 0.0;
     var previous: ?u21 = null;
     var index: usize = 0;
-    while (nextCodepoint(value, &index)) |raw_codepoint| {
+    while (ui.nextCodepoint(value, &index)) |raw_codepoint| {
         const codepoint = resolveCodepoint(body, raw_codepoint);
         if (previous) |left| out += glyphKern(body, left, codepoint, px_size);
         out += glyphAdvance(body, codepoint, px_size);
@@ -53,7 +54,7 @@ pub fn fitPrefix(value: []const u8, px_size: f32, max_width: f32) []const u8 {
     var index: usize = 0;
     while (index < value.len) {
         const start = index;
-        const raw_codepoint = nextCodepoint(value, &index) orelse break;
+        const raw_codepoint = ui.nextCodepoint(value, &index) orelse break;
         const codepoint = resolveCodepoint(body, raw_codepoint);
         const next = out + glyphAdvance(body, codepoint, px_size) + if (previous) |left| glyphKern(body, left, codepoint, px_size) else 0.0;
         if (next > max_width) return value[0..start];
@@ -63,33 +64,10 @@ pub fn fitPrefix(value: []const u8, px_size: f32, max_width: f32) []const u8 {
     return value;
 }
 
-fn nextCodepoint(value: []const u8, index: *usize) ?u21 {
-    if (index.* >= value.len) return null;
-    const start = index.*;
-
-    const codepoint_len = std.unicode.utf8ByteSequenceLength(value[start]) catch {
-        index.* = start + 1;
-        return std.unicode.replacement_character;
-    };
-
-    const end = start + codepoint_len;
-    if (end > value.len) {
-        index.* = value.len;
-        return std.unicode.replacement_character;
-    }
-
-    const codepoint = std.unicode.utf8Decode(value[start..end]) catch {
-        index.* = start + 1;
-        return std.unicode.replacement_character;
-    };
-    index.* = end;
-    return codepoint;
-}
-
 fn utf8CodepointCount(value: []const u8) usize {
     var index: usize = 0;
     var count: usize = 0;
-    while (nextCodepoint(value, &index)) |_| count += 1;
+    while (ui.nextCodepoint(value, &index)) |_| count += 1;
     return count;
 }
 

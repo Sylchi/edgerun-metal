@@ -918,3 +918,23 @@ pub fn utf8CodepointCount(value: []const u8) usize {
     }
     return count;
 }
+
+pub fn nextCodepoint(value: []const u8, index: *usize) ?u21 {
+    if (index.* >= value.len) return null;
+    const start = index.*;
+    const codepoint_len = std.unicode.utf8ByteSequenceLength(value[start]) catch {
+        index.* = start + 1;
+        return std.unicode.replacement_character;
+    };
+    const end = start + codepoint_len;
+    if (end > value.len) {
+        index.* = value.len;
+        return std.unicode.replacement_character;
+    }
+    const codepoint = std.unicode.utf8Decode(value[start..end]) catch {
+        index.* = start + 1;
+        return std.unicode.replacement_character;
+    };
+    index.* = end;
+    return codepoint;
+}

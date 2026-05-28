@@ -10,8 +10,6 @@ pub const icon_line_vertex_float_stride: usize = 6;
 pub const image_vertex_float_stride: usize = 8;
 pub const font_first_px: u8 = 11;
 pub const font_last_px: u8 = 48;
-pub const font_first_char: u8 = 32;
-pub const font_last_char: u8 = 126;
 pub const textured_quad_vertex_count: usize = 6;
 
 pub const Error = error{
@@ -115,6 +113,16 @@ pub const IconInstance = struct {
     bounds: ui.Rect,
     color: ui.Color,
     icon_id: u32,
+};
+
+pub const RgbaTexture = struct {
+    width: usize,
+    height: usize,
+    pixels: []const ui.Color,
+
+    pub fn valid(self: RgbaTexture) bool {
+        return self.width != 0 and self.height != 0 and self.pixels.len >= self.width * self.height;
+    }
 };
 
 pub const IconOpIterator = icon_svg.Iterator;
@@ -413,7 +421,7 @@ pub fn pushText(buffers: Buffers, font: FontAtlas, layer: Layer, bounds: ui.Rect
     const baseline = bounds.y + metrics_value.ascender;
     const clip = textClipBounds(bounds, metrics_value);
     var index: usize = 0;
-    while (nextCodepoint(value, &index)) |codepoint| {
+    while (ui.nextCodepoint(value, &index)) |codepoint| {
         const glyph_value = (try font.glyph(font.context, codepoint, px)) orelse continue;
         if (glyph_value.w > 0.0 and glyph_value.h > 0.0) {
             const quad = snapGlyphQuad(pen_x + glyph_value.left, baseline + glyph_value.top, glyph_value.w, glyph_value.h);
@@ -818,29 +826,6 @@ fn overhangTestGlyph(_: *anyopaque, ch: u21, _: u8) Error!?Glyph {
 
 fn expectSourceDoesNotContain(source: []const u8, needle: []const u8) !void {
     try std.testing.expectEqual(@as(?usize, null), std.mem.indexOf(u8, source, needle));
-}
-
-fn nextCodepoint(value: []const u8, index: *usize) ?u21 {
-    if (index.* >= value.len) return null;
-    const start = index.*;
-
-    const codepoint_len = std.unicode.utf8ByteSequenceLength(value[start]) catch {
-        index.* = start + 1;
-        return std.unicode.replacement_character;
-    };
-
-    const end = start + codepoint_len;
-    if (end > value.len) {
-        index.* = value.len;
-        return std.unicode.replacement_character;
-    }
-
-    const codepoint = std.unicode.utf8Decode(value[start..end]) catch {
-        index.* = start + 1;
-        return std.unicode.replacement_character;
-    };
-    index.* = end;
-    return codepoint;
 }
 
 test "renderer ir owns svg source lookup and command painting boundaries" {

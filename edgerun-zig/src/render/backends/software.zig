@@ -76,15 +76,7 @@ pub const AlphaAtlas = struct {
     }
 };
 
-pub const RgbaTexture = struct {
-    width: usize,
-    height: usize,
-    pixels: []const ui.Color,
-
-    pub fn valid(self: RgbaTexture) bool {
-        return self.width != 0 and self.height != 0 and self.pixels.len >= self.width * self.height;
-    }
-};
+pub const RgbaTexture = renderer_ir.RgbaTexture;
 
 pub const IrResources = struct {
     font: AlphaAtlas,
@@ -134,11 +126,11 @@ pub const Surface = struct {
         @memset(self.pixels, color);
     }
 
-    pub fn rasterize(self: Surface, commands: []const ui.Command) void {
-        self.rasterizeScaled(commands, default_raster_scale);
+    pub fn rasterize(self: Surface, commands: []const ui.Command) Error!void {
+        try self.rasterizeScaled(commands, default_raster_scale);
     }
 
-    pub fn rasterizeScaled(self: Surface, commands: []const ui.Command, scale: f32) void {
+    pub fn rasterizeScaled(self: Surface, commands: []const ui.Command, scale: f32) Error!void {
         for (commands) |command| switch (command) {
             .rect => |rect| self.drawRect(rect, scale),
             .border => |border| {
@@ -149,7 +141,7 @@ pub const Surface = struct {
                 self.fill(.{ .x = bounds.x, .y = bounds.y, .w = border_width, .h = bounds.h }, border.color);
                 self.fill(.{ .x = bounds.x + bounds.w - border_width, .y = bounds.y, .w = border_width, .h = bounds.h }, border.color);
             },
-            .text => {},
+            .text => return error.UnsupportedIrPrimitive,
             .icon_quad => |quad| self.drawIconQuad(quad, scale),
             .drag_source, .drop_target, .text_quad, .image_quad, .transition => {},
         };
@@ -244,40 +236,6 @@ pub const Surface = struct {
         }
     }
 
-    fn rasterizeNearestAlphaTexturedQuads(self: Surface, vertices: []const f32, atlas: AlphaAtlas) Error!void {
-        var iter = renderer_ir.TexturedQuadIterator.init(vertices) catch return error.InvalidIrBuffer;
-        while (iter.next() catch return error.InvalidIrBuffer) |quad| {
-            try self.rasterizeNearestAlphaTexturedQuad(quad, atlas);
-        }
-    }
-
-    fn rasterizeNearestAlphaTexturedQuad(self: Surface, quad: renderer_ir.TexturedQuad, atlas: AlphaAtlas) Error!void {
-        const px0 = clampCoord(@intFromFloat(@floor(quad.bounds.x)), self.width);
-        const py0 = clampCoord(@intFromFloat(@floor(quad.bounds.y)), self.height);
-        const px1 = clampCoord(@intFromFloat(@ceil(quad.bounds.x + quad.bounds.w)), self.width);
-        const py1 = clampCoord(@intFromFloat(@ceil(quad.bounds.y + quad.bounds.h)), self.height);
-        if (px1 <= px0 or py1 <= py0) return;
-
-        const atlas_w: f32 = @floatFromInt(atlas.width - 1);
-        const atlas_h: f32 = @floatFromInt(atlas.height - 1);
-        const u_step = (quad.u1 - quad.u0) / quad.bounds.w;
-        const v_step = (quad.v1 - quad.v0) / quad.bounds.h;
-        var y = py0;
-        while (y < py1) : (y += 1) {
-            const v = quad.v0 + (@as(f32, @floatFromInt(y)) + pixel_center - quad.bounds.y) * v_step;
-            const sample_y = nearestSampleIndex(v, atlas_h, atlas.height);
-            var x = px0;
-            while (x < px1) : (x += 1) {
-                const u = quad.u0 + (@as(f32, @floatFromInt(x)) + pixel_center - quad.bounds.x) * u_step;
-                const sample_x = nearestSampleIndex(u, atlas_w, atlas.width);
-                const alpha = scaleByte(quad.color.a, @as(f32, @floatFromInt(atlas.alpha[sample_y * atlas.width + sample_x])) / byte_unit_scale);
-                var color = quad.color;
-                color.a = 255;
-                if (alpha != 0) self.blendPixel(x, y, color, alpha);
-            }
-        }
-    }
-
     fn rasterizeBilinearAlphaTexturedQuads(self: Surface, vertices: []const f32, atlas: AlphaAtlas) Error!void {
         var iter = renderer_ir.TexturedQuadIterator.init(vertices) catch return error.InvalidIrBuffer;
         while (iter.next() catch return error.InvalidIrBuffer) |quad| {
@@ -294,20 +252,18 @@ pub const Surface = struct {
 
         const u_step = (quad.u1 - quad.u0) / quad.bounds.w;
         const v_step = (quad.v1 - quad.v0) / quad.bounds.h;
-        const atlas_w: f32 = @floatFromInt(atlas.width - 1);
-        const atlas_h: f32 = @floatFromInt(atlas.height - 1);
         var color = quad.color;
         color.a = max_alpha;
         var y = py0;
         while (y < py1) : (y += 1) {
             const v = quad.v0 + (@as(f32, @floatFromInt(y)) + pixel_center - quad.bounds.y) * v_step;
-            const sample_y = bilinearAxis(v, atlas_h, atlas.height);
+            const sample_y = bilinearAxis(v, atlas.height);
             const row0 = sample_y.index0 * atlas.width;
             const row1 = sample_y.index1 * atlas.width;
             var x = px0;
             while (x < px1) : (x += 1) {
                 const u = quad.u0 + (@as(f32, @floatFromInt(x)) + pixel_center - quad.bounds.x) * u_step;
-                const sample_x = bilinearAxis(u, atlas_w, atlas.width);
+                const sample_x = bilinearAxis(u, atlas.width);
                 const sampled_alpha = bilinearAlphaFloat(
                     atlas.alpha[row0 + sample_x.index0],
                     atlas.alpha[row0 + sample_x.index1],
@@ -1527,11 +1483,6 @@ const min_border_width: f32 = 1.0;
 const quarter_turn: f32 = 0.25;
 const byte_unit_scale: f32 = 255.0;
 const cpu_shadow_alpha: f32 = 0.34;
-const small_text_sharpen_max_glyph_h: f32 = 14.0;
-const small_text_sharpen_midpoint: f32 = 128.0;
-const small_text_sharpen_contrast: f32 = 1.18;
-const small_text_sharpen_lift: f32 = 8.0;
-
 fn iconStroke(bounds: ui.Rect, stroke_width: f32) f32 {
     return @max(icon_stroke_min_px, @min(bounds.w, bounds.h) * stroke_width);
 }
@@ -2073,21 +2024,13 @@ fn colorF(value: u8) f32 {
     return @as(f32, @floatFromInt(value)) / 255.0;
 }
 
-fn nearestSampleIndex(value: f32, max_index_float: f32, len: usize) usize {
-    _ = max_index_float;
-    const scaled = math.clampF(math.clampF(value, 0.0, 1.0) * @as(f32, @floatFromInt(len)) - 0.5, 0.0, @as(f32, @floatFromInt(len - 1)));
-    const index: usize = @intFromFloat(@round(scaled));
-    return @min(index, len - 1);
-}
-
 const BilinearAxis = struct {
     index0: usize,
     index1: usize,
     fraction: f32,
 };
 
-fn bilinearAxis(value: f32, max_index_float: f32, len: usize) BilinearAxis {
-    _ = max_index_float;
+fn bilinearAxis(value: f32, len: usize) BilinearAxis {
     const scaled = math.clampF(math.clampF(value, 0.0, 1.0) * @as(f32, @floatFromInt(len)) - 0.5, 0.0, @as(f32, @floatFromInt(len - 1)));
     const index0: usize = @intFromFloat(@floor(scaled));
     return .{
@@ -2112,14 +2055,6 @@ fn bilinearAlphaFloat(a00: u8, a10: u8, a01: u8, a11: u8, tx: f32, ty: f32) f32 
 fn scaleAlphaByte(tint: u8, sample: u8) u8 {
     if (tint == max_alpha) return sample;
     return @intCast((@as(u16, tint) * @as(u16, sample) + 127) / 255);
-}
-
-fn sharpenSmallTextAlpha(sample: u8) u8 {
-    if (sample == 0 or sample == max_alpha) return sample;
-    const value = small_text_sharpen_midpoint +
-        (@as(f32, @floatFromInt(sample)) - small_text_sharpen_midpoint) * small_text_sharpen_contrast +
-        small_text_sharpen_lift;
-    return @intFromFloat(@round(math.clampF(value, 0.0, byte_unit_scale)));
 }
 
 fn sampleRgba(texture: RgbaTexture, u: f32, v: f32) ui.Color {
@@ -2936,13 +2871,6 @@ test "software renderer rasterizes alpha textured ir with supplied resources" {
     const pixel = pixels[4 * 8 + 4];
     try std.testing.expect(pixel.a > 0);
     try std.testing.expect(pixel.r > pixel.g);
-}
-
-test "software renderer sharpens small text alpha without changing solid coverage" {
-    try std.testing.expectEqual(@as(u8, 0), sharpenSmallTextAlpha(0));
-    try std.testing.expectEqual(max_alpha, sharpenSmallTextAlpha(max_alpha));
-    try std.testing.expect(sharpenSmallTextAlpha(64) < 64);
-    try std.testing.expect(sharpenSmallTextAlpha(160) > 160);
 }
 
 test "software renderer rasterizes image ir with supplied rgba texture" {

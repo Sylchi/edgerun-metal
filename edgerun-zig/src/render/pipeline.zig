@@ -26,9 +26,6 @@ pub const text_vertex_float_stride = renderer_ir.text_vertex_float_stride;
 pub const icon_instance_float_stride = renderer_ir.icon_instance_float_stride;
 pub const icon_line_vertex_float_stride = renderer_ir.icon_line_vertex_float_stride;
 pub const image_vertex_float_stride = renderer_ir.image_vertex_float_stride;
-pub const font_first_char = renderer_ir.font_first_char;
-pub const font_last_char = renderer_ir.font_last_char;
-
 pub const FontSource = enum { atlas, object };
 
 pub fn sources(font_atlas: *renderer_font_atlas.Atlas, font_source: FontSource) renderer_ir.Sources {
@@ -139,7 +136,7 @@ pub fn packBufferIconLines(buffers: renderer_ir.Buffers) icon_line_buffer.Error!
 
 test "render pipeline builds atlas and object font sources" {
     var font_atlas: renderer_font_atlas.Atlas = undefined;
-    font_atlas.initEmpty();
+    font_atlas.initUtf8();
     var commands: [1]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
     try scene.push(.{ .text = .{ .origin = ui.Rect.init(0, 0, 80, 24), .value = "A", .color = .text } });
@@ -152,7 +149,7 @@ test "render pipeline ignores invalid utf8 text during atlas prep" {
     var font_atlas: renderer_font_atlas.Atlas = undefined;
     font_atlas.initUtf8();
 
-    const invalid = [_]u8{ 0xff };
+    const invalid = [_]u8{0xff};
     var scene_commands: [2]ui.Command = undefined;
     var scene = ui.Scene.init(&scene_commands);
     try scene.push(.{ .text = .{ .origin = ui.Rect.init(0, 0, 80, 24), .value = &invalid, .color = .text } });
