@@ -21,7 +21,10 @@ pub fn zeroed(value: []const u8) bool {
 
 pub fn eql(a: []const u8, b: []const u8) bool {
     if (a.len != b.len) return false;
-    return @import("std").mem.eql(u8, a, b);
+    for (a, b) |left, right| {
+        if (left != right) return false;
+    }
+    return true;
 }
 
 pub fn eqlLen(a: []const u8, b: []const u8, len: usize) bool {
@@ -41,6 +44,41 @@ pub fn compareLen(a: []const u8, b: []const u8, len: usize) i2 {
         if (a[index] > b[index]) return 1;
     }
     return 0;
+}
+
+pub fn startsWith(haystack: []const u8, needle: []const u8) bool {
+    if (needle.len > haystack.len) return false;
+    for (haystack[0..needle.len], needle) |h, n| {
+        if (h != n) return false;
+    }
+    return true;
+}
+
+pub fn endsWith(haystack: []const u8, needle: []const u8) bool {
+    if (needle.len > haystack.len) return false;
+    const offset = haystack.len - needle.len;
+    for (haystack[offset..], needle) |h, n| {
+        if (h != n) return false;
+    }
+    return true;
+}
+
+pub fn indexOf(haystack: []const u8, needle: []const u8) ?usize {
+    if (needle.len > haystack.len) return null;
+    const end = haystack.len - needle.len;
+    var i: usize = 0;
+    while (i <= end) : (i += 1) {
+        var matched = true;
+        var j: usize = 0;
+        while (j < needle.len) : (j += 1) {
+            if (haystack[i + j] != needle[j]) {
+                matched = false;
+                break;
+            }
+        }
+        if (matched) return i;
+    }
+    return null;
 }
 
 pub fn order(a: []const u8, b: []const u8) i2 {

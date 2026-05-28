@@ -39,7 +39,7 @@ pub const Context = struct {
     }
 
     pub fn getRandom(self: *Context, out: []u8) bool {
-        if (out.len == 0 or out.len > std.math.maxInt(u16)) return false;
+        if (out.len == 0 or out.len > 0xFFFF) return false;
         const command = tpm.buildGetRandom(@intCast(out.len), &self.command) orelse return false;
         const response = self.runOrScrub(command) orelse return false;
         const parsed = tpm.parseGetRandom(response, out) orelse return false;
@@ -47,7 +47,7 @@ pub const Context = struct {
     }
 
     pub fn sha256(self: *Context, data: []const u8) ?[tpm.sha256_digest_len]u8 {
-        if (data.len == 0 or data.len > std.math.maxInt(u16)) return null;
+        if (data.len == 0 or data.len > 0xFFFF) return null;
         if (data.len <= sha256_oneshot_max_bytes) {
             const command = self.buildSha256Finish(.oneshot, 0, data) orelse return null;
             return self.runDigest(command);

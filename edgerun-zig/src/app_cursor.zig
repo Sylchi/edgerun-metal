@@ -1,4 +1,5 @@
 const std = @import("std");
+const math = @import("math.zig");
 const icon_svg = @import("icon_svg.zig");
 const ui = @import("ui.zig");
 const ui_runtime = @import("ui_runtime.zig");
@@ -73,7 +74,7 @@ pub fn fromState(action: ui_runtime.ActionKind, hover: ?ui.HitKind) Kind {
 }
 
 pub fn render(scene: *ui.Scene, x: f32, y: f32, kind: Kind) ui.RenderError!void {
-    if (!std.math.isFinite(x) or !std.math.isFinite(y) or x < 0.0 or y < 0.0) return;
+    if (!math.isFiniteF(x) or !math.isFiniteF(y) or x < 0.0 or y < 0.0) return;
     switch (kind) {
         .default => try renderDefault(scene, x, y),
         .pointer => try renderPointer(scene, x, y),
@@ -83,7 +84,7 @@ pub fn render(scene: *ui.Scene, x: f32, y: f32, kind: Kind) ui.RenderError!void 
 }
 
 pub fn damageBounds(x: f32, y: f32, kind: Kind) ?ui.Rect {
-    if (!std.math.isFinite(x) or !std.math.isFinite(y) or x < 0.0 or y < 0.0) return null;
+    if (!math.isFiniteF(x) or !math.isFiniteF(y) or x < 0.0 or y < 0.0) return null;
     const pad = outline_offset + shadow_offset + soft_shadow_blur + 1.0;
     return switch (kind) {
         .default => iconCursorBounds(x, y, pointer_2_hotspot_x, pointer_2_hotspot_y, pad),
@@ -201,7 +202,7 @@ test "cursor renderer ignores invalid pointer coordinates" {
     var scene = ui.Scene.init(&commands);
 
     try render(&scene, -1.0, 12.0, .default);
-    try render(&scene, 12.0, std.math.inf(f32), .pointer);
+    try render(&scene, 12.0, @as(f32, @bitCast(@as(u32, 0x7f800000))), .pointer);
 
     try std.testing.expectEqual(@as(usize, 0), scene.written().len);
 }

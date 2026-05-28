@@ -1,4 +1,5 @@
 const std = @import("std");
+const bytes = @import("bytes.zig");
 const interaction = @import("ui_interaction.zig");
 const renderer_font_atlas = @import("render/font_atlas.zig");
 const renderer_gles = @import("render/gles.zig");
@@ -261,23 +262,23 @@ fn parseOptions(args: []const [:0]const u8) !Options {
     var options = Options{};
     var index: usize = 1;
     while (index < args.len) : (index += 1) {
-        if (std.mem.eql(u8, args[index], "--width")) {
+        if (bytes.eql(args[index], "--width")) {
             index += 1;
             if (index >= args.len) return error.InvalidArguments;
             options.width = try std.fmt.parseInt(i32, args[index], 10);
-        } else if (std.mem.eql(u8, args[index], "--height")) {
+        } else if (bytes.eql(args[index], "--height")) {
             index += 1;
             if (index >= args.len) return error.InvalidArguments;
             options.height = try std.fmt.parseInt(i32, args[index], 10);
-        } else if (std.mem.eql(u8, args[index], "--scale")) {
+        } else if (bytes.eql(args[index], "--scale")) {
             index += 1;
             if (index >= args.len) return error.InvalidArguments;
             options.scale = try std.fmt.parseInt(i32, args[index], 10);
-        } else if (std.mem.eql(u8, args[index], "--seconds")) {
+        } else if (bytes.eql(args[index], "--seconds")) {
             index += 1;
             if (index >= args.len) return error.InvalidArguments;
             options.seconds = try std.fmt.parseUnsigned(u32, args[index], 10);
-        } else if (std.mem.eql(u8, args[index], "--verify-parity")) {
+        } else if (bytes.eql(args[index], "--verify-parity")) {
             options.verify_parity = true;
         } else {
             return error.InvalidArguments;
@@ -552,11 +553,11 @@ fn registryGlobal(data: ?*anyopaque, registry: ?*c.wl_registry, name: u32, inter
     const state: *WaylandState = @ptrCast(@alignCast(data.?));
     const reg = registry.?;
     const iface = std.mem.span(interface);
-    if (std.mem.eql(u8, iface, "wl_compositor")) {
+    if (bytes.eql(iface, "wl_compositor")) {
         state.compositor = @ptrCast(c.wl_registry_bind(reg, name, &c.wl_compositor_interface, @min(version, 4)));
-    } else if (std.mem.eql(u8, iface, "xdg_wm_base")) {
+    } else if (bytes.eql(iface, "xdg_wm_base")) {
         state.wm_base = @ptrCast(c.wl_registry_bind(reg, name, &c.xdg_wm_base_interface, @min(version, 1)));
-    } else if (std.mem.eql(u8, iface, "wl_seat")) {
+    } else if (bytes.eql(iface, "wl_seat")) {
         state.seat = @ptrCast(c.wl_registry_bind(reg, name, &c.wl_seat_interface, @min(version, wl_seat_protocol_version)));
     }
 }
@@ -675,7 +676,7 @@ test "egl host input helpers update hover activation and scroll state" {
     scrollBy(&app, default_width, 200, 120.0);
     try std.testing.expect(app.input.scroll_y > 0.0);
     const before = app.input.scroll_y;
-    scrollBy(&app, default_width, 200, std.math.nan(f32));
+    scrollBy(&app, default_width, 200, @as(f32, @bitCast(@as(u32, 0x7fc00000))));
     try std.testing.expectEqual(before, app.input.scroll_y);
 }
 

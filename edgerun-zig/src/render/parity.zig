@@ -3,7 +3,7 @@ const ui = @import("../ui.zig");
 
 pub const exact_tolerance: u8 = 0;
 pub const hardware_tolerance: u8 = 2;
-pub const missing_mismatch: usize = std.math.maxInt(usize);
+pub const missing_mismatch: usize = ~@as(usize, 0);
 
 pub const PixelDiff = struct {
     width: usize,

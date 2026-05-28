@@ -1,4 +1,5 @@
 const std = @import("std");
+const bytes = @import("bytes.zig");
 const ui = @import("ui.zig");
 const text_component = @import("ui/components/Text.zig");
 const badge_component = @import("ui/components/Badge.zig");
@@ -1383,7 +1384,7 @@ fn flowMarkdown(scene: ?*ui.Scene, bounds: ui.Rect, post_index: usize, source: [
     var it = std.mem.splitScalar(u8, source, '\n');
     while (it.next()) |raw_line| {
         const line_value = std.mem.trim(u8, raw_line, "\r");
-        if (std.mem.eql(u8, line_value, "```zig") or std.mem.eql(u8, line_value, "```text") or std.mem.eql(u8, line_value, "```")) {
+        if (bytes.eql(line_value, "```zig") or bytes.eql(line_value, "```text") or bytes.eql(line_value, "```")) {
             if (in_code) {
                 const height = 28.0 + code_line_h * @as(f32, @floatFromInt(code_count));
                 if (scene) |target| try codeBlock(target, ui.Rect.init(bounds.x, y, bounds.w, height), code_lines[0..code_count]);
@@ -1410,23 +1411,23 @@ fn flowMarkdown(scene: ?*ui.Scene, bounds: ui.Rect, post_index: usize, source: [
         }
         if (line_value.len == 0) {
             y += 12.0;
-        } else if (std.mem.startsWith(u8, line_value, "# ")) {
+        } else if (bytes.startsWith(line_value, "# ")) {
             if (scene) |target| try text_component.Text.renderWrapped(target, ui.Rect.init(bounds.x, y, bounds.w, 84.0), line_value[2..], palette.text, .{
                 .line_height = 34.0,
                 .average_char_width = 15.0,
                 .max_lines = 2,
             });
             y += 88.0;
-        } else if (std.mem.startsWith(u8, line_value, "## ")) {
+        } else if (bytes.startsWith(line_value, "## ")) {
             if (scene) |target| try text(target, bounds.x, y + 16.0, bounds.w, 24.0, line_value[3..], palette.text);
             y += 58.0;
-        } else if (std.mem.startsWith(u8, line_value, "- ")) {
+        } else if (bytes.startsWith(line_value, "- ")) {
             if (scene) |target| {
                 try fill(target, ui.Rect.init(bounds.x + 2.0, y + 8.0, 5.0, 5.0), palette.primary, 3.0);
                 try paragraph(target, ui.Rect.init(bounds.x + 22.0, y, bounds.w - 22.0, 42.0), line_value[2..]);
             }
             y += 44.0;
-        } else if (std.mem.startsWith(u8, line_value, "> ")) {
+        } else if (bytes.startsWith(line_value, "> ")) {
             const callout_h = calloutHeight(line_value[2..], bounds.w);
             if (scene) |target| try callout(target, ui.Rect.init(bounds.x, y, bounds.w, callout_h), line_value[2..]);
             y += callout_h + callout_gap;
@@ -1439,23 +1440,23 @@ fn flowMarkdown(scene: ?*ui.Scene, bounds: ui.Rect, post_index: usize, source: [
 }
 
 fn demoDirective(line_value: []const u8) ?DemoDirective {
-    if (std.mem.eql(u8, line_value, "[[demo:post_model]]")) return .post_model;
-    if (std.mem.eql(u8, line_value, "[[demo:vpn_who_sees_what]]")) return .vpn_who_sees_what;
-    if (std.mem.eql(u8, line_value, "[[demo:tls_endpoint]]")) return .tls_endpoint;
-    if (std.mem.eql(u8, line_value, "[[demo:data_copy_map]]")) return .data_copy_map;
-    if (std.mem.eql(u8, line_value, "[[demo:phone_identity_stack]]")) return .phone_identity_stack;
-    if (std.mem.eql(u8, line_value, "[[demo:permission_ladder]]")) return .permission_ladder;
-    if (std.mem.eql(u8, line_value, "[[demo:dns_lookup_path]]")) return .dns_lookup_path;
-    if (std.mem.eql(u8, line_value, "[[demo:account_vs_key]]")) return .account_vs_key;
-    if (std.mem.eql(u8, line_value, "[[demo:server_pipeline]]")) return .server_pipeline;
-    if (std.mem.eql(u8, line_value, "[[demo:push_wake_path]]")) return .push_wake_path;
-    if (std.mem.eql(u8, line_value, "[[demo:dependency_graph]]")) return .dependency_graph;
-    if (std.mem.eql(u8, line_value, "[[demo:router_boundary]]")) return .router_boundary;
-    if (std.mem.eql(u8, line_value, "[[demo:keypress_commit_path]]")) return .keypress_commit_path;
-    if (std.mem.eql(u8, line_value, "[[demo:local_compute_capacity]]")) return .local_compute_capacity;
-    if (std.mem.eql(u8, line_value, "[[demo:storage_sealed_objects]]")) return .storage_sealed_objects;
-    if (std.mem.eql(u8, line_value, "[[demo:secure_boot_root]]")) return .secure_boot_root;
-    if (std.mem.eql(u8, line_value, "[[demo:authority_flow]]")) return .authority_flow;
+    if (bytes.eql(line_value, "[[demo:post_model]]")) return .post_model;
+    if (bytes.eql(line_value, "[[demo:vpn_who_sees_what]]")) return .vpn_who_sees_what;
+    if (bytes.eql(line_value, "[[demo:tls_endpoint]]")) return .tls_endpoint;
+    if (bytes.eql(line_value, "[[demo:data_copy_map]]")) return .data_copy_map;
+    if (bytes.eql(line_value, "[[demo:phone_identity_stack]]")) return .phone_identity_stack;
+    if (bytes.eql(line_value, "[[demo:permission_ladder]]")) return .permission_ladder;
+    if (bytes.eql(line_value, "[[demo:dns_lookup_path]]")) return .dns_lookup_path;
+    if (bytes.eql(line_value, "[[demo:account_vs_key]]")) return .account_vs_key;
+    if (bytes.eql(line_value, "[[demo:server_pipeline]]")) return .server_pipeline;
+    if (bytes.eql(line_value, "[[demo:push_wake_path]]")) return .push_wake_path;
+    if (bytes.eql(line_value, "[[demo:dependency_graph]]")) return .dependency_graph;
+    if (bytes.eql(line_value, "[[demo:router_boundary]]")) return .router_boundary;
+    if (bytes.eql(line_value, "[[demo:keypress_commit_path]]")) return .keypress_commit_path;
+    if (bytes.eql(line_value, "[[demo:local_compute_capacity]]")) return .local_compute_capacity;
+    if (bytes.eql(line_value, "[[demo:storage_sealed_objects]]")) return .storage_sealed_objects;
+    if (bytes.eql(line_value, "[[demo:secure_boot_root]]")) return .secure_boot_root;
+    if (bytes.eql(line_value, "[[demo:authority_flow]]")) return .authority_flow;
     return null;
 }
 
@@ -1690,26 +1691,26 @@ fn postModelDetail(post: Post, card: PostModelCard) []const u8 {
 }
 
 fn postModelArcShape(arc: []const u8) []const u8 {
-    if (std.mem.eql(u8, arc, arc_local)) return "Name the local component before sending work away.";
-    if (std.mem.eql(u8, arc, arc_network)) return "Keep transport from becoming identity or ownership.";
-    if (std.mem.eql(u8, arc, arc_device)) return "Move root authority back toward owner-held keys.";
-    if (std.mem.eql(u8, arc, arc_control)) return "Make policy, ranking, updates, and access inspectable.";
+    if (bytes.eql(arc, arc_local)) return "Name the local component before sending work away.";
+    if (bytes.eql(arc, arc_network)) return "Keep transport from becoming identity or ownership.";
+    if (bytes.eql(arc, arc_device)) return "Move root authority back toward owner-held keys.";
+    if (bytes.eql(arc, arc_control)) return "Make policy, ranking, updates, and access inspectable.";
     return "Turn hidden resource use into explicit receipts.";
 }
 
 fn postModelArcRisk(arc: []const u8) []const u8 {
-    if (std.mem.eql(u8, arc, arc_local)) return "The risk is treating the device as magic. Once local components are invisible, cloud authority feels natural.";
-    if (std.mem.eql(u8, arc, arc_network)) return "The risk is trusting the path as if it owned the user's intent. Networks carry objects; they should not become roots.";
-    if (std.mem.eql(u8, arc, arc_device)) return "The risk is buying hardware but renting the keys, accounts, storage, identity, and recovery path.";
-    if (std.mem.eql(u8, arc, arc_control)) return "The risk is letting platforms quietly define discovery, payments, updates, attention, terms, and legitimacy.";
+    if (bytes.eql(arc, arc_local)) return "The risk is treating the device as magic. Once local components are invisible, cloud authority feels natural.";
+    if (bytes.eql(arc, arc_network)) return "The risk is trusting the path as if it owned the user's intent. Networks carry objects; they should not become roots.";
+    if (bytes.eql(arc, arc_device)) return "The risk is buying hardware but renting the keys, accounts, storage, identity, and recovery path.";
+    if (bytes.eql(arc, arc_control)) return "The risk is letting platforms quietly define discovery, payments, updates, attention, terms, and legitimacy.";
     return "The risk is invisible cost: memory, storage, compute, dependencies, and bandwidth get spent without a local receipt.";
 }
 
 fn postModelArcDetail(arc: []const u8) []const u8 {
-    if (std.mem.eql(u8, arc, arc_local)) return "The user should see which local component acts, what state it changes, and which boundary must approve the next step.";
-    if (std.mem.eql(u8, arc, arc_network)) return "The better path is sealed objects, explicit routes, and minimal metadata: transport does work without owning meaning.";
-    if (std.mem.eql(u8, arc, arc_device)) return "The better path is owner-held identity, portable storage, inspectable capabilities, and recovery that does not become platform ownership.";
-    if (std.mem.eql(u8, arc, arc_control)) return "The better path is replaceable clients, visible rules, signed claims, local indexes, and appealable receipts.";
+    if (bytes.eql(arc, arc_local)) return "The user should see which local component acts, what state it changes, and which boundary must approve the next step.";
+    if (bytes.eql(arc, arc_network)) return "The better path is sealed objects, explicit routes, and minimal metadata: transport does work without owning meaning.";
+    if (bytes.eql(arc, arc_device)) return "The better path is owner-held identity, portable storage, inspectable capabilities, and recovery that does not become platform ownership.";
+    if (bytes.eql(arc, arc_control)) return "The better path is replaceable clients, visible rules, signed claims, local indexes, and appealable receipts.";
     return "The better path is preallocated resources, scoped children, explicit durable commits, and receipts for work performed.";
 }
 
@@ -3343,7 +3344,7 @@ fn trustDetail(role: TrustStepRole) []const u8 {
 }
 
 fn bodyWithoutTitle(source: []const u8) []const u8 {
-    if (!std.mem.startsWith(u8, source, "# ")) return source;
+    if (!bytes.startsWith(source, "# ")) return source;
     const split = std.mem.indexOfScalar(u8, source, '\n') orelse return "";
     var start = split + 1;
     while (start < source.len and (source[start] == '\n' or source[start] == '\r')) : (start += 1) {}
@@ -3491,7 +3492,7 @@ test "blog renders committed post index through native components" {
     try std.testing.expect(hasHit(collector.written(), postIdAt(0)));
     try std.testing.expect(hasHit(collector.written(), app_navigation.blog_button_id));
     try std.testing.expect(hasHit(collector.written(), app_navigation.logo_button_id));
-    try std.testing.expect(hasHit(collector.written(), app_navigation.all_lessons_button_id));
+    try std.testing.expect(hasHit(collector.written(), app_navigation.blog_button_id));
     try std.testing.expect(hasHit(collector.written(), arcFilterButtonId(0)));
     try std.testing.expect(hasImage(scene.written(), cloud_meme_image_id));
 }
@@ -3601,7 +3602,7 @@ test "blog renders selected markdown post body" {
     try std.testing.expect(hasText(scene.written(), "User-owned shape"));
     try std.testing.expect(hasText(scene.written(), "Starts with"));
     try std.testing.expect(hasText(scene.written(), "Next"));
-    try std.testing.expect(hasHit(collector.written(), app_navigation.blog_back_button_id));
+    try std.testing.expect(hasHit(collector.written(), app_navigation.blog_button_id));
 }
 
 test "blog selected post footer links previous and next posts" {
@@ -3754,7 +3755,7 @@ test "blog demo and callout frames use canonical card surfaces" {
 
 fn hasText(commands: []const ui.Command, value: []const u8) bool {
     for (commands) |command| switch (command) {
-        .text => |text_command| if (std.mem.eql(u8, text_command.value, value)) return true,
+        .text => |text_command| if (bytes.eql(text_command.value, value)) return true,
         else => {},
     };
     return false;
@@ -3769,26 +3770,26 @@ fn hasRectColor(commands: []const ui.Command, color: ui.Color) bool {
 }
 
 fn contains(haystack: []const u8, needle: []const u8) bool {
-    return std.mem.indexOf(u8, haystack, needle) != null;
+    return bytes.indexOf(haystack, needle) != null;
 }
 
 fn markdownSectionCount(source: []const u8) usize {
     var count: usize = 0;
     var it = std.mem.splitScalar(u8, source, '\n');
     while (it.next()) |line| {
-        if (std.mem.startsWith(u8, line, "## ")) count += 1;
+        if (bytes.startsWith(line, "## ")) count += 1;
     }
     return count;
 }
 
 fn hasMarkdownCallout(source: []const u8) bool {
-    if (std.mem.startsWith(u8, source, "> ")) return true;
+    if (bytes.startsWith(source, "> ")) return true;
     return contains(source, "\n> ");
 }
 
 fn hasTextPrefix(commands: []const ui.Command, value: []const u8) bool {
     for (commands) |command| switch (command) {
-        .text => |text_command| if (std.mem.startsWith(u8, text_command.value, value)) return true,
+        .text => |text_command| if (bytes.startsWith(text_command.value, value)) return true,
         else => {},
     };
     return false;
@@ -3822,7 +3823,7 @@ fn firstNodeMapDot(commands: []const ui.Command) ?ui.Rect {
 fn textWithin(commands: []const ui.Command, value: []const u8, bounds: ui.Rect) bool {
     for (commands) |command| switch (command) {
         .text => |text_command| {
-            if (std.mem.eql(u8, text_command.value, value) and bounds.containsInclusive(text_command.origin.x, text_command.origin.y) and bounds.containsInclusive(text_command.origin.x + text_command.origin.w, text_command.origin.y + text_command.origin.h)) return true;
+            if (bytes.eql(text_command.value, value) and bounds.containsInclusive(text_command.origin.x, text_command.origin.y) and bounds.containsInclusive(text_command.origin.x + text_command.origin.w, text_command.origin.y + text_command.origin.h)) return true;
         },
         else => {},
     };

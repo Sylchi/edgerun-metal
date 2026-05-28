@@ -178,7 +178,7 @@ pub const EfiGuid = extern struct {
     data4: [8]u8,
 
     pub fn eql(self: EfiGuid, other: EfiGuid) bool {
-        return self.data1 == other.data1 and self.data2 == other.data2 and self.data3 == other.data3 and std.mem.eql(u8, &self.data4, &other.data4);
+        return self.data1 == other.data1 and self.data2 == other.data2 and self.data3 == other.data3 and bytes_mod.eql(&self.data4, &other.data4);
     }
 };
 

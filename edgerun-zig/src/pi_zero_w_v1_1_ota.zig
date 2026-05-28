@@ -162,7 +162,7 @@ fn unwrapWifiVendorAction(frame: []const u8, expected_mac: *const [mac_bytes]u8)
     if (!macMatches(dst, expected_mac) and !macMatches(dst, &broadcast_mac)) return null;
     const body = frame[wifi_body_offset..];
     if (body[0] != wifi_vendor_category or
-        !std.mem.eql(u8, body[1..4], &wifi_vendor_oui) or
+        !bytes.eql(body[1..4], &wifi_vendor_oui) or
         body[4] != wifi_vendor_type_update) return null;
     return parseEthernet(body[wifi_vendor_header_bytes..], expected_mac);
 }
@@ -181,7 +181,7 @@ pub fn crc32(data: []const u8) u32 {
 }
 
 fn macMatches(candidate: []const u8, expected: *const [mac_bytes]u8) bool {
-    return candidate.len == mac_bytes and std.mem.eql(u8, candidate, expected);
+    return candidate.len == mac_bytes and bytes.eql(candidate, expected);
 }
 
 fn canonicalObjectFromPacket(packet: Packet) ?CanonicalObjectPayload {
@@ -228,7 +228,7 @@ test "builds and parses Pi Zero OTA erwire packets" {
     try std.testing.expectEqual(@as(u32, 3), packet.header.sequence);
     try std.testing.expectEqual(erwire_kind_vfs_object_packet, packet.header.kind);
     try std.testing.expectEqual(@as(u32, payload.len), packet.header.payload_len);
-    try std.testing.expect(std.mem.eql(u8, payload, packet.payload));
+    try std.testing.expect(bytes.eql(payload, packet.payload));
     raw[24] ^= 1;
     try std.testing.expect(parsePacket(raw[0..len]) == null);
 }
@@ -242,7 +242,7 @@ test "unwraps EdgeRun Ethernet and vendor action frames" {
     eth[12] = 0x88;
     eth[13] = 0xb5;
     @memcpy(eth[14..18], "ERW1");
-    try std.testing.expect(std.mem.eql(u8, "ERW1", unwrapL2(eth[0..18], &expected).?));
+    try std.testing.expect(bytes.eql("ERW1", unwrapL2(eth[0..18], &expected).?));
 
     var action = [_]u8{0} ** 96;
     action[0] = 0xd0;
@@ -252,7 +252,7 @@ test "unwraps EdgeRun Ethernet and vendor action frames" {
     @memcpy(action[wifi_body_offset + 1 .. wifi_body_offset + 4], &wifi_vendor_oui);
     action[wifi_body_offset + 4] = wifi_vendor_type_update;
     @memcpy(action[wifi_body_offset + 5 .. wifi_body_offset + 5 + 18], eth[0..18]);
-    try std.testing.expect(std.mem.eql(u8, "ERW1", unwrapL2(action[0 .. wifi_body_offset + 5 + 18], &expected).?));
+    try std.testing.expect(bytes.eql("ERW1", unwrapL2(action[0 .. wifi_body_offset + 5 + 18], &expected).?));
 }
 
 test "parses OTA L2 frames only as canonical object payloads" {
@@ -279,7 +279,7 @@ test "parses OTA L2 frames only as canonical object payloads" {
     const payload = parseL2CanonicalObjectPayload(eth[0..eth_len], &dst).?;
     try std.testing.expect(bytes.eql(&payload.id, &object.Header.id(canonical)));
     try std.testing.expectEqual(object.Kind.bytes, payload.view.header.kind);
-    try std.testing.expect(std.mem.eql(u8, "ota-image", payload.view.body));
+    try std.testing.expect(bytes.eql("ota-image", payload.view.body));
 
     erwire[16] = 1;
     const bad_eth_len = buildEthernetFrame(&src, &dst, erwire[0..erwire_len], &eth).?;

@@ -9,6 +9,7 @@ const interaction = @import("../../ui_interaction.zig");
 const layouts = @import("../../layouts.zig");
 const object = @import("../../object.zig");
 const std = @import("std");
+const math = @import("../../math.zig");
 const Text = @import("Text.zig").Text;
 const tree_codec = @import("TreeCodec.zig");
 const ui = @import("../../ui.zig");
@@ -59,7 +60,7 @@ pub fn Stack(comptime Component: type) type {
         }
 
         pub fn toObject(self: Self, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
-            if (self.children.len == 0 or self.children.len > std.math.maxInt(u16)) return null;
+            if (self.children.len == 0 or self.children.len > 0xFFFF) return null;
             var writer = codec.Writer.init(ui_out, @intCast(self.children.len), @intCast(self.children.len), self.axis, self.gap, self.padding) orelse return null;
             for (self.children, 0..) |child, index| {
                 if (!component_codec.writeRecord(Component, &writer, index, child)) return null;

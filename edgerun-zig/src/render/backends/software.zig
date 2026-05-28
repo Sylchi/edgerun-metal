@@ -1,4 +1,5 @@
 const std = @import("std");
+const math = @import("../../math.zig");
 const icon_vector = @import("../../icon_vector.zig");
 const renderer_icon_mask = @import("../icon_mask.zig");
 const renderer_ir = @import("../ir.zig");
@@ -353,13 +354,13 @@ pub const Surface = struct {
 
     fn blendPixelFloatAlpha(self: Surface, index: usize, color: ui.Color, alpha: f32) void {
         const dst = self.pixels[index];
-        const a = std.math.clamp(alpha, 0.0, 1.0);
+        const a = math.clampF(alpha, 0.0, 1.0);
         const inv = 1.0 - a;
         self.pixels[index] = .{
             .r = blendChannelFloat(color.r, dst.r, a, inv),
             .g = blendChannelFloat(color.g, dst.g, a, inv),
             .b = blendChannelFloat(color.b, dst.b, a, inv),
-            .a = @intFromFloat(@round(std.math.clamp(@as(f32, @floatFromInt(color.a)) * a + @as(f32, @floatFromInt(dst.a)) * inv, 0.0, 255.0))),
+            .a = @intFromFloat(@round(math.clampF(@as(f32, @floatFromInt(color.a)) * a + @as(f32, @floatFromInt(dst.a)) * inv, 0.0, 255.0))),
         };
     }
 
@@ -873,7 +874,7 @@ pub const Surface = struct {
             while (x < x_end) : (x += 1) {
                 const px = @as(f32, @floatFromInt(x)) + pixel_center;
                 const py = @as(f32, @floatFromInt(y)) + pixel_center;
-                const t = std.math.clamp(((px - x0) * dx + (py - y0) * dy) / denom, 0.0, 1.0);
+                const t = math.clampF(((px - x0) * dx + (py - y0) * dy) / denom, 0.0, 1.0);
                 const cx = x0 + dx * t;
                 const cy = y0 + dy * t;
                 const dist = @sqrt((px - cx) * (px - cx) + (py - cy) * (py - cy));
@@ -905,7 +906,7 @@ pub const Surface = struct {
             while (x < x_end) : (x += 1) {
                 const px = @as(f32, @floatFromInt(x)) + pixel_center;
                 const py = @as(f32, @floatFromInt(y)) + pixel_center;
-                const t = std.math.clamp(((px - x0) * dx + (py - y0) * dy) / denom, 0.0, 1.0);
+                const t = math.clampF(((px - x0) * dx + (py - y0) * dy) / denom, 0.0, 1.0);
                 const cx = x0 + dx * t;
                 const cy = y0 + dy * t;
                 const dist = @sqrt((px - cx) * (px - cx) + (py - cy) * (py - cy));
@@ -1756,7 +1757,7 @@ fn svgArcGeometry(start: icon_vector.Point, arc: icon_vector.Arc) ?SvgArcGeometr
     const rx_start = @abs(arc.rx);
     const ry_start = @abs(arc.ry);
     if (rx_start <= 0.0 or ry_start <= 0.0) return null;
-    const phi = arc.x_axis_rotation * std.math.pi / 180.0;
+    const phi = arc.x_axis_rotation * math.pi / 180.0;
     const cos_phi = @cos(phi);
     const sin_phi = @sin(phi);
     const dx = (start.x - arc.end.x) * 0.5;
@@ -1785,8 +1786,8 @@ fn svgArcGeometry(start: icon_vector.Point, arc: icon_vector.Arc) ?SvgArcGeometr
     const v1 = icon_vector.Point{ .x = (-x1p - cxp) / rx, .y = (-y1p - cyp) / ry };
     const start_angle = vectorAngle(.{ .x = 1.0, .y = 0.0 }, v0);
     var delta = vectorAngle(v0, v1);
-    if (!arc.sweep and delta > 0.0) delta -= std.math.tau;
-    if (arc.sweep and delta < 0.0) delta += std.math.tau;
+    if (!arc.sweep and delta > 0.0) delta -= math.tau;
+    if (arc.sweep and delta < 0.0) delta += math.tau;
     return .{
         .center = center,
         .rx = rx,
@@ -1800,7 +1801,7 @@ fn svgArcGeometry(start: icon_vector.Point, arc: icon_vector.Arc) ?SvgArcGeometr
 
 fn arcStepCount(delta: f32, arc: icon_vector.Arc) usize {
     const divisor = if (arc.large_arc) active_icon_tuning.large_arc_step_divisor else active_icon_tuning.arc_step_divisor;
-    return @max(4, @as(usize, @intFromFloat(@ceil(@abs(delta) * divisor / std.math.pi))));
+    return @max(4, @as(usize, @intFromFloat(@ceil(@abs(delta) * divisor / math.pi))));
 }
 
 fn arcAntialiasWidth(arc: icon_vector.Arc) f32 {
@@ -1811,7 +1812,7 @@ fn arcAntialiasWidth(arc: icon_vector.Arc) f32 {
 fn vectorAngle(left: icon_vector.Point, right: icon_vector.Point) f32 {
     const dot = left.x * right.x + left.y * right.y;
     const det = left.x * right.y - left.y * right.x;
-    return std.math.atan2(det, dot);
+    return math.atan2F(det, dot);
 }
 
 fn pointToPixels(bounds: ui.Rect, point: icon_vector.Point) icon_vector.Point {
@@ -1858,7 +1859,7 @@ fn coverageAlpha(radius: f32, distance: f32) u8 {
     if (distance <= radius - antialias_width) return max_alpha;
     if (distance >= radius + antialias_width) return 0;
     const coverage = (radius + antialias_width - distance) / (antialias_width * 2.0);
-    return @intFromFloat(@round(std.math.clamp(coverage, 0.0, 1.0) * 255.0));
+    return @intFromFloat(@round(math.clampF(coverage, 0.0, 1.0) * 255.0));
 }
 
 fn isSlopedSegment(dx: f32, dy: f32) bool {
@@ -1873,7 +1874,7 @@ fn strokeCoverageAlpha(radius: f32, distance: f32, antialias_width_value: f32, b
         t + coverage_boost * (t - icon_stroke_coverage_boost_floor) * (1.0 - t)
     else
         t;
-    return @intFromFloat(@round(std.math.clamp(coverage, 0.0, 1.0) * 255.0));
+    return @intFromFloat(@round(math.clampF(coverage, 0.0, 1.0) * 255.0));
 }
 
 fn pathContainsPoint(path: *const IconPathState, point: icon_vector.Point) bool {
@@ -1932,7 +1933,7 @@ fn isLeftOfEdge(start: icon_vector.Point, end: icon_vector.Point, point: icon_ve
 
 fn roundedAlpha(bounds: ui.Rect, radius: f32, x: f32, y: f32) u8 {
     const distance = roundedOutsideDistance(bounds, radius, x, y);
-    const coverage = std.math.clamp(-distance / antialias_width, 0.0, 1.0);
+    const coverage = math.clampF(-distance / antialias_width, 0.0, 1.0);
     return @intFromFloat(@floor(coverage * 255.0 + 0.5));
 }
 
@@ -1940,7 +1941,7 @@ fn roundedBorderAlpha(outer_alpha: u8, inner: ui.Rect, inner_radius: f32, x: f32
     if (outer_alpha == 0) return 0;
     if (!inner.valid()) return outer_alpha;
     const inner_distance = roundedOutsideDistance(inner, inner_radius, x, y);
-    const gate = std.math.clamp(inner_distance / antialias_width, 0.0, 1.0);
+    const gate = math.clampF(inner_distance / antialias_width, 0.0, 1.0);
     return scaleByte(outer_alpha, gate);
 }
 
@@ -1961,12 +1962,12 @@ fn roundedOutsideDistance(bounds: ui.Rect, radius: f32, x: f32, y: f32) f32 {
 
 fn clampRange(value: f32, lower: f32, upper: f32) f32 {
     if (lower > upper) return (lower + upper) * 0.5;
-    return std.math.clamp(value, lower, upper);
+    return math.clampF(value, lower, upper);
 }
 
 fn gradientMix(bounds: ui.Rect, y: f32) f32 {
     if (bounds.h <= 0.0) return 0.0;
-    return std.math.clamp((y - bounds.y) / bounds.h, 0.0, 1.0);
+    return math.clampF((y - bounds.y) / bounds.h, 0.0, 1.0);
 }
 
 fn gradientColorAt(gradient: icon_vector.LinearGradient, icon_bounds: ui.Rect, object_bounds: ui.Rect, x: usize, y: usize) ui.Color {
@@ -2083,7 +2084,7 @@ fn paintToColor(paint: icon_vector.Paint) ui.Color {
 }
 
 fn mixColor(a: ui.Color, b: ui.Color, t: f32) ui.Color {
-    const clamped = std.math.clamp(t, 0.0, 1.0);
+    const clamped = math.clampF(t, 0.0, 1.0);
     return .{
         .r = mixByte(a.r, b.r, clamped),
         .g = mixByte(a.g, b.g, clamped),
@@ -2103,11 +2104,11 @@ fn colorsEqual(a: ui.Color, b: ui.Color) bool {
 }
 
 fn lerp(a: f32, b: f32, t: f32) f32 {
-    return a + (b - a) * std.math.clamp(t, 0.0, 1.0);
+    return a + (b - a) * math.clampF(t, 0.0, 1.0);
 }
 
 fn scaleByte(value: u8, factor: f32) u8 {
-    return @intFromFloat(@round(std.math.clamp(@as(f32, @floatFromInt(value)) * factor, 0.0, 255.0)));
+    return @intFromFloat(@round(math.clampF(@as(f32, @floatFromInt(value)) * factor, 0.0, 255.0)));
 }
 
 fn blendChannel(src: u8, dst: u8, src_alpha: u16, inv_alpha: u16) u8 {
@@ -2116,7 +2117,7 @@ fn blendChannel(src: u8, dst: u8, src_alpha: u16, inv_alpha: u16) u8 {
 
 fn blendChannelFloat(src: u8, dst: u8, src_alpha: f32, inv_alpha: f32) u8 {
     const value = @as(f32, @floatFromInt(src)) * src_alpha + @as(f32, @floatFromInt(dst)) * inv_alpha;
-    return @intFromFloat(@round(std.math.clamp(value, 0.0, 255.0)));
+    return @intFromFloat(@round(math.clampF(value, 0.0, 255.0)));
 }
 
 fn colorF(value: u8) f32 {
@@ -2125,7 +2126,7 @@ fn colorF(value: u8) f32 {
 
 fn nearestSampleIndex(value: f32, max_index_float: f32, len: usize) usize {
     _ = max_index_float;
-    const scaled = std.math.clamp(std.math.clamp(value, 0.0, 1.0) * @as(f32, @floatFromInt(len)) - 0.5, 0.0, @as(f32, @floatFromInt(len - 1)));
+    const scaled = math.clampF(math.clampF(value, 0.0, 1.0) * @as(f32, @floatFromInt(len)) - 0.5, 0.0, @as(f32, @floatFromInt(len - 1)));
     const index: usize = @intFromFloat(@round(scaled));
     return @min(index, len - 1);
 }
@@ -2138,7 +2139,7 @@ const BilinearAxis = struct {
 
 fn bilinearAxis(value: f32, max_index_float: f32, len: usize) BilinearAxis {
     _ = max_index_float;
-    const scaled = std.math.clamp(std.math.clamp(value, 0.0, 1.0) * @as(f32, @floatFromInt(len)) - 0.5, 0.0, @as(f32, @floatFromInt(len - 1)));
+    const scaled = math.clampF(math.clampF(value, 0.0, 1.0) * @as(f32, @floatFromInt(len)) - 0.5, 0.0, @as(f32, @floatFromInt(len - 1)));
     const index0: usize = @intFromFloat(@floor(scaled));
     return .{
         .index0 = index0,
@@ -2169,12 +2170,12 @@ fn sharpenSmallTextAlpha(sample: u8) u8 {
     const value = small_text_sharpen_midpoint +
         (@as(f32, @floatFromInt(sample)) - small_text_sharpen_midpoint) * small_text_sharpen_contrast +
         small_text_sharpen_lift;
-    return @intFromFloat(@round(std.math.clamp(value, 0.0, byte_unit_scale)));
+    return @intFromFloat(@round(math.clampF(value, 0.0, byte_unit_scale)));
 }
 
 fn sampleRgba(texture: RgbaTexture, u: f32, v: f32) ui.Color {
-    const x = std.math.clamp(u, 0.0, 1.0) * @as(f32, @floatFromInt(texture.width - 1));
-    const y = std.math.clamp(v, 0.0, 1.0) * @as(f32, @floatFromInt(texture.height - 1));
+    const x = math.clampF(u, 0.0, 1.0) * @as(f32, @floatFromInt(texture.width - 1));
+    const y = math.clampF(v, 0.0, 1.0) * @as(f32, @floatFromInt(texture.height - 1));
     const x0: usize = @intFromFloat(@floor(x));
     const y0: usize = @intFromFloat(@floor(y));
     const x1 = @min(x0 + 1, texture.width - 1);
@@ -2217,7 +2218,7 @@ fn byteUnit(value: u8) f32 {
 }
 
 fn clockwiseTurn(dx: f32, dy: f32) f32 {
-    var turn = std.math.atan2(dy, dx) / std.math.tau + quarter_turn;
+    var turn = math.atan2F(dy, dx) / math.tau + quarter_turn;
     if (turn < 0.0) turn += 1.0;
     if (turn > 1.0) turn -= 1.0;
     return turn;
@@ -2243,7 +2244,7 @@ fn clampCoord(value: isize, limit: usize) usize {
 fn clampMaskCoord(value: isize, start: usize, limit: usize) usize {
     if (value <= 0) return start;
     const as_usize: usize = @intCast(value);
-    return std.math.clamp(as_usize, start, limit);
+    return math.clampSize(as_usize, start, limit);
 }
 
 fn iconMaskPixel(mask: IconAlphaMask, x: usize, y: usize) u8 {
@@ -2294,7 +2295,7 @@ test "software renderer svg arc geometry follows sweep side" {
     try std.testing.expect(geometry.center.x < 0.4);
     try std.testing.expect(geometry.center.y > 0.5);
     try std.testing.expect(geometry.delta > 0.0);
-    try std.testing.expect(geometry.delta < std.math.pi);
+    try std.testing.expect(geometry.delta < math.pi);
 }
 
 test "software renderer boosts only sloped icon stroke mid coverage" {

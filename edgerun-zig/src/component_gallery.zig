@@ -1,4 +1,6 @@
 const std = @import("std");
+const math = @import("math.zig");
+const bytes = @import("bytes.zig");
 const clock = @import("clock.zig");
 const badge_component = @import("ui/components/Badge.zig");
 const card_component = @import("ui/components/Card.zig");
@@ -248,21 +250,21 @@ fn componentSpec(name: []const u8, slug: []const u8, category: Category, source_
 
 pub fn findBySlug(slug: []const u8) ?*const ComponentSpec {
     for (&component_catalog) |*entry| {
-        if (std.mem.eql(u8, entry.slug, slug)) return entry;
+        if (bytes.eql(entry.slug, slug)) return entry;
     }
     return null;
 }
 
 pub fn findBySourceComponent(source_component: []const u8) ?*const ComponentSpec {
     for (&component_catalog) |*entry| {
-        if (std.mem.eql(u8, entry.source_component, source_component)) return entry;
+        if (bytes.eql(entry.source_component, source_component)) return entry;
     }
     return null;
 }
 
 pub fn indexBySlug(slug: []const u8) ?usize {
     for (component_catalog, 0..) |entry, index| {
-        if (std.mem.eql(u8, entry.slug, slug)) return index;
+        if (bytes.eql(entry.slug, slug)) return index;
     }
     return null;
 }
@@ -308,7 +310,7 @@ pub fn categorySummary(category: Category) CategorySummary {
 
 fn routeFor(slug: []const u8) []const u8 {
     inline for (component_routes) |entry| {
-        if (std.mem.eql(u8, slug, entry.slug)) return entry.route;
+        if (bytes.eql(slug, entry.slug)) return entry.route;
     }
     unreachable;
 }
@@ -458,7 +460,7 @@ const GalleryLayout = struct {
 
 fn galleryLayout(bounds: ui.Rect, state: ComponentGalleryState) GalleryLayout {
     const content = app_layout.centered(bounds, design.content_wide, design.content_pad);
-    const scroll_y = std.math.clamp(state.scroll_y, 0.0, 4096.0);
+    const scroll_y = math.clampF(state.scroll_y, 0.0, 4096.0);
     const gap = normalizedGridGap(state.grid_gap);
     const board = ui.Rect.init(content.x, bounds.y + header_h + page_top_pad - scroll_y, content.w, @max(240, bounds.h - header_h - page_top_pad + scroll_y));
     const columns = galleryColumnCount(board.w, gap);
@@ -1088,7 +1090,7 @@ fn hasHit(regions: []const interaction.Region, id_value: u32) bool {
 
 fn hasText(commands: []const ui.Command, value: []const u8) bool {
     for (commands) |command| switch (command) {
-        .text => |text_command| if (std.mem.eql(u8, text_command.value, value)) return true,
+        .text => |text_command| if (bytes.eql(text_command.value, value)) return true,
         else => {},
     };
     return false;
@@ -1096,7 +1098,7 @@ fn hasText(commands: []const ui.Command, value: []const u8) bool {
 
 fn textCommand(commands: []const ui.Command, value: []const u8) ?ui.Command {
     for (commands) |command| switch (command) {
-        .text => |text_command| if (std.mem.eql(u8, text_command.value, value)) return .{ .text = text_command },
+        .text => |text_command| if (bytes.eql(text_command.value, value)) return .{ .text = text_command },
         else => {},
     };
     return null;

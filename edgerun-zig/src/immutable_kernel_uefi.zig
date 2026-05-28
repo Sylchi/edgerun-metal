@@ -1,4 +1,5 @@
 const std = @import("std");
+const bytes = @import("bytes.zig");
 const uefi = std.os.uefi;
 const content_kernel = @import("content/kernel.zig");
 const registry_app = @import("content/registry_app.zig");
@@ -124,7 +125,7 @@ fn chunk(value: []const u8) data_chunk.DataChunk {
 }
 
 fn sameChunk(left: data_chunk.DataChunk, right: data_chunk.DataChunk) bool {
-    return left.valid() and right.valid() and std.mem.eql(u8, left.body(), right.body());
+    return left.valid() and right.valid() and bytes.eql(left.body(), right.body());
 }
 
 fn printLine(message: []const u8) void {

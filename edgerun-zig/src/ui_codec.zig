@@ -319,7 +319,7 @@ test "decode ui bytes into borrowed nodes and render paint" {
 
 fn hasText(commands: []const ui.Command, value: []const u8) bool {
     for (commands) |command| switch (command) {
-        .text => |text_command| if (std.mem.eql(u8, text_command.value, value)) return true,
+        .text => |text_command| if (bytes.eql(text_command.value, value)) return true,
         else => {},
     };
     return false;
@@ -534,7 +534,7 @@ pub const Writer = struct {
     pub fn string(self: *Writer, value: []const u8) ?StringRef {
         const table_start = header_size + @as(usize, self.node_count) * record_size;
         const offset = self.cursor - table_start;
-        if (offset > std.math.maxInt(u16) or value.len > std.math.maxInt(u16)) return null;
+        if (offset > 0xFFFF or value.len > 0xFFFF) return null;
         if (value.len > self.raw.len - self.cursor) return null;
         @memcpy(self.raw[self.cursor..][0..value.len], value);
         self.cursor += value.len;

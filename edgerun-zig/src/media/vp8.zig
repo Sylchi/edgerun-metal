@@ -1,5 +1,6 @@
 const common = @import("common.zig");
 const std = @import("std");
+const bytes_mod = @import("../bytes.zig");
 
 const readU24Le = common.readU24Le;
 const readU16Le = common.readU16Le;
@@ -108,7 +109,7 @@ fn parseKeyFrameHeaderWithTag(data: []const u8, tag: FrameTag) Error!Header {
         .key => {},
         .inter => return error.UnsupportedImage,
     }
-    if (!std.mem.eql(u8, data[start_code_offset..][0..key_frame_start_code.len], &key_frame_start_code)) return error.BadImage;
+    if (!bytes_mod.eql(data[start_code_offset..][0..key_frame_start_code.len], &key_frame_start_code)) return error.BadImage;
     const width = @as(usize, readU16Le(data[6..][0..2]) & dimension_mask);
     const height = @as(usize, readU16Le(data[8..][0..2]) & dimension_mask);
     if (width == 0 or height == 0) return error.BadImage;

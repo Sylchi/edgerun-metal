@@ -1,4 +1,5 @@
 const std = @import("std");
+const bytes = @import("bytes.zig");
 const component_gallery = @import("component_gallery.zig");
 const app_blog = @import("app_blog.zig");
 const app_docs = @import("app_docs.zig");
@@ -24,7 +25,7 @@ pub const first_post_button_id: u32 = 40_100;
 pub const all_lessons_button_id: u32 = 40_899;
 pub const first_arc_filter_button_id: u32 = 40_900;
 pub const context_source_button_id: u32 = 33_001;
-pub const reveal_identity_button_id: u32 = 20_001;
+pub const reveal_identity_button_id: u32 = 15_001;
 
 pub const SourceAction = enum(u32) {
     compile,
@@ -226,8 +227,8 @@ pub fn actionId(action: Action) u32 {
 }
 
 pub fn pathFromHash(hash: []const u8) error{InvalidRouteHash}![]const u8 {
-    if (hash.len == 0 or std.mem.eql(u8, hash, "#")) return "/";
-    if (std.mem.startsWith(u8, hash, "#/")) return hash[1..];
+    if (hash.len == 0 or bytes.eql(hash, "#")) return "/";
+    if (bytes.startsWith(hash, "#/")) return hash[1..];
     return error.InvalidRouteHash;
 }
 
@@ -259,15 +260,15 @@ pub fn writeHash(out: []u8, route: Route) error{RouteBufferTooSmall}!usize {
 }
 
 fn pathKind(path: []const u8) PathKind {
-    if (std.mem.eql(u8, path, RoutePath.root)) return .root;
-    if (std.mem.eql(u8, path, RoutePath.academy)) return .academy;
-    if (std.mem.eql(u8, path, RoutePath.docs)) return .docs;
-    if (std.mem.eql(u8, path, RoutePath.component_catalog)) return .component_catalog;
-    if (std.mem.eql(u8, path, RoutePath.source)) return .source;
-    if (std.mem.eql(u8, path, RoutePath.agent)) return .agent;
-    if (std.mem.startsWith(u8, path, RoutePath.academy_detail_prefix)) return .academy_detail;
-    if (std.mem.startsWith(u8, path, RoutePath.component_detail_prefix)) return .component_detail;
-    if (std.mem.startsWith(u8, path, RoutePath.docs_detail_prefix)) return .docs_detail;
+    if (bytes.eql(path, RoutePath.root)) return .root;
+    if (bytes.eql(path, RoutePath.academy)) return .academy;
+    if (bytes.eql(path, RoutePath.docs)) return .docs;
+    if (bytes.eql(path, RoutePath.component_catalog)) return .component_catalog;
+    if (bytes.eql(path, RoutePath.source)) return .source;
+    if (bytes.eql(path, RoutePath.agent)) return .agent;
+    if (bytes.startsWith(path, RoutePath.academy_detail_prefix)) return .academy_detail;
+    if (bytes.startsWith(path, RoutePath.component_detail_prefix)) return .component_detail;
+    if (bytes.startsWith(path, RoutePath.docs_detail_prefix)) return .docs_detail;
     return .unknown;
 }
 
@@ -306,7 +307,7 @@ const dynamic_route_fixtures = blk: {
     const post_id = app_blog.postIdAt(0);
     const docs_index = docIndexBySlug("component-system") orelse 0;
     const docs_expected: Route = if (docSlugByIndex(docs_index)) |slug|
-        if (std.mem.eql(u8, slug, "component-system"))
+        if (bytes.eql(slug, "component-system"))
             .{ .view = .components }
         else
             .{ .view = .docs, .selected_doc_index = docs_index }
@@ -566,7 +567,7 @@ fn writePrefixPath(out: []u8, prefix: []const u8, suffix: []const u8) error{Rout
 
 fn docIndexBySlug(slug: []const u8) ?usize {
     for (app_docs.doc_pages, 0..) |page, index| {
-        if (std.mem.eql(u8, page.slug, slug)) return index;
+        if (bytes.eql(page.slug, slug)) return index;
     }
     return null;
 }
@@ -610,7 +611,7 @@ fn blogPostSlug(post_id: u32) ?[]const u8 {
 
 fn blogPostIdBySlug(slug: []const u8) ?u32 {
     for (app_blog.posts, 0..) |_, index| {
-        if (std.mem.eql(u8, blogSlugByIndex(index), slug)) {
+        if (bytes.eql(blogSlugByIndex(index), slug)) {
             return blogPostButtonId(index);
         }
     }
@@ -634,7 +635,7 @@ fn blogSlugByIndex(index: usize) []const u8 {
 
 fn isComponentDocIndex(index: usize) bool {
     const slug = docSlugByIndex(index) orelse return false;
-    return std.mem.eql(u8, slug, "component-system");
+    return bytes.eql(slug, "component-system");
 }
 
 comptime {
@@ -712,7 +713,7 @@ comptime {
     for (dynamic_route_resolvers, 0..) |left, i| {
         var j: usize = i + 1;
         while (j < dynamic_route_resolvers.len) : (j += 1) {
-            if (std.mem.eql(u8, left.name, dynamic_route_resolvers[j].name)) {
+            if (bytes.eql(left.name, dynamic_route_resolvers[j].name)) {
                 @compileError("dynamic_route_resolvers contains duplicate name");
             }
         }

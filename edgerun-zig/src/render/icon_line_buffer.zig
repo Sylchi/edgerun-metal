@@ -1,4 +1,5 @@
 const std = @import("std");
+const math = @import("../math.zig");
 const icon_vector = @import("../icon_vector.zig");
 const renderer_ir = @import("ir.zig");
 const ui = @import("../ui.zig");
@@ -17,7 +18,7 @@ pub const min_line_length: f32 = 0.001;
 pub const min_stroke_width: f32 = 1.5;
 pub const stroke_scale: f32 = 2.0 / 24.0;
 pub const half: f32 = 0.5;
-pub const quarter_arc_step: f32 = std.math.pi / 32.0;
+pub const quarter_arc_step: f32 = math.pi / 32.0;
 pub const min_arc_segments: usize = 4;
 pub const min_arc_denominator: f32 = 0.000001;
 pub const color_channel_max: f32 = 255.0;
@@ -187,13 +188,13 @@ fn ellipse(out: []f32, out_len: *usize, bounds: ui.Rect, color: ui.Color, cx: f3
     const start_turn: f32 = if (full) 0.0 else half;
     const span = 1.0 - start_turn;
     var previous = icon_vector.Point{
-        .x = cx + @cos(start_turn * std.math.tau) * rx,
-        .y = cy + @sin(start_turn * std.math.tau) * ry,
+        .x = cx + @cos(start_turn * math.tau) * rx,
+        .y = cy + @sin(start_turn * math.tau) * ry,
     };
     var index: usize = 1;
     while (index <= filled_circle_segments) : (index += 1) {
         const turn = start_turn + @as(f32, @floatFromInt(index)) * span / @as(f32, @floatFromInt(filled_circle_segments));
-        const angle = turn * std.math.tau;
+        const angle = turn * math.tau;
         const next = icon_vector.Point{
             .x = cx + @cos(angle) * rx,
             .y = cy + @sin(angle) * ry,
@@ -213,8 +214,8 @@ fn filledCircle(out: []f32, out_len: *usize, bounds: ui.Rect, color: ui.Color, c
     const scaled_radius = size * radius;
     var index: usize = 0;
     while (index < filled_circle_segments) : (index += 1) {
-        const a0 = @as(f32, @floatFromInt(index)) * std.math.tau / @as(f32, @floatFromInt(filled_circle_segments));
-        const a1 = @as(f32, @floatFromInt(index + 1)) * std.math.tau / @as(f32, @floatFromInt(filled_circle_segments));
+        const a0 = @as(f32, @floatFromInt(index)) * math.tau / @as(f32, @floatFromInt(filled_circle_segments));
+        const a1 = @as(f32, @floatFromInt(index + 1)) * math.tau / @as(f32, @floatFromInt(filled_circle_segments));
         try vertex(out, out_len, center.x, center.y, color);
         try vertex(out, out_len, center.x + @cos(a0) * scaled_radius, center.y + @sin(a0) * scaled_radius, color);
         try vertex(out, out_len, center.x + @cos(a1) * scaled_radius, center.y + @sin(a1) * scaled_radius, color);
@@ -307,7 +308,7 @@ fn arc(out: []f32, out_len: *usize, bounds: ui.Rect, color: ui.Color, start: ico
         try segment(out, out_len, bounds, color, start, value.end);
         return;
     }
-    const phi = value.x_axis_rotation * std.math.pi / 180.0;
+    const phi = value.x_axis_rotation * math.pi / 180.0;
     const cos_phi = @cos(phi);
     const sin_phi = @sin(phi);
     const dx = (start.x - value.end.x) * half;
@@ -334,8 +335,8 @@ fn arc(out: []f32, out_len: *usize, bounds: ui.Rect, color: ui.Color, start: ico
     const v1 = icon_vector.Point{ .x = (-x1p - cxp) / rx, .y = (-y1p - cyp) / ry };
     const start_angle = vectorAngle(.{ .x = 1.0, .y = 0.0 }, v0);
     var delta = vectorAngle(v0, v1);
-    if (!value.sweep and delta > 0.0) delta -= std.math.tau;
-    if (value.sweep and delta < 0.0) delta += std.math.tau;
+    if (!value.sweep and delta > 0.0) delta -= math.tau;
+    if (value.sweep and delta < 0.0) delta += math.tau;
     const steps: usize = @max(min_arc_segments, @as(usize, @intFromFloat(@ceil(@abs(delta) / quarter_arc_step))));
     var previous = start;
     var step: usize = 1;
@@ -367,7 +368,7 @@ fn arcPath(
         try path.appendSegment(out, out_len, bounds, color, start, value.end);
         return;
     }
-    const phi = value.x_axis_rotation * std.math.pi / 180.0;
+    const phi = value.x_axis_rotation * math.pi / 180.0;
     const cos_phi = @cos(phi);
     const sin_phi = @sin(phi);
     const dx = (start.x - value.end.x) * half;
@@ -394,8 +395,8 @@ fn arcPath(
     const v1 = icon_vector.Point{ .x = (-x1p - cxp) / rx, .y = (-y1p - cyp) / ry };
     const start_angle = vectorAngle(.{ .x = 1.0, .y = 0.0 }, v0);
     var delta = vectorAngle(v0, v1);
-    if (!value.sweep and delta > 0.0) delta -= std.math.tau;
-    if (value.sweep and delta < 0.0) delta += std.math.tau;
+    if (!value.sweep and delta > 0.0) delta -= math.tau;
+    if (value.sweep and delta < 0.0) delta += math.tau;
     const steps: usize = @max(min_arc_segments, @as(usize, @intFromFloat(@ceil(@abs(delta) / quarter_arc_step))));
     var previous = start;
     var step: usize = 1;
@@ -481,7 +482,7 @@ fn vertex(out: []f32, out_len: *usize, x: f32, y: f32, color: ui.Color) Error!vo
 fn vectorAngle(left: icon_vector.Point, right: icon_vector.Point) f32 {
     const dot = left.x * right.x + left.y * right.y;
     const det = left.x * right.y - left.y * right.x;
-    return std.math.atan2(det, dot);
+    return math.atan2F(det, dot);
 }
 
 fn channel(value: u8) f32 {

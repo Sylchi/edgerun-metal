@@ -1,4 +1,5 @@
 const std = @import("std");
+const bytes = @import("bytes.zig");
 const icon = @import("icon.zig");
 const icon_vector = @import("icon_vector.zig");
 
@@ -97,7 +98,7 @@ pub fn validateIconPack(pack: IconPackSpec, limits: Limits) Status {
         for (pack.entries[i + 1 ..]) |other| {
             if (entry.value == other.value) return .duplicate_icon;
         }
-        if (!std.mem.eql(u8, entry.provider_name, icon.providerName(entry.value, pack.provider))) {
+        if (!bytes.eql(entry.provider_name, icon.providerName(entry.value, pack.provider))) {
             return .icon_provider_name_mismatch;
         }
     }
@@ -141,13 +142,13 @@ pub fn validateEmojiPack(pack: EmojiPackSpec, limits: Limits) Status {
     if (pack.emoji.len > limits.max_emoji_count) return .emoji_count_exceeded;
     for (pack.emoji, 0..) |entry, i| {
         for (pack.emoji[i + 1 ..]) |other| {
-            if (std.mem.eql(u8, entry.key, other.key)) return .duplicate_emoji;
+            if (bytes.eql(entry.key, other.key)) return .duplicate_emoji;
         }
     }
     for (required_emoji) |required| {
         var found = false;
         for (pack.emoji) |entry| {
-            if (std.mem.eql(u8, entry.key, required.key)) found = true;
+            if (bytes.eql(entry.key, required.key)) found = true;
         }
         if (!found) return .missing_required_emoji;
     }

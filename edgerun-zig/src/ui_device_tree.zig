@@ -1,4 +1,5 @@
 const std = @import("std");
+const bytes = @import("bytes.zig");
 const arena = @import("arena.zig");
 const codec = @import("ui_codec.zig");
 const ui = @import("ui.zig");
@@ -190,7 +191,7 @@ test "device tree applies f32 wire patch and re-renders" {
     var found = false;
     for (scene.written()) |cmd| switch (cmd) {
         .text => |t| {
-            if (std.mem.eql(u8, t.value, "28.3°C")) found = true;
+            if (bytes.eql(t.value, "28.3°C")) found = true;
         },
         else => {},
     };

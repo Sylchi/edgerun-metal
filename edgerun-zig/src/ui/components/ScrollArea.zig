@@ -1,4 +1,5 @@
 const std = @import("std");
+const math = @import("../../math.zig");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
 const object = @import("../../object.zig");
@@ -88,7 +89,7 @@ fn scrollAreaMetrics(bounds: ui.Rect, state: ?common.ScrollState) ScrollAreaMetr
         return .{
             .viewport_h = viewport_h,
             .content_h = content_h,
-            .offset_y = std.math.clamp(value.offset_y, 0.0, @max(0.0, content_h - viewport_h)),
+            .offset_y = math.clampF(value.offset_y, 0.0, @max(0.0, content_h - viewport_h)),
         };
     }
     const content_h = fallback_viewport_h / scroll_area_thumb_ratio;
@@ -108,7 +109,7 @@ fn trackBounds(bounds: ui.Rect) ui.Rect {
 }
 
 fn thumbBounds(track: ui.Rect, metrics: ScrollAreaMetrics) ui.Rect {
-    const ratio = std.math.clamp(metrics.viewport_h / @max(metrics.viewport_h, metrics.content_h), 0.0, 1.0);
+    const ratio = math.clampF(metrics.viewport_h / @max(metrics.viewport_h, metrics.content_h), 0.0, 1.0);
     const thumb_h = @min(track.h, @max(scroll_area_thumb_min_h, track.h * ratio));
     const travel = @max(0.0, track.h - thumb_h);
     const offset_ratio = if (metrics.maxOffset() == 0.0) 0.0 else metrics.offset_y / metrics.maxOffset();

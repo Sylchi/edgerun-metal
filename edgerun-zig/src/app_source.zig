@@ -1,4 +1,5 @@
 const std = @import("std");
+const bytes = @import("bytes.zig");
 const app_chrome = @import("app_chrome.zig");
 const app_design = @import("app_design.zig");
 const app_hit = @import("app_hit.zig");
@@ -145,7 +146,7 @@ pub fn renderWorkspaceSidebar(scene: *ui.Scene, collector: *interaction.Collecto
     var y = bounds.y + 100.0;
     for (state.files, 0..) |file, index| {
         const row = ui.Rect.init(bounds.x + 8.0, y, bounds.w - 16.0, 38.0);
-        const selected = std.mem.eql(u8, file.path, state.label) or std.mem.eql(u8, file.displayLabel(), state.label);
+        const selected = bytes.eql(file.path, state.label) or bytes.eql(file.displayLabel(), state.label);
         try fill(scene, row, if (selected) ui.Color{ .r = 34, .g = 47, .b = 66 } else ui.Color.clear, 8.0);
         try textAt(scene, row.x + 10.0, row.y + 9.0, row.w - 20.0, 16.0, file.displayLabel(), if (file.dirty) accent else text);
         try collector.addSemanticHit(row, sourceFileHit(index));
@@ -356,7 +357,7 @@ fn isIdentContinue(c: u8) bool {
 
 fn isKeyword(word: []const u8) bool {
     const keywords = [_][]const u8{ "const", "var", "fn", "pub", "return", "if", "else", "while", "for", "switch", "struct", "enum", "union", "error", "try", "catch" };
-    for (keywords) |keyword| if (std.mem.eql(u8, word, keyword)) return true;
+    for (keywords) |keyword| if (bytes.eql(word, keyword)) return true;
     return false;
 }
 

@@ -1,4 +1,5 @@
 const std = @import("std");
+const bytes = @import("bytes.zig");
 const linux = std.os.linux;
 const tpm = @import("tpm.zig");
 const tls_tpm = @import("tls_tpm.zig");
@@ -71,14 +72,14 @@ pub fn main() !void {
     const tpm_digest = ctx.sha256(sample) orelse return error.TpmCommandFailed;
     var software_digest: [tpm.sha256_digest_len]u8 = undefined;
     std.crypto.hash.sha2.Sha256.hash(sample, &software_digest, .{});
-    if (!std.mem.eql(u8, &tpm_digest, &software_digest)) return error.DigestMismatch;
+    if (!bytes.eql(&tpm_digest, &software_digest)) return error.DigestMismatch;
     printHex("tls_tpm.sha256", &tpm_digest);
 
     var long_data: [300]u8 = undefined;
     for (&long_data, 0..) |*byte, index| byte.* = @intCast(index & 0xff);
     const long_tpm_digest = ctx.sha256(&long_data) orelse return error.TpmCommandFailed;
     std.crypto.hash.sha2.Sha256.hash(&long_data, &software_digest, .{});
-    if (!std.mem.eql(u8, &long_tpm_digest, &software_digest)) return error.DigestMismatch;
+    if (!bytes.eql(&long_tpm_digest, &software_digest)) return error.DigestMismatch;
     printHex("tls_tpm.sha256(sequence)", &long_tpm_digest);
 
     const hmac_key = [_]u8{0x31} ** tpm.sha256_digest_len;

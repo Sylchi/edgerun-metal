@@ -90,7 +90,7 @@ pub const Clock = struct {
 
     pub fn advanceWith(self: *Clock, modifier: Modifier) ?Boundary {
         if (!self.limits.valid() or !modifier.valid()) return null;
-        if (modifier.tick_stride > std.math.maxInt(u64) - self.now.tick) return null;
+        if (modifier.tick_stride > ~@as(u64, 0) - self.now.tick) return null;
 
         var next_era = self.now.era;
         var next_epoch = self.now.epoch;
@@ -104,7 +104,7 @@ pub const Clock = struct {
             self.now.tick = next_tick;
             return boundary;
         }
-        if (slot_steps > std.math.maxInt(u64) - next_slot) return null;
+        if (slot_steps > ~@as(u64, 0) - next_slot) return null;
 
         const total_slots = next_slot + slot_steps;
         next_slot = total_slots & (self.limits.slots_per_epoch - 1);
@@ -115,7 +115,7 @@ pub const Clock = struct {
             self.now.slot = next_slot;
             return boundary;
         }
-        if (epoch_steps > std.math.maxInt(u64) - next_epoch) return null;
+        if (epoch_steps > ~@as(u64, 0) - next_epoch) return null;
 
         const total_epochs = next_epoch + epoch_steps;
         next_epoch = total_epochs & (self.limits.epochs_per_era - 1);
@@ -127,7 +127,7 @@ pub const Clock = struct {
             self.now.epoch = next_epoch;
             return boundary;
         }
-        if (era_steps > std.math.maxInt(u64) - next_era) return null;
+        if (era_steps > ~@as(u64, 0) - next_era) return null;
 
         next_era += era_steps;
         self.now.tick = next_tick;
@@ -176,6 +176,6 @@ test "clock rejects zero stride and overflow" {
     var c = Clock.init(keeper, .{ .ticks_per_slot = 2, .slots_per_epoch = 2, .epochs_per_era = 2 }).?;
 
     try std.testing.expect(c.advance(0) == null);
-    c.now.tick = std.math.maxInt(u64);
+    c.now.tick = ~@as(u64, 0);
     try std.testing.expect(c.advance(1) == null);
 }

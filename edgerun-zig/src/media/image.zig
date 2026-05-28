@@ -149,7 +149,7 @@ pub const webpAnimationDecoderScratchByteLen = webp.webpAnimationDecoderScratchB
 
 test "runtime decoder rejects foreign image bytes" {
     var pixels: [1]ui.Color = undefined;
-    try @import("std").testing.expectError(error.UnsupportedImage, decode("not-erimg", &pixels));
+    try @import("std").testing.expectError(error.UnsupportedImage, decode("not-an-erimg-file-byte-stream-here-no-magic", &pixels));
 }
 
 test "runtime decoder accepts canonical ERIMG only" {

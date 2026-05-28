@@ -1,4 +1,6 @@
 const std = @import("std");
+const math = @import("math.zig");
+const bytes_mod = @import("bytes.zig");
 const ui = @import("ui.zig");
 
 pub const geist_bytes = @embedFile("assets/Geist[wght].ttf");
@@ -269,7 +271,7 @@ pub const Cache = struct {
 
     pub fn setAxis(self: *Cache, axis_tag: *const [4:0]u8, value: f32) bool {
         for (self.face.axes[0..self.face.axis_count], 0..) |axis, index| {
-            if (std.mem.eql(u8, &axis.tag, axis_tag[0..4])) {
+            if (bytes_mod.eql(&axis.tag, axis_tag[0..4])) {
                 self.axis_values[index] = self.face.mapAxisValue(index, value);
                 self.clear();
                 return true;
@@ -520,7 +522,7 @@ pub const Face = struct {
     pub fn fixedAxisValues(self: Face, comptime axis_tag: *const [4:0]u8, value: f32) [max_axes]f32 {
         var values = [_]f32{0.0} ** max_axes;
         for (self.axes[0..self.axis_count], 0..) |axis, index| {
-            if (std.mem.eql(u8, &axis.tag, axis_tag[0..4])) {
+            if (bytes_mod.eql(&axis.tag, axis_tag[0..4])) {
                 values[index] = self.mapAxisValue(index, value);
                 return values;
             }
@@ -1405,9 +1407,9 @@ fn bakeSdfBitmap(bitmap: []u8, width: u16, height: u16, left: i16, top: i16, edg
 }
 
 fn msdfSignedDistances(px: f32, py: f32, edges: []const Edge, edge_colors: []const u8, curves: []const Curve, curve_colors: []const u8) [msdf_channels]f32 {
-    var nearest_channel_sq = [_]f32{ std.math.floatMax(f32), std.math.floatMax(f32), std.math.floatMax(f32) };
+    var nearest_channel_sq = [_]f32{ math.float_max, math.float_max, math.float_max };
     var present = [_]bool{ false, false, false };
-    var nearest_sq = std.math.floatMax(f32);
+    var nearest_sq = math.float_max;
 
     for (edges, 0..) |edge, i| {
         const d_sq = segmentDistanceSq(px, py, edge);
@@ -1433,7 +1435,7 @@ fn msdfSignedDistances(px: f32, py: f32, edges: []const Edge, edge_colors: []con
     }
 
     var nearest = @sqrt(nearest_sq);
-    if (!std.math.isFinite(nearest)) nearest = segment_tolerance;
+    if (!math.isFiniteF(nearest)) nearest = segment_tolerance;
     var distances = [_]f32{ nearest, nearest, nearest };
     var any_present = false;
     for (0..msdf_channels) |color| {
@@ -1451,17 +1453,17 @@ fn msdfSignedDistances(px: f32, py: f32, edges: []const Edge, edge_colors: []con
 }
 
 fn signedDistanceToOutline(px: f32, py: f32, edges: []const Edge, edge_colors: []const u8, curves: []const Curve) f32 {
-    var nearest_sq = std.math.floatMax(f32);
+    var nearest_sq = math.float_max;
     for (edges) |edge| nearest_sq = @min(nearest_sq, segmentDistanceSq(px, py, edge));
     for (curves) |curve| nearest_sq = @min(nearest_sq, quadraticDistanceSq(px, py, curve));
     var nearest = @sqrt(nearest_sq);
-    if (!std.math.isFinite(nearest)) nearest = segment_tolerance;
+    if (!math.isFiniteF(nearest)) nearest = segment_tolerance;
     const sign: f32 = if (insideWithCurves(px, py, edges, edge_colors, curves)) 1.0 else -1.0;
     return sign * nearest;
 }
 
 fn signedDistanceToBoundary(px: f32, py: f32, edges: []const Edge, edge_colors: []const u8, curves: []const Curve, boundary_edges: []const bool, boundary_curves: []const bool) f32 {
-    var nearest_sq = std.math.floatMax(f32);
+    var nearest_sq = math.float_max;
     for (edges, 0..) |edge, index| {
         if (boundary_edges[index]) {
             nearest_sq = @min(nearest_sq, segmentDistanceSq(px, py, edge));
@@ -1472,14 +1474,14 @@ fn signedDistanceToBoundary(px: f32, py: f32, edges: []const Edge, edge_colors: 
             nearest_sq = @min(nearest_sq, quadraticDistanceSq(px, py, curve));
         }
     }
-    if (nearest_sq == std.math.floatMax(f32)) {
+    if (nearest_sq == math.float_max) {
         for (edges, 0..) |edge, index| {
             if ((edge_colors[index] & flattened_curve_edge_flag) == 0) nearest_sq = @min(nearest_sq, segmentDistanceSq(px, py, edge));
         }
         for (curves) |curve| nearest_sq = @min(nearest_sq, quadraticDistanceSq(px, py, curve));
     }
     var nearest = @sqrt(nearest_sq);
-    if (!std.math.isFinite(nearest)) nearest = segment_tolerance;
+    if (!math.isFiniteF(nearest)) nearest = segment_tolerance;
     const sign: f32 = if (insideWithCurves(px, py, edges, edge_colors, curves)) 1.0 else -1.0;
     return sign * nearest;
 }
@@ -1615,7 +1617,7 @@ fn segmentDistanceSq(px: f32, py: f32, edge: Edge) f32 {
     const wx = px - edge.a.x;
     const wy = py - edge.a.y;
     const len_sq = vx * vx + vy * vy;
-    const t = if (len_sq <= segment_tolerance) 0.0 else std.math.clamp((wx * vx + wy * vy) / len_sq, 0.0, 1.0);
+    const t = if (len_sq <= segment_tolerance) 0.0 else math.clampF((wx * vx + wy * vy) / len_sq, 0.0, 1.0);
     const proj_x = edge.a.x + t * vx;
     const proj_y = edge.a.y + t * vy;
     return square(px - proj_x) + square(py - proj_y);
@@ -1646,7 +1648,7 @@ fn quadraticDistanceSq(px: f32, py: f32, curve: Curve) f32 {
             const derivative = ((3.0 * c3 * t + 2.0 * c2) * t + c1) * t + c0;
             const slope = (3.0 * c3 * t + 2.0 * c2) * t + c1;
             if (@abs(slope) <= segment_tolerance) break;
-            const next_t = std.math.clamp(t - derivative / slope, 0.0, 1.0);
+            const next_t = math.clampF(t - derivative / slope, 0.0, 1.0);
             if (@abs(next_t - t) <= curve_newton_epsilon) {
                 t = next_t;
                 break;
@@ -1674,12 +1676,12 @@ fn quadraticPointDistanceSq(px: f32, py: f32, curve: Curve, t: f32) f32 {
 
 fn alphaFromSignedDistance(distance: f32) u8 {
     const value = msdf_mid_alpha + (distance * msdf_edge_scale) / msdf_spread;
-    return @intFromFloat(@round(std.math.clamp(value, 0.0, 255.0)));
+    return @intFromFloat(@round(math.clampF(value, 0.0, 255.0)));
 }
 
 fn msdfCoverageAlpha(encoded: u8) u8 {
     const signed_distance = (@as(f32, @floatFromInt(encoded)) - msdf_mid_alpha) * msdf_spread / msdf_edge_scale;
-    const coverage = std.math.clamp(signed_distance + 0.5, 0.0, 1.0);
+    const coverage = math.clampF(signed_distance + 0.5, 0.0, 1.0);
     return @intFromFloat(@round(coverage * 255.0));
 }
 
@@ -1702,20 +1704,20 @@ fn colorMsdfEdges(edges: []const MsdfEdge, out_colors: []u8) void {
     var preferred: [max_contour_points]u8 = undefined;
     for (edges, 0..) |edge, i| preferred[i] = preferredMsdfEdgeColor(edge, i);
 
-    var best_cost: u32 = std.math.maxInt(u32);
+    var best_cost: u32 = ~@as(u32, 0);
     var best_first: u8 = 0;
     var best_last: u8 = 0;
     var first: u8 = 0;
     while (first < msdf_channels) : (first += 1) {
-        var dp_prev = [_]u32{std.math.maxInt(u32)} ** msdf_channels;
-        var dp_next = [_]u32{std.math.maxInt(u32)} ** msdf_channels;
+        var dp_prev = [_]u32{~@as(u32, 0)} ** msdf_channels;
+        var dp_next = [_]u32{~@as(u32, 0)} ** msdf_channels;
         dp_prev[first] = msdfColorCost(first, preferred[0]);
         var edge_index: usize = 1;
         while (edge_index < edges.len) : (edge_index += 1) {
-            @memset(&dp_next, std.math.maxInt(u32));
+            @memset(&dp_next, ~@as(u32, 0));
             var prev: u8 = 0;
             while (prev < msdf_channels) : (prev += 1) {
-                if (dp_prev[prev] == std.math.maxInt(u32)) continue;
+                if (dp_prev[prev] == ~@as(u32, 0)) continue;
                 var color: u8 = 0;
                 while (color < msdf_channels) : (color += 1) {
                     if (color == prev) continue;
@@ -1741,15 +1743,15 @@ fn colorMsdfEdges(edges: []const MsdfEdge, out_colors: []u8) void {
     for (0..edges.len) |edge_index| {
         for (0..msdf_channels) |color| parent[edge_index][color] = 0;
     }
-    var dp_prev = [_]u32{std.math.maxInt(u32)} ** msdf_channels;
-    var dp_next = [_]u32{std.math.maxInt(u32)} ** msdf_channels;
+    var dp_prev = [_]u32{~@as(u32, 0)} ** msdf_channels;
+    var dp_next = [_]u32{~@as(u32, 0)} ** msdf_channels;
     dp_prev[best_first] = msdfColorCost(best_first, preferred[0]);
     var edge_index: usize = 1;
     while (edge_index < edges.len) : (edge_index += 1) {
-        @memset(&dp_next, std.math.maxInt(u32));
+        @memset(&dp_next, ~@as(u32, 0));
         var prev: u8 = 0;
         while (prev < msdf_channels) : (prev += 1) {
-            if (dp_prev[prev] == std.math.maxInt(u32)) continue;
+            if (dp_prev[prev] == ~@as(u32, 0)) continue;
             var color: u8 = 0;
             while (color < msdf_channels) : (color += 1) {
                 if (color == prev) continue;
@@ -1793,7 +1795,7 @@ fn preferredMsdfEdgeColor(edge: MsdfEdge, edge_index: usize) u8 {
 
 fn msdfEdgeColor(dx: f32, dy: f32, edge_index: usize) u8 {
     if (@abs(dx) <= segment_tolerance and @abs(dy) <= segment_tolerance) return @intCast(edge_index % msdf_channels);
-    var angle = std.math.atan2(dy, dx) + msdf_pi;
+    var angle = math.atan2F(dy, dx) + msdf_pi;
     if (angle < 0.0) angle = 0.0;
     if (angle >= msdf_two_pi) angle = msdf_two_pi;
     var biased = angle / msdf_two_pi + msdf_channel_half_bin;

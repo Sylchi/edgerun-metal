@@ -1,4 +1,5 @@
 const std = @import("std");
+const bytes_mod = @import("../bytes.zig");
 const ui = @import("../ui.zig");
 const common = @import("common.zig");
 
@@ -54,7 +55,7 @@ pub fn decodePngHeader(bytes: []const u8) DecodeError!Header {
 }
 
 pub fn isPng(bytes: []const u8) bool {
-    return bytes.len >= png_signature.len and std.mem.eql(u8, bytes[0..png_signature.len], png_signature);
+    return bytes.len >= png_signature.len and bytes_mod.eql(bytes[0..png_signature.len], png_signature);
 }
 pub fn decodePng(bytes: []const u8, out: []ui.Color, scratch: []u8) DecodeError!Header {
     const info = try parsePng(bytes, scratch);
@@ -105,7 +106,7 @@ fn parsePng(bytes: []const u8, maybe_idat_out: ?[]u8) DecodeError!PngInfo {
         cursor += png_crc_size;
         if (pngChunkCrc(chunk_type, data) != expected_crc) return error.BadImage;
 
-        if (std.mem.eql(u8, chunk_type, png_chunk_ihdr)) {
+        if (bytes_mod.eql(chunk_type, png_chunk_ihdr)) {
             if (header != null or cursor != png_signature.len + png_chunk_overhead + png_ihdr_data_size) return error.BadImage;
             if (length != png_ihdr_data_size) return error.BadImage;
             const width = readU32Be(data[png_width_index..][0..4]);
@@ -118,17 +119,17 @@ fn parsePng(bytes: []const u8, maybe_idat_out: ?[]u8) DecodeError!PngInfo {
             if (data[png_filter_index] != png_filter_standard) return error.UnsupportedImage;
             if (data[png_interlace_index] != png_interlace_none) return error.UnsupportedImage;
             header = .{ .width = @intCast(width), .height = @intCast(height) };
-        } else if (std.mem.eql(u8, chunk_type, png_chunk_idat)) {
+        } else if (bytes_mod.eql(chunk_type, png_chunk_idat)) {
             if (header == null or closed_idat) return error.BadImage;
             saw_idat = true;
-            if (idat_total > std.math.maxInt(usize) - length) return error.PixelBudget;
+            if (idat_total > ~@as(usize, 0) - length) return error.PixelBudget;
             idat_total += length;
             if (maybe_idat_out) |idat_out| {
                 if (idat_cursor + length > idat_out.len) return error.PixelBudget;
                 @memcpy(idat_out[idat_cursor..][0..length], data);
                 idat_cursor += length;
             }
-        } else if (std.mem.eql(u8, chunk_type, png_chunk_iend)) {
+        } else if (bytes_mod.eql(chunk_type, png_chunk_iend)) {
             if (header == null or !saw_idat or idat_total == 0 or length != 0) return error.BadImage;
             if (cursor != bytes.len) return error.BadImage;
             return .{
@@ -179,9 +180,9 @@ fn pngChannels(color_type: u8) DecodeError!usize {
 }
 
 fn pngDecodedByteLen(header: Header, channels: usize) DecodeError!usize {
-    if (header.width > (std.math.maxInt(usize) - 1) / channels) return error.PixelBudget;
+    if (header.width > (~@as(usize, 0) - 1) / channels) return error.PixelBudget;
     const row_body = header.width * channels;
-    if (header.height > std.math.maxInt(usize) / (row_body + 1)) return error.PixelBudget;
+    if (header.height > ~@as(usize, 0) / (row_body + 1)) return error.PixelBudget;
     return header.height * (row_body + 1);
 }
 
@@ -196,7 +197,7 @@ fn pngScratchLayoutByteLen(idat_len: usize, decoded_len: usize) DecodeError!usiz
 }
 
 fn pixelCount(header: Header) DecodeError!usize {
-    if (header.width > std.math.maxInt(usize) / header.height) return error.PixelBudget;
+    if (header.width > ~@as(usize, 0) / header.height) return error.PixelBudget;
     return header.width * header.height;
 }
 
@@ -377,11 +378,11 @@ test "png decoder rejects empty idat streams" {
 test "png scratch length calculation rejects overflow" {
     try std.testing.expectError(
         error.PixelBudget,
-        pngScratchByteLenChecked(std.math.maxInt(usize), 1, 1),
+        pngScratchByteLenChecked(~@as(usize, 0), 1, 1),
     );
     try std.testing.expectError(
         error.PixelBudget,
-        pngScratchByteLenChecked(1, std.math.maxInt(usize), 1),
+        pngScratchByteLenChecked(1, ~@as(usize, 0), 1),
     );
 }
 
@@ -424,7 +425,7 @@ fn findPngChunkOffset(bytes: []const u8, chunk_name: []const u8) usize {
     while (cursor + png_chunk_overhead <= bytes.len) {
         const length: usize = readU32Be(bytes[cursor..][0..png_length_size]);
         const chunk_type = bytes[cursor + png_length_size ..][0..png_type_size];
-        if (std.mem.eql(u8, chunk_type, chunk_name)) return cursor;
+        if (bytes_mod.eql(chunk_type, chunk_name)) return cursor;
         cursor += png_chunk_overhead + length;
     }
     unreachable;

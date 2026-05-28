@@ -214,7 +214,7 @@ pub const Writer = struct {
     }
 
     pub fn putTpm2b(self: *Writer, value: []const u8) bool {
-        if (value.len > std.math.maxInt(u16)) return false;
+        if (value.len > 0xFFFF) return false;
         return self.putU16(@intCast(value.len)) and self.putBytes(value);
     }
 
@@ -286,7 +286,7 @@ pub fn buildLoadExternalP256VerifyKey(public_key: [p256_public_key_len]u8, out: 
 }
 
 pub fn buildHashSha256(data: []const u8, hierarchy: u32, out: []u8) ?[]u8 {
-    if (data.len == 0 or data.len > std.math.maxInt(u16) or !validHierarchy(hierarchy)) return null;
+    if (data.len == 0 or data.len > 0xFFFF or !validHierarchy(hierarchy)) return null;
     const command_len = hash_command_fixed_len + data.len;
     const command = buildHeader(st_no_sessions, command_len, cc_hash, out) orelse return null;
     var writer = Writer.init(command);
@@ -296,7 +296,7 @@ pub fn buildHashSha256(data: []const u8, hierarchy: u32, out: []u8) ?[]u8 {
 }
 
 pub fn buildHmacSha256(handle: u32, data: []const u8, out: []u8) ?[]u8 {
-    if (handle == 0 or data.len == 0 or data.len > std.math.maxInt(u16)) return null;
+    if (handle == 0 or data.len == 0 or data.len > 0xFFFF) return null;
     const command_len = hmac_command_fixed_len + data.len;
     const command = buildHeader(st_sessions, command_len, cc_hmac, out) orelse return null;
     var writer = Writer.init(command);
@@ -314,7 +314,7 @@ pub fn buildHashSequenceStartSha256(out: []u8) ?[]u8 {
 }
 
 pub fn buildSequenceUpdate(handle: u32, data: []const u8, out: []u8) ?[]u8 {
-    if (handle == 0 or data.len == 0 or data.len > std.math.maxInt(u16)) return null;
+    if (handle == 0 or data.len == 0 or data.len > 0xFFFF) return null;
     const command_len = sequence_update_command_fixed_len + data.len;
     const command = buildHeader(st_sessions, command_len, cc_sequence_update, out) orelse return null;
     var writer = Writer.init(command);
@@ -324,7 +324,7 @@ pub fn buildSequenceUpdate(handle: u32, data: []const u8, out: []u8) ?[]u8 {
 }
 
 pub fn buildSequenceComplete(handle: u32, data: []const u8, hierarchy: u32, out: []u8) ?[]u8 {
-    if (handle == 0 or data.len == 0 or data.len > std.math.maxInt(u16) or !validHierarchy(hierarchy)) return null;
+    if (handle == 0 or data.len == 0 or data.len > 0xFFFF or !validHierarchy(hierarchy)) return null;
     const command_len = sequence_complete_command_fixed_len + data.len;
     const command = buildHeader(st_sessions, command_len, cc_sequence_complete, out) orelse return null;
     var writer = Writer.init(command);
@@ -343,7 +343,7 @@ pub fn buildGetCapability(capability: u32, property: u32, property_count: u32, o
 }
 
 pub fn buildLoadExternalHmacSha256Key(key: []const u8, seed: [sha256_digest_len]u8, unique: [sha256_digest_len]u8, out: []u8) ?[]u8 {
-    if (key.len == 0 or key.len > std.math.maxInt(u16) - load_external_hmac_sensitive_header_len - load_external_key_seed_len) return null;
+    if (key.len == 0 or key.len > 0xFFFF - load_external_hmac_sensitive_header_len - load_external_key_seed_len) return null;
     const sensitive_area_len: u16 = @intCast(load_external_hmac_sensitive_header_len + load_external_key_seed_len + key.len);
     const command_len = load_external_keyedhash_fixed_len + key.len;
     const command = buildHeader(st_no_sessions, command_len, cc_load_external, out) orelse return null;
@@ -410,7 +410,7 @@ pub fn buildVerifyP256Sha256(handle: u32, digest: [sha256_digest_len]u8, signatu
 }
 
 pub fn buildEncryptDecrypt2(handle: u32, decrypt: bool, mode: u16, iv: []const u8, input: []const u8, out: []u8) ?[]u8 {
-    if (handle == 0 or !symmetricModeSupported(mode) or iv.len == 0 or input.len == 0 or iv.len > std.math.maxInt(u16) or input.len > std.math.maxInt(u16)) return null;
+    if (handle == 0 or !symmetricModeSupported(mode) or iv.len == 0 or input.len == 0 or iv.len > 0xFFFF or input.len > 0xFFFF) return null;
     const command_len = encrypt_decrypt2_command_fixed_len + iv.len + input.len;
     const command = buildHeader(st_sessions, command_len, cc_encrypt_decrypt2, out) orelse return null;
     var writer = Writer.init(command);

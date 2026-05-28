@@ -62,8 +62,8 @@ const Tcg2Transport = struct {
     last_response_len: usize = 0,
 
     fn transact(user: ?*anyopaque, command: []const u8, response: []u8) ?[]const u8 {
-        if (command.len == 0 or command.len > std.math.maxInt(u32)) return null;
-        if (response.len == 0 or response.len > std.math.maxInt(u32)) return null;
+        if (command.len == 0 or command.len > ~@as(u32, 0)) return null;
+        if (response.len == 0 or response.len > ~@as(u32, 0)) return null;
         const self: *Tcg2Transport = @ptrCast(@alignCast(user orelse return null));
         const status = self.protocol.submit_command(
             self.protocol,

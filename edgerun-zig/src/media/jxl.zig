@@ -1,4 +1,5 @@
 const std = @import("std");
+const bytes_mod = @import("../bytes.zig");
 const common = @import("common.zig");
 
 pub const codestream_signature = [_]u8{ 0xff, 0x0a };
@@ -20,11 +21,11 @@ pub fn isJxl(bytes: []const u8) bool {
 }
 
 pub fn isJxlCodestream(bytes: []const u8) bool {
-    return bytes.len >= codestream_signature.len and std.mem.eql(u8, bytes[0..codestream_signature.len], &codestream_signature);
+    return bytes.len >= codestream_signature.len and bytes_mod.eql(bytes[0..codestream_signature.len], &codestream_signature);
 }
 
 pub fn isJxlContainer(bytes: []const u8) bool {
-    return bytes.len >= container_signature.len and std.mem.eql(u8, bytes[0..container_signature.len], &container_signature);
+    return bytes.len >= container_signature.len and bytes_mod.eql(bytes[0..container_signature.len], &container_signature);
 }
 
 pub fn decodeHeader(bytes: []const u8) common.DecodeError!common.Header {

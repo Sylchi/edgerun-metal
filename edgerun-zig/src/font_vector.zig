@@ -90,9 +90,15 @@ pub const FixedFace = struct {
         return .{ .units_per_em = value.units_per_em, .ascender = value.ascender, .descender = value.descender, .line_gap = value.line_gap, .y_min = value.y_min, .y_max = value.y_max };
     }
 
-    pub fn glyphId(self: FixedFace, codepoint: u21) u16 { return self.face.glyphId(codepoint); }
-    pub fn advance(self: FixedFace, glyph_id: u16, px_size: f32) f32 { return self.face.advance(glyph_id, px_size); }
-    pub fn kern(self: FixedFace, left: u16, right: u16, px_size: f32) f32 { return self.face.kern(left, right, px_size); }
+    pub fn glyphId(self: FixedFace, codepoint: u21) u16 {
+        return self.face.glyphId(codepoint);
+    }
+    pub fn advance(self: FixedFace, glyph_id: u16, px_size: f32) f32 {
+        return self.face.advance(glyph_id, px_size);
+    }
+    pub fn kern(self: FixedFace, left: u16, right: u16, px_size: f32) f32 {
+        return self.face.kern(left, right, px_size);
+    }
 
     pub fn glyphPath(self: FixedFace, glyph_id: u16, out: []Command) varfont.Error![]const Command {
         var points: [varfont.max_points]varfont.Point = undefined;
@@ -177,9 +183,9 @@ pub fn serializedLen(glyph_count: usize, kern_count: usize, command_count: usize
 }
 
 pub fn encodeBody(out: []u8, body: Body) ?[]const u8 {
-    if (body.glyphs.len > std.math.maxInt(u32)) return null;
-    if (body.kerns.len > std.math.maxInt(u32)) return null;
-    if (body.commands.len > std.math.maxInt(u32)) return null;
+    if (body.glyphs.len > ~@as(u32, 0)) return null;
+    if (body.kerns.len > ~@as(u32, 0)) return null;
+    if (body.commands.len > ~@as(u32, 0)) return null;
     const total = serializedLen(body.glyphs.len, body.kerns.len, body.commands.len) orelse return null;
     if (out.len < total) return null;
 
@@ -197,9 +203,18 @@ pub fn encodeBody(out: []u8, body: Body) ?[]const u8 {
     _ = bytes.store32(out[44..48], 0);
 
     var offset: usize = header_size;
-    for (body.glyphs) |glyph| { if (!encodeGlyphRecord(out[offset .. offset + glyph_record_size], glyph)) return null; offset += glyph_record_size; }
-    for (body.kerns) |kern_record| { if (!encodeKernRecord(out[offset .. offset + kern_record_size], kern_record)) return null; offset += kern_record_size; }
-    for (body.commands) |command| { encodeCommandRecord(out[offset .. offset + command_record_size], command); offset += command_record_size; }
+    for (body.glyphs) |glyph| {
+        if (!encodeGlyphRecord(out[offset .. offset + glyph_record_size], glyph)) return null;
+        offset += glyph_record_size;
+    }
+    for (body.kerns) |kern_record| {
+        if (!encodeKernRecord(out[offset .. offset + kern_record_size], kern_record)) return null;
+        offset += kern_record_size;
+    }
+    for (body.commands) |command| {
+        encodeCommandRecord(out[offset .. offset + command_record_size], command);
+        offset += command_record_size;
+    }
     return out[0..total];
 }
 
@@ -254,15 +269,25 @@ pub fn decodeBody(bytes_in: []const u8, glyphs_out: []GlyphRecord, kerns_out: []
         offset += glyph_record_size;
     }
     index = 0;
-    while (index < kern_count) : (index += 1) { kerns_out[index] = decodeKernRecord(bytes_in[offset .. offset + kern_record_size]) orelse return null; offset += kern_record_size; }
+    while (index < kern_count) : (index += 1) {
+        kerns_out[index] = decodeKernRecord(bytes_in[offset .. offset + kern_record_size]) orelse return null;
+        offset += kern_record_size;
+    }
     index = 0;
-    while (index < command_count) : (index += 1) { commands_out[index] = decodeCommandRecord(bytes_in[offset .. offset + command_record_size]) orelse return null; offset += command_record_size; }
+    while (index < command_count) : (index += 1) {
+        commands_out[index] = decodeCommandRecord(bytes_in[offset .. offset + command_record_size]) orelse return null;
+        offset += command_record_size;
+    }
 
     return .{ .metrics = metrics, .glyphs = glyphs_out[0..glyph_count], .kerns = kerns_out[0..kern_count], .commands = commands_out[0..command_count] };
 }
 
-fn storeF32(out: []u8, value: f32) void { _ = bytes.store32(out, @as(u32, @bitCast(value))); }
-fn loadF32(in: []const u8) ?f32 { return @as(f32, @bitCast(bytes.load32(in) orelse return null)); }
+fn storeF32(out: []u8, value: f32) void {
+    _ = bytes.store32(out, @as(u32, @bitCast(value)));
+}
+fn loadF32(in: []const u8) ?f32 {
+    return @as(f32, @bitCast(bytes.load32(in) orelse return null));
+}
 
 fn encodeGlyphRecord(out: []u8, glyph: GlyphRecord) bool {
     if (out.len < glyph_record_size) return false;
@@ -302,9 +327,23 @@ fn decodeKernRecord(in: []const u8) ?KernRecord {
 fn encodeCommandRecord(out: []u8, command: Command) void {
     bytes.zero(out[0..command_record_size]);
     switch (command) {
-        .move_to => |p| { _ = bytes.store32(out[0..4], op_move_to); storeF32(out[4..8], p.x); storeF32(out[8..12], p.y); },
-        .line_to => |p| { _ = bytes.store32(out[0..4], op_line_to); storeF32(out[4..8], p.x); storeF32(out[8..12], p.y); },
-        .quad_to => |q| { _ = bytes.store32(out[0..4], op_quad_to); storeF32(out[4..8], q.end.x); storeF32(out[8..12], q.end.y); storeF32(out[12..16], q.control.x); storeF32(out[16..20], q.control.y); },
+        .move_to => |p| {
+            _ = bytes.store32(out[0..4], op_move_to);
+            storeF32(out[4..8], p.x);
+            storeF32(out[8..12], p.y);
+        },
+        .line_to => |p| {
+            _ = bytes.store32(out[0..4], op_line_to);
+            storeF32(out[4..8], p.x);
+            storeF32(out[8..12], p.y);
+        },
+        .quad_to => |q| {
+            _ = bytes.store32(out[0..4], op_quad_to);
+            storeF32(out[4..8], q.end.x);
+            storeF32(out[8..12], q.end.y);
+            storeF32(out[12..16], q.control.x);
+            storeF32(out[16..20], q.control.y);
+        },
         .close => _ = bytes.store32(out[0..4], op_close),
     }
 }
@@ -332,7 +371,11 @@ fn emitContour(raw: []const varfont.Point, out: []Command, count: *usize) varfon
     var i: usize = if (raw[0].on_curve) 1 else 0;
     while (i < raw.len) {
         const p = raw[i];
-        if (p.on_curve) { try appendCommand(out, count, .{ .line_to = point(p) }); i += 1; continue; }
+        if (p.on_curve) {
+            try appendCommand(out, count, .{ .line_to = point(p) });
+            i += 1;
+            continue;
+        }
         const next = raw[(i + 1) % raw.len];
         const end = if (next.on_curve) next else midpoint(p, next);
         try appendCommand(out, count, .{ .quad_to = .{ .control = point(p), .end = point(end) } });
@@ -353,8 +396,12 @@ fn appendCommand(out: []Command, count: *usize, command: Command) varfont.Error!
     count.* += 1;
 }
 
-fn point(value: varfont.Point) Point { return .{ .x = value.x, .y = value.y }; }
-fn midpoint(a: varfont.Point, b: varfont.Point) varfont.Point { return .{ .x = (a.x + b.x) * 0.5, .y = (a.y + b.y) * 0.5, .on_curve = true }; }
+fn point(value: varfont.Point) Point {
+    return .{ .x = value.x, .y = value.y };
+}
+fn midpoint(a: varfont.Point, b: varfont.Point) varfont.Point {
+    return .{ .x = (a.x + b.x) * 0.5, .y = (a.y + b.y) * 0.5, .on_curve = true };
+}
 
 test "font vector body round trips widened counts" {
     const commands = [_]Command{ .{ .move_to = .{ .x = 0, .y = 0 } }, .close };

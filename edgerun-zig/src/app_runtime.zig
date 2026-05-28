@@ -1,4 +1,5 @@
 const std = @import("std");
+const math = @import("math.zig");
 const bytes = @import("bytes.zig");
 const web_host_js = @import("web_host_js.zig");
 const clock = @import("clock.zig");
@@ -841,7 +842,7 @@ export fn er_ui_release_artifact_capacity() usize {
 export fn er_ui_release_artifact_commit(artifact_len: usize) u32 {
     if (artifact_len > release_artifact.len) return finishError(.bad_input);
     if (artifact_len < 4) return finishError(.bad_input);
-    if (!std.mem.eql(u8, release_artifact[0..4], &.{ 0x00, 0x61, 0x73, 0x6d })) return finishError(.bad_input);
+    if (!bytes.eql(release_artifact[0..4], &.{ 0x00, 0x61, 0x73, 0x6d })) return finishError(.bad_input);
     release_artifact_len = artifact_len;
     last_error = .ok;
     return @intFromEnum(ErrorCode.ok);
@@ -1048,21 +1049,21 @@ fn handleSourcePointerDown(x: f32, y: f32, width: f32, height: f32) bool {
 fn handleSourceSearchKey(key: []const u8, ctrl: u32, meta: u32, alt: u32) bool {
     if (!sourceExplorerSearchFocused()) return false;
     if (alt != 0) return false;
-    if ((ctrl != 0 or meta != 0) and (std.mem.eql(u8, key, "a") or std.mem.eql(u8, key, "A"))) {
+    if ((ctrl != 0 or meta != 0) and (bytes.eql(key, "a") or bytes.eql(key, "A"))) {
         source_search_len = 0;
         return true;
     }
     if (ctrl != 0 or meta != 0) return false;
-    if (std.mem.eql(u8, key, "Escape")) {
+    if (bytes.eql(key, "Escape")) {
         source_search_len = 0;
         _ = runtime_state.clearFocus();
         return true;
     }
-    if (std.mem.eql(u8, key, "Backspace")) {
+    if (bytes.eql(key, "Backspace")) {
         source_search_len -|= 1;
         return true;
     }
-    if (std.mem.eql(u8, key, "Delete")) {
+    if (bytes.eql(key, "Delete")) {
         source_search_len = 0;
         return true;
     }
@@ -1072,16 +1073,16 @@ fn handleSourceSearchKey(key: []const u8, ctrl: u32, meta: u32, alt: u32) bool {
 
 fn handleSourceSearchTextInput(input_type: []const u8, data: []const u8) bool {
     if (!sourceExplorerSearchFocused()) return false;
-    if (std.mem.eql(u8, input_type, "deleteContentBackward")) {
+    if (bytes.eql(input_type, "deleteContentBackward")) {
         source_search_len -|= 1;
         return true;
     }
-    if (std.mem.eql(u8, input_type, "deleteContentForward")) {
+    if (bytes.eql(input_type, "deleteContentForward")) {
         source_search_len = 0;
         return true;
     }
     if (data.len == 0) return false;
-    if (std.mem.eql(u8, input_type, "insertText") or std.mem.eql(u8, input_type, "insertCompositionText") or std.mem.eql(u8, input_type, "insertFromPaste")) {
+    if (bytes.eql(input_type, "insertText") or bytes.eql(input_type, "insertCompositionText") or bytes.eql(input_type, "insertFromPaste")) {
         var decoded: [max_input_bytes]u8 = undefined;
         const text = decodeInputEventData(data, &decoded) catch return false;
         return insertSourceSearchText(text);
@@ -1242,15 +1243,15 @@ export fn er_ui_boot() u32 {
 }
 
 fn keyFromText(value: []const u8, shift: u32) ?ui_runtime.Key {
-    if (shift != 0 and std.mem.eql(u8, value, "Tab")) return .shift_tab;
-    if (std.mem.eql(u8, value, "Tab")) return .tab;
-    if (std.mem.eql(u8, value, "Enter")) return .enter;
-    if (std.mem.eql(u8, value, " ") or std.mem.eql(u8, value, "Spacebar")) return .space;
-    if (std.mem.eql(u8, value, "ArrowUp")) return .arrow_up;
-    if (std.mem.eql(u8, value, "ArrowDown")) return .arrow_down;
-    if (std.mem.eql(u8, value, "ArrowLeft")) return .arrow_left;
-    if (std.mem.eql(u8, value, "ArrowRight")) return .arrow_right;
-    if (std.mem.eql(u8, value, "Escape")) return .escape;
+    if (shift != 0 and bytes.eql(value, "Tab")) return .shift_tab;
+    if (bytes.eql(value, "Tab")) return .tab;
+    if (bytes.eql(value, "Enter")) return .enter;
+    if (bytes.eql(value, " ") or bytes.eql(value, "Spacebar")) return .space;
+    if (bytes.eql(value, "ArrowUp")) return .arrow_up;
+    if (bytes.eql(value, "ArrowDown")) return .arrow_down;
+    if (bytes.eql(value, "ArrowLeft")) return .arrow_left;
+    if (bytes.eql(value, "ArrowRight")) return .arrow_right;
+    if (bytes.eql(value, "Escape")) return .escape;
     return null;
 }
 
@@ -1311,7 +1312,7 @@ fn loadSourceEditorFromWorkspace() SourceEditorStatus {
 
 fn findWorkspaceFileBody(workspace_bytes: []const u8, label: []const u8) ![]const u8 {
     const workspace_view = try object.View.decode(workspace_bytes);
-    if (!std.mem.startsWith(u8, workspace_view.body, "ERVFSWS1")) return error.CorruptWorkspace;
+    if (!bytes.startsWith(workspace_view.body, "ERVFSWS1")) return error.CorruptWorkspace;
     if (workspace_view.body.len < workspace_manifest_header_bytes) return error.CorruptWorkspace;
     const file_count = bytes.load32(workspace_view.body[12..16]) orelse return error.CorruptWorkspace;
     var index: usize = workspace_manifest_header_bytes;
@@ -1324,10 +1325,10 @@ fn findWorkspaceFileBody(workspace_bytes: []const u8, label: []const u8) ![]cons
         if (index > workspace_view.body.len or file_len > workspace_view.body.len - index) return error.CorruptWorkspace;
         const file_object = workspace_view.body[index..][0..file_len];
         index += file_len;
-        if (std.mem.eql(u8, label_ref.labelSlice(), label)) {
+        if (bytes.eql(label_ref.labelSlice(), label)) {
             const file_view = try object.View.decode(file_object);
             const file_id = file_view.id();
-            if (!std.mem.eql(u8, &label_ref.object_id, &file_id)) return error.CorruptWorkspace;
+            if (!bytes.eql(&label_ref.object_id, &file_id)) return error.CorruptWorkspace;
             return file_view.body;
         }
     }
@@ -1342,7 +1343,7 @@ fn currentSourceFiles() []const app_source.FileEntry {
     source_file_label_bytes_len = 0;
     source_file_cache_workspace_len = source_workspace_len;
     const workspace_view = object.View.decode(source_workspace[0..source_workspace_len]) catch return source_file_entries[0..0];
-    if (!std.mem.startsWith(u8, workspace_view.body, "ERVFSWS1")) return source_file_entries[0..0];
+    if (!bytes.startsWith(workspace_view.body, "ERVFSWS1")) return source_file_entries[0..0];
     if (workspace_view.body.len < workspace_manifest_header_bytes) return source_file_entries[0..0];
     const file_count = bytes.load32(workspace_view.body[12..16]) orelse return source_file_entries[0..0];
     var index: usize = workspace_manifest_header_bytes;
@@ -1376,15 +1377,15 @@ fn handleSourceEditorKey(key: []const u8, ctrl: u32, meta: u32, alt: u32, shift:
     if (alt != 0) return false;
     ensureSourceEditor();
     if (source_editor_status != .ready and source_editor_status != .dirty) return false;
-    if ((ctrl != 0 or meta != 0) and std.mem.eql(u8, key, "s")) {
+    if ((ctrl != 0 or meta != 0) and bytes.eql(key, "s")) {
         _ = compileWorkspaceInsideWasm();
         return true;
     }
-    if ((ctrl != 0 or meta != 0) and std.mem.eql(u8, key, "Enter")) {
+    if ((ctrl != 0 or meta != 0) and bytes.eql(key, "Enter")) {
         _ = compileWorkspaceInsideWasm();
         return true;
     }
-    if ((ctrl != 0 or meta != 0) and (std.mem.eql(u8, key, "a") or std.mem.eql(u8, key, "A"))) {
+    if ((ctrl != 0 or meta != 0) and (bytes.eql(key, "a") or bytes.eql(key, "A"))) {
         source_editor_selection_anchor = 0;
         source_editor_cursor = source_editor_len;
         source_editor_selection_active = source_editor_len != 0;
@@ -1392,60 +1393,60 @@ fn handleSourceEditorKey(key: []const u8, ctrl: u32, meta: u32, alt: u32, shift:
         ensureSourceEditorCursorVisible();
         return true;
     }
-    if ((ctrl != 0 or meta != 0) and (std.mem.eql(u8, key, "z") or std.mem.eql(u8, key, "Z"))) return undoSourceEditorEdit();
-    if ((ctrl != 0 or meta != 0) and (std.mem.eql(u8, key, "y") or std.mem.eql(u8, key, "Y"))) return redoSourceEditorEdit();
-    if ((ctrl != 0 or meta != 0) and std.mem.eql(u8, key, "ArrowLeft")) {
+    if ((ctrl != 0 or meta != 0) and (bytes.eql(key, "z") or bytes.eql(key, "Z"))) return undoSourceEditorEdit();
+    if ((ctrl != 0 or meta != 0) and (bytes.eql(key, "y") or bytes.eql(key, "Y"))) return redoSourceEditorEdit();
+    if ((ctrl != 0 or meta != 0) and bytes.eql(key, "ArrowLeft")) {
         moveSourceEditorCursor(sourceEditorWordLeft(), shift != 0);
         return true;
     }
-    if ((ctrl != 0 or meta != 0) and std.mem.eql(u8, key, "ArrowRight")) {
+    if ((ctrl != 0 or meta != 0) and bytes.eql(key, "ArrowRight")) {
         moveSourceEditorCursor(sourceEditorWordRight(), shift != 0);
         return true;
     }
     if (ctrl != 0 or meta != 0) return false;
 
-    if (std.mem.eql(u8, key, "ArrowLeft")) {
+    if (bytes.eql(key, "ArrowLeft")) {
         moveSourceEditorCursor(source_editor_cursor -| 1, shift != 0);
         return true;
     }
-    if (std.mem.eql(u8, key, "ArrowRight")) {
+    if (bytes.eql(key, "ArrowRight")) {
         moveSourceEditorCursor(@min(source_editor_len, source_editor_cursor + 1), shift != 0);
         return true;
     }
-    if (std.mem.eql(u8, key, "ArrowUp")) {
+    if (bytes.eql(key, "ArrowUp")) {
         moveSourceEditorVertical(.up, shift != 0);
         return true;
     }
-    if (std.mem.eql(u8, key, "ArrowDown")) {
+    if (bytes.eql(key, "ArrowDown")) {
         moveSourceEditorVertical(.down, shift != 0);
         return true;
     }
-    if (std.mem.eql(u8, key, "PageUp")) {
+    if (bytes.eql(key, "PageUp")) {
         moveSourceEditorPage(.up, shift != 0);
         return true;
     }
-    if (std.mem.eql(u8, key, "PageDown")) {
+    if (bytes.eql(key, "PageDown")) {
         moveSourceEditorPage(.down, shift != 0);
         return true;
     }
-    if (std.mem.eql(u8, key, "Home")) {
+    if (bytes.eql(key, "Home")) {
         moveSourceEditorCursor(currentSourceEditorLineStart(), shift != 0);
         return true;
     }
-    if (std.mem.eql(u8, key, "End")) {
+    if (bytes.eql(key, "End")) {
         moveSourceEditorCursor(currentSourceEditorLineEnd(), shift != 0);
         return true;
     }
-    if (std.mem.eql(u8, key, "Backspace")) {
+    if (bytes.eql(key, "Backspace")) {
         return deleteSourceEditorBackward();
     }
-    if (std.mem.eql(u8, key, "Delete")) {
+    if (bytes.eql(key, "Delete")) {
         return deleteSourceEditorForward();
     }
-    if (std.mem.eql(u8, key, "Enter")) return insertSourceEditorNewline();
-    if (shift != 0 and std.mem.eql(u8, key, "Tab")) return outdentSourceEditorSelection();
-    if (source_editor_selection_active and std.mem.eql(u8, key, "Tab")) return indentSourceEditorSelection();
-    if (std.mem.eql(u8, key, "Tab")) return insertSourceEditorText(source_editor_tab);
+    if (bytes.eql(key, "Enter")) return insertSourceEditorNewline();
+    if (shift != 0 and bytes.eql(key, "Tab")) return outdentSourceEditorSelection();
+    if (source_editor_selection_active and bytes.eql(key, "Tab")) return indentSourceEditorSelection();
+    if (bytes.eql(key, "Tab")) return insertSourceEditorText(source_editor_tab);
     if (key.len == 1 and key[0] >= 0x20 and key[0] <= 0x7e) return insertSourceEditorText(key);
     return false;
 }
@@ -1453,14 +1454,14 @@ fn handleSourceEditorKey(key: []const u8, ctrl: u32, meta: u32, alt: u32, shift:
 fn handleSourceEditorTextInput(input_type: []const u8, data: []const u8) bool {
     ensureSourceEditor();
     if (source_editor_status != .ready and source_editor_status != .dirty) return false;
-    if (std.mem.eql(u8, input_type, "insertText") or std.mem.eql(u8, input_type, "insertCompositionText") or std.mem.eql(u8, input_type, "insertFromPaste")) {
+    if (bytes.eql(input_type, "insertText") or bytes.eql(input_type, "insertCompositionText") or bytes.eql(input_type, "insertFromPaste")) {
         var decoded: [max_input_bytes]u8 = undefined;
         const text = decodeInputEventData(data, &decoded) catch return false;
         return insertSourceEditorText(text);
     }
-    if (std.mem.eql(u8, input_type, "insertLineBreak")) return insertSourceEditorText("\n");
-    if (std.mem.eql(u8, input_type, "deleteContentBackward")) return deleteSourceEditorBackward();
-    if (std.mem.eql(u8, input_type, "deleteContentForward")) return deleteSourceEditorForward();
+    if (bytes.eql(input_type, "insertLineBreak")) return insertSourceEditorText("\n");
+    if (bytes.eql(input_type, "deleteContentBackward")) return deleteSourceEditorBackward();
+    if (bytes.eql(input_type, "deleteContentForward")) return deleteSourceEditorForward();
     return false;
 }
 
@@ -1846,7 +1847,7 @@ fn commitSourceEditorBytes() void {
 fn rebuildSourceWorkspaceFromEditor() SourceEditorStatus {
     ensureSourceWorkspace();
     const workspace_view = object.View.decode(source_workspace[0..source_workspace_len]) catch return .corrupt_workspace;
-    if (!std.mem.startsWith(u8, workspace_view.body, "ERVFSWS1")) return .corrupt_workspace;
+    if (!bytes.startsWith(workspace_view.body, "ERVFSWS1")) return .corrupt_workspace;
     if (workspace_view.body.len < workspace_manifest_header_bytes) return .corrupt_workspace;
     const file_count = bytes.load32(workspace_view.body[12..16]) orelse return .corrupt_workspace;
     if (compiler_runtime_memory.len < object.header_size + workspace_view.body.len) return .workspace_full;
@@ -1867,7 +1868,7 @@ fn rebuildSourceWorkspaceFromEditor() SourceEditorStatus {
         const file_object = workspace_view.body[index..][0..file_len];
         index += file_len;
 
-        if (std.mem.eql(u8, label_ref.labelSlice(), source_editor_label)) {
+        if (bytes.eql(label_ref.labelSlice(), source_editor_label)) {
             const file_view = object.View.decode(file_object) catch return .corrupt_workspace;
             const label_pos = object.header_size + body_len;
             const file_pos = label_pos + vfs.object_label_ref_bytes;
@@ -1964,7 +1965,7 @@ fn compileWorkspaceInsideWasm() ErrorCode {
     const output_len: usize = @intCast(output_len_result.valueI32(0) catch return finishCompileError(.render_failed));
     if (output_len < 4 or output_len > release_artifact.len) return finishCompileError(.bad_input);
     if (output_ptr > compiler_runtime_memory.len or output_len > compiler_runtime_memory.len - output_ptr) return finishCompileError(.bad_input);
-    if (!std.mem.eql(u8, compiler_runtime_memory[output_ptr..][0..4], &.{ 0x00, 0x61, 0x73, 0x6d })) return finishCompileError(.bad_input);
+    if (!bytes.eql(compiler_runtime_memory[output_ptr..][0..4], &.{ 0x00, 0x61, 0x73, 0x6d })) return finishCompileError(.bad_input);
 
     @memcpy(release_artifact[0..output_len], compiler_runtime_memory[output_ptr .. output_ptr + output_len]);
     release_artifact_len = output_len;
@@ -2054,10 +2055,10 @@ fn pagesForBytes(value: usize) usize {
 }
 
 export fn er_ui_app_scroll_by(delta_y: f32, width: f32, height: f32) u32 {
-    if (!std.math.isFinite(delta_y) or !std.math.isFinite(width) or !std.math.isFinite(height)) return finishError(.bad_input);
+    if (!math.isFiniteF(delta_y) or !math.isFiniteF(width) or !math.isFiniteF(height)) return finishError(.bad_input);
     if (width <= 0.0 or height <= 0.0) return finishError(.bad_input);
     const limit = appScrollLimit(width, height);
-    app_state.scroll_y = std.math.clamp(app_state.scroll_y + delta_y, 0.0, limit);
+    app_state.scroll_y = math.clampF(app_state.scroll_y + delta_y, 0.0, limit);
     last_error = .ok;
     return @intFromEnum(ErrorCode.ok);
 }
@@ -2606,8 +2607,8 @@ fn ensureFontAtlas() !void {
 }
 
 fn normalizedDeviceScale(scale: f32) f32 {
-    if (!std.math.isFinite(scale)) return default_device_scale;
-    return std.math.clamp(scale, min_device_scale, max_device_scale);
+    if (!math.isFiniteF(scale)) return default_device_scale;
+    return math.clampF(scale, min_device_scale, max_device_scale);
 }
 
 fn framebufferDeviceScale(width: u32, height: u32, scale_raw: f32) f32 {
@@ -2615,13 +2616,13 @@ fn framebufferDeviceScale(width: u32, height: u32, scale_raw: f32) f32 {
     if (width == 0 or height == 0) return requested;
     const width_limit = @as(f32, @floatFromInt(max_width)) / @as(f32, @floatFromInt(width));
     const height_limit = @as(f32, @floatFromInt(max_height)) / @as(f32, @floatFromInt(height));
-    return std.math.clamp(@min(requested, width_limit, height_limit), min_device_scale, max_device_scale);
+    return math.clampF(@min(requested, width_limit, height_limit), min_device_scale, max_device_scale);
 }
 
 fn scaledFrameDimension(value: u32, scale: f32) ?u32 {
-    if (value == 0 or !std.math.isFinite(scale)) return null;
+    if (value == 0 or !math.isFiniteF(scale)) return null;
     const scaled = @ceil(@as(f32, @floatFromInt(value)) * scale);
-    if (scaled < 1.0 or scaled > @as(f32, @floatFromInt(std.math.maxInt(u32)))) return null;
+    if (scaled < 1.0 or scaled > @as(f32, @floatFromInt(~@as(u32, 0)))) return null;
     return @intFromFloat(scaled);
 }
 
@@ -3092,8 +3093,8 @@ test "app runtime exposes repo-owned source as canonical object bytes" {
         try std.testing.expectEqualSlices(u8, &label_ref.object_id, &file_id);
         index += file_len;
 
-        if (std.mem.eql(u8, label_ref.labelSlice(), "src/app_runtime.zig")) saw_runtime = true;
-        if (std.mem.eql(u8, label_ref.labelSlice(), "compiler/zig/src/edgerun_wasm_compiler.zig")) saw_compiler = true;
+        if (bytes.eql(label_ref.labelSlice(), "src/app_runtime.zig")) saw_runtime = true;
+        if (bytes.eql(label_ref.labelSlice(), "compiler/zig/src/edgerun_wasm_compiler.zig")) saw_compiler = true;
     }
     try std.testing.expectEqual(view.body.len, index);
     try std.testing.expect(saw_runtime);

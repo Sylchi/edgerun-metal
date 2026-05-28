@@ -1,4 +1,5 @@
 const std = @import("std");
+const bytes_mod = @import("bytes.zig");
 const object = @import("object.zig");
 const vfs = @import("vfs.zig");
 
@@ -69,8 +70,8 @@ pub fn main(init: std.process.Init) !void {
 }
 
 fn parseMode(text: []const u8) ?Mode {
-    if (std.mem.eql(u8, text, "file")) return .file;
-    if (std.mem.eql(u8, text, "workspace")) return .workspace;
+    if (bytes_mod.eql(text, "file")) return .file;
+    if (bytes_mod.eql(text, "workspace")) return .workspace;
     return null;
 }
 
@@ -224,10 +225,10 @@ fn pruneSourcePathsToAppClosure(io: std.Io, allocator: std.mem.Allocator, root: 
         const importer = queue.items[queue_index];
         const source = try readWorkspaceFile(io, allocator, root, importer);
         defer allocator.free(source);
-        if (std.mem.endsWith(u8, importer, ".zig")) {
+        if (bytes_mod.endsWith(importer, ".zig")) {
             try enqueueImportedSourcePaths(allocator, paths.items, importer, source, &reachable, &queue);
             try enqueueEmbeddedSourcePaths(allocator, paths.items, importer, source, &reachable, &queue);
-        } else if (std.mem.endsWith(u8, importer, ".er")) {
+        } else if (bytes_mod.endsWith(importer, ".er")) {
             try enqueueEdgeRunImportedSourcePaths(allocator, paths.items, importer, source, &reachable, &queue);
         }
     }
@@ -260,7 +261,7 @@ fn enqueueEdgeRunImportedSourcePaths(
         const import_name = source[name_start..name_end];
         var resolved_buffer: [vfs.label_max]u8 = undefined;
         const resolved = resolveEdgeRunImportLabel(importer, import_name, &resolved_buffer) orelse return error.BadWorkspaceImport;
-        if (!std.mem.endsWith(u8, resolved, ".er")) return error.BadWorkspaceImport;
+        if (!bytes_mod.endsWith(resolved, ".er")) return error.BadWorkspaceImport;
         if (findSourcePath(paths, resolved) == null) return error.MissingWorkspaceImport;
         try enqueueReachable(allocator, reachable, queue, resolved);
         index = name_end + 1;
@@ -268,7 +269,7 @@ fn enqueueEdgeRunImportedSourcePaths(
 }
 
 fn resolveEdgeRunImportLabel(importer_label: []const u8, import_name: []const u8, out: *[vfs.label_max]u8) ?[]const u8 {
-    if (std.mem.startsWith(u8, import_name, "src/")) return normalizeLabel(import_name, out);
+    if (bytes_mod.startsWith(import_name, "src/")) return normalizeLabel(import_name, out);
     return resolveImportLabel(importer_label, import_name, out);
 }
 
@@ -281,7 +282,7 @@ fn enqueueImportedSourcePaths(
     queue: *std.ArrayList([]u8),
 ) !void {
     try enqueueStdFieldSourcePaths(allocator, paths, source, reachable, queue);
-    if (std.mem.eql(u8, importer, "compiler/zig/lib/std/std.zig")) return;
+    if (bytes_mod.eql(importer, "compiler/zig/lib/std/std.zig")) return;
 
     const sentinel_source = try allocator.dupeZ(u8, source);
     defer allocator.free(sentinel_source);
@@ -403,27 +404,28 @@ fn findSourcePath(paths: []const []u8, label: []const u8) ?[]u8 {
     var high: usize = paths.len;
     while (low < high) {
         const mid = low + (high - low) / 2;
-        switch (std.mem.order(u8, paths[mid], label)) {
-            .eq => return paths[mid],
-            .lt => low = mid + 1,
-            .gt => high = mid,
+        switch (bytes_mod.order(paths[mid], label)) {
+            0 => return paths[mid],
+            -1 => low = mid + 1,
+            1 => high = mid,
+            -2 => unreachable,
         }
     }
     return null;
 }
 
 fn virtualImport(import_name: []const u8) bool {
-    return std.mem.eql(u8, import_name, "builtin") or
-        std.mem.eql(u8, import_name, "build_options") or
-        std.mem.eql(u8, import_name, "embedded_source_object") or
-        std.mem.eql(u8, import_name, "embedded_wasm_compiler");
+    return bytes_mod.eql(import_name, "builtin") or
+        bytes_mod.eql(import_name, "build_options") or
+        bytes_mod.eql(import_name, "embedded_source_object") or
+        bytes_mod.eql(import_name, "embedded_wasm_compiler");
 }
 
 fn resolveImportLabel(importer_label: []const u8, import_name: []const u8, out: *[vfs.label_max]u8) ?[]const u8 {
-    if (std.mem.eql(u8, import_name, "std")) return copyResolved(out, "compiler/zig/lib/std/std.zig");
-    if (std.mem.eql(u8, import_name, "root")) return copyResolved(out, importer_label);
+    if (bytes_mod.eql(import_name, "std")) return copyResolved(out, "compiler/zig/lib/std/std.zig");
+    if (bytes_mod.eql(import_name, "root")) return copyResolved(out, importer_label);
     if (import_name.len == 0 or import_name.len > vfs.label_max) return null;
-    if (std.mem.startsWith(u8, import_name, "/")) return null;
+    if (bytes_mod.startsWith(import_name, "/")) return null;
 
     var raw: [vfs.label_max]u8 = undefined;
     var raw_len: usize = 0;
@@ -446,9 +448,9 @@ fn normalizeLabel(raw: []const u8, out: *[vfs.label_max]u8) ?[]const u8 {
         const start = index;
         while (index < raw.len and raw[index] != '/') : (index += 1) {}
         const part = raw[start..index];
-        if (part.len == 0 or std.mem.eql(u8, part, ".")) {
+        if (part.len == 0 or bytes_mod.eql(part, ".")) {
             // Skip empty and current-directory path segments.
-        } else if (std.mem.eql(u8, part, "..")) {
+        } else if (bytes_mod.eql(part, "..")) {
             if (len == 0) return null;
             len -= 1;
             while (len > 0 and out[len - 1] != '/') : (len -= 1) {}
@@ -482,106 +484,89 @@ fn relativePath(allocator: std.mem.Allocator, prefix: []const u8, name: []const 
 }
 
 fn sourceFileAllowed(path: []const u8) bool {
-    if (std.mem.eql(u8, path, "build.zig")) return true;
-    if (std.mem.startsWith(u8, path, "src/")) return appSourceFileAllowed(path);
-    if (std.mem.startsWith(u8, path, "compiler/zig/src/")) return false;
-    if (std.mem.startsWith(u8, path, "compiler/zig/lib/std/")) return compilerStdFileAllowed(path);
-    if (std.mem.startsWith(u8, path, "compiler/zig/lib/compiler/")) return false;
+    if (bytes_mod.eql(path, "build.zig")) return true;
+    if (bytes_mod.startsWith(path, "src/")) return appSourceFileAllowed(path);
+    if (bytes_mod.startsWith(path, "compiler/zig/src/")) return false;
+    if (bytes_mod.startsWith(path, "compiler/zig/lib/std/")) return compilerStdFileAllowed(path);
+    if (bytes_mod.startsWith(path, "compiler/zig/lib/compiler/")) return false;
     return false;
 }
 
 fn sourceDirectoryAllowed(path: []const u8) bool {
-    if (std.mem.eql(u8, path, app_source_root)) return true;
-    if (std.mem.startsWith(u8, path, "src/")) return !std.mem.eql(u8, std.fs.path.basename(path), ".zig-cache");
-    if (std.mem.eql(u8, path, compiler_root)) return true;
-    if (std.mem.eql(u8, path, compiler_zig_root)) return true;
-    if (std.mem.startsWith(u8, path, "compiler/zig/src/")) return false;
-    if (std.mem.eql(u8, path, compiler_zig_lib_root)) return true;
-    if (std.mem.eql(u8, path, compiler_zig_std_root)) return true;
-    if (std.mem.startsWith(u8, path, "compiler/zig/lib/std/")) return compilerStdDirectoryAllowed(path);
-    if (std.mem.eql(u8, path, compiler_zig_compiler_lib_root)) return false;
-    if (std.mem.startsWith(u8, path, "compiler/zig/lib/compiler/")) return false;
+    if (bytes_mod.eql(path, app_source_root)) return true;
+    if (bytes_mod.startsWith(path, "src/")) return !bytes_mod.eql(std.fs.path.basename(path), ".zig-cache");
+    if (bytes_mod.eql(path, compiler_root)) return true;
+    if (bytes_mod.eql(path, compiler_zig_root)) return true;
+    if (bytes_mod.startsWith(path, "compiler/zig/src/")) return false;
+    if (bytes_mod.eql(path, compiler_zig_lib_root)) return true;
+    if (bytes_mod.eql(path, compiler_zig_std_root)) return true;
+    if (bytes_mod.startsWith(path, "compiler/zig/lib/std/")) return compilerStdDirectoryAllowed(path);
+    if (bytes_mod.eql(path, compiler_zig_compiler_lib_root)) return false;
+    if (bytes_mod.startsWith(path, "compiler/zig/lib/compiler/")) return false;
     return false;
 }
 
 fn sourceExtensionAllowed(path: []const u8) bool {
-    return std.mem.endsWith(u8, path, ".zig") or std.mem.endsWith(u8, path, ".er") or std.mem.endsWith(u8, path, ".md");
+    return bytes_mod.endsWith(path, ".zig") or bytes_mod.endsWith(path, ".er") or bytes_mod.endsWith(path, ".md");
 }
 
 fn appSourceFileAllowed(path: []const u8) bool {
     if (!sourceExtensionAllowed(path)) return false;
-    if (std.mem.endsWith(u8, path, "_test.zig")) return false;
-    if (std.mem.endsWith(u8, path, "_tests.zig")) return false;
-    if (std.mem.endsWith(u8, path, "/tests.zig")) return false;
-    if (std.mem.endsWith(u8, path, "/test.zig")) return false;
+    if (bytes_mod.endsWith(path, "_test.zig")) return false;
+    if (bytes_mod.endsWith(path, "_tests.zig")) return false;
+    if (bytes_mod.endsWith(path, "/tests.zig")) return false;
+    if (bytes_mod.endsWith(path, "/test.zig")) return false;
 
-    if (std.mem.eql(u8, path, "src/cheating_app_tests.zig")) return false;
-    if (std.mem.eql(u8, path, "src/render/native_present.zig")) return false;
-    if (std.mem.eql(u8, path, "src/render/gles.zig")) return false;
-    if (std.mem.eql(u8, path, "src/render/gpu.zig")) return false;
-    if (std.mem.eql(u8, path, "src/render/gpu_buffer.zig")) return false;
-    if (std.mem.eql(u8, path, "src/sdk_bench.zig")) return false;
-    if (std.mem.eql(u8, path, "src/sdk_cli.zig")) return false;
-    if (std.mem.eql(u8, path, "src/tpm_real_check.zig")) return false;
-    if (std.mem.eql(u8, path, "src/ui_bench.zig")) return false;
-    if (std.mem.eql(u8, path, "src/ui_core_test.zig")) return false;
-    if (std.mem.eql(u8, path, "src/ui_snapshot.zig")) return false;
-    if (std.mem.eql(u8, path, "src/wasm_compiler_probe.zig")) return false;
-    if (std.mem.eql(u8, path, "src/wasm_compiler_runner_test.zig")) return false;
-    if (std.mem.eql(u8, path, "src/wayland_egl_host.zig")) return false;
-    if (std.mem.eql(u8, path, "src/wayland_window_host.zig")) return false;
-    if (std.mem.eql(u8, path, "src/drm_gbm_host.zig")) return false;
-
-    if (std.mem.startsWith(u8, path, "src/pi_")) return false;
-    if (std.mem.startsWith(u8, path, "src/pi_zero_")) return false;
-    if (std.mem.startsWith(u8, path, "src/render/backends/gles")) return false;
-    if (std.mem.startsWith(u8, path, "src/render/backends/gpu")) return false;
+    if (bytes_mod.startsWith(path, "src/pi_")) return false;
+    if (bytes_mod.startsWith(path, "src/pi_zero_")) return false;
+    if (bytes_mod.startsWith(path, "src/render/backends/gles")) return false;
+    if (bytes_mod.startsWith(path, "src/render/backends/gpu")) return false;
 
     return true;
 }
 
 fn compilerStdFileAllowed(path: []const u8) bool {
-    if (std.mem.endsWith(u8, path, "_test.zig")) return false;
-    if (std.mem.eql(u8, std.fs.path.basename(path), compiler_zig_std_test_name)) return false;
-    if (std.mem.eql(u8, std.fs.path.basename(path), compiler_zig_std_parser_test_name)) return false;
-    if (std.mem.eql(u8, path, "compiler/zig/lib/std/Build.zig")) return false;
-    if (std.mem.eql(u8, path, "compiler/zig/lib/std/c.zig")) return false;
-    if (std.mem.eql(u8, path, "compiler/zig/lib/std/crypto.zig")) return false;
-    if (std.mem.eql(u8, path, "compiler/zig/lib/std/http.zig")) return false;
-    if (std.mem.eql(u8, path, "compiler/zig/lib/std/os.zig")) return false;
-    if (std.mem.eql(u8, path, "compiler/zig/lib/std/tar.zig")) return false;
-    if (std.mem.eql(u8, path, "compiler/zig/lib/std/testing.zig")) return false;
-    if (std.mem.eql(u8, path, "compiler/zig/lib/std/tz.zig")) return false;
-    if (std.mem.eql(u8, path, "compiler/zig/lib/std/valgrind.zig")) return false;
-    if (std.mem.eql(u8, path, "compiler/zig/lib/std/zip.zig")) return false;
-    if (std.mem.startsWith(u8, path, "compiler/zig/lib/std/Build/")) return false;
-    if (std.mem.startsWith(u8, path, "compiler/zig/lib/std/c/")) return false;
-    if (std.mem.startsWith(u8, path, "compiler/zig/lib/std/debug/")) return false;
-    if (std.mem.startsWith(u8, path, "compiler/zig/lib/std/crypto/")) return false;
-    if (std.mem.startsWith(u8, path, "compiler/zig/lib/std/http/")) return false;
-    if (std.mem.eql(u8, path, "compiler/zig/lib/std/Io/Threaded.zig")) return false;
-    if (std.mem.eql(u8, path, "compiler/zig/lib/std/Io/Uring.zig")) return false;
-    if (std.mem.startsWith(u8, path, "compiler/zig/lib/std/os/")) return false;
-    if (std.mem.startsWith(u8, path, "compiler/zig/lib/std/tar/")) return false;
-    if (std.mem.startsWith(u8, path, "compiler/zig/lib/std/testing/")) return false;
-    if (std.mem.startsWith(u8, path, "compiler/zig/lib/std/tz/")) return false;
-    if (std.mem.startsWith(u8, path, "compiler/zig/lib/std/zig/llvm/")) return false;
-    return std.mem.endsWith(u8, path, ".zig") or std.mem.endsWith(u8, path, ".md");
+    if (bytes_mod.endsWith(path, "_test.zig")) return false;
+    if (bytes_mod.eql(std.fs.path.basename(path), compiler_zig_std_test_name)) return false;
+    if (bytes_mod.eql(std.fs.path.basename(path), compiler_zig_std_parser_test_name)) return false;
+    if (bytes_mod.eql(path, "compiler/zig/lib/std/Build.zig")) return false;
+    if (bytes_mod.eql(path, "compiler/zig/lib/std/c.zig")) return false;
+    if (bytes_mod.eql(path, "compiler/zig/lib/std/crypto.zig")) return false;
+    if (bytes_mod.eql(path, "compiler/zig/lib/std/http.zig")) return false;
+    if (bytes_mod.eql(path, "compiler/zig/lib/std/os.zig")) return false;
+    if (bytes_mod.eql(path, "compiler/zig/lib/std/tar.zig")) return false;
+    if (bytes_mod.eql(path, "compiler/zig/lib/std/testing.zig")) return false;
+    if (bytes_mod.eql(path, "compiler/zig/lib/std/tz.zig")) return false;
+    if (bytes_mod.eql(path, "compiler/zig/lib/std/valgrind.zig")) return false;
+    if (bytes_mod.eql(path, "compiler/zig/lib/std/zip.zig")) return false;
+    if (bytes_mod.startsWith(path, "compiler/zig/lib/std/Build/")) return false;
+    if (bytes_mod.startsWith(path, "compiler/zig/lib/std/c/")) return false;
+    if (bytes_mod.startsWith(path, "compiler/zig/lib/std/debug/")) return false;
+    if (bytes_mod.startsWith(path, "compiler/zig/lib/std/crypto/")) return false;
+    if (bytes_mod.startsWith(path, "compiler/zig/lib/std/http/")) return false;
+    if (bytes_mod.eql(path, "compiler/zig/lib/std/Io/Threaded.zig")) return false;
+    if (bytes_mod.eql(path, "compiler/zig/lib/std/Io/Uring.zig")) return false;
+    if (bytes_mod.startsWith(path, "compiler/zig/lib/std/os/")) return false;
+    if (bytes_mod.startsWith(path, "compiler/zig/lib/std/tar/")) return false;
+    if (bytes_mod.startsWith(path, "compiler/zig/lib/std/testing/")) return false;
+    if (bytes_mod.startsWith(path, "compiler/zig/lib/std/tz/")) return false;
+    if (bytes_mod.startsWith(path, "compiler/zig/lib/std/zig/llvm/")) return false;
+    return bytes_mod.endsWith(path, ".zig") or bytes_mod.endsWith(path, ".md");
 }
 
 fn compilerStdDirectoryAllowed(path: []const u8) bool {
-    if (std.mem.eql(u8, std.fs.path.basename(path), ".zig-cache")) return false;
-    if (std.mem.eql(u8, path, compiler_zig_std_build_root) or std.mem.startsWith(u8, path, "compiler/zig/lib/std/Build/")) return false;
-    if (std.mem.eql(u8, path, compiler_zig_std_c_root) or std.mem.startsWith(u8, path, "compiler/zig/lib/std/c/")) return false;
-    if (std.mem.eql(u8, path, compiler_zig_std_debug_root) or std.mem.startsWith(u8, path, "compiler/zig/lib/std/debug/")) return false;
-    if (std.mem.eql(u8, path, compiler_zig_std_crypto_root) or std.mem.startsWith(u8, path, "compiler/zig/lib/std/crypto/")) return false;
-    if (std.mem.eql(u8, path, compiler_zig_std_http_root) or std.mem.startsWith(u8, path, "compiler/zig/lib/std/http/")) return false;
-    if (std.mem.eql(u8, path, compiler_zig_std_os_root) or std.mem.startsWith(u8, path, "compiler/zig/lib/std/os/")) return false;
-    if (std.mem.eql(u8, path, compiler_zig_std_tar_root) or std.mem.startsWith(u8, path, "compiler/zig/lib/std/tar/")) return false;
-    if (std.mem.eql(u8, path, compiler_zig_std_testing_root) or std.mem.startsWith(u8, path, "compiler/zig/lib/std/testing/")) return false;
-    if (std.mem.eql(u8, path, compiler_zig_std_tz_root) or std.mem.startsWith(u8, path, "compiler/zig/lib/std/tz/")) return false;
-    if (std.mem.eql(u8, path, compiler_zig_std_zig_llvm_root) or std.mem.startsWith(u8, path, "compiler/zig/lib/std/zig/llvm/")) return false;
-    if (std.mem.eql(u8, path, compiler_zig_std_io_root)) return true;
+    if (bytes_mod.eql(std.fs.path.basename(path), ".zig-cache")) return false;
+    if (bytes_mod.eql(path, compiler_zig_std_build_root) or bytes_mod.startsWith(path, "compiler/zig/lib/std/Build/")) return false;
+    if (bytes_mod.eql(path, compiler_zig_std_c_root) or bytes_mod.startsWith(path, "compiler/zig/lib/std/c/")) return false;
+    if (bytes_mod.eql(path, compiler_zig_std_debug_root) or bytes_mod.startsWith(path, "compiler/zig/lib/std/debug/")) return false;
+    if (bytes_mod.eql(path, compiler_zig_std_crypto_root) or bytes_mod.startsWith(path, "compiler/zig/lib/std/crypto/")) return false;
+    if (bytes_mod.eql(path, compiler_zig_std_http_root) or bytes_mod.startsWith(path, "compiler/zig/lib/std/http/")) return false;
+    if (bytes_mod.eql(path, compiler_zig_std_os_root) or bytes_mod.startsWith(path, "compiler/zig/lib/std/os/")) return false;
+    if (bytes_mod.eql(path, compiler_zig_std_tar_root) or bytes_mod.startsWith(path, "compiler/zig/lib/std/tar/")) return false;
+    if (bytes_mod.eql(path, compiler_zig_std_testing_root) or bytes_mod.startsWith(path, "compiler/zig/lib/std/testing/")) return false;
+    if (bytes_mod.eql(path, compiler_zig_std_tz_root) or bytes_mod.startsWith(path, "compiler/zig/lib/std/tz/")) return false;
+    if (bytes_mod.eql(path, compiler_zig_std_zig_llvm_root) or bytes_mod.startsWith(path, "compiler/zig/lib/std/zig/llvm/")) return false;
+    if (bytes_mod.eql(path, compiler_zig_std_io_root)) return true;
     return true;
 }
 
@@ -596,7 +581,7 @@ fn readWorkspaceFile(io: std.Io, allocator: std.mem.Allocator, root: *std.Io.Dir
 }
 
 fn pathLessThan(_: void, left: []const u8, right: []const u8) bool {
-    return std.mem.order(u8, left, right) == .lt;
+    return bytes_mod.order(left, right) == -1;
 }
 
 fn sourceObjectRequirements() object.Requirements {

@@ -92,7 +92,7 @@ pub const DumbBuffer = struct {
 
     pub fn map(self: *DumbBuffer) Error![]u8 {
         if (self.mapped) |memory| return memory;
-        if (self.size > std.math.maxInt(usize)) return error.InvalidBufferSize;
+        if (self.size > ~@as(usize, 0)) return error.InvalidBufferSize;
         var request = DrmModeMapDumb{ .handle = self.handle, .pad = 0, .offset = 0 };
         try ioctlOk(self.drm_fd, drm_ioctl_mode_map_dumb, @intFromPtr(&request), error.DrmMapDumbFailed);
         const memory = posix.mmap(
@@ -152,7 +152,7 @@ fn createExportedFromFd(drm_fd: posix.fd_t, request: CreateRequest) Error!DumbBu
 
 fn createRequest(width: u32, height: u32, format: renderer_native_present.PixelFormat) ?CreateRequest {
     if (width == 0 or height == 0) return null;
-    if (width > std.math.maxInt(u32) / bytes_per_pixel) return null;
+    if (width > ~@as(u32, 0) / bytes_per_pixel) return null;
     return .{
         .width = width,
         .height = height,
@@ -201,5 +201,5 @@ test "drm dumb create request validates dimensions and format" {
     try std.testing.expectEqual(@as(u32, xrgb8888_bits_per_pixel), createRequest(1, 1, .xrgb8888).?.bpp);
     try std.testing.expect(createRequest(0, 480, .xrgb8888) == null);
     try std.testing.expect(createRequest(640, 0, .xrgb8888) == null);
-    try std.testing.expect(createRequest(std.math.maxInt(u32), 1, .xrgb8888) == null);
+    try std.testing.expect(createRequest(~@as(u32, 0), 1, .xrgb8888) == null);
 }

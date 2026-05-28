@@ -1,4 +1,5 @@
 const std = @import("std");
+const bytes = @import("bytes.zig");
 const clock = @import("clock.zig");
 const identity = @import("identity.zig");
 const object = @import("object.zig");
@@ -247,7 +248,7 @@ test "tree object storage helper rejects insufficient storage" {
 
 fn hasText(commands: []const ui.Command, value: []const u8) bool {
     for (commands) |command| switch (command) {
-        .text => |text_command| if (std.mem.eql(u8, text_command.value, value)) return true,
+        .text => |text_command| if (bytes.eql(text_command.value, value)) return true,
         else => {},
     };
     return false;

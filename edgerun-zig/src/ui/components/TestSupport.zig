@@ -1,4 +1,5 @@
 const std = @import("std");
+const bytes = @import("../../bytes.zig");
 const clock = @import("../../clock.zig");
 const ui = @import("../../ui.zig");
 
@@ -16,7 +17,7 @@ pub fn firstTextCommand(commands: []const ui.Command) ?ui.Command {
 
 pub fn textCommand(commands: []const ui.Command, value: []const u8) ?ui.Command {
     for (commands) |command| switch (command) {
-        .text => |text| if (std.mem.eql(u8, text.value, value)) return command,
+        .text => |text| if (bytes.eql(text.value, value)) return command,
         else => {},
     };
     return null;
@@ -24,7 +25,7 @@ pub fn textCommand(commands: []const ui.Command, value: []const u8) ?ui.Command 
 
 pub fn textCommandPrefix(commands: []const ui.Command, prefix: []const u8) ?ui.Command {
     for (commands) |command| switch (command) {
-        .text => |text| if (std.mem.startsWith(u8, text.value, prefix)) return command,
+        .text => |text| if (bytes.startsWith(text.value, prefix)) return command,
         else => {},
     };
     return null;

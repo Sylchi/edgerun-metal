@@ -1,4 +1,5 @@
 const std = @import("std");
+const bytes_mod = @import("../bytes.zig");
 const video_common = @import("video_common.zig");
 
 pub const Error = video_common.Error;
@@ -38,7 +39,7 @@ pub const InitState = struct {
 };
 
 pub fn is(bytes: []const u8) bool {
-    return bytes.len >= signature.len and std.mem.eql(u8, bytes[0..signature.len], &signature);
+    return bytes.len >= signature.len and bytes_mod.eql(bytes[0..signature.len], &signature);
 }
 
 pub fn initState(bytes: []const u8) Error!InitState {
@@ -211,12 +212,12 @@ fn readWebmVideoDimensions(video: []const u8) Error!WebmDimensions {
 
 fn readWebmDimension(payload: []const u8) Error!usize {
     const value = try readEbmlUnsigned(payload);
-    if (value == 0 or value > std.math.maxInt(usize)) return error.BadVideo;
+    if (value == 0 or value > ~@as(usize, 0)) return error.BadVideo;
     return @intCast(value);
 }
 
 fn decodeWebmCodec(codec: []const u8) Error!Codec {
-    if (std.mem.eql(u8, codec, codec_vp8)) return .vp8;
+    if (bytes_mod.eql(codec, codec_vp8)) return .vp8;
     return error.UnsupportedVideo;
 }
 
@@ -342,7 +343,7 @@ fn readSignedI16Be(bytes: []const u8) i16 {
 fn readEbmlElement(bytes: []const u8, cursor: usize) Error!Element {
     const id = try readEbmlId(bytes, cursor);
     const size = try readEbmlVint(bytes, cursor + id.size, true);
-    if (size.value > std.math.maxInt(usize)) return error.BadVideo;
+    if (size.value > ~@as(usize, 0)) return error.BadVideo;
     const payload_start = std.math.add(usize, cursor + id.size, size.size) catch return error.BadVideo;
     const payload_end = std.math.add(usize, payload_start, @as(usize, @intCast(size.value))) catch return error.BadVideo;
     if (payload_end > bytes.len) return error.BadVideo;

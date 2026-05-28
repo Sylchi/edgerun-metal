@@ -42,7 +42,9 @@ pub const Atlas = struct {
         return atlas;
     }
 
-    pub fn initEmpty(self: *Atlas) void { self.initUtf8(); }
+    pub fn initEmpty(self: *Atlas) void {
+        self.initUtf8();
+    }
 
     pub fn initUtf8(self: *Atlas) void {
         self.font = font_builtin.body(.regular);
@@ -77,12 +79,24 @@ pub const Atlas = struct {
         self.atlas_row_h = 0;
     }
 
-    pub fn source(self: *Atlas) ir.FontAtlas { return .{ .context = self, .metrics = metrics, .width = textWidth, .glyph = glyph }; }
-    pub fn objectSource(self: *Atlas) ir.FontAtlas { return self.source(); }
-    pub fn alphaSlice(self: *const Atlas) []const u8 { return &self.alpha; }
-    pub fn cachedGlyphCount(self: *const Atlas) usize { return self.glyph_count; }
-    pub fn deviceScale(self: *const Atlas) f32 { return self.device_scale; }
-    pub fn cacheRevision(self: *const Atlas) u32 { return self.revision; }
+    pub fn source(self: *Atlas) ir.FontAtlas {
+        return .{ .context = self, .metrics = metrics, .width = textWidth, .glyph = glyph };
+    }
+    pub fn objectSource(self: *Atlas) ir.FontAtlas {
+        return self.source();
+    }
+    pub fn alphaSlice(self: *const Atlas) []const u8 {
+        return &self.alpha;
+    }
+    pub fn cachedGlyphCount(self: *const Atlas) usize {
+        return self.glyph_count;
+    }
+    pub fn deviceScale(self: *const Atlas) f32 {
+        return self.device_scale;
+    }
+    pub fn cacheRevision(self: *const Atlas) u32 {
+        return self.revision;
+    }
 
     pub fn setTextWeight(self: *Atlas, weight: font_builtin.Weight) void {
         self.active_weight = weight;
@@ -168,7 +182,9 @@ pub const Atlas = struct {
         if (self.revision == 0) self.revision = 1;
     }
 
-    fn s(self: *const Atlas, value: f32) f32 { return value / self.device_scale; }
+    fn s(self: *const Atlas, value: f32) f32 {
+        return value / self.device_scale;
+    }
 };
 
 fn metrics(context: *anyopaque, px: u8) ir.TextMetrics {

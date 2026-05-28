@@ -266,7 +266,7 @@ fn packBgrxScanout(out: []u8, pixels: []const ui.Color) void {
 }
 
 fn presentVirtioGpu(width: u32, height: u32, scanout: []u8) Error!void {
-    if (scanout.len > std.math.maxInt(u32)) return error.VirtioScanoutTooLarge;
+    if (scanout.len > ~@as(u32, 0)) return error.VirtioScanoutTooLarge;
     var device = virtio_gpu.Device.findAndInit(&virtio_gpu_queue) catch |err| return mapVirtioGpuError(err);
     const setup = virtio_gpu.Setup2d.init(
         virtio_scanout_resource_id,

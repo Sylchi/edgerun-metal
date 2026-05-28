@@ -1,4 +1,5 @@
 const std = @import("std");
+const bytes = @import("../../bytes.zig");
 const clock = @import("../../clock.zig");
 const common = @import("../../ui_component_common.zig");
 const object = @import("../../object.zig");
@@ -234,8 +235,8 @@ test "card component title can occupy responsive wrapped lines" {
     for (scene.written()) |command| {
         switch (command) {
             .text => |text| {
-                if (std.mem.eql(u8, text.value, "Runtime")) title_lines += 1;
-                if (std.mem.startsWith(u8, text.value, "Receipts")) detail_y = text.origin.y;
+                if (bytes.eql(text.value, "Runtime")) title_lines += 1;
+                if (bytes.startsWith(text.value, "Receipts")) detail_y = text.origin.y;
             },
             else => {},
         }

@@ -32,7 +32,10 @@ pub const font_last_char = renderer_ir.font_last_char;
 pub const FontSource = enum { atlas, object };
 
 pub fn sources(font_atlas: *renderer_font_atlas.Atlas, font_source: FontSource) renderer_ir.Sources {
-    return .{ .font = switch (font_source) { .atlas => font_atlas.source(), .object => font_atlas.objectSource() } };
+    return .{ .font = switch (font_source) {
+        .atlas => font_atlas.source(),
+        .object => font_atlas.objectSource(),
+    } };
 }
 
 pub fn packScene(buffers: renderer_ir.Buffers, font_atlas: *renderer_font_atlas.Atlas, font_source: FontSource, commands: []const ui.Command) (renderer_ir.Error || icon_line_buffer.Error)!void {
@@ -90,16 +93,37 @@ pub fn softwareResourcesFromAlphaAtlas(font: renderer_software.AlphaAtlas, image
     return .{ .font = font, .image = image };
 }
 
-pub fn presentationResources(font_atlas_ready: bool, image_ready: bool) renderer_present.Resources { return .{ .font_atlas = font_atlas_ready, .image_texture = image_ready }; }
-pub fn renderSoftwareFrame(surface: renderer_software.Framebuffer, buffers: renderer_ir.Buffers, resources: renderer_software.Resources, background: ui.Color) renderer_software.Error!renderer_present.Receipt { surface.clear(background); return surface.renderIr(buffers, resources); }
-pub fn presentPackedFrame(width: u32, height: u32, buffers: renderer_ir.Buffers, resource_set: renderer_present.Resources) renderer_present.Error!renderer_present.Receipt { return renderer_present.present(.{ .target = .{ .destination = .packed_frame, .width = width, .height = height }, .buffers = buffers, .resources = resource_set }); }
-pub fn softwareFramebuffer(width: usize, height: usize, pixels: []ui.Color) renderer_software.Error!SoftwareFramebuffer { return renderer_software.Framebuffer.init(width, height, pixels); }
-pub fn setIconTuningForTest(tuning: IconTuning) IconTuningError!void { try renderer_software.setIconTuningForTest(tuning); }
-pub fn resetIconTuningForTest() void { renderer_software.resetIconTuningForTest(); }
-pub fn pushText(buffers: Buffers, font: FontAtlas, layer: Layer, bounds: ui.Rect, value: []const u8, color: ui.Color, alignment: ui.TextAlign) IrError!void { try renderer_ir.pushText(buffers, font, layer, bounds, value, color, alignment); }
-pub fn pushIcon(buffers: Buffers, layer: Layer, quad: ui.IconQuad) IrError!void { try renderer_ir.pushIcon(buffers, layer, quad); }
-pub fn iconAt(values: []const f32, index: usize) IrError!IconInstance { return renderer_ir.iconAt(values, index); }
-pub fn packIconLines(instances: []const f32, out: []f32, out_len: *usize) icon_line_buffer.Error!void { try icon_line_buffer.packIconInstances(instances, out, out_len); }
+pub fn presentationResources(font_atlas_ready: bool, image_ready: bool) renderer_present.Resources {
+    return .{ .font_atlas = font_atlas_ready, .image_texture = image_ready };
+}
+pub fn renderSoftwareFrame(surface: renderer_software.Framebuffer, buffers: renderer_ir.Buffers, resources: renderer_software.Resources, background: ui.Color) renderer_software.Error!renderer_present.Receipt {
+    surface.clear(background);
+    return surface.renderIr(buffers, resources);
+}
+pub fn presentPackedFrame(width: u32, height: u32, buffers: renderer_ir.Buffers, resource_set: renderer_present.Resources) renderer_present.Error!renderer_present.Receipt {
+    return renderer_present.present(.{ .target = .{ .destination = .packed_frame, .width = width, .height = height }, .buffers = buffers, .resources = resource_set });
+}
+pub fn softwareFramebuffer(width: usize, height: usize, pixels: []ui.Color) renderer_software.Error!SoftwareFramebuffer {
+    return renderer_software.Framebuffer.init(width, height, pixels);
+}
+pub fn setIconTuningForTest(tuning: IconTuning) IconTuningError!void {
+    try renderer_software.setIconTuningForTest(tuning);
+}
+pub fn resetIconTuningForTest() void {
+    renderer_software.resetIconTuningForTest();
+}
+pub fn pushText(buffers: Buffers, font: FontAtlas, layer: Layer, bounds: ui.Rect, value: []const u8, color: ui.Color, alignment: ui.TextAlign) IrError!void {
+    try renderer_ir.pushText(buffers, font, layer, bounds, value, color, alignment);
+}
+pub fn pushIcon(buffers: Buffers, layer: Layer, quad: ui.IconQuad) IrError!void {
+    try renderer_ir.pushIcon(buffers, layer, quad);
+}
+pub fn iconAt(values: []const f32, index: usize) IrError!IconInstance {
+    return renderer_ir.iconAt(values, index);
+}
+pub fn packIconLines(instances: []const f32, out: []f32, out_len: *usize) icon_line_buffer.Error!void {
+    try icon_line_buffer.packIconInstances(instances, out, out_len);
+}
 
 pub fn packBufferIconLines(buffers: renderer_ir.Buffers) icon_line_buffer.Error!void {
     try packIconLines(buffers.liveIconVertices(), buffers.icon_line_vertices, buffers.icon_line_vertex_len);

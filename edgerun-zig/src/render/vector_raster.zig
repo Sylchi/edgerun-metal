@@ -1,4 +1,5 @@
 const std = @import("std");
+const math = @import("../math.zig");
 const font_vector = @import("../font_vector.zig");
 const varfont = @import("../varfont.zig");
 
@@ -202,5 +203,5 @@ fn sharpenAlpha(alpha: []u8, stride: usize, w: usize, h: usize) void {
 fn sharpen(sample: u8) u8 {
     if (sample == 0 or sample == 255) return sample;
     const value = sharpen_midpoint + (@as(f32, @floatFromInt(sample)) - sharpen_midpoint) * sharpen_contrast + sharpen_lift;
-    return @intFromFloat(@round(std.math.clamp(value, 0.0, 255.0)));
+    return @intFromFloat(@round(math.clampF(value, 0.0, 255.0)));
 }

@@ -1,4 +1,6 @@
 const std = @import("std");
+const math = @import("math.zig");
+const bytes_mod = @import("bytes.zig");
 const media = @import("media/root.zig");
 
 pub const Error = error{
@@ -190,9 +192,9 @@ fn imageSubtypeFromInt(value: u16) ?ImageSubtype {
 
 fn isZip(bytes: []const u8) bool {
     if (bytes.len < 4) return false;
-    return std.mem.eql(u8, bytes[0..4], &.{ 0x50, 0x4b, 0x03, 0x04 }) or
-        std.mem.eql(u8, bytes[0..4], &.{ 0x50, 0x4b, 0x05, 0x06 }) or
-        std.mem.eql(u8, bytes[0..4], &.{ 0x50, 0x4b, 0x07, 0x08 });
+    return bytes_mod.eql(bytes[0..4], &.{ 0x50, 0x4b, 0x03, 0x04 }) or
+        bytes_mod.eql(bytes[0..4], &.{ 0x50, 0x4b, 0x05, 0x06 }) or
+        bytes_mod.eql(bytes[0..4], &.{ 0x50, 0x4b, 0x07, 0x08 });
 }
 
 fn looksUtf8Text(bytes: []const u8, name: []const u8) bool {
@@ -238,7 +240,7 @@ fn entropyMilliBits(bytes: []const u8) u16 {
         const p = @as(f64, @floatFromInt(count)) / len_f;
         entropy -= p * std.math.log2(p);
     }
-    return @intFromFloat(@round(std.math.clamp(entropy * 1000.0, 0.0, 8000.0)));
+    return @intFromFloat(@round(math.clampF(@as(f32, @floatCast(entropy * 1000.0)), 0.0, 8000.0)));
 }
 
 fn extensionSlice(name: []const u8) []const u8 {

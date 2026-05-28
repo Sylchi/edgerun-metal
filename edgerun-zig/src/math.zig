@@ -3,6 +3,7 @@ pub const pi: f32 = 3.14159265358979323846;
 pub const half_pi: f32 = pi * 0.5;
 pub const quarter_pi: f32 = pi * 0.25;
 pub const three_quarter_pi: f32 = pi * 0.75;
+pub const tau: f32 = pi * 2.0;
 pub const atan2_epsilon: f32 = 1.0e-10;
 pub const atan2_cubic: f32 = 0.1963;
 pub const atan2_linear: f32 = -0.9817;
@@ -200,6 +201,7 @@ pub fn rsqrtF(value: f32) f32 {
 }
 
 pub fn atan2F(y: f32, x: f32) f32 {
+    if (y == 0.0) return if (x > 0.0) 0.0 else pi;
     if (x == 0.0) {
         if (y > 0.0) return half_pi;
         if (y < 0.0) return -half_pi;

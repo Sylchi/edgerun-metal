@@ -32,7 +32,7 @@ pub fn checkedMul(a: usize, b: usize) DecodeError!usize {
 }
 
 pub fn pixelCount(header: Header) DecodeError!usize {
-    if (header.width > std.math.maxInt(usize) / header.height) return error.PixelBudget;
+    if (header.width > ~@as(usize, 0) / header.height) return error.PixelBudget;
     return header.width * header.height;
 }
 
@@ -115,7 +115,7 @@ pub fn writeU24Le(bytes: *[3]u8, value: usize) void {
 }
 
 pub fn writeU16(bytes: *[2]u8, value: usize) void {
-    std.debug.assert(value <= std.math.maxInt(u16));
+    std.debug.assert(value <= 0xFFFF);
     bytes[0] = @intCast(value & 0xff);
     bytes[1] = @intCast((value >> 8) & 0xff);
 }

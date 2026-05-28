@@ -1,4 +1,6 @@
 const std = @import("std");
+const math = @import("../math.zig");
+const bytes_mod = @import("../bytes.zig");
 const audio_common = @import("audio_common.zig");
 
 pub const Error = audio_common.Error;
@@ -72,7 +74,7 @@ const WebmAudioSettings = struct {
 };
 
 pub fn is(bytes: []const u8) bool {
-    return bytes.len >= signature.len and std.mem.eql(u8, bytes[0..signature.len], &signature);
+    return bytes.len >= signature.len and bytes_mod.eql(bytes[0..signature.len], &signature);
 }
 
 pub fn initState(bytes: []const u8) Error!InitState {
@@ -218,7 +220,7 @@ fn readWebmAudioSettings(audio: []const u8) Error!WebmAudioSettings {
 
 fn readWebmSampleRate(payload: []const u8) Error!u32 {
     const value = try readEbmlFloat(payload);
-    if (!std.math.isFinite(value) or value < 1 or value > std.math.maxInt(u32)) return error.BadAudio;
+    if (!math.isFiniteF(@as(f32, @floatCast(value))) or value < 1 or value > ~@as(u32, 0)) return error.BadAudio;
     const rounded = @round(value);
     if (rounded != value) return error.UnsupportedAudio;
     return @intFromFloat(rounded);
@@ -226,13 +228,13 @@ fn readWebmSampleRate(payload: []const u8) Error!u32 {
 
 fn readWebmChannels(payload: []const u8) Error!u8 {
     const value = try readEbmlUnsigned(payload);
-    if (value == 0 or value > std.math.maxInt(u8)) return error.BadAudio;
+    if (value == 0 or value > 255) return error.BadAudio;
     return @intCast(value);
 }
 
 fn decodeWebmCodec(codec: []const u8) Error!Codec {
-    if (std.mem.eql(u8, codec, codec_opus)) return .opus;
-    if (std.mem.eql(u8, codec, codec_vorbis)) return .vorbis;
+    if (bytes_mod.eql(codec, codec_opus)) return .opus;
+    if (bytes_mod.eql(codec, codec_vorbis)) return .vorbis;
     return error.UnsupportedAudio;
 }
 
@@ -358,7 +360,7 @@ fn readSignedI16Be(bytes: []const u8) i16 {
 fn readEbmlElement(bytes: []const u8, cursor: usize) Error!Element {
     const id = try readEbmlId(bytes, cursor);
     const size = try readEbmlVint(bytes, cursor + id.size, true);
-    if (size.value > std.math.maxInt(usize)) return error.BadAudio;
+    if (size.value > ~@as(usize, 0)) return error.BadAudio;
     const payload_start = std.math.add(usize, cursor + id.size, size.size) catch return error.BadAudio;
     const payload_end = std.math.add(usize, payload_start, @as(usize, @intCast(size.value))) catch return error.BadAudio;
     if (payload_end > bytes.len) return error.BadAudio;

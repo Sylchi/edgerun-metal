@@ -1,4 +1,5 @@
 const std = @import("std");
+const bytes = @import("bytes.zig");
 const builtin = @import("builtin");
 const app_mod = @import("app.zig");
 const app_frame = @import("app_frame.zig");
@@ -487,8 +488,8 @@ noinline fn runWasmAppChecks(state: *State, emit: Reporter) Error!void {
     emit("check: post-exit wasm execution ok");
 
     if (!state.first_app_result.receipt.valid()) return fail(emit, error.WasmReceiptInvalid, "FAIL post-exit wasm receipt invalid");
-    if (!std.mem.eql(u8, &state.first_app_result.receipt.app_hash, &image.code_hash) or
-        !std.mem.eql(u8, &state.first_app_result.receipt.manifest, &image.manifest))
+    if (!bytes.eql(&state.first_app_result.receipt.app_hash, &image.code_hash) or
+        !bytes.eql(&state.first_app_result.receipt.manifest, &image.manifest))
     {
         return fail(emit, error.WasmReceiptImageMismatch, "FAIL post-exit wasm receipt image");
     }
@@ -571,7 +572,7 @@ fn chunk(value: []const u8) data_chunk.DataChunk {
 }
 
 fn sameChunk(left: data_chunk.DataChunk, right: data_chunk.DataChunk) bool {
-    return left.valid() and right.valid() and std.mem.eql(u8, left.body(), right.body());
+    return left.valid() and right.valid() and bytes.eql(left.body(), right.body());
 }
 
 fn testIdentity(kind: identity.Kind, material: []const u8, epoch: clock.Stamp) ?identity.Identity {

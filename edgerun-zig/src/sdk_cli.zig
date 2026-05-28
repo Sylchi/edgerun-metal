@@ -1,4 +1,5 @@
 const std = @import("std");
+const bytes = @import("bytes.zig");
 const sdk = @import("sdk.zig");
 const store = @import("store.zig");
 
@@ -42,7 +43,7 @@ fn parseArgs(args_value: std.process.Args) !sdk.Profile {
     var args = std.process.Args.Iterator.init(args_value);
     _ = args.next();
     const command = args.next() orelse return .standard;
-    if (!std.mem.eql(u8, command, "simulate")) return UsageError.BadCommand;
+    if (!bytes.eql(command, "simulate")) return UsageError.BadCommand;
     const profile_arg = args.next() orelse return .standard;
     if (args.next() != null) return UsageError.ExtraArgument;
     return parseProfile(profile_arg);
@@ -54,9 +55,9 @@ fn printHash(out: *std.Io.Writer, label: []const u8, value: [sdk.identity_hash_s
 }
 
 fn parseProfile(value: []const u8) !sdk.Profile {
-    if (std.mem.eql(u8, value, "minimal")) return .minimal;
-    if (std.mem.eql(u8, value, "standard")) return .standard;
-    if (std.mem.eql(u8, value, "ui")) return .ui;
+    if (bytes.eql(value, "minimal")) return .minimal;
+    if (bytes.eql(value, "standard")) return .standard;
+    if (bytes.eql(value, "ui")) return .ui;
     return UsageError.BadProfile;
 }
 

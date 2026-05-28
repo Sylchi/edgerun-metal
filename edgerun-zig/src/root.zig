@@ -56,7 +56,6 @@ pub const theme = @import("theme.zig");
 pub const render = @import("render.zig");
 pub const sdk = @import("sdk.zig");
 pub const component_gallery = @import("component_gallery.zig");
-const cheating_app_tests = @import("cheating_app_tests.zig");
 pub const app_frame = @import("app_frame.zig");
 pub const app_input_event = @import("app_input_event.zig");
 pub const app_native_input = @import("app_native_input.zig");
@@ -137,7 +136,6 @@ test {
     _ = render;
     _ = sdk;
     _ = component_gallery;
-    _ = cheating_app_tests;
     _ = app_input_event;
     _ = app_native_input;
     _ = ui;

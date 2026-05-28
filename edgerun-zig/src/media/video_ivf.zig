@@ -1,4 +1,5 @@
 const std = @import("std");
+const bytes_mod = @import("../bytes.zig");
 const media_common = @import("common.zig");
 const video_common = @import("video_common.zig");
 
@@ -22,7 +23,7 @@ pub const frame_timestamp_index: usize = 4;
 pub const codec_vp8 = "VP80";
 
 pub fn is(bytes: []const u8) bool {
-    return bytes.len >= signature.len and std.mem.eql(u8, bytes[0..signature.len], signature);
+    return bytes.len >= signature.len and bytes_mod.eql(bytes[0..signature.len], signature);
 }
 
 pub fn decodeHeader(bytes: []const u8) Error!Header {
@@ -42,7 +43,7 @@ pub fn decodeHeader(bytes: []const u8) Error!Header {
 }
 
 fn decodeCodec(codec: []const u8) ?Codec {
-    if (std.mem.eql(u8, codec, codec_vp8)) return .vp8;
+    if (bytes_mod.eql(codec, codec_vp8)) return .vp8;
     return null;
 }
 

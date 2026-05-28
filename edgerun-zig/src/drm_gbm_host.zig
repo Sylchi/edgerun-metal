@@ -1,4 +1,5 @@
 const std = @import("std");
+const bytes = @import("bytes.zig");
 const renderer_font_atlas = @import("render/font_atlas.zig");
 const renderer_gles = @import("render/gles.zig");
 const renderer_ir = @import("render/ir.zig");
@@ -142,19 +143,19 @@ fn parseOptions(args: []const [:0]const u8) !Options {
     var options = Options{};
     var index: usize = 1;
     while (index < args.len) : (index += 1) {
-        if (std.mem.eql(u8, args[index], "--device")) {
+        if (bytes.eql(args[index], "--device")) {
             index += 1;
             if (index >= args.len) return error.InvalidArguments;
             options.device = args[index];
-        } else if (std.mem.eql(u8, args[index], "--seconds")) {
+        } else if (bytes.eql(args[index], "--seconds")) {
             index += 1;
             if (index >= args.len) return error.InvalidArguments;
             options.seconds = try std.fmt.parseUnsigned(u32, args[index], 10);
-        } else if (std.mem.eql(u8, args[index], "--connector")) {
+        } else if (bytes.eql(args[index], "--connector")) {
             index += 1;
             if (index >= args.len) return error.InvalidArguments;
             options.connector_id = try std.fmt.parseUnsigned(u32, args[index], 10);
-        } else if (std.mem.eql(u8, args[index], "--mode-index")) {
+        } else if (bytes.eql(args[index], "--mode-index")) {
             index += 1;
             if (index >= args.len) return error.InvalidArguments;
             options.mode_index = try std.fmt.parseUnsigned(u32, args[index], 10);

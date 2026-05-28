@@ -94,6 +94,7 @@ pages-site: app-runtime
 	cp pages/index.html $(PAGES_SITE_DIR)/index.html
 	cp pages/404.html $(PAGES_SITE_DIR)/404.html
 	cp $(PAGES_ZIG_OUT)/web/index.html $(PAGES_SITE_DIR)/web/index.html
+	chmod u+w $(PAGES_SITE_DIR)/web/index.html
 	python3 -c "from pathlib import Path; p=Path('$(PAGES_SITE_DIR)/web/index.html'); s=p.read_text(); old='A=(e,k)=>{let p=W.er_ui_input_ptr()'; new='A=(e,k)=>{if(!W)return;let p=W.er_ui_input_ptr()'; p.write_text(s if new in s else s.replace(old,new,1)); raise SystemExit(0 if new in p.read_text() else 1)"
 	grep -q 'A=(e,k)=>{if(!W)return;' $(PAGES_SITE_DIR)/web/index.html
 	cp $(APP_RUNTIME_WASM) $(PAGES_SITE_DIR)/bin/edgerun-app-runtime.wasm

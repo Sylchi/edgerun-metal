@@ -1,4 +1,6 @@
 const std = @import("std");
+const math = @import("math.zig");
+const bytes = @import("bytes.zig");
 const badge_component = @import("ui/components/Badge.zig");
 const button_component = @import("ui/components/Button.zig");
 const card_component = @import("ui/components/Card.zig");
@@ -88,7 +90,7 @@ pub const State = struct {
     }
 
     pub fn contextRatio(self: State) f32 {
-        return std.math.clamp(@as(f32, @floatFromInt(self.context_used)) / @as(f32, @floatFromInt(context_window_tokens)), 0.0, 1.0);
+        return math.clampF(@as(f32, @floatFromInt(self.context_used)) / @as(f32, @floatFromInt(context_window_tokens)), 0.0, 1.0);
     }
 
     fn applyString(self: *State, component_id: u8, payload: []const u8) !void {
@@ -96,8 +98,8 @@ pub const State = struct {
         switch (component_id) {
             status_component_id => {
                 self.status.set(value.value);
-                self.connected = !std.mem.eql(u8, value.value, "offline");
-                self.thinking = std.mem.indexOf(u8, value.value, "thinking") != null or std.mem.indexOf(u8, value.value, "finalizing") != null or std.mem.indexOf(u8, value.value, "pipeline") != null;
+                self.connected = !bytes.eql(value.value, "offline");
+                self.thinking = bytes.indexOf(value.value, "thinking") != null or bytes.indexOf(value.value, "finalizing") != null or bytes.indexOf(value.value, "pipeline") != null;
             },
             run_component_id => self.run_label.set(value.value),
             input_component_id => self.input.set(value.value),
@@ -120,7 +122,7 @@ pub const State = struct {
 
     fn applyF32(self: *State, component_id: u8, payload: []const u8) !void {
         if (payload.len < 4) return error.BadUiStreamPatch;
-        if (component_id == status_component_id) self.progress = std.math.clamp(@as(f32, @bitCast(std.mem.readInt(u32, payload[0..4], .little))), 0.0, 1.0);
+        if (component_id == status_component_id) self.progress = math.clampF(@as(f32, @bitCast(std.mem.readInt(u32, payload[0..4], .little))), 0.0, 1.0);
     }
 };
 
@@ -193,7 +195,7 @@ fn renderContextCard(scene: *ui.Scene, bounds: ui.Rect, state: State, style: ui.
     const total = pipelineContextUsed(state);
     const detail = std.fmt.bufPrint(&detail_buf, "{d} / {d} tokens across {d} fixed-role prompts", .{ total, context_window_tokens, state.agents.len }) catch "32k context budget";
     try (card_component.Card{ .title = "32k context budget", .detail = detail, .variant = .panel }).render(scene, bounds, .{ .style = style });
-    try (display_component.Progress{ .value = std.math.clamp(@as(f32, @floatFromInt(total)) / @as(f32, @floatFromInt(context_window_tokens)), 0.0, 1.0) }).render(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 68.0, bounds.w - 32.0, 12.0), .{ .style = style });
+    try (display_component.Progress{ .value = math.clampF(@as(f32, @floatFromInt(total)) / @as(f32, @floatFromInt(context_window_tokens)), 0.0, 1.0) }).render(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 68.0, bounds.w - 32.0, 12.0), .{ .style = style });
 }
 
 fn renderAgents(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State, style: ui.Style) !void {

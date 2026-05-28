@@ -2,12 +2,15 @@
 *.log
 machine-report*.txt
 
+# stale host build artifacts
+ifstatus
+er-embed
+
 # generated local build artifacts
 .build/
 .zig-cache/
 edgerun-zig/.build/
 edgerun-zig/.zig-cache/
-edgerun-metal/build/
 edgerun-zig/zig-out/
 varfont/build/
 

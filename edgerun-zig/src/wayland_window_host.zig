@@ -1,4 +1,5 @@
 const std = @import("std");
+const bytes_mod = @import("bytes.zig");
 const icon_svg = @import("icon_svg.zig");
 const interaction = @import("ui_interaction.zig");
 const linux_drm = @import("linux_drm.zig");
@@ -255,7 +256,7 @@ const DmabufImport = struct {
     fn fromWaylandSurface(surface: renderer_native_present.WaylandSurface) !DmabufImport {
         const gpu_buffer = surface.gpu_buffer orelse return error.InvalidDmabufImport;
         if (gpu_buffer.kind != .dma_buf or gpu_buffer.plane_count != 1) return error.InvalidDmabufImport;
-        if (gpu_buffer.handle > @as(u64, @intCast(std.math.maxInt(posix.fd_t)))) return error.InvalidDmabufImport;
+        if (gpu_buffer.handle > @as(u64, 2147483647)) return error.InvalidDmabufImport;
         const import = DmabufImport{
             .fd = @intCast(gpu_buffer.handle),
             .width = surface.width,
@@ -343,35 +344,35 @@ fn parseOptions(args: []const [:0]const u8) !Options {
     var index: usize = 1;
     while (index < args.len) : (index += 1) {
         const arg = args[index];
-        if (std.mem.eql(u8, arg, "--width")) {
+        if (bytes_mod.eql(arg, "--width")) {
             index += 1;
             if (index >= args.len) return error.InvalidArguments;
             options.width = try std.fmt.parseUnsigned(u32, args[index], 10);
-        } else if (std.mem.eql(u8, arg, "--height")) {
+        } else if (bytes_mod.eql(arg, "--height")) {
             index += 1;
             if (index >= args.len) return error.InvalidArguments;
             options.height = try std.fmt.parseUnsigned(u32, args[index], 10);
-        } else if (std.mem.eql(u8, arg, "--seconds")) {
+        } else if (bytes_mod.eql(arg, "--seconds")) {
             index += 1;
             if (index >= args.len) return error.InvalidArguments;
             options.seconds = try std.fmt.parseUnsigned(u32, args[index], 10);
-        } else if (std.mem.eql(u8, arg, "--present")) {
+        } else if (bytes_mod.eql(arg, "--present")) {
             index += 1;
             if (index >= args.len) return error.InvalidArguments;
             options.present = try parsePresentMode(args[index]);
-        } else if (std.mem.eql(u8, arg, "--drm-device")) {
+        } else if (bytes_mod.eql(arg, "--drm-device")) {
             index += 1;
             if (index >= args.len) return error.InvalidArguments;
             options.drm_device = args[index];
-        } else if (std.mem.eql(u8, arg, "--dmabuf-fd")) {
+        } else if (bytes_mod.eql(arg, "--dmabuf-fd")) {
             index += 1;
             if (index >= args.len) return error.InvalidArguments;
             options.dmabuf_fd = try std.fmt.parseInt(posix.fd_t, args[index], 10);
-        } else if (std.mem.eql(u8, arg, "--path")) {
+        } else if (bytes_mod.eql(arg, "--path")) {
             index += 1;
             if (index >= args.len) return error.InvalidArguments;
             options.path = args[index];
-        } else if (std.mem.eql(u8, arg, "--dashboard")) {
+        } else if (bytes_mod.eql(arg, "--dashboard")) {
             options.dashboard = true;
         } else {
             return error.InvalidArguments;
@@ -382,9 +383,9 @@ fn parseOptions(args: []const [:0]const u8) !Options {
 }
 
 fn parsePresentMode(value: []const u8) !PresentMode {
-    if (std.mem.eql(u8, value, "cpu")) return .cpu;
-    if (std.mem.eql(u8, value, "gpu-record")) return .gpu_record;
-    if (std.mem.eql(u8, value, "gpu-dmabuf")) return .gpu_dmabuf;
+    if (bytes_mod.eql(value, "cpu")) return .cpu;
+    if (bytes_mod.eql(value, "gpu-record")) return .gpu_record;
+    if (bytes_mod.eql(value, "gpu-dmabuf")) return .gpu_dmabuf;
     return error.InvalidArguments;
 }
 
@@ -1487,12 +1488,12 @@ fn parseRegistryGlobal(payload: []const u8) !RegistryGlobal {
 }
 
 fn registryInterface(value: []const u8) RegistryInterface {
-    if (std.mem.eql(u8, value, "wl_compositor")) return .compositor;
-    if (std.mem.eql(u8, value, "wl_shm")) return .shm;
-    if (std.mem.eql(u8, value, "xdg_wm_base")) return .wm_base;
-    if (std.mem.eql(u8, value, "wl_seat")) return .seat;
-    if (std.mem.eql(u8, value, "zwp_linux_dmabuf_v1")) return .linux_dmabuf;
-    if (std.mem.eql(u8, value, "zxdg_decoration_manager_v1")) return .xdg_decoration_manager;
+    if (bytes_mod.eql(value, "wl_compositor")) return .compositor;
+    if (bytes_mod.eql(value, "wl_shm")) return .shm;
+    if (bytes_mod.eql(value, "xdg_wm_base")) return .wm_base;
+    if (bytes_mod.eql(value, "wl_seat")) return .seat;
+    if (bytes_mod.eql(value, "zwp_linux_dmabuf_v1")) return .linux_dmabuf;
+    if (bytes_mod.eql(value, "zxdg_decoration_manager_v1")) return .xdg_decoration_manager;
     return .other;
 }
 
@@ -1949,9 +1950,12 @@ test "wayland host renders the source app through canonical ir" {
     var scene = ui.Scene.initWithClips(&commands, &clips);
     var collector = interaction.Collector.init(&regions);
     var dash_state: app_dashboard.State = .{};
-    try renderNativeAppScene(&scene, &collector, 1280, 800, .{}, &dash_state, false);
-    try std.testing.expect(hasText(scene.written(), "EdgeRun Workspace"));
-    try std.testing.expect(hasText(scene.written(), "EXPLORER"));
+    try renderNativeAppScene(&scene, &collector, 1280, 800, .{
+        .route = .{ .view = .source },
+        .source = .{ .label = "src/app_runtime.zig" },
+    }, &dash_state, false);
+    try std.testing.expect(hasText(scene.written(), "src/app_runtime.zig"));
+    try std.testing.expect(hasText(scene.written(), "WORKSPACE"));
 
     var ir_storage = IrStorage{};
     const buffers = ir_storage.buffers();
@@ -1970,10 +1974,8 @@ test "wayland host renders academy post route through canonical ir" {
     var scene = ui.Scene.initWithClips(&commands, &clips);
     var collector = interaction.Collector.init(&regions);
     const post_id = app_blog.postIdAt(app_blog.posts.len - 1);
-    var path: [app_navigation.route_path_capacity]u8 = undefined;
-    const route_path = try std.fmt.bufPrint(&path, "/academy/{d}", .{post_id});
     var dash_b: app_dashboard.State = .{};
-    try renderNativeAppScene(&scene, &collector, 1280, 1800, .{ .route = app_navigation.fromPath(route_path) }, &dash_b, false);
+    try renderNativeAppScene(&scene, &collector, 1280, 1800, .{ .route = .{ .view = .blog, .selected_blog_post_id = post_id } }, &dash_b, false);
     try std.testing.expect(hasText(scene.written(), "AUTHORITY FLOW"));
     try std.testing.expect(hasText(scene.written(), "Relay"));
     try std.testing.expect(hasText(scene.written(), "TPM"));
@@ -2178,7 +2180,7 @@ fn pixelBufferHasPaint(pixels: []const ui.Color) bool {
 
 fn hasText(commands: []const ui.Command, value: []const u8) bool {
     for (commands) |command| {
-        if (command == .text and std.mem.eql(u8, command.text.value, value)) return true;
+        if (command == .text and bytes_mod.eql(command.text.value, value)) return true;
     }
     return false;
 }

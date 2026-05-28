@@ -1,4 +1,5 @@
 const std = @import("std");
+const math = @import("../math.zig");
 const ui = @import("../ui.zig");
 
 pub const Axis = enum {
@@ -190,12 +191,12 @@ fn sanitizeSize2(size: ui.Size) ui.Size {
 }
 
 fn sanitizeSize(value: f32) f32 {
-    if (!std.math.isFinite(value) or value <= 0) return 0;
+    if (!math.isFiniteF(value) or value <= 0) return 0;
     return value;
 }
 
 fn sanitizePositive(value: f32, fallback: f32) f32 {
-    if (!std.math.isFinite(value) or value <= 0) return fallback;
+    if (!math.isFiniteF(value) or value <= 0) return fallback;
     return value;
 }
 

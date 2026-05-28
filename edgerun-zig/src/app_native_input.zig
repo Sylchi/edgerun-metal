@@ -1,4 +1,5 @@
 const std = @import("std");
+const math = @import("math.zig");
 const app_bundle = @import("app_bundle.zig");
 const app_cursor = app_bundle.app_cursor;
 const app_frame = @import("app_frame.zig");
@@ -93,10 +94,10 @@ pub fn processPointerEvent(state: *State, commands: []const ui.Command, regions:
 }
 
 pub fn scrollBy(state: *State, width: f32, viewport_height: f32, delta_y: f32) void {
-    if (!std.math.isFinite(delta_y)) return;
+    if (!math.isFiniteF(delta_y)) return;
     const viewport_h = @max(1.0, viewport_height);
     const limit = @max(0.0, state.contentHeight(width) - viewport_h);
-    state.scroll_y = std.math.clamp(state.scroll_y + delta_y, 0.0, limit);
+    state.scroll_y = math.clampF(state.scroll_y + delta_y, 0.0, limit);
 }
 
 test "native input activates routes and resets scroll through shared state" {

@@ -1,4 +1,5 @@
 const std = @import("std");
+const math = @import("math.zig");
 const icon = @import("icon.zig");
 
 pub const op_polyline: f32 = 1.0;
@@ -249,7 +250,7 @@ pub const Iterator = struct {
             const start = self.index + 1;
             self.index += stroke_width_len;
             const width = self.values[start];
-            if (!std.math.isFinite(width) or width <= 0.0) return error.InvalidIconVector;
+            if (!math.isFiniteF(width) or width <= 0.0) return error.InvalidIconVector;
             return .{ .stroke_width = width };
         }
         if (kind == op_stroke_cap) {
@@ -269,7 +270,7 @@ pub const Iterator = struct {
             const start = self.index + 1;
             self.index += stroke_miter_limit_len;
             const limit = self.values[start];
-            if (!std.math.isFinite(limit) or limit < 1.0) return error.InvalidIconVector;
+            if (!math.isFiniteF(limit) or limit < 1.0) return error.InvalidIconVector;
             return .{ .stroke_miter_limit = limit };
         }
         if (kind == op_begin_clip_path) {

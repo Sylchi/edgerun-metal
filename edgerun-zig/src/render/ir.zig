@@ -1,4 +1,5 @@
 const std = @import("std");
+const math = @import("../math.zig");
 const icon_svg = @import("../icon_svg.zig");
 const ui = @import("../ui.zig");
 
@@ -480,7 +481,7 @@ pub fn pushTexturedVertex(buffer: []f32, len: *usize, x: f32, y: f32, u: f32, v:
 }
 
 pub fn textPx(height: f32) u8 {
-    return @intFromFloat(@round(std.math.clamp(height, @as(f32, @floatFromInt(font_first_px)), @as(f32, @floatFromInt(font_last_px)))));
+    return @intFromFloat(@round(math.clampF(height, @as(f32, @floatFromInt(font_first_px)), @as(f32, @floatFromInt(font_last_px)))));
 }
 
 pub fn rectModeCode(mode: ui.RectMode) f32 {
@@ -727,7 +728,7 @@ fn colorFromChannels(r: f32, g: f32, b: f32, a: f32) ui.Color {
 }
 
 fn byteFromChannel(value: f32) u8 {
-    return @intFromFloat(@round(std.math.clamp(value, 0.0, 1.0) * 255.0));
+    return @intFromFloat(@round(math.clampF(value, 0.0, 1.0) * 255.0));
 }
 
 fn rectModeFromCode(code: f32) Error!ui.RectMode {

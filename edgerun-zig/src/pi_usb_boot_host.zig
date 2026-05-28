@@ -1,4 +1,5 @@
 const std = @import("std");
+const bytes = @import("bytes.zig");
 const bcm = @import("bcm2708_usb_boot.zig");
 
 const linux = std.os.linux;
@@ -10,7 +11,7 @@ const wait_poll_ms: u32 = 250;
 const default_image_path = ".build/edgerun-metal/pi-zero-w-v1_1/boot/bootcode.bin";
 const default_boot_dir = ".build/edgerun-metal/pi-zero-w-v1_1/boot";
 const default_kernel_path = ".build/pi-zero-w-v1_1-zig/kernel.img";
-const wait_forever_ms: u32 = std.math.maxInt(u32);
+const wait_forever_ms: u32 = ~@as(u32, 0);
 
 const file_command_get_size: u32 = 0;
 const file_command_read: u32 = 1;
@@ -132,23 +133,23 @@ fn parseOptions(args: []const [:0]const u8) !Options {
     var index: usize = 1;
     while (index < args.len) : (index += 1) {
         const arg = args[index];
-        if (std.mem.eql(u8, arg, "--dry-run")) {
+        if (bytes.eql(arg, "--dry-run")) {
             options.dry_run = true;
-        } else if (std.mem.eql(u8, arg, "--serve-only")) {
+        } else if (bytes.eql(arg, "--serve-only")) {
             options.serve_only = true;
             options.wait = true;
-        } else if (std.mem.eql(u8, arg, "--wait")) {
+        } else if (bytes.eql(arg, "--wait")) {
             options.wait = true;
-        } else if (std.mem.eql(u8, arg, "--wait-ms")) {
+        } else if (bytes.eql(arg, "--wait-ms")) {
             index += 1;
             if (index >= args.len) return error.InvalidArguments;
             options.wait = true;
             options.wait_timeout_ms = try std.fmt.parseUnsigned(u32, args[index], 10);
-        } else if (std.mem.eql(u8, arg, "--serve-dir")) {
+        } else if (bytes.eql(arg, "--serve-dir")) {
             index += 1;
             if (index >= args.len) return error.InvalidArguments;
             options.boot_dir = args[index];
-        } else if (std.mem.eql(u8, arg, "--kernel-image")) {
+        } else if (bytes.eql(arg, "--kernel-image")) {
             index += 1;
             if (index >= args.len) return error.InvalidArguments;
             options.kernel_path = args[index];
@@ -409,7 +410,7 @@ fn decodeFileRequest(raw: *const [file_message_bytes]u8) ?FileRequest {
 fn safeFileName(name: []const u8) bool {
     if (name.len == 0 or name.len >= file_name_bytes) return false;
     if (name[0] == '/' or name[0] == '\\' or name[0] == '*') return false;
-    if (std.mem.indexOf(u8, name, "..") != null) return false;
+    if (bytes.indexOf(name, "..") != null) return false;
     for (name) |byte| {
         if (byte == 0 or byte == '\\') return false;
     }
@@ -423,7 +424,7 @@ fn bootFileSize(io: std.Io, options: Options, name: []const u8) !u32 {
 }
 
 fn readBootFile(io: std.Io, allocator: std.mem.Allocator, options: Options, name: []const u8) ![]u8 {
-    if (std.mem.eql(u8, name, "kernel.img")) {
+    if (bytes.eql(name, "kernel.img")) {
         return std.Io.Dir.cwd().readFileAlloc(io, options.kernel_path, allocator, .limited(16 * 1024 * 1024));
     }
     var path_buf: [512]u8 = undefined;

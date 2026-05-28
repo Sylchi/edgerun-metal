@@ -1,4 +1,5 @@
 const std = @import("std");
+const math = @import("../math.zig");
 const icon_vector = @import("../icon_vector.zig");
 const renderer_ir = @import("ir.zig");
 
@@ -362,15 +363,15 @@ fn strokeEllipse(width: usize, height: usize, out: []u8, stroke_width: f32, cx: 
     const end_turn: f32 = 1.0;
     const span = end_turn - start_turn;
     var previous = icon_vector.Point{
-        .x = cx + @cos(start_turn * std.math.tau) * rx,
-        .y = cy + @sin(start_turn * std.math.tau) * ry,
+        .x = cx + @cos(start_turn * math.tau) * rx,
+        .y = cy + @sin(start_turn * math.tau) * ry,
     };
     var step: usize = 1;
     while (step <= stroke_curve_segments * 4) : (step += 1) {
         const turn = start_turn + @as(f32, @floatFromInt(step)) * span / @as(f32, @floatFromInt(stroke_curve_segments * 4));
         const next = icon_vector.Point{
-            .x = cx + @cos(turn * std.math.tau) * rx,
-            .y = cy + @sin(turn * std.math.tau) * ry,
+            .x = cx + @cos(turn * math.tau) * rx,
+            .y = cy + @sin(turn * math.tau) * ry,
         };
         strokeSegment(width, height, out, stroke_width, previous, next, stroke_antialias_width, curve_stroke_coverage_boost);
         previous = next;
@@ -530,7 +531,7 @@ fn svgArcGeometry(start: icon_vector.Point, arc: icon_vector.Arc) ?SvgArcGeometr
     const rx_start = @abs(arc.rx);
     const ry_start = @abs(arc.ry);
     if (rx_start <= 0.0 or ry_start <= 0.0) return null;
-    const phi = arc.x_axis_rotation * std.math.pi / 180.0;
+    const phi = arc.x_axis_rotation * math.pi / 180.0;
     const cos_phi = @cos(phi);
     const sin_phi = @sin(phi);
     const dx = (start.x - arc.end.x) * 0.5;
@@ -559,8 +560,8 @@ fn svgArcGeometry(start: icon_vector.Point, arc: icon_vector.Arc) ?SvgArcGeometr
     const v1 = icon_vector.Point{ .x = (-x1p - cxp) / rx, .y = (-y1p - cyp) / ry };
     const start_angle = vectorAngle(.{ .x = 1.0, .y = 0.0 }, v0);
     var delta = vectorAngle(v0, v1);
-    if (!arc.sweep and delta > 0.0) delta -= std.math.tau;
-    if (arc.sweep and delta < 0.0) delta += std.math.tau;
+    if (!arc.sweep and delta > 0.0) delta -= math.tau;
+    if (arc.sweep and delta < 0.0) delta += math.tau;
     return .{
         .center = center,
         .rx = rx,
@@ -574,13 +575,13 @@ fn svgArcGeometry(start: icon_vector.Point, arc: icon_vector.Arc) ?SvgArcGeometr
 
 fn arcStepCount(delta: f32, arc: icon_vector.Arc) usize {
     const divisor = if (arc.large_arc) stroke_large_arc_step_divisor else stroke_arc_step_divisor;
-    return @max(4, @as(usize, @intFromFloat(@ceil(@abs(delta) * divisor / std.math.pi))));
+    return @max(4, @as(usize, @intFromFloat(@ceil(@abs(delta) * divisor / math.pi))));
 }
 
 fn vectorAngle(left: icon_vector.Point, right: icon_vector.Point) f32 {
     const dot = left.x * right.x + left.y * right.y;
     const det = left.x * right.y - left.y * right.x;
-    return std.math.atan2(det, dot);
+    return math.atan2F(det, dot);
 }
 
 fn iconStroke(width: usize, height: usize, stroke_width: f32) f32 {
@@ -611,7 +612,7 @@ fn strokeCoverageAlpha(radius: f32, distance: f32, antialias_width_value: f32, b
         t + coverage_boost * (t - stroke_coverage_boost_floor) * (1.0 - t)
     else
         t;
-    return @intFromFloat(@round(std.math.clamp(coverage, 0.0, 1.0) * 255.0));
+    return @intFromFloat(@round(math.clampF(coverage, 0.0, 1.0) * 255.0));
 }
 
 test "icon mask leaves github outline path unpainted" {

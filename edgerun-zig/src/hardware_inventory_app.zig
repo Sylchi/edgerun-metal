@@ -199,7 +199,7 @@ fn ready(inventory: hardware_inventory.Inventory) bool {
 }
 
 fn countToU16(value: usize) u16 {
-    return @intCast(@min(value, std.math.maxInt(u16)));
+    return @intCast(@min(value, 0xFFFF));
 }
 
 fn detailOffset(row: usize) usize {

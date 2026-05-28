@@ -1,4 +1,6 @@
 const std = @import("std");
+const math = @import("math.zig");
+const bytes = @import("bytes.zig");
 const component_gallery = @import("component_gallery.zig");
 const card_component = @import("ui/components/Card.zig");
 const row_item_component = @import("ui/components/RowItem.zig");
@@ -248,8 +250,8 @@ fn renderContextMenuPanel(scene: *ui.Scene, collector: *interaction.Collector, b
     const menu_w: f32 = 280.0;
     const menu_h: f32 = 88.0;
     const pad: f32 = 10.0;
-    const x = std.math.clamp(menu.x, bounds.x + pad, bounds.x + @max(pad, bounds.w - menu_w - pad));
-    const y = std.math.clamp(menu.y, bounds.y + pad, bounds.y + @max(pad, bounds.h - menu_h - pad));
+    const x = math.clampF(menu.x, bounds.x + pad, bounds.x + @max(pad, bounds.w - menu_w - pad));
+    const y = math.clampF(menu.y, bounds.y + pad, bounds.y + @max(pad, bounds.h - menu_h - pad));
     const panel = ui.Rect.init(x, y, menu_w, menu_h);
     try scene.pushRect(panel, palette.shadow, .shadow, design.surface_radius, 16.0);
     try (card_component.Card{
@@ -327,7 +329,7 @@ test "app frame uses source editor as workspace shell without nested chrome" {
             .workspace_bytes = 2048,
             .file_bytes = 28,
             .release_bytes = 4096,
-            .status = "ready: editing src/app_runtime.zig inside the app-owned VFS object",
+            .status = "ready: editing the app-owned VFS object",
         },
     });
 
@@ -336,9 +338,9 @@ test "app frame uses source editor as workspace shell without nested chrome" {
     const top_bottom = workspace_top_h;
     const status_top = 800.0 - workspace_status_h;
 
-    try std.testing.expectEqual(@as(usize, 1), countText(scene.written(), "EXPLORER"));
-    try std.testing.expectEqual(@as(usize, 1), countText(scene.written(), "EdgeRun Workspace"));
-    try std.testing.expectEqual(@as(usize, 1), countText(scene.written(), "APP-OWNED VFS"));
+    try std.testing.expectEqual(@as(usize, 1), countText(scene.written(), "WORKSPACE"));
+    try std.testing.expectEqual(@as(usize, 1), countText(scene.written(), "src/app_runtime.zig"));
+    try std.testing.expectEqual(@as(usize, 1), countText(scene.written(), "app-owned VFS"));
     try std.testing.expectEqual(@as(usize, 0), countText(scene.written(), "artifact.wasm"));
 
     try expectHitWithin(collector.written(), app_navigation.sourceActionButtonId(.compile), ui.Rect.init(workspace_rail_w, 0.0, 1280.0 - workspace_rail_w, workspace_top_h));
@@ -358,7 +360,7 @@ test "app frame renders agent as a usable workspace tab" {
 
     try render(&scene, &collector, ui.Rect.init(0, 0, 1280, 800), .{ .route = .{ .view = .agent } });
 
-    try std.testing.expect(hasText(scene.written(), "Owned local agent"));
+    try std.testing.expect(hasText(scene.written(), "Owned local agent pipeline"));
     try expectHit(collector.written(), app_agent.run_hit_id);
     try expectHit(collector.written(), app_agent.input_hit_id);
 }
@@ -444,7 +446,7 @@ fn expectNoDirectAppRenderImports(source: []const u8) !void {
 
 fn hasText(commands: []const ui.Command, value: []const u8) bool {
     for (commands) |command| switch (command) {
-        .text => |text| if (std.mem.eql(u8, text.value, value)) return true,
+        .text => |text| if (bytes.eql(text.value, value)) return true,
         else => {},
     };
     return false;
@@ -454,7 +456,7 @@ fn countText(commands: []const ui.Command, value: []const u8) usize {
     var count: usize = 0;
     for (commands) |command| switch (command) {
         .text => |text| {
-            if (std.mem.eql(u8, text.value, value)) count += 1;
+            if (bytes.eql(text.value, value)) count += 1;
         },
         else => {},
     };

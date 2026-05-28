@@ -1,4 +1,5 @@
 const std = @import("std");
+const bytes_mod = @import("../../bytes.zig");
 const ui = @import("../../ui.zig");
 const common = @import("../common.zig");
 const raw_vp8 = @import("../vp8.zig");
@@ -364,8 +365,8 @@ const test_webp_vp8l_meta_prefix_multi_len: usize = 96;
 const test_webp_vp8l_meta_prefix_three_group_len: usize = 128;
 pub fn isWebp(bytes: []const u8) bool {
     return bytes.len >= riff_header_size and
-        std.mem.eql(u8, bytes[0..4], riff_signature) and
-        std.mem.eql(u8, bytes[8..12], webp_signature);
+        bytes_mod.eql(bytes[0..4], riff_signature) and
+        bytes_mod.eql(bytes[8..12], webp_signature);
 }
 pub fn decodeWebpHeader(bytes: []const u8) DecodeError!Header {
     return (try parseWebp(bytes)).header;
@@ -455,7 +456,7 @@ pub const WebpAnimationCanvasDecoder = struct {
     fn readNextFrameInfo(self: *WebpAnimationCanvasDecoder) DecodeError!WebpAnimationFrameInfoWithPayload {
         while (self.cursor < self.bytes.len) {
             const chunk = try readWebpChunk(self.bytes, &self.cursor);
-            if (std.mem.eql(u8, chunk.chunk_type, webp_chunk_anmf)) {
+            if (bytes_mod.eql(chunk.chunk_type, webp_chunk_anmf)) {
                 return parseWebpAnmf(chunk.data, self.header.canvas);
             } else if (isMetadataWebpChunk(chunk.chunk_type)) {
                 continue;
@@ -534,14 +535,14 @@ fn webpScratchByteLenChecked(bytes: []const u8, width: usize, height: usize) Dec
     const info = try parseWebp(bytes);
     if (info.header.width != width or info.header.height != height) return error.BadImage;
     if ((info.feature_flags & webp_vp8x_decode_blocking_flags) != 0) return error.UnsupportedImage;
-    const vp8_scratch = if (std.mem.eql(u8, info.chunk_type, webp_chunk_vp8) or info.vp8_data != null)
+    const vp8_scratch = if (bytes_mod.eql(info.chunk_type, webp_chunk_vp8) or info.vp8_data != null)
         try vp8VideoReferenceByteLen(info.header)
     else
         0;
     if (info.alpha_data) |alpha_data| return checkedAdd(vp8_scratch, try webpAlphaScratchByteLen(alpha_data, info.header));
-    if (std.mem.eql(u8, info.chunk_type, webp_chunk_vp8)) return vp8_scratch;
+    if (bytes_mod.eql(info.chunk_type, webp_chunk_vp8)) return vp8_scratch;
     if (info.vp8_data != null) return vp8_scratch;
-    if (!std.mem.eql(u8, info.chunk_type, webp_chunk_vp8l)) return 0;
+    if (!bytes_mod.eql(info.chunk_type, webp_chunk_vp8l)) return 0;
 
     return webpVp8lScratchByteLen(bytes.len, info.header);
 }
@@ -587,12 +588,12 @@ pub fn decodeWebp(bytes: []const u8, out: []ui.Color) DecodeError!Header {
 pub fn decodeWebpWithScratch(bytes: []const u8, out: []ui.Color, scratch: []u8) DecodeError!Header {
     const info = try parseWebp(bytes);
     if ((info.feature_flags & webp_vp8x_decode_blocking_flags) != 0) return error.UnsupportedImage;
-    if (std.mem.eql(u8, info.chunk_type, webp_chunk_vp8)) {
+    if (bytes_mod.eql(info.chunk_type, webp_chunk_vp8)) {
         return decodeVp8FrameWithAlpha(info.primary_data, info.alpha_data, info.header, out, scratch);
-    } else if (std.mem.eql(u8, info.chunk_type, webp_chunk_vp8l)) {
+    } else if (bytes_mod.eql(info.chunk_type, webp_chunk_vp8l)) {
         if (info.alpha_data != null) return error.BadImage;
         return decodeVp8lFrame(info.primary_data, info.header, out, scratch);
-    } else if (std.mem.eql(u8, info.chunk_type, webp_chunk_vp8x)) {
+    } else if (bytes_mod.eql(info.chunk_type, webp_chunk_vp8x)) {
         if (info.vp8_data) |vp8_data| return decodeVp8FrameWithAlpha(vp8_data, info.alpha_data, info.header, out, scratch);
     }
     return error.UnsupportedImage;
@@ -760,13 +761,13 @@ fn parseWebpAnimationStart(bytes: []const u8) DecodeError!WebpAnimationStart {
     while (cursor < bytes.len) {
         const chunk_cursor = cursor;
         const chunk = try readWebpChunk(bytes, &cursor);
-        if (std.mem.eql(u8, chunk.chunk_type, webp_chunk_vp8x)) {
+        if (bytes_mod.eql(chunk.chunk_type, webp_chunk_vp8x)) {
             if (vp8x != null or anim != null or frame_count != 0) return error.BadImage;
             vp8x = try parseWebpVp8x(chunk.data);
-        } else if (std.mem.eql(u8, chunk.chunk_type, webp_chunk_anim)) {
+        } else if (bytes_mod.eql(chunk.chunk_type, webp_chunk_anim)) {
             if (vp8x == null or anim != null or frame_count != 0) return error.BadImage;
             anim = try parseWebpAnim(chunk.data);
-        } else if (std.mem.eql(u8, chunk.chunk_type, webp_chunk_anmf)) {
+        } else if (bytes_mod.eql(chunk.chunk_type, webp_chunk_anmf)) {
             if (vp8x == null or anim == null) return error.BadImage;
             if (frame_cursor == null) frame_cursor = chunk_cursor;
             const frame = try parseWebpAnmf(chunk.data, vp8x.?.header);
@@ -774,9 +775,9 @@ fn parseWebpAnimationStart(bytes: []const u8) DecodeError!WebpAnimationStart {
             frame_count = try checkedAdd(frame_count, 1);
         } else if (isMetadataWebpChunk(chunk.chunk_type)) {
             continue;
-        } else if (std.mem.eql(u8, chunk.chunk_type, webp_chunk_vp8) or
-            std.mem.eql(u8, chunk.chunk_type, webp_chunk_vp8l) or
-            std.mem.eql(u8, chunk.chunk_type, webp_chunk_alph))
+        } else if (bytes_mod.eql(chunk.chunk_type, webp_chunk_vp8) or
+            bytes_mod.eql(chunk.chunk_type, webp_chunk_vp8l) or
+            bytes_mod.eql(chunk.chunk_type, webp_chunk_alph))
         {
             return error.BadImage;
         } else if (isCriticalWebpChunk(chunk.chunk_type)) {
@@ -807,15 +808,15 @@ fn parseWebpAnimationFrameInfo(bytes: []const u8, target_frame_index: usize) Dec
     var frame_index: usize = 0;
     while (cursor < bytes.len) {
         const chunk = try readWebpChunk(bytes, &cursor);
-        if (std.mem.eql(u8, chunk.chunk_type, webp_chunk_vp8x)) {
+        if (bytes_mod.eql(chunk.chunk_type, webp_chunk_vp8x)) {
             if (vp8x != null or saw_anim or frame_index != 0) return error.BadImage;
             vp8x = try parseWebpVp8x(chunk.data);
             if ((vp8x.?.flags & webp_vp8x_flag_animation) == 0) return error.BadImage;
-        } else if (std.mem.eql(u8, chunk.chunk_type, webp_chunk_anim)) {
+        } else if (bytes_mod.eql(chunk.chunk_type, webp_chunk_anim)) {
             if (vp8x == null or saw_anim or frame_index != 0) return error.BadImage;
             _ = try parseWebpAnim(chunk.data);
             saw_anim = true;
-        } else if (std.mem.eql(u8, chunk.chunk_type, webp_chunk_anmf)) {
+        } else if (bytes_mod.eql(chunk.chunk_type, webp_chunk_anmf)) {
             if (vp8x == null or !saw_anim) return error.BadImage;
             const frame = try parseWebpAnmf(chunk.data, vp8x.?.header);
             try validateWebpAnimationFramePayload(frame.payload, .{ .width = frame.width, .height = frame.height });
@@ -823,9 +824,9 @@ fn parseWebpAnimationFrameInfo(bytes: []const u8, target_frame_index: usize) Dec
             frame_index = try checkedAdd(frame_index, 1);
         } else if (isMetadataWebpChunk(chunk.chunk_type)) {
             continue;
-        } else if (std.mem.eql(u8, chunk.chunk_type, webp_chunk_vp8) or
-            std.mem.eql(u8, chunk.chunk_type, webp_chunk_vp8l) or
-            std.mem.eql(u8, chunk.chunk_type, webp_chunk_alph))
+        } else if (bytes_mod.eql(chunk.chunk_type, webp_chunk_vp8) or
+            bytes_mod.eql(chunk.chunk_type, webp_chunk_vp8l) or
+            bytes_mod.eql(chunk.chunk_type, webp_chunk_alph))
         {
             return error.BadImage;
         } else if (isCriticalWebpChunk(chunk.chunk_type)) {
@@ -842,13 +843,13 @@ fn decodeWebpAnimationFramePayload(data: []const u8, expected_header: Header, ou
     var vp8l_data: ?[]const u8 = null;
     while (cursor < data.len) {
         const chunk = try readWebpFrameChunk(data, &cursor);
-        if (std.mem.eql(u8, chunk.chunk_type, webp_chunk_alph)) {
+        if (bytes_mod.eql(chunk.chunk_type, webp_chunk_alph)) {
             if (alpha_data != null or vp8_data != null or vp8l_data != null) return error.BadImage;
             alpha_data = chunk.data;
-        } else if (std.mem.eql(u8, chunk.chunk_type, webp_chunk_vp8)) {
+        } else if (bytes_mod.eql(chunk.chunk_type, webp_chunk_vp8)) {
             if (vp8_data != null or vp8l_data != null) return error.BadImage;
             vp8_data = chunk.data;
-        } else if (std.mem.eql(u8, chunk.chunk_type, webp_chunk_vp8l)) {
+        } else if (bytes_mod.eql(chunk.chunk_type, webp_chunk_vp8l)) {
             if (vp8_data != null or vp8l_data != null or alpha_data != null) return error.BadImage;
             vp8l_data = chunk.data;
         } else if (isMetadataWebpChunk(chunk.chunk_type)) {
@@ -870,15 +871,15 @@ fn webpAnimationPayloadScratchByteLen(data: []const u8, expected_header: Header)
     var vp8l_data: ?[]const u8 = null;
     while (cursor < data.len) {
         const chunk = try readWebpFrameChunk(data, &cursor);
-        if (std.mem.eql(u8, chunk.chunk_type, webp_chunk_alph)) {
+        if (bytes_mod.eql(chunk.chunk_type, webp_chunk_alph)) {
             if (alpha_data != null or vp8_data != null or vp8l_data != null) return error.BadImage;
             alpha_data = chunk.data;
-        } else if (std.mem.eql(u8, chunk.chunk_type, webp_chunk_vp8)) {
+        } else if (bytes_mod.eql(chunk.chunk_type, webp_chunk_vp8)) {
             if (vp8_data != null or vp8l_data != null) return error.BadImage;
             const header = try raw_vp8.parseKeyFrameHeader(chunk.data);
             if (header.width != expected_header.width or header.height != expected_header.height) return error.UnsupportedImage;
             vp8_data = chunk.data;
-        } else if (std.mem.eql(u8, chunk.chunk_type, webp_chunk_vp8l)) {
+        } else if (bytes_mod.eql(chunk.chunk_type, webp_chunk_vp8l)) {
             if (vp8_data != null or vp8l_data != null or alpha_data != null) return error.BadImage;
             const header = try parseWebpVp8lHeader(chunk.data);
             if (header.width != expected_header.width or header.height != expected_header.height) return error.UnsupportedImage;
@@ -1007,7 +1008,7 @@ const WebpChunk = struct {
 fn validateWebpRiffLen(bytes: []const u8) DecodeError!void {
     const riff_len: usize = readU32Le(bytes[4..][0..4]);
     if (riff_len < 4) return error.BadImage;
-    if (riff_len > std.math.maxInt(usize) - 8) return error.PixelBudget;
+    if (riff_len > ~@as(usize, 0) - 8) return error.PixelBudget;
     if (riff_len + 8 != bytes.len) return error.BadImage;
 }
 
@@ -1168,20 +1169,20 @@ fn parseWebp(bytes: []const u8) DecodeError!WebpInfo {
     while (cursor < bytes.len) {
         const chunk = try readWebpChunk(bytes, &cursor);
 
-        if (std.mem.eql(u8, chunk.chunk_type, webp_chunk_vp8x)) {
+        if (bytes_mod.eql(chunk.chunk_type, webp_chunk_vp8x)) {
             if (saw_primary or header != null) return error.BadImage;
             const vp8x = try parseWebpVp8x(chunk.data);
             header = vp8x.header;
             feature_flags = vp8x.flags;
             primary_chunk = webp_chunk_vp8x;
             primary_data = chunk.data;
-        } else if (std.mem.eql(u8, chunk.chunk_type, webp_chunk_vp8l)) {
+        } else if (bytes_mod.eql(chunk.chunk_type, webp_chunk_vp8l)) {
             if (saw_primary) return error.BadImage;
             if (header == null) header = try parseWebpVp8lHeader(chunk.data);
             primary_chunk = webp_chunk_vp8l;
             primary_data = chunk.data;
             saw_primary = true;
-        } else if (std.mem.eql(u8, chunk.chunk_type, webp_chunk_vp8)) {
+        } else if (bytes_mod.eql(chunk.chunk_type, webp_chunk_vp8)) {
             if (saw_primary) return error.BadImage;
             if (header == null) {
                 header = try raw_vp8.parseKeyFrameHeader(chunk.data);
@@ -1192,7 +1193,7 @@ fn parseWebp(bytes: []const u8) DecodeError!WebpInfo {
             if (primary_data.len == 0) primary_data = chunk.data;
             vp8_data = chunk.data;
             saw_primary = true;
-        } else if (std.mem.eql(u8, chunk.chunk_type, webp_chunk_alph)) {
+        } else if (bytes_mod.eql(chunk.chunk_type, webp_chunk_alph)) {
             if (alpha_data != null or saw_primary or header == null) return error.BadImage;
             alpha_data = chunk.data;
         } else if (isMetadataWebpChunk(chunk.chunk_type)) {
@@ -1930,7 +1931,7 @@ fn divTruncVp8l(numerator: i16, denominator: i16) i16 {
 
 fn clampVp8lChannel(value: i16) u8 {
     if (value < 0) return 0;
-    if (value > std.math.maxInt(u8)) return std.math.maxInt(u8);
+    if (value > 255) return 255;
     return @intCast(value);
 }
 
@@ -2909,7 +2910,7 @@ fn vp8SimpleThreshold(segment: Vp8LoopFilterSegment, filter_limit: u8) bool {
 
 fn vp8NormalThreshold(segment: Vp8LoopFilterSegment, edge_limit: u8, interior_limit: u8) bool {
     const filter_limit = 2 * @as(u16, edge_limit) + @as(u16, interior_limit);
-    return vp8SimpleThreshold(segment, @intCast(@min(filter_limit, std.math.maxInt(u8)))) and
+    return vp8SimpleThreshold(segment, @intCast(@min(filter_limit, 255))) and
         vp8AbsDiff(segment.p3, segment.p2) <= interior_limit and
         vp8AbsDiff(segment.p2, segment.p1) <= interior_limit and
         vp8AbsDiff(segment.p1, segment.p0) <= interior_limit and
@@ -4318,7 +4319,7 @@ fn parseVp8MacroblockHeaders(frame_header: *const Vp8CompressedFrameHeader) Deco
     var reader = frame_header.reader;
     const mb_w = vp8MacroblockDimension(frame_header.header.width);
     const mb_h = vp8MacroblockDimension(frame_header.header.height);
-    if (mb_w > std.math.maxInt(usize) / mb_h) return error.PixelBudget;
+    if (mb_w > ~@as(usize, 0) / mb_h) return error.PixelBudget;
     const macroblock_count = mb_w * mb_h;
     var intra4_mode_state = Vp8Intra4ModeState.init(frame_header.header.width);
     var inter_mode_state = Vp8InterModeState.init(frame_header.header.width);
@@ -5381,14 +5382,14 @@ fn isCriticalWebpChunk(chunk_type: []const u8) bool {
 }
 
 fn isMetadataWebpChunk(chunk_type: []const u8) bool {
-    return std.mem.eql(u8, chunk_type, webp_chunk_iccp) or
-        std.mem.eql(u8, chunk_type, webp_chunk_exif) or
-        std.mem.eql(u8, chunk_type, webp_chunk_xmp);
+    return bytes_mod.eql(chunk_type, webp_chunk_iccp) or
+        bytes_mod.eql(chunk_type, webp_chunk_exif) or
+        bytes_mod.eql(chunk_type, webp_chunk_xmp);
 }
 
 fn isUnsupportedWebpImageChunk(chunk_type: []const u8) bool {
-    return std.mem.eql(u8, chunk_type, webp_chunk_anim) or
-        std.mem.eql(u8, chunk_type, webp_chunk_anmf);
+    return bytes_mod.eql(chunk_type, webp_chunk_anim) or
+        bytes_mod.eql(chunk_type, webp_chunk_anmf);
 }
 
 test "webp decoder parses vp8x dimensions through shared header path" {

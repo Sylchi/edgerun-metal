@@ -412,7 +412,7 @@ fn dirtyTilesMarkIrIcons(plan: TilePlan, values: []const f32, tile_marks: []u8, 
 }
 
 fn dirtyInputsValid(plan: TilePlan, tile_marks: []u8, list: *const DirtyTileList) bool {
-    return plan.tile_count > 0 and plan.tile_count <= tile_marks.len and plan.tile_count <= std.math.maxInt(u32) and list.tile_ids.len >= plan.max_dirty_tiles;
+    return plan.tile_count > 0 and plan.tile_count <= tile_marks.len and plan.tile_count <= ~@as(u32, 0) and list.tile_ids.len >= plan.max_dirty_tiles;
 }
 
 fn divCeil(value: u32, divisor: u32) u32 {

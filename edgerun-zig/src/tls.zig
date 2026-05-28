@@ -456,7 +456,7 @@ fn parseServerKeyShare(out: *ServerHello, data: []const u8) Error!void {
 }
 
 fn hostValid(host: []const u8) bool {
-    if (host.len == 0 or host.len > std.math.maxInt(u16)) return false;
+    if (host.len == 0 or host.len > 0xFFFF) return false;
     for (host) |c| {
         switch (c) {
             'a'...'z', 'A'...'Z', '0'...'9', '.', '-' => {},

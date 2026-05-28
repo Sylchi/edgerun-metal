@@ -331,7 +331,7 @@ fn sourceAlpha(source: ui.Color, format: PixelFormat, opacity: u8) u8 {
 }
 
 const max_alpha: u8 = 255;
-const max_i32: u32 = @intCast(std.math.maxInt(i32));
+const max_i32: u32 = @intCast(2147483647);
 
 test "compositor composites app surface pixels into the target" {
     const red = ui.Color{ .r = 255, .g = 0, .b = 0 };

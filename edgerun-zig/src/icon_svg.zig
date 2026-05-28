@@ -1,6 +1,8 @@
 const std = @import("std");
+const bytes = @import("bytes.zig");
 const icon = @import("icon.zig");
 const icon_vector = @import("icon_vector.zig");
+const math = @import("math.zig");
 
 const default_view_box = ViewBox{ .min_x = 0.0, .min_y = 0.0, .width = 24.0, .height = 24.0 };
 
@@ -1208,7 +1210,7 @@ fn svgRootTag(svg: []const u8) Error![]const u8 {
         const tag_end = try svgTagEnd(svg, tag_start);
         const tag = svg[tag_start..tag_end];
         search_index = tag_end + 1;
-        if (std.mem.startsWith(u8, tag, "<?") or std.mem.startsWith(u8, tag, "<!")) continue;
+        if (bytes.startsWith(tag, "<?") or bytes.startsWith(tag, "<!")) continue;
         if (tagHasName(tag, "svg")) return tag;
         return error.InvalidSvg;
     }
@@ -1298,8 +1300,8 @@ fn validCssSimpleName(value: []const u8) bool {
 fn skipCssWhitespaceAndComments(css: []const u8, index: *usize) Error!void {
     while (index.* < css.len) {
         while (index.* < css.len and std.ascii.isWhitespace(css[index.*])) : (index.* += 1) {}
-        if (index.* + css_comment_open.len <= css.len and std.mem.eql(u8, css[index.* .. index.* + css_comment_open.len], css_comment_open)) {
-            const close_offset = std.mem.indexOf(u8, css[index.* + css_comment_open.len ..], css_comment_close) orelse return error.InvalidSvg;
+        if (index.* + css_comment_open.len <= css.len and bytes.eql(css[index.* .. index.* + css_comment_open.len], css_comment_open)) {
+            const close_offset = bytes.indexOf(css[index.* + css_comment_open.len ..], css_comment_close) orelse return error.InvalidSvg;
             index.* = index.* + css_comment_open.len + close_offset + css_comment_close.len;
             continue;
         }
@@ -1364,7 +1366,7 @@ fn attrValueOptional(tag: []const u8, name: []const u8) Error!?[]const u8 {
         if (index >= tag.len) return error.InvalidSvg;
         const value = tag[value_start..index];
         index += 1;
-        if (std.mem.eql(u8, attr_name, name)) return value;
+        if (bytes.eql(attr_name, name)) return value;
     }
 }
 
@@ -2633,9 +2635,9 @@ fn findReferencedElement(svg: []const u8, id: []const u8) Error!ReferencedElemen
         const tag_end = try svgTagEnd(svg, tag_start);
         const tag = svg[tag_start..tag_end];
         search_index = tag_end + 1;
-        if (std.mem.startsWith(u8, tag, "</")) continue;
+        if (bytes.startsWith(tag, "</")) continue;
         if (try attrValueOptional(tag, "id")) |candidate| {
-            if (std.mem.eql(u8, candidate, id)) {
+            if (bytes.eql(candidate, id)) {
                 if (isReusableContainerOpenTag(tag) or isLinearGradientOpenTag(tag) or isRadialGradientOpenTag(tag) or isClipPathOpenTag(tag)) {
                     if (isSelfClosingTag(tag)) return .{ .tag = tag, .content_start = search_index, .content_end = search_index };
                     const close_start = try containerCloseStart(svg, search_index, tagName(tag));
@@ -2671,12 +2673,12 @@ fn parseTransform(raw: []const u8) Error!Transform {
 }
 
 fn parseTransformFunction(name: []const u8, args: []const u8) Error!Transform {
-    if (std.mem.eql(u8, name, "matrix")) return parseMatrix(args);
-    if (std.mem.eql(u8, name, "translate")) return parseTranslate(args);
-    if (std.mem.eql(u8, name, "scale")) return parseScale(args);
-    if (std.mem.eql(u8, name, "rotate")) return parseRotate(args);
-    if (std.mem.eql(u8, name, "skewX")) return parseSkewX(args);
-    if (std.mem.eql(u8, name, "skewY")) return parseSkewY(args);
+    if (bytes.eql(name, "matrix")) return parseMatrix(args);
+    if (bytes.eql(name, "translate")) return parseTranslate(args);
+    if (bytes.eql(name, "scale")) return parseScale(args);
+    if (bytes.eql(name, "rotate")) return parseRotate(args);
+    if (bytes.eql(name, "skewX")) return parseSkewX(args);
+    if (bytes.eql(name, "skewY")) return parseSkewY(args);
     return error.UnsupportedSvgElement;
 }
 
@@ -2775,15 +2777,15 @@ fn previousNonWhitespaceIs(data: []const u8, current_index: usize, expected: u8)
 }
 
 fn degreesToRadians(value: f32) f32 {
-    return value * std.math.pi / half_turn_degrees;
+    return value * math.pi / half_turn_degrees;
 }
 
 fn radiansToDegrees(value: f32) f32 {
-    return value * half_turn_degrees / std.math.pi;
+    return value * half_turn_degrees / math.pi;
 }
 
 fn isIgnorableTag(tag: []const u8) bool {
-    return std.mem.startsWith(u8, tag, "<!") or std.mem.startsWith(u8, tag, "<?") or std.mem.startsWith(u8, tag, "<svg") or std.mem.startsWith(u8, tag, "</svg");
+    return bytes.startsWith(tag, "<!") or bytes.startsWith(tag, "<?") or bytes.startsWith(tag, "<svg") or bytes.startsWith(tag, "</svg");
 }
 
 fn isGroupOpenTag(tag: []const u8) bool {
@@ -2791,7 +2793,7 @@ fn isGroupOpenTag(tag: []const u8) bool {
 }
 
 fn isGroupCloseTag(tag: []const u8) bool {
-    return std.mem.startsWith(u8, tag, "</g") and tagNameBoundary(tag, 3);
+    return bytes.startsWith(tag, "</g") and tagNameBoundary(tag, 3);
 }
 
 fn isSymbolOpenTag(tag: []const u8) bool {
@@ -2809,8 +2811,8 @@ fn isReusableContainerOpenTag(tag: []const u8) bool {
 fn isMetadataTag(tag: []const u8) bool {
     return tagHasName(tag, "title") or
         tagHasName(tag, "desc") or
-        (std.mem.startsWith(u8, tag, "</title") and tagNameBoundary(tag, 7)) or
-        (std.mem.startsWith(u8, tag, "</desc") and tagNameBoundary(tag, 6));
+        (bytes.startsWith(tag, "</title") and tagNameBoundary(tag, 7)) or
+        (bytes.startsWith(tag, "</desc") and tagNameBoundary(tag, 6));
 }
 
 fn isStyleTag(tag: []const u8) bool {
@@ -2848,7 +2850,7 @@ fn isClipPathCloseTag(tag: []const u8) bool {
 fn styleCloseStart(svg: []const u8, content_start: usize) ?usize {
     var search_index = content_start;
     while (search_index < svg.len) {
-        const offset = std.mem.indexOf(u8, svg[search_index..], "</style") orelse return null;
+        const offset = bytes.indexOf(svg[search_index..], "</style") orelse return null;
         const candidate = search_index + offset;
         const tag_end = svgTagEnd(svg, candidate) catch return null;
         const tag = svg[candidate..tag_end];
@@ -2893,7 +2895,7 @@ fn cssRuleMatchesTag(selector: CssSelector, tag: []const u8) Error!bool {
     return switch (selector) {
         .element => |name| tagHasName(tag, name),
         .class => |name| try tagClassContains(tag, name),
-        .id => |name| if (try attrValueOptional(tag, "id")) |value| std.mem.eql(u8, value, name) else false,
+        .id => |name| if (try attrValueOptional(tag, "id")) |value| bytes.eql(value, name) else false,
     };
 }
 
@@ -2905,7 +2907,7 @@ fn tagClassContains(tag: []const u8, name: []const u8) Error!bool {
         const end = start;
         var token_end = end;
         while (token_end < classes.len and !std.ascii.isWhitespace(classes[token_end])) : (token_end += 1) {}
-        if (token_end > start and std.mem.eql(u8, classes[start..token_end], name)) return true;
+        if (token_end > start and bytes.eql(classes[start..token_end], name)) return true;
         start = token_end;
     }
     return false;
@@ -2958,13 +2960,13 @@ fn svgContainsElementTag(svg: []const u8, name: []const u8) bool {
 
 fn skipSpecialMarkup(svg: []const u8, tag_start: usize, search_index: *usize) Error!bool {
     inline for (special_markup_spans) |span| {
-        if (std.mem.startsWith(u8, svg[tag_start..], span.open)) {
-            const end_offset = std.mem.indexOf(u8, svg[tag_start + span.open.len ..], span.close) orelse return error.InvalidSvg;
+        if (bytes.startsWith(svg[tag_start..], span.open)) {
+            const end_offset = bytes.indexOf(svg[tag_start + span.open.len ..], span.close) orelse return error.InvalidSvg;
             search_index.* = tag_start + span.open.len + end_offset + span.close.len;
             return true;
         }
     }
-    if (std.mem.startsWith(u8, svg[tag_start..], svg_doctype_open)) {
+    if (bytes.startsWith(svg[tag_start..], svg_doctype_open)) {
         search_index.* = try svgDoctypeEnd(svg, tag_start) + 1;
         return true;
     }
@@ -3016,19 +3018,19 @@ fn svgTagEnd(svg: []const u8, tag_start: usize) Error!usize {
 fn tagHasName(tag: []const u8, name: []const u8) bool {
     if (tag.len < name.len + 1) return false;
     if (tag[0] != '<') return false;
-    if (!std.mem.eql(u8, tag[1 .. 1 + name.len], name)) return false;
+    if (!bytes.eql(tag[1 .. 1 + name.len], name)) return false;
     return tagNameBoundary(tag, 1 + name.len);
 }
 
 fn tagCloseHasName(tag: []const u8, name: []const u8) bool {
     if (tag.len < name.len + 2) return false;
-    if (!std.mem.startsWith(u8, tag, "</")) return false;
-    if (!std.mem.eql(u8, tag[2 .. 2 + name.len], name)) return false;
+    if (!bytes.startsWith(tag, "</")) return false;
+    if (!bytes.eql(tag[2 .. 2 + name.len], name)) return false;
     return tagNameBoundary(tag, 2 + name.len);
 }
 
 fn tagName(tag: []const u8) []const u8 {
-    var index: usize = if (std.mem.startsWith(u8, tag, "</")) 2 else 1;
+    var index: usize = if (bytes.startsWith(tag, "</")) 2 else 1;
     const start = index;
     while (index < tag.len and !tagNameBoundary(tag, index)) : (index += 1) {}
     return tag[start..index];
@@ -3087,7 +3089,7 @@ fn parseSvgNumber(data: []const u8, index: *usize, comptime invalid_error: Error
 
 fn parseFiniteSvgFloat(raw: []const u8, comptime invalid_error: Error) Error!f32 {
     const value = std.fmt.parseFloat(f32, raw) catch return invalid_error;
-    if (!std.math.isFinite(value)) return invalid_error;
+    if (!math.isFiniteF(value)) return invalid_error;
     return value;
 }
 

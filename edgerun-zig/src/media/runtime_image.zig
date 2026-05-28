@@ -1,4 +1,5 @@
 const std = @import("std");
+const bytes = @import("../bytes.zig");
 const common = @import("common.zig");
 const ui = @import("../ui.zig");
 
@@ -38,10 +39,10 @@ pub const Header = struct {
 
     pub fn validRgba(self: Header) bool {
         if (self.width == 0 or self.height == 0) return false;
-        if (self.width > std.math.maxInt(u16) or self.height > std.math.maxInt(u16)) return false;
+        if (self.width > 0xFFFF or self.height > 0xFFFF) return false;
         if (self.tile_w == 0 or self.tile_h == 0) return false;
         if (self.tile_w > self.width or self.tile_h > self.height) return false;
-        if (self.tile_w > std.math.maxInt(u16) or self.tile_h > std.math.maxInt(u16)) return false;
+        if (self.tile_w > 0xFFFF or self.tile_h > 0xFFFF) return false;
         if (self.format != .rgba8 or self.flags != 0) return false;
         const expected_tiles = tileCountFor(self.width, self.height, self.tile_w, self.tile_h) catch return false;
         if (self.tile_count != expected_tiles) return false;
@@ -81,7 +82,7 @@ pub const View = struct {
 pub fn tileCountFor(width: usize, height: usize, tile_w: usize, tile_h: usize) common.DecodeError!u32 {
     if (width == 0 or height == 0 or tile_w == 0 or tile_h == 0) return error.BadImage;
     const count = try common.checkedMul(divRoundUp(width, tile_w), divRoundUp(height, tile_h));
-    if (count > std.math.maxInt(u32)) return error.PixelBudget;
+    if (count > ~@as(u32, 0)) return error.PixelBudget;
     return @intCast(count);
 }
 
@@ -115,9 +116,9 @@ pub fn encodeRgba(width: usize, height: usize, pixels: []const ui.Color, out: []
 
 pub fn encodeRgbaTiled(width: usize, height: usize, tile_w: usize, tile_h: usize, pixels: []const ui.Color, out: []u8) common.EncodeError![]u8 {
     if (width == 0 or height == 0 or tile_w == 0 or tile_h == 0) return error.BadImage;
-    if (width > std.math.maxInt(u16) or height > std.math.maxInt(u16)) return error.BadImage;
+    if (width > 0xFFFF or height > 0xFFFF) return error.BadImage;
     if (tile_w > width or tile_h > height) return error.BadImage;
-    if (tile_w > std.math.maxInt(u16) or tile_h > std.math.maxInt(u16)) return error.BadImage;
+    if (tile_w > 0xFFFF or tile_h > 0xFFFF) return error.BadImage;
     const pixel_count = std.math.mul(usize, width, height) catch return error.OutputBudget;
     if (pixels.len < pixel_count) return error.BadImage;
     const payload_len = rgbaPayloadLenForTiling(width, height, tile_w, tile_h) catch return error.OutputBudget;
@@ -154,7 +155,7 @@ pub fn encodeRgbaTiled(width: usize, height: usize, tile_w: usize, tile_h: usize
 
 pub fn decode(canonical: []const u8) common.DecodeError!View {
     if (canonical.len < header_size) return error.BadImage;
-    if (!std.mem.eql(u8, canonical[0..magic.len], magic)) return error.UnsupportedImage;
+    if (!bytes.eql(canonical[0..magic.len], magic)) return error.UnsupportedImage;
     if (readU16Le(canonical[8..10]) != abi_version) return error.UnsupportedImage;
     const format: Format = switch (readU16Le(canonical[10..12])) {
         @intFromEnum(Format.rgba8) => .rgba8,
@@ -333,5 +334,5 @@ test "runtime image rejects noncanonical trailing bytes" {
 test "runtime image rejects oversized single-tile dimensions" {
     const pixels = [_]ui.Color{.{ .r = 1, .g = 2, .b = 3, .a = 255 }};
     var canonical: [header_size + @sizeOf(ui.Color)]u8 = undefined;
-    try std.testing.expectError(error.BadImage, encodeRgba(std.math.maxInt(u16) + 1, 1, &pixels, &canonical));
+    try std.testing.expectError(error.BadImage, encodeRgba(0xFFFF + 1, 1, &pixels, &canonical));
 }

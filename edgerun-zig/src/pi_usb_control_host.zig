@@ -1,4 +1,5 @@
 const std = @import("std");
+const bytes = @import("bytes.zig");
 const control = @import("pi_usb_control.zig");
 
 const linux = std.os.linux;
@@ -6,7 +7,7 @@ const posix = std.posix;
 
 const timeout_ms: u32 = 5000;
 const wait_poll_ms: u32 = 250;
-const wait_forever_ms: u32 = std.math.maxInt(u32);
+const wait_forever_ms: u32 = ~@as(u32, 0);
 
 const UsbBulkTransfer = extern struct {
     endpoint: c_uint,
@@ -75,12 +76,12 @@ fn parseOptions(args: []const [:0]const u8) !Options {
     var wait = false;
     var wait_timeout_ms: u32 = wait_forever_ms;
     var index: usize = 1;
-    while (index < args.len and std.mem.startsWith(u8, args[index], "--")) : (index += 1) {
-        if (std.mem.eql(u8, args[index], "--wait")) {
+    while (index < args.len and bytes.startsWith(args[index], "--")) : (index += 1) {
+        if (bytes.eql(args[index], "--wait")) {
             wait = true;
-        } else if (std.mem.eql(u8, args[index], "--dry-run")) {
+        } else if (bytes.eql(args[index], "--dry-run")) {
             dry_run = true;
-        } else if (std.mem.eql(u8, args[index], "--wait-ms")) {
+        } else if (bytes.eql(args[index], "--wait-ms")) {
             index += 1;
             if (index >= args.len) return error.InvalidArguments;
             wait = true;
@@ -93,16 +94,16 @@ fn parseOptions(args: []const [:0]const u8) !Options {
 
     const verb = args[index];
     index += 1;
-    const command: CommandLine = if (std.mem.eql(u8, verb, "gpio-read")) blk: {
+    const command: CommandLine = if (bytes.eql(verb, "gpio-read")) blk: {
         if (index + 1 != args.len) return error.InvalidArguments;
         break :blk .{ .gpio_read = try std.fmt.parseUnsigned(u32, args[index], 0) };
-    } else if (std.mem.eql(u8, verb, "gpio-write")) blk: {
+    } else if (bytes.eql(verb, "gpio-write")) blk: {
         if (index + 2 != args.len) return error.InvalidArguments;
         break :blk .{ .gpio_write = .{
             .pin = try std.fmt.parseUnsigned(u32, args[index], 0),
             .value = try std.fmt.parseUnsigned(u32, args[index + 1], 0),
         } };
-    } else if (std.mem.eql(u8, verb, "memory-read")) blk: {
+    } else if (bytes.eql(verb, "memory-read")) blk: {
         if (index + 2 != args.len) return error.InvalidArguments;
         break :blk .{ .memory_read = .{
             .address = try std.fmt.parseUnsigned(u64, args[index], 0),

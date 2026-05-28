@@ -1,4 +1,5 @@
 const std = @import("std");
+const bytes = @import("bytes.zig");
 const interaction = @import("ui_interaction.zig");
 const ui = @import("ui.zig");
 const text_component = @import("ui/components/Text.zig");
@@ -341,7 +342,7 @@ pub const doc_pages = [_]DocPage{
 
 pub fn indexBySlug(slug: []const u8) ?usize {
     for (doc_pages, 0..) |page, index| {
-        if (std.mem.eql(u8, page.slug, slug)) return index;
+        if (bytes.eql(page.slug, slug)) return index;
     }
     return null;
 }
@@ -1059,7 +1060,7 @@ test "docs navigation surfaces render through shared components" {
 
 fn hasText(commands: []const ui.Command, value: []const u8) bool {
     for (commands) |command| switch (command) {
-        .text => |text_command| if (std.mem.eql(u8, text_command.value, value)) return true,
+        .text => |text_command| if (bytes.eql(text_command.value, value)) return true,
         else => {},
     };
     return false;

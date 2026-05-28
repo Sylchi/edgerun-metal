@@ -126,7 +126,7 @@ pub const DecodedEntry = struct {
 
 pub fn decode(canonical: []const u8, out_entries: []Entry) Error!Metadata {
     if (canonical.len < header_size) return error.Corrupt;
-    if (!std.mem.eql(u8, canonical[0..magic.len], magic)) return error.Corrupt;
+    if (!bytes.eql(canonical[0..magic.len], magic)) return error.Corrupt;
     if ((bytes.load16(canonical[8..10]) orelse return error.Corrupt) != version) return error.Corrupt;
     if ((bytes.load16(canonical[10..12]) orelse return error.Corrupt) != 0) return error.Corrupt;
     const confidence_ppm = bytes.load32(canonical[12..16]) orelse return error.Corrupt;

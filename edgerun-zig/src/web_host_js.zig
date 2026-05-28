@@ -1,9 +1,10 @@
 const std = @import("std");
+const bytes = @import("bytes.zig");
 
 pub const source = "";
 
 fn contains(needle: []const u8) bool {
-    return std.mem.indexOf(u8, source, needle) != null;
+    return bytes.indexOf(source, needle) != null;
 }
 
 test "web host javascript is empty because the browser bridge is the loader" {

@@ -1,4 +1,5 @@
 const std = @import("std");
+const bytes = @import("bytes.zig");
 const codec = @import("ui_codec.zig");
 const linux = std.os.linux;
 const posix = std.posix;
@@ -54,7 +55,7 @@ pub fn main(init: std.process.Init) !void {
     {
         var iter = dir0.iterate();
         while (try iter.next(init.io)) |entry| {
-            if (!std.mem.eql(u8, entry.name, "lo")) iface_count += 1;
+            if (!bytes.eql(entry.name, "lo")) iface_count += 1;
         }
     }
 
@@ -89,7 +90,7 @@ pub fn main(init: std.process.Init) !void {
         defer dir.close(init.io);
         var iter = dir.iterate();
         while (try iter.next(init.io)) |entry| {
-            if (std.mem.eql(u8, entry.name, "lo")) continue;
+            if (bytes.eql(entry.name, "lo")) continue;
             if (idx >= node_count) break;
 
             const ifname = entry.name;

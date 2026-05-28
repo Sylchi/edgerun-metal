@@ -118,24 +118,24 @@ pub fn main(init: std.process.Init) !void {
     var metadata_only = false;
     var synthetic_file_count: ?usize = null;
     var root_label = args.next() orelse default_root_label;
-    if (std.mem.eql(u8, root_label, host_graph_only_arg)) {
+    if (bytes.eql(root_label, host_graph_only_arg)) {
         host_graph_only = true;
         root_label = args.next() orelse default_root_label;
     }
-    if (std.mem.eql(u8, root_label, metadata_only_arg)) {
+    if (bytes.eql(root_label, metadata_only_arg)) {
         metadata_only = true;
         root_label = args.next() orelse default_root_label;
     }
-    if (std.mem.eql(u8, root_label, synthetic_arg)) {
+    if (bytes.eql(root_label, synthetic_arg)) {
         const count_text = args.next() orelse return error.MissingSyntheticFileCount;
         synthetic_file_count = try std.fmt.parseInt(usize, count_text, 10);
         root_label = synthetic_root_label;
     }
-    if (std.mem.eql(u8, root_label, metadata_only_arg)) {
+    if (bytes.eql(root_label, metadata_only_arg)) {
         metadata_only = true;
         root_label = args.next() orelse default_root_label;
     }
-    if (std.mem.eql(u8, root_label, synthetic_arg)) {
+    if (bytes.eql(root_label, synthetic_arg)) {
         const count_text = args.next() orelse return error.MissingSyntheticFileCount;
         synthetic_file_count = try std.fmt.parseInt(usize, count_text, 10);
         root_label = synthetic_root_label;
@@ -298,7 +298,7 @@ pub fn main(init: std.process.Init) !void {
                     @memcpy(successor_memory[source_ptr..][0..sample.len], sample);
                     source_commit_ok = try exportI32ArgOptional(&successor, output, "er_ui_source_workspace_commit", @intCast(sample.len));
                     source_len_after_commit = try exportI32Optional(&successor, output, "er_ui_source_workspace_len");
-                    if (capacity_i32 < std.math.maxInt(i32)) {
+                    if (capacity_i32 < ~@as(i32, 0) >> 1) {
                         source_commit_oversized = try exportI32ArgOptional(&successor, output, "er_ui_source_workspace_commit", capacity_i32 + 1);
                         source_len_after_oversized = try exportI32Optional(&successor, output, "er_ui_source_workspace_len");
                     }
@@ -344,7 +344,7 @@ pub fn main(init: std.process.Init) !void {
                     const release_len: usize = @intCast(release_len_i32);
                     if (artifact_ptr <= successor_memory.len and release_len <= successor_memory.len - artifact_ptr) {
                         const release = successor_memory[artifact_ptr..][0..release_len];
-                        self_compile_release_magic_ok = std.mem.eql(u8, release[0..wasm_magic.len], &wasm_magic);
+                        self_compile_release_magic_ok = bytes.eql(release[0..wasm_magic.len], &wasm_magic);
                         self_compile_release_hash = sourceHash(release);
                     }
                 }
@@ -391,7 +391,7 @@ pub fn main(init: std.process.Init) !void {
     std.debug.print("output.actual_ptr={d}\n", .{output_ptr});
     std.debug.print("output.bytes={d}\n", .{output_len});
     std.debug.print("output.hash=0x{x:0>8}\n", .{sourceHash(output)});
-    std.debug.print("output.embedded_source_offset={?d}\n", .{std.mem.indexOf(u8, output, source_bytes)});
+    std.debug.print("output.embedded_source_offset={?d}\n", .{bytes.indexOf(output, source_bytes)});
     std.debug.print("successor.export_source_ptr={d}\n", .{app_source_ptr});
     std.debug.print("successor.export_source_len={d}\n", .{app_source_len});
     std.debug.print("successor.export_source_hash=0x{x:0>8}\n", .{@as(u32, @bitCast(app_source_hash))});
@@ -595,7 +595,7 @@ fn sourceObjectEpoch() @TypeOf(@as(object.Header, undefined).epoch) {
 
 fn inspectVfs(source_bytes: []const u8, root_label: []const u8) !VfsStats {
     const view = try object.View.decode(source_bytes);
-    if (!std.mem.startsWith(u8, view.body, workspace_magic)) return error.NotWorkspace;
+    if (!bytes.startsWith(view.body, workspace_magic)) return error.NotWorkspace;
     const file_count = bytes.load32(view.body[12..16]) orelse return error.Corrupt;
     var stats = VfsStats{
         .file_count = file_count,
@@ -632,35 +632,35 @@ fn inspectVfs(source_bytes: []const u8, root_label: []const u8) !VfsStats {
         stats.source_body_bytes += file_view.body.len;
         const label = label_ref.labelSlice();
         insertTopFile(&stats.top_files, FileStat.init(label, file_view.body.len));
-        if (std.mem.startsWith(u8, label, "src/")) {
+        if (bytes.startsWith(label, "src/")) {
             stats.app_file_count += 1;
             stats.app_source_body_bytes += file_view.body.len;
         }
-        if (std.mem.startsWith(u8, label, "compiler/zig/")) {
+        if (bytes.startsWith(label, "compiler/zig/")) {
             stats.compiler_file_count += 1;
             stats.compiler_source_body_bytes += file_view.body.len;
         }
-        if (std.mem.startsWith(u8, label, "compiler/zig/src/")) {
+        if (bytes.startsWith(label, "compiler/zig/src/")) {
             stats.compiler_src_file_count += 1;
             stats.compiler_src_body_bytes += file_view.body.len;
         }
-        if (std.mem.startsWith(u8, label, "compiler/zig/src/codegen/")) {
+        if (bytes.startsWith(label, "compiler/zig/src/codegen/")) {
             stats.compiler_codegen_file_count += 1;
             stats.compiler_codegen_body_bytes += file_view.body.len;
         }
-        if (std.mem.startsWith(u8, label, "compiler/zig/src/link/")) {
+        if (bytes.startsWith(label, "compiler/zig/src/link/")) {
             stats.compiler_link_file_count += 1;
             stats.compiler_link_body_bytes += file_view.body.len;
         }
-        if (std.mem.startsWith(u8, label, "compiler/zig/lib/std/")) {
+        if (bytes.startsWith(label, "compiler/zig/lib/std/")) {
             stats.std_file_count += 1;
             stats.std_source_body_bytes += file_view.body.len;
         }
-        if (std.mem.startsWith(u8, label, "compiler/zig/lib/std/") and std.mem.endsWith(u8, label, "_test.zig")) {
+        if (bytes.startsWith(label, "compiler/zig/lib/std/") and bytes.endsWith(label, "_test.zig")) {
             stats.std_test_file_count += 1;
             stats.std_test_body_bytes += file_view.body.len;
         }
-        if (std.mem.eql(u8, label, root_label)) stats.root_source_bytes = file_view.body.len;
+        if (bytes.eql(label, root_label)) stats.root_source_bytes = file_view.body.len;
     }
     if (index != view.body.len) return error.Corrupt;
     if (stats.root_source_bytes == 0) return error.MissingRoot;
@@ -760,14 +760,14 @@ fn inspectImportGraph(source_bytes: []const u8, root_label: []const u8) !GraphSt
 
 fn workspaceFileCount(source_bytes: []const u8) !usize {
     const view = try object.View.decode(source_bytes);
-    if (!std.mem.startsWith(u8, view.body, workspace_magic)) return error.NotWorkspace;
+    if (!bytes.startsWith(view.body, workspace_magic)) return error.NotWorkspace;
     const file_count = bytes.load32(view.body[12..16]) orelse return error.Corrupt;
     return @intCast(file_count);
 }
 
 fn buildHostFileIndex(source_bytes: []const u8, files: []HostFileEntry) !usize {
     const view = try object.View.decode(source_bytes);
-    if (!std.mem.startsWith(u8, view.body, workspace_magic)) return error.NotWorkspace;
+    if (!bytes.startsWith(view.body, workspace_magic)) return error.NotWorkspace;
     const file_count = bytes.load32(view.body[12..16]) orelse return error.Corrupt;
     if (file_count > files.len) return error.OutOfMemory;
     var index: usize = workspace_header_bytes;
@@ -789,7 +789,7 @@ fn buildHostFileIndex(source_bytes: []const u8, files: []HostFileEntry) !usize {
 }
 
 fn hostFileLessThan(_: void, left: HostFileEntry, right: HostFileEntry) bool {
-    return std.mem.order(u8, left.label.slice(), right.label.slice()) == .lt;
+    return bytes.order(left.label.slice(), right.label.slice()) == -1;
 }
 
 fn findHostFile(files: []const HostFileEntry, label: []const u8) ?[]const u8 {
@@ -797,57 +797,58 @@ fn findHostFile(files: []const HostFileEntry, label: []const u8) ?[]const u8 {
     var high: usize = files.len;
     while (low < high) {
         const mid = low + (high - low) / 2;
-        switch (std.mem.order(u8, files[mid].label.slice(), label)) {
-            .eq => return files[mid].body,
-            .lt => low = mid + 1,
-            .gt => high = mid,
+        switch (bytes.order(files[mid].label.slice(), label)) {
+            0 => return files[mid].body,
+            -1 => low = mid + 1,
+            1 => high = mid,
+            -2 => unreachable,
         }
     }
     return null;
 }
 
 fn virtualImport(import_name: []const u8) bool {
-    return std.mem.eql(u8, import_name, "builtin") or
-        std.mem.eql(u8, import_name, "build_options") or
-        std.mem.eql(u8, import_name, "embedded_source_object") or
-        std.mem.eql(u8, import_name, "embedded_wasm_compiler");
+    return bytes.eql(import_name, "builtin") or
+        bytes.eql(import_name, "build_options") or
+        bytes.eql(import_name, "embedded_source_object") or
+        bytes.eql(import_name, "embedded_wasm_compiler");
 }
 
 fn prunedSourceImport(resolved_label: []const u8) bool {
-    if (std.mem.endsWith(u8, resolved_label, "_test.zig")) return true;
-    if (std.mem.eql(u8, resolved_label, "compiler/zig/lib/std/Build.zig")) return true;
-    if (std.mem.eql(u8, resolved_label, "compiler/zig/lib/std/c.zig")) return true;
-    if (std.mem.eql(u8, resolved_label, "compiler/zig/lib/std/crypto.zig")) return true;
-    if (std.mem.eql(u8, resolved_label, "compiler/zig/lib/std/http.zig")) return true;
-    if (std.mem.eql(u8, resolved_label, "compiler/zig/lib/std/Io/Threaded.zig")) return true;
-    if (std.mem.eql(u8, resolved_label, "compiler/zig/lib/std/Io/Uring.zig")) return true;
-    if (std.mem.eql(u8, resolved_label, "compiler/zig/lib/std/os.zig")) return true;
-    if (std.mem.eql(u8, resolved_label, "compiler/zig/lib/std/tar.zig")) return true;
-    if (std.mem.eql(u8, resolved_label, "compiler/zig/lib/std/testing.zig")) return true;
-    if (std.mem.eql(u8, resolved_label, "compiler/zig/lib/std/tz.zig")) return true;
-    if (std.mem.eql(u8, resolved_label, "compiler/zig/lib/std/valgrind.zig")) return true;
-    if (std.mem.eql(u8, resolved_label, "compiler/zig/lib/std/zip.zig")) return true;
-    if (std.mem.startsWith(u8, resolved_label, "compiler/zig/lib/std/Build/")) return true;
-    if (std.mem.startsWith(u8, resolved_label, "compiler/zig/lib/std/c/")) return true;
-    if (std.mem.startsWith(u8, resolved_label, "compiler/zig/lib/std/crypto/")) return true;
-    if (std.mem.startsWith(u8, resolved_label, "compiler/zig/lib/std/debug/")) return true;
-    if (std.mem.startsWith(u8, resolved_label, "compiler/zig/lib/std/http/")) return true;
-    if (std.mem.startsWith(u8, resolved_label, "compiler/zig/lib/std/os/")) return true;
-    if (std.mem.startsWith(u8, resolved_label, "compiler/zig/lib/std/tar/")) return true;
-    if (std.mem.startsWith(u8, resolved_label, "compiler/zig/lib/std/testing/")) return true;
-    if (std.mem.startsWith(u8, resolved_label, "compiler/zig/lib/std/tz/")) return true;
-    if (std.mem.startsWith(u8, resolved_label, "compiler/zig/lib/std/zig/llvm/")) return true;
-    if (std.mem.startsWith(u8, resolved_label, "compiler/zig/lib/compiler/")) return true;
-    if (std.mem.startsWith(u8, resolved_label, "compiler/zig/src/libs/")) return true;
-    if (std.mem.startsWith(u8, resolved_label, "compiler/zig/src/Package/Fetch/")) return true;
+    if (bytes.endsWith(resolved_label, "_test.zig")) return true;
+    if (bytes.eql(resolved_label, "compiler/zig/lib/std/Build.zig")) return true;
+    if (bytes.eql(resolved_label, "compiler/zig/lib/std/c.zig")) return true;
+    if (bytes.eql(resolved_label, "compiler/zig/lib/std/crypto.zig")) return true;
+    if (bytes.eql(resolved_label, "compiler/zig/lib/std/http.zig")) return true;
+    if (bytes.eql(resolved_label, "compiler/zig/lib/std/Io/Threaded.zig")) return true;
+    if (bytes.eql(resolved_label, "compiler/zig/lib/std/Io/Uring.zig")) return true;
+    if (bytes.eql(resolved_label, "compiler/zig/lib/std/os.zig")) return true;
+    if (bytes.eql(resolved_label, "compiler/zig/lib/std/tar.zig")) return true;
+    if (bytes.eql(resolved_label, "compiler/zig/lib/std/testing.zig")) return true;
+    if (bytes.eql(resolved_label, "compiler/zig/lib/std/tz.zig")) return true;
+    if (bytes.eql(resolved_label, "compiler/zig/lib/std/valgrind.zig")) return true;
+    if (bytes.eql(resolved_label, "compiler/zig/lib/std/zip.zig")) return true;
+    if (bytes.startsWith(resolved_label, "compiler/zig/lib/std/Build/")) return true;
+    if (bytes.startsWith(resolved_label, "compiler/zig/lib/std/c/")) return true;
+    if (bytes.startsWith(resolved_label, "compiler/zig/lib/std/crypto/")) return true;
+    if (bytes.startsWith(resolved_label, "compiler/zig/lib/std/debug/")) return true;
+    if (bytes.startsWith(resolved_label, "compiler/zig/lib/std/http/")) return true;
+    if (bytes.startsWith(resolved_label, "compiler/zig/lib/std/os/")) return true;
+    if (bytes.startsWith(resolved_label, "compiler/zig/lib/std/tar/")) return true;
+    if (bytes.startsWith(resolved_label, "compiler/zig/lib/std/testing/")) return true;
+    if (bytes.startsWith(resolved_label, "compiler/zig/lib/std/tz/")) return true;
+    if (bytes.startsWith(resolved_label, "compiler/zig/lib/std/zig/llvm/")) return true;
+    if (bytes.startsWith(resolved_label, "compiler/zig/lib/compiler/")) return true;
+    if (bytes.startsWith(resolved_label, "compiler/zig/src/libs/")) return true;
+    if (bytes.startsWith(resolved_label, "compiler/zig/src/Package/Fetch/")) return true;
     return false;
 }
 
 fn resolveImportLabel(importer_label: []const u8, import_name: []const u8, out: *[vfs.label_max]u8) ?[]const u8 {
-    if (std.mem.eql(u8, import_name, "std")) return copyResolved(out, "compiler/zig/lib/std/std.zig");
-    if (std.mem.eql(u8, import_name, "root")) return copyResolved(out, importer_label);
+    if (bytes.eql(import_name, "std")) return copyResolved(out, "compiler/zig/lib/std/std.zig");
+    if (bytes.eql(import_name, "root")) return copyResolved(out, importer_label);
     if (import_name.len == 0 or import_name.len > vfs.label_max) return null;
-    if (std.mem.startsWith(u8, import_name, "/")) return null;
+    if (bytes.startsWith(import_name, "/")) return null;
 
     var raw: [vfs.label_max]u8 = undefined;
     var raw_len: usize = 0;
@@ -870,9 +871,9 @@ fn normalizeLabel(raw: []const u8, out: *[vfs.label_max]u8) ?[]const u8 {
         const start = index;
         while (index < raw.len and raw[index] != '/') : (index += 1) {}
         const part = raw[start..index];
-        if (part.len == 0 or std.mem.eql(u8, part, ".")) {
+        if (part.len == 0 or bytes.eql(part, ".")) {
             // skip
-        } else if (std.mem.eql(u8, part, "..")) {
+        } else if (bytes.eql(part, "..")) {
             if (len == 0) return null;
             len -= 1;
             while (len > 0 and out[len - 1] != '/') : (len -= 1) {}
@@ -902,7 +903,7 @@ fn copyResolved(out: *[vfs.label_max]u8, value: []const u8) ?[]const u8 {
 
 fn labelQueued(queue: []const Label, label: []const u8) bool {
     for (queue) |queued| {
-        if (std.mem.eql(u8, queued.slice(), label)) return true;
+        if (bytes.eql(queued.slice(), label)) return true;
     }
     return false;
 }
@@ -946,13 +947,13 @@ fn compilerMagicOk(memory: []const u8, maybe_ptr: ?i32, maybe_len: ?i32) bool {
     const ptr: usize = @intCast(ptr_i32);
     const len: usize = @intCast(len_i32);
     if (ptr > memory.len or len > memory.len - ptr) return false;
-    return std.mem.eql(u8, memory[ptr..][0..wasm_magic.len], &wasm_magic);
+    return bytes.eql(memory[ptr..][0..wasm_magic.len], &wasm_magic);
 }
 
 fn findSuccessorWasm(memory: []u8, output_len: usize, reported_output_ptr: usize) ?usize {
     if (validSuccessorAt(memory, output_len, reported_output_ptr)) return reported_output_ptr;
     var index: usize = 0;
-    while (std.mem.indexOf(u8, memory[index..], &.{ 0x00, 0x61, 0x73, 0x6d })) |relative| {
+    while (bytes.indexOf(memory[index..], &.{ 0x00, 0x61, 0x73, 0x6d })) |relative| {
         const candidate = index + relative;
         if (validSuccessorAt(memory, output_len, candidate)) return candidate;
         index = candidate + 1;

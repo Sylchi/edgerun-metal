@@ -1,4 +1,5 @@
 const std = @import("std");
+const bytes = @import("bytes.zig");
 const interaction = @import("ui_interaction.zig");
 const ui = @import("ui.zig");
 const text_component = @import("ui/components/Text.zig");
@@ -975,7 +976,7 @@ fn firstNodeMapNode(commands: []const ui.Command) ?ui.Rect {
 
 fn hasText(commands: []const ui.Command, value: []const u8) bool {
     for (commands) |command| switch (command) {
-        .text => |text_command| if (std.mem.eql(u8, text_command.value, value)) return true,
+        .text => |text_command| if (bytes.eql(text_command.value, value)) return true,
         else => {},
     };
     return false;
@@ -983,7 +984,7 @@ fn hasText(commands: []const ui.Command, value: []const u8) bool {
 
 fn textOrigin(commands: []const ui.Command, value: []const u8) ?ui.Rect {
     for (commands) |command| switch (command) {
-        .text => |text_command| if (std.mem.eql(u8, text_command.value, value)) return text_command.origin,
+        .text => |text_command| if (bytes.eql(text_command.value, value)) return text_command.origin,
         else => {},
     };
     return null;
@@ -992,7 +993,7 @@ fn textOrigin(commands: []const ui.Command, value: []const u8) ?ui.Rect {
 fn contentTextAboveHeader(commands: []const ui.Command, value: []const u8) bool {
     for (commands) |command| switch (command) {
         .text => |text_command| {
-            if (std.mem.eql(u8, text_command.value, value) and text_command.origin.y < header_h) return true;
+            if (bytes.eql(text_command.value, value) and text_command.origin.y < header_h) return true;
         },
         else => {},
     };

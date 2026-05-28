@@ -1,4 +1,5 @@
 const std = @import("std");
+const bytes = @import("bytes.zig");
 const uefi = std.os.uefi;
 const app_mod = @import("app.zig");
 const clock = @import("clock.zig");
@@ -156,8 +157,8 @@ noinline fn runVerifyResultStage() uefi.Status {
     if (!result_slot.receipt.valid()) return failText("invalid work receipt");
     if (!result_slot.receipt.parent.eql(parent_slot.id)) return failText("receipt parent mismatch");
     if (!result_slot.receipt.app.eql(app_slot.id)) return failText("receipt app mismatch");
-    if (!std.mem.eql(u8, &result_slot.receipt.app_hash, &image_slot.code_hash)) return failText("receipt code hash mismatch");
-    if (!std.mem.eql(u8, &result_slot.receipt.manifest, &image_slot.manifest)) return failText("receipt manifest mismatch");
+    if (!bytes.eql(&result_slot.receipt.app_hash, &image_slot.code_hash)) return failText("receipt code hash mismatch");
+    if (!bytes.eql(&result_slot.receipt.manifest, &image_slot.manifest)) return failText("receipt manifest mismatch");
     if (result_slot.receipt.execution_used != expected_execution_used) return failText("receipt execution mismatch");
     if (runtime_slot.schedule.len != contracts.len) return failText("schedule length mismatch");
 

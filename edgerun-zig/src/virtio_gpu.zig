@@ -481,8 +481,8 @@ pub const Device = struct {
     }
 
     pub fn sendWithResponse(self: *Device, storage: *QueueStorage, command_bytes: []const u8, response_bytes: []u8) Error!void {
-        if (command_bytes.len == 0 or command_bytes.len > std.math.maxInt(u32)) return error.InvalidResponse;
-        if (response_bytes.len == 0 or response_bytes.len > std.math.maxInt(u32)) return error.InvalidResponse;
+        if (command_bytes.len == 0 or command_bytes.len > ~@as(u32, 0)) return error.InvalidResponse;
+        if (response_bytes.len == 0 or response_bytes.len > ~@as(u32, 0)) return error.InvalidResponse;
         prepareCommandDescriptors(storage, command_bytes, response_bytes);
         virtio.postDescriptor(&storage.avail, self.queue_size, 0);
         self.transport.notifyQueue(self.queue_notify_off, control_queue);
@@ -490,8 +490,8 @@ pub const Device = struct {
     }
 
     pub fn sendWithPayload(self: *Device, storage: *QueueStorage, command_bytes: []const u8, payload: []const u8) Error!Response {
-        if (command_bytes.len == 0 or command_bytes.len > std.math.maxInt(u32)) return error.InvalidResponse;
-        if (payload.len == 0 or payload.len > std.math.maxInt(u32)) return error.InvalidResponse;
+        if (command_bytes.len == 0 or command_bytes.len > ~@as(u32, 0)) return error.InvalidResponse;
+        if (payload.len == 0 or payload.len > ~@as(u32, 0)) return error.InvalidResponse;
         storage.response = .{ .header = .{ .control_type = .resp_err_unspec } };
         prepareCommandWithPayloadDescriptors(storage, command_bytes, payload, std.mem.asBytes(&storage.response));
         virtio.postDescriptor(&storage.avail, self.queue_size, 0);

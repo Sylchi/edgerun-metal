@@ -1,4 +1,5 @@
 const std = @import("std");
+const bytes = @import("bytes.zig");
 const ui = @import("ui.zig");
 const device_tree = @import("ui_device_tree.zig");
 const ui_stream = @import("ui_stream.zig");
@@ -81,10 +82,10 @@ test "dashboard renders two device trees from manual nodes" {
     var found_hum = false;
     for (scene.written()) |cmd| switch (cmd) {
         .text => |t| {
-            if (std.mem.eql(u8, t.value, "sensor-1")) found_sensor1 = true;
-            if (std.mem.eql(u8, t.value, "sensor-2")) found_sensor2 = true;
-            if (std.mem.eql(u8, t.value, "22.5°C")) found_temp = true;
-            if (std.mem.eql(u8, t.value, "65%")) found_hum = true;
+            if (bytes.eql(t.value, "sensor-1")) found_sensor1 = true;
+            if (bytes.eql(t.value, "sensor-2")) found_sensor2 = true;
+            if (bytes.eql(t.value, "22.5°C")) found_temp = true;
+            if (bytes.eql(t.value, "65%")) found_hum = true;
         },
         else => {},
     };
@@ -132,8 +133,8 @@ test "dashboard patches propagate across devices" {
     var found_b = false;
     for (scene.written()) |cmd| switch (cmd) {
         .text => |t| {
-            if (std.mem.eql(u8, t.value, "23.1°C")) found_a = true;
-            if (std.mem.eql(u8, t.value, "ON")) found_b = true;
+            if (bytes.eql(t.value, "23.1°C")) found_a = true;
+            if (bytes.eql(t.value, "ON")) found_b = true;
         },
         else => {},
     };
