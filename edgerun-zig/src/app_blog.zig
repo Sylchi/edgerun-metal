@@ -1043,7 +1043,7 @@ fn renderLessonRhythm(scene: *ui.Scene, collector: *interaction.Collector, bound
     try text(scene, bounds.x + 128.0, bounds.y + 23.0, bounds.w - 286.0, 14.0, "Every lesson has a job: notice the ordinary action, name the hidden authority, then ask what the user can own.", palette.text);
     try app_chrome.renderNavItem(scene, collector, .{
         .kind = .top_text,
-        .binding = app_navigation.topLevelBinding(.blog),
+        .binding = app_navigation.subNavBinding(.blog),
         .bounds = ui.Rect.init(bounds.x + bounds.w - 140.0, bounds.y + 14.0, 122.0, 32.0),
         .active = false,
         .label = "All Lessons",
@@ -1202,7 +1202,7 @@ fn flowPostContent(scene: ?*ui.Scene, collector: ?*interaction.Collector, bounds
     if (scene) |target| {
         try app_chrome.renderNavItem(target, collector.?, .{
             .kind = .top_text,
-            .binding = app_navigation.topLevelBinding(.blog),
+            .binding = app_navigation.subNavBinding(.blog),
             .bounds = ui.Rect.init(bounds.x, bounds.y, 134.0, 34.0),
             .active = false,
             .label = "All Lessons",
@@ -3445,7 +3445,7 @@ fn demoFrame(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
 fn nativeComponent(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, component: anytype) (ui.RenderError || interaction.Error)!void {
     try component.render(scene, bounds, .{ .style = appStyle() });
     if (comptime @hasDecl(@TypeOf(component), "collectInteractions")) {
-        const fn_info = @typeInfo(@TypeOf(@TypeOf(component).collectInteractions)).Fn;
+        const fn_info = @typeInfo(@TypeOf(@TypeOf(component).collectInteractions)).@"fn";
         if (fn_info.params.len >= 4) {
             try component.collectInteractions(collector, bounds, .{ .style = appStyle() });
         } else {
@@ -3497,9 +3497,9 @@ test "blog renders committed post index through native components" {
     try std.testing.expectEqualStrings(arc_control, posts[34].arc);
     try std.testing.expectEqualStrings(arc_accounting, posts[61].arc);
     try std.testing.expect(hasHit(collector.written(), postIdAt(0)));
-    try std.testing.expect(hasHit(collector.written(), app_navigation.blog_button_id));
-    try std.testing.expect(hasHit(collector.written(), app_navigation.logo_button_id));
-    try std.testing.expect(hasHit(collector.written(), app_navigation.blog_button_id));
+    try std.testing.expect(hasHit(collector.written(), app_navigation.subNavBinding(.blog).id));
+    try std.testing.expect(hasHit(collector.written(), app_navigation.subNavBinding(.logo).id));
+    try std.testing.expect(hasHit(collector.written(), app_navigation.subNavBinding(.blog).id));
     try std.testing.expect(hasHit(collector.written(), arcFilterButtonId(0)));
     try std.testing.expect(hasImage(scene.written(), cloud_meme_image_id));
 }
@@ -3609,7 +3609,7 @@ test "blog renders selected markdown post body" {
     try std.testing.expect(hasText(scene.written(), "User-owned shape"));
     try std.testing.expect(hasText(scene.written(), "Starts with"));
     try std.testing.expect(hasText(scene.written(), "Next"));
-    try std.testing.expect(hasHit(collector.written(), app_navigation.blog_button_id));
+    try std.testing.expect(hasHit(collector.written(), app_navigation.subNavBinding(.blog).id));
 }
 
 test "blog selected post footer links previous and next posts" {

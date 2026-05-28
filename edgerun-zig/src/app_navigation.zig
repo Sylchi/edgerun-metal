@@ -150,8 +150,17 @@ pub fn blogArcFilterIndexFromButton(hit_id: u32) ?usize {
     return if (index < 8) index else null;
 }
 
-pub fn fromHit(hit_id: u32, current: Route) ?Route {
+pub fn fromHit(hit_id: u32, _current: Route) ?Route {
+    _ = _current;
     if (routeFromStaticHit(hit_id)) |route| return route;
+    if (routeFromSubNavHit(hit_id)) |route| return route;
+    return null;
+}
+
+fn routeFromSubNavHit(hit_id: u32) ?Route {
+    for (sub_nav_bindings) |binding| {
+        if (binding.id == hit_id) return binding.route;
+    }
     return null;
 }
 
@@ -263,6 +272,56 @@ pub fn topLevelWorkspaceBindings() []const TopLevelBinding {
     return &top_level_bindings;
 }
 
+pub const SubNavKey = enum(u32) {
+    logo = 0,
+    docs = 1,
+    blog = 2,
+    source = 3,
+};
+
+pub fn subNavBinding(key: SubNavKey) TopLevelBinding {
+    return sub_nav_bindings[@intFromEnum(key)];
+}
+
+const sub_nav_bindings = [_]TopLevelBinding{
+    .{
+        .button = @as(MainButton, @enumFromInt(0)),
+        .id = frontend_button_id + 20,
+        .route = .{ .view = .frontend },
+        .icon = icon_component.Icon.named(.terminal),
+        .rail_label = "",
+        .row_title = "EdgeRun",
+        .row_detail = "",
+    },
+    .{
+        .button = @as(MainButton, @enumFromInt(0)),
+        .id = frontend_button_id + 21,
+        .route = .{ .view = .frontend, .selected_doc_index = 0 },
+        .icon = icon_component.Icon.named(.book),
+        .rail_label = "",
+        .row_title = "Docs",
+        .row_detail = "",
+    },
+    .{
+        .button = @as(MainButton, @enumFromInt(0)),
+        .id = frontend_button_id + 22,
+        .route = .{ .view = .frontend },
+        .icon = icon_component.Icon.named(.terminal),
+        .rail_label = "",
+        .row_title = "Blog",
+        .row_detail = "",
+    },
+    .{
+        .button = @as(MainButton, @enumFromInt(0)),
+        .id = frontend_button_id + 23,
+        .route = .{ .view = .backend },
+        .icon = icon_component.Icon.named(.code),
+        .rail_label = "",
+        .row_title = "Source",
+        .row_detail = "",
+    },
+};
+
 pub const action_bindings = [_]ActionBinding{
     .{ .id = reveal_identity_button_id, .action = .reveal_identity },
     .{ .id = sourceActionButtonId(.compile), .action = .compile_source },
@@ -291,6 +350,15 @@ pub fn contract() Contract {
     };
 }
 
+pub const DynamicRouteFixture = struct {
+    hit_id: u32,
+    expected: Route,
+};
+
+pub fn dynamicRouteFixtures() []const DynamicRouteFixture {
+    return &.{};
+}
+
 pub fn trimPath(path: []const u8) []const u8 {
     if (path.len == 0) return RoutePath.frontend;
     if (path[0] != '/') return RoutePath.frontend;
@@ -299,6 +367,12 @@ pub fn trimPath(path: []const u8) []const u8 {
     const trimmed = path[0..hash_start];
     if (trimmed.len == 0) return RoutePath.frontend;
     return trimmed;
+}
+
+comptime {
+    if (sub_nav_bindings.len != @typeInfo(SubNavKey).@"enum".fields.len) {
+        @compileError("sub_nav_bindings must cover every SubNavKey enum value");
+    }
 }
 
 comptime {
@@ -363,6 +437,31 @@ comptime {
         while (i < static_routes.len) : (i += 1) {
             if (entry.id == static_routes[i].id) {
                 @compileError("action id collides with static route id");
+            }
+        }
+        i = 0;
+        while (i < sub_nav_bindings.len) : (i += 1) {
+            if (entry.id == sub_nav_bindings[i].id) {
+                @compileError("action id collides with sub-nav route id");
+            }
+        }
+    }
+
+    for (sub_nav_bindings, 0..) |left, i| {
+        var j: usize = i + 1;
+        while (j < sub_nav_bindings.len) : (j += 1) {
+            if (left.id == sub_nav_bindings[j].id) {
+                @compileError("sub_nav_bindings contains duplicate hit id");
+            }
+        }
+        for (top_level_bindings) |top| {
+            if (left.id == top.id) {
+                @compileError("sub-nav id collides with top-level route id");
+            }
+        }
+        for (static_routes) |sr| {
+            if (left.id == sr.id) {
+                @compileError("sub-nav id collides with static route id");
             }
         }
     }

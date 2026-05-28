@@ -10,7 +10,11 @@ const identity = @import("identity.zig");
 const interaction = @import("ui_interaction.zig");
 const object = @import("object.zig");
 const renderer_font_atlas = @import("render/font_atlas_weighted.zig");
+const renderer_ir = @import("render/ir.zig");
 const renderer_pipeline = @import("render/pipeline.zig");
+const gles_wasm = @import("render/backends/gles_wasm.zig");
+const wasm_gl = @import("render/wasm_gl.zig");
+const gl_contract = @import("render/gl_contract.zig");
 const component_gallery = @import("component_gallery.zig");
 const app_blog = @import("app_blog.zig");
 const app_chrome = @import("app_chrome.zig");
@@ -207,6 +211,7 @@ var ephemeral_identity_id: [identity.id_size]u8 = [_]u8{0} ** identity.id_size;
 var public_identity_text: [public_identity_text_len]u8 = [_]u8{0} ** public_identity_text_len;
 var ephemeral_identity_ready = false;
 var environment_appearance: EnvironmentAppearance = .unknown;
+var wasm_gl_state: ?gles_wasm.State = null;
 
 const hover_hit_kind_none: u32 = 255;
 
@@ -2108,6 +2113,54 @@ export fn er_ui_build_frame(width: u32, height: u32, frame_ms: f32) u32 {
     return er_ui_build_app_frame(width, height, pointer_hover_x, pointer_hover_y, frame_ms);
 }
 
+export fn er_ui_wasm_gl_init() u32 {
+    ensureFontAtlas() catch return finishError(.font_atlas);
+    wasm_gl_state = gles_wasm.initState(&font_atlas);
+    wasm_gl.glClearColor(
+        gl_contract.clear_color_r,
+        gl_contract.clear_color_g,
+        gl_contract.clear_color_b,
+        gl_contract.clear_color_a,
+    );
+    wasm_gl.glDisable(wasm_gl.gl_dither);
+    wasm_gl.glEnable(wasm_gl.gl_blend);
+    wasm_gl.glBlendFuncSeparate(
+        wasm_gl.gl_one,
+        wasm_gl.gl_one_minus_src_alpha,
+        wasm_gl.gl_one,
+        wasm_gl.gl_one_minus_src_alpha,
+    );
+    last_error = .ok;
+    return @intFromEnum(ErrorCode.ok);
+}
+
+export fn er_ui_render_frame_wasm(width: u32, height: u32, scale_raw: f32, frame_ms: f32) u32 {
+    const scale = framebufferDeviceScale(width, height, scale_raw);
+    const physical_width = scaledFrameDimension(width, scale) orelse return finishError(.bad_size);
+    const physical_height = scaledFrameDimension(height, scale) orelse return finishError(.bad_size);
+    if (!setFrameSize(width, height)) return finishError(.bad_size);
+    clampAppScrollToViewport(width, height);
+    _ = er_ui_set_device_scale(scale);
+    var scene = ui.Scene.initWithClips(&commands, &clips);
+    var frame_regions: [max_interaction_regions]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&frame_regions);
+    app_frame.render(&scene, &collector, frameBounds(), currentAppFrameState(pointer_hover_x, pointer_hover_y, frame_ms)) catch return finishError(.render_failed);
+    const frame_scene = prepareFrameScene(scene, collector.written(), .{ .enabled = true, .x = pointer_hover_x, .y = pointer_hover_y }) catch return finishError(.render_failed);
+    ensureFontAtlas() catch return finishError(.font_atlas);
+    const buffers = packedBuffers();
+    renderer_pipeline.packSceneWithSources(buffers, packedSources(), frame_scene.written()) catch return finishError(.packed_budget);
+    const gl = if (wasm_gl_state) |*st| st else return finishError(.render_failed);
+    gles_wasm.refreshFontTexture(gl, &font_atlas);
+    gles_wasm.ensureImageTexture(gl, currentWasmImageTexture());
+    gles_wasm.renderFrame(gl, @intCast(physical_width), @intCast(physical_height), scale, buffers) catch return finishError(.render_failed);
+    last_error = .ok;
+    return @intFromEnum(ErrorCode.ok);
+}
+
+fn currentWasmImageTexture() ?renderer_ir.RgbaTexture {
+    return app_images.cloudMeme() catch return null;
+}
+
 export fn er_ui_render_frame(width: u32, height: u32, frame_ms: f32) u32 {
     const surface = beginFrame(width, height) orelse return finishError(.bad_size);
     clampAppScrollToViewport(width, height);
@@ -2415,20 +2468,14 @@ fn storeLastRegions(regions: []const interaction.Region) error{InteractionBudget
     last_region_count = regions.len;
 }
 
-fn currentDragId() u32 {
-    if (runtime_state.value_drag) |drag| return drag.id;
-    if (runtime_state.last_value_drag) |drag| return drag.id;
-    return 0;
-}
-
-fn currentDragValue() f32 {
-    if (runtime_state.value_drag) |drag| {
-        return ui.clampUnit((drag.current_x - drag.bounds.x) / drag.bounds.w);
+fn currentDragOverride() ?component_gallery.DragOverride {
+    const active = runtime_state.drag_value orelse runtime_state.persisted_value orelse return null;
+    for (interaction_regions[0..last_region_count]) |r| {
+        if (r.id == active.id and r.kind == .slider) {
+            return .{ .id = active.id, .value = ui.clampUnit((active.pointer_x - r.bounds.x) / r.bounds.w) };
+        }
     }
-    if (runtime_state.last_value_drag) |drag| {
-        return ui.clampUnit((drag.current_x - drag.bounds.x) / drag.bounds.w);
-    }
-    return -1.0;
+    return null;
 }
 
 fn currentAppFrameState(hover_x: f32, hover_y: f32, frame_ms: f32) app_frame.State {
@@ -2440,8 +2487,7 @@ fn currentAppFrameState(hover_x: f32, hover_y: f32, frame_ms: f32) app_frame.Sta
         .frame_ms = frame_ms,
         .public_identity = publicIdentityText(),
         .public_identity_ready = ephemeral_identity_ready,
-        .drag_id = currentDragId(),
-        .drag_value = currentDragValue(),
+        .drag_override = currentDragOverride(),
         .source = if (app_state.view == .backend) currentSourceState(hover_x, hover_y) else .{},
         .context_menu = .{
             .open = context_menu_open,

@@ -240,8 +240,8 @@ fn renderHero(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Re
     const paragraph_x = if (stacked) layout.copy.x + (layout.copy.w - paragraph_w) * 0.5 else layout.copy.x;
     try heroParagraph(scene, ui.Rect.init(paragraph_x, layout.copy.y + 244.0, paragraph_w, 88.0), "EdgeRun carries its compiler, source object, UI system, object store, and receipts inside the app. Edit source, build, and run the next artifact.");
     const actions = actionPairBounds(if (stacked) layout.copy else ui.Rect.init(layout.copy.x, layout.button_y, layout.copy.w, action_button_h), layout.button_y);
-    const source = app_navigation.topLevelBinding(.source);
-    const docs = app_navigation.topLevelBinding(.docs);
+    const source = app_navigation.subNavBinding(.source);
+    const docs = app_navigation.subNavBinding(.docs);
     try app_chrome.renderNavItem(scene, collector, .{
         .kind = .top_text,
         .binding = source,
@@ -426,7 +426,7 @@ fn renderArchitecture(scene: *ui.Scene, collector: *interaction.Collector, bound
     try paragraph(scene, ui.Rect.init(left.x, left.y + 138.0, left.w, 96.0), "The web host loads one WASM app. That app owns the source workspace, compiler bytes, UI scene, render buffers, and release artifact.");
     const source_button_y: f32 = if (compact) 218.0 else 264.0;
     const source_button = actionButtonBounds(left, left.y + source_button_y, 180.0);
-    const source = app_navigation.topLevelBinding(.source);
+    const source = app_navigation.subNavBinding(.source);
     try app_chrome.renderNavItem(scene, collector, .{
         .kind = .top_text,
         .binding = source,
@@ -535,8 +535,8 @@ fn renderCta(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rec
     try alignedText(scene, bounds.x + 40.0, bounds.y + 70.0, bounds.w - 80.0, 30.0, "Open The Self-Compiling App", palette.text, .center);
     try alignedText(scene, bounds.x + 40.0, bounds.y + 118.0, bounds.w - 80.0, 18.0, "Read the source object, edit it, and compile the next artifact from inside the app.", palette.dim, .center);
     const actions = actionPairBounds(bounds.insetLtrb(40.0, 0.0, 40.0, 0.0), bounds.y + 168.0);
-    const source = app_navigation.topLevelBinding(.source);
-    const docs = app_navigation.topLevelBinding(.docs);
+        const source = app_navigation.subNavBinding(.source);
+    const docs = app_navigation.subNavBinding(.docs);
     try app_chrome.renderNavItem(scene, collector, .{
         .kind = .top_text,
         .binding = source,
@@ -556,7 +556,8 @@ fn renderCta(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rec
     });
 }
 
-fn renderFooter(scene: *ui.Scene, bounds: ui.Rect, content: ui.Rect) ui.RenderError!void {
+fn renderFooter
+(scene: *ui.Scene, bounds: ui.Rect, content: ui.Rect) ui.RenderError!void {
     try fill(scene, bounds, palette.bg, 0.0);
     try fill(scene, ui.Rect.init(bounds.x, bounds.y, bounds.w, 1.0), palette.border, 0.0);
     try text(scene, content.x, bounds.y + 44.0, 120.0, 18.0, "EdgeRun", palette.text);
@@ -811,7 +812,7 @@ fn nativeCard(scene: *ui.Scene, bounds: ui.Rect, title_value: []const u8, detail
 fn nativeComponent(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, component: anytype) (ui.RenderError || interaction.Error)!void {
     try component.render(scene, bounds, .{ .style = appStyle() });
     if (comptime @hasDecl(@TypeOf(component), "collectInteractions")) {
-        const fn_info = @typeInfo(@TypeOf(@TypeOf(component).collectInteractions)).Fn;
+        const fn_info = @typeInfo(@TypeOf(@TypeOf(component).collectInteractions)).@"fn";
         if (fn_info.params.len >= 4) {
             try component.collectInteractions(collector, bounds, .{ .style = appStyle() });
         } else {
@@ -873,8 +874,8 @@ test "landing page renders app sections and primary actions" {
     try std.testing.expect(hasText(scene.written(), "Click to Reveal ID"));
     try std.testing.expect(!hasText(scene.written(), "113 nodes online"));
     try std.testing.expect(hasPieSlice(scene.written()));
-    try std.testing.expect(hasHit(collector.written(), app_navigation.topLevelButtonId(.docs)));
-    try std.testing.expect(hasHit(collector.written(), app_navigation.topLevelButtonId(.source)));
+    try std.testing.expect(hasHit(collector.written(), app_navigation.subNavBinding(.docs).id));
+    try std.testing.expect(hasHit(collector.written(), app_navigation.subNavBinding(.source).id));
     try std.testing.expect(hasIcon(scene.written(), icon_component.Icon.named(.chevron_right)));
     try std.testing.expect(hasIcon(scene.written(), icon_component.Icon.named(.code)));
 }

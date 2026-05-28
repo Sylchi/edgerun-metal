@@ -75,8 +75,7 @@ pub const State = struct {
     hover_y: f32 = -1.0,
     selected_doc_index: ?usize = null,
     selected_component_index: ?usize = null,
-    drag_id: u32 = 0,
-    drag_value: f32 = -1.0,
+    drag_override: ?component_gallery.DragOverride = null,
 };
 
 pub const DocSection = enum {
@@ -478,7 +477,7 @@ fn renderHero(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Re
     }
 
     if (page.section == .source) {
-        const source = app_navigation.topLevelBinding(.source);
+        const source = app_navigation.subNavBinding(.source);
         try app_chrome.renderNavItem(scene, collector, .{
             .kind = .top_text,
             .binding = source,
@@ -489,7 +488,7 @@ fn renderHero(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Re
             .icon_slot = icon_component.IconSlot.of(.trailing, icon_component.Icon.named(.chevron_right)),
         });
     } else if (page.section == .authority) {
-        const academy = app_navigation.topLevelBinding(.blog);
+        const academy = app_navigation.subNavBinding(.blog);
         try app_chrome.renderNavItem(scene, collector, .{
             .kind = .top_text,
             .binding = academy,
@@ -597,7 +596,7 @@ fn renderSectionPage(scene: *ui.Scene, collector: *interaction.Collector, bounds
 
     if (page.section == .components) {
         cursor_y += section_gap;
-        try component_gallery.renderDocsContent(scene, collector, ui.Rect.init(bounds.x, cursor_y, bounds.w, component_gallery.docsContentHeight(bounds.w, state.selected_component_index)), state.selected_component_index, state.hover_x, state.hover_y, state.drag_id, state.drag_value);
+        try component_gallery.renderDocsContent(scene, collector, ui.Rect.init(bounds.x, cursor_y, bounds.w, component_gallery.docsContentHeight(bounds.w, state.selected_component_index)), state.selected_component_index, state.hover_x, state.hover_y, state.drag_override);
     } else if (page.section == .media) {
         cursor_y += section_gap;
         try renderMediaDemo(scene, ui.Rect.init(bounds.x, cursor_y, bounds.w, mediaDemoHeight(bounds.w)));

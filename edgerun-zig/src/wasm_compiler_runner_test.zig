@@ -225,30 +225,31 @@ test "embedded compiler emits workspace successor wasm with source object embedd
 
     var execution_ticks: u64 = execution_tick_budget;
     var runtime = wasm.Runtime.initWithMemoryPages(memory, &execution_ticks, memory_pages);
-    const init_args = [_]wasm.Value{
+    var compiler_storage = wasm.ExecutionStorage{};
+    const init_result = try wasm.executeExportValueArgsWithStorage(&runtime, &wasm_compiler, "er_wasm_compiler_init", &.{
         .{ .i32 = @intCast(compiler_memory_offset) },
         .{ .i32 = @intCast(compiler_memory_len) },
-    };
-    const init_result = try wasm.executeExportValueArgs(&runtime, &wasm_compiler, "er_wasm_compiler_init", &init_args);
+    }, &compiler_storage);
     try std.testing.expectEqual(@as(i32, 0), try init_result.valueI32(0));
 
-    const compile_args = [_]wasm.Value{
+    const status_result = try wasm.executeExportValueArgsWithStorage(&runtime, &wasm_compiler, "er_wasm_compiler_status", &.{}, &compiler_storage);
+    const diag_len_result = try wasm.executeExportValueArgsWithStorage(&runtime, &wasm_compiler, "er_wasm_compiler_diagnostic_len", &.{}, &compiler_storage);
+    std.debug.print("\n  after init: status={d} diag_len={d}", .{ try status_result.valueI32(0), try diag_len_result.valueI32(0) });
+
+    const compile_result = try wasm.executeExportValueArgsWithStorage(&runtime, &wasm_compiler, "er_wasm_compiler_compile_wasm", &.{
         .{ .i32 = @intCast(compiler_memory_offset) },
         .{ .i32 = @intCast(compiler_memory_len) },
         .{ .i32 = @intCast(root_label_offset) },
         .{ .i32 = @intCast(runner_root_label.len) },
         .{ .i32 = @intCast(source_offset) },
         .{ .i32 = @intCast(source_bytes.len) },
-    };
-    const compile_result = try wasm.executeExportValueArgs(&runtime, &wasm_compiler, "er_wasm_compiler_compile_wasm", &compile_args);
+    }, &compiler_storage);
     try std.testing.expectEqual(@as(i32, 0), try compile_result.valueI32(0));
 
-    const output_len_result = try wasm.executeExportValueArgs(&runtime, &wasm_compiler, "er_wasm_compiler_output_len", &.{});
-    const output_len: usize = @intCast(try output_len_result.valueI32(0));
+    const output_len: usize = @intCast(try (try wasm.executeExportValueArgsWithStorage(&runtime, &wasm_compiler, "er_wasm_compiler_output_len", &.{}, &compiler_storage)).valueI32(0));
     try std.testing.expect(output_len > source_bytes.len);
 
-    const output_ptr_result = try wasm.executeExportValueArgs(&runtime, &wasm_compiler, "er_wasm_compiler_output_ptr", &.{});
-    const output_ptr: usize = @intCast(try output_ptr_result.valueI32(0));
+    const output_ptr: usize = @intCast(try (try wasm.executeExportValueArgsWithStorage(&runtime, &wasm_compiler, "er_wasm_compiler_output_ptr", &.{}, &compiler_storage)).valueI32(0));
     try std.testing.expectEqual(@as(usize, compiler_memory_offset), output_ptr);
     const output = memory[output_ptr..][0..output_len];
     try std.testing.expectEqualSlices(u8, &.{ 0x00, 0x61, 0x73, 0x6d }, output[0..4]);
@@ -397,25 +398,29 @@ test "embedded compiler compiles edgerun source root through interpreter" {
 
     var execution_ticks: u64 = execution_tick_budget;
     var runtime = wasm.Runtime.initWithMemoryPages(memory, &execution_ticks, memory_pages);
-    const init_result = try wasm.executeExportValueArgs(&runtime, &wasm_compiler, "er_wasm_compiler_init", &.{
+    var compiler_storage = wasm.ExecutionStorage{};
+    const init_result = try wasm.executeExportValueArgsWithStorage(&runtime, &wasm_compiler, "er_wasm_compiler_init", &.{
         .{ .i32 = @intCast(compiler_memory_offset) },
         .{ .i32 = @intCast(compiler_memory_len) },
-    });
+    }, &compiler_storage);
     try std.testing.expectEqual(@as(i32, 0), try init_result.valueI32(0));
 
-    const compile_result = try wasm.executeExportValueArgs(&runtime, &wasm_compiler, "er_wasm_compiler_compile_wasm", &.{
+    const compile_result = try wasm.executeExportValueArgsWithStorage(&runtime, &wasm_compiler, "er_wasm_compiler_compile_wasm", &.{
         .{ .i32 = @intCast(compiler_memory_offset) },
         .{ .i32 = @intCast(compiler_memory_len) },
         .{ .i32 = @intCast(root_label_offset) },
         .{ .i32 = @intCast(edgerun_runner_root_label.len) },
         .{ .i32 = @intCast(source_offset) },
         .{ .i32 = @intCast(source_bytes.len) },
-    });
-    try std.testing.expectEqual(@as(i32, 0), try compile_result.valueI32(0));
+    }, &compiler_storage);
+    const compile_status = try compile_result.valueI32(0);
+    std.debug.print("\n  test3 compile_status={d} output_len=?", .{compile_status});
+    try std.testing.expectEqual(@as(i32, 0), compile_status);
 
-    const output_len: usize = @intCast(try (try wasm.executeExportValueArgs(&runtime, &wasm_compiler, "er_wasm_compiler_output_len", &.{})).valueI32(0));
+    const output_len: usize = @intCast(try (try wasm.executeExportValueArgsWithStorage(&runtime, &wasm_compiler, "er_wasm_compiler_output_len", &.{}, &compiler_storage)).valueI32(0));
+    std.debug.print(" output_len={d} source_bytes.len={d}\n", .{output_len, source_bytes.len});
     try std.testing.expect(output_len > source_bytes.len);
-    const output_ptr: usize = @intCast(try (try wasm.executeExportValueArgs(&runtime, &wasm_compiler, "er_wasm_compiler_output_ptr", &.{})).valueI32(0));
+    const output_ptr: usize = @intCast(try (try wasm.executeExportValueArgsWithStorage(&runtime, &wasm_compiler, "er_wasm_compiler_output_ptr", &.{}, &compiler_storage)).valueI32(0));
     try std.testing.expectEqual(@as(usize, compiler_memory_offset), output_ptr);
     const output = memory[output_ptr..][0..output_len];
     try std.testing.expectEqualSlices(u8, &.{ 0x00, 0x61, 0x73, 0x6d }, output[0..4]);
@@ -517,25 +522,32 @@ fn compileWorkspaceWithEmbeddedCompiler(allocator: std.mem.Allocator, source_byt
 
     var execution_ticks: u64 = execution_tick_budget;
     var runtime = wasm.Runtime.initWithMemoryPages(memory, &execution_ticks, memory_pages);
-    const init_result = try wasm.executeExportValueArgs(&runtime, &wasm_compiler, "er_wasm_compiler_init", &.{
+    var compiler_storage = wasm.ExecutionStorage{};
+    const init_result = try wasm.executeExportValueArgsWithStorage(&runtime, &wasm_compiler, "er_wasm_compiler_init", &.{
         .{ .i32 = @intCast(compiler_memory_offset) },
         .{ .i32 = @intCast(compiler_memory_len) },
-    });
+    }, &compiler_storage);
     try std.testing.expectEqual(@as(i32, 0), try init_result.valueI32(0));
 
-    const compile_result = try wasm.executeExportValueArgs(&runtime, &wasm_compiler, "er_wasm_compiler_compile_wasm", &.{
+    const compile_result = try wasm.executeExportValueArgsWithStorage(&runtime, &wasm_compiler, "er_wasm_compiler_compile_wasm", &.{
         .{ .i32 = @intCast(compiler_memory_offset) },
         .{ .i32 = @intCast(compiler_memory_len) },
         .{ .i32 = @intCast(root_label_offset) },
         .{ .i32 = @intCast(root_label.len) },
         .{ .i32 = @intCast(source_offset) },
         .{ .i32 = @intCast(source_bytes.len) },
-    });
-    try std.testing.expectEqual(@as(i32, 0), try compile_result.valueI32(0));
+    }, &compiler_storage);
+    const compile_status = try compile_result.valueI32(0);
+    const cwEC_diag_len = try (try wasm.executeExportValueArgsWithStorage(&runtime, &wasm_compiler, "er_wasm_compiler_diagnostic_len", &.{}, &compiler_storage)).valueI32(0);
+    const cwEC_diag_ptr = try (try wasm.executeExportValueArgsWithStorage(&runtime, &wasm_compiler, "er_wasm_compiler_diagnostic_ptr", &.{}, &compiler_storage)).valueI32(0);
+    const cwEC_diag_slice = memory[@as(usize, @intCast(cwEC_diag_ptr))..][0..@as(usize, @intCast(cwEC_diag_len))];
+    std.debug.print("\n  cwEC compile_status={d} diagnostic=\"{s}\"", .{ compile_status, cwEC_diag_slice });
+    try std.testing.expectEqual(@as(i32, 0), compile_status);
 
-    const output_len: usize = @intCast(try (try wasm.executeExportValueArgs(&runtime, &wasm_compiler, "er_wasm_compiler_output_len", &.{})).valueI32(0));
-    const output_ptr: usize = @intCast(try (try wasm.executeExportValueArgs(&runtime, &wasm_compiler, "er_wasm_compiler_output_ptr", &.{})).valueI32(0));
+    const output_len: usize = @intCast(try (try wasm.executeExportValueArgsWithStorage(&runtime, &wasm_compiler, "er_wasm_compiler_output_len", &.{}, &compiler_storage)).valueI32(0));
+    const output_ptr: usize = @intCast(try (try wasm.executeExportValueArgsWithStorage(&runtime, &wasm_compiler, "er_wasm_compiler_output_ptr", &.{}, &compiler_storage)).valueI32(0));
     const output = memory[output_ptr..][0..output_len];
+    std.debug.print(" output_len={d}\n", .{output_len});
     try expectWasmMagic(output);
     try std.testing.expect(output_len < self_host_buffer_len);
 

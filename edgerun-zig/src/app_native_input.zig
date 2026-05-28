@@ -110,11 +110,11 @@ pub fn scrollBy(state: *State, width: f32, viewport_height: f32, delta_y: f32) v
 
 test "native input activates routes and resets scroll through shared state" {
     var state = State{ .scroll_y = 120.0 };
-    state.runtime.hovered = .{ .kind = .button, .id = app_navigation.topLevelButtonId(.docs), .bounds = ui.Rect.init(0, 0, 1, 1) };
+    state.runtime.hovered = .{ .kind = .button, .id = app_navigation.subNavBinding(.docs).id, .bounds = ui.Rect.init(0, 0, 1, 1) };
 
     activateHovered(&state);
 
-    try std.testing.expectEqual(app_navigation.View.docs, state.route.view);
+    try std.testing.expectEqual(app_navigation.View.frontend, state.route.view);
     try std.testing.expectEqual(@as(f32, 0.0), state.scroll_y);
 }
 
@@ -144,14 +144,14 @@ test "native input pointer path uses shared runtime activation" {
     var scene = ui.Scene.init(&commands);
     var regions: [1]interaction.Region = undefined;
     var collector = interaction.Collector.init(&regions);
-    try collector.addHit(ui.Rect.init(0, 0, 20, 20), .button, app_navigation.topLevelButtonId(.blog));
+    try collector.addHit(ui.Rect.init(0, 0, 20, 20), .button, app_navigation.subNavBinding(.blog).id);
     var state = State{ .hover_x = 8.0, .hover_y = 8.0 };
 
     processPointerEvent(&state, scene.written(), collector.written(), .pointer_down);
     processPointerEvent(&state, scene.written(), collector.written(), .pointer_up);
 
     try std.testing.expectEqual(ui_runtime.ActionKind.activated, state.last_action_kind);
-    try std.testing.expectEqual(app_navigation.View.blog, state.route.view);
+    try std.testing.expectEqual(app_navigation.View.frontend, state.route.view);
 }
 
 test "native input routes all canonical fixtures through shared top-level binding path" {
@@ -182,7 +182,7 @@ test "native input route fixtures keep deterministic path/hash mapping" {
 
 test "native input resolves dynamic hit families using shared navigation logic" {
     for (app_navigation.dynamicRouteFixtures()) |entry| {
-        var state = State{ .route = .{ .view = .source } };
+        var state = State{ .route = .{ .view = .backend } };
         state.runtime.hovered = .{ .kind = .button, .id = entry.hit_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
 
         activateHovered(&state);

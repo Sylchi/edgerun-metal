@@ -56,7 +56,7 @@ fn runFrame(width: u32, height: u32, image_texture: renderer_software.RgbaTextur
     var scene = ui.Scene.initWithClips(&commands, &clips);
     var collector = interaction.Collector.init(&regions);
     try app_frame.render(&scene, &collector, ui.Rect.init(0, 0, @floatFromInt(width), @floatFromInt(height)), .{
-        .route = .{ .view = .landing },
+        .route = .{ .view = .frontend },
         .public_identity = "blessed-native-renderer",
         .public_identity_ready = true,
     });

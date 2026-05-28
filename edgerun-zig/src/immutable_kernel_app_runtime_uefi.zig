@@ -60,7 +60,7 @@ const SceneState = struct {
         var scene = ui.Scene.initWithClips(&self.commands, &self.clips);
         var collector = interaction.Collector.init(&self.regions);
         app_frame.render(&scene, &collector, ui.Rect.init(0, 0, @floatFromInt(width), @floatFromInt(height)), .{
-            .route = .{ .view = .landing },
+            .route = .{ .view = .frontend },
             .public_identity = "blessed-native-renderer",
             .public_identity_ready = true,
         }) catch return error.AppFrameBuildFailed;

@@ -33,11 +33,6 @@ pub const Key = enum(u8) {
 pub const DragValue = struct {
     id: u32,
     pointer_x: f32,
-    bounds: ui.Rect,
-
-    pub fn value(self: DragValue) f32 {
-        return ui.clampUnit((self.pointer_x - self.bounds.x) / self.bounds.w);
-    }
 };
 
 pub const Action = struct {
@@ -130,17 +125,6 @@ pub const State = struct {
         self.hovered = null;
     }
 
-    pub fn dragValueFor(self: State, id: u32) ?f32 {
-        if (self.drag_value) |drag| {
-            if (drag.id == id) return drag.value();
-            return null;
-        }
-        if (self.persisted_value) |drag| {
-            if (drag.id == id) return drag.value();
-        }
-        return null;
-    }
-
     pub fn hoverKind(self: State) ?ui.HitKind {
         return if (self.hovered) |hit| hit.kind else null;
     }
@@ -177,11 +161,7 @@ pub const State = struct {
         } else null;
         if (hit) |h| {
             if (h.kind == .slider) {
-                self.drag_value = .{
-                    .id = h.id,
-                    .pointer_x = x,
-                    .bounds = h.bounds,
-                };
+                self.drag_value = .{ .id = h.id, .pointer_x = x };
             }
         }
         return if (hit) |value| .{ .kind = .hovered, .hit = value } else Action.none();
@@ -220,11 +200,7 @@ pub const State = struct {
         } else null;
         if (hit) |h| {
             if (h.kind == .slider) {
-                self.drag_value = .{
-                    .id = h.id,
-                    .pointer_x = x,
-                    .bounds = h.bounds,
-                };
+                self.drag_value = .{ .id = h.id, .pointer_x = x };
             }
         }
         return if (hit) |value| .{ .kind = .hovered, .hit = value } else Action.none();

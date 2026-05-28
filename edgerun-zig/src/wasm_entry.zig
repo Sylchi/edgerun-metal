@@ -1,8 +1,5 @@
 const std = @import("std");
 const app_input_event = @import("app_input_event.zig");
-const gl_contract = @import("render/gl_contract.zig");
-const icon_line_buffer = @import("render/icon_line_buffer.zig");
-const renderer_ir = @import("render/ir.zig");
 
 const output_file_permissions = std.Io.File.Permissions.default_file.setReadOnly(true);
 
@@ -12,33 +9,6 @@ pub const immutable_marker = "GENERATED FILE. IMMUTABLE.";
 pub const viewport_css = "html,body{margin:0;width:100%;height:100%;overflow:hidden;cursor:none}canvas{display:block}";
 pub const max_total_js_bytes: usize = 8360;
 
-const attr_pos_location_js = std.fmt.comptimePrint("{d}", .{gl_contract.attr_pos_location});
-const attr_uv_location_js = std.fmt.comptimePrint("{d}", .{gl_contract.attr_uv_location});
-const attr_color_location_js = std.fmt.comptimePrint("{d}", .{gl_contract.attr_color_location});
-const rect_float_stride_js = std.fmt.comptimePrint("{d}", .{renderer_ir.rect_float_stride});
-const rect_x_index_js = std.fmt.comptimePrint("{d}", .{renderer_ir.rect_x_index});
-const rect_y_index_js = std.fmt.comptimePrint("{d}", .{renderer_ir.rect_y_index});
-const rect_w_index_js = std.fmt.comptimePrint("{d}", .{renderer_ir.rect_w_index});
-const rect_h_index_js = std.fmt.comptimePrint("{d}", .{renderer_ir.rect_h_index});
-const rect_radius_index_js = std.fmt.comptimePrint("{d}", .{renderer_ir.rect_radius_index});
-const rect_shadow_index_js = std.fmt.comptimePrint("{d}", .{renderer_ir.rect_shadow_index});
-const rect_color_r_index_js = std.fmt.comptimePrint("{d}", .{renderer_ir.rect_color_r_index});
-const rect_color_g_index_js = std.fmt.comptimePrint("{d}", .{renderer_ir.rect_color_g_index});
-const rect_color_b_index_js = std.fmt.comptimePrint("{d}", .{renderer_ir.rect_color_b_index});
-const rect_color_a_index_js = std.fmt.comptimePrint("{d}", .{renderer_ir.rect_color_a_index});
-const rect_color2_r_index_js = std.fmt.comptimePrint("{d}", .{renderer_ir.rect_color2_r_index});
-const rect_color2_g_index_js = std.fmt.comptimePrint("{d}", .{renderer_ir.rect_color2_g_index});
-const rect_color2_b_index_js = std.fmt.comptimePrint("{d}", .{renderer_ir.rect_color2_b_index});
-const rect_color2_a_index_js = std.fmt.comptimePrint("{d}", .{renderer_ir.rect_color2_a_index});
-const rect_mode_index_js = std.fmt.comptimePrint("{d}", .{renderer_ir.rect_mode_index});
-const rect_mode_shadow_js = std.fmt.comptimePrint("{d}", .{renderer_ir.rect_mode_shadow});
-const texture_kind_red_js = std.fmt.comptimePrint("{d}", .{gl_contract.texture_kind_red});
-const clear_color_r_js = std.fmt.comptimePrint("{d}/255", .{gl_contract.clear_color_r_u8});
-const clear_color_g_js = std.fmt.comptimePrint("{d}/255", .{gl_contract.clear_color_g_u8});
-const clear_color_b_js = std.fmt.comptimePrint("{d}/255", .{gl_contract.clear_color_b_u8});
-const clear_color_a_js = std.fmt.comptimePrint("{d}/255", .{gl_contract.clear_color_a_u8});
-const text_vertex_float_stride_js = std.fmt.comptimePrint("{d}", .{renderer_ir.text_vertex_float_stride});
-const text_vertex_byte_stride_js = std.fmt.comptimePrint("{d}", .{renderer_ir.text_vertex_float_stride * @sizeOf(f32)});
 const keyboard_capture_event_js =
     "k==" ++ std.fmt.comptimePrint("{d}", .{@intFromEnum(app_input_event.Kind.key_down)}) ++
     "||k==" ++ std.fmt.comptimePrint("{d}", .{@intFromEnum(app_input_event.Kind.key_up)}) ++
@@ -48,153 +18,16 @@ const keyboard_capture_event_js =
     "||k==" ++ std.fmt.comptimePrint("{d}", .{@intFromEnum(app_input_event.Kind.composition_start)}) ++
     "||k==" ++ std.fmt.comptimePrint("{d}", .{@intFromEnum(app_input_event.Kind.composition_update)}) ++
     "||k==" ++ std.fmt.comptimePrint("{d}", .{@intFromEnum(app_input_event.Kind.composition_end)});
-const textured_u_byte_offset_js = std.fmt.comptimePrint("{d}", .{renderer_ir.textured_u_index * @sizeOf(f32)});
-const textured_color_byte_offset_js = std.fmt.comptimePrint("{d}", .{renderer_ir.textured_color_r_index * @sizeOf(f32)});
-const icon_line_vertex_float_stride_js = std.fmt.comptimePrint("{d}", .{icon_line_buffer.vertex_float_stride});
-const icon_line_vertex_byte_stride_js = std.fmt.comptimePrint("{d}", .{icon_line_buffer.vertex_float_stride * @sizeOf(f32)});
-const icon_line_color_byte_offset_js = std.fmt.comptimePrint("{d}", .{icon_line_buffer.vertex_color_r_index * @sizeOf(f32)});
-const gl_attr_bindings =
-    "G.bindAttribLocation(p," ++ attr_pos_location_js ++ ",`" ++ gl_contract.attr_pos ++ "`);" ++
-    "G.bindAttribLocation(p," ++ attr_uv_location_js ++ ",`" ++ gl_contract.attr_uv ++ "`);" ++
-    "G.bindAttribLocation(p," ++ attr_color_location_js ++ ",`" ++ gl_contract.attr_color ++ "`);";
-const gl_shader_sources =
-    "V=`" ++ gl_contract.rect_vertex_shader ++
-    "`,Rr=`" ++ gl_contract.rect_fragment_shader ++
-    "`,Tv=`" ++ gl_contract.textured_vertex_shader ++
-    "`,Tf=`" ++ gl_contract.text_fragment_shader ++
-    "`,If=`" ++ gl_contract.image_fragment_shader ++
-    "`,Lv=`" ++ gl_contract.line_vertex_shader ++
-    "`,Lf=`" ++ gl_contract.line_fragment_shader ++ "`";
 
 pub const loader_js =
-    \\let W,M,I,F,N=0,R=requestAnimationFrame,C=c,G=C.getContext`webgl`,T=new TextEncoder,D=new TextDecoder;if(!G)throw`webgl`;let U=(p,l)=>new Uint8Array(M,p,l).slice(),B=(p,l)=>D.decode(new Uint8Array(M,p,l)),Q=(p,l,t,z)=>{let a=document.createElement`a`,u=URL.createObjectURL(new Blob([U(p,l)]));a.href=u;a.download=B(t,z)||`edgerun-app.wasm`;a.click();URL.revokeObjectURL(u)},P=()=>{for(let i=0,n=W.er_ui_outbox_count();i<n;i++){let k=W.er_ui_outbox_kind(i),p=W.er_ui_outbox_payload_ptr(i),l=W.er_ui_outbox_payload_len(i),t=W.er_ui_outbox_target_ptr(i),z=W.er_ui_outbox_target_len(i);if(k==1)open(B(p,l),`_blank`,`noopener`);else if(k==2)location.hash=B(p,l);else if(k==3)document.title=B(p,l);else if(k==4){let e=document.getElementById(B(t,z));if(e)e.innerHTML=B(p,l)}else if(k==5&&l)Q(p,l,t,z);else if(k==6&&l)I=[I,WebAssembly.instantiate(U(p,l),{})]}W.er_ui_outbox_clear()},A=(e,k)=>{let p=W.er_ui_input_ptr(),m=new Uint8Array(M,p,W.er_ui_input_capacity()),v=new DataView(M,p),o=36,a=[e.key||``,e.code||``,e.inputType||``,e.data||location.hash||``],l=[];for(let i=0;i<4;i++){l[i]=T.encodeInto(a[i],m.subarray(o)).written;o+=l[i]}v.setUint32(0,k,1);v.setFloat32(4,e.clientX||0,1);v.setFloat32(8,e.clientY||0,1);v.setFloat32(12,e.deltaY||0,1);v.setUint32(16,(e.ctrlKey|0)+2*(e.metaKey|0)+4*(e.altKey|0)+8*(e.shiftKey|0)+16*(e.repeat|0),1);for(let i=0;i<4;i++)v.setUint32(20+i*4,l[i],1);let r=W.er_ui_event_bytes(o,innerWidth,innerHeight,performance.now());if((r&1)||
+    \\let W,M,I,F,N=0,R=requestAnimationFrame,C=c,G=C.getContext`webgl`,T=new TextEncoder,D=new TextDecoder;if(!G)throw`webgl`;
+    \\let U=(p,l)=>new Uint8Array(M,p,l).slice(),B=(p,l)=>D.decode(new Uint8Array(M,p,l)),Q=(p,l,t,z)=>{let a=document.createElement`a`,u=URL.createObjectURL(new Blob([U(p,l)]));a.href=u;a.download=B(t,z)||`edgerun-app.wasm`;a.click();URL.revokeObjectURL(u)},P=()=>{for(let i=0,n=W.er_ui_outbox_count();i<n;i++){let k=W.er_ui_outbox_kind(i),p=W.er_ui_outbox_payload_ptr(i),l=W.er_ui_outbox_payload_len(i),t=W.er_ui_outbox_target_ptr(i),z=W.er_ui_outbox_target_len(i);if(k==1)open(B(p,l),`_blank`,`noopener`);else if(k==2)location.hash=B(p,l);else if(k==3)document.title=B(p,l);else if(k==4){let e=document.getElementById(B(t,z));if(e)e.innerHTML=B(p,l)}else if(k==5&&l)Q(p,l,t,z);else if(k==6&&l)I=[I,WebAssembly.instantiate(U(p,l),{})]}W.er_ui_outbox_clear()},A=(e,k)=>{let p=W.er_ui_input_ptr(),m=new Uint8Array(M,p,W.er_ui_input_capacity()),v=new DataView(M,p),o=36,a=[e.key||``,e.code||``,e.inputType||``,e.data||location.hash||``],l=[];for(let i=0;i<4;i++){l[i]=T.encodeInto(a[i],m.subarray(o)).written;o+=l[i]}v.setUint32(0,k,1);v.setFloat32(4,e.clientX||0,1);v.setFloat32(8,e.clientY||0,1);v.setFloat32(12,e.deltaY||0,1);v.setUint32(16,(e.ctrlKey|0)+2*(e.metaKey|0)+4*(e.altKey|0)+8*(e.shiftKey|0)+16*(e.repeat|0),1);for(let i=0;i<4;i++)v.setUint32(20+i*4,l[i],1);let r=W.er_ui_event_bytes(o,innerWidth,innerHeight,performance.now());if((r&1)||
 ++ keyboard_capture_event_js ++
     \\)e.preventDefault();if(r&8)P();if(r&2)N||(N=R(F))};` resize wheel pointermove pointerleave pointerdown pointerup popstate hashchange keydown contextmenu keyup input change click dblclick visibilitychange focus blur beforeinput compositionstart compositionupdate compositionend touchstart touchmove touchend touchcancel dragstart dragend drop`.split` `.map((n,k)=>n&&addEventListener(n,e=>A(e,k),{passive:0,capture:1}));addEventListener(`scroll`,e=>A(e,2));addEventListener(`pointercancel`,e=>A(e,4));
-    \\let S=(t,s)=>{let h=G.createShader(t);G.shaderSource(h,s);G.compileShader(h);if(!G.getShaderParameter(h,G.COMPILE_STATUS))throw G.getShaderInfoLog(h);return h},O=(v,f)=>{let p=G.createProgram();G.attachShader(p,S(G.VERTEX_SHADER,v));G.attachShader(p,S(G.FRAGMENT_SHADER,f));
-++ gl_attr_bindings ++
-    \\G.linkProgram(p);if(!G.getProgramParameter(p,G.LINK_STATUS))throw G.getProgramInfoLog(p);return p},
-++ gl_shader_sources ++
-    \\;
-    \\let pr=O(V,Rr),pt=O(Tv,Tf),pi=O(Tv,If),pl=O(Lv,Lf),rb=G.createBuffer(),tb=G.createBuffer(),lb=G.createBuffer(),ft=G.createTexture(),it=G.createTexture(),fg=0,up=(x,w,h,fmt)=>{G.bindTexture(G.TEXTURE_2D,x);G.texParameteri(G.TEXTURE_2D,G.TEXTURE_MIN_FILTER,G.LINEAR);G.texParameteri(G.TEXTURE_2D,G.TEXTURE_MAG_FILTER,G.LINEAR);G.texParameteri(G.TEXTURE_2D,G.TEXTURE_WRAP_S,G.CLAMP_TO_EDGE);G.texParameteri(G.TEXTURE_2D,G.TEXTURE_WRAP_T,G.CLAMP_TO_EDGE);G.texImage2D(G.TEXTURE_2D,0,fmt,w,h,0,fmt,G.UNSIGNED_BYTE,new Uint8Array(M,fmt==G.RGBA?W.er_ui_post_image_rgba_ptr():W.er_ui_font_atlas_ptr(),fmt==G.RGBA?W.er_ui_post_image_rgba_len():w*h))},dr=(p,l)=>{let a=new Float32Array(M,p,l);G.bindBuffer(G.ARRAY_BUFFER,rb);G.bufferData(G.ARRAY_BUFFER,new Float32Array([0,0,1,0,0,1,1,1]),G.STATIC_DRAW);G.vertexAttribPointer(
-++ attr_pos_location_js ++
-    \\,2,G.FLOAT,0,0,0);G.enableVertexAttribArray(
-++ attr_pos_location_js ++
-    \\);G.useProgram(pr);G.uniform2f(G.getUniformLocation(pr,`
-++ gl_contract.uniform_screen ++
-    \\`),W.er_ui_width(),W.er_ui_height());G.uniform1f(G.getUniformLocation(pr,`
-++ gl_contract.uniform_pixel_scale ++
-    \\`),C.width/W.er_ui_width());for(let i=0;i<l;i+=
-++ rect_float_stride_js ++
-    \\){let x=a[i+
-++ rect_x_index_js ++
-    \\],y=a[i+
-++ rect_y_index_js ++
-    \\],w=a[i+
-++ rect_w_index_js ++
-    \\],h=a[i+
-++ rect_h_index_js ++
-    \\],m=a[i+
-++ rect_mode_index_js ++
-    \\],sh=a[i+
-++ rect_shadow_index_js ++
-    \\];G.uniform4f(G.getUniformLocation(pr,`
-++ gl_contract.uniform_rect ++
-    \\`),m==
-++ rect_mode_shadow_js ++
-    \\?x-sh:x,m==
-++ rect_mode_shadow_js ++
-    \\?y-sh:y,m==
-++ rect_mode_shadow_js ++
-    \\?w+sh*2:w,m==
-++ rect_mode_shadow_js ++
-    \\?h+sh*2:h);G.uniform4f(G.getUniformLocation(pr,`
-++ gl_contract.uniform_source_rect ++
-    \\`),x,y,w,h);G.uniform1f(G.getUniformLocation(pr,`
-++ gl_contract.uniform_radius ++
-    \\`),a[i+
-++ rect_radius_index_js ++
-    \\]);G.uniform1f(G.getUniformLocation(pr,`
-++ gl_contract.uniform_shadow ++
-    \\`),sh);G.uniform1i(G.getUniformLocation(pr,`
-++ gl_contract.uniform_mode ++
-    \\`),m);G.uniform4f(G.getUniformLocation(pr,`
-++ gl_contract.uniform_color ++
-    \\`),a[i+
-++ rect_color_r_index_js ++
-    \\],a[i+
-++ rect_color_g_index_js ++
-    \\],a[i+
-++ rect_color_b_index_js ++
-    \\],a[i+
-++ rect_color_a_index_js ++
-    \\]);G.uniform4f(G.getUniformLocation(pr,`
-++ gl_contract.uniform_color2 ++
-    \\`),a[i+
-++ rect_color2_r_index_js ++
-    \\],a[i+
-++ rect_color2_g_index_js ++
-    \\],a[i+
-++ rect_color2_b_index_js ++
-    \\],a[i+
-++ rect_color2_a_index_js ++
-    \\]);G.drawArrays(G.TRIANGLE_STRIP,0,4)}};let dt=(p,l,t,g)=>{if(!l)return;G.useProgram(g?pi:pt);G.uniform2f(G.getUniformLocation(g?pi:pt,`
-++ gl_contract.uniform_screen ++
-    \\`),W.er_ui_width(),W.er_ui_height());if(!g)G.uniform1i(G.getUniformLocation(pt,`
-++ gl_contract.uniform_texture_kind ++
-    \\`),
-++ texture_kind_red_js ++
-    \\);G.bindTexture(G.TEXTURE_2D,t);G.bindBuffer(G.ARRAY_BUFFER,tb);G.bufferData(G.ARRAY_BUFFER,new Float32Array(M,p,l),G.DYNAMIC_DRAW);G.vertexAttribPointer(
-++ attr_pos_location_js ++
-    \\,2,G.FLOAT,0,
-++ text_vertex_byte_stride_js ++
-    \\,0);G.vertexAttribPointer(
-++ attr_uv_location_js ++
-    \\,2,G.FLOAT,0,
-++ text_vertex_byte_stride_js ++
-    \\,
-++ textured_u_byte_offset_js ++
-    \\);G.vertexAttribPointer(
-++ attr_color_location_js ++
-    \\,4,G.FLOAT,0,
-++ text_vertex_byte_stride_js ++
-    \\,
-++ textured_color_byte_offset_js ++
-    \\);G.enableVertexAttribArray(
-++ attr_pos_location_js ++
-    \\);G.enableVertexAttribArray(
-++ attr_uv_location_js ++
-    \\);G.enableVertexAttribArray(
-++ attr_color_location_js ++
-    \\);G.drawArrays(G.TRIANGLES,0,l/
-++ text_vertex_float_stride_js ++
-    \\)},dl=(p,l)=>{if(!l)return;G.useProgram(pl);G.uniform2f(G.getUniformLocation(pl,`
-++ gl_contract.uniform_screen ++
-    \\`),W.er_ui_width(),W.er_ui_height());G.bindBuffer(G.ARRAY_BUFFER,lb);G.bufferData(G.ARRAY_BUFFER,new Float32Array(M,p,l),G.DYNAMIC_DRAW);G.vertexAttribPointer(
-++ attr_pos_location_js ++
-    \\,2,G.FLOAT,0,
-++ icon_line_vertex_byte_stride_js ++
-    \\,0);G.vertexAttribPointer(
-++ attr_color_location_js ++
-    \\,4,G.FLOAT,0,
-++ icon_line_vertex_byte_stride_js ++
-    \\,
-++ icon_line_color_byte_offset_js ++
-    \\);G.enableVertexAttribArray(
-++ attr_pos_location_js ++
-    \\);G.enableVertexAttribArray(
-++ attr_color_location_js ++
-    \\);G.drawArrays(G.TRIANGLES,0,l/
-++ icon_line_vertex_float_stride_js ++
-    \\)};
-    \\F=t=>{N=0;let w=innerWidth|0,h=innerHeight|0,d=Math.min(devicePixelRatio||1,4,W.er_ui_max_width()/w,W.er_ui_max_height()/h);C.style.width=w+`px`;C.style.height=h+`px`;C.width=w*d;C.height=h*d;G.viewport(0,0,C.width,C.height);G.clearColor(
-++ clear_color_r_js ++
-    \\,
-++ clear_color_g_js ++
-    \\,
-++ clear_color_b_js ++
-    \\,
-++ clear_color_a_js ++
-    \\);G.clear(G.COLOR_BUFFER_BIT);G.disable(G.DITHER);G.enable(G.BLEND);G.blendFuncSeparate(G.ONE,G.ONE_MINUS_SRC_ALPHA,G.ONE,G.ONE_MINUS_SRC_ALPHA);W.er_ui_set_device_scale(d);if(W.er_ui_build_frame(w,h,t))throw W.er_ui_last_error();if(fg!=W.er_ui_font_atlas_generation()){up(ft,W.er_ui_font_atlas_width(),W.er_ui_font_atlas_height(),G.LUMINANCE);fg=W.er_ui_font_atlas_generation()}if(!it.w){up(it,W.er_ui_post_image_width(),W.er_ui_post_image_height(),G.RGBA);it.w=1}dr(W.er_ui_packed_rect_buffer_ptr(),W.er_ui_packed_rect_buffer_len());dt(W.er_ui_packed_image_vertex_buffer_ptr(),W.er_ui_packed_image_vertex_buffer_len(),it,1);dt(W.er_ui_packed_text_vertex_buffer_ptr(),W.er_ui_packed_text_vertex_buffer_len(),ft,0);dl(W.er_ui_packed_icon_line_vertex_buffer_ptr(),W.er_ui_packed_icon_line_vertex_buffer_len());dr(W.er_ui_packed_overlay_rect_buffer_ptr(),W.er_ui_packed_overlay_rect_buffer_len());dt(W.er_ui_packed_overlay_text_vertex_buffer_ptr(),W.er_ui_packed_overlay_text_vertex_buffer_len(),ft,0);dl(W.er_ui_packed_overlay_icon_line_vertex_buffer_ptr(),W.er_ui_packed_overlay_icon_line_vertex_buffer_len())};W=(await WebAssembly.instantiate(await(await fetch`../bin/edgerun-app-runtime.wasm`).arrayBuffer())).instance.exports;M=W.memory.buffer;W.er_ui_boot();P();A({type:`hashchange`},8);N||(N=R(F))
+    \\let R_=(x,l)=>D.decode(new Uint8Array(W.memory.buffer,x,l));
+    \\let L={glActiveTexture:t=>G.activeTexture(t),glAttachShader:(p,s)=>G.attachShader(p,s),glBindAttribLocation:(p,i,x,l)=>G.bindAttribLocation(p,i,R_(x,l)),glBindBuffer:(t,b)=>G.bindBuffer(t,b),glBindTexture:(t,x)=>G.bindTexture(t,x),glBlendFuncSeparate:(a,b,c,d)=>G.blendFuncSeparate(a,b,c,d),glBufferData:(t,s,p,u)=>G.bufferData(t,new Float32Array(W.memory.buffer,p,s/4),u),glClear:m=>G.clear(m),glClearColor:(r,g,b,a)=>G.clearColor(r,g,b,a),glCompileShader:s=>G.compileShader(s),glCreateProgram:()=>G.createProgram(),glCreateShader:t=>G.createShader(t),glDeleteBuffers:(n,b)=>G.deleteBuffers([b]),glDeleteProgram:p=>G.deleteProgram(p),glDeleteShader:s=>G.deleteShader(s),glDeleteTextures:(n,t)=>G.deleteTextures([t]),glDisable:c=>G.disable(c),glDrawArrays:(m,f,c)=>G.drawArrays(m,f,c),glEnable:c=>G.enable(c),glEnableVertexAttribArray:i=>G.enableVertexAttribArray(i),glGenBuffers:n=>G.createBuffer(),glGenTextures:n=>G.createTexture(),glGetProgramiv:(p,n)=>G.getProgramParameter(p,n)?1:0,glGetShaderiv:(s,n)=>G.getShaderParameter(s,n)?1:0,glGetUniformLocation:(p,x,l)=>G.getUniformLocation(p,R_(x,l)),glLinkProgram:p=>G.linkProgram(p),glPixelStorei:(p,v)=>G.pixelStorei(p,v),glShaderSource:(s,c,x,l)=>G.shaderSource(s,R_(x,l)),glTexImage2D:(t,l,i,w,h,b,f,tp,p)=>G.texImage2D(t,l,i,w,h,b,f,tp,p?new Uint8Array(W.memory.buffer,p):null),glTexParameteri:(t,p,v)=>G.texParameteri(t,p,v),glTexSubImage2D:(t,l,x,y,w,h,f,tp,p)=>G.texSubImage2D(t,l,x,y,w,h,f,tp,new Uint8Array(W.memory.buffer,p)),glUniform1f:(l,v)=>G.uniform1f(l,v),glUniform1i:(l,v)=>G.uniform1i(l,v),glUniform2f:(l,a,b)=>G.uniform2f(l,a,b),glUniform4f:(l,a,b,c,d)=>G.uniform4f(l,a,b,c,d),glUseProgram:p=>G.useProgram(p),glVertexAttribPointer:(i,s,t,n,st,ptr)=>G.vertexAttribPointer(i,s,t,n,st,ptr),glViewport:(x,y,w,h)=>G.viewport(x,y,w,h)};
+    \\W=(await WebAssembly.instantiate(await(await fetch`../bin/edgerun-app-runtime.wasm`).arrayBuffer(),{env:L})).instance.exports;M=W.memory.buffer;W.er_ui_wasm_gl_init();W.er_ui_boot();P();A({type:`hashchange`},8);
+    \\F=t=>{N=0;let w=innerWidth|0,h=innerHeight|0,d=Math.min(devicePixelRatio||1,4,W.er_ui_max_width()/w,W.er_ui_max_height()/h);C.style.width=w+`px`;C.style.height=h+`px`;C.width=w*d;C.height=h*d;W.er_ui_render_frame_wasm(w,h,d,t);P()};A({type:`hashchange`},8);N||(N=R(F))
 ;
 pub const total_js_bytes: usize = loader_js.len;
 
@@ -261,53 +94,24 @@ test "generated entry has the only javascript byte bridge" {
     try std.testing.expect(contains("fetch`../bin/edgerun-app-runtime.wasm`"));
     try std.testing.expect(contains("er_ui_event_bytes"));
     try std.testing.expect(contains("getContext`webgl`"));
-    try std.testing.expect(contains("er_ui_build_frame"));
+    try std.testing.expect(contains("er_ui_wasm_gl_init"));
+    try std.testing.expect(contains("er_ui_render_frame_wasm"));
+    try std.testing.expect(!contains("er_ui_build_frame"));
     try std.testing.expect(contains("er_ui_set_device_scale"));
     try std.testing.expect(contains("er_ui_outbox_count"));
     try std.testing.expect(contains("new DataView"));
     try std.testing.expect(contains("setUint32(0,k,1)"));
     try std.testing.expect(contains("setFloat32(4"));
     try std.testing.expect(contains("setUint32(20+i*4"));
-    try std.testing.expect(contains("createShader"));
-    try std.testing.expect(contains("shaderSource"));
-    try std.testing.expect(contains("bindAttribLocation(p,0,`a`)"));
-    try std.testing.expect(contains("bindAttribLocation(p,1,`b`)"));
-    try std.testing.expect(contains("bindAttribLocation(p,2,`c`)"));
-    try std.testing.expect(contains(gl_contract.rect_vertex_shader));
-    try std.testing.expect(contains(gl_contract.rect_fragment_shader));
-    try std.testing.expect(contains(gl_contract.textured_vertex_shader));
-    try std.testing.expect(contains(gl_contract.text_fragment_shader));
-    try std.testing.expect(contains(gl_contract.image_fragment_shader));
-    try std.testing.expect(contains(gl_contract.line_vertex_shader));
-    try std.testing.expect(contains(gl_contract.line_fragment_shader));
-    try std.testing.expect(contains("i+=" ++ rect_float_stride_js));
-    try std.testing.expect(contains("m=a[i+" ++ rect_mode_index_js ++ "]"));
-    try std.testing.expect(contains("sh=a[i+" ++ rect_shadow_index_js ++ "]"));
-    try std.testing.expect(contains("m==" ++ rect_mode_shadow_js ++ "?x-sh:x"));
-    try std.testing.expect(contains("G.clearColor(" ++ clear_color_r_js ++ "," ++ clear_color_g_js ++ "," ++ clear_color_b_js ++ "," ++ clear_color_a_js ++ ")"));
-    try std.testing.expect(!contains("G.clearColor(10/255,14/255,20/255,1)"));
-    try std.testing.expect(contains("G.disable(G.DITHER)"));
-    try std.testing.expect(contains("G.blendFuncSeparate(G.ONE,G.ONE_MINUS_SRC_ALPHA,G.ONE,G.ONE_MINUS_SRC_ALPHA)"));
-    try std.testing.expect(!contains("G.blendFunc(G.ONE,G.ONE_MINUS_SRC_ALPHA)"));
-    try std.testing.expect(contains("G.uniform1i(G.getUniformLocation(pt,`" ++ gl_contract.uniform_texture_kind ++ "`)," ++ texture_kind_red_js ++ ")"));
-    try std.testing.expect(contains("G.vertexAttribPointer(" ++ attr_pos_location_js ++ ",2,G.FLOAT,0," ++ text_vertex_byte_stride_js ++ ",0)"));
-    try std.testing.expect(contains("G.vertexAttribPointer(" ++ attr_uv_location_js ++ ",2,G.FLOAT,0," ++ text_vertex_byte_stride_js ++ "," ++ textured_u_byte_offset_js ++ ")"));
-    try std.testing.expect(contains("G.vertexAttribPointer(" ++ attr_color_location_js ++ ",4,G.FLOAT,0," ++ text_vertex_byte_stride_js ++ "," ++ textured_color_byte_offset_js ++ ")"));
-    try std.testing.expect(contains("G.drawArrays(G.TRIANGLES,0,l/" ++ text_vertex_float_stride_js ++ ")"));
-    try std.testing.expect(contains("G.vertexAttribPointer(" ++ attr_pos_location_js ++ ",2,G.FLOAT,0," ++ icon_line_vertex_byte_stride_js ++ ",0)"));
-    try std.testing.expect(contains("G.vertexAttribPointer(" ++ attr_color_location_js ++ ",4,G.FLOAT,0," ++ icon_line_vertex_byte_stride_js ++ "," ++ icon_line_color_byte_offset_js ++ ")"));
-    try std.testing.expect(contains("G.drawArrays(G.TRIANGLES,0,l/" ++ icon_line_vertex_float_stride_js ++ ")"));
-    try std.testing.expect(contains("er_ui_packed_rect_buffer_ptr"));
-    try std.testing.expect(contains("er_ui_packed_text_vertex_buffer_ptr"));
-    try std.testing.expect(contains("er_ui_packed_image_vertex_buffer_ptr"));
-    try std.testing.expect(contains("er_ui_packed_icon_line_vertex_buffer_ptr"));
-    try std.testing.expect(contains("er_ui_packed_overlay_rect_buffer_ptr"));
-    try std.testing.expect(contains("er_ui_packed_overlay_text_vertex_buffer_ptr"));
-    try std.testing.expect(contains("er_ui_packed_overlay_icon_line_vertex_buffer_ptr"));
-    try std.testing.expect(contains("er_ui_font_atlas_ptr"));
-    try std.testing.expect(contains("er_ui_post_image_rgba_ptr"));
+    try std.testing.expect(contains("glCreateShader"));
+    try std.testing.expect(contains("glShaderSource"));
+    try std.testing.expect(contains("glBindAttribLocation"));
     try std.testing.expect(contains("TextDecoder"));
     try std.testing.expect(contains("TextEncoder"));
+    try std.testing.expect(contains("glUniform4f"));
+    try std.testing.expect(contains("glDrawArrays"));
+    try std.testing.expect(contains("glClearColor"));
+    try std.testing.expect(contains("glViewport"));
     try std.testing.expect(contains("download=B(t,z)"));
     try std.testing.expect(contains("location.hash=B(p,l)"));
     try std.testing.expect(contains("I=[I,WebAssembly.instantiate"));
@@ -334,4 +138,31 @@ test "generated entry has the only javascript byte bridge" {
     try std.testing.expect(!contains("vertexSource"));
     try std.testing.expect(!contains("hostCommandHandlers"));
     try std.testing.expect(!contains("addEventListener(\"keydown\""));
+    try std.testing.expect(!contains("er_ui_packed_rect_buffer_ptr"));
+    try std.testing.expect(!contains("er_ui_packed_text_vertex_buffer_ptr"));
+    try std.testing.expect(!contains("er_ui_packed_image_vertex_buffer_ptr"));
+    try std.testing.expect(!contains("er_ui_packed_icon_line_vertex_buffer_ptr"));
+    try std.testing.expect(!contains("er_ui_packed_overlay_rect_buffer_ptr"));
+    try std.testing.expect(!contains("er_ui_packed_overlay_text_vertex_buffer_ptr"));
+    try std.testing.expect(!contains("er_ui_packed_overlay_icon_line_vertex_buffer_ptr"));
+    try std.testing.expect(!contains("er_ui_font_atlas_ptr"));
+    try std.testing.expect(!contains("er_ui_post_image_rgba_ptr"));
+    try std.testing.expect(!contains("G.vertexAttribPointer"));
+    try std.testing.expect(!contains("G.bindAttribLocation"));
+    try std.testing.expect(!contains("blendFuncSeparate"));
+    try std.testing.expect(!contains("rect_vertex_shader"));
+    try std.testing.expect(!contains("rect_fragment_shader"));
+    try std.testing.expect(!contains("textured_vertex_shader"));
+    try std.testing.expect(!contains("text_fragment_shader"));
+    try std.testing.expect(!contains("image_fragment_shader"));
+    try std.testing.expect(!contains("line_vertex_shader"));
+    try std.testing.expect(!contains("line_fragment_shader"));
+    try std.testing.expect(!contains("er_ui_font_atlas_generation"));
+    try std.testing.expect(!contains("er_ui_packed_rect_float_stride"));
+    try std.testing.expect(!contains("i+="));
+    try std.testing.expect(!contains("m=a[i+"));
+    try std.testing.expect(!contains("sh=a[i+"));
+    try std.testing.expect(!contains("G.getUniformLocation(pt,`"));
+    try std.testing.expect(!contains("er_ui_post_image_width"));
+    try std.testing.expect(!contains("er_ui_font_atlas_width"));
 }

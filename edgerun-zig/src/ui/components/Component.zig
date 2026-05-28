@@ -142,7 +142,7 @@ pub const Component = union(enum) {
             inline else => |component| {
                 if (comptime @hasDecl(@TypeOf(component), "collectInteractions")) {
                     const T = @TypeOf(component);
-                    const fn_info = @typeInfo(@TypeOf(T.collectInteractions)).Fn;
+                    const fn_info = @typeInfo(@TypeOf(T.collectInteractions)).@"fn";
                     if (fn_info.params.len >= 4) {
                         try component.collectInteractions(collector, bounds, options);
                     } else {

@@ -83,7 +83,7 @@ const SceneState = struct {
             .w = @floatFromInt(width),
             .h = @floatFromInt(height),
         }, .{
-            .route = .{ .view = .landing },
+            .route = .{ .view = .frontend },
             .public_identity = "drm-gbm-gpu",
             .public_identity_ready = true,
         });

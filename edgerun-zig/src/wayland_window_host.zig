@@ -923,7 +923,6 @@ const NativeApp = struct {
     }
 
     fn refreshAgentHostConnectivity(self: *NativeApp) void {
-        if (self.state.route.view != .agent) return;
         if (self.state.agent.host_launch_requested) return;
         if (isHostApiReachable(self.state.agent.host_url)) {
             self.state.agent.connected = true;
@@ -1056,7 +1055,6 @@ const NativeApp = struct {
                 if (button == wl_pointer_button_left) {
                     if (state == wl_pointer_button_released) {
                         app_native_input.processPointerEvent(&self.state, &.{}, self.regionSlice(), .pointer_up);
-                        if (self.state.route.view == .agent) self.refreshAgentHostConnectivity();
                         try self.activateClientDecoration(client);
                     } else {
                         app_native_input.processPointerEvent(&self.state, &.{}, self.regionSlice(), .pointer_down);
@@ -2033,7 +2031,7 @@ test "wayland host renders the source app scene through the shared frame" {
     var collector = interaction.Collector.init(&regions);
     var dash_state: app_dashboard.State = .{};
     try renderNativeAppScene(&scene, &collector, 1280, 800, .{
-        .route = .{ .view = .source },
+        .route = .{ .view = .backend },
     }, &dash_state, false);
     try std.testing.expect(hasText(scene.written(), "WORKSPACE"));
     try std.testing.expect(scene.written().len > 0);
@@ -2047,7 +2045,7 @@ test "wayland host renders academy post route through canonical ir" {
     var collector = interaction.Collector.init(&regions);
     const post_id = app_blog.postIdAt(app_blog.posts.len - 1);
     var dash_b: app_dashboard.State = .{};
-    try renderNativeAppScene(&scene, &collector, 1280, 1800, .{ .route = .{ .view = .blog, .selected_blog_post_id = post_id } }, &dash_b, false);
+    try renderNativeAppScene(&scene, &collector, 1280, 1800, .{ .route = .{ .view = .frontend, .selected_blog_post_id = post_id } }, &dash_b, false);
     try std.testing.expect(hasText(scene.written(), "AUTHORITY FLOW"));
     try std.testing.expect(hasText(scene.written(), "Relay"));
     try std.testing.expect(hasText(scene.written(), "TPM"));
@@ -2105,7 +2103,7 @@ test "wayland host renders client side decoration above app content" {
     try std.testing.expectEqual(@as(f32, 0.0), (try hitRect(collector.written(), client_decor_drag_id)).y);
     try std.testing.expect((try hitRect(collector.written(), client_decor_close_id)).x > 1200.0);
 
-    const academy = try hitRect(collector.written(), app_navigation.topLevelButtonId(.blog));
+    const academy = try hitRect(collector.written(), app_navigation.subNavBinding(.blog).id);
     try std.testing.expect(academy.y >= client_decor_h);
 }
 
@@ -2174,7 +2172,7 @@ test "wayland host pointer input updates hover activation and scroll state" {
     updateHoverHitForState(&state, collector.written());
     try std.testing.expect(state.runtime.hovered == null);
 
-    const docs = try hitRect(collector.written(), app_navigation.topLevelButtonId(.docs));
+    const docs = try hitRect(collector.written(), app_navigation.subNavBinding(.docs).id);
     state.hover_x = docs.x + docs.w * 0.5;
     state.hover_y = docs.y + docs.h * 0.5;
     updateHoverHitForState(&state, collector.written());
@@ -2209,7 +2207,7 @@ test "wayland host appends scene cursor from native hover state" {
     var collector = interaction.Collector.init(&app.regions);
     try renderNativeAppScene(&scene, &collector, app.width, app.height, app.state, &app.dashboard_app, app.dashboard);
     app.region_len = collector.written().len;
-    const docs = try hitRect(app.regionSlice(), app_navigation.topLevelButtonId(.docs));
+    const docs = try hitRect(app.regionSlice(), app_navigation.subNavBinding(.docs).id);
     app.state.hover_x = docs.x + docs.w * 0.5;
     app.state.hover_y = docs.y + docs.h * 0.5;
     app.updateHoverHit(app.regionSlice());

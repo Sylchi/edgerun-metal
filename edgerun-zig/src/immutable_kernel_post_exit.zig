@@ -242,7 +242,7 @@ fn renderVirtioGpuPackedDebugFrame(device: *virtio_gpu.Device, state: *State, em
     var scene = ui.Scene.initWithClips(&state.app_scene_commands, &state.app_scene_clips);
     var collector = interaction.Collector.init(&state.app_interactions);
     app_frame.render(&scene, &collector, ui.Rect.init(0, 0, @floatFromInt(virtio_scanout_width), @floatFromInt(virtio_scanout_height)), .{
-        .route = .{ .view = .source },
+        .route = .{ .view = .backend },
         .public_identity = "post-exit-virtio-renderer",
         .public_identity_ready = true,
     }) catch return fail(emit, error.RendererIrFailed, "FAIL post-exit virtio-gpu app-frame");

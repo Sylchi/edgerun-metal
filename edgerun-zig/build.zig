@@ -518,6 +518,8 @@ pub fn build(b: *std.Build) void {
         "er_ui_build_frame",
         "er_ui_render_frame",
         "er_ui_render_frame_hd",
+        "er_ui_wasm_gl_init",
+        "er_ui_render_frame_wasm",
         "er_ui_render_icon_svg_test",
         "er_ui_render_icon_svg_tuning_test",
     };
@@ -625,4 +627,16 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| pi_usb_control.addArgs(args);
     const pi_usb_control_step = b.step("pi-usb-control", "Send Edgerun Pi USB control commands over Linux usbfs without external dependencies");
     pi_usb_control_step.dependOn(&pi_usb_control.step);
+
+    const gen_font = b.addExecutable(.{
+        .name = "gen-font",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/gen_font.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    const run_gen_font = b.addRunArtifact(gen_font);
+    const gen_font_step = b.step("gen-font", "Generate pre-compiled font canonical objects from the Geist TTF");
+    gen_font_step.dependOn(&run_gen_font.step);
 }

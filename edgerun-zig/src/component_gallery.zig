@@ -518,7 +518,7 @@ pub fn docsContentHeight(width: f32, selected_index: ?usize) f32 {
     return selected_h + catalogSectionHeight(columns, gap);
 }
 
-pub fn renderDocsContent(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, selected_index: ?usize, hover_x: f32, hover_y: f32, drag_id: u32, drag_value: f32) GalleryError!void {
+pub fn renderDocsContent(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, selected_index: ?usize, hover_x: f32, hover_y: f32, drag_override: ?DragOverride) GalleryError!void {
     const previous_hover_point = gallery_hover_point;
     gallery_hover_point = if (hover_x >= hover_disabled_coord + 1 and hover_y >= hover_disabled_coord + 1)
         .{ .x = hover_x, .y = hover_y }
@@ -526,9 +526,9 @@ pub fn renderDocsContent(scene: *ui.Scene, collector: *interaction.Collector, bo
         null;
     defer gallery_hover_point = previous_hover_point;
 
-    const previous_drag = gallery_drag_value;
-    gallery_drag_value = if (drag_value >= 0.0) .{ .id = drag_id, .value = drag_value } else null;
-    defer gallery_drag_value = previous_drag;
+    const previous_drag = gallery_drag_override;
+    gallery_drag_override = drag_override;
+    defer gallery_drag_override = previous_drag;
 
     const gap = grid_gap_default;
     const columns = galleryColumnCount(bounds.w, gap);
@@ -820,7 +820,7 @@ fn renderComponentPreview(scene: *ui.Scene, collector: *interaction.Collector, b
     try validateCanonicalPreview(component);
     const meta = component.accessibility();
     const open_ids = if (meta.control_id) |id| (&[_]u32{id})[0..] else &.{};
-    const drag_value = if (meta.control_id) |id| if (gallery_drag_value) |drag| if (drag.id == id) drag.value else null else null else null;
+    const drag_value = if (meta.control_id) |id| if (gallery_drag_override) |drag| if (drag.id == id) drag.value else null else null else null;
     const options = .{ .style = componentStyle(), .overlay = .{ .open_ids = open_ids }, .drag_value = drag_value };
     try component.render(scene, bounds, options);
     try component.collectInteractions(collector, bounds, options);

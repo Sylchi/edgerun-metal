@@ -142,9 +142,10 @@ pub fn headerMode(content_w: f32) HeaderMode {
 }
 
 pub fn renderHeader(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, content: ui.Rect, active: ActiveNav) (ui.RenderError || interaction.Error)!void {
-    const docs_binding = app_navigation.topLevelBinding(.docs);
-    const blog_binding = app_navigation.topLevelBinding(.blog);
-    const source_binding = app_navigation.topLevelBinding(.source);
+    const logo_binding = app_navigation.subNavBinding(.logo);
+    const docs_binding = app_navigation.subNavBinding(.docs);
+    const blog_binding = app_navigation.subNavBinding(.blog);
+    const source_binding = app_navigation.subNavBinding(.source);
 
     try fill(scene, bounds, palette.bg, 0.0);
     try fill(scene, ui.Rect.init(bounds.x, bounds.y + bounds.h - 1.0, bounds.w, 1.0), palette.border, 0.0);
@@ -161,7 +162,7 @@ pub fn renderHeader(scene: *ui.Scene, collector: *interaction.Collector, bounds:
     try fill(scene, logo, palette.primary, 7.0);
     try icon_component.Icon.named(.terminal).renderColor(scene, logo.insetUniform(design.Icon.logo_inset), palette.bg);
     try text(scene, logo.x + 42.0, bounds.y + 23.0, 110.0, 18.0, "EdgeRun", palette.text);
-    try collector.addHit(ui.Rect.init(logo.x, logo.y, 148.0, logo.h), .button, app_navigation.topLevelBinding(.logo).id);
+    try collector.addHit(ui.Rect.init(logo.x, logo.y, 148.0, logo.h), .button, logo_binding.id);
 
     const nav_y = bounds.y + 18.0;
     const nav_center = content.x + content.w * 0.5;
@@ -173,34 +174,35 @@ pub fn renderHeader(scene: *ui.Scene, collector: *interaction.Collector, bounds:
         .kind = .top_text,
         .binding = docs_binding,
         .bounds = ui.Rect.init(nav_x, nav_y, docs_w, nav_item_h),
-        .active = isActive(.docs, active),
+        .active = active == .docs,
     });
     nav_x += docs_w + compact_nav_gap;
     try renderNavItem(scene, collector, .{
         .kind = .top_text,
         .binding = blog_binding,
         .bounds = ui.Rect.init(nav_x, nav_y, academy_w, nav_item_h),
-        .active = isActive(.blog, active),
+        .active = active == .blog,
     });
 
-    const source = ui.Rect.init(content.x + content.w - design.Icon.logo_box, bounds.y + 16.0, design.Icon.logo_box, design.Icon.logo_box);
+    const source_bounds = ui.Rect.init(content.x + content.w - design.Icon.logo_box, bounds.y + 16.0, design.Icon.logo_box, design.Icon.logo_box);
     try renderNavItem(scene, collector, .{
         .kind = .top_icon,
         .binding = source_binding,
-        .bounds = source,
-        .active = isActive(.source, active),
+        .bounds = source_bounds,
+        .active = active == .source,
     });
 }
 
 fn renderCompactHeader(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, content: ui.Rect, active: ActiveNav) (ui.RenderError || interaction.Error)!void {
-    const source_binding = app_navigation.topLevelBinding(.source);
-    const docs_binding = app_navigation.topLevelBinding(.docs);
+    const logo_binding = app_navigation.subNavBinding(.logo);
+    const docs_binding = app_navigation.subNavBinding(.docs);
+    const source_binding = app_navigation.subNavBinding(.source);
 
     const logo = ui.Rect.init(content.x, bounds.y + 16.0, design.Icon.logo_box, design.Icon.logo_box);
     try fill(scene, logo, palette.primary, 7.0);
     try icon_component.Icon.named(.terminal).renderColor(scene, logo.insetUniform(design.Icon.logo_inset), palette.bg);
     try text(scene, logo.x + 40.0, bounds.y + 23.0, 78.0, 18.0, "EdgeRun", palette.text);
-    try collector.addHit(ui.Rect.init(logo.x, logo.y, 118.0, logo.h), .button, app_navigation.topLevelBinding(.logo).id);
+    try collector.addHit(ui.Rect.init(logo.x, logo.y, 118.0, logo.h), .button, logo_binding.id);
 
     switch (headerMode(content.w)) {
         .mobile => {
@@ -210,13 +212,13 @@ fn renderCompactHeader(scene: *ui.Scene, collector: *interaction.Collector, boun
                 .kind = .top_icon,
                 .binding = source_binding,
                 .bounds = source,
-                .active = isActive(.source, active),
+                .active = active == .source,
             });
             try renderNavItem(scene, collector, .{
                 .kind = .top_icon,
                 .binding = docs_binding,
                 .bounds = docs,
-                .active = isActive(.docs, active),
+                .active = active == .docs,
             });
             return;
         },
@@ -229,13 +231,13 @@ fn renderCompactHeader(scene: *ui.Scene, collector: *interaction.Collector, boun
         .kind = .top_icon,
         .binding = source_binding,
         .bounds = source,
-        .active = isActive(.source, active),
+        .active = active == .source,
     });
 
     const nav_y = bounds.y + 18.0;
     const nav_right = source.x - compact_nav_gap;
-    const blog = app_navigation.topLevelBinding(.blog);
-    const docs = app_navigation.topLevelBinding(.docs);
+    const blog = app_navigation.subNavBinding(.blog);
+    const docs = app_navigation.subNavBinding(.docs);
     const blog_w = navWidth(blog.row_title);
     const docs_w = navWidth(docs.row_title);
     const blog_bounds = ui.Rect.init(nav_right - blog_w, nav_y, blog_w, nav_item_h);
@@ -246,25 +248,15 @@ fn renderCompactHeader(scene: *ui.Scene, collector: *interaction.Collector, boun
             .kind = .top_text,
             .binding = docs,
             .bounds = docs_bounds,
-            .active = isActive(.docs, active),
+            .active = active == .docs,
         });
         try renderNavItem(scene, collector, .{
             .kind = .top_text,
             .binding = blog,
             .bounds = blog_bounds,
-            .active = isActive(.blog, active),
+            .active = active == .blog,
         });
     }
-}
-
-fn isActive(button: app_navigation.MainButton, active: ActiveNav) bool {
-    return switch (button) {
-        .docs => active == .docs,
-        .blog => active == .blog,
-        .source => active == .source,
-        .agent => active == .agent,
-        else => false,
-    };
 }
 
 pub fn renderNavItem(scene: *ui.Scene, collector: *interaction.Collector, props: NavProps) (ui.RenderError || interaction.Error)!void {
