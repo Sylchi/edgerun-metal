@@ -219,57 +219,37 @@ fn tokenColor(line: []const u8, index: *usize) ui.Color {
 
 fn renderCursorForLine(scene: *ui.Scene, code_view: ui.Rect, y: f32, line_start: usize, line_end: usize, state: State) !void {
     if (state.cursor < line_start or state.cursor > line_end) return;
+    const line_prefix_len = state.cursor - line_start;
     const line = state.source[line_start..line_end];
-    const offset = codeColumnWidth(line, state.cursor - line_start);
-    try fill(scene, ui.Rect.init(code_view.x + code_pad + code_gutter_w + offset, y + 2.0, 1.5, code_line_h - 4.0), accent, 0.0);
+    const x = code_view.x + code_gutter_w + code_pad + codeColumnWidth(line, line_prefix_len);
+    try fill(scene, ui.Rect.init(x, y + 2.0, 1.5, code_line_h - 4.0), accent, 1.0);
 }
 
-fn renderSelectionForLine(scene: *ui.Scene, code_view: ui.Rect, y: f32, line_start: usize, visible_end: usize, state: State) !void {
-    if (!state.selection_active or state.selection_anchor == state.cursor) return;
-    const selection = selectionBounds(state);
-    const start = @max(selection.start, line_start);
-    const end = @min(selection.end, visible_end);
-    if (start >= end) return;
-    const line = state.source[line_start..visible_end];
-    const start_offset = codeColumnWidth(line, start - line_start);
-    const end_offset = codeColumnWidth(line, end - line_start);
-    const x = code_view.x + code_pad + code_gutter_w + start_offset;
-    const w = @max(2.0, end_offset - start_offset);
-    try fill(scene, ui.Rect.init(x, y, w, code_line_h), ui.Color{ .r = 9, .g = 71, .b = 113, .a = 210 }, 0.0);
-}
-
-fn button(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id: u32, variant: component_common.ButtonVariant, leading: icon_component.Icon, enabled: bool) !void {
-    const component = button_component.Button{ .id = id, .label = label, .variant = variant, .icon_slot = icon_component.IconSlot.of(.leading, leading) };
-    if (!enabled) {
-        try component.render(scene, bounds, .{
-            .style = app_design.style(),
-            .control = .{ .disabled = true },
-        });
-        return;
-    }
-    try component.render(scene, bounds, .{ .style = app_design.style() });
-    try component.collectInteractions(collector, bounds);
+fn renderSelectionForLine(scene: *ui.Scene, code_view: ui.Rect, y: f32, line_start: usize, line_end: usize, state: State) !void {
+    if (!state.selection_active) return;
+    const bounds = selectionBounds(state);
+    if (bounds.end <= line_start or bounds.start >= line_end) return;
+    const start = @max(bounds.start, line_start);
+    const end = @min(bounds.end, line_end);
+    const line = state.source[line_start..line_end];
+    const x0 = code_view.x + code_gutter_w + code_pad + codeColumnWidth(line, start - line_start);
+    const x1 = code_view.x + code_gutter_w + code_pad + codeColumnWidth(line, end - line_start);
+    try fill(scene, ui.Rect.init(x0, y, @max(2.0, x1 - x0), code_line_h), ui.Color{ .r = 76, .g = 195, .b = 255, .a = 55 }, 2.0);
 }
 
 fn canCompile(state: State) bool {
-    return state.workspace_bytes != 0 and state.file_bytes != 0 and !isErrorStatus(state.status);
+    _ = state;
+    return true;
 }
 
 fn canExport(state: State) bool {
-    return state.release_bytes != 0;
-}
-
-fn canRun(state: State) bool {
-    return state.release_bytes != 0;
-}
-
-fn isErrorStatus(status: []const u8) bool {
-    return std.mem.startsWith(u8, status, "error:");
+    return state.release_bytes > 0;
 }
 
 fn sourceSummary(state: State) []const u8 {
-    _ = state;
-    return "canonical workspace is edited in-memory and compiled to a release artifact";
+    if (state.compile_summary.len != 0) return state.compile_summary;
+    if (state.dirty) return "dirty in-memory workspace; compile to create a fresh artifact";
+    return "canonical in-memory workspace; compile output is content addressed";
 }
 
 fn selectionBounds(state: State) struct { start: usize, end: usize } {
@@ -285,7 +265,9 @@ fn codeColumnWidth(line: []const u8, count: usize) f32 {
 
 fn countLines(text_value: []const u8) usize {
     var count: usize = 1;
-    for (text_value) |c| if (c == '\n') count += 1;
+    for (text_value) |c| {
+        if (c == '\n') count += 1;
+    }
     return count;
 }
 
@@ -304,10 +286,10 @@ fn textAt(scene: *ui.Scene, x: f32, y: f32, w: f32, h: f32, value: []const u8, c
     try scene.pushText(ui.Rect.init(x, y, w, h), value, color);
 }
 
-fn isKeyword(word: []const u8) bool {
-    const keywords = [_][]const u8{ "fn", "let", "const", "var", "type", "pub", "return", "if", "else", "while", "for", "in", "match", "struct", "enum", "union", "import", "export" };
-    for (keywords) |keyword| if (std.mem.eql(u8, word, keyword)) return true;
-    return false;
+fn button(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, id: u32, variant: component_common.ButtonVariant, icon: icon_component.Icon, enabled: bool) !void {
+    const component = button_component.Button{ .id = id, .label = label, .variant = variant, .icon_slot = icon_component.IconSlot.named(.leading, icon.value) };
+    try component.render(scene, bounds, .{ .style = app_design.style(), .control = .{ .disabled = !enabled } });
+    try component.collectInteractions(collector, bounds);
 }
 
 fn isDigit(c: u8) bool {
@@ -315,9 +297,15 @@ fn isDigit(c: u8) bool {
 }
 
 fn isIdentStart(c: u8) bool {
-    return std.ascii.isAlphabetic(c) or c == '_';
+    return (c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z') or c == '_';
 }
 
 fn isIdentContinue(c: u8) bool {
     return isIdentStart(c) or isDigit(c);
+}
+
+fn isKeyword(word: []const u8) bool {
+    const keywords = [_][]const u8{ "const", "var", "fn", "pub", "return", "if", "else", "while", "for", "switch", "struct", "enum", "union", "error", "try", "catch" };
+    for (keywords) |keyword| if (std.mem.eql(u8, word, keyword)) return true;
+    return false;
 }
