@@ -7,16 +7,13 @@ const varfont = @import("varfont.zig");
 pub const default_weight: f32 = 400.0;
 
 pub const max_commands = varfont.max_contour_points;
-pub const body_magic = "ERFNTV2\n".*;
-pub const header_size: usize = 40;
+pub const body_magic = "ERFNTV3\n".*;
+pub const header_size: usize = 48;
 pub const glyph_record_size: usize = 20;
 pub const kern_record_size: usize = 12;
 pub const command_record_size: usize = 20;
 
-pub const Error = error{
-    Corrupt,
-    UnsupportedObject,
-};
+pub const Error = error{ Corrupt, UnsupportedObject };
 
 pub const CompileError = varfont.Error || error{
     DuplicateCodepoint,
@@ -32,13 +29,7 @@ const op_close: u32 = 4;
 
 pub const Point = struct { x: f32, y: f32 };
 pub const Quadratic = struct { control: Point, end: Point };
-
-pub const Command = union(enum) {
-    move_to: Point,
-    line_to: Point,
-    quad_to: Quadratic,
-    close,
-};
+pub const Command = union(enum) { move_to: Point, line_to: Point, quad_to: Quadratic, close };
 
 pub const Metrics = struct {
     units_per_em: u16,
@@ -49,11 +40,7 @@ pub const Metrics = struct {
     y_max: f32,
 };
 
-pub const GlyphInfo = struct {
-    glyph_id: u16,
-    advance: f32,
-    commands: []const Command,
-};
+pub const GlyphInfo = struct { glyph_id: u16, advance: f32, commands: []const Command };
 
 pub const GlyphRecord = struct {
     codepoint: u21,
@@ -63,11 +50,7 @@ pub const GlyphRecord = struct {
     advance: f32,
 };
 
-pub const KernRecord = struct {
-    left_codepoint: u21,
-    right_codepoint: u21,
-    advance_adjust: f32,
-};
+pub const KernRecord = struct { left_codepoint: u21, right_codepoint: u21, advance_adjust: f32 };
 
 pub const Body = struct {
     metrics: Metrics,
@@ -78,8 +61,8 @@ pub const Body = struct {
     pub fn glyphForCodepoint(self: Body, codepoint: u21) ?GlyphInfo {
         for (self.glyphs) |glyph| {
             if (glyph.codepoint == codepoint) {
-                const start: usize = glyph.command_offset;
-                const end = start + @as(usize, glyph.command_count);
+                const start: usize = @intCast(glyph.command_offset);
+                const end = start + @as(usize, @intCast(glyph.command_count));
                 if (end > self.commands.len) return null;
                 return .{ .glyph_id = glyph.glyph_id, .advance = glyph.advance, .commands = self.commands[start..end] };
             }
@@ -88,9 +71,7 @@ pub const Body = struct {
     }
 
     pub fn kern(self: Body, left: u21, right: u21) f32 {
-        for (self.kerns) |record| {
-            if (record.left_codepoint == left and record.right_codepoint == right) return record.advance_adjust;
-        }
+        for (self.kerns) |record| if (record.left_codepoint == left and record.right_codepoint == right) return record.advance_adjust;
         return 0;
     }
 };
@@ -121,11 +102,7 @@ pub const FixedFace = struct {
     }
 };
 
-pub const Counts = struct {
-    glyphs: usize,
-    kerns: usize,
-    commands: usize,
-};
+pub const Counts = struct { glyphs: usize, kerns: usize, commands: usize };
 
 pub fn countCodepoints(face: FixedFace, codepoints: []const u21) CompileError!Counts {
     const metrics = face.metrics();
@@ -136,8 +113,7 @@ pub fn countCodepoints(face: FixedFace, codepoints: []const u21) CompileError!Co
 
     for (codepoints, 0..) |codepoint, i| {
         if (containsCodepoint(codepoints[0..i], codepoint)) return error.DuplicateCodepoint;
-        const glyph_id = face.glyphId(codepoint);
-        const path = try face.glyphPath(glyph_id, &tmp);
+        const path = try face.glyphPath(face.glyphId(codepoint), &tmp);
         commands += path.len;
     }
 
@@ -152,18 +128,12 @@ pub fn countCodepoints(face: FixedFace, codepoints: []const u21) CompileError!Co
     return .{ .glyphs = codepoints.len, .kerns = kerns, .commands = commands };
 }
 
-pub fn compileCodepoints(
-    face: FixedFace,
-    codepoints: []const u21,
-    glyphs_out: []GlyphRecord,
-    kerns_out: []KernRecord,
-    commands_out: []Command,
-) CompileError!Body {
+pub fn compileCodepoints(face: FixedFace, codepoints: []const u21, glyphs_out: []GlyphRecord, kerns_out: []KernRecord, commands_out: []Command) CompileError!Body {
     if (codepoints.len > glyphs_out.len) return error.GlyphRecordBudgetExceeded;
-
     const metrics = face.metrics();
     const design_size: f32 = @floatFromInt(metrics.units_per_em);
     var command_count: usize = 0;
+
     for (codepoints, 0..) |codepoint, glyph_index| {
         if (containsCodepoint(codepoints[0..glyph_index], codepoint)) return error.DuplicateCodepoint;
         const glyph_id = face.glyphId(codepoint);
@@ -207,7 +177,7 @@ pub fn serializedLen(glyph_count: usize, kern_count: usize, command_count: usize
 }
 
 pub fn encodeBody(out: []u8, body: Body) ?[]const u8 {
-    if (body.glyphs.len > std.math.maxInt(u16)) return null;
+    if (body.glyphs.len > std.math.maxInt(u32)) return null;
     if (body.kerns.len > std.math.maxInt(u32)) return null;
     if (body.commands.len > std.math.maxInt(u32)) return null;
     const total = serializedLen(body.glyphs.len, body.kerns.len, body.commands.len) orelse return null;
@@ -215,28 +185,21 @@ pub fn encodeBody(out: []u8, body: Body) ?[]const u8 {
 
     @memcpy(out[0..body_magic.len], &body_magic);
     if (!bytes.store16(out[8..10], body.metrics.units_per_em)) return null;
-    if (!bytes.store16(out[10..12], @intCast(body.glyphs.len))) return null;
-    if (!bytes.store32(out[12..16], @intCast(body.commands.len))) return null;
-    storeF32(out[16..20], body.metrics.ascender);
-    storeF32(out[20..24], body.metrics.descender);
-    storeF32(out[24..28], body.metrics.line_gap);
-    storeF32(out[28..32], body.metrics.y_min);
-    storeF32(out[32..36], body.metrics.y_max);
-    _ = bytes.store32(out[36..40], @intCast(body.kerns.len));
+    if (!bytes.store16(out[10..12], 0)) return null;
+    if (!bytes.store32(out[12..16], @intCast(body.glyphs.len))) return null;
+    if (!bytes.store32(out[16..20], @intCast(body.commands.len))) return null;
+    if (!bytes.store32(out[20..24], @intCast(body.kerns.len))) return null;
+    storeF32(out[24..28], body.metrics.ascender);
+    storeF32(out[28..32], body.metrics.descender);
+    storeF32(out[32..36], body.metrics.line_gap);
+    storeF32(out[36..40], body.metrics.y_min);
+    storeF32(out[40..44], body.metrics.y_max);
+    _ = bytes.store32(out[44..48], 0);
 
     var offset: usize = header_size;
-    for (body.glyphs) |glyph| {
-        if (!encodeGlyphRecord(out[offset .. offset + glyph_record_size], glyph)) return null;
-        offset += glyph_record_size;
-    }
-    for (body.kerns) |kern_record| {
-        if (!encodeKernRecord(out[offset .. offset + kern_record_size], kern_record)) return null;
-        offset += kern_record_size;
-    }
-    for (body.commands) |command| {
-        encodeCommandRecord(out[offset .. offset + command_record_size], command);
-        offset += command_record_size;
-    }
+    for (body.glyphs) |glyph| { if (!encodeGlyphRecord(out[offset .. offset + glyph_record_size], glyph)) return null; offset += glyph_record_size; }
+    for (body.kerns) |kern_record| { if (!encodeKernRecord(out[offset .. offset + kern_record_size], kern_record)) return null; offset += kern_record_size; }
+    for (body.commands) |command| { encodeCommandRecord(out[offset .. offset + command_record_size], command); offset += command_record_size; }
     return out[0..total];
 }
 
@@ -262,22 +225,24 @@ pub fn objectNodeOwned(body_out: []u8, object_out: []u8, body: Body, req: object
 pub fn decodeBody(bytes_in: []const u8, glyphs_out: []GlyphRecord, kerns_out: []KernRecord, commands_out: []Command) ?Body {
     if (bytes_in.len < header_size) return null;
     if (!bytes.eql(bytes_in[0..body_magic.len], &body_magic)) return null;
-    const glyph_count = bytes.load16(bytes_in[10..12]) orelse return null;
-    const command_count = bytes.load32(bytes_in[12..16]) orelse return null;
-    const kern_count = bytes.load32(bytes_in[36..40]) orelse return null;
+    const glyph_count = bytes.load32(bytes_in[12..16]) orelse return null;
+    const command_count = bytes.load32(bytes_in[16..20]) orelse return null;
+    const kern_count = bytes.load32(bytes_in[20..24]) orelse return null;
     if (glyph_count > glyphs_out.len or kern_count > kerns_out.len or command_count > commands_out.len) return null;
     const total = serializedLen(glyph_count, kern_count, command_count) orelse return null;
     if (bytes_in.len != total) return null;
 
     const metrics = Metrics{
         .units_per_em = bytes.load16(bytes_in[8..10]) orelse return null,
-        .ascender = loadF32(bytes_in[16..20]) orelse return null,
-        .descender = loadF32(bytes_in[20..24]) orelse return null,
-        .line_gap = loadF32(bytes_in[24..28]) orelse return null,
-        .y_min = loadF32(bytes_in[28..32]) orelse return null,
-        .y_max = loadF32(bytes_in[32..36]) orelse return null,
+        .ascender = loadF32(bytes_in[24..28]) orelse return null,
+        .descender = loadF32(bytes_in[28..32]) orelse return null,
+        .line_gap = loadF32(bytes_in[32..36]) orelse return null,
+        .y_min = loadF32(bytes_in[36..40]) orelse return null,
+        .y_max = loadF32(bytes_in[40..44]) orelse return null,
     };
     if (metrics.units_per_em == 0) return null;
+    if ((bytes.load16(bytes_in[10..12]) orelse return null) != 0) return null;
+    if ((bytes.load32(bytes_in[44..48]) orelse return null) != 0) return null;
 
     var offset: usize = header_size;
     var index: usize = 0;
@@ -288,18 +253,10 @@ pub fn decodeBody(bytes_in: []const u8, glyphs_out: []GlyphRecord, kerns_out: []
         glyphs_out[index] = glyph;
         offset += glyph_record_size;
     }
-
     index = 0;
-    while (index < kern_count) : (index += 1) {
-        kerns_out[index] = decodeKernRecord(bytes_in[offset .. offset + kern_record_size]) orelse return null;
-        offset += kern_record_size;
-    }
-
+    while (index < kern_count) : (index += 1) { kerns_out[index] = decodeKernRecord(bytes_in[offset .. offset + kern_record_size]) orelse return null; offset += kern_record_size; }
     index = 0;
-    while (index < command_count) : (index += 1) {
-        commands_out[index] = decodeCommandRecord(bytes_in[offset .. offset + command_record_size]) orelse return null;
-        offset += command_record_size;
-    }
+    while (index < command_count) : (index += 1) { commands_out[index] = decodeCommandRecord(bytes_in[offset .. offset + command_record_size]) orelse return null; offset += command_record_size; }
 
     return .{ .metrics = metrics, .glyphs = glyphs_out[0..glyph_count], .kerns = kerns_out[0..kern_count], .commands = commands_out[0..command_count] };
 }
@@ -323,13 +280,7 @@ fn decodeGlyphRecord(in: []const u8) ?GlyphRecord {
     const codepoint = bytes.load32(in[0..4]) orelse return null;
     if (codepoint > std.math.maxInt(u21)) return null;
     if ((bytes.load16(in[6..8]) orelse return null) != 0) return null;
-    return .{
-        .codepoint = @intCast(codepoint),
-        .glyph_id = bytes.load16(in[4..6]) orelse return null,
-        .command_offset = bytes.load32(in[8..12]) orelse return null,
-        .command_count = bytes.load32(in[12..16]) orelse return null,
-        .advance = loadF32(in[16..20]) orelse return null,
-    };
+    return .{ .codepoint = @intCast(codepoint), .glyph_id = bytes.load16(in[4..6]) orelse return null, .command_offset = bytes.load32(in[8..12]) orelse return null, .command_count = bytes.load32(in[12..16]) orelse return null, .advance = loadF32(in[16..20]) orelse return null };
 }
 
 fn encodeKernRecord(out: []u8, kern_record: KernRecord) bool {
@@ -381,11 +332,7 @@ fn emitContour(raw: []const varfont.Point, out: []Command, count: *usize) varfon
     var i: usize = if (raw[0].on_curve) 1 else 0;
     while (i < raw.len) {
         const p = raw[i];
-        if (p.on_curve) {
-            try appendCommand(out, count, .{ .line_to = point(p) });
-            i += 1;
-            continue;
-        }
+        if (p.on_curve) { try appendCommand(out, count, .{ .line_to = point(p) }); i += 1; continue; }
         const next = raw[(i + 1) % raw.len];
         const end = if (next.on_curve) next else midpoint(p, next);
         try appendCommand(out, count, .{ .quad_to = .{ .control = point(p), .end = point(end) } });
@@ -409,7 +356,7 @@ fn appendCommand(out: []Command, count: *usize, command: Command) varfont.Error!
 fn point(value: varfont.Point) Point { return .{ .x = value.x, .y = value.y }; }
 fn midpoint(a: varfont.Point, b: varfont.Point) varfont.Point { return .{ .x = (a.x + b.x) * 0.5, .y = (a.y + b.y) * 0.5, .on_curve = true }; }
 
-test "font vector body round trips widened glyph command offsets" {
+test "font vector body round trips widened counts" {
     const commands = [_]Command{ .{ .move_to = .{ .x = 0, .y = 0 } }, .close };
     const glyphs = [_]GlyphRecord{.{ .codepoint = 'A', .glyph_id = 4, .command_offset = 0, .command_count = commands.len, .advance = 10 }};
     const body = Body{ .metrics = .{ .units_per_em = 1000, .ascender = 800, .descender = -200, .line_gap = 0, .y_min = -200, .y_max = 1000 }, .glyphs = &glyphs, .commands = &commands };
@@ -419,5 +366,6 @@ test "font vector body round trips widened glyph command offsets" {
     var decoded_kerns: [0]KernRecord = .{};
     var decoded_commands: [commands.len]Command = undefined;
     const decoded = decodeBody(out, &decoded_glyphs, &decoded_kerns, &decoded_commands).?;
+    try std.testing.expectEqual(@as(u32, 1), @as(u32, @intCast(decoded.glyphs.len)));
     try std.testing.expectEqual(@as(u32, commands.len), decoded.glyphs[0].command_count);
 }
