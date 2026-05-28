@@ -225,9 +225,9 @@ pub fn objectNodeOwned(body_out: []u8, object_out: []u8, body: Body, req: object
 pub fn decodeBody(bytes_in: []const u8, glyphs_out: []GlyphRecord, kerns_out: []KernRecord, commands_out: []Command) ?Body {
     if (bytes_in.len < header_size) return null;
     if (!bytes.eql(bytes_in[0..body_magic.len], &body_magic)) return null;
-    const glyph_count = bytes.load32(bytes_in[12..16]) orelse return null;
-    const command_count = bytes.load32(bytes_in[16..20]) orelse return null;
-    const kern_count = bytes.load32(bytes_in[20..24]) orelse return null;
+    const glyph_count: usize = @intCast(bytes.load32(bytes_in[12..16]) orelse return null);
+    const command_count: usize = @intCast(bytes.load32(bytes_in[16..20]) orelse return null);
+    const kern_count: usize = @intCast(bytes.load32(bytes_in[20..24]) orelse return null);
     if (glyph_count > glyphs_out.len or kern_count > kerns_out.len or command_count > commands_out.len) return null;
     const total = serializedLen(glyph_count, kern_count, command_count) orelse return null;
     if (bytes_in.len != total) return null;
@@ -248,7 +248,7 @@ pub fn decodeBody(bytes_in: []const u8, glyphs_out: []GlyphRecord, kerns_out: []
     var index: usize = 0;
     while (index < glyph_count) : (index += 1) {
         const glyph = decodeGlyphRecord(bytes_in[offset .. offset + glyph_record_size]) orelse return null;
-        const end = @as(usize, glyph.command_offset) + @as(usize, glyph.command_count);
+        const end = @as(usize, @intCast(glyph.command_offset)) + @as(usize, @intCast(glyph.command_count));
         if (end > command_count) return null;
         glyphs_out[index] = glyph;
         offset += glyph_record_size;
