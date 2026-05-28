@@ -30,7 +30,7 @@ pub fn cloudMemeRuntime() image.RuntimeImageError![]const u8 {
 
 fn ensureCloudMemeRuntime() image.RuntimeImageError!void {
     if (cloud_meme_ready) return;
-    const encoded = try image.decodeToRuntimeWithScratch(cloud_meme_png, &cloud_meme_pixels, &cloud_meme_scratch, &cloud_meme_runtime);
+    const encoded = try image.decodeToRuntimeDefaultTiledWithScratch(cloud_meme_png, &cloud_meme_pixels, &cloud_meme_scratch, &cloud_meme_runtime);
     if (encoded.len != cloud_meme_runtime_len) return error.BadImage;
     const header = try image.decodeRuntimeRgba(encoded, &cloud_meme_pixels);
     if (header.width != cloud_meme_width or header.height != cloud_meme_height) return error.BadImage;
@@ -57,11 +57,13 @@ pub fn cloudMemeRuntimeLen() usize {
     return runtime.len;
 }
 
-test "cloud meme decodes to canonical runtime image and rgba texture" {
+test "cloud meme decodes to tiled runtime image and rgba texture" {
     try @import("std").testing.expectEqual(image.Format.png, try image.detectFormat(cloud_meme_png));
     const runtime = try cloudMemeRuntime();
     try @import("std").testing.expectEqual(image.Format.erimg, try image.detectFormat(runtime));
     try @import("std").testing.expectEqual(cloud_meme_runtime_len, runtime.len);
+    const view = try image.decodeRuntimeImage(runtime);
+    try @import("std").testing.expect(view.header.tile_count > 1);
     const texture = try cloudMeme();
     try @import("std").testing.expectEqual(cloud_meme_width, texture.width);
     try @import("std").testing.expectEqual(cloud_meme_height, texture.height);
