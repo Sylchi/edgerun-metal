@@ -3,7 +3,7 @@ const font_vector = @import("font_vector.zig");
 
 pub const replacement_codepoint: u21 = std.unicode.replacement_character;
 
-pub const max_codepoints: usize = 4096;
+pub const max_codepoints: usize = std.math.maxInt(u16);
 pub const max_kerns: usize = 65536;
 pub const max_commands: usize = font_vector.max_serialized_commands;
 
@@ -86,7 +86,7 @@ fn contains(values: []const u21, needle: u21) bool {
 }
 
 fn put(out: *[max_codepoints]u21, count: *usize, value: u21) void {
-    if (count.* >= out.len) @compileError("source font coverage exceeds built-in vector font codepoint capacity");
+    if (count.* >= out.len) @compileError("source font coverage exceeds vector font format glyph-count capacity");
     out[count.*] = value;
     count.* += 1;
 }
