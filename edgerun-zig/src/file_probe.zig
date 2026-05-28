@@ -212,7 +212,9 @@ fn hasNul(bytes: []const u8) bool {
 
 fn countLines(bytes: []const u8) u32 {
     var count: u32 = if (bytes.len == 0) 0 else 1;
-    for (bytes) |byte| if (byte == '\n') count +|= 1;
+    for (bytes) |byte| {
+        if (byte == '\n') count = count + 1;
+    }
     return count;
 }
 

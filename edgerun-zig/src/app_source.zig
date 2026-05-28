@@ -10,6 +10,7 @@ const ui = @import("ui.zig");
 const source_scope = app_hit.scope("source");
 pub const editor_textarea_id: u32 = source_scope.id(.editor, "main");
 pub const explorer_search_input_id: u32 = source_scope.id(.search, "explorer");
+pub const explorer_file_id_base: u32 = source_scope.indexed(.file, 0);
 const max_source_hit_files: usize = 4096;
 
 pub const State = struct {

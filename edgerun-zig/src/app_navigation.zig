@@ -739,12 +739,12 @@ test "app_navigation route contract is deterministic for top-level and dynamic f
 
     for (top_level_bindings) |binding| {
         try std.testing.expectEqual(binding.route, routeFor(.{ .button = binding.button }).?);
-        try std.testing.expectEqual(binding.id, fromHit(topLevelButtonId(binding.button), .{}) orelse unreachable);
+        try std.testing.expectEqual(binding.route, fromHit(topLevelButtonId(binding.button), .{}) orelse unreachable);
     }
 
     for (action_bindings) |entry| {
         if (entry.action == .open_context_source) {
-            try std.testing.expectEqual(.{ .view = .source }, routeFor(.{ .action = entry.action }) orelse unreachable);
+            try std.testing.expectEqual(Route{ .view = .source }, routeFor(.{ .action = entry.action }) orelse unreachable);
         } else {
             try std.testing.expectEqual(@as(?Route, null), routeFor(.{ .action = entry.action }));
         }

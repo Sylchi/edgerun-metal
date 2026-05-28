@@ -22,6 +22,478 @@ pub const Rect = geometry.Rect;
 
 pub const Node = @import("ui_node.zig").Node;
 
+pub fn accordionNode(id: u32, title: []const u8, detail: []const u8, open: bool) Node {
+    return .{ .accordion = .{ .id = id, .title = title, .detail = detail, .open = open } };
+}
+pub fn alertNode(title: []const u8, detail: []const u8, destructive: bool, icon: u16) Node {
+    return .{ .alert = .{ .title = title, .detail = detail, .destructive = destructive, .icon = icon } };
+}
+pub fn alertDialogNode(id: u32, title: []const u8, detail: []const u8) Node {
+    return .{ .alert_dialog = .{ .id = id, .title = title, .detail = detail } };
+}
+pub fn aspectRatioNode(ratio_w: u16, ratio_h: u16) Node {
+    return .{ .aspect_ratio = .{ .ratio_w = ratio_w, .ratio_h = ratio_h } };
+}
+pub fn avatarNode(label: []const u8) Node {
+    return .{ .avatar = .{ .label = label } };
+}
+pub fn badgeVariantNode(label: []const u8, variant: u16) Node {
+    return .{ .badge = .{ .label = label, .variant = variant } };
+}
+pub fn breadcrumbNode(id: u32, first: []const u8, current: []const u8) Node {
+    return .{ .breadcrumb = .{ .id = id, .first = first, .current = current } };
+}
+pub fn buttonDetailNode(id: u32, label: []const u8, variant: u16, leading_icon: u16, trailing_icon: u16) Node {
+    return .{ .button = .{ .id = id, .label = label, .variant = variant, .leading_icon = leading_icon, .trailing_icon = trailing_icon } };
+}
+pub fn buttonGroupNode(id: u32, first: []const u8, second: []const u8, active: u16) Node {
+    return .{ .button_group = .{ .id = id, .first = first, .second = second, .active = active } };
+}
+pub fn calendarNode(id: u32, month: []const u8, selected_day: u16) Node {
+    return .{ .calendar = .{ .id = id, .month = month, .selected_day = selected_day } };
+}
+pub fn cardVariantNode(title: []const u8, detail: []const u8, variant: u16) Node {
+    return .{ .card = .{ .title = title, .detail = detail, .variant = variant } };
+}
+pub fn carouselNode(id: u32, label: []const u8) Node {
+    return .{ .carousel = .{ .id = id, .label = label } };
+}
+pub fn chartNode(id: u32, label: []const u8) Node {
+    return .{ .chart = .{ .id = id, .label = label } };
+}
+pub fn checkboxNode(id: u32, label: []const u8, checked: bool) Node {
+    return .{ .checkbox = .{ .id = id, .label = label, .checked = checked } };
+}
+pub fn comboboxNode(id: u32, placeholder: []const u8, selected: []const u8) Node {
+    return .{ .combobox = .{ .id = id, .placeholder = placeholder, .selected = selected } };
+}
+pub fn commandNode(id: u32, placeholder: []const u8, leading_icon: u16) Node {
+    return .{ .command = .{ .id = id, .placeholder = placeholder, .leading_icon = leading_icon } };
+}
+pub fn contextMenuNode(id: u32, first: []const u8, second: []const u8) Node {
+    return .{ .context_menu = .{ .id = id, .first = first, .second = second } };
+}
+pub fn dialogNode(id: u32, title: []const u8, detail: []const u8) Node {
+    return .{ .dialog = .{ .id = id, .title = title, .detail = detail } };
+}
+pub fn directionNode(id: u32, active: u16) Node {
+    return .{ .direction = .{ .id = id, .active = active } };
+}
+pub fn drawerNode(id: u32, title: []const u8, detail: []const u8) Node {
+    return .{ .drawer = .{ .id = id, .title = title, .detail = detail } };
+}
+pub fn dropdownMenuNode(id: u32, first: []const u8, second: []const u8) Node {
+    return .{ .dropdown_menu = .{ .id = id, .first = first, .second = second } };
+}
+pub fn emptyNode(title: []const u8, detail: []const u8, icon: u16) Node {
+    return .{ .empty = .{ .title = title, .detail = detail, .icon = icon } };
+}
+pub fn fieldNode(id: u32, label: []const u8, placeholder: []const u8) Node {
+    return .{ .field = .{ .id = id, .label = label, .placeholder = placeholder } };
+}
+pub fn hoverCardNode(id: u32, trigger: []const u8, content: []const u8) Node {
+    return .{ .hover_card = .{ .id = id, .trigger = trigger, .content = content } };
+}
+pub fn iconButtonNode(id: u32, label: []const u8, icon: u16, variant: u16) Node {
+    return .{ .icon_button = .{ .id = id, .label = label, .icon = icon, .variant = variant } };
+}
+pub fn iconNode(label: []const u8, icon_tag: u16) Node {
+    return .{ .icon = .{ .label = label, .icon = icon_tag } };
+}
+pub fn inputDetailNode(id: u32, placeholder: []const u8, leading_icon: u16) Node {
+    return .{ .input = .{ .id = id, .placeholder = placeholder, .leading_icon = leading_icon } };
+}
+pub fn inputGroupNode(id: u32, addon: []const u8, placeholder: []const u8) Node {
+    return .{ .input_group = .{ .id = id, .addon = addon, .placeholder = placeholder } };
+}
+pub fn inputNode(id: u32, placeholder: []const u8) Node {
+    return .{ .input = .{ .id = id, .placeholder = placeholder } };
+}
+pub fn inputOtpNode(id: u32, value: []const u8) Node {
+    return .{ .input_otp = .{ .id = id, .value = value } };
+}
+pub fn kbdNode(label: []const u8) Node {
+    return .{ .kbd = .{ .label = label } };
+}
+pub fn labelNode(value: []const u8) Node {
+    return .{ .label = .{ .value = value } };
+}
+pub fn menubarNode(id: u32, first: []const u8, second: []const u8, active: u16) Node {
+    return .{ .menubar = .{ .id = id, .first = first, .second = second, .active = active } };
+}
+pub fn navigationMenuNode(id: u32, first: []const u8, second: []const u8, active: u16) Node {
+    return .{ .navigation_menu = .{ .id = id, .first = first, .second = second, .active = active } };
+}
+pub fn paginationNode(id: u32, page: u16) Node {
+    return .{ .pagination = .{ .id = id, .page = page } };
+}
+pub fn popoverNode(id: u32, trigger: []const u8, content: []const u8) Node {
+    return .{ .popover = .{ .id = id, .trigger = trigger, .content = content } };
+}
+pub fn progressNode(value: f32) Node {
+    return .{ .progress = .{ .value = value } };
+}
+pub fn radioGroupNode(id: u32, first: []const u8, second: []const u8, selected: u16) Node {
+    return .{ .radio_group = .{ .id = id, .first = first, .second = second, .selected = selected } };
+}
+pub fn resizableNode(id: u32, ratio: f32) Node {
+    return .{ .resizable = .{ .id = id, .ratio = ratio } };
+}
+pub fn scrollAreaNode() Node {
+    return .{ .scroll_area = {} };
+}
+pub fn selectNode(id: u32, label: []const u8, trailing_icon: u16) Node {
+    return .{ .select = .{ .id = id, .label = label, .trailing_icon = trailing_icon } };
+}
+pub fn separatorNode() Node {
+    return .{ .separator = {} };
+}
+pub fn sheetNode(id: u32, title: []const u8, detail: []const u8) Node {
+    return .{ .sheet = .{ .id = id, .title = title, .detail = detail } };
+}
+pub fn sidebarNode(id: u32, title: []const u8, item: []const u8) Node {
+    return .{ .sidebar = .{ .id = id, .title = title, .item = item } };
+}
+pub fn skeletonNode() Node {
+    return .{ .skeleton = {} };
+}
+pub fn sliderNode(id: u32, label: []const u8, value: f32) Node {
+    return .{ .slider = .{ .id = id, .label = label, .value = value } };
+}
+pub fn spinnerNode() Node {
+    return .{ .spinner = {} };
+}
+pub fn switchNode(id: u32, label: []const u8, checked: bool) Node {
+    return .{ .switch_control = .{ .id = id, .label = label, .checked = checked } };
+}
+pub fn tableNode(id: u32, name: []const u8, role: []const u8) Node {
+    return .{ .table = .{ .id = id, .name = name, .role = role } };
+}
+pub fn tabsNode(id: u32, first: []const u8, second: []const u8, active: u16) Node {
+    return .{ .tabs = .{ .id = id, .first = first, .second = second, .active = active } };
+}
+pub fn textNode(value: []const u8, color: ?Color) Node {
+    return .{ .text = .{ .value = value, .color = color } };
+}
+pub fn textareaNode(id: u32, placeholder: []const u8) Node {
+    return .{ .textarea = .{ .id = id, .placeholder = placeholder } };
+}
+pub fn toastNode(id: u32, title: []const u8, detail: []const u8) Node {
+    return .{ .toast = .{ .id = id, .title = title, .detail = detail } };
+}
+pub fn toggleNode(id: u32, label: []const u8, pressed: bool) Node {
+    return .{ .toggle = .{ .id = id, .label = label, .pressed = pressed } };
+}
+pub fn toggleGroupNode(id: u32, first: []const u8, second: []const u8, active: u16) Node {
+    return .{ .toggle_group = .{ .id = id, .first = first, .second = second, .active = active } };
+}
+pub fn tooltipNode(id: u32, trigger: []const u8, content: []const u8) Node {
+    return .{ .tooltip = .{ .id = id, .trigger = trigger, .content = content } };
+}
+pub fn columnStack(gap: f32, padding: f32, children: []const Node) Node {
+    return .{ .stack = .{ .axis = .column, .gap = gap, .padding = padding, .children = children } };
+}
+
+pub const Patch = union(enum) {
+    text_value: []const u8,
+    accordion_open: bool,
+    alert: struct { title: []const u8, detail: []const u8, destructive: bool },
+    alert_dialog: struct { title: []const u8, detail: []const u8 },
+    calendar_selected_day: u16,
+    carousel_label: []const u8,
+    chart_label: []const u8,
+    combobox_selected: []const u8,
+    card_text: struct { title: []const u8, detail: []const u8 },
+    empty_text: struct { title: []const u8, detail: []const u8 },
+    badge_label: []const u8,
+    avatar_label: []const u8,
+    kbd_label: []const u8,
+    label_value: []const u8,
+    breadcrumb_current: []const u8,
+    menubar_active: u16,
+    navigation_menu_active: u16,
+    command_placeholder: []const u8,
+    context_menu: struct { first: []const u8, second: []const u8 },
+    dialog: struct { title: []const u8, detail: []const u8 },
+    direction_active: u16,
+    drawer: struct { title: []const u8, detail: []const u8 },
+    dropdown_menu: struct { first: []const u8, second: []const u8 },
+    field_placeholder: []const u8,
+    hover_card_content: []const u8,
+    input_otp_value: []const u8,
+    button_label: []const u8,
+    button_group_active: u16,
+    toggle_group_active: u16,
+    toggle_pressed: bool,
+    input_placeholder: []const u8,
+    input_group_placeholder: []const u8,
+    textarea_placeholder: []const u8,
+    select_label: []const u8,
+    checkbox_checked: bool,
+    radio_selected: u16,
+    switch_checked: bool,
+    pagination_page: u16,
+    popover_content: []const u8,
+    resizable_ratio: f32,
+    sheet: struct { title: []const u8, detail: []const u8 },
+    sidebar_item: []const u8,
+    progress_value: f32,
+    slider_value: f32,
+    tabs_active: u16,
+    table_row: struct { name: []const u8, role: []const u8 },
+    tooltip_content: []const u8,
+    toast: struct { title: []const u8, detail: []const u8 },
+    row_item: struct { title: []const u8, detail: []const u8 },
+    rect_color: Color,
+    style_color: Color,
+};
+
+pub fn render(scene: *Scene, root: Node, bounds: Rect, style: Style) RenderError!void {
+    switch (root) {
+        .rect => |r| try scene.pushRect(bounds, r.color, .fill, 0.0, 0.0),
+        .text => |t| try scene.pushText(bounds, t.value, t.color orelse style.text),
+        .slot => |s| try render(scene, s.child.*, bounds, style),
+        .stack => |s| {
+            const gap = s.gap;
+            const pad = s.padding;
+            var offset: f32 = 0.0;
+            for (s.children) |child| {
+                const pref = child.preferredSize();
+                const child_bounds = switch (s.axis) {
+                    .column => Rect.init(bounds.x + pad, bounds.y + pad + offset, bounds.w - 2.0 * pad, pref.h),
+                    .row => Rect.init(bounds.x + pad + offset, bounds.y + pad, pref.w, bounds.h - 2.0 * pad),
+                };
+                if (child_bounds.valid()) try render(scene, child, child_bounds, style);
+                offset += switch (s.axis) {
+                    .column => pref.h,
+                    .row => pref.w,
+                } + gap;
+            }
+        },
+        .separator, .scroll_area, .skeleton, .spinner => {},
+        else => return error.UnsupportedComponent,
+    }
+}
+
+pub fn applyPatch(node: *Node, patch: Patch) RenderError!void {
+    switch (patch) {
+        .text_value => |v| {
+            if (node.* != .text) return error.UnsupportedComponent;
+            node.text.value = v;
+        },
+        .accordion_open => |v| {
+            if (node.* != .accordion) return error.UnsupportedComponent;
+            node.accordion.open = v;
+        },
+        .alert => |v| {
+            if (node.* != .alert) return error.UnsupportedComponent;
+            node.alert.title = v.title;
+            node.alert.detail = v.detail;
+            node.alert.destructive = v.destructive;
+        },
+        .alert_dialog => |v| {
+            if (node.* != .alert_dialog) return error.UnsupportedComponent;
+            node.alert_dialog.title = v.title;
+            node.alert_dialog.detail = v.detail;
+        },
+        .calendar_selected_day => |v| {
+            if (node.* != .calendar) return error.UnsupportedComponent;
+            node.calendar.selected_day = v;
+        },
+        .carousel_label => |v| {
+            if (node.* != .carousel) return error.UnsupportedComponent;
+            node.carousel.label = v;
+        },
+        .chart_label => |v| {
+            if (node.* != .chart) return error.UnsupportedComponent;
+            node.chart.label = v;
+        },
+        .combobox_selected => |v| {
+            if (node.* != .combobox) return error.UnsupportedComponent;
+            node.combobox.selected = v;
+        },
+        .card_text => |v| {
+            if (node.* != .card) return error.UnsupportedComponent;
+            node.card.title = v.title;
+            node.card.detail = v.detail;
+        },
+        .empty_text => |v| {
+            if (node.* != .empty) return error.UnsupportedComponent;
+            node.empty.title = v.title;
+            node.empty.detail = v.detail;
+        },
+        .badge_label => |v| {
+            if (node.* != .badge) return error.UnsupportedComponent;
+            node.badge.label = v;
+        },
+        .avatar_label => |v| {
+            if (node.* != .avatar) return error.UnsupportedComponent;
+            node.avatar.label = v;
+        },
+        .kbd_label => |v| {
+            if (node.* != .kbd) return error.UnsupportedComponent;
+            node.kbd.label = v;
+        },
+        .label_value => |v| {
+            if (node.* != .label) return error.UnsupportedComponent;
+            node.label.value = v;
+        },
+        .breadcrumb_current => |v| {
+            if (node.* != .breadcrumb) return error.UnsupportedComponent;
+            node.breadcrumb.current = v;
+        },
+        .menubar_active => |v| {
+            if (node.* != .menubar) return error.UnsupportedComponent;
+            node.menubar.active = v;
+        },
+        .navigation_menu_active => |v| {
+            if (node.* != .navigation_menu) return error.UnsupportedComponent;
+            node.navigation_menu.active = v;
+        },
+        .command_placeholder => |v| {
+            if (node.* != .command) return error.UnsupportedComponent;
+            node.command.placeholder = v;
+        },
+        .context_menu => |v| {
+            if (node.* != .context_menu) return error.UnsupportedComponent;
+            node.context_menu.first = v.first;
+            node.context_menu.second = v.second;
+        },
+        .dialog => |v| {
+            if (node.* != .dialog) return error.UnsupportedComponent;
+            node.dialog.title = v.title;
+            node.dialog.detail = v.detail;
+        },
+        .direction_active => |v| {
+            if (node.* != .direction) return error.UnsupportedComponent;
+            node.direction.active = v;
+        },
+        .drawer => |v| {
+            if (node.* != .drawer) return error.UnsupportedComponent;
+            node.drawer.title = v.title;
+            node.drawer.detail = v.detail;
+        },
+        .dropdown_menu => |v| {
+            if (node.* != .dropdown_menu) return error.UnsupportedComponent;
+            node.dropdown_menu.first = v.first;
+            node.dropdown_menu.second = v.second;
+        },
+        .field_placeholder => |v| {
+            if (node.* != .field) return error.UnsupportedComponent;
+            node.field.placeholder = v;
+        },
+        .hover_card_content => |v| {
+            if (node.* != .hover_card) return error.UnsupportedComponent;
+            node.hover_card.content = v;
+        },
+        .input_otp_value => |v| {
+            if (node.* != .input_otp) return error.UnsupportedComponent;
+            node.input_otp.value = v;
+        },
+        .button_label => |v| {
+            if (node.* != .button) return error.UnsupportedComponent;
+            node.button.label = v;
+        },
+        .button_group_active => |v| {
+            if (node.* != .button_group) return error.UnsupportedComponent;
+            node.button_group.active = v;
+        },
+        .toggle_group_active => |v| {
+            if (node.* != .toggle_group) return error.UnsupportedComponent;
+            node.toggle_group.active = v;
+        },
+        .toggle_pressed => |v| {
+            if (node.* != .toggle) return error.UnsupportedComponent;
+            node.toggle.pressed = v;
+        },
+        .input_placeholder => |v| {
+            if (node.* != .input) return error.UnsupportedComponent;
+            node.input.placeholder = v;
+        },
+        .input_group_placeholder => |v| {
+            if (node.* != .input_group) return error.UnsupportedComponent;
+            node.input_group.placeholder = v;
+        },
+        .textarea_placeholder => |v| {
+            if (node.* != .textarea) return error.UnsupportedComponent;
+            node.textarea.placeholder = v;
+        },
+        .select_label => |v| {
+            if (node.* != .select) return error.UnsupportedComponent;
+            node.select.label = v;
+        },
+        .checkbox_checked => |v| {
+            if (node.* != .checkbox) return error.UnsupportedComponent;
+            node.checkbox.checked = v;
+        },
+        .radio_selected => |v| {
+            if (node.* != .radio_group) return error.UnsupportedComponent;
+            node.radio_group.selected = v;
+        },
+        .switch_checked => |v| {
+            if (node.* != .switch_control) return error.UnsupportedComponent;
+            node.switch_control.checked = v;
+        },
+        .pagination_page => |v| {
+            if (node.* != .pagination) return error.UnsupportedComponent;
+            node.pagination.page = v;
+        },
+        .popover_content => |v| {
+            if (node.* != .popover) return error.UnsupportedComponent;
+            node.popover.content = v;
+        },
+        .resizable_ratio => |v| {
+            if (node.* != .resizable) return error.UnsupportedComponent;
+            node.resizable.ratio = v;
+        },
+        .sheet => |v| {
+            if (node.* != .sheet) return error.UnsupportedComponent;
+            node.sheet.title = v.title;
+            node.sheet.detail = v.detail;
+        },
+        .sidebar_item => |v| {
+            if (node.* != .sidebar) return error.UnsupportedComponent;
+            node.sidebar.item = v;
+        },
+        .progress_value => |v| {
+            if (node.* != .progress) return error.UnsupportedComponent;
+            node.progress.value = v;
+        },
+        .slider_value => |v| {
+            if (node.* != .slider) return error.UnsupportedComponent;
+            node.slider.value = v;
+        },
+        .tabs_active => |v| {
+            if (node.* != .tabs) return error.UnsupportedComponent;
+            node.tabs.active = v;
+        },
+        .table_row => |v| {
+            if (node.* != .table) return error.UnsupportedComponent;
+            node.table.name = v.name;
+            node.table.role = v.role;
+        },
+        .tooltip_content => |v| {
+            if (node.* != .tooltip) return error.UnsupportedComponent;
+            node.tooltip.content = v;
+        },
+        .toast => |v| {
+            if (node.* != .toast) return error.UnsupportedComponent;
+            node.toast.title = v.title;
+            node.toast.detail = v.detail;
+        },
+        .row_item => |v| {
+            if (node.* != .row_item) return error.UnsupportedComponent;
+            node.row_item.title = v.title;
+            node.row_item.detail = v.detail;
+        },
+        .rect_color => |v| {
+            if (node.* != .rect) return error.UnsupportedComponent;
+            node.rect.color = v;
+        },
+        .style_color => {},
+    }
+}
+
 pub fn clampUnit(value: f32) f32 {
     return geometry.clamp(value, 0.0, 1.0);
 }
