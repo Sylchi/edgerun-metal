@@ -5,6 +5,7 @@ pub const replacement_codepoint: u21 = std.unicode.replacement_character;
 
 const source_face = font_vector.FixedFace.geistDefault() catch @compileError("failed to load source font for built-in vector font");
 
+pub const fallback_codepoint: u21 = firstCoveredCodepoint(source_face);
 pub const codepoint_count: usize = countCoveredCodepoints(source_face);
 pub const codepoints: [codepoint_count]u21 = buildCodepoints(source_face);
 pub const counts: font_vector.Counts = countExactVectorStorage(source_face, &codepoints);
@@ -95,7 +96,6 @@ fn walkFormat4(comptime face: font_vector.FixedFace, out: anytype, out_count: *u
             counted.* += 1;
         }
     }
-    ensureReplacement(face, out, out_count, counted, write);
 }
 
 fn countFormat12(comptime face: font_vector.FixedFace) usize {
@@ -127,27 +127,20 @@ fn walkFormat12(comptime face: font_vector.FixedFace, out: anytype, out_count: *
             counted.* += 1;
         }
     }
-    ensureReplacement(face, out, out_count, counted, write);
 }
 
-fn ensureReplacement(comptime face: font_vector.FixedFace, out: anytype, out_count: *usize, counted: *usize, comptime write: bool) void {
-    if (face.glyphId(replacement_codepoint) == 0) @compileError("source font has no U+FFFD replacement glyph");
-    if (!coverageContains(face, replacement_codepoint)) {
-        if (write) put(out, out_count, replacement_codepoint);
-        counted.* += 1;
-    }
-}
-
-fn coverageContains(comptime face: font_vector.FixedFace, cp: u21) bool {
+fn firstCoveredCodepoint(comptime face: font_vector.FixedFace) u21 {
+    if (face.glyphId(replacement_codepoint) != 0) return replacement_codepoint;
+    if (face.glyphId('?') != 0) return '?';
+    if (face.glyphId(' ') != 0) return ' ';
     return switch (face.face.cmap_format) {
-        4 => containsFormat4(face, cp),
-        12 => containsFormat12(face, cp),
-        else => false,
+        4 => firstFormat4(face),
+        12 => firstFormat12(face),
+        else => @compileError("unsupported cmap format for built-in vector font"),
     };
 }
 
-fn containsFormat4(comptime face: font_vector.FixedFace, cp: u21) bool {
-    if (cp > 0xffff) return false;
+fn firstFormat4(comptime face: font_vector.FixedFace) u21 {
     const sub = face.face.cmap_offset;
     const seg_count = readU16(face.face.data, sub + 6) / 2;
     const end_codes = sub + 14;
@@ -156,21 +149,31 @@ fn containsFormat4(comptime face: font_vector.FixedFace, cp: u21) bool {
     while (i < seg_count) : (i += 1) {
         const start = readU16(face.face.data, start_codes + i * 2);
         const end = readU16(face.face.data, end_codes + i * 2);
-        if (cp >= start and cp <= end) return true;
+        var raw: usize = start;
+        while (raw <= end) : (raw += 1) {
+            const cp: u21 = @intCast(raw);
+            if (isSurrogate(cp)) continue;
+            if (face.glyphId(cp) != 0) return cp;
+        }
     }
-    return false;
+    @compileError("source font exposes no usable cmap glyphs");
 }
 
-fn containsFormat12(comptime face: font_vector.FixedFace, cp: u21) bool {
+fn firstFormat12(comptime face: font_vector.FixedFace) u21 {
     const group_count = readU32(face.face.data, face.face.cmap_offset + 12);
     var group_index: usize = 0;
     while (group_index < group_count) : (group_index += 1) {
         const group = face.face.cmap_offset + 16 + group_index * 12;
         const start = readU32(face.face.data, group);
         const end = readU32(face.face.data, group + 4);
-        if (cp >= start and cp <= end) return true;
+        var raw: usize = start;
+        while (raw <= end and raw <= std.math.maxInt(u21)) : (raw += 1) {
+            const cp: u21 = @intCast(raw);
+            if (isSurrogate(cp)) continue;
+            if (face.glyphId(cp) != 0) return cp;
+        }
     }
-    return false;
+    @compileError("source font exposes no usable cmap glyphs");
 }
 
 fn put(out: anytype, count: *usize, cp: u21) void {
