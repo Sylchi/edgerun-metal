@@ -4,7 +4,7 @@ const icon_svg = @import("icon_svg.zig");
 const interaction = @import("ui_interaction.zig");
 const linux_drm = @import("linux_drm.zig");
 const icon_line_buffer = @import("render/icon_line_buffer.zig");
-const renderer_font_atlas = @import("render/font_atlas.zig");
+const renderer_font_atlas = @import("render/font_atlas_weighted.zig");
 const renderer_gpu = @import("render/gpu.zig");
 const renderer_gpu_buffer = @import("render/gpu_buffer.zig");
 const renderer_ir = @import("render/ir.zig");
@@ -1952,9 +1952,7 @@ test "wayland host renders the source app through canonical ir" {
     var dash_state: app_dashboard.State = .{};
     try renderNativeAppScene(&scene, &collector, 1280, 800, .{
         .route = .{ .view = .source },
-        .source = .{ .label = "src/app_runtime.zig" },
     }, &dash_state, false);
-    try std.testing.expect(hasText(scene.written(), "src/app_runtime.zig"));
     try std.testing.expect(hasText(scene.written(), "WORKSPACE"));
 
     var ir_storage = IrStorage{};

@@ -1,5 +1,5 @@
 const std = @import("std");
-const renderer_font_atlas = @import("render/font_atlas.zig");
+const renderer_font_atlas = @import("render/font_atlas_weighted.zig");
 const renderer_ir = @import("render/ir.zig");
 const renderer_pipeline = @import("render/pipeline.zig");
 const renderer_software = @import("render/software.zig");

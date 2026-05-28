@@ -5,7 +5,7 @@ const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
 const component_union = @import("Component.zig");
 const interaction = @import("../../ui_interaction.zig");
-const layouts = @import("../../layouts.zig");
+const layout_types = @import("../../layouts/Types.zig");
 const object = @import("../../object.zig");
 const std = @import("std");
 const tree_codec = @import("TreeCodec.zig");
@@ -27,7 +27,7 @@ pub fn Slot(comptime Component: type) type {
             return .{ .slot = .{ .id = self.id, .child = &out_nodes[0] } };
         }
 
-        pub fn measure(self: Self, constraints: layouts.types.Constraints, options: RenderOptions) layouts.types.Measurement {
+        pub fn measure(self: Self, constraints: layout_types.Constraints, options: RenderOptions) layout_types.Measurement {
             return self.child.measure(constraints, options);
         }
 

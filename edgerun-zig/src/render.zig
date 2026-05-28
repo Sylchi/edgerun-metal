@@ -1,5 +1,5 @@
 pub const compositor = @import("render/compositor.zig");
-pub const font_atlas = @import("render/font_atlas.zig");
+pub const font_atlas = @import("render/font_atlas_weighted.zig");
 pub const gpu = @import("render/gpu.zig");
 pub const gpu_buffer = @import("render/gpu_buffer.zig");
 pub const gl_contract = @import("render/gl_contract.zig");

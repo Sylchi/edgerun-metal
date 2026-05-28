@@ -1,7 +1,7 @@
 const clock = @import("../../clock.zig");
 const ui_input = @import("../../input.zig");
 const interaction = @import("../../ui_interaction.zig");
-const layouts = @import("../../layouts.zig");
+const layout_types = @import("../../layouts/Types.zig");
 const object = @import("../../object.zig");
 const ui = @import("../../ui.zig");
 const common = @import("../../ui_component_common.zig");
@@ -147,7 +147,7 @@ pub const Component = union(enum) {
         }
     }
 
-    pub fn measure(self: Component, constraints: layouts.types.Constraints, options: RenderOptions) layouts.types.Measurement {
+    pub fn measure(self: Component, constraints: layout_types.Constraints, options: RenderOptions) layout_types.Measurement {
         return switch (self) {
             inline else => |component| component.measure(constraints, options),
         };

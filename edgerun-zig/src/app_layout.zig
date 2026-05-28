@@ -1,5 +1,5 @@
 const std = @import("std");
-const layouts = @import("layouts.zig");
+const layout_types = @import("layouts/Types.zig");
 const ui = @import("ui.zig");
 const text_component = @import("ui/components/Text.zig");
 
@@ -19,7 +19,7 @@ pub fn alignedText(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, color: 
     try text_component.Text.renderAligned(scene, bounds, value, color, alignment);
 }
 
-pub fn wrappedText(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, color: ui.Color, metrics: layouts.types.TextMetrics) ui.RenderError!void {
+pub fn wrappedText(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, color: ui.Color, metrics: layout_types.TextMetrics) ui.RenderError!void {
     try text_component.Text.renderWrapped(scene, bounds, value, color, .{
         .line_height = metrics.line_height,
         .average_char_width = metrics.average_char_width,
@@ -35,8 +35,8 @@ pub fn wrappedTextWith(scene: *ui.Scene, bounds: ui.Rect, value: []const u8, col
     });
 }
 
-pub fn wrappedTextHeight(value: []const u8, width: f32, metrics: layouts.types.TextMetrics) f32 {
-    const measurement = layouts.types.measureText(value, .{
+pub fn wrappedTextHeight(value: []const u8, width: f32, metrics: layout_types.TextMetrics) f32 {
+    const measurement = layout_types.measureText(value, .{
         .width = .{ .exact = @max(1.0, width) },
         .height = .unconstrained,
         .text_wrap = .wrap,
@@ -84,7 +84,7 @@ pub fn gridColumns(width: f32, min_column_width: f32, gap: f32, max_columns: usi
 }
 
 test "app layout wrapped text measurement delegates to canonical layout metrics" {
-    const metrics = layouts.types.TextMetrics{ .line_height = 18.0, .average_char_width = 9.0, .max_lines = 3 };
+    const metrics = layout_types.TextMetrics{ .line_height = 18.0, .average_char_width = 9.0, .max_lines = 3 };
     try std.testing.expect(wrappedTextHeight("one two three four five", 60.0, metrics) > metrics.line_height);
 }
 

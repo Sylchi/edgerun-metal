@@ -1,4 +1,5 @@
-const layouts = @import("../../layouts.zig");
+const layout_types = @import("../../layouts/Types.zig");
+const layout_flex = @import("../../layouts/Flex.zig");
 const common = @import("../../ui_component_common.zig");
 const component_union = @import("Component.zig");
 const primitives = @import("Primitives.zig");
@@ -27,7 +28,7 @@ pub fn renderNode(comptime Component: type, scene: *ui.Scene, bounds: ui.Rect, n
     }
 }
 
-pub fn measureNode(comptime Component: type, node: ui.Node, constraints: layouts.types.Constraints, options: RenderOptions) layouts.types.Measurement {
+pub fn measureNode(comptime Component: type, node: ui.Node, constraints: layout_types.Constraints, options: RenderOptions) layout_types.Measurement {
     return switch (node) {
         .rect, .text => primitiveNodeMeasurement(node, constraints),
         .slot => |slot| measureNode(Component, slot.child.*, constraints, options),
@@ -43,7 +44,7 @@ fn renderNodeStack(comptime Component: type, scene: *ui.Scene, bounds: ui.Rect, 
     if (stack.children.len == 0) return;
     if (stack.children.len > node_stack_max_children) return error.CommandBudgetExceeded;
 
-    var child_measurements: [node_stack_max_children]layouts.types.Measurement = undefined;
+    var child_measurements: [node_stack_max_children]layout_types.Measurement = undefined;
     var child_bounds: [node_stack_max_children]ui.Rect = undefined;
     const placed_children = placeNodeStackChildren(Component, bounds, stack, options, &child_measurements, &child_bounds);
     for (stack.children[0..placed_children.len], placed_children) |child, child_rect| {
@@ -52,21 +53,21 @@ fn renderNodeStack(comptime Component: type, scene: *ui.Scene, bounds: ui.Rect, 
     }
 }
 
-fn measureNodeStack(comptime Component: type, stack: ui.Layout, constraints: layouts.types.Constraints, options: RenderOptions) layouts.types.Measurement {
-    var child_measurements: [node_stack_max_children]layouts.types.Measurement = undefined;
+fn measureNodeStack(comptime Component: type, stack: ui.Layout, constraints: layout_types.Constraints, options: RenderOptions) layout_types.Measurement {
+    var child_measurements: [node_stack_max_children]layout_types.Measurement = undefined;
     const child_constraints = stack_component.stackChildConstraintsFor(stack.axis, stack.padding, constraints);
     const measured_children = measureNodeChildren(Component, stack.children, child_constraints, options, &child_measurements);
-    return layouts.Flex.measure(measured_children, constraints, nodeStackLayoutOptionsFor(stack));
+    return layout_flex.measure(measured_children, constraints, nodeStackLayoutOptionsFor(stack));
 }
 
-fn placeNodeStackChildren(comptime Component: type, bounds: ui.Rect, stack: ui.Layout, options: RenderOptions, measurements: *[node_stack_max_children]layouts.types.Measurement, out: *[node_stack_max_children]ui.Rect) []ui.Rect {
+fn placeNodeStackChildren(comptime Component: type, bounds: ui.Rect, stack: ui.Layout, options: RenderOptions, measurements: *[node_stack_max_children]layout_types.Measurement, out: *[node_stack_max_children]ui.Rect) []ui.Rect {
     const constraints = stack_component.constraintsFromBounds(bounds);
     const child_constraints = stack_component.stackChildConstraintsFor(stack.axis, stack.padding, constraints);
     const measured_children = measureNodeChildren(Component, stack.children, child_constraints, options, measurements);
-    return layouts.Flex.place(bounds, measured_children, nodeStackLayoutOptionsFor(stack), out);
+    return layout_flex.place(bounds, measured_children, nodeStackLayoutOptionsFor(stack), out);
 }
 
-fn measureNodeChildren(comptime Component: type, children: []const ui.Node, constraints: layouts.types.Constraints, options: RenderOptions, out: []layouts.types.Measurement) []layouts.types.Measurement {
+fn measureNodeChildren(comptime Component: type, children: []const ui.Node, constraints: layout_types.Constraints, options: RenderOptions, out: []layout_types.Measurement) []layout_types.Measurement {
     const count = @min(children.len, @min(out.len, node_stack_max_children));
     for (children[0..count], 0..) |child, index| {
         out[index] = measureNode(Component, child, constraints, options);
@@ -74,11 +75,11 @@ fn measureNodeChildren(comptime Component: type, children: []const ui.Node, cons
     return out[0..count];
 }
 
-fn nodeStackLayoutOptionsFor(stack: ui.Layout) layouts.Flex.Options {
+fn nodeStackLayoutOptionsFor(stack: ui.Layout) layout_flex.Options {
     return stack_component.stackLayoutOptionsFor(stack.axis, stack.gap, stack.padding, nodeStackCrossAlign(stack.cross_align));
 }
 
-pub fn nodeStackCrossAlign(value: ui.Align) layouts.Flex.Align {
+pub fn nodeStackCrossAlign(value: ui.Align) layout_flex.Align {
     return switch (value) {
         .start => .start,
         .center, .end => .start,
@@ -86,10 +87,10 @@ pub fn nodeStackCrossAlign(value: ui.Align) layouts.Flex.Align {
     };
 }
 
-fn primitiveNodeMeasurement(node: ui.Node, constraints: layouts.types.Constraints) layouts.types.Measurement {
+fn primitiveNodeMeasurement(node: ui.Node, constraints: layout_types.Constraints) layout_types.Measurement {
     const size = node.preferredSize();
     const preferred = primitives.constrainPreferredSize(size, constraints);
-    return layouts.types.Measurement.flexible(
+    return layout_types.Measurement.flexible(
         .{ .w = @min(size.w, preferred.w), .h = @min(size.h, preferred.h) },
         preferred,
         .{ .w = primitives.maxMeasuredWidth(constraints, preferred.w), .h = size.h },
@@ -109,10 +110,10 @@ test "primitive node measurement respects at-most constraints" {
 }
 
 test "node stack layout keeps existing cross alignment policy" {
-    try std.testing.expectEqual(layouts.Flex.Align.start, nodeStackCrossAlign(.start));
-    try std.testing.expectEqual(layouts.Flex.Align.start, nodeStackCrossAlign(.center));
-    try std.testing.expectEqual(layouts.Flex.Align.start, nodeStackCrossAlign(.end));
-    try std.testing.expectEqual(layouts.Flex.Align.stretch, nodeStackCrossAlign(.stretch));
+    try std.testing.expectEqual(layout_flex.Align.start, nodeStackCrossAlign(.start));
+    try std.testing.expectEqual(layout_flex.Align.start, nodeStackCrossAlign(.center));
+    try std.testing.expectEqual(layout_flex.Align.start, nodeStackCrossAlign(.end));
+    try std.testing.expectEqual(layout_flex.Align.stretch, nodeStackCrossAlign(.stretch));
 }
 
 test "primitive node rendering uses scene command helpers" {

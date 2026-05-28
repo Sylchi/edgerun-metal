@@ -1,6 +1,6 @@
 const std = @import("std");
 const backend = @import("backends/gles.zig");
-const renderer_font_atlas = @import("font_atlas.zig");
+const renderer_font_atlas = @import("font_atlas_weighted.zig");
 const renderer_ir = @import("ir.zig");
 const renderer_present = @import("present.zig");
 const ui = @import("../ui.zig");
