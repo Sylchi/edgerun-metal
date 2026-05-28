@@ -27,7 +27,7 @@ pub const agent_row_id_base: u32 = 50_100;
 const max_text_bytes: usize = 4096;
 const max_small_text_bytes: usize = 512;
 const max_rows: usize = 6;
-const max_agents: usize = 4;
+const max_agents: usize = 7;
 const context_window_tokens: u32 = 32 * 1024;
 
 pub const AgentSlot = struct {
@@ -39,17 +39,20 @@ pub const AgentSlot = struct {
 };
 
 const default_agents = [_]AgentSlot{
-    .{ .name = "Architect", .role = "plans changes and keeps context small", .model = "devstral-20b", .context_used = 8192, .active = true },
-    .{ .name = "Coder", .role = "edits code and runs focused checks", .model = "devstral-20b", .context_used = 6144 },
-    .{ .name = "Reviewer", .role = "diff review, tests, regressions", .model = "devstral-20b", .context_used = 4096 },
-    .{ .name = "Runner", .role = "shell/tool execution and logs", .model = "devstral-20b", .context_used = 2048 },
+    .{ .name = "Router", .role = "classifies task and selects pipeline", .model = "devstral-20b", .context_used = 2048, .active = true },
+    .{ .name = "Codebase", .role = "keeps repo map and relevant files warm", .model = "devstral-20b", .context_used = 8192 },
+    .{ .name = "Architect", .role = "compresses plan into minimal change set", .model = "devstral-20b", .context_used = 6144 },
+    .{ .name = "Toolsmith", .role = "chooses exact shell/fs/test tools", .model = "devstral-20b", .context_used = 3072 },
+    .{ .name = "Executor", .role = "turns plan into one focused patch", .model = "devstral-20b", .context_used = 6144 },
+    .{ .name = "Reviewer", .role = "reviews diff and predicts breakage", .model = "devstral-20b", .context_used = 4096 },
+    .{ .name = "Summarizer", .role = "returns compact durable memory", .model = "devstral-20b", .context_used = 2048 },
 };
 
 pub const State = struct {
     status: TextBuf(max_small_text_bytes) = TextBuf(max_small_text_bytes).init("offline"),
-    run_label: TextBuf(64) = TextBuf(64).init("Run"),
-    input: TextBuf(max_small_text_bytes) = TextBuf(max_small_text_bytes).init("Tell the local agent what to change, test, or inspect…"),
-    assistant: TextBuf(max_text_bytes) = TextBuf(max_text_bytes).init("Start codex-host in native mode to stream model and tool state here. The UI consumes existing ui_stream patch bytes directly from the child stdout pipe."),
+    run_label: TextBuf(64) = TextBuf(64).init("Run pipeline"),
+    input: TextBuf(max_small_text_bytes) = TextBuf(max_small_text_bytes).init("Describe the outcome. The pipeline will route, plan, execute, review, and summarize automatically."),
+    assistant: TextBuf(max_text_bytes) = TextBuf(max_text_bytes).init("Pipeline mode: Router → Codebase → Architect → Toolsmith → Executor → Reviewer → Summarizer. Fixed role prompts improve cache locality and keep each step under the 32k context budget."),
     progress: f32 = 0.0,
     connected: bool = false,
     thinking: bool = false,
@@ -67,11 +70,11 @@ pub const State = struct {
         const component_id = patch[1];
         const payload = patch[2..];
         switch (kind) {
-            8 => try self.applyTwoString(component_id, payload), // card_text
-            13 => try self.applyString(component_id, payload), // label_value
-            26 => try self.applyString(component_id, payload), // button_label
-            42 => try self.applyF32(component_id, payload), // progress_value
-            48 => try self.applyTwoString(component_id, payload), // row_item
+            8 => try self.applyTwoString(component_id, payload),
+            13 => try self.applyString(component_id, payload),
+            26 => try self.applyString(component_id, payload),
+            42 => try self.applyF32(component_id, payload),
+            48 => try self.applyTwoString(component_id, payload),
             else => {},
         }
     }
@@ -94,7 +97,7 @@ pub const State = struct {
             status_component_id => {
                 self.status.set(value.value);
                 self.connected = !std.mem.eql(u8, value.value, "offline");
-                self.thinking = std.mem.indexOf(u8, value.value, "thinking") != null or std.mem.indexOf(u8, value.value, "finalizing") != null;
+                self.thinking = std.mem.indexOf(u8, value.value, "thinking") != null or std.mem.indexOf(u8, value.value, "finalizing") != null or std.mem.indexOf(u8, value.value, "pipeline") != null;
             },
             run_component_id => self.run_label.set(value.value),
             input_component_id => self.input.set(value.value),
@@ -124,7 +127,7 @@ pub const State = struct {
 pub fn contentHeight(width: f32, state: State) f32 {
     _ = width;
     _ = state;
-    return 820.0;
+    return 900.0;
 }
 
 pub fn render(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
@@ -146,73 +149,75 @@ pub fn render(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Re
     y += @max(status_h, context_h) + gap;
 
     const prompt_h: f32 = 96.0;
-    const prompt_rect = ui.Rect.init(content.x, y, content.w - 116.0, prompt_h);
-    const run_rect = ui.Rect.init(prompt_rect.x + prompt_rect.w + 12.0, y + prompt_h - 40.0, 104.0, 40.0);
-    try (textarea_component.Textarea{ .id = input_hit_id, .placeholder = state.input.slice() }).render(scene, prompt_rect, .{ .style = style });
-    try (textarea_component.Textarea{ .id = input_hit_id, .placeholder = state.input.slice() }).collectInteractions(collector, prompt_rect);
+    const prompt_rect = ui.Rect.init(content.x, y, content.w - 136.0, prompt_h);
+    const run_rect = ui.Rect.init(prompt_rect.x + prompt_rect.w + 12.0, y + prompt_h - 40.0, 124.0, 40.0);
+    const textarea = textarea_component.Textarea{ .id = input_hit_id, .placeholder = state.input.slice() };
+    try textarea.render(scene, prompt_rect, .{ .style = style });
+    try textarea.collectInteractions(collector, prompt_rect);
     const run_button = button_component.Button{ .id = run_hit_id, .label = state.run_label.slice(), .variant = .primary, .icon_slot = icon_component.IconSlot.named(.leading, .send) };
     try run_button.render(scene, run_rect, .{ .style = style, .control = .{ .loading = state.thinking } });
     try run_button.collectInteractions(collector, run_rect);
     y += prompt_h + gap;
 
-    const agent_h: f32 = 232.0;
-    const transcript_h: f32 = 232.0;
+    const agent_h: f32 = 306.0;
+    const transcript_h: f32 = 306.0;
     try renderAgents(scene, collector, ui.Rect.init(content.x, y, half_w, agent_h), state, style);
     try renderTranscript(scene, ui.Rect.init(content.x + half_w + half_gap, y, half_w, transcript_h), state, style);
     y += @max(agent_h, transcript_h) + gap;
 
     const tool_h: f32 = 220.0;
-    try renderRows(scene, ui.Rect.init(content.x, y, half_w, tool_h), "Tools", "executor and model actions", state.tools, style);
+    try renderRows(scene, ui.Rect.init(content.x, y, half_w, tool_h), "Pipeline events", "fixed prompts, handoffs and tool choices", state.tools, style);
     try renderOutputRows(scene, ui.Rect.init(content.x + half_w + half_gap, y, half_w, tool_h), state, style);
 }
 
 fn renderHero(scene: *ui.Scene, bounds: ui.Rect, state: State, style: ui.Style) !void {
     _ = state;
     try (card_component.Card{
-        .title = "Owned local agent",
-        .detail = "Native multi-agent control surface for local TabbyAPI + devstral-20b. Optimized for 32k context: split work across architect, coder, reviewer, and runner instead of stuffing everything into one prompt.",
+        .title = "Owned local agent pipeline",
+        .detail = "User gives one request. Router classifies it; Codebase selects context; Architect compresses the plan; Toolsmith chooses tools; Executor makes one focused patch; Reviewer checks it; Summarizer writes durable memory. Fixed prompts keep devstral-20b cache-friendly on 32k context.",
         .variant = .elevated,
     }).render(scene, bounds, .{ .style = style });
 }
 
 fn renderStatusCard(scene: *ui.Scene, bounds: ui.Rect, state: State, style: ui.Style) !void {
     try (card_component.Card{ .title = "Runtime", .detail = "", .variant = .panel }).render(scene, bounds, .{ .style = style });
-    const badge_label = if (state.thinking) "thinking" else if (state.connected) "ready" else "offline";
+    const badge_label = if (state.thinking) "pipeline" else if (state.connected) "ready" else "offline";
     const badge_variant: @TypeOf((badge_component.Badge{ .label = "" }).variant) = if (state.thinking) .default else if (state.connected) .secondary else .outline;
-    try (badge_component.Badge{ .label = badge_label, .variant = badge_variant }).render(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 42.0, 96.0, 24.0), .{ .style = style });
-    try text_component.Text.renderAligned(scene, ui.Rect.init(bounds.x + 124.0, bounds.y + 44.0, bounds.w - 140.0, 18.0), state.status.slice(), style.text, .start);
+    try (badge_component.Badge{ .label = badge_label, .variant = badge_variant }).render(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 42.0, 112.0, 24.0), .{ .style = style });
+    try text_component.Text.renderAligned(scene, ui.Rect.init(bounds.x + 140.0, bounds.y + 44.0, bounds.w - 156.0, 18.0), state.status.slice(), style.text, .start);
     try (display_component.Progress{ .value = state.progress }).render(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 68.0, bounds.w - 32.0, 12.0), .{ .style = style });
 }
 
 fn renderContextCard(scene: *ui.Scene, bounds: ui.Rect, state: State, style: ui.Style) !void {
-    var detail_buf: [96]u8 = undefined;
-    const detail = std.fmt.bufPrint(&detail_buf, "{d} / {d} tokens allocated across agents", .{ state.context_used, context_window_tokens }) catch "32k context budget";
-    try (card_component.Card{ .title = "Context budget", .detail = detail, .variant = .panel }).render(scene, bounds, .{ .style = style });
-    try (display_component.Progress{ .value = state.contextRatio() }).render(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 68.0, bounds.w - 32.0, 12.0), .{ .style = style });
+    var detail_buf: [128]u8 = undefined;
+    const total = pipelineContextUsed(state);
+    const detail = std.fmt.bufPrint(&detail_buf, "{d} / {d} tokens across {d} fixed-role prompts", .{ total, context_window_tokens, state.agents.len }) catch "32k context budget";
+    try (card_component.Card{ .title = "32k context budget", .detail = detail, .variant = .panel }).render(scene, bounds, .{ .style = style });
+    try (display_component.Progress{ .value = std.math.clamp(@as(f32, @floatFromInt(total)) / @as(f32, @floatFromInt(context_window_tokens)), 0.0, 1.0) }).render(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 68.0, bounds.w - 32.0, 12.0), .{ .style = style });
 }
 
 fn renderAgents(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State, style: ui.Style) !void {
-    try (card_component.Card{ .title = "Agents", .detail = "small role-specific contexts", .variant = .panel }).render(scene, bounds, .{ .style = style });
+    try (card_component.Card{ .title = "Expert pipeline", .detail = "automatic role chain", .variant = .panel }).render(scene, bounds, .{ .style = style });
     var y = bounds.y + 58.0;
     for (state.agents, 0..) |agent, index| {
-        var detail_buf: [160]u8 = undefined;
-        const detail = std.fmt.bufPrint(&detail_buf, "{s} · {d} tokens", .{ agent.role, agent.context_used }) catch agent.role;
+        var detail_buf: [176]u8 = undefined;
+        const detail = std.fmt.bufPrint(&detail_buf, "{s} · {s} · {d} tokens", .{ agent.role, agent.model, agent.context_used }) catch agent.role;
         const row = row_item_component.RowItem{ .id = agent_row_id_base + @as(u32, @intCast(index)), .title = agent.name, .detail = detail };
-        try row.render(scene, ui.Rect.init(bounds.x + 8.0, y, bounds.w - 16.0, 40.0), .{ .style = style, .control = .{ .active = agent.active } });
-        try row.collectInteractions(collector, ui.Rect.init(bounds.x + 8.0, y, bounds.w - 16.0, 40.0));
-        y += 42.0;
+        try row.render(scene, ui.Rect.init(bounds.x + 8.0, y, bounds.w - 16.0, 34.0), .{ .style = style, .control = .{ .active = agent.active } });
+        try row.collectInteractions(collector, ui.Rect.init(bounds.x + 8.0, y, bounds.w - 16.0, 34.0));
+        y += 36.0;
     }
 }
 
 fn renderTranscript(scene: *ui.Scene, bounds: ui.Rect, state: State, style: ui.Style) !void {
-    try (card_component.Card{ .title = "Assistant", .detail = state.assistant.slice(), .variant = .elevated }).render(scene, bounds, .{ .style = style });
+    try (card_component.Card{ .title = "Result", .detail = state.assistant.slice(), .variant = .elevated }).render(scene, bounds, .{ .style = style });
 }
 
 fn renderRows(scene: *ui.Scene, bounds: ui.Rect, title: []const u8, detail: []const u8, rows: RowList, style: ui.Style) !void {
     try (card_component.Card{ .title = title, .detail = detail, .variant = .panel }).render(scene, bounds, .{ .style = style });
     var y = bounds.y + 58.0;
     if (rows.len == 0) {
-        try (row_item_component.RowItem{ .id = 0, .title = "No events yet", .detail = "waiting for agent/tool stream" }).render(scene, ui.Rect.init(bounds.x + 8.0, y, bounds.w - 16.0, 42.0), .{ .style = style });
+        try (row_item_component.RowItem{ .id = 0, .title = "No events yet", .detail = "waiting for pipeline stream" }).render(scene, ui.Rect.init(bounds.x + 8.0, y, bounds.w - 16.0, 42.0), .{ .style = style });
         return;
     }
     for (rows.items[0..rows.len]) |row| {
@@ -239,6 +244,12 @@ fn renderRowGroup(scene: *ui.Scene, bounds: ui.Rect, y: *f32, rows: RowList, ren
         any = true;
     }
     return any;
+}
+
+fn pipelineContextUsed(state: State) u32 {
+    var total: u32 = 0;
+    for (state.agents) |agent| total += agent.context_used;
+    return total;
 }
 
 fn TextBuf(comptime capacity: usize) type {
@@ -308,7 +319,7 @@ test "agent render composes native components" {
     var scene = ui.Scene.init(&commands);
     var regions: [64]interaction.Region = undefined;
     var collector = interaction.Collector.init(&regions);
-    try render(&scene, &collector, ui.Rect.init(0, 0, 1280, 800), .{});
+    try render(&scene, &collector, ui.Rect.init(0, 0, 1280, 900), .{});
     try std.testing.expect(scene.written().len != 0);
     try std.testing.expect(collector.written().len >= 2);
 }
