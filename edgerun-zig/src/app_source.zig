@@ -136,7 +136,7 @@ pub fn renderWorkspaceSidebar(scene: *ui.Scene, collector: *interaction.Collecto
 
     const search = ui.Rect.init(bounds.x + 12.0, bounds.y + 58.0, bounds.w - 24.0, search_h);
     try fill(scene, search, ui.Color{ .r = 12, .g = 16, .b = 23 }, 8.0);
-    try fill(scene, search, border, .border, 8.0);
+    try stroke(scene, search, border, 8.0);
     try collector.addSemanticHit(search, sourceSearchHit());
     const search_text = if (state.search_query.len == 0) "search files" else state.search_query;
     try textAt(scene, search.x + 10.0, search.y + 8.0, search.w - 20.0, 14.0, search_text, if (state.search_query.len == 0) muted else text);
@@ -331,6 +331,10 @@ fn formatBytes(out: []u8, value: usize) []const u8 {
 
 fn fill(scene: *ui.Scene, bounds: ui.Rect, color: ui.Color, radius: f32) ui.RenderError!void {
     try scene.pushRect(bounds, color, .fill, radius, 0.0);
+}
+
+fn stroke(scene: *ui.Scene, bounds: ui.Rect, color: ui.Color, radius: f32) ui.RenderError!void {
+    try scene.pushRect(bounds, color, .border, radius, 1.0);
 }
 
 fn textAt(scene: *ui.Scene, x: f32, y: f32, w: f32, h: f32, value: []const u8, color: ui.Color) ui.RenderError!void {
