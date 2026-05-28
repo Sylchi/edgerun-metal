@@ -166,7 +166,7 @@ pub fn fromPath(path: []const u8) Route {
         .docs => .{ .view = .docs },
         .component_catalog => .{ .view = .components },
         .component_detail => .{ .view = .components, .selected_component_index = component_gallery.indexBySlug(trimmed[RoutePath.component_detail_prefix.len..]) },
-        .docs_detail => .{ .view = .docs, .selected_doc_index = app_docs.indexBySlug(trimmed[RoutePath.docs_detail_prefix.len..]) },
+        .docs_detail => .{ .view = .docs, .selected_doc_index = docIndexBySlug(trimmed[RoutePath.docs_detail_prefix.len..]) },
         .academy_detail => academyPostRoute(trimmed[RoutePath.academy_detail_prefix.len..]),
         .unknown => .{ .view = .landing },
     };
@@ -203,7 +203,7 @@ pub fn blogArcFilterButtonId(index: usize) u32 {
 pub fn blogArcFilterIndexFromButton(hit_id: u32) ?usize {
     if (hit_id < first_arc_filter_button_id) return null;
     const index: usize = hit_id - first_arc_filter_button_id;
-    return if (index < app_blog.arc_sections.len) index else null;
+    return app_blogArcFilterIndex(index);
 }
 
 pub fn fromHit(hit_id: u32, current: Route) ?Route {
@@ -216,6 +216,13 @@ pub fn actionFromHit(hit_id: u32) ?Action {
         if (binding.id == hit_id) return binding.action;
     }
     return null;
+}
+
+pub fn actionId(action: Action) u32 {
+    for (action_bindings) |binding| {
+        if (binding.action == action) return binding.id;
+    }
+    unreachable;
 }
 
 pub fn pathFromHash(hash: []const u8) error{InvalidRouteHash}![]const u8 {
@@ -297,8 +304,8 @@ pub const DynamicRouteFixture = struct {
 
 const dynamic_route_fixtures = blk: {
     const post_id = app_blog.postIdAt(0);
-    const docs_index = app_docs.indexBySlug("component-system") orelse 0;
-    const docs_expected: Route = if (app_docs.slugByIndex(docs_index)) |slug|
+    const docs_index = docIndexBySlug("component-system") orelse 0;
+    const docs_expected: Route = if (docSlugByIndex(docs_index)) |slug|
         if (std.mem.eql(u8, slug, "component-system"))
             .{ .view = .components }
         else
@@ -445,7 +452,7 @@ const dynamic_route_resolvers = [_]DynamicRouteResolver{
 };
 
 fn isBlogPostHit(hit_id: u32) bool {
-    return app_blog.postIdFromHit(hit_id) != null;
+    return blogPostIdFromHit(hit_id) != null;
 }
 
 fn isArcFilterHit(hit_id: u32) bool {
@@ -461,11 +468,11 @@ fn isComponentPreviewHit(hit_id: u32) bool {
 }
 
 fn isDocsFamilyHit(hit_id: u32) bool {
-    return app_docs.indexFromHit(hit_id) != null;
+    return docIndexFromHit(hit_id) != null;
 }
 
 fn blogPostFromHit(hit_id: u32, current: Route) ?Route {
-    if (app_blog.postIdFromHit(hit_id)) |post_id| {
+    if (blogPostIdFromHit(hit_id)) |post_id| {
         return .{ .view = .blog, .selected_blog_post_id = post_id, .blog_arc_filter_index = current.blog_arc_filter_index };
     }
     return null;
@@ -493,7 +500,7 @@ fn componentPreviewFromHit(hit_id: u32, _: Route) ?Route {
 }
 
 fn docsOrCatalogFromHit(hit_id: u32, _: Route) ?Route {
-    if (app_docs.indexFromHit(hit_id)) |index| {
+    if (docIndexFromHit(hit_id)) |index| {
         if (isComponentDocIndex(index)) return .{ .view = .components };
         return .{ .view = .docs, .selected_doc_index = index };
     }
@@ -509,7 +516,7 @@ pub fn contract() Contract {
 }
 
 fn academyPostRoute(slug: []const u8) Route {
-    if (app_blog.postIdBySlug(slug)) |post_id| return .{ .view = .blog, .selected_blog_post_id = post_id };
+    if (blogPostIdBySlug(slug)) |post_id| return .{ .view = .blog, .selected_blog_post_id = post_id };
     return blogIndex(null);
 }
 
@@ -528,17 +535,17 @@ pub fn trimPath(path: []const u8) []const u8 {
 }
 
 fn writePostPath(out: []u8, post_id: u32) error{RouteBufferTooSmall}!usize {
-    const slug = app_blog.postSlug(post_id) orelse return error.RouteBufferTooSmall;
+    const slug = blogPostSlug(post_id) orelse return error.RouteBufferTooSmall;
     return writePrefixPath(out, RoutePath.academy_detail_prefix, slug);
 }
 
 fn writeDocPath(out: []u8, index: usize) error{RouteBufferTooSmall}!usize {
-    const slug = app_docs.slugByIndex(index) orelse return error.RouteBufferTooSmall;
+    const slug = docSlugByIndex(index) orelse return error.RouteBufferTooSmall;
     return writePrefixPath(out, RoutePath.docs_detail_prefix, slug);
 }
 
 fn writeComponentPath(out: []u8, index: usize) error{RouteBufferTooSmall}!usize {
-    const slug = component_gallery.slugByIndex(index) orelse return error.RouteBufferTooSmall;
+    const slug = componentSlugByIndex(index) orelse return error.RouteBufferTooSmall;
     return writePrefixPath(out, RoutePath.component_detail_prefix, slug);
 }
 
@@ -557,16 +564,84 @@ fn writePrefixPath(out: []u8, prefix: []const u8, suffix: []const u8) error{Rout
     return len;
 }
 
+fn docIndexBySlug(slug: []const u8) ?usize {
+    for (app_docs.doc_pages, 0..) |page, index| {
+        if (std.mem.eql(u8, page.slug, slug)) return index;
+    }
+    return null;
+}
+
+fn docIndexFromHit(hit_id: u32) ?usize {
+    return docsPageIndexFromButton(hit_id);
+}
+
+fn docSlugByIndex(index: usize) ?[]const u8 {
+    if (index >= app_docs.doc_pages.len) return null;
+    return app_docs.doc_pages[index].slug;
+}
+
+fn componentSlugByIndex(index: usize) ?[]const u8 {
+    if (index >= component_gallery.component_catalog.len) return null;
+    return component_gallery.component_catalog[index].slug;
+}
+
+fn app_blogArcFilterIndex(index: usize) ?usize {
+    return if (index < app_blogArcSectionCount()) index else null;
+}
+
+fn app_blogArcSectionCount() usize {
+    return 5;
+}
+
+fn blogPostIdFromHit(hit_id: u32) ?u32 {
+    return if (blogPostIndexFromId(hit_id) != null) hit_id else null;
+}
+
+fn blogPostIndexFromId(post_id: u32) ?usize {
+    if (post_id < first_post_button_id) return null;
+    const index: usize = @intCast(post_id - first_post_button_id);
+    return if (index < app_blog.posts.len) index else null;
+}
+
+fn blogPostSlug(post_id: u32) ?[]const u8 {
+    const index = blogPostIndexFromId(post_id) orelse return null;
+    return blogSlugByIndex(index);
+}
+
+fn blogPostIdBySlug(slug: []const u8) ?u32 {
+    for (app_blog.posts, 0..) |_, index| {
+        if (std.mem.eql(u8, blogSlugByIndex(index), slug)) {
+            return blogPostButtonId(index);
+        }
+    }
+    return null;
+}
+
+fn blogSlugByIndex(index: usize) []const u8 {
+    return switch (index) {
+        0 => "device-city",
+        1 => "cpu-instructions",
+        2 => "ram-desk",
+        3 => "storage-long-term",
+        4 => "gpu-draws-reality",
+        5 => "os-referee",
+        6 => "apps-are-guests",
+        7 => "drivers-firmware",
+        8 => "keys-tpms-secure-boot",
+        else => "lesson",
+    };
+}
+
 fn isComponentDocIndex(index: usize) bool {
-    const slug = app_docs.slugByIndex(index) orelse return false;
+    const slug = docSlugByIndex(index) orelse return false;
     return std.mem.eql(u8, slug, "component-system");
 }
 
 comptime {
-    if (top_level_bindings.len != @typeInfo(MainButton).Enum.fields.len) {
+    if (top_level_bindings.len != @typeInfo(MainButton).@"enum".fields.len) {
         @compileError("top_level_bindings must cover every MainButton enum value");
     }
-    var seen_buttons: [@typeInfo(MainButton).Enum.fields.len]bool = [_]bool{false} ** @typeInfo(MainButton).Enum.fields.len;
+    var seen_buttons: [@typeInfo(MainButton).@"enum".fields.len]bool = [_]bool{false} ** @typeInfo(MainButton).@"enum".fields.len;
     for (top_level_bindings) |entry| {
         const idx = @intFromEnum(entry.button);
         if (idx >= seen_buttons.len) @compileError("top_level_bindings contains unknown MainButton");
@@ -579,7 +654,7 @@ comptime {
 }
 
 comptime {
-    var seen_actions: [@typeInfo(Action).Enum.fields.len]bool = [_]bool{false} ** @typeInfo(Action).Enum.fields.len;
+    var seen_actions: [@typeInfo(Action).@"enum".fields.len]bool = [_]bool{false} ** @typeInfo(Action).@"enum".fields.len;
     for (action_bindings) |entry| {
         const idx = @intFromEnum(entry.action);
         if (idx >= seen_actions.len) @compileError("action_bindings contains unknown Action");
@@ -658,8 +733,8 @@ test "app_navigation route contract is deterministic for top-level and dynamic f
     }
 
     const post_id = app_blog.postIdAt(0);
-    const docs_index = app_docs.indexBySlug("component-system").?;
-    for (app_navigation.dynamicRouteFixtures()) |entry| {
+    const docs_index = docIndexBySlug("component-system").?;
+    for (dynamicRouteFixtures()) |entry| {
         const route = fromHit(entry.hit_id, .{ .view = .source }) orelse unreachable;
         try std.testing.expectEqual(entry.expected, route);
     }

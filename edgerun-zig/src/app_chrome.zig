@@ -79,14 +79,15 @@ pub const ActionRouteNavProps = struct {
 };
 
 pub fn renderActionItem(scene: *ui.Scene, collector: *interaction.Collector, props: ActionNavProps) (ui.RenderError || interaction.Error)!void {
-    const control = if (props.active)
-        .{ .active = true, .disabled = !props.enabled, .control_size = props.control_size orelse .default }
-    else
-        .{ .disabled = !props.enabled, .control_size = props.control_size orelse .default };
+    const control = .{
+        .active = props.active,
+        .disabled = !props.enabled,
+        .control_size = props.control_size orelse .default,
+    };
     const button = button_component.Button{
         .id = props.id,
         .label = props.label,
-        .variant = props.variant orelse if (props.active) .secondary else .outline,
+        .variant = props.variant orelse activeVariant(props.active, .secondary, .outline),
         .icon_slot = props.icon_slot orelse .none,
     };
     try button.render(scene, props.bounds, .{
@@ -268,56 +269,56 @@ fn isActive(button: app_navigation.MainButton, active: ActiveNav) bool {
 
 pub fn renderNavItem(scene: *ui.Scene, collector: *interaction.Collector, props: NavProps) (ui.RenderError || interaction.Error)!void {
     switch (props.kind) {
-    .top_text => {
-        const variant = props.variant orelse if (props.active) .secondary else .ghost;
-        const label = props.label orelse props.binding.row_title;
-        const component = button_component.Button{
-            .id = props.binding.id,
-            .label = label,
-            .variant = variant,
-            .icon_slot = props.icon_slot orelse .none,
-        };
-        try component.render(scene, props.bounds, .{ .style = design.style() });
-        try component.collectInteractions(collector, props.bounds);
-    },
-    .top_icon => {
-        const variant = props.variant orelse if (props.active) .secondary else .ghost;
-        const label = props.label orelse props.binding.icon.label;
-        const icon = props.icon orelse props.binding.icon;
-        const component = button_component.IconButton{
-            .id = props.binding.id,
-            .label = label,
-            .icon = icon,
-            .variant = variant,
-        };
-        try component.render(scene, props.bounds, .{ .style = design.style() });
-        try component.collectInteractions(collector, props.bounds);
-    },
-    .workspace_rail => {
-        const icon = props.icon orelse props.binding.icon;
-        const variant = props.variant orelse if (props.active) .secondary else .ghost;
-        const component = button_component.IconButton{
-            .id = props.binding.id,
-            .label = props.binding.rail_label,
-            .icon = icon,
-            .variant = variant,
-        };
-        try component.render(scene, props.bounds, .{ .style = design.style() });
-        try component.collectInteractions(collector, props.bounds);
-    },
-    .workspace_sidebar => {
-        const title = props.label orelse props.binding.row_title;
-        const component = row_item_component.RowItem{
-            .id = props.binding.id,
-            .title = title,
-            .detail = props.binding.row_detail,
-        };
-        try component.render(scene, props.bounds, .{
-            .style = design.style(),
-            .control = .{ .active = props.active },
-        });
-        try component.collectInteractions(collector, props.bounds);
-    },
+        .top_text => {
+            const variant = props.variant orelse activeVariant(props.active, .secondary, .ghost);
+            const label = props.label orelse props.binding.row_title;
+            const component = button_component.Button{
+                .id = props.binding.id,
+                .label = label,
+                .variant = variant,
+                .icon_slot = props.icon_slot orelse .none,
+            };
+            try component.render(scene, props.bounds, .{ .style = design.style() });
+            try component.collectInteractions(collector, props.bounds);
+        },
+        .top_icon => {
+            const variant = props.variant orelse activeVariant(props.active, .secondary, .ghost);
+            const label = props.label orelse props.binding.icon.label;
+            const icon = props.icon orelse props.binding.icon;
+            const component = button_component.IconButton{
+                .id = props.binding.id,
+                .label = label,
+                .icon = icon,
+                .variant = variant,
+            };
+            try component.render(scene, props.bounds, .{ .style = design.style() });
+            try component.collectInteractions(collector, props.bounds);
+        },
+        .workspace_rail => {
+            const icon = props.icon orelse props.binding.icon;
+            const variant = props.variant orelse activeVariant(props.active, .secondary, .ghost);
+            const component = button_component.IconButton{
+                .id = props.binding.id,
+                .label = props.binding.rail_label,
+                .icon = icon,
+                .variant = variant,
+            };
+            try component.render(scene, props.bounds, .{ .style = design.style() });
+            try component.collectInteractions(collector, props.bounds);
+        },
+        .workspace_sidebar => {
+            const title = props.label orelse props.binding.row_title;
+            const component = row_item_component.RowItem{
+                .id = props.binding.id,
+                .title = title,
+                .detail = props.binding.row_detail,
+            };
+            try component.render(scene, props.bounds, .{
+                .style = design.style(),
+                .control = .{ .active = props.active },
+            });
+            try component.collectInteractions(collector, props.bounds);
+        },
     }
 }
 
@@ -346,4 +347,8 @@ test "header renders compact source control" {
     var collector = interaction.Collector.init(&regions);
     try renderHeader(&scene, &collector, ui.Rect.init(0, 0, 640, header_h), ui.Rect.init(20, 0, 600, header_h), .source);
     try std.testing.expect(scene.written().len != 0);
+}
+
+fn activeVariant(active: bool, on: ui_component_common.ButtonVariant, off: ui_component_common.ButtonVariant) ui_component_common.ButtonVariant {
+    return if (active) on else off;
 }

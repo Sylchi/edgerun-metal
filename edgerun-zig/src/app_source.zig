@@ -6,6 +6,9 @@ const icon_component = @import("ui/components/Icon.zig");
 const interaction = @import("ui_interaction.zig");
 const ui = @import("ui.zig");
 
+pub const editor_textarea_id: u32 = 32_100;
+pub const explorer_search_input_id: u32 = 32_101;
+
 pub const State = struct {
     scroll_y: f32 = 0.0,
     hover_x: f32 = -1.0,
@@ -35,8 +38,14 @@ pub const State = struct {
 };
 
 pub const FileEntry = struct {
-    label: []const u8,
+    path: []const u8,
+    label: []const u8 = "",
     dirty: bool = false,
+
+    pub fn displayLabel(self: FileEntry) []const u8 {
+        if (self.label.len != 0) return self.label;
+        return basename(self.path);
+    }
 };
 
 const sidebar_w: f32 = 260.0;
@@ -121,8 +130,8 @@ pub fn renderWorkspaceSidebar(scene: *ui.Scene, collector: *interaction.Collecto
     var y = bounds.y + 70.0;
     for (state.files, 0..) |file, index| {
         const row = ui.Rect.init(bounds.x + 8.0, y, bounds.w - 16.0, 38.0);
-        try fill(scene, row, if (std.mem.eql(u8, file.label, state.label)) ui.Color{ .r = 34, .g = 47, .b = 66 } else ui.Color.clear, 8.0);
-        try textAt(scene, row.x + 10.0, row.y + 9.0, row.w - 20.0, 16.0, file.label, if (file.dirty) accent else text);
+        try fill(scene, row, if (std.mem.eql(u8, file.displayLabel(), state.label)) ui.Color{ .r = 34, .g = 47, .b = 66 } else ui.Color.clear, 8.0);
+        try textAt(scene, row.x + 10.0, row.y + 9.0, row.w - 20.0, 16.0, file.displayLabel(), if (file.dirty) accent else text);
         try collector.addHit(row, .row_item, @intCast(40_000 + index));
         y += 42.0;
     }
@@ -324,4 +333,12 @@ fn isKeyword(word: []const u8) bool {
     const keywords = [_][]const u8{ "const", "var", "fn", "pub", "return", "if", "else", "while", "for", "switch", "struct", "enum", "union", "error", "try", "catch" };
     for (keywords) |keyword| if (std.mem.eql(u8, word, keyword)) return true;
     return false;
+}
+
+fn basename(path: []const u8) []const u8 {
+    var index = path.len;
+    while (index > 0) : (index -= 1) {
+        if (path[index - 1] == '/') return path[index..];
+    }
+    return path;
 }

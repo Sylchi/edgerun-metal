@@ -813,7 +813,7 @@ fn nativeComponent(scene: *ui.Scene, collector: *interaction.Collector, bounds: 
 }
 
 fn appStyle() ui.Style {
-    var resolved = app_chrome.style();
+    var resolved = design.style();
     resolved.panel = palette.card;
     resolved.row = palette.card_alt;
     return resolved;

@@ -20,6 +20,20 @@ pub const Color = packed struct {
 
 pub const Rect = geometry.Rect;
 
+pub const Node = @import("ui_node.zig").Node;
+
+pub fn clampUnit(value: f32) f32 {
+    return geometry.clamp(value, 0.0, 1.0);
+}
+
+pub fn encodeUnit(value: f32) u16 {
+    return @intFromFloat(@round(clampUnit(value) * 65535.0));
+}
+
+pub fn decodeUnit(value: u16) f32 {
+    return @as(f32, @floatFromInt(value)) / 65535.0;
+}
+
 pub const Size = struct { w: f32, h: f32 };
 pub const Axis = enum { row, column };
 pub const Align = enum { start, center, end, stretch };
@@ -152,7 +166,7 @@ pub const Stats = struct { rects: usize = 0, drag_sources: usize = 0, drop_targe
 pub const Budget = struct { rects: usize = 2000, drag_sources: usize = 240, drop_targets: usize = 240, transitions: usize = 1200, icon_quads: usize = 160, text_quads: usize = 900, image_quads: usize = 16 };
 pub const BudgetViolation = struct { name: []const u8, actual: usize, limit: usize };
 pub const RenderError = error{ CommandBudgetExceeded, InvalidBounds, ClipBudgetExceeded, UnsupportedComponent };
-pub const PatchError = error{ WrongNodeKind };
+pub const PatchError = error{WrongNodeKind};
 
 pub const CommandList = bounded.SliceList(Command);
 pub const ClipList = bounded.SliceList(Rect);
@@ -161,13 +175,26 @@ pub const Scene = struct {
     commands: CommandList,
     clips: ClipList,
 
-    pub fn init(commands: []Command) Scene { return .{ .commands = CommandList.from(commands), .clips = ClipList.from(&.{}) }; }
-    pub fn initWithClips(commands: []Command, clips: []Rect) Scene { return .{ .commands = CommandList.from(commands), .clips = ClipList.from(clips) }; }
-    pub fn clear(self: *Scene) void { self.commands.clear(); self.clips.clear(); }
-    pub fn push(self: *Scene, command: Command) RenderError!void { if (!self.commands.append(command)) return error.CommandBudgetExceeded; }
+    pub fn init(commands: []Command) Scene {
+        return .{ .commands = CommandList.from(commands), .clips = ClipList.from(&.{}) };
+    }
+    pub fn initWithClips(commands: []Command, clips: []Rect) Scene {
+        return .{ .commands = CommandList.from(commands), .clips = ClipList.from(clips) };
+    }
+    pub fn clear(self: *Scene) void {
+        self.commands.clear();
+        self.clips.clear();
+    }
+    pub fn push(self: *Scene, command: Command) RenderError!void {
+        if (!self.commands.append(command)) return error.CommandBudgetExceeded;
+    }
 
-    pub fn pushRect(self: *Scene, bounds: Rect, color: Color, mode: RectMode, radius: f32, shadow: f32) RenderError!void { try self.pushRectPair(bounds, color, .clear, mode, radius, shadow); }
-    pub fn pushGradientRect(self: *Scene, bounds: Rect, top_color: Color, bottom_color: Color, radius: f32) RenderError!void { try self.pushRectPair(bounds, top_color, bottom_color, .linear_gradient, radius, 0.0); }
+    pub fn pushRect(self: *Scene, bounds: Rect, color: Color, mode: RectMode, radius: f32, shadow: f32) RenderError!void {
+        try self.pushRectPair(bounds, color, .clear, mode, radius, shadow);
+    }
+    pub fn pushGradientRect(self: *Scene, bounds: Rect, top_color: Color, bottom_color: Color, radius: f32) RenderError!void {
+        try self.pushRectPair(bounds, top_color, bottom_color, .linear_gradient, radius, 0.0);
+    }
 
     pub fn pushPieSlice(self: *Scene, bounds: Rect, color: Color, start_turn: f32, end_turn: f32) RenderError!void {
         if (!geometry.finite(start_turn) or !geometry.finite(end_turn)) return;
@@ -196,20 +223,35 @@ pub const Scene = struct {
         if (self.clipRect(target.bounds)) |clipped| try self.push(.{ .drop_target = .{ .scope_id = target.scope_id, .index = target.index, .bounds = clipped } });
     }
 
-    pub fn pushTransition(self: *Scene, value: Transition) RenderError!void { if (!value.valid()) return; try self.push(.{ .transition = value }); }
+    pub fn pushTransition(self: *Scene, value: Transition) RenderError!void {
+        if (!value.valid()) return;
+        try self.push(.{ .transition = value });
+    }
 
     pub fn pushIconQuad(self: *Scene, quad: IconQuad) RenderError!void {
         if (quad.icon_id == 0) return;
         if (self.clipRect(quad.bounds)) |clipped| try self.push(.{ .icon_quad = .{ .bounds = clipped, .icon_id = quad.icon_id, .color = quad.color } });
     }
 
-    pub fn pushTextQuad(self: *Scene, quad: Quad) RenderError!void { if (self.clipQuad(quad)) |clipped| try self.push(.{ .text_quad = clipped }); }
-    pub fn pushImageQuad(self: *Scene, quad: Quad) RenderError!void { if (self.clipQuad(quad)) |clipped| try self.push(.{ .image_quad = clipped }); }
+    pub fn pushTextQuad(self: *Scene, quad: Quad) RenderError!void {
+        if (self.clipQuad(quad)) |clipped| try self.push(.{ .text_quad = clipped });
+    }
+    pub fn pushImageQuad(self: *Scene, quad: Quad) RenderError!void {
+        if (self.clipQuad(quad)) |clipped| try self.push(.{ .image_quad = clipped });
+    }
 
-    pub fn pushText(self: *Scene, origin: Rect, value: []const u8, color: Color) RenderError!void { try self.pushAlignedText(origin, value, color, .start); }
-    pub fn pushStrongText(self: *Scene, origin: Rect, value: []const u8, color: Color) RenderError!void { try self.pushAlignedTextWeight(origin, value, color, .start, .semibold); }
-    pub fn pushBoldText(self: *Scene, origin: Rect, value: []const u8, color: Color) RenderError!void { try self.pushAlignedTextWeight(origin, value, color, .start, .bold); }
-    pub fn pushAlignedText(self: *Scene, origin: Rect, value: []const u8, color: Color, alignment: TextAlign) RenderError!void { try self.pushAlignedTextWeight(origin, value, color, alignment, .regular); }
+    pub fn pushText(self: *Scene, origin: Rect, value: []const u8, color: Color) RenderError!void {
+        try self.pushAlignedText(origin, value, color, .start);
+    }
+    pub fn pushStrongText(self: *Scene, origin: Rect, value: []const u8, color: Color) RenderError!void {
+        try self.pushAlignedTextWeight(origin, value, color, .start, .semibold);
+    }
+    pub fn pushBoldText(self: *Scene, origin: Rect, value: []const u8, color: Color) RenderError!void {
+        try self.pushAlignedTextWeight(origin, value, color, .start, .bold);
+    }
+    pub fn pushAlignedText(self: *Scene, origin: Rect, value: []const u8, color: Color, alignment: TextAlign) RenderError!void {
+        try self.pushAlignedTextWeight(origin, value, color, alignment, .regular);
+    }
 
     pub fn pushAlignedTextWeight(self: *Scene, origin: Rect, value: []const u8, color: Color, alignment: TextAlign, weight: FontWeight) RenderError!void {
         if (value.len == 0) return;
@@ -241,8 +283,12 @@ pub const Scene = struct {
         return true;
     }
 
-    pub fn popClip(self: *Scene) void { _ = self.clips.pop(); }
-    pub fn cursor(self: Scene) Cursor { return .{ .commands = self.commands.len }; }
+    pub fn popClip(self: *Scene) void {
+        _ = self.clips.pop();
+    }
+    pub fn cursor(self: Scene) Cursor {
+        return .{ .commands = self.commands.len };
+    }
 
     pub fn stats(self: Scene) Stats {
         var out = Stats{ .clips = self.clips.len };
@@ -286,8 +332,14 @@ pub const Scene = struct {
         };
     }
 
-    fn currentClip(self: Scene) ?Rect { if (self.clips.len == 0) return null; return self.clips.items[self.clips.len - 1]; }
-    fn clipRect(self: Scene, bounds: Rect) ?Rect { if (!bounds.valid()) return null; return if (self.currentClip()) |clip| bounds.intersect(clip) else bounds; }
+    fn currentClip(self: Scene) ?Rect {
+        if (self.clips.len == 0) return null;
+        return self.clips.items[self.clips.len - 1];
+    }
+    fn clipRect(self: Scene, bounds: Rect) ?Rect {
+        if (!bounds.valid()) return null;
+        return if (self.currentClip()) |clip| bounds.intersect(clip) else bounds;
+    }
 
     fn clipQuad(self: Scene, quad: Quad) ?Quad {
         const clipped_bounds = self.clipRect(quad.bounds) orelse return null;
@@ -304,12 +356,20 @@ pub const Scene = struct {
         return .{ .bounds = clipped_bounds, .u0 = quad.u0 + u_span * left, .v0 = quad.v0 + v_span * top, .u1 = quad.u0 + u_span * right, .v1 = quad.v0 + v_span * bottom, .atlas_id = quad.atlas_id, .color = quad.color };
     }
 
-    pub fn written(self: Scene) []const Command { return self.commands.slice(); }
-    pub fn commandCount(self: Scene) usize { return self.commands.len; }
-    pub fn commandAt(self: Scene, index: usize) ?Command { return self.commands.at(index); }
+    pub fn written(self: Scene) []const Command {
+        return self.commands.slice();
+    }
+    pub fn commandCount(self: Scene) usize {
+        return self.commands.len;
+    }
+    pub fn commandAt(self: Scene, index: usize) ?Command {
+        return self.commands.at(index);
+    }
 };
 
-pub fn frameBudget() Budget { return .{}; }
+pub fn frameBudget() Budget {
+    return .{};
+}
 
 pub fn firstBudgetViolation(stats_value: Stats, budget: Budget) ?BudgetViolation {
     const entries = [_]BudgetViolation{
@@ -325,7 +385,9 @@ pub fn firstBudgetViolation(stats_value: Stats, budget: Budget) ?BudgetViolation
     return null;
 }
 
-pub fn statsFitBudget(stats_value: Stats, budget: Budget) bool { return firstBudgetViolation(stats_value, budget) == null; }
+pub fn statsFitBudget(stats_value: Stats, budget: Budget) bool {
+    return firstBudgetViolation(stats_value, budget) == null;
+}
 
 fn normalizeRect(bounds: *Rect, radius: *f32, shadow: *f32) bool {
     if (!bounds.valid() or !geometry.finite(radius.*) or !geometry.finite(shadow.*)) return false;
@@ -334,12 +396,19 @@ fn normalizeRect(bounds: *Rect, radius: *f32, shadow: *f32) bool {
     return true;
 }
 
-fn translateRect(bounds: *Rect, dx: f32, dy: f32) void { bounds.x += dx; bounds.y += dy; }
-fn scaleAlpha(alpha: u8, factor: f32) u8 { return @intFromFloat(@round(@as(f32, @floatFromInt(alpha)) * factor)); }
+fn translateRect(bounds: *Rect, dx: f32, dy: f32) void {
+    bounds.x += dx;
+    bounds.y += dy;
+}
+fn scaleAlpha(alpha: u8, factor: f32) u8 {
+    return @intFromFloat(@round(@as(f32, @floatFromInt(alpha)) * factor));
+}
 
-fn unitByte(value: f32) u8 { return @intFromFloat(@round(geometry.clamp(value, 0.0, 1.0) * 255.0)); }
+fn unitByte(value: f32) u8 {
+    return @intFromFloat(@round(geometry.clamp(value, 0.0, 1.0) * 255.0));
+}
 
-fn skipAsciiSpace(value: []const u8, start: usize) usize {
+pub fn skipAsciiSpace(value: []const u8, start: usize) usize {
     var index = start;
     while (index < value.len and value[index] == ' ') : (index += 1) {}
     return index;

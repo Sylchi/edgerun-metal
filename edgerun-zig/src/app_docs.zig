@@ -404,7 +404,7 @@ fn docBodyHeight(width: f32, compact: bool, page: DocPage, state: State) f32 {
 }
 
 fn renderSidebar(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, selected_index: ?usize) (ui.RenderError || interaction.Error)!void {
-    try (card_component.Card{ .title = "", .detail = "" }).render(scene, bounds, .{ .style = app_chrome.style() });
+    try (card_component.Card{ .title = "", .detail = "" }).render(scene, bounds, .{ .style = design.style() });
     try text(scene, bounds.x + card_pad, bounds.y + 18.0, bounds.w - card_pad * 2.0, 16.0, "Docs", palette.text);
     try text(scene, bounds.x + card_pad, bounds.y + 38.0, bounds.w - card_pad * 2.0, 14.0, "Feature map", palette.muted);
     var y = bounds.y + 64.0;
@@ -453,7 +453,7 @@ fn renderHero(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Re
     try (card_component.Card{
         .title = "",
         .detail = "",
-    }).render(scene, bounds, .{ .style = app_chrome.style() });
+    }).render(scene, bounds, .{ .style = design.style() });
     const inset = bounds.insetUniform(card_pad);
     try label(scene, heroLabelBounds(inset, page.status), page.status, page.color);
     const split = bounds.w >= compact_w;
@@ -533,7 +533,7 @@ fn renderFeatureGlyph(scene: *ui.Scene, bounds: ui.Rect, page: DocPage) ui.Rende
         .title = "",
         .detail = "",
         .variant = .subtle,
-    }).render(scene, bounds, .{ .style = app_chrome.style() });
+    }).render(scene, bounds, .{ .style = design.style() });
     try stroke(scene, bounds, page.color, panel_radius);
     const icon_size = @min(design.Icon.hero_max, bounds.w * 0.42);
     try page.icon_value.renderColor(scene, ui.Rect.init(bounds.x + bounds.w * 0.5 - icon_size * 0.5, bounds.y + 42.0, icon_size, icon_size), page.color);
@@ -668,7 +668,7 @@ fn renderMediaCard(scene: *ui.Scene, bounds: ui.Rect, demo: MediaDemo) ui.Render
     try (card_component.Card{
         .title = "",
         .detail = "",
-    }).render(scene, bounds, .{ .style = app_chrome.style() });
+    }).render(scene, bounds, .{ .style = design.style() });
     const preview = ui.Rect.init(bounds.x + card_pad, bounds.y + card_pad, bounds.w - card_pad * 2.0, media_preview_h);
     switch (demo.kind) {
         .image => try renderImageDemo(scene, preview, demo),
@@ -708,7 +708,7 @@ fn renderDocBlock(scene: *ui.Scene, bounds: ui.Rect, block: DocBlock) ui.RenderE
     try (card_component.Card{
         .title = "",
         .detail = "",
-    }).render(scene, bounds, .{ .style = app_chrome.style() });
+    }).render(scene, bounds, .{ .style = design.style() });
     try text(scene, bounds.x + card_pad, bounds.y + card_pad, bounds.w - card_pad * 2.0, section_block_title_h, block.title, palette.text);
     const body_y = bounds.y + card_pad + section_block_title_h + 10.0;
     const body_h = wrappedTextHeight(block.body, bounds.w - card_pad * 2.0, section_block_body_line_h, section_block_body_max_lines, section_block_body_avg_w);
@@ -775,7 +775,7 @@ fn renderFeatureCard(scene: *ui.Scene, collector: *interaction.Collector, bounds
         .title = page.title,
         .detail = page.summary,
         .variant = if (active) .elevated else .subtle,
-    }).render(scene, bounds, .{ .style = app_chrome.style() });
+    }).render(scene, bounds, .{ .style = design.style() });
     try stroke(scene, bounds, if (active) page.color else palette.border, panel_radius);
     try collector.addHit(bounds, .button, id);
 }
@@ -817,7 +817,7 @@ fn renderDetailCard(scene: *ui.Scene, bounds: ui.Rect, title_value: []const u8, 
     try (card_component.Card{
         .title = "",
         .detail = "",
-    }).render(scene, bounds, .{ .style = app_chrome.style() });
+    }).render(scene, bounds, .{ .style = design.style() });
     try text(scene, bounds.x + card_pad, bounds.y + 18.0, bounds.w - card_pad * 2.0, 16.0, title_value, palette.text);
     try wrappedText(scene, ui.Rect.init(bounds.x + card_pad, bounds.y + 44.0, bounds.w - card_pad * 2.0, @max(1.0, bounds.h - 44.0 - card_pad)), detail, palette.dim, detail_body_line_h, detail_body_avg_w, detail_body_max_lines);
 }
@@ -837,7 +837,7 @@ fn lineCount(value: []const u8) usize {
 }
 
 fn renderCodeCard(scene: *ui.Scene, bounds: ui.Rect, value: []const u8) ui.RenderError!void {
-    var code_style = app_chrome.style();
+    var code_style = design.style();
     code_style.panel = palette.code_bg;
     try (card_component.Card{
         .title = "",
@@ -867,7 +867,7 @@ fn renderGrid(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
 }
 
 fn appStyle() ui.Style {
-    var resolved = app_chrome.style();
+    var resolved = design.style();
     resolved.panel = palette.panel_alt;
     resolved.row = palette.row;
     resolved.border = palette.border;
@@ -897,8 +897,8 @@ test "docs page renders sidebar feature documentation" {
     try std.testing.expect(hasText(scene.written(), "Feature map"));
     try std.testing.expect(hasText(scene.written(), "Feature sections"));
     try std.testing.expect(hasText(scene.written(), "Contract and API"));
-        try std.testing.expect(hasHit(collector.written(), app_navigation.docsPageButtonId(indexBySlug("media").?)));
-        try std.testing.expect(hasHit(collector.written(), app_navigation.docsPageButtonId(indexBySlug("component-system").?)));
+    try std.testing.expect(hasHit(collector.written(), app_navigation.docsPageButtonId(indexBySlug("media").?)));
+    try std.testing.expect(hasHit(collector.written(), app_navigation.docsPageButtonId(indexBySlug("component-system").?)));
     try std.testing.expect(component_gallery.component_catalog.len > 0);
     try std.testing.expect(app_blog.posts.len > 0);
 }
@@ -1048,8 +1048,8 @@ test "docs navigation surfaces render through shared components" {
     var collector = interaction.Collector.init(&regions);
     const page = doc_pages[0];
 
-        try renderSidebarRow(&scene, &collector, ui.Rect.init(20.0, 40.0, 240.0, row_h - 6.0), page, app_navigation.docsPageButtonId(0), true);
-        try renderFeatureCard(&scene, &collector, ui.Rect.init(20.0, 90.0, 420.0, featureCardHeight(420.0)), page, app_navigation.docsPageButtonId(1), false);
+    try renderSidebarRow(&scene, &collector, ui.Rect.init(20.0, 40.0, 240.0, row_h - 6.0), page, app_navigation.docsPageButtonId(0), true);
+    try renderFeatureCard(&scene, &collector, ui.Rect.init(20.0, 90.0, 420.0, featureCardHeight(420.0)), page, app_navigation.docsPageButtonId(1), false);
 
     try std.testing.expect(hasText(scene.written(), page.section.label()));
     try std.testing.expect(hasText(scene.written(), page.title));

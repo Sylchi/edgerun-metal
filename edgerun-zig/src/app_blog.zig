@@ -1040,14 +1040,14 @@ fn renderLessonRhythm(scene: *ui.Scene, collector: *interaction.Collector, bound
     try nativeCard(scene, bounds, "", "");
     try tag(scene, ui.Rect.init(bounds.x + 18.0, bounds.y + 18.0, 92.0, 24.0), "HOW TO READ", palette.blue);
     try text(scene, bounds.x + 128.0, bounds.y + 23.0, bounds.w - 286.0, 14.0, "Every lesson has a job: notice the ordinary action, name the hidden authority, then ask what the user can own.", palette.text);
-        try app_chrome.renderNavItem(scene, collector, .{
-            .kind = .top_text,
-            .binding = app_navigation.topLevelBinding(.blog),
-            .bounds = ui.Rect.init(bounds.x + bounds.w - 140.0, bounds.y + 14.0, 122.0, 32.0),
-            .active = false,
-            .label = "All Lessons",
-            .variant = .outline,
-        });
+    try app_chrome.renderNavItem(scene, collector, .{
+        .kind = .top_text,
+        .binding = app_navigation.topLevelBinding(.blog),
+        .bounds = ui.Rect.init(bounds.x + bounds.w - 140.0, bounds.y + 14.0, 122.0, 32.0),
+        .active = false,
+        .label = "All Lessons",
+        .variant = .outline,
+    });
 
     const gap: f32 = 14.0;
     const item_title_y = bounds.y + 58.0;
@@ -3451,7 +3451,7 @@ fn nativeComponentVisual(scene: *ui.Scene, bounds: ui.Rect, component: anytype) 
 }
 
 fn appStyle() ui.Style {
-    var resolved = app_chrome.style();
+    var resolved = design.style();
     resolved.panel = palette.card;
     resolved.row = palette.card_alt;
     return resolved;
