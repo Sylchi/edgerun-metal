@@ -1,5 +1,283 @@
 const std = @import("std");
 
+pub const Token = union(enum) {
+    eof,
+    invalid: []const u8,
+    identifier: []const u8,
+    integer_literal: []const u8,
+    string_literal: []const u8,
+
+    keyword_const,
+    keyword_var,
+    keyword_fn,
+    keyword_export,
+    keyword_pub,
+    keyword_return,
+    keyword_while,
+    keyword_if,
+    keyword_else,
+    keyword_true,
+    keyword_false,
+    keyword_module,
+
+    builtin_import,
+    builtin_int_cast,
+    builtin_int_from_enum,
+    builtin_int_from_ptr,
+
+    lparen,
+    rparen,
+    lbrace,
+    rbrace,
+    lbracket,
+    rbracket,
+    colon,
+    semicolon,
+    equals,
+    dot,
+    comma,
+
+    plus,
+    minus,
+    star,
+    slash,
+    percent,
+    eq_eq,
+    not_eq,
+    lt,
+    gt,
+    lt_eq,
+    gt_eq,
+};
+
+pub const Tokenizer = struct {
+    source: []const u8,
+    index: usize = 0,
+
+    pub fn init(source: []const u8) Tokenizer {
+        return .{ .source = source };
+    }
+
+    pub fn peek(tokenizer: *const Tokenizer) Token {
+        var copy = tokenizer.*;
+        return copy.next();
+    }
+
+    pub fn next(tokenizer: *Tokenizer) Token {
+        tokenizer.skipSpace();
+        if (tokenizer.index >= tokenizer.source.len) return .eof;
+        const byte = tokenizer.source[tokenizer.index];
+        if (byte == '/' and tokenizer.index + 1 < tokenizer.source.len and tokenizer.source[tokenizer.index + 1] == '/') {
+            tokenizer.skipLineComment();
+            return tokenizer.next();
+        }
+        if (byte == '@') {
+            const start = tokenizer.index;
+            tokenizer.index += 1;
+            const ident_start = tokenizer.index;
+            while (tokenizer.index < tokenizer.source.len and identContinue(tokenizer.source[tokenizer.index])) : (tokenizer.index += 1) {}
+            const name = tokenizer.source[ident_start..tokenizer.index];
+            if (std.mem.eql(u8, name, "import")) return .builtin_import;
+            if (std.mem.eql(u8, name, "intCast")) return .builtin_int_cast;
+            if (std.mem.eql(u8, name, "intFromEnum")) return .builtin_int_from_enum;
+            if (std.mem.eql(u8, name, "intFromPtr")) return .builtin_int_from_ptr;
+            return .{ .invalid = tokenizer.source[start..tokenizer.index] };
+        }
+        if (identStart(byte)) {
+            const start = tokenizer.index;
+            tokenizer.index += 1;
+            while (tokenizer.index < tokenizer.source.len and identContinue(tokenizer.source[tokenizer.index])) : (tokenizer.index += 1) {}
+            const word = tokenizer.source[start..tokenizer.index];
+            return if (matchKeyword(word)) |tok| tok else .{ .identifier = word };
+        }
+        if (byte >= '0' and byte <= '9') {
+            const start = tokenizer.index;
+            while (tokenizer.index < tokenizer.source.len and tokenizer.source[tokenizer.index] >= '0' and tokenizer.source[tokenizer.index] <= '9') : (tokenizer.index += 1) {}
+            return .{ .integer_literal = tokenizer.source[start..tokenizer.index] };
+        }
+        if (byte == '"') {
+            const start = tokenizer.index;
+            tokenizer.index += 1;
+            while (tokenizer.index < tokenizer.source.len and tokenizer.source[tokenizer.index] != '"') : (tokenizer.index += 1) {
+                if (tokenizer.source[tokenizer.index] == '\\') tokenizer.index += 1;
+            }
+            if (tokenizer.index >= tokenizer.source.len) return .{ .invalid = tokenizer.source[start..tokenizer.index] };
+            tokenizer.index += 1;
+            return .{ .string_literal = tokenizer.source[start..tokenizer.index] };
+        }
+        tokenizer.index += 1;
+        return switch (byte) {
+            '(' => Token{ .lparen = {} },
+            ')' => .rparen,
+            '{' => .lbrace,
+            '}' => .rbrace,
+            '[' => .lbracket,
+            ']' => .rbracket,
+            ':' => .colon,
+            ';' => .semicolon,
+            ',' => .comma,
+            '.' => .dot,
+            '+' => .plus,
+            '-' => .minus,
+            '*' => .star,
+            '/' => .slash,
+            '%' => .percent,
+            '=' => if (tokenizer.index < tokenizer.source.len and tokenizer.source[tokenizer.index] == '=') tok: {
+                tokenizer.index += 1;
+                break :tok Token{ .eq_eq = {} };
+            } else .equals,
+            '!' => if (tokenizer.index < tokenizer.source.len and tokenizer.source[tokenizer.index] == '=') tok: {
+                tokenizer.index += 1;
+                break :tok Token{ .not_eq = {} };
+            } else .{ .invalid = tokenizer.source[tokenizer.index - 1 .. tokenizer.index] },
+            '<' => if (tokenizer.index < tokenizer.source.len and tokenizer.source[tokenizer.index] == '=') tok: {
+                tokenizer.index += 1;
+                break :tok Token{ .lt_eq = {} };
+            } else .lt,
+            '>' => if (tokenizer.index < tokenizer.source.len and tokenizer.source[tokenizer.index] == '=') tok: {
+                tokenizer.index += 1;
+                break :tok Token{ .gt_eq = {} };
+            } else .gt,
+            else => .{ .invalid = tokenizer.source[tokenizer.index - 1 .. tokenizer.index] },
+        };
+    }
+
+    fn skipSpace(tokenizer: *Tokenizer) void {
+        while (tokenizer.index < tokenizer.source.len) {
+            const byte = tokenizer.source[tokenizer.index];
+            if (byte == '/' and tokenizer.index + 1 < tokenizer.source.len and tokenizer.source[tokenizer.index + 1] == '/') {
+                tokenizer.skipLineComment();
+                continue;
+            }
+            if (byte != ' ' and byte != '\n' and byte != '\r' and byte != '\t') break;
+            tokenizer.index += 1;
+        }
+    }
+
+    fn skipLineComment(tokenizer: *Tokenizer) void {
+        tokenizer.index += 2;
+        while (tokenizer.index < tokenizer.source.len and tokenizer.source[tokenizer.index] != '\n' and tokenizer.source[tokenizer.index] != '\r') : (tokenizer.index += 1) {}
+    }
+};
+
+fn matchKeyword(word: []const u8) ?Token {
+    if (std.mem.eql(u8, word, "const")) return .keyword_const;
+    if (std.mem.eql(u8, word, "var")) return .keyword_var;
+    if (std.mem.eql(u8, word, "fn")) return .keyword_fn;
+    if (std.mem.eql(u8, word, "export")) return .keyword_export;
+    if (std.mem.eql(u8, word, "pub")) return .keyword_pub;
+    if (std.mem.eql(u8, word, "return")) return .keyword_return;
+    if (std.mem.eql(u8, word, "while")) return .keyword_while;
+    if (std.mem.eql(u8, word, "if")) return .keyword_if;
+    if (std.mem.eql(u8, word, "else")) return .keyword_else;
+    if (std.mem.eql(u8, word, "true")) return .keyword_true;
+    if (std.mem.eql(u8, word, "false")) return .keyword_false;
+    if (std.mem.eql(u8, word, "module")) return .keyword_module;
+    return null;
+}
+
+fn identStart(byte: u8) bool {
+    return (byte >= 'a' and byte <= 'z') or (byte >= 'A' and byte <= 'Z') or byte == '_';
+}
+
+fn identContinue(byte: u8) bool {
+    return identStart(byte) or (byte >= '0' and byte <= '9');
+}
+
+pub fn tokenize(source: []const u8) Tokenizer {
+    return Tokenizer.init(source);
+}
+
+test "tokenizer handles basic tokens" {
+    var tok = tokenize("const max: usize = 4096;");
+    try std.testing.expectEqual(Token.keyword_const, tok.next());
+    try std.testing.expectEqualStrings("max", tok.next().identifier);
+    try std.testing.expectEqual(Token.colon, tok.next());
+    try std.testing.expectEqualStrings("usize", tok.next().identifier);
+    try std.testing.expectEqual(Token.equals, tok.next());
+    try std.testing.expectEqualStrings("4096", tok.next().integer_literal);
+    try std.testing.expectEqual(Token.semicolon, tok.next());
+    try std.testing.expectEqual(Token.eof, tok.next());
+}
+
+test "tokenizer handles keywords" {
+    var tok = tokenize("pub export fn er_app_main() i32 { return 7; }");
+    try std.testing.expectEqual(Token.keyword_pub, tok.next());
+    try std.testing.expectEqual(Token.keyword_export, tok.next());
+    try std.testing.expectEqual(Token.keyword_fn, tok.next());
+    try std.testing.expectEqualStrings("er_app_main", tok.next().identifier);
+    try std.testing.expectEqual(Token.lparen, tok.next());
+    try std.testing.expectEqual(Token.rparen, tok.next());
+    try std.testing.expectEqualStrings("i32", tok.next().identifier);
+    try std.testing.expectEqual(Token.lbrace, tok.next());
+    try std.testing.expectEqual(Token.keyword_return, tok.next());
+    try std.testing.expectEqualStrings("7", tok.next().integer_literal);
+    try std.testing.expectEqual(Token.semicolon, tok.next());
+    try std.testing.expectEqual(Token.rbrace, tok.next());
+    try std.testing.expectEqual(Token.eof, tok.next());
+}
+
+test "tokenizer skips comments and handles builtins" {
+    var tok = tokenize(
+        \\// comment
+        \\const val: usize = @intCast(7);
+    );
+    try std.testing.expectEqual(Token.keyword_const, tok.next());
+    try std.testing.expectEqualStrings("val", tok.next().identifier);
+    try std.testing.expectEqual(Token.colon, tok.next());
+    try std.testing.expectEqualStrings("usize", tok.next().identifier);
+    try std.testing.expectEqual(Token.equals, tok.next());
+    try std.testing.expectEqual(Token.builtin_int_cast, tok.next());
+    try std.testing.expectEqual(Token.lparen, tok.next());
+    try std.testing.expectEqualStrings("7", tok.next().integer_literal);
+    try std.testing.expectEqual(Token.rparen, tok.next());
+    try std.testing.expectEqual(Token.semicolon, tok.next());
+    try std.testing.expectEqual(Token.eof, tok.next());
+}
+
+test "tokenizer handles operators and comparison" {
+    var tok = tokenize("a + b * c != d <= e");
+    try std.testing.expectEqualStrings("a", tok.next().identifier);
+    try std.testing.expectEqual(Token.plus, tok.next());
+    try std.testing.expectEqualStrings("b", tok.next().identifier);
+    try std.testing.expectEqual(Token.star, tok.next());
+    try std.testing.expectEqualStrings("c", tok.next().identifier);
+    try std.testing.expectEqual(Token.not_eq, tok.next());
+    try std.testing.expectEqualStrings("d", tok.next().identifier);
+    try std.testing.expectEqual(Token.lt_eq, tok.next());
+    try std.testing.expectEqualStrings("e", tok.next().identifier);
+    try std.testing.expectEqual(Token.eof, tok.next());
+}
+
+test "tokenizer handles string literals" {
+    var tok = tokenize("\"hello world\"");
+    try std.testing.expectEqualStrings("\"hello world\"", tok.next().string_literal);
+    try std.testing.expectEqual(Token.eof, tok.next());
+}
+
+test "tokenizer handles builtins" {
+    var tok = tokenize("@import @intFromEnum @intFromPtr");
+    try std.testing.expectEqual(Token.builtin_import, tok.next());
+    try std.testing.expectEqual(Token.builtin_int_from_enum, tok.next());
+    try std.testing.expectEqual(Token.builtin_int_from_ptr, tok.next());
+    try std.testing.expectEqual(Token.eof, tok.next());
+}
+
+test "tokenizer handles module keyword" {
+    var tok = tokenize("const helper: module = @import(\"src/er/self_host/helper.er\");");
+    try std.testing.expectEqual(Token.keyword_const, tok.next());
+    try std.testing.expectEqualStrings("helper", tok.next().identifier);
+    try std.testing.expectEqual(Token.colon, tok.next());
+    try std.testing.expectEqual(Token.keyword_module, tok.next());
+    try std.testing.expectEqual(Token.equals, tok.next());
+    try std.testing.expectEqual(Token.builtin_import, tok.next());
+    try std.testing.expectEqual(Token.lparen, tok.next());
+    try std.testing.expectEqualStrings("\"src/er/self_host/helper.er\"", tok.next().string_literal);
+    try std.testing.expectEqual(Token.rparen, tok.next());
+    try std.testing.expectEqual(Token.semicolon, tok.next());
+    try std.testing.expectEqual(Token.eof, tok.next());
+}
+
 const const_keyword = "const ";
 const var_keyword = "var ";
 const fn_keyword = "fn ";
