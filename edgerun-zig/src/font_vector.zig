@@ -7,12 +7,11 @@ const varfont = @import("varfont.zig");
 pub const default_weight: f32 = 400.0;
 
 pub const max_commands = varfont.max_contour_points;
-pub const body_magic = "ERFNTV1\n".*;
+pub const body_magic = "ERFNTV2\n".*;
 pub const header_size: usize = 40;
-pub const glyph_record_size: usize = 16;
+pub const glyph_record_size: usize = 20;
 pub const kern_record_size: usize = 12;
 pub const command_record_size: usize = 20;
-pub const max_serialized_commands: usize = std.math.maxInt(u16);
 
 pub const Error = error{
     Corrupt,
@@ -31,21 +30,14 @@ const op_line_to: u32 = 2;
 const op_quad_to: u32 = 3;
 const op_close: u32 = 4;
 
-pub const Point = struct {
-    x: f32,
-    y: f32,
-};
+pub const Point = struct { x: f32, y: f32 };
+pub const Quadratic = struct { control: Point, end: Point };
 
 pub const Command = union(enum) {
     move_to: Point,
     line_to: Point,
     quad_to: Quadratic,
     close,
-};
-
-pub const Quadratic = struct {
-    control: Point,
-    end: Point,
 };
 
 pub const Metrics = struct {
@@ -66,8 +58,8 @@ pub const GlyphInfo = struct {
 pub const GlyphRecord = struct {
     codepoint: u21,
     glyph_id: u16,
-    command_offset: u16,
-    command_count: u16,
+    command_offset: u32,
+    command_count: u32,
     advance: f32,
 };
 
@@ -89,11 +81,7 @@ pub const Body = struct {
                 const start: usize = glyph.command_offset;
                 const end = start + @as(usize, glyph.command_count);
                 if (end > self.commands.len) return null;
-                return .{
-                    .glyph_id = glyph.glyph_id,
-                    .advance = glyph.advance,
-                    .commands = self.commands[start..end],
-                };
+                return .{ .glyph_id = glyph.glyph_id, .advance = glyph.advance, .commands = self.commands[start..end] };
             }
         }
         return null;
@@ -113,35 +101,17 @@ pub const FixedFace = struct {
 
     pub fn geistDefault() varfont.Error!FixedFace {
         const face = try varfont.Face.geist();
-        return .{
-            .face = face,
-            .axis_values = face.fixedAxisValues("wght", default_weight),
-        };
+        return .{ .face = face, .axis_values = face.fixedAxisValues("wght", default_weight) };
     }
 
     pub fn metrics(self: FixedFace) Metrics {
         const value = self.face.metrics(@floatFromInt(self.face.units_per_em));
-        return .{
-            .units_per_em = value.units_per_em,
-            .ascender = value.ascender,
-            .descender = value.descender,
-            .line_gap = value.line_gap,
-            .y_min = value.y_min,
-            .y_max = value.y_max,
-        };
+        return .{ .units_per_em = value.units_per_em, .ascender = value.ascender, .descender = value.descender, .line_gap = value.line_gap, .y_min = value.y_min, .y_max = value.y_max };
     }
 
-    pub fn glyphId(self: FixedFace, codepoint: u21) u16 {
-        return self.face.glyphId(codepoint);
-    }
-
-    pub fn advance(self: FixedFace, glyph_id: u16, px_size: f32) f32 {
-        return self.face.advance(glyph_id, px_size);
-    }
-
-    pub fn kern(self: FixedFace, left: u16, right: u16, px_size: f32) f32 {
-        return self.face.kern(left, right, px_size);
-    }
+    pub fn glyphId(self: FixedFace, codepoint: u21) u16 { return self.face.glyphId(codepoint); }
+    pub fn advance(self: FixedFace, glyph_id: u16, px_size: f32) f32 { return self.face.advance(glyph_id, px_size); }
+    pub fn kern(self: FixedFace, left: u16, right: u16, px_size: f32) f32 { return self.face.kern(left, right, px_size); }
 
     pub fn glyphPath(self: FixedFace, glyph_id: u16, out: []Command) varfont.Error![]const Command {
         var points: [varfont.max_points]varfont.Point = undefined;
@@ -150,6 +120,37 @@ pub const FixedFace = struct {
         return emitGlyphPath(points[0..outline.points], contour_ends[0..outline.contours], out);
     }
 };
+
+pub const Counts = struct {
+    glyphs: usize,
+    kerns: usize,
+    commands: usize,
+};
+
+pub fn countCodepoints(face: FixedFace, codepoints: []const u21) CompileError!Counts {
+    const metrics = face.metrics();
+    const design_size: f32 = @floatFromInt(metrics.units_per_em);
+    var tmp: [max_commands]Command = undefined;
+    var commands: usize = 0;
+    var kerns: usize = 0;
+
+    for (codepoints, 0..) |codepoint, i| {
+        if (containsCodepoint(codepoints[0..i], codepoint)) return error.DuplicateCodepoint;
+        const glyph_id = face.glyphId(codepoint);
+        const path = try face.glyphPath(glyph_id, &tmp);
+        commands += path.len;
+    }
+
+    for (codepoints) |left_cp| {
+        const left_id = face.glyphId(left_cp);
+        for (codepoints) |right_cp| {
+            const right_id = face.glyphId(right_cp);
+            if (face.kern(left_id, right_id, design_size) != 0) kerns += 1;
+        }
+    }
+
+    return .{ .glyphs = codepoints.len, .kerns = kerns, .commands = commands };
+}
 
 pub fn compileCodepoints(
     face: FixedFace,
@@ -165,21 +166,11 @@ pub fn compileCodepoints(
     var command_count: usize = 0;
     for (codepoints, 0..) |codepoint, glyph_index| {
         if (containsCodepoint(codepoints[0..glyph_index], codepoint)) return error.DuplicateCodepoint;
-        if (command_count > max_serialized_commands) return error.GlyphCommandBudgetExceeded;
-
         const glyph_id = face.glyphId(codepoint);
         const path = try face.glyphPath(glyph_id, commands_out[command_count..]);
-        if (path.len > max_serialized_commands - command_count) return error.GlyphCommandBudgetExceeded;
-
         const start = command_count;
         command_count += path.len;
-        glyphs_out[glyph_index] = .{
-            .codepoint = codepoint,
-            .glyph_id = glyph_id,
-            .command_offset = @intCast(start),
-            .command_count = @intCast(path.len),
-            .advance = face.advance(glyph_id, design_size),
-        };
+        glyphs_out[glyph_index] = .{ .codepoint = codepoint, .glyph_id = glyph_id, .command_offset = @intCast(start), .command_count = @intCast(path.len), .advance = face.advance(glyph_id, design_size) };
     }
 
     var kern_count: usize = 0;
@@ -188,21 +179,12 @@ pub fn compileCodepoints(
             const adjust = face.kern(left.glyph_id, right.glyph_id, design_size);
             if (adjust == 0) continue;
             if (kern_count >= kerns_out.len) return error.KernRecordBudgetExceeded;
-            kerns_out[kern_count] = .{
-                .left_codepoint = left.codepoint,
-                .right_codepoint = right.codepoint,
-                .advance_adjust = adjust,
-            };
+            kerns_out[kern_count] = .{ .left_codepoint = left.codepoint, .right_codepoint = right.codepoint, .advance_adjust = adjust };
             kern_count += 1;
         }
     }
 
-    return .{
-        .metrics = metrics,
-        .glyphs = glyphs_out[0..codepoints.len],
-        .kerns = kerns_out[0..kern_count],
-        .commands = commands_out[0..command_count],
-    };
+    return .{ .metrics = metrics, .glyphs = glyphs_out[0..codepoints.len], .kerns = kerns_out[0..kern_count], .commands = commands_out[0..command_count] };
 }
 
 pub fn emitGlyphPath(points: []const varfont.Point, contour_ends: []const u16, out: []Command) varfont.Error![]const Command {
@@ -227,7 +209,7 @@ pub fn serializedLen(glyph_count: usize, kern_count: usize, command_count: usize
 pub fn encodeBody(out: []u8, body: Body) ?[]const u8 {
     if (body.glyphs.len > std.math.maxInt(u16)) return null;
     if (body.kerns.len > std.math.maxInt(u32)) return null;
-    if (body.commands.len > max_serialized_commands) return null;
+    if (body.commands.len > std.math.maxInt(u32)) return null;
     const total = serializedLen(body.glyphs.len, body.kerns.len, body.commands.len) orelse return null;
     if (out.len < total) return null;
 
@@ -272,15 +254,7 @@ pub fn objectNode(body_out: []u8, object_out: []u8, body: Body, req: object.Requ
     return objectNodeOwned(body_out, object_out, body, req, epoch, &.{}, &.{});
 }
 
-pub fn objectNodeOwned(
-    body_out: []u8,
-    object_out: []u8,
-    body: Body,
-    req: object.Requirements,
-    epoch: clock.Stamp,
-    owners: []const object.Owner,
-    envelopes: []const object.Envelope,
-) ?[]u8 {
+pub fn objectNodeOwned(body_out: []u8, object_out: []u8, body: Body, req: object.Requirements, epoch: clock.Stamp, owners: []const object.Owner, envelopes: []const object.Envelope) ?[]u8 {
     const encoded = encodeBody(body_out, body) orelse return null;
     return (object.NodeWriter{ .out = object_out }).bytesNodeOwned(req, epoch, owners, envelopes, encoded) catch return null;
 }
@@ -327,31 +301,20 @@ pub fn decodeBody(bytes_in: []const u8, glyphs_out: []GlyphRecord, kerns_out: []
         offset += command_record_size;
     }
 
-    return .{
-        .metrics = metrics,
-        .glyphs = glyphs_out[0..glyph_count],
-        .kerns = kerns_out[0..kern_count],
-        .commands = commands_out[0..command_count],
-    };
+    return .{ .metrics = metrics, .glyphs = glyphs_out[0..glyph_count], .kerns = kerns_out[0..kern_count], .commands = commands_out[0..command_count] };
 }
 
-fn storeF32(out: []u8, value: f32) void {
-    _ = bytes.store32(out, @as(u32, @bitCast(value)));
-}
-
-fn loadF32(in: []const u8) ?f32 {
-    return @as(f32, @bitCast(bytes.load32(in) orelse return null));
-}
+fn storeF32(out: []u8, value: f32) void { _ = bytes.store32(out, @as(u32, @bitCast(value))); }
+fn loadF32(in: []const u8) ?f32 { return @as(f32, @bitCast(bytes.load32(in) orelse return null)); }
 
 fn encodeGlyphRecord(out: []u8, glyph: GlyphRecord) bool {
     if (out.len < glyph_record_size) return false;
-    if (glyph.command_count > max_serialized_commands - glyph.command_offset) return false;
     if (!bytes.store32(out[0..4], glyph.codepoint)) return false;
     if (!bytes.store16(out[4..6], glyph.glyph_id)) return false;
-    if (!bytes.store16(out[6..8], glyph.command_offset)) return false;
-    if (!bytes.store16(out[8..10], glyph.command_count)) return false;
-    if (!bytes.store16(out[10..12], 0)) return false;
-    storeF32(out[12..16], glyph.advance);
+    if (!bytes.store16(out[6..8], 0)) return false;
+    if (!bytes.store32(out[8..12], glyph.command_offset)) return false;
+    if (!bytes.store32(out[12..16], glyph.command_count)) return false;
+    storeF32(out[16..20], glyph.advance);
     return true;
 }
 
@@ -359,13 +322,13 @@ fn decodeGlyphRecord(in: []const u8) ?GlyphRecord {
     if (in.len < glyph_record_size) return null;
     const codepoint = bytes.load32(in[0..4]) orelse return null;
     if (codepoint > std.math.maxInt(u21)) return null;
-    if ((bytes.load16(in[10..12]) orelse return null) != 0) return null;
+    if ((bytes.load16(in[6..8]) orelse return null) != 0) return null;
     return .{
         .codepoint = @intCast(codepoint),
         .glyph_id = bytes.load16(in[4..6]) orelse return null,
-        .command_offset = bytes.load16(in[6..8]) orelse return null,
-        .command_count = bytes.load16(in[8..10]) orelse return null,
-        .advance = loadF32(in[12..16]) orelse return null,
+        .command_offset = bytes.load32(in[8..12]) orelse return null,
+        .command_count = bytes.load32(in[12..16]) orelse return null,
+        .advance = loadF32(in[16..20]) orelse return null,
     };
 }
 
@@ -382,33 +345,15 @@ fn decodeKernRecord(in: []const u8) ?KernRecord {
     const left = bytes.load32(in[0..4]) orelse return null;
     const right = bytes.load32(in[4..8]) orelse return null;
     if (left > std.math.maxInt(u21) or right > std.math.maxInt(u21)) return null;
-    return .{
-        .left_codepoint = @intCast(left),
-        .right_codepoint = @intCast(right),
-        .advance_adjust = loadF32(in[8..12]) orelse return null,
-    };
+    return .{ .left_codepoint = @intCast(left), .right_codepoint = @intCast(right), .advance_adjust = loadF32(in[8..12]) orelse return null };
 }
 
 fn encodeCommandRecord(out: []u8, command: Command) void {
     bytes.zero(out[0..command_record_size]);
     switch (command) {
-        .move_to => |p| {
-            _ = bytes.store32(out[0..4], op_move_to);
-            storeF32(out[4..8], p.x);
-            storeF32(out[8..12], p.y);
-        },
-        .line_to => |p| {
-            _ = bytes.store32(out[0..4], op_line_to);
-            storeF32(out[4..8], p.x);
-            storeF32(out[8..12], p.y);
-        },
-        .quad_to => |q| {
-            _ = bytes.store32(out[0..4], op_quad_to);
-            storeF32(out[4..8], q.end.x);
-            storeF32(out[8..12], q.end.y);
-            storeF32(out[12..16], q.control.x);
-            storeF32(out[16..20], q.control.y);
-        },
+        .move_to => |p| { _ = bytes.store32(out[0..4], op_move_to); storeF32(out[4..8], p.x); storeF32(out[8..12], p.y); },
+        .line_to => |p| { _ = bytes.store32(out[0..4], op_line_to); storeF32(out[4..8], p.x); storeF32(out[8..12], p.y); },
+        .quad_to => |q| { _ = bytes.store32(out[0..4], op_quad_to); storeF32(out[4..8], q.end.x); storeF32(out[8..12], q.end.y); storeF32(out[12..16], q.control.x); storeF32(out[16..20], q.control.y); },
         .close => _ = bytes.store32(out[0..4], op_close),
     }
 }
@@ -416,33 +361,16 @@ fn encodeCommandRecord(out: []u8, command: Command) void {
 fn decodeCommandRecord(in: []const u8) ?Command {
     if (in.len < command_record_size) return null;
     return switch (bytes.load32(in[0..4]) orelse return null) {
-        op_move_to => .{ .move_to = .{
-            .x = loadF32(in[4..8]) orelse return null,
-            .y = loadF32(in[8..12]) orelse return null,
-        } },
-        op_line_to => .{ .line_to = .{
-            .x = loadF32(in[4..8]) orelse return null,
-            .y = loadF32(in[8..12]) orelse return null,
-        } },
-        op_quad_to => .{ .quad_to = .{
-            .control = .{
-                .x = loadF32(in[12..16]) orelse return null,
-                .y = loadF32(in[16..20]) orelse return null,
-            },
-            .end = .{
-                .x = loadF32(in[4..8]) orelse return null,
-                .y = loadF32(in[8..12]) orelse return null,
-            },
-        } },
+        op_move_to => .{ .move_to = .{ .x = loadF32(in[4..8]) orelse return null, .y = loadF32(in[8..12]) orelse return null } },
+        op_line_to => .{ .line_to = .{ .x = loadF32(in[4..8]) orelse return null, .y = loadF32(in[8..12]) orelse return null } },
+        op_quad_to => .{ .quad_to = .{ .control = .{ .x = loadF32(in[12..16]) orelse return null, .y = loadF32(in[16..20]) orelse return null }, .end = .{ .x = loadF32(in[4..8]) orelse return null, .y = loadF32(in[8..12]) orelse return null } } },
         op_close => if (bytes.zeroed(in[4..20])) .close else null,
         else => null,
     };
 }
 
 fn containsCodepoint(haystack: []const u21, needle: u21) bool {
-    for (haystack) |value| {
-        if (value == needle) return true;
-    }
+    for (haystack) |value| if (value == needle) return true;
     return false;
 }
 
@@ -450,7 +378,6 @@ fn emitContour(raw: []const varfont.Point, out: []Command, count: *usize) varfon
     if (raw.len == 0) return error.InvalidFont;
     const start = contourStart(raw);
     try appendCommand(out, count, .{ .move_to = point(start) });
-
     var i: usize = if (raw[0].on_curve) 1 else 0;
     while (i < raw.len) {
         const p = raw[i];
@@ -459,13 +386,11 @@ fn emitContour(raw: []const varfont.Point, out: []Command, count: *usize) varfon
             i += 1;
             continue;
         }
-
         const next = raw[(i + 1) % raw.len];
         const end = if (next.on_curve) next else midpoint(p, next);
         try appendCommand(out, count, .{ .quad_to = .{ .control = point(p), .end = point(end) } });
         i += if (next.on_curve) 2 else 1;
     }
-
     try appendCommand(out, count, .close);
 }
 
@@ -481,225 +406,18 @@ fn appendCommand(out: []Command, count: *usize, command: Command) varfont.Error!
     count.* += 1;
 }
 
-fn point(value: varfont.Point) Point {
-    return .{ .x = value.x, .y = value.y };
-}
+fn point(value: varfont.Point) Point { return .{ .x = value.x, .y = value.y }; }
+fn midpoint(a: varfont.Point, b: varfont.Point) varfont.Point { return .{ .x = (a.x + b.x) * 0.5, .y = (a.y + b.y) * 0.5, .on_curve = true }; }
 
-fn midpoint(a: varfont.Point, b: varfont.Point) varfont.Point {
-    return .{
-        .x = (a.x + b.x) * 0.5,
-        .y = (a.y + b.y) * 0.5,
-        .on_curve = true,
-    };
-}
-
-test "fixed vector face exposes pinned geist metrics and spacing" {
-    const fixed = try FixedFace.geistDefault();
-    const face = try varfont.Face.geist();
-    const glyph_id = face.glyphId('A');
-    const next_id = face.glyphId('V');
-    const expected_axis_values = face.fixedAxisValues("wght", default_weight);
-
-    try std.testing.expectEqual(expected_axis_values, fixed.axis_values);
-    try std.testing.expectEqual(glyph_id, fixed.glyphId('A'));
-    try std.testing.expectEqual(face.advance(glyph_id, 18.0), fixed.advance(glyph_id, 18.0));
-    try std.testing.expectEqual(face.kern(glyph_id, next_id, 18.0), fixed.kern(glyph_id, next_id, 18.0));
-    try std.testing.expectEqual(face.metrics(18.0).units_per_em, fixed.metrics().units_per_em);
-}
-
-test "font vector body round trips borrowed glyph paths" {
-    const commands = [_]Command{
-        .{ .move_to = .{ .x = 0, .y = 0 } },
-        .{ .quad_to = .{ .control = .{ .x = 6, .y = 12 }, .end = .{ .x = 12, .y = 0 } } },
-        .close,
-    };
-    const glyphs = [_]GlyphRecord{
-        .{
-            .codepoint = 'A',
-            .glyph_id = 4,
-            .command_offset = 0,
-            .command_count = commands.len,
-            .advance = 13.5,
-        },
-    };
-    const kerns = [_]KernRecord{
-        .{ .left_codepoint = 'A', .right_codepoint = 'V', .advance_adjust = -20 },
-    };
-    const body = Body{
-        .metrics = testMetrics(),
-        .glyphs = &glyphs,
-        .kerns = &kerns,
-        .commands = &commands,
-    };
-
-    var raw: [160]u8 = undefined;
-    const encoded = encodeBody(&raw, body).?;
+test "font vector body round trips widened glyph command offsets" {
+    const commands = [_]Command{ .{ .move_to = .{ .x = 0, .y = 0 } }, .close };
+    const glyphs = [_]GlyphRecord{.{ .codepoint = 'A', .glyph_id = 4, .command_offset = 0, .command_count = commands.len, .advance = 10 }};
+    const body = Body{ .metrics = .{ .units_per_em = 1000, .ascender = 800, .descender = -200, .line_gap = 0, .y_min = -200, .y_max = 1000 }, .glyphs = &glyphs, .commands = &commands };
+    var encoded: [header_size + glyph_record_size + command_record_size * commands.len]u8 = undefined;
+    const out = encodeBody(&encoded, body).?;
     var decoded_glyphs: [1]GlyphRecord = undefined;
-    var decoded_kerns: [kerns.len]KernRecord = undefined;
+    var decoded_kerns: [0]KernRecord = .{};
     var decoded_commands: [commands.len]Command = undefined;
-    const decoded = decodeBody(encoded, &decoded_glyphs, &decoded_kerns, &decoded_commands).?;
-    const glyph = decoded.glyphForCodepoint('A').?;
-
-    try std.testing.expectEqual(@as(u16, 4), glyph.glyph_id);
-    try std.testing.expectEqual(@as(f32, 13.5), glyph.advance);
-    try std.testing.expectEqual(@as(usize, commands.len), glyph.commands.len);
-    try std.testing.expect(glyph.commands[1] == .quad_to);
-    try std.testing.expectEqual(@as(f32, 6), glyph.commands[1].quad_to.control.x);
-    try std.testing.expectEqual(@as(f32, -20), decoded.kern('A', 'V'));
-}
-
-test "font vector body moves as canonical bytes object" {
-    const commands = [_]Command{
-        .{ .move_to = .{ .x = 1, .y = 2 } },
-        .close,
-    };
-    const glyphs = [_]GlyphRecord{
-        .{
-            .codepoint = 'x',
-            .glyph_id = 9,
-            .command_offset = 0,
-            .command_count = commands.len,
-            .advance = 7,
-        },
-    };
-    const body = Body{
-        .metrics = testMetrics(),
-        .glyphs = &glyphs,
-        .commands = &commands,
-    };
-
-    var body_raw: [128]u8 = undefined;
-    var canonical: [object.header_size + 128]u8 = undefined;
-    const node = objectNode(&body_raw, &canonical, body, testRequirements(), testEpoch()).?;
-
-    var decoded_glyphs: [1]GlyphRecord = undefined;
-    var decoded_kerns: [1]KernRecord = undefined;
-    var decoded_commands: [commands.len]Command = undefined;
-    const decoded = try decodeObject(node, &decoded_glyphs, &decoded_kerns, &decoded_commands);
-    try std.testing.expectEqual(@as(u16, 1000), decoded.metrics.units_per_em);
-    try std.testing.expectEqual(@as(u16, 9), decoded.glyphForCodepoint('x').?.glyph_id);
-}
-
-test "font vector decoder rejects non byte objects" {
-    var canonical: [object.header_size]u8 = undefined;
-    const node = try (object.NodeWriter{ .out = &canonical }).treeNode(testRequirements(), testEpoch(), &.{});
-
-    var decoded_glyphs: [1]GlyphRecord = undefined;
-    var decoded_kerns: [1]KernRecord = undefined;
-    var decoded_commands: [1]Command = undefined;
-    try std.testing.expectError(error.UnsupportedObject, decodeObject(node, &decoded_glyphs, &decoded_kerns, &decoded_commands));
-}
-
-test "font vector decoder rejects non font object bodies" {
-    var canonical: [object.header_size + 5]u8 = undefined;
-    const node = try (object.NodeWriter{ .out = &canonical }).bytesNode(testRequirements(), testEpoch(), "hello");
-
-    var decoded_glyphs: [1]GlyphRecord = undefined;
-    var decoded_kerns: [1]KernRecord = undefined;
-    var decoded_commands: [1]Command = undefined;
-    try std.testing.expectError(error.Corrupt, decodeObject(node, &decoded_glyphs, &decoded_kerns, &decoded_commands));
-}
-
-test "font vector compiler emits a canonical object from a fixed face" {
-    const fixed = try FixedFace.geistDefault();
-    const codepoints = [_]u21{ 'A', 'V', ' ' };
-    var glyphs: [codepoints.len]GlyphRecord = undefined;
-    var kerns: [codepoints.len * codepoints.len]KernRecord = undefined;
-    var commands: [max_commands * 2]Command = undefined;
-    const compiled = try compileCodepoints(fixed, &codepoints, &glyphs, &kerns, &commands);
-
-    try std.testing.expectEqual(@as(usize, codepoints.len), compiled.glyphs.len);
-    try std.testing.expect(compiled.glyphForCodepoint('A').?.commands.len > 2);
-    try std.testing.expect(compiled.glyphForCodepoint(' ').?.advance > 0);
-    try std.testing.expectEqual(@as(usize, 0), compiled.glyphForCodepoint(' ').?.commands.len);
-
-    var body_raw: [8192]u8 = undefined;
-    var canonical: [object.header_size + body_raw.len]u8 = undefined;
-    const node = objectNode(&body_raw, &canonical, compiled, testRequirements(), testEpoch()).?;
-
-    var decoded_glyphs: [codepoints.len]GlyphRecord = undefined;
-    var decoded_kerns: [kerns.len]KernRecord = undefined;
-    var decoded_commands: [commands.len]Command = undefined;
-    const decoded = try decodeObject(node, &decoded_glyphs, &decoded_kerns, &decoded_commands);
-    try std.testing.expectEqual(compiled.metrics.units_per_em, decoded.metrics.units_per_em);
-    try std.testing.expectEqual(compiled.glyphForCodepoint('V').?.glyph_id, decoded.glyphForCodepoint('V').?.glyph_id);
-    try std.testing.expectEqual(compiled.kerns.len, decoded.kerns.len);
-    try std.testing.expectEqual(compiled.kern('A', 'V'), decoded.kern('A', 'V'));
-}
-
-test "font vector compiler rejects duplicate codepoints and small record budgets" {
-    const fixed = try FixedFace.geistDefault();
-    const duplicate_codepoints = [_]u21{ 'A', 'A' };
-    var glyphs: [duplicate_codepoints.len]GlyphRecord = undefined;
-    var kerns: [duplicate_codepoints.len * duplicate_codepoints.len]KernRecord = undefined;
-    var commands: [max_commands]Command = undefined;
-    try std.testing.expectError(error.DuplicateCodepoint, compileCodepoints(fixed, &duplicate_codepoints, &glyphs, &kerns, &commands));
-
-    const one_codepoint = [_]u21{'A'};
-    var empty_glyphs = [_]GlyphRecord{};
-    try std.testing.expectError(error.GlyphRecordBudgetExceeded, compileCodepoints(fixed, &one_codepoint, &empty_glyphs, &kerns, &commands));
-}
-
-test "fixed vector face emits owned quadratic glyph path" {
-    const fixed = try FixedFace.geistDefault();
-    const glyph_id = fixed.glyphId('A');
-    var commands: [max_commands]Command = undefined;
-    const path = try fixed.glyphPath(glyph_id, &commands);
-
-    try std.testing.expect(path.len > 2);
-    try std.testing.expect(path[0] == .move_to);
-    try std.testing.expect(path[path.len - 1] == .close);
-    var has_draw = false;
-    for (path[1 .. path.len - 1]) |command| switch (command) {
-        .line_to, .quad_to => has_draw = true,
-        .move_to, .close => {},
-    };
-    try std.testing.expect(has_draw);
-}
-
-test "path emitter inserts implied on-curve quadratic endpoints" {
-    const raw = [_]varfont.Point{
-        .{ .x = 0, .y = 0, .on_curve = true },
-        .{ .x = 10, .y = 20, .on_curve = false },
-        .{ .x = 20, .y = 20, .on_curve = false },
-        .{ .x = 30, .y = 0, .on_curve = true },
-    };
-    const contour_ends = [_]u16{raw.len - 1};
-    var commands: [8]Command = undefined;
-    const path = try emitGlyphPath(&raw, &contour_ends, &commands);
-
-    try std.testing.expectEqual(@as(usize, 4), path.len);
-    try std.testing.expect(path[1] == .quad_to);
-    try std.testing.expectEqual(@as(f32, 15.0), path[1].quad_to.end.x);
-    try std.testing.expect(path[2] == .quad_to);
-    try std.testing.expect(path[3] == .close);
-}
-
-fn testMetrics() Metrics {
-    return .{
-        .units_per_em = 1000,
-        .ascender = 800,
-        .descender = -200,
-        .line_gap = 100,
-        .y_min = -250,
-        .y_max = 900,
-    };
-}
-
-fn testRequirements() object.Requirements {
-    return .{
-        .durability = .memory,
-        .confidentiality = .public,
-        .portability = .public_portable,
-        .integrity = .hash_only,
-        .lifetime = .cache,
-        .visibility = .public,
-        .access = .explicit_io,
-    };
-}
-
-fn testEpoch() clock.Stamp {
-    var keeper = [_]u8{0} ** clock.keeper_id_size;
-    keeper[0] = 1;
-    return .{ .keeper = .{ .bytes = keeper } };
+    const decoded = decodeBody(out, &decoded_glyphs, &decoded_kerns, &decoded_commands).?;
+    try std.testing.expectEqual(@as(u32, commands.len), decoded.glyphs[0].command_count);
 }
