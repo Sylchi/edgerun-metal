@@ -76,4 +76,88 @@ pub const Node = union(enum) {
     icon: struct { label: []const u8, icon: u16 = 0 },
     toggle: struct { id: u32, label: []const u8, pressed: bool = false },
     resizable: struct { id: u32, ratio: f32 = 0.5 },
+
+    pub fn preferredSize(self: Node) ui.Size {
+        return switch (self) {
+            .rect => .{ .w = 1.0, .h = 1.0 },
+            .text => |text| .{ .w = @as(f32, @floatFromInt(text.value.len)) * 8.0, .h = 18.0 },
+            .slot => |slot| slot.child.preferredSize(),
+            .stack => |stack| stackPreferredSize(stack),
+            .separator => .{ .w = 1.0, .h = 1.0 },
+            .scroll_area, .skeleton, .spinner => .{ .w = 120.0, .h = 32.0 },
+            .accordion,
+            .alert,
+            .alert_dialog,
+            .calendar,
+            .carousel,
+            .chart,
+            .combobox,
+            .empty,
+            .button_group,
+            .toggle_group,
+            .input_group,
+            .row_item,
+            .card,
+            .table,
+            .breadcrumb,
+            .menubar,
+            .navigation_menu,
+            .command,
+            .context_menu,
+            .dialog,
+            .drawer,
+            .dropdown_menu,
+            .field,
+            .hover_card,
+            .popover,
+            .tooltip,
+            .toast,
+            .sheet,
+            .sidebar,
+            .radio_group,
+            .tabs,
+            => .{ .w = 220.0, .h = 48.0 },
+            .button,
+            .icon_button,
+            .badge,
+            .checkbox,
+            .switch_control,
+            .pagination,
+            .direction,
+            .toggle,
+            .select,
+            => .{ .w = 120.0, .h = 36.0 },
+            .input,
+            .input_otp,
+            .textarea,
+            .slider,
+            .resizable,
+            .progress,
+            => .{ .w = 180.0, .h = 36.0 },
+            .aspect_ratio => .{ .w = 160.0, .h = 90.0 },
+            .avatar, .icon => .{ .w = 32.0, .h = 32.0 },
+            .kbd, .label => .{ .w = 64.0, .h = 24.0 },
+        };
+    }
 };
+
+fn stackPreferredSize(stack: ui.Layout) ui.Size {
+    var width: f32 = 0.0;
+    var height: f32 = 0.0;
+    for (stack.children, 0..) |child, index| {
+        const size = child.preferredSize();
+        switch (stack.axis) {
+            .row => {
+                width += size.w;
+                if (index != 0) width += stack.gap;
+                height = @max(height, size.h);
+            },
+            .column => {
+                height += size.h;
+                if (index != 0) height += stack.gap;
+                width = @max(width, size.w);
+            },
+        }
+    }
+    return .{ .w = width + stack.padding * 2.0, .h = height + stack.padding * 2.0 };
+}
