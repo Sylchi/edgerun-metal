@@ -9,13 +9,14 @@ pub const width: usize = 2048;
 pub const height: usize = 2048;
 pub const bytes: usize = width * height;
 pub const channels: usize = 1;
-pub const glyph_capacity: usize = 1280;
+pub const glyph_capacity: usize = 4096;
 pub const format: varfont.AtlasFormat = .alpha8;
 
 const replacement = font_builtin.replacement_codepoint;
 const pad: usize = 8;
 const row_gap: usize = 8;
 const default_scale: f32 = 2.0;
+const prebake_px = [_]u8{ 11, 12, 14, 16, 18, 20, 24, 32, 48 };
 const Cached = struct { ch: u21, px: u8, glyph: ir.Glyph };
 
 pub const Atlas = struct {
@@ -27,6 +28,7 @@ pub const Atlas = struct {
     atlas_row_h: usize,
     font: font_vector.Body,
     device_scale: f32,
+    sealed: bool,
 
     pub fn init() Atlas {
         var self: Atlas = undefined;
@@ -47,6 +49,7 @@ pub const Atlas = struct {
         self.font = font;
         self.device_scale = default_scale;
         self.clear();
+        self.prebake() catch {};
     }
 
     pub fn clear(self: *Atlas) void {
@@ -55,6 +58,7 @@ pub const Atlas = struct {
         self.atlas_x = pad;
         self.atlas_y = pad;
         self.atlas_row_h = 0;
+        self.sealed = false;
     }
 
     pub fn source(self: *Atlas) ir.FontAtlas { return .{ .context = self, .metrics = metrics, .width = textWidth, .glyph = glyph }; }
@@ -67,11 +71,22 @@ pub const Atlas = struct {
         if (@abs(self.device_scale - scale) <= 0.001) return;
         self.device_scale = scale;
         self.clear();
+        self.prebake() catch {};
+    }
+
+    fn prebake(self: *Atlas) varfont.Error!void {
+        for (prebake_px) |px| {
+            for (self.font.glyphs) |record| {
+                _ = try self.cacheGlyph(record.codepoint, px);
+            }
+        }
+        self.sealed = true;
     }
 
     fn resolveGlyph(self: *Atlas, raw: u21, px: u8) ir.Error!?ir.Glyph {
-        const cp = resolve(self.font, raw);
+        const cp = resolve(self.font, raw) orelse return null;
         for (self.glyphs[0..self.glyph_count]) |entry| if (entry.ch == cp and entry.px == px) return entry.glyph;
+        if (self.sealed) return null;
         return self.cacheGlyph(cp, px) catch |err| switch (err) {
             error.GlyphBitmapBudgetExceeded, error.GlyphCacheFull => error.Budget,
             else => null,
@@ -126,7 +141,7 @@ fn textWidth(context: *anyopaque, value: []const u8, px: u8) f32 {
     var prev: ?u21 = null;
     var index: usize = 0;
     while (nextCodepoint(value, &index)) |raw| {
-        const cp = resolve(atlas.font, raw);
+        const cp = resolve(atlas.font, raw) orelse continue;
         if (atlas.font.glyphForCodepoint(cp)) |info| {
             if (prev) |left| out += atlas.font.kern(left, cp) * scale;
             out += info.advance * scale;
@@ -141,10 +156,10 @@ fn glyph(context: *anyopaque, ch: u21, px: u8) ir.Error!?ir.Glyph {
     return atlas.resolveGlyph(ch, px);
 }
 
-fn resolve(font: font_vector.Body, raw: u21) u21 {
+fn resolve(font: font_vector.Body, raw: u21) ?u21 {
     if (font.glyphForCodepoint(raw) != null) return raw;
     if (font.glyphForCodepoint(replacement) != null) return replacement;
-    return raw;
+    return null;
 }
 
 fn nextCodepoint(value: []const u8, index: *usize) ?u21 {
