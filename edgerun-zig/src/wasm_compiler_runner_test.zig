@@ -6,10 +6,10 @@ const vfs = @import("vfs.zig");
 const wasm = @import("wasm/root.zig");
 const wasm_compiler = @import("embedded_wasm_compiler").bytes;
 
-const source_gap_bytes: usize = 64 * 1024;
+const source_gap_bytes: usize = 256 * 1024;
 const compiler_memory_offset: usize = 16 * 1024 * 1024;
-const compiler_memory_extra_bytes: usize = 256 * 1024 * 1024;
-const self_host_compiler_memory_extra_bytes: usize = 512 * 1024 * 1024;
+const compiler_memory_extra_bytes: usize = 384 * 1024 * 1024;
+const self_host_compiler_memory_extra_bytes: usize = 768 * 1024 * 1024;
 const execution_tick_budget: u64 = 16_000_000_000;
 const wasm_page_bytes: usize = 64 * 1024;
 const self_host_buffer_len: usize = 16 * 1024 * 1024;

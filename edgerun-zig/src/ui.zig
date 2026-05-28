@@ -1,6 +1,7 @@
 const std = @import("std");
 const bounded = @import("bounded.zig");
 const geometry = @import("geometry.zig");
+const icon_svg = @import("icon_svg.zig");
 
 pub const Color = packed struct {
     r: u8,
@@ -579,6 +580,23 @@ pub const Quad = struct {
 };
 
 pub const IconQuad = struct { bounds: Rect, icon_id: u32, color: Color };
+
+/// First-class SVG quad carrying parsed SVG data through the scene pipeline.
+/// Analogous to image quads (Quad + atlas_id), SVG quads carry the Svg asset directly.
+pub const SvgQuad = struct {
+    bounds: Rect,
+    svg: icon_svg.Svg,
+    color: Color,
+
+    pub fn fromIconQuad(quad: IconQuad) SvgQuad {
+        return .{
+            .bounds = quad.bounds,
+            .svg = icon_svg.Svg.fromIconId(quad.icon_id),
+            .color = quad.color,
+        };
+    }
+};
+
 pub const TransitionProperty = enum(u8) { opacity, translate_x, translate_y };
 pub const Easing = enum(u8) { linear, ease_in, ease_out, ease_in_out };
 
@@ -629,6 +647,7 @@ pub const Command = union(enum) {
     drag_source: DragSource,
     drop_target: DropTarget,
     icon_quad: IconQuad,
+    svg_quad: SvgQuad,
     text_quad: Quad,
     image_quad: Quad,
     transition: Transition,
@@ -642,8 +661,8 @@ pub const TextWrap = struct {
 };
 
 pub const Cursor = struct { commands: usize = 0 };
-pub const Stats = struct { rects: usize = 0, drag_sources: usize = 0, drop_targets: usize = 0, transitions: usize = 0, clips: usize = 0, icon_quads: usize = 0, text_quads: usize = 0, image_quads: usize = 0 };
-pub const Budget = struct { rects: usize = 2000, drag_sources: usize = 240, drop_targets: usize = 240, transitions: usize = 1200, icon_quads: usize = 160, text_quads: usize = 900, image_quads: usize = 16 };
+pub const Stats = struct { rects: usize = 0, drag_sources: usize = 0, drop_targets: usize = 0, transitions: usize = 0, clips: usize = 0, icon_quads: usize = 0, svg_quads: usize = 0, text_quads: usize = 0, image_quads: usize = 0 };
+pub const Budget = struct { rects: usize = 2000, drag_sources: usize = 240, drop_targets: usize = 240, transitions: usize = 1200, icon_quads: usize = 160, svg_quads: usize = 160, text_quads: usize = 900, image_quads: usize = 16 };
 pub const BudgetViolation = struct { name: []const u8, actual: usize, limit: usize };
 pub const RenderError = error{ CommandBudgetExceeded, InvalidBounds, ClipBudgetExceeded, UnsupportedComponent };
 pub const PatchError = error{WrongNodeKind};
@@ -713,6 +732,11 @@ pub const Scene = struct {
         if (self.clipRect(quad.bounds)) |clipped| try self.push(.{ .icon_quad = .{ .bounds = clipped, .icon_id = quad.icon_id, .color = quad.color } });
     }
 
+    pub fn pushSvgQuad(self: *Scene, quad: SvgQuad) RenderError!void {
+        if (quad.svg.source.len == 0) return;
+        if (self.clipRect(quad.bounds)) |clipped| try self.push(.{ .svg_quad = .{ .bounds = clipped, .svg = quad.svg, .color = quad.color } });
+    }
+
     pub fn pushTextQuad(self: *Scene, quad: Quad) RenderError!void {
         if (self.clipQuad(quad)) |clipped| try self.push(.{ .text_quad = clipped });
     }
@@ -778,6 +802,7 @@ pub const Scene = struct {
             .drop_target => out.drop_targets += 1,
             .transition => out.transitions += 1,
             .icon_quad => out.icon_quads += 1,
+            .svg_quad => out.svg_quads += 1,
             .text_quad, .text => out.text_quads += 1,
             .image_quad => out.image_quads += 1,
         };
@@ -791,6 +816,7 @@ pub const Scene = struct {
             .border => |*border| border.color.a = scaleAlpha(border.color.a, alpha),
             .text => |*text_cmd| text_cmd.color.a = scaleAlpha(text_cmd.color.a, alpha),
             .icon_quad => |*quad| quad.color.a = scaleAlpha(quad.color.a, alpha),
+            .svg_quad => |*quad| quad.color.a = scaleAlpha(quad.color.a, alpha),
             .text_quad => |*quad| quad.color.a = scaleAlpha(quad.color.a, alpha),
             .image_quad => |*quad| quad.color.a = scaleAlpha(quad.color.a, alpha),
             else => {},
@@ -806,6 +832,7 @@ pub const Scene = struct {
             .drag_source => |*source| translateRect(&source.bounds, dx, dy),
             .drop_target => |*target| translateRect(&target.bounds, dx, dy),
             .icon_quad => |*quad| translateRect(&quad.bounds, dx, dy),
+            .svg_quad => |*quad| translateRect(&quad.bounds, dx, dy),
             .text_quad => |*quad| translateRect(&quad.bounds, dx, dy),
             .image_quad => |*quad| translateRect(&quad.bounds, dx, dy),
             else => {},
@@ -858,6 +885,7 @@ pub fn firstBudgetViolation(stats_value: Stats, budget: Budget) ?BudgetViolation
         .{ .name = "drop_targets", .actual = stats_value.drop_targets, .limit = budget.drop_targets },
         .{ .name = "transitions", .actual = stats_value.transitions, .limit = budget.transitions },
         .{ .name = "icon_quads", .actual = stats_value.icon_quads, .limit = budget.icon_quads },
+        .{ .name = "svg_quads", .actual = stats_value.svg_quads, .limit = budget.svg_quads },
         .{ .name = "text_quads", .actual = stats_value.text_quads, .limit = budget.text_quads },
         .{ .name = "image_quads", .actual = stats_value.image_quads, .limit = budget.image_quads },
     };

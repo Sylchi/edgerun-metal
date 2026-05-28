@@ -375,7 +375,7 @@ fn encodeIrBuffers(
         .rects, .overlay_rects => |rects| try encodeIrRects(rects, out),
         .image => |vertices| try encodeIrTextured(.image_quad, vertices, out),
         .text, .overlay_text => |vertices| try encodeIrTextured(.text_quad, vertices, out),
-        .icon, .overlay_icon => |instances| try encodeIrIcons(instances, out),
+        .icon, .svg, .overlay_icon => |instances| try encodeIrIcons(instances, out),
         .icon_lines, .overlay_icon_lines => {},
     };
 }

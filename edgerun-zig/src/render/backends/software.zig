@@ -143,6 +143,7 @@ pub const Surface = struct {
             },
             .text => return error.UnsupportedIrPrimitive,
             .icon_quad => |quad| self.drawIconQuad(quad, scale),
+            .svg_quad => |quad| self.drawIconInstance(quad.bounds, quad.color, quad.svg.icon_id, scale),
             .drag_source, .drop_target, .text_quad, .image_quad, .transition => {},
         };
     }
@@ -152,7 +153,7 @@ pub const Surface = struct {
         if (buffers.hasTexturedVertices()) return error.UnsupportedIrPrimitive;
         for (renderer_ir.drawBatches(buffers)) |batch| switch (batch) {
             .rects, .overlay_rects => |rects| try self.rasterizeIrRects(rects),
-            .icon, .overlay_icon => |icons| try self.rasterizeIrIcons(icons),
+            .icon, .svg, .overlay_icon => |icons| try self.rasterizeIrIcons(icons),
             .image, .text, .overlay_text, .icon_lines, .overlay_icon_lines => {},
         };
     }
@@ -170,7 +171,7 @@ pub const Surface = struct {
             .rects, .overlay_rects => |rects| try self.rasterizeIrRects(rects),
             .image => |vertices| if (image_texture) |texture| try self.rasterizeRgbaTexturedQuads(vertices, texture),
             .text, .overlay_text => |vertices| try self.rasterizeBilinearAlphaTexturedQuads(vertices, resources.font),
-            .icon, .overlay_icon => |icons| try self.rasterizeIrIcons(icons),
+            .icon, .svg, .overlay_icon => |icons| try self.rasterizeIrIcons(icons),
             .icon_lines, .overlay_icon_lines => {},
         };
     }

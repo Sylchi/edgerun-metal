@@ -62,6 +62,7 @@ fn packPreparedRange(buffers: renderer_ir.Buffers, font_atlas: *renderer_font_at
             try renderer_ir.pushText(buffers, source_set.font, layer, text_command.origin, text_command.value, text_command.color, text_command.alignment);
         },
         .icon_quad => |quad| try renderer_ir.pushIcon(buffers, layer, quad),
+        .svg_quad => |quad| try renderer_ir.pushSvgQuad(buffers, layer, quad),
         .image_quad => |quad| if (layer == .base) try renderer_ir.pushImage(buffers, quad),
         .drag_source, .drop_target, .text_quad, .transition => {},
     };

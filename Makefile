@@ -1,6 +1,8 @@
 .PHONY: help all check clean \
 	fmt fmt-check test zig-test \
 	crypto-test crypto-bench \
+	asm-test asm-test-math asm-test-runtime asm-test-serial \
+	asm-kernel asm-kernel-hello \
 	app-runtime pages-site pages-check pages-public-check pages-release \
 	wayland-window wayland-window-test \
 	ifstatus real-tpm sdk-cli sdk-bench
@@ -12,6 +14,12 @@ OPT ?= ReleaseFast
 
 CMAKE ?= cmake
 CTEST ?= ctest
+
+YASM ?= yasm
+ASM_BUILD_DIR := $(BUILD_DIR)/asm
+ASM_X86_64_DIR := asm/x86_64
+ASM_TEST_DIR := asm/test
+ASM_INC := -I asm
 
 WAYLAND_WIDTH ?= 1280
 WAYLAND_HEIGHT ?= 900
@@ -36,6 +44,12 @@ help:
 		'  make check              fmt-check + tests' \
 		'  make fmt                format Zig code' \
 		'  make test               run Zig tests' \
+		'  make crypto-test        run C BLAKE3 tests' \
+		'  make asm-test           run all x86_64 assembly tests' \
+		'  make asm-test-math      run assembly math function tests' \
+		'  make asm-test-runtime   run assembly runtime/memory tests' \
+		'  make asm-test-serial    run assembly serial output tests' \
+		'  make asm-kernel         build a bare-metal x86_64 kernel image' \
 		'  make app-runtime        build wasm runtime and print artifact sizes' \
 		'  make wayland-window     build wasm runtime and open native Wayland host' \
 		'  make pages-site         build local GitHub Pages artifact' \
@@ -64,6 +78,105 @@ crypto-test:
 crypto-bench:
 	$(CMAKE) -S edgerun-crypto -B $(BUILD_DIR)/edgerun-crypto
 	$(CMAKE) --build $(BUILD_DIR)/edgerun-crypto --target bench
+
+ASM_OBJS := \
+	$(ASM_BUILD_DIR)/math.o \
+	$(ASM_BUILD_DIR)/runtime.o \
+	$(ASM_BUILD_DIR)/serial.o
+
+ASM_KERNEL_FORMAT := elf32
+ASM_KERNEL_OBJS := \
+	$(ASM_BUILD_DIR)/kernel_math.o \
+	$(ASM_BUILD_DIR)/kernel_runtime.o \
+	$(ASM_BUILD_DIR)/kernel_serial.o \
+	$(ASM_BUILD_DIR)/kernel_entry.o \
+	$(ASM_BUILD_DIR)/kernel_main_elf32.o
+
+ASM_KERNEL_LD := $(ASM_X86_64_DIR)/linker.ld
+ASM_KERNEL_ELF := $(ASM_BUILD_DIR)/kernel.elf
+ASM_KERNEL_BIN := $(ASM_BUILD_DIR)/kernel.bin
+
+ASM_TEST_OBJS := \
+	$(ASM_BUILD_DIR)/serial_test.o
+
+asm-build: $(ASM_OBJS)
+
+$(ASM_BUILD_DIR)/math.o: $(ASM_X86_64_DIR)/math.asm $(ASM_X86_64_DIR)/macros.inc $(ASM_X86_64_DIR)/simd.inc
+	@mkdir -p $(ASM_BUILD_DIR)
+	$(YASM) -f elf64 $(ASM_INC) $< -o $@ 2>/dev/null && test -f $@
+
+$(ASM_BUILD_DIR)/runtime.o: $(ASM_X86_64_DIR)/runtime.asm $(ASM_X86_64_DIR)/macros.inc
+	@mkdir -p $(ASM_BUILD_DIR)
+	$(YASM) -f elf64 $(ASM_INC) $< -o $@ 2>/dev/null && test -f $@
+
+$(ASM_BUILD_DIR)/serial.o: $(ASM_X86_64_DIR)/serial.asm $(ASM_X86_64_DIR)/macros.inc
+	@mkdir -p $(ASM_BUILD_DIR)
+	$(YASM) -f elf64 $(ASM_INC) $< -o $@ 2>/dev/null && test -f $@
+
+$(ASM_BUILD_DIR)/serial_test.o: $(ASM_X86_64_DIR)/serial.asm $(ASM_X86_64_DIR)/macros.inc
+	@mkdir -p $(ASM_BUILD_DIR)
+	$(YASM) -f elf64 $(ASM_INC) -DHOSTED_TEST $< -o $@ 2>/dev/null && test -f $@
+
+$(ASM_BUILD_DIR)/kernel_main.o: $(ASM_X86_64_DIR)/kernel_main.asm $(ASM_X86_64_DIR)/macros.inc
+	@mkdir -p $(ASM_BUILD_DIR)
+	$(YASM) -f elf64 $(ASM_INC) $< -o $@ 2>/dev/null && test -f $@
+
+# Kernel build: all objects in ELF32 format for QEMU multiboot compatibility.
+# The 64-bit code is embedded within the ELF32 container; the 32→64
+# transition in entry.asm switches to long mode after multiboot loads us.
+
+$(ASM_BUILD_DIR)/kernel_entry.o: $(ASM_X86_64_DIR)/entry.asm $(ASM_X86_64_DIR)/macros.inc
+	@mkdir -p $(ASM_BUILD_DIR)
+	$(YASM) -f $(ASM_KERNEL_FORMAT) $(ASM_INC) $< -o $@ 2>/dev/null && test -f $@
+
+$(ASM_BUILD_DIR)/kernel_math.o: $(ASM_X86_64_DIR)/math.asm $(ASM_X86_64_DIR)/macros.inc $(ASM_X86_64_DIR)/simd.inc
+	@mkdir -p $(ASM_BUILD_DIR)
+	$(YASM) -f $(ASM_KERNEL_FORMAT) $(ASM_INC) $< -o $@ 2>/dev/null && test -f $@
+
+$(ASM_BUILD_DIR)/kernel_runtime.o: $(ASM_X86_64_DIR)/runtime.asm $(ASM_X86_64_DIR)/macros.inc
+	@mkdir -p $(ASM_BUILD_DIR)
+	$(YASM) -f $(ASM_KERNEL_FORMAT) $(ASM_INC) $< -o $@ 2>/dev/null && test -f $@
+
+$(ASM_BUILD_DIR)/kernel_serial.o: $(ASM_X86_64_DIR)/serial.asm $(ASM_X86_64_DIR)/macros.inc
+	@mkdir -p $(ASM_BUILD_DIR)
+	$(YASM) -f $(ASM_KERNEL_FORMAT) $(ASM_INC) $< -o $@ 2>/dev/null && test -f $@
+
+$(ASM_BUILD_DIR)/kernel_main_elf32.o: $(ASM_X86_64_DIR)/kernel_main.asm $(ASM_X86_64_DIR)/macros.inc
+	@mkdir -p $(ASM_BUILD_DIR)
+	$(YASM) -f $(ASM_KERNEL_FORMAT) $(ASM_INC) $< -o $@ 2>/dev/null && test -f $@
+
+asm-test-math: $(ASM_BUILD_DIR)/math.o
+	$(CC) -no-pie -g -o $(ASM_BUILD_DIR)/test_math $(ASM_TEST_DIR)/test_math.c $(ASM_BUILD_DIR)/math.o -lm
+	$(ASM_BUILD_DIR)/test_math
+
+asm-test-runtime: $(ASM_BUILD_DIR)/runtime.o
+	$(CC) -no-pie -g -o $(ASM_BUILD_DIR)/test_runtime $(ASM_TEST_DIR)/test_runtime.c $(ASM_BUILD_DIR)/runtime.o
+	$(ASM_BUILD_DIR)/test_runtime
+
+asm-test-serial: $(ASM_BUILD_DIR)/serial_test.o $(ASM_BUILD_DIR)/runtime.o
+	$(CC) -no-pie -g -o $(ASM_BUILD_DIR)/test_serial $(ASM_TEST_DIR)/test_serial.c $(ASM_BUILD_DIR)/serial_test.o $(ASM_BUILD_DIR)/runtime.o
+	$(ASM_BUILD_DIR)/test_serial
+
+ASM_KERNEL_LD := $(ASM_X86_64_DIR)/linker.ld
+ASM_KERNEL_ELF := $(ASM_BUILD_DIR)/kernel.elf
+ASM_KERNEL_BIN := $(ASM_BUILD_DIR)/kernel.bin
+
+asm-kernel: $(ASM_KERNEL_OBJS)
+	ld -m elf_i386 -T $(ASM_KERNEL_LD) -o $(ASM_KERNEL_ELF) $(ASM_KERNEL_OBJS)
+	objcopy -O binary $(ASM_KERNEL_ELF) $(ASM_KERNEL_BIN)
+	@printf 'kernel: %s (%d bytes)\n' '$(ASM_KERNEL_ELF)' "$$(stat -c '%s' '$(ASM_KERNEL_ELF)')"
+	@printf 'flat:   %s (%d bytes)\n' '$(ASM_KERNEL_BIN)' "$$(stat -c '%s' '$(ASM_KERNEL_BIN)')"
+
+asm-kernel-hello: asm-kernel
+	qemu-system-x86_64 \
+		-machine q35 \
+		-display none \
+		-serial stdio \
+		-no-reboot \
+		-kernel $(ASM_KERNEL_ELF) \
+		-m 256
+
+asm-test: asm-test-math asm-test-runtime asm-test-serial
 
 sdk-cli:
 	$(ZIG_BUILD) sdk-cli -- simulate standard

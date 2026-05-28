@@ -274,6 +274,7 @@ pub fn dirtyTilesMarkScene(plan: TilePlan, scene: ui.Scene, tile_marks: []u8, li
             .border => |border| border.bounds,
             .text => |text| text.origin,
             .icon_quad => |quad| quad.bounds,
+            .svg_quad => |quad| quad.bounds,
             .text_quad => |quad| quad.bounds,
             .image_quad => |quad| quad.bounds,
             else => continue,
@@ -289,7 +290,7 @@ pub fn dirtyTilesMarkIrBuffers(plan: TilePlan, buffers: renderer_ir.Buffers, til
         const marked = switch (batch) {
             .rects, .overlay_rects => |rects| dirtyTilesMarkIrRects(plan, rects, tile_marks, list),
             .image, .text, .overlay_text => |vertices| dirtyTilesMarkIrTextured(plan, vertices, tile_marks, list),
-            .icon, .overlay_icon => |icons| dirtyTilesMarkIrIcons(plan, icons, tile_marks, list),
+            .icon, .svg, .overlay_icon => |icons| dirtyTilesMarkIrIcons(plan, icons, tile_marks, list),
             .icon_lines, .overlay_icon_lines => true,
         };
         if (!marked) return false;
@@ -380,6 +381,7 @@ fn markCommand(plan: TilePlan, command: ui.Command, tile_marks: []u8, list: *Dir
         .border => |border| border.bounds,
         .text => |text| text.origin,
         .icon_quad => |quad| quad.bounds,
+        .svg_quad => |quad| quad.bounds,
         .text_quad => |quad| quad.bounds,
         .image_quad => |quad| quad.bounds,
         else => return true,

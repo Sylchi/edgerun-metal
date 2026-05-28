@@ -1,7 +1,6 @@
 const std = @import("std");
 const bytes = @import("bytes.zig");
 const icon = @import("icon.zig");
-const icon_vector = @import("icon_vector.zig");
 const font_builtin = @import("font_builtin.zig");
 
 pub const Status = enum {
@@ -24,7 +23,6 @@ pub const Status = enum {
 
 pub const Limits = struct {
     max_icon_count: usize,
-    max_icon_vector_bytes: usize,
     max_font_faces: usize,
     max_font_atlas_side: u32,
     max_font_atlas_bytes: usize,
@@ -41,7 +39,6 @@ pub const IconPackSpec = struct {
     name: []const u8,
     provider: icon.Provider,
     entries: []const IconPackEntry,
-    vector_bytes: usize,
 };
 
 pub const FontFaceSpec = struct {
@@ -79,8 +76,7 @@ pub const required_font_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstu
 
 pub fn defaultLimits() Limits {
     return .{
-        .max_icon_count = 256,
-        .max_icon_vector_bytes = 64 * 1024,
+        .max_icon_count = 6000,
         .max_font_faces = 8,
         .max_font_atlas_side = @as(u32, @intCast(font_builtin.atlas_width)),
         .max_font_atlas_bytes = font_builtin.atlas_bytes,
@@ -93,7 +89,6 @@ pub fn validateIconPack(pack: IconPackSpec, limits: Limits) Status {
     const name_status = validateName(pack.name, limits);
     if (name_status != .ok) return name_status;
     if (pack.entries.len > limits.max_icon_count) return .icon_count_exceeded;
-    if (pack.vector_bytes == 0 or pack.vector_bytes > limits.max_icon_vector_bytes) return .invalid_icon_vector;
 
     for (pack.entries, 0..) |entry, i| {
         for (pack.entries[i + 1 ..]) |other| {
@@ -173,7 +168,6 @@ pub fn tablerInterPack() AssetPackSpec {
             .name = "tabler-svg",
             .provider = .tabler,
             .entries = &tabler_icon_entries,
-            .vector_bytes = bundledIconVectorBytes(),
         },
         .fonts = .{
             .name = "inter",
@@ -193,7 +187,6 @@ pub fn lucideGeistPack() AssetPackSpec {
             .name = "lucide-svg",
             .provider = .lucide,
             .entries = &lucide_icon_entries,
-            .vector_bytes = bundledIconVectorBytes(),
         },
         .fonts = .{
             .name = "geist",
@@ -236,14 +229,6 @@ const required_emoji = [_]EmojiSpec{
     .{ .key = "document", .label = "document" },
     .{ .key = "surface", .label = "surface" },
 };
-
-fn bundledIconVectorBytes() usize {
-    var total: usize = 0;
-    for (std.enums.values(icon.Icon)) |value| {
-        total += icon_vector.data(value).len * @sizeOf(f32);
-    }
-    return total;
-}
 
 test "bundled asset packs validate" {
     const limits = defaultLimits();

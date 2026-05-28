@@ -2540,6 +2540,12 @@ fn executorForWithStorage(runtime: *Runtime, wasm_bytes: []const u8, storage: *E
     if (!storage.prepared) {
         try Module.parseInto(&storage.module, wasm_bytes);
         try storage.module.resolveImports(runtime.*);
+        if (storage.module.global_count > 0 and storage.module.globals[0].mutable and storage.module.globals[0].value_type == .i32) {
+            const sp_end = runtime.memoryLen();
+            if (sp_end > 64 * 1024) {
+                storage.module.globals[0].value.i32 = @intCast(sp_end - 64 * 1024);
+            }
+        }
     }
     const memory_pages = try initialMemoryPages(runtime.*, &storage.module);
     const required_memory = pagesToBytes(memory_pages) orelse return error.Unsupported;

@@ -78,7 +78,7 @@ pub const Alert = struct {
 
 fn statusIcon(self: Alert) Icon {
     if (self.icon_slot.optional()) |slot| return slot;
-    return Icon.named(if (self.destructive) .warning else .shield);
+    return Icon.named(if (self.destructive) .alert_circle else .shield);
 }
 
 fn statusIconTag(self: Alert) u16 {
@@ -110,7 +110,7 @@ const alert_icon_shift: u5 = 1;
 const alert_danger = ui.Color{ .r = 239, .g = 68, .b = 68 };
 
 test "alert component serializes icon slot to canonical object and deserializes" {
-    const alert = Alert{ .title = "Heads up", .detail = "Status message", .destructive = true, .icon_slot = IconSlot.named(.status, .warning) };
+    const alert = Alert{ .title = "Heads up", .detail = "Status message", .destructive = true, .icon_slot = IconSlot.named(.status, .alert_circle) };
     var ui_raw: [128]u8 = undefined;
     var object_raw: [object.header_size + 128]u8 = undefined;
 
@@ -120,7 +120,7 @@ test "alert component serializes icon slot to canonical object and deserializes"
     try std.testing.expectEqualStrings(alert.title, decoded.title);
     try std.testing.expectEqualStrings(alert.detail, decoded.detail);
     try std.testing.expect(decoded.destructive);
-    try std.testing.expectEqual(Icon.named(.warning).value, decoded.icon_slot.status.value);
+    try std.testing.expectEqual(Icon.named(.alert_circle).value, decoded.icon_slot.status.value);
 }
 
 test "alert component renders title detail and destructive variant" {

@@ -243,6 +243,7 @@ pub const Compositor = struct {
             .border => |border| try self.markRect(border.bounds),
             .text => |text| try self.markRect(text.origin),
             .icon_quad => |quad| try self.markRect(quad.bounds),
+            .svg_quad => |quad| try self.markRect(quad.bounds),
             .text_quad => |quad| try self.markRect(quad.bounds),
             .image_quad => |quad| try self.markRect(quad.bounds),
             .drag_source, .drop_target, .transition => {},
@@ -252,7 +253,7 @@ pub const Compositor = struct {
     fn markIrDamage(self: *Compositor, buffers: renderer_ir.Buffers) Error!void {
         for (renderer_ir.drawBatches(buffers)) |batch| switch (batch) {
             .rects, .overlay_rects => |rects| try self.markIrRectBuffer(rects),
-            .image, .text, .icon, .overlay_text, .overlay_icon => |vertices| try self.markTexturedVertices(vertices),
+            .image, .text, .icon, .svg, .overlay_text, .overlay_icon => |vertices| try self.markTexturedVertices(vertices),
             .icon_lines, .overlay_icon_lines => {},
         };
     }

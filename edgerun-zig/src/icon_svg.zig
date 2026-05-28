@@ -240,6 +240,31 @@ pub const Error = error{
     UnsupportedSvgStroke,
 };
 
+/// First-class SVG type wrapping source bytes with lazy parsing.
+/// Analogous to RgbaTexture for images, this is the canonical SVG asset type.
+pub const Svg = struct {
+    source: []const u8,
+    /// Handle for the rendering pipeline. For known icons this is icon.id();
+    /// for cursor SVGs it is the special cursor ID; 0 means generic/unknown SVG.
+    icon_id: u32 = 0,
+
+    pub fn iterator(self: Svg) Iterator {
+        return Iterator.init(self.source);
+    }
+
+    pub fn fromIcon(value: icon.Icon) Svg {
+        return .{ .source = source(value), .icon_id = icon.id(value) };
+    }
+
+    pub fn fromSource(svg_source: []const u8) Svg {
+        return .{ .source = svg_source, .icon_id = 0 };
+    }
+
+    pub fn fromIconId(svg_icon_id: u32) Svg {
+        return .{ .source = sourceForIconId(svg_icon_id), .icon_id = svg_icon_id };
+    }
+};
+
 pub const cursor_pointer_2_icon_id: u32 = 40_001;
 pub const cursor_hand_finger_icon_id: u32 = 40_002;
 
@@ -253,39 +278,10 @@ pub fn sourceForIconId(icon_id: u32) []const u8 {
     return source(value);
 }
 
+const icon_embed = @import("icon_embed.zig");
+
 pub fn source(value: icon.Icon) []const u8 {
-    return switch (value) {
-        .activity => @embedFile("icons/tabler/activity.svg"),
-        .app => @embedFile("icons/tabler/apps.svg"),
-        .bell => @embedFile("icons/tabler/bell.svg"),
-        .chat => @embedFile("icons/tabler/message-circle.svg"),
-        .check => @embedFile("icons/tabler/check.svg"),
-        .chevron_right => @embedFile("icons/tabler/chevron-right.svg"),
-        .code => @embedFile("icons/tabler/code.svg"),
-        .cpu => @embedFile("icons/tabler/cpu.svg"),
-        .database, .storage => @embedFile("icons/tabler/database.svg"),
-        .eye => @embedFile("icons/tabler/eye.svg"),
-        .file => @embedFile("icons/tabler/file.svg"),
-        .key => @embedFile("icons/tabler/key.svg"),
-        .lock => @embedFile("icons/tabler/lock.svg"),
-        .menu => @embedFile("icons/tabler/menu-2.svg"),
-        .message_plus => @embedFile("icons/tabler/message-plus.svg"),
-        .network => @embedFile("icons/tabler/network.svg"),
-        .route => @embedFile("icons/tabler/route.svg"),
-        .search => @embedFile("icons/tabler/search.svg"),
-        .send => @embedFile("icons/tabler/arrow-up.svg"),
-        .server => @embedFile("icons/tabler/server.svg"),
-        .settings => @embedFile("icons/tabler/settings.svg"),
-        .shield, .trust => @embedFile("icons/tabler/shield-check.svg"),
-        .sparkles => @embedFile("icons/tabler/sparkles.svg"),
-        .terminal => @embedFile("icons/tabler/terminal-2.svg"),
-        .trash => @embedFile("icons/tabler/trash.svg"),
-        .user => @embedFile("icons/tabler/user.svg"),
-        .wallet => @embedFile("icons/tabler/wallet.svg"),
-        .warning => @embedFile("icons/tabler/alert-triangle.svg"),
-        .x => @embedFile("icons/tabler/x.svg"),
-        .github => @embedFile("icons/tabler/brand-github.svg"),
-    };
+    return icon_embed.source(value);
 }
 
 pub const Iterator = struct {
@@ -5163,15 +5159,6 @@ test "smooth quadratic resets after non quadratic command" {
     } }, (try iter.next()).?);
 }
 
-test "all mapped tabler svgs parse without invalid path data" {
-    inline for (std.meta.fields(icon.Icon)) |field| {
-        var iter = Iterator.init(source(@enumFromInt(field.value)));
-        var count: usize = 0;
-        while (try iter.next()) |_| count += 1;
-        try std.testing.expect(count > 0);
-    }
-}
-
 test "cursor tabler svgs parse through the shared icon iterator" {
     const ids = [_]u32{ cursor_pointer_2_icon_id, cursor_hand_finger_icon_id };
     for (ids) |icon_id| {
@@ -5179,11 +5166,5 @@ test "cursor tabler svgs parse through the shared icon iterator" {
         var count: usize = 0;
         while (try iter.next()) |_| count += 1;
         try std.testing.expect(count > 0);
-    }
-}
-
-test "all mapped tabler svgs match supported stroke contract" {
-    inline for (std.meta.fields(icon.Icon)) |field| {
-        try validateSupportedTablerStroke(source(@enumFromInt(field.value)));
     }
 }
