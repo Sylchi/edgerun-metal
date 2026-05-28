@@ -1,7 +1,7 @@
-const std = @import("std");
 const authority = @import("authority.zig");
 const bytes = @import("bytes.zig");
 const clock = @import("clock.zig");
+const crypto = @import("crypto.zig");
 const identity = @import("identity.zig");
 const intent = @import("intent.zig");
 const preimage = @import("preimage.zig");
@@ -193,7 +193,7 @@ pub const Header = struct {
         };
         header.encode(&header_raw) catch return null;
 
-        var builder = std.crypto.hash.Blake3.init(.{});
+        var builder = crypto.blake3.init(.{});
         builder.update(&header_raw);
         builder.update(body);
         var out: [id_size]u8 = undefined;
@@ -352,7 +352,7 @@ pub const View = struct {
     pub fn decode(canonical: []const u8) Error!View {
         if (canonical.len < header_size) return error.Corrupt;
         const header = try Header.decode(canonical[0..header_size]);
-        const body_len = std.math.cast(usize, header.body_len) orelse return error.Corrupt;
+        const body_len = @as(usize, @intCast(header.body_len));
         const expected_len = try canonicalSize(header.kind, body_len, header.owner_count, header.envelope_count, header.child_count);
         if (expected_len != canonical.len) return error.Corrupt;
 
@@ -381,7 +381,9 @@ pub const View = struct {
         index = 0;
         while (index < header.child_count) : (index += 1) {
             const child = try Child.decode(canonical[children_start + index * child_size ..][0..child_size], expected_offset);
-            expected_offset = std.math.add(u64, expected_offset, child.logical_len) catch return error.Corrupt;
+            const r = @addWithOverflow(expected_offset, child.logical_len);
+            if (r[1] != 0) return error.Corrupt;
+            expected_offset = r[0];
         }
         if (header.kind == .tree and expected_offset != header.logical_len) return error.Corrupt;
 
@@ -415,7 +417,9 @@ pub const View = struct {
         var cursor: usize = 0;
         while (cursor < index) : (cursor += 1) {
             const child = try Child.decode(self.children[cursor * child_size ..][0..child_size], expected_offset);
-            expected_offset = std.math.add(u64, expected_offset, child.logical_len) catch return error.Corrupt;
+            const r = @addWithOverflow(expected_offset, child.logical_len);
+            if (r[1] != 0) return error.Corrupt;
+            expected_offset = r[0];
         }
         return Child.decode(self.children[index * child_size ..][0..child_size], expected_offset);
     }
@@ -517,11 +521,20 @@ pub fn canonicalSize(kind: Kind, body_len: usize, owners: usize, envelopes: usiz
     if ((kind == .bytes or kind == .receipt) and children != 0) return error.BadArgument;
     if (kind == .tree and body_len != 0) return error.BadArgument;
 
+    const ov = struct {
+        fn mulAdd(a: usize, b: usize, c: usize) Error!usize {
+            const p = @mulWithOverflow(a, b);
+            if (p[1] != 0) return error.NoSpace;
+            const r = @addWithOverflow(p[0], c);
+            if (r[1] != 0) return error.NoSpace;
+            return r[0];
+        }
+    }.mulAdd;
     var total: usize = header_size;
-    total = std.math.add(usize, total, std.math.mul(usize, owners, owner_size) catch return error.NoSpace) catch return error.NoSpace;
-    total = std.math.add(usize, total, std.math.mul(usize, envelopes, envelope_size) catch return error.NoSpace) catch return error.NoSpace;
-    total = std.math.add(usize, total, std.math.mul(usize, children, child_size) catch return error.NoSpace) catch return error.NoSpace;
-    total = std.math.add(usize, total, body_len) catch return error.NoSpace;
+    total = try ov(owners, owner_size, total);
+    total = try ov(envelopes, envelope_size, total);
+    total = try ov(children, child_size, total);
+    total = try ov(body_len, 1, total);
     return total;
 }
 
@@ -553,7 +566,9 @@ pub const NodeWriter = struct {
         var logical_len: u64 = 0;
         for (children) |child| {
             if (!child.valid(logical_len)) return error.BadArgument;
-            logical_len = std.math.add(u64, logical_len, child.logical_len) catch return error.NoSpace;
+            const r = @addWithOverflow(logical_len, child.logical_len);
+            if (r[1] != 0) return error.NoSpace;
+            logical_len = r[0];
         }
 
         return try self.writeNode(.{
@@ -630,9 +645,13 @@ pub const NodeWriter = struct {
 fn copyBytes(dest: []u8, source: []const u8) void {
     if (dest.len == 0) return;
     if (@intFromPtr(dest.ptr) <= @intFromPtr(source.ptr)) {
-        std.mem.copyForwards(u8, dest, source);
+        for (0..dest.len) |i| dest[i] = source[i];
     } else {
-        std.mem.copyBackwards(u8, dest, source);
+        var i: usize = dest.len;
+        while (i > 0) {
+            i -= 1;
+            dest[i] = source[i];
+        }
     }
 }
 
@@ -856,8 +875,9 @@ fn decodeEpoch(in: []const u8) Error!clock.Stamp {
 }
 
 fn enumFromInt(comptime E: type, value: anytype) ?E {
-    inline for (std.enums.values(E)) |candidate| {
-        if (@intFromEnum(candidate) == value) return candidate;
+    const fields = @typeInfo(E).@"enum".fields;
+    inline for (fields) |f| {
+        if (f.value == value) return @as(E, @enumFromInt(f.value));
     }
     return null;
 }
@@ -873,6 +893,7 @@ fn zeroed(in: []const u8) bool {
 }
 
 test "requirements are encoded and hashed deterministically" {
+    const std = @import("std");
     const req = Requirements{
         .durability = .durable,
         .confidentiality = .user_app_private,
@@ -887,6 +908,7 @@ test "requirements are encoded and hashed deterministically" {
 }
 
 test "header encode decode owns canonical layout" {
+    const std = @import("std");
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const req = Requirements{
         .durability = .durable,
@@ -915,6 +937,7 @@ test "header encode decode owns canonical layout" {
 }
 
 test "header decode rejects nonzero reserved bytes" {
+    const std = @import("std");
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const req = Requirements{
         .durability = .durable,
@@ -941,6 +964,7 @@ test "header decode rejects nonzero reserved bytes" {
 }
 
 test "owner and child encode decode are symmetric" {
+    const std = @import("std");
     const node_id = [_]u8{2} ++ [_]u8{0} ** 31;
     const requirement_id = [_]u8{3} ++ [_]u8{0} ** 31;
     const owner = Owner{ .kind = .app, .node_id = node_id };
@@ -964,6 +988,7 @@ test "owner and child encode decode are symmetric" {
 }
 
 test "envelope encode decode validates owner and algorithm" {
+    const std = @import("std");
     const owner = Owner{
         .kind = .app,
         .node_id = [_]u8{4} ++ [_]u8{0} ** 31,
@@ -993,6 +1018,7 @@ test "envelope encode decode validates owner and algorithm" {
 }
 
 test "view decodes canonical bytes node and owns body slicing" {
+    const std = @import("std");
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const req = Requirements{
         .durability = .memory,
@@ -1015,6 +1041,7 @@ test "view decodes canonical bytes node and owns body slicing" {
 }
 
 test "writer builds owned canonical bytes nodes" {
+    const std = @import("std");
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const req = Requirements{
         .durability = .durable,
@@ -1062,6 +1089,7 @@ test "writer builds owned canonical bytes nodes" {
 }
 
 test "object tpm encryption binds storage envelope to caller policy" {
+    const std = @import("std");
     var events: [4]tpmapp.Event = undefined;
     const keeper = clock.KeeperId{ .bytes = [_]u8{9} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
@@ -1158,6 +1186,7 @@ test "object tpm encryption binds storage envelope to caller policy" {
 }
 
 test "object app private encryption is app sealed without user decrypt principal" {
+    const std = @import("std");
     var events: [4]tpmapp.Event = undefined;
     const keeper = clock.KeeperId{ .bytes = [_]u8{10} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
@@ -1226,6 +1255,7 @@ test "object app private encryption is app sealed without user decrypt principal
 }
 
 test "writer builds canonical tree nodes from child records" {
+    const std = @import("std");
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const req = Requirements{
         .durability = .memory,
@@ -1276,6 +1306,7 @@ test "writer builds canonical tree nodes from child records" {
 }
 
 test "writer builds owned canonical tree nodes" {
+    const std = @import("std");
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const req = Requirements{
         .durability = .durable,
@@ -1323,6 +1354,7 @@ test "writer builds owned canonical tree nodes" {
 }
 
 test "writer builds canonical receipt nodes" {
+    const std = @import("std");
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const req = Requirements{
         .durability = .durable,
@@ -1345,6 +1377,7 @@ test "writer builds canonical receipt nodes" {
 }
 
 test "signature receipts bind signer challenge and subject object ids" {
+    const std = @import("std");
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
     const req = Requirements{
@@ -1376,6 +1409,7 @@ test "signature receipts bind signer challenge and subject object ids" {
 }
 
 test "signature receipts reject malformed body policy and zero signatures" {
+    const std = @import("std");
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
     const req = Requirements{

@@ -1,4 +1,3 @@
-const std = @import("std");
 const BoundedArena = @import("arena.zig").BoundedArena;
 const authority = @import("authority.zig");
 const bounded = @import("bounded.zig");
@@ -7,11 +6,11 @@ const clock = @import("clock.zig");
 const grant = @import("grant.zig");
 const identity = @import("identity.zig");
 const intent = @import("intent.zig");
+const object = @import("object.zig");
 const preimage = @import("preimage.zig");
 const relay = @import("relay.zig");
 const seal = @import("seal.zig");
 const store = @import("store.zig");
-const object = @import("object.zig");
 const tpmapp = @import("tpmapp.zig");
 const component_common = @import("ui_component_common.zig");
 const component_union = @import("ui/components/Component.zig");
@@ -427,9 +426,9 @@ pub const App = struct {
 
         pub fn id(self: DeclaredAllocation) ?preimage.Hash {
             if (!self.valid()) return null;
-            const memory_amount = std.math.cast(u64, self.memory_bytes) orelse return null;
-            const storage_amount = std.math.cast(u64, self.storage_bytes) orelse return null;
-            const slot_amount = std.math.cast(u64, self.storage_slots) orelse return null;
+            const memory_amount = @as(u64, @intCast(self.memory_bytes));
+            const storage_amount = @as(u64, @intCast(self.storage_bytes));
+            const slot_amount = @as(u64, @intCast(self.storage_slots));
             var raw: [allocation_body_size]u8 = undefined;
             var writer = preimage.Writer.init(&raw);
             if (!writer.writeU64(memory_amount) or
@@ -617,9 +616,9 @@ pub const App = struct {
         };
 
         pub fn valid(self: WorkReceipt) bool {
-            const memory_amount = std.math.cast(u64, self.allocation.memory_bytes) orelse return false;
-            const storage_amount = std.math.cast(u64, self.allocation.storage_bytes) orelse return false;
-            const slot_amount = std.math.cast(u64, self.allocation.storage_slots) orelse return false;
+            const memory_amount = @as(u64, @intCast(self.allocation.memory_bytes));
+            const storage_amount = @as(u64, @intCast(self.allocation.storage_bytes));
+            const slot_amount = @as(u64, @intCast(self.allocation.storage_slots));
             return self.parent.valid() and
                 self.app.valid() and
                 bytes.nonzero(&self.input) and
@@ -662,7 +661,15 @@ pub const App = struct {
         pub fn decodeObject(canonical: []const u8) object.Error!Info {
             const view = try object.View.decode(canonical);
             if (view.header.kind != .receipt) return error.Corrupt;
-            if (!std.meta.eql(view.header.requirements, workReceiptRequirements())) return error.Corrupt;
+            const req = view.header.requirements;
+            const wrr = workReceiptRequirements();
+            if (req.durability != wrr.durability or
+                req.confidentiality != wrr.confidentiality or
+                req.portability != wrr.portability or
+                req.integrity != wrr.integrity or
+                req.lifetime != wrr.lifetime or
+                req.visibility != wrr.visibility or
+                req.access != wrr.access) return error.Corrupt;
             if (view.body.len != work_receipt_body_size) return error.Corrupt;
             return decodeBody(view.body) orelse error.Corrupt;
         }
@@ -1503,9 +1510,9 @@ fn appPrivateStorageProofHash(policy_id: preimage.Hash, seal_event: preimage.Has
 
 fn writeAllocationBody(allocation: App.DeclaredAllocation, out: []u8) bool {
     if (!allocation.valid() or out.len < allocation_body_size) return false;
-    const memory_amount = std.math.cast(u64, allocation.memory_bytes) orelse return false;
-    const storage_amount = std.math.cast(u64, allocation.storage_bytes) orelse return false;
-    const slot_amount = std.math.cast(u64, allocation.storage_slots) orelse return false;
+    const memory_amount = @as(u64, @intCast(allocation.memory_bytes));
+    const storage_amount = @as(u64, @intCast(allocation.storage_bytes));
+    const slot_amount = @as(u64, @intCast(allocation.storage_slots));
     return bytes.store64(out[0..8], memory_amount) and
         bytes.store64(out[8..16], storage_amount) and
         bytes.store64(out[16..24], slot_amount) and
@@ -1523,9 +1530,18 @@ fn readAllocationBody(in: []const u8) ?App.DeclaredAllocation {
     _ = bytes.copy(&route_handle, in[allocation_count_body_size..][0..preimage.hash_size]);
     _ = bytes.copy(&device_handle_bytes, in[allocation_count_body_size + preimage.hash_size ..][0..identity.id_size]);
     const allocation = App.DeclaredAllocation{
-        .memory_bytes = std.math.cast(usize, bytes.load64(in[0..8]) orelse return null) orelse return null,
-        .storage_bytes = std.math.cast(usize, bytes.load64(in[8..16]) orelse return null) orelse return null,
-        .storage_slots = std.math.cast(usize, bytes.load64(in[16..24]) orelse return null) orelse return null,
+        .memory_bytes = blk: {
+            const v = bytes.load64(in[0..8]) orelse return null;
+            break :blk @as(usize, @intCast(v));
+        },
+        .storage_bytes = blk: {
+            const v = bytes.load64(in[8..16]) orelse return null;
+            break :blk @as(usize, @intCast(v));
+        },
+        .storage_slots = blk: {
+            const v = bytes.load64(in[16..24]) orelse return null;
+            break :blk @as(usize, @intCast(v));
+        },
         .execution_ticks = bytes.load64(in[24..32]) orelse return null,
         .route_handles = bytes.load64(in[32..40]) orelse return null,
         .device_handles = bytes.load64(in[40..48]) orelse return null,
@@ -1538,9 +1554,9 @@ fn readAllocationBody(in: []const u8) ?App.DeclaredAllocation {
 fn allocationFromSpawnReceipt(receipt: grant.SpawnReceipt) ?App.DeclaredAllocation {
     if (!receipt.valid()) return null;
     const allocation = App.DeclaredAllocation{
-        .memory_bytes = std.math.cast(usize, receipt.memory.amount) orelse return null,
-        .storage_bytes = std.math.cast(usize, receipt.storage_bytes.amount) orelse return null,
-        .storage_slots = std.math.cast(usize, receipt.storage_slots.amount) orelse return null,
+        .memory_bytes = @as(usize, @intCast(receipt.memory.amount)),
+        .storage_bytes = @as(usize, @intCast(receipt.storage_bytes.amount)),
+        .storage_slots = @as(usize, @intCast(receipt.storage_slots.amount)),
         .execution_ticks = receipt.execution_ticks.amount,
         .route_handles = receipt.route_handles.amount,
         .device_handles = receipt.device_handles.amount,
@@ -1643,8 +1659,8 @@ fn mapComponentError(err: component_common.Error) App.UiError {
 }
 
 fn sharedMemoryId(owner: identity.Id, offset: usize, len: usize, epoch: clock.Stamp) ?preimage.Hash {
-    const offset_amount = std.math.cast(u64, offset) orelse return null;
-    const len_amount = std.math.cast(u64, len) orelse return null;
+    const offset_amount = @as(u64, @intCast(offset));
+    const len_amount = @as(u64, @intCast(len));
     var raw: [identity.id_size + 16 + preimage.epoch_size]u8 = undefined;
     var writer = preimage.Writer.init(&raw);
     if (!writer.id(owner) or
@@ -1662,6 +1678,7 @@ fn hashMaterial(material: []const u8) preimage.Hash {
 }
 
 test "execution host identity is device authority only" {
+    const std = @import("std");
     const epoch = clock.Stamp{ .keeper = .{ .bytes = [_]u8{30} ++ [_]u8{0} ** 31 } };
     const device_id = identity.Identity.init(.device, identity.Source.prepare(.hash, &preimage.rawHash("host authority device")).?, epoch).?;
     const app_id = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("host authority app")).?, epoch).?;
@@ -1673,6 +1690,7 @@ test "execution host identity is device authority only" {
 }
 
 test "manifest spawn transfers declared memory and storage to child" {
+    const std = @import("std");
     var memory_bytes: [64]u8 = undefined;
     var storage_bytes: [512]u8 = undefined;
     var slots: [4]store.Blob = undefined;
@@ -1769,6 +1787,7 @@ test "manifest spawn transfers declared memory and storage to child" {
 }
 
 test "manifest spawn can run app with no ram object storage" {
+    const std = @import("std");
     const parent_memory_bytes = 64;
     const parent_storage_bytes = 128;
     const parent_storage_slots = 2;
@@ -1832,6 +1851,7 @@ test "manifest spawn can run app with no ram object storage" {
 }
 
 test "manifest declares app private storage capability and requires storage grant" {
+    const std = @import("std");
     var memory_bytes: [64]u8 = undefined;
     var storage_bytes: [128]u8 = undefined;
     var slots: [2]store.Blob = undefined;
@@ -1874,6 +1894,7 @@ test "manifest declares app private storage capability and requires storage gran
 }
 
 test "app proves app private storage seal and open capability" {
+    const std = @import("std");
     var memory_bytes: [64]u8 = undefined;
     var storage_bytes: [512]u8 = undefined;
     var slots: [4]store.Blob = undefined;
@@ -1935,6 +1956,7 @@ test "app proves app private storage seal and open capability" {
 }
 
 test "native runtime manifest requires edgerun runtime signature" {
+    const std = @import("std");
     var memory_bytes: [64]u8 = undefined;
     var storage_bytes: [512]u8 = undefined;
     var slots: [4]store.Blob = undefined;
@@ -1985,6 +2007,7 @@ test "native runtime manifest requires edgerun runtime signature" {
 }
 
 test "declared allocation bounds app child work receipts and clean reclaim" {
+    const std = @import("std");
     const parent_memory_bytes = 128;
     const parent_storage_bytes = 2048;
     const parent_storage_slots = 8;
@@ -2248,6 +2271,7 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
 }
 
 test "minimum containment memory storage and reclaim laws" {
+    const std = @import("std");
     const child_memory_bytes = 4096;
     const parent_memory_bytes = child_memory_bytes * 2;
     const child_storage_bytes = 1024;
@@ -2377,6 +2401,7 @@ test "minimum containment memory storage and reclaim laws" {
 }
 
 test "minimum containment child cannot write byte past 4kb allocation" {
+    const std = @import("std");
     const child_memory_bytes = 4096;
     var memory_bytes: [child_memory_bytes]u8 = undefined;
     var arena = BoundedArena.init(.{ .base = &memory_bytes });
@@ -2388,6 +2413,7 @@ test "minimum containment child cannot write byte past 4kb allocation" {
 }
 
 test "minimum containment rejects parent allocation id as child memory id" {
+    const std = @import("std");
     const parent_memory_bytes = 128;
     const parent_storage_bytes = 256;
     const parent_storage_slots = 4;
@@ -2447,6 +2473,7 @@ test "minimum containment rejects parent allocation id as child memory id" {
 }
 
 test "minimum containment routes devices receipts and revoked handles" {
+    const std = @import("std");
     const parent_memory_bytes = 128;
     const parent_storage_bytes = 1536;
     const parent_storage_slots = 6;
@@ -2549,6 +2576,7 @@ test "minimum containment routes devices receipts and revoked handles" {
 }
 
 test "minimum containment work receipt records ticks used" {
+    const std = @import("std");
     const parent_memory_bytes = 128;
     const parent_storage_bytes = 1024;
     const parent_storage_slots = 4;
@@ -2605,6 +2633,7 @@ test "minimum containment work receipt records ticks used" {
 }
 
 test "parent signs validated work receipt drafts" {
+    const std = @import("std");
     const parent_memory_bytes = 128;
     const parent_storage_bytes = 1024;
     const parent_storage_slots = 4;
@@ -2760,6 +2789,7 @@ test "parent signs validated work receipt drafts" {
 }
 
 test "app creates its store from its host-owned memory slice" {
+    const std = @import("std");
     var host_memory: [1024]u8 = undefined;
     var state_raw: [object.header_size + object.owner_size + object.envelope_size + 5]u8 = undefined;
 
@@ -2788,6 +2818,7 @@ test "app creates its store from its host-owned memory slice" {
 }
 
 test "app storage requires seal envelope for private durable objects" {
+    const std = @import("std");
     var host_memory: [2048]u8 = undefined;
     var unsealed_raw: [object.header_size + object.owner_size + 5]u8 = undefined;
     var sealed_raw: [object.header_size + object.owner_size + object.envelope_size + 5]u8 = undefined;
@@ -2822,6 +2853,7 @@ test "app storage requires seal envelope for private durable objects" {
 }
 
 test "app shares owned memory read only for direct ui updates" {
+    const std = @import("std");
     var producer_memory: [512]u8 = undefined;
     var ui_memory: [256]u8 = undefined;
 
@@ -2862,6 +2894,7 @@ test "app shares owned memory read only for direct ui updates" {
 }
 
 test "app publishes canonical ui component and renders from object storage" {
+    const std = @import("std");
     var host_memory: [4096]u8 = undefined;
     const keeper = clock.KeeperId{ .bytes = [_]u8{4} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
@@ -2897,6 +2930,7 @@ test "app publishes canonical ui component and renders from object storage" {
 }
 
 test "app publishes stack ui as one canonical render object" {
+    const std = @import("std");
     var host_memory: [8192]u8 = undefined;
     const keeper = clock.KeeperId{ .bytes = [_]u8{5} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
@@ -2931,6 +2965,7 @@ test "app publishes stack ui as one canonical render object" {
 }
 
 test "apps exchange identity routed envelopes through relay boundary" {
+    const std = @import("std");
     var source_memory: [256]u8 = undefined;
     var target_memory: [256]u8 = undefined;
     var relay_memory: [128]u8 = undefined;

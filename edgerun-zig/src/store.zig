@@ -1,7 +1,7 @@
-const std = @import("std");
 const BoundedArena = @import("arena.zig").BoundedArena;
 const bounded = @import("bounded.zig");
 const bytes = @import("bytes.zig");
+const crypto = @import("crypto.zig");
 const identity = @import("identity.zig");
 const object = @import("object.zig");
 const preimage = @import("preimage.zig");
@@ -881,7 +881,7 @@ pub const PersistentStore = struct {
     }
 
     fn hashPayload(self: *PersistentStore, off: u64, len: u64, out: *[hash_size]u8) Error!void {
-        var hasher = std.crypto.hash.Blake3.init(.{});
+        var hasher = crypto.blake3.init(.{});
         var remaining = len;
         var cursor = off;
         var chunk: [512]u8 = undefined;
@@ -973,7 +973,7 @@ fn configBlockBytes(config: Config) Error!u32 {
         .byte_log => if (config.block_bytes == 0 or config.block_bytes == 1) 1 else error.BadArgument,
         .sdcard => if (config.block_bytes == 0 or config.block_bytes == sdcard_block_bytes) sdcard_block_bytes else error.BadArgument,
         .nvme => if (config.block_bytes == 0 or config.block_bytes == nvme_block_bytes) nvme_block_bytes else error.BadArgument,
-        .custom => if (config.block_bytes >= align_bytes and std.math.isPowerOfTwo(config.block_bytes)) config.block_bytes else error.BadArgument,
+        .custom => if (config.block_bytes >= align_bytes and config.block_bytes != 0 and (config.block_bytes & (config.block_bytes - 1)) == 0) config.block_bytes else error.BadArgument,
     };
 }
 
@@ -1128,6 +1128,7 @@ fn entryKeyStartsWith(entry: IndexEntry, prefix: []const u8) bool {
 }
 
 test "store consumes caller-owned region without allocation" {
+    const std = @import("std");
     var data: [64]u8 = undefined;
     var slots: [4]Blob = undefined;
     var store = Store.init(.{ .base = &data }, &slots);
@@ -1138,6 +1139,7 @@ test "store consumes caller-owned region without allocation" {
 }
 
 test "store can be carved from an app-owned arena" {
+    const std = @import("std");
     var memory: [1024]u8 = undefined;
     var arena = BoundedArena.init(.{ .base = &memory });
     var s = Store.initFromArena(&arena, .{ .data_bytes = 64, .slot_count = 4 }).?;
@@ -1149,6 +1151,7 @@ test "store can be carved from an app-owned arena" {
 }
 
 test "ram store can explicitly declare no object storage" {
+    const std = @import("std");
     const no_storage_bytes = 0;
     const no_storage_slots = 0;
     var memory: [16]u8 = undefined;
@@ -1165,6 +1168,7 @@ test "ram store can explicitly declare no object storage" {
 }
 
 test "store entries are typed and owner scoped" {
+    const std = @import("std");
     const clock = @import("clock.zig");
     var data: [64]u8 = undefined;
     var slots: [4]Blob = undefined;
@@ -1179,6 +1183,7 @@ test "store entries are typed and owner scoped" {
 }
 
 test "typed blobs expose content type and deterministic stats root" {
+    const std = @import("std");
     const clock = @import("clock.zig");
     var data: [128]u8 = undefined;
     var slots: [4]Blob = undefined;
@@ -1207,6 +1212,7 @@ test "typed blobs expose content type and deterministic stats root" {
 }
 
 test "store preserves canonical object and receipt ids" {
+    const std = @import("std");
     const clock = @import("clock.zig");
     var data: [512]u8 = undefined;
     var slots: [4]Blob = undefined;
@@ -1241,6 +1247,7 @@ test "store preserves canonical object and receipt ids" {
 }
 
 test "index maps app-owned keys to existing store entries" {
+    const std = @import("std");
     const clock = @import("clock.zig");
     var data: [128]u8 = undefined;
     var slots: [4]Blob = undefined;
@@ -1270,6 +1277,7 @@ test "index maps app-owned keys to existing store entries" {
 }
 
 test "index rejects targets outside the owner scope" {
+    const std = @import("std");
     const clock = @import("clock.zig");
     var data: [128]u8 = undefined;
     var slots: [4]Blob = undefined;
@@ -1286,6 +1294,7 @@ test "index rejects targets outside the owner scope" {
 }
 
 test "store split delegates data and unused slot capacity" {
+    const std = @import("std");
     var data: [64]u8 = undefined;
     var slots: [4]Blob = undefined;
     var parent = Store.init(.{ .base = &data }, &slots);
@@ -1302,6 +1311,7 @@ test "store split delegates data and unused slot capacity" {
 }
 
 test "store reclaim returns consumed child storage and clears slots" {
+    const std = @import("std");
     var data: [64]u8 = undefined;
     var slots: [4]Blob = undefined;
     var parent = Store.init(.{ .base = &data }, &slots);
@@ -1391,6 +1401,7 @@ fn persistentTestConfig() Config {
 }
 
 test "persistent store replays append log after reopen" {
+    const std = @import("std");
     var io_state = PersistentTestIo{};
     var blobs_a: [8]PersistentBlobSlot = undefined;
     var keys_a: [8]PersistentIndexSlot = undefined;
@@ -1416,6 +1427,7 @@ test "persistent store replays append log after reopen" {
 }
 
 test "persistent store replays latest index value" {
+    const std = @import("std");
     var io_state = PersistentTestIo{};
     var blobs_a: [8]PersistentBlobSlot = undefined;
     var keys_a: [8]PersistentIndexSlot = undefined;
@@ -1438,6 +1450,7 @@ test "persistent store replays latest index value" {
 }
 
 test "persistent store persists canonical object bytes and object indexes" {
+    const std = @import("std");
     const clock = @import("clock.zig");
     var io_state = PersistentTestIo{};
     var blobs_a: [8]PersistentBlobSlot = undefined;
@@ -1473,6 +1486,7 @@ test "persistent store persists canonical object bytes and object indexes" {
 }
 
 test "persistent store truncates corrupt tail during recovery" {
+    const std = @import("std");
     var io_state = PersistentTestIo{};
     var blobs_a: [4]PersistentBlobSlot = undefined;
     var keys_a: [4]PersistentIndexSlot = undefined;
@@ -1491,6 +1505,7 @@ test "persistent store truncates corrupt tail during recovery" {
 }
 
 test "persistent store block-backed io stays aligned" {
+    const std = @import("std");
     var io_state = PersistentTestIo{ .block_bytes = sdcard_block_bytes };
     var config = persistentTestConfig();
     config.block_backing = .sdcard;
@@ -1512,6 +1527,7 @@ test "persistent store block-backed io stays aligned" {
 }
 
 test "persistent store verify detects payload corruption" {
+    const std = @import("std");
     var io_state = PersistentTestIo{};
     var blobs: [4]PersistentBlobSlot = undefined;
     var keys: [4]PersistentIndexSlot = undefined;

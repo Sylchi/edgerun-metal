@@ -96,6 +96,7 @@ pub fn SliceList(comptime T: type) type {
 }
 
 test "fixed list appends without allocation" {
+    const std = @import("std");
     var list = FixedList(u8, 2){};
     try std.testing.expect(list.empty());
     try std.testing.expect(list.append(7));

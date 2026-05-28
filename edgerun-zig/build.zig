@@ -29,7 +29,6 @@ pub fn build(b: *std.Build) void {
     if (math_obj) |obj| tests.root_module.addObjectFile(obj);
     if (runtime_obj) |obj| tests.root_module.addObjectFile(obj);
 
-
     const run_tests = b.addRunArtifact(tests);
     const test_step = b.step("test", "Run Zig prototype tests");
     test_step.dependOn(&run_tests.step);

@@ -1,6 +1,6 @@
-const std = @import("std");
 const bytes = @import("bytes.zig");
 const clock = @import("clock.zig");
+const crypto = @import("crypto.zig");
 
 pub const id_size = 32;
 pub const hash_size = 32;
@@ -86,7 +86,7 @@ pub const Source = struct {
     }
 
     pub fn id(self: Source) Id {
-        var hasher = std.crypto.hash.Blake3.init(.{});
+        var hasher = crypto.blake3.init(.{});
         var header: [4]u8 = undefined;
         _ = bytes.store16(header[0..2], @intFromEnum(self.kind));
         _ = bytes.store16(header[2..4], @intCast(self.len));
@@ -140,7 +140,7 @@ pub const Identity = struct {
         const app_anchor = init(.app, app_source, value.epoch) orelse return null;
         var operation_bytes: [4]u8 = undefined;
         _ = bytes.store32(&operation_bytes, @intFromEnum(value.required_parent_operations));
-        var scope_hasher = std.crypto.hash.Blake3.init(.{});
+        var scope_hasher = crypto.blake3.init(.{});
         scope_hasher.update("edgerun:zig:v1:identity-app-scope");
         scope_hasher.update(&operation_bytes);
         scope_hasher.update(value.scope_hash);
@@ -179,7 +179,7 @@ pub const Identity = struct {
 
         var kind_bytes: [2]u8 = undefined;
         _ = bytes.store16(&kind_bytes, @intFromEnum(child_kind));
-        var hasher = std.crypto.hash.Blake3.init(.{});
+        var hasher = crypto.blake3.init(.{});
         hasher.update("edgerun:zig:v1:identity-child");
         hasher.update(&self.id.bytes);
         hasher.update(&kind_bytes);
@@ -220,11 +220,12 @@ fn materialLenValid(kind: SourceKind, len: usize) bool {
 
 fn hashMaterial(material: []const u8) [hash_size]u8 {
     var out: [hash_size]u8 = undefined;
-    std.crypto.hash.Blake3.hash(material, &out, .{});
+    crypto.blake3.hash(material, &out, .{});
     return out;
 }
 
 test "source is explicit material with deterministic id" {
+    const std = @import("std");
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
     const source = Source.prepare(.hash, &hashMaterial("app manifest")).?;
@@ -236,6 +237,7 @@ test "source is explicit material with deterministic id" {
 }
 
 test "strict source preparation enforces C identity material sizes" {
+    const std = @import("std");
     try std.testing.expect(Source.prepare(.hash, "short") == null);
     const source = Source.prepare(.hash, &hashMaterial("manifest")).?;
     try std.testing.expect(source.valid());
@@ -243,6 +245,7 @@ test "strict source preparation enforces C identity material sizes" {
 }
 
 test "identity derives child and delegated app identities" {
+    const std = @import("std");
     const keeper = clock.KeeperId{ .bytes = [_]u8{2} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
     const parent = Identity.instantiate(.{

@@ -1,4 +1,3 @@
-const std = @import("std");
 const bytes = @import("bytes.zig");
 const clock = @import("clock.zig");
 const identity = @import("identity.zig");
@@ -181,9 +180,9 @@ pub fn spawnReceipt(parent: identity.Identity, child: identity.Identity, epoch: 
 }
 
 pub fn spawnReceiptAllocated(parent: identity.Identity, child: identity.Identity, epoch: clock.Stamp, memory_bytes: usize, storage_bytes: usize, storage_slots: usize, execution_ticks: u64, route_handles: u64, device_handles: u64, route_handle: preimage.Hash, device_handle: identity.Id) ?SpawnReceipt {
-    const memory_amount = std.math.cast(u64, memory_bytes) orelse return null;
-    const storage_amount = std.math.cast(u64, storage_bytes) orelse return null;
-    const slot_amount = std.math.cast(u64, storage_slots) orelse return null;
+    const memory_amount = @as(u64, @intCast(memory_bytes));
+    const storage_amount = @as(u64, @intCast(storage_bytes));
+    const slot_amount = @as(u64, @intCast(storage_slots));
     if (execution_ticks == 0) return null;
     if (route_handles == 0 and bytes.nonzero(&route_handle)) return null;
     if (route_handles != 0 and bytes.zeroed(&route_handle)) return null;
@@ -241,8 +240,8 @@ pub fn spawnReceiptAllocated(parent: identity.Identity, child: identity.Identity
 }
 
 pub fn memoryViewReceipt(owner: identity.Identity, allocator: identity.Identity, reader: identity.Identity, slice: preimage.Hash, authorization: preimage.Hash, epoch: clock.Stamp, offset: usize, bytes_len: usize) ?MemoryViewReceipt {
-    const offset_amount = std.math.cast(u64, offset) orelse return null;
-    const byte_amount = std.math.cast(u64, bytes_len) orelse return null;
+    const offset_amount = @as(u64, @intCast(offset));
+    const byte_amount = @as(u64, @intCast(bytes_len));
 
     return .{
         .owner = owner.id,
@@ -262,6 +261,7 @@ pub fn memoryViewReceipt(owner: identity.Identity, allocator: identity.Identity,
 }
 
 test "spawn receipt deterministically records delegated resources" {
+    const std = @import("std");
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
     const parent = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("parent")).?, epoch).?;
@@ -291,6 +291,7 @@ test "spawn receipt deterministically records delegated resources" {
 }
 
 test "memory view receipt binds owner reader slice and byte range" {
+    const std = @import("std");
     const keeper = clock.KeeperId{ .bytes = [_]u8{2} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
     const owner = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("memory owner")).?, epoch).?;

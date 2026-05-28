@@ -1,4 +1,3 @@
-const std = @import("std");
 const bytes = @import("bytes.zig");
 
 pub const keeper_id_size = 32;
@@ -149,6 +148,7 @@ fn shiftForPowerOfTwo(value: u64) ?u6 {
 }
 
 test "clock advances deterministic boundaries" {
+    const std = @import("std");
     const keeper = KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     var c = Clock.init(keeper, .{ .ticks_per_slot = 2, .slots_per_epoch = 2, .epochs_per_era = 2 }).?;
 
@@ -158,6 +158,7 @@ test "clock advances deterministic boundaries" {
 }
 
 test "clock advances arbitrary strides across epoch and era boundaries" {
+    const std = @import("std");
     const keeper = KeeperId{ .bytes = [_]u8{2} ++ [_]u8{0} ** 31 };
     var c = Clock.init(keeper, .{ .ticks_per_slot = 4, .slots_per_epoch = 4, .epochs_per_era = 4 }).?;
 
@@ -172,6 +173,7 @@ test "clock advances arbitrary strides across epoch and era boundaries" {
 }
 
 test "clock rejects zero stride and overflow" {
+    const std = @import("std");
     const keeper = KeeperId{ .bytes = [_]u8{3} ++ [_]u8{0} ** 31 };
     var c = Clock.init(keeper, .{ .ticks_per_slot = 2, .slots_per_epoch = 2, .epochs_per_era = 2 }).?;
 

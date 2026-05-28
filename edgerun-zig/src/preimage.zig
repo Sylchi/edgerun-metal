@@ -1,6 +1,6 @@
-const std = @import("std");
 const bytes_mod = @import("bytes.zig");
 const clock = @import("clock.zig");
+const crypto = @import("crypto.zig");
 const identity = @import("identity.zig");
 
 pub const hash_size = 32;
@@ -15,15 +15,15 @@ pub fn hash(domain: []const u8, value: []const u8) Hash {
 
 pub fn rawHash(value: []const u8) Hash {
     var out: Hash = undefined;
-    std.crypto.hash.Blake3.hash(value, &out, .{});
+    crypto.blake3.hash(value, &out, .{});
     return out;
 }
 
 pub const Builder = struct {
-    hasher: std.crypto.hash.Blake3,
+    hasher: crypto.blake3,
 
     pub fn init(domain: []const u8) Builder {
-        var hasher = std.crypto.hash.Blake3.init(.{});
+        var hasher = crypto.blake3.init(.{});
         hasher.update(domain);
         return .{ .hasher = hasher };
     }
@@ -140,6 +140,7 @@ pub fn decodeEpoch(in: []const u8) ?clock.Stamp {
 }
 
 test "writer encodes ids integers and epochs deterministically" {
+    const std = @import("std");
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const stamp = clock.Stamp{ .keeper = keeper, .tick = 2 };
     const id_value = identity.Id{ .bytes = [_]u8{3} ++ [_]u8{0} ** 31 };

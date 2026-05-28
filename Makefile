@@ -83,7 +83,8 @@ ASM_OBJS := \
 	$(ASM_BUILD_DIR)/ctype.o \
 	$(ASM_BUILD_DIR)/math.o \
 	$(ASM_BUILD_DIR)/runtime.o \
-	$(ASM_BUILD_DIR)/serial.o
+	$(ASM_BUILD_DIR)/serial.o \
+	$(ASM_BUILD_DIR)/wasm_interpreter.o
 
 ASM_KERNEL_FORMAT := elf32
 ASM_KERNEL_OBJS := \
@@ -115,6 +116,10 @@ $(ASM_BUILD_DIR)/runtime.o: $(ASM_X86_64_DIR)/runtime.asm $(ASM_X86_64_DIR)/macr
 	$(YASM) -f elf64 $(ASM_INC) $< -o $@ 2>/dev/null && test -f $@
 
 $(ASM_BUILD_DIR)/serial.o: $(ASM_X86_64_DIR)/serial.asm $(ASM_X86_64_DIR)/macros.inc
+	@mkdir -p $(ASM_BUILD_DIR)
+	$(YASM) -f elf64 $(ASM_INC) $< -o $@ 2>/dev/null && test -f $@
+
+$(ASM_BUILD_DIR)/wasm_interpreter.o: $(ASM_X86_64_DIR)/wasm_interpreter.asm $(ASM_X86_64_DIR)/macros.inc
 	@mkdir -p $(ASM_BUILD_DIR)
 	$(YASM) -f elf64 $(ASM_INC) $< -o $@ 2>/dev/null && test -f $@
 

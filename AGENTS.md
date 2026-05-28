@@ -7,8 +7,10 @@
 - Errors are fatal.
 - No shortcuts.
 - No external dependencies.
-- Production code must be freestanding and must not depend on host libc.
-- Host libc is allowed only for deterministic host-side tests and explicit host tools, such as the Pi USB boot loader in `edgerun-zig/src/pi_usb_boot_host.zig`.
+- All production code must be freestanding: no `@import("std")`, no `@cImport`, no host libc, no OS-specific APIs. The only exception is `edgerun-zig/src/crypto.zig` which may import `std` solely for `std.crypto.hash.Blake3` as a controlled boundary.
+- Host-side tests and explicit host tools may use `@import("std")`, `std.testing`, `std.os`, `std.fs`, `std.io`, host libc, system libraries, and OS APIs — but these dependencies must never leak into production code paths.
+- Host tools (Wayland, DRM/GBM, Pi USB boot, CLI tools, benchmarks) are keepers of their own host assumptions. They are not production code and may freely use Zig's standard library, libc, and system libraries. Port host-tool-specific functionality (e.g., Wayland, EGL, DRM) to a separate external repo like `~/edgerun` rather than baking protocol complexity into this repository.
+- The boundary between production and host code is explicit: production files never `@import("std")` at module scope. Test blocks within production files must scope their `@import("std")` locally.
 - The permitted vendor binary exceptions are explicit and narrow: device radio firmware needed to operate a radio block, such as CYW43438 RAM/NVRAM/CLM files, and Raspberry Pi Zero-family boot firmware needed for the Broadcom mask-ROM/GPU boot chain to load repo-owned `kernel.img` on Pi Zero W v1.1 bring-up hardware. These exceptions do not permit vendor drivers, host tools, protocol stacks, closed control planes, compatibility layers, or any other vendor blob.
 - No ambiguity.
 - Tests must cover touched behavior.
@@ -32,7 +34,7 @@
 - `edgerun-zig/src/clock.zig`, `identity.zig`, `object.zig`, and `store.zig` are the canonical current implementations for clock, identity, object, and storage.
 - `edgerun-zig/src/root.zig` is the broad Zig integration test root.
 - `edgerun-zig/build.zig` owns Zig test and host-tool steps.
-- `edgerun-crypto/` remains C/CMake for BLAKE3.
+- `edgerun-zig/src/crypto.zig` is the only production file that may `@import("std")` — it wraps `std.crypto.hash.Blake3` as a controlled boundary, keeping all other production files freestanding.
 - `edgerun-zig/src/geometry.zig` and `ui.zig` are the canonical current UI core primitives and scene implementation.
 - `edgerun-zig/src/ui.zig`, `ui_codec.zig`, `ui_components.zig`, `ui_resolver.zig`, renderer files, and asset/font files are the Zig UI/application experimentation path.
 - `edgerun-zig/src/pi_zero_w_v1_1*.zig`, `pi_mmc.zig`, `pi_usb_control.zig`, `bcm2708_usb_boot.zig`, and `pi_usb_boot_host.zig` are the Pi Zero W v1.1 bring-up path.
@@ -71,6 +73,7 @@
 - Keep behavior and tests coherent across `Makefile`, `edgerun-zig/build.zig`, and module-local tests.
 - Do not reintroduce old C package APIs as compatibility surfaces unless the user explicitly requests that exact boundary.
 - For object/storage/identity/clock work, use `edgerun-zig/src/object.zig`, `store.zig`, `identity.zig`, and `clock.zig` as the authoritative code.
+- All production-level hashing goes through `edgerun-zig/src/crypto.zig`. No production file imports `@import("std")` directly for crypto or anything else.
 - Canonical object bytes are the object boundary. Do not invent IDs from raw payload buffers where an object verifier or `object.View` should be used.
 - If a boundary accepts stored or transferred objects, prefer canonical object bytes plus explicit validation over raw buffer convenience.
 
