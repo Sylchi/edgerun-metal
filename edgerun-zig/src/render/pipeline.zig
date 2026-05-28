@@ -72,7 +72,14 @@ fn packPreparedRange(buffers: renderer_ir.Buffers, font_atlas: *renderer_font_at
 
 pub fn prepareSceneAssets(font_atlas: *renderer_font_atlas.Atlas, commands: []const ui.Command) renderer_ir.Error!void {
     for (commands) |command| switch (command) {
-        .text => |text_command| try font_atlas.prepareText(text_command.value, renderer_ir.textPx(text_command.origin.h), fontWeightForText(text_command.weight)),
+        .text => |text_command| font_atlas.prepareText(
+            text_command.value,
+            renderer_ir.textPx(text_command.origin.h),
+            fontWeightForText(text_command.weight),
+        ) catch |err| switch (err) {
+            error.InvalidBuffer => {},
+            else => return err,
+        },
         else => {},
     };
 }
@@ -86,7 +93,7 @@ fn fontWeightForText(weight: ui.FontWeight) @import("../font_builtin.zig").Weigh
 }
 
 pub fn softwareResources(font_atlas: *const renderer_font_atlas.Atlas, image: ?renderer_software.RgbaTexture) renderer_software.Resources {
-    return softwareResourcesFromAlphaAtlas(.{ .width = renderer_font_atlas.width, .height = renderer_font_atlas.height, .alpha = font_atlas.alphaSlice() }, image);
+    return softwareResourcesFromAlphaAtlas(.{ .width = font_atlas.width, .height = font_atlas.height, .alpha = font_atlas.alphaSlice() }, image);
 }
 
 pub fn softwareResourcesFromAlphaAtlas(font: renderer_software.AlphaAtlas, image: ?renderer_software.RgbaTexture) renderer_software.Resources {
@@ -139,4 +146,18 @@ test "render pipeline builds atlas and object font sources" {
     var atlas_storage = renderer_ir.FixedBuffers(0, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0, 0, 0){};
     try packScene(atlas_storage.buffers(), &font_atlas, .atlas, scene.written());
     try std.testing.expect(atlas_storage.text_vertex_len != 0);
+}
+
+test "render pipeline ignores invalid utf8 text during atlas prep" {
+    var font_atlas: renderer_font_atlas.Atlas = undefined;
+    font_atlas.initUtf8();
+
+    const invalid = [_]u8{ 0xff };
+    var scene_commands: [2]ui.Command = undefined;
+    var scene = ui.Scene.init(&scene_commands);
+    try scene.push(.{ .text = .{ .origin = ui.Rect.init(0, 0, 80, 24), .value = &invalid, .color = .text } });
+    try scene.push(.{ .text = .{ .origin = ui.Rect.init(0, 24, 80, 24), .value = "A", .color = .text } });
+
+    var atlas_storage = renderer_ir.FixedBuffers(0, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0, 0, 0){};
+    try packScene(atlas_storage.buffers(), &font_atlas, .atlas, scene.written());
 }

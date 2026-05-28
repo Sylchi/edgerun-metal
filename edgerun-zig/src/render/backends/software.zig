@@ -8,7 +8,6 @@ const component_union = @import("../../ui/components/Component.zig");
 const node_renderer = @import("../../ui/components/NodeRenderer.zig");
 const ui = @import("../../ui.zig");
 const builtin = @import("builtin");
-const varfont = @import("../../varfont.zig");
 
 pub const Error = renderer_present.Error || error{
     PixelBudgetExceeded,
@@ -150,7 +149,7 @@ pub const Surface = struct {
                 self.fill(.{ .x = bounds.x, .y = bounds.y, .w = border_width, .h = bounds.h }, border.color);
                 self.fill(.{ .x = bounds.x + bounds.w - border_width, .y = bounds.y, .w = border_width, .h = bounds.h }, border.color);
             },
-            .text => |text| self.drawTextCommand(text, scale),
+            .text => {},
             .icon_quad => |quad| self.drawIconQuad(quad, scale),
             .drag_source, .drop_target, .text_quad, .image_quad, .transition => {},
         };
@@ -564,20 +563,6 @@ pub const Surface = struct {
         var source = color;
         source.a = max_alpha;
         self.blendPixel(x, y, source, scaleByte(color.a, @as(f32, @floatFromInt(coverage)) / byte_unit_scale));
-    }
-
-    fn drawTextCommand(self: Surface, text: anytype, scale: f32) void {
-        const bounds = scaleRect(text.origin, scale);
-        const px_size = textPxSize(bounds);
-        var draw_bounds = bounds;
-        const measured = @min(bounds.w, measureText(text.value, px_size));
-        draw_bounds.x += switch (text.alignment) {
-            .start => 0.0,
-            .center => @max(0.0, (bounds.w - measured) * 0.5),
-            .end => @max(0.0, bounds.w - measured),
-        };
-        draw_bounds.w = @max(1.0, bounds.w - (draw_bounds.x - bounds.x));
-        textCache().drawText(self, draw_bounds, text.value, text.color, px_size) catch unreachable;
     }
 
     fn drawIconQuad(self: Surface, quad: ui.IconQuad, scale: f32) void {
@@ -1546,42 +1531,6 @@ const small_text_sharpen_max_glyph_h: f32 = 14.0;
 const small_text_sharpen_midpoint: f32 = 128.0;
 const small_text_sharpen_contrast: f32 = 1.18;
 const small_text_sharpen_lift: f32 = 8.0;
-const font_bitmap_bytes: usize = 4 * 1024 * 1024;
-var geist_face: ?varfont.Face = null;
-var geist_bitmap: [font_bitmap_bytes]u8 = undefined;
-var geist_cache: ?varfont.Cache = null;
-
-fn textCache() *varfont.Cache {
-    if (geist_cache == null) {
-        const face = varfont.Face.geist() catch unreachable;
-        geist_face = face;
-        geist_cache = varfont.Cache.init(geist_face.?, &geist_bitmap);
-        _ = geist_cache.?.setAxis("wght", 560.0);
-    }
-    return &geist_cache.?;
-}
-
-fn textPxSize(bounds: ui.Rect) f32 {
-    return @max(11.0, @min(22.0, bounds.h));
-}
-
-fn measureText(value: []const u8, px_size: f32) f32 {
-    const face = if (geist_face) |face| face else blk: {
-        const parsed = varfont.Face.geist() catch unreachable;
-        geist_face = parsed;
-        break :blk parsed;
-    };
-    var width: f32 = 0.0;
-    var previous: u16 = 0;
-    for (value) |byte| {
-        if (byte >= 0x80) unreachable;
-        const glyph_id = face.glyphId(@intCast(byte));
-        if (previous != 0) width += face.kern(previous, glyph_id, px_size);
-        width += face.advance(glyph_id, px_size);
-        previous = glyph_id;
-    }
-    return width;
-}
 
 fn iconStroke(bounds: ui.Rect, stroke_width: f32) f32 {
     return @max(icon_stroke_min_px, @min(bounds.w, bounds.h) * stroke_width);

@@ -5,8 +5,9 @@ const ir = @import("ir.zig");
 const raster = @import("vector_raster.zig");
 const varfont = @import("../varfont.zig");
 
-pub const width: usize = 4096;
-pub const height: usize = 4096;
+/// Atlas footprint is derived from the chosen font pack policy at compile time.
+pub const width: usize = font_builtin.atlas_width;
+pub const height: usize = font_builtin.atlas_height;
 pub const bytes: usize = width * height;
 pub const channels: usize = 1;
 pub const glyph_capacity: usize = 32768;
@@ -18,6 +19,8 @@ const default_scale: f32 = 2.0;
 const Cached = struct { weight: font_builtin.Weight, ch: u21, px: u8, glyph: ir.Glyph };
 
 pub const Atlas = struct {
+    width: usize,
+    height: usize,
     alpha: [bytes]u8,
     glyphs: [glyph_capacity]Cached,
     glyph_count: usize,
@@ -49,6 +52,8 @@ pub const Atlas = struct {
     pub fn initUtf8(self: *Atlas) void {
         self.font = font_builtin.body(.regular);
         self.builtin = true;
+        self.width = width;
+        self.height = height;
         self.device_scale = default_scale;
         self.active_weight = .regular;
         self.revision = 0;
@@ -59,6 +64,8 @@ pub const Atlas = struct {
     pub fn initWithFontInPlace(self: *Atlas, font: font_vector.Body) void {
         self.font = font;
         self.builtin = false;
+        self.width = width;
+        self.height = height;
         self.device_scale = default_scale;
         self.active_weight = .regular;
         self.revision = 0;
@@ -147,24 +154,24 @@ pub const Atlas = struct {
         if (self.glyph_count >= self.glyphs.len) return error.GlyphCacheFull;
         const font = self.body(weight);
         const info = font.glyphForCodepoint(cp) orelse return error.UnsupportedGlyph;
-        if (self.atlas_x + 256 >= width) {
+        if (self.atlas_x + 256 >= self.width) {
             self.atlas_x = pad;
             self.atlas_y += self.atlas_row_h + row_gap;
             self.atlas_row_h = 0;
         }
-        if (self.atlas_y + pad >= height) return error.GlyphBitmapBudgetExceeded;
+        if (self.atlas_y + pad >= self.height) return error.GlyphBitmapBudgetExceeded;
         const scale = (@as(f32, @floatFromInt(px)) * self.device_scale) / @as(f32, @floatFromInt(font.metrics.units_per_em));
-        const bitmap = if (info.commands.len == 0) raster.GlyphBitmap{ .width = 0, .height = 0, .left = 0, .top = 0 } else try raster.bakeAlpha(self.alpha[self.atlas_y * width + self.atlas_x ..], width, info.commands, scale, px);
-        if (self.atlas_y + bitmap.height + pad >= height) return error.GlyphBitmapBudgetExceeded;
+        const bitmap = if (info.commands.len == 0) raster.GlyphBitmap{ .width = 0, .height = 0, .left = 0, .top = 0 } else try raster.bakeAlpha(self.alpha[self.atlas_y * self.width + self.atlas_x ..], self.width, info.commands, scale, px);
+        if (self.atlas_y + bitmap.height + pad >= self.height) return error.GlyphBitmapBudgetExceeded;
         const ax = self.atlas_x;
         const ay = self.atlas_y;
         self.atlas_row_h = @max(self.atlas_row_h, bitmap.height);
         self.atlas_x += bitmap.width + row_gap;
         const out = ir.Glyph{
-            .u0 = if (bitmap.width == 0) 0 else (@as(f32, @floatFromInt(ax)) + 0.5) / @as(f32, @floatFromInt(width)),
-            .v0 = if (bitmap.height == 0) 0 else (@as(f32, @floatFromInt(ay)) + 0.5) / @as(f32, @floatFromInt(height)),
-            .u1 = if (bitmap.width == 0) 0 else (@as(f32, @floatFromInt(ax + bitmap.width)) - 0.5) / @as(f32, @floatFromInt(width)),
-            .v1 = if (bitmap.height == 0) 0 else (@as(f32, @floatFromInt(ay + bitmap.height)) - 0.5) / @as(f32, @floatFromInt(height)),
+            .u0 = if (bitmap.width == 0) 0 else (@as(f32, @floatFromInt(ax)) + 0.5) / @as(f32, @floatFromInt(self.width)),
+            .v0 = if (bitmap.height == 0) 0 else (@as(f32, @floatFromInt(ay)) + 0.5) / @as(f32, @floatFromInt(self.height)),
+            .u1 = if (bitmap.width == 0) 0 else (@as(f32, @floatFromInt(ax + bitmap.width)) - 0.5) / @as(f32, @floatFromInt(self.width)),
+            .v1 = if (bitmap.height == 0) 0 else (@as(f32, @floatFromInt(ay + bitmap.height)) - 0.5) / @as(f32, @floatFromInt(self.height)),
             .w = self.s(@floatFromInt(bitmap.width)),
             .h = self.s(@floatFromInt(bitmap.height)),
             .left = self.s(@floatFromInt(bitmap.left)),

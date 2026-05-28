@@ -1,21 +1,40 @@
 const std = @import("std");
-const varfont = @import("varfont.zig");
+const font_builtin = @import("font_builtin.zig");
+const font_vector = @import("font_vector.zig");
 
 pub const default_text_px: f32 = 16.0;
 pub const button_label_px: f32 = 17.0;
 pub const badge_label_px: f32 = 13.0;
 
+fn resolveCodepoint(body: font_vector.Body, codepoint: u21) u21 {
+    if (body.glyphForCodepoint(codepoint) != null) return codepoint;
+    return font_builtin.replacement_codepoint;
+}
+
+fn glyphAdvance(body: font_vector.Body, codepoint: u21, px_size: f32) f32 {
+    const glyph = body.glyphForCodepoint(codepoint) orelse return 0.0;
+    const scale = px_size / @as(f32, @floatFromInt(body.metrics.units_per_em));
+    return glyph.advance * scale;
+}
+
+fn glyphKern(body: font_vector.Body, left: u21, right: u21, px_size: f32) f32 {
+    const kern = body.kern(left, right);
+    if (kern == 0.0) return 0.0;
+    const scale = px_size / @as(f32, @floatFromInt(body.metrics.units_per_em));
+    return kern * scale;
+}
+
 pub fn width(value: []const u8, px_size: f32) f32 {
     if (value.len == 0) return 0.0;
-    const face = varfont.Face.geist() catch unreachable;
+    const body = font_builtin.body(.regular);
     var out: f32 = 0.0;
-    var previous: ?u16 = null;
+    var previous: ?u21 = null;
     var index: usize = 0;
-    while (nextCodepoint(value, &index)) |codepoint| {
-        const glyph_id = face.glyphId(codepoint);
-        if (previous) |left| out += face.kern(left, glyph_id, px_size);
-        out += face.advance(glyph_id, px_size);
-        previous = glyph_id;
+    while (nextCodepoint(value, &index)) |raw_codepoint| {
+        const codepoint = resolveCodepoint(body, raw_codepoint);
+        if (previous) |left| out += glyphKern(body, left, codepoint, px_size);
+        out += glyphAdvance(body, codepoint, px_size);
+        previous = codepoint;
     }
     return out;
 }
@@ -28,19 +47,18 @@ pub fn averageWidth(value: []const u8, px_size: f32) f32 {
 
 pub fn fitPrefix(value: []const u8, px_size: f32, max_width: f32) []const u8 {
     if (value.len == 0 or max_width <= 0.0) return value[0..0];
-    const face = varfont.Face.geist() catch unreachable;
+    const body = font_builtin.body(.regular);
     var out: f32 = 0.0;
-    var previous: ?u16 = null;
+    var previous: ?u21 = null;
     var index: usize = 0;
     while (index < value.len) {
         const start = index;
-        const codepoint = nextCodepoint(value, &index) orelse break;
-        const glyph_id = face.glyphId(codepoint);
-        const kern = if (previous) |left| face.kern(left, glyph_id, px_size) else 0.0;
-        const next = out + kern + face.advance(glyph_id, px_size);
+        const raw_codepoint = nextCodepoint(value, &index) orelse break;
+        const codepoint = resolveCodepoint(body, raw_codepoint);
+        const next = out + glyphAdvance(body, codepoint, px_size) + if (previous) |left| glyphKern(body, left, codepoint, px_size) else 0.0;
         if (next > max_width) return value[0..start];
         out = next;
-        previous = glyph_id;
+        previous = codepoint;
     }
     return value;
 }
@@ -93,7 +111,7 @@ test "ui text metrics use geist glyph advances and kerning" {
     try std.testing.expect(averageWidth("EdgeRun", default_text_px) > 1.0);
 }
 
-test "ui text metrics fits deterministic prefixes to a width" {
+test "ui text metrics fit deterministic prefixes to a width" {
     const value = "Continue safely";
     const full_width = width(value, button_label_px);
     try std.testing.expectEqualStrings(value, fitPrefix(value, button_label_px, full_width));

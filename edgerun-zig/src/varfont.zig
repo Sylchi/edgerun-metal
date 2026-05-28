@@ -3,7 +3,7 @@ const math = @import("math.zig");
 const bytes_mod = @import("bytes.zig");
 const ui = @import("ui.zig");
 
-pub const geist_bytes = @embedFile("assets/Geist[wght].ttf");
+const geist_bytes = @embedFile("assets/Geist[wght].ttf");
 
 pub const Error = error{
     InvalidFont,

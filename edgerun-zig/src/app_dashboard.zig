@@ -15,7 +15,7 @@ pub const State = struct {
     tree_valid: bool = false,
 
     pub fn refresh(self: *State) Error!void {
-        const codec_bytes = runIfstatus() catch |err| {
+        const codec_bytes = readIfstatusBytes(self.device_memory[0..]) catch |err| {
             self.tree_valid = false;
             return err;
         };
@@ -34,8 +34,15 @@ pub const State = struct {
 
 const linux = std.os.linux;
 
-fn runIfstatus() ![]const u8 {
-    var codec_buf: [max_codec_bytes]u8 = undefined;
+const ifstatus_buffer_size: usize = max_codec_bytes;
+
+pub fn readIfstatusBytes(output: []u8) Error![]const u8 {
+    return runIfstatus(output);
+}
+
+fn runIfstatus(output: []u8) ![]const u8 {
+    if (output.len < ifstatus_buffer_size) return error.CodecReadFailed;
+    var codec_buf: []u8 = output[0..ifstatus_buffer_size];
 
     var pipe_fds: [2]i32 = undefined;
     const pipe_rc = linux.pipe2(&pipe_fds, .{});

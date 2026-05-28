@@ -1,5 +1,6 @@
 const std = @import("std");
 const math = @import("math.zig");
+const app_agent = @import("app_agent.zig");
 const app_cursor = @import("app_cursor.zig");
 const app_frame = @import("app_frame.zig");
 const app_input_event = @import("app_input_event.zig");
@@ -14,6 +15,7 @@ pub const State = struct {
     hover_x: f32 = -1.0,
     hover_y: f32 = -1.0,
     runtime: ui_runtime.State = .{},
+    agent: app_agent.State = .{},
     last_action_kind: ui_runtime.ActionKind = .none,
     public_identity_ready: bool = true,
     public_identity: []const u8 = "native",
@@ -25,6 +27,7 @@ pub const State = struct {
             .scroll_y = self.scroll_y,
             .hover_x = self.hover_x,
             .hover_y = self.hover_y,
+            .agent = self.agent,
             .public_identity_ready = self.public_identity_ready,
             .public_identity = self.public_identity,
         };
@@ -59,6 +62,12 @@ pub fn activateHovered(state: *State) void {
     const hover_hit_id = state.runtime.hoverHitId();
     if (app_navigation.fromHit(hover_hit_id, state.route)) |route| {
         applyRoute(state, route);
+        return;
+    }
+    if (hover_hit_id == app_agent.open_host_binary_button_id) {
+        state.agent.host_launch_requested = true;
+        state.agent.connected = false;
+        state.agent.status.set(app_agent.host_launch_requested_notice);
         return;
     }
     if (app_navigation.actionFromHit(hover_hit_id)) |action| switch (action) {
@@ -117,6 +126,17 @@ test "native input reveals host identity from shared action policy" {
 
     try std.testing.expect(state.public_identity_ready);
     try std.testing.expectEqualStrings("native-test", state.public_identity);
+}
+
+test "native input requests host launch from open-host action" {
+    var state = State{};
+    state.runtime.hovered = .{ .kind = .button, .id = app_agent.open_host_binary_button_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
+
+    activateHovered(&state);
+
+    try std.testing.expect(state.agent.host_launch_requested);
+    try std.testing.expect(!state.agent.connected);
+    try std.testing.expect(state.agent.status.len > 0);
 }
 
 test "native input pointer path uses shared runtime activation" {

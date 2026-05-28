@@ -2,6 +2,7 @@ const std = @import("std");
 const bytes = @import("bytes.zig");
 const icon = @import("icon.zig");
 const icon_vector = @import("icon_vector.zig");
+const font_builtin = @import("font_builtin.zig");
 
 pub const Status = enum {
     ok,
@@ -81,8 +82,8 @@ pub fn defaultLimits() Limits {
         .max_icon_count = 256,
         .max_icon_vector_bytes = 64 * 1024,
         .max_font_faces = 8,
-        .max_font_atlas_side = 4096,
-        .max_font_atlas_bytes = 16_777_216,
+        .max_font_atlas_side = @as(u32, @intCast(font_builtin.atlas_width)),
+        .max_font_atlas_bytes = font_builtin.atlas_bytes,
         .max_emoji_count = 256,
         .max_name_len = 96,
     };
@@ -220,7 +221,7 @@ fn iconEntries(comptime provider: icon.Provider) [std.enums.values(icon.Icon).le
     return entries;
 }
 
-const bundled_font_atlas_side: u32 = 1024;
+const bundled_font_atlas_side: u32 = @as(u32, font_builtin.atlas_width);
 const tabler_icon_entries = iconEntries(.tabler);
 const lucide_icon_entries = iconEntries(.lucide);
 const inter_font_faces = [_]FontFaceSpec{.{ .name = "Inter", .default_face = true, .covered_chars = required_font_chars }};

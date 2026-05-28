@@ -2,6 +2,10 @@ const std = @import("std");
 const font_vector = @import("font_vector.zig");
 const varfont = @import("varfont.zig");
 
+pub const atlas_width: usize = 1024;
+pub const atlas_height: usize = 1024;
+pub const atlas_bytes: usize = atlas_width * atlas_height;
+
 pub const replacement_codepoint: u21 = std.unicode.replacement_character;
 
 pub const Weight = enum(u8) {

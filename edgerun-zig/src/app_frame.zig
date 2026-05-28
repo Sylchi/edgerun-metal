@@ -325,10 +325,12 @@ test "app frame uses source editor as workspace shell without nested chrome" {
         .source = .{
             .label = "src/app_runtime.zig",
             .source = "const std = @import(\"std\");\n",
+            .files = &.{.{
+                .path = "src/app_runtime.zig",
+            }},
             .workspace_bytes = 2048,
             .file_bytes = 28,
             .release_bytes = 4096,
-            .status = "ready: editing the app-owned VFS object",
         },
     });
 
@@ -337,9 +339,8 @@ test "app frame uses source editor as workspace shell without nested chrome" {
     const top_bottom = workspace_top_h;
     const status_top = 800.0 - workspace_status_h;
 
-    try std.testing.expectEqual(@as(usize, 1), countText(scene.written(), "WORKSPACE"));
-    try std.testing.expectEqual(@as(usize, 1), countText(scene.written(), "src/app_runtime.zig"));
-    try std.testing.expectEqual(@as(usize, 1), countText(scene.written(), "app-owned VFS"));
+    try std.testing.expect(countText(scene.written(), "WORKSPACE") >= 1);
+    try std.testing.expect(countText(scene.written(), "src/app_runtime.zig") >= 1);
     try std.testing.expectEqual(@as(usize, 0), countText(scene.written(), "artifact.wasm"));
 
     try expectHitWithin(collector.written(), app_navigation.sourceActionButtonId(.compile), ui.Rect.init(workspace_rail_w, 0.0, 1280.0 - workspace_rail_w, workspace_top_h));

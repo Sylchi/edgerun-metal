@@ -81,7 +81,7 @@ pub fn init(font_atlas: *renderer_font_atlas.Atlas, image: ?RgbaTexture) !State 
         .rect_vbo = makeBuffer(),
         .textured_vbo = makeBuffer(),
         .line_vbo = makeBuffer(),
-        .font_texture = makeAlphaTextureFiltered(renderer_font_atlas.width, renderer_font_atlas.height, font_atlas.alphaSlice(), c.GL_LINEAR),
+        .font_texture = makeAlphaTextureFiltered(font_atlas.width, font_atlas.height, font_atlas.alphaSlice(), c.GL_LINEAR),
         .image_texture = image_texture,
     };
 }
@@ -99,7 +99,7 @@ pub fn deinit(gl: *State) void {
 }
 
 pub fn refreshFontTexture(gl: State, font_atlas: *const renderer_font_atlas.Atlas) void {
-    updateAlphaTexture(gl.font_texture, renderer_font_atlas.width, renderer_font_atlas.height, font_atlas.alphaSlice());
+    updateAlphaTexture(gl.font_texture, font_atlas.width, font_atlas.height, font_atlas.alphaSlice());
 }
 
 pub fn renderFrame(gl: State, width: i32, height: i32, buffers: renderer_ir.Buffers) !void {
@@ -293,24 +293,22 @@ fn rectDrawBounds(rect: anytype) ui.Rect {
 }
 
 fn drawFontTextured(gl: State, width: i32, height: i32, values: []const f32, texture: c.GLuint) !void {
-    try drawAlphaTextured(gl, width, height, values, texture, true, renderer_font_atlas.width, renderer_font_atlas.height);
+    try drawAlphaTextured(gl, width, height, values, texture, true);
 }
 
-fn drawAlphaTextured(gl: State, width: i32, height: i32, values: []const f32, texture: c.GLuint, manual_bilinear: bool, texture_width: usize, texture_height: usize) !void {
-    try drawAlphaTexturedWithProgram(gl, width, height, values, texture, gl.textured_program, manual_bilinear, texture_width, texture_height);
+fn drawAlphaTextured(gl: State, width: i32, height: i32, values: []const f32, texture: c.GLuint, manual_bilinear: bool) !void {
+    try drawAlphaTexturedWithProgram(gl, width, height, values, texture, gl.textured_program, manual_bilinear);
 }
 
 fn drawTexturedWithProgram(gl: State, width: i32, height: i32, values: []const f32, texture: c.GLuint, program: c.GLuint) !void {
-    try drawAlphaTexturedWithProgram(gl, width, height, values, texture, program, false, 1, 1);
+    try drawAlphaTexturedWithProgram(gl, width, height, values, texture, program, false);
 }
 
-fn drawAlphaTexturedWithProgram(gl: State, width: i32, height: i32, values: []const f32, texture: c.GLuint, program: c.GLuint, manual_bilinear: bool, texture_width: usize, texture_height: usize) !void {
+fn drawAlphaTexturedWithProgram(gl: State, width: i32, height: i32, values: []const f32, texture: c.GLuint, program: c.GLuint, manual_bilinear: bool) !void {
     if (values.len == 0) return;
     if (values.len % renderer_ir.text_vertex_float_stride != 0) return error.InvalidIrBuffer;
     c.glUseProgram(program);
     _ = manual_bilinear;
-    _ = texture_width;
-    _ = texture_height;
     c.glUniform2f(c.glGetUniformLocation(program, gl_contract.uniform_screen), @floatFromInt(width), @floatFromInt(height));
     c.glActiveTexture(c.GL_TEXTURE0);
     c.glBindTexture(c.GL_TEXTURE_2D, texture);

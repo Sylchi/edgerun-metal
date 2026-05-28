@@ -24,6 +24,7 @@ pub const run_component_id: u8 = 8;
 
 pub const input_hit_id: u32 = 50_007;
 pub const run_hit_id: u32 = 50_008;
+pub const open_host_binary_button_id: u32 = 50_009;
 pub const agent_row_id_base: u32 = 50_100;
 
 const max_text_bytes: usize = 4096;
@@ -31,6 +32,11 @@ const max_small_text_bytes: usize = 512;
 const max_rows: usize = 6;
 const max_agents: usize = 7;
 const context_window_tokens: u32 = 32 * 1024;
+pub const default_host_api_url: []const u8 = "http://192.168.1.201:5001/v1";
+pub const host_not_connected_notice: []const u8 = "Host is not connected. Start host binary at:";
+pub const host_launch_requested_notice: []const u8 = "Host launch requested. Make sure host binary is running and retry.";
+pub const host_launching_notice: []const u8 = "Starting host binary: codex-host";
+pub const host_launch_failed_notice: []const u8 = "Host binary launch failed. Run 'cargo build -p codex-host' in /home/ken/edgerun and retry.";
 
 pub const AgentSlot = struct {
     name: []const u8,
@@ -57,6 +63,9 @@ pub const State = struct {
     assistant: TextBuf(max_text_bytes) = TextBuf(max_text_bytes).init("Pipeline mode: Router → Codebase → Architect → Toolsmith → Executor → Reviewer → Summarizer. Fixed role prompts improve cache locality and keep each step under the 32k context budget."),
     progress: f32 = 0.0,
     connected: bool = false,
+    host_url: []const u8 = default_host_api_url,
+    host_launch_requested: bool = false,
+    host_launch_generation: u32 = 0,
     thinking: bool = false,
     context_used: u32 = 0,
     active_agent_index: usize = 0,
@@ -142,11 +151,11 @@ pub fn render(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Re
     try renderHero(scene, ui.Rect.init(content.x, y, content.w, 112.0), state, style);
     y += 112.0 + gap;
 
-    const status_h: f32 = 92.0;
-    const context_h: f32 = 92.0;
+    const status_h: f32 = 118.0;
+    const context_h: f32 = 118.0;
     const half_gap: f32 = 12.0;
     const half_w = (content.w - half_gap) * 0.5;
-    try renderStatusCard(scene, ui.Rect.init(content.x, y, half_w, status_h), state, style);
+    try renderStatusCard(scene, collector, ui.Rect.init(content.x, y, half_w, status_h), state, style);
     try renderContextCard(scene, ui.Rect.init(content.x + half_w + half_gap, y, half_w, context_h), state, style);
     y += @max(status_h, context_h) + gap;
 
@@ -181,13 +190,33 @@ fn renderHero(scene: *ui.Scene, bounds: ui.Rect, state: State, style: ui.Style) 
     }).render(scene, bounds, .{ .style = style });
 }
 
-fn renderStatusCard(scene: *ui.Scene, bounds: ui.Rect, state: State, style: ui.Style) !void {
+fn renderStatusCard(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State, style: ui.Style) !void {
     try (card_component.Card{ .title = "Runtime", .detail = "", .variant = .panel }).render(scene, bounds, .{ .style = style });
     const badge_label = if (state.thinking) "pipeline" else if (state.connected) "ready" else "offline";
     const badge_variant: @TypeOf((badge_component.Badge{ .label = "" }).variant) = if (state.thinking) .default else if (state.connected) .secondary else .outline;
     try (badge_component.Badge{ .label = badge_label, .variant = badge_variant }).render(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 42.0, 112.0, 24.0), .{ .style = style });
-    try text_component.Text.renderAligned(scene, ui.Rect.init(bounds.x + 140.0, bounds.y + 44.0, bounds.w - 156.0, 18.0), state.status.slice(), style.text, .start);
-    try (display_component.Progress{ .value = state.progress }).render(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 68.0, bounds.w - 32.0, 12.0), .{ .style = style });
+    if (state.thinking) {
+        try text_component.Text.renderAligned(scene, ui.Rect.init(bounds.x + 140.0, bounds.y + 44.0, bounds.w - 156.0, 18.0), state.status.slice(), style.text, .start);
+        try (display_component.Progress{ .value = state.progress }).render(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 68.0, bounds.w - 32.0, 12.0), .{ .style = style });
+        return;
+    }
+    if (state.connected) {
+        try text_component.Text.renderAligned(scene, ui.Rect.init(bounds.x + 140.0, bounds.y + 44.0, bounds.w - 156.0, 18.0), state.status.slice(), style.text, .start);
+        try (display_component.Progress{ .value = state.progress }).render(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 68.0, bounds.w - 32.0, 12.0), .{ .style = style });
+        return;
+    }
+    const host_notice = if (state.host_launch_requested) host_launch_requested_notice else host_not_connected_notice;
+    try text_component.Text.renderAligned(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 44.0, bounds.w - 32.0, 18.0), host_notice, style.text, .start);
+    try text_component.Text.renderAligned(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 64.0, bounds.w - 32.0, 18.0), state.host_url, style.text, .start);
+    const launch_button = button_component.Button{
+        .id = open_host_binary_button_id,
+        .label = "Open host API",
+        .variant = .secondary,
+        .icon_slot = icon_component.IconSlot.named(.leading, .network),
+    };
+    const launch_rect = ui.Rect.init(bounds.x + 16.0, bounds.y + 84.0, bounds.w - 32.0, 22.0);
+    try launch_button.render(scene, launch_rect, .{ .style = style });
+    try launch_button.collectInteractions(collector, launch_rect);
 }
 
 fn renderContextCard(scene: *ui.Scene, bounds: ui.Rect, state: State, style: ui.Style) !void {

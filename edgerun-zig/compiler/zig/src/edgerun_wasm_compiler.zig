@@ -1788,11 +1788,6 @@ const ParsedIndexAssignment = struct {
     next_index: usize,
 };
 
-const ParsedIndexExpr = struct {
-    name: []const u8,
-    index_expr: []const u8,
-};
-
 fn parseEdgeRunVarDecl(body: []const u8, start: usize) ?ParsedLocalVarDecl {
     if (!std.mem.startsWith(u8, body[start..], var_keyword)) return null;
     const name_start = skipWhitespace(body, start + var_keyword.len);
@@ -1852,18 +1847,6 @@ fn parseEdgeRunIndexAssignment(body: []const u8, start: usize) ?ParsedIndexAssig
     };
 }
 
-fn parseEdgeRunIndexExpr(text: []const u8) ?ParsedIndexExpr {
-    const name_end = scanIdentifierEnd(text, 0) orelse return null;
-    const name = text[0..name_end];
-    const index = skipWhitespace(text, name_end);
-    if (index >= text.len or text[index] != '[') return null;
-    const index_end = findMatchingBracket(text, index) orelse return null;
-    if (skipWhitespace(text, index_end + 1) != text.len) return null;
-    const index_expr = trimAsciiWhitespace(text[index + 1 .. index_end]);
-    if (index_expr.len == 0) return null;
-    return .{ .name = name, .index_expr = index_expr };
-}
-
 fn compileEdgeRunAssignmentCode(assignment: ParsedAssignment, context: *LoweringContext, args: EdgeRunArgs, locals: *const ExprIndex, vars: *const LocalVarIndex, calls: *const LoweredExports, function_index_base: u32, writer: *Writer) error{ OutputTooLarge, InvalidSource }!void {
     if (vars.find(assignment.name)) |local_index| {
         try compileEdgeRunExprCode(assignment.value, context, args, locals, vars, calls, function_index_base, writer);
@@ -1886,14 +1869,6 @@ fn compileEdgeRunIndexAssignmentCode(assignment: ParsedIndexAssignment, context:
     try writer.append(wasm_opcode_i32_add);
     try compileEdgeRunExprCode(assignment.value, context, args, locals, vars, calls, function_index_base, writer);
     try emitI32Store8(writer);
-}
-
-fn compileEdgeRunIndexExprCode(index_expr: ParsedIndexExpr, context: *LoweringContext, args: EdgeRunArgs, locals: *const ExprIndex, vars: *const LocalVarIndex, calls: *const LoweredExports, function_index_base: u32, writer: *Writer) error{ OutputTooLarge, InvalidSource }!void {
-    const base = pointerForArray(context, index_expr.name) orelse return error.InvalidSource;
-    try emitI32Const(writer, base);
-    try compileEdgeRunExprCode(index_expr.index_expr, context, args, locals, vars, calls, function_index_base, writer);
-    try writer.append(wasm_opcode_i32_add);
-    try emitI32Load8U(writer);
 }
 
 fn compileEdgeRunWhileStatementCode(body: []const u8, start: usize, context: *LoweringContext, args: EdgeRunArgs, locals: *const ExprIndex, vars: *const LocalVarIndex, calls: *const LoweredExports, function_index_base: u32, writer: *Writer) ?usize {
@@ -2024,138 +1999,270 @@ fn compileEdgeRunReturnStatementCode(body: []const u8, start: usize, context: *L
 }
 
 fn compileEdgeRunExprCode(raw: []const u8, context: *LoweringContext, args: EdgeRunArgs, locals: *const ExprIndex, vars: *const LocalVarIndex, calls: *const LoweredExports, function_index_base: u32, writer: *Writer) error{ OutputTooLarge, InvalidSource }!void {
-    const text = trimAsciiWhitespace(raw);
-    if (text.len == 0) return error.InvalidSource;
-    if (std.mem.startsWith(u8, text, "@intCast(")) {
-        const value = unwrapCallArgument(text, "@intCast(") orelse return error.InvalidSource;
-        return compileEdgeRunExprCode(value, context, args, locals, vars, calls, function_index_base, writer);
-    }
-    if (std.mem.startsWith(u8, text, "@intFromEnum(")) {
-        const value = unwrapCallArgument(text, "@intFromEnum(") orelse return error.InvalidSource;
-        const parsed = parseValueExpression(value, context) orelse return error.InvalidSource;
-        try emitI32Const(writer, parsed);
-        return;
-    }
-    if (std.mem.startsWith(u8, text, "@intFromPtr(")) {
-        const value = unwrapCallArgument(text, "@intFromPtr(") orelse return error.InvalidSource;
-        const parsed = parsePointerExpression(value, context) orelse return error.InvalidSource;
-        try emitI32Const(writer, parsed);
-        return;
-    }
-    if (std.mem.startsWith(u8, text, "if (")) {
-        return compileEdgeRunIfExprCode(text, context, args, locals, vars, calls, function_index_base, writer);
-    }
-    if (parseEdgeRunIndexExpr(text)) |index_expr| {
-        return compileEdgeRunIndexExprCode(index_expr, context, args, locals, vars, calls, function_index_base, writer);
-    }
-    if (splitTopLevelOperators(text, &.{ '+', '-' })) |split| {
-        try compileEdgeRunExprCode(split.left, context, args, locals, vars, calls, function_index_base, writer);
-        try compileEdgeRunExprCode(split.right, context, args, locals, vars, calls, function_index_base, writer);
-        try writer.append(switch (split.operator) {
-            '+' => wasm_opcode_i32_add,
-            '-' => wasm_opcode_i32_sub,
-            else => return error.InvalidSource,
-        });
-        return;
-    }
-    if (splitTopLevelOperators(text, &.{ '*', '/', '%' })) |split| {
-        try compileEdgeRunExprCode(split.left, context, args, locals, vars, calls, function_index_base, writer);
-        try compileEdgeRunExprCode(split.right, context, args, locals, vars, calls, function_index_base, writer);
-        try writer.append(switch (split.operator) {
-            '*' => wasm_opcode_i32_mul,
-            '/' => wasm_opcode_i32_div_s,
-            '%' => wasm_opcode_i32_rem_s,
-            else => return error.InvalidSource,
-        });
-        return;
-    }
-    if (args.find(text)) |arg_index| {
-        try emitLocalGet(writer, arg_index);
-        return;
-    }
-    if (vars.find(text)) |local_index| {
-        try emitLocalGet(writer, local_index);
-        return;
-    }
-    if (locals.find(text)) |code| {
-        try writer.appendSlice(code.slice());
-        return;
-    }
-    if (context.state_offsets.find(text)) |state_offset| {
-        try emitStateLoadI32(writer, state_offset);
-        return;
-    }
-    if (parseEdgeRunCallExpr(text)) |call| {
-        const target = calls.findCall(call.name, call.arg_count, function_index_base) orelse return error.InvalidSource;
-        var arg_index: u8 = 0;
-        while (arg_index < call.arg_count) : (arg_index += 1) {
-            try compileEdgeRunExprCode(call.args[arg_index], context, args, locals, vars, calls, function_index_base, writer);
-        }
-        try emitCall(writer, target);
-        return;
-    }
-    if (parseValueExpression(text, context)) |value| {
-        try emitI32Const(writer, value);
-        return;
-    }
-    return error.InvalidSource;
+    var tok = edgerun_source.tokenize(raw);
+    return compileEdgeRunExprTokens(&tok, context, args, locals, vars, calls, function_index_base, writer);
 }
 
-fn compileEdgeRunIfExprCode(text: []const u8, context: *LoweringContext, args: EdgeRunArgs, locals: *const ExprIndex, vars: *const LocalVarIndex, calls: *const LoweredExports, function_index_base: u32, writer: *Writer) error{ OutputTooLarge, InvalidSource }!void {
-    const condition_end = findMatchingParen(text, "if ".len) orelse return error.InvalidSource;
-    const condition = text["if (".len..condition_end];
-    const after_condition = trimAsciiWhitespace(text[condition_end + 1 ..]);
-    const else_index = findElseKeyword(after_condition) orelse return error.InvalidSource;
-    const then_expr = after_condition[0..else_index];
-    const else_expr = after_condition[else_index + "else".len ..];
-    try compileEdgeRunConditionCode(condition, context, args, locals, vars, calls, function_index_base, writer);
-    try writer.append(wasm_opcode_if);
-    try writer.append(wasm_block_type_i32);
-    try compileEdgeRunExprCode(then_expr, context, args, locals, vars, calls, function_index_base, writer);
-    try writer.append(wasm_opcode_else);
-    try compileEdgeRunExprCode(else_expr, context, args, locals, vars, calls, function_index_base, writer);
-    try writer.append(wasm_opcode_end);
+fn compileEdgeRunExprTokens(tok: *edgerun_source.Tokenizer, context: *LoweringContext, args: EdgeRunArgs, locals: *const ExprIndex, vars: *const LocalVarIndex, calls: *const LoweredExports, function_index_base: u32, writer: *Writer) error{ OutputTooLarge, InvalidSource }!void {
+    try parseExprComparison(tok, context, args, locals, vars, calls, function_index_base, writer);
+    const token = tok.next();
+    if (token != .eof) return error.InvalidSource;
+}
+
+fn parseExprComparison(tok: *edgerun_source.Tokenizer, context: *LoweringContext, args: EdgeRunArgs, locals: *const ExprIndex, vars: *const LocalVarIndex, calls: *const LoweredExports, function_index_base: u32, writer: *Writer) error{ OutputTooLarge, InvalidSource }!void {
+    try parseExprAddSub(tok, context, args, locals, vars, calls, function_index_base, writer);
+    const op_token = tok.peek();
+    const op: u8 = switch (op_token) {
+        .eq_eq => wasm_opcode_i32_eq,
+        .not_eq => wasm_opcode_i32_ne,
+        .lt => wasm_opcode_i32_lt_s,
+        .gt => wasm_opcode_i32_gt_s,
+        .lt_eq => wasm_opcode_i32_le_s,
+        .gt_eq => wasm_opcode_i32_ge_s,
+        else => return,
+    };
+    _ = tok.next();
+    try parseExprAddSub(tok, context, args, locals, vars, calls, function_index_base, writer);
+    try writer.append(op);
+}
+
+fn parseExprAddSub(tok: *edgerun_source.Tokenizer, context: *LoweringContext, args: EdgeRunArgs, locals: *const ExprIndex, vars: *const LocalVarIndex, calls: *const LoweredExports, function_index_base: u32, writer: *Writer) error{ OutputTooLarge, InvalidSource }!void {
+    try parseExprMulDiv(tok, context, args, locals, vars, calls, function_index_base, writer);
+    while (true) {
+        const op = tok.peek();
+        const opcode: u8 = switch (op) {
+            .plus => wasm_opcode_i32_add,
+            .minus => wasm_opcode_i32_sub,
+            else => return,
+        };
+        _ = tok.next();
+        try parseExprMulDiv(tok, context, args, locals, vars, calls, function_index_base, writer);
+        try writer.append(opcode);
+    }
+}
+
+fn parseExprMulDiv(tok: *edgerun_source.Tokenizer, context: *LoweringContext, args: EdgeRunArgs, locals: *const ExprIndex, vars: *const LocalVarIndex, calls: *const LoweredExports, function_index_base: u32, writer: *Writer) error{ OutputTooLarge, InvalidSource }!void {
+    try parseExprPrimary(tok, context, args, locals, vars, calls, function_index_base, writer);
+    while (true) {
+        const op = tok.peek();
+        const opcode: u8 = switch (op) {
+            .star => wasm_opcode_i32_mul,
+            .slash => wasm_opcode_i32_div_s,
+            .percent => wasm_opcode_i32_rem_s,
+            else => return,
+        };
+        _ = tok.next();
+        try parseExprPrimary(tok, context, args, locals, vars, calls, function_index_base, writer);
+        try writer.append(opcode);
+    }
+}
+
+fn parseExprPrimary(tok: *edgerun_source.Tokenizer, context: *LoweringContext, args: EdgeRunArgs, locals: *const ExprIndex, vars: *const LocalVarIndex, calls: *const LoweredExports, function_index_base: u32, writer: *Writer) error{ OutputTooLarge, InvalidSource }!void {
+    const token = tok.next();
+    switch (token) {
+        .keyword_true => try emitI32Const(writer, 1),
+        .keyword_false => try emitI32Const(writer, 0),
+        .minus => {
+            try emitI32Const(writer, 0);
+            try parseExprPrimary(tok, context, args, locals, vars, calls, function_index_base, writer);
+            try writer.append(wasm_opcode_i32_sub);
+        },
+        .integer_literal => |literal| {
+            const value = parseIntLiteral(literal) orelse return error.InvalidSource;
+            try emitI32Const(writer, value);
+        },
+        .builtin_int_cast => {
+            if (tok.next() != .lparen) return error.InvalidSource;
+            try parseExprComparison(tok, context, args, locals, vars, calls, function_index_base, writer);
+            if (tok.next() != .rparen) return error.InvalidSource;
+        },
+        .builtin_int_from_enum => {
+            if (tok.next() != .lparen) return error.InvalidSource;
+            const arg_text = try collectTokenArgText(tok);
+            const parsed = parseValueExpression(arg_text, context) orelse return error.InvalidSource;
+            try emitI32Const(writer, parsed);
+        },
+        .builtin_int_from_ptr => {
+            if (tok.next() != .lparen) return error.InvalidSource;
+            const arg_text = try collectTokenArgText(tok);
+            const parsed = parsePointerExpression(arg_text, context) orelse return error.InvalidSource;
+            try emitI32Const(writer, parsed);
+        },
+        .keyword_if => {
+            if (tok.next() != .lparen) return error.InvalidSource;
+            try parseExprComparison(tok, context, args, locals, vars, calls, function_index_base, writer);
+            if (tok.next() != .rparen) return error.InvalidSource;
+            try writer.append(wasm_opcode_if);
+            try writer.append(wasm_block_type_i32);
+            try parseExprComparison(tok, context, args, locals, vars, calls, function_index_base, writer);
+            if (tok.next() != .keyword_else) return error.InvalidSource;
+            try writer.append(wasm_opcode_else);
+            try parseExprComparison(tok, context, args, locals, vars, calls, function_index_base, writer);
+            try writer.append(wasm_opcode_end);
+        },
+        .builtin_import => {
+            if (tok.next() != .lparen) return error.InvalidSource;
+            if (tok.next() != .string_literal) return error.InvalidSource;
+            if (tok.next() != .rparen) return error.InvalidSource;
+        },
+        .identifier => |name| {
+            if (tok.peek() == .dot) {
+                _ = tok.next();
+                const suffix = tok.next();
+                if (suffix == .identifier) {
+                    if (std.mem.eql(u8, suffix.identifier, "len")) {
+                        if (context.array_lengths.find(name)) |value| {
+                            try emitI32Const(writer, value);
+                            return;
+                        }
+                        return error.InvalidSource;
+                    }
+                    if (tok.peek() == .lparen) {
+                        const qualified_name_len = name.len + 1 + suffix.identifier.len;
+                        if (qualified_name_len > vfs_label_max) return error.InvalidSource;
+                        var qualified_buf: [vfs_label_max]u8 = undefined;
+                        @memcpy(qualified_buf[0..name.len], name);
+                        qualified_buf[name.len] = '.';
+                        @memcpy(qualified_buf[name.len + 1 .. qualified_name_len], suffix.identifier);
+                        const qualified_name = qualified_buf[0..qualified_name_len];
+                        _ = tok.next();
+                        var parsed_args: [3][]const u8 = .{ "", "", "" };
+                        var arg_count: u8 = 0;
+                        if (tok.peek() != .rparen) {
+                            while (true) {
+                                if (arg_count >= parsed_args.len) return error.InvalidSource;
+                                const arg_start = tok.index;
+                                try skipBalancedExpr(tok);
+                                parsed_args[arg_count] = tok.source[arg_start..tok.index];
+                                arg_count += 1;
+                                const sep = tok.next();
+                                if (sep == .rparen) break;
+                                if (sep != .comma) return error.InvalidSource;
+                            }
+                        } else {
+                            _ = tok.next();
+                        }
+                        const target = calls.findCall(qualified_name, arg_count, function_index_base) orelse return error.InvalidSource;
+                        var arg_index: u8 = 0;
+                        while (arg_index < arg_count) : (arg_index += 1) {
+                            try compileEdgeRunExprCode(parsed_args[arg_index], context, args, locals, vars, calls, function_index_base, writer);
+                        }
+                        try emitCall(writer, target);
+                        return;
+                    }
+                }
+                return error.InvalidSource;
+            }
+            if (tok.peek() == .lbracket) {
+                _ = tok.next();
+                const base = pointerForArray(context, name) orelse return error.InvalidSource;
+                try emitI32Const(writer, base);
+                try parseExprAddSub(tok, context, args, locals, vars, calls, function_index_base, writer);
+                if (tok.next() != .rbracket) return error.InvalidSource;
+                try writer.append(wasm_opcode_i32_add);
+                try emitI32Load8U(writer);
+            } else if (tok.peek() == .lparen) {
+                _ = tok.next();
+                var parsed_args: [3][]const u8 = .{ "", "", "" };
+                var arg_count: u8 = 0;
+                if (tok.peek() != .rparen) {
+                    while (true) {
+                        if (arg_count >= parsed_args.len) return error.InvalidSource;
+                        const arg_start = tok.index;
+                        try skipBalancedExpr(tok);
+                        parsed_args[arg_count] = tok.source[arg_start..tok.index];
+                        arg_count += 1;
+                        const sep = tok.next();
+                        if (sep == .rparen) break;
+                        if (sep != .comma) return error.InvalidSource;
+                    }
+                } else {
+                    _ = tok.next();
+                }
+                const target = calls.findCall(name, arg_count, function_index_base) orelse return error.InvalidSource;
+                var arg_index: u8 = 0;
+                while (arg_index < arg_count) : (arg_index += 1) {
+                    try compileEdgeRunExprCode(parsed_args[arg_index], context, args, locals, vars, calls, function_index_base, writer);
+                }
+                try emitCall(writer, target);
+            } else if (args.find(name)) |arg_index| {
+                try emitLocalGet(writer, arg_index);
+            } else if (vars.find(name)) |local_index| {
+                try emitLocalGet(writer, local_index);
+            } else if (locals.find(name)) |code| {
+                try writer.appendSlice(code.slice());
+            } else if (context.state_offsets.find(name)) |state_offset| {
+                try emitStateLoadI32(writer, state_offset);
+            } else if (parseValueExpression(name, context)) |value| {
+                try emitI32Const(writer, value);
+            } else {
+                return error.InvalidSource;
+            }
+        },
+        .string_literal => {
+            const text = tok.source[tok.index - 1 .. tok.index];
+            if (parseValueExpression(text, context)) |value| {
+                try emitI32Const(writer, value);
+                return;
+            }
+            return error.InvalidSource;
+        },
+        .lparen => {
+            try parseExprComparison(tok, context, args, locals, vars, calls, function_index_base, writer);
+            if (tok.next() != .rparen) return error.InvalidSource;
+        },
+        else => return error.InvalidSource,
+    }
+}
+
+fn skipBalancedExpr(tok: *edgerun_source.Tokenizer) error{ OutputTooLarge, InvalidSource }!void {
+    var depth: usize = 0;
+    while (true) {
+        const t = tok.peek();
+        switch (t) {
+            .eof => return error.InvalidSource,
+            .lparen, .lbrace, .lbracket => {
+                _ = tok.next();
+                depth += 1;
+            },
+            .rparen, .rbrace, .rbracket, .comma => {
+                if (depth == 0) return;
+                _ = tok.next();
+                depth -= 1;
+            },
+            else => {
+                _ = tok.next();
+            },
+        }
+    }
+}
+
+fn collectTokenArgText(tok: *edgerun_source.Tokenizer) error{ OutputTooLarge, InvalidSource }![]const u8 {
+    const start = tok.index;
+    var depth: usize = 1;
+    while (true) {
+        if (tok.index >= tok.source.len) return error.InvalidSource;
+        const byte = tok.source[tok.index];
+        tok.index += 1;
+        switch (byte) {
+            '(' => depth += 1,
+            ')' => {
+                depth -= 1;
+                if (depth == 0) return tok.source[start .. tok.index - 1];
+            },
+            else => {},
+        }
+    }
+}
+
+fn parseIntLiteral(literal: []const u8) ?i32 {
+    return std.fmt.parseInt(i32, literal, 10) catch null;
 }
 
 fn compileEdgeRunConditionCode(raw: []const u8, context: *LoweringContext, args: EdgeRunArgs, locals: *const ExprIndex, vars: *const LocalVarIndex, calls: *const LoweredExports, function_index_base: u32, writer: *Writer) error{ OutputTooLarge, InvalidSource }!void {
-    const text = trimAsciiWhitespace(raw);
-    if (splitTopLevelToken(text, "!=")) |split| {
-        try compileEdgeRunExprCode(split.left, context, args, locals, vars, calls, function_index_base, writer);
-        try compileEdgeRunExprCode(split.right, context, args, locals, vars, calls, function_index_base, writer);
-        try writer.append(wasm_opcode_i32_ne);
-        return;
-    }
-    if (splitTopLevelToken(text, "==")) |split| {
-        try compileEdgeRunExprCode(split.left, context, args, locals, vars, calls, function_index_base, writer);
-        try compileEdgeRunExprCode(split.right, context, args, locals, vars, calls, function_index_base, writer);
-        try writer.append(wasm_opcode_i32_eq);
-        return;
-    }
-    if (splitTopLevelToken(text, "<=")) |split| {
-        try compileEdgeRunExprCode(split.left, context, args, locals, vars, calls, function_index_base, writer);
-        try compileEdgeRunExprCode(split.right, context, args, locals, vars, calls, function_index_base, writer);
-        try writer.append(wasm_opcode_i32_le_s);
-        return;
-    }
-    if (splitTopLevelToken(text, ">=")) |split| {
-        try compileEdgeRunExprCode(split.left, context, args, locals, vars, calls, function_index_base, writer);
-        try compileEdgeRunExprCode(split.right, context, args, locals, vars, calls, function_index_base, writer);
-        try writer.append(wasm_opcode_i32_ge_s);
-        return;
-    }
-    if (splitTopLevelToken(text, "<")) |split| {
-        try compileEdgeRunExprCode(split.left, context, args, locals, vars, calls, function_index_base, writer);
-        try compileEdgeRunExprCode(split.right, context, args, locals, vars, calls, function_index_base, writer);
-        try writer.append(wasm_opcode_i32_lt_s);
-        return;
-    }
-    if (splitTopLevelToken(text, ">")) |split| {
-        try compileEdgeRunExprCode(split.left, context, args, locals, vars, calls, function_index_base, writer);
-        try compileEdgeRunExprCode(split.right, context, args, locals, vars, calls, function_index_base, writer);
-        try writer.append(wasm_opcode_i32_gt_s);
-        return;
-    }
-    return error.InvalidSource;
+    var tok = edgerun_source.tokenize(raw);
+    try parseExprComparison(&tok, context, args, locals, vars, calls, function_index_base, writer);
+    if (tok.next() != .eof) return error.InvalidSource;
 }
 
 const ExprSplit = struct {
@@ -2168,52 +2275,6 @@ const ExprOperatorSplit = struct {
     right: []const u8,
     operator: u8,
 };
-
-const EdgeRunCallExpr = struct {
-    name: []const u8,
-    args: [3][]const u8 = .{ "", "", "" },
-    arg_count: u8 = 0,
-};
-
-fn parseEdgeRunCallExpr(text: []const u8) ?EdgeRunCallExpr {
-    const name_end = scanQualifiedIdentifierEnd(text, 0) orelse return null;
-    const name = text[0..name_end];
-    const index = skipWhitespace(text, name_end);
-    if (index >= text.len or text[index] != '(') return null;
-    const close = findMatchingParen(text, index) orelse return null;
-    if (skipWhitespace(text, close + 1) != text.len) return null;
-    const raw_args = trimAsciiWhitespace(text[index + 1 .. close]);
-    var args = EdgeRunCallExpr{ .name = name };
-    if (raw_args.len != 0) {
-        var remaining = raw_args;
-        while (true) {
-            if (args.arg_count >= args.args.len) return null;
-            if (splitTopLevelToken(remaining, ",")) |split| {
-                const arg = trimAsciiWhitespace(split.left);
-                if (arg.len == 0) return null;
-                args.args[args.arg_count] = arg;
-                args.arg_count += 1;
-                remaining = split.right;
-                continue;
-            }
-            const arg = trimAsciiWhitespace(remaining);
-            if (arg.len == 0) return null;
-            args.args[args.arg_count] = arg;
-            args.arg_count += 1;
-            break;
-        }
-    }
-    return args;
-}
-
-fn scanQualifiedIdentifierEnd(source: []const u8, start: usize) ?usize {
-    var index = scanIdentifierEnd(source, start) orelse return null;
-    while (index < source.len and source[index] == '.') {
-        const next = scanIdentifierEnd(source, index + 1) orelse return null;
-        index = next;
-    }
-    return index;
-}
 
 fn splitTopLevelToken(text: []const u8, token: []const u8) ?ExprSplit {
     if (token.len == 0 or token.len > text.len) return null;
@@ -2371,28 +2432,6 @@ fn findMatchingBracket(text: []const u8, open_index: usize) ?usize {
             },
             else => {},
         }
-    }
-    return null;
-}
-
-fn findElseKeyword(text: []const u8) ?usize {
-    var paren_depth: usize = 0;
-    var index: usize = 0;
-    while (index + "else".len <= text.len) : (index += 1) {
-        switch (text[index]) {
-            '(' => paren_depth += 1,
-            ')' => {
-                if (paren_depth == 0) return null;
-                paren_depth -= 1;
-            },
-            else => {},
-        }
-        if (paren_depth != 0) continue;
-        if (!std.mem.eql(u8, text[index..][0.."else".len], "else")) continue;
-        const before_ok = index == 0 or asciiWhitespace(text[index - 1]);
-        const after_index = index + "else".len;
-        const after_ok = after_index == text.len or asciiWhitespace(text[after_index]);
-        if (before_ok and after_ok) return index;
     }
     return null;
 }

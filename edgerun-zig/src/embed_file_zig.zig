@@ -118,15 +118,11 @@ fn buildWorkspaceObject(io: std.Io, root_path: []const u8, embedded_compiler_pat
         paths.deinit(allocator);
     }
     try collectSourcePaths(io, allocator, &root, "", &paths);
-    std.debug.print("COLLECTED {d} PATHS\n", .{paths.items.len});
-    for (paths.items, 0..) |p, i| {
-        std.debug.print("  [{d}] {s}\n", .{ i, p });
-    }
     std.mem.sort([]u8, paths.items, {}, pathLessThan);
-    for (paths.items, 0..) |p, i| {
-        std.debug.print("  [{d}] {s}\n", .{ i, p });
-    }
-    try pruneSourcePathsToAppClosure(io, allocator, &root, &paths);
+    // TODO: pruneSourcePathsToAppClosure segfaults on the Zig compiler std lib
+    // ZIR parsing (optimizer bug or stack corruption). Skip until the self-host
+    // compiler replaces the Zig toolchain path entirely.
+    //try pruneSourcePathsToAppClosure(io, allocator, &root, &paths);
 
     var manifest: std.ArrayList(u8) = .empty;
     defer manifest.deinit(allocator);
