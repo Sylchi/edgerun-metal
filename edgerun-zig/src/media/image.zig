@@ -1,4 +1,5 @@
 const jpeg = @import("jpeg.zig");
+const jxl = @import("jxl.zig");
 const png = @import("png.zig");
 const tga = @import("tga.zig");
 const webp = @import("webp/root.zig");
@@ -20,11 +21,13 @@ pub const Format = enum {
 
 pub const ImportFormat = enum {
     jpeg,
+    jxl,
     png,
     tga,
     webp,
 };
 
+pub const JxlKind = jxl.Kind;
 pub const WebpAnimationHeader = webp.WebpAnimationHeader;
 pub const WebpAnimationFrameInfo = webp.WebpAnimationFrameInfo;
 pub const WebpAnimationFrame = webp.WebpAnimationFrame;
@@ -71,15 +74,21 @@ pub fn runtimeCanonicalLenTiled(bytes: []const u8, tile_w: usize, tile_h: usize)
 
 pub fn importDetectFormat(bytes: []const u8) DecodeError!ImportFormat {
     if (jpeg.isJpeg(bytes)) return .jpeg;
+    if (jxl.isJxl(bytes)) return .jxl;
     if (png.isPng(bytes)) return .png;
     if (tga.isTga(bytes)) return .tga;
     if (webp.isWebp(bytes)) return .webp;
     return error.UnsupportedImage;
 }
 
+pub fn importJxlKind(bytes: []const u8) DecodeError!JxlKind {
+    return try jxl.detectKind(bytes);
+}
+
 pub fn importHeader(bytes: []const u8) DecodeError!Header {
     return switch (try importDetectFormat(bytes)) {
         .jpeg => jpeg.decodeHeader(bytes),
+        .jxl => jxl.decodeHeader(bytes),
         .png => png.decodePngHeader(bytes),
         .tga => tga.decodeTgaHeader(bytes),
         .webp => webp.decodeWebpHeader(bytes),
@@ -88,7 +97,7 @@ pub fn importHeader(bytes: []const u8) DecodeError!Header {
 
 pub fn importScratchByteLen(bytes: []const u8, width: usize, height: usize) usize {
     return switch (importDetectFormat(bytes) catch @panic("image import scratch byte length format error")) {
-        .jpeg, .tga => 0,
+        .jpeg, .jxl, .tga => 0,
         .png => png.pngScratchByteLen(bytes.len, width, height),
         .webp => webp.webpScratchByteLen(bytes, width, height),
     };
@@ -97,6 +106,7 @@ pub fn importScratchByteLen(bytes: []const u8, width: usize, height: usize) usiz
 fn importDecodeWithScratch(bytes: []const u8, out: []ui.Color, scratch: []u8) DecodeError!Header {
     return switch (try importDetectFormat(bytes)) {
         .jpeg => jpeg.decode(bytes, out),
+        .jxl => jxl.decodeHeader(bytes),
         .png => png.decodePng(bytes, out, scratch),
         .tga => tga.decodeTga(bytes, out),
         .webp => webp.decodeWebpWithScratch(bytes, out, scratch),
@@ -161,6 +171,15 @@ test "import path requires foreign image bytes and preserves existing runtime by
     try @import("std").testing.expectError(error.UnsupportedImage, importDetectFormat(encoded));
 }
 
+test "import path detects jpeg xl codestream and container" {
+    const codestream = [_]u8{ 0xff, 0x0a, 0x00, 0x01 };
+    const container = jxl.container_signature ++ [_]u8{ 0x00, 0x00, 0x00, 0x00 };
+    try @import("std").testing.expectEqual(ImportFormat.jxl, try importDetectFormat(&codestream));
+    try @import("std").testing.expectEqual(JxlKind.codestream, try importJxlKind(&codestream));
+    try @import("std").testing.expectEqual(ImportFormat.jxl, try importDetectFormat(&container));
+    try @import("std").testing.expectEqual(JxlKind.container, try importJxlKind(&container));
+}
+
 test "runtime decoder accepts tiled ERIMG" {
     const pixels = [_]ui.Color{
         .{ .r = 1, .g = 0, .b = 0, .a = 255 },
@@ -178,6 +197,7 @@ test "runtime decoder accepts tiled ERIMG" {
 
 test {
     _ = jpeg;
+    _ = jxl;
     _ = png;
     _ = tga;
     _ = webp;
