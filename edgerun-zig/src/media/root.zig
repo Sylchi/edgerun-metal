@@ -1,4 +1,5 @@
 pub const image = @import("image.zig");
+pub const image_object = @import("image_object.zig");
 pub const video = @import("video.zig");
 pub const audio = @import("audio.zig");
 
@@ -55,6 +56,7 @@ pub const webpAnimationDecoderScratchByteLen = image.webpAnimationDecoderScratch
 
 test {
     _ = image;
+    _ = image_object;
     _ = video;
     _ = audio;
 }
