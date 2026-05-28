@@ -12,7 +12,6 @@ const app_cursor = @import("app_cursor.zig");
 const app_frame = @import("app_frame.zig");
 const app_images = @import("app_images.zig");
 const app_input_event = @import("app_input_event.zig");
-const app_landing = @import("app_landing.zig");
 const app_navigation = @import("app_navigation.zig");
 const app_native_input = @import("app_native_input.zig");
 const ui = @import("ui.zig");
@@ -660,14 +659,14 @@ test "egl host input helpers update hover activation and scroll state" {
     var app = AppState{ .input = .{ .public_identity_ready = false, .public_identity = "pending", .reveal_identity = "native-egl-gpu" } };
     var regions: [1]interaction.Region = undefined;
     var collector = interaction.Collector.init(&regions);
-    try collector.add(.{ .kind = .button, .id = app_landing.reveal_identity_button_id, .bounds = ui.Rect.init(8, 8, 80, 32) });
+    try collector.add(.{ .kind = .button, .id = app_navigation.reveal_identity_button_id, .bounds = ui.Rect.init(8, 8, 80, 32) });
     updateHoverHit(&app, collector.written());
     try std.testing.expectEqual(@as(u32, 0), app.input.runtime.hoverHitId());
 
     app.input.hover_x = 16.0;
     app.input.hover_y = 16.0;
     updateHoverHit(&app, collector.written());
-    try std.testing.expectEqual(app_landing.reveal_identity_button_id, app.input.runtime.hoverHitId());
+    try std.testing.expectEqual(app_navigation.reveal_identity_button_id, app.input.runtime.hoverHitId());
 
     app_native_input.activateHovered(&app.input);
     try std.testing.expect(app.input.public_identity_ready);

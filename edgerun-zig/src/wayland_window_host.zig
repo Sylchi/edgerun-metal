@@ -15,7 +15,6 @@ const app_chrome = @import("app_chrome.zig");
 const app_cursor = @import("app_cursor.zig");
 const app_frame = @import("app_frame.zig");
 const app_images = @import("app_images.zig");
-const app_landing = @import("app_landing.zig");
 const app_navigation = @import("app_navigation.zig");
 const app_native_input = @import("app_native_input.zig");
 const app_dashboard = @import("app_dashboard.zig");
@@ -2101,7 +2100,7 @@ test "wayland host pointer input updates hover activation and scroll state" {
     updateHoverHitForState(&state, collector.written());
     try std.testing.expect(state.runtime.hovered == null);
 
-    const docs = try hitRect(collector.written(), app_landing.docs_button_id);
+    const docs = try hitRect(collector.written(), app_chrome.docs_button_id);
     state.hover_x = docs.x + docs.w * 0.5;
     state.hover_y = docs.y + docs.h * 0.5;
     updateHoverHitForState(&state, collector.written());
@@ -2136,7 +2135,7 @@ test "wayland host appends scene cursor from native hover state" {
     var collector = interaction.Collector.init(&app.regions);
     try renderNativeAppScene(&scene, &collector, app.width, app.height, app.state, &app.dashboard_app, app.dashboard);
     app.region_len = collector.written().len;
-    const docs = try hitRect(app.regionSlice(), app_landing.docs_button_id);
+    const docs = try hitRect(app.regionSlice(), app_chrome.docs_button_id);
     app.state.hover_x = docs.x + docs.w * 0.5;
     app.state.hover_y = docs.y + docs.h * 0.5;
     app.updateHoverHit(app.regionSlice());

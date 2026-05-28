@@ -3,13 +3,21 @@ const component_gallery = @import("component_gallery.zig");
 const app_blog = @import("app_blog.zig");
 const app_chrome = @import("app_chrome.zig");
 const app_docs = @import("app_docs.zig");
-const app_landing = @import("app_landing.zig");
 const app_source = @import("app_source.zig");
-const app_agent = @import("app_agent.zig");
 
 pub const route_path_capacity: usize = 96;
 pub const route_hash_capacity: usize = route_path_capacity + 1;
 pub const context_source_button_id: u32 = 33_001;
+pub const reveal_identity_button_id: u32 = 20_001;
+
+pub const MainButton = enum(u32) {
+    logo = 0,
+    docs = 1,
+    blog = 2,
+    source = 3,
+    agent = 4,
+    components = 5,
+};
 
 pub const RoutePath = struct {
     pub const root = "/";
@@ -79,33 +87,15 @@ pub fn fromPath(path: []const u8) Route {
 }
 
 pub fn fromHit(hit_id: u32, current: Route) ?Route {
-    return switch (hit_id) {
-        app_chrome.logo_button_id,
-        => .{ .view = .source },
-        app_chrome.docs_button_id => .{ .view = .docs },
-        app_chrome.blog_button_id,
-        app_blog.all_lessons_button_id,
-        app_docs.academy_button_id,
-        => blogIndex(null),
-        app_chrome.source_button_id => .{ .view = .source },
-        app_chrome.agent_button_id => .{ .view = .agent },
-        app_docs.source_button_id => .{ .view = .source },
-        app_docs.component_catalog_button_id => .{ .view = .components },
-        app_blog.back_button_id => blogIndex(null),
-        else => routeFromDynamicHit(hit_id, current),
-    };
+    if (routeFromStaticHit(hit_id)) |route| return route;
+    return routeFromDynamicHit(hit_id, current);
 }
 
 pub fn actionFromHit(hit_id: u32) ?Action {
-    return switch (hit_id) {
-        app_landing.reveal_identity_button_id => .reveal_identity,
-        app_source.compile_button_id => .compile_source,
-        app_source.download_button_id => .download_source_release,
-        app_source.launch_button_id => .launch_source_release,
-        app_source.reset_button_id => .reset_source,
-        context_source_button_id => .open_context_source,
-        else => null,
-    };
+    for (action_bindings) |binding| {
+        if (binding.id == hit_id) return binding.action;
+    }
+    return null;
 }
 
 pub fn pathFromHash(hash: []const u8) error{InvalidRouteHash}![]const u8 {
@@ -155,15 +145,110 @@ fn pathKind(path: []const u8) PathKind {
 }
 
 fn routeFromDynamicHit(hit_id: u32, current: Route) ?Route {
-    if (app_blog.postIdFromHit(hit_id)) |post_id| return .{ .view = .blog, .selected_blog_post_id = post_id, .blog_arc_filter_index = current.blog_arc_filter_index };
-    if (app_blog.arcFilterIndexFromHit(hit_id)) |index| return .{ .view = .blog, .blog_arc_filter_index = index };
-    if (component_gallery.indexByCatalogHit(hit_id)) |index| return .{ .view = .components, .selected_component_index = index };
-    if (component_gallery.indexByPreviewHit(hit_id)) |index| return .{ .view = .components, .selected_component_index = index };
+    for (dynamic_route_resolvers) |resolve| {
+        if (resolve(hit_id, current)) |route| return route;
+    }
+    return null;
+}
+
+pub const HitRoute = struct { id: u32, route: Route };
+pub const ActionBinding = struct { id: u32, action: Action };
+const ResolveRouteFromHit = *const fn (u32, Route) ?Route;
+
+pub const Contract = struct {
+    static_routes: []const HitRoute,
+    action_bindings: []const ActionBinding,
+};
+
+pub fn topLevelButtonId(button: MainButton) u32 {
+    return switch (button) {
+        .logo => app_chrome.logo_button_id,
+        .docs => app_chrome.docs_button_id,
+        .blog => app_chrome.blog_button_id,
+        .source => app_chrome.source_button_id,
+        .agent => app_chrome.agent_button_id,
+        .components => app_docs.component_catalog_button_id,
+    };
+}
+
+pub const action_bindings = [_]ActionBinding{
+    .{ .id = reveal_identity_button_id, .action = .reveal_identity },
+    .{ .id = app_source.compile_button_id, .action = .compile_source },
+    .{ .id = app_source.download_button_id, .action = .download_source_release },
+    .{ .id = app_source.launch_button_id, .action = .launch_source_release },
+    .{ .id = app_source.reset_button_id, .action = .reset_source },
+    .{ .id = context_source_button_id, .action = .open_context_source },
+};
+
+pub const static_routes = [_]HitRoute{
+    .{ .id = app_chrome.logo_button_id, .route = .{ .view = .source } },
+    .{ .id = app_chrome.docs_button_id, .route = .{ .view = .docs } },
+    .{ .id = app_chrome.blog_button_id, .route = .{ .view = .blog } },
+    .{ .id = app_blog.all_lessons_button_id, .route = .{ .view = .blog } },
+    .{ .id = app_docs.academy_button_id, .route = .{ .view = .blog } },
+    .{ .id = app_chrome.source_button_id, .route = .{ .view = .source } },
+    .{ .id = app_chrome.agent_button_id, .route = .{ .view = .agent } },
+    .{ .id = app_docs.source_button_id, .route = .{ .view = .source } },
+    .{ .id = app_docs.component_catalog_button_id, .route = .{ .view = .components } },
+    .{ .id = app_blog.back_button_id, .route = .{ .view = .blog } },
+};
+
+fn routeFromStaticHit(hit_id: u32) ?Route {
+    for (static_routes) |binding| {
+        if (binding.id == hit_id) return binding.route;
+    }
+    return null;
+}
+
+const dynamic_route_resolvers = [_]ResolveRouteFromHit{
+    blogPostFromHit,
+    arcFilterFromHit,
+    componentCatalogFromHit,
+    componentPreviewFromHit,
+    docsOrCatalogFromHit,
+};
+
+fn blogPostFromHit(hit_id: u32, current: Route) ?Route {
+    if (app_blog.postIdFromHit(hit_id)) |post_id| {
+        return .{ .view = .blog, .selected_blog_post_id = post_id, .blog_arc_filter_index = current.blog_arc_filter_index };
+    }
+    return null;
+}
+
+fn arcFilterFromHit(hit_id: u32, _: Route) ?Route {
+    if (app_blog.arcFilterIndexById(hit_id)) |index| {
+        return .{ .view = .blog, .blog_arc_filter_index = index };
+    }
+    return null;
+}
+
+fn componentCatalogFromHit(hit_id: u32, _: Route) ?Route {
+    if (component_gallery.indexByCatalogHit(hit_id)) |index| {
+        return .{ .view = .components, .selected_component_index = index };
+    }
+    return null;
+}
+
+fn componentPreviewFromHit(hit_id: u32, _: Route) ?Route {
+    if (component_gallery.indexByPreviewHit(hit_id)) |index| {
+        return .{ .view = .components, .selected_component_index = index };
+    }
+    return null;
+}
+
+fn docsOrCatalogFromHit(hit_id: u32, _: Route) ?Route {
     if (app_docs.indexFromHit(hit_id)) |index| {
         if (isComponentDocIndex(index)) return .{ .view = .components };
         return .{ .view = .docs, .selected_doc_index = index };
     }
     return null;
+}
+
+pub fn contract() Contract {
+    return .{
+        .static_routes = &static_routes,
+        .action_bindings = &action_bindings,
+    };
 }
 
 fn academyPostRoute(slug: []const u8) Route {

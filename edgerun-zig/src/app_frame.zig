@@ -5,14 +5,15 @@ const card_component = @import("ui/components/Card.zig");
 const icon_component = @import("ui/components/Icon.zig");
 const row_item_component = @import("ui/components/RowItem.zig");
 const interaction = @import("ui_interaction.zig");
-const app_agent = @import("app_agent.zig");
-const app_blog = @import("app_blog.zig");
-const app_chrome = @import("app_chrome.zig");
-const app_docs = @import("app_docs.zig");
-const app_landing = @import("app_landing.zig");
+const app_bundle = @import("app_bundle.zig");
+const app_agent = app_bundle.app_agent;
+const app_blog = app_bundle.app_blog;
+const app_chrome = app_bundle.app_chrome;
+const app_docs = app_bundle.app_docs;
+const app_landing = app_bundle.app_landing;
 const app_navigation = @import("app_navigation.zig");
-const app_source = @import("app_source.zig");
-const design = @import("app_design.zig");
+const app_source = app_bundle.app_source;
+const design = app_bundle.app_design;
 const ui = @import("ui.zig");
 const text_component = @import("ui/components/Text.zig");
 const ui_overlay = @import("ui_overlay.zig");
@@ -103,11 +104,11 @@ fn renderWorkspaceTop(scene: *ui.Scene, collector: *interaction.Collector, bound
 fn renderWorkspaceRail(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, active: app_navigation.View) !void {
     try scene.pushRect(bounds, workspace_rail_bg, .fill, 0.0, 0.0);
     const items = [_]struct { id: u32, icon_value: icon_component.Icon, label: []const u8, view: app_navigation.View }{
-        .{ .id = app_chrome.source_button_id, .icon_value = icon_component.Icon.named(.code), .label = "Source", .view = .source },
-        .{ .id = app_chrome.agent_button_id, .icon_value = icon_component.Icon.named(.sparkles), .label = "Agent", .view = .agent },
-        .{ .id = app_docs.component_catalog_button_id, .icon_value = icon_component.Icon.named(.app), .label = "Components", .view = .components },
-        .{ .id = app_chrome.docs_button_id, .icon_value = icon_component.Icon.named(.file), .label = "Docs", .view = .docs },
-        .{ .id = app_chrome.blog_button_id, .icon_value = icon_component.Icon.named(.terminal), .label = "Academy", .view = .blog },
+        .{ .id = app_navigation.topLevelButtonId(.source), .icon_value = icon_component.Icon.named(.code), .label = "Source", .view = .source },
+        .{ .id = app_navigation.topLevelButtonId(.agent), .icon_value = icon_component.Icon.named(.sparkles), .label = "Agent", .view = .agent },
+        .{ .id = app_navigation.topLevelButtonId(.components), .icon_value = icon_component.Icon.named(.app), .label = "Components", .view = .components },
+        .{ .id = app_navigation.topLevelButtonId(.docs), .icon_value = icon_component.Icon.named(.file), .label = "Docs", .view = .docs },
+        .{ .id = app_navigation.topLevelButtonId(.blog), .icon_value = icon_component.Icon.named(.terminal), .label = "Academy", .view = .blog },
     };
     var y = bounds.y + workspace_rail_pad;
     for (items) |item| {
@@ -137,11 +138,11 @@ fn renderWorkspaceSidebar(scene: *ui.Scene, collector: *interaction.Collector, b
     try text_component.Text.renderAligned(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 36.0, bounds.w - 32.0, 14.0), sidebarDetail(route), design.palette.muted, .start);
     var y = bounds.y + 68.0;
     const rows = [_]struct { id: u32, title: []const u8, detail: []const u8, view: app_navigation.View }{
-        .{ .id = app_chrome.source_button_id, .title = "Source", .detail = "edit app workspace", .view = .source },
-        .{ .id = app_chrome.agent_button_id, .title = "Agent", .detail = "local model and tools", .view = .agent },
-        .{ .id = app_docs.component_catalog_button_id, .title = "Components", .detail = "edit and preview system", .view = .components },
-        .{ .id = app_chrome.docs_button_id, .title = "Docs", .detail = "manual inside workspace", .view = .docs },
-        .{ .id = app_chrome.blog_button_id, .title = "Academy", .detail = "lessons inside workspace", .view = .blog },
+        .{ .id = app_navigation.topLevelButtonId(.source), .title = "Source", .detail = "edit app workspace", .view = .source },
+        .{ .id = app_navigation.topLevelButtonId(.agent), .title = "Agent", .detail = "local model and tools", .view = .agent },
+        .{ .id = app_navigation.topLevelButtonId(.components), .title = "Components", .detail = "edit and preview system", .view = .components },
+        .{ .id = app_navigation.topLevelButtonId(.docs), .title = "Docs", .detail = "manual inside workspace", .view = .docs },
+        .{ .id = app_navigation.topLevelButtonId(.blog), .title = "Academy", .detail = "lessons inside workspace", .view = .blog },
     };
     for (rows) |row| {
         const row_bounds = ui.Rect.init(bounds.x + 10.0, y, bounds.w - 20.0, 42.0);
@@ -319,12 +320,12 @@ test "app frame routes through workspace sidebar instead of top navbar" {
     try render(&scene, &collector, ui.Rect.init(0, 0, 1280, 800), .{ .route = .{ .view = .components } });
 
     try std.testing.expect(hasText(scene.written(), "Components"));
-    try expectHit(collector.written(), app_chrome.source_button_id);
-    try expectHit(collector.written(), app_chrome.agent_button_id);
+    try expectHit(collector.written(), app_navigation.topLevelButtonId(.source));
+    try expectHit(collector.written(), app_navigation.topLevelButtonId(.agent));
     try expectHit(collector.written(), app_docs.component_catalog_button_id);
-    try expectHit(collector.written(), app_chrome.docs_button_id);
-    try expectHit(collector.written(), app_chrome.blog_button_id);
-    try expectNoHit(collector.written(), app_chrome.logo_button_id);
+    try expectHit(collector.written(), app_navigation.topLevelButtonId(.docs));
+    try expectHit(collector.written(), app_navigation.topLevelButtonId(.blog));
+    try expectNoHit(collector.written(), app_navigation.topLevelButtonId(.logo));
 }
 
 test "app frame uses source editor as workspace shell without nested chrome" {

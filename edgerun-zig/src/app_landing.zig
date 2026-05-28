@@ -9,12 +9,7 @@ const icon_component = @import("ui/components/Icon.zig");
 const app_chrome = @import("app_chrome.zig");
 const design = @import("app_design.zig");
 const app_layout = @import("app_layout.zig");
-
-pub const logo_button_id: u32 = app_chrome.logo_button_id;
-pub const docs_button_id: u32 = app_chrome.docs_button_id;
-pub const blog_button_id: u32 = app_chrome.blog_button_id;
-pub const source_button_id: u32 = app_chrome.source_button_id;
-pub const reveal_identity_button_id: u32 = 20_001;
+const app_navigation = @import("app_navigation.zig");
 
 const max_columns: usize = 4;
 const header_h: f32 = app_chrome.header_h;
@@ -325,7 +320,7 @@ fn renderTerminal(scene: *ui.Scene, collector: *interaction.Collector, bounds: u
 
     if (!state.public_identity_ready) {
         const reveal = ui.Rect.init(bounds.x + 24.0, bounds.y + bounds.h - 54.0, 196.0, 32.0);
-        try outlineButton(scene, collector, reveal, "Click to Reveal ID", reveal_identity_button_id);
+        try outlineButton(scene, collector, reveal, "Click to Reveal ID", app_navigation.reveal_identity_button_id);
     }
 }
 

@@ -1,7 +1,8 @@
 const std = @import("std");
-const app_cursor = @import("app_cursor.zig");
+const app_bundle = @import("app_bundle.zig");
+const app_cursor = app_bundle.app_cursor;
 const app_frame = @import("app_frame.zig");
-const app_input_event = @import("app_input_event.zig");
+const app_input_event = app_bundle.app_input_event;
 const app_navigation = @import("app_navigation.zig");
 const interaction = @import("ui_interaction.zig");
 const ui = @import("ui.zig");
@@ -100,7 +101,7 @@ pub fn scrollBy(state: *State, width: f32, viewport_height: f32, delta_y: f32) v
 
 test "native input activates routes and resets scroll through shared state" {
     var state = State{ .scroll_y = 120.0 };
-    state.runtime.hovered = .{ .kind = .button, .id = @import("app_chrome.zig").docs_button_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
+    state.runtime.hovered = .{ .kind = .button, .id = app_navigation.topLevelButtonId(.docs), .bounds = ui.Rect.init(0, 0, 1, 1) };
 
     activateHovered(&state);
 
@@ -110,7 +111,7 @@ test "native input activates routes and resets scroll through shared state" {
 
 test "native input reveals host identity from shared action policy" {
     var state = State{ .public_identity_ready = false, .public_identity = "pending", .reveal_identity = "native-test" };
-    state.runtime.hovered = .{ .kind = .button, .id = @import("app_landing.zig").reveal_identity_button_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
+    state.runtime.hovered = .{ .kind = .button, .id = app_navigation.reveal_identity_button_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
 
     activateHovered(&state);
 
@@ -123,7 +124,7 @@ test "native input pointer path uses shared runtime activation" {
     var scene = ui.Scene.init(&commands);
     var regions: [1]interaction.Region = undefined;
     var collector = interaction.Collector.init(&regions);
-    try collector.addHit(ui.Rect.init(0, 0, 20, 20), .button, @import("app_chrome.zig").blog_button_id);
+    try collector.addHit(ui.Rect.init(0, 0, 20, 20), .button, app_navigation.topLevelButtonId(.blog));
     var state = State{ .hover_x = 8.0, .hover_y = 8.0 };
 
     processPointerEvent(&state, scene.written(), collector.written(), .pointer_down);
