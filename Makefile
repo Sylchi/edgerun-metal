@@ -24,8 +24,8 @@ PAGES_WORKTREE_DIR := $(BUILD_DIR)/pages-worktree
 PAGES_ZIG_OUT := edgerun-zig/zig-out
 PAGES_PUBLIC_URL ?= https://sylchi.github.io/edgerun-c/
 APP_RUNTIME_WASM := $(PAGES_ZIG_OUT)/bin/edgerun-app-runtime.wasm
-FONT_ATLAS_WIDTH := 2048
-FONT_ATLAS_HEIGHT := 2048
+FONT_ATLAS_WIDTH := 4096
+FONT_ATLAS_HEIGHT := 4096
 FONT_ATLAS_CHANNELS := 1
 FONT_ATLAS_BYTES := $(shell expr $(FONT_ATLAS_WIDTH) \* $(FONT_ATLAS_HEIGHT) \* $(FONT_ATLAS_CHANNELS))
 
