@@ -65,15 +65,23 @@ pub fn scope(namespace: []const u8) Scope {
 }
 
 fn stableHash32(namespace: []const u8, role: []const u8, key: []const u8) HitId {
-    var hasher = std.hash.Wyhash.init(0x9d76_12aa_4f65_3b29);
-    hasher.update("edgerun:ui-hit:v1");
-    hasher.update(namespace);
-    hasher.update(&.{0});
-    hasher.update(role);
-    hasher.update(&.{0});
-    hasher.update(key);
-    const value: u32 = @truncate(hasher.final());
-    return if (value == 0) 1 else value;
+    var hash: u32 = 0x811c9dc5;
+    hash = updateHash(hash, "edgerun:ui-hit:v1");
+    hash = updateHash(hash, namespace);
+    hash = updateHash(hash, &.{0});
+    hash = updateHash(hash, role);
+    hash = updateHash(hash, &.{0});
+    hash = updateHash(hash, key);
+    return if (hash == 0) 1 else hash;
+}
+
+fn updateHash(initial: u32, value: []const u8) u32 {
+    var hash = initial;
+    for (value) |byte| {
+        hash ^= byte;
+        hash *%= 0x01000193;
+    }
+    return hash;
 }
 
 test "hit ids are deterministic and non-zero" {
