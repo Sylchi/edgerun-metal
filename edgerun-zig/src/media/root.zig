@@ -5,6 +5,9 @@ pub const audio = @import("audio.zig");
 pub const Header = image.Header;
 pub const DecodeError = image.DecodeError;
 pub const EncodeError = image.EncodeError;
+pub const RuntimeImageError = image.RuntimeImageError;
+pub const RuntimeImageHeader = image.RuntimeImageHeader;
+pub const RuntimeImageView = image.RuntimeImageView;
 pub const Format = image.Format;
 
 pub const WebpAnimationHeader = image.WebpAnimationHeader;
@@ -17,6 +20,17 @@ pub const decodeHeader = image.decodeHeader;
 pub const decode = image.decode;
 pub const decodeWithScratch = image.decodeWithScratch;
 pub const scratchByteLen = image.scratchByteLen;
+
+pub const runtimeImageMagic = image.runtimeImageMagic;
+pub const runtimeImageHeaderSize = image.runtimeImageHeaderSize;
+pub const runtimeImageRgbaCanonicalLen = image.runtimeImageRgbaCanonicalLen;
+pub const runtimeCanonicalLen = image.runtimeCanonicalLen;
+pub const runtimeCanonicalLenForHeader = image.runtimeCanonicalLenForHeader;
+pub const encodeRuntimeRgba = image.encodeRuntimeRgba;
+pub const decodeRuntimeRgbaObject = image.decodeRuntimeRgbaObject;
+pub const decodeToRuntimeWithScratch = image.decodeToRuntimeWithScratch;
+pub const decodeRuntimeImage = image.decodeRuntimeImage;
+pub const decodeRuntimeRgba = image.decodeRuntimeRgba;
 
 pub const pngScratchByteLen = image.pngScratchByteLen;
 pub const decodePngHeader = image.decodePngHeader;
