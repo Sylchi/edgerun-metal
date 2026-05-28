@@ -11,7 +11,7 @@ pub const cloud_meme_png = @embedFile("assets/old-man-yells-at-cloud.png");
 
 var cloud_meme_pixels: [cloud_meme_pixel_count]ui.Color = undefined;
 var cloud_meme_runtime: [cloud_meme_runtime_len]u8 = undefined;
-var cloud_meme_scratch: [image.pngScratchByteLen(cloud_meme_png.len, cloud_meme_width, cloud_meme_height)]u8 = undefined;
+var cloud_meme_scratch: [image.importScratchByteLen(cloud_meme_png, cloud_meme_width, cloud_meme_height)]u8 = undefined;
 var cloud_meme_ready = false;
 
 pub fn cloudMeme() image.RuntimeImageError!renderer_software.RgbaTexture {
@@ -30,7 +30,7 @@ pub fn cloudMemeRuntime() image.RuntimeImageError![]const u8 {
 
 fn ensureCloudMemeRuntime() image.RuntimeImageError!void {
     if (cloud_meme_ready) return;
-    const encoded = try image.decodeToRuntimeDefaultTiledWithScratch(cloud_meme_png, &cloud_meme_pixels, &cloud_meme_scratch, &cloud_meme_runtime);
+    const encoded = try image.importToRuntimeDefaultTiledWithScratch(cloud_meme_png, &cloud_meme_pixels, &cloud_meme_scratch, &cloud_meme_runtime);
     if (encoded.len != cloud_meme_runtime_len) return error.BadImage;
     const header = try image.decodeRuntimeRgba(encoded, &cloud_meme_pixels);
     if (header.width != cloud_meme_width or header.height != cloud_meme_height) return error.BadImage;
@@ -57,8 +57,8 @@ pub fn cloudMemeRuntimeLen() usize {
     return runtime.len;
 }
 
-test "cloud meme decodes to tiled runtime image and rgba texture" {
-    try @import("std").testing.expectEqual(image.Format.png, try image.detectFormat(cloud_meme_png));
+test "cloud meme imports to tiled runtime image and rgba texture" {
+    try @import("std").testing.expectEqual(image.ImportFormat.png, try image.importDetectFormat(cloud_meme_png));
     const runtime = try cloudMemeRuntime();
     try @import("std").testing.expectEqual(image.Format.erimg, try image.detectFormat(runtime));
     try @import("std").testing.expectEqual(cloud_meme_runtime_len, runtime.len);
