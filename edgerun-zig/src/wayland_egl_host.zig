@@ -2,11 +2,11 @@ const std = @import("std");
 const bytes = @import("bytes.zig");
 const interaction = @import("ui_interaction.zig");
 const renderer_font_atlas = @import("render/font_atlas_weighted.zig");
-const renderer_gles = @import("render/gles.zig");
+const renderer_gles = @import("render/backends/gles.zig");
 const renderer_ir = @import("render/ir.zig");
 const renderer_parity = @import("render/parity.zig");
 const renderer_pipeline = @import("render/pipeline.zig");
-const renderer_software = @import("render/software.zig");
+const renderer_software = @import("render/backends/software.zig");
 const app_blog = @import("app_blog.zig");
 const app_chrome = @import("app_chrome.zig");
 const app_cursor = @import("app_cursor.zig");
@@ -16,16 +16,11 @@ const app_input_event = @import("app_input_event.zig");
 const app_navigation = @import("app_navigation.zig");
 const app_native_input = @import("app_native_input.zig");
 const ui = @import("ui.zig");
+const wl = @import("linux_wayland.zig");
+const gpu = @import("linux_gpu.zig");
 
 const linux = std.os.linux;
 const posix = std.posix;
-
-const c = @cImport({
-    @cInclude("wayland-client.h");
-    @cInclude("wayland-egl.h");
-    @cInclude("xdg-shell-client-protocol.h");
-    @cInclude("EGL/egl.h");
-});
 
 const default_width: i32 = 960;
 const default_height: i32 = 540;
@@ -69,15 +64,16 @@ const Options = struct {
 };
 
 const WaylandState = struct {
-    display: *c.wl_display,
-    registry: *c.wl_registry,
-    compositor: ?*c.wl_compositor = null,
-    wm_base: ?*c.xdg_wm_base = null,
-    seat: ?*c.wl_seat = null,
-    pointer: ?*c.wl_pointer = null,
-    surface: ?*c.wl_surface = null,
-    xdg_surface: ?*c.xdg_surface = null,
-    toplevel: ?*c.xdg_toplevel = null,
+    wayland: wl.Wayland,
+    display: *wl.WlDisplay,
+    registry: *wl.WlRegistry,
+    compositor: ?*wl.WlCompositor = null,
+    wm_base: ?*wl.XdgWmBase = null,
+    seat: ?*wl.WlSeat = null,
+    pointer: ?*wl.WlPointer = null,
+    surface: ?*wl.WlSurface = null,
+    xdg_surface: ?*wl.XdgSurface = null,
+    toplevel: ?*wl.XdgToplevel = null,
     configured: bool = false,
     closed: bool = false,
     resized: bool = false,
@@ -99,16 +95,17 @@ const WaylandState = struct {
 };
 
 const EglState = struct {
-    display: c.EGLDisplay,
-    context: c.EGLContext,
-    surface: c.EGLSurface,
-    window: *c.wl_egl_window,
+    egl: gpu.Egl,
+    display: gpu.EGLDisplay,
+    context: gpu.EGLContext,
+    surface: gpu.EGLSurface,
+    window: *wl.WlEglWindow,
 
-    fn surfaceSize(self: EglState) !SurfaceSize {
-        var width: c.EGLint = 0;
-        var height: c.EGLint = 0;
-        if (c.eglQuerySurface(self.display, self.surface, c.EGL_WIDTH, &width) != c.EGL_TRUE) return error.EglSurfaceQueryFailed;
-        if (c.eglQuerySurface(self.display, self.surface, c.EGL_HEIGHT, &height) != c.EGL_TRUE) return error.EglSurfaceQueryFailed;
+    fn surfaceSize(self: *EglState) !SurfaceSize {
+        var width: gpu.EGLint = 0;
+        var height: gpu.EGLint = 0;
+        if (self.egl.eglQuerySurface(self.display, self.surface, @intCast(gpu.egl_width), &width) != gpu.egl_true) return error.EglSurfaceQueryFailed;
+        if (self.egl.eglQuerySurface(self.display, self.surface, @intCast(gpu.egl_height), &height) != gpu.egl_true) return error.EglSurfaceQueryFailed;
         if (width <= 0 or height <= 0) return error.InvalidFramebufferSize;
         return .{ .width = width, .height = height };
     }
@@ -172,10 +169,10 @@ pub fn main(init: std.process.Init) !void {
     const options = try parseOptions(args);
 
     var app = AppState{};
-    var wl: WaylandState = undefined;
-    try initWayland(&wl, options.width, options.height, options.scale, &app);
-    defer deinitWayland(&wl);
-    var egl = try initEgl(&wl);
+    var wl_state: WaylandState = undefined;
+    try initWayland(&wl_state, options.width, options.height, options.scale, &app);
+    defer deinitWayland(&wl_state);
+    var egl = try initEgl(&wl_state);
     defer deinitEgl(&egl);
     var font_atlas: renderer_font_atlas.Atlas = undefined;
     font_atlas.initUtf8();
@@ -188,65 +185,65 @@ pub fn main(init: std.process.Init) !void {
     defer gl.deinit();
 
     var scene_state = SceneState{};
-    var buffers = try scene_state.rebuild(wl.width, wl.height, &app, &font_atlas);
+    var buffers = try scene_state.rebuild(wl_state.width, wl_state.height, &app, &font_atlas);
     gl.refreshFontTexture(&font_atlas);
 
     var frames_remaining: u32 = options.seconds * 60;
     var frame_verified = false;
-    while (!wl.closed and frames_remaining != 0) : (frames_remaining -= 1) {
-        try pumpWaylandEvents(&wl);
+    while (!wl_state.closed and frames_remaining != 0) : (frames_remaining -= 1) {
+        try pumpWaylandEvents(&wl_state);
 
-        if (wl.resized) {
-            c.wl_egl_window_resize(egl.window, wl.framebufferWidth(), wl.framebufferHeight(), 0, 0);
-            buffers = try scene_state.rebuild(wl.width, wl.height, &app, &font_atlas);
+        if (wl_state.resized) {
+            wl_state.wayland.wl_egl_window_resize(egl.window, wl_state.framebufferWidth(), wl_state.framebufferHeight(), 0, 0);
+            buffers = try scene_state.rebuild(wl_state.width, wl_state.height, &app, &font_atlas);
             gl.refreshFontTexture(&font_atlas);
-            wl.resized = false;
-        } else if (wl.input_dirty) {
-            processPointerEvent(&wl, scene_state.commandSlice(), scene_state.regionSlice());
-            buffers = try scene_state.rebuild(wl.width, wl.height, &app, &font_atlas);
+            wl_state.resized = false;
+        } else if (wl_state.input_dirty) {
+            processPointerEvent(&wl_state, scene_state.commandSlice(), scene_state.regionSlice());
+            buffers = try scene_state.rebuild(wl_state.width, wl_state.height, &app, &font_atlas);
             gl.refreshFontTexture(&font_atlas);
-            wl.input_dirty = false;
+            wl_state.input_dirty = false;
         }
         const framebuffer = try egl.surfaceSize();
-        const receipt = try gl.renderFrameToViewport(wl.width, wl.height, framebuffer.width, framebuffer.height, buffers);
+        const receipt = try gl.renderFrameToViewport(wl_state.width, wl_state.height, framebuffer.width, framebuffer.height, buffers);
         if (!receipt.valid()) return error.InvalidGlesReceipt;
         if (options.verify_parity) {
-            try verifyGpuCpuParity(gl, wl.width, wl.height, framebuffer.width, framebuffer.height, buffers, &font_atlas, cloud_meme, allocator);
+            try verifyGpuCpuParity(gl, wl_state.width, wl_state.height, framebuffer.width, framebuffer.height, buffers, &font_atlas, cloud_meme, allocator);
         }
         if (!frame_verified) {
             _ = try gl.verifyFrameNonBlank(framebuffer.width, framebuffer.height);
             frame_verified = true;
         }
-        if (c.eglSwapBuffers(egl.display, egl.surface) != c.EGL_TRUE) return error.EglSwapFailed;
+        if (egl.egl.eglSwapBuffers(egl.display, egl.surface) != gpu.egl_true) return error.EglSwapFailed;
         sleepFrame();
     }
 }
 
-fn pumpWaylandEvents(wl: *WaylandState) !void {
-    while (c.wl_display_prepare_read(wl.display) != 0) {
-        if (c.wl_display_dispatch_pending(wl.display) < 0) return error.WaylandDispatchFailed;
+fn pumpWaylandEvents(wl_state: *WaylandState) !void {
+    while (wl_state.wayland.wl_display_prepare_read(wl_state.display) != 0) {
+        if (wl_state.wayland.wl_display_dispatch_pending(wl_state.display) < 0) return error.WaylandDispatchFailed;
     }
-    if (c.wl_display_flush(wl.display) < 0) {
-        c.wl_display_cancel_read(wl.display);
+    if (wl_state.wayland.wl_display_flush(wl_state.display) < 0) {
+        wl_state.wayland.wl_display_cancel_read(wl_state.display);
         return error.WaylandFlushFailed;
     }
 
     var fds = [_]posix.pollfd{.{
-        .fd = c.wl_display_get_fd(wl.display),
+        .fd = wl_state.wayland.wl_display_get_fd(wl_state.display),
         .events = linux.POLL.IN,
         .revents = 0,
     }};
     const ready = try posix.poll(&fds, 0);
     if ((fds[0].revents & (linux.POLL.ERR | linux.POLL.HUP | linux.POLL.NVAL)) != 0) {
-        c.wl_display_cancel_read(wl.display);
+        wl_state.wayland.wl_display_cancel_read(wl_state.display);
         return error.WaylandPollFailed;
     }
     if (ready != 0 and (fds[0].revents & linux.POLL.IN) != 0) {
-        if (c.wl_display_read_events(wl.display) < 0) return error.WaylandReadFailed;
+        if (wl_state.wayland.wl_display_read_events(wl_state.display) < 0) return error.WaylandReadFailed;
     } else {
-        c.wl_display_cancel_read(wl.display);
+        wl_state.wayland.wl_display_cancel_read(wl_state.display);
     }
-    if (c.wl_display_dispatch_pending(wl.display) < 0) return error.WaylandDispatchFailed;
+    if (wl_state.wayland.wl_display_dispatch_pending(wl_state.display) < 0) return error.WaylandDispatchFailed;
 }
 
 fn sleepFrame() void {
@@ -453,195 +450,199 @@ fn printParityIconsAt(label: []const u8, values: []const f32, x: f32, y: f32) vo
 }
 
 fn initWayland(state: *WaylandState, width: i32, height: i32, scale: i32, app: *AppState) !void {
-    const display = c.wl_display_connect(null) orelse return error.WaylandConnectFailed;
-    errdefer c.wl_display_disconnect(display);
-    const registry = c.wl_display_get_registry(display) orelse return error.WaylandRegistryFailed;
-    state.* = .{ .display = display, .registry = registry, .app = app, .width = width, .height = height, .scale = scale };
-    if (c.wl_registry_add_listener(registry, &registry_listener, state) != 0) return error.WaylandRegistryFailed;
-    if (c.wl_display_roundtrip(display) < 0) return error.WaylandRoundtripFailed;
+    var wayland = try wl.Wayland.open();
+    errdefer wayland.deinit();
+    const display = wayland.wl_display_connect(null) orelse return error.WaylandConnectFailed;
+    errdefer wayland.wl_display_disconnect(display);
+    const registry = wayland.wl_display_get_registry(display) orelse return error.WaylandRegistryFailed;
+    state.* = .{ .wayland = wayland, .display = display, .registry = registry, .app = app, .width = width, .height = height, .scale = scale };
+    if (state.wayland.wl_registry_add_listener(registry, &registry_listener, state) != 0) return error.WaylandRegistryFailed;
+    if (state.wayland.wl_display_roundtrip(display) < 0) return error.WaylandRoundtripFailed;
     const compositor = state.compositor orelse return error.MissingWaylandCompositor;
     const wm_base = state.wm_base orelse return error.MissingXdgWmBase;
-    if (c.xdg_wm_base_add_listener(wm_base, &wm_base_listener, state) != 0) return error.XdgListenerFailed;
+    if (wl.xdg_wm_base_add_listener(wm_base, &wm_base_listener, state) != 0) return error.XdgListenerFailed;
     if (state.seat) |seat| {
-        if (c.wl_seat_add_listener(seat, &seat_listener, state) != 0) return error.WaylandSeatListenerFailed;
+        if (state.wayland.wl_seat_add_listener(seat, &seat_listener, state) != 0) return error.WaylandSeatListenerFailed;
     }
-    state.surface = c.wl_compositor_create_surface(compositor) orelse return error.WaylandSurfaceFailed;
-    c.wl_surface_set_buffer_scale(state.surface, scale);
-    state.xdg_surface = c.xdg_wm_base_get_xdg_surface(wm_base, state.surface) orelse return error.XdgSurfaceFailed;
-    if (c.xdg_surface_add_listener(state.xdg_surface, &xdg_surface_listener, state) != 0) return error.XdgListenerFailed;
-    state.toplevel = c.xdg_surface_get_toplevel(state.xdg_surface) orelse return error.XdgToplevelFailed;
-    if (c.xdg_toplevel_add_listener(state.toplevel, &xdg_toplevel_listener, state) != 0) return error.XdgListenerFailed;
-    c.xdg_toplevel_set_title(state.toplevel, "EdgeRun EGL GPU");
-    c.wl_surface_commit(state.surface);
+    state.surface = state.wayland.wl_compositor_create_surface(compositor) orelse return error.WaylandSurfaceFailed;
+    state.wayland.wl_surface_set_buffer_scale(state.surface, scale);
+    state.xdg_surface = wl.xdg_wm_base_get_xdg_surface(wm_base, state.surface) orelse return error.XdgSurfaceFailed;
+    if (wl.xdg_surface_add_listener(state.xdg_surface, &xdg_surface_listener, state) != 0) return error.XdgListenerFailed;
+    state.toplevel = wl.xdg_surface_get_toplevel(state.xdg_surface) orelse return error.XdgToplevelFailed;
+    if (wl.xdg_toplevel_add_listener(state.toplevel, &xdg_toplevel_listener, state) != 0) return error.XdgListenerFailed;
+    wl.xdg_toplevel_set_title(state.toplevel, "EdgeRun EGL GPU");
+    state.wayland.wl_surface_commit(state.surface);
     while (!state.configured) {
-        if (c.wl_display_dispatch(display) < 0) return error.WaylandDispatchFailed;
+        if (state.wayland.wl_display_dispatch(display) < 0) return error.WaylandDispatchFailed;
     }
 }
 
 fn deinitWayland(state: *WaylandState) void {
-    if (state.pointer) |value| c.wl_pointer_destroy(value);
-    if (state.seat) |value| c.wl_seat_destroy(value);
-    if (state.toplevel) |value| c.xdg_toplevel_destroy(value);
-    if (state.xdg_surface) |value| c.xdg_surface_destroy(value);
-    if (state.surface) |value| c.wl_surface_destroy(value);
-    if (state.wm_base) |value| c.xdg_wm_base_destroy(value);
-    if (state.compositor) |value| c.wl_compositor_destroy(value);
-    c.wl_registry_destroy(state.registry);
-    c.wl_display_disconnect(state.display);
+    if (state.pointer) |value| state.wayland.wl_pointer_destroy(value);
+    if (state.seat) |value| state.wayland.wl_seat_destroy(value);
+    if (state.toplevel) |value| wl.xdg_toplevel_destroy(value);
+    if (state.xdg_surface) |value| wl.xdg_surface_destroy(value);
+    if (state.surface) |value| state.wayland.wl_surface_destroy(value);
+    if (state.wm_base) |value| wl.xdg_wm_base_destroy(value);
+    if (state.compositor) |value| state.wayland.wl_compositor_destroy(value);
+    state.wayland.wl_registry_destroy(state.registry);
+    state.wayland.wl_display_disconnect(state.display);
+    state.wayland.deinit();
 }
 
-fn initEgl(wl: *WaylandState) !EglState {
-    const egl_display = c.eglGetDisplay(@ptrCast(wl.display));
-    if (egl_display == c.EGL_NO_DISPLAY) return error.EglDisplayFailed;
-    var major: c.EGLint = 0;
-    var minor: c.EGLint = 0;
-    if (c.eglInitialize(egl_display, &major, &minor) != c.EGL_TRUE) return error.EglInitializeFailed;
-    if (c.eglBindAPI(c.EGL_OPENGL_ES_API) != c.EGL_TRUE) return error.EglApiFailed;
-    const attrs = [_]c.EGLint{
-        c.EGL_SURFACE_TYPE,    c.EGL_WINDOW_BIT,
-        c.EGL_RENDERABLE_TYPE, c.EGL_OPENGL_ES2_BIT,
-        c.EGL_RED_SIZE,        8,
-        c.EGL_GREEN_SIZE,      8,
-        c.EGL_BLUE_SIZE,       8,
-        c.EGL_ALPHA_SIZE,      8,
-        c.EGL_NONE,
+fn initEgl(wl_state: *WaylandState) !EglState {
+    var egl_wrapper = try gpu.Egl.open();
+    errdefer egl_wrapper.lib.close();
+    const egl_display = egl_wrapper.eglGetDisplay(@ptrCast(wl_state.display));
+    if (egl_display == null) return error.EglDisplayFailed;
+    var major: gpu.EGLint = 0;
+    var minor: gpu.EGLint = 0;
+    if (egl_wrapper.eglInitialize(egl_display, &major, &minor) != gpu.egl_true) return error.EglInitializeFailed;
+    if (egl_wrapper.eglBindAPI(gpu.egl_opengl_es_api) != gpu.egl_true) return error.EglApiFailed;
+    const attrs = [_]gpu.EGLint{
+        gpu.egl_surface_type,    gpu.egl_window_bit,
+        gpu.egl_renderable_type, gpu.egl_opengl_es2_bit,
+        gpu.egl_red_size,        8,
+        gpu.egl_green_size,      8,
+        gpu.egl_blue_size,       8,
+        gpu.egl_alpha_size,      8,
+        gpu.egl_none,
     };
-    var config: c.EGLConfig = null;
-    var count: c.EGLint = 0;
-    if (c.eglChooseConfig(egl_display, &attrs, &config, 1, &count) != c.EGL_TRUE or count == 0) return error.EglConfigFailed;
-    const context_attrs = [_]c.EGLint{ c.EGL_CONTEXT_CLIENT_VERSION, 2, c.EGL_NONE };
-    const context = c.eglCreateContext(egl_display, config, c.EGL_NO_CONTEXT, &context_attrs);
-    if (context == c.EGL_NO_CONTEXT) return error.EglContextFailed;
-    errdefer _ = c.eglDestroyContext(egl_display, context);
-    const surface = wl.surface orelse return error.WaylandSurfaceFailed;
-    const window = c.wl_egl_window_create(surface, wl.framebufferWidth(), wl.framebufferHeight()) orelse return error.EglWindowFailed;
-    errdefer c.wl_egl_window_destroy(window);
-    const egl_surface = c.eglCreateWindowSurface(egl_display, config, @ptrCast(window), null);
-    if (egl_surface == c.EGL_NO_SURFACE) return error.EglSurfaceFailed;
-    if (c.eglMakeCurrent(egl_display, egl_surface, egl_surface, context) != c.EGL_TRUE) return error.EglMakeCurrentFailed;
-    if (c.eglSwapInterval(egl_display, 1) != c.EGL_TRUE) return error.EglSwapIntervalFailed;
-    return .{ .display = egl_display, .context = context, .surface = egl_surface, .window = window };
+    var config: gpu.EGLConfig = undefined;
+    var count: gpu.EGLint = 0;
+    if (egl_wrapper.eglChooseConfig(egl_display, &attrs, &config, 1, &count) != gpu.egl_true or count == 0) return error.EglConfigFailed;
+    const context_attrs = [_]gpu.EGLint{ gpu.egl_context_client_version, 2, gpu.egl_none };
+    const context = egl_wrapper.eglCreateContext(egl_display, config, gpu.egl_no_context, &context_attrs);
+    if (context == null) return error.EglContextFailed;
+    errdefer _ = egl_wrapper.eglDestroyContext(egl_display, context);
+    const surface = wl_state.surface orelse return error.WaylandSurfaceFailed;
+    const window = wl_state.wayland.wl_egl_window_create(surface, wl_state.framebufferWidth(), wl_state.framebufferHeight()) orelse return error.EglWindowFailed;
+    errdefer wl_state.wayland.wl_egl_window_destroy(window);
+    const egl_surface = egl_wrapper.eglCreateWindowSurface(egl_display, config, @ptrCast(window), null);
+    if (egl_surface == null) return error.EglSurfaceFailed;
+    if (egl_wrapper.eglMakeCurrent(egl_display, egl_surface, egl_surface, context) != gpu.egl_true) return error.EglMakeCurrentFailed;
+    if (egl_wrapper.eglSwapInterval(egl_display, 1) != gpu.egl_true) return error.EglSwapIntervalFailed;
+    return .{ .egl = egl_wrapper, .display = egl_display, .context = context, .surface = egl_surface, .window = window };
 }
 
-fn deinitEgl(egl: *EglState) void {
-    _ = c.eglMakeCurrent(egl.display, c.EGL_NO_SURFACE, c.EGL_NO_SURFACE, c.EGL_NO_CONTEXT);
-    _ = c.eglDestroySurface(egl.display, egl.surface);
-    _ = c.eglDestroyContext(egl.display, egl.context);
-    c.wl_egl_window_destroy(egl.window);
-    _ = c.eglTerminate(egl.display);
+fn deinitEgl(egl_state: *EglState) void {
+    _ = egl_state.egl.eglMakeCurrent(egl_state.display, gpu.egl_no_surface, gpu.egl_no_surface, gpu.egl_no_context);
+    _ = egl_state.egl.eglDestroySurface(egl_state.display, egl_state.surface);
+    _ = egl_state.egl.eglDestroyContext(egl_state.display, egl_state.context);
+    egl_state.egl.lib.close();
 }
 
 fn updateHoverHit(app: *AppState, regions: []const interaction.Region) void {
     app_native_input.refreshHover(&app.input, regions);
 }
 
-fn processPointerEvent(wl: *WaylandState, commands: []const ui.Command, regions: []const interaction.Region) void {
-    if (wl.pointer_event) |event| app_native_input.processPointerEvent(&wl.app.input, commands, regions, event);
-    wl.pointer_event = null;
+fn processPointerEvent(wl_state: *WaylandState, commands: []const ui.Command, regions: []const interaction.Region) void {
+    if (wl_state.pointer_event) |event| app_native_input.processPointerEvent(&wl_state.app.input, commands, regions, event);
+    wl_state.pointer_event = null;
 }
 
 fn scrollBy(app: *AppState, width: i32, height: i32, delta_y: f32) void {
     app_native_input.scrollBy(&app.input, @floatFromInt(width), @floatFromInt(height), delta_y);
 }
 
-fn fixedToFloat(value: c.wl_fixed_t) f32 {
+fn fixedToFloat(value: wl.wl_fixed_t) f32 {
     return @as(f32, @floatFromInt(value)) / wayland_fixed_scale;
 }
 
-const registry_listener = c.wl_registry_listener{ .global = registryGlobal, .global_remove = registryRemove };
-fn registryGlobal(data: ?*anyopaque, registry: ?*c.wl_registry, name: u32, interface: [*c]const u8, version: u32) callconv(.c) void {
+const registry_listener = wl.WlRegistryListener{ .global = registryGlobal, .global_remove = registryRemove };
+fn registryGlobal(data: ?*anyopaque, registry: ?*wl.WlRegistry, name: u32, interface: [*c]const u8, version: u32) callconv(.c) void {
     const state: *WaylandState = @ptrCast(@alignCast(data.?));
     const reg = registry.?;
     const iface = std.mem.span(interface);
     if (bytes.eql(iface, "wl_compositor")) {
-        state.compositor = @ptrCast(c.wl_registry_bind(reg, name, &c.wl_compositor_interface, @min(version, 4)));
+        state.compositor = @ptrCast(state.wayland.wl_registry_bind(reg, name, state.wayland.wl_compositor_interface, @min(version, 4)));
     } else if (bytes.eql(iface, "xdg_wm_base")) {
-        state.wm_base = @ptrCast(c.wl_registry_bind(reg, name, &c.xdg_wm_base_interface, @min(version, 1)));
+        state.wm_base = @ptrCast(state.wayland.wl_registry_bind(reg, name, &wl.xdg_wm_base_interface, @min(version, 1)));
     } else if (bytes.eql(iface, "wl_seat")) {
-        state.seat = @ptrCast(c.wl_registry_bind(reg, name, &c.wl_seat_interface, @min(version, wl_seat_protocol_version)));
+        state.seat = @ptrCast(state.wayland.wl_registry_bind(reg, name, state.wayland.wl_seat_interface, @min(version, wl_seat_protocol_version)));
     }
 }
-fn registryRemove(_: ?*anyopaque, _: ?*c.wl_registry, _: u32) callconv(.c) void {}
+fn registryRemove(_: ?*anyopaque, _: ?*wl.WlRegistry, _: u32) callconv(.c) void {}
 
-const seat_listener = c.wl_seat_listener{ .capabilities = seatCapabilities, .name = seatName };
-fn seatCapabilities(data: ?*anyopaque, seat: ?*c.wl_seat, capabilities: u32) callconv(.c) void {
+const seat_listener = wl.WlSeatListener{ .capabilities = seatCapabilities, .name = seatName };
+fn seatCapabilities(data: ?*anyopaque, seat: ?*wl.WlSeat, capabilities: u32) callconv(.c) void {
     const state: *WaylandState = @ptrCast(@alignCast(data.?));
-    if ((capabilities & c.WL_SEAT_CAPABILITY_POINTER) != 0 and state.pointer == null) {
-        state.pointer = c.wl_seat_get_pointer(seat);
+    if ((capabilities & wl.wl_seat_capability_pointer) != 0 and state.pointer == null) {
+        state.pointer = state.wayland.wl_seat_get_pointer(seat.?);
         if (state.pointer) |pointer| {
-            _ = c.wl_pointer_add_listener(pointer, &pointer_listener, state);
+            _ = state.wayland.wl_pointer_add_listener(pointer, &pointer_listener, state);
         }
-    } else if ((capabilities & c.WL_SEAT_CAPABILITY_POINTER) == 0 and state.pointer != null) {
-        c.wl_pointer_destroy(state.pointer.?);
+    } else if ((capabilities & wl.wl_seat_capability_pointer) == 0 and state.pointer != null) {
+        state.wayland.wl_pointer_destroy(state.pointer.?);
         state.pointer = null;
     }
 }
-fn seatName(_: ?*anyopaque, _: ?*c.wl_seat, _: [*c]const u8) callconv(.c) void {}
+fn seatName(_: ?*anyopaque, _: ?*wl.WlSeat, _: [*c]const u8) callconv(.c) void {}
 
-const pointer_listener = c.wl_pointer_listener{
+const pointer_listener = wl.WlPointerListener{
     .enter = pointerEnter,
     .leave = pointerLeave,
     .motion = pointerMotion,
     .button = pointerButton,
     .axis = pointerAxis,
 };
-fn pointerEnter(data: ?*anyopaque, pointer: ?*c.wl_pointer, serial: u32, _: ?*c.wl_surface, sx: c.wl_fixed_t, sy: c.wl_fixed_t) callconv(.c) void {
+fn pointerEnter(data: ?*anyopaque, pointer: ?*wl.WlPointer, serial: u32, _: ?*wl.WlSurface, sx: wl.wl_fixed_t, sy: wl.wl_fixed_t) callconv(.c) void {
     const state: *WaylandState = @ptrCast(@alignCast(data.?));
     state.pointer_serial = serial;
-    hideHostCursor(pointer, serial);
+    hideHostCursor(state, pointer, serial);
     state.app.input.hover_x = fixedToFloat(sx);
     state.app.input.hover_y = fixedToFloat(sy);
     state.pointer_event = .pointer_move;
     state.input_dirty = true;
 }
-fn pointerLeave(data: ?*anyopaque, _: ?*c.wl_pointer, _: u32, _: ?*c.wl_surface) callconv(.c) void {
+fn pointerLeave(data: ?*anyopaque, _: ?*wl.WlPointer, _: u32, _: ?*wl.WlSurface) callconv(.c) void {
     const state: *WaylandState = @ptrCast(@alignCast(data.?));
     app_native_input.clearHover(&state.app.input);
     state.pointer_event = .pointer_leave;
     state.input_dirty = true;
 }
-fn pointerMotion(data: ?*anyopaque, _: ?*c.wl_pointer, _: u32, sx: c.wl_fixed_t, sy: c.wl_fixed_t) callconv(.c) void {
+fn pointerMotion(data: ?*anyopaque, _: ?*wl.WlPointer, _: u32, sx: wl.wl_fixed_t, sy: wl.wl_fixed_t) callconv(.c) void {
     const state: *WaylandState = @ptrCast(@alignCast(data.?));
     state.app.input.hover_x = fixedToFloat(sx);
     state.app.input.hover_y = fixedToFloat(sy);
     state.pointer_event = .pointer_move;
     state.input_dirty = true;
 }
-fn pointerButton(data: ?*anyopaque, pointer: ?*c.wl_pointer, serial: u32, _: u32, button: u32, button_state: u32) callconv(.c) void {
+fn pointerButton(data: ?*anyopaque, pointer: ?*wl.WlPointer, serial: u32, _: u32, button: u32, button_state: u32) callconv(.c) void {
     const state: *WaylandState = @ptrCast(@alignCast(data.?));
     state.pointer_serial = serial;
-    hideHostCursor(pointer, serial);
-    if (button == pointer_button_left and button_state == c.WL_POINTER_BUTTON_STATE_PRESSED) {
+    hideHostCursor(state, pointer, serial);
+    if (button == pointer_button_left and button_state == wl.wl_pointer_button_state_pressed) {
         state.pointer_event = .pointer_down;
-    } else if (button == pointer_button_left and button_state == c.WL_POINTER_BUTTON_STATE_RELEASED) {
+    } else if (button == pointer_button_left and button_state == wl.wl_pointer_button_state_released) {
         state.pointer_event = .pointer_up;
     }
     state.input_dirty = true;
 }
 
-fn hideHostCursor(pointer: ?*c.wl_pointer, serial: u32) void {
-    if (pointer) |value| c.wl_pointer_set_cursor(value, serial, null, 0, 0);
+fn hideHostCursor(wl_state: *WaylandState, pointer: ?*wl.WlPointer, serial: u32) void {
+    if (pointer) |value| wl_state.wayland.wl_pointer_set_cursor(value, serial, null, 0, 0);
 }
-fn pointerAxis(data: ?*anyopaque, _: ?*c.wl_pointer, _: u32, axis: u32, value: c.wl_fixed_t) callconv(.c) void {
+fn pointerAxis(data: ?*anyopaque, _: ?*wl.WlPointer, _: u32, axis: u32, value: wl.wl_fixed_t) callconv(.c) void {
     const state: *WaylandState = @ptrCast(@alignCast(data.?));
-    if (axis == c.WL_POINTER_AXIS_VERTICAL_SCROLL) scrollBy(state.app, state.width, state.height, fixedToFloat(value));
+    if (axis == wl.wl_pointer_axis_vertical_scroll) scrollBy(state.app, state.width, state.height, fixedToFloat(value));
     state.input_dirty = true;
 }
 
-const wm_base_listener = c.xdg_wm_base_listener{ .ping = wmBasePing };
-fn wmBasePing(_: ?*anyopaque, wm_base: ?*c.xdg_wm_base, serial: u32) callconv(.c) void {
-    c.xdg_wm_base_pong(wm_base, serial);
+const wm_base_listener = wl.XdgWmBaseListener{ .ping = wmBasePing };
+fn wmBasePing(_: ?*anyopaque, wm_base: ?*wl.XdgWmBase, serial: u32) callconv(.c) void {
+    wl.xdg_wm_base_pong(wm_base, serial);
 }
 
-const xdg_surface_listener = c.xdg_surface_listener{ .configure = xdgSurfaceConfigure };
-fn xdgSurfaceConfigure(data: ?*anyopaque, surface: ?*c.xdg_surface, serial: u32) callconv(.c) void {
+const xdg_surface_listener = wl.XdgSurfaceListener{ .configure = xdgSurfaceConfigure };
+fn xdgSurfaceConfigure(data: ?*anyopaque, surface: ?*wl.XdgSurface, serial: u32) callconv(.c) void {
     const state: *WaylandState = @ptrCast(@alignCast(data.?));
-    c.xdg_surface_ack_configure(surface, serial);
+    wl.xdg_surface_ack_configure(surface, serial);
     state.configured = true;
 }
 
-const xdg_toplevel_listener = c.xdg_toplevel_listener{ .configure = xdgToplevelConfigure, .close = xdgToplevelClose };
-fn xdgToplevelConfigure(data: ?*anyopaque, _: ?*c.xdg_toplevel, width: i32, height: i32, _: ?*c.wl_array) callconv(.c) void {
+const xdg_toplevel_listener = wl.XdgToplevelListener{ .configure = xdgToplevelConfigure, .close = xdgToplevelClose };
+fn xdgToplevelConfigure(data: ?*anyopaque, _: ?*wl.XdgToplevel, width: i32, height: i32, _: ?*wl.WlArray) callconv(.c) void {
     const state: *WaylandState = @ptrCast(@alignCast(data.?));
     if (width > 0 and height > 0) {
         if (state.width != width or state.height != height) {
@@ -651,7 +652,7 @@ fn xdgToplevelConfigure(data: ?*anyopaque, _: ?*c.xdg_toplevel, width: i32, heig
         }
     }
 }
-fn xdgToplevelClose(data: ?*anyopaque, _: ?*c.xdg_toplevel) callconv(.c) void {
+fn xdgToplevelClose(data: ?*anyopaque, _: ?*wl.XdgToplevel) callconv(.c) void {
     const state: *WaylandState = @ptrCast(@alignCast(data.?));
     state.closed = true;
 }

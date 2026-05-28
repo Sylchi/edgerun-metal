@@ -1128,30 +1128,30 @@ fn entryKeyStartsWith(entry: IndexEntry, prefix: []const u8) bool {
 }
 
 test "store consumes caller-owned region without allocation" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     var data: [64]u8 = undefined;
     var slots: [4]Blob = undefined;
     var store = Store.init(.{ .base = &data }, &slots);
 
     const hash = store.putRawBlob("hello").?;
-    try std.testing.expectEqualStrings("hello", store.get(hash).?);
-    try std.testing.expectEqual(@as(usize, 59), store.data.len());
+    try testing.expectEqualStrings("hello", store.get(hash).?);
+    try testing.expectEqual(@as(usize, 59), store.data.len());
 }
 
 test "store can be carved from an app-owned arena" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     var memory: [1024]u8 = undefined;
     var arena = BoundedArena.init(.{ .base = &memory });
     var s = Store.initFromArena(&arena, .{ .data_bytes = 64, .slot_count = 4 }).?;
 
     const hash = s.putRawBlob("owned storage").?;
-    try std.testing.expectEqualStrings("owned storage", s.get(hash).?);
-    try std.testing.expect(s.data.len() < 64);
-    try std.testing.expect(arena.remaining() < 960);
+    try testing.expectEqualStrings("owned storage", s.get(hash).?);
+    try testing.expect(s.data.len() < 64);
+    try testing.expect(arena.remaining() < 960);
 }
 
 test "ram store can explicitly declare no object storage" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     const no_storage_bytes = 0;
     const no_storage_slots = 0;
     var memory: [16]u8 = undefined;
@@ -1161,14 +1161,14 @@ test "ram store can explicitly declare no object storage" {
         .slot_count = no_storage_slots,
     }).?;
 
-    try std.testing.expectEqual(@as(usize, no_storage_bytes), s.data.len());
-    try std.testing.expectEqual(@as(usize, no_storage_slots), s.slotCapacity());
-    try std.testing.expect(s.putRawBlob("implicit durable storage") == null);
-    try std.testing.expectEqual(@as(usize, memory.len), arena.remaining());
+    try testing.expectEqual(@as(usize, no_storage_bytes), s.data.len());
+    try testing.expectEqual(@as(usize, no_storage_slots), s.slotCapacity());
+    try testing.expect(s.putRawBlob("implicit durable storage") == null);
+    try testing.expectEqual(@as(usize, memory.len), arena.remaining());
 }
 
 test "store entries are typed and owner scoped" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     const clock = @import("clock.zig");
     var data: [64]u8 = undefined;
     var slots: [4]Blob = undefined;
@@ -1178,12 +1178,12 @@ test "store entries are typed and owner scoped" {
     const app = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("app")).?, epoch).?;
 
     const hash = s.putOwned(.blob, app.id, "state").?;
-    try std.testing.expectEqualStrings("state", s.getOwned(.blob, app.id, hash).?);
-    try std.testing.expect(s.getOwned(.blob, null, hash) == null);
+    try testing.expectEqualStrings("state", s.getOwned(.blob, app.id, hash).?);
+    try testing.expect(s.getOwned(.blob, null, hash) == null);
 }
 
 test "typed blobs expose content type and deterministic stats root" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     const clock = @import("clock.zig");
     var data: [128]u8 = undefined;
     var slots: [4]Blob = undefined;
@@ -1198,21 +1198,21 @@ test "typed blobs expose content type and deterministic stats root" {
     const before = s.stats();
     const hash = s.putTypedOwnedBlob(app.id, message_type, "message").?;
     const info = s.getBlobInfo(hash).?;
-    try std.testing.expect(info.valid());
-    try std.testing.expectEqual(message_type, info.content_type);
-    try std.testing.expectEqual(@as(usize, 7), info.size);
+    try testing.expect(info.valid());
+    try testing.expectEqual(message_type, info.content_type);
+    try testing.expectEqual(@as(usize, 7), info.size);
 
     const after = s.stats();
-    try std.testing.expect(after.valid());
-    try std.testing.expectEqual(@as(usize, before.slot_count + 1), after.slot_count);
-    try std.testing.expect(!bytes.eql(&before.log_root, &after.log_root));
+    try testing.expect(after.valid());
+    try testing.expectEqual(@as(usize, before.slot_count + 1), after.slot_count);
+    try testing.expect(!bytes.eql(&before.log_root, &after.log_root));
 
-    try std.testing.expect(index.put(s, app.id, 5, "messages/latest", .blob, hash));
-    try std.testing.expectEqual(message_type, index.get(app.id, 5, "messages/latest").?.content_type);
+    try testing.expect(index.put(s, app.id, 5, "messages/latest", .blob, hash));
+    try testing.expectEqual(message_type, index.get(app.id, 5, "messages/latest").?.content_type);
 }
 
 test "store preserves canonical object and receipt ids" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     const clock = @import("clock.zig");
     var data: [512]u8 = undefined;
     var slots: [4]Blob = undefined;
@@ -1233,21 +1233,21 @@ test "store preserves canonical object and receipt ids" {
     var object_raw: [object.header_size + 5]u8 = undefined;
     const object_canonical = try (object.NodeWriter{ .out = &object_raw }).bytesNode(req, epoch, "state");
     const object_id = s.putObject(app.id, object_canonical).?;
-    try std.testing.expect(bytes.eql(&object_id, &object.Header.id(object_canonical)));
-    try std.testing.expectEqualStrings("state", s.getObject(app.id, object_id).?.body);
+    try testing.expect(bytes.eql(&object_id, &object.Header.id(object_canonical)));
+    try testing.expectEqualStrings("state", s.getObject(app.id, object_id).?.body);
 
     var receipt_raw: [object.header_size + 7]u8 = undefined;
     const receipt_canonical = try (object.NodeWriter{ .out = &receipt_raw }).receiptNode(req, epoch, "receipt");
     const receipt_id = s.putReceipt(app.id, receipt_canonical).?;
-    try std.testing.expect(bytes.eql(&receipt_id, &object.Header.id(receipt_canonical)));
-    try std.testing.expectEqualStrings("receipt", s.getReceipt(app.id, receipt_id).?.body);
-    try std.testing.expect(s.putReceipt(app.id, object_canonical) == null);
-    try std.testing.expect(s.putObject(app.id, receipt_canonical) == null);
-    try std.testing.expect(s.getReceipt(app.id, object_id) == null);
+    try testing.expect(bytes.eql(&receipt_id, &object.Header.id(receipt_canonical)));
+    try testing.expectEqualStrings("receipt", s.getReceipt(app.id, receipt_id).?.body);
+    try testing.expect(s.putReceipt(app.id, object_canonical) == null);
+    try testing.expect(s.putObject(app.id, receipt_canonical) == null);
+    try testing.expect(s.getReceipt(app.id, object_id) == null);
 }
 
 test "index maps app-owned keys to existing store entries" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     const clock = @import("clock.zig");
     var data: [128]u8 = undefined;
     var slots: [4]Blob = undefined;
@@ -1260,24 +1260,24 @@ test "index maps app-owned keys to existing store entries" {
 
     const alpha = s.putOwned(.blob, app.id, "alpha").?;
     const beta = s.putOwned(.blob, app.id, "beta").?;
-    try std.testing.expect(index.put(s, app.id, 7, "messages/alpha", .blob, alpha));
-    try std.testing.expect(index.put(s, app.id, 7, "messages/beta", .blob, beta));
+    try testing.expect(index.put(s, app.id, 7, "messages/alpha", .blob, alpha));
+    try testing.expect(index.put(s, app.id, 7, "messages/beta", .blob, beta));
 
     const entry = index.get(app.id, 7, "messages/alpha").?;
-    try std.testing.expect(bytes.eql(&entry.target_hash, &alpha));
-    try std.testing.expectEqual(@as(usize, 5), entry.value_size);
+    try testing.expect(bytes.eql(&entry.target_hash, &alpha));
+    try testing.expectEqual(@as(usize, 5), entry.value_size);
 
     var out: [2]IndexEntry = undefined;
-    try std.testing.expectEqual(@as(usize, 2), index.scanPrefix(app.id, 7, "messages/", &out));
+    try testing.expectEqual(@as(usize, 2), index.scanPrefix(app.id, 7, "messages/", &out));
 
     var cursor = index.cursor(app.id, 7, "messages/").?;
-    try std.testing.expect(bytes.eql(&cursor.next().?.target_hash, &alpha));
-    try std.testing.expect(bytes.eql(&cursor.next().?.target_hash, &beta));
-    try std.testing.expect(cursor.next() == null);
+    try testing.expect(bytes.eql(&cursor.next().?.target_hash, &alpha));
+    try testing.expect(bytes.eql(&cursor.next().?.target_hash, &beta));
+    try testing.expect(cursor.next() == null);
 }
 
 test "index rejects targets outside the owner scope" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     const clock = @import("clock.zig");
     var data: [128]u8 = undefined;
     var slots: [4]Blob = undefined;
@@ -1290,42 +1290,42 @@ test "index rejects targets outside the owner scope" {
     const other = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("other")).?, epoch).?;
 
     const hash = s.putOwned(.blob, app.id, "owned").?;
-    try std.testing.expect(!index.put(s, other.id, 1, "bad", .blob, hash));
+    try testing.expect(!index.put(s, other.id, 1, "bad", .blob, hash));
 }
 
 test "store split delegates data and unused slot capacity" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     var data: [64]u8 = undefined;
     var slots: [4]Blob = undefined;
     var parent = Store.init(.{ .base = &data }, &slots);
     var child = parent.split(.{ .data_bytes = 24, .slot_count = 2 }).?;
 
-    try std.testing.expectEqual(@as(usize, 40), parent.data.len());
-    try std.testing.expectEqual(@as(usize, 2), parent.slotCapacity());
-    try std.testing.expectEqual(@as(usize, 24), child.data.len());
-    try std.testing.expectEqual(@as(usize, 2), child.slotCapacity());
+    try testing.expectEqual(@as(usize, 40), parent.data.len());
+    try testing.expectEqual(@as(usize, 2), parent.slotCapacity());
+    try testing.expectEqual(@as(usize, 24), child.data.len());
+    try testing.expectEqual(@as(usize, 2), child.slotCapacity());
 
     const hash = child.putRawBlob("child data").?;
-    try std.testing.expectEqualStrings("child data", child.get(hash).?);
-    try std.testing.expectEqual(@as(usize, 40), parent.data.len());
+    try testing.expectEqualStrings("child data", child.get(hash).?);
+    try testing.expectEqual(@as(usize, 40), parent.data.len());
 }
 
 test "store reclaim returns consumed child storage and clears slots" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     var data: [64]u8 = undefined;
     var slots: [4]Blob = undefined;
     var parent = Store.init(.{ .base = &data }, &slots);
     var child = parent.split(.{ .data_bytes = 24, .slot_count = 2 }).?;
 
     const hash = child.putRawBlob("child data").?;
-    try std.testing.expectEqualStrings("child data", child.get(hash).?);
-    try std.testing.expectEqual(@as(usize, 14), child.data.len());
+    try testing.expectEqualStrings("child data", child.get(hash).?);
+    try testing.expectEqual(@as(usize, 14), child.data.len());
 
-    try std.testing.expect(parent.reclaim(&child));
-    try std.testing.expectEqual(@as(usize, 64), parent.data.len());
-    try std.testing.expectEqual(@as(usize, 4), parent.slotCapacity());
-    try std.testing.expectEqual(@as(usize, 0), child.data.len());
-    try std.testing.expect(child.get(hash) == null);
+    try testing.expect(parent.reclaim(&child));
+    try testing.expectEqual(@as(usize, 64), parent.data.len());
+    try testing.expectEqual(@as(usize, 4), parent.slotCapacity());
+    try testing.expectEqual(@as(usize, 0), child.data.len());
+    try testing.expect(child.get(hash) == null);
 }
 
 const PersistentTestIo = struct {
@@ -1401,33 +1401,33 @@ fn persistentTestConfig() Config {
 }
 
 test "persistent store replays append log after reopen" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     var io_state = PersistentTestIo{};
     var blobs_a: [8]PersistentBlobSlot = undefined;
     var keys_a: [8]PersistentIndexSlot = undefined;
     var scratch_a: [sdcard_block_bytes]u8 = undefined;
     var store_a = try PersistentStore.open(io_state.io(), persistentTestConfig(), &blobs_a, &keys_a, &scratch_a);
 
-    try std.testing.expectEqual(@as(u64, superblock_size), io_state.used);
+    try testing.expectEqual(@as(u64, superblock_size), io_state.used);
     const hash = try store_a.putRawBlob("durable bytes");
     const size_after_first = io_state.used;
-    try std.testing.expectEqual(hash, try store_a.putRawBlob("durable bytes"));
-    try std.testing.expectEqual(size_after_first, io_state.used);
+    try testing.expectEqual(hash, try store_a.putRawBlob("durable bytes"));
+    try testing.expectEqual(size_after_first, io_state.used);
     try store_a.close();
-    try std.testing.expectEqual(@as(usize, 0), io_state.sync_count);
+    try testing.expectEqual(@as(usize, 0), io_state.sync_count);
 
     var blobs_b: [8]PersistentBlobSlot = undefined;
     var keys_b: [8]PersistentIndexSlot = undefined;
     var scratch_b: [sdcard_block_bytes]u8 = undefined;
     var store_b = try PersistentStore.open(io_state.io(), persistentTestConfig(), &blobs_b, &keys_b, &scratch_b);
     var out: [32]u8 = undefined;
-    try std.testing.expectEqualStrings("durable bytes", try store_b.getBlob(hash, &out));
+    try testing.expectEqualStrings("durable bytes", try store_b.getBlob(hash, &out));
     try store_b.sync();
-    try std.testing.expectEqual(@as(usize, 1), io_state.sync_count);
+    try testing.expectEqual(@as(usize, 1), io_state.sync_count);
 }
 
 test "persistent store replays latest index value" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     var io_state = PersistentTestIo{};
     var blobs_a: [8]PersistentBlobSlot = undefined;
     var keys_a: [8]PersistentIndexSlot = undefined;
@@ -1443,14 +1443,14 @@ test "persistent store replays latest index value" {
     var keys_b: [8]PersistentIndexSlot = undefined;
     var scratch_b: [sdcard_block_bytes]u8 = undefined;
     var store_b = try PersistentStore.open(io_state.io(), persistentTestConfig(), &blobs_b, &keys_b, &scratch_b);
-    try std.testing.expectEqual(second, try store_b.indexGet(index_default, "row/current"));
+    try testing.expectEqual(second, try store_b.indexGet(index_default, "row/current"));
     const entry = try store_b.indexGetEntry(index_default, "row/current");
-    try std.testing.expectEqual(value_blob, entry.value_kind);
-    try std.testing.expectEqual(@as(u64, 6), entry.value_size);
+    try testing.expectEqual(value_blob, entry.value_kind);
+    try testing.expectEqual(@as(u64, 6), entry.value_size);
 }
 
 test "persistent store persists canonical object bytes and object indexes" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     const clock = @import("clock.zig");
     var io_state = PersistentTestIo{};
     var blobs_a: [8]PersistentBlobSlot = undefined;
@@ -1479,14 +1479,14 @@ test "persistent store persists canonical object bytes and object indexes" {
     var store_b = try PersistentStore.open(io_state.io(), persistentTestConfig(), &blobs_b, &keys_b, &scratch_b);
     var out: [256]u8 = undefined;
     const view = try store_b.getCanonicalObject(hash, &out);
-    try std.testing.expectEqualStrings("object-body", view.body);
+    try testing.expectEqualStrings("object-body", view.body);
     const entry = try store_b.indexGetEntry(7, "objects/current");
-    try std.testing.expectEqual(value_object, entry.value_kind);
-    try std.testing.expectEqual(type_object, entry.content_type);
+    try testing.expectEqual(value_object, entry.value_kind);
+    try testing.expectEqual(type_object, entry.content_type);
 }
 
 test "persistent store truncates corrupt tail during recovery" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     var io_state = PersistentTestIo{};
     var blobs_a: [4]PersistentBlobSlot = undefined;
     var keys_a: [4]PersistentIndexSlot = undefined;
@@ -1494,18 +1494,18 @@ test "persistent store truncates corrupt tail during recovery" {
     var store_a = try PersistentStore.open(io_state.io(), persistentTestConfig(), &blobs_a, &keys_a, &scratch_a);
     _ = try store_a.putRawBlob("valid");
     const valid_size = io_state.used;
-    try std.testing.expect(PersistentTestIo.writeAt(&io_state, io_state.used, "junk"));
-    try std.testing.expect(io_state.used > valid_size);
+    try testing.expect(PersistentTestIo.writeAt(&io_state, io_state.used, "junk"));
+    try testing.expect(io_state.used > valid_size);
 
     var blobs_b: [4]PersistentBlobSlot = undefined;
     var keys_b: [4]PersistentIndexSlot = undefined;
     var scratch_b: [sdcard_block_bytes]u8 = undefined;
     _ = try PersistentStore.open(io_state.io(), persistentTestConfig(), &blobs_b, &keys_b, &scratch_b);
-    try std.testing.expectEqual(valid_size, io_state.used);
+    try testing.expectEqual(valid_size, io_state.used);
 }
 
 test "persistent store block-backed io stays aligned" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     var io_state = PersistentTestIo{ .block_bytes = sdcard_block_bytes };
     var config = persistentTestConfig();
     config.block_backing = .sdcard;
@@ -1514,20 +1514,20 @@ test "persistent store block-backed io stays aligned" {
     var scratch_a: [sdcard_block_bytes]u8 = undefined;
     var store_a = try PersistentStore.open(io_state.io(), config, &blobs_a, &keys_a, &scratch_a);
 
-    try std.testing.expectEqual(@as(u64, sdcard_block_bytes), io_state.used);
+    try testing.expectEqual(@as(u64, sdcard_block_bytes), io_state.used);
     const hash = try store_a.putRawBlob("block bytes");
-    try std.testing.expectEqual(@as(u64, 0), io_state.used & (sdcard_block_bytes - 1));
+    try testing.expectEqual(@as(u64, 0), io_state.used & (sdcard_block_bytes - 1));
 
     var blobs_b: [4]PersistentBlobSlot = undefined;
     var keys_b: [4]PersistentIndexSlot = undefined;
     var scratch_b: [sdcard_block_bytes]u8 = undefined;
     var store_b = try PersistentStore.open(io_state.io(), config, &blobs_b, &keys_b, &scratch_b);
     var out: [32]u8 = undefined;
-    try std.testing.expectEqualStrings("block bytes", try store_b.getBlob(hash, &out));
+    try testing.expectEqualStrings("block bytes", try store_b.getBlob(hash, &out));
 }
 
 test "persistent store verify detects payload corruption" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     var io_state = PersistentTestIo{};
     var blobs: [4]PersistentBlobSlot = undefined;
     var keys: [4]PersistentIndexSlot = undefined;
@@ -1536,5 +1536,5 @@ test "persistent store verify detects payload corruption" {
 
     _ = try store.putRawBlob("hash checked");
     io_state.bytes[superblock_size + record_header_size] ^= 0x01;
-    try std.testing.expectError(error.Corrupt, store.verify());
+    try testing.expectError(error.Corrupt, store.verify());
 }

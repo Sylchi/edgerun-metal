@@ -1,4 +1,3 @@
-const std = @import("std");
 const bytes = @import("bytes.zig");
 const identity = @import("identity.zig");
 const preimage = @import("preimage.zig");
@@ -108,6 +107,7 @@ fn validId(id: ?identity.Id) bool {
 }
 
 test "seal policy captures machine app user binding" {
+    const testing = @import("testing.zig");
     const clock = @import("clock.zig");
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
@@ -116,8 +116,8 @@ test "seal policy captures machine app user binding" {
     const app = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("chat")).?, epoch).?;
 
     const policy = Policy.machineAppUser(device, app, user);
-    try std.testing.expect(policy.valid());
-    try std.testing.expect(bytes.nonzero(&policy.id().?));
-    try std.testing.expect(Policy.public().valid());
-    try std.testing.expect(Policy.integrityOnly().valid());
+    try testing.expect(policy.valid());
+    try testing.expect(bytes.nonzero(&policy.id().?));
+    try testing.expect(Policy.public().valid());
+    try testing.expect(Policy.integrityOnly().valid());
 }

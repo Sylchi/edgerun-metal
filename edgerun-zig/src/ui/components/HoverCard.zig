@@ -24,7 +24,9 @@ pub const HoverCard = struct {
 
     pub fn render(self: HoverCard, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         try primitives.renderSidePanelTrigger(scene, bounds, hover_card_layout, options.style.panel, options.style.border, primitives.control_text_padding, self.trigger, options.style.text);
-        try primitives.renderTitleDetailPanel(scene, primitives.sidePanelContentBounds(bounds, hover_card_layout), self.content, hover_card_detail_label, options, hover_card_panel, options.style.border, options.style.text);
+        if (options.overlay.isOpen(self.id)) {
+            try primitives.renderTitleDetailPanel(scene, primitives.sidePanelContentBounds(bounds, hover_card_layout), self.content, hover_card_detail_label, options, hover_card_panel, options.style.border, options.style.text);
+        }
     }
 
     pub fn collectInteractions(self: HoverCard, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
@@ -80,7 +82,7 @@ test "hover card component renders trigger content and hit regions" {
     var regions: [2]interaction.Region = undefined;
     var collector = interaction.Collector.init(&regions);
 
-    try hover_card.render(&scene, ui.Rect.init(0, 0, 240, 52), .{});
+    try hover_card.render(&scene, ui.Rect.init(0, 0, 240, 52), .{ .overlay = .{ .open_ids = &.{hover_card.id} } });
     try hover_card.collectInteractions(&collector, ui.Rect.init(0, 0, 240, 52));
 
     try std.testing.expect(component_test.hasText(scene.written(), "Hover"));

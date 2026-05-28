@@ -29,7 +29,8 @@ pub const Slider = struct {
     }
 
     pub fn render(self: Slider, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        const clamped = ui.clampUnit(self.value);
+        const value = options.drag_value orelse self.value;
+        const clamped = ui.clampUnit(value);
         const label_h = @min(bounds.h, component_primitives.measuredTextHeight(self.label, bounds.w, slider_label_height, slider_label_max_lines));
         try text_component.Text.renderWrapped(scene, ui.Rect.init(bounds.x, bounds.y, bounds.w, label_h), self.label, options.style.text, component_primitives.textWrap(self.label, slider_label_height, slider_label_max_lines));
         const track_y = bounds.y + @min(label_h + slider_label_track_gap, @max(0.0, bounds.h - slider_track_height));

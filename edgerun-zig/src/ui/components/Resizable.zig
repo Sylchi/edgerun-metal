@@ -21,7 +21,8 @@ pub const Resizable = struct {
     }
 
     pub fn render(self: Resizable, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        const handle = handleBounds(bounds, self.ratio);
+        const ratio = options.drag_value orelse self.ratio;
+        const handle = handleBounds(bounds, ratio);
         const left = ui.Rect.init(bounds.x, bounds.y, @max(component_primitives.min_extent, handle.x - bounds.x), bounds.h);
         const right_x = handle.x + handle.w;
         const right = ui.Rect.init(right_x, bounds.y, @max(component_primitives.min_extent, bounds.x + bounds.w - right_x), bounds.h);
@@ -30,8 +31,9 @@ pub const Resizable = struct {
         try scene.pushRect(handle, options.style.border, .fill, resizable_handle_radius, 0.0);
     }
 
-    pub fn collectInteractions(self: Resizable, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-        try collector.addHit(handleBounds(bounds, self.ratio).insetUniform(-resizable_handle_hit_outset), .slider, self.id);
+    pub fn collectInteractions(self: Resizable, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) interaction.Error!void {
+        const ratio = options.drag_value orelse self.ratio;
+        try collector.addHit(handleBounds(bounds, ratio).insetUniform(-resizable_handle_hit_outset), .slider, self.id);
     }
 
     pub fn measure(self: Resizable, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
@@ -99,7 +101,7 @@ test "resizable component renders panels and handle hit region" {
     var collector = interaction.Collector.init(&regions);
 
     try resizable.render(&scene, ui.Rect.init(0, 0, 220, 36), .{});
-    try resizable.collectInteractions(&collector, ui.Rect.init(0, 0, 220, 36));
+    try resizable.collectInteractions(&collector, ui.Rect.init(0, 0, 220, 36), .{});
 
     try std.testing.expect(scene.written().len >= 3);
     try std.testing.expectEqual(@as(usize, 1), collector.written().len);

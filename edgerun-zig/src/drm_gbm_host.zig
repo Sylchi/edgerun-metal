@@ -1,24 +1,17 @@
 const std = @import("std");
 const bytes = @import("bytes.zig");
 const renderer_font_atlas = @import("render/font_atlas_weighted.zig");
-const renderer_gles = @import("render/gles.zig");
+const renderer_gles = @import("render/backends/gles.zig");
 const renderer_ir = @import("render/ir.zig");
 const renderer_pipeline = @import("render/pipeline.zig");
 const app_frame = @import("app_frame.zig");
 const ui = @import("ui.zig");
 const interaction = @import("ui_interaction.zig");
+const drm = @import("linux_drm.zig");
+const gpu = @import("linux_gpu.zig");
 
 const linux = std.os.linux;
 const posix = std.posix;
-
-const c = @cImport({
-    @cInclude("fcntl.h");
-    @cInclude("gbm.h");
-    @cInclude("xf86drm.h");
-    @cInclude("xf86drmMode.h");
-    @cInclude("drm_fourcc.h");
-    @cInclude("EGL/egl.h");
-});
 
 const default_device_path = "/dev/dri/card1";
 const default_seconds: u32 = 5;
@@ -59,18 +52,20 @@ const Options = struct {
 const DrmTarget = struct {
     connector_id: u32,
     crtc_id: u32,
-    mode: c.drmModeModeInfo,
+    mode: drm.DrmModeModeInfo,
 };
 
 const GbmState = struct {
-    device: *c.gbm_device,
-    surface: *c.gbm_surface,
+    gbm: *gpu.Gbm,
+    device: *gpu.GbmDevice,
+    surface: *gpu.GbmSurface,
 };
 
 const EglState = struct {
-    display: c.EGLDisplay,
-    context: c.EGLContext,
-    surface: c.EGLSurface,
+    egl: *gpu.Egl,
+    display: gpu.EGLDisplay,
+    context: gpu.EGLContext,
+    surface: gpu.EGLSurface,
 };
 
 const SceneState = struct {
@@ -106,8 +101,8 @@ pub fn main(init: std.process.Init) !void {
 
     const fd = try openDrm(options.device);
     defer closeFd(fd);
-    try requireDrmMaster(fd);
-    defer dropDrmMaster(fd);
+    try drm.setMaster(fd);
+    defer drm.dropMaster(fd) catch {};
 
     const target = try chooseTarget(fd, options);
     const width: i32 = @intCast(target.mode.hdisplay);
@@ -128,15 +123,14 @@ pub fn main(init: std.process.Init) !void {
     const receipt = try gl.renderFrame(width, height, buffers);
     if (!receipt.valid()) return error.InvalidGlesReceipt;
     _ = try gl.verifyFrameNonBlank(width, height);
-    if (c.eglSwapBuffers(egl.display, egl.surface) != c.EGL_TRUE) return error.EglSwapFailed;
+    if (egl.egl.eglSwapBuffers(egl.display, egl.surface) != gpu.egl_true) return error.EglSwapFailed;
 
     var scanout = try lockScanout(fd, &gbm, @intCast(width), @intCast(height));
     defer scanout.deinit(fd, &gbm);
-    const saved = c.drmModeGetCrtc(fd, target.crtc_id);
-    defer if (saved) |crtc| c.drmModeFreeCrtc(crtc);
-    try setCrtc(fd, target, scanout.fb_id);
+    const saved = drm.getCrtc(fd, target.crtc_id) catch |err| return err;
+    try drm.setCrtc(fd, target.crtc_id, scanout.fb_id, target.connector_id, &target.mode);
     sleepSeconds(options.seconds);
-    if (saved) |crtc| restoreCrtc(fd, target, crtc);
+    restoreCrtc(fd, saved);
 }
 
 fn parseOptions(args: []const [:0]const u8) !Options {
@@ -175,147 +169,132 @@ fn closeFd(fd: posix.fd_t) void {
     _ = linux.close(fd);
 }
 
-fn requireDrmMaster(fd: posix.fd_t) !void {
-    if (c.drmSetMaster(fd) != 0) return error.DrmMasterUnavailable;
-}
-
-fn dropDrmMaster(fd: posix.fd_t) void {
-    _ = c.drmDropMaster(fd);
-}
-
 fn chooseTarget(fd: posix.fd_t, options: Options) !DrmTarget {
-    const resources = c.drmModeGetResources(fd) orelse return error.DrmResourcesFailed;
-    defer c.drmModeFreeResources(resources);
-    var connector_index: c_int = 0;
-    while (connector_index < resources.*.count_connectors) : (connector_index += 1) {
-        const connector_id = resources.*.connectors[@intCast(connector_index)];
+    const resources = try drm.getResources(fd);
+    defer std.heap.page_allocator.free(resources.crtcs);
+    defer std.heap.page_allocator.free(resources.connectors);
+    defer std.heap.page_allocator.free(resources.encoders);
+    defer std.heap.page_allocator.free(resources.fbs);
+    var connector_index: usize = 0;
+    while (connector_index < @as(usize, @intCast(@max(resources.count_connectors, 0)))) : (connector_index += 1) {
+        const connector_id = resources.connectors[connector_index];
         if (options.connector_id) |requested| {
             if (connector_id != requested) continue;
         }
-        const connector = c.drmModeGetConnector(fd, connector_id) orelse continue;
-        defer c.drmModeFreeConnector(connector);
-        if (connector.*.connection != c.DRM_MODE_CONNECTED or connector.*.count_modes == 0) continue;
-        if (options.mode_index >= connector.*.count_modes) return error.InvalidDrmModeIndex;
+        const connector = try drm.getConnector(fd, connector_id);
+        defer std.heap.page_allocator.free(connector.encoder_ids);
+        defer std.heap.page_allocator.free(connector.modes);
+        defer std.heap.page_allocator.free(connector.prop_ids);
+        defer std.heap.page_allocator.free(connector.prop_values);
+        if (connector.connection != drm.connector_connected or connector.modes.len == 0) continue;
+        if (options.mode_index >= connector.modes.len) return error.InvalidDrmModeIndex;
         const crtc_id = findCrtcForConnector(fd, resources, connector) orelse continue;
         return .{
-            .connector_id = connector.*.connector_id,
+            .connector_id = connector.connector_id,
             .crtc_id = crtc_id,
-            .mode = connector.*.modes[@intCast(options.mode_index)],
+            .mode = connector.modes[options.mode_index],
         };
     }
     if (options.connector_id != null) return error.RequestedDrmConnectorUnavailable;
     return error.NoConnectedDrmConnector;
 }
 
-fn findCrtcForConnector(fd: posix.fd_t, resources: c.drmModeResPtr, connector: c.drmModeConnectorPtr) ?u32 {
-    if (connector.*.encoder_id != 0) {
-        if (c.drmModeGetEncoder(fd, connector.*.encoder_id)) |encoder| {
-            defer c.drmModeFreeEncoder(encoder);
-            if (encoder.*.crtc_id != 0) return encoder.*.crtc_id;
-        }
+fn findCrtcForConnector(fd: posix.fd_t, resources: drm.DrmResources, connector: drm.DrmConnector) ?u32 {
+    if (connector.encoder_id != 0) {
+        if (drm.getEncoder(fd, connector.encoder_id)) |enc| {
+            if (enc.crtc_id != 0) return enc.crtc_id;
+        } else |_| {}
     }
-    var encoder_index: c_int = 0;
-    while (encoder_index < connector.*.count_encoders) : (encoder_index += 1) {
-        const encoder = c.drmModeGetEncoder(fd, connector.*.encoders[@intCast(encoder_index)]) orelse continue;
-        defer c.drmModeFreeEncoder(encoder);
-        var crtc_index: c_int = 0;
-        while (crtc_index < resources.*.count_crtcs) : (crtc_index += 1) {
+    for (connector.encoder_ids) |enc_id| {
+        const enc = drm.getEncoder(fd, enc_id) catch continue;
+        var crtc_index: usize = 0;
+        while (crtc_index < @as(usize, @intCast(@max(resources.count_crtcs, 0)))) : (crtc_index += 1) {
             const crtc_mask = @as(u32, 1) << @intCast(crtc_index);
-            if ((encoder.*.possible_crtcs & crtc_mask) != 0) return resources.*.crtcs[@intCast(crtc_index)];
+            if ((enc.possible_crtcs & crtc_mask) != 0) return resources.crtcs[crtc_index];
         }
     }
     return null;
 }
 
 fn initGbm(fd: posix.fd_t, width: u32, height: u32) !GbmState {
-    const device = c.gbm_create_device(fd) orelse return error.GbmDeviceFailed;
-    errdefer c.gbm_device_destroy(device);
-    const surface = c.gbm_surface_create(
-        device,
-        width,
-        height,
-        c.DRM_FORMAT_XRGB8888,
-        c.GBM_BO_USE_SCANOUT | c.GBM_BO_USE_RENDERING,
-    ) orelse return error.GbmSurfaceFailed;
-    return .{ .device = device, .surface = surface };
+    var gbm_wrapper = try gpu.Gbm.open();
+    const device = gbm_wrapper.gbmCreateDevice(fd) orelse return error.GbmDeviceFailed;
+    errdefer gbm_wrapper.gbmDeviceDestroy(device);
+    const surface = gbm_wrapper.gbmCreateSurface(device, width, height, gpu.drm_format_xrgb8888, gpu.gbm_bo_use_scanout | gpu.gbm_bo_use_rendering) orelse return error.GbmSurfaceFailed;
+    return .{ .gbm = &gbm_wrapper, .device = device, .surface = surface };
 }
 
 fn deinitGbm(gbm: *GbmState) void {
-    c.gbm_surface_destroy(gbm.surface);
-    c.gbm_device_destroy(gbm.device);
+    gbm.gbm.gbmSurfaceDestroy(gbm.surface);
+    gbm.gbm.gbmDeviceDestroy(gbm.device);
+    gbm.gbm.lib.close();
 }
 
 fn initEgl(gbm: *GbmState) !EglState {
-    const egl_display = c.eglGetDisplay(@ptrCast(gbm.device));
-    if (egl_display == c.EGL_NO_DISPLAY) return error.EglDisplayFailed;
-    var major: c.EGLint = 0;
-    var minor: c.EGLint = 0;
-    if (c.eglInitialize(egl_display, &major, &minor) != c.EGL_TRUE) return error.EglInitializeFailed;
-    if (c.eglBindAPI(c.EGL_OPENGL_ES_API) != c.EGL_TRUE) return error.EglApiFailed;
-    const attrs = [_]c.EGLint{
-        c.EGL_SURFACE_TYPE,    c.EGL_WINDOW_BIT,
-        c.EGL_RENDERABLE_TYPE, c.EGL_OPENGL_ES2_BIT,
-        c.EGL_RED_SIZE,        8,
-        c.EGL_GREEN_SIZE,      8,
-        c.EGL_BLUE_SIZE,       8,
-        c.EGL_NONE,
+    var egl_wrapper = try gpu.Egl.open();
+    const egl_display = egl_wrapper.eglGetDisplay(@ptrCast(gbm.device));
+    if (egl_display == null) return error.EglDisplayFailed;
+    var major: gpu.EGLint = 0;
+    var minor: gpu.EGLint = 0;
+    if (egl_wrapper.eglInitialize(egl_display, &major, &minor) != gpu.egl_true) return error.EglInitializeFailed;
+    if (egl_wrapper.eglBindAPI(gpu.egl_opengl_es_api) != gpu.egl_true) return error.EglApiFailed;
+    const attrs = [_]gpu.EGLint{
+        gpu.egl_surface_type,    gpu.egl_window_bit,
+        gpu.egl_renderable_type, gpu.egl_opengl_es2_bit,
+        gpu.egl_red_size,        8,
+        gpu.egl_green_size,      8,
+        gpu.egl_blue_size,       8,
+        gpu.egl_none,
     };
-    var config: c.EGLConfig = null;
-    var count: c.EGLint = 0;
-    if (c.eglChooseConfig(egl_display, &attrs, &config, 1, &count) != c.EGL_TRUE or count == 0) return error.EglConfigFailed;
-    const context_attrs = [_]c.EGLint{ c.EGL_CONTEXT_CLIENT_VERSION, 2, c.EGL_NONE };
-    const context = c.eglCreateContext(egl_display, config, c.EGL_NO_CONTEXT, &context_attrs);
-    if (context == c.EGL_NO_CONTEXT) return error.EglContextFailed;
-    errdefer _ = c.eglDestroyContext(egl_display, context);
-    const surface = c.eglCreateWindowSurface(egl_display, config, @ptrCast(gbm.surface), null);
-    if (surface == c.EGL_NO_SURFACE) return error.EglSurfaceFailed;
-    if (c.eglMakeCurrent(egl_display, surface, surface, context) != c.EGL_TRUE) return error.EglMakeCurrentFailed;
-    return .{ .display = egl_display, .context = context, .surface = surface };
+    var config: gpu.EGLConfig = undefined;
+    var count: gpu.EGLint = 0;
+    if (egl_wrapper.eglChooseConfig(egl_display, &attrs, &config, 1, &count) != gpu.egl_true or count == 0) return error.EglConfigFailed;
+    const context_attrs = [_]gpu.EGLint{ gpu.egl_context_client_version, 2, gpu.egl_none };
+    const context = egl_wrapper.eglCreateContext(egl_display, config, gpu.egl_no_context, &context_attrs);
+    if (context == null) return error.EglContextFailed;
+    errdefer _ = egl_wrapper.eglDestroyContext(egl_display, context);
+    const surface = egl_wrapper.eglCreateWindowSurface(egl_display, config, @ptrCast(gbm.surface), null);
+    if (surface == null) return error.EglSurfaceFailed;
+    if (egl_wrapper.eglMakeCurrent(egl_display, surface, surface, context) != gpu.egl_true) return error.EglMakeCurrentFailed;
+    return .{ .egl = &egl_wrapper, .display = egl_display, .context = context, .surface = surface };
 }
 
 fn deinitEgl(egl: *EglState) void {
-    _ = c.eglMakeCurrent(egl.display, c.EGL_NO_SURFACE, c.EGL_NO_SURFACE, c.EGL_NO_CONTEXT);
-    _ = c.eglDestroySurface(egl.display, egl.surface);
-    _ = c.eglDestroyContext(egl.display, egl.context);
-    _ = c.eglTerminate(egl.display);
+    _ = egl.egl.eglMakeCurrent(egl.display, gpu.egl_no_surface, gpu.egl_no_surface, gpu.egl_no_context);
+    _ = egl.egl.eglDestroySurface(egl.display, egl.surface);
+    _ = egl.egl.eglDestroyContext(egl.display, egl.context);
+    _ = egl.egl.eglTerminate(egl.display);
+    egl.egl.lib.close();
 }
 
 const Scanout = struct {
-    bo: *c.gbm_bo,
+    bo: *gpu.GbmBo,
     fb_id: u32,
 
     fn deinit(self: *Scanout, fd: posix.fd_t, gbm: *GbmState) void {
         if (self.fb_id != 0) {
-            _ = c.drmModeRmFB(fd, self.fb_id);
+            drm.rmfb(fd, self.fb_id) catch {};
             self.fb_id = 0;
         }
-        c.gbm_surface_release_buffer(gbm.surface, self.bo);
+        gbm.gbm.gbmSurfaceReleaseBuffer(gbm.surface, self.bo);
     }
 };
 
 fn lockScanout(fd: posix.fd_t, gbm: *GbmState, width: u32, height: u32) !Scanout {
-    const bo = c.gbm_surface_lock_front_buffer(gbm.surface) orelse return error.GbmLockFailed;
-    errdefer c.gbm_surface_release_buffer(gbm.surface, bo);
-    const handle = c.gbm_bo_get_handle(bo).u32;
-    const stride = c.gbm_bo_get_stride(bo);
-    var fb_id: u32 = 0;
-    if (c.drmModeAddFB(fd, width, height, crtc_depth, crtc_bpp, stride, handle, &fb_id) != 0) return error.DrmFramebufferFailed;
+    const bo = gbm.gbm.gbmSurfaceLockFrontBuffer(gbm.surface) orelse return error.GbmLockFailed;
+    errdefer gbm.gbm.gbmSurfaceReleaseBuffer(gbm.surface, bo);
+    const handle = gbm.gbm.gbmBoGetHandle(bo);
+    const stride = gbm.gbm.gbmBoGetStride(bo);
+    const fb_id = try drm.addFb2(fd, handle, width, height, stride, gpu.drm_format_xrgb8888);
     return .{ .bo = bo, .fb_id = fb_id };
 }
 
-fn setCrtc(fd: posix.fd_t, target: DrmTarget, fb_id: u32) !void {
-    var connector_id = target.connector_id;
-    var mode = target.mode;
-    if (c.drmModeSetCrtc(fd, target.crtc_id, fb_id, 0, 0, &connector_id, 1, &mode) != 0) return error.DrmSetCrtcFailed;
-}
-
-fn restoreCrtc(fd: posix.fd_t, target: DrmTarget, crtc: c.drmModeCrtcPtr) void {
-    var connector_id = target.connector_id;
-    if (crtc.*.mode_valid != 0) {
-        var mode = crtc.*.mode;
-        _ = c.drmModeSetCrtc(fd, crtc.*.crtc_id, crtc.*.buffer_id, crtc.*.x, crtc.*.y, &connector_id, 1, &mode);
+fn restoreCrtc(fd: posix.fd_t, crtc: drm.DrmCrtcInfo) void {
+    if (crtc.mode_valid != 0) {
+        drm.setCrtc(fd, crtc.crtc_id, crtc.fb_id, 0, &crtc.mode) catch {};
     } else {
-        _ = c.drmModeSetCrtc(fd, crtc.*.crtc_id, 0, crtc.*.x, crtc.*.y, &connector_id, 1, null);
+        // Restore with no FB (disable the CRTC)
+        _ = linux.ioctl(fd, drm.drm_ioctl_mode_setcrtc, 0);
     }
 }
 

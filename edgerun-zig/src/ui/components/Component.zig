@@ -137,11 +137,17 @@ pub const Component = union(enum) {
         try primitives.renderControlStateOverlay(scene, bounds, resolved_options, primitives.control_radius);
     }
 
-    pub fn collectInteractions(self: Component, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+    pub fn collectInteractions(self: Component, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) interaction.Error!void {
         switch (self) {
             inline else => |component| {
                 if (comptime @hasDecl(@TypeOf(component), "collectInteractions")) {
-                    try component.collectInteractions(collector, bounds);
+                    const T = @TypeOf(component);
+                    const fn_info = @typeInfo(@TypeOf(T.collectInteractions)).Fn;
+                    if (fn_info.params.len >= 4) {
+                        try component.collectInteractions(collector, bounds, options);
+                    } else {
+                        try component.collectInteractions(collector, bounds);
+                    }
                 }
             },
         }
@@ -281,9 +287,9 @@ test "component union dispatches button variants and collects hit targets" {
     const primary = Component{ .button = .{ .id = 501, .label = "Primary" } };
     const outline = Component{ .button = .{ .id = 502, .label = "Outline", .variant = .outline, .icon_slot = IconSlot.named(.leading, .search) } };
     try primary.render(&scene, ui.Rect.init(0, 0, 120, 36), .{});
-    try primary.collectInteractions(&collector, ui.Rect.init(0, 0, 120, 36));
+    try primary.collectInteractions(&collector, ui.Rect.init(0, 0, 120, 36), .{});
     try outline.render(&scene, ui.Rect.init(0, 44, 120, 36), .{});
-    try outline.collectInteractions(&collector, ui.Rect.init(0, 44, 120, 36));
+    try outline.collectInteractions(&collector, ui.Rect.init(0, 44, 120, 36), .{});
 
     try std.testing.expectEqual(@as(u32, 501), ui_input.hitTest(collector.written(), 12, 12).?.id);
     try std.testing.expectEqual(@as(u32, 502), ui_input.hitTest(collector.written(), 12, 56).?.id);
@@ -367,7 +373,7 @@ test "component interaction collection covers primitive controls" {
 
     for (controls, 0..) |component, index| {
         const y = @as(f32, @floatFromInt(index)) * 48.0;
-        try component.collectInteractions(&collector, ui.Rect.init(0, y, 240, 40));
+        try component.collectInteractions(&collector, ui.Rect.init(0, y, 240, 40), .{});
     }
 
     try std.testing.expectEqual(controls.len, collector.written().len);

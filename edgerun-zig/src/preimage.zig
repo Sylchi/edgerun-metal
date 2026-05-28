@@ -140,18 +140,18 @@ pub fn decodeEpoch(in: []const u8) ?clock.Stamp {
 }
 
 test "writer encodes ids integers and epochs deterministically" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const stamp = clock.Stamp{ .keeper = keeper, .tick = 2 };
     const id_value = identity.Id{ .bytes = [_]u8{3} ++ [_]u8{0} ** 31 };
     var raw: [106]u8 = undefined;
     var writer = Writer.init(&raw);
 
-    try std.testing.expect(writer.id(id_value));
-    try std.testing.expect(writer.writeU16(4));
-    try std.testing.expect(writer.writeU64(5));
-    try std.testing.expect(writer.epoch(stamp));
-    try std.testing.expectEqual(raw.len, writer.written().len);
-    try std.testing.expectEqual(stamp, decodeEpoch(raw[42..106]).?);
-    try std.testing.expect(bytes_mod.nonzero(&hash("edgerun:zig:v1:test", writer.written())));
+    try testing.expect(writer.id(id_value));
+    try testing.expect(writer.writeU16(4));
+    try testing.expect(writer.writeU64(5));
+    try testing.expect(writer.epoch(stamp));
+    try testing.expectEqual(raw.len, writer.written().len);
+    try testing.expectEqual(stamp, decodeEpoch(raw[42..106]).?);
+    try testing.expect(bytes_mod.nonzero(&hash("edgerun:zig:v1:test", writer.written())));
 }

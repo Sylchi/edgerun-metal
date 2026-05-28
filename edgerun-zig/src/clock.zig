@@ -148,36 +148,36 @@ fn shiftForPowerOfTwo(value: u64) ?u6 {
 }
 
 test "clock advances deterministic boundaries" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     const keeper = KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     var c = Clock.init(keeper, .{ .ticks_per_slot = 2, .slots_per_epoch = 2, .epochs_per_era = 2 }).?;
 
-    try std.testing.expect(!(c.advance(1).?).slot);
-    try std.testing.expect((c.advance(1).?).slot);
-    try std.testing.expectEqual(@as(u64, 1), c.now.slot);
+    try testing.expect(!(c.advance(1).?).slot);
+    try testing.expect((c.advance(1).?).slot);
+    try testing.expectEqual(@as(u64, 1), c.now.slot);
 }
 
 test "clock advances arbitrary strides across epoch and era boundaries" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     const keeper = KeeperId{ .bytes = [_]u8{2} ++ [_]u8{0} ** 31 };
     var c = Clock.init(keeper, .{ .ticks_per_slot = 4, .slots_per_epoch = 4, .epochs_per_era = 4 }).?;
 
     const boundary = c.advance(4 * 4 * 4 + 5).?;
-    try std.testing.expect(boundary.slot);
-    try std.testing.expect(boundary.epoch);
-    try std.testing.expect(boundary.era);
-    try std.testing.expectEqual(@as(u64, 1), c.now.era);
-    try std.testing.expectEqual(@as(u64, 0), c.now.epoch);
-    try std.testing.expectEqual(@as(u64, 1), c.now.slot);
-    try std.testing.expectEqual(@as(u64, 1), c.now.tick);
+    try testing.expect(boundary.slot);
+    try testing.expect(boundary.epoch);
+    try testing.expect(boundary.era);
+    try testing.expectEqual(@as(u64, 1), c.now.era);
+    try testing.expectEqual(@as(u64, 0), c.now.epoch);
+    try testing.expectEqual(@as(u64, 1), c.now.slot);
+    try testing.expectEqual(@as(u64, 1), c.now.tick);
 }
 
 test "clock rejects zero stride and overflow" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     const keeper = KeeperId{ .bytes = [_]u8{3} ++ [_]u8{0} ** 31 };
     var c = Clock.init(keeper, .{ .ticks_per_slot = 2, .slots_per_epoch = 2, .epochs_per_era = 2 }).?;
 
-    try std.testing.expect(c.advance(0) == null);
+    try testing.expect(c.advance(0) == null);
     c.now.tick = ~@as(u64, 0);
-    try std.testing.expect(c.advance(1) == null);
+    try testing.expect(c.advance(1) == null);
 }

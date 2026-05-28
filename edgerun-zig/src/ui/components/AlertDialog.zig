@@ -28,7 +28,9 @@ pub const AlertDialog = struct {
 
     pub fn render(self: AlertDialog, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         try primitives.renderSidePanelTrigger(scene, bounds, dialog_layout, alert_danger, options.style.border, dialog_trigger_padding, dialog_delete_label, options.style.bg);
-        try primitives.renderTitleDetailPanel(scene, primitives.sidePanelContentBounds(bounds, dialog_layout), self.title, self.detail, options, dialog_panel, alert_danger, alert_danger);
+        if (options.overlay.isOpen(self.id)) {
+            try primitives.renderTitleDetailPanel(scene, primitives.sidePanelContentBounds(bounds, dialog_layout), self.title, self.detail, options, dialog_panel, alert_danger, alert_danger);
+        }
     }
 
     pub fn collectInteractions(self: AlertDialog, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
@@ -84,7 +86,7 @@ test "alert dialog component renders destructive trigger and hit regions" {
     var regions: [2]interaction.Region = undefined;
     var collector = interaction.Collector.init(&regions);
 
-    try dialog.render(&scene, ui.Rect.init(0, 0, 240, 52), .{});
+    try dialog.render(&scene, ui.Rect.init(0, 0, 240, 52), .{ .overlay = .{ .open_ids = &.{dialog.id} } });
     try dialog.collectInteractions(&collector, ui.Rect.init(0, 0, 240, 52));
 
     try std.testing.expect(component_test.hasText(scene.written(), "Delete"));

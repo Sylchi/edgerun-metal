@@ -1,6 +1,6 @@
 const std = @import("std");
 const renderer_ir = @import("ir.zig");
-const renderer_software = @import("software.zig");
+const renderer_software = @import("backends/software.zig");
 const ui = @import("../ui.zig");
 
 pub const Error = error{

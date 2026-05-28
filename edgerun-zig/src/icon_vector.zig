@@ -1,4 +1,3 @@
-const std = @import("std");
 const math = @import("math.zig");
 const icon = @import("icon.zig");
 
@@ -539,102 +538,9 @@ fn byteFromFloat(value: f32) ?u8 {
     return as_int;
 }
 
-pub fn dataForIconId(icon_id: u32) []const f32 {
-    const value = icon.fromId(icon_id) orelse return &.{};
-    return data(value);
-}
-
-pub fn data(value: icon.Icon) []const f32 {
-    return switch (value) {
-        .activity => &activity,
-        .apps => &app,
-        .bell => &bell,
-        .message => &chat,
-        .check => &check,
-        .chevron_right => &chevron_right,
-        .code => &code,
-        .cpu => &cpu,
-        .database => &database,
-        .eye => &eye,
-        .file => &file,
-        .key => &key,
-        .lock => &lock,
-        .menu => &menu,
-        .message_plus => &message_plus,
-        .network => &network,
-        .route => &route,
-        .search => &search,
-        .send => &send,
-        .server => &server,
-        .settings => &settings,
-        .shield => &shield,
-        .sparkles => &sparkles,
-        .terminal => &terminal,
-        .trash => &trash,
-        .user => &user,
-        .wallet => &wallet,
-        .alert_triangle => &warning,
-        .x => &x,
-        .brand_github => &github,
-    };
-}
-
-const activity = [_]f32{ op_move_to, 0.1250, 0.5000, op_line_to, 0.2917, 0.5000, op_line_to, 0.4167, 0.8333, op_line_to, 0.5833, 0.1667, op_line_to, 0.7083, 0.5000, op_line_to, 0.8750, 0.5000 };
-const app = [_]f32{ op_move_to, 0.1667, 0.2083, op_arc_to, 0.0417, 0.0417, 0.0000, 0, 1, 0.2083, 0.1667, op_line_to, 0.3750, 0.1667, op_arc_to, 0.0417, 0.0417, 0.0000, 0, 1, 0.4167, 0.2083, op_line_to, 0.4167, 0.3750, op_arc_to, 0.0417, 0.0417, 0.0000, 0, 1, 0.3750, 0.4167, op_line_to, 0.2083, 0.4167, op_arc_to, 0.0417, 0.0417, 0.0000, 0, 1, 0.1667, 0.3750, op_line_to, 0.1667, 0.2083, op_move_to, 0.1667, 0.6250, op_arc_to, 0.0417, 0.0417, 0.0000, 0, 1, 0.2083, 0.5833, op_line_to, 0.3750, 0.5833, op_arc_to, 0.0417, 0.0417, 0.0000, 0, 1, 0.4167, 0.6250, op_line_to, 0.4167, 0.7917, op_arc_to, 0.0417, 0.0417, 0.0000, 0, 1, 0.3750, 0.8333, op_line_to, 0.2083, 0.8333, op_arc_to, 0.0417, 0.0417, 0.0000, 0, 1, 0.1667, 0.7917, op_line_to, 0.1667, 0.6250, op_move_to, 0.5833, 0.6250, op_arc_to, 0.0417, 0.0417, 0.0000, 0, 1, 0.6250, 0.5833, op_line_to, 0.7917, 0.5833, op_arc_to, 0.0417, 0.0417, 0.0000, 0, 1, 0.8333, 0.6250, op_line_to, 0.8333, 0.7917, op_arc_to, 0.0417, 0.0417, 0.0000, 0, 1, 0.7917, 0.8333, op_line_to, 0.6250, 0.8333, op_arc_to, 0.0417, 0.0417, 0.0000, 0, 1, 0.5833, 0.7917, op_line_to, 0.5833, 0.6250, op_move_to, 0.5833, 0.2917, op_line_to, 0.8333, 0.2917, op_move_to, 0.7083, 0.1667, op_line_to, 0.7083, 0.4167 };
-const bell = [_]f32{ op_move_to, 0.4167, 0.2083, op_arc_to, 0.0833, 0.0833, 0.0000, 1, 1, 0.5833, 0.2083, op_arc_to, 0.2917, 0.2917, 0.0000, 0, 1, 0.7500, 0.4583, op_line_to, 0.7500, 0.5833, op_arc_to, 0.1667, 0.1667, 0.0000, 0, 0, 0.8333, 0.7083, op_line_to, 0.1667, 0.7083, op_arc_to, 0.1667, 0.1667, 0.0000, 0, 0, 0.2500, 0.5833, op_line_to, 0.2500, 0.4583, op_arc_to, 0.2917, 0.2917, 0.0000, 0, 1, 0.4167, 0.2083, op_move_to, 0.3750, 0.7083, op_line_to, 0.3750, 0.7500, op_arc_to, 0.1250, 0.1250, 0.0000, 0, 0, 0.6250, 0.7500, op_line_to, 0.6250, 0.7083 };
-const chat = [_]f32{ op_move_to, 0.1250, 0.8333, op_line_to, 0.1792, 0.6708, op_cubic_to, 0.0823, 0.5276, 0.1197, 0.3428, 0.2667, 0.2386, op_cubic_to, 0.4136, 0.1344, 0.6246, 0.1429, 0.7602, 0.2586, op_cubic_to, 0.8958, 0.3743, 0.9142, 0.5613, 0.8031, 0.6961, op_cubic_to, 0.6920, 0.8309, 0.4858, 0.8718, 0.3208, 0.7917, op_line_to, 0.1250, 0.8333 };
-const check = [_]f32{ op_move_to, 0.2083, 0.5000, op_line_to, 0.4167, 0.7083, op_line_to, 0.8333, 0.2917 };
-const chevron_right = [_]f32{ op_move_to, 0.3750, 0.2500, op_line_to, 0.6250, 0.5000, op_line_to, 0.3750, 0.7500 };
-const code = [_]f32{ op_move_to, 0.2917, 0.3333, op_line_to, 0.1250, 0.5000, op_line_to, 0.2917, 0.6667, op_move_to, 0.7083, 0.3333, op_line_to, 0.8750, 0.5000, op_line_to, 0.7083, 0.6667, op_move_to, 0.5833, 0.1667, op_line_to, 0.4167, 0.8333 };
-const cpu = [_]f32{ op_move_to, 0.2083, 0.2500, op_arc_to, 0.0417, 0.0417, 0.0000, 0, 1, 0.2500, 0.2083, op_line_to, 0.7500, 0.2083, op_arc_to, 0.0417, 0.0417, 0.0000, 0, 1, 0.7917, 0.2500, op_line_to, 0.7917, 0.7500, op_arc_to, 0.0417, 0.0417, 0.0000, 0, 1, 0.7500, 0.7917, op_line_to, 0.2500, 0.7917, op_arc_to, 0.0417, 0.0417, 0.0000, 0, 1, 0.2083, 0.7500, op_line_to, 0.2083, 0.2500, op_move_to, 0.3750, 0.3750, op_line_to, 0.6250, 0.3750, op_line_to, 0.6250, 0.6250, op_line_to, 0.3750, 0.6250, op_line_to, 0.3750, 0.3750, op_move_to, 0.1250, 0.4167, op_line_to, 0.2083, 0.4167, op_move_to, 0.1250, 0.5833, op_line_to, 0.2083, 0.5833, op_move_to, 0.4167, 0.1250, op_line_to, 0.4167, 0.2083, op_move_to, 0.5833, 0.1250, op_line_to, 0.5833, 0.2083, op_move_to, 0.8750, 0.4167, op_line_to, 0.7917, 0.4167, op_move_to, 0.8750, 0.5833, op_line_to, 0.7917, 0.5833, op_move_to, 0.5833, 0.8750, op_line_to, 0.5833, 0.7917, op_move_to, 0.4167, 0.8750, op_line_to, 0.4167, 0.7917 };
-const database = [_]f32{ op_move_to, 0.1667, 0.2500, op_arc_to, 0.3333, 0.1250, 0.0000, 1, 0, 0.8333, 0.2500, op_arc_to, 0.3333, 0.1250, 0.0000, 1, 0, 0.1667, 0.2500, op_move_to, 0.1667, 0.2500, op_line_to, 0.1667, 0.5000, op_arc_to, 0.3333, 0.1250, 0.0000, 0, 0, 0.8333, 0.5000, op_line_to, 0.8333, 0.2500, op_move_to, 0.1667, 0.5000, op_line_to, 0.1667, 0.7500, op_arc_to, 0.3333, 0.1250, 0.0000, 0, 0, 0.8333, 0.7500, op_line_to, 0.8333, 0.5000 };
-const eye = [_]f32{ op_move_to, 0.4167, 0.5000, op_arc_to, 0.0833, 0.0833, 0.0000, 1, 0, 0.5833, 0.5000, op_arc_to, 0.0833, 0.0833, 0.0000, 0, 0, 0.4167, 0.5000, op_move_to, 0.8750, 0.5000, op_cubic_to, 0.7750, 0.6667, 0.6500, 0.7500, 0.5000, 0.7500, op_cubic_to, 0.3500, 0.7500, 0.2250, 0.6667, 0.1250, 0.5000, op_cubic_to, 0.2250, 0.3333, 0.3500, 0.2500, 0.5000, 0.2500, op_cubic_to, 0.6500, 0.2500, 0.7750, 0.3333, 0.8750, 0.5000 };
-const file = [_]f32{ op_move_to, 0.5833, 0.1250, op_line_to, 0.5833, 0.2917, op_arc_to, 0.0417, 0.0417, 0.0000, 0, 0, 0.6250, 0.3333, op_line_to, 0.7917, 0.3333, op_move_to, 0.7083, 0.8750, op_line_to, 0.2917, 0.8750, op_arc_to, 0.0833, 0.0833, 0.0000, 0, 1, 0.2083, 0.7917, op_line_to, 0.2083, 0.2083, op_arc_to, 0.0833, 0.0833, 0.0000, 0, 1, 0.2917, 0.1250, op_line_to, 0.5833, 0.1250, op_line_to, 0.7917, 0.3333, op_line_to, 0.7917, 0.7917, op_arc_to, 0.0833, 0.0833, 0.0000, 0, 1, 0.7083, 0.8750 };
-const key = [_]f32{ op_move_to, 0.6898, 0.1601, op_line_to, 0.8399, 0.3102, op_arc_to, 0.1199, 0.1199, 0.0000, 0, 1, 0.8399, 0.4797, op_line_to, 0.7298, 0.5899, op_arc_to, 0.1199, 0.1199, 0.0000, 0, 1, 0.5602, 0.5899, op_line_to, 0.5477, 0.5773, op_line_to, 0.2744, 0.8506, op_arc_to, 0.0833, 0.0833, 0.0000, 0, 1, 0.2228, 0.8747, op_line_to, 0.2155, 0.8750, op_line_to, 0.1667, 0.8750, op_arc_to, 0.0417, 0.0417, 0.0000, 0, 1, 0.1253, 0.8382, op_line_to, 0.1250, 0.8333, op_line_to, 0.1250, 0.7845, op_arc_to, 0.0833, 0.0833, 0.0000, 0, 1, 0.1445, 0.7310, op_line_to, 0.1494, 0.7256, op_line_to, 0.1667, 0.7083, op_line_to, 0.2500, 0.7083, op_line_to, 0.2500, 0.6250, op_line_to, 0.3333, 0.6250, op_line_to, 0.3333, 0.5417, op_line_to, 0.4227, 0.4523, op_line_to, 0.4101, 0.4398, op_arc_to, 0.1199, 0.1199, 0.0000, 0, 1, 0.4101, 0.2703, op_line_to, 0.5203, 0.1601, op_arc_to, 0.1199, 0.1199, 0.0000, 0, 1, 0.6898, 0.1601, op_move_to, 0.6250, 0.3750, op_line_to, 0.6254, 0.3750 };
-const lock = [_]f32{ op_move_to, 0.2083, 0.5417, op_arc_to, 0.0833, 0.0833, 0.0000, 0, 1, 0.2917, 0.4583, op_line_to, 0.7083, 0.4583, op_arc_to, 0.0833, 0.0833, 0.0000, 0, 1, 0.7917, 0.5417, op_line_to, 0.7917, 0.7917, op_arc_to, 0.0833, 0.0833, 0.0000, 0, 1, 0.7083, 0.8750, op_line_to, 0.2917, 0.8750, op_arc_to, 0.0833, 0.0833, 0.0000, 0, 1, 0.2083, 0.7917, op_line_to, 0.2083, 0.5417, op_move_to, 0.4583, 0.6667, op_arc_to, 0.0417, 0.0417, 0.0000, 1, 0, 0.5417, 0.6667, op_arc_to, 0.0417, 0.0417, 0.0000, 0, 0, 0.4583, 0.6667, op_move_to, 0.3333, 0.4583, op_line_to, 0.3333, 0.2917, op_arc_to, 0.1667, 0.1667, 0.0000, 1, 1, 0.6667, 0.2917, op_line_to, 0.6667, 0.4583 };
-const menu = [_]f32{ op_move_to, 0.1667, 0.2500, op_line_to, 0.8333, 0.2500, op_move_to, 0.1667, 0.5000, op_line_to, 0.8333, 0.5000, op_move_to, 0.1667, 0.7500, op_line_to, 0.8333, 0.7500 };
-const message_plus = [_]f32{ op_move_to, 0.3333, 0.3750, op_line_to, 0.6667, 0.3750, op_move_to, 0.3333, 0.5417, op_line_to, 0.5833, 0.5417, op_move_to, 0.5004, 0.7748, op_line_to, 0.3333, 0.8750, op_line_to, 0.3333, 0.7500, op_line_to, 0.2500, 0.7500, op_arc_to, 0.1250, 0.1250, 0.0000, 0, 1, 0.1250, 0.6250, op_line_to, 0.1250, 0.2917, op_arc_to, 0.1250, 0.1250, 0.0000, 0, 1, 0.2500, 0.1667, op_line_to, 0.7500, 0.1667, op_arc_to, 0.1250, 0.1250, 0.0000, 0, 1, 0.8750, 0.2917, op_line_to, 0.8750, 0.5208, op_move_to, 0.6667, 0.7917, op_line_to, 0.9167, 0.7917, op_move_to, 0.7917, 0.6667, op_line_to, 0.7917, 0.9167 };
-const network = [_]f32{ op_move_to, 0.2500, 0.3750, op_arc_to, 0.2500, 0.2500, 0.0000, 1, 0, 0.7500, 0.3750, op_arc_to, 0.2500, 0.2500, 0.0000, 0, 0, 0.2500, 0.3750, op_move_to, 0.5000, 0.1250, op_cubic_to, 0.5555, 0.1389, 0.5833, 0.2222, 0.5833, 0.3750, op_cubic_to, 0.5833, 0.5278, 0.5555, 0.6111, 0.5000, 0.6250, op_move_to, 0.5000, 0.1250, op_cubic_to, 0.4445, 0.1389, 0.4167, 0.2222, 0.4167, 0.3750, op_cubic_to, 0.4167, 0.5278, 0.4445, 0.6111, 0.5000, 0.6250, op_move_to, 0.2500, 0.3750, op_line_to, 0.7500, 0.3750, op_move_to, 0.1250, 0.8333, op_line_to, 0.4167, 0.8333, op_move_to, 0.5833, 0.8333, op_line_to, 0.8750, 0.8333, op_move_to, 0.4167, 0.8333, op_arc_to, 0.0833, 0.0833, 0.0000, 1, 0, 0.5833, 0.8333, op_arc_to, 0.0833, 0.0833, 0.0000, 0, 0, 0.4167, 0.8333, op_move_to, 0.5000, 0.6250, op_line_to, 0.5000, 0.7500 };
-const route = [_]f32{ op_move_to, 0.1250, 0.7917, op_arc_to, 0.0833, 0.0833, 0.0000, 1, 0, 0.2917, 0.7917, op_arc_to, 0.0833, 0.0833, 0.0000, 0, 0, 0.1250, 0.7917, op_move_to, 0.7917, 0.2917, op_arc_to, 0.0833, 0.0833, 0.0000, 1, 0, 0.7917, 0.1250, op_arc_to, 0.0833, 0.0833, 0.0000, 0, 0, 0.7917, 0.2917, op_move_to, 0.4583, 0.7917, op_line_to, 0.6875, 0.7917, op_arc_to, 0.1458, 0.1458, 0.0000, 0, 0, 0.6875, 0.5000, op_line_to, 0.3542, 0.5000, op_arc_to, 0.1458, 0.1458, 0.0000, 0, 1, 0.3542, 0.2083, op_line_to, 0.5417, 0.2083 };
-const search = [_]f32{ op_move_to, 0.1250, 0.4167, op_arc_to, 0.2917, 0.2917, 0.0000, 1, 0, 0.7083, 0.4167, op_arc_to, 0.2917, 0.2917, 0.0000, 1, 0, 0.1250, 0.4167, op_move_to, 0.8750, 0.8750, op_line_to, 0.6250, 0.6250 };
-const send = [_]f32{ op_move_to, 0.5000, 0.2083, op_line_to, 0.5000, 0.7917, op_move_to, 0.7500, 0.4583, op_line_to, 0.5000, 0.2083, op_move_to, 0.2500, 0.4583, op_line_to, 0.5000, 0.2083 };
-const server = [_]f32{ op_move_to, 0.1250, 0.2917, op_arc_to, 0.1250, 0.1250, 0.0000, 0, 1, 0.2500, 0.1667, op_line_to, 0.7500, 0.1667, op_arc_to, 0.1250, 0.1250, 0.0000, 0, 1, 0.8750, 0.2917, op_line_to, 0.8750, 0.3750, op_arc_to, 0.1250, 0.1250, 0.0000, 0, 1, 0.7500, 0.5000, op_line_to, 0.2500, 0.5000, op_arc_to, 0.1250, 0.1250, 0.0000, 0, 1, 0.1250, 0.3750, op_move_to, 0.1250, 0.6250, op_arc_to, 0.1250, 0.1250, 0.0000, 0, 1, 0.2500, 0.5000, op_line_to, 0.7500, 0.5000, op_arc_to, 0.1250, 0.1250, 0.0000, 0, 1, 0.8750, 0.6250, op_line_to, 0.8750, 0.7083, op_arc_to, 0.1250, 0.1250, 0.0000, 0, 1, 0.7500, 0.8333, op_line_to, 0.2500, 0.8333, op_arc_to, 0.1250, 0.1250, 0.0000, 0, 1, 0.1250, 0.7083, op_line_to, 0.1250, 0.6250, op_move_to, 0.2917, 0.3333, op_line_to, 0.2917, 0.3338, op_move_to, 0.2917, 0.6667, op_line_to, 0.2917, 0.6671 };
-const settings = [_]f32{ op_move_to, 0.4302, 0.1799, op_cubic_to, 0.4480, 0.1067, 0.5520, 0.1067, 0.5698, 0.1799, op_arc_to, 0.0718, 0.0718, 0.0000, 0, 0, 0.6770, 0.2243, op_cubic_to, 0.7413, 0.1851, 0.8149, 0.2587, 0.7757, 0.3230, op_arc_to, 0.0718, 0.0718, 0.0000, 0, 0, 0.8201, 0.4302, op_cubic_to, 0.8933, 0.4480, 0.8933, 0.5520, 0.8201, 0.5698, op_arc_to, 0.0718, 0.0718, 0.0000, 0, 0, 0.7757, 0.6770, op_cubic_to, 0.8149, 0.7413, 0.7413, 0.8149, 0.6770, 0.7757, op_arc_to, 0.0718, 0.0718, 0.0000, 0, 0, 0.5698, 0.8201, op_cubic_to, 0.5520, 0.8933, 0.4480, 0.8933, 0.4302, 0.8201, op_arc_to, 0.0718, 0.0718, 0.0000, 0, 0, 0.3230, 0.7757, op_cubic_to, 0.2587, 0.8149, 0.1851, 0.7413, 0.2243, 0.6770, op_arc_to, 0.0718, 0.0718, 0.0000, 0, 0, 0.1799, 0.5698, op_cubic_to, 0.1067, 0.5520, 0.1067, 0.4480, 0.1799, 0.4302, op_arc_to, 0.0718, 0.0718, 0.0000, 0, 0, 0.2243, 0.3230, op_cubic_to, 0.1851, 0.2587, 0.2587, 0.1851, 0.3230, 0.2243, op_cubic_to, 0.3647, 0.2496, 0.4187, 0.2272, 0.4302, 0.1799, op_move_to, 0.3750, 0.5000, op_arc_to, 0.1250, 0.1250, 0.0000, 1, 0, 0.6250, 0.5000, op_arc_to, 0.1250, 0.1250, 0.0000, 0, 0, 0.3750, 0.5000 };
-const shield = [_]f32{ op_move_to, 0.4775, 0.8686, op_arc_to, 0.5000, 0.5000, 0.0000, 0, 1, 0.1458, 0.2500, op_arc_to, 0.5000, 0.5000, 0.0000, 0, 0, 0.5000, 0.1250, op_arc_to, 0.5000, 0.5000, 0.0000, 0, 0, 0.8542, 0.2500, op_arc_to, 0.5000, 0.5000, 0.0000, 0, 1, 0.8504, 0.5442, op_move_to, 0.6250, 0.7917, op_line_to, 0.7083, 0.8750, op_line_to, 0.8750, 0.7083 };
-const sparkles = [_]f32{ op_move_to, 0.6667, 0.7500, op_arc_to, 0.0833, 0.0833, 0.0000, 0, 1, 0.7500, 0.8333, op_arc_to, 0.0833, 0.0833, 0.0000, 0, 1, 0.8333, 0.7500, op_arc_to, 0.0833, 0.0833, 0.0000, 0, 1, 0.7500, 0.6667, op_arc_to, 0.0833, 0.0833, 0.0000, 0, 1, 0.6667, 0.7500, op_move_to, 0.6667, 0.2500, op_arc_to, 0.0833, 0.0833, 0.0000, 0, 1, 0.7500, 0.3333, op_arc_to, 0.0833, 0.0833, 0.0000, 0, 1, 0.8333, 0.2500, op_arc_to, 0.0833, 0.0833, 0.0000, 0, 1, 0.7500, 0.1667, op_arc_to, 0.0833, 0.0833, 0.0000, 0, 1, 0.6667, 0.2500, op_move_to, 0.3750, 0.7500, op_arc_to, 0.2500, 0.2500, 0.0000, 0, 1, 0.6250, 0.5000, op_arc_to, 0.2500, 0.2500, 0.0000, 0, 1, 0.3750, 0.2500, op_arc_to, 0.2500, 0.2500, 0.0000, 0, 1, 0.1250, 0.5000, op_arc_to, 0.2500, 0.2500, 0.0000, 0, 1, 0.3750, 0.7500 };
-const terminal = [_]f32{ op_move_to, 0.3333, 0.3750, op_line_to, 0.4583, 0.5000, op_line_to, 0.3333, 0.6250, op_move_to, 0.5417, 0.6250, op_line_to, 0.6667, 0.6250, op_move_to, 0.1250, 0.2500, op_arc_to, 0.0833, 0.0833, 0.0000, 0, 1, 0.2083, 0.1667, op_line_to, 0.7917, 0.1667, op_arc_to, 0.0833, 0.0833, 0.0000, 0, 1, 0.8750, 0.2500, op_line_to, 0.8750, 0.7500, op_arc_to, 0.0833, 0.0833, 0.0000, 0, 1, 0.7917, 0.8333, op_line_to, 0.2083, 0.8333, op_arc_to, 0.0833, 0.0833, 0.0000, 0, 1, 0.1250, 0.7500, op_line_to, 0.1250, 0.2500 };
-const trash = [_]f32{ op_move_to, 0.1667, 0.2917, op_line_to, 0.8333, 0.2917, op_move_to, 0.4167, 0.4583, op_line_to, 0.4167, 0.7083, op_move_to, 0.5833, 0.4583, op_line_to, 0.5833, 0.7083, op_move_to, 0.2083, 0.2917, op_line_to, 0.2500, 0.7917, op_arc_to, 0.0833, 0.0833, 0.0000, 0, 0, 0.3333, 0.8750, op_line_to, 0.6667, 0.8750, op_arc_to, 0.0833, 0.0833, 0.0000, 0, 0, 0.7500, 0.7917, op_line_to, 0.7917, 0.2917, op_move_to, 0.3750, 0.2917, op_line_to, 0.3750, 0.1667, op_arc_to, 0.0417, 0.0417, 0.0000, 0, 1, 0.4167, 0.1250, op_line_to, 0.5833, 0.1250, op_arc_to, 0.0417, 0.0417, 0.0000, 0, 1, 0.6250, 0.1667, op_line_to, 0.6250, 0.2917 };
-const user = [_]f32{ op_move_to, 0.3333, 0.2917, op_arc_to, 0.1667, 0.1667, 0.0000, 1, 0, 0.6667, 0.2917, op_arc_to, 0.1667, 0.1667, 0.0000, 0, 0, 0.3333, 0.2917, op_move_to, 0.2500, 0.8750, op_line_to, 0.2500, 0.7917, op_arc_to, 0.1667, 0.1667, 0.0000, 0, 1, 0.4167, 0.6250, op_line_to, 0.5833, 0.6250, op_arc_to, 0.1667, 0.1667, 0.0000, 0, 1, 0.7500, 0.7917, op_line_to, 0.7500, 0.8750 };
-const wallet = [_]f32{ op_move_to, 0.7083, 0.3333, op_line_to, 0.7083, 0.2083, op_arc_to, 0.0417, 0.0417, 0.0000, 0, 0, 0.6667, 0.1667, op_line_to, 0.2500, 0.1667, op_arc_to, 0.0833, 0.0833, 0.0000, 0, 0, 0.2500, 0.3333, op_line_to, 0.7500, 0.3333, op_arc_to, 0.0417, 0.0417, 0.0000, 0, 1, 0.7917, 0.3750, op_line_to, 0.7917, 0.5000, op_move_to, 0.7917, 0.6667, op_line_to, 0.7917, 0.7917, op_arc_to, 0.0417, 0.0417, 0.0000, 0, 1, 0.7500, 0.8333, op_line_to, 0.2500, 0.8333, op_arc_to, 0.0833, 0.0833, 0.0000, 0, 1, 0.1667, 0.7500, op_line_to, 0.1667, 0.2500, op_move_to, 0.8333, 0.5000, op_line_to, 0.8333, 0.6667, op_line_to, 0.6667, 0.6667, op_arc_to, 0.0833, 0.0833, 0.0000, 0, 1, 0.6667, 0.5000, op_line_to, 0.8333, 0.5000 };
-const warning = [_]f32{ op_move_to, 0.5000, 0.3750, op_line_to, 0.5000, 0.5417, op_move_to, 0.4318, 0.1496, op_line_to, 0.0940, 0.7135, op_arc_to, 0.0798, 0.0798, 0.0000, 0, 0, 0.1622, 0.8332, op_line_to, 0.8378, 0.8332, op_arc_to, 0.0798, 0.0798, 0.0000, 0, 0, 0.9060, 0.7136, op_line_to, 0.5682, 0.1496, op_arc_to, 0.0798, 0.0798, 0.0000, 0, 0, 0.4318, 0.1496, op_move_to, 0.5000, 0.6667, op_line_to, 0.5004, 0.6667 };
-const x = [_]f32{ op_move_to, 0.7500, 0.2500, op_line_to, 0.2500, 0.7500, op_move_to, 0.2500, 0.2500, op_line_to, 0.7500, 0.7500 };
-const github = [_]f32{ op_move_to, 0.3750, 0.7917, op_cubic_to, 0.1958, 0.8500, 0.1958, 0.6875, 0.1250, 0.6667, op_move_to, 0.6250, 0.8750, op_line_to, 0.6250, 0.7292, op_cubic_to, 0.6250, 0.6875, 0.6292, 0.6708, 0.6042, 0.6458, op_cubic_to, 0.7208, 0.6333, 0.8333, 0.5875, 0.8333, 0.3958, op_arc_to, 0.1917, 0.1917, 0.0000, 0, 0, 0.7792, 0.2625, op_arc_to, 0.1750, 0.1750, 0.0000, 0, 0, 0.7750, 0.1292, op_cubic_to, 0.7750, 0.1292, 0.7292, 0.1167, 0.6292, 0.1833, op_arc_to, 0.5125, 0.5125, 0.0000, 0, 0, 0.3708, 0.1833, op_cubic_to, 0.2708, 0.1167, 0.2250, 0.1292, 0.2250, 0.1292, op_arc_to, 0.1750, 0.1750, 0.0000, 0, 0, 0.2208, 0.2625, op_arc_to, 0.1917, 0.1917, 0.0000, 0, 0, 0.1667, 0.3958, op_cubic_to, 0.1667, 0.5875, 0.2792, 0.6333, 0.3958, 0.6458, op_cubic_to, 0.3708, 0.6708, 0.3708, 0.6958, 0.3750, 0.7292, op_line_to, 0.3750, 0.8750 };
-
-test "every icon has valid vector data" {
-    @setEvalBranchQuota(10000);
-    inline for (@typeInfo(icon.Icon).@"enum".fields) |field| {
-        const value: icon.Icon = @enumFromInt(field.value);
-        var iter = Iterator.init(data(value));
-        var count: usize = 0;
-        while (try iter.next()) |_| count += 1;
-        try std.testing.expect(count > 0);
-    }
-}
-
-test "invalid icon ids return no vector data" {
-    try std.testing.expectEqual(@as(usize, 0), dataForIconId(0).len);
-    try std.testing.expectEqual(@as(usize, 0), dataForIconId(255).len);
-}
-
-test "icon vectors keep svg path commands instead of baked polylines" {
-    try std.testing.expect(hasOp(data(.brand_github), op_cubic_to));
-    try std.testing.expect(hasOp(data(.search), op_arc_to));
-    try std.testing.expect(hasOp(data(.apps), op_arc_to));
-    try std.testing.expectEqualSlices(f32, data(.database), data(.database));
-    try std.testing.expectEqualSlices(f32, data(.shield), data(.shield));
-}
 
 test "iterator decodes linear gradient paint op" {
+    const std = @import("std");
     const values = [_]f32{
         op_paint_linear_gradient,
         @floatFromInt(@intFromEnum(GradientCoordinateSpace.user_space)),
@@ -685,6 +591,7 @@ test "iterator decodes linear gradient paint op" {
 }
 
 test "iterator decodes radial gradient paint op" {
+    const std = @import("std");
     const values = [_]f32{
         op_paint_radial_gradient,
         @floatFromInt(@intFromEnum(GradientCoordinateSpace.object_bounding_box)),
@@ -734,6 +641,7 @@ test "iterator decodes radial gradient paint op" {
 }
 
 test "iterator decodes current color alpha paint op" {
+    const std = @import("std");
     const values = [_]f32{
         op_paint_current_color_alpha,
         128.0,
@@ -745,6 +653,7 @@ test "iterator decodes current color alpha paint op" {
 }
 
 test "iterator decodes stroke width op" {
+    const std = @import("std");
     const values = [_]f32{
         op_stroke_width,
         1.5 / 24.0,
@@ -756,6 +665,7 @@ test "iterator decodes stroke width op" {
 }
 
 test "iterator decodes stroke cap op" {
+    const std = @import("std");
     const values = [_]f32{
         op_stroke_cap,
         @floatFromInt(@intFromEnum(StrokeCap.square)),
@@ -767,6 +677,7 @@ test "iterator decodes stroke cap op" {
 }
 
 test "iterator decodes stroke join op" {
+    const std = @import("std");
     const values = [_]f32{
         op_stroke_join,
         @floatFromInt(@intFromEnum(StrokeJoin.bevel)),
@@ -778,6 +689,7 @@ test "iterator decodes stroke join op" {
 }
 
 test "iterator decodes stroke miter limit op" {
+    const std = @import("std");
     const values = [_]f32{
         op_stroke_miter_limit,
         2.5,
@@ -789,6 +701,7 @@ test "iterator decodes stroke miter limit op" {
 }
 
 test "iterator decodes clip path control ops" {
+    const std = @import("std");
     const values = [_]f32{
         op_begin_clip_path,
         op_end_clip_path,
@@ -802,7 +715,3 @@ test "iterator decodes clip path control ops" {
     try std.testing.expectEqual(@as(?Op, null), try iter.next());
 }
 
-fn hasOp(values: []const f32, op: f32) bool {
-    for (values) |value| if (value == op) return true;
-    return false;
-}

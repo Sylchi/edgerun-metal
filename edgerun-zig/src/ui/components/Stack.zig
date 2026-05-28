@@ -120,7 +120,7 @@ pub fn collectStackInteractions(comptime Component: type, collector: *interactio
     const placed_children = placeStackChildren(Component, bounds, stack, options, &child_measurements, &child_bounds);
     for (stack.children[0..placed_children.len], placed_children) |child, child_rect| {
         if (!child_rect.valid()) return error.InvalidInteractionBounds;
-        try child.collectInteractions(collector, child_rect);
+        try child.collectInteractions(collector, child_rect, options);
     }
 }
 

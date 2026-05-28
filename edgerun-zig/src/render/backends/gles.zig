@@ -3,23 +3,21 @@ const renderer_font_atlas = @import("../font_atlas_weighted.zig");
 const gl_contract = @import("../gl_contract.zig");
 const renderer_ir = @import("../ir.zig");
 const ui = @import("../../ui.zig");
-
-pub const c = @cImport({
-    @cInclude("GLES2/gl2.h");
-});
+const gles_gl = @import("../../linux_gles.zig");
 
 pub const RgbaTexture = renderer_ir.RgbaTexture;
 
 pub const State = struct {
-    rect_program: c.GLuint,
-    textured_program: c.GLuint,
-    image_program: c.GLuint,
-    line_program: c.GLuint,
-    rect_vbo: c.GLuint,
-    textured_vbo: c.GLuint,
-    line_vbo: c.GLuint,
-    font_texture: c.GLuint,
-    image_texture: ?c.GLuint,
+    gles: *const gles_gl.Gles2,
+    rect_program: gles_gl.GLuint,
+    textured_program: gles_gl.GLuint,
+    image_program: gles_gl.GLuint,
+    line_program: gles_gl.GLuint,
+    rect_vbo: gles_gl.GLuint,
+    textured_vbo: gles_gl.GLuint,
+    line_vbo: gles_gl.GLuint,
+    font_texture: gles_gl.GLuint,
+    image_texture: ?gles_gl.GLuint,
 };
 
 pub const Pixel = struct {
@@ -55,43 +53,44 @@ const fnv64_offset_basis: u64 = 0xcbf29ce484222325;
 const fnv64_prime: u64 = 0x100000001b3;
 const shader_log_capacity: usize = 1024;
 
-pub fn init(font_atlas: *renderer_font_atlas.Atlas, image: ?RgbaTexture) !State {
-    try requireHardwareGl();
-    c.glClearColor(gl_contract.clear_color_r, gl_contract.clear_color_g, gl_contract.clear_color_b, gl_contract.clear_color_a);
-    c.glDisable(c.GL_DITHER);
-    c.glEnable(c.GL_BLEND);
-    c.glBlendFuncSeparate(c.GL_ONE, c.GL_ONE_MINUS_SRC_ALPHA, c.GL_ONE, c.GL_ONE_MINUS_SRC_ALPHA);
+pub fn initState(font_atlas: *renderer_font_atlas.Atlas, image: ?RgbaTexture, gles: *const gles_gl.Gles2) !State {
+    try requireHardwareGl(gles);
+    gles.glClearColor(gl_contract.clear_color_r, gl_contract.clear_color_g, gl_contract.clear_color_b, gl_contract.clear_color_a);
+    gles.glDisable(gles_gl.gl_dither);
+    gles.glEnable(gles_gl.gl_blend);
+    gles.glBlendFuncSeparate(gles_gl.gl_one, gles_gl.gl_one_minus_src_alpha, gles_gl.gl_one, gles_gl.gl_one_minus_src_alpha);
     const image_texture = if (image) |texture| blk: {
         if (!texture.valid()) return error.InvalidImageTexture;
-        break :blk makeRgbaTexture(texture.width, texture.height, texture.pixels);
+        break :blk makeRgbaTexture(gles, texture.width, texture.height, texture.pixels);
     } else null;
     return .{
-        .rect_program = try makeProgram(gl_contract.rect_vertex_shader, gl_contract.rect_fragment_shader),
-        .textured_program = try makeProgram(gl_contract.textured_vertex_shader, gl_contract.text_fragment_shader),
-        .image_program = try makeProgram(gl_contract.textured_vertex_shader, gl_contract.image_fragment_shader),
-        .line_program = try makeProgram(gl_contract.line_vertex_shader, gl_contract.line_fragment_shader),
-        .rect_vbo = makeBuffer(),
-        .textured_vbo = makeBuffer(),
-        .line_vbo = makeBuffer(),
-        .font_texture = makeAlphaTextureFiltered(font_atlas.width, font_atlas.height, font_atlas.alphaSlice(), c.GL_LINEAR),
+        .gles = gles,
+        .rect_program = try makeProgram(gles, gl_contract.rect_vertex_shader, gl_contract.rect_fragment_shader),
+        .textured_program = try makeProgram(gles, gl_contract.textured_vertex_shader, gl_contract.text_fragment_shader),
+        .image_program = try makeProgram(gles, gl_contract.textured_vertex_shader, gl_contract.image_fragment_shader),
+        .line_program = try makeProgram(gles, gl_contract.line_vertex_shader, gl_contract.line_fragment_shader),
+        .rect_vbo = makeBuffer(gles),
+        .textured_vbo = makeBuffer(gles),
+        .line_vbo = makeBuffer(gles),
+        .font_texture = makeAlphaTextureFiltered(gles, font_atlas.width, font_atlas.height, font_atlas.alphaSlice(), gles_gl.gl_linear),
         .image_texture = image_texture,
     };
 }
 
 pub fn deinit(gl: *State) void {
-    if (gl.image_texture) |texture| c.glDeleteTextures(1, &texture);
-    c.glDeleteTextures(1, &gl.font_texture);
-    c.glDeleteBuffers(1, &gl.rect_vbo);
-    c.glDeleteBuffers(1, &gl.textured_vbo);
-    c.glDeleteBuffers(1, &gl.line_vbo);
-    c.glDeleteProgram(gl.rect_program);
-    c.glDeleteProgram(gl.textured_program);
-    c.glDeleteProgram(gl.image_program);
-    c.glDeleteProgram(gl.line_program);
+    if (gl.image_texture) |texture| gl.gles.glDeleteTextures(1, &texture);
+    gl.gles.glDeleteTextures(1, &gl.font_texture);
+    gl.gles.glDeleteBuffers(1, &gl.rect_vbo);
+    gl.gles.glDeleteBuffers(1, &gl.textured_vbo);
+    gl.gles.glDeleteBuffers(1, &gl.line_vbo);
+    gl.gles.glDeleteProgram(gl.rect_program);
+    gl.gles.glDeleteProgram(gl.textured_program);
+    gl.gles.glDeleteProgram(gl.image_program);
+    gl.gles.glDeleteProgram(gl.line_program);
 }
 
 pub fn refreshFontTexture(gl: State, font_atlas: *const renderer_font_atlas.Atlas) void {
-    updateAlphaTexture(gl.font_texture, font_atlas.width, font_atlas.height, font_atlas.alphaSlice());
+    updateAlphaTexture(gl.gles, gl.font_texture, font_atlas.width, font_atlas.height, font_atlas.alphaSlice());
 }
 
 pub fn renderFrame(gl: State, width: i32, height: i32, buffers: renderer_ir.Buffers) !void {
@@ -99,8 +98,8 @@ pub fn renderFrame(gl: State, width: i32, height: i32, buffers: renderer_ir.Buff
 }
 
 pub fn renderFrameToViewport(gl: State, logical_width: i32, logical_height: i32, framebuffer_width: i32, framebuffer_height: i32, buffers: renderer_ir.Buffers) !void {
-    c.glViewport(0, 0, framebuffer_width, framebuffer_height);
-    c.glClear(c.GL_COLOR_BUFFER_BIT);
+    gl.gles.glViewport(0, 0, framebuffer_width, framebuffer_height);
+    gl.gles.glClear(gles_gl.gl_color_buffer_bit);
     const scale = viewportScale(logical_width, logical_height, framebuffer_width, framebuffer_height);
     try drawRects(gl, logical_width, logical_height, scale, buffers.liveRects());
     try drawImage(gl, logical_width, logical_height, buffers.liveImageVertices());
@@ -117,47 +116,47 @@ fn drawImage(gl: State, width: i32, height: i32, values: []const f32) !void {
     try drawTexturedWithProgram(gl, width, height, values, texture, gl.image_program);
 }
 
-pub fn verifyFrameNonBlank(width: i32, height: i32) !FrameProof {
+pub fn verifyFrameNonBlank(gles: *const gles_gl.Gles2, width: i32, height: i32) !FrameProof {
     if (width <= 0 or height <= 0) return error.InvalidFramebufferSize;
     var samples: [verification_sample_count]Pixel = undefined;
-    readVerificationSamples(width, height, &samples);
+    readVerificationSamples(gles, width, height, &samples);
     const proof = frameProof(width, height, &samples);
     if (!proof.valid()) return error.BlankGpuFrame;
     return proof;
 }
 
-pub fn readFramePixels(width: i32, height: i32, out: []ui.Color) !void {
-    try readBoundFramePixels(width, height, out);
+pub fn readFramePixels(gles: *const gles_gl.Gles2, width: i32, height: i32, out: []ui.Color) !void {
+    try readBoundFramePixels(gles, width, height, out);
 }
 
 pub fn renderFrameToRgbaPixels(gl: State, width: i32, height: i32, buffers: renderer_ir.Buffers, out: []ui.Color) !void {
     if (width <= 0 or height <= 0) return error.InvalidFramebufferSize;
-    const texture = makeEmptyRgbaTexture(@intCast(width), @intCast(height));
-    defer c.glDeleteTextures(1, &texture);
-    var framebuffer: c.GLuint = 0;
-    c.glGenFramebuffers(1, &framebuffer);
-    defer c.glDeleteFramebuffers(1, &framebuffer);
-    c.glBindFramebuffer(c.GL_FRAMEBUFFER, framebuffer);
-    defer c.glBindFramebuffer(c.GL_FRAMEBUFFER, 0);
-    c.glFramebufferTexture2D(c.GL_FRAMEBUFFER, c.GL_COLOR_ATTACHMENT0, c.GL_TEXTURE_2D, texture, 0);
-    if (c.glCheckFramebufferStatus(c.GL_FRAMEBUFFER) != c.GL_FRAMEBUFFER_COMPLETE) return error.GlFramebufferIncomplete;
+    const texture = makeEmptyRgbaTexture(gl.gles, @intCast(width), @intCast(height));
+    defer gl.gles.glDeleteTextures(1, &texture);
+    var framebuffer: gles_gl.GLuint = 0;
+    gl.gles.glGenFramebuffers(1, &framebuffer);
+    defer gl.gles.glDeleteFramebuffers(1, &framebuffer);
+    gl.gles.glBindFramebuffer(gles_gl.gl_framebuffer, framebuffer);
+    defer gl.gles.glBindFramebuffer(gles_gl.gl_framebuffer, 0);
+    gl.gles.glFramebufferTexture2D(gles_gl.gl_framebuffer, gles_gl.gl_color_attachment0, gles_gl.gl_texture_2d, texture, 0);
+    if (gl.gles.glCheckFramebufferStatus(gles_gl.gl_framebuffer) != gles_gl.gl_framebuffer_complete) return error.GlFramebufferIncomplete;
     try renderFrameToViewport(gl, width, height, width, height, buffers);
-    try readBoundFramePixels(width, height, out);
+    try readBoundFramePixels(gl.gles, width, height, out);
 }
 
-fn readBoundFramePixels(width: i32, height: i32, out: []ui.Color) !void {
+fn readBoundFramePixels(gles: *const gles_gl.Gles2, width: i32, height: i32, out: []ui.Color) !void {
     if (width <= 0 or height <= 0) return error.InvalidFramebufferSize;
     const width_usize: usize = @intCast(width);
     const height_usize: usize = @intCast(height);
     const pixel_count = width_usize * height_usize;
     if (out.len < pixel_count) return error.InvalidPixelBuffer;
-    c.glFinish();
-    c.glPixelStorei(c.GL_PACK_ALIGNMENT, 1);
+    gles.glFinish();
+    gles.glPixelStorei(gles_gl.gl_pack_alignment, 1);
     var top_row: usize = 0;
     while (top_row < height_usize) : (top_row += 1) {
-        const gl_row: c.GLint = @intCast(height_usize - 1 - top_row);
+        const gl_row: gles_gl.GLint = @intCast(height_usize - 1 - top_row);
         const dst = out[top_row * width_usize ..][0..width_usize];
-        c.glReadPixels(0, gl_row, @intCast(width_usize), 1, c.GL_RGBA, c.GL_UNSIGNED_BYTE, @as([*]u8, @ptrCast(dst.ptr)));
+        gles.glReadPixels(0, gl_row, @intCast(width_usize), 1, gles_gl.gl_rgba, gles_gl.gl_unsigned_byte, @as([*]u8, @ptrCast(dst.ptr)));
     }
 }
 
@@ -167,9 +166,9 @@ pub fn sources(font_atlas: *renderer_font_atlas.Atlas) renderer_ir.Sources {
     };
 }
 
-pub fn requireHardwareGl() !void {
-    const renderer_raw = c.glGetString(c.GL_RENDERER) orelse return error.GlRendererUnavailable;
-    const renderer = std.mem.span(@as([*:0]const u8, @ptrCast(renderer_raw)));
+pub fn requireHardwareGl(gles: *const gles_gl.Gles2) !void {
+    const renderer_raw = gles.glGetString(gles_gl.gl_renderer) orelse return error.GlRendererUnavailable;
+    const renderer = std.mem.span(@as([*:0]const u8, @ptrCast(renderer_raw.?)));
     if (isSoftwareRenderer(renderer)) return error.SoftwareGlRendererRejected;
 }
 
@@ -179,8 +178,8 @@ pub fn isSoftwareRenderer(renderer: []const u8) bool {
         std.ascii.indexOfIgnoreCase(renderer, "swrast") != null;
 }
 
-fn readVerificationSamples(width: i32, height: i32, samples: *[verification_sample_count]Pixel) void {
-    c.glFinish();
+fn readVerificationSamples(gles: *const gles_gl.Gles2, width: i32, height: i32, samples: *[verification_sample_count]Pixel) void {
+    gles.glFinish();
     var index: usize = 0;
     var x_slot: i32 = 1;
     while (x_slot <= verification_sample_axis) : (x_slot += 1) {
@@ -189,7 +188,7 @@ fn readVerificationSamples(width: i32, height: i32, samples: *[verification_samp
             var pixel = [_]u8{ 0, 0, 0, 0 };
             const x = sampleCoordinate(width, x_slot);
             const y = sampleCoordinate(height, y_slot);
-            c.glReadPixels(x, y, 1, 1, c.GL_RGBA, c.GL_UNSIGNED_BYTE, &pixel);
+            gles.glReadPixels(x, y, 1, 1, gles_gl.gl_rgba, gles_gl.gl_unsigned_byte, &pixel);
             samples[index] = .{ .r = pixel[0], .g = pixel[1], .b = pixel[2], .a = pixel[3] };
             index += 1;
         }
@@ -256,24 +255,24 @@ fn viewportScale(logical_width: i32, logical_height: i32, framebuffer_width: i32
 
 fn drawRects(gl: State, width: i32, height: i32, scale: f32, values: []const f32) !void {
     var iter = renderer_ir.RectIterator.init(values) catch return error.InvalidIrBuffer;
-    c.glUseProgram(gl.rect_program);
-    c.glUniform2f(c.glGetUniformLocation(gl.rect_program, gl_contract.uniform_screen), @floatFromInt(width), @floatFromInt(height));
-    c.glUniform1f(c.glGetUniformLocation(gl.rect_program, gl_contract.uniform_pixel_scale), scale);
-    c.glBindBuffer(c.GL_ARRAY_BUFFER, gl.rect_vbo);
+    gl.gles.glUseProgram(gl.rect_program);
+    gl.gles.glUniform2f(gl.gles.glGetUniformLocation(gl.rect_program, gl_contract.uniform_screen), @floatFromInt(width), @floatFromInt(height));
+    gl.gles.glUniform1f(gl.gles.glGetUniformLocation(gl.rect_program, gl_contract.uniform_pixel_scale), scale);
+    gl.gles.glBindBuffer(gles_gl.gl_array_buffer, gl.rect_vbo);
     const verts = [_]f32{ 0, 0, 1, 0, 0, 1, 1, 1 };
-    c.glBufferData(c.GL_ARRAY_BUFFER, @intCast(verts.len * @sizeOf(f32)), &verts, c.GL_STATIC_DRAW);
-    c.glEnableVertexAttribArray(gl_contract.attr_pos_location);
-    c.glVertexAttribPointer(gl_contract.attr_pos_location, 2, c.GL_FLOAT, c.GL_FALSE, 2 * @sizeOf(f32), null);
+    gl.gles.glBufferData(gles_gl.gl_array_buffer, @intCast(verts.len * @sizeOf(f32)), &verts, gles_gl.gl_static_draw);
+    gl.gles.glEnableVertexAttribArray(gl_contract.attr_pos_location);
+    gl.gles.glVertexAttribPointer(gl_contract.attr_pos_location, 2, gles_gl.gl_float, gles_gl.gl_false, 2 * @sizeOf(f32), null);
     while (try iter.next()) |rect| {
         const draw_bounds = rectDrawBounds(rect);
-        c.glUniform4f(c.glGetUniformLocation(gl.rect_program, gl_contract.uniform_rect), draw_bounds.x, draw_bounds.y, draw_bounds.w, draw_bounds.h);
-        c.glUniform4f(c.glGetUniformLocation(gl.rect_program, gl_contract.uniform_source_rect), rect.bounds.x, rect.bounds.y, rect.bounds.w, rect.bounds.h);
-        c.glUniform4f(c.glGetUniformLocation(gl.rect_program, gl_contract.uniform_color), colorF(rect.color.r), colorF(rect.color.g), colorF(rect.color.b), colorF(rect.color.a));
-        c.glUniform4f(c.glGetUniformLocation(gl.rect_program, gl_contract.uniform_color2), colorF(rect.color2.r), colorF(rect.color2.g), colorF(rect.color2.b), colorF(rect.color2.a));
-        c.glUniform1f(c.glGetUniformLocation(gl.rect_program, gl_contract.uniform_radius), rect.radius);
-        c.glUniform1f(c.glGetUniformLocation(gl.rect_program, gl_contract.uniform_shadow), rect.shadow);
-        c.glUniform1i(c.glGetUniformLocation(gl.rect_program, gl_contract.uniform_mode), rectMode(rect.mode));
-        c.glDrawArrays(c.GL_TRIANGLE_STRIP, 0, 4);
+        gl.gles.glUniform4f(gl.gles.glGetUniformLocation(gl.rect_program, gl_contract.uniform_rect), draw_bounds.x, draw_bounds.y, draw_bounds.w, draw_bounds.h);
+        gl.gles.glUniform4f(gl.gles.glGetUniformLocation(gl.rect_program, gl_contract.uniform_source_rect), rect.bounds.x, rect.bounds.y, rect.bounds.w, rect.bounds.h);
+        gl.gles.glUniform4f(gl.gles.glGetUniformLocation(gl.rect_program, gl_contract.uniform_color), colorF(rect.color.r), colorF(rect.color.g), colorF(rect.color.b), colorF(rect.color.a));
+        gl.gles.glUniform4f(gl.gles.glGetUniformLocation(gl.rect_program, gl_contract.uniform_color2), colorF(rect.color2.r), colorF(rect.color2.g), colorF(rect.color2.b), colorF(rect.color2.a));
+        gl.gles.glUniform1f(gl.gles.glGetUniformLocation(gl.rect_program, gl_contract.uniform_radius), rect.radius);
+        gl.gles.glUniform1f(gl.gles.glGetUniformLocation(gl.rect_program, gl_contract.uniform_shadow), rect.shadow);
+        gl.gles.glUniform1i(gl.gles.glGetUniformLocation(gl.rect_program, gl_contract.uniform_mode), rectMode(gl.gles, rect.mode));
+        gl.gles.glDrawArrays(gles_gl.gl_triangle_strip, 0, 4);
     }
 }
 
@@ -284,124 +283,124 @@ fn rectDrawBounds(rect: anytype) ui.Rect {
     };
 }
 
-fn drawFontTextured(gl: State, width: i32, height: i32, values: []const f32, texture: c.GLuint) !void {
+fn drawFontTextured(gl: State, width: i32, height: i32, values: []const f32, texture: gles_gl.GLuint) !void {
     try drawTexturedWithProgram(gl, width, height, values, texture, gl.textured_program);
 }
 
-fn drawTexturedWithProgram(gl: State, width: i32, height: i32, values: []const f32, texture: c.GLuint, program: c.GLuint) !void {
+fn drawTexturedWithProgram(gl: State, width: i32, height: i32, values: []const f32, texture: gles_gl.GLuint, program: gles_gl.GLuint) !void {
     if (values.len == 0) return;
     if (values.len % renderer_ir.text_vertex_float_stride != 0) return error.InvalidIrBuffer;
-    c.glUseProgram(program);
-    c.glUniform2f(c.glGetUniformLocation(program, gl_contract.uniform_screen), @floatFromInt(width), @floatFromInt(height));
-    c.glActiveTexture(c.GL_TEXTURE0);
-    c.glBindTexture(c.GL_TEXTURE_2D, texture);
-    c.glUniform1i(c.glGetUniformLocation(program, gl_contract.uniform_texture), 0);
-    if (program == gl.textured_program) c.glUniform1i(c.glGetUniformLocation(program, gl_contract.uniform_texture_kind), gl_contract.texture_kind_alpha);
-    c.glBindBuffer(c.GL_ARRAY_BUFFER, gl.textured_vbo);
-    c.glBufferData(c.GL_ARRAY_BUFFER, @intCast(values.len * @sizeOf(f32)), values.ptr, c.GL_DYNAMIC_DRAW);
-    c.glEnableVertexAttribArray(gl_contract.attr_pos_location);
-    c.glEnableVertexAttribArray(gl_contract.attr_uv_location);
-    c.glEnableVertexAttribArray(gl_contract.attr_color_location);
-    c.glVertexAttribPointer(gl_contract.attr_pos_location, 2, c.GL_FLOAT, c.GL_FALSE, renderer_ir.text_vertex_float_stride * @sizeOf(f32), null);
-    c.glVertexAttribPointer(gl_contract.attr_uv_location, 2, c.GL_FLOAT, c.GL_FALSE, renderer_ir.text_vertex_float_stride * @sizeOf(f32), @ptrFromInt(2 * @sizeOf(f32)));
-    c.glVertexAttribPointer(gl_contract.attr_color_location, 4, c.GL_FLOAT, c.GL_FALSE, renderer_ir.text_vertex_float_stride * @sizeOf(f32), @ptrFromInt(4 * @sizeOf(f32)));
-    c.glDrawArrays(c.GL_TRIANGLES, 0, @intCast(values.len / renderer_ir.text_vertex_float_stride));
+    gl.gles.glUseProgram(program);
+    gl.gles.glUniform2f(gl.gles.glGetUniformLocation(program, gl_contract.uniform_screen), @floatFromInt(width), @floatFromInt(height));
+    gl.gles.glActiveTexture(gles_gl.gl_texture0);
+    gl.gles.glBindTexture(gles_gl.gl_texture_2d, texture);
+    gl.gles.glUniform1i(gl.gles.glGetUniformLocation(program, gl_contract.uniform_texture), 0);
+    if (program == gl.textured_program) gl.gles.glUniform1i(gl.gles.glGetUniformLocation(program, gl_contract.uniform_texture_kind), gl_contract.texture_kind_alpha);
+    gl.gles.glBindBuffer(gles_gl.gl_array_buffer, gl.textured_vbo);
+    gl.gles.glBufferData(gles_gl.gl_array_buffer, @intCast(values.len * @sizeOf(f32)), values.ptr, gles_gl.gl_dynamic_draw);
+    gl.gles.glEnableVertexAttribArray(gl_contract.attr_pos_location);
+    gl.gles.glEnableVertexAttribArray(gl_contract.attr_uv_location);
+    gl.gles.glEnableVertexAttribArray(gl_contract.attr_color_location);
+    gl.gles.glVertexAttribPointer(gl_contract.attr_pos_location, 2, gles_gl.gl_float, gles_gl.gl_false, renderer_ir.text_vertex_float_stride * @sizeOf(f32), null);
+    gl.gles.glVertexAttribPointer(gl_contract.attr_uv_location, 2, gles_gl.gl_float, gles_gl.gl_false, renderer_ir.text_vertex_float_stride * @sizeOf(f32), @ptrFromInt(2 * @sizeOf(f32)));
+    gl.gles.glVertexAttribPointer(gl_contract.attr_color_location, 4, gles_gl.gl_float, gles_gl.gl_false, renderer_ir.text_vertex_float_stride * @sizeOf(f32), @ptrFromInt(4 * @sizeOf(f32)));
+    gl.gles.glDrawArrays(gles_gl.gl_triangles, 0, @intCast(values.len / renderer_ir.text_vertex_float_stride));
 }
 
 fn drawIconLines(gl: State, width: i32, height: i32, values: []const f32) !void {
     if (values.len == 0) return;
     if (values.len % renderer_ir.icon_line_vertex_float_stride != 0) return error.InvalidIrBuffer;
-    c.glUseProgram(gl.line_program);
-    c.glUniform2f(c.glGetUniformLocation(gl.line_program, gl_contract.uniform_screen), @floatFromInt(width), @floatFromInt(height));
-    c.glBindBuffer(c.GL_ARRAY_BUFFER, gl.line_vbo);
-    c.glEnableVertexAttribArray(gl_contract.attr_pos_location);
-    c.glEnableVertexAttribArray(gl_contract.attr_color_location);
-    c.glVertexAttribPointer(gl_contract.attr_pos_location, 2, c.GL_FLOAT, c.GL_FALSE, renderer_ir.icon_line_vertex_float_stride * @sizeOf(f32), null);
-    c.glVertexAttribPointer(gl_contract.attr_color_location, 4, c.GL_FLOAT, c.GL_FALSE, renderer_ir.icon_line_vertex_float_stride * @sizeOf(f32), @ptrFromInt(renderer_ir.icon_line_color_r_index * @sizeOf(f32)));
-    c.glBufferData(c.GL_ARRAY_BUFFER, @intCast(values.len * @sizeOf(f32)), values.ptr, c.GL_DYNAMIC_DRAW);
-    c.glDrawArrays(c.GL_TRIANGLES, 0, @intCast(values.len / renderer_ir.icon_line_vertex_float_stride));
+    gl.gles.glUseProgram(gl.line_program);
+    gl.gles.glUniform2f(gl.gles.glGetUniformLocation(gl.line_program, gl_contract.uniform_screen), @floatFromInt(width), @floatFromInt(height));
+    gl.gles.glBindBuffer(gles_gl.gl_array_buffer, gl.line_vbo);
+    gl.gles.glEnableVertexAttribArray(gl_contract.attr_pos_location);
+    gl.gles.glEnableVertexAttribArray(gl_contract.attr_color_location);
+    gl.gles.glVertexAttribPointer(gl_contract.attr_pos_location, 2, gles_gl.gl_float, gles_gl.gl_false, renderer_ir.icon_line_vertex_float_stride * @sizeOf(f32), null);
+    gl.gles.glVertexAttribPointer(gl_contract.attr_color_location, 4, gles_gl.gl_float, gles_gl.gl_false, renderer_ir.icon_line_vertex_float_stride * @sizeOf(f32), @ptrFromInt(renderer_ir.icon_line_color_r_index * @sizeOf(f32)));
+    gl.gles.glBufferData(gles_gl.gl_array_buffer, @intCast(values.len * @sizeOf(f32)), values.ptr, gles_gl.gl_dynamic_draw);
+    gl.gles.glDrawArrays(gles_gl.gl_triangles, 0, @intCast(values.len / renderer_ir.icon_line_vertex_float_stride));
 }
 
-fn makeBuffer() c.GLuint {
-    var buffer: c.GLuint = 0;
-    c.glGenBuffers(1, &buffer);
+fn makeBuffer(gles: *const gles_gl.Gles2) gles_gl.GLuint {
+    var buffer: gles_gl.GLuint = 0;
+    gles.glGenBuffers(1, &buffer);
     return buffer;
 }
 
-fn makeAlphaTextureFiltered(width: usize, height: usize, alpha: []const u8, filter: c.GLint) c.GLuint {
-    var texture: c.GLuint = 0;
-    c.glGenTextures(1, &texture);
-    c.glBindTexture(c.GL_TEXTURE_2D, texture);
-    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_MIN_FILTER, filter);
-    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_MAG_FILTER, filter);
-    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_WRAP_S, c.GL_CLAMP_TO_EDGE);
-    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_WRAP_T, c.GL_CLAMP_TO_EDGE);
-    c.glPixelStorei(c.GL_UNPACK_ALIGNMENT, 1);
-    c.glTexImage2D(c.GL_TEXTURE_2D, 0, c.GL_ALPHA, @intCast(width), @intCast(height), 0, c.GL_ALPHA, c.GL_UNSIGNED_BYTE, alpha.ptr);
+fn makeAlphaTextureFiltered(gles: *const gles_gl.Gles2, width: usize, height: usize, alpha: []const u8, filter: gles_gl.GLint) gles_gl.GLuint {
+    var texture: gles_gl.GLuint = 0;
+    gles.glGenTextures(1, &texture);
+    gles.glBindTexture(gles_gl.gl_texture_2d, texture);
+    gles.glTexParameteri(gles_gl.gl_texture_2d, gles_gl.gl_texture_min_filter, filter);
+    gles.glTexParameteri(gles_gl.gl_texture_2d, gles_gl.gl_texture_mag_filter, filter);
+    gles.glTexParameteri(gles_gl.gl_texture_2d, gles_gl.gl_texture_wrap_s, gles_gl.gl_clamp_to_edge);
+    gles.glTexParameteri(gles_gl.gl_texture_2d, gles_gl.gl_texture_wrap_t, gles_gl.gl_clamp_to_edge);
+    gles.glPixelStorei(gles_gl.gl_unpack_alignment, 1);
+    gles.glTexImage2D(gles_gl.gl_texture_2d, 0, gles_gl.gl_alpha, @intCast(width), @intCast(height), 0, gles_gl.gl_alpha, gles_gl.gl_unsigned_byte, alpha.ptr);
     return texture;
 }
 
-fn makeRgbaTexture(width: usize, height: usize, pixels: []const ui.Color) c.GLuint {
-    var texture: c.GLuint = 0;
-    c.glGenTextures(1, &texture);
-    c.glBindTexture(c.GL_TEXTURE_2D, texture);
-    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_MIN_FILTER, c.GL_LINEAR);
-    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_MAG_FILTER, c.GL_LINEAR);
-    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_WRAP_S, c.GL_CLAMP_TO_EDGE);
-    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_WRAP_T, c.GL_CLAMP_TO_EDGE);
-    c.glPixelStorei(c.GL_UNPACK_ALIGNMENT, 1);
-    c.glTexImage2D(c.GL_TEXTURE_2D, 0, c.GL_RGBA, @intCast(width), @intCast(height), 0, c.GL_RGBA, c.GL_UNSIGNED_BYTE, pixels.ptr);
+fn makeRgbaTexture(gles: *const gles_gl.Gles2, width: usize, height: usize, pixels: []const ui.Color) gles_gl.GLuint {
+    var texture: gles_gl.GLuint = 0;
+    gles.glGenTextures(1, &texture);
+    gles.glBindTexture(gles_gl.gl_texture_2d, texture);
+    gles.glTexParameteri(gles_gl.gl_texture_2d, gles_gl.gl_texture_min_filter, gles_gl.gl_linear);
+    gles.glTexParameteri(gles_gl.gl_texture_2d, gles_gl.gl_texture_mag_filter, gles_gl.gl_linear);
+    gles.glTexParameteri(gles_gl.gl_texture_2d, gles_gl.gl_texture_wrap_s, gles_gl.gl_clamp_to_edge);
+    gles.glTexParameteri(gles_gl.gl_texture_2d, gles_gl.gl_texture_wrap_t, gles_gl.gl_clamp_to_edge);
+    gles.glPixelStorei(gles_gl.gl_unpack_alignment, 1);
+    gles.glTexImage2D(gles_gl.gl_texture_2d, 0, gles_gl.gl_rgba, @intCast(width), @intCast(height), 0, gles_gl.gl_rgba, gles_gl.gl_unsigned_byte, pixels.ptr);
     return texture;
 }
 
-fn makeEmptyRgbaTexture(width: usize, height: usize) c.GLuint {
-    var texture: c.GLuint = 0;
-    c.glGenTextures(1, &texture);
-    c.glBindTexture(c.GL_TEXTURE_2D, texture);
-    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_MIN_FILTER, c.GL_NEAREST);
-    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_MAG_FILTER, c.GL_NEAREST);
-    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_WRAP_S, c.GL_CLAMP_TO_EDGE);
-    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_WRAP_T, c.GL_CLAMP_TO_EDGE);
-    c.glPixelStorei(c.GL_UNPACK_ALIGNMENT, 1);
-    c.glTexImage2D(c.GL_TEXTURE_2D, 0, c.GL_RGBA, @intCast(width), @intCast(height), 0, c.GL_RGBA, c.GL_UNSIGNED_BYTE, null);
+fn makeEmptyRgbaTexture(gles: *const gles_gl.Gles2, width: usize, height: usize) gles_gl.GLuint {
+    var texture: gles_gl.GLuint = 0;
+    gles.glGenTextures(1, &texture);
+    gles.glBindTexture(gles_gl.gl_texture_2d, texture);
+    gles.glTexParameteri(gles_gl.gl_texture_2d, gles_gl.gl_texture_min_filter, gles_gl.gl_nearest);
+    gles.glTexParameteri(gles_gl.gl_texture_2d, gles_gl.gl_texture_mag_filter, gles_gl.gl_nearest);
+    gles.glTexParameteri(gles_gl.gl_texture_2d, gles_gl.gl_texture_wrap_s, gles_gl.gl_clamp_to_edge);
+    gles.glTexParameteri(gles_gl.gl_texture_2d, gles_gl.gl_texture_wrap_t, gles_gl.gl_clamp_to_edge);
+    gles.glPixelStorei(gles_gl.gl_unpack_alignment, 1);
+    gles.glTexImage2D(gles_gl.gl_texture_2d, 0, gles_gl.gl_rgba, @intCast(width), @intCast(height), 0, gles_gl.gl_rgba, gles_gl.gl_unsigned_byte, null);
     return texture;
 }
 
-fn updateAlphaTexture(texture: c.GLuint, width: usize, height: usize, alpha: []const u8) void {
-    c.glBindTexture(c.GL_TEXTURE_2D, texture);
-    c.glPixelStorei(c.GL_UNPACK_ALIGNMENT, 1);
-    c.glTexSubImage2D(c.GL_TEXTURE_2D, 0, 0, 0, @intCast(width), @intCast(height), c.GL_ALPHA, c.GL_UNSIGNED_BYTE, alpha.ptr);
+fn updateAlphaTexture(gles: *const gles_gl.Gles2, texture: gles_gl.GLuint, width: usize, height: usize, alpha: []const u8) void {
+    gles.glBindTexture(gles_gl.gl_texture_2d, texture);
+    gles.glPixelStorei(gles_gl.gl_unpack_alignment, 1);
+    gles.glTexSubImage2D(gles_gl.gl_texture_2d, 0, 0, 0, @intCast(width), @intCast(height), gles_gl.gl_alpha, gles_gl.gl_unsigned_byte, alpha.ptr);
 }
 
-fn makeProgram(vertex_source: [:0]const u8, fragment_source: [:0]const u8) !c.GLuint {
-    const vertex = try makeShader(c.GL_VERTEX_SHADER, vertex_source);
-    defer c.glDeleteShader(vertex);
-    const fragment = try makeShader(c.GL_FRAGMENT_SHADER, fragment_source);
-    defer c.glDeleteShader(fragment);
-    const program = c.glCreateProgram();
-    c.glAttachShader(program, vertex);
-    c.glAttachShader(program, fragment);
-    c.glBindAttribLocation(program, gl_contract.attr_pos_location, gl_contract.attr_pos);
-    c.glBindAttribLocation(program, gl_contract.attr_uv_location, gl_contract.attr_uv);
-    c.glBindAttribLocation(program, gl_contract.attr_color_location, gl_contract.attr_color);
-    c.glLinkProgram(program);
-    var ok: c.GLint = 0;
-    c.glGetProgramiv(program, c.GL_LINK_STATUS, &ok);
+fn makeProgram(gles: *const gles_gl.Gles2, vertex_source: [:0]const u8, fragment_source: [:0]const u8) !gles_gl.GLuint {
+    const vertex = try makeShader(gles, gles_gl.gl_vertex_shader, vertex_source);
+    defer gles.glDeleteShader(vertex);
+    const fragment = try makeShader(gles, gles_gl.gl_fragment_shader, fragment_source);
+    defer gles.glDeleteShader(fragment);
+    const program = gles.glCreateProgram();
+    gles.glAttachShader(program, vertex);
+    gles.glAttachShader(program, fragment);
+    gles.glBindAttribLocation(program, gl_contract.attr_pos_location, gl_contract.attr_pos);
+    gles.glBindAttribLocation(program, gl_contract.attr_uv_location, gl_contract.attr_uv);
+    gles.glBindAttribLocation(program, gl_contract.attr_color_location, gl_contract.attr_color);
+    gles.glLinkProgram(program);
+    var ok: gles_gl.GLint = 0;
+    gles.glGetProgramiv(program, gles_gl.gl_link_status, &ok);
     if (ok == 0) return error.GlProgramFailed;
     return program;
 }
 
-fn makeShader(kind: c.GLenum, source: [:0]const u8) !c.GLuint {
-    const shader = c.glCreateShader(kind);
+fn makeShader(gles: *const gles_gl.Gles2, kind: gles_gl.GLenum, source: [:0]const u8) !gles_gl.GLuint {
+    const shader = gles.glCreateShader(kind);
     var ptr = source.ptr;
-    c.glShaderSource(shader, 1, &ptr, null);
-    c.glCompileShader(shader);
-    var ok: c.GLint = 0;
-    c.glGetShaderiv(shader, c.GL_COMPILE_STATUS, &ok);
+    gles.glShaderSource(shader, 1, &ptr, null);
+    gles.glCompileShader(shader);
+    var ok: gles_gl.GLint = 0;
+    gles.glGetShaderiv(shader, gles_gl.gl_compile_status, &ok);
     if (ok == 0) {
         var log: [shader_log_capacity]u8 = undefined;
-        var len: c.GLsizei = 0;
-        c.glGetShaderInfoLog(shader, log.len, &len, &log);
+        var len: gles_gl.GLsizei = 0;
+        gles.glGetShaderInfoLog(shader, log.len, &len, &log);
         std.debug.print("gles shader compile failed: {s}\n", .{log[0..@intCast(len)]});
         return error.GlShaderFailed;
     }
@@ -412,7 +411,8 @@ fn colorF(value: u8) f32 {
     return @as(f32, @floatFromInt(value)) / 255.0;
 }
 
-fn rectMode(mode: ui.RectMode) c.GLint {
+fn rectMode(gles: *const gles_gl.Gles2, mode: ui.RectMode) gles_gl.GLint {
+    _ = gles;
     return switch (mode) {
         .fill => 0,
         .shadow => 1,
@@ -430,11 +430,13 @@ test "software GL renderer names are rejected" {
 }
 
 test "rect modes map to stable shader mode ids" {
-    try std.testing.expectEqual(@as(c.GLint, 0), rectMode(.fill));
-    try std.testing.expectEqual(@as(c.GLint, 1), rectMode(.shadow));
-    try std.testing.expectEqual(@as(c.GLint, 2), rectMode(.border));
-    try std.testing.expectEqual(@as(c.GLint, 3), rectMode(.linear_gradient));
-    try std.testing.expectEqual(@as(c.GLint, 0), rectMode(.pie_slice));
+    const gles = try gles_gl.Gles2.open();
+    try std.testing.expectEqual(@as(gles_gl.GLint, 0), rectMode(&gles, .fill));
+    try std.testing.expectEqual(@as(gles_gl.GLint, 1), rectMode(&gles, .shadow));
+    try std.testing.expectEqual(@as(gles_gl.GLint, 2), rectMode(&gles, .border));
+    try std.testing.expectEqual(@as(gles_gl.GLint, 3), rectMode(&gles, .linear_gradient));
+    try std.testing.expectEqual(@as(gles_gl.GLint, 0), rectMode(&gles, .pie_slice));
+    gles.lib.close();
 }
 
 test "gles icons use the shared IR packed line contract" {
@@ -517,4 +519,85 @@ test "rgba texture type validates image pixels" {
     const pixels = [_]ui.Color{.{ .r = 1, .g = 2, .b = 3, .a = 4 }};
     try std.testing.expect((RgbaTexture{ .width = 1, .height = 1, .pixels = &pixels }).valid());
     try std.testing.expect(!(RgbaTexture{ .width = 1, .height = 2, .pixels = &pixels }).valid());
+}
+
+pub const Receipt = renderer_present.Receipt;
+
+pub const AdapterError = error{
+    InvalidImageTexture,
+    GlRendererUnavailable,
+    SoftwareGlRendererRejected,
+    InvalidFramebufferSize,
+    BlankGpuFrame,
+    GlFramebufferIncomplete,
+};
+
+pub const Adapter = struct {
+    state: State,
+    gles: gles_gl.Gles2,
+    image_texture_ready: bool,
+
+    pub fn init(font_atlas: *renderer_font_atlas.Atlas, image: ?RgbaTexture) AdapterError!Adapter {
+        var gles_instance = try gles_gl.Gles2.open();
+        const gles_ptr = &gles_instance;
+        const st = try initState(font_atlas, image, gles_ptr);
+        return .{ .state = st, .gles = gles_instance, .image_texture_ready = image != null };
+    }
+
+    pub fn deinit(self: *Adapter) void {
+        deinit(&self.state);
+        self.gles.lib.close();
+    }
+
+    pub fn refreshFontTexture(self: Adapter, font_atlas: *const renderer_font_atlas.Atlas) void {
+        refreshFontTexture(self.state, font_atlas);
+    }
+
+    pub fn renderFrame(self: Adapter, width: i32, height: i32, buffers: renderer_ir.Buffers) AdapterError!Receipt {
+        const receipt = try self.receiptForFrame(width, height, buffers);
+        try renderFrame(self.state, width, height, buffers);
+        return receipt;
+    }
+
+    pub fn renderFrameToViewport(self: Adapter, logical_width: i32, logical_height: i32, framebuffer_width: i32, framebuffer_height: i32, buffers: renderer_ir.Buffers) AdapterError!Receipt {
+        const receipt = try self.receiptForFrame(logical_width, logical_height, buffers);
+        try renderFrameToViewport(self.state, logical_width, logical_height, framebuffer_width, framebuffer_height, buffers);
+        return receipt;
+    }
+
+    pub fn verifyFrameNonBlank(self: Adapter, width: i32, height: i32) !FrameProof {
+        return verifyFrameNonBlank(&self.gles, width, height);
+    }
+
+    pub fn readFramePixels(self: Adapter, width: i32, height: i32, out: []ui.Color) !void {
+        try readFramePixels(&self.gles, width, height, out);
+    }
+
+    pub fn renderFrameToRgbaPixels(self: Adapter, width: i32, height: i32, buffers: renderer_ir.Buffers, out: []ui.Color) AdapterError!Receipt {
+        const receipt = try self.receiptForFrame(width, height, buffers);
+        try renderFrameToRgbaPixels(self.state, width, height, buffers, out);
+        return receipt;
+    }
+
+    fn receiptForFrame(self: Adapter, width: i32, height: i32) renderer_present.Error!Receipt {
+        if (width <= 0 or height <= 0) return error.InvalidTarget;
+        return renderer_present.present(.{
+            .target = .{
+                .destination = .command_frame,
+                .width = @intCast(width),
+                .height = @intCast(height),
+            },
+            .buffers = self.state.last_ir_buffers,
+            .resources = .{
+                .font_atlas = true,
+                .image_texture = self.image_texture_ready,
+            },
+        });
+    }
+};
+
+pub fn requireHardwareGlExt() !void {
+    var gles_instance = try gles_gl.Gles2.open();
+    defer gles_instance.lib.close();
+    try requireHardwareGl(&gles_instance);
 }

@@ -27,16 +27,18 @@ pub const Tooltip = struct {
     pub fn render(self: Tooltip, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         const trigger_bounds = triggerBounds(bounds);
         try component_primitives.renderControlTrigger(scene, trigger_bounds, options.style.panel, options.style.border, component_primitives.control_text_padding, self.trigger, options.style.text);
-        const tip = contentBounds(bounds, self.content);
-        try scene.pushRect(tip, options.style.text, .fill, tooltip_radius, 0.0);
-        if (component_primitives.contentInset(tip, tooltip_padding)) |inner| {
-            const text_h = @min(inner.h, component_primitives.measuredTextHeight(self.content, inner.w, tooltip_text_h, tooltip_text_max_lines));
-            try text_component.Text.renderWrapped(scene, inner.withHeightCentered(text_h), self.content, options.style.bg, component_primitives.textWrap(self.content, tooltip_text_h, tooltip_text_max_lines));
+        if (options.overlay.isOpen(self.id)) {
+            const tip = contentBounds(bounds, self.content);
+            try scene.pushRect(tip, options.style.text, .fill, tooltip_radius, 0.0);
+            if (component_primitives.contentInset(tip, tooltip_padding)) |inner| {
+                const text_h = @min(inner.h, component_primitives.measuredTextHeight(self.content, inner.w, tooltip_text_h, tooltip_text_max_lines));
+                try text_component.Text.renderWrapped(scene, inner.withHeightCentered(text_h), self.content, options.style.bg, component_primitives.textWrap(self.content, tooltip_text_h, tooltip_text_max_lines));
+            }
         }
     }
 
     pub fn collectInteractions(self: Tooltip, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-        try collector.addHit(triggerBounds(bounds), .button, self.id);
+        try collector.addHit(triggerBounds(bounds), .overlay_trigger, self.id);
     }
 
     pub fn measure(self: Tooltip, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
@@ -119,13 +121,12 @@ test "tooltip component renders trigger content and hit region" {
     var regions: [1]interaction.Region = undefined;
     var collector = interaction.Collector.init(&regions);
 
-    try tooltip.render(&scene, ui.Rect.init(0, 0, 240, 44), .{});
-    try tooltip.collectInteractions(&collector, ui.Rect.init(0, 0, 240, 44));
+    try tooltip.render(&scene, ui.Rect.init(0, 0, 240, 44), .{ .overlay = .{ .open_ids = &.{tooltip.id} } });
 
     try std.testing.expect(component_test.hasText(scene.written(), "Hover me"));
     try std.testing.expect(component_test.hasText(scene.written(), "Add to library"));
     try std.testing.expectEqual(@as(usize, 1), collector.written().len);
-    try std.testing.expectEqual(ui.HitKind.button, collector.written()[0].kind);
+    try std.testing.expectEqual(ui.HitKind.overlay_trigger, collector.written()[0].kind);
 }
 
 test "tooltip measurement wraps long content under narrow constraints" {

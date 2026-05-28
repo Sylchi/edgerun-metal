@@ -1,5 +1,3 @@
-const std = @import("std");
-
 pub const Region = struct {
     base: []u8,
 
@@ -58,29 +56,32 @@ pub const Region = struct {
 };
 
 test "split transfers ownership out of parent" {
+    const testing = @import("testing.zig");
     var memory: [16]u8 = undefined;
     var parent = Region{ .base = &memory };
     const child = parent.split(6).?;
 
-    try std.testing.expectEqual(@as(usize, 10), parent.len());
-    try std.testing.expectEqual(@as(usize, 6), child.len());
+    try testing.expectEqual(@as(usize, 10), parent.len());
+    try testing.expectEqual(@as(usize, 6), child.len());
 }
 
 test "append suffix reclaims adjacent split region" {
+    const testing = @import("testing.zig");
     var memory: [16]u8 = undefined;
     var parent = Region{ .base = &memory };
     const child = parent.split(6).?;
 
-    try std.testing.expect(parent.appendSuffix(child));
-    try std.testing.expectEqual(@as(usize, 16), parent.len());
+    try testing.expect(parent.appendSuffix(child));
+    try testing.expectEqual(@as(usize, 16), parent.len());
 }
 
 test "region reports contained slice offset" {
+    const testing = @import("testing.zig");
     var memory: [16]u8 = undefined;
     const region = Region{ .base = &memory };
     const slice = memory[4..12];
 
-    try std.testing.expect(region.contains(slice));
-    try std.testing.expectEqual(@as(usize, 4), region.offsetOf(slice).?);
-    try std.testing.expect(!region.contains(&.{}));
+    try testing.expect(region.contains(slice));
+    try testing.expectEqual(@as(usize, 4), region.offsetOf(slice).?);
+    try testing.expect(!region.contains(&.{}));
 }

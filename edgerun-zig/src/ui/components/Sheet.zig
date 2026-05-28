@@ -27,10 +27,11 @@ pub const Sheet = struct {
 
     pub fn render(self: Sheet, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         try primitives.renderControlTrigger(scene, triggerBounds(bounds), options.style.accent, options.style.border, sheet_trigger_padding, overlay_open_label, options.style.bg);
-
-        const content = contentBounds(bounds);
-        try primitives.renderTitleDetailPanel(scene, content, self.title, self.detail, options, sheet_panel, options.style.border, options.style.text);
-        try Icon.named(.x).renderColor(scene, closeBounds(bounds), options.style.muted);
+        if (options.overlay.isOpen(self.id)) {
+            const content = contentBounds(bounds);
+            try primitives.renderTitleDetailPanel(scene, content, self.title, self.detail, options, sheet_panel, options.style.border, options.style.text);
+            try Icon.named(.x).renderColor(scene, closeBounds(bounds), options.style.muted);
+        }
     }
 
     pub fn collectInteractions(self: Sheet, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
@@ -119,7 +120,7 @@ test "sheet component renders trigger content and hit regions" {
     var regions: [3]interaction.Region = undefined;
     var collector = interaction.Collector.init(&regions);
 
-    try sheet.render(&scene, ui.Rect.init(0, 0, 240, 76), .{});
+    try sheet.render(&scene, ui.Rect.init(0, 0, 240, 76), .{ .overlay = .{ .open_ids = &.{sheet.id} } });
     try sheet.collectInteractions(&collector, ui.Rect.init(0, 0, 240, 76));
 
     try std.testing.expect(component_test.textCommandPrefix(scene.written(), "Edit") != null);

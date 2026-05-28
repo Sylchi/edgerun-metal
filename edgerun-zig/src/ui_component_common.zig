@@ -135,6 +135,17 @@ pub const AccessibilityTree = struct {
     }
 };
 
+pub const OverlayState = struct {
+    open_ids: []const u32 = &.{},
+
+    pub fn isOpen(self: OverlayState, id: u32) bool {
+        for (self.open_ids) |oid| {
+            if (oid == id) return true;
+        }
+        return false;
+    }
+};
+
 pub const RenderOptions = struct {
     style: ui.Style = .{},
     control: ControlState = .{},
@@ -144,6 +155,8 @@ pub const RenderOptions = struct {
     table_sort: ?TableSort = null,
     command_palette: ?CommandPalette = null,
     control_size: ControlSize = .default,
+    overlay: OverlayState = .{},
+    drag_value: ?f32 = null,
 
     pub fn withControlId(self: RenderOptions, id: ?u32) RenderOptions {
         const value = id orelse return self;

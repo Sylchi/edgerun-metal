@@ -563,6 +563,8 @@ er_wasm_eql:
     test    rsi, rsi
     jz      .equal
     mov     r8, rsi
+    mov     rsi, rdx
+    mov     rcx, r8
     cld
     repe    cmpsb
     jne     .not_equal
@@ -643,13 +645,14 @@ er_wasm_parse_module:
     mov     byte [imported_memory_present], 0
     mov     byte [imported_table_present], 0
     mov     qword [decoded_op_count], 0
+    mov     qword [start_function_index], -1
 
     ; Check magic bytes
     cmp     rsi, 8
     jb      .corrupt
     ; Compare wasm magic
-    mov     r8, [rdi]
-    cmp     r8, 0x6d736100      ; little-endian "\x00asm"
+    mov     r8d, [rdi]
+    cmp     r8d, 0x6d736100      ; little-endian "\x00asm"
     jne     .corrupt
     ; Compare wasm version (0x00000001 at offset 4)
     mov     r8d, [rdi + 4]
@@ -692,12 +695,14 @@ er_wasm_parse_module:
     cmp     rax, r13
     ja      .corrupt
 
-    ; Save r12 (payload start) and r11 (payload len), dispatch
-    mov     [rsp], r12          ; save payload start
+    ; Save rsi (payload start) and r11 (payload len), dispatch
+    mov     [rsp], rsi          ; save payload start (past section-size LEB)
     mov     [rsp + 8], r11      ; save payload length
     mov     [rsp + 16], r13     ; save end pointer
 
-    ; Keep r12 = payload pointer for section parsing
+    ; r12 = payload pointer for section parsing
+    mov     r12, rsi
+    mov     [debug_section_id], r15b  ; debug: mark section ID
     cmp     r15d, SECTION_TYPE
     je      .parse_type
     cmp     r15d, SECTION_IMPORT
@@ -1318,6 +1323,7 @@ er_wasm_parse_export_section:
     push    r12
     push    r13
     push    r14
+    push    r15
 
     mov     rsi, r12
     call    er_wasm_read_leb_u32
@@ -1338,6 +1344,7 @@ er_wasm_parse_export_section:
     test    edx, edx
     jnz     .error
     mov     r13, rsi            ; save name start
+    mov     r15, rax            ; save name length in r15
     add     rsi, rax            ; skip name
 
     ; Read kind
@@ -1345,12 +1352,9 @@ er_wasm_parse_export_section:
     inc     rsi
 
     ; Read index
-    push    rsi
     call    er_wasm_read_leb_u32
-    pop     rsi
     test    edx, edx
     jnz     .error
-    ; TODO: validate index based on kind
     ; Store export
     push    r10
         mov     r10, r14
@@ -1360,7 +1364,7 @@ er_wasm_parse_export_section:
     push    r10
         mov     r10, r14
         imul    r10, EXPORT_SIZE
-    mov     [exports_buf + r10 + 8], rax   ; name len (not stored — need to save it)
+    mov     [exports_buf + r10 + 8], r15   ; name length
         pop     r10
     push    r10
         mov     r10, r14
@@ -1370,7 +1374,7 @@ er_wasm_parse_export_section:
     push    r10
         mov     r10, r14
         imul    r10, EXPORT_SIZE
-    mov     [exports_buf + r10 + 24], rdi  ; index (stored as arg)
+    mov     [exports_buf + r10 + 24], rax  ; index
         pop     r10
 
     inc     r14
@@ -1389,6 +1393,7 @@ er_wasm_parse_export_section:
 .error:
     mov     edx, edx
 .out:
+    pop     r15
     pop     r14
     pop     r13
     pop     r12
@@ -1544,7 +1549,7 @@ er_wasm_parse_code_section:
     push    r10
         mov     r10, r14
         imul    r10, CODE_SIZE
-    mov     [code_buf + r10 + 8], r11     ; local_count
+    mov     [code_buf + r10 + 16], r11    ; local_count
         pop     r10
     ; Store body end pointer - start = body length
     mov     rax, r15
@@ -1552,7 +1557,7 @@ er_wasm_parse_code_section:
     push    r10
         mov     r10, r14
         imul    r10, CODE_SIZE
-    mov     [code_buf + r10 + 16], rax    ; body_len (overwrite local_group_count)
+    mov     [code_buf + r10 + 8], rax     ; body_len
         pop     r10
     ; Store decoded_start = current decoded_op_count
     mov     rax, [decoded_op_count]
@@ -1993,10 +1998,11 @@ er_wasm_decode_body:
     mov     r12, rdi            ; body start
     mov     r13, rdi
     add     r13, rsi            ; body end
+    mov     rsi, rdi            ; rsi = bytecode reader (start at body ptr)
     mov     r14, [decoded_op_count]  ; start index
 
 .decode_loop:
-    cmp     r12, r13
+    cmp     rsi, r13
     jae     .done
 
     mov     r15d, [decoded_op_count]
@@ -2004,13 +2010,13 @@ er_wasm_decode_body:
     jae     .unsupported
 
     ; Calculate offset from body start
-    mov     rax, r12
+    mov     rax, rsi
     sub     rax, rdi
     mov     edx, eax            ; offset (low 32 bits)
 
     ; Read opcode byte
-    movzx   r11d, byte [r12]
-    inc     r12
+    movzx   r11d, byte [rsi]
+    inc     rsi
 
     ; Store decoded op header
     mov     ebx, r15d
@@ -2119,7 +2125,7 @@ er_wasm_decode_body:
     je      .decode_br_table
 
     ; Store next_offset for opcodes with no immediates
-    mov     eax, r12d
+    mov     eax, esi
     sub     eax, edi            ; relative to body start
     mov     [decoded_ops + rbx + 4], eax  ; next_offset
 
@@ -2133,7 +2139,7 @@ er_wasm_decode_body:
     test    edx, edx
     jnz     .error
     mov     [decoded_ops + rbx + 12], eax  ; imm0
-    mov     eax, r12d
+    mov     eax, esi
     sub     eax, edi
     mov     [decoded_ops + rbx + 4], eax   ; next_offset
     inc     dword [decoded_op_count]
@@ -2149,7 +2155,7 @@ er_wasm_decode_body:
     test    edx, edx
     jnz     .error
     mov     [decoded_ops + rbx + 16], eax  ; imm1 = offset
-    mov     eax, r12d
+    mov     eax, esi
     sub     eax, edi
     mov     [decoded_ops + rbx + 4], eax   ; next_offset
     inc     dword [decoded_op_count]
@@ -2162,7 +2168,7 @@ er_wasm_decode_body:
     jnz     .error
     test    eax, eax
     jnz     .unsupported
-    mov     eax, r12d
+    mov     eax, esi
     sub     eax, edi
     mov     [decoded_ops + rbx + 4], eax
     inc     dword [decoded_op_count]
@@ -2173,7 +2179,7 @@ er_wasm_decode_body:
     test    edx, edx
     jnz     .error
     mov     [decoded_ops + rbx + 12], eax  ; imm0 = value (as bit pattern)
-    mov     eax, r12d
+    mov     eax, esi
     sub     eax, edi
     mov     [decoded_ops + rbx + 4], eax
     inc     dword [decoded_op_count]
@@ -2183,26 +2189,26 @@ er_wasm_decode_body:
     call    er_wasm_read_leb_i64
     test    edx, edx
     jnz     .error
-    mov     eax, r12d
+    mov     eax, esi
     sub     eax, edi
     mov     [decoded_ops + rbx + 4], eax
     inc     dword [decoded_op_count]
     jmp     .decode_loop
 
 .decode_f32_const:
-    mov     eax, [r12]
-    add     r12, 4
+    mov     eax, [rsi]
+    add     rsi, 4
     mov     [decoded_ops + rbx + 12], eax  ; imm0 = f32 bits
-    mov     eax, r12d
+    mov     eax, esi
     sub     eax, edi
     mov     [decoded_ops + rbx + 4], eax
     inc     dword [decoded_op_count]
     jmp     .decode_loop
 
 .decode_f64_const:
-    mov     eax, r12d
-    add     r12, 8
-    mov     eax, r12d
+    mov     eax, esi
+    add     rsi, 8
+    mov     eax, esi
     sub     eax, edi
     mov     [decoded_ops + rbx + 4], eax
     inc     dword [decoded_op_count]
@@ -2210,8 +2216,8 @@ er_wasm_decode_body:
 
 .decode_block_type:
     ; Read block type (1 byte or LEB128 type index)
-    movzx   eax, byte [r12]
-    inc     r12
+    movzx   eax, byte [rsi]
+    inc     rsi
     cmp     al, WASM_EMPTY_BLOCK_TYPE
     je      .block_done
     ; Check if it's a value type
@@ -2227,12 +2233,12 @@ er_wasm_decode_body:
     je      .block_done
     ; It's a type index (LEB128 starting with this byte)
     ; Continue reading as LEB128
-    dec     r12                 ; put back the byte
+    dec     rsi                 ; put back the byte
     call    er_wasm_read_leb_u32
     test    edx, edx
     jnz     .error
 .block_done:
-    mov     eax, r12d
+    mov     eax, esi
     sub     eax, edi
     mov     [decoded_ops + rbx + 4], eax
     inc     dword [decoded_op_count]
@@ -2247,7 +2253,7 @@ er_wasm_decode_body:
     test    edx, edx
     jnz     .error
     mov     [decoded_ops + rbx + 16], eax  ; imm1 = table_index
-    mov     eax, r12d
+    mov     eax, esi
     sub     eax, edi
     mov     [decoded_ops + rbx + 4], eax
     inc     dword [decoded_op_count]
@@ -2262,7 +2268,7 @@ er_wasm_decode_body:
     call    er_wasm_read_value_type
     test    edx, edx
     jnz     .error
-    mov     eax, r12d
+    mov     eax, esi
     sub     eax, edi
     mov     [decoded_ops + rbx + 4], eax
     inc     dword [decoded_op_count]
@@ -2273,18 +2279,18 @@ er_wasm_decode_body:
     test    edx, edx
     jnz     .error
     mov     [decoded_ops + rbx + 12], eax
-    mov     eax, r12d
+    mov     eax, esi
     sub     eax, edi
     mov     [decoded_ops + rbx + 4], eax
     inc     dword [decoded_op_count]
     jmp     .decode_loop
 
 .decode_ref_null:
-    movzx   eax, byte [r12]
-    inc     r12
+    movzx   eax, byte [rsi]
+    inc     rsi
     cmp     al, WASM_FUNCREF_TYPE
     jne     .unsupported
-    mov     eax, r12d
+    mov     eax, esi
     sub     eax, edi
     mov     [decoded_ops + rbx + 4], eax
     inc     dword [decoded_op_count]
@@ -2308,7 +2314,7 @@ er_wasm_decode_body:
     call    er_wasm_read_leb_u32  ; default target
     test    edx, edx
     jnz     .error
-    mov     eax, r12d
+    mov     eax, esi
     sub     eax, edi
     mov     [decoded_ops + rbx + 4], eax
     inc     dword [decoded_op_count]
@@ -2407,17 +2413,18 @@ er_wasm_decode_body:
     jnz     .error
     jmp     .ext_done
 .ext_done:
-    mov     eax, r12d
+    mov     eax, esi
     sub     eax, edi
     mov     [decoded_ops + rbx + 4], eax
     inc     dword [decoded_op_count]
     jmp     .decode_loop
 
 .done:
-    xor     eax, eax
+    xor     edx, edx
     jmp     .out
 .unsupported:
-    mov     eax, ERROR_UNSUPPORTED
+    mov     edx, ERROR_UNSUPPORTED
+    mov     eax, edx
     jmp     .out
 .error:
     mov     eax, edx
@@ -2434,10 +2441,14 @@ er_wasm_decode_body:
 ; Missing BSS variables referenced by parsers
 ; =================================================================+
 SECTION .bss
+debug_section_id:  resb 1
+debug_check:       resq 4
 memory_min_pages:  resq 1
 memory_max_pages:  resq 1
 has_memory:        resb 1
 start_function_index: resq 1
+
+SECTION .text
 
 ; ==================================================================
 ; Apply data segments — copy data segment bytes into runtime memory
@@ -2667,15 +2678,17 @@ er_wasm_code_index_for_function:
 ; =================================================================+
 
 ; -- Frame state (current invocation)
+SECTION .bss
 frame_locals:    resb MAX_LOCALS * 16  ; 1024 Values * 16 bytes each = 16KB
 frame_stack:     resb MAX_STACK * 16   ; 32 Values * 16 bytes = 512 bytes
 frame_stack_len: resq 1
+SECTION .text
 
 ; ==================================================================
 ; Pop value from frame stack
 ; Returns value in rax
 ; =================================================================+
-er_fn er_wasm_frame_pop
+er_fn er_fn_pop
     push    rbp
     mov     rbp, rsp
 
@@ -2701,7 +2714,7 @@ er_fn er_wasm_frame_pop
 ; Push value to frame stack
 ; rdi = value data
 ; =================================================================+
-er_fn er_wasm_frame_push
+er_fn er_fn_push
     push    rbp
     mov     rbp, rsp
 
@@ -2724,7 +2737,7 @@ er_fn er_wasm_frame_push
 
 ; ==================================================================
 ; Executor entry point
-; er_wasm_run_export(runtime_ptr=rdi, wasm_bytes_ptr=rsi, wasm_bytes_len=rdx, export_name_ptr=rcx, export_name_len=r8)
+; er_fn_run(runtime_ptr=rdi, wasm_bytes_ptr=rsi, wasm_bytes_len=rdx, export_name_ptr=rcx, export_name_len=r8)
 ; =================================================================+
 ; ==================================================================
 ; Frame save/restore helpers
@@ -2992,7 +3005,8 @@ er_fn reader_peek_byte
     mov     rax, [exec_reader_offset]
     cmp     rax, [exec_code_body_len]
     jae     .done
-    mov     al, [exec_code_body_ptr + rax]
+    mov     rsi, [exec_code_body_ptr]
+    mov     al, [rsi + rax]
     xor     edx, edx
     clc
     ret
@@ -3026,7 +3040,7 @@ er_fn reader_read_byte
 ; rsi = args pointer (array of int64)
 ; rdx = args count
 ; =================================================================+
-er_fn er_wasm_execute_function
+er_fn er_fn_exec
     push    rbp
     mov     rbp, rsp
     push    rbx
@@ -3829,7 +3843,7 @@ exec_dispatch_loop:
     cmp     bl, 0x0b         ; end
     je      .skip_if_end
     ; Regular opcode - skip immediates
-    call    skip_opcode_immediates
+    call    .skip_opcode_immediates
     jmp     .skip_if_loop
 .skip_if_block:
     inc     r15d
@@ -3934,7 +3948,7 @@ exec_dispatch_loop:
     ; For proper argument passing, need to pop from stack
     xor     rsi, rsi        ; no explicit args for now
     xor     rdx, rdx
-    call    er_wasm_execute_function
+    call    er_fn_exec
     test    rdx, rdx
     jnz     .error_return
     jmp     .dispatch_next
@@ -3955,7 +3969,7 @@ exec_dispatch_loop:
     mov     rdi, rax                ; function_index
     xor     rsi, rsi
     xor     rdx, rdx
-    call    er_wasm_execute_function
+    call    er_fn_exec
     test    rdx, rdx
     jnz     .error_return
     jmp     .dispatch_next
@@ -4012,67 +4026,6 @@ exec_dispatch_loop:
 
 ; Push control frame: expects values on stack (kind=8 bytes, start=8 bytes)
 ; Used as: push kind; push start; call exec_control_push
-er_fn exec_control_push
-    pop     rax     ; return address
-    pop     rcx     ; start
-    pop     rdx     ; kind
-    push    rax     ; restore return address
-    mov     rax, [exec_control_len]
-    cmp     rax, MAX_CONTROL_DEPTH
-    jae     .overflow
-    push    r10
-    mov     r10, rax
-    imul    r10, CONTROL_FRAME_SIZE
-    mov     [exec_control + r10], rdx      ; kind
-    mov     [exec_control + r10 + 8], rcx  ; start
-    pop     r10
-    inc     qword [exec_control_len]
-    ret
-.overflow:
-    mov     edx, ERROR_UNSUPPORTED
-    ; Skip the pushed values
-    ret
-
-; Branch to control at given depth
-; rdi = branch_depth from current position (0 = innermost)
-er_fn exec_branch_to_control
-    push    rbp
-    mov     rbp, rsp
-    ; target_index = control_len - 1 - branch_depth
-    mov     rax, [exec_control_len]
-    test    rax, rax
-    jz      .error
-    sub     rax, 1
-    sub     rax, rdi
-    jc      .error
-    ; Get control frame at target_index
-    push    r10
-    mov     r10, rax
-    imul    r10, CONTROL_FRAME_SIZE
-    mov     rcx, [exec_control + r10]        ; kind
-    mov     rdx, [exec_control + r10 + 8]   ; start
-    pop     r10
-    ; Set control length = target_index + 1 (for loop) or target_index (for block)
-    mov     r8, rax         ; target_index
-    cmp     rcx, CONTROL_LOOP
-    je      .branch_loop
-    ; block/if_then/if_else
-.branch_block:
-    mov     [exec_control_len], r8
-    mov     [exec_reader_offset], rdx
-    jmp     .branch_done
-.branch_loop:
-    add     r8, 1
-    mov     [exec_control_len], r8
-    mov     [exec_reader_offset], rdx
-.branch_done:
-    xor     edx, edx
-    pop     rbp
-    ret
-.error:
-    mov     edx, ERROR_CORRUPT
-    pop     rbp
-    ret
 
 ; ==================================================================
 ; Integer i32 binary ops
@@ -4498,13 +4451,17 @@ er_fn exec_branch_to_control
     jc      .underflow_error
     test    rcx, rcx
     jz      .arithmetic_trap
-    cmp     rax, 0x8000000000000000
+    mov     rdx, rax
+    mov     rax, 0x8000000000000000
+    cmp     rdx, rax
     jne     .div_s64_ok
     cmp     rcx, -1
     jne     .div_s64_ok
+    ; Overflow: INT64_MIN / -1
     mov     edx, ERROR_ARITHMETIC_TRAP
     jmp     .error_return
 .div_s64_ok:
+    mov     rax, rdx
     cqo
     idiv    rcx
     call    exec_stack_push
@@ -4537,7 +4494,8 @@ er_fn exec_branch_to_control
     cqo
     idiv    rcx
     mov     rax, rdx
-    cmp     r8, 0x8000000000000000
+    mov     rdx, 0x8000000000000000
+    cmp     r8, rdx
     jne     .rem_s64_done
     cmp     rcx, -1
     jne     .rem_s64_done
@@ -4967,79 +4925,6 @@ er_fn exec_branch_to_control
 ; Memory ops
 ; =================================================================+
 
-; Helper: read alignment and offset immediates, compute address
-; Returns address in rax
-er_fn exec_memory_prepare
-    ; Read alignment (LEB, skip it)
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
-    call    er_wasm_read_leb_u32
-    test    rdx, rdx
-    jnz     .corrupt_mem
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
-    ; Read offset (LEB)
-    mov     rsi, [exec_code_body_ptr]
-    add     rsi, [exec_reader_offset]
-    call    er_wasm_read_leb_u32
-    test    rdx, rdx
-    jnz     .corrupt_mem
-    push    rsi
-    sub     rsi, [exec_code_body_ptr]
-    mov     [exec_reader_offset], rsi
-    pop     rsi
-    mov     r15d, eax      ; offset
-    ; Pop base address from stack
-    call    exec_stack_pop
-    jc      .underflow_mem
-    mov     ecx, eax        ; base (lower 32 bits)
-    ; Compute final address = base + offset
-    mov     eax, ecx
-    add     eax, r15d       ; add offset
-    jc      .no_memory      ; overflow
-    clc
-    ret
-.corrupt_mem:
-    mov     edx, ERROR_CORRUPT
-    stc
-    ret
-.underflow_mem:
-    mov     edx, ERROR_STACK_UNDERFLOW
-    stc
-    ret
-.no_memory:
-    mov     edx, ERROR_NO_MEMORY
-    stc
-    ret
-
-; Check memory range: address in eax, size in ecx
-; Returns pointer in rax, carry on error
-er_fn exec_memory_check_range
-    push    rbp
-    mov     rbp, rsp
-    ; Check address + size <= memory_len
-    mov     rdx, [runtime_memory_len]
-    mov     r8d, eax
-    add     r8d, ecx
-    jc      .out_of_range
-    cmp     r8d, edx
-    ja      .out_of_range
-    ; Also check address + size <= memory_limit
-    mov     rdx, [executor_memory_limit]
-    cmp     r8d, edx
-    ja      .out_of_range
-    ; Valid: return pointer in rax
-    add     rax, [runtime_memory_ptr]
-    clc
-    pop     rbp
-    ret
-.out_of_range:
-    mov     edx, ERROR_NO_MEMORY
-    stc
-    pop     rbp
-    ret
 
 .op_i32_load:
     call    exec_memory_prepare
@@ -5514,7 +5399,7 @@ er_fn exec_memory_check_range
 ; ==================================================================
 ; Opcode immediate skipping helper
 ; =================================================================+
-skip_opcode_immediates:
+.skip_opcode_immediates:
     ; ebx = opcode byte
     movzx   ebx, bl
     ; Most opcodes have no immediates
@@ -5550,7 +5435,7 @@ skip_opcode_immediates:
     cmp     bl, 0x0e         ; br_table
     je      .skip_br_table
     cmp     bl, 0x28         ; i32.load etc.
-    jb      .skip_done       ; below 0x28 just return
+    ret
     cmp     bl, 0x3f         ; below memory_size
     jb      .skip_load_store
     cmp     bl, 0x40         ; memory_grow
@@ -5744,9 +5629,143 @@ skip_opcode_immediates:
     mov     rax, -1
     pop     rbp
     ret
+er_fn exec_control_push
+    pop     rax     ; return address
+    pop     rcx     ; start
+    pop     rdx     ; kind
+    push    rax     ; restore return address
+    mov     rax, [exec_control_len]
+    cmp     rax, MAX_CONTROL_DEPTH
+    jae     .overflow
+    push    r10
+    mov     r10, rax
+    imul    r10, CONTROL_FRAME_SIZE
+    mov     [exec_control + r10], rdx      ; kind
+    mov     [exec_control + r10 + 8], rcx  ; start
+    pop     r10
+    inc     qword [exec_control_len]
+    ret
+.overflow:
+    mov     edx, ERROR_UNSUPPORTED
+    ; Skip the pushed values
+    ret
+
+; Branch to control at given depth
+; rdi = branch_depth from current position (0 = innermost)
+er_fn exec_branch_to_control
+    push    rbp
+    mov     rbp, rsp
+    ; target_index = control_len - 1 - branch_depth
+    mov     rax, [exec_control_len]
+    test    rax, rax
+    jz      .error
+    sub     rax, 1
+    sub     rax, rdi
+    jc      .error
+    ; Get control frame at target_index
+    push    r10
+    mov     r10, rax
+    imul    r10, CONTROL_FRAME_SIZE
+    mov     rcx, [exec_control + r10]        ; kind
+    mov     rdx, [exec_control + r10 + 8]   ; start
+    pop     r10
+    ; Set control length = target_index + 1 (for loop) or target_index (for block)
+    mov     r8, rax         ; target_index
+    cmp     rcx, CONTROL_LOOP
+    je      .branch_loop
+    ; block/if_then/if_else
+.branch_block:
+    mov     [exec_control_len], r8
+    mov     [exec_reader_offset], rdx
+    jmp     .branch_done
+.branch_loop:
+    add     r8, 1
+    mov     [exec_control_len], r8
+    mov     [exec_reader_offset], rdx
+.branch_done:
+    xor     edx, edx
+    pop     rbp
+    ret
+.error:
+    mov     edx, ERROR_CORRUPT
+    pop     rbp
+    ret
+; Helper: read alignment and offset immediates, compute address
+; Returns address in rax
+er_fn exec_memory_prepare
+    ; Read alignment (LEB, skip it)
+    mov     rsi, [exec_code_body_ptr]
+    add     rsi, [exec_reader_offset]
+    call    er_wasm_read_leb_u32
+    test    rdx, rdx
+    jnz     .corrupt_mem
+    push    rsi
+    sub     rsi, [exec_code_body_ptr]
+    mov     [exec_reader_offset], rsi
+    pop     rsi
+    ; Read offset (LEB)
+    mov     rsi, [exec_code_body_ptr]
+    add     rsi, [exec_reader_offset]
+    call    er_wasm_read_leb_u32
+    test    rdx, rdx
+    jnz     .corrupt_mem
+    push    rsi
+    sub     rsi, [exec_code_body_ptr]
+    mov     [exec_reader_offset], rsi
+    pop     rsi
+    mov     r15d, eax      ; offset
+    ; Pop base address from stack
+    call    exec_stack_pop
+    jc      .underflow_mem
+    mov     ecx, eax        ; base (lower 32 bits)
+    ; Compute final address = base + offset
+    mov     eax, ecx
+    add     eax, r15d       ; add offset
+    jc      .no_memory      ; overflow
+    clc
+    ret
+.corrupt_mem:
+    mov     edx, ERROR_CORRUPT
+    stc
+    ret
+.underflow_mem:
+    mov     edx, ERROR_STACK_UNDERFLOW
+    stc
+    ret
+.no_memory:
+    mov     edx, ERROR_NO_MEMORY
+    stc
+    ret
+
+; Check memory range: address in eax, size in ecx
+; Returns pointer in rax, carry on error
+er_fn exec_memory_check_range
+    push    rbp
+    mov     rbp, rsp
+    ; Check address + size <= memory_len
+    mov     rdx, [runtime_memory_len]
+    mov     r8d, eax
+    add     r8d, ecx
+    jc      .out_of_range
+    cmp     r8d, edx
+    ja      .out_of_range
+    ; Also check address + size <= memory_limit
+    mov     rdx, [executor_memory_limit]
+    cmp     r8d, edx
+    ja      .out_of_range
+    ; Valid: return pointer in rax
+    add     rax, [runtime_memory_ptr]
+    clc
+    pop     rbp
+    ret
+.out_of_range:
+    mov     edx, ERROR_NO_MEMORY
+    stc
+    pop     rbp
+    ret
 
 ; ==================================================================
-; er_wasm_run_export: Top-level entry point
+; er_fn_run: Top-level entry point
 ; rdi = runtime_ptr
 ; rsi = wasm_bytes_ptr
 ; rdx = wasm_bytes_len
@@ -5754,7 +5773,7 @@ skip_opcode_immediates:
 ; r8  = export_name_len
 ; Returns: rax = result value, rdx = error code
 ; =================================================================+
-er_fn er_wasm_run_export
+er_fn er_fn_run
     push    rbp
     mov     rbp, rsp
     push    rbx
@@ -5762,6 +5781,7 @@ er_fn er_wasm_run_export
     push    r13
     push    r14
     push    r15
+    push    r8              ; save export_name_len
 
     mov     r12, rdi        ; runtime_ptr
     mov     r13, rsi        ; wasm_bytes
@@ -5772,7 +5792,7 @@ er_fn er_wasm_run_export
     mov     rdi, [r12]      ; runtime.memory_ptr (first field)
     mov     rsi, [r12 + 8]  ; runtime.memory_len (second field)
     mov     rdx, [r12 + 16] ; runtime.execution_ticks (third field)
-    call    er_wasm_init_runtime
+    call    er_fn_init
 
     ; Also store the grow function pointers if present
     mov     rax, [r12 + 24] ; runtime_memory_grow_fn
@@ -5798,7 +5818,7 @@ er_fn er_wasm_run_export
     mov     rdi, r13
     mov     rsi, r14
     call    er_wasm_parse_module
-    test    rdx, rdx
+    test    rax, rax
     jnz     .error
 
     mov     byte [exec_storage_module_valid], 1
@@ -5826,7 +5846,7 @@ er_fn er_wasm_run_export
     mov     rdi, [start_function_index]
     xor     rsi, rsi
     xor     rdx, rdx
-    call    er_wasm_execute_function
+    call    er_fn_exec
     test    rdx, rdx
     jnz     .error
     ; Check that start function returned no results
@@ -5839,7 +5859,7 @@ er_fn er_wasm_run_export
 .skip_start:
     ; Find the export
     mov     rdi, r15
-    mov     rsi, r8
+    mov     rsi, [rbp - 48]
     call    er_wasm_find_export
     test    rdx, rdx
     jnz     .error
@@ -5855,7 +5875,7 @@ er_fn er_wasm_run_export
     mov     rdi, r15
     xor     rsi, rsi        ; no args for now
     xor     rdx, rdx
-    call    er_wasm_execute_function
+    call    er_fn_exec
     test    rdx, rdx
     jnz     .error
 
@@ -5869,6 +5889,7 @@ er_fn er_wasm_run_export
 .error:
     mov     rax, -1
 .done:
+    pop     r8              ; restore export_name_len
     pop     r15
     pop     r14
     pop     r13
@@ -5879,9 +5900,9 @@ er_fn er_wasm_run_export
 
 ; ==================================================================
 ; Initialize the runtime context
-; er_wasm_init_runtime(memory_ptr=rdi, memory_len=rsi, ticks_ptr=rdx)
+; er_fn_init(memory_ptr=rdi, memory_len=rsi, ticks_ptr=rdx)
 ; =================================================================+
-er_fn er_wasm_init_runtime
+er_fn er_fn_init
     push    rbp
     mov     rbp, rsp
 

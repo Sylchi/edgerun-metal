@@ -1,12 +1,10 @@
 const std = @import("std");
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = gpa.allocator();
+    const allocator = std.heap.page_allocator;
 
     const args = try std.process.argsAllocator(allocator);
     if (args.len < 4) {
-        if (gpa.deinit() == .leak) @panic("leak");
         std.debug.print("usage: {s} <svg-dir> <output-icon-zig> <output-embed-zig>\n", .{args[0]});
         std.process.exit(1);
     }
@@ -45,6 +43,7 @@ pub fn main() !void {
         try w.writeAll(
             \\const std = @import("std");
             \\
+            \\// zig fmt: off
             \\pub const Icon = enum(u16) {
             \\
         );
@@ -56,6 +55,7 @@ pub fn main() !void {
 
         try w.writeAll(
             \\};
+            \\// zig fmt: on
             \\
             \\pub const Provider = enum {
             \\    lucide,

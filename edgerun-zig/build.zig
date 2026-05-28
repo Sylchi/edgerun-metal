@@ -25,6 +25,10 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         }),
+        .test_runner = .{
+            .path = b.path("src/test_runner.zig"),
+            .mode = .simple,
+        },
     });
     if (math_obj) |obj| tests.root_module.addObjectFile(obj);
     if (runtime_obj) |obj| tests.root_module.addObjectFile(obj);
@@ -316,11 +320,7 @@ pub fn build(b: *std.Build) void {
     if (runtime_obj) |obj| wayland_egl_window.root_module.addObjectFile(obj);
     wayland_egl_window.root_module.addIncludePath(xdg_shell_header.dirname());
     wayland_egl_window.root_module.addCSourceFile(.{ .file = xdg_shell_code });
-    wayland_egl_window.root_module.linkSystemLibrary("c", .{});
     wayland_egl_window.root_module.linkSystemLibrary("wayland-client", .{});
-    wayland_egl_window.root_module.linkSystemLibrary("wayland-egl", .{});
-    wayland_egl_window.root_module.linkSystemLibrary("EGL", .{});
-    wayland_egl_window.root_module.linkSystemLibrary("GLESv2", .{});
     wayland_egl_window.step.dependOn(&xdg_shell_header_cmd.step);
     wayland_egl_window.step.dependOn(&xdg_shell_code_cmd.step);
     const run_wayland_egl_window = b.addRunArtifact(wayland_egl_window);
@@ -338,15 +338,9 @@ pub fn build(b: *std.Build) void {
     });
     if (math_obj) |obj| drm_gbm_window.root_module.addObjectFile(obj);
     if (runtime_obj) |obj| drm_gbm_window.root_module.addObjectFile(obj);
-    drm_gbm_window.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/libdrm" });
-    drm_gbm_window.root_module.linkSystemLibrary("c", .{});
-    drm_gbm_window.root_module.linkSystemLibrary("gbm", .{});
-    drm_gbm_window.root_module.linkSystemLibrary("drm", .{});
-    drm_gbm_window.root_module.linkSystemLibrary("EGL", .{});
-    drm_gbm_window.root_module.linkSystemLibrary("GLESv2", .{});
     const run_drm_gbm_window = b.addRunArtifact(drm_gbm_window);
     if (b.args) |args| run_drm_gbm_window.addArgs(args);
-    const drm_gbm_window_step = b.step("drm-gbm-window", "Render canonical UI IR through EGL/GLES to a DRM/GBM scanout surface");
+    const drm_gbm_window_step = b.step("drm-gbm-window", "Render canonical UI IR through EGL/GLES to a DRM/GBM scanout surface (DynLib, no @cImport, no libdrm/libc linkage)");
     drm_gbm_window_step.dependOn(&run_drm_gbm_window.step);
 
     const drm_gbm_tests = b.addTest(.{
@@ -358,12 +352,6 @@ pub fn build(b: *std.Build) void {
     });
     if (math_obj) |obj| drm_gbm_tests.root_module.addObjectFile(obj);
     if (runtime_obj) |obj| drm_gbm_tests.root_module.addObjectFile(obj);
-    drm_gbm_tests.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/libdrm" });
-    drm_gbm_tests.root_module.linkSystemLibrary("c", .{});
-    drm_gbm_tests.root_module.linkSystemLibrary("gbm", .{});
-    drm_gbm_tests.root_module.linkSystemLibrary("drm", .{});
-    drm_gbm_tests.root_module.linkSystemLibrary("EGL", .{});
-    drm_gbm_tests.root_module.linkSystemLibrary("GLESv2", .{});
     const run_drm_gbm_tests = b.addRunArtifact(drm_gbm_tests);
     const drm_gbm_test_step = b.step("drm-gbm-test", "Run DRM/GBM host tests");
     drm_gbm_test_step.dependOn(&run_drm_gbm_tests.step);

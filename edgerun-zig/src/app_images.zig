@@ -1,5 +1,5 @@
 const image = @import("media/image.zig");
-const renderer_software = @import("render/software.zig");
+const renderer_software = @import("render/backends/software.zig");
 const ui = @import("ui.zig");
 
 pub const cloud_meme_width: usize = 680;

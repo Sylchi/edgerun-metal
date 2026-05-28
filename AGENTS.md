@@ -6,11 +6,10 @@
 - Warnings are errors.
 - Errors are fatal.
 - No shortcuts.
-- No external dependencies.
-- All production code must be freestanding: no `@import("std")`, no `@cImport`, no host libc, no OS-specific APIs. The only exception is `edgerun-zig/src/crypto.zig` which may import `std` solely for `std.crypto.hash.Blake3` as a controlled boundary.
-- Host-side tests and explicit host tools may use `@import("std")`, `std.testing`, `std.os`, `std.fs`, `std.io`, host libc, system libraries, and OS APIs — but these dependencies must never leak into production code paths.
-- Host tools (Wayland, DRM/GBM, Pi USB boot, CLI tools, benchmarks) are keepers of their own host assumptions. They are not production code and may freely use Zig's standard library, libc, and system libraries. Port host-tool-specific functionality (e.g., Wayland, EGL, DRM) to a separate external repo like `~/edgerun` rather than baking protocol complexity into this repository.
-- The boundary between production and host code is explicit: production files never `@import("std")` at module scope. Test blocks within production files must scope their `@import("std")` locally.
+- No external dependencies beyond what's required for self-hosted builds.
+- All production code is x86_64 assembly using the project's own macro DSL (`macros.inc`).
+- No Zig, no C, no Python, no CMake in production code paths.
+- Host-side test harnesses may temporarily use C for linking purposes, but must be migrated to pure ASM self-hosted runners.
 - The permitted vendor binary exceptions are explicit and narrow: device radio firmware needed to operate a radio block, such as CYW43438 RAM/NVRAM/CLM files, and Raspberry Pi Zero-family boot firmware needed for the Broadcom mask-ROM/GPU boot chain to load repo-owned `kernel.img` on Pi Zero W v1.1 bring-up hardware. These exceptions do not permit vendor drivers, host tools, protocol stacks, closed control planes, compatibility layers, or any other vendor blob.
 - No ambiguity.
 - Tests must cover touched behavior.
@@ -22,60 +21,61 @@
 - Consolidating and removing code is preferred over adding new code.
 - No regressions.
 - Generated build artifacts must stay untracked.
-- Use `.build/` for local CMake and Zig build output.
+- Use `.build/` for local build output.
 - Keep this as one Git repository; nested `.git` directories, `.gitmodules`, and submodule gitlinks are not allowed.
 - Multiple agents may work in this repository at the same time.
 - Stay inside the bounds of the assigned task and owned files.
 - Do not create, switch to, or continue work on feature branches unless the user explicitly asks.
 
-## Current Workspace Shape
+## Workspace & Language
 
-- `edgerun-zig/` is the primary implementation workspace for the current core modules.
-- `edgerun-zig/src/clock.zig`, `identity.zig`, `object.zig`, and `store.zig` are the canonical current implementations for clock, identity, object, and storage.
-- `edgerun-zig/src/root.zig` is the broad Zig integration test root.
-- `edgerun-zig/build.zig` owns Zig test and host-tool steps.
-- `edgerun-zig/src/crypto.zig` is the only production file that may `@import("std")` — it wraps `std.crypto.hash.Blake3` as a controlled boundary, keeping all other production files freestanding.
-- `edgerun-zig/src/geometry.zig` and `ui.zig` are the canonical current UI core primitives and scene implementation.
-- `edgerun-zig/src/ui.zig`, `ui_codec.zig`, `ui_components.zig`, `ui_resolver.zig`, renderer files, and asset/font files are the Zig UI/application experimentation path.
-- `edgerun-zig/src/pi_zero_w_v1_1*.zig`, `pi_mmc.zig`, `pi_usb_control.zig`, `bcm2708_usb_boot.zig`, and `pi_usb_boot_host.zig` are the Pi Zero W v1.1 bring-up path.
+- **The project's own language is the x86_64 assembly DSL defined in `asm/x86_64/macros.inc`** — `er_fn`, `er_fnstr`, `er_frame_push`, `er_push_all`, etc. This IS the dogfooding target. All production code must be written in this DSL.
+- `asm/x86_64/` — canonical hardware-near implementation of all core modules: math, runtime, serial, ctype, TPM, WASM interpreter, kernel entry, kernel main.
+- `asm/test/` — test files. Must be migrated from C to self-hosted ASM runners. Currently C test harnesses provide the `main()` entry point and link against ASM `.o` files for freestanding testing.
+- `edgerun-zig/` — DEPRECATED. Being removed as part of the Zig toolchain elimination. Do not add new Zig code.
+- `edgerun-crypto/` — C BLAKE3 implementation. Needs to be ported to ASM or replaced with a project-owned implementation.
+- `Makefile` — owns x86_64 ASM builds and kernel images.
+
+## External Dependencies (to eliminate)
+
+### Build tools (minimum to bootstrap)
+- `yasm` (or `nasm`) — assembler for the DSL. Long-term goal: own assembler.
+- `make` — build orchestrator. Long-term goal: own build system.
+- `ld` / `objcopy` (binutils) — linker. Long-term goal: own linker.
+
+### Current test-time dependencies (being phased out)
+- `cc` (gcc/clang) — used to compile C test harness + link ASM objects into freestanding static binaries.
+- C startup crt0 stubs via `-ffreestanding -nostdlib`.
+- `zig` — full Zig compiler + std lib (DEPRECATED, remove).
+- `cmake` / `ctest` — only needed for edgerun-crypto (remove with C crypto).
+- `python3` — only needed for pages tooling.
+- `qemu-system-x86_64` — kernel test environment.
 
 ## Required Commands
 
 - Full repository check:
   - `make check`
-- Zig format check:
-  - `make zig-fmt-check`
-  - or `zig fmt --check edgerun-zig`
-- Zig full test:
-  - `make zig-test`
-  - or `zig build --build-file edgerun-zig/build.zig --cache-dir .build/edgerun-zig test`
-- Focused Zig module tests:
-  - `make clock-test`
-  - `make identity-test`
-  - `make object-test`
-  - `make storage-test`
-- C module tests:
-  - `make crypto-test`
-- Zig UI core test:
-  - `make ui-core-test`
-- Pi Zero W v1.1 kernel image:
-  - `make pi-zero-w-v1_1-kernel`
-- Pi USB boot load:
-  - `make pi-usb-load`
-- Real TPM check, only on a machine with the expected TPM device:
-  - `make zig-real-tpm`
+- ASM module tests (builds and runs):
+  - `make asm-test-math`
+  - `make asm-test-runtime`
+  - `make asm-test-serial`
+  - `make asm-test-wasm`
+  - `make asm-test-tpm`
+  - `make asm-test` (all of the above)
+- ASM kernel build:
+  - `make asm-kernel`
+  - `make asm-kernel-hello` (build + QEMU launch)
+- Clean:
+  - `make clean`
 
-## C To Zig Porting Rules
+## C To ASM Porting Rules
 
-- Read the current Zig implementation before porting or consolidating anything.
-- Prefer canonical Zig modules over compatibility layers or wrapper shims.
-- When a C package has already been ported to Zig, update build/test routing to the Zig module and delete stale C implementation files rather than keeping parallel implementations.
-- Keep behavior and tests coherent across `Makefile`, `edgerun-zig/build.zig`, and module-local tests.
-- Do not reintroduce old C package APIs as compatibility surfaces unless the user explicitly requests that exact boundary.
-- For object/storage/identity/clock work, use `edgerun-zig/src/object.zig`, `store.zig`, `identity.zig`, and `clock.zig` as the authoritative code.
-- All production-level hashing goes through `edgerun-zig/src/crypto.zig`. No production file imports `@import("std")` directly for crypto or anything else.
-- Canonical object bytes are the object boundary. Do not invent IDs from raw payload buffers where an object verifier or `object.View` should be used.
-- If a boundary accepts stored or transferred objects, prefer canonical object bytes plus explicit validation over raw buffer convenience.
+- All new production code must be written in the project's ASM DSL (`macros.inc`).
+- Port existing C test harnesses to pure ASM self-hosted test runners (no `main()` from C).
+- When porting, update Makefile rules to assemble and link directly via ld without the C compiler bridge.
+- Keep behavior and tests coherent across the Makefile and module-local tests.
+- Do not reintroduce C compatibility wrappers or shims at the ASM boundary.
+- The WASM interpreter in `asm/x86_64/wasm_interpreter.asm` is the canonical implementation.
 
 ## Friction Prevention
 
@@ -93,15 +93,6 @@
 - For the current Pi USB bring-up station, the affected root hub is owned by xHCI PCI device `0000:c3:00.4` and carries USB bus 007/008. Reset it with `sudo sh -c 'echo 0000:c3:00.4 > /sys/bus/pci/drivers/xhci_hcd/unbind; sleep 3; echo 0000:c3:00.4 > /sys/bus/pci/drivers/xhci_hcd/bind'`.
 - After a Pi USB root-hub reset, re-run `lsusb` and `chown` the new `/dev/bus/usb/BBB/DDD` Broadcom boot node before running the non-root boot command.
 
-## UI And Visual Work
-
-- UI work must be reference-driven. Use the provided screenshot, reference repo, component source, theme tokens, icon set, and font assets as concrete inputs.
-- Do not hand-wave visual parity. Compare the rendered result against the reference and list the remaining visual differences before claiming the task is done.
-- Use the actual component system and renderer paths that are meant to ship. Do not create a separate demo-only surface that bypasses the real UI architecture.
-- For shadcn-style work, port the component structure, spacing, states, icons, and theme values from the canonical source instead of making approximate lookalikes.
-- Run the relevant render path, snapshot, screenshot, or QEMU check when visual output is changed. If visual verification cannot run, report that explicitly.
-- For Zig UI work, prefer `ui.zig`, `ui_codec.zig`, `ui_components.zig`, `ui_resolver.zig`, `render.zig`, `render/software.zig`, and `render/surface.zig` over one-off rendering paths.
-
 ## Enforcement
 
 - Fail fast on unsupported, uncertain, or partial states.
@@ -116,15 +107,6 @@
 - Keep root documentation and command wrappers current when workflow changes.
 - Add tests for new repository tooling and for behavior changes when deterministic tests are possible.
 - Document the purpose and intention of new tools, tests, and top-level structure.
-
-## Repo Inspection Annotations
-
-- `tools/repo-inspect/` supports reasoned annotations for intentional false positives, including duplicate-block findings.
-- Use `//@optimizer-ignore reason` on the exact line, `//@optimizer-ignore-function reason` immediately before a function definition, or `//@optimizer-ignore-constant reason` immediately before a constant or macro block.
-- Every annotation must include a concrete reason; bare optimizer-ignore markers are misuse.
-- Prefer fixing real duplication, CPU-cost, magic-number, or string-indexing findings.
-- Use annotations only when the reported shape is required by a protocol, ABI, hardware register layout, cryptographic schedule, SIMD lane packing, or another explicit invariant.
-- Do not use annotations to hide incomplete work, accidental complexity, unclear ownership, or missing tests.
 
 ## Multi-Agent Safety
 

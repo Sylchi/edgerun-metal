@@ -893,7 +893,7 @@ fn zeroed(in: []const u8) bool {
 }
 
 test "requirements are encoded and hashed deterministically" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     const req = Requirements{
         .durability = .durable,
         .confidentiality = .user_app_private,
@@ -904,11 +904,11 @@ test "requirements are encoded and hashed deterministically" {
         .access = .explicit_io,
     };
 
-    try std.testing.expect(bytes.nonzero(&req.hash()));
+    try testing.expect(bytes.nonzero(&req.hash()));
 }
 
 test "header encode decode owns canonical layout" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const req = Requirements{
         .durability = .durable,
@@ -931,13 +931,13 @@ test "header encode decode owns canonical layout" {
     try header.encode(&raw);
 
     const decoded = try Header.decode(&raw);
-    try std.testing.expectEqual(Kind.bytes, decoded.kind);
-    try std.testing.expectEqual(@as(u64, 5), decoded.body_len);
-    try std.testing.expectEqual(Integrity.hash_only, decoded.requirements.integrity);
+    try testing.expectEqual(Kind.bytes, decoded.kind);
+    try testing.expectEqual(@as(u64, 5), decoded.body_len);
+    try testing.expectEqual(Integrity.hash_only, decoded.requirements.integrity);
 }
 
 test "header decode rejects nonzero reserved bytes" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const req = Requirements{
         .durability = .durable,
@@ -960,11 +960,11 @@ test "header decode rejects nonzero reserved bytes" {
     try header.encode(&raw);
     raw[header_reserved_start] = 1;
 
-    try std.testing.expectError(error.Corrupt, Header.decode(&raw));
+    try testing.expectError(error.Corrupt, Header.decode(&raw));
 }
 
 test "owner and child encode decode are symmetric" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     const node_id = [_]u8{2} ++ [_]u8{0} ** 31;
     const requirement_id = [_]u8{3} ++ [_]u8{0} ** 31;
     const owner = Owner{ .kind = .app, .node_id = node_id };
@@ -978,17 +978,17 @@ test "owner and child encode decode are symmetric" {
 
     var owner_raw: [owner_size]u8 = undefined;
     var child_raw: [child_size]u8 = undefined;
-    try std.testing.expect(owner.encode(&owner_raw));
-    try std.testing.expect(child.encode(&child_raw));
+    try testing.expect(owner.encode(&owner_raw));
+    try testing.expect(child.encode(&child_raw));
 
     const decoded_owner = try Owner.decode(&owner_raw);
     const decoded_child = try Child.decode(&child_raw, 0);
-    try std.testing.expectEqual(OwnerKind.app, decoded_owner.kind);
-    try std.testing.expectEqual(@as(u64, 10), decoded_child.logical_len);
+    try testing.expectEqual(OwnerKind.app, decoded_owner.kind);
+    try testing.expectEqual(@as(u64, 10), decoded_child.logical_len);
 }
 
 test "envelope encode decode validates owner and algorithm" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     const owner = Owner{
         .kind = .app,
         .node_id = [_]u8{4} ++ [_]u8{0} ** 31,
@@ -1003,22 +1003,22 @@ test "envelope encode decode validates owner and algorithm" {
     };
 
     var raw: [envelope_size]u8 = undefined;
-    try std.testing.expect(envelope.encode(owner, &raw));
+    try testing.expect(envelope.encode(owner, &raw));
 
     const decoded = try Envelope.decode(&raw);
-    try std.testing.expect(decoded.valid(owner));
-    try std.testing.expectEqual(EnvelopeKind.app, decoded.kind);
-    try std.testing.expectEqual(Algorithm.aes_gcm_256, decoded.algorithm);
+    try testing.expect(decoded.valid(owner));
+    try testing.expectEqual(EnvelopeKind.app, decoded.kind);
+    try testing.expectEqual(Algorithm.aes_gcm_256, decoded.algorithm);
 
     const wrong_owner = Owner{
         .kind = .user,
         .node_id = [_]u8{7} ++ [_]u8{0} ** 31,
     };
-    try std.testing.expect(!envelope.encode(wrong_owner, &raw));
+    try testing.expect(!envelope.encode(wrong_owner, &raw));
 }
 
 test "view decodes canonical bytes node and owns body slicing" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const req = Requirements{
         .durability = .memory,
@@ -1035,13 +1035,13 @@ test "view decodes canonical bytes node and owns body slicing" {
     const canonical = try writer.bytesNode(req, .{ .keeper = keeper }, "hello");
     const view = try View.decode(canonical);
 
-    try std.testing.expectEqual(Kind.bytes, view.header.kind);
-    try std.testing.expectEqualStrings("hello", view.body);
-    try std.testing.expect(bytes.nonzero(&view.id()));
+    try testing.expectEqual(Kind.bytes, view.header.kind);
+    try testing.expectEqualStrings("hello", view.body);
+    try testing.expect(bytes.nonzero(&view.id()));
 }
 
 test "writer builds owned canonical bytes nodes" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const req = Requirements{
         .durability = .durable,
@@ -1070,12 +1070,12 @@ test "writer builds owned canonical bytes nodes" {
     const canonical = try writer.bytesNodeOwned(req, .{ .keeper = keeper }, &.{owner}, &.{envelope}, "payload");
     const view = try View.decode(canonical);
 
-    try std.testing.expectEqual(Kind.bytes, view.header.kind);
-    try std.testing.expectEqual(@as(u16, 1), view.header.owner_count);
-    try std.testing.expectEqual(@as(u16, 1), view.header.envelope_count);
-    try std.testing.expectEqualStrings("payload", view.body);
-    try std.testing.expectEqual(OwnerKind.app, (try view.ownerAt(0)).kind);
-    try std.testing.expectEqual(Algorithm.xchacha20_poly1305, (try view.envelopeAt(0)).algorithm);
+    try testing.expectEqual(Kind.bytes, view.header.kind);
+    try testing.expectEqual(@as(u16, 1), view.header.owner_count);
+    try testing.expectEqual(@as(u16, 1), view.header.envelope_count);
+    try testing.expectEqualStrings("payload", view.body);
+    try testing.expectEqual(OwnerKind.app, (try view.ownerAt(0)).kind);
+    try testing.expectEqual(Algorithm.xchacha20_poly1305, (try view.envelopeAt(0)).algorithm);
 
     const bad_envelope = Envelope{
         .kind = .user,
@@ -1085,11 +1085,11 @@ test "writer builds owned canonical bytes nodes" {
         .key_id = [_]u8{11} ++ [_]u8{0} ** 31,
         .metadata_hash = [_]u8{12} ++ [_]u8{0} ** 31,
     };
-    try std.testing.expectError(error.BadArgument, writer.bytesNodeOwned(req, .{ .keeper = keeper }, &.{owner}, &.{bad_envelope}, "payload"));
+    try testing.expectError(error.BadArgument, writer.bytesNodeOwned(req, .{ .keeper = keeper }, &.{owner}, &.{bad_envelope}, "payload"));
 }
 
 test "object tpm encryption binds storage envelope to caller policy" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     var events: [4]tpmapp.Event = undefined;
     const keeper = clock.KeeperId{ .bytes = [_]u8{9} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
@@ -1121,18 +1121,18 @@ test "object tpm encryption binds storage envelope to caller policy" {
         .user = user,
         .authorization = seal_authorization,
     });
-    try std.testing.expect(encrypted.valid());
-    try std.testing.expectEqual(EnvelopeKind.storage, encrypted.envelope.kind);
-    try std.testing.expect(tpm.eventAt(0).?.caller.eql(authority.Principal.storage(storage).?));
+    try testing.expect(encrypted.valid());
+    try testing.expectEqual(EnvelopeKind.storage, encrypted.envelope.kind);
+    try testing.expect(tpm.eventAt(0).?.caller.eql(authority.Principal.storage(storage).?));
 
-    try std.testing.expectError(error.BadArgument, encryptWithTpm(req, "bank record", .{
+    try testing.expectError(error.BadArgument, encryptWithTpm(req, "bank record", .{
         .tpm = &tpm,
         .caller = user,
         .user = user,
         .authorization = seal_authorization,
     }));
 
-    try std.testing.expectError(error.BadArgument, encryptWithTpm(req, "bank record", .{
+    try testing.expectError(error.BadArgument, encryptWithTpm(req, "bank record", .{
         .tpm = &tpm,
         .caller = storage,
         .user = other_user,
@@ -1140,7 +1140,7 @@ test "object tpm encryption binds storage envelope to caller policy" {
     }));
 
     const wrong_device_authorization = intent.admit(user, other_device, storage, tpm_id, .seal_data, .writes_private_state, tpm.clock.now, intent.requestId("object wrong device seal").?).?;
-    try std.testing.expectError(error.BadArgument, encryptWithTpm(req, "bank record", .{
+    try testing.expectError(error.BadArgument, encryptWithTpm(req, "bank record", .{
         .tpm = &tpm,
         .caller = storage,
         .user = user,
@@ -1160,24 +1160,24 @@ test "object tpm encryption binds storage envelope to caller policy" {
         .user = user,
         .authorization = unseal_authorization,
     });
-    try std.testing.expect(bytes.nonzero(&open_event));
-    try std.testing.expectEqual(@as(usize, 2), tpm.eventCount());
+    try testing.expect(bytes.nonzero(&open_event));
+    try testing.expectEqual(@as(usize, 2), tpm.eventCount());
 
-    try std.testing.expectError(error.BadArgument, decryptWithTpm(view, encrypted.sealed, .{
+    try testing.expectError(error.BadArgument, decryptWithTpm(view, encrypted.sealed, .{
         .tpm = &tpm,
         .caller = user,
         .user = user,
         .authorization = unseal_authorization,
     }));
 
-    try std.testing.expectError(error.BadArgument, decryptWithTpm(view, encrypted.sealed, .{
+    try testing.expectError(error.BadArgument, decryptWithTpm(view, encrypted.sealed, .{
         .tpm = &tpm,
         .caller = other_storage,
         .user = user,
         .authorization = unseal_authorization,
     }));
 
-    try std.testing.expectError(error.BadArgument, decryptWithTpm(view, encrypted.sealed, .{
+    try testing.expectError(error.BadArgument, decryptWithTpm(view, encrypted.sealed, .{
         .tpm = &tpm,
         .caller = storage,
         .user = other_user,
@@ -1186,7 +1186,7 @@ test "object tpm encryption binds storage envelope to caller policy" {
 }
 
 test "object app private encryption is app sealed without user decrypt principal" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     var events: [4]tpmapp.Event = undefined;
     const keeper = clock.KeeperId{ .bytes = [_]u8{10} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
@@ -1215,11 +1215,11 @@ test "object app private encryption is app sealed without user decrypt principal
         .caller = app,
         .authorization = seal_authorization,
     });
-    try std.testing.expect(encrypted.sealed.policy.user == null);
-    try std.testing.expectEqual(seal.Scope.machine_app, encrypted.sealed.policy.scope);
-    try std.testing.expectEqual(EnvelopeKind.app, encrypted.envelope.kind);
+    try testing.expect(encrypted.sealed.policy.user == null);
+    try testing.expectEqual(seal.Scope.machine_app, encrypted.sealed.policy.scope);
+    try testing.expectEqual(EnvelopeKind.app, encrypted.envelope.kind);
 
-    try std.testing.expectError(error.BadArgument, encryptWithTpm(req, "developer license", .{
+    try testing.expectError(error.BadArgument, encryptWithTpm(req, "developer license", .{
         .tpm = &tpm,
         .caller = app,
         .user = grant_user,
@@ -1238,16 +1238,16 @@ test "object app private encryption is app sealed without user decrypt principal
         .caller = app,
         .authorization = unseal_authorization,
     });
-    try std.testing.expect(bytes.nonzero(&open_event));
+    try testing.expect(bytes.nonzero(&open_event));
 
-    try std.testing.expectError(error.BadArgument, decryptWithTpm(view, encrypted.sealed, .{
+    try testing.expectError(error.BadArgument, decryptWithTpm(view, encrypted.sealed, .{
         .tpm = &tpm,
         .caller = app,
         .user = grant_user,
         .authorization = unseal_authorization,
     }));
 
-    try std.testing.expectError(error.BadArgument, decryptWithTpm(view, encrypted.sealed, .{
+    try testing.expectError(error.BadArgument, decryptWithTpm(view, encrypted.sealed, .{
         .tpm = &tpm,
         .caller = other_app,
         .authorization = unseal_authorization,
@@ -1255,7 +1255,7 @@ test "object app private encryption is app sealed without user decrypt principal
 }
 
 test "writer builds canonical tree nodes from child records" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const req = Requirements{
         .durability = .memory,
@@ -1297,16 +1297,16 @@ test "writer builds canonical tree nodes from child records" {
     const canonical = try tree_writer.treeNode(req, epoch, &children);
     const view = try View.decode(canonical);
 
-    try std.testing.expectEqual(Kind.tree, view.header.kind);
-    try std.testing.expectEqual(@as(u64, 11), view.header.logical_len);
-    try std.testing.expectEqual(@as(u32, 2), view.header.child_count);
-    try std.testing.expectEqual(@as(usize, 0), view.body.len);
-    try std.testing.expectEqual(@as(u64, 0), (try view.childAt(0)).logical_offset);
-    try std.testing.expectEqual(@as(u64, 5), (try view.childAt(1)).logical_offset);
+    try testing.expectEqual(Kind.tree, view.header.kind);
+    try testing.expectEqual(@as(u64, 11), view.header.logical_len);
+    try testing.expectEqual(@as(u32, 2), view.header.child_count);
+    try testing.expectEqual(@as(usize, 0), view.body.len);
+    try testing.expectEqual(@as(u64, 0), (try view.childAt(0)).logical_offset);
+    try testing.expectEqual(@as(u64, 5), (try view.childAt(1)).logical_offset);
 }
 
 test "writer builds owned canonical tree nodes" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const req = Requirements{
         .durability = .durable,
@@ -1343,18 +1343,18 @@ test "writer builds owned canonical tree nodes" {
     const canonical = try writer.treeNodeOwned(req, epoch, &.{owner}, &.{envelope}, &.{child});
     const view = try View.decode(canonical);
 
-    try std.testing.expectEqual(Kind.tree, view.header.kind);
-    try std.testing.expectEqual(@as(u64, 32), view.header.logical_len);
-    try std.testing.expectEqual(@as(u16, 1), view.header.owner_count);
-    try std.testing.expectEqual(@as(u16, 1), view.header.envelope_count);
-    try std.testing.expectEqual(@as(u32, 1), view.header.child_count);
-    try std.testing.expectEqual(OwnerKind.app, (try view.ownerAt(0)).kind);
-    try std.testing.expectEqual(EnvelopeKind.app, (try view.envelopeAt(0)).kind);
-    try std.testing.expectEqual(@as(u64, 32), (try view.childAt(0)).logical_len);
+    try testing.expectEqual(Kind.tree, view.header.kind);
+    try testing.expectEqual(@as(u64, 32), view.header.logical_len);
+    try testing.expectEqual(@as(u16, 1), view.header.owner_count);
+    try testing.expectEqual(@as(u16, 1), view.header.envelope_count);
+    try testing.expectEqual(@as(u32, 1), view.header.child_count);
+    try testing.expectEqual(OwnerKind.app, (try view.ownerAt(0)).kind);
+    try testing.expectEqual(EnvelopeKind.app, (try view.envelopeAt(0)).kind);
+    try testing.expectEqual(@as(u64, 32), (try view.childAt(0)).logical_len);
 }
 
 test "writer builds canonical receipt nodes" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const req = Requirements{
         .durability = .durable,
@@ -1371,13 +1371,13 @@ test "writer builds canonical receipt nodes" {
     const canonical = try writer.receiptNode(req, .{ .keeper = keeper }, "receipt");
     const view = try View.decode(canonical);
 
-    try std.testing.expectEqual(Kind.receipt, view.header.kind);
-    try std.testing.expectEqualStrings("receipt", view.body);
-    try std.testing.expectEqual(@as(u32, 0), view.header.child_count);
+    try testing.expectEqual(Kind.receipt, view.header.kind);
+    try testing.expectEqualStrings("receipt", view.body);
+    try testing.expectEqual(@as(u32, 0), view.header.child_count);
 }
 
 test "signature receipts bind signer challenge and subject object ids" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
     const req = Requirements{
@@ -1401,15 +1401,15 @@ test "signature receipts bind signer challenge and subject object ids" {
     const receipt = try (NodeWriter{ .out = &receipt_raw }).signatureReceiptNode(subject, challenge, signer_id, .ecdsa_p256_sha256, &signature, epoch);
     const info = try decodeSignatureReceipt(receipt);
 
-    try std.testing.expectEqualSlices(u8, &signer_id, &info.signer_id);
-    try std.testing.expectEqualSlices(u8, &Header.id(challenge), &info.challenge_id);
-    try std.testing.expectEqualSlices(u8, &Header.id(subject), &info.subject_id);
-    try std.testing.expectEqual(Algorithm.ecdsa_p256_sha256, info.algorithm);
-    try std.testing.expectEqualSlices(u8, &signature, info.signature);
+    try testing.expectEqualSlices(u8, &signer_id, &info.signer_id);
+    try testing.expectEqualSlices(u8, &Header.id(challenge), &info.challenge_id);
+    try testing.expectEqualSlices(u8, &Header.id(subject), &info.subject_id);
+    try testing.expectEqual(Algorithm.ecdsa_p256_sha256, info.algorithm);
+    try testing.expectEqualSlices(u8, &signature, info.signature);
 }
 
 test "signature receipts reject malformed body policy and zero signatures" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
     const req = Requirements{
@@ -1430,10 +1430,10 @@ test "signature receipts reject malformed body policy and zero signatures" {
     const signer_id = [_]u8{23} ++ [_]u8{0} ** 31;
     const zero_signature = [_]u8{0} ** 64;
     var receipt_raw: [header_size + signature_fixed_body_size + 64]u8 = undefined;
-    try std.testing.expectError(error.BadArgument, writeSignatureReceipt(subject, challenge, signer_id, .ed25519, &zero_signature, epoch, &receipt_raw));
+    try testing.expectError(error.BadArgument, writeSignatureReceipt(subject, challenge, signer_id, .ed25519, &zero_signature, epoch, &receipt_raw));
 
     const signature = [_]u8{0x5a} ** 64;
     const receipt = try writeSignatureReceipt(subject, challenge, signer_id, .ed25519, &signature, epoch, &receipt_raw);
     receipt[header_size + 108] = 1;
-    try std.testing.expectError(error.Corrupt, decodeSignatureReceipt(receipt));
+    try testing.expectError(error.Corrupt, decodeSignatureReceipt(receipt));
 }

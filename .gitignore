@@ -3,6 +3,8 @@
 machine-report*.txt
 
 # stale host build artifacts
+*.o
+gen_icons
 ifstatus
 er-embed
 

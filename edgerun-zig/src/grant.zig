@@ -261,7 +261,7 @@ pub fn memoryViewReceipt(owner: identity.Identity, allocator: identity.Identity,
 }
 
 test "spawn receipt deterministically records delegated resources" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
     const parent = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("parent")).?, epoch).?;
@@ -272,26 +272,26 @@ test "spawn receipt deterministically records delegated resources" {
     const allocated_receipt = spawnReceiptAllocated(parent, child, epoch, 16, 32, 2, 4, 1, 1, route_handle, device.id).?;
     const memory_only_receipt = spawnReceiptAllocated(parent, child, epoch, 16, 0, 0, 4, 0, 0, [_]u8{0} ** preimage.hash_size, .{ .bytes = [_]u8{0} ** identity.id_size }).?;
 
-    try std.testing.expect(receipt.valid());
-    try std.testing.expect(bytes.nonzero(&receipt.id().?));
-    try std.testing.expectEqual(@as(u64, 16), receipt.memory.amount);
-    try std.testing.expectEqual(Resource.execution_ticks, receipt.execution_ticks.resource);
-    try std.testing.expectEqual(@as(u64, 0), receipt.route_handles.amount);
-    try std.testing.expectEqual(@as(u64, 0), receipt.device_handles.amount);
-    try std.testing.expect(allocated_receipt.valid());
-    try std.testing.expectEqual(@as(u64, 1), allocated_receipt.route_handles.amount);
-    try std.testing.expectEqual(@as(u64, 1), allocated_receipt.device_handles.amount);
-    try std.testing.expect(bytes.eql(&route_handle, &allocated_receipt.route_handle));
-    try std.testing.expect(allocated_receipt.device_handle.eql(device.id));
-    try std.testing.expect(memory_only_receipt.valid());
-    try std.testing.expectEqual(@as(u64, 0), memory_only_receipt.storage_bytes.amount);
-    try std.testing.expectEqual(@as(u64, 0), memory_only_receipt.storage_slots.amount);
-    try std.testing.expect(spawnReceiptAllocated(parent, child, epoch, 16, 32, 2, 4, 1, 1, [_]u8{0} ** preimage.hash_size, device.id) == null);
-    try std.testing.expect(spawnReceiptAllocated(parent, child, epoch, 16, 32, 2, 4, 1, 1, route_handle, .{ .bytes = [_]u8{0} ** identity.id_size }) == null);
+    try testing.expect(receipt.valid());
+    try testing.expect(bytes.nonzero(&receipt.id().?));
+    try testing.expectEqual(@as(u64, 16), receipt.memory.amount);
+    try testing.expectEqual(Resource.execution_ticks, receipt.execution_ticks.resource);
+    try testing.expectEqual(@as(u64, 0), receipt.route_handles.amount);
+    try testing.expectEqual(@as(u64, 0), receipt.device_handles.amount);
+    try testing.expect(allocated_receipt.valid());
+    try testing.expectEqual(@as(u64, 1), allocated_receipt.route_handles.amount);
+    try testing.expectEqual(@as(u64, 1), allocated_receipt.device_handles.amount);
+    try testing.expect(bytes.eql(&route_handle, &allocated_receipt.route_handle));
+    try testing.expect(allocated_receipt.device_handle.eql(device.id));
+    try testing.expect(memory_only_receipt.valid());
+    try testing.expectEqual(@as(u64, 0), memory_only_receipt.storage_bytes.amount);
+    try testing.expectEqual(@as(u64, 0), memory_only_receipt.storage_slots.amount);
+    try testing.expect(spawnReceiptAllocated(parent, child, epoch, 16, 32, 2, 4, 1, 1, [_]u8{0} ** preimage.hash_size, device.id) == null);
+    try testing.expect(spawnReceiptAllocated(parent, child, epoch, 16, 32, 2, 4, 1, 1, route_handle, .{ .bytes = [_]u8{0} ** identity.id_size }) == null);
 }
 
 test "memory view receipt binds owner reader slice and byte range" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     const keeper = clock.KeeperId{ .bytes = [_]u8{2} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
     const owner = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("memory owner")).?, epoch).?;
@@ -301,11 +301,11 @@ test "memory view receipt binds owner reader slice and byte range" {
     const authorization = preimage.hash("edgerun:zig:v1:test-memory-grant", "allocator approved");
     const receipt = memoryViewReceipt(owner, allocator, reader, slice, authorization, epoch, 8, 32).?;
 
-    try std.testing.expect(receipt.valid());
-    try std.testing.expect(bytes.nonzero(&receipt.id().?));
-    try std.testing.expect(receipt.allocator.eql(allocator.id));
-    try std.testing.expect(bytes.eql(&receipt.authorization, &authorization));
-    try std.testing.expectEqual(Resource.read_only_memory, receipt.memory.resource);
-    try std.testing.expectEqual(@as(u64, 32), receipt.memory.amount);
-    try std.testing.expectEqual(@as(u64, 8), receipt.offset);
+    try testing.expect(receipt.valid());
+    try testing.expect(bytes.nonzero(&receipt.id().?));
+    try testing.expect(receipt.allocator.eql(allocator.id));
+    try testing.expect(bytes.eql(&receipt.authorization, &authorization));
+    try testing.expectEqual(Resource.read_only_memory, receipt.memory.resource);
+    try testing.expectEqual(@as(u64, 32), receipt.memory.amount);
+    try testing.expectEqual(@as(u64, 8), receipt.offset);
 }

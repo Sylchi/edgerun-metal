@@ -5,25 +5,63 @@ pub const Token = union(enum) {
     invalid: []const u8,
     identifier: []const u8,
     integer_literal: []const u8,
+    float_literal: []const u8,
     string_literal: []const u8,
+    char_literal: []const u8,
+    multiline_string_literal_line: []const u8,
+    builtin: []const u8,
+    doc_comment: []const u8,
+    container_doc_comment: []const u8,
 
+    keyword_addrspace,
+    keyword_align,
+    keyword_allowzero,
+    keyword_and,
+    keyword_anyframe,
+    keyword_anytype,
+    keyword_asm,
+    keyword_break,
+    keyword_callconv,
+    keyword_catch,
+    keyword_comptime,
     keyword_const,
-    keyword_var,
-    keyword_fn,
-    keyword_export,
-    keyword_pub,
-    keyword_return,
-    keyword_while,
-    keyword_if,
+    keyword_continue,
+    keyword_defer,
     keyword_else,
+    keyword_enum,
+    keyword_errdefer,
+    keyword_error,
+    keyword_export,
+    keyword_extern,
+    keyword_fn,
+    keyword_for,
+    keyword_if,
+    keyword_inline,
+    keyword_noalias,
+    keyword_noinline,
+    keyword_nosuspend,
+    keyword_opaque,
+    keyword_or,
+    keyword_orelse,
+    keyword_packed,
+    keyword_pub,
+    keyword_resume,
+    keyword_return,
+    keyword_linksection,
+    keyword_struct,
+    keyword_suspend,
+    keyword_switch,
+    keyword_test,
+    keyword_threadlocal,
+    keyword_try,
     keyword_true,
     keyword_false,
+    keyword_union,
+    keyword_unreachable,
+    keyword_var,
+    keyword_volatile,
+    keyword_while,
     keyword_module,
-
-    builtin_import,
-    builtin_int_cast,
-    builtin_int_from_enum,
-    builtin_int_from_ptr,
 
     lparen,
     rparen,
@@ -33,21 +71,69 @@ pub const Token = union(enum) {
     rbracket,
     colon,
     semicolon,
-    equals,
-    dot,
     comma,
 
+    // Assignment / equality
+    equals,
+    eq_eq,
+    equal_angle_bracket_right,
+    bang_equal,
+    bang,
+
+    // Comparison
+    lt,
+    gt,
+    lt_eq,
+    gt_eq,
+
+    // Arithmetic
     plus,
     minus,
     star,
     slash,
     percent,
-    eq_eq,
-    not_eq,
-    lt,
-    gt,
-    lt_eq,
-    gt_eq,
+    plus_plus,
+    plus_equal,
+    plus_percent,
+    plus_percent_equal,
+    plus_pipe,
+    plus_pipe_equal,
+    minus_equal,
+    minus_percent,
+    minus_percent_equal,
+    minus_pipe,
+    minus_pipe_equal,
+    star_equal,
+    star_percent,
+    star_percent_equal,
+    star_pipe,
+    star_pipe_equal,
+    slash_equal,
+    percent_equal,
+
+    // Bitwise / logical
+    ampersand,
+    ampersand_equal,
+    pipe,
+    pipe_pipe,
+    pipe_equal,
+    caret,
+    caret_equal,
+    tilde,
+
+    // Shift
+    angle_bracket_angle_bracket_left,
+    angle_bracket_angle_bracket_left_equal,
+    angle_bracket_angle_bracket_right,
+    angle_bracket_angle_bracket_right_equal,
+
+    // Access / range
+    dot,
+    period_asterisk,
+    ellipsis2,
+    ellipsis3,
+    arrow,
+    question_mark,
 };
 
 pub const Tokenizer = struct {
@@ -64,25 +150,22 @@ pub const Tokenizer = struct {
     }
 
     pub fn next(tokenizer: *Tokenizer) Token {
-        tokenizer.skipSpace();
+        tokenizer.skipSpaceOrComment();
         if (tokenizer.index >= tokenizer.source.len) return .eof;
         const byte = tokenizer.source[tokenizer.index];
-        if (byte == '/' and tokenizer.index + 1 < tokenizer.source.len and tokenizer.source[tokenizer.index + 1] == '/') {
-            tokenizer.skipLineComment();
-            return tokenizer.next();
-        }
+
         if (byte == '@') {
             const start = tokenizer.index;
             tokenizer.index += 1;
             const ident_start = tokenizer.index;
             while (tokenizer.index < tokenizer.source.len and identContinue(tokenizer.source[tokenizer.index])) : (tokenizer.index += 1) {}
-            const name = tokenizer.source[ident_start..tokenizer.index];
-            if (std.mem.eql(u8, name, "import")) return .builtin_import;
-            if (std.mem.eql(u8, name, "intCast")) return .builtin_int_cast;
-            if (std.mem.eql(u8, name, "intFromEnum")) return .builtin_int_from_enum;
-            if (std.mem.eql(u8, name, "intFromPtr")) return .builtin_int_from_ptr;
+            if (ident_start < tokenizer.index) {
+                const name = tokenizer.source[ident_start..tokenizer.index];
+                return .{ .builtin = name };
+            }
             return .{ .invalid = tokenizer.source[start..tokenizer.index] };
         }
+
         if (identStart(byte)) {
             const start = tokenizer.index;
             tokenizer.index += 1;
@@ -90,21 +173,23 @@ pub const Tokenizer = struct {
             const word = tokenizer.source[start..tokenizer.index];
             return if (matchKeyword(word)) |tok| tok else .{ .identifier = word };
         }
+
         if (byte >= '0' and byte <= '9') {
-            const start = tokenizer.index;
-            while (tokenizer.index < tokenizer.source.len and tokenizer.source[tokenizer.index] >= '0' and tokenizer.source[tokenizer.index] <= '9') : (tokenizer.index += 1) {}
-            return .{ .integer_literal = tokenizer.source[start..tokenizer.index] };
+            return tokenizer.lexNumber();
         }
+
         if (byte == '"') {
-            const start = tokenizer.index;
-            tokenizer.index += 1;
-            while (tokenizer.index < tokenizer.source.len and tokenizer.source[tokenizer.index] != '"') : (tokenizer.index += 1) {
-                if (tokenizer.source[tokenizer.index] == '\\') tokenizer.index += 1;
-            }
-            if (tokenizer.index >= tokenizer.source.len) return .{ .invalid = tokenizer.source[start..tokenizer.index] };
-            tokenizer.index += 1;
-            return .{ .string_literal = tokenizer.source[start..tokenizer.index] };
+            return tokenizer.lexString();
         }
+
+        if (byte == '\'') {
+            return tokenizer.lexChar();
+        }
+
+        if (byte == '\\') {
+            return tokenizer.lexMultilineStringLine();
+        }
+
         tokenizer.index += 1;
         return switch (byte) {
             '(' => Token{ .lparen = {} },
@@ -116,41 +201,277 @@ pub const Tokenizer = struct {
             ':' => .colon,
             ';' => .semicolon,
             ',' => .comma,
-            '.' => .dot,
-            '+' => .plus,
-            '-' => .minus,
-            '*' => .star,
-            '/' => .slash,
-            '%' => .percent,
-            '=' => if (tokenizer.index < tokenizer.source.len and tokenizer.source[tokenizer.index] == '=') tok: {
+            '?' => .question_mark,
+            '~' => .tilde,
+
+            '.' => if (tokenizer.index < tokenizer.source.len and tokenizer.source[tokenizer.index] == '*') tok: {
                 tokenizer.index += 1;
-                break :tok Token{ .eq_eq = {} };
+                break :tok Token{ .period_asterisk = {} };
+            } else if (tokenizer.index + 1 < tokenizer.source.len and
+                tokenizer.source[tokenizer.index] == '.' and
+                tokenizer.source[tokenizer.index + 1] == '.')
+            tok: {
+                tokenizer.index += 2;
+                break :tok Token{ .ellipsis3 = {} };
+            } else if (tokenizer.index < tokenizer.source.len and tokenizer.source[tokenizer.index] == '.') tok: {
+                tokenizer.index += 1;
+                break :tok Token{ .ellipsis2 = {} };
+            } else .dot,
+
+            '+' => if (tokenizer.index < tokenizer.source.len) switch (tokenizer.source[tokenizer.index]) {
+                '+' => tok: {
+                    tokenizer.index += 1;
+                    break :tok Token{ .plus_plus = {} };
+                },
+                '=' => tok: {
+                    tokenizer.index += 1;
+                    break :tok Token{ .plus_equal = {} };
+                },
+                '%' => if (tokenizer.index + 1 < tokenizer.source.len and tokenizer.source[tokenizer.index + 1] == '=') tok: {
+                    tokenizer.index += 2;
+                    break :tok Token{ .plus_percent_equal = {} };
+                } else tok: {
+                    tokenizer.index += 1;
+                    break :tok Token{ .plus_percent = {} };
+                },
+                '|' => if (tokenizer.index + 1 < tokenizer.source.len and tokenizer.source[tokenizer.index + 1] == '=') tok: {
+                    tokenizer.index += 2;
+                    break :tok Token{ .plus_pipe_equal = {} };
+                } else tok: {
+                    tokenizer.index += 1;
+                    break :tok Token{ .plus_pipe = {} };
+                },
+                else => .plus,
+            } else .plus,
+
+            '-' => if (tokenizer.index < tokenizer.source.len) switch (tokenizer.source[tokenizer.index]) {
+                '=' => tok: {
+                    tokenizer.index += 1;
+                    break :tok Token{ .minus_equal = {} };
+                },
+                '>' => tok: {
+                    tokenizer.index += 1;
+                    break :tok Token{ .arrow = {} };
+                },
+                '%' => if (tokenizer.index + 1 < tokenizer.source.len and tokenizer.source[tokenizer.index + 1] == '=') tok: {
+                    tokenizer.index += 2;
+                    break :tok Token{ .minus_percent_equal = {} };
+                } else tok: {
+                    tokenizer.index += 1;
+                    break :tok Token{ .minus_percent = {} };
+                },
+                '|' => if (tokenizer.index + 1 < tokenizer.source.len and tokenizer.source[tokenizer.index + 1] == '=') tok: {
+                    tokenizer.index += 2;
+                    break :tok Token{ .minus_pipe_equal = {} };
+                } else tok: {
+                    tokenizer.index += 1;
+                    break :tok Token{ .minus_pipe = {} };
+                },
+                else => .minus,
+            } else .minus,
+
+            '*' => if (tokenizer.index < tokenizer.source.len) switch (tokenizer.source[tokenizer.index]) {
+                '=' => tok: {
+                    tokenizer.index += 1;
+                    break :tok Token{ .star_equal = {} };
+                },
+                '%' => if (tokenizer.index + 1 < tokenizer.source.len and tokenizer.source[tokenizer.index + 1] == '=') tok: {
+                    tokenizer.index += 2;
+                    break :tok Token{ .star_percent_equal = {} };
+                } else tok: {
+                    tokenizer.index += 1;
+                    break :tok Token{ .star_percent = {} };
+                },
+                '|' => if (tokenizer.index + 1 < tokenizer.source.len and tokenizer.source[tokenizer.index + 1] == '=') tok: {
+                    tokenizer.index += 2;
+                    break :tok Token{ .star_pipe_equal = {} };
+                } else tok: {
+                    tokenizer.index += 1;
+                    break :tok Token{ .star_pipe = {} };
+                },
+                else => .star,
+            } else .star,
+
+            '/' => .slash,
+
+            '%' => if (tokenizer.index < tokenizer.source.len and tokenizer.source[tokenizer.index] == '=') tok: {
+                tokenizer.index += 1;
+                break :tok Token{ .percent_equal = {} };
+            } else .percent,
+
+            '=' => if (tokenizer.index < tokenizer.source.len) switch (tokenizer.source[tokenizer.index]) {
+                '=' => tok: {
+                    tokenizer.index += 1;
+                    break :tok Token{ .eq_eq = {} };
+                },
+                '>' => tok: {
+                    tokenizer.index += 1;
+                    break :tok Token{ .equal_angle_bracket_right = {} };
+                },
+                else => .equals,
             } else .equals,
+
             '!' => if (tokenizer.index < tokenizer.source.len and tokenizer.source[tokenizer.index] == '=') tok: {
                 tokenizer.index += 1;
-                break :tok Token{ .not_eq = {} };
-            } else .{ .invalid = tokenizer.source[tokenizer.index - 1 .. tokenizer.index] },
-            '<' => if (tokenizer.index < tokenizer.source.len and tokenizer.source[tokenizer.index] == '=') tok: {
-                tokenizer.index += 1;
-                break :tok Token{ .lt_eq = {} };
+                break :tok Token{ .bang_equal = {} };
+            } else .bang,
+
+            '<' => if (tokenizer.index < tokenizer.source.len) switch (tokenizer.source[tokenizer.index]) {
+                '=' => tok: {
+                    tokenizer.index += 1;
+                    break :tok Token{ .lt_eq = {} };
+                },
+                '<' => if (tokenizer.index + 1 < tokenizer.source.len and tokenizer.source[tokenizer.index + 1] == '=') tok: {
+                    tokenizer.index += 2;
+                    break :tok Token{ .angle_bracket_angle_bracket_left_equal = {} };
+                } else tok: {
+                    tokenizer.index += 1;
+                    break :tok Token{ .angle_bracket_angle_bracket_left = {} };
+                },
+                else => .lt,
             } else .lt,
-            '>' => if (tokenizer.index < tokenizer.source.len and tokenizer.source[tokenizer.index] == '=') tok: {
-                tokenizer.index += 1;
-                break :tok Token{ .gt_eq = {} };
+
+            '>' => if (tokenizer.index < tokenizer.source.len) switch (tokenizer.source[tokenizer.index]) {
+                '=' => tok: {
+                    tokenizer.index += 1;
+                    break :tok Token{ .gt_eq = {} };
+                },
+                '>' => if (tokenizer.index + 1 < tokenizer.source.len and tokenizer.source[tokenizer.index + 1] == '=') tok: {
+                    tokenizer.index += 2;
+                    break :tok Token{ .angle_bracket_angle_bracket_right_equal = {} };
+                } else tok: {
+                    tokenizer.index += 1;
+                    break :tok Token{ .angle_bracket_angle_bracket_right = {} };
+                },
+                else => .gt,
             } else .gt,
+
+            '&' => if (tokenizer.index < tokenizer.source.len and tokenizer.source[tokenizer.index] == '=') tok: {
+                tokenizer.index += 1;
+                break :tok Token{ .ampersand_equal = {} };
+            } else .ampersand,
+
+            '|' => if (tokenizer.index < tokenizer.source.len) switch (tokenizer.source[tokenizer.index]) {
+                '=' => tok: {
+                    tokenizer.index += 1;
+                    break :tok Token{ .pipe_equal = {} };
+                },
+                '|' => tok: {
+                    tokenizer.index += 1;
+                    break :tok Token{ .pipe_pipe = {} };
+                },
+                else => .pipe,
+            } else .pipe,
+
+            '^' => if (tokenizer.index < tokenizer.source.len and tokenizer.source[tokenizer.index] == '=') tok: {
+                tokenizer.index += 1;
+                break :tok Token{ .caret_equal = {} };
+            } else .caret,
+
             else => .{ .invalid = tokenizer.source[tokenizer.index - 1 .. tokenizer.index] },
         };
     }
 
-    fn skipSpace(tokenizer: *Tokenizer) void {
+    fn lexNumber(tokenizer: *Tokenizer) Token {
+        const start = tokenizer.index;
+        if (tokenizer.source[tokenizer.index] == '0' and tokenizer.index + 1 < tokenizer.source.len) {
+            const ch = tokenizer.source[tokenizer.index + 1];
+            if (ch == 'x' or ch == 'X') {
+                tokenizer.index += 2;
+                while (tokenizer.index < tokenizer.source.len and isHexDigit(tokenizer.source[tokenizer.index])) : (tokenizer.index += 1) {}
+                return .{ .integer_literal = tokenizer.source[start..tokenizer.index] };
+            }
+            if (ch == 'b' or ch == 'B') {
+                tokenizer.index += 2;
+                while (tokenizer.index < tokenizer.source.len and (tokenizer.source[tokenizer.index] == '0' or tokenizer.source[tokenizer.index] == '1')) : (tokenizer.index += 1) {}
+                return .{ .integer_literal = tokenizer.source[start..tokenizer.index] };
+            }
+            if (ch == 'o' or ch == 'O') {
+                tokenizer.index += 2;
+                while (tokenizer.index < tokenizer.source.len and tokenizer.source[tokenizer.index] >= '0' and tokenizer.source[tokenizer.index] <= '7') : (tokenizer.index += 1) {}
+                return .{ .integer_literal = tokenizer.source[start..tokenizer.index] };
+            }
+        }
+        while (tokenizer.index < tokenizer.source.len and isDigit(tokenizer.source[tokenizer.index])) : (tokenizer.index += 1) {
+            if (tokenizer.index + 1 < tokenizer.source.len and tokenizer.source[tokenizer.index] == '.') {
+                const after_dot = tokenizer.index + 1;
+                if (after_dot < tokenizer.source.len and tokenizer.source[after_dot] == '.') {
+                    // Range operator '..', stop before dot
+                    return .{ .integer_literal = tokenizer.source[start..tokenizer.index] };
+                }
+                // Could be a float
+                tokenizer.index = after_dot;
+                while (tokenizer.index < tokenizer.source.len and isDigit(tokenizer.source[tokenizer.index])) : (tokenizer.index += 1) {}
+                // Check for exponent
+                if (tokenizer.index < tokenizer.source.len and (tokenizer.source[tokenizer.index] == 'e' or tokenizer.source[tokenizer.index] == 'E')) {
+                    tokenizer.index += 1;
+                    if (tokenizer.index < tokenizer.source.len and (tokenizer.source[tokenizer.index] == '+' or tokenizer.source[tokenizer.index] == '-'))
+                        tokenizer.index += 1;
+                    while (tokenizer.index < tokenizer.source.len and isDigit(tokenizer.source[tokenizer.index])) : (tokenizer.index += 1) {}
+                }
+                return .{ .float_literal = tokenizer.source[start..tokenizer.index] };
+            }
+        }
+        return .{ .integer_literal = tokenizer.source[start..tokenizer.index] };
+    }
+
+    fn lexString(tokenizer: *Tokenizer) Token {
+        const start = tokenizer.index;
+        tokenizer.index += 1;
+        while (tokenizer.index < tokenizer.source.len and tokenizer.source[tokenizer.index] != '"') : (tokenizer.index += 1) {
+            if (tokenizer.source[tokenizer.index] == '\\') tokenizer.index += 1;
+        }
+        if (tokenizer.index >= tokenizer.source.len) return .{ .invalid = tokenizer.source[start..tokenizer.index] };
+        tokenizer.index += 1;
+        return .{ .string_literal = tokenizer.source[start..tokenizer.index] };
+    }
+
+    fn lexChar(tokenizer: *Tokenizer) Token {
+        const start = tokenizer.index;
+        tokenizer.index += 1; // skip opening '
+        if (tokenizer.index < tokenizer.source.len and tokenizer.source[tokenizer.index] == '\\') {
+            tokenizer.index += 1; // skip backslash
+            if (tokenizer.index < tokenizer.source.len) tokenizer.index += 1; // skip escaped char
+        } else if (tokenizer.index < tokenizer.source.len) {
+            tokenizer.index += 1; // skip single char
+        }
+        if (tokenizer.index < tokenizer.source.len and tokenizer.source[tokenizer.index] == '\'') {
+            tokenizer.index += 1;
+            return .{ .char_literal = tokenizer.source[start..tokenizer.index] };
+        }
+        return .{ .invalid = tokenizer.source[start..tokenizer.index] };
+    }
+
+    fn lexMultilineStringLine(tokenizer: *Tokenizer) Token {
+        const start = tokenizer.index;
+        tokenizer.index += 1; // skip \
+        while (tokenizer.index < tokenizer.source.len and tokenizer.source[tokenizer.index] != '\n' and tokenizer.source[tokenizer.index] != '\r') : (tokenizer.index += 1) {}
+        // skip newline
+        if (tokenizer.index < tokenizer.source.len and tokenizer.source[tokenizer.index] == '\r') tokenizer.index += 1;
+        if (tokenizer.index < tokenizer.source.len and tokenizer.source[tokenizer.index] == '\n') tokenizer.index += 1;
+        return .{ .multiline_string_literal_line = tokenizer.source[start..tokenizer.index] };
+    }
+
+    fn skipSpaceOrComment(tokenizer: *Tokenizer) void {
         while (tokenizer.index < tokenizer.source.len) {
             const byte = tokenizer.source[tokenizer.index];
-            if (byte == '/' and tokenizer.index + 1 < tokenizer.source.len and tokenizer.source[tokenizer.index + 1] == '/') {
-                tokenizer.skipLineComment();
+            if (asciiWhitespace(byte)) {
+                tokenizer.index += 1;
                 continue;
             }
-            if (byte != ' ' and byte != '\n' and byte != '\r' and byte != '\t') break;
-            tokenizer.index += 1;
+            if (byte == '/' and tokenizer.index + 1 < tokenizer.source.len) {
+                const ch2 = tokenizer.source[tokenizer.index + 1];
+                if (ch2 == '/') {
+                    tokenizer.skipLineComment();
+                    continue;
+                }
+                if (ch2 == '*') {
+                    tokenizer.skipBlockComment();
+                    continue;
+                }
+                break;
+            }
+            break;
         }
     }
 
@@ -158,21 +479,87 @@ pub const Tokenizer = struct {
         tokenizer.index += 2;
         while (tokenizer.index < tokenizer.source.len and tokenizer.source[tokenizer.index] != '\n' and tokenizer.source[tokenizer.index] != '\r') : (tokenizer.index += 1) {}
     }
+
+    fn skipBlockComment(tokenizer: *Tokenizer) void {
+        tokenizer.index += 2;
+        var depth: usize = 1;
+        while (tokenizer.index < tokenizer.source.len and depth > 0) : (tokenizer.index += 1) {
+            if (tokenizer.source[tokenizer.index] == '/' and
+                tokenizer.index + 1 < tokenizer.source.len and
+                tokenizer.source[tokenizer.index + 1] == '*')
+            {
+                tokenizer.index += 1;
+                depth += 1;
+            } else if (tokenizer.source[tokenizer.index] == '*' and
+                tokenizer.index + 1 < tokenizer.source.len and
+                tokenizer.source[tokenizer.index + 1] == '/')
+            {
+                tokenizer.index += 1;
+                depth -= 1;
+            }
+        }
+        if (depth > 0) tokenizer.index = tokenizer.source.len;
+    }
 };
 
+fn isDigit(byte: u8) bool {
+    return byte >= '0' and byte <= '9';
+}
+
+fn isHexDigit(byte: u8) bool {
+    return isDigit(byte) or (byte >= 'a' and byte <= 'f') or (byte >= 'A' and byte <= 'F');
+}
+
 fn matchKeyword(word: []const u8) ?Token {
+    if (std.mem.eql(u8, word, "addrspace")) return .keyword_addrspace;
+    if (std.mem.eql(u8, word, "align")) return .keyword_align;
+    if (std.mem.eql(u8, word, "allowzero")) return .keyword_allowzero;
+    if (std.mem.eql(u8, word, "and")) return .keyword_and;
+    if (std.mem.eql(u8, word, "anyframe")) return .keyword_anyframe;
+    if (std.mem.eql(u8, word, "anytype")) return .keyword_anytype;
+    if (std.mem.eql(u8, word, "asm")) return .keyword_asm;
+    if (std.mem.eql(u8, word, "break")) return .keyword_break;
+    if (std.mem.eql(u8, word, "callconv")) return .keyword_callconv;
+    if (std.mem.eql(u8, word, "catch")) return .keyword_catch;
+    if (std.mem.eql(u8, word, "comptime")) return .keyword_comptime;
     if (std.mem.eql(u8, word, "const")) return .keyword_const;
-    if (std.mem.eql(u8, word, "var")) return .keyword_var;
-    if (std.mem.eql(u8, word, "fn")) return .keyword_fn;
-    if (std.mem.eql(u8, word, "export")) return .keyword_export;
-    if (std.mem.eql(u8, word, "pub")) return .keyword_pub;
-    if (std.mem.eql(u8, word, "return")) return .keyword_return;
-    if (std.mem.eql(u8, word, "while")) return .keyword_while;
-    if (std.mem.eql(u8, word, "if")) return .keyword_if;
+    if (std.mem.eql(u8, word, "continue")) return .keyword_continue;
+    if (std.mem.eql(u8, word, "defer")) return .keyword_defer;
     if (std.mem.eql(u8, word, "else")) return .keyword_else;
+    if (std.mem.eql(u8, word, "enum")) return .keyword_enum;
+    if (std.mem.eql(u8, word, "errdefer")) return .keyword_errdefer;
+    if (std.mem.eql(u8, word, "error")) return .keyword_error;
+    if (std.mem.eql(u8, word, "export")) return .keyword_export;
+    if (std.mem.eql(u8, word, "extern")) return .keyword_extern;
+    if (std.mem.eql(u8, word, "fn")) return .keyword_fn;
+    if (std.mem.eql(u8, word, "for")) return .keyword_for;
+    if (std.mem.eql(u8, word, "if")) return .keyword_if;
+    if (std.mem.eql(u8, word, "inline")) return .keyword_inline;
+    if (std.mem.eql(u8, word, "module")) return .keyword_module;
+    if (std.mem.eql(u8, word, "noalias")) return .keyword_noalias;
+    if (std.mem.eql(u8, word, "noinline")) return .keyword_noinline;
+    if (std.mem.eql(u8, word, "nosuspend")) return .keyword_nosuspend;
+    if (std.mem.eql(u8, word, "opaque")) return .keyword_opaque;
+    if (std.mem.eql(u8, word, "or")) return .keyword_or;
+    if (std.mem.eql(u8, word, "orelse")) return .keyword_orelse;
+    if (std.mem.eql(u8, word, "packed")) return .keyword_packed;
+    if (std.mem.eql(u8, word, "pub")) return .keyword_pub;
+    if (std.mem.eql(u8, word, "resume")) return .keyword_resume;
+    if (std.mem.eql(u8, word, "return")) return .keyword_return;
+    if (std.mem.eql(u8, word, "linksection")) return .keyword_linksection;
+    if (std.mem.eql(u8, word, "struct")) return .keyword_struct;
+    if (std.mem.eql(u8, word, "suspend")) return .keyword_suspend;
+    if (std.mem.eql(u8, word, "switch")) return .keyword_switch;
+    if (std.mem.eql(u8, word, "test")) return .keyword_test;
+    if (std.mem.eql(u8, word, "threadlocal")) return .keyword_threadlocal;
+    if (std.mem.eql(u8, word, "try")) return .keyword_try;
+    if (std.mem.eql(u8, word, "union")) return .keyword_union;
+    if (std.mem.eql(u8, word, "unreachable")) return .keyword_unreachable;
+    if (std.mem.eql(u8, word, "var")) return .keyword_var;
+    if (std.mem.eql(u8, word, "volatile")) return .keyword_volatile;
+    if (std.mem.eql(u8, word, "while")) return .keyword_while;
     if (std.mem.eql(u8, word, "true")) return .keyword_true;
     if (std.mem.eql(u8, word, "false")) return .keyword_false;
-    if (std.mem.eql(u8, word, "module")) return .keyword_module;
     return null;
 }
 
@@ -227,7 +614,7 @@ test "tokenizer skips comments and handles builtins" {
     try std.testing.expectEqual(Token.colon, tok.next());
     try std.testing.expectEqualStrings("usize", tok.next().identifier);
     try std.testing.expectEqual(Token.equals, tok.next());
-    try std.testing.expectEqual(Token.builtin_int_cast, tok.next());
+    try std.testing.expectEqualStrings("intCast", tok.next().builtin);
     try std.testing.expectEqual(Token.lparen, tok.next());
     try std.testing.expectEqualStrings("7", tok.next().integer_literal);
     try std.testing.expectEqual(Token.rparen, tok.next());
@@ -242,7 +629,7 @@ test "tokenizer handles operators and comparison" {
     try std.testing.expectEqualStrings("b", tok.next().identifier);
     try std.testing.expectEqual(Token.star, tok.next());
     try std.testing.expectEqualStrings("c", tok.next().identifier);
-    try std.testing.expectEqual(Token.not_eq, tok.next());
+    try std.testing.expectEqual(Token.bang_equal, tok.next());
     try std.testing.expectEqualStrings("d", tok.next().identifier);
     try std.testing.expectEqual(Token.lt_eq, tok.next());
     try std.testing.expectEqualStrings("e", tok.next().identifier);
@@ -257,9 +644,9 @@ test "tokenizer handles string literals" {
 
 test "tokenizer handles builtins" {
     var tok = tokenize("@import @intFromEnum @intFromPtr");
-    try std.testing.expectEqual(Token.builtin_import, tok.next());
-    try std.testing.expectEqual(Token.builtin_int_from_enum, tok.next());
-    try std.testing.expectEqual(Token.builtin_int_from_ptr, tok.next());
+    try std.testing.expectEqualStrings("import", tok.next().builtin);
+    try std.testing.expectEqualStrings("intFromEnum", tok.next().builtin);
+    try std.testing.expectEqualStrings("intFromPtr", tok.next().builtin);
     try std.testing.expectEqual(Token.eof, tok.next());
 }
 
@@ -270,7 +657,7 @@ test "tokenizer handles module keyword" {
     try std.testing.expectEqual(Token.colon, tok.next());
     try std.testing.expectEqual(Token.keyword_module, tok.next());
     try std.testing.expectEqual(Token.equals, tok.next());
-    try std.testing.expectEqual(Token.builtin_import, tok.next());
+    try std.testing.expectEqualStrings("import", tok.next().builtin);
     try std.testing.expectEqual(Token.lparen, tok.next());
     try std.testing.expectEqualStrings("\"src/er/self_host/helper.er\"", tok.next().string_literal);
     try std.testing.expectEqual(Token.rparen, tok.next());

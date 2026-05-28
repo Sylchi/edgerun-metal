@@ -2975,3 +2975,28 @@ fn irTestTextWidth(_: *anyopaque, value: []const u8, _: u8) f32 {
 fn irTestGlyph(_: *anyopaque, _: u21, _: u8) renderer_ir.Error!?renderer_ir.Glyph {
     return null;
 }
+
+pub const Framebuffer = struct {
+    width: usize,
+    height: usize,
+    pixels: []ui.Color,
+
+    pub fn init(w: usize, h: usize, px: []ui.Color) Error!Framebuffer {
+        const surface = try Surface.init(w, h, px);
+        return .{ .width = surface.width, .height = surface.height, .pixels = surface.pixels };
+    }
+
+    pub fn clear(self: Framebuffer, color: ui.Color) void {
+        (Surface{ .width = self.width, .height = self.height, .pixels = self.pixels }).clear(color);
+    }
+
+    pub fn renderIr(self: Framebuffer, buffers: renderer_ir.Buffers, resources: IrResources) Error!renderer_present.Receipt {
+        return (Surface{ .width = self.width, .height = self.height, .pixels = self.pixels }).renderIrFrameWithResources(buffers, resources);
+    }
+
+    pub fn blendPixel(self: Framebuffer, x: usize, y: usize, color: ui.Color, alpha: u8) void {
+        (Surface{ .width = self.width, .height = self.height, .pixels = self.pixels }).blendPixel(x, y, color, alpha);
+    }
+};
+
+pub const Resources = IrResources;

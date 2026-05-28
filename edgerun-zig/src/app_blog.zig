@@ -3444,7 +3444,14 @@ fn demoFrame(scene: *ui.Scene, bounds: ui.Rect) ui.RenderError!void {
 
 fn nativeComponent(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, component: anytype) (ui.RenderError || interaction.Error)!void {
     try component.render(scene, bounds, .{ .style = appStyle() });
-    try component.collectInteractions(collector, bounds);
+    if (comptime @hasDecl(@TypeOf(component), "collectInteractions")) {
+        const fn_info = @typeInfo(@TypeOf(@TypeOf(component).collectInteractions)).Fn;
+        if (fn_info.params.len >= 4) {
+            try component.collectInteractions(collector, bounds, .{ .style = appStyle() });
+        } else {
+            try component.collectInteractions(collector, bounds);
+        }
+    }
 }
 
 fn nativeComponentVisual(scene: *ui.Scene, bounds: ui.Rect, component: anytype) ui.RenderError!void {

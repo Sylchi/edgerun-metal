@@ -752,3 +752,31 @@ fn testTextWidth(_: *anyopaque, value: []const u8, _: u8) f32 {
 fn testGlyph(_: *anyopaque, _: u21, _: u8) renderer_ir.Error!?renderer_ir.Glyph {
     return null;
 }
+
+pub const Workspace = struct {
+    primitives: []Primitive,
+    tile_marks: []u8,
+    dirty_ids: []u32,
+};
+
+pub fn renderIr(
+    device: Device,
+    mode: renderer_surface.Mode,
+    tile_width: u32,
+    tile_height: u32,
+    surfaces: []const Surface,
+    buffers: renderer_ir.Buffers,
+    resources: renderer_present.Resources,
+    workspace: Workspace,
+) Error!Receipt {
+    var renderer = try Renderer.init(
+        device,
+        mode,
+        tile_width,
+        tile_height,
+        workspace.primitives,
+        workspace.tile_marks,
+        workspace.dirty_ids,
+    );
+    return renderer.renderIrWithResources(surfaces, buffers, resources);
+}

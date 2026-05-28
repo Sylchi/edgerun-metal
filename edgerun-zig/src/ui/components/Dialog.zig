@@ -28,7 +28,9 @@ pub const Dialog = struct {
 
     pub fn render(self: Dialog, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         try primitives.renderSidePanelTrigger(scene, bounds, dialog_layout, options.style.accent, options.style.border, dialog_trigger_padding, dialog_open_label, options.style.bg);
-        try primitives.renderTitleDetailPanel(scene, primitives.sidePanelContentBounds(bounds, dialog_layout), self.title, self.detail, options, dialog_panel, options.style.border, options.style.text);
+        if (options.overlay.isOpen(self.id)) {
+            try primitives.renderTitleDetailPanel(scene, primitives.sidePanelContentBounds(bounds, dialog_layout), self.title, self.detail, options, dialog_panel, options.style.border, options.style.text);
+        }
     }
 
     pub fn collectInteractions(self: Dialog, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
@@ -83,7 +85,7 @@ test "dialog component renders trigger content and hit regions" {
     var regions: [2]interaction.Region = undefined;
     var collector = interaction.Collector.init(&regions);
 
-    try dialog.render(&scene, ui.Rect.init(0, 0, 240, 52), .{});
+    try dialog.render(&scene, ui.Rect.init(0, 0, 240, 52), .{ .overlay = .{ .open_ids = &.{dialog.id} } });
     try dialog.collectInteractions(&collector, ui.Rect.init(0, 0, 240, 52));
 
     try std.testing.expect(component_test.hasText(scene.written(), "Edit profile"));

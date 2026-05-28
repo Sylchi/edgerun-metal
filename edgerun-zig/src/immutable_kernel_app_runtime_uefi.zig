@@ -7,7 +7,7 @@ const interaction = @import("ui_interaction.zig");
 const renderer_font_atlas = @import("render/font_atlas_weighted.zig");
 const renderer_ir = @import("render/ir.zig");
 const renderer_pipeline = @import("render/pipeline.zig");
-const renderer_software = @import("render/software.zig");
+const renderer_software = @import("render/backends/software.zig");
 const ui = @import("ui.zig");
 const virtio_gpu = @import("virtio_gpu.zig");
 

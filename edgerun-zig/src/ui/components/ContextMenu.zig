@@ -28,7 +28,9 @@ pub const ContextMenu = struct {
 
     pub fn render(self: ContextMenu, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         try primitives.renderSidePanelTrigger(scene, bounds, menu_panel_layout, options.style.accent, options.style.border, menu_trigger_padding, context_menu_trigger, options.style.bg);
-        try primitives.renderTwoItemMenuPanel(scene, primitives.sidePanelContentBounds(bounds, menu_panel_layout), self.first, self.second, options, menu_radius, menu_list_layout);
+        if (options.overlay.isOpen(self.id)) {
+            try primitives.renderTwoItemMenuPanel(scene, primitives.sidePanelContentBounds(bounds, menu_panel_layout), self.first, self.second, options, menu_radius, menu_list_layout);
+        }
     }
 
     pub fn collectInteractions(self: ContextMenu, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
@@ -85,7 +87,7 @@ test "context menu component renders menu rows and hit regions" {
     var regions: [3]interaction.Region = undefined;
     var collector = interaction.Collector.init(&regions);
 
-    try menu.render(&scene, ui.Rect.init(0, 0, 240, 52), .{});
+    try menu.render(&scene, ui.Rect.init(0, 0, 240, 52), .{ .overlay = .{ .open_ids = &.{menu.id} } });
     try menu.collectInteractions(&collector, ui.Rect.init(0, 0, 240, 52));
 
     try std.testing.expect(component_test.hasText(scene.written(), "Context"));

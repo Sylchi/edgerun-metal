@@ -2014,7 +2014,7 @@ fn parseExprComparison(tok: *edgerun_source.Tokenizer, context: *LoweringContext
     const op_token = tok.peek();
     const op: u8 = switch (op_token) {
         .eq_eq => wasm_opcode_i32_eq,
-        .not_eq => wasm_opcode_i32_ne,
+        .bang_equal => wasm_opcode_i32_ne,
         .lt => wasm_opcode_i32_lt_s,
         .gt => wasm_opcode_i32_gt_s,
         .lt_eq => wasm_opcode_i32_le_s,
@@ -2071,22 +2071,26 @@ fn parseExprPrimary(tok: *edgerun_source.Tokenizer, context: *LoweringContext, a
             const value = parseIntLiteral(literal) orelse return error.InvalidSource;
             try emitI32Const(writer, value);
         },
-        .builtin_int_cast => {
-            if (tok.next() != .lparen) return error.InvalidSource;
-            try parseExprComparison(tok, context, args, locals, vars, calls, function_index_base, writer);
-            if (tok.next() != .rparen) return error.InvalidSource;
-        },
-        .builtin_int_from_enum => {
-            if (tok.next() != .lparen) return error.InvalidSource;
-            const arg_text = try collectTokenArgText(tok);
-            const parsed = parseValueExpression(arg_text, context) orelse return error.InvalidSource;
-            try emitI32Const(writer, parsed);
-        },
-        .builtin_int_from_ptr => {
-            if (tok.next() != .lparen) return error.InvalidSource;
-            const arg_text = try collectTokenArgText(tok);
-            const parsed = parsePointerExpression(arg_text, context) orelse return error.InvalidSource;
-            try emitI32Const(writer, parsed);
+        .builtin => |name| {
+            if (std.mem.eql(u8, name, "import")) {
+                if (tok.next() != .lparen) return error.InvalidSource;
+                if (tok.next() != .string_literal) return error.InvalidSource;
+                if (tok.next() != .rparen) return error.InvalidSource;
+            } else if (std.mem.eql(u8, name, "intCast")) {
+                if (tok.next() != .lparen) return error.InvalidSource;
+                try parseExprComparison(tok, context, args, locals, vars, calls, function_index_base, writer);
+                if (tok.next() != .rparen) return error.InvalidSource;
+            } else if (std.mem.eql(u8, name, "intFromEnum")) {
+                if (tok.next() != .lparen) return error.InvalidSource;
+                const arg_text = try collectTokenArgText(tok);
+                const parsed = parseValueExpression(arg_text, context) orelse return error.InvalidSource;
+                try emitI32Const(writer, parsed);
+            } else if (std.mem.eql(u8, name, "intFromPtr")) {
+                if (tok.next() != .lparen) return error.InvalidSource;
+                const arg_text = try collectTokenArgText(tok);
+                const parsed = parsePointerExpression(arg_text, context) orelse return error.InvalidSource;
+                try emitI32Const(writer, parsed);
+            } else return error.InvalidSource;
         },
         .keyword_if => {
             if (tok.next() != .lparen) return error.InvalidSource;
@@ -2099,11 +2103,6 @@ fn parseExprPrimary(tok: *edgerun_source.Tokenizer, context: *LoweringContext, a
             try writer.append(wasm_opcode_else);
             try parseExprComparison(tok, context, args, locals, vars, calls, function_index_base, writer);
             try writer.append(wasm_opcode_end);
-        },
-        .builtin_import => {
-            if (tok.next() != .lparen) return error.InvalidSource;
-            if (tok.next() != .string_literal) return error.InvalidSource;
-            if (tok.next() != .rparen) return error.InvalidSource;
         },
         .identifier => |name| {
             if (tok.peek() == .dot) {

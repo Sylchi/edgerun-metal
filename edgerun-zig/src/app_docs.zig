@@ -75,6 +75,8 @@ pub const State = struct {
     hover_y: f32 = -1.0,
     selected_doc_index: ?usize = null,
     selected_component_index: ?usize = null,
+    drag_id: u32 = 0,
+    drag_value: f32 = -1.0,
 };
 
 pub const DocSection = enum {
@@ -595,7 +597,7 @@ fn renderSectionPage(scene: *ui.Scene, collector: *interaction.Collector, bounds
 
     if (page.section == .components) {
         cursor_y += section_gap;
-        try component_gallery.renderDocsContent(scene, collector, ui.Rect.init(bounds.x, cursor_y, bounds.w, component_gallery.docsContentHeight(bounds.w, state.selected_component_index)), state.selected_component_index, state.hover_x, state.hover_y);
+        try component_gallery.renderDocsContent(scene, collector, ui.Rect.init(bounds.x, cursor_y, bounds.w, component_gallery.docsContentHeight(bounds.w, state.selected_component_index)), state.selected_component_index, state.hover_x, state.hover_y, state.drag_id, state.drag_value);
     } else if (page.section == .media) {
         cursor_y += section_gap;
         try renderMediaDemo(scene, ui.Rect.init(bounds.x, cursor_y, bounds.w, mediaDemoHeight(bounds.w)));

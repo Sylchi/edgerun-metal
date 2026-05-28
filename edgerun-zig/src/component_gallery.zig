@@ -58,10 +58,16 @@ pub const grid_gap_default: f32 = 40;
 pub const grid_gap_wide: f32 = 56;
 var gallery_text_clip_top: ?f32 = null;
 var gallery_hover_point: ?HoverPoint = null;
+var gallery_drag_override: ?DragOverride = null;
 
 const HoverPoint = struct {
     x: f32,
     y: f32,
+};
+
+pub const DragOverride = struct {
+    id: u32,
+    value: f32,
 };
 
 pub const Category = enum {
@@ -512,13 +518,17 @@ pub fn docsContentHeight(width: f32, selected_index: ?usize) f32 {
     return selected_h + catalogSectionHeight(columns, gap);
 }
 
-pub fn renderDocsContent(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, selected_index: ?usize, hover_x: f32, hover_y: f32) GalleryError!void {
+pub fn renderDocsContent(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, selected_index: ?usize, hover_x: f32, hover_y: f32, drag_id: u32, drag_value: f32) GalleryError!void {
     const previous_hover_point = gallery_hover_point;
     gallery_hover_point = if (hover_x >= hover_disabled_coord + 1 and hover_y >= hover_disabled_coord + 1)
         .{ .x = hover_x, .y = hover_y }
     else
         null;
     defer gallery_hover_point = previous_hover_point;
+
+    const previous_drag = gallery_drag_value;
+    gallery_drag_value = if (drag_value >= 0.0) .{ .id = drag_id, .value = drag_value } else null;
+    defer gallery_drag_value = previous_drag;
 
     const gap = grid_gap_default;
     const columns = galleryColumnCount(bounds.w, gap);
@@ -808,8 +818,12 @@ fn primitivePreview(kind: PreviewKind, id: u32) PrimitivePreview {
 
 fn renderComponentPreview(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, component: component_union.Component) GalleryError!void {
     try validateCanonicalPreview(component);
-    try component.render(scene, bounds, .{ .style = componentStyle() });
-    try component.collectInteractions(collector, bounds);
+    const meta = component.accessibility();
+    const open_ids = if (meta.control_id) |id| (&[_]u32{id})[0..] else &.{};
+    const drag_value = if (meta.control_id) |id| if (gallery_drag_value) |drag| if (drag.id == id) drag.value else null else null else null;
+    const options = .{ .style = componentStyle(), .overlay = .{ .open_ids = open_ids }, .drag_value = drag_value };
+    try component.render(scene, bounds, options);
+    try component.collectInteractions(collector, bounds, options);
 }
 
 fn validateCanonicalPreview(component: component_union.Component) GalleryError!void {

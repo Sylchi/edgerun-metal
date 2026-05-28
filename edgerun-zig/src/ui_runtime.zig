@@ -4,6 +4,7 @@ const interaction = @import("ui_interaction.zig");
 const ui = @import("ui.zig");
 
 const drag_start_threshold_px: f32 = 5.0;
+const max_overlays: usize = 16;
 
 pub const ActionKind = enum(u8) {
     none,
@@ -29,11 +30,22 @@ pub const Key = enum(u8) {
     escape,
 };
 
+pub const DragValue = struct {
+    id: u32,
+    pointer_x: f32,
+    bounds: ui.Rect,
+
+    pub fn value(self: DragValue) f32 {
+        return ui.clampUnit((self.pointer_x - self.bounds.x) / self.bounds.w);
+    }
+};
+
 pub const Action = struct {
     kind: ActionKind = .none,
     hit: ?interaction.Region = null,
     source: ?ui.DragSource = null,
     target: ?ui.DropTarget = null,
+    value_drag: ?DragValue = null,
 
     pub fn none() Action {
         return .{};
@@ -50,11 +62,65 @@ const DragState = struct {
     target: ?ui.DropTarget = null,
 };
 
+pub const OverlayManager = struct {
+    open_ids: [max_overlays]u32 = undefined,
+    count: usize = 0,
+
+    pub fn toggle(self: *OverlayManager, id: u32) void {
+        for (self.open_ids[0..self.count], 0..) |oid, i| {
+            if (oid == id) {
+                self.open_ids[i] = self.open_ids[self.count - 1];
+                self.count -= 1;
+                return;
+            }
+        }
+        if (self.count < max_overlays) {
+            self.open_ids[self.count] = id;
+            self.count += 1;
+        }
+    }
+
+    pub fn open(self: *OverlayManager, id: u32) void {
+        if (!self.isOpen(id) and self.count < max_overlays) {
+            self.open_ids[self.count] = id;
+            self.count += 1;
+        }
+    }
+
+    pub fn close(self: *OverlayManager, id: u32) void {
+        for (self.open_ids[0..self.count], 0..) |oid, i| {
+            if (oid == id) {
+                self.open_ids[i] = self.open_ids[self.count - 1];
+                self.count -= 1;
+                return;
+            }
+        }
+    }
+
+    pub fn dismissAll(self: *OverlayManager) void {
+        self.count = 0;
+    }
+
+    pub fn isOpen(self: OverlayManager, id: u32) bool {
+        for (self.open_ids[0..self.count]) |oid| {
+            if (oid == id) return true;
+        }
+        return false;
+    }
+
+    pub fn toSlice(self: OverlayManager) []const u32 {
+        return self.open_ids[0..self.count];
+    }
+};
+
 pub const State = struct {
     hovered: ?interaction.Region = null,
     active: ?interaction.Region = null,
     focused: ?interaction.Region = null,
     drag: ?DragState = null,
+    drag_value: ?DragValue = null,
+    persisted_value: ?DragValue = null,
+    overlays: OverlayManager = .{},
 
     pub fn refreshHover(self: *State, regions: []const interaction.Region, x: f32, y: f32) void {
         self.hovered = if (x < 0.0 or y < 0.0) null else input.hitTest(regions, x, y);
@@ -62,6 +128,17 @@ pub const State = struct {
 
     pub fn clearHover(self: *State) void {
         self.hovered = null;
+    }
+
+    pub fn dragValueFor(self: State, id: u32) ?f32 {
+        if (self.drag_value) |drag| {
+            if (drag.id == id) return drag.value();
+            return null;
+        }
+        if (self.persisted_value) |drag| {
+            if (drag.id == id) return drag.value();
+        }
+        return null;
     }
 
     pub fn hoverKind(self: State) ?ui.HitKind {
@@ -98,6 +175,15 @@ pub const State = struct {
             .current_x = x,
             .current_y = y,
         } else null;
+        if (hit) |h| {
+            if (h.kind == .slider) {
+                self.drag_value = .{
+                    .id = h.id,
+                    .pointer_x = x,
+                    .bounds = h.bounds,
+                };
+            }
+        }
         return if (hit) |value| .{ .kind = .hovered, .hit = value } else Action.none();
     }
 
@@ -132,6 +218,15 @@ pub const State = struct {
             .current_x = x,
             .current_y = y,
         } else null;
+        if (hit) |h| {
+            if (h.kind == .slider) {
+                self.drag_value = .{
+                    .id = h.id,
+                    .pointer_x = x,
+                    .bounds = h.bounds,
+                };
+            }
+        }
         return if (hit) |value| .{ .kind = .hovered, .hit = value } else Action.none();
     }
 
@@ -218,12 +313,19 @@ pub const State = struct {
                 return .{ .kind = .drag_moved, .source = drag.source, .target = next_target };
             }
         }
+        if (self.drag_value) |*drag| {
+            drag.pointer_x = x;
+        }
         return if (self.hovered) |value| .{ .kind = .hovered, .hit = value } else Action.none();
     }
 
     pub fn pointerUp(self: *State, commands: []const ui.Command, regions: []const interaction.Region, x: f32, y: f32) Action {
         _ = commands;
         self.hovered = input.hitTest(regions, x, y);
+
+        self.persisted_value = self.drag_value;
+        self.drag_value = null;
+
         const finished_drag = self.drag;
         self.drag = null;
         defer self.active = null;

@@ -29,6 +29,21 @@ const workspace_sidebar_bg = ui.Color{ .r = 24, .g = 24, .b = 24 };
 const workspace_main_bg = ui.Color{ .r = 10, .g = 12, .b = 16 };
 const workspace_status_bg = ui.Color{ .r = 0, .g = 122, .b = 204 };
 
+pub const FrontendPage = enum {
+    landing,
+    blog,
+    docs,
+    components,
+};
+
+pub fn frontendPage(route: app_navigation.Route) FrontendPage {
+    if (route.selected_blog_post_id != 0) return .blog;
+    if (route.blog_arc_filter_index != null) return .blog;
+    if (route.selected_doc_index != null) return .docs;
+    if (route.selected_component_index != null) return .components;
+    return .landing;
+}
+
 pub const State = struct {
     route: app_navigation.Route = .{},
     scroll_y: f32 = 0.0,
@@ -39,6 +54,8 @@ pub const State = struct {
     public_identity_ready: bool = false,
     component_layout: component_gallery.LayoutMode = .masonry,
     component_grid_gap: f32 = component_gallery.grid_gap_default,
+    drag_id: u32 = 0,
+    drag_value: f32 = -1.0,
     source: app_source.State = .{},
     agent: app_agent.State = .{},
     context_menu: ContextMenu = .{},
@@ -63,15 +80,16 @@ pub fn render(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Re
 
 pub fn contentHeight(width: f32, state: State) f32 {
     return switch (state.route.view) {
-        .landing => app_landing.contentHeight(width),
-        .blog => if (state.route.selected_blog_post_id == 0)
-            app_blog.indexContentHeightFiltered(width, state.route.blog_arc_filter_index)
-        else
-            app_blog.postContentHeight(width, state.route.selected_blog_post_id),
-        .docs => app_docs.contentHeightForState(width, .{ .selected_doc_index = state.route.selected_doc_index, .selected_component_index = state.route.selected_component_index }),
-        .components => workspace_content_pad * 2.0 + component_gallery.docsContentHeight(@max(1.0, width - workspace_content_pad * 2.0), state.route.selected_component_index),
-        .source => app_source.contentHeight(width, state.source),
-        .agent => app_agent.contentHeight(width, state.agent),
+        .backend => app_source.contentHeight(width, state.source),
+        .frontend => switch (frontendPage(state.route)) {
+            .landing => app_landing.contentHeight(width),
+            .blog => if (state.route.selected_blog_post_id == 0)
+                app_blog.indexContentHeightFiltered(width, state.route.blog_arc_filter_index)
+            else
+                app_blog.postContentHeight(width, state.route.selected_blog_post_id),
+            .docs => app_docs.contentHeightForState(width, .{ .selected_doc_index = state.route.selected_doc_index, .selected_component_index = state.route.selected_component_index }),
+            .components => workspace_content_pad * 2.0 + component_gallery.docsContentHeight(@max(1.0, width - workspace_content_pad * 2.0), state.route.selected_component_index),
+        },
     };
 }
 
@@ -90,14 +108,13 @@ fn renderWorkspace(scene: *ui.Scene, collector: *interaction.Collector, bounds: 
 }
 
 fn renderWorkspaceTop(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
-    switch (state.route.view) {
-        .source => try app_source.renderWorkspaceTopBar(scene, collector, bounds, state.source),
-        else => {
-            try scene.pushRect(bounds, workspace_sidebar_bg, .fill, 0.0, 0.0);
-            try scene.pushRect(ui.Rect.init(bounds.x, bounds.y + bounds.h - 1.0, bounds.w, 1.0), design.palette.border, .fill, 0.0, 0.0);
-            try text_component.Text.renderAligned(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 18.0, bounds.w - 32.0, 16.0), statusText(state.route), design.palette.text, .start);
-        },
+    if (state.route.view == .backend) {
+        try app_source.renderWorkspaceTopBar(scene, collector, bounds, state.source);
+        return;
     }
+    try scene.pushRect(bounds, workspace_sidebar_bg, .fill, 0.0, 0.0);
+    try scene.pushRect(ui.Rect.init(bounds.x, bounds.y + bounds.h - 1.0, bounds.w, 1.0), design.palette.border, .fill, 0.0, 0.0);
+    try text_component.Text.renderAligned(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 18.0, bounds.w - 32.0, 16.0), statusText(state.route), design.palette.text, .start);
 }
 
 fn renderWorkspaceRail(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, active: app_navigation.View) !void {
@@ -119,7 +136,7 @@ fn renderWorkspaceRail(scene: *ui.Scene, collector: *interaction.Collector, boun
 
 fn renderWorkspaceSidebar(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
     const route = state.route;
-    if (route.view == .source) {
+    if (route.view == .backend) {
         try app_source.renderWorkspaceSidebar(scene, collector, bounds, state.source);
         return;
     }
@@ -128,7 +145,7 @@ fn renderWorkspaceSidebar(scene: *ui.Scene, collector: *interaction.Collector, b
     try text_component.Text.renderAligned(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 14.0, bounds.w - 32.0, 16.0), "EDGERUN", design.palette.text, .start);
     try text_component.Text.renderAligned(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 36.0, bounds.w - 32.0, 14.0), sidebarDetail(route), design.palette.muted, .start);
     var y = bounds.y + 68.0;
-    const rows = app_navigation.topLevelWorkspaceBindings();
+    const rows = app_navigation.topLevelBindings();
     for (rows) |row| {
         const row_bounds = ui.Rect.init(bounds.x + 10.0, y, bounds.w - 20.0, 42.0);
         try app_chrome.renderNavItem(scene, collector, .{
@@ -146,44 +163,49 @@ fn renderWorkspaceMain(scene: *ui.Scene, collector: *interaction.Collector, boun
     if (try scene.pushClip(bounds)) {
         defer scene.popClip();
         switch (state.route.view) {
-            .source => try app_source.renderWorkspace(scene, collector, bounds, state.source),
-            .agent => try app_agent.render(scene, collector, bounds, state.agent),
-            .landing => try app_landing.render(scene, collector, shiftedPageBounds(bounds), .{
-                .scroll_y = state.scroll_y,
-                .hover_x = state.hover_x,
-                .hover_y = state.hover_y,
-                .frame_ms = state.frame_ms,
-                .public_identity = state.public_identity,
-                .public_identity_ready = state.public_identity_ready,
-            }),
-            .blog => try app_blog.render(scene, collector, shiftedPageBounds(bounds), .{
-                .scroll_y = state.scroll_y,
-                .hover_x = state.hover_x,
-                .hover_y = state.hover_y,
-                .selected_post_id = state.route.selected_blog_post_id,
-                .arc_filter_index = state.route.blog_arc_filter_index,
-            }),
-            .docs => try app_docs.render(scene, collector, shiftedPageBounds(bounds), .{
-                .scroll_y = state.scroll_y,
-                .hover_x = state.hover_x,
-                .hover_y = state.hover_y,
-                .selected_doc_index = state.route.selected_doc_index,
-                .selected_component_index = state.route.selected_component_index,
-            }),
-            .components => try component_gallery.renderDocsContent(
-                scene,
-                collector,
-                workspaceContentBounds(bounds, state.scroll_y),
-                state.route.selected_component_index,
-                state.hover_x,
-                state.hover_y,
-            ),
+            .backend => try app_source.renderWorkspace(scene, collector, bounds, state.source),
+            .frontend => switch (frontendPage(state.route)) {
+                .landing => try app_landing.render(scene, collector, shiftedPageBounds(bounds), .{
+                    .scroll_y = state.scroll_y,
+                    .hover_x = state.hover_x,
+                    .hover_y = state.hover_y,
+                    .frame_ms = state.frame_ms,
+                    .public_identity = state.public_identity,
+                    .public_identity_ready = state.public_identity_ready,
+                }),
+                .blog => try app_blog.render(scene, collector, shiftedPageBounds(bounds), .{
+                    .scroll_y = state.scroll_y,
+                    .hover_x = state.hover_x,
+                    .hover_y = state.hover_y,
+                    .selected_post_id = state.route.selected_blog_post_id,
+                    .arc_filter_index = state.route.blog_arc_filter_index,
+                }),
+                .docs => try app_docs.render(scene, collector, shiftedPageBounds(bounds), .{
+                    .scroll_y = state.scroll_y,
+                    .hover_x = state.hover_x,
+                    .hover_y = state.hover_y,
+                    .selected_doc_index = state.route.selected_doc_index,
+                    .selected_component_index = state.route.selected_component_index,
+                    .drag_id = state.drag_id,
+                    .drag_value = state.drag_value,
+                }),
+                .components => try component_gallery.renderDocsContent(
+                    scene,
+                    collector,
+                    workspaceContentBounds(bounds, state.scroll_y),
+                    state.route.selected_component_index,
+                    state.hover_x,
+                    state.hover_y,
+                    state.drag_id,
+                    state.drag_value,
+                ),
+            },
         }
     }
 }
 
 fn renderWorkspaceStatus(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
-    if (state.route.view == .source) {
+    if (state.route.view == .backend) {
         try app_source.renderWorkspaceStatus(scene, bounds, state.source);
         return;
     }
@@ -206,23 +228,25 @@ fn workspaceContentBounds(bounds: ui.Rect, scroll_y: f32) ui.Rect {
 
 fn sidebarDetail(route: app_navigation.Route) []const u8 {
     return switch (route.view) {
-        .source => "workspace",
-        .agent => "local agent",
-        .docs => "documentation",
-        .blog => "academy",
-        .components => "components",
-        .landing => "overview",
+        .backend => "workspace",
+        .frontend => switch (frontendPage(route)) {
+            .landing => "overview",
+            .blog => "academy",
+            .docs => "documentation",
+            .components => "components",
+        },
     };
 }
 
 fn statusText(route: app_navigation.Route) []const u8 {
     return switch (route.view) {
-        .source => "Source | app-owned VFS | compiler ready",
-        .agent => "Agent | local model | host-owned tools | ui_stream native pipe",
-        .docs => "Docs | contained workspace tab",
-        .blog => "Academy | contained workspace tab",
-        .components => "Components | edit and preview workspace",
-        .landing => "Overview | contained workspace tab",
+        .backend => "Source | app-owned VFS | compiler ready",
+        .frontend => switch (frontendPage(route)) {
+            .landing => "Overview | contained workspace tab",
+            .blog => "Academy | contained workspace tab",
+            .docs => "Docs | contained workspace tab",
+            .components => "Components | edit and preview workspace",
+        },
     };
 }
 
@@ -271,14 +295,11 @@ fn renderContextMenuPanel(scene: *ui.Scene, collector: *interaction.Collector, b
 
 test "app frame renders every top level route through one scene builder" {
     const routes = [_]app_navigation.Route{
-        .{ .view = .landing },
-        .{ .view = .blog },
-        .{ .view = .docs },
-        .{ .view = .docs, .selected_doc_index = app_docs.indexBySlug("media") },
-        .{ .view = .docs, .selected_doc_index = app_docs.indexBySlug("component-system") },
-        .{ .view = .components },
-        .{ .view = .source },
-        .{ .view = .agent },
+        .{},
+        .{ .view = .frontend, .selected_blog_post_id = app_blog.postIdAt(0) },
+        .{ .view = .frontend, .selected_doc_index = app_docs.indexBySlug("media") },
+        .{ .view = .frontend, .selected_doc_index = app_docs.indexBySlug("component-system") },
+        .{ .view = .backend },
     };
     for (routes) |route| {
         var commands: [4096]ui.Command = undefined;
@@ -302,15 +323,10 @@ test "app frame routes through workspace sidebar instead of top navbar" {
     var scene = ui.Scene.initWithClips(&commands, &clips);
     var collector = interaction.Collector.init(&regions);
 
-    try render(&scene, &collector, ui.Rect.init(0, 0, 1280, 800), .{ .route = .{ .view = .components } });
+    try render(&scene, &collector, ui.Rect.init(0, 0, 1280, 800), .{ .route = .{} });
 
-    try std.testing.expect(hasText(scene.written(), "Components"));
-    try expectHit(collector.written(), app_navigation.topLevelButtonId(.source));
-    try expectHit(collector.written(), app_navigation.topLevelButtonId(.agent));
-    try expectHit(collector.written(), app_navigation.topLevelButtonId(.components));
-    try expectHit(collector.written(), app_navigation.topLevelButtonId(.docs));
-    try expectHit(collector.written(), app_navigation.topLevelButtonId(.blog));
-    try expectNoHit(collector.written(), app_navigation.topLevelButtonId(.logo));
+    try expectHit(collector.written(), app_navigation.topLevelButtonId(.backend));
+    try expectHit(collector.written(), app_navigation.topLevelButtonId(.frontend));
 }
 
 test "app frame uses source editor as workspace shell without nested chrome" {
@@ -321,7 +337,7 @@ test "app frame uses source editor as workspace shell without nested chrome" {
     var collector = interaction.Collector.init(&regions);
 
     try render(&scene, &collector, ui.Rect.init(0, 0, 1280, 800), .{
-        .route = .{ .view = .source },
+        .route = .{ .view = .backend },
         .source = .{
             .label = "src/app_runtime.zig",
             .source = "const std = @import(\"std\");\n",
@@ -358,8 +374,7 @@ test "app frame renders agent as a usable workspace tab" {
     var scene = ui.Scene.initWithClips(&commands, &clips);
     var collector = interaction.Collector.init(&regions);
 
-    try render(&scene, &collector, ui.Rect.init(0, 0, 1280, 800), .{ .route = .{ .view = .agent } });
-
+    try app_agent.render(&scene, &collector, ui.Rect.init(0, 0, 1280, 800), .{});
     try std.testing.expect(hasText(scene.written(), "Owned local agent pipeline"));
     try expectHit(collector.written(), app_agent.run_hit_id);
     try expectHit(collector.written(), app_agent.input_hit_id);
@@ -373,7 +388,7 @@ test "app frame renders source jump context menu as shared ui" {
     var collector = interaction.Collector.init(&regions);
 
     try render(&scene, &collector, ui.Rect.init(0, 0, 900, 640), .{
-        .route = .{ .view = .docs },
+        .route = .{ .view = .frontend, .selected_doc_index = app_docs.indexBySlug("media") },
         .context_menu = .{
             .open = true,
             .x = 240.0,
@@ -396,7 +411,7 @@ test "app frame renders every component route from the shared catalog" {
         var collector = interaction.Collector.init(&regions);
         try render(&scene, &collector, ui.Rect.init(0, 0, 1280, 800), .{
             .route = .{
-                .view = .docs,
+                .view = .frontend,
                 .selected_doc_index = app_docs.indexBySlug("component-system"),
                 .selected_component_index = index,
             },
@@ -407,21 +422,17 @@ test "app frame renders every component route from the shared catalog" {
 
 test "app frame owns content height for route state" {
     const width: f32 = 1280.0;
-    try std.testing.expectEqual(app_landing.contentHeight(width), contentHeight(width, .{ .route = .{ .view = .landing } }));
-    try std.testing.expectEqual(app_blog.indexContentHeight(width), contentHeight(width, .{ .route = .{ .view = .blog } }));
-    try std.testing.expectEqual(app_blog.postContentHeight(width, app_blog.postIdAt(0)), contentHeight(width, .{ .route = .{ .view = .blog, .selected_blog_post_id = app_blog.postIdAt(0) } }));
-    try std.testing.expectEqual(app_docs.contentHeight(width), contentHeight(width, .{ .route = .{ .view = .docs } }));
+    const button_index = component_gallery.indexBySlug("button").?;
+    try std.testing.expectEqual(app_landing.contentHeight(width), contentHeight(width, .{ .route = .{ .view = .frontend } }));
+    try std.testing.expectEqual(app_blog.postContentHeight(width, app_blog.postIdAt(0)), contentHeight(width, .{ .route = .{ .view = .frontend, .selected_blog_post_id = app_blog.postIdAt(0) } }));
     try std.testing.expectEqual(
         app_docs.contentHeightForState(width, .{ .selected_doc_index = app_docs.indexBySlug("media") }),
-        contentHeight(width, .{ .route = .{ .view = .docs, .selected_doc_index = app_docs.indexBySlug("media") } }),
+        contentHeight(width, .{ .route = .{ .view = .frontend, .selected_doc_index = app_docs.indexBySlug("media") } }),
     );
-    try std.testing.expectEqual(app_source.contentHeight(width, .{}), contentHeight(width, .{ .route = .{ .view = .source } }));
-    try std.testing.expectEqual(app_agent.contentHeight(width, .{}), contentHeight(width, .{ .route = .{ .view = .agent } }));
-
-    const button_index = component_gallery.indexBySlug("button").?;
+    try std.testing.expectEqual(app_source.contentHeight(width, .{}), contentHeight(width, .{ .route = .{ .view = .backend } }));
     try std.testing.expectEqual(
         workspace_content_pad * 2.0 + component_gallery.docsContentHeight(width - workspace_content_pad * 2.0, button_index),
-        contentHeight(width, .{ .route = .{ .view = .components, .selected_component_index = button_index } }),
+        contentHeight(width, .{ .route = .{ .view = .frontend, .selected_component_index = button_index } }),
     );
 }
 

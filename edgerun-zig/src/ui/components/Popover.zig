@@ -24,10 +24,12 @@ pub const Popover = struct {
 
     pub fn render(self: Popover, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         try primitives.renderSidePanelTrigger(scene, bounds, popover_layout, options.style.accent, options.style.border, primitives.control_text_padding, self.trigger, options.style.bg);
-        const content_bounds = primitives.sidePanelContentBounds(bounds, popover_layout);
-        try scene.pushRect(content_bounds, options.style.panel, .fill, popover_radius, 0.0);
-        try scene.pushRect(content_bounds, options.style.border, .border, popover_radius, 0.0);
-        try primitives.renderControlText(scene, content_bounds, popover_padding, primitives.control_label_height, self.content, options.style.text, .start);
+        if (options.overlay.isOpen(self.id)) {
+            const content_bounds = primitives.sidePanelContentBounds(bounds, popover_layout);
+            try scene.pushRect(content_bounds, options.style.panel, .fill, popover_radius, 0.0);
+            try scene.pushRect(content_bounds, options.style.border, .border, popover_radius, 0.0);
+            try primitives.renderControlText(scene, content_bounds, popover_padding, primitives.control_label_height, self.content, options.style.text, .start);
+        }
     }
 
     pub fn collectInteractions(self: Popover, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
@@ -92,7 +94,7 @@ test "popover component renders trigger content and hit regions" {
     var regions: [2]interaction.Region = undefined;
     var collector = interaction.Collector.init(&regions);
 
-    try popover.render(&scene, ui.Rect.init(0, 0, 240, 52), .{});
+    try popover.render(&scene, ui.Rect.init(0, 0, 240, 52), .{ .overlay = .{ .open_ids = &.{popover.id} } });
     try popover.collectInteractions(&collector, ui.Rect.init(0, 0, 240, 52));
 
     try std.testing.expect(component_test.hasText(scene.written(), "Open"));

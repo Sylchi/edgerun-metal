@@ -36,8 +36,7 @@ pub fn Slot(comptime Component: type) type {
         }
 
         pub fn collectInteractions(self: Self, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) interaction.Error!void {
-            _ = options;
-            return self.child.collectInteractions(collector, bounds);
+            return self.child.collectInteractions(collector, bounds, options);
         }
 
         pub fn collectAccessibility(self: Self, tree: *common.AccessibilityTree, bounds: ui.Rect, options: RenderOptions) common.AccessibilityError!void {

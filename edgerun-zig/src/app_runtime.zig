@@ -175,7 +175,7 @@ var packed_overlay_icon_line_vertex_float_len: usize = 0;
 var font_atlas: renderer_font_atlas.Atlas = undefined;
 var font_atlas_ready = false;
 var font_device_scale: f32 = 1.0;
-var font_atlas_generation: u32 = 0;
+
 var frame_width: usize = 0;
 var frame_height: usize = 0;
 var last_command_count: usize = 0;
@@ -280,7 +280,7 @@ const SourceEditorSnapshot = struct {
 };
 
 const AppRuntimeState = struct {
-    view: AppView = .source,
+    view: AppView = .backend,
     selected_blog_post_id: u32 = 0,
     blog_arc_filter_index: ?usize = null,
     selected_doc_index: ?usize = null,
@@ -473,8 +473,7 @@ export fn er_ui_font_atlas_ptr() usize {
 }
 
 export fn er_ui_font_atlas_generation() u32 {
-    ensureFontAtlas() catch return 0;
-    return font_atlas_generation;
+    return font_atlas.cacheRevision();
 }
 
 export fn er_ui_width() u32 {
@@ -937,7 +936,7 @@ export fn er_ui_app_activate_hit(hit_id: u32) u32 {
         .open_context_source => {
             if (context_source_label.len == 0) return @intFromEnum(app_state.queued_action);
             if (selectSourceEditorLabel(context_source_label) == .ok) {
-                applyRoute(.{ .view = .source });
+                applyRoute(.{ .view = .backend });
             }
             context_menu_open = false;
         },
@@ -978,6 +977,7 @@ fn appKeyEvent(key: []const u8, ctrl: u32, meta: u32, alt: u32, shift: u32) u32 
         return 0;
     }
     if (keyFromText(key, shift)) |runtime_key| {
+        if (runtime_key == .escape) runtime_state.overlays.dismissAll();
         const focused_before = runtime_state.focusHitId();
         const action = runtime_state.keyDown(lastRegions(), runtime_key);
         recordAction(action);
@@ -1022,15 +1022,15 @@ export fn er_ui_event(kind_raw: u32, x: f32, y: f32, delta_y: f32, ctrl: u32, me
 }
 
 fn sourceEditorFocused() bool {
-    return app_state.view == .source and runtime_state.focusKind() == .textarea and runtime_state.focusHitId() == app_source.editor_textarea_id;
+    return app_state.view == .backend and runtime_state.focusKind() == .textarea and runtime_state.focusHitId() == app_source.editor_textarea_id;
 }
 
 fn sourceExplorerSearchFocused() bool {
-    return app_state.view == .source and runtime_state.focusKind() == .input and runtime_state.focusHitId() == app_source.explorer_search_input_id;
+    return app_state.view == .backend and runtime_state.focusKind() == .input and runtime_state.focusHitId() == app_source.explorer_search_input_id;
 }
 
 fn handleSourcePointerDown(x: f32, y: f32, width: f32, height: f32) bool {
-    if (app_state.view != .source) return false;
+    if (app_state.view != .backend) return false;
     const hit_id = currentHoverHitId();
     if (hit_id == app_source.editor_textarea_id) {
         setSourceEditorCursor(sourceCursorFromPoint(x, y, width, height));
@@ -1100,14 +1100,14 @@ fn insertSourceSearchText(text: []const u8) bool {
 }
 
 fn handleSourcePointerMove(x: f32, y: f32, width: f32, height: f32) bool {
-    if (!source_pointer_drag_select or app_state.view != .source) return false;
+    if (!source_pointer_drag_select or app_state.view != .backend) return false;
     const cursor = sourceCursorFromPoint(x, y, width, height);
     moveSourceEditorCursor(cursor, true);
     return true;
 }
 
 fn handleSourceDoubleClick(x: f32, y: f32, width: f32, height: f32) bool {
-    if (app_state.view != .source) return false;
+    if (app_state.view != .backend) return false;
     runtime_state.refreshHover(lastRegions(), x, y);
     if (currentHoverHitId() != app_source.editor_textarea_id) return false;
     const cursor = sourceCursorFromPoint(x, y, width, height);
@@ -1122,7 +1122,7 @@ fn sourceCursorFromPoint(x: f32, y: f32, width: f32, height: f32) usize {
 }
 
 fn scrollSourceEditorByWheel(delta_y: f32) bool {
-    if (app_state.view != .source or currentHoverHitId() != app_source.editor_textarea_id) return false;
+    if (app_state.view != .backend or currentHoverHitId() != app_source.editor_textarea_id) return false;
     const magnitude = @abs(delta_y);
     const lines: usize = @max(1, @as(usize, @intFromFloat(magnitude / source_editor_wheel_pixels_per_line)));
     if (delta_y > 0) {
@@ -2067,7 +2067,7 @@ export fn er_ui_app_scroll_y() f32 {
 }
 
 export fn er_ui_app_blog_post_content_height(width: f32, post_id: u32) f32 {
-    return app_frame.contentHeight(width, .{ .route = .{ .view = .blog, .selected_blog_post_id = post_id } });
+    return app_frame.contentHeight(width, .{ .route = .{ .view = .frontend, .selected_blog_post_id = post_id } });
 }
 
 export fn er_ui_app_content_height(width: f32) f32 {
@@ -2240,6 +2240,7 @@ fn scaleSceneCommand(command: *ui.Command, scale: f32) void {
         .icon_quad => |*quad| scaleRect(&quad.bounds, scale),
         .text_quad => |*quad| scaleRect(&quad.bounds, scale),
         .image_quad => |*quad| scaleRect(&quad.bounds, scale),
+        .svg_quad => |*quad| scaleRect(&quad.bounds, scale),
         .transition => {},
     }
 }
@@ -2414,6 +2415,22 @@ fn storeLastRegions(regions: []const interaction.Region) error{InteractionBudget
     last_region_count = regions.len;
 }
 
+fn currentDragId() u32 {
+    if (runtime_state.value_drag) |drag| return drag.id;
+    if (runtime_state.last_value_drag) |drag| return drag.id;
+    return 0;
+}
+
+fn currentDragValue() f32 {
+    if (runtime_state.value_drag) |drag| {
+        return ui.clampUnit((drag.current_x - drag.bounds.x) / drag.bounds.w);
+    }
+    if (runtime_state.last_value_drag) |drag| {
+        return ui.clampUnit((drag.current_x - drag.bounds.x) / drag.bounds.w);
+    }
+    return -1.0;
+}
+
 fn currentAppFrameState(hover_x: f32, hover_y: f32, frame_ms: f32) app_frame.State {
     return .{
         .route = currentRoute(),
@@ -2423,7 +2440,9 @@ fn currentAppFrameState(hover_x: f32, hover_y: f32, frame_ms: f32) app_frame.Sta
         .frame_ms = frame_ms,
         .public_identity = publicIdentityText(),
         .public_identity_ready = ephemeral_identity_ready,
-        .source = if (app_state.view == .source) currentSourceState(hover_x, hover_y) else .{},
+        .drag_id = currentDragId(),
+        .drag_value = currentDragValue(),
+        .source = if (app_state.view == .backend) currentSourceState(hover_x, hover_y) else .{},
         .context_menu = .{
             .open = context_menu_open,
             .x = context_menu_x,
@@ -2554,8 +2573,8 @@ fn currentRoute() app_navigation.Route {
 fn sourceLabelForHit(route: app_navigation.Route, hit_id: u32, out: []u8) ?[]const u8 {
     if (hit_id == 0) return null;
     const index = switch (route.view) {
-        .components, .docs => component_gallery.indexByCatalogHit(hit_id) orelse component_gallery.indexByPreviewHit(hit_id),
-        else => null,
+        .frontend => component_gallery.indexByCatalogHit(hit_id) orelse component_gallery.indexByPreviewHit(hit_id),
+        .backend => null,
     } orelse return null;
     return component_gallery.sourcePathForIndex(index, out);
 }
@@ -2579,6 +2598,15 @@ fn recordAction(action: ui_runtime.Action) void {
     last_action_scope_id = if (action.source) |source| source.scope_id else 0;
     last_action_from_index = if (action.source) |source| @intCast(source.index) else 0;
     last_action_to_index = if (action.target) |target| @intCast(target.index) else 0;
+    if (action.kind == .activated) {
+        if (action.hit) |hit| {
+            if (hit.kind == .overlay_trigger) {
+                runtime_state.overlays.toggle(hit.id);
+            } else {
+                runtime_state.overlays.dismissAll();
+            }
+        }
+    }
 }
 
 fn hasRectColor(items: []const ui.Command, color: ui.Color) bool {
@@ -2601,7 +2629,6 @@ fn ensureFontAtlas() !void {
     if (font_atlas_ready) return;
     font_atlas.initUtf8();
     font_atlas.setDeviceScale(font_device_scale);
-    font_atlas_generation +%= 1;
     font_atlas_ready = true;
 }
 
@@ -2683,7 +2710,7 @@ test "app runtime draws deterministic focus ring from runtime focus state" {
 
 test "app runtime component catalog builds packed app buffers and app-ready icon lines" {
     font_atlas_ready = false;
-    applyRoute(.{ .view = .docs, .selected_doc_index = app_docs.indexBySlug("component-system") });
+    applyRoute(.{ .view = .frontend, .selected_doc_index = app_docs.indexBySlug("component-system") });
     const code = er_ui_build_app_frame(960, 640, -1.0, -1.0, 0.0);
     try std.testing.expectEqual(@as(u32, 0), code);
     try std.testing.expect(font_atlas_ready);
@@ -2697,7 +2724,7 @@ test "app runtime component catalog builds packed app buffers and app-ready icon
 }
 
 test "app runtime component catalog render uses canonical ir buffers" {
-    applyRoute(.{ .view = .docs, .selected_doc_index = app_docs.indexBySlug("component-system") });
+    applyRoute(.{ .view = .frontend, .selected_doc_index = app_docs.indexBySlug("component-system") });
     const code = er_ui_render_frame(480, 360, 0.0);
     try std.testing.expectEqual(@as(u32, 0), code);
     try std.testing.expectEqual(renderer_pipeline.Transport.pixel_bytes, last_present_transport);
@@ -2721,7 +2748,7 @@ test "app runtime landing builds packed app buffers and hit state" {
     try std.testing.expect(packed_icon_vertex_float_len > 0);
     try std.testing.expectEqual(app_landing.contentHeight(1280.0), er_ui_app_content_height(1280.0));
     try std.testing.expectEqual(@intFromEnum(ui.HitKind.button), er_ui_hover_hit_kind());
-    try std.testing.expectEqual(app_navigation.topLevelButtonId(.source), er_ui_hover_hit_id());
+    try std.testing.expectEqual(app_navigation.topLevelButtonId(.backend), er_ui_hover_hit_id());
 }
 
 test "app runtime route snapshots cover canonical fixtures and dynamic families" {
@@ -2734,7 +2761,7 @@ test "app runtime route snapshots cover canonical fixtures and dynamic families"
     const dynamic_cases = app_navigation.dynamicRouteFixtures();
 
     for (dynamic_cases) |entry| {
-        applyRoute(.{ .view = .source });
+        applyRoute(.{ .view = .backend });
         _ = er_ui_app_activate_hit(entry.hit_id);
         try expectRouteState(entry.expected);
     }
@@ -2779,7 +2806,7 @@ fn expectRouteState(expected: app_navigation.Route) !void {
 }
 
 test "app runtime blog builds packed app buffers and post hit state" {
-    applyRoute(.{ .view = .blog });
+    applyRoute(.{ .view = .frontend });
     const code = er_ui_build_app_frame(1280, 800, 340.0, 700.0, 0.0);
     try std.testing.expectEqual(@as(u32, 0), code);
     try std.testing.expect(packed_rect_float_len > 0);
@@ -2802,26 +2829,26 @@ test "app runtime activation keeps page state in wasm" {
     defer app_state = .{};
 
     try std.testing.expectEqual(app_landing.contentHeight(1280.0), er_ui_app_content_height(1280.0));
-    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_activate_hit(app_navigation.topLevelButtonId(.blog)));
+    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_activate_hit(app_navigation.frontend_button_id));
     try std.testing.expectEqual(app_blog.indexContentHeight(1280.0), er_ui_app_content_height(1280.0));
     try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_activate_hit(app_blog.postIdAt(0)));
     try std.testing.expectEqual(app_blog.postContentHeight(1280.0, app_blog.postIdAt(0)), er_ui_app_content_height(1280.0));
-    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_activate_hit(app_navigation.topLevelButtonId(.source)));
+    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_activate_hit(app_navigation.topLevelButtonId(.backend)));
     try std.testing.expectEqualStrings("/source", route_bytes[0..er_ui_app_route_path_len()]);
     try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_action_kind());
     try std.testing.expectEqual(@as(u32, 0), er_ui_outbox_count());
     try std.testing.expectEqual(@as(u32, 0), er_ui_outbox_clear());
     try std.testing.expectEqual(@as(u32, 0), er_ui_outbox_count());
-    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_activate_hit(app_navigation.topLevelButtonId(.logo)));
+    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_activate_hit(app_navigation.frontend_button_id));
     try std.testing.expectEqual(app_landing.contentHeight(1280.0), er_ui_app_content_height(1280.0));
-    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_activate_hit(app_navigation.topLevelButtonId(.blog)));
+    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_activate_hit(app_navigation.frontend_button_id));
     try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_activate_hit(app_blog.arcFilterButtonId(3)));
     try std.testing.expectEqual(app_blog.indexContentHeightFiltered(1280.0, 3), er_ui_app_content_height(1280.0));
     try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_activate_hit(app_navigation.all_lessons_button_id));
     try std.testing.expectEqual(app_blog.indexContentHeight(1280.0), er_ui_app_content_height(1280.0));
-    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_activate_hit(app_navigation.topLevelButtonId(.docs)));
+    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_activate_hit(app_navigation.frontend_button_id));
     try std.testing.expectEqual(app_docs.contentHeight(1280.0), er_ui_app_content_height(1280.0));
-    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_activate_hit(app_navigation.topLevelButtonId(.components)));
+    try std.testing.expectEqual(@intFromEnum(UiAction.none), er_ui_app_activate_hit(app_navigation.frontend_button_id));
     try std.testing.expectEqual(component_gallery.contentHeightForState(1280.0, .{}), er_ui_app_content_height(1280.0));
 }
 
@@ -2889,7 +2916,7 @@ test "app runtime context source jump opens exact component file" {
 
     const button_index = component_gallery.indexBySlug("button").?;
     const preview_id = component_gallery.preview_base_id + 7000 + @as(u32, @intCast(button_index)) * 32;
-    applyRoute(.{ .view = .docs, .selected_doc_index = app_docs.indexBySlug("component-system"), .selected_component_index = button_index });
+    applyRoute(.{ .view = .frontend, .selected_doc_index = app_docs.indexBySlug("component-system"), .selected_component_index = button_index });
     try storeLastRegions(&.{.{ .slot = 0, .kind = .button, .id = preview_id, .bounds = ui.Rect.init(40, 40, 200, 80) }});
 
     try std.testing.expectEqual(@as(u32, 0), er_ui_app_context_menu(80.0, 60.0));
@@ -3019,7 +3046,7 @@ test "app runtime event pump owns dom event interpretation" {
 
     app_state.queued_action = .none;
     last_command_count = 0;
-    try storeLastRegions(&.{.{ .slot = 0, .kind = .button, .id = app_navigation.topLevelButtonId(.source), .bounds = ui.Rect.init(0, 0, 40, 40) }});
+    try storeLastRegions(&.{.{ .slot = 0, .kind = .button, .id = app_navigation.topLevelButtonId(.backend), .bounds = ui.Rect.init(0, 0, 40, 40) }});
     const pointer_result = er_ui_event(@intFromEnum(InputEventKind.pointer_up), 8.0, 8.0, 0, 0, 0, 0, 0, 1280.0, 900.0);
     try std.testing.expectEqual(input_event_release_pointer | input_event_schedule_frame | input_event_outbox, pointer_result);
     try std.testing.expectEqual(@as(u32, 1), er_ui_outbox_count());
@@ -3131,7 +3158,7 @@ test "app runtime source route initializes embedded editor state" {
     source_editor_loaded = false;
     source_editor_len = 0;
     source_editor_status = .not_loaded;
-    applyRoute(.{ .view = .source });
+    applyRoute(.{ .view = .backend });
     defer _ = er_ui_source_workspace_reset();
 
     const code = er_ui_build_app_frame(960, 640, -1.0, -1.0, 0.0);
@@ -3148,7 +3175,7 @@ test "app runtime source route initializes embedded editor state" {
 test "app runtime source editor rewrites a canonical vfs file" {
     try std.testing.expectEqual(@as(u32, 0), er_ui_source_workspace_reset());
     defer _ = er_ui_source_workspace_reset();
-    applyRoute(.{ .view = .source });
+    applyRoute(.{ .view = .backend });
     runtime_state.focused = .{ .kind = .textarea, .id = app_source.editor_textarea_id, .bounds = ui.Rect.init(0.0, 0.0, 1.0, 1.0) };
     defer runtime_state = .{};
 
@@ -3177,7 +3204,7 @@ test "app runtime source editor pointer focus places caret before editing" {
     defer app_state = .{};
     defer runtime_state = .{};
 
-    applyRoute(.{ .view = .source });
+    applyRoute(.{ .view = .backend });
     const code = er_ui_build_app_frame(1280, 800, -1.0, -1.0, 0.0);
     try std.testing.expectEqual(@as(u32, 0), code);
     const editor_bounds = try lastRegionBounds(app_source.editor_textarea_id);
@@ -3202,7 +3229,7 @@ test "app runtime source explorer rows open real workspace files" {
     defer app_state = .{};
     defer runtime_state = .{};
 
-    applyRoute(.{ .view = .source });
+    applyRoute(.{ .view = .backend });
     const code = er_ui_build_app_frame(1280, 800, -1.0, -1.0, 0.0);
     try std.testing.expectEqual(@as(u32, 0), code);
     const row_bounds = try lastRegionBounds(app_source.explorer_file_id_base + 1);
@@ -3222,7 +3249,7 @@ test "app runtime source explorer search is edited inside wasm" {
     defer app_state = .{};
     defer runtime_state = .{};
 
-    applyRoute(.{ .view = .source });
+    applyRoute(.{ .view = .backend });
     try storeLastRegions(&.{.{ .slot = 0, .kind = .input, .id = app_source.explorer_search_input_id, .bounds = ui.Rect.init(8, 8, 220, 32) }});
     const pointer_result = er_ui_event(@intFromEnum(InputEventKind.pointer_down), 12.0, 12.0, 0.0, 0, 0, 0, 0, 1280.0, 800.0);
     try std.testing.expectEqual(input_event_capture_pointer | input_event_schedule_frame, pointer_result);
@@ -3280,7 +3307,7 @@ test "app runtime source editor handles full event records and edit history" {
     defer app_state = .{};
     defer runtime_state = .{};
 
-    applyRoute(.{ .view = .source });
+    applyRoute(.{ .view = .backend });
     ensureSourceEditor();
     runtime_state.focused = .{ .kind = .textarea, .id = app_source.editor_textarea_id, .bounds = ui.Rect.init(0.0, 0.0, 1.0, 1.0) };
     const original_len = source_editor_len;
@@ -3326,7 +3353,7 @@ test "app runtime source editor uses workspace file list and pointer selection" 
     defer app_state = .{};
     defer runtime_state = .{};
 
-    applyRoute(.{ .view = .source });
+    applyRoute(.{ .view = .backend });
     const files = currentSourceFiles();
     try std.testing.expect(files.len > 4);
     try std.testing.expectEqualStrings(files[0].path, sourceFileLabelFromHit(app_source.explorer_file_id_base).?);
@@ -3369,7 +3396,7 @@ test "app runtime source editor scrolls editor viewport without page scroll" {
     source_editor_loaded = true;
     source_editor_status = .ready;
     source_editor_dirty = false;
-    app_state = .{ .view = .source };
+    app_state = .{ .view = .backend };
     runtime_state = .{};
     defer app_state = .{};
     defer runtime_state = .{};
@@ -3448,7 +3475,7 @@ test "app runtime app state owns scroll position" {
 
     try std.testing.expectEqual(@as(u32, 0), er_ui_app_scroll_by(320.0, 1280.0, 900.0));
     try std.testing.expectEqual(@as(f32, 320.0), er_ui_app_scroll_y());
-    try std.testing.expectEqual(@as(u32, 0), er_ui_app_activate_hit(app_navigation.topLevelButtonId(.blog)));
+    try std.testing.expectEqual(@as(u32, 0), er_ui_app_activate_hit(app_navigation.frontend_button_id));
     try std.testing.expectEqual(@as(f32, 0.0), er_ui_app_scroll_y());
     try std.testing.expectEqual(@as(u32, 0), er_ui_app_scroll_by(200000.0, 1280.0, 900.0));
     try std.testing.expectEqual(appScrollLimit(1280.0, 900.0), er_ui_app_scroll_y());
@@ -3497,7 +3524,7 @@ test "app runtime cursor is scene-drawn from runtime pointer state" {
 
 test "app runtime pointer up owns activation suppression policy" {
     last_command_count = 0;
-    try storeLastRegions(&.{.{ .slot = 0, .kind = .button, .id = app_navigation.topLevelButtonId(.blog), .bounds = ui.Rect.init(0, 0, 40, 40) }});
+    try storeLastRegions(&.{.{ .slot = 0, .kind = .button, .id = app_navigation.frontend_button_id, .bounds = ui.Rect.init(0, 0, 40, 40) }});
 
     app_state = .{};
     runtime_state = .{};
@@ -3514,7 +3541,7 @@ test "app runtime pointer up owns activation suppression policy" {
     try drag_scene.pushDropTarget(.{ .scope_id = 81, .index = 2, .bounds = ui.Rect.init(0, 70, 40, 40) });
     last_command_count = drag_scene.written().len;
     @memcpy(commands[0..last_command_count], drag_scene.written());
-    try storeLastRegions(&.{.{ .slot = 0, .kind = .button, .id = app_navigation.topLevelButtonId(.docs), .bounds = ui.Rect.init(0, 70, 40, 40) }});
+    try storeLastRegions(&.{.{ .slot = 0, .kind = .button, .id = app_navigation.frontend_button_id, .bounds = ui.Rect.init(0, 70, 40, 40) }});
     runtime_state = .{};
     app_state = .{};
 

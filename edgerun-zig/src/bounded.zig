@@ -1,5 +1,3 @@
-const std = @import("std");
-
 pub fn FixedList(comptime T: type, comptime capacity: usize) type {
     if (capacity == 0) @compileError("FixedList capacity must be nonzero");
 
@@ -96,22 +94,23 @@ pub fn SliceList(comptime T: type) type {
 }
 
 test "fixed list appends without allocation" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     var list = FixedList(u8, 2){};
-    try std.testing.expect(list.empty());
-    try std.testing.expect(list.append(7));
-    try std.testing.expect(list.append(8));
-    try std.testing.expect(!list.append(9));
-    try std.testing.expect(list.full());
-    try std.testing.expectEqualSlices(u8, &.{ 7, 8 }, list.slice());
+    try testing.expect(list.empty());
+    try testing.expect(list.append(7));
+    try testing.expect(list.append(8));
+    try testing.expect(!list.append(9));
+    try testing.expect(list.full());
+    try testing.expectEqualSlices(u8, &.{ 7, 8 }, list.slice());
 }
 
 test "slice list uses caller provided storage" {
+    const testing = @import("testing.zig");
     var storage: [2]u16 = undefined;
     var list = SliceList(u16).init(&storage).?;
-    try std.testing.expect(list.append(11));
-    try std.testing.expect(list.append(12));
-    try std.testing.expect(!list.append(13));
-    try std.testing.expect(list.full());
-    try std.testing.expectEqual(@as(u16, 12), list.at(1).?);
+    try testing.expect(list.append(11));
+    try testing.expect(list.append(12));
+    try testing.expect(!list.append(13));
+    try testing.expect(list.full());
+    try testing.expectEqual(@as(u16, 12), list.at(1).?);
 }

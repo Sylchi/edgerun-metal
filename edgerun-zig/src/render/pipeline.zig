@@ -3,7 +3,7 @@ const renderer_font_atlas = @import("font_atlas_weighted.zig");
 const icon_line_buffer = @import("icon_line_buffer.zig");
 const renderer_ir = @import("ir.zig");
 const renderer_present = @import("present.zig");
-const renderer_software = @import("software.zig");
+const renderer_software = @import("backends/software.zig");
 const ui = @import("../ui.zig");
 
 pub const Error = renderer_present.Error || renderer_software.Error;

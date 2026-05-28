@@ -123,7 +123,7 @@ $(ASM_BUILD_DIR)/wasm_interpreter.o: $(ASM_X86_64_DIR)/wasm_interpreter.asm $(AS
 	@mkdir -p $(ASM_BUILD_DIR)
 	$(YASM) -f elf64 $(ASM_INC) $< -o $@ 2>/dev/null && test -f $@
 
-$(ASM_BUILD_DIR)/ctype.o: $(ASM_X86_64_DIR)/ctype.asm $(ASM_X86_64_DIR)/macros.inc
+	$(ASM_BUILD_DIR)/ctype.o: $(ASM_X86_64_DIR)/ctype.asm $(ASM_X86_64_DIR)/macros.inc
 	@mkdir -p $(ASM_BUILD_DIR)
 	$(YASM) -f elf64 $(ASM_INC) $< -o $@ 2>/dev/null && test -f $@
 
@@ -214,6 +214,10 @@ asm-test-tpm: $(ASM_BUILD_DIR)/tpm_test.o $(ASM_BUILD_DIR)/tpm_crb_test.o $(ASM_
 	$(CC) -ffreestanding -nostdlib -static -fno-stack-protector -g -o $(ASM_BUILD_DIR)/test_tpm $(ASM_TEST_DIR)/test_tpm.c $(ASM_BUILD_DIR)/test_entry.o $(ASM_BUILD_DIR)/runtime.o $(ASM_BUILD_DIR)/tpm_test.o $(ASM_BUILD_DIR)/tpm_crb_test.o
 	$(ASM_BUILD_DIR)/test_tpm
 
+asm-test-wasm: $(ASM_BUILD_DIR)/wasm_interpreter.o $(ASM_BUILD_DIR)/runtime.o $(ASM_BUILD_DIR)/test_entry.o
+	$(CC) -ffreestanding -nostdlib -static -fno-stack-protector -g -o $(ASM_BUILD_DIR)/test_wasm $(ASM_TEST_DIR)/test_wasm.c $(ASM_BUILD_DIR)/test_entry.o $(ASM_BUILD_DIR)/runtime.o $(ASM_BUILD_DIR)/wasm_interpreter.o
+	$(ASM_BUILD_DIR)/test_wasm
+
 asm-test: asm-test-ctype asm-test-math asm-test-runtime asm-test-serial asm-test-tpm
 
 sdk-cli:
@@ -229,12 +233,12 @@ ifstatus:
 	$(ZIG_BUILD) ifstatus
 
 app-runtime:
-	$(ZIG_BUILD) -Doptimize=$(OPT) app-runtime
+	$(ZIG_BUILD) app-runtime
 	@printf 'font atlas: %sx%s alpha%s = %s bytes\n' '$(FONT_ATLAS_WIDTH)' '$(FONT_ATLAS_HEIGHT)' '$(FONT_ATLAS_CHANNELS)' '$(FONT_ATLAS_BYTES)'
 	@stat -c 'wasm runtime: %s bytes (%n)' '$(APP_RUNTIME_WASM)' 2>/dev/null || true
 
 wayland-window: app-runtime
-	$(ZIG_BUILD) -Doptimize=$(OPT) wayland-window -- --width $(WAYLAND_WIDTH) --height $(WAYLAND_HEIGHT) --seconds $(WAYLAND_SECONDS) --path $(WAYLAND_PATH)
+	$(ZIG_BUILD) wayland-window -- --width $(WAYLAND_WIDTH) --height $(WAYLAND_HEIGHT) --seconds $(WAYLAND_SECONDS) --path $(WAYLAND_PATH)
 
 wayland-window-test:
 	$(ZIG_BUILD) wayland-window-test

@@ -24,10 +24,11 @@ pub const Drawer = struct {
 
     pub fn render(self: Drawer, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         try primitives.renderControlTrigger(scene, triggerBounds(bounds), options.style.accent, options.style.border, drawer_trigger_padding, overlay_open_label, options.style.bg);
-
-        const content = contentBounds(bounds);
-        try primitives.renderTitleDetailPanel(scene, content, self.title, self.detail, options, drawer_panel, options.style.border, options.style.text);
-        try scene.pushRect(handleBounds(content), options.style.muted, .fill, drawer_handle_radius, 0.0);
+        if (options.overlay.isOpen(self.id)) {
+            const content = contentBounds(bounds);
+            try primitives.renderTitleDetailPanel(scene, content, self.title, self.detail, options, drawer_panel, options.style.border, options.style.text);
+            try scene.pushRect(handleBounds(content), options.style.muted, .fill, drawer_handle_radius, 0.0);
+        }
     }
 
     pub fn collectInteractions(self: Drawer, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
@@ -115,7 +116,7 @@ test "drawer component renders trigger content and hit regions" {
     var regions: [2]interaction.Region = undefined;
     var collector = interaction.Collector.init(&regions);
 
-    try drawer.render(&scene, ui.Rect.init(0, 0, 240, 76), .{});
+    try drawer.render(&scene, ui.Rect.init(0, 0, 240, 76), .{ .overlay = .{ .open_ids = &.{drawer.id} } });
     try drawer.collectInteractions(&collector, ui.Rect.init(0, 0, 240, 76));
 
     try std.testing.expect(component_test.hasText(scene.written(), "Edit profile"));

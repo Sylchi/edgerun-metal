@@ -561,7 +561,7 @@ pub const Style = struct {
     accent: Color = .accent,
 };
 
-pub const HitKind = enum(u8) { button, input, row_item, checkbox, switch_control, slider, textarea, select };
+pub const HitKind = enum(u8) { button, input, row_item, checkbox, switch_control, slider, textarea, select, overlay_trigger };
 pub const RectMode = enum(u8) { fill, shadow, border, linear_gradient, pie_slice };
 pub const TextAlign = enum(u8) { start, center, end };
 pub const FontWeight = enum(u8) { regular = 0, semibold = 1, bold = 2 };

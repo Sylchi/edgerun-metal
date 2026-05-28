@@ -225,27 +225,27 @@ fn hashMaterial(material: []const u8) [hash_size]u8 {
 }
 
 test "source is explicit material with deterministic id" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
     const source = Source.prepare(.hash, &hashMaterial("app manifest")).?;
     const a = Identity.init(.app, source, epoch).?;
     const b = Identity.init(.app, source, epoch).?;
 
-    try std.testing.expect(a.id.eql(b.id));
-    try std.testing.expect(Identity.init(.app, Source.init(.hash, "short").?, epoch) == null);
+    try testing.expect(a.id.eql(b.id));
+    try testing.expect(Identity.init(.app, Source.init(.hash, "short").?, epoch) == null);
 }
 
 test "strict source preparation enforces C identity material sizes" {
-    const std = @import("std");
-    try std.testing.expect(Source.prepare(.hash, "short") == null);
+    const testing = @import("testing.zig");
+    try testing.expect(Source.prepare(.hash, "short") == null);
     const source = Source.prepare(.hash, &hashMaterial("manifest")).?;
-    try std.testing.expect(source.valid());
-    try std.testing.expect(Source.prepare(.p256_public, &([_]u8{1} ** 64)) != null);
+    try testing.expect(source.valid());
+    try testing.expect(Source.prepare(.p256_public, &([_]u8{1} ** 64)) != null);
 }
 
 test "identity derives child and delegated app identities" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     const keeper = clock.KeeperId{ .bytes = [_]u8{2} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
     const parent = Identity.instantiate(.{
@@ -256,9 +256,9 @@ test "identity derives child and delegated app identities" {
     }).?;
 
     const child = parent.deriveChild(.app, epoch, "chat", "manifest").?;
-    try std.testing.expect(child.valid());
-    try std.testing.expectEqual(Kind.app, child.kind);
-    try std.testing.expectEqual(SourceKind.derived, child.source.kind);
+    try testing.expect(child.valid());
+    try testing.expectEqual(Kind.app, child.kind);
+    try testing.expectEqual(SourceKind.derived, child.source.kind);
 
     const delegated = Identity.instantiateApp(.{
         .parent = parent,
@@ -267,11 +267,11 @@ test "identity derives child and delegated app identities" {
         .epoch = epoch,
         .required_parent_operations = .verify_and_sign,
     }).?;
-    try std.testing.expect(delegated.valid());
-    try std.testing.expectEqual(Kind.delegated, delegated.kind);
-    try std.testing.expectEqual(SourceKind.delegation, delegated.source.kind);
+    try testing.expect(delegated.valid());
+    try testing.expectEqual(Kind.delegated, delegated.kind);
+    try testing.expectEqual(SourceKind.delegation, delegated.source.kind);
 
-    try std.testing.expect(Identity.instantiateApp(.{
+    try testing.expect(Identity.instantiateApp(.{
         .parent = parent,
         .app_material = &hashMaterial("delegated-app"),
         .scope_hash = "short",

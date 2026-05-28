@@ -1,5 +1,5 @@
 const std = @import("std");
-const renderer_gpu = @import("gpu.zig");
+const renderer_gpu = @import("backends/gpu.zig");
 const renderer_surface = @import("surface.zig");
 
 pub const CpuFilledDevice = struct {

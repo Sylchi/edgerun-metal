@@ -264,7 +264,7 @@ pub fn measureSidePanelMenu(trigger: []const u8, first: []const u8, second: []co
 }
 
 pub fn collectSidePanelHits(collector: *interaction.Collector, trigger: ui.Rect, content: ui.Rect, id: u32) interaction.Error!void {
-    try collector.addHit(trigger, .button, id);
+    try collector.addHit(trigger, .overlay_trigger, id);
     try collector.addHit(content, .button, id + 1);
 }
 
@@ -275,7 +275,7 @@ pub fn collectMenuListHits(collector: *interaction.Collector, content: ui.Rect, 
 }
 
 pub fn collectSidePanelMenuHits(collector: *interaction.Collector, bounds: ui.Rect, panel: SidePanelLayout, id: u32, spec: MenuListLayout, item_count: usize) interaction.Error!void {
-    try collector.addHit(sidePanelTriggerBounds(bounds, panel), .button, id);
+    try collector.addHit(sidePanelTriggerBounds(bounds, panel), .overlay_trigger, id);
     try collectMenuListHits(collector, sidePanelContentBounds(bounds, panel), id, spec, item_count);
 }
 

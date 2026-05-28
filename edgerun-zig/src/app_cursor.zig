@@ -69,7 +69,7 @@ pub fn fromState(action: ui_runtime.ActionKind, hover: ?ui.HitKind) Kind {
 
     return switch (hover orelse return .default) {
         .input, .textarea => .text,
-        .button, .row_item, .checkbox, .switch_control, .slider, .select => .pointer,
+        .button, .row_item, .checkbox, .switch_control, .slider, .select, .overlay_trigger => .pointer,
     };
 }
 

@@ -1678,19 +1678,19 @@ fn hashMaterial(material: []const u8) preimage.Hash {
 }
 
 test "execution host identity is device authority only" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     const epoch = clock.Stamp{ .keeper = .{ .bytes = [_]u8{30} ++ [_]u8{0} ** 31 } };
     const device_id = identity.Identity.init(.device, identity.Source.prepare(.hash, &preimage.rawHash("host authority device")).?, epoch).?;
     const app_id = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("host authority app")).?, epoch).?;
     const user_id = identity.Identity.init(.user, identity.Source.prepare(.hash, &preimage.rawHash("host authority user")).?, epoch).?;
 
-    try std.testing.expect((ExecutionHost.init(device_id) orelse return error.TestUnexpectedResult).valid());
-    try std.testing.expect(ExecutionHost.init(app_id) == null);
-    try std.testing.expect(ExecutionHost.init(user_id) == null);
+    try testing.expect((ExecutionHost.init(device_id) orelse return error.TestUnexpectedResult).valid());
+    try testing.expect(ExecutionHost.init(app_id) == null);
+    try testing.expect(ExecutionHost.init(user_id) == null);
 }
 
 test "manifest spawn transfers declared memory and storage to child" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     var memory_bytes: [64]u8 = undefined;
     var storage_bytes: [512]u8 = undefined;
     var slots: [4]store.Blob = undefined;
@@ -1741,16 +1741,16 @@ test "manifest spawn transfers declared memory and storage to child" {
     const manifest_canonical = try App.writeManifestObject(child_id, manifest, epoch, &manifest_raw);
     var spawned = try (ExecutionHost.init(device_id).?).spawnManifest(&parent, allocator_id, child_id, epoch, authorization, manifest_canonical);
     const child_handle = spawned.handle().?;
-    try std.testing.expect(child_handle.valid());
-    try std.testing.expect(child_handle.child.id.eql(child_id.id));
-    try std.testing.expectEqualSlices(u8, &(manifest.allocation.id().?), &child_handle.allocation);
+    try testing.expect(child_handle.valid());
+    try testing.expect(child_handle.child.id.eql(child_id.id));
+    try testing.expectEqualSlices(u8, &(manifest.allocation.id().?), &child_handle.allocation);
     var child = spawned.app;
-    try std.testing.expectEqual(@as(usize, 48), parent.state.memory.remaining());
-    try std.testing.expectEqual(@as(usize, 224), parent.state.storage.data.len());
-    try std.testing.expectEqual(@as(usize, 2), parent.state.storage.slotCapacity());
-    try std.testing.expectEqual(@as(usize, 16), child.state.memory.remaining());
-    try std.testing.expectEqual(@as(usize, 288), child.state.storage.data.len());
-    try std.testing.expectEqual(@as(usize, 2), child.state.storage.slotCapacity());
+    try testing.expectEqual(@as(usize, 48), parent.state.memory.remaining());
+    try testing.expectEqual(@as(usize, 224), parent.state.storage.data.len());
+    try testing.expectEqual(@as(usize, 2), parent.state.storage.slotCapacity());
+    try testing.expectEqual(@as(usize, 16), child.state.memory.remaining());
+    try testing.expectEqual(@as(usize, 288), child.state.storage.data.len());
+    try testing.expectEqual(@as(usize, 2), child.state.storage.slotCapacity());
 
     const child_allocator = child.state.memory.allocator();
     _ = try child_allocator.alloc(u8, 8);
@@ -1762,7 +1762,7 @@ test "manifest spawn transfers declared memory and storage to child" {
     const child_state_envelope = sealedEnvelopeForApp(device_id, child_id, user_id, child_state_req, "manifest child state key").?;
     const child_state_canonical = try (object.NodeWriter{ .out = &child_state_raw }).bytesNodeOwned(child_state_req, epoch, &.{child_state_owner}, &.{child_state_envelope}, "child state");
     const child_hash = child.putSealedObject(device_id, user_id, child_state_canonical).?;
-    try std.testing.expectEqual(@as(usize, 48), parent.state.memory.remaining());
+    try testing.expectEqual(@as(usize, 48), parent.state.memory.remaining());
     const oversized_manifest = App.Manifest{
         .code_hash = preimage.hash("edgerun:zig:v1:test-code", "oversized child"),
         .allocation = .{
@@ -1772,22 +1772,22 @@ test "manifest spawn transfers declared memory and storage to child" {
         },
     };
     const oversized_canonical = try App.writeManifestObject(child_id, oversized_manifest, epoch, &manifest_raw);
-    try std.testing.expectError(error.NoMemory, (ExecutionHost.init(device_id).?).spawnManifest(&parent, allocator_id, child_id, epoch, authorization, oversized_canonical));
-    try std.testing.expect(spawned.receipt.valid());
-    try std.testing.expectEqual(@as(u64, 288), spawned.receipt.storage_bytes.amount);
+    try testing.expectError(error.NoMemory, (ExecutionHost.init(device_id).?).spawnManifest(&parent, allocator_id, child_id, epoch, authorization, oversized_canonical));
+    try testing.expect(spawned.receipt.valid());
+    try testing.expectEqual(@as(u64, 288), spawned.receipt.storage_bytes.amount);
 
     const reclaimed = try (ExecutionHost.init(device_id).?).reclaimChild(&parent, &child, spawned.receipt, epoch);
-    try std.testing.expect(reclaimed.valid());
-    try std.testing.expect(bytes.nonzero(&reclaimed.id().?));
-    try std.testing.expectEqual(@as(usize, 64), parent.state.memory.remaining());
-    try std.testing.expectEqual(@as(usize, 512), parent.state.storage.data.len());
-    try std.testing.expectEqual(@as(usize, 4), parent.state.storage.slotCapacity());
-    try std.testing.expectEqual(@as(usize, 0), child.state.memory.remaining());
-    try std.testing.expect(child.state.storage.getObject(child.id.id, child_hash) == null);
+    try testing.expect(reclaimed.valid());
+    try testing.expect(bytes.nonzero(&reclaimed.id().?));
+    try testing.expectEqual(@as(usize, 64), parent.state.memory.remaining());
+    try testing.expectEqual(@as(usize, 512), parent.state.storage.data.len());
+    try testing.expectEqual(@as(usize, 4), parent.state.storage.slotCapacity());
+    try testing.expectEqual(@as(usize, 0), child.state.memory.remaining());
+    try testing.expect(child.state.storage.getObject(child.id.id, child_hash) == null);
 }
 
 test "manifest spawn can run app with no ram object storage" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     const parent_memory_bytes = 64;
     const parent_storage_bytes = 128;
     const parent_storage_slots = 2;
@@ -1834,24 +1834,24 @@ test "manifest spawn can run app with no ram object storage" {
     const spawned = try (ExecutionHost.init(device_id).?).spawnManifest(&parent, parent_id, child_id, epoch, authorization, manifest_canonical);
     var child = spawned.app;
 
-    try std.testing.expect(spawned.receipt.valid());
-    try std.testing.expectEqual(@as(u64, child_storage_bytes), spawned.receipt.storage_bytes.amount);
-    try std.testing.expectEqual(@as(u64, child_storage_slots), spawned.receipt.storage_slots.amount);
-    try std.testing.expectEqual(@as(usize, parent_storage_bytes), parent.state.storage.data.len());
-    try std.testing.expectEqual(@as(usize, parent_storage_slots), parent.state.storage.slotCapacity());
-    try std.testing.expectEqual(@as(usize, child_storage_bytes), child.state.storage.data.len());
-    try std.testing.expectEqual(@as(usize, child_storage_slots), child.state.storage.slotCapacity());
-    try std.testing.expect(child.state.storage.putRawBlob("implicit durable state") == null);
+    try testing.expect(spawned.receipt.valid());
+    try testing.expectEqual(@as(u64, child_storage_bytes), spawned.receipt.storage_bytes.amount);
+    try testing.expectEqual(@as(u64, child_storage_slots), spawned.receipt.storage_slots.amount);
+    try testing.expectEqual(@as(usize, parent_storage_bytes), parent.state.storage.data.len());
+    try testing.expectEqual(@as(usize, parent_storage_slots), parent.state.storage.slotCapacity());
+    try testing.expectEqual(@as(usize, child_storage_bytes), child.state.storage.data.len());
+    try testing.expectEqual(@as(usize, child_storage_slots), child.state.storage.slotCapacity());
+    try testing.expect(child.state.storage.putRawBlob("implicit durable state") == null);
 
     _ = try (ExecutionHost.init(device_id).?).reclaimChild(&parent, &child, spawned.receipt, epoch);
-    try std.testing.expectEqual(@as(usize, parent_storage_bytes), parent.state.storage.data.len());
-    try std.testing.expectEqual(@as(usize, parent_storage_slots), parent.state.storage.slotCapacity());
-    try std.testing.expectEqual(@as(usize, 0), child.state.storage.data.len());
-    try std.testing.expectEqual(@as(usize, 0), child.state.storage.slotCapacity());
+    try testing.expectEqual(@as(usize, parent_storage_bytes), parent.state.storage.data.len());
+    try testing.expectEqual(@as(usize, parent_storage_slots), parent.state.storage.slotCapacity());
+    try testing.expectEqual(@as(usize, 0), child.state.storage.data.len());
+    try testing.expectEqual(@as(usize, 0), child.state.storage.slotCapacity());
 }
 
 test "manifest declares app private storage capability and requires storage grant" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     var memory_bytes: [64]u8 = undefined;
     var storage_bytes: [128]u8 = undefined;
     var slots: [2]store.Blob = undefined;
@@ -1888,13 +1888,13 @@ test "manifest declares app private storage capability and requires storage gran
     const authorization = intent.admit(user_id, device_id, parent_id, child_id, .spawn_app, .delegates_resources, epoch, intent.requestId("private storage manifest spawn").?).?;
     try parent.admitOwnAuthorization(authorization, parent_id, child_id);
 
-    try std.testing.expect(manifest.appPrivateStorageRequired());
-    try std.testing.expect(App.Manifest.fromObject(manifest_canonical).?.appPrivateStorageRequired());
-    try std.testing.expectError(error.NoStorage, (ExecutionHost.init(device_id).?).spawnManifest(&parent, parent_id, child_id, epoch, authorization, manifest_canonical));
+    try testing.expect(manifest.appPrivateStorageRequired());
+    try testing.expect(App.Manifest.fromObject(manifest_canonical).?.appPrivateStorageRequired());
+    try testing.expectError(error.NoStorage, (ExecutionHost.init(device_id).?).spawnManifest(&parent, parent_id, child_id, epoch, authorization, manifest_canonical));
 }
 
 test "app proves app private storage seal and open capability" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     var memory_bytes: [64]u8 = undefined;
     var storage_bytes: [512]u8 = undefined;
     var slots: [4]store.Blob = undefined;
@@ -1940,23 +1940,23 @@ test "app proves app private storage seal and open capability" {
         .clock_end = epoch,
     };
     const proof = try app.proveAppPrivateStorage(device_id, user_id, &tpm, seal_authorization, open_authorization, proof_context, &proof_raw);
-    try std.testing.expect(proof.valid());
-    try std.testing.expect(proof.packet.actor.eql(authority.Principal.app(app_id).?));
-    try std.testing.expect(proof.packet.root.eql(authority.Principal.user(user_id).?));
-    try std.testing.expect(proof.packet.subject.eql(authority.Principal.tpm(tpm_id).?));
-    try std.testing.expect(proof.packet.actionPermittedBy(seal_authorization, epoch));
-    try std.testing.expectEqual(authority.PacketKind.storage_write, proof.packet.kind);
-    try std.testing.expect(proof.packet.hasCapability(.app_private_storage));
-    try std.testing.expectEqualSlices(u8, &manifest_id, &proof.packet.manifest);
-    try std.testing.expectEqualSlices(u8, &code_hash, &proof.packet.code_hash);
+    try testing.expect(proof.valid());
+    try testing.expect(proof.packet.actor.eql(authority.Principal.app(app_id).?));
+    try testing.expect(proof.packet.root.eql(authority.Principal.user(user_id).?));
+    try testing.expect(proof.packet.subject.eql(authority.Principal.tpm(tpm_id).?));
+    try testing.expect(proof.packet.actionPermittedBy(seal_authorization, epoch));
+    try testing.expectEqual(authority.PacketKind.storage_write, proof.packet.kind);
+    try testing.expect(proof.packet.hasCapability(.app_private_storage));
+    try testing.expectEqualSlices(u8, &manifest_id, &proof.packet.manifest);
+    try testing.expectEqualSlices(u8, &code_hash, &proof.packet.code_hash);
     const stored = app.state.storage.getObject(app.id.id, proof.object_id).?;
     const envelope = try stored.envelopeAt(0);
-    try std.testing.expectEqual(object.EnvelopeKind.app, envelope.kind);
-    try std.testing.expectEqual(@as(usize, 2), tpm.eventCount());
+    try testing.expectEqual(object.EnvelopeKind.app, envelope.kind);
+    try testing.expectEqual(@as(usize, 2), tpm.eventCount());
 }
 
 test "native runtime manifest requires edgerun runtime signature" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     var memory_bytes: [64]u8 = undefined;
     var storage_bytes: [512]u8 = undefined;
     var slots: [4]store.Blob = undefined;
@@ -1995,19 +1995,19 @@ test "native runtime manifest requires edgerun runtime signature" {
     try parent.admitOwnAuthorization(authorization, parent_id, child_id);
     const host = ExecutionHost.init(device_id).?;
 
-    try std.testing.expectError(error.Unauthorized, host.spawnManifest(&parent, parent_id, child_id, epoch, authorization, manifest_canonical));
-    try std.testing.expectError(error.Unauthorized, host.spawnNativeRuntimeManifest(&parent, parent_id, child_id, epoch, authorization, manifest_canonical, runtime_id, manifest_canonical));
+    try testing.expectError(error.Unauthorized, host.spawnManifest(&parent, parent_id, child_id, epoch, authorization, manifest_canonical));
+    try testing.expectError(error.Unauthorized, host.spawnNativeRuntimeManifest(&parent, parent_id, child_id, epoch, authorization, manifest_canonical, runtime_id, manifest_canonical));
 
     const signature = nativeRuntimeSignature(runtime_id, manifest_canonical).?;
     const signature_canonical = try object.writeSignatureReceipt(manifest_canonical, manifest_canonical, runtime_id.id.bytes, .ecdsa_p256_sha256, &signature, epoch, &signature_raw);
     var spawned = try host.spawnNativeRuntimeManifest(&parent, parent_id, child_id, epoch, authorization, manifest_canonical, runtime_id, signature_canonical);
-    try std.testing.expect(spawned.receipt.valid());
-    try std.testing.expectEqual(@as(usize, 48), parent.state.memory.remaining());
-    try std.testing.expectEqual(@as(usize, 16), spawned.app.state.memory.remaining());
+    try testing.expect(spawned.receipt.valid());
+    try testing.expectEqual(@as(usize, 48), parent.state.memory.remaining());
+    try testing.expectEqual(@as(usize, 16), spawned.app.state.memory.remaining());
 }
 
 test "declared allocation bounds app child work receipts and clean reclaim" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     const parent_memory_bytes = 128;
     const parent_storage_bytes = 2048;
     const parent_storage_slots = 8;
@@ -2058,7 +2058,7 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
     ).?;
     const relay_id = identity.Identity.init(.relay, identity.Source.prepare(.hash, &preimage.rawHash("declared relay")).?, start).?;
     var route = relay.Route.init(route_admission, child_id, grandchild_id, .sync_data, .exports_data, hashMaterial("declared route policy")).?;
-    try std.testing.expect(route.appendRelay(relay_id));
+    try testing.expect(route.appendRelay(relay_id));
     const route_id = route.id().?;
     const wrong_device_id = identity.Identity.init(.device, identity.Source.prepare(.hash, &preimage.rawHash("wrong declared device")).?, start).?;
 
@@ -2096,7 +2096,7 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
     };
     const child_manifest_canonical = try App.writeManifestObject(child_id, child_manifest, start, &child_manifest_raw);
     const child_manifest_id = object.Header.id(child_manifest_canonical);
-    try std.testing.expectEqual(child_manifest.allocation, App.Manifest.fromObject(child_manifest_canonical).?.allocation);
+    try testing.expectEqual(child_manifest.allocation, App.Manifest.fromObject(child_manifest_canonical).?.allocation);
     const child_authorization = intent.admit(
         user_id,
         device_id,
@@ -2111,24 +2111,24 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
 
     const spawned_child = try (ExecutionHost.init(device_id).?).spawnManifest(&parent, parent_id, child_id, start, child_authorization, child_manifest_canonical);
     var child = spawned_child.app;
-    try std.testing.expectEqual(@as(usize, parent_memory_bytes - child_memory_bytes), parent.state.memory.remaining());
-    try std.testing.expectEqual(@as(usize, child_memory_bytes), child.state.memory.remaining());
-    try std.testing.expectEqual(@as(usize, child_storage_bytes), child.state.storage.data.len());
-    try std.testing.expectEqual(@as(usize, child_storage_slots), child.state.storage.slotCapacity());
-    try std.testing.expectEqual(@as(u64, parent_execution_ticks - child_execution_ticks), parent.state.execution_ticks);
-    try std.testing.expectEqual(@as(u64, child_execution_ticks), child.state.execution_ticks);
-    try std.testing.expectEqual(@as(u64, child_route_handles), child.state.route_handles);
-    try std.testing.expectEqual(@as(u64, child_device_handles), child.state.device_handles);
-    try std.testing.expect(!child.state.memory.owns(memory_bytes[0..4]));
-    try std.testing.expect(!child.state.storage.owned.contains(storage_bytes[0..4]));
+    try testing.expectEqual(@as(usize, parent_memory_bytes - child_memory_bytes), parent.state.memory.remaining());
+    try testing.expectEqual(@as(usize, child_memory_bytes), child.state.memory.remaining());
+    try testing.expectEqual(@as(usize, child_storage_bytes), child.state.storage.data.len());
+    try testing.expectEqual(@as(usize, child_storage_slots), child.state.storage.slotCapacity());
+    try testing.expectEqual(@as(u64, parent_execution_ticks - child_execution_ticks), parent.state.execution_ticks);
+    try testing.expectEqual(@as(u64, child_execution_ticks), child.state.execution_ticks);
+    try testing.expectEqual(@as(u64, child_route_handles), child.state.route_handles);
+    try testing.expectEqual(@as(u64, child_device_handles), child.state.device_handles);
+    try testing.expect(!child.state.memory.owns(memory_bytes[0..4]));
+    try testing.expect(!child.state.storage.owned.contains(storage_bytes[0..4]));
 
     const child_allocator = child.state.memory.allocator();
     _ = try child_allocator.alloc(u8, child_private_bytes);
-    try std.testing.expectError(error.OutOfMemory, child_allocator.alloc(u8, child_memory_bytes));
-    try std.testing.expect(child.state.storage.putRawBlob(&oversized_storage) == null);
-    try std.testing.expect(!child.consumeExecution(child_execution_ticks + 1));
-    try std.testing.expect(child.useDevice(device_id));
-    try std.testing.expect(!child.useDevice(wrong_device_id));
+    try testing.expectError(error.OutOfMemory, child_allocator.alloc(u8, child_memory_bytes));
+    try testing.expect(child.state.storage.putRawBlob(&oversized_storage) == null);
+    try testing.expect(!child.consumeExecution(child_execution_ticks + 1));
+    try testing.expect(child.useDevice(device_id));
+    try testing.expect(!child.useDevice(wrong_device_id));
 
     const grandchild_authorization = intent.admit(
         user_id,
@@ -2148,7 +2148,7 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
         .bytes = memory_bytes[0..4],
         .epoch = start,
     };
-    try std.testing.expectError(error.Corrupt, child.shareMemoryReadOnly(child_id, grandchild_id, forged_parent_slice, start, grandchild_authorization));
+    try testing.expectError(error.Corrupt, child.shareMemoryReadOnly(child_id, grandchild_id, forged_parent_slice, start, grandchild_authorization));
     const impossible_grandchild = App.DeclaredAllocation{
         .memory_bytes = child_memory_bytes,
         .storage_bytes = grandchild_storage_bytes,
@@ -2159,7 +2159,7 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
         .route_handle = route_id,
         .device_handle = device_id.id,
     };
-    try std.testing.expectError(error.NoMemory, (ExecutionHost.init(device_id).?).spawnDeclared(&child, child_id, grandchild_id, start, grandchild_authorization, impossible_grandchild));
+    try testing.expectError(error.NoMemory, (ExecutionHost.init(device_id).?).spawnDeclared(&child, child_id, grandchild_id, start, grandchild_authorization, impossible_grandchild));
 
     const impossible_route_grandchild = App.DeclaredAllocation{
         .memory_bytes = grandchild_memory_bytes,
@@ -2171,7 +2171,7 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
         .route_handle = route_id,
         .device_handle = device_id.id,
     };
-    try std.testing.expectError(error.NoRoute, (ExecutionHost.init(device_id).?).spawnDeclared(&child, child_id, grandchild_id, start, grandchild_authorization, impossible_route_grandchild));
+    try testing.expectError(error.NoRoute, (ExecutionHost.init(device_id).?).spawnDeclared(&child, child_id, grandchild_id, start, grandchild_authorization, impossible_route_grandchild));
 
     const grandchild_allocation = App.DeclaredAllocation{
         .memory_bytes = grandchild_memory_bytes,
@@ -2191,14 +2191,14 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
     const grandchild_manifest_id = object.Header.id(grandchild_manifest_canonical);
     const spawned_grandchild = try (ExecutionHost.init(device_id).?).spawnManifest(&child, child_id, grandchild_id, start, grandchild_authorization, grandchild_manifest_canonical);
     var grandchild = spawned_grandchild.app;
-    try std.testing.expectEqual(@as(usize, grandchild_memory_bytes), grandchild.state.memory.remaining());
-    try std.testing.expectEqual(@as(usize, grandchild_storage_bytes), grandchild.state.storage.data.len());
-    try std.testing.expectEqual(@as(u64, child_execution_ticks - grandchild_execution_ticks), child.state.execution_ticks);
-    try std.testing.expectEqual(@as(u64, 0), child.state.route_handles);
-    try std.testing.expectEqual(@as(u64, 0), child.state.device_handles);
-    try std.testing.expect(!child.useDevice(device_id));
-    try std.testing.expect(grandchild.useDevice(device_id));
-    try std.testing.expect(!grandchild.useDevice(wrong_device_id));
+    try testing.expectEqual(@as(usize, grandchild_memory_bytes), grandchild.state.memory.remaining());
+    try testing.expectEqual(@as(usize, grandchild_storage_bytes), grandchild.state.storage.data.len());
+    try testing.expectEqual(@as(u64, child_execution_ticks - grandchild_execution_ticks), child.state.execution_ticks);
+    try testing.expectEqual(@as(u64, 0), child.state.route_handles);
+    try testing.expectEqual(@as(u64, 0), child.state.device_handles);
+    try testing.expect(!child.useDevice(device_id));
+    try testing.expect(grandchild.useDevice(device_id));
+    try testing.expect(!grandchild.useDevice(wrong_device_id));
     const great_grandchild_authorization = intent.admit(
         user_id,
         device_id,
@@ -2209,10 +2209,10 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
         start,
         intent.requestId("blocked great grandchild spawn").?,
     ).?;
-    try std.testing.expectError(error.Unauthorized, (ExecutionHost.init(device_id).?).spawnDeclared(&grandchild, grandchild_id, great_grandchild_id, start, great_grandchild_authorization, grandchild_allocation));
+    try testing.expectError(error.Unauthorized, (ExecutionHost.init(device_id).?).spawnDeclared(&grandchild, grandchild_id, great_grandchild_id, start, great_grandchild_authorization, grandchild_allocation));
 
-    try std.testing.expect(child.createRelayEnvelope(route, 1, hashMaterial("route object"), hashMaterial("route payload")) == null);
-    try std.testing.expect(!grandchild.consumeExecution(grandchild_execution_ticks + 1));
+    try testing.expect(child.createRelayEnvelope(route, 1, hashMaterial("route object"), hashMaterial("route payload")) == null);
+    try testing.expect(!grandchild.consumeExecution(grandchild_execution_ticks + 1));
 
     const input_hash = preimage.hash("edgerun:zig:v1:test-input", "declared work input");
     const output_owner = object.Owner{
@@ -2226,52 +2226,52 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
     _ = local_clock.advanceDefault() orelse return error.SkipZigTest;
     const end = local_clock.now;
     const work = grandchild.completeWork(child.id, input_hash, output_hash, grandchild_manifest.code_hash, grandchild_manifest_id, start, end, grandchild_allocation, spawned_grandchild.receipt).?;
-    try std.testing.expect(work.valid());
-    try std.testing.expect(bytes.nonzero(&work.id().?));
-    try std.testing.expect(bytes.eql(&work.manifest, &grandchild_manifest_id));
-    try std.testing.expect(bytes.nonzero(&child_manifest_id));
-    try std.testing.expect(work.clock_start.order(work.clock_end) < 0);
+    try testing.expect(work.valid());
+    try testing.expect(bytes.nonzero(&work.id().?));
+    try testing.expect(bytes.eql(&work.manifest, &grandchild_manifest_id));
+    try testing.expect(bytes.nonzero(&child_manifest_id));
+    try testing.expect(work.clock_start.order(work.clock_end) < 0);
     const work_receipt_object_id = try grandchild.putWorkReceipt(work, end, &work_receipt_raw);
-    try std.testing.expect(bytes.eql(&work_receipt_object_id, &object.Header.id(&work_receipt_raw)));
+    try testing.expect(bytes.eql(&work_receipt_object_id, &object.Header.id(&work_receipt_raw)));
     const stored_work_receipt = grandchild.state.storage.getReceipt(grandchild.id.id, work_receipt_object_id).?;
-    try std.testing.expectEqual(object.Kind.receipt, stored_work_receipt.header.kind);
-    try std.testing.expectEqual(workReceiptRequirements(), stored_work_receipt.header.requirements);
+    try testing.expectEqual(object.Kind.receipt, stored_work_receipt.header.kind);
+    try testing.expectEqual(workReceiptRequirements(), stored_work_receipt.header.requirements);
     const decoded_work_receipt = try App.WorkReceipt.decodeObject(&work_receipt_raw);
-    try std.testing.expect(decoded_work_receipt.matches(work));
-    try std.testing.expect(decoded_work_receipt.parent.eql(child.id.id));
-    try std.testing.expect(decoded_work_receipt.app.eql(grandchild.id.id));
-    try std.testing.expect(bytes.eql(&decoded_work_receipt.output, &output_hash));
-    try std.testing.expect(bytes.eql(&decoded_work_receipt.app_hash, &grandchild_manifest.code_hash));
-    try std.testing.expect(bytes.eql(&decoded_work_receipt.manifest, &grandchild_manifest_id));
-    try std.testing.expect(App.WorkReceipt.decodeBody(stored_work_receipt.body).?.matches(work));
-    try std.testing.expectError(error.Corrupt, App.WorkReceipt.decodeObject(output_canonical));
+    try testing.expect(decoded_work_receipt.matches(work));
+    try testing.expect(decoded_work_receipt.parent.eql(child.id.id));
+    try testing.expect(decoded_work_receipt.app.eql(grandchild.id.id));
+    try testing.expect(bytes.eql(&decoded_work_receipt.output, &output_hash));
+    try testing.expect(bytes.eql(&decoded_work_receipt.app_hash, &grandchild_manifest.code_hash));
+    try testing.expect(bytes.eql(&decoded_work_receipt.manifest, &grandchild_manifest_id));
+    try testing.expect(App.WorkReceipt.decodeBody(stored_work_receipt.body).?.matches(work));
+    try testing.expectError(error.Corrupt, App.WorkReceipt.decodeObject(output_canonical));
     var wrong_route_receipt = spawned_grandchild.receipt;
     wrong_route_receipt.route_handle = hashMaterial("wrong receipt route");
-    try std.testing.expect(grandchild.completeWork(child.id, input_hash, output_hash, grandchild_manifest.code_hash, grandchild_manifest_id, start, end, grandchild_allocation, wrong_route_receipt) == null);
+    try testing.expect(grandchild.completeWork(child.id, input_hash, output_hash, grandchild_manifest.code_hash, grandchild_manifest_id, start, end, grandchild_allocation, wrong_route_receipt) == null);
 
-    try std.testing.expectError(error.Corrupt, (ExecutionHost.init(device_id).?).reclaimChild(&parent, &child, spawned_child.receipt, end));
-    try std.testing.expectError(error.Corrupt, (ExecutionHost.init(device_id).?).reclaimChild(&child, &grandchild, wrong_route_receipt, end));
+    try testing.expectError(error.Corrupt, (ExecutionHost.init(device_id).?).reclaimChild(&parent, &child, spawned_child.receipt, end));
+    try testing.expectError(error.Corrupt, (ExecutionHost.init(device_id).?).reclaimChild(&child, &grandchild, wrong_route_receipt, end));
     const grandchild_reclaim = try (ExecutionHost.init(device_id).?).reclaimChild(&child, &grandchild, spawned_grandchild.receipt, end);
-    try std.testing.expect(grandchild_reclaim.valid());
-    try std.testing.expectEqual(@as(usize, 0), grandchild.state.memory.remaining());
-    try std.testing.expect(grandchild.state.storage.getObject(grandchild.id.id, output_hash) == null);
-    try std.testing.expectEqual(@as(u64, child_execution_ticks), child.state.execution_ticks);
-    try std.testing.expectEqual(@as(u64, child_route_handles), child.state.route_handles);
-    try std.testing.expectEqual(@as(u64, child_device_handles), child.state.device_handles);
+    try testing.expect(grandchild_reclaim.valid());
+    try testing.expectEqual(@as(usize, 0), grandchild.state.memory.remaining());
+    try testing.expect(grandchild.state.storage.getObject(grandchild.id.id, output_hash) == null);
+    try testing.expectEqual(@as(u64, child_execution_ticks), child.state.execution_ticks);
+    try testing.expectEqual(@as(u64, child_route_handles), child.state.route_handles);
+    try testing.expectEqual(@as(u64, child_device_handles), child.state.device_handles);
 
     const child_reclaim = try (ExecutionHost.init(device_id).?).reclaimChild(&parent, &child, spawned_child.receipt, end);
-    try std.testing.expect(child_reclaim.valid());
-    try std.testing.expectEqual(@as(usize, parent_memory_bytes), parent.state.memory.remaining());
-    try std.testing.expectEqual(@as(usize, parent_storage_bytes), parent.state.storage.data.len());
-    try std.testing.expectEqual(@as(usize, parent_storage_slots), parent.state.storage.slotCapacity());
-    try std.testing.expectEqual(@as(u64, parent_execution_ticks), parent.state.execution_ticks);
-    try std.testing.expectEqual(@as(u64, parent_route_handles), parent.state.route_handles);
-    try std.testing.expectEqual(@as(u64, parent_device_handles), parent.state.device_handles);
-    try std.testing.expectEqual(@as(usize, 0), child.state.memory.remaining());
+    try testing.expect(child_reclaim.valid());
+    try testing.expectEqual(@as(usize, parent_memory_bytes), parent.state.memory.remaining());
+    try testing.expectEqual(@as(usize, parent_storage_bytes), parent.state.storage.data.len());
+    try testing.expectEqual(@as(usize, parent_storage_slots), parent.state.storage.slotCapacity());
+    try testing.expectEqual(@as(u64, parent_execution_ticks), parent.state.execution_ticks);
+    try testing.expectEqual(@as(u64, parent_route_handles), parent.state.route_handles);
+    try testing.expectEqual(@as(u64, parent_device_handles), parent.state.device_handles);
+    try testing.expectEqual(@as(usize, 0), child.state.memory.remaining());
 }
 
 test "minimum containment memory storage and reclaim laws" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     const child_memory_bytes = 4096;
     const parent_memory_bytes = child_memory_bytes * 2;
     const child_storage_bytes = 1024;
@@ -2357,11 +2357,11 @@ test "minimum containment memory storage and reclaim laws" {
     const child_allocator = child.state.memory.allocator();
     const child_memory = try child_allocator.alloc(u8, 1);
     child_memory[0] = 0x11;
-    try std.testing.expect(!child.state.memory.owns(memory_bytes[0..1]));
+    try testing.expect(!child.state.memory.owns(memory_bytes[0..1]));
 
-    try std.testing.expect(child.state.storage.putRawBlob(&oversized_storage) == null);
+    try testing.expect(child.state.storage.putRawBlob(&oversized_storage) == null);
     const sibling_secret = sibling.state.storage.putRawBlob("sibling secret").?;
-    try std.testing.expect(child.state.storage.get(sibling_secret) == null);
+    try testing.expect(child.state.storage.get(sibling_secret) == null);
 
     const grandchild_authorization = intent.admit(
         user_id,
@@ -2386,22 +2386,22 @@ test "minimum containment memory storage and reclaim laws" {
     const grandchild_manifest_canonical = try App.writeManifestObject(grandchild_id, grandchild_manifest, epoch, &grandchild_manifest_raw);
     const spawned_grandchild = try (ExecutionHost.init(device_id).?).spawnManifest(&child, child_id, grandchild_id, epoch, grandchild_authorization, grandchild_manifest_canonical);
     var grandchild = spawned_grandchild.app;
-    try std.testing.expectEqual(@as(u64, child_execution_ticks - grandchild_execution_ticks), child.state.execution_ticks);
-    try std.testing.expectEqual(@as(usize, grandchild_memory_bytes), grandchild.state.memory.remaining());
-    try std.testing.expectEqual(@as(usize, parent_memory_bytes - child_memory_bytes), parent.state.memory.remaining());
+    try testing.expectEqual(@as(u64, child_execution_ticks - grandchild_execution_ticks), child.state.execution_ticks);
+    try testing.expectEqual(@as(usize, grandchild_memory_bytes), grandchild.state.memory.remaining());
+    try testing.expectEqual(@as(usize, parent_memory_bytes - child_memory_bytes), parent.state.memory.remaining());
 
-    try std.testing.expectError(error.Corrupt, (ExecutionHost.init(device_id).?).reclaimChild(&parent, &child, spawned_child.receipt, epoch));
+    try testing.expectError(error.Corrupt, (ExecutionHost.init(device_id).?).reclaimChild(&parent, &child, spawned_child.receipt, epoch));
     _ = try (ExecutionHost.init(device_id).?).reclaimChild(&child, &grandchild, spawned_grandchild.receipt, epoch);
     _ = try (ExecutionHost.init(device_id).?).reclaimChild(&parent, &child, spawned_child.receipt, epoch);
-    try std.testing.expectEqual(@as(usize, parent_memory_bytes), parent.state.memory.remaining());
-    try std.testing.expectEqual(@as(usize, parent_storage_bytes), parent.state.storage.data.len());
-    try std.testing.expectEqual(@as(usize, 0), child.state.memory.remaining());
-    try std.testing.expectEqual(@as(usize, 0), child.state.storage.data.len());
-    try std.testing.expectError(error.Corrupt, (ExecutionHost.init(device_id).?).reclaimChild(&parent, &child, spawned_child.receipt, epoch));
+    try testing.expectEqual(@as(usize, parent_memory_bytes), parent.state.memory.remaining());
+    try testing.expectEqual(@as(usize, parent_storage_bytes), parent.state.storage.data.len());
+    try testing.expectEqual(@as(usize, 0), child.state.memory.remaining());
+    try testing.expectEqual(@as(usize, 0), child.state.storage.data.len());
+    try testing.expectError(error.Corrupt, (ExecutionHost.init(device_id).?).reclaimChild(&parent, &child, spawned_child.receipt, epoch));
 }
 
 test "minimum containment child cannot write byte past 4kb allocation" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     const child_memory_bytes = 4096;
     var memory_bytes: [child_memory_bytes]u8 = undefined;
     var arena = BoundedArena.init(.{ .base = &memory_bytes });
@@ -2409,11 +2409,11 @@ test "minimum containment child cannot write byte past 4kb allocation" {
 
     const full_child_memory = try allocator.alloc(u8, child_memory_bytes);
     full_child_memory[child_memory_bytes - 1] = 0x11;
-    try std.testing.expectError(error.OutOfMemory, allocator.alloc(u8, 1));
+    try testing.expectError(error.OutOfMemory, allocator.alloc(u8, 1));
 }
 
 test "minimum containment rejects parent allocation id as child memory id" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     const parent_memory_bytes = 128;
     const parent_storage_bytes = 256;
     const parent_storage_slots = 4;
@@ -2469,11 +2469,11 @@ test "minimum containment rejects parent allocation id as child memory id" {
         .epoch = epoch,
     };
     const share_authorization = intent.admit(user_id, device_id, child_id, reader_id, .grant_resource, .exports_data, epoch, intent.requestId("allocation id forged share").?).?;
-    try std.testing.expectError(error.Corrupt, child.shareMemoryReadOnly(child_id, reader_id, forged_allocation_slice, epoch, share_authorization));
+    try testing.expectError(error.Corrupt, child.shareMemoryReadOnly(child_id, reader_id, forged_allocation_slice, epoch, share_authorization));
 }
 
 test "minimum containment routes devices receipts and revoked handles" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     const parent_memory_bytes = 128;
     const parent_storage_bytes = 1536;
     const parent_storage_slots = 6;
@@ -2503,7 +2503,7 @@ test "minimum containment routes devices receipts and revoked handles" {
     const route_admission = intent.admit(user_id, device_id, child_id, other_id, .sync_data, .exports_data, start, intent.requestId("receipt laws route").?).?;
     const relay_id = identity.Identity.init(.relay, identity.Source.prepare(.hash, &preimage.rawHash("receipt laws relay")).?, start).?;
     var route = relay.Route.init(route_admission, child_id, other_id, .sync_data, .exports_data, hashMaterial("receipt laws route policy")).?;
-    try std.testing.expect(route.appendRelay(relay_id));
+    try testing.expect(route.appendRelay(relay_id));
     const route_id = route.id().?;
     const different_route_id = hashMaterial("receipt laws different route");
 
@@ -2543,13 +2543,13 @@ test "minimum containment routes devices receipts and revoked handles" {
     const spawned = try (ExecutionHost.init(device_id).?).spawnManifest(&parent, parent_id, child_id, start, authorization, child_manifest_canonical);
     var child = spawned.app;
 
-    try std.testing.expect(child.createRelayEnvelope(route, 1, hashMaterial("receipt laws object"), hashMaterial("receipt laws payload")) != null);
+    try testing.expect(child.createRelayEnvelope(route, 1, hashMaterial("receipt laws object"), hashMaterial("receipt laws payload")) != null);
     child.state.route_handle = different_route_id;
-    try std.testing.expect(child.createRelayEnvelope(route, 2, hashMaterial("receipt laws object"), hashMaterial("receipt laws payload")) == null);
+    try testing.expect(child.createRelayEnvelope(route, 2, hashMaterial("receipt laws object"), hashMaterial("receipt laws payload")) == null);
     child.state.route_handle = route_id;
-    try std.testing.expect(child.useDevice(device_id));
-    try std.testing.expect(!child.useDevice(other_device_id));
-    try std.testing.expect(child.consumeExecution(used_execution_ticks));
+    try testing.expect(child.useDevice(device_id));
+    try testing.expect(!child.useDevice(other_device_id));
+    try testing.expect(child.consumeExecution(used_execution_ticks));
 
     const owner = object.Owner{ .kind = .app, .node_id = child.id.id.bytes };
     const output_req = sealedAppRequirements();
@@ -2561,22 +2561,22 @@ test "minimum containment routes devices receipts and revoked handles" {
     const work = child.completeWork(parent.id, input_hash, output_hash, child_manifest.code_hash, child_manifest_id, start, end, child_allocation, spawned.receipt).?;
     const first_receipt_id = try child.putWorkReceipt(work, end, &receipt_raw);
     const second_receipt_id = try child.putWorkReceipt(work, end, &receipt_again_raw);
-    try std.testing.expectEqualSlices(u8, &receipt_raw, &receipt_again_raw);
-    try std.testing.expect(bytes.eql(&first_receipt_id, &second_receipt_id));
+    try testing.expectEqualSlices(u8, &receipt_raw, &receipt_again_raw);
+    try testing.expect(bytes.eql(&first_receipt_id, &second_receipt_id));
 
     var tampered_receipt = receipt_raw;
     tampered_receipt[object.header_size + identity.id_size * 2] ^= 1;
     const tampered_info = try App.WorkReceipt.decodeObject(&tampered_receipt);
-    try std.testing.expect(!tampered_info.matches(work));
+    try testing.expect(!tampered_info.matches(work));
 
     _ = try (ExecutionHost.init(device_id).?).reclaimChild(&parent, &child, spawned.receipt, end);
-    try std.testing.expect(!child.useDevice(device_id));
-    try std.testing.expect(child.createRelayEnvelope(route, 3, hashMaterial("receipt laws object"), hashMaterial("receipt laws payload")) == null);
-    try std.testing.expect(!child.consumeExecution(1));
+    try testing.expect(!child.useDevice(device_id));
+    try testing.expect(child.createRelayEnvelope(route, 3, hashMaterial("receipt laws object"), hashMaterial("receipt laws payload")) == null);
+    try testing.expect(!child.consumeExecution(1));
 }
 
 test "minimum containment work receipt records ticks used" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     const parent_memory_bytes = 128;
     const parent_storage_bytes = 1024;
     const parent_storage_slots = 4;
@@ -2627,13 +2627,13 @@ test "minimum containment work receipt records ticks used" {
     const spawned = try (ExecutionHost.init(device_id).?).spawnManifest(&parent, parent_id, child_id, start, authorization, manifest_canonical);
     var child = spawned.app;
 
-    try std.testing.expect(child.consumeExecution(used_execution_ticks));
+    try testing.expect(child.consumeExecution(used_execution_ticks));
     const work = child.completeWork(parent.id, hashMaterial("usage input"), hashMaterial("usage output"), manifest.code_hash, manifest_id, start, end, allocation, spawned.receipt).?;
-    try std.testing.expectEqual(@as(u64, used_execution_ticks), work.execution_used);
+    try testing.expectEqual(@as(u64, used_execution_ticks), work.execution_used);
 }
 
 test "parent signs validated work receipt drafts" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     const parent_memory_bytes = 128;
     const parent_storage_bytes = 1024;
     const parent_storage_slots = 4;
@@ -2706,7 +2706,7 @@ test "parent signs validated work receipt drafts" {
     const output_hash = hashMaterial("signed output");
     const work = child.completeWork(parent.id, input_hash, output_hash, manifest.code_hash, manifest_id, start, end, allocation, spawned.receipt).?;
     const draft = try work.writeObject(end, &draft_raw);
-    try std.testing.expectError(error.Corrupt, object.decodeSignatureReceipt(draft));
+    try testing.expectError(error.Corrupt, object.decodeSignatureReceipt(draft));
 
     const signing_authorization = intent.admit(user_id, device_id, parent_id, parent_id, .sign_data, .attests_state, end, intent.requestId("parent signs accepted work").?).?;
     try parent.admitOwnAuthorization(signing_authorization, parent_id, parent_id);
@@ -2727,21 +2727,21 @@ test "parent signs validated work receipt drafts" {
         .spawn_receipt = spawned.receipt,
     };
     const signed = try parent.signWorkReceiptDraft(draft, context, end, capability, &signed_raw);
-    try std.testing.expect(App.verifySignedWorkReceipt(draft, signed, capability));
-    try std.testing.expectError(error.Corrupt, parent.signWorkReceiptDraft(draft, context, end, capability, &signed_raw));
+    try testing.expect(App.verifySignedWorkReceipt(draft, signed, capability));
+    try testing.expectError(error.Corrupt, parent.signWorkReceiptDraft(draft, context, end, capability, &signed_raw));
 
     var tampered_draft = draft_raw;
     tampered_draft[object.header_size + identity.id_size * 2] ^= 1;
-    try std.testing.expect(!App.verifySignedWorkReceipt(&tampered_draft, signed, capability));
-    try std.testing.expectError(error.Corrupt, parent.signWorkReceiptDraft(&tampered_draft, context, end, capability, &signed_raw));
+    try testing.expect(!App.verifySignedWorkReceipt(&tampered_draft, signed, capability));
+    try testing.expectError(error.Corrupt, parent.signWorkReceiptDraft(&tampered_draft, context, end, capability, &signed_raw));
 
     var wrong_allocation_context = context;
     wrong_allocation_context.allocation.storage_bytes += 1;
-    try std.testing.expectError(error.BadArgument, parent.signWorkReceiptDraft(draft, wrong_allocation_context, end, capability, &signed_raw));
+    try testing.expectError(error.BadArgument, parent.signWorkReceiptDraft(draft, wrong_allocation_context, end, capability, &signed_raw));
 
     var impossible_usage_context = context;
     impossible_usage_context.execution_used = allocation.execution_ticks + 1;
-    try std.testing.expectError(error.BadArgument, parent.signWorkReceiptDraft(draft, impossible_usage_context, end, capability, &signed_raw));
+    try testing.expectError(error.BadArgument, parent.signWorkReceiptDraft(draft, impossible_usage_context, end, capability, &signed_raw));
 
     const overlap_start = clock.Stamp{ .keeper = keeper, .tick = 15 };
     const overlap_end = clock.Stamp{ .keeper = keeper, .tick = 25 };
@@ -2752,7 +2752,7 @@ test "parent signs validated work receipt drafts" {
     overlap_context.output = hashMaterial("overlap output");
     overlap_context.clock_start = overlap_start;
     overlap_context.clock_end = overlap_end;
-    try std.testing.expectError(error.Corrupt, parent.signWorkReceiptDraft(overlap_draft, overlap_context, end, capability, &signed_raw));
+    try testing.expectError(error.Corrupt, parent.signWorkReceiptDraft(overlap_draft, overlap_context, end, capability, &signed_raw));
 
     const backward_start = clock.Stamp{ .keeper = keeper, .tick = 5 };
     const backward_end = clock.Stamp{ .keeper = keeper, .tick = 9 };
@@ -2763,11 +2763,11 @@ test "parent signs validated work receipt drafts" {
     backward_context.output = hashMaterial("backward output");
     backward_context.clock_start = backward_start;
     backward_context.clock_end = backward_end;
-    try std.testing.expectError(error.Corrupt, parent.signWorkReceiptDraft(backward_draft, backward_context, end, capability, &signed_raw));
+    try testing.expectError(error.Corrupt, parent.signWorkReceiptDraft(backward_draft, backward_context, end, capability, &signed_raw));
 
     const wrong_manifest_work = child.completeWork(parent.id, input_hash, output_hash, manifest.code_hash, hashMaterial("wrong manifest"), start, end, allocation, spawned.receipt).?;
     const wrong_manifest_draft = try wrong_manifest_work.writeObject(end, &wrong_manifest_draft_raw);
-    try std.testing.expectError(error.Corrupt, parent.signWorkReceiptDraft(wrong_manifest_draft, context, end, capability, &signed_raw));
+    try testing.expectError(error.Corrupt, parent.signWorkReceiptDraft(wrong_manifest_draft, context, end, capability, &signed_raw));
 
     const other_signing_authorization = intent.admit(user_id, device_id, other_parent_id, other_parent_id, .sign_data, .attests_state, end, intent.requestId("other parent signs accepted work").?).?;
     try other_parent.admitOwnAuthorization(other_signing_authorization, other_parent_id, other_parent_id);
@@ -2775,7 +2775,7 @@ test "parent signs validated work receipt drafts" {
         .signer = other_parent_id,
         .authorization = other_signing_authorization,
     };
-    try std.testing.expectError(error.BadArgument, other_parent.signWorkReceiptDraft(draft, context, end, other_capability, &signed_raw));
+    try testing.expectError(error.BadArgument, other_parent.signWorkReceiptDraft(draft, context, end, other_capability, &signed_raw));
 
     const expired_authorization = intent.admitWindow(user_id, device_id, parent_id, parent_id, .sign_data, .attests_state, start, start, start, intent.requestId("expired parent signing").?).?;
     try parent.admitOwnAuthorization(expired_authorization, parent_id, parent_id);
@@ -2783,13 +2783,13 @@ test "parent signs validated work receipt drafts" {
         .signer = parent_id,
         .authorization = expired_authorization,
     };
-    try std.testing.expectError(error.Unauthorized, parent.signWorkReceiptDraft(draft, context, end, expired_capability, &signed_raw));
+    try testing.expectError(error.Unauthorized, parent.signWorkReceiptDraft(draft, context, end, expired_capability, &signed_raw));
 
-    try std.testing.expectError(error.Unauthorized, parent.signWorkReceiptDraft(draft, context, end, null, &signed_raw));
+    try testing.expectError(error.Unauthorized, parent.signWorkReceiptDraft(draft, context, end, null, &signed_raw));
 }
 
 test "app creates its store from its host-owned memory slice" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     var host_memory: [1024]u8 = undefined;
     var state_raw: [object.header_size + object.owner_size + object.envelope_size + 5]u8 = undefined;
 
@@ -2813,12 +2813,12 @@ test "app creates its store from its host-owned memory slice" {
     const envelope = sealedEnvelopeForApp(device_id, app_id, user_id, req, "host slice state key").?;
     const canonical = try (object.NodeWriter{ .out = &state_raw }).bytesNodeOwned(req, epoch, &.{owner}, &.{envelope}, "state");
     const hash = app.putSealedObject(device_id, user_id, canonical).?;
-    try std.testing.expectEqualStrings("state", app.state.storage.getObject(app.id.id, hash).?.body);
-    try std.testing.expect(app.state.memory.remaining() < 640);
+    try testing.expectEqualStrings("state", app.state.storage.getObject(app.id.id, hash).?.body);
+    try testing.expect(app.state.memory.remaining() < 640);
 }
 
 test "app storage requires seal envelope for private durable objects" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     var host_memory: [2048]u8 = undefined;
     var unsealed_raw: [object.header_size + object.owner_size + 5]u8 = undefined;
     var sealed_raw: [object.header_size + object.owner_size + object.envelope_size + 5]u8 = undefined;
@@ -2838,22 +2838,22 @@ test "app storage requires seal envelope for private durable objects" {
         .node_id = app_id.id.bytes,
     };
     const unsealed = try (object.NodeWriter{ .out = &unsealed_raw }).bytesNodeOwned(req, epoch, &.{owner}, &.{}, "state");
-    try std.testing.expect(app.putSealedObject(device_id, user_id, unsealed) == null);
+    try testing.expect(app.putSealedObject(device_id, user_id, unsealed) == null);
 
     const wrong_envelope = sealedEnvelopeForApp(wrong_device_id, app_id, user_id, req, "state key").?;
     const wrong_sealed = try (object.NodeWriter{ .out = &wrong_seal_raw }).bytesNodeOwned(req, epoch, &.{owner}, &.{wrong_envelope}, "state");
-    try std.testing.expect(app.putSealedObject(device_id, user_id, wrong_sealed) == null);
+    try testing.expect(app.putSealedObject(device_id, user_id, wrong_sealed) == null);
 
     const envelope = sealedEnvelopeForApp(device_id, app_id, user_id, req, "state key").?;
     const sealed_object = try (object.NodeWriter{ .out = &sealed_raw }).bytesNodeOwned(req, epoch, &.{owner}, &.{envelope}, "state");
     const object_id = app.putSealedObject(device_id, user_id, sealed_object).?;
     const stored = app.state.storage.getObject(app.id.id, object_id).?;
-    try std.testing.expectEqual(object.Integrity.sealed, stored.header.requirements.integrity);
-    try std.testing.expectEqual(object.EnvelopeKind.app, (try stored.envelopeAt(0)).kind);
+    try testing.expectEqual(object.Integrity.sealed, stored.header.requirements.integrity);
+    try testing.expectEqual(object.EnvelopeKind.app, (try stored.envelopeAt(0)).kind);
 }
 
 test "app shares owned memory read only for direct ui updates" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     var producer_memory: [512]u8 = undefined;
     var ui_memory: [256]u8 = undefined;
 
@@ -2882,19 +2882,19 @@ test "app shares owned memory read only for direct ui updates" {
     try producer.admitOwnAuthorization(authorization, allocator_id, ui_id);
 
     const view = try producer.shareMemoryReadOnly(allocator_id, ui_id, shared, epoch, authorization);
-    try std.testing.expect(view.valid());
-    try std.testing.expect(view.allocator.id.eql(allocator_id.id));
-    try std.testing.expect(view.receipt.allocator.eql(allocator_id.id));
-    try std.testing.expect(bytes.eql(&view.receipt.authorization, &authorization.id().?));
-    try std.testing.expectEqual(grant.Resource.read_only_memory, view.receipt.memory.resource);
-    try std.testing.expectEqualStrings("ready", view.bytes[0..5]);
+    try testing.expect(view.valid());
+    try testing.expect(view.allocator.id.eql(allocator_id.id));
+    try testing.expect(view.receipt.allocator.eql(allocator_id.id));
+    try testing.expect(bytes.eql(&view.receipt.authorization, &authorization.id().?));
+    try testing.expectEqual(grant.Resource.read_only_memory, view.receipt.memory.resource);
+    try testing.expectEqualStrings("ready", view.bytes[0..5]);
 
     _ = bytes.copy(shared.bytes[0..5], "paint");
-    try std.testing.expectEqualStrings("paint", view.bytes[0..5]);
+    try testing.expectEqualStrings("paint", view.bytes[0..5]);
 }
 
 test "app publishes canonical ui component and renders from object storage" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     var host_memory: [4096]u8 = undefined;
     const keeper = clock.KeeperId{ .bytes = [_]u8{4} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
@@ -2915,22 +2915,22 @@ test "app publishes canonical ui component and renders from object storage" {
     };
 
     const published = try app.publishUiComponent(.{ .button = .{ .id = 42, .label = "Open" } }, epoch, scratch);
-    try std.testing.expect(published.valid());
-    try std.testing.expect(bytes.nonzero(&published.id().?));
+    try testing.expect(published.valid());
+    try testing.expect(bytes.nonzero(&published.id().?));
 
     const stored = app.state.storage.getObject(app.id.id, published.object_id).?;
-    try std.testing.expectEqual(object.Kind.bytes, stored.header.kind);
-    try std.testing.expectEqual(object.Confidentiality.app_private, stored.header.requirements.confidentiality);
-    try std.testing.expectEqual(object.Visibility.app_namespace, stored.header.requirements.visibility);
+    try testing.expectEqual(object.Kind.bytes, stored.header.kind);
+    try testing.expectEqual(object.Confidentiality.app_private, stored.header.requirements.confidentiality);
+    try testing.expectEqual(object.Visibility.app_namespace, stored.header.requirements.visibility);
 
     var commands: [16]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
     try app.renderPublishedUi(published, scratch, &scene, .{ .x = 0, .y = 0, .w = 160, .h = 64 }, .{});
-    try std.testing.expect(scene.commandCount() > 0);
+    try testing.expect(scene.commandCount() > 0);
 }
 
 test "app publishes stack ui as one canonical render object" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     var host_memory: [8192]u8 = undefined;
     const keeper = clock.KeeperId{ .bytes = [_]u8{5} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
@@ -2961,11 +2961,11 @@ test "app publishes stack ui as one canonical render object" {
     var commands: [32]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
     try app.renderStoredUi(published.object_id, scratch, &scene, .{ .x = 0, .y = 0, .w = 320, .h = 200 }, .{});
-    try std.testing.expect(scene.commandCount() >= 6);
+    try testing.expect(scene.commandCount() >= 6);
 }
 
 test "apps exchange identity routed envelopes through relay boundary" {
-    const std = @import("std");
+    const testing = @import("testing.zig");
     var source_memory: [256]u8 = undefined;
     var target_memory: [256]u8 = undefined;
     var relay_memory: [128]u8 = undefined;
@@ -2995,7 +2995,7 @@ test "apps exchange identity routed envelopes through relay boundary" {
         intent.requestId("identity routed app message").?,
     ).?;
     var route = relay.Route.init(admission, source_id, target_id, .sync_data, .exports_data, hashMaterial("app route policy")).?;
-    try std.testing.expect(route.appendRelay(relay_id));
+    try testing.expect(route.appendRelay(relay_id));
     const route_id = route.id().?;
     source.state.route_handles = 1;
     target.state.route_handles = 1;
@@ -3005,13 +3005,13 @@ test "apps exchange identity routed envelopes through relay boundary" {
     const envelope = source.createRelayEnvelope(route, 1, hashMaterial("message object"), hashMaterial("sealed to target")).?;
     var public_relay = relay.RelayApp.init(relay_id).?;
     const transit = try public_relay.forward(route, envelope, now);
-    try std.testing.expect(transit.valid());
+    try testing.expect(transit.valid());
 
     var forged_transit = transit;
     forged_transit.to = authority.Principal.app(source_id).?;
-    try std.testing.expectError(error.WrongRelay, target.receiveRelayEnvelope(route, envelope, forged_transit, now));
+    try testing.expectError(error.WrongRelay, target.receiveRelayEnvelope(route, envelope, forged_transit, now));
 
     const received = try target.receiveRelayEnvelope(route, envelope, transit, now);
-    try std.testing.expect(received.valid());
-    try std.testing.expect(bytes.nonzero(&received.id().?));
+    try testing.expect(received.valid());
+    try testing.expect(bytes.nonzero(&received.id().?));
 }
