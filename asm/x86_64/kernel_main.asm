@@ -586,45 +586,18 @@ er_fn er_kernel_main
     ; Try to load firmware / verify HCI is alive
     mov     rdi, COM2_PORT
     call    er_bt_fw_load
-    push    rax
-    mov     rdi, COM1_PORT
-    pop     rsi
-    push    rsi
-    call    er_serial_puthex32
-    mov     rdi, COM1_PORT
-    mov     sil, 0x20
-    call    er_serial_putchar
-    pop     rax
     test    eax, eax
     jnz     .bt_absent
 
     ; Reset controller to known state
     mov     rdi, COM2_PORT
     call    er_bt_reset
-    push    rax
-    mov     rdi, COM1_PORT
-    pop     rsi
-    push    rsi
-    call    er_serial_puthex32
-    mov     rdi, COM1_PORT
-    mov     sil, 0x20
-    call    er_serial_putchar
-    pop     rax
     test    eax, eax
     jnz     .bt_absent
 
     ; Set LE scan parameters
     mov     rdi, COM2_PORT
     call    er_bt_le_set_scan_params
-    push    rax
-    mov     rdi, COM1_PORT
-    pop     rsi
-    push    rsi
-    call    er_serial_puthex32
-    mov     rdi, COM1_PORT
-    mov     sil, 0x20
-    call    er_serial_putchar
-    pop     rax
     test    eax, eax
     jnz     .bt_absent
 

@@ -242,11 +242,15 @@ _start:
     call    er_render_ir_push_rect
     xor     edx, edx
     TEST
+    lea     rcx, [rel rect_data1]
+    mov     rdx, RS*4
     call    er_render_ir_push_rect
     xor     edx, edx
     TEST
 
     ; budget exceeded
+    lea     rcx, [rel rect_data1]
+    mov     rdx, RS*4
     call    er_render_ir_push_rect
     mov     edx, -1
     TEST
@@ -567,6 +571,7 @@ _start:
     mov     rdx, [rel total]
     cmp     rax, rdx
     sete    al
+    xor     al, 1               ; invert: 1→0 (all pass), 0→1 (fail)
     movzx   edi, al
     mov     eax, 60
     syscall

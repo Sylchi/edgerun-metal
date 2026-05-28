@@ -198,11 +198,10 @@ cmd_kernel_bt_test() {
 	BT_SOCK="/tmp/bt_mock.sock"
 	PYTHON="${PYTHON:-python3}"
 	rm -f "${BT_SOCK}"
-	# Start the mock as a server first, then have QEMU connect.
 	"${PYTHON}" "tools/bt_mock.py" --socket "${BT_SOCK}" &
 	MOCK_PID=$!
 	while [ ! -S "${BT_SOCK}" ]; do sleep 0.1; done
-	echo "Running QEMU with BT mock on COM2..."
+	echo "Running QEMU with BT mock on COM2 (Unix)..."
 	qemu-system-x86_64 -machine q35 -display none -serial stdio \
 		-serial unix:"${BT_SOCK}" \
 		-no-reboot -kernel "${KERNEL_ELF}" -m 256 || true

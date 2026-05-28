@@ -96,6 +96,12 @@ _bt_uart_putchar:
     mov     dx, di
     mov     al, sil
     out     dx, al          ; write to THR
+    ; Small delay to let UART settle
+    mov     ecx, 1000
+.pause:
+    pause
+    dec     ecx
+    jnz     .pause
     pop     rax
     pop     rdx
     ret
@@ -109,7 +115,7 @@ _bt_uart_putchar:
 _bt_uart_getchar:
     push    rcx
     push    rdx
-    mov     ecx, 1000000       ; ~1s timeout at ~1M loops
+    mov     ecx, 5000000       ; ~12ms timeout at ~2GHz
     mov     dx, di
     add     dx, 5              ; LSR
 .wait_dr:
@@ -270,6 +276,22 @@ _bt_hci_cmd_sync:
     ; Wait for Command Complete event
     mov     ecx, 100        ; max attempts
 .wait_cc:
+    push    rcx
+    ; Debug: read LSR
+    mov     dx, r12w
+    add     dx, 5
+    in      al, dx
+    mov     byte [hci_evt_buf + 0], al
+    mov     rdi, 0x3f8
+    mov     esi, 0x4c       ; 'L'
+    call    er_serial_putchar
+    mov     esi, 0x3d
+    call    er_serial_putchar
+    movzx   esi, byte [hci_evt_buf + 0]
+    call    er_serial_puthex32
+    mov     esi, 0x20
+    call    er_serial_putchar
+    pop     rcx
     mov     rdi, r12
     call    _bt_recv_hci_evt
     test    edx, edx
@@ -278,33 +300,12 @@ _bt_hci_cmd_sync:
     ; Check if it's Command Complete
     movzx   eax, byte [hci_evt_buf + 0]
     cmp     al, HCI_EVT_CMD_COMPLETE
-    jne     .dump_and_next
+    jne     .next
 
     ; Check that opcode matches (hci_evt_buf[3..4] is the command opcode)
     movzx   eax, word [hci_evt_buf + 3]
     cmp     ax, r13w
     je      .match
-
-.dump_and_next:
-    push    rcx
-    push    r10
-    movzx   r10d, byte [hci_evt_buf + 0]
-    mov     rdi, 0x3f8    ; COM1 for debug
-    mov     esi, 0x65    ; 'e'
-    call    er_serial_putchar
-    mov     esi, 0x3d    ; '='
-    call    er_serial_putchar
-    mov     esi, r10d
-    call    er_serial_puthex32
-    movzx   r10d, word [hci_evt_buf + 3]
-    mov     esi, 0x6f    ; 'o'
-    call    er_serial_putchar
-    mov     esi, 0x3d
-    call    er_serial_putchar
-    mov     esi, r10d
-    call    er_serial_puthex32
-    pop     r10
-    pop     rcx
 
 .next:
     dec     ecx

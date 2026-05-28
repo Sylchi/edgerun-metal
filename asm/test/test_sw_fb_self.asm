@@ -213,6 +213,7 @@ _start:
     mov     rdx, [rel total]
     cmp     rax, rdx
     sete    al
+    xor     al, 1               ; invert: 1→0 (all pass), 0→1 (fail)
     movzx   edi, al
     mov     eax, 60
     syscall

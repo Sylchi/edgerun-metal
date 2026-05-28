@@ -679,13 +679,8 @@ er_fn er_tpm_flush_context
     test    rax, rax
     jz      .err_pop2
     mov     ecx, r12d
-    mov     byte [rax + 10], ch
-    shr     ecx, 8
-    mov     byte [rax + 11], cl
-    shr     ecx, 8
-    mov     byte [rax + 12], cl
-    shr     ecx, 8
-    mov     byte [rax + 13], cl
+    bswap   ecx
+    mov     [rax + 10], ecx
 %ifdef HOSTED_TEST
     mov     rdi, rax
     push    rax
@@ -725,13 +720,8 @@ er_fn er_tpm_read_public
     test    rax, rax
     jz      .err_pop2
     mov     ecx, r12d
-    mov     byte [rax + 10], ch
-    shr     ecx, 8
-    mov     byte [rax + 11], cl
-    shr     ecx, 8
-    mov     byte [rax + 12], cl
-    shr     ecx, 8
-    mov     byte [rax + 13], cl
+    bswap   ecx
+    mov     [rax + 10], ecx
 %ifdef HOSTED_TEST
     mov     rdi, rax
     push    rax
@@ -783,25 +773,24 @@ er_fn er_tpm_hash_sha256
     mov     word [rax], 0x000B
     ; hierarchy (4 BE)
     mov     ecx, r12d
-    mov     byte [rax + 2], ch
-    shr     ecx, 8
-    mov     byte [rax + 3], cl
-    shr     ecx, 8
-    mov     byte [rax + 4], ch
-    shr     ecx, 8
-    mov     byte [rax + 5], cl
+    bswap   ecx
+    mov     [rax + 2], ecx
 %ifdef HOSTED_TEST
-    mov     rdi, rax
     push    rax
+    mov     rdi, [rsp + 8]   ; rdi = buffer start from entry push
     call    _tpm_capture_tx
     pop     rax
-    add     rsp, 8          ; pop saved rdi
+    mov     rax, [rsp]       ; restore buffer start for return
+    add     rsp, 8
 %endif
     pop     r13
     pop     r12
     pop     rbx
     ret
 .err_pop3:
+%ifdef HOSTED_TEST
+    add     rsp, 8
+%endif
     pop     r13
     pop     r12
     pop     rbx
@@ -834,9 +823,13 @@ er_fn er_tpm_hash_sequence_start
     push    rax
     call    _tpm_capture_tx
     pop     rax
+    add     rsp, 8
 %endif
     ret
 .err:
+%ifdef HOSTED_TEST
+    add     rsp, 8
+%endif
     xor     eax, eax
     ret
 
@@ -874,10 +867,11 @@ er_fn er_tpm_sequence_update
     mov     edx, r13d
     call    _tpm_write_tpm2b
 %ifdef HOSTED_TEST
-    mov     rdi, rax
     push    rax
+    mov     rdi, [rsp + 8]   ; rdi = buffer start from entry push
     call    _tpm_capture_tx
     pop     rax
+    mov     rax, [rsp]
     add     rsp, 8
 %endif
     pop     r13
@@ -885,6 +879,9 @@ er_fn er_tpm_sequence_update
     pop     rbx
     ret
 .err_pop3:
+%ifdef HOSTED_TEST
+    add     rsp, 8
+%endif
     pop     r13
     pop     r12
     pop     rbx
@@ -928,18 +925,14 @@ er_fn er_tpm_sequence_complete
     call    _tpm_write_tpm2b
     ; hierarchy (4 BE)
     mov     ecx, r14d
-    mov     byte [rax], ch
-    shr     ecx, 8
-    mov     byte [rax + 1], cl
-    shr     ecx, 8
-    mov     byte [rax + 2], ch
-    shr     ecx, 8
-    mov     byte [rax + 3], cl
+    bswap   ecx
+    mov     [rax], ecx
 %ifdef HOSTED_TEST
-    mov     rdi, rax
     push    rax
+    mov     rdi, [rsp + 8]   ; rdi = buffer start from entry push
     call    _tpm_capture_tx
     pop     rax
+    mov     rax, [rsp]
     add     rsp, 8
 %endif
     pop     r14
@@ -994,10 +987,11 @@ er_fn er_tpm_hmac_sha256
     call    _tpm_write_tpm2b
     mov     word [rax], 0x000B
 %ifdef HOSTED_TEST
-    mov     rdi, rax
     push    rax
+    mov     rdi, [rsp + 8]   ; rdi = buffer start from entry push
     call    _tpm_capture_tx
     pop     rax
+    mov     rax, [rsp]
     add     rsp, 8
 %endif
     pop     r13
@@ -1058,10 +1052,11 @@ er_fn er_tpm_sign_p256_sha256
     mov     byte [rax + 9], 0x07
     mov     word [rax + 10], 0x0000
 %ifdef HOSTED_TEST
-    mov     rdi, rax
     push    rax
+    mov     rdi, [rsp + 8]   ; rdi = buffer start from entry push
     call    _tpm_capture_tx
     pop     rax
+    mov     rax, [rsp]
     add     rsp, 8
 %endif
     pop     r12
@@ -1128,10 +1123,11 @@ er_fn er_tpm_verify_p256_sha256
     mov     edx, TPM_P256_POINT_BYTES
     call    _tpm_write_tpm2b
 %ifdef HOSTED_TEST
-    mov     rdi, rax
     push    rax
+    mov     rdi, [rsp + 8]   ; rdi = buffer start from entry push
     call    _tpm_capture_tx
     pop     rax
+    mov     rax, [rsp]
     add     rsp, 8
 %endif
     pop     r14
@@ -1223,10 +1219,11 @@ er_fn er_tpm_create_primary_p256
     mov     dword [rdi + 61], 0x00000000 ; creationPCR count = 0
 
 %ifdef HOSTED_TEST
-    mov     rdi, rax
     push    rax
+    mov     rdi, [rsp + 8]   ; rdi = buffer start from entry push
     call    _tpm_capture_tx
     pop     rax
+    mov     rax, [rsp]
     add     rsp, 8
 %endif
     pop     r12
@@ -1386,10 +1383,11 @@ er_fn er_tpm_ecdh_zgen_p256
     pop     rax
 
 %ifdef HOSTED_TEST
-    mov     rdi, rax
     push    rax
+    mov     rdi, [rsp + 8]   ; rdi = buffer start from entry push
     call    _tpm_capture_tx
     pop     rax
+    mov     rax, [rsp]
     add     rsp, 8
 %endif
     pop     r12
@@ -1454,9 +1452,9 @@ er_fn er_tpm_encrypt_decrypt2
     mov     byte [rax], 0x00
     inc     rax
     ; mode (2 BE)
-    mov     eax, r15d
-    xchg    al, ah
-    mov     [rax], ax
+    mov     ecx, r15d
+    xchg    cl, ch
+    mov     [rax], cx
     add     rax, 2
     ; symmetric alg = TPM_ALG_AES (2 BE)
     mov     word [rax], 0x0006
@@ -1472,10 +1470,11 @@ er_fn er_tpm_encrypt_decrypt2
     call    _tpm_write_tpm2b
 
 %ifdef HOSTED_TEST
-    mov     rdi, rax
     push    rax
+    mov     rdi, [rsp + 8]   ; rdi = buffer start from entry push
     call    _tpm_capture_tx
     pop     rax
+    mov     rax, [rsp]
     add     rsp, 8
 %endif
     pop     r15

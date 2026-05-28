@@ -305,12 +305,15 @@ writer_append_slice:
     ja      .overflow
     mov     rcx, [rdi]          ; dst = bytes + cur_len
     add     rcx, rax
-    push    rdi
+    push    rsi                 ; save src
+    push    rdx                 ; save len
+    push    rdi                 ; save writer
     mov     rdi, rcx            ; rdi = dst
     mov     rcx, rdx            ; rcx = count (rep movsb uses rcx)
     rep     movsb               ; memcpy(rdi=dst, rsi=src, rcx=count)
-    pop     rdi
-    mov     rsi, rdi            ; restore rsi convention
+    pop     rdi                 ; restore writer
+    pop     rdx                 ; restore len
+    pop     rsi                 ; restore src
     add     qword [rdi + 16], rdx
     clc
     ret
@@ -929,37 +932,35 @@ all_whitespace:
 emit_section:
     push    rbp
     mov     rbp, rsp
-    push    rsi
-    push    rdx
+    sub     rsp, 16              ; dedicated slots: [rbp-16]=payload_ptr, [rbp-8]=payload_len
+    mov     [rbp - 16], rsi      ; save payload ptr
+    mov     [rbp - 8], rdx       ; save payload len
     mov     sil, al              ; section_id
     call    writer_append_byte
     jc      .error
-    pop     rdx
-    pop     rsi
     ; Write payload length as LEB128
-    xchg    rdi, rsi
-    push    rsi                  ; save writer
-    mov     eax, edx
-    ; Need to call writer_append_u32_leb with writer in rdi
-    ; But writer is currently in rsi, swap
-    xchg    rdi, rsi
-    push    rdx
+    mov     eax, [rbp - 8]       ; payload len
+    push    rdi                  ; save writer
+    push    rax                  ; save payload len
     call    writer_append_u32_leb
-    pop     rdx
-    pop     rsi
+    pop     rax                  ; discard
+    pop     rdi                  ; restore writer
     test    eax, eax
     jnz     .error
     ; Write payload bytes
-    mov     rdi, rsi             ; rdi = writer (rsi was restored from stack)
-    mov     rsi, [rbp - 16]      ; rsi = payload ptr
-    mov     rdx, [rbp - 8]       ; rdx = payload len
+    mov     rsi, [rbp - 16]      ; payload ptr
+    mov     rdx, [rbp - 8]       ; payload len
     call    writer_append_slice
     jc      .error
     xor     eax, eax
+    clc
+    add     rsp, 16
     pop     rbp
     ret
 .error:
     or      eax, -1
+    stc
+    add     rsp, 16
     pop     rbp
     ret
 

@@ -301,11 +301,14 @@ er_fn er_render_ir_push_rect_ex
     push    r12                    ; save buffer
     push    r13                    ; save len_ptr
     push    r14                    ; save capacity
+    push    r15
     sub     rsp, 64                ; temp 15-float array + alignment
 
     mov     r12, rdi               ; buffer
     mov     r13, rsi               ; len_ptr
     mov     r14, rdx               ; capacity
+    mov     r15d, r8d              ; color
+    mov     [rsp + 60], r9d        ; color2
 
     ; Copy bounds (4 floats from rcx) to temp[0..3]
     mov     rax, [rcx]
@@ -313,56 +316,52 @@ er_fn er_render_ir_push_rect_ex
     mov     rax, [rcx + 8]
     mov     [rsp + RECT_W*4], rax
 
-    ; Convert color (r8) channels
-    mov     eax, r8d
-
+    ; Convert color (r15d) channels
     ; r channel — byte 0
-    mov     edi, eax
+    mov     edi, r15d
     and     edi, 0xFF
     call    er_render_ir_channel
     movss   [rsp + RECT_R*4], xmm0
 
     ; g channel — byte 1
-    mov     edi, eax
+    mov     edi, r15d
     shr     edi, 8
     and     edi, 0xFF
     call    er_render_ir_channel
     movss   [rsp + RECT_G*4], xmm0
 
     ; b channel — byte 2
-    mov     edi, eax
+    mov     edi, r15d
     shr     edi, 16
     and     edi, 0xFF
     call    er_render_ir_channel
     movss   [rsp + RECT_B*4], xmm0
 
     ; a channel — byte 3
-    mov     edi, eax
+    mov     edi, r15d
     shr     edi, 24
     call    er_render_ir_channel
     movss   [rsp + RECT_A*4], xmm0
 
-    ; Convert color2 (r9) channels
-    mov     eax, r9d
-
-    mov     edi, eax
+    ; Convert color2 channels
+    mov     edi, [rsp + 60]
     and     edi, 0xFF
     call    er_render_ir_channel
     movss   [rsp + RECT_R2*4], xmm0
 
-    mov     edi, eax
+    mov     edi, [rsp + 60]
     shr     edi, 8
     and     edi, 0xFF
     call    er_render_ir_channel
     movss   [rsp + RECT_G2*4], xmm0
 
-    mov     edi, eax
+    mov     edi, [rsp + 60]
     shr     edi, 16
     and     edi, 0xFF
     call    er_render_ir_channel
     movss   [rsp + RECT_B2*4], xmm0
 
-    mov     edi, eax
+    mov     edi, [rsp + 60]
     shr     edi, 24
     call    er_render_ir_channel
     movss   [rsp + RECT_A2*4], xmm0
@@ -383,6 +382,7 @@ er_fn er_render_ir_push_rect_ex
     call    er_render_ir_push_rect
 
     add     rsp, 64
+    pop     r15
     pop     r14
     pop     r13
     pop     r12
@@ -419,27 +419,25 @@ er_fn er_render_ir_push_textured_vertex_ex
     movss   [rsp + VTX_U*4], xmm2
     movss   [rsp + VTX_V*4], xmm3
 
-    ; Convert color channels
-    mov     eax, r15d
-
-    mov     edi, eax
+    ; Convert color channels (r15d preserved across calls)
+    mov     edi, r15d
     and     edi, 0xFF
     call    er_render_ir_channel
     movss   [rsp + VTX_R*4], xmm0
 
-    mov     edi, eax
+    mov     edi, r15d
     shr     edi, 8
     and     edi, 0xFF
     call    er_render_ir_channel
     movss   [rsp + VTX_G*4], xmm0
 
-    mov     edi, eax
+    mov     edi, r15d
     shr     edi, 16
     and     edi, 0xFF
     call    er_render_ir_channel
     movss   [rsp + VTX_B*4], xmm0
 
-    mov     edi, eax
+    mov     edi, r15d
     shr     edi, 24
     call    er_render_ir_channel
     movss   [rsp + VTX_A*4], xmm0
@@ -482,6 +480,7 @@ er_fn er_render_ir_push_icon_ex
     mov     r13, rsi               ; len_ptr
     mov     r14, rdx               ; capacity
     mov     r15, r9                ; icon_id
+    mov     [rsp + 36], r8d        ; color (save in free stack slot)
 
     ; Copy bounds
     mov     rax, [rcx]
@@ -490,26 +489,24 @@ er_fn er_render_ir_push_icon_ex
     mov     [rsp + ICON_W*4], rax
 
     ; Convert color channels
-    mov     eax, r8d
-
-    mov     edi, eax
+    mov     edi, [rsp + 36]
     and     edi, 0xFF
     call    er_render_ir_channel
     movss   [rsp + ICON_R*4], xmm0
 
-    mov     edi, eax
+    mov     edi, [rsp + 36]
     shr     edi, 8
     and     edi, 0xFF
     call    er_render_ir_channel
     movss   [rsp + ICON_G*4], xmm0
 
-    mov     edi, eax
+    mov     edi, [rsp + 36]
     shr     edi, 16
     and     edi, 0xFF
     call    er_render_ir_channel
     movss   [rsp + ICON_B*4], xmm0
 
-    mov     edi, eax
+    mov     edi, [rsp + 36]
     shr     edi, 24
     call    er_render_ir_channel
     movss   [rsp + ICON_A*4], xmm0

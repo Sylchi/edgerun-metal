@@ -65,6 +65,7 @@ class HCIController:
         self.lmp_subver = 0
 
     def send_raw(self, data: bytes):
+        print(f"  >> TX {data.hex()}", flush=True)
         self.conn.sendall(data)
 
     def send_cmd_complete(self, opcode: int, status: int = 0,
@@ -140,6 +141,7 @@ class HCIController:
                     if not chunk:
                         print("Connection closed.", flush=True)
                         return
+                    print(f"  << RX {chunk.hex()}", flush=True)
                     buf.extend(chunk)
                 except socket.timeout:
                     pass
@@ -174,18 +176,62 @@ class HCIController:
 def main():
     ap = argparse.ArgumentParser(
         description="Mock Bluetooth HCI UART controller for QEMU testing")
-    ap.add_argument("--socket", default="/tmp/bt_mock.sock",
-                    help="Unix socket path (default: /tmp/bt_mock.sock)")
+    ap.add_argument("--socket", default=None,
+                    help="Unix socket path (listen)")
     ap.add_argument("--connect", default=None,
                     help="Connect to existing socket instead of listening")
+    ap.add_argument("--tcp", default=None,
+                    help="TCP address:port to listen on (e.g. 127.0.0.1:9900)")
     ap.add_argument("--adv-interval", type=float, default=2.0,
                     help="Seconds between fake advertisements (default: 2.0)")
     args = ap.parse_args()
 
-    socket_path = args.connect or args.socket
+    if args.tcp:
+        host, port_str = args.tcp.split(":")
+        port = int(port_str)
+        server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server.bind((host, port))
+        server.listen(1)
+        print(f"Listening on TCP {host}:{port}", flush=True)
+        try:
+            while True:
+                conn, addr = server.accept()
+                conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                print(f"Connection from {addr}", flush=True)
+                controller = HCIController(conn, adv_interval=args.adv_interval)
+                controller.run()
+        except KeyboardInterrupt:
+            print("\nShutting down.", flush=True)
+        finally:
+            server.close()
+    elif args.socket or not args.connect:
+        socket_path = args.socket or "/tmp/bt_mock.sock"
+        try:
+            os.unlink(socket_path)
+        except FileNotFoundError:
+            pass
 
-    if args.connect:
-        # Client mode: connect to QEMU's server socket
+        server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        server.bind(socket_path)
+        server.listen(1)
+        os.chmod(socket_path, 0o666)
+        print(f"Listening on {socket_path}", flush=True)
+        try:
+            while True:
+                conn, _ = server.accept()
+                controller = HCIController(conn, adv_interval=args.adv_interval)
+                controller.run()
+        except KeyboardInterrupt:
+            print("\nShutting down.", flush=True)
+        finally:
+            server.close()
+            try:
+                os.unlink(socket_path)
+            except FileNotFoundError:
+                pass
+    else:
+        socket_path = args.connect
         for attempt in range(30):
             try:
                 sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -201,32 +247,6 @@ def main():
         print(f"Connected to {socket_path}", flush=True)
         controller = HCIController(sock, adv_interval=args.adv_interval)
         controller.run()
-    else:
-        # Server mode: listen for QEMU connection
-        try:
-            os.unlink(socket_path)
-        except FileNotFoundError:
-            pass
-
-        server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        server.bind(socket_path)
-        server.listen(1)
-        os.chmod(socket_path, 0o666)
-        print(f"Listening on {socket_path}", flush=True)
-
-        try:
-            while True:
-                conn, _ = server.accept()
-                controller = HCIController(conn, adv_interval=args.adv_interval)
-                controller.run()
-        except KeyboardInterrupt:
-            print("\nShutting down.", flush=True)
-        finally:
-            server.close()
-            try:
-                os.unlink(socket_path)
-            except FileNotFoundError:
-                pass
 
 
 if __name__ == "__main__":
