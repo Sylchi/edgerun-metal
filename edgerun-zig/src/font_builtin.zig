@@ -1,16 +1,55 @@
 const std = @import("std");
 const font_vector = @import("font_vector.zig");
+const varfont = @import("varfont.zig");
 
 pub const replacement_codepoint: u21 = std.unicode.replacement_character;
 
-const source_face = font_vector.FixedFace.geistDefault() catch @compileError("failed to load source font for built-in vector font");
+pub const Weight = enum(u8) {
+    regular,
+    semibold,
+    bold,
+};
+
+const source_face = fixedFace(.regular);
 
 pub const codepoint_count: usize = countCoveredCodepoints(source_face);
 pub const codepoints: [codepoint_count]u21 = buildCodepoints(source_face);
-pub const counts: font_vector.Counts = countExactVectorStorage(source_face, &codepoints);
 
-pub const Compiled = CompiledFont(counts.glyphs, counts.kerns, counts.commands);
-pub const compiled: Compiled = compileBuiltIn(source_face, &codepoints, counts);
+pub const regular_counts: font_vector.Counts = countExactVectorStorage(fixedFace(.regular), &codepoints);
+pub const semibold_counts: font_vector.Counts = countExactVectorStorage(fixedFace(.semibold), &codepoints);
+pub const bold_counts: font_vector.Counts = countExactVectorStorage(fixedFace(.bold), &codepoints);
+
+pub const RegularCompiled = CompiledFont(regular_counts.glyphs, regular_counts.kerns, regular_counts.commands);
+pub const SemiboldCompiled = CompiledFont(semibold_counts.glyphs, semibold_counts.kerns, semibold_counts.commands);
+pub const BoldCompiled = CompiledFont(bold_counts.glyphs, bold_counts.kerns, bold_counts.commands);
+
+pub const regular: RegularCompiled = compileBuiltIn(fixedFace(.regular), &codepoints, regular_counts);
+pub const semibold: SemiboldCompiled = compileBuiltIn(fixedFace(.semibold), &codepoints, semibold_counts);
+pub const bold: BoldCompiled = compileBuiltIn(fixedFace(.bold), &codepoints, bold_counts);
+
+pub const Compiled = RegularCompiled;
+pub const compiled = regular;
+
+pub fn body(weight: Weight) font_vector.Body {
+    return switch (weight) {
+        .regular => regular.body(),
+        .semibold => semibold.body(),
+        .bold => bold.body(),
+    };
+}
+
+pub fn weightValue(weight: Weight) f32 {
+    return switch (weight) {
+        .regular => 400.0,
+        .semibold => 600.0,
+        .bold => 700.0,
+    };
+}
+
+fn fixedFace(weight: Weight) font_vector.FixedFace {
+    const face = varfont.Face.geist() catch @compileError("failed to load source font for built-in vector font");
+    return .{ .face = face, .axis_values = face.fixedAxisValues("wght", weightValue(weight)) };
+}
 
 pub fn CompiledFont(comptime glyph_count: usize, comptime kern_count: usize, comptime command_count: usize) type {
     return struct {
@@ -35,11 +74,11 @@ fn compileBuiltIn(comptime face: font_vector.FixedFace, comptime cps: []const u2
     var glyphs: [expected.glyphs]font_vector.GlyphRecord = undefined;
     var kerns: [expected.kerns]font_vector.KernRecord = undefined;
     var commands: [expected.commands]font_vector.Command = undefined;
-    const body = font_vector.compileCodepoints(face, cps, &glyphs, &kerns, &commands) catch @compileError("failed to compile built-in vector font");
-    if (body.glyphs.len != expected.glyphs) @compileError("built-in vector font glyph count drifted");
-    if (body.kerns.len != expected.kerns) @compileError("built-in vector font kern count drifted");
-    if (body.commands.len != expected.commands) @compileError("built-in vector font command count drifted");
-    return .{ .metrics = body.metrics, .glyphs = glyphs, .kerns = kerns, .commands = commands };
+    const compiled_body = font_vector.compileCodepoints(face, cps, &glyphs, &kerns, &commands) catch @compileError("failed to compile built-in vector font");
+    if (compiled_body.glyphs.len != expected.glyphs) @compileError("built-in vector font glyph count drifted");
+    if (compiled_body.kerns.len != expected.kerns) @compileError("built-in vector font kern count drifted");
+    if (compiled_body.commands.len != expected.commands) @compileError("built-in vector font command count drifted");
+    return .{ .metrics = compiled_body.metrics, .glyphs = glyphs, .kerns = kerns, .commands = commands };
 }
 
 fn countCoveredCodepoints(comptime face: font_vector.FixedFace) usize {
