@@ -51,7 +51,6 @@ er_fn er_fn_run
     mov     byte [exec_storage_module_valid], 0
     mov     byte [exec_storage_start_ran], 0
     mov     qword [exec_frame_save_ptr], 0
-    mov     qword [exec_call_depth], 0
     ; Clear JIT table — per-module entries become stale on re-run
     cld
     lea     rdi, [rel jit_table]
@@ -68,6 +67,11 @@ er_fn er_fn_run
 
     ; Resolve imports against host-provided table
     call    er_wasm_resolve_imports
+    test    rdx, rdx
+    jnz     .error
+
+    ; Validate no recursion in call graph
+    call    er_wasm_validate_no_recursion
     test    rdx, rdx
     jnz     .error
 
@@ -265,3 +269,163 @@ er_wasm_resolve_imports:
     pop     rbx
     pop     rbp
     ret
+
+; ==================================================================
+; Validate that the call graph has no cycles (recursion is banned).
+; Scans decoded ops for direct call(0x10) instructions and runs a
+; DFS cycle-detection pass over all functions.
+; Returns: rdx = 0 on success, ERROR_RECURSION on cycle
+; =================================================================+
+er_wasm_validate_no_recursion:
+    push    rbp
+    mov     rbp, rsp
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+
+    ; Stack-allocate visited[0..1023] + in_progress[1024..2047]
+    sub     rsp, MAX_FUNCTIONS * 2
+
+    ; Zero both arrays (2*1024/8 = 256 qwords)
+    lea     rdi, [rsp]
+    xor     eax, eax
+    mov     ecx, MAX_FUNCTIONS * 2 / 8
+    rep stosq
+
+    mov     r15, [function_count]
+
+    xor     r12d, r12d              ; f = 0
+.check_loop:
+    cmp     r12, r15
+    jae     .check_done
+
+    cmp     byte [rsp + r12], 0     ; visited[f]?
+    jne     .check_next
+
+    ; DFS from function f
+    mov     rdi, r12
+    lea     rsi, [rsp]              ; visited
+    lea     rdx, [rsp + MAX_FUNCTIONS]  ; in_progress
+    mov     rcx, r15                ; function_count
+    call    .dfs_cycle
+    test    rdx, rdx
+    jnz     .check_error
+
+.check_next:
+    inc     r12
+    jmp     .check_loop
+
+.check_done:
+    add     rsp, MAX_FUNCTIONS * 2
+    xor     edx, edx
+    jmp     .check_out
+
+.check_error:
+    add     rsp, MAX_FUNCTIONS * 2
+    ; rdx already set
+
+.check_out:
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
+    ret
+
+; ── DFS cycle detection ──
+; rdi = function index
+; rsi = visited byte array
+; rdx = in_progress byte array
+; rcx = function_count
+; Returns rdx = 0 on success, ERROR_RECURSION on cycle
+.dfs_cycle:
+    ; Mark in-progress
+    mov     byte [rdx + rdi], 1
+    mov     byte [rsi + rdi], 1
+
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+    push    rcx                 ; save function_count
+
+    mov     r12, rdi            ; current function
+    mov     r13, rsi            ; visited
+    mov     r14, rdx            ; in_progress
+
+    ; Get code info
+    push    rdi
+    call    er_wasm_code_index_for_function
+    test    rdx, rdx
+    jnz     .dfs_ok             ; skip on error (caught elsewhere)
+    pop     rdi
+
+    imul    r10, rax, CODE_SIZE
+    mov     r11, [code_buf + r10 + 24]  ; decoded_start
+    mov     r15, [code_buf + r10 + 32]  ; decoded_count
+
+    ; Iterate decoded ops
+    xor     ecx, ecx
+.dfs_op_loop:
+    cmp     ecx, r15d
+    jae     .dfs_op_done
+
+    mov     r8, r11
+    add     r8, rcx
+    imul    r8, DECODED_OP_SIZE
+
+    movzx   eax, byte [decoded_ops + r8 + 8]  ; opcode
+    cmp     al, 0x10                            ; call
+    jne     .dfs_op_next
+
+    mov     r9, [decoded_ops + r8 + 12]         ; target func index
+    mov     rax, [rsp]                          ; function_count
+    cmp     r9, rax
+    jae     .dfs_op_next                        ; skip invalid (caught elsewhere)
+
+    ; Check for cycle
+    cmp     byte [r14 + r9], 0
+    jne     .dfs_cycle_found
+
+    ; If not visited, recurse
+    cmp     byte [r13 + r9], 0
+    jne     .dfs_op_next
+
+    mov     rdi, r9
+    mov     rsi, r13
+    mov     rdx, r14
+    mov     rcx, [rsp]          ; function_count (on stack above our pushes)
+    call    .dfs_cycle
+    test    rdx, rdx
+    jnz     .dfs_error
+
+.dfs_op_next:
+    inc     ecx
+    jmp     .dfs_op_loop
+
+.dfs_op_done:
+    xor     edx, edx
+    jmp     .dfs_done
+
+.dfs_cycle_found:
+    mov     edx, ERROR_RECURSION
+    jmp     .dfs_done
+
+.dfs_error:
+    ; rdx already set
+.dfs_done:
+    mov     byte [r14 + r12], 0  ; clear in_progress
+    add     rsp, 8               ; discard saved function_count from stack
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    ret
+
+.dfs_ok:
+    pop     rdi
+    xor     edx, edx
+    jmp     .dfs_done

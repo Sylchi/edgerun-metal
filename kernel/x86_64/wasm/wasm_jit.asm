@@ -34,7 +34,6 @@ jit_globals:
         at JitGlobals.result_count_ptr, resq 1
         at JitGlobals.table_entries,    resq 1
         at JitGlobals.table_min,        resq 1
-        at JitGlobals.call_depth_ptr,   resq 1
         at JitGlobals.local_count_ptr,  resq 1
         at JitGlobals.functions_buf,    resq 1
         at JitGlobals.function_count,   resq 1
@@ -124,9 +123,6 @@ er_wasm_jit_init:
 
     mov     rax, [rel table_min]
     mov     [rel jit_globals + JitGlobals.table_min], rax
-
-    lea     rax, [rel exec_call_depth]
-    mov     [rel jit_globals + JitGlobals.call_depth_ptr], rax
 
     lea     rax, [rel exec_local_count]
     mov     [rel jit_globals + JitGlobals.local_count_ptr], rax
@@ -680,18 +676,12 @@ er_wasm_jit_exec:
 .exec_compiled:
     mov     rbx, rax            ; code_ptr
 
-    ; Check call depth
-    mov     rax, [rel exec_call_depth]
-    cmp     rax, MAX_CALL_DEPTH
-    jae     .depth_error
-
     ; Save current frame if we have locals
     cmp     qword [rel exec_local_count], 0
     je      .exec_no_save
     call    exec_save_frame_state
-    jc      .depth_error
+    jc      .exec_error
 .exec_no_save:
-    inc     qword [rel exec_call_depth]
 
     ; Set up locals from args (same as interpreter)
     ; Get function type for param_count
@@ -752,9 +742,6 @@ er_wasm_jit_exec:
     mov     r15, rax             ; save return value
     mov     r14, rdx             ; save error code
 
-    ; Decrement call depth
-    dec     qword [rel exec_call_depth]
-
     ; Restore previous frame
     call    exec_restore_frame_state
 
@@ -764,10 +751,6 @@ er_wasm_jit_exec:
 
 .exec_error:
     ; rdx already set
-    jmp     .exec_done
-
-.depth_error:
-    er_err  ERROR_UNSUPPORTED
     jmp     .exec_done
 
 .unsupported_error:

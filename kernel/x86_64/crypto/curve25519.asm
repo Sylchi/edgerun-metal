@@ -501,12 +501,6 @@ _fe_frombytes:
     and     rax, rbx
     mov     [rdi + 32], rax
 
-    ; Canonical reduction: add 19 if bit 255 was set (2^255 ≡ 19 mod p)
-    mov     rax, [rsi + 24]
-    shr     rax, 63
-    imul    rax, rax, 19
-    add     [rdi], rax
-
     pop     rbx
     ret
 

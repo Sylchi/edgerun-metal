@@ -568,9 +568,6 @@ exec_code_body_ptr:    resq 1  ; pointer to current code body
 exec_code_body_len:    resq 1  ; remaining body length
 exec_reader_offset:    resq 1  ; current reader offset within body
 
-; Call depth for recursion limit
-exec_call_depth: resq 1
-
 ; Return value from function execution (as i64, + count in exec_result_count)
 exec_result_values: resb MAX_TYPE_RESULTS * 8  ; up to 4 result values
 exec_result_count:  resq 1

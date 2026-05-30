@@ -52,8 +52,7 @@ struc JitGlobals
     .result_count_ptr: resq 1  ; 88 — &exec_result_count
     .table_entries:    resq 1  ; 96 — table_entries addr
     .table_min:        resq 1  ; 104 — table_min value
-    .call_depth_ptr:   resq 1  ; 112 — &exec_call_depth
-    .local_count_ptr:  resq 1  ; 120 — &exec_local_count
+    .local_count_ptr:  resq 1  ; 112 — &exec_local_count
     .functions_buf:    resq 1  ; 128 — functions_buf addr
     .function_count:   resq 1  ; 136 — function_count value
     .mem_grow_hook:    resq 1  ; 144 — host memory grow callback or 0

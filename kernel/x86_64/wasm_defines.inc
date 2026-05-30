@@ -20,7 +20,6 @@
 %define MAX_DATAS            128
 %define MAX_INDIRECT_TABLE   1024      ; also MAX_TABLE_ENTRIES
 %define MAX_LOCALS           128
-%define MAX_CALL_DEPTH       128
 %define MAX_STACK            4096
 %define MAX_CONTROL          256       ; also MAX_CONTROL_DEPTH
 %define MAX_HOST_IMPORTS     256
@@ -223,6 +222,7 @@ wasm_version: db 0x01, 0x00, 0x00, 0x00
 %define ERROR_ARITHMETIC_TRAP  17
 %define ERROR_MISSING_IMPORT   18
 %define ERROR_MISSING_EXPORT   19
+%define ERROR_RECURSION        31
 
 ; Generic driver / system errors (20-29)
 %define ERROR_TIMEOUT          20

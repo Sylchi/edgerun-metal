@@ -16,18 +16,12 @@ er_fn er_fn_exec
     mov     r13, rsi        ; args ptr
     mov     r14, rdx        ; args count
 
-    ; Check call depth
-    mov     rax, [exec_call_depth]
-    cmp     rax, MAX_CALL_DEPTH
-    jae     .depth_error
-
     ; Save current frame if we have locals
     cmp     qword [exec_local_count], 0
     je      .no_save
     call    exec_save_frame_state
     jc      .depth_error
 .no_save:
-    inc     qword [exec_call_depth]
 
     ; Check if imported function
     mov     rax, r12
@@ -132,9 +126,6 @@ er_fn er_fn_exec
     mov     r14, rdx      ; save error code
 
 .after_dispatch:
-    ; Decrement call depth
-    dec     qword [exec_call_depth]
-
     ; Restore previous frame (only if a save was done)
     cmp     qword [exec_frame_save_ptr], 0
     je      .after_restore

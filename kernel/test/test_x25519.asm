@@ -21,11 +21,14 @@ extern _curve25519_ladder_step
 
 %macro ASSERT 2
     test    %1, %1
-    jnz     %%pass
-    inc     qword [rel failed]
-    jmp     %%done
-%%pass:
+    jz      %%fail
     inc     qword [rel passed]
+    jmp     %%done
+%%fail:
+    inc     qword [rel failed]
+    mov     edi, %2
+    mov     eax, 60
+    syscall
 %%done:
 %endmacro
 
@@ -45,15 +48,15 @@ ladder_x1:  resq 5
 
 SECTION .data
 
-; RFC 7748 Section 6.1 Test Vector 1
-scalar1: dq 0xc49a44ba44226a50, 0x185afcc10a4c1462, 0xdd5e46824b15163b, 0x9d7c52f06be346a5
-point1:  dq 0x4c1cabd0a603a910, 0x3b35b326ec246672, 0x7c5fb124a4c19435, 0xe6db6867583030db
+; RFC 7748 Section 5.2 Test Vector 1
+scalar1: dq 0x9d7c52f06be346a5, 0xdd5e46824b15163b, 0x185afcc10a4c1462, 0xc49a44ba44226a50
+point1:  dq 0xdb3030586768dbe6, 0x7c5fb124a4c19435, 0x3b35b326ec246672, 0x4c1cabd0a603a910
 output1: dq 0x90c6e99d3755dac3, 0x4f088df24dea948e, 0xf7711c4903cfec32, 0x5285a2775507b454
 
-; RFC 7748 Section 6.1 Test Vector 2
-scalar2: dq 0x0dba18799e16a42c, 0xd401eae021641bc1, 0xf56a7d959126d25a, 0x3c67b4d1d4e9664b
-point2:  dq 0x93a415c749d54cfc, 0x3e3cc06f10e7db31, 0x2cae38059d95b7f4, 0xd3116878120f21e5
-output2: dq 0xa4a9d29f28fda99c, 0xe259525afaa4a6fa, 0x722e27e7393e45be, 0x0767b8c3a7df13f1
+; RFC 7748 Section 5.2 Test Vector 2
+scalar2: dq 0x3c67b4d1d4e9664b, 0xf56a7d952691d25a, 0xd401eae021641bc1, 0x0dba18799e16a42c
+point2:  dq 0xd3116878120f21e5, 0x2cae38059d95b7f4, 0x3e3cc06f10e7db31, 0x93a415c749d54cfc
+output2: dq 0x7d90e87694decb95, 0xf873b8b45ce4ad7a, 0x52a19f79685a598b, 0x5779ac7a64f7f8e6
 
 fe_one:  dq 1, 0, 0, 0, 0
 fe_two:  dq 2, 0, 0, 0, 0
@@ -74,9 +77,6 @@ _start:
     lea     rsi, [rel scalar1]
     lea     rdx, [rel point1]
     call    er_tor_curve25519_scalar_mult
-
-    lea     rdi, [rel result]
-    call    dump_hex
 
     lea     rdi, [rel result]
     lea     rsi, [rel output1]
