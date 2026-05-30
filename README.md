@@ -347,11 +347,11 @@ http://127.0.0.1:8765/web/index.html
 Build the GitHub Pages artifact locally:
 
 ```sh
-make pages-site
+# make pages-site (stale — not yet migrated to build.sh)
 ```
 
 The Pages artifact is written to `.build/github-pages`.
-Run `make pages-release` to publish `.build/github-pages` to the `gh-pages` branch.
+# Run `make pages-release` to publish `.build/github-pages` to `gh-pages` (stale).
 The workflow then deploys that branch, and no longer builds the Pages artifact
 inside GitHub Actions.
 
@@ -368,8 +368,8 @@ cd edgerun-zig
 Pi Zero W v1.1 bring-up:
 
 ```sh
-make pi-zero-w-v1_1-kernel
-make pi-usb-load
+./build.sh pi-kernel
+./build.sh pi-usb-boot
 ```
 
 ## Working Rule

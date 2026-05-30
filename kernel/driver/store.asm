@@ -24,7 +24,7 @@ extern er_store64
 extern er_load32
 extern er_load64
 extern er_bytes_copy
-extern er_bytes_nonzero
+extern er_bytes_eql
 extern er_bytes_zero
 
 ; ==================================================================
@@ -74,6 +74,9 @@ CONTENT_TYPE_OBJECT  equ 1
 
 ; Block device constants
 BLOCK_BYTES          equ 512
+
+; Scratch buffer for block I/O (4K-aligned, safe range above kernel)
+%define STORE_SCRATCH    0x306000
 
 ; ==================================================================
 ; StoreState struct (at start of state buffer)
@@ -212,7 +215,7 @@ _store_blk_write:
 
     mov     rdi, r12
     mov     rsi, r8
-    mov     rdx, NVME_IO_BUF
+    mov     rdx, STORE_SCRATCH
     mov     ecx, 1
     call    er_nvme_read_blocks
     test    eax, eax
@@ -221,7 +224,7 @@ _store_blk_write:
     pop     rdi
     pop     rcx
     ; Copy patch into scratch buffer at intra-block offset
-    mov     rdi, NVME_IO_BUF
+    mov     rdi, STORE_SCRATCH
     add     edi, r9d
     mov     esi, ecx
     mov     rdx, r10
@@ -234,7 +237,7 @@ _store_blk_write:
 .wr_write_full:
     push    rcx
     push    rdi
-    mov     rdi, NVME_IO_BUF
+    mov     rdi, STORE_SCRATCH
     mov     esi, ecx
     mov     rdx, r10
     mov     ecx, esi
@@ -245,7 +248,7 @@ _store_blk_write:
 .wr_do_write:
     mov     rdi, r12
     mov     rsi, r8
-    mov     rdx, NVME_IO_BUF
+    mov     rdx, STORE_SCRATCH
     call    er_nvme_write_blocks
     test    eax, eax
     jnz     .wr_fail
@@ -324,7 +327,7 @@ _store_blk_read:
 
     mov     rdi, r12
     mov     rsi, r8
-    mov     rdx, NVME_IO_BUF
+    mov     rdx, STORE_SCRATCH
     mov     ecx, 1
     call    er_nvme_read_blocks
     test    eax, eax
@@ -334,7 +337,7 @@ _store_blk_read:
     ; Copy from scratch buffer + offset to output
     mov     rdi, r10
     mov     esi, ecx
-    mov     rdx, NVME_IO_BUF
+    mov     rdx, STORE_SCRATCH
     add     edx, r9d
     call    er_bytes_copy
 
@@ -410,31 +413,31 @@ er_fn er_store_init
     ; Try to read superblock at offset 0
     mov     rdi, r14
     xor     esi, esi
-    mov     rdx, NVME_IO_BUF
+    mov     rdx, STORE_SCRATCH
     mov     ecx, SUPERBLOCK_SIZE
     call    _store_blk_read
     test    eax, eax
     jnz     .init_fresh      ; can't read → first use
 
     ; Check superblock magic
-    mov     rdi, NVME_IO_BUF
+    mov     rdi, STORE_SCRATCH
     mov     esi, STORE_MAGIC_STR_LEN
     lea     rdx, [rel STORE_MAGIC_STR]
     mov     ecx, STORE_MAGIC_STR_LEN
     push    r12
-    call    er_bytes_nonzero
+    call    er_bytes_eql
     pop     r12
     test    eax, eax
     jz      .init_fresh      ; bad magic → first use
 
     ; Read log_start / log_end from superblock
-    mov     rdi, NVME_IO_BUF + SUPER_LOG_START_OFF
+    mov     rdi, STORE_SCRATCH + SUPER_LOG_START_OFF
     mov     esi, 8
     call    er_load64
     mov     [r12 + ST_LOG_START], rax
     mov     [r12 + ST_LOG_END], rax
 
-    mov     rdi, NVME_IO_BUF + SUPER_LOG_END_OFF
+    mov     rdi, STORE_SCRATCH + SUPER_LOG_END_OFF
     mov     esi, 8
     call    er_load64
     mov     [r12 + ST_LOG_END], rax
@@ -490,7 +493,7 @@ er_fn er_store_init
 ; _store_write_superblock — flush store state to superblock
 ; rdi = state
 ; Returns: eax = 0 on success, -1 on failure
-; Uses NVME_IO_BUF as scratch.
+; Uses STORE_SCRATCH as scratch.
 ; ==================================================================
 _store_write_superblock:
     push    rbx
@@ -499,50 +502,50 @@ _store_write_superblock:
     mov     r12, rdi
 
     ; Build superblock in scratch buffer
-    mov     rdi, NVME_IO_BUF
+    mov     rdi, STORE_SCRATCH
     mov     ecx, SUPERBLOCK_SIZE
     call    er_bytes_zero
 
     ; Magic: "ERSTORE"
-    mov     byte [NVME_IO_BUF + 0], 'E'
-    mov     byte [NVME_IO_BUF + 1], 'R'
-    mov     byte [NVME_IO_BUF + 2], 'S'
-    mov     byte [NVME_IO_BUF + 3], 'T'
-    mov     byte [NVME_IO_BUF + 4], 'O'
-    mov     byte [NVME_IO_BUF + 5], 'R'
-    mov     byte [NVME_IO_BUF + 6], 'E'
-    mov     byte [NVME_IO_BUF + 7], 0
+    mov     byte [STORE_SCRATCH + 0], 'E'
+    mov     byte [STORE_SCRATCH + 1], 'R'
+    mov     byte [STORE_SCRATCH + 2], 'S'
+    mov     byte [STORE_SCRATCH + 3], 'T'
+    mov     byte [STORE_SCRATCH + 4], 'O'
+    mov     byte [STORE_SCRATCH + 5], 'R'
+    mov     byte [STORE_SCRATCH + 6], 'E'
+    mov     byte [STORE_SCRATCH + 7], 0
 
     ; Version = 1
-    mov     dword [NVME_IO_BUF + SUPER_VERSION_OFF], 1
+    mov     dword [STORE_SCRATCH + SUPER_VERSION_OFF], 1
 
     ; Header size = SUPERBLOCK_SIZE
-    mov     dword [NVME_IO_BUF + SUPER_HDR_SIZE_OFF], SUPERBLOCK_SIZE
+    mov     dword [STORE_SCRATCH + SUPER_HDR_SIZE_OFF], SUPERBLOCK_SIZE
 
     ; Log start
     mov     rax, [r12 + ST_LOG_START]
-    mov     qword [NVME_IO_BUF + SUPER_LOG_START_OFF], rax
+    mov     qword [STORE_SCRATCH + SUPER_LOG_START_OFF], rax
 
     ; Log end
     mov     rax, [r12 + ST_LOG_END]
-    mov     qword [NVME_IO_BUF + SUPER_LOG_END_OFF], rax
+    mov     qword [STORE_SCRATCH + SUPER_LOG_END_OFF], rax
 
     ; Root hash (last record hash)
-    mov     rdi, NVME_IO_BUF + SUPER_ROOT_HASH_OFF
+    mov     rdi, STORE_SCRATCH + SUPER_ROOT_HASH_OFF
     mov     esi, HASH_SIZE
     lea     rdx, [r12 + ST_LAST_HASH]
     mov     ecx, HASH_SIZE
     call    er_bytes_copy
 
     ; CRC32 of bytes 0..SUPER_CRC_OFF-1
-    lea     rdi, [rel NVME_IO_BUF]
+    lea     rdi, [rel STORE_SCRATCH]
     call    _store_crc32_super
-    mov     dword [NVME_IO_BUF + SUPER_CRC_OFF], eax
+    mov     dword [STORE_SCRATCH + SUPER_CRC_OFF], eax
 
     ; Write to block 0 (single block)
     mov     rdi, [r12 + ST_DEV_BAR0]
     xor     esi, esi
-    mov     rdx, NVME_IO_BUF
+    mov     rdx, STORE_SCRATCH
     mov     ecx, 1
     call    er_nvme_write_blocks
     test    eax, eax
@@ -627,7 +630,7 @@ _store_find_blob:
     mov     ecx, HASH_SIZE
     push    r8
     push    rbx
-    call    er_bytes_nonzero
+    call    er_bytes_eql
     pop     rbx
     pop     r8
     test    eax, eax
@@ -705,53 +708,53 @@ _store_append_record:
     ; Compute payload hash
     mov     rdi, r14
     mov     esi, r15d
-    mov     rdx, NVME_IO_BUF + RECORD_HEADER_SIZE  ; use area after header
+    mov     rdx, STORE_SCRATCH + RECORD_HEADER_SIZE  ; use area after header
     call    er_preimage_raw_hash
 
-    ; Build record header at NVME_IO_BUF
-    mov     rdi, NVME_IO_BUF
+    ; Build record header at STORE_SCRATCH
+    mov     rdi, STORE_SCRATCH
     mov     ecx, RECORD_HEADER_SIZE
     call    er_bytes_zero
 
     ; Magic
-    mov     dword [NVME_IO_BUF + HDR_MAGIC_OFF], STORE_MAGIC
+    mov     dword [STORE_SCRATCH + HDR_MAGIC_OFF], STORE_MAGIC
 
     ; Version = 2
-    mov     word [NVME_IO_BUF + HDR_VERSION_OFF], 2
+    mov     word [STORE_SCRATCH + HDR_VERSION_OFF], 2
 
     ; Type
-    mov     word [NVME_IO_BUF + HDR_TYPE_OFF], r13w
+    mov     word [STORE_SCRATCH + HDR_TYPE_OFF], r13w
 
     ; Sequence
     mov     rax, [r12 + ST_NEXT_SEQ]
-    mov     qword [NVME_IO_BUF + HDR_SEQ_OFF], rax
+    mov     qword [STORE_SCRATCH + HDR_SEQ_OFF], rax
 
     ; Payload length
-    mov     qword [NVME_IO_BUF + HDR_PAYLOAD_LEN_OFF], r15
+    mov     qword [STORE_SCRATCH + HDR_PAYLOAD_LEN_OFF], r15
 
-    ; Payload hash (already computed at NVME_IO_BUF + RECORD_HEADER_SIZE)
-    mov     rdi, NVME_IO_BUF + HDR_PAYLOAD_HASH_OFF
+    ; Payload hash (already computed at STORE_SCRATCH + RECORD_HEADER_SIZE)
+    mov     rdi, STORE_SCRATCH + HDR_PAYLOAD_HASH_OFF
     mov     esi, HASH_SIZE
-    mov     rdx, NVME_IO_BUF + RECORD_HEADER_SIZE
+    mov     rdx, STORE_SCRATCH + RECORD_HEADER_SIZE
     mov     ecx, HASH_SIZE
     call    er_bytes_copy
 
     ; Previous record hash
-    mov     rdi, NVME_IO_BUF + HDR_PREV_HASH_OFF
+    mov     rdi, STORE_SCRATCH + HDR_PREV_HASH_OFF
     mov     esi, HASH_SIZE
     lea     rdx, [r12 + ST_LAST_HASH]
     mov     ecx, HASH_SIZE
     call    er_bytes_copy
 
     ; CRC32 of header (bytes before CRC)
-    mov     rdi, NVME_IO_BUF
+    mov     rdi, STORE_SCRATCH
     call    _store_crc32_record
-    mov     dword [NVME_IO_BUF + HDR_CRC_OFF], eax
+    mov     dword [STORE_SCRATCH + HDR_CRC_OFF], eax
 
     ; Write header to disk
     mov     rdi, [r12 + ST_DEV_BAR0]
     mov     rsi, [r12 + ST_LOG_END]
-    mov     rdx, NVME_IO_BUF
+    mov     rdx, STORE_SCRATCH
     mov     ecx, RECORD_HEADER_SIZE
     call    _store_blk_write
     test    eax, eax
@@ -772,7 +775,7 @@ _store_append_record:
     jnz     .ar_fail
 
     ; Compute header hash for chain
-    mov     rdi, NVME_IO_BUF
+    mov     rdi, STORE_SCRATCH
     mov     esi, RECORD_HEADER_SIZE
     lea     rdx, [r12 + ST_LAST_HASH]
     call    er_preimage_raw_hash
@@ -834,26 +837,26 @@ _store_replay:
     ; Read header
     mov     rdi, [r12 + ST_DEV_BAR0]
     mov     rsi, r13
-    mov     rdx, NVME_IO_BUF
+    mov     rdx, STORE_SCRATCH
     mov     ecx, RECORD_HEADER_SIZE
     call    _store_blk_read
     test    eax, eax
     jnz     .replay_fail
 
     ; Validate magic
-    mov     eax, [NVME_IO_BUF + HDR_MAGIC_OFF]
+    mov     eax, [STORE_SCRATCH + HDR_MAGIC_OFF]
     cmp     eax, STORE_MAGIC
     jne     .replay_corrupt
 
     ; Validate CRC
-    mov     rdi, NVME_IO_BUF
+    mov     rdi, STORE_SCRATCH
     call    _store_crc32_record
-    mov     edx, [NVME_IO_BUF + HDR_CRC_OFF]
+    mov     edx, [STORE_SCRATCH + HDR_CRC_OFF]
     cmp     eax, edx
     jne     .replay_corrupt
 
     ; Get payload length
-    mov     rax, [NVME_IO_BUF + HDR_PAYLOAD_LEN_OFF]
+    mov     rax, [STORE_SCRATCH + HDR_PAYLOAD_LEN_OFF]
     mov     r15, rax             ; payload_len
 
     ; Payload offset
@@ -868,7 +871,7 @@ _store_replay:
     ja      .replay_corrupt     ; payload extends past log_end
 
     ; Apply record based on type
-    movzx   eax, word [NVME_IO_BUF + HDR_TYPE_OFF]
+    movzx   eax, word [STORE_SCRATCH + HDR_TYPE_OFF]
     cmp     eax, REC_BLOB
     je      .replay_blob
     cmp     eax, REC_INDEX_PUT
@@ -883,7 +886,7 @@ _store_replay:
     ; Hash the payload
     mov     rdi, r8
     mov     esi, r15d
-    mov     rdx, NVME_IO_BUF + RECORD_HEADER_SIZE
+    mov     rdx, STORE_SCRATCH + RECORD_HEADER_SIZE
     call    er_preimage_raw_hash
 
     ; Insert blob slot
@@ -902,9 +905,9 @@ _store_replay:
     mov     dword [rbx + BL_CONTENT_TYPE], ecx
 
     ; Copy hash
-    mov     rdi, rbx + BL_HASH
+    lea     rdi, [rbx + BL_HASH]
     mov     esi, HASH_SIZE
-    mov     rdx, NVME_IO_BUF + RECORD_HEADER_SIZE
+    mov     rdx, STORE_SCRATCH + RECORD_HEADER_SIZE
     mov     ecx, HASH_SIZE
     call    er_bytes_copy
 
@@ -977,7 +980,7 @@ _store_replay:
 
 .replay_next:
     ; Update last_record_hash
-    mov     rdi, NVME_IO_BUF
+    mov     rdi, STORE_SCRATCH
     mov     esi, RECORD_HEADER_SIZE
     lea     rdx, [r12 + ST_LAST_HASH]
     call    er_preimage_raw_hash
@@ -1090,9 +1093,9 @@ er_fn er_store_put_blob
     mov     dword [rbx + BL_CONTENT_TYPE], CONTENT_TYPE_RAW
 
     ; Copy hash
-    mov     rdi, rbx + BL_HASH
+    lea     rdi, [rbx + BL_HASH]
     mov     esi, HASH_SIZE
-    lea     rdx, [r12 + ST_STRUCT_SIZE]  ; hash was stored here
+    mov     rdx, STORE_SCRATCH + RECORD_HEADER_SIZE
     mov     ecx, HASH_SIZE
     call    er_bytes_copy
 
@@ -1345,7 +1348,7 @@ _store_find_key:
     mov     ecx, r15d
     push    r8
     push    rbx
-    call    er_bytes_nonzero
+    call    er_bytes_eql
     pop     rbx
     pop     r8
     test    eax, eax
@@ -1448,14 +1451,14 @@ er_fn er_store_index_put
     mov     qword [rbx + KL_KEY_LEN], r15
 
     ; Copy key
-    mov     rdi, rbx + KL_KEY
+    lea     rdi, [rbx + KL_KEY]
     mov     esi, r15d
     mov     rdx, r14
     mov     ecx, r15d
     call    er_bytes_copy
 
     ; Copy hash
-    mov     rdi, rbx + KL_HASH
+    lea     rdi, [rbx + KL_HASH]
     mov     esi, HASH_SIZE
     mov     rdx, rbp
     mov     ecx, HASH_SIZE
@@ -1477,23 +1480,23 @@ er_fn er_store_index_put
     add     edi, r15d
     add     edi, HASH_SIZE
     mov     r9d, edi            ; payload_size
-    cmp     r9d, NVME_IO_BUF + 512
+    cmp     r9d, STORE_SCRATCH + 512
     ja      .ip_bad             ; payload too large
 
-    ; Build payload at NVME_IO_BUF
-    mov     dword [NVME_IO_BUF], r13d          ; index_id
-    mov     dword [NVME_IO_BUF + 4], 1          ; value_kind = blob
-    mov     dword [NVME_IO_BUF + 8], CONTENT_TYPE_RAW
-    mov     qword [NVME_IO_BUF + 12], 0         ; value_size (unknown from here)
-    mov     qword [NVME_IO_BUF + 20], r15       ; key_len
+    ; Build payload at STORE_SCRATCH
+    mov     dword [STORE_SCRATCH], r13d          ; index_id
+    mov     dword [STORE_SCRATCH + 4], 1          ; value_kind = blob
+    mov     dword [STORE_SCRATCH + 8], CONTENT_TYPE_RAW
+    mov     qword [STORE_SCRATCH + 12], 0         ; value_size (unknown from here)
+    mov     qword [STORE_SCRATCH + 20], r15       ; key_len
     ; Copy key at offset 28
-    mov     rdi, NVME_IO_BUF + 28
+    mov     rdi, STORE_SCRATCH + 28
     mov     esi, r15d
     mov     rdx, r14
     mov     ecx, r15d
     call    er_bytes_copy
     ; Copy hash at offset 28 + key_len
-    mov     rdi, NVME_IO_BUF + 28
+    mov     rdi, STORE_SCRATCH + 28
     add     edi, r15d
     mov     esi, HASH_SIZE
     mov     rdx, rbp
@@ -1503,7 +1506,7 @@ er_fn er_store_index_put
     ; Append record
     mov     rdi, r12
     mov     esi, REC_INDEX_PUT
-    mov     rdx, NVME_IO_BUF
+    mov     rdx, STORE_SCRATCH
     mov     ecx, r9d
     call    _store_append_record
     cmp     eax, -1
