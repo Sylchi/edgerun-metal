@@ -120,6 +120,7 @@ extern er_memcmp
 
 extern _fe_invert
 extern _fe_mul
+extern _fe_sq
 extern _fe_copy
 extern fe_base
 extern fe_one
@@ -574,6 +575,88 @@ er_fn er_kernel_main
     jmp     .sha_done
 
 .sha_done:
+    ; ═══════ CONSTANT VERIFICATION ═══════
+    ; Print fe_one content
+    mov     rdi, COM1_PORT
+    mov     sil, 'O'
+    call    er_serial_putchar
+    mov     r15d, 4
+    xor     r14d, r14d
+.const_dump:
+    mov     edi, COM1_PORT
+    mov     rax, [rel fe_one + r14]
+    mov     esi, eax
+    call    er_serial_puthex32
+    mov     edi, COM1_PORT
+    mov     rax, [rel fe_one + r14]
+    shr     rax, 32
+    mov     esi, eax
+    call    er_serial_puthex32
+    mov     edi, COM1_PORT
+    mov     sil, ' '
+    call    er_serial_putchar
+    add     r14d, 8
+    dec     r15d
+    jnz     .const_dump
+    call    .crlf
+
+    ; ═══════ SIMPLE MULTIPLY SMOKE TEST ═══════
+    ; 9 * 1 should be 9 — quick check that _fe_mul isn't trivially broken
+    mov     rdi, COM1_PORT
+    mov     sil, 's'
+    call    er_serial_putchar
+    mov     rdi, fe_tmp4
+    lea     rsi, [rel fe_base]
+    lea     rdx, [rel fe_one]
+    call    _fe_mul               ; fe_tmp4 = 9 * 1
+    mov     rdi, fe_tmp4
+    lea     rsi, [rel fe_base]
+    mov     edx, 32
+    call    er_memcmp
+    test    eax, eax
+    jz      .smoke_pass
+    mov     rdi, COM1_PORT
+    mov     sil, 'F'
+    call    er_serial_putchar
+.smoke_pass:
+    mov     rdi, COM1_PORT
+    mov     sil, 's'
+    call    er_serial_putchar
+
+    ; ═══════ SQ/MUL SEQUENCE TEST — a^255 = a^(2^8-1) ═══════
+    ; Manually do 8 sq+multiply iterations: should give 9^255
+    ; This matches the first 8 loop iterations of the invert
+    mov     r15d, 8
+    mov     rdi, fe_tmp0
+    lea     rsi, [rel fe_base]
+    call    _fe_copy
+.seq_loop:
+    mov     rdi, fe_tmp0
+    mov     rsi, fe_tmp0
+    call    _fe_sq
+    mov     rdi, fe_tmp0
+    mov     rsi, fe_tmp0
+    lea     rdx, [rel fe_base]
+    call    _fe_mul
+    dec     r15d
+    jnz     .seq_loop
+    ; Print first limb to compare with expected from invert
+    mov     rdi, COM1_PORT
+    mov     sil, 's'
+    call    er_serial_putchar
+    mov     edi, COM1_PORT
+    mov     rax, [fe_tmp0]
+    mov     esi, eax
+    call    er_serial_puthex32
+    mov     edi, COM1_PORT
+    mov     rax, [fe_tmp0]
+    shr     rax, 32
+    mov     esi, eax
+    call    er_serial_puthex32
+    mov     rdi, COM1_PORT
+    mov     sil, ':'
+    call    er_serial_putchar
+
     ; ═══════ CURVE25519 FIELD INVERT TEST ═══════
     ; Verify n * n^(-1) mod p = 1 using base point 9
     mov     rdi, COM1_PORT
@@ -622,12 +705,57 @@ er_fn er_kernel_main
     jmp     .kbd_start
 
 .fe_inv_fail:
+    ; Print all 4 limbs of fe_tmp4
     mov     rdi, COM1_PORT
     lea     rsi, [rel fe_inv_fail_str]
     call    er_serial_puts
+    mov     r15d, 4
+    xor     r14d, r14d
+.dump_limbs:
     mov     edi, COM1_PORT
-    mov     esi, [fe_tmp4]
+    mov     rax, [fe_tmp4 + r14]
+    mov     esi, eax
     call    er_serial_puthex32
+    mov     edi, COM1_PORT
+    mov     rax, [fe_tmp4 + r14]
+    shr     rax, 32
+    mov     esi, eax
+    call    er_serial_puthex32
+    mov     edi, COM1_PORT
+    mov     sil, ' '
+    call    er_serial_putchar
+    add     r14d, 8
+    dec     r15d
+    jnz     .dump_limbs
+    call    .crlf
+    jmp     .fe_inv_test_invert
+
+.fe_inv_test_invert:
+    ; Also dump fe_tmp3 (the invert result) - all 4 limbs
+    mov     rdi, COM1_PORT
+    mov     sil, '3'         ; prefix for fe_tmp3
+    call    er_serial_putchar
+    mov     edi, COM1_PORT
+    mov     sil, ':'
+    call    er_serial_putchar
+    mov     r15d, 4
+    xor     r14d, r14d
+.dump_limbs3:
+    mov     edi, COM1_PORT
+    mov     rax, [fe_tmp3 + r14]
+    mov     esi, eax
+    call    er_serial_puthex32
+    mov     edi, COM1_PORT
+    mov     rax, [fe_tmp3 + r14]
+    shr     rax, 32
+    mov     esi, eax
+    call    er_serial_puthex32
+    mov     edi, COM1_PORT
+    mov     sil, ' '
+    call    er_serial_putchar
+    add     r14d, 8
+    dec     r15d
+    jnz     .dump_limbs3
     call    .crlf
     jmp     .kbd_start
 

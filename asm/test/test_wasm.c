@@ -600,7 +600,7 @@ int main(void) {
         runtime.initial_pages = INITIAL_MEMORY_PAGES; runtime.has_initial_pages = 1;
         runtime.imports_ptr = 0; runtime.imports_len = 0;
         uint64_t result = er_fn_run(&runtime, mod, sizeof(mod), "f", 1);
-        TEST("trunc_sat_f32_s -1.0 -> -1", result == 0xffffffffffffffffULL);
+        TEST("trunc_sat_f32_s -1.0 -> -1", result == 0xffffffffULL);
     }
 
     // ================================================================

@@ -1,7 +1,7 @@
 const std = @import("std");
 const renderer_ir = @import("ir.zig");
-const interaction = @import("ui_interaction.zig");
-const ui = @import("ui.zig");
+const interaction = @import("../ui_interaction.zig");
+const ui = @import("../ui.zig");
 
 pub const Error = error{Budget} || ui.RenderError || interaction.Error || error{
     OverlayBudgetExceeded,

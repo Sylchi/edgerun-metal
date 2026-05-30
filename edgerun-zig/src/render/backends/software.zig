@@ -2926,6 +2926,69 @@ fn renderTestSceneIr(surface: Surface, commands: []const ui.Command) !void {
     });
 }
 
+test "software renderer all rect modes produce deterministic pixel output" {
+    var commands: [6]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+
+    try scene.pushRect(ui.Rect.init(0, 0, 20, 16), .{ .r = 0, .g = 0, .b = 255 }, .fill, 0.0, 0.0);
+    try scene.pushRect(ui.Rect.init(20, 0, 20, 16), .{ .r = 0, .g = 255, .b = 0 }, .border, 4.0, 0.0);
+    try scene.pushGradientRect(ui.Rect.init(0, 16, 20, 16), .{ .r = 0, .g = 0, .b = 255 }, .{ .r = 0, .g = 255, .b = 0 }, 0.0);
+    try scene.pushRect(ui.Rect.init(20, 16, 20, 16), .{ .r = 128, .g = 0, .b = 128 }, .shadow, 0.0, 4.0);
+    try scene.pushPieSlice(ui.Rect.init(42, 0, 16, 16), .{ .r = 255, .g = 0, .b = 0 }, 0.0, 0.25);
+    try scene.pushRect(ui.Rect.init(42, 16, 16, 16), .{ .r = 255, .g = 0, .b = 0 }, .fill, 0.0, 0.0);
+
+    var pixels: [64 * 48]ui.Color = undefined;
+    const surface = try Surface.init(64, 48, &pixels);
+    surface.clear(.clear);
+    try renderTestSceneIr(surface, scene.written());
+
+    const center = struct {
+        fn at(s: []const ui.Color, stride: usize, col: usize, row: usize) ui.Color {
+            return s[row * stride + col];
+        }
+    }.at;
+
+    // Fill rect (blue): center pixel should be opaque blue
+    const fill_pixel = center(&pixels, 64, 10, 8);
+    try std.testing.expectEqual(@as(u8, 255), fill_pixel.a);
+    try std.testing.expectEqual(@as(u8, 255), fill_pixel.b);
+    try std.testing.expectEqual(@as(u8, 0), fill_pixel.r);
+
+    // Pie slice (red, 0–0.25 turn): SW corner of bounds is outside sweep
+    // center of pie is at (50, 8), radius 8
+    // pixel (42+8=50, 0+8=8) would be center — but with pixel_center offset
+    // At (50, 8): dx = 0, dy = 0, turn = 0 (undefined but let's check edge)
+    // Pixel (58, 0): outside circle, should be clear
+    try std.testing.expectEqual(@as(u8, 0), pixels[64 * 0 + 58].a);
+
+    // Pie slice (red, turn 0→0.25 = upward to rightward, ~top-right quadrant)
+    // At pixel (55, 4): dx=5.5, dy=-3.5, turn≈0.16, inside sweep, dist≈6.5 < radius=8.
+    const pie_inside = center(&pixels, 64, 55, 4);
+    try std.testing.expect(pie_inside.a > 0);
+    try std.testing.expect(pie_inside.r > 200);
+
+    // Fill rect (red, 42,16, 16,16): compare to pie slice
+    // Same bounds and color, but filled completely
+    const fill2 = center(&pixels, 64, 50, 24);
+    try std.testing.expectEqual(@as(u8, 255), fill2.a);
+    try std.testing.expectEqual(@as(u8, 255), fill2.r);
+
+    // Gradient: top row more blue, bottom row more green
+    const grad_top = center(&pixels, 64, 10, 17);
+    const grad_bot = center(&pixels, 64, 10, 31);
+    try std.testing.expect(grad_top.b > grad_bot.b);
+    try std.testing.expect(grad_bot.g > grad_top.g);
+
+    // Determinism: re-render should produce identical output
+    var pixels2: [64 * 48]ui.Color = undefined;
+    const surface2 = try Surface.init(64, 48, &pixels2);
+    surface2.clear(.clear);
+    try renderTestSceneIr(surface2, scene.written());
+    for (pixels, 0..) |p, i| {
+        try std.testing.expectEqual(p, pixels2[i]);
+    }
+}
+
 pub const Framebuffer = struct {
     width: usize,
     height: usize,

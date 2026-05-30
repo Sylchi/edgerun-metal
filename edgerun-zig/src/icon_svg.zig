@@ -1696,7 +1696,7 @@ fn parseOpacityByte(value: []const u8) Error!u8 {
 
 fn supportedOpacity(value: []const u8) Error!bool {
     const parsed = try parseOpacity(value);
-    return @abs(parsed) <= transform_epsilon or @abs(parsed - opacity_opaque) <= transform_epsilon;
+    return parsed >= 0.0 and parsed <= opacity_opaque;
 }
 
 fn supportedFillOpacity(value: []const u8) Error!bool {
@@ -4799,14 +4799,14 @@ test "svg iterator returns no ops when root opacity is zero" {
     try std.testing.expectEqual(@as(?icon_vector.Op, null), try iter.next());
 }
 
-test "svg iterator rejects nonzero opacity because alpha compositing is unsupported" {
+test "svg iterator accepts partial opacity values in [0,1]" {
     var iter = Iterator.init(
         \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" opacity="0.5" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         \\  <path d="M 0 0 L 1 1"/>
         \\</svg>
     );
 
-    try std.testing.expectError(error.UnsupportedSvgStroke, iter.next());
+    try std.testing.expect((try iter.next()) != null);
 
     var unit = Iterator.init(
         \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" opacity="1px" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

@@ -373,8 +373,7 @@ er_fn er_fn_exec
     jb      .imported_func
 
     ; Defined function
-    sub     r12, [import_count]    ; defined_index
-    mov     rdi, r12
+    mov     rdi, r12               ; pass absolute function_index
     call    er_wasm_code_index_for_function
     test    rdx, rdx
     jnz     .error
@@ -398,9 +397,8 @@ er_fn er_fn_exec
     mov     [exec_decoded_end], rax
     pop     r10
 
-    ; Get function type
+    ; Get function type (pass absolute function_index)
     mov     rdi, r12
-    add     rdi, [import_count]
     call    er_wasm_type_index_for_function
     test    rdx, rdx
     jnz     .error
@@ -494,8 +492,84 @@ er_fn er_fn_exec
 ; =================================================================+
 er_wasm_call_imported:
     er_frame_push
-    ; For now, return Unsupported
+    push    r15
+    push    r14
+
+    mov     r10, rdi
+    imul    r10, IMPORTED_FUNC_SIZE
+
+    ; Get func_ptr
+    mov     r15, [imports_buf + r10 + IMPORT_RESOLVED_FUNC_IDX_OFF]
+
+    ; Get type info for param/result count
+    mov     rax, [imports_buf + r10 + IMPORT_TYPE_INDEX_OFF]
+    mov     r10, rax
+    imul    r10, FUNC_TYPE_SIZE
+    mov     r14, [types_buf + r10 + FUNC_TYPE_PARAM_COUNT_OFF]   ; param_count
+    mov     rcx, [types_buf + r10 + FUNC_TYPE_RESULT_COUNT_OFF]  ; result_count
+
+    ; Pop args from eval stack (WASM order: last pushed = last param)
+    ; For x86_64 calling convention: arg0 = rdi, arg1 = rsi, arg2 = rdx, arg3 = rcx, arg4 = r8, arg5 = r9
+    xor     edi, edi
+    xor     esi, esi
+    xor     edx, edx
+    xor     ecx, ecx
+    xor     r8d, r8d
+    xor     r9d, r9d
+
+    cmp     r14, 0
+    je      .import_do_call
+    cmp     r14, 1
+    je      .import_one_arg
+    cmp     r14, 2
+    je      .import_two_args
+
+    ; >2 args not supported yet
     er_err  ERROR_UNSUPPORTED
+    pop     r14
+    pop     r15
+    pop     rbp
+    ret
+
+.import_two_args:
+    call    exec_stack_pop
+    jc      .import_underflow
+    mov     rsi, rax        ; arg1 = second param
+
+.import_one_arg:
+    call    exec_stack_pop
+    jc      .import_underflow
+    mov     rdi, rax        ; arg0 = first param
+
+.import_do_call:
+    ; Call host function
+    call    r15
+
+    ; Push result(s) to eval stack
+    test    rcx, rcx        ; result_count
+    jz      .import_no_result
+    mov     rdi, rax
+    call    exec_stack_push
+    jc      .import_overflow
+
+.import_no_result:
+    xor     edx, edx        ; ERROR_SUCCESS
+    pop     r14
+    pop     r15
+    pop     rbp
+    ret
+
+.import_underflow:
+    er_err  ERROR_STACK_UNDERFLOW
+    pop     r14
+    pop     r15
+    pop     rbp
+    ret
+
+.import_overflow:
+    er_err  ERROR_STACK_OVERFLOW
+    pop     r14
+    pop     r15
     pop     rbp
     ret
 
@@ -1955,9 +2029,67 @@ exec_dispatch_loop:
 .op_f32_store:
 .op_f64_store:
 .op_f32_const:
+    mov     rsi, [exec_code_body_ptr]
+    add     rsi, [exec_reader_offset]
+    mov     rax, [exec_reader_offset]
+    add     rax, 4
+    cmp     rax, [exec_code_body_len]
+    ja      .corrupt_error
+    mov     eax, [rsi]
+    add     qword [exec_reader_offset], 4
+    call    exec_stack_push
+    jc      .overflow_error
+    jmp     .dispatch_next
+
 .op_f64_const:
+    mov     rsi, [exec_code_body_ptr]
+    add     rsi, [exec_reader_offset]
+    mov     rax, [exec_reader_offset]
+    add     rax, 8
+    cmp     rax, [exec_code_body_len]
+    ja      .corrupt_error
+    mov     rax, [rsi]
+    add     qword [exec_reader_offset], 8
+    call    exec_stack_push
+    jc      .overflow_error
+    jmp     .dispatch_next
+
 .op_f32_eq:
+    call    exec_stack_pop
+    jc      .underflow_error
+    movd    xmm1, eax
+    call    exec_stack_pop
+    jc      .underflow_error
+    movd    xmm0, eax
+    ucomiss xmm0, xmm1
+    setz    al
+    ; Check for unordered (NaN): PF=1 → result should be 0
+    jnp     .f32_eq_done
+    xor     al, al
+.f32_eq_done:
+    movzx   eax, al
+    call    exec_stack_push
+    jc      .overflow_error
+    jmp     .dispatch_next
+
 .op_f32_ne:
+    call    exec_stack_pop
+    jc      .underflow_error
+    movd    xmm1, eax
+    call    exec_stack_pop
+    jc      .underflow_error
+    movd    xmm0, eax
+    ucomiss xmm0, xmm1
+    setnz   al
+    ; For unordered (NaN): result should be 1
+    jnp     .f32_ne_done
+    mov     al, 1
+.f32_ne_done:
+    movzx   eax, al
+    call    exec_stack_push
+    jc      .overflow_error
+    jmp     .dispatch_next
+
 .op_f32_lt:
 .op_f32_gt:
 .op_f32_le:
@@ -1968,6 +2100,22 @@ exec_dispatch_loop:
 .op_f64_gt:
 .op_f64_le:
 .op_f64_ge:
+.op_f32_add:
+    call    exec_stack_pop
+    jc      .underflow_error
+    movd    xmm1, eax
+    call    exec_stack_pop
+    jc      .underflow_error
+    movd    xmm0, eax
+    addss   xmm0, xmm1
+    movd    eax, xmm0
+    call    exec_stack_push
+    jc      .overflow_error
+    jmp     .dispatch_next
+
+.op_f32_sub:
+.op_f32_mul:
+.op_f32_div:
 .op_f32_abs:
 .op_f32_neg:
 .op_f32_ceil:
@@ -1975,13 +2123,25 @@ exec_dispatch_loop:
 .op_f32_trunc:
 .op_f32_nearest:
 .op_f32_sqrt:
-.op_f32_add:
-.op_f32_sub:
-.op_f32_mul:
-.op_f32_div:
 .op_f32_min:
 .op_f32_max:
 .op_f32_copysign:
+.op_f64_add:
+    call    exec_stack_pop
+    jc      .underflow_error
+    movq    xmm1, rax
+    call    exec_stack_pop
+    jc      .underflow_error
+    movq    xmm0, rax
+    addsd   xmm0, xmm1
+    movq    rax, xmm0
+    call    exec_stack_push
+    jc      .overflow_error
+    jmp     .dispatch_next
+
+.op_f64_sub:
+.op_f64_mul:
+.op_f64_div:
 .op_f64_abs:
 .op_f64_neg:
 .op_f64_ceil:
@@ -1989,10 +2149,6 @@ exec_dispatch_loop:
 .op_f64_trunc:
 .op_f64_nearest:
 .op_f64_sqrt:
-.op_f64_add:
-.op_f64_sub:
-.op_f64_mul:
-.op_f64_div:
 .op_f64_min:
 .op_f64_max:
 .op_f64_copysign:
@@ -2005,6 +2161,14 @@ exec_dispatch_loop:
 .op_i64_trunc_f64_s:
 .op_i64_trunc_f64_u:
 .op_f32_convert_i32_s:
+    call    exec_stack_pop
+    jc      .underflow_error
+    cvtsi2ss xmm0, eax
+    movd    eax, xmm0
+    call    exec_stack_push
+    jc      .overflow_error
+    jmp     .dispatch_next
+
 .op_f32_convert_i32_u:
 .op_f32_convert_i64_s:
 .op_f32_convert_i64_u:
@@ -2060,6 +2224,214 @@ exec_dispatch_loop:
     ; All other extended opcodes (table ops) - unsupported for now
     er_err  ERROR_UNSUPPORTED
     jmp     .error_return
+
+; ==================================================================
+; Saturating truncation ops (0xfc prefix, opcodes 0-7)
+; =================================================================+
+
+.ext_i32_trunc_sat_f32_s:
+    call    exec_stack_pop
+    jc      .underflow_error
+    movd    xmm0, eax
+    ucomiss xmm0, xmm0
+    jp      .sat_zero_i32
+    movss   xmm1, [rel f32_sat_2pow31]
+    ucomiss xmm0, xmm1
+    jae     .sat_i32_max
+    movss   xmm1, [rel f32_sat_minus_2pow31]
+    ucomiss xmm0, xmm1
+    jb      .sat_i32_min
+    cvttss2si eax, xmm0
+    call    exec_stack_push
+    jc      .overflow_error
+    jmp     .dispatch_next
+.sat_i32_max:
+    mov     eax, 0x7fffffff
+    call    exec_stack_push
+    jc      .overflow_error
+    jmp     .dispatch_next
+.sat_i32_min:
+    mov     eax, 0x80000000
+    call    exec_stack_push
+    jc      .overflow_error
+    jmp     .dispatch_next
+.sat_zero_i32:
+    xor     eax, eax
+    call    exec_stack_push
+    jc      .overflow_error
+    jmp     .dispatch_next
+
+.ext_i32_trunc_sat_f32_u:
+    call    exec_stack_pop
+    jc      .underflow_error
+    movd    xmm0, eax
+    ucomiss xmm0, xmm0
+    jp      .sat_zero_i32
+    xorps   xmm1, xmm1
+    ucomiss xmm0, xmm1
+    jbe     .sat_zero_i32
+    movss   xmm1, [rel f32_sat_2pow32]
+    ucomiss xmm0, xmm1
+    jae     .sat_u32_max
+    movss   xmm1, [rel f32_sat_2pow31]
+    ucomiss xmm0, xmm1
+    jae     .sat_u32_high
+    cvttss2si eax, xmm0
+    jmp     .push_sat_i32
+.sat_u32_high:
+    subss   xmm0, xmm1
+    cvttss2si eax, xmm0
+    add     eax, 0x80000000
+    jmp     .push_sat_i32
+.sat_u32_max:
+    mov     eax, 0xffffffff
+    jmp     .push_sat_i32
+
+.ext_i32_trunc_sat_f64_s:
+    call    exec_stack_pop
+    jc      .underflow_error
+    movq    xmm0, rax
+    ucomisd xmm0, xmm0
+    jp      .sat_zero_i32
+    cvttsd2si eax, xmm0
+    cmp     eax, 0x80000000
+    jne     .push_sat_i32
+    ucomisd xmm0, xmm0
+    jp      .sat_zero_i32
+    movq    rax, xmm0
+    bt      rax, 63
+    jc      .sat_i32_min
+    jmp     .sat_i32_max
+.push_sat_i32:
+    call    exec_stack_push
+    jc      .overflow_error
+    jmp     .dispatch_next
+
+.ext_i32_trunc_sat_f64_u:
+    call    exec_stack_pop
+    jc      .underflow_error
+    movq    xmm0, rax
+    ucomisd xmm0, xmm0
+    jp      .sat_zero_i32
+    xorps   xmm1, xmm1
+    ucomisd xmm0, xmm1
+    jbe     .sat_zero_i32
+    cvttsd2si eax, xmm0
+    cmp     eax, 0x80000000
+    jne     .push_sat_i32
+    movq    rax, xmm0
+    bt      rax, 63
+    jc      .sat_zero_i32
+    movsd   xmm1, [rel f64_sat_2pow64]
+    ucomisd xmm0, xmm1
+    jae     .sat_u32_max
+    movsd   xmm1, [rel f64_sat_2pow63]
+    subsd   xmm0, xmm1
+    cvttsd2si eax, xmm0
+    mov     ecx, 0x80000000
+    xor     eax, ecx
+    jmp     .push_sat_i32
+
+.ext_i64_trunc_sat_f32_s:
+    call    exec_stack_pop
+    jc      .underflow_error
+    movd    xmm0, eax
+    ucomiss xmm0, xmm0
+    jp      .sat_zero_i64
+    cvttss2si rax, xmm0
+    cmp     rax, 0x8000000000000000
+    jne     .push_sat_i64
+    movd    eax, xmm0
+    bt      rax, 31
+    jc      .sat_i64_min
+    jmp     .sat_i64_max
+
+.ext_i64_trunc_sat_f32_u:
+    call    exec_stack_pop
+    jc      .underflow_error
+    movd    xmm0, eax
+    ucomiss xmm0, xmm0
+    jp      .sat_zero_i64
+    xorps   xmm1, xmm1
+    ucomiss xmm0, xmm1
+    jbe     .sat_zero_i64
+    cvttss2si rax, xmm0
+    cmp     rax, 0x8000000000000000
+    jne     .push_sat_i64
+    movd    eax, xmm0
+    bt      rax, 31
+    jc      .sat_zero_i64
+    mov     eax, 0x5F800000
+    movd    xmm1, eax
+    ucomiss xmm0, xmm1
+    jae     .sat_u64_max_overflow
+    mov     eax, 0x5F000000
+    movd    xmm1, eax
+    subss   xmm0, xmm1
+    cvttss2si rax, xmm0
+    mov     rcx, 0x8000000000000000
+    xor     rax, rcx
+    jmp     .push_sat_i64
+
+.ext_i64_trunc_sat_f64_s:
+    call    exec_stack_pop
+    jc      .underflow_error
+    movq    xmm0, rax
+    ucomisd xmm0, xmm0
+    jp      .sat_zero_i64
+    cvttsd2si rax, xmm0
+    cmp     rax, 0x8000000000000000
+    jne     .push_sat_i64
+    movq    rcx, xmm0
+    bt      rcx, 63
+    jc      .sat_i64_min
+    jmp     .sat_i64_max
+
+.ext_i64_trunc_sat_f64_u:
+    call    exec_stack_pop
+    jc      .underflow_error
+    movq    xmm0, rax
+    ucomisd xmm0, xmm0
+    jp      .sat_zero_i64
+    xorps   xmm1, xmm1
+    ucomisd xmm0, xmm1
+    jbe     .sat_zero_i64
+    cvttsd2si rax, xmm0
+    cmp     rax, 0x8000000000000000
+    jne     .push_sat_i64
+    movq    rcx, xmm0
+    bt      rcx, 63
+    jc      .sat_zero_i64
+    mov     rcx, 0x43F0000000000000
+    movq    xmm1, rcx
+    ucomisd xmm0, xmm1
+    jae     .sat_u64_max_overflow
+    mov     rcx, 0x43E0000000000000
+    movq    xmm1, rcx
+    subsd   xmm0, xmm1
+    cvttsd2si rax, xmm0
+    mov     rcx, 0x8000000000000000
+    xor     rax, rcx
+    jmp     .push_sat_i64
+
+.sat_zero_i64:
+    xor     eax, eax
+    xor     edx, edx
+    jmp     .push_sat_i64_64
+.sat_i64_max:
+    mov     rax, 0x7fffffffffffffff
+    jmp     .push_sat_i64_64
+.sat_i64_min:
+    mov     rax, 0x8000000000000000
+    jmp     .push_sat_i64_64
+.sat_u64_max_overflow:
+    mov     rax, 0xffffffffffffffff
+    jmp     .push_sat_i64_64
+.push_sat_i64:
+.push_sat_i64_64:
+    call    exec_stack_push
+    jc      .overflow_error
+    jmp     .dispatch_next
 
 .ext_memory_init:
     ; Read segment index, then memory index

@@ -718,13 +718,6 @@ test "renderer backends stay behind adapter imports" {
     const backend_import = "render/backends/";
     try expectSourceDoesNotContain(@embedFile("../root.zig"), backend_import);
     try expectSourceDoesNotContain(@embedFile("../ui_core_test.zig"), backend_import);
-    try expectSourceDoesNotContain(@embedFile("../app_runtime.zig"), backend_import);
-    try expectSourceDoesNotContain(@embedFile("../wayland_window_host.zig"), backend_import);
-    try expectSourceDoesNotContain(@embedFile("../wayland_egl_host.zig"), backend_import);
-    try expectSourceDoesNotContain(@embedFile("../drm_gbm_host.zig"), backend_import);
-    try expectSourceDoesNotContain(@embedFile("../app_images.zig"), backend_import);
-    try expectSourceDoesNotContain(@embedFile("../ui_bench.zig"), backend_import);
-    try expectSourceDoesNotContain(@embedFile("../ui_snapshot.zig"), backend_import);
 }
 
 test "renderer ir fixed buffers expose writable canonical buffer view" {

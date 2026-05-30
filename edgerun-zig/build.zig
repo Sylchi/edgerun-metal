@@ -737,4 +737,17 @@ pub fn build(b: *std.Build) void {
     const run_gen_atlas = b.addRunArtifact(gen_atlas);
     const gen_atlas_step = b.step("gen-atlas", "Generate font atlas bitmap and glyph table from pre-compiled font objects");
     gen_atlas_step.dependOn(&run_gen_atlas.step);
+
+    const gen_icon_objects = b.addExecutable(.{
+        .name = "gen-icon-objects",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/gen_icon_objects.zig"),
+            .target = b.graph.host,
+            .optimize = optimize,
+        }),
+    });
+    const run_gen_icon_objects = b.addRunArtifact(gen_icon_objects);
+
+    const gen_icon_objects_step = b.step("gen-icon-objects", "Convert Tabler SVG icons to pre-compiled IR canonical objects");
+    gen_icon_objects_step.dependOn(&run_gen_icon_objects.step);
 }

@@ -5100,21 +5100,26 @@ pub fn source(value: icon.Icon) []const u8 {
 
 test "all mapped tabler svgs parse without invalid path data" {
     const std = @import("std");
-    @setEvalBranchQuota(6000);
+    @setEvalBranchQuota(18000);
     const icon_svg = @import("icon_svg.zig");
+    const testOne = struct {
+        fn one(comptime svg: []const u8) !void {
+            var iter = icon_svg.Iterator.init(svg);
+            var count: usize = 0;
+            while (try iter.next()) |_| count += 1;
+            try std.testing.expect(count > 0);
+        }
+    }.one;
     inline for (std.meta.fields(icon.Icon)) |field| {
-        var iter = icon_svg.Iterator.init(source(@enumFromInt(field.value)));
-        var count: usize = 0;
-        while (try iter.next()) |_| count += 1;
-        try std.testing.expect(count > 0);
+        try testOne(comptime source(@enumFromInt(field.value)));
     }
 }
 
 test "all mapped tabler svgs match supported stroke contract" {
     const std = @import("std");
-    @setEvalBranchQuota(6000);
+    @setEvalBranchQuota(18000);
     const icon_svg = @import("icon_svg.zig");
     inline for (std.meta.fields(icon.Icon)) |field| {
-        try icon_svg.validateSupportedTablerStroke(source(@enumFromInt(field.value)));
+        try icon_svg.validateSupportedTablerStroke(comptime source(@enumFromInt(field.value)));
     }
 }

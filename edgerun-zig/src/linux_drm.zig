@@ -212,7 +212,6 @@ pub const DrmModeFbCmd2 = extern struct {
     pitches: [4]u32,
     offsets: [4]u32,
     modifier: [4]u64,
-    _pad: [4]u8,
 };
 
 pub const DrmModePageFlip = extern struct {

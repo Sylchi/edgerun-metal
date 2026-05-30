@@ -21,6 +21,7 @@ extern er_tor_hmac_sha256
 GLOBAL _fe_invert
 GLOBAL _fe_mul
 GLOBAL _fe_copy
+GLOBAL _fe_sq
 GLOBAL fe_base
 GLOBAL fe_one
 GLOBAL fe_tmp0
@@ -241,106 +242,189 @@ _fe_mul:
     mov     r12, rsi        ; a
     mov     r13, rdx        ; b
 
-    ; Product array on stack (8 limbs = 64 bytes)
-    sub     rsp, 64
+    ; Product array on stack (16 limbs = 128 bytes for 128-bit accumulators)
+    sub     rsp, 128
     mov     rdi, rsp
     xor     eax, eax
-    mov     ecx, 8
+    mov     ecx, 16
     rep     stosq
     mov     rdi, rbx        ; save dst for later
     mov     r14, rsp        ; product ptr
 
-    ; Fully unrolled 4x4 schoolbook multiplication
-    ; a = [r12+0..24], b = [r13+0..24]
-    ; product[i+j] += a[i]*b[j]
+    ; Fully unrolled 4x4 schoolbook using 128-bit accumulators per position.
+    ;
+    ; Each position k accumulates into two adjacent qwords on the stack:
+    ;   [r14 + k*8]       = accum_lo (sum mod 2^64)
+    ;   [r14 + 64 + k*8]  = accum_hi (total overflows from this position)
+    ;
+    ; For each product a[i]*b[j] = [hi:lo]:
+    ;   position (i+j):   add lo → CF wraps → adc 0 to accum_hi
+    ;   position (i+j+1): add hi → CF wraps → adc 0 to accum_hi
+    ;
+    ; MUL destroys CF between pairs, but each pair's accumulation is
+    ; self-contained (two independent add/adc sequences), so no CF
+    ; needs to cross a mul boundary.
 
-    ; i=0
+    ; i=0, j=0
     mov     rax, [r12]
     mov     rcx, [r13]
     mul     rcx
     add     [r14], rax
-    adc     [r14+8], rdx
+    adc qword [r14+64], 0
+    add     [r14+8], rdx
+    adc qword [r14+72], 0
+
+    ; i=0, j=1
     mov     rax, [r12]
     mov     rcx, [r13+8]
     mul     rcx
     add     [r14+8], rax
-    adc     [r14+16], rdx
+    adc qword [r14+72], 0
+    add     [r14+16], rdx
+    adc qword [r14+80], 0
+
+    ; i=0, j=2
     mov     rax, [r12]
     mov     rcx, [r13+16]
     mul     rcx
     add     [r14+16], rax
-    adc     [r14+24], rdx
+    adc qword [r14+80], 0
+    add     [r14+24], rdx
+    adc qword [r14+88], 0
+
+    ; i=0, j=3
     mov     rax, [r12]
     mov     rcx, [r13+24]
     mul     rcx
     add     [r14+24], rax
-    adc     [r14+32], rdx
+    adc qword [r14+88], 0
+    add     [r14+32], rdx
+    adc qword [r14+96], 0
 
-    ; i=1
+    ; i=1, j=0
     mov     rax, [r12+8]
     mov     rcx, [r13]
     mul     rcx
     add     [r14+8], rax
-    adc     [r14+16], rdx
+    adc qword [r14+72], 0
+    add     [r14+16], rdx
+    adc qword [r14+80], 0
+
+    ; i=1, j=1
     mov     rax, [r12+8]
     mov     rcx, [r13+8]
     mul     rcx
     add     [r14+16], rax
-    adc     [r14+24], rdx
+    adc qword [r14+80], 0
+    add     [r14+24], rdx
+    adc qword [r14+88], 0
+
+    ; i=1, j=2
     mov     rax, [r12+8]
     mov     rcx, [r13+16]
     mul     rcx
     add     [r14+24], rax
-    adc     [r14+32], rdx
+    adc qword [r14+88], 0
+    add     [r14+32], rdx
+    adc qword [r14+96], 0
+
+    ; i=1, j=3
     mov     rax, [r12+8]
     mov     rcx, [r13+24]
     mul     rcx
     add     [r14+32], rax
-    adc     [r14+40], rdx
+    adc qword [r14+96], 0
+    add     [r14+40], rdx
+    adc qword [r14+104], 0
 
-    ; i=2
+    ; i=2, j=0
     mov     rax, [r12+16]
     mov     rcx, [r13]
     mul     rcx
     add     [r14+16], rax
-    adc     [r14+24], rdx
+    adc qword [r14+80], 0
+    add     [r14+24], rdx
+    adc qword [r14+88], 0
+
+    ; i=2, j=1
     mov     rax, [r12+16]
     mov     rcx, [r13+8]
     mul     rcx
     add     [r14+24], rax
-    adc     [r14+32], rdx
+    adc qword [r14+88], 0
+    add     [r14+32], rdx
+    adc qword [r14+96], 0
+
+    ; i=2, j=2
     mov     rax, [r12+16]
     mov     rcx, [r13+16]
     mul     rcx
     add     [r14+32], rax
-    adc     [r14+40], rdx
+    adc qword [r14+96], 0
+    add     [r14+40], rdx
+    adc qword [r14+104], 0
+
+    ; i=2, j=3
     mov     rax, [r12+16]
     mov     rcx, [r13+24]
     mul     rcx
     add     [r14+40], rax
-    adc     [r14+48], rdx
+    adc qword [r14+104], 0
+    add     [r14+48], rdx
+    adc qword [r14+112], 0
 
-    ; i=3
+    ; i=3, j=0
     mov     rax, [r12+24]
     mov     rcx, [r13]
     mul     rcx
     add     [r14+24], rax
-    adc     [r14+32], rdx
+    adc qword [r14+88], 0
+    add     [r14+32], rdx
+    adc qword [r14+96], 0
+
+    ; i=3, j=1
     mov     rax, [r12+24]
     mov     rcx, [r13+8]
     mul     rcx
     add     [r14+32], rax
-    adc     [r14+40], rdx
+    adc qword [r14+96], 0
+    add     [r14+40], rdx
+    adc qword [r14+104], 0
+
+    ; i=3, j=2
     mov     rax, [r12+24]
     mov     rcx, [r13+16]
     mul     rcx
     add     [r14+40], rax
-    adc     [r14+48], rdx
+    adc qword [r14+104], 0
+    add     [r14+48], rdx
+    adc qword [r14+112], 0
+
+    ; i=3, j=3
     mov     rax, [r12+24]
     mov     rcx, [r13+24]
     mul     rcx
     add     [r14+48], rax
-    adc     [r14+56], rdx
+    adc qword [r14+112], 0
+    add     [r14+56], rdx
+    adc qword [r14+120], 0
+
+    ; Collapse 128-bit accumulators into 8 product limbs with carry propagation
+    ; For each position k: total = accum_lo[k] + accum_hi[k-1] + carry_in
+    ;                      product[k] = total & 2^64-1
+    ;                      carry_out = total >> 64 + accum_hi[k]
+    xor     r15d, r15d          ; carry_in = 0
+    xor     ecx, ecx            ; k = 0
+.collapse:
+    mov     rax, [r14 + rcx*8]           ; accum_lo[k]
+    add     rax, r15                      ; + carry_in
+    mov     r15, 0
+    adc     r15d, 0                       ; carry_out = carry from add
+    add     r15, [r14 + 64 + rcx*8]      ; + accum_hi[k]
+    mov     [r14 + rcx*8], rax           ; product[k] = result
+    inc     ecx
+    cmp     ecx, 8
+    jb      .collapse
 
     ; Now reduce product modulo 2^255-19
     ; Low 256 bits: r14[0..3] (4 limbs)
@@ -348,17 +432,19 @@ _fe_mul:
     ; Result = low + high * 38
 
     ; Multiply high 4 limbs by 38, accumulating overflow
-    mov     ecx, 4
+    ; Process LSB to MSB so carries propagate correctly upward
+    xor     ecx, ecx
     xor     r15d, r15d      ; accumulated overflow from mul38
 .mul38:
-    mov     rax, [r14 + 32 + rcx*8 - 8]
-    mul     qword [rel fe_38 + rcx*8 - 8]   ; rdx:rax = limb * 38
-    add     rax, r15                         ; add previous overflow
-    mov     r15, rdx                         ; save new overflow (mul hi)
-    adc     r15, 0                           ; propagate carry from add
-    mov     [r14 + 32 + rcx*8 - 8], rax
-    dec     ecx
-    jnz     .mul38
+    mov     rax, [r14 + 32 + rcx*8]
+    mul     qword [rel fe_38 + rcx*8]   ; rdx:rax = limb * 38
+    add     rax, r15                     ; add previous overflow
+    mov     r15, rdx                     ; save new overflow (mul hi)
+    adc     r15, 0                       ; propagate carry from add
+    mov     [r14 + 32 + rcx*8], rax
+    inc     ecx
+    cmp     ecx, 4
+    jb      .mul38
 
     ; Add mod-reduced high*38 to low (4-limb carry chain)
     mov     rax, [r14 + 0]
@@ -388,9 +474,13 @@ _fe_mul:
     adc     r9,  0
     mov     [r14 + 24], r9
 
-    ; Carry propagation
-    mov     rdi, r14
-    call    _fe_carry
+    ; Handle possible overflow at 256 bits from final adc
+    jnc     .no_carry
+    add     qword [r14 + 0], 38
+    adc     qword [r14 + 8], 0
+    adc     qword [r14 + 16], 0
+    adc     qword [r14 + 24], 0
+.no_carry:
 
     ; Copy to destination
     mov     rdi, rbx
@@ -398,7 +488,7 @@ _fe_mul:
     mov     edx, 32
     call    er_memcpy
 
-    add     rsp, 64
+    add     rsp, 128
     pop     r15
     pop     r14
     pop     r13
@@ -450,9 +540,6 @@ _fe_invert:
     mov     rdi, fe_tmp1
     mov     rsi, r13
     call    _fe_copy
-    ; Carry the input copy for safety
-    mov     rdi, fe_tmp1
-    call    _fe_carry
 
     ; Initialize result = 1 in fe_tmp0
     mov     rdi, fe_tmp0
