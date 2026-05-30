@@ -142,6 +142,8 @@ wasm_version: db 0x01, 0x00, 0x00, 0x00
 %define ERROR_INVALID_PARAM    24
 %define ERROR_BUSY             25
 %define ERROR_AUTH             26
+%define ERROR_NO_SPACE         27
+%define ERROR_NOT_FOUND        28
 
 %define ERROR_OK               0
 

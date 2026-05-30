@@ -42,7 +42,7 @@ http_str_content_type: db "content-type: "
 http_str_content_type_len equ 14
 
 http_str_sse_ct:      db "text/event-stream"
-http_str_sse_ct_len   equ 18
+http_str_sse_ct_len   equ 17
 
 http_str_sse_data:    db "data"
 http_str_sse_data_len equ 4
@@ -1088,12 +1088,12 @@ _http_sse_parse_event:
 .parse_retry:
     test    edx, edx
     jz      .retry_done
-    mov     bl, [rbx + rcx]
-    sub     bl, '0'
-    cmp     bl, 9
+    movzx   r11d, byte [rbx + rcx]
+    lea     r11d, [r11d - '0']
+    cmp     r11d, 9
     ja      .retry_done
     imul    eax, 10
-    add     eax, ebx
+    add     eax, r11d
     inc     ecx
     dec     edx
     jmp     .parse_retry
