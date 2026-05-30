@@ -235,6 +235,58 @@ er_wasm_jit_init:
     _jit_init_op 0x88, jit_template_i64_shr_u
     _jit_init_op 0x89, jit_template_i64_rotl
     _jit_init_op 0x8A, jit_template_i64_rotr
+    ; Float comparisons (f32: 0x5B-0x60, f64: 0x61-0x66)
+    _jit_init_op 0x5B, jit_template_f32_eq
+    _jit_init_op 0x5C, jit_template_f32_ne
+    _jit_init_op 0x5D, jit_template_f32_lt
+    _jit_init_op 0x5E, jit_template_f32_gt
+    _jit_init_op 0x5F, jit_template_f32_le
+    _jit_init_op 0x60, jit_template_f32_ge
+    _jit_init_op 0x61, jit_template_f64_eq
+    _jit_init_op 0x62, jit_template_f64_ne
+    _jit_init_op 0x63, jit_template_f64_lt
+    _jit_init_op 0x64, jit_template_f64_gt
+    _jit_init_op 0x65, jit_template_f64_le
+    _jit_init_op 0x66, jit_template_f64_ge
+    ; Float constants
+    _jit_init_op 0x43, jit_template_f32_const
+    _jit_init_op 0x44, jit_template_f64_const
+    ; Float unary
+    _jit_init_op 0x8B, jit_template_f32_abs
+    _jit_init_op 0x8C, jit_template_f32_neg
+    _jit_init_op 0x99, jit_template_f64_abs
+    _jit_init_op 0x9A, jit_template_f64_neg
+    _jit_init_op 0x91, jit_template_f32_sqrt
+    _jit_init_op 0x9F, jit_template_f64_sqrt
+    ; Float rounding (SSE4.1)
+    _jit_init_op 0x8D, jit_template_f32_ceil
+    _jit_init_op 0x8E, jit_template_f32_floor
+    _jit_init_op 0x8F, jit_template_f32_trunc
+    _jit_init_op 0x90, jit_template_f32_nearest
+    _jit_init_op 0x9B, jit_template_f64_ceil
+    _jit_init_op 0x9C, jit_template_f64_floor
+    _jit_init_op 0x9D, jit_template_f64_trunc
+    _jit_init_op 0x9E, jit_template_f64_nearest
+    ; Float binary (f32: add/sub/mul/div)
+    _jit_init_op 0x92, jit_template_f32_add
+    _jit_init_op 0x93, jit_template_f32_sub
+    _jit_init_op 0x94, jit_template_f32_mul
+    _jit_init_op 0x95, jit_template_f32_div
+    ; Float binary (f64: add/sub/mul/div)
+    _jit_init_op 0xA0, jit_template_f64_add
+    _jit_init_op 0xA1, jit_template_f64_sub
+    _jit_init_op 0xA2, jit_template_f64_mul
+    _jit_init_op 0xA3, jit_template_f64_div
+    ; Float load/store — reuse integer templates (same semantics)
+    _jit_init_op 0x2A, jit_template_i32_load   ; f32.load
+    _jit_init_op 0x2B, jit_template_i64_load   ; f64.load
+    _jit_init_op 0x38, jit_template_i32_store  ; f32.store
+    _jit_init_op 0x39, jit_template_i64_store  ; f64.store
+    ; Reinterpret ops — no-op on x86_64 (bits are the same)
+    _jit_init_op 0xBC, jit_template_i32_reinterpret_f32
+    _jit_init_op 0xBD, jit_template_i64_reinterpret_f64
+    _jit_init_op 0xBE, jit_template_f32_reinterpret_i32
+    _jit_init_op 0xBF, jit_template_f64_reinterpret_i64
 
     mov     byte [rel jit_initialized], 1
     er_ok

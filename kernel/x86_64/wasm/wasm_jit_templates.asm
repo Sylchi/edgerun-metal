@@ -1421,7 +1421,599 @@ er_fn jit_template_call_indirect
     er_err  ERROR_NOT_IMPLEMENTED
     ret
 
-; ------------------------------------------------------------------
+; ==================================================================
+; Float comparison helpers — shared by f32 and f64 comparison templates
+; =================================================================+
+; After ucomiss/ucomisd:
+;   ZF=1,PF=0,CF=0 → equal
+;   ZF=0,PF=0,CF=0 → greater than
+;   ZF=0,PF=0,CF=1 → less than
+;   ZF=1,PF=1,CF=1 → unordered (NaN)
+;
+; NaN fixup:
+;   eq: setnp al; mov ah, al; sete al; and al, ah  (false on NaN)
+;   ne: setne al; setnp ah; ... wait, need OR with PF
+;   ne: setp al; ... no
+;
+;   Actually:
+;   eq: sete & ~PF   → setnp; save; sete; and
+;   ne: setne | PF   → sete? no
+;   ne: the opposite of eq: setne al (1 if !equal); but NaN → ZF=1 → setne=0, we want 1
+;   Better: setp al (1 if NaN); setne ah (1 if not equal); or al, ah
+;   Or simplest: sete al; setnp ah; xor al, 1; and al, ah; xor al, 1
+;     (flip eq result for NaN-safe eq → ne)
+;   lt: setb & ~PF   → setnp; save; setb; and
+;   gt: seta alone (NaN: CF=1 → seta=0 ✓)
+;   le: setbe & ~PF  → setnp; save; setbe; and
+;   ge: setae alone (NaN: CF=1 → setae=0 ✓)
+;
+; For ne: use setp al; mov ah, al; sete al; xor al, 1; and al, ah; xor al, 1
+;   NaN: setp al=1 → ah=1; sete al=1; xor 1=0; and 0,1=0; xor 1=1 ✓
+;   equal: setp al=0 → ah=0; sete al=1; xor 1=0; and 0,0=0; xor 1=1 ... WRONG!
+;   Not equal: setp al=0 → ah=0; sete al=0; xor 1=1; and 1,0=0; xor 1=1 ✓
+;
+; Hmm, equal case is wrong. Let me try:
+; ne = (a != b) || isNaN(a,b) = NOT(eq & ordered)
+;   = NOT(sete & ~PF) = (NOT sete) | PF
+;   = setne | PF
+; So: setp al (PF→al); setne ah; or al, ah
+
+; -----------------------------------------------------------------+
+; Emit f32 comparison prologue: pop xmm1(right), pop xmm0(left), ucomiss
+; -----------------------------------------------------------------+
+er_fn jit_emit_f32_cmp_prologue
+    mov     cl, 1
+    call    jit_emit_pop_reg          ; pop rcx
+    xor     ecx, ecx
+    call    jit_emit_pop_reg          ; pop rax
+    call    jit_emit_movd_xmm1_ecx
+    call    jit_emit_movd_xmm0_eax
+    mov     al, 0x0F
+    call    jit_emit_byte
+    mov     al, 0x2E
+    call    jit_emit_byte
+    mov     al, 0xC1
+    jmp     jit_emit_modrm
+
+; -----------------------------------------------------------------+
+; Emit f64 comparison prologue: pop xmm1(right), pop xmm0(left), ucomisd
+; -----------------------------------------------------------------+
+er_fn jit_emit_f64_cmp_prologue
+    mov     cl, 1
+    call    jit_emit_pop_reg          ; pop rcx
+    xor     ecx, ecx
+    call    jit_emit_pop_reg          ; pop rax
+    call    jit_emit_movq_xmm1_rcx
+    call    jit_emit_movq_xmm0_rax
+    mov     al, 0x66
+    call    jit_emit_byte
+    mov     al, 0x0F
+    call    jit_emit_byte
+    mov     al, 0x2E
+    call    jit_emit_byte
+    mov     al, 0xC1
+    jmp     jit_emit_modrm
+
+; ==================================================================
+; F32 comparison templates (0x5B-0x60)
+; Each: cmp_prologue → setcc → NaN fixup → movzx → push
+; =================================================================+
+
+; f32.eq (0x5B)
+er_fn jit_template_f32_eq
+    call    jit_emit_f32_cmp_prologue
+    call    jit_emit_setnp_save_ah
+    mov     cl, 0x94
+    call    jit_emit_setcc         ; sete al
+    call    jit_emit_and_al_ah     ; and al, ah → al = eq && ordered
+    call    jit_emit_movzx_al_eax
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; f32.ne (0x5C)
+er_fn jit_template_f32_ne
+    call    jit_emit_f32_cmp_prologue
+    call    jit_emit_setp_save_ah
+    mov     cl, 0x95
+    call    jit_emit_setcc         ; setne al
+    call    jit_emit_or_al_ah      ; or al, ah → al = setne | PF
+    call    jit_emit_movzx_al_eax
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+; ACTUALLY: setp al; mov ah, al; setne al; or al, ah
+
+; f32.lt (0x5D)
+er_fn jit_template_f32_lt
+    call    jit_emit_f32_cmp_prologue
+    call    jit_emit_setnp_save_ah
+    mov     cl, 0x92               ; setb (CF=1, below)
+    call    jit_emit_setcc
+    call    jit_emit_and_al_ah
+    call    jit_emit_movzx_al_eax
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; f32.gt (0x5E)
+er_fn jit_template_f32_gt
+    call    jit_emit_f32_cmp_prologue
+    mov     cl, 0x97               ; seta (CF=0,ZF=0)
+    call    jit_emit_setcc
+    call    jit_emit_movzx_al_eax
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; f32.le (0x5F)
+er_fn jit_template_f32_le
+    call    jit_emit_f32_cmp_prologue
+    call    jit_emit_setnp_save_ah
+    mov     cl, 0x96               ; setbe (CF=1 or ZF=1)
+    call    jit_emit_setcc
+    call    jit_emit_and_al_ah
+    call    jit_emit_movzx_al_eax
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; f32.ge (0x60)
+er_fn jit_template_f32_ge
+    call    jit_emit_f32_cmp_prologue
+    mov     cl, 0x93               ; setae (CF=0)
+    call    jit_emit_setcc
+    call    jit_emit_movzx_al_eax
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; ==================================================================
+; F64 comparison templates (0x61-0x66)
+; =================================================================+
+
+; f64.eq (0x61)
+er_fn jit_template_f64_eq
+    call    jit_emit_f64_cmp_prologue
+    call    jit_emit_setnp_save_ah
+    mov     cl, 0x94
+    call    jit_emit_setcc
+    call    jit_emit_and_al_ah
+    call    jit_emit_movzx_al_eax
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; f64.ne (0x62)
+er_fn jit_template_f64_ne
+    call    jit_emit_f64_cmp_prologue
+    call    jit_emit_setp_save_ah
+    mov     cl, 0x95
+    call    jit_emit_setcc
+    call    jit_emit_or_al_ah
+    call    jit_emit_movzx_al_eax
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; f64.lt (0x63)
+er_fn jit_template_f64_lt
+    call    jit_emit_f64_cmp_prologue
+    call    jit_emit_setnp_save_ah
+    mov     cl, 0x92
+    call    jit_emit_setcc
+    call    jit_emit_and_al_ah
+    call    jit_emit_movzx_al_eax
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; f64.gt (0x64)
+er_fn jit_template_f64_gt
+    call    jit_emit_f64_cmp_prologue
+    mov     cl, 0x97
+    call    jit_emit_setcc
+    call    jit_emit_movzx_al_eax
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; f64.le (0x65)
+er_fn jit_template_f64_le
+    call    jit_emit_f64_cmp_prologue
+    call    jit_emit_setnp_save_ah
+    mov     cl, 0x96
+    call    jit_emit_setcc
+    call    jit_emit_and_al_ah
+    call    jit_emit_movzx_al_eax
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; f64.ge (0x66)
+er_fn jit_template_f64_ge
+    call    jit_emit_f64_cmp_prologue
+    mov     cl, 0x93
+    call    jit_emit_setcc
+    call    jit_emit_movzx_al_eax
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; ==================================================================
+; F32 constant and unary templates
+; =================================================================+
+
+; -----------------------------------------------------------------+
+; f32.const (0x43) — push imm32 float bits
+; -----------------------------------------------------------------+
+er_fn jit_template_f32_const
+    mov     eax, [rdi + 12]
+    call    jit_emit_push_imm32
+    ret
+
+; -----------------------------------------------------------------+
+; f64.const (0x44) — push imm64 float bits
+; -----------------------------------------------------------------+
+er_fn jit_template_f64_const
+    mov     eax, [rdi + 12]
+    mov     edx, [rdi + 16]
+    shl     rdx, 32
+    or      rax, rdx
+    mov     cl, 1
+    mov     ch, 0
+    xor     r8b, r8b
+    xor     r9b, r9b
+    call    jit_emit_rex
+    mov     al, 0xB8
+    call    jit_emit_byte
+    mov     eax, [rdi + 12]
+    mov     edx, [rdi + 16]
+    shl     rdx, 32
+    or      rax, rdx
+    call    jit_emit_qword
+    xor     ecx, ecx
+    call    jit_emit_push_reg
+    ret
+
+; -----------------------------------------------------------------+
+; f32.abs (0x8B) — pop; clear sign bit 31; push
+; -----------------------------------------------------------------+
+er_fn jit_template_f32_abs
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    mov     cl, 31
+    call    jit_emit_btr_eax
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; -----------------------------------------------------------------+
+; f32.neg (0x8C) — pop; toggle sign bit 31; push
+; -----------------------------------------------------------------+
+er_fn jit_template_f32_neg
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    mov     cl, 31
+    call    jit_emit_btc_eax
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; -----------------------------------------------------------------+
+; f64.abs (0x99) — pop; clear sign bit 63; push
+; -----------------------------------------------------------------+
+er_fn jit_template_f64_abs
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    mov     cl, 63
+    call    jit_emit_btr_rax
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; -----------------------------------------------------------------+
+; f64.neg (0x9A) — pop; toggle sign bit 63; push
+; -----------------------------------------------------------------+
+er_fn jit_template_f64_neg
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    mov     cl, 63
+    call    jit_emit_btc_rax
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; -----------------------------------------------------------------+
+; f32.sqrt (0x91) — pop, sqrtss, push
+; -----------------------------------------------------------------+
+er_fn jit_template_f32_sqrt
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    call    jit_emit_movd_xmm0_eax
+    mov     al, 0xF3
+    mov     ch, 0x51
+    mov     cl, 0xC0
+    call    jit_emit_sse_op
+    call    jit_emit_movd_eax_xmm0
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; -----------------------------------------------------------------+
+; f64.sqrt (0x9F) — pop, sqrtsd, push
+; -----------------------------------------------------------------+
+er_fn jit_template_f64_sqrt
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    call    jit_emit_movq_xmm0_rax
+    mov     al, 0xF2
+    mov     ch, 0x51
+    mov     cl, 0xC0
+    call    jit_emit_sse_op
+    call    jit_emit_movq_rax_xmm0
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; ==================================================================
+; F32 SSE binary arithmetic templates (0x92-0x95)
+; Each: pop rcx, pop rax, movd xmm1, movd xmm0, opss, movd, push
+; =================================================================+
+
+; f32.add (0x92)
+er_fn jit_template_f32_add
+    mov     cl, 1
+    call    jit_emit_pop_reg           ; pop rcx
+    xor     ecx, ecx
+    call    jit_emit_pop_reg           ; pop rax
+    call    jit_emit_movd_xmm1_ecx
+    call    jit_emit_movd_xmm0_eax
+    mov     al, 0xF3
+    mov     ch, 0x58                   ; addss opcode
+    mov     cl, 0xC1
+    call    jit_emit_sse_op
+    call    jit_emit_movd_eax_xmm0
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; f32.sub (0x93)
+er_fn jit_template_f32_sub
+    mov     cl, 1
+    call    jit_emit_pop_reg
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    call    jit_emit_movd_xmm1_ecx
+    call    jit_emit_movd_xmm0_eax
+    mov     al, 0xF3
+    mov     ch, 0x5C                   ; subss
+    mov     cl, 0xC1
+    call    jit_emit_sse_op
+    call    jit_emit_movd_eax_xmm0
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; f32.mul (0x94)
+er_fn jit_template_f32_mul
+    mov     cl, 1
+    call    jit_emit_pop_reg
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    call    jit_emit_movd_xmm1_ecx
+    call    jit_emit_movd_xmm0_eax
+    mov     al, 0xF3
+    mov     ch, 0x59                   ; mulss
+    mov     cl, 0xC1
+    call    jit_emit_sse_op
+    call    jit_emit_movd_eax_xmm0
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; f32.div (0x95)
+er_fn jit_template_f32_div
+    mov     cl, 1
+    call    jit_emit_pop_reg
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    call    jit_emit_movd_xmm1_ecx
+    call    jit_emit_movd_xmm0_eax
+    mov     al, 0xF3
+    mov     ch, 0x5E                   ; divss
+    mov     cl, 0xC1
+    call    jit_emit_sse_op
+    call    jit_emit_movd_eax_xmm0
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; ==================================================================
+; F64 SSE binary arithmetic templates (0xA0-0xA3)
+; Each: pop rcx, pop rax, movq xmm1, movq xmm0, opsd, movq, push
+; =================================================================+
+
+; f64.add (0xA0)
+er_fn jit_template_f64_add
+    mov     cl, 1
+    call    jit_emit_pop_reg
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    call    jit_emit_movq_xmm1_rcx
+    call    jit_emit_movq_xmm0_rax
+    mov     al, 0xF2
+    mov     ch, 0x58                   ; addsd
+    mov     cl, 0xC1
+    call    jit_emit_sse_op
+    call    jit_emit_movq_rax_xmm0
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; f64.sub (0xA1)
+er_fn jit_template_f64_sub
+    mov     cl, 1
+    call    jit_emit_pop_reg
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    call    jit_emit_movq_xmm1_rcx
+    call    jit_emit_movq_xmm0_rax
+    mov     al, 0xF2
+    mov     ch, 0x5C                   ; subsd
+    mov     cl, 0xC1
+    call    jit_emit_sse_op
+    call    jit_emit_movq_rax_xmm0
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; f64.mul (0xA2)
+er_fn jit_template_f64_mul
+    mov     cl, 1
+    call    jit_emit_pop_reg
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    call    jit_emit_movq_xmm1_rcx
+    call    jit_emit_movq_xmm0_rax
+    mov     al, 0xF2
+    mov     ch, 0x59                   ; mulsd
+    mov     cl, 0xC1
+    call    jit_emit_sse_op
+    call    jit_emit_movq_rax_xmm0
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; f64.div (0xA3)
+er_fn jit_template_f64_div
+    mov     cl, 1
+    call    jit_emit_pop_reg
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    call    jit_emit_movq_xmm1_rcx
+    call    jit_emit_movq_xmm0_rax
+    mov     al, 0xF2
+    mov     ch, 0x5E                   ; divsd
+    mov     cl, 0xC1
+    call    jit_emit_sse_op
+    call    jit_emit_movq_rax_xmm0
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; ==================================================================
+; SSE4.1 rounding templates
+; roundss/roundsd: 66 0F 3A 0A/0B <modrm> <imm8>
+; imm8 = 0x08 | mode where mode: 0=nearest,1=floor,2=ceil,3=trunc
+; Imm[3]=1 suppresses precision exception
+; =================================================================+
+
+; f32.ceil (0x8D)
+er_fn jit_template_f32_ceil
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    call    jit_emit_movd_xmm0_eax
+    mov     al, 0x0A
+    mov     cl, 0xC0
+    mov     ch, 0x0A                   ; ceil (2) | 0x08 = 0x0A
+    call    jit_emit_sse3a_op
+    call    jit_emit_movd_eax_xmm0
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; f32.floor (0x8E)
+er_fn jit_template_f32_floor
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    call    jit_emit_movd_xmm0_eax
+    mov     al, 0x0A
+    mov     cl, 0xC0
+    mov     ch, 0x09                   ; floor (1) | 0x08 = 0x09
+    call    jit_emit_sse3a_op
+    call    jit_emit_movd_eax_xmm0
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; f32.trunc (0x8F)
+er_fn jit_template_f32_trunc
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    call    jit_emit_movd_xmm0_eax
+    mov     al, 0x0A
+    mov     cl, 0xC0
+    mov     ch, 0x0B                   ; trunc (3) | 0x08 = 0x0B
+    call    jit_emit_sse3a_op
+    call    jit_emit_movd_eax_xmm0
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; f32.nearest (0x90)
+er_fn jit_template_f32_nearest
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    call    jit_emit_movd_xmm0_eax
+    mov     al, 0x0A
+    mov     cl, 0xC0
+    mov     ch, 0x08                   ; nearest (0) | 0x08 = 0x08
+    call    jit_emit_sse3a_op
+    call    jit_emit_movd_eax_xmm0
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; f64.ceil (0x9B)
+er_fn jit_template_f64_ceil
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    call    jit_emit_movq_xmm0_rax
+    mov     al, 0x0B
+    mov     cl, 0xC0
+    mov     ch, 0x0A
+    call    jit_emit_sse3a_op
+    call    jit_emit_movq_rax_xmm0
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; f64.floor (0x9C)
+er_fn jit_template_f64_floor
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    call    jit_emit_movq_xmm0_rax
+    mov     al, 0x0B
+    mov     cl, 0xC0
+    mov     ch, 0x09
+    call    jit_emit_sse3a_op
+    call    jit_emit_movq_rax_xmm0
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; f64.trunc (0x9D)
+er_fn jit_template_f64_trunc
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    call    jit_emit_movq_xmm0_rax
+    mov     al, 0x0B
+    mov     cl, 0xC0
+    mov     ch, 0x0B
+    call    jit_emit_sse3a_op
+    call    jit_emit_movq_rax_xmm0
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; f64.nearest (0x9E)
+er_fn jit_template_f64_nearest
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    call    jit_emit_movq_xmm0_rax
+    mov     al, 0x0B
+    mov     cl, 0xC0
+    mov     ch, 0x08
+    call    jit_emit_sse3a_op
+    call    jit_emit_movq_rax_xmm0
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; ==================================================================
+; Reinterpret ops — no-op on x86_64 (WASM stack holds raw bits)
+; =================================================================+
+
+; i32.reinterpret_f32 (0xBC)
+er_fn jit_template_i32_reinterpret_f32
+    ret
+
+; i64.reinterpret_f64 (0xBD)
+er_fn jit_template_i64_reinterpret_f64
+    ret
+
+; f32.reinterpret_i32 (0xBE)
+er_fn jit_template_f32_reinterpret_i32
+    ret
+
+; f64.reinterpret_i64 (0xBF)
+er_fn jit_template_f64_reinterpret_i64
+    ret
+
+; ==================================================================
+; Float load/store — reuse integer load/store templates
+; (f32.load = i32.load, f64.load = i64.load, etc.)
+; =================================================================+
+; These are registered by alias in the init table.
+
+; -----------------------------------------------------------------+
 ; Fallback — emit nothing, just return (orchestrator handles fallback)
 ; -----------------------------------------------------------------+
 er_fn jit_template_fallback

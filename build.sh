@@ -167,6 +167,12 @@ cmd_kernel_hello() {
 		-kernel "${KERNEL_ELF}" -m 256
 }
 
+cmd_kernel_vnc() {
+	cmd_kernel
+	qemu-system-x86_64 -machine q35 -vga std -vnc :0 -serial stdio -no-reboot \
+		-kernel "${KERNEL_ELF}" -m 256
+}
+
 cmd_kernel_efi() {
 	assemble_kernel_efi
 	local objs=$(kernel_objs "kernel_efi" ".o" "kernel_main_efi64.o")
@@ -229,7 +235,7 @@ cmd_kernel_net_tpm() {
 		-chardev socket,id=chrtpm,path="${tpm_sock}" \
 		-tpmdev emulator,id=tpm0,chardev=chrtpm \
 		-device tpm-crb,tpmdev=tpm0 \
-		-netdev user,id=net0 \
+		-netdev user,id=net0,guestfwd=tcp:10.0.2.2:19001-cmd:nc\ 127.0.0.1\ 19001 \
 		-device virtio-net-pci,netdev=net0 || true
 	kill "${swtpm_pid}" 2>/dev/null || true
 	wait "${swtpm_pid}" 2>/dev/null || true
@@ -313,6 +319,7 @@ cmd_test() {
 	cmd_test_wasm_jit
 	cmd_test_recursion_valid
 	cmd_test_recursion_invalid
+	cmd_test_wasm_float
 }
 
 cmd_test_recursion_valid() {
@@ -385,6 +392,21 @@ cmd_test_http() {
 		elf64 "${ASM_DIR}/net/http.asm" "$http_o"
 	fi
 	ld -nostdlib -static -o "$bin" "$obj" "$http_o" "$stub_obj"
+	echo "  LD  ${bin}"
+	"$bin"
+}
+
+cmd_test_wasm_float() {
+	local name="test_wasm_float"
+	local src="${TEST_DIR}/${name}.asm"
+	local obj="${ASM_BUILD}/${name}.o"
+	local bin="${ASM_BUILD}/${name}"
+	${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
+	local dep_obj="${ASM_BUILD}/runtime.o"
+	if [ ! -f "$dep_obj" ]; then
+		elf64 "${ASM_DIR}/rt/runtime.asm" "$dep_obj"
+	fi
+	ld -T "${TEST_DIR}/test_jit.ld" -nostdlib -static -o "$bin" "$obj" "$dep_obj"
 	echo "  LD  ${bin}"
 	"$bin"
 }
@@ -560,7 +582,8 @@ cmd_help() {
 	cat <<'EOF'
 EdgeRun build targets:
   kernel              Build kernel.elf + kernel.bin
-  kernel-hello        Build kernel + run in QEMU
+  kernel-hello        Build kernel + run in QEMU (serial)
+  kernel-vnc          Build kernel + run in QEMU (VNC :0)
   kernel-net          Build kernel + run in QEMU with virtio-net
   kernel-net-tpm      Build kernel + run in QEMU with swtpm + virtio-net
   kernel-tpm-live-test    Build kernel with TPM live test main
@@ -569,6 +592,7 @@ EdgeRun build targets:
   install-efi         Build + install kernel.efi to ESP + add boot entry
   test                Run all self-hosted ASM tests
   test-wasm-jit       Run WASM JIT self-test (self-hosted ASM runner)
+  test-wasm-float     Run WASM float opcode test (self-hosted ASM runner)
   test-ctype          Run ctype test (self-hosted ASM runner)
   test-clock          Run clock test (self-hosted ASM runner)
   test-http           Run HTTP test (self-hosted ASM runner)
@@ -595,6 +619,7 @@ EOF
 case "${1:-help}" in
 	kernel)         cmd_kernel ;;
 	kernel-hello)   cmd_kernel_hello ;;
+	kernel-vnc)     cmd_kernel_vnc ;;
 	kernel-net)     cmd_kernel_net ;;
 	kernel-net-tpm) cmd_kernel_net_tpm ;;
 	kernel-tpm-live-test)   cmd_kernel_tpm_live_test ;;
@@ -603,6 +628,7 @@ case "${1:-help}" in
 	install-efi)    cmd_install_efi ;;
 	test)           cmd_test ;;
 	test-wasm-jit)  cmd_test_wasm_jit ;;
+	test-wasm-float) cmd_test_wasm_float ;;
 	test-ctype)     cmd_test_ctype ;;
 	test-clock)     cmd_test_clock ;;
 	test-http)       cmd_test_http ;;

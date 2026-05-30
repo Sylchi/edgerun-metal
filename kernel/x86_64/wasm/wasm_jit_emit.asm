@@ -1086,3 +1086,249 @@ er_fn jit_emit_xor_edx_edx
     mov     al, 0xD2         ; xor edx, edx
     call    jit_emit_modrm
     ret
+
+; ==================================================================
+; SSE/Float instruction emitters for JIT templates
+; =================================================================+
+; Each function emits a complete SSE instruction into the code cache.
+; Calling convention matches the rest of the JIT emitter helpers.
+
+; ------------------------------------------------------------------
+; Generic SSE opcode emitter: <prefix> 0F <opcode> <modrm>
+; al = prefix (0xF2=sd, 0xF3=ss, 0x66=packed/pd), ch = opcode, cl = modrm
+; -----------------------------------------------------------------+
+er_fn jit_emit_sse_op
+    call    jit_emit_byte
+    mov     al, 0x0F
+    call    jit_emit_byte
+    mov     al, ch
+    call    jit_emit_byte
+    mov     al, cl
+    jmp     jit_emit_modrm
+
+; ------------------------------------------------------------------
+; Generic SSE opcode with 64-bit REX.W: <prefix> 48 0F <opcode> <modrm>
+; al = prefix, ch = opcode, cl = modrm
+; -----------------------------------------------------------------+
+er_fn jit_emit_sse64_op
+    call    jit_emit_byte
+    mov     al, 0x48         ; REX.W
+    call    jit_emit_byte
+    mov     al, 0x0F
+    call    jit_emit_byte
+    mov     al, ch
+    call    jit_emit_byte
+    mov     al, cl
+    jmp     jit_emit_modrm
+
+; ------------------------------------------------------------------
+; SSE4.1 three-byte opcode: 66 0F 3A <opcode> <modrm> <imm8>
+; al = opcode byte, cl = modrm, ch = imm8
+; -----------------------------------------------------------------+
+er_fn jit_emit_sse3a_op
+    push    rax
+    mov     al, 0x66
+    call    jit_emit_byte
+    mov     al, 0x0F
+    call    jit_emit_byte
+    mov     al, 0x3A
+    call    jit_emit_byte
+    pop     rax
+    call    jit_emit_byte
+    mov     al, cl
+    call    jit_emit_modrm
+    mov     al, ch
+    jmp     jit_emit_byte
+
+; ------------------------------------------------------------------
+; movd xmm0, eax  (66 0F 6E C0)
+; -----------------------------------------------------------------+
+er_fn jit_emit_movd_xmm0_eax
+    mov     al, 0x66
+    call    jit_emit_byte
+    mov     al, 0x0F
+    call    jit_emit_byte
+    mov     al, 0x6E
+    call    jit_emit_byte
+    mov     al, 0xC0
+    jmp     jit_emit_modrm
+
+; ------------------------------------------------------------------
+; movd xmm1, ecx  (66 0F 6E C9)
+; -----------------------------------------------------------------+
+er_fn jit_emit_movd_xmm1_ecx
+    mov     al, 0x66
+    call    jit_emit_byte
+    mov     al, 0x0F
+    call    jit_emit_byte
+    mov     al, 0x6E
+    call    jit_emit_byte
+    mov     al, 0xC9
+    jmp     jit_emit_modrm
+
+; ------------------------------------------------------------------
+; movd eax, xmm0  (66 0F 7E C0)
+; -----------------------------------------------------------------+
+er_fn jit_emit_movd_eax_xmm0
+    mov     al, 0x66
+    call    jit_emit_byte
+    mov     al, 0x0F
+    call    jit_emit_byte
+    mov     al, 0x7E
+    call    jit_emit_byte
+    mov     al, 0xC0
+    jmp     jit_emit_modrm
+
+; ------------------------------------------------------------------
+; movq xmm0, rax  (66 48 0F 6E C0)
+; -----------------------------------------------------------------+
+er_fn jit_emit_movq_xmm0_rax
+    mov     al, 0x66
+    call    jit_emit_byte
+    mov     al, 0x48         ; REX.W
+    call    jit_emit_byte
+    mov     al, 0x0F
+    call    jit_emit_byte
+    mov     al, 0x6E
+    call    jit_emit_byte
+    mov     al, 0xC0
+    jmp     jit_emit_modrm
+
+; ------------------------------------------------------------------
+; movq xmm1, rcx  (66 48 0F 6E C9)
+; -----------------------------------------------------------------+
+er_fn jit_emit_movq_xmm1_rcx
+    mov     al, 0x66
+    call    jit_emit_byte
+    mov     al, 0x48         ; REX.W
+    call    jit_emit_byte
+    mov     al, 0x0F
+    call    jit_emit_byte
+    mov     al, 0x6E
+    call    jit_emit_byte
+    mov     al, 0xC9
+    jmp     jit_emit_modrm
+
+; ------------------------------------------------------------------
+; movq rax, xmm0  (66 48 0F 7E C0)
+; -----------------------------------------------------------------+
+er_fn jit_emit_movq_rax_xmm0
+    mov     al, 0x66
+    call    jit_emit_byte
+    mov     al, 0x48         ; REX.W
+    call    jit_emit_byte
+    mov     al, 0x0F
+    call    jit_emit_byte
+    mov     al, 0x7E
+    call    jit_emit_byte
+    mov     al, 0xC0
+    jmp     jit_emit_modrm
+
+; ------------------------------------------------------------------
+; btr eax, imm8  (0F BA /5 ib) — bit test and reset (for f32 abs)
+; cl = imm8 bit position
+; -----------------------------------------------------------------+
+er_fn jit_emit_btr_eax
+    mov     al, 0x0F
+    call    jit_emit_byte
+    mov     al, 0xBA
+    call    jit_emit_byte
+    mov     al, 0xE8         ; ModRM: mod=11, reg=5(btr), rm=0(eax)
+    call    jit_emit_modrm
+    mov     al, cl
+    jmp     jit_emit_byte
+
+; ------------------------------------------------------------------
+; btc eax, imm8  (0F BA /7 ib) — bit test and complement (for f32 neg)
+; cl = imm8 bit position
+; -----------------------------------------------------------------+
+er_fn jit_emit_btc_eax
+    mov     al, 0x0F
+    call    jit_emit_byte
+    mov     al, 0xBA
+    call    jit_emit_byte
+    mov     al, 0xF8         ; ModRM: mod=11, reg=7(btc), rm=0(eax)
+    call    jit_emit_modrm
+    mov     al, cl
+    jmp     jit_emit_byte
+
+; ------------------------------------------------------------------
+; btr rax, imm8 with REX.W  (48 0F BA /5 ib) — f64 abs
+; cl = imm8 bit position
+; -----------------------------------------------------------------+
+er_fn jit_emit_btr_rax
+    mov     al, 0x48         ; REX.W
+    call    jit_emit_byte
+    mov     al, 0x0F
+    call    jit_emit_byte
+    mov     al, 0xBA
+    call    jit_emit_byte
+    mov     al, 0xE8         ; ModRM: mod=11, reg=5(btr), rm=0(rax)
+    call    jit_emit_modrm
+    mov     al, cl
+    jmp     jit_emit_byte
+
+; ------------------------------------------------------------------
+; btc rax, imm8 with REX.W  (48 0F BA /7 ib) — f64 neg
+; cl = imm8 bit position
+; -----------------------------------------------------------------+
+er_fn jit_emit_btc_rax
+    mov     al, 0x48         ; REX.W
+    call    jit_emit_byte
+    mov     al, 0x0F
+    call    jit_emit_byte
+    mov     al, 0xBA
+    call    jit_emit_byte
+    mov     al, 0xF8         ; ModRM: mod=11, reg=7(btc), rm=0(rax)
+    call    jit_emit_modrm
+    mov     al, cl
+    jmp     jit_emit_byte
+
+; ------------------------------------------------------------------
+; NaN fixup helpers for float comparisons
+; After ucomiss/ucomisd, PF is set for unordered (NaN).
+; -----------------------------------------------------------------+
+
+; Emit: setnp al; mov ah, al  — save ~PF (ordered=1) to ah
+er_fn jit_emit_setnp_save_ah
+    mov     al, 0x0F
+    call    jit_emit_byte
+    mov     al, 0x9B
+    call    jit_emit_byte
+    mov     al, 0xC0
+    call    jit_emit_modrm
+    mov     al, 0x88
+    call    jit_emit_byte
+    mov     al, 0xC4
+    jmp     jit_emit_modrm
+
+; Emit: setp al; mov ah, al  — save PF (unordered=1) to ah
+er_fn jit_emit_setp_save_ah
+    mov     al, 0x0F
+    call    jit_emit_byte
+    mov     al, 0x9A
+    call    jit_emit_byte
+    mov     al, 0xC0
+    call    jit_emit_modrm
+    mov     al, 0x88
+    call    jit_emit_byte
+    mov     al, 0xC4
+    jmp     jit_emit_modrm
+
+; ------------------------------------------------------------------
+; Emit: and al, ah  (20 E0)
+; -----------------------------------------------------------------+
+er_fn jit_emit_and_al_ah
+    mov     al, 0x20
+    call    jit_emit_byte
+    mov     al, 0xE0
+    jmp     jit_emit_modrm
+
+; ------------------------------------------------------------------
+; Emit: or al, ah  (08 E0)
+; -----------------------------------------------------------------+
+er_fn jit_emit_or_al_ah
+    mov     al, 0x08
+    call    jit_emit_byte
+    mov     al, 0xE0
+    jmp     jit_emit_modrm
