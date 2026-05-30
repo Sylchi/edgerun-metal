@@ -1,6 +1,5 @@
 const state = @import("runtime/state.zig");
 const render = @import("runtime/render.zig");
-const compiler = @import("runtime/compiler.zig");
 const editor = @import("runtime/editor.zig");
 const input = @import("runtime/input.zig");
 const idp = @import("runtime/identity.zig");
@@ -342,7 +341,7 @@ export fn er_ui_release_artifact_clear() u32 {
 }
 
 export fn er_ui_compile_workspace_wasm() u32 {
-    return @intFromEnum(compiler.compileWorkspaceInsideWasm());
+    return @intFromEnum(state.ErrorCode.render_failed);
 }
 
 export fn er_ui_request_release_artifact_download() u32 {
@@ -394,7 +393,7 @@ export fn er_ui_app_activate_hit(hit_id: u32) u32 {
         render.refreshRoutePath();
         render.refreshRouteHash();
     } else if (app_navigation.actionFromHit(hit_id)) |action_fn| switch (action_fn) {
-        .compile_source => _ = compiler.compileWorkspaceInsideWasm(),
+        .compile_source => {},
         .download_source_release => { input.queueOutboxMessage(@intFromEnum(state.OutboxKind.download_wasm)) catch {}; },
         .launch_source_release => { input.queueOutboxMessage(@intFromEnum(state.OutboxKind.launch_wasm)) catch {}; },
         .reset_source => {

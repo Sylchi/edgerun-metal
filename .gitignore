@@ -35,6 +35,7 @@ edgerun-zig/edgerun-ui-producer
 bin/
 test_decl
 test_zig
+ssdt*.dat
 
 # vendored tool binaries (host artifacts, exceed GitHub blob limits)
 toolchain/bin/*

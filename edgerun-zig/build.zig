@@ -208,20 +208,6 @@ pub fn build(b: *std.Build) void {
     const ui_core_test_step = b.step("ui-core-test", "Run Zig UI core tests");
     ui_core_test_step.dependOn(&run_ui_core_tests.step);
 
-    const wasm_compiler_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("compiler/zig/src/edgerun_wasm_compiler.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
-    });
-    if (math_obj) |obj| wasm_compiler_tests.root_module.addObjectFile(obj);
-    if (runtime_obj) |obj| wasm_compiler_tests.root_module.addObjectFile(obj);
-    const run_wasm_compiler_tests = b.addRunArtifact(wasm_compiler_tests);
-    const wasm_compiler_test_step = b.step("wasm-compiler-test", "Run EdgeRun freestanding compiler ABI tests");
-    wasm_compiler_test_step.dependOn(&run_wasm_compiler_tests.step);
-    test_step.dependOn(&run_wasm_compiler_tests.step);
-
     const component_gallery_tests = b.addTest(.{
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/component_gallery.zig"),
@@ -360,29 +346,6 @@ pub fn build(b: *std.Build) void {
     const app_runtime_target = b.resolveTargetQuery(std.Target.Query.parse(.{
         .arch_os_abi = "wasm32-freestanding",
     }) catch unreachable);
-    const wasm_compiler = b.addExecutable(.{
-        .name = "edgerun-wasm-compiler",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("compiler/zig/src/edgerun_wasm_compiler.zig"),
-            .target = app_runtime_target,
-            .optimize = optimize,
-            .single_threaded = true,
-        }),
-    });
-    wasm_compiler.entry = .disabled;
-    wasm_compiler.export_memory = true;
-    wasm_compiler.root_module.export_symbol_names = &.{
-        "er_wasm_compiler_abi_version",
-        "er_wasm_compiler_init",
-        "er_wasm_compiler_status",
-        "er_wasm_compiler_compile_wasm",
-        "er_wasm_compiler_compile_wasm_metadata",
-        "er_wasm_compiler_output_ptr",
-        "er_wasm_compiler_output_len",
-        "er_wasm_compiler_diagnostic_ptr",
-        "er_wasm_compiler_diagnostic_len",
-    };
-    const install_wasm_compiler = b.addInstallArtifact(wasm_compiler, .{});
     const embed_file_zig_module = b.createModule(.{
         .root_source_file = b.path("src/embed_file_zig.zig"),
         .target = b.graph.host,
@@ -392,14 +355,9 @@ pub fn build(b: *std.Build) void {
         .name = "edgerun-embed-file-zig",
         .root_module = embed_file_zig_module,
     });
-    const run_embed_wasm_compiler = b.addRunArtifact(embed_file_zig);
-    run_embed_wasm_compiler.addArg("file");
-    run_embed_wasm_compiler.addFileArg(wasm_compiler.getEmittedBin());
-    const embedded_wasm_compiler = run_embed_wasm_compiler.addOutputFileArg("embedded_wasm_compiler.zig");
     const run_embed_source_object = b.addRunArtifact(embed_file_zig);
     run_embed_source_object.addArg("workspace");
     run_embed_source_object.addDirectoryArg(b.path("."));
-    run_embed_source_object.addFileArg(wasm_compiler.getEmittedBin());
     const embedded_source_object = run_embed_source_object.addOutputFileArg("embedded_source_object.zig");
     const app_runtime = b.addExecutable(.{
         .name = "edgerun-app-runtime",
@@ -409,9 +367,6 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             .single_threaded = true,
         }),
-    });
-    app_runtime.root_module.addAnonymousImport("embedded_wasm_compiler", .{
-        .root_source_file = embedded_wasm_compiler,
     });
     app_runtime.root_module.addAnonymousImport("embedded_source_object", .{
         .root_source_file = embedded_source_object,
@@ -426,45 +381,6 @@ pub fn build(b: *std.Build) void {
     });
     app_runtime.root_module.addImport("er", er_module);
 
-    const wasm_compiler_runner_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/wasm_compiler_runner_test.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
-    });
-    if (math_obj) |obj| wasm_compiler_runner_tests.root_module.addObjectFile(obj);
-    if (runtime_obj) |obj| wasm_compiler_runner_tests.root_module.addObjectFile(obj);
-    wasm_compiler_runner_tests.root_module.addAnonymousImport("embedded_wasm_compiler", .{
-        .root_source_file = embedded_wasm_compiler,
-    });
-    wasm_compiler_runner_tests.root_module.addAnonymousImport("embedded_source_object", .{
-        .root_source_file = embedded_source_object,
-    });
-    const run_wasm_compiler_runner_tests = b.addRunArtifact(wasm_compiler_runner_tests);
-    const wasm_compiler_runner_test_step = b.step("wasm-compiler-runner-test", "Run embedded compiler through the EdgeRun wasm interpreter");
-    wasm_compiler_runner_test_step.dependOn(&run_wasm_compiler_runner_tests.step);
-    test_step.dependOn(&run_wasm_compiler_runner_tests.step);
-    const wasm_compiler_probe = b.addExecutable(.{
-        .name = "edgerun-wasm-compiler-probe",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/wasm_compiler_probe.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
-    });
-    if (math_obj) |obj| wasm_compiler_probe.root_module.addObjectFile(obj);
-    if (runtime_obj) |obj| wasm_compiler_probe.root_module.addObjectFile(obj);
-    wasm_compiler_probe.root_module.addAnonymousImport("embedded_wasm_compiler", .{
-        .root_source_file = embedded_wasm_compiler,
-    });
-    wasm_compiler_probe.root_module.addAnonymousImport("embedded_source_object", .{
-        .root_source_file = embedded_source_object,
-    });
-    const run_wasm_compiler_probe = b.addRunArtifact(wasm_compiler_probe);
-    if (b.args) |args| run_wasm_compiler_probe.addArgs(args);
-    const wasm_compiler_probe_step = b.step("wasm-compiler-probe", "Print embedded compiler runtime metrics");
-    wasm_compiler_probe_step.dependOn(&run_wasm_compiler_probe.step);
     app_runtime.entry = .disabled;
     app_runtime.export_memory = true;
     app_runtime.stack_size = 8 * 1024 * 1024;
@@ -556,7 +472,6 @@ pub fn build(b: *std.Build) void {
     const app_runtime_step = b.step("app-runtime", "Build the host-agnostic app runtime wasm");
     app_runtime_step.dependOn(&install_app_runtime.step);
     app_runtime_step.dependOn(&install_web_app_runtime.step);
-    app_runtime_step.dependOn(&install_wasm_compiler.step);
     app_runtime_step.dependOn(&install_wasm_entry.step);
 
     const ui_wasm = b.addExecutable(.{
