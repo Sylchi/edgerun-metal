@@ -49,7 +49,7 @@ pub fn contentHeight(width: f32, state: State) f32 {
 }
 
 fn renderWorkspace(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
-    try scene.pushRect(bounds, design.palette.bg, .fill, 0.0, 0.0);
+    try scene.pushRect(bounds, design.Palette.bg, .fill, 0.0, 0.0);
     const rail = ui.Rect.init(bounds.x, bounds.y, workspace_rail_w, @max(1.0, bounds.h - workspace_status_h));
     const top = ui.Rect.init(rail.x + rail.w, bounds.y, @max(1.0, bounds.w - rail.w), workspace_top_h);
     const sidebar = ui.Rect.init(rail.x + rail.w, bounds.y + workspace_top_h, workspace_sidebar_w, @max(1.0, bounds.h - workspace_top_h - workspace_status_h));
@@ -65,8 +65,8 @@ fn renderWorkspace(scene: *ui.Scene, collector: *interaction.Collector, bounds: 
 fn renderWorkspaceTop(scene: *ui.Scene, _collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
     _ = _collector;
     try scene.pushRect(bounds, workspace_sidebar_bg, .fill, 0.0, 0.0);
-    try scene.pushRect(ui.Rect.init(bounds.x, bounds.y + bounds.h - 1.0, bounds.w, 1.0), design.palette.border, .fill, 0.0, 0.0);
-    try text_component.Text.renderAligned(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 18.0, bounds.w - 32.0, 16.0), statusText(state.route), design.palette.text, .start);
+    try scene.pushRect(ui.Rect.init(bounds.x, bounds.y + bounds.h - 1.0, bounds.w, 1.0), design.Palette.border, .fill, 0.0, 0.0);
+    try text_component.Text.renderAligned(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 18.0, bounds.w - 32.0, 16.0), statusText(state.route), design.Palette.text, .start);
 }
 
 fn renderWorkspaceRail(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, active: app_navigation.View) !void {
@@ -81,16 +81,16 @@ fn renderWorkspaceRail(scene: *ui.Scene, collector: *interaction.Collector, boun
             .bounds = item_bounds,
             .active = active == item.route.view,
         });
-        if (active == item.route.view) try scene.pushRect(ui.Rect.init(bounds.x, item_bounds.y + 5.0, 2.0, item_bounds.h - 10.0), design.palette.primary, .fill, 0.0, 0.0);
+        if (active == item.route.view) try scene.pushRect(ui.Rect.init(bounds.x, item_bounds.y + 5.0, 2.0, item_bounds.h - 10.0), design.Palette.primary, .fill, 0.0, 0.0);
         y += workspace_icon_button + 8.0;
     }
 }
 
 fn renderWorkspaceSidebar(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
     try scene.pushRect(bounds, workspace_sidebar_bg, .fill, 0.0, 0.0);
-    try scene.pushRect(ui.Rect.init(bounds.x + bounds.w - 1.0, bounds.y, 1.0, bounds.h), design.palette.border, .fill, 0.0, 0.0);
-    try text_component.Text.renderAligned(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 14.0, bounds.w - 32.0, 16.0), "EDGERUN", design.palette.text, .start);
-    try text_component.Text.renderAligned(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 36.0, bounds.w - 32.0, 14.0), "preview", design.palette.muted, .start);
+    try scene.pushRect(ui.Rect.init(bounds.x + bounds.w - 1.0, bounds.y, 1.0, bounds.h), design.Palette.border, .fill, 0.0, 0.0);
+    try text_component.Text.renderAligned(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 14.0, bounds.w - 32.0, 16.0), "EDGERUN", design.Palette.text, .start);
+    try text_component.Text.renderAligned(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 36.0, bounds.w - 32.0, 14.0), "preview", design.Palette.muted, .start);
     var y = bounds.y + 68.0;
     const rows = app_navigation.topLevelBindings();
     for (rows) |row| {
@@ -176,9 +176,9 @@ test "route state drives content height" {
 }
 
 test "host render callers do not bypass the shared app frame builder" {
-    try expectNoDirectAppRenderImports(@embedFile("app_runtime.zig"));
-    try expectNoDirectAppRenderImports(@embedFile("wayland_window_host.zig"));
-        try expectNoDirectAppRenderImports(@embedFile("drm_gbm_host.zig"));
+    try expectNoDirectAppRenderImports(@embedFile("../app_runtime.zig"));
+    try expectNoDirectAppRenderImports(@embedFile("../wayland_window_host.zig"));
+        try expectNoDirectAppRenderImports(@embedFile("../drm_gbm_host.zig"));
 }
 
 fn expectNoDirectAppRenderImports(source: []const u8) !void {

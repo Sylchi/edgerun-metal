@@ -58,7 +58,7 @@ pub const Scope = struct {
 
     pub fn indexed(self: Scope, role: Role, index: usize) HitId {
         var buf: [32]u8 = undefined;
-        const key = std.fmt.bufPrint(&buf, "{}", .{index}) catch unreachable;
+        const key = std.fmt.bufPrint(&buf, "{}", .{index}) catch return .{ .id = 0, .role = role, .key = "" };
         return self.id(role, key);
     }
 };

@@ -3,7 +3,7 @@ const wasm_gl = @import("../wasm_gl.zig");
 const gl_contract = @import("../gl_contract.zig");
 const renderer_ir = @import("../ir.zig");
 const renderer_font_atlas = @import("../font_atlas_weighted.zig");
-const ui = @import("../../ui.zig");
+const ui = @import("../../ui/core.zig");
 const renderer_present = @import("../present.zig");
 
 pub const State = struct {
@@ -23,10 +23,10 @@ pub const State = struct {
 };
 
 pub fn initState(font_atlas: *renderer_font_atlas.Atlas) State {
-    const rect_program = makeProgram(gl_contract.rect_vertex_shader, gl_contract.rect_fragment_shader);
-    const textured_program = makeProgram(gl_contract.textured_vertex_shader, gl_contract.text_fragment_shader);
-    const image_program = makeProgram(gl_contract.textured_vertex_shader, gl_contract.image_fragment_shader);
-    const line_program = makeProgram(gl_contract.line_vertex_shader, gl_contract.line_fragment_shader);
+    const rect_program = makeProgram(gl_contract.rect_vertex_shader, gl_contract.rect_fragment_shader) orelse @panic("GL rect program init failed");
+    const textured_program = makeProgram(gl_contract.textured_vertex_shader, gl_contract.text_fragment_shader) orelse @panic("GL textured program init failed");
+    const image_program = makeProgram(gl_contract.textured_vertex_shader, gl_contract.image_fragment_shader) orelse @panic("GL image program init failed");
+    const line_program = makeProgram(gl_contract.line_vertex_shader, gl_contract.line_fragment_shader) orelse @panic("GL line program init failed");
     return .{
         .rect_program = rect_program,
         .textured_program = textured_program,
@@ -236,11 +236,11 @@ fn makeEmptyRgbaTexture(width: usize, height: usize) wasm_gl.GLuint {
     return texture;
 }
 
-fn makeProgram(vertex_source: [:0]const u8, fragment_source: [:0]const u8) wasm_gl.GLuint {
-    const vertex = makeShader(wasm_gl.gl_vertex_shader, vertex_source);
-    const fragment = makeShader(wasm_gl.gl_fragment_shader, fragment_source);
+fn makeProgram(vertex_source: [:0]const u8, fragment_source: [:0]const u8) ?wasm_gl.GLuint {
+    const vertex = makeShader(wasm_gl.gl_vertex_shader, vertex_source) orelse return null;
+    const fragment = makeShader(wasm_gl.gl_fragment_shader, fragment_source) orelse return null;
     const program = wasm_gl.glCreateProgram();
-    if (program == 0) @panic("GL program creation failed");
+    if (program == 0) return null;
     wasm_gl.glAttachShader(program, vertex);
     wasm_gl.glAttachShader(program, fragment);
     glBindAttribLocation(program, gl_contract.attr_pos_location, gl_contract.attr_pos);
@@ -248,19 +248,19 @@ fn makeProgram(vertex_source: [:0]const u8, fragment_source: [:0]const u8) wasm_
     glBindAttribLocation(program, gl_contract.attr_color_location, gl_contract.attr_color);
     wasm_gl.glLinkProgram(program);
     const ok = wasm_gl.glGetProgramiv(program, wasm_gl.gl_link_status);
-    if (ok == 0) @panic("GL program link failed");
+    if (ok == 0) return null;
     wasm_gl.glDeleteShader(vertex);
     wasm_gl.glDeleteShader(fragment);
     return program;
 }
 
-fn makeShader(kind: wasm_gl.GLenum, source: [:0]const u8) wasm_gl.GLuint {
+fn makeShader(kind: wasm_gl.GLenum, source: [:0]const u8) ?wasm_gl.GLuint {
     const shader = wasm_gl.glCreateShader(kind);
-    if (shader == 0) @panic("GL shader creation failed");
+    if (shader == 0) return null;
     wasm_gl.glShaderSource(shader, 1, @intFromPtr(source.ptr), @intCast(source.len));
     wasm_gl.glCompileShader(shader);
     const ok = wasm_gl.glGetShaderiv(shader, wasm_gl.gl_compile_status);
-    if (ok == 0) @panic("GL shader compile failed");
+    if (ok == 0) return null;
     return shader;
 }
 

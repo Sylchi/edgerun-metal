@@ -7,6 +7,72 @@ const identity = @import("../identity.zig");
 const preimage = @import("../preimage.zig");
 const ui = @import("core.zig");
 
+pub const magic = "ERuI\x00\x00\x00\x00";
+pub const header_size: usize = 20;
+pub const record_size: usize = 16;
+
+pub const RecordKind = enum(u16) {
+    rect,
+    text,
+    slot,
+    accordion,
+    alert,
+    alert_dialog,
+    aspect_ratio,
+    calendar,
+    carousel,
+    chart,
+    combobox,
+    empty,
+    button,
+    icon_button,
+    button_group,
+    toggle_group,
+    input,
+    input_group,
+    input_otp,
+    textarea,
+    select,
+    field,
+    checkbox,
+    switch_control,
+    slider,
+    radio_group,
+    row_item,
+    badge,
+    card,
+    avatar,
+    kbd,
+    label,
+    table,
+    separator,
+    scroll_area,
+    skeleton,
+    spinner,
+    progress,
+    breadcrumb,
+    menubar,
+    navigation_menu,
+    pagination,
+    tabs,
+    direction,
+    command,
+    context_menu,
+    dialog,
+    drawer,
+    dropdown_menu,
+    hover_card,
+    popover,
+    tooltip,
+    toast,
+    sheet,
+    sidebar,
+    icon,
+    toggle,
+    resizable,
+    _,
+};
+
 test "ui writer round-trips through store" {
     var raw_ui: [128]u8 = undefined;
     var cursor = Writer.init(&raw_ui, 1, 1, .column, 0, 0).?;
@@ -170,6 +236,123 @@ pub const Writer = struct {
         return object_writer.bytesNodeOwned(req, epoch, owners, envelopes, self.written()) catch return null;
     }
 };
+
+pub fn decodeView(view: object.View, nodes: []ui.Node) Error!ui.Node {
+    if (view.header.kind != .bytes) return error.Corrupt;
+    return decodeBytes(view.body, nodes) catch return error.Corrupt;
+}
+
+pub fn decodeBytes(bytes_in: []const u8, nodes: []ui.Node) Error!ui.Node {
+    if (bytes_in.len < header_size) return error.Corrupt;
+    const node_count: usize = std.mem.readInt(u16, bytes_in[16..18], .little);
+    if (node_count == 0 or node_count > nodes.len) return error.Corrupt;
+    const axis: ui.Axis = switch (std.mem.readInt(u16, bytes_in[10..12], .little)) {
+        0 => .column,
+        1 => .row,
+        else => return error.Corrupt,
+    };
+    const gap = std.mem.readInt(u16, bytes_in[12..14], .little);
+    const padding = std.mem.readInt(u16, bytes_in[14..16], .little);
+
+    for (0..node_count) |i| {
+        const offset = header_size + i * record_size;
+        if (offset + record_size > bytes_in.len) return error.Corrupt;
+        const record = bytes_in[offset..][0..record_size];
+        const kind: RecordKind = @enumFromInt(std.mem.readInt(u16, record[0..2], .little));
+        const id = std.mem.readInt(u32, record[4..8], .little);
+        const first_ref = StringRef{
+            .offset = std.mem.readInt(u16, record[8..10], .little),
+            .len = std.mem.readInt(u16, record[10..12], .little),
+        };
+        const second_ref = StringRef{
+            .offset = std.mem.readInt(u16, record[12..14], .little),
+            .len = std.mem.readInt(u16, record[14..16], .little),
+        };
+        const table_start = header_size + node_count * record_size;
+        const first_str = refToSlice(bytes_in, table_start, first_ref);
+        const second_str = refToSlice(bytes_in, table_start, second_ref);
+
+        nodes[i] = recordToNode(kind, id, first_str, second_str);
+    }
+
+    return ui.Node{ .stack = .{
+        .axis = axis,
+        .gap = gap,
+        .padding = padding,
+        .children = nodes[0..node_count],
+    } };
+}
+
+fn refToSlice(bytes_in: []const u8, table_start: usize, ref: StringRef) []const u8 {
+    if (ref.len == 0) return "";
+    const start = table_start + ref.offset;
+    if (start + ref.len > bytes_in.len) return "";
+    return bytes_in[start..][0..ref.len];
+}
+
+fn recordToNode(kind: RecordKind, id: u32, first: []const u8, second: []const u8) ui.Node {
+    return switch (kind) {
+        .rect => ui.Node{ .rect = .{ .color = ui.Color.clear } },
+        .text => ui.Node{ .text = .{ .value = first } },
+        .slot => ui.Node{ .slot = .{ .id = id, .child = undefined } },
+        .accordion => ui.Node{ .accordion = .{ .id = id, .title = first, .detail = second } },
+        .alert => ui.Node{ .alert = .{ .title = first, .detail = second } },
+        .alert_dialog => ui.Node{ .alert_dialog = .{ .id = id, .title = first, .detail = second } },
+        .button => ui.Node{ .button = .{ .id = id, .label = first } },
+        .icon_button => ui.Node{ .icon_button = .{ .id = id, .label = first } },
+        .button_group => ui.Node{ .button_group = .{ .id = id, .first = first, .second = second } },
+        .toggle_group => ui.Node{ .toggle_group = .{ .id = id, .first = first, .second = second } },
+        .input => ui.Node{ .input = .{ .id = id, .placeholder = first } },
+        .input_group => ui.Node{ .input_group = .{ .id = id, .addon = first, .placeholder = second } },
+        .input_otp => ui.Node{ .input_otp = .{ .id = id, .value = first } },
+        .textarea => ui.Node{ .textarea = .{ .id = id, .placeholder = first } },
+        .select => ui.Node{ .select = .{ .id = id, .label = first } },
+        .field => ui.Node{ .field = .{ .id = id, .label = first, .placeholder = second } },
+        .checkbox => ui.Node{ .checkbox = .{ .id = id, .label = first } },
+        .switch_control => ui.Node{ .switch_control = .{ .id = id, .label = first } },
+        .slider => ui.Node{ .slider = .{ .id = id, .label = first } },
+        .radio_group => ui.Node{ .radio_group = .{ .id = id, .first = first, .second = second } },
+        .row_item => ui.Node{ .row_item = .{ .id = id, .title = first, .detail = second } },
+        .badge => ui.Node{ .badge = .{ .label = first } },
+        .card => ui.Node{ .card = .{ .title = first, .detail = second } },
+        .avatar => ui.Node{ .avatar = .{ .label = first } },
+        .kbd => ui.Node{ .kbd = .{ .label = first } },
+        .label => ui.Node{ .label = .{ .value = first } },
+        .table => ui.Node{ .table = .{ .id = id, .name = first, .role = second } },
+        .separator => ui.Node{ .separator = {} },
+        .scroll_area => ui.Node{ .scroll_area = {} },
+        .skeleton => ui.Node{ .skeleton = {} },
+        .spinner => ui.Node{ .spinner = {} },
+        .progress => ui.Node{ .progress = .{} },
+        .breadcrumb => ui.Node{ .breadcrumb = .{ .id = id, .first = first, .current = second } },
+        .menubar => ui.Node{ .menubar = .{ .id = id, .first = first, .second = second } },
+        .navigation_menu => ui.Node{ .navigation_menu = .{ .id = id, .first = first, .second = second } },
+        .pagination => ui.Node{ .pagination = .{ .id = id } },
+        .tabs => ui.Node{ .tabs = .{ .id = id, .first = first, .second = second } },
+        .direction => ui.Node{ .direction = .{ .id = id } },
+        .command => ui.Node{ .command = .{ .id = id, .placeholder = first } },
+        .context_menu => ui.Node{ .context_menu = .{ .id = id, .first = first, .second = second } },
+        .dialog => ui.Node{ .dialog = .{ .id = id, .title = first, .detail = second } },
+        .drawer => ui.Node{ .drawer = .{ .id = id, .title = first, .detail = second } },
+        .dropdown_menu => ui.Node{ .dropdown_menu = .{ .id = id, .first = first, .second = second } },
+        .hover_card => ui.Node{ .hover_card = .{ .id = id, .trigger = first, .content = second } },
+        .popover => ui.Node{ .popover = .{ .id = id, .trigger = first, .content = second } },
+        .tooltip => ui.Node{ .tooltip = .{ .id = id, .trigger = first, .content = second } },
+        .toast => ui.Node{ .toast = .{ .id = id, .title = first, .detail = second } },
+        .sheet => ui.Node{ .sheet = .{ .id = id, .title = first, .detail = second } },
+        .sidebar => ui.Node{ .sidebar = .{ .id = id, .title = first, .item = second } },
+        .icon => ui.Node{ .icon = .{ .label = first } },
+        .toggle => ui.Node{ .toggle = .{ .id = id, .label = first } },
+        .resizable => ui.Node{ .resizable = .{ .id = id } },
+        .calendar => ui.Node{ .calendar = .{ .id = id, .month = first } },
+        .carousel => ui.Node{ .carousel = .{ .id = id, .label = first } },
+        .chart => ui.Node{ .chart = .{ .id = id, .label = first } },
+        .combobox => ui.Node{ .combobox = .{ .id = id, .placeholder = first } },
+        .empty => ui.Node{ .empty = .{ .title = first, .detail = second } },
+        .aspect_ratio => ui.Node{ .aspect_ratio = .{ .ratio_w = 0, .ratio_h = 0 } },
+        else => ui.Node{ .text = .{ .value = "" } },
+    };
+}
 
 pub const Error = error{
     Corrupt,

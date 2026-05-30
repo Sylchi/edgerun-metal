@@ -142,7 +142,7 @@ pub fn contentHeight(width: f32, state: State) f32 {
 }
 
 pub fn render(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
-    const style = design.style();
+    const style = design.appStyle();
     const pad: f32 = 24.0;
     const gap: f32 = 14.0;
     const content = bounds.insetUniform(pad);

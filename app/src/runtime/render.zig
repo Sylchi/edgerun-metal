@@ -1,9 +1,9 @@
 const std = @import("std");
 const math = @import("../math.zig");
-const interaction = @import("../ui_interaction.zig");
+const interaction = @import("../ui/interaction.zig");
 const app_frame = @import("../app_frame.zig");
 const app_images = @import("../app_images.zig");
-const app_cursor = @import("../app_cursor.zig");
+const app_cursor = @import("../ui/cursor.zig");
 const state = @import("state.zig");
 const input = @import("input/hit.zig");
 

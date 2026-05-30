@@ -1,6 +1,6 @@
 const std = @import("std");
 const math = @import("../math.zig");
-const icon_vector = @import("../icon_vector.zig");
+const icon_vector = @import("../ui/icon_vector.zig");
 const icon_pack = @import("../ui/icon.zig");
 const ui = @import("../ui/core.zig");
 
@@ -113,9 +113,8 @@ pub fn iconOpIteratorForId(icon_id: u32) IconOpIterator {
     return icon_vector.Iterator.init(icon_pack.getIr(icon_id) orelse &.{});
 }
 
-pub fn iconOpIteratorFromSource(source: []const u8) IconOpIterator {
-    _ = source;
-    return icon_vector.Iterator.init(&.{});
+pub fn iconOpIteratorFromSource(source: []const f32) IconOpIterator {
+    return icon_vector.Iterator.init(source);
 }
 
 pub const DrawBatch = union(enum) {
@@ -717,7 +716,6 @@ test "renderer ir publishes packed frame field layout" {
 test "renderer backends stay behind adapter imports" {
     const backend_import = "render/backends/";
     try expectSourceDoesNotContain(@embedFile("../root.zig"), backend_import);
-    try expectSourceDoesNotContain(@embedFile("../ui_core_test.zig"), backend_import);
 }
 
 test "renderer ir fixed buffers expose writable canonical buffer view" {

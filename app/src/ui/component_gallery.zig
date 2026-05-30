@@ -318,7 +318,7 @@ fn routeFor(slug: []const u8) []const u8 {
     inline for (component_routes) |entry| {
         if (bytes.eql(slug, entry.slug)) return entry.route;
     }
-    unreachable;
+    return "";
 }
 
 const Route = struct {
@@ -429,7 +429,7 @@ pub const LayoutMode = enum(u32) {
     }
 };
 
-const palette = design.palette;
+const palette = design.Palette;
 
 pub fn renderComponentGallery(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: ComponentGalleryState) GalleryError!void {
     const previous_hover_point = gallery_hover_point;
@@ -990,7 +990,7 @@ test "component gallery preview path validates canonical component object" {
 
     try std.testing.expectEqualStrings("Default", switch (decoded) {
         .button => |button| button.label,
-        else => unreachable,
+        else => "",
     });
     try std.testing.expect(hasText(scene.written(), "Default"));
     try std.testing.expect(hasHit(collector.written(), preview_base_id + 33));

@@ -491,41 +491,7 @@ pub fn build(b: *std.Build) void {
     const ui_wasm_step = b.step("ui-components-wasm", "Build the standalone UI component library wasm");
     ui_wasm_step.dependOn(&install_ui_wasm.step);
 
-    const ui_producer = b.addExecutable(.{
-        .name = "edgerun-ui-producer",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/app_ui_producer.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
-    });
-    if (math_obj) |obj| ui_producer.root_module.addObjectFile(obj);
-    if (runtime_obj) |obj| ui_producer.root_module.addObjectFile(obj);
-    b.installArtifact(ui_producer);
 
-    const run_ui_producer = b.addRunArtifact(ui_producer);
-    const ui_producer_step = b.step("ui-producer", "Produce serialized UI component tree to stdout");
-    ui_producer_step.dependOn(&run_ui_producer.step);
-
-    const ui_consumer = b.addExecutable(.{
-        .name = "edgerun-ui-consumer",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/app_ui_consumer.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
-    });
-    if (math_obj) |obj| ui_consumer.root_module.addObjectFile(obj);
-    if (runtime_obj) |obj| ui_consumer.root_module.addObjectFile(obj);
-    b.installArtifact(ui_consumer);
-
-    const run_ui_consumer = b.addRunArtifact(ui_consumer);
-    const ui_consumer_step = b.step("ui-consumer", "Consume serialized UI component tree from stdin and render to PPM");
-    ui_consumer_step.dependOn(&run_ui_consumer.step);
-
-    const ui_stream_demo_step = b.step("ui-stream-demo", "Pipe producer to consumer: edgerun-ui-producer | edgerun-ui-consumer");
-    ui_stream_demo_step.dependOn(&run_ui_producer.step);
-    ui_stream_demo_step.dependOn(&run_ui_consumer.step);
 
     const uefi_target = b.resolveTargetQuery(std.Target.Query.parse(.{
         .arch_os_abi = "x86_64-uefi",

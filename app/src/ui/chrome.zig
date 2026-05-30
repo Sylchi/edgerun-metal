@@ -90,7 +90,7 @@ pub fn renderActionItem(scene: *ui.Scene, collector: *interaction.Collector, pro
         .icon_slot = props.icon_slot orelse .none,
     };
     try button.render(scene, props.bounds, .{
-        .style = design.style(),
+        .style = design.appStyle(),
         .control = control,
         .control_size = props.control_size orelse .default,
     });
@@ -130,7 +130,7 @@ pub const ActiveNav = enum {
     agent,
 };
 
-const palette = design.palette;
+const palette = design.Palette;
 
 pub fn headerMode(content_w: f32) HeaderMode {
     if (content_w < mobile_header_breakpoint_w) return .mobile;
@@ -172,7 +172,7 @@ pub fn renderNavItem(scene: *ui.Scene, collector: *interaction.Collector, props:
                 .variant = variant,
                 .icon_slot = props.icon_slot orelse .none,
             };
-            try component.render(scene, props.bounds, .{ .style = design.style() });
+            try component.render(scene, props.bounds, .{ .style = design.appStyle() });
             try component.collectInteractions(collector, props.bounds);
         },
         .top_icon => {
@@ -185,7 +185,7 @@ pub fn renderNavItem(scene: *ui.Scene, collector: *interaction.Collector, props:
                 .icon = icon,
                 .variant = variant,
             };
-            try component.render(scene, props.bounds, .{ .style = design.style() });
+            try component.render(scene, props.bounds, .{ .style = design.appStyle() });
             try component.collectInteractions(collector, props.bounds);
         },
         .workspace_rail => {
@@ -197,7 +197,7 @@ pub fn renderNavItem(scene: *ui.Scene, collector: *interaction.Collector, props:
                 .icon = icon,
                 .variant = variant,
             };
-            try component.render(scene, props.bounds, .{ .style = design.style() });
+            try component.render(scene, props.bounds, .{ .style = design.appStyle() });
             try component.collectInteractions(collector, props.bounds);
         },
         .workspace_sidebar => {
@@ -208,7 +208,7 @@ pub fn renderNavItem(scene: *ui.Scene, collector: *interaction.Collector, props:
                 .detail = props.binding.row_detail,
             };
             try component.render(scene, props.bounds, .{
-                .style = design.style(),
+                .style = design.appStyle(),
                 .control = .{ .active = props.active },
             });
             try component.collectInteractions(collector, props.bounds);

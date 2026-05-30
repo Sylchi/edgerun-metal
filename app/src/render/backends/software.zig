@@ -1,12 +1,12 @@
 const std = @import("std");
 const math = @import("../../math.zig");
-const icon_vector = @import("../../icon_vector.zig");
+const icon_vector = @import("../../ui/icon_vector.zig");
 const renderer_icon_mask = @import("../icon_mask.zig");
 const renderer_ir = @import("../ir.zig");
 const renderer_present = @import("../present.zig");
 const component_union = @import("../../ui/components/Component.zig");
 const node_renderer = @import("../../ui/components/NodeRenderer.zig");
-const ui = @import("../../ui.zig");
+const ui = @import("../../ui/core.zig");
 const builtin = @import("builtin");
 
 pub const Error = renderer_present.Error || error{
@@ -573,7 +573,7 @@ pub const Surface = struct {
         var stroke_cap = icon_vector.StrokeCap.round;
         var stroke_join = icon_vector.StrokeJoin.round;
         var stroke_miter_limit: f32 = svg_miter_limit_default;
-        while (iter.next() catch unreachable) |op| {
+        while (iter.next() catch null) |op| {
             self.drawIconOp(bounds, color, &paint, &stroke_width, &stroke_cap, &stroke_join, &stroke_miter_limit, &mask, &clip, &path, op);
         }
         self.finishIconSubpath(&mask, &path, stroke_width, stroke_cap);
@@ -1106,7 +1106,7 @@ pub const Surface = struct {
         const c = icon_vector.Point{ .x = p1.x + n1.x * radius, .y = p1.y + n1.y * radius };
         const b = switch (stroke_join) {
             .bevel => p1,
-            .round => unreachable,
+            .round => p1,
             .miter => miterPoint(p1, incoming, outgoing, n0, n1, radius, stroke_miter_limit) orelse p1,
         };
         self.fillTriangleMask(mask, a, b, c);
@@ -1581,7 +1581,7 @@ const IconPathState = struct {
     }
 
     fn fillMoveTo(self: *IconPathState, point: icon_vector.Point) void {
-        if (self.fill_subpath_len >= self.fill_subpaths.len) unreachable;
+        if (self.fill_subpath_len >= self.fill_subpaths.len) return;
         self.fill_subpaths[self.fill_subpath_len] = self.fill_point_len;
         self.fill_subpath_len += 1;
         self.current = point;
@@ -1608,7 +1608,7 @@ const IconPathState = struct {
     }
 
     fn appendFillPoint(self: *IconPathState, point: icon_vector.Point) void {
-        if (self.fill_point_len >= self.fill_points.len) unreachable;
+        if (self.fill_point_len >= self.fill_points.len) return;
         self.fill_points[self.fill_point_len] = point;
         self.fill_point_len += 1;
     }

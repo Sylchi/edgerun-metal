@@ -1,6 +1,6 @@
 const std = @import("std");
 const math = @import("../math.zig");
-const icon_vector = @import("../icon_vector.zig");
+const icon_vector = @import("../ui/icon_vector.zig");
 const renderer_ir = @import("ir.zig");
 const ui = @import("../ui/core.zig");
 
@@ -494,7 +494,7 @@ test "icon line buffer packs browser-ready vertices" {
     try renderer_ir.pushSvgQuad(instances_storage.buffers(), .base, ui.IconQuad{
         .bounds = ui.Rect.init(10, 20, 24, 24),
         .color = .accent,
-        .icon_id = @intFromEnum(@import("../icon.zig").Icon.search) + 1,
+        .icon_id = @intFromEnum(@import("../ui/icon.zig").Icon.search) + 1,
     });
     var out: [line_vertex_count * vertex_float_stride * filled_circle_segments * 8]f32 = undefined;
     var out_len: usize = 0;
@@ -515,7 +515,7 @@ test "icon line buffer publishes packed vertex layout" {
 
 test "single icon line buffer budget fits built in icons" {
     @setEvalBranchQuota(20000);
-    const icon = @import("../icon.zig");
+    const icon = @import("../ui/icon.zig");
     var out: [max_instance_float_count]f32 = undefined;
     inline for (@typeInfo(icon.Icon).@"enum".fields) |field| {
         const value: icon.Icon = @enumFromInt(field.value);

@@ -65,7 +65,7 @@ fn testEpoch() clock.Stamp {
 }
 
 test "runtime image object wraps canonical ERIMG bytes" {
-    const ui = @import("../ui.zig");
+    const ui = @import("../ui/core.zig");
     const pixels = [_]ui.Color{.{ .r = 1, .g = 2, .b = 3, .a = 255 }};
     var erimg_raw: [runtime_image.header_size + @sizeOf(ui.Color)]u8 = undefined;
     const erimg = try runtime_image.encodeRgba(1, 1, &pixels, &erimg_raw);

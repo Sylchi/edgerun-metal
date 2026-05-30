@@ -1,5 +1,5 @@
 const std = @import("std");
-const ui = @import("../ui.zig");
+const ui = @import("../ui/core.zig");
 const image = @import("common.zig");
 
 const marker_prefix: u8 = 0xff;

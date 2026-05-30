@@ -1,6 +1,6 @@
 const std = @import("std");
 const math = @import("../math.zig");
-const icon_vector = @import("../icon_vector.zig");
+const icon_vector = @import("../ui/icon_vector.zig");
 const renderer_ir = @import("ir.zig");
 
 pub const max_width: usize = 128;

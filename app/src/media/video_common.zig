@@ -1,5 +1,5 @@
 const std = @import("std");
-const ui = @import("../ui.zig");
+const ui = @import("../ui/core.zig");
 const image_common = @import("common.zig");
 const webp = @import("webp/root.zig");
 

@@ -1,5 +1,5 @@
 const std = @import("std");
-const ui = @import("../ui.zig");
+const ui = @import("../ui/core.zig");
 const video_module = @import("video.zig");
 const ivf_container = @import("video_ivf.zig");
 const webm_container = @import("video_webm.zig");

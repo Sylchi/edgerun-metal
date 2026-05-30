@@ -88,7 +88,7 @@ pub const client_decor_border = ui.Color{ .r = 52, .g = 52, .b = 58 };
 pub const client_decor_text = ui.Color{ .r = 232, .g = 232, .b = 235 };
 pub const client_decor_dim = ui.Color{ .r = 156, .g = 156, .b = 164 };
 
-const ui = @import("../ui.zig");
+const ui = @import("../ui/core.zig");
 const posix = std.posix;
 
 pub const ObjectKind = enum {

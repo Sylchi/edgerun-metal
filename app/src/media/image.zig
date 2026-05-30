@@ -5,7 +5,7 @@ const tga = @import("tga.zig");
 const webp = @import("webp/root.zig");
 const common = @import("common.zig");
 const runtime_image = @import("runtime_image.zig");
-const ui = @import("../ui.zig");
+const ui = @import("../ui/core.zig");
 
 pub const Header = common.Header;
 pub const DecodeError = common.DecodeError;

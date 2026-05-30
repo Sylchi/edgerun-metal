@@ -182,36 +182,36 @@ pub fn serializedLen(glyph_count: usize, kern_count: usize, command_count: usize
     return std.math.add(usize, header_size, glyph_bytes + kern_bytes + command_bytes) catch null;
 }
 
-pub fn encodeBody(out: []u8, body: Body) ?[]const u8 {
-    if (body.glyphs.len > ~@as(u32, 0)) return null;
-    if (body.kerns.len > ~@as(u32, 0)) return null;
-    if (body.commands.len > ~@as(u32, 0)) return null;
-    const total = serializedLen(body.glyphs.len, body.kerns.len, body.commands.len) orelse return null;
+pub fn encodeBody(out: []u8, body_val: Body) ?[]const u8 {
+    if (body_val.glyphs.len > ~@as(u32, 0)) return null;
+    if (body_val.kerns.len > ~@as(u32, 0)) return null;
+    if (body_val.commands.len > ~@as(u32, 0)) return null;
+    const total = serializedLen(body_val.glyphs.len, body_val.kerns.len, body_val.commands.len) orelse return null;
     if (out.len < total) return null;
 
     @memcpy(out[0..body_magic.len], &body_magic);
-    if (!bytes.store16(out[8..10], body.metrics.units_per_em)) return null;
+    if (!bytes.store16(out[8..10], body_val.metrics.units_per_em)) return null;
     if (!bytes.store16(out[10..12], 0)) return null;
-    if (!bytes.store32(out[12..16], @intCast(body.glyphs.len))) return null;
-    if (!bytes.store32(out[16..20], @intCast(body.commands.len))) return null;
-    if (!bytes.store32(out[20..24], @intCast(body.kerns.len))) return null;
-    storeF32(out[24..28], body.metrics.ascender);
-    storeF32(out[28..32], body.metrics.descender);
-    storeF32(out[32..36], body.metrics.line_gap);
-    storeF32(out[36..40], body.metrics.y_min);
-    storeF32(out[40..44], body.metrics.y_max);
+    if (!bytes.store32(out[12..16], @intCast(body_val.glyphs.len))) return null;
+    if (!bytes.store32(out[16..20], @intCast(body_val.commands.len))) return null;
+    if (!bytes.store32(out[20..24], @intCast(body_val.kerns.len))) return null;
+    storeF32(out[24..28], body_val.metrics.ascender);
+    storeF32(out[28..32], body_val.metrics.descender);
+    storeF32(out[32..36], body_val.metrics.line_gap);
+    storeF32(out[36..40], body_val.metrics.y_min);
+    storeF32(out[40..44], body_val.metrics.y_max);
     _ = bytes.store32(out[44..48], 0);
 
     var offset: usize = header_size;
-    for (body.glyphs) |glyph| {
+    for (body_val.glyphs) |glyph| {
         if (!encodeGlyphRecord(out[offset .. offset + glyph_record_size], glyph)) return null;
         offset += glyph_record_size;
     }
-    for (body.kerns) |kern_record| {
+    for (body_val.kerns) |kern_record| {
         if (!encodeKernRecord(out[offset .. offset + kern_record_size], kern_record)) return null;
         offset += kern_record_size;
     }
-    for (body.commands) |command| {
+    for (body_val.commands) |command| {
         encodeCommandRecord(out[offset .. offset + command_record_size], command);
         offset += command_record_size;
     }
@@ -228,12 +228,12 @@ pub fn decodeView(view: object.View, glyphs_out: []GlyphRecord, kerns_out: []Ker
     return decodeBody(view.body, glyphs_out, kerns_out, commands_out) orelse return error.Corrupt;
 }
 
-pub fn objectNode(body_out: []u8, object_out: []u8, body: Body, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
-    return objectNodeOwned(body_out, object_out, body, req, epoch, &.{}, &.{});
+pub fn objectNode(body_out: []u8, object_out: []u8, body_val: Body, req: object.Requirements, epoch: clock.Stamp) ?[]u8 {
+    return objectNodeOwned(body_out, object_out, body_val, req, epoch, &.{}, &.{});
 }
 
-pub fn objectNodeOwned(body_out: []u8, object_out: []u8, body: Body, req: object.Requirements, epoch: clock.Stamp, owners: []const object.Owner, envelopes: []const object.Envelope) ?[]u8 {
-    const encoded = encodeBody(body_out, body) orelse return null;
+pub fn objectNodeOwned(body_out: []u8, object_out: []u8, body_val: Body, req: object.Requirements, epoch: clock.Stamp, owners: []const object.Owner, envelopes: []const object.Envelope) ?[]u8 {
+    const encoded = encodeBody(body_out, body_val) orelse return null;
     return (object.NodeWriter{ .out = object_out }).bytesNodeOwned(req, epoch, owners, envelopes, encoded) catch return null;
 }
 
@@ -406,9 +406,9 @@ fn midpoint(a: varfont.Point, b: varfont.Point) varfont.Point {
 test "font vector body round trips widened counts" {
     const commands = [_]Command{ .{ .move_to = .{ .x = 0, .y = 0 } }, .close };
     const glyphs = [_]GlyphRecord{.{ .codepoint = 'A', .glyph_id = 4, .command_offset = 0, .command_count = commands.len, .advance = 10 }};
-    const body = Body{ .metrics = .{ .units_per_em = 1000, .ascender = 800, .descender = -200, .line_gap = 0, .y_min = -200, .y_max = 1000 }, .glyphs = &glyphs, .commands = &commands };
+    const body_val = Body{ .metrics = .{ .units_per_em = 1000, .ascender = 800, .descender = -200, .line_gap = 0, .y_min = -200, .y_max = 1000 }, .glyphs = &glyphs, .commands = &commands };
     var encoded: [header_size + glyph_record_size + command_record_size * commands.len]u8 = undefined;
-    const out = encodeBody(&encoded, body).?;
+    const out = encodeBody(&encoded, body_val).?;
     var decoded_glyphs: [1]GlyphRecord = undefined;
     var decoded_kerns: [0]KernRecord = .{};
     var decoded_commands: [commands.len]Command = undefined;
@@ -430,9 +430,9 @@ pub const Weight = enum(u8) {
 
 /// Canonical EdgeRun objects generated by gen-font tool.
 /// Body starts at byte 148 (object.header_size) for bytes-kind objects with no owners/envelopes/children.
-const regular_obj = @embedFile("assets/font_regular.obj");
-const semibold_obj = @embedFile("assets/font_semibold.obj");
-const bold_obj = @embedFile("assets/font_bold.obj");
+const regular_obj = @embedFile("../assets/font_regular.obj");
+const semibold_obj = @embedFile("../assets/font_semibold.obj");
+const bold_obj = @embedFile("../assets/font_bold.obj");
 
 const object_body_offset = 148;
 
@@ -524,7 +524,7 @@ fn ensureWeight(weight: Weight) void {
             .bold => bold_obj,
         };
         const raw = obj[object_body_offset..];
-        const decoded = decodeBody(raw, &storage.glyphs, &storage.kerns, &storage.commands) orelse unreachable;
+        const decoded = decodeBody(raw, &storage.glyphs, &storage.kerns, &storage.commands) orelse @panic("built-in font body decode failed");
         storage.metrics = decoded.metrics;
         storage.glyph_count = decoded.glyphs.len;
         storage.kern_count = decoded.kerns.len;

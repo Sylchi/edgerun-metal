@@ -69,7 +69,6 @@ pub const wasm_app = @import("wasm/app.zig");
 
 test {
     _ = bytes;
-    _ = content;
     _ = data_chunk;
     _ = data_definition;
     _ = data_object;

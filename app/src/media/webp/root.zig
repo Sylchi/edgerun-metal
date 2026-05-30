@@ -1,6 +1,6 @@
 const std = @import("std");
 const bytes_mod = @import("../../bytes.zig");
-const ui = @import("../../ui.zig");
+const ui = @import("../../ui/core.zig");
 const common = @import("../common.zig");
 const raw_vp8 = @import("../vp8.zig");
 const vp8_tables = @import("vp8_tables.zig");

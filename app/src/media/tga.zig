@@ -1,5 +1,5 @@
 const std = @import("std");
-const ui = @import("../ui.zig");
+const ui = @import("../ui/core.zig");
 const common = @import("common.zig");
 
 const Header = common.Header;

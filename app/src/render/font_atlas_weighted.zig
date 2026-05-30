@@ -2,7 +2,7 @@ const std = @import("std");
 const font_builtin = @import("font.zig");
 const font_vector = @import("font.zig");
 const raster = @import("vector_raster.zig");
-const varfont = @import("../varfont.zig");
+const varfont = @import("varfont.zig");
 
 pub const width: usize = font_builtin.atlas_width;
 pub const height: usize = font_builtin.atlas_height;

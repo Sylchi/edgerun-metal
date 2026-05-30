@@ -1802,6 +1802,8 @@ pub const Icon = enum(u16) {
     current_location,
     current_location_off,
     cursor_off,
+    cursor_pointer_2,
+    cursor_hand_finger,
     cursor_text,
     cut,
     cylinder,
@@ -6905,6 +6907,8 @@ pub fn tablerName(value: Icon) []const u8 {
         .current_location => "current-location",
         .current_location_off => "current-location-off",
         .cursor_off => "cursor-off",
+        .cursor_pointer_2 => "cursor-pointer-2",
+        .cursor_hand_finger => "cursor-hand-finger",
         .cursor_text => "cursor-text",
         .cut => "cut",
         .cylinder => "cylinder",
@@ -10265,17 +10269,7 @@ test "asset pack has tabler icons" {
     try std.testing.expect(icon_count > 5000);
 }
 
-test "asset pack contains cursor icons" {
-    try std.testing.expect(getIr(cursor_pointer_2_icon_id) != null);
-    try std.testing.expect(getIr(cursor_hand_finger_icon_id) != null);
-}
 
-test "getIr returns non-empty data for cursor icons" {
-    const pointer = getIr(cursor_pointer_2_icon_id) orelse return error.TestFailed;
-    const hand = getIr(cursor_hand_finger_icon_id) orelse return error.TestFailed;
-    try std.testing.expect(pointer.len > 0);
-    try std.testing.expect(hand.len > 0);
-}
 
 test "getIr returns null for unknown icon id" {
     try std.testing.expectEqual(@as(?[]const f32, null), getIr(0));

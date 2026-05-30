@@ -3,7 +3,7 @@ const renderer_font_atlas = @import("../font_atlas_weighted.zig");
 const gl_contract = @import("../gl_contract.zig");
 const renderer_ir = @import("../ir.zig");
 const renderer_present = @import("../present.zig");
-const ui = @import("../../ui.zig");
+const ui = @import("../../ui/core.zig");
 const gles_gl = @import("../../linux_gles.zig");
 const gles_mod = @This();
 

@@ -1,7 +1,7 @@
 const std = @import("std");
 const bytes = @import("../bytes.zig");
 const common = @import("common.zig");
-const ui = @import("../ui.zig");
+const ui = @import("../ui/core.zig");
 
 pub const magic = "ERIMG001";
 pub const abi_version: u16 = 1;

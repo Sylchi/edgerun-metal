@@ -475,12 +475,16 @@ _fe_mul:
     mov     [r14 + 24], r9
 
     ; Handle possible overflow at 256 bits from final adc
-    jnc     .no_carry
+    jnc     .carry_norm
     add     qword [r14 + 0], 38
     adc     qword [r14 + 8], 0
     adc     qword [r14 + 16], 0
     adc     qword [r14 + 24], 0
-.no_carry:
+.carry_norm:
+
+    ; Fully reduce via carry propagation (clear bit 63 of each limb, wrap *19)
+    mov     rdi, r14
+    call    _fe_carry
 
     ; Copy to destination
     mov     rdi, rbx

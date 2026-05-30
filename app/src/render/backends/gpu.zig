@@ -4,7 +4,7 @@ const renderer_present = @import("../present.zig");
 const renderer_surface = @import("../surface.zig");
 const component_union = @import("../../ui/components/Component.zig");
 const node_renderer = @import("../../ui/components/NodeRenderer.zig");
-const ui = @import("../../ui.zig");
+const ui = @import("../../ui/core.zig");
 
 pub const Error = renderer_present.Error || error{
     InvalidMode,
