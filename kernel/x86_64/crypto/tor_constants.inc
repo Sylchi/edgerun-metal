@@ -164,6 +164,7 @@ ERROR_TOR_CIRC_BUILD_FAIL  equ 42
 ERROR_TOR_STREAM_FAIL      equ 43
 ERROR_TOR_PROTOCOL_ERR     equ 44
 ERROR_TOR_TIMEOUT          equ 45
+ERROR_TOR_ROLE_INVALID     equ 46
 
 ; ==================================================================
 ; Fixed Tor network constants
@@ -214,4 +215,29 @@ TOR_STATE_GUARD_IP         equ 8  ; u32 relay guard IP
 TOR_STATE_GUARD_PORT       equ 12 ; u16
 TOR_STATE_GUARD_FINGERPRINT equ 14 ; 20 bytes (identity digest)
 TOR_STATE_N_CIRCUITS       equ 34 ; u32
-TOR_STATE_SIZE             equ 38
+TOR_STATE_ROLE             equ 38 ; u32
+TOR_STATE_ROLE_CAPS        equ 42 ; u32 bitmask
+TOR_STATE_SIZE             equ 46
+
+; ==================================================================
+; Tor role model
+; ==================================================================
+TOR_ROLE_CLIENT            equ 0
+TOR_ROLE_GUARD             equ 1
+TOR_ROLE_MIDDLE            equ 2
+TOR_ROLE_EXIT              equ 3
+TOR_ROLE_DIRECTORY         equ 4
+TOR_ROLE_BRIDGE            equ 5
+TOR_ROLE_HS_SERVICE        equ 6
+TOR_ROLE_HS_INTRO          equ 7
+TOR_ROLE_HS_RENDEZVOUS     equ 8
+
+; Capabilities bitset for TOR_STATE_ROLE_CAPS
+TOR_CAP_CLIENT             equ 0x0001
+TOR_CAP_OR_RELAY           equ 0x0002
+TOR_CAP_EXIT               equ 0x0004
+TOR_CAP_DIRECTORY          equ 0x0008
+TOR_CAP_BRIDGE             equ 0x0010
+TOR_CAP_HS_SERVICE         equ 0x0020
+TOR_CAP_HS_INTRO           equ 0x0040
+TOR_CAP_HS_RENDEZVOUS      equ 0x0080

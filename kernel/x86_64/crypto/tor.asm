@@ -14,19 +14,15 @@ extern er_tor_cell_init
 extern er_tor_link_handshake
 extern er_tor_circuit_create
 extern er_tor_send_relay
-extern er_tor_recv_relay
 extern er_tor_open_stream
 extern er_tor_ntor_keygen
-extern er_tor_curve25519_scalar_mult
 extern er_tcp_recv
 
 extern er_serial_puts
 extern er_serial_putchar
 extern er_serial_puthex32
 extern er_serial_crlf
-extern er_net_get_ip
 extern er_memcpy
-extern er_memset
 ; er_sprintf not available
 
 ; Externs from tor_cell.asm
@@ -54,7 +50,6 @@ str_tor_circ_ok: db "tor: circuit ok", 0x0A, 0
 str_tor_circ_fail: db "tor: circuit FAIL", 0x0A, 0
 str_tor_stream:  db "tor: stream ", 0
 str_tor_ok:      db "ok", 0x0A, 0
-str_tor_fail:    db "FAIL", 0x0A, 0
 str_tor_arrow:   db " -> ", 0
 
 SECTION .bss
@@ -69,10 +64,91 @@ tor_stream_id_app: resw 1  ; primary stream for app traffic
 ; Buffer for building test traffic
 tor_test_buf: resb 512
 
-; HTTP GET request buffer
-tor_http_get: resb 256
-
 SECTION .text
+
+; ==================================================================
+; _tor_caps_from_role — map role enum to capability mask
+; edi = role
+; returns eax = caps, or -1 on invalid role
+; ==================================================================
+_tor_caps_from_role:
+    cmp     edi, TOR_ROLE_CLIENT
+    je      .client
+    cmp     edi, TOR_ROLE_GUARD
+    je      .guard
+    cmp     edi, TOR_ROLE_MIDDLE
+    je      .middle
+    cmp     edi, TOR_ROLE_EXIT
+    je      .exit
+    cmp     edi, TOR_ROLE_DIRECTORY
+    je      .directory
+    cmp     edi, TOR_ROLE_BRIDGE
+    je      .bridge
+    cmp     edi, TOR_ROLE_HS_SERVICE
+    je      .hs_service
+    cmp     edi, TOR_ROLE_HS_INTRO
+    je      .hs_intro
+    cmp     edi, TOR_ROLE_HS_RENDEZVOUS
+    je      .hs_rendezvous
+    mov     eax, -1
+    ret
+.client:
+    mov     eax, TOR_CAP_CLIENT
+    ret
+.guard:
+    mov     eax, TOR_CAP_OR_RELAY
+    ret
+.middle:
+    mov     eax, TOR_CAP_OR_RELAY
+    ret
+.exit:
+    mov     eax, TOR_CAP_OR_RELAY | TOR_CAP_EXIT
+    ret
+.directory:
+    mov     eax, TOR_CAP_DIRECTORY
+    ret
+.bridge:
+    mov     eax, TOR_CAP_OR_RELAY | TOR_CAP_BRIDGE
+    ret
+.hs_service:
+    mov     eax, TOR_CAP_HS_SERVICE
+    ret
+.hs_intro:
+    mov     eax, TOR_CAP_HS_INTRO
+    ret
+.hs_rendezvous:
+    mov     eax, TOR_CAP_HS_RENDEZVOUS
+    ret
+
+; ==================================================================
+; er_tor_set_role — configure Tor operating role
+; edi = role (TOR_ROLE_*)
+; returns eax=0 on success, -1 on invalid role
+; ==================================================================
+global er_tor_set_role
+er_fn er_tor_set_role
+    call    _tor_caps_from_role
+    cmp     eax, -1
+    je      .bad_role
+    mov     [tor_state + TOR_STATE_ROLE], edi
+    mov     [tor_state + TOR_STATE_ROLE_CAPS], eax
+    xor     eax, eax
+    er_ok
+    er_ret
+.bad_role:
+    mov     eax, -1
+    er_err  ERROR_TOR_ROLE_INVALID
+    er_ret
+
+; ==================================================================
+; er_tor_get_role — read current role
+; returns eax = TOR_ROLE_*
+; ==================================================================
+global er_tor_get_role
+er_fn er_tor_get_role
+    mov     eax, [tor_state + TOR_STATE_ROLE]
+    er_ok
+    er_ret
 
 ; ==================================================================
 ; _tor_print_status — print status message
@@ -169,6 +245,10 @@ er_fn er_tor_init
 
     ; Initialize Tor cell module
     call    er_tor_cell_init
+    mov     edi, TOR_ROLE_CLIENT
+    call    er_tor_set_role
+    test    eax, eax
+    js      .link_fail
 
     ; === Phase 1: Connect to guard relay ===
     lea     rdi, [rel str_tor_connect]

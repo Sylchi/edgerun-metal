@@ -1,12 +1,12 @@
 ; EdgeRun display driver — x86_64 assembly
 ; System V AMD64 ABI, freestanding.
 ;
-; Dual-mode: VGA text mode (0xB8000, 80x25) or linear framebuffer
-; (multiboot-provided UEFI GOP).  Mode is selected at init time.
+; Primary path: linear framebuffer (multiboot-provided UEFI GOP).
 ;
 ; Framebuffer text rendering delegates to fb_text.asm (alpha8 atlas).
 
 %include "x86_64/macros.inc"
+%include "x86_64/wasm_defines.inc"
 
 %define VGA_TEXT_BUF     0xB8000
 %define VGA_COLS         80
@@ -36,7 +36,7 @@
 
 SECTION .data
 vga_cursor:      dd 0
-display_mode:    db 0        ; 0=VGA text mode, 1=framebuffer
+display_mode:    db 0        ; 0=unavailable, 1=framebuffer
 
 SECTION .text
 
@@ -53,7 +53,8 @@ extern er_memset
 ; er_display_init — initialize display
 ; void er_display_init(void)
 ;
-; Tries: multiboot framebuffer → native framebuffer → legacy text mode.
+; Tries: multiboot framebuffer → native framebuffer.
+; No legacy text-mode fallback.
 ; ==================================================================
 er_fn er_display_init
     push    rdi
@@ -68,23 +69,18 @@ er_fn er_display_init
 .try_native:
     call    _native_fb_init
     test    eax, eax
-    jnz     .legacy_text_mode
+    jnz     .display_unavailable
 
     mov     byte [display_mode], 1
     jmp     .done_init
 
-.legacy_text_mode:
+.display_unavailable:
     mov     byte [display_mode], 0
-    call    er_display_clear
-    lea     rdi, [rel .banner]
-    call    er_display_puts
+    er_err  ERROR_NOT_PRESENT
 
 .done_init:
     pop     rdi
-    er_ok
     ret
-
-.banner: db "EdgeRun x86_64 bare metal - VGA text mode", 0x0A, 0
 
 ; ==================================================================
 ; _native_fb_init — try native framebuffer initialization
@@ -228,22 +224,7 @@ _bochs_vbe_init:
 er_fn er_display_clear
     cmp     byte [display_mode], 1
     je      er_fb_text_clear
-
-    push    rdi
-    push    rcx
-    push    rax
-
-    mov     rdi, VGA_TEXT_BUF
-    mov     ecx, VGA_COLS * VGA_ROWS
-    mov     ax, (VGA_ATTR << 8) | ' '
-    rep stosw
-
-    mov     dword [vga_cursor], 0
-
-    pop     rax
-    pop     rcx
-    pop     rdi
-    er_ok
+    er_err  ERROR_NOT_PRESENT
     ret
 
 ; ==================================================================
@@ -278,53 +259,7 @@ _vga_scroll:
 er_fn er_display_putchar
     cmp     byte [display_mode], 1
     je      er_fb_text_putchar
-
-    push    rbx
-    push    rcx
-    push    rdx
-
-    movzx   ebx, dil
-    mov     ecx, [vga_cursor]
-
-    cmp     bl, 0x0A
-    je      .line_feed
-    cmp     bl, 0x0D
-    je      .carriage_return
-
-    mov     eax, ecx
-    shl     eax, 1
-    add     rax, VGA_TEXT_BUF
-    mov     [rax], bl
-    mov     byte [rax + 1], VGA_ATTR
-
-    inc     ecx
-    jmp     .check_scroll
-
-.line_feed:
-    add     ecx, VGA_COLS
-    jmp     .check_scroll
-
-.carriage_return:
-    xor     edx, edx
-    mov     eax, ecx
-    mov     ecx, VGA_COLS
-    div     ecx
-    imul    eax, VGA_COLS
-    mov     ecx, eax
-    jmp     .store
-
-.check_scroll:
-    cmp     ecx, VGA_COLS * VGA_ROWS
-    jb      .store
-    sub     ecx, VGA_COLS
-    call    _vga_scroll
-
-.store:
-    mov     [vga_cursor], ecx
-    pop     rdx
-    pop     rcx
-    pop     rbx
-    er_ok
+    er_err  ERROR_NOT_PRESENT
     ret
 
 ; ==================================================================
@@ -334,19 +269,5 @@ er_fn er_display_putchar
 er_fn er_display_puts
     cmp     byte [display_mode], 1
     je      er_fb_text_puts
-
-    push    rdi
-    push    rsi
-    mov     rsi, rdi
-.loop:
-    lodsb
-    test    al, al
-    jz      .done
-    movzx   edi, al
-    call    er_display_putchar
-    jmp     .loop
-.done:
-    pop     rsi
-    pop     rdi
-    er_ok
+    er_err  ERROR_NOT_PRESENT
     ret

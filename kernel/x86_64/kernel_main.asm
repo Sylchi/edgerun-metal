@@ -236,6 +236,7 @@ check_ra_3:    db "v3", 0
 check_ra_flash:db " flash 0x", 0
 check_ble:     db "check: ble ", 0
 check_ble_usb_unsupported: db "usb transport unsupported", 0
+check_wifi:    db "check: wifi ax210 ", 0
 check_abs:     db "absent", 0
 check_virtio_net: db "check: virtio_net ", 0
 check_amdgpu:  db "check: amdgpu ", 0
@@ -321,6 +322,7 @@ device_flags:
     .amdgpu:   resb 1
     .emmc:     resb 1
     .intel_gpu: resb 1
+ax210_present: resb 1
 
 %define VIRTIO_NET_STORAGE_size 4900
 virtio_net_dev:      resb VIRTIO_NET_DEVICE_size
@@ -1297,6 +1299,51 @@ er_fn er_kernel_main
 .acpi_done:
     add     rsp, 56
 
+    ; ─── Intel AX210 Wi-Fi (PCIe) ───────────────────────────────────
+    mov     byte [ax210_present], 0
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_wifi]
+    call    er_serial_puts
+    sub     rsp, 3
+    mov     rdi, 0x8086
+    mov     rsi, 0x2725
+    mov     rdx, rsp
+    lea     rcx, [rsp + 1]
+    lea     r8, [rsp + 2]
+    call    er_pci_find_device
+    test    eax, eax
+    jz      .wifi_absent
+    mov     byte [ax210_present], 1
+    movzx   esi, byte [rsp]
+    mov     rdi, COM1_PORT
+    call    er_serial_putdec32
+    mov     rdi, COM1_PORT
+    mov     sil, ':'
+    call    er_serial_putchar
+    movzx   esi, byte [rsp + 1]
+    mov     rdi, COM1_PORT
+    call    er_serial_putdec32
+    mov     rdi, COM1_PORT
+    mov     sil, '.'
+    call    er_serial_putchar
+    movzx   esi, byte [rsp + 2]
+    mov     rdi, COM1_PORT
+    call    er_serial_putdec32
+    mov     rdi, COM1_PORT
+    mov     sil, ' '
+    call    er_serial_putchar
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_ble_usb_unsupported]
+    call    er_serial_puts
+    jmp     .wifi_done
+.wifi_absent:
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_abs]
+    call    er_serial_puts
+.wifi_done:
+    call    .crlf
+    add     rsp, 3
+
     ; ─── RTL8125 Ethernet ─────────────────────────────────────────
     sub     rsp, 3
     mov     rdi, 0x02
@@ -1370,17 +1417,8 @@ er_fn er_kernel_main
     call    er_serial_puts
 
     ; AX210 class hardware uses USB BT transport, not COM2 UART HCI.
-    ; Detect it explicitly and skip the UART-only path.
-    sub     rsp, 3
-    mov     rdi, 0x8086
-    mov     rsi, 0x2725
-    mov     rdx, rsp
-    lea     rcx, [rsp + 1]
-    lea     r8, [rsp + 2]
-    call    er_pci_find_device
-    add     rsp, 3
-    test    eax, eax
-    jz      .bt_uart_try
+    cmp     byte [ax210_present], 1
+    jne     .bt_uart_try
     mov     rdi, COM1_PORT
     lea     rsi, [rel check_ble_usb_unsupported]
     call    er_serial_puts
