@@ -773,8 +773,11 @@ test "wayland host pointer input updates hover activation and scroll state" {
 }
 
 test "wayland host appends scene cursor from native hover state" {
-    var app = NativeApp{
-        .allocator = std.testing.allocator,
+    const alloc = std.testing.allocator;
+    const app = try alloc.create(NativeApp);
+    defer alloc.destroy(app);
+    app.* = NativeApp{
+        .allocator = alloc,
         .width = 1280,
         .height = 800,
         .present = .cpu,
@@ -802,8 +805,11 @@ test "wayland host appends scene cursor from native hover state" {
 
 test "wayland host renders vector cursor overlay through native pipeline" {
     var pixels: [64 * 64]ui.Color = [_]ui.Color{ui.Color.clear} ** (64 * 64);
-    var app = NativeApp{
-        .allocator = std.testing.allocator,
+    const alloc = std.testing.allocator;
+    const app = try alloc.create(NativeApp);
+    defer alloc.destroy(app);
+    app.* = NativeApp{
+        .allocator = alloc,
         .width = 64,
         .height = 64,
         .present = .cpu,

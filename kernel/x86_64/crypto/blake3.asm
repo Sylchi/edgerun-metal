@@ -747,10 +747,9 @@ er_blake3_subtree_cv:
 
     ; nfull = len / CHUNK_LEN, rem = len % CHUNK_LEN
     mov     rax, r13
-    xor     rdx, rdx
-    mov     ecx, BLAKE3_CHUNK_LEN
-    div     rcx
-    ; rax = nfull, rdx = rem
+    mov     rdx, rax
+    and     rdx, 1023           ; rem = len & (CHUNK_LEN - 1)
+    shr     rax, 10             ; nfull = len >> 10 (CHUNK_LEN = 1024 = 2^10)
     mov     [rsp + 64], rax     ; save nfull
     mov     [rsp + 72], rdx     ; save rem
 
@@ -795,10 +794,7 @@ er_blake3_subtree_cv:
 
     ; counter2 = counter + half / CHUNK_LEN
     mov     rax, [rsp + 88]     ; half
-    xor     rdx, rdx
-    mov     ecx, BLAKE3_CHUNK_LEN
-    div     rcx
-    ; rax = half / CHUNK_LEN
+    shr     rax, 10             ; half >> 10 (CHUNK_LEN = 1024 = 2^10)
     mov     r9, rax
     add     r9, r14             ; counter + half/CHUNK_LEN
 
@@ -968,9 +964,7 @@ er_blake3_hash_bytes:
 
     ; nfull = len / CHUNK_LEN
     mov     rax, r13
-    xor     rdx, rdx
-    mov     ecx, BLAKE3_CHUNK_LEN
-    div     rcx
+    shr     rax, 10             ; nfull = len >> 10 (CHUNK_LEN = 1024 = 2^10)
     mov     r15, rax            ; nfull
 
     ; left_chunks = pow2 split

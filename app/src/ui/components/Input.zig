@@ -9,6 +9,7 @@ const layout = @import("../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
 const icon_component = @import("Icon.zig");
+const icon_pack = @import("../icon_pack.zig");
 const primitives = @import("Primitives.zig");
 
 const Error = common.Error;
@@ -160,7 +161,7 @@ test "input component renders leading icon as component state" {
     try input.render(&scene, ui.Rect.init(4, 8, 220, 40), .{});
 
     const placeholder = component_test.textCommand(scene.written(), "Search objects").?;
-    try std.testing.expect(component_test.hasIcon(scene.written(), Icon.named(.search).tag()));
+    try std.testing.expect(component_test.hasIcon(scene.written(), icon_pack.iconId(.search)));
     try std.testing.expectEqual(@as(f32, 52.0), placeholder.text.origin.x);
 }
 

@@ -13,10 +13,36 @@ const ir_bytes: []const u8 = &ir_storage;
 
 const index_bytes = @embedFile("../gen/icon_asset_pack_index.bin");
 
+const names_bytes = @embedFile("../gen/icon_names.bin");
+
 pub const icon_count: u32 = mem.readInt(u32, index_bytes[4..8], .little);
 
-pub const cursor_pointer_2_icon_id: u32 = @intFromEnum(icon.Icon.pointer_2) + 1;
-pub const cursor_hand_finger_icon_id: u32 = @intFromEnum(icon.Icon.hand_finger) + 1;
+pub fn iconId(ic: icon.Icon) u32 {
+    @setEvalBranchQuota(100000);
+    const raw = @tagName(ic);
+    var name_buf: [128]u8 = undefined;
+    var j: usize = 0;
+    for (raw) |c| {
+        name_buf[j] = if (c == '_') '-' else c;
+        j += 1;
+    }
+    const name = name_buf[0..j];
+    var pos: u32 = 0;
+    var off: usize = 0;
+    while (off < names_bytes.len) {
+        pos += 1;
+        var end: usize = off;
+        while (end < names_bytes.len and names_bytes[end] != 0) : (end += 1) {}
+        if (end >= names_bytes.len) break;
+        const n = names_bytes[off..end];
+        if (mem.eql(u8, n, name)) return pos;
+        off = end + 1;
+    }
+    return 0;
+}
+
+pub const cursor_pointer_2_icon_id: u32 = iconId(.pointer_2);
+pub const cursor_hand_finger_icon_id: u32 = iconId(.hand_finger);
 
 pub fn getIr(icon_id: u32) ?[]const f32 {
     if (icon_id == 0 or icon_id > icon_count) return null;
@@ -30,6 +56,14 @@ pub fn getIr(icon_id: u32) ?[]const f32 {
 
 test "asset pack has tabler icons" {
     try std.testing.expect(icon_count > 5000);
+}
+
+test "iconId returns correct positions" {
+    try std.testing.expect(iconId(.dashboard) > 0);
+    try std.testing.expect(iconId(.circle_check) > 0);
+    try std.testing.expect(iconId(.circle_x) > 0);
+    try std.testing.expect(iconId(.git_commit) > 0);
+    try std.testing.expect(iconId(.dashboard) != iconId(.circle_check));
 }
 
 test "asset pack contains cursor icons" {

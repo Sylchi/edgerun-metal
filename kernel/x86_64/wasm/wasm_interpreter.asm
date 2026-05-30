@@ -15,6 +15,17 @@ default rel
 %include "wasm_constants.inc"
 
 SECTION .text
-%include "wasm_decode.asm"
+; Decode sub-modules (order: utilities → module → sections → body → helper utilities)
+%include "wasm_decode_leb.asm"
+%include "wasm_decode_module.asm"
+%include "wasm_decode_sections.asm"
+%include "wasm_decode_body.asm"
+%include "wasm_decode_util.asm"
+
+; Exec sub-modules (order: helpers → entry → dispatch → handlers)
+%include "wasm_exec_helpers.asm"
+%include "wasm_exec_entry.asm"
 %include "wasm_exec.asm"
+%include "wasm_exec_handlers.asm"
+
 %include "wasm_run.asm"

@@ -7,6 +7,7 @@ const ui = @import("../core.zig");
 const common = @import("../component_common.zig");
 const component_codec = @import("Codec.zig");
 const component_test = @import("TestSupport.zig");
+const icon_pack = @import("../icon_pack.zig");
 const primitives = @import("Primitives.zig");
 const std = @import("std");
 const ui_tokens = @import("../theme.zig");
@@ -277,7 +278,6 @@ test "component union rejects objects without component requirements" {
 }
 
 test "component union dispatches button variants and collects hit targets" {
-    const Icon = icon_component.Icon;
     const IconSlot = icon_component.IconSlot;
     var commands: [16]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
@@ -295,7 +295,7 @@ test "component union dispatches button variants and collects hit targets" {
     try std.testing.expectEqual(@as(u32, 502), ui_input.hitTest(collector.written(), 12, 56).?.id);
     try std.testing.expect(component_test.hasText(scene.written(), "Primary"));
     try std.testing.expect(component_test.hasText(scene.written(), "Outline"));
-    try std.testing.expect(component_test.hasIcon(scene.written(), Icon.named(.search).tag()));
+    try std.testing.expect(component_test.hasIcon(scene.written(), icon_pack.iconId(.search)));
 }
 
 test "component renderer exports shared sizing tokens for measurements" {

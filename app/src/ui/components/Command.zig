@@ -8,6 +8,7 @@ const text_component = @import("Text.zig");
 const layout = @import("../layouts/Types.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
+const icon_pack = @import("../icon_pack.zig");
 const icon_component = @import("Icon.zig");
 const primitives = @import("Primitives.zig");
 
@@ -228,7 +229,7 @@ test "command component renders search input and hit region" {
     try command.collectInteractions(&collector, ui.Rect.init(0, 0, 220, 36));
 
     try std.testing.expect(component_test.hasText(scene.written(), "Type a command..."));
-    try std.testing.expect(component_test.hasIcon(scene.written(), Icon.named(.search).tag()));
+    try std.testing.expect(component_test.hasIcon(scene.written(), icon_pack.iconId(.search)));
     try std.testing.expectEqual(@as(usize, 1), collector.written().len);
     try std.testing.expectEqual(ui.HitKind.input, collector.written()[0].kind);
 }

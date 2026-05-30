@@ -844,9 +844,9 @@ er_fn er_render_ir_rect_count
 ; ==================================================================
 er_fn er_render_ir_textured_vertex_count
     mov     rax, rdi
-    xor     edx, edx
-    mov     ecx, RENDER_IR_TEXT_VERTEX_FLOAT_STRIDE
-    div     rcx
+    mov     rdx, rax
+    and     edx, 7          ; rem = len & (STRIDE - 1)
+    shr     rax, 3          ; count = len >> 3 (STRIDE = 8 = 2^3)
     test    rdx, rdx
     jnz     .invalid_vtx
     ret

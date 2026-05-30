@@ -67,12 +67,8 @@ er_local_ring_write:
 
     ; Compute slot index: head % LOCAL_RING_SLOTS
     mov     eax, [rbx + LOCAL_RING_HEAD]
-    xor     edx, edx
-    mov     ecx, LOCAL_RING_SLOTS
-    div     ecx
-
-    ; Slot offset in bytes: slot * LOCAL_CELL_SIZE
     mov     r13d, eax
+    and     r13d, 63        ; slot = head & (LOCAL_RING_SLOTS - 1)
     imul    r13d, LOCAL_CELL_SIZE
 
     ; Slot pointer = ring + LOCAL_RING_CELLS + slot_offset
@@ -123,12 +119,8 @@ er_local_ring_read:
 
     ; Compute slot index: tail % LOCAL_RING_SLOTS
     mov     eax, ecx        ; tail
-    xor     edx, edx
-    mov     ecx, LOCAL_RING_SLOTS
-    div     ecx
-
-    ; Slot offset in bytes: slot * LOCAL_CELL_SIZE
     mov     r13d, eax
+    and     r13d, 63        ; slot = tail & (LOCAL_RING_SLOTS - 1)
     imul    r13d, LOCAL_CELL_SIZE
 
     ; Slot pointer = ring + LOCAL_RING_CELLS + slot_offset

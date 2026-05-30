@@ -25,6 +25,7 @@ const ui = @import("../ui/core.zig");
 const text_component = @import("../ui/components/Text.zig");
 const renderer_icon_mask = @import("../render/icon_mask.zig");
 const icon_vector = @import("../ui/icon_vector.zig");
+const icon_pack = @import("../ui/icon_pack.zig");
 const icon_line_buffer = @import("../render/icon_line_buffer.zig");
 const linux_drm = @import("../linux_drm.zig");
 const bytes_mod = @import("../bytes.zig");
@@ -701,7 +702,7 @@ pub fn hasRectColor(commands: []const ui.Command, color: ui.Color) bool {
 }
 
 pub fn hasIcon(commands: []const ui.Command, value: icon_component.Icon) bool {
-    return hasIconId(commands, value.tag());
+    return hasIconId(commands, icon_pack.iconId(value.value));
 }
 
 pub fn hasIconId(commands: []const ui.Command, icon_id: u32) bool {

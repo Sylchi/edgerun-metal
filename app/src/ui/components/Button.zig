@@ -10,6 +10,7 @@ const text_metrics = @import("../text_metrics.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
 const icon_component = @import("Icon.zig");
+const icon_pack = @import("../icon_pack.zig");
 const primitives = @import("Primitives.zig");
 
 const Error = common.Error;
@@ -406,7 +407,7 @@ test "icon button component renders centered icon and hit region" {
     try button.render(&scene, bounds, .{});
     try button.collectInteractions(&collector, bounds);
 
-    const icon_command = component_test.iconCommand(scene.written(), Icon.named(.search).tag()).?;
+    const icon_command = component_test.iconCommand(scene.written(), icon_pack.iconId(.search)).?;
     try std.testing.expectEqual(bounds.x + (bounds.w - icon_size) * 0.5, icon_command.icon_quad.bounds.x);
     try std.testing.expectEqual(bounds.y + (bounds.h - icon_size) * 0.5, icon_command.icon_quad.bounds.y);
     try std.testing.expectEqual(@as(usize, 1), collector.written().len);
@@ -525,7 +526,7 @@ test "button component renders extended reference variants" {
     try std.testing.expect(component_test.hasRectColor(scene.written(), button_danger));
     try std.testing.expect(!component_test.hasRectBounds(scene.written(), ui.Rect.init(0, 44, 120, height)));
     try std.testing.expect(component_test.hasTextColor(scene.written(), ui.Color.accent));
-    try std.testing.expect(component_test.hasIcon(scene.written(), Icon.named(.search).tag()));
+    try std.testing.expect(component_test.hasIcon(scene.written(), icon_pack.iconId(.search)));
 }
 
 test "button deserializer rejects wrong component kind" {

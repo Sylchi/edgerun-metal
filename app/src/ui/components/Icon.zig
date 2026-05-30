@@ -2,6 +2,7 @@ const clock = @import("../../clock.zig");
 const common = @import("../component_common.zig");
 const text_component = @import("Text.zig");
 const icon = @import("../icon.zig");
+const icon_pack = @import("../icon_pack.zig");
 const layout = @import("../layouts/Types.zig");
 const object = @import("../../object.zig");
 const std = @import("std");
@@ -122,7 +123,7 @@ fn measureIconIntrinsic(constraints: layout.Constraints) layout.Measurement {
 fn renderIconGlyph(scene: *ui.Scene, bounds: ui.Rect, value: icon.Icon, color: ui.Color) ui.RenderError!void {
     const size = @max(1.0, @min(bounds.w, bounds.h));
     const centered = ui.Rect.init(bounds.x + (bounds.w - size) * 0.5, bounds.y + (bounds.h - size) * 0.5, size, size);
-    try scene.pushIconQuad(.{ .bounds = centered, .icon_id = icon.id(value), .color = color });
+    try scene.pushIconQuad(.{ .bounds = centered, .icon_id = icon_pack.iconId(value), .color = color });
 }
 
 pub const default_size: f32 = 18.0;
@@ -154,7 +155,7 @@ test "icon component renders centered glyph" {
 
     try Icon.named(.search).render(&scene, bounds, .{});
 
-    const command = component_test.iconCommand(scene.written(), icon.id(.search)).?.icon_quad;
+    const command = component_test.iconCommand(scene.written(), icon_pack.iconId(.search)).?.icon_quad;
     try std.testing.expectEqual(@as(f32, 4.0), command.bounds.x);
     try std.testing.expectEqual(@as(f32, 12.0), command.bounds.y);
     try std.testing.expectEqual(@as(f32, 24.0), command.bounds.w);

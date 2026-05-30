@@ -192,69 +192,76 @@ _aes_encrypt_block:
     xor     eax, eax
     mov     al,  byte [r12]
     movzx   eax, byte [rel aes_sbox + eax]
-    shl     eax, 24
+    shl     eax, 0
     mov     ecx, eax
     movzx   eax, byte [r12 + 1]
     movzx   eax, byte [rel aes_sbox + eax]
-    shl     eax, 16
+    shl     eax, 8
     or      ecx, eax
     movzx   eax, byte [r12 + 2]
     movzx   eax, byte [rel aes_sbox + eax]
-    shl     eax, 8
+    shl     eax, 16
     or      ecx, eax
     movzx   eax, byte [r12 + 3]
     movzx   eax, byte [rel aes_sbox + eax]
+    shl     eax, 24
     or      ecx, eax
     mov     dword [r12], ecx
 
-    movzx   eax, byte [r12 + 4]
+    xor     eax, eax
+    mov     al,  byte [r12 + 4]
     movzx   eax, byte [rel aes_sbox + eax]
-    shl     eax, 24
+    shl     eax, 0
     mov     ecx, eax
     movzx   eax, byte [r12 + 5]
     movzx   eax, byte [rel aes_sbox + eax]
-    shl     eax, 16
+    shl     eax, 8
     or      ecx, eax
     movzx   eax, byte [r12 + 6]
     movzx   eax, byte [rel aes_sbox + eax]
-    shl     eax, 8
+    shl     eax, 16
     or      ecx, eax
     movzx   eax, byte [r12 + 7]
     movzx   eax, byte [rel aes_sbox + eax]
+    shl     eax, 24
     or      ecx, eax
     mov     dword [r12 + 4], ecx
 
-    movzx   eax, byte [r12 + 8]
+    xor     eax, eax
+    mov     al,  byte [r12 + 8]
     movzx   eax, byte [rel aes_sbox + eax]
-    shl     eax, 24
+    shl     eax, 0
     mov     ecx, eax
     movzx   eax, byte [r12 + 9]
     movzx   eax, byte [rel aes_sbox + eax]
-    shl     eax, 16
+    shl     eax, 8
     or      ecx, eax
     movzx   eax, byte [r12 + 10]
     movzx   eax, byte [rel aes_sbox + eax]
-    shl     eax, 8
+    shl     eax, 16
     or      ecx, eax
     movzx   eax, byte [r12 + 11]
     movzx   eax, byte [rel aes_sbox + eax]
+    shl     eax, 24
     or      ecx, eax
     mov     dword [r12 + 8], ecx
 
-    movzx   eax, byte [r12 + 12]
+    xor     eax, eax
+    mov     al,  byte [r12 + 12]
     movzx   eax, byte [rel aes_sbox + eax]
-    shl     eax, 24
+    shl     eax, 0
     mov     ecx, eax
     movzx   eax, byte [r12 + 13]
     movzx   eax, byte [rel aes_sbox + eax]
-    shl     eax, 16
+    shl     eax, 8
     or      ecx, eax
     movzx   eax, byte [r12 + 14]
     movzx   eax, byte [rel aes_sbox + eax]
-    shl     eax, 8
+    shl     eax, 16
     or      ecx, eax
     movzx   eax, byte [r12 + 15]
     movzx   eax, byte [rel aes_sbox + eax]
+    shl     eax, 24
     or      ecx, eax
     mov     dword [r12 + 12], ecx
 
@@ -556,13 +563,13 @@ er_fn er_tor_aes_ctr
     ; Restore IV pointer
     pop     r8
 
-    ; Counter block buffer (16 bytes)
+    ; Counter block buffer: rbx = counter (16B), rbx+16 = encrypt work buf (16B)
     sub     rsp, 32
     mov     rdi, rsp
     mov     rsi, r8         ; iv
     mov     edx, 16
     call    er_memcpy
-    mov     rbx, rsp        ; counter block
+    mov     rbx, rsp        ; rbx = counter block
 
 .ctr_loop:
     cmp     r14d, 0
@@ -575,19 +582,23 @@ er_fn er_tor_aes_ctr
     mov     ecx, r14d
 .full_block:
 
-    ; Encrypt counter block
+    ; Copy counter to work buffer and encrypt the copy
     push    rcx
-    mov     rdi, rbx
+    lea     rdi, [rbx + 16]    ; work buffer
+    mov     rsi, rbx            ; counter
+    mov     edx, 16
+    call    er_memcpy
+    lea     rdi, [rbx + 16]
     call    _aes_encrypt_block
     pop     rcx
 
-    ; XOR encrypted counter with input
+    ; XOR encrypted counter with input (from work buffer at rbx+16)
     xor     r8d, r8d
 .xor_loop:
     cmp     r8d, ecx
     jae     .xor_done
     mov     al, [r13 + r8]
-    xor     al, [rbx + r8]
+    xor     al, [rbx + 16 + r8]
     mov     [r12 + r8], al
     inc     r8d
     jmp     .xor_loop
@@ -598,7 +609,7 @@ er_fn er_tor_aes_ctr
     add     r13, rcx
     sub     r14d, ecx
 
-    ; Increment counter (big-endian)
+    ; Increment counter (big-endian) — increments the original counter at rbx
     mov     eax, [rbx + 12]
     bswap   eax
     inc     eax

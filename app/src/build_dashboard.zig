@@ -8,6 +8,7 @@ const node_renderer = @import("ui/components/NodeRenderer.zig");
 const component_union = @import("ui/components/Component.zig");
 const ui = @import("ui/core.zig");
 const icon_mod = @import("ui/icon.zig");
+const icon_pack = @import("ui/icon_pack.zig");
 const layout_mod = @import("ui/layout.zig");
 
 const W: usize = 1280;
@@ -16,7 +17,7 @@ const max_commands: usize = 2048;
 const max_rects: usize = 4096;
 const max_image_vertices: usize = 32768;
 const max_icon_vertices: usize = 1024;
-const max_icon_line_vertices: usize = 0;
+const max_icon_line_vertices: usize = 32768;
 const max_overlay_rects: usize = 0;
 const max_overlay_icon_vertices: usize = 0;
 const max_overlay_icon_line_vertices: usize = 0;
@@ -190,7 +191,7 @@ fn collectData(alloc: std.mem.Allocator, io: std.Io) !BuildData {
 }
 
 fn iconTag(ic: icon_mod.Icon) u16 {
-    return @intCast(icon_mod.id(ic));
+    return @intCast(icon_pack.iconId(ic));
 }
 
 fn sizeLabel(buf: *[128]u8, bytes: u64) []const u8 {
@@ -348,6 +349,7 @@ fn renderLayout(scene: *ui.Scene, data: BuildData) !void {
     var cmt_count: usize = 0;
     for (data.commits, 0..) |msg, i| {
         if (i >= cmt_nodes.len) break;
+        if (msg.len == 0) continue;
         cmt_nodes[i] = ui.Node{
             .stack = .{
                 .axis = .row, .gap = 4, .cross_align = .center,
@@ -408,6 +410,14 @@ fn renderLayout(scene: *ui.Scene, data: BuildData) !void {
 
     for (0..cell_count) |i| {
         const cell_bounds = bento.childBounds(i, full_bounds) catch continue;
-        try node_renderer.renderNode(component_union.Component, scene, cell_bounds, ui_nodes[i], .{});
+        node_renderer.renderNode(component_union.Component, scene, cell_bounds, ui_nodes[i], .{}) catch |err| {
+            if (comptime std.debug.runtime_safety) {
+                std.debug.print("cell {d} failed: bounds=({d:.1},{d:.1},{d:.1},{d:.1}) node={s}\n", .{
+                    i, cell_bounds.x, cell_bounds.y, cell_bounds.w, cell_bounds.h,
+                    @tagName(ui_nodes[i]),
+                });
+            }
+            return err;
+        };
     }
 }

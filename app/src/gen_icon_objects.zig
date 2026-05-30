@@ -196,4 +196,17 @@ fn emitAssetPack(dir: std.Io.Dir, io: std.Io, _: mem.Allocator, icons: []const I
         }
         try w.interface.flush();
     }
+
+    {
+        dir.deleteFile(io, "icon_names.bin") catch {};
+        var f = try dir.createFile(io, "icon_names.bin", .{ .truncate = true });
+        defer f.close(io);
+        var w = f.writer(io, &.{});
+
+        for (icons) |ic| {
+            try w.interface.writeAll(ic.name);
+            try w.interface.writeByte(0);
+        }
+        try w.interface.flush();
+    }
 }
