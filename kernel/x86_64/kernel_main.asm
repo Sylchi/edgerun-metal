@@ -73,6 +73,7 @@ extern er_pci_find_nvme
 extern er_pci_find_class
 extern er_pci_find_device
 extern er_pci_read32
+extern er_pci_write32
 extern er_nvme_probe
 extern er_nvme_init
 extern er_nvme_print_info
@@ -177,6 +178,11 @@ extern fe_tmp4
 %define DEV_EMMC     6
 %define DEV_INTEL_GPU 7
 %define DEV_COUNT    8
+%define PCI_COMMAND  0x04
+%define PCI_BAR0     0x10
+%define PCI_BAR1     0x14
+%define PCI_CMD_MEM_SPACE (1 << 1)
+%define PCI_CMD_BUS_MASTER (1 << 2)
 
 ; QEMU debugcon port and ISA debugcon device registers
 %define COM1_PORT      0x3f8
@@ -237,6 +243,7 @@ check_ra_flash:db " flash 0x", 0
 check_ble:     db "check: ble ", 0
 check_ble_usb_unsupported: db "usb transport unsupported", 0
 check_wifi:    db "check: wifi ax210 ", 0
+check_wifi_bar: db " bar ", 0
 check_abs:     db "absent", 0
 check_virtio_net: db "check: virtio_net ", 0
 check_amdgpu:  db "check: amdgpu ", 0
@@ -1314,6 +1321,36 @@ er_fn er_kernel_main
     test    eax, eax
     jz      .wifi_absent
     mov     byte [ax210_present], 1
+    movzx   r12d, byte [rsp]
+    movzx   r13d, byte [rsp + 1]
+    movzx   r14d, byte [rsp + 2]
+    ; Enable memory space + bus master for AX210 PCIe function.
+    mov     rdi, r12
+    mov     rsi, r13
+    mov     rdx, r14
+    mov     ecx, PCI_COMMAND
+    call    er_pci_read32
+    or      eax, PCI_CMD_MEM_SPACE | PCI_CMD_BUS_MASTER
+    mov     r8, rax
+    mov     rdi, r12
+    mov     rsi, r13
+    mov     rdx, r14
+    mov     ecx, PCI_COMMAND
+    call    er_pci_write32
+    ; Capture BAR0/BAR1 for upcoming MMIO driver bring-up.
+    mov     rdi, r12
+    mov     rsi, r13
+    mov     rdx, r14
+    mov     ecx, PCI_BAR0
+    call    er_pci_read32
+    mov     r15d, eax
+    mov     rdi, r12
+    mov     rsi, r13
+    mov     rdx, r14
+    mov     ecx, PCI_BAR1
+    call    er_pci_read32
+    and     r15d, 0xFFFFFFF0
+
     movzx   esi, byte [rsp]
     mov     rdi, COM1_PORT
     call    er_serial_putdec32
@@ -1329,6 +1366,15 @@ er_fn er_kernel_main
     movzx   esi, byte [rsp + 2]
     mov     rdi, COM1_PORT
     call    er_serial_putdec32
+    mov     rdi, COM1_PORT
+    mov     sil, ' '
+    call    er_serial_putchar
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_wifi_bar]
+    call    er_serial_puts
+    mov     rdi, COM1_PORT
+    mov     esi, r15d
+    call    er_serial_puthex32
     mov     rdi, COM1_PORT
     mov     sil, ' '
     call    er_serial_putchar

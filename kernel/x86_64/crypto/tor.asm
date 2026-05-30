@@ -127,6 +127,12 @@ _tor_caps_from_role:
 ; ==================================================================
 global er_tor_set_role
 er_fn er_tor_set_role
+    ; Keep Tor integrated with the current kernel operating model:
+    ; only the client path is implemented end-to-end right now.
+    ; Other roles stay hard-fail until corresponding handlers land in
+    ; the existing identity/cell pipeline.
+    cmp     edi, TOR_ROLE_CLIENT
+    jne     .unsupported_role
     call    _tor_caps_from_role
     cmp     eax, -1
     je      .bad_role
@@ -138,6 +144,10 @@ er_fn er_tor_set_role
 .bad_role:
     mov     eax, -1
     er_err  ERROR_TOR_ROLE_INVALID
+    er_ret
+.unsupported_role:
+    mov     eax, -1
+    er_err  ERROR_TOR_ROLE_UNSUPPORTED
     er_ret
 
 ; ==================================================================

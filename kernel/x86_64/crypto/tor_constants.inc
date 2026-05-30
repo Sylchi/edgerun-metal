@@ -165,6 +165,7 @@ ERROR_TOR_STREAM_FAIL      equ 43
 ERROR_TOR_PROTOCOL_ERR     equ 44
 ERROR_TOR_TIMEOUT          equ 45
 ERROR_TOR_ROLE_INVALID     equ 46
+ERROR_TOR_ROLE_UNSUPPORTED equ 47
 
 ; ==================================================================
 ; Fixed Tor network constants
