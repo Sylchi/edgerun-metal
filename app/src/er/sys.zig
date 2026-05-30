@@ -55,6 +55,33 @@ pub const err_exists: u32 = 83;
 pub const err_busy: u32 = 84;
 
 // -----------------------------------------------------------------
+// Agent protocol constants
+// -----------------------------------------------------------------
+
+/// Agent message types (byte 0 of agent cell payload)
+pub const agent_msg_request: u32 = 1;
+pub const agent_msg_response: u32 = 2;
+pub const agent_msg_error: u32 = 3;
+
+/// Agent message flags (byte 1 of agent cell payload)
+pub const agent_flag_more: u32 = 1;
+pub const agent_flag_end: u32 = 2;
+
+/// Offset of sender_slot_id in agent request payload
+pub const agent_sender_off: u32 = 2;
+
+/// Agent identity labels (well-known)
+pub const http_agent_label: []const u8 = "edgerun.agent.http";
+
+/// Precomputed BLAKE3 hash of "edgerun.agent.http"
+pub const http_agent_hash = [32]u8{
+    0x0e, 0x7f, 0xd9, 0x95, 0x8e, 0x6b, 0xb9, 0x9f,
+    0x09, 0xc9, 0x11, 0x09, 0xa5, 0x60, 0x9a, 0x71,
+    0x5d, 0x94, 0x85, 0x3d, 0x17, 0x8b, 0x72, 0x32,
+    0xdd, 0x91, 0x2f, 0xf8, 0x06, 0x4e, 0xba, 0xb4,
+};
+
+// -----------------------------------------------------------------
 // Host import declarations
 //
 // These are resolved by the WASM interpreter at module load time

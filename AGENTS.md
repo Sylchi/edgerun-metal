@@ -151,6 +151,7 @@ All targets are in `build.sh`. No Makefile, no C, no Zig in production paths.
 - Check `git status --short --branch` before edits, before staging, and before committing.
 - If a needed change overlaps another agent's work, stop and coordinate instead of resolving by force.
 - Keep commit messages descriptive of what changed and why. Use `wip: checkpoint` for intermediate saves, `task: description` for coherent task commits.
+- When changing the output path of a code generator, remove stale build artifacts from the old path. Do not leave orphaned files behind.
 
 ## Changelog
 

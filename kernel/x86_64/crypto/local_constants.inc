@@ -32,7 +32,9 @@ LOCAL_RING_SIZE         equ 8 + LOCAL_RING_SLOTS * LOCAL_CELL_SIZE
 ; ==================================================================
 LOCAL_ID_HASH           equ 0   ; 32 bytes identity hash (BLAKE3)
 LOCAL_ID_RING           equ 32  ; incoming ring buffer (LOCAL_RING_SIZE bytes)
-LOCAL_ID_SLOT_SIZE      equ 32 + LOCAL_RING_SIZE
+LOCAL_ID_HANDLER        equ 32 + LOCAL_RING_SIZE  ; 8-byte agent handler fn ptr
+LOCAL_ID_FLAGS          equ 40 + LOCAL_RING_SIZE  ; 1-byte agent flags
+LOCAL_ID_SLOT_SIZE      equ 41 + LOCAL_RING_SIZE
 LOCAL_MAX_IDENTITIES    equ 16
 LOCAL_ROUTE_TABLE_SIZE  equ LOCAL_MAX_IDENTITIES * LOCAL_ID_SLOT_SIZE
 

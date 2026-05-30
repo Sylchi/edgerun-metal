@@ -163,91 +163,37 @@ const IconData = struct {
     ir: []const f32,
 };
 
-fn writeEscaped(s: []const u8, buf: []u8) []u8 {
-    var pos: usize = 0;
-    for (s) |c| {
-        switch (c) {
-            '\\' => {
-                buf[pos..][0..2].* = "\\\\".*;
-                pos += 2;
-            },
-            '"' => {
-                buf[pos..][0..2].* = "\\\"".*;
-                pos += 2;
-            },
-            else => {
-                buf[pos] = c;
-                pos += 1;
-            },
-        }
-    }
-    return buf[0..pos];
-}
-
 fn emitAssetPack(dir: std.Io.Dir, io: std.Io, _: mem.Allocator, icons: []const IconData) !void {
-    var buf: [4096]u8 = undefined;
-
     {
-        dir.deleteFile(io, "icon_asset_pack_index.zig") catch {};
-        var f = try dir.createFile(io, "icon_asset_pack_index.zig", .{ .truncate = true });
+        dir.deleteFile(io, "icon_asset_pack_index.bin") catch {};
+        var f = try dir.createFile(io, "icon_asset_pack_index.bin", .{ .truncate = true });
         defer f.close(io);
-        var w = f.writer(io, &buf);
+        var w = f.writer(io, &.{});
 
-        try w.interface.print(
-            \\const std = @import("std");
-            \\const mem = std.mem;
-            \\
-            \\pub const icon_count: u32 = {d};
-            \\
-            \\pub const Entry = struct {{
-            \\    name: []const u8,
-            \\    tags: []const u8,
-            \\    category: []const u8,
-            \\    ir_offset: u32,
-            \\    ir_len: u32,
-            \\}};
-            \\
-            \\pub const entries = [_]Entry{{
-            \\
-        , .{icons.len});
+        const magic: u32 = 0x4E435849; // "IXCN" in little-endian file bytes
+        try w.interface.writeInt(u32, magic, .little);
+        try w.interface.writeInt(u32, @as(u32, @intCast(icons.len)), .little);
 
-        var offset: u32 = 0;
-        var escaped: [65536]u8 = undefined;
+        var ir_offset: u32 = 0;
         for (icons) |ic| {
-            const data_len = @as(u32, @intCast(ic.ir.len * @sizeOf(f32)));
-            try w.interface.writeAll("    .{ .name = \"");
-            try w.interface.writeAll(writeEscaped(ic.name, &escaped));
-            try w.interface.writeAll("\", .tags = \"");
-            try w.interface.writeAll(writeEscaped(ic.tags, &escaped));
-            try w.interface.writeAll("\", .category = \"");
-            try w.interface.writeAll(writeEscaped(ic.category, &escaped));
-            try w.interface.print("\", .ir_offset = {d}, .ir_len = {d} }},\n", .{ offset, data_len });
-            offset += data_len;
+            const ir_len = @as(u32, @intCast(ic.ir.len * @sizeOf(f32)));
+            try w.interface.writeInt(u32, ir_offset, .little);
+            try w.interface.writeInt(u32, ir_len, .little);
+            ir_offset += ir_len;
         }
-
-        try w.interface.writeAll(
-            \\};
-            \\
-        );
         try w.interface.flush();
     }
 
     {
-        dir.deleteFile(io, "icon_asset_pack_ir.zig") catch {};
-        var f = try dir.createFile(io, "icon_asset_pack_ir.zig", .{ .truncate = true });
+        dir.deleteFile(io, "icon_asset_pack_ir.bin") catch {};
+        var f = try dir.createFile(io, "icon_asset_pack_ir.bin", .{ .truncate = true });
         defer f.close(io);
-        var w = f.writer(io, &buf);
-        try w.interface.writeAll("pub const data align(4) = [_]u8{\n");
-        var written: usize = 0;
+        var w = f.writer(io, &.{});
+
         for (icons) |ic| {
             const bytes = mem.sliceAsBytes(ic.ir);
-            for (bytes) |b| {
-                try w.interface.print("0x{x:0>2},", .{b});
-                written += 1;
-                if (written % 32 == 0) try w.interface.writeAll("\n");
-            }
+            try w.interface.writeAll(bytes);
         }
-        try w.interface.writeAll("\n};\n");
         try w.interface.flush();
     }
 }

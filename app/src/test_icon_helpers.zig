@@ -27,14 +27,18 @@ const GradSpec = union(enum) {
 };
 const StopSpec = struct { offset: f32, color: icon_vector.Paint };
 
-const PaintSpec = union(enum) { rgba: icon_vector.Paint, current_color: void, url: []const u8 };
+const PaintSpec = union(enum) {
+    rgba: icon_vector.Paint,
+    current_color: void,
+    url: struct { ref: []const u8, fallback: ?icon_vector.Paint },
+};
 const FillRule = enum { nonzero, evenodd };
 const StrokeCap = icon_vector.StrokeCap;
 const StrokeJoin = icon_vector.StrokeJoin;
 
 const SvgAttrs = struct {
     viewBox: svg_parser.ViewBox = .{ .width = 24, .height = 24 },
-    fill: ?PaintSpec = null,
+    fill: ?PaintSpec = PaintSpec{ .rgba = .{ .r = 0, .g = 0, .b = 0, .a = 255 } },
     stroke: ?PaintSpec = null,
     stroke_width: f32 = 2.0,
     stroke_linecap: StrokeCap = .round,
@@ -47,16 +51,16 @@ const SvgAttrs = struct {
 
 pub fn svgToIr(alloc: mem.Allocator, svg: []const u8) ![]const f32 {
     var ir: std.ArrayList(f32) = .empty;
+    errdefer ir.deinit(alloc);
 
     const default_attrs = extractSvgAttrs(alloc, svg);
     const viewbox = default_attrs.viewBox;
     const grads = extractGradients(alloc, svg, viewbox);
     defer for (&grads) |*g| {
-        if (g.*) |spec| {
-            switch (spec) {
-                .linear => |s| alloc.free(s.stops),
-                .radial => |s| alloc.free(s.stops),
-            }
+        const spec = g.* orelse continue;
+        switch (spec) {
+            .linear => |s| alloc.free(s.stops),
+            .radial => |s| alloc.free(s.stops),
         }
     };
 
@@ -120,6 +124,8 @@ pub fn svgToIr(alloc: mem.Allocator, svg: []const u8) ![]const f32 {
                 }
                 try appendPaint(&ir, alloc, stroke_spec.?, svg_color, stroke_opacity, grads);
                 try appendPathData(&ir, alloc, d, viewbox);
+                try ir.append(alloc, icon_vector.op_begin_fill_path);
+                try ir.append(alloc, icon_vector.op_end_fill_path);
             }
         } else if (mem.eql(u8, tag_name, "circle")) {
             var cx = parseF32Attr(attrs.getRaw("cx"), 0.0);
@@ -167,15 +173,15 @@ pub fn svgToIr(alloc: mem.Allocator, svg: []const u8) ![]const f32 {
             }
         } else if (mem.eql(u8, tag_name, "polyline")) {
             const points_raw = attrs.getRaw("points") orelse continue;
-            var pl_ir: std.ArrayList(f32) = .empty;
-            defer pl_ir.deinit(alloc);
-            try parsePolylinePoints(&pl_ir, alloc, points_raw, viewbox);
+            var pl_points: std.ArrayList(f32) = .empty;
+            defer pl_points.deinit(alloc);
+            try parsePolylinePoints(&pl_points, alloc, points_raw, viewbox);
             const fv = fill_opacity > 0.0;
             const sv = stroke_opacity > 0.0;
             if (have_fill and fv) {
                 try appendPaint(&ir, alloc, fill_spec.?, svg_color, fill_opacity, grads);
                 try appendBeginFill(&ir, alloc, fill_rule);
-                try ir.appendSlice(alloc, pl_ir.items);
+                try appendPolylineFillPath(&ir, alloc, pl_points.items);
                 try ir.append(alloc, icon_vector.op_end_fill_path);
             }
             if (have_stroke and sv) {
@@ -184,7 +190,7 @@ pub fn svgToIr(alloc: mem.Allocator, svg: []const u8) ![]const f32 {
                 try ir.appendSlice(alloc, &.{ icon_vector.op_stroke_join, @floatFromInt(@intFromEnum(stroke_join)) });
                 try ir.appendSlice(alloc, &.{ icon_vector.op_stroke_miter_limit, 4.0 });
                 try appendPaint(&ir, alloc, stroke_spec.?, svg_color, stroke_opacity, grads);
-                try ir.appendSlice(alloc, pl_ir.items);
+                try ir.appendSlice(alloc, pl_points.items);
             }
         }
     }
@@ -205,8 +211,8 @@ fn applyTranslate(tx: []const u8, cx: *f32, cy: *f32) void {
     cy.* += dy;
 }
 
-fn extractGradients(alloc: mem.Allocator, svg: []const u8, viewbox: svg_parser.ViewBox) [4]??GradSpec {
-    var result: [4]??GradSpec = .{ null, null, null, null };
+fn extractGradients(alloc: mem.Allocator, svg: []const u8, viewbox: svg_parser.ViewBox) [4]?GradSpec {
+    var result: [4]?GradSpec = .{ null, null, null, null };
     var defs_start: ?usize = null;
     const svg_idx: usize = 0;
     while (true) {
@@ -277,12 +283,12 @@ fn extractGradients(alloc: mem.Allocator, svg: []const u8, viewbox: svg_parser.V
             result[grad_idx] = GradSpec{ .radial = .{
                 .space = space,
                 .spread = spread,
-                .cx = parseF32Attr(attrs.getRaw("cx"), 0.5) / if (space == .user_space) 1.0 else 1.0,
-                .cy = parseF32Attr(attrs.getRaw("cy"), 0.5) / if (space == .user_space) 1.0 else 1.0,
-                .radius = parseF32Attr(attrs.getRaw("r"), 0.5) / if (space == .user_space) 1.0 else 1.0,
-                .fx = parseF32Attr(attrs.getRaw("fx"), 0.5) / if (space == .user_space) 1.0 else 1.0,
-                .fy = parseF32Attr(attrs.getRaw("fy"), 0.5) / if (space == .user_space) 1.0 else 1.0,
-                .focal_radius = parseF32Attr(attrs.getRaw("fr"), 0.0) / if (space == .user_space) 1.0 else 1.0,
+                .cx = parseF32Attr(attrs.getRaw("cx"), 0.5),
+                .cy = parseF32Attr(attrs.getRaw("cy"), 0.5),
+                .radius = parseF32Attr(attrs.getRaw("r"), 0.5),
+                .fx = parseF32Attr(attrs.getRaw("fx"), 0.5),
+                .fy = parseF32Attr(attrs.getRaw("fy"), 0.5),
+                .focal_radius = parseF32Attr(attrs.getRaw("fr"), 0.0),
                 .stops = stops,
             } };
         } else {
@@ -292,7 +298,7 @@ fn extractGradients(alloc: mem.Allocator, svg: []const u8, viewbox: svg_parser.V
             var y1 = parseF32Attr(attrs.getRaw("y1"), 0.0);
             var x2 = parseF32Attr(attrs.getRaw("x2"), 1.0);
             var y2 = parseF32Attr(attrs.getRaw("y2"), 0.0);
-            if (space == .object_bounding_box) {
+            if (space == .user_space) {
                 x1 /= viewbox.width;
                 y1 /= viewbox.height;
                 x2 /= viewbox.width;
@@ -303,10 +309,7 @@ fn extractGradients(alloc: mem.Allocator, svg: []const u8, viewbox: svg_parser.V
                 if (mem.startsWith(u8, h_trim, "#")) {
                     for (&result) |*existing| {
                         if (existing.*) |e| {
-                            if ((std.meta.activeTag(e) == .linear)) {
-                                // inherit stops from referenced gradient
-                                // for now just use the stops we have
-                            }
+                            _ = e;
                         }
                     }
                 }
@@ -323,7 +326,7 @@ fn extractGradients(alloc: mem.Allocator, svg: []const u8, viewbox: svg_parser.V
     return result;
 }
 
-fn findGradById(grads: [4]??GradSpec, id: []const u8) ?GradSpec {
+fn findGradById(grads: [4]?GradSpec, id: []const u8) ?GradSpec {
     _ = id;
     for (grads) |g| {
         if (g) |spec| return spec;
@@ -399,7 +402,15 @@ fn parsePaintSpec(value: []const u8) ?PaintSpec {
     }
     if (mem.startsWith(u8, t, "url(")) {
         const end = mem.indexOfScalar(u8, t[4..], ')') orelse return null;
-        return PaintSpec{ .url = t[4 .. 4 + end] };
+        const ref = t[4 .. 4 + end];
+        const after = mem.trim(u8, t[4 + end + 1 ..], " ");
+        const fallback: ?icon_vector.Paint = if (after.len > 0) blk: {
+            if (parsePaintSpec(after)) |ps| {
+                if (ps == .rgba) break :blk ps.rgba;
+            }
+            break :blk null;
+        } else null;
+        return PaintSpec{ .url = .{ .ref = ref, .fallback = fallback } };
     }
     if (t.len > 0 and t[0] == '#') {
         return PaintSpec{ .rgba = parseHexColor(t) orelse return null };
@@ -469,25 +480,40 @@ fn clampByte(v: i32) u8 {
     return @intCast(@max(0, @min(255, v)));
 }
 
-fn appendPaint(ir: *std.ArrayList(f32), alloc: mem.Allocator, spec: PaintSpec, svg_color: ?PaintSpec, opacity: f32, grads: [4]??GradSpec) !void {
+fn appendPaint(ir: *std.ArrayList(f32), alloc: mem.Allocator, spec: PaintSpec, svg_color: ?PaintSpec, opacity: f32, grads: [4]?GradSpec) !void {
     switch (spec) {
         .rgba => |c| {
             const a = if (opacity < 1.0)
-                clampByte(@intFromFloat(@as(f32, @floatFromInt(c.a)) * opacity))
+                @as(u8, @intFromFloat(@round(@as(f32, @floatFromInt(c.a)) * opacity)))
             else
                 c.a;
             try ir.appendSlice(alloc, &.{ icon_vector.op_paint_rgba, @floatFromInt(c.r), @floatFromInt(c.g), @floatFromInt(c.b), @floatFromInt(a) });
         },
         .current_color => {
-            if (opacity < 1.0) {
-                try ir.appendSlice(alloc, &.{ icon_vector.op_paint_current_color_alpha, @floatFromInt(clampByte(@intFromFloat(opacity * 255.0))) });
-            } else {
-                try ir.append(alloc, icon_vector.op_paint_current_color);
-            }
+            const base = svg_color orelse {
+                if (opacity < 1.0) {
+                    const a: u8 = @intFromFloat(@round(opacity * 255.0));
+                    try ir.appendSlice(alloc, &.{ icon_vector.op_paint_current_color_alpha, @floatFromInt(a) });
+                } else {
+                    try ir.append(alloc, icon_vector.op_paint_current_color);
+                }
+                return;
+            };
+            const c = switch (base) {
+                .rgba => |v| v,
+                else => return,
+            };
+            const a = if (opacity < 1.0)
+                @as(u8, @intFromFloat(@round(@as(f32, @floatFromInt(c.a)) * opacity)))
+            else
+                c.a;
+            try ir.appendSlice(alloc, &.{ icon_vector.op_paint_rgba, @floatFromInt(c.r), @floatFromInt(c.g), @floatFromInt(c.b), @floatFromInt(a) });
         },
-        .url => |ref| {
-            if (findGradById(grads, ref)) |gs| {
+        .url => |info| {
+            if (findGradById(grads, info.ref)) |gs| {
                 try appendGradOp(ir, alloc, gs, svg_color, opacity);
+            } else if (info.fallback) |c| {
+                try ir.appendSlice(alloc, &.{ icon_vector.op_paint_rgba, @floatFromInt(c.r), @floatFromInt(c.g), @floatFromInt(c.b), @floatFromInt(c.a) });
             } else {
                 try ir.append(alloc, icon_vector.op_paint_current_color);
             }
@@ -507,7 +533,7 @@ fn appendGradOp(ir: *std.ArrayList(f32), alloc: mem.Allocator, gs: GradSpec, svg
             try ir.append(alloc, sc);
             for (l.stops) |s| {
                 const a = if (opacity < 1.0)
-                    clampByte(@intFromFloat(@as(f32, @floatFromInt(s.color.a)) * opacity))
+                    @as(u8, @intFromFloat(@round(@as(f32, @floatFromInt(s.color.a)) * opacity)))
                 else
                     s.color.a;
                 try ir.appendSlice(alloc, &.{ s.offset, @floatFromInt(s.color.r), @floatFromInt(s.color.g), @floatFromInt(s.color.b), @floatFromInt(a) });
@@ -573,6 +599,25 @@ fn parsePolylinePoints(ir: *std.ArrayList(f32), alloc: mem.Allocator, points: []
         try ir.append(alloc, @as(f32, @floatFromInt(values.items.len / 2)));
         try ir.appendSlice(alloc, values.items);
     }
+}
+
+fn appendPolylineFillPath(ir: *std.ArrayList(f32), alloc: mem.Allocator, items: []const f32) !void {
+    if (items.len < 4) return;
+    _ = items[0];
+    const point_count = @as(usize, @intFromFloat(items[1]));
+    if (point_count < 2) return;
+    const pts = items[2..];
+    if (pts.len < 2 * point_count) return;
+    try ir.append(alloc, icon_vector.op_move_to);
+    try ir.append(alloc, pts[0]);
+    try ir.append(alloc, pts[1]);
+    var i: usize = 1;
+    while (i < point_count) : (i += 1) {
+        try ir.append(alloc, icon_vector.op_line_to);
+        try ir.append(alloc, pts[2 * i]);
+        try ir.append(alloc, pts[2 * i + 1]);
+    }
+    try ir.append(alloc, icon_vector.op_close_path);
 }
 
 fn parseViewBox(value: []const u8) ?svg_parser.ViewBox {
@@ -693,9 +738,9 @@ fn extractAttributes(alloc: mem.Allocator, tag: []const u8) AttrMap {
 }
 
 fn appendClipPathForRef(alloc: mem.Allocator, ir: *std.ArrayList(f32), svg: []const u8, ref: []const u8, viewbox: svg_parser.ViewBox) !void {
-    const defs_start = mem.indexOf(u8, svg, "<clipPath") orelse return;
-    const defs_end = mem.indexOf(u8, svg[defs_start..], "</clipPath>") orelse return;
-    const clip_content = svg[defs_start .. defs_start + defs_end + 12];
+    const clip_start = mem.indexOf(u8, svg, "<clipPath") orelse return;
+    const clip_end = mem.indexOf(u8, svg[clip_start..], "</clipPath>") orelse return;
+    const clip_content = svg[clip_start .. clip_start + clip_end + 12];
 
     const id_start = mem.indexOf(u8, clip_content, "id=\"") orelse return;
     const id_val_start = id_start + 4;
@@ -704,6 +749,8 @@ fn appendClipPathForRef(alloc: mem.Allocator, ir: *std.ArrayList(f32), svg: []co
     if (!mem.eql(u8, clip_id, ref)) return;
 
     try ir.append(alloc, icon_vector.op_begin_clip_path);
+    try ir.appendSlice(alloc, &.{ icon_vector.op_paint_rgba, 255, 255, 255, 255 });
+    try ir.append(alloc, icon_vector.op_begin_fill_path);
     var search = clip_content;
     while (true) {
         const path_tag_start = mem.indexOf(u8, search, "<path") orelse break;
@@ -714,5 +761,6 @@ fn appendClipPathForRef(alloc: mem.Allocator, ir: *std.ArrayList(f32), svg: []co
         const d = pattrs.getRaw("d") orelse continue;
         try appendPathData(ir, alloc, d, viewbox);
     }
+    try ir.append(alloc, icon_vector.op_end_fill_path);
     try ir.append(alloc, icon_vector.op_end_clip_path);
 }

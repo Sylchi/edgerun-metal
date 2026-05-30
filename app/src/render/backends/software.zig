@@ -2366,7 +2366,7 @@ test "software renderer honors explicit svg solid paint colors" {
         icon_vector.op_filled_round_rect, 2.0 / 24.0, 4.0 / 24.0, 8.0 / 24.0, 8.0 / 24.0, 0,
         icon_vector.op_paint_rgba, 0, 0, 255, 255,
         icon_vector.op_filled_round_rect, 14.0 / 24.0, 4.0 / 24.0, 8.0 / 24.0, 8.0 / 24.0, 0,
-        icon_vector.op_paint_rgba, 0, 128, 0, 128,
+        icon_vector.op_paint_rgba, 0, 255, 0, 128,
         icon_vector.op_filled_round_rect, 2.0 / 24.0, 14.0 / 24.0, 8.0 / 24.0, 8.0 / 24.0, 0,
         icon_vector.op_paint_rgba, 200, 100, 50, 128,
         icon_vector.op_filled_round_rect, 14.0 / 24.0, 14.0 / 24.0, 8.0 / 24.0, 8.0 / 24.0, 0,

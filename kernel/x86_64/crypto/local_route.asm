@@ -20,6 +20,7 @@
 %include "x86_64/macros.inc"
 %include "x86_64/wasm_defines.inc"
 %include "x86_64/crypto/local_constants.inc"
+%include "x86_64/agent/agent_constants.inc"
 
 extern er_memcpy
 extern er_memset
@@ -290,6 +291,81 @@ er_fn er_local_route_unregister
     er_ret
 
 ; ==================================================================
+; er_local_route_set_handler — set agent handler for a slot
+; int er_local_route_set_handler(u32 slot_id, void *handler, u8 flags)
+; rdi = slot_id, rsi = handler fn ptr, dl = flags
+; Returns: eax = 0, edx = 0 on success
+; ==================================================================
+er_fn er_local_route_set_handler
+    push    rbx
+    push    r12
+
+    mov     r12b, dl            ; flags
+
+    call    _local_route_entry_ptr
+    test    edx, edx
+    jnz     .bad
+
+    ; Store handler pointer
+    mov     [rax + LOCAL_ID_HANDLER], rsi
+    ; Store flags
+    mov     [rax + LOCAL_ID_FLAGS], r12b
+
+    xor     eax, eax
+    er_ok
+    pop     r12
+    pop     rbx
+    er_ret
+
+.bad:
+    pop     r12
+    pop     rbx
+    er_ret
+
+; ==================================================================
+; _agent_dispatch — call agent handler for a slot
+; rdi = slot_id, rsi = cell_ptr
+;
+; If the slot has a registered handler with AGENT_FLAG_SYNC,
+; calls the handler directly. The handler receives:
+;   rdi = cell pointer
+;   rsi = sender slot_id (read from cell payload bytes 2-5)
+; ==================================================================
+_agent_dispatch:
+    push    rbx
+    push    r12
+
+    mov     r12, rsi            ; cell_ptr
+    mov     ebx, edi            ; slot_id
+
+    call    _local_route_entry_ptr
+    test    edx, edx
+    jnz     .done
+
+    ; Check flags for synchronous dispatch
+    movzx   ecx, byte [rax + LOCAL_ID_FLAGS]
+    test    cl, AGENT_FLAG_SYNC
+    jz      .done
+
+    ; Check if handler is set
+    mov     rcx, [rax + LOCAL_ID_HANDLER]
+    test    rcx, rcx
+    jz      .done
+
+    ; Get sender slot_id from cell payload bytes 2-5
+    lea     rdi, [r12 + LOCAL_CELL_PAYLOAD]
+    mov     esi, [rdi + 2]      ; sender slot_id
+
+    ; Call handler(rdi=cell_ptr, rsi=sender_slot_id)
+    mov     rdi, r12
+    call    rcx
+
+.done:
+    pop     r12
+    pop     rbx
+    ret
+
+; ==================================================================
 ; er_local_route_get_ring — get ring buffer pointer for a slot
 ; int er_local_route_get_ring(u32 slot_id)
 ; rdi = slot_id
@@ -332,6 +408,11 @@ er_fn er_local_cell_send
     mov     rdi, rax        ; ring_ptr
     mov     rsi, r12        ; cell
     call    er_local_ring_write
+
+    ; Dispatch to agent handler if registered
+    mov     edi, ebx        ; slot_id
+    mov     rsi, r12        ; cell ptr
+    call    _agent_dispatch
 
     pop     r12
     pop     rbx
@@ -409,11 +490,64 @@ er_fn er_local_cell_send_to_slot
 ; er_local_cell_poll — called from main loop
 ; void er_local_cell_poll(void)
 ;
-; Currently a stub. In the future, will iterate registered identities
-; and deliver pending cells to WASM app handlers.
+; Iterates all registered identities. For each with a handler
+; and pending cells, calls the handler.
 ; ==================================================================
 er_fn er_local_cell_poll
+    push    rbx
+    push    r12
+    push    r13
+
+    xor     r12d, r12d          ; slot index
+
+.loop:
+    cmp     r12d, LOCAL_MAX_IDENTITIES
+    jae     .done
+
+    mov     edi, r12d
+    call    _local_route_entry_ptr
+    test    edx, edx
+    jnz     .next
+
+    ; Check for handler
+    mov     rcx, [rax + LOCAL_ID_HANDLER]
+    test    rcx, rcx
+    jz      .next
+
+    ; Check ring for pending cells
+    lea     r13, [rax + LOCAL_ID_RING]
+    mov     rdi, r13
+    call    er_local_ring_available
+    test    eax, eax
+    jz      .next
+
+    ; Read one pending cell and dispatch
+    sub     rsp, LOCAL_CELL_SIZE
+    mov     rdi, r13
+    mov     rsi, rsp
+    call    er_local_ring_read
+    test    edx, edx
+    jnz     .pop_next
+
+    ; Dispatch: handler(rdi=cell_ptr, rsi=sender_slot_id)
+    mov     rdi, rsp
+    lea     rsi, [rsp + LOCAL_CELL_PAYLOAD + 2]
+    mov     esi, [rsi]          ; sender slot_id from payload
+    call    rcx
+
+.pop_next:
+    add     rsp, LOCAL_CELL_SIZE
+
+.next:
+    inc     r12d
+    jmp     .loop
+
+.done:
+    xor     eax, eax
     er_ok
+    pop     r13
+    pop     r12
+    pop     rbx
     er_ret
 
 ; ==================================================================
@@ -519,18 +653,18 @@ er_module_name: db "er"
 er_module_name_len: dq 2
 
 ; Function name strings
-fn_send:       db "local_cell_send"
-fn_send_len:   dq 15
-fn_recv:       db "local_cell_recv"
-fn_recv_len:   dq 15
-fn_register:   db "local_route_register"
-fn_register_len: dq 21
-fn_lookup:     db "local_route_lookup"
-fn_lookup_len: dq 19
-fn_unregister: db "local_route_unregister"
-fn_unregister_len: dq 23
-fn_available:  db "local_cell_available"
-fn_available_len: dq 20
+fn_send:       db "cell_send"
+fn_send_len:   dq 9
+fn_recv:       db "cell_recv"
+fn_recv_len:   dq 9
+fn_register:   db "route_register"
+fn_register_len: dq 15
+fn_lookup:     db "route_lookup"
+fn_lookup_len: dq 12
+fn_unregister: db "route_unregister"
+fn_unregister_len: dq 17
+fn_available:  db "cell_available"
+fn_available_len: dq 14
 
 ; Import table — 6 entries × 40 bytes = 240 bytes total
 ; Note: assembled as ELF32, use dd (4-byte) with zero upper padding

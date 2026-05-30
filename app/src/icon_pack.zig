@@ -1,48 +1,36 @@
 const std = @import("std");
 const mem = std.mem;
 const icon_vector = @import("icon_vector.zig");
+const icon = @import("icon.zig");
 
-const ir_data = @import("gen/icon_asset_pack_ir.zig").data;
-const IndexEntry = @import("gen/icon_asset_pack_index.zig").Entry;
-const index_entries = @import("gen/icon_asset_pack_index.zig").entries;
+const ir_bytes = @embedFile("gen/icon_asset_pack_ir.bin");
+const index_bytes = @embedFile("gen/icon_asset_pack_index.bin");
 
-pub const cursor_pointer_2_icon_id: u32 = 40_001;
-pub const cursor_hand_finger_icon_id: u32 = 40_002;
+pub const icon_count: u32 = mem.readInt(u32, index_bytes[4..8], .little);
+
+pub const cursor_pointer_2_icon_id: u32 = @intFromEnum(icon.Icon.pointer_2) + 1;
+pub const cursor_hand_finger_icon_id: u32 = @intFromEnum(icon.Icon.hand_finger) + 1;
 
 pub fn getIr(icon_id: u32) ?[]const f32 {
-    const entry = getEntry(icon_id) orelse return null;
-    const byte_start = entry.ir_offset;
-    const byte_len = entry.ir_len;
-    if (byte_start + byte_len > ir_data.len) return null;
-    const slice = ir_data[byte_start..][0..byte_len];
-    const aligned: []align(4) const u8 = @alignCast(slice);
-    return std.mem.bytesAsSlice(f32, aligned);
-}
-
-fn getEntry(icon_id: u32) ?IndexEntry {
-    if (icon_id == cursor_pointer_2_icon_id) return findEntryByName("pointer-2");
-    if (icon_id == cursor_hand_finger_icon_id) return findEntryByName("hand-finger");
-    if (icon_id == 0 or icon_id > index_entries.len) return null;
-    return index_entries[icon_id - 1];
-}
-
-fn findEntryByName(name: []const u8) ?IndexEntry {
-    for (index_entries) |entry| {
-        if (std.mem.eql(u8, entry.name, name)) return entry;
-    }
-    return null;
+    if (icon_id == 0 or icon_id > icon_count) return null;
+    const off: usize = 8 + (icon_id - 1) * 8;
+    const ir_offset = mem.readInt(u32, index_bytes[off..][0..4], .little);
+    const ir_len = mem.readInt(u32, index_bytes[off + 4 ..][0..4], .little);
+    if (ir_offset + ir_len > ir_bytes.len) return null;
+    const ptr: [*]const f32 = @ptrCast(@alignCast(ir_bytes.ptr + ir_offset));
+    return ptr[0 .. ir_len / @sizeOf(f32)];
 }
 
 test "asset pack has tabler icons" {
-    try std.testing.expect(index_entries.len > 5000);
+    try std.testing.expect(icon_count > 5000);
 }
 
 test "asset pack contains cursor icons" {
-    try std.testing.expect(findEntryByName("pointer-2") != null);
-    try std.testing.expect(findEntryByName("hand-finger") != null);
+    try std.testing.expect(getIr(cursor_pointer_2_icon_id) != null);
+    try std.testing.expect(getIr(cursor_hand_finger_icon_id) != null);
 }
 
-test "cursor icon ids resolve to valid entries" {
+test "getIr returns non-empty data for cursor icons" {
     const pointer = getIr(cursor_pointer_2_icon_id) orelse return error.TestFailed;
     const hand = getIr(cursor_hand_finger_icon_id) orelse return error.TestFailed;
     try std.testing.expect(pointer.len > 0);

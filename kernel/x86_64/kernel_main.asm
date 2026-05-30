@@ -28,6 +28,7 @@ extern er_local_cell_poll
 extern er_local_cell_imports
 extern er_local_cell_import_count
 extern er_wasm_runtime_ptr
+extern er_agent_http_init
 
 extern er_mmio_read32
 extern er_tpm_crb_present
@@ -111,6 +112,10 @@ extern er_fn_run
 extern wasm_return42_start
 extern wasm_return42_len
 extern wasm_export_name
+extern agent_wasm_test_start
+extern agent_wasm_test_len
+extern agent_wasm_test_export_name
+extern er_memset
 
 extern er_sha256_init
 extern er_sha256_update
@@ -201,6 +206,7 @@ ok_text:       db "ok", 0
 fail_text:     db "FAIL", 0
 pass_text:       db "PASS asm-bare-metal-x86_64", 0
 check_wasm:      db "check: wasm return42 ", 0
+check_agent:     db "check: wasm agent_test ", 0
 bench_banner:  db "TPM SHA-256 bench", 0
 bench_sha64:   db "  sha256 64B: ", 0
 bench_sha1k:   db "  sha256 1KB: ", 0
@@ -1602,6 +1608,42 @@ er_fn er_kernel_main
     call    er_serial_putchar
     call    .crlf
 
+    ; ── Test 2: agent WASM test ──
+    ; rbx still has RuntimeConfig (er_fn_run preserves callee-saved regs)
+
+    ; Zero WASM memory for clean state between modules
+    push    rbx
+    lea     rdi, [rel wasm_memory]
+    xor     esi, esi
+    mov     edx, 65536
+    call    er_memset
+    pop     rbx
+
+    ; er_fn_run(rdi=runtime, rsi=wasm_bytes, rdx=wasm_len,
+    ;           rcx=export_name, r8=export_name_len)
+    mov     rdi, rbx            ; runtime
+    lea     rsi, [rel agent_wasm_test_start]
+    mov     rdx, [rel agent_wasm_test_len]
+    lea     rcx, [rel agent_wasm_test_export_name]
+    mov     r8, 1               ; export name length
+    call    er_fn_run
+    push    rax                 ; save result
+
+    ; Print check label for agent test
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_agent]
+    call    er_serial_puts
+
+    ; Print result (0 = success)
+    pop     rsi
+    mov     rdi, COM1_PORT
+    call    er_serial_puthex64
+
+    mov     rdi, COM1_PORT
+    mov     sil, ' '
+    call    er_serial_putchar
+    call    .crlf
+
     add     rsp, 96
 
 .pass:
@@ -1625,6 +1667,9 @@ er_fn er_kernel_main
     ; Save wasm_runtime ptr for WASM import wrappers
     lea     rax, [rel wasm_runtime]
     mov     [rel er_wasm_runtime_ptr], rax
+
+    ; ─── Agent init ──────────────────────────────────────────
+    call    er_agent_http_init
 
     ; ─── Boot Device Summary ─────────────────────────────────
     ; Show detected peripherals on display before entering shell
