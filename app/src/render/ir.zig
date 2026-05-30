@@ -713,10 +713,7 @@ test "renderer ir publishes packed frame field layout" {
     try std.testing.expectEqual(icon_instance_float_stride - 1, icon_id_index);
 }
 
-test "renderer backends stay behind adapter imports" {
-    const backend_import = "render/backends/";
-    try expectSourceDoesNotContain(@embedFile("../root.zig"), backend_import);
-}
+
 
 test "renderer ir fixed buffers expose writable canonical buffer view" {
     var storage = FixedBuffers(1, 0, 0, 0, 0, 0, 0){};

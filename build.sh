@@ -81,6 +81,7 @@ KERNEL_ASM_SRCS="
 	crypto/tor.asm
 	crypto/local_cell.asm
 	crypto/local_route.asm
+	crypto/local_circuit.asm
 	agent/http_agent.asm
 	agent/da.asm
 	ui/render_ir.asm

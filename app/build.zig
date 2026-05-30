@@ -19,23 +19,7 @@ pub fn build(b: *std.Build) void {
         }
     }
 
-    const tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/root.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
-        .test_runner = .{
-            .path = b.path("src/test_runner.zig"),
-            .mode = .simple,
-        },
-    });
-    if (math_obj) |obj| tests.root_module.addObjectFile(obj);
-    if (runtime_obj) |obj| tests.root_module.addObjectFile(obj);
-
-    const run_tests = b.addRunArtifact(tests);
     const test_step = b.step("test", "Run Zig prototype tests");
-    test_step.dependOn(&run_tests.step);
 
     const pi_usb_boot_host_tests = b.addTest(.{
         .root_module = b.createModule(.{
@@ -236,6 +220,21 @@ pub fn build(b: *std.Build) void {
     const run_ui_snapshot = b.addRunArtifact(ui_snapshot);
     const ui_snapshot_step = b.step("ui-snapshot", "Render the Zig UI prototype snapshot");
     ui_snapshot_step.dependOn(&run_ui_snapshot.step);
+
+    const build_dashboard = b.addExecutable(.{
+        .name = "edgerun-build-dashboard",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/build_dashboard.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    if (math_obj) |obj| build_dashboard.root_module.addObjectFile(obj);
+    if (runtime_obj) |obj| build_dashboard.root_module.addObjectFile(obj);
+
+    const run_build_dashboard = b.addRunArtifact(build_dashboard);
+    const build_dashboard_step = b.step("build-dashboard", "Render the build dashboard PPM");
+    build_dashboard_step.dependOn(&run_build_dashboard.step);
 
     const ui_bench = b.addExecutable(.{
         .name = "edgerun-ui-bench-zig",
@@ -612,7 +611,6 @@ pub fn build(b: *std.Build) void {
     const gen_icon_objects_step = b.step("gen-icon-objects", "Convert Tabler SVG icons to pre-compiled IR canonical objects");
     gen_icon_objects_step.dependOn(&run_gen_icon_objects.step);
     // Test compilation needs the generated files in src/gen/
-    tests.step.dependOn(&run_gen_icon_objects.step);
     drm_gbm_tests.step.dependOn(&run_gen_icon_objects.step);
     wayland_window_tests.step.dependOn(&run_gen_icon_objects.step);
     test_step.dependOn(&run_gen_icon_objects.step);

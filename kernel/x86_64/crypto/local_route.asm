@@ -32,6 +32,12 @@ extern er_local_ring_write
 extern er_local_ring_read
 extern er_local_ring_available
 
+; Import circuit functions from local_circuit.asm
+extern er_local_open_circuit
+extern er_local_send_cell
+extern er_local_recv_cell
+extern er_local_close_circuit
+
 ; ==================================================================
 ; BSS data — routing table
 ; ==================================================================
@@ -641,6 +647,62 @@ _wasm_import_local_cell_available:
     ret
 
 ; ==================================================================
+; Circuit WASM import wrappers
+; ==================================================================
+
+; er_wasm_circuit_open(rdi=dest_hash_ptr(i32), rsi=own_slot(i32)) -> i32 (fd)
+_wasm_import_circuit_open:
+    push    rsi              ; save own_slot (i32 value)
+    mov     rax, [er_wasm_runtime_ptr]
+    test    rax, rax
+    jz      .no_mem_open
+    mov     rax, [rax + RUNTIME_MEMORY_PTR_OFF]
+    add     rdi, rax         ; convert dest_hash ptr to host pointer
+    pop     rsi              ; restore own_slot (raw i32, not an offset)
+    jmp     er_local_open_circuit
+.no_mem_open:
+    add     rsp, 8
+    mov     eax, -1
+    er_err  ERROR_NOT_PRESENT
+    ret
+
+; er_wasm_circuit_send(rdi=fd(i32), rsi=cell_ptr(i32)) -> i32
+_wasm_import_circuit_send:
+    push    rdi
+    mov     rdi, [er_wasm_runtime_ptr]
+    test    rdi, rdi
+    jz      .no_mem_send
+    mov     rax, [rdi + RUNTIME_MEMORY_PTR_OFF]
+    pop     rdi
+    add     rsi, rax
+    jmp     er_local_send_cell
+.no_mem_send:
+    pop     rdi
+    mov     eax, -1
+    er_err  ERROR_NOT_PRESENT
+    ret
+
+; er_wasm_circuit_recv(rdi=fd(i32), rsi=out_cell_ptr(i32)) -> i32
+_wasm_import_circuit_recv:
+    push    rdi
+    mov     rdi, [er_wasm_runtime_ptr]
+    test    rdi, rdi
+    jz      .no_mem_recv
+    mov     rax, [rdi + RUNTIME_MEMORY_PTR_OFF]
+    pop     rdi
+    add     rsi, rax
+    jmp     er_local_recv_cell
+.no_mem_recv:
+    pop     rdi
+    mov     eax, -1
+    er_err  ERROR_NOT_PRESENT
+    ret
+
+; er_wasm_circuit_close(rdi=fd(i32)) -> i32
+_wasm_import_circuit_close:
+    jmp     er_local_close_circuit
+
+; ==================================================================
 ; Host import table
 ;
 ; Array of HostImport struct entries (HOST_IMPORT_SIZE each).
@@ -665,8 +727,16 @@ fn_unregister: db "route_unregister"
 fn_unregister_len: dq 16
 fn_available:  db "cell_available"
 fn_available_len: dq 14
+fn_circ_open:  db "circuit_open"
+fn_circ_open_len: dq 11
+fn_circ_send:  db "circuit_send"
+fn_circ_send_len: dq 12
+fn_circ_recv:  db "circuit_recv"
+fn_circ_recv_len: dq 12
+fn_circ_close: db "circuit_close"
+fn_circ_close_len: dq 12
 
-; Import table — 6 entries × 40 bytes = 240 bytes total
+; Import table — 10 entries × 40 bytes = 400 bytes total
 ; Note: assembled as ELF32, use dd (4-byte) with zero upper padding
 ; to keep 8-byte-per-field struct layout (HOST_IMPORT_SIZE = 40).
 global er_local_cell_imports
@@ -713,6 +783,34 @@ dd fn_available, 0
 dd 14, 0
 dd _wasm_import_local_cell_available, 0
 
+; Entry 6: circuit_open
+dd er_module_name, 0
+dd 2, 0
+dd fn_circ_open, 0
+dd 11, 0
+dd _wasm_import_circuit_open, 0
+
+; Entry 7: circuit_send
+dd er_module_name, 0
+dd 2, 0
+dd fn_circ_send, 0
+dd 12, 0
+dd _wasm_import_circuit_send, 0
+
+; Entry 8: circuit_recv
+dd er_module_name, 0
+dd 2, 0
+dd fn_circ_recv, 0
+dd 12, 0
+dd _wasm_import_circuit_recv, 0
+
+; Entry 9: circuit_close
+dd er_module_name, 0
+dd 2, 0
+dd fn_circ_close, 0
+dd 12, 0
+dd _wasm_import_circuit_close, 0
+
 ; Import count
 global er_local_cell_import_count
-er_local_cell_import_count: dq 6
+er_local_cell_import_count: dq 10

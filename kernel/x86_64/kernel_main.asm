@@ -25,6 +25,7 @@ extern er_tor_init
 extern er_tor_poll
 extern er_local_cell_init
 extern er_local_cell_poll
+extern er_local_circuit_init
 extern er_local_cell_imports
 extern er_local_cell_import_count
 extern er_wasm_runtime_ptr
@@ -1245,6 +1246,9 @@ er_fn er_kernel_main
     jmp     .bt_check
 
 .net_init_str: db " net init: ", 0
+.dbg_tor:   db " tor: init ok", 0
+.dbg_cell:  db " cell: init ok", 0
+.dbg_circ:  db " circ: init ok", 0
 .ok_str:       db "ok", 0
 .fail_str:     db "FAIL", 0
 
@@ -1716,6 +1720,12 @@ er_fn er_kernel_main
     ; Save wasm_runtime ptr for WASM import wrappers
     lea     rax, [rel wasm_runtime]
     mov     [rel er_wasm_runtime_ptr], rax
+
+    ; ─── Local circuit transport init ────────────────────────
+    call    er_local_circuit_init
+    mov     esi, 0x3f8
+    lea     rdi, [rel .dbg_circ]
+    call    er_serial_puts
 
     ; ─── Agent init ──────────────────────────────────────────
     call    er_agent_http_init
