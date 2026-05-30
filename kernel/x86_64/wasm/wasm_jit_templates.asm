@@ -746,6 +746,155 @@ er_fn jit_template_i64_extend_i32_u
     ret
 
 ; ==================================================================
+; Sign extension templates
+; =================================================================+
+
+; i32.extend8_s (0xC0) — movsx eax, al
+er_fn jit_template_i32_extend8_s
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    mov     al, 0x0F
+    call    jit_emit_byte
+    mov     al, 0xBE
+    call    jit_emit_byte
+    mov     al, 0xC0
+    call    jit_emit_modrm
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; i32.extend16_s (0xC1) — movsx eax, ax
+er_fn jit_template_i32_extend16_s
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    mov     al, 0x0F
+    call    jit_emit_byte
+    mov     al, 0xBF
+    call    jit_emit_byte
+    mov     al, 0xC0
+    call    jit_emit_modrm
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; i64.extend8_s (0xC2) — REX.W movsx rax, al
+er_fn jit_template_i64_extend8_s
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    mov     al, 0x48
+    call    jit_emit_byte
+    mov     al, 0x0F
+    call    jit_emit_byte
+    mov     al, 0xBE
+    call    jit_emit_byte
+    mov     al, 0xC0
+    call    jit_emit_modrm
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; i64.extend16_s (0xC3) — REX.W movsx rax, ax
+er_fn jit_template_i64_extend16_s
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    mov     al, 0x48
+    call    jit_emit_byte
+    mov     al, 0x0F
+    call    jit_emit_byte
+    mov     al, 0xBF
+    call    jit_emit_byte
+    mov     al, 0xC0
+    call    jit_emit_modrm
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; i64.extend32_s (0xC4) — REX.W movsxd rax, eax
+er_fn jit_template_i64_extend32_s
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    mov     al, 0x48
+    call    jit_emit_byte
+    mov     al, 0x63
+    call    jit_emit_byte
+    mov     al, 0xC0
+    call    jit_emit_modrm
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; ==================================================================
+; Reference type templates
+; =================================================================+
+
+; ref.null (0xD0) — push -1 (null reference)
+er_fn jit_template_ref_null
+    mov     eax, -1
+    jmp     jit_emit_push_imm32
+
+; ref.is_null (0xD1) — pop, cmp -1, sete al, push
+er_fn jit_template_ref_is_null
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    mov     al, 0x83           ; cmp eax, -1 (83 F8 FF)
+    call    jit_emit_byte
+    mov     al, 0xF8
+    call    jit_emit_modrm
+    mov     al, -1
+    call    jit_emit_byte
+    mov     al, 0x0F           ; sete al (0F 94 C0)
+    call    jit_emit_byte
+    mov     al, 0x94
+    call    jit_emit_byte
+    mov     al, 0xC0
+    call    jit_emit_modrm
+    mov     al, 0x0F           ; movzx eax, al (0F B6 C0)
+    call    jit_emit_byte
+    mov     al, 0xB6
+    call    jit_emit_byte
+    mov     al, 0xC0
+    call    jit_emit_modrm
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; ref.func (0xD2) — push function index as reference
+er_fn jit_template_ref_func
+    mov     eax, [rdi + 12]  ; imm0 = function index
+    jmp     jit_emit_push_imm32
+
+; ==================================================================
+; Parametric templates
+; =================================================================+
+
+; select (0x1B) / select_typed (0x1C)
+er_fn jit_template_select
+    mov     cl, 2                           ; rdx = condition
+    call    jit_emit_pop_reg
+    mov     cl, 1                           ; rcx = false_val
+    call    jit_emit_pop_reg
+    xor     ecx, ecx                        ; rax = true_val
+    call    jit_emit_pop_reg
+    mov     al, 0x85                        ; test edx, edx
+    call    jit_emit_byte
+    mov     al, 0xD2
+    call    jit_emit_modrm
+    mov     al, 0x0F                        ; cmovz eax, ecx
+    call    jit_emit_byte
+    mov     al, 0x44
+    call    jit_emit_byte
+    mov     al, 0xC1
+    call    jit_emit_modrm
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; ==================================================================
+; Memory management templates
+; =================================================================+
+
+; memory.size (0x3F) — push current page count
+er_fn jit_template_memory_size
+    mov     cl, 2                           ; rdx
+    mov     eax, JitGlobals.memory_pages
+    call    jit_emit_load_global_to_reg
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; ==================================================================
 ; Memory op templates (i32.load, i64.load, i32.store, i64.store)
 ; =================================================================+
 
@@ -791,6 +940,84 @@ er_fn jit_template_i64_store
     xor     ecx, ecx
     call    jit_emit_pop_reg
     call    jit_emit_mem_store64
+    ret
+
+; ==================================================================
+; Narrow memory load/store templates
+; =================================================================+
+
+; i32.load8_s (0x2C)
+er_fn jit_template_i32_load8_s
+    mov     cl, 1
+    call    jit_emit_pop_reg
+    call    jit_emit_mem_load8_s
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; i32.load8_u (0x2D)
+er_fn jit_template_i32_load8_u
+    mov     cl, 1
+    call    jit_emit_pop_reg
+    call    jit_emit_mem_load8_u
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; i32.load16_s (0x2E)
+er_fn jit_template_i32_load16_s
+    mov     cl, 1
+    call    jit_emit_pop_reg
+    call    jit_emit_mem_load16_s
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; i32.load16_u (0x2F)
+er_fn jit_template_i32_load16_u
+    mov     cl, 1
+    call    jit_emit_pop_reg
+    call    jit_emit_mem_load16_u
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; i64.load8_s (0x30) — REX.W movsx to rax
+er_fn jit_template_i64_load8_s
+    mov     cl, 1
+    call    jit_emit_pop_reg
+    call    jit_emit_mem_load8_s_64
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; i64.load16_s (0x32) — REX.W movsx to rax
+er_fn jit_template_i64_load16_s
+    mov     cl, 1
+    call    jit_emit_pop_reg
+    call    jit_emit_mem_load16_s_64
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; i64.load32_s (0x34) — movsxd rax, dword
+er_fn jit_template_i64_load32_s
+    mov     cl, 1
+    call    jit_emit_pop_reg
+    call    jit_emit_mem_load32_s
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; i32.store8 (0x3A)
+er_fn jit_template_i32_store8
+    mov     cl, 1
+    call    jit_emit_pop_reg
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    call    jit_emit_mem_store8
+    ret
+
+; i32.store16 (0x3B)
+er_fn jit_template_i32_store16
+    mov     cl, 1
+    call    jit_emit_pop_reg
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    call    jit_emit_mem_store16
     ret
 
 ; ==================================================================
@@ -2519,23 +2746,18 @@ er_fn jit_template_f64_copysign
 
     ; btr rax, 63 (clear sign of left)
     mov     cl, 63
-    push    rcx
     call    jit_emit_btr_rax
-    pop     rcx
 
     ; isolate sign bit of right: and rcx, 0x8000000000000000
-    ; Need to load 64-bit mask into rdx
     mov     cl, 2                           ; rdx
     mov     rax, 0x8000000000000000
-    push    rcx
-    call    jit_emit_mov_reg_imm64
-    pop     rcx
-    ; and rcx, rdx
+    call    jit_emit_mov_reg_imm64           ; mov rdx, mask
+    ; and rcx, rdx (mask right to just sign bit)
     mov     cl, 1                           ; REX.W
     call    jit_emit_rex_nob
     mov     al, 0x21                        ; and r/m64, r64
     call    jit_emit_byte
-    mov     al, 0xCA                        ; ModRM: reg=1(rcx), rm=2(rdx) → and rcx, rdx
+    mov     al, 0xD1                        ; ModRM: reg=2(rdx), rm=1(rcx) → and rcx, rdx
     call    jit_emit_modrm
 
     ; or rax, rcx (combine)

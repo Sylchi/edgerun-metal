@@ -128,6 +128,10 @@ er_fn er_fb_text_clear
     xor     eax, eax
     rep stosb
 
+    xor     eax, eax
+    mov     [fb_cursor_x], eax
+    mov     [fb_cursor_y], eax
+
 .done_c:
     pop     rax
     pop     rcx
@@ -340,10 +344,9 @@ _fb_text_blit:
 
     mov     r12d, ecx               ; dest_x
     mov     r13d, r15d              ; dest_y
-    mov     r14d, ebp               ; h
 
-    ; Load color
-    mov     r15d, [rsp + 5*8]       ; fg_color (5 push regs on stack)
+    ; Load color from stack: 5 pushed regs + return address = 6*8
+    mov     r15d, [rsp + 6*8]       ; fg_color
 
     ; Clip rect to framebuffer bounds
     mov     ebx, 0                  ; clip left

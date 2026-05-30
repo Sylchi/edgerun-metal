@@ -39,6 +39,7 @@ jit_globals:
         at JitGlobals.function_count,   resq 1
         at JitGlobals.mem_grow_hook,    resq 1
         at JitGlobals.mem_grow_ctx,     resq 1
+        at JitGlobals.memory_pages,     resq 1
     iend
 
 ; Code cache — emitted x86_64 code lands here
@@ -139,6 +140,9 @@ er_wasm_jit_init:
     mov     rax, [rel runtime_memory_grow_ctx]
     mov     [rel jit_globals + JitGlobals.mem_grow_ctx], rax
 
+    mov     rax, [rel executor_memory_pages]
+    mov     [rel jit_globals + JitGlobals.memory_pages], rax
+
     ; --- fill template dispatch table ---
     ; Default all entries to jit_template_fallback
     lea     rax, [rel jit_template_fallback]
@@ -159,6 +163,9 @@ er_wasm_jit_init:
     _jit_init_op 0x10, jit_template_call
     _jit_init_op 0x11, jit_template_call_indirect
     _jit_init_op 0x1A, jit_template_drop
+    ; Parametric
+    _jit_init_op 0x1B, jit_template_select
+    _jit_init_op 0x1C, jit_template_select   ; select_typed = select (identical runtime behavior)
     _jit_init_op 0x20, jit_template_local_get
     _jit_init_op 0x21, jit_template_local_set
     _jit_init_op 0x22, jit_template_local_tee
@@ -198,11 +205,36 @@ er_wasm_jit_init:
     _jit_init_op 0xA7, jit_template_i32_wrap_i64
     _jit_init_op 0xAC, jit_template_i64_extend_i32_s
     _jit_init_op 0xAD, jit_template_i64_extend_i32_u
+    ; Sign extensions
+    _jit_init_op 0xC0, jit_template_i32_extend8_s
+    _jit_init_op 0xC1, jit_template_i32_extend16_s
+    _jit_init_op 0xC2, jit_template_i64_extend8_s
+    _jit_init_op 0xC3, jit_template_i64_extend16_s
+    _jit_init_op 0xC4, jit_template_i64_extend32_s
     ; Memory ops
     _jit_init_op 0x28, jit_template_i32_load
     _jit_init_op 0x29, jit_template_i64_load
+    ; Narrow loads
+    _jit_init_op 0x2C, jit_template_i32_load8_s
+    _jit_init_op 0x2D, jit_template_i32_load8_u
+    _jit_init_op 0x2E, jit_template_i32_load16_s
+    _jit_init_op 0x2F, jit_template_i32_load16_u
+    _jit_init_op 0x30, jit_template_i64_load8_s
+    _jit_init_op 0x31, jit_template_i32_load8_u   ; i64.load8_u = i32.load8_u
+    _jit_init_op 0x32, jit_template_i64_load16_s
+    _jit_init_op 0x33, jit_template_i32_load16_u   ; i64.load16_u = i32.load16_u
+    _jit_init_op 0x34, jit_template_i64_load32_s
+    _jit_init_op 0x35, jit_template_i32_load       ; i64.load32_u = i32.load
     _jit_init_op 0x36, jit_template_i32_store
     _jit_init_op 0x37, jit_template_i64_store
+    ; Narrow stores
+    _jit_init_op 0x3A, jit_template_i32_store8
+    _jit_init_op 0x3B, jit_template_i32_store16
+    _jit_init_op 0x3C, jit_template_i32_store8     ; i64.store8 = i32.store8
+    _jit_init_op 0x3D, jit_template_i32_store16    ; i64.store16 = i32.store16
+    _jit_init_op 0x3E, jit_template_i32_store      ; i64.store32 = i32.store
+    ; Memory management
+    _jit_init_op 0x3F, jit_template_memory_size
     ; i64 comparisons
     _jit_init_op 0x50, jit_template_i64_eqz
     _jit_init_op 0x51, jit_template_i64_eq
@@ -272,21 +304,43 @@ er_wasm_jit_init:
     _jit_init_op 0x93, jit_template_f32_sub
     _jit_init_op 0x94, jit_template_f32_mul
     _jit_init_op 0x95, jit_template_f32_div
+    ; Float binary (f32/f64: min/max/copysign)
+    _jit_init_op 0x96, jit_template_f32_min
+    _jit_init_op 0x97, jit_template_f32_max
+    _jit_init_op 0x98, jit_template_f32_copysign
     ; Float binary (f64: add/sub/mul/div)
     _jit_init_op 0xA0, jit_template_f64_add
     _jit_init_op 0xA1, jit_template_f64_sub
     _jit_init_op 0xA2, jit_template_f64_mul
     _jit_init_op 0xA3, jit_template_f64_div
+    _jit_init_op 0xA4, jit_template_f64_min
+    _jit_init_op 0xA5, jit_template_f64_max
+    _jit_init_op 0xA6, jit_template_f64_copysign
     ; Float load/store — reuse integer templates (same semantics)
     _jit_init_op 0x2A, jit_template_i32_load   ; f32.load
     _jit_init_op 0x2B, jit_template_i64_load   ; f64.load
     _jit_init_op 0x38, jit_template_i32_store  ; f32.store
     _jit_init_op 0x39, jit_template_i64_store  ; f64.store
+    ; Float conversions
+    _jit_init_op 0xB2, jit_template_f32_convert_i32_s
+    _jit_init_op 0xB3, jit_template_f32_convert_i32_u
+    _jit_init_op 0xB4, jit_template_f32_convert_i64_s
+    _jit_init_op 0xB5, jit_template_f32_convert_i64_u
+    _jit_init_op 0xB6, jit_template_f32_demote_f64
+    _jit_init_op 0xB7, jit_template_f64_convert_i32_s
+    _jit_init_op 0xB8, jit_template_f64_convert_i32_u
+    _jit_init_op 0xB9, jit_template_f64_convert_i64_s
+    _jit_init_op 0xBA, jit_template_f64_convert_i64_u
+    _jit_init_op 0xBB, jit_template_f64_promote_f32
     ; Reinterpret ops — no-op on x86_64 (bits are the same)
     _jit_init_op 0xBC, jit_template_i32_reinterpret_f32
     _jit_init_op 0xBD, jit_template_i64_reinterpret_f64
     _jit_init_op 0xBE, jit_template_f32_reinterpret_i32
     _jit_init_op 0xBF, jit_template_f64_reinterpret_i64
+    ; Reference types
+    _jit_init_op 0xD0, jit_template_ref_null
+    _jit_init_op 0xD1, jit_template_ref_is_null
+    _jit_init_op 0xD2, jit_template_ref_func
 
     mov     byte [rel jit_initialized], 1
     er_ok

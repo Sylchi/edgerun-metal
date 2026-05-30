@@ -21,6 +21,7 @@ extern er_memset
 extern er_serial_puts
 extern er_serial_putchar
 extern er_serial_puthex64
+extern er_serial_puthex32
 extern er_serial_crlf
 
 extern er_tor_ntor_keygen
@@ -286,7 +287,7 @@ er_fn er_tor_link_handshake
     ; Retry TCP connect until it succeeds (handles ARP resolution).
     ; The connect may fail with ERROR_ARP_PENDING — er_net_poll
     ; processes ARP replies and populates the cache between retries.
-    mov     ebx, 200             ; retry counter (ecx used for args)
+    mov     ebx, 3               ; retry counter (ecx used for args)
 .connect_retry:
     mov     edi, r12d
     mov     esi, r13d
@@ -294,56 +295,40 @@ er_fn er_tor_link_handshake
     xor     ecx, ecx            ; src_port = 0 (auto)
     call    er_tcp_connect
     test    eax, eax
-    jns     .connected
-    ; First iteration only: print error code
-    cmp     ebx, 200
-    jne     .no_dbg
+    jns     .connected2
+    ; Print return value hex on first failure
+    cmp     ebx, 3
+    jne     .skip_dbg
     push    rax
     push    rdx
     mov     edi, 0x3f8
     mov     esi, 'e'
     call    er_serial_putchar
-    mov     edi, 0x3f8
-    mov     esi, '='
-    call    er_serial_putchar
     pop     rdx
     mov     edi, 0x3f8
-    mov     esi, dl
-    call    er_serial_putchar    ; edx low byte as crude debug
+    mov     esi, edx
+    call    er_serial_puthex32
+    push    rdx
+    mov     edi, 0x3f8
+    mov     esi, ':'
+    call    er_serial_putchar
+    pop     rdx
+    pop     rax
+    mov     edi, 0x3f8
+    mov     esi, eax
+    call    er_serial_puthex32
     mov     edi, 0x3f8
     mov     esi, ' '
     call    er_serial_putchar
-    pop     rax
-    mov     edi, 0x3f8
-    mov     esi, 'r'
-    call    er_serial_putchar
-    mov     edi, 0x3f8
-    mov     esi, '='
-    call    er_serial_putchar
-    mov     edi, 0x3f8
-    mov     esi, al
-    call    er_serial_putchar    ; al low byte as crude debug
-    mov     edi, 0x3f8
-    mov     esi, 0x0D
-    call    er_serial_putchar
-    mov     edi, 0x3f8
-    mov     esi, 0x0A
-    call    er_serial_putchar
-.no_dbg:
+.skip_dbg:
     push    rbx
     call    er_net_poll
     pop     rbx
     dec     ebx
     jnz     .connect_retry
-    mov     edi, 0x3f8
-    mov     esi, 'T'            ; timeout marker
-    call    er_serial_putchar
     jmp     .connect_fail
 
-.connected:
-    mov     edi, 0x3f8
-    mov     esi, 'C'            ; connected marker
-    call    er_serial_putchar
+.connected2:
     mov     [tor_conn_id], eax
 
     ; Build VERSIONS cell once (before the poll loop)

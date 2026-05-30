@@ -824,6 +824,139 @@ er_fn jit_emit_mem_store64
     ret
 
 ; ------------------------------------------------------------------
+; Narrow memory load/store helpers — SIB addressing via [rdx + rcx]
+; Input: rcx = byte offset, rdx loaded internally with mem_ptr
+; -----------------------------------------------------------------+
+
+; Emit: movsx eax, byte [memory_base + rcx]  (0F BE 04 0A)
+er_fn jit_emit_mem_load8_s
+    mov     cl, 2
+    mov     eax, JitGlobals.mem_ptr
+    call    jit_emit_load_global_to_reg
+    mov     al, 0x0F
+    call    jit_emit_byte
+    mov     al, 0xBE
+    call    jit_emit_byte
+    mov     al, 0x04
+    call    jit_emit_modrm
+    mov     al, 0x0A
+    jmp     jit_emit_sib
+
+; Emit: movzx eax, byte [memory_base + rcx]  (0F B6 04 0A)
+er_fn jit_emit_mem_load8_u
+    mov     cl, 2
+    mov     eax, JitGlobals.mem_ptr
+    call    jit_emit_load_global_to_reg
+    mov     al, 0x0F
+    call    jit_emit_byte
+    mov     al, 0xB6
+    call    jit_emit_byte
+    mov     al, 0x04
+    call    jit_emit_modrm
+    mov     al, 0x0A
+    jmp     jit_emit_sib
+
+; Emit: movsx eax, word [memory_base + rcx]  (0F BF 04 0A)
+er_fn jit_emit_mem_load16_s
+    mov     cl, 2
+    mov     eax, JitGlobals.mem_ptr
+    call    jit_emit_load_global_to_reg
+    mov     al, 0x0F
+    call    jit_emit_byte
+    mov     al, 0xBF
+    call    jit_emit_byte
+    mov     al, 0x04
+    call    jit_emit_modrm
+    mov     al, 0x0A
+    jmp     jit_emit_sib
+
+; Emit: movzx eax, word [memory_base + rcx]  (0F B7 04 0A)
+er_fn jit_emit_mem_load16_u
+    mov     cl, 2
+    mov     eax, JitGlobals.mem_ptr
+    call    jit_emit_load_global_to_reg
+    mov     al, 0x0F
+    call    jit_emit_byte
+    mov     al, 0xB7
+    call    jit_emit_byte
+    mov     al, 0x04
+    call    jit_emit_modrm
+    mov     al, 0x0A
+    jmp     jit_emit_sib
+
+; Emit: REX.W movsx rax, byte [memory_base + rcx]  (48 0F BE 04 0A)
+er_fn jit_emit_mem_load8_s_64
+    mov     cl, 2
+    mov     eax, JitGlobals.mem_ptr
+    call    jit_emit_load_global_to_reg
+    mov     al, 0x48
+    call    jit_emit_byte
+    mov     al, 0x0F
+    call    jit_emit_byte
+    mov     al, 0xBE
+    call    jit_emit_byte
+    mov     al, 0x04
+    call    jit_emit_modrm
+    mov     al, 0x0A
+    jmp     jit_emit_sib
+
+; Emit: REX.W movsx rax, word [memory_base + rcx]  (48 0F BF 04 0A)
+er_fn jit_emit_mem_load16_s_64
+    mov     cl, 2
+    mov     eax, JitGlobals.mem_ptr
+    call    jit_emit_load_global_to_reg
+    mov     al, 0x48
+    call    jit_emit_byte
+    mov     al, 0x0F
+    call    jit_emit_byte
+    mov     al, 0xBF
+    call    jit_emit_byte
+    mov     al, 0x04
+    call    jit_emit_modrm
+    mov     al, 0x0A
+    jmp     jit_emit_sib
+
+; Emit: movsxd rax, dword [memory_base + rcx]  (48 63 04 0A)
+er_fn jit_emit_mem_load32_s
+    mov     cl, 2
+    mov     eax, JitGlobals.mem_ptr
+    call    jit_emit_load_global_to_reg
+    mov     al, 0x48
+    call    jit_emit_byte
+    mov     al, 0x63
+    call    jit_emit_byte
+    mov     al, 0x04
+    call    jit_emit_modrm
+    mov     al, 0x0A
+    jmp     jit_emit_sib
+
+; Emit: mov [memory_base + rcx], al  (88 04 0A)
+er_fn jit_emit_mem_store8
+    mov     cl, 2
+    mov     eax, JitGlobals.mem_ptr
+    call    jit_emit_load_global_to_reg
+    mov     al, 0x88
+    call    jit_emit_byte
+    mov     al, 0x04
+    call    jit_emit_modrm
+    mov     al, 0x0A
+    jmp     jit_emit_sib
+
+; Emit: mov [memory_base + rcx], ax  (66 89 04 0A)
+er_fn jit_emit_mem_store16
+    mov     cl, 2
+    mov     eax, JitGlobals.mem_ptr
+    call    jit_emit_load_global_to_reg
+    mov     al, 0x66
+    call    jit_emit_byte
+    mov     al, 0x89
+    call    jit_emit_byte
+    mov     al, 0x04
+    call    jit_emit_modrm
+    mov     al, 0x0A
+    jmp     jit_emit_sib
+
+; ------------------------------------------------------------------
 ; Emit: mov rsi, rsp  (48 8B F4)
 ; -----------------------------------------------------------------+
 er_fn jit_emit_mov_rsi_rsp

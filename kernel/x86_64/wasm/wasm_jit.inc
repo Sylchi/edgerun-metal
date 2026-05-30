@@ -57,6 +57,7 @@ struc JitGlobals
     .function_count:   resq 1  ; 136 — function_count value
     .mem_grow_hook:    resq 1  ; 144 — host memory grow callback or 0
     .mem_grow_ctx:     resq 1  ; 152 — context for grow hook
+    .memory_pages:     resq 1  ; 160 — executor_memory_pages value
 endstruc
 
 ; ==================================================================
