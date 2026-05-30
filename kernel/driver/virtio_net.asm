@@ -5,8 +5,8 @@
 ; No offloads, no checksum offloading, no multi-segment buffers.
 
 %include "x86_64/macros.inc"
-%include "x86_64/drv/virtio_constants.inc"
-%include "x86_64/drv/virtio_net_constants.inc"
+%include "driver/virtio_constants.inc"
+%include "driver/virtio_net_constants.inc"
 
 extern er_virtio_find_device
 extern er_virtio_map_device

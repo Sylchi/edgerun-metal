@@ -7,7 +7,7 @@
 
 %include "x86_64/macros.inc"
 %include "x86_64/wasm_defines.inc"
-%include "x86_64/drv/amdgpu_constants.inc"
+%include "driver/amdgpu_constants.inc"
 
 extern er_pci_read32
 extern er_pci_write32

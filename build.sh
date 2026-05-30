@@ -13,12 +13,12 @@ unset CARGO_HOME
 unset GOCACHE
 
 BUILD_DIR=".build"
-ASM_BUILD="${BUILD_DIR}/asm"
-ASM_DIR="asm/x86_64"
-TEST_DIR="asm/test"
+ASM_BUILD="${BUILD_DIR}/kernel"
+ASM_DIR="kernel/x86_64"
+TEST_DIR="kernel/test"
 YASM="${YASM:-yasm}"
 CC="${CC:-cc}"
-ASM_INC="-I asm"
+ASM_INC="-I kernel"
 ASM_KERNEL_FMT="elf32"
 KERNEL_LD="${ASM_DIR}/linker.ld"
 KERNEL_EFI_LD="${ASM_DIR}/efi_linker.ld"
@@ -46,33 +46,33 @@ KERNEL_ASM_SRCS="
 	crypto/identity.asm
 	rt/math.asm
 	rt/runtime.asm
-	drv/serial.asm
+	../driver/serial.asm
 	tpm/tpm.asm
 	tpm/tpm_crb.asm
-	drv/cmos.asm
-	drv/i8042.asm
-	drv/cros_ec.asm
-	drv/dw_i2c.asm
-	drv/i2c_hid.asm
-	drv/pci.asm
-	drv/nvme.asm
-	drv/amdgpu.asm
+	../driver/cmos.asm
+	../driver/i8042.asm
+	../driver/cros_ec.asm
+	../driver/dw_i2c.asm
+	../driver/i2c_hid.asm
+	../driver/pci.asm
+	../driver/nvme.asm
+	../driver/amdgpu.asm
 	crypto/preimage.asm
-	drv/display.asm
-	drv/fb_text.asm
-	drv/acpi.asm
-	drv/xhci.asm
-	drv/rtl8125.asm
-	drv/bt.asm
-	drv/virtio.asm
-	drv/virtio_gpu.asm
-	drv/virtio_net.asm
-	drv/smn.asm
-	drv/psp_mailbox.asm
-	drv/psp_rom_armor.asm
-	drv/spi_flash.asm
-	drv/intel_sdhci.asm
-	drv/intel_gpu.asm
+	../driver/display.asm
+	../driver/fb_text.asm
+	../driver/acpi.asm
+	../driver/xhci.asm
+	../driver/rtl8125.asm
+	../driver/bt.asm
+	../driver/virtio.asm
+	../driver/virtio_gpu.asm
+	../driver/virtio_net.asm
+	../driver/smn.asm
+	../driver/psp_mailbox.asm
+	../driver/psp_rom_armor.asm
+	../driver/spi_flash.asm
+	../driver/intel_sdhci.asm
+	../driver/intel_gpu.asm
 	net/net.asm
 	net/arp.asm
 	net/ipv4.asm
@@ -93,7 +93,7 @@ KERNEL_ASM_SRCS="
 # ---- shared library objects (elf64, used by tests) ----
 SOBJS="
 	crypto/blake3.o
-	drv/acpi.o
+	../driver/acpi.o
 	rt/bytes.o
 	rt/clock.o
 	rt/ctype.o
@@ -102,7 +102,7 @@ SOBJS="
 	crypto/preimage.o
 	ui/render_ir.o
 	rt/runtime.o
-	drv/serial.o
+	../driver/serial.o
 	ui/sw_fb.o
 	wasm/wasm_interpreter.o
 	wasm/wasm_module.o
@@ -112,7 +112,7 @@ SOBJS="
 	wasm/wasm_compiler_char.o
 	wasm/wasm_compiler_emit.o
 	ui/ui_core.o
-	drv/fb_text.o
+	../driver/fb_text.o
 	object/object.o
 "
 
@@ -194,7 +194,7 @@ test_via_cc() {
 	for dep; do
 		local d_path="${ASM_BUILD}/${dep}"
 		if [ "${dep}" = "serial_test.o" ]; then
-			hosted_test_obj "drv/serial"
+			hosted_test_obj "../driver/serial"
 		elif [ "${dep}" = "tpm_test.o" ]; then
 			hosted_test_obj "tpm/tpm"
 		elif [ "${dep}" = "tpm_crb_test.o" ]; then
@@ -481,23 +481,16 @@ cmd_test_render_ir() {
 }
 
 # ---- ARM / Pi Zero targets ----
-ASM_ARM_DIR="asm/arm/pi"
+ASM_ARM_DIR="kernel/arm/pi"
 ARM_AS="${ARM_AS:-arm-none-eabi-as}"
 ARM_LD="${ARM_LD:-arm-none-eabi-ld}"
-ARM_OBJCOPY="${ARM_OBJCOPY:-arm-none-eabi-objcopy}"
 ARM_LD_SCRIPT="${ASM_ARM_DIR}/linker.ld"
-PI_BUILD="${BUILD_DIR}/pi"
-PI_KERNEL_ELF="${PI_BUILD}/kernel.elf"
-PI_KERNEL_IMG="${PI_BUILD}/kernel.img"
+ARM_ELF="${ASM_BUILD}/kernel.elf.arm"
 
-# Host USB/serial boot tools
-HOST_BUILD="${BUILD_DIR}/host"
-PI_USB_BOOT="${HOST_BUILD}/pi_usb_boot_host"
-ESP32_BOOT="${HOST_BUILD}/esp32_serial_boot_host"
-
-arm_obj() {
-	mkdir -p "${PI_BUILD}"
-	${ARM_AS} -mcpu=arm1176jzf-s -I asm -o "$2" "$1"
+asm_arm() {
+	local src="${ASM_ARM_DIR}/start.asm"
+	local obj="$1"
+	${ARM_AS} -mcpu=arm1176jzf-s -I kernel -o "$2" "$1"
 }
 
 cmd_pi_kernel() {
@@ -515,9 +508,9 @@ cmd_pi_kernel() {
 
 cmd_pi_usb_boot() {
 	mkdir -p "${HOST_BUILD}"
-	local src="asm/host/pi_usb_boot_host.asm"
+	local src="kernel/host/pi_usb_boot_host.asm"
 	local obj="${HOST_BUILD}/pi_usb_boot_host.o"
-	${YASM} -f elf64 -I asm -o "$obj" "$src"
+	${YASM} -f elf64 -I kernel -o "$obj" "$src"
 	ld -o "${PI_USB_BOOT}" "$obj"
 	echo "  LD  ${PI_USB_BOOT}"
 }
@@ -532,9 +525,9 @@ cmd_pi_boot() {
 
 cmd_esp32_serial_boot() {
 	mkdir -p "${HOST_BUILD}"
-	local src="asm/host/esp32_serial_boot_host.asm"
+	local src="kernel/host/esp32_serial_boot_host.asm"
 	local obj="${HOST_BUILD}/esp32_serial_boot_host.o"
-	${YASM} -f elf64 -I asm -o "$obj" "$src"
+	${YASM} -f elf64 -I kernel -o "$obj" "$src"
 	ld -o "${ESP32_BOOT}" "$obj"
 	echo "  LD  ${ESP32_BOOT}"
 }

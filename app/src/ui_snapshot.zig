@@ -31,7 +31,7 @@ const SnapshotIrStorage = renderer_ir.FixedBuffers(
 );
 
 pub fn main(init: std.process.Init) !void {
-    try renderSnapshot(init, ".build/edgerun-zig/ui.ppm");
+    try renderSnapshot(init, ".build/app/ui.ppm");
 }
 
 fn renderSnapshot(init: std.process.Init, out_path: []const u8) !void {

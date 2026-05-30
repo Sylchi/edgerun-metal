@@ -19,19 +19,19 @@ er-embed
 # generated local build artifacts
 .build/
 .zig-cache/
-edgerun-zig/.build/
-edgerun-zig/.zig-cache/
-edgerun-zig/zig-out/
-edgerun-zig/build/
+app/.build/
+app/.zig-cache/
+app/zig-out/
+app/build/
 varfont/build/
 
 # junk binaries and test output (never belong in git)
-edgerun-zig/embed_debug*
-edgerun-zig/embed_test
-edgerun-zig/root
-edgerun-zig/test_atlas_out
-edgerun-zig/gen-font
-edgerun-zig/edgerun-ui-producer
+app/embed_debug*
+app/embed_test
+app/root
+app/test_atlas_out
+app/gen-font
+app/edgerun-ui-producer
 bin/
 test_decl
 test_zig

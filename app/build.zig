@@ -10,11 +10,11 @@ pub fn build(b: *std.Build) void {
     var runtime_obj: ?std.Build.LazyPath = null;
     if (is_x86_64) {
         {
-            const cmd = b.addSystemCommand(&.{ "yasm", "-f", "elf64", "-I", "asm", "asm/x86_64/math.asm", "-o" });
+            const cmd = b.addSystemCommand(&.        { "yasm", "-f", "elf64", "-I", "kernel", "kernel/x86_64/math.asm", "-o" });
             math_obj = cmd.addOutputFileArg("math.o");
         }
         {
-            const cmd = b.addSystemCommand(&.{ "yasm", "-f", "elf64", "-I", "asm", "asm/x86_64/runtime.asm", "-o" });
+            const cmd = b.addSystemCommand(&.        { "yasm", "-f", "elf64", "-I", "kernel", "kernel/x86_64/runtime.asm", "-o" });
             runtime_obj = cmd.addOutputFileArg("runtime.o");
         }
     }

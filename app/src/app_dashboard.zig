@@ -62,7 +62,7 @@ fn runIfstatus(output: []u8) ![]const u8 {
         _ = linux.close(rfd);
         _ = linux.dup2(wfd, 1);
         _ = linux.close(wfd);
-        const exe_path: [*:0]const u8 = ".build/edgerun-zig/edgerun-ifstatus";
+        const exe_path: [*:0]const u8 = ".build/app/edgerun-ifstatus";
         const argv: [*:null]const ?[*:0]const u8 = &.{ exe_path, null };
         const envp: [*:null]const ?[*:0]const u8 = &.{null};
         _ = linux.execve(exe_path, argv, envp);

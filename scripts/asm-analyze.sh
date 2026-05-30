@@ -8,9 +8,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-ASM_DIR="asm/x86_64"
-TEST_DIR="asm/test"
-INC_DIR="asm"
+ASM_DIR="kernel/x86_64"
+TEST_DIR="kernel/test"
+INC_DIR="kernel"
 
 bold()   { printf '\033[1m%s\033[0m\n' "$1"; }
 red()    { printf '\033[31m%s\033[0m\n' "$1"; }
@@ -74,7 +74,7 @@ find_dead_code() {
 
   # Check for production .asm files not listed in Makefile ASM_OBJS
   local asm_objs
-  asm_objs=$(grep -oP '(?<=\.build/asm/)\w+(?=\.o)' Makefile 2>/dev/null | sort -u)
+  asm_objs=$(grep -oP '(?<=\.build/kernel/)\w+(?=\.o)' Makefile 2>/dev/null | sort -u)
   for f in "$ASM_DIR"/*.asm(N); do
     local base="${f##*/}"
     local name="${base%.asm}"

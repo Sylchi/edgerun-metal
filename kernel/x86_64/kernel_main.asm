@@ -4,8 +4,8 @@
 
 %include "x86_64/macros.inc"
 %include "x86_64/tpm/tpm_constants.inc"
-%include "x86_64/drv/virtio_constants.inc"
-%include "x86_64/drv/virtio_net_constants.inc"
+%include "driver/virtio_constants.inc"
+%include "driver/virtio_net_constants.inc"
 %include "x86_64/wasm_defines.inc"
 
 extern er_serial_init

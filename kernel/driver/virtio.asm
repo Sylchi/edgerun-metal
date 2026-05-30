@@ -6,7 +6,7 @@
 ; because QEMU i440FX does not forward MMIO at 0xFE000000 to the PCI bus.
 
 %include "x86_64/macros.inc"
-%include "x86_64/drv/virtio_constants.inc"
+%include "driver/virtio_constants.inc"
 
 extern er_pci_read32
 extern er_pci_write32

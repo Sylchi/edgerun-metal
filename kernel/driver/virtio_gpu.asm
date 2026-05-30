@@ -5,8 +5,8 @@
 ; Depends on virtio.asm for transport layer primitives.
 
 %include "x86_64/macros.inc"
-%include "x86_64/drv/virtio_constants.inc"
-%include "x86_64/drv/virtio_gpu_constants.inc"
+%include "driver/virtio_constants.inc"
+%include "driver/virtio_gpu_constants.inc"
 
 extern er_virtio_find_device
 extern er_virtio_map_device
