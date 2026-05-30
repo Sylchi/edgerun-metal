@@ -61,6 +61,7 @@ KERNEL_ASM_SRCS="
 	../driver/display.asm
 	../driver/fb_text.asm
 	../driver/acpi.asm
+	../driver/portio.asm
 	../driver/xhci.asm
 	../driver/rtl8125.asm
 	../driver/bt.asm
@@ -113,6 +114,7 @@ SOBJS="
 	wasm/wasm_compiler_emit.o
 	ui/ui_core.o
 	../driver/fb_text.o
+	../driver/portio.o
 	object/object.o
 "
 
@@ -421,7 +423,22 @@ cmd_test_sw_fb() {
 
 cmd_test_math()     { test_via_cc "math"     "math.o"; }
 cmd_test_runtime()  { test_via_cc "runtime"; }
-cmd_test_serial()   { test_via_cc "serial"   "serial_test.o"; }
+cmd_test_serial() {
+	local src="${TEST_DIR}/test_serial_self.asm"
+	local obj="${ASM_BUILD}/test_serial_self.o"
+	local serial_src="${ASM_DIR}/../driver/serial.asm"
+	local serial_obj="${ASM_BUILD}/serial_test.o"
+	local runtime_o="${ASM_BUILD}/runtime.o"
+	local bin="${ASM_BUILD}/test_serial"
+	${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
+	elf64 "$serial_src" "$serial_obj"
+	if [ ! -f "$runtime_o" ]; then
+		elf64 "${ASM_DIR}/rt/runtime.asm" "$runtime_o"
+	fi
+	ld -nostdlib -static -o "$bin" "$obj" "$serial_obj" "$runtime_o"
+	echo "  LD  ${bin}"
+	"$bin"
+}
 cmd_test_tpm()      { test_via_cc "tpm"      "tpm_test.o" "tpm_crb_test.o"; }
 cmd_test_wasm()     { TEST_TIMEOUT=5 test_via_cc "wasm"     "wasm_interpreter.o"; }
 cmd_test_wasm_compiler() { TEST_TIMEOUT=10 test_via_cc "wasm_compiler" "wasm_compiler.o" "wasm_compiler_source.o" "wasm_compiler_helpers.o" "wasm_compiler_char.o" "wasm_compiler_emit.o"; }

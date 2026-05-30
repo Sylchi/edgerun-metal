@@ -174,32 +174,7 @@
 %endm
 
 ; ------------------------------------------------------------------
-; I/O port helpers
-; ------------------------------------------------------------------
-; Write 8-bit value to I/O port
-%ifndef HOSTED_TEST
-%macro er_outb 2
-    mov     al, %2
-    mov     dx, %1
-    out     dx, al
-%endm
-
-; Read 8-bit from I/O port into al
-%macro er_inb 1
-    mov     dx, %1
-    in      al, dx
-%endm
-
-; Low-level I/O: port in dx, value in al — no register shuffling
-%macro er_out_dx_al 0
-    out     dx, al
-%endm
-
-%macro er_in_al_dx 0
-    in      al, dx
-%endm
-%endif
-
+; Memory helpers (clobber rax, rcx, rdi, rsi)
 ; ------------------------------------------------------------------
 ; Memory helpers (clobber rax, rcx, rdi, rsi)
 ; ------------------------------------------------------------------

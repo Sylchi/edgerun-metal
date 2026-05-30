@@ -3,9 +3,6 @@
 ; Freestanding — no libc, no external dependencies.
 ;
 ; COM1 at standard I/O port 0x3F8.
-; For bare-metal use, serial_init must be called before any other serial function.
-; For hosted testing, define HOSTED_TEST — OUT instructions become buffer stores,
-; IN instructions return ready status, and the test can read the output buffer.
 
 %include "x86_64/macros.inc"
 
@@ -38,57 +35,11 @@
 ; Default baud rate divisor for 115200 (1.8432 MHz / (16 * 115200))
 %define BAUD_115200  1
 
-; er_outb, er_inb, er_out_dx_al, er_in_al_dx defined in macros.inc
-; HOSTED_TEST overrides them below.
-
-%ifdef HOSTED_TEST
-; Hosted-testing mode: redirect serial output to a global buffer.
-section .bss
-global er_serial_tx_buffer, er_serial_tx_count
-er_serial_tx_buffer: resb 4096
-er_serial_tx_count:  resq 1
-
-; Override I/O macros — each port write appends to the buffer.
-%macro er_outb 2
-    push    rsi
-    push    rdi
-    push    rcx
-    mov     rsi, er_serial_tx_buffer
-    mov     rdi, [er_serial_tx_count]
-    add     rsi, rdi
-    mov     byte [rsi], %2
-    inc     rdi
-    mov     [er_serial_tx_count], rdi
-    pop     rcx
-    pop     rdi
-    pop     rsi
-%endmacro
-
-%macro er_inb 1
-    mov     al, 0x60        ; LSR_THR_EMPTY always set
-%endmacro
-
-%macro er_out_dx_al 0
-    push    rsi
-    push    rdi
-    push    rcx
-    mov     rsi, er_serial_tx_buffer
-    mov     rdi, [er_serial_tx_count]
-    add     rsi, rdi
-    mov     [rsi], al
-    inc     rdi
-    mov     [er_serial_tx_count], rdi
-    pop     rcx
-    pop     rdi
-    pop     rsi
-%endmacro
-
-%macro er_in_al_dx 0
-    mov     al, 0x60
-%endmacro
-%endif
-
 SECTION .text
+
+; Port I/O provided by driver/portio.asm.
+extern er_in_al_dx
+extern er_out_dx_al
 
 ; ==================================================================
 ; er_serial_init — initialize COM1 serial port
@@ -156,13 +107,13 @@ er_fn er_serial_putchar
     mov     dx, di
     add     dx, UART_LSR
 .wait:
-    er_in_al_dx
+    call    er_in_al_dx
     test    al, LSR_THR_EMPTY
     jz      .wait
 
     mov     dx, di
     mov     al, sil
-    er_out_dx_al
+    call    er_out_dx_al
     ret
 
 ; ==================================================================
@@ -182,13 +133,13 @@ er_fn er_serial_puts
     mov     dx, bx
     add     dx, UART_LSR
 .wait:
-    er_in_al_dx
+    call    er_in_al_dx
     test    al, LSR_THR_EMPTY
     jz      .wait
 
     mov     dx, bx
     mov     al, [rsi - 1]
-    er_out_dx_al
+    call    er_out_dx_al
 
     jmp     .loop
 
@@ -333,12 +284,12 @@ _serial_putchar:
     mov     dx, r8w
     add     dx, UART_LSR
 .wait:
-    er_in_al_dx
+    call    er_in_al_dx
     test    al, LSR_THR_EMPTY
     jz      .wait
     mov     dx, r8w
     mov     al, sil
-    er_out_dx_al
+    call    er_out_dx_al
     ret
 
 er_fn er_serial_crlf
@@ -366,13 +317,13 @@ er_fn er_serial_getchar
 
     mov     dx, di
     add     dx, UART_LSR
-    er_in_al_dx
+    call    er_in_al_dx
     test    al, LSR_DATA_READY
     jz      .no_data
 
     mov     dx, di
     add     dx, UART_RBR
-    er_in_al_dx
+    call    er_in_al_dx
     movzx   eax, al
 
     pop     rdx
