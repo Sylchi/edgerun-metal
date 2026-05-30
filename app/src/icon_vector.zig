@@ -1,5 +1,4 @@
 const math = @import("math.zig");
-const icon = @import("icon.zig");
 
 pub const op_polyline: f32 = 1.0;
 pub const op_circle: f32 = 2.0;

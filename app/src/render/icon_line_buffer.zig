@@ -491,11 +491,11 @@ fn channel(value: u8) f32 {
 
 test "icon line buffer packs browser-ready vertices" {
     var instances_storage = renderer_ir.FixedBuffers(0, 1, 0, 0, 0, 0, 0){};
-    try renderer_ir.pushSvgQuad(instances_storage.buffers(), .base, ui.SvgQuad.fromIconQuad(.{
+    try renderer_ir.pushSvgQuad(instances_storage.buffers(), .base, ui.IconQuad{
         .bounds = ui.Rect.init(10, 20, 24, 24),
         .color = .accent,
         .icon_id = @intFromEnum(@import("../icon.zig").Icon.search) + 1,
-    }));
+    });
     var out: [line_vertex_count * vertex_float_stride * filled_circle_segments * 8]f32 = undefined;
     var out_len: usize = 0;
     try packIconInstances(instances_storage.buffers().liveIconVertices(), &out, &out_len);

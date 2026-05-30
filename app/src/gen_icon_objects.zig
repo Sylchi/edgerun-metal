@@ -56,8 +56,8 @@ pub fn main(init: std.process.Init) !void {
     const icons = try icon_list.toOwnedSlice(alloc);
     mem.sortUnstable(IconData, icons, {}, lessThanByName);
 
-    try cwd.createDirPath(io, ".build");
-    const out_dir = try cwd.openDir(io, ".build", .{});
+    try cwd.createDirPath(io, "src/gen");
+    const out_dir = try cwd.openDir(io, "src/gen", .{});
     defer out_dir.close(io);
 
     try emitAssetPack(out_dir, io, alloc, icons);
@@ -163,6 +163,27 @@ const IconData = struct {
     ir: []const f32,
 };
 
+fn writeEscaped(s: []const u8, buf: []u8) []u8 {
+    var pos: usize = 0;
+    for (s) |c| {
+        switch (c) {
+            '\\' => {
+                buf[pos..][0..2].* = "\\\\".*;
+                pos += 2;
+            },
+            '"' => {
+                buf[pos..][0..2].* = "\\\"".*;
+                pos += 2;
+            },
+            else => {
+                buf[pos] = c;
+                pos += 1;
+            },
+        }
+    }
+    return buf[0..pos];
+}
+
 fn emitAssetPack(dir: std.Io.Dir, io: std.Io, _: mem.Allocator, icons: []const IconData) !void {
     var buf: [4096]u8 = undefined;
 
@@ -191,9 +212,16 @@ fn emitAssetPack(dir: std.Io.Dir, io: std.Io, _: mem.Allocator, icons: []const I
         , .{icons.len});
 
         var offset: u32 = 0;
+        var escaped: [65536]u8 = undefined;
         for (icons) |ic| {
             const data_len = @as(u32, @intCast(ic.ir.len * @sizeOf(f32)));
-            try w.interface.print("    .{{ .name = \"{s}\", .tags = \"{s}\", .category = \"{s}\", .ir_offset = {d}, .ir_len = {d} }},\n", .{ ic.name, ic.tags, ic.category, offset, data_len });
+            try w.interface.writeAll("    .{ .name = \"");
+            try w.interface.writeAll(writeEscaped(ic.name, &escaped));
+            try w.interface.writeAll("\", .tags = \"");
+            try w.interface.writeAll(writeEscaped(ic.tags, &escaped));
+            try w.interface.writeAll("\", .category = \"");
+            try w.interface.writeAll(writeEscaped(ic.category, &escaped));
+            try w.interface.print("\", .ir_offset = {d}, .ir_len = {d} }},\n", .{ offset, data_len });
             offset += data_len;
         }
 

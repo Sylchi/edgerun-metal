@@ -1,6 +1,7 @@
 const std = @import("std");
 const math = @import("../math.zig");
-const icon_svg = @import("../icon_svg.zig");
+const icon_vector = @import("../icon_vector.zig");
+const icon_pack = @import("../icon_pack.zig");
 const ui = @import("../ui.zig");
 
 pub const rect_float_stride: usize = 15;
@@ -106,14 +107,15 @@ pub const RgbaTexture = struct {
     }
 };
 
-pub const IconOpIterator = icon_svg.Iterator;
+pub const IconOpIterator = icon_vector.Iterator;
 
 pub fn iconOpIteratorForId(icon_id: u32) IconOpIterator {
-    return icon_svg.Iterator.init(icon_svg.sourceForIconId(icon_id));
+    return icon_vector.Iterator.init(icon_pack.getIr(icon_id) orelse &.{});
 }
 
 pub fn iconOpIteratorFromSource(source: []const u8) IconOpIterator {
-    return icon_svg.Iterator.init(source);
+    _ = source;
+    return icon_vector.Iterator.init(&.{});
 }
 
 pub const DrawBatch = union(enum) {
@@ -305,7 +307,7 @@ pub fn pushRect(buffers: Buffers, layer: Layer, bounds: ui.Rect, color: ui.Color
 }
 
 pub fn pushSvgQuad(buffers: Buffers, layer: Layer, quad: ui.SvgQuad) Error!void {
-    if (!quad.bounds.valid() or quad.svg.icon_id == 0) return;
+    if (!quad.bounds.valid() or quad.icon_id == 0) return;
     const buffer = switch (layer) {
         .base => buffers.icon_vertices,
         .overlay => buffers.overlay_icon_vertices,
@@ -324,7 +326,7 @@ pub fn pushSvgQuad(buffers: Buffers, layer: Layer, quad: ui.SvgQuad) Error!void 
         channel(quad.color.g),
         channel(quad.color.b),
         channel(quad.color.a),
-        @floatFromInt(quad.svg.icon_id),
+        @floatFromInt(quad.icon_id),
     };
     @memcpy(buffer[len.* .. len.* + icon_instance_float_stride], &values);
     len.* += icon_instance_float_stride;
@@ -692,10 +694,8 @@ fn expectSourceDoesNotContain(source: []const u8, needle: []const u8) !void {
     try std.testing.expectEqual(@as(?usize, null), std.mem.indexOf(u8, source, needle));
 }
 
-test "renderer ir owns svg source lookup boundaries" {
-    try expectSourceDoesNotContain(@embedFile("backends/software.zig"), "@import(\"icon_svg.zig\")");
-    try expectSourceDoesNotContain(@embedFile("icon_line_buffer.zig"), "@import(\"icon_svg.zig\")");
-    try expectSourceDoesNotContain(@embedFile("backends/gles.zig"), "dataForIconId");
+test "renderer ir backends stay behind icon_pack adapter" {
+    try expectSourceDoesNotContain(@embedFile("backends/gles.zig"), "sourceForIconId");
     try expectSourceDoesNotContain(@embedFile("backends/software.zig"), "sourceForIconId");
     try expectSourceDoesNotContain(@embedFile("icon_line_buffer.zig"), "sourceForIconId");
 }

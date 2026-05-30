@@ -40,7 +40,7 @@ fn packPreparedRange(buffers: renderer_ir.Buffers, commands: []const ui.Command,
         .rect => |rect| try renderer_ir.pushRect(buffers, layer, rect.bounds, rect.color, rect.color2, rect.radius, rect.shadow, renderer_ir.rectModeCode(rect.mode)),
         .border => |border| try renderer_ir.pushRect(buffers, layer, border.bounds, border.color, .clear, 0, 0, renderer_ir.rectModeCode(.border)),
         .text => {},
-        .icon_quad => |quad| try renderer_ir.pushSvgQuad(buffers, layer, ui.SvgQuad.fromIconQuad(quad)),
+        .icon_quad => |quad| try renderer_ir.pushSvgQuad(buffers, layer, quad),
         .svg_quad => |quad| try renderer_ir.pushSvgQuad(buffers, layer, quad),
         .image_quad => |quad| if (layer == .base) try renderer_ir.pushImage(buffers, quad),
         .drag_source, .drop_target, .text_quad, .transition => {},
@@ -97,7 +97,7 @@ pub fn resetIconTuningForTest() void {
     renderer_software.resetIconTuningForTest();
 }
 pub fn pushIcon(buffers: Buffers, layer: Layer, quad: ui.IconQuad) IrError!void {
-    try renderer_ir.pushSvgQuad(buffers, layer, ui.SvgQuad.fromIconQuad(quad));
+    try renderer_ir.pushSvgQuad(buffers, layer, quad);
 }
 pub fn iconAt(values: []const f32, index: usize) IrError!IconInstance {
     return renderer_ir.iconAt(values, index);

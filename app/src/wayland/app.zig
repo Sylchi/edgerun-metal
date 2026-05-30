@@ -2,7 +2,7 @@ const std = @import("std");
 const protocol = @import("protocol.zig");
 const client = @import("client.zig");
 
-const icon_svg = @import("../icon_svg.zig");
+
 const interaction = @import("../ui_interaction.zig");
 const renderer_font_atlas = @import("../render/font_atlas_weighted.zig");
 const renderer_gpu = @import("../render/backends/gpu.zig");

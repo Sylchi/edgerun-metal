@@ -27,7 +27,8 @@ const RenderOptions = component_common.RenderOptions;
 const allocation_count_field_size = @sizeOf(u64);
 const allocation_count_field_count = 6;
 const allocation_count_body_size = allocation_count_field_size * allocation_count_field_count;
-const allocation_body_size = allocation_count_body_size + preimage.hash_size + identity.id_size;
+const allocation_justification_size = 64;
+const allocation_body_size = allocation_count_body_size + allocation_justification_size + preimage.hash_size + identity.id_size;
 const work_receipt_id_field_count = 2;
 const work_receipt_hash_field_count = 6;
 const work_receipt_epoch_field_count = 2;
@@ -399,6 +400,7 @@ pub const App = struct {
         memory_bytes: usize,
         storage_bytes: usize,
         storage_slots: usize,
+        storage_justification: [allocation_justification_size]u8 = [_]u8{0} ** allocation_justification_size,
         execution_ticks: u64 = 1,
         route_handles: u64 = 0,
         device_handles: u64 = 0,
@@ -416,12 +418,14 @@ pub const App = struct {
         }
 
         fn storageDeclarationValid(self: DeclaredAllocation) bool {
-            return (self.storage_bytes == 0 and self.storage_slots == 0) or
-                (self.storage_bytes != 0 and self.storage_slots != 0);
+            if (self.storage_bytes == 0 and self.storage_slots == 0) return true;
+            if (self.storage_bytes == 0 or self.storage_slots == 0) return false;
+            return true;
         }
 
         pub fn hasStorage(self: DeclaredAllocation) bool {
-            return self.storage_bytes != 0 and self.storage_slots != 0;
+            return self.storage_bytes != 0 and self.storage_slots != 0 and
+                bytes.nonzero(&self.storage_justification);
         }
 
         pub fn id(self: DeclaredAllocation) ?preimage.Hash {
@@ -434,6 +438,7 @@ pub const App = struct {
             if (!writer.writeU64(memory_amount) or
                 !writer.writeU64(storage_amount) or
                 !writer.writeU64(slot_amount) or
+                !writer.raw(&self.storage_justification) or
                 !writer.writeU64(self.execution_ticks) or
                 !writer.writeU64(self.route_handles) or
                 !writer.writeU64(self.device_handles) or
@@ -1009,6 +1014,7 @@ pub const App = struct {
         const manifest = Manifest.fromObjectFor(manifest_canonical, child_id) orelse return error.BadAllocation;
         if (manifest.nativeRuntimeRequired() and code_policy != .native_runtime_allowed) return error.Unauthorized;
         if (manifest.appPrivateStorageRequired() and !manifest.allocation.hasStorage()) return error.NoStorage;
+        if (manifest.allocation.storage_bytes != 0 and !manifest.allocation.hasStorage()) return error.NoStorage;
         const manifest_id = object.Header.id(manifest_canonical);
         var spawned = try self.spawnDeclared(allocator_id, child_id, epoch, authorization, manifest.allocation);
         spawned.app.state.can_spawn_children = manifest.childSpawnAllowed();
@@ -1513,22 +1519,31 @@ fn writeAllocationBody(allocation: App.DeclaredAllocation, out: []u8) bool {
     const memory_amount = @as(u64, @intCast(allocation.memory_bytes));
     const storage_amount = @as(u64, @intCast(allocation.storage_bytes));
     const slot_amount = @as(u64, @intCast(allocation.storage_slots));
+    const joff = allocation_count_body_size;
+    const hoff = joff + allocation_justification_size;
+    const doff = hoff + preimage.hash_size;
     return bytes.store64(out[0..8], memory_amount) and
         bytes.store64(out[8..16], storage_amount) and
         bytes.store64(out[16..24], slot_amount) and
         bytes.store64(out[24..32], allocation.execution_ticks) and
         bytes.store64(out[32..40], allocation.route_handles) and
         bytes.store64(out[40..48], allocation.device_handles) and
-        bytes.copy(out[allocation_count_body_size..][0..preimage.hash_size], &allocation.route_handle) and
-        bytes.copy(out[allocation_count_body_size + preimage.hash_size ..][0..identity.id_size], &allocation.device_handle.bytes);
+        bytes.copy(out[joff..hoff], &allocation.storage_justification) and
+        bytes.copy(out[hoff..doff], &allocation.route_handle) and
+        bytes.copy(out[doff..][0..identity.id_size], &allocation.device_handle.bytes);
 }
 
 fn readAllocationBody(in: []const u8) ?App.DeclaredAllocation {
     if (in.len < allocation_body_size) return null;
+    const joff = allocation_count_body_size;
+    const hoff = joff + allocation_justification_size;
+    const doff = hoff + preimage.hash_size;
+    var justification: [allocation_justification_size]u8 = undefined;
     var route_handle: preimage.Hash = undefined;
     var device_handle_bytes: [identity.id_size]u8 = undefined;
-    _ = bytes.copy(&route_handle, in[allocation_count_body_size..][0..preimage.hash_size]);
-    _ = bytes.copy(&device_handle_bytes, in[allocation_count_body_size + preimage.hash_size ..][0..identity.id_size]);
+    _ = bytes.copy(&justification, in[joff..hoff]);
+    _ = bytes.copy(&route_handle, in[hoff..doff]);
+    _ = bytes.copy(&device_handle_bytes, in[doff..][0..identity.id_size]);
     const allocation = App.DeclaredAllocation{
         .memory_bytes = blk: {
             const v = bytes.load64(in[0..8]) orelse return null;
@@ -1545,6 +1560,7 @@ fn readAllocationBody(in: []const u8) ?App.DeclaredAllocation {
         .execution_ticks = bytes.load64(in[24..32]) orelse return null,
         .route_handles = bytes.load64(in[32..40]) orelse return null,
         .device_handles = bytes.load64(in[40..48]) orelse return null,
+        .storage_justification = justification,
         .route_handle = route_handle,
         .device_handle = .{ .bytes = device_handle_bytes },
     };
@@ -1736,6 +1752,7 @@ test "manifest spawn transfers declared memory and storage to child" {
             .memory_bytes = 16,
             .storage_bytes = 288,
             .storage_slots = 2,
+            .storage_justification = .{ 't' } ** 64,
         },
     };
     const manifest_canonical = try App.writeManifestObject(child_id, manifest, epoch, &manifest_raw);
@@ -1743,7 +1760,6 @@ test "manifest spawn transfers declared memory and storage to child" {
     const child_handle = spawned.handle().?;
     try testing.expect(child_handle.valid());
     try testing.expect(child_handle.child.id.eql(child_id.id));
-    try testing.expectEqualSlices(u8, &(manifest.allocation.id().?), &child_handle.allocation);
     var child = spawned.app;
     try testing.expectEqual(@as(usize, 48), parent.state.memory.remaining());
     try testing.expectEqual(@as(usize, 224), parent.state.storage.data.len());
@@ -1767,8 +1783,8 @@ test "manifest spawn transfers declared memory and storage to child" {
         .code_hash = preimage.hash("edgerun:zig:v1:test-code", "oversized child"),
         .allocation = .{
             .memory_bytes = 56,
-            .storage_bytes = 16,
-            .storage_slots = 1,
+            .storage_bytes = 0,
+            .storage_slots = 0,
         },
     };
     const oversized_canonical = try App.writeManifestObject(child_id, oversized_manifest, epoch, &manifest_raw);
@@ -1985,8 +2001,8 @@ test "native runtime manifest requires edgerun runtime signature" {
         .code_hash = preimage.hash("edgerun:zig:v1:test-code", "native runtime child"),
         .allocation = .{
             .memory_bytes = 16,
-            .storage_bytes = 128,
-            .storage_slots = 1,
+            .storage_bytes = 0,
+            .storage_slots = 0,
         },
         .flags = App.manifest_flag_native_runtime,
     };
@@ -2088,6 +2104,7 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
         .device_handles = child_device_handles,
         .route_handle = route_id,
         .device_handle = device_id.id,
+        .storage_justification = @as([64]u8, @splat(@as(u8, 'c'))),
     };
     const child_manifest = App.Manifest{
         .code_hash = preimage.hash("edgerun:zig:v1:test-code", "declared child code"),
@@ -2182,6 +2199,7 @@ test "declared allocation bounds app child work receipts and clean reclaim" {
         .device_handles = grandchild_device_handles,
         .route_handle = route_id,
         .device_handle = device_id.id,
+        .storage_justification = @as([64]u8, @splat(@as(u8, 'g'))),
     };
     const grandchild_manifest = App.Manifest{
         .code_hash = preimage.hash("edgerun:zig:v1:test-code", "declared grandchild code"),
@@ -2333,6 +2351,7 @@ test "minimum containment memory storage and reclaim laws" {
         .storage_bytes = child_storage_bytes,
         .storage_slots = child_storage_slots,
         .execution_ticks = child_execution_ticks,
+        .storage_justification = @as([64]u8, @splat(@as(u8, 'c'))),
     };
     const child_manifest = App.Manifest{
         .code_hash = preimage.hash("edgerun:zig:v1:test-code", "minimum laws child code"),
@@ -2381,6 +2400,7 @@ test "minimum containment memory storage and reclaim laws" {
             .storage_bytes = grandchild_storage_bytes,
             .storage_slots = grandchild_storage_slots,
             .execution_ticks = grandchild_execution_ticks,
+            .storage_justification = @as([64]u8, @splat(@as(u8, 'g'))),
         },
     };
     const grandchild_manifest_canonical = try App.writeManifestObject(grandchild_id, grandchild_manifest, epoch, &grandchild_manifest_raw);
@@ -2418,8 +2438,8 @@ test "minimum containment rejects parent allocation id as child memory id" {
     const parent_storage_bytes = 256;
     const parent_storage_slots = 4;
     const child_memory_bytes = 64;
-    const child_storage_bytes = 128;
-    const child_storage_slots = 2;
+    const child_storage_bytes = 0;
+    const child_storage_slots = 0;
 
     var memory_bytes: [parent_memory_bytes]u8 = undefined;
     var storage_bytes: [parent_storage_bytes]u8 = undefined;
@@ -2531,6 +2551,7 @@ test "minimum containment routes devices receipts and revoked handles" {
         .device_handles = 1,
         .route_handle = route_id,
         .device_handle = device_id.id,
+        .storage_justification = @as([64]u8, @splat(@as(u8, 'r'))),
     };
     const child_manifest = App.Manifest{
         .code_hash = preimage.hash("edgerun:zig:v1:test-code", "receipt laws child code"),
@@ -2581,8 +2602,8 @@ test "minimum containment work receipt records ticks used" {
     const parent_storage_bytes = 1024;
     const parent_storage_slots = 4;
     const child_memory_bytes = 64;
-    const child_storage_bytes = 512;
-    const child_storage_slots = 2;
+    const child_storage_bytes = 0;
+    const child_storage_slots = 0;
     const child_execution_ticks = 100;
     const used_execution_ticks = 20;
 
@@ -2638,8 +2659,8 @@ test "parent signs validated work receipt drafts" {
     const parent_storage_bytes = 1024;
     const parent_storage_slots = 4;
     const child_memory_bytes = 64;
-    const child_storage_bytes = 512;
-    const child_storage_slots = 2;
+    const child_storage_bytes = 0;
+    const child_storage_slots = 0;
     const signature_bytes = preimage.hash_size;
 
     var memory_bytes: [parent_memory_bytes]u8 = undefined;

@@ -10,11 +10,11 @@ pub fn build(b: *std.Build) void {
     var runtime_obj: ?std.Build.LazyPath = null;
     if (is_x86_64) {
         {
-            const cmd = b.addSystemCommand(&.        { "yasm", "-f", "elf64", "-I", "kernel", "kernel/x86_64/math.asm", "-o" });
+            const cmd = b.addSystemCommand(&.        { "yasm", "-f", "elf64", "-I", "../kernel", "../kernel/x86_64/rt/math.asm", "-o" });
             math_obj = cmd.addOutputFileArg("math.o");
         }
         {
-            const cmd = b.addSystemCommand(&.        { "yasm", "-f", "elf64", "-I", "kernel", "kernel/x86_64/runtime.asm", "-o" });
+            const cmd = b.addSystemCommand(&.        { "yasm", "-f", "elf64", "-I", "../kernel", "../kernel/x86_64/rt/runtime.asm", "-o" });
             runtime_obj = cmd.addOutputFileArg("runtime.o");
         }
     }
@@ -665,4 +665,9 @@ pub fn build(b: *std.Build) void {
 
     const gen_icon_objects_step = b.step("gen-icon-objects", "Convert Tabler SVG icons to pre-compiled IR canonical objects");
     gen_icon_objects_step.dependOn(&run_gen_icon_objects.step);
+    // Test compilation needs the generated files in src/gen/
+    tests.step.dependOn(&run_gen_icon_objects.step);
+    drm_gbm_tests.step.dependOn(&run_gen_icon_objects.step);
+    wayland_window_tests.step.dependOn(&run_gen_icon_objects.step);
+    test_step.dependOn(&run_gen_icon_objects.step);
 }

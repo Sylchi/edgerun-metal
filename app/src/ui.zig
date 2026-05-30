@@ -1,7 +1,6 @@
 const std = @import("std");
 const bounded = @import("bounded.zig");
 const geometry = @import("geometry.zig");
-const icon_svg = @import("icon_svg.zig");
 
 pub const Color = packed struct {
     r: u8,
@@ -582,21 +581,9 @@ pub const Quad = struct {
 
 pub const IconQuad = struct { bounds: Rect, icon_id: u32, color: Color };
 
-/// First-class SVG quad carrying parsed SVG data through the scene pipeline.
-/// Analogous to image quads (Quad + atlas_id), SVG quads carry the Svg asset directly.
-pub const SvgQuad = struct {
-    bounds: Rect,
-    svg: icon_svg.Svg,
-    color: Color,
-
-    pub fn fromIconQuad(quad: IconQuad) SvgQuad {
-        return .{
-            .bounds = quad.bounds,
-            .svg = icon_svg.Svg.fromIconId(quad.icon_id),
-            .color = quad.color,
-        };
-    }
-};
+/// First-class SVG quad using pre-compiled icon IR data.
+/// Analogous to image quads (Quad + atlas_id), SVG quads carry an icon_id for pack lookup.
+pub const SvgQuad = IconQuad;
 
 pub const TransitionProperty = enum(u8) { opacity, translate_x, translate_y };
 pub const Easing = enum(u8) { linear, ease_in, ease_out, ease_in_out };
@@ -729,12 +716,12 @@ pub const Scene = struct {
     }
 
     pub fn pushIconQuad(self: *Scene, quad: IconQuad) RenderError!void {
-        try self.pushSvgQuad(SvgQuad.fromIconQuad(quad));
+        try self.pushSvgQuad(quad);
     }
 
     pub fn pushSvgQuad(self: *Scene, quad: SvgQuad) RenderError!void {
-        if (quad.svg.source.len == 0) return;
-        if (self.clipRect(quad.bounds)) |clipped| try self.push(.{ .svg_quad = .{ .bounds = clipped, .svg = quad.svg, .color = quad.color } });
+        if (quad.icon_id == 0) return;
+        if (self.clipRect(quad.bounds)) |clipped| try self.push(.{ .svg_quad = .{ .bounds = clipped, .icon_id = quad.icon_id, .color = quad.color } });
     }
 
     pub fn pushTextQuad(self: *Scene, quad: Quad) RenderError!void {

@@ -453,7 +453,7 @@ fn packGpuCommand(buffers: renderer_ir.Buffers, command: ui.Command) Error!void 
     switch (command) {
         .rect => |r| try renderer_ir.pushRect(buffers, .base, r.bounds, r.color, r.color2, r.radius, r.shadow, renderer_ir.rectModeCode(r.mode)),
         .border => |b| try renderer_ir.pushRect(buffers, .base, b.bounds, b.color, .clear, 0, 0, renderer_ir.rectModeCode(.border)),
-        .icon_quad => |q| try renderer_ir.pushSvgQuad(buffers, .base, ui.SvgQuad.fromIconQuad(q)),
+        .icon_quad => |q| try renderer_ir.pushSvgQuad(buffers, .base, q),
         .image_quad => |q| try renderer_ir.pushImage(buffers, q),
         .svg_quad => |q| try renderer_ir.pushSvgQuad(buffers, .base, q),
         .text, .drag_source, .drop_target, .text_quad, .transition => {},
@@ -669,11 +669,11 @@ test "gpu renderer keeps semantic icon ids separate from texture atlas ids" {
     const expected_icon_id: u32 = 7;
     var storage = renderer_ir.FixedBuffers(0, 1, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
-    try renderer_ir.pushSvgQuad(buffers, .base, ui.SvgQuad.fromIconQuad(.{
+    try renderer_ir.pushSvgQuad(buffers, .base, .{
         .bounds = .{ .x = 8, .y = 8, .w = 16, .h = 16 },
         .icon_id = expected_icon_id,
         .color = .accent,
-    }));
+    });
 
     var primitives: [4]Primitive = undefined;
     var tile_marks: [16]u8 = undefined;

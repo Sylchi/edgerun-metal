@@ -1,6 +1,6 @@
 const std = @import("std");
 const math = @import("math.zig");
-const icon_svg = @import("icon_svg.zig");
+const icon_pack = @import("icon_pack.zig");
 const ui = @import("ui.zig");
 const ui_runtime = @import("ui_runtime.zig");
 
@@ -103,11 +103,11 @@ fn centeredBounds(x: f32, y: f32, w: f32, h: f32, pad: f32) ui.Rect {
 }
 
 fn renderDefault(scene: *ui.Scene, x: f32, y: f32) ui.RenderError!void {
-    try renderSvgCursor(scene, x, y, pointer_2_hotspot_x, pointer_2_hotspot_y, icon_svg.cursor_pointer_2_icon_id, color);
+    try renderSvgCursor(scene, x, y, pointer_2_hotspot_x, pointer_2_hotspot_y, icon_pack.cursor_pointer_2_icon_id, color);
 }
 
 fn renderPointer(scene: *ui.Scene, x: f32, y: f32) ui.RenderError!void {
-    try renderSvgCursor(scene, x, y, hand_finger_hotspot_x, hand_finger_hotspot_y, icon_svg.cursor_hand_finger_icon_id, color);
+    try renderSvgCursor(scene, x, y, hand_finger_hotspot_x, hand_finger_hotspot_y, icon_pack.cursor_hand_finger_icon_id, color);
 }
 
 fn renderText(scene: *ui.Scene, x: f32, y: f32) ui.RenderError!void {
@@ -181,7 +181,7 @@ test "cursor renders into the scene instead of host cursor APIs" {
 
     var found_pointer_svg = false;
     for (scene.written()) |command| switch (command) {
-        .icon_quad => |quad| found_pointer_svg = found_pointer_svg or quad.icon_id == icon_svg.cursor_hand_finger_icon_id,
+        .icon_quad => |quad| found_pointer_svg = found_pointer_svg or quad.icon_id == icon_pack.cursor_hand_finger_icon_id,
         else => {},
     };
     try std.testing.expect(found_pointer_svg);
@@ -217,7 +217,7 @@ test "cursor visuals include shadow outline and fill svg layers" {
     var found_fill = false;
     for (scene.written()) |command| switch (command) {
         .rect => |rect| found_shadow = found_shadow or rect.mode == .shadow,
-        .icon_quad => |quad| if (quad.icon_id == icon_svg.cursor_pointer_2_icon_id) {
+        .icon_quad => |quad| if (quad.icon_id == icon_pack.cursor_pointer_2_icon_id) {
             found_outline = found_outline or std.meta.eql(quad.color, outline);
             found_fill = found_fill or std.meta.eql(quad.color, color);
         },

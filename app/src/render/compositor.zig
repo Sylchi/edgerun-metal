@@ -156,10 +156,10 @@ test "compositor merges two app ird by layer order" {
     var b_storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0){};
     var out_storage = renderer_ir.FixedBuffers(2, 0, 0, 0, 0, 0, 0){};
 
-    var a = a_storage.buffers();
-    var b = b_storage.buffers();
-    try renderer_ir.pushRect(&a, .base, .{ .x = 0, .y = 0, .w = 10, .h = 10 }, .{ .r = 255, .g = 0, .b = 0 }, .{}, 0, 0, renderer_ir.rectModeCode(.fill));
-    try renderer_ir.pushRect(&b, .base, .{ .x = 5, .y = 5, .w = 10, .h = 10 }, .{ .r = 0, .g = 255, .b = 0 }, .{}, 0, 0, renderer_ir.rectModeCode(.fill));
+    const a = a_storage.buffers();
+    const b = b_storage.buffers();
+    try renderer_ir.pushRect(a, .base, .{ .x = 0, .y = 0, .w = 10, .h = 10 }, .{ .r = 255, .g = 0, .b = 0 }, .{ .r = 0, .g = 0, .b = 0 }, 0, 0, renderer_ir.rectModeCode(.fill));
+    try renderer_ir.pushRect(b, .base, .{ .x = 5, .y = 5, .w = 10, .h = 10 }, .{ .r = 0, .g = 255, .b = 0 }, .{ .r = 0, .g = 0, .b = 0 }, 0, 0, renderer_ir.rectModeCode(.fill));
 
     var output = out_storage.buffers();
     const receipt = try compose(&.{ .{ .buffers = a, .layer = .scrim }, .{ .buffers = b, .layer = .popover } }, &output);
@@ -218,7 +218,8 @@ test "compositor merges two empty buffers" {
     var storage = renderer_ir.FixedBuffers(0, 0, 0, 0, 0, 0, 0){};
     var output = renderer_ir.FixedBuffers(0, 0, 0, 0, 0, 0, 0){};
     const input = storage.buffers();
-    const receipt = try compose(&.{ .{ .buffers = input, .layer = .scrim } }, &output.buffers());
+    var output_buf = output.buffers();
+    const receipt = try compose(&.{ .{ .buffers = input, .layer = .scrim } }, &output_buf);
     try std.testing.expectEqual(@as(usize, 1), receipt.input_count);
     try std.testing.expectEqual(@as(usize, 0), receipt.total_primitives);
 }
@@ -227,11 +228,12 @@ test "compositor reports error when output buffer is too small" {
     var a_storage = renderer_ir.FixedBuffers(2, 0, 0, 0, 0, 0, 0){};
     var small = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0){};
 
-    var a = a_storage.buffers();
-    try renderer_ir.pushRect(&a, .base, .{ .x = 0, .y = 0, .w = 10, .h = 10 }, .{ .r = 255, .g = 0, .b = 0 }, .{}, 0, 0, renderer_ir.rectModeCode(.fill));
-    try renderer_ir.pushRect(&a, .base, .{ .x = 5, .y = 5, .w = 10, .h = 10 }, .{ .r = 0, .g = 255, .b = 0 }, .{}, 0, 0, renderer_ir.rectModeCode(.fill));
+    const a = a_storage.buffers();
+    try renderer_ir.pushRect(a, .base, .{ .x = 0, .y = 0, .w = 10, .h = 10 }, .{ .r = 255, .g = 0, .b = 0 }, .{ .r = 0, .g = 0, .b = 0 }, 0, 0, renderer_ir.rectModeCode(.fill));
+    try renderer_ir.pushRect(a, .base, .{ .x = 5, .y = 5, .w = 10, .h = 10 }, .{ .r = 0, .g = 255, .b = 0 }, .{ .r = 0, .g = 0, .b = 0 }, 0, 0, renderer_ir.rectModeCode(.fill));
 
-    try std.testing.expectError(error.Budget, compose(&.{.{ .buffers = a, .layer = .scrim }}, &small.buffers()));
+    const small_buf = small.buffers();
+    try std.testing.expectError(error.Budget, compose(&.{.{ .buffers = a, .layer = .scrim }}, &small_buf));
 }
 
 fn rectRed(command: ui.Command) u8 {

@@ -238,6 +238,108 @@ Create the kernel syscall interface described in `00-os-mapping.md` section
 | `net/ipv4.asm` | Kept for exit bridge only |
 | `tpm/tpm.asm` | Device key storage and attestation — reused as-is |
 
+---
+
+## Phase 6: EdgeRun Object Store
+
+Convert all disk storage to content-addressed canonical EdgeRun Objects. Replace
+the POSIX filesystem with a kernel-owned object store. Apps have zero direct disk
+access — they operate on in-RAM object stores carved from their parent's arena at
+spawn, and must call `er_flush()` to commit dirty objects to the append-log WAL
+on the block device.
+
+### P6a — Storage Justification in Manifest
+
+- **File:** `app/src/app.zig:398-447`
+- **Current:** `DeclaredAllocation` has `storage_bytes`/`storage_slots` but no
+  explanation requirement
+- **Work:** Add `storage_justification: [64]u8` field. `hasStorage()` returns
+  true only when justification is non-empty. Include in allocation body encoding
+  and hash.
+- **Enforces:** No app gets persistent storage without declaring why
+
+### P6b — NVMe Read/Write Block Commands
+
+- **File:** `kernel/driver/nvme.asm`
+- **Current:** IO submission/completion queues created (`er_nvme_io_setup`),
+  identify works, but no `er_nvme_read_blocks` or `er_nvme_write_blocks`
+- **Work:** Implement NVMe read/write using IO queue 1. SQE at `NVME_IO_SQ`
+  (0x304000), CQ at `NVME_IO_CQ` (0x303000), data buffer at `NVME_IO_BUF`
+  (0x305000). IO SQ doorbell at BAR0 + 0x1008.
+- **Dependencies:** P6b completion
+- **Forms basis of:** Block I/O backend for PersistentStore
+
+### P6c — Kernel Block Device Abstraction
+
+- **New file:** `kernel/x86_64/storage/block_io.asm`
+- **Work:** Unified `BlockIo` struct with function pointers: `read(slot, lba, buf, count)`,
+  `write(slot, lba, buf, count)`, `sync(slot)`. Backed by NVMe or SDHCI at
+  boot-time selection.
+- **Replaces:** Raw driver calls in kernel main
+- **Dependencies:** P6b (NVMe), existing SDHCI read/write
+
+### P6d — PersistentStore in Kernel ASM
+
+- **New files:** `kernel/x86_64/storage/persistent_store.asm`,
+  `kernel/x86_64/storage/persistent_store_constants.inc`
+- **Current:** `app/src/store.zig` has a complete `PersistentStore` with WAL append-log,
+  blob index, key index, prefix scan, replay, and superblock — but only in Zig/test
+- **Work:** Port the WAL append-log + index + replay to kernel ASM. On-disk format
+  unchanged (compatible with Zig version).
+- **Dependencies:** P6c (block device abstraction)
+- **Key functions:**
+  - `er_persistent_store_open(io, config, blobs, keys) → store`
+  - `er_persistent_store_put_object(canonical) → hash`
+  - `er_persistent_store_get_object(hash, out) → view`
+  - `er_persistent_store_index_put(index_id, key, hash)`
+  - `er_persistent_store_index_scan(index_id, prefix, out) → count`
+  - `er_persistent_store_sync()`
+  - `er_persistent_store_replay()`
+
+### P6e — Kernel Object Runtime (WASM Imports)
+
+- **New files:** `kernel/x86_64/wasm/wasm_object_api.asm`,
+  `kernel/x86_64/storage/object_runtime.asm`
+- **Work:** WASM import functions that replace POSIX I/O:
+  - `er_object_get(hash, out) → body pointer` — reads from app's RAM Store
+  - `er_object_put(canonical) → hash` — writes to app's RAM Store
+  - `er_flush()` — copies dirty RAM Store objects to PersistentStore WAL
+  - `er_index_scan(index_id, prefix, out) → count` — prefix scan over index
+  - `er_object_resolve(tree_hash, path) → child hash` — VFS path walk
+- **Dependencies:** P6a, P6d
+- **Enforces:** No app ever touches a block device. POSIX open/read/write does
+  not exist in the WASM import namespace.
+
+### P6f — Boot-Time Store Load
+
+- **File:** `kernel/x86_64/kernel_main.asm`
+- **Work:** After NVMe/SDHCI probe, call `er_persistent_store_open` + `replay`
+  on the object store partition. Read root tree hash from superblock. The root
+  tree's children form the top-level VFS namespace. Any app spawned gets its
+  storage carved from the kernel's RAM cache of loaded objects.
+- **Dependencies:** P6d, P6e
+
+### P6g — Host Conversion Tool
+
+- **New file:** `asm/host/obj_convert.asm`
+- **Work:** Linux userspace tool that walks a filesystem tree, wraps every file
+  as `OBJECT_KIND_BYTES`, every directory as `OBJECT_KIND_TREE`, and writes them
+  into a PersistentStore partition. Also builds the index: each file is indexed
+  by its path label for instant `indexScanPrefix()` lookup.
+- **Dependencies:** P6d (on-disk format)
+- **Enables:** `./obj_convert /mnt/old_disk /dev/nvme0n1p1` → instant migration
+
+### P6h — Object Store Index Cache
+
+- **New file:** `kernel/x86_64/storage/index_cache.asm`
+- **Work:** On boot, load PersistentStore index slots into a fixed RAM array.
+  Enables O(n) prefix scan within microseconds for datasets up to ~1M entries.
+  For larger datasets, a hash-table index on disk with RAM cache of hot pages.
+- **Dependencies:** P6d, P6f
+- **Enables:** "search within moments" across all objects on disk
+
+---
+
 ## Non-Goals
 
 These Tor features are intentionally not implemented in the native path

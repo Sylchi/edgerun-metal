@@ -4,7 +4,7 @@ const bytes = @import("../bytes.zig");
 const web_host_js = @import("../web_host_js.zig");
 const clock = @import("../clock.zig");
 const source_object = @import("embedded_source_object").bytes;
-const icon_svg = @import("../icon_svg.zig");
+
 const identity_core = @import("../identity.zig");
 pub const interaction = @import("../ui_interaction.zig");
 const object = @import("../object.zig");

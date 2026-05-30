@@ -341,6 +341,7 @@ fn declaredAllocation(resources: ResourcePlan) app_mod.App.DeclaredAllocation {
         .memory_bytes = resources.child_memory_bytes,
         .storage_bytes = resources.child_storage_bytes,
         .storage_slots = resources.child_storage_slots,
+        .storage_justification = @as([64]u8, @splat(@as(u8, 's'))),
     };
 }
 

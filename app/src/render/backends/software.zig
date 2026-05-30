@@ -2915,7 +2915,7 @@ fn renderTestSceneIr(surface: Surface, commands: []const ui.Command) !void {
     for (commands) |cmd| switch (cmd) {
         .rect => |r| try renderer_ir.pushRect(buffers, .base, r.bounds, r.color, r.color2, r.radius, r.shadow, renderer_ir.rectModeCode(r.mode)),
         .border => |b| try renderer_ir.pushRect(buffers, .base, b.bounds, b.color, .clear, 0, 0, renderer_ir.rectModeCode(.border)),
-        .icon_quad => |q| try renderer_ir.pushSvgQuad(buffers, .base, ui.SvgQuad.fromIconQuad(q)),
+        .icon_quad => |q| try renderer_ir.pushSvgQuad(buffers, .base, q),
         .svg_quad => |q| try renderer_ir.pushSvgQuad(buffers, .base, q),
         .image_quad => |q| try renderer_ir.pushImage(buffers, q),
         .text, .text_quad, .drag_source, .drop_target, .transition => {},

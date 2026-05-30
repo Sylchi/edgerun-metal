@@ -20,6 +20,8 @@ er-embed
 .build/
 .zig-cache/
 app/.build/
+app/src/.build/
+app/src/gen/
 app/.zig-cache/
 app/zig-out/
 app/build/

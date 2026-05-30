@@ -132,23 +132,6 @@ pub fn main() !void {
             \\    };
             \\}
             \\
-            \\test "all mapped tabler svgs parse without invalid path data" {
-            \\    const icon_svg = @import("icon_svg.zig");
-            \\    inline for (std.meta.fields(icon.Icon)) |field| {
-            \\        var iter = icon_svg.Iterator.init(source(@enumFromInt(field.value)));
-            \\        var count: usize = 0;
-            \\        while (try iter.next()) |_| count += 1;
-            \\        try std.testing.expect(count > 0);
-            \\    }
-            \\}
-            \\
-            \\test "all mapped tabler svgs match supported stroke contract" {
-            \\    const icon_svg = @import("icon_svg.zig");
-            \\    inline for (std.meta.fields(icon.Icon)) |field| {
-            \\        try icon_svg.validateSupportedTablerStroke(source(@enumFromInt(field.value)));
-            \\    }
-            \\}
-            \\
         );
     }
 }

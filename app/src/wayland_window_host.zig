@@ -1,6 +1,6 @@
 const std = @import("std");
 const bytes_mod = @import("bytes.zig");
-const icon_svg = @import("icon_svg.zig");
+const icon_pack = @import("icon_pack.zig");
 const interaction = @import("ui_interaction.zig");
 const renderer_font_atlas = @import("render/font_atlas_weighted.zig");
 const renderer_gpu = @import("render/backends/gpu.zig");
@@ -797,7 +797,7 @@ test "wayland host appends scene cursor from native hover state" {
     try app_cursor.render(&scene, app.state.hover_x, app.state.hover_y, app.state.cursorKind());
 
     try std.testing.expectEqual(app_cursor.Kind.pointer, app.state.cursorKind());
-    try std.testing.expect(hasIconId(scene.written(), icon_svg.cursor_hand_finger_icon_id));
+    try std.testing.expect(hasIconId(scene.written(), icon_pack.cursor_hand_finger_icon_id));
 }
 
 test "wayland host renders vector cursor overlay through native pipeline" {
