@@ -57,31 +57,62 @@ pub fn isCommand(value: u8) bool {
     };
 }
 
-pub fn skipSvgNumberSeparators(data: []const u8, index: *usize) void {
-    while (index.* < data.len) : (index.* += 1) {
-        const byte = data[index.*];
-        if (byte == ' ' or byte == ',' or byte == '\t' or byte == '\n' or byte == '\r') continue;
-        break;
-    }
+pub fn isSvgWhitespace(byte: u8) bool {
+    return switch (byte) {
+        ' ', '\n', '\r', '\t' => true,
+        else => false,
+    };
+}
+
+pub fn isSvgNumberStart(byte: u8) bool {
+    return switch (byte) {
+        '0'...'9', '.', '-', '+' => true,
+        else => false,
+    };
+}
+
+fn previousSvgNumberCanTakeComma(data: []const u8, comma_index: usize) bool {
+    if (comma_index == 0) return false;
+    const prev = data[comma_index - 1];
+    return prev == ')' or isSvgWhitespace(prev) or isSvgNumberStart(prev);
+}
+
+pub fn skipSvgNumberSeparators(data: []const u8, index: *usize) !void {
+    while (index.* < data.len and isSvgWhitespace(data[index.*])) : (index.* += 1) {}
+    if (index.* >= data.len or data[index.*] != ',') return;
+    if (!previousSvgNumberCanTakeComma(data, index.*)) return error.InvalidSvg;
+    index.* += 1;
+    while (index.* < data.len and isSvgWhitespace(data[index.*])) : (index.* += 1) {}
+    if (index.* >= data.len or !isSvgNumberStart(data[index.*])) return error.InvalidSvg;
+}
+
+fn parseFiniteSvgFloat(raw: []const u8) !f32 {
+    const value = std.fmt.parseFloat(f32, raw) catch return error.InvalidSvg;
+    if (!math.isFiniteF(value)) return error.InvalidSvg;
+    return value;
 }
 
 pub fn parseSvgNumber(data: []const u8, index: *usize) !f32 {
-    skipSvgNumberSeparators(data, index);
+    try skipSvgNumberSeparators(data, index);
     if (index.* >= data.len) return error.InvalidSvg;
     const start = index.*;
     if (data[index.*] == '-' or data[index.*] == '+') index.* += 1;
-    while (index.* < data.len and data[index.*] >= '0' and data[index.*] <= '9') index.* += 1;
+    var has_digit = false;
+    while (index.* < data.len and std.ascii.isDigit(data[index.*])) : (index.* += 1) has_digit = true;
     if (index.* < data.len and data[index.*] == '.') {
         index.* += 1;
-        while (index.* < data.len and data[index.*] >= '0' and data[index.*] <= '9') index.* += 1;
+        while (index.* < data.len and std.ascii.isDigit(data[index.*])) : (index.* += 1) has_digit = true;
     }
+    if (!has_digit) return error.InvalidSvg;
     if (index.* < data.len and (data[index.*] == 'e' or data[index.*] == 'E')) {
         index.* += 1;
         if (index.* < data.len and (data[index.*] == '-' or data[index.*] == '+')) index.* += 1;
-        while (index.* < data.len and data[index.*] >= '0' and data[index.*] <= '9') index.* += 1;
+        var exponent_digits = false;
+        while (index.* < data.len and std.ascii.isDigit(data[index.*])) : (index.* += 1) exponent_digits = true;
+        if (!exponent_digits) return error.InvalidSvg;
     }
     if (index.* == start) return error.InvalidSvg;
-    return std.fmt.parseFloat(f32, data[start..index.*]);
+    return parseFiniteSvgFloat(data[start..index.*]);
 }
 
 pub const PathIterator = struct {
@@ -105,7 +136,7 @@ pub const PathIterator = struct {
     }
 
     pub fn next(self: *PathIterator) !?icon_vector.Op {
-        self.skipSeparators();
+        try self.skipSeparators();
         if (self.index >= self.data.len) return null;
         if (isCommand(self.data[self.index])) {
             self.command = self.data[self.index];
@@ -261,7 +292,7 @@ pub const PathIterator = struct {
     }
 
     fn flag(self: *PathIterator) !bool {
-        self.skipSeparators();
+        try self.skipSeparators();
         if (self.index >= self.data.len) return error.InvalidPath;
         const value = self.data[self.index];
         if (value == '0') {
@@ -279,8 +310,8 @@ pub const PathIterator = struct {
         return parseSvgNumber(self.data, &self.index);
     }
 
-    fn skipSeparators(self: *PathIterator) void {
-        skipSvgNumberSeparators(self.data, &self.index);
+    fn skipSeparators(self: *PathIterator) !void {
+        try skipSvgNumberSeparators(self.data, &self.index);
     }
 
     fn normalizePoint(self: PathIterator, value: icon_vector.Point) icon_vector.Point {

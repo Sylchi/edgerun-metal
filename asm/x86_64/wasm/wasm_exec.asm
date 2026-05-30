@@ -498,8 +498,12 @@ er_wasm_call_imported:
     mov     r10, rdi
     imul    r10, IMPORTED_FUNC_SIZE
 
-    ; Get func_ptr
+    ; Get resolved host import index and convert to function pointer
     mov     r15, [imports_buf + r10 + IMPORT_RESOLVED_FUNC_IDX_OFF]
+    mov     rax, r15
+    imul    rax, HOST_IMPORT_SIZE
+    add     rax, [runtime_imports_ptr]
+    mov     r15, [rax + HOST_IMPORT_FN_PTR_OFF]
 
     ; Get type info for param/result count
     mov     rax, [imports_buf + r10 + IMPORT_TYPE_INDEX_OFF]

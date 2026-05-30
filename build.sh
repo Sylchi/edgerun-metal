@@ -4,6 +4,14 @@
 # Targets:  kernel  kernel-hello  test  test-*  clean
 set -euo pipefail
 
+# Disable all forms of disk-based caching
+export CCACHE_DISABLE=1
+export SCCACHE_DISABLE=1
+export PYTHONDONTWRITEBYTECODE=1
+export CARGO_INCREMENTAL=0
+unset CARGO_HOME
+unset GOCACHE
+
 BUILD_DIR=".build"
 ASM_BUILD="${BUILD_DIR}/asm"
 ASM_DIR="asm/x86_64"
@@ -112,24 +120,19 @@ SOBJS="
 test_entry() {
 	local src="${TEST_DIR}/test_entry.asm"
 	local dst="${ASM_BUILD}/test_entry.o"
-	if [ ! -f "$dst" ] || [ "$src" -nt "$dst" ] || [ "${ASM_DIR}/macros.inc" -nt "$dst" ]; then
-		${YASM} -f elf64 ${ASM_INC} -o "$dst" "$src"
-	fi
+	${YASM} -f elf64 ${ASM_INC} -o "$dst" "$src"
 	echo "  AS  ${dst}"
 }
 
 # ---- assemble_shared ----
 assemble_shared() {
-	local missing=0
 	for o in ${SOBJS}; do
 		local base="${o%.o}"
 		local name="${base##*/}"
 		local src="${ASM_DIR}/${base}.asm"
 		local dst="${ASM_BUILD}/${name}.o"
-		if [ ! -f "$dst" ] || [ "$src" -nt "$dst" ] || [ "${ASM_DIR}/macros.inc" -nt "$dst" ]; then
-			elf64 "$src" "$dst"
-			echo "  AS  ${dst}"
-		fi
+		elf64 "$src" "$dst"
+		echo "  AS  ${dst}"
 	done
 }
 
@@ -140,18 +143,14 @@ assemble_kernel() {
 		local name="${base##*/}"
 		local src_path="${ASM_DIR}/${src}"
 		local dst="${ASM_BUILD}/kernel_${name}.o"
-		if [ ! -f "$dst" ] || [ "$src_path" -nt "$dst" ] || [ "${ASM_DIR}/macros.inc" -nt "$dst" ]; then
-			elf32 "$src_path" "$dst"
-			echo "  AS  ${dst}"
-		fi
+		elf32 "$src_path" "$dst"
+		echo "  AS  ${dst}"
 	done
 	# kernel_main — source name != target
 	local km_src="${ASM_DIR}/kernel_main.asm"
 	local km_dst="${ASM_BUILD}/kernel_main_elf32.o"
-	if [ ! -f "$km_dst" ] || [ "$km_src" -nt "$km_dst" ] || [ "${ASM_DIR}/macros.inc" -nt "$km_dst" ]; then
-		elf32 "$km_src" "$km_dst"
-		echo "  AS  ${km_dst}"
-	fi
+	elf32 "$km_src" "$km_dst"
+	echo "  AS  ${km_dst}"
 }
 
 # ---- assemble_kernel_efi (elf64, for PE32+) ----
@@ -164,18 +163,14 @@ assemble_kernel_efi() {
 			src_path="${ASM_DIR}/efi_entry.asm"
 		fi
 		local dst="${ASM_BUILD}/kernel_efi_${name}.o"
-		if [ ! -f "$dst" ] || [ "$src_path" -nt "$dst" ] || [ "${ASM_DIR}/macros.inc" -nt "$dst" ]; then
-			elf64 "$src_path" "$dst"
-			echo "  AS  ${dst}"
-		fi
+		elf64 "$src_path" "$dst"
+		echo "  AS  ${dst}"
 	done
 	# kernel_main as ELF64
 	local km_src="${ASM_DIR}/kernel_main.asm"
 	local km_dst="${ASM_BUILD}/kernel_main_efi64.o"
-	if [ ! -f "$km_dst" ] || [ "$km_src" -nt "$km_dst" ] || [ "${ASM_DIR}/macros.inc" -nt "$km_dst" ]; then
-		elf64 "$km_src" "$km_dst"
-		echo "  AS  ${km_dst}"
-	fi
+	elf64 "$km_src" "$km_dst"
+	echo "  AS  ${km_dst}"
 }
 
 # ---- target helpers ----
@@ -185,10 +180,8 @@ hosted_test_obj() {
 	local name="${path##*/}"
 	local src="${ASM_DIR}/${path}.asm"
 	local dst="${ASM_BUILD}/${name}_test.o"
-	if [ ! -f "$dst" ] || [ "$src" -nt "$dst" ] || [ "${ASM_DIR}/macros.inc" -nt "$dst" ]; then
-		elf64_h "$src" "$dst"
-		echo "  AS  ${dst}"
-	fi
+	elf64_h "$src" "$dst"
+	echo "  AS  ${dst}"
 }
 
 test_via_cc() {
@@ -206,22 +199,6 @@ test_via_cc() {
 			hosted_test_obj "tpm/tpm"
 		elif [ "${dep}" = "tpm_crb_test.o" ]; then
 			hosted_test_obj "tpm/tpm_crb"
-		elif [ ! -f "$d_path" ]; then
-			local base="${dep%.o}"
-			local s=""
-			for d in drv rt crypto wasm net tpm ui object ""; do
-				local candidate="${ASM_DIR}/${d}${d:+/}${base}.asm"
-				if [ -f "$candidate" ]; then
-					s="$candidate"; break
-				fi
-			done
-			if [ -n "$s" ]; then
-				elf64 "$s" "$d_path"
-				echo "  AS  ${d_path}"
-			else
-				echo "error: missing dependency $dep" >&2
-				exit 1
-			fi
 		fi
 		args+=("${d_path}")
 	done
@@ -414,19 +391,17 @@ cmd_test() {
 	cmd_test_wasm_compile_and_run
 	cmd_test_wasm_compile_minimal
 	cmd_test_object
+	cmd_test_tor_ntor
+	cmd_test_fe_mul
 }
 
 cmd_test_ctype() {
 	local src="${TEST_DIR}/test_ctype_self.asm"
 	local obj="${ASM_BUILD}/test_ctype_self.o"
 	local bin="${ASM_BUILD}/test_ctype"
-	if [ ! -f "$obj" ] || [ "$src" -nt "$obj" ] || [ "${ASM_DIR}/macros.inc" -nt "$obj" ]; then
-		${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
-	fi
+	${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
 	local ctype_o="${ASM_BUILD}/ctype.o"
-	if [ ! -f "$ctype_o" ]; then
-		elf64 "${ASM_DIR}/rt/ctype.asm" "$ctype_o"
-	fi
+	elf64 "${ASM_DIR}/rt/ctype.asm" "$ctype_o"
 	ld -nostdlib -static -o "$bin" "$obj" "$ctype_o"
 	echo "  LD  ${bin}"
 	"$bin"
@@ -436,13 +411,9 @@ cmd_test_sw_fb() {
 	local src="${TEST_DIR}/test_sw_fb_self.asm"
 	local obj="${ASM_BUILD}/test_sw_fb_self.o"
 	local bin="${ASM_BUILD}/test_sw_fb"
-	if [ ! -f "$obj" ] || [ "$src" -nt "$obj" ] || [ "${ASM_DIR}/macros.inc" -nt "$obj" ]; then
-		${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
-	fi
+	${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
 	local sw_fb_o="${ASM_BUILD}/sw_fb.o"
-	if [ ! -f "$sw_fb_o" ]; then
-		elf64 "${ASM_DIR}/ui/sw_fb.asm" "$sw_fb_o"
-	fi
+	elf64 "${ASM_DIR}/ui/sw_fb.asm" "$sw_fb_o"
 	ld -nostdlib -static -o "$bin" "$obj" "$sw_fb_o"
 	echo "  LD  ${bin}"
 	"$bin"
@@ -464,22 +435,46 @@ cmd_test_acpi()     { test_via_cc "acpi"     "acpi.o"; }
 cmd_test_preimage() { test_via_cc "preimage" "preimage.o" "blake3.o" "clock.o" "bytes.o"; }
 cmd_test_identity() { test_via_cc "identity" "identity.o" "blake3.o" "clock.o" "bytes.o"; }
 cmd_test_object()   { test_via_cc "object"   "object.o" "preimage.o" "blake3.o" "clock.o" "bytes.o"; }
+cmd_test_tor_ntor() { test_via_cc "tor_ntor" "tor_ntor.o" "runtime.o"; }
+
+cmd_test_fe_mul() {
+    local src="${TEST_DIR}/test_fe_mul.asm"
+    local obj="${ASM_BUILD}/test_fe_mul.o"
+    local stub_src="${TEST_DIR}/stubs_tor_ntor.asm"
+    local stub_obj="${ASM_BUILD}/stubs_tor_ntor.o"
+    local bin="${ASM_BUILD}/test_fe_mul"
+    # Assemble test
+    if [ ! -f "$obj" ] || [ "$src" -nt "$obj" ] || [ "${ASM_DIR}/macros.inc" -nt "$obj" ]; then
+        ${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
+    fi
+    # Assemble stubs
+    if [ ! -f "$stub_obj" ] || [ "$stub_src" -nt "$stub_obj" ] || [ "${ASM_DIR}/macros.inc" -nt "$stub_obj" ]; then
+        ${YASM} -f elf64 ${ASM_INC} -o "$stub_obj" "$stub_src"
+    fi
+    # Ensure tor_ntor.o and runtime.o exist
+    local tor_ntor_o="${ASM_BUILD}/tor_ntor.o"
+    if [ ! -f "$tor_ntor_o" ]; then
+        elf64 "${ASM_DIR}/crypto/tor_ntor.asm" "$tor_ntor_o"
+    fi
+    local runtime_o="${ASM_BUILD}/runtime.o"
+    if [ ! -f "$runtime_o" ]; then
+        elf64 "${ASM_DIR}/rt/runtime.asm" "$runtime_o"
+    fi
+    ld -nostdlib -static -o "$bin" "$obj" "$tor_ntor_o" "$runtime_o" "$stub_obj"
+    echo "  LD  ${bin}"
+    "$bin"
+    echo "  TEST ${bin}: exit $?"
+}
 
 cmd_test_render_ir() {
 	local src="${TEST_DIR}/test_render_ir_self.asm"
 	local obj="${ASM_BUILD}/test_render_ir_self.o"
 	local bin="${ASM_BUILD}/test_render_ir"
-	if [ ! -f "$obj" ] || [ "$src" -nt "$obj" ] || [ "${ASM_DIR}/macros.inc" -nt "$obj" ]; then
-		${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
-	fi
+	${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
 	local render_ir_o="${ASM_BUILD}/render_ir.o"
-	if [ ! -f "$render_ir_o" ]; then
-		elf64 "${ASM_DIR}/ui/render_ir.asm" "$render_ir_o"
-	fi
+	elf64 "${ASM_DIR}/ui/render_ir.asm" "$render_ir_o"
 	local sw_fb_o="${ASM_BUILD}/sw_fb.o"
-	if [ ! -f "$sw_fb_o" ]; then
-		elf64 "${ASM_DIR}/ui/sw_fb.asm" "$sw_fb_o"
-	fi
+	elf64 "${ASM_DIR}/ui/sw_fb.asm" "$sw_fb_o"
 	ld -nostdlib -static -o "$bin" "$obj" "$render_ir_o" "$sw_fb_o"
 	echo "  LD  ${bin}"
 	"$bin"
@@ -580,6 +575,8 @@ EdgeRun build targets:
   test-wasm-compile-and-run  Run WASM compile + pipeline integration test
   test-wasm-compile-minimal  Run minimal compile + run test
   test-object         Run object serialization test
+  test-tor-ntor       Run Tor ntor field arithmetic test
+  test-fe-mul         Run _fe_mul field multiplication test (self-hosted ASM)
   pi-kernel           Build Pi Zero W kernel.img (ARMv6)
   pi-usb-boot         Build Pi USB boot host tool (x86_64)
   pi-boot             Build + boot Pi Zero via USB
@@ -618,7 +615,9 @@ case "${1:-help}" in
 	test-wasm-pipeline) cmd_test_wasm_pipeline ;;
 	test-wasm-compile-and-run) cmd_test_wasm_compile_and_run ;;
 	test-wasm-compile-minimal) cmd_test_wasm_compile_minimal ;;
-	test-object)    cmd_test_object ;;
+ 	test-object)    cmd_test_object ;;
+	test-tor-ntor)  cmd_test_tor_ntor ;;
+	test-fe-mul)    cmd_test_fe_mul ;;
 	pi-kernel)      cmd_pi_kernel ;;
 	pi-usb-boot)       cmd_pi_usb_boot ;;
 	pi-boot)           cmd_pi_boot ;;
