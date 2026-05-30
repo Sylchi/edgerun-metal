@@ -649,6 +649,14 @@ test "icon mask covers code slash parity pixel" {
     var alpha: [max_pixels]u8 = undefined;
     const mask = try rasterizeIconAlpha(7, 22, 22, &alpha);
     try std.testing.expect(mask.painted);
+    const actual = mask.alpha[6 * 22 + 13];
+    if (actual != 21) {
+        std.debug.print("\n  MASK: actual={} expected=21\n", .{actual});
+        var i: usize = 0;
+        while (i < mask.alpha.len) : (i += 1) {
+            if (mask.alpha[i] > 0) std.debug.print("  mask[{}]={}\n", .{ i, mask.alpha[i] });
+        }
+    }
     try std.testing.expectEqual(@as(u8, 21), mask.alpha[6 * 22 + 13]);
 }
 
