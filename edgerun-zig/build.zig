@@ -466,9 +466,7 @@ pub fn build(b: *std.Build) void {
         "er_ui_packed_rect_float_stride",
         "er_ui_packed_rect_buffer_ptr",
         "er_ui_packed_rect_buffer_len",
-        "er_ui_packed_text_vertex_float_stride",
-        "er_ui_packed_text_vertex_buffer_ptr",
-        "er_ui_packed_text_vertex_buffer_len",
+
         "er_ui_packed_icon_vertex_float_stride",
         "er_ui_packed_icon_vertex_buffer_ptr",
         "er_ui_packed_icon_vertex_buffer_len",
@@ -480,8 +478,7 @@ pub fn build(b: *std.Build) void {
         "er_ui_packed_image_vertex_buffer_len",
         "er_ui_packed_overlay_rect_buffer_ptr",
         "er_ui_packed_overlay_rect_buffer_len",
-        "er_ui_packed_overlay_text_vertex_buffer_ptr",
-        "er_ui_packed_overlay_text_vertex_buffer_len",
+
         "er_ui_packed_overlay_icon_vertex_buffer_ptr",
         "er_ui_packed_overlay_icon_vertex_buffer_len",
         "er_ui_packed_overlay_icon_line_vertex_buffer_ptr",
@@ -639,4 +636,16 @@ pub fn build(b: *std.Build) void {
     const run_gen_font = b.addRunArtifact(gen_font);
     const gen_font_step = b.step("gen-font", "Generate pre-compiled font canonical objects from the Geist TTF");
     gen_font_step.dependOn(&run_gen_font.step);
+
+    const gen_atlas = b.addExecutable(.{
+        .name = "gen-atlas",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/gen_atlas.zig"),
+            .target = b.graph.host,
+            .optimize = optimize,
+        }),
+    });
+    const run_gen_atlas = b.addRunArtifact(gen_atlas);
+    const gen_atlas_step = b.step("gen-atlas", "Generate font atlas bitmap and glyph table from pre-compiled font objects");
+    gen_atlas_step.dependOn(&run_gen_atlas.step);
 }

@@ -98,7 +98,17 @@ er_fn er_fn_run
     test    rdx, rdx
     jnz     .error
 
-    mov     r15, rax        ; function_index
+    ; er_wasm_find_export returns the export entry index.
+    ; We must look up the actual function index from the export entry.
+    mov     r15, rax        ; export_index
+    push    r10
+    mov     r10, r15
+    imul    r10, EXPORT_SIZE
+    movzx   eax, byte [exports_buf + r10 + 16]  ; kind
+    cmp     al, 0x00        ; function kind
+    jne     .error          ; not a function export
+    mov     r15, [exports_buf + r10 + 24]   ; function index
+    pop     r10
 
     ; Apply data segments
     mov     rdi, [runtime_memory_ptr]

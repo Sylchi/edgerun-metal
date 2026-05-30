@@ -141,9 +141,12 @@ er_wasm_read_value_type:
 ; Helper: er_wasm_read_limits
 ; Reads limits from [rsi], stores in [rcx] (Limits struct: min=0, max=8).
 ; Updates rsi.
+; NOTE: er_wasm_read_leb_u32 clobbers rcx (shift counter).
+;       Save rcx in rbx before calling it.
 ; ==================================================================
 er_wasm_read_limits:
     push    rbx
+    mov     rbx, rcx            ; preserve output pointer in callee-saved rbx
     movzx   eax, byte [rsi]
     inc     rsi
     cmp     al, LIMITS_MIN_ONLY
@@ -157,8 +160,8 @@ er_wasm_read_limits:
     call    er_wasm_read_leb_u32
     test    edx, edx
     jnz     .error
-    mov     [rcx], rax          ; store min
-    mov     qword [rcx + 8], 0  ; max = null (0)
+    mov     [rbx], rax          ; store min
+    mov     qword [rbx + 8], 0  ; max = null (0)
     er_ok
     pop     rbx
     ret
@@ -166,19 +169,24 @@ er_wasm_read_limits:
     call    er_wasm_read_leb_u32
     test    edx, edx
     jnz     .error
-    mov     [rcx], rax          ; store min
-    mov     rbx, rax
+    mov     [rbx], rax          ; store min
+    push    rax                 ; save min on stack for comparison
     call    er_wasm_read_leb_u32
     test    edx, edx
-    jnz     .error
-    cmp     rax, rbx
+    jnz     .error_pop
+    pop     rcx                 ; restore min for comparison
+    cmp     rax, rcx
     jb      .corrupt
-    mov     [rcx + 8], rax      ; store max
+    mov     [rbx + 8], rax      ; store max
     er_ok
     pop     rbx
     ret
 .corrupt:
     er_err  ERROR_CORRUPT
+    pop     rbx
+    ret
+.error_pop:
+    add     rsp, 8              ; discard saved min
 .error:
     pop     rbx
     ret

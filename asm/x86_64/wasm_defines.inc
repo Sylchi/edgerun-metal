@@ -109,6 +109,8 @@ ERROR_TIMEOUT          equ 20
 ERROR_IO               equ 21
 ERROR_NOT_PRESENT      equ 22
 ERROR_NO_DATA          equ 23
+ERROR_INVALID_PARAM    equ 24
+ERROR_BUSY             equ 25
 
 ERROR_OK               equ 0
 

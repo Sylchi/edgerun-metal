@@ -33,6 +33,7 @@ SECTION .text
 ; Returns:   eax = dword value from config space
 ; ==================================================================
 er_fn er_pci_read32
+    push    rbx
     mov     eax, 0x80000000
     mov     al, cl
     and     al, 0xFC
@@ -52,6 +53,7 @@ er_fn er_pci_read32
     out     dx, eax
     mov     dx, PCI_DATA_PORT
     in      eax, dx
+    pop     rbx
     er_ok
     ret
 
@@ -64,6 +66,7 @@ er_fn er_pci_read32
 ; ==================================================================
 er_fn er_pci_write32
     push    r8
+    push    rbx
 
     mov     eax, 0x80000000
     mov     al, cl
@@ -86,6 +89,7 @@ er_fn er_pci_write32
     mov     dx, PCI_DATA_PORT
     out     dx, eax
 
+    pop     rbx
     pop     r8
     er_ok
     ret
@@ -99,7 +103,9 @@ er_fn er_pci_write32
 ; Args: rdi=class, rsi=subclass, rdx=prog_if, rcx=out_bus,
 ;       r8=out_dev, r9=out_func
 ;
-; Scans bus 0, devices 0-31, functions 0-7.
+; Scans all 256 PCI buses (0-255) for a matching class/subclass/prog-if.
+; Non-existent buses/devices return 0xFFFFFFFF via the standard
+; 0xCF8/0xCFC config mechanism and are skipped.
 ; Returns: eax = 1 if found, 0 if not found
 ; ==================================================================
 er_fn er_pci_find_class
@@ -182,7 +188,7 @@ er_fn er_pci_find_class
     cmp     r8b, 32
     jb      .dev_loop
     inc     ebx
-    cmp     ebx, 1
+    cmp     ebx, 256        ; scan all 256 buses
     jb      .bus_loop
 
     xor     eax, eax

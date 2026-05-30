@@ -1,5 +1,7 @@
 const std = @import("std");
 const renderer_ir = @import("ir.zig");
+const renderer_pipeline = @import("pipeline.zig");
+const renderer_font_atlas = @import("font_atlas_weighted.zig");
 const renderer_software = @import("backends/software.zig");
 const ui = @import("../ui.zig");
 
@@ -15,11 +17,9 @@ pub const Error = error{
 };
 
 const compose_rect_budget: usize = 4096;
-const compose_text_vertex_budget: usize = 24576;
 const compose_icon_budget: usize = 4096;
-const compose_image_vertex_budget: usize = 384;
+const compose_image_vertex_budget: usize = 2400;
 const compose_overlay_rect_budget: usize = 512;
-const compose_overlay_text_vertex_budget: usize = 8192;
 const compose_overlay_icon_budget: usize = 256;
 
 pub const PixelFormat = enum(u8) {
@@ -139,26 +139,20 @@ pub const Compositor = struct {
         };
     }
 
-    pub fn compose(self: *Compositor, surfaces: []const Surface, scene: ui.Scene, background: ui.Color) Error!Receipt {
+    pub fn compose(self: *Compositor, surfaces: []const Surface, font_atlas: *renderer_font_atlas.Atlas, scene: ui.Scene, background: ui.Color) Error!Receipt {
         var storage = renderer_ir.FixedBuffers(
             compose_rect_budget,
-            compose_text_vertex_budget,
             compose_icon_budget,
             compose_image_vertex_budget,
             compose_overlay_rect_budget,
-            compose_overlay_text_vertex_budget,
             compose_overlay_icon_budget,
             0,
             0,
         ){};
         const buffers = storage.buffers();
-        var context: u8 = 0;
-        const sources = renderer_ir.Sources{ .font = renderer_ir.commandAdapterFont(&context) };
-        renderer_ir.packScene(buffers, sources, scene.written()) catch return error.InvalidIrBuffer;
-        const alpha = [_]u8{255};
-        return self.composeIr(surfaces, buffers, .{
-            .font = .{ .width = 1, .height = 1, .alpha = &alpha },
-        }, background);
+        renderer_pipeline.packScene(buffers, font_atlas, scene.written()) catch return error.InvalidIrBuffer;
+        renderer_pipeline.packTextQuads(buffers, font_atlas, scene.written()) catch return error.InvalidIrBuffer;
+        return self.composeIr(surfaces, buffers, renderer_pipeline.softwareResources(font_atlas, null), background);
     }
 
     pub fn composeIr(
@@ -253,7 +247,7 @@ pub const Compositor = struct {
     fn markIrDamage(self: *Compositor, buffers: renderer_ir.Buffers) Error!void {
         for (renderer_ir.drawBatches(buffers)) |batch| switch (batch) {
             .rects, .overlay_rects => |rects| try self.markIrRectBuffer(rects),
-            .image, .text, .svg, .overlay_text, .overlay_icon => |vertices| try self.markTexturedVertices(vertices),
+            .image, .svg, .overlay_icon => |vertices| try self.markTexturedVertices(vertices),
             .icon_lines, .overlay_icon_lines => {},
         };
     }
@@ -357,8 +351,10 @@ test "compositor composites app surface pixels into the target" {
     var compositor = try Compositor.init(target, &damage);
     var commands: [1]ui.Command = undefined;
     const scene = ui.Scene.init(&commands);
+    var font_atlas: renderer_font_atlas.Atlas = undefined;
+    font_atlas.initUtf8();
 
-    const receipt = try compositor.compose(&.{app_surface}, scene, .clear);
+    const receipt = try compositor.compose(&.{app_surface}, &font_atlas, scene, .clear);
     try std.testing.expect(receipt.valid());
     try std.testing.expectEqual(@as(u64, 4), receipt.pixels_written);
     try std.testing.expectEqual(red, pixels[1 * 4 + 1]);
@@ -390,8 +386,10 @@ test "compositor renders ui scene above app surfaces" {
     var commands: [2]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
     try scene.pushRect(.{ .x = 1, .y = 1, .w = 2, .h = 2 }, red, .fill, 0.0, 0.0);
+    var font_atlas: renderer_font_atlas.Atlas = undefined;
+    font_atlas.initUtf8();
 
-    const receipt = try compositor.compose(&.{app_surface}, scene, .clear);
+    const receipt = try compositor.compose(&.{app_surface}, &font_atlas, scene, .clear);
     try std.testing.expect(receipt.valid());
     try std.testing.expectEqual(blue, pixels[0]);
     try std.testing.expectEqual(red, pixels[1 * 4 + 1]);
@@ -422,38 +420,23 @@ test "compositor renders canonical ir above app surfaces" {
     const command_target = try renderer_software.Framebuffer.init(4, 4, &command_pixels);
     var command_damage: [4]PixelRect = undefined;
     var command_compositor = try Compositor.init(command_target, &command_damage);
-    const command_receipt = try command_compositor.compose(&.{app_surface}, scene, .clear);
+    var font_atlas: renderer_font_atlas.Atlas = undefined;
+    font_atlas.initUtf8();
+    const command_receipt = try command_compositor.compose(&.{app_surface}, &font_atlas, scene, .clear);
 
-    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
-    var source_context: u8 = 0;
-    const sources = renderer_ir.Sources{
-        .font = .{ .context = &source_context, .metrics = testFontMetrics, .width = testTextWidth, .glyph = testGlyph },
-    };
-    try renderer_ir.packScene(buffers, sources, scene.written());
 
     var ir_pixels: [4 * 4]ui.Color = undefined;
     const ir_target = try renderer_software.Framebuffer.init(4, 4, &ir_pixels);
     var ir_damage: [4]PixelRect = undefined;
     var ir_compositor = try Compositor.init(ir_target, &ir_damage);
-    const alpha = [_]u8{255};
+    const alpha_single = [_]u8{255};
     const ir_receipt = try ir_compositor.composeIr(&.{app_surface}, buffers, .{
-        .font = .{ .width = 1, .height = 1, .alpha = &alpha },
+        .font = .{ .width = 1, .height = 1, .alpha = &alpha_single },
     }, .clear);
 
     try std.testing.expect(ir_receipt.valid());
     try std.testing.expectEqual(command_receipt.damage_count, ir_receipt.damage_count);
     try std.testing.expectEqualSlices(ui.Color, &command_pixels, &ir_pixels);
-}
-
-fn testFontMetrics(_: *anyopaque, _: u8) renderer_ir.TextMetrics {
-    return .{ .ascender = 10.0, .descender = -3.0 };
-}
-
-fn testTextWidth(_: *anyopaque, value: []const u8, _: u8) f32 {
-    return @as(f32, @floatFromInt(ui.utf8CodepointCount(value))) * 8.0;
-}
-
-fn testGlyph(_: *anyopaque, _: u21, _: u8) renderer_ir.Error!?renderer_ir.Glyph {
-    return null;
 }

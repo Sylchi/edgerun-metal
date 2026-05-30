@@ -150,27 +150,33 @@ pub const Surface = struct {
 
     pub fn rasterizeIr(self: Surface, buffers: renderer_ir.Buffers) Error!void {
         renderer_ir.validateBuffers(buffers) catch return error.InvalidIrBuffer;
-        if (buffers.hasTexturedVertices()) return error.UnsupportedIrPrimitive;
+        if (buffers.hasImageVertices()) return error.UnsupportedIrPrimitive;
         for (renderer_ir.drawBatches(buffers)) |batch| switch (batch) {
             .rects, .overlay_rects => |rects| try self.rasterizeIrRects(rects),
             .svg, .overlay_icon => |icons| try self.rasterizeIrIcons(icons),
-            .image, .text, .overlay_text, .icon_lines, .overlay_icon_lines => {},
+            .image, .icon_lines, .overlay_icon_lines => {},
         };
     }
 
     pub fn rasterizeIrWithResources(self: Surface, buffers: renderer_ir.Buffers, resources: IrResources) Error!void {
         renderer_ir.validateBuffers(buffers) catch return error.InvalidIrBuffer;
-        if (!resources.font.valid()) return error.InvalidIrResource;
         const image_texture = if (!buffers.hasImageVertices())
             null
         else
-            resources.image orelse return error.InvalidIrResource;
+            resources.image;
         if (image_texture) |texture| if (!texture.valid()) return error.InvalidIrResource;
 
         for (renderer_ir.drawBatches(buffers)) |batch| switch (batch) {
             .rects, .overlay_rects => |rects| try self.rasterizeIrRects(rects),
-            .image => |vertices| if (image_texture) |texture| try self.rasterizeRgbaTexturedQuads(vertices, texture),
-            .text, .overlay_text => |vertices| try self.rasterizeBilinearAlphaTexturedQuads(vertices, resources.font),
+            .image => |vertices| {
+                if (image_texture) |texture| {
+                    try self.rasterizeRgbaTexturedQuads(vertices, texture);
+                } else if (resources.font.valid()) {
+                    try self.rasterizeAlphaTexturedQuads(vertices, resources.font);
+                } else {
+                    return error.InvalidIrResource;
+                }
+            },
             .svg, .overlay_icon => |icons| try self.rasterizeIrIcons(icons),
             .icon_lines, .overlay_icon_lines => {},
         };
@@ -237,44 +243,31 @@ pub const Surface = struct {
         }
     }
 
-    fn rasterizeBilinearAlphaTexturedQuads(self: Surface, vertices: []const f32, atlas: AlphaAtlas) Error!void {
+    fn rasterizeAlphaTexturedQuads(self: Surface, vertices: []const f32, atlas: AlphaAtlas) Error!void {
         var iter = renderer_ir.TexturedQuadIterator.init(vertices) catch return error.InvalidIrBuffer;
         while (iter.next() catch return error.InvalidIrBuffer) |quad| {
-            try self.rasterizeBilinearAlphaTexturedQuad(quad, atlas);
+            try self.rasterizeAlphaTexturedQuad(quad, atlas);
         }
     }
 
-    fn rasterizeBilinearAlphaTexturedQuad(self: Surface, quad: renderer_ir.TexturedQuad, atlas: AlphaAtlas) Error!void {
+    fn rasterizeAlphaTexturedQuad(self: Surface, quad: renderer_ir.TexturedQuad, atlas: AlphaAtlas) Error!void {
         const px0 = clampCoord(@intFromFloat(math.floorF(quad.bounds.x)), self.width);
         const py0 = clampCoord(@intFromFloat(math.floorF(quad.bounds.y)), self.height);
         const px1 = clampCoord(@intFromFloat(math.ceilF(quad.bounds.x + quad.bounds.w)), self.width);
         const py1 = clampCoord(@intFromFloat(math.ceilF(quad.bounds.y + quad.bounds.h)), self.height);
         if (px1 <= px0 or py1 <= py0) return;
 
-        const u_step = (quad.u1 - quad.u0) / quad.bounds.w;
-        const v_step = (quad.v1 - quad.v0) / quad.bounds.h;
-        var color = quad.color;
-        color.a = max_alpha;
         var y = py0;
         while (y < py1) : (y += 1) {
-            const v = quad.v0 + (@as(f32, @floatFromInt(y)) + pixel_center - quad.bounds.y) * v_step;
-            const sample_y = bilinearAxis(v, atlas.height);
-            const row0 = sample_y.index0 * atlas.width;
-            const row1 = sample_y.index1 * atlas.width;
+            const fy = (@as(f32, @floatFromInt(y)) + pixel_center - quad.bounds.y) / quad.bounds.h;
+            const v = lerp(quad.v0, quad.v1, fy);
             var x = px0;
             while (x < px1) : (x += 1) {
-                const u = quad.u0 + (@as(f32, @floatFromInt(x)) + pixel_center - quad.bounds.x) * u_step;
-                const sample_x = bilinearAxis(u, atlas.width);
-                const sampled_alpha = bilinearAlphaFloat(
-                    atlas.alpha[row0 + sample_x.index0],
-                    atlas.alpha[row0 + sample_x.index1],
-                    atlas.alpha[row1 + sample_x.index0],
-                    atlas.alpha[row1 + sample_x.index1],
-                    sample_x.fraction,
-                    sample_y.fraction,
-                );
-                const alpha = colorF(quad.color.a) * sampled_alpha;
-                if (alpha > 0.0) self.blendPixelFloatAlpha(y * self.width + x, color, alpha);
+                const fx = (@as(f32, @floatFromInt(x)) + pixel_center - quad.bounds.x) / quad.bounds.w;
+                const u = lerp(quad.u0, quad.u1, fx);
+                const texel_alpha = sampleAlpha(atlas, u, v);
+                const alpha = scaleByte(quad.color.a, @as(f32, @floatFromInt(texel_alpha)) / 255.0);
+                if (alpha != 0) self.blendPixel(x, y, quad.color, alpha);
             }
         }
     }
@@ -2021,62 +2014,21 @@ fn blendChannelFloat(src: u8, dst: u8, src_alpha: f32, inv_alpha: f32) u8 {
     return @intCast(math.lrintF(math.clampF(value, 0.0, 255.0)));
 }
 
-fn colorF(value: u8) f32 {
-    return @as(f32, @floatFromInt(value)) / 255.0;
-}
-
-const BilinearAxis = struct {
-    index0: usize,
-    index1: usize,
-    fraction: f32,
-};
-
-fn bilinearAxis(value: f32, len: usize) BilinearAxis {
-    const scaled = math.clampF(math.clampF(value, 0.0, 1.0) * @as(f32, @floatFromInt(len)) - 0.5, 0.0, @as(f32, @floatFromInt(len - 1)));
-    const index0: usize = @intFromFloat(math.floorF(scaled));
-    return .{
-        .index0 = index0,
-        .index1 = @min(index0 + 1, len - 1),
-        .fraction = scaled - @as(f32, @floatFromInt(index0)),
-    };
-}
-
-fn bilinearAlphaByte(a00: u8, a10: u8, a01: u8, a11: u8, tx: f32, ty: f32) u8 {
-    return @intCast(math.lrintF(bilinearAlphaFloat(a00, a10, a01, a11, tx, ty) * 255.0));
-}
-
-fn bilinearAlphaFloat(a00: u8, a10: u8, a01: u8, a11: u8, tx: f32, ty: f32) f32 {
-    return lerp(
-        lerp(@as(f32, @floatFromInt(a00)), @as(f32, @floatFromInt(a10)), tx),
-        lerp(@as(f32, @floatFromInt(a01)), @as(f32, @floatFromInt(a11)), tx),
-        ty,
-    ) / 255.0;
-}
-
 fn scaleAlphaByte(tint: u8, sample: u8) u8 {
     if (tint == max_alpha) return sample;
     return @intCast((@as(u16, tint) * @as(u16, sample) + 127) / 255);
 }
 
 fn sampleRgba(texture: RgbaTexture, u: f32, v: f32) ui.Color {
-    const x = math.clampF(u, 0.0, 1.0) * @as(f32, @floatFromInt(texture.width - 1));
-    const y = math.clampF(v, 0.0, 1.0) * @as(f32, @floatFromInt(texture.height - 1));
-    const x0: usize = @intFromFloat(math.floorF(x));
-    const y0: usize = @intFromFloat(math.floorF(y));
-    const x1 = @min(x0 + 1, texture.width - 1);
-    const y1 = @min(y0 + 1, texture.height - 1);
-    const tx = x - @as(f32, @floatFromInt(x0));
-    const ty = y - @as(f32, @floatFromInt(y0));
-    const c00 = texture.pixels[y0 * texture.width + x0];
-    const c10 = texture.pixels[y0 * texture.width + x1];
-    const c01 = texture.pixels[y1 * texture.width + x0];
-    const c11 = texture.pixels[y1 * texture.width + x1];
-    return .{
-        .r = sampleChannel(c00.r, c10.r, c01.r, c11.r, tx, ty),
-        .g = sampleChannel(c00.g, c10.g, c01.g, c11.g, tx, ty),
-        .b = sampleChannel(c00.b, c10.b, c01.b, c11.b, tx, ty),
-        .a = sampleChannel(c00.a, c10.a, c01.a, c11.a, tx, ty),
-    };
+    const x = @min(@as(usize, @intFromFloat(u * @as(f32, @floatFromInt(texture.width)))), texture.width - 1);
+    const y = @min(@as(usize, @intFromFloat(v * @as(f32, @floatFromInt(texture.height)))), texture.height - 1);
+    return texture.pixels[y * texture.width + x];
+}
+
+fn sampleAlpha(atlas: AlphaAtlas, u: f32, v: f32) u8 {
+    const x = @min(@as(usize, @intFromFloat(u * @as(f32, @floatFromInt(atlas.width)))), atlas.width - 1);
+    const y = @min(@as(usize, @intFromFloat(v * @as(f32, @floatFromInt(atlas.height)))), atlas.height - 1);
+    return atlas.alpha[y * atlas.width + x];
 }
 
 fn sampleChannel(a00: u8, a10: u8, a01: u8, a11: u8, tx: f32, ty: f32) u8 {
@@ -2811,13 +2763,15 @@ test "software renderer rasterizes rect ir deterministically" {
     try scene.pushRect(ui.Rect.init(42.0, 18.0, 12.0, 12.0), .{ .r = 0, .g = 0, .b = 0, .a = 120 }, .shadow, 4.0, 5.0);
     try scene.pushRect(ui.Rect.init(44.0, 20.0, 10.0, 10.0), .accent, .border, 3.0, 0.0);
 
-    var storage = renderer_ir.FixedBuffers(3, 0, 0, 0, 1, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(4, 0, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
-    var source_context: u8 = 0;
-    const sources = renderer_ir.Sources{
-        .font = .{ .context = &source_context, .metrics = irTestFontMetrics, .width = irTestTextWidth, .glyph = irTestGlyph },
-    };
-    try renderer_ir.packSceneWithOverlay(buffers, sources, scene.written(), 3);
+    buffers.clearBase();
+    for (scene.written()) |cmd| {
+        switch (cmd) {
+            .rect => |r| try renderer_ir.pushRect(buffers, .base, r.bounds, r.color, r.color2, r.radius, r.shadow, renderer_ir.rectModeCode(r.mode)),
+            else => {},
+        }
+    }
 
     var ir_pixels: [64 * 48]ui.Color = undefined;
     const ir_surface = try Surface.init(64, 48, &ir_pixels);
@@ -2832,10 +2786,10 @@ test "software renderer rasterizes rect ir deterministically" {
 test "software renderer rejects textured ir without resources" {
     var pixels: [4]ui.Color = undefined;
     const surface = try Surface.init(2, 2, &pixels);
-    var storage = renderer_ir.FixedBuffers(0, 1, 0, 0, 0, 0, 0, 0, 0){};
-    storage.text_vertex_len = 1;
+    var storage = renderer_ir.FixedBuffers(0, 0, 0, 0, 0, 0, 0){};
+    storage.image_vertex_len = 1;
     const buffers = storage.buffers();
-    try std.testing.expectError(error.UnsupportedIrPrimitive, surface.rasterizeIr(buffers));
+    try std.testing.expectError(error.InvalidIrBuffer, surface.rasterizeIr(buffers));
 }
 
 test "software renderer rasterizes alpha textured ir with supplied resources" {
@@ -2843,12 +2797,12 @@ test "software renderer rasterizes alpha textured ir with supplied resources" {
     const surface = try Surface.init(8, 8, &pixels);
     surface.clear(.clear);
 
-    var storage = renderer_ir.FixedBuffers(0, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(0, 0, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0){};
     const buffers = storage.buffers();
 
     try renderer_ir.pushClippedTexturedQuad(
-        buffers.text_vertices,
-        buffers.text_vertex_len,
+        buffers.image_vertices,
+        buffers.image_vertex_len,
         ui.Rect.init(0, 0, 8, 8),
         ui.Rect.init(0, 0, 8, 8),
         0.0,
@@ -2857,12 +2811,15 @@ test "software renderer rasterizes alpha textured ir with supplied resources" {
         1.0,
         .{ .r = 255, .g = 32, .b = 16, .a = 200 },
     );
-    const alpha = [_]u8{
-        0,   255,
-        255, 255,
+    const rgba = [_]ui.Color{
+        .{ .r = 255, .g = 255, .b = 255, .a = 0 },
+        .{ .r = 255, .g = 255, .b = 255, .a = 255 },
+        .{ .r = 255, .g = 255, .b = 255, .a = 255 },
+        .{ .r = 255, .g = 255, .b = 255, .a = 255 },
     };
     const resources = IrResources{
-        .font = .{ .width = 2, .height = 2, .alpha = &alpha },
+        .font = .{ .width = 0, .height = 0, .alpha = &.{} },
+        .image = .{ .width = 2, .height = 2, .pixels = &rgba },
     };
 
     const receipt = try surface.renderIrFrameWithResources(buffers, resources);
@@ -2879,7 +2836,7 @@ test "software renderer rasterizes image ir with supplied rgba texture" {
     const surface = try Surface.init(8, 8, &pixels);
     surface.clear(.clear);
 
-    var storage = renderer_ir.FixedBuffers(0, 0, 0, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(0, 0, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0){};
     const buffers = storage.buffers();
 
     try renderer_ir.pushClippedTexturedQuad(
@@ -2919,7 +2876,7 @@ test "software renderer frame rejects missing image texture through presentation
     var pixels: [8 * 8]ui.Color = undefined;
     const surface = try Surface.init(8, 8, &pixels);
 
-    var storage = renderer_ir.FixedBuffers(0, 0, 0, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(0, 0, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     try renderer_ir.pushClippedTexturedQuad(
         buffers.image_vertices,
@@ -2951,29 +2908,21 @@ fn sampleRoot(children: []ui.Node) ui.Node {
 }
 
 fn renderTestSceneIr(surface: Surface, commands: []const ui.Command) !void {
-    var storage = renderer_ir.FixedBuffers(64, 1024, 64, 64, 0, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(64, 64, 0, 0, 0, 64, 0){};
     const buffers = storage.buffers();
-    var source_context: u8 = 0;
-    const sources = renderer_ir.Sources{
-        .font = .{ .context = &source_context, .metrics = irTestFontMetrics, .width = irTestTextWidth, .glyph = irTestGlyph },
+    buffers.clearBase();
+    for (commands) |cmd| switch (cmd) {
+        .rect => |r| try renderer_ir.pushRect(buffers, .base, r.bounds, r.color, r.color2, r.radius, r.shadow, renderer_ir.rectModeCode(r.mode)),
+        .border => |b| try renderer_ir.pushRect(buffers, .base, b.bounds, b.color, .clear, 0, 0, renderer_ir.rectModeCode(.border)),
+        .icon_quad => |q| try renderer_ir.pushSvgQuad(buffers, .base, ui.SvgQuad.fromIconQuad(q)),
+        .svg_quad => |q| try renderer_ir.pushSvgQuad(buffers, .base, q),
+        .image_quad => |q| try renderer_ir.pushImage(buffers, q),
+        .text, .text_quad, .drag_source, .drop_target, .transition => {},
     };
-    try renderer_ir.packScene(buffers, sources, commands);
     const alpha = [_]u8{255};
     try surface.rasterizeIrWithResources(buffers, .{
         .font = .{ .width = 1, .height = 1, .alpha = &alpha },
     });
-}
-
-fn irTestFontMetrics(_: *anyopaque, _: u8) renderer_ir.TextMetrics {
-    return .{ .ascender = 10.0, .descender = -3.0 };
-}
-
-fn irTestTextWidth(_: *anyopaque, value: []const u8, _: u8) f32 {
-    return @as(f32, @floatFromInt(ui.utf8CodepointCount(value))) * 8.0;
-}
-
-fn irTestGlyph(_: *anyopaque, _: u21, _: u8) renderer_ir.Error!?renderer_ir.Glyph {
-    return null;
 }
 
 pub const Framebuffer = struct {

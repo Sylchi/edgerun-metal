@@ -55,37 +55,22 @@ pub fn main() !void {
     const atlas_pack_start = nowNs();
     i = 0;
     while (i < ir_pack_iterations) : (i += 1) {
-        try renderer_pipeline.packScene(ir_buffers, &atlas_font_atlas, .atlas, scene.written());
+        try renderer_pipeline.packScene(ir_buffers, &atlas_font_atlas, scene.written());
     }
     const atlas_pack_ns = nowNs() - atlas_pack_start;
-
-    const surface = try renderer_software.Framebuffer.init(width, height, &frame_pixels);
-    const atlas_resources = renderer_pipeline.softwareResources(&atlas_font_atlas, null);
-    std.debug.print("ui bench stage: atlas render\n", .{});
-    const atlas_render_start = nowNs();
-    i = 0;
-    while (i < ir_render_iterations) : (i += 1) {
-        surface.clear(.bg);
-        const receipt = try surface.renderIr(ir_buffers, atlas_resources);
-        if (!receipt.valid()) return error.InvalidSoftwareReceipt;
-    }
-    const atlas_render_ns = nowNs() - atlas_render_start;
-    const atlas_packed_checksum = irChecksum(ir_buffers);
-    const atlas_rendered_checksum = pixelChecksum(&frame_pixels);
 
     std.debug.print("ui bench stage: object font compile\n", .{});
     font_storage = renderer_font_atlas.AsciiFontStorage{};
     const font_compile_start = nowNs();
     const object_font = try renderer_font_atlas.compileGeistAscii(&font_storage);
     const font_compile_ns = nowNs() - font_compile_start;
-    const object_font_body_len = @import("font_vector.zig").serializedLen(object_font.glyphs.len, object_font.kerns.len, object_font.commands.len).?;
 
     object_font_atlas = font_storage.atlas().?;
     std.debug.print("ui bench stage: object pack\n", .{});
     const object_pack_start = nowNs();
     i = 0;
     while (i < ir_pack_iterations) : (i += 1) {
-        try renderer_pipeline.packScene(ir_buffers, &object_font_atlas, .atlas, scene.written());
+        try renderer_pipeline.packScene(ir_buffers, &object_font_atlas, scene.written());
     }
     const object_pack_ns = nowNs() - object_pack_start;
     const object_resources = renderer_pipeline.softwareResources(&object_font_atlas, null);
@@ -124,7 +109,7 @@ pub fn main() !void {
     , .{
         scene.written().len,
         ir_storage.rect_len,
-        ir_storage.text_vertex_len,
+        @as(u32, 0),
         ir_storage.icon_vertex_len,
         atlas_font_atlas.cachedGlyphCount(),
         object_font.glyphs.len,

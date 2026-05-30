@@ -2,8 +2,10 @@ const std = @import("std");
 const renderer_font_atlas = @import("../font_atlas_weighted.zig");
 const gl_contract = @import("../gl_contract.zig");
 const renderer_ir = @import("../ir.zig");
+const renderer_present = @import("../present.zig");
 const ui = @import("../../ui.zig");
 const gles_gl = @import("../../linux_gles.zig");
+const gles_mod = @This();
 
 pub const RgbaTexture = renderer_ir.RgbaTexture;
 
@@ -103,10 +105,8 @@ pub fn renderFrameToViewport(gl: State, logical_width: i32, logical_height: i32,
     const scale = viewportScale(logical_width, logical_height, framebuffer_width, framebuffer_height);
     try drawRects(gl, logical_width, logical_height, scale, buffers.liveRects());
     try drawImage(gl, logical_width, logical_height, buffers.liveImageVertices());
-    try drawFontTextured(gl, logical_width, logical_height, buffers.liveTextVertices(), gl.font_texture);
     try drawIconLines(gl, logical_width, logical_height, buffers.liveIconLineVertices());
     try drawRects(gl, logical_width, logical_height, scale, buffers.liveOverlayRects());
-    try drawFontTextured(gl, logical_width, logical_height, buffers.liveOverlayTextVertices(), gl.font_texture);
     try drawIconLines(gl, logical_width, logical_height, buffers.liveOverlayIconLineVertices());
 }
 
@@ -158,12 +158,6 @@ fn readBoundFramePixels(gles: *const gles_gl.Gles2, width: i32, height: i32, out
         const dst = out[top_row * width_usize ..][0..width_usize];
         gles.glReadPixels(0, gl_row, @intCast(width_usize), 1, gles_gl.gl_rgba, gles_gl.gl_unsigned_byte, @as([*]u8, @ptrCast(dst.ptr)));
     }
-}
-
-pub fn sources(font_atlas: *renderer_font_atlas.Atlas) renderer_ir.Sources {
-    return .{
-        .font = font_atlas.source(),
-    };
 }
 
 pub fn requireHardwareGl(gles: *const gles_gl.Gles2) !void {
@@ -281,10 +275,6 @@ fn rectDrawBounds(rect: anytype) ui.Rect {
         .shadow => rect.bounds.insetUniform(-rect.shadow),
         .fill, .border, .linear_gradient, .pie_slice => rect.bounds,
     };
-}
-
-fn drawFontTextured(gl: State, width: i32, height: i32, values: []const f32, texture: gles_gl.GLuint) !void {
-    try drawTexturedWithProgram(gl, width, height, values, texture, gl.textured_program);
 }
 
 fn drawTexturedWithProgram(gl: State, width: i32, height: i32, values: []const f32, texture: gles_gl.GLuint, program: gles_gl.GLuint) !void {
@@ -509,9 +499,7 @@ test "viewport scale follows the EGL framebuffer backing size" {
 test "font atlas refresh API accepts populated variable font atlas" {
     var atlas: renderer_font_atlas.Atlas = undefined;
     atlas.initUtf8();
-    var storage = renderer_ir.FixedBuffers(1, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0, 0, 0){};
-    const buffers = storage.buffers();
-    try renderer_ir.pushText(buffers, atlas.source(), .base, .{ .x = 0, .y = 0, .w = 64, .h = 18 }, "A", .text, .start);
+    try atlas.prepareText("A", 18, .regular);
     try std.testing.expect(atlas.cachedGlyphCount() > 0);
 }
 
@@ -545,37 +533,37 @@ pub const Adapter = struct {
     }
 
     pub fn deinit(self: *Adapter) void {
-        deinit(&self.state);
+        gles_mod.deinit(&self.state);
         self.gles.lib.close();
     }
 
     pub fn refreshFontTexture(self: Adapter, font_atlas: *const renderer_font_atlas.Atlas) void {
-        refreshFontTexture(self.state, font_atlas);
+        gles_mod.refreshFontTexture(self.state, font_atlas);
     }
 
     pub fn renderFrame(self: Adapter, width: i32, height: i32, buffers: renderer_ir.Buffers) AdapterError!Receipt {
         const receipt = try self.receiptForFrame(width, height, buffers);
-        try renderFrame(self.state, width, height, buffers);
+        try gles_mod.renderFrame(self.state, width, height, buffers);
         return receipt;
     }
 
     pub fn renderFrameToViewport(self: Adapter, logical_width: i32, logical_height: i32, framebuffer_width: i32, framebuffer_height: i32, buffers: renderer_ir.Buffers) AdapterError!Receipt {
         const receipt = try self.receiptForFrame(logical_width, logical_height, buffers);
-        try renderFrameToViewport(self.state, logical_width, logical_height, framebuffer_width, framebuffer_height, buffers);
+        try gles_mod.renderFrameToViewport(self.state, logical_width, logical_height, framebuffer_width, framebuffer_height, buffers);
         return receipt;
     }
 
     pub fn verifyFrameNonBlank(self: Adapter, width: i32, height: i32) !FrameProof {
-        return verifyFrameNonBlank(&self.gles, width, height);
+        return gles_mod.verifyFrameNonBlank(&self.gles, width, height);
     }
 
     pub fn readFramePixels(self: Adapter, width: i32, height: i32, out: []ui.Color) !void {
-        try readFramePixels(&self.gles, width, height, out);
+        try gles_mod.readFramePixels(&self.gles, width, height, out);
     }
 
     pub fn renderFrameToRgbaPixels(self: Adapter, width: i32, height: i32, buffers: renderer_ir.Buffers, out: []ui.Color) AdapterError!Receipt {
         const receipt = try self.receiptForFrame(width, height, buffers);
-        try renderFrameToRgbaPixels(self.state, width, height, buffers, out);
+        try gles_mod.renderFrameToRgbaPixels(self.state, width, height, buffers, out);
         return receipt;
     }
 

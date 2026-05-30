@@ -15,11 +15,7 @@ extern er_virtio_negotiate_features
 extern er_virtio_select_queue
 extern er_virtio_read_queue_size
 extern er_virtio_set_queue_size
-extern er_virtio_set_queue_desc
-extern er_virtio_set_queue_avail
-extern er_virtio_set_queue_used
-extern er_virtio_enable_queue
-extern er_virtio_read_queue_notify_off
+extern er_virtio_set_queue_address
 extern er_virtio_notify_queue
 extern er_virtio_read_status
 extern er_virtio_write_status
@@ -29,15 +25,15 @@ extern er_virtio_read8
 extern er_virtio_write8
 
 ; ==================================================================
-; VIRTIO_GPU_DEVICE — GPU device state (56 bytes + embedded transport)
+; VIRTIO_GPU_DEVICE — GPU device state (44 bytes + embedded transport)
 ;
 ; Layout:
-;   transport:         VIRTIO_TRANSPORT (44 bytes)
+;   transport:         VIRTIO_TRANSPORT (12 bytes)
 ;   driver_features:   resq 1         (8)
 ;   queue_notify_off:  resw 1         (2)
 ;   queue_size:        resw 1         (2)
 ;   last_used_idx:     resw 1         (2)
-;                      resb 6         (pad to 64 for alignment)
+;                      resb 18        (pad)
 ; Total: 64 bytes
 ; ==================================================================
 struc VIRTIO_GPU_DEVICE
@@ -118,34 +114,19 @@ er_fn er_virtio_gpu_init
     mov     esi, eax
     call    er_virtio_set_queue_size
 
-    ; 6. Write queue addresses
+    ; 6. Write queue address (legacy I/O: single physical address)
     mov     rdi, r14
-    lea     rsi, [r13 + VIRTIO_GPU_STORAGE.desc]
-    call    er_virtio_set_queue_desc
+    lea     esi, [r13 + VIRTIO_GPU_STORAGE.desc]
+    call    er_virtio_set_queue_address
 
     mov     rdi, r14
-    lea     rsi, [r13 + VIRTIO_GPU_STORAGE.avail]
-    call    er_virtio_set_queue_avail
-
+    ; 7. Skip used/enable/notify_off — legacy I/O mode:
+    ;    queue address write suffices to activate the queue,
+    ;    notify uses fixed I/O port, no notify_off_mult.
+    ; 8. Set driver_ok status (legacy I/O)
     mov     rdi, r14
-    lea     rsi, [r13 + VIRTIO_GPU_STORAGE.used]
-    call    er_virtio_set_queue_used
-
-    ; 7. Enable queue
-    mov     rdi, r14
-    mov     esi, 1
-    call    er_virtio_enable_queue
-
-    ; 8. Read notify offset
-    mov     rdi, r14
-    call    er_virtio_read_queue_notify_off
-    mov     [r12 + VIRTIO_GPU_DEVICE.queue_notify_off], ax
-
-    ; 9. Set driver_ok status
-    mov     rdi, [r14 + VIRTIO_TRANSPORT.common_cfg]
-    add     rdi, VIRTIO_COMMON_CFG_DEVICE_STATUS
     mov     esi, VIRTIO_STATUS_DRIVER_OK
-    call    er_virtio_write8
+    call    er_virtio_write_status
 
     ; 10. Copy transport into device
     mov     ecx, VIRTIO_TRANSPORT_size / 8

@@ -289,7 +289,7 @@ pub fn dirtyTilesMarkIrBuffers(plan: TilePlan, buffers: renderer_ir.Buffers, til
     for (renderer_ir.drawBatches(buffers)) |batch| {
         const marked = switch (batch) {
             .rects, .overlay_rects => |rects| dirtyTilesMarkIrRects(plan, rects, tile_marks, list),
-            .image, .text, .overlay_text => |vertices| dirtyTilesMarkIrTextured(plan, vertices, tile_marks, list),
+            .image => |vertices| dirtyTilesMarkIrTextured(plan, vertices, tile_marks, list),
             .svg, .overlay_icon => |icons| dirtyTilesMarkIrIcons(plan, icons, tile_marks, list),
             .icon_lines, .overlay_icon_lines => true,
         };
@@ -489,10 +489,10 @@ test "dirty tile tracking marks canonical ir buffers" {
     var ids: [8]u32 = undefined;
     var list = DirtyTileList{ .tile_ids = &ids };
 
-    var storage = renderer_ir.FixedBuffers(1, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(1, 0, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     try renderer_ir.pushRect(buffers, .base, ui.Rect.init(15.5, 0, 2, 16), .text, .clear, 0, 0, renderer_ir.rectModeCode(.fill));
-    try renderer_ir.pushClippedTexturedQuad(buffers.text_vertices, buffers.text_vertex_len, ui.Rect.init(32, 32, 8, 8), ui.Rect.init(32, 32, 8, 8), 0, 0, 1, 1, .accent);
+    try renderer_ir.pushClippedTexturedQuad(buffers.image_vertices, buffers.image_vertex_len, ui.Rect.init(32, 32, 8, 8), ui.Rect.init(32, 32, 8, 8), 0, 0, 1, 1, .accent);
 
     try std.testing.expect(dirtyTilesReset(plan, &marks, &list));
     try std.testing.expect(dirtyTilesMarkIrBuffers(plan, buffers, &marks, &list));

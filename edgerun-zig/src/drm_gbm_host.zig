@@ -88,7 +88,7 @@ const SceneState = struct {
             .public_identity_ready = true,
         });
         const buffers = self.ir_storage.buffers();
-        try renderer_pipeline.packScene(buffers, font_atlas, .atlas, scene.written());
+        try renderer_pipeline.packScene(buffers, font_atlas, scene.written());
         return buffers;
     }
 };

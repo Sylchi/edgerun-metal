@@ -5,87 +5,69 @@
 
 %include "x86_64/macros.inc"
 
-extern er_mmio_read32
-extern er_mmio_write32
-
 ; ─── CRB register offsets (from base) ─────────────────────────────────
 %define CRB_BASE                0xFED40000
 
+; CRB register offsets per TCG PTP spec (QEMU hw/acpi/tpm.h layout)
 %define CRB_LOC_STATE           0x0000
-%define CRB_LOC_CTRL            0x0004
-%define CRB_LOC_STS             0x0008
-%define CRB_INTF_ID             0x0010
-%define CRB_INTF_CTRL           0x0014
-%define CRB_INTF_STS            0x0018
-%define CRB_CTRL_EXT            0x0020
-%define CRB_CTRL_REQ            0x0030
-%define CRB_CTRL_CMD_SIZE       0x0034
-%define CRB_CTRL_CMD_LPC        0x0038
-%define CRB_CTRL_CMD_HPC        0x003C
-%define CRB_CTRL_RSP_SIZE       0x0040
-%define CRB_CTRL_RSP_ADDR       0x0044
-%define CRB_DATA_BUFFER         0x0800
+%define CRB_LOC_CTRL            0x0008
+%define CRB_LOC_STS             0x000C
+%define CRB_INTF_ID             0x0030
+%define CRB_INTF_ID2            0x0034
+%define CRB_CTRL_EXT            0x0038
+%define CRB_CTRL_REQ            0x0040
+%define CRB_CTRL_STS            0x0044
+%define CRB_CTRL_CANCEL         0x0048
+%define CRB_CTRL_START          0x004C
+%define CRB_CTRL_CMD_SIZE       0x0058
+%define CRB_CTRL_CMD_LADDR      0x005C
+%define CRB_CTRL_CMD_HADDR      0x0060
+%define CRB_CTRL_RSP_SIZE       0x0064
+%define CRB_CTRL_RSP_ADDR       0x0068
+%define CRB_DATA_BUFFER         0x0080
 
 ; Bit definitions
-%define CRB_CTRL_REQ_CMD_READY  0x01
-%define CRB_LOC_CTRL_ACQUIRE    0x01
-%define CRB_LOC_STS_GRANTED     0x01
-%define CRB_INTF_STS_TPM_IDLE   0x01
-
-; ─── HOSTED_TEST mode ─────────────────────────────────────────────────
-%ifdef HOSTED_TEST
-; In hosted test mode, CRB operations use a memory shadow instead of MMIO.
-section .bss
-global er_crb_shadow
-er_crb_shadow: resb 4096        ; Simulated CRB register block
-%endif
+%define CRB_LOC_CTRL_REQUEST_ACCESS  0x01
+%define CRB_CTRL_REQ_CMD_READY       0x01
+%define CRB_CTRL_REQ_GO_IDLE        0x02
+%define CRB_CTRL_START_INVOKE       0x01
+%define CRB_CTRL_STS_TPM_IDLE       0x02
 
 ; ==================================================================
-; MMIO read (32-bit) — inline sequence since we alias the 64-bit helper
+; MMIO read (32-bit) — inline sequence
 ; =================================================================
 %macro crb_mmio_read32 2
-    lea     rdi, [%1]
-    call    er_mmio_read32
-    mov     %2, eax
+    mov     %2, dword [%1]
 %endmacro
 
 ; ==================================================================
 ; MMIO write (32-bit) — inline sequence
 ; =================================================================
 %macro crb_mmio_write32 2
-    lea     rdi, [%1]
-    mov     esi, %2
-    call    er_mmio_write32
+    mov     dword [%1], %2
 %endmacro
 
 ; ==================================================================
-; Poll CRB_CTRL_REQ until bit 0 clears (timeout = ~10ms @ 2GHz)
+; Wait for CRB_CTRL_START bit 0 (INVOKE) to clear (command complete)
 ; rdi = CRB base address
 ; Returns: rax = 0 on timeout, 1 on success
 ; =================================================================
-er_fn er_tpm_crb_wait
-%ifndef HOSTED_TEST
-    mov     ecx, 20000000        ; ~10ms spin budget
+er_fn er_tpm_crb_wait_start
+    mov     ecx, 20000000
 
 .loop:
-    crb_mmio_read32 rdi + CRB_CTRL_REQ, eax
-    test    eax, CRB_CTRL_REQ_CMD_READY
+    crb_mmio_read32 rdi + CRB_CTRL_START, eax
+    test    eax, CRB_CTRL_START_INVOKE
     jz      .done
-
     pause
     dec     ecx
     jnz     .loop
-
-    xor     eax, eax             ; timeout
+    xor     eax, eax
     ret
 
 .done:
     mov     eax, 1
     ret
-%else
-    mov     eax, 1               ; hosted test: assume ready
-    ret
-%endif
 
 ; ==================================================================
 ; Send command buffer to CRB and receive response
@@ -95,15 +77,18 @@ er_fn er_tpm_crb_wait
 ; ecx = response buffer max size
 ; Returns: rax = response size on success, 0 on error
 ;
-; CRB transfer sequence:
-;   1. Copy command to CRB_DATA_BUFFER
-;   2. Write command size to CRB_CTRL_CMD_SIZE
-;   3. Write GO bit to CRB_CTRL_REQ
-;   4. Poll CRB_CTRL_REQ until clear
-;   5. Read response from CRB_DATA_BUFFER
+; Sequence:
+;   1. Request locality 0 (LOC_CTRL ← REQUEST_ACCESS)
+;   2. CMD_READY (CTRL_REQ ← CMD_READY)
+;   3. Copy command to CRB_DATA_BUFFER (cmdmem is RAM)
+;   4. Write command size to CRB_CTRL_CMD_SIZE
+;   5. INVOKE (CTRL_START ← INVOKE)
+;   6. Wait for completion (CTRL_START bit 0 clears)
+;   7. Read response header from cmdmem via rep movsb
+;   8. Extract big-endian size from header, copy response
+;   9. GO_IDLE (CTRL_REQ ← GO_IDLE)
 ; =================================================================
 er_fn er_tpm_crb_transfer
-    ; Validate parameters
     test    rdi, rdi
     jz      .err
     test    esi, esi
@@ -119,89 +104,73 @@ er_fn er_tpm_crb_transfer
     push    r14
     push    r15
 
-    mov     r12, rdi             ; r12 = command buffer
-    mov     r13d, esi            ; r13d = command size
-    mov     r14, rdx             ; r14 = response buffer
-    mov     r15d, ecx            ; r15d = response max size
+    mov     r12, rdi
+    mov     r13d, esi
+    mov     r14, rdx
+    mov     r15d, ecx
 
-%ifndef HOSTED_TEST
-    mov     rdi, CRB_BASE + CRB_DATA_BUFFER
+    ; Load CRB base into rbx for register-indirect MMIO access
+    ; (direct [CRB_BASE + offset] in 64-bit mode sign-extends to a high
+    ;  unmapped address due to disp32 sign-extension in long mode)
+    mov     ebx, CRB_BASE
+
+    ; Step 1: Request locality 0
+    mov     dword [rbx + CRB_LOC_CTRL], CRB_LOC_CTRL_REQUEST_ACCESS
+
+    ; Step 2: CMD_READY
+    mov     dword [rbx + CRB_CTRL_REQ], CRB_CTRL_REQ_CMD_READY
+
+    ; Step 3: Copy command to DATA_BUFFER
+    lea     rdi, [rbx + CRB_DATA_BUFFER]
     mov     rsi, r12
     mov     rcx, r13
     rep     movsb
 
-    ; Write command size to CRB_CTRL_CMD_SIZE
-    mov     edi, CRB_BASE + CRB_CTRL_CMD_SIZE
-    mov     esi, r13d
-    call    er_mmio_write32
+    ; Step 4: Write command size
+    mov     dword [rbx + CRB_CTRL_CMD_SIZE], r13d
 
-    ; Write GO bit to CRB_CTRL_REQ
-    mov     edi, CRB_BASE + CRB_CTRL_REQ
-    mov     esi, CRB_CTRL_REQ_CMD_READY
-    call    er_mmio_write32
+    ; Step 5: INVOKE
+    mov     dword [rbx + CRB_CTRL_START], CRB_CTRL_START_INVOKE
 
-    ; Poll for completion
-    mov     rdi, CRB_BASE
-    call    er_tpm_crb_wait
+    ; Step 6: Wait for completion
+    mov     rdi, rbx
+    call    er_tpm_crb_wait_start
     test    eax, eax
     jz      .err_pop
 
-    ; Read response size from CRB_CTRL_RSP_SIZE
-    mov     edi, CRB_BASE + CRB_CTRL_RSP_SIZE
-    call    er_mmio_read32
-    mov     ebx, eax
+    ; Step 7: Read response header from cmdmem via rep movsb
+    sub     rsp, 16
+    mov     rdi, rsp
+    lea     rsi, [rbx + CRB_DATA_BUFFER]
+    mov     rcx, 8
+    rep     movsb
 
-    ; Validate response size
-    test    ebx, ebx
+    ; Step 8: Extract response size from header (big-endian at offset +2)
+    xor     edx, edx
+    mov     dl, [rsp + 2]
+    shl     edx, 8
+    mov     dl, [rsp + 3]
+    shl     edx, 8
+    mov     dl, [rsp + 4]
+    shl     edx, 8
+    mov     dl, [rsp + 5]
+    add     rsp, 16
+
+    test    edx, edx
     jz      .err_pop
-    cmp     ebx, r15d
+    cmp     edx, r15d
     ja      .err_pop
 
-    ; Copy response from CRB_DATA_BUFFER to output buffer
-    mov     rsi, CRB_BASE + CRB_DATA_BUFFER
+    ; Copy response from DATA_BUFFER to output buffer
+    lea     rsi, [rbx + CRB_DATA_BUFFER]
     mov     rdi, r14
-    mov     rcx, rbx
+    mov     rcx, rdx
     rep     movsb
 
-    mov     eax, ebx             ; return response size
+    ; Step 9: GO_IDLE
+    mov     dword [rbx + CRB_CTRL_REQ], CRB_CTRL_REQ_GO_IDLE
 
-%else
-    ; HOSTED_TEST: simulate CRB transfer using shadow buffer.
-    ; Copy command to shadow CMD area (separate from response area).
-    ; The test pre-fills the response at CRB_DATA_BUFFER.
-    mov     rdi, er_crb_shadow + CRB_DATA_BUFFER + 0x1000
-    mov     rsi, r12
-    mov     rcx, r13
-    rep     movsb
-
-    ; Read response size from shadow header (big-endian at +2)
-    mov     rdi, er_crb_shadow + CRB_DATA_BUFFER + 2
-    movzx   eax, byte [rdi]
-    shl     eax, 8
-    movzx   ecx, byte [rdi + 1]
-    or      eax, ecx
-    shl     eax, 8
-    movzx   ecx, byte [rdi + 2]
-    or      eax, ecx
-    shl     eax, 8
-    movzx   ecx, byte [rdi + 3]
-    or      eax, ecx
-    mov     ebx, eax            ; ebx = response size
-
-    ; Validate response size fits in output buffer
-    test    ebx, ebx
-    jz      .err_pop
-    cmp     ebx, r15d
-    ja      .err_pop
-
-    ; Copy actual response from shadow to output
-    mov     rsi, er_crb_shadow + CRB_DATA_BUFFER
-    mov     rdi, r14
-    mov     rcx, rbx
-    rep     movsb
-
-    mov     eax, ebx             ; return actual response size
-%endif
+    mov     eax, edx
 
 .pop:
     pop     r15
@@ -224,33 +193,18 @@ er_fn er_tpm_crb_transfer
 ; Returns: rax = 1 if CRB interface detected, 0 otherwise
 ; =================================================================
 er_fn er_tpm_crb_present
-%ifndef HOSTED_TEST
-    ; Read CRB_INTF_ID to check interface
-    mov     edi, CRB_BASE + CRB_INTF_ID
-    call    er_mmio_read32
-
-    ; CRB_INTF_ID bits:
-    ;   [0:3]   = interface version (must be >= 1)
-    ;   [4:7]   = interface type (0 = TPM 1.2, 1 = TPM 2.0)
-    ;   [16:23] = vendor ID
+    mov     edi, CRB_BASE
+    mov     eax, [rdi + CRB_INTF_ID]
     test    eax, eax
     jz      .not_found
-
-    ; Check TPM 2.0 (bit 4 = 1)
-    test    eax, 0x10
+    test    eax, 0x11
     jz      .not_found
-
     mov     eax, 1
     ret
 
 .not_found:
     xor     eax, eax
     ret
-%else
-    ; Hosted test: assume present
-    mov     eax, 1
-    ret
-%endif
 
 ; ==================================================================
 ; Simple TPM2 CRB command: build, send, receive in one call
@@ -261,5 +215,4 @@ er_fn er_tpm_crb_present
 ; Returns: rax = response size, 0 on error
 ; =================================================================
 er_fn er_tpm_crb_command
-    ; Delegate to er_tpm_crb_transfer
     jmp     er_tpm_crb_transfer

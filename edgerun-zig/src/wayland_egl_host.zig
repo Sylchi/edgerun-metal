@@ -133,7 +133,7 @@ const SceneState = struct {
         self.command_len = scene.written().len;
         self.region_len = collector.written().len;
         const buffers = self.ir_storage.buffers();
-        try renderer_pipeline.packScene(buffers, font_atlas, .object, scene.written());
+        try renderer_pipeline.packScene(buffers, font_atlas, scene.written());
         return buffers;
     }
 
@@ -363,11 +363,9 @@ fn printParityDeltaBuckets(diff: renderer_parity.PixelDiff) void {
 
 fn printParityPrimitiveAt(buffers: renderer_ir.Buffers, x: f32, y: f32) void {
     printParityRectsAt("base", buffers.liveRects(), x, y);
-    printParityTexturedAt("base text", buffers.liveTextVertices(), x, y);
     printParityTexturedAt("base image", buffers.liveImageVertices(), x, y);
     printParityIconsAt("base icon", buffers.liveIconVertices(), x, y);
     printParityRectsAt("overlay", buffers.liveOverlayRects(), x, y);
-    printParityTexturedAt("overlay text", buffers.liveOverlayTextVertices(), x, y);
     printParityIconsAt("overlay icon", buffers.liveOverlayIconVertices(), x, y);
 }
 

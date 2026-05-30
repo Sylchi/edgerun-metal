@@ -18,16 +18,25 @@ _er_stack_bottom:
     resb 16384
 _er_stack_top:
 
+; Multiboot info structure pointer (saved from ebx at entry)
+global mb_info_ptr
+mb_info_ptr:    dq 0
+
 ; ─── Multiboot v1 header (must be in first 8192 bytes) ────────────────
+; Request: align modules, memory info, video mode (linear framebuffer)
 SECTION .text._start
 align 4
 mb_header:
     dd 0x1BADB002
-    dd 0x00000003
-    dd -(0x1BADB002 + 0x00000003)
+    dd 0x00000007          ; flags: bit0=align, bit1=meminfo, bit2=video
+    dd -(0x1BADB002 + 0x00000007)
+    dd 0                   ; mode: 0=prefer LFB
+    dd 1024                ; width
+    dd 768                 ; height
+    dd 32                  ; depth
 
-; ─── Boot page tables (1GB huge pages identity-map the full low 4GB) ─────
-; CPU must support pdpe1gb (AMD Ryzen 7840U does).
+; ─── Boot page tables ──────────────────────────────────────────────────
+; CPU must support pdpe1gb (AMD Ryzen 7840U does). Identity-map full 8GB.
 align 4096
 boot_pml4:
     dd boot_pdpt + 0x07           ; entry 0: present + writable
@@ -36,16 +45,44 @@ boot_pml4:
     dd 0, 0                       ; entry 511
 
 boot_pdpt:
-    ; 1GB huge pages identity-map 0 – 4GB
+    ; 1GB huge pages identity-map 0 – 3GB and 4GB – 8GB
     dd 0x00000083                 ; [0G, 1G): present + writable + 1G page
     dd 0
     dd 0x40000083                 ; [1G, 2G)
     dd 0
     dd 0x80000083                 ; [2G, 3G)
     dd 0
-    dd 0xC0000083                 ; [3G, 4G)
+    dd boot_pd_pci + 0x07        ; [3G, 4G): point to PD (2MB pages, no PS bit)
     dd 0
-    times 508 dq 0
+    dd 0x00000083                 ; [4G, 5G): present + writable + 1G page
+    dd 0x00000001
+    dd 0x40000083                 ; [5G, 6G)
+    dd 0x00000001
+    dd 0x80000083                 ; [6G, 7G)
+    dd 0x00000001
+    dd 0xC0000083                 ; [7G, 8G)
+    dd 0x00000001
+    times 504 dq 0
+
+; Page Directory for [3G, 4G) — 2MB pages so we can mark MMIO as UC
+; Most entries are WB (0x83), MMIO entries (IOAPIC at 0xFEC, LAPIC at 0xFEE)
+; use UC (0x9B = Present|Writable|PS|PWT|PCD).
+align 4096
+boot_pd_pci:
+    ; Indices 0-501: WB 2MB pages (0xC0000000 – 0xFEBFFFFF)
+    %assign i 0
+    %rep 502
+        dd (0xC0000000 + i * 0x200000) | 0x83
+        dd 0
+        %assign i i + 1
+    %endrep
+    ; Index 502: 0xFEC00000 (IOAPIC, HPET, TPM CRB)
+    dd 0xFEC00083
+    dd 0
+    ; Index 503: 0xFEE00000 (LAPIC)
+    dd 0xFEE00083
+    dd 0
+    times 8 dq 0                  ; indices 504-511 unused
 
 ; ─── Temporary 64-bit GDT ─────────────────────────────────────────────
 align 16
@@ -69,6 +106,10 @@ gdt_descriptor:
 [BITS 32]
 global _start
 _start:
+    ; Save multiboot info structure pointer (ebx holds physical address)
+    ; Must be saved immediately before anything clobbers ebx
+    mov     [mb_info_ptr], ebx
+
     ; Disable interrupts
     cli
 

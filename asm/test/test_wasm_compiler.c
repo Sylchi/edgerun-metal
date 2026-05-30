@@ -35,9 +35,12 @@ extern uint32_t er_wasm_compiler_compile_wasm(
 static int total_tests = 0;
 static int passed_tests = 0;
 
+static int _failing_test = -1;
 #define TEST(name, expr) do { \
     total_tests++; \
-    if (expr) { passed_tests++; } \
+    int _ok = (expr); \
+    if (_ok) { passed_tests++; } \
+    else { _failing_test = total_tests; return 100 + total_tests; } \
 } while(0)
 
 static int wasm_read_leb128(const uint8_t* data, uint64_t* value) {
@@ -56,6 +59,72 @@ static int wasm_read_leb128(const uint8_t* data, uint64_t* value) {
 
 // Validate WASM binary structure
 // Returns 0 on success, -1 on failure
+// Count exports in the export section
+// Returns export count on success, -1 on error
+static int wasm_export_count(const uint8_t* wasm, uint64_t wasm_len) {
+    uint64_t pos = 8;
+    while (pos < wasm_len) {
+        if (pos + 1 > wasm_len) return -1;
+        uint8_t sid = wasm[pos++];
+        if (pos + 5 > wasm_len) return -1;
+        uint64_t slen;
+        int leb = wasm_read_leb128(wasm + pos, &slen);
+        pos += leb;
+        if (pos + slen > wasm_len) return -1;
+        if (sid == 7) {
+            // Export section: first value is count
+            if (pos + 5 > wasm_len) return -1;
+            uint64_t count;
+            wasm_read_leb128(wasm + pos, &count);
+            return (int)count;
+        }
+        pos += slen;
+    }
+    return -1;
+}
+
+// Find export name in export section
+// Returns 1 if found, 0 if not found, -1 on error
+static int wasm_has_export(const uint8_t* wasm, uint64_t wasm_len,
+                            const char* name, uint64_t name_len) {
+    uint64_t pos = 8;
+    while (pos < wasm_len) {
+        if (pos + 1 > wasm_len) return -1;
+        uint8_t sid = wasm[pos++];
+        if (pos + 5 > wasm_len) return -1;
+        uint64_t slen;
+        int leb = wasm_read_leb128(wasm + pos, &slen);
+        pos += leb;
+        if (pos + slen > wasm_len) return -1;
+        if (sid == 7) {
+            uint64_t pos_end = pos + slen;
+            uint64_t count;
+            pos += wasm_read_leb128(wasm + pos, &count);
+            while (count > 0 && pos < pos_end) {
+                uint64_t ename_len_val;
+                int elen = wasm_read_leb128(wasm + pos, &ename_len_val);
+                uint64_t ename_len = ename_len_val;
+                pos += elen;
+                if (pos + ename_len + 1 + 1 > pos_end) return -1;
+                if (ename_len == name_len) {
+                    int match = 1;
+                    for (uint64_t i = 0; i < name_len; i++) {
+                        if (wasm[pos + i] != (uint8_t)name[i]) { match = 0; break; }
+                    }
+                    if (match) return 1;
+                }
+                pos += ename_len;
+                pos += 1;             // skip kind
+                pos += wasm_read_leb128(wasm + pos, &ename_len_val); // skip index
+                count--;
+            }
+            return 0;
+        }
+        pos += slen;
+    }
+    return -1;
+}
+
 static int validate_wasm(const uint8_t* wasm, uint64_t wasm_len) {
     if (wasm_len < 8) return -1;
     if (wasm[0] != WASM_MAGIC0 || wasm[1] != WASM_MAGIC1 ||
@@ -139,6 +208,13 @@ int main(void) {
 
         int valid = validate_wasm((const uint8_t*)out_ptr, out_len);
         TEST("valid WASM binary", valid == 0);
+
+        int ec = wasm_export_count((const uint8_t*)out_ptr, out_len);
+        TEST("export count = 29 (28 base + 1 user)", ec == 29);
+
+        int has_main = wasm_has_export((const uint8_t*)out_ptr, out_len,
+                                       "main", 4);
+        TEST("user export 'main' present", has_main == 1);
     }
 
     // Test 3: Compile with multiple exports
@@ -156,6 +232,17 @@ int main(void) {
         uint64_t out_len = er_wasm_compiler_output_len();
         int valid = validate_wasm((const uint8_t*)out_ptr, out_len);
         TEST("multi-export valid WASM", valid == 0);
+
+        int ec = wasm_export_count((const uint8_t*)out_ptr, out_len);
+        TEST("multi-export count = 30 (28 base + 2 user)", ec == 30);
+
+        int has_main = wasm_has_export((const uint8_t*)out_ptr, out_len,
+                                       "main", 4);
+        TEST("multi-export 'main' present", has_main == 1);
+
+        int has_helper = wasm_has_export((const uint8_t*)out_ptr, out_len,
+                                         "helper", 6);
+        TEST("multi-export 'helper' present", has_helper == 1);
     }
 
     // Test 4: Empty source should fail

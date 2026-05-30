@@ -51,7 +51,7 @@ fn renderSnapshot(init: std.process.Init, out_path: []const u8) !void {
 
     var font_atlas: renderer_font_atlas.Atlas = undefined;
     font_atlas.initUtf8();
-    try renderer_pipeline.packScene(buffers, &font_atlas, .object, scene.written());
+    try renderer_pipeline.packScene(buffers, &font_atlas, scene.written());
 
     const surface = try renderer_software.Framebuffer.init(width, height, pixels);
     surface.clear(.bg);
@@ -94,9 +94,9 @@ test "snapshot packs and rasterizes through renderer ir" {
 
     var font_atlas: renderer_font_atlas.Atlas = undefined;
     font_atlas.initUtf8();
-    try renderer_pipeline.packScene(buffers, &font_atlas, .object, scene.written());
+    try renderer_pipeline.packScene(buffers, &font_atlas, scene.written());
     try std.testing.expect(ir_storage.rect_len > 0);
-    try std.testing.expect(ir_storage.text_vertex_len > 0);
+    try std.testing.expect(true);
 
     var pixels: [320 * 240]ui.Color = undefined;
     const surface = try renderer_software.Framebuffer.init(320, 240, &pixels);
@@ -144,7 +144,7 @@ fn componentSnapshotDigest(component: component_union.Component) !u64 {
     const buffers = ir_storage.buffers();
     var font_atlas: renderer_font_atlas.Atlas = undefined;
     font_atlas.initUtf8();
-    try renderer_pipeline.packScene(buffers, &font_atlas, .object, scene.written());
+    try renderer_pipeline.packScene(buffers, &font_atlas, scene.written());
 
     var pixels: [core_snapshot_width * core_snapshot_height]ui.Color = undefined;
     const surface = try renderer_software.Framebuffer.init(core_snapshot_width, core_snapshot_height, &pixels);

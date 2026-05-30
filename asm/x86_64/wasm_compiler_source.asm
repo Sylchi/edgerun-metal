@@ -80,9 +80,18 @@ parse_stats_export_bytes:   resd    1
 ; Export name storage (filled by source_parse)
 MAX_PARSED_EXPORTS equ 64
 global export_name_ptrs, export_name_lens, export_name_count
+global return_values
 export_name_ptrs:   resq    MAX_PARSED_EXPORTS
 export_name_lens:   resd    MAX_PARSED_EXPORTS
 export_name_count:  resd    1
+return_values:      resd    MAX_PARSED_EXPORTS
+
+; Const name/value table (populated by source_parse)
+MAX_CONST_DECLS equ 64
+const_name_ptrs:   resq    MAX_CONST_DECLS
+const_name_lens:   resd    MAX_CONST_DECLS
+const_values:      resd    MAX_CONST_DECLS
+const_decl_count:  resd    1
 
 ; ==================================================================
 ; .rodata
@@ -109,6 +118,7 @@ prefix_var:         db "var "
 prefix_fn:          db "fn "
 prefix_export_fn:   db "export fn "
 prefix_pub_export:  db "pub export fn "
+prefix_return:      db "return "
 
 ; Keyword lookup table: { ptr(8), len(8), type(8) } = 24 bytes/entry
 align 8
@@ -636,15 +646,15 @@ check_prefix:
     push    rbp
     mov     rbp, rsp
     push    rcx
-    push    rdi
-    push    rsi
+    push    rdi             ; saved original rdi (source ptr)
+    push    rsi             ; saved original rsi (source len)
     push    r8
     mov     r8, rsi
     sub     r8, rdx
     cmp     r8, r11
     jb      .no
-    mov     rdi, [tokenizer_source_ptr]
-    add     rdi, rdx
+    ; Use the rdi argument directly instead of reloading from tokenizer_source_ptr
+    add     rdi, rdx        ; rdi = source_ptr + index
     mov     rsi, r10
     mov     rcx, r11
     repe    cmpsb
@@ -830,6 +840,7 @@ source_parse:
     xor     r14d, r14d          ; decl count
     xor     r15d, r15d          ; export count
     xor     ebx, ebx            ; export name bytes
+    mov     dword [const_decl_count], 0
 
     call    tokenizer_init
 
@@ -874,10 +885,90 @@ source_parse:
 
 .handle_const:
     inc     r14d
-    jmp     .loop
+    ; [tokenizer_index] points past "const ". r12=src, r13=len.
+    mov     rdx, [tokenizer_index]
+
+    ; Parse identifier name
+    mov     rdi, r12
+    mov     rsi, r13
+    mov     r10, rdx                ; save name start offset
+    call    scan_identifier_end
+    jc      .const_scan_semi        ; no ident, skip to semicolon
+
+    ; r10 = name start offset, rdx = name end offset
+    mov     r8d, [const_decl_count]
+    cmp     r8d, MAX_CONST_DECLS
+    jae     .const_scan_val         ; table full
+
+    lea     rax, [r12 + r10]
+    mov     [const_name_ptrs + r8*8], rax
+    mov     eax, edx
+    sub     eax, r10d
+    mov     [const_name_lens + r8*4], eax
+
+.const_scan_val:
+    ; Scan forward for '='
+    mov     rdi, r12
+    mov     rsi, r13
+.const_scan_eq:
+    cmp     rdx, r13
+    jae     .const_scan_semi
+    movzx   eax, byte [r12 + rdx]
+    cmp     al, '='
+    je      .const_got_eq
+    cmp     al, ';'
+    je      .const_scan_semi
+    inc     rdx
+    jmp     .const_scan_eq
+.const_got_eq:
+    inc     rdx                     ; skip '='
+
+    ; Skip whitespace before value
+    call    skip_space
+    jc      .const_scan_semi
+
+    ; Parse decimal value
+    xor     ecx, ecx
+.const_val_loop:
+    cmp     rdx, r13
+    jae     .const_val_done
+    movzx   eax, byte [r12 + rdx]
+    cmp     al, '0'
+    jb      .const_val_done
+    cmp     al, '9'
+    ja      .const_val_done
+    imul    ecx, 10
+    sub     al, '0'
+    add     ecx, eax
+    inc     rdx
+    jmp     .const_val_loop
+.const_val_done:
+    cmp     r8d, MAX_CONST_DECLS
+    jae     .const_scan_semi
+    mov     [const_values + r8*4], ecx
+    inc     dword [const_decl_count]
+
+.const_scan_semi:
+    mov     rdi, r12
+    mov     rsi, r13
+    jmp     .scan_semicolon
 
 .handle_var:
     inc     r14d
+    mov     rdi, r12
+    mov     rsi, r13
+    mov     rdx, [tokenizer_index]
+    add     rdx, 4              ; skip "var "
+.scan_semicolon:
+    cmp     rdx, rsi
+    jae     .fail
+    cmp     byte [rdi + rdx], ';'
+    je      .semi_found
+    inc     rdx
+    jmp     .scan_semicolon
+.semi_found:
+    inc     rdx
+    mov     [tokenizer_index], rdx
     jmp     .loop
 
 .handle_fn:
@@ -887,7 +978,6 @@ source_parse:
     inc     r15d
     mov     rax, [parser_result_buf + 8]
     add     ebx, eax
-    ; Store export name if space
     mov     ecx, [export_name_count]
     cmp     ecx, MAX_PARSED_EXPORTS
     jae     .fn_skip
@@ -896,6 +986,93 @@ source_parse:
     mov     [export_name_ptrs + rcx*8], rdx
     mov     [export_name_lens + rcx*4], eax
     inc     dword [export_name_count]
+
+    ; Extract return literal from body
+    push    qword [tokenizer_index]
+
+    mov     rdx, [parser_result_buf + 48]  ; body offset
+    inc     rdx                            ; skip '{'
+
+    mov     rdi, r12
+    mov     rsi, r13
+    call    skip_space
+    mov     r8d, 0               ; default value
+    jc      .ret_done
+
+    lea     r10, [prefix_return]
+    mov     r11, 7
+    call    check_prefix
+    mov     r8d, 0
+    jc      .ret_done
+
+.ret_parse:
+    cmp     rdx, r13
+    jae     .ret_done
+    movzx   r9d, byte [r12 + rdx]
+    cmp     r9b, '0'
+    jb      .ret_check_ident
+    cmp     r9b, '9'
+    ja      .ret_check_ident
+    ; Digit: accumulate
+    imul    r8d, 10
+    sub     r9b, '0'
+    add     r8d, r9d
+    inc     rdx
+    jmp     .ret_parse
+
+.ret_check_ident:
+    ; Not a digit. Check if identifier start.
+    movzx   eax, r9b
+    call    is_ident_start
+    jz      .ret_lookup_const
+    ; Neither digit nor ident → done
+    jmp     .ret_done
+
+.ret_lookup_const:
+    ; rdx = start of identifier
+    push    rdx                    ; save ident start
+    mov     rdi, r12
+    mov     rsi, r13
+    call    scan_identifier_end
+    pop     rdi                    ; rdi = ident start offset
+    jc      .ret_done
+    ; rdx = ident end, rdi = ident start
+    mov     r9d, edx
+    sub     r9d, edi               ; r9d = ident length
+    lea     r10, [r12 + rdi]       ; r10 = absolute ptr to ident
+
+    ; Linear search of const table
+    push    rcx                    ; save export index
+    push    r15                    ; save export count → use as loop index
+    mov     r11d, [const_decl_count]
+    xor     r15d, r15d
+.const_lookup_loop:
+    cmp     r15d, r11d
+    jae     .const_lookup_not_found
+    mov     eax, [const_name_lens + r15*4]
+    cmp     r9d, eax
+    jne     .const_lookup_next
+    mov     rdi, r10
+    mov     rsi, [const_name_ptrs + r15*8]
+    mov     ecx, r9d
+    repe    cmpsb
+    jne     .const_lookup_next
+    ; Found!
+    mov     r8d, [const_values + r15*4]
+    jmp     .const_lookup_done
+.const_lookup_next:
+    inc     r15d
+    jmp     .const_lookup_loop
+.const_lookup_not_found:
+    ; r8d stays 0 (default)
+.const_lookup_done:
+    pop     r15                    ; restore export count
+    pop     rcx                    ; restore export index
+    jmp     .ret_done
+
+.ret_done:
+    pop     qword [tokenizer_index]
+    mov     [return_values + ecx*4], r8d
 .fn_skip:
     mov     rdx, [parser_result_buf + 64]
     mov     [tokenizer_index], rdx

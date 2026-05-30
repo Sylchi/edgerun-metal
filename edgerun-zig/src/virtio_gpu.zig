@@ -688,12 +688,10 @@ pub fn virglClearColorCommandByteLen() usize {
 }
 
 pub fn packedFullFrameClearColor(width: u32, height: u32, buffers: renderer_ir.Buffers) Error!VirglClearColor {
-    if (buffers.liveTextVertices().len != 0 or
-        buffers.liveIconVertices().len != 0 or
+    if (buffers.liveIconVertices().len != 0 or
         buffers.liveIconLineVertices().len != 0 or
         buffers.liveImageVertices().len != 0 or
         buffers.liveOverlayRects().len != 0 or
-        buffers.liveOverlayTextVertices().len != 0 or
         buffers.liveOverlayIconVertices().len != 0 or
         buffers.liveOverlayIconLineVertices().len != 0)
     {
@@ -717,11 +715,9 @@ pub fn packedFullFrameClearColor(width: u32, height: u32, buffers: renderer_ir.B
 pub fn rasterizePackedRectsToBgra(width: u32, height: u32, pixels: []u8, buffers: renderer_ir.Buffers, background: ui.Color) Error!void {
     const byte_len = @as(usize, width) * @as(usize, height) * 4;
     if (pixels.len < byte_len) return error.UnsupportedPackedFrame;
-    if (buffers.liveTextVertices().len != 0 or
-        buffers.liveIconVertices().len != 0 or
+    if (buffers.liveIconVertices().len != 0 or
         buffers.liveIconLineVertices().len != 0 or
         buffers.liveImageVertices().len != 0 or
-        buffers.liveOverlayTextVertices().len != 0 or
         buffers.liveOverlayIconVertices().len != 0 or
         buffers.liveOverlayIconLineVertices().len != 0)
     {
@@ -874,7 +870,7 @@ test "3d transfer command covers full color resource" {
 }
 
 test "packed rect rasterizer writes bgra scanout bytes" {
-    var storage = renderer_ir.FixedBuffers(2, 0, 0, 0, 0, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(2, 0, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     try renderer_ir.pushRect(buffers, .base, ui.Rect.init(0, 0, 4, 3), .{ .r = 1, .g = 2, .b = 3, .a = 255 }, .clear, 0, 0, renderer_ir.rectModeCode(.fill));
     try renderer_ir.pushRect(buffers, .base, ui.Rect.init(1, 1, 2, 1), .{ .r = 9, .g = 8, .b = 7, .a = 255 }, .clear, 0, 0, renderer_ir.rectModeCode(.fill));
@@ -953,7 +949,7 @@ test "virgl clear color command stream creates surface binds framebuffer and cle
 }
 
 test "packed renderer full-frame fill maps to virgl clear color" {
-    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     try renderer_ir.pushRect(buffers, .base, ui.Rect.init(0, 0, 640, 360), .{ .r = 33, .g = 212, .b = 237, .a = 255 }, .clear, 0, 0, renderer_ir.rectModeCode(.fill));
 
@@ -965,7 +961,7 @@ test "packed renderer full-frame fill maps to virgl clear color" {
 }
 
 test "packed renderer scanout bridge rejects unsupported partial frames" {
-    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     try renderer_ir.pushRect(buffers, .base, ui.Rect.init(8, 8, 320, 180), .accent, .clear, 0, 0, renderer_ir.rectModeCode(.fill));
 

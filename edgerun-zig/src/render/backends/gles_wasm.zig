@@ -90,10 +90,8 @@ pub fn renderFrame(gl: *State, width: i32, height: i32, scale: f32, buffers: ren
     wasm_gl.glClear(wasm_gl.gl_color_buffer_bit);
     try drawRects(gl, width, height, scale, buffers.liveRects());
     drawImage(gl, width, height, buffers.liveImageVertices());
-    drawTextured(gl, width, height, buffers.liveTextVertices(), gl.font_texture, gl.textured_program);
     drawIconLines(gl, width, height, buffers.liveIconLineVertices());
     try drawRects(gl, width, height, scale, buffers.liveOverlayRects());
-    drawTextured(gl, width, height, buffers.liveOverlayTextVertices(), gl.font_texture, gl.textured_program);
     drawIconLines(gl, width, height, buffers.liveOverlayIconLineVertices());
 }
 

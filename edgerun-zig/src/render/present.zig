@@ -113,7 +113,7 @@ pub fn validateResources(buffers: renderer_ir.Buffers, resources: Resources) Err
 
 pub fn bufferRequirements(buffers: renderer_ir.Buffers) Requirements {
     return .{
-        .font_atlas = buffers.text_vertex_len.* != 0 or buffers.overlay_text_vertex_len.* != 0,
+        .font_atlas = false,
         .image_texture = buffers.image_vertex_len.* != 0,
     };
 }
@@ -146,7 +146,7 @@ test "presentation target transport is explicit" {
 }
 
 test "presentation frame validates canonical ir buffers for every target" {
-    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     try renderer_ir.pushRect(buffers, .base, .{ .x = 2, .y = 3, .w = 10, .h = 12 }, .text, .clear, 4, 0, 0);
 
@@ -168,16 +168,7 @@ test "presentation frame validates canonical ir buffers for every target" {
 }
 
 test "presentation frame rejects invalid dimensions and missing texture resources" {
-    var text_storage = renderer_ir.FixedBuffers(0, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0, 0, 0){};
-    text_storage.text_vertex_len = renderer_ir.textured_quad_vertex_count * renderer_ir.text_vertex_float_stride;
-    const text_frame = Frame{
-        .target = .{ .destination = .pixel_frame, .width = 64, .height = 48 },
-        .buffers = text_storage.buffers(),
-        .resources = .{},
-    };
-    try std.testing.expectError(error.MissingFontAtlas, text_frame.validate());
-
-    var icon_storage = renderer_ir.FixedBuffers(0, 0, 1, 0, 0, 0, 0, 0, 0){};
+    var icon_storage = renderer_ir.FixedBuffers(0, 1, 0, 0, 0, 0, 0){};
     icon_storage.icon_vertex_len = renderer_ir.icon_instance_float_stride;
     const icon_frame = Frame{
         .target = .{ .destination = .packed_frame, .width = 64, .height = 48 },
@@ -186,7 +177,7 @@ test "presentation frame rejects invalid dimensions and missing texture resource
     };
     try icon_frame.validate();
 
-    var image_storage = renderer_ir.FixedBuffers(0, 0, 0, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0){};
+    var image_storage = renderer_ir.FixedBuffers(0, 0, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0){};
     image_storage.image_vertex_len = renderer_ir.textured_quad_vertex_count * renderer_ir.image_vertex_float_stride;
     const image_frame = Frame{
         .target = .{ .destination = .native_surface, .width = 64, .height = 48 },
@@ -204,8 +195,7 @@ test "presentation frame rejects invalid dimensions and missing texture resource
 }
 
 test "presentation receipt records canonical resource requirements" {
-    var storage = renderer_ir.FixedBuffers(0, renderer_ir.textured_quad_vertex_count, 1, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0){};
-    storage.text_vertex_len = renderer_ir.textured_quad_vertex_count * renderer_ir.text_vertex_float_stride;
+    var storage = renderer_ir.FixedBuffers(0, 1, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0){};
     storage.icon_vertex_len = renderer_ir.icon_instance_float_stride;
     storage.image_vertex_len = renderer_ir.textured_quad_vertex_count * renderer_ir.image_vertex_float_stride;
 
@@ -217,7 +207,7 @@ test "presentation receipt records canonical resource requirements" {
     const receipt = try present(frame);
     try std.testing.expectEqual(PrimitiveFormat.canonical_ir, receipt.primitive_format);
     try std.testing.expectEqual(Transport.command_stream, receipt.transport);
-    try std.testing.expect(receipt.requirements.font_atlas);
     try std.testing.expect(receipt.requirements.image_texture);
-    try std.testing.expectEqual(@as(usize, 3), receipt.primitive_count);
+    try std.testing.expect(!receipt.requirements.font_atlas);
+    try std.testing.expectEqual(@as(usize, 2), receipt.primitive_count);
 }

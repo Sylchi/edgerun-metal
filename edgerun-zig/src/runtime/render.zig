@@ -11,8 +11,6 @@ pub fn packedBuffers() state.renderer_pipeline.Buffers {
     return .{
         .rects = state.packed_rect_floats[0..],
         .rect_len = &state.packed_rect_float_len,
-        .text_vertices = state.packed_text_vertex_floats[0..],
-        .text_vertex_len = &state.packed_text_vertex_float_len,
         .icon_vertices = state.packed_icon_vertex_floats[0..],
         .icon_vertex_len = &state.packed_icon_vertex_float_len,
         .icon_line_vertices = state.packed_icon_line_vertex_floats[0..],
@@ -21,17 +19,11 @@ pub fn packedBuffers() state.renderer_pipeline.Buffers {
         .image_vertex_len = &state.packed_image_vertex_float_len,
         .overlay_rects = state.packed_overlay_rect_floats[0..],
         .overlay_rect_len = &state.packed_overlay_rect_float_len,
-        .overlay_text_vertices = state.packed_overlay_text_vertex_floats[0..],
-        .overlay_text_vertex_len = &state.packed_overlay_text_vertex_float_len,
         .overlay_icon_vertices = state.packed_overlay_icon_vertex_floats[0..],
         .overlay_icon_vertex_len = &state.packed_overlay_icon_vertex_float_len,
         .overlay_icon_line_vertices = state.packed_overlay_icon_line_vertex_floats[0..],
         .overlay_icon_line_vertex_len = &state.packed_overlay_icon_line_vertex_float_len,
     };
-}
-
-pub fn packedSources() state.renderer_pipeline.Sources {
-    return state.renderer_pipeline.sources(&state.font_atlas, .object);
 }
 
 pub fn renderAppPixels(surface: state.renderer_pipeline.SoftwareFramebuffer, hover_x: f32, hover_y: f32, frame_ms: f32) u32 {
@@ -67,7 +59,7 @@ pub fn finishPackedFrame(scene: state.ui.Scene, regions: []const interaction.Reg
     const frame_scene = prepareFrameScene(scene, regions, .{ .enabled = true, .x = hover_x, .y = hover_y }) catch return finishError(.render_failed);
     ensureFontAtlas() catch return finishError(.font_atlas);
     const buffers = packedBuffers();
-    state.renderer_pipeline.packSceneWithSources(buffers, packedSources(), frame_scene.written()) catch return finishError(.packed_budget);
+    state.renderer_pipeline.packScene(buffers, &state.font_atlas, frame_scene.written()) catch return finishError(.packed_budget);
     presentPackedBuffers(buffers) catch return finishError(.render_failed);
     state.last_error = .ok;
     return @intFromEnum(state.ErrorCode.ok);
@@ -138,7 +130,7 @@ pub fn beginFrame(width_raw: u32, height_raw: u32) ?state.renderer_pipeline.Soft
 fn renderSceneIr(surface: state.renderer_pipeline.SoftwareFramebuffer, scene_commands: []const state.ui.Command, background: state.ui.Color) !void {
     try ensureFontAtlas();
     const buffers = packedBuffers();
-    try state.renderer_pipeline.packSceneWithSources(buffers, packedSources(), scene_commands);
+    try state.renderer_pipeline.packScene(buffers, &state.font_atlas, scene_commands);
     const image_texture = try app_images.cloudMeme();
     const receipt = try state.renderer_pipeline.renderSoftwareFrame(surface, buffers, state.renderer_pipeline.softwareResourcesFromAlphaAtlas(.{
         .width = state.font_atlas_width,

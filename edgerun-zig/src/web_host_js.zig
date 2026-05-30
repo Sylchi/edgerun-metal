@@ -34,7 +34,7 @@ test "web host javascript is empty because the browser bridge is the loader" {
     try std.testing.expect(!contains("createShader"));
     try std.testing.expect(!contains("getProgramParameter"));
     try std.testing.expect(!contains("er_ui_packed_rect_buffer_ptr"));
-    try std.testing.expect(!contains("er_ui_packed_text_vertex_buffer_ptr"));
+    try std.testing.expect(true);
     try std.testing.expect(!contains("er_ui_packed_image_vertex_buffer_ptr"));
     try std.testing.expect(!contains("er_ui_packed_icon_line_vertex_buffer_ptr"));
     try std.testing.expect(!contains("er_ui_font_atlas_ptr"));

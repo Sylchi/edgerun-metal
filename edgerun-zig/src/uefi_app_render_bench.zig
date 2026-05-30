@@ -64,7 +64,7 @@ fn runFrame(width: u32, height: u32, image_texture: renderer_software.RgbaTextur
 
     const buffers = ir_storage.buffers();
     const pack_start = nowNs();
-    try renderer_pipeline.packScene(buffers, &font_atlas, .object, scene.written());
+    try renderer_pipeline.packScene(buffers, &font_atlas, scene.written());
     const pack_ns = nowNs() - pack_start;
 
     const surface = try renderer_software.Framebuffer.init(width, height, pixels[0 .. width * height]);
@@ -91,7 +91,7 @@ fn runFrame(width: u32, height: u32, image_texture: renderer_software.RgbaTextur
         height,
         scene.written().len,
         ir_storage.rect_len,
-        ir_storage.text_vertex_len,
+        @as(u32, 0),
         ir_storage.icon_vertex_len,
         ir_storage.icon_line_vertex_len,
         ir_storage.image_vertex_len,

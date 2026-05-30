@@ -369,3 +369,38 @@ er_fn er_serial_crlf
     call    er_serial_putchar
     pop     rsi
     ret
+
+; Error code for no-data condition
+%define ERROR_NO_DATA 23
+
+; ==================================================================
+; er_serial_getchar — non-blocking serial read
+; uint8_t er_serial_getchar(uint16_t port)
+;
+; rdi = COM port base (e.g. 0x3F8 for COM1)
+; Returns: rax = byte read (if available), rdx = 0
+;          rax = 0, rdx = ERROR_NO_DATA if nothing available
+; ==================================================================
+er_fn er_serial_getchar
+    push    rdx
+
+    mov     dx, di
+    add     dx, UART_LSR
+    er_in_al_dx
+    test    al, LSR_DATA_READY
+    jz      .no_data
+
+    mov     dx, di
+    add     dx, UART_RBR
+    er_in_al_dx
+    movzx   eax, al
+
+    pop     rdx
+    xor     edx, edx
+    ret
+
+.no_data:
+    pop     rdx
+    xor     eax, eax
+    mov     edx, ERROR_NO_DATA
+    ret

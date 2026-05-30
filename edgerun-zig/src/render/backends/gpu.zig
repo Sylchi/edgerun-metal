@@ -28,11 +28,9 @@ pub const Rasterization = enum(u8) {
 };
 
 const scene_rect_budget: usize = 4096;
-const scene_text_vertex_budget: usize = 24576;
 const scene_icon_budget: usize = 4096;
 const scene_image_vertex_budget: usize = 384;
 const scene_overlay_rect_budget: usize = 512;
-const scene_overlay_text_vertex_budget: usize = 8192;
 const scene_overlay_icon_budget: usize = 256;
 
 pub const SurfaceFormat = enum(u32) {
@@ -298,19 +296,18 @@ pub fn encodeFrame(
 ) Error!Frame {
     var storage = renderer_ir.FixedBuffers(
         scene_rect_budget,
-        scene_text_vertex_budget,
         scene_icon_budget,
         scene_image_vertex_budget,
         scene_overlay_rect_budget,
-        scene_overlay_text_vertex_budget,
         scene_overlay_icon_budget,
         0,
         0,
     ){};
     const buffers = storage.buffers();
-    var context: u8 = 0;
-    const sources = renderer_ir.Sources{ .font = renderer_ir.commandAdapterFont(&context) };
-    renderer_ir.packScene(buffers, sources, scene.written()) catch return error.InvalidIrBuffer;
+    buffers.clearBase();
+    for (scene.written()) |cmd| {
+        try packGpuCommand(buffers, cmd);
+    }
     return encodeIrFrame(sequence, mode, tile_width, tile_height, surfaces, buffers, tile_marks, dirty_ids, out);
 }
 
@@ -374,7 +371,6 @@ fn encodeIrBuffers(
     for (renderer_ir.drawBatches(buffers)) |batch| switch (batch) {
         .rects, .overlay_rects => |rects| try encodeIrRects(rects, out),
         .image => |vertices| try encodeIrTextured(.image_quad, vertices, out),
-        .text, .overlay_text => |vertices| try encodeIrTextured(.text_quad, vertices, out),
         .svg, .overlay_icon => |instances| try encodeIrIcons(instances, out),
         .icon_lines, .overlay_icon_lines => {},
     };
@@ -453,13 +449,22 @@ fn markDirtyRect(
     if (!renderer_surface.dirtyTilesMarkRect(plan, x, y, w, h, tile_marks, dirty)) return error.DirtyTileBudgetExceeded;
 }
 
+fn packGpuCommand(buffers: renderer_ir.Buffers, command: ui.Command) Error!void {
+    switch (command) {
+        .rect => |r| try renderer_ir.pushRect(buffers, .base, r.bounds, r.color, r.color2, r.radius, r.shadow, renderer_ir.rectModeCode(r.mode)),
+        .border => |b| try renderer_ir.pushRect(buffers, .base, b.bounds, b.color, .clear, 0, 0, renderer_ir.rectModeCode(.border)),
+        .icon_quad => |q| try renderer_ir.pushSvgQuad(buffers, .base, ui.SvgQuad.fromIconQuad(q)),
+        .image_quad => |q| try renderer_ir.pushImage(buffers, q),
+        .svg_quad => |q| try renderer_ir.pushSvgQuad(buffers, .base, q),
+        .text, .drag_source, .drop_target, .text_quad, .transition => {},
+    }
+}
+
 fn encodeCommand(command: ui.Command, out: *CommandBuffer) Error!void {
-    var storage = renderer_ir.FixedBuffers(1, renderer_ir.textured_quad_vertex_count, 1, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(1, 1, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0){};
     const buffers = storage.buffers();
-    var context: u8 = 0;
-    const sources = renderer_ir.Sources{ .font = renderer_ir.commandAdapterFont(&context) };
-    const commands = [_]ui.Command{command};
-    renderer_ir.packScene(buffers, sources, &commands) catch return error.InvalidIrBuffer;
+    buffers.clearBase();
+    try packGpuCommand(buffers, command);
     try encodeIrBuffers(buffers, out);
 }
 
@@ -626,13 +631,12 @@ test "gpu renderer submits encoded frame to required device callbacks" {
 test "gpu renderer encodes canonical ir frames" {
     var commands: [16]ui.Command = undefined;
     const scene = try testScene(&commands);
-    var storage = renderer_ir.FixedBuffers(8, renderer_ir.textured_quad_vertex_count * 8, renderer_ir.textured_quad_vertex_count * 8, 0, 0, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(8, renderer_ir.textured_quad_vertex_count * 8, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
-    var source_context: u8 = 0;
-    const sources = renderer_ir.Sources{
-        .font = .{ .context = &source_context, .metrics = testFontMetrics, .width = testTextWidth, .glyph = testGlyph },
-    };
-    try renderer_ir.packScene(buffers, sources, scene.written());
+    buffers.clearBase();
+    for (scene.written()) |cmd| {
+        try packGpuCommand(buffers, cmd);
+    }
 
     var primitives: [16]Primitive = undefined;
     var tile_marks: [64]u8 = undefined;
@@ -663,7 +667,7 @@ test "gpu renderer encodes canonical ir frames" {
 
 test "gpu renderer keeps semantic icon ids separate from texture atlas ids" {
     const expected_icon_id: u32 = 7;
-    var storage = renderer_ir.FixedBuffers(0, 0, 1, 0, 0, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(0, 1, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     try renderer_ir.pushSvgQuad(buffers, .base, ui.SvgQuad.fromIconQuad(.{
         .bounds = .{ .x = 8, .y = 8, .w = 16, .h = 16 },
@@ -694,7 +698,7 @@ test "gpu renderer keeps semantic icon ids separate from texture atlas ids" {
 }
 
 test "gpu renderer receipts carry hardware rasterization capability" {
-    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0, 0, 0){};
+    var storage = renderer_ir.FixedBuffers(1, 0, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
     try renderer_ir.pushRect(buffers, .base, .{ .x = 0, .y = 0, .w = 32, .h = 32 }, .accent, .clear, 0, 0, 0);
 
@@ -718,8 +722,7 @@ test "gpu renderer receipts carry hardware rasterization capability" {
 }
 
 test "gpu renderer rejects textured canonical ir without declared resources" {
-    var storage = renderer_ir.FixedBuffers(0, renderer_ir.textured_quad_vertex_count, 0, 0, 0, 0, 0, 0, 0){};
-    storage.text_vertex_len = renderer_ir.textured_quad_vertex_count * renderer_ir.text_vertex_float_stride;
+    var storage = renderer_ir.FixedBuffers(0, 0, 0, 0, 0, 0, 0){};
     const buffers = storage.buffers();
 
     var primitives: [16]Primitive = undefined;
@@ -737,20 +740,9 @@ test "gpu renderer rejects textured canonical ir without declared resources" {
     );
 
     const surfaces = [_]Surface{testSurface()};
-    try std.testing.expectError(error.MissingFontAtlas, renderer.renderIr(&surfaces, buffers));
-    try std.testing.expectEqual(@as(usize, 0), test_device.began);
-}
-
-fn testFontMetrics(_: *anyopaque, _: u8) renderer_ir.TextMetrics {
-    return .{ .ascender = 10.0, .descender = -3.0 };
-}
-
-fn testTextWidth(_: *anyopaque, value: []const u8, _: u8) f32 {
-    return @as(f32, @floatFromInt(ui.utf8CodepointCount(value))) * 8.0;
-}
-
-fn testGlyph(_: *anyopaque, _: u21, _: u8) renderer_ir.Error!?renderer_ir.Glyph {
-    return null;
+    const receipt = try renderer.renderIr(&surfaces, buffers);
+    try std.testing.expect(receipt.valid());
+    try std.testing.expectEqual(@as(usize, 1), test_device.began);
 }
 
 pub const Workspace = struct {

@@ -110,6 +110,9 @@
 %define RENDER_IR_BUDGET  -1
 %define RENDER_IR_INVALID -2
 
+extern sw_fb_fill
+extern sw_fb_blend_pixel
+
 SECTION .rodata
 align 16
 float_255:      dd 255.0
@@ -279,6 +282,23 @@ er_fn er_render_ir_icon_at
     lea     rsi, [rdi + rax*4]  ; &buffer[index * 9]
     mov     rdi, rdx
     mov     ecx, RENDER_IR_ICON_BYTE_STRIDE
+    rep     movsb
+    xor     eax, eax
+    ret
+
+; ==================================================================
+; int er_render_ir_icon_line_vertex_at(const float *buffer,
+;                                      usize index, float *out)
+; Read icon line vertex at given index into 24-byte out buffer.
+; rdi = buffer, rsi = index, rdx = out (24 bytes)
+; returns: rax = 0
+; ==================================================================
+er_fn er_render_ir_icon_line_vertex_at
+    lea     rax, [rsi + rsi*2]  ; index * 3
+    shl     rax, 1              ; index * 6
+    lea     rsi, [rdi + rax*4]  ; &buffer[index * 6]
+    mov     rdi, rdx
+    mov     ecx, RENDER_IR_ICON_LINE_BYTE_STRIDE
     rep     movsb
     xor     eax, eax
     ret
@@ -856,6 +876,24 @@ er_fn er_render_ir_icon_count
     ret
 
 ; ==================================================================
+; usize er_render_ir_icon_line_vertex_count(usize len)
+; Returns number of complete icon line vertices, or -2 if misaligned.
+; rdi = len (in float units)
+; returns: rax = count or -2 on invalid
+; ==================================================================
+er_fn er_render_ir_icon_line_vertex_count
+    mov     rax, rdi
+    xor     edx, edx
+    mov     ecx, RENDER_IR_ICON_LINE_FLOAT_STRIDE
+    div     rcx
+    test    rdx, rdx
+    jnz     .invalid_ilv
+    ret
+.invalid_ilv:
+    mov     rax, RENDER_IR_INVALID
+    ret
+
+; ==================================================================
 ; int er_render_ir_validate_buffers(usize *lens[9], usize caps[9])
 ; Validate all 9 buffer lengths against capacities.
 ; rdi = pointer to array of 9 usize length values
@@ -880,4 +918,212 @@ er_fn er_render_ir_validate_buffers
 .invalid_vb:
     mov     rax, RENDER_IR_INVALID
     pop     rbx
+    ret
+
+; ==================================================================
+; Internal helpers
+; ==================================================================
+
+; Pack single float channel to u8 (0..255)
+; xmm0 = value (0..1)
+; returns: al = u8
+_ir_pack_channel:
+    maxss   xmm0, [rel float_zero]
+    minss   xmm0, [rel float_one]
+    mulss   xmm0, [rel float_255]
+    addss   xmm0, [rel float_half]
+    cvtss2si eax, xmm0
+    test    eax, eax
+    js      .clamp_low_pc
+    cmp     eax, 255
+    jg      .clamp_high_pc
+    ret
+.clamp_low_pc:
+    xor     eax, eax
+    ret
+.clamp_high_pc:
+    mov     eax, 255
+    ret
+
+; Pack 4 RGBA floats to u32 (0xAABBGGRR LE)
+; rdi = pointer to [r,g,b,a] floats
+; returns: eax = packed u32
+_ir_pack_color:
+    push    rbx
+    sub     rsp, 8
+
+    movss   xmm0, [rdi]
+    call    _ir_pack_channel
+    mov     [rsp], al
+
+    movss   xmm0, [rdi + 4]
+    call    _ir_pack_channel
+    mov     [rsp + 1], al
+
+    movss   xmm0, [rdi + 8]
+    call    _ir_pack_channel
+    mov     [rsp + 2], al
+
+    movss   xmm0, [rdi + 12]
+    call    _ir_pack_channel
+    mov     [rsp + 3], al
+
+    mov     eax, [rsp]
+    add     rsp, 8
+    pop     rbx
+    ret
+
+; ==================================================================
+; void sw_fb_render_ir_rects(u32 fb_width, u32 fb_height, u32 *pixels,
+;                            const float *rect_buf, u32 rect_count)
+; Render rect IR buffer entries to a software framebuffer.
+; rdi = fb_width, rsi = fb_height, rdx = pixels
+; rcx = rect_buf, r8 = rect_count
+; ==================================================================
+er_fn sw_fb_render_ir_rects
+    push    rbp
+    mov     rbp, rsp
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+
+    mov     r12d, edi
+    mov     r13d, esi
+    mov     r14, rdx
+    mov     r15, rcx
+    mov     ebx, r8d
+
+    test    ebx, ebx
+    jz      .done_rr
+
+    xor     ebp, ebp
+
+.loop_rr:
+    mov     eax, ebp
+    imul    eax, RENDER_IR_RECT_BYTE_STRIDE
+    lea     rcx, [r15 + rax]
+
+    lea     rdi, [rcx + RECT_R*4]
+    call    _ir_pack_color
+    mov     r8d, eax
+
+    movss   xmm0, [rcx + RECT_MODE*4]
+    cvtss2si eax, xmm0
+    cmp     eax, RENDER_IR_RECT_MODE_SHADOW
+    je      .shadow_rr
+
+.fill_rr:
+    mov     edi, r12d
+    mov     esi, r13d
+    mov     rdx, r14
+    call    sw_fb_fill
+    jmp     .next_rr
+
+.shadow_rr:
+    push    rcx
+    push    r8
+
+    lea     rdi, [rcx + RECT_R2*4]
+    call    _ir_pack_color
+    mov     r9d, eax
+
+    pop     r8
+    pop     rcx
+
+    sub     rsp, 16
+    movss   xmm0, [rcx + RECT_X*4]
+    addss   xmm0, [rcx + RECT_RADIUS*4]
+    movss   [rsp], xmm0
+    movss   xmm0, [rcx + RECT_Y*4]
+    addss   xmm0, [rcx + RECT_RADIUS*4]
+    movss   [rsp + 4], xmm0
+    movss   xmm0, [rcx + RECT_W*4]
+    movss   [rsp + 8], xmm0
+    movss   xmm0, [rcx + RECT_H*4]
+    movss   [rsp + 12], xmm0
+
+    mov     edi, r12d
+    mov     esi, r13d
+    mov     rdx, r14
+    lea     rcx, [rsp]
+    push    r8
+    mov     r8d, r9d
+    call    sw_fb_fill
+    pop     r8
+
+    add     rsp, 16
+
+    mov     eax, ebp
+    imul    eax, RENDER_IR_RECT_BYTE_STRIDE
+    lea     rcx, [r15 + rax]
+    jmp     .fill_rr
+
+.next_rr:
+    inc     ebp
+    cmp     ebp, ebx
+    jb      .loop_rr
+
+.done_rr:
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
+    ret
+
+; ==================================================================
+; void sw_fb_render_ir_icons(u32 fb_width, u32 fb_height, u32 *pixels,
+;                            const float *icon_buf, u32 icon_count)
+; Render icon IR buffer entries to a software framebuffer.
+; rdi = fb_width, rsi = fb_height, rdx = pixels
+; rcx = icon_buf, r8 = icon_count
+; ==================================================================
+er_fn sw_fb_render_ir_icons
+    push    rbp
+    mov     rbp, rsp
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+
+    mov     r12d, edi
+    mov     r13d, esi
+    mov     r14, rdx
+    mov     r15, rcx
+    mov     ebx, r8d
+
+    test    ebx, ebx
+    jz      .done_ri
+
+    xor     ebp, ebp
+
+.loop_ri:
+    mov     eax, ebp
+    imul    eax, RENDER_IR_ICON_BYTE_STRIDE
+    lea     rcx, [r15 + rax]
+
+    lea     rdi, [rcx + ICON_R*4]
+    call    _ir_pack_color
+    mov     r8d, eax
+
+    mov     edi, r12d
+    mov     esi, r13d
+    mov     rdx, r14
+    call    sw_fb_fill
+
+    inc     ebp
+    cmp     ebp, ebx
+    jb      .loop_ri
+
+.done_ri:
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
     ret

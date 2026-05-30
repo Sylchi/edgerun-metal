@@ -6,6 +6,19 @@
 %define VIRTIO_DEVICE_GPU           0x1050
 %define VIRTIO_DEVICE_TYPE_GPU      16
 
+; Legacy I/O port register offsets (relative to BAR0 I/O base)
+; The transitional virtio device provides a legacy interface via I/O ports on BAR0.
+; QEMU i440FX does not forward MMIO to BAR4 at 0xFE000000 — use legacy I/O instead.
+%define LEGACY_DEVICE_FEATURES      0x00  ; read 32-bit
+%define LEGACY_GUEST_FEATURES       0x04  ; write 32-bit
+%define LEGACY_QUEUE_ADDRESS        0x08  ; write 32-bit
+%define LEGACY_QUEUE_SIZE           0x0C  ; read 16-bit
+%define LEGACY_QUEUE_SELECT         0x0E  ; write 16-bit
+%define LEGACY_QUEUE_NOTIFY         0x10  ; write 16-bit
+%define LEGACY_DEVICE_STATUS        0x12  ; read/write 8-bit
+%define LEGACY_ISR                  0x13  ; read 8-bit
+%define LEGACY_DEVICE_CFG           0x14  ; device-specific config
+
 ; PCI capability types (vendor-specific capability for Virtio)
 %define VIRTIO_PCI_CAP_VENDOR       0x09
 %define VIRTIO_PCI_CAP_COMMON_CFG   1
@@ -33,7 +46,6 @@
 %define VIRTIO_STATUS_FAILED        0x80
 
 ; Feature bits
-%define VIRTIO_F_VERSION_1          (1 << 32)
 %define VIRTIO_F_RING_INDIRECT_DESC (1 << 28)
 
 ; Virtio GPU feature bits
@@ -42,25 +54,6 @@
 %define VIRTIO_GPU_F_RESOURCE_UUID  (1 << 2)
 %define VIRTIO_GPU_F_RESOURCE_BLOB  (1 << 3)
 %define VIRTIO_GPU_F_CONTEXT_INIT   (1 << 4)
-
-; Common cfg register offsets (relative to common_cfg base)
-%define VIRTIO_COMMON_CFG_DEVICE_FEATURES_SEL 0
-%define VIRTIO_COMMON_CFG_DEVICE_FEATURES     4
-%define VIRTIO_COMMON_CFG_DRIVER_FEATURES_SEL 8
-%define VIRTIO_COMMON_CFG_DRIVER_FEATURES     12
-%define VIRTIO_COMMON_CFG_NUM_QUEUES          20
-%define VIRTIO_COMMON_CFG_DEVICE_STATUS       20  ; same offset
-%define VIRTIO_COMMON_CFG_QUEUE_SEL           22
-%define VIRTIO_COMMON_CFG_QUEUE_SIZE          24
-%define VIRTIO_COMMON_CFG_QUEUE_MSIX_VECTOR   26
-%define VIRTIO_COMMON_CFG_QUEUE_ENABLE        28
-%define VIRTIO_COMMON_CFG_QUEUE_NOTIFY_OFF    30
-%define VIRTIO_COMMON_CFG_QUEUE_DESC_LOW      32
-%define VIRTIO_COMMON_CFG_QUEUE_DESC_HIGH     36
-%define VIRTIO_COMMON_CFG_QUEUE_DRIVER_LOW    40
-%define VIRTIO_COMMON_CFG_QUEUE_DRIVER_HIGH   44
-%define VIRTIO_COMMON_CFG_QUEUE_DEVICE_LOW    48
-%define VIRTIO_COMMON_CFG_QUEUE_DEVICE_HIGH   52
 
 ; Split virtqueue descriptor flags
 %define VIRTIO_DESC_F_NEXT          0x0001
@@ -106,16 +99,15 @@ struc VIRTIO_DEVICE
 endstruc
 
 ; ==================================================================
-; VIRTIO_TRANSPORT — MMIO addresses and device identifiers (44 bytes)
+; VIRTIO_TRANSPORT — legacy I/O port interface (20 bytes)
+; Replaces the previous MMIO-based transport. Uses BAR0 I/O ports.
 ; ==================================================================
 struc VIRTIO_TRANSPORT
-    .common_cfg:        resq 1      ; 8
-    .notify_cfg:        resq 1      ; 8
-    .device_cfg:        resq 1      ; 8
-    .isr_cfg:           resq 1      ; 8
-    .bus:               resb 1      ; 1
-    .slot:              resb 1      ; 1
-    .func:              resb 1      ; 1
-                        resb 1      ; padding
-    .notify_off_mult:   resd 1      ; 4
+    .io_base:           resw 1      ; BAR0 I/O port base (e.g., 0xC000)
+    .device_config:     resw 1      ; device config I/O port (io_base + 0x14)
+    .bus:               resb 1
+    .slot:              resb 1
+    .func:              resb 1
+                        resb 1
+    .notify_off_mult:   resd 1
 endstruc

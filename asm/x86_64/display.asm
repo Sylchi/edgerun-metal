@@ -1,27 +1,66 @@
-; EdgeRun VGA text-mode display driver — x86_64 assembly
-; System V AMD64 ABI
-; Freestanding — no libc, no external dependencies.
+; EdgeRun display driver — x86_64 assembly
+; System V AMD64 ABI, freestanding.
 ;
-; Writes to VGA text-mode framebuffer at 0xB8000 (80x25, 2 bytes per cell).
-; Cursor position tracked in memory (no CRTC port I/O in long mode).
+; Dual-mode: VGA text mode (0xB8000, 80x25) or linear framebuffer
+; (multiboot-provided UEFI GOP).  Mode is selected at init time.
+;
+; Framebuffer text rendering delegates to fb_text.asm (alpha8 atlas).
 
 %include "x86_64/macros.inc"
 
 %define VGA_TEXT_BUF     0xB8000
 %define VGA_COLS         80
 %define VGA_ROWS         25
-%define VGA_ATTR         0x07        ; light gray on black
+%define VGA_ATTR         0x07
 
 SECTION .data
-vga_cursor:      dd 0        ; current cursor offset (0-1999)
+vga_cursor:      dd 0
+display_mode:    db 0        ; 0=VGA text mode, 1=framebuffer
 
 SECTION .text
 
+extern er_fb_text_init
+extern er_fb_text_putchar
+extern er_fb_text_puts
+extern er_fb_text_clear
+
 ; ==================================================================
-; er_display_clear — clear the VGA text screen, reset cursor to (0,0)
+; er_display_init — initialize display
+; void er_display_init(void)
+;
+; Tries framebuffer (multiboot v1) first; falls back to VGA text mode.
+; ==================================================================
+er_fn er_display_init
+    push    rdi
+
+    call    er_fb_text_init
+    test    rdx, rdx
+    jnz     .vga_fallback
+
+    mov     byte [display_mode], 1
+    jmp     .done_init
+
+.vga_fallback:
+    mov     byte [display_mode], 0
+    call    er_display_clear
+    lea     rdi, [rel .banner]
+    call    er_display_puts
+
+.done_init:
+    pop     rdi
+    er_ok
+    ret
+
+.banner: db "EdgeRun x86_64 bare metal - VGA text mode", 0x0A, 0
+
+; ==================================================================
+; er_display_clear — clear display
 ; void er_display_clear(void)
 ; ==================================================================
 er_fn er_display_clear
+    cmp     byte [display_mode], 1
+    je      er_fb_text_clear
+
     push    rdi
     push    rcx
     push    rax
@@ -40,8 +79,7 @@ er_fn er_display_clear
     ret
 
 ; ==================================================================
-; _vga_scroll — scroll the display up by one row
-; Preserves: rbx,rcx,rdx,rsi,rdi,r8-r15
+; _vga_scroll — scroll VGA display up by one row
 ; ==================================================================
 _vga_scroll:
     push    rdi
@@ -66,34 +104,32 @@ _vga_scroll:
     ret
 
 ; ==================================================================
-; er_display_putchar — write one character at current cursor position
+; er_display_putchar — write one character
 ; void er_display_putchar(unsigned char c)
-;
-; Handles \n (line feed, next row same column),
-; \r (carriage return, column 0), and automatic scrolling.
 ; ==================================================================
 er_fn er_display_putchar
+    cmp     byte [display_mode], 1
+    je      er_fb_text_putchar
+
     push    rbx
     push    rcx
     push    rdx
 
-    movzx   ebx, dil                     ; bl = character
-    mov     ecx, [vga_cursor]            ; ecx = cursor offset
+    movzx   ebx, dil
+    mov     ecx, [vga_cursor]
 
-    cmp     bl, 0x0A                     ; '\n'
+    cmp     bl, 0x0A
     je      .line_feed
-
-    cmp     bl, 0x0D                     ; '\r'
+    cmp     bl, 0x0D
     je      .carriage_return
 
-    ; Normal character: write at cursor offset
     mov     eax, ecx
     shl     eax, 1
     add     rax, VGA_TEXT_BUF
-    mov     [rax], bl                    ; char
-    mov     byte [rax + 1], VGA_ATTR     ; attribute
+    mov     [rax], bl
+    mov     byte [rax + 1], VGA_ATTR
 
-    inc     ecx                          ; advance cursor
+    inc     ecx
     jmp     .check_scroll
 
 .line_feed:
@@ -104,7 +140,7 @@ er_fn er_display_putchar
     xor     edx, edx
     mov     eax, ecx
     mov     ecx, VGA_COLS
-    div     ecx                          ; eax = row, edx = col
+    div     ecx
     imul    eax, VGA_COLS
     mov     ecx, eax
     jmp     .store
@@ -117,7 +153,6 @@ er_fn er_display_putchar
 
 .store:
     mov     [vga_cursor], ecx
-
     pop     rdx
     pop     rcx
     pop     rbx
@@ -125,15 +160,16 @@ er_fn er_display_putchar
     ret
 
 ; ==================================================================
-; er_display_puts — write a null-terminated string to the VGA display
+; er_display_puts — write a null-terminated string
 ; void er_display_puts(const char* str)
 ; ==================================================================
 er_fn er_display_puts
+    cmp     byte [display_mode], 1
+    je      er_fb_text_puts
+
     push    rdi
     push    rsi
-
     mov     rsi, rdi
-
 .loop:
     lodsb
     test    al, al
@@ -141,29 +177,8 @@ er_fn er_display_puts
     movzx   edi, al
     call    er_display_putchar
     jmp     .loop
-
 .done:
     pop     rsi
     pop     rdi
     er_ok
     ret
-
-; ==================================================================
-; er_display_init — initialize VGA text mode display
-; void er_display_init(void)
-;
-; Clears screen, resets cursor, and prints a startup banner.
-; ==================================================================
-er_fn er_display_init
-    push    rdi
-
-    call    er_display_clear
-
-    lea     rdi, [rel .banner]
-    call    er_display_puts
-
-    pop     rdi
-    er_ok
-    ret
-
-.banner: db "EdgeRun x86_64 bare metal - VGA text mode", 0x0A, 0

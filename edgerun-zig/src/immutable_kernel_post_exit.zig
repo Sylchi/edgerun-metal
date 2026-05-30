@@ -49,22 +49,18 @@ const max_app_commands: usize = 4096;
 const max_app_clips: usize = 64;
 const max_app_interaction_regions: usize = 4096;
 const max_app_rects: usize = 8192;
-const max_app_text_vertices: usize = 24576;
 const max_app_icon_vertices: usize = 4096;
 const max_app_icon_line_vertices: usize = 65536;
 const max_app_image_vertices: usize = 384;
 const max_app_overlay_rects: usize = 512;
-const max_app_overlay_text_vertices: usize = 8192;
 const max_app_overlay_icon_vertices: usize = 256;
 const max_app_overlay_icon_line_vertices: usize = 16384;
 
 const AppIrStorage = renderer_ir.FixedBuffers(
     max_app_rects,
-    max_app_text_vertices,
     max_app_icon_vertices,
     max_app_image_vertices,
     max_app_overlay_rects,
-    max_app_overlay_text_vertices,
     max_app_overlay_icon_vertices,
     max_app_icon_line_vertices,
     max_app_overlay_icon_line_vertices,
@@ -250,7 +246,7 @@ fn renderVirtioGpuPackedDebugFrame(device: *virtio_gpu.Device, state: *State, em
 
     state.app_font_atlas.initUtf8();
     const buffers = state.app_ir_storage.buffers();
-    renderer_pipeline.packScene(buffers, &state.app_font_atlas, .object, scene.written()) catch return fail(emit, error.RendererIrFailed, "FAIL post-exit virtio-gpu pack-app");
+    renderer_pipeline.packScene(buffers, &state.app_font_atlas, scene.written()) catch return fail(emit, error.RendererIrFailed, "FAIL post-exit virtio-gpu pack-app");
     emit("check: post-exit virtio-gpu app-frame packed");
 
     const surface = renderer_pipeline.softwareFramebuffer(

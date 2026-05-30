@@ -22,7 +22,6 @@ const max_commands: usize = 4096;
 const max_clips: usize = 64;
 const max_interaction_regions: usize = 4096;
 const max_rects: usize = 8192;
-const max_text_vertices: usize = 24576;
 const max_icon_vertices: usize = 4096;
 const max_icon_line_vertices: usize = 65536;
 const max_image_vertices: usize = 384;
@@ -35,11 +34,9 @@ const virtio_scanout_id: u32 = 0;
 
 const IrStorage = renderer_ir.FixedBuffers(
     max_rects,
-    max_text_vertices,
     max_icon_vertices,
     max_image_vertices,
     max_overlay_rects,
-    max_overlay_text_vertices,
     max_overlay_icon_vertices,
     max_icon_line_vertices,
     max_overlay_icon_line_vertices,
@@ -65,47 +62,9 @@ const SceneState = struct {
             .public_identity_ready = true,
         }) catch return error.AppFrameBuildFailed;
         const buffers = self.ir_storage.buffers();
-        renderer_pipeline.packScene(buffers, atlas, .object, scene.written()) catch return error.AppIrInvalid;
-        return buffers;
-    }
+        renderer_pipeline.packScene(buffers, atlas, scene.written()) catch return error.AppIrInvalid;
 
-    fn rebuildBootPanel(self: *SceneState, width: u32, height: u32) Error!renderer_ir.Buffers {
-        var scene = ui.Scene.initWithClips(&self.commands, &self.clips);
-        const w: f32 = @floatFromInt(width);
-        const h: f32 = @floatFromInt(height);
-        try scene.pushRect(ui.Rect.init(0, 0, w, h), ui.Color.bg, .fill, 0.0, 0.0);
-
-        const margin: f32 = 28.0;
-        const panel = ui.Rect.init(margin, margin, @max(1.0, w - margin * 2.0), @max(1.0, h - margin * 2.0));
-        try scene.pushRect(panel, .{ .r = 18, .g = 26, .b = 38 }, .fill, 18.0, 0.0);
-        try scene.pushRect(panel, .{ .r = 71, .g = 91, .b = 120 }, .border, 18.0, 0.0);
-
-        const top = ui.Rect.init(panel.x + 20.0, panel.y + 20.0, @max(1.0, panel.w - 40.0), 16.0);
-        try scene.pushRect(top, .{ .r = 34, .g = 211, .b = 238 }, .fill, 8.0, 0.0);
-        try scene.pushRect(ui.Rect.init(top.x, top.y + 30.0, top.w * 0.62, 18.0), .{ .r = 232, .g = 238, .b = 247 }, .fill, 6.0, 0.0);
-        try scene.pushRect(ui.Rect.init(top.x, top.y + 58.0, top.w * 0.78, 12.0), .{ .r = 148, .g = 163, .b = 184 }, .fill, 6.0, 0.0);
-        try scene.pushRect(ui.Rect.init(top.x, top.y + 80.0, top.w * 0.52, 12.0), .{ .r = 148, .g = 163, .b = 184 }, .fill, 6.0, 0.0);
-
-        const card_y = panel.y + 140.0;
-        const gap: f32 = 16.0;
-        const card_w = @max(1.0, (panel.w - 40.0 - gap * 2.0) / 3.0);
-        var card_index: u32 = 0;
-        while (card_index < 3) : (card_index += 1) {
-            const x = panel.x + 20.0 + (@as(f32, @floatFromInt(card_index)) * (card_w + gap));
-            const card = ui.Rect.init(x, card_y, card_w, 96.0);
-            try scene.pushRect(card, .{ .r = 35, .g = 44, .b = 58 }, .fill, 10.0, 0.0);
-            try scene.pushRect(card, .{ .r = 80, .g = 96, .b = 118 }, .border, 10.0, 0.0);
-            try scene.pushRect(ui.Rect.init(card.x + 14.0, card.y + 16.0, card.w * 0.52, 12.0), .{ .r = 232, .g = 238, .b = 247 }, .fill, 6.0, 0.0);
-            try scene.pushRect(ui.Rect.init(card.x + 14.0, card.y + 42.0, card.w - 28.0, 10.0), .{ .r = 148, .g = 163, .b = 184 }, .fill, 5.0, 0.0);
-            try scene.pushRect(ui.Rect.init(card.x + 14.0, card.y + 62.0, (card.w - 28.0) * (0.42 + @as(f32, @floatFromInt(card_index)) * 0.16), 10.0), .{ .r = 91, .g = 219, .b = 134 }, .fill, 5.0, 0.0);
-        }
-
-        const rail_y = @max(panel.y + panel.h - 54.0, panel.y + 250.0);
-        try scene.pushRect(ui.Rect.init(panel.x + 20.0, rail_y, panel.w - 40.0, 10.0), .{ .r = 80, .g = 96, .b = 118 }, .fill, 5.0, 0.0);
-        try scene.pushRect(ui.Rect.init(panel.x + 20.0, rail_y, (panel.w - 40.0) * 0.72, 10.0), .{ .r = 34, .g = 211, .b = 238 }, .fill, 5.0, 0.0);
-
-        const buffers = self.ir_storage.buffers();
-        renderer_pipeline.packScene(buffers, &font_atlas, .atlas, scene.written()) catch return error.AppIrInvalid;
+        renderer_pipeline.packScene(buffers, &font_atlas, scene.written()) catch return error.AppIrInvalid;
         return buffers;
     }
 };
@@ -213,42 +172,34 @@ fn renderDiagnosticBatch(
     image_texture: renderer_software.RgbaTexture,
     batch: DiagnosticBatch,
 ) Error!void {
-    const text_len = buffers.text_vertex_len.*;
     const icon_len = buffers.icon_vertex_len.*;
     const icon_line_len = buffers.icon_line_vertex_len.*;
     const image_len = buffers.image_vertex_len.*;
     const overlay_rect_len = buffers.overlay_rect_len.*;
-    const overlay_text_len = buffers.overlay_text_vertex_len.*;
     const overlay_icon_len = buffers.overlay_icon_vertex_len.*;
     const overlay_icon_line_len = buffers.overlay_icon_line_vertex_len.*;
 
-    buffers.text_vertex_len.* = if (batch == .text or batch == .icons) text_len else 0;
     buffers.icon_vertex_len.* = if (batch == .icons) icon_len else 0;
     buffers.icon_line_vertex_len.* = if (batch == .icons) icon_line_len else 0;
     buffers.image_vertex_len.* = if (batch == .icons) image_len else 0;
     buffers.overlay_rect_len.* = if (batch == .icons) overlay_rect_len else 0;
-    buffers.overlay_text_vertex_len.* = if (batch == .icons) overlay_text_len else 0;
     buffers.overlay_icon_vertex_len.* = if (batch == .icons) overlay_icon_len else 0;
     buffers.overlay_icon_line_vertex_len.* = if (batch == .icons) overlay_icon_line_len else 0;
 
     switch (batch) {
         .rects => writeDebugconLine("diag: software rect batch start"),
-        .text => writeDebugconLine("diag: software text batch start"),
         .icons => writeDebugconLine("diag: software icon batch start"),
     }
     _ = renderer_pipeline.renderSoftwareFrame(surface, buffers, renderer_pipeline.softwareResources(&font_atlas, image_texture), .bg) catch return error.NativeRenderFailed;
     switch (batch) {
         .rects => writeDebugconLine("diag: software rect batch ok"),
-        .text => writeDebugconLine("diag: software text batch ok"),
         .icons => writeDebugconLine("diag: software icon batch ok"),
     }
 
-    buffers.text_vertex_len.* = text_len;
     buffers.icon_vertex_len.* = icon_len;
     buffers.icon_line_vertex_len.* = icon_line_len;
     buffers.image_vertex_len.* = image_len;
     buffers.overlay_rect_len.* = overlay_rect_len;
-    buffers.overlay_text_vertex_len.* = overlay_text_len;
     buffers.overlay_icon_vertex_len.* = overlay_icon_len;
     buffers.overlay_icon_line_vertex_len.* = overlay_icon_line_len;
 }

@@ -13,6 +13,7 @@
 ; Extern from source parser
 extern source_parse
 extern export_name_count, export_name_ptrs, export_name_lens
+extern return_values
 
 ; ------------------------------------------------------------------
 ; BSS — global compiler state
@@ -941,9 +942,8 @@ emit_section:
     ; Write payload length as LEB128
     mov     eax, [rbp - 8]       ; payload len
     push    rdi                  ; save writer
-    push    rax                  ; save payload len
     call    writer_append_u32_leb
-    pop     rax                  ; discard
+    ; eax = return value from writer_append_u32_leb (0 = success)
     pop     rdi                  ; restore writer
     test    eax, eax
     jnz     .error
@@ -1406,17 +1406,23 @@ emit_base_exports:
     mov     rbp, rsp
     push    r12
     push    r13
+    push    r14
+    push    r15
     mov     r12, rdi               ; main writer
-    sub     rsp, 64
+    mov     r13d, ecx              ; user export count
+    mov     r14, r8                ; export_name_ptrs base
+    mov     r15, r9                ; export_name_lens base
+    ; Temp writer: 24-byte header + 1024-byte buffer
+    sub     rsp, 24 + 1024
 
     lea     rax, [rsp + 24]
     mov     [rsp], rax
-    mov     qword [rsp + 8], 256
+    mov     qword [rsp + 8], 1024
     mov     qword [rsp + 16], 0
 
-    ; export count = 28
+    ; export count = 28 + user_count
     mov     rdi, rsp
-    mov     eax, 28
+    lea     eax, [r13 + 28]
     call    writer_append_u32_leb
     test    eax, eax
     jnz     .be_error
@@ -1440,12 +1446,12 @@ emit_base_exports:
 
     ; 27 function exports (kind=0, index 0-26)
     ; Using table of {name_ptr, name_len, index} tuples
-    lea     r13, [export_table]
-    xor     ecx, ecx
+    lea     r10, [export_table]    ; r10 not clobbered by writer functions
+    xor     ebx, ebx               ; rbx preserved by writer_append_u32_leb push/pop
 .be_loop:
     mov     rdi, rsp
-    mov     rsi, [r13]             ; name ptr
-    mov     edx, [r13 + 8]         ; name len
+    mov     rsi, [r10]             ; name ptr
+    mov     edx, [r10 + 8]         ; name len
     call    writer_append_name
     test    eax, eax
     jnz     .be_error
@@ -1454,15 +1460,39 @@ emit_base_exports:
     call    writer_append_byte
     jc      .be_error
     mov     rdi, rsp
-    mov     eax, [r13 + 12]        ; index
+    mov     eax, [r10 + 12]        ; index
     call    writer_append_u32_leb
     test    eax, eax
     jnz     .be_error
-    add     r13, 16                ; next table entry
-    inc     ecx
-    cmp     ecx, 27
+    add     r10, 16                ; next table entry
+    inc     ebx
+    cmp     ebx, 27
     jb      .be_loop
 
+    ; User function exports (kind=0, index = 27 + i)
+    xor     ebx, ebx
+.be_user_loop:
+    cmp     ebx, r13d
+    jae     .be_done_exports
+    mov     rdi, rsp
+    mov     rsi, [r14 + rbx*8]     ; export name ptr
+    mov     edx, [r15 + rbx*4]     ; export name len
+    call    writer_append_name
+    test    eax, eax
+    jnz     .be_error
+    mov     rdi, rsp
+    mov     sil, 0                 ; function kind
+    call    writer_append_byte
+    jc      .be_error
+    mov     rdi, rsp
+    lea     eax, [rbx + 27]        ; function index = 27 + i
+    call    writer_append_u32_leb
+    test    eax, eax
+    jnz     .be_error
+    inc     ebx
+    jmp     .be_user_loop
+
+.be_done_exports:
     ; Emit export section
     mov     rdi, r12
     mov     al, 7
@@ -1472,14 +1502,18 @@ emit_base_exports:
     jc      .be_error
 
     xor     eax, eax
-    add     rsp, 64
+    add     rsp, 1048
+    pop     r15
+    pop     r14
     pop     r13
     pop     r12
     pop     rbp
     ret
 .be_error:
     or      eax, -1
-    add     rsp, 64
+    add     rsp, 1048
+    pop     r15
+    pop     r14
     pop     r13
     pop     r12
     pop     rbp
@@ -1568,7 +1602,7 @@ emit_start_section:
 ; emit_code_section(rdi=main_writer, ecx=user_count,
 ;                   r8=export_name_ptrs, r9=export_name_lens)
 ; Section 10: code section with 27 noop bodies + user bodies
-; For now, user bodies return i32_const(0)
+; User bodies return i32_const(val) from source
 ; ------------------------------------------------------------------
 emit_code_section:
     push    rbp
@@ -1581,11 +1615,12 @@ emit_code_section:
     mov     r13d, ecx              ; user count
     mov     r14, r8                ; export name ptrs
     mov     r15, r9                ; export name lens
-    sub     rsp, 64
+    ; Temp writer: 24-byte header + 1024-byte buffer
+    sub     rsp, 24 + 1024
 
     lea     rax, [rsp + 24]
     mov     [rsp], rax
-    mov     qword [rsp + 8], 40
+    mov     qword [rsp + 8], 1024
     mov     qword [rsp + 16], 0
 
     ; code count = 27 + user_count
@@ -1616,35 +1651,49 @@ emit_code_section:
     cmp     ecx, SUCCESSOR_BASE_FUNCTION_COUNT
     jb      .cs_noop_loop
 
-    ; N user function bodies: return i32_const(0) for now
-    xor     ecx, ecx
+    ; N user function bodies: return i32_const(val)
+    xor     r14d, r14d
 .cs_user_loop:
-    ; body size = 5 bytes (local_count=0, i32.const 0, end)
-    mov     rdi, rsp
-    mov     eax, 5
-    call    writer_append_u32_leb
-    test    eax, eax
-    jnz     .cs_error
-    mov     rdi, rsp
+    ; Sub-writer at [rsp + 800] for building one body
+    lea     rax, [rsp + 824]
+    mov     [rsp + 800], rax
+    mov     qword [rsp + 808], 224
+    mov     qword [rsp + 816], 0
+
+    lea     rdi, [rsp + 800]
     mov     sil, 0x00              ; local count = 0
     call    writer_append_byte
     jc      .cs_error
-    mov     rdi, rsp
+    lea     rdi, [rsp + 800]
     mov     sil, WASM_I32_CONST
     call    writer_append_byte
     jc      .cs_error
-    mov     rdi, rsp
-    xor     eax, eax               ; value = 0
-    call    writer_append_i32_leb  ; 1 byte
+    lea     rdi, [rsp + 800]
+    mov     eax, [return_values + r14*4]
+    call    writer_append_i32_leb
     test    eax, eax
     jnz     .cs_error
-    mov     rdi, rsp
+    lea     rdi, [rsp + 800]
     mov     sil, WASM_OPCODE_END
     call    writer_append_byte
     jc      .cs_error
 
-    inc     ecx
-    cmp     ecx, r13d
+    ; body size
+    mov     rdi, rsp
+    mov     eax, [rsp + 816]
+    call    writer_append_u32_leb
+    test    eax, eax
+    jnz     .cs_error
+
+    ; body content
+    mov     rdi, rsp
+    lea     rsi, [rsp + 824]
+    mov     edx, [rsp + 816]
+    call    writer_append_slice
+    jc      .cs_error
+
+    inc     r14d
+    cmp     r14d, r13d
     jb      .cs_user_loop
 
     mov     rdi, r12
@@ -1655,7 +1704,7 @@ emit_code_section:
     jc      .cs_error
 
     xor     eax, eax
-    add     rsp, 64
+    add     rsp, 1048
     pop     r15
     pop     r14
     pop     r13
@@ -1664,7 +1713,7 @@ emit_code_section:
     ret
 .cs_error:
     or      eax, -1
-    add     rsp, 64
+    add     rsp, 1048
     pop     r15
     pop     r14
     pop     r13
@@ -1757,8 +1806,11 @@ er_fn er_wasm_compiler_compile_wasm
     test    eax, eax
     jnz     .cs_error
 
-    ; Emit export section (base exports = memory + 27 functions)
+    ; Emit export section (base exports + user function exports)
     mov     rdi, rsp
+    mov     ecx, [export_name_count]
+    lea     r8, [export_name_ptrs]
+    lea     r9, [export_name_lens]
     call    emit_base_exports
     test    eax, eax
     jnz     .cs_error

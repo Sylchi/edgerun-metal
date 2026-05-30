@@ -40,7 +40,6 @@ pub const max_height = state.max_height;
 pub const max_pixels = state.max_pixels;
 pub const max_input_bytes = state.max_input_bytes;
 pub const packed_rect_float_stride = state.packed_rect_float_stride;
-pub const packed_text_vertex_float_stride = state.packed_text_vertex_float_stride;
 pub const packed_icon_vertex_float_stride = state.packed_icon_vertex_float_stride;
 pub const packed_icon_line_vertex_float_stride = state.packed_icon_line_vertex_float_stride;
 pub const packed_image_vertex_float_stride = state.packed_image_vertex_float_stride;
@@ -65,10 +64,6 @@ export fn er_ui_packed_rect_float_stride() u32 { return state.packed_rect_float_
 export fn er_ui_packed_rect_buffer_ptr() usize { return @intFromPtr(&state.packed_rect_floats); }
 export fn er_ui_packed_rect_buffer_len() usize { return state.packed_rect_floats.len; }
 
-export fn er_ui_packed_text_vertex_float_stride() u32 { return state.packed_text_vertex_float_stride; }
-export fn er_ui_packed_text_vertex_buffer_ptr() usize { return @intFromPtr(&state.packed_text_vertex_floats); }
-export fn er_ui_packed_text_vertex_buffer_len() usize { return state.packed_text_vertex_floats.len; }
-
 export fn er_ui_packed_icon_vertex_float_stride() u32 { return state.packed_icon_vertex_float_stride; }
 export fn er_ui_packed_icon_vertex_buffer_ptr() usize { return @intFromPtr(&state.packed_icon_vertex_floats); }
 export fn er_ui_packed_icon_vertex_buffer_len() usize { return state.packed_icon_vertex_floats.len; }
@@ -83,8 +78,6 @@ export fn er_ui_packed_image_vertex_buffer_len() usize { return state.packed_ima
 
 export fn er_ui_packed_overlay_rect_buffer_ptr() usize { return @intFromPtr(&state.packed_overlay_rect_floats); }
 export fn er_ui_packed_overlay_rect_buffer_len() usize { return state.packed_overlay_rect_floats.len; }
-export fn er_ui_packed_overlay_text_vertex_buffer_ptr() usize { return @intFromPtr(&state.packed_overlay_text_vertex_floats); }
-export fn er_ui_packed_overlay_text_vertex_buffer_len() usize { return state.packed_overlay_text_vertex_floats.len; }
 export fn er_ui_packed_overlay_icon_vertex_buffer_ptr() usize { return @intFromPtr(&state.packed_overlay_icon_vertex_floats); }
 export fn er_ui_packed_overlay_icon_vertex_buffer_len() usize { return state.packed_overlay_icon_vertex_floats.len; }
 export fn er_ui_packed_overlay_icon_line_vertex_buffer_ptr() usize { return @intFromPtr(&state.packed_overlay_icon_line_vertex_floats); }
@@ -573,7 +566,7 @@ export fn er_ui_render_frame_wasm(width: u32, height: u32, scale_raw: f32, frame
     const frame_scene = render.prepareFrameScene(scene, collector.written(), .{ .enabled = true, .x = state.pointer_hover_x, .y = state.pointer_hover_y }) catch return render.finishError(.render_failed);
     render.ensureFontAtlas() catch return render.finishError(.font_atlas);
     const buffers = render.packedBuffers();
-    renderer_pipeline.packSceneWithSources(buffers, render.packedSources(), frame_scene.written()) catch return render.finishError(.packed_budget);
+    renderer_pipeline.packScene(buffers, &state.font_atlas, frame_scene.written()) catch return render.finishError(.packed_budget);
     const gl = if (state.wasm_gl_state) |*st| st else return render.finishError(.render_failed);
     gles_wasm.refreshFontTexture(gl, &state.font_atlas);
     gles_wasm.ensureImageTexture(gl, render.currentWasmImageTexture());
@@ -734,7 +727,6 @@ test "app runtime component catalog builds packed app buffers and app-ready icon
     try std.testing.expectEqual(renderer_pipeline.Transport.packed_buffers, state.last_present_transport);
     try std.testing.expect(state.last_present_primitive_count > 0);
     try std.testing.expect(state.packed_rect_float_len > 0);
-    try std.testing.expect(state.packed_text_vertex_float_len > 0);
     try std.testing.expect(state.packed_icon_vertex_float_len > 0);
     try std.testing.expect(state.packed_icon_line_vertex_float_len > 0);
     try std.testing.expect(er_ui_font_atlas_ptr() != 0);
@@ -747,7 +739,6 @@ test "app runtime component catalog render uses canonical ir buffers" {
     try std.testing.expectEqual(renderer_pipeline.Transport.pixel_bytes, state.last_present_transport);
     try std.testing.expect(state.last_present_primitive_count > 0);
     try std.testing.expect(state.packed_rect_float_len > 0);
-    try std.testing.expect(state.packed_text_vertex_float_len > 0);
     try std.testing.expect(state.packed_icon_vertex_float_len > 0);
     var painted: usize = 0;
     for (state.pixels[0 .. state.frame_width * state.frame_height]) |pixel| {
@@ -761,7 +752,6 @@ test "app runtime landing builds packed app buffers and hit state" {
     const code = er_ui_build_app_frame(1280, 800, 1065.0, 32.0, 0.0);
     try std.testing.expectEqual(@as(u32, 0), code);
     try std.testing.expect(state.packed_rect_float_len > 0);
-    try std.testing.expect(state.packed_text_vertex_float_len > 0);
     try std.testing.expect(state.packed_icon_vertex_float_len > 0);
     try std.testing.expectEqual(app_landing.contentHeight(1280.0), er_ui_app_content_height(1280.0));
     try std.testing.expectEqual(@intFromEnum(ui.HitKind.button), er_ui_hover_hit_kind());

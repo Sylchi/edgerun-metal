@@ -1,7 +1,6 @@
 const std = @import("std");
 const font_builtin = @import("../font_builtin.zig");
 const font_vector = @import("../font_vector.zig");
-const ir = @import("ir.zig");
 const raster = @import("vector_raster.zig");
 const varfont = @import("../varfont.zig");
 
@@ -11,14 +10,46 @@ pub const bytes: usize = width * height;
 pub const channels: usize = 1;
 pub const format: varfont.AtlasFormat = .alpha8;
 
+pub const Error = error{
+    Budget,
+    InvalidBuffer,
+};
+
+pub const Glyph = struct {
+    u0: f32,
+    v0: f32,
+    u1: f32,
+    v1: f32,
+    w: f32,
+    h: f32,
+    left: f32,
+    top: f32,
+    advance: f32,
+};
+
+pub const TextMetrics = struct {
+    ascender: f32,
+    descender: f32,
+};
+
+pub const FontAtlas = struct {
+    context: *anyopaque,
+    metrics: *const fn (context: *anyopaque, px: u8) TextMetrics,
+    width: *const fn (context: *anyopaque, value: []const u8, px: u8) f32,
+    glyph: *const fn (context: *anyopaque, ch: u21, px: u8) Error!?Glyph,
+};
+
+pub const font_first_px: u8 = 12;
+pub const font_last_px: u8 = 60;
+
 const weight_count = @typeInfo(font_builtin.Weight).@"enum".fields.len;
-const px_range = ir.font_last_px - ir.font_first_px + 1;
+const px_range = font_last_px - font_first_px + 1;
 const glyph_capacity: usize = font_builtin.codepoint_count * weight_count * px_range;
 
 const pad: usize = 8;
 const row_gap: usize = 8;
 const default_scale: f32 = 2.0;
-const Cached = struct { weight: font_builtin.Weight, ch: u21, px: u8, glyph: ir.Glyph };
+const Cached = struct { weight: font_builtin.Weight, ch: u21, px: u8, glyph: Glyph };
 
 pub const Atlas = struct {
     width: usize,
@@ -72,10 +103,10 @@ pub const Atlas = struct {
         self.atlas_row_h = 0;
     }
 
-    pub fn source(self: *Atlas) ir.FontAtlas {
+    pub fn source(self: *Atlas) FontAtlas {
         return .{ .context = self, .metrics = metrics, .width = textWidth, .glyph = glyph };
     }
-    pub fn objectSource(self: *Atlas) ir.FontAtlas {
+    pub fn objectSource(self: *Atlas) FontAtlas {
         return self.source();
     }
     pub fn alphaSlice(self: *const Atlas) []const u8 {
@@ -101,7 +132,7 @@ pub const Atlas = struct {
         self.clear();
     }
 
-    pub fn prepareText(self: *Atlas, value: []const u8, px: u8, weight: font_builtin.Weight) ir.Error!void {
+    pub fn prepareText(self: *Atlas, value: []const u8, px: u8, weight: font_builtin.Weight) Error!void {
         var index: usize = 0;
         while (try nextCodepointStrict(value, &index)) |cp| {
             if (self.body(weight).glyphForCodepoint(cp) == null) return error.InvalidBuffer;
@@ -117,26 +148,26 @@ pub const Atlas = struct {
         return font_builtin.body(weight);
     }
 
-    fn resolveGlyph(self: *Atlas, raw: u21, px: u8) ir.Error!?ir.Glyph {
+    fn resolveGlyph(self: *Atlas, raw: u21, px: u8) Error!?Glyph {
         const weight = self.active_weight;
         const font = self.body(weight);
         if (font.glyphForCodepoint(raw) == null) return null;
         return self.lookupGlyph(weight, raw, px);
     }
 
-    fn lookupGlyph(self: *const Atlas, weight: font_builtin.Weight, cp: u21, px: u8) ?ir.Glyph {
+    fn lookupGlyph(self: *const Atlas, weight: font_builtin.Weight, cp: u21, px: u8) ?Glyph {
         for (self.glyphs[0..self.glyph_count]) |entry| {
             if (entry.weight == weight and entry.ch == cp and entry.px == px) return entry.glyph;
         }
         return null;
     }
 
-    fn ensureGlyph(self: *Atlas, weight: font_builtin.Weight, cp: u21, px: u8) varfont.Error!ir.Glyph {
+    fn ensureGlyph(self: *Atlas, weight: font_builtin.Weight, cp: u21, px: u8) varfont.Error!Glyph {
         if (self.lookupGlyph(weight, cp, px)) |found| return found;
         return self.cacheGlyph(weight, cp, px);
     }
 
-    fn cacheGlyph(self: *Atlas, weight: font_builtin.Weight, cp: u21, px: u8) varfont.Error!ir.Glyph {
+    fn cacheGlyph(self: *Atlas, weight: font_builtin.Weight, cp: u21, px: u8) varfont.Error!Glyph {
         if (self.glyph_count >= self.glyphs.len) return error.GlyphCacheFull;
         const font = self.body(weight);
         const info = font.glyphForCodepoint(cp) orelse return error.UnsupportedGlyph;
@@ -153,7 +184,7 @@ pub const Atlas = struct {
         const ay = self.atlas_y;
         self.atlas_row_h = @max(self.atlas_row_h, bitmap.height);
         self.atlas_x += bitmap.width + row_gap;
-        const out = ir.Glyph{
+        const out = Glyph{
             .u0 = if (bitmap.width == 0) 0 else (@as(f32, @floatFromInt(ax)) + 0.5) / @as(f32, @floatFromInt(self.width)),
             .v0 = if (bitmap.height == 0) 0 else (@as(f32, @floatFromInt(ay)) + 0.5) / @as(f32, @floatFromInt(self.height)),
             .u1 = if (bitmap.width == 0) 0 else (@as(f32, @floatFromInt(ax + bitmap.width)) - 0.5) / @as(f32, @floatFromInt(self.width)),
@@ -180,7 +211,7 @@ pub const Atlas = struct {
     }
 };
 
-fn metrics(context: *anyopaque, px: u8) ir.TextMetrics {
+fn metrics(context: *anyopaque, px: u8) TextMetrics {
     const atlas: *Atlas = @ptrCast(@alignCast(context));
     const font = atlas.body(atlas.active_weight);
     const scale = @as(f32, @floatFromInt(px)) / @as(f32, @floatFromInt(font.metrics.units_per_em));
@@ -204,12 +235,12 @@ fn textWidth(context: *anyopaque, value: []const u8, px: u8) f32 {
     return out;
 }
 
-fn glyph(context: *anyopaque, ch: u21, px: u8) ir.Error!?ir.Glyph {
+fn glyph(context: *anyopaque, ch: u21, px: u8) Error!?Glyph {
     const atlas: *Atlas = @ptrCast(@alignCast(context));
     return atlas.resolveGlyph(ch, px);
 }
 
-fn nextCodepointStrict(value: []const u8, index: *usize) ir.Error!?u21 {
+fn nextCodepointStrict(value: []const u8, index: *usize) Error!?u21 {
     if (index.* >= value.len) return null;
     const start = index.*;
     const len = std.unicode.utf8ByteSequenceLength(value[start]) catch return error.InvalidBuffer;

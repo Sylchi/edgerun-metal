@@ -122,7 +122,7 @@ pub fn renderWorkspaceSidebar(scene: *ui.Scene, collector: *interaction.Collecto
     const search = ui.Rect.init(bounds.x + 12.0, bounds.y + 58.0, bounds.w - 24.0, search_h);
     try fill(scene, search, ui.Color{ .r = 12, .g = 16, .b = 23 }, 8.0);
     try stroke(scene, search, border, 8.0);
-    try collector.addSemanticHit(search, sourceSearchHit());
+    try collector.addHit(search, .input, explorer_search_input_id);
     const search_text = if (state.search_query.len == 0) "search files" else state.search_query;
     try textAt(scene, search.x + 10.0, search.y + 8.0, search.w - 20.0, 14.0, search_text, if (state.search_query.len == 0) muted else text);
 
@@ -132,7 +132,7 @@ pub fn renderWorkspaceSidebar(scene: *ui.Scene, collector: *interaction.Collecto
         const selected = bytes.eql(file.path, state.label) or bytes.eql(file.displayLabel(), state.label);
         try fill(scene, row, if (selected) ui.Color{ .r = 34, .g = 47, .b = 66 } else ui.Color.clear, 8.0);
         try textAt(scene, row.x + 10.0, row.y + 9.0, row.w - 20.0, 16.0, file.displayLabel(), if (file.dirty) accent else text);
-        try collector.addSemanticHit(row, sourceFileHit(index));
+        try collector.addHit(row, .row_item, sourceFileHitId(index));
         y += 42.0;
     }
 }
@@ -192,7 +192,7 @@ fn renderEditorToolbar(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
 
 fn renderCodeEditor(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
     try fill(scene, bounds, code_bg, 0.0);
-    try collector.addSemanticHit(bounds, sourceEditorHit());
+    try collector.addHit(bounds, .textarea, editor_textarea_id);
     const first_line = state.scroll_line;
     const visible_lines = @max(@as(usize, 1), @as(usize, @intFromFloat(@max(1.0, bounds.h / code_line_h))));
     var line_index: usize = 0;
@@ -362,30 +362,6 @@ fn basename(path: []const u8) []const u8 {
         if (path[index - 1] == '/') return path[index..];
     }
     return path;
-}
-
-fn sourceEditorHit() app_hit.Hit {
-    return .{
-        .kind = .textarea,
-        .id = editor_textarea_id,
-        .source = .editor,
-    };
-}
-
-fn sourceSearchHit() app_hit.Hit {
-    return .{
-        .kind = .input,
-        .id = explorer_search_input_id,
-        .source = .search,
-    };
-}
-
-fn sourceFileHit(index: usize) app_hit.Hit {
-    return .{
-        .kind = .row_item,
-        .id = sourceFileHitId(index),
-        .source = .{ .file = index },
-    };
 }
 
 fn sourceFileHitId(index: usize) u32 {

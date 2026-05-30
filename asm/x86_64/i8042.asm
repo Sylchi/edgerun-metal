@@ -404,10 +404,10 @@ er_fn er_i8042_read_scancode
     jmp     .done
 
 .none:
-    xor     eax, eax
-    er_err  ERROR_NO_DATA
     pop     rdx
     pop     rcx
+    xor     eax, eax
+    er_err  ERROR_NO_DATA
     er_ret
 
 .done:

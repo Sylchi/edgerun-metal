@@ -13,14 +13,6 @@
 %define TPM_CRB_MAX_BUFFER_SIZE 4096
 
 ; ─── HOSTED_TEST capture buffer ───────────────────────────────────────
-%ifdef HOSTED_TEST
-section .bss
-global er_tpm_tx_buffer, er_tpm_tx_count, er_tpm_rx_buffer, er_tpm_rx_size
-er_tpm_tx_buffer: resb 4096
-er_tpm_tx_count:  resq 1
-er_tpm_rx_buffer: resb 4096
-er_tpm_rx_size:   resq 1
-%endif
 
 ; ==================================================================
 ; Helper: store big-endian u16 at address in rdi
@@ -125,9 +117,6 @@ er_fn er_tpm_startup
     test    rdi, rdi
     jz      .err
 
-%ifdef HOSTED_TEST
-    push    rdi
-%endif
     mov     esi, TPM_ST_NO_SESSIONS
     mov     edx, TPM_CMD_STARTUP_LEN
     mov     ecx, TPM_CC_STARTUP
@@ -139,12 +128,6 @@ er_fn er_tpm_startup
     mov     byte [rax + 10], 0x00
     mov     byte [rax + 11], 0x00
 
-%ifdef HOSTED_TEST
-    pop     rdi
-    push    rax
-    call    _tpm_capture_tx
-    pop     rax
-%endif
     ret
 
 .err:
@@ -163,10 +146,7 @@ er_fn er_tpm_get_random
     test    esi, esi
     jz      .err
 
-%ifdef HOSTED_TEST
-    push    rdi
-    push    rsi
-%endif
+    mov     r8d, esi            ; save bytes_req
     mov     esi, TPM_ST_NO_SESSIONS
     mov     edx, TPM_CMD_GET_RANDOM_LEN
     mov     ecx, TPM_CC_GET_RANDOM
@@ -175,17 +155,10 @@ er_fn er_tpm_get_random
     jz      .err
 
     ; Store bytes requested at offset 10 (big-endian)
-    pop     rcx        ; esi value = bytes_req
-    mov     byte [rax + 11], cl    ; LSB
-    shr     ecx, 8
-    mov     byte [rax + 10], cl    ; MSB
+    mov     byte [rax + 11], r8b    ; LSB at offset 11
+    shr     r8d, 8
+    mov     byte [rax + 10], r8b    ; MSB at offset 10
 
-%ifdef HOSTED_TEST
-    pop     rdi
-    push    rax
-    call    _tpm_capture_tx
-    pop     rax
-%endif
     ret
 
 .err:
@@ -209,9 +182,6 @@ er_fn er_tpm_get_capability
     push    rcx
     push    rdx
     push    rsi
-%ifdef HOSTED_TEST
-    push    rdi
-%endif
 
     mov     esi, TPM_ST_NO_SESSIONS
     mov     edx, TPM_CMD_GET_CAP_LEN
@@ -220,52 +190,25 @@ er_fn er_tpm_get_capability
     test    rax, rax
     jz      .err_pop3
 
-%ifdef HOSTED_TEST
-    pop     rdi             ; pop buf off stack before data-field pops
-%endif
     ; Offset 10: capability
     pop     rcx
-    mov     byte [rax + 10], cl
-    shr     ecx, 8
-    mov     byte [rax + 11], cl
-    shr     ecx, 8
-    mov     byte [rax + 12], cl
-    shr     ecx, 8
-    mov     byte [rax + 13], cl
+    bswap   ecx
+    mov     [rax + 10], ecx
 
     ; Offset 14: property
     pop     rcx
-    mov     byte [rax + 14], cl
-    shr     ecx, 8
-    mov     byte [rax + 15], cl
-    shr     ecx, 8
-    mov     byte [rax + 16], cl
-    shr     ecx, 8
-    mov     byte [rax + 17], cl
+    bswap   ecx
+    mov     [rax + 14], ecx
 
     ; Offset 18: property_count
     pop     rcx
-    mov     byte [rax + 18], cl
-    shr     ecx, 8
-    mov     byte [rax + 19], cl
-    shr     ecx, 8
-    mov     byte [rax + 20], cl
-    shr     ecx, 8
-    mov     byte [rax + 21], cl
+    bswap   ecx
+    mov     [rax + 18], ecx
 
-%ifdef HOSTED_TEST
-    push    rax
-    call    _tpm_capture_tx   ; rdi already = buf from earlier pop
-    pop     rax
-%endif
     ret
 
 .err_pop3:
-%ifdef HOSTED_TEST
-    add     rsp, 32     ; pop rdi, rsi, rdx, rcx
-%else
     add     rsp, 24     ; pop rsi, rdx, rcx
-%endif
 .err:
     xor     eax, eax
     ret
@@ -536,37 +479,6 @@ er_fn er_tpm_has_command
     ret
 
 ; ─── HOSTED_TEST capture helper ───────────────────────────────────────
-%ifdef HOSTED_TEST
-_tpm_capture_tx:
-    ; Capture command buffer for test verification.
-    ; rdi = command buffer pointer (uses er_tpm_tx_count as size).
-    ; The size was encoded at offset 2-5.
-    push    rsi
-    push    rcx
-    push    rdi
-
-    ; Read command size from header offset 2
-    add     rdi, 2
-    call    _tpm_get_be32
-    mov     ecx, eax            ; ecx = command size
-
-    mov     rdi, er_tpm_tx_buffer
-    push    rcx
-    mov     rsi, [er_tpm_tx_count]
-    add     rdi, rsi
-    pop     rcx
-
-    mov     rsi, [rsp]          ; rsi = saved rdi = cmd_buf pointer
-
-    rep     movsb
-
-    sub     rdi, er_tpm_tx_buffer
-    mov     [er_tpm_tx_count], rdi
-    pop     rdi
-    pop     rcx
-    pop     rsi
-    ret
-%endif
 ; ==================================================================
 ; Internal: write big-endian u32 at [rdi], return rdi+4
 ; rdi = ptr, esi = value → rax = rdi+4
@@ -599,9 +511,9 @@ er_fn _tpm_write_auth_handle
     mov     [rdi], eax
     mov     dword [rdi + 4], 0x09000000
     mov     dword [rdi + 8], 0x09000040
-    mov     word [rdi + 12], 0x0000
+    mov word [rdi + 12], 0x0000
     mov     byte [rdi + 14], 0x00
-    mov     word [rdi + 15], 0x0000
+    mov word [rdi + 15], 0x0000
     lea     rax, [rdi + 17]
     ret
 
@@ -628,9 +540,6 @@ er_fn er_tpm_shutdown
     jz      .err
     push    r12
     mov     r12d, esi            ; r12 = shutdown_type
-%ifdef HOSTED_TEST
-    push    rdi
-%endif
     mov     esi, TPM_ST_NO_SESSIONS
     mov     edx, TPM_CMD_SHUTDOWN_LEN
     mov     ecx, TPM_CC_SHUTDOWN
@@ -640,19 +549,9 @@ er_fn er_tpm_shutdown
     mov     ecx, r12d
     mov     byte [rax + 10], ch
     mov     byte [rax + 11], cl
-%ifdef HOSTED_TEST
-    mov     rdi, rax
-    push    rax
-    call    _tpm_capture_tx
-    pop     rax
-    pop     rdi
-%endif
     pop     r12
     ret
 .err_pop2:
-%ifdef HOSTED_TEST
-    add     rsp, 8
-%endif
     pop     r12
 .err:
     xor     eax, eax
@@ -669,9 +568,6 @@ er_fn er_tpm_flush_context
     jz      .err
     push    r12
     mov     r12d, esi
-%ifdef HOSTED_TEST
-    push    rdi
-%endif
     mov     esi, TPM_ST_NO_SESSIONS
     mov     edx, TPM_CMD_FLUSH_CONTEXT_LEN
     mov     ecx, TPM_CC_FLUSH_CONTEXT
@@ -681,19 +577,9 @@ er_fn er_tpm_flush_context
     mov     ecx, r12d
     bswap   ecx
     mov     [rax + 10], ecx
-%ifdef HOSTED_TEST
-    mov     rdi, rax
-    push    rax
-    call    _tpm_capture_tx
-    pop     rax
-    pop     rdi
-%endif
     pop     r12
     ret
 .err_pop2:
-%ifdef HOSTED_TEST
-    add     rsp, 8
-%endif
     pop     r12
 .err:
     xor     eax, eax
@@ -710,9 +596,6 @@ er_fn er_tpm_read_public
     jz      .err
     push    r12
     mov     r12d, esi
-%ifdef HOSTED_TEST
-    push    rdi
-%endif
     mov     esi, TPM_ST_NO_SESSIONS
     mov     edx, TPM_CMD_READ_PUBLIC_LEN
     mov     ecx, TPM_CC_READ_PUBLIC
@@ -722,19 +605,9 @@ er_fn er_tpm_read_public
     mov     ecx, r12d
     bswap   ecx
     mov     [rax + 10], ecx
-%ifdef HOSTED_TEST
-    mov     rdi, rax
-    push    rax
-    call    _tpm_capture_tx
-    pop     rax
-    pop     rdi
-%endif
     pop     r12
     ret
 .err_pop2:
-%ifdef HOSTED_TEST
-    add     rsp, 8
-%endif
     pop     r12
 .err:
     xor     eax, eax
@@ -752,45 +625,33 @@ er_fn er_tpm_hash_sha256
     push    rbx
     push    r12
     push    r13
-    mov     r12d, ecx
-    mov     rbx, rsi
-    mov     r13d, edx
-%ifdef HOSTED_TEST
-    push    rdi
-%endif
+    mov     r12d, ecx            ; hierarchy
+    mov     rbx, rsi             ; data ptr
+    mov     r13d, edx            ; data len
+    ; Command size = header(10) + TPM2B(2+data) + hashAlg(2) + hierarchy(4)
     lea     edx, [r13 + TPM_CMD_HASH_FIXED_LEN]
     mov     esi, TPM_ST_NO_SESSIONS
     mov     ecx, TPM_CC_HASH
     call    er_tpm_header_build
     test    rax, rax
     jz      .err_pop3
-    mov     rdi, rax
-    add     rdi, TPM_HEADER_LEN
+    ; [10..]: TPM2B data at offset 10 (no handle area — hierarchy is parameter 3 at end)
+    lea     rdi, [rax + 10]
     mov     rsi, rbx
     mov     edx, r13d
     call    _tpm_write_tpm2b
-    ; hash_alg = TPM_ALG_SHA256
-    mov     word [rax], 0x000B
-    ; hierarchy (4 BE)
+    ; rax = position after TPM2B = 10 + 2 + data_len
+    ; hash_alg = TPM_ALG_SHA256 (byte-swapped for BE wire format)
+    mov     word [rax], 0x0B00
+    ; hierarchy = TPMI_RH_HIERARCHY as parameter 3 (after hashAlg)
     mov     ecx, r12d
     bswap   ecx
     mov     [rax + 2], ecx
-%ifdef HOSTED_TEST
-    push    rax
-    mov     rdi, [rsp + 8]   ; rdi = buffer start from entry push
-    call    _tpm_capture_tx
-    pop     rax
-    mov     rax, [rsp]       ; restore buffer start for return
-    add     rsp, 8
-%endif
     pop     r13
     pop     r12
     pop     rbx
     ret
 .err_pop3:
-%ifdef HOSTED_TEST
-    add     rsp, 8
-%endif
     pop     r13
     pop     r12
     pop     rbx
@@ -805,31 +666,20 @@ er_fn er_tpm_hash_sha256
 er_fn er_tpm_hash_sequence_start
     test    rdi, rdi
     jz      .err
-%ifdef HOSTED_TEST
-    push    rdi
-%endif
     mov     esi, TPM_ST_NO_SESSIONS
     mov     edx, TPM_CMD_HASH_SEQUENCE_START_LEN
     mov     ecx, TPM_CC_HASH_SEQUENCE_START
     call    er_tpm_header_build
     test    rax, rax
     jz      .err
-    ; hash_alg = TPM_ALG_SHA256 at offset 10 (2 BE)
-    mov     word [rax + 10], 0x000B
-    ; hierarchy = TPM_RH_NULL at offset 12 (4 BE)
-    mov     dword [rax + 12], 0x07000040
-%ifdef HOSTED_TEST
-    mov     rdi, rax
-    push    rax
-    call    _tpm_capture_tx
-    pop     rax
-    add     rsp, 8
-%endif
+    ; authHandle = TPM_RH_NULL at offset 10 (4 BE)
+    mov     dword [rax + 10], 0x07000040
+    ; hash_alg = TPM_ALG_SHA256 at offset 14 (2 BE, byte-swapped)
+    mov     word [rax + 14], 0x0B00
+    ; hierarchy = TPM_RH_NULL at offset 16 (4 BE)
+    mov     dword [rax + 16], 0x07000040
     ret
 .err:
-%ifdef HOSTED_TEST
-    add     rsp, 8
-%endif
     xor     eax, eax
     ret
 
@@ -850,9 +700,6 @@ er_fn er_tpm_sequence_update
     mov     r12d, esi
     mov     rbx, rdx
     mov     r13d, ecx
-%ifdef HOSTED_TEST
-    push    rdi
-%endif
     lea     edx, [r13 + TPM_CMD_SEQ_UPDATE_FIXED_LEN]
     mov     esi, TPM_ST_SESSIONS
     mov     ecx, TPM_CC_SEQUENCE_UPDATE
@@ -866,22 +713,11 @@ er_fn er_tpm_sequence_update
     mov     rsi, rbx
     mov     edx, r13d
     call    _tpm_write_tpm2b
-%ifdef HOSTED_TEST
-    push    rax
-    mov     rdi, [rsp + 8]   ; rdi = buffer start from entry push
-    call    _tpm_capture_tx
-    pop     rax
-    mov     rax, [rsp]
-    add     rsp, 8
-%endif
     pop     r13
     pop     r12
     pop     rbx
     ret
 .err_pop3:
-%ifdef HOSTED_TEST
-    add     rsp, 8
-%endif
     pop     r13
     pop     r12
     pop     rbx
@@ -907,9 +743,6 @@ er_fn er_tpm_sequence_complete
     mov     rbx, rdx
     mov     r13d, ecx
     mov     r14d, r8d
-%ifdef HOSTED_TEST
-    push    rdi
-%endif
     lea     edx, [r13 + TPM_CMD_SEQ_COMPLETE_FIXED_LEN]
     mov     esi, TPM_ST_SESSIONS
     mov     ecx, TPM_CC_SEQUENCE_COMPLETE
@@ -927,23 +760,12 @@ er_fn er_tpm_sequence_complete
     mov     ecx, r14d
     bswap   ecx
     mov     [rax], ecx
-%ifdef HOSTED_TEST
-    push    rax
-    mov     rdi, [rsp + 8]   ; rdi = buffer start from entry push
-    call    _tpm_capture_tx
-    pop     rax
-    mov     rax, [rsp]
-    add     rsp, 8
-%endif
     pop     r14
     pop     r13
     pop     r12
     pop     rbx
     ret
 .err_pop4:
-%ifdef HOSTED_TEST
-    add     rsp, 8
-%endif
     pop     r14
     pop     r13
     pop     r12
@@ -969,9 +791,6 @@ er_fn er_tpm_hmac_sha256
     mov     r12d, esi
     mov     rbx, rdx
     mov     r13d, ecx
-%ifdef HOSTED_TEST
-    push    rdi
-%endif
     lea     edx, [r13 + TPM_CMD_HMAC_FIXED_LEN]
     mov     esi, TPM_ST_SESSIONS
     mov     ecx, TPM_CC_HMAC
@@ -985,23 +804,12 @@ er_fn er_tpm_hmac_sha256
     mov     rsi, rbx
     mov     edx, r13d
     call    _tpm_write_tpm2b
-    mov     word [rax], 0x000B
-%ifdef HOSTED_TEST
-    push    rax
-    mov     rdi, [rsp + 8]   ; rdi = buffer start from entry push
-    call    _tpm_capture_tx
-    pop     rax
-    mov     rax, [rsp]
-    add     rsp, 8
-%endif
+    mov word [rax], 0x0B00
     pop     r13
     pop     r12
     pop     rbx
     ret
 .err_pop3:
-%ifdef HOSTED_TEST
-    add     rsp, 8
-%endif
     pop     r13
     pop     r12
     pop     rbx
@@ -1024,9 +832,6 @@ er_fn er_tpm_sign_p256_sha256
     push    r12
     mov     r12d, esi
     mov     rbx, rdx
-%ifdef HOSTED_TEST
-    push    rdi
-%endif
     mov     esi, TPM_ST_SESSIONS
     mov     edx, TPM_CMD_SIGN_LEN
     mov     ecx, TPM_CC_SIGN
@@ -1041,8 +846,8 @@ er_fn er_tpm_sign_p256_sha256
     mov     rsi, rbx
     call    _tpm_write_tpm2b
     ; TPMT_SIG_SCHEME: alg_ecdsa + alg_sha256
-    mov     word [rax], 0x0018
-    mov     word [rax + 2], 0x000B
+    mov word [rax], 0x1800
+    mov word [rax + 2], 0x0B00
     ; TPMT_TK_HASHCHECK: st_hashcheck + rh_null + digest_len=0
     mov     byte [rax + 4], 0x80
     mov     byte [rax + 5], 0x24
@@ -1050,22 +855,11 @@ er_fn er_tpm_sign_p256_sha256
     mov     byte [rax + 7], 0x00
     mov     byte [rax + 8], 0x00
     mov     byte [rax + 9], 0x07
-    mov     word [rax + 10], 0x0000
-%ifdef HOSTED_TEST
-    push    rax
-    mov     rdi, [rsp + 8]   ; rdi = buffer start from entry push
-    call    _tpm_capture_tx
-    pop     rax
-    mov     rax, [rsp]
-    add     rsp, 8
-%endif
+    mov word [rax + 10], 0x0000
     pop     r12
     pop     rbx
     ret
 .err_pop2:
-%ifdef HOSTED_TEST
-    add     rsp, 8
-%endif
     pop     r12
     pop     rbx
 .err:
@@ -1096,9 +890,6 @@ er_fn er_tpm_verify_p256_sha256
     mov     rbx, rdx
     mov     r13, rcx
     mov     r14, r8
-%ifdef HOSTED_TEST
-    push    rdi
-%endif
     mov     esi, TPM_ST_NO_SESSIONS
     mov     edx, TPM_CMD_VERIFY_SHA256_LEN
     mov     ecx, TPM_CC_VERIFY_SIGNATURE
@@ -1112,8 +903,8 @@ er_fn er_tpm_verify_p256_sha256
     mov     rsi, rbx
     mov     edx, TPM_SHA256_DIGEST_LEN
     call    _tpm_write_tpm2b
-    mov     word [rax], 0x0018
-    mov     word [rax + 2], 0x000B
+    mov word [rax], 0x1800
+    mov word [rax + 2], 0x0B00
     add     rax, 4
     mov     rsi, r13
     mov     edx, TPM_P256_POINT_BYTES
@@ -1122,23 +913,12 @@ er_fn er_tpm_verify_p256_sha256
     mov     rsi, r14
     mov     edx, TPM_P256_POINT_BYTES
     call    _tpm_write_tpm2b
-%ifdef HOSTED_TEST
-    push    rax
-    mov     rdi, [rsp + 8]   ; rdi = buffer start from entry push
-    call    _tpm_capture_tx
-    pop     rax
-    mov     rax, [rsp]
-    add     rsp, 8
-%endif
     pop     r14
     pop     r13
     pop     r12
     pop     rbx
     ret
 .err_pop4:
-%ifdef HOSTED_TEST
-    add     rsp, 8
-%endif
     pop     r14
     pop     r13
     pop     r12
@@ -1158,10 +938,8 @@ er_fn er_tpm_create_primary_p256
     push    r12
     mov     r12d, esi
     mov     ebx, edx
-%ifdef HOSTED_TEST
-    push    rdi
-%endif
-    mov     esi, TPM_ST_SESSIONS
+    ; Use TPM_ST_NO_SESSIONS matching tpm2-tools
+    mov     esi, TPM_ST_NO_SESSIONS
     mov     edx, TPM_CMD_CREATE_PRIMARY_LEN
     mov     ecx, TPM_CC_CREATE_PRIMARY
     call    er_tpm_header_build
@@ -1169,70 +947,78 @@ er_fn er_tpm_create_primary_p256
     jz      .err_pop2
 
     mov     rdi, rax
-    ; [10-13] rh_owner (4 BE)
-    mov     dword [rdi + 10], 0x01004000
-    ; [14-17] auth_area_len = 9 (4 BE)
-    mov     dword [rdi + 14], 0x09000000
-    ; [18-21] rs_pw (4 BE)
-    mov     dword [rdi + 18], 0x09000040
-    ; [22-23] nonce = 0 (2 BE)
-    mov     word [rdi + 22], 0x0000
-    ; [24]   session attrs = 0
-    mov     byte [rdi + 24], 0x00
-    ; [25-26] hmac = 0 (2 BE)
-    mov     word [rdi + 25], 0x0000
-    ; [27-28] empty_sensitive_create_len = 4 (2 BE)
-    mov     word [rdi + 27], 0x0004
-    ; [29-30] sensitive type = 0 (2 BE)
-    mov     word [rdi + 29], 0x0000
-    ; [31-32] authValue TPM2B = empty (2 BE)
-    mov     word [rdi + 31], 0x0000
-    ; [33-34] TPM2B_PUBLIC len = 24 (2 BE)
-    mov     word [rdi + 33], 0x0018
+    ; [10-13] primaryHandle = TPM_RH_ENDORSEMENT (4 BE)
+    mov     dword [rdi + 10], 0x0b000040
 
-    ; TPMT_PUBLIC (24 bytes at [35-58]):
-    mov     word [rdi + 35], 0x0023     ; type = TPM_ALG_ECC
-    mov     word [rdi + 37], 0x000B     ; nameAlg = TPM_ALG_SHA256
+    ; ── TPM2B_SENSITIVE_CREATE: empty (size=0, no data) ────────────
+    ; tpm2-tools uses inSensitive.size=0, no sensitiveType/authValue.
+    mov word [rdi + 14], 0x0000     ; inSensitive.size = 0
 
-    ; [39-42] objectAttributes (4 BE)
+    ; ── inPublic starts at [16] ──────────────────────────────────────
+    ; Determine whether scheme is NULL (-> 22B public) or not (-> 24B)
+    lea     eax, [r12 - TPM_ALG_NULL]
+    test    eax, eax
+    jnz     .scheme_not_null_cp
+
+    ; ── NULL scheme: inPublic = 22 bytes ──────────────────────────
+    ; TPMS_ECC_PARMS layout: symmetric, scheme, curveID, kdf
+    mov word [rdi + 33], 0x1600     ; public.size = 22 (BE)
+    mov word [rdi + 35], 0x2300     ; type = TPM_ALG_ECC
+    mov word [rdi + 37], 0x0B00     ; nameAlg = TPM_ALG_SHA256
     mov     eax, TPM_OA_FIXED_TPM
     or      eax, TPM_OA_FIXED_PARENT
     or      eax, TPM_OA_SENSITIVE_DATA_ORIGIN
     or      eax, TPM_OA_USER_WITH_AUTH
-    or      eax, TPM_OA_NODA
     or      eax, ebx
     bswap   eax
-    mov     [rdi + 39], eax
+    mov     [rdi + 39], eax          ; objectAttributes
+    mov word [rdi + 43], 0x0000     ; authPolicy.size = 0
+    mov word [rdi + 45], 0x1000     ; symmetric = TPM_ALG_NULL
+    mov word [rdi + 47], 0x1000     ; scheme = TPM_ALG_NULL (2B for NULL)
+    mov word [rdi + 49], 0x0300     ; curveID = TPM_ECC_NIST_P256
+    mov word [rdi + 51], 0x1000     ; kdf = TPM_ALG_NULL
+    mov word [rdi + 53], 0x0000     ; unique.x.size = 0
+    mov word [rdi + 55], 0x0000     ; unique.y.size = 0
+    ; total params = 8, public = 22 bytes: [35-56]
+    mov word [rdi + 57], 0x0000      ; outsideInfo.size = 0
+    mov     dword [rdi + 59], 0x00000000 ; creationPCR.count = 0
+    ; Fix header size to 63 (NULL scheme)
+    mov     dword [rdi + 2], 0x3f000000
+    jmp     .done_cp
 
-    mov     word [rdi + 43], 0x0000     ; authPolicy TPM2B = empty
-    mov     word [rdi + 45], 0x0010     ; symmetric = TPM_ALG_NULL
-    ; [47-48] scheme alg
+.scheme_not_null_cp:
+    ; ── Non-NULL scheme (ECDSA/ECDH): inPublic = 24 bytes ────────
+    ; TPMS_ECC_PARMS: symmetric(2), scheme(4), curveID(2), kdf(2) = 10
+    mov word [rdi + 33], 0x1800     ; public.size = 24 (BE)
+    mov word [rdi + 35], 0x2300     ; type = TPM_ALG_ECC
+    mov word [rdi + 37], 0x0B00     ; nameAlg = TPM_ALG_SHA256
+    mov     eax, TPM_OA_FIXED_TPM
+    or      eax, TPM_OA_FIXED_PARENT
+    or      eax, TPM_OA_SENSITIVE_DATA_ORIGIN
+    or      eax, TPM_OA_USER_WITH_AUTH
+    or      eax, ebx
+    bswap   eax
+    mov     [rdi + 39], eax          ; objectAttributes
+    mov word [rdi + 43], 0x0000     ; authPolicy.size = 0
+    mov word [rdi + 45], 0x1000     ; symmetric = TPM_ALG_NULL
     mov     eax, r12d
     xchg    al, ah
-    mov     [rdi + 47], ax
-    mov     word [rdi + 49], 0x000B     ; scheme hash = SHA256
-    mov     word [rdi + 51], 0x0003     ; curve = NIST_P256
-    mov     word [rdi + 53], 0x0010     ; kdf = TPM_ALG_NULL
-    mov     word [rdi + 55], 0x0000     ; unique_x len = 0
-    mov     word [rdi + 57], 0x0000     ; unique_y len = 0
-    mov     word [rdi + 59], 0x0000     ; outsideInfo len = 0
-    mov     dword [rdi + 61], 0x00000000 ; creationPCR count = 0
-
-%ifdef HOSTED_TEST
-    push    rax
-    mov     rdi, [rsp + 8]   ; rdi = buffer start from entry push
-    call    _tpm_capture_tx
-    pop     rax
-    mov     rax, [rsp]
-    add     rsp, 8
-%endif
+    mov     [rdi + 47], ax           ; scheme algorithm (ECDSA/ECDH)
+    mov word [rdi + 49], 0x0B00     ; scheme.hash = SHA256
+    mov word [rdi + 51], 0x0300     ; curveID = TPM_ECC_NIST_P256
+    mov word [rdi + 53], 0x1000     ; kdf = TPM_ALG_NULL
+    mov word [rdi + 55], 0x0000     ; unique.x.size = 0
+    mov word [rdi + 57], 0x0000     ; unique.y.size = 0
+    ; total params = 10, public = 24 bytes: [35-58]
+    mov word [rdi + 59], 0x0000      ; outsideInfo.size = 0
+    mov     dword [rdi + 61], 0x00000000 ; creationPCR.count = 0
+    ; Fix header size to 65 (ECDSA scheme)
+    mov     dword [rdi + 2], 0x41000000
+.done_cp:
     pop     r12
     pop     rbx
     ret
 .err_pop2:
-%ifdef HOSTED_TEST
-    add     rsp, 8
-%endif
     pop     r12
     pop     rbx
 .err:
@@ -1268,9 +1054,6 @@ er_fn er_tpm_load_external_p256_verify
     jz      .err
     push    rbx
     mov     rbx, rsi
-%ifdef HOSTED_TEST
-    push    rdi
-%endif
     mov     esi, TPM_ST_NO_SESSIONS
     mov     edx, TPM_CMD_LOAD_EXT_P256_LEN
     mov     ecx, TPM_CC_LOAD_EXTERNAL
@@ -1280,21 +1063,21 @@ er_fn er_tpm_load_external_p256_verify
 
     mov     rdi, rax
     ; [10-11] TPM2B_SENSITIVE outer len = 0
-    mov     word [rdi + 10], 0x0000
+    mov word [rdi + 10], 0x0000
     ; [12-13] TPM2B_PUBLIC area_len = 88
-    mov     word [rdi + 12], 0x0058
+    mov word [rdi + 12], 0x5800
 
     ; TPMT_PUBLIC starting at [14]:
-    mov     word [rdi + 14], 0x0023     ; type = ECC
-    mov     word [rdi + 16], 0x000B     ; nameAlg = SHA256
+    mov word [rdi + 14], 0x2300     ; type = ECC
+    mov word [rdi + 16], 0x0B00     ; nameAlg = SHA256
     mov     dword [rdi + 18], 0x52040000 ; objectAttributes
-    mov     word [rdi + 22], 0x0000     ; authPolicy = empty
-    mov     word [rdi + 24], 0x0010     ; symmetric = NULL
-    mov     word [rdi + 26], 0x0018     ; scheme = ECDSA
-    mov     word [rdi + 28], 0x000B     ; scheme hash = SHA256
-    mov     word [rdi + 30], 0x0003     ; curve = NIST_P256
-    mov     word [rdi + 32], 0x0010     ; kdf = NULL
-    mov     word [rdi + 34], 0x0020     ; unique_x len = 32
+    mov word [rdi + 22], 0x0000     ; authPolicy = empty
+    mov word [rdi + 24], 0x1000     ; symmetric = NULL
+    mov word [rdi + 26], 0x1800     ; scheme = ECDSA
+    mov word [rdi + 28], 0x0B00     ; scheme hash = SHA256
+    mov word [rdi + 30], 0x0300     ; curve = NIST_P256
+    mov word [rdi + 32], 0x1000     ; kdf = NULL
+    mov word [rdi + 34], 0x2000     ; unique_x len = 32
     ; [36-67] copy X (32 bytes)
     push    rdi
     add     rdi, 36
@@ -1302,7 +1085,7 @@ er_fn er_tpm_load_external_p256_verify
     mov     ecx, TPM_P256_POINT_BYTES
     rep     movsb
     pop     rdi
-    mov     word [rdi + 68], 0x0020     ; unique_y len = 32
+    mov word [rdi + 68], 0x2000     ; unique_y len = 32
     ; [70-101] copy Y from key+32
     push    rdi
     add     rdi, 70
@@ -1313,19 +1096,9 @@ er_fn er_tpm_load_external_p256_verify
     ; [102-105] hierarchy = TPM_RH_NULL
     mov     dword [rdi + 102], 0x07000040
 
-%ifdef HOSTED_TEST
-    mov     rdi, rax
-    push    rax
-    call    _tpm_capture_tx
-    pop     rax
-    add     rsp, 8
-%endif
     pop     rbx
     ret
 .err_pop1:
-%ifdef HOSTED_TEST
-    add     rsp, 8
-%endif
     pop     rbx
 .err:
     xor     eax, eax
@@ -1346,9 +1119,6 @@ er_fn er_tpm_ecdh_zgen_p256
     push    r12
     mov     r12d, esi
     mov     rbx, rdx
-%ifdef HOSTED_TEST
-    push    rdi
-%endif
     mov     esi, TPM_ST_SESSIONS
     mov     edx, TPM_CMD_ECDH_ZGEN_LEN
     mov     ecx, TPM_CC_ECDH_ZGEN
@@ -1362,9 +1132,9 @@ er_fn er_tpm_ecdh_zgen_p256
     call    _tpm_write_auth_handle
     ; rax = buf+27. Write TPM2B_ECC_POINT:
     ; [0-1] outer_len = 68 (0x0044)
-    mov     word [rax], 0x0044
+    mov word [rax], 0x4400
     ; [2-3] x_len = 32 (0x0020)
-    mov     word [rax + 2], 0x0020
+    mov word [rax + 2], 0x2000
     ; [4-35] copy X (32 bytes from rbx)
     push    rax
     lea     rdi, [rax + 4]
@@ -1373,7 +1143,7 @@ er_fn er_tpm_ecdh_zgen_p256
     rep     movsb
     pop     rax
     ; [36-37] y_len = 32 (0x0020)
-    mov     word [rax + 36], 0x0020
+    mov word [rax + 36], 0x2000
     ; [38-69] copy Y (32 bytes from rbx+32)
     push    rax
     lea     rdi, [rax + 38]
@@ -1382,21 +1152,10 @@ er_fn er_tpm_ecdh_zgen_p256
     rep     movsb
     pop     rax
 
-%ifdef HOSTED_TEST
-    push    rax
-    mov     rdi, [rsp + 8]   ; rdi = buffer start from entry push
-    call    _tpm_capture_tx
-    pop     rax
-    mov     rax, [rsp]
-    add     rsp, 8
-%endif
     pop     r12
     pop     rbx
     ret
 .err_pop2:
-%ifdef HOSTED_TEST
-    add     rsp, 8
-%endif
     pop     r12
     pop     rbx
 .err:
@@ -1436,9 +1195,6 @@ er_fn er_tpm_encrypt_decrypt2
     lea     edx, [r13 + 16 + TPM_CMD_ENC_DEC2_FIXED_LEN]
     mov     esi, TPM_ST_SESSIONS
     mov     ecx, TPM_CC_ENCRYPT_DECRYPT2
-%ifdef HOSTED_TEST
-    push    rdi
-%endif
     call    er_tpm_header_build
     test    rax, rax
     jz      .err_pop5
@@ -1456,9 +1212,6 @@ er_fn er_tpm_encrypt_decrypt2
     xchg    cl, ch
     mov     [rax], cx
     add     rax, 2
-    ; symmetric alg = TPM_ALG_AES (2 BE)
-    mov     word [rax], 0x0006
-    add     rax, 2
     ; IV TPM2B (16 bytes)
     mov     rsi, r14
     mov     edx, 16
@@ -1469,14 +1222,6 @@ er_fn er_tpm_encrypt_decrypt2
     mov     edx, r13d
     call    _tpm_write_tpm2b
 
-%ifdef HOSTED_TEST
-    push    rax
-    mov     rdi, [rsp + 8]   ; rdi = buffer start from entry push
-    call    _tpm_capture_tx
-    pop     rax
-    mov     rax, [rsp]
-    add     rsp, 8
-%endif
     pop     r15
     pop     r14
     pop     r13
@@ -1484,9 +1229,6 @@ er_fn er_tpm_encrypt_decrypt2
     pop     rbx
     ret
 .err_pop5:
-%ifdef HOSTED_TEST
-    add     rsp, 8
-%endif
     pop     r15
     pop     r14
     pop     r13
@@ -1560,28 +1302,34 @@ er_fn er_tpm_parse_sha256_digest
     lea     esi, [ecx + 14]
     jmp     .check_param_sd
 .no_param_sz_sd:
-    mov     esi, esi          ; keep original length
+    ; For no-sessions responses with handle, TPM2B starts at offset 14
+    pop     rdi
+    pop     rsi
+    pop     rdx
+    jmp     .skip_handle_sd
 
 .check_param_sd:
     pop     rdi
     pop     rsi
     pop     rdx
+    ; For sessions, param_size at offset 10, TPM2B at offset 14
 
-    ; cursor starts at TPM_HEADER_LEN
-    mov     ecx, TPM_HEADER_LEN
-    ; Read TPM2B at cursor
+.skip_handle_sd:
+    ; Read TPM2B at offset 14
+    mov     ecx, TPM_HEADER_LEN + 4
     cmp     esi, ecx
     jb      .err
     add     ecx, 2
     cmp     esi, ecx
     jb      .err
-    movzx   eax, word [rdi + TPM_HEADER_LEN]
+    movzx   eax, word [rdi + TPM_HEADER_LEN + 4]
+    xchg    al, ah
     cmp     eax, TPM_SHA256_DIGEST_LEN
     jne     .err
     ; Copy digest
     mov     ecx, TPM_SHA256_DIGEST_LEN
     mov     rsi, rdi
-    add     rsi, TPM_HEADER_LEN + 2
+    add     rsi, TPM_HEADER_LEN + 4 + 2
     mov     rdi, rdx
     rep     movsb
     mov     eax, TPM_SHA256_DIGEST_LEN
@@ -1598,6 +1346,109 @@ er_fn er_tpm_parse_sha256_digest
 ; → rax = 64 on success, 0 on error (TODO)
 ; =================================================================
 er_fn er_tpm_parse_p256_public
-    ; TODO: full implementation
+    test    rdi, rdi
+    jz      .err
+    test    rdx, rdx
+    jz      .err
+    test    rcx, rcx
+    jz      .err
+
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    mov     r12, rdx            ; x_out
+    mov     r13, rcx            ; y_out
+
+    push    rsi
+    push    rdi
+    call    er_tpm_response_success
+    test    eax, eax
+    jz      .err_pop6
+
+    pop     rdi                 ; rdi = response
+    pop     rsi                 ; rsi = length
+
+    ; Determine handle offset from tag
+    movzx   eax, word [rdi]
+    cmp     eax, TPM_ST_SESSIONS
+    je      .has_param_size
+    ; TPM_ST_NO_SESSIONS: handle at +10
+    mov     ebx, 10
+    jmp     .got_handle_ofs
+.has_param_size:
+    ; TPM_ST_SESSIONS: parameterSize at +10, handle at +14
+    mov     ebx, 14
+.got_handle_ofs:
+    lea     ecx, [rbx + 4]
+    cmp     esi, ecx
+    jb      .err_pop4
+
+    ; Skip past header + handle
+    lea     r14, [rdi + rbx + 4]
+
+    ; Read TPM2B_PUBLIC size
+    movzx   eax, word [r14]
+    xchg    al, ah
+    add     r14, 2
+
+    ; Type: must be TPM_ALG_ECC (0x0023)
+    movzx   eax, word [r14]
+    xchg    al, ah
+    cmp     eax, TPM_ALG_ECC
+    jne     .err_pop4
+    add     r14, 2
+
+    ; Skip nameAlg (2), objectAttributes (4)
+    add     r14, 6
+
+    ; Skip authPolicy TPM2B
+    movzx   eax, word [r14]
+    xchg    al, ah
+    lea     r14, [r14 + rax + 2]
+
+    ; Skip ECC params: symmetric(2), scheme(4), curveID(2), kdf(2)
+    add     r14, 10
+
+    ; unique: x TPM2B
+    movzx   eax, word [r14]
+    xchg    al, ah
+    cmp     eax, 32
+    jne     .err_pop4
+    add     r14, 2
+    mov     ecx, 32
+    mov     rsi, r14
+    mov     rdi, r12
+    rep     movsb
+    mov     r14, rsi
+
+    ; unique: y TPM2B
+    movzx   eax, word [r14]
+    xchg    al, ah
+    cmp     eax, 32
+    jne     .err_pop4
+    add     r14, 2
+    mov     ecx, 32
+    mov     rsi, r14
+    mov     rdi, r13
+    rep     movsb
+
+    mov     eax, 64
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    ret
+
+.err_pop6:
+    add     rsp, 48
+    xor     eax, eax
+    ret
+.err_pop4:
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+.err:
     xor     eax, eax
     ret

@@ -1721,42 +1721,42 @@ exec_dispatch_loop:
     jmp     .dispatch_next
 
 .op_i32_store:
-    call    exec_stack_pop   ; value to store
-    jc      .underflow_error
-    push    rax
     call    exec_memory_prepare
     jc      .error_return
     mov     ecx, 4
     call    exec_memory_check_range
     jc      .error_return
+    push    rax
+    call    exec_stack_pop
+    jc      .underflow_error
     pop     rcx
-    mov     [rax], ecx       ; store 32 bits
+    mov     [rcx], eax
     jmp     .dispatch_next
 
 .op_i32_store8:
-    call    exec_stack_pop
-    jc      .underflow_error
-    push    rax
     call    exec_memory_prepare
     jc      .error_return
     mov     ecx, 1
     call    exec_memory_check_range
     jc      .error_return
+    push    rax
+    call    exec_stack_pop
+    jc      .underflow_error
     pop     rcx
-    mov     [rax], cl
+    mov     [rcx], al
     jmp     .dispatch_next
 
 .op_i32_store16:
-    call    exec_stack_pop
-    jc      .underflow_error
-    push    rax
     call    exec_memory_prepare
     jc      .error_return
     mov     ecx, 2
     call    exec_memory_check_range
     jc      .error_return
+    push    rax
+    call    exec_stack_pop
+    jc      .underflow_error
     pop     rcx
-    mov     [rax], cx
+    mov     [rcx], ax
     jmp     .dispatch_next
 
 .op_i64_load:
@@ -1837,55 +1837,55 @@ exec_dispatch_loop:
     jmp     .dispatch_next
 
 .op_i64_store:
-    call    exec_stack_pop
-    jc      .underflow_error
-    push    rax
     call    exec_memory_prepare
     jc      .error_return
     mov     ecx, 8
     call    exec_memory_check_range
     jc      .error_return
+    push    rax
+    call    exec_stack_pop
+    jc      .underflow_error
     pop     rcx
-    mov     [rax], rcx
+    mov     [rcx], rax
     jmp     .dispatch_next
 
 .op_i64_store8:
-    call    exec_stack_pop
-    jc      .underflow_error
-    push    rax
     call    exec_memory_prepare
     jc      .error_return
     mov     ecx, 1
     call    exec_memory_check_range
     jc      .error_return
+    push    rax
+    call    exec_stack_pop
+    jc      .underflow_error
     pop     rcx
-    mov     [rax], cl
+    mov     [rcx], al
     jmp     .dispatch_next
 
 .op_i64_store16:
-    call    exec_stack_pop
-    jc      .underflow_error
-    push    rax
     call    exec_memory_prepare
     jc      .error_return
     mov     ecx, 2
     call    exec_memory_check_range
     jc      .error_return
+    push    rax
+    call    exec_stack_pop
+    jc      .underflow_error
     pop     rcx
-    mov     [rax], cx
+    mov     [rcx], ax
     jmp     .dispatch_next
 
 .op_i64_store32:
-    call    exec_stack_pop
-    jc      .underflow_error
-    push    rax
     call    exec_memory_prepare
     jc      .error_return
     mov     ecx, 4
     call    exec_memory_check_range
     jc      .error_return
+    push    rax
+    call    exec_stack_pop
+    jc      .underflow_error
     pop     rcx
-    mov     [rax], ecx
+    mov     [rcx], eax
     jmp     .dispatch_next
 
 .op_memory_size:

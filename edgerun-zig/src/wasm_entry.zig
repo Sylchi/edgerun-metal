@@ -139,11 +139,9 @@ test "generated entry has the only javascript byte bridge" {
     try std.testing.expect(!contains("hostCommandHandlers"));
     try std.testing.expect(!contains("addEventListener(\"keydown\""));
     try std.testing.expect(!contains("er_ui_packed_rect_buffer_ptr"));
-    try std.testing.expect(!contains("er_ui_packed_text_vertex_buffer_ptr"));
     try std.testing.expect(!contains("er_ui_packed_image_vertex_buffer_ptr"));
     try std.testing.expect(!contains("er_ui_packed_icon_line_vertex_buffer_ptr"));
     try std.testing.expect(!contains("er_ui_packed_overlay_rect_buffer_ptr"));
-    try std.testing.expect(!contains("er_ui_packed_overlay_text_vertex_buffer_ptr"));
     try std.testing.expect(!contains("er_ui_packed_overlay_icon_line_vertex_buffer_ptr"));
     try std.testing.expect(!contains("er_ui_font_atlas_ptr"));
     try std.testing.expect(!contains("er_ui_post_image_rgba_ptr"));
