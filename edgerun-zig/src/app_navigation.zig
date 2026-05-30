@@ -6,24 +6,32 @@ pub const route_path_capacity: usize = 96;
 pub const route_hash_capacity: usize = route_path_capacity + 1;
 pub const backend_button_id: u32 = 30_012;
 pub const frontend_button_id: u32 = 30_000;
-pub const source_compile_button_id: u32 = 32_001;
-pub const source_download_button_id: u32 = 32_002;
-pub const source_launch_button_id: u32 = 32_003;
-pub const source_reset_button_id: u32 = 32_004;
-pub const context_source_button_id: u32 = 33_001;
 pub const reveal_identity_button_id: u32 = 15_001;
-pub const first_doc_page_button_id: u32 = 31_200;
-pub const first_post_button_id: u32 = 40_100;
-pub const first_arc_filter_button_id: u32 = 40_900;
-pub const all_lessons_button_id: u32 = 40_899;
-pub const blog_back_button_id: u32 = 40_001;
 
-pub const SourceAction = enum(u32) {
-    compile,
-    download,
-    launch,
-    reset,
+pub const Action = enum(u32) {
+    reveal_identity,
+    compile_source,
+    download_source_release,
+    launch_source_release,
+    reset_source,
+    open_context_source,
 };
+
+pub const SubNavBinding = enum {
+    logo,
+    docs,
+    blog,
+    source,
+};
+
+pub fn subNavBinding(kind: SubNavBinding) TopLevelBinding {
+    return switch (kind) {
+        .logo => topLevelBinding(.frontend),
+        .docs => topLevelBinding(.frontend),
+        .blog => topLevelBinding(.frontend),
+        .source => topLevelBinding(.backend),
+    };
+}
 
 pub const MainButton = enum(u32) {
     backend = 0,
@@ -42,19 +50,6 @@ pub const View = enum(u32) {
 
 pub const Route = struct {
     view: View = .backend,
-    selected_blog_post_id: u32 = 0,
-    blog_arc_filter_index: ?usize = null,
-    selected_doc_index: ?usize = null,
-    selected_component_index: ?usize = null,
-};
-
-pub const Action = enum(u32) {
-    reveal_identity,
-    compile_source,
-    download_source_release,
-    launch_source_release,
-    reset_source,
-    open_context_source,
 };
 
 pub const RouteFixture = struct {
@@ -88,15 +83,8 @@ pub fn routeForButton(button: MainButton) Route {
 }
 
 pub fn routeForAction(action: Action) ?Route {
-    return switch (action) {
-        .open_context_source => .{ .view = .backend },
-        .reveal_identity,
-        .compile_source,
-        .download_source_release,
-        .launch_source_release,
-        .reset_source,
-        => null,
-    };
+    _ = action;
+    return null;
 }
 
 pub fn routeForSlug(slug: []const u8) Route {
@@ -112,53 +100,13 @@ pub fn fromPath(path: []const u8) Route {
     const trimmed = trimPath(path);
     return switch (pathKind(trimmed)) {
         .backend => .{ .view = .backend },
-        .frontend => .{},
+        .frontend => .{ .view = .frontend },
     };
-}
-
-pub fn sourceActionButtonId(action: SourceAction) u32 {
-    return source_compile_button_id + @as(u32, @intCast(@intFromEnum(action)));
-}
-
-pub fn docsPageButtonId(index: usize) u32 {
-    return first_doc_page_button_id + @as(u32, @intCast(index));
-}
-
-pub fn docsPageIndexFromButton(hit_id: u32) ?usize {
-    if (hit_id < first_doc_page_button_id) return null;
-    const index: usize = hit_id - first_doc_page_button_id;
-    return if (index < 64) index else null;
-}
-
-pub fn blogPostButtonId(index: usize) u32 {
-    return first_post_button_id + @as(u32, @intCast(index));
-}
-
-pub fn blogPostIndexFromButton(hit_id: u32) ?usize {
-    if (hit_id < first_post_button_id) return null;
-    const index: usize = hit_id - first_post_button_id;
-    return if (index < 64) index else null;
-}
-
-pub fn blogArcFilterButtonId(index: usize) u32 {
-    return first_arc_filter_button_id + @as(u32, @intCast(index));
-}
-
-pub fn blogArcFilterIndexFromButton(hit_id: u32) ?usize {
-    if (hit_id < first_arc_filter_button_id) return null;
-    const index: usize = hit_id - first_arc_filter_button_id;
-    return if (index < 8) index else null;
 }
 
 pub fn fromHit(hit_id: u32, _current: Route) ?Route {
     _ = _current;
-    if (routeFromStaticHit(hit_id)) |route| return route;
-    if (routeFromSubNavHit(hit_id)) |route| return route;
-    return null;
-}
-
-fn routeFromSubNavHit(hit_id: u32) ?Route {
-    for (sub_nav_bindings) |binding| {
+    for (static_routes) |binding| {
         if (binding.id == hit_id) return binding.route;
     }
     return null;
@@ -272,63 +220,13 @@ pub fn topLevelWorkspaceBindings() []const TopLevelBinding {
     return &top_level_bindings;
 }
 
-pub const SubNavKey = enum(u32) {
-    logo = 0,
-    docs = 1,
-    blog = 2,
-    source = 3,
-};
-
-pub fn subNavBinding(key: SubNavKey) TopLevelBinding {
-    return sub_nav_bindings[@intFromEnum(key)];
-}
-
-const sub_nav_bindings = [_]TopLevelBinding{
-    .{
-        .button = @as(MainButton, @enumFromInt(0)),
-        .id = frontend_button_id + 20,
-        .route = .{ .view = .frontend },
-        .icon = icon_component.Icon.named(.terminal),
-        .rail_label = "",
-        .row_title = "EdgeRun",
-        .row_detail = "",
-    },
-    .{
-        .button = @as(MainButton, @enumFromInt(0)),
-        .id = frontend_button_id + 21,
-        .route = .{ .view = .frontend, .selected_doc_index = 0 },
-        .icon = icon_component.Icon.named(.book),
-        .rail_label = "",
-        .row_title = "Docs",
-        .row_detail = "",
-    },
-    .{
-        .button = @as(MainButton, @enumFromInt(0)),
-        .id = frontend_button_id + 22,
-        .route = .{ .view = .frontend },
-        .icon = icon_component.Icon.named(.terminal),
-        .rail_label = "",
-        .row_title = "Blog",
-        .row_detail = "",
-    },
-    .{
-        .button = @as(MainButton, @enumFromInt(0)),
-        .id = frontend_button_id + 23,
-        .route = .{ .view = .backend },
-        .icon = icon_component.Icon.named(.code),
-        .rail_label = "",
-        .row_title = "Source",
-        .row_detail = "",
-    },
-};
-
 pub const action_bindings = [_]ActionBinding{
     .{ .id = reveal_identity_button_id, .action = .reveal_identity },
-    .{ .id = sourceActionButtonId(.compile), .action = .compile_source },
-    .{ .id = sourceActionButtonId(.download), .action = .download_source_release },
-    .{ .id = sourceActionButtonId(.launch), .action = .launch_source_release },
-    .{ .id = sourceActionButtonId(.reset), .action = .reset_source },
-    .{ .id = context_source_button_id, .action = .open_context_source },
+    .{ .id = 90_001, .action = .compile_source },
+    .{ .id = 90_002, .action = .download_source_release },
+    .{ .id = 90_003, .action = .launch_source_release },
+    .{ .id = 90_004, .action = .reset_source },
+    .{ .id = 90_005, .action = .open_context_source },
 };
 
 pub const static_routes = [_]HitRoute{
@@ -336,27 +234,11 @@ pub const static_routes = [_]HitRoute{
     .{ .id = frontend_button_id, .route = .{ .view = .frontend } },
 };
 
-fn routeFromStaticHit(hit_id: u32) ?Route {
-    for (static_routes) |binding| {
-        if (binding.id == hit_id) return binding.route;
-    }
-    return null;
-}
-
 pub fn contract() Contract {
     return .{
         .static_routes = &static_routes,
         .action_bindings = &action_bindings,
     };
-}
-
-pub const DynamicRouteFixture = struct {
-    hit_id: u32,
-    expected: Route,
-};
-
-pub fn dynamicRouteFixtures() []const DynamicRouteFixture {
-    return &.{};
 }
 
 pub fn trimPath(path: []const u8) []const u8 {
@@ -367,12 +249,6 @@ pub fn trimPath(path: []const u8) []const u8 {
     const trimmed = path[0..hash_start];
     if (trimmed.len == 0) return RoutePath.frontend;
     return trimmed;
-}
-
-comptime {
-    if (sub_nav_bindings.len != @typeInfo(SubNavKey).@"enum".fields.len) {
-        @compileError("sub_nav_bindings must cover every SubNavKey enum value");
-    }
 }
 
 comptime {
@@ -439,31 +315,6 @@ comptime {
                 @compileError("action id collides with static route id");
             }
         }
-        i = 0;
-        while (i < sub_nav_bindings.len) : (i += 1) {
-            if (entry.id == sub_nav_bindings[i].id) {
-                @compileError("action id collides with sub-nav route id");
-            }
-        }
-    }
-
-    for (sub_nav_bindings, 0..) |left, i| {
-        var j: usize = i + 1;
-        while (j < sub_nav_bindings.len) : (j += 1) {
-            if (left.id == sub_nav_bindings[j].id) {
-                @compileError("sub_nav_bindings contains duplicate hit id");
-            }
-        }
-        for (top_level_bindings) |top| {
-            if (left.id == top.id) {
-                @compileError("sub-nav id collides with top-level route id");
-            }
-        }
-        for (static_routes) |sr| {
-            if (left.id == sr.id) {
-                @compileError("sub-nav id collides with static route id");
-            }
-        }
     }
 }
 
@@ -486,11 +337,7 @@ test "app_navigation route contract is deterministic for top-level views" {
     }
 
     for (action_bindings) |entry| {
-        if (entry.action == .open_context_source) {
-            try std.testing.expectEqual(Route{ .view = .backend }, routeFor(.{ .action = entry.action }) orelse unreachable);
-        } else {
-            try std.testing.expectEqual(@as(?Route, null), routeFor(.{ .action = entry.action }));
-        }
+        try std.testing.expectEqual(@as(?Route, null), routeFor(.{ .action = entry.action }));
         try std.testing.expectEqual(entry.action, actionFromHit(entry.id).?);
     }
 }

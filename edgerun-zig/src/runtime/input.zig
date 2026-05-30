@@ -228,7 +228,6 @@ pub fn currentAppFrameState(hover_x: f32, hover_y: f32, frame_ms: f32) app_frame
     fs.public_identity = identity.publicIdentityText();
     fs.public_identity_ready = state.ephemeral_identity_ready;
     fs.drag_override = currentDragOverride();
-    fs.source = if (state.native_input_state.route.view == .backend) currentSourceState(hover_x, hover_y) else @as(state.app_source.State, .{});
     fs.context_menu = .{
         .open = state.context_menu_open,
         .x = state.context_menu_x,
@@ -248,34 +247,4 @@ fn currentDragOverride() ?component_gallery.DragOverride {
     return null;
 }
 
-fn currentSourceState(hover_x: f32, hover_y: f32) state.app_source.State {
-    editor.ensureSourceWorkspace();
-    editor.ensureSourceEditor();
-    return .{
-        .scroll_y = state.native_input_state.scroll_y,
-        .hover_x = hover_x,
-        .hover_y = hover_y,
-        .label = state.source_editor_label,
-        .search_query = state.source_search_bytes[0..state.source_search_len],
-        .files = editor.currentSourceFiles(),
-        .source = state.source_editor_bytes[0..state.source_editor_len],
-        .cursor = state.source_editor_cursor,
-        .selection_anchor = state.source_editor_selection_anchor,
-        .selection_active = state.source_editor_selection_active,
-        .scroll_line = state.source_editor_scroll_line,
-        .workspace_bytes = state.source_workspace_len,
-        .file_bytes = state.source_editor_len,
-        .release_bytes = state.release_artifact_len,
-        .resource_memory_bytes = editor.sourceRuntimeMemoryBytes(),
-        .resource_cpu_instructions = state.last_compile_instructions,
-        .dirty = state.source_editor_dirty,
-        .can_undo = state.source_editor_undo_len != 0,
-        .can_redo = state.source_editor_redo_len != 0,
-        .status = editor.sourceEditorStatusText(state.source_editor_status),
-        .compile_phase = compiler.compilePhaseText(state.last_compile_phase),
-        .compile_progress = @as(f32, @floatFromInt(state.last_compile_progress_permille)) / 1000.0,
-        .compile_summary = compiler.sourceCompileSummaryText(),
-        .diagnostic = state.last_compiler_diagnostic[0..state.last_compiler_diagnostic_len],
-        .diagnostic_line = editor.sourceDiagnosticLine(state.last_compiler_diagnostic[0..state.last_compiler_diagnostic_len]),
-    };
-}
+

@@ -40,7 +40,7 @@ pub const Node = union(enum) {
     slider: struct { id: u32, label: []const u8, value: f32 = 0.0 },
     radio_group: struct { id: u32, first: []const u8, second: []const u8, selected: u16 = 0 },
 
-    row_item: struct { id: u32, title: []const u8, detail: []const u8 },
+    row_item: struct { id: u32, title: []const u8, detail: []const u8, icon: u16 = 0 },
     badge: struct { label: []const u8, variant: u16 = 0 },
     card: struct { title: []const u8, detail: []const u8, variant: u16 = 0 },
     avatar: struct { label: []const u8 },

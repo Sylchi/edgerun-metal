@@ -1,8 +1,11 @@
-; x86_64 assembly macros for EdgeRun assembly porting
+; x86_64 assembly macros for EdgeRun
 ; NASM/yasm syntax — our own assembler is the long-term goal
 ;
 ; Usage:
 ;   %include "x86_64/macros.inc"
+
+%ifndef MACROS_INC
+%define MACROS_INC
 
 [BITS 64]
 
@@ -78,6 +81,16 @@
 %endm
 
 ; ------------------------------------------------------------------
+; Call and check error (two-register convention)
+; Calls function, then checks rdx for error; jumps to fail_label if non-zero
+; ------------------------------------------------------------------
+%macro er_call 2
+    call    %1
+    test    edx, edx
+    jnz     %2
+%endm
+
+; ------------------------------------------------------------------
 ; Stack frame macros
 ; ------------------------------------------------------------------
 ; Push frame pointer, set up new frame
@@ -91,27 +104,33 @@
     pop     rbp
 %endm
 
+; Push callee-saved registers (list subsets, e.g. er_push rbx, r12, r13)
+%macro er_push 1-*
+    %rep %0
+        push    %1
+        %rotate 1
+    %endrep
+%endm
+
+; Pop callee-saved registers (reverse order)
+%macro er_pop 1-*
+    %rep %0
+        %rotate -1
+        pop     %1
+    %endrep
+%endm
+
 ; Push all callee-saved GPRs
 %macro er_push_all 0
-    push    rbx
-    push    rbp
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    er_push rbx, rbp, r12, r13, r14, r15
 %endm
 
 ; Pop all callee-saved GPRs
 %macro er_pop_all 0
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbp
-    pop     rbx
+    er_pop  rbx, rbp, r12, r13, r14, r15
 %endm
 
-; Allocate N bytes on the stack (N must be multiple of 16)
+; Allocate N bytes on the stack (N should be multiple of 16)
 %macro er_stack_alloc 1
     sub     rsp, %1
 %endm
@@ -127,60 +146,56 @@
 %endm
 
 ; ------------------------------------------------------------------
-; Conditional move helpers
+; Null / zero check helpers
 ; ------------------------------------------------------------------
-%macro er_cmoveq 2
-    cmove   %1, %2
-%endm
-
-%macro er_cmovne 2
-    cmovne  %1, %2
-%endm
-
-%macro er_cmovl 2
-    cmovl   %1, %2
-%endm
-
-%macro er_cmovg 2
-    cmovg   %1, %2
-%endm
-
-%macro er_cmovle 2
-    cmovle  %1, %2
-%endm
-
-%macro er_cmovge 2
-    cmovge  %1, %2
-%endm
-
-; ------------------------------------------------------------------
-; Branch helpers
-; ------------------------------------------------------------------
-; Unconditional trap
-%macro er_trap 0
-    ud2
-%endm
-
-; Assert register is in [min, max] — traps if out of range
-%macro er_assert_range 3
-    cmp     %1, %2
-    jl      %%trap
-    cmp     %1, %3
-    jg      %%trap
-    jmp     %%ok
-%%trap:
-    ud2
-%%ok:
-%endm
-
-; Assert zero flag set (argument must be zero)
-%macro er_assert_zero 1
+; Jump to label if register is zero
+%macro er_check_zero 2
     test    %1, %1
-    jnz     %%trap
-    jmp     %%ok
-%%trap:
-    ud2
-%%ok:
+    jz      %2
+%endm
+
+; Jump to label if register is non-zero
+%macro er_check_nonzero 2
+    test    %1, %1
+    jnz     %2
+%endm
+
+; ------------------------------------------------------------------
+; MMIO helpers (32-bit)
+; ------------------------------------------------------------------
+; Read 32-bit MMIO at [base + offset] into eax
+%macro er_read32 2
+    mov     eax, [%1 + %2]
+%endm
+
+; Write 32-bit value to MMIO at [base + offset]
+%macro er_write32 3
+    mov     [%1 + %2], %3
+%endm
+
+; ------------------------------------------------------------------
+; I/O port helpers
+; ------------------------------------------------------------------
+; Write 8-bit value to I/O port
+%macro er_outb 2
+    mov     al, %2
+    mov     dx, %1
+    out     dx, al
+%endm
+
+; Read 8-bit from I/O port into al
+%macro er_inb 1
+    mov     dx, %1
+    in      al, dx
+%endm
+
+; Low-level I/O: port in dx, value in al — no register shuffling
+%macro er_out_dx_al 0
+    out     dx, al
+%endm
+
+%macro er_in_al_dx 0
+    in      al, dx
 %endm
 
 ; ------------------------------------------------------------------
@@ -213,52 +228,4 @@
     repe    cmpsb
 %endm
 
-; ------------------------------------------------------------------
-; Debug helpers (use only in hosted/test builds)
-; ------------------------------------------------------------------
-; Breakpoint (int3)
-%macro er_break 0
-    int3
-%endm
-
-; ------------------------------------------------------------------
-; Section switching helpers
-; ------------------------------------------------------------------
-%macro er_section_text 0
-    SECTION .text
-%endm
-
-%macro er_section_data 0
-    SECTION .data
-%endm
-
-%macro er_section_rodata 0
-    SECTION .rodata
-%endm
-
-; ------------------------------------------------------------------
-; Read/write x86 control registers
-; ------------------------------------------------------------------
-%macro er_read_cr0 1
-    mov     %1, cr0
-%endm
-
-%macro er_read_cr2 1
-    mov     %1, cr2
-%endm
-
-%macro er_read_cr3 1
-    mov     %1, cr3
-%endm
-
-%macro er_read_cr4 1
-    mov     %1, cr4
-%endm
-
-%macro er_write_cr0 1
-    mov     cr0, %1
-%endm
-
-%macro er_write_cr3 1
-    mov     cr3, %1
-%endm
+%endif ; MACROS_INC

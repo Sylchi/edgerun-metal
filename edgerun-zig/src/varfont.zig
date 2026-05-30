@@ -335,7 +335,7 @@ pub const Cache = struct {
                     out,
                     &vertex_count,
                     pen_x + glyph_value.x_offset + @as(f32, @floatFromInt(baked.left)),
-                    origin_y + glyph_value.y_offset - @as(f32, @floatFromInt(baked.top)),
+                    origin_y + glyph_value.y_offset + @as(f32, @floatFromInt(baked.top)),
                     baked,
                 );
             }

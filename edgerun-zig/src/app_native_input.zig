@@ -75,12 +75,7 @@ pub fn activateHovered(state: *State) void {
             state.public_identity_ready = true;
             state.public_identity = state.reveal_identity;
         },
-        .compile_source,
-        .download_source_release,
-        .launch_source_release,
-        .reset_source,
-        .open_context_source,
-        => {},
+        else => {},
     };
 }
 
@@ -110,7 +105,7 @@ pub fn scrollBy(state: *State, width: f32, viewport_height: f32, delta_y: f32) v
 
 test "native input activates routes and resets scroll through shared state" {
     var state = State{ .scroll_y = 120.0 };
-    state.runtime.hovered = .{ .kind = .button, .id = app_navigation.subNavBinding(.docs).id, .bounds = ui.Rect.init(0, 0, 1, 1) };
+    state.runtime.hovered = .{ .kind = .button, .id = app_navigation.frontend_button_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
 
     activateHovered(&state);
 
@@ -144,7 +139,7 @@ test "native input pointer path uses shared runtime activation" {
     var scene = ui.Scene.init(&commands);
     var regions: [1]interaction.Region = undefined;
     var collector = interaction.Collector.init(&regions);
-    try collector.addHit(ui.Rect.init(0, 0, 20, 20), .button, app_navigation.subNavBinding(.blog).id);
+    try collector.addHit(ui.Rect.init(0, 0, 20, 20), .button, app_navigation.frontend_button_id);
     var state = State{ .hover_x = 8.0, .hover_y = 8.0 };
 
     processPointerEvent(&state, scene.written(), collector.written(), .pointer_down);
@@ -180,23 +175,10 @@ test "native input route fixtures keep deterministic path/hash mapping" {
     }
 }
 
-test "native input resolves dynamic hit families using shared navigation logic" {
-    for (app_navigation.dynamicRouteFixtures()) |entry| {
-        var state = State{ .route = .{ .view = .backend } };
-        state.runtime.hovered = .{ .kind = .button, .id = entry.hit_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
 
-        activateHovered(&state);
-
-        try expectRoute(state.route, entry.expected);
-    }
-}
 
 fn expectRoute(actual: app_navigation.Route, expected: app_navigation.Route) !void {
     try std.testing.expectEqual(expected.view, actual.view);
-    try std.testing.expectEqual(expected.selected_blog_post_id, actual.selected_blog_post_id);
-    try std.testing.expectEqual(expected.blog_arc_filter_index, actual.blog_arc_filter_index);
-    try std.testing.expectEqual(expected.selected_doc_index, actual.selected_doc_index);
-    try std.testing.expectEqual(expected.selected_component_index, actual.selected_component_index);
 }
 
 fn expectRoutePathHash(route: app_navigation.Route, expected_path: []const u8, expected_hash: []const u8) !void {

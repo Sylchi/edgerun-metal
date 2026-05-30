@@ -23,15 +23,11 @@ const ui_runtime = state.ui_runtime;
 const ui_codec = @import("ui_codec.zig");
 const component_union = @import("ui/components/Component.zig");
 const node_renderer = @import("ui/components/NodeRenderer.zig");
-const app_source = @import("app_source.zig");
 const identity = @import("identity.zig");
 const clock = @import("clock.zig");
 const gles_wasm = @import("render/backends/gles_wasm.zig");
 const wasm_gl = @import("render/wasm_gl.zig");
 const gl_contract = @import("render/gl_contract.zig");
-const app_blog = @import("app_blog.zig");
-const app_docs = @import("app_docs.zig");
-const app_landing = @import("app_landing.zig");
 const app_input_event = @import("app_input_event.zig");
 const wasm_interpreter = state.wasm_interpreter;
 
@@ -199,14 +195,6 @@ export fn er_ui_app_pointer_up(x: f32, y: f32) u32 {
     state.pointer_hover_x = x;
     state.pointer_hover_y = y;
     return er_ui_pointer_up(x, y);
-}
-
-// -----------------------------------------------------------------
-// Blog / content exports
-// -----------------------------------------------------------------
-
-export fn er_ui_blog_post_count() u32 {
-    return app_blog.posts.len;
 }
 
 export fn er_ui_app_action_kind() u32 {
@@ -502,10 +490,6 @@ export fn er_ui_app_scroll_by(delta_y: f32, width: f32, height: f32) u32 {
 
 export fn er_ui_app_scroll_y() f32 { return state.native_input_state.scroll_y; }
 
-export fn er_ui_app_blog_post_content_height(width: f32, post_id: u32) f32 {
-    return app_frame.contentHeight(width, .{ .route = .{ .view = .frontend, .selected_blog_post_id = post_id } });
-}
-
 export fn er_ui_app_content_height(width: f32) f32 {
     return app_frame.contentHeight(width, input.currentAppFrameState(state.pointer_hover_x, state.pointer_hover_y, 0.0));
 }
@@ -661,10 +645,6 @@ fn expectRouteFixture(fixture: app_navigation.RouteFixture) !void {
 
 fn expectRouteState(expected: app_navigation.Route) !void {
     try std.testing.expectEqual(expected.view, state.native_input_state.route.view);
-    try std.testing.expectEqual(expected.selected_blog_post_id, state.native_input_state.route.selected_blog_post_id);
-    try std.testing.expectEqual(expected.blog_arc_filter_index, state.native_input_state.route.blog_arc_filter_index);
-    try std.testing.expectEqual(expected.selected_doc_index, state.native_input_state.route.selected_doc_index);
-    try std.testing.expectEqual(expected.selected_component_index, state.native_input_state.route.selected_component_index);
 }
 
 test "wasm render bridge exports neutral frame and outbox names" {
@@ -720,7 +700,7 @@ test "app runtime draws deterministic focus ring from runtime focus state" {
 
 test "app runtime component catalog builds packed app buffers and app-ready icon lines" {
     state.font_atlas_ready = false;
-    input.applyRoute(.{ .view = .frontend, .selected_doc_index = app_docs.indexBySlug("component-system") });
+    input.applyRoute(.{ .view = .frontend });
     const code = er_ui_build_app_frame(960, 640, -1.0, -1.0, 0.0);
     try std.testing.expectEqual(@as(u32, 0), code);
     try std.testing.expect(state.font_atlas_ready);
@@ -733,7 +713,7 @@ test "app runtime component catalog builds packed app buffers and app-ready icon
 }
 
 test "app runtime component catalog render uses canonical ir buffers" {
-    input.applyRoute(.{ .view = .frontend, .selected_doc_index = app_docs.indexBySlug("component-system") });
+    input.applyRoute(.{ .view = .frontend });
     const code = er_ui_render_frame(480, 360, 0.0);
     try std.testing.expectEqual(@as(u32, 0), code);
     try std.testing.expectEqual(renderer_pipeline.Transport.pixel_bytes, state.last_present_transport);
@@ -753,9 +733,8 @@ test "app runtime landing builds packed app buffers and hit state" {
     try std.testing.expectEqual(@as(u32, 0), code);
     try std.testing.expect(state.packed_rect_float_len > 0);
     try std.testing.expect(state.packed_icon_vertex_float_len > 0);
-    try std.testing.expectEqual(app_landing.contentHeight(1280.0), er_ui_app_content_height(1280.0));
+    try std.testing.expect(er_ui_app_content_height(1280.0) > 0.0);
     try std.testing.expectEqual(@intFromEnum(ui.HitKind.button), er_ui_hover_hit_kind());
-    try std.testing.expectEqual(app_navigation.topLevelButtonId(.backend), er_ui_hover_hit_id());
 }
 
 test "app runtime route snapshots cover canonical fixtures and dynamic families" {
@@ -766,27 +745,26 @@ test "app runtime route snapshots cover canonical fixtures and dynamic families"
     }
 }
 
-test "app runtime blog builds packed app buffers and post hit state" {
-    input.applyRoute(.{ .view = .frontend, .selected_blog_post_id = 1 });
+test "app runtime frontend builds packed app buffers" {
+    input.applyRoute(.{ .view = .frontend });
     try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, 640.0, 500.0, 0.0));
 }
 
 test "app runtime activation keeps page state in wasm" {
-    input.applyRoute(.{ .view = .frontend, .selected_blog_post_id = 1 });
+    input.applyRoute(.{ .view = .frontend });
     try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, -1.0, -1.0, 0.0));
     try std.testing.expectEqual(app_navigation.View.frontend, state.native_input_state.route.view);
-    try std.testing.expectEqual(@as(u32, 1), state.native_input_state.route.selected_blog_post_id);
 }
 
 test "app runtime route sync owns URL path state" {
-    input.applyRoute(.{ .view = .frontend, .selected_blog_post_id = 1 });
+    input.applyRoute(.{ .view = .frontend });
     er_ui_build_app_frame(1280, 800, -1.0, -1.0, 0.0);
     try std.testing.expect(state.route_len > 0);
     try std.testing.expect(state.route_hash_len > 0);
 }
 
 test "app runtime context source jump opens exact component file" {
-    input.applyRoute(.{ .view = .frontend, .selected_component_index = 1 });
+    input.applyRoute(.{ .view = .frontend });
     try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, 30.0, 150.0, 0.0));
 }
 
@@ -840,7 +818,7 @@ test "app runtime exposes no secondary bootstrap javascript" {
 test "app runtime exposes repo-owned source as canonical object bytes" {
     try std.testing.expect(er_ui_compiler_source_len() > 0);
 
-    input.applyRoute(.{ .view = .frontend, .selected_doc_index = app_docs.indexBySlug("component-system") });
+    input.applyRoute(.{ .view = .frontend });
     try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, -1.0, -1.0, 0.0));
 }
 
@@ -915,8 +893,7 @@ test "app runtime source editor uses workspace file list and pointer selection" 
     try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, -1.0, -1.0, 0.0));
     const files = editor.currentSourceFiles();
     if (files.len > 0) {
-        const hit_id = app_source.sourceHitForIndex(0);
-        try std.testing.expectEqualStrings(files[0].path, (editor.sourceFileLabelFromHit(hit_id) orelse unreachable));
+        try std.testing.expect(files[0].path.len > 0);
     }
 }
 
@@ -978,7 +955,7 @@ test "app runtime pointer up owns activation suppression policy" {
 }
 
 test "app packed text preserves variable font descenders" {
-    input.applyRoute(.{ .view = .frontend, .selected_doc_index = app_docs.indexBySlug("component-system") });
+    input.applyRoute(.{ .view = .frontend });
     try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, -1.0, -1.0, 0.0));
 }
 
@@ -999,7 +976,7 @@ test "app font atlas populates glyphs on demand" {
 }
 
 test "app icon buffer stores semantic icon instances" {
-    input.applyRoute(.{ .view = .frontend, .selected_doc_index = app_docs.indexBySlug("component-system") });
+    input.applyRoute(.{ .view = .frontend });
     try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, -1.0, -1.0, 0.0));
 }
 

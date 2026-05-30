@@ -7,7 +7,6 @@ const renderer_ir = @import("render/ir.zig");
 const renderer_parity = @import("render/parity.zig");
 const renderer_pipeline = @import("render/pipeline.zig");
 const renderer_software = @import("render/backends/software.zig");
-const app_blog = @import("app_blog.zig");
 const app_chrome = @import("app_chrome.zig");
 const app_cursor = @import("app_cursor.zig");
 const app_frame = @import("app_frame.zig");
@@ -703,28 +702,16 @@ test "egl host parses explicit parity verification mode" {
 test "egl host activation uses shared app navigation routes" {
     var app = AppState{};
 
-    app.input.runtime.hovered = .{ .kind = .button, .id = app_navigation.subNavBinding(.blog).id, .bounds = ui.Rect.init(0, 0, 1, 1) };
+    app.input.runtime.hovered = .{ .kind = .button, .id = app_navigation.frontend_button_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
     app_native_input.activateHovered(&app.input);
     try std.testing.expectEqual(app_navigation.View.frontend, app.input.route.view);
     try std.testing.expectEqual(@as(f32, 0.0), app.input.scroll_y);
 
-    const post_id = app_blog.postIdAt(0);
-    app.input.scroll_y = 120.0;
-    app.input.runtime.hovered = .{ .kind = .button, .id = post_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
+    app.input.runtime.hovered = .{ .kind = .button, .id = app_navigation.backend_button_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
     app_native_input.activateHovered(&app.input);
-    try std.testing.expectEqual(app_navigation.View.frontend, app.input.route.view);
-    try std.testing.expectEqual(post_id, app.input.route.selected_blog_post_id);
-    try std.testing.expectEqual(@as(f32, 0.0), app.input.scroll_y);
+    try std.testing.expectEqual(app_navigation.View.backend, app.input.route.view);
 
-    app.input.runtime.hovered = .{ .kind = .button, .id = app_navigation.subNavBinding(.docs).id, .bounds = ui.Rect.init(0, 0, 1, 1) };
-    app_native_input.activateHovered(&app.input);
-    try std.testing.expectEqual(app_navigation.View.frontend, app.input.route.view);
-
-    app.input.runtime.hovered = .{ .kind = .button, .id = app_navigation.subNavBinding(.docs).id, .bounds = ui.Rect.init(0, 0, 1, 1) };
-    app_native_input.activateHovered(&app.input);
-    try std.testing.expectEqual(app_navigation.View.frontend, app.input.route.view);
-
-    app.input.runtime.hovered = .{ .kind = .button, .id = app_navigation.subNavBinding(.logo).id, .bounds = ui.Rect.init(0, 0, 1, 1) };
+    app.input.runtime.hovered = .{ .kind = .button, .id = app_navigation.frontend_button_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
     app_native_input.activateHovered(&app.input);
     try std.testing.expectEqual(app_navigation.View.frontend, app.input.route.view);
 }

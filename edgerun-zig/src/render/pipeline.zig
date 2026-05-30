@@ -143,7 +143,7 @@ pub fn packTextQuads(buffers: renderer_ir.Buffers, font_atlas: *renderer_font_at
                 const glyph_value = (try font_source.glyph(font_source.context, codepoint, px)) orelse continue;
                 if (glyph_value.w > 0.0 and glyph_value.h > 0.0) {
                     const gx = pen_x + glyph_value.left;
-                    const gy = baseline - glyph_value.top;
+                    const gy = baseline + glyph_value.top;
                     const snapped = ui.Rect.init(
                         @round(gx),
                         @round(gy),
@@ -153,7 +153,7 @@ pub fn packTextQuads(buffers: renderer_ir.Buffers, font_atlas: *renderer_font_at
                     try renderer_ir.pushClippedTexturedQuad(
                         buffers.image_vertices,
                         buffers.image_vertex_len,
-                        text_command.origin,
+                        snapped,
                         snapped,
                         glyph_value.u0,
                         glyph_value.v0,

@@ -244,7 +244,7 @@ pub const Patch = union(enum) {
     table_row: struct { name: []const u8, role: []const u8 },
     tooltip_content: []const u8,
     toast: struct { title: []const u8, detail: []const u8 },
-    row_item: struct { title: []const u8, detail: []const u8 },
+    row_item: struct { title: []const u8, detail: []const u8, icon: u16 = 0 },
     rect_color: Color,
     style_color: Color,
 };
@@ -486,6 +486,7 @@ pub fn applyPatch(node: *Node, patch: Patch) RenderError!void {
             if (node.* != .row_item) return error.UnsupportedComponent;
             node.row_item.title = v.title;
             node.row_item.detail = v.detail;
+            node.row_item.icon = v.icon;
         },
         .rect_color => |v| {
             if (node.* != .rect) return error.UnsupportedComponent;

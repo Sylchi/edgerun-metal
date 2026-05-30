@@ -138,7 +138,7 @@ pub fn decodeBytes(raw: []const u8, out_nodes: []ui.Node) Error!ui.Node {
             .toggle_group => .{ .toggle_group = .{ .id = id / toggle_group_id_stride, .first = try stringRef(string_table, a, b), .second = try stringRef(string_table, c, d), .active = @intCast(id % toggle_group_id_stride) } },
             .input => .{ .input = .{ .id = id, .placeholder = try stringRef(string_table, a, b), .leading_icon = try boundedTag(c, component_common.encoded_icon_count) } },
             .input_group => .{ .input_group = .{ .id = id, .addon = try stringRef(string_table, a, b), .placeholder = try stringRef(string_table, c, d) } },
-            .row_item => .{ .row_item = .{ .id = id, .title = try stringRef(string_table, a, b), .detail = try stringRef(string_table, c, d) } },
+            .row_item => .{ .row_item = .{ .id = id >> codec_icon_shift, .title = try stringRef(string_table, a, b), .detail = try stringRef(string_table, c, d), .icon = @as(u16, @truncate(id & (1 << codec_icon_shift) -% 1)) } },
             .badge => .{ .badge = .{ .label = try stringRef(string_table, a, b), .variant = try boundedTag(c, badge_variant_count) } },
             .checkbox => .{ .checkbox = .{ .id = id, .label = try stringRef(string_table, a, b), .checked = decodeBool(c) orelse return error.Corrupt } },
             .switch_control => .{ .switch_control = .{ .id = id, .label = try stringRef(string_table, a, b), .checked = decodeBool(c) orelse return error.Corrupt } },
@@ -292,6 +292,7 @@ const badge_variant_count: u16 = 6;
 const surface_variant_count: u16 = 3;
 const button_icon_mask: u16 = 0x00ff;
 const button_icon_shift: u4 = 8;
+const codec_icon_shift: u5 = 14;
 
 test "decode ui bytes into borrowed nodes and render paint" {
     var raw: [256]u8 = undefined;
@@ -303,7 +304,7 @@ test "decode ui bytes into borrowed nodes and render paint" {
     const button = cursor.string("Render");
     try std.testing.expect(cursor.record(0, .text, 0, title.?, .{}));
     try std.testing.expect(cursor.record(1, .input, 10, search.?, .{}));
-    try std.testing.expect(cursor.record(2, .row_item, 20, row_title.?, row_detail.?));
+    try std.testing.expect(cursor.record(2, .row_item, 20 << 14, row_title.?, row_detail.?));
     try std.testing.expect(cursor.record(3, .slot, 7, .{ .offset = 4, .len = 0 }, .{}));
     try std.testing.expect(cursor.record(4, .badge, 30, button.?, .{}));
 

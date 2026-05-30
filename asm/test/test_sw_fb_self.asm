@@ -2,37 +2,10 @@
 ; Exits via syscall: 0 = pass, 1 = fail.
 
 %include "x86_64/macros.inc"
+%include "test/test_macros.inc"
 
 extern sw_fb_fill
 extern sw_fb_blend_pixel
-
-; Test macro: increment passed if eax == edx (32-bit)
-%macro TEST 0
-    cmp     eax, edx
-    jne     %%fail
-    inc     qword [rel passed]
-%%fail:
-    inc     qword [rel total]
-%endmacro
-
-; Same but 64-bit
-%macro TESTQ 0
-    cmp     rax, rdx
-    jne     %%fail
-    inc     qword [rel passed]
-%%fail:
-    inc     qword [rel total]
-%endmacro
-
-; Memory compare: rdi=rsi=pointers, ecx=count
-%macro TEST_MEM 0
-    cld
-    repe    cmpsb
-    jne     %%fail
-    inc     qword [rel passed]
-%%fail:
-    inc     qword [rel total]
-%endmacro
 
 SECTION .rodata
 ; Color: 0xAABBGGRR LE

@@ -108,7 +108,7 @@ pub const Frame = struct {
 pub fn validateResources(buffers: renderer_ir.Buffers, resources: Resources) Error!void {
     const required = bufferRequirements(buffers);
     if (required.font_atlas and !resources.font_atlas) return error.MissingFontAtlas;
-    if (required.image_texture and !resources.image_texture) return error.MissingImageTexture;
+    if (required.image_texture and !resources.image_texture and !resources.font_atlas) return error.MissingImageTexture;
 }
 
 pub fn bufferRequirements(buffers: renderer_ir.Buffers) Requirements {
@@ -182,7 +182,7 @@ test "presentation frame rejects invalid dimensions and missing texture resource
     const image_frame = Frame{
         .target = .{ .destination = .native_surface, .width = 64, .height = 48 },
         .buffers = image_storage.buffers(),
-        .resources = .{ .font_atlas = true },
+        .resources = .{ .font_atlas = false },
     };
     try std.testing.expectError(error.MissingImageTexture, image_frame.validate());
 

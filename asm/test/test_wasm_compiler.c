@@ -180,6 +180,33 @@ static const char multi_export_source[] =
     "    return 0;\n"
     "}\n";
 
+// EdgeRun source with binary expression
+static const char expr_source[] =
+    "export fn double(x: u32) u32 {\n"
+    "    return x * 2;\n"
+    "}\n";
+
+// EdgeRun source with add expression
+static const char add_source[] =
+    "export fn add(a: u32, b: u32) u32 {\n"
+    "    return a + b;\n"
+    "}\n";
+
+// EdgeRun source with complex expression
+static const char complex_expr_source[] =
+    "export fn compute(x: u32) u32 {\n"
+    "    return x * 3 + 1;\n"
+    "}\n";
+
+// EdgeRun source with function call
+static const char call_source[] =
+    "export fn double(x: u32) u32 {\n"
+    "    return x * 2;\n"
+    "}\n"
+    "export fn main() u32 {\n"
+    "    return double(21);\n"
+    "}\n";
+
 int main(void) {
     enum { COMPILER_MEM_SIZE = 1024 * 1024 };
     static uint8_t compiler_mem[COMPILER_MEM_SIZE]
@@ -263,6 +290,76 @@ int main(void) {
             (const uint8_t*)no_export_src,
             sizeof(no_export_src) - 1);
         TEST("no exports fails", result != 0);
+    }
+
+    // Test 6: Compile source with binary expression (double(x) = x * 2)
+    {
+        uint32_t result = er_wasm_compiler_compile_wasm(
+            compiler_mem, COMPILER_MEM_SIZE,
+            "src/main.er", 11,
+            (const uint8_t*)expr_source, sizeof(expr_source) - 1);
+
+        uint32_t status = er_wasm_compiler_status();
+        TEST("expr_source compile ok", result == 0 && status == 0);
+
+        void* out_ptr = er_wasm_compiler_output_ptr();
+        uint64_t out_len = er_wasm_compiler_output_len();
+        int valid = validate_wasm((const uint8_t*)out_ptr, out_len);
+        TEST("expr_source valid WASM", valid == 0);
+
+        int ec = wasm_export_count((const uint8_t*)out_ptr, out_len);
+        TEST("expr_source export count = 29 (base + 1 user)", ec == 29);
+
+        int has_double = wasm_has_export((const uint8_t*)out_ptr, out_len,
+                                        "double", 6);
+        TEST("expr_source export 'double' present", has_double == 1);
+    }
+
+    // Test 7: Compile source with add expression (add(a,b) = a + b)
+    {
+        uint32_t result = er_wasm_compiler_compile_wasm(
+            compiler_mem, COMPILER_MEM_SIZE,
+            "src/main.er", 11,
+            (const uint8_t*)add_source, sizeof(add_source) - 1);
+
+        uint32_t status = er_wasm_compiler_status();
+        TEST("add_source compile ok", result == 0 && status == 0);
+
+        void* out_ptr = er_wasm_compiler_output_ptr();
+        uint64_t out_len = er_wasm_compiler_output_len();
+        int valid = validate_wasm((const uint8_t*)out_ptr, out_len);
+        TEST("add_source valid WASM", valid == 0);
+
+        int ec = wasm_export_count((const uint8_t*)out_ptr, out_len);
+        TEST("add_source export count = 29 (base + 1 user)", ec == 29);
+
+        int has_add = wasm_has_export((const uint8_t*)out_ptr, out_len,
+                                     "add", 3);
+        TEST("add_source export 'add' present", has_add == 1);
+    }
+
+    // Test 8: Compile source with complex expression (compute(x) = x * 3 + 1)
+    {
+        uint32_t result = er_wasm_compiler_compile_wasm(
+            compiler_mem, COMPILER_MEM_SIZE,
+            "src/main.er", 11,
+            (const uint8_t*)complex_expr_source,
+            sizeof(complex_expr_source) - 1);
+
+        uint32_t status = er_wasm_compiler_status();
+        TEST("complex_expr_source compile ok", result == 0 && status == 0);
+
+        void* out_ptr = er_wasm_compiler_output_ptr();
+        uint64_t out_len = er_wasm_compiler_output_len();
+        int valid = validate_wasm((const uint8_t*)out_ptr, out_len);
+        TEST("complex_expr_source valid WASM", valid == 0);
+
+        int ec = wasm_export_count((const uint8_t*)out_ptr, out_len);
+        TEST("complex_expr_source export count = 29 (base + 1 user)", ec == 29);
+
+        int has_compute = wasm_has_export((const uint8_t*)out_ptr, out_len,
+                                          "compute", 7);
+        TEST("complex_expr_source export 'compute' present", has_compute == 1);
     }
 
     if (passed_tests != total_tests) return 1;

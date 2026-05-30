@@ -27,14 +27,37 @@
 - Stay inside the bounds of the assigned task and owned files.
 - Do not create, switch to, or continue work on feature branches unless the user explicitly asks.
 
+## Architecture Boundary
+
+The repository has two code worlds separated by a hard boundary:
+
+- **Host-side** — runs on bare metal or Linux userspace. Written in x86_64
+  assembly using the project's own DSL (`macros.inc`). Owns the kernel, drivers,
+  boot path, PCI, MMIO, serial, TPM, framebuffer, WASM interpreter, render IR,
+  UI shell, and all host tooling.
+- **App-side** — Zig source compiled to WASM. Runs inside the EdgeRun WASM
+  interpreter. Must have zero host assumptions: no syscalls, no libc, no POSIX,
+  no platform intrinsics. Authority enters only through explicit EdgeRun
+  import contracts backed by requirements and receipts.
+
 ## Workspace & Language
 
-- **The project's own language is the x86_64 assembly DSL defined in `asm/x86_64/macros.inc`** — `er_fn`, `er_fnstr`, `er_frame_push`, `er_push_all`, etc. This IS the dogfooding target. All production code must be written in this DSL.
-- `asm/x86_64/` — canonical hardware-near implementation of all core modules: math, runtime, serial, ctype, TPM, WASM interpreter, kernel entry, kernel main.
-- `asm/test/` — test files. Must be migrated from C to self-hosted ASM runners. Currently C test harnesses provide the `main()` entry point and link against ASM `.o` files for freestanding testing.
-- `edgerun-zig/` — DEPRECATED. Being removed as part of the Zig toolchain elimination. Do not add new Zig code.
-- `asm/x86_64/blake3.asm` — project-owned x86_64 ASM BLAKE3 implementation. Replaces the former C implementation.
-- `Makefile` — owns x86_64 ASM builds and kernel images.
+- **The project's own language is the x86_64 assembly DSL defined in `asm/x86_64/macros.inc`** — `er_fn`, `er_fnstr`, `er_frame_push`, `er_push_all`, etc. This IS the dogfooding target. All host-side production code must be written in this DSL.
+- `asm/x86_64/` — canonical hardware-near implementation, organized by subsystem:
+  - Root: `macros.inc`, `wasm_defines.inc`, `entry.asm`, `kernel_main.asm`, `efi_entry.asm`, `linker.ld`, `efi_linker.ld`
+  - `drv/` — hardware drivers (serial, i8042, pci, virtio*, xhci, nvme, rtl8125, amdgpu, intel_*, i2c_hid, cros_ec, spi_flash, display, fb_text, etc.)
+  - `rt/` — runtime library (runtime.asm, math.asm, ctype.asm, clock.asm, bytes.asm)
+  - `crypto/` — blake3, preimage, identity, tor
+  - `wasm/` — interpreter + compiler (wasm_interpreter, wasm_decode, wasm_exec, wasm_compiler*)
+  - `net/` — net, arp, ipv4, tcp
+  - `tpm/` — tpm.asm, tpm_crb.asm, tpm_constants.inc
+  - `ui/` — ui_core, render_ir, sw_fb
+  - `object/` — object.asm, object_constants.inc
+- `asm/test/` — test files. Must be migrated from C to self-hosted ASM runners.
+- `asm/arm/pi/` — Raspberry Pi Zero W kernel, mailbox, EMMC, DWC2 USB.
+- `asm/host/` — Linux userspace host tools (Pi USB boot, ESP32 serial boot).
+- `edgerun-zig/` — app-side Zig frontend (compiles to WASM). DEPRECATED for host paths. Being replaced by the self-hosted WASM compiler (`asm/x86_64/wasm_compiler*.asm`).
+- `build.sh` — all build commands.
 
 ## External Dependencies (to eliminate)
 

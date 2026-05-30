@@ -28,71 +28,78 @@ elf64_h() { ${YASM} -f elf64   ${ASM_INC} -DHOSTED_TEST -o "$2" "$1" && test -f 
 link_cc() { ${CC} -ffreestanding -nostdlib -static -fno-stack-protector -g -o "$@"; }
 
 # ---- kernel objects (elf32) ----
-kobj() { elf32 "${ASM_DIR}/$1" "${ASM_BUILD}/kernel_$1"; }
+# kobj is unused; assembly done via assemble_kernel/assemble_kernel_efi
 
 KERNEL_ASM_SRCS="
-	blake3.asm
-	bytes.asm
-	clock.asm
-	ctype.asm
-	identity.asm
-	math.asm
-	runtime.asm
-	serial.asm
-	tpm.asm
-	tpm_crb.asm
-	cmos.asm
-	i8042.asm
-	cros_ec.asm
-	dw_i2c.asm
-	i2c_hid.asm
-	pci.asm
-	nvme.asm
-	amdgpu.asm
-	preimage.asm
-	display.asm
-	fb_text.asm
-	acpi.asm
-	xhci.asm
-	rtl8125.asm
-	bt.asm
-	virtio.asm
-	virtio_gpu.asm
-	virtio_net.asm
-	smn.asm
-	psp_mailbox.asm
-	psp_rom_armor.asm
-	spi_flash.asm
-	intel_sdhci.asm
-	intel_gpu.asm
-	net.asm
-	arp.asm
-	ipv4.asm
-	tcp.asm
+	crypto/blake3.asm
+	rt/bytes.asm
+	rt/clock.asm
+	rt/ctype.asm
+	crypto/identity.asm
+	rt/math.asm
+	rt/runtime.asm
+	drv/serial.asm
+	tpm/tpm.asm
+	tpm/tpm_crb.asm
+	drv/cmos.asm
+	drv/i8042.asm
+	drv/cros_ec.asm
+	drv/dw_i2c.asm
+	drv/i2c_hid.asm
+	drv/pci.asm
+	drv/nvme.asm
+	drv/amdgpu.asm
+	crypto/preimage.asm
+	drv/display.asm
+	drv/fb_text.asm
+	drv/acpi.asm
+	drv/xhci.asm
+	drv/rtl8125.asm
+	drv/bt.asm
+	drv/virtio.asm
+	drv/virtio_gpu.asm
+	drv/virtio_net.asm
+	drv/smn.asm
+	drv/psp_mailbox.asm
+	drv/psp_rom_armor.asm
+	drv/spi_flash.asm
+	drv/intel_sdhci.asm
+	drv/intel_gpu.asm
+	net/net.asm
+	net/arp.asm
+	net/ipv4.asm
+	net/tcp.asm
+	crypto/tor_ntor.asm
+	crypto/tor_aes.asm
+	crypto/tor_cell.asm
+	crypto/tor.asm
 	entry.asm
 "
 
 # ---- shared library objects (elf64, used by tests) ----
 SOBJS="
-	blake3.o
-	acpi.o
-	bytes.o
-	clock.o
-	ctype.o
-	identity.o
-	math.o
-	preimage.o
-	render_ir.o
-	runtime.o
-	serial.o
-	sw_fb.o
-	wasm_interpreter.o
-	wasm_module.o
-	wasm_compiler.o
-	wasm_compiler_source.o
-	ui_core.o
-	fb_text.o
-	object.o
+	crypto/blake3.o
+	drv/acpi.o
+	rt/bytes.o
+	rt/clock.o
+	rt/ctype.o
+	crypto/identity.o
+	rt/math.o
+	crypto/preimage.o
+	ui/render_ir.o
+	rt/runtime.o
+	drv/serial.o
+	ui/sw_fb.o
+	wasm/wasm_interpreter.o
+	wasm/wasm_module.o
+	wasm/wasm_compiler.o
+	wasm/wasm_compiler_source.o
+	wasm/wasm_compiler_helpers.o
+	wasm/wasm_compiler_char.o
+	wasm/wasm_compiler_emit.o
+	ui/ui_core.o
+	drv/fb_text.o
+	object/object.o
 "
 
 # ---- test_entry.o ----
@@ -110,17 +117,13 @@ assemble_shared() {
 	local missing=0
 	for o in ${SOBJS}; do
 		local base="${o%.o}"
+		local name="${base##*/}"
 		local src="${ASM_DIR}/${base}.asm"
-		local dst="${ASM_BUILD}/${o}"
+		local dst="${ASM_BUILD}/${name}.o"
 		if [ ! -f "$dst" ] || [ "$src" -nt "$dst" ] || [ "${ASM_DIR}/macros.inc" -nt "$dst" ]; then
 			elf64 "$src" "$dst"
 			echo "  AS  ${dst}"
 		fi
-	done
-	for o in acpi.o bytes.o blake3.o preimage.o; do
-		local base="${o%.o}"
-		# these may have extra deps — handled by simple timestamp check above
-		:
 	done
 }
 
@@ -128,8 +131,9 @@ assemble_shared() {
 assemble_kernel() {
 	for src in ${KERNEL_ASM_SRCS}; do
 		local base="${src%.asm}"
+		local name="${base##*/}"
 		local src_path="${ASM_DIR}/${src}"
-		local dst="${ASM_BUILD}/kernel_${base}.o"
+		local dst="${ASM_BUILD}/kernel_${name}.o"
 		if [ ! -f "$dst" ] || [ "$src_path" -nt "$dst" ] || [ "${ASM_DIR}/macros.inc" -nt "$dst" ]; then
 			elf32 "$src_path" "$dst"
 			echo "  AS  ${dst}"
@@ -148,11 +152,12 @@ assemble_kernel() {
 assemble_kernel_efi() {
 	for src in ${KERNEL_ASM_SRCS}; do
 		local base="${src%.asm}"
+		local name="${base##*/}"
 		local src_path="${ASM_DIR}/${src}"
-		if [ "$base" = "entry" ]; then
+		if [ "$name" = "entry" ]; then
 			src_path="${ASM_DIR}/efi_entry.asm"
 		fi
-		local dst="${ASM_BUILD}/kernel_efi_${base}.o"
+		local dst="${ASM_BUILD}/kernel_efi_${name}.o"
 		if [ ! -f "$dst" ] || [ "$src_path" -nt "$dst" ] || [ "${ASM_DIR}/macros.inc" -nt "$dst" ]; then
 			elf64 "$src_path" "$dst"
 			echo "  AS  ${dst}"
@@ -170,8 +175,9 @@ assemble_kernel_efi() {
 # ---- target helpers ----
 # serial_test.o and tpm_test.o need -DHOSTED_TEST
 hosted_test_obj() {
-	local name="$1"
-	local src="${ASM_DIR}/${name}.asm"
+	local path="$1"
+	local name="${path##*/}"
+	local src="${ASM_DIR}/${path}.asm"
 	local dst="${ASM_BUILD}/${name}_test.o"
 	if [ ! -f "$dst" ] || [ "$src" -nt "$dst" ] || [ "${ASM_DIR}/macros.inc" -nt "$dst" ]; then
 		elf64_h "$src" "$dst"
@@ -189,15 +195,21 @@ test_via_cc() {
 	for dep; do
 		local d_path="${ASM_BUILD}/${dep}"
 		if [ "${dep}" = "serial_test.o" ]; then
-			hosted_test_obj "serial"
+			hosted_test_obj "drv/serial"
 		elif [ "${dep}" = "tpm_test.o" ]; then
-			hosted_test_obj "tpm"
+			hosted_test_obj "tpm/tpm"
 		elif [ "${dep}" = "tpm_crb_test.o" ]; then
-			hosted_test_obj "tpm_crb"
+			hosted_test_obj "tpm/tpm_crb"
 		elif [ ! -f "$d_path" ]; then
 			local base="${dep%.o}"
-			local s="${ASM_DIR}/${base}.asm"
-			if [ -f "$s" ]; then
+			local s=""
+			for d in drv rt crypto wasm net tpm ui object ""; do
+				local candidate="${ASM_DIR}/${d}${d:+/}${base}.asm"
+				if [ -f "$candidate" ]; then
+					s="$candidate"; break
+				fi
+			done
+			if [ -n "$s" ]; then
 				elf64 "$s" "$d_path"
 				echo "  AS  ${d_path}"
 			else
@@ -221,8 +233,8 @@ cmd_kernel() {
 	assemble_kernel
 	local objs=""
 	for src in ${KERNEL_ASM_SRCS}; do
-		local base="${src%.asm}"
-		objs="${objs} ${ASM_BUILD}/kernel_${base}.o"
+		local name="${src%.asm}"; name="${name##*/}"
+		objs="${objs} ${ASM_BUILD}/kernel_${name}.o"
 	done
 	objs="${objs} ${ASM_BUILD}/kernel_main_elf32.o"
 	ld -m elf_i386 -T "${KERNEL_LD}" -o "${KERNEL_ELF}" ${objs}
@@ -244,8 +256,8 @@ cmd_kernel_efi() {
 	assemble_kernel_efi
 	local objs=""
 	for src in ${KERNEL_ASM_SRCS}; do
-		local base="${src%.asm}"
-		objs="${objs} ${ASM_BUILD}/kernel_efi_${base}.o"
+		local name="${src%.asm}"; name="${name##*/}"
+		objs="${objs} ${ASM_BUILD}/kernel_efi_${name}.o"
 	done
 	objs="${objs} ${ASM_BUILD}/kernel_main_efi64.o"
 	ld -m i386pep -T "${KERNEL_EFI_LD}" --subsystem 10 --image-base 0x100000 \
@@ -335,15 +347,15 @@ cmd_kernel_bt_test() {
 cmd_kernel_tpm_live_test() {
 	assemble_kernel
 	# Assemble tpm_live_test_main.asm as ELF32 (has [BITS 64] via macros.inc)
-	local lt_src="${ASM_DIR}/tpm_live_test_main.asm"
+	local lt_src="${ASM_DIR}/tpm/tpm_live_test_main.asm"
 	local lt_dst="${ASM_BUILD}/kernel_tpm_live_test_main_elf32.o"
 	elf32 "$lt_src" "$lt_dst"
 	echo "  AS  ${lt_dst}"
 	# Link with live test main instead of kernel_main_elf32.o
 	local objs=""
 	for src in ${KERNEL_ASM_SRCS}; do
-		local base="${src%.asm}"
-		objs="${objs} ${ASM_BUILD}/kernel_${base}.o"
+		local name="${src%.asm}"; name="${name##*/}"
+		objs="${objs} ${ASM_BUILD}/kernel_${name}.o"
 	done
 	objs="${objs} ${ASM_BUILD}/kernel_tpm_live_test_main_elf32.o"
 	ld -m elf_i386 -T "${KERNEL_LD}" -o "${KERNEL_ELF}" ${objs}
@@ -393,6 +405,8 @@ cmd_test() {
 	cmd_test_sw_fb
 	cmd_test_wasm_compiler
 	cmd_test_wasm_pipeline
+	cmd_test_wasm_compile_and_run
+	cmd_test_wasm_compile_minimal
 	cmd_test_object
 }
 
@@ -405,7 +419,7 @@ cmd_test_ctype() {
 	fi
 	local ctype_o="${ASM_BUILD}/ctype.o"
 	if [ ! -f "$ctype_o" ]; then
-		elf64 "${ASM_DIR}/ctype.asm" "$ctype_o"
+		elf64 "${ASM_DIR}/rt/ctype.asm" "$ctype_o"
 	fi
 	ld -nostdlib -static -o "$bin" "$obj" "$ctype_o"
 	echo "  LD  ${bin}"
@@ -421,7 +435,7 @@ cmd_test_sw_fb() {
 	fi
 	local sw_fb_o="${ASM_BUILD}/sw_fb.o"
 	if [ ! -f "$sw_fb_o" ]; then
-		elf64 "${ASM_DIR}/sw_fb.asm" "$sw_fb_o"
+		elf64 "${ASM_DIR}/ui/sw_fb.asm" "$sw_fb_o"
 	fi
 	ld -nostdlib -static -o "$bin" "$obj" "$sw_fb_o"
 	echo "  LD  ${bin}"
@@ -433,8 +447,10 @@ cmd_test_runtime()  { test_via_cc "runtime"; }
 cmd_test_serial()   { test_via_cc "serial"   "serial_test.o"; }
 cmd_test_tpm()      { test_via_cc "tpm"      "tpm_test.o" "tpm_crb_test.o"; }
 cmd_test_wasm()     { TEST_TIMEOUT=5 test_via_cc "wasm"     "wasm_interpreter.o"; }
-cmd_test_wasm_compiler() { TEST_TIMEOUT=10 test_via_cc "wasm_compiler" "wasm_compiler.o" "wasm_compiler_source.o"; }
+cmd_test_wasm_compiler() { TEST_TIMEOUT=10 test_via_cc "wasm_compiler" "wasm_compiler.o" "wasm_compiler_source.o" "wasm_compiler_helpers.o" "wasm_compiler_char.o" "wasm_compiler_emit.o"; }
 cmd_test_wasm_pipeline() { TEST_TIMEOUT=5 test_via_cc "wasm_pipeline" "wasm_interpreter.o" "wasm_module.o"; }
+cmd_test_wasm_compile_and_run() { TEST_TIMEOUT=15 test_via_cc "wasm_compile_and_run" "wasm_compiler.o" "wasm_compiler_source.o" "wasm_compiler_helpers.o" "wasm_compiler_char.o" "wasm_compiler_emit.o" "wasm_interpreter.o" "wasm_module.o"; }
+cmd_test_wasm_compile_minimal() { TEST_TIMEOUT=10 test_via_cc "wasm_compile_minimal" "wasm_compiler.o" "wasm_compiler_source.o" "wasm_compiler_helpers.o" "wasm_compiler_char.o" "wasm_compiler_emit.o"; }
 cmd_test_blake3()   { test_via_cc "blake3"   "blake3.o"; }
 cmd_test_bytes()    { test_via_cc "bytes"    "bytes.o"; }
 cmd_test_clock()    { test_via_cc "clock"    "clock.o" "bytes.o"; }
@@ -452,11 +468,11 @@ cmd_test_render_ir() {
 	fi
 	local render_ir_o="${ASM_BUILD}/render_ir.o"
 	if [ ! -f "$render_ir_o" ]; then
-		elf64 "${ASM_DIR}/render_ir.asm" "$render_ir_o"
+		elf64 "${ASM_DIR}/ui/render_ir.asm" "$render_ir_o"
 	fi
 	local sw_fb_o="${ASM_BUILD}/sw_fb.o"
 	if [ ! -f "$sw_fb_o" ]; then
-		elf64 "${ASM_DIR}/sw_fb.asm" "$sw_fb_o"
+		elf64 "${ASM_DIR}/ui/sw_fb.asm" "$sw_fb_o"
 	fi
 	ld -nostdlib -static -o "$bin" "$obj" "$render_ir_o" "$sw_fb_o"
 	echo "  LD  ${bin}"
@@ -555,6 +571,8 @@ EdgeRun build targets:
   test-sw-fb          Run software framebuffer test (self-hosted ASM runner)
   test-wasm-compiler  Run WASM compiler test
   test-wasm-pipeline  Run WASM module pipeline test
+  test-wasm-compile-and-run  Run WASM compile + pipeline integration test
+  test-wasm-compile-minimal  Run minimal compile + run test
   test-object         Run object serialization test
   pi-kernel           Build Pi Zero W kernel.img (ARMv6)
   pi-usb-boot         Build Pi USB boot host tool (x86_64)
@@ -592,6 +610,8 @@ case "${1:-help}" in
 	test-sw-fb)     cmd_test_sw_fb ;;
 	test-wasm-compiler) cmd_test_wasm_compiler ;;
 	test-wasm-pipeline) cmd_test_wasm_pipeline ;;
+	test-wasm-compile-and-run) cmd_test_wasm_compile_and_run ;;
+	test-wasm-compile-minimal) cmd_test_wasm_compile_minimal ;;
 	test-object)    cmd_test_object ;;
 	pi-kernel)      cmd_pi_kernel ;;
 	pi-usb-boot)       cmd_pi_usb_boot ;;

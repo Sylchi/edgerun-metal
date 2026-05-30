@@ -1,17 +1,14 @@
 const std = @import("std");
 const bytes = @import("bytes.zig");
-const clock = @import("clock.zig");
 const ui = @import("ui.zig");
-const object = @import("object.zig");
+const icon = @import("icon.zig");
 const component_union = @import("ui/components/Component.zig");
-const stack_component = @import("ui/components/Stack.zig");
-const row_item = @import("ui/components/RowItem.zig");
+const RowItem = @import("ui/components/RowItem.zig").RowItem;
+const Stack = @import("ui/components/Stack.zig").Stack;
+const IconComponent = @import("ui/components/Icon.zig");
+const RenderOptions = @import("ui_component_common.zig").RenderOptions;
 
 const linux = std.os.linux;
-const posix = std.posix;
-
-const Component = component_union.Component;
-const Stack = stack_component.Stack(Component);
 
 pub const Error = error{
     ReadFailed,
@@ -19,10 +16,28 @@ pub const Error = error{
 };
 
 const row_count = 10;
-const component_count = row_count + 1; // title + rows
-
 const detail_bytes = 80;
 const state_bytes = row_count * detail_bytes;
+
+const RowDef = struct {
+    icon_kind: icon.Icon,
+    title: []const u8,
+};
+
+const rows = [_]RowDef{
+    .{ .icon_kind = .device_desktop, .title = "Platform" },
+    .{ .icon_kind = .temperature,    .title = "CPU Temp" },
+    .{ .icon_kind = .database,       .title = "Memory" },
+    .{ .icon_kind = .battery,        .title = "Battery" },
+    .{ .icon_kind = .keyboard,       .title = "Keyboard" },
+    .{ .icon_kind = .server,         .title = "EC" },
+    .{ .icon_kind = .cpu,            .title = "AMDGPU" },
+    .{ .icon_kind = .shield_check,   .title = "TPM" },
+    .{ .icon_kind = .device_desktop, .title = "PCI Devices" },
+    .{ .icon_kind = .network,        .title = "Network" },
+};
+
+const Component = component_union.Component;
 
 pub const State = struct {
     details: [state_bytes]u8 = [_]u8{0} ** state_bytes,
@@ -30,123 +45,99 @@ pub const State = struct {
     pub fn refresh(self: *State) void {
         var offset: usize = 0;
 
-        // Row 0: System
         writeDetail(self.details[offset..][0..detail_bytes], "System: Framework 13 AMD 7840U");
         offset += detail_bytes;
 
-        // Row 1: CPU Temperature
         var cpu_buf: [detail_bytes]u8 = [_]u8{0} ** detail_bytes;
         if (readFirstThermal(&cpu_buf)) |_| {
-            writeDetail(self.details[offset..][0..detail_bytes], @as([]const u8, trimBuf(&cpu_buf)));
+            writeDetail(self.details[offset..][0..detail_bytes], trimBuf(&cpu_buf));
         } else |_| {
-            writeDetail(self.details[offset..][0..detail_bytes], "CPU temp: N/A");
+            writeDetail(self.details[offset..][0..detail_bytes], "N/A");
         }
         offset += detail_bytes;
 
-        // Row 2: Memory
         var mem_buf: [detail_bytes]u8 = [_]u8{0} ** detail_bytes;
         if (readMem(&mem_buf)) |_| {
             writeDetail(self.details[offset..][0..detail_bytes], trimBuf(&mem_buf));
         } else |_| {
-            writeDetail(self.details[offset..][0..detail_bytes], "Memory: N/A");
+            writeDetail(self.details[offset..][0..detail_bytes], "N/A");
         }
         offset += detail_bytes;
 
-        // Row 3: Battery
         var bat_buf: [detail_bytes]u8 = [_]u8{0} ** detail_bytes;
         if (readBattery(&bat_buf)) |_| {
             writeDetail(self.details[offset..][0..detail_bytes], trimBuf(&bat_buf));
         } else |_| {
-            writeDetail(self.details[offset..][0..detail_bytes], "Battery: N/A");
+            writeDetail(self.details[offset..][0..detail_bytes], "N/A");
         }
         offset += detail_bytes;
 
-        // Row 4: Keyboard Backlight
         var kbd_buf: [detail_bytes]u8 = [_]u8{0} ** detail_bytes;
         if (readKbdBacklight(&kbd_buf)) |_| {
             writeDetail(self.details[offset..][0..detail_bytes], trimBuf(&kbd_buf));
         } else |_| {
-            writeDetail(self.details[offset..][0..detail_bytes], "KBD backlight: N/A");
+            writeDetail(self.details[offset..][0..detail_bytes], "N/A");
         }
         offset += detail_bytes;
 
-        // Row 5: EC
         var ec_buf: [detail_bytes]u8 = [_]u8{0} ** detail_bytes;
         if (readEcInfo(&ec_buf)) |_| {
             writeDetail(self.details[offset..][0..detail_bytes], trimBuf(&ec_buf));
         } else |_| {
-            writeDetail(self.details[offset..][0..detail_bytes], "EC: N/A");
+            writeDetail(self.details[offset..][0..detail_bytes], "N/A");
         }
         offset += detail_bytes;
 
-        // Row 6: AMDGPU
         var gpu_buf: [detail_bytes]u8 = [_]u8{0} ** detail_bytes;
         if (readAmdgpu(&gpu_buf)) |_| {
             writeDetail(self.details[offset..][0..detail_bytes], trimBuf(&gpu_buf));
         } else |_| {
-            writeDetail(self.details[offset..][0..detail_bytes], "AMDGPU: N/A");
+            writeDetail(self.details[offset..][0..detail_bytes], "N/A");
         }
         offset += detail_bytes;
 
-        // Row 7: TPM
         var tpm_buf: [detail_bytes]u8 = [_]u8{0} ** detail_bytes;
         if (readTpmInfo(&tpm_buf)) |_| {
             writeDetail(self.details[offset..][0..detail_bytes], trimBuf(&tpm_buf));
         } else |_| {
-            writeDetail(self.details[offset..][0..detail_bytes], "TPM: N/A");
+            writeDetail(self.details[offset..][0..detail_bytes], "N/A");
         }
         offset += detail_bytes;
 
-        // Row 8: PCI devices
         var pci_buf: [detail_bytes]u8 = [_]u8{0} ** detail_bytes;
         if (readPciCount(&pci_buf)) |_| {
             writeDetail(self.details[offset..][0..detail_bytes], trimBuf(&pci_buf));
         } else |_| {
-            writeDetail(self.details[offset..][0..detail_bytes], "PCI: N/A");
+            writeDetail(self.details[offset..][0..detail_bytes], "N/A");
         }
         offset += detail_bytes;
 
-        // Row 9: Network
         var net_buf: [detail_bytes]u8 = [_]u8{0} ** detail_bytes;
         if (readNetwork(&net_buf)) |_| {
             writeDetail(self.details[offset..][0..detail_bytes], trimBuf(&net_buf));
         } else |_| {
-            writeDetail(self.details[offset..][0..detail_bytes], "Network: N/A");
+            writeDetail(self.details[offset..][0..detail_bytes], "N/A");
         }
     }
 
-    pub fn render(self: *State, scene: *ui.Scene, bounds: ui.Rect, style: ui.Style) !void {
-        var cursor = ui.LinearCursor.init(bounds, .column, 4);
-        const rows = [_]RowInfo{
-            .{ .title = "Platform" },
-            .{ .title = "CPU Temp" },
-            .{ .title = "Memory" },
-            .{ .title = "Battery" },
-            .{ .title = "Keyboard Light" },
-            .{ .title = "EC" },
-            .{ .title = "AMDGPU" },
-            .{ .title = "TPM" },
-            .{ .title = "PCI Devices" },
-            .{ .title = "Network" },
-        };
-
-        for (&rows, 0..) |*row, i| {
-            const detail_str = self.detail(i);
-            const panel_h: f32 = 36;
-            const panel_bounds = cursor.take(panel_h);
-            if (!panel_bounds.usable()) break;
-
-            try scene.pushRect(panel_bounds, style.panel, .fill, 4, 0);
-            const inner = panel_bounds.insetUniform(4);
-            if (!inner.valid()) continue;
-
-            const title_h: f32 = 14;
-            try scene.pushText(ui.Rect.init(inner.x, inner.y, inner.w, title_h), row.title, style.accent);
-            if (inner.h > title_h + 2) {
-                const detail_y = inner.y + title_h + 2;
-                try scene.pushText(ui.Rect.init(inner.x, detail_y, inner.w, inner.h - title_h - 2), detail_str, style.text);
-            }
+    pub fn render(self: *State, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) !void {
+        var children: [1 + row_count]Component = undefined;
+        children[0] = .{ .text = .{ .value = "Hardware Overview" } };
+        for (&rows, 0..) |row, i| {
+            children[i + 1] = .{ .row_item = .{
+                .id = @intCast(i),
+                .title = row.title,
+                .detail = self.detail(i),
+                .leading_icon = IconComponent.IconSlot.named(.leading, row.icon_kind),
+            } };
         }
+        const stack = Stack(Component){
+            .axis = .column,
+            .gap = 4,
+            .padding = 8,
+            .children = &children,
+        };
+        try stack.render(scene, bounds, options);
     }
 
     fn detail(self: *State, row: usize) []const u8 {
@@ -156,10 +147,6 @@ pub const State = struct {
         while (len < raw.len and raw[len] != 0) : (len += 1) {}
         return raw[0..len];
     }
-};
-
-const RowInfo = struct {
-    title: []const u8,
 };
 
 fn writeDetail(out: []u8, value: []const u8) void {
@@ -174,21 +161,17 @@ fn trimBuf(buf: *[detail_bytes]u8) []const u8 {
     return buf[0..len];
 }
 
-// ─── Sysfs readers ───────────────────────────────────────────
-
 fn readSysfsStr(path: []const u8, buf: []u8) !usize {
-    const cpath = toC(path);
-    const rc = linux.openat(linux.AT.FDCWD, cpath.ptr, linux.O{}, 0);
+    var path_buf: [256]u8 = [_]u8{0} ** 256;
+    if (path.len >= path_buf.len) return error.ReadFailed;
+    @memcpy(path_buf[0..path.len], path);
+    const rc = linux.openat(linux.AT.FDCWD, @ptrCast(&path_buf), linux.O{}, 0);
     if (@as(isize, @bitCast(rc)) < 0) return error.ReadFailed;
     const fd = @as(i32, @intCast(rc));
     defer _ = linux.close(fd);
     const n = linux.read(fd, buf.ptr, buf.len);
     if (n < 0) return error.ReadFailed;
     return @intCast(n);
-}
-
-fn toC(s: []const u8) [:0]const u8 {
-    return @as([:0]const u8, @ptrCast(s));
 }
 
 fn readFirstThermal(buf: *[detail_bytes]u8) !void {
@@ -199,7 +182,7 @@ fn readFirstThermal(buf: *[detail_bytes]u8) !void {
         const trimmed = std.mem.trimEnd(u8, tmp[0..tmp_n], &[_]u8{ '\n', ' ', '\r' });
         const raw = std.fmt.parseUnsigned(u32, trimmed, 10) catch return error.ParseFailed;
         const celsius = @as(f32, @floatFromInt(raw)) / 1000.0;
-        writeBuf(buf, "CPU: {d:5.1} °C", .{celsius});
+        writeBuf(buf, "{d:5.1} °C", .{celsius});
         return;
     }
     return error.ReadFailed;
@@ -319,7 +302,6 @@ fn readNetwork(buf: *[detail_bytes]u8) !void {
         const ifname = std.mem.trim(u8, line[0..colon], &[_]u8{ ' ', '\t' });
         if (std.mem.eql(u8, ifname, "lo")) continue;
         total += 1;
-        // Count non-loopback as "up" if it has nonzero bytes
         const parts = std.mem.trim(u8, line[colon + 1 ..], &[_]u8{ ' ', '\t' });
         const space = std.mem.indexOfScalar(u8, parts, ' ') orelse parts.len;
         const rx_bytes = std.fmt.parseUnsigned(u64, parts[0..space], 10) catch 0;

@@ -2,6 +2,7 @@
 ; Exits via syscall: 0 = pass, 1 = fail.
 
 %include "x86_64/macros.inc"
+%include "test/test_macros.inc"
 
 extern er_render_ir_channel
 extern er_render_ir_pack_channel
@@ -23,35 +24,6 @@ extern er_render_ir_push_textured_quad
 %define RS  15
 %define VS  8
 %define IS  9
-
-; Test macro: increment passed if eax == expected
-; (expected in edx for 64-bit comparison, eax for 32-bit)
-%macro TEST 0
-    cmp     eax, edx
-    jne     %%fail
-    inc     qword [rel passed]
-%%fail:
-    inc     qword [rel total]
-%endmacro
-
-; Same but 64-bit
-%macro TESTQ 0
-    cmp     rax, rdx
-    jne     %%fail
-    inc     qword [rel passed]
-%%fail:
-    inc     qword [rel total]
-%endmacro
-
-; Memory compare: rdi=rsi=pointers, ecx=count, inc passed if equal
-%macro TEST_MEM 0
-    cld
-    repe    cmpsb
-    jne     %%fail
-    inc     qword [rel passed]
-%%fail:
-    inc     qword [rel total]
-%endmacro
 
 SECTION .rodata
 align 16

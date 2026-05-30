@@ -1,0 +1,268 @@
+const std = @import("std");
+const protocol = @import("protocol.zig");
+const messages = @import("messages.zig");
+
+const linux = std.os.linux;
+const posix = std.posix;
+
+pub const max_socket_read_bytes: usize = 8192;
+pub const max_message_bytes: usize = 512;
+
+pub const WaylandClient = struct {
+    fd: posix.fd_t,
+    state: protocol.WaylandState = .{},
+    read_buffer: [max_socket_read_bytes]u8 = undefined,
+    read_len: usize = 0,
+    object_kinds: [32]protocol.ObjectKind = [_]protocol.ObjectKind{.unknown} ** 32,
+
+    pub fn connect(io: std.Io, path: []const u8) !WaylandClient {
+        const address = try std.Io.net.UnixAddress.init(path);
+        const stream = try std.Io.net.UnixAddress.connect(&address, io);
+        var client = WaylandClient{ .fd = stream.socket.handle };
+        client.object_kinds[protocol.display_id] = .display;
+        client.object_kinds[protocol.registry_id] = .registry;
+        client.object_kinds[protocol.sync_callback_id] = .callback;
+        client.object_kinds[protocol.compositor_id] = .compositor;
+        client.object_kinds[protocol.shm_id] = .shm;
+        client.object_kinds[protocol.wm_base_id] = .wm_base;
+        client.object_kinds[protocol.surface_id] = .surface;
+        client.object_kinds[protocol.xdg_surface_id] = .xdg_surface;
+        client.object_kinds[protocol.xdg_toplevel_id] = .xdg_toplevel;
+        client.object_kinds[protocol.seat_id] = .seat;
+        client.object_kinds[protocol.pointer_id] = .pointer;
+        client.object_kinds[protocol.linux_dmabuf_id] = .linux_dmabuf;
+        client.object_kinds[protocol.dmabuf_params_id] = .dmabuf_params;
+        client.object_kinds[protocol.dmabuf_wl_buffer_id] = .dmabuf_buffer;
+        client.object_kinds[protocol.xdg_decoration_manager_id] = .decoration_manager;
+        client.object_kinds[protocol.xdg_toplevel_decoration_id] = .toplevel_decoration;
+        return client;
+    }
+
+    pub fn close(self: *WaylandClient, io: std.Io) void {
+        _ = io;
+        protocol.closeFd(self.fd);
+    }
+
+    pub fn bootstrap(self: *WaylandClient) !void {
+        try self.send(messages.makeGetRegistry);
+        try self.send(messages.makeSync);
+        while (!self.state.registry_done) try self.readEventsBlocking();
+        const compositor = self.state.registry.find(.compositor) orelse return error.MissingWaylandCompositor;
+        const shm = self.state.registry.find(.shm) orelse return error.MissingWaylandShm;
+        const wm_base = self.state.registry.find(.wm_base) orelse return error.MissingXdgWmBase;
+        const seat = self.state.registry.find(.seat);
+        try self.sendBind(compositor.name, "wl_compositor", @min(compositor.version, 4), protocol.compositor_id);
+        try self.sendBind(shm.name, "wl_shm", @min(shm.version, 1), protocol.shm_id);
+        try self.sendBind(wm_base.name, "xdg_wm_base", @min(wm_base.version, 1), protocol.wm_base_id);
+        if (seat) |value| {
+            try self.sendBind(value.name, "wl_seat", value.version, protocol.seat_id);
+        }
+        try self.send(messages.makeSync);
+        self.state.registry_done = false;
+        while (!self.state.registry_done) try self.readEventsBlocking();
+        if (self.state.seat_has_pointer) {
+            try self.send(messages.makeGetPointer);
+            try self.send(messages.makeSync);
+            self.state.registry_done = false;
+            while (!self.state.registry_done) try self.readEventsBlocking();
+        }
+    }
+
+    pub fn createWindow(self: *WaylandClient, width: u32, height: u32) !void {
+        _ = width;
+        _ = height;
+        try self.send(messages.makeCreateSurface);
+        try self.send(messages.makeGetXdgSurface);
+        try self.send(messages.makeGetToplevel);
+        try self.sendTitle("EdgeRun Native Wayland");
+        try self.sendAppId("dev.edgerun.Native");
+        try self.send(messages.makeSurfaceCommit);
+        while (!self.state.configured) try self.readEventsBlocking();
+    }
+
+    pub fn eventLoop(self: *WaylandClient, seconds: u32, app: anytype) !void {
+        var remaining_ms: i32 = @intCast(seconds * std.time.ms_per_s);
+        while (!self.state.closed and remaining_ms > 0) {
+            const step_ms: i32 = @min(remaining_ms, 100);
+            var fds = [_]posix.pollfd{.{ .fd = self.fd, .events = linux.POLL.IN, .revents = 0 }};
+            const ready = try posix.poll(&fds, step_ms);
+            if (ready != 0 and (fds[0].revents & linux.POLL.IN) != 0) try self.readEvents(app);
+            remaining_ms -= step_ms;
+        }
+    }
+
+    pub fn createShmBuffer(self: *WaylandClient, bytes: usize, width: u32, height: u32, stride: u32) !protocol.ShmBuffer {
+        const fd = try posix.memfd_create("edgerun-wayland-frame", linux.MFD.CLOEXEC);
+        errdefer protocol.closeFd(fd);
+        try messages.truncateFd(fd, bytes);
+        const mapped = try posix.mmap(null, bytes, .{ .READ = true, .WRITE = true }, .{ .TYPE = .SHARED }, fd, 0);
+        errdefer posix.munmap(mapped);
+        try self.sendCreatePool(fd, @intCast(bytes));
+        try self.sendCreateBuffer(width, height, stride);
+        try self.send(messages.makeDestroyPool);
+        return .{ .fd = fd, .memory = mapped, .width = width, .height = height, .stride = stride };
+    }
+
+    pub fn createDmabufBuffer(self: *WaylandClient, import: protocol.DmabufImport) !void {
+        if (!import.valid()) return error.InvalidDmabufImport;
+        try self.bindDmabuf();
+        try self.send(messages.makeDmabufCreateParams);
+        try self.sendDmabufAddPlane(import);
+        try self.sendDmabufCreateImmediate(import.width, import.height, import.format);
+    }
+
+    fn bindDmabuf(self: *WaylandClient) !void {
+        if (self.state.dmabuf_bound) return;
+        const global = self.state.registry.find(.linux_dmabuf) orelse return error.MissingWaylandDmabuf;
+        try self.sendBind(global.name, "zwp_linux_dmabuf_v1", @min(global.version, 4), protocol.linux_dmabuf_id);
+        try self.send(messages.makeSync);
+        self.state.registry_done = false;
+        while (!self.state.registry_done) try self.readEventsBlocking();
+        self.state.dmabuf_bound = true;
+    }
+
+    pub fn attachCommit(self: *WaylandClient, width: u32, height: u32) !void {
+        try self.sendAttach(protocol.wl_buffer_id);
+        try self.sendDamage(width, height);
+        try self.send(messages.makeSurfaceCommit);
+    }
+
+    pub fn attachCommitRect(self: *WaylandClient, rect: protocol.PixelRect) !void {
+        try self.sendAttach(protocol.wl_buffer_id);
+        try self.sendDamageRect(rect);
+        try self.send(messages.makeSurfaceCommit);
+    }
+
+    pub fn attachDmabufCommit(self: *WaylandClient, width: u32, height: u32) !void {
+        try self.sendAttach(protocol.dmabuf_wl_buffer_id);
+        try self.sendDamage(width, height);
+        try self.send(messages.makeSurfaceCommit);
+    }
+
+    fn send(self: WaylandClient, comptime maker: fn ([]u8) anyerror![]const u8) !void {
+        var buffer: [max_message_bytes]u8 = undefined;
+        try messages.writeAll(self.fd, try maker(&buffer));
+    }
+
+    fn sendBind(self: WaylandClient, name: u32, interface: []const u8, version: u32, new_id: u32) !void {
+        var buffer: [max_message_bytes]u8 = undefined;
+        const bytes = try messages.makeBind(&buffer, name, interface, version, new_id);
+        try messages.writeAll(self.fd, bytes);
+    }
+
+    fn sendTitle(self: WaylandClient, title: []const u8) !void {
+        var buffer: [max_message_bytes]u8 = undefined;
+        const bytes = try messages.makeSetTitle(&buffer, title);
+        try messages.writeAll(self.fd, bytes);
+    }
+
+    fn sendAppId(self: WaylandClient, app_id: []const u8) !void {
+        var buffer: [max_message_bytes]u8 = undefined;
+        const bytes = try messages.makeSetAppId(&buffer, app_id);
+        try messages.writeAll(self.fd, bytes);
+    }
+
+    pub fn sendMove(self: WaylandClient, serial: u32) !void {
+        var buffer: [max_message_bytes]u8 = undefined;
+        try messages.writeAll(self.fd, try messages.makeMove(&buffer, serial));
+    }
+
+    pub fn sendMinimize(self: WaylandClient) !void {
+        var buffer: [max_message_bytes]u8 = undefined;
+        try messages.writeAll(self.fd, try messages.makeSetMinimized(&buffer));
+    }
+
+    pub fn sendHidePointerCursor(self: WaylandClient, serial: u32) !void {
+        var buffer: [max_message_bytes]u8 = undefined;
+        try messages.writeAll(self.fd, try messages.makeHidePointerCursor(&buffer, serial));
+    }
+
+    fn sendDamage(self: WaylandClient, width: u32, height: u32) !void {
+        var buffer: [max_message_bytes]u8 = undefined;
+        try messages.writeAll(self.fd, try messages.makeDamageBuffer(&buffer, width, height));
+    }
+
+    fn sendDamageRect(self: WaylandClient, rect: protocol.PixelRect) !void {
+        var buffer: [max_message_bytes]u8 = undefined;
+        try messages.writeAll(self.fd, try messages.makeDamageBufferRect(&buffer, rect));
+    }
+
+    fn sendAttach(self: WaylandClient, buffer_id: u32) !void {
+        var buffer: [max_message_bytes]u8 = undefined;
+        try messages.writeAll(self.fd, try messages.makeAttach(&buffer, buffer_id));
+    }
+
+    fn sendCreatePool(self: WaylandClient, fd: posix.fd_t, bytes: i32) !void {
+        var buffer: [max_message_bytes]u8 = undefined;
+        const msg = try messages.makeCreatePool(&buffer, bytes);
+        try messages.sendFd(self.fd, msg, fd);
+    }
+
+    fn sendCreateBuffer(self: WaylandClient, width: u32, height: u32, stride: u32) !void {
+        var buffer: [max_message_bytes]u8 = undefined;
+        try messages.writeAll(self.fd, try messages.makeCreateBuffer(&buffer, width, height, stride));
+    }
+
+    fn sendDmabufAddPlane(self: WaylandClient, import: protocol.DmabufImport) !void {
+        var buffer: [max_message_bytes]u8 = undefined;
+        const bytes = try messages.makeDmabufAddPlane(&buffer, import.plane_index, import.offset, import.stride, import.modifier);
+        try messages.sendFd(self.fd, bytes, import.fd);
+    }
+
+    fn sendDmabufCreateImmediate(self: WaylandClient, width: u32, height: u32, format: u32) !void {
+        var buffer: [max_message_bytes]u8 = undefined;
+        try messages.writeAll(self.fd, try messages.makeDmabufCreateImmediate(&buffer, width, height, format));
+    }
+
+    fn readEventsBlocking(self: *WaylandClient) !void {
+        const n = try posix.read(self.fd, self.read_buffer[self.read_len..]);
+        if (n == 0) return error.WaylandConnectionClosed;
+        self.read_len += n;
+        var offset: usize = 0;
+        while (messages.nextMessage(self.read_buffer[offset..self.read_len])) |msg| {
+            try self.replyToMessage(self.object_kinds[msg.object_id], msg);
+            try messages.handleMessage(&self.state, self.object_kinds[msg.object_id], msg);
+            offset += msg.payload.len + 8;
+        }
+        if (offset != 0) {
+            std.mem.copyForwards(u8, self.read_buffer[0 .. self.read_len - offset], self.read_buffer[offset..self.read_len]);
+            self.read_len -= offset;
+        }
+    }
+
+    pub fn readEvents(self: *WaylandClient, app: anytype) !void {
+        const n = try posix.read(self.fd, self.read_buffer[self.read_len..]);
+        if (n == 0) return error.WaylandConnectionClosed;
+        self.read_len += n;
+        var offset: usize = 0;
+        var needs_render = false;
+        while (messages.nextMessage(self.read_buffer[offset..self.read_len])) |msg| {
+            const kind = self.object_kinds[msg.object_id];
+            try self.replyToMessage(kind, msg);
+            try messages.handleMessage(&self.state, kind, msg);
+            needs_render = (try app.handleWaylandInput(self, kind, msg)) or needs_render;
+            offset += msg.payload.len + 8;
+        }
+        if (offset != 0) {
+            std.mem.copyForwards(u8, self.read_buffer[0 .. self.read_len - offset], self.read_buffer[offset..self.read_len]);
+            self.read_len -= offset;
+        }
+        if (needs_render) app.renderSafe(self);
+    }
+
+    fn replyToMessage(self: WaylandClient, kind: protocol.ObjectKind, message: protocol.Message) !void {
+        if (message.payload.len < 4) return;
+        const serial = std.mem.readInt(u32, message.payload[0..4], .little);
+        switch (kind) {
+            .wm_base => if (message.opcode == protocol.xdg_wm_base_ping_event) {
+                var buffer: [max_message_bytes]u8 = undefined;
+                try messages.writeAll(self.fd, try messages.makePong(&buffer, serial));
+            },
+            .xdg_surface => if (message.opcode == protocol.xdg_surface_configure_event) {
+                var buffer: [max_message_bytes]u8 = undefined;
+                try messages.writeAll(self.fd, try messages.makeAckConfigure(&buffer, serial));
+            },
+            else => {},
+        }
+    }
+};

@@ -1,6 +1,21 @@
 # EdgeRun
 
-EdgeRun is a self-compiling app system with zero dependency chains. Current prodcution asset in about 5MB expected to shrink while still a lot of the features will be added. Goal is simple, computers do what they are good at which is determenistically moving bytes, data is controlled by its real owners, zero waste. 
+EdgeRun is a self-compiling app system with zero dependency chains.
+
+The repository has two distinct code worlds with a hard boundary:
+
+- **Host-side code** — x86_64 assembly using the project's own macro DSL
+  (`asm/x86_64/macros.inc`). This owns the kernel, drivers, boot path, PCI, MMIO,
+  serial, TPM, framebuffer, interrupt management, and the WASM interpreter.
+  No C, no Zig, no external runtime. Built with `yasm` + `ld` via `build.sh`.
+- **App-side code** — Zig, compiled to WASM, running inside the EdgeRun WASM
+  interpreter. Apps must have zero host assumptions: no syscalls, no libc,
+  no POSIX, no platform intrinsics. Authority enters only through explicit
+  EdgeRun import contracts backed by requirements and receipts.
+  The Zig toolchain is being removed from production boot paths and retained
+  only as an app-authoring frontend until the self-hosted compiler replaces it.
+
+ Current prodcution asset in about 5MB expected to shrink while still a lot of the features will be added. Goal is simple, computers do what they are good at which is determenistically moving bytes, data is controlled by its real owners, zero waste. 
 
 No package manager. No npm install. No hidden authority. No cloud compiler. Disk IO is only to store userful work results everything else is compiled in and if your carbage needs terabytes of storage then good luck getting user permission. Your cache belongs to memory which is 1000x faster anyway. This philosophy comes from literally creating this same work. Terabyte of disk writes per day is not inevitable cause this is how compilers work. This repo is here to prove that we dont need this way of thinking. Your OS should fit in your nvram and shouldnt be able to spy on you, we are giving it authority over everything and then software is trying to claw it back. Edgerun is giving authority to user.
 
@@ -78,6 +93,26 @@ run this object
 grant these exact resources
 verify the receipt
 ```
+
+## Repository Map
+
+- `asm/` — all host-side production code.
+  - `asm/x86_64/` — kernel, drivers, runtime, math, serial, TPM, framebuffer,
+    render IR, WASM interpreter, WASM compiler, UI components, interactive shell,
+    AMDGPU display, virtio-net/gpu, RTL8125, PCI, NVMe, BLAKE3, object serialization.
+  - `asm/arm/pi/` — Raspberry Pi Zero W v1.1 kernel, VC mailbox, EMMC/SD, DWC2 USB.
+  - `asm/host/` — Linux userspace host tools (Pi USB boot, ESP32 serial boot).
+  - `asm/test/` — self-hosted ASM test runners (being migrated from C harnesses).
+- `edgerun-zig/` — app-side Zig frontend (being replaced by the self-hosted WASM
+  compiler). Deprecated for host paths.
+  - `edgerun-zig/src/` — app object model, identity, clock, WASM interpreter
+    (superseded by `asm/x86_64/wasm_interpreter.asm`), render IR, UI components.
+  - `edgerun-zig/compiler/` — EdgeRun WASM compiler (superseded by
+    `asm/x86_64/wasm_compiler*.asm`).
+  - `edgerun-zig/src/ui/` — shared app render contract consumed by web, CPU, Wayland,
+    GLES, and DRM paths.
+- `build.sh` — all build commands. No Makefile for production paths.
+- `AGENTS.md` — working agreements, session history, porting rules.
 
 ## What Is Real In This Repo
 

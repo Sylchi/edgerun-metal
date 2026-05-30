@@ -3,9 +3,9 @@
 ; Follows the project kernel pattern: banner → checks → PASS.
 
 %include "x86_64/macros.inc"
-%include "x86_64/tpm_constants.inc"
-%include "x86_64/virtio_constants.inc"
-%include "x86_64/virtio_net_constants.inc"
+%include "x86_64/tpm/tpm_constants.inc"
+%include "x86_64/drv/virtio_constants.inc"
+%include "x86_64/drv/virtio_net_constants.inc"
 
 extern er_serial_init
 extern er_serial_puts
@@ -19,6 +19,8 @@ extern er_cpu_id
 extern er_rdtsc
 extern er_net_poll
 extern er_halt
+extern er_tor_init
+extern er_tor_poll
 
 extern er_mmio_read32
 extern er_tpm_crb_present
@@ -299,9 +301,7 @@ er_fn er_kernel_main
 
     ; ─── Keyboard ────────────────────────────────────────────────
 .kbd_start:
-    call    er_i8042_init
-    test    edx, edx
-    jnz     .kbd_fail
+    er_call er_i8042_init, .kbd_fail
 
     mov     rdi, COM1_PORT
     mov     rsi, check_kbd
@@ -385,18 +385,14 @@ er_fn er_kernel_main
 
     mov     rdi, I2CB_MMIO
     mov     esi, 400
-    call    er_dw_i2c_init
-    test    edx, edx
-    jnz     .tpad_absent
+    er_call er_dw_i2c_init, .tpad_absent
 
     sub     rsp, 4
     mov     rdi, I2CB_MMIO
     mov     sil, TPAD_ADDR
     lea     rdx, [rsp]
     lea     rcx, [rsp + 2]
-    call    er_i2c_hid_probe
-    test    edx, edx
-    jnz     .tpad_absent_fail
+    er_call er_i2c_hid_probe, .tpad_absent_fail
 
     movzx   esi, word [rsp]
     mov     rdi, r14
@@ -461,9 +457,7 @@ er_fn er_kernel_main
     mov     rsi, r12
     mov     rdx, r13
     mov     rcx, rsp
-    call    er_nvme_probe
-    test    edx, edx
-    jnz     .nvme_fail
+    er_call er_nvme_probe, .nvme_fail
 
     mov     rax, [rsp]
     mov     r14, rax
@@ -479,20 +473,14 @@ er_fn er_kernel_main
 
     ; Initialize controller (admin queues, enable)
     mov     rdi, r14
-    call    er_nvme_init
-    test    edx, edx
-    jnz     .nvme_noio
+    er_call er_nvme_init, .nvme_noio
 
     ; Initialize IO queues and identify namespace
     mov     rdi, r14
-    call    er_nvme_io_setup
-    test    edx, edx
-    jnz     .nvme_noio
+    er_call er_nvme_io_setup, .nvme_noio
 
     mov     rdi, r14
-    call    er_nvme_identify_ns
-    test    edx, edx
-    jnz     .nvme_noio
+    er_call er_nvme_identify_ns, .nvme_noio
 
     mov     rdi, COM1_PORT
     call    er_nvme_print_ns_info
@@ -538,9 +526,7 @@ er_fn er_kernel_main
     mov     rsi, r13
     mov     rdx, r14
     mov     rcx, rsp            ; &out_bar0
-    call    er_intel_sdhci_probe
-    test    edx, edx
-    jnz     .emmc_fail
+    er_call er_intel_sdhci_probe, .emmc_fail
 
     mov     ebx, [rsp]          ; bar0
 
@@ -553,9 +539,7 @@ er_fn er_kernel_main
 
     ; Init + detect card
     mov     rdi, rbx
-    call    er_intel_sdhci_init
-    test    edx, edx
-    jnz     .emmc_init_fail
+    er_call er_intel_sdhci_init, .emmc_init_fail
 
     mov     byte [device_flags + DEV_EMMC], 2
     mov     rdi, COM1_PORT
@@ -934,9 +918,7 @@ er_fn er_kernel_main
     mov     rdx, r13
     mov     rcx, rsp            ; &out_bar0
     lea     r8, [rsp + 8]       ; &out_bar2
-    call    er_amdgpu_probe
-    test    edx, edx
-    jnz     .amdgpu_fail
+    er_call er_amdgpu_probe, .amdgpu_fail
 
     mov     r14, [rsp]          ; BAR0
 
@@ -961,9 +943,7 @@ er_fn er_kernel_main
     call    er_serial_puts
     mov     rdi, r14
     mov     rsi, r15
-    call    er_amdgpu_dcn_init
-    test    edx, edx
-    jnz     .amdgpu_dcn_fail
+    er_call er_amdgpu_dcn_init, .amdgpu_dcn_fail
     mov     rdi, COM1_PORT
     lea     rsi, [rel ok_text]
     call    er_serial_puts
@@ -1023,9 +1003,7 @@ er_fn er_kernel_main
     mov     rdx, r14
     mov     rcx, rsp            ; &out_bar0
     lea     r8, [rsp + 4]       ; &out_bar2
-    call    er_intel_gpu_probe
-    test    edx, edx
-    jnz     .intel_gpu_fail
+    er_call er_intel_gpu_probe, .intel_gpu_fail
 
     mov     r15d, [rsp]         ; bar0
     mov     ebx, [rsp + 4]      ; bar2
@@ -1108,6 +1086,9 @@ er_fn er_kernel_main
     call    er_display_puts
     mov     rdi, 0x0A
     call    er_display_putchar
+
+    ; ─── Tor client init ─────────────────────────────────────
+    call    er_tor_init
 
     ; ─── Boot Device Summary ─────────────────────────────────
     ; Show detected peripherals on display before entering shell
@@ -1272,6 +1253,7 @@ er_fn er_kernel_main
     ; Boot complete — main polling loop
 .main_loop:
     call    er_net_poll
+    call    er_tor_poll
     ; Future: call er_tcp_poll, ui_shell_tick, etc.
     ; Yield to give other subsystems time
     mov     ecx, 100000

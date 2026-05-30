@@ -2,9 +2,12 @@ const std = @import("std");
 const bytes = @import("../bytes.zig");
 const object = @import("../object.zig");
 const vfs = @import("../vfs.zig");
-const app_source = @import("../app_source.zig");
 const state = @import("state.zig");
 const compiler = @import("compiler.zig");
+
+pub const FileEntry = struct {
+    path: []const u8,
+};
 
 pub fn ensureSourceWorkspace() void {
     if (!state.source_workspace_ready) {
@@ -83,7 +86,7 @@ pub fn findWorkspaceFileBody(workspace_bytes: []const u8, label: []const u8) ![]
     return error.FileNotFound;
 }
 
-pub fn currentSourceFiles() []const app_source.FileEntry {
+pub fn currentSourceFiles() []const FileEntry {
     if (state.source_file_cache_workspace_len == state.source_workspace_len and state.source_file_count > 0) return state.source_file_entries[0..state.source_file_count];
     state.source_file_count = 0;
     state.source_file_label_bytes_len = 0;
@@ -119,13 +122,6 @@ pub fn currentSourceFiles() []const app_source.FileEntry {
     }
     state.source_file_cache_workspace_len = state.source_workspace_len;
     return state.source_file_entries[0..state.source_file_count];
-}
-
-pub fn sourceFileLabelFromHit(hit_id: u32) ?[]const u8 {
-    const index = app_source.sourceIndexFromHit(hit_id) orelse return null;
-    const files = currentSourceFiles();
-    if (index >= files.len) return null;
-    return files[index].path;
 }
 
 pub fn selectSourceEditorLabel(label: []const u8) state.ErrorCode {

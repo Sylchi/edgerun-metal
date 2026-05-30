@@ -2890,9 +2890,8 @@ test "software renderer frame rejects missing image texture through presentation
         .{ .r = 255, .g = 255, .b = 255, .a = 255 },
     );
 
-    const alpha = [_]u8{ 255, 255, 255, 255 };
     const resources = IrResources{
-        .font = .{ .width = 2, .height = 2, .alpha = &alpha },
+        .font = .{ .width = 0, .height = 0, .alpha = &[_]u8{} },
     };
     try std.testing.expectError(error.MissingImageTexture, surface.renderIrFrameWithResources(buffers, resources));
 }

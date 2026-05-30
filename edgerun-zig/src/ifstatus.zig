@@ -1,15 +1,18 @@
 const std = @import("std");
 const bytes = @import("bytes.zig");
-const codec = @import("ui_codec.zig");
+const clock = @import("clock.zig");
+const object = @import("object.zig");
 const linux = std.os.linux;
 const posix = std.posix;
+
+const Component = @import("ui/components/Component.zig").Component;
+const Text = @import("ui/components/Text.zig").Text;
+const Stack = @import("ui/components/Stack.zig").Stack(Component);
 
 const SIOCGIFADDR: u32 = 0x8915;
 
 const Error = error{
     CodecFailed,
-    StringFailed,
-    RecordFailed,
     DirectoryFailed,
     SocketFailed,
     SysfsFailed,
@@ -60,16 +63,27 @@ pub fn main(init: std.process.Init) !void {
     }
 
     const n_iface = @min(@as(u16, @intCast(iface_count)), 32);
-    const node_count: u16 = 2 + n_iface * 2;
-    const root_count: u16 = node_count;
+    const node_count: usize = 2 + n_iface * 2;
     if (node_count == 0) return;
 
-    var codec_buf: [8192]u8 = undefined;
-    var writer = codec.Writer.init(&codec_buf, node_count, root_count, .column, 2, 4) orelse return error.CodecFailed;
+    var storage: [8192]u8 = undefined;
+    var storage_pos: usize = 0;
 
-    const header_ref = writer.string("Network Interfaces") orelse return error.StringFailed;
-    if (!writer.record(0, .text, 0, header_ref, .{})) return error.RecordFailed;
-    if (!writer.record(1, .separator, 0, .{}, .{})) return error.RecordFailed;
+    const store = struct {
+        fn put(buf: *[8192]u8, pos: *usize, value: []const u8) []const u8 {
+            if (pos.* + value.len > buf.len) return value;
+            const start = pos.*;
+            pos.* += value.len;
+            @memcpy(buf[start..][0..value.len], value);
+            return buf[start..][0..value.len];
+        }
+    }.put;
+
+    const header_text = store(&storage, &storage_pos, "Network Interfaces");
+
+    var components: [66]Component = undefined;
+    components[0] = Component{ .text = Text{ .value = header_text } };
+    components[1] = Component{ .separator = .{} };
 
     var ip_buf: [16]u8 = undefined;
     var state_buf: [8]u8 = undefined;
@@ -84,7 +98,7 @@ pub fn main(init: std.process.Init) !void {
     const sock_fd: posix.fd_t = @intCast(sock_rc);
     defer _ = linux.close(sock_fd);
 
-    var idx: u16 = 2;
+    var idx: usize = 2;
     {
         var dir = std.Io.Dir.openDirAbsolute(init.io, "/sys/class/net", .{ .iterate = true }) catch return error.DirectoryFailed;
         defer dir.close(init.io);
@@ -102,19 +116,23 @@ pub fn main(init: std.process.Init) !void {
             const rx_fmt = formatBytes(rx, &rx_fmt_buf);
             const tx_fmt = formatBytes(tx, &tx_fmt_buf);
 
-            const line1 = std.fmt.bufPrint(&line_buf, "{s}  {s}  {s}", .{ ifname, ip, state }) catch "iface-error";
-            const ref1 = writer.string(line1) orelse return error.StringFailed;
-            if (!writer.record(idx, .text, idx, ref1, .{})) return error.RecordFailed;
+            const line1_raw = std.fmt.bufPrint(&line_buf, "{s}  {s}  {s}", .{ ifname, ip, state }) catch "iface-error";
+            const line1 = store(&storage, &storage_pos, line1_raw);
+            components[idx] = Component{ .text = Text{ .value = line1 } };
             idx += 1;
-            if (idx >= node_count) break;
 
-            const line2 = std.fmt.bufPrint(&line_buf, "  mac {s}  rx {s}  tx {s}", .{ mac, rx_fmt, tx_fmt }) catch "stats-error";
-            const ref2 = writer.string(line2) orelse return error.StringFailed;
-            if (!writer.record(idx, .text, idx, ref2, .{})) return error.RecordFailed;
+            const line2_raw = std.fmt.bufPrint(&line_buf, "  mac {s}  rx {s}  tx {s}", .{ mac, rx_fmt, tx_fmt }) catch "stats-error";
+            const line2 = store(&storage, &storage_pos, line2_raw);
+            components[idx] = Component{ .text = Text{ .value = line2 } };
             idx += 1;
         }
     }
 
-    const out = writer.written();
-    _ = linux.write(1, out.ptr, @intCast(out.len));
+    const stack = Stack{ .axis = .column, .gap = 2, .padding = 4, .children = components[0..idx] };
+    var ui_raw: [8192]u8 = undefined;
+    var object_raw: [object.header_size + 8192]u8 = undefined;
+    const keeper_bytes: [clock.keeper_id_size]u8 = .{0} ** 31 ++ .{1} ** 1;
+    const epoch = clock.Stamp{ .keeper = .{ .bytes = keeper_bytes } };
+    const canonical = stack.toObject(&ui_raw, &object_raw, epoch) orelse return error.CodecFailed;
+    _ = linux.write(1, canonical.ptr, @intCast(canonical.len));
 }

@@ -454,7 +454,7 @@ pub fn renderComponentGallery(scene: *ui.Scene, collector: *interaction.Collecto
         try renderCatalogSection(scene, collector, ui.Rect.init(layout.board.x, layout.board.y, layout.board.w, catalog_h), layout.columns, layout.gap, state.selected_component_index);
     }
 
-    try app_chrome.renderHeader(scene, collector, ui.Rect.init(bounds.x, bounds.y, bounds.w, header_h), content, .docs);
+    try app_chrome.renderHeader(scene, collector, ui.Rect.init(bounds.x, bounds.y, bounds.w, header_h), content, .none);
 }
 
 const GalleryLayout = struct {
