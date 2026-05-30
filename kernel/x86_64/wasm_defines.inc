@@ -2,139 +2,141 @@
 ; Shared definitions (equates, %defines, error codes) — no BSS, no data, no macros.inc.
 ; Designed for inclusion by driver files that need error codes without the ~18MB WASM BSS.
 
+%ifndef WASM_DEFINES_INC
+%define WASM_DEFINES_INC
+
 ; ==================================================================
 ; WASM limits (matching root.zig exactly)
 ; ==================================================================
 %define MAX_FUNCTIONS        1024
 %define MAX_IMPORTS          16
 %define MAX_TYPES            128
-%define MAX_TYPE_PARAMS      128
+%define MAX_TYPE_PARAMS      32
 %define MAX_TYPE_RESULTS     4
-%define MAX_LOCALS           1024
-%define MAX_STACK            32
-%define MAX_CALL_DEPTH       256
-%define MAX_CONTROL_DEPTH    256
-%define MAX_GLOBALS          16
-%define MAX_TABLE_ENTRIES    32
-%define MAX_DATA_SEGMENTS    8
-%define MAX_DECODED_OPS      (512 * 1024)
-%define BYTE_LOAD_BYTES      1
-%define I32_LOAD_BYTES       4
-%define WASM_PAGE_BYTES      65536
-%define WASM_PAGE_SHIFT      16
-%define LEB32_MAX_BYTES      5
-%define LEB64_MAX_BYTES      10
-
-; LEB128 bit masks
-%define LEB_PAYLOAD_MASK     0x7f
-%define LEB_CONTINUE_MASK    0x80
-%define LEB_SIGN_MASK        0x40
-%define LEB_BITS_PER_BYTE    7
-
-; WASM type markers
-%define WASM_EMPTY_BLOCK_TYPE 0x40
-%define WASM_FUNCREF_TYPE     0x70
-%define WASM_REF_FUNC_OPCODE  0xd2
-%define WASM_EXTENDED_PREFIX  0xfc
-
-; Limits flags
-%define LIMITS_MIN_ONLY       0
-%define LIMITS_MIN_MAX        1
-
-; Extended opcodes
-%define EXT_I32_TRUNC_SAT_F32_S  0
-%define EXT_I32_TRUNC_SAT_F32_U  1
-%define EXT_I32_TRUNC_SAT_F64_S  2
-%define EXT_I32_TRUNC_SAT_F64_U  3
-%define EXT_I64_TRUNC_SAT_F32_S  4
-%define EXT_I64_TRUNC_SAT_F32_U  5
-%define EXT_I64_TRUNC_SAT_F64_S  6
-%define EXT_I64_TRUNC_SAT_F64_U  7
-%define EXT_MEMORY_INIT          8
-%define EXT_DATA_DROP            9
-%define EXT_MEMORY_COPY          10
-%define EXT_MEMORY_FILL          11
-%define EXT_TABLE_INIT           12
-%define EXT_ELEM_DROP            13
-%define EXT_TABLE_COPY           14
-%define EXT_TABLE_GROW           15
-%define EXT_TABLE_SIZE           16
-%define EXT_TABLE_FILL           17
-
-; WASM sections
-%define SECTION_TYPE        1
-%define SECTION_IMPORT      2
-%define SECTION_FUNCTION    3
-%define SECTION_TABLE       4
-%define SECTION_MEMORY      5
-%define SECTION_GLOBAL      6
-%define SECTION_EXPORT      7
-%define SECTION_START       8
-%define SECTION_ELEMENT     9
-%define SECTION_CODE        10
-%define SECTION_DATA        11
-%define SECTION_DATA_COUNT  12
-
-; External kinds
-%define EXTERNAL_FUNCTION   0
-%define EXTERNAL_TABLE      1
-%define EXTERNAL_MEMORY     2
-%define EXTERNAL_GLOBAL     3
-
-; External references
-extern er_memcpy
-extern er_memset
-extern er_memmove
+%define MAX_EXPORTS          256
+%define MAX_CODES            1024
+%define MAX_GLOBALS          256
+%define MAX_ELEMENTS         128
+%define MAX_DATAS            128
+%define MAX_INDIRECT_TABLE   1024
+%define MAX_LOCALS           128
+%define MAX_CALL_DEPTH       128
+%define MAX_STACK            4096
+%define MAX_CONTROL          256
+%define MAX_HOST_IMPORTS     256
+%define FRAME_SAVE_SIZE      512 * 1024
 
 ; ==================================================================
-; HostImport struct — host-provided import table entries
-; Each entry: module name, function name, function pointer
-; The caller passes an array of these via runtime.imports_ptr/len.
+; WASM binary format constants
 ; ==================================================================
-%define HOST_IMPORT_MODULE_PTR_OFF  0
-%define HOST_IMPORT_MODULE_LEN_OFF  8
-%define HOST_IMPORT_NAME_PTR_OFF   16
-%define HOST_IMPORT_NAME_LEN_OFF   24
-%define HOST_IMPORT_FN_PTR_OFF     32
-%define HOST_IMPORT_SIZE           40
-
-; ==================================================================
-; RuntimeConfig struct offsets (passed as pointer in rdi to er_fn_run)
-; ==================================================================
-%define RUNTIME_MEMORY_PTR_OFF      0
-%define RUNTIME_MEMORY_LEN_OFF      8
-%define RUNTIME_TICKS_PTR_OFF      16
-%define RUNTIME_MEM_GROW_FN_OFF    24
-%define RUNTIME_MEM_GROW_CTX_OFF   32
-%define RUNTIME_TABLE_GROW_FN_OFF  40
-%define RUNTIME_TABLE_GROW_CTX_OFF 48
-%define RUNTIME_INITIAL_PAGES_OFF  56
-%define RUNTIME_HAS_PAGES_OFF      64
-%define RUNTIME_IMPORTS_PTR_OFF    72
-%define RUNTIME_IMPORTS_LEN_OFF    80
-%define RUNTIME_SIZE               88
-
-; WASM magic + version
 wasm_magic: db 0x00, 0x61, 0x73, 0x6d
 wasm_version: db 0x01, 0x00, 0x00, 0x00
 
-; Error codes (returned in rdx on error; rdx=0 on success, per macros.inc convention)
-%define ERROR_BAD_ARGUMENT     1
-%define ERROR_CORRUPT          2
-%define ERROR_UNSUPPORTED      3
-%define ERROR_NO_MEMORY        4
-%define ERROR_MEMORY_GROWTH    5
-%define ERROR_TABLE_GROWTH     6
-%define ERROR_NO_EXECUTION     7
-%define ERROR_MISSING_EXPORT   8
-%define ERROR_MISSING_IMPORT   9
-%define ERROR_STACK_OVERFLOW   10
-%define ERROR_STACK_UNDERFLOW  11
-%define ERROR_TRAP             12
-%define ERROR_ARITHMETIC_TRAP  13
-%define ERROR_IMPORT_NOT_FOUND 14
+; ==================================================================
+; WASM section IDs
+; ==================================================================
+%define WASM_SECTION_CUSTOM      0
+%define WASM_SECTION_TYPE        1
+%define WASM_SECTION_IMPORT      2
+%define WASM_SECTION_FUNCTION    3
+%define WASM_SECTION_TABLE       4
+%define WASM_SECTION_MEMORY      5
+%define WASM_SECTION_GLOBAL      6
+%define WASM_SECTION_EXPORT      7
+%define WASM_SECTION_START       8
+%define WASM_SECTION_ELEMENT     9
+%define WASM_SECTION_CODE        10
+%define WASM_SECTION_DATA        11
 
-; Driver error codes (shared across all hardware drivers)
+; ==================================================================
+; WASM type opcodes (used during decode)
+; ==================================================================
+%define WASM_TYPE_I32        0x7f
+%define WASM_TYPE_I64        0x7e
+%define WASM_TYPE_F32        0x7d
+%define WASM_TYPE_F64        0x7c
+%define WASM_TYPE_FUNCREF    0x70
+%define WASM_TYPE_EMPTY      0x40
+
+; ==================================================================
+; WASM opcodes
+; ==================================================================
+%define WASM_OP_UNREACHABLE 0x00
+%define WASM_OP_NOP         0x01
+%define WASM_OP_BLOCK       0x02
+%define WASM_OP_LOOP        0x03
+%define WASM_OP_IF          0x04
+%define WASM_OP_ELSE        0x05
+%define WASM_OP_END         0x0B
+%define WASM_OP_BR          0x0C
+%define WASM_OP_BR_IF       0x0D
+%define WASM_OP_BR_TABLE    0x0E
+%define WASM_OP_RETURN      0x0F
+%define WASM_OP_CALL        0x10
+%define WASM_OP_CALL_INDIRECT 0x11
+%define WASM_OP_DROP        0x1A
+%define WASM_OP_SELECT      0x1B
+%define WASM_OP_LOCAL_GET   0x20
+%define WASM_OP_LOCAL_SET   0x21
+%define WASM_OP_LOCAL_TEE   0x22
+%define WASM_OP_GLOBAL_GET  0x23
+%define WASM_OP_GLOBAL_SET  0x24
+%define WASM_OP_I32_LOAD    0x28
+%define WASM_OP_I64_LOAD    0x29
+%define WASM_OP_F32_LOAD    0x2A
+%define WASM_OP_F64_LOAD    0x2B
+%define WASM_OP_I32_LOAD8_S 0x2C
+%define WASM_OP_I32_LOAD8_U 0x2D
+%define WASM_OP_I32_LOAD16_S 0x2E
+%define WASM_OP_I32_LOAD16_U 0x2F
+%define WASM_OP_I32_STORE   0x36
+%define WASM_OP_I64_STORE   0x37
+%define WASM_OP_F32_STORE   0x38
+%define WASM_OP_F64_STORE   0x39
+%define WASM_OP_I32_STORE8  0x3A
+%define WASM_OP_I32_STORE16 0x3B
+%define WASM_OP_MEMORY_SIZE 0x3F
+%define WASM_OP_MEMORY_GROW 0x40
+%define WASM_OP_I32_CONST   0x41
+%define WASM_OP_I64_CONST   0x42
+%define WASM_OP_F32_CONST   0x43
+%define WASM_OP_F64_CONST   0x44
+
+; ==================================================================
+; Boolean constants
+; ==================================================================
+%define TRUE    1
+%define FALSE   0
+
+; ==================================================================
+; Math constants (shared with Zig)
+; ==================================================================
+%define MASK_32_BIT         0xFFFFFFFF
+; ==================================================================
+; Error codes (returned in rdx)
+; Range 1-14: WASM interpreter errors
+; Range 20-28: Generic driver / system errors
+; Range 30-39: Virtio-specific errors
+; 0 = OK (no error)
+; ==================================================================
+; WASM interpreter errors (1-14)
+%define ERROR_OK               0
+%define ERROR_UNSUPPORTED      1
+%define ERROR_CORRUPT          2
+%define ERROR_STACK_UNDERFLOW  3
+%define ERROR_STACK_OVERFLOW   4
+%define ERROR_MEMORY           5
+%define ERROR_NOT_FOUND        6
+%define ERROR_PARSE            7
+%define ERROR_NOT_IMPLEMENTED  8
+%define ERROR_TYPE_MISMATCH    9
+%define ERROR_UNKNOWN_OPCODE   10
+%define ERROR_INVALID_IMPORT   11
+%define ERROR_NO_MEMORY        12
+%define ERROR_INVALID_INDEX    13
+%define ERROR_IMPORT_MISMATCH  14
+
+; Generic driver / system errors (20-28)
 %define ERROR_TIMEOUT          20
 %define ERROR_IO               21
 %define ERROR_NOT_PRESENT      22
@@ -152,7 +154,11 @@ wasm_version: db 0x01, 0x00, 0x00, 0x00
 %define ERROR_QUEUE_SETUP          33
 %define ERROR_INVALID_RESPONSE     34
 
-%define ERROR_OK               0
+; ==================================================================
+; WasmEdge / EdgeRun-specific opcodes (prefixed opcodes ≥ 0xFC)
+; ==================================================================
+; WASM_OP_I32_TRUNC_SAT_F32_S etc. are defined separately in wasm_exec.asm
+; because they require the dispatch table.
 
 ; ==================================================================
 ; Value type tags (for Value.tag field)
@@ -168,3 +174,5 @@ wasm_version: db 0x01, 0x00, 0x00, 0x00
 %define CONTROL_LOOP       1
 %define CONTROL_IF_THEN    2
 %define CONTROL_IF_ELSE    3
+
+%endif ; WASM_DEFINES_INC

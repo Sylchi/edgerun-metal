@@ -146,6 +146,22 @@
 %endm
 
 ; ------------------------------------------------------------------
+; Combined prologue / epilogue — balanced push/pop pairs
+; ------------------------------------------------------------------
+; Standard function prologue: frame pointer + all callee-saved regs
+%macro er_prologue 0
+    er_frame_push
+    er_push_all
+%endm
+
+; Standard function epilogue: restore callee-saved regs + frame + return
+%macro er_epilogue 0
+    er_pop_all
+    er_frame_pop
+    ret
+%endm
+
+; ------------------------------------------------------------------
 ; Null / zero check helpers
 ; ------------------------------------------------------------------
 ; Jump to label if register is zero

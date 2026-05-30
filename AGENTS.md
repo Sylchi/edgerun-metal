@@ -7,8 +7,8 @@
 - Errors are fatal.
 - No shortcuts.
 - No external dependencies beyond what's required for self-hosted builds.
-- All production code is x86_64 assembly using the project's own macro DSL (`macros.inc`).
-- No Zig, no C, no Python, no CMake in production code paths.
+- All host-side production code is x86_64 assembly using the project's own macro DSL (`macros.inc`).
+- No C, no Python, no CMake in host-side production code paths. App-side code is Zig compiled to WASM — that is the intended workflow.
 - Host-side test harnesses may temporarily use C for linking purposes, but must be migrated to pure ASM self-hosted runners.
 - The permitted vendor binary exceptions are explicit and narrow: device radio firmware needed to operate a radio block, such as CYW43438 RAM/NVRAM/CLM files, and Raspberry Pi Zero-family boot firmware needed for the Broadcom mask-ROM/GPU boot chain to load repo-owned `kernel.img` on Pi Zero W v1.1 bring-up hardware. These exceptions do not permit vendor drivers, host tools, protocol stacks, closed control planes, compatibility layers, or any other vendor blob.
 - No ambiguity.
@@ -42,7 +42,9 @@ The repository has two code worlds separated by a hard boundary:
 
 ## Workspace & Language
 
-- **The project's own language is the x86_64 assembly DSL defined in `asm/x86_64/macros.inc`** — `er_fn`, `er_fnstr`, `er_frame_push`, `er_push_all`, etc. This IS the dogfooding target. All host-side production code must be written in this DSL.
+- **The project has two languages, each owning its side of the boundary:**
+  - **Host-side:** x86_64 assembly DSL defined in `asm/x86_64/macros.inc` — `er_fn`, `er_fnstr`, `er_frame_push`, `er_push_all`, etc. This IS the dogfooding target. All host-side production code must be written in this DSL.
+  - **App-side:** Zig source compiled to WASM. This is the intended path for application logic that runs inside the WASM interpreter. Zig is the app-side language — not deprecated, not frozen.
 - `asm/x86_64/` — canonical hardware-near implementation, organized by subsystem:
   - Root: `macros.inc`, `wasm_defines.inc`, `entry.asm`, `kernel_main.asm`, `efi_entry.asm`, `linker.ld`, `efi_linker.ld`
   - `drv/` — hardware drivers (serial, i8042, pci, virtio*, xhci, nvme, rtl8125, amdgpu, intel_*, i2c_hid, cros_ec, spi_flash, display, fb_text, etc.)
@@ -56,7 +58,7 @@ The repository has two code worlds separated by a hard boundary:
 - `asm/test/` — test files. Must be migrated from C to self-hosted ASM runners.
 - `asm/arm/pi/` — Raspberry Pi Zero W kernel, mailbox, EMMC, DWC2 USB.
 - `asm/host/` — Linux userspace host tools (Pi USB boot, ESP32 serial boot).
-- `edgerun-zig/` — app-side Zig frontend (compiles to WASM). DEPRECATED for host paths. Being replaced by the self-hosted WASM compiler (`asm/x86_64/wasm_compiler*.asm`).
+- `edgerun-zig/` — app-side Zig frontend (compiles to WASM). This is the primary app development path — write apps here, compile to WASM, run on the WASM interpreter. The self-hosted WASM compiler (`asm/x86_64/wasm_compiler*.asm`) is a host-side build tool replacement, not a replacement for app-side Zig.
 - `build.sh` — all build commands.
 
 ## External Dependencies (to eliminate)
@@ -69,7 +71,7 @@ The repository has two code worlds separated by a hard boundary:
 ### Current test-time dependencies (being phased out)
 - `cc` (gcc/clang) — used to compile C test harness + link ASM objects into freestanding static binaries.
 - C startup crt0 stubs via `-ffreestanding -nostdlib`.
-- `zig` — full Zig compiler + std lib (DEPRECATED, remove).
+- `zig` — full Zig compiler + std lib (DEPRECATED as host-side build dependency; still needed for app-side Zig→WASM compilation until the self-hosted WASM compiler replaces this path).
 
 - `qemu-system-x86_64` — kernel test environment.
 

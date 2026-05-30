@@ -655,7 +655,12 @@ er_fn er_nvme_print_ns_info
 ; Uses IO SQ 1 (submission) and IO CQ 1 (completion).
 ; Returns: eax = 0 on success, -1 on failure (rdx = error code)
 ; ==================================================================
-er_fn er_nvme_read_blocks
+; ==================================================================
+; _nvme_io_blocks — shared read/write internal helper
+; rdi = BAR0, rsi = LBA, rdx = buf, ecx = count, r8d = opcode
+; Returns: eax = 0 on success, rdx = error code
+; ==================================================================
+_nvme_io_blocks:
     push    rbx
     push    r12
     push    r13
@@ -667,7 +672,6 @@ er_fn er_nvme_read_blocks
     mov     r14, rdx            ; buf
     mov     r15d, ecx           ; count
 
-    ; Validate: count must be > 0 and <= 64 (queue depth)
     test    r15d, r15d
     jz      .bad_arg
     cmp     r15d, 64
@@ -683,8 +687,8 @@ er_fn er_nvme_read_blocks
     dec     ecx
     jnz     .clr_sqe
 
-    ; CDW0: opcode=2 (Read), flags=0, cmd_id=0
-    mov     dword [NVME_IO_SQ], 2
+    ; CDW0: opcode from r8d, flags=0, cmd_id=0
+    mov     dword [NVME_IO_SQ], r8d
 
     ; NSID = 1
     mov     dword [NVME_IO_SQ + 4], 1
@@ -748,98 +752,21 @@ er_fn er_nvme_read_blocks
     ret
 
 ; ==================================================================
+; er_nvme_read_blocks — read blocks from NVMe namespace
+; int er_nvme_read_blocks(uint64_t bar0, uint64_t lba,
+;                         void* buf, uint32_t count)
+; Returns: eax = 0 on success, rdx = error code
+; ==================================================================
+er_fn er_nvme_read_blocks
+    mov     r8d, 2              ; opcode: Read
+    jmp     _nvme_io_blocks
+
+; ==================================================================
 ; er_nvme_write_blocks — write blocks to NVMe namespace
 ; int er_nvme_write_blocks(uint64_t bar0, uint64_t lba,
 ;                          const void* buf, uint32_t count)
-;
-; Same signature as read. count: 512-byte blocks.
-; Returns: eax = 0 on success, -1 on failure (rdx = error code)
+; Returns: eax = 0 on success, rdx = error code
 ; ==================================================================
 er_fn er_nvme_write_blocks
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
-
-    mov     r12, rdi            ; BAR0
-    mov     r13, rsi            ; lba
-    mov     r14, rdx            ; buf
-    mov     r15d, ecx           ; count
-
-    test    r15d, r15d
-    jz      .w_bad_arg
-    cmp     r15d, 64
-    ja      .w_bad_arg
-
-    ; Build SQE at NVME_IO_SQ
-    mov     rdi, NVME_IO_SQ
-    xor     eax, eax
-    mov     ecx, 16
-.w_clr_sqe:
-    mov     [rdi], eax
-    add     rdi, 4
-    dec     ecx
-    jnz     .w_clr_sqe
-
-    ; CDW0: opcode=1 (Write)
-    mov     dword [NVME_IO_SQ], 1
-
-    ; NSID = 1
-    mov     dword [NVME_IO_SQ + 4], 1
-
-    ; CDW10/11 = lba
-    mov     dword [NVME_IO_SQ + 16], r13d
-    shr     r13, 32
-    mov     dword [NVME_IO_SQ + 20], r13d
-
-    ; CDW12 = number of blocks - 1
-    mov     eax, r15d
-    dec     eax
-    mov     dword [NVME_IO_SQ + 24], eax
-
-    ; PRP1
-    mov     dword [NVME_IO_SQ + 40], r14d
-    mov     dword [NVME_IO_SQ + 44], 0
-
-    ; Clear IO CQ phase
-    mov     dword [NVME_IO_CQ], 0
-
-    ; Ring IO SQ tail doorbell
-    lea     rdi, [r12 + NVME_SQ1TDBL]
-    mov     esi, 1
-    call    er_mmio_write32
-
-    ; Poll IO CQ
-    mov     ebx, 100000000
-.w_poll_cq:
-    mov     eax, [NVME_IO_CQ]
-    test    eax, 1
-    jnz     .w_cq_done
-    pause
-    dec     ebx
-    jnz     .w_poll_cq
-    er_err  ERROR_TIMEOUT
-    jmp     .w_out
-
-.w_cq_done:
-    movzx   eax, word [NVME_IO_CQ + 6]
-    and     eax, 0x7FFE
-    jnz     .w_io_fail
-
-    er_ok
-    jmp     .w_out
-
-.w_bad_arg:
-    er_err  ERROR_UNSUPPORTED
-    jmp     .w_out
-
-.w_io_fail:
-    er_err  ERROR_IO
-.w_out:
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
-    ret
+    mov     r8d, 1              ; opcode: Write
+    jmp     _nvme_io_blocks

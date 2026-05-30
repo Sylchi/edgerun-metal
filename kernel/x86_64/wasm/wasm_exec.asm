@@ -1149,16 +1149,54 @@ exec_dispatch_loop:
     sub     rsi, [exec_code_body_ptr]
     mov     [exec_reader_offset], rsi
     pop     rsi
-    ; Execute function
-    mov     rdi, rax        ; function_index
-    ; Pass current stack as args - simplified: pass args_ptr=0, args_count=0
-    ; For proper argument passing, need to pop from stack
-    xor     rsi, rsi        ; no explicit args for now
-    xor     rdx, rdx
-    call    er_fn_exec
+    mov     r15, rax                ; save function_index
+
+    ; Get param count and result count from function type
+    mov     rdi, r15
+    call    er_wasm_type_index_for_function
     test    rdx, rdx
     jnz     .error_return
-    jmp     .dispatch_next
+    imul    rax, FUNC_TYPE_SIZE
+    mov     r14, [types_buf + rax + FUNC_TYPE_PARAM_COUNT_OFF]   ; param_count
+    mov     r13, [types_buf + rax + FUNC_TYPE_RESULT_COUNT_OFF]  ; result_count
+
+    ; Pop args from eval stack into buffer (reversed order)
+    mov     r12, r14                ; loop counter = param_count
+    cmp     r12, 8
+    ja      .unsupported_error
+    sub     rsp, 64                 ; buffer for up to 8 * 8 = 64 bytes
+    lea     rbx, [rsp]
+.pop_args:
+    test    r12, r12
+    jz      .args_popped
+    dec     r12
+    call    exec_stack_pop
+    jc      .underflow_error
+    mov     [rbx + r12 * 8], rax
+    jmp     .pop_args
+.args_popped:
+
+    ; Call function
+    mov     rdi, r15                ; function_index
+    mov     rsi, rbx                ; args ptr
+    mov     rdx, r14                ; args count
+    call    er_fn_exec
+    add     rsp, 64                 ; reclaim buffer
+    test    rdx, rdx
+    jnz     .error_return
+
+    ; Push return value(s) onto eval stack
+    mov     rcx, r13                ; result_count
+    xor     r12, r12
+.push_results:
+    cmp     r12, rcx
+    jae     .dispatch_next
+    mov     rax, [exec_result_values + r12 * 8]
+    push    rax
+    call    exec_stack_push
+    pop     rax
+    inc     r12
+    jmp     .push_results
 
 .op_call_indirect:
     mov     rsi, [exec_code_body_ptr]
@@ -1173,13 +1211,51 @@ exec_dispatch_loop:
     ; Pop function index from stack
     call    exec_stack_pop
     jc      .underflow_error
-    mov     rdi, rax                ; function_index
-    xor     rsi, rsi
-    xor     rdx, rdx
+    mov     r14, rax                ; save function_index
+
+    ; Get param count and result count from the type_index already read
+    mov     rax, r15
+    imul    rax, FUNC_TYPE_SIZE
+    mov     r12, [types_buf + rax + FUNC_TYPE_PARAM_COUNT_OFF]   ; param_count
+    mov     r13, [types_buf + rax + FUNC_TYPE_RESULT_COUNT_OFF]  ; result_count
+
+    ; Pop args from eval stack into buffer (reversed order)
+    mov     rbx, r12                ; loop counter = param_count
+    cmp     rbx, 8
+    ja      .unsupported_error
+    sub     rsp, 64                 ; buffer for up to 8 * 8 = 64 bytes
+    lea     r11, [rsp]
+.pop_args_indirect:
+    test    rbx, rbx
+    jz      .args_popped_indirect
+    dec     rbx
+    call    exec_stack_pop
+    jc      .underflow_error
+    mov     [r11 + rbx * 8], rax
+    jmp     .pop_args_indirect
+.args_popped_indirect:
+
+    ; Call function
+    mov     rdi, r14                ; function_index
+    mov     rsi, r11                ; args ptr
+    mov     rdx, r12                ; args count
     call    er_fn_exec
+    add     rsp, 64                 ; reclaim buffer
     test    rdx, rdx
     jnz     .error_return
-    jmp     .dispatch_next
+
+    ; Push return value(s) onto eval stack
+    mov     rcx, r13                ; result_count
+    xor     r12, r12
+.push_results_indirect:
+    cmp     r12, rcx
+    jae     .dispatch_next
+    mov     rax, [exec_result_values + r12 * 8]
+    push    rax
+    call    exec_stack_push
+    pop     rax
+    inc     r12
+    jmp     .push_results_indirect
 
 .op_br_table:
     ; Read target count
