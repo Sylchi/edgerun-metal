@@ -101,6 +101,7 @@ KERNEL_ASM_SRCS="
 	agent/http_agent.asm
 	agent/da.asm
 	agent/da_wasm.asm
+	agent/input_kbd.asm
 	ui/render_ir.asm
 	ui/sw_fb.asm
 	wasm/wasm_interpreter.asm
@@ -425,6 +426,21 @@ cmd_test_bench_render_ir() {
 	build_test "bench_render_ir" "${TEST_DIR}/bench_render_ir.asm" "ui/sw_fb" "ui/render_ir"
 }
 
+cmd_bench_wasm_jit() {
+	local name="bench_wasm_jit"
+	local src="${TEST_DIR}/${name}.asm"
+	local obj="${ASM_BUILD}/${name}.o"
+	local bin="${ASM_BUILD}/${name}"
+	${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
+	local runtime_o="${ASM_BUILD}/runtime.o"
+	if [ ! -f "$runtime_o" ]; then
+		elf64 "${ASM_DIR}/rt/runtime.asm" "$runtime_o"
+	fi
+	ld -T "${TEST_DIR}/test_jit.ld" -nostdlib -static -o "$bin" "$obj" "$runtime_o"
+	echo "  LD  ${bin}"
+	"$bin"
+}
+
 # ---- ARM / Pi Zero targets ----
 HOST_BUILD="${BUILD_DIR}/host"
 PI_BUILD="${BUILD_DIR}/pi"
@@ -507,6 +523,7 @@ EdgeRun build targets:
   test-tor            Run Tor AES-128-CTR KAT test (self-hosted ASM)
   test-x25519         Run X25519 scalar mult RFC 7748 test vectors (self-hosted ASM)
   test-bench-render-ir Run render_ir RDTSC benchmark (self-hosted ASM)
+  bench-wasm-jit      Run WASM JIT vs native RDTSC benchmark (self-hosted ASM)
   pi-kernel           Build Pi Zero W kernel.img (ARMv6)
   pi-usb-boot         Build Pi USB boot host tool (x86_64)
   pi-boot             Build + boot Pi Zero via USB
@@ -537,6 +554,7 @@ case "${1:-help}" in
 	test-tor)       cmd_test_tor ;;
 	test-x25519)    cmd_test_x25519 ;;
 	test-bench-render-ir) cmd_test_bench_render_ir ;;
+	bench-wasm-jit) cmd_bench_wasm_jit ;;
 	pi-kernel)      cmd_pi_kernel ;;
 	pi-usb-boot)    cmd_pi_usb_boot ;;
 	pi-boot)        cmd_pi_boot ;;

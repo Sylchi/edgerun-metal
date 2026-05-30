@@ -18,17 +18,11 @@
 
 extern er_local_route_register
 extern er_local_route_set_handler
-extern er_local_route_get_ring
-extern er_local_cell_send_to_slot
-extern er_local_ring_write
 extern er_blake3_hash_bytes
 extern er_memcpy
 extern er_memset
 extern er_memcmp
 extern er_fn_run
-extern er_i8042_read_scancode
-extern er_i8042_scancode_to_ascii
-extern er_local_route_lookup
 
 ; Framebuffer info from fb_text.asm
 extern fb_addr, fb_width, fb_height, fb_pitch
@@ -73,10 +67,11 @@ da_wasm_runtime: resb RUNTIME_SIZE
 da_surface_rect_pool: resd DA_MAX_SURFACES * DA_SURFACE_POOL_RECTS * 15
 da_surface_icon_pool: resd DA_MAX_SURFACES * DA_SURFACE_POOL_ICONS * 9
 
-; Focus tracking
-da_focused_slot:   resd 1
-da_kbd_modifiers:  resb 1
-da_input_cell:     resb LOCAL_CELL_SIZE
+; Focus tracking — input_kbd.asm reads these directly (same address space)
+global da_focused_slot
+global da_focused_hash
+da_focused_slot:   resd 1   ; surface slot index, -1 = none
+da_focused_hash:   resb 32  ; 32-byte identity hash of focused app (zero if none)
 
 ; ==================================================================
 ; .data
@@ -162,7 +157,11 @@ er_fn er_da_init
 
 .init_skip_route:
     mov     dword [rel da_focused_slot], -1
-    mov     byte [rel da_kbd_modifiers], 0
+    ; Zero out focused_hash (no app has focus yet)
+    lea     rdi, [rel da_focused_hash]
+    xor     esi, esi
+    mov     edx, 32
+    call    er_memset
     call    er_da_inject_shell_surfaces
     mov     byte [rel da_initialized], 1
 
@@ -197,8 +196,6 @@ _da_handler:
     je      .exit
     cmp     al, DA_MSG_SURFACE_FOCUS
     je      .focus
-    cmp     al, DA_MSG_INPUT_EVENT
-    je      .input_event
     ; Unknown message — ignore
     pop     r13
     pop     r12
@@ -254,16 +251,6 @@ _da_handler:
 .focus:
     mov     rdi, r12
     call    _da_focus_surface
-    pop     r13
-    pop     r12
-    pop     rbx
-    xor     eax, eax
-    er_ok
-    er_ret
-
-.input_event:
-    mov     rdi, r12
-    call    _da_forward_input
     pop     r13
     pop     r12
     pop     rbx
@@ -384,6 +371,11 @@ _da_register_surface:
     je      .no_autofocus
     mov     [rel da_focused_slot], r13d
     or      byte [rbx + DA_SURFACE_FLAGS], DA_SURFACE_FOCUSED
+    ; Copy focused app hash for input_kbd agent
+    lea     rdi, [rel da_focused_hash]
+    lea     rsi, [rbx + DA_SURFACE_HASH]
+    mov     edx, 32
+    call    er_memcpy
 .no_autofocus:
 
     inc     dword [rel da_surface_count]
@@ -443,6 +435,16 @@ _da_unregister_surface:
     xor     esi, esi
     mov     edx, DA_SURFACE_SIZE
     call    er_memset
+
+    ; If this was the focused surface, clear focus
+    cmp     ebx, [rel da_focused_slot]
+    jne     .no_focus_clear
+    mov     dword [rel da_focused_slot], -1
+    lea     rdi, [rel da_focused_hash]
+    xor     esi, esi
+    mov     edx, 32
+    call    er_memset
+.no_focus_clear:
 
     dec     dword [rel da_surface_count]
 
@@ -774,52 +776,20 @@ _da_focus_surface:
     ; Update focused slot
     mov     [rel da_focused_slot], r13d
 
+    ; Copy focused app hash for input_kbd agent
+    mov     eax, r13d
+    imul    eax, DA_SURFACE_SIZE
+    lea     rsi, [rel da_surface_registry + rax + DA_SURFACE_HASH]
+    lea     rdi, [rel da_focused_hash]
+    mov     edx, 32
+    call    er_memcpy
+
 .done:
     pop     r13
     pop     r12
     pop     rbx
     xor     eax, eax
     er_ok
-    ret
-
-; ==================================================================
-; _da_forward_input — forward an input cell to the focused app's ring
-; rdi = cell_ptr
-; ==================================================================
-_da_forward_input:
-    push    rbx
-    push    r12
-    push    r13
-
-    mov     r12, rdi
-
-    ; Check if there is a focused surface
-    mov     r13d, [rel da_focused_slot]
-    cmp     r13d, -1
-    je      .done
-    cmp     r13d, [rel da_surface_count]
-    jae     .done
-
-    ; Get the focused surface's identity hash
-    mov     eax, r13d
-    imul    eax, DA_SURFACE_SIZE
-    lea     rdi, [rel da_surface_registry + rax + DA_SURFACE_HASH]
-
-    ; Look up the route slot for this identity
-    call    er_local_route_lookup
-    test    edx, edx
-    jnz     .done
-
-    ; Send the cell to the app's route ring
-    mov     edi, eax
-    mov     rsi, r12
-    call    er_local_cell_send_to_slot
-
-.done:
-    pop     r13
-    pop     r12
-    pop     rbx
-    xor     eax, eax
     ret
 
 ; ==================================================================
@@ -1068,106 +1038,8 @@ er_fn er_da_composite
     er_ret
 
 ; ==================================================================
-; _da_poll_input — poll keyboard, forward input to focused app
-; ==================================================================
-_da_poll_input:
-    push    rbx
-    push    r12
-    push    r13
-
-    ; Skip if no focused surface
-    mov     eax, [rel da_focused_slot]
-    cmp     eax, -1
-    je      .done
-
-    call    er_i8042_read_scancode
-    test    edx, edx
-    jnz     .done
-
-    mov     ebx, eax            ; bl = raw scancode
-    mov     r12d, eax           ; r12b = raw scancode (preserved)
-
-    ; Check for modifier keys (left shift = 0x12, right shift = 0x59)
-    mov     al, bl
-    and     al, 0x7f
-    cmp     al, 0x12
-    je      .shift_key
-    cmp     al, 0x59
-    je      .shift_key
-
-    ; Not a modifier — check make/break
-    test    bl, 0x80
-    jnz     .key_up
-
-.key_down:
-    ; Translate to ASCII
-    mov     dil, bl
-    movzx   esi, byte [rel da_kbd_modifiers]
-    and     esi, 1              ; just shift bit
-    call    er_i8042_scancode_to_ascii
-    mov     r13d, eax           ; r13b = ascii char
-
-    ; Build input cell in da_input_cell buffer
-    lea     rdi, [rel da_input_cell]
-    xor     esi, esi
-    mov     edx, LOCAL_CELL_SIZE
-    call    er_memset
-
-    mov     byte [rdi + LOCAL_CELL_CMD], LOCAL_CELL_DATA
-    mov     byte [rdi + LOCAL_CELL_PAYLOAD + 0], DA_MSG_INPUT_EVENT
-    mov     byte [rdi + LOCAL_CELL_PAYLOAD + 1], DA_INPUT_KEY_DOWN
-    mov     al, [rel da_kbd_modifiers]
-    mov     byte [rdi + LOCAL_CELL_PAYLOAD + 2], al
-    mov     byte [rdi + LOCAL_CELL_PAYLOAD + 3], r12b
-    mov     byte [rdi + LOCAL_CELL_PAYLOAD + 4], r13b
-
-    call    _da_forward_input
-    jmp     .done
-
-.key_up:
-    ; Translate to ASCII (for key_up, just for reference)
-    mov     dil, bl
-    movzx   esi, byte [rel da_kbd_modifiers]
-    and     esi, 1
-    call    er_i8042_scancode_to_ascii
-    mov     r13d, eax
-
-    lea     rdi, [rel da_input_cell]
-    xor     esi, esi
-    mov     edx, LOCAL_CELL_SIZE
-    call    er_memset
-
-    mov     byte [rdi + LOCAL_CELL_CMD], LOCAL_CELL_DATA
-    mov     byte [rdi + LOCAL_CELL_PAYLOAD + 0], DA_MSG_INPUT_EVENT
-    mov     byte [rdi + LOCAL_CELL_PAYLOAD + 1], DA_INPUT_KEY_UP
-    mov     byte [rdi + LOCAL_CELL_PAYLOAD + 2], 0
-    mov     byte [rdi + LOCAL_CELL_PAYLOAD + 3], r12b
-    mov     byte [rdi + LOCAL_CELL_PAYLOAD + 4], r13b
-
-    call    _da_forward_input
-    jmp     .done
-
-.shift_key:
-    test    bl, 0x80
-    jnz     .shift_break
-    or      byte [rel da_kbd_modifiers], DA_MOD_SHIFT
-    jmp     .done
-.shift_break:
-    and     byte [rel da_kbd_modifiers], ~DA_MOD_SHIFT
-    jmp     .done
-
-.done:
-    pop     r13
-    pop     r12
-    pop     rbx
-    xor     eax, eax
-    ret
-
 ; ==================================================================
 ; er_da_tick — called from kernel pipeline once per iteration
 ; ==================================================================
 er_fn er_da_tick
-    call    _da_poll_input
-    call    er_da_composite
-    xor     eax, eax
-    er_ret
+    jmp     er_da_composite

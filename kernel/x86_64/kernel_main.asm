@@ -32,6 +32,8 @@ extern er_wasm_runtime_ptr
 extern er_agent_http_init
 extern er_da_init
 extern er_da_tick
+extern er_input_kbd_init
+extern er_input_kbd_poll
 extern er_clock_init
 extern er_clock_advance_with
 
@@ -1281,6 +1283,7 @@ er_fn er_kernel_main
 .dbg_circ:  db " circ: init ok", 0
 .dbg_agent: db " agent: init ok", 0
 .dbg_da_init: db " da: init ok", 0
+.dbg_input_kbd_init: db " kbd: init ok", 0
 .dbg_da_reg:  db " da: register: ", 0
 .ok_str:       db "ok", 0
 .fail_str:     db "FAIL", 0
@@ -1753,6 +1756,12 @@ er_fn er_kernel_main
     lea     rsi, [rel .dbg_da_init]
     call    er_serial_puts
 
+    ; ─── Keyboard Input Agent init ──────────────────────────
+    call    er_input_kbd_init
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel .dbg_input_kbd_init]
+    call    er_serial_puts
+
     ; ─── DA WASM Registration Test ────────────────────────────
     xor     edi, edi        ; params at WASM memory offset 0
     call    _wasm_import_da_surface_register
@@ -1945,6 +1954,7 @@ er_fn er_kernel_main
     call    er_net_poll
     call    er_tor_poll
     call    er_local_cell_poll
+    call    er_input_kbd_poll
     call    er_da_tick
 
     jmp     .main_loop

@@ -21,14 +21,11 @@ extern _curve25519_ladder_step
 
 %macro ASSERT 2
     test    %1, %1
-    jz      %%fail
-    inc     qword [rel passed]
-    jmp     %%done
-%%fail:
+    jnz     %%pass
     inc     qword [rel failed]
-    mov     edi, %2
-    mov     eax, 60
-    syscall
+    jmp     %%done
+%%pass:
+    inc     qword [rel passed]
 %%done:
 %endmacro
 
@@ -79,6 +76,9 @@ _start:
     call    er_tor_curve25519_scalar_mult
 
     lea     rdi, [rel result]
+    call    dump_hex
+
+    lea     rdi, [rel result]
     lea     rsi, [rel output1]
     mov     edx, 32
     call    _mem_eq
@@ -91,6 +91,9 @@ _start:
     lea     rsi, [rel scalar2]
     lea     rdx, [rel point2]
     call    er_tor_curve25519_scalar_mult
+
+    lea     rdi, [rel result]
+    call    dump_hex
 
     lea     rdi, [rel result]
     lea     rsi, [rel output2]
@@ -229,7 +232,6 @@ _start:
 ; ================================================================
 ; Done — report results
 ; ================================================================
-; ================================================================
     mov     rax, [rel failed]
     test    rax, rax
     jnz     .exit_fail
@@ -241,6 +243,56 @@ _start:
 .exit:
     mov     eax, 60
     syscall
+
+; Debug: dump 32 bytes pointed by rdi to stderr as hex
+dump_hex:
+    push    rcx
+    push    rdx
+    push    rsi
+    push    rdi
+    push    rax
+    push    r8
+
+    sub     rsp, 66
+    mov     r8, rdi
+    xor     ecx, ecx
+.next_byte:
+    movzx   eax, byte [r8 + rcx]
+    mov     edx, eax
+    shr     al, 4
+    and     al, 0xf
+    add     al, 0x30
+    cmp     al, 0x39
+    jbe     .lo_ok
+    add     al, 0x27
+.lo_ok:
+    mov     [rsp + rcx*2], al
+    mov     al, dl
+    and     al, 0xf
+    add     al, 0x30
+    cmp     al, 0x39
+    jbe     .hi_ok
+    add     al, 0x27
+.hi_ok:
+    mov     [rsp + rcx*2 + 1], al
+    inc     ecx
+    cmp     ecx, 32
+    jb      .next_byte
+    mov     byte [rsp + 64], 10
+    mov     eax, 1
+    mov     edi, 2
+    lea     rsi, [rsp]
+    mov     edx, 65
+    syscall
+
+    add     rsp, 66
+    pop     r8
+    pop     rax
+    pop     rdi
+    pop     rsi
+    pop     rdx
+    pop     rcx
+    ret
 
 ; Helper: _mem_eq(rdi=expected, rsi=actual, edx=len)
 ; returns eax = 1 if equal, 0 if not

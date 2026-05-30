@@ -442,8 +442,11 @@ er_wasm_jit_compile:
     jmp     .compile_loop
 
 .handle_end:
-    dec     qword [rel jit_state.label_depth]
     mov     rdx, [rel jit_state.label_depth]
+    test    rdx, rdx
+    jz      .end_done        ; function-level end — no label handling needed
+    dec     qword [rel jit_state.label_depth]
+    dec     rdx
     ; Check label kind
     cmp     byte [rel jit_state.label_kinds + rdx], JIT_LABEL_LOOP
     je      .end_loop
