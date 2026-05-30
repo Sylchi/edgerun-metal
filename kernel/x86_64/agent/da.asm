@@ -23,6 +23,8 @@ extern er_memcpy
 extern er_memset
 extern er_memcmp
 extern er_fn_run
+extern er_fn_load
+extern er_fn_call
 
 ; Framebuffer info from fb_text.asm
 extern fb_addr, fb_width, fb_height, fb_pitch
@@ -72,6 +74,11 @@ global da_focused_slot
 global da_focused_hash
 da_focused_slot:   resd 1   ; surface slot index, -1 = none
 da_focused_hash:   resb 32  ; 32-byte identity hash of focused app (zero if none)
+
+; Persistent app state (for WASM event loop)
+da_app_loaded:     resb 1   ; non-zero when a persistent app is loaded
+da_app_export:     resb 64  ; export name buffer
+da_app_export_len: resb 1   ; length of export name
 
 ; ==================================================================
 ; .data
@@ -651,10 +658,23 @@ _da_launch_app:
     mov     edx, [r12 + LOCAL_CELL_PAYLOAD + 1]  ; wasm_len
     movzx   r8d, byte [r12 + LOCAL_CELL_PAYLOAD + 5]  ; export_name_len
 
-    ; Export name pointer
-    lea     rcx, [r12 + LOCAL_CELL_PAYLOAD + 6]
+    ; Store export name in DA BSS for persistent ticks
+    mov     [rel da_app_export_len], r8b
+    test    r8d, r8d
+    jz      .skip_export_copy
+    cmp     r8d, 64
+    ja      .skip_export_copy
+    push    rcx
+    push    rdx
+    lea     rdi, [rel da_app_export]
+    lea     rsi, [r12 + LOCAL_CELL_PAYLOAD + 6]
+    mov     edx, r8d
+    call    er_memcpy
+    pop     rdx
+    pop     rcx
+.skip_export_copy:
 
-    ; WASM bytes pointer
+    ; WASM bytes pointer (after export name)
     lea     rsi, [r12 + LOCAL_CELL_PAYLOAD + 6]
     add     rsi, r8
 
@@ -688,16 +708,17 @@ _da_launch_app:
     ; Clear tick counter
     mov     qword [rel da_wasm_ticks], 0
 
-    ; Run the WASM module
+    ; Load the WASM module (parse, validate, start, data segments)
     mov     rdi, r14            ; runtime
-    ; rsi still holds wasm_bytes_ptr
-    ; rdx still holds wasm_bytes_len
-    ; rcx still holds export_name_ptr
-    ; r8 still holds export_name_len
-    call    er_fn_run
+    ; rsi holds wasm_bytes_ptr
+    ; rdx holds wasm_bytes_len
+    call    er_fn_load
+    test    edx, edx
+    jnz     .done               ; load failed — skip
 
-    ; Mark app as exited
-    mov     byte [r15 + DA_APP_STATE], 2
+    ; Mark app as ready for persistent ticks
+    mov     byte [rel da_app_loaded], 1
+    ; App state stays = 1 (running) — not exited
 
     inc     dword [rel da_app_count]
 
@@ -727,6 +748,8 @@ _da_app_exit:
     imul    eax, DA_APP_SIZE
     lea     rbx, [rel da_app_registry + rax]
     mov     byte [rbx + DA_APP_STATE], 2
+    ; Clear persistent app state
+    mov     byte [rel da_app_loaded], 0
 
 .done:
     pop     rbx
@@ -847,16 +870,34 @@ er_fn er_da_launch_app
 
     mov     qword [rel da_wasm_ticks], 0
 
-    ; Run the module
+    ; Store export name for persistent ticks
+    mov     [rel da_app_export_len], r15b
+    test    r15, r15
+    jz      .skip_export_copy
+    cmp     r15, 64
+    ja      .skip_export_copy
+    push    rcx
+    push    rdx
+    lea     rdi, [rel da_app_export]
+    mov     rsi, r14
+    mov     edx, r15d
+    call    er_memcpy
+    pop     rdx
+    pop     rcx
+.skip_export_copy:
+
+    ; Load the module (parse, validate, start, data segments)
     mov     rdi, rbx
     mov     rsi, r12
     mov     rdx, r13
-    mov     rcx, r14
-    mov     r8,  r15
-    call    er_fn_run
+    call    er_fn_load
+    test    edx, edx
+    jnz     .fail
 
-    ; Mark as exited
-    mov     byte [rbx + DA_APP_STATE], 2
+    ; Mark as ready for persistent ticks
+    mov     byte [rel da_app_loaded], 1
+    ; App state stays = 1 (running)
+
     inc     dword [rel da_app_count]
 
 .fail:
@@ -1040,6 +1081,18 @@ er_fn er_da_composite
 ; ==================================================================
 ; ==================================================================
 ; er_da_tick — called from kernel pipeline once per iteration
-; ==================================================================
+; Runs the persistent WASM app's tick function, then composites.
+; =================================================================+
 er_fn er_da_tick
+    cmp     byte [rel da_app_loaded], 0
+    jz      .tick_composite
+
+    ; Call the loaded app's tick export
+    lea     rdi, [rel da_wasm_runtime]
+    lea     rsi, [rel da_app_export]
+    movzx   edx, byte [rel da_app_export_len]
+    call    er_fn_call
+    ; Ignore errors from app ticks — keep compositing
+
+.tick_composite:
     jmp     er_da_composite

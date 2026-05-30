@@ -8,6 +8,16 @@
 %include "driver/virtio_net_constants.inc"
 %include "x86_64/wasm_defines.inc"
 
+; ─── Local constants ─────────────────────────────────────────────
+%define TPM_RSP_BUF_SIZE         512
+%define TPM_GET_RANDOM_BYTES     4
+%define SHA256_BLOCK_SIZE        64
+%define SHA256_DATA_1K           1024
+%define SHA256_ITER_64           10
+%define SHA256_ITER_1K           5
+%define SHA256_SW_BENCH_ITER     10000
+%define WASM_MEM_SIZE            65536
+
 extern er_serial_init
 extern er_serial_puts
 extern er_serial_puthex32
@@ -272,7 +282,7 @@ tpm_cmd_buf:  resb 512
 tpm_rsp_buf:  resb 512
 
 ; WASM runtime config + scratch memory
-wasm_memory:   resb 65536        ; WASM linear memory (64KB = 1 page)
+wasm_memory:   resb WASM_MEM_SIZE
 wasm_ticks:    resq 1            ; tick counter
 wasm_runtime:  resb RUNTIME_SIZE ; RuntimeConfig struct (88 bytes)
 
@@ -366,7 +376,7 @@ er_fn er_kernel_main
 
     ; TPM present — send GetRandom to test the TPM CRB data path.
     mov     rdi, tpm_cmd_buf
-    mov     esi, 4
+    mov     esi, TPM_GET_RANDOM_BYTES
     call    er_tpm_get_random
     test    rax, rax
     jz      .tpm_fail
@@ -374,7 +384,7 @@ er_fn er_kernel_main
     ; Command size = TPM_CMD_GET_RANDOM_LEN (known constant).
     mov     esi, TPM_CMD_GET_RANDOM_LEN
     mov     rdx, tpm_rsp_buf
-    mov     ecx, 512
+    mov     ecx, TPM_RSP_BUF_SIZE
     call    er_tpm_crb_transfer
     test    rax, rax
     jz      .tpm_fail
@@ -400,21 +410,21 @@ er_fn er_kernel_main
     ; Warm up: one SHA-256
     mov     rdi, tpm_cmd_buf
     lea     rsi, [rel bench_data]
-    mov     edx, 64
+    mov     edx, SHA256_BLOCK_SIZE
     mov     ecx, TPM_RH_NULL
     call    er_tpm_hash_sha256
     test    rax, rax
     jz      .bench_done
-    mov     esi, 64 + TPM_CMD_HASH_FIXED_LEN
+    mov     esi, SHA256_BLOCK_SIZE + TPM_CMD_HASH_FIXED_LEN
     mov     rdi, tpm_cmd_buf
     mov     rdx, tpm_rsp_buf
-    mov     ecx, 512
+    mov     ecx, TPM_RSP_BUF_SIZE
     call    er_tpm_crb_transfer
     test    rax, rax
     jz      .bench_done
 
     ; Benchmark SHA-256, 64 bytes, 10 iterations
-    mov     r12d, 10
+    mov     r12d, SHA256_ITER_64
     rdtsc
     shl     rdx, 32
     or      rax, rdx
@@ -423,15 +433,15 @@ er_fn er_kernel_main
 .bench64:
     mov     rdi, tpm_cmd_buf
     lea     rsi, [rel bench_data]
-    mov     edx, 64
+    mov     edx, SHA256_BLOCK_SIZE
     mov     ecx, TPM_RH_NULL
     call    er_tpm_hash_sha256
     test    rax, rax
     jz      .bench_done
-    mov     esi, 64 + TPM_CMD_HASH_FIXED_LEN
+    mov     esi, SHA256_BLOCK_SIZE + TPM_CMD_HASH_FIXED_LEN
     mov     rdi, tpm_cmd_buf
     mov     rdx, tpm_rsp_buf
-    mov     ecx, 512
+    mov     ecx, TPM_RSP_BUF_SIZE
     call    er_tpm_crb_transfer
     test    rax, rax
     jz      .bench_done
@@ -443,7 +453,7 @@ er_fn er_kernel_main
     or      rax, rdx
     sub     rax, rbp
     xor     edx, edx
-    mov     ecx, 10
+    mov     ecx, SHA256_ITER_64
     div     ecx
 
     push    rax
@@ -458,8 +468,8 @@ er_fn er_kernel_main
     call    er_serial_puts
     call    .crlf
 
-    ; Benchmark SHA-256, 1024 bytes, 5 iterations
-    mov     r12d, 5
+    ; Benchmark SHA-256, SHA256_DATA_1K bytes, SHA256_ITER_1K iterations
+    mov     r12d, SHA256_ITER_1K
     rdtsc
     shl     rdx, 32
     or      rax, rdx
@@ -468,15 +478,15 @@ er_fn er_kernel_main
 .bench1k:
     mov     rdi, tpm_cmd_buf
     lea     rsi, [rel bench_data]
-    mov     edx, 1024
+    mov     edx, SHA256_DATA_1K
     mov     ecx, TPM_RH_NULL
     call    er_tpm_hash_sha256
     test    rax, rax
     jz      .bench_done
-    mov     esi, 1024 + TPM_CMD_HASH_FIXED_LEN
+    mov     esi, SHA256_DATA_1K + TPM_CMD_HASH_FIXED_LEN
     mov     rdi, tpm_cmd_buf
     mov     rdx, tpm_rsp_buf
-    mov     ecx, 512
+    mov     ecx, TPM_RSP_BUF_SIZE
     call    er_tpm_crb_transfer
     test    rax, rax
     jz      .bench_done
@@ -488,7 +498,7 @@ er_fn er_kernel_main
     or      rax, rdx
     sub     rax, rbp
     xor     edx, edx
-    mov     ecx, 5
+    mov     ecx, SHA256_ITER_1K
     div     ecx
 
     push    rax
@@ -572,8 +582,8 @@ er_fn er_kernel_main
     ; Skip software SHA-256 benchmark when running without TPM (QEMU speed)
     jmp     .sha_done
 
-    ; Software SHA-256 benchmark: 10K iterations of 64-byte hash
-    mov     r12d, 10000
+    ; Software SHA-256 benchmark: SHA256_SW_BENCH_ITER iterations
+    mov     r12d, SHA256_SW_BENCH_ITER
     rdtsc
     shl     rdx, 32
     or      rax, rdx
@@ -584,7 +594,7 @@ er_fn er_kernel_main
     call    er_sha256_init
     mov     rdi, sha256_ctx
     lea     rsi, [rel bench_data]
-    mov     edx, 64
+    mov     edx, SHA256_BLOCK_SIZE
     call    er_sha256_update
     mov     rdi, sha256_ctx
     mov     rsi, sha256_out
@@ -1660,7 +1670,7 @@ er_fn er_kernel_main
     push    rbx
     lea     rdi, [rel wasm_memory]
     xor     esi, esi
-    mov     edx, 65536
+    mov     edx, WASM_MEM_SIZE
     call    er_memset
     pop     rbx
     mov     rdi, rbx
@@ -1685,7 +1695,7 @@ er_fn er_kernel_main
     push    rbx
     lea     rdi, [rel wasm_memory]
     xor     esi, esi
-    mov     edx, 65536
+    mov     edx, WASM_MEM_SIZE
     call    er_memset
     pop     rbx
     mov     rdi, rbx

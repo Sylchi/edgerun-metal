@@ -21,6 +21,7 @@
 - Consolidating and removing code is preferred over adding new code.
 - No regressions.
 - **Removal-first rule: Before adding any new file, struct, function, or macro, find and remove at least as many lines of existing code without reducing functionality. Refactoring is the default. Addition is the exception. If you cannot find code to remove, you do not understand the existing code well enough to add.**
+- **WASM recursion is banned.** All modules are validated at load time: `er_wasm_validate_no_recursion` performs a DFS over the decoded call graph and rejects any module whose direct `call` (opcode 0x10) instructions form a cycle with `ERROR_RECURSION` (31). There is no runtime call-depth check; the static validation is the sole enforcement. `call_indirect` cycles are not detected statically (the table can be modified at runtime) and remain a documented limitation.
 - Generated build artifacts must stay untracked.
 - Use `.build/` for local build output.
 - Keep this as one Git repository; nested `.git` directories, `.gitmodules`, and submodule gitlinks are not allowed.
@@ -156,6 +157,11 @@ The cell is the universal IR — input events, network frames, storage requests,
 Every process has a 32-byte identity (BLAKE3 hash of binary + TPM measurement).
 Every device has a persistent TPM-backed identity. Identity kinds: USER, DEVICE, APP, STORAGE, RELAY, RESOURCE, OBJECT, EPHEMERAL, DELEGATED.
 
+### Authorization & Resource Grants
+Resources (RAM, storage, identity access) require a signed user grant.
+See [`docs/authorization.md`](docs/authorization.md) for the full architecture:
+app manifest → user prompt → signed receipt → TPM-mediated key hierarchy.
+
 ### Route Table
 A fixed-size table (16 entries) maps identity hash → SPSC ring buffer + handler.
 - `register_handler(id)` → slot_id
@@ -174,7 +180,7 @@ A circuit caches destination slot_id for fast send.
 When a cell arrives for a registered identity, the kernel either synchronously calls the handler (SYNC flag) or leaves it in the ring buffer for the consumer to poll.
 
 ### Clock
-Every kernel and app instance has a clock providing a verifiable stamp: `[keeper:32][tick:8][slot:8][epoch:8][era:8]`. The clock advances on each pipeline tick. Stamps allow apps to sync data and prove recency/ordering. All limits are powers of two for efficient modular arithmetic. Clock boundaries (slot/epoch/era) enable periodic work scheduling without timers.
+Every kernel and app instance has a clock providing a verifiable stamp: `[keeper:32][tick:8][slot:8][epoch:8][era:8]`. The kernel clock advances on each pipeline tick. Each app has an independent tick rate adjustment knob — apps can tick at different rates (e.g., every N pipeline ticks, on demand, or in response to cell arrival). Stamps allow apps to sync data and prove recency/ordering. All limits are powers of two for efficient modular arithmetic. Clock boundaries (slot/epoch/era) enable periodic work scheduling without timers.
 
 ### Pipeline Model
 The main loop (`kernel_main.asm`) is a round-robin pipeline:

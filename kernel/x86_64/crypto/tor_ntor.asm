@@ -54,15 +54,6 @@ ntor_tpm_rng: resb 32
 ; ntor work buffer
 ntor_work_buf: resb 1024
 
-; ==================================================================
-; _tor_ntor_kdf — ntor key derivation function
-; void _tor_ntor_kdf(u8 *key_seed[32], u8 *verify[32],
-;                    const u8 *secret_input, u32 secret_len)
-;
-; Uses HMAC-SHA256 via TPM.
-; key_seed = HMAC-SHA256(secret_input, "tor-ntor-kdf-1")
-; verify = HMAC-SHA256(secret_input, "tor-ntor-kdf-2")
-; ==================================================================
 _tor_ntor_kdf:
     push    rbx
     push    r12
@@ -112,18 +103,6 @@ _tor_ntor_kdf:
     pop     rbx
     ret
 
-; ==================================================================
-; _tor_ntor_auth — compute ntor server authentication value
-; int _tor_ntor_auth(u8 *auth[32], const u8 *verify[32],
-;    const u8 *node_id[20], const u8 *onion_key[32],
-;    const u8 *y[32], const u8 *client_pub[32])
-;
-; auth_input = verify(32) || node_id(20) || onion_key(32)
-;              || y(32) || client_pub(32) || PROTOID(24) || "Server"(6)
-; AUTH = HMAC-SHA256(auth_input, "tor-ntor-auth-1")
-;
-; Returns 0 on success, non-zero on TPM error.
-; ==================================================================
 _tor_ntor_auth:
     push    rbx
     push    r12
@@ -201,13 +180,6 @@ _tor_ntor_auth:
     pop     rbx
     ret
 
-; ==================================================================
-; er_tor_ntor_keygen — generate Curve25519 keypair
-; int er_tor_ntor_keygen(u8 *priv[32], u8 *pub[32])
-;
-; Generates random scalar via TPM RNG, clamps, computes public key.
-; Returns 0 on success, non-zero on TPM error.
-; ==================================================================
 er_fn er_tor_ntor_keygen
     push    rbx
     push    r12
@@ -275,23 +247,6 @@ er_fn er_tor_ntor_keygen
     pop     rbx
     er_ret
 
-; ==================================================================
-; er_tor_ntor_client_handshake — generate CREATE2 handshake data
-; int er_tor_ntor_client_handshake(
-;     u8 *handshake_out[84], u32 *handshake_len,
-;     const u8 *node_id[20], const u8 *onion_key[32],
-;     u8 *priv_key[32], u8 *pub_key[32])
-;
-; Generates client ephemeral keypair, computes X = priv * onion_key,
-; produces CREATE2 handshake: NODE_ID(20) || KEY_ID(32) || X(32)
-;
-; Returns:
-;   eax = 0 on success, rdx = error code
-;   handshake_out filled with 84 bytes
-;   *handshake_len = 84
-;   priv_key = client private scalar (clamped)
-;   pub_key = X (client public share)
-; ==================================================================
 er_fn er_tor_ntor_client_handshake
     push    rbx
     push    r12
@@ -368,22 +323,6 @@ er_fn er_tor_ntor_client_handshake
     pop     rbx
     er_ret
 
-; ==================================================================
-; er_tor_ntor_client_process — process CREATED2, derive circuit keys
-; int er_tor_ntor_client_process(
-;     const u8 *handshake_reply[64],
-;     const u8 *node_id[20], const u8 *onion_key[32],
-;     const u8 *client_priv[32], const u8 *client_pub[32],
-;     u8 *forward_key[16], u8 *backward_key[16],
-;     u8 *forward_iv[16],  u8 *backward_iv[16])
-;
-; Parses Y(32) + AUTH(32) from CREATED2.
-; Computes secret_input = EXP(Y,x) | EXP(B,x) | ID | B | X | Y | PROTOID
-; Derives key_seed and verify via HMAC-SHA256.
-; Verifies server AUTH via HMAC-SHA256.
-; Expands key_seed to forward/backward keys + IVs.
-; Returns 0 on success, -1 on error.
-; ==================================================================
 er_fn er_tor_ntor_client_process
     push    rbx
     push    r12

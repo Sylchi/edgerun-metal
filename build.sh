@@ -29,6 +29,7 @@ mkdir -p "${ASM_BUILD}"
 
 elf64()   { ${YASM} -f elf64   ${ASM_INC} -o "$2" "$1" && test -f "$2"; }
 elf32()   { ${YASM} -f elf32   ${ASM_INC} -o "$2" "$1" && test -f "$2"; }
+elf64_dbg() { ${YASM} -f elf64 ${ASM_INC} -dX25519_DEBUG -o "$2" "$1" && test -f "$2"; }
 
 # Build object list string from KERNEL_ASM_SRCS with given prefix/suffix
 # Usage: kernel_objs <prefix> <suffix> [extra_objects...]
@@ -310,6 +311,38 @@ cmd_test() {
 	cmd_test_tor
 	cmd_test_x25519
 	cmd_test_wasm_jit
+	cmd_test_recursion_valid
+	cmd_test_recursion_invalid
+}
+
+cmd_test_recursion_valid() {
+	local name="test_recursion_valid"
+	local src="${TEST_DIR}/${name}.asm"
+	local obj="${ASM_BUILD}/${name}.o"
+	local bin="${ASM_BUILD}/${name}"
+	${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
+	local dep_obj="${ASM_BUILD}/runtime.o"
+	if [ ! -f "$dep_obj" ]; then
+		elf64 "${ASM_DIR}/rt/runtime.asm" "$dep_obj"
+	fi
+	ld -T "${TEST_DIR}/test_jit.ld" -nostdlib -static -o "$bin" "$obj" "$dep_obj"
+	echo "  LD  ${bin}"
+	"$bin"
+}
+
+cmd_test_recursion_invalid() {
+	local name="test_recursion_invalid"
+	local src="${TEST_DIR}/${name}.asm"
+	local obj="${ASM_BUILD}/${name}.o"
+	local bin="${ASM_BUILD}/${name}"
+	${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
+	local dep_obj="${ASM_BUILD}/runtime.o"
+	if [ ! -f "$dep_obj" ]; then
+		elf64 "${ASM_DIR}/rt/runtime.asm" "$dep_obj"
+	fi
+	ld -T "${TEST_DIR}/test_jit.ld" -nostdlib -static -o "$bin" "$obj" "$dep_obj"
+	echo "  LD  ${bin}"
+	"$bin"
 }
 
 cmd_test_wasm_jit() {
@@ -422,6 +455,29 @@ cmd_test_x25519() {
 	"$bin"
 }
 
+cmd_test_x25519_debug() {
+	local src="${TEST_DIR}/test_x25519.asm"
+	local obj="${ASM_BUILD}/test_x25519_debug.o"
+	local stub_src="${TEST_DIR}/stubs_tor_ntor.asm"
+	local stub_obj="${ASM_BUILD}/stubs_tor_ntor_debug.o"
+	local bin="${ASM_BUILD}/test_x25519_debug"
+	${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
+	${YASM} -f elf64 ${ASM_INC} -o "$stub_obj" "$stub_src"
+	local tor_ntor_o="${ASM_BUILD}/tor_ntor.o"
+	if [ ! -f "$tor_ntor_o" ]; then
+		elf64 "${ASM_DIR}/crypto/tor_ntor.asm" "$tor_ntor_o"
+	fi
+	local runtime_o="${ASM_BUILD}/runtime.o"
+	if [ ! -f "$runtime_o" ]; then
+		elf64 "${ASM_DIR}/rt/runtime.asm" "$runtime_o"
+	fi
+	local curve25519_o="${ASM_BUILD}/curve25519_debug.o"
+	elf64_dbg "${ASM_DIR}/crypto/curve25519.asm" "$curve25519_o"
+	ld -nostdlib -static -o "$bin" "$obj" "$curve25519_o" "$tor_ntor_o" "$runtime_o" "$stub_obj"
+	echo "  LD  ${bin}"
+	"$bin"
+}
+
 cmd_test_bench_render_ir() {
 	build_test "bench_render_ir" "${TEST_DIR}/bench_render_ir.asm" "ui/sw_fb" "ui/render_ir"
 }
@@ -512,9 +568,12 @@ EdgeRun build targets:
   kernel-efi          Build kernel.efi (native UEFI PE32+)
   install-efi         Build + install kernel.efi to ESP + add boot entry
   test                Run all self-hosted ASM tests
+  test-wasm-jit       Run WASM JIT self-test (self-hosted ASM runner)
   test-ctype          Run ctype test (self-hosted ASM runner)
   test-clock          Run clock test (self-hosted ASM runner)
   test-http           Run HTTP test (self-hosted ASM runner)
+  test-recursion-valid    Run WASM recursion-validation valid-DAG test
+  test-recursion-invalid  Run WASM recursion-validation cycle-rejection test
   test-serial         Run serial test (self-hosted ASM runner)
   test-sw-fb          Run software framebuffer test (self-hosted ASM runner)
   test-render-ir      Run render IR test (self-hosted ASM runner)
@@ -543,16 +602,20 @@ case "${1:-help}" in
 	kernel-efi)     cmd_kernel_efi ;;
 	install-efi)    cmd_install_efi ;;
 	test)           cmd_test ;;
+	test-wasm-jit)  cmd_test_wasm_jit ;;
 	test-ctype)     cmd_test_ctype ;;
 	test-clock)     cmd_test_clock ;;
-	test-http)      cmd_test_http ;;
-	test-serial)    cmd_test_serial ;;
+	test-http)       cmd_test_http ;;
+	test-recursion-valid) cmd_test_recursion_valid ;;
+	test-recursion-invalid) cmd_test_recursion_invalid ;;
+	test-serial)     cmd_test_serial ;;
 	test-sw-fb)     cmd_test_sw_fb ;;
 	test-render-ir) cmd_test_render_ir ;;
 	test-fe-mul)    cmd_test_fe_mul ;;
 	test-spi-flash) cmd_test_spi_flash ;;
 	test-tor)       cmd_test_tor ;;
-	test-x25519)    cmd_test_x25519 ;;
+	test-x25519)     cmd_test_x25519 ;;
+	test-x25519-debug) cmd_test_x25519_debug ;;
 	test-bench-render-ir) cmd_test_bench_render_ir ;;
 	bench-wasm-jit) cmd_bench_wasm_jit ;;
 	pi-kernel)      cmd_pi_kernel ;;

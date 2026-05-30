@@ -63,10 +63,6 @@ _tcp_conn_ptr:
     er_err  ERROR_INVALID_PARAM
     ret
 
-; ==================================================================
-; er_tcp_init — initialize TCP module
-; void er_tcp_init(void)
-; ==================================================================
 er_fn er_tcp_init
     ; Zero the connection table
     mov     edi, tcp_conns_bss
@@ -107,19 +103,6 @@ er_fn er_tcp_get_state
     er_ret
 ; ==================================================================
 
-; ==================================================================
-; er_tcp_connect — initiate TCP connection
-; int er_tcp_connect(uint32_t dst_ip, uint16_t dst_port,
-;                    uint32_t src_ip, uint16_t src_port)
-;
-; dst_ip in network byte order
-; dst_port in host byte order
-; src_ip in network byte order
-; src_port in host byte order (0 = auto-assign)
-;
-; Returns: eax = connection ID (0..TCP_MAX_CONNS-1) on success
-;          eax = -1 on error, rdx = error code
-; ==================================================================
 er_fn er_tcp_connect
     push    rbx
     push    r12
@@ -565,15 +548,6 @@ er_fn er_tcp_send
     er_ret
 ; ==================================================================
 
-; ==================================================================
-; er_tcp_recv — receive data from connection
-; int er_tcp_recv(uint32_t conn_id, void *buf, uint32_t *len)
-;
-; On entry: *len = max bytes to read
-; On return: *len = bytes actually read
-; Returns: eax = 0 on success (data available or no data)
-;          eax = -1 on error
-; ==================================================================
 er_fn er_tcp_recv
     push    rbx
     push    r12
@@ -759,10 +733,6 @@ er_fn er_tcp_close
     er_ret
 ; ==================================================================
 
-; ==================================================================
-; _tcp_send_ack — send pure ACK segment
-; void _tcp_send_ack(tcp_conn *conn)
-; ==================================================================
 _tcp_send_ack:
     push    r12
     mov     r12, rdi
@@ -822,10 +792,6 @@ _tcp_send_ack:
     pop     r12
     ret
 
-; ==================================================================
-; _tcp_send_fin — send FIN segment
-; void _tcp_send_fin(tcp_conn *conn)
-; ==================================================================
 _tcp_send_fin:
     push    r12
     mov     r12, rdi
@@ -890,13 +856,6 @@ _tcp_send_fin:
     pop     r12
     ret
 
-; ==================================================================
-; er_tcp_handle — process incoming TCP segment
-; void er_tcp_handle(const void *ip_hdr, uint32_t ip_total_len)
-;
-; ip_hdr points to the IP header (already validated)
-; ip_total_len is the total IP packet length in host byte order
-; ==================================================================
 er_fn er_tcp_handle
     push    rbx
     push    r12

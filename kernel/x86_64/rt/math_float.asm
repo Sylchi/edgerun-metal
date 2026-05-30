@@ -35,35 +35,35 @@ neg_float_max_f32:    dd 0xff7fffff     ; -FLT_MAX
 SECTION .text
 
 ; ==================================================================
-; er_absF — absolute value
-; float er_absF(float value)
+; er_abs_f32 — absolute value
+; float er_abs_f32(float value)
 ; ==================================================================
-er_fn er_absF
+er_fn er_abs_f32
     ; Clear sign bit: andps xmm0, [abs_mask]
     andps   xmm0, [rel abs_f32_mask]
     er_ret
 
 ; ==================================================================
-; er_minF — minimum of two floats (returns NaN if either is NaN)
-; float er_minF(float a, float b)
+; er_min_f32 — minimum of two floats (returns NaN if either is NaN)
+; float er_min_f32(float a, float b)
 ; ==================================================================
-er_fn er_minF
+er_fn er_min_f32
     minss   xmm0, xmm1
     er_ret
 
 ; ==================================================================
-; er_maxF — maximum of two floats (returns NaN if either is NaN)
-; float er_maxF(float a, float b)
+; er_max_f32 — maximum of two floats (returns NaN if either is NaN)
+; float er_max_f32(float a, float b)
 ; ==================================================================
-er_fn er_maxF
+er_fn er_max_f32
     maxss   xmm0, xmm1
     er_ret
 
 ; ==================================================================
-; er_clampF — clamp value to [min_value, max_value]
-; float er_clampF(float value, float min_value, float max_value)
+; er_clamp_f32 — clamp value to [min_value, max_value]
+; float er_clamp_f32(float value, float min_value, float max_value)
 ; ==================================================================
-er_fn er_clampF
+er_fn er_clamp_f32
     ; value in xmm0, min in xmm1, max in xmm2
     ; clamp = min(max(value, min_value), max_value)
     maxss   xmm0, xmm1       ; xmm0 = max(value, min)
@@ -71,10 +71,10 @@ er_fn er_clampF
     er_ret
 
 ; ==================================================================
-; er_clamp01F — clamp value to [0.0, 1.0]
-; float er_clamp01F(float value)
+; er_clamp01_f32 — clamp value to [0.0, 1.0]
+; float er_clamp01_f32(float value)
 ; ==================================================================
-er_fn er_clamp01F
+er_fn er_clamp01_f32
     ; Compare with 0.0
     xorps   xmm1, xmm1       ; xmm1 = 0.0
     maxss   xmm0, xmm1       ; xmm0 = max(value, 0.0)
@@ -85,12 +85,12 @@ er_fn er_clamp01F
     er_ret
 
 ; ==================================================================
-; er_sqrtF — Newton-Raphson square root (matches math.zig reference)
+; er_sqrt_f32 — Newton-Raphson square root (matches math.zig reference)
 ; Falls back to SSE hardware sqrtss as the reference, which is
 ; correctly rounded per IEEE 754 and strictly more accurate.
-; For bit-exactness with the Zig Newton-Raphson, see er_sqrtF_nr.
+; For bit-exactness with the Zig Newton-Raphson, see er_sqrt_f32_nr.
 ; ==================================================================
-er_fn er_sqrtF
+er_fn er_sqrt_f32
     ; If value <= 0.0, return 0.0
     xorps   xmm1, xmm1
     ucomiss xmm0, xmm1
@@ -104,8 +104,8 @@ er_fn er_sqrtF
     er_ret
 
 ; ==================================================================
-; er_sqrtF_nr — Newton-Raphson sqrt bit-exact with math.zig
-; float er_sqrtF_nr(float value)
+; er_sqrt_f32_nr — Newton-Raphson sqrt bit-exact with math.zig
+; float er_sqrt_f32_nr(float value)
 ;
 ; Algorithm from edgerun-zig/src/math.zig sqrtF:
 ;   if (value <= 0.0) return 0.0;
@@ -116,7 +116,7 @@ er_fn er_sqrtF
 ;   estimate = 0.5 * (estimate + value / estimate);
 ;   return estimate;
 ; ==================================================================
-er_fn er_sqrtF_nr
+er_fn er_sqrt_f32_nr
     ; If value <= 0.0, return 0.0
     xorps   xmm1, xmm1
     ucomiss xmm0, xmm1
@@ -154,8 +154,8 @@ er_fn er_sqrtF_nr
     er_ret
 
 ; ==================================================================
-; er_rsqrtF — fast inverse square root (matches math.zig reference)
-; float er_rsqrtF(float value)
+; er_rsqrt_f32 — fast inverse square root (matches math.zig reference)
+; float er_rsqrt_f32(float value)
 ;
 ; Algorithm from edgerun-zig/src/math.zig rsqrtF:
 ;   if (value <= 0.0) return 0.0;
@@ -167,7 +167,7 @@ er_fn er_sqrtF_nr
 ;   estimate = estimate * (1.5 - half * estimate * estimate);
 ;   return estimate;
 ; ==================================================================
-er_fn er_rsqrtF
+er_fn er_rsqrt_f32
     ; If value <= 0.0, return 0.0
     xorps   xmm1, xmm1
     ucomiss xmm0, xmm1
@@ -211,15 +211,15 @@ er_fn er_rsqrtF
     er_ret
 
 ; ==================================================================
-; er_floorF — floor function (matches math.zig reference)
-; float er_floorF(float value)
+; er_floor_f32 — floor function (matches math.zig reference)
+; float er_floor_f32(float value)
 ;
 ; Algorithm from edgerun-zig/src/math.zig floorF:
 ;   truncated = @intFromFloat(value);
 ;   if (@floatFromInt(truncated) > value) truncated -= 1;
 ;   return @floatFromInt(truncated);
 ; ==================================================================
-er_fn er_floorF
+er_fn er_floor_f32
     ; Convert float to i32 (truncate toward zero)
     cvttss2si eax, xmm0     ; eax = (i32)value
 
@@ -239,15 +239,15 @@ er_fn er_floorF
     er_ret
 
 ; ==================================================================
-; er_ceilF — ceil function (matches math.zig reference)
-; float er_ceilF(float value)
+; er_ceil_f32 — ceil function (matches math.zig reference)
+; float er_ceil_f32(float value)
 ;
 ; Algorithm from edgerun-zig/src/math.zig ceilF:
 ;   truncated = @intFromFloat(value);
 ;   if (@floatFromInt(truncated) < value) truncated += 1;
 ;   return @floatFromInt(truncated);
 ; ==================================================================
-er_fn er_ceilF
+er_fn er_ceil_f32
     ; Convert float to i32 (truncate toward zero)
     cvttss2si eax, xmm0     ; eax = (i32)value
 
@@ -267,14 +267,14 @@ er_fn er_ceilF
     er_ret
 
 ; ==================================================================
-; er_isFiniteF — check if float is finite (matches math.zig reference)
-; int er_isFiniteF(float value)
+; er_is_finite_f32 — check if float is finite (matches math.zig reference)
+; int er_is_finite_f32(float value)
 ;
 ; Algorithm from edgerun-zig/src/math.zig isFiniteF:
 ;   return value == value and value <= float_max and value >= -float_max;
 ; Returns: 1 if finite, 0 if NaN or infinite
 ; ==================================================================
-er_fn er_isFiniteF
+er_fn er_is_finite_f32
     ; Check: value == value (catches NaN — NaN != NaN)
     ucomiss xmm0, xmm0
     jp      .not_finite      ; NaN has parity flag set
@@ -298,8 +298,8 @@ er_fn er_isFiniteF
     er_ret
 
 ; ==================================================================
-; er_u8FromUnitF — convert unit float [0,1] to u8 (matches math.zig)
-; unsigned char er_u8FromUnitF(float value)
+; er_u8_from_unit_f32 — convert unit float [0,1] to u8 (matches math.zig)
+; unsigned char er_u8_from_unit_f32(float value)
 ;
 ; Algorithm from edgerun-zig/src/math.zig u8FromUnitF:
 ;   scaled = clamp01F(value) * 255.0 + 0.5;
@@ -307,7 +307,7 @@ er_fn er_isFiniteF
 ;   if (scaled >= 255.0) return 255;
 ;   return (int)scaled;
 ; ==================================================================
-er_fn er_u8FromUnitF
+er_fn er_u8_from_unit_f32
     ; Clamp to [0, 1]
     xorps   xmm1, xmm1
     maxss   xmm0, xmm1       ; xmm0 = max(value, 0.0)

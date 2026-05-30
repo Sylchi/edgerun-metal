@@ -72,10 +72,6 @@ tor_status_msg: resb 128
 
 SECTION .text
 
-; ==================================================================
-; er_tor_cell_init — initialize Tor cell module
-; void er_tor_cell_init(void)
-; ==================================================================
 er_fn er_tor_cell_init
     ; Zero all BSS state
     mov     dword [tor_conn_id], -1
@@ -135,10 +131,6 @@ _tor_stream_ptr:
     er_err  ERROR_INVALID_PARAM
     ret
 
-; ==================================================================
-; _tor_cell_send — send a fixed-length Tor cell over TCP
-; int _tor_cell_send(u32 conn_id, const u8 *cell[514])
-; ==================================================================
 _tor_cell_send:
     mov     edi, [tor_conn_id]
     mov     rsi, rsi        ; cell
@@ -146,11 +138,6 @@ _tor_cell_send:
     call    er_tcp_send
     ret
 
-; ==================================================================
-; _tor_cell_recv — receive a fixed-length Tor cell from TCP
-; int _tor_cell_recv(u32 conn_id, u8 *cell[514])
-; Populates cell buffer. Returns 0 on success.
-; ==================================================================
 _tor_cell_recv:
     push    rbx
     mov     rbx, rsi        ; cell buffer
@@ -180,13 +167,6 @@ tor_recv_len: dd 0
 
 SECTION .text
 
-; ==================================================================
-; _tor_build_versions_cell — build VERSIONS cell
-; void _tor_build_versions_cell(u8 *cell, u32 version)
-;
-; Variable-length cell: circ_id(4)=0 + cmd=7 + len(2) + versions
-; For link protocol version requests: [4, 5]
-; ==================================================================
 _tor_build_versions_cell:
     ; circ_id = 0
     mov     dword [rdi + TOR_VAR_CIRC_ID], 0
@@ -199,11 +179,6 @@ _tor_build_versions_cell:
     mov     word [rdi + TOR_VAR_PAYLOAD + 2], 0x0005
     ret
 
-; ==================================================================
-; _tor_parse_versions — parse VERSIONS cell, pick highest common version
-; int _tor_parse_versions(const u8 *cell, u32 cell_len)
-; Returns chosen version, or -1 if none match.
-; ==================================================================
 _tor_parse_versions:
     push    rbx
     mov     rbx, rdi        ; cell
@@ -243,10 +218,6 @@ _tor_parse_versions:
     pop     rbx
     ret
 
-; ==================================================================
-; _tor_build_netinfo_cell — build NETINFO cell
-; void _tor_build_netinfo_cell(u8 *cell)
-; ==================================================================
 _tor_build_netinfo_cell:
     ; circ_id = 0
     mov     dword [rdi + TOR_VAR_CIRC_ID], 0
@@ -271,10 +242,6 @@ _tor_build_netinfo_cell:
 
     ret
 
-; ==================================================================
-; _tor_build_certs_cell — build CERTS cell (minimal, anonymous auth)
-; void _tor_build_certs_cell(u8 *cell)
-; ==================================================================
 _tor_build_certs_cell:
     ; circ_id = 0
     mov     dword [rdi + TOR_VAR_CIRC_ID], 0
@@ -286,10 +253,6 @@ _tor_build_certs_cell:
     mov     byte [rdi + TOR_VAR_PAYLOAD], 0
     ret
 
-; ==================================================================
-; _tor_build_authenticate_cell — build AUTHENTICATE cell (anonymous)
-; void _tor_build_authenticate_cell(u8 *cell, const u8 *challenge[32])
-; ==================================================================
 _tor_build_authenticate_cell:
     push    rbx
     mov     rbx, rdi        ; cell
@@ -307,19 +270,6 @@ _tor_build_authenticate_cell:
     pop     rbx
     ret
 
-; ==================================================================
-; er_tor_link_handshake — perform Tor link handshake
-; int er_tor_link_handshake(u32 guard_ip, u16 guard_port)
-;
-; 1. TCP connect to guard relay
-; 2. Exchange VERSIONS cells → negotiate link version
-; 3. Exchange CERTS cells
-; 4. Process AUTH_CHALLENGE, send AUTHENTICATE
-; 5. Exchange NETINFO
-; 6. Set tor_link_established = 1
-;
-; Returns: eax = 0 on success, -1 on failure
-; ==================================================================
 er_fn er_tor_link_handshake
     push    rbx
     push    r12
@@ -495,13 +445,6 @@ er_fn er_tor_link_handshake
     pop     rbx
     er_ret
 
-; ==================================================================
-; _tor_send_create2 — send CREATE2 cell to build circuit
-; int _tor_send_create2(u32 circ_id, const u8 *handshake_data, u32 handshake_len)
-;
-; Sends fixed-length cell: circ_id(2)+cmd+payload
-; CREATE2 payload: htype(2) + hlen(2) + handshake_data
-; ==================================================================
 _tor_send_create2:
     push    rbx
     push    r12
@@ -550,13 +493,6 @@ _tor_send_create2:
     pop     rbx
     ret
 
-; ==================================================================
-; _tor_recv_created2 — wait for CREATED2 cell
-; int _tor_recv_created2(u32 circ_id, u8 *reply, u32 *reply_len)
-;
-; Waits for CREATED2 cell for given circ_id.
-; reply buffer must be at least 128 bytes.
-; ==================================================================
 _tor_recv_created2:
     push    rbx
     push    r12
@@ -609,20 +545,6 @@ _tor_recv_created2:
     pop     rbx
     er_ret
 
-; ==================================================================
-; _tor_build_extend2 — build RELAY_EARLY cell with EXTEND2 body
-; void _tor_build_extend2(u8 *cell, u32 circ_id, u16 stream_id,
-;                         const u8 *node_id[20], const u8 *onion_key[32],
-;                         const u8 *handshake[84])
-;
-; Builds a cell containing RELAY_EARLY + EXTEND2 body.
-; EXTEND2 body format:
-;   NSPEC(1) + LSTYPE(1)+LSLEN(1)+LST(20) + HTYPE(2)+HLEN(2)+HDATA(84)
-;
-; For ntor (HTYPE=0x0002), uses 2 link specifiers:
-;   spec1: LSTYPE=2 (IPv4), LSLEN=6, data=IP(4)+PORT(2)
-;   spec2: LSTYPE=4 (legacy ID), LSLEN=20, data=node_id
-; ==================================================================
 _tor_build_extend2:
     push    rbx
     push    r12
@@ -693,16 +615,6 @@ _tor_build_extend2:
     pop     rbx
     ret
 
-; ==================================================================
-; _tor_parse_extended2 — parse EXTENDED2 reply from relay cell
-; int _tor_parse_extended2(const u8 *relay_body, u32 body_len,
-;                          u8 *out_handshake_reply[64])
-;
-; Parses EXTENDED2 body from a received RELAY cell payload.
-; EXTENDED2 body: HTYPE(2) + HLEN(2) + HDATA(variable)
-;
-; Returns 0 on success, -1 on parse error.
-; ==================================================================
 _tor_parse_extended2:
     push    rbx
     push    r12
@@ -749,12 +661,6 @@ _tor_parse_extended2:
     pop     rbx
     ret
 
-; ==================================================================
-; er_tor_relay_crypt — encrypt/decrypt a relay cell for a circuit
-; Applies AES-CTR encryption using circuit's forward/backward keys
-; void er_tor_relay_crypt(u8 *cell, u32 circ_id, int direction)
-; direction: 0 = forward (outgoing), 1 = backward (incoming)
-; ==================================================================
 global er_tor_relay_crypt
 er_tor_relay_crypt:
     push    rbx
@@ -803,15 +709,6 @@ er_tor_relay_crypt:
     pop     rbx
     ret
 
-; ==================================================================
-; er_tor_circuit_create — build a circuit through the guard relay
-; int er_tor_circuit_create(u32 *out_circ_id,
-;                           const u8 *node_id[20],
-;                           const u8 *onion_key[32])
-;
-; Creates a 1-hop circuit to the guard relay using CREATE2/CREATED2.
-; Returns circuit ID in *out_circ_id.
-; ==================================================================
 er_fn er_tor_circuit_create
     push    rbx
     push    r12
@@ -932,13 +829,6 @@ er_fn er_tor_circuit_create
     pop     rbx
     er_ret
 
-; ==================================================================
-; er_tor_send_relay — send a relay cell through a circuit
-; int er_tor_send_relay(u32 circ_id, u16 stream_id,
-;                       u8 relay_cmd, const u8 *data, u32 data_len)
-;
-; Builds, encrypts, and sends a relay cell over the circuit.
-; ==================================================================
 er_fn er_tor_send_relay
     push    rbx
     push    r12
@@ -1070,14 +960,6 @@ er_fn er_tor_send_relay
     pop     rbx
     er_ret
 
-; ==================================================================
-; er_tor_recv_relay — receive and decrypt a relay cell
-; int er_tor_recv_relay(u32 circ_id, u16 *out_stream_id,
-;                       u8 *out_cmd, u8 *out_data, u32 *out_data_len)
-;
-; Reads a cell from TCP, decrypts with circuit's backward key,
-; parses relay header.
-; ==================================================================
 er_fn er_tor_recv_relay
     push    rbx
     push    r12
@@ -1217,13 +1099,6 @@ er_fn er_tor_recv_relay
     pop     rbx
     er_ret
 
-; ==================================================================
-; er_tor_open_stream — open a TCP stream through a circuit
-; int er_tor_open_stream(u32 circ_id, u32 dst_ip, u16 dst_port,
-;                        u16 *out_stream_id)
-;
-; Sends RELAY_BEGIN cell through the circuit.
-; ==================================================================
 er_fn er_tor_open_stream
     push    rbx
     push    r12

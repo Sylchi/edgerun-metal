@@ -181,6 +181,208 @@ er_fn er_fn_init
     ret
 
 ; ==================================================================
+; er_fn_load — Parse and prepare a WASM module for repeated execution
+; rdi = runtime_ptr, rsi = wasm_bytes_ptr, rdx = wasm_bytes_len
+; Returns: rdx = error code (0 = OK)
+;
+; Like er_fn_run but stops after the start function and data segments.
+; Does NOT find or call the export. Leaves the module ready for
+; repeated calls via er_fn_call.
+; =================================================================+
+%ifndef HAVE_ER_WASM_RUNTIME_PTR
+extern er_wasm_runtime_ptr
+%endif
+er_fn er_fn_load
+    er_frame_push
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+
+    mov     r12, rdi        ; runtime_ptr
+    mov     r13, rsi        ; wasm_bytes
+    mov     r14, rdx        ; wasm_len
+
+    ; Update runtime pointer for import wrappers
+    mov     [rel er_wasm_runtime_ptr], r12
+
+    ; Initialize runtime context
+    mov     rdi, [r12 + RUNTIME_MEMORY_PTR_OFF]
+    mov     rsi, [r12 + RUNTIME_MEMORY_LEN_OFF]
+    mov     rdx, [r12 + RUNTIME_TICKS_PTR_OFF]
+    call    er_fn_init
+
+    ; Store grow function pointers
+    mov     rax, [r12 + RUNTIME_MEM_GROW_FN_OFF]
+    mov     [runtime_memory_grow_fn], rax
+    mov     rax, [r12 + RUNTIME_MEM_GROW_CTX_OFF]
+    mov     [runtime_memory_grow_ctx], rax
+    mov     rax, [r12 + RUNTIME_TABLE_GROW_FN_OFF]
+    mov     [runtime_table_grow_fn], rax
+    mov     rax, [r12 + RUNTIME_TABLE_GROW_CTX_OFF]
+    mov     [runtime_table_grow_ctx], rax
+    mov     rax, [r12 + RUNTIME_INITIAL_PAGES_OFF]
+    mov     [runtime_initial_pages], rax
+    movzx   eax, byte [r12 + RUNTIME_HAS_PAGES_OFF]
+    mov     [runtime_has_initial_pages], al
+
+    ; Store host imports table
+    mov     rax, [r12 + RUNTIME_IMPORTS_PTR_OFF]
+    mov     [runtime_imports_ptr], rax
+    mov     rax, [r12 + RUNTIME_IMPORTS_LEN_OFF]
+    mov     [runtime_imports_len], rax
+
+    ; Reset parser state
+    mov     byte [exec_storage_module_valid], 0
+    mov     byte [exec_storage_start_ran], 0
+    mov     qword [exec_frame_save_ptr], 0
+    ; Clear JIT table
+    cld
+    lea     rdi, [rel jit_table]
+    xor     eax, eax
+    mov     ecx, MAX_FUNCTIONS
+    rep stosq
+
+    ; Parse module
+    mov     rdi, r13
+    mov     rsi, r14
+    call    er_wasm_parse_module
+    test    rdx, rdx
+    jnz     .error
+
+    ; Resolve imports
+    call    er_wasm_resolve_imports
+    test    rdx, rdx
+    jnz     .error
+
+    ; Validate no recursion
+    call    er_wasm_validate_no_recursion
+    test    rdx, rdx
+    jnz     .error
+
+    mov     byte [exec_storage_module_valid], 1
+
+    ; Determine initial memory pages
+    cmp     byte [runtime_has_initial_pages], 0
+    je      .use_module_memory_pages
+    mov     rax, [runtime_initial_pages]
+    jmp     .set_memory_pages
+.use_module_memory_pages:
+    mov     rax, [memory_min_pages]
+.set_memory_pages:
+    mov     [executor_memory_pages], rax
+    shl     rax, WASM_PAGE_SHIFT
+    mov     [executor_memory_limit], rax
+
+    ; Run start function if present
+    cmp     byte [exec_storage_start_ran], 0
+    jne     .skip_start
+
+    cmp     qword [start_function_index], -1
+    je      .no_start
+
+    mov     rdi, [start_function_index]
+    xor     rsi, rsi
+    xor     rdx, rdx
+    call    er_fn_exec
+    test    rdx, rdx
+    jnz     .error
+    cmp     qword [exec_result_count], 0
+    jne     .error
+
+.no_start:
+    mov     byte [exec_storage_start_ran], 1
+
+.skip_start:
+    ; Apply data segments
+    mov     rdi, [runtime_memory_ptr]
+    mov     rsi, [executor_memory_pages]
+    call    er_wasm_apply_data_segments
+
+    xor     edx, edx
+    jmp     .done
+
+.error:
+    mov     rax, -1
+.done:
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
+    ret
+
+; ==================================================================
+; er_fn_call — Call an exported function of a loaded module
+; rdi = runtime_ptr, rsi = export_name_ptr, rdx = export_name_len
+; Returns: rax = result value, rdx = error code
+;
+; The module must have been loaded via er_fn_load first.
+; Multiple calls are safe — execution state is reset each time.
+; =================================================================+
+er_fn er_fn_call
+    er_frame_push
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+
+    mov     r12, rdi        ; runtime_ptr
+    mov     r13, rsi        ; export_name_ptr
+    mov     r14, rdx        ; export_name_len
+
+    ; Update runtime pointer for import wrappers
+    mov     [rel er_wasm_runtime_ptr], r12
+
+    ; Find the export
+    mov     rdi, r13
+    mov     rsi, r14
+    call    er_wasm_find_export
+    test    rdx, rdx
+    jnz     .error
+
+    ; Get function index from export entry
+    mov     rbx, rax        ; export_index
+    imul    rbx, EXPORT_SIZE
+    movzx   eax, byte [exports_buf + rbx + 16]  ; kind
+    cmp     al, 0x00        ; function kind
+    jne     .error_kind
+    mov     rbx, [exports_buf + rbx + 24]   ; function index
+
+    ; Execute the function
+    mov     rdi, rbx
+    xor     rsi, rsi        ; no args
+    xor     rdx, rdx        ; 0 args
+    call    er_fn_exec
+    test    rdx, rdx
+    jnz     .error
+
+    ; Return result
+    mov     rax, [exec_result_values]
+    xor     edx, edx
+    jmp     .done
+
+.error_kind:
+    xor     eax, eax
+    mov     edx, ERROR_MISSING_EXPORT
+    jmp     .done
+
+.error:
+    xor     eax, eax
+    ; rdx already set by failing call
+.done:
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
+    ret
+
+; ==================================================================
 ; Resolve all imports against host-provided import table
 ; For each import in imports_buf, scans runtime_imports for a match
 ; by module name and function name.

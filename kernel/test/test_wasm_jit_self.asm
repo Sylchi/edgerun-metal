@@ -6,6 +6,7 @@
 ;          test_wasm_jit_self.o kernel_build/runtime.o
 ; Run:   ./test_wasm_jit
 
+%define HAVE_ER_WASM_RUNTIME_PTR
 %include "x86_64/wasm/wasm_interpreter.asm"
 %include "x86_64/wasm/wasm_jit_debug.asm"
 
@@ -29,6 +30,10 @@ SECTION .bss
 test_fail: resq 1
 saved_rax: resq 1
 saved_rdx: resq 1
+
+; er_wasm_runtime_ptr provided here so wasm_run.asm doesn't extern it
+global er_wasm_runtime_ptr
+er_wasm_runtime_ptr: resq 1
 
 SECTION .text
 global _start

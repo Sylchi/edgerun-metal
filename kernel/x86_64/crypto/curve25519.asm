@@ -1147,6 +1147,16 @@ er_tor_curve25519_scalar_mult:
     and     byte [SCALAR + 31], 127
     or      byte [SCALAR + 31], 64
 
+%ifdef X25519_DEBUG
+    movzx   eax, byte [SCALAR + 31]
+    test    eax, 0x40
+    jnz     .dbg_scalar_top_bit_ok
+    mov     eax, 60
+    mov     edi, 0xE1
+    syscall
+.dbg_scalar_top_bit_ok:
+%endif
+
     ; X1 = point (u-coordinate)
     lea     rdi, [X1]
     mov     rsi, r14
@@ -1202,6 +1212,54 @@ er_tor_curve25519_scalar_mult:
     mov     edx, r15d
     call    _fe_cswap
 
+%ifdef X25519_DEBUG
+    cmp     ebx, 254
+    jne     .dbg_after_cswap_done
+
+    ; After first cswap, expected: Z2=1, X3=1, Z3=0
+    cmp     qword [Z2], 1
+    jne     .dbg_bad_cswap
+    cmp     qword [Z2 + 8], 0
+    jne     .dbg_bad_cswap
+    cmp     qword [Z2 + 16], 0
+    jne     .dbg_bad_cswap
+    cmp     qword [Z2 + 24], 0
+    jne     .dbg_bad_cswap
+    cmp     qword [Z2 + 32], 0
+    jne     .dbg_bad_cswap
+
+    cmp     qword [X3], 1
+    jne     .dbg_bad_cswap
+    cmp     qword [X3 + 8], 0
+    jne     .dbg_bad_cswap
+    cmp     qword [X3 + 16], 0
+    jne     .dbg_bad_cswap
+    cmp     qword [X3 + 24], 0
+    jne     .dbg_bad_cswap
+    cmp     qword [X3 + 32], 0
+    jne     .dbg_bad_cswap
+
+    cmp     qword [Z3], 0
+    jne     .dbg_bad_cswap
+    cmp     qword [Z3 + 8], 0
+    jne     .dbg_bad_cswap
+    cmp     qword [Z3 + 16], 0
+    jne     .dbg_bad_cswap
+    cmp     qword [Z3 + 24], 0
+    jne     .dbg_bad_cswap
+    cmp     qword [Z3 + 32], 0
+    jne     .dbg_bad_cswap
+
+    jmp     .dbg_after_cswap_done
+
+.dbg_bad_cswap:
+    mov     eax, 60
+    mov     edi, 0xE2
+    syscall
+
+.dbg_after_cswap_done:
+%endif
+
     ; swap = bit
     mov     r15d, [BITTMP]
 
@@ -1212,6 +1270,43 @@ er_tor_curve25519_scalar_mult:
     lea     rcx, [Z3]
     lea     r8,  [X1]
     call    _curve25519_ladder_step
+
+%ifdef X25519_DEBUG
+    cmp     ebx, 254
+    jne     .dbg_after_step_done
+
+    ; Check Z2 not raw zero
+    mov     rax, [Z2]
+    or      rax, [Z2 + 8]
+    or      rax, [Z2 + 16]
+    or      rax, [Z2 + 24]
+    or      rax, [Z2 + 32]
+    test    rax, rax
+    jnz     .dbg_z2_nonzero_raw
+    mov     edi, 0xE3
+    mov     eax, 60
+    syscall
+
+.dbg_z2_nonzero_raw:
+    ; Check Z2 not p (= [2^51-19, 2^51-1, 2^51-1, 2^51-1, 2^51-1])
+    mov     rax, 0x0007FFFFFFFFFFED
+    cmp     [Z2], rax
+    jne     .dbg_after_step_done
+    mov     rax, 0x0007FFFFFFFFFFFF
+    cmp     [Z2 + 8], rax
+    jne     .dbg_after_step_done
+    cmp     [Z2 + 16], rax
+    jne     .dbg_after_step_done
+    cmp     [Z2 + 24], rax
+    jne     .dbg_after_step_done
+    cmp     [Z2 + 32], rax
+    jne     .dbg_after_step_done
+    mov     edi, 0xE4
+    mov     eax, 60
+    syscall
+
+.dbg_after_step_done:
+%endif
 
     dec     ebx
     jns     .scalar_loop
@@ -1226,6 +1321,62 @@ er_tor_curve25519_scalar_mult:
     lea     rsi, [Z3]
     mov     edx, r15d
     call    _fe_cswap
+
+%ifdef X25519_DEBUG
+    ; After final cswap, check Z2 for 0/p
+    mov     rax, [Z2]
+    or      rax, [Z2 + 8]
+    or      rax, [Z2 + 16]
+    or      rax, [Z2 + 24]
+    or      rax, [Z2 + 32]
+    test    rax, rax
+    jnz     .dbg_final_z2_nonzero
+    mov     edi, 0xE5
+    mov     eax, 60
+    syscall
+.dbg_final_z2_nonzero:
+    ; Check p
+    mov     rax, 0x0007FFFFFFFFFFED
+    cmp     [Z2], rax
+    jne     .dbg_final_z2_ok
+    mov     rax, 0x0007FFFFFFFFFFFF
+    cmp     [Z2 + 8], rax
+    jne     .dbg_final_z2_ok
+    cmp     [Z2 + 16], rax
+    jne     .dbg_final_z2_ok
+    cmp     [Z2 + 24], rax
+    jne     .dbg_final_z2_ok
+    cmp     [Z2 + 32], rax
+    jne     .dbg_final_z2_ok
+    mov     edi, 0xE6
+    mov     eax, 60
+    syscall
+.dbg_final_z2_ok:
+    ; Dump X2 (40 bytes raw limbs) to stderr
+    mov     eax, 1
+    mov     edi, 2
+    lea     rsi, [X2]
+    mov     edx, 40
+    syscall
+    ; Dump Z2 (40 bytes raw limbs) to stderr
+    mov     eax, 1
+    mov     edi, 2
+    lea     rsi, [Z2]
+    mov     edx, 40
+    syscall
+    ; Dump X3 (40 bytes raw limbs) to stderr
+    mov     eax, 1
+    mov     edi, 2
+    lea     rsi, [X3]
+    mov     edx, 40
+    syscall
+    ; Dump Z3 (40 bytes raw limbs) to stderr
+    mov     eax, 1
+    mov     edi, 2
+    lea     rsi, [Z3]
+    mov     edx, 40
+    syscall
+%endif
 
     ; Z2INV = invert(Z2)
     lea     rdi, [Z2INV]

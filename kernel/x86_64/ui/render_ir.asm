@@ -122,24 +122,12 @@ float_zero:     dd 0.0
 
 SECTION .text
 
-; ==================================================================
-; float er_render_ir_channel(u8 value)
-; Convert 0..255 byte to float in 0..1 range.
-; rdi = u8 channel value (only low byte used)
-; returns: xmm0 = float
-; ==================================================================
 er_fn er_render_ir_channel
     movzx   eax, dil
     cvtsi2ss xmm0, eax
     divss   xmm0, [rel float_255]
     ret
 
-; ==================================================================
-; u8 er_render_ir_pack_channel(float value)
-; Convert 0..1 float to 0..255 byte, clamped and rounded.
-; xmm0 = float value
-; returns: eax = u8
-; ==================================================================
 er_fn er_render_ir_pack_channel
     ; Clamp to [0, 1]
     maxss   xmm0, [rel float_zero]
@@ -192,43 +180,15 @@ er_fn er_render_ir_pack_channel
     ret
 %endmacro
 
-; ==================================================================
-; int er_render_ir_push_rect(float *buffer, usize *len,
-;                            usize capacity, const float *rect)
-; Push 15 floats from rect to buffer at position *len.
-; rdi = buffer, rsi = len, rdx = capacity, rcx = rect data (60 bytes)
-; returns: rax = 0 on success, -1 on budget exceeded
-; ==================================================================
 er_fn er_render_ir_push_rect
     er_render_ir_push_impl RENDER_IR_RECT_FLOAT_STRIDE, RENDER_IR_RECT_BYTE_STRIDE
 
-; ==================================================================
-; int er_render_ir_push_textured_vertex(float *buffer, usize *len,
-;                                       usize capacity, const float *vtx)
-; Push 8 floats from vertex to buffer at position *len.
-; rdi = buffer, rsi = len, rdx = capacity, rcx = vertex (32 bytes)
-; returns: rax = 0 on success, -1 on budget exceeded
-; ==================================================================
 er_fn er_render_ir_push_textured_vertex
     er_render_ir_push_impl RENDER_IR_TEXT_VERTEX_FLOAT_STRIDE, RENDER_IR_TEXT_VERTEX_BYTE_STRIDE
 
-; ==================================================================
-; int er_render_ir_push_icon(float *buffer, usize *len,
-;                            usize capacity, const float *icon)
-; Push 9 floats from icon to buffer at position *len.
-; rdi = buffer, rsi = len, rdx = capacity, rcx = icon (36 bytes)
-; returns: rax = 0 on success, -1 on budget exceeded
-; ==================================================================
 er_fn er_render_ir_push_icon
     er_render_ir_push_impl RENDER_IR_ICON_FLOAT_STRIDE, RENDER_IR_ICON_BYTE_STRIDE
 
-; ==================================================================
-; int er_render_ir_push_icon_line_vertex(float *buffer, usize *len,
-;                                        usize capacity, const float *vtx)
-; Push 6 floats from vertex to buffer at position *len.
-; rdi = buffer, rsi = len, rdx = capacity, rcx = vertex (24 bytes)
-; returns: rax = 0 on success, -1 on budget exceeded
-; ==================================================================
 er_fn er_render_ir_push_icon_line_vertex
     er_render_ir_push_impl RENDER_IR_ICON_LINE_FLOAT_STRIDE, RENDER_IR_ICON_LINE_BYTE_STRIDE
 
@@ -236,12 +196,6 @@ er_fn er_render_ir_push_icon_line_vertex
 ; Read-back helpers
 ; ==================================================================
 
-; ==================================================================
-; int er_render_ir_rect_at(const float *buffer, usize index, float *out)
-; Read rect instance at given index into 60-byte out buffer.
-; rdi = buffer, rsi = index, rdx = out (60 bytes)
-; returns: rax = 0
-; ==================================================================
 er_fn er_render_ir_rect_at
     mov     rax, rsi
     shl     rax, 4           ; index * 16
@@ -253,13 +207,6 @@ er_fn er_render_ir_rect_at
     xor     eax, eax
     ret
 
-; ==================================================================
-; int er_render_ir_textured_vertex_at(const float *buffer,
-;                                     usize index, float *out)
-; Read vertex at given index into 32-byte out buffer.
-; rdi = buffer, rsi = index, rdx = out (32 bytes)
-; returns: rax = 0
-; ==================================================================
 er_fn er_render_ir_textured_vertex_at
     mov     rax, rsi
     shl     rax, 3           ; index * 8
@@ -270,12 +217,6 @@ er_fn er_render_ir_textured_vertex_at
     xor     eax, eax
     ret
 
-; ==================================================================
-; int er_render_ir_icon_at(const float *buffer, usize index, float *out)
-; Read icon at given index into 36-byte out buffer.
-; rdi = buffer, rsi = index, rdx = out (36 bytes)
-; returns: rax = 0
-; ==================================================================
 er_fn er_render_ir_icon_at
     mov     rax, rsi
     shl     rax, 3           ; index * 8
@@ -287,13 +228,6 @@ er_fn er_render_ir_icon_at
     xor     eax, eax
     ret
 
-; ==================================================================
-; int er_render_ir_icon_line_vertex_at(const float *buffer,
-;                                      usize index, float *out)
-; Read icon line vertex at given index into 24-byte out buffer.
-; rdi = buffer, rsi = index, rdx = out (24 bytes)
-; returns: rax = 0
-; ==================================================================
 er_fn er_render_ir_icon_line_vertex_at
     lea     rax, [rsi + rsi*2]  ; index * 3
     shl     rax, 1              ; index * 6
@@ -304,18 +238,6 @@ er_fn er_render_ir_icon_line_vertex_at
     xor     eax, eax
     ret
 
-; ==================================================================
-; int er_render_ir_push_rect_ex(float *buffer, usize *len, usize capacity,
-;                               const float *bounds, u32 color, u32 color2,
-;                               float radius, float shadow, float mode)
-; Higher-level rect push: takes packed colors, converts channels to floats.
-; rdi = buffer, rsi = len, rdx = capacity
-; rcx = bounds (4 floats: x, y, w, h)
-; r8  = color (packed u32: 0xAABBGGRR little-endian → r=byte0, g=byte1, b=byte2, a=byte3)
-; r9  = color2 (same layout)
-; [rbp+16] = radius (f32), [rbp+24] = shadow (f32), [rbp+32] = mode (f32)
-; returns: rax = 0 on success, -1 on budget exceeded
-; ==================================================================
 er_fn er_render_ir_push_rect_ex
     er_frame_push
     push    r12                    ; save buffer
@@ -409,16 +331,6 @@ er_fn er_render_ir_push_rect_ex
     pop     rbp
     ret
 
-; ==================================================================
-; int er_render_ir_push_textured_vertex_ex(float *buffer, usize *len,
-;                                          usize capacity, float x, float y,
-;                                          float u, float v, u32 color)
-; Higher-level vertex push: takes packed color, converts channels.
-; rdi = buffer, rsi = len, rdx = capacity
-; xmm0 = x, xmm1 = y, xmm2 = u, xmm3 = v
-; rcx  = color (packed u32: 0xAABBGGRR)
-; returns: rax = 0 on success, -1 on budget exceeded
-; ==================================================================
 er_fn er_render_ir_push_textured_vertex_ex
     er_frame_push
     push    r12                    ; save buffer
@@ -476,16 +388,6 @@ er_fn er_render_ir_push_textured_vertex_ex
     pop     rbp
     ret
 
-; ==================================================================
-; int er_render_ir_push_icon_ex(float *buffer, usize *len, usize capacity,
-;                               const float *bounds, u32 color, u32 icon_id)
-; Higher-level icon push: takes packed color, converts channels.
-; rdi = buffer, rsi = len, rdx = capacity
-; rcx = bounds (4 floats: x, y, w, h)
-; r8  = color (packed u32)
-; r9  = icon_id (u32, stored as float)
-; returns: rax = 0 on success, -1 on budget exceeded
-; ==================================================================
 er_fn er_render_ir_push_icon_ex
     er_frame_push
     push    r12
@@ -549,19 +451,6 @@ er_fn er_render_ir_push_icon_ex
     pop     rbp
     ret
 
-; ==================================================================
-; int er_render_ir_push_textured_quad(float *buffer, usize *len, usize capacity,
-;                                     const float *clip, const float *bounds,
-;                                     float tex_u0, float tex_v0,
-;                                     float tex_u1, float tex_v1,
-;                                     u32 color)
-; Push 6 textured vertices for a clipped quad with UV adjustment.
-; rdi=buffer, rsi=len_ptr, rdx=capacity
-; rcx=clip ptr, r8=bounds ptr
-; xmm0=tex_u0, xmm1=tex_v0, xmm2=tex_u1, xmm3=tex_v1
-; r9=color (packed u32)
-; returns: rax=0 success, -1 budget
-; ==================================================================
 er_fn er_render_ir_push_textured_quad
     er_frame_push
     push    r12
@@ -814,12 +703,6 @@ er_fn er_render_ir_push_textured_quad
 ; Count validation helpers
 ; ==================================================================
 
-; ==================================================================
-; usize er_render_ir_rect_count(usize len)
-; Returns number of complete rect instances, or -1 if misaligned.
-; rdi = len (in float units)
-; returns: rax = count or -2 on invalid
-; ==================================================================
 ; Returns number of complete rect instances, or -1 if misaligned.
 ; rdi = len (in float units)
 ; returns: rax = count or -2 on invalid
