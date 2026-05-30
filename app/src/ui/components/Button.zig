@@ -54,7 +54,12 @@ pub const Button = struct {
 
     pub fn writeRecord(self: Button, writer: *component_codec.Writer, index: usize) bool {
         const label_ref = writer.string(self.label) orelse return false;
-        return writer.record(index, .button, self.id, label_ref, .{ .offset = variantTag(self.variant), .len = packIconSlot(self.icon_slot) });
+        const tag = packIconSlot(self.icon_slot);
+        const trailing: u16 = switch (self.icon_slot) {
+            .trailing => trailing_button_flag,
+            else => 0,
+        };
+        return writer.record(index, .button, self.id, label_ref, .{ .offset = tag, .len = variantTag(self.variant) | trailing });
     }
 
     pub fn fromView(view: object.View) Error!Button {
@@ -67,23 +72,20 @@ pub const Button = struct {
     }
 };
 
-const IconSlotTags = struct {
-    leading: u16 = 0,
-    trailing: u16 = 0,
-};
-
-fn iconSlotTags(slot: IconSlot) IconSlotTags {
+fn packIconSlot(slot: IconSlot) u16 {
     return switch (slot) {
-        .none => .{},
-        .leading => |value| .{ .leading = common.optionalIconTag(value.value) },
-        .trailing => |value| .{ .trailing = common.optionalIconTag(value.value) },
-        .status, .media => .{},
+        .none, .status, .media => 0,
+        .leading, .trailing => |value| common.optionalIconTag(value.value),
     };
 }
 
-fn packIconSlot(slot: IconSlot) u16 {
-    const encoded = iconSlotTags(slot);
-    return encoded.leading | (encoded.trailing << icon_pack_shift);
+fn iconSlotTags(slot: IconSlot) struct { leading: u16, trailing: u16 } {
+    const tag = packIconSlot(slot);
+    return switch (slot) {
+        .none, .status, .media => .{ .leading = 0, .trailing = 0 },
+        .leading => .{ .leading = tag, .trailing = 0 },
+        .trailing => .{ .leading = 0, .trailing = tag },
+    };
 }
 
 fn iconSlotFromTags(leading_tag: u16, trailing_tag: u16) Error!IconSlot {
@@ -325,7 +327,7 @@ const min_width: f32 = 44.0;
 const icon_button_size: f32 = 36.0;
 const button_danger = ui.Color{ .r = 225, .g = 29, .b = 72 };
 const button_danger_text = ui.Color{ .r = 255, .g = 255, .b = 255 };
-const icon_pack_shift: u4 = 8;
+const trailing_button_flag: u16 = 0x0100;
 
 fn buttonHeight(size: common.ControlSize) f32 {
     return switch (size) {

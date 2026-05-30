@@ -178,8 +178,7 @@ test "route state drives content height" {
 test "host render callers do not bypass the shared app frame builder" {
     try expectNoDirectAppRenderImports(@embedFile("app_runtime.zig"));
     try expectNoDirectAppRenderImports(@embedFile("wayland_window_host.zig"));
-    try expectNoDirectAppRenderImports(@embedFile("wayland_egl_host.zig"));
-    try expectNoDirectAppRenderImports(@embedFile("drm_gbm_host.zig"));
+        try expectNoDirectAppRenderImports(@embedFile("drm_gbm_host.zig"));
 }
 
 fn expectNoDirectAppRenderImports(source: []const u8) !void {

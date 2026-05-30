@@ -132,7 +132,7 @@ pub fn decodeBytes(raw: []const u8, out_nodes: []ui.Node) Error!ui.Node {
             .chart => .{ .chart = .{ .id = id, .label = try stringRef(string_table, a, b) } },
             .combobox => .{ .combobox = .{ .id = id, .placeholder = try stringRef(string_table, a, b), .selected = try stringRef(string_table, c, d) } },
             .empty => .{ .empty = .{ .title = try stringRef(string_table, a, b), .detail = try stringRef(string_table, c, d), .icon = try boundedU32Tag(id, component_common.encoded_icon_count) } },
-            .button => .{ .button = .{ .id = id, .label = try stringRef(string_table, a, b), .variant = try boundedTag(c, button_variant_count), .leading_icon = try boundedTag(d & button_icon_mask, component_common.encoded_icon_count), .trailing_icon = try boundedTag(d >> button_icon_shift, component_common.encoded_icon_count) } },
+            .button => .{ .button = .{ .id = id, .label = try stringRef(string_table, a, b), .variant = try boundedTag(d & 0xff, button_variant_count), .leading_icon = if ((d & trailing_button_flag) == 0) try boundedTag(c, component_common.encoded_icon_count) else 0, .trailing_icon = if ((d & trailing_button_flag) != 0) try boundedTag(c, component_common.encoded_icon_count) else 0 } },
             .icon_button => .{ .icon_button = .{ .id = id, .label = try stringRef(string_table, a, b), .variant = try boundedTag(c, button_variant_count), .icon = try boundedTag(d, component_common.encoded_icon_count) } },
             .button_group => .{ .button_group = .{ .id = id / grouped_id_stride, .first = try stringRef(string_table, a, b), .second = try stringRef(string_table, c, d), .active = @intCast(id % grouped_id_stride) } },
             .toggle_group => .{ .toggle_group = .{ .id = id / toggle_group_id_stride, .first = try stringRef(string_table, a, b), .second = try stringRef(string_table, c, d), .active = @intCast(id % toggle_group_id_stride) } },
@@ -290,8 +290,7 @@ const navigation_menu_id_stride: u32 = 3;
 const button_variant_count: u16 = 6;
 const badge_variant_count: u16 = 6;
 const surface_variant_count: u16 = 3;
-const button_icon_mask: u16 = 0x00ff;
-const button_icon_shift: u4 = 8;
+const trailing_button_flag: u16 = 0x0100;
 const codec_icon_shift: u5 = 14;
 
 test "decode ui bytes into borrowed nodes and render paint" {

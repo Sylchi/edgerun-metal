@@ -154,6 +154,14 @@ ERROR_NET_NOROUTE     equ 34
 ERROR_ARP_PENDING     equ 35
 
 ; ==================================================================
+; HTTP client error codes
+; ==================================================================
+ERROR_HTTP_PARSE     equ 40
+ERROR_HTTP_TIMEOUT   equ 41
+ERROR_HTTP_CLOSED    equ 42
+ERROR_HTTP_NORESP    equ 43
+
+; ==================================================================
 ; TCP pseudo-header for checksum calculation
 ; Layout (12 bytes):
 ;   src_ip    u32

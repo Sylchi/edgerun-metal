@@ -103,7 +103,7 @@ er_fn er_stamp_order
     er_ok
     er_ret
 .ord_less:
-    mov     eax, -1
+    mov     rax, -1
     pop     r13
     pop     r12
     pop     rbx

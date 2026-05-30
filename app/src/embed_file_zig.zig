@@ -520,7 +520,6 @@ test "workspace source filter removes app host tools and tests" {
     try std.testing.expect(!sourceFileAllowed("src/wasm_compiler_probe.zig"));
     try std.testing.expect(!sourceFileAllowed("src/wasm_compiler_runner_test.zig"));
     try std.testing.expect(!sourceFileAllowed("src/wayland_window_host.zig"));
-    try std.testing.expect(!sourceFileAllowed("src/wayland_egl_host.zig"));
-    try std.testing.expect(!sourceFileAllowed("src/render/native_present.zig"));
+        try std.testing.expect(!sourceFileAllowed("src/render/native_present.zig"));
     try std.testing.expect(!sourceFileAllowed("src/pi_zero_w_v1_1.zig"));
 }

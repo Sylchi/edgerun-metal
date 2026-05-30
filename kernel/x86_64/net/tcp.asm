@@ -80,6 +80,34 @@ er_fn er_tcp_init
 ; ==================================================================
 
 ; ==================================================================
+; er_tcp_get_state — get TCP connection state
+; int er_tcp_get_state(uint32_t conn_id)
+;
+; Returns: eax = TCP state constant (TCP_CLOSED, TCP_SYN_SENT, etc.)
+;          eax = -1 on error, rdx = error code
+; ==================================================================
+er_fn er_tcp_get_state
+    push    rbx
+    mov     ebx, edi        ; conn_id
+
+    mov     edi, ebx
+    call    _tcp_conn_ptr
+    test    rax, rax
+    jz      .bad
+
+    mov     eax, [rax + TCP_CONN_STATE]
+    er_ok
+    pop     rbx
+    er_ret
+
+.bad:
+    mov     eax, -1
+    er_err  ERROR_INVALID_PARAM
+    pop     rbx
+    er_ret
+; ==================================================================
+
+; ==================================================================
 ; er_tcp_connect — initiate TCP connection
 ; int er_tcp_connect(uint32_t dst_ip, uint16_t dst_port,
 ;                    uint32_t src_ip, uint16_t src_port)

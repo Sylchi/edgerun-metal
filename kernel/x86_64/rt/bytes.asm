@@ -96,7 +96,7 @@ er_fn er_bytes_order
     er_ok
     er_ret
 .less:
-    mov     eax, -1
+    mov     rax, -1
     pop     rbx
     er_ok
     er_ret

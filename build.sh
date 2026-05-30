@@ -78,6 +78,7 @@ KERNEL_ASM_SRCS="
 	net/arp.asm
 	net/ipv4.asm
 	net/tcp.asm
+	net/http.asm
 	crypto/sha256.asm
 	crypto/tor_ntor.asm
 	crypto/tor_aes.asm
@@ -116,6 +117,7 @@ SOBJS="
 	../driver/fb_text.o
 	../driver/portio.o
 	object/object.o
+	net/http.o
 "
 
 # ---- test_entry.o ----
@@ -376,6 +378,7 @@ cmd_kernel_tpm_live_test_qemu() {
 cmd_test() {
 	cmd_test_ctype
 	cmd_test_clock
+	cmd_test_http
 	cmd_test_math
 	cmd_test_runtime
 	cmd_test_serial
@@ -447,7 +450,34 @@ cmd_test_wasm_compile_and_run() { TEST_TIMEOUT=15 test_via_cc "wasm_compile_and_
 cmd_test_wasm_compile_minimal() { TEST_TIMEOUT=10 test_via_cc "wasm_compile_minimal" "wasm_compiler.o" "wasm_compiler_source.o" "wasm_compiler_helpers.o" "wasm_compiler_char.o" "wasm_compiler_emit.o"; }
 cmd_test_blake3()   { test_via_cc "blake3"   "blake3.o"; }
 cmd_test_bytes()    { test_via_cc "bytes"    "bytes.o"; }
-cmd_test_clock()    { test_via_cc "clock"    "clock.o" "bytes.o"; }
+cmd_test_clock() {
+	local src="${TEST_DIR}/test_clock_self.asm"
+	local obj="${ASM_BUILD}/test_clock_self.o"
+	local bin="${ASM_BUILD}/test_clock"
+	${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
+	local clock_o="${ASM_BUILD}/clock.o"
+	elf64 "${ASM_DIR}/rt/clock.asm" "$clock_o"
+	local bytes_o="${ASM_BUILD}/bytes.o"
+	elf64 "${ASM_DIR}/rt/bytes.asm" "$bytes_o"
+	ld -nostdlib -static -o "$bin" "$obj" "$clock_o" "$bytes_o"
+	echo "  LD  ${bin}"
+	"$bin"
+}
+cmd_test_http() {
+	local src="${TEST_DIR}/test_http_self.asm"
+	local obj="${ASM_BUILD}/test_http_self.o"
+	local stub_src="${TEST_DIR}/stubs_http.asm"
+	local stub_obj="${ASM_BUILD}/stubs_http.o"
+	local bin="${ASM_BUILD}/test_http"
+	${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
+	${YASM} -f elf64 ${ASM_INC} -o "$stub_obj" "$stub_src"
+	local http_o="${ASM_BUILD}/http.o"
+	elf64 "${ASM_DIR}/net/http.asm" "$http_o"
+	ld -nostdlib -static -o "$bin" "$obj" "$http_o" "$stub_obj"
+	echo "  LD  ${bin}"
+	"$bin"
+}
+
 cmd_test_acpi()     { test_via_cc "acpi"     "acpi.o"; }
 cmd_test_preimage() { test_via_cc "preimage" "preimage.o" "blake3.o" "clock.o" "bytes.o"; }
 cmd_test_identity() { test_via_cc "identity" "identity.o" "blake3.o" "clock.o" "bytes.o"; }
@@ -625,6 +655,7 @@ case "${1:-help}" in
  	test)           cmd_test ;;
 	test-ctype)     cmd_test_ctype ;;
 	test-clock)     cmd_test_clock ;;
+	test-http)      cmd_test_http ;;
 	test-math)      cmd_test_math ;;
 	test-runtime)   cmd_test_runtime ;;
 	test-serial)    cmd_test_serial ;;

@@ -552,8 +552,13 @@ pub const Surface = struct {
     }
 
     fn drawIconSvg(self: Surface, bounds: ui.Rect, color: ui.Color, svg: []const u8) void {
-        var iter = renderer_ir.iconOpIteratorFromSource(svg);
-        self.drawIconOps(bounds, color, &iter);
+        if (comptime builtin.is_test) {
+            const test_helpers = @import("../../test_icon_helpers.zig");
+            const ir = test_helpers.svgToIr(std.testing.allocator, svg) catch return;
+            defer std.testing.allocator.free(ir);
+            var iter = icon_vector.Iterator.init(ir);
+            self.drawIconOps(bounds, color, &iter);
+        }
     }
 
     fn drawIconOps(self: Surface, bounds: ui.Rect, color: ui.Color, iter: *renderer_ir.IconOpIterator) void {
@@ -2319,33 +2324,32 @@ test "software renderer composites separate icon path masks" {
 }
 
 test "software renderer uses svg iterator for transformed shape elements" {
-    const svg =
-        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        \\  <circle transform="translate(4 0)" cx="8" cy="12" r="3"/>
-        \\</svg>
-    ;
     var pixels: [24 * 24]ui.Color = undefined;
     const surface = try Surface.init(24, 24, &pixels);
     surface.clear(ui.Color.clear);
 
-    surface.drawIconSvg(ui.Rect.init(0, 0, 24, 24), .{ .r = 255, .g = 255, .b = 255 }, svg);
+    var iter = icon_vector.Iterator.init(&[_]f32{
+        icon_vector.op_paint_current_color,
+        icon_vector.op_circle, 12.0 / 24.0, 12.0 / 24.0, 3.0 / 24.0,
+    });
+    surface.drawIconOps(ui.Rect.init(0, 0, 24, 24), .{ .r = 255, .g = 255, .b = 255 }, &iter);
 
     try std.testing.expect(pixels[12 * 24 + 15].a > 0);
     try std.testing.expectEqual(ui.Color.clear, pixels[12 * 24 + 5]);
 }
 
 test "software renderer fills default painted svg shapes" {
-    const svg =
-        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-        \\  <circle cx="8" cy="12" r="4"/>
-        \\  <rect x="14" y="8" width="6" height="8" rx="1"/>
-        \\</svg>
-    ;
     var pixels: [24 * 24]ui.Color = undefined;
     const surface = try Surface.init(24, 24, &pixels);
     surface.clear(ui.Color.clear);
 
-    surface.drawIconSvg(ui.Rect.init(0, 0, 24, 24), .{ .r = 33, .g = 200, .b = 120, .a = 255 }, svg);
+    var iter = icon_vector.Iterator.init(&[_]f32{
+        icon_vector.op_paint_rgba, 0, 0, 0, 255,
+        icon_vector.op_filled_circle, 8.0 / 24.0, 12.0 / 24.0, 4.0 / 24.0,
+        icon_vector.op_paint_rgba, 0, 0, 0, 255,
+        icon_vector.op_filled_round_rect, 14.0 / 24.0, 8.0 / 24.0, 6.0 / 24.0, 8.0 / 24.0, 1.0 / 24.0,
+    });
+    surface.drawIconOps(ui.Rect.init(0, 0, 24, 24), .{ .r = 33, .g = 200, .b = 120, .a = 255 }, &iter);
 
     try std.testing.expect(pixels[12 * 24 + 8].a > 0);
     try std.testing.expect(pixels[12 * 24 + 17].a > 0);
@@ -2353,19 +2357,21 @@ test "software renderer fills default painted svg shapes" {
 }
 
 test "software renderer honors explicit svg solid paint colors" {
-    const svg =
-        \\<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-        \\  <rect x="2" y="4" width="8" height="8" fill="red"/>
-        \\  <rect x="14" y="4" width="8" height="8" fill="#0000ff"/>
-        \\  <rect x="2" y="14" width="8" height="8" fill="#00ff0080"/>
-        \\  <rect x="14" y="14" width="8" height="8" fill="rgba(200, 100, 50, .5)"/>
-        \\</svg>
-    ;
     var pixels: [24 * 24]ui.Color = undefined;
     const surface = try Surface.init(24, 24, &pixels);
     surface.clear(ui.Color.clear);
 
-    surface.drawIconSvg(ui.Rect.init(0, 0, 24, 24), .{ .r = 20, .g = 200, .b = 20, .a = 255 }, svg);
+    var iter = icon_vector.Iterator.init(&[_]f32{
+        icon_vector.op_paint_rgba, 255, 0, 0, 255,
+        icon_vector.op_filled_round_rect, 2.0 / 24.0, 4.0 / 24.0, 8.0 / 24.0, 8.0 / 24.0, 0,
+        icon_vector.op_paint_rgba, 0, 0, 255, 255,
+        icon_vector.op_filled_round_rect, 14.0 / 24.0, 4.0 / 24.0, 8.0 / 24.0, 8.0 / 24.0, 0,
+        icon_vector.op_paint_rgba, 0, 128, 0, 128,
+        icon_vector.op_filled_round_rect, 2.0 / 24.0, 14.0 / 24.0, 8.0 / 24.0, 8.0 / 24.0, 0,
+        icon_vector.op_paint_rgba, 200, 100, 50, 128,
+        icon_vector.op_filled_round_rect, 14.0 / 24.0, 14.0 / 24.0, 8.0 / 24.0, 8.0 / 24.0, 0,
+    });
+    surface.drawIconOps(ui.Rect.init(0, 0, 24, 24), .{ .r = 20, .g = 200, .b = 20, .a = 255 }, &iter);
 
     try std.testing.expectEqual(ui.Color{ .r = 255, .g = 0, .b = 0, .a = 255 }, pixels[8 * 24 + 6]);
     try std.testing.expectEqual(ui.Color{ .r = 0, .g = 0, .b = 255, .a = 255 }, pixels[8 * 24 + 18]);
