@@ -44,7 +44,6 @@ er_fn ui_color_blend
     push    rbx
     push    r12
     push    r13
-    sub     rsp, 8
 
     mov     r12d, edi              ; src
     mov     r13d, esi              ; dst
@@ -52,25 +51,72 @@ er_fn ui_color_blend
     mov     ecx, 255
     sub     ecx, ebx               ; inv = 255 - alpha
 
-    ; R channel
-    movzx   eax, r12b
-    imul    eax, ebx
-    movzx   edx, r13b
-    imul    edx, ecx
-    add     eax, edx
-    add     eax, 127
-    shr     eax, 8
+    ; Blend each channel: (src_ch * alpha + dst_ch * inv + 127) / 255
+    xor     eax, eax
     xor     edx, edx
-    div     byte [rsp]             ; this is wrong — let's use fixed /255
-    ; Actually: (src * alpha + dst * (255-alpha) + 127) / 255
-    ; We can use mul + add + div by constant 255 using a fixed-point trick
 
-    ; Simpler: do it per-channel with just imul and shifts
-    ; result = (src_ch * alpha + dst_ch * (255-alpha) + 127) / 255
-    ; Since 255 = 0xFF, we can do: result = (src*alpha + dst*(255-alpha) + 127) * 257 >> 16
-    ; Or just use div which is fine for non-bottleneck path
+    ; R channel (byte 0)
+    movzx   edx, r12b
+    imul    edx, ebx
+    movzx   r8d, r13b
+    imul    r8d, ecx
+    add     edx, r8d
+    add     edx, 127
+    mov     eax, edx
+    mov     edi, 255
+    div     edi
+    mov     r8d, eax                ; r result in r8b
 
-    add     rsp, 8
+    ; G channel (byte 1)
+    movzx   edx, r12b
+    shr     edx, 8
+    and     edx, 0xFF
+    imul    edx, ebx
+    movzx   r9d, r13b
+    shr     r9d, 8
+    and     r9d, 0xFF
+    imul    r9d, ecx
+    add     edx, r9d
+    add     edx, 127
+    mov     eax, edx
+    xor     edx, edx
+    div     edi
+    shl     eax, 8
+    or      r8d, eax
+
+    ; B channel (byte 2)
+    mov     edx, r12d
+    shr     edx, 16
+    and     edx, 0xFF
+    imul    edx, ebx
+    mov     r9d, r13d
+    shr     r9d, 16
+    and     r9d, 0xFF
+    imul    r9d, ecx
+    add     edx, r9d
+    add     edx, 127
+    mov     eax, edx
+    xor     edx, edx
+    div     edi
+    shl     eax, 16
+    or      r8d, eax
+
+    ; A channel (byte 3)
+    mov     edx, r12d
+    shr     edx, 24
+    imul    edx, ebx
+    mov     r9d, r13d
+    shr     r9d, 24
+    imul    r9d, ecx
+    add     edx, r9d
+    add     edx, 127
+    mov     eax, edx
+    xor     edx, edx
+    div     edi
+    shl     eax, 24
+    or      r8d, eax
+
+    mov     eax, r8d
     pop     r13
     pop     r12
     pop     rbx

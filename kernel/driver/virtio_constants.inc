@@ -70,14 +70,7 @@
 %define VIRTIO_GPU_CONTROL_QUEUE    0
 %define VIRTIO_GPU_CURSOR_QUEUE     1
 
-; Error codes (returned in rdx)
-%define ERROR_DEVICE_NOT_FOUND      1
-%define ERROR_MAP_FAILED            2
-%define ERROR_FEATURE_NEGOTIATION   3
-%define ERROR_QUEUE_SETUP           4
-%define ERROR_INVALID_RESPONSE      5
-%define ERROR_INVALID_PARAM         6
-%define ERROR_TIMEOUT               7
+%include "x86_64/wasm_defines.inc"
 
 ; ==================================================================
 ; VIRTIO_DEVICE — discovered device info (28 bytes)

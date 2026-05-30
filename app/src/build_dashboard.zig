@@ -4,24 +4,31 @@ const renderer_font_atlas = @import("render/font_atlas_weighted.zig");
 const renderer_ir = @import("render/ir.zig");
 const renderer_pipeline = @import("render/pipeline.zig");
 const renderer_software = @import("render/backends/software.zig");
+const node_renderer = @import("ui/components/NodeRenderer.zig");
+const component_union = @import("ui/components/Component.zig");
 const ui = @import("ui/core.zig");
 const icon_mod = @import("ui/icon.zig");
+const layout_mod = @import("ui/layout.zig");
 
 const W: usize = 1280;
 const H: usize = 720;
-const max_commands: usize = 1024;
+const max_commands: usize = 2048;
 const max_rects: usize = 4096;
-const max_text_vertices: usize = 32768;
+const max_image_vertices: usize = 32768;
 const max_icon_vertices: usize = 1024;
+const max_icon_line_vertices: usize = 0;
+const max_overlay_rects: usize = 0;
+const max_overlay_icon_vertices: usize = 0;
+const max_overlay_icon_line_vertices: usize = 0;
 
-const SnapshotIrStorage = renderer_ir.FixedBuffers(
+const IrStorage = renderer_ir.FixedBuffers(
     max_rects,
-    max_text_vertices,
     max_icon_vertices,
-    0, // overlay_rect_instances
-    0, // overlay_icon_vertices_count
-    0, // icon_line_vertices_count
-    0, // overlay_icon_line_vertices_count
+    max_image_vertices,
+    max_overlay_rects,
+    max_overlay_icon_vertices,
+    max_icon_line_vertices,
+    max_overlay_icon_line_vertices,
 );
 
 const Artifact = struct { name: []const u8, size_bytes: u64 };
@@ -178,19 +185,34 @@ fn collectData(alloc: std.mem.Allocator, io: std.Io) !BuildData {
         .git_hash = git_hash, .branch = branch, .commit_count = commit_count,
         .asm_files = asm_files, .inc_files = inc_files, .total_loc = total_loc,
         .artifacts = artifacts, .modules = modules, .tests = tests,
-        .commits = try commit_list.toOwnedSlice(alloc), // Aligned version: toOwnedSlice(self, gpa)
+        .commits = try commit_list.toOwnedSlice(alloc),
     };
 }
 
+fn iconTag(ic: icon_mod.Icon) u16 {
+    return @intCast(icon_mod.id(ic));
+}
+
+fn sizeLabel(buf: *[128]u8, bytes: u64) []const u8 {
+    if (bytes > 1024 * 1024) {
+        return std.fmt.bufPrint(buf, "{d:.1} MB", .{@as(f32, @floatFromInt(bytes)) / (1024 * 1024)}) catch "?";
+    } else if (bytes > 1024) {
+        return std.fmt.bufPrint(buf, "{} KB", .{bytes / 1024}) catch "?";
+    } else {
+        return std.fmt.bufPrint(buf, "{} B", .{bytes}) catch "?";
+    }
+}
+
 fn renderPPM(alloc: std.mem.Allocator, io: std.Io, data: BuildData) !void {
-    var commands: [max_commands]ui.Command = undefined;
-    var scene = ui.Scene.init(&commands);
-    try renderDashboard(&scene, data);
+    var scene_commands: [max_commands]ui.Command = undefined;
+    var scene = ui.Scene.init(&scene_commands);
+
+    try renderLayout(&scene, data);
 
     const pixels = try alloc.alloc(ui.Color, W * H);
     defer alloc.free(pixels);
 
-    var ir_storage = SnapshotIrStorage{};
+    var ir_storage = IrStorage{};
     const buffers = ir_storage.buffers();
     var font_atlas: renderer_font_atlas.Atlas = undefined;
     font_atlas.initUtf8();
@@ -214,180 +236,178 @@ fn renderPPM(alloc: std.mem.Allocator, io: std.Io, data: BuildData) !void {
     }
 }
 
-fn renderDashboard(scene: *ui.Scene, data: BuildData) !void {
-    const panel = ui.Color.panel;
-    const row = ui.Color.row;
-    const border = ui.Color.border;
-    const text = ui.Color.text;
-    const muted = ui.Color.muted;
-    const accent = ui.Color.accent;
-    const fail_color = ui.Color{ .r = 240, .g = 80, .b = 80, .a = 255 };
-    const success_color = ui.Color{ .r = 80, .g = 200, .b = 120, .a = 255 };
-
-    const margin_x: f32 = 40;
-    const col_gap: f32 = 16;
-    const section_gap: f32 = 20;
-    const card_w: f32 = (W - 2 * margin_x - 3 * col_gap) / 4;
-    const card_h: f32 = 72;
-    const section_header_h: f32 = 28;
-    const row_item_h: f32 = 28;
-    const progress_h: f32 = 14;
-
+fn renderLayout(scene: *ui.Scene, data: BuildData) !void {
     var buf: [128]u8 = undefined;
-    var y: f32 = 32;
-    const in_w = @as(f32, @floatFromInt(W));
 
-    // ── Header ──
-    {
-        try scene.pushIconQuad(.{ .bounds = ui.Rect.init(margin_x, y + 2, 24, 24), .icon_id = icon_mod.id(.dashboard), .color = accent });
-        try scene.pushStrongText(ui.Rect.init(margin_x + 34, y, 280, 26), "Build Dashboard", text);
+    const header = ui.Node{
+        .stack = .{
+            .axis = .row,
+            .gap = 8,
+            .cross_align = .start,
+            .children = &.{
+                .{ .icon = .{ .label = "", .icon = iconTag(.dashboard) } },
+                .{ .text = .{ .value = "Build Dashboard" } },
+                .{ .text = .{ .value = data.branch } },
+                .{ .text = .{ .value = data.git_hash } },
+            },
+        },
+    };
 
-        const badge_x = in_w - margin_x - 380;
-        var badge_bg = accent;
-        badge_bg.a = 30;
-        const b_label = data.branch;
-        const b_w = @as(f32, @floatFromInt(b_label.len)) * 7.5 + 20;
-        const badge_b = ui.Rect.init(badge_x, y + 2, b_w, 22);
-        try scene.pushRect(badge_b, badge_bg, .fill, 11, 0);
-        try scene.pushRect(badge_b, accent, .border, 11, 0);
-        try scene.pushAlignedText(ui.Rect.init(badge_b.x, badge_b.y + 2, badge_b.w, 18), b_label, accent, .center);
+    const total_files = data.asm_files + data.inc_files;
+    var total_buf: [32]u8 = undefined;
+    const total_str = std.fmt.bufPrint(&total_buf, "{}", .{total_files}) catch "?";
+    const loc_str = std.fmt.bufPrint(&total_buf, "{}", .{data.total_loc}) catch "?";
+    const mod_count_str = std.fmt.bufPrint(&total_buf, "{}", .{data.modules.len}) catch "?";
+    const test_str = std.fmt.bufPrint(&total_buf, "{}", .{data.tests.len}) catch "?";
 
-        const hx = badge_x + b_w + 16;
-        try scene.pushIconQuad(.{ .bounds = ui.Rect.init(hx, y + 6, 14, 14), .icon_id = icon_mod.id(.git_commit), .color = muted });
-        const hash_label = data.git_hash;
-        try scene.pushText(ui.Rect.init(hx + 18, y + 4, 100, 18), hash_label, text);
-        const cnt_label = std.fmt.bufPrint(&buf, "{} commits", .{data.commit_count}) catch "?";
-        try scene.pushText(ui.Rect.init(hx + 110, y + 4, 120, 18), cnt_label, muted);
+    const c1 = ui.cardVariantNode("ASM Files", total_str, 0);
+    const c2 = ui.cardVariantNode("Lines of Code", loc_str, 0);
+    const c3 = ui.cardVariantNode("Subsystems", mod_count_str, 0);
+    const c4 = ui.cardVariantNode("Test Suites", test_str, 0);
 
-        y += 32;
-        try scene.pushRect(ui.Rect.init(margin_x, y, in_w - 2 * margin_x, 1), border, .fill, 0, 0);
-        y += 12;
+    var max_size: u64 = 0;
+    for (data.artifacts) |a| {
+        if (a.size_bytes > max_size) max_size = a.size_bytes;
     }
+    if (max_size == 0) max_size = 1;
 
-    // ── Summary Cards ──
-    {
-        const vals = [_]u32{
-            data.asm_files + data.inc_files,
-            data.total_loc,
-            @intCast(data.modules.len),
-            if (data.tests.len > 0) data.tests[0].passed else 0,
+    var art_nodes: [3]ui.Node = undefined;
+    var art_count: usize = 0;
+    for (data.artifacts, 0..) |a, i| {
+        if (i >= art_nodes.len) break;
+        const p = @as(f32, @floatFromInt(a.size_bytes)) / @as(f32, @floatFromInt(max_size));
+        const sl = sizeLabel(&buf, a.size_bytes);
+        art_nodes[i] = ui.Node{
+            .stack = .{
+                .axis = .row, .gap = 6, .cross_align = .center,
+                .children = &.{
+                    .{ .text = .{ .value = a.name } },
+                    .{ .text = .{ .value = sl } },
+                    .{ .progress = .{ .value = p } },
+                },
+            },
         };
-        const icons = [_]icon_mod.Icon{ .file_code, .code, .box, .check };
-        const titles = [_][]const u8{ "ASM Files", "Lines of Code", "Subsystems", "Tests" };
-
-        for (&titles, &vals, &icons, 0..) |title, val, ic, i| {
-            const cx = margin_x + @as(f32, @floatFromInt(i)) * (card_w + col_gap);
-            const cb = ui.Rect.init(cx, y, card_w, card_h);
-            try scene.pushRect(cb, panel, .fill, 8, 0);
-            try scene.pushRect(cb, border, .border, 8, 0);
-            try scene.pushIconQuad(.{ .bounds = ui.Rect.init(cx + 12, y + 10, 20, 20), .icon_id = icon_mod.id(ic), .color = accent });
-            try scene.pushText(ui.Rect.init(cx + 40, y + 10, card_w - 52, 18), title, muted);
-            const vlabel = std.fmt.bufPrint(&buf, "{}", .{val}) catch "?";
-            try scene.pushStrongText(ui.Rect.init(cx + 12, y + 36, card_w - 24, 26), vlabel, text);
-        }
-        y += card_h + section_gap;
+        art_count = i + 1;
     }
+    const art_section = ui.Node{
+        .stack = .{ .axis = .column, .gap = 4, .padding = 0, .children = art_nodes[0..art_count] },
+    };
 
-    // ── Build Artifacts ──
-    {
-        try scene.pushText(ui.Rect.init(margin_x, y, 200, section_header_h), "Build Artifacts", muted);
-        try scene.pushRect(ui.Rect.init(margin_x, y + section_header_h, in_w - 2 * margin_x, 1), border, .fill, 0, 0);
-        y += section_header_h + 10;
-
-        var max_size: u64 = 0;
-        for (data.artifacts) |a| {
-            if (a.size_bytes > max_size) max_size = a.size_bytes;
-        }
-        if (max_size == 0) max_size = 1;
-
-        for (data.artifacts) |artifact| {
-            const progress = @as(f32, @floatFromInt(artifact.size_bytes)) / @as(f32, @floatFromInt(max_size));
-            const ks = if (artifact.size_bytes > 1024 * 1024)
-                (std.fmt.bufPrint(&buf, "{d:.1} MB", .{@as(f32, @floatFromInt(artifact.size_bytes)) / (1024 * 1024)}) catch "? B")
-            else if (artifact.size_bytes > 1024)
-                (std.fmt.bufPrint(&buf, "{} KB", .{artifact.size_bytes / 1024}) catch "? B")
-            else
-                (std.fmt.bufPrint(&buf, "{} B", .{artifact.size_bytes}) catch "? B");
-
-            try scene.pushText(ui.Rect.init(margin_x, y + 4, 120, row_item_h), artifact.name, text);
-            try scene.pushText(ui.Rect.init(margin_x + 130, y + 4, 100, row_item_h), ks, muted);
-
-            const track = ui.Rect.init(margin_x + 240, y + (row_item_h - progress_h) * 0.5, 300, progress_h);
-            try scene.pushRect(track, row, .fill, 7, 0);
-            if (progress > 0) {
-                try scene.pushRect(ui.Rect.init(track.x, track.y, track.w * progress, track.h), accent, .fill, 7, 0);
-            }
-            const plabel = std.fmt.bufPrint(&buf, "{d:.0}%", .{progress * 100}) catch "?";
-            try scene.pushText(ui.Rect.init(margin_x + 240 + 308, y + 4, 50, row_item_h), plabel, text);
-            y += row_item_h + 6;
-        }
-        y += section_gap - 6;
+    var max_loc: u32 = 0;
+    for (data.modules) |m| {
+        if (m.loc > max_loc) max_loc = m.loc;
     }
+    if (max_loc == 0) max_loc = 1;
 
-    // ── Module LOC ──
-    {
-        try scene.pushText(ui.Rect.init(margin_x, y, 200, section_header_h), "Module Lines of Code", muted);
-        try scene.pushRect(ui.Rect.init(margin_x, y + section_header_h, in_w - 2 * margin_x, 1), border, .fill, 0, 0);
-        y += section_header_h + 10;
-
-        var max_loc: u32 = 0;
-        for (data.modules) |m| {
-            if (m.loc > max_loc) max_loc = m.loc;
-        }
-        if (max_loc == 0) max_loc = 1;
-
-        const loc_bar_w: f32 = 400;
-        for (data.modules) |mod_item| {
-            const progress = @as(f32, @floatFromInt(mod_item.loc)) / @as(f32, @floatFromInt(max_loc));
-            const ll = std.fmt.bufPrint(&buf, "{}", .{mod_item.loc}) catch "?";
-            try scene.pushText(ui.Rect.init(margin_x, y + 4, 70, row_item_h), mod_item.name, text);
-            try scene.pushText(ui.Rect.init(margin_x + 76, y + 4, 70, row_item_h), ll, muted);
-
-            const track = ui.Rect.init(margin_x + 152, y + (row_item_h - progress_h) * 0.5, loc_bar_w, progress_h);
-            try scene.pushRect(track, row, .fill, 7, 0);
-            if (progress > 0) {
-                try scene.pushRect(ui.Rect.init(track.x, track.y, track.w * progress, track.h), accent, .fill, 7, 0);
-            }
-            const pl = std.fmt.bufPrint(&buf, "{d:.0}%", .{progress * 100}) catch "?";
-            try scene.pushText(ui.Rect.init(margin_x + 152 + loc_bar_w + 10, y + 4, 50, row_item_h), pl, muted);
-            y += row_item_h + 6;
-        }
-        y += section_gap - 6;
+    var mod_nodes: [9]ui.Node = undefined;
+    var mod_count: usize = 0;
+    for (data.modules, 0..) |m, i| {
+        if (i >= mod_nodes.len) break;
+        const p = @as(f32, @floatFromInt(m.loc)) / @as(f32, @floatFromInt(max_loc));
+        const ml = std.fmt.bufPrint(&buf, "{}", .{m.loc}) catch "?";
+        mod_nodes[i] = ui.Node{
+            .stack = .{
+                .axis = .row, .gap = 6, .cross_align = .center,
+                .children = &.{
+                    .{ .text = .{ .value = m.name } },
+                    .{ .text = .{ .value = ml } },
+                    .{ .progress = .{ .value = p } },
+                },
+            },
+        };
+        mod_count = i + 1;
     }
+    const mod_section = ui.Node{
+        .stack = .{ .axis = .column, .gap = 4, .padding = 0, .children = mod_nodes[0..mod_count] },
+    };
 
-    // ── Test Results ──
-    {
-        try scene.pushText(ui.Rect.init(margin_x, y, 200, section_header_h), "Test Results", muted);
-        try scene.pushRect(ui.Rect.init(margin_x, y + section_header_h, in_w - 2 * margin_x, 1), border, .fill, 0, 0);
-        y += section_header_h + 10;
-
-        const per_row: usize = 3;
-        const col_w = (in_w - 2 * margin_x) / @as(f32, @floatFromInt(per_row));
-
-        for (data.tests, 0..) |ts, i| {
-            const r = i / per_row;
-            const c = i % per_row;
-            if (c == 0 and r > 0) y += row_item_h + 6;
-            const tx = margin_x + @as(f32, @floatFromInt(c)) * col_w;
-            const pass = ts.passed == ts.total and ts.total > 0;
-            try scene.pushIconQuad(.{ .bounds = ui.Rect.init(tx, y + 5, 16, 16), .icon_id = icon_mod.id(if (pass) icon_mod.Icon.circle_check else icon_mod.Icon.circle_x), .color = if (pass) success_color else fail_color });
-            try scene.pushText(ui.Rect.init(tx + 22, y + 4, 100, row_item_h), ts.name, text);
-            const plabel = std.fmt.bufPrint(&buf, "{}/{}", .{ ts.passed, ts.total }) catch "?";
-            try scene.pushText(ui.Rect.init(tx + 120, y + 4, 60, row_item_h), plabel, muted);
-        }
-        y += row_item_h + section_gap;
+    var test_nodes: [8]ui.Node = undefined;
+    var test_count: usize = 0;
+    for (data.tests, 0..) |t, i| {
+        if (i >= test_nodes.len) break;
+        const pass = t.passed == t.total and t.total > 0;
+        const icon_id = if (pass) iconTag(.circle_check) else iconTag(.circle_x);
+        const pl = std.fmt.bufPrint(&buf, "{}/{}", .{ t.passed, t.total }) catch "?";
+        test_nodes[i] = ui.Node{
+            .stack = .{
+                .axis = .row, .gap = 4, .cross_align = .center,
+                .children = &.{
+                    .{ .icon = .{ .label = "", .icon = icon_id } },
+                    .{ .text = .{ .value = t.name } },
+                    .{ .text = .{ .value = pl } },
+                },
+            },
+        };
+        test_count = i + 1;
     }
+    const test_section = ui.Node{
+        .stack = .{ .axis = .column, .gap = 4, .padding = 0, .children = test_nodes[0..test_count] },
+    };
 
-    // ── Recent Commits ──
-    {
-        try scene.pushText(ui.Rect.init(margin_x, y, 200, section_header_h), "Recent Commits", muted);
-        try scene.pushRect(ui.Rect.init(margin_x, y + section_header_h, in_w - 2 * margin_x, 1), border, .fill, 0, 0);
-        y += section_header_h + 10;
+    var cmt_nodes: [5]ui.Node = undefined;
+    var cmt_count: usize = 0;
+    for (data.commits, 0..) |msg, i| {
+        if (i >= cmt_nodes.len) break;
+        cmt_nodes[i] = ui.Node{
+            .stack = .{
+                .axis = .row, .gap = 4, .cross_align = .center,
+                .children = &.{
+                    .{ .icon = .{ .label = "", .icon = iconTag(.git_commit) } },
+                    .{ .text = .{ .value = msg } },
+                },
+            },
+        };
+        cmt_count = i + 1;
+    }
+    const cmt_section = ui.Node{
+        .stack = .{ .axis = .column, .gap = 4, .padding = 0, .children = cmt_nodes[0..cmt_count] },
+    };
 
-        for (data.commits) |msg| {
-            try scene.pushIconQuad(.{ .bounds = ui.Rect.init(margin_x, y + 5, 12, 12), .icon_id = icon_mod.id(.git_commit), .color = muted });
-            try scene.pushText(ui.Rect.init(margin_x + 20, y + 2, in_w - 2 * margin_x - 28, row_item_h), msg, text);
-            y += row_item_h + 4;
-        }
+    const cell_count = 9;
+    var layout_nodes: [cell_count]layout_mod.Node = undefined;
+    var ui_nodes: [cell_count]ui.Node = undefined;
+
+    layout_nodes[0] = .{ .column_span = 8, .row_span = 1 };
+    ui_nodes[0] = header;
+
+    layout_nodes[1] = .{ .column_span = 2, .row_span = 1 };
+    ui_nodes[1] = c1;
+    layout_nodes[2] = .{ .column_span = 2, .row_span = 1 };
+    ui_nodes[2] = c2;
+    layout_nodes[3] = .{ .column_span = 2, .row_span = 1 };
+    ui_nodes[3] = c3;
+    layout_nodes[4] = .{ .column_span = 2, .row_span = 1 };
+    ui_nodes[4] = c4;
+
+    layout_nodes[5] = .{ .column_span = 4, .row_span = 3 };
+    ui_nodes[5] = art_section;
+    layout_nodes[6] = .{ .column_span = 4, .row_span = 3 };
+    ui_nodes[6] = mod_section;
+
+    layout_nodes[7] = .{ .column_span = 8, .row_span = 2 };
+    ui_nodes[7] = test_section;
+
+    layout_nodes[8] = .{ .column_span = 8, .row_span = 1 };
+    ui_nodes[8] = cmt_section;
+
+    const layout_children = [_]*const layout_mod.Node{
+        &layout_nodes[0], &layout_nodes[1], &layout_nodes[2],
+        &layout_nodes[3], &layout_nodes[4], &layout_nodes[5],
+        &layout_nodes[6], &layout_nodes[7], &layout_nodes[8],
+    };
+
+    const bento = layout_mod.Node{
+        .kind = .bento_grid,
+        .selected = 8,
+        .gap = 12,
+        .padding = 24,
+        .children = &layout_children,
+    };
+
+    const full_bounds = ui.Rect.init(0, 0, @floatFromInt(W), @floatFromInt(H));
+
+    for (0..cell_count) |i| {
+        const cell_bounds = bento.childBounds(i, full_bounds) catch continue;
+        try node_renderer.renderNode(component_union.Component, scene, cell_bounds, ui_nodes[i], .{});
     }
 }

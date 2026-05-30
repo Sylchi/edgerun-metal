@@ -11,8 +11,9 @@
 ; UI Color constants — palette from ui_tokens.zig Palette
 ; ==================================================================
 ; Macro to pack RGBA into u32: 0xAABBGGRR
-%macro UI_COLOR 4
-    %define %1 ((%4 << 24) | (%3 << 16) | (%2 << 8) | %4)
+; Usage: UI_COLOR name, r, g, b, a
+%macro UI_COLOR 5
+    %define %1 ((%5 << 24) | (%4 << 16) | (%3 << 8) | %2)
 %endm
 
 ; Named color constants (0xAABBGGRR hex)

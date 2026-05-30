@@ -669,7 +669,7 @@ export_table:
     exp_entry str_er_app_embedded_src_len, 25, 23
     exp_entry str_er_app_lowered_main_count, 28, 24
     exp_entry str_er_app_lowered_export_count, 30, 25
-    exp_entry str_er_app_lowered_main_count, 28, 26
+    exp_entry str_er_app_lowered_export_count, 30, 26
 
 ; ==================================================================
 ; Section 8: Start section

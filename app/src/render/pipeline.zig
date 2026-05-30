@@ -26,6 +26,7 @@ pub const image_vertex_float_stride = renderer_ir.image_vertex_float_stride;
 pub fn packScene(buffers: renderer_ir.Buffers, font_atlas: *renderer_font_atlas.Atlas, commands: []const ui.Command) (renderer_ir.Error || icon_line_buffer.Error)!void {
     try prepareSceneAssets(font_atlas, commands);
     try packPreparedScene(buffers, commands);
+    try packTextQuads(buffers, font_atlas, commands);
 }
 
 fn packPreparedScene(buffers: renderer_ir.Buffers, commands: []const ui.Command) (renderer_ir.Error || icon_line_buffer.Error)!void {
@@ -176,7 +177,7 @@ test "render pipeline prepares font atlas without text in packed buffers" {
     var commands: [1]ui.Command = undefined;
     var scene = ui.Scene.init(&commands);
     try scene.push(.{ .text = .{ .origin = ui.Rect.init(0, 0, 80, 24), .value = "A", .color = .text } });
-    var atlas_storage = renderer_ir.FixedBuffers(0, 0, 0, 0, 0, 0, 0){};
+    var atlas_storage = renderer_ir.FixedBuffers(0, 0, 6, 0, 0, 0, 0){};
     try packScene(atlas_storage.buffers(), &font_atlas, scene.written());
 }
 
@@ -190,6 +191,6 @@ test "render pipeline ignores invalid utf8 text during atlas prep" {
     try scene.push(.{ .text = .{ .origin = ui.Rect.init(0, 0, 80, 24), .value = &invalid, .color = .text } });
     try scene.push(.{ .text = .{ .origin = ui.Rect.init(0, 24, 80, 24), .value = "A", .color = .text } });
 
-    var atlas_storage = renderer_ir.FixedBuffers(0, 0, 0, 0, 0, 0, 0){};
+    var atlas_storage = renderer_ir.FixedBuffers(0, 0, 6, 0, 0, 0, 0){};
     try packScene(atlas_storage.buffers(), &font_atlas, scene.written());
 }

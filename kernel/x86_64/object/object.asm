@@ -1377,7 +1377,7 @@ er_fn er_object_view_decode
     jz      .corrupt_pop
 
     mov     rax, [rsp + 40]
-    add     r11d, eax
+    add     r11, rax
     jc      .corrupt_pop
 
     inc     r15d
@@ -1387,7 +1387,7 @@ er_fn er_object_view_decode
     cmp     word [r14 + 16], 2
     jne     .success
     mov     rdx, [r14 + 16 + 8]
-    cmp     r11d, edx
+    cmp     r11, rdx
     jne     .corrupt_pop
 
 .success:

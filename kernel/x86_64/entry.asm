@@ -76,11 +76,11 @@ boot_pd_pci:
         dd 0
         %assign i i + 1
     %endrep
-    ; Index 502: 0xFEC00000 (IOAPIC, HPET, TPM CRB)
-    dd 0xFEC00083
+    ; Index 502: 0xFEC00000 (IOAPIC, HPET, TPM CRB) — UC (bit3=PWT, bit4=PCD)
+    dd 0xFEC0009B
     dd 0
-    ; Index 503: 0xFEE00000 (LAPIC)
-    dd 0xFEE00083
+    ; Index 503: 0xFEE00000 (LAPIC) — UC
+    dd 0xFEE0009B
     dd 0
     times 8 dq 0                  ; indices 504-511 unused
 

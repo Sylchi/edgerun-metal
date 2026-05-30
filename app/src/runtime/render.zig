@@ -132,7 +132,6 @@ fn renderSceneIr(surface: state.renderer_pipeline.SoftwareFramebuffer, scene_com
     try ensureFontAtlas();
     const buffers = packedBuffers();
     try state.renderer_pipeline.packScene(buffers, &state.font_atlas, scene_commands);
-    try state.renderer_pipeline.packTextQuads(buffers, &state.font_atlas, scene_commands);
     const image_texture = try app_images.cloudMeme();
     const resources = state.renderer_pipeline.softwareResourcesFromAlphaAtlas(.{
         .width = state.font_atlas_width,

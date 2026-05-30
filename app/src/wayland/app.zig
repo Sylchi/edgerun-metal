@@ -405,7 +405,6 @@ pub const NativeApp = struct {
 
         const buffers = self.ir_storage.buffers();
         try renderer_pipeline.packScene(buffers, &self.font_atlas, scene.written());
-        try renderer_pipeline.packTextQuads(buffers, &self.font_atlas, scene.written());
 
         const has_images = for (scene.written()) |c| {
             if (c == .image_quad) break true;
@@ -554,7 +553,6 @@ pub const NativeApp = struct {
         var cursor_ir = renderer_ir.FixedBuffers(cursor_scene_budget, cursor_overlay_icon_instances, 0, 0, 0, cursor_overlay_icon_line_vertices, 0){};
         const buffers = cursor_ir.buffers();
         try renderer_pipeline.packScene(buffers, &self.font_atlas, scene.written());
-        try renderer_pipeline.packTextQuads(buffers, &self.font_atlas, scene.written());
         const surface = try renderer_software.Framebuffer.init(self.width, self.height, self.pixels);
         const receipt = try surface.renderIr(buffers, renderer_pipeline.softwareResources(&self.font_atlas, null));
         if (!receipt.valid()) return error.InvalidSoftwareReceipt;

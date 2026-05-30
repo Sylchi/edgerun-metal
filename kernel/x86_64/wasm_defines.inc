@@ -145,6 +145,13 @@ wasm_version: db 0x01, 0x00, 0x00, 0x00
 %define ERROR_NO_SPACE         27
 %define ERROR_NOT_FOUND        28
 
+; Virtio-specific error codes (range 30-39)
+%define ERROR_DEVICE_NOT_FOUND     30
+%define ERROR_MAP_FAILED           31
+%define ERROR_FEATURE_NEGOTIATION  32
+%define ERROR_QUEUE_SETUP          33
+%define ERROR_INVALID_RESPONSE     34
+
 %define ERROR_OK               0
 
 ; ==================================================================
