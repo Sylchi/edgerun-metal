@@ -144,7 +144,7 @@ er_wasm_jit_init:
     mov     [rel jit_globals + JitGlobals.memory_pages], rax
 
     ; --- fill template dispatch table ---
-    ; Default all entries to jit_template_fallback
+    ; Default all entries to jit_template_fallback (compile refusal path).
     lea     rax, [rel jit_template_fallback]
     mov     ecx, 256
     lea     rdx, [rel jit_template_table]
@@ -171,6 +171,8 @@ er_wasm_jit_init:
     _jit_init_op 0x22, jit_template_local_tee
     _jit_init_op 0x23, jit_template_global_get
     _jit_init_op 0x24, jit_template_global_set
+    _jit_init_op 0x25, jit_template_table_get
+    _jit_init_op 0x26, jit_template_table_set
     _jit_init_op 0x41, jit_template_i32_const
     _jit_init_op 0x42, jit_template_i64_const
     _jit_init_op 0x45, jit_template_i32_eqz
@@ -235,6 +237,7 @@ er_wasm_jit_init:
     _jit_init_op 0x3E, jit_template_i32_store      ; i64.store32 = i32.store
     ; Memory management
     _jit_init_op 0x3F, jit_template_memory_size
+    _jit_init_op 0x40, jit_template_memory_grow
     ; i64 comparisons
     _jit_init_op 0x50, jit_template_i64_eqz
     _jit_init_op 0x51, jit_template_i64_eq

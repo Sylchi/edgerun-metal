@@ -1232,37 +1232,37 @@
 .op_memory_grow:
     call    exec_stack_pop
     jc      .underflow_error
-    mov     r15, rax         ; requested pages
-    ; Current pages
-    mov     rax, [executor_memory_pages]
-    mov     r14, rax         ; previous pages
-    ; Check if grow function exists
-    mov     rdi, [runtime_memory_grow_fn]
-    test    rdi, rdi
-    jz      .memory_grow_no_authority
-    mov     rsi, [runtime_memory_grow_ctx]
-    ; Call memory grow function: fn(context, old_pages, new_pages)
-    ; ABI: rdi=context, rsi=old_pages, rdx=new_pages
-    mov     rdx, r15
-    call    rdi
+    mov     r15, rax         ; delta pages
+    mov     r14, [executor_memory_pages] ; previous pages
+    mov     r13, r14
+    add     r13, r15         ; requested pages = previous + delta
+    jc      .memory_grow_requires_grant
+
+    mov     rax, [memory_max_pages]
     test    rax, rax
-    jz      .memory_grow_failed
-    ; Update memory pages and limit
-    mov     [executor_memory_pages], r15
-    ; Current pages pushed as result
+    jz      .memory_grow_check_bytes
+    cmp     r13, rax
+    ja      .memory_grow_requires_grant
+
+.memory_grow_check_bytes:
+    mov     rdi, r13
+    call    er_wasm_pages_to_bytes
+    test    rdx, rdx
+    jnz     .memory_grow_requires_grant
+    mov     r12, rax         ; requested bytes
+
+    cmp     r12, [runtime_memory_len]
+    ja      .memory_grow_requires_grant
+
+    mov     [executor_memory_pages], r13
+    mov     [executor_memory_limit], r12
     mov     rax, r14
     call    exec_stack_push
     jc      .overflow_error
     jmp     .dispatch_next
-.memory_grow_no_authority:
+.memory_grow_requires_grant:
     er_err  ERROR_MEMORY_GROWTH
     jmp     .error_return
-.memory_grow_failed:
-    ; Push -1 on failure (WASM spec)
-    mov     eax, -1
-    call    exec_stack_push
-    jc      .overflow_error
-    jmp     .dispatch_next
 
 ; ==================================================================
 ; Table ops

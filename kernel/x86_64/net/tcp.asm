@@ -163,14 +163,18 @@ er_fn er_tcp_connect
     test    rax, rax
     jz      .tpm_fail
 
-    mov     r9, rax
-    sub     r9, rdi
-    mov     esi, r9d
+    mov     esi, 12             ; TPM_CMD_GET_RANDOM_LEN
     mov     rdx, tpm_isn_rsp
     mov     ecx, 64
     call    er_tpm_crb_transfer
     test    rax, rax
     jz      .tpm_fail
+    ; Debug: got transfer
+    push    rax
+    mov     edi, 0x3f8
+    mov     esi, 'X'
+    call    er_serial_putchar
+    pop     rax
 
     mov     rdi, tpm_isn_rsp
     mov     esi, eax
@@ -179,6 +183,10 @@ er_fn er_tcp_connect
     call    er_tpm_parse_get_random
     test    rax, rax
     jz      .tpm_fail
+    ; Debug: got parse
+    mov     edi, 0x3f8
+    mov     esi, 'P'
+    call    er_serial_putchar
 
     ; Recalculate connection pointer (r8 may be clobbered by TPM calls)
     mov     eax, ebx
@@ -258,18 +266,6 @@ _tcp_send_syn:
     push    r12
 
     mov     r12, rdi        ; conn pointer
-
-    ; Debug: stage marker A
-    mov     edi, 0x3f8
-    mov     esi, 'A'
-    call    er_serial_putchar
-    mov     edi, 0x3f8
-    mov     esi, [r12 + TCP_CONN_DST_IP]
-    call    er_serial_puthex32
-    mov     edi, 0x3f8
-    mov     esi, ':'
-    call    er_serial_putchar
-
     lea     rdi, [tcp_seg_buf]
 
     ; Build TCP header with MSS option (24 bytes)
@@ -325,17 +321,6 @@ _tcp_send_syn:
     call    _tcp_compute_checksum
     mov     [tcp_seg_buf + TCP_CHECKSUM], ax
 
-    ; Debug: stage marker B
-    mov     edi, 0x3f8
-    mov     esi, 'B'
-    call    er_serial_putchar
-    mov     edi, 0x3f8
-    mov     esi, [r12 + TCP_CONN_DST_IP]
-    call    er_serial_puthex32
-    mov     edi, 0x3f8
-    mov     esi, '\n'
-    call    er_serial_putchar
-
     ; Send via IP
     mov     edi, [r12 + TCP_CONN_DST_IP]  ; dst_ip
     mov     esi, IP_PROTO_TCP
@@ -350,16 +335,6 @@ _tcp_send_syn:
     ret
 
 .fail:
-    ; Debug: stage marker F
-    mov     edi, 0x3f8
-    mov     esi, 'F'
-    call    er_serial_putchar
-    mov     edi, 0x3f8
-    mov     esi, eax
-    call    er_serial_puthex32
-    mov     edi, 0x3f8
-    mov     esi, '\n'
-    call    er_serial_putchar
     mov     eax, -1
     pop     r12
     ret

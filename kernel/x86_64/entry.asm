@@ -116,9 +116,9 @@ _start:
     ; Load GDT
     lgdt [gdt_descriptor]
 
-    ; Set PAE and PGE in CR4
+    ; Set PAE, PGE, OSFXSR, OSXMMEXCPT in CR4
     mov     eax, cr4
-    or      eax, 0x000000A0        ; PAE + PGE
+    or      eax, 0x000006A0        ; PAE + PGE + OSFXSR + OSXMMEXCPT
     mov     cr4, eax
 
     ; Load PML4 address into CR3
@@ -149,6 +149,12 @@ _start:
     mov     fs, ax
     mov     gs, ax
     db      0x8E, 0xD0       ; mov ss, ax
+
+    ; Initialize MXCSR (SSE control/status) — default: mask all exceptions
+    push    rax
+    mov     eax, 0x1F80
+    ldmxcsr [rsp]
+    pop     rax
 
     ; Zero BSS using multiboot-provided stack
     lea     rdi, [rel __bss_start]

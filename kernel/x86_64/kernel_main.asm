@@ -1134,38 +1134,72 @@ er_fn er_kernel_main
 
     ; ─── xHCI USB ─────────────────────────────────────────────────
 .xhci_check:
-    sub     rsp, 3
-    mov     rdi, 0x0C
-    mov     esi, 0x03
-    mov     edx, 0x30
-    mov     rcx, rsp
-    lea     r8, [rsp + 1]
-    lea     r9, [rsp + 2]
-    call    er_pci_find_class
-    test    eax, eax
-    jz      .xhci_absent
+    mov     byte [device_flags + DEV_XHCI], 1
+    xor     r13d, r13d           ; match_count
+    xor     r12d, r12d           ; bus
+.xhci_bus_loop:
+    xor     r14d, r14d           ; dev
+.xhci_dev_loop:
+    xor     r15d, r15d           ; func
+.xhci_func_loop:
+    ; Skip absent functions quickly.
+    mov     rdi, r12
+    mov     rsi, r14
+    mov     rdx, r15
+    xor     ecx, ecx
+    call    er_pci_read32
+    cmp     eax, 0xFFFFFFFF
+    je      .xhci_next_func
 
-    movzx   r12d, byte [rsp]     ; bus
-    movzx   r13d, byte [rsp+1]   ; dev
-    movzx   r14d, byte [rsp+2]   ; func
+    ; Match class/subclass/prog-if for xHCI: 0x0C/0x03/0x30.
+    mov     rdi, r12
+    mov     rsi, r14
+    mov     rdx, r15
+    mov     ecx, 0x08
+    call    er_pci_read32
+    shr     eax, 8               ; 0x00CCSSPP
+    movzx   edx, al              ; prog-if
+    movzx   ecx, ah              ; subclass
+    shr     eax, 16              ; class in al
+    cmp     al, 0x0C
+    jne     .xhci_next_func
+    cmp     cl, 0x03
+    jne     .xhci_next_func
+    cmp     dl, 0x30
+    jne     .xhci_next_func
 
+    ; Probe and init every matching xHCI controller.
+    inc     r13d
+    mov     byte [device_flags + DEV_XHCI], 2
     mov     rdi, COM1_PORT
     mov     esi, r12d
-    mov     edx, r13d
-    mov     ecx, r14d
+    mov     edx, r14d
+    mov     ecx, r15d
     call    er_xhci_probe
-
     mov     rdi, COM1_PORT
     mov     esi, r12d
-    mov     edx, r13d
-    mov     ecx, r14d
+    mov     edx, r14d
+    mov     ecx, r15d
     xor     r8d, r8d
     call    er_xhci_init
-    add     rsp, 3
+
+.xhci_next_func:
+    inc     r15d
+    cmp     r15d, 8
+    jb      .xhci_func_loop
+    inc     r14d
+    cmp     r14d, 32
+    jb      .xhci_dev_loop
+    inc     r12d
+    cmp     r12d, 256
+    jb      .xhci_bus_loop
+
+    test    r13d, r13d
+    jz      .xhci_absent
     jmp     .acpi_check
 
 .xhci_absent:
-    add     rsp, 3
+    mov     byte [device_flags + DEV_XHCI], 1
 
     ; ─── ACPI ───────────────────────────────────────────────────────
     ; Stack: [rsdp@0]=8, [rsdt@8]=8, [xsdt@16]=8, [rev@24]=1, [tmp@28]=4
@@ -1839,322 +1873,6 @@ er_fn er_kernel_main
     mov     rdi, COM1_PORT
     call    er_serial_crlf
 
-    ; ─── Boot Device Summary ─────────────────────────────────
-    ; Show detected peripherals on display before entering shell
-    mov     rdi, COM1_PORT
-    mov     sil, 'S'
-    call    er_serial_putchar
-    call    er_display_clear
-    mov     rdi, COM1_PORT
-    mov     sil, 's'
-    call    er_serial_putchar
-
-    ; Display a string via char-by-char (avoids bug in er_display_puts loop)
-    lea     r12, [rel .boot_header]
-.bs_header:
-    movzx   ebx, byte [r12]
-    test    ebx, ebx
-    jz      .bs_start_tpm
-    mov     edi, ebx
-    call    er_display_putchar
-    inc     r12
-    jmp     .bs_header
-.bs_start_tpm:
-    mov     rdi, COM1_PORT
-    mov     sil, 'a'
-    call    er_serial_putchar
-    ; TPM (from stored flag)
-    lea     r12, [rel .dev_tpm]
-.bs_tpm:
-    movzx   ebx, byte [r12]
-    test    ebx, ebx
-    jz      .bs_tpm_status
-    mov     edi, ebx
-    call    er_display_putchar
-    inc     r12
-    jmp     .bs_tpm
-.bs_tpm_status:
-    cmp     byte [device_flags + DEV_TPM], 2
-    je      .bs_tpm_ok
-    lea     r12, [rel .stat_absent]
-    jmp     .bs_tpm_done
-.bs_tpm_ok:
-    lea     r12, [rel .stat_ok]
-.bs_tpm_done:
-    movzx   ebx, byte [r12]
-    test    ebx, ebx
-    jz      .bs_tpm_nl
-    mov     edi, ebx
-    call    er_display_putchar
-    inc     r12
-    jmp     .bs_tpm_done
-.bs_tpm_nl:
-    mov     edi, 0x0A
-    call    er_display_putchar
-
-    ; Keyboard (from stored flag)
-    lea     r12, [rel .dev_kbd]
-.bs_kbd:
-    movzx   ebx, byte [r12]
-    test    ebx, ebx
-    jz      .bs_kbd_status
-    mov     edi, ebx
-    call    er_display_putchar
-    inc     r12
-    jmp     .bs_kbd
-.bs_kbd_status:
-    cmp     byte [device_flags + DEV_KBD], 2
-    je      .bs_kbd_ok
-    lea     r12, [rel .stat_absent]
-    jmp     .bs_kbd_done
-.bs_kbd_ok:
-    lea     r12, [rel .stat_ok]
-.bs_kbd_done:
-    movzx   ebx, byte [r12]
-    test    ebx, ebx
-    jz      .bs_kbd_nl
-    mov     edi, ebx
-    call    er_display_putchar
-    inc     r12
-    jmp     .bs_kbd_done
-.bs_kbd_nl:
-    mov     edi, 0x0A
-    call    er_display_putchar
-
-    ; NVMe (re-probe PCI)
-    lea     r12, [rel .dev_nvme]
-.bs_nvme:
-    movzx   ebx, byte [r12]
-    test    ebx, ebx
-    jz      .bs_nvme_probe
-    mov     edi, ebx
-    call    er_display_putchar
-    inc     r12
-    jmp     .bs_nvme
-.bs_nvme_probe:
-    sub     rsp, 3
-    mov     rdi, rsp
-    lea     rsi, [rsp + 1]
-    lea     rdx, [rsp + 2]
-    call    er_pci_find_nvme
-    add     rsp, 3
-    test    eax, eax
-    jz      .bs_nvme_absent
-    lea     r12, [rel .stat_present]
-    jmp     .bs_nvme_done
-.bs_nvme_absent:
-    lea     r12, [rel .stat_absent]
-.bs_nvme_done:
-    movzx   ebx, byte [r12]
-    test    ebx, ebx
-    jz      .bs_nvme_nl
-    mov     edi, ebx
-    call    er_display_putchar
-    inc     r12
-    jmp     .bs_nvme_done
-.bs_nvme_nl:
-    mov     edi, 0x0A
-    call    er_display_putchar
-
-    ; xHCI (re-probe PCI class 0x0C/0x03/0x30)
-    lea     r12, [rel .dev_xhci]
-.bs_xhci:
-    movzx   ebx, byte [r12]
-    test    ebx, ebx
-    jz      .bs_xhci_probe
-    mov     edi, ebx
-    call    er_display_putchar
-    inc     r12
-    jmp     .bs_xhci
-.bs_xhci_probe:
-    sub     rsp, 3
-    mov     rdi, 0x0C
-    mov     esi, 0x03
-    mov     edx, 0x30
-    mov     rcx, rsp
-    lea     r8, [rsp + 1]
-    lea     r9, [rsp + 2]
-    call    er_pci_find_class
-    add     rsp, 3
-    test    eax, eax
-    jz      .bs_xhci_absent
-    lea     r12, [rel .stat_present]
-    jmp     .bs_xhci_done
-.bs_xhci_absent:
-    lea     r12, [rel .stat_absent]
-.bs_xhci_done:
-    movzx   ebx, byte [r12]
-    test    ebx, ebx
-    jz      .bs_xhci_nl
-    mov     edi, ebx
-    call    er_display_putchar
-    inc     r12
-    jmp     .bs_xhci_done
-.bs_xhci_nl:
-    mov     edi, 0x0A
-    call    er_display_putchar
-
-    ; Virtio-net (re-probe PCI class 0x02/0x00/0x00)
-    lea     r12, [rel .dev_virtio]
-.bs_virtio:
-    movzx   ebx, byte [r12]
-    test    ebx, ebx
-    jz      .bs_virtio_probe
-    mov     edi, ebx
-    call    er_display_putchar
-    inc     r12
-    jmp     .bs_virtio
-.bs_virtio_probe:
-    sub     rsp, 3
-    mov     rdi, 0x02
-    mov     esi, 0x00
-    mov     edx, 0x00
-    mov     rcx, rsp
-    lea     r8, [rsp + 1]
-    lea     r9, [rsp + 2]
-    call    er_pci_find_class
-    add     rsp, 3
-    test    eax, eax
-    jz      .bs_virtio_absent
-    lea     r12, [rel .stat_present]
-    jmp     .bs_virtio_done
-.bs_virtio_absent:
-    lea     r12, [rel .stat_absent]
-.bs_virtio_done:
-    movzx   ebx, byte [r12]
-    test    ebx, ebx
-    jz      .bs_virtio_nl
-    mov     edi, ebx
-    call    er_display_putchar
-    inc     r12
-    jmp     .bs_virtio_done
-.bs_virtio_nl:
-    mov     edi, 0x0A
-    call    er_display_putchar
-
-    ; AMDGPU (re-probe PCI class 0x03/0x00/0x00 + check vendor)
-    lea     r12, [rel .dev_amdgpu]
-.bs_amdgpu:
-    movzx   ebx, byte [r12]
-    test    ebx, ebx
-    jz      .bs_amdgpu_probe
-    mov     edi, ebx
-    call    er_display_putchar
-    inc     r12
-    jmp     .bs_amdgpu
-.bs_amdgpu_probe:
-    sub     rsp, 3
-    mov     rdi, 0x03
-    mov     esi, 0x00
-    mov     edx, 0x00
-    mov     rcx, rsp
-    lea     r8, [rsp + 1]
-    lea     r9, [rsp + 2]
-    call    er_pci_find_class
-    movzx   r13d, byte [rsp]      ; save bus
-    movzx   r14d, byte [rsp + 1] ; save dev
-    movzx   r15d, byte [rsp + 2] ; save func
-    add     rsp, 3
-    test    eax, eax
-    jz      .bs_amdgpu_absent
-    mov     rdi, r13
-    mov     rsi, r14
-    mov     rdx, r15
-    xor     ecx, ecx
-    call    er_pci_read32
-    and     eax, 0xFFFF
-    cmp     eax, 0x1002       ; AMD vendor ID
-    je      .bs_amdgpu_present
-.bs_amdgpu_absent:
-    lea     r12, [rel .stat_absent]
-    jmp     .bs_amdgpu_done
-.bs_amdgpu_present:
-    lea     r12, [rel .stat_present]
-.bs_amdgpu_done:
-    movzx   ebx, byte [r12]
-    test    ebx, ebx
-    jz      .bs_amdgpu_nl
-    mov     edi, ebx
-    call    er_display_putchar
-    inc     r12
-    jmp     .bs_amdgpu_done
-.bs_amdgpu_nl:
-    mov     edi, 0x0A
-    call    er_display_putchar
-
-    ; eMMC (from stored flag)
-    lea     r12, [rel .dev_emmc]
-.bs_emmc:
-    movzx   ebx, byte [r12]
-    test    ebx, ebx
-    jz      .bs_emmc_status
-    mov     edi, ebx
-    call    er_display_putchar
-    inc     r12
-    jmp     .bs_emmc
-.bs_emmc_status:
-    cmp     byte [device_flags + DEV_EMMC], 2
-    je      .bs_emmc_ok
-    lea     r12, [rel .stat_absent]
-    jmp     .bs_emmc_done
-.bs_emmc_ok:
-    lea     r12, [rel .stat_present]
-.bs_emmc_done:
-    movzx   ebx, byte [r12]
-    test    ebx, ebx
-    jz      .bs_emmc_nl
-    mov     edi, ebx
-    call    er_display_putchar
-    inc     r12
-    jmp     .bs_emmc_done
-.bs_emmc_nl:
-    mov     edi, 0x0A
-    call    er_display_putchar
-
-    ; Intel GPU (from stored flag)
-    lea     r12, [rel .dev_intel_gpu]
-.bs_intel_gpu:
-    movzx   ebx, byte [r12]
-    test    ebx, ebx
-    jz      .bs_intel_gpu_status
-    mov     edi, ebx
-    call    er_display_putchar
-    inc     r12
-    jmp     .bs_intel_gpu
-.bs_intel_gpu_status:
-    cmp     byte [device_flags + DEV_INTEL_GPU], 2
-    je      .bs_intel_gpu_ok
-    lea     r12, [rel .stat_absent]
-    jmp     .bs_intel_gpu_done
-.bs_intel_gpu_ok:
-    lea     r12, [rel .stat_present]
-.bs_intel_gpu_done:
-    movzx   ebx, byte [r12]
-    test    ebx, ebx
-    jz      .bs_intel_gpu_nl
-    mov     edi, ebx
-    call    er_display_putchar
-    inc     r12
-    jmp     .bs_intel_gpu_done
-.bs_intel_gpu_nl:
-    mov     edi, 0x0A
-    call    er_display_putchar
-
-    ; Footer
-    lea     r12, [rel .boot_footer]
-.bs_footer:
-    movzx   ebx, byte [r12]
-    test    ebx, ebx
-    jz      .bs_done
-    mov     edi, ebx
-    call    er_display_putchar
-    inc     r12
-    jmp     .bs_footer
-.bs_done:
-    mov     rdi, COM1_PORT
-    mov     rsi, 'C'
-    call    er_serial_putchar
-
     ; ─── Kernel clock init ──────────────────────────────────────
     lea     rdi, [rel kernel_keeper_id]
     lea     rsi, [rel kernel_limits]
@@ -2165,12 +1883,13 @@ er_fn er_kernel_main
 
     ; Boot complete — pipeline main loop
 .main_loop:
-    mov     rdi, COM1_PORT
-    mov     rsi, 'D'
+    push    rdi
+    push    rsi
+    mov     edi, COM1_PORT
+    mov     esi, '.'
     call    er_serial_putchar
-    mov     rdi, COM1_PORT
-    mov     sil, 'X'
-    call    er_serial_putchar
+    pop     rsi
+    pop     rdi
     ; Advance kernel clock by 1 tick per iteration
     lea     rdi, [rel kernel_clock]
     mov     esi, 1
@@ -2182,15 +1901,6 @@ er_fn er_kernel_main
     call    er_local_cell_poll
     call    er_input_kbd_poll
     call    er_da_tick
-
-    ; Overlay boot status text on top of composited shell UI
-    mov     rdi, COM1_PORT
-    mov     sil, 'O'
-    call    er_serial_putchar
-            call    _render_display_overlay
-    mov     rdi, COM1_PORT
-    mov     sil, 'o'
-    call    er_serial_putchar
 
     jmp     .main_loop
 

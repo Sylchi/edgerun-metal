@@ -1,11 +1,7 @@
 ; ==================================================================
-; Helper: find_host_import
-; Searches runtime.imports for a matching import.
-; rdi = import_ptr (ImportedFunction), rsi = import_size (for generic compare)
-; rdx = expected kind (function/memory/table/global)
-; Returns host import ptr in rax, or error in rdx
+; Legacy placeholder notes were here before module parser entry.
+; Import resolution is handled by er_wasm_resolve_imports in wasm_run.asm.
 ; ==================================================================
-; TODO: implement
 
 ; ==================================================================
 ; Helper: checked_add
@@ -273,4 +269,3 @@ er_wasm_parse_module:
     pop     rbx
     pop     rbp
     ret
-

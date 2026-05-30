@@ -178,7 +178,7 @@ er_wasm_parse_import_section:
     mov     [imported_memory_min], rax
     mov     [imported_memory_max], rbx
     ; Update module memory limits
-    mov     [memory_min_pages], rax  ; TODO: define this global
+    mov     [memory_min_pages], rax
     mov     [memory_max_pages], rbx
     jmp     .import_next
 

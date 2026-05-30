@@ -190,7 +190,7 @@ _start.halt:
 ; efi_get_fb — Get framebuffer from UEFI GOP protocol
 ; In:   saved_systab must be set
 ; Out:  fb_addr, fb_width, fb_height, fb_pitch, fb_bpp filled
-;       on success; all zero on failure (VGA fallback expected)
+;       on success; all zero on failure
 ; ==================================================================
 efi_get_fb:
     push    r12

@@ -10,6 +10,13 @@
 %include "x86_64/wasm/wasm_interpreter.asm"
 %include "x86_64/wasm/wasm_jit_debug.asm"
 
+LINUX_SYS_MPROTECT equ 10
+LINUX_PROT_READ    equ 1
+LINUX_PROT_WRITE   equ 2
+LINUX_PROT_EXEC    equ 4
+LINUX_PAGE_SIZE    equ 4096
+LINUX_PAGE_MASK    equ -LINUX_PAGE_SIZE
+
 ; ==================================================================
 ; Data
 ; =================================================================+
@@ -41,6 +48,17 @@ _start:
 
     call    jit_debug_init
     mov     qword [rel test_fail], 0
+
+    lea     rdi, [rel jit_code_cache]
+    and     rdi, LINUX_PAGE_MASK
+    lea     rsi, [rel jit_code_cache + JIT_CACHE_SIZE + LINUX_PAGE_SIZE - 1]
+    and     rsi, LINUX_PAGE_MASK
+    sub     rsi, rdi
+    mov     edx, LINUX_PROT_READ | LINUX_PROT_WRITE | LINUX_PROT_EXEC
+    mov     eax, LINUX_SYS_MPROTECT
+    syscall
+    test    rax, rax
+    jnz     .fail
 
     ; --- Common runtime memory setup ---
     lea     rax, [rel dummy_mem]

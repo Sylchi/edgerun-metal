@@ -85,6 +85,22 @@ er_fn er_fn_run
 .use_module_memory_pages:
     mov     rax, [memory_min_pages]
 .set_memory_pages:
+    cmp     rax, [memory_min_pages]
+    jb      .no_memory
+    mov     rcx, [memory_max_pages]
+    test    rcx, rcx
+    jz      .check_initial_bytes
+    cmp     rax, rcx
+    ja      .no_memory
+.check_initial_bytes:
+    push    rax
+    mov     rdi, rax
+    call    er_wasm_pages_to_bytes
+    test    rdx, rdx
+    jnz     .initial_pages_error
+    cmp     rax, [runtime_memory_len]
+    ja      .initial_pages_nomem
+    pop     rax
     mov     [executor_memory_pages], rax
     ; Calculate memory limit: pages * 65536
     shl     rax, WASM_PAGE_SHIFT
@@ -150,6 +166,15 @@ er_fn er_fn_run
 
 .corrupt_error_label:
     er_err  ERROR_CORRUPT
+.no_memory:
+    er_err  ERROR_NO_MEMORY
+    jmp     .error
+.initial_pages_nomem:
+    pop     rax
+    er_err  ERROR_NO_MEMORY
+    jmp     .error
+.initial_pages_error:
+    pop     rax
 .error:
     mov     rax, -1
 .done:
@@ -271,6 +296,22 @@ er_fn er_fn_load
 .use_module_memory_pages:
     mov     rax, [memory_min_pages]
 .set_memory_pages:
+    cmp     rax, [memory_min_pages]
+    jb      .no_memory
+    mov     rcx, [memory_max_pages]
+    test    rcx, rcx
+    jz      .check_initial_bytes
+    cmp     rax, rcx
+    ja      .no_memory
+.check_initial_bytes:
+    push    rax
+    mov     rdi, rax
+    call    er_wasm_pages_to_bytes
+    test    rdx, rdx
+    jnz     .initial_pages_error
+    cmp     rax, [runtime_memory_len]
+    ja      .initial_pages_nomem
+    pop     rax
     mov     [executor_memory_pages], rax
     shl     rax, WASM_PAGE_SHIFT
     mov     [executor_memory_limit], rax
@@ -303,6 +344,15 @@ er_fn er_fn_load
     xor     edx, edx
     jmp     .done
 
+.no_memory:
+    er_err  ERROR_NO_MEMORY
+    jmp     .error
+.initial_pages_nomem:
+    pop     rax
+    er_err  ERROR_NO_MEMORY
+    jmp     .error
+.initial_pages_error:
+    pop     rax
 .error:
     mov     rax, -1
 .done:

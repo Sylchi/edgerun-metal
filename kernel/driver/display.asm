@@ -53,7 +53,7 @@ extern er_memset
 ; er_display_init — initialize display
 ; void er_display_init(void)
 ;
-; Tries: multiboot framebuffer → native framebuffer → VGA text fallback.
+; Tries: multiboot framebuffer → native framebuffer → legacy text mode.
 ; ==================================================================
 er_fn er_display_init
     push    rdi
@@ -68,12 +68,12 @@ er_fn er_display_init
 .try_native:
     call    _native_fb_init
     test    eax, eax
-    jnz     .vga_fallback
+    jnz     .legacy_text_mode
 
     mov     byte [display_mode], 1
     jmp     .done_init
 
-.vga_fallback:
+.legacy_text_mode:
     mov     byte [display_mode], 0
     call    er_display_clear
     lea     rdi, [rel .banner]

@@ -195,9 +195,7 @@ er_fn er_tor_ntor_keygen
     test    rax, rax
     jz      .fail
 
-    mov     r9, rax
-    sub     r9, rdi
-    mov     esi, r9d
+    mov     esi, 12             ; TPM_CMD_GET_RANDOM_LEN
     mov     rdx, ntor_tpm_rsp
     mov     ecx, 64
     call    er_tpm_crb_transfer

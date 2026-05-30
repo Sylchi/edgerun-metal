@@ -6,6 +6,9 @@
 
 %include "x86_64/macros.inc"
 
+FE_LIMB_P0 equ 0x0007ffffffffffe0
+FE_LIMB_PN equ 0x0007ffffffffffff
+
 extern er_tor_curve25519_scalar_mult
 extern _fe_mul
 extern _fe_square
@@ -239,20 +242,22 @@ _start:
     jmp     .test6_is_2torsion
 .test6_not_zero:
     ; Check if fe_b == p (all limbs = 2^51-1 except L0 = 2^51-19)
+    mov     rcx, FE_LIMB_PN
     mov     rax, [rel fe_b]
-    cmp     rax, 0x0007ffffffffffe0   ; 2^51-19  
+    mov     rdx, FE_LIMB_P0
+    cmp     rax, rdx
     jne     .test6_not_p
     mov     rax, [rel fe_b + 8]
-    cmp     rax, 0x0007ffffffffffff   ; 2^51-1
+    cmp     rax, rcx
     jne     .test6_not_p
     mov     rax, [rel fe_b + 16]
-    cmp     rax, 0x0007ffffffffffff
+    cmp     rax, rcx
     jne     .test6_not_p
     mov     rax, [rel fe_b + 24]
-    cmp     rax, 0x0007ffffffffffff
+    cmp     rax, rcx
     jne     .test6_not_p
     mov     rax, [rel fe_b + 32]
-    cmp     rax, 0x0007ffffffffffff
+    cmp     rax, rcx
     jne     .test6_not_p
     jmp     .test6_is_2torsion
 .test6_is_2torsion:

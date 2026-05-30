@@ -5,7 +5,7 @@ EdgeRun is a self-compiling app system with zero dependency chains.
 The repository has two distinct code worlds with a hard boundary:
 
 - **Host-side code** — x86_64 assembly using the project's own macro DSL
-  (`asm/x86_64/macros.inc`). This owns the kernel, drivers, boot path, PCI, MMIO,
+  (`kernel/x86_64/macros.inc`). This owns the kernel, drivers, boot path, PCI, MMIO,
   serial, TPM, framebuffer, interrupt management, and the WASM interpreter.
   No C, no Zig, no external runtime. Built with `yasm` + `ld` via `build.sh`.
 - **App-side code** — Zig, compiled to WASM, running inside the EdgeRun WASM
@@ -96,20 +96,22 @@ verify the receipt
 
 ## Repository Map
 
-- `asm/` — all host-side production code.
-  - `asm/x86_64/` — kernel, drivers, runtime, math, serial, TPM, framebuffer,
-    render IR, WASM interpreter, WASM compiler, UI components, interactive shell,
-    AMDGPU display, virtio-net/gpu, RTL8125, PCI, NVMe, BLAKE3, object serialization.
-  - `asm/arm/pi/` — Raspberry Pi Zero W v1.1 kernel, VC mailbox, EMMC/SD, DWC2 USB.
-  - `asm/host/` — Linux userspace host tools (Pi USB boot, ESP32 serial boot).
-  - `asm/test/` — self-hosted ASM test runners (being migrated from C harnesses).
-- `edgerun-zig/` — app-side Zig frontend (being replaced by the self-hosted WASM
-  compiler). Deprecated for host paths.
-  - `edgerun-zig/src/` — app object model, identity, clock, WASM interpreter
-    (superseded by `asm/x86_64/wasm_interpreter.asm`), render IR, UI components.
-  - `edgerun-zig/compiler/` — EdgeRun WASM compiler (superseded by
-    `asm/x86_64/wasm_compiler*.asm`).
-  - `edgerun-zig/src/ui/` — shared app render contract consumed by web, CPU, Wayland,
+- `kernel/` — host-side code.
+  - `kernel/x86_64/` — canonical hardware-near x86_64 ASM implementation: kernel,
+    runtime, TPM, identity, BLAKE3, object serialization, network stack, render IR,
+    UI shell, WASM interpreter, and WASM JIT/compiler work.
+  - `kernel/driver/` — host ASM drivers for serial, PCI, ACPI, NVMe, display,
+    virtio, xHCI, RTL8125, AMDGPU, Intel GPU, SPI flash, and related hardware.
+  - `kernel/arm/pi/` — Raspberry Pi Zero W v1.1 kernel, VC mailbox, EMMC/SD,
+    and DWC2 USB bring-up.
+  - `kernel/host/` — x86_64 ASM Linux userspace host tools for Pi USB boot and
+    ESP32 serial boot.
+  - `kernel/test/` — self-hosted ASM test runners.
+- `app/` — app-side Zig frontend. Zig remains the app-authoring path: source is
+  compiled to WASM and run inside EdgeRun's interpreter/import contract.
+  - `app/src/` — app object model, identity, clock, storage, grants, receipts,
+    media, UI, UEFI smoke paths, Pi helpers, and host-facing dev tools.
+  - `app/src/ui/` — shared app render contract consumed by web, CPU, Wayland,
     GLES, and DRM paths.
 - `build.sh` — all build commands. No Makefile for production paths.
 - `AGENTS.md` — working agreements, session history, porting rules.
@@ -314,27 +316,34 @@ A single app broadcasts its scene to multiple UI hosts. Each renders independent
 ## Try The Important Checks
 
 ```sh
-make check
+./build.sh test
 ```
 
 Focused checks:
 
 ```sh
-make zig-fmt-check
-make zig-test
-make crypto-test
-make clock-test
-make identity-test
-make object-test
-make storage-test
-make ui-core-test
+./build.sh test-ctype
+./build.sh test-clock
+./build.sh test-http
+./build.sh test-serial
+./build.sh test-sw-fb
+./build.sh test-render-ir
+./build.sh test-wasm-jit
+./build.sh test-wasm-float
+./build.sh test-recursion-valid
+./build.sh test-recursion-invalid
+./build.sh test-fe-mul
+./build.sh test-spi-flash
+./build.sh test-tor
+./build.sh test-x25519
 ```
 
-Build the app runtime:
+Build the app-side WASM runtime:
 
 ```sh
-zig build --build-file edgerun-zig/build.zig --cache-dir .build/edgerun-zig app-runtime
-cd edgerun-zig/zig-out
+cd app
+zig build --cache-dir ../.build/app app-runtime
+cd zig-out
 python3 -m http.server 8765 --bind 127.0.0.1
 ```
 
@@ -344,25 +353,14 @@ Then open:
 http://127.0.0.1:8765/web/index.html
 ```
 
-Build the GitHub Pages artifact locally:
+Build and run the main host-side kernel paths:
 
 ```sh
-# make pages-site (stale — not yet migrated to build.sh)
-```
-
-The Pages artifact is written to `.build/github-pages`.
-# Run `make pages-release` to publish `.build/github-pages` to `gh-pages` (stale).
-The workflow then deploys that branch, and no longer builds the Pages artifact
-inside GitHub Actions.
-
-Run the main kernel smokes:
-
-```sh
-cd edgerun-zig
-./tools/run-immutable-kernel-qemu.sh
-./tools/run-immutable-kernel-runtime-qemu.sh
-./tools/run-immutable-kernel-exit-boot-qemu.sh
-./tools/run-immutable-kernel-swtpm-qemu.sh
+./build.sh kernel
+./build.sh kernel-hello
+./build.sh kernel-efi
+./build.sh kernel-net-tpm
+./build.sh kernel-tpm-live-test-qemu
 ```
 
 Pi Zero W v1.1 bring-up:

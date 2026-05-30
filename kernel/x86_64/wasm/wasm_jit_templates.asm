@@ -213,6 +213,61 @@ er_fn jit_template_global_set
     ret
 
 ; ------------------------------------------------------------------
+; table.get (0x25) — pop index, push table[index]
+; -----------------------------------------------------------------+
+er_fn jit_template_table_get
+    mov     eax, [rdi + 12]         ; imm0 = table index
+    test    eax, eax
+    jnz     .table_get_bad_index
+    xor     ecx, ecx                ; rax
+    call    jit_emit_pop_reg         ; rax = index
+    mov     cl, 1                   ; rcx
+    mov     eax, JitGlobals.table_entries
+    call    jit_emit_load_global_to_reg  ; rcx = table_entries
+    ; mov rax, [rcx + rax*8] — load table entry
+    mov     al, 0x48
+    call    jit_emit_byte
+    mov     al, 0x8B
+    call    jit_emit_byte
+    mov     al, 0x04               ; ModRM: mod=00, reg=rax(0), rm=SIB
+    call    jit_emit_modrm
+    mov     al, 0xC1               ; SIB: scale=8, index=rax, base=rcx
+    call    jit_emit_sib
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg       ; push rax
+.table_get_bad_index:
+    mov     rdx, ERROR_NOT_IMPLEMENTED
+    ret
+
+; ------------------------------------------------------------------
+; table.set (0x26) — pop value, pop index, table[index] = value
+; -----------------------------------------------------------------+
+er_fn jit_template_table_set
+    mov     eax, [rdi + 12]         ; imm0 = table index
+    test    eax, eax
+    jnz     .table_set_bad_index
+    mov     cl, 2                   ; rdx
+    call    jit_emit_pop_reg         ; rdx = value
+    xor     ecx, ecx                ; rax
+    call    jit_emit_pop_reg         ; rax = index
+    mov     cl, 1                   ; rcx
+    mov     eax, JitGlobals.table_entries
+    call    jit_emit_load_global_to_reg  ; rcx = table_entries
+    ; mov [rcx + rax*8], rdx — store table entry
+    mov     al, 0x48
+    call    jit_emit_byte
+    mov     al, 0x89
+    call    jit_emit_byte
+    mov     al, 0x14               ; ModRM: mod=00, reg=rdx(2), rm=SIB
+    call    jit_emit_modrm
+    mov     al, 0xC1               ; SIB: scale=8, index=rax, base=rcx
+    call    jit_emit_sib
+    ret
+.table_set_bad_index:
+    mov     rdx, ERROR_NOT_IMPLEMENTED
+    ret
+
+; ------------------------------------------------------------------
 ; Template: i32.const imm (0x41)
 ; Emit: push imm32
 ; -----------------------------------------------------------------+
@@ -893,6 +948,13 @@ er_fn jit_template_memory_size
     call    jit_emit_load_global_to_reg
     xor     ecx, ecx
     jmp     jit_emit_push_reg
+
+; memory.grow (0x40) — explicit user-allocation boundary
+; JIT path defers to interpreter policy by surfacing ERROR_MEMORY_GROWTH
+; so both paths enforce the same constant and user-visible behavior.
+er_fn jit_template_memory_grow
+    mov     rdx, ERROR_MEMORY_GROWTH
+    ret
 
 ; ==================================================================
 ; Memory op templates (i32.load, i64.load, i32.store, i64.store)
@@ -2773,7 +2835,7 @@ er_fn jit_template_f64_copysign
 ; These are registered by alias in the init table.
 
 ; -----------------------------------------------------------------+
-; Fallback — emit nothing, just return (orchestrator handles fallback)
+; Compile refusal template — emit nothing, let orchestrator return ERROR_NOT_IMPLEMENTED
 ; -----------------------------------------------------------------+
 er_fn jit_template_fallback
     ret

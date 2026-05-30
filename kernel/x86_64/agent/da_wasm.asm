@@ -27,14 +27,14 @@ extern er_memcpy
 
 SECTION .bss
 da_wasm_da_slot:   resd 1    ; cached DA route slot (-1 = uninit)
+global da_wasm_app_hash
 da_wasm_app_hash:  resb 32   ; cached app identity hash (BLAKE3)
+global da_wasm_ready
 da_wasm_ready:     resb 1    ; non-zero when caches are valid
 
 SECTION .data
 da_wasm_da_label:   db "edgerun.agent.da", 0
 da_wasm_da_label_len: dq 16
-da_wasm_app_label:  db "edgerun.agent.da_test", 0
-da_wasm_app_label_len: dq 21
 
 SECTION .text
 
@@ -68,19 +68,23 @@ _da_wasm_ensure_init:
     jnz     .fail
     mov     [rel da_wasm_da_slot], eax
 
-    ; Compute app identity hash into rsp[32..63]
-    lea     rdi, [rel da_wasm_app_label]
-    mov     rsi, [rel da_wasm_app_label_len]
-    lea     rdx, [rsp + 32]
-    call    er_blake3_hash_bytes
-    test    rax, rax
-    jz      .fail
-
-    ; Copy app hash to persistent buffer
+    ; App identity hash is provided by launcher from the loaded WASM bytes.
+    ; Fail if unset (all zeros).
     lea     rdi, [rel da_wasm_app_hash]
     lea     rsi, [rsp + 32]
     mov     edx, 32
     call    er_memcpy
+    lea     rdi, [rsp + 32]
+    xor     esi, esi
+    mov     ecx, 32
+.check_app_hash_nonzero:
+    movzx   eax, byte [rdi]
+    or      esi, eax
+    inc     rdi
+    dec     ecx
+    jnz     .check_app_hash_nonzero
+    test    esi, esi
+    jz      .fail
 
     mov     byte [rel da_wasm_ready], 1
     mov     eax, [rel da_wasm_da_slot]
