@@ -71,6 +71,7 @@ extern er_i2c_hid_probe
 
 extern er_pci_find_nvme
 extern er_pci_find_class
+extern er_pci_find_device
 extern er_pci_read32
 extern er_nvme_probe
 extern er_nvme_init
@@ -234,6 +235,7 @@ check_ra_2:    db "v2", 0
 check_ra_3:    db "v3", 0
 check_ra_flash:db " flash 0x", 0
 check_ble:     db "check: ble ", 0
+check_ble_usb_unsupported: db "usb transport unsupported", 0
 check_abs:     db "absent", 0
 check_virtio_net: db "check: virtio_net ", 0
 check_amdgpu:  db "check: amdgpu ", 0
@@ -1366,6 +1368,26 @@ er_fn er_kernel_main
     mov     rdi, COM1_PORT
     lea     rsi, [rel check_ble]
     call    er_serial_puts
+
+    ; AX210 class hardware uses USB BT transport, not COM2 UART HCI.
+    ; Detect it explicitly and skip the UART-only path.
+    sub     rsp, 3
+    mov     rdi, 0x8086
+    mov     rsi, 0x2725
+    mov     rdx, rsp
+    lea     rcx, [rsp + 1]
+    lea     r8, [rsp + 2]
+    call    er_pci_find_device
+    add     rsp, 3
+    test    eax, eax
+    jz      .bt_uart_try
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_ble_usb_unsupported]
+    call    er_serial_puts
+    call    .crlf
+    jmp     .virtio_net_check
+
+.bt_uart_try:
 
     ; Init COM2 UART for BT HCI
     mov     rdi, COM2_PORT

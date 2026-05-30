@@ -199,6 +199,70 @@ er_fn er_pci_find_class
     ret
 
 ; ==================================================================
+; er_pci_find_device — find first PCI device matching vendor/device id
+; int er_pci_find_device(uint16_t vendor, uint16_t device, uint8_t* out_bus,
+;                        uint8_t* out_dev, uint8_t* out_func)
+;
+; Args: rdi=vendor, rsi=device, rdx=out_bus, rcx=out_dev, r8=out_func
+; Returns: eax = 1 if found, 0 if not found
+; ==================================================================
+er_fn er_pci_find_device
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+
+    movzx   r12d, di            ; vendor
+    movzx   r13d, si            ; device
+    shl     r13d, 16
+    or      r13d, r12d          ; target DID:VID in config dword 0
+    mov     r14, rdx            ; out_bus
+    mov     r15, rcx            ; out_dev
+
+    xor     ebx, ebx            ; bus
+.dev_bus_loop:
+    xor     r9d, r9d            ; dev
+.dev_dev_loop:
+    xor     r10d, r10d          ; func
+.dev_func_loop:
+    mov     rdi, rbx
+    mov     rsi, r9
+    mov     rdx, r10
+    xor     ecx, ecx            ; offset 0 (VID/DID)
+    call    er_pci_read32
+    cmp     eax, r13d
+    jne     .dev_next_func
+
+    mov     byte [r14], bl
+    mov     byte [r15], r9b
+    mov     byte [r8], r10b
+    mov     eax, 1
+    er_ok
+    jmp     .dev_out
+
+.dev_next_func:
+    inc     r10d
+    cmp     r10d, 8
+    jb      .dev_func_loop
+    inc     r9d
+    cmp     r9d, 32
+    jb      .dev_dev_loop
+    inc     ebx
+    cmp     ebx, 256
+    jb      .dev_bus_loop
+
+    xor     eax, eax
+    er_ok
+.dev_out:
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    ret
+
+; ==================================================================
 ; er_pci_find_nvme — find NVMe controller on bus 0
 ; int er_pci_find_nvme(uint8_t* out_bus, uint8_t* out_dev,
 ;                      uint8_t* out_func)
