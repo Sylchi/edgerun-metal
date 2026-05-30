@@ -2,7 +2,7 @@ const std = @import("std");
 const mem = std.mem;
 const icon_vector = @import("icon_vector.zig");
 
-const ir_bin = @embedFile("gen/icon_asset_pack_ir.bin");
+const ir_data = @import("gen/icon_asset_pack_ir.zig").data;
 const IndexEntry = @import("gen/icon_asset_pack_index.zig").Entry;
 const index_entries = @import("gen/icon_asset_pack_index.zig").entries;
 
@@ -13,9 +13,10 @@ pub fn getIr(icon_id: u32) ?[]const f32 {
     const entry = getEntry(icon_id) orelse return null;
     const byte_start = entry.ir_offset;
     const byte_len = entry.ir_len;
-    if (byte_start + byte_len > ir_bin.len) return null;
-    const bytes = ir_bin[byte_start..][0..byte_len];
-    return @as([]const f32, @alignCast(std.mem.bytesAsSlice(f32, bytes)));
+    if (byte_start + byte_len > ir_data.len) return null;
+    const slice = ir_data[byte_start..][0..byte_len];
+    const aligned: []align(4) const u8 = @alignCast(slice);
+    return std.mem.bytesAsSlice(f32, aligned);
 }
 
 fn getEntry(icon_id: u32) ?IndexEntry {

@@ -232,7 +232,7 @@ test "compositor reports error when output buffer is too small" {
     try renderer_ir.pushRect(a, .base, .{ .x = 0, .y = 0, .w = 10, .h = 10 }, .{ .r = 255, .g = 0, .b = 0 }, .{ .r = 0, .g = 0, .b = 0 }, 0, 0, renderer_ir.rectModeCode(.fill));
     try renderer_ir.pushRect(a, .base, .{ .x = 5, .y = 5, .w = 10, .h = 10 }, .{ .r = 0, .g = 255, .b = 0 }, .{ .r = 0, .g = 0, .b = 0 }, 0, 0, renderer_ir.rectModeCode(.fill));
 
-    const small_buf = small.buffers();
+    var small_buf = small.buffers();
     try std.testing.expectError(error.Budget, compose(&.{.{ .buffers = a, .layer = .scrim }}, &small_buf));
 }
 

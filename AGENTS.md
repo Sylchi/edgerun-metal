@@ -146,10 +146,11 @@ All targets are in `build.sh`. No Makefile, no C, no Zig in production paths.
 - Treat unrecognized local changes as another agent's work.
 - Do not overwrite, revert, reformat, move, or delete another agent's files unless explicitly instructed.
 - Do not run destructive Git commands such as `git reset --hard`, `git checkout --`, `git clean`, or broad restore operations.
-- Do not use `git add -A` or broad staging when unrelated changes are present; stage only owned paths.
+- **Commit and push all uncommitted work, including other agents' changes, regularly.** An uncommitted change is easily lost (power fail, agent crash) but trivially reverted once committed. A commit is a save, not a contract — `git revert` and `git reset` exist. The cost of losing work is far higher than the cost of reverting a bad commit.
+- Use `git add -A` to stage all changes before committing.
 - Check `git status --short --branch` before edits, before staging, and before committing.
 - If a needed change overlaps another agent's work, stop and coordinate instead of resolving by force.
-- Keep commits scoped to one coherent task and mention any intentionally touched shared files.
+- Keep commit messages descriptive of what changed and why. Use `wip: checkpoint` for intermediate saves, `task: description` for coherent task commits.
 
 ## Changelog
 

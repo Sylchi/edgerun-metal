@@ -233,13 +233,21 @@ fn emitAssetPack(dir: std.Io.Dir, io: std.Io, _: mem.Allocator, icons: []const I
     }
 
     {
-        dir.deleteFile(io, "icon_asset_pack_ir.bin") catch {};
-        var f = try dir.createFile(io, "icon_asset_pack_ir.bin", .{ .truncate = true });
+        dir.deleteFile(io, "icon_asset_pack_ir.zig") catch {};
+        var f = try dir.createFile(io, "icon_asset_pack_ir.zig", .{ .truncate = true });
         defer f.close(io);
         var w = f.writer(io, &buf);
+        try w.interface.writeAll("pub const data align(4) = [_]u8{\n");
+        var written: usize = 0;
         for (icons) |ic| {
-            try w.interface.writeAll(mem.sliceAsBytes(ic.ir));
+            const bytes = mem.sliceAsBytes(ic.ir);
+            for (bytes) |b| {
+                try w.interface.print("0x{x:0>2},", .{b});
+                written += 1;
+                if (written % 32 == 0) try w.interface.writeAll("\n");
+            }
         }
+        try w.interface.writeAll("\n};\n");
         try w.interface.flush();
     }
 }
