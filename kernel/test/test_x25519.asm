@@ -14,14 +14,21 @@ extern _fe_tobytes
 extern _fe_frombytes
 extern _fe_1
 extern _fe_copy
+extern _fe_add
+extern _fe_sub
+extern _fe_cswap
+extern _curve25519_ladder_step
 
-%macro ASSERT 1
+%macro ASSERT 2
     test    %1, %1
     jz      %%fail
     inc     qword [rel passed]
     jmp     %%done
 %%fail:
     inc     qword [rel failed]
+    mov     edi, %2
+    mov     eax, 60
+    syscall
 %%done:
 %endmacro
 
@@ -33,22 +40,31 @@ expected:   resq 8      ; 32 bytes
 fe_a:       resq 5      ; field element
 fe_b:       resq 5
 fe_c:       resq 5
+ladder_x2:  resq 5
+ladder_z2:  resq 5
+ladder_x3:  resq 5
+ladder_z3:  resq 5
+ladder_x1:  resq 5
 
 SECTION .data
 
 ; RFC 7748 Section 6.1 Test Vector 1
 scalar1: dq 0xc49a44ba44226a50, 0x185afcc10a4c1462, 0xdd5e46824b15163b, 0x9d7c52f06be346a5
-point1:  dq 0x4c1cabd0a603a910, 0x3b35b326ec246672, 0x7c5fb124a4c19435, 0xdb3030586768dbe6
-output1: dq 0x5285a2775507b454, 0xf7711c4903cfec32, 0x4f088df24dea948e, 0x90c6e99d3755dac3
+point1:  dq 0x4c1cabd0a603a910, 0x3b35b326ec246672, 0x7c5fb124a4c19435, 0xe6db6867583030db
+output1: dq 0x90c6e99d3755dac3, 0x4f088df24dea948e, 0xf7711c4903cfec32, 0x5285a2775507b454
 
 ; RFC 7748 Section 6.1 Test Vector 2
 scalar2: dq 0x0dba18799e16a42c, 0xd401eae021641bc1, 0xf56a7d959126d25a, 0x3c67b4d1d4e9664b
 point2:  dq 0x93a415c749d54cfc, 0x3e3cc06f10e7db31, 0x2cae38059d95b7f4, 0xd3116878120f21e5
-output2: dq 0x5779ac7a64f7f8e6, 0x52a19f79685a598b, 0xf873b8b45ce4ad7a, 0x7d90e87694decb95
+output2: dq 0xa4a9d29f28fda99c, 0xe259525afaa4a6fa, 0x722e27e7393e45be, 0x0767b8c3a7df13f1
 
 fe_one:  dq 1, 0, 0, 0, 0
 fe_two:  dq 2, 0, 0, 0, 0
 nine:    dq 9, 0, 0, 0, 0
+fe_324:  dq 0x144, 0, 0, 0, 0
+fe_36:   dq 0x24, 0, 0, 0, 0
+fe_6400: dq 0x1900, 0, 0, 0, 0
+fe_z2_expected: dq 0x9660720, 0, 0, 0, 0
 
 SECTION .text
 global _start
@@ -66,7 +82,7 @@ _start:
     lea     rsi, [rel output1]
     mov     edx, 32
     call    _mem_eq
-    ASSERT eax
+    ASSERT eax, 1
 
 ; ================================================================
 ; Test 2: RFC 7748 Test Vector 2 — full scalar multiplication
@@ -80,7 +96,7 @@ _start:
     lea     rsi, [rel output2]
     mov     edx, 32
     call    _mem_eq
-    ASSERT eax
+    ASSERT eax, 2
 
 ; ================================================================
 ; Test 3: frombytes(tobytes(x)) == x  (round-trip canonical)
@@ -97,7 +113,7 @@ _start:
     lea     rsi, [rel fe_two]
     mov     edx, 40
     call    _mem_eq
-    ASSERT eax
+    ASSERT eax, 3
 
 ; ================================================================
 ; Test 4: mul(x, invert(x)) == 1 for x = 2
@@ -115,7 +131,7 @@ _start:
     lea     rsi, [rel fe_one]
     mov     edx, 40
     call    _mem_eq
-    ASSERT eax
+    ASSERT eax, 4
 
 ; ================================================================
 ; Test 5: square(x) == mul(x, x) for x = 9
@@ -133,7 +149,7 @@ _start:
     lea     rsi, [rel fe_b]
     mov     edx, 40
     call    _mem_eq
-    ASSERT eax
+    ASSERT eax, 5
 
 ; ================================================================
 ; Test 6: mul(x, 1) == x for x = 9
@@ -147,10 +163,72 @@ _start:
     lea     rsi, [rel nine]
     mov     edx, 40
     call    _mem_eq
-    ASSERT eax
+    ASSERT eax, 6
+
+; ================================================================
+; Test 7: One Montgomery ladder step (X1=9, scalar bit=1)
+; Expect: x2=6400, z2=157681440, x3=324, z3=36
+; ================================================================
+    ; post-cswap state for first iteration with bit=1:
+    ; x2 = 9, z2 = 1, x3 = 1, z3 = 0
+    lea     rdi, [rel ladder_x2]
+    lea     rsi, [rel nine]
+    call    _fe_copy
+
+    lea     rdi, [rel ladder_z2]
+    lea     rsi, [rel fe_one]
+    call    _fe_copy
+
+    lea     rdi, [rel ladder_x3]
+    lea     rsi, [rel fe_one]
+    call    _fe_copy
+
+    xor     eax, eax
+    lea     rdi, [rel ladder_z3]
+    mov     [rdi], rax
+    mov     [rdi + 8], rax
+    mov     [rdi + 16], rax
+    mov     [rdi + 24], rax
+    mov     [rdi + 32], rax
+
+    lea     rdi, [rel ladder_x1]
+    lea     rsi, [rel nine]
+    call    _fe_copy
+
+    lea     rdi, [rel ladder_x2]
+    lea     rsi, [rel ladder_z2]
+    lea     rdx, [rel ladder_x3]
+    lea     rcx, [rel ladder_z3]
+    lea     r8,  [rel ladder_x1]
+    call    _curve25519_ladder_step
+
+    lea     rdi, [rel ladder_x3]
+    lea     rsi, [rel fe_324]
+    mov     edx, 40
+    call    _mem_eq
+    ASSERT eax, 7
+
+    lea     rdi, [rel ladder_z3]
+    lea     rsi, [rel fe_36]
+    mov     edx, 40
+    call    _mem_eq
+    ASSERT eax, 8
+
+    lea     rdi, [rel ladder_x2]
+    lea     rsi, [rel fe_6400]
+    mov     edx, 40
+    call    _mem_eq
+    ASSERT eax, 9
+
+    lea     rdi, [rel ladder_z2]
+    lea     rsi, [rel fe_z2_expected]
+    mov     edx, 40
+    call    _mem_eq
+    ASSERT eax, 10
 
 ; ================================================================
 ; Done — report results
+; ================================================================
 ; ================================================================
     mov     rax, [rel failed]
     test    rax, rax

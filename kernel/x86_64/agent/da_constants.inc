@@ -75,3 +75,14 @@ DA_APP_SLOT      equ 33  ; 4 bytes — sender slot_id
 DA_APP_SIZE      equ 37
 
 DA_MAX_APPS      equ 4
+
+; Input event subtypes (DA_MSG_INPUT_EVENT payload[1])
+DA_INPUT_KEY_DOWN   equ 1
+DA_INPUT_KEY_UP     equ 2
+DA_INPUT_TEXT       equ 3
+
+; Modifier key flags (DA_MSG_INPUT_EVENT payload[2])
+DA_MOD_SHIFT        equ 1
+DA_MOD_CTRL         equ 2
+DA_MOD_ALT          equ 4
+DA_MOD_META         equ 8

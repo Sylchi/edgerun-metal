@@ -283,6 +283,9 @@ er_wasm_jit_compile:
     mov     [rel jit_state.func_idx], r12
     mov     qword [rel jit_state.stack_depth], 0
     mov     qword [rel jit_state.max_stack], 0
+    mov     qword [rel jit_state.label_depth], 0
+    mov     qword [rel jit_state.fixup_count], 0
+    mov     qword [rel jit_state.return_emitted], 0
 
     ; --- emit function prologue ---
     ; push rbp; mov rbp, rsp

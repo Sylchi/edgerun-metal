@@ -87,15 +87,15 @@ GLOBAL er_tor_curve25519_scalar_mult
 _curve25519_init:
     push    rbx
     lea     rbx, [rel fe_one_data]
-    mov     rdi, fe_one
+    lea     rdi, [rel fe_one]
     mov     rsi, rbx
     call    _fe_copy
     lea     rbx, [rel fe_base_data]
-    mov     rdi, fe_base
+    lea     rdi, [rel fe_base]
     mov     rsi, rbx
     call    _fe_copy
     lea     rbx, [rel fe_zero_data]
-    mov     rdi, fe_zero
+    lea     rdi, [rel fe_zero]
     mov     rsi, rbx
     call    _fe_copy
     pop     rbx
@@ -180,6 +180,7 @@ _fe_normalize:
     mov     [rdi + 32], r9
 %endmacro
 
+    FE_CARRY_PASS
     FE_CARRY_PASS
     FE_CARRY_PASS
     ret
@@ -525,8 +526,8 @@ _fe_tobytes:
     ; stack:
     ; x[5] = 40 bytes
     ; y[5] = 40 bytes
-    ; + alignment
-    sub     rsp, 88
+    ; totals 80 — keeps rsp 16-byte aligned after 5 pushes
+    sub     rsp, 80
 
     ; copy x
     mov     rax, [r13 + 0]
@@ -649,7 +650,7 @@ _fe_tobytes:
     or      rax, rdx
     mov     [r12 + 24], rax
 
-    add     rsp, 88
+    add     rsp, 80
 
     pop     r15
     pop     r14
