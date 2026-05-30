@@ -112,9 +112,15 @@ extern er_fn_run
 extern wasm_return42_start
 extern wasm_return42_len
 extern wasm_export_name
-extern agent_wasm_test_start
-extern agent_wasm_test_len
-extern agent_wasm_test_export_name
+extern test_mem_start
+extern test_mem_len
+extern test_mem_export
+extern test_tblonly_start
+extern test_tblonly_len
+extern test_tblonly_export
+extern agent_minimal_start
+extern agent_minimal_len
+extern agent_minimal_export_name
 extern er_memset
 
 extern er_sha256_init
@@ -206,7 +212,9 @@ ok_text:       db "ok", 0
 fail_text:     db "FAIL", 0
 pass_text:       db "PASS asm-bare-metal-x86_64", 0
 check_wasm:      db "check: wasm return42 ", 0
-check_agent:     db "check: wasm agent_test ", 0
+check_mem:       db "check: wasm mem45 ", 0
+check_tblonly:   db "check: wasm tblonly47 ", 0
+check_minimal:   db "check: wasm minimal43 ", 0
 bench_banner:  db "TPM SHA-256 bench", 0
 bench_sha64:   db "  sha256 64B: ", 0
 bench_sha1k:   db "  sha256 1KB: ", 0
@@ -1619,26 +1627,84 @@ er_fn er_kernel_main
     call    er_memset
     pop     rbx
 
-    ; er_fn_run(rdi=runtime, rsi=wasm_bytes, rdx=wasm_len,
-    ;           rcx=export_name, r8=export_name_len)
+    ; Test 2: minimal module returning 43
     mov     rdi, rbx            ; runtime
-    lea     rsi, [rel agent_wasm_test_start]
-    mov     rdx, [rel agent_wasm_test_len]
-    lea     rcx, [rel agent_wasm_test_export_name]
+    lea     rsi, [rel agent_minimal_start]
+    mov     rdx, [rel agent_minimal_len]
+    lea     rcx, [rel agent_minimal_export_name]
     mov     r8, 1               ; export name length
     call    er_fn_run
     push    rax                 ; save result
 
-    ; Print check label for agent test
+    ; Print check label for minimal test
     mov     rdi, COM1_PORT
-    lea     rsi, [rel check_agent]
+    lea     rsi, [rel check_minimal]
     call    er_serial_puts
 
-    ; Print result (0 = success)
+    ; Print result (should be 43 = 0x2B)
     pop     rsi
     mov     rdi, COM1_PORT
     call    er_serial_puthex64
 
+    mov     rdi, COM1_PORT
+    mov     sil, ' '
+    call    er_serial_putchar
+    call    .crlf
+
+    ; ── Test 3: memory-only module (45) ──
+    push    rbx
+    lea     rdi, [rel wasm_memory]
+    xor     esi, esi
+    mov     edx, 65536
+    call    er_memset
+    pop     rbx
+    mov     rdi, rbx
+    lea     rsi, [rel test_mem_start]
+    mov     rdx, [rel test_mem_len]
+    lea     rcx, [rel test_mem_export]
+    mov     r8, 1
+    call    er_fn_run
+    push    rax
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_mem]
+    call    er_serial_puts
+    pop     rsi
+    mov     rdi, COM1_PORT
+    call    er_serial_puthex64
+    mov     rdi, COM1_PORT
+    mov     sil, ' '
+    call    er_serial_putchar
+    call    .crlf
+
+    ; ── Test 4: table-only module (47) ──
+    mov     rdi, COM1_PORT
+    mov     sil, 'A'
+    call    er_serial_putchar
+    push    rbx
+    lea     rdi, [rel wasm_memory]
+    xor     esi, esi
+    mov     edx, 65536
+    call    er_memset
+    pop     rbx
+    mov     rdi, COM1_PORT
+    mov     sil, 'B'
+    call    er_serial_putchar
+    mov     rdi, rbx
+    lea     rsi, [rel test_tblonly_start]
+    mov     rdx, [rel test_tblonly_len]
+    lea     rcx, [rel test_tblonly_export]
+    mov     r8, 1
+    call    er_fn_run
+    mov     rdi, COM1_PORT
+    mov     sil, 'C'
+    call    er_serial_putchar
+    push    rax
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_tblonly]
+    call    er_serial_puts
+    pop     rsi
+    mov     rdi, COM1_PORT
+    call    er_serial_puthex64
     mov     rdi, COM1_PORT
     mov     sil, ' '
     call    er_serial_putchar

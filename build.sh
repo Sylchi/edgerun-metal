@@ -84,7 +84,9 @@ KERNEL_ASM_SRCS="
 	agent/http_agent.asm
 	wasm/wasm_interpreter.asm
 	wasm/wasm_module_data.asm
-	wasm/agent_wasm_test.asm
+	wasm/test_mem.asm
+	wasm/test_tblonly.asm
+	wasm/agent_minimal.asm
 	entry.asm
 "
 

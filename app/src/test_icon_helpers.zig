@@ -637,9 +637,11 @@ fn parseF32Attr(raw: ?[]const u8, default: f32) f32 {
 }
 
 fn parseF32(s: []const u8) ?f32 {
+    const had_pct = mem.indexOfScalar(u8, s, '%') != null;
     const t = mem.trim(u8, s, " \"'%");
     if (t.len == 0) return null;
-    return std.fmt.parseFloat(f32, t) catch null;
+    const v = std.fmt.parseFloat(f32, t) catch return null;
+    return if (had_pct) v / 100.0 else v;
 }
 
 fn parseStrokeCap(raw: ?[]const u8) ?StrokeCap {

@@ -3,7 +3,14 @@ const mem = std.mem;
 const icon_vector = @import("icon_vector.zig");
 const icon = @import("icon.zig");
 
-const ir_bytes = @embedFile("gen/icon_asset_pack_ir.bin");
+const ir_src = @embedFile("gen/icon_asset_pack_ir.bin");
+const ir_storage: [ir_src.len]u8 align(4) = blk: {
+    var arr: [ir_src.len]u8 align(4) = undefined;
+    @memcpy(&arr, ir_src);
+    break :blk arr;
+};
+const ir_bytes: []const u8 = &ir_storage;
+
 const index_bytes = @embedFile("gen/icon_asset_pack_index.bin");
 
 pub const icon_count: u32 = mem.readInt(u32, index_bytes[4..8], .little);
@@ -17,8 +24,8 @@ pub fn getIr(icon_id: u32) ?[]const f32 {
     const ir_offset = mem.readInt(u32, index_bytes[off..][0..4], .little);
     const ir_len = mem.readInt(u32, index_bytes[off + 4 ..][0..4], .little);
     if (ir_offset + ir_len > ir_bytes.len) return null;
-    const ptr: [*]const f32 = @ptrCast(@alignCast(ir_bytes.ptr + ir_offset));
-    return ptr[0 .. ir_len / @sizeOf(f32)];
+    const aligned: []align(4) const u8 = @alignCast(ir_bytes[ir_offset..][0..ir_len]);
+    return std.mem.bytesAsSlice(f32, aligned);
 }
 
 test "asset pack has tabler icons" {

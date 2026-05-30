@@ -844,10 +844,10 @@ er_wasm_parse_table_section:
     cmp     al, WASM_FUNCREF_TYPE
     jne     .unsupported
 
-    lea     rcx, [rsp - 16]
+    lea     rcx, [table_min]
     er_call er_wasm_read_limits, .error
-    mov     rax, [rsp - 16]     ; min
-    mov     rbx, [rsp - 8]      ; max
+    mov     rax, [table_min]    ; min
+    mov     rbx, [table_max]    ; max
     cmp     rax, MAX_TABLE_ENTRIES
     ja      .unsupported
     test    rbx, rbx

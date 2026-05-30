@@ -658,11 +658,11 @@ fn_send_len:   dq 9
 fn_recv:       db "cell_recv"
 fn_recv_len:   dq 9
 fn_register:   db "route_register"
-fn_register_len: dq 15
+fn_register_len: dq 14
 fn_lookup:     db "route_lookup"
 fn_lookup_len: dq 12
 fn_unregister: db "route_unregister"
-fn_unregister_len: dq 17
+fn_unregister_len: dq 16
 fn_available:  db "cell_available"
 fn_available_len: dq 14
 
@@ -675,42 +675,42 @@ er_local_cell_imports:
 dd er_module_name, 0
 dd 2, 0
 dd fn_send, 0
-dd fn_send_len, 0
+dd 9, 0
 dd _wasm_import_local_cell_send, 0
 
 ; Entry 1: local_cell_recv
 dd er_module_name, 0
 dd 2, 0
 dd fn_recv, 0
-dd fn_recv_len, 0
+dd 9, 0
 dd _wasm_import_local_cell_recv, 0
 
 ; Entry 2: local_route_register
 dd er_module_name, 0
 dd 2, 0
 dd fn_register, 0
-dd fn_register_len, 0
+dd 14, 0
 dd _wasm_import_local_route_register, 0
 
 ; Entry 3: local_route_lookup
 dd er_module_name, 0
 dd 2, 0
 dd fn_lookup, 0
-dd fn_lookup_len, 0
+dd 12, 0
 dd _wasm_import_local_route_lookup, 0
 
 ; Entry 4: local_route_unregister
 dd er_module_name, 0
 dd 2, 0
 dd fn_unregister, 0
-dd fn_unregister_len, 0
+dd 16, 0
 dd _wasm_import_local_route_unregister, 0
 
 ; Entry 5: local_cell_available
 dd er_module_name, 0
 dd 2, 0
 dd fn_available, 0
-dd fn_available_len, 0
+dd 14, 0
 dd _wasm_import_local_cell_available, 0
 
 ; Import count
