@@ -71,9 +71,8 @@ extern er_i2c_hid_probe
 
 extern er_pci_find_nvme
 extern er_pci_find_class
-extern er_pci_find_device
 extern er_pci_read32
-extern er_pci_write32
+extern er_ax210_probe_init
 extern er_nvme_probe
 extern er_nvme_init
 extern er_nvme_print_info
@@ -178,11 +177,6 @@ extern fe_tmp4
 %define DEV_EMMC     6
 %define DEV_INTEL_GPU 7
 %define DEV_COUNT    8
-%define PCI_COMMAND  0x04
-%define PCI_BAR0     0x10
-%define PCI_BAR1     0x14
-%define PCI_CMD_MEM_SPACE (1 << 1)
-%define PCI_CMD_BUS_MASTER (1 << 2)
 
 ; QEMU debugcon port and ISA debugcon device registers
 %define COM1_PORT      0x3f8
@@ -330,6 +324,7 @@ device_flags:
     .emmc:     resb 1
     .intel_gpu: resb 1
 ax210_present: resb 1
+ax210_bar0:    resq 1
 
 %define VIRTIO_NET_STORAGE_size 4900
 virtio_net_dev:      resb VIRTIO_NET_DEVICE_size
@@ -1312,44 +1307,14 @@ er_fn er_kernel_main
     lea     rsi, [rel check_wifi]
     call    er_serial_puts
     sub     rsp, 3
-    mov     rdi, 0x8086
-    mov     rsi, 0x2725
-    mov     rdx, rsp
-    lea     rcx, [rsp + 1]
-    lea     r8, [rsp + 2]
-    call    er_pci_find_device
+    mov     rdi, rsp
+    lea     rsi, [rsp + 1]
+    lea     rdx, [rsp + 2]
+    lea     rcx, [rel ax210_bar0]
+    call    er_ax210_probe_init
     test    eax, eax
     jz      .wifi_absent
     mov     byte [ax210_present], 1
-    movzx   r12d, byte [rsp]
-    movzx   r13d, byte [rsp + 1]
-    movzx   r14d, byte [rsp + 2]
-    ; Enable memory space + bus master for AX210 PCIe function.
-    mov     rdi, r12
-    mov     rsi, r13
-    mov     rdx, r14
-    mov     ecx, PCI_COMMAND
-    call    er_pci_read32
-    or      eax, PCI_CMD_MEM_SPACE | PCI_CMD_BUS_MASTER
-    mov     r8, rax
-    mov     rdi, r12
-    mov     rsi, r13
-    mov     rdx, r14
-    mov     ecx, PCI_COMMAND
-    call    er_pci_write32
-    ; Capture BAR0/BAR1 for upcoming MMIO driver bring-up.
-    mov     rdi, r12
-    mov     rsi, r13
-    mov     rdx, r14
-    mov     ecx, PCI_BAR0
-    call    er_pci_read32
-    mov     r15d, eax
-    mov     rdi, r12
-    mov     rsi, r13
-    mov     rdx, r14
-    mov     ecx, PCI_BAR1
-    call    er_pci_read32
-    and     r15d, 0xFFFFFFF0
 
     movzx   esi, byte [rsp]
     mov     rdi, COM1_PORT
@@ -1373,7 +1338,7 @@ er_fn er_kernel_main
     lea     rsi, [rel check_wifi_bar]
     call    er_serial_puts
     mov     rdi, COM1_PORT
-    mov     esi, r15d
+    mov     esi, [rel ax210_bar0]
     call    er_serial_puthex32
     mov     rdi, COM1_PORT
     mov     sil, ' '
