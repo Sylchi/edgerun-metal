@@ -3,9 +3,9 @@ const interaction = @import("ui_interaction.zig");
 const ui = @import("ui.zig");
 const Toast = @import("ui/components/Toast.zig").Toast;
 const design = @import("app_design.zig");
-const ui_overlay = @import("ui_overlay.zig");
+const compositor = @import("render/compositor.zig");
 
-pub const Error = ui_overlay.Error || error{
+pub const Error = compositor.Error || error{
     ToastBudgetExceeded,
 };
 
@@ -75,7 +75,7 @@ pub const Manager = struct {
         return count;
     }
 
-    pub fn render(self: Manager, host: *ui_overlay.Host, bounds: ui.Rect, frame_ms: f32) Error!void {
+    pub fn render(self: Manager, host: *compositor.Host, bounds: ui.Rect, frame_ms: f32) Error!void {
         var surface = host.begin(.toast);
         var visible_index: usize = 0;
         var index = self.len;
@@ -121,8 +121,8 @@ test "toast manager renders newest visible toasts as a bottom right stack" {
 
     var overlay_commands: [64]ui.Command = undefined;
     var overlay_regions: [16]interaction.Region = undefined;
-    var entries: [4]ui_overlay.Entry = undefined;
-    var host = ui_overlay.Host.init(&overlay_commands, &overlay_regions, &entries);
+    var entries: [4]compositor.Entry = undefined;
+    var host = compositor.Host.init(&overlay_commands, &overlay_regions, &entries);
     try manager.render(&host, ui.Rect.init(0, 0, 800, 600), 30.0);
 
     var commands: [64]ui.Command = undefined;

@@ -2032,6 +2032,22 @@ exec_dispatch_loop:
     mov     [exec_reader_offset], rsi
     pop     rsi
 
+    cmp     eax, EXT_I32_TRUNC_SAT_F32_S
+    je      .ext_i32_trunc_sat_f32_s
+    cmp     eax, EXT_I32_TRUNC_SAT_F32_U
+    je      .ext_i32_trunc_sat_f32_u
+    cmp     eax, EXT_I32_TRUNC_SAT_F64_S
+    je      .ext_i32_trunc_sat_f64_s
+    cmp     eax, EXT_I32_TRUNC_SAT_F64_U
+    je      .ext_i32_trunc_sat_f64_u
+    cmp     eax, EXT_I64_TRUNC_SAT_F32_S
+    je      .ext_i64_trunc_sat_f32_s
+    cmp     eax, EXT_I64_TRUNC_SAT_F32_U
+    je      .ext_i64_trunc_sat_f32_u
+    cmp     eax, EXT_I64_TRUNC_SAT_F64_S
+    je      .ext_i64_trunc_sat_f64_s
+    cmp     eax, EXT_I64_TRUNC_SAT_F64_U
+    je      .ext_i64_trunc_sat_f64_u
     cmp     eax, EXT_MEMORY_INIT
     je      .ext_memory_init
     cmp     eax, EXT_DATA_DROP
@@ -2041,7 +2057,7 @@ exec_dispatch_loop:
     cmp     eax, EXT_MEMORY_FILL
     je      .ext_memory_fill
 
-    ; All other extended opcodes (trunc_sat, table ops) - unsupported for now
+    ; All other extended opcodes (table ops) - unsupported for now
     er_err  ERROR_UNSUPPORTED
     jmp     .error_return
 

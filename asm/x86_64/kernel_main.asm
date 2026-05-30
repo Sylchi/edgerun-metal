@@ -6,10 +6,12 @@
 %include "x86_64/tpm/tpm_constants.inc"
 %include "x86_64/drv/virtio_constants.inc"
 %include "x86_64/drv/virtio_net_constants.inc"
+%include "x86_64/wasm_defines.inc"
 
 extern er_serial_init
 extern er_serial_puts
 extern er_serial_puthex32
+extern er_serial_puthex64
 extern er_serial_putdec32
 extern er_serial_putchar
 extern er_serial_putdec32
@@ -21,12 +23,18 @@ extern er_net_poll
 extern er_halt
 extern er_tor_init
 extern er_tor_poll
+extern er_local_cell_init
+extern er_local_cell_poll
+extern er_local_cell_imports
+extern er_local_cell_import_count
+extern er_wasm_runtime_ptr
 
 extern er_mmio_read32
 extern er_tpm_crb_present
 extern er_tpm_crb_transfer
 extern er_tpm_startup
 extern er_tpm_get_random
+extern er_tpm_hash_sha256
 extern er_tpm_get_capability
 extern er_tpm_response_success
 extern er_tpm_has_algorithm
@@ -99,6 +107,28 @@ extern er_acpi_find_table
 extern er_acpi_parse_madt
 extern er_acpi_parse_mcfg
 
+extern er_fn_run
+extern wasm_return42_start
+extern wasm_return42_len
+extern wasm_export_name
+
+extern er_sha256_init
+extern er_sha256_update
+extern er_sha256_final
+extern _sha256_compress
+extern er_memcmp
+
+extern _fe_invert
+extern _fe_mul
+extern _fe_copy
+extern fe_base
+extern fe_one
+extern fe_tmp0
+extern fe_tmp1
+extern fe_tmp2
+extern fe_tmp3
+extern fe_tmp4
+
 ; Device status flag offsets (for device_flags BSS array)
 %define DEV_TPM      0
 %define DEV_KBD      1
@@ -168,11 +198,36 @@ check_intel_gpu: db "check: intel_gpu ", 0
 check_intel_gpu_abs: db "check: intel_gpu absent", 0
 ok_text:       db "ok", 0
 fail_text:     db "FAIL", 0
-pass_text:     db "PASS asm-bare-metal-x86_64", 0
+pass_text:       db "PASS asm-bare-metal-x86_64", 0
+check_wasm:      db "check: wasm return42 ", 0
+bench_banner:  db "TPM SHA-256 bench", 0
+bench_sha64:   db "  sha256 64B: ", 0
+bench_sha1k:   db "  sha256 1KB: ", 0
+bench_cyc:     db " cyc/call", 0
+bench_data:    times 1024 db 0xAB
+
+sha256_test_abc:     db "abc", 0
+sha256_expected_abc: db 0xba, 0x78, 0x16, 0xbf, 0x8f, 0x01, 0xcf, 0xea
+                     db 0x41, 0x41, 0x40, 0xde, 0x5d, 0xae, 0x22, 0x23
+                     db 0xb0, 0x03, 0x61, 0xa3, 0x96, 0x17, 0x7a, 0x9c
+                     db 0xb4, 0x10, 0xff, 0x61, 0xf2, 0x00, 0x15, 0xad
+sha256_pass:         db "  sha256: PASS", 0
+sha256_pre:          db " sha256:pre ", 0
+sha256_post:         db " sha256:post ", 0
+sha256_fail_str:     db "  sha256: FAIL", 0
+sha256_bench_str:    db "  sw-sha256 64B: ", 0
+
+fe_inv_pass_str:     db "  fe_invert: PASS", 0
+fe_inv_fail_str:     db "  fe_invert: FAIL hi=", 0
 
 SECTION .bss
 tpm_cmd_buf:  resb 512
 tpm_rsp_buf:  resb 512
+
+; WASM runtime config + scratch memory
+wasm_memory:   resb 65536        ; WASM linear memory (64KB = 1 page)
+wasm_ticks:    resq 1            ; tick counter
+wasm_runtime:  resb RUNTIME_SIZE ; RuntimeConfig struct (88 bytes)
 
 ; Boot device status flags (0=unknown, 1=absent, 2=present)
 device_flags:
@@ -189,6 +244,10 @@ device_flags:
 virtio_net_dev:      resb VIRTIO_NET_DEVICE_size
 virtio_net_storage:  resb VIRTIO_NET_STORAGE_size
 virtio_net_mac_str:  resb 18    ; "XX:XX:XX:XX:XX:XX\0"
+
+sha256_ctx:  resb 108
+sha256_out:  resb 32
+sha256_block: resb 64
 
 SECTION .text
 
@@ -281,6 +340,295 @@ er_fn er_kernel_main
     mov     rsi, check_tpm_pre
     call    er_serial_puts
     call    .crlf
+
+    ; ═══════ TPM SHA-256 BENCHMARK ═══════
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel bench_banner]
+    call    er_serial_puts
+    call    .crlf
+
+    ; Warm up: one SHA-256
+    mov     rdi, tpm_cmd_buf
+    lea     rsi, [rel bench_data]
+    mov     edx, 64
+    mov     ecx, TPM_RH_NULL
+    call    er_tpm_hash_sha256
+    test    rax, rax
+    jz      .bench_done
+    mov     esi, 64 + TPM_CMD_HASH_FIXED_LEN
+    mov     rdi, tpm_cmd_buf
+    mov     rdx, tpm_rsp_buf
+    mov     ecx, 512
+    call    er_tpm_crb_transfer
+    test    rax, rax
+    jz      .bench_done
+
+    ; Benchmark SHA-256, 64 bytes, 10 iterations
+    mov     r12d, 10
+    rdtsc
+    shl     rdx, 32
+    or      rax, rdx
+    mov     rbp, rax
+
+.bench64:
+    mov     rdi, tpm_cmd_buf
+    lea     rsi, [rel bench_data]
+    mov     edx, 64
+    mov     ecx, TPM_RH_NULL
+    call    er_tpm_hash_sha256
+    test    rax, rax
+    jz      .bench_done
+    mov     esi, 64 + TPM_CMD_HASH_FIXED_LEN
+    mov     rdi, tpm_cmd_buf
+    mov     rdx, tpm_rsp_buf
+    mov     ecx, 512
+    call    er_tpm_crb_transfer
+    test    rax, rax
+    jz      .bench_done
+    dec     r12d
+    jnz     .bench64
+
+    rdtsc
+    shl     rdx, 32
+    or      rax, rdx
+    sub     rax, rbp
+    xor     edx, edx
+    mov     ecx, 10
+    div     ecx
+
+    push    rax
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel bench_sha64]
+    call    er_serial_puts
+    pop     rsi
+    mov     rdi, COM1_PORT
+    call    er_serial_puthex64
+    lea     rsi, [rel bench_cyc]
+    mov     rdi, COM1_PORT
+    call    er_serial_puts
+    call    .crlf
+
+    ; Benchmark SHA-256, 1024 bytes, 5 iterations
+    mov     r12d, 5
+    rdtsc
+    shl     rdx, 32
+    or      rax, rdx
+    mov     rbp, rax
+
+.bench1k:
+    mov     rdi, tpm_cmd_buf
+    lea     rsi, [rel bench_data]
+    mov     edx, 1024
+    mov     ecx, TPM_RH_NULL
+    call    er_tpm_hash_sha256
+    test    rax, rax
+    jz      .bench_done
+    mov     esi, 1024 + TPM_CMD_HASH_FIXED_LEN
+    mov     rdi, tpm_cmd_buf
+    mov     rdx, tpm_rsp_buf
+    mov     ecx, 512
+    call    er_tpm_crb_transfer
+    test    rax, rax
+    jz      .bench_done
+    dec     r12d
+    jnz     .bench1k
+
+    rdtsc
+    shl     rdx, 32
+    or      rax, rdx
+    sub     rax, rbp
+    xor     edx, edx
+    mov     ecx, 5
+    div     ecx
+
+    push    rax
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel bench_sha1k]
+    call    er_serial_puts
+    pop     rsi
+    mov     rdi, COM1_PORT
+    call    er_serial_puthex64
+    lea     rsi, [rel bench_cyc]
+    mov     rdi, COM1_PORT
+    call    er_serial_puts
+    call    .crlf
+
+.bench_done:
+    ; ═══════ END TPM BENCHMARK ═══════
+
+.sha_test_start:
+    ; ═══════ SOFTWARE SHA-256 SELF-TEST ═══════
+    ; SHA-256 direct compress test: all-zeros block, manually set H
+    ; Write initial H values directly to ctx
+    mov     dword [sha256_ctx + 0],  0x6a09e667
+    mov     dword [sha256_ctx + 4],  0xbb67ae85
+    mov     dword [sha256_ctx + 8],  0x3c6ef372
+    mov     dword [sha256_ctx + 12], 0xa54ff53a
+    mov     dword [sha256_ctx + 16], 0x510e527f
+    mov     dword [sha256_ctx + 20], 0x9b05688c
+    mov     dword [sha256_ctx + 24], 0x1f83d9ab
+    mov     dword [sha256_ctx + 28], 0x5be0cd19
+    mov     edi, COM1_PORT
+    lea     rsi, [rel sha256_pre]
+    call    er_serial_puts
+    mov     rdi, sha256_ctx
+    mov     rsi, sha256_block
+    call    _sha256_compress
+    mov     edi, COM1_PORT
+    lea     rsi, [rel sha256_post]
+    call    er_serial_puts
+    ; Dump H[0..1]
+    push    r12
+    mov     r12d, [sha256_ctx]
+    mov     edi, COM1_PORT
+    mov     esi, r12d
+    call    er_serial_puthex32
+    mov     r12d, [sha256_ctx + 4]
+    mov     edi, COM1_PORT
+    mov     esi, r12d
+    call    er_serial_puthex32
+    pop     r12
+    mov     rdi, sha256_ctx
+    call    er_sha256_init
+    test    rax, rax
+    jz      .sha_fail
+
+    mov     rdi, sha256_ctx
+    lea     rsi, [rel sha256_test_abc]
+    mov     edx, 3
+    call    er_sha256_update
+    test    rax, rax
+    jz      .sha_fail
+
+    mov     rdi, sha256_ctx
+    mov     rsi, sha256_out
+    call    er_sha256_final
+    test    rax, rax
+    jz      .sha_fail
+
+    ; Compare with expected digest
+    mov     rdi, sha256_out
+    lea     rsi, [rel sha256_expected_abc]
+    mov     edx, 32
+    call    er_memcmp
+    test    eax, eax
+    jnz     .sha_fail
+
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel sha256_pass]
+    call    er_serial_puts
+    call    .crlf
+
+    ; Skip software SHA-256 benchmark when running without TPM (QEMU speed)
+    jmp     .sha_done
+
+    ; Software SHA-256 benchmark: 10K iterations of 64-byte hash
+    mov     r12d, 10000
+    rdtsc
+    shl     rdx, 32
+    or      rax, rdx
+    mov     rbp, rax
+
+.sha_bench_loop:
+    mov     rdi, sha256_ctx
+    call    er_sha256_init
+    mov     rdi, sha256_ctx
+    lea     rsi, [rel bench_data]
+    mov     edx, 64
+    call    er_sha256_update
+    mov     rdi, sha256_ctx
+    mov     rsi, sha256_out
+    call    er_sha256_final
+    dec     r12d
+    jnz     .sha_bench_loop
+
+    rdtsc
+    shl     rdx, 32
+    or      rax, rdx
+    sub     rax, rbp
+    xor     edx, edx
+    mov     ecx, 10000
+    div     ecx
+
+    push    rax
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel sha256_bench_str]
+    call    er_serial_puts
+    pop     rsi
+    mov     rdi, COM1_PORT
+    call    er_serial_puthex64
+    lea     rsi, [rel bench_cyc]
+    mov     rdi, COM1_PORT
+    call    er_serial_puts
+    call    .crlf
+    jmp     .sha_done
+
+.sha_fail:
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel sha256_fail_str]
+    call    er_serial_puts
+    ; Dump first dword of actual output
+    mov     edi, COM1_PORT
+    mov     esi, [sha256_out]
+    call    er_serial_puthex32
+    jmp     .sha_done
+
+.sha_done:
+    ; ═══════ CURVE25519 FIELD INVERT TEST ═══════
+    ; Verify n * n^(-1) mod p = 1 using base point 9
+    mov     rdi, COM1_PORT
+    mov     sil, 'I'
+    call    er_serial_putchar
+
+    mov     rdi, fe_tmp2
+    lea     rsi, [rel fe_base]
+    call    _fe_copy
+
+    mov     rdi, COM1_PORT
+    mov     sil, 'C'
+    call    er_serial_putchar
+
+    ; invert(9) → fe_tmp3
+    mov     rdi, fe_tmp3
+    mov     rsi, fe_tmp2
+    call    _fe_invert
+
+    mov     rdi, COM1_PORT
+    mov     sil, 'V'
+    call    er_serial_putchar
+
+    ; fe_tmp4 = 9 * invert(9)
+    mov     rdi, fe_tmp4
+    mov     rsi, fe_tmp2
+    mov     rdx, fe_tmp3
+    call    _fe_mul
+
+    mov     rdi, COM1_PORT
+    mov     sil, 'M'
+    call    er_serial_putchar
+
+    ; Verify fe_tmp4 == fe_one
+    mov     rdi, fe_tmp4
+    lea     rsi, [rel fe_one]
+    mov     edx, 32
+    call    er_memcmp
+    test    eax, eax
+    jnz     .fe_inv_fail
+
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel fe_inv_pass_str]
+    call    er_serial_puts
+    call    .crlf
+    jmp     .kbd_start
+
+.fe_inv_fail:
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel fe_inv_fail_str]
+    call    er_serial_puts
+    mov     edi, COM1_PORT
+    mov     esi, [fe_tmp4]
+    call    er_serial_puthex32
+    call    .crlf
     jmp     .kbd_start
 
 .tpm_absent:
@@ -289,7 +637,7 @@ er_fn er_kernel_main
     mov     rsi, check_tpm_abs
     call    er_serial_puts
     call    .crlf
-    jmp     .kbd_start
+    jmp     .sha_test_start
 
 .tpm_fail:
     mov     byte [device_flags + DEV_TPM], 1
@@ -297,7 +645,7 @@ er_fn er_kernel_main
     mov     rsi, check_tpm_fail
     call    er_serial_puts
     call    .crlf
-    jmp     .kbd_start
+    jmp     .sha_test_start
 
     ; ─── Keyboard ────────────────────────────────────────────────
 .kbd_start:
@@ -1074,6 +1422,60 @@ er_fn er_kernel_main
     call    .crlf
     add     rsp, 3
 
+.wasm_check:
+    ; ─── WASM module execution test ──────────────────────────────
+    ; Set up RuntimeConfig struct on stack (88 bytes)
+    sub     rsp, 96
+    lea     rbx, [rel wasm_runtime]
+
+    ; memory_ptr
+    lea     rax, [rel wasm_memory]
+    mov     [rbx + RUNTIME_MEMORY_PTR_OFF], rax
+    ; memory_len
+    mov     qword [rbx + RUNTIME_MEMORY_LEN_OFF], 65536
+    ; ticks_ptr
+    lea     rax, [rel wasm_ticks]
+    mov     [rbx + RUNTIME_TICKS_PTR_OFF], rax
+    ; Zero out grow functions, imports
+    xor     eax, eax
+    mov     [rbx + RUNTIME_MEM_GROW_FN_OFF], rax
+    mov     [rbx + RUNTIME_MEM_GROW_CTX_OFF], rax
+    mov     [rbx + RUNTIME_TABLE_GROW_FN_OFF], rax
+    mov     [rbx + RUNTIME_TABLE_GROW_CTX_OFF], rax
+    mov     [rbx + RUNTIME_INITIAL_PAGES_OFF], rax
+    mov     byte [rbx + RUNTIME_HAS_PAGES_OFF], 0
+    lea     rax, [rel er_local_cell_imports]
+    mov     [rbx + RUNTIME_IMPORTS_PTR_OFF], rax
+    mov     rax, [rel er_local_cell_import_count]
+    mov     [rbx + RUNTIME_IMPORTS_LEN_OFF], rax
+
+    ; er_fn_run(rdi=runtime, rsi=wasm_bytes, rdx=wasm_len, rcx=export_name, r8=export_name_len)
+    mov     rdi, rbx            ; runtime
+    lea     rsi, [rel wasm_return42_start]
+    mov     rdx, [rel wasm_return42_len]
+    lea     rcx, [rel wasm_export_name]
+    mov     r8, 1               ; export name length
+    call    er_fn_run
+    ; rax = result, rdx = error
+    push    rax                 ; save result
+
+    ; Print check label
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_wasm]
+    call    er_serial_puts
+
+    ; Print result (should be 42 = 0x2A)
+    pop     rsi
+    mov     rdi, COM1_PORT
+    call    er_serial_puthex64
+
+    mov     rdi, COM1_PORT
+    mov     sil, ' '
+    call    er_serial_putchar
+    call    .crlf
+
+    add     rsp, 96
+
 .pass:
     ; PASS — serial
     mov     rdi, COM1_PORT
@@ -1089,6 +1491,12 @@ er_fn er_kernel_main
 
     ; ─── Tor client init ─────────────────────────────────────
     call    er_tor_init
+
+    ; ─── Local cell transport init ───────────────────────────
+    call    er_local_cell_init
+    ; Save wasm_runtime ptr for WASM import wrappers
+    lea     rax, [rel wasm_runtime]
+    mov     [rel er_wasm_runtime_ptr], rax
 
     ; ─── Boot Device Summary ─────────────────────────────────
     ; Show detected peripherals on display before entering shell
@@ -1254,6 +1662,7 @@ er_fn er_kernel_main
 .main_loop:
     call    er_net_poll
     call    er_tor_poll
+    call    er_local_cell_poll
     ; Future: call er_tcp_poll, ui_shell_tick, etc.
     ; Yield to give other subsystems time
     mov     ecx, 100000

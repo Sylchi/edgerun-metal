@@ -83,36 +83,67 @@
 
 ; External references
 extern er_memcpy
+extern er_memset
+extern er_memmove
+
+; ==================================================================
+; HostImport struct — host-provided import table entries
+; Each entry: module name, function name, function pointer
+; The caller passes an array of these via runtime.imports_ptr/len.
+; ==================================================================
+%define HOST_IMPORT_MODULE_PTR_OFF  0
+%define HOST_IMPORT_MODULE_LEN_OFF  8
+%define HOST_IMPORT_NAME_PTR_OFF   16
+%define HOST_IMPORT_NAME_LEN_OFF   24
+%define HOST_IMPORT_FN_PTR_OFF     32
+%define HOST_IMPORT_SIZE           40
+
+; ==================================================================
+; RuntimeConfig struct offsets (passed as pointer in rdi to er_fn_run)
+; ==================================================================
+%define RUNTIME_MEMORY_PTR_OFF      0
+%define RUNTIME_MEMORY_LEN_OFF      8
+%define RUNTIME_TICKS_PTR_OFF      16
+%define RUNTIME_MEM_GROW_FN_OFF    24
+%define RUNTIME_MEM_GROW_CTX_OFF   32
+%define RUNTIME_TABLE_GROW_FN_OFF  40
+%define RUNTIME_TABLE_GROW_CTX_OFF 48
+%define RUNTIME_INITIAL_PAGES_OFF  56
+%define RUNTIME_HAS_PAGES_OFF      64
+%define RUNTIME_IMPORTS_PTR_OFF    72
+%define RUNTIME_IMPORTS_LEN_OFF    80
+%define RUNTIME_SIZE               88
 
 ; WASM magic + version
 wasm_magic: db 0x00, 0x61, 0x73, 0x6d
 wasm_version: db 0x01, 0x00, 0x00, 0x00
 
 ; Error codes (returned in rdx on error; rdx=0 on success, per macros.inc convention)
-ERROR_BAD_ARGUMENT     equ 1
-ERROR_CORRUPT          equ 2
-ERROR_UNSUPPORTED      equ 3
-ERROR_NO_MEMORY        equ 4
-ERROR_MEMORY_GROWTH    equ 5
-ERROR_TABLE_GROWTH     equ 6
-ERROR_NO_EXECUTION     equ 7
-ERROR_MISSING_EXPORT   equ 8
-ERROR_MISSING_IMPORT   equ 9
-ERROR_STACK_OVERFLOW   equ 10
-ERROR_STACK_UNDERFLOW  equ 11
-ERROR_TRAP             equ 12
-ERROR_ARITHMETIC_TRAP  equ 13
-ERROR_IMPORT_NOT_FOUND equ 14
+%define ERROR_BAD_ARGUMENT     1
+%define ERROR_CORRUPT          2
+%define ERROR_UNSUPPORTED      3
+%define ERROR_NO_MEMORY        4
+%define ERROR_MEMORY_GROWTH    5
+%define ERROR_TABLE_GROWTH     6
+%define ERROR_NO_EXECUTION     7
+%define ERROR_MISSING_EXPORT   8
+%define ERROR_MISSING_IMPORT   9
+%define ERROR_STACK_OVERFLOW   10
+%define ERROR_STACK_UNDERFLOW  11
+%define ERROR_TRAP             12
+%define ERROR_ARITHMETIC_TRAP  13
+%define ERROR_IMPORT_NOT_FOUND 14
 
 ; Driver error codes (shared across all hardware drivers)
-ERROR_TIMEOUT          equ 20
-ERROR_IO               equ 21
-ERROR_NOT_PRESENT      equ 22
-ERROR_NO_DATA          equ 23
-ERROR_INVALID_PARAM    equ 24
-ERROR_BUSY             equ 25
+%define ERROR_TIMEOUT          20
+%define ERROR_IO               21
+%define ERROR_NOT_PRESENT      22
+%define ERROR_NO_DATA          23
+%define ERROR_INVALID_PARAM    24
+%define ERROR_BUSY             25
+%define ERROR_AUTH             26
 
-ERROR_OK               equ 0
+%define ERROR_OK               0
 
 ; ==================================================================
 ; Value type tags (for Value.tag field)

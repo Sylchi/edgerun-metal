@@ -948,7 +948,7 @@ er_fn er_tpm_create_primary_p256
 
     mov     rdi, rax
     ; [10-13] primaryHandle = TPM_RH_ENDORSEMENT (4 BE)
-    mov     dword [rdi + 10], 0x0b000040
+    mov     dword [rdi + 10], 0x01000040
 
     ; ── TPM2B_SENSITIVE_CREATE: empty (size=0, no data) ────────────
     ; tpm2-tools uses inSensitive.size=0, no sensitiveType/authValue.

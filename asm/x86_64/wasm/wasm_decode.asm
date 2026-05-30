@@ -624,13 +624,26 @@ er_wasm_parse_import_section:
 
     ; Read module name
     er_call er_wasm_read_leb_u32, .error
-    mov     r15, rsi
-    add     rsi, rax            ; skip name bytes (we don't store them for matching — names are in the caller's wasm bytes)
+    push    r10
+    mov     r10, r13
+    imul    r10, IMPORTED_FUNC_SIZE
+    mov     [imports_buf + r10], rsi        ; module_name_ptr
+    mov     [imports_buf + r10 + 8], rax    ; module_name_len
+    pop     r10
+    add     rsi, rax                        ; skip module name bytes
 
     ; Read import name
     er_call er_wasm_read_leb_u32, .error
-    mov     r15, rsi
-    add     rsi, rax
+    push    r10
+    mov     r10, r13
+    imul    r10, IMPORTED_FUNC_SIZE
+    mov     [imports_buf + r10 + 16], rsi   ; func_name_ptr
+    mov     [imports_buf + r10 + 24], rax   ; func_name_len
+    ; Initialize resolved fields to -1 (unresolved)
+    mov     qword [imports_buf + r10 + 40], -1  ; resolved_module_id
+    mov     qword [imports_buf + r10 + 48], -1  ; resolved_func_index
+    pop     r10
+    add     rsi, rax                        ; skip import name bytes
 
     ; Read external kind
     movzx   r15d, byte [rsi]
@@ -647,15 +660,6 @@ er_wasm_parse_import_section:
     jmp     .unsupported
 
 .import_function:
-    ; Store ImportedFunction
-    push    r10
-        mov     r10, r13
-        imul    r10, IMPORTED_FUNC_SIZE
-    mov     qword [imports_buf + r10], r15   ; module offset (simplified — just store pointer to wasm bytes)
-        pop     r10
-    ; For now, we store the name pointer relative to original bytes
-    ; TODO: store properly
-    mov     rdi, qword [rsp]    ; get saved payload start
     ; type_index
     er_call er_wasm_read_leb_u32, .error
     ; Verify type_index < type_count
@@ -1358,16 +1362,152 @@ er_wasm_read_constant_value:
 ; Element section parser (stub for now — full implementation)
 ; =================================================================+
 er_wasm_parse_element_section:
-    ; TODO: full element section parsing
     er_frame_push
+    push    r11
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+
     mov     rsi, r12
     er_call er_wasm_read_leb_u32, .error
-    mov     r12, rsi            ; skip for now
+    mov     r15, rax
+    cmp     r15, MAX_DATA_SEGMENTS
+    ja      .unsupported_section
+    mov     [element_segment_count], r15
+
+    xor     r11d, r11d          ; segment index
+.seg_loop:
+    cmp     r11, r15
+    jae     .done
+
+    ; Initialize segment
+    push    r10
+    mov     r10, r11
+    imul    r10, ELEMENT_SEGMENT_SIZE
+    mov     qword [element_segments + r10 + 256], 0   ; count = 0
+    mov     byte [element_segments + r10 + 264], 0    ; passive = 0
+    mov     byte [element_segments + r10 + 265], 0    ; dropped = 0
+    pop     r10
+
+    ; Read mode
+    er_call er_wasm_read_leb_u32, .error
+
+    cmp     eax, 0
+    je      .mode_0
+    cmp     eax, 1
+    je      .mode_1
+    cmp     eax, 2
+    je      .mode_2
+    cmp     eax, 3
+    je      .mode_3
+    ; Modes 4-7 are like 0-3 but use ref.func expressions
+    ; For now, skip them the same way (unsupported would be too strict)
+    cmp     eax, 4
+    je      .mode_0
+    cmp     eax, 5
+    je      .mode_1
+    cmp     eax, 6
+    je      .mode_2
+    cmp     eax, 7
+    je      .mode_3
+    jmp     .unsupported_section
+
+.mode_0:
+    ; read offset_expr, then treat like mode_1 (active -> store entries in element_segment)
+    er_call er_wasm_read_constant_i32, .error
+    ; For now, just read elem_kind + vec and skip (no table support needed yet)
+    ; We fall through to mode_1 parsing
+.mode_1:
+    ; Passive: elem_kind byte + vec(func_idx)
+    movzx   eax, byte [rsi]     ; elem_kind
+    inc     rsi
+    ; Validate elem_kind is 0x00 (funcref)
+    test    al, al
+    jnz     .unsupported_section
+
+    ; Read function count
+    er_call er_wasm_read_leb_u32, .error
+    mov     r14, rax            ; count
+    cmp     r14, MAX_TABLE_ENTRIES
+    ja      .unsupported_section
+
+    ; Store in element segment
+    push    r10
+    mov     r10, r11
+    imul    r10, ELEMENT_SEGMENT_SIZE
+    mov     [element_segments + r10 + 256], r14  ; count
+    mov     byte [element_segments + r10 + 264], 1  ; passive = 1
+    pop     r10
+
+    xor     r13d, r13d
+.idx_loop:
+    cmp     r13, r14
+    jae     .next
+    er_call er_wasm_read_leb_u32, .error
+    push    r10
+    mov     r10, r11
+    imul    r10, ELEMENT_SEGMENT_SIZE
+    mov     [element_segments + r10 + r13 * 8], rax
+    pop     r10
+    inc     r13
+    jmp     .idx_loop
+
+.mode_2:
+    ; Active with explicit table: table_idx, offset_expr, elem_kind, vec
+    er_call er_wasm_read_leb_u32, .error  ; table index
+    test    eax, eax
+    jnz     .unsupported_section          ; only table 0 supported
+    er_call er_wasm_read_constant_i32, .error  ; offset expr (skip)
+    jmp     .mode_1                        ; rest same as mode_1
+
+.mode_3:
+    ; Declarative: elem_kind byte + vec(func_idx) — skip entirely
+    movzx   eax, byte [rsi]
+    inc     rsi
+    test    al, al
+    jnz     .unsupported_section
+    er_call er_wasm_read_leb_u32, .error
+    mov     r14, rax
+.skip_idx_loop:
+    test    r14, r14
+    jz      .next
+    er_call er_wasm_read_leb_u32, .error
+    dec     r14
+    jmp     .skip_idx_loop
+
+.next:
+    inc     r11
+    jmp     .seg_loop
+
+.done:
     er_ok
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     r11
     pop     rbp
     ret
+
 .error:
-    mov     edx, edx
+    ; rdx already has error from er_call
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     r11
+    pop     rbp
+    ret
+
+.unsupported:
+.unsupported_section:
+    er_err  ERROR_UNSUPPORTED
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     r11
     pop     rbp
     ret
 

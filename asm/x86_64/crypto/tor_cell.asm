@@ -20,13 +20,12 @@ extern er_memset
 extern er_serial_puts
 extern er_serial_puthex64
 extern er_serial_crlf
-extern er_blake3_hash
-
 extern er_tor_ntor_keygen
 extern er_tor_ntor_client_handshake
 extern er_tor_ntor_client_process
 extern er_tor_curve25519_scalar_mult
 extern er_tor_aes_ctr
+extern er_tor_sha256
 
 ; ==================================================================
 ; BSS data
@@ -54,6 +53,9 @@ tor_streams: resb TOR_STREAM_SIZE * TOR_MAX_STREAMS
 
 ; Temporary buffers for circuit operations
 tor_tmp_buf: resb 512
+
+; Digest work buffer (large enough for 32 bytes running + 509 cell payload = 541)
+tor_digest_buf: resb 1024
 
 ; Per-hop key material (for multi-hop circuits)
 ; Each hop needs: forward_key(16), backward_key(16), forward_iv(16), backward_iv(16)
@@ -613,7 +615,13 @@ _tor_recv_created2:
 ;                         const u8 *node_id[20], const u8 *onion_key[32],
 ;                         const u8 *handshake[84])
 ;
-; Builds a relay cell containing an EXTEND2 body.
+; Builds a cell containing RELAY_EARLY + EXTEND2 body.
+; EXTEND2 body format:
+;   NSPEC(1) + LSTYPE(1)+LSLEN(1)+LST(20) + HTYPE(2)+HLEN(2)+HDATA(84)
+;
+; For ntor (HTYPE=0x0002), uses 2 link specifiers:
+;   spec1: LSTYPE=2 (IPv4), LSLEN=6, data=IP(4)+PORT(2)
+;   spec2: LSTYPE=4 (legacy ID), LSLEN=20, data=node_id
 ; ==================================================================
 _tor_build_extend2:
     push    rbx
@@ -624,27 +632,119 @@ _tor_build_extend2:
 
     mov     r12, rdi        ; cell
     mov     r13d, esi       ; circ_id
-    mov     r14w, dx        ; stream_id (ax)
-    mov     r15, rcx        ; node_id (8th arg from stack)
+    mov     r14w, dx        ; stream_id
+    mov     r15, rcx        ; node_id
+    ; r8 = onion_key
+    ; r9 = handshake[84]
 
-    ; This is a very complex relay cell builder
-    ; For now, just build a minimal EXTEND2
-    ; Full implementation would:
-    ; 1. Build RELAY header (stream_id, digest, len, cmd=EXTEND2, recognized=0)
-    ; 2. Build EXTEND2 body: nspec(1) + spec(n) + handshake_type(2) + hlen(2) + data
-    ; 3. Encrypt relay payload with circuit key
-    ; 4. Wrap in cell header
+    ; Build cell header: circ_id(4) + cmd(RELAY_EARLY)
+    mov     [r12], r13d
+    mov     byte [r12 + 4], TOR_CELL_RELAY_EARLY
 
-    ; Relay cell header inside payload (11 bytes)
-    ; Actually cell structure is:
-    ; circ_id(2/4) + cmd(1) + relay_header(11) + relay_body(498 max)
+    ; Relay header (cell payload offset 5):
+    mov     [r12 + 5], r14w        ; stream_id (2 bytes)
+    mov     dword [r12 + 7], 0     ; digest (zeroed, computed before encrypt)
+    ; data_len (big-endian) — EXTEND2 body size
+    mov     eax, 119
+    xchg    ah, al
+    mov     [r12 + 11], ax
+    mov     byte [r12 + 13], TOR_RELAY_EXTEND2  ; relay cmd
+    mov     word [r12 + 14], 0     ; recognized = 0
 
-    ; Placeholder: for first iteration skip extend, use 1-hop circuits
-    ; For now, this is a no-op
+    ; EXTEND2 body starts at cell offset 16
+    ; NSPEC = 2
+    mov     byte [r12 + 16], 2
+
+    ; Specifier 1: IPv4 socket (LSTYPE=2, LSLEN=6)
+    mov     byte [r12 + 17], 2     ; LSTYPE = IPv4
+    mov     byte [r12 + 18], 6     ; LSLEN = 6
+    ; IP and port — use zeros (will be filled by caller or default)
+    mov     dword [r12 + 19], 0    ; IP (4 bytes, network order)
+    mov     word  [r12 + 23], 0    ; PORT (2 bytes, network order)
+
+    ; Specifier 2: Legacy ID (LSTYPE=4, LSLEN=20)
+    mov     byte [r12 + 25], 4     ; LSTYPE = legacy ID
+    mov     byte [r12 + 26], 20    ; LSLEN = 20
+    mov     rdi, r12
+    add     rdi, 27
+    mov     rsi, r15               ; node_id (20 bytes)
+    mov     edx, 20
+    call    er_memcpy
+
+    ; Handshake type: ntor = 0x0002 (big-endian)
+    mov     byte [r12 + 47], 0
+    mov     byte [r12 + 48], 2
+
+    ; Handshake data length: 84 (big-endian)
+    mov     byte [r12 + 49], 0
+    mov     byte [r12 + 50], 84
+
+    ; Handshake data (84 bytes)
+    mov     rdi, r12
+    add     rdi, 51
+    mov     rsi, r9                ; handshake[84] (NODE_ID||KEY_ID||X)
+    mov     edx, 84
+    call    er_memcpy
 
     pop     r15
     pop     r14
     pop     r13
+    pop     r12
+    pop     rbx
+    ret
+
+; ==================================================================
+; _tor_parse_extended2 — parse EXTENDED2 reply from relay cell
+; int _tor_parse_extended2(const u8 *relay_body, u32 body_len,
+;                          u8 *out_handshake_reply[64])
+;
+; Parses EXTENDED2 body from a received RELAY cell payload.
+; EXTENDED2 body: HTYPE(2) + HLEN(2) + HDATA(variable)
+;
+; Returns 0 on success, -1 on parse error.
+; ==================================================================
+_tor_parse_extended2:
+    push    rbx
+    push    r12
+
+    mov     r12, rdi        ; relay_body
+    mov     ebx, esi        ; body_len
+
+    ; Need at least 4 bytes (HTYPE + HLEN)
+    cmp     ebx, 4
+    jb      .bad
+
+    ; Check handshake type is ntor (0x0002, big-endian → LE word = 0x0200)
+    cmp     word [r12], 0x0200
+    jne     .bad
+
+    ; Read HLEN (big-endian)
+    movzx   eax, byte [r12 + 2]
+    shl     eax, 8
+    movzx   ecx, byte [r12 + 3]
+    or      eax, ecx
+
+    ; ntor reply is 64 bytes (Y||AUTH)
+    cmp     eax, 64
+    jne     .bad
+
+    ; Check body_len is enough
+    cmp     ebx, 68         ; 4 + 64
+    jb      .bad
+
+    ; Copy HDATA to output
+    mov     rdi, rdx        ; out_handshake_reply
+    lea     rsi, [r12 + 4]
+    mov     edx, 64
+    call    er_memcpy
+
+    xor     eax, eax
+    pop     r12
+    pop     rbx
+    ret
+
+.bad:
+    mov     eax, -1
     pop     r12
     pop     rbx
     ret
@@ -772,28 +872,26 @@ er_fn er_tor_circuit_create
     test    eax, eax
     js      .build_fail
 
-    ; Simplified key derivation: use first 32 bytes of reply (Y)
-    ; forward_key = Y[0..15], backward_key = Y[16..31]
-    lea     rsi, [rsp + 152] ; Y
-    lea     rdi, [rbx + TOR_CIRC_FORWARD_KEY]
-    mov     edx, 16
-    call    er_memcpy
+    ; Full ntor key derivation via er_tor_ntor_client_process
+    ; Push stack params: backward_key, forward_iv, backward_iv
+    lea     rax, [rbx + TOR_CIRC_BACKWARD_IV]
+    push    rax
+    lea     rax, [rbx + TOR_CIRC_FORWARD_IV]
+    push    rax
+    lea     rax, [rbx + TOR_CIRC_BACKWARD_KEY]
+    push    rax
 
-    lea     rsi, [rsp + 168] ; Y + 16
-    lea     rdi, [rbx + TOR_CIRC_BACKWARD_KEY]
-    mov     edx, 16
-    call    er_memcpy
-
-    ; Zero IVs
-    lea     rdi, [rbx + TOR_CIRC_FORWARD_IV]
-    xor     esi, esi
-    mov     edx, 16
-    call    er_memset
-
-    lea     rdi, [rbx + TOR_CIRC_BACKWARD_IV]
-    xor     esi, esi
-    mov     edx, 16
-    call    er_memset
+    ; rdi = handshake_reply = [rsp+152+24] (reply = Y || AUTH)
+    lea     rdi, [rsp + 152 + 24]  ; reply buffer
+    mov     rsi, r13               ; node_id
+    mov     rdx, r14               ; onion_key
+    lea     rcx, [rsp + 88 + 24]   ; client_priv
+    lea     r8,  [rsp + 120 + 24]  ; client_pub
+    lea     r9,  [rbx + TOR_CIRC_FORWARD_KEY]  ; forward_key
+    call    er_tor_ntor_client_process
+    add     rsp, 24                ; pop stack params
+    test    eax, eax
+    js      .build_fail
 
     ; Mark circuit open
     mov     dword [rbx + TOR_CIRC_STATE], TOR_CIRC_OPEN
@@ -892,6 +990,53 @@ er_fn er_tor_send_relay
     call    er_memcpy
 
 .no_data:
+    ; ============================================================
+    ; Compute relay digest using forward running hash
+    ; forward_digest = SHA256(forward_digest || cell_payload[0..508])
+    ; digest_field = first 4 bytes of forward_digest
+    ; ============================================================
+    ; Get circuit pointer
+    mov     edi, r12d
+    call    _tor_circ_ptr
+    test    rax, rax
+    jz      .no_digest
+
+    ; Build input at tor_digest_buf: forward_digest[32] || cell_payload[509]
+    ; Cell payload = bytes 5..513 of tor_tx_cell (509 bytes including relay header)
+    mov     rdi, tor_digest_buf
+    lea     rsi, [rax + TOR_CIRC_FORWARD_DIGEST]
+    mov     edx, 32
+    call    er_memcpy
+
+    mov     rdi, tor_digest_buf + 32
+    lea     rsi, [tor_tx_cell + 5]   ; cell payload (509 bytes)
+    mov     edx, 509
+    call    er_memcpy
+
+    ; Compute SHA256(input, 541) → output to tor_digest_buf + 541
+    mov     rdi, tor_digest_buf      ; input
+    mov     esi, 541                 ; input length
+    lea     rdx, [tor_digest_buf + 541] ; output (32 bytes)
+    call    er_tor_sha256
+    test    eax, eax
+    jz      .no_digest
+
+    ; Write first 4 bytes of new digest into cell's digest field
+    mov     eax, [tor_digest_buf + 541]
+    mov     [tor_tx_cell + 7], eax
+
+    ; Update circuit's forward_digest with new full digest
+    mov     edi, r12d
+    call    _tor_circ_ptr
+    test    rax, rax
+    jz      .no_digest
+    mov     rdi, rax
+    add     rdi, TOR_CIRC_FORWARD_DIGEST
+    lea     rsi, [tor_digest_buf + 541]
+    mov     edx, 32
+    call    er_memcpy
+
+.no_digest:
     ; Encrypt cell payload with circuit's forward key
     mov     edi, tor_tx_cell
     mov     esi, r12d       ; circ_id
@@ -965,6 +1110,71 @@ er_fn er_tor_recv_relay
     mov     esi, r12d
     mov     edx, 1           ; backward direction
     call    er_tor_relay_crypt
+
+    ; ============================================================
+    ; Verify relay digest
+    ; ============================================================
+    ; Save the current digest field (4 bytes)
+    mov     eax, [tor_rx_cell + 7]
+    push    rax
+
+    ; Zero the digest field for recomputation
+    mov     dword [tor_rx_cell + 7], 0
+
+    ; Get circuit pointer
+    mov     edi, r12d
+    call    _tor_circ_ptr
+    test    rax, rax
+    jz      .digest_skip
+
+    push    rax                          ; save circuit ptr
+
+    ; Build input at tor_digest_buf: backward_digest[32] || cell_payload[509]
+    mov     rdi, tor_digest_buf
+    lea     rsi, [rax + TOR_CIRC_BACKWARD_DIGEST]
+    mov     edx, 32
+    call    er_memcpy
+
+    mov     rdi, tor_digest_buf + 32
+    lea     rsi, [tor_rx_cell + 5]
+    mov     edx, 509
+    call    er_memcpy
+
+    ; SHA256(input, 541) → output
+    mov     rdi, tor_digest_buf
+    mov     esi, 541
+    lea     rdx, [tor_digest_buf + 541]
+    call    er_tor_sha256
+    test    eax, eax
+    jz      .digest_skip_pop
+
+    ; Compare first 4 bytes with saved digest
+    mov     eax, [tor_digest_buf + 541]
+    pop     rcx                          ; saved digest (from push at start)
+    cmp     eax, ecx
+    jne     .digest_fail
+
+    ; Update circuit's backward_digest
+    mov     edi, r12d
+    call    _tor_circ_ptr
+    test    rax, rax
+    jz      .digest_skip
+    mov     rdi, rax
+    add     rdi, TOR_CIRC_BACKWARD_DIGEST
+    lea     rsi, [tor_digest_buf + 541]
+    mov     edx, 32
+    call    er_memcpy
+    jmp     .digest_skip
+
+.digest_fail:
+    ; Digest mismatch — signal error
+    add     rsp, 16          ; pop circuit ptr + saved digest
+    jmp     .fail
+
+.digest_skip_pop:
+    pop     rax              ; circuit ptr (not needed)
+.digest_skip:
+    pop     rax              ; saved digest value (from the push)
 
     ; Parse relay header
     movzx   ecx, word [tor_rx_cell + 5]   ; stream_id

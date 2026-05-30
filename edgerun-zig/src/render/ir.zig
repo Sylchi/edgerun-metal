@@ -424,6 +424,96 @@ pub fn primitiveCount(buffers: Buffers) Error!usize {
     return count;
 }
 
+pub const body_header_size: usize = 28;
+
+pub fn bodySize(buffers: Buffers) usize {
+    return body_header_size +
+        (buffers.rect_len.* +
+            buffers.icon_vertex_len.* +
+            buffers.icon_line_vertex_len.* +
+            buffers.image_vertex_len.* +
+            buffers.overlay_rect_len.* +
+            buffers.overlay_icon_vertex_len.* +
+            buffers.overlay_icon_line_vertex_len.*) * @sizeOf(f32);
+}
+
+pub const BodyHeader = struct {
+    rect_floats: u32,
+    icon_floats: u32,
+    icon_line_floats: u32,
+    image_floats: u32,
+    overlay_rect_floats: u32,
+    overlay_icon_floats: u32,
+    overlay_icon_line_floats: u32,
+};
+
+pub fn encodeBody(buffers: Buffers, out: []u8) void {
+    const hdr: BodyHeader = .{
+        .rect_floats = @intCast(buffers.rect_len.*),
+        .icon_floats = @intCast(buffers.icon_vertex_len.*),
+        .icon_line_floats = @intCast(buffers.icon_line_vertex_len.*),
+        .image_floats = @intCast(buffers.image_vertex_len.*),
+        .overlay_rect_floats = @intCast(buffers.overlay_rect_len.*),
+        .overlay_icon_floats = @intCast(buffers.overlay_icon_vertex_len.*),
+        .overlay_icon_line_floats = @intCast(buffers.overlay_icon_line_vertex_len.*),
+    };
+    const floats = std.mem.asBytes(&hdr);
+    @memcpy(out[0..floats.len], floats);
+    var pos: usize = floats.len;
+    for ([_][]const f32{
+        buffers.liveRects(),
+        buffers.liveIconVertices(),
+        buffers.liveIconLineVertices(),
+        buffers.liveImageVertices(),
+        buffers.liveOverlayRects(),
+        buffers.liveOverlayIconVertices(),
+        buffers.liveOverlayIconLineVertices(),
+    }) |slice| {
+        const bytes = std.mem.sliceAsBytes(slice);
+        @memcpy(out[pos..][0..bytes.len], bytes);
+        pos += bytes.len;
+    }
+}
+
+pub fn decodeBody(body: []const u8) BodyHeader {
+    const hdr: BodyHeader = .{
+        .rect_floats = std.mem.readInt(u32, body[0..4], .little),
+        .icon_floats = std.mem.readInt(u32, body[4..8], .little),
+        .icon_line_floats = std.mem.readInt(u32, body[8..12], .little),
+        .image_floats = std.mem.readInt(u32, body[12..16], .little),
+        .overlay_rect_floats = std.mem.readInt(u32, body[16..20], .little),
+        .overlay_icon_floats = std.mem.readInt(u32, body[20..24], .little),
+        .overlay_icon_line_floats = std.mem.readInt(u32, body[24..28], .little),
+    };
+    return hdr;
+}
+
+pub fn applyBody(body: []const u8, buffers: *Buffers) void {
+    const hdr = decodeBody(body);
+    var pos: usize = body_header_size;
+    inline for (.{
+        .{ .dst = buffers.rects, .len = &buffers.rect_len.*, .count = hdr.rect_floats },
+        .{ .dst = buffers.icon_vertices, .len = &buffers.icon_vertex_len.*, .count = hdr.icon_floats },
+        .{ .dst = buffers.icon_line_vertices, .len = &buffers.icon_line_vertex_len.*, .count = hdr.icon_line_floats },
+        .{ .dst = buffers.image_vertices, .len = &buffers.image_vertex_len.*, .count = hdr.image_floats },
+        .{ .dst = buffers.overlay_rects, .len = &buffers.overlay_rect_len.*, .count = hdr.overlay_rect_floats },
+        .{ .dst = buffers.overlay_icon_vertices, .len = &buffers.overlay_icon_vertex_len.*, .count = hdr.overlay_icon_floats },
+        .{ .dst = buffers.overlay_icon_line_vertices, .len = &buffers.overlay_icon_line_vertex_len.*, .count = hdr.overlay_icon_line_floats },
+    }) |field| {
+        const n: usize = field.count;
+        field.len.* = n;
+        if (n == 0) continue;
+        const src = std.mem.bytesAsSlice(f32, body[pos..][0..n * @sizeOf(f32)]);
+        @memcpy(field.dst[0..n], src);
+        pos += n * @sizeOf(f32);
+    }
+}
+
+pub fn bodyFloatCount(hdr: BodyHeader) usize {
+    return hdr.rect_floats + hdr.icon_floats + hdr.icon_line_floats + hdr.image_floats +
+        hdr.overlay_rect_floats + hdr.overlay_icon_floats + hdr.overlay_icon_line_floats;
+}
+
 pub fn batchPrimitiveCount(batch: DrawBatch) Error!usize {
     return switch (batch) {
         .rects, .overlay_rects => |rects| rectCount(rects),

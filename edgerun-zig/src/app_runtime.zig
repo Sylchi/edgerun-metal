@@ -30,6 +30,7 @@ const wasm_gl = @import("render/wasm_gl.zig");
 const gl_contract = @import("render/gl_contract.zig");
 const app_input_event = @import("app_input_event.zig");
 const wasm_interpreter = state.wasm_interpreter;
+const er = @import("er");
 
 pub const max_width = state.max_width;
 pub const max_height = state.max_height;
@@ -615,6 +616,42 @@ export fn er_ui_render_input_object(input_len: usize, width: u32, height: u32) u
         .h = @floatFromInt(state.frame_height),
     }, root, .{}) catch return render.finishError(.render_failed);
     return render.finishCpuSceneFrame(surface, scene, &.{}, .{ .enabled = false }, state.ui.Color.bg);
+}
+
+// -----------------------------------------------------------------
+// Local cell / identity routing — export wrappers
+//
+// These exports bridge the host's input-buffer calling convention to
+// the raw er host syscalls declared in er/sys.zig.
+// -----------------------------------------------------------------
+
+export fn er_identity_register(hash_len: u32) u32 {
+    if (hash_len < 32) return er.err_busy;
+    return er.register(@intCast(@intFromPtr(&state.input_bytes)));
+}
+
+export fn er_identity_lookup(hash_len: u32) u32 {
+    if (hash_len < 32) return er.err_busy;
+    return er.lookup(@intCast(@intFromPtr(&state.input_bytes)));
+}
+
+export fn er_identity_unregister(slot_id: u32) u32 {
+    return er.unregister(slot_id);
+}
+
+export fn er_cell_send(hash_len: u32, cell_len: u32) u32 {
+    if (hash_len < 32) return er.err_busy;
+    if (cell_len < er.cell_size) return er.err_busy;
+    const base = @intFromPtr(&state.input_bytes);
+    return er.send(@intCast(base), @intCast(base + hash_len));
+}
+
+export fn er_cell_recv(slot_id: u32) u32 {
+    return er.recv(slot_id, @intCast(@intFromPtr(&state.input_bytes)));
+}
+
+export fn er_cell_available(slot_id: u32) u32 {
+    return er.available(slot_id);
 }
 
 // -----------------------------------------------------------------

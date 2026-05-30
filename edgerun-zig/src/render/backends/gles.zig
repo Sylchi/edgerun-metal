@@ -408,7 +408,7 @@ fn rectMode(gles: *const gles_gl.Gles2, mode: ui.RectMode) gles_gl.GLint {
         .shadow => 1,
         .border => 2,
         .linear_gradient => 3,
-        .pie_slice => 0,
+        .pie_slice => 4,
     };
 }
 

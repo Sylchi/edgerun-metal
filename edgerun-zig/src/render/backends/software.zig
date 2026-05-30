@@ -293,11 +293,13 @@ pub const Surface = struct {
         const dst = self.pixels[index];
         const a: u16 = alpha;
         const inv: u16 = 255 - a;
+        const src_a: u16 = (@as(u16, color.a) * a) / 255;
+        const dst_atten: u16 = @as(u16, dst.a) * (255 - src_a) / 255;
         self.pixels[index] = .{
             .r = blendChannel(color.r, dst.r, a, inv),
             .g = blendChannel(color.g, dst.g, a, inv),
             .b = blendChannel(color.b, dst.b, a, inv),
-            .a = @intCast(@min(@as(u16, 255), @as(u16, dst.a) + (@as(u16, color.a) * a) / 255)),
+            .a = @intCast(@min(@as(u16, 255), src_a + dst_atten)),
         };
     }
 

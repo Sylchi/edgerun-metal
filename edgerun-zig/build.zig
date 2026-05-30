@@ -416,6 +416,16 @@ pub fn build(b: *std.Build) void {
     app_runtime.root_module.addAnonymousImport("embedded_source_object", .{
         .root_source_file = embedded_source_object,
     });
+
+    // Register the er SDK module so any WASM target can @import("er").
+    const er_module = b.createModule(.{
+        .root_source_file = b.path("src/er/sys.zig"),
+        .target = app_runtime_target,
+        .optimize = optimize,
+        .single_threaded = true,
+    });
+    app_runtime.root_module.addImport("er", er_module);
+
     const wasm_compiler_runner_tests = b.addTest(.{
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/wasm_compiler_runner_test.zig"),
@@ -519,6 +529,12 @@ pub fn build(b: *std.Build) void {
         "er_ui_render_frame_wasm",
         "er_ui_render_icon_svg_test",
         "er_ui_render_icon_svg_tuning_test",
+        "er_identity_register",
+        "er_identity_lookup",
+        "er_identity_unregister",
+        "er_cell_send",
+        "er_cell_recv",
+        "er_cell_available",
     };
     const install_app_runtime = b.addInstallArtifact(app_runtime, .{});
     const install_web_app_runtime = b.addInstallFile(app_runtime.getEmittedBin(), "web/a.wasm");

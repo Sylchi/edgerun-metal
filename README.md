@@ -15,9 +15,9 @@ The repository has two distinct code worlds with a hard boundary:
   The Zig toolchain is being removed from production boot paths and retained
   only as an app-authoring frontend until the self-hosted compiler replaces it.
 
- Current prodcution asset in about 5MB expected to shrink while still a lot of the features will be added. Goal is simple, computers do what they are good at which is determenistically moving bytes, data is controlled by its real owners, zero waste. 
+ Current production assets ~5MB expected to shrink while features are added. Goal is simple: computers do what they are good at — deterministically moving bytes. Data is controlled by its real owners. Zero waste. 
 
-No package manager. No npm install. No hidden authority. No cloud compiler. Disk IO is only to store userful work results everything else is compiled in and if your carbage needs terabytes of storage then good luck getting user permission. Your cache belongs to memory which is 1000x faster anyway. This philosophy comes from literally creating this same work. Terabyte of disk writes per day is not inevitable cause this is how compilers work. This repo is here to prove that we dont need this way of thinking. Your OS should fit in your nvram and shouldnt be able to spy on you, we are giving it authority over everything and then software is trying to claw it back. Edgerun is giving authority to user.
+No package manager. No npm install. No hidden authority. No cloud compiler. Disk IO is only to store useful work results — everything else is compiled in. If your garbage needs terabytes of storage, good luck getting user permission. Your cache belongs to memory, which is 1000x faster anyway. This philosophy comes from literally creating this same work. A terabyte of disk writes per day is not inevitable — that's just how current compilers work. This repo proves we don't need that way of thinking. Your OS should fit in your NVRAM and shouldn't be able to spy on you. Today we give software authority over everything, then other software tries to claw it back. EdgeRun gives authority to the user.
 
 No web framework. No pile of native dependencies. 
 
@@ -133,27 +133,183 @@ verify the receipt
 - Raspberry Pi Zero W v1.1 kernel and USB boot tooling for real hardware
   bring-up.
 
-The long-form model is in [EDGE_MODEL.md](EDGE_MODEL.md).
 
-## Repository Map
+## Core Model
 
-- `edgerun-zig/`: active implementation workspace.
-- `edgerun-zig/src/clock.zig`: deterministic clock coordinates.
-- `edgerun-zig/src/identity.zig`: user, device, app, and delegated identities.
-- `edgerun-zig/src/object.zig`: canonical object bytes, ids, requirements, and
-  verification.
-- `edgerun-zig/src/store.zig`: accepted-object storage and replay state.
-- `edgerun-zig/src/app.zig`: app manifests, execution receipts, and containment
-  tests.
-- `edgerun-zig/src/wasm/`: deterministic EdgeRun WASM interpreter.
-- `edgerun-zig/src/render/`: shared render IR, presentation receipts, software
-  and GPU paths.
-- `edgerun-zig/src/app_runtime.zig`: app runtime entry point.
-- `edgerun-zig/src/content/`: kernel resource inventory, contracts, authority,
-  and WASM launch work.
-- `edgerun-zig/src/immutable_kernel_*.zig`: QEMU UEFI kernel smokes.
-- `edgerun-zig/src/pi_zero_w_v1_1*.zig`: Pi Zero W v1.1 bring-up.
-- `edgerun-crypto/`: C/CMake BLAKE3 package.
+Everything is an object. Each device, app, allocator, UI surface, and storage instance is its own admission domain. No component has global meaning. No component gets ambient authority because it is a parent, storage layer, UI layer, transport, or device.
+
+Authority is explicit and replayable: `user → machine → allocator → ui → app → storage`.
+
+### Existing Primitives
+
+- **clock** — deterministic epoch coordinates for replay and local admission
+- **identity** — stable user, device, app, and delegated identities
+- **object** — canonical content-addressed objects, owners, envelopes, child refs, requirements, receipts
+- **storage** — append-only accepted-object log, recovery by replay, rebuildable projections
+- **crypto** — hashing foundation used by object, identity, and storage
+
+### Objects, Not Files
+
+Nothing is a file. Everything that matters is a content-addressed object. Labels, paths, refs, indexes, and projections are rebuildable conveniences — not truth.
+
+```
+If it matters, it is an object.
+If it grants authority, it is a receipt object.
+If it changes state, it is a deterministic transition object or receipt.
+```
+
+### Slices And Ownership
+
+Apps own explicit preallocated memory and storage slices. Sharing is separate from ownership — no share receipt, no access. The allocator records range ownership transitions without needing to read app memory.
+
+### Requirements
+
+`er_object_requirements_t` captures declarative constraints so admission can make deterministic state transitions:
+
+- durability: volatile, durable, replicated
+- confidentiality: public, integrity-only, app/user/device/layered private
+- portability: machine-bound, user/app/public portable
+- integrity: hash-only, signed, sealed
+- lifetime: transient, session, cache, retained, pinned
+- visibility: private, app namespace, user namespace, public
+
+### Boundary Crossing
+
+Transport is dumb. No object crosses a device boundary unless explicitly public, integrity-only, or sealed for the recipient scope. TLS is not the trust root — the object and receipt chain carry confidentiality, integrity, identity, and replay proof.
+
+---
+
+## UI Streaming Architecture
+
+### Core Principle
+
+If it crosses a device boundary, it is an object.
+
+Everything that moves between devices — IR frames, input events, hit results, image textures, video frames — is a canonical `object.zig` `Kind.bytes` or `Kind.tree` payload.
+
+### Object Types
+
+| What | Object Kind | Body | Reference |
+|------|------------|------|-----------|
+| App IR frame | `bytes` | `ir.BodyHeader` + float arrays | `render/ir.zig`: `encodeBody` / `applyBody` |
+| Composited IR frame | `bytes` | Same format, merged output | `render/compositor.zig`: `compose` |
+| Image texture | `bytes` | `ERIMG001` tiled RGBA | `media/image_object.zig` |
+| Input event | `bytes` | Binary event record | `app_input_event.zig` |
+| Hit result | `bytes` | Hit ID + position + scope | compositor output |
+
+### Pipeline
+
+```
+Device A (app host)                          Device B (renderer)
+ App produces IR                              receive object
+  → ir.encodeBody()       object bytes         → View.decode()
+  → object.bytesNode()   ─────────────────→   → applyBody()
+                         (BT / WiFi)          → backend renders
+
+ Media decoded locally                        receive image object
+  → ERIMG tiles           object body          → ERIMG decode
+  → object.bytesNode()   ─────────────────→   → upload as texture
+                                               → IR references it
+```
+
+### Compositor
+
+The compositor is pure IR-in/IR-out data transformation. No framebuffer, no pixel ops, no software backend dependency. Compiles to WASM.
+
+- Receives serialized IR objects from apps, tagged with a `Layer`
+- Merges by fixed Z-order: scrim < menu < popover < modal < toast
+- Applies cursor IR based on latest pointer position
+- Outputs serialized merged IR object for backends
+- Performs hit-testing on the merged spatial layout
+
+### Media As Objects
+
+Images and video frames are decoded on the source device into `ERIMG001` tiled RGBA (`media/runtime_image.zig`), wrapped as `Kind.bytes` objects by `media/image_object.zig`. On the receiver, the body is decoded back into ERIMG tiles, uploaded as a GPU texture, and referenced by `IR.image_vertices`. No raw pixel stream crosses the device boundary.
+
+### Fragmentation
+
+Large payloads use `Kind.tree` — children with offset/len fields provide built-in reassembly:
+```
+tree object (logical_len = 74 KB)
+  ├─ child offset=0    len=256
+  ├─ child offset=256  len=256
+  └─ ...
+```
+No separate fragment protocol. See `object.zig`: `Child`, `View.decode`.
+
+### Module Boundaries
+
+| Module | Responsibility | WASM |
+|--------|---------------|------|
+| `render/ir.zig` | IR types, push functions, body encode/decode | no |
+| `render/compositor.zig` | IR merge by layer, overlay system | yes |
+| `render/pipeline.zig` | Scene→IR packing, text rasterization, presentation | no |
+| `render/backends/` | Pixel-level renderers (sw, gles) | no |
+| `media/runtime_image.zig` | ERIMG001 tiled RGBA encode/decode | yes |
+| `media/image_object.zig` | ERIMG ↔ object envelope | yes |
+| `ui_codec.zig` | ERUI001 component tree decode | yes |
+| `ui_renderer.zig` | Component tree → IR (WASM-facing) | yes |
+| `app_input_event.zig` | Input event binary format | yes |
+| `object.zig` | Canonical object format | yes |
+| `app_runtime.zig` | WASM host bridge exports | no |
+| `runtime/render.zig` | Frame orchestration (scene→IR→render) | no |
+
+---
+
+## UI Relay Architecture
+
+### Domain Separation
+
+UI is not a root authority. It never knows what the objects mean — it renders slots and emits narrow intent receipts. The UI domain and App domain communicate only over a message channel (the "relay"):
+
+```
+user hits (x,y)  →  UI emits "slot 7 activated"  →  App resolves to action
+app updates      →  App emits scene description   →  UI renders natively
+```
+
+### Authority Boundary
+
+```
+user → input device → [UI Domain] → relay → [App Domain] → storage/network
+                             ↓                         ↓
+                      scene renderer              business logic
+                      zero authority               full authority
+                      no state                      owns state
+```
+
+The UI domain renders whatever scene it receives, collects raw input, and has no access to storage, identity keys, or app data. The App domain owns all business logic, state, and data.
+
+### Relay Protocol
+
+Messages are self-contained binary packets with a 12-byte header:
+
+```
+Offset  Size  Field
+0       4     magic: 0x4552524C ("ERRL")
+4       1     version: 0x01
+5       1     message_type
+6       4     sequence_number
+10      2     payload_length
+```
+
+| Type | Code | Direction | Payload |
+|------|------|-----------|---------|
+| SceneUpdate | 0x01 | App → UI | packed Render IR scene |
+| InputEvent | 0x02 | UI → App | serialized input events |
+| Resize | 0x03 | UI → App | viewport width/height |
+| Hover | 0x04 | UI → App | pointer x/y |
+| IntentReceipt | 0x05 | UI → App | user intent receipt |
+| Ack | 0x80 | bidirectional | acked sequence number |
+
+### Transport Abstraction
+
+The same binary format works over same-process coroutines, serial/UART (HDLC-style 0x7E framing), BLE advertisements (31-byte limit), and TCP/UDP (length-prefixed).
+
+### Multi-Device
+
+A single app broadcasts its scene to multiple UI hosts. Each renders independently. Input from any device flows back to the app. Devices may have different resolutions and input capabilities.
+
+---
 
 ## Try The Important Checks
 

@@ -8,8 +8,6 @@ const app_navigation = @import("app_navigation.zig");
 const design = @import("app_design.zig");
 const ui = @import("ui.zig");
 const text_component = @import("ui/components/Text.zig");
-const ui_overlay = @import("ui_overlay.zig");
-
 const workspace_rail_w: f32 = 48.0;
 const workspace_sidebar_w: f32 = 260.0;
 const workspace_top_h: f32 = 56.0;
@@ -30,6 +28,13 @@ pub const State = struct {
     frame_ms: f32 = 0.0,
     public_identity: []const u8 = "",
     public_identity_ready: bool = false,
+    drag_override: ?component_gallery.DragOverride = null,
+    context_menu: struct {
+        open: bool,
+        x: f32,
+        y: f32,
+        source_path: []const u8,
+    } = .{ .open = false, .x = 0.0, .y = 0.0, .source_path = "" },
     agent: app_agent.State = .{},
 };
 
@@ -123,10 +128,6 @@ fn statusText(route: app_navigation.Route) []const u8 {
         .frontend => "preview",
     };
 }
-
-const overlay_command_capacity: usize = 64;
-const overlay_region_capacity: usize = 32;
-const overlay_entry_capacity: usize = 8;
 
 test "app frame renders agent workspace" {
     var commands: [4096]ui.Command = undefined;

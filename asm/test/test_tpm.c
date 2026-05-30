@@ -335,8 +335,8 @@ int main(void) {
     {
         uint8_t* result = er_tpm_create_primary_p256_signing(cmd_buf);
         TEST("create_primary_signing returns non-null", result != 0);
-        TEST("create_primary size = 67",
-             load_be32(cmd_buf + 2) == 67);
+        TEST("create_primary size = 65",
+             load_be32(cmd_buf + 2) == 65);
         TEST("create_primary cc = 0x131",
              load_be32(cmd_buf + 6) == 0x00000131);
         TEST("create_primary rh_owner = 0x40000001",
@@ -344,8 +344,8 @@ int main(void) {
 
         result = er_tpm_create_primary_p256_ecdh(cmd_buf);
         TEST("create_primary_ecdh returns non-null", result != 0);
-        TEST("create_primary_ecdh size = 67",
-             load_be32(cmd_buf + 2) == 67);
+        TEST("create_primary_ecdh size = 65",
+             load_be32(cmd_buf + 2) == 65);
     }
 
     {

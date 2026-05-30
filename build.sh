@@ -69,10 +69,16 @@ KERNEL_ASM_SRCS="
 	net/arp.asm
 	net/ipv4.asm
 	net/tcp.asm
+	crypto/sha256.asm
 	crypto/tor_ntor.asm
 	crypto/tor_aes.asm
 	crypto/tor_cell.asm
+	crypto/tor_digest.asm
 	crypto/tor.asm
+	crypto/local_cell.asm
+	crypto/local_route.asm
+	wasm/wasm_interpreter.asm
+	wasm/wasm_module_data.asm
 	entry.asm
 "
 

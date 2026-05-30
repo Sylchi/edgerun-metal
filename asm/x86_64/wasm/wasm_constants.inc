@@ -73,6 +73,155 @@ default rel
     jmp     .dispatch_next
 %endm
 
+; Float binary ops (SSE scalar)
+; f32: pop right (low32), pop left (low32), compute, push result
+%macro _wasm_f32_binop 1
+    call    exec_stack_pop
+    jc      .underflow_error
+    movd    xmm1, eax
+    call    exec_stack_pop
+    jc      .underflow_error
+    movd    xmm0, eax
+    %1      xmm0, xmm1
+    movd    eax, xmm0
+    call    exec_stack_push
+    jc      .overflow_error
+    jmp     .dispatch_next
+%endm
+
+; f64: pop right, pop left, compute, push result
+%macro _wasm_f64_binop 1
+    call    exec_stack_pop
+    jc      .underflow_error
+    movq    xmm1, rax
+    call    exec_stack_pop
+    jc      .underflow_error
+    movq    xmm0, rax
+    %1      xmm0, xmm1
+    movq    rax, xmm0
+    call    exec_stack_push
+    jc      .overflow_error
+    jmp     .dispatch_next
+%endm
+
+; Float unary round ops: pop, compute via roundss/roundsd, push
+; arg2 = rounding mode immediate (0=nearest, 1=floor, 2=ceil, 3=trunc)
+%macro _wasm_f32_unop_round 2
+    call    exec_stack_pop
+    jc      .underflow_error
+    movd    xmm0, eax
+    %1      xmm0, xmm0, %2
+    movd    eax, xmm0
+    call    exec_stack_push
+    jc      .overflow_error
+    jmp     .dispatch_next
+%endm
+
+%macro _wasm_f64_unop_round 2
+    call    exec_stack_pop
+    jc      .underflow_error
+    movq    xmm0, rax
+    %1      xmm0, xmm0, %2
+    movq    rax, xmm0
+    call    exec_stack_push
+    jc      .overflow_error
+    jmp     .dispatch_next
+%endm
+
+; Float sqrt unary ops
+%macro _wasm_f32_unop_sqrt 0
+    call    exec_stack_pop
+    jc      .underflow_error
+    movd    xmm0, eax
+    sqrtss  xmm0, xmm0
+    movd    eax, xmm0
+    call    exec_stack_push
+    jc      .overflow_error
+    jmp     .dispatch_next
+%endm
+
+%macro _wasm_f64_unop_sqrt 0
+    call    exec_stack_pop
+    jc      .underflow_error
+    movq    xmm0, rax
+    sqrtsd  xmm0, xmm0
+    movq    rax, xmm0
+    call    exec_stack_push
+    jc      .overflow_error
+    jmp     .dispatch_next
+%endm
+
+; Float comparison: returns 0 for NaN (eq, lt, gt, le, ge)
+; arg = setCC instruction suffix (e.g., e, b, a, be, ae)
+%macro _wasm_f32_cmp 1
+    call    exec_stack_pop
+    jc      .underflow_error
+    movd    xmm1, eax
+    call    exec_stack_pop
+    jc      .underflow_error
+    movd    xmm0, eax
+    ucomiss xmm0, xmm1
+    setnp   cl
+    set%1   al
+    and     al, cl
+    movzx   eax, al
+    call    exec_stack_push
+    jc      .overflow_error
+    jmp     .dispatch_next
+%endm
+
+%macro _wasm_f64_cmp 1
+    call    exec_stack_pop
+    jc      .underflow_error
+    movq    xmm1, rax
+    call    exec_stack_pop
+    jc      .underflow_error
+    movq    xmm0, rax
+    ucomisd xmm0, xmm1
+    setnp   cl
+    set%1   al
+    and     al, cl
+    movzx   eax, al
+    call    exec_stack_push
+    jc      .overflow_error
+    jmp     .dispatch_next
+%endm
+
+; Float ne comparison: returns 1 for NaN
+%macro _wasm_f32_cmp_ne 0
+    call    exec_stack_pop
+    jc      .underflow_error
+    movd    xmm1, eax
+    call    exec_stack_pop
+    jc      .underflow_error
+    movd    xmm0, eax
+    ucomiss xmm0, xmm1
+    setp    cl      ; 1 if NaN
+    setne   al      ; 1 if not equal (ordered)
+    or      al, cl  ; 1 if NaN or not equal
+    movzx   eax, al
+    call    exec_stack_push
+    jc      .overflow_error
+    jmp     .dispatch_next
+%endm
+
+%macro _wasm_f64_cmp_ne 0
+    call    exec_stack_pop
+    jc      .underflow_error
+    movq    xmm1, rax
+    call    exec_stack_pop
+    jc      .underflow_error
+    movq    xmm0, rax
+    ucomisd xmm0, xmm1
+    setp    cl
+    setne   al
+    or      al, cl
+    movzx   eax, al
+    call    exec_stack_push
+    jc      .overflow_error
+    jmp     .dispatch_next
+%endm
+
 %include "x86_64/wasm_defines.inc"
 
 ; ==================================================================
@@ -320,6 +469,18 @@ db 9   ; 9 element
 db 10  ; 10 data_count
 db 11  ; 11 code
 db 12  ; 12 data
+
+; Float constants for saturating truncation
+align 8
+f32_sat_bound_0:    dd 0x00000000  ; 0.0f (positive zero)
+f32_sat_bound_1:    dd 0x3f800000  ; 1.0f
+f32_sat_2pow31:     dd 0x4F000000  ; 2147483648.0f = 2^31
+f32_sat_minus_2pow31: dd 0xCF000000  ; -2147483648.0f
+f32_sat_2pow32:     dd 0x4F800000  ; 4294967296.0f = 2^32
+f32_sat_minus_1:    dd 0xBF800000  ; -1.0f
+f64_sat_2pow63:     dq 0x43E0000000000000  ; 9223372036854775808.0 = 2^63
+f64_sat_minus_2pow63: dq 0xC3E0000000000000  ; -9223372036854775808.0
+f64_sat_2pow64:     dq 0x43F0000000000000  ; 18446744073709551616.0 = 2^64
 
 SECTION .bss
 frame_locals:    resb MAX_LOCALS * 16  ; 1024 Values * 16 bytes each = 16KB

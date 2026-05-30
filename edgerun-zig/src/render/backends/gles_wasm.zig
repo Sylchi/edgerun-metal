@@ -282,6 +282,6 @@ fn rectMode(mode: ui.RectMode) wasm_gl.GLint {
         .shadow => 1,
         .border => 2,
         .linear_gradient => 3,
-        .pie_slice => 0,
+        .pie_slice => 4,
     };
 }

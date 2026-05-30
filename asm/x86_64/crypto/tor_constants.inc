@@ -188,11 +188,10 @@ TOR_CIRC_FORWARD_KEY   equ 65552 ; 16 bytes AES forward key (encrypt going out)
 TOR_CIRC_FORWARD_IV    equ 65568 ; 16 bytes AES forward IV
 TOR_CIRC_BACKWARD_KEY  equ 65584 ; 16 bytes AES backward key
 TOR_CIRC_BACKWARD_IV   equ 65600 ; 16 bytes AES backward IV
-TOR_CIRC_NTOR_KEYS     equ 65616 ; ntor key material (repeated for each hop)
-TOR_CIRC_SIZE          equ 66000 ; total per-circuit (approximate)
-
-; Per-hop state stored inside TOR_CIRC_NTOR_KEYS area
-TOR_HOP_KEY_LEN        equ 128
+TOR_CIRC_FORWARD_DIGEST equ 65616 ; 32 bytes running forward digest state
+TOR_CIRC_BACKWARD_DIGEST equ 65648 ; 32 bytes running backward digest state
+TOR_CIRC_NTOR_KEYS     equ 65680 ; ntor key material (repeated for each hop)
+TOR_CIRC_SIZE          equ 66144 ; total per-circuit (slack for >5 hops)
 
 ; ==================================================================
 ; Stream data structure (per-stream)

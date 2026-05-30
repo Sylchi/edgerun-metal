@@ -50,7 +50,7 @@ pub fn renderAppPixelsScaled(surface: state.renderer_pipeline.SoftwareFramebuffe
     app_frame.render(&scene, &collector, frameBounds(), input.currentAppFrameState(hover_x, hover_y, frame_ms)) catch return finishError(.render_failed);
     const frame_scene = prepareFrameScene(scene, collector.written(), .{ .enabled = true, .x = hover_x, .y = hover_y }) catch return finishError(.render_failed);
     scaleSceneCommands(state.commands[0..frame_scene.commandCount()], scale);
-    renderSceneIr(surface, frame_scene.written(), state.ui.Color.bg) catch return finishError(.render_failed);
+    renderSceneIr(surface, frame_scene.written()) catch return finishError(.render_failed);
     state.last_error = .ok;
     return @intFromEnum(state.ErrorCode.ok);
 }
@@ -66,8 +66,9 @@ pub fn finishPackedFrame(scene: state.ui.Scene, regions: []const interaction.Reg
 }
 
 pub fn finishCpuSceneFrame(surface: state.renderer_pipeline.SoftwareFramebuffer, scene: state.ui.Scene, regions: []const interaction.Region, hover: state.HoverUpdate, background: state.ui.Color) u32 {
+    _ = background;
     const frame_scene = prepareFrameScene(scene, regions, hover) catch return finishError(.render_failed);
-    renderSceneIr(surface, frame_scene.written(), background) catch return finishError(.render_failed);
+    renderSceneIr(surface, frame_scene.written()) catch return finishError(.render_failed);
     state.last_error = .ok;
     return @intFromEnum(state.ErrorCode.ok);
 }
@@ -127,17 +128,20 @@ pub fn beginFrame(width_raw: u32, height_raw: u32) ?state.renderer_pipeline.Soft
     return state.renderer_pipeline.softwareFramebuffer(width, height, state.pixels[0 .. width * height]) catch null;
 }
 
-fn renderSceneIr(surface: state.renderer_pipeline.SoftwareFramebuffer, scene_commands: []const state.ui.Command, background: state.ui.Color) !void {
+fn renderSceneIr(surface: state.renderer_pipeline.SoftwareFramebuffer, scene_commands: []const state.ui.Command) !void {
     try ensureFontAtlas();
     const buffers = packedBuffers();
     try state.renderer_pipeline.packScene(buffers, &state.font_atlas, scene_commands);
+    try state.renderer_pipeline.packTextQuads(buffers, &state.font_atlas, scene_commands);
     const image_texture = try app_images.cloudMeme();
-    const receipt = try state.renderer_pipeline.renderSoftwareFrame(surface, buffers, state.renderer_pipeline.softwareResourcesFromAlphaAtlas(.{
+    const resources = state.renderer_pipeline.softwareResourcesFromAlphaAtlas(.{
         .width = state.font_atlas_width,
         .height = state.font_atlas_height,
         .alpha = state.font_atlas.alphaSlice(),
-    }, image_texture), background);
-    recordPresentation(receipt);
+    }, image_texture);
+    const receipt = try surface.renderIr(buffers, resources);
+    state.last_present_primitive_count = receipt.primitive_count;
+    state.last_present_transport = receipt.transport;
 }
 
 fn presentPackedBuffers(buffers: state.renderer_pipeline.Buffers) state.renderer_pipeline.Error!void {

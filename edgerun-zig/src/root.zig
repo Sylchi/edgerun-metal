@@ -55,7 +55,7 @@ pub const app_input_event = @import("app_input_event.zig");
 pub const app_native_input = @import("app_native_input.zig");
 pub const ui = @import("ui.zig");
 const ui_components = @import("ui/components/Component.zig");
-pub const ui_overlay = @import("ui_overlay.zig");
+pub const compositor = @import("render/compositor.zig");
 pub const ui_resolver = @import("ui_resolver.zig");
 pub const ui_stream = @import("ui_stream.zig");
 pub const ui_device_tree = @import("ui_device_tree.zig");
@@ -128,7 +128,7 @@ test {
     _ = app_native_input;
     _ = ui;
     _ = ui_components;
-    _ = ui_overlay;
+    _ = compositor;
     _ = ui_resolver;
     _ = ui_text_edit;
     _ = ui_text_metrics;

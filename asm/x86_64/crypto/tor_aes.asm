@@ -125,6 +125,8 @@ _aes_key_expand:
     shl     eax, 24
     or      r8d, eax
 
+    ; Store in BE byte order (matching state and round key 0 byte order)
+    bswap   r8d
     mov     [rbx], r8d        ; w[i] = w[i-4] ^ SubWord(RotWord(w[i-1])) ^ Rcon
 
     ; Remaining 3 columns: w[i+N] = w[i-4+N] ^ w[i+N-1]

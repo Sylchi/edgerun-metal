@@ -1,5 +1,7 @@
 const std = @import("std");
 const bytes = @import("bytes.zig");
+const clock = @import("clock.zig");
+const object = @import("object.zig");
 
 pub const Kind = enum(u32) {
     resize = 1,
@@ -181,6 +183,49 @@ fn boolFlag(flags: u32, flag: u32) u32 {
 
 fn storeF32(out: []u8, offset: usize, value: f32) void {
     _ = bytes.store32(out[offset..][0..4], @as(u32, @bitCast(value)));
+}
+
+pub fn requirements() object.Requirements {
+    return .{
+        .durability = .memory,
+        .confidentiality = .public,
+        .portability = .machine_bound,
+        .integrity = .hash_only,
+        .lifetime = .transient,
+        .visibility = .private,
+        .access = .hot_memory_allowed,
+    };
+}
+
+pub fn encodeObject(kind: Kind, x: f32, y: f32, delta_y: f32, flags: u32, key: []const u8, code: []const u8, input_type: []const u8, data: []const u8, epoch: clock.Stamp, out: []u8) ![]u8 {
+    var body_buf: [2048]u8 = undefined;
+    const body_len = try writeBytes(&body_buf, kind, x, y, delta_y, flags, key, code, input_type, data);
+    return try (object.NodeWriter{ .out = out }).bytesNode(requirements(), epoch, body_buf[0..body_len]);
+}
+
+pub fn decodeObject(canonical: []const u8) !Record {
+    const view = try object.View.decode(canonical);
+    if (view.header.kind != .bytes) return error.BadInput;
+    return try parseBytes(view.body);
+}
+
+test "input event decode object rejects non-bytes kind" {
+    const epoch = clock.Stamp{ .keeper = .{ .bytes = [_]u8{0x69} ** 32 }, .tick = 1, .slot = 1, .epoch = 1, .era = 1 };
+    var obj_buf: [512]u8 = undefined;
+    const tree = try (object.NodeWriter{ .out = &obj_buf }).treeNode(requirements(), epoch, &.{});
+    try std.testing.expectError(error.BadInput, decodeObject(tree));
+}
+
+test "input event object round trips" {
+    const epoch = clock.Stamp{ .keeper = .{ .bytes = [_]u8{0x69} ** 32 }, .tick = 1, .slot = 1, .epoch = 1, .era = 1 };
+    var object_buf: [2048]u8 = undefined;
+    const canonical = try encodeObject(.pointer_move, 10.0, 20.0, 0.0, flag_ctrl | flag_shift, "", "", "", "", epoch, &object_buf);
+    const record = try decodeObject(canonical);
+    try std.testing.expectEqual(Kind.pointer_move, record.kind);
+    try std.testing.expectEqual(@as(f32, 10.0), record.x);
+    try std.testing.expectEqual(@as(f32, 20.0), record.y);
+    try std.testing.expectEqual(@as(u32, 1), record.ctrl);
+    try std.testing.expectEqual(@as(u32, 1), record.shift);
 }
 
 test "input event byte record round trips browser bridge fields" {
