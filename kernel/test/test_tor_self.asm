@@ -189,7 +189,6 @@ _start:
     mov     rax, [rel failed]
     test    rax, rax
     jnz     .exit_fail
-.exit_pass:
     xor     edi, edi
     jmp     .exit
 .exit_fail:

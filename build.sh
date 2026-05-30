@@ -302,6 +302,8 @@ cmd_test() {
 	cmd_test_sw_fb
 	cmd_test_render_ir
 	cmd_test_fe_mul
+	cmd_test_spi_flash
+	cmd_test_tor
 }
 
 cmd_test_ctype() {
@@ -360,6 +362,18 @@ cmd_test_fe_mul() {
 	ld -nostdlib -static -o "$bin" "$obj" "$tor_ntor_o" "$runtime_o" "$stub_obj"
 	echo "  LD  ${bin}"
 	"$bin"
+}
+
+cmd_test_spi_flash() {
+	build_test "test_spi_flash_self" "${TEST_DIR}/test_spi_flash_self.asm"
+}
+
+cmd_test_tor() {
+	build_test "test_tor_self" "${TEST_DIR}/test_tor_self.asm" "crypto/tor_aes" "rt/runtime"
+}
+
+cmd_test_bench_render_ir() {
+	build_test "bench_render_ir" "${TEST_DIR}/bench_render_ir.asm" "ui/sw_fb" "ui/render_ir"
 }
 
 # ---- ARM / Pi Zero targets ----
@@ -440,6 +454,9 @@ EdgeRun build targets:
   test-sw-fb          Run software framebuffer test (self-hosted ASM runner)
   test-render-ir      Run render IR test (self-hosted ASM runner)
   test-fe-mul         Run _fe_mul field multiplication test (self-hosted ASM)
+  test-spi-flash      Run SPI flash compile-check test (self-hosted ASM)
+  test-tor            Run Tor AES-128-CTR KAT test (self-hosted ASM)
+  test-bench-render-ir Run render_ir RDTSC benchmark (self-hosted ASM)
   pi-kernel           Build Pi Zero W kernel.img (ARMv6)
   pi-usb-boot         Build Pi USB boot host tool (x86_64)
   pi-boot             Build + boot Pi Zero via USB
@@ -466,6 +483,9 @@ case "${1:-help}" in
 	test-sw-fb)     cmd_test_sw_fb ;;
 	test-render-ir) cmd_test_render_ir ;;
 	test-fe-mul)    cmd_test_fe_mul ;;
+	test-spi-flash) cmd_test_spi_flash ;;
+	test-tor)       cmd_test_tor ;;
+	test-bench-render-ir) cmd_test_bench_render_ir ;;
 	pi-kernel)      cmd_pi_kernel ;;
 	pi-usb-boot)    cmd_pi_usb_boot ;;
 	pi-boot)        cmd_pi_boot ;;
