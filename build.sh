@@ -435,7 +435,23 @@ cmd_test_acpi()     { test_via_cc "acpi"     "acpi.o"; }
 cmd_test_preimage() { test_via_cc "preimage" "preimage.o" "blake3.o" "clock.o" "bytes.o"; }
 cmd_test_identity() { test_via_cc "identity" "identity.o" "blake3.o" "clock.o" "bytes.o"; }
 cmd_test_object()   { test_via_cc "object"   "object.o" "preimage.o" "blake3.o" "clock.o" "bytes.o"; }
-cmd_test_tor_ntor() { test_via_cc "tor_ntor" "tor_ntor.o" "runtime.o"; }
+cmd_test_tor_ntor() {
+	local src="${TEST_DIR}/test_tor_ntor.c"
+	local bin="${ASM_BUILD}/test_tor_ntor"
+	local stub_src="${TEST_DIR}/stubs_tor_ntor.asm"
+	local stub_obj="${ASM_BUILD}/stubs_tor_ntor.o"
+	assemble_shared
+	if [ ! -f "$stub_obj" ] || [ "$stub_src" -nt "$stub_obj" ] || [ "${ASM_DIR}/macros.inc" -nt "$stub_obj" ]; then
+		${YASM} -f elf64 ${ASM_INC} -o "$stub_obj" "$stub_src"
+	fi
+	local tor_ntor_o="${ASM_BUILD}/tor_ntor.o"
+	if [ ! -f "$tor_ntor_o" ]; then
+		elf64 "${ASM_DIR}/crypto/tor_ntor.asm" "$tor_ntor_o"
+	fi
+	${CC} -g -no-pie -o "$bin" "$src" "${ASM_BUILD}/runtime.o" "$tor_ntor_o" "$stub_obj"
+	echo "  LD  ${bin}"
+	"$bin"
+}
 
 cmd_test_fe_mul() {
     local src="${TEST_DIR}/test_fe_mul.asm"

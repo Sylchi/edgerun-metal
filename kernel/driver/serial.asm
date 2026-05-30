@@ -49,7 +49,6 @@ er_serial_tx_buffer: resb 4096
 er_serial_tx_count:  resq 1
 
 ; Override I/O macros — each port write appends to the buffer.
-%undef er_outb
 %macro er_outb 2
     push    rsi
     push    rdi
@@ -65,12 +64,10 @@ er_serial_tx_count:  resq 1
     pop     rsi
 %endmacro
 
-%undef er_inb
 %macro er_inb 1
     mov     al, 0x60        ; LSR_THR_EMPTY always set
 %endmacro
 
-%undef er_out_dx_al
 %macro er_out_dx_al 0
     push    rsi
     push    rdi
@@ -86,7 +83,6 @@ er_serial_tx_count:  resq 1
     pop     rsi
 %endmacro
 
-%undef er_in_al_dx
 %macro er_in_al_dx 0
     mov     al, 0x60
 %endmacro

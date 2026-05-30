@@ -177,6 +177,7 @@
 ; I/O port helpers
 ; ------------------------------------------------------------------
 ; Write 8-bit value to I/O port
+%ifndef HOSTED_TEST
 %macro er_outb 2
     mov     al, %2
     mov     dx, %1
@@ -197,6 +198,7 @@
 %macro er_in_al_dx 0
     in      al, dx
 %endm
+%endif
 
 ; ------------------------------------------------------------------
 ; Memory helpers (clobber rax, rcx, rdi, rsi)

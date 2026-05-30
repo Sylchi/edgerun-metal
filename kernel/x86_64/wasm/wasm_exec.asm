@@ -2343,7 +2343,8 @@ exec_dispatch_loop:
     ucomiss xmm0, xmm0
     jp      .sat_zero_i64
     cvttss2si rax, xmm0
-    cmp     rax, 0x8000000000000000
+    mov     rcx, 0x8000000000000000
+    cmp     rax, rcx
     jne     .push_sat_i64
     movd    eax, xmm0
     bt      rax, 31
@@ -2360,7 +2361,8 @@ exec_dispatch_loop:
     ucomiss xmm0, xmm1
     jbe     .sat_zero_i64
     cvttss2si rax, xmm0
-    cmp     rax, 0x8000000000000000
+    mov     rcx, 0x8000000000000000
+    cmp     rax, rcx
     jne     .push_sat_i64
     movd    eax, xmm0
     bt      rax, 31
@@ -2384,7 +2386,8 @@ exec_dispatch_loop:
     ucomisd xmm0, xmm0
     jp      .sat_zero_i64
     cvttsd2si rax, xmm0
-    cmp     rax, 0x8000000000000000
+    mov     rcx, 0x8000000000000000
+    cmp     rax, rcx
     jne     .push_sat_i64
     movq    rcx, xmm0
     bt      rcx, 63
@@ -2401,7 +2404,8 @@ exec_dispatch_loop:
     ucomisd xmm0, xmm1
     jbe     .sat_zero_i64
     cvttsd2si rax, xmm0
-    cmp     rax, 0x8000000000000000
+    mov     rcx, 0x8000000000000000
+    cmp     rax, rcx
     jne     .push_sat_i64
     movq    rcx, xmm0
     bt      rcx, 63
