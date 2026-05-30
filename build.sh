@@ -235,7 +235,7 @@ cmd_kernel_net_tpm() {
 		-chardev socket,id=chrtpm,path="${tpm_sock}" \
 		-tpmdev emulator,id=tpm0,chardev=chrtpm \
 		-device tpm-crb,tpmdev=tpm0 \
-		-netdev user,id=net0,guestfwd=tcp:10.0.2.2:19001-cmd:nc\ 127.0.0.1\ 19001 \
+		-netdev user,id=net0,guestfwd=tcp:10.0.2.100:19001-cmd:nc\ 127.0.0.1\ 19001 \
 		-device virtio-net-pci,netdev=net0 || true
 	kill "${swtpm_pid}" 2>/dev/null || true
 	wait "${swtpm_pid}" 2>/dev/null || true

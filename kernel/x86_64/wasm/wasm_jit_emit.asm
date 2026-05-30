@@ -1332,3 +1332,55 @@ er_fn jit_emit_or_al_ah
     call    jit_emit_byte
     mov     al, 0xE0
     jmp     jit_emit_modrm
+
+; ------------------------------------------------------------------
+; Emit: and eax, imm32  (25 <imm32>)
+; eax = imm32 value
+; -----------------------------------------------------------------+
+er_fn jit_emit_and_eax_imm32
+    push    rax
+    mov     al, 0x25
+    call    jit_emit_byte
+    pop     rax
+    jmp     jit_emit_dword
+
+; ------------------------------------------------------------------
+; Emit: and ecx, imm32  (81 E1 <imm32>)
+; eax = imm32 value
+; -----------------------------------------------------------------+
+er_fn jit_emit_and_ecx_imm32
+    push    rax
+    mov     al, 0x81
+    call    jit_emit_byte
+    mov     al, 0xE1
+    call    jit_emit_modrm
+    pop     rax
+    jmp     jit_emit_dword
+
+; ------------------------------------------------------------------
+; Emit: or eax, ecx  (09 C8)
+; -----------------------------------------------------------------+
+er_fn jit_emit_or_eax_ecx
+    mov     al, 0x09
+    call    jit_emit_byte
+    mov     al, 0xC8
+    jmp     jit_emit_modrm
+
+; ------------------------------------------------------------------
+; Emit: sub eax, imm32  (2D <imm32>)
+; eax = imm32 value
+; -----------------------------------------------------------------+
+er_fn jit_emit_sub_eax_imm32
+    push    rax
+    mov     al, 0x2D
+    call    jit_emit_byte
+    pop     rax
+    jmp     jit_emit_dword
+
+; ------------------------------------------------------------------
+; Patch dword at absolute code cache address
+; rdi = address to write, eax = dword value
+; -----------------------------------------------------------------+
+er_fn jit_emit_patch_dword
+    mov     [rdi], eax
+    ret

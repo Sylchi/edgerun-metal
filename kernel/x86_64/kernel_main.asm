@@ -84,6 +84,7 @@ extern er_rtl8125_probe
 extern er_rtl8125_init
 extern er_virtio_net_init
 extern er_net_init
+extern er_arp_add_static
 extern er_net_register_nic
 extern er_bt_uart_init
 extern er_bt_reset
@@ -97,6 +98,8 @@ extern er_display_init
 extern er_display_clear
 extern er_display_puts
 extern er_display_putchar
+extern fb_cursor_x, fb_cursor_y
+extern fb_addr
 
 extern er_amdgpu_probe
 extern er_amdgpu_print_info
@@ -252,6 +255,25 @@ bench_sha64:   db "  sha256 64B: ", 0
 bench_sha1k:   db "  sha256 1KB: ", 0
 bench_cyc:     db " cyc/call", 0
 bench_data:    times 1024 db 0xAB
+
+; Display overlay status strings (persistent text on composited shell)
+ov_header:     db "EdgeRun x86_64 :: Shell", 0
+ov_devices:    db "Devices:", 0
+ov_tpm_ok:     db "TPM:ok", 0
+ov_kbd_ok:     db "KBD:ok", 0
+ov_nvme_ok:    db "NVMe:ok", 0
+ov_xhci_ok:    db "xHCI:ok", 0
+ov_virtio_ok:  db "VirtIO:ok", 0
+ov_absent:     db "n/a", 0
+ov_disp_label: db "Display:", 0
+ov_disp_res:   db "1024x768", 0
+ov_disp_fb:    db "FB:0x", 0
+ov_tick_label: db "pulse:t", 0
+ov_elapsed_label: db "elapsed:t", 0
+ov_hex:        db "0123456789ABCDEF"
+ov_fb_buf:     db "00000000", 0
+ov_tick_buf:   times 16 db 0
+ov_elapsed_buf: times 16 db 0
 
 ; Kernel clock identity keeper (32 bytes, non-zero)
 kernel_keeper_id:
@@ -1404,7 +1426,14 @@ er_fn er_kernel_main
     lea     rcx, [rel virtio_net_dev + VIRTIO_NET_DEVICE.mac]
     call    er_net_init
 
+    ; Static ARP entry for QEMU guestfwd target (10.0.2.100 -> 52:55:0a:00:02:64)
+    mov     edi, 0x6402000A        ; 10.0.2.100
+    lea     rsi, [rel .gw_mac]
+    call    er_arp_add_static
     jmp     .virtio_net_done
+
+.gw_mac:
+    db 0x52, 0x55, 0x0a, 0x00, 0x02, 0x64
 
 .virtio_net_absent:
     mov     rdi, COM1_PORT
@@ -1967,6 +1996,9 @@ er_fn er_kernel_main
     call    er_input_kbd_poll
     call    er_da_tick
 
+    ; Overlay boot status text on top of composited shell UI
+        call    _render_display_overlay
+
     jmp     .main_loop
 
     pop     r15
@@ -1976,7 +2008,7 @@ er_fn er_kernel_main
     pop     rbx
     ret
 
-; Boot summary strings
+; ── Data labels for boot-output strings used within er_kernel_main ──
 .b_newline:
     mov     rdi, 0x0A
     jmp     er_display_putchar
@@ -1999,3 +2031,187 @@ er_fn er_kernel_main
 .crlf:
     mov     rdi, COM1_PORT
     jmp     er_serial_crlf
+
+; ====================================================================
+; _render_display_overlay — framebuffer status overlay (outside kernel_main scope)
+; ====================================================================
+_render_display_overlay:
+    push    rbx
+    push    r12
+    push    r13
+
+    ; ── Title line (top-left) ───────────────────────────────────
+    mov     dword [fb_cursor_x], 8
+    mov     dword [fb_cursor_y], 8
+    lea     rdi, [rel ov_header]
+    call    er_display_puts
+
+    ; ── Device status line ──────────────────────────────────────
+    mov     dword [fb_cursor_x], 8
+    mov     dword [fb_cursor_y], 30
+    lea     rdi, [rel ov_devices]
+    call    er_display_puts
+    mov     dword [fb_cursor_x], 108
+    ; TPM
+    lea     rdi, [rel ov_tpm_ok]
+    test    byte [device_flags + 0], 2
+    jz      .ov_tpm_abs
+    call    er_display_puts
+    jmp     .ov_tpm_done
+.ov_tpm_abs:
+    lea     rdi, [rel ov_absent]
+    call    er_display_puts
+.ov_tpm_done:
+    ; KBD
+    mov     dword [fb_cursor_x], 190
+    lea     rdi, [rel ov_kbd_ok]
+    test    byte [device_flags + 1], 2
+    jz      .ov_kbd_abs
+    call    er_display_puts
+    jmp     .ov_kbd_done
+.ov_kbd_abs:
+    lea     rdi, [rel ov_absent]
+    call    er_display_puts
+.ov_kbd_done:
+    ; NVMe
+    mov     dword [fb_cursor_x], 272
+    lea     rdi, [rel ov_nvme_ok]
+    test    byte [device_flags + 2], 2
+    jz      .ov_nvme_abs
+    call    er_display_puts
+    jmp     .ov_nvme_done
+.ov_nvme_abs:
+    lea     rdi, [rel ov_absent]
+    call    er_display_puts
+.ov_nvme_done:
+    ; xHCI
+    mov     dword [fb_cursor_x], 354
+    lea     rdi, [rel ov_xhci_ok]
+    test    byte [device_flags + 3], 2
+    jz      .ov_xhci_abs
+    call    er_display_puts
+    jmp     .ov_xhci_done
+.ov_xhci_abs:
+    lea     rdi, [rel ov_absent]
+    call    er_display_puts
+.ov_xhci_done:
+    ; VirtIO
+    mov     dword [fb_cursor_x], 436
+    lea     rdi, [rel ov_virtio_ok]
+    test    byte [device_flags + 4], 2
+    jz      .ov_virtio_abs
+    call    er_display_puts
+    jmp     .ov_virtio_done
+.ov_virtio_abs:
+    lea     rdi, [rel ov_absent]
+    call    er_display_puts
+.ov_virtio_done:
+
+    ; ── Display info line ───────────────────────────────────────
+    mov     dword [fb_cursor_x], 8
+    mov     dword [fb_cursor_y], 52
+    lea     rdi, [rel ov_disp_label]
+    call    er_display_puts
+    mov     dword [fb_cursor_x], 108
+    lea     rdi, [rel ov_disp_res]
+    call    er_display_puts
+    mov     dword [fb_cursor_x], 280
+    lea     rdi, [rel ov_disp_fb]
+    call    er_display_puts
+    mov     dword [fb_cursor_x], 360
+    ; Print fb_addr as hex
+    mov     rdi, [fb_addr]
+    shr     rdi, 28
+    and     edi, 0xF
+    lea     rdx, [rel ov_hex]
+    movzx   edi, byte [rdx + rdi]
+    mov     byte [rel ov_fb_buf], dil
+    mov     rdi, [fb_addr]
+    shr     rdi, 24
+    and     edi, 0xF
+    movzx   edi, byte [rdx + rdi]
+    mov     byte [rel ov_fb_buf + 1], dil
+    mov     rdi, [fb_addr]
+    shr     rdi, 20
+    and     edi, 0xF
+    movzx   edi, byte [rdx + rdi]
+    mov     byte [rel ov_fb_buf + 2], dil
+    mov     rdi, [fb_addr]
+    shr     rdi, 16
+    and     edi, 0xF
+    movzx   edi, byte [rdx + rdi]
+    mov     byte [rel ov_fb_buf + 3], dil
+    mov     rdi, [fb_addr]
+    shr     rdi, 12
+    and     edi, 0xF
+    movzx   edi, byte [rdx + rdi]
+    mov     byte [rel ov_fb_buf + 4], dil
+    mov     rdi, [fb_addr]
+    shr     rdi, 8
+    and     edi, 0xF
+    movzx   edi, byte [rdx + rdi]
+    mov     byte [rel ov_fb_buf + 5], dil
+    mov     rdi, [fb_addr]
+    shr     rdi, 4
+    and     edi, 0xF
+    movzx   edi, byte [rdx + rdi]
+    mov     byte [rel ov_fb_buf + 6], dil
+    mov     rdi, [fb_addr]
+    and     edi, 0xF
+    movzx   edi, byte [rdx + rdi]
+    mov     byte [rel ov_fb_buf + 7], dil
+    lea     rdi, [rel ov_fb_buf]
+    call    er_display_puts
+
+    ; ── Tick counter (status bar area) ──────────────────────────
+    mov     dword [fb_cursor_x], 8
+    mov     dword [fb_cursor_y], 728
+    lea     rdi, [rel ov_tick_label]
+    call    er_display_puts
+    ; Print tick as hex
+    mov     rax, [rel kernel_clock + 32]  ; tick offset in er_stamp
+    mov     ecx, 16
+    lea     rbx, [rel ov_hex]
+    lea     r12, [rel ov_tick_buf + 15]
+    mov     byte [r12], 0
+    dec     r12
+.ov_tick_loop:
+    xor     edx, edx
+    div     ecx
+    movzx   edx, byte [rbx + rdx]
+    mov     byte [r12], dl
+    dec     r12
+    test    rax, rax
+    jnz     .ov_tick_loop
+    inc     r12
+    mov     rdi, r12
+    call    er_display_puts
+
+    ; ── Status bar right side: elapsed ──────────────────────────
+    mov     dword [fb_cursor_x], 920
+    mov     dword [fb_cursor_y], 728
+    lea     rdi, [rel ov_elapsed_label]
+    call    er_display_puts
+    ; Print elapsed as hex (tick * ~1ns at pipeline speed, just show tick)
+    mov     rax, [rel kernel_clock + 32]
+    mov     ecx, 16
+    lea     rbx, [rel ov_hex]
+    lea     r12, [rel ov_elapsed_buf + 15]
+    mov     byte [r12], 0
+    dec     r12
+.ov_elapsed_loop:
+    xor     edx, edx
+    div     ecx
+    movzx   edx, byte [rbx + rdx]
+    mov     byte [r12], dl
+    dec     r12
+    test    rax, rax
+    jnz     .ov_elapsed_loop
+    inc     r12
+    mov     rdi, r12
+    call    er_display_puts
+
+    pop     r13
+    pop     r12
+    pop     rbx
+    ret

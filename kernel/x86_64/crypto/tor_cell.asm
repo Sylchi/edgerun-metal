@@ -15,11 +15,14 @@ extern er_tcp_connect
 extern er_tcp_send
 extern er_tcp_recv
 extern er_tcp_close
+extern er_net_poll
 extern er_memcpy
 extern er_memset
 extern er_serial_puts
+extern er_serial_putchar
 extern er_serial_puthex64
 extern er_serial_crlf
+
 extern er_tor_ntor_keygen
 extern er_tor_ntor_client_handshake
 extern er_tor_ntor_client_process
@@ -280,33 +283,97 @@ er_fn er_tor_link_handshake
     mov     r12d, edi       ; guard_ip (network order)
     mov     r13w, si        ; guard_port (host order)
 
-    ; TCP connect to guard relay
-    xor     ecx, ecx        ; src_port = 0 (auto)
-    xor     edx, edx        ; src_ip = 0
+    ; Retry TCP connect until it succeeds (handles ARP resolution).
+    ; The connect may fail with ERROR_ARP_PENDING — er_net_poll
+    ; processes ARP replies and populates the cache between retries.
+    mov     ebx, 200             ; retry counter (ecx used for args)
+.connect_retry:
     mov     edi, r12d
     mov     esi, r13d
+    xor     edx, edx            ; src_ip = 0
+    xor     ecx, ecx            ; src_port = 0 (auto)
     call    er_tcp_connect
-
     test    eax, eax
-    js      .connect_fail
+    jns     .connected
+    ; First iteration only: print error code
+    cmp     ebx, 200
+    jne     .no_dbg
+    push    rax
+    push    rdx
+    mov     edi, 0x3f8
+    mov     esi, 'e'
+    call    er_serial_putchar
+    mov     edi, 0x3f8
+    mov     esi, '='
+    call    er_serial_putchar
+    pop     rdx
+    mov     edi, 0x3f8
+    mov     esi, dl
+    call    er_serial_putchar    ; edx low byte as crude debug
+    mov     edi, 0x3f8
+    mov     esi, ' '
+    call    er_serial_putchar
+    pop     rax
+    mov     edi, 0x3f8
+    mov     esi, 'r'
+    call    er_serial_putchar
+    mov     edi, 0x3f8
+    mov     esi, '='
+    call    er_serial_putchar
+    mov     edi, 0x3f8
+    mov     esi, al
+    call    er_serial_putchar    ; al low byte as crude debug
+    mov     edi, 0x3f8
+    mov     esi, 0x0D
+    call    er_serial_putchar
+    mov     edi, 0x3f8
+    mov     esi, 0x0A
+    call    er_serial_putchar
+.no_dbg:
+    push    rbx
+    call    er_net_poll
+    pop     rbx
+    dec     ebx
+    jnz     .connect_retry
+    mov     edi, 0x3f8
+    mov     esi, 'T'            ; timeout marker
+    call    er_serial_putchar
+    jmp     .connect_fail
+
+.connected:
+    mov     edi, 0x3f8
+    mov     esi, 'C'            ; connected marker
+    call    er_serial_putchar
     mov     [tor_conn_id], eax
 
-    ; Small delay for connection to establish
-    ; The TCP stack handles SYN/SYN-ACK/ACK in er_net_poll
-    ; For now, just proceed (polling in main loop handles it)
-
-    ; Send VERSIONS cell
+    ; Build VERSIONS cell once (before the poll loop)
     mov     rdi, tor_var_cell
     call    _tor_build_versions_cell
 
-    ; Send variable-length cell
+    ; Wait for TCP 3-way handshake to complete by polling
+    ; er_net_poll and retrying er_tcp_send until it succeeds.
+    ; The connection starts in SYN_SENT; er_net_poll processes
+    ; the SYN-ACK from the host and completes the handshake.
+    mov     ecx, 500
+.wait_established:
+    push    rcx
+    call    er_net_poll
+    pop     rcx
+
+    push    rcx
     mov     edi, [tor_conn_id]
     mov     rsi, tor_var_cell
-    ; Length = header(7) + payload(4)
     mov     edx, TOR_VAR_HEADER + 4
     call    er_tcp_send
+    pop     rcx
+
     test    eax, eax
-    js      .send_fail
+    jns     .versions_sent
+    dec     ecx
+    jnz     .wait_established
+    jmp     .connect_fail
+
+.versions_sent:
 
     ; Read VERSIONS cell response
     mov     edi, [tor_conn_id]

@@ -42,8 +42,8 @@ SECTION .rodata
 ; 131.188.40.189 = 0xBD28B683 (but in network byte order)
 ; For testing in QEMU with local Tor: 10.0.2.2 = localhost via host
 ; We use a compile-time default that can be overridden
-tor_default_guard_ip:   db 0x0A, 0x00, 0x02, 0x02  ; 10.0.2.2 (QEMU host)
-tor_default_guard_port: dw 9001
+tor_default_guard_ip:       db 0x0A, 0x00, 0x02, 0x64  ; 10.0.2.100 (QEMU host)
+tor_default_guard_port: dw 19001
 
 ; Status strings
 str_tor_init:    db "tor: init", 0x0A, 0
@@ -175,8 +175,12 @@ er_fn er_tor_init
     call    _tor_print_status
 
     ; Load default guard IP and port
+    ; The IP is stored as db 0x0A,0x00,0x02,0x02 — loading as a dword
+    ; gives 0x0202000A, whose in-memory bytes (0A 00 02 02) already match
+    ; the network-order representation. No bswap — er_ip_send stores this
+    ; dword directly into the IP header, and the memory byte order produces
+    ; the correct big-endian wire format.
     mov     edi, [rel tor_default_guard_ip]
-    bswap   edi             ; convert from stored to network order
     movzx   esi, word [rel tor_default_guard_port]
 
     ; Store guard IP/port in tor_state

@@ -307,6 +307,49 @@ _arp_send_request:
     er_ret
 
 ; ==================================================================
+; er_arp_add_static — add static ARP entry
+; void er_arp_add_static(uint32_t ip, const uint8_t mac[6])
+; ==================================================================
+global er_arp_add_static
+er_arp_add_static:
+    push    rbx
+    push    rcx
+    push    rdx
+
+    xor     ecx, ecx
+.find_slot:
+    cmp     ecx, ARP_CACHE_SIZE
+    jae     .done
+
+    mov     eax, ecx
+    imul    eax, ARP_ENTRY_SIZE
+
+    cmp     byte [arp_cache + eax + ARP_ENTRY_VALID], 0
+    je      .fill
+
+    inc     ecx
+    jmp     .find_slot
+
+.fill:
+    ; Store IP
+    mov     [arp_cache + eax + ARP_ENTRY_IP], edi
+
+    ; Store MAC (6 bytes) — load as dword + word to avoid overread
+    mov     edx, [rsi]
+    mov     [arp_cache + eax + ARP_ENTRY_MAC], edx
+    mov     dx, [rsi + 4]
+    mov     [arp_cache + eax + ARP_ENTRY_MAC + 4], dx
+
+    ; Mark valid
+    mov     byte [arp_cache + eax + ARP_ENTRY_VALID], 1
+
+.done:
+    pop     rdx
+    pop     rcx
+    pop     rbx
+    ret
+
+; ==================================================================
 ; _arp_cache_update — update cache from current ARP packet sender
 ; Clobbers: none
 ; ==================================================================

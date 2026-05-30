@@ -2008,8 +2008,545 @@ er_fn jit_template_f64_reinterpret_i64
     ret
 
 ; ==================================================================
+; Float conversion templates (signed int → float)
+; =================================================================+
+
+; f32.convert_i32_s (0xB2) — pop i32, cvtsi2ss, push f32
+er_fn jit_template_f32_convert_i32_s
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    call    jit_emit_movd_xmm0_eax
+    mov     al, 0xF3
+    mov     ch, 0x2A
+    mov     cl, 0xC0
+    call    jit_emit_sse_op               ; cvtsi2ss xmm0, eax
+    call    jit_emit_movd_eax_xmm0
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; f32.convert_i32_u (0xB3) — if value >= 2^31: subtract 2^31, convert, add 2^31
+er_fn jit_template_f32_convert_i32_u
+    xor     ecx, ecx
+    call    jit_emit_pop_reg               ; pop rax
+    call    jit_emit_test32                ; test eax, eax
+
+    mov     rdx, [jit_state.code_ptr]
+    add     rdx, 2                         ; jns disp field address
+
+    mov     cl, 0x09                       ; jns condition
+    xor     eax, eax
+    call    jit_emit_jcc_rel32
+
+    mov     eax, 0x80000000
+    call    jit_emit_sub_eax_imm32
+    call    jit_emit_movd_xmm0_eax
+    mov     al, 0xF3
+    mov     ch, 0x2A
+    mov     cl, 0xC0
+    call    jit_emit_sse_op               ; cvtsi2ss xmm0, eax
+
+    mov     al, 0xB9                       ; mov ecx, imm32
+    call    jit_emit_byte
+    mov     eax, 0x4F000000                ; 2^31 as f32
+    call    jit_emit_dword
+    call    jit_emit_movd_xmm1_ecx
+    mov     al, 0xF3
+    mov     ch, 0x58
+    mov     cl, 0xC1
+    call    jit_emit_sse_op               ; addss xmm0, xmm1
+
+    mov     r8, [jit_state.code_ptr]
+    inc     r8                             ; jmp disp field address
+
+    mov     al, 0xE9
+    call    jit_emit_byte
+    xor     eax, eax
+    call    jit_emit_dword
+
+    ; .positive:
+    ; Patch jns displacement
+    mov     rax, [jit_state.code_ptr]
+    sub     rax, rdx
+    sub     rax, 4
+    mov     rdi, rdx
+    call    jit_emit_patch_dword
+
+    mov     al, 0xF3
+    mov     ch, 0x2A
+    mov     cl, 0xC0
+    call    jit_emit_sse_op               ; cvtsi2ss xmm0, eax
+
+    ; .done:
+    ; Patch jmp displacement
+    mov     rax, [jit_state.code_ptr]
+    sub     rax, r8
+    sub     rax, 4
+    mov     rdi, r8
+    call    jit_emit_patch_dword
+
+    call    jit_emit_movd_eax_xmm0
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; f32.convert_i64_s (0xB4) — pop i64, cvtsi2ss xmm0, rax, push f32
+er_fn jit_template_f32_convert_i64_s
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    mov     al, 0xF3
+    mov     ch, 0x2A
+    mov     cl, 0xC0
+    call    jit_emit_sse64_op              ; cvtsi2ss xmm0, rax
+    call    jit_emit_movd_eax_xmm0
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; f32.convert_i64_u (0xB5) — unsigned i64 → f32 with subtract-2^63 trick
+er_fn jit_template_f32_convert_i64_u
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    call    jit_emit_test64                ; test rax, rax
+
+    mov     rdx, [jit_state.code_ptr]
+    add     rdx, 2
+
+    mov     cl, 0x09
+    xor     eax, eax
+    call    jit_emit_jcc_rel32
+
+    ; Unsigned path: clear sign bit, convert, add 2^63
+    ; btr rax, 63
+    mov     cl, 63
+    call    jit_emit_btr_rax
+
+    mov     al, 0xF3
+    mov     ch, 0x2A
+    mov     cl, 0xC0
+    call    jit_emit_sse64_op              ; cvtsi2ss xmm0, rax
+
+    ; Load 2^63 as f32 (0x5F000000) into xmm1 and add
+    mov     al, 0xB9
+    call    jit_emit_byte
+    mov     eax, 0x5F000000
+    call    jit_emit_dword
+    call    jit_emit_movd_xmm1_ecx
+    mov     al, 0xF3
+    mov     ch, 0x58
+    mov     cl, 0xC1
+    call    jit_emit_sse_op               ; addss xmm0, xmm1
+
+    mov     r8, [jit_state.code_ptr]
+    inc     r8
+
+    mov     al, 0xE9
+    call    jit_emit_byte
+    xor     eax, eax
+    call    jit_emit_dword
+
+    ; .positive:
+    mov     rax, [jit_state.code_ptr]
+    sub     rax, rdx
+    sub     rax, 4
+    mov     rdi, rdx
+    call    jit_emit_patch_dword
+
+    mov     al, 0xF3
+    mov     ch, 0x2A
+    mov     cl, 0xC0
+    call    jit_emit_sse64_op              ; cvtsi2ss xmm0, rax
+
+    ; .done:
+    mov     rax, [jit_state.code_ptr]
+    sub     rax, r8
+    sub     rax, 4
+    mov     rdi, r8
+    call    jit_emit_patch_dword
+
+    call    jit_emit_movd_eax_xmm0
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; f32.demote_f64 (0xB6) — pop f64, cvtsd2ss, push f32
+er_fn jit_template_f32_demote_f64
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    call    jit_emit_movq_xmm0_rax
+    mov     al, 0xF2
+    mov     ch, 0x5A
+    mov     cl, 0xC0
+    call    jit_emit_sse_op               ; cvtsd2ss xmm0, xmm0
+    call    jit_emit_movd_eax_xmm0
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; f64.convert_i32_s (0xB7) — pop i32, cvtsi2sd, push f64
+er_fn jit_template_f64_convert_i32_s
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    call    jit_emit_movq_xmm0_rax
+    mov     al, 0xF2
+    mov     ch, 0x2A
+    mov     cl, 0xC0
+    call    jit_emit_sse_op               ; cvtsi2sd xmm0, eax
+    call    jit_emit_movq_rax_xmm0
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; f64.convert_i32_u (0xB8) — unsigned i32 → f64
+er_fn jit_template_f64_convert_i32_u
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    call    jit_emit_test32
+
+    mov     rdx, [jit_state.code_ptr]
+    add     rdx, 2
+
+    mov     cl, 0x09
+    xor     eax, eax
+    call    jit_emit_jcc_rel32
+
+    mov     eax, 0x80000000
+    call    jit_emit_sub_eax_imm32
+    call    jit_emit_movq_xmm0_rax
+    mov     al, 0xF2
+    mov     ch, 0x2A
+    mov     cl, 0xC0
+    call    jit_emit_sse_op               ; cvtsi2sd xmm0, eax
+
+    ; addsd xmm0, [2^31 as f64]
+    ; Load 0x41E0000000000000 into xmm1
+    mov     al, 0x48                       ; REX.W
+    call    jit_emit_byte
+    mov     al, 0xB9                       ; mov rcx, imm64
+    call    jit_emit_byte
+    mov     rax, 0x41E0000000000000
+    call    jit_emit_qword
+    call    jit_emit_movq_xmm1_rcx
+    mov     al, 0xF2
+    mov     ch, 0x58
+    mov     cl, 0xC1
+    call    jit_emit_sse_op               ; addsd xmm0, xmm1
+
+    mov     r8, [jit_state.code_ptr]
+    inc     r8
+
+    mov     al, 0xE9
+    call    jit_emit_byte
+    xor     eax, eax
+    call    jit_emit_dword
+
+    ; .positive:
+    mov     rax, [jit_state.code_ptr]
+    sub     rax, rdx
+    sub     rax, 4
+    mov     rdi, rdx
+    call    jit_emit_patch_dword
+
+    mov     al, 0xF2
+    mov     ch, 0x2A
+    mov     cl, 0xC0
+    call    jit_emit_sse_op               ; cvtsi2sd xmm0, eax
+
+    ; .done:
+    mov     rax, [jit_state.code_ptr]
+    sub     rax, r8
+    sub     rax, 4
+    mov     rdi, r8
+    call    jit_emit_patch_dword
+
+    call    jit_emit_movq_rax_xmm0
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; f64.convert_i64_s (0xB9) — pop i64, cvtsi2sd rax, push f64
+er_fn jit_template_f64_convert_i64_s
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    mov     al, 0xF2
+    mov     ch, 0x2A
+    mov     cl, 0xC0
+    call    jit_emit_sse64_op              ; cvtsi2sd xmm0, rax
+    call    jit_emit_movq_rax_xmm0
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; f64.convert_i64_u (0xBA) — unsigned i64 → f64
+er_fn jit_template_f64_convert_i64_u
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    call    jit_emit_test64
+
+    mov     rdx, [jit_state.code_ptr]
+    add     rdx, 2
+
+    mov     cl, 0x09
+    xor     eax, eax
+    call    jit_emit_jcc_rel32
+
+    mov     cl, 63
+    call    jit_emit_btr_rax
+
+    mov     al, 0xF2
+    mov     ch, 0x2A
+    mov     cl, 0xC0
+    call    jit_emit_sse64_op              ; cvtsi2sd xmm0, rax
+
+    ; addsd xmm0, [2^63 as f64]
+    mov     al, 0x48
+    call    jit_emit_byte
+    mov     al, 0xB9
+    call    jit_emit_byte
+    mov     rax, 0x43E0000000000000
+    call    jit_emit_qword
+    call    jit_emit_movq_xmm1_rcx
+    mov     al, 0xF2
+    mov     ch, 0x58
+    mov     cl, 0xC1
+    call    jit_emit_sse_op               ; addsd xmm0, xmm1
+
+    mov     r8, [jit_state.code_ptr]
+    inc     r8
+
+    mov     al, 0xE9
+    call    jit_emit_byte
+    xor     eax, eax
+    call    jit_emit_dword
+
+    ; .positive:
+    mov     rax, [jit_state.code_ptr]
+    sub     rax, rdx
+    sub     rax, 4
+    mov     rdi, rdx
+    call    jit_emit_patch_dword
+
+    mov     al, 0xF2
+    mov     ch, 0x2A
+    mov     cl, 0xC0
+    call    jit_emit_sse64_op
+
+    ; .done:
+    mov     rax, [jit_state.code_ptr]
+    sub     rax, r8
+    sub     rax, 4
+    mov     rdi, r8
+    call    jit_emit_patch_dword
+
+    call    jit_emit_movq_rax_xmm0
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; f64.promote_f32 (0xBB) — pop f32, cvtss2sd, push f64
+er_fn jit_template_f64_promote_f32
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    call    jit_emit_movd_xmm0_eax
+    mov     al, 0xF3
+    mov     ch, 0x5A
+    mov     cl, 0xC0
+    call    jit_emit_sse_op               ; cvtss2sd xmm0, xmm0
+    call    jit_emit_movq_rax_xmm0
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; ==================================================================
+; f32/f64.min, max — with NaN propagation fixup
+; =================================================================+
+
+; Helper: after a SSE min/max op, check if result is NaN and fix
+; Input: xmm0 = result, xmm1 = right operand
+; Output: xmm0 = NaN-fixed or original result
+er_fn jit_emit_fixup_nan
+    ; ucomiss xmm0, xmm0 -> PF=1 if NaN
+    mov     al, 0x0F
+    call    jit_emit_byte
+    mov     al, 0x2E
+    call    jit_emit_byte
+    mov     al, 0xC0
+    call    jit_emit_modrm
+
+    mov     rdx, [jit_state.code_ptr]
+    add     rdx, 2
+
+    mov     cl, 0x0B                       ; jnp condition
+    xor     eax, eax
+    call    jit_emit_jcc_rel32
+
+    mov     eax, 0x7FC00000                ; canonical NaN (f32)
+    call    jit_emit_push_imm32
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    call    jit_emit_movd_xmm0_eax
+
+    ; Patch jnp displacement
+    mov     rax, [jit_state.code_ptr]
+    sub     rax, rdx
+    sub     rax, 4
+    mov     rdi, rdx
+    jmp     jit_emit_patch_dword
+
+; Helper: after f64 min/max, NaN fixup
+er_fn jit_emit_fixup_nan_f64
+    mov     al, 0x66
+    call    jit_emit_byte
+    mov     al, 0x0F
+    call    jit_emit_byte
+    mov     al, 0x2E
+    call    jit_emit_byte
+    mov     al, 0xC0
+    call    jit_emit_modrm
+
+    mov     rdx, [jit_state.code_ptr]
+    add     rdx, 2
+
+    mov     cl, 0x0B
+    xor     eax, eax
+    call    jit_emit_jcc_rel32
+
+    mov     rax, 0x7FF8000000000000        ; canonical NaN (f64)
+    mov     cl, 1
+    mov     ch, 0
+    xor     r8b, r8b
+    xor     r9b, r9b
+    call    jit_emit_rex
+    mov     al, 0xB8
+    call    jit_emit_byte
+    mov     rax, 0x7FF8000000000000
+    call    jit_emit_qword
+    xor     ecx, ecx
+    call    jit_emit_push_reg
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    call    jit_emit_movq_xmm0_rax
+
+    mov     rax, [jit_state.code_ptr]
+    sub     rax, rdx
+    sub     rax, 4
+    mov     rdi, rdx
+    jmp     jit_emit_patch_dword
+
+; f32.min (0x96)
+er_fn jit_template_f32_min
+    mov     cl, 1
+    call    jit_emit_pop_reg
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    call    jit_emit_movd_xmm1_ecx
+    call    jit_emit_movd_xmm0_eax
+    mov     al, 0xF3
+    mov     ch, 0x5D
+    mov     cl, 0xC1
+    call    jit_emit_sse_op               ; minss xmm0, xmm1
+    call    jit_emit_fixup_nan
+    call    jit_emit_movd_eax_xmm0
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; f32.max (0x97)
+er_fn jit_template_f32_max
+    mov     cl, 1
+    call    jit_emit_pop_reg
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    call    jit_emit_movd_xmm1_ecx
+    call    jit_emit_movd_xmm0_eax
+    mov     al, 0xF3
+    mov     ch, 0x5F
+    mov     cl, 0xC1
+    call    jit_emit_sse_op               ; maxss xmm0, xmm1
+    call    jit_emit_fixup_nan
+    call    jit_emit_movd_eax_xmm0
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; f64.min (0xA4)
+er_fn jit_template_f64_min
+    mov     cl, 1
+    call    jit_emit_pop_reg
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    call    jit_emit_movq_xmm1_rcx
+    call    jit_emit_movq_xmm0_rax
+    mov     al, 0xF2
+    mov     ch, 0x5D
+    mov     cl, 0xC1
+    call    jit_emit_sse_op               ; minsd xmm0, xmm1
+    call    jit_emit_fixup_nan_f64
+    call    jit_emit_movq_rax_xmm0
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; f64.max (0xA5)
+er_fn jit_template_f64_max
+    mov     cl, 1
+    call    jit_emit_pop_reg
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    call    jit_emit_movq_xmm1_rcx
+    call    jit_emit_movq_xmm0_rax
+    mov     al, 0xF2
+    mov     ch, 0x5F
+    mov     cl, 0xC1
+    call    jit_emit_sse_op               ; maxsd xmm0, xmm1
+    call    jit_emit_fixup_nan_f64
+    call    jit_emit_movq_rax_xmm0
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; ==================================================================
+; copysign — bit manipulation in GPR
+; =================================================================+
+
+; f32.copysign (0x98): result = abs(left) | signbit(right)
+er_fn jit_template_f32_copysign
+    mov     cl, 1
+    call    jit_emit_pop_reg               ; pop rcx (right)
+    xor     ecx, ecx
+    call    jit_emit_pop_reg               ; pop rax (left)
+    ; rax = left magnitude, rcx = right sign
+    mov     cl, 31
+    call    jit_emit_btr_eax               ; btr eax, 31 (clear sign of left)
+    mov     eax, 0x80000000
+    call    jit_emit_and_ecx_imm32          ; and ecx, 0x80000000 (isolate sign of right)
+    call    jit_emit_or_eax_ecx             ; or eax, ecx (combine)
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; f64.copysign (0xA6): result = abs(left) | signbit(right)
+er_fn jit_template_f64_copysign
+    mov     cl, 1
+    call    jit_emit_pop_reg               ; pop rcx (right)
+    xor     ecx, ecx
+    call    jit_emit_pop_reg               ; pop rax (left)
+
+    ; btr rax, 63 (clear sign of left)
+    mov     cl, 63
+    push    rcx
+    call    jit_emit_btr_rax
+    pop     rcx
+
+    ; isolate sign bit of right: and rcx, 0x8000000000000000
+    ; Need to load 64-bit mask into rdx
+    mov     cl, 2                           ; rdx
+    mov     rax, 0x8000000000000000
+    push    rcx
+    call    jit_emit_mov_reg_imm64
+    pop     rcx
+    ; and rcx, rdx
+    mov     cl, 1                           ; REX.W
+    call    jit_emit_rex_nob
+    mov     al, 0x21                        ; and r/m64, r64
+    call    jit_emit_byte
+    mov     al, 0xCA                        ; ModRM: reg=1(rcx), rm=2(rdx) → and rcx, rdx
+    call    jit_emit_modrm
+
+    ; or rax, rcx (combine)
+    mov     cl, 1
+    call    jit_emit_rex_nob
+    call    jit_emit_or_eax_ecx             ; or rax, rcx
+    xor     ecx, ecx
+    jmp     jit_emit_push_reg
+
+; ==================================================================
 ; Float load/store — reuse integer load/store templates
-; (f32.load = i32.load, f64.load = i64.load, etc.)
 ; =================================================================+
 ; These are registered by alias in the init table.
 
