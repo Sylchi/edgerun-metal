@@ -22,10 +22,21 @@ er-embed
 edgerun-zig/.build/
 edgerun-zig/.zig-cache/
 edgerun-zig/zig-out/
+edgerun-zig/build/
 varfont/build/
 
-# local toolchain binaries are host artifacts and exceed GitHub blob limits
-toolchain/bin/clang
-toolchain/bin/lld
+# junk binaries and test output (never belong in git)
+edgerun-zig/embed_debug*
+edgerun-zig/embed_test
+edgerun-zig/root
+edgerun-zig/test_atlas_out
+edgerun-zig/gen-font
+edgerun-zig/edgerun-ui-producer
+bin/
+test_decl
 
+# vendored tool binaries (host artifacts, exceed GitHub blob limits)
+toolchain/bin/*
+
+# catch zig cache anywhere (already listed above for known paths)
 */.zig-cache
