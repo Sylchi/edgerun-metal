@@ -52,6 +52,12 @@ er_fn er_fn_run
     mov     byte [exec_storage_start_ran], 0
     mov     qword [exec_frame_save_ptr], 0
     mov     qword [exec_call_depth], 0
+    ; Clear JIT table — per-module entries become stale on re-run
+    cld
+    lea     rdi, [rel jit_table]
+    xor     eax, eax
+    mov     ecx, MAX_FUNCTIONS
+    rep stosq
 
     ; Parse module
     mov     rdi, r13

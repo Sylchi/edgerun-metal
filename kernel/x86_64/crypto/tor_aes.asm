@@ -32,16 +32,11 @@ db 0x8c,0xa1,0x89,0x0d,0xbf,0xe6,0x42,0x68,0x41,0x99,0x2d,0x0f,0xb0,0x54,0xbb,0x
 aes_rcon:
 db 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36
 
-SECTION .bss
-
-; Key schedule storage
-aes_round_keys: resb 176  ; 11 round keys x 16 bytes
-
 SECTION .text
 
 ; ==================================================================
 ; _aes_key_expand — expand 128-bit key to 11 round keys
-; void _aes_key_expand(const u8 *key[16])
+; void _aes_key_expand(const u8 *key[16], u8 *round_keys[176])
 ; ==================================================================
 _aes_key_expand:
     push    rbx
@@ -51,7 +46,10 @@ _aes_key_expand:
     push    r15
 
     mov     r12, rdi        ; key
-    lea     r13, [rel aes_round_keys]
+    mov     r13, rsi        ; round_keys buffer
+
+    lea     r10, [rel aes_sbox]
+    lea     r11, [rel aes_rcon]
 
     ; Copy first 16 bytes (round key 0)
     mov     rdi, r13
@@ -67,23 +65,12 @@ _aes_key_expand:
     ; Previous round key end (16 bytes before current)
     lea     rsi, [rbx - 16]
 
-    ; Compute first column via RotWord + SubWord + Rcon in LE-correct order.
-    ; For w[i] = w[i-4] ^ SubWord(RotWord(w[i-1])) ^ Rcon:
-    ; w[i-1] in LE memory: bytes [b0,b1,b2,b3]
-    ; w[i-1] as big-endian: [b0,b1,b2,b3]  (byte 0 of LE = LSB of w[i-1])
-    ; RotWord([b0,b1,b2,b3]) = [b1,b2,b3,b0]
-    ; SubWord → [S[b1], S[b2], S[b3], S[b0]]
-    ; XOR Rcon at byte 0: [S[b1]^Rcon, S[b2], S[b3], S[b0]]
-    ; XOR w[i-4] bytes [a0,a1,a2,a3] (also stored LE):
-    ;   BE w4 = [a0^S[b1]^Rcon, a1^S[b2], a2^S[b3], a3^S[b0]]
-    ; Stored LE: byte0 = a3^S[b0], byte1 = a2^S[b3], byte2 = a1^S[b2], byte3 = a0^S[b1]^Rcon
-
     mov     r14d, [rsi]         ; w[i-4] LE: byte0=a0, byte1=a1, byte2=a2, byte3=a3
     mov     r15d, [rsi + 12]    ; w[i-1] LE: byte0=b0, byte1=b1, byte2=b2, byte3=b3
 
     ; byte0 of result = a3 ^ S[b0] = (w0>>24) ^ S[w3_byte0]
     movzx   edx, r15b           ; w3 byte 0 = b0
-    movzx   edx, byte [rel aes_sbox + edx]
+    movzx   edx, byte [r10 + rdx]
     mov     eax, r14d
     shr     eax, 24
     xor     eax, edx
@@ -93,7 +80,7 @@ _aes_key_expand:
     mov     eax, r15d
     shr     eax, 24
     movzx   edx, al
-    movzx   edx, byte [rel aes_sbox + edx]
+    movzx   edx, byte [r10 + rdx]
     mov     eax, r14d
     shr     eax, 16
     movzx   eax, al
@@ -105,7 +92,7 @@ _aes_key_expand:
     mov     eax, r15d
     shr     eax, 16
     movzx   edx, al
-    movzx   edx, byte [rel aes_sbox + edx]
+    movzx   edx, byte [r10 + rdx]
     mov     eax, r14d
     shr     eax, 8
     movzx   eax, al
@@ -117,10 +104,10 @@ _aes_key_expand:
     mov     eax, r15d
     shr     eax, 8
     movzx   edx, al
-    movzx   edx, byte [rel aes_sbox + edx]
+    movzx   edx, byte [r10 + rdx]
     movzx   eax, r14b
     xor     eax, edx
-    movzx   edx, byte [rel aes_rcon + ecx]
+    movzx   edx, byte [r11 + rcx]
     xor     eax, edx
     shl     eax, 24
     or      r8d, eax
@@ -156,8 +143,7 @@ _aes_key_expand:
 
 ; ==================================================================
 ; _aes_encrypt_block — encrypt one 16-byte block
-; void _aes_encrypt_block(u8 *block[16])
-; Uses pre-computed round keys in aes_round_keys.
+; void _aes_encrypt_block(u8 *block[16], const u8 *round_keys[176])
 ; ==================================================================
 _aes_encrypt_block:
     push    rbx
@@ -166,7 +152,7 @@ _aes_encrypt_block:
     push    r14
 
     mov     r12, rdi        ; block
-    lea     r13, [rel aes_round_keys]
+    mov     r13, rsi        ; round_keys buffer
 
     ; AddRoundKey (initial)
     mov     eax, [r13]
@@ -189,78 +175,80 @@ _aes_encrypt_block:
     add     rbx, r13        ; rbx = &round_keys[r14]
 
     ; SubBytes (table lookup)
+    lea     r10, [rel aes_sbox]
+
     xor     eax, eax
     mov     al,  byte [r12]
-    movzx   eax, byte [rel aes_sbox + eax]
+    movzx   eax, byte [r10 + rax]
     shl     eax, 0
     mov     ecx, eax
     movzx   eax, byte [r12 + 1]
-    movzx   eax, byte [rel aes_sbox + eax]
+    movzx   eax, byte [r10 + rax]
     shl     eax, 8
     or      ecx, eax
     movzx   eax, byte [r12 + 2]
-    movzx   eax, byte [rel aes_sbox + eax]
+    movzx   eax, byte [r10 + rax]
     shl     eax, 16
     or      ecx, eax
     movzx   eax, byte [r12 + 3]
-    movzx   eax, byte [rel aes_sbox + eax]
+    movzx   eax, byte [r10 + rax]
     shl     eax, 24
     or      ecx, eax
     mov     dword [r12], ecx
 
     xor     eax, eax
     mov     al,  byte [r12 + 4]
-    movzx   eax, byte [rel aes_sbox + eax]
+    movzx   eax, byte [r10 + rax]
     shl     eax, 0
     mov     ecx, eax
     movzx   eax, byte [r12 + 5]
-    movzx   eax, byte [rel aes_sbox + eax]
+    movzx   eax, byte [r10 + rax]
     shl     eax, 8
     or      ecx, eax
     movzx   eax, byte [r12 + 6]
-    movzx   eax, byte [rel aes_sbox + eax]
+    movzx   eax, byte [r10 + rax]
     shl     eax, 16
     or      ecx, eax
     movzx   eax, byte [r12 + 7]
-    movzx   eax, byte [rel aes_sbox + eax]
+    movzx   eax, byte [r10 + rax]
     shl     eax, 24
     or      ecx, eax
     mov     dword [r12 + 4], ecx
 
     xor     eax, eax
     mov     al,  byte [r12 + 8]
-    movzx   eax, byte [rel aes_sbox + eax]
+    movzx   eax, byte [r10 + rax]
     shl     eax, 0
     mov     ecx, eax
     movzx   eax, byte [r12 + 9]
-    movzx   eax, byte [rel aes_sbox + eax]
+    movzx   eax, byte [r10 + rax]
     shl     eax, 8
     or      ecx, eax
     movzx   eax, byte [r12 + 10]
-    movzx   eax, byte [rel aes_sbox + eax]
+    movzx   eax, byte [r10 + rax]
     shl     eax, 16
     or      ecx, eax
     movzx   eax, byte [r12 + 11]
-    movzx   eax, byte [rel aes_sbox + eax]
+    movzx   eax, byte [r10 + rax]
     shl     eax, 24
     or      ecx, eax
     mov     dword [r12 + 8], ecx
 
     xor     eax, eax
     mov     al,  byte [r12 + 12]
-    movzx   eax, byte [rel aes_sbox + eax]
+    movzx   eax, byte [r10 + rax]
     shl     eax, 0
     mov     ecx, eax
     movzx   eax, byte [r12 + 13]
-    movzx   eax, byte [rel aes_sbox + eax]
+    movzx   eax, byte [r10 + rax]
     shl     eax, 8
     or      ecx, eax
     movzx   eax, byte [r12 + 14]
-    movzx   eax, byte [rel aes_sbox + eax]
+    movzx   eax, byte [r10 + rax]
     shl     eax, 16
     or      ecx, eax
     movzx   eax, byte [r12 + 15]
-    movzx   eax, byte [rel aes_sbox + eax]
+    movzx   eax, byte [r10 + rax]
     shl     eax, 24
     or      ecx, eax
     mov     dword [r12 + 12], ecx
@@ -401,10 +389,12 @@ _aes_encrypt_block:
     ; where 2*x = xtime(x) = (x<<1) ^ (0x1b & -(x>>7))
     ;       3*x = xtime(x) ^ x
     ;
-    ; Uses r8-r15 as scratch; r12/r13 saved on stack and restored after.
+    ; Uses r8-r15 as scratch; r12/r13/r14/r15 saved on stack and restored after.
     push    rbx
     push    r12
     push    r13
+    push    r14
+    push    r15
 
     mov     rsi, r12        ; rsi = state pointer (safe for reading)
 
@@ -499,6 +489,8 @@ _aes_encrypt_block:
     _MC_COL 8, 8
     _MC_COL 12, 12
 
+    pop     r15
+    pop     r14
     pop     r13
     pop     r12
     pop     rbx
@@ -545,20 +537,19 @@ er_fn er_tor_aes_ctr
     mov     r14d, edx       ; len
     mov     r15, rcx        ; key
 
-    ; Save IV pointer (r8 is clobbered by _aes_key_expand)
-    push    r8
+    ; Combined stack frame: 32 (counter/work) + 16 (IV save + pad) + 176 (round_keys) = 224
+    sub     rsp, 224
+    mov     [rsp + 32], r8  ; save IV pointer
 
-    ; Key expansion
+    ; Key expansion — pass buffer at rsp+48
     mov     rdi, r15
+    lea     rsi, [rsp + 48]
     call    _aes_key_expand
 
-    ; Restore IV pointer
-    pop     r8
-
-    ; Counter block buffer: rbx = counter (16B), rbx+16 = encrypt work buf (16B)
-    sub     rsp, 32
-    mov     rdi, rsp
-    mov     rsi, r8         ; iv
+    ; Copy counter from saved IV
+    mov     r8, [rsp + 32]  ; restore IV pointer
+    mov     rdi, rsp        ; counter buffer at rsp
+    mov     rsi, r8
     mov     edx, 16
     call    er_memcpy
     mov     rbx, rsp        ; rbx = counter block
@@ -575,14 +566,15 @@ er_fn er_tor_aes_ctr
 .full_block:
 
     ; Copy counter to work buffer and encrypt the copy
-    push    rcx
-    lea     rdi, [rbx + 16]    ; work buffer
-    mov     rsi, rbx            ; counter
+    mov     r15d, ecx       ; save block size (no push — keeps stack aligned)
+    lea     rdi, [rbx + 16]
+    mov     rsi, rbx
     mov     edx, 16
     call    er_memcpy
     lea     rdi, [rbx + 16]
+    lea     rsi, [rsp + 48] ; round_keys buffer
     call    _aes_encrypt_block
-    pop     rcx
+    mov     ecx, r15d       ; restore block size
 
     ; XOR encrypted counter with input (from work buffer at rbx+16)
     xor     r8d, r8d
@@ -604,20 +596,20 @@ er_fn er_tor_aes_ctr
     ; Increment counter (big-endian) — increments the original counter at rbx
     mov     eax, [rbx + 12]
     bswap   eax
-    inc     eax
+    add     eax, 1          ; use add to set CF (inc does not set CF)
     bswap   eax
     mov     [rbx + 12], eax
     jnc     .ctr_loop      ; no carry, continue
     ; Carry into next dword (rare)
     mov     eax, [rbx + 8]
     bswap   eax
-    inc     eax
+    add     eax, 1
     bswap   eax
     mov     [rbx + 8], eax
     jmp     .ctr_loop
 
 .done:
-    add     rsp, 32
+    add     rsp, 224
     pop     r15
     pop     r14
     pop     r13

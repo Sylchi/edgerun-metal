@@ -14,7 +14,6 @@ er_fn jit_emit_byte
     mov     rdi, [jit_state.code_ptr]
     mov     [rdi], al
     inc     qword [jit_state.code_ptr]
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -25,7 +24,6 @@ er_fn jit_emit_dword
     mov     rdi, [jit_state.code_ptr]
     mov     [rdi], eax
     add     qword [jit_state.code_ptr], 4
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -36,7 +34,6 @@ er_fn jit_emit_qword
     mov     rdi, [jit_state.code_ptr]
     mov     [rdi], rax
     add     qword [jit_state.code_ptr], 8
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -47,7 +44,6 @@ er_fn jit_emit_modrm
     mov     rdi, [jit_state.code_ptr]
     mov     [rdi], al
     inc     qword [jit_state.code_ptr]
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -58,7 +54,6 @@ er_fn jit_emit_sib
     mov     rdi, [jit_state.code_ptr]
     mov     [rdi], al
     inc     qword [jit_state.code_ptr]
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -75,7 +70,6 @@ er_fn jit_build_modrm
     and     ecx, 3
     shl     ecx, 6          ; mod << 6
     or      eax, ecx
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -94,7 +88,6 @@ er_fn jit_build_sib
     and     ecx, 3
     shl     ecx, 6          ; scale << 6
     or      eax, ecx
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -121,7 +114,6 @@ er_fn jit_emit_rex
     mov     rdi, [jit_state.code_ptr]
     mov     [rdi], al
     inc     qword [jit_state.code_ptr]
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -148,7 +140,6 @@ er_fn jit_emit_load_global
     ; displacement dword
     pop     rax
     call    jit_emit_dword
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -181,7 +172,6 @@ er_fn jit_emit_load_global_to_reg
     pop     rcx
     pop     rax
     call    jit_emit_dword   ; displacement
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -212,7 +202,6 @@ er_fn jit_emit_store_global_from_reg
     pop     rcx
     pop     rax
     call    jit_emit_dword
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -245,7 +234,6 @@ er_fn jit_emit_mov_reg_imm64
     ; imm64
     pop     rax
     call    jit_emit_qword
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -256,7 +244,6 @@ er_fn jit_emit_add32
     call    jit_emit_byte
     mov     al, 0xC8         ; ModRM: mod=11, reg=1(ecx), rm=0(eax) → add eax, ecx
     call    jit_emit_modrm
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -267,7 +254,6 @@ er_fn jit_emit_sub32
     call    jit_emit_byte
     mov     al, 0xC8
     call    jit_emit_modrm
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -281,7 +267,6 @@ er_fn jit_emit_imul32
     call    jit_emit_byte
     mov     al, 0xC1         ; ModRM: mod=11, reg=0(eax=dest), rm=1(ecx=src) → imul eax, ecx
     call    jit_emit_modrm
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -292,7 +277,6 @@ er_fn jit_emit_and32
     call    jit_emit_byte
     mov     al, 0xC8
     call    jit_emit_modrm
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -303,7 +287,6 @@ er_fn jit_emit_or32
     call    jit_emit_byte
     mov     al, 0xC8
     call    jit_emit_modrm
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -314,7 +297,6 @@ er_fn jit_emit_xor32
     call    jit_emit_byte
     mov     al, 0xC8
     call    jit_emit_modrm
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -325,7 +307,6 @@ er_fn jit_emit_shl32
     call    jit_emit_byte
     mov     al, 0xE0         ; shl eax, cl
     call    jit_emit_modrm
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -336,7 +317,6 @@ er_fn jit_emit_shr32
     call    jit_emit_byte
     mov     al, 0xE8         ; shr eax, cl
     call    jit_emit_modrm
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -347,7 +327,6 @@ er_fn jit_emit_sar32
     call    jit_emit_byte
     mov     al, 0xF8         ; sar eax, cl
     call    jit_emit_modrm
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -358,7 +337,6 @@ er_fn jit_emit_ror32
     call    jit_emit_byte
     mov     al, 0xC8         ; ror eax, cl (ModRM: mod=11, reg=1, rm=0)
     call    jit_emit_modrm
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -369,7 +347,6 @@ er_fn jit_emit_rol32
     call    jit_emit_byte
     mov     al, 0xC0         ; rol eax, cl (ModRM: mod=11, reg=0, rm=0)
     call    jit_emit_modrm
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -380,7 +357,6 @@ er_fn jit_emit_cmp32
     call    jit_emit_byte
     mov     al, 0xC8         ; ModRM: mod=11, reg=1(ecx), rm=0(eax) → cmp eax, ecx
     call    jit_emit_modrm
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -396,7 +372,6 @@ er_fn jit_emit_cmp64
     call    jit_emit_byte
     mov     al, 0xC8         ; ModRM: reg=1(rcx), rm=0(rax) → cmp rax, rcx
     call    jit_emit_modrm
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -412,7 +387,6 @@ er_fn jit_emit_setcc
     call    jit_emit_byte
     mov     al, 0xC0         ; ModRM: mod=11, rm=0 (al)
     call    jit_emit_modrm
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -425,7 +399,6 @@ er_fn jit_emit_movzx_al_eax
     call    jit_emit_byte
     mov     al, 0xC0         ; movzx eax, al
     call    jit_emit_modrm
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -436,7 +409,6 @@ er_fn jit_emit_cdqe
     call    jit_emit_byte
     mov     al, 0x63
     call    jit_emit_byte
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -464,7 +436,6 @@ er_fn jit_emit_add_global
     call    jit_emit_modrm
     pop     rax
     call    jit_emit_dword
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -473,7 +444,6 @@ er_fn jit_emit_add_global
 er_fn jit_emit_rex_nob
     mov     al, 0x48         ; REX.W
     call    jit_emit_byte
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -493,7 +463,6 @@ er_fn jit_emit_sub_rsp
     call    jit_emit_modrm
     pop     rax
     call    jit_emit_byte    ; imm8
-    pop     rbp
     ret
 .sub_large:
     ; sub rsp, imm32
@@ -505,7 +474,6 @@ er_fn jit_emit_sub_rsp
     call    jit_emit_modrm
     pop     rax
     call    jit_emit_dword   ; imm32
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -514,44 +482,45 @@ er_fn jit_emit_sub_rsp
 er_fn jit_emit_ret
     mov     al, 0xC3
     call    jit_emit_byte
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
 ; Emit push reg (cl = register 0-15)
 ; -----------------------------------------------------------------+
 er_fn jit_emit_push_reg
-    mov     al, 0x50
-    or      al, cl
-    and     al, 7
     test    cl, 8
     jz      .push_no_rex
-    ; REX.B needed
     push    rax
-    mov     al, 0x41         ; REX.B
+    mov     al, 0x41
     call    jit_emit_byte
     pop     rax
-.push_no_rex:
+    mov     al, 0x50
+    and     cl, 7
+    or      al, cl
     call    jit_emit_byte
-    pop     rbp
+    ret
+.push_no_rex:
+    mov     al, 0x50
+    or      al, cl
+    call    jit_emit_byte
     ret
 
-; ------------------------------------------------------------------
-; Emit pop reg (cl = register 0-15)
-; -----------------------------------------------------------------+
 er_fn jit_emit_pop_reg
-    mov     al, 0x58
-    or      al, cl
-    and     al, 7
     test    cl, 8
     jz      .pop_no_rex
     push    rax
-    mov     al, 0x41         ; REX.B
+    mov     al, 0x41
     call    jit_emit_byte
     pop     rax
-.pop_no_rex:
+    mov     al, 0x58
+    and     cl, 7
+    or      al, cl
     call    jit_emit_byte
-    pop     rbp
+    ret
+.pop_no_rex:
+    mov     al, 0x58
+    or      al, cl
+    call    jit_emit_byte
     ret
 
 ; ------------------------------------------------------------------
@@ -587,7 +556,6 @@ er_fn jit_emit_store_spill
     pop     rcx
     pop     rax
     call    jit_emit_dword   ; displacement
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -620,7 +588,6 @@ er_fn jit_emit_load_spill
     pop     rcx
     pop     rax
     call    jit_emit_dword
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -633,7 +600,6 @@ er_fn jit_emit_jmp_rel32
     call    jit_emit_byte
     pop     rax
     call    jit_emit_dword
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -651,7 +617,6 @@ er_fn jit_emit_jcc_rel32
     pop     rcx
     pop     rax
     call    jit_emit_dword
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -673,7 +638,6 @@ er_fn jit_emit_mem_load32
     ; SIB: scale=0, index=1 (rcx), base=2 (rdx)
     mov     al, 0x0A
     call    jit_emit_sib
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -689,7 +653,6 @@ er_fn jit_emit_mem_store32
     call    jit_emit_modrm
     mov     al, 0x0A         ; SIB: [rdx + rcx]
     call    jit_emit_sib
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -705,7 +668,6 @@ er_fn jit_emit_add64
     call    jit_emit_byte
     mov     al, 0xC1
     call    jit_emit_modrm
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -721,7 +683,6 @@ er_fn jit_emit_sub64
     call    jit_emit_byte
     mov     al, 0xC1
     call    jit_emit_modrm
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -732,7 +693,6 @@ er_fn jit_emit_mul32
     call    jit_emit_byte
     mov     al, 0xE1         ; mul ecx
     call    jit_emit_modrm
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -743,7 +703,6 @@ er_fn jit_emit_imul32_single
     call    jit_emit_byte
     mov     al, 0xE9         ; imul ecx
     call    jit_emit_modrm
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -754,7 +713,6 @@ er_fn jit_emit_div32
     call    jit_emit_byte
     mov     al, 0xF1         ; div ecx
     call    jit_emit_modrm
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -765,7 +723,6 @@ er_fn jit_emit_idiv32
     call    jit_emit_byte
     mov     al, 0xF9         ; idiv ecx
     call    jit_emit_modrm
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -776,7 +733,6 @@ er_fn jit_emit_xor_eax_eax
     call    jit_emit_byte
     mov     al, 0xC0
     call    jit_emit_modrm
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -791,7 +747,6 @@ er_fn jit_emit_lzcnt32
     call    jit_emit_byte
     mov     al, 0xC1         ; lzcnt eax, ecx
     call    jit_emit_modrm
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -806,7 +761,6 @@ er_fn jit_emit_tzcnt32
     call    jit_emit_byte
     mov     al, 0xC1
     call    jit_emit_modrm
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -821,7 +775,6 @@ er_fn jit_emit_popcnt32
     call    jit_emit_byte
     mov     al, 0xC1
     call    jit_emit_modrm
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -834,7 +787,6 @@ er_fn jit_emit_movsxd
     call    jit_emit_byte
     mov     al, 0xC1         ; movsxd rax, ecx
     call    jit_emit_modrm
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -852,7 +804,6 @@ er_fn jit_emit_mem_load64
     call    jit_emit_modrm
     mov     al, 0x0A         ; SIB: [rdx + rcx]
     call    jit_emit_sib
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -870,7 +821,190 @@ er_fn jit_emit_mem_store64
     call    jit_emit_modrm
     mov     al, 0x0A         ; SIB: [rdx + rcx]
     call    jit_emit_sib
-    pop     rbp
+    ret
+
+; ------------------------------------------------------------------
+; Emit: mov rsi, rsp  (48 8B F4)
+; -----------------------------------------------------------------+
+er_fn jit_emit_mov_rsi_rsp
+    mov     al, 0x48         ; REX.W
+    call    jit_emit_byte
+    mov     al, 0x8B         ; mov r64, r/m64
+    call    jit_emit_byte
+    mov     al, 0xF4         ; ModRM: mod=11, reg=6(rsi), rm=4(rsp)
+    call    jit_emit_modrm
+    ret
+
+; ------------------------------------------------------------------
+; Emit: mov rdi, imm64  (48 BF <8 bytes>)
+; rax = imm64
+; -----------------------------------------------------------------+
+er_fn jit_emit_mov_rdi_imm64
+    push    rax
+    mov     al, 0x48         ; REX.W
+    call    jit_emit_byte
+    mov     al, 0xBF         ; mov rdi, imm64
+    call    jit_emit_byte
+    pop     rax
+    call    jit_emit_qword
+    ret
+
+; ------------------------------------------------------------------
+; Emit: mov rax, imm64  (48 B8 <8 bytes>)
+; rax = imm64
+; -----------------------------------------------------------------+
+er_fn jit_emit_mov_rax_imm64
+    push    rax
+    mov     al, 0x48         ; REX.W
+    call    jit_emit_byte
+    mov     al, 0xB8         ; mov rax, imm64
+    call    jit_emit_byte
+    pop     rax
+    call    jit_emit_qword
+    ret
+
+; ------------------------------------------------------------------
+; Emit: mov edx, imm32  (BA <4 bytes>)
+; eax = imm32
+; -----------------------------------------------------------------+
+er_fn jit_emit_mov_edx_imm32
+    push    rax
+    mov     al, 0xBA         ; mov edx, imm32
+    call    jit_emit_byte
+    pop     rax
+    call    jit_emit_dword
+    ret
+
+; ------------------------------------------------------------------
+; Emit: call rax  (FF D0)
+; -----------------------------------------------------------------+
+er_fn jit_emit_call_rax
+    mov     al, 0xFF
+    call    jit_emit_byte
+    mov     al, 0xD0         ; ModRM: mod=11, reg=2(call), rm=0(rax)
+    call    jit_emit_modrm
+    ret
+
+; ------------------------------------------------------------------
+; Emit: sub rsp, imm32  (48 81 EC / 48 83 EC)
+; eax = unsigned value
+; -----------------------------------------------------------------+
+er_fn jit_emit_sub_rsp_imm
+    push    rax
+    mov     al, 0x48         ; REX.W
+    call    jit_emit_byte
+    pop     rax
+    cmp     eax, 128
+    jb      .sub_small
+    push    rax
+    mov     al, 0x81
+    call    jit_emit_byte
+    mov     al, 0xEC         ; ModRM: mod=11, reg=5(sub), rm=4(rsp)
+    call    jit_emit_modrm
+    pop     rax
+    call    jit_emit_dword
+    ret
+.sub_small:
+    push    rax
+    mov     al, 0x83
+    call    jit_emit_byte
+    mov     al, 0xEC
+    call    jit_emit_modrm
+    pop     rax
+    call    jit_emit_byte
+    ret
+
+; ------------------------------------------------------------------
+; Emit: add rsp, imm32  (48 81 C4 / 48 83 C4)
+; eax = unsigned value
+; -----------------------------------------------------------------+
+er_fn jit_emit_add_rsp_imm
+    push    rax
+    mov     al, 0x48         ; REX.W
+    call    jit_emit_byte
+    pop     rax
+    cmp     eax, 128
+    jb      .add_small
+    push    rax
+    mov     al, 0x81
+    call    jit_emit_byte
+    mov     al, 0xC4         ; ModRM: mod=11, reg=0(add), rm=4(rsp)
+    call    jit_emit_modrm
+    pop     rax
+    call    jit_emit_dword
+    ret
+.add_small:
+    push    rax
+    mov     al, 0x83
+    call    jit_emit_byte
+    mov     al, 0xC4
+    call    jit_emit_modrm
+    pop     rax
+    call    jit_emit_byte
+    ret
+
+; ------------------------------------------------------------------
+; Emit: mov rax, [rsp + disp]  (48 8B 44 24 <disp8> or 48 8B 84 24 <disp32>)
+; eax = unsigned displacement
+; -----------------------------------------------------------------+
+er_fn jit_emit_load_rax_rsp_disp
+    push    rax
+    mov     al, 0x48         ; REX.W
+    call    jit_emit_byte
+    mov     al, 0x8B         ; mov r64, r/m64
+    call    jit_emit_byte
+    pop     rax
+    cmp     eax, 128
+    jb      .ld_small
+    ; disp32 form: ModRM 84 with SIB 24
+    push    rax
+    mov     al, 0x84         ; mod=10, reg=0, rm=4(SIB)
+    call    jit_emit_modrm
+    mov     al, 0x24         ; SIB: [rsp]
+    call    jit_emit_sib
+    pop     rax
+    call    jit_emit_dword
+    ret
+.ld_small:
+    ; disp8 form: ModRM 44 with SIB 24
+    push    rax
+    mov     al, 0x44         ; mod=01, reg=0, rm=4(SIB)
+    call    jit_emit_modrm
+    mov     al, 0x24         ; SIB: [rsp]
+    call    jit_emit_sib
+    pop     rax
+    call    jit_emit_byte
+    ret
+
+; ------------------------------------------------------------------
+; Emit: mov [rsp + disp], rax  (48 89 44 24 <disp8> or 48 89 84 24 <disp32>)
+; eax = unsigned displacement
+; -----------------------------------------------------------------+
+er_fn jit_emit_store_rax_rsp_disp
+    push    rax
+    mov     al, 0x48         ; REX.W
+    call    jit_emit_byte
+    mov     al, 0x89         ; mov r/m64, r64
+    call    jit_emit_byte
+    pop     rax
+    cmp     eax, 128
+    jb      .st_small
+    push    rax
+    mov     al, 0x84         ; mod=10, reg=0, rm=4(SIB)
+    call    jit_emit_modrm
+    mov     al, 0x24         ; SIB: [rsp]
+    call    jit_emit_sib
+    pop     rax
+    call    jit_emit_dword
+    ret
+.st_small:
+    push    rax
+    mov     al, 0x44         ; mod=01, reg=0, rm=4(SIB)
+    call    jit_emit_modrm
+    mov     al, 0x24         ; SIB: [rsp]
+    call    jit_emit_sib
+    pop     rax
+    call    jit_emit_byte
     ret
 
 ; ------------------------------------------------------------------
@@ -883,7 +1017,6 @@ er_fn jit_emit_test64
     call    jit_emit_byte
     mov     al, 0xC0         ; test rax, rax
     call    jit_emit_modrm
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -900,7 +1033,6 @@ er_fn jit_emit_lzcnt64
     call    jit_emit_byte
     mov     al, 0xC0         ; lzcnt rax, rax
     call    jit_emit_modrm
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -917,7 +1049,6 @@ er_fn jit_emit_tzcnt64
     call    jit_emit_byte
     mov     al, 0xC0         ; tzcnt rax, rax
     call    jit_emit_modrm
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -934,7 +1065,6 @@ er_fn jit_emit_popcnt64
     call    jit_emit_byte
     mov     al, 0xC0         ; popcnt rax, rax
     call    jit_emit_modrm
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -945,7 +1075,6 @@ er_fn jit_emit_cqo
     call    jit_emit_byte
     mov     al, 0x99         ; cqo
     call    jit_emit_byte
-    pop     rbp
     ret
 
 ; ------------------------------------------------------------------
@@ -956,5 +1085,4 @@ er_fn jit_emit_xor_edx_edx
     call    jit_emit_byte
     mov     al, 0xD2         ; xor edx, edx
     call    jit_emit_modrm
-    pop     rbp
     ret

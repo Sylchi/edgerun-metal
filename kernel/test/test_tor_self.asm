@@ -28,12 +28,12 @@ test_pt:  db 0x6b, 0xc1, 0xbe, 0xe2, 0x2e, 0x40, 0x9f, 0x96
 
 test_ct:  db 0x87, 0x4d, 0x61, 0x91, 0xb6, 0x20, 0xe3, 0x26
           db 0x1b, 0xef, 0x68, 0x64, 0x99, 0x0d, 0xb6, 0xce
-          db 0x5d, 0xea, 0xc2, 0xde, 0x49, 0x33, 0xce, 0xf5
-          db 0xf1, 0x9d, 0x09, 0xc6, 0x8f, 0xc3, 0x64, 0x84
-          db 0x01, 0xed, 0x7d, 0x9a, 0x56, 0xc9, 0xa8, 0xd9
-          db 0x57, 0x89, 0xb6, 0x0a, 0x64, 0x29, 0x7b, 0x6e
-          db 0x83, 0x5d, 0x87, 0x7d, 0xde, 0xb1, 0x07, 0x50
-          db 0x3d, 0x37, 0x4f, 0xca, 0x66, 0xff, 0xbc, 0xd4
+          db 0x98, 0x06, 0xf6, 0x6b, 0x79, 0x70, 0xfd, 0xff
+          db 0x86, 0x17, 0x18, 0x7b, 0xb9, 0xff, 0xfd, 0xff
+          db 0x5a, 0xe4, 0xdf, 0x3e, 0xdb, 0xd5, 0xd3, 0x5e
+          db 0x5b, 0x4f, 0x09, 0x02, 0x0d, 0xb0, 0x3e, 0xab
+          db 0x1e, 0x03, 0x1d, 0xda, 0x2f, 0xbe, 0x03, 0xd1
+          db 0x79, 0x21, 0x70, 0xa0, 0xf3, 0x00, 0x9c, 0xee
 
 SECTION .bss
 buf:      resb 64
@@ -65,7 +65,7 @@ _start:
 
 %macro TEST_LABEL 1
     jmp     %%done
-%%str: db %1, 0
+%%str: db %1, 10, 0
 %%done:
     push    rcx
     push    r11
@@ -90,7 +90,7 @@ _start:
 ; Test 1: AES-128-CTR encrypt — known-answer test
 ; NIST SP 800-38A test vector F.5.1 (64 bytes, key=2b...)
 ; ================================================================
-    TEST_LABEL "1\n"
+    TEST_LABEL "1"
     lea     rdi, [rel iv_copy]
     lea     rsi, [rel test_iv]
     mov     edx, 16
@@ -128,7 +128,7 @@ _start:
 ; ================================================================
 ; Test 2: AES-128-CTR roundtrip (decrypt = same operation in CTR)
 ; ================================================================
-    TEST_LABEL "2\n"
+    TEST_LABEL "2"
     lea     rdi, [rel iv_copy]
     lea     rsi, [rel test_iv]
     mov     edx, 16
@@ -162,7 +162,7 @@ _start:
 ; ================================================================
 ; Test 3: Partial block (non-16-byte aligned length)
 ; ================================================================
-    TEST_LABEL "3\n"
+    TEST_LABEL "3"
     lea     rdi, [rel iv_copy]
     lea     rsi, [rel test_iv]
     mov     edx, 16
@@ -185,7 +185,7 @@ _start:
 ; ================================================================
 ; Test 4: Empty length (should be no-op)
 ; ================================================================
-    TEST_LABEL "4\n"
+    TEST_LABEL "4"
     lea     rdi, [rel iv_copy]
     lea     rsi, [rel test_iv]
     mov     edx, 16
@@ -208,7 +208,7 @@ _start:
 ; ================================================================
 ; Test 5: Multi-block XOR (3 blocks = 48 bytes)
 ; ================================================================
-    TEST_LABEL "5\n"
+    TEST_LABEL "5"
     lea     rdi, [rel iv_copy]
     lea     rsi, [rel test_iv]
     mov     edx, 16

@@ -89,6 +89,7 @@ KERNEL_ASM_SRCS="
 	net/tcp.asm
 	net/http.asm
 	crypto/sha256.asm
+	crypto/curve25519.asm
 	crypto/tor_ntor.asm
 	crypto/tor_aes.asm
 	crypto/tor_cell.asm
@@ -99,10 +100,12 @@ KERNEL_ASM_SRCS="
 	crypto/local_circuit.asm
 	agent/http_agent.asm
 	agent/da.asm
+	agent/da_wasm.asm
 	ui/render_ir.asm
 	ui/sw_fb.asm
 	wasm/wasm_interpreter.asm
 	wasm/wasm_test_data.asm
+	wasm/da_wasm_test.asm
 	entry.asm
 "
 
@@ -304,6 +307,23 @@ cmd_test() {
 	cmd_test_fe_mul
 	cmd_test_spi_flash
 	cmd_test_tor
+	cmd_test_x25519
+	cmd_test_wasm_jit
+}
+
+cmd_test_wasm_jit() {
+	local name="test_wasm_jit_self"
+	local src="${TEST_DIR}/${name}.asm"
+	local obj="${ASM_BUILD}/${name}.o"
+	local bin="${ASM_BUILD}/${name%_self}"
+	${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
+	local dep_obj="${ASM_BUILD}/runtime.o"
+	if [ ! -f "$dep_obj" ]; then
+		elf64 "${ASM_DIR}/rt/runtime.asm" "$dep_obj"
+	fi
+	ld -T "${TEST_DIR}/test_jit.ld" -nostdlib -static -o "$bin" "$obj" "$dep_obj"
+	echo "  LD  ${bin}"
+	"$bin"
 }
 
 cmd_test_ctype() {
@@ -359,7 +379,11 @@ cmd_test_fe_mul() {
 	if [ ! -f "$runtime_o" ]; then
 		elf64 "${ASM_DIR}/rt/runtime.asm" "$runtime_o"
 	fi
-	ld -nostdlib -static -o "$bin" "$obj" "$tor_ntor_o" "$runtime_o" "$stub_obj"
+	local curve25519_o="${ASM_BUILD}/curve25519.o"
+	if [ ! -f "$curve25519_o" ]; then
+		elf64 "${ASM_DIR}/crypto/curve25519.asm" "$curve25519_o"
+	fi
+	ld -nostdlib -static -o "$bin" "$obj" "$curve25519_o" "$tor_ntor_o" "$runtime_o" "$stub_obj"
 	echo "  LD  ${bin}"
 	"$bin"
 }
@@ -370,6 +394,31 @@ cmd_test_spi_flash() {
 
 cmd_test_tor() {
 	build_test "test_tor_self" "${TEST_DIR}/test_tor_self.asm" "crypto/tor_aes" "rt/runtime"
+}
+
+cmd_test_x25519() {
+	local src="${TEST_DIR}/test_x25519.asm"
+	local obj="${ASM_BUILD}/test_x25519.o"
+	local stub_src="${TEST_DIR}/stubs_tor_ntor.asm"
+	local stub_obj="${ASM_BUILD}/stubs_tor_ntor.o"
+	local bin="${ASM_BUILD}/test_x25519"
+	${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
+	${YASM} -f elf64 ${ASM_INC} -o "$stub_obj" "$stub_src"
+	local tor_ntor_o="${ASM_BUILD}/tor_ntor.o"
+	if [ ! -f "$tor_ntor_o" ]; then
+		elf64 "${ASM_DIR}/crypto/tor_ntor.asm" "$tor_ntor_o"
+	fi
+	local runtime_o="${ASM_BUILD}/runtime.o"
+	if [ ! -f "$runtime_o" ]; then
+		elf64 "${ASM_DIR}/rt/runtime.asm" "$runtime_o"
+	fi
+	local curve25519_o="${ASM_BUILD}/curve25519.o"
+	if [ ! -f "$curve25519_o" ]; then
+		elf64 "${ASM_DIR}/crypto/curve25519.asm" "$curve25519_o"
+	fi
+	ld -nostdlib -static -o "$bin" "$obj" "$curve25519_o" "$tor_ntor_o" "$runtime_o" "$stub_obj"
+	echo "  LD  ${bin}"
+	"$bin"
 }
 
 cmd_test_bench_render_ir() {
@@ -456,6 +505,7 @@ EdgeRun build targets:
   test-fe-mul         Run _fe_mul field multiplication test (self-hosted ASM)
   test-spi-flash      Run SPI flash compile-check test (self-hosted ASM)
   test-tor            Run Tor AES-128-CTR KAT test (self-hosted ASM)
+  test-x25519         Run X25519 scalar mult RFC 7748 test vectors (self-hosted ASM)
   test-bench-render-ir Run render_ir RDTSC benchmark (self-hosted ASM)
   pi-kernel           Build Pi Zero W kernel.img (ARMv6)
   pi-usb-boot         Build Pi USB boot host tool (x86_64)
@@ -485,6 +535,7 @@ case "${1:-help}" in
 	test-fe-mul)    cmd_test_fe_mul ;;
 	test-spi-flash) cmd_test_spi_flash ;;
 	test-tor)       cmd_test_tor ;;
+	test-x25519)    cmd_test_x25519 ;;
 	test-bench-render-ir) cmd_test_bench_render_ir ;;
 	pi-kernel)      cmd_pi_kernel ;;
 	pi-usb-boot)    cmd_pi_usb_boot ;;

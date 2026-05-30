@@ -126,6 +126,10 @@ extern test_tblonly_export
 extern agent_minimal_start
 extern agent_minimal_len
 extern agent_minimal_export_name
+extern da_wasm_test_start
+extern da_wasm_test_len
+extern da_wasm_test_export_name
+extern _wasm_import_da_surface_register
 extern er_memset
 
 extern er_sha256_init
@@ -230,6 +234,7 @@ check_wasm:      db "check: wasm return42 ", 0
 check_mem:       db "check: wasm mem45 ", 0
 check_tblonly:   db "check: wasm tblonly47 ", 0
 check_minimal:   db "check: wasm minimal43 ", 0
+check_da_wasm:   db "check: wasm da_test ", 0
 bench_banner:  db "TPM SHA-256 bench", 0
 bench_sha64:   db "  sha256 64B: ", 0
 bench_sha1k:   db "  sha256 1KB: ", 0
@@ -1274,6 +1279,9 @@ er_fn er_kernel_main
 .dbg_tor:   db " tor: init ok", 0
 .dbg_cell:  db " cell: init ok", 0
 .dbg_circ:  db " circ: init ok", 0
+.dbg_agent: db " agent: init ok", 0
+.dbg_da_init: db " da: init ok", 0
+.dbg_da_reg:  db " da: register: ", 0
 .ok_str:       db "ok", 0
 .fail_str:     db "FAIL", 0
 
@@ -1622,6 +1630,10 @@ er_fn er_kernel_main
     mov     rax, [rel er_local_cell_import_count]
     mov     [rbx + RUNTIME_IMPORTS_LEN_OFF], rax
 
+    ; Save pointer for WASM import wrappers
+    lea     rax, [rel wasm_runtime]
+    mov     [rel er_wasm_runtime_ptr], rax
+
     ; ── Test 1: return42 (no imports, no mem) ──
     mov     rdi, rbx            ; runtime
     lea     rsi, [rel wasm_return42_start]
@@ -1666,7 +1678,7 @@ er_fn er_kernel_main
     call    er_serial_putchar
     call    .crlf
 
-    ; ── Test 3: mem (imports, memory, returns 45) ──
+    ; ── Test 3: DA test (wasm imports, memory, calls da_surface_register) ──
     push    rbx
     lea     rdi, [rel wasm_memory]
     xor     esi, esi
@@ -1674,14 +1686,15 @@ er_fn er_kernel_main
     call    er_memset
     pop     rbx
     mov     rdi, rbx
-    lea     rsi, [rel test_mem_start]
-    mov     rdx, [rel test_mem_len]
-    lea     rcx, [rel test_mem_export]
+    lea     rsi, [rel da_wasm_test_start]
+    mov     rdx, [rel da_wasm_test_len]
+    lea     rcx, [rel da_wasm_test_export_name]
     mov     r8, 1
     call    er_fn_run
     push    rax
+    push    rdx
     mov     rdi, COM1_PORT
-    lea     rsi, [rel check_mem]
+    lea     rsi, [rel check_da_wasm]
     call    er_serial_puts
     pop     rsi
     mov     rdi, COM1_PORT
@@ -1689,32 +1702,11 @@ er_fn er_kernel_main
     mov     rdi, COM1_PORT
     mov     sil, ' '
     call    er_serial_putchar
-    call    .crlf
-
-    ; ── Test 4: tblonly (imports, table, memory, returns 47) ──
-    push    rbx
-    lea     rdi, [rel wasm_memory]
-    xor     esi, esi
-    mov     edx, 65536
-    call    er_memset
-    pop     rbx
-    mov     rdi, rbx
-    lea     rsi, [rel test_tblonly_start]
-    mov     rdx, [rel test_tblonly_len]
-    lea     rcx, [rel test_tblonly_export]
-    mov     r8, 1
-    call    er_fn_run
-    push    rax
-    mov     rdi, COM1_PORT
-    lea     rsi, [rel check_tblonly]
-    call    er_serial_puts
     pop     rsi
     mov     rdi, COM1_PORT
     call    er_serial_puthex64
     mov     rdi, COM1_PORT
-    mov     sil, ' '
-    call    er_serial_putchar
-    call    .crlf
+    call    er_serial_crlf
 
     add     rsp, 96
 
@@ -1733,30 +1725,46 @@ er_fn er_kernel_main
 
     ; ─── Tor client init ─────────────────────────────────────
     call    er_tor_init
-    mov     esi, 0x3f8
-    lea     rdi, [rel .dbg_tor]
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel .dbg_tor]
     call    er_serial_puts
 
     ; ─── Local cell transport init ───────────────────────────
     call    er_local_cell_init
-    mov     esi, 0x3f8
-    lea     rdi, [rel .dbg_cell]
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel .dbg_cell]
     call    er_serial_puts
-    ; Save wasm_runtime ptr for WASM import wrappers
-    lea     rax, [rel wasm_runtime]
-    mov     [rel er_wasm_runtime_ptr], rax
 
     ; ─── Local circuit transport init ────────────────────────
     call    er_local_circuit_init
-    mov     esi, 0x3f8
-    lea     rdi, [rel .dbg_circ]
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel .dbg_circ]
     call    er_serial_puts
 
     ; ─── Agent init ──────────────────────────────────────────
     call    er_agent_http_init
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel .dbg_agent]
+    call    er_serial_puts
 
     ; ─── Display Agent init ──────────────────────────────────
     call    er_da_init
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel .dbg_da_init]
+    call    er_serial_puts
+
+    ; ─── DA WASM Registration Test ────────────────────────────
+    xor     edi, edi        ; params at WASM memory offset 0
+    call    _wasm_import_da_surface_register
+    push    rax
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel .dbg_da_reg]
+    call    er_serial_puts
+    pop     rsi
+    mov     rdi, COM1_PORT
+    call    er_serial_puthex64
+    mov     rdi, COM1_PORT
+    call    er_serial_crlf
 
     ; ─── Boot Device Summary ─────────────────────────────────
     ; Show detected peripherals on display before entering shell

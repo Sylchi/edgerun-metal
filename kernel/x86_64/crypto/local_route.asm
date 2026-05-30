@@ -26,6 +26,11 @@ extern er_memcpy
 extern er_memset
 extern er_memcmp
 
+; DA WASM import wrappers (from agent/da_wasm.asm)
+extern _wasm_import_da_surface_register
+extern _wasm_import_da_surface_update
+extern _wasm_import_da_surface_unregister
+
 ; Import ring buffer helpers from local_cell.asm
 extern er_local_ring_init
 extern er_local_ring_write
@@ -735,8 +740,14 @@ fn_circ_recv:  db "circuit_recv"
 fn_circ_recv_len: dq 12
 fn_circ_close: db "circuit_close"
 fn_circ_close_len: dq 12
+fn_da_register:  db "da_surface_register"
+fn_da_register_len: dq 19
+fn_da_update:    db "da_surface_update"
+fn_da_update_len: dq 17
+fn_da_unregister: db "da_surface_unregister"
+fn_da_unregister_len: dq 21
 
-; Import table — 10 entries × 40 bytes = 400 bytes total
+; Import table — 13 entries × 40 bytes = 520 bytes total
 ; Note: assembled as ELF32, use dd (4-byte) with zero upper padding
 ; to keep 8-byte-per-field struct layout (HOST_IMPORT_SIZE = 40).
 global er_local_cell_imports
@@ -811,6 +822,27 @@ dd fn_circ_close, 0
 dd 12, 0
 dd _wasm_import_circuit_close, 0
 
+; Entry 10: da_surface_register
+dd er_module_name, 0
+dd 2, 0
+dd fn_da_register, 0
+dd 19, 0
+dd _wasm_import_da_surface_register, 0
+
+; Entry 11: da_surface_update
+dd er_module_name, 0
+dd 2, 0
+dd fn_da_update, 0
+dd 17, 0
+dd _wasm_import_da_surface_update, 0
+
+; Entry 12: da_surface_unregister
+dd er_module_name, 0
+dd 2, 0
+dd fn_da_unregister, 0
+dd 21, 0
+dd _wasm_import_da_surface_unregister, 0
+
 ; Import count
 global er_local_cell_import_count
-er_local_cell_import_count: dq 10
+er_local_cell_import_count: dq 13

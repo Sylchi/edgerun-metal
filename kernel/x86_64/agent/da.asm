@@ -63,6 +63,13 @@ da_wasm_memory:  resb 65536
 da_wasm_ticks:   resq 1
 da_wasm_runtime: resb RUNTIME_SIZE
 
+; Per-surface rect/icon storage pools (DA_MAX_SURFACES entries each)
+; Each surface's rect/icon pool is at [pool_base + slot_idx * entry_size].
+; Rect pool entry: 32 rects * 15 floats * 4 bytes = 1920 bytes
+; Icon pool entry: 16 icons * 9 floats * 4 bytes = 576 bytes
+da_surface_rect_pool: resd DA_MAX_SURFACES * DA_SURFACE_POOL_RECTS * 15
+da_surface_icon_pool: resd DA_MAX_SURFACES * DA_SURFACE_POOL_ICONS * 9
+
 ; ==================================================================
 ; .data
 ; ==================================================================
@@ -170,6 +177,8 @@ _da_handler:
     movzx   eax, byte [r12 + LOCAL_CELL_PAYLOAD]
     cmp     al, DA_MSG_SURFACE_REGISTER
     je      .register
+    cmp     al, DA_MSG_SURFACE_UPDATE
+    je      .update
     cmp     al, DA_MSG_SURFACE_UNREGISTER
     je      .unregister
     cmp     al, DA_MSG_LAUNCH_APP
@@ -193,13 +202,21 @@ _da_handler:
     pop     rbx
     er_ret
 
-.unregister:
-    mov     rdi, r12
-    call    _da_unregister_surface
+.done:
     pop     r13
     pop     r12
     pop     rbx
+    xor     eax, eax
+    er_ok
     er_ret
+
+.unregister:
+    call    _da_unregister_surface
+    jmp     .done
+
+.update:
+    call    _da_update_surface
+    jmp     .done
 
 .launch:
     mov     rdi, r12
@@ -283,6 +300,7 @@ _da_register_surface:
     cmp     ebx, DA_MAX_SURFACES
     jae     .fail
 
+    mov     r13d, ebx           ; save slot_index for pool calc
     mov     eax, ebx
     imul    eax, DA_SURFACE_SIZE
     lea     rbx, [rel da_surface_registry + rax]
@@ -307,15 +325,20 @@ _da_register_surface:
     mov     al, [r12 + LOCAL_CELL_PAYLOAD + 2]
     mov     [rbx + DA_SURFACE_FLAGS], al
 
-    ; Use shell rects as placeholder (app provides real data via updates)
-    lea     rax, [rel shell_bg_rects]
+    ; Point to surface's pool slot for rects and icons
+    mov     eax, r13d
+    imul    eax, DA_SURFACE_POOL_RECTS * 15 * 4   ; byte offset into rect pool
+    lea     rax, [rel da_surface_rect_pool + rax]
     mov     [rbx + DA_SURFACE_RECT_PTR], rax
-    mov     rax, [rel shell_bg_count]
-    mov     [rbx + DA_SURFACE_RECT_LEN], rax
-    mov     qword [rbx + DA_SURFACE_RECT_CAP], 0
-    mov     qword [rbx + DA_SURFACE_ICON_PTR], 0
+    mov     qword [rbx + DA_SURFACE_RECT_LEN], 0
+    mov     qword [rbx + DA_SURFACE_RECT_CAP], DA_SURFACE_POOL_RECTS
+
+    mov     eax, r13d
+    imul    eax, DA_SURFACE_POOL_ICONS * 9 * 4    ; byte offset into icon pool
+    lea     rax, [rel da_surface_icon_pool + rax]
+    mov     [rbx + DA_SURFACE_ICON_PTR], rax
     mov     qword [rbx + DA_SURFACE_ICON_LEN], 0
-    mov     qword [rbx + DA_SURFACE_ICON_CAP], 0
+    mov     qword [rbx + DA_SURFACE_ICON_CAP], DA_SURFACE_POOL_ICONS
 
     inc     dword [rel da_surface_count]
     pop     r13
@@ -382,6 +405,173 @@ _da_unregister_surface:
     pop     rbx
     xor     eax, eax
     er_ok
+    ret
+
+; ==================================================================
+; _da_update_surface — update a registered surface's rect/icon data
+; rdi = cell_ptr, esi = sender_slot_id
+; Cell payload:
+;   [0] type=2 (DA_MSG_SURFACE_UPDATE, already consumed by handler)
+;   [1] update_flags (DA_UPDATE_* bitmask)
+;   [2] 32-byte app identity hash
+;   [34] rect_count (u16 LE)
+;   [36] N*60 bytes of rect data (up to 3 rects = 180 bytes)
+; ==================================================================
+_da_update_surface:
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+    mov     r12, rdi                 ; cell_ptr
+    mov     r13d, esi                ; sender_slot_id (unused)
+
+    ; Find surface by identity hash at payload[2..33]
+    lea     rdi, [r12 + LOCAL_CELL_PAYLOAD + 2]
+    call    _da_find_surface_by_hash
+    test    edx, edx
+    jnz     .us_return              ; not found — return error
+
+    mov     r14d, eax               ; r14d = slot_index
+    mov     eax, r14d
+    imul    eax, DA_SURFACE_SIZE
+    lea     r15, [rel da_surface_registry + rax]  ; r15 = surface entry
+
+    movzx   ebx, byte [r12 + LOCAL_CELL_PAYLOAD + 1]  ; bl = update_flags
+
+    ; ── Handle rect updates ──
+    test    bl, DA_UPDATE_CLEAR_RECTS
+    jz      .us_check_replace_rects
+    mov     qword [r15 + DA_SURFACE_RECT_LEN], 0
+    jmp     .us_check_icons
+
+.us_check_replace_rects:
+    test    bl, DA_UPDATE_REPLACE_RECTS
+    jz      .us_check_append_rects
+    mov     qword [r15 + DA_SURFACE_RECT_LEN], 0
+    ; fall through to append
+
+.us_check_append_rects:
+    test    bl, DA_UPDATE_APPEND_RECTS | DA_UPDATE_REPLACE_RECTS
+    jz      .us_check_icons          ; no rect changes
+
+    ; Read rect_count from payload[34..35]
+    movzx   ecx, word [r12 + LOCAL_CELL_PAYLOAD + 34]
+    test    ecx, ecx
+    jz      .us_check_icons          ; no rects to copy
+
+    ; Calculate space remaining in pool
+    mov     r8d, [r15 + DA_SURFACE_RECT_LEN]  ; r8d = current_len
+    mov     edx, DA_SURFACE_POOL_RECTS
+    sub     edx, r8d                 ; edx = available slots
+    jle     .us_check_icons          ; pool full
+    cmp     ecx, edx
+    cmova   ecx, edx                 ; cap rect_count to available
+
+    ; dst = pool_base + slot_index * (POOL_RECTS * 60) + current_len * 60
+    mov     eax, r14d
+    imul    eax, DA_SURFACE_POOL_RECTS * 15 * 4  ; per-surface rect pool bytes
+    mov     edx, r8d
+    imul    edx, 15 * 4              ; current_len * 60 bytes
+    add     eax, edx
+    lea     rdi, [rel da_surface_rect_pool + rax]
+
+    ; src = cell payload + 36
+    lea     rsi, [r12 + LOCAL_CELL_PAYLOAD + 36]
+
+    ; bytes_to_copy = rect_count * 15 floats * 4 bytes
+    mov     eax, ecx
+    imul    eax, 15 * 4
+    mov     edx, eax
+    call    er_memcpy
+
+    ; Update rect_len: current_len + rect_count
+    mov     eax, [r15 + DA_SURFACE_RECT_LEN]
+    add     eax, ecx
+    mov     [r15 + DA_SURFACE_RECT_LEN], eax
+
+    ; Ensure surface rect_ptr points to its pool slot
+    mov     eax, r14d
+    imul    eax, DA_SURFACE_POOL_RECTS * 15 * 4
+    lea     rax, [rel da_surface_rect_pool + rax]
+    mov     [r15 + DA_SURFACE_RECT_PTR], rax
+
+    ; Set rect_cap to POOL_RECTS (stays constant after first update)
+    cmp     qword [r15 + DA_SURFACE_RECT_CAP], 0
+    jnz     .us_check_icons
+    mov     qword [r15 + DA_SURFACE_RECT_CAP], DA_SURFACE_POOL_RECTS
+
+.us_check_icons:
+    ; ── Handle icon updates (same pattern, reserved for future) ──
+    test    bl, DA_UPDATE_CLEAR_ICONS
+    jz      .us_check_replace_icons
+    mov     qword [r15 + DA_SURFACE_ICON_LEN], 0
+    jmp     .us_done
+
+.us_check_replace_icons:
+    test    bl, DA_UPDATE_REPLACE_ICONS
+    jz      .us_check_append_icons
+    mov     qword [r15 + DA_SURFACE_ICON_LEN], 0
+
+.us_check_append_icons:
+    test    bl, DA_UPDATE_APPEND_ICONS | DA_UPDATE_REPLACE_ICONS
+    jz      .us_done
+
+    movzx   ecx, word [r12 + LOCAL_CELL_PAYLOAD + 34]
+    test    ecx, ecx
+    jz      .us_done
+
+    mov     r8d, [r15 + DA_SURFACE_ICON_LEN]
+    mov     edx, DA_SURFACE_POOL_ICONS
+    sub     edx, r8d
+    jle     .us_done
+    cmp     ecx, edx
+    cmova   ecx, edx
+
+    mov     eax, r14d
+    imul    eax, DA_SURFACE_POOL_ICONS * 9 * 4
+    mov     edx, r8d
+    imul    edx, 9 * 4
+    add     eax, edx
+    lea     rdi, [rel da_surface_icon_pool + rax]
+
+    lea     rsi, [r12 + LOCAL_CELL_PAYLOAD + 36 + 0]  ; icon data after rects
+    mov     eax, ecx
+    imul    eax, 9 * 4
+    mov     edx, eax
+    call    er_memcpy
+
+    mov     eax, [r15 + DA_SURFACE_ICON_LEN]
+    add     eax, ecx
+    mov     [r15 + DA_SURFACE_ICON_LEN], eax
+
+    mov     eax, r14d
+    imul    eax, DA_SURFACE_POOL_ICONS * 9 * 4
+    lea     rax, [rel da_surface_icon_pool + rax]
+    mov     [r15 + DA_SURFACE_ICON_PTR], rax
+
+    cmp     qword [r15 + DA_SURFACE_ICON_CAP], 0
+    jnz     .us_done
+    mov     qword [r15 + DA_SURFACE_ICON_CAP], DA_SURFACE_POOL_ICONS
+
+.us_done:
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    xor     eax, eax
+    er_ok
+    ret
+
+.us_return:
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    xor     eax, eax
+    er_err  ERROR_LOCAL_NOT_FOUND
     ret
 
 ; ==================================================================

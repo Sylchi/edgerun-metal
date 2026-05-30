@@ -160,6 +160,8 @@ er_wasm_jit_init:
 
     _jit_init_op 0x00, jit_template_unreachable
     _jit_init_op 0x01, jit_template_nop
+    _jit_init_op 0x10, jit_template_call
+    _jit_init_op 0x11, jit_template_call_indirect
     _jit_init_op 0x1A, jit_template_drop
     _jit_init_op 0x20, jit_template_local_get
     _jit_init_op 0x21, jit_template_local_set
@@ -805,5 +807,4 @@ er_fn jit_patch_fixups_for_label
     test    rcx, rcx
     jnz     .pff_loop
 .pff_done:
-    pop     rbp
     ret

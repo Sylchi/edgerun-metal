@@ -1,7 +1,6 @@
-; EdgeRun _fe_mul field multiplication test — x86_64 assembly
-; Tests raw 512-bit product correctness against known values.
-; Links against tor_ntor.o + runtime.o.
-; No libc, no external dependencies. Exits via syscall.
+; EdgeRun 5×51 field multiplication test — x86_64 assembly
+; Tests _fe_mul correctness with 5×51 limb representation (40 bytes/fe).
+; Links against curve25519.o + runtime.o.
 
 %include "x86_64/macros.inc"
 
@@ -20,22 +19,22 @@ extern _fe_mul
 SECTION .bss
 passed:     resq 1
 failed:     resq 1
-result:     resq 4      ; 4 limbs
-expected:   resq 4
+result:     resq 5      ; 5 limbs × 51 bits = 255 bits
+expected:   resq 5
 
 SECTION .data
-nine:       dq 9, 0, 0, 0
-one:        dq 1, 0, 0, 0
-eighty_one: dq 81, 0, 0, 0
-p_minus_1:  dq 0xFFFFFFFFFFFFFFEC, 0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF, 0x7FFFFFFFFFFFFFFF
-p_minus_9:  dq 0xFFFFFFFFFFFFFFE4, 0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF, 0x7FFFFFFFFFFFFFFF
-p_plus_18:  dq 0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF, 0x7FFFFFFFFFFFFFFF
-inv9_correct: dq 0xc71c71c71c71c712, 0x1c71c71c71c71c71, 0x71c71c71c71c71c7, 0x471c71c71c71c71c
-inv9_buggy:   dq 0xc71c71c71c71c6ff, 0x1c71c71c71c71c71, 0x71c71c71c71c71c7, 0xc71c71c71c71c71c
-high_shift: dq 0, 0, 0, 1
-fe_one:     dq 1, 0, 0, 0
-fe_324:     dq 324, 0, 0, 0
-fe_9_at_192: dq 0, 0, 0, 9
+; 5×51 limb field elements (40 bytes each)
+; p = 2^255-19 = [2^51-19, 2^51-1, 2^51-1, 2^51-1, 2^51-1]
+p0: equ 0x7FFFFFFFFFFED   ; 2^51 - 19
+p1: equ 0x7FFFFFFFFFFFF   ; 2^51 - 1
+
+nine:       dq 9, 0, 0, 0, 0
+one:        dq 1, 0, 0, 0, 0
+eighty_one: dq 81, 0, 0, 0, 0
+p_minus_1:  dq p0-1, p1, p1, p1, p1      ; 2^255 - 20
+p_minus_9:  dq p0-9, p1, p1, p1, p1      ; 2^255 - 28
+p_plus_18:  dq p1, p1, p1, p1, p1        ; 2^255 - 1 (all 255 bits set)
+fe_324:     dq 324, 0, 0, 0, 0
 
 SECTION .text
 global _start
@@ -51,7 +50,7 @@ _start:
 
     lea     rdi, [rel result]
     lea     rsi, [rel nine]
-    mov     edx, 32
+    mov     edx, 40
     call    _mem_eq
     ASSERT eax
 
@@ -65,7 +64,7 @@ _start:
 
     lea     rdi, [rel result]
     lea     rsi, [rel eighty_one]
-    mov     edx, 32
+    mov     edx, 40
     call    _mem_eq
     ASSERT eax
 
@@ -79,13 +78,14 @@ _start:
 
     lea     rdi, [rel result]
     lea     rsi, [rel p_minus_9]
-    mov     edx, 32
+    mov     edx, 40
     call    _mem_eq
     ASSERT eax
 
 ; ================================================================
 ; Test 4: (p+18)^2 mod p = 324
-; p+18 = 2^255 - 1 = all limbs 0xFF..FF, top 0x7F..FF
+; p+18 = 2^255 - 1 (all 5 limbs = 2^51-1)
+; 2^255-1 ≡ 18 mod p, 18^2 = 324
 ; ================================================================
     lea     rdi, [rel result]
     lea     rsi, [rel p_plus_18]
@@ -94,27 +94,9 @@ _start:
 
     lea     rdi, [rel result]
     lea     rsi, [rel fe_324]
-    mov     edx, 32
+    mov     edx, 40
     call    _mem_eq
     ASSERT eax
-
-; ================================================================
-; Debug: dump result limbs for test 4 via write(1, buf, 32)
-; ================================================================
-    lea     rsi, [rel result]
-    mov     edx, 32
-    mov     edi, 1
-    mov     eax, 1
-    syscall             ; write(1, result, 32)
-
-    ; newline
-    push    10
-    mov     rsi, rsp
-    mov     edx, 1
-    mov     edi, 1
-    mov     eax, 1
-    syscall
-    add     rsp, 8
 
 ; ================================================================
 ; Done — report results

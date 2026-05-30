@@ -39,6 +39,19 @@ DA_SURFACE_SIZE      equ 84
 
 DA_MAX_SURFACES      equ 8
 
+; Per-surface rect/icon storage pool limits (each surface gets this many)
+; Chosen so MAX_SURFACES * POOL <= COMPOSITE_MAX for that type.
+DA_SURFACE_POOL_RECTS  equ 32
+DA_SURFACE_POOL_ICONS  equ 16
+
+; Surface update flags (bitmask for DA_MSG_SURFACE_UPDATE update_flags byte)
+DA_UPDATE_REPLACE_RECTS  equ 1   ; replace all rects with new data
+DA_UPDATE_APPEND_RECTS   equ 2   ; append rect data to existing
+DA_UPDATE_CLEAR_RECTS    equ 4   ; clear all rects (ignore rect_count/data)
+DA_UPDATE_REPLACE_ICONS  equ 8   ; replace all icons
+DA_UPDATE_APPEND_ICONS   equ 16  ; append icons
+DA_UPDATE_CLEAR_ICONS    equ 32  ; clear all icons
+
 ; Compositing output buffer limits (per frame)
 DA_COMPOSITE_MAX_RECTS   equ 256
 DA_COMPOSITE_MAX_ICONS   equ 128

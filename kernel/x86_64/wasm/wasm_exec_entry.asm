@@ -121,6 +121,7 @@ er_fn er_fn_exec
     lea     r15, [rel jit_globals]
     call    rax
     xor     edx, edx
+    mov     [rel exec_result_values], rax
     mov     r15, rax
     mov     r14, rdx
     jmp     .after_dispatch
@@ -134,8 +135,11 @@ er_fn er_fn_exec
     ; Decrement call depth
     dec     qword [exec_call_depth]
 
-    ; Restore previous frame
+    ; Restore previous frame (only if a save was done)
+    cmp     qword [exec_frame_save_ptr], 0
+    je      .after_restore
     call    exec_restore_frame_state
+.after_restore:
 
     mov     rax, r15
     mov     rdx, r14

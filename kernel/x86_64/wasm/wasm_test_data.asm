@@ -28,7 +28,7 @@ global agent_minimal_export_name
 
 ; ── mem45 (imports, memory, returns 45) ──
 test_mem_start:
-    incbin "test_mem.wasm"
+    incbin "test_mem_simple.wasm"
 test_mem_end:
 test_mem_len: dq test_mem_end - test_mem_start
 global test_mem_start, test_mem_end, test_mem_len

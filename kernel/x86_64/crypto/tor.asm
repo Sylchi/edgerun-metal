@@ -257,7 +257,6 @@ er_fn er_tor_init
 .link_fail:
     lea     rdi, [rel str_tor_link_fail]
     call    _tor_print_status
-    add     rsp, 128
     mov     eax, -1
     er_err  ERROR_TOR_LINK_FAILED
     pop     r14
