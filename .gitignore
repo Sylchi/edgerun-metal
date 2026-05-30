@@ -34,6 +34,7 @@ edgerun-zig/gen-font
 edgerun-zig/edgerun-ui-producer
 bin/
 test_decl
+test_zig
 
 # vendored tool binaries (host artifacts, exceed GitHub blob limits)
 toolchain/bin/*
