@@ -5,7 +5,7 @@ const hardware_inventory = @import("hardware_inventory.zig");
 const tpm_acpi = @import("tpm_acpi.zig");
 const component_union = @import("ui/components/Component.zig");
 const stack_component = @import("ui/components/Stack.zig");
-const ui = @import("ui.zig");
+const ui = @import("ui/core.zig");
 
 const Component = component_union.Component;
 const Stack = stack_component.Stack(Component);

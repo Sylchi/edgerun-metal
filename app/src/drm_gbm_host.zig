@@ -4,9 +4,9 @@ const renderer_font_atlas = @import("render/font_atlas_weighted.zig");
 const renderer_gles = @import("render/backends/gles.zig");
 const renderer_ir = @import("render/ir.zig");
 const renderer_pipeline = @import("render/pipeline.zig");
-const app_frame = @import("app_frame.zig");
-const ui = @import("ui.zig");
-const interaction = @import("ui_interaction.zig");
+const app_frame = @import("route/frame.zig");
+const ui = @import("ui/core.zig");
+const interaction = @import("ui/interaction.zig");
 const drm = @import("linux_drm.zig");
 const gpu = @import("linux_gpu.zig");
 

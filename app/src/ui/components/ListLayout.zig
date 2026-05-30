@@ -1,6 +1,6 @@
-const interaction = @import("../../ui_interaction.zig");
-const layout = @import("../../layouts/Types.zig");
-const ui = @import("../../ui.zig");
+const interaction = @import("../interaction.zig");
+const layout = @import("../layouts/Types.zig");
+const ui = @import("../core.zig");
 const primitives = @import("Primitives.zig");
 const Text = @import("Text.zig").Text;
 

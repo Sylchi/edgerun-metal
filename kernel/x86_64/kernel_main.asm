@@ -29,6 +29,8 @@ extern er_local_cell_imports
 extern er_local_cell_import_count
 extern er_wasm_runtime_ptr
 extern er_agent_http_init
+extern er_da_init
+extern er_da_tick
 
 extern er_mmio_read32
 extern er_tpm_crb_present
@@ -1591,67 +1593,51 @@ er_fn er_kernel_main
     mov     rax, [rel er_local_cell_import_count]
     mov     [rbx + RUNTIME_IMPORTS_LEN_OFF], rax
 
-    ; er_fn_run(rdi=runtime, rsi=wasm_bytes, rdx=wasm_len, rcx=export_name, r8=export_name_len)
+    ; ── Test 1: return42 (no imports, no mem) ──
     mov     rdi, rbx            ; runtime
     lea     rsi, [rel wasm_return42_start]
     mov     rdx, [rel wasm_return42_len]
     lea     rcx, [rel wasm_export_name]
-    mov     r8, 1               ; export name length
+    mov     r8, 1
     call    er_fn_run
-    ; rax = result, rdx = error
-    push    rax                 ; save result
-
-    ; Print check label
+    push    rax
     mov     rdi, COM1_PORT
     lea     rsi, [rel check_wasm]
     call    er_serial_puts
-
-    ; Print result (should be 42 = 0x2A)
     pop     rsi
     mov     rdi, COM1_PORT
     call    er_serial_puthex64
-
     mov     rdi, COM1_PORT
     mov     sil, ' '
     call    er_serial_putchar
     call    .crlf
 
-    ; ── Test 2: agent WASM test ──
-    ; rbx still has RuntimeConfig (er_fn_run preserves callee-saved regs)
-
-    ; Zero WASM memory for clean state between modules
+    ; ── Test 2: minimal (imports, returns 43) ──
     push    rbx
     lea     rdi, [rel wasm_memory]
     xor     esi, esi
     mov     edx, 65536
     call    er_memset
     pop     rbx
-
-    ; Test 2: minimal module returning 43
-    mov     rdi, rbx            ; runtime
+    mov     rdi, rbx
     lea     rsi, [rel agent_minimal_start]
     mov     rdx, [rel agent_minimal_len]
     lea     rcx, [rel agent_minimal_export_name]
-    mov     r8, 1               ; export name length
+    mov     r8, 1
     call    er_fn_run
-    push    rax                 ; save result
-
-    ; Print check label for minimal test
+    push    rax
     mov     rdi, COM1_PORT
     lea     rsi, [rel check_minimal]
     call    er_serial_puts
-
-    ; Print result (should be 43 = 0x2B)
     pop     rsi
     mov     rdi, COM1_PORT
     call    er_serial_puthex64
-
     mov     rdi, COM1_PORT
     mov     sil, ' '
     call    er_serial_putchar
     call    .crlf
 
-    ; ── Test 3: memory-only module (45) ──
+    ; ── Test 3: mem (imports, memory, returns 45) ──
     push    rbx
     lea     rdi, [rel wasm_memory]
     xor     esi, esi
@@ -1676,28 +1662,19 @@ er_fn er_kernel_main
     call    er_serial_putchar
     call    .crlf
 
-    ; ── Test 4: table-only module (47) ──
-    mov     rdi, COM1_PORT
-    mov     sil, 'A'
-    call    er_serial_putchar
+    ; ── Test 4: tblonly (imports, table, memory, returns 47) ──
     push    rbx
     lea     rdi, [rel wasm_memory]
     xor     esi, esi
     mov     edx, 65536
     call    er_memset
     pop     rbx
-    mov     rdi, COM1_PORT
-    mov     sil, 'B'
-    call    er_serial_putchar
     mov     rdi, rbx
     lea     rsi, [rel test_tblonly_start]
     mov     rdx, [rel test_tblonly_len]
     lea     rcx, [rel test_tblonly_export]
     mov     r8, 1
     call    er_fn_run
-    mov     rdi, COM1_PORT
-    mov     sil, 'C'
-    call    er_serial_putchar
     push    rax
     mov     rdi, COM1_PORT
     lea     rsi, [rel check_tblonly]
@@ -1727,15 +1704,24 @@ er_fn er_kernel_main
 
     ; ─── Tor client init ─────────────────────────────────────
     call    er_tor_init
+    mov     esi, 0x3f8
+    lea     rdi, [rel .dbg_tor]
+    call    er_serial_puts
 
     ; ─── Local cell transport init ───────────────────────────
     call    er_local_cell_init
+    mov     esi, 0x3f8
+    lea     rdi, [rel .dbg_cell]
+    call    er_serial_puts
     ; Save wasm_runtime ptr for WASM import wrappers
     lea     rax, [rel wasm_runtime]
     mov     [rel er_wasm_runtime_ptr], rax
 
     ; ─── Agent init ──────────────────────────────────────────
     call    er_agent_http_init
+
+    ; ─── Display Agent init ──────────────────────────────────
+    call    er_da_init
 
     ; ─── Boot Device Summary ─────────────────────────────────
     ; Show detected peripherals on display before entering shell
@@ -1902,7 +1888,7 @@ er_fn er_kernel_main
     call    er_net_poll
     call    er_tor_poll
     call    er_local_cell_poll
-    ; Future: call er_tcp_poll, ui_shell_tick, etc.
+    call    er_da_tick
     ; Yield to give other subsystems time
     mov     ecx, 100000
 .delay:

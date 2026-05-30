@@ -1,12 +1,12 @@
-const layout_types = @import("../../layouts/Types.zig");
-const layout_flex = @import("../../layouts/Flex.zig");
-const common = @import("../../ui_component_common.zig");
+const layout_types = @import("../layouts/Types.zig");
+const layout_flex = @import("../layouts/Flex.zig");
+const common = @import("../component_common.zig");
 const component_union = @import("Component.zig");
 const primitives = @import("Primitives.zig");
 const stack_component = @import("Stack.zig");
 const std = @import("std");
 const Text = @import("Text.zig").Text;
-const ui = @import("../../ui.zig");
+const ui = @import("../core.zig");
 
 const RenderOptions = common.RenderOptions;
 

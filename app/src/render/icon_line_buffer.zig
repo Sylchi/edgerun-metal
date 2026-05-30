@@ -2,7 +2,7 @@ const std = @import("std");
 const math = @import("../math.zig");
 const icon_vector = @import("../icon_vector.zig");
 const renderer_ir = @import("ir.zig");
-const ui = @import("../ui.zig");
+const ui = @import("../ui/core.zig");
 
 pub const vertex_float_stride: usize = renderer_ir.icon_line_vertex_float_stride;
 pub const vertex_x_index: usize = renderer_ir.icon_line_x_index;

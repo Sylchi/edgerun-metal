@@ -1,12 +1,12 @@
 const std = @import("std");
 const bytes = @import("bytes.zig");
-const ui = @import("ui.zig");
-const icon = @import("icon.zig");
+const ui = @import("ui/core.zig");
+const icon = @import("ui/icon.zig");
 const component_union = @import("ui/components/Component.zig");
 const RowItem = @import("ui/components/RowItem.zig").RowItem;
 const Stack = @import("ui/components/Stack.zig").Stack;
 const IconComponent = @import("ui/components/Icon.zig");
-const RenderOptions = @import("ui_component_common.zig").RenderOptions;
+const RenderOptions = @import("ui/component_common.zig").RenderOptions;
 
 const linux = std.os.linux;
 

@@ -6,12 +6,12 @@ const button_component = @import("ui/components/Button.zig");
 const card_component = @import("ui/components/Card.zig");
 const display_component = @import("ui/components/Display.zig");
 const icon_component = @import("ui/components/Icon.zig");
-const interaction = @import("ui_interaction.zig");
-const design = @import("app_design.zig");
+const interaction = @import("ui/interaction.zig");
+const design = @import("ui/theme.zig");
 const row_item_component = @import("ui/components/RowItem.zig");
 const textarea_component = @import("ui/components/Textarea.zig");
 const text_component = @import("ui/components/Text.zig");
-const ui = @import("ui.zig");
+const ui = @import("ui/core.zig");
 
 pub const assistant_component_id: u8 = 1;
 pub const status_component_id: u8 = 2;

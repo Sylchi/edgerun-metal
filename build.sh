@@ -82,11 +82,11 @@ KERNEL_ASM_SRCS="
 	crypto/local_cell.asm
 	crypto/local_route.asm
 	agent/http_agent.asm
+	agent/da.asm
+	ui/render_ir.asm
+	ui/sw_fb.asm
 	wasm/wasm_interpreter.asm
-	wasm/wasm_module_data.asm
-	wasm/test_mem.asm
-	wasm/test_tblonly.asm
-	wasm/agent_minimal.asm
+	wasm/wasm_test_data.asm
 	entry.asm
 "
 

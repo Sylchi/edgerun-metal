@@ -1,5 +1,5 @@
 const std = @import("std");
-const ui = @import("../ui.zig");
+const ui = @import("../ui/core.zig");
 
 pub const exact_tolerance: u8 = 0;
 pub const hardware_tolerance: u8 = 2;

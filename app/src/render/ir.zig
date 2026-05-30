@@ -1,8 +1,8 @@
 const std = @import("std");
 const math = @import("../math.zig");
 const icon_vector = @import("../icon_vector.zig");
-const icon_pack = @import("../icon_pack.zig");
-const ui = @import("../ui.zig");
+const icon_pack = @import("../ui/icon.zig");
+const ui = @import("../ui/core.zig");
 
 pub const rect_float_stride: usize = 15;
 pub const text_vertex_float_stride: usize = 8;

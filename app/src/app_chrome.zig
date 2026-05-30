@@ -2,12 +2,12 @@ const std = @import("std");
 const button_component = @import("ui/components/Button.zig");
 const icon_component = @import("ui/components/Icon.zig");
 const row_item_component = @import("ui/components/RowItem.zig");
-const interaction = @import("ui_interaction.zig");
-const ui = @import("ui.zig");
-const ui_component_common = @import("ui_component_common.zig");
+const interaction = @import("ui/interaction.zig");
+const ui = @import("ui/core.zig");
+const ui_component_common = @import("ui/component_common.zig");
 const text_component = @import("ui/components/Text.zig");
-const design = @import("app_design.zig");
-const app_navigation = @import("app_navigation.zig");
+const design = @import("ui/theme.zig");
+const app_navigation = @import("route/navigation.zig");
 
 pub const header_h: f32 = design.header_h;
 pub const surface_radius: f32 = design.surface_radius;

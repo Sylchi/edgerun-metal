@@ -1,6 +1,6 @@
 const std = @import("std");
 const math = @import("../math.zig");
-const font_vector = @import("../font_vector.zig");
+const font_vector = @import("font.zig");
 const varfont = @import("../varfont.zig");
 
 pub const Point = struct { x: f32, y: f32 };

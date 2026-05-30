@@ -1,6 +1,6 @@
 const std = @import("std");
-const font_builtin = @import("../font_builtin.zig");
-const font_vector = @import("../font_vector.zig");
+const font_builtin = @import("font.zig");
+const font_vector = @import("font.zig");
 const raster = @import("vector_raster.zig");
 const varfont = @import("../varfont.zig");
 

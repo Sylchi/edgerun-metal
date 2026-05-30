@@ -1,14 +1,14 @@
 const std = @import("std");
 const uefi = std.os.uefi;
-const app_frame = @import("app_frame.zig");
-const app_images = @import("app_images.zig");
+const app_frame = @import("route/frame.zig");
+const app_images = @import("ui/images.zig");
 const gop_framebuffer = @import("boot/gop_framebuffer.zig");
-const interaction = @import("ui_interaction.zig");
+const interaction = @import("ui/interaction.zig");
 const renderer_font_atlas = @import("render/font_atlas_weighted.zig");
 const renderer_ir = @import("render/ir.zig");
 const renderer_pipeline = @import("render/pipeline.zig");
 const renderer_software = @import("render/backends/software.zig");
-const ui = @import("ui.zig");
+const ui = @import("ui/core.zig");
 const virtio_gpu = @import("virtio_gpu.zig");
 
 const debugcon_port: u16 = 0x402;

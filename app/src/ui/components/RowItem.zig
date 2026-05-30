@@ -1,17 +1,17 @@
 const std = @import("std");
 const clock = @import("../../clock.zig");
-const common = @import("../../ui_component_common.zig");
-const interaction = @import("../../ui_interaction.zig");
+const common = @import("../component_common.zig");
+const interaction = @import("../interaction.zig");
 const object = @import("../../object.zig");
-const ui = @import("../../ui.zig");
+const ui = @import("../core.zig");
 const text_component = @import("Text.zig");
 const icon_component = @import("Icon.zig");
-const layout = @import("../../layouts/Types.zig");
-const text_metrics = @import("../../ui_text_metrics.zig");
+const layout = @import("../layouts/Types.zig");
+const text_metrics = @import("../text_metrics.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
 const component_primitives = @import("Primitives.zig");
-const tokens = @import("../../ui_tokens.zig");
+const tokens = @import("../theme.zig");
 
 const IconSlot = icon_component.IconSlot;
 

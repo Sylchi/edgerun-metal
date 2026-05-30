@@ -1,7 +1,7 @@
 const std = @import("std");
 const bytes = @import("../../bytes.zig");
 const clock = @import("../../clock.zig");
-const ui = @import("../../ui.zig");
+const ui = @import("../core.zig");
 
 pub fn epoch() clock.Stamp {
     return .{ .keeper = .{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 } };

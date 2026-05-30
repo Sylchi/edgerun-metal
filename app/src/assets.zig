@@ -1,7 +1,7 @@
 const std = @import("std");
 const bytes = @import("bytes.zig");
-const icon = @import("icon.zig");
-const font_builtin = @import("font_builtin.zig");
+const icon = @import("ui/icon.zig");
+const font_builtin = @import("render/font.zig");
 
 pub const Status = enum {
     ok,

@@ -28,6 +28,7 @@
 %define ERROR_NOT_PRESENT 22
 
 SECTION .data
+global fb_addr, fb_width, fb_height, fb_pitch
 fb_addr:     dq 0
 fb_width:    dd 0
 fb_height:   dd 0

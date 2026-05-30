@@ -7,7 +7,7 @@ const grant = @import("../grant.zig");
 const identity = @import("../identity.zig");
 const preimage = @import("../preimage.zig");
 const store = @import("../store.zig");
-const wasm = @import("root.zig");
+const wasm = @import("../wasm/root.zig");
 const wasm_app = @import("app.zig");
 
 const App = app_mod.App;

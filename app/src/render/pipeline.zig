@@ -4,7 +4,7 @@ const icon_line_buffer = @import("icon_line_buffer.zig");
 const renderer_ir = @import("ir.zig");
 const renderer_present = @import("present.zig");
 const renderer_software = @import("backends/software.zig");
-const ui = @import("../ui.zig");
+const ui = @import("../ui/core.zig");
 
 pub const Error = renderer_present.Error || renderer_software.Error;
 pub const Receipt = renderer_present.Receipt;
@@ -61,7 +61,7 @@ pub fn prepareSceneAssets(font_atlas: *renderer_font_atlas.Atlas, commands: []co
     };
 }
 
-fn fontWeightForText(weight: ui.FontWeight) @import("../font_builtin.zig").Weight {
+fn fontWeightForText(weight: ui.FontWeight) @import("font.zig").Weight {
     return switch (weight) {
         .regular => .regular,
         .semibold => .semibold,

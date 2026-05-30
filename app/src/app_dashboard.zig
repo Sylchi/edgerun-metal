@@ -1,8 +1,8 @@
 const std = @import("std");
-const codec = @import("ui_codec.zig");
-const dashboard = @import("ui_dashboard.zig");
-const device_tree = @import("ui_device_tree.zig");
-const ui = @import("ui.zig");
+const codec = @import("ui/codec.zig");
+const dashboard = @import("ui/dashboard.zig");
+const device_tree = @import("ui/device_tree.zig");
+const ui = @import("ui/core.zig");
 
 const Error = dashboard.Error || error{ IfstatusFailed, CodecReadFailed };
 

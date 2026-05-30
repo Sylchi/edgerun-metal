@@ -1,6 +1,6 @@
-const ui = @import("../../ui.zig");
-const interaction = @import("../../ui_interaction.zig");
-const common = @import("../../ui_component_common.zig");
+const ui = @import("../core.zig");
+const interaction = @import("../interaction.zig");
+const common = @import("../component_common.zig");
 const node_renderer = @import("NodeRenderer.zig");
 
 pub const Target = union(enum) {

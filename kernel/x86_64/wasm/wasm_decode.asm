@@ -301,6 +301,12 @@ er_wasm_parse_module:
     mov     qword [table_min], 0
     mov     qword [table_max], 0
     mov     byte [table_has], 0
+    mov     qword [memory_min_pages], 0
+    mov     qword [memory_max_pages], 0
+    mov     qword [imported_memory_min], 0
+    mov     qword [imported_memory_max], 0
+    mov     qword [imported_table_min], 0
+    mov     qword [imported_table_max], 0
     mov     byte [imported_memory_present], 0
     mov     byte [imported_table_present], 0
     mov     qword [decoded_op_count], 0
@@ -722,10 +728,10 @@ er_wasm_parse_import_section:
     inc     rsi
     cmp     al, WASM_FUNCREF_TYPE
     jne     .unsupported
-    lea     rcx, [rsp - 16]
+    lea     rcx, [imported_table_min]
     er_call er_wasm_read_limits, .error
-    mov     rax, [rsp - 16]      ; min
-    mov     rbx, [rsp - 8]       ; max
+    mov     rax, [imported_table_min]  ; min
+    mov     rbx, [imported_table_max]  ; max
     cmp     rax, MAX_TABLE_ENTRIES
     ja      .unsupported
     test    rbx, rbx

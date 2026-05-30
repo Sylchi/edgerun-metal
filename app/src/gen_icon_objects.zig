@@ -1,7 +1,7 @@
 const std = @import("std");
 const mem = std.mem;
 const svg_parser = @import("svg_path_parser.zig");
-const icon_vector = @import("icon_vector.zig");
+const icon_vector = @import("ui/icon_vector.zig");
 
 pub fn main(init: std.process.Init) !void {
     const alloc = std.heap.page_allocator;

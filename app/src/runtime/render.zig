@@ -5,7 +5,7 @@ const app_frame = @import("../app_frame.zig");
 const app_images = @import("../app_images.zig");
 const app_cursor = @import("../app_cursor.zig");
 const state = @import("state.zig");
-const input = @import("input.zig");
+const input = @import("input/hit.zig");
 
 pub fn packedBuffers() state.renderer_pipeline.Buffers {
     return .{

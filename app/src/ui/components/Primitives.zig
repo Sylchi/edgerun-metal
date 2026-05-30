@@ -1,10 +1,10 @@
-const layout = @import("../../layouts/Types.zig");
-const common = @import("../../ui_component_common.zig");
-const interaction = @import("../../ui_interaction.zig");
+const layout = @import("../layouts/Types.zig");
+const common = @import("../component_common.zig");
+const interaction = @import("../interaction.zig");
 const std = @import("std");
-const text_metrics = @import("../../ui_text_metrics.zig");
-const tokens = @import("../../ui_tokens.zig");
-const ui = @import("../../ui.zig");
+const text_metrics = @import("../text_metrics.zig");
+const tokens = @import("../theme.zig");
+const ui = @import("../core.zig");
 const text_component = @import("Text.zig");
 
 pub fn constrainPreferredSize(preferred: ui.Size, constraints: layout.Constraints) ui.Size {

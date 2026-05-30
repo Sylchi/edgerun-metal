@@ -1,6 +1,6 @@
 const std = @import("std");
-const ui = @import("ui.zig");
-const interaction = @import("ui_interaction.zig");
+const ui = @import("ui/core.zig");
+const interaction = @import("ui/interaction.zig");
 
 pub fn hitTest(regions: []const interaction.Region, x: f32, y: f32) ?interaction.Region {
     return interaction.hitTest(regions, x, y);

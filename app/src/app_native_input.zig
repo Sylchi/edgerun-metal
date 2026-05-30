@@ -1,13 +1,13 @@
 const std = @import("std");
 const math = @import("math.zig");
-const app_agent = @import("app_agent.zig");
-const app_cursor = @import("app_cursor.zig");
-const app_frame = @import("app_frame.zig");
-const app_input_event = @import("app_input_event.zig");
-const app_navigation = @import("app_navigation.zig");
-const interaction = @import("ui_interaction.zig");
-const ui = @import("ui.zig");
-const ui_runtime = @import("ui_runtime.zig");
+const app_agent = @import("route/agent.zig");
+const app_cursor = @import("ui/runtime.zig");
+const app_frame = @import("route/frame.zig");
+const app_input_event = @import("input/event.zig");
+const app_navigation = @import("route/navigation.zig");
+const interaction = @import("ui/interaction.zig");
+const ui = @import("ui/core.zig");
+const ui_runtime = @import("ui/runtime.zig");
 
 pub const State = struct {
     route: app_navigation.Route = .{},

@@ -1,9 +1,9 @@
 const bytes = @import("../../bytes.zig");
-const common = @import("../../ui_component_common.zig");
+const common = @import("../component_common.zig");
 const component_codec = @import("Codec.zig");
 const object = @import("../../object.zig");
 const std = @import("std");
-const ui = @import("../../ui.zig");
+const ui = @import("../core.zig");
 
 const Error = common.Error;
 

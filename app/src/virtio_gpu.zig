@@ -1,6 +1,6 @@
 const std = @import("std");
 const renderer_ir = @import("render/ir.zig");
-const ui = @import("ui.zig");
+const ui = @import("ui/core.zig");
 const virtio = @import("virtio.zig");
 
 pub const device_id = virtio.modern_device_id_gpu;

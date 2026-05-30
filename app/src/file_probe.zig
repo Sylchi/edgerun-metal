@@ -1,7 +1,7 @@
 const std = @import("std");
 const math = @import("math.zig");
 const bytes_mod = @import("bytes.zig");
-const media = @import("media/root.zig");
+const media_image = @import("media/image.zig");
 
 pub const Error = error{
     UnsupportedFile,
@@ -119,13 +119,13 @@ pub fn factsWithName(bytes: []const u8, name: []const u8) Facts {
         .line_count = countLines(bytes),
     };
 
-    if (media.detectFormat(bytes)) |_| {
+    if (media_image.detectFormat(bytes)) |_| {
         out.probe = imageProbe(.erimg, bytes.len, .{ .runtime = true, .has_dimensions = true, .high_entropy = entropy >= 7500 });
-        if (media.decodeHeader(bytes)) |header| out.dimensions = .{ .width = @intCast(header.width), .height = @intCast(header.height) } else |_| {}
+        if (media_image.decodeHeader(bytes)) |header| out.dimensions = .{ .width = @intCast(header.width), .height = @intCast(header.height) } else |_| {}
         return out;
     } else |_| {}
 
-    if (media.importDetectFormat(bytes)) |format| {
+    if (media_image.importDetectFormat(bytes)) |format| {
         out.probe = switch (format) {
             .jpeg => imageProbe(.jpeg, bytes.len, .{ .import = true, .high_entropy = entropy >= 7500 }),
             .jxl => imageProbe(.jxl, bytes.len, .{ .import = true, .metadata_only = true, .high_entropy = entropy >= 7500 }),
@@ -133,7 +133,7 @@ pub fn factsWithName(bytes: []const u8, name: []const u8) Facts {
             .tga => imageProbe(.tga, bytes.len, .{ .import = true, .high_entropy = entropy >= 7500 }),
             .webp => imageProbe(.webp, bytes.len, .{ .import = true, .high_entropy = entropy >= 7500 }),
         };
-        if (media.importHeader(bytes)) |header| {
+        if (media_image.importHeader(bytes)) |header| {
             out.dimensions = .{ .width = @intCast(header.width), .height = @intCast(header.height) };
             out.probe.capability.has_dimensions = true;
         } else |_| {}
@@ -311,7 +311,7 @@ fn endsWithIgnoreCase(value: []const u8, suffix: []const u8) bool {
 }
 
 test "file probe classifies ERIMG as runtime image" {
-    const ui = @import("ui.zig");
+    const ui = @import("ui/core.zig");
     const runtime_image = @import("media/runtime_image.zig");
     const pixels = [_]ui.Color{.{ .r = 1, .g = 2, .b = 3, .a = 255 }};
     var canonical: [runtime_image.header_size + @sizeOf(ui.Color)]u8 = undefined;

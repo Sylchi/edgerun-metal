@@ -3,7 +3,7 @@ const clock = @import("../clock.zig");
 const grant = @import("../grant.zig");
 const identity = @import("../identity.zig");
 const preimage = @import("../preimage.zig");
-const wasm = @import("root.zig");
+const wasm = @import("../wasm/root.zig");
 const byte_utils = @import("../bytes.zig");
 
 const App = app_mod.App;

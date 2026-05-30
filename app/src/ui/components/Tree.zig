@@ -1,4 +1,4 @@
-const common = @import("../../ui_component_common.zig");
+const common = @import("../component_common.zig");
 const component_test = @import("TestSupport.zig");
 const component_codec = @import("Codec.zig");
 const component_union = @import("Component.zig");
@@ -7,7 +7,7 @@ const slot_component = @import("Slot.zig");
 const stack_component = @import("Stack.zig");
 const std = @import("std");
 const tree_codec = @import("TreeCodec.zig");
-const ui = @import("../../ui.zig");
+const ui = @import("../core.zig");
 
 const Error = common.Error;
 

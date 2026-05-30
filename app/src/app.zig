@@ -12,12 +12,12 @@ const relay = @import("relay.zig");
 const seal = @import("seal.zig");
 const store = @import("store.zig");
 const tpmapp = @import("tpmapp.zig");
-const component_common = @import("ui_component_common.zig");
+const component_common = @import("ui/component_common.zig");
 const component_union = @import("ui/components/Component.zig");
 const stack_component = @import("ui/components/Stack.zig");
 const slot_component = @import("ui/components/Slot.zig");
-const ui = @import("ui.zig");
-const ui_resolver = @import("ui_resolver.zig");
+const ui = @import("ui/core.zig");
+const ui_resolver = @import("ui/resolver.zig");
 
 const Component = component_union.Component;
 const Stack = stack_component.Stack(Component);

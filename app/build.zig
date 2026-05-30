@@ -196,7 +196,7 @@ pub fn build(b: *std.Build) void {
 
     const ui_core_tests = b.addTest(.{
         .root_module = b.createModule(.{
-            .root_source_file = b.path("src/ui_core_test.zig"),
+            .root_source_file = b.path("src/ui/core_test.zig"),
             .target = target,
             .optimize = optimize,
         }),
@@ -210,7 +210,7 @@ pub fn build(b: *std.Build) void {
 
     const component_gallery_tests = b.addTest(.{
         .root_module = b.createModule(.{
-            .root_source_file = b.path("src/component_gallery.zig"),
+            .root_source_file = b.path("src/ui/component_gallery.zig"),
             .target = target,
             .optimize = optimize,
         }),
@@ -457,7 +457,7 @@ pub fn build(b: *std.Build) void {
     const ui_wasm = b.addExecutable(.{
         .name = "edgerun-ui-components",
         .root_module = b.createModule(.{
-            .root_source_file = b.path("src/ui_wasm.zig"),
+            .root_source_file = b.path("src/ui/wasm.zig"),
             .target = app_runtime_target,
             .optimize = optimize,
             .single_threaded = true,

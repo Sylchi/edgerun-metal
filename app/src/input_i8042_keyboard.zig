@@ -1,5 +1,5 @@
 const std = @import("std");
-const app_input_event = @import("app_input_event.zig");
+const app_input_event = @import("input/event.zig");
 
 pub const source_name = "framework13-i8042-at-translated-set2";
 pub const resource_id = "framework13-i8042-keyboard";
