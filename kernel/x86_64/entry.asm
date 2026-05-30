@@ -144,11 +144,11 @@ _start:
 .64bit:
     ; Load data segment descriptor
     mov     ax, SEL_DATA64
-    mov     ds, ax
-    mov     es, ax
+    db      0x8E, 0xD8       ; mov ds, ax (raw encode to suppress YASM seg warning)
+    db      0x8E, 0xC0       ; mov es, ax
     mov     fs, ax
     mov     gs, ax
-    mov     ss, ax
+    db      0x8E, 0xD0       ; mov ss, ax
 
     ; Zero BSS using multiboot-provided stack
     lea     rdi, [rel __bss_start]
