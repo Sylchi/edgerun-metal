@@ -20,84 +20,8 @@ BOUNDARY_ERA           equ 4
 KEEPER_ID_SIZE         equ 32
 SIZEOF_CLOCK           equ 88
 
-; ─── Assertion macros ──────────────────────────────────────────────
-%macro ASSERT_EQ 2
-    cmp     %1, %2
-    jne     %%fail
-    inc     qword [rel passed]
-    jmp     %%done
-%%fail:
-    inc     qword [rel failed]
-%%done:
-%endmacro
-
-; Assert that rax == expected (immediate)
-%macro ASSERT_RAX 1
-    cmp     rax, %1
-    jne     %%fail
-    inc     qword [rel passed]
-    jmp     %%done
-%%fail:
-    inc     qword [rel failed]
-%%done:
-%endmacro
-
-; Assert that rdx == expected error code (immediate)
-%macro ASSERT_RDX 1
-    cmp     rdx, %1
-    jne     %%fail
-    inc     qword [rel passed]
-    jmp     %%done
-%%fail:
-    inc     qword [rel failed]
-%%done:
-%endmacro
-
-; Assert that memory at rdi (size rsi) equals expected immediate byte
-%macro ASSERT_MEM_ALL 2
-    push    rcx
-    push    rdi
-    push    rsi
-    mov     rcx, %2
-    mov     al, %1
-%%loop:
-    cmp     [rdi], al
-    jne     %%fail
-    inc     rdi
-    dec     rcx
-    jnz     %%loop
-    inc     qword [rel passed]
-    jmp     %%done
-%%fail:
-    inc     qword [rel failed]
-%%done:
-    pop     rsi
-    pop     rdi
-    pop     rcx
-%endmacro
-
-; Assert that memory at rdi (size rsi) is all zeros
-%macro ASSERT_MEM_ZERO 2
-    push    rcx
-    push    rdi
-    push    rsi
-    mov     rcx, %2
-    xor     eax, eax
-%%loop:
-    cmp     [rdi], al
-    jne     %%fail
-    inc     rdi
-    dec     rcx
-    jnz     %%loop
-    inc     qword [rel passed]
-    jmp     %%done
-%%fail:
-    inc     qword [rel failed]
-%%done:
-    pop     rsi
-    pop     rdi
-    pop     rcx
-%endmacro
+; ─── Use shared assertion macros from test_macros.inc ───────────────
+%include "test/test_macros.inc"
 
 ; Assert u64 value at memory location equals expected
 ; %1 = address expression (e.g. clock1 + 32), %2 = expected u64 immediate

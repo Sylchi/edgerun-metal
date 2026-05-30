@@ -3,6 +3,8 @@
 ; ==================================================================
 SECTION .text
 
+extern er_memcpy
+
 ; ==================================================================
 ; Helper: er_wasm_read_leb_u32
 ; Reads a LEB128 unsigned 32-bit value from [rsi], returns in rax.

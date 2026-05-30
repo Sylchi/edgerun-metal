@@ -50,3 +50,15 @@ DA_COMPOSITE_ICON_BYTES  equ DA_COMPOSITE_MAX_ICONS * 36   ; 9 * 4 bytes per ico
 
 ; DA identity label length
 DA_LABEL_LEN equ 16
+
+; DA app lifecycle message types
+DA_MSG_LAUNCH_APP         equ 10  ; launch a WASM app
+DA_MSG_APP_EXIT           equ 11  ; app signals exit
+
+; App registry entry struct (40 bytes)
+DA_APP_HASH      equ 0   ; 32 bytes — app identity hash
+DA_APP_STATE     equ 32  ; 1 byte — 0=idle, 1=running, 2=exited
+DA_APP_SLOT      equ 33  ; 4 bytes — sender slot_id
+DA_APP_SIZE      equ 37
+
+DA_MAX_APPS      equ 4

@@ -3,7 +3,7 @@ const mem = std.mem;
 const icon_vector = @import("icon_vector.zig");
 const icon = @import("icon.zig");
 
-const ir_src = @embedFile("gen/icon_asset_pack_ir.bin");
+const ir_src = @embedFile("../gen/icon_asset_pack_ir.bin");
 const ir_storage: [ir_src.len]u8 align(4) = blk: {
     var arr: [ir_src.len]u8 align(4) = undefined;
     @memcpy(&arr, ir_src);
@@ -11,7 +11,7 @@ const ir_storage: [ir_src.len]u8 align(4) = blk: {
 };
 const ir_bytes: []const u8 = &ir_storage;
 
-const index_bytes = @embedFile("gen/icon_asset_pack_index.bin");
+const index_bytes = @embedFile("../gen/icon_asset_pack_index.bin");
 
 pub const icon_count: u32 = mem.readInt(u32, index_bytes[4..8], .little);
 

@@ -7,7 +7,6 @@
 SECTION .rodata
 align 8
 ceil_addend:    dd 0x3F7FFFFE       ; 0.99999988f → add then trunc to get ceil
-const_255:      dd 255
 
 SECTION .text
 
@@ -83,24 +82,27 @@ er_fn sw_fb_fill
     cmp     r11d, r9d
     jle     .early_ret_fill
 
-    mov     ebx, r9d               ; y = y0
-
-.row_loop_fill:
-    ; offset = y * width + x0
-    mov     eax, ebx
+    ; Compute start pointer = pixels + y0 * width + x0
+    mov     eax, r9d
     mul     r12d
     add     eax, r8d
+    lea     r13, [r14 + rax*4]    ; r13 = row pointer (incremented by pitch)
 
-    ; fill one row: pixels[offset..offset+(x1-x0)] = color
-    lea     rdi, [r14 + rax*4]
-    mov     eax, r15d
     mov     ecx, r10d
-    sub     ecx, r8d
-    rep     stosd
+    sub     ecx, r8d              ; ecx = pixels per row
+    mov     eax, r15d             ; color
+    shl     r12d, 2               ; r12d = pitch in bytes (width * 4)
 
-    inc     ebx
-    cmp     ebx, r11d
-    jb      .row_loop_fill
+.row_loop_fill:
+    mov     rdi, r13
+    push    rcx                   ; save count
+    rep     stosd
+    pop     rcx
+    add     r13, r12              ; next row by pitch
+
+    dec     r11d
+    cmp     r11d, r9d
+    ja      .row_loop_fill
 
 .early_ret_fill:
     pop     r15
@@ -118,14 +120,14 @@ er_fn sw_fb_fill
 ; rdi = width, rsi = height, rdx = pixels
 ; rcx = x, r8 = y, r9 = color (packed u32 0xAABBGGRR)
 ; [rbp+16] = alpha (u8, 0-255)
+; Uses (x * 257 + 257) >> 16 in place of div 255.
 ; ==================================================================
 er_fn sw_fb_blend_pixel
     er_frame_push
     push    rbx
     push    r12
-    sub     rsp, 8
 
-    mov     r12, rdx               ; save pixels ptr (before mul clobbers rdx)
+    mov     r12, rdx               ; save pixels ptr
 
     ; index = y * width + x
     mov     eax, r8d
@@ -138,22 +140,25 @@ er_fn sw_fb_blend_pixel
 
     ; alpha
     movzx   r8d, byte [rbp + 16]
+    mov     r10d, 255
+    sub     r10d, r8d              ; r10d = inv_alpha
 
-    ; ---- R channel (byte 0) ----
+    ; ---- Blend all 4 channels using multiply (no div) ----
+    ; Each channel: (src_ch * alpha + dst_ch * inv + 127) * 257 + 257) >> 16
+
+    ; R channel (byte 0)
     movzx   eax, r9b
     imul    eax, r8d
     movzx   ecx, dil
-    mov     edx, 255
-    sub     edx, r8d               ; inv = 255 - alpha
-    imul    ecx, edx
+    imul    ecx, r10d
     add     eax, ecx
     add     eax, 127
-    xor     edx, edx
-    mov     ecx, 255
-    div     ecx
-    mov     byte [rsp], al
+    imul    eax, 257
+    add     eax, 257
+    shr     eax, 16
+    mov     byte [rsp - 8], al
 
-    ; ---- G channel (byte 1) ----
+    ; G channel (byte 1)
     mov     eax, r9d
     shr     eax, 8
     and     eax, 0xFF
@@ -161,17 +166,15 @@ er_fn sw_fb_blend_pixel
     mov     ecx, edi
     shr     ecx, 8
     and     ecx, 0xFF
-    mov     edx, 255
-    sub     edx, r8d
-    imul    ecx, edx
+    imul    ecx, r10d
     add     eax, ecx
     add     eax, 127
-    xor     edx, edx
-    mov     ecx, 255
-    div     ecx
-    mov     byte [rsp + 1], al
+    imul    eax, 257
+    add     eax, 257
+    shr     eax, 16
+    mov     byte [rsp - 7], al
 
-    ; ---- B channel (byte 2) ----
+    ; B channel (byte 2)
     mov     eax, r9d
     shr     eax, 16
     and     eax, 0xFF
@@ -179,38 +182,35 @@ er_fn sw_fb_blend_pixel
     mov     ecx, edi
     shr     ecx, 16
     and     ecx, 0xFF
-    mov     edx, 255
-    sub     edx, r8d
-    imul    ecx, edx
+    imul    ecx, r10d
     add     eax, ecx
     add     eax, 127
-    xor     edx, edx
-    mov     ecx, 255
-    div     ecx
-    mov     byte [rsp + 2], al
+    imul    eax, 257
+    add     eax, 257
+    shr     eax, 16
+    mov     byte [rsp - 6], al
 
-    ; ---- A channel (byte 3) ----
+    ; A channel (byte 3) — different formula:
     ; alpha_final = min(255, dst.a + (color.a * alpha) / 255)
     mov     eax, r9d
     shr     eax, 24
     imul    eax, r8d
-    xor     edx, edx
-    mov     ecx, 255
-    div     ecx                    ; eax = (color.a * alpha) / 255
+    imul    eax, 257
+    add     eax, 257
+    shr     eax, 16
     mov     ecx, edi
-    shr     ecx, 24               ; dst.a
+    shr     ecx, 24
     add     eax, ecx
     cmp     eax, 255
     jle     .a_ok_bp
     mov     eax, 255
 .a_ok_bp:
-    mov     byte [rsp + 3], al
+    mov     byte [rsp - 5], al
 
-    ; Write back blended pixel using saved ptr and index
-    mov     eax, [rsp]
+    ; Write back blended pixel
+    mov     eax, [rsp - 8]
     mov     [r12 + rbx*4], eax
 
-    add     rsp, 8
     pop     r12
     pop     rbx
     pop     rbp

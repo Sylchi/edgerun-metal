@@ -1,6 +1,6 @@
 const std = @import("std");
 const math = @import("../math.zig");
-const icon_pack = @import("icon.zig");
+const icon_pack = @import("icon_pack.zig");
 const ui = @import("core.zig");
 const ui_runtime = @import("runtime.zig");
 

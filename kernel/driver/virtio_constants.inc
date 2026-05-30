@@ -26,17 +26,15 @@
 %define VIRTIO_PCI_CAP_ISR_CFG      3
 %define VIRTIO_PCI_CAP_DEVICE_CFG   4
 
-; PCI config space offsets
+%include "driver/pci_constants.inc"
+
+; Additional PCI constants (not in pci_constants.inc)
 %define PCI_VID                     0x00
 %define PCI_DID                     0x02
-%define PCI_COMMAND                 0x04
-%define PCI_STATUS                  0x06
-%define PCI_HEADER_TYPE             0x0E
-%define PCI_BAR0                    0x10
-%define PCI_CAP_LIST                0x34
 %define PCI_COMMAND_MEMORY          0x0002
 %define PCI_COMMAND_BUS_MASTER      0x0004
 %define PCI_STATUS_CAPABILITIES     0x0010
+%define PCI_CAP_LIST                PCI_CAPABILITIES_PTR
 
 ; Device status register bits
 %define VIRTIO_STATUS_ACKNOWLEDGE   0x01

@@ -202,7 +202,8 @@ er_fn er_clock_init
     lea     rdi, [rbx + er_clock.now + er_stamp.keeper]
     mov     rsi, r12
     mov     ecx, KEEPER_ID_SIZE
-    rep movsb
+    shr     ecx, 3
+    rep movsq
     mov     qword [rbx + er_clock.now + er_stamp.tick], 0
     mov     qword [rbx + er_clock.now + er_stamp.slot], 0
     mov     qword [rbx + er_clock.now + er_stamp.epoch], 0

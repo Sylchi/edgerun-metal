@@ -79,7 +79,8 @@ pub fn svgToIr(alloc: mem.Allocator, svg: []const u8) ![]const f32 {
             mem.eql(u8, tag_name, "stop") or
             mem.eql(u8, tag_name, "clipPath")) continue;
 
-        const attrs = extractAttributes(alloc, tag_content);
+        var attrs = extractAttributes(alloc, tag_content);
+        defer attrs.deinit(alloc);
 
         const fill_spec = if (attrs.getRaw("fill")) |f| parsePaintSpec(f) else default_attrs.fill;
         const stroke_spec = if (attrs.getRaw("stroke")) |s| parsePaintSpec(s) else default_attrs.stroke;
@@ -236,7 +237,8 @@ fn extractGradients(alloc: mem.Allocator, svg: []const u8, viewbox: svg_parser.V
         const tag = search[lg_start .. lg_start + lg_end + 1];
         search = search[lg_start + lg_end + 1 ..];
 
-        const attrs = extractAttributes(alloc, tag);
+        var attrs = extractAttributes(alloc, tag);
+        defer attrs.deinit(alloc);
 
         _ = attrs.getRaw("id") orelse continue;
         const href = attrs.getRaw("href");
@@ -261,7 +263,8 @@ fn extractGradients(alloc: mem.Allocator, svg: []const u8, viewbox: svg_parser.V
             const stop_end = mem.indexOf(u8, stop_search[stop_start..], ">") orelse break;
             const stop_tag = stop_search[stop_start .. stop_start + stop_end + 1];
             stop_search = stop_search[stop_start + stop_end + 1 ..];
-            const stop_attrs = extractAttributes(alloc, stop_tag);
+            var stop_attrs = extractAttributes(alloc, stop_tag);
+            defer stop_attrs.deinit(alloc);
             const offset = parseF32Attr(stop_attrs.getRaw("offset"), 0.0);
             const stop_color_str = stop_attrs.getRaw("stop-color") orelse "black";
             const stop_color = if (parsePaintSpec(stop_color_str)) |ps| switch (ps) {
@@ -355,7 +358,8 @@ fn extractSvgAttrs(alloc: mem.Allocator, svg: []const u8) SvgAttrs {
     const svg_tag_end = findTagEnd(svg[svg_tag_start..]) orelse return result;
     const tag = svg[svg_tag_start .. svg_tag_start + svg_tag_end + 1];
 
-    const attrs = extractAttributes(alloc, tag);
+    var attrs = extractAttributes(alloc, tag);
+    defer attrs.deinit(alloc);
     if (attrs.getRaw("viewBox")) |vb| {
         result.viewBox = parseViewBox(vb) orelse result.viewBox;
     }
@@ -396,8 +400,7 @@ fn extractSvgAttrs(alloc: mem.Allocator, svg: []const u8) SvgAttrs {
 fn parsePaintSpec(value: []const u8) ?PaintSpec {
     const t = mem.trim(u8, value, " \"'");
     if (mem.eql(u8, t, "none")) return null;
-    if (mem.eql(u8, t, "currentColor") or mem.eql(u8, t, "white") or
-        mem.eql(u8, t, "#fff") or mem.eql(u8, t, "#ffffff")) {
+    if (mem.eql(u8, t, "currentColor")) {
         return PaintSpec{ .current_color = {} };
     }
     if (mem.startsWith(u8, t, "url(")) {
@@ -709,6 +712,10 @@ const AttrMap = struct {
         }
         return null;
     }
+
+    fn deinit(self: *AttrMap, alloc: mem.Allocator) void {
+        self.pairs.deinit(alloc);
+    }
 };
 
 const AttrPair = struct { name: []const u8, value: []const u8 };
@@ -759,7 +766,8 @@ fn appendClipPathForRef(alloc: mem.Allocator, ir: *std.ArrayList(f32), svg: []co
         const path_tag_end = mem.indexOf(u8, search[path_tag_start..], ">") orelse break;
         const path_tag = search[path_tag_start .. path_tag_start + path_tag_end + 1];
         search = search[path_tag_start + path_tag_end + 1 ..];
-        const pattrs = extractAttributes(alloc, path_tag);
+        var pattrs = extractAttributes(alloc, path_tag);
+        defer pattrs.deinit(alloc);
         const d = pattrs.getRaw("d") orelse continue;
         try appendPathData(ir, alloc, d, viewbox);
     }

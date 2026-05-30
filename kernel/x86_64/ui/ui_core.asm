@@ -39,6 +39,7 @@ er_fn ui_color_pack
 ; Alpha-blend two packed colors.
 ; rdi = src (0xAABBGGRR), rsi = dst, rdx = alpha (0-255)
 ; returns: eax = blended color
+; Uses (x * 257 + 257) >> 16 in place of div 255.
 ; ==================================================================
 er_fn ui_color_blend
     push    rbx
@@ -51,68 +52,64 @@ er_fn ui_color_blend
     mov     ecx, 255
     sub     ecx, ebx               ; inv = 255 - alpha
 
-    ; Blend each channel: (src_ch * alpha + dst_ch * inv + 127) / 255
-    xor     eax, eax
-    xor     edx, edx
-
     ; R channel (byte 0)
-    movzx   edx, r12b
-    imul    edx, ebx
-    movzx   r8d, r13b
-    imul    r8d, ecx
-    add     edx, r8d
-    add     edx, 127
-    mov     eax, edx
-    mov     edi, 255
-    div     edi
-    mov     r8d, eax                ; r result in r8b
+    movzx   eax, r12b
+    imul    eax, ebx
+    movzx   edx, r13b
+    imul    edx, ecx
+    add     eax, edx
+    add     eax, 127
+    imul    eax, 257
+    add     eax, 257
+    shr     eax, 16
+    mov     r8d, eax
 
     ; G channel (byte 1)
-    movzx   edx, r12b
+    mov     eax, r12d
+    shr     eax, 8
+    and     eax, 0xFF
+    imul    eax, ebx
+    mov     edx, r13d
     shr     edx, 8
     and     edx, 0xFF
-    imul    edx, ebx
-    movzx   r9d, r13b
-    shr     r9d, 8
-    and     r9d, 0xFF
-    imul    r9d, ecx
-    add     edx, r9d
-    add     edx, 127
-    mov     eax, edx
-    xor     edx, edx
-    div     edi
+    imul    edx, ecx
+    add     eax, edx
+    add     eax, 127
+    imul    eax, 257
+    add     eax, 257
+    shr     eax, 16
     shl     eax, 8
     or      r8d, eax
 
     ; B channel (byte 2)
-    mov     edx, r12d
+    mov     eax, r12d
+    shr     eax, 16
+    and     eax, 0xFF
+    imul    eax, ebx
+    mov     edx, r13d
     shr     edx, 16
     and     edx, 0xFF
-    imul    edx, ebx
-    mov     r9d, r13d
-    shr     r9d, 16
-    and     r9d, 0xFF
-    imul    r9d, ecx
-    add     edx, r9d
-    add     edx, 127
-    mov     eax, edx
-    xor     edx, edx
-    div     edi
+    imul    edx, ecx
+    add     eax, edx
+    add     eax, 127
+    imul    eax, 257
+    add     eax, 257
+    shr     eax, 16
     shl     eax, 16
     or      r8d, eax
 
     ; A channel (byte 3)
-    mov     edx, r12d
+    mov     eax, r12d
+    shr     eax, 24
+    imul    eax, ebx
+    mov     edx, r13d
     shr     edx, 24
-    imul    edx, ebx
-    mov     r9d, r13d
-    shr     r9d, 24
-    imul    r9d, ecx
-    add     edx, r9d
-    add     edx, 127
-    mov     eax, edx
-    xor     edx, edx
-    div     edi
+    imul    edx, ecx
+    add     eax, edx
+    add     eax, 127
+    imul    eax, 257
+    add     eax, 257
+    shr     eax, 16
     shl     eax, 24
     or      r8d, eax
 

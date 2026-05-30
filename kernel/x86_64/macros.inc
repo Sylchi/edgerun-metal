@@ -189,36 +189,4 @@
     mov     [%1 + %2], %3
 %endm
 
-; ------------------------------------------------------------------
-; Memory helpers (clobber rax, rcx, rdi, rsi)
-; ------------------------------------------------------------------
-; Memory helpers (clobber rax, rcx, rdi, rsi)
-; ------------------------------------------------------------------
-; Zero N bytes at [PTR]
-%macro er_zero_mem 2
-    cld
-    mov     rdi, %1
-    mov     rcx, %2
-    xor     eax, eax
-    rep     stosb
-%endm
-
-; Copy N bytes from [SRC] to [DST]
-%macro er_copy_mem 3
-    cld
-    mov     rsi, %1  ; src
-    mov     rdi, %2  ; dst
-    mov     rcx, %3  ; count
-    rep     movsb
-%endm
-
-; Compare N bytes of [A] vs [B]; sets ZF if equal
-%macro er_cmp_mem 3
-    cld
-    mov     rsi, %1
-    mov     rdi, %2
-    mov     rcx, %3
-    repe    cmpsb
-%endm
-
 %endif ; MACROS_INC

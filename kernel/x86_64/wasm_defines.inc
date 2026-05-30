@@ -18,13 +18,13 @@
 %define MAX_GLOBALS          256
 %define MAX_ELEMENTS         128
 %define MAX_DATAS            128
-%define MAX_INDIRECT_TABLE   1024
+%define MAX_INDIRECT_TABLE   1024      ; also MAX_TABLE_ENTRIES
 %define MAX_LOCALS           128
 %define MAX_CALL_DEPTH       128
 %define MAX_STACK            4096
-%define MAX_CONTROL          256
+%define MAX_CONTROL          256       ; also MAX_CONTROL_DEPTH
 %define MAX_HOST_IMPORTS     256
-%define FRAME_SAVE_SIZE      512 * 1024
+; FRAME_SAVE_SIZE defined in wasm_constants.inc (1MB)
 
 ; ==================================================================
 ; WASM binary format constants
@@ -118,10 +118,10 @@ wasm_version: db 0x01, 0x00, 0x00, 0x00
 ; ==================================================================
 %define WASM_PAGE_SIZE       65536
 %define WASM_PAGE_SHIFT      16
-%define MAX_TABLE_ENTRIES    1024
+%define MAX_TABLE_ENTRIES    MAX_INDIRECT_TABLE
 %define MAX_DATA_SEGMENTS    128
 %define MAX_DECODED_OPS      512 * 1024
-%define MAX_CONTROL_DEPTH    256
+%define MAX_CONTROL_DEPTH    MAX_CONTROL
 
 ; LEB128 constant definitions
 %define LEB32_MAX_BYTES      5
@@ -135,19 +135,19 @@ wasm_version: db 0x01, 0x00, 0x00, 0x00
 %define LIMITS_MIN_ONLY      0
 %define LIMITS_MIN_MAX       1
 
-; Section IDs (short aliases matching wasm_decode.asm naming)
-%define SECTION_TYPE          1
-%define SECTION_IMPORT        2
-%define SECTION_FUNCTION      3
-%define SECTION_TABLE         4
-%define SECTION_MEMORY        5
-%define SECTION_GLOBAL        6
-%define SECTION_EXPORT        7
-%define SECTION_START         8
-%define SECTION_ELEMENT       9
+; Short section aliases (used by wasm_decode.asm)
+%define SECTION_TYPE          WASM_SECTION_TYPE
+%define SECTION_IMPORT        WASM_SECTION_IMPORT
+%define SECTION_FUNCTION      WASM_SECTION_FUNCTION
+%define SECTION_TABLE         WASM_SECTION_TABLE
+%define SECTION_MEMORY        WASM_SECTION_MEMORY
+%define SECTION_GLOBAL        WASM_SECTION_GLOBAL
+%define SECTION_EXPORT        WASM_SECTION_EXPORT
+%define SECTION_START         WASM_SECTION_START
+%define SECTION_ELEMENT       WASM_SECTION_ELEMENT
+%define SECTION_CODE          WASM_SECTION_CODE
+%define SECTION_DATA          WASM_SECTION_DATA
 %define SECTION_DATA_COUNT    12
-%define SECTION_CODE          10
-%define SECTION_DATA          11
 
 ; External kind constants (for import/export parsing)
 %define EXTERNAL_FUNCTION     0
@@ -156,7 +156,8 @@ wasm_version: db 0x01, 0x00, 0x00, 0x00
 %define EXTERNAL_GLOBAL       3
 
 ; WASM type / block aliases used by decoder
-%define WASM_EMPTY_BLOCK_TYPE 0x40
+%define WASM_EMPTY_BLOCK_TYPE WASM_TYPE_EMPTY
+%define WASM_FUNCREF_TYPE    WASM_TYPE_FUNCREF
 %define WASM_EXTENDED_PREFIX  0xfc
 
 ; Extended opcode constants (prefix 0xFC sub-ops)
@@ -248,14 +249,12 @@ wasm_version: db 0x01, 0x00, 0x00, 0x00
 ; WASM_OP_I32_TRUNC_SAT_F32_S etc. are defined separately in wasm_exec.asm
 ; because they require the dispatch table.
 
-; ==================================================================
-; Value type tags (for Value.tag field)
-; ==================================================================
-%define VALUE_TAG_I32      0x7f
-%define VALUE_TAG_I64      0x7e
-%define VALUE_TAG_F32      0x7d
-%define VALUE_TAG_F64      0x7c
-%define VALUE_TAG_FUNCREF  0x70
+; Value type tags — aliases for WASM_TYPE_* constants
+%define VALUE_TAG_I32      WASM_TYPE_I32
+%define VALUE_TAG_I64      WASM_TYPE_I64
+%define VALUE_TAG_F32      WASM_TYPE_F32
+%define VALUE_TAG_F64      WASM_TYPE_F64
+%define VALUE_TAG_FUNCREF  WASM_TYPE_FUNCREF
 
 ; Control frame kinds
 %define CONTROL_BLOCK      0

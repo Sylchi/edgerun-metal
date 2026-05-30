@@ -30,6 +30,21 @@ mkdir -p "${ASM_BUILD}"
 elf64()   { ${YASM} -f elf64   ${ASM_INC} -o "$2" "$1" && test -f "$2"; }
 elf32()   { ${YASM} -f elf32   ${ASM_INC} -o "$2" "$1" && test -f "$2"; }
 
+# Build object list string from KERNEL_ASM_SRCS with given prefix/suffix
+# Usage: kernel_objs <prefix> <suffix> [extra_objects...]
+kernel_objs() {
+	local prefix="$1" suffix="$2"; shift 2
+	local objs=""
+	for src in ${KERNEL_ASM_SRCS}; do
+		local name="${src%.asm}"; name="${name##*/}"
+		objs="${objs} ${ASM_BUILD}/${prefix}_${name}${suffix}"
+	done
+	for extra; do
+		objs="${objs} ${ASM_BUILD}/${extra}"
+	done
+	echo "${objs}"
+}
+
 # ---- kernel objects (elf32) ----
 KERNEL_ASM_SRCS="
 	crypto/blake3.asm
@@ -131,12 +146,7 @@ assemble_kernel_efi() {
 # ---- targets ----
 cmd_kernel() {
 	assemble_kernel
-	local objs=""
-	for src in ${KERNEL_ASM_SRCS}; do
-		local name="${src%.asm}"; name="${name##*/}"
-		objs="${objs} ${ASM_BUILD}/kernel_${name}.o"
-	done
-	objs="${objs} ${ASM_BUILD}/kernel_main_elf32.o"
+	local objs=$(kernel_objs "kernel" ".o" "kernel_main_elf32.o")
 	ld -m elf_i386 -T "${KERNEL_LD}" -o "${KERNEL_ELF}" ${objs}
 	strip --strip-all "${KERNEL_ELF}"
 	objcopy -O binary "${KERNEL_ELF}" "${KERNEL_BIN}"
@@ -154,12 +164,7 @@ cmd_kernel_hello() {
 
 cmd_kernel_efi() {
 	assemble_kernel_efi
-	local objs=""
-	for src in ${KERNEL_ASM_SRCS}; do
-		local name="${src%.asm}"; name="${name##*/}"
-		objs="${objs} ${ASM_BUILD}/kernel_efi_${name}.o"
-	done
-	objs="${objs} ${ASM_BUILD}/kernel_main_efi64.o"
+	local objs=$(kernel_objs "kernel_efi" ".o" "kernel_main_efi64.o")
 	ld -m i386pep -T "${KERNEL_EFI_LD}" --subsystem 10 --image-base 0x100000 \
 		-o "${KERNEL_EFI}" ${objs}
 	local esize=$(stat -c '%s' "${KERNEL_EFI}")
@@ -235,12 +240,7 @@ cmd_kernel_tpm_live_test() {
 	elf32 "$lt_src" "$lt_dst"
 	echo "  AS  ${lt_dst}"
 	# Link with live test main instead of kernel_main_elf32.o
-	local objs=""
-	for src in ${KERNEL_ASM_SRCS}; do
-		local name="${src%.asm}"; name="${name##*/}"
-		objs="${objs} ${ASM_BUILD}/kernel_${name}.o"
-	done
-	objs="${objs} ${ASM_BUILD}/kernel_tpm_live_test_main_elf32.o"
+	local objs=$(kernel_objs "kernel" ".o" "kernel_tpm_live_test_main_elf32.o")
 	ld -m elf_i386 -T "${KERNEL_LD}" -o "${KERNEL_ELF}" ${objs}
 	strip --strip-all "${KERNEL_ELF}"
 	objcopy -O binary "${KERNEL_ELF}" "${KERNEL_BIN}"

@@ -11,7 +11,12 @@ er_fn er_memset
     movzx   eax, sil            ; eax = value byte (zero-extended)
 
     cld
-    rep     stosb               ; fill [rdi] with al, rcx times
+    mov     r9, rcx
+    and     r9, 7
+    shr     rcx, 3
+    rep     stosq               ; qword fill (8x fewer iterations)
+    mov     rcx, r9
+    rep     stosb               ; remaining bytes
 
     mov     rax, r8             ; return dst
     ret
@@ -28,7 +33,12 @@ er_fn er_memcpy
     mov     rsi, rsi            ; rsi = src (already in rsi)
     mov     rdi, rax            ; rdi = dst
     cld
-    rep     movsb
+    mov     r8, rcx
+    and     r8, 7
+    shr     rcx, 3
+    rep     movsq               ; qword copy (8x fewer iterations)
+    mov     rcx, r8
+    rep     movsb               ; remaining bytes
 
     ret
 
@@ -42,8 +52,15 @@ er_fn er_memcmp
     jz      .equal
 
     mov     rcx, rdx
+    mov     r8, rcx
+    and     r8, 7
+    shr     rcx, 3
     cld
+    repe    cmpsq
+    jne     .done
+    mov     rcx, r8
     repe    cmpsb
+.done:
 
     movzx   eax, byte [rdi - 1]
     movzx   ecx, byte [rsi - 1]
@@ -72,14 +89,24 @@ er_fn er_memmove
     lea     rsi, [rsi + rdx - 1] ; src end
     lea     rdi, [rdi + rdx - 1] ; dst end
     mov     rcx, rdx
+    mov     r8, rcx
+    and     r8, 7
+    shr     rcx, 3
     std
+    rep     movsq
+    mov     rcx, r8
     rep     movsb
     cld
     ret
 
 .forward:
     mov     rcx, rdx
+    mov     r8, rcx
+    and     r8, 7
+    shr     rcx, 3
     cld
+    rep     movsq
+    mov     rcx, r8
     rep     movsb
     ret
 

@@ -4,6 +4,7 @@
 
 %include "x86_64/macros.inc"
 %include "x86_64/wasm_defines.inc"
+%include "driver/pci_constants.inc"
 
 extern er_pci_read32
 extern er_mmio_read32
@@ -12,10 +13,6 @@ extern er_serial_puts
 extern er_serial_puthex32
 extern er_serial_putdec32
 extern er_serial_crlf
-
-; PCI config registers (reused from pci.asm context)
-%define PCI_BAR0        0x10
-%define PCI_BAR1        0x14
 
 ; NVMe controller MMIO registers (BAR0 offset, 32-bit access)
 %define NVME_CAP_LO     0x00

@@ -6,16 +6,10 @@
 ; (CONFIG_ADDRESS at 0xCF8, CONFIG_DATA at 0xCFC).
 
 %include "x86_64/macros.inc"
+%include "driver/pci_constants.inc"
 
 %define PCI_ADDR_PORT   0xCF8
 %define PCI_DATA_PORT   0xCFC
-
-%define PCI_BAR0        0x10
-%define PCI_BAR1        0x14
-%define PCI_BAR2        0x18
-%define PCI_BAR3        0x1C
-%define PCI_BAR4        0x20
-%define PCI_BAR5        0x24
 
 ; NVMe class code
 %define NVME_CLASS      0x01

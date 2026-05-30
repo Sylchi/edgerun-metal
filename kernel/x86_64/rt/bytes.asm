@@ -14,13 +14,17 @@ SECTION .text
 er_fn er_bytes_nonzero
     test    esi, esi
     jz      .all_zero
+    cld
+    mov     ecx, esi
+    mov     r8, rcx
+    and     r8, 7
+    shr     rcx, 3
     xor     eax, eax
-.loop:
-    cmp     byte [rdi + rax], 0
-    jnz     .found
-    inc     eax
-    cmp     eax, esi
-    jb      .loop
+    repe    scasq
+    jne     .found
+    mov     rcx, r8
+    repe    scasb
+    jne     .found
 .all_zero:
     xor     eax, eax
     er_ok
@@ -34,28 +38,22 @@ er_fn er_bytes_nonzero
 ; er_bytes_eql(a, len_a, b, len_b) → bool
 ; rdi=a, esi=len_a, rdx=b, ecx=len_b
 ; Returns eax=1 if len_a==len_b and content matches, else 0. rdx=0.
+; Uses er_memcmp for qword-granular comparison (much faster than byte loop).
 ; ==================================================================
 er_fn er_bytes_eql
     cmp     esi, ecx
     jne     .not_eql
     test    esi, esi
-    jz      .eql             ; both zero-length → equal
-    push    rcx
-    xor     ecx, ecx
-.loop:
-    mov     al, [rdi + rcx]
-    cmp     al, [rdx + rcx]
-    jne     .not_eql_pop
-    inc     ecx
-    cmp     ecx, esi
-    jb      .loop
-    pop     rcx
+    jz      .eql
+    mov     rsi, rdx
+    mov     edx, esi
+    call    er_memcmp
+    test    eax, eax
+    jnz     .not_eql
 .eql:
     mov     eax, 1
     er_ok
     er_ret
-.not_eql_pop:
-    pop     rcx
 .not_eql:
     xor     eax, eax
     er_ok
@@ -114,54 +112,102 @@ er_fn er_bytes_order
 er_fn er_bytes_zero
     test    esi, esi
     jz      .zero_done
-    xor     eax, eax
-.zero_loop:
-    mov     [rdi + rax], byte 0
-    inc     eax
-    cmp     eax, esi
-    jb      .zero_loop
+    mov     edx, esi
+    xor     esi, esi
+    call    er_memset
 .zero_done:
     er_ret
 
-; ==================================================================
-; er_store16(out, value) → bool
-; rdi=out, esi=value (u16)
-; Little-endian store. Always returns 1. rdx=0.
-; ==================================================================
-er_fn er_store16
-    mov     [rdi], si
+%macro _store_le 2  ; %1=fn_suffix (16/32/64), %2=reg_name (si/esi/rsi)
+    SECTION .text
+    align 16
+    global er_store%1
+er_store%1:
+    mov     [rdi], %2
     mov     eax, 1
     er_ok
     er_ret
+%endmacro
 
-; ==================================================================
-; er_store32(out, value) → bool
-; rdi=out, esi=value (u32)
-; Little-endian store. Always returns 1. rdx=0.
-; ==================================================================
-er_fn er_store32
+%macro _store_be 1  ; %1=fn_suffix (32/64)
+    SECTION .text
+    align 16
+    global er_storebe%1
+er_storebe%1:
+    %if %1 = 32
+    bswap   esi
     mov     [rdi], esi
+    %elif %1 = 64
+    mov     rax, rsi
+    bswap   rax
+    mov     [rdi], rax
+    %endif
     mov     eax, 1
     er_ok
     er_ret
+%endmacro
 
-; ==================================================================
-; er_store64(out, value) → bool
-; rdi=out, esi=value (u64)
-; Little-endian store. Always returns 1. rdx=0.
-; ==================================================================
-er_fn er_store64
-    mov     [rdi], rsi
-    mov     eax, 1
+%macro _load_le 2  ; %1=fn_suffix (16/32/64), %2=size_bytes (2/4/8)
+    SECTION .text
+    align 16
+    global er_load%1
+er_load%1:
+    cmp     esi, %2
+    jb      %%fail
+    %if %2 = 2
+    movzx   eax, word [rdi]
+    %elif %2 = 4
+    mov     eax, [rdi]
+    %elif %2 = 8
+    mov     rax, [rdi]
+    %endif
     er_ok
     er_ret
+%%fail:
+    xor     eax, eax
+    er_err  1
+    er_ret
+%endmacro
+
+%macro _load_be 1  ; %1=fn_suffix (32/64)
+    SECTION .text
+    align 16
+    global er_loadbe%1
+er_loadbe%1:
+    %if %1 = 32
+    cmp     esi, 4
+    jb      %%fail
+    mov     eax, [rdi]
+    bswap   eax
+    %elif %1 = 64
+    cmp     esi, 8
+    jb      %%fail
+    mov     rax, [rdi]
+    bswap   rax
+    %endif
+    er_ok
+    er_ret
+%%fail:
+    xor     eax, eax
+    er_err  1
+    er_ret
+%endmacro
 
 ; ==================================================================
-; er_storebe16(out, value) → bool
-; rdi=out, esi=value (u16)
-; Big-endian store. Always returns 1. rdx=0.
+; LE store: er_store16/32/64
 ; ==================================================================
-er_fn er_storebe16
+_store_le 16, si
+_store_le 32, esi
+_store_le 64, rsi
+
+; ==================================================================
+; BE store: er_storebe16/32/64
+; storebe16 uses manual byte swap (no bswap for 16-bit)
+; ==================================================================
+SECTION .text
+align 16
+global er_storebe16
+er_storebe16:
     mov     [rdi], si
     mov     al, [rdi]
     mov     bl, [rdi + 1]
@@ -171,85 +217,24 @@ er_fn er_storebe16
     er_ok
     er_ret
 
-; ==================================================================
-; er_storebe32(out, value) → bool
-; rdi=out, esi=value (u32)
-; Big-endian store. Always returns 1. rdx=0.
-; ==================================================================
-er_fn er_storebe32
-    bswap   esi
-    mov     [rdi], esi
-    mov     eax, 1
-    er_ok
-    er_ret
+_store_be 32
+_store_be 64
 
 ; ==================================================================
-; er_storebe64(out, value) → bool
-; rdi=out, rdx=value (u64)
-; Big-endian store. Always returns 1. rdx=0.
+; LE load: er_load16/32/64
 ; ==================================================================
-er_fn er_storebe64
-    mov     rax, rsi
-    bswap   rax
-    mov     [rdi], rax
-    mov     eax, 1
-    er_ok
-    er_ret
+_load_le 16, 2
+_load_le 32, 4
+_load_le 64, 8
 
 ; ==================================================================
-; er_load16(in) → u16 (or 0 if len < 2)
-; rdi=in, esi=len
-; Little-endian load. Returns u16 value in eax. rdx=error code.
+; BE load: er_loadbe16/32/64
+; loadbe16 uses xchg al,ah instead of bswap
 ; ==================================================================
-er_fn er_load16
-    cmp     esi, 2
-    jb      .load16_fail
-    movzx   eax, word [rdi]
-    er_ok
-    er_ret
-.load16_fail:
-    xor     eax, eax
-    er_err  1
-    er_ret
-
-; ==================================================================
-; er_load32(in) → u32
-; rdi=in, esi=len
-; Little-endian load. rdx=0 on success, 1 on error.
-; ==================================================================
-er_fn er_load32
-    cmp     esi, 4
-    jb      .load32_fail
-    mov     eax, [rdi]
-    er_ok
-    er_ret
-.load32_fail:
-    xor     eax, eax
-    er_err  1
-    er_ret
-
-; ==================================================================
-; er_load64(in) → u64
-; rdi=in, esi=len
-; Little-endian load. rdx=0 on success, 1 on error.
-; ==================================================================
-er_fn er_load64
-    cmp     esi, 8
-    jb      .load64_fail
-    mov     rax, [rdi]
-    er_ok
-    er_ret
-.load64_fail:
-    xor     eax, eax
-    er_err  1
-    er_ret
-
-; ==================================================================
-; er_loadbe16(in) → u16
-; rdi=in, esi=len
-; Big-endian load. rdx=0 on success, 1 on error.
-; ==================================================================
-er_fn er_loadbe16
+SECTION .text
+align 16
+global er_loadbe16
+er_loadbe16:
     cmp     esi, 2
     jb      .loadbe16_fail
     movzx   eax, word [rdi]
@@ -261,58 +246,24 @@ er_fn er_loadbe16
     er_err  1
     er_ret
 
-; ==================================================================
-; er_loadbe32(in) → u32
-; rdi=in, esi=len
-; Big-endian load. rdx=0 on success, 1 on error.
-; ==================================================================
-er_fn er_loadbe32
-    cmp     esi, 4
-    jb      .loadbe32_fail
-    mov     eax, [rdi]
-    bswap   eax
-    er_ok
-    er_ret
-.loadbe32_fail:
-    xor     eax, eax
-    er_err  1
-    er_ret
-
-; ==================================================================
-; er_loadbe64(in) → u64
-; rdi=in, esi=len
-; Big-endian load. rdx=0 on success, 1 on error.
-; ==================================================================
-er_fn er_loadbe64
-    cmp     esi, 8
-    jb      .loadbe64_fail
-    mov     rax, [rdi]
-    bswap   rax
-    er_ok
-    er_ret
-.loadbe64_fail:
-    xor     eax, eax
-    er_err  1
-    er_ret
+_load_be 32
+_load_be 64
 
 ; ==================================================================
 ; er_bytes_copy(dst, dst_len, src, src_len) → bool
 ; rdi=dst, esi=dst_len, rdx=src, ecx=src_len
 ; Copies src_len bytes from src to dst. Returns eax=1 if dst_len >= src_len.
 ; Returns eax=0 (rdx=1) if src_len > dst_len. rdx=0 on success.
+; Uses er_memcpy for qword-granular copy (much faster).
 ; ==================================================================
 er_fn er_bytes_copy
     cmp     ecx, esi
     ja      .copy_fail
     test    ecx, ecx
     jz      .copy_ok
-    xor     r8d, r8d
-.copy_loop:
-    mov     al, [rdx + r8]
-    mov     [rdi + r8], al
-    inc     r8d
-    cmp     r8d, ecx
-    jb      .copy_loop
+    mov     rsi, rdx
+    mov     edx, ecx
+    call    er_memcpy
 .copy_ok:
     mov     eax, 1
     er_ok

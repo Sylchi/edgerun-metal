@@ -122,6 +122,7 @@ test "tooltip component renders trigger content and hit region" {
     var collector = interaction.Collector.init(&regions);
 
     try tooltip.render(&scene, ui.Rect.init(0, 0, 240, 44), .{ .overlay = .{ .open_ids = &.{tooltip.id} } });
+    try tooltip.collectInteractions(&collector, ui.Rect.init(0, 0, 240, 44));
 
     try std.testing.expect(component_test.hasText(scene.written(), "Hover me"));
     try std.testing.expect(component_test.hasText(scene.written(), "Add to library"));

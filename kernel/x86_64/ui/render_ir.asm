@@ -178,7 +178,8 @@ er_fn er_render_ir_pack_channel
     lea     rdi, [rdi + rax*4]   ; dst = &buffer[*len]
     mov     rsi, r8              ; src = data
     mov     ecx, %2              ; byte count
-    rep     movsb
+    shr     ecx, 2               ; convert to dword count
+    rep     movsd
     pop     rsi
     mov     rax, [rsi]
     add     rax, %1
@@ -247,8 +248,8 @@ er_fn er_render_ir_rect_at
     sub     rax, rsi         ; index * 15
     lea     rsi, [rdi + rax*4]  ; &buffer[index * 15]
     mov     rdi, rdx         ; rdi = out
-    mov     ecx, RENDER_IR_RECT_BYTE_STRIDE
-    rep     movsb
+    mov     ecx, RENDER_IR_RECT_BYTE_STRIDE / 4
+    rep     movsd
     xor     eax, eax
     ret
 
@@ -264,8 +265,8 @@ er_fn er_render_ir_textured_vertex_at
     shl     rax, 3           ; index * 8
     lea     rsi, [rdi + rax*4]  ; &buffer[index * 8]
     mov     rdi, rdx
-    mov     ecx, RENDER_IR_TEXT_VERTEX_BYTE_STRIDE
-    rep     movsb
+    mov     ecx, RENDER_IR_TEXT_VERTEX_BYTE_STRIDE / 4
+    rep     movsd
     xor     eax, eax
     ret
 
@@ -281,8 +282,8 @@ er_fn er_render_ir_icon_at
     add     rax, rsi         ; index * 9
     lea     rsi, [rdi + rax*4]  ; &buffer[index * 9]
     mov     rdi, rdx
-    mov     ecx, RENDER_IR_ICON_BYTE_STRIDE
-    rep     movsb
+    mov     ecx, RENDER_IR_ICON_BYTE_STRIDE / 4
+    rep     movsd
     xor     eax, eax
     ret
 
@@ -298,8 +299,8 @@ er_fn er_render_ir_icon_line_vertex_at
     shl     rax, 1              ; index * 6
     lea     rsi, [rdi + rax*4]  ; &buffer[index * 6]
     mov     rdi, rdx
-    mov     ecx, RENDER_IR_ICON_LINE_BYTE_STRIDE
-    rep     movsb
+    mov     ecx, RENDER_IR_ICON_LINE_BYTE_STRIDE / 4
+    rep     movsd
     xor     eax, eax
     ret
 

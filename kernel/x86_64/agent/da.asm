@@ -13,12 +13,19 @@
 %include "x86_64/ui/ui_constants.inc"
 %include "x86_64/agent/agent_constants.inc"
 %include "x86_64/agent/da_constants.inc"
+%include "x86_64/crypto/local_constants.inc"
+%include "x86_64/wasm_defines.inc"
 
 extern er_local_route_register
 extern er_local_route_set_handler
+extern er_local_route_get_ring
+extern er_local_cell_send_to_slot
+extern er_local_ring_write
 extern er_blake3_hash_bytes
 extern er_memcpy
 extern er_memset
+extern er_memcmp
+extern er_fn_run
 
 ; Framebuffer info from fb_text.asm
 extern fb_addr, fb_width, fb_height, fb_pitch
@@ -47,6 +54,15 @@ da_composite_icon_len:  resq 1
 da_surface_registry: resb DA_MAX_SURFACES * DA_SURFACE_SIZE
 da_surface_count:    resd 1
 
+; App registry — tracks launched apps by identity
+da_app_registry: resb DA_MAX_APPS * DA_APP_SIZE
+da_app_count:    resd 1
+
+; DA's WASM runtime (for launching apps)
+da_wasm_memory:  resb 65536
+da_wasm_ticks:   resq 1
+da_wasm_runtime: resb RUNTIME_SIZE
+
 ; ==================================================================
 ; .data
 ; ==================================================================
@@ -59,36 +75,36 @@ da_layer_order: db DA_LAYER_SCRIM, DA_LAYER_MENU, DA_LAYER_POPOVER
                 db DA_LAYER_MODAL, DA_LAYER_TOAST
 
 ; ==================================================================
-; .rodata — test surface data
+; .rodata — shell surface data
 ; ==================================================================
 SECTION .rodata
 
-; Surface 1: full-screen background (1 rect, scrim layer)
-test1_rects:
+; Shell background: full-screen dark fill (1 rect, scrim layer)
+shell_bg_rects:
     dd 0.0, 0.0, 1024.0, 768.0
     dd 0.0, 0.0
     dd 0.0431, 0.0431, 0.0431, 1.0
     dd 0.0, 0.0, 0.0, 0.0
     dd 0.0
-test1_rects_end:
-test1_rect_count: dq (test1_rects_end - test1_rects) / 60
+shell_bg_rects_end:
+shell_bg_count: dq (shell_bg_rects_end - shell_bg_rects) / 60
 
-; Surface 2: panel (2 rects: shadow bg + accent bar, menu layer)
-test2_rects:
-    ; Rect 1: shadow
-    dd 200.0, 200.0, 624.0, 368.0
-    dd 8.0, 4.0
+; Shell status bar: bottom bar + accent line (2 rects, toast layer)
+shell_bar_rects:
+    ; Bar background
+    dd 0.0, 724.0, 1024.0, 44.0
+    dd 0.0, 0.0
     dd 0.0745, 0.0784, 0.0863, 1.0
     dd 0.0, 0.0, 0.0, 0.0
     dd 1.0
-    ; Rect 2: accent bar
-    dd 200.0, 200.0, 624.0, 4.0
+    ; Accent line at top of bar
+    dd 0.0, 724.0, 1024.0, 2.0
     dd 0.0, 0.0
     dd 0.2902, 0.8706, 0.5020, 1.0
     dd 0.0, 0.0, 0.0, 0.0
     dd 0.0
-test2_rects_end:
-test2_rect_count: dq (test2_rects_end - test2_rects) / 60
+shell_bar_rects_end:
+shell_bar_count: dq (shell_bar_rects_end - shell_bar_rects) / 60
 
 ; ==================================================================
 ; .text
@@ -130,7 +146,7 @@ er_fn er_da_init
     call    er_local_route_set_handler
 
 .init_skip_route:
-    call    er_da_inject_test_surfaces
+    call    er_da_inject_shell_surfaces
     mov     byte [rel da_initialized], 1
 
     add     rsp, 32
@@ -141,41 +157,450 @@ er_fn er_da_init
     er_ret
 
 ; ==================================================================
-; _da_handler — stub for future cell-based surface protocol
+; _da_handler — cell message dispatch for compositor
+; rdi = cell_ptr, rsi = sender_slot_id
 ; ==================================================================
 _da_handler:
+    push    rbx
+    push    r12
+    push    r13
+    mov     r12, rdi            ; cell_ptr
+    mov     r13d, esi           ; sender_slot_id
+
+    movzx   eax, byte [r12 + LOCAL_CELL_PAYLOAD]
+    cmp     al, DA_MSG_SURFACE_REGISTER
+    je      .register
+    cmp     al, DA_MSG_SURFACE_UNREGISTER
+    je      .unregister
+    cmp     al, DA_MSG_LAUNCH_APP
+    je      .launch
+    cmp     al, DA_MSG_APP_EXIT
+    je      .exit
+    ; Unknown message — ignore
+    pop     r13
+    pop     r12
+    pop     rbx
+    xor     eax, eax
+    er_ok
+    er_ret
+
+.register:
+    mov     rdi, r12
+    mov     esi, r13d
+    call    _da_register_surface
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+
+.unregister:
+    mov     rdi, r12
+    call    _da_unregister_surface
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+
+.launch:
+    mov     rdi, r12
+    mov     esi, r13d
+    call    _da_launch_app
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+
+.exit:
+    mov     rdi, r12
+    call    _da_app_exit
+    pop     r13
+    pop     r12
+    pop     rbx
     xor     eax, eax
     er_ok
     er_ret
 
 ; ==================================================================
-; er_da_inject_test_surfaces
+; _da_find_surface_by_hash — find surface slot by app hash
+; rdi = hash_ptr (32 bytes)
+; returns eax = slot_index, edx = ERROR_LOCAL_NOT_FOUND if none
 ; ==================================================================
-er_fn er_da_inject_test_surfaces
+_da_find_surface_by_hash:
     push    rbx
+    push    r12
+    mov     r12, rdi
+    xor     ebx, ebx
+.loop:
+    cmp     ebx, [rel da_surface_count]
+    jae     .not_found
+    mov     eax, ebx
+    imul    eax, DA_SURFACE_SIZE
+    lea     rdi, [rel da_surface_registry + rax + DA_SURFACE_HASH]
+    mov     rsi, r12
+    mov     edx, 32
+    call    er_memcmp
+    test    eax, eax
+    jz      .found
+    inc     ebx
+    jmp     .loop
+.found:
+    mov     eax, ebx
+    er_ok
+    pop     r12
+    pop     rbx
+    ret
+.not_found:
+    xor     eax, eax
+    er_err  ERROR_LOCAL_NOT_FOUND
+    pop     r12
+    pop     rbx
+    ret
 
-    ; Surface 0: background (scrim)
-    lea     rbx, [rel da_surface_registry]
-    mov     byte [rbx + DA_SURFACE_LAYER], DA_LAYER_SCRIM
-    mov     byte [rbx + DA_SURFACE_FLAGS], DA_SURFACE_VISIBLE
-    lea     rax, [rel test1_rects]
+; ==================================================================
+; _da_register_surface — register a surface from cell payload
+; rdi = cell_ptr, esi = sender_slot_id
+; Cell payload: [type:1][layer:1][flags:1][rect_count:2][hash:32][rect_data...]
+; ==================================================================
+_da_register_surface:
+    push    rbx
+    push    r12
+    push    r13
+    mov     r12, rdi
+    mov     r13d, esi
+
+    ; Extract sender identity hash from cell circ_id field
+    lea     rsi, [r12 + LOCAL_CELL_PAYLOAD + 5]  ; hash starts at offset 5 in payload
+    lea     rdi, [r12 + LOCAL_CELL_PAYLOAD + 5]  ; use it directly
+
+    ; Check if this hash already has a surface
+    mov     rdi, rsi
+    call    _da_find_surface_by_hash
+    test    edx, edx
+    jz      .update_existing
+
+    ; Find free slot or allocate new
+    mov     ebx, [rel da_surface_count]
+    cmp     ebx, DA_MAX_SURFACES
+    jae     .fail
+
+    mov     eax, ebx
+    imul    eax, DA_SURFACE_SIZE
+    lea     rbx, [rel da_surface_registry + rax]
+
+    ; Zero the slot
+    mov     edi, ebx
+    xor     esi, esi
+    mov     edx, DA_SURFACE_SIZE
+    call    er_memset
+
+    ; Copy app identity hash
+    lea     rdi, [rbx + DA_SURFACE_HASH]
+    lea     rsi, [r12 + LOCAL_CELL_PAYLOAD + 5]
+    mov     edx, 32
+    call    er_memcpy
+
+    ; Set layer from cell payload byte 1
+    mov     al, [r12 + LOCAL_CELL_PAYLOAD + 1]
+    mov     [rbx + DA_SURFACE_LAYER], al
+
+    ; Set flags from cell payload byte 2
+    mov     al, [r12 + LOCAL_CELL_PAYLOAD + 2]
+    mov     [rbx + DA_SURFACE_FLAGS], al
+
+    ; Use shell rects as placeholder (app provides real data via updates)
+    lea     rax, [rel shell_bg_rects]
     mov     [rbx + DA_SURFACE_RECT_PTR], rax
-    mov     rax, [rel test1_rect_count]
+    mov     rax, [rel shell_bg_count]
     mov     [rbx + DA_SURFACE_RECT_LEN], rax
-    mov     qword [rbx + DA_SURFACE_RECT_CAP], 16
+    mov     qword [rbx + DA_SURFACE_RECT_CAP], 0
     mov     qword [rbx + DA_SURFACE_ICON_PTR], 0
     mov     qword [rbx + DA_SURFACE_ICON_LEN], 0
     mov     qword [rbx + DA_SURFACE_ICON_CAP], 0
 
-    ; Surface 1: panel (menu)
-    lea     rbx, [rel da_surface_registry + DA_SURFACE_SIZE]
-    mov     byte [rbx + DA_SURFACE_LAYER], DA_LAYER_MENU
+    inc     dword [rel da_surface_count]
+    pop     r13
+    pop     r12
+    pop     rbx
+    xor     eax, eax
+    er_ok
+    ret
+
+.update_existing:
+    ; Surface already exists — update flags/layer
+    mov     eax, eax
+    imul    eax, DA_SURFACE_SIZE
+    lea     rbx, [rel da_surface_registry + rax]
+
+    mov     al, [r12 + LOCAL_CELL_PAYLOAD + 1]
+    mov     [rbx + DA_SURFACE_LAYER], al
+    mov     al, [r12 + LOCAL_CELL_PAYLOAD + 2]
+    mov     [rbx + DA_SURFACE_FLAGS], al
+
+    pop     r13
+    pop     r12
+    pop     rbx
+    xor     eax, eax
+    er_ok
+    ret
+
+.fail:
+    pop     r13
+    pop     r12
+    pop     rbx
+    mov     eax, -1
+    er_err  ERROR_LOCAL_FULL
+    ret
+
+; ==================================================================
+; _da_unregister_surface — remove a surface by hash from cell
+; rdi = cell_ptr
+; ==================================================================
+_da_unregister_surface:
+    push    rbx
+    push    r12
+
+    lea     rdi, [rdi + LOCAL_CELL_PAYLOAD + 5]
+    call    _da_find_surface_by_hash
+    test    edx, edx
+    jnz     .done
+
+    ; Shift remaining surfaces down to fill the gap
+    mov     ebx, eax
+    mov     eax, ebx
+    imul    eax, DA_SURFACE_SIZE
+    lea     rdi, [rel da_surface_registry + rax]
+
+    ; Zero the slot
+    xor     esi, esi
+    mov     edx, DA_SURFACE_SIZE
+    call    er_memset
+
+    dec     dword [rel da_surface_count]
+
+.done:
+    pop     r12
+    pop     rbx
+    xor     eax, eax
+    er_ok
+    ret
+
+; ==================================================================
+; _da_launch_app — launch a WASM app from cell payload
+; rdi = cell_ptr, esi = sender_slot_id
+; Cell payload: [type:1][wasm_len:4][export_len:1][export_name...][wasm_bytes...]
+; ==================================================================
+_da_launch_app:
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+    mov     r12, rdi            ; cell_ptr
+    mov     r13d, esi           ; sender_slot_id
+
+    ; Track app in registry
+    mov     ebx, [rel da_app_count]
+    cmp     ebx, DA_MAX_APPS
+    jae     .done               ; too many apps
+
+    mov     eax, ebx
+    imul    eax, DA_APP_SIZE
+    lea     r15, [rel da_app_registry + rax]
+
+    mov     byte [r15 + DA_APP_STATE], 1   ; running
+
+    ; Read wasm length and export info from cell
+    mov     edx, [r12 + LOCAL_CELL_PAYLOAD + 1]  ; wasm_len
+    movzx   r8d, byte [r12 + LOCAL_CELL_PAYLOAD + 5]  ; export_name_len
+
+    ; Export name pointer
+    lea     rcx, [r12 + LOCAL_CELL_PAYLOAD + 6]
+
+    ; WASM bytes pointer
+    lea     rsi, [r12 + LOCAL_CELL_PAYLOAD + 6]
+    add     rsi, r8
+
+    ; Set up DA's WASM runtime
+    lea     r14, [rel da_wasm_runtime]
+    lea     rax, [rel da_wasm_memory]
+    mov     [r14 + RUNTIME_MEMORY_PTR_OFF], rax
+    mov     qword [r14 + RUNTIME_MEMORY_LEN_OFF], 65536
+    lea     rax, [rel da_wasm_ticks]
+    mov     [r14 + RUNTIME_TICKS_PTR_OFF], rax
+    xor     eax, eax
+    mov     [r14 + RUNTIME_MEM_GROW_FN_OFF], rax
+    mov     [r14 + RUNTIME_MEM_GROW_CTX_OFF], rax
+    mov     [r14 + RUNTIME_TABLE_GROW_FN_OFF], rax
+    mov     [r14 + RUNTIME_TABLE_GROW_CTX_OFF], rax
+    mov     [r14 + RUNTIME_INITIAL_PAGES_OFF], rax
+    mov     byte [r14 + RUNTIME_HAS_PAGES_OFF], 0
+    extern er_local_cell_imports
+    extern er_local_cell_import_count
+    lea     rax, [rel er_local_cell_imports]
+    mov     [r14 + RUNTIME_IMPORTS_PTR_OFF], rax
+    mov     rax, [rel er_local_cell_import_count]
+    mov     [r14 + RUNTIME_IMPORTS_LEN_OFF], rax
+
+    ; Clear WASM memory
+    lea     rdi, [rel da_wasm_memory]
+    xor     esi, esi
+    mov     edx, 65536
+    call    er_memset
+
+    ; Clear tick counter
+    mov     qword [rel da_wasm_ticks], 0
+
+    ; Run the WASM module
+    mov     rdi, r14            ; runtime
+    ; rsi still holds wasm_bytes_ptr
+    ; rdx still holds wasm_bytes_len
+    ; rcx still holds export_name_ptr
+    ; r8 still holds export_name_len
+    call    er_fn_run
+
+    ; Mark app as exited
+    mov     byte [r15 + DA_APP_STATE], 2
+
+    inc     dword [rel da_app_count]
+
+.done:
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    xor     eax, eax
+    er_ok
+    ret
+
+; ==================================================================
+; _da_app_exit — mark an app as exited
+; rdi = cell_ptr
+; ==================================================================
+_da_app_exit:
+    push    rbx
+
+    mov     ebx, [rel da_app_count]
+    test    ebx, ebx
+    jz      .done
+
+    dec     ebx
+    mov     eax, ebx
+    imul    eax, DA_APP_SIZE
+    lea     rbx, [rel da_app_registry + rax]
+    mov     byte [rbx + DA_APP_STATE], 2
+
+.done:
+    pop     rbx
+    xor     eax, eax
+    er_ok
+    ret
+
+; ==================================================================
+; er_da_launch_app — public API: launch a WASM module
+; rdi = wasm_bytes_ptr, rsi = wasm_bytes_len, rdx = export_name_ptr
+; rcx = export_name_len
+; ==================================================================
+global er_da_launch_app
+er_fn er_da_launch_app
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+
+    mov     r12, rdi        ; wasm_bytes_ptr
+    mov     r13, rsi        ; wasm_bytes_len
+    mov     r14, rdx        ; export_name_ptr
+    mov     r15, rcx        ; export_name_len
+
+    ; Track in app registry
+    mov     ebx, [rel da_app_count]
+    cmp     ebx, DA_MAX_APPS
+    jae     .fail
+
+    mov     eax, ebx
+    imul    eax, DA_APP_SIZE
+    lea     rbx, [rel da_app_registry + rax]
+    mov     byte [rbx + DA_APP_STATE], 1
+
+    ; Set up DA's WASM runtime
+    lea     rbx, [rel da_wasm_runtime]
+    lea     rax, [rel da_wasm_memory]
+    mov     [rbx + RUNTIME_MEMORY_PTR_OFF], rax
+    mov     qword [rbx + RUNTIME_MEMORY_LEN_OFF], 65536
+    lea     rax, [rel da_wasm_ticks]
+    mov     [rbx + RUNTIME_TICKS_PTR_OFF], rax
+    xor     eax, eax
+    mov     [rbx + RUNTIME_MEM_GROW_FN_OFF], rax
+    mov     [rbx + RUNTIME_MEM_GROW_CTX_OFF], rax
+    mov     [rbx + RUNTIME_TABLE_GROW_FN_OFF], rax
+    mov     [rbx + RUNTIME_TABLE_GROW_CTX_OFF], rax
+    mov     [rbx + RUNTIME_INITIAL_PAGES_OFF], rax
+    mov     byte [rbx + RUNTIME_HAS_PAGES_OFF], 0
+    lea     rax, [rel er_local_cell_imports]
+    mov     [rbx + RUNTIME_IMPORTS_PTR_OFF], rax
+    mov     rax, [rel er_local_cell_import_count]
+    mov     [rbx + RUNTIME_IMPORTS_LEN_OFF], rax
+
+    ; Clear WASM memory
+    lea     rdi, [rel da_wasm_memory]
+    xor     esi, esi
+    mov     edx, 65536
+    call    er_memset
+
+    mov     qword [rel da_wasm_ticks], 0
+
+    ; Run the module
+    mov     rdi, rbx
+    mov     rsi, r12
+    mov     rdx, r13
+    mov     rcx, r14
+    mov     r8,  r15
+    call    er_fn_run
+
+    ; Mark as exited
+    mov     byte [rbx + DA_APP_STATE], 2
+    inc     dword [rel da_app_count]
+
+.fail:
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    xor     eax, eax
+    er_ok
+    er_ret
+
+; ==================================================================
+; er_da_inject_shell_surfaces — set up shell compositor surfaces
+; ==================================================================
+er_fn er_da_inject_shell_surfaces
+    push    rbx
+
+    ; Surface 0: shell background (scrim)
+    lea     rbx, [rel da_surface_registry]
+    mov     byte [rbx + DA_SURFACE_LAYER], DA_LAYER_SCRIM
     mov     byte [rbx + DA_SURFACE_FLAGS], DA_SURFACE_VISIBLE
-    lea     rax, [rel test2_rects]
+    lea     rax, [rel shell_bg_rects]
     mov     [rbx + DA_SURFACE_RECT_PTR], rax
-    mov     rax, [rel test2_rect_count]
+    mov     rax, [rel shell_bg_count]
     mov     [rbx + DA_SURFACE_RECT_LEN], rax
-    mov     qword [rbx + DA_SURFACE_RECT_CAP], 16
+    mov     qword [rbx + DA_SURFACE_RECT_CAP], 0
+    mov     qword [rbx + DA_SURFACE_ICON_PTR], 0
+    mov     qword [rbx + DA_SURFACE_ICON_LEN], 0
+    mov     qword [rbx + DA_SURFACE_ICON_CAP], 0
+
+    ; Surface 1: shell status bar (toast)
+    lea     rbx, [rel da_surface_registry + DA_SURFACE_SIZE]
+    mov     byte [rbx + DA_SURFACE_LAYER], DA_LAYER_TOAST
+    mov     byte [rbx + DA_SURFACE_FLAGS], DA_SURFACE_VISIBLE
+    lea     rax, [rel shell_bar_rects]
+    mov     [rbx + DA_SURFACE_RECT_PTR], rax
+    mov     rax, [rel shell_bar_count]
+    mov     [rbx + DA_SURFACE_RECT_LEN], rax
+    mov     qword [rbx + DA_SURFACE_RECT_CAP], 0
     mov     qword [rbx + DA_SURFACE_ICON_PTR], 0
     mov     qword [rbx + DA_SURFACE_ICON_LEN], 0
     mov     qword [rbx + DA_SURFACE_ICON_CAP], 0

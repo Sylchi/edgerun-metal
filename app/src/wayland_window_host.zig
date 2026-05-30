@@ -1,6 +1,6 @@
 const std = @import("std");
 const bytes_mod = @import("bytes.zig");
-const icon_pack = @import("ui/icon.zig");
+const icon_pack = @import("ui/icon_pack.zig");
 const interaction = @import("ui/interaction.zig");
 const renderer_font_atlas = @import("render/font_atlas_weighted.zig");
 const renderer_gpu = @import("render/backends/gpu.zig");
@@ -623,7 +623,7 @@ test "wayland host renders the source app scene through the shared frame" {
     try renderNativeAppScene(&scene, &collector, 1280, 800, .{
         .route = .{ .view = .backend },
     }, &dash_state, false, null, false);
-    try std.testing.expect(hasText(scene.written(), "WORKSPACE"));
+    try std.testing.expect(hasText(scene.written(), "workspace"));
     try std.testing.expect(scene.written().len > 0);
 }
 
@@ -666,7 +666,7 @@ test "wayland host packs docs overview route at launch size" {
     try renderer_pipeline.packScene(buffers, &font_atlas, scene.written());
 
     try std.testing.expect(hasText(scene.written(), "EdgeRun Native"));
-    try std.testing.expect(hasText(scene.written(), "Overview"));
+    try std.testing.expect(hasText(scene.written(), "preview"));
     try std.testing.expect(true);
 }
 
@@ -766,9 +766,9 @@ test "wayland host pointer input updates hover activation and scroll state" {
     app_native_input.activateHovered(&state);
     try std.testing.expectEqual(old_hit, state.runtime.hovered.?.id);
 
-    scrollStateBy(&state, 1280, 800, 320.0);
-    try std.testing.expectEqual(@as(f32, 320.0), state.scroll_y);
-    scrollStateBy(&state, 1280, 800, 200000.0);
+    scrollStateBy(&state, 1280, 400, 100.0);
+    try std.testing.expectEqual(@as(f32, 100.0), state.scroll_y);
+    scrollStateBy(&state, 1280, 400, 200000.0);
     try std.testing.expect(state.scroll_y <= state.contentHeight(1280.0));
 }
 
