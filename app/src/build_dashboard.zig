@@ -1,5 +1,6 @@
 const std = @import("std");
 const mem = std.mem;
+const common = @import("ui/component_common.zig");
 const renderer_font_atlas = @import("render/font_atlas_weighted.zig");
 const renderer_ir = @import("render/ir.zig");
 const renderer_pipeline = @import("render/pipeline.zig");
@@ -8,15 +9,17 @@ const node_renderer = @import("ui/components/NodeRenderer.zig");
 const component_union = @import("ui/components/Component.zig");
 const ui = @import("ui/core.zig");
 const icon_mod = @import("ui/icon.zig");
-const icon_pack = @import("ui/icon_pack.zig");
 const layout_mod = @import("ui/layout.zig");
+const card_component = @import("ui/components/Card.zig");
+const text_component = @import("ui/components/Text.zig");
+const display_component = @import("ui/components/Display.zig");
 
 const W: usize = 1280;
 const H: usize = 720;
-const max_commands: usize = 2048;
-const max_rects: usize = 4096;
+const max_commands: usize = 4096;
+const max_rects: usize = 8192;
 const max_image_vertices: usize = 32768;
-const max_icon_vertices: usize = 1024;
+const max_icon_vertices: usize = 4096;
 const max_icon_line_vertices: usize = 32768;
 const max_overlay_rects: usize = 0;
 const max_overlay_icon_vertices: usize = 0;
@@ -151,7 +154,7 @@ fn collectData(alloc: std.mem.Allocator, io: std.Io) !BuildData {
             .git_hash = git_hash, .branch = branch, .commit_count = commit_count,
             .asm_files = asm_files, .inc_files = inc_files, .total_loc = total_loc,
             .artifacts = try alloc.dupe(Artifact, &.{}),
-            .modules = modules, .tests = tests, .commits = try alloc.dupe([]const u8, &.{""}),
+            .modules = modules, .tests = tests, .commits = try alloc.dupe([]const u8, &.{}),
         };
     };
     defer alloc.free(cmt_result.stderr);
@@ -161,7 +164,9 @@ fn collectData(alloc: std.mem.Allocator, io: std.Io) !BuildData {
         const line = mem.trim(u8, rest[0..nl], " \n\r\t");
         if (mem.indexOf(u8, line, " ")) |sp| {
             const msg = mem.trim(u8, line[sp + 1 ..], " ");
-            commit_list.append(alloc, try alloc.dupe(u8, msg)) catch {};
+            if (msg.len > 0) {
+                commit_list.append(alloc, try alloc.dupe(u8, msg)) catch {};
+            }
         }
         rest = rest[nl + 1 ..];
     }
@@ -191,7 +196,7 @@ fn collectData(alloc: std.mem.Allocator, io: std.Io) !BuildData {
 }
 
 fn iconTag(ic: icon_mod.Icon) u16 {
-    return @intCast(icon_pack.iconId(ic));
+    return common.optionalIconTag(ic);
 }
 
 fn sizeLabel(buf: *[128]u8, bytes: u64) []const u8 {
@@ -242,29 +247,26 @@ fn renderLayout(scene: *ui.Scene, data: BuildData) !void {
 
     const header = ui.Node{
         .stack = .{
-            .axis = .row,
-            .gap = 8,
-            .cross_align = .start,
+            .axis = .row, .gap = 8, .cross_align = .start,
             .children = &.{
                 .{ .icon = .{ .label = "", .icon = iconTag(.dashboard) } },
-                .{ .text = .{ .value = "Build Dashboard" } },
-                .{ .text = .{ .value = data.branch } },
-                .{ .text = .{ .value = data.git_hash } },
+                (text_component.Text{ .value = "Build Dashboard" }).node(),
+                (text_component.Text{ .value = data.branch }).node(),
+                (text_component.Text{ .value = data.git_hash }).node(),
             },
         },
     };
 
     const total_files = data.asm_files + data.inc_files;
-    var total_buf: [32]u8 = undefined;
-    const total_str = std.fmt.bufPrint(&total_buf, "{}", .{total_files}) catch "?";
-    const loc_str = std.fmt.bufPrint(&total_buf, "{}", .{data.total_loc}) catch "?";
-    const mod_count_str = std.fmt.bufPrint(&total_buf, "{}", .{data.modules.len}) catch "?";
-    const test_str = std.fmt.bufPrint(&total_buf, "{}", .{data.tests.len}) catch "?";
+    const total_str = std.fmt.bufPrint(&buf, "{}", .{total_files}) catch "?";
+    const loc_str = std.fmt.bufPrint(&buf, "{}", .{data.total_loc}) catch "?";
+    const mod_count_str = std.fmt.bufPrint(&buf, "{}", .{data.modules.len}) catch "?";
+    const test_count_str = std.fmt.bufPrint(&buf, "{}", .{data.tests.len}) catch "?";
 
-    const c1 = ui.cardVariantNode("ASM Files", total_str, 0);
-    const c2 = ui.cardVariantNode("Lines of Code", loc_str, 0);
-    const c3 = ui.cardVariantNode("Subsystems", mod_count_str, 0);
-    const c4 = ui.cardVariantNode("Test Suites", test_str, 0);
+    const c1 = (card_component.Card{ .title = "ASM Files", .detail = total_str, .variant = .elevated }).node();
+    const c2 = (card_component.Card{ .title = "Lines of Code", .detail = loc_str, .variant = .elevated }).node();
+    const c3 = (card_component.Card{ .title = "Subsystems", .detail = mod_count_str, .variant = .elevated }).node();
+    const c4 = (card_component.Card{ .title = "Test Suites", .detail = test_count_str, .variant = .elevated }).node();
 
     var max_size: u64 = 0;
     for (data.artifacts) |a| {
@@ -272,27 +274,26 @@ fn renderLayout(scene: *ui.Scene, data: BuildData) !void {
     }
     if (max_size == 0) max_size = 1;
 
-    var art_nodes: [3]ui.Node = undefined;
+    var art_children: [16]ui.Node = undefined;
     var art_count: usize = 0;
-    for (data.artifacts, 0..) |a, i| {
-        if (i >= art_nodes.len) break;
+    art_children[art_count] = (text_component.Text{ .value = "Build Artifacts" }).node();
+    art_count += 1;
+    for (data.artifacts) |a| {
+        if (art_count >= art_children.len) break;
         const p = @as(f32, @floatFromInt(a.size_bytes)) / @as(f32, @floatFromInt(max_size));
         const sl = sizeLabel(&buf, a.size_bytes);
-        art_nodes[i] = ui.Node{
+        art_children[art_count] = ui.Node{
             .stack = .{
                 .axis = .row, .gap = 6, .cross_align = .center,
                 .children = &.{
                     .{ .text = .{ .value = a.name } },
                     .{ .text = .{ .value = sl } },
-                    .{ .progress = .{ .value = p } },
+                    (display_component.Progress{ .value = p }).node(),
                 },
             },
         };
-        art_count = i + 1;
+        art_count += 1;
     }
-    const art_section = ui.Node{
-        .stack = .{ .axis = .column, .gap = 4, .padding = 0, .children = art_nodes[0..art_count] },
-    };
 
     var max_loc: u32 = 0;
     for (data.modules) |m| {
@@ -300,36 +301,37 @@ fn renderLayout(scene: *ui.Scene, data: BuildData) !void {
     }
     if (max_loc == 0) max_loc = 1;
 
-    var mod_nodes: [9]ui.Node = undefined;
+    var mod_children: [16]ui.Node = undefined;
     var mod_count: usize = 0;
-    for (data.modules, 0..) |m, i| {
-        if (i >= mod_nodes.len) break;
+    mod_children[mod_count] = (text_component.Text{ .value = "Subsystem LOC" }).node();
+    mod_count += 1;
+    for (data.modules) |m| {
+        if (mod_count >= mod_children.len) break;
         const p = @as(f32, @floatFromInt(m.loc)) / @as(f32, @floatFromInt(max_loc));
         const ml = std.fmt.bufPrint(&buf, "{}", .{m.loc}) catch "?";
-        mod_nodes[i] = ui.Node{
+        mod_children[mod_count] = ui.Node{
             .stack = .{
                 .axis = .row, .gap = 6, .cross_align = .center,
                 .children = &.{
                     .{ .text = .{ .value = m.name } },
                     .{ .text = .{ .value = ml } },
-                    .{ .progress = .{ .value = p } },
+                    (display_component.Progress{ .value = p }).node(),
                 },
             },
         };
-        mod_count = i + 1;
+        mod_count += 1;
     }
-    const mod_section = ui.Node{
-        .stack = .{ .axis = .column, .gap = 4, .padding = 0, .children = mod_nodes[0..mod_count] },
-    };
 
-    var test_nodes: [8]ui.Node = undefined;
+    var test_children: [16]ui.Node = undefined;
     var test_count: usize = 0;
-    for (data.tests, 0..) |t, i| {
-        if (i >= test_nodes.len) break;
+    test_children[test_count] = (text_component.Text{ .value = "Test Results" }).node();
+    test_count += 1;
+    for (data.tests) |t| {
+        if (test_count >= test_children.len) break;
         const pass = t.passed == t.total and t.total > 0;
         const icon_id = if (pass) iconTag(.circle_check) else iconTag(.circle_x);
         const pl = std.fmt.bufPrint(&buf, "{}/{}", .{ t.passed, t.total }) catch "?";
-        test_nodes[i] = ui.Node{
+        test_children[test_count] = ui.Node{
             .stack = .{
                 .axis = .row, .gap = 4, .cross_align = .center,
                 .children = &.{
@@ -339,18 +341,16 @@ fn renderLayout(scene: *ui.Scene, data: BuildData) !void {
                 },
             },
         };
-        test_count = i + 1;
+        test_count += 1;
     }
-    const test_section = ui.Node{
-        .stack = .{ .axis = .column, .gap = 4, .padding = 0, .children = test_nodes[0..test_count] },
-    };
 
-    var cmt_nodes: [5]ui.Node = undefined;
+    var cmt_children: [16]ui.Node = undefined;
     var cmt_count: usize = 0;
-    for (data.commits, 0..) |msg, i| {
-        if (i >= cmt_nodes.len) break;
-        if (msg.len == 0) continue;
-        cmt_nodes[i] = ui.Node{
+    cmt_children[cmt_count] = (text_component.Text{ .value = "Recent Commits" }).node();
+    cmt_count += 1;
+    for (data.commits) |msg| {
+        if (cmt_count >= cmt_children.len) break;
+        cmt_children[cmt_count] = ui.Node{
             .stack = .{
                 .axis = .row, .gap = 4, .cross_align = .center,
                 .children = &.{
@@ -359,11 +359,8 @@ fn renderLayout(scene: *ui.Scene, data: BuildData) !void {
                 },
             },
         };
-        cmt_count = i + 1;
+        cmt_count += 1;
     }
-    const cmt_section = ui.Node{
-        .stack = .{ .axis = .column, .gap = 4, .padding = 0, .children = cmt_nodes[0..cmt_count] },
-    };
 
     const cell_count = 9;
     var layout_nodes: [cell_count]layout_mod.Node = undefined;
@@ -371,7 +368,6 @@ fn renderLayout(scene: *ui.Scene, data: BuildData) !void {
 
     layout_nodes[0] = .{ .column_span = 8, .row_span = 1 };
     ui_nodes[0] = header;
-
     layout_nodes[1] = .{ .column_span = 2, .row_span = 1 };
     ui_nodes[1] = c1;
     layout_nodes[2] = .{ .column_span = 2, .row_span = 1 };
@@ -380,17 +376,14 @@ fn renderLayout(scene: *ui.Scene, data: BuildData) !void {
     ui_nodes[3] = c3;
     layout_nodes[4] = .{ .column_span = 2, .row_span = 1 };
     ui_nodes[4] = c4;
-
     layout_nodes[5] = .{ .column_span = 4, .row_span = 3 };
-    ui_nodes[5] = art_section;
+    ui_nodes[5] = .{ .stack = .{ .axis = .column, .gap = 4, .padding = 0, .children = art_children[0..art_count] } };
     layout_nodes[6] = .{ .column_span = 4, .row_span = 3 };
-    ui_nodes[6] = mod_section;
-
+    ui_nodes[6] = .{ .stack = .{ .axis = .column, .gap = 4, .padding = 0, .children = mod_children[0..mod_count] } };
     layout_nodes[7] = .{ .column_span = 8, .row_span = 2 };
-    ui_nodes[7] = test_section;
-
+    ui_nodes[7] = .{ .stack = .{ .axis = .column, .gap = 4, .padding = 0, .children = test_children[0..test_count] } };
     layout_nodes[8] = .{ .column_span = 8, .row_span = 1 };
-    ui_nodes[8] = cmt_section;
+    ui_nodes[8] = .{ .stack = .{ .axis = .column, .gap = 4, .padding = 0, .children = cmt_children[0..cmt_count] } };
 
     const layout_children = [_]*const layout_mod.Node{
         &layout_nodes[0], &layout_nodes[1], &layout_nodes[2],
@@ -410,13 +403,11 @@ fn renderLayout(scene: *ui.Scene, data: BuildData) !void {
 
     for (0..cell_count) |i| {
         const cell_bounds = bento.childBounds(i, full_bounds) catch continue;
+        if (i >= 5) {
+            try scene.pushRect(cell_bounds, ui.Color.panel, .fill, 6, 0);
+            try scene.pushRect(cell_bounds, ui.Color.border, .border, 6, 0);
+        }
         node_renderer.renderNode(component_union.Component, scene, cell_bounds, ui_nodes[i], .{}) catch |err| {
-            if (comptime std.debug.runtime_safety) {
-                std.debug.print("cell {d} failed: bounds=({d:.1},{d:.1},{d:.1},{d:.1}) node={s}\n", .{
-                    i, cell_bounds.x, cell_bounds.y, cell_bounds.w, cell_bounds.h,
-                    @tagName(ui_nodes[i]),
-                });
-            }
             return err;
         };
     }

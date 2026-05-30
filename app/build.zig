@@ -281,6 +281,22 @@ pub fn build(b: *std.Build) void {
     wayland_window_test_step.dependOn(&run_wayland_window_tests.step);
     test_step.dependOn(&run_wayland_window_tests.step);
 
+    const demo = b.addExecutable(.{
+        .name = "edgerun-demo",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/demo_app.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    if (math_obj) |obj| demo.root_module.addObjectFile(obj);
+    if (runtime_obj) |obj| demo.root_module.addObjectFile(obj);
+
+    const run_demo = b.addRunArtifact(demo);
+    if (b.args) |args| run_demo.addArgs(args);
+    const demo_step = b.step("demo", "Run the canonical UI component demo app (Wayland)");
+    demo_step.dependOn(&run_demo.step);
+
     const xdg_shell_header_cmd = b.addSystemCommand(&.{
         "wayland-scanner",
         "client-header",

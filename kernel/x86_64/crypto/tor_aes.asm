@@ -265,43 +265,35 @@ _aes_encrypt_block:
     or      ecx, eax
     mov     dword [r12 + 12], ecx
 
-    ; ShiftRows
-    ; Row 0: no shift (bytes 0,4,8,12)
-    ; Row 1: shift left 1 (bytes 1,5,9,13 -> 5,9,13,1)
-    ; Row 2: shift left 2 (bytes 2,6,10,14 -> 10,14,2,6)
-    ; Row 3: shift left 3 (bytes 3,7,11,15 -> 15,3,7,11)
-    ; We work on the state as 4 x 32-bit words (columns)
+    ; ShiftRows — standard AES row shift on column-major state
 
-    ; Load state as 4 dwords
-    mov     eax, [r12 + 0]   ; column 0: s00 s01 s02 s03  (bytes 0,4,8,12)
-    mov     ecx, [r12 + 4]   ; column 1: s10 s11 s12 s13  (bytes 1,5,9,13)
-    mov     edx, [r12 + 8]   ; column 2: s20 s21 s22 s23  (bytes 2,6,10,14)
-    mov     esi, [r12 + 12]  ; column 3: s30 s31 s32 s33  (bytes 3,7,11,15)
+    ; Load state as 4 column dwords (column-major throughout)
+    ; column 0 = [s00,s10,s20,s30] at bytes 0-3
+    ; column 1 = [s01,s11,s21,s31] at bytes 4-7
+    ; column 2 = [s02,s12,s22,s32] at bytes 8-11
+    ; column 3 = [s03,s13,s23,s33] at bytes 12-15
+    mov     eax, [r12 + 0]   ; col 0: s00 s10 s20 s30
+    mov     ecx, [r12 + 4]   ; col 1: s01 s11 s21 s31
+    mov     edx, [r12 + 8]   ; col 2: s02 s12 s22 s32
+    mov     esi, [r12 + 12]  ; col 3: s03 s13 s23 s33
 
-    ; ShiftRows transformation (bytes within each column)
-    ; We need the bytes to move between columns. In the standard column-major order:
-    ; After SubBytes: [r12] holds columns in little-endian
-    ; s00=[r12+0]byte0, s01=[r12+0]byte1, s02=[r12+0]byte2, s03=[r12+0]byte3
-    ; s10=[r12+4]byte0, s11=[r12+4]byte1, s12=[r12+4]byte2, s13=[r12+4]byte3
-    ; etc.
-    ;
-    ; ShiftRows:
+    ; ShiftRows on column-major state, output column-major:
     ;   row 0: s00,s01,s02,s03 -> s00,s01,s02,s03 (unchanged)
-    ;   row 1: s10,s11,s12,s13 -> s11,s12,s13,s10 (left rotate 1 byte within row)
-    ;   row 2: s20,s21,s22,s23 -> s22,s23,s20,s21 (left rotate 2 bytes within row)
-    ;   row 3: s30,s31,s32,s33 -> s33,s30,s31,s32 (left rotate 3 bytes)
+    ;   row 1: s10,s11,s12,s13 -> s11,s12,s13,s10 (left rotate 1)
+    ;   row 2: s20,s21,s22,s23 -> s22,s23,s20,s21 (left rotate 2)
+    ;   row 3: s30,s31,s32,s33 -> s33,s30,s31,s32 (left rotate 3)
     ;
-    ; New state columns:
-    ;   c0' = s00 | s11 | s22 | s33
-    ;   c1' = s01 | s12 | s23 | s30
-    ;   c2' = s02 | s13 | s20 | s31
-    ;   c3' = s03 | s10 | s21 | s32
+    ; New columns (reading rows from column dwords):
+    ;   c0' = [eax.byte0=s00, ecx.byte1=s11, edx.byte2=s22, esi.byte3=s33]
+    ;   c1' = [ecx.byte0=s01, edx.byte1=s12, esi.byte2=s23, eax.byte3=s30]
+    ;   c2' = [edx.byte0=s02, esi.byte1=s13, eax.byte2=s20, ecx.byte3=s31]
+    ;   c3' = [esi.byte0=s03, eax.byte1=s10, ecx.byte2=s21, edx.byte3=s32]
 
-    ; Extract each sXY byte from the 4 column dwords
-    ; eax = column 0 = byte0(s00),byte1(s01),byte2(s02),byte3(s03)
-    ; ecx = column 1 = byte0(s10),byte1(s11),byte2(s12),byte3(s13)
-    ; edx = column 2 = byte0(s20),byte1(s21),byte2(s22),byte3(s23)
-    ; esi = column 3 = byte0(s30),byte1(s31),byte2(s32),byte3(s33)
+    ; Extract bytes from 4 column dwords
+    ; eax = column 0 = byte0(s00),byte1(s10),byte2(s20),byte3(s30)
+    ; ecx = column 1 = byte0(s01),byte1(s11),byte2(s21),byte3(s31)
+    ; edx = column 2 = byte0(s02),byte1(s12),byte2(s22),byte3(s32)
+    ; esi = column 3 = byte0(s03),byte1(s13),byte2(s23),byte3(s33)
 
     ; Build new columns
     push    rbx
@@ -326,61 +318,61 @@ _aes_encrypt_block:
     mov     [r12 + 0], ebx  ; store c0'
 
     ; c1' = s01 | s12 | s23 | s30
-    mov     ebx, eax
-    shr     ebx, 8
-    and     ebx, 0xFF       ; s01
-    mov     edi, ecx
-    shr     edi, 16
-    and     edi, 0xFF       ; s12
+    mov     ebx, ecx
+    and     ebx, 0xFF       ; s01 = ecx byte 0
+    mov     edi, edx
+    shr     edi, 8
+    and     edi, 0xFF       ; s12 = edx byte 1
     shl     edi, 8
     or      ebx, edi
-    mov     edi, edx
-    shr     edi, 24
-    and     edi, 0xFF       ; s23
+    mov     edi, esi
+    shr     edi, 16
+    and     edi, 0xFF       ; s23 = esi byte 2
     shl     edi, 16
     or      ebx, edi
-    mov     edi, esi
-    and     edi, 0xFF       ; s30
+    mov     edi, eax
+    shr     edi, 24
+    and     edi, 0xFF       ; s30 = eax byte 3
     shl     edi, 24
     or      ebx, edi
     mov     [r12 + 4], ebx  ; store c1'
 
     ; c2' = s02 | s13 | s20 | s31
-    mov     ebx, eax
-    shr     ebx, 16
-    and     ebx, 0xFF       ; s02
-    mov     edi, ecx
-    shr     edi, 24
-    and     edi, 0xFF       ; s13
-    shl     edi, 8
-    or      ebx, edi
-    mov     edi, edx
-    and     edi, 0xFF       ; s20
-    shl     edi, 16
-    or      ebx, edi
+    mov     ebx, edx
+    and     ebx, 0xFF       ; s02 = edx byte 0
     mov     edi, esi
     shr     edi, 8
-    and     edi, 0xFF       ; s31
+    and     edi, 0xFF       ; s13 = esi byte 1
+    shl     edi, 8
+    or      ebx, edi
+    mov     edi, eax
+    shr     edi, 16
+    and     edi, 0xFF       ; s20 = eax byte 2
+    shl     edi, 16
+    or      ebx, edi
+    mov     edi, ecx
+    shr     edi, 24
+    and     edi, 0xFF       ; s31 = ecx byte 3
     shl     edi, 24
     or      ebx, edi
     mov     [r12 + 8], ebx  ; store c2'
 
     ; c3' = s03 | s10 | s21 | s32
-    mov     ebx, eax
-    shr     ebx, 24
-    and     ebx, 0xFF       ; s03
-    mov     edi, ecx
-    and     edi, 0xFF       ; s10
+    mov     ebx, esi
+    and     ebx, 0xFF       ; s03 = esi byte 0
+    mov     edi, eax
+    shr     edi, 8
+    and     edi, 0xFF       ; s10 = eax byte 1
     shl     edi, 8
     or      ebx, edi
-    mov     edi, edx
-    shr     edi, 8
-    and     edi, 0xFF       ; s21
+    mov     edi, ecx
+    shr     edi, 16
+    and     edi, 0xFF       ; s21 = ecx byte 2
     shl     edi, 16
     or      ebx, edi
-    mov     edi, esi
-    shr     edi, 16
-    and     edi, 0xFF       ; s32
+    mov     edi, edx
+    shr     edi, 24
+    and     edi, 0xFF       ; s32 = edx byte 3
     shl     edi, 24
     or      ebx, edi
     mov     [r12 + 12], ebx ; store c3'

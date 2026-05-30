@@ -28,4 +28,10 @@ SECTION .text
 %include "wasm_exec.asm"
 %include "wasm_exec_handlers.asm"
 
+; JIT sub-modules (no dispatch loop, emit native code directly)
+%include "wasm_jit.inc"
+%include "wasm_jit_emit.asm"
+%include "wasm_jit_templates.asm"
+%include "wasm_jit.asm"
+
 %include "wasm_run.asm"

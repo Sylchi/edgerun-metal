@@ -27,6 +27,7 @@ const messages = @import("wayland/messages.zig");
 const client_import = @import("wayland/client.zig");
 const options_import = @import("wayland/options.zig");
 const app_import = @import("wayland/app.zig");
+const surface_import = @import("wayland/surface.zig");
 
 const posix = std.posix;
 const linux = std.os.linux;
@@ -496,7 +497,7 @@ test "wayland dmabuf import derives from gpu backed native wayland surface" {
 }
 
 test "wayland native app builds dmabuf surface only in explicit fd mode" {
-    var app = NativeApp{
+    var surf = surface_import.Surface{
         .allocator = std.testing.allocator,
         .width = 320,
         .height = 240,
@@ -505,21 +506,21 @@ test "wayland native app builds dmabuf surface only in explicit fd mode" {
         .shm = undefined,
         .pixels = &.{},
         .base_pixels = &.{},
-        .font_atlas = undefined,
         .gpu_primitives = &.{},
+        .font_atlas = undefined,
     };
-    app.font_atlas.initUtf8();
-    const surface = try app.dmabufSurface();
-    const import = try DmabufImport.fromNativeSurface(surface);
+    surf.font_atlas.initUtf8();
+    const s = try surf.dmabufSurface();
+    const import = try DmabufImport.fromNativeSurface(s);
     try std.testing.expectEqual(@as(posix.fd_t, 19), import.fd);
     try std.testing.expectEqual(@as(u32, 320 * @sizeOf(u32)), import.stride);
 
-    app.dmabuf_fd = null;
-    try std.testing.expectError(error.MissingDmabufFd, app.dmabufSurface());
+    surf.dmabuf_fd = null;
+    try std.testing.expectError(error.MissingDmabufFd, surf.dmabufSurface());
 }
 
 test "wayland native app builds dmabuf surface from owned drm buffer" {
-    var app = NativeApp{
+    var surf = surface_import.Surface{
         .allocator = std.testing.allocator,
         .width = 320,
         .height = 240,
@@ -528,8 +529,8 @@ test "wayland native app builds dmabuf surface from owned drm buffer" {
         .shm = undefined,
         .pixels = &.{},
         .base_pixels = &.{},
-        .font_atlas = undefined,
         .gpu_primitives = &.{},
+        .font_atlas = undefined,
         .drm_buffer = .{
             .drm_fd = 18,
             .dma_buf_fd = 19,
@@ -540,9 +541,9 @@ test "wayland native app builds dmabuf surface from owned drm buffer" {
             .size = 320 * 240 * @sizeOf(u32),
         },
     };
-    app.font_atlas.initUtf8();
-    const surface = try app.dmabufSurface();
-    const import = try DmabufImport.fromNativeSurface(surface);
+    surf.font_atlas.initUtf8();
+    const s = try surf.dmabufSurface();
+    const import = try DmabufImport.fromNativeSurface(s);
     try std.testing.expectEqual(@as(posix.fd_t, 19), import.fd);
     try std.testing.expectEqual(@as(u32, 320 * @sizeOf(u32)), import.stride);
 }
@@ -691,11 +692,10 @@ test "wayland host renders client side decoration above app content" {
 }
 
 test "wayland cursor overlay renders through software presentation receipt" {
-    const source = @embedFile("wayland_window_host.zig");
-    const direct_raster = "try surface." ++ "rasterizeIr(";
-    try std.testing.expect(std.mem.indexOf(u8, source, direct_raster) == null);
-    try std.testing.expect(std.mem.indexOf(u8, source, "const receipt = try surface.renderIr(") != null);
-    try std.testing.expect(std.mem.indexOf(u8, source, "if (!receipt.valid()) return error.InvalidSoftwareReceipt;") != null);
+    const surface_source = @embedFile("wayland/surface.zig");
+    try std.testing.expect(std.mem.indexOf(u8, surface_source, "rasterizeIr(") == null);
+    try std.testing.expect(std.mem.indexOf(u8, surface_source, "const receipt = try surface.renderIr(") != null);
+    try std.testing.expect(std.mem.indexOf(u8, surface_source, "if (!receipt.valid()) return error.InvalidSoftwareReceipt;") != null);
 }
 
 test "wayland gpu recorder accepts canonical ir frame callbacks" {
@@ -774,9 +774,9 @@ test "wayland host pointer input updates hover activation and scroll state" {
 
 test "wayland host appends scene cursor from native hover state" {
     const alloc = std.testing.allocator;
-    const app = try alloc.create(NativeApp);
-    defer alloc.destroy(app);
-    app.* = NativeApp{
+    const surf = try alloc.create(surface_import.Surface);
+    defer alloc.destroy(surf);
+    surf.* = surface_import.Surface{
         .allocator = alloc,
         .width = 1280,
         .height = 800,
@@ -785,13 +785,19 @@ test "wayland host appends scene cursor from native hover state" {
         .shm = undefined,
         .pixels = &.{},
         .base_pixels = &.{},
-        .font_atlas = undefined,
         .gpu_primitives = &.{},
+        .font_atlas = undefined,
     };
-    app.font_atlas.initUtf8();
+    surf.font_atlas.initUtf8();
+    const app = try alloc.create(NativeApp);
+    defer alloc.destroy(app);
+    app.* = NativeApp{
+        .allocator = alloc,
+        .surface = surf,
+    };
     var scene = ui.Scene.initWithClips(&app.commands, &app.clips);
     var collector = interaction.Collector.init(&app.regions);
-    try renderNativeAppScene(&scene, &collector, app.width, app.height, app.state, &app.dashboard_app, app.dashboard, &app.hardware_app, app.hardware);
+    try renderNativeAppScene(&scene, &collector, app.surface.width, app.surface.height, app.state, &app.dashboard_app, app.dashboard, &app.hardware_app, app.hardware);
     app.region_len = collector.written().len;
     const backend = try hitRect(app.regionSlice(), app_navigation.backend_button_id);
     app.state.hover_x = backend.x + backend.w * 0.5;
@@ -806,9 +812,9 @@ test "wayland host appends scene cursor from native hover state" {
 test "wayland host renders vector cursor overlay through native pipeline" {
     var pixels: [64 * 64]ui.Color = [_]ui.Color{ui.Color.clear} ** (64 * 64);
     const alloc = std.testing.allocator;
-    const app = try alloc.create(NativeApp);
-    defer alloc.destroy(app);
-    app.* = NativeApp{
+    const surf = try alloc.create(surface_import.Surface);
+    defer alloc.destroy(surf);
+    surf.* = surface_import.Surface{
         .allocator = alloc,
         .width = 64,
         .height = 64,
@@ -817,10 +823,16 @@ test "wayland host renders vector cursor overlay through native pipeline" {
         .shm = undefined,
         .pixels = &pixels,
         .base_pixels = &.{},
-        .font_atlas = undefined,
         .gpu_primitives = &.{},
+        .font_atlas = undefined,
     };
-    app.font_atlas.initUtf8();
+    surf.font_atlas.initUtf8();
+    const app = try alloc.create(NativeApp);
+    defer alloc.destroy(app);
+    app.* = NativeApp{
+        .allocator = alloc,
+        .surface = surf,
+    };
     app.state.hover_x = 24.0;
     app.state.hover_y = 24.0;
 

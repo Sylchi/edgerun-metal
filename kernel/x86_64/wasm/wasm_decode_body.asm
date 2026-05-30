@@ -188,6 +188,9 @@ er_wasm_decode_body:
 
 .decode_i64_const:
     er_call er_wasm_read_leb_i64, .error
+    mov     [decoded_ops + rbx + 12], eax  ; imm0 = low 32 bits
+    shr     rax, 32
+    mov     [decoded_ops + rbx + 16], eax  ; imm1 = high 32 bits
     mov     eax, esi
     sub     eax, edi
     mov     [decoded_ops + rbx + 4], eax
@@ -205,7 +208,10 @@ er_wasm_decode_body:
     jmp     .decode_loop
 
 .decode_f64_const:
-    mov     eax, esi
+    mov     eax, [rsi]
+    mov     [decoded_ops + rbx + 12], eax  ; imm0 = low 32 bits
+    mov     eax, [rsi + 4]
+    mov     [decoded_ops + rbx + 16], eax  ; imm1 = high 32 bits
     add     rsi, 8
     mov     eax, esi
     sub     eax, edi
