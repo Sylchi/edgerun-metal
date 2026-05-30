@@ -485,12 +485,7 @@ _start:
 
     ; Set tick to max so that stride 1 wraps tick -> slot_steps=1
     ; Then set slot to U64_MAX so that slot + 1 overflows
-    mov     qword [clock5 + 32], 0xFFFFFFFFFFFFFFFE   ; tick huge (so step wraps)
-    ; Actually we need tick such that (tick + stride) >> 1 produces a slot_steps
-    ; that overflows when added to slot. Let's do:
-    ; stride=1, tick = U64_MAX-1, so total_ticks = U64_MAX
-    ; next_tick = U64_MAX & 1 = 1
-    ; slot_steps = U64_MAX >> 1 = 0x7FFFFFFFFFFFFFFF
+    ; tick = U64_MAX-1, so (tick + 1) >> 1 = 0x7FFFFFFFFFFFFFFF slot_steps
     ; slot = U64_MAX, then slot + slot_steps overflows
     mov     qword [clock5 + 32], -2     ; tick = U64_MAX - 1
     mov     qword [clock5 + 40], -1     ; slot = U64_MAX

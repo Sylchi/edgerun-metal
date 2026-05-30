@@ -100,23 +100,23 @@ _fe_carry:
     ; Carry chain
     mov     r8, rax
     shr     r8, 63
-    and     rax, 0x7FFFFFFFFFFFFFFF
+    btr     rax, 63
     add     rcx, r8
 
     mov     r8, rcx
     shr     r8, 63
-    and     rcx, 0x7FFFFFFFFFFFFFFF
+    btr     rcx, 63
     add     rdx, r8
 
     mov     r8, rdx
     shr     r8, 63
-    and     rdx, 0x7FFFFFFFFFFFFFFF
+    btr     rdx, 63
     add     rsi, r8
 
     ; Top limb: carry wraps to multiply by 19 and add back
     mov     r8, rsi
     shr     r8, 63
-    and     rsi, 0x7FFFFFFFFFFFFFFF
+    btr     rsi, 63
 
     ; r8 * 19
     imul    r8, r8, 19
@@ -125,40 +125,40 @@ _fe_carry:
     ; Re-carry if needed (rare)
     mov     r8, rax
     shr     r8, 63
-    and     rax, 0x7FFFFFFFFFFFFFFF
+    btr     rax, 63
     add     rcx, r8
 
     mov     r8, rcx
     shr     r8, 63
-    and     rcx, 0x7FFFFFFFFFFFFFFF
+    btr     rcx, 63
     add     rdx, r8
 
     mov     r8, rdx
     shr     r8, 63
-    and     rdx, 0x7FFFFFFFFFFFFFFF
+    btr     rdx, 63
     add     rsi, r8
 
     ; Final carry from top (wrap with *19)
     mov     r8, rsi
     shr     r8, 63
-    and     rsi, 0x7FFFFFFFFFFFFFFF
+    btr     rsi, 63
     imul    r8, r8, 19
     add     rax, r8
 
     ; One more micro-carry
     mov     r8, rax
     shr     r8, 63
-    and     rax, 0x7FFFFFFFFFFFFFFF
+    btr     rax, 63
     add     rcx, r8
 
     mov     r8, rcx
     shr     r8, 63
-    and     rcx, 0x7FFFFFFFFFFFFFFF
+    btr     rcx, 63
     add     rdx, r8
 
     mov     r8, rdx
     shr     r8, 63
-    and     rdx, 0x7FFFFFFFFFFFFFFF
+    btr     rdx, 63
     add     rsi, r8
 
     mov     [rdi + 0], rax
@@ -482,9 +482,15 @@ _fe_mul:
     adc     qword [r14 + 24], 0
 .carry_norm:
 
-    ; Fully reduce via carry propagation (clear bit 63 of each limb, wrap *19)
-    mov     rdi, r14
-    call    _fe_carry
+    ; Reduce if top bit (2^255) is set: 2^255 ≡ 19 (mod 2^255-19)
+    bt      qword [r14 + 24], 63
+    jnc     .no_reduce
+    add     qword [r14], 19
+    adc     qword [r14 + 8], 0
+    adc     qword [r14 + 16], 0
+    adc     qword [r14 + 24], 0
+    btr     qword [r14 + 24], 63
+.no_reduce:
 
     ; Copy to destination
     mov     rdi, rbx
@@ -759,14 +765,12 @@ er_fn er_tor_curve25519_scalar_mult
     call    er_memcpy
 
     ; byte 0: clear bottom 3 bits
-    mov     rax, [rsp]
-    and     rax, 0xFFFFFFFFFFFFFFF8
-    mov     [rsp], rax
+    and     byte [rsp], 0xF8
 
     ; byte 31 (in u64 at [rsp+24]): clear bit 255, set bit 254
     mov     rax, [rsp + 24]
-    and     rax, 0x7FFFFFFFFFFFFFFF
-    or      rax, 0x4000000000000000
+    btr     rax, 63
+    bts     rax, 62
     mov     [rsp + 24], rax
 
     ; Initialize ladder state in BSS temps
@@ -1049,9 +1053,7 @@ er_fn er_tor_ntor_keygen
     call    er_memcpy
 
     ; Clamp: clear bottom 3 bits of first byte, set top bit of last byte
-    mov     rax, [r12]
-    and     rax, 0xFFFFFFFFFFFFFFF8
-    mov     [r12], rax
+    and     byte [r12], 0xF8
 
     movzx   eax, byte [r12 + 31]
     or      al, 0x40          ; set bit 6 of last byte

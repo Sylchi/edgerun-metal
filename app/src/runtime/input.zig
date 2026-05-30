@@ -4,7 +4,7 @@ const state = @import("state.zig");
 const editor = @import("editor.zig");
 const identity = @import("identity.zig");
 const compiler = @import("compiler.zig");
-const app_frame = @import("../app_frame.zig");
+const app_frame = @import("../route/frame.zig");
 const component_gallery = @import("../component_gallery.zig");
 
 pub fn appKeyEvent(key: []const u8, ctrl: u32, meta: u32, alt: u32, shift: u32) u32 {

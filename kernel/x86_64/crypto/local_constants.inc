@@ -45,6 +45,21 @@ LOCAL_ROUTE_TABLE_SIZE  equ LOCAL_MAX_IDENTITIES * LOCAL_ID_SLOT_SIZE
 ; Local circuits skip directly to TOR_CIRC_OPEN.
 
 ; ==================================================================
+; Circuit table entry layout (per-process, fixed-size)
+; ==================================================================
+CIRCUIT_DEST_HASH       equ 0   ; 32 bytes — destination identity
+CIRCUIT_DEST_SLOT       equ 32  ; 4 bytes — cached destination slot_id
+CIRCUIT_STATE           equ 36  ; 4 bytes — 0=FREE, 1=OPEN
+CIRCUIT_SLOT_SIZE       equ 40
+
+MAX_CIRCUITS            equ 16
+CIRCUIT_TABLE_SIZE      equ MAX_CIRCUITS * CIRCUIT_SLOT_SIZE
+
+; Circuit states
+CIRCUIT_STATE_FREE      equ 0
+CIRCUIT_STATE_OPEN      equ 1
+
+; ==================================================================
 ; Error codes
 ; ==================================================================
 ERROR_LOCAL_FULL        equ 80
@@ -52,3 +67,4 @@ ERROR_LOCAL_EMPTY       equ 81
 ERROR_LOCAL_NOT_FOUND   equ 82
 ERROR_LOCAL_EXISTS      equ 83
 ERROR_LOCAL_BUSY        equ 84
+ERROR_CIRCUIT_INVALID   equ 85
