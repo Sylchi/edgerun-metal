@@ -4,6 +4,10 @@
 
 %include "x86_64/macros.inc"
 
+extern er_memset
+extern er_memcpy
+extern er_memcmp
+
 SECTION .text
 
 ; ==================================================================

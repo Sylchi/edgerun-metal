@@ -309,7 +309,7 @@ cmd_test_ctype() {
 }
 
 cmd_test_clock() {
-	build_test "test_clock_self" "${TEST_DIR}/test_clock_self.asm" "rt/clock" "rt/bytes"
+	build_test "test_clock_self" "${TEST_DIR}/test_clock_self.asm" "rt/clock" "rt/bytes" "rt/runtime"
 }
 
 cmd_test_serial() {

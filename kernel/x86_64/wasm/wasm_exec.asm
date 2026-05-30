@@ -1,3 +1,6 @@
+extern er_memmove
+extern er_memset
+
 er_fn er_fn_pop
     er_frame_push
 
@@ -2542,8 +2545,43 @@ exec_dispatch_loop:
     call    exec_stack_pop  ; d
     jc      .underflow_error
     mov     r12, rax
-    ; TODO: implement actual memory.init
-    ; For now, just skip
+    ; Validate segment index
+    cmp     r15, [data_segment_count]
+    jae     .memory_trap
+
+    ; Calculate segment descriptor offset
+    mov     r10, r15
+    imul    r10, DATA_SEGMENT_SIZE
+    mov     rbx, r10
+
+    ; Check segment is not dropped (active != 0)
+    cmp     byte [data_segments + rbx + 24], 0
+    je      .memory_trap
+
+    ; Check s + n <= bytes_len
+    mov     rax, [data_segments + rbx + 16]  ; bytes_len
+    mov     rcx, r13
+    add     rcx, r14
+    jc      .memory_trap
+    cmp     rcx, rax
+    ja      .memory_trap
+
+    ; Check d + n <= memory_len
+    mov     rax, [runtime_memory_len]
+    mov     rcx, r12
+    add     rcx, r14
+    jc      .memory_trap
+    cmp     rcx, rax
+    ja      .memory_trap
+
+    ; Copy: memcpy(memory + d, bytes_ptr + s, n)
+    mov     rdi, [runtime_memory_ptr]
+    add     rdi, r12
+    mov     rsi, [data_segments + rbx + 8]  ; bytes_ptr
+    add     rsi, r13
+    mov     rdx, r14
+    call    er_memcpy
+
     jmp     .dispatch_next
 
 .ext_data_drop:
@@ -2556,9 +2594,18 @@ exec_dispatch_loop:
     sub     rsi, [exec_code_body_ptr]
     mov     [exec_reader_offset], rsi
     pop     rsi
-    ; Mark data segment as dropped (set active=0)
-    ; data_segment layout: offset(8) + byte_offset(8) + byte_len(8) + active(1) + dropped(1)
-    ; For now, just skip
+    ; Validate segment index
+    cmp     rax, [data_segment_count]
+    jae     .memory_trap
+
+    ; Calculate segment descriptor offset
+    mov     r10, rax
+    imul    r10, DATA_SEGMENT_SIZE
+
+    ; Set active = 0, dropped = 1
+    mov     byte [data_segments + r10 + 24], 0
+    mov     byte [data_segments + r10 + 25], 1
+
     jmp     .dispatch_next
 
 .ext_memory_copy:
@@ -2577,7 +2624,29 @@ exec_dispatch_loop:
     call    exec_stack_pop  ; d
     jc      .underflow_error
     mov     r12, rax
-    ; TODO: implement actual memory.copy
+    ; Validate d + n <= memory_len
+    mov     rax, [runtime_memory_len]
+    mov     rcx, r12
+    add     rcx, r14
+    jc      .memory_trap
+    cmp     rcx, rax
+    ja      .memory_trap
+
+    ; Validate s + n <= memory_len
+    mov     rcx, r13
+    add     rcx, r14
+    jc      .memory_trap
+    cmp     rcx, rax
+    ja      .memory_trap
+
+    ; memmove(memory + d, memory + s, n)
+    mov     rdi, [runtime_memory_ptr]
+    add     rdi, r12
+    mov     rsi, [runtime_memory_ptr]
+    add     rsi, r13
+    mov     rdx, r14
+    call    er_memmove
+
     jmp     .dispatch_next
 
 .ext_memory_fill:
@@ -2593,7 +2662,21 @@ exec_dispatch_loop:
     call    exec_stack_pop  ; d
     jc      .underflow_error
     mov     r12, rax
-    ; TODO: implement actual memory.fill
+    ; Validate d + n <= memory_len
+    mov     rax, [runtime_memory_len]
+    mov     rcx, r12
+    add     rcx, r14
+    jc      .memory_trap
+    cmp     rcx, rax
+    ja      .memory_trap
+
+    ; memset(memory + d, val, n)
+    mov     rdi, [runtime_memory_ptr]
+    add     rdi, r12
+    mov     esi, r13d           ; val (byte)
+    mov     rdx, r14            ; n
+    call    er_memset
+
     jmp     .dispatch_next
 
 ; ==================================================================
@@ -2814,6 +2897,9 @@ exec_dispatch_loop:
     jmp     .error_return
 .arithmetic_trap:
     er_err  ERROR_ARITHMETIC_TRAP
+    jmp     .error_return
+.memory_trap:
+    er_err  ERROR_TRAP
     jmp     .error_return
 
 ; ==================================================================

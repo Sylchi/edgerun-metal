@@ -283,15 +283,25 @@ fn extractGradients(alloc: mem.Allocator, svg: []const u8, viewbox: svg_parser.V
         if (is_radial) {
             const space = parseGradSpace(attrs.getRaw("gradientUnits"));
             const spread = parseSpread(attrs.getRaw("spreadMethod"));
+            var cx = parseF32Attr(attrs.getRaw("cx"), 0.5);
+            var cy = parseF32Attr(attrs.getRaw("cy"), 0.5);
+            var radius = parseF32Attr(attrs.getRaw("r"), 0.5);
+            var fx = parseF32Attr(attrs.getRaw("fx"), 0.5);
+            var fy = parseF32Attr(attrs.getRaw("fy"), 0.5);
+            var focal_radius = parseF32Attr(attrs.getRaw("fr"), 0.0);
+            if (space == .user_space) {
+                cx /= viewbox.width;
+                cy /= viewbox.height;
+                radius /= viewbox.width;
+                fx /= viewbox.width;
+                fy /= viewbox.height;
+                focal_radius /= viewbox.width;
+            }
             result[grad_idx] = GradSpec{ .radial = .{
                 .space = space,
                 .spread = spread,
-                .cx = parseF32Attr(attrs.getRaw("cx"), 0.5),
-                .cy = parseF32Attr(attrs.getRaw("cy"), 0.5),
-                .radius = parseF32Attr(attrs.getRaw("r"), 0.5),
-                .fx = parseF32Attr(attrs.getRaw("fx"), 0.5),
-                .fy = parseF32Attr(attrs.getRaw("fy"), 0.5),
-                .focal_radius = parseF32Attr(attrs.getRaw("fr"), 0.0),
+                .cx = cx, .cy = cy, .radius = radius,
+                .fx = fx, .fy = fy, .focal_radius = focal_radius,
                 .stops = stops,
             } };
         } else {

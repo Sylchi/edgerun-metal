@@ -2532,16 +2532,6 @@ test "software renderer rasterizes svg linear gradient fills" {
 
     const radial_center = pixels[12 * 24 + 12];
     const radial_corner = pixels[1 * 24 + 1];
-    if (!(radial_center.r > radial_corner.r)) {
-        const test_helpers = @import("../../test_icon_helpers.zig");
-        const ir = test_helpers.svgToIr(std.testing.allocator, radial_svg) catch return;
-        defer std.testing.allocator.free(ir);
-        std.debug.print("\n  RADIAL FAIL center=({},{},{},{}) corner=({},{},{},{}) ir={any}\n", .{
-            radial_center.r, radial_center.g, radial_center.b, radial_center.a,
-            radial_corner.r, radial_corner.g, radial_corner.b, radial_corner.a,
-            ir,
-        });
-    }
     try std.testing.expect(radial_center.r > radial_corner.r);
     try std.testing.expect(radial_center.g > radial_corner.g);
     try std.testing.expect(radial_center.b > radial_corner.b);
