@@ -225,7 +225,8 @@ fn hashMaterial(material: []const u8) [hash_size]u8 {
 }
 
 test "source is explicit material with deterministic id" {
-    const testing = @import("testing.zig");
+    const std = @import("std");
+    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
     const source = Source.prepare(.hash, &hashMaterial("app manifest")).?;
@@ -237,7 +238,8 @@ test "source is explicit material with deterministic id" {
 }
 
 test "strict source preparation enforces C identity material sizes" {
-    const testing = @import("testing.zig");
+    const std = @import("std");
+    const testing = std.testing;
     try testing.expect(Source.prepare(.hash, "short") == null);
     const source = Source.prepare(.hash, &hashMaterial("manifest")).?;
     try testing.expect(source.valid());
@@ -245,7 +247,8 @@ test "strict source preparation enforces C identity material sizes" {
 }
 
 test "identity derives child and delegated app identities" {
-    const testing = @import("testing.zig");
+    const std = @import("std");
+    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{2} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
     const parent = Identity.instantiate(.{

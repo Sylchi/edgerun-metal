@@ -56,7 +56,8 @@ pub const Region = struct {
 };
 
 test "split transfers ownership out of parent" {
-    const testing = @import("testing.zig");
+    const std = @import("std");
+    const testing = std.testing;
     var memory: [16]u8 = undefined;
     var parent = Region{ .base = &memory };
     const child = parent.split(6).?;
@@ -66,7 +67,8 @@ test "split transfers ownership out of parent" {
 }
 
 test "append suffix reclaims adjacent split region" {
-    const testing = @import("testing.zig");
+    const std = @import("std");
+    const testing = std.testing;
     var memory: [16]u8 = undefined;
     var parent = Region{ .base = &memory };
     const child = parent.split(6).?;
@@ -76,7 +78,8 @@ test "append suffix reclaims adjacent split region" {
 }
 
 test "region reports contained slice offset" {
-    const testing = @import("testing.zig");
+    const std = @import("std");
+    const testing = std.testing;
     var memory: [16]u8 = undefined;
     const region = Region{ .base = &memory };
     const slice = memory[4..12];

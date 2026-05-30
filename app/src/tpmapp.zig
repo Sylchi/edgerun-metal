@@ -401,7 +401,8 @@ fn admitForTest(app: *App, authorization: intent.Receipt, actor: identity.Identi
 }
 
 test "tpm app seals only for authorized caller-bound policy" {
-    const testing = @import("testing.zig");
+    const std = @import("std");
+    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
     const ids = testIdentities(epoch);
@@ -425,7 +426,8 @@ test "tpm app seals only for authorized caller-bound policy" {
 }
 
 test "tpm app identity must be tpm backed" {
-    const testing = @import("testing.zig");
+    const std = @import("std");
+    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
     const ids = testIdentities(epoch);
@@ -436,7 +438,8 @@ test "tpm app identity must be tpm backed" {
 }
 
 test "tpm app refuses signatures without caller intent" {
-    const testing = @import("testing.zig");
+    const std = @import("std");
+    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
     const ids = testIdentities(epoch);
@@ -456,7 +459,8 @@ test "tpm app refuses signatures without caller intent" {
 }
 
 test "tpm app exposes authorized rng to apps" {
-    const testing = @import("testing.zig");
+    const std = @import("std");
+    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
     const ids = testIdentities(epoch);

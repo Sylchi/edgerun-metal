@@ -893,7 +893,8 @@ fn zeroed(in: []const u8) bool {
 }
 
 test "requirements are encoded and hashed deterministically" {
-    const testing = @import("testing.zig");
+    const std = @import("std");
+    const testing = std.testing;
     const req = Requirements{
         .durability = .durable,
         .confidentiality = .user_app_private,
@@ -908,7 +909,8 @@ test "requirements are encoded and hashed deterministically" {
 }
 
 test "header encode decode owns canonical layout" {
-    const testing = @import("testing.zig");
+    const std = @import("std");
+    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const req = Requirements{
         .durability = .durable,
@@ -937,7 +939,8 @@ test "header encode decode owns canonical layout" {
 }
 
 test "header decode rejects nonzero reserved bytes" {
-    const testing = @import("testing.zig");
+    const std = @import("std");
+    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const req = Requirements{
         .durability = .durable,
@@ -964,7 +967,8 @@ test "header decode rejects nonzero reserved bytes" {
 }
 
 test "owner and child encode decode are symmetric" {
-    const testing = @import("testing.zig");
+    const std = @import("std");
+    const testing = std.testing;
     const node_id = [_]u8{2} ++ [_]u8{0} ** 31;
     const requirement_id = [_]u8{3} ++ [_]u8{0} ** 31;
     const owner = Owner{ .kind = .app, .node_id = node_id };
@@ -988,7 +992,8 @@ test "owner and child encode decode are symmetric" {
 }
 
 test "envelope encode decode validates owner and algorithm" {
-    const testing = @import("testing.zig");
+    const std = @import("std");
+    const testing = std.testing;
     const owner = Owner{
         .kind = .app,
         .node_id = [_]u8{4} ++ [_]u8{0} ** 31,
@@ -1018,7 +1023,8 @@ test "envelope encode decode validates owner and algorithm" {
 }
 
 test "view decodes canonical bytes node and owns body slicing" {
-    const testing = @import("testing.zig");
+    const std = @import("std");
+    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const req = Requirements{
         .durability = .memory,
@@ -1041,7 +1047,8 @@ test "view decodes canonical bytes node and owns body slicing" {
 }
 
 test "writer builds owned canonical bytes nodes" {
-    const testing = @import("testing.zig");
+    const std = @import("std");
+    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const req = Requirements{
         .durability = .durable,
@@ -1089,7 +1096,8 @@ test "writer builds owned canonical bytes nodes" {
 }
 
 test "object tpm encryption binds storage envelope to caller policy" {
-    const testing = @import("testing.zig");
+    const std = @import("std");
+    const testing = std.testing;
     var events: [4]tpmapp.Event = undefined;
     const keeper = clock.KeeperId{ .bytes = [_]u8{9} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
@@ -1186,7 +1194,8 @@ test "object tpm encryption binds storage envelope to caller policy" {
 }
 
 test "object app private encryption is app sealed without user decrypt principal" {
-    const testing = @import("testing.zig");
+    const std = @import("std");
+    const testing = std.testing;
     var events: [4]tpmapp.Event = undefined;
     const keeper = clock.KeeperId{ .bytes = [_]u8{10} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
@@ -1255,7 +1264,8 @@ test "object app private encryption is app sealed without user decrypt principal
 }
 
 test "writer builds canonical tree nodes from child records" {
-    const testing = @import("testing.zig");
+    const std = @import("std");
+    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const req = Requirements{
         .durability = .memory,
@@ -1306,7 +1316,8 @@ test "writer builds canonical tree nodes from child records" {
 }
 
 test "writer builds owned canonical tree nodes" {
-    const testing = @import("testing.zig");
+    const std = @import("std");
+    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const req = Requirements{
         .durability = .durable,
@@ -1354,7 +1365,8 @@ test "writer builds owned canonical tree nodes" {
 }
 
 test "writer builds canonical receipt nodes" {
-    const testing = @import("testing.zig");
+    const std = @import("std");
+    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const req = Requirements{
         .durability = .durable,
@@ -1377,7 +1389,8 @@ test "writer builds canonical receipt nodes" {
 }
 
 test "signature receipts bind signer challenge and subject object ids" {
-    const testing = @import("testing.zig");
+    const std = @import("std");
+    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
     const req = Requirements{
@@ -1409,7 +1422,8 @@ test "signature receipts bind signer challenge and subject object ids" {
 }
 
 test "signature receipts reject malformed body policy and zero signatures" {
-    const testing = @import("testing.zig");
+    const std = @import("std");
+    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
     const req = Requirements{

@@ -159,7 +159,8 @@ fn testIdentities(epoch: clock.Stamp) TestIdentities {
 }
 
 test "intent receipt binds user device actor subject and consequence" {
-    const testing = @import("testing.zig");
+    const std = @import("std");
+    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
     const ids = testIdentities(epoch);
@@ -173,7 +174,8 @@ test "intent receipt binds user device actor subject and consequence" {
 }
 
 test "intent receipt rejects replay outside admission window" {
-    const testing = @import("testing.zig");
+    const std = @import("std");
+    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const ids = testIdentities(.{ .keeper = keeper });
     const start = clock.Stamp{ .keeper = keeper, .tick = 10 };

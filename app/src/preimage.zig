@@ -140,7 +140,8 @@ pub fn decodeEpoch(in: []const u8) ?clock.Stamp {
 }
 
 test "writer encodes ids integers and epochs deterministically" {
-    const testing = @import("testing.zig");
+    const std = @import("std");
+    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const stamp = clock.Stamp{ .keeper = keeper, .tick = 2 };
     const id_value = identity.Id{ .bytes = [_]u8{3} ++ [_]u8{0} ** 31 };

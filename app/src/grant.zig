@@ -261,7 +261,8 @@ pub fn memoryViewReceipt(owner: identity.Identity, allocator: identity.Identity,
 }
 
 test "spawn receipt deterministically records delegated resources" {
-    const testing = @import("testing.zig");
+    const std = @import("std");
+    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
     const parent = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("parent")).?, epoch).?;
@@ -291,7 +292,8 @@ test "spawn receipt deterministically records delegated resources" {
 }
 
 test "memory view receipt binds owner reader slice and byte range" {
-    const testing = @import("testing.zig");
+    const std = @import("std");
+    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{2} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
     const owner = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("memory owner")).?, epoch).?;

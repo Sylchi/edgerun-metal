@@ -94,7 +94,8 @@ pub fn SliceList(comptime T: type) type {
 }
 
 test "fixed list appends without allocation" {
-    const testing = @import("testing.zig");
+    const std = @import("std");
+    const testing = std.testing;
     var list = FixedList(u8, 2){};
     try testing.expect(list.empty());
     try testing.expect(list.append(7));
@@ -105,7 +106,8 @@ test "fixed list appends without allocation" {
 }
 
 test "slice list uses caller provided storage" {
-    const testing = @import("testing.zig");
+    const std = @import("std");
+    const testing = std.testing;
     var storage: [2]u16 = undefined;
     var list = SliceList(u16).init(&storage).?;
     try testing.expect(list.append(11));

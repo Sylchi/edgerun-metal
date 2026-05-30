@@ -437,7 +437,8 @@ fn writePrincipal(writer: *preimage.Writer, principal: Principal) bool {
 }
 
 test "authority chain is ordered and deterministic" {
-    const testing = @import("testing.zig");
+    const std = @import("std");
+    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
     const user = identity.Identity.init(.user, identity.Source.prepare(.hash, &preimage.rawHash("user")).?, epoch).?;
@@ -453,7 +454,8 @@ test "authority chain is ordered and deterministic" {
 }
 
 test "tpm principal requires a tpm backed app identity" {
-    const testing = @import("testing.zig");
+    const std = @import("std");
+    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{4} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
     const app = identity.Identity.init(.app, identity.Source.prepare(.hash, &preimage.rawHash("ordinary app")).?, epoch).?;
@@ -465,7 +467,8 @@ test "tpm principal requires a tpm backed app identity" {
 }
 
 test "authority packet binds resource grant manifest state and proof" {
-    const testing = @import("testing.zig");
+    const std = @import("std");
+    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{2} ++ [_]u8{0} ** 31 };
     const start = clock.Stamp{ .keeper = keeper, .tick = 4 };
     const end = clock.Stamp{ .keeper = keeper, .tick = 6 };
@@ -505,7 +508,8 @@ test "authority packet binds resource grant manifest state and proof" {
 }
 
 test "external approval binds exact authority packet and clock window" {
-    const testing = @import("testing.zig");
+    const std = @import("std");
+    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{3} ++ [_]u8{0} ** 31 };
     const start = clock.Stamp{ .keeper = keeper, .tick = 1 };
     const end = clock.Stamp{ .keeper = keeper, .tick = 3 };

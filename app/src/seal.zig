@@ -107,7 +107,8 @@ fn validId(id: ?identity.Id) bool {
 }
 
 test "seal policy captures machine app user binding" {
-    const testing = @import("testing.zig");
+    const std = @import("std");
+    const testing = std.testing;
     const clock = @import("clock.zig");
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
