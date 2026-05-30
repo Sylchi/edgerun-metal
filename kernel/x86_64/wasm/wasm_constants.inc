@@ -277,6 +277,16 @@ IMPORTED_GLOBAL_SIZE equ 24
 imported_globals_buf:   resb MAX_GLOBALS * IMPORTED_GLOBAL_SIZE
 imported_global_count:  resq 1
 
+; -- HostImport struct: module_ptr(8) + module_len(8) + name_ptr(8) + name_len(8) + fn_ptr(8) = 40
+HOST_IMPORT_SIZE        equ 40
+%define HOST_IMPORT_MODULE_PTR_OFF    0
+%define HOST_IMPORT_MODULE_LEN_OFF    8
+%define HOST_IMPORT_NAME_PTR_OFF      16
+%define HOST_IMPORT_NAME_LEN_OFF      24
+%define HOST_IMPORT_FN_PTR_OFF        32
+host_imports_buf:   resb MAX_HOST_IMPORTS * HOST_IMPORT_SIZE
+host_import_count:  resq 1
+
 ; -- Function: type_index(8) + code_index(8) = 16
 FUNCTION_SIZE equ 16
 functions_buf:   resb MAX_FUNCTIONS * FUNCTION_SIZE

@@ -20,6 +20,7 @@
 - Eliminate repetition; refactor repeated logic into utility functions.
 - Consolidating and removing code is preferred over adding new code.
 - No regressions.
+- **Removal-first rule: Before adding any new file, struct, function, or macro, find and remove at least as many lines of existing code without reducing functionality. Refactoring is the default. Addition is the exception. If you cannot find code to remove, you do not understand the existing code well enough to add.**
 - Generated build artifacts must stay untracked.
 - Use `.build/` for local build output.
 - Keep this as one Git repository; nested `.git` directories, `.gitmodules`, and submodule gitlinks are not allowed.
@@ -43,22 +44,24 @@ The repository has two code worlds separated by a hard boundary:
 ## Workspace & Language
 
 - **The project has two languages, each owning its side of the boundary:**
-  - **Host-side:** x86_64 assembly DSL defined in `asm/x86_64/macros.inc` — `er_fn`, `er_fnstr`, `er_frame_push`, `er_push_all`, etc. This IS the dogfooding target. All host-side production code must be written in this DSL.
+  - **Host-side:** x86_64 assembly DSL defined in `kernel/x86_64/macros.inc` — `er_fn`, `er_fnstr`, `er_frame_push`, `er_push_all`, etc. This IS the dogfooding target. All host-side production code must be written in this DSL.
   - **App-side:** Zig source compiled to WASM. This is the intended path for application logic that runs inside the WASM interpreter. Zig is the app-side language — not deprecated, not frozen.
-- `asm/x86_64/` — canonical hardware-near implementation, organized by subsystem:
+- `kernel/x86_64/` — canonical hardware-near implementation, organized by subsystem:
   - Root: `macros.inc`, `wasm_defines.inc`, `entry.asm`, `kernel_main.asm`, `efi_entry.asm`, `linker.ld`, `efi_linker.ld`
-  - `drv/` — hardware drivers (serial, i8042, pci, virtio*, xhci, nvme, rtl8125, amdgpu, intel_*, i2c_hid, cros_ec, spi_flash, display, fb_text, etc.)
+  - `drv/` — hardware drivers
   - `rt/` — runtime library (runtime.asm, math.asm, ctype.asm, clock.asm, bytes.asm)
-  - `crypto/` — blake3, preimage, identity, tor
-  - `wasm/` — interpreter + compiler (wasm_interpreter, wasm_decode, wasm_exec, wasm_compiler*)
+  - `crypto/` — blake3, preimage, identity, tor, local_cell, local_route, local_circuit
+  - `wasm/` — interpreter + compiler
   - `net/` — net, arp, ipv4, tcp
   - `tpm/` — tpm.asm, tpm_crb.asm, tpm_constants.inc
+  - `agent/` — agent protocol, display agent (da.asm)
   - `ui/` — ui_core, render_ir, sw_fb
   - `object/` — object.asm, object_constants.inc
-- `asm/test/` — test files. Must be migrated from C to self-hosted ASM runners.
-- `asm/arm/pi/` — Raspberry Pi Zero W kernel, mailbox, EMMC, DWC2 USB.
-- `asm/host/` — Linux userspace host tools (Pi USB boot, ESP32 serial boot).
-- `edgerun-zig/` — app-side Zig frontend (compiles to WASM). This is the primary app development path — write apps here, compile to WASM, run on the WASM interpreter. The self-hosted WASM compiler (`asm/x86_64/wasm_compiler*.asm`) is a host-side build tool replacement, not a replacement for app-side Zig.
+- `kernel/test/` — test files. To be migrated from C to self-hosted ASM runners.
+- `kernel/arm/pi/` — Raspberry Pi Zero W kernel, mailbox, EMMC, DWC2 USB.
+- `kernel/host/` — Linux userspace host tools (Pi USB boot, ESP32 serial boot).
+- `kernel/driver/` — hardware drivers (serial, i8042, pci, virtio*, xhci, nvme, rtl8125, amdgpu, intel_*, i2c_hid, cros_ec, spi_flash, display, fb_text, etc.)
+- `edgerun-zig/` — app-side Zig frontend (compiles to WASM). This is the primary app development path — write apps here, compile to WASM, run on the WASM interpreter. The self-hosted WASM compiler (`kernel/x86_64/wasm_compiler*.asm`) is a host-side build tool replacement, not a replacement for app-side Zig.
 - `build.sh` — all build commands.
 
 ## External Dependencies (to eliminate)
@@ -108,7 +111,7 @@ All targets are in `build.sh`. No Makefile, no C, no Zig in production paths.
 - When porting, update Makefile rules to assemble and link directly via ld without the C compiler bridge.
 - Keep behavior and tests coherent across the Makefile and module-local tests.
 - Do not reintroduce C compatibility wrappers or shims at the ASM boundary.
-- The WASM interpreter in `asm/x86_64/wasm_interpreter.asm` is the canonical implementation.
+- The WASM interpreter in `kernel/x86_64/wasm/wasm_run.asm` is the canonical implementation.
 
 ## Friction Prevention
 
@@ -140,6 +143,49 @@ All targets are in `build.sh`. No Makefile, no C, no Zig in production paths.
 - Keep root documentation and command wrappers current when workflow changes.
 - Add tests for new repository tooling and for behavior changes when deterministic tests are possible.
 - Document the purpose and intention of new tools, tests, and top-level structure.
+
+## Routing Model
+
+The kernel routes all inter-process communication by identity using fixed-size cells through SPSC ring buffers.
+
+### Cell Format (Universal IR)
+All I/O travels as 256-byte cells: `[circ_id:4][cmd:1][payload:251]`.
+The cell is the universal IR — input events, network frames, storage requests, display commands, and agent messages all use it.
+
+### Identities
+Every process has a 32-byte identity (BLAKE3 hash of binary + TPM measurement).
+Every device has a persistent TPM-backed identity. Identity kinds: USER, DEVICE, APP, STORAGE, RELAY, RESOURCE, OBJECT, EPHEMERAL, DELEGATED.
+
+### Route Table
+A fixed-size table (16 entries) maps identity hash → SPSC ring buffer + handler.
+- `register_handler(id)` → slot_id
+- `route_lookup(hash)` → slot_id
+- `cell_send_to_slot(slot, cell)` → pushes to identity's incoming ring
+
+### Ring Buffers (Channels)
+SPSC lock-free buffers, 64 slots of 256 bytes each. Producer writes, consumer reads. Non-blocking — returns full/empty immediately.
+
+### Circuits
+A circuit caches destination slot_id for fast send.
+- `open_circuit(dest_hash)` → fd
+- `send(fd, cell)` / `recv(fd)` → cell / `close(fd)`
+
+### Agent Dispatch
+When a cell arrives for a registered identity, the kernel either synchronously calls the handler (SYNC flag) or leaves it in the ring buffer for the consumer to poll.
+
+### Clock
+Every kernel and app instance has a clock providing a verifiable stamp: `[keeper:32][tick:8][slot:8][epoch:8][era:8]`. The clock advances on each pipeline tick. Stamps allow apps to sync data and prove recency/ordering. All limits are powers of two for efficient modular arithmetic. Clock boundaries (slot/epoch/era) enable periodic work scheduling without timers.
+
+### Pipeline Model
+The main loop (`kernel_main.asm`) is a round-robin pipeline:
+  `clock_advance → net_poll → tor_poll → cell_poll → da_tick`
+Each stage returns cells processed (0 = idle). The clock advances by 1 per iteration, giving every stage access to the current stamp for ordering and proof.
+
+### Tor Integration
+Legacy IP is accessed exclusively through Tor. The exit bridge registers as identity `edgerun.exit`. All IP-bound traffic addresses this identity — no native IP routing, no DNS in the kernel.
+
+### Render IR (Display)
+Display commands use a separate push-buffer of float arrays (not cells) for GPU-like batch rendering: rect buffers (15 floats/rect), icon buffers (9 floats/icon), vertex buffers (8 floats/vertex). The DA compositor processes these per frame tick.
 
 ## Multi-Agent Safety
 

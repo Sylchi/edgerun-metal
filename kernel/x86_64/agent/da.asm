@@ -317,25 +317,7 @@ er_fn er_da_composite
     er_ret
 
 ; ==================================================================
-; er_da_tick — called from kernel main loop once per iteration
+; er_da_tick — called from kernel pipeline once per iteration
 ; ==================================================================
 er_fn er_da_tick
-    ; Debug: raw serial write to confirm tick runs
-    push    rax
-    push    rdx
-    mov     dx, 0x3f8
-    add     dx, 5
-.wait:  in      al, dx
-    test    al, 0x20
-    jz      .wait
-    mov     dx, 0x3f8
-    mov     al, '!'
-    out     dx, al
-    pop     rdx
-    pop     rax
-
-    cmp     byte [rel da_initialized], 0
-    jz      .tick_skip
-
-.tick_skip:
     jmp     er_da_composite

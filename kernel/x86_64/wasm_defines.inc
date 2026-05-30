@@ -6,7 +6,7 @@
 %define WASM_DEFINES_INC
 
 ; ==================================================================
-; WASM limits (matching root.zig exactly)
+; WASM resource limits
 ; ==================================================================
 %define MAX_FUNCTIONS        1024
 %define MAX_IMPORTS          16
@@ -112,21 +112,103 @@ wasm_version: db 0x01, 0x00, 0x00, 0x00
 ; Math constants (shared with Zig)
 ; ==================================================================
 %define MASK_32_BIT         0xFFFFFFFF
+
+; ==================================================================
+; WASM page / memory constants
+; ==================================================================
+%define WASM_PAGE_SIZE       65536
+%define WASM_PAGE_SHIFT      16
+%define MAX_TABLE_ENTRIES    1024
+%define MAX_DATA_SEGMENTS    128
+%define MAX_DECODED_OPS      512 * 1024
+%define MAX_CONTROL_DEPTH    256
+
+; LEB128 constant definitions
+%define LEB32_MAX_BYTES      5
+%define LEB64_MAX_BYTES      10
+%define LEB_PAYLOAD_MASK     0x7f
+%define LEB_CONTINUE_MASK    0x80
+%define LEB_SIGN_MASK        0x40
+%define LEB_BITS_PER_BYTE    7
+
+; Limits encoding
+%define LIMITS_MIN_ONLY      0
+%define LIMITS_MIN_MAX       1
+
+; Section IDs (short aliases matching wasm_decode.asm naming)
+%define SECTION_TYPE          1
+%define SECTION_IMPORT        2
+%define SECTION_FUNCTION      3
+%define SECTION_TABLE         4
+%define SECTION_MEMORY        5
+%define SECTION_GLOBAL        6
+%define SECTION_EXPORT        7
+%define SECTION_START         8
+%define SECTION_ELEMENT       9
+%define SECTION_DATA_COUNT    12
+%define SECTION_CODE          10
+%define SECTION_DATA          11
+
+; External kind constants (for import/export parsing)
+%define EXTERNAL_FUNCTION     0
+%define EXTERNAL_TABLE        1
+%define EXTERNAL_MEMORY       2
+%define EXTERNAL_GLOBAL       3
+
+; WASM type / block aliases used by decoder
+%define WASM_EMPTY_BLOCK_TYPE 0x40
+%define WASM_EXTENDED_PREFIX  0xfc
+
+; Extended opcode constants (prefix 0xFC sub-ops)
+%define EXT_I32_TRUNC_SAT_F32_S   0
+%define EXT_I32_TRUNC_SAT_F32_U   1
+%define EXT_I32_TRUNC_SAT_F64_S   2
+%define EXT_I32_TRUNC_SAT_F64_U   3
+%define EXT_I64_TRUNC_SAT_F32_S   4
+%define EXT_I64_TRUNC_SAT_F32_U   5
+%define EXT_I64_TRUNC_SAT_F64_S   6
+%define EXT_I64_TRUNC_SAT_F64_U   7
+%define EXT_MEMORY_INIT           8
+%define EXT_DATA_DROP             9
+%define EXT_MEMORY_COPY           10
+%define EXT_MEMORY_FILL           11
+%define EXT_TABLE_INIT            12
+%define EXT_ELEM_DROP             13
+%define EXT_TABLE_COPY            14
+%define EXT_TABLE_GROW            15
+%define EXT_TABLE_SIZE            16
+%define EXT_TABLE_FILL            17
+
+; ==================================================================
+; RuntimeConfig struct offsets (88 bytes, defined in kernel_main.asm)
+; ==================================================================
+%define RUNTIME_MEMORY_PTR_OFF       0
+%define RUNTIME_MEMORY_LEN_OFF       8
+%define RUNTIME_TICKS_PTR_OFF        16
+%define RUNTIME_MEM_GROW_FN_OFF      24
+%define RUNTIME_MEM_GROW_CTX_OFF     32
+%define RUNTIME_TABLE_GROW_FN_OFF    40
+%define RUNTIME_TABLE_GROW_CTX_OFF   48
+%define RUNTIME_INITIAL_PAGES_OFF    56
+%define RUNTIME_HAS_PAGES_OFF        64
+%define RUNTIME_IMPORTS_PTR_OFF      72
+%define RUNTIME_IMPORTS_LEN_OFF      80
+%define RUNTIME_SIZE                 88
+
 ; ==================================================================
 ; Error codes (returned in rdx)
-; Range 1-14: WASM interpreter errors
-; Range 20-28: Generic driver / system errors
+; Range 1-19: WASM interpreter errors
+; Range 20-29: Generic driver / system errors
 ; Range 30-39: Virtio-specific errors
 ; 0 = OK (no error)
 ; ==================================================================
-; WASM interpreter errors (1-14)
+; WASM interpreter errors (1-19)
 %define ERROR_OK               0
 %define ERROR_UNSUPPORTED      1
 %define ERROR_CORRUPT          2
 %define ERROR_STACK_UNDERFLOW  3
 %define ERROR_STACK_OVERFLOW   4
 %define ERROR_MEMORY           5
-%define ERROR_NOT_FOUND        6
 %define ERROR_PARSE            7
 %define ERROR_NOT_IMPLEMENTED  8
 %define ERROR_TYPE_MISMATCH    9
@@ -135,8 +217,13 @@ wasm_version: db 0x01, 0x00, 0x00, 0x00
 %define ERROR_NO_MEMORY        12
 %define ERROR_INVALID_INDEX    13
 %define ERROR_IMPORT_MISMATCH  14
+%define ERROR_MEMORY_GROWTH    15
+%define ERROR_TRAP             16
+%define ERROR_ARITHMETIC_TRAP  17
+%define ERROR_MISSING_IMPORT   18
+%define ERROR_MISSING_EXPORT   19
 
-; Generic driver / system errors (20-28)
+; Generic driver / system errors (20-29)
 %define ERROR_TIMEOUT          20
 %define ERROR_IO               21
 %define ERROR_NOT_PRESENT      22
@@ -146,6 +233,7 @@ wasm_version: db 0x01, 0x00, 0x00, 0x00
 %define ERROR_AUTH             26
 %define ERROR_NO_SPACE         27
 %define ERROR_NOT_FOUND        28
+%define ERROR_BAD_ARGUMENT      29
 
 ; Virtio-specific error codes (range 30-39)
 %define ERROR_DEVICE_NOT_FOUND     30

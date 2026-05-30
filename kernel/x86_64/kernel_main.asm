@@ -32,6 +32,8 @@ extern er_wasm_runtime_ptr
 extern er_agent_http_init
 extern er_da_init
 extern er_da_tick
+extern er_clock_init
+extern er_clock_advance_with
 
 extern er_mmio_read32
 extern er_tpm_crb_present
@@ -160,6 +162,16 @@ extern fe_tmp4
 %define COM2_PORT      0x2f8
 %define BAUD_115200    1
 
+; Clock struct sizes (from rt/clock.asm)
+%define KERNEL_STAMP_SIZE     64
+%define KERNEL_LIMITS_SIZE    24
+%define KERNEL_CLOCK_SIZE     88
+
+; Clock limits
+%define KERNEL_TICKS_PER_SLOT   1024
+%define KERNEL_SLOTS_PER_EPOCH  1024
+%define KERNEL_EPOCHS_PER_ERA   1024
+
 ; I2C / touchpad constants
 %define I2CB_MMIO      0xFEDC3000
 %define TPAD_ADDR      0x2C
@@ -224,6 +236,16 @@ bench_sha1k:   db "  sha256 1KB: ", 0
 bench_cyc:     db " cyc/call", 0
 bench_data:    times 1024 db 0xAB
 
+; Kernel clock identity keeper (32 bytes, non-zero)
+kernel_keeper_id:
+    db "EdgeRun Kernel Keeper v1.0", 0, 0, 0, 0, 0
+
+; Kernel clock limits (powers of two)
+kernel_limits:
+    dq KERNEL_TICKS_PER_SLOT
+    dq KERNEL_SLOTS_PER_EPOCH
+    dq KERNEL_EPOCHS_PER_ERA
+
 sha256_test_abc:     db "abc", 0
 sha256_expected_abc: db 0xba, 0x78, 0x16, 0xbf, 0x8f, 0x01, 0xcf, 0xea
                      db 0x41, 0x41, 0x40, 0xde, 0x5d, 0xae, 0x22, 0x23
@@ -266,6 +288,9 @@ virtio_net_mac_str:  resb 18    ; "XX:XX:XX:XX:XX:XX\0"
 sha256_ctx:  resb 108
 sha256_out:  resb 32
 sha256_block: resb 64
+
+; Kernel clock state
+kernel_clock: resb KERNEL_CLOCK_SIZE
 
 SECTION .text
 
@@ -1893,17 +1918,27 @@ er_fn er_kernel_main
     lea     rdi, [rel .boot_footer]
     call    er_display_puts
 
-    ; Boot complete — main polling loop
+    ; ─── Kernel clock init ──────────────────────────────────────
+    lea     rdi, [rel kernel_keeper_id]
+    lea     rsi, [rel kernel_limits]
+    lea     rdx, [rel kernel_clock]
+    call    er_clock_init
+    test    eax, eax
+    jz      .main_loop         ; clock unavailable — run without it
+
+    ; Boot complete — pipeline main loop
 .main_loop:
+    ; Advance kernel clock by 1 tick per iteration
+    lea     rdi, [rel kernel_clock]
+    mov     esi, 1
+    call    er_clock_advance_with
+
+    ; Pipeline stages — each returns cells processed (0 = idle)
     call    er_net_poll
     call    er_tor_poll
     call    er_local_cell_poll
     call    er_da_tick
-    ; Yield to give other subsystems time
-    mov     ecx, 100000
-.delay:
-    dec     ecx
-    jnz     .delay
+
     jmp     .main_loop
 
     pop     r15

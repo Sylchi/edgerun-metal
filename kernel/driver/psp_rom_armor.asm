@@ -11,6 +11,7 @@
 %include "x86_64/macros.inc"
 %include "x86_64/wasm_defines.inc"
 
+extern er_memcpy
 extern er_psp_mbox_hsti_query
 extern er_psp_mbox_nop
 extern er_psp_mbox_armor_enforce

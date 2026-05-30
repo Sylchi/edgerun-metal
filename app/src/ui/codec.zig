@@ -272,7 +272,7 @@ pub fn decodeBytes(bytes_in: []const u8, nodes: []ui.Node) Error!ui.Node {
         const first_str = refToSlice(bytes_in, table_start, first_ref);
         const second_str = refToSlice(bytes_in, table_start, second_ref);
 
-        nodes[i] = recordToNode(kind, id, first_str, second_str);
+        nodes[i] = recordToNode(kind, id, first_str, second_str, second_ref);
     }
 
     return ui.Node{ .stack = .{
@@ -290,31 +290,35 @@ fn refToSlice(bytes_in: []const u8, table_start: usize, ref: StringRef) []const 
     return bytes_in[start..][0..ref.len];
 }
 
-fn recordToNode(kind: RecordKind, id: u32, first: []const u8, second: []const u8) ui.Node {
+fn recordToNode(kind: RecordKind, id: u32, first: []const u8, second: []const u8, second_ref: StringRef) ui.Node {
     return switch (kind) {
         .rect => ui.Node{ .rect = .{ .color = ui.Color.clear } },
         .text => ui.Node{ .text = .{ .value = first } },
         .slot => ui.Node{ .slot = .{ .id = id, .child = undefined } },
-        .accordion => ui.Node{ .accordion = .{ .id = id, .title = first, .detail = second } },
-        .alert => ui.Node{ .alert = .{ .title = first, .detail = second } },
+        .accordion => ui.Node{ .accordion = .{ .id = id / 2, .title = first, .detail = second, .open = (id & 1) != 0 } },
+        .alert => ui.Node{ .alert = .{ .title = first, .detail = second, .destructive = (id & 1) != 0, .icon = @truncate(id >> 1) } },
         .alert_dialog => ui.Node{ .alert_dialog = .{ .id = id, .title = first, .detail = second } },
-        .button => ui.Node{ .button = .{ .id = id, .label = first } },
-        .icon_button => ui.Node{ .icon_button = .{ .id = id, .label = first } },
-        .button_group => ui.Node{ .button_group = .{ .id = id, .first = first, .second = second } },
-        .toggle_group => ui.Node{ .toggle_group = .{ .id = id, .first = first, .second = second } },
-        .input => ui.Node{ .input = .{ .id = id, .placeholder = first } },
+        .button => {
+            const tag = second_ref.offset;
+            const trailing = (second_ref.len >> 8) != 0;
+            return ui.Node{ .button = .{ .id = id, .label = first, .variant = second_ref.len & 0xFF, .leading_icon = if (trailing) 0 else tag, .trailing_icon = if (trailing) tag else 0 } };
+        },
+        .icon_button => ui.Node{ .icon_button = .{ .id = id, .label = first, .variant = second_ref.offset, .icon = second_ref.len } },
+        .button_group => ui.Node{ .button_group = .{ .id = id / 2, .first = first, .second = second, .active = @truncate(id % 2) } },
+        .toggle_group => ui.Node{ .toggle_group = .{ .id = id / 3, .first = first, .second = second, .active = @truncate(id % 3) } },
+        .input => ui.Node{ .input = .{ .id = id, .placeholder = first, .leading_icon = second_ref.offset } },
         .input_group => ui.Node{ .input_group = .{ .id = id, .addon = first, .placeholder = second } },
         .input_otp => ui.Node{ .input_otp = .{ .id = id, .value = first } },
         .textarea => ui.Node{ .textarea = .{ .id = id, .placeholder = first } },
-        .select => ui.Node{ .select = .{ .id = id, .label = first } },
+        .select => ui.Node{ .select = .{ .id = id, .label = first, .trailing_icon = second_ref.offset } },
         .field => ui.Node{ .field = .{ .id = id, .label = first, .placeholder = second } },
-        .checkbox => ui.Node{ .checkbox = .{ .id = id, .label = first } },
-        .switch_control => ui.Node{ .switch_control = .{ .id = id, .label = first } },
-        .slider => ui.Node{ .slider = .{ .id = id, .label = first } },
-        .radio_group => ui.Node{ .radio_group = .{ .id = id, .first = first, .second = second } },
-        .row_item => ui.Node{ .row_item = .{ .id = id, .title = first, .detail = second } },
-        .badge => ui.Node{ .badge = .{ .label = first } },
-        .card => ui.Node{ .card = .{ .title = first, .detail = second } },
+        .checkbox => ui.Node{ .checkbox = .{ .id = id, .label = first, .checked = second_ref.offset != 0 } },
+        .switch_control => ui.Node{ .switch_control = .{ .id = id, .label = first, .checked = second_ref.offset != 0 } },
+        .slider => ui.Node{ .slider = .{ .id = id, .label = first, .value = ui.decodeUnit(second_ref.offset) } },
+        .radio_group => ui.Node{ .radio_group = .{ .id = id / 2, .first = first, .second = second, .selected = @truncate(id % 2) } },
+        .row_item => ui.Node{ .row_item = .{ .id = id >> 14, .title = first, .detail = second, .icon = @truncate(id & 0x3FFF) } },
+        .badge => ui.Node{ .badge = .{ .label = first, .variant = second_ref.offset } },
+        .card => ui.Node{ .card = .{ .title = first, .detail = second, .variant = @truncate(id) } },
         .avatar => ui.Node{ .avatar = .{ .label = first } },
         .kbd => ui.Node{ .kbd = .{ .label = first } },
         .label => ui.Node{ .label = .{ .value = first } },
@@ -323,14 +327,14 @@ fn recordToNode(kind: RecordKind, id: u32, first: []const u8, second: []const u8
         .scroll_area => ui.Node{ .scroll_area = {} },
         .skeleton => ui.Node{ .skeleton = {} },
         .spinner => ui.Node{ .spinner = {} },
-        .progress => ui.Node{ .progress = .{} },
+        .progress => ui.Node{ .progress = .{ .value = ui.decodeUnit(second_ref.offset) } },
         .breadcrumb => ui.Node{ .breadcrumb = .{ .id = id, .first = first, .current = second } },
-        .menubar => ui.Node{ .menubar = .{ .id = id, .first = first, .second = second } },
-        .navigation_menu => ui.Node{ .navigation_menu = .{ .id = id, .first = first, .second = second } },
-        .pagination => ui.Node{ .pagination = .{ .id = id } },
-        .tabs => ui.Node{ .tabs = .{ .id = id, .first = first, .second = second } },
-        .direction => ui.Node{ .direction = .{ .id = id } },
-        .command => ui.Node{ .command = .{ .id = id, .placeholder = first } },
+        .menubar => ui.Node{ .menubar = .{ .id = id / 3, .first = first, .second = second, .active = @truncate(id % 3) } },
+        .navigation_menu => ui.Node{ .navigation_menu = .{ .id = id / 3, .first = first, .second = second, .active = @truncate(id % 3) } },
+        .pagination => ui.Node{ .pagination = .{ .id = id / 3, .page = @truncate(id % 3) } },
+        .tabs => ui.Node{ .tabs = .{ .id = id / 2, .first = first, .second = second, .active = @truncate(id % 2) } },
+        .direction => ui.Node{ .direction = .{ .id = id / 2, .active = @truncate(id % 2) } },
+        .command => ui.Node{ .command = .{ .id = id, .placeholder = first, .leading_icon = second_ref.offset } },
         .context_menu => ui.Node{ .context_menu = .{ .id = id, .first = first, .second = second } },
         .dialog => ui.Node{ .dialog = .{ .id = id, .title = first, .detail = second } },
         .drawer => ui.Node{ .drawer = .{ .id = id, .title = first, .detail = second } },
@@ -341,15 +345,15 @@ fn recordToNode(kind: RecordKind, id: u32, first: []const u8, second: []const u8
         .toast => ui.Node{ .toast = .{ .id = id, .title = first, .detail = second } },
         .sheet => ui.Node{ .sheet = .{ .id = id, .title = first, .detail = second } },
         .sidebar => ui.Node{ .sidebar = .{ .id = id, .title = first, .item = second } },
-        .icon => ui.Node{ .icon = .{ .label = first } },
-        .toggle => ui.Node{ .toggle = .{ .id = id, .label = first } },
-        .resizable => ui.Node{ .resizable = .{ .id = id } },
-        .calendar => ui.Node{ .calendar = .{ .id = id, .month = first } },
+        .icon => ui.Node{ .icon = .{ .label = first, .icon = second_ref.len } },
+        .toggle => ui.Node{ .toggle = .{ .id = id, .label = first, .pressed = second_ref.offset != 0 } },
+        .resizable => ui.Node{ .resizable = .{ .id = id, .ratio = ui.decodeUnit(second_ref.offset) } },
+        .calendar => ui.Node{ .calendar = .{ .id = id, .month = first, .selected_day = second_ref.offset } },
         .carousel => ui.Node{ .carousel = .{ .id = id, .label = first } },
         .chart => ui.Node{ .chart = .{ .id = id, .label = first } },
-        .combobox => ui.Node{ .combobox = .{ .id = id, .placeholder = first } },
-        .empty => ui.Node{ .empty = .{ .title = first, .detail = second } },
-        .aspect_ratio => ui.Node{ .aspect_ratio = .{ .ratio_w = 0, .ratio_h = 0 } },
+        .combobox => ui.Node{ .combobox = .{ .id = id, .placeholder = first, .selected = second } },
+        .empty => ui.Node{ .empty = .{ .title = first, .detail = second, .icon = @truncate(id) } },
+        .aspect_ratio => ui.Node{ .aspect_ratio = .{ .ratio_w = second_ref.offset, .ratio_h = second_ref.len } },
         else => ui.Node{ .text = .{ .value = "" } },
     };
 }
