@@ -15,6 +15,10 @@ export_name: db "f"
 EXPORT_NAME_LEN equ $ - export_name
 call_export_name: db "call_sum"
 CALL_EXPORT_NAME_LEN equ $ - call_export_name
+call_pair_export_name: db "call_pair"
+CALL_PAIR_EXPORT_NAME_LEN equ $ - call_pair_export_name
+call_param_export_name: db "call_param"
+CALL_PARAM_EXPORT_NAME_LEN equ $ - call_param_export_name
 add_export_name: db "add"
 ADD_EXPORT_NAME_LEN equ $ - add_export_name
 wasm_add_i32:
@@ -26,8 +30,28 @@ wasm_add_i32:
 wasm_add_i32_len equ $ - wasm_add_i32
 body_i32_40: db 0x41, 0x28
 BODY_I32_40_LEN equ $ - body_i32_40
+body_i32_20: db 0x41, 0x14
+BODY_I32_20_LEN equ $ - body_i32_20
+body_i32_22: db 0x41, 0x16
+BODY_I32_22_LEN equ $ - body_i32_22
 body_call0_add2: db 0x10, 0x00, 0x41, 0x02, 0x6a
 BODY_CALL0_ADD2_LEN equ $ - body_call0_add2
+body_call0_call1_add: db 0x10, 0x00, 0x10, 0x01, 0x6a
+BODY_CALL0_CALL1_ADD_LEN equ $ - body_call0_call1_add
+body_param_add: db 0x20, 0x00, 0x20, 0x01, 0x6a
+BODY_PARAM_ADD_LEN equ $ - body_param_add
+body_call_param_add: db 0x41, 0x13, 0x41, 0x17, 0x10, 0x00
+BODY_CALL_PARAM_ADD_LEN equ $ - body_call_param_add
+body_table_call_pair:
+    dq body_i32_20, BODY_I32_20_LEN
+    dq body_i32_22, BODY_I32_22_LEN
+    dq body_call0_call1_add, BODY_CALL0_CALL1_ADD_LEN
+body_table_call_param:
+    dq body_param_add, BODY_PARAM_ADD_LEN
+    dq body_call_param_add, BODY_CALL_PARAM_ADD_LEN
+sig_table_call_param:
+    dq 2, 0
+    dq 0, 0
 source_call_pair: db "export base = 40; export call_sum = base() + 2;"
 SOURCE_CALL_PAIR_LEN equ $ - source_call_pair
 source_call_id: db "export base = 42; export call_id = base();"
@@ -62,6 +86,30 @@ source_call_twice_mul: db "export base = 6; export call_twice_mul = base() * bas
 SOURCE_CALL_TWICE_MUL_LEN equ $ - source_call_twice_mul
 source_call_named_callee: db "export seed = 14; export call_named_callee = seed() * 3;"
 SOURCE_CALL_NAMED_CALLEE_LEN equ $ - source_call_named_callee
+source_call_spaced: db "export base = 40; export call_spaced = base ( ) + 2;"
+SOURCE_CALL_SPACED_LEN equ $ - source_call_spaced
+source_call_two_callees: db "export left = 20; export right = 22; export call_pair = left() + right();"
+SOURCE_CALL_TWO_CALLEES_LEN equ $ - source_call_two_callees
+source_call_four_exports: db "export a = 5; export b = 7; export c = a() + b(); export d = a() + b() + c() + 18;"
+SOURCE_CALL_FOUR_EXPORTS_LEN equ $ - source_call_four_exports
+source_call_param_source: db "export add2(a, b) = a + b; export call_param_source = add2(19, 23);"
+SOURCE_CALL_PARAM_SOURCE_LEN equ $ - source_call_param_source
+source_call_param_forward_local: db "export add23(x) = x + 23; export call_param_forward = add23(19);"
+SOURCE_CALL_PARAM_FORWARD_LOCAL_LEN equ $ - source_call_param_forward_local
+source_call_param_final_arg: db "export add23(x) = x + 23; export call_param_final(y) = add23(y);"
+SOURCE_CALL_PARAM_FINAL_ARG_LEN equ $ - source_call_param_final_arg
+source_call_param_expr_arg: db "export add2(a, b) = a + b; export call_param_expr = add2(10 + 9, 20 + 3);"
+SOURCE_CALL_PARAM_EXPR_ARG_LEN equ $ - source_call_param_expr_arg
+source_call_param_group_arg: db "export add2(a, b) = a + b; export call_param_group = add2((50 - 31), (5 * 4) + 3);"
+SOURCE_CALL_PARAM_GROUP_ARG_LEN equ $ - source_call_param_group_arg
+source_call_param_nested_arg: db "export add2(a, b) = a + b; export nineteen = 19; export call_param_nested = add2(nineteen(), add2(20, 3));"
+SOURCE_CALL_PARAM_NESTED_ARG_LEN equ $ - source_call_param_nested_arg
+source_call_local_callee: db "export add_local(a) = let b = a + 20; b + 3; export call_local_callee = add_local(19);"
+SOURCE_CALL_LOCAL_CALLEE_LEN equ $ - source_call_local_callee
+source_call_local_final: db "export add2(a, b) = a + b; export call_local_final = let x = 19; let y = 23; add2(x, y);"
+SOURCE_CALL_LOCAL_FINAL_LEN equ $ - source_call_local_final
+param_final_name: db "call_param_final"
+PARAM_FINAL_NAME_LEN equ $ - param_final_name
 source_call_div_zero: db "export base = 42; export call_div_zero = base() / 0;"
 SOURCE_CALL_DIV_ZERO_LEN equ $ - source_call_div_zero
 source_call_rhs_div_zero: db "export base = 0; export call_rhs_div_zero = 84 / base();"
@@ -88,8 +136,40 @@ source_call_rhs_bad_arity: db "export base = 40; export bad_arity_rhs = 1 + base
 SOURCE_CALL_RHS_BAD_ARITY_LEN equ $ - source_call_rhs_bad_arity
 source_call_group_bad_arity: db "export base = 40; export bad_arity_group = (base(1));"
 SOURCE_CALL_GROUP_BAD_ARITY_LEN equ $ - source_call_group_bad_arity
+source_call_spaced_bad_arity: db "export base = 40; export bad_arity_spaced = base ( 1 );"
+SOURCE_CALL_SPACED_BAD_ARITY_LEN equ $ - source_call_spaced_bad_arity
+source_call_two_callees_bad_arity: db "export left = 20; export right = 22; export bad_pair = left() + right(1);"
+SOURCE_CALL_TWO_CALLEES_BAD_ARITY_LEN equ $ - source_call_two_callees_bad_arity
+source_call_three_dup_first: db "export left = 20; export right = 22; export left = right();"
+SOURCE_CALL_THREE_DUP_FIRST_LEN equ $ - source_call_three_dup_first
+source_call_three_dup_second: db "export left = 20; export right = 22; export right = left();"
+SOURCE_CALL_THREE_DUP_SECOND_LEN equ $ - source_call_three_dup_second
+source_call_four_dup_middle: db "export a = 5; export b = 7; export c = a() + b(); export b = c();"
+SOURCE_CALL_FOUR_DUP_MIDDLE_LEN equ $ - source_call_four_dup_middle
+source_call_too_many: db "export a = 1; export b = 2; export c = 3; export d = 4; export e = a();"
+SOURCE_CALL_TOO_MANY_LEN equ $ - source_call_too_many
+source_call_param_too_few: db "export add2(a, b) = a + b; export bad_param_few = add2(19);"
+SOURCE_CALL_PARAM_TOO_FEW_LEN equ $ - source_call_param_too_few
+source_call_param_too_many: db "export add2(a, b) = a + b; export bad_param_many = add2(19, 20, 3);"
+SOURCE_CALL_PARAM_TOO_MANY_LEN equ $ - source_call_param_too_many
+source_call_local_dup_param: db "export bad_local_dup_param(a) = let a = 1; a; export call_bad_local_dup = bad_local_dup_param(1);"
+SOURCE_CALL_LOCAL_DUP_PARAM_LEN equ $ - source_call_local_dup_param
+source_call_local_dup_local: db "export bad_local_dup_local = let a = 1; let a = 2; a; export call_bad_local_dup = bad_local_dup_local();"
+SOURCE_CALL_LOCAL_DUP_LOCAL_LEN equ $ - source_call_local_dup_local
 source_return42: db "export f = 42;"
 SOURCE_RETURN42_LEN equ $ - source_return42
+source_param_add: db "export add2(a, b) = a + b;"
+SOURCE_PARAM_ADD_LEN equ $ - source_param_add
+source_param_local: db "export add_local(a, b) = let c = a + b; c + 1;"
+SOURCE_PARAM_LOCAL_LEN equ $ - source_param_local
+param_add_name: db "add2"
+PARAM_ADD_NAME_LEN equ $ - param_add_name
+param_local_name: db "add_local"
+PARAM_LOCAL_NAME_LEN equ $ - param_local_name
+source_param_dup: db "export dup_param(a, a) = a;"
+SOURCE_PARAM_DUP_LEN equ $ - source_param_dup
+source_param_trailing_comma: db "export bad_param(a,) = a;"
+SOURCE_PARAM_TRAILING_COMMA_LEN equ $ - source_param_trailing_comma
 source_named: db "  export answer_1 = 123;  "
 SOURCE_NAMED_LEN equ $ - source_named
 source_i32_max: db "export max_i32 = 2147483647;"
@@ -261,6 +341,16 @@ wasm_compile_run_cases:
     dq source_call_twice_add, SOURCE_CALL_TWICE_ADD_LEN, 42
     dq source_call_twice_mul, SOURCE_CALL_TWICE_MUL_LEN, 42
     dq source_call_named_callee, SOURCE_CALL_NAMED_CALLEE_LEN, 42
+    dq source_call_spaced, SOURCE_CALL_SPACED_LEN, 42
+    dq source_call_two_callees, SOURCE_CALL_TWO_CALLEES_LEN, 42
+    dq source_call_four_exports, SOURCE_CALL_FOUR_EXPORTS_LEN, 42
+    dq source_call_param_source, SOURCE_CALL_PARAM_SOURCE_LEN, 42
+    dq source_call_param_forward_local, SOURCE_CALL_PARAM_FORWARD_LOCAL_LEN, 42
+    dq source_call_param_expr_arg, SOURCE_CALL_PARAM_EXPR_ARG_LEN, 42
+    dq source_call_param_group_arg, SOURCE_CALL_PARAM_GROUP_ARG_LEN, 42
+    dq source_call_param_nested_arg, SOURCE_CALL_PARAM_NESTED_ARG_LEN, 42
+    dq source_call_local_callee, SOURCE_CALL_LOCAL_CALLEE_LEN, 42
+    dq source_call_local_final, SOURCE_CALL_LOCAL_FINAL_LEN, 42
     dq source_add, SOURCE_ADD_LEN, 42
     dq source_sub, SOURCE_SUB_LEN, 42
     dq source_mul, SOURCE_MUL_LEN, 42
@@ -324,6 +414,17 @@ wasm_compile_parse_error_cases:
     dq source_call_bad_arity, SOURCE_CALL_BAD_ARITY_LEN
     dq source_call_rhs_bad_arity, SOURCE_CALL_RHS_BAD_ARITY_LEN
     dq source_call_group_bad_arity, SOURCE_CALL_GROUP_BAD_ARITY_LEN
+    dq source_call_spaced_bad_arity, SOURCE_CALL_SPACED_BAD_ARITY_LEN
+    dq source_call_two_callees_bad_arity, SOURCE_CALL_TWO_CALLEES_BAD_ARITY_LEN
+    dq source_call_three_dup_first, SOURCE_CALL_THREE_DUP_FIRST_LEN
+    dq source_call_three_dup_second, SOURCE_CALL_THREE_DUP_SECOND_LEN
+    dq source_call_four_dup_middle, SOURCE_CALL_FOUR_DUP_MIDDLE_LEN
+    dq source_param_dup, SOURCE_PARAM_DUP_LEN
+    dq source_param_trailing_comma, SOURCE_PARAM_TRAILING_COMMA_LEN
+    dq source_call_param_too_few, SOURCE_CALL_PARAM_TOO_FEW_LEN
+    dq source_call_param_too_many, SOURCE_CALL_PARAM_TOO_MANY_LEN
+    dq source_call_local_dup_param, SOURCE_CALL_LOCAL_DUP_PARAM_LEN
+    dq source_call_local_dup_local, SOURCE_CALL_LOCAL_DUP_LOCAL_LEN
 WASM_COMPILE_PARSE_ERROR_CASE_SIZE equ 16
 wasm_compile_parse_error_cases_end:
 WASM_COMPILE_PARSE_ERROR_CASES equ (wasm_compile_parse_error_cases_end - wasm_compile_parse_error_cases) / WASM_COMPILE_PARSE_ERROR_CASE_SIZE
@@ -351,6 +452,18 @@ wasm_compile_run_error_cases:
     dq source_call_bad_arity, SOURCE_CALL_BAD_ARITY_LEN, ERROR_PARSE
     dq source_call_rhs_bad_arity, SOURCE_CALL_RHS_BAD_ARITY_LEN, ERROR_PARSE
     dq source_call_group_bad_arity, SOURCE_CALL_GROUP_BAD_ARITY_LEN, ERROR_PARSE
+    dq source_call_spaced_bad_arity, SOURCE_CALL_SPACED_BAD_ARITY_LEN, ERROR_PARSE
+    dq source_call_two_callees_bad_arity, SOURCE_CALL_TWO_CALLEES_BAD_ARITY_LEN, ERROR_PARSE
+    dq source_call_three_dup_first, SOURCE_CALL_THREE_DUP_FIRST_LEN, ERROR_PARSE
+    dq source_call_three_dup_second, SOURCE_CALL_THREE_DUP_SECOND_LEN, ERROR_PARSE
+    dq source_call_four_dup_middle, SOURCE_CALL_FOUR_DUP_MIDDLE_LEN, ERROR_PARSE
+    dq source_call_too_many, SOURCE_CALL_TOO_MANY_LEN, ERROR_NO_SPACE
+    dq source_param_dup, SOURCE_PARAM_DUP_LEN, ERROR_PARSE
+    dq source_param_trailing_comma, SOURCE_PARAM_TRAILING_COMMA_LEN, ERROR_PARSE
+    dq source_call_param_too_few, SOURCE_CALL_PARAM_TOO_FEW_LEN, ERROR_PARSE
+    dq source_call_param_too_many, SOURCE_CALL_PARAM_TOO_MANY_LEN, ERROR_PARSE
+    dq source_call_local_dup_param, SOURCE_CALL_LOCAL_DUP_PARAM_LEN, ERROR_PARSE
+    dq source_call_local_dup_local, SOURCE_CALL_LOCAL_DUP_LOCAL_LEN, ERROR_PARSE
     dq source_call_div_zero, SOURCE_CALL_DIV_ZERO_LEN, ERROR_ARITHMETIC_TRAP
     dq source_call_rhs_div_zero, SOURCE_CALL_RHS_DIV_ZERO_LEN, ERROR_ARITHMETIC_TRAP
     dq source_call_rhs_rem_zero, SOURCE_CALL_RHS_REM_ZERO_LEN, ERROR_ARITHMETIC_TRAP
@@ -450,6 +563,83 @@ _start:
 
     lea     rdi, [rel compiled_wasm]
     mov     esi, 128
+    lea     rdx, [rel source_param_add]
+    mov     ecx, SOURCE_PARAM_ADD_LEN
+    call    er_wasmc_compile_source
+    test    rdx, rdx
+    jnz     .fail
+    mov     r12, rax
+
+    mov     qword [rel call_args], 19
+    mov     qword [rel call_args + 8], 23
+    mov     eax, 2
+    push    rax
+    lea     rdi, [rel runtime]
+    lea     rsi, [rel compiled_wasm]
+    mov     rdx, r12
+    lea     rcx, [rel param_add_name]
+    mov     r8d, PARAM_ADD_NAME_LEN
+    lea     r9, [rel call_args]
+    call    er_fn_run_args
+    add     rsp, 8
+    test    rdx, rdx
+    jz      .fail
+    cmp     rax, 42
+    jne     .fail
+
+    lea     rdi, [rel compiled_wasm]
+    mov     esi, 128
+    lea     rdx, [rel source_param_local]
+    mov     ecx, SOURCE_PARAM_LOCAL_LEN
+    call    er_wasmc_compile_source
+    test    rdx, rdx
+    jnz     .fail
+    mov     r12, rax
+
+    mov     qword [rel call_args], 19
+    mov     qword [rel call_args + 8], 22
+    mov     eax, 2
+    push    rax
+    lea     rdi, [rel runtime]
+    lea     rsi, [rel compiled_wasm]
+    mov     rdx, r12
+    lea     rcx, [rel param_local_name]
+    mov     r8d, PARAM_LOCAL_NAME_LEN
+    lea     r9, [rel call_args]
+    call    er_fn_run_args
+    add     rsp, 8
+    test    rdx, rdx
+    jz      .fail
+    cmp     rax, 42
+    jne     .fail
+
+    lea     rdi, [rel compiled_wasm]
+    mov     esi, 128
+    lea     rdx, [rel source_call_param_final_arg]
+    mov     ecx, SOURCE_CALL_PARAM_FINAL_ARG_LEN
+    call    er_wasmc_compile_source
+    test    rdx, rdx
+    jnz     .fail
+    mov     r12, rax
+
+    mov     qword [rel call_args], 19
+    mov     eax, 1
+    push    rax
+    lea     rdi, [rel runtime]
+    lea     rsi, [rel compiled_wasm]
+    mov     rdx, r12
+    lea     rcx, [rel param_final_name]
+    mov     r8d, PARAM_FINAL_NAME_LEN
+    lea     r9, [rel call_args]
+    call    er_fn_run_args
+    add     rsp, 8
+    test    rdx, rdx
+    jz      .fail
+    cmp     rax, 42
+    jne     .fail
+
+    lea     rdi, [rel compiled_wasm]
+    mov     esi, 128
     lea     rdx, [rel source_return42]
     mov     ecx, SOURCE_RETURN42_LEN
     call    er_wasmc_compile_source
@@ -518,6 +708,94 @@ _start:
     mov     rdx, r12
     lea     rcx, [rel call_export_name]
     mov     r8d, CALL_EXPORT_NAME_LEN
+    call    er_fn_run
+    test    rdx, rdx
+    jz      .fail
+    cmp     rax, 42
+    jne     .fail
+
+    lea     rdi, [rel compiled_wasm]
+    mov     esi, 128
+    lea     rdx, [rel body_table_call_pair]
+    mov     ecx, 3
+    lea     r8, [rel call_pair_export_name]
+    mov     r9d, CALL_PAIR_EXPORT_NAME_LEN
+    mov     r10d, 2
+    call    er_wasmc_emit_i32_body_table_export
+    test    rdx, rdx
+    jnz     .fail
+    mov     r12, rax
+
+    lea     rdi, [rel compiled_wasm_b]
+    mov     esi, 128
+    lea     rdx, [rel body_table_call_pair]
+    mov     ecx, 3
+    lea     r8, [rel call_pair_export_name]
+    mov     r9d, CALL_PAIR_EXPORT_NAME_LEN
+    mov     r10d, 2
+    call    er_wasmc_emit_i32_body_table_export
+    test    rdx, rdx
+    jnz     .fail
+    cmp     rax, r12
+    jne     .fail
+
+    lea     rdi, [rel compiled_wasm]
+    lea     rsi, [rel compiled_wasm_b]
+    mov     rdx, r12
+    call    _bytes_equal
+    test    rax, rax
+    jz      .fail
+
+    lea     rdi, [rel runtime]
+    lea     rsi, [rel compiled_wasm]
+    mov     rdx, r12
+    lea     rcx, [rel call_pair_export_name]
+    mov     r8d, CALL_PAIR_EXPORT_NAME_LEN
+    call    er_fn_run
+    test    rdx, rdx
+    jz      .fail
+    cmp     rax, 42
+    jne     .fail
+
+    lea     rdi, [rel compiled_wasm]
+    mov     esi, 128
+    lea     rdx, [rel body_table_call_param]
+    mov     ecx, 2
+    lea     r8, [rel call_param_export_name]
+    mov     r9d, CALL_PARAM_EXPORT_NAME_LEN
+    mov     r10d, 1
+    lea     r11, [rel sig_table_call_param]
+    call    er_wasmc_emit_i32_sig_body_table_export
+    test    rdx, rdx
+    jnz     .fail
+    mov     r12, rax
+
+    lea     rdi, [rel compiled_wasm_b]
+    mov     esi, 128
+    lea     rdx, [rel body_table_call_param]
+    mov     ecx, 2
+    lea     r8, [rel call_param_export_name]
+    mov     r9d, CALL_PARAM_EXPORT_NAME_LEN
+    mov     r10d, 1
+    lea     r11, [rel sig_table_call_param]
+    call    er_wasmc_emit_i32_sig_body_table_export
+    test    rdx, rdx
+    jnz     .fail
+    cmp     rax, r12
+    jne     .fail
+
+    lea     rdi, [rel compiled_wasm]
+    lea     rsi, [rel compiled_wasm_b]
+    mov     rdx, r12
+    call    _bytes_equal
+    test    rax, rax
+    jz      .fail
+
+    lea     rdi, [rel runtime]
+    lea     rsi, [rel compiled_wasm]
+    mov     rdx, r12
+    lea     rcx, [rel call_param_export_name]
+    mov     r8d, CALL_PARAM_EXPORT_NAME_LEN
     call    er_fn_run
     test    rdx, rdx
     jz      .fail

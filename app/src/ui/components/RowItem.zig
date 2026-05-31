@@ -168,7 +168,7 @@ fn detailWrap(value: []const u8) ui.TextWrap {
 }
 
 const row_radius: f32 = tokens.Component.row_radius;
-const row_text_padding_x: f32 = 10.0;
+const row_text_padding_x: f32 = 12.0;
 const row_padding_y: f32 = 6.0;
 const row_text_gap: f32 = 2.0;
 const row_min_width: f32 = 96.0;
@@ -178,11 +178,11 @@ const row_detail_line_height: f32 = 13.0;
 const row_text_max_lines: usize = 1;
 const row_icon_size: f32 = 16.0;
 const row_icon_chip_size: f32 = 26.0;
-const row_icon_chip_radius: f32 = 7.0;
+const row_icon_chip_radius: f32 = 8.0;
 const row_icon_text_gap: f32 = 10.0;
-const row_floor = ui.Color{ .r = 8, .g = 10, .b = 13, .a = 8 };
-const row_rim = ui.Color{ .r = 255, .g = 255, .b = 255, .a = 3 };
-const row_icon_chip_fill = ui.Color{ .r = 12, .g = 16, .b = 18, .a = 150 };
+const row_floor = ui.Color{ .r = 6, .g = 9, .b = 12, .a = 18 };
+const row_rim = ui.Color{ .r = 255, .g = 255, .b = 255, .a = 6 };
+const row_icon_chip_fill = ui.Color{ .r = 13, .g = 19, .b = 23, .a = 186 };
 const row_rim_height: f32 = 1.0;
 
 test "row item component serializes to canonical object and deserializes" {

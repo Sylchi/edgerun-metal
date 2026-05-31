@@ -53,6 +53,8 @@ const max_overlay_rects: usize = 512;
 const max_overlay_text_vertices: usize = 8192;
 const max_overlay_icon_vertices: usize = 256;
 const max_overlay_icon_line_vertices: usize = 16384;
+const stream_counter_digits: usize = 6;
+const neighbor_status_path = "/media/developer/temp/edgerun-neighbors.txt";
 
 const WlMessage = extern struct {
     name: [*c]const u8,
@@ -442,11 +444,13 @@ const SceneState = struct {
     hardware: app_hardware_dashboard.State = .{},
     app_state: app_native_input.State = .{},
     tv_info: TvInfo = .{},
+    stream_counter: [stream_counter_digits]u8 = [_]u8{'0'} ** stream_counter_digits,
 
     fn render(self: *SceneState, width: i32, height: i32, frame: u32, font_atlas: *renderer_font_atlas.Atlas) !renderer_ir.Buffers {
         var scene = ui.Scene.initWithClips(&self.commands, &self.clips);
         var collector = interaction.Collector.init(&self.regions);
         try renderTvHardwareScene(&scene, &collector, @intCast(width), @intCast(height), &self.tv_info);
+        try renderStreamCounter(&scene, width, &self.stream_counter);
         try renderHeartbeat(&scene, width, height, frame);
         try renderCursor(&scene, self.app_state.hover_x, self.app_state.hover_y);
         const written_commands = scene.written();
@@ -554,6 +558,9 @@ const TvInfo = struct {
     kernel: [info_bytes]u8 = [_]u8{0} ** info_bytes,
     graphics: [info_bytes]u8 = [_]u8{0} ** info_bytes,
     input: [info_bytes]u8 = [_]u8{0} ** info_bytes,
+    disk: [info_bytes]u8 = [_]u8{0} ** info_bytes,
+    wifi: [info_bytes]u8 = [_]u8{0} ** info_bytes,
+    bluetooth: [info_bytes]u8 = [_]u8{0} ** info_bytes,
     refreshed: bool = false,
 
     fn refresh(self: *TvInfo) void {
@@ -561,6 +568,9 @@ const TvInfo = struct {
         readProcessor(&self.processor) catch writeInfo(&self.processor, "ARM platform");
         readMemory(&self.memory) catch writeInfo(&self.memory, "Memory unavailable");
         readKernel(&self.kernel) catch writeInfo(&self.kernel, "Linux kernel");
+        readDisk(&self.disk) catch writeInfo(&self.disk, "Disk usage unavailable");
+        readWifi(&self.wifi) catch writeInfo(&self.wifi, "Wi-Fi scan unavailable");
+        readBluetooth(&self.bluetooth) catch writeInfo(&self.bluetooth, "Bluetooth scan unavailable");
         writeInfo(&self.graphics, "Mali-G52 via libmali EGL/GLES");
         writeInfo(&self.input, "Magic Remote input: LGE M-RCU + ClickableMouse");
         self.refreshed = true;
@@ -601,6 +611,7 @@ pub fn main(init: std.process.Init) !void {
     while (frame < frames) : (frame += 1) {
         direct_mouse.poll(&scene_state, options.logical_width, options.logical_height);
         _ = scene_state.hardware.tick();
+        if (frame % frames_per_second == 0) writeCounter(&scene_state.stream_counter, frame / frames_per_second);
         if (frame % frames_per_second == 0) scene_state.tv_info.refresh();
         const buffers = try scene_state.render(options.logical_width, options.logical_height, frame, &font_atlas);
         renderer_gles.refreshFontTexture(gl, &font_atlas);
@@ -656,12 +667,15 @@ fn renderTvHardwareScene(scene: *ui.Scene, collector: *interaction.Collector, wi
     try renderTvCard(scene, collector, ui.Rect.init(margin + card_w + gap, top_y, card_w, card_h), 2, "CPU", TvInfo.slice(&info.processor), ui.Color{ .r = 82, .g = 154, .b = 255 });
     try renderTvCard(scene, collector, ui.Rect.init(margin + (card_w + gap) * 2.0, top_y, card_w, card_h), 3, "Graphics", TvInfo.slice(&info.graphics), ui.Color{ .r = 245, .g = 183, .b = 78 });
 
-    const lower_y = top_y + card_h + gap;
-    const lower_card_h: f32 = 168.0;
-    const lower_card_w = (w - margin * 2.0 - gap * 2.0) / 3.0;
-    try renderTvCard(scene, collector, ui.Rect.init(margin, lower_y, lower_card_w, lower_card_h), 4, "Memory", TvInfo.slice(&info.memory), ui.Color{ .r = 132, .g = 204, .b = 22 });
-    try renderTvCard(scene, collector, ui.Rect.init(margin + lower_card_w + gap, lower_y, lower_card_w, lower_card_h), 5, "Kernel", TvInfo.slice(&info.kernel), ui.Color{ .r = 168, .g = 85, .b = 247 });
-    try renderTvCard(scene, collector, ui.Rect.init(margin + (lower_card_w + gap) * 2.0, lower_y, lower_card_w, lower_card_h), 6, "Remote", TvInfo.slice(&info.input), ui.Color{ .r = 20, .g = 184, .b = 166 });
+    const mid_y = top_y + card_h + gap;
+    const lower_y = mid_y + card_h + gap;
+    try renderTvCard(scene, collector, ui.Rect.init(margin, mid_y, card_w, card_h), 4, "Memory", TvInfo.slice(&info.memory), ui.Color{ .r = 132, .g = 204, .b = 22 });
+    try renderTvCard(scene, collector, ui.Rect.init(margin + card_w + gap, mid_y, card_w, card_h), 5, "Disk", TvInfo.slice(&info.disk), ui.Color{ .r = 251, .g = 113, .b = 133 });
+    try renderTvCard(scene, collector, ui.Rect.init(margin + (card_w + gap) * 2.0, mid_y, card_w, card_h), 6, "Wi-Fi", TvInfo.slice(&info.wifi), ui.Color{ .r = 56, .g = 189, .b = 248 });
+
+    try renderTvCard(scene, collector, ui.Rect.init(margin, lower_y, card_w, card_h), 7, "Bluetooth", TvInfo.slice(&info.bluetooth), ui.Color{ .r = 96, .g = 165, .b = 250 });
+    try renderTvCard(scene, collector, ui.Rect.init(margin + card_w + gap, lower_y, card_w, card_h), 8, "Kernel", TvInfo.slice(&info.kernel), ui.Color{ .r = 168, .g = 85, .b = 247 });
+    try renderTvCard(scene, collector, ui.Rect.init(margin + (card_w + gap) * 2.0, lower_y, card_w, card_h), 9, "Remote", TvInfo.slice(&info.input), ui.Color{ .r = 20, .g = 184, .b = 166 });
 }
 
 fn renderTvCard(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32, title: []const u8, detail: []const u8, accent: ui.Color) !void {
@@ -671,6 +685,26 @@ fn renderTvCard(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.
     try scene.pushRect(ui.Rect.init(bounds.x + 22.0, bounds.y + 24.0, 58.0, 6.0), accent, .fill, 3.0, 0.0);
     try scene.pushStrongText(ui.Rect.init(bounds.x + 22.0, bounds.y + 52.0, bounds.w - 44.0, 30.0), title, ui.Color{ .r = 245, .g = 247, .b = 250 });
     try scene.pushText(ui.Rect.init(bounds.x + 22.0, bounds.y + 98.0, bounds.w - 44.0, 58.0), detail, ui.Color{ .r = 178, .g = 188, .b = 202 });
+}
+
+fn renderStreamCounter(scene: *ui.Scene, width: i32, counter: *const [stream_counter_digits]u8) !void {
+    const w = @as(f32, @floatFromInt(@max(width, 1)));
+    const panel = ui.Rect.init(w - 548.0, 42.0, 492.0, 126.0);
+    try scene.pushOverlayRect(panel, ui.Color{ .r = 8, .g = 12, .b = 18, .a = 236 }, .fill, 16.0, 0.0);
+    try scene.pushOverlayRect(panel, ui.Color{ .r = 45, .g = 212, .b = 191, .a = 120 }, .border, 16.0, 0.0);
+    try scene.pushOverlayRect(ui.Rect.init(panel.x + 18.0, panel.y + 18.0, 84.0, 8.0), ui.Color{ .r = 45, .g = 212, .b = 191, .a = 255 }, .fill, 4.0, 0.0);
+    try scene.pushStrongText(ui.Rect.init(panel.x + 18.0, panel.y + 38.0, panel.w - 36.0, 24.0), "ERUI stream", ui.Color{ .r = 190, .g = 245, .b = 238, .a = 255 });
+    try scene.pushBoldText(ui.Rect.init(panel.x + 18.0, panel.y + 70.0, panel.w - 36.0, 44.0), counter, ui.Color{ .r = 255, .g = 255, .b = 255, .a = 255 });
+}
+
+fn writeCounter(out: *[stream_counter_digits]u8, value: u32) void {
+    var n = value % 1_000_000;
+    var index: usize = stream_counter_digits;
+    while (index > 0) {
+        index -= 1;
+        out[index] = @intCast('0' + (n % 10));
+        n /= 10;
+    }
 }
 
 fn writeInfo(out: *[info_bytes]u8, value: []const u8) void {
@@ -709,6 +743,43 @@ fn readKernel(out: *[info_bytes]u8) !void {
     writeFixed(out, "Linux {s} aarch64", .{text});
 }
 
+fn readDisk(out: *[info_bytes]u8) !void {
+    readStatusValue(out, "disk=") catch writeInfo(out, "Waiting for disk status");
+}
+
+fn readWifi(out: *[info_bytes]u8) !void {
+    var buf: [2048]u8 = undefined;
+    const n = try readFile("/proc/net/wireless", &buf);
+    const text = buf[0..n];
+    var iface_count: u32 = 0;
+    var best_link: u32 = 0;
+    var best_level: i32 = 0;
+    var best_name: []const u8 = "wifi";
+    var lines = std.mem.splitScalar(u8, text, '\n');
+    _ = lines.next();
+    _ = lines.next();
+    while (lines.next()) |line| {
+        const colon = std.mem.indexOfScalar(u8, line, ':') orelse continue;
+        const name = std.mem.trim(u8, line[0..colon], " \t");
+        var parts = std.mem.tokenizeAny(u8, line[colon + 1 ..], " \t.");
+        _ = parts.next();
+        const link = std.fmt.parseUnsigned(u32, parts.next() orelse continue, 10) catch continue;
+        const level = std.fmt.parseInt(i32, parts.next() orelse "0", 10) catch 0;
+        iface_count += 1;
+        if (iface_count == 1 or link > best_link) {
+            best_link = link;
+            best_level = level;
+            best_name = name;
+        }
+    }
+    if (iface_count == 0) return error.ReadFailed;
+    writeFixed(out, "{d} radios; {s} link {d}/100 level {d}", .{ iface_count, best_name, best_link, best_level });
+}
+
+fn readBluetooth(out: *[info_bytes]u8) !void {
+    readStatusValue(out, "bluetooth=") catch writeInfo(out, "Waiting for Bluetooth scan");
+}
+
 fn parseMeminfoKb(text: []const u8, key: []const u8) ?u32 {
     var lines = std.mem.splitScalar(u8, text, '\n');
     while (lines.next()) |line| {
@@ -717,6 +788,18 @@ fn parseMeminfoKb(text: []const u8, key: []const u8) ?u32 {
         return std.fmt.parseUnsigned(u32, parts.next() orelse return null, 10) catch null;
     }
     return null;
+}
+
+fn readStatusValue(out: *[info_bytes]u8, key: []const u8) !void {
+    var buf: [2048]u8 = undefined;
+    const n = try readFile(neighbor_status_path, &buf);
+    var lines = std.mem.splitScalar(u8, buf[0..n], '\n');
+    while (lines.next()) |line| {
+        if (!std.mem.startsWith(u8, line, key)) continue;
+        writeInfo(out, line[key.len..]);
+        return;
+    }
+    return error.ReadFailed;
 }
 
 fn readFile(path: []const u8, out: []u8) !usize {

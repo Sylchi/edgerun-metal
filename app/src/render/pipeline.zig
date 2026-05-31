@@ -66,7 +66,7 @@ fn prepareText(font_atlas: *renderer_font_atlas.Atlas, text_command: anytype) re
     font_atlas.setTextWeight(fontWeightForText(text_command.weight));
     font_atlas.prepareText(text_command.value, px, fontWeightForText(text_command.weight)) catch |err| switch (err) {
         error.Budget => return error.Budget,
-        error.InvalidBuffer => return error.InvalidBuffer,
+        error.InvalidBuffer => return,
     };
 }
 
@@ -130,52 +130,52 @@ pub fn packTextQuads(buffers: renderer_ir.Buffers, commands: []const ui.Command)
 }
 
 fn packTextCommand(buffers: renderer_ir.Buffers, text_command: anytype, overlay: bool) renderer_ir.Error!void {
-            if (text_command.value.len == 0) return;
-            const px: u8 = @intFromFloat(@ceil(text_command.origin.h));
-            const font_body = font_vector.body(fontWeightForText(text_command.weight));
-            const font_scale = @as(f32, @floatFromInt(px)) / @as(f32, @floatFromInt(font_body.metrics.units_per_em));
-            const text_width = vectorTextWidth(font_body, text_command.value, font_scale);
-            const align_offset: f32 = switch (text_command.alignment) {
-                .start => 0.0,
-                .center => @max(0.0, (text_command.origin.w - text_width) * 0.5),
-                .end => @max(0.0, text_command.origin.w - text_width),
-            };
-            var pen_x = text_command.origin.x + align_offset;
-            if (shouldSnapTextToPixelGrid(px)) pen_x = @round(pen_x);
-            const baseline = if (shouldSnapTextToPixelGrid(px))
-                @round(text_command.origin.y + font_body.metrics.ascender * font_scale)
-            else
-                text_command.origin.y + font_body.metrics.ascender * font_scale;
-            var previous: ?u21 = null;
-            var index: usize = 0;
-            while (index < text_command.value.len) {
-                const cp_len = std.unicode.utf8ByteSequenceLength(text_command.value[index]) catch {
-                    index += 1;
-                    continue;
-                };
-                const end = index + cp_len;
-                if (end > text_command.value.len) break;
-                const codepoint = std.unicode.utf8Decode(text_command.value[index..end]) catch {
-                    index = end;
-                    continue;
-                };
-                index = end;
-                if (previous) |prev| pen_x += font_body.kern(prev, codepoint) * font_scale;
-                const glyph_value = font_body.glyphForCodepoint(codepoint) orelse {
-                    previous = codepoint;
-                    continue;
-                };
-                if (glyph_value.commands.len != 0) {
-                    if (overlay) {
-                        try renderer_ir.pushOverlayTextGlyph(buffers, pen_x, baseline, @floatFromInt(px), codepoint, text_command.weight, text_command.color);
-                    } else {
-                        try renderer_ir.pushTextGlyph(buffers, pen_x, baseline, @floatFromInt(px), codepoint, text_command.weight, text_command.color);
-                    }
-                }
-                pen_x += glyph_value.advance * font_scale;
-                previous = codepoint;
-                if (pen_x > text_command.origin.x + text_command.origin.w) break;
+    if (text_command.value.len == 0) return;
+    const px: u8 = @intFromFloat(@ceil(text_command.origin.h));
+    const font_body = font_vector.body(fontWeightForText(text_command.weight));
+    const font_scale = @as(f32, @floatFromInt(px)) / @as(f32, @floatFromInt(font_body.metrics.units_per_em));
+    const text_width = vectorTextWidth(font_body, text_command.value, font_scale);
+    const align_offset: f32 = switch (text_command.alignment) {
+        .start => 0.0,
+        .center => @max(0.0, (text_command.origin.w - text_width) * 0.5),
+        .end => @max(0.0, text_command.origin.w - text_width),
+    };
+    var pen_x = text_command.origin.x + align_offset;
+    if (shouldSnapTextToPixelGrid(px)) pen_x = @round(pen_x);
+    const baseline = if (shouldSnapTextToPixelGrid(px))
+        @round(text_command.origin.y + font_body.metrics.ascender * font_scale)
+    else
+        text_command.origin.y + font_body.metrics.ascender * font_scale;
+    var previous: ?u21 = null;
+    var index: usize = 0;
+    while (index < text_command.value.len) {
+        const cp_len = std.unicode.utf8ByteSequenceLength(text_command.value[index]) catch {
+            index += 1;
+            continue;
+        };
+        const end = index + cp_len;
+        if (end > text_command.value.len) break;
+        const codepoint = std.unicode.utf8Decode(text_command.value[index..end]) catch {
+            index = end;
+            continue;
+        };
+        index = end;
+        if (previous) |prev| pen_x += font_body.kern(prev, codepoint) * font_scale;
+        const glyph_value = font_body.glyphForCodepoint(codepoint) orelse {
+            previous = codepoint;
+            continue;
+        };
+        if (glyph_value.commands.len != 0) {
+            if (overlay) {
+                try renderer_ir.pushOverlayTextGlyph(buffers, pen_x, baseline, @floatFromInt(px), codepoint, text_command.weight, text_command.color);
+            } else {
+                try renderer_ir.pushTextGlyph(buffers, pen_x, baseline, @floatFromInt(px), codepoint, text_command.weight, text_command.color);
             }
+        }
+        pen_x += glyph_value.advance * font_scale;
+        previous = codepoint;
+        if (pen_x > text_command.origin.x + text_command.origin.w) break;
+    }
 }
 
 fn vectorTextWidth(font_body: font_vector.Body, value: []const u8, scale: f32) f32 {

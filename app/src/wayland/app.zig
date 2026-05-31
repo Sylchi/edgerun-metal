@@ -269,6 +269,9 @@ pub const NativeApp = struct {
                         if (self.hardware and self.state.last_action_kind == .activated) {
                             self.hardware_app.activate(self.state.runtime.hovered, self.state.runtime.persisted_value);
                         }
+                        if (self.chat and self.state.last_action_kind == .activated) {
+                            self.chat_app.activate(self.state.runtime.hovered);
+                        }
                         try self.activateClientDecoration(client_ptr);
                     } else {
                         app_native_input.processPointerEvent(&self.state, &.{}, self.regionSlice(), self.routedPointerHit(), .pointer_down);

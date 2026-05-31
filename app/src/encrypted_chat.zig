@@ -14,11 +14,13 @@ pub const max_name_bytes = 64;
 pub const max_route_bytes = 128;
 pub const max_public_key_bytes = 96;
 pub const max_message_body_bytes = 1024;
+pub const max_media_ref_bytes = 160;
+pub const max_media_mime_bytes = 48;
 pub const sealed_header_size = 114;
 
 const snapshot_magic = "ERCHAT01";
 const sealed_magic = "ERCHSEAL";
-const version: u16 = 1;
+const version: u16 = 2;
 
 pub const Error = error{
     BadArgument,
@@ -31,6 +33,12 @@ pub const Error = error{
 pub const Direction = enum(u8) {
     inbound = 1,
     outbound = 2,
+};
+
+pub const MediaKind = enum(u8) {
+    none = 0,
+    image = 1,
+    video = 2,
 };
 
 pub const ContactImport = struct {
@@ -82,11 +90,25 @@ pub const Message = struct {
     contact_id: identity.Id,
     body_hash: preimage.Hash,
     direction: Direction,
+    media_kind: MediaKind = .none,
+    media_ref: [max_media_ref_bytes]u8 = [_]u8{0} ** max_media_ref_bytes,
+    media_ref_len: usize = 0,
+    media_mime: [max_media_mime_bytes]u8 = [_]u8{0} ** max_media_mime_bytes,
+    media_mime_len: usize = 0,
+    media_size: u64 = 0,
     body: [max_message_body_bytes]u8 = [_]u8{0} ** max_message_body_bytes,
     body_len: usize = 0,
 
     pub fn bodyBytes(self: *const Message) []const u8 {
         return self.body[0..self.body_len];
+    }
+
+    pub fn mediaRefBytes(self: *const Message) []const u8 {
+        return self.media_ref[0..self.media_ref_len];
+    }
+
+    pub fn mediaMimeBytes(self: *const Message) []const u8 {
+        return self.media_mime[0..self.media_mime_len];
     }
 };
 
@@ -156,18 +178,34 @@ pub fn ChatState(comptime max_contacts: usize, comptime max_messages: usize) typ
         }
 
         pub fn appendMessage(self: *Self, contact_id: identity.Id, direction: Direction, body: []const u8) Error!preimage.Hash {
+            return self.appendMessageWithMedia(contact_id, direction, body, .none, "", "", 0);
+        }
+
+        pub fn appendMediaMessage(self: *Self, contact_id: identity.Id, direction: Direction, body: []const u8, media_kind: MediaKind, media_ref: []const u8, media_mime: []const u8, media_size: u64) Error!preimage.Hash {
+            if (media_kind == .none) return error.BadArgument;
+            return self.appendMessageWithMedia(contact_id, direction, body, media_kind, media_ref, media_mime, media_size);
+        }
+
+        fn appendMessageWithMedia(self: *Self, contact_id: identity.Id, direction: Direction, body: []const u8, media_kind: MediaKind, media_ref: []const u8, media_mime: []const u8, media_size: u64) Error!preimage.Hash {
             if (!contact_id.valid() or self.findContactIndex(contact_id) == null) return error.NotFound;
             if (body.len == 0 or body.len > max_message_body_bytes) return error.BadArgument;
+            if (!validMedia(media_kind, media_ref, media_mime, media_size)) return error.BadArgument;
             if (self.message_count == self.messages.len) return error.NoSpace;
 
             var msg = Message{
-                .id = messageId(contact_id, direction, body, @intCast(self.message_count)),
+                .id = messageId(contact_id, direction, body, media_kind, media_ref, @intCast(self.message_count)),
                 .contact_id = contact_id,
                 .body_hash = preimage.hash("edgerun:zig:v1:encrypted-chat-message-body", body),
                 .direction = direction,
+                .media_kind = media_kind,
+                .media_size = media_size,
             };
             _ = bytes.copy(msg.body[0..body.len], body);
             msg.body_len = body.len;
+            _ = bytes.copy(msg.media_ref[0..media_ref.len], media_ref);
+            _ = bytes.copy(msg.media_mime[0..media_mime.len], media_mime);
+            msg.media_ref_len = media_ref.len;
+            msg.media_mime_len = media_mime.len;
             self.messages[self.message_count] = msg;
             self.message_count += 1;
             return msg.id;
@@ -197,7 +235,7 @@ pub fn ChatState(comptime max_contacts: usize, comptime max_messages: usize) typ
             i = 0;
             while (i < self.message_count) : (i += 1) {
                 const m = &self.messages[i];
-                size += 99 + m.body_len;
+                size += 112 + m.media_ref_len + m.media_mime_len + m.body_len;
             }
             return size;
         }
@@ -237,7 +275,13 @@ pub fn ChatState(comptime max_contacts: usize, comptime max_messages: usize) typ
                 try writer.raw(&m.contact_id.bytes);
                 try writer.raw(&m.body_hash);
                 try writer.byte(@intFromEnum(m.direction));
+                try writer.byte(@intFromEnum(m.media_kind));
+                try writer.writeU16(@intCast(m.media_ref_len));
+                try writer.writeU16(@intCast(m.media_mime_len));
+                try writer.writeU64(m.media_size);
                 try writer.writeU16(@intCast(m.body_len));
+                try writer.raw(m.mediaRefBytes());
+                try writer.raw(m.mediaMimeBytes());
                 try writer.raw(m.bodyBytes());
             }
             return writer.written();
@@ -296,9 +340,22 @@ pub fn ChatState(comptime max_contacts: usize, comptime max_messages: usize) typ
                         @intFromEnum(Direction.outbound) => .outbound,
                         else => return error.Corrupt,
                     },
+                    .media_kind = switch (try reader.byte()) {
+                        @intFromEnum(MediaKind.none) => .none,
+                        @intFromEnum(MediaKind.image) => .image,
+                        @intFromEnum(MediaKind.video) => .video,
+                        else => return error.Corrupt,
+                    },
                 };
+                msg.media_ref_len = try reader.readU16();
+                msg.media_mime_len = try reader.readU16();
+                msg.media_size = try reader.readU64();
                 msg.body_len = try reader.readU16();
                 if (!bytes.nonzero(&msg.id) or !msg.contact_id.valid() or msg.body_len == 0 or msg.body_len > max_message_body_bytes) return error.Corrupt;
+                if (msg.media_ref_len > max_media_ref_bytes or msg.media_mime_len > max_media_mime_bytes) return error.Corrupt;
+                if (!validMediaLengths(msg.media_kind, msg.media_ref_len, msg.media_mime_len, msg.media_size)) return error.Corrupt;
+                _ = bytes.copy(msg.media_ref[0..msg.media_ref_len], try reader.raw(msg.media_ref_len));
+                _ = bytes.copy(msg.media_mime[0..msg.media_mime_len], try reader.raw(msg.media_mime_len));
                 _ = bytes.copy(msg.body[0..msg.body_len], try reader.raw(msg.body_len));
                 if (!bytes.eql(&msg.body_hash, &preimage.hash("edgerun:zig:v1:encrypted-chat-message-body", msg.bodyBytes()))) return error.Corrupt;
                 new_messages[mi] = msg;
@@ -334,6 +391,11 @@ pub fn contactDetailsHash(value: ContactImport) ?preimage.Hash {
     var raw: [contact_canonical_max]u8 = undefined;
     const canonical = canonicalContact(value, &raw) orelse return null;
     return preimage.hash("edgerun:zig:v1:encrypted-chat-contact", canonical);
+}
+
+pub fn writeContactLink(out: []u8, value: ContactImport) Error![]const u8 {
+    if (!value.valid()) return error.BadArgument;
+    return std.fmt.bufPrint(out, "{s}|{s}|{s}|{s}", .{ value.contact_route, value.name, value.route, value.public_key }) catch error.NoSpace;
 }
 
 pub fn sealBytes(policy: seal.Policy, nonce_material: []const u8, plaintext: []const u8, out: []u8) Error![]const u8 {
@@ -420,12 +482,27 @@ fn trim(value: []const u8) []const u8 {
     return value[start..end];
 }
 
-fn messageId(contact_id: identity.Id, direction: Direction, body: []const u8, sequence: u64) preimage.Hash {
+fn validMedia(kind: MediaKind, media_ref: []const u8, media_mime: []const u8, media_size: u64) bool {
+    if (media_ref.len > max_media_ref_bytes or media_mime.len > max_media_mime_bytes) return false;
+    return validMediaLengths(kind, media_ref.len, media_mime.len, media_size);
+}
+
+fn validMediaLengths(kind: MediaKind, media_ref_len: usize, media_mime_len: usize, media_size: u64) bool {
+    return switch (kind) {
+        .none => media_ref_len == 0 and media_mime_len == 0 and media_size == 0,
+        .image, .video => media_ref_len != 0 and media_mime_len != 0 and media_size != 0,
+    };
+}
+
+fn messageId(contact_id: identity.Id, direction: Direction, body: []const u8, media_kind: MediaKind, media_ref: []const u8, sequence: u64) preimage.Hash {
     var dir = [_]u8{@intFromEnum(direction)};
+    var kind = [_]u8{@intFromEnum(media_kind)};
     var builder = preimage.Builder.init("edgerun:zig:v1:encrypted-chat-message");
     builder.id(contact_id);
     builder.bytes(&dir);
+    builder.bytes(&kind);
     builder.writeU64(sequence);
+    builder.bytes(media_ref);
     builder.bytes(body);
     return builder.final();
 }
@@ -591,6 +668,12 @@ test "imports contact text appends messages and seals snapshot" {
     try testing.expectEqual(@as(usize, 2), imported);
     const alice = deriveContactId(.{ .contact_route = "route-to-me-for-alice", .name = "Alice", .route = "alice.onion", .public_key = "alice-key" }).?;
     _ = try chat.appendMessage(alice, .outbound, "hello over our onion route");
+    _ = try chat.appendMediaMessage(alice, .inbound, "photo proof", .image, "object://image/alice-proof", "image/erimg", 4096);
+    _ = try chat.appendMediaMessage(alice, .outbound, "video proof", .video, "object://video/alice-proof", "video/ivf", 8192);
+
+    var link_buf: [contact_canonical_max]u8 = undefined;
+    const share_line = try writeContactLink(&link_buf, .{ .contact_route = "route-to-me-for-alice", .name = "Alice", .route = "alice.onion", .public_key = "alice-key" });
+    try testing.expectEqualStrings("route-to-me-for-alice|Alice|alice.onion|alice-key", share_line);
 
     var plaintext: [4096]u8 = undefined;
     var sealed_buf: [4096]u8 = undefined;
@@ -602,8 +685,16 @@ test "imports contact text appends messages and seals snapshot" {
     var open_buf: [4096]u8 = undefined;
     try restored.unsealSnapshot(restored.sealPolicy(), sealed_snapshot, &open_buf);
     try testing.expectEqual(@as(usize, 2), restored.contact_count);
-    try testing.expectEqual(@as(usize, 1), restored.message_count);
+    try testing.expectEqual(@as(usize, 3), restored.message_count);
     try testing.expectEqualStrings("hello over our onion route", restored.messages[0].bodyBytes());
+    try testing.expectEqual(MediaKind.image, restored.messages[1].media_kind);
+    try testing.expectEqualStrings("object://image/alice-proof", restored.messages[1].mediaRefBytes());
+    try testing.expectEqualStrings("image/erimg", restored.messages[1].mediaMimeBytes());
+    try testing.expectEqual(@as(u64, 4096), restored.messages[1].media_size);
+    try testing.expectEqual(MediaKind.video, restored.messages[2].media_kind);
+    try testing.expectEqualStrings("object://video/alice-proof", restored.messages[2].mediaRefBytes());
+    try testing.expectEqualStrings("video/ivf", restored.messages[2].mediaMimeBytes());
+    try testing.expectEqual(@as(u64, 8192), restored.messages[2].media_size);
 
     sealed_buf[sealed_snapshot.len - 1] ^= 1;
     try testing.expectError(error.AuthFailed, restored.unsealSnapshot(restored.sealPolicy(), sealed_buf[0..sealed_snapshot.len], &open_buf));

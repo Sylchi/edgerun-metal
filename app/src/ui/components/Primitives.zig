@@ -50,7 +50,7 @@ pub fn measuredTextHeight(value: []const u8, width: f32, line_height: f32, max_l
 }
 
 pub fn renderControlFrame(scene: *ui.Scene, bounds: ui.Rect, fill: ui.Color, border: ui.Color, radius: f32) ui.RenderError!void {
-    try scene.pushRect(bounds, fill, .fill, radius, 0.0);
+    try scene.pushGradientRect(bounds, fill, tokens.Palette.panel_floor, radius);
     try scene.pushRect(bounds, border, .border, radius, 0.0);
 }
 

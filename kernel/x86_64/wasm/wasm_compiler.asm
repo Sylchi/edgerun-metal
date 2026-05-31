@@ -54,6 +54,16 @@ WASMC_COMPILE_OP_OFF equ 384
 WASMC_COMPILE_OP_MAX equ 32
 WASMC_COMPILE_LOCAL_TABLE_OFF equ 512
 WASMC_COMPILE_LOCAL_MAX equ 8
+WASMC_COMPILE_FUNC_MAX equ 4
+WASMC_COMPILE_FUNC_BODY_STRIDE equ 128
+WASMC_COMPILE_MULTI_SYMBOL_OFF equ 320
+WASMC_COMPILE_MULTI_BODY_TABLE_OFF equ 448
+WASMC_COMPILE_MULTI_SIG_TABLE_OFF equ 512
+WASMC_COMPILE_MULTI_LOCAL_TABLE_OFF equ 1024
+WASMC_COMPILE_MULTI_LOCAL_STRIDE equ 128
+WASMC_COMPILE_MULTI_BODY_OFF equ 1536
+WASMC_COMPILE_MULTI_OP_OFF equ 2048
+WASMC_COMPILE_MULTI_LOCAL_BYTES equ 2304
 WASMC_OP_PLUS equ '+'
 WASMC_OP_MINUS equ '-'
 WASMC_OP_STAR equ '*'
@@ -68,6 +78,7 @@ WASMC_OP_LT equ '<'
 WASMC_OP_GT equ '>'
 WASMC_OP_LPAREN equ '('
 WASMC_OP_RPAREN equ ')'
+WASMC_OP_COMMA equ ','
 WASMC_I32_RESULT_COUNT equ 1
 WASMC_EXPECT_OPERAND equ 1
 WASMC_EXPECT_OPERATOR equ 0
@@ -141,13 +152,16 @@ er_fn er_wasmc_compile_source_run
     mov     rdi, r9
     mov     rsi, r15
     call    _er_wasmc_skip_ws
+    mov     r9, rax
     mov     rdi, rax
     mov     rsi, r15
     call    _er_wasmc_parse_export_header
     test    rdx, rdx
-    jnz     .compile_source
+    jnz     .run_export_scan_loop
     mov     [rbp - 48], rax ; runnable export name ptr
     mov     [rbp - 56], rcx ; runnable export name len
+    mov     r9, r8
+    jmp     .run_export_scan_loop
 
 .compile_source:
     mov     rdi, r12
@@ -190,9 +204,10 @@ er_fn er_wasmc_compile_source_run
 
 ; er_wasmc_compile_call_source(out=rdi, cap=rsi, source=rdx, source_len=rcx)
 ; Source form:
-;   export callee = i32_expr; export caller = i32_expr;
-; The caller expression may use callee() as a zero-arg direct call.
-; Emits a two-function module exporting caller. Returns rax=bytes_written, rdx=0.
+;   export fn0 = i32_expr; export fn1 = i32_expr; ...
+; Later functions may call earlier functions as zero-arg direct calls.
+; Emits a multi-function module exporting the final function.
+; Returns rax=bytes_written, rdx=0.
 er_fn er_wasmc_compile_call_source
     er_frame_push
     push    rbx
@@ -200,7 +215,7 @@ er_fn er_wasmc_compile_call_source
     push    r13
     push    r14
     push    r15
-    sub     rsp, 440
+    sub     rsp, WASMC_COMPILE_MULTI_LOCAL_BYTES
 
     test    rdi, rdi
     jz      .bad_argument
@@ -213,65 +228,197 @@ er_fn er_wasmc_compile_call_source
     mov     r13, rsi
     mov     r14, rdx
     lea     r15, [rdx + rcx]
+    mov     rbx, r14
+    xor     eax, eax
+    mov     [rbp - 48], rax
 
-    mov     rdi, r14
-    mov     rsi, r15
-    call    _er_wasmc_parse_export_header
-    test    rdx, rdx
-    jnz     .parse_error
-    mov     [rbp - 48], rax ; callee name ptr
-    mov     [rbp - 56], rcx ; callee name len
-    mov     rbx, r8
+.parse_export_loop:
+    mov     rax, [rbp - 48]
+    cmp     rax, WASMC_COMPILE_FUNC_MAX
+    jae     .no_space
 
-    mov     rdi, rbx
-    mov     rsi, r15
-    call    _er_wasmc_skip_ws
-    mov     rbx, rax
-    cmp     rbx, r15
-    jae     .parse_error
-    cmp     byte [rbx], '='
-    jne     .parse_error
-    inc     rbx
-
-    lea     rdi, [rbp - 240]
-    mov     rsi, rbx
-    mov     rdx, r15
-    lea     rcx, [rbp - 432]
-    xor     r8d, r8d
-    xor     r9d, r9d
-    call    _er_wasmc_emit_i32_expr_until_semicolon
-    test    rdx, rdx
-    jnz     .error
-    mov     rbx, rax
-    mov     [rbp - 112], rcx
-
-.finish_callee_export:
     mov     rdi, rbx
     mov     rsi, r15
     call    _er_wasmc_parse_export_header
     test    rdx, rdx
     jnz     .parse_error
-    mov     [rbp - 72], rax ; caller name ptr
-    mov     [rbp - 80], rcx ; caller name len
+    mov     [rbp - 88], rax ; current name ptr
+    mov     [rbp - 96], rcx ; current name len
     mov     rbx, r8
 
-    mov     rax, [rbp - 56]
-    cmp     rax, [rbp - 80]
-    jne     .caller_name_unique
-    mov     rdi, [rbp - 48]
-    mov     rsi, [rbp - 72]
-    mov     rcx, rax
-.caller_name_compare:
+    xor     r10d, r10d
+.duplicate_loop:
+    cmp     r10, [rbp - 48]
+    jae     .name_unique
+    mov     rax, r10
+    shl     rax, 5
+    mov     rdx, [rbp - 96]
+    cmp     rdx, [rbp - WASMC_COMPILE_MULTI_SYMBOL_OFF + rax + 8]
+    jne     .next_duplicate
+    mov     rdi, [rbp - 88]
+    mov     rsi, [rbp - WASMC_COMPILE_MULTI_SYMBOL_OFF + rax]
+    mov     rcx, rdx
+.duplicate_name_compare:
     test    rcx, rcx
     jz      .parse_error
     mov     dl, [rdi]
     cmp     dl, [rsi]
-    jne     .caller_name_unique
+    jne     .next_duplicate
     inc     rdi
     inc     rsi
     dec     rcx
-    jmp     .caller_name_compare
-.caller_name_unique:
+    jmp     .duplicate_name_compare
+.next_duplicate:
+    inc     r10
+    jmp     .duplicate_loop
+.name_unique:
+
+    mov     rdi, rbx
+    mov     rsi, r15
+    call    _er_wasmc_skip_ws
+    mov     rbx, rax
+    cmp     rbx, r15
+    jae     .parse_error
+    mov     r10, [rbp - 48]
+    mov     rax, r10
+    shl     rax, 7
+    lea     r11, [rbp - WASMC_COMPILE_MULTI_LOCAL_TABLE_OFF + rax]
+    mov     [rbp - 112], r11 ; current local table
+    xor     eax, eax
+    mov     [rbp - 120], rax ; current local count
+    mov     [rbp - 128], rax ; current param count
+    cmp     byte [rbx], WASMC_OP_LPAREN
+    je      .parse_multi_param_list
+.after_multi_params:
+    cmp     byte [rbx], '='
+    jne     .parse_error
+    inc     rbx
+    jmp     .after_multi_equals
+
+.parse_multi_param_list:
+    inc     rbx
+    mov     rdi, rbx
+    mov     rsi, r15
+    call    _er_wasmc_skip_ws
+    mov     rbx, rax
+    cmp     rbx, r15
+    jae     .parse_error
+    cmp     byte [rbx], WASMC_OP_RPAREN
+    je      .finish_empty_multi_param_list
+.multi_param_loop:
+    mov     rdi, rbx
+    mov     rsi, r15
+    call    _er_wasmc_parse_ident
+    test    rdx, rdx
+    jnz     .parse_error
+    mov     [rbp - 136], rax
+    mov     [rbp - 144], rcx
+    mov     rbx, r8
+
+    mov     rdi, [rbp - 112]
+    mov     rsi, [rbp - 120]
+    mov     rdx, [rbp - 136]
+    mov     rcx, [rbp - 144]
+    call    _er_wasmc_find_local
+    test    rdx, rdx
+    jz      .parse_error
+
+    mov     r10, [rbp - 120]
+    cmp     r10, WASMC_COMPILE_LOCAL_MAX
+    jae     .no_space
+    mov     r11, [rbp - 112]
+    mov     rcx, r10
+    shl     rcx, 4
+    mov     rax, [rbp - 136]
+    mov     [r11 + rcx], rax
+    mov     rax, [rbp - 144]
+    mov     [r11 + rcx + 8], rax
+    inc     r10
+    mov     [rbp - 120], r10
+    mov     [rbp - 128], r10
+
+    mov     rdi, rbx
+    mov     rsi, r15
+    call    _er_wasmc_skip_ws
+    mov     rbx, rax
+    cmp     rbx, r15
+    jae     .parse_error
+    cmp     byte [rbx], WASMC_OP_COMMA
+    je      .next_multi_param
+    cmp     byte [rbx], WASMC_OP_RPAREN
+    je      .finish_multi_param_list
+    jmp     .parse_error
+.next_multi_param:
+    inc     rbx
+    mov     rdi, rbx
+    mov     rsi, r15
+    call    _er_wasmc_skip_ws
+    mov     rbx, rax
+    cmp     rbx, r15
+    jae     .parse_error
+    jmp     .multi_param_loop
+.finish_empty_multi_param_list:
+    inc     rbx
+    mov     rdi, rbx
+    mov     rsi, r15
+    call    _er_wasmc_skip_ws
+    mov     rbx, rax
+    jmp     .after_multi_params
+.finish_multi_param_list:
+    inc     rbx
+    mov     rdi, rbx
+    mov     rsi, r15
+    call    _er_wasmc_skip_ws
+    mov     rbx, rax
+    jmp     .after_multi_params
+
+.after_multi_equals:
+    mov     rax, [rbp - 48]
+    shl     rax, 7
+    lea     r11, [rbp - WASMC_COMPILE_MULTI_BODY_OFF + rax]
+    mov     [rbp - 152], r11 ; current body ptr
+    xor     eax, eax
+    mov     [rbp - 104], rax ; current body len
+
+.multi_let_scan:
+    mov     rdi, rbx
+    mov     rsi, r15
+    call    _er_wasmc_skip_ws
+    mov     rbx, rax
+    lea     rdi, [rel wasmc_kw_let]
+    mov     esi, WASMC_KW_LET_LEN
+    mov     rdx, rbx
+    mov     rcx, r15
+    call    _er_wasmc_match_keyword
+    test    rdx, rdx
+    jnz     .emit_multi_final_expr
+
+    mov     rdi, rax
+    mov     rsi, r15
+    call    _er_wasmc_require_ws
+    test    rdx, rdx
+    jnz     .parse_error
+    mov     rdi, rax
+    mov     rsi, r15
+    call    _er_wasmc_parse_ident
+    test    rdx, rdx
+    jnz     .parse_error
+    mov     [rbp - 136], rax ; pending local name ptr
+    mov     [rbp - 144], rcx ; pending local name len
+    mov     rbx, r8
+
+    mov     rdi, [rbp - 112]
+    mov     rsi, [rbp - 120]
+    mov     rdx, [rbp - 136]
+    mov     rcx, [rbp - 144]
+    call    _er_wasmc_find_local
+    test    rdx, rdx
+    jz      .parse_error
+
+    mov     r10, [rbp - 120]
+    cmp     r10, WASMC_COMPILE_LOCAL_MAX
+    jae     .no_space
+    mov     [rbp - 160], r10 ; pending local index
 
     mov     rdi, rbx
     mov     rsi, r15
@@ -283,38 +430,116 @@ er_fn er_wasmc_compile_call_source
     jne     .parse_error
     inc     rbx
 
-    lea     r14, [rbp - 368]
-    mov     rdi, r14
+    mov     rdi, [rbp - 152]
+    add     rdi, [rbp - 104]
     mov     rsi, rbx
     mov     rdx, r15
-    lea     rcx, [rbp - 432]
-    mov     r8, [rbp - 48]
-    mov     r9, [rbp - 56]
-    call    _er_wasmc_emit_i32_expr_until_semicolon
+    lea     rcx, [rbp - WASMC_COMPILE_MULTI_OP_OFF]
+    lea     r8, [rbp - WASMC_COMPILE_MULTI_SYMBOL_OFF]
+    mov     r9, [rbp - 48]
+    mov     r10, [rbp - 112]
+    mov     r11, [rbp - 120]
+    call    _er_wasmc_emit_i32_multi_expr_until_semicolon
     test    rdx, rdx
     jnz     .error
     mov     rbx, rax
-    mov     [rbp - 384], rcx
+    add     [rbp - 104], rcx
+
+    mov     rdi, [rbp - 152]
+    mov     rsi, [rbp - 104]
+    mov     edx, ER_WASMC_OP_LOCAL_SET
+    call    _er_wasmc_emit_body_byte
+    test    rdx, rdx
+    jnz     .error
+    mov     rdi, [rbp - 152]
+    mov     rsi, rax
+    mov     edx, [rbp - 160]
+    call    _er_wasmc_emit_body_byte
+    test    rdx, rdx
+    jnz     .error
+    mov     [rbp - 104], rax
+
+    mov     r10, [rbp - 120]
+    mov     r11, [rbp - 112]
+    mov     rcx, r10
+    shl     rcx, 4
+    mov     rax, [rbp - 136]
+    mov     [r11 + rcx], rax
+    mov     rax, [rbp - 144]
+    mov     [r11 + rcx + 8], rax
+    inc     r10
+    mov     [rbp - 120], r10
+    jmp     .multi_let_scan
+
+.emit_multi_final_expr:
+    mov     rdi, [rbp - 152]
+    add     rdi, [rbp - 104]
+    mov     rsi, rbx
+    mov     rdx, r15
+    lea     rcx, [rbp - WASMC_COMPILE_MULTI_OP_OFF]
+    lea     r8, [rbp - WASMC_COMPILE_MULTI_SYMBOL_OFF]
+    mov     r9, [rbp - 48]
+    mov     r10, [rbp - 112]
+    mov     r11, [rbp - 120]
+    call    _er_wasmc_emit_i32_multi_expr_until_semicolon
+    test    rdx, rdx
+    jnz     .error
+    mov     rbx, rax
+    add     [rbp - 104], rcx
+
+    mov     r10, [rbp - 48]
+    mov     rax, r10
+    shl     rax, 7
+    lea     rdx, [rbp - WASMC_COMPILE_MULTI_BODY_OFF + rax]
+    mov     rax, r10
+    shl     rax, 4
+    mov     [rbp - WASMC_COMPILE_MULTI_BODY_TABLE_OFF + rax], rdx
+    mov     rdx, [rbp - 104]
+    mov     [rbp - WASMC_COMPILE_MULTI_BODY_TABLE_OFF + rax + 8], rdx
+
+    mov     rax, r10
+    shl     rax, 5
+    mov     rdx, [rbp - 88]
+    mov     [rbp - WASMC_COMPILE_MULTI_SYMBOL_OFF + rax], rdx
+    mov     rdx, [rbp - 96]
+    mov     [rbp - WASMC_COMPILE_MULTI_SYMBOL_OFF + rax + 8], rdx
+    mov     [rbp - WASMC_COMPILE_MULTI_SYMBOL_OFF + rax + 16], r10
+    mov     rdx, [rbp - 128]
+    mov     [rbp - WASMC_COMPILE_MULTI_SYMBOL_OFF + rax + 24], rdx
+    mov     rax, r10
+    shl     rax, 4
+    mov     rdx, [rbp - 128]
+    mov     [rbp - WASMC_COMPILE_MULTI_SIG_TABLE_OFF + rax], rdx
+    mov     rdx, [rbp - 120]
+    sub     rdx, [rbp - 128]
+    mov     [rbp - WASMC_COMPILE_MULTI_SIG_TABLE_OFF + rax + 8], rdx
+    inc     r10
+    mov     [rbp - 48], r10
 
     mov     rdi, rbx
     mov     rsi, r15
     call    _er_wasmc_skip_ws
-    cmp     rax, r15
-    jne     .parse_error
+    mov     rbx, rax
+    cmp     rbx, r15
+    jne     .parse_export_loop
 
-    mov     rbx, [rbp - 384]
+    mov     r10, [rbp - 48]
+    cmp     r10, 2
+    jb      .parse_error
+    dec     r10
+    mov     rax, r10
+    shl     rax, 5
 
-.emit_two_body_module:
     mov     rdi, r12
     mov     rsi, r13
-    lea     rdx, [rbp - 240]
-    mov     rcx, [rbp - 112]
-    mov     r8, r14
-    mov     r9, rbx
-    mov     r10, [rbp - 72]
-    mov     r11, [rbp - 80]
-    call    er_wasmc_emit_i32_two_body_export
+    lea     rdx, [rbp - WASMC_COMPILE_MULTI_BODY_TABLE_OFF]
+    mov     rcx, [rbp - 48]
+    mov     r8, [rbp - WASMC_COMPILE_MULTI_SYMBOL_OFF + rax]
+    mov     r9, [rbp - WASMC_COMPILE_MULTI_SYMBOL_OFF + rax + 8]
+    lea     r11, [rbp - WASMC_COMPILE_MULTI_SIG_TABLE_OFF]
+    call    er_wasmc_emit_i32_sig_body_table_export
     jmp     .done
+
 .bad_argument:
     xor     eax, eax
     mov     edx, ERROR_BAD_ARGUMENT
@@ -330,7 +555,7 @@ er_fn er_wasmc_compile_call_source
 .error:
     xor     eax, eax
 .done:
-    add     rsp, 440
+    add     rsp, WASMC_COMPILE_MULTI_LOCAL_BYTES
     pop     r15
     pop     r14
     pop     r13
@@ -399,6 +624,9 @@ er_fn er_wasmc_compile_source
     mov     [rbp - 48], rax ; name ptr
     mov     [rbp - 56], rcx ; name len
     mov     rbx, r8
+    xor     r11d, r11d
+    mov     [rbp - 112], r11 ; local count, including params
+    mov     [rbp - 168], r11 ; param count
 
     mov     rdi, rbx
     mov     rsi, r15
@@ -406,10 +634,96 @@ er_fn er_wasmc_compile_source
     mov     rbx, rax
     cmp     rbx, r15
     jae     .parse_error
+    cmp     byte [rbx], WASMC_OP_LPAREN
+    je      .parse_param_list
+.expect_export_equals:
     cmp     byte [rbx], '='
     jne     .parse_error
     inc     rbx
+    jmp     .after_export_equals
 
+.parse_param_list:
+    inc     rbx
+    mov     rdi, rbx
+    mov     rsi, r15
+    call    _er_wasmc_skip_ws
+    mov     rbx, rax
+    cmp     rbx, r15
+    jae     .parse_error
+    cmp     byte [rbx], WASMC_OP_RPAREN
+    je      .finish_empty_param_list
+.param_loop:
+    mov     rdi, rbx
+    mov     rsi, r15
+    call    _er_wasmc_parse_ident
+    test    rdx, rdx
+    jnz     .parse_error
+    mov     [rbp - 136], rax ; pending param name ptr
+    mov     [rbp - 144], rcx ; pending param name len
+    mov     rbx, r8
+
+    lea     rdi, [rbp - WASMC_COMPILE_LOCAL_TABLE_OFF]
+    mov     rsi, [rbp - 112]
+    mov     rdx, [rbp - 136]
+    mov     rcx, [rbp - 144]
+    call    _er_wasmc_find_local
+    test    rdx, rdx
+    jz      .parse_error
+
+    mov     r10, [rbp - 112]
+    cmp     r10, WASMC_COMPILE_LOCAL_MAX
+    jae     .no_space
+    lea     r11, [rbp - WASMC_COMPILE_LOCAL_TABLE_OFF]
+    mov     rcx, r10
+    shl     rcx, 4
+    mov     rax, [rbp - 136]
+    mov     [r11 + rcx], rax
+    mov     rax, [rbp - 144]
+    mov     [r11 + rcx + 8], rax
+    inc     r10
+    mov     [rbp - 112], r10
+    mov     [rbp - 168], r10
+
+    mov     rdi, rbx
+    mov     rsi, r15
+    call    _er_wasmc_skip_ws
+    mov     rbx, rax
+    cmp     rbx, r15
+    jae     .parse_error
+    cmp     byte [rbx], WASMC_OP_COMMA
+    je      .next_param
+    cmp     byte [rbx], WASMC_OP_RPAREN
+    je      .finish_param_list
+    jmp     .parse_error
+.next_param:
+    inc     rbx
+    mov     rdi, rbx
+    mov     rsi, r15
+    call    _er_wasmc_skip_ws
+    mov     rbx, rax
+    cmp     rbx, r15
+    jae     .parse_error
+    jmp     .param_loop
+.finish_empty_param_list:
+    inc     rbx
+    mov     rdi, rbx
+    mov     rsi, r15
+    call    _er_wasmc_skip_ws
+    mov     rbx, rax
+    cmp     rbx, r15
+    jae     .parse_error
+    jmp     .expect_export_equals
+.finish_param_list:
+    inc     rbx
+    mov     rdi, rbx
+    mov     rsi, r15
+    call    _er_wasmc_skip_ws
+    mov     rbx, rax
+    cmp     rbx, r15
+    jae     .parse_error
+    jmp     .expect_export_equals
+
+.after_export_equals:
     mov     rdi, rbx
     mov     rsi, r15
     call    _er_wasmc_skip_ws
@@ -420,7 +734,6 @@ er_fn er_wasmc_compile_source
     xor     r11d, r11d
     mov     [rbp - 72], r11 ; body len
     mov     [rbp - 96], r11 ; operator stack len
-    mov     [rbp - 112], r11 ; local count
     mov     byte [rbp - 104], WASMC_EXPECT_OPERAND
 
 .let_scan:
@@ -807,6 +1120,8 @@ er_fn er_wasmc_compile_source
     mov     r8, [rbp - 48]
     mov     r9, [rbp - 56]
     mov     r10, [rbp - 112]
+    sub     r10, [rbp - 168]
+    mov     r11, [rbp - 168]
     call    er_wasmc_emit_i32_locals_body_export
     jmp     .done
 
@@ -834,9 +1149,9 @@ er_fn er_wasmc_compile_source
     pop     rbp
     ret
 
-; _er_wasmc_emit_i32_expr_until_semicolon(body=rdi, cursor=rsi, end=rdx, op_stack=rcx, call_name=r8, call_name_len=r9)
-; Emits an i32 expression into body. If call_name_len is nonzero, calls resolve
-; through the call0 symbol resolver. Returns rax=cursor_after_semicolon,
+; _er_wasmc_emit_i32_expr_until_semicolon(body=rdi, cursor=rsi, end=rdx, op_stack=rcx, symbols=r8, symbol_count=r9)
+; Emits an i32 expression into body. If symbol_count is nonzero, calls resolve
+; through the call0 symbol table. Returns rax=cursor_after_semicolon,
 ; rcx=body_len, rdx=ERROR_OK.
 er_fn _er_wasmc_emit_i32_expr_until_semicolon
     er_frame_push
@@ -860,8 +1175,8 @@ er_fn _er_wasmc_emit_i32_expr_until_semicolon
     mov     r13, rsi ; cursor
     mov     r14, rdx ; end
     mov     r15, rcx ; operator stack
-    mov     [rbp - 48], r8 ; call name ptr
-    mov     [rbp - 56], r9 ; call name len
+    mov     [rbp - 48], r8 ; symbol table ptr
+    mov     [rbp - 56], r9 ; symbol count
     xor     ebx, ebx ; body len
     xor     r11d, r11d
     mov     [rbp - 64], r11 ; operator stack len
@@ -1064,6 +1379,390 @@ er_fn _er_wasmc_emit_i32_expr_until_semicolon
     pop     rbp
     ret
 
+; _er_wasmc_emit_i32_multi_expr_until_semicolon(body=rdi, cursor=rsi, end=rdx, op_stack=rcx, symbols=r8, symbol_count=r9, locals=r10, local_count=r11)
+; Emits an i32 expression with current-function locals and calls to prior symbols.
+; Symbol entries are qword name_ptr, qword name_len, qword function_index,
+; qword param_count. Call arguments are i32 literals or local identifiers.
+; Returns rax=cursor_after_semicolon, rcx=body_len, rdx=ERROR_OK.
+er_fn _er_wasmc_emit_i32_multi_expr_until_semicolon
+    er_frame_push
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+    sub     rsp, 160
+
+    test    rdi, rdi
+    jz      .bad_argument
+    test    rsi, rsi
+    jz      .bad_argument
+    test    rdx, rdx
+    jz      .bad_argument
+    test    rcx, rcx
+    jz      .bad_argument
+
+    mov     r12, rdi ; body
+    mov     r13, rsi ; cursor
+    mov     r14, rdx ; end
+    mov     r15, rcx ; operator stack
+    mov     [rbp - 48], r8 ; symbol table ptr
+    mov     [rbp - 56], r9 ; symbol count
+    mov     [rbp - 88], r10 ; local table ptr
+    mov     [rbp - 96], r11 ; local count
+    xor     ebx, ebx ; body len
+    xor     r11d, r11d
+    mov     [rbp - 64], r11 ; operator stack len
+    mov     byte [rbp - 65], WASMC_EXPECT_OPERAND
+
+.expr_loop:
+    mov     rdi, r13
+    mov     rsi, r14
+    call    _er_wasmc_skip_ws
+    mov     r13, rax
+    cmp     r13, r14
+    jae     .parse_error
+    movzx   eax, byte [r13]
+    cmp     byte [rbp - 65], WASMC_EXPECT_OPERAND
+    je      .expect_operand
+
+    cmp     al, ';'
+    je      .expect_semicolon
+    cmp     al, WASMC_OP_COMMA
+    je      .maybe_comma_delimiter
+    cmp     al, WASMC_OP_RPAREN
+    je      .maybe_rparen_delimiter
+    mov     rdi, r13
+    mov     rsi, r14
+    call    _er_wasmc_operator_info
+    test    rdx, rdx
+    jnz     .parse_error
+    mov     [rbp - 66], al
+    mov     [rbp - 67], cl
+    mov     [rbp - 68], r8b
+
+.flush_for_precedence:
+    mov     r10, [rbp - 64]
+    test    r10, r10
+    jz      .push_operator
+    dec     r10
+    cmp     byte [r15 + r10 * 2], 0
+    je      .push_operator
+    movzx   eax, byte [r15 + r10 * 2 + 1]
+    cmp     al, [rbp - 67]
+    jb      .push_operator
+
+    movzx   edx, byte [r15 + r10 * 2]
+    mov     [rbp - 64], r10
+    mov     rdi, r12
+    mov     rsi, rbx
+    call    _er_wasmc_emit_body_byte
+    test    rdx, rdx
+    jnz     .error
+    mov     rbx, rax
+    jmp     .flush_for_precedence
+
+.push_operator:
+    mov     r10, [rbp - 64]
+    cmp     r10, WASMC_COMPILE_OP_MAX
+    jae     .no_space
+    mov     al, [rbp - 66]
+    mov     [r15 + r10 * 2], al
+    mov     al, [rbp - 67]
+    mov     [r15 + r10 * 2 + 1], al
+    inc     r10
+    mov     [rbp - 64], r10
+    movzx   eax, byte [rbp - 68]
+    add     r13, rax
+    mov     byte [rbp - 65], WASMC_EXPECT_OPERAND
+    jmp     .expr_loop
+
+.expect_operand:
+    cmp     al, WASMC_OP_LPAREN
+    je      .open_group
+
+    mov     rdi, r13
+    mov     rsi, r14
+    call    _er_wasmc_parse_i32
+    test    rdx, rdx
+    jnz     .try_ident_operand
+    mov     [rbp - 80], rcx
+    mov     rdi, r12
+    mov     rsi, rbx
+    mov     edx, eax
+    call    _er_wasmc_emit_body_i32_const
+    test    rdx, rdx
+    jnz     .error
+    mov     rbx, rax
+    mov     r13, [rbp - 80]
+    mov     byte [rbp - 65], WASMC_EXPECT_OPERATOR
+    jmp     .expr_loop
+
+.try_ident_operand:
+    mov     rdi, r13
+    mov     rsi, r14
+    call    _er_wasmc_parse_ident
+    test    rdx, rdx
+    jnz     .parse_error
+    mov     [rbp - 104], rax ; ident ptr
+    mov     [rbp - 112], rcx ; ident len
+    mov     [rbp - 80], r8   ; cursor after ident
+
+    mov     rdi, r8
+    mov     rsi, r14
+    call    _er_wasmc_skip_ws
+    cmp     rax, r14
+    jae     .emit_local_operand
+    cmp     byte [rax], WASMC_OP_LPAREN
+    je      .emit_call_operand
+
+.emit_local_operand:
+    mov     rdi, [rbp - 88]
+    mov     rsi, [rbp - 96]
+    mov     rdx, [rbp - 104]
+    mov     rcx, [rbp - 112]
+    call    _er_wasmc_find_local
+    test    rdx, rdx
+    jnz     .parse_error
+    mov     [rbp - 120], rax
+    mov     rdi, r12
+    mov     rsi, rbx
+    mov     edx, ER_WASMC_OP_LOCAL_GET
+    call    _er_wasmc_emit_body_byte
+    test    rdx, rdx
+    jnz     .error
+    mov     rdi, r12
+    mov     rsi, rax
+    mov     edx, [rbp - 120]
+    call    _er_wasmc_emit_body_byte
+    test    rdx, rdx
+    jnz     .error
+    mov     rbx, rax
+    mov     r13, [rbp - 80]
+    mov     byte [rbp - 65], WASMC_EXPECT_OPERATOR
+    jmp     .expr_loop
+
+.emit_call_operand:
+    mov     r13, rax
+    mov     qword [rbp - 120], 0
+.find_symbol_loop:
+    mov     r10, [rbp - 120]
+    cmp     r10, [rbp - 56]
+    jae     .parse_error
+    mov     rax, r10
+    shl     rax, 5
+    mov     rdi, [rbp - 48]
+    mov     rsi, [rdi + rax + 8]
+    cmp     rsi, [rbp - 112]
+    jne     .next_symbol
+    mov     rdi, [rdi + rax]
+    mov     rsi, [rbp - 104]
+    mov     rcx, [rbp - 112]
+.symbol_name_compare:
+    test    rcx, rcx
+    jz      .symbol_found
+    mov     dl, [rdi]
+    cmp     dl, [rsi]
+    jne     .next_symbol
+    inc     rdi
+    inc     rsi
+    dec     rcx
+    jmp     .symbol_name_compare
+.next_symbol:
+    inc     qword [rbp - 120]
+    jmp     .find_symbol_loop
+.symbol_found:
+    mov     rax, [rbp - 120]
+    shl     rax, 5
+    mov     rdi, [rbp - 48]
+    mov     rcx, [rdi + rax + 16]
+    mov     [rbp - 128], rcx ; function index
+    mov     rcx, [rdi + rax + 24]
+    mov     [rbp - 136], rcx ; expected arg count
+    xor     eax, eax
+    mov     [rbp - 144], rax ; seen arg count
+
+    inc     r13
+.call_arg_loop:
+    mov     rdi, r13
+    mov     rsi, r14
+    call    _er_wasmc_skip_ws
+    mov     r13, rax
+    cmp     r13, r14
+    jae     .parse_error
+    cmp     byte [r13], WASMC_OP_RPAREN
+    je      .finish_call_args
+
+    lea     rdi, [r12 + rbx]
+    mov     rsi, r13
+    mov     rdx, r14
+    mov     rcx, r15
+    mov     r8, [rbp - 48]
+    mov     r9, [rbp - 56]
+    mov     r10, [rbp - 88]
+    mov     r11, [rbp - 96]
+    call    _er_wasmc_emit_i32_multi_expr_until_semicolon
+    test    rdx, rdx
+    jnz     .error
+    mov     r13, rax
+    add     rbx, rcx
+.call_arg_emitted:
+    inc     qword [rbp - 144]
+    mov     rdi, r13
+    mov     rsi, r14
+    call    _er_wasmc_skip_ws
+    mov     r13, rax
+    cmp     r13, r14
+    jae     .parse_error
+    cmp     byte [r13], WASMC_OP_COMMA
+    je      .next_call_arg
+    cmp     byte [r13], WASMC_OP_RPAREN
+    je      .finish_call_args
+    jmp     .parse_error
+.next_call_arg:
+    inc     r13
+    jmp     .call_arg_loop
+.finish_call_args:
+    mov     rax, [rbp - 144]
+    cmp     rax, [rbp - 136]
+    jne     .parse_error
+    inc     r13
+    mov     rdi, r12
+    mov     rsi, rbx
+    mov     edx, ER_WASMC_OP_CALL
+    call    _er_wasmc_emit_body_byte
+    test    rdx, rdx
+    jnz     .error
+    mov     rdi, r12
+    mov     rsi, rax
+    mov     edx, [rbp - 128]
+    call    _er_wasmc_emit_body_byte
+    test    rdx, rdx
+    jnz     .error
+    mov     rbx, rax
+    mov     byte [rbp - 65], WASMC_EXPECT_OPERATOR
+    jmp     .expr_loop
+
+.maybe_comma_delimiter:
+    cmp     byte [rbp - 65], WASMC_EXPECT_OPERAND
+    je      .parse_error
+    mov     r10, [rbp - 64]
+.comma_group_scan:
+    test    r10, r10
+    jz      .expect_delimiter
+    dec     r10
+    cmp     byte [r15 + r10 * 2], 0
+    je      .parse_error
+    jmp     .comma_group_scan
+
+.maybe_rparen_delimiter:
+    cmp     byte [rbp - 65], WASMC_EXPECT_OPERAND
+    je      .parse_error
+    mov     r10, [rbp - 64]
+.rparen_group_scan:
+    test    r10, r10
+    jz      .expect_delimiter
+    dec     r10
+    cmp     byte [r15 + r10 * 2], 0
+    je      .close_group
+    jmp     .rparen_group_scan
+
+.open_group:
+    mov     r10, [rbp - 64]
+    cmp     r10, WASMC_COMPILE_OP_MAX
+    jae     .no_space
+    mov     byte [r15 + r10 * 2], 0
+    mov     byte [r15 + r10 * 2 + 1], 0
+    inc     r10
+    mov     [rbp - 64], r10
+    inc     r13
+    jmp     .expr_loop
+
+.close_group:
+    cmp     byte [rbp - 65], WASMC_EXPECT_OPERAND
+    je      .parse_error
+.flush_group:
+    mov     r10, [rbp - 64]
+    test    r10, r10
+    jz      .parse_error
+    dec     r10
+    movzx   edx, byte [r15 + r10 * 2]
+    test    dl, dl
+    jz      .pop_group
+    mov     [rbp - 64], r10
+    mov     rdi, r12
+    mov     rsi, rbx
+    call    _er_wasmc_emit_body_byte
+    test    rdx, rdx
+    jnz     .error
+    mov     rbx, rax
+    jmp     .flush_group
+.pop_group:
+    mov     [rbp - 64], r10
+    inc     r13
+    mov     byte [rbp - 65], WASMC_EXPECT_OPERATOR
+    jmp     .expr_loop
+
+.expect_semicolon:
+    cmp     byte [rbp - 65], WASMC_EXPECT_OPERAND
+    je      .parse_error
+    inc     r13
+    jmp     .flush_remaining
+
+.expect_delimiter:
+    cmp     byte [rbp - 65], WASMC_EXPECT_OPERAND
+    je      .parse_error
+
+.flush_remaining:
+    mov     r10, [rbp - 64]
+    test    r10, r10
+    jz      .ok
+    dec     r10
+    movzx   edx, byte [r15 + r10 * 2]
+    test    dl, dl
+    jz      .parse_error
+    mov     [rbp - 64], r10
+    mov     rdi, r12
+    mov     rsi, rbx
+    call    _er_wasmc_emit_body_byte
+    test    rdx, rdx
+    jnz     .error
+    mov     rbx, rax
+    jmp     .flush_remaining
+
+.ok:
+    mov     rax, r13
+    mov     rcx, rbx
+    xor     edx, edx
+    jmp     .done
+.bad_argument:
+    xor     eax, eax
+    xor     ecx, ecx
+    mov     edx, ERROR_BAD_ARGUMENT
+    jmp     .done
+.parse_error:
+    xor     eax, eax
+    xor     ecx, ecx
+    mov     edx, ERROR_PARSE
+    jmp     .done
+.no_space:
+    xor     eax, eax
+    xor     ecx, ecx
+    mov     edx, ERROR_NO_SPACE
+    jmp     .done
+.error:
+    xor     eax, eax
+    xor     ecx, ecx
+.done:
+    add     rsp, 160
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
+    ret
+
 ; _er_wasmc_parse_export_header(cursor=rdi, end=rsi)
 ; Returns rax=name_ptr, rcx=name_len, r8=cursor_after_name, rdx=0.
 er_fn _er_wasmc_parse_export_header
@@ -1138,28 +1837,46 @@ er_fn _er_wasmc_match_keyword
     pop     rbx
     ret
 
-; _er_wasmc_resolve_call0_symbol(cursor=rdi, end=rsi, name=rdx, name_len=rcx)
+; _er_wasmc_resolve_call0_symbol(cursor=rdi, end=rsi, symbols=rdx, symbol_count=rcx)
+; Symbol entries are qword name_ptr, qword name_len, qword function_index.
 ; Returns rax=cursor_after_call, r8=function_index, rdx=0 on a zero-arg call.
 er_fn _er_wasmc_resolve_call0_symbol
     push    rbx
     push    r12
     push    r13
     push    r14
+    push    r15
     mov     rbx, rsi
     mov     r12, rdi
     mov     r13, rdx
     mov     r14, rcx
     test    r14, r14
     jz      .bad
+    test    r13, r13
+    jz      .bad
 
-    mov     rdi, r13
-    mov     rsi, r14
+    xor     r15d, r15d
+.symbol_loop:
+    cmp     r15, r14
+    jae     .bad
+    mov     rax, r15
+    lea     rax, [rax + rax * 2]
+    shl     rax, 3
+    mov     rdi, [r13 + rax]
+    mov     rsi, [r13 + rax + 8]
     mov     rdx, r12
     mov     rcx, rbx
     call    _er_wasmc_match_keyword
     test    rdx, rdx
-    jnz     .bad
+    jz      .matched_symbol
+    inc     r15
+    jmp     .symbol_loop
 
+.matched_symbol:
+    mov     r11, r15
+    lea     r11, [r11 + r11 * 2]
+    shl     r11, 3
+    mov     r8, [r13 + r11 + 16]
     mov     rdi, rax
     mov     rsi, rbx
     call    _er_wasmc_skip_ws
@@ -1178,8 +1895,8 @@ er_fn _er_wasmc_resolve_call0_symbol
     jne     .bad
     inc     rax
 
-    xor     r8d, r8d
     xor     edx, edx
+    pop     r15
     pop     r14
     pop     r13
     pop     r12
@@ -1189,6 +1906,7 @@ er_fn _er_wasmc_resolve_call0_symbol
     xor     eax, eax
     xor     r8d, r8d
     mov     edx, ERROR_PARSE
+    pop     r15
     pop     r14
     pop     r13
     pop     r12
@@ -1453,9 +2171,10 @@ er_fn _er_wasmc_emit_body_i32_const
 ; Returns rax=bytes_written, rdx=ERROR_OK on success.
 er_fn er_wasmc_emit_i32_body_export
     xor     r10d, r10d
+    xor     r11d, r11d
     jmp     er_wasmc_emit_i32_locals_body_export
 
-; er_wasmc_emit_i32_locals_body_export(out=rdi, cap=rsi, body=rdx, body_len=rcx, name=r8, name_len=r9, local_count=r10)
+; er_wasmc_emit_i32_locals_body_export(out=rdi, cap=rsi, body=rdx, body_len=rcx, name=r8, name_len=r9, local_count=r10, param_count=r11)
 ; Returns rax=bytes_written, rdx=ERROR_OK on success.
 er_fn er_wasmc_emit_i32_locals_body_export
     er_frame_push
@@ -1464,7 +2183,7 @@ er_fn er_wasmc_emit_i32_locals_body_export
     push    r13
     push    r14
     push    r15
-    sub     rsp, 16
+    sub     rsp, 32
 
     test    rdi, rdi
     jz      .bad_argument
@@ -1482,6 +2201,8 @@ er_fn er_wasmc_emit_i32_locals_body_export
     ja      .bad_argument
     cmp     r10, WASMC_MAX_SHORT_ULEB
     ja      .bad_argument
+    cmp     r11, WASMC_MAX_SHORT_ULEB
+    ja      .bad_argument
 
     mov     r12, rdi
     mov     r13, rsi
@@ -1490,10 +2211,12 @@ er_fn er_wasmc_emit_i32_locals_body_export
     mov     r15, r8
     mov     rbx, r9
     mov     [rbp - 56], r10 ; local count
+    mov     [rbp - 64], r11 ; param count
 
     mov     rax, WASMC_FIXED_BYTES_WITH_BODY
     add     rax, rbx
     add     rax, r14
+    add     rax, [rbp - 64]
     cmp     qword [rbp - 56], 0
     je      .have_total_size
     add     rax, 2
@@ -1514,13 +2237,26 @@ er_fn er_wasmc_emit_i32_locals_body_export
     add     rdi, 8
 
     mov     byte [rdi + 0], ER_WASMC_SECTION_TYPE
-    mov     byte [rdi + 1], 5
+    mov     rax, [rbp - 64]
+    add     rax, 5
+    mov     [rdi + 1], al
     mov     byte [rdi + 2], 1
     mov     byte [rdi + 3], ER_WASMC_TYPE_FUNC
-    mov     byte [rdi + 4], 0
-    mov     byte [rdi + 5], 1
-    mov     byte [rdi + 6], ER_WASMC_TYPE_I32
-    add     rdi, 7
+    mov     rax, [rbp - 64]
+    mov     [rdi + 4], al
+    add     rdi, 5
+    xor     r10d, r10d
+.write_param_types:
+    cmp     r10, [rbp - 64]
+    jae     .param_types_done
+    mov     byte [rdi], ER_WASMC_TYPE_I32
+    inc     rdi
+    inc     r10
+    jmp     .write_param_types
+.param_types_done:
+    mov     byte [rdi], 1
+    mov     byte [rdi + 1], ER_WASMC_TYPE_I32
+    add     rdi, 2
 
     mov     byte [rdi + 0], ER_WASMC_SECTION_FUNC
     mov     byte [rdi + 1], 2
@@ -1590,7 +2326,7 @@ er_fn er_wasmc_emit_i32_locals_body_export
     mov     edx, ERROR_NO_SPACE
     jmp     .done
 .done:
-    add     rsp, 16
+    add     rsp, 32
     pop     r15
     pop     r14
     pop     r13
@@ -1604,12 +2340,42 @@ er_fn er_wasmc_emit_i32_locals_body_export
 ; Returns rax=bytes_written, rdx=ERROR_OK on success.
 er_fn er_wasmc_emit_i32_two_body_export
     er_frame_push
+    sub     rsp, 32
+
+    mov     [rbp - 32], rdx
+    mov     [rbp - 24], rcx
+    mov     [rbp - 16], r8
+    mov     [rbp - 8], r9
+    lea     rdx, [rbp - 32]
+    mov     ecx, 2
+    mov     r8, r10
+    mov     r9, r11
+    mov     r10d, 1
+    call    er_wasmc_emit_i32_body_table_export
+
+    add     rsp, 32
+    pop     rbp
+    ret
+
+; er_wasmc_emit_i32_body_table_export(out=rdi, cap=rsi, body_table=rdx, func_count=rcx, name=r8, name_len=r9, export_index=r10)
+; body_table entries are qword body_ptr, qword body_len. All functions are
+; zero-arg i32 results with no locals. Returns rax=bytes_written, rdx=ERROR_OK.
+er_fn er_wasmc_emit_i32_body_table_export
+    xor     r11d, r11d
+    jmp     er_wasmc_emit_i32_sig_body_table_export
+
+; er_wasmc_emit_i32_sig_body_table_export(out=rdi, cap=rsi, body_table=rdx, func_count=rcx, name=r8, name_len=r9, export_index=r10, sig_table=r11)
+; body_table entries are qword body_ptr, qword body_len. sig_table is optional;
+; when nonzero, it has qword param_count, qword local_count per function.
+; Returns rax=bytes_written, rdx=ERROR_OK.
+er_fn er_wasmc_emit_i32_sig_body_table_export
+    er_frame_push
     push    rbx
     push    r12
     push    r13
     push    r14
     push    r15
-    sub     rsp, 48
+    sub     rsp, 96
 
     test    rdi, rdi
     jz      .bad_argument
@@ -1623,28 +2389,76 @@ er_fn er_wasmc_emit_i32_two_body_export
     jz      .bad_argument
     test    r9, r9
     jz      .bad_argument
-    cmp     r9, WASMC_MAX_SHORT_ULEB
+    cmp     r9, WASMC_MAX_SHORT_ULEB - 4
     ja      .bad_argument
-    test    r10, r10
-    jz      .bad_argument
-    test    r11, r11
-    jz      .bad_argument
-    cmp     r11, WASMC_MAX_SHORT_ULEB
-    ja      .bad_argument
+    cmp     r10, rcx
+    jae     .bad_argument
 
     mov     r12, rdi
     mov     r13, rsi
-    mov     [rbp - 48], rdx ; body0 ptr
-    mov     [rbp - 56], rcx ; body0 len
-    mov     [rbp - 64], r8  ; body1 ptr
-    mov     [rbp - 72], r9  ; body1 len
-    mov     r15, r10        ; export name ptr
-    mov     rbx, r11        ; export name len
+    mov     r14, rdx
+    mov     r15, rcx
+    mov     [rbp - 48], r8  ; export name ptr
+    mov     rbx, r9         ; export name len
+    mov     [rbp - 56], r10 ; export function index
+    mov     [rbp - 72], r11 ; signature table ptr
 
-    mov     rax, rbx
-    add     rax, [rbp - 56]
-    add     rax, [rbp - 72]
-    add     rax, 35
+    xor     r10d, r10d
+    xor     r11d, r11d
+    xor     eax, eax
+    mov     [rbp - 80], rax ; total param type bytes
+    mov     [rbp - 88], rax ; total local decl bytes
+.validate_body_loop:
+    cmp     r10, r15
+    jae     .body_lengths_ok
+    mov     rax, r10
+    shl     rax, 4
+    cmp     qword [r14 + rax], 0
+    je      .bad_argument
+    mov     rdx, [r14 + rax + 8]
+    test    rdx, rdx
+    jz      .bad_argument
+    cmp     rdx, WASMC_MAX_SHORT_ULEB
+    ja      .bad_argument
+    add     r11, rdx
+    cmp     qword [rbp - 72], 0
+    je      .validated_sig_entry
+    mov     rax, r10
+    shl     rax, 4
+    mov     rcx, [rbp - 72]
+    mov     rdx, [rcx + rax]
+    cmp     rdx, WASMC_MAX_SHORT_ULEB
+    ja      .bad_argument
+    add     [rbp - 80], rdx
+    mov     rdx, [rcx + rax + 8]
+    cmp     rdx, WASMC_MAX_SHORT_ULEB
+    ja      .bad_argument
+    test    rdx, rdx
+    jz      .validated_sig_entry
+    add     qword [rbp - 88], 2
+.validated_sig_entry:
+    inc     r10
+    jmp     .validate_body_loop
+.body_lengths_ok:
+    mov     [rbp - 64], r11 ; total body byte count
+
+    mov     rax, r15
+    lea     rax, [rax + rax * 2 + 1]
+    add     rax, [rbp - 64]
+    add     rax, [rbp - 88]
+    cmp     rax, WASMC_MAX_SHORT_ULEB
+    ja      .bad_argument
+
+    mov     rax, 23
+    add     rax, rbx
+    add     rax, [rbp - 64]
+    add     rax, [rbp - 80]
+    add     rax, [rbp - 88]
+    mov     r11, r15
+    imul    r11, 8
+    add     rax, r11
+    cmp     rax, WASMC_MAX_SHORT_ULEB
+    ja      .bad_argument
     cmp     r13, rax
     jb      .no_space
 
@@ -1660,20 +2474,60 @@ er_fn er_wasmc_emit_i32_two_body_export
     add     rdi, 8
 
     mov     byte [rdi + 0], ER_WASMC_SECTION_TYPE
-    mov     byte [rdi + 1], 5
-    mov     byte [rdi + 2], 1
-    mov     byte [rdi + 3], ER_WASMC_TYPE_FUNC
-    mov     byte [rdi + 4], 0
-    mov     byte [rdi + 5], 1
-    mov     byte [rdi + 6], ER_WASMC_TYPE_I32
-    add     rdi, 7
+    mov     rax, r15
+    shl     rax, 2
+    inc     rax
+    add     rax, [rbp - 80]
+    mov     [rdi + 1], al
+    mov     [rdi + 2], r15b
+    add     rdi, 3
+    xor     r10d, r10d
+.write_type_loop:
+    cmp     r10, r15
+    jae     .types_done
+    mov     byte [rdi], ER_WASMC_TYPE_FUNC
+    inc     rdi
+    xor     eax, eax
+    cmp     qword [rbp - 72], 0
+    je      .have_type_param_count
+    mov     r11, r10
+    shl     r11, 4
+    mov     rcx, [rbp - 72]
+    mov     rax, [rcx + r11]
+.have_type_param_count:
+    mov     [rdi], al
+    inc     rdi
+    mov     r11, rax
+.write_type_params:
+    test    r11, r11
+    jz      .type_params_done
+    mov     byte [rdi], ER_WASMC_TYPE_I32
+    inc     rdi
+    dec     r11
+    jmp     .write_type_params
+.type_params_done:
+    mov     byte [rdi], 1
+    mov     byte [rdi + 1], ER_WASMC_TYPE_I32
+    add     rdi, 2
+    inc     r10
+    jmp     .write_type_loop
+.types_done:
 
     mov     byte [rdi + 0], ER_WASMC_SECTION_FUNC
-    mov     byte [rdi + 1], 3
-    mov     byte [rdi + 2], 2
-    mov     byte [rdi + 3], 0
-    mov     byte [rdi + 4], 0
-    add     rdi, 5
+    mov     rax, r15
+    inc     rax
+    mov     [rdi + 1], al
+    mov     [rdi + 2], r15b
+    add     rdi, 3
+    xor     r10d, r10d
+.write_func_type_loop:
+    cmp     r10, r15
+    jae     .func_types_done
+    mov     [rdi], r10b
+    inc     rdi
+    inc     r10
+    jmp     .write_func_type_loop
+.func_types_done:
 
     mov     byte [rdi + 0], ER_WASMC_SECTION_EXPORT
     mov     rax, rbx
@@ -1684,44 +2538,62 @@ er_fn er_wasmc_emit_i32_two_body_export
     add     rdi, 4
 
     mov     rcx, rbx
-    mov     rsi, r15
+    mov     rsi, [rbp - 48]
     rep     movsb
 
     mov     byte [rdi + 0], ER_WASMC_EXPORT_FUNC
-    mov     byte [rdi + 1], 1
+    mov     rax, [rbp - 56]
+    mov     [rdi + 1], al
     add     rdi, 2
 
     mov     byte [rdi + 0], ER_WASMC_SECTION_CODE
-    mov     rax, [rbp - 56]
-    add     rax, [rbp - 72]
-    add     rax, 7
+    mov     rax, r15
+    lea     rax, [rax + rax * 2 + 1]
+    add     rax, [rbp - 64]
+    add     rax, [rbp - 88]
     mov     [rdi + 1], al
-    mov     byte [rdi + 2], 2
+    mov     [rdi + 2], r15b
     add     rdi, 3
 
-    mov     rax, [rbp - 56]
-    add     rax, 2
-    mov     [rdi], al
+    xor     r10d, r10d
+.write_body_loop:
+    cmp     r10, r15
+    jae     .bodies_done
+    mov     rax, r10
+    shl     rax, 4
+    mov     rcx, [r14 + rax + 8]
+    lea     r11, [rcx + 2]
+    cmp     qword [rbp - 72], 0
+    je      .have_body_size
+    mov     rdx, [rbp - 72]
+    cmp     qword [rdx + rax + 8], 0
+    je      .have_body_size
+    add     r11, 2
+.have_body_size:
+    mov     [rdi], r11b
     inc     rdi
+    cmp     qword [rbp - 72], 0
+    je      .write_zero_locals
+    mov     rdx, [rbp - 72]
+    mov     r11, [rdx + rax + 8]
+    test    r11, r11
+    jz      .write_zero_locals
+    mov     byte [rdi], 1
+    mov     [rdi + 1], r11b
+    mov     byte [rdi + 2], ER_WASMC_TYPE_I32
+    add     rdi, 3
+    jmp     .copy_sig_body
+.write_zero_locals:
     mov     byte [rdi], 0
     inc     rdi
-    mov     rcx, [rbp - 56]
-    mov     rsi, [rbp - 48]
+.copy_sig_body:
+    mov     rsi, [r14 + rax]
     rep     movsb
     mov     byte [rdi], ER_WASMC_OP_END
     inc     rdi
-
-    mov     rax, [rbp - 72]
-    add     rax, 2
-    mov     [rdi], al
-    inc     rdi
-    mov     byte [rdi], 0
-    inc     rdi
-    mov     rcx, [rbp - 72]
-    mov     rsi, [rbp - 64]
-    rep     movsb
-    mov     byte [rdi], ER_WASMC_OP_END
-    inc     rdi
+    inc     r10
+    jmp     .write_body_loop
+.bodies_done:
 
     mov     rax, rdi
     sub     rax, r12
@@ -1735,7 +2607,7 @@ er_fn er_wasmc_emit_i32_two_body_export
     xor     eax, eax
     mov     edx, ERROR_NO_SPACE
 .done:
-    add     rsp, 48
+    add     rsp, 96
     pop     r15
     pop     r14
     pop     r13

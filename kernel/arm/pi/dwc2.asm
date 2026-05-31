@@ -10,6 +10,9 @@
 @   dwc2_control_xfer(struct*)r0=0 ok
 @   dwc2_bulk_xfer(struct*)   r0=0 ok
 @   dwc2_enumerate()          r0=0 ok, or device address (1-127)
+@   dwc2_find_ethernet_config(config, len, out) r0=0 ok
+@   dwc2_find_mass_storage_config(config, len, out) r0=0 ok
+@   dwc2_msc_read10(dev, lba, buf) r0=0 ok
 
 @ ---- DWC2 base address (BCM2835) ----
 .equ DWC2_BASE,             0x20980000
@@ -219,6 +222,19 @@
 .equ USB_DESC_DEVICE,      1
 .equ USB_DESC_CONFIG,      2
 .equ USB_DESC_STRING,      3
+.equ USB_DESC_INTERFACE,   4
+.equ USB_DESC_ENDPOINT,    5
+
+.equ USB_CLASS_COMM,       0x02
+.equ USB_CLASS_MASS_STORAGE, 0x08
+.equ USB_CLASS_CDC_DATA,   0x0a
+.equ USB_CDC_SUBCLASS_ECM, 0x06
+.equ USB_CDC_SUBCLASS_NCM, 0x0d
+.equ USB_MSC_SUBCLASS_SCSI, 0x06
+.equ USB_MSC_PROTOCOL_BULK_ONLY, 0x50
+.equ USB_ENDPOINT_DIR_IN,  0x80
+.equ USB_ENDPOINT_ATTR_TYPE_MASK, 0x03
+.equ USB_ENDPOINT_ATTR_BULK, 0x02
 
 @ ---- DWC2 core ID values ----
 .equ DWC2_CORE_ID_310,      0x4f54230a
@@ -265,6 +281,43 @@
 .equ XFER_ACTUAL,            16
 .equ XFER_STRUCT_SIZE,       20
 
+@ ---- Structure: dwc2_msc_dev_t (12 bytes) ----
+@ Offset 0: Device address (byte)
+@ Offset 1: Speed (byte)
+@ Offset 2: Bulk IN endpoint address (byte)
+@ Offset 3: Bulk OUT endpoint address (byte)
+@ Offset 4: Bulk IN max packet size (u16)
+@ Offset 6: Bulk OUT max packet size (u16)
+@ Offset 8: BOT tag counter (u32)
+.equ MSC_DEV_ADDR,            0
+.equ MSC_DEV_SPEED,           1
+.equ MSC_DEV_BULK_IN_EP,      2
+.equ MSC_DEV_BULK_OUT_EP,     3
+.equ MSC_DEV_BULK_IN_MPS,     4
+.equ MSC_DEV_BULK_OUT_MPS,    6
+.equ MSC_DEV_TAG,             8
+
+@ ---- USB Mass Storage Bulk-Only Transport ----
+.equ USB_MSC_CBW_SIGNATURE,   0x43425355
+.equ USB_MSC_CSW_SIGNATURE,   0x53425355
+.equ USB_MSC_CBW_LEN,         31
+.equ USB_MSC_CSW_LEN,         13
+.equ USB_MSC_CBW_TAG,         4
+.equ USB_MSC_CBW_DATA_LEN,    8
+.equ USB_MSC_CBW_FLAGS,       12
+.equ USB_MSC_CBW_LUN,         13
+.equ USB_MSC_CBW_CDB_LEN,     14
+.equ USB_MSC_CBW_CDB,         15
+.equ USB_MSC_CSW_TAG,         4
+.equ USB_MSC_CSW_RESIDUE,     8
+.equ USB_MSC_CSW_STATUS,      12
+.equ USB_MSC_FLAG_IN,         0x80
+.equ USB_MSC_SCSI_TEST_READY, 0x00
+.equ USB_MSC_SCSI_INQUIRY,    0x12
+.equ USB_MSC_SCSI_READ_CAP10, 0x25
+.equ USB_MSC_SCSI_READ10,     0x28
+.equ USB_MSC_BLOCK_SIZE,      512
+
 @ ---- Structure: dwc2_control_xfer_t (28 bytes) ----
 @ Offset 0: Device address (byte)
 @ Offset 1: Request type (byte: bmRequestType)
@@ -300,8 +353,537 @@
 .globl dwc2_control_xfer
 .globl dwc2_bulk_xfer
 .globl dwc2_enumerate
+.globl dwc2_find_ethernet_config
+.globl dwc2_find_mass_storage_config
+.globl dwc2_msc_scsi
+.globl dwc2_msc_test_unit_ready
+.globl dwc2_msc_inquiry
+.globl dwc2_msc_read_capacity10
+.globl dwc2_msc_read10
 .weak dwc2_mmio_read
 .weak dwc2_mmio_write
+.weak dwc2_msc_bulk_xfer
+
+@ ==========================================================
+@ dwc2_find_ethernet_config
+@ Arguments:
+@   r0 = configuration descriptor buffer
+@   r1 = buffer length
+@   r2 = output: ctrl_if, data_if, bulk_in_ep, bulk_out_ep,
+@                bulk_in_mps:u16, bulk_out_mps:u16
+@ Returns: r0 = 0 on supported CDC ECM/NCM-style Ethernet config.
+@ ==========================================================
+dwc2_find_ethernet_config:
+    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}
+    cmp     r0, #0
+    beq     .Leth_fail
+    cmp     r1, #2
+    blo     .Leth_fail
+    cmp     r2, #0
+    beq     .Leth_fail
+    mov     r4, r0
+    mov     r5, r1
+    mov     r6, r2
+    mov     r7, #0
+    mov     r8, #0xff
+    mov     r9, #0xff
+    mov     r10, #0
+    mov     r11, #0
+    mov     r0, #0
+    str     r0, [r6]
+    str     r0, [r6, #4]
+
+.Leth_next_desc:
+    cmp     r5, #2
+    blo     .Leth_done
+    ldrb    r0, [r4]
+    cmp     r0, #2
+    blo     .Leth_fail
+    cmp     r0, r5
+    bhi     .Leth_fail
+    ldrb    r1, [r4, #1]
+    cmp     r1, #USB_DESC_INTERFACE
+    beq     .Leth_interface
+    cmp     r1, #USB_DESC_ENDPOINT
+    beq     .Leth_endpoint
+    b       .Leth_advance
+
+.Leth_interface:
+    cmp     r0, #9
+    blo     .Leth_advance
+    mov     r7, #0
+    ldrb    r1, [r4, #5]
+    cmp     r1, #USB_CLASS_COMM
+    bne     1f
+    ldrb    r2, [r4, #6]
+    cmp     r2, #USB_CDC_SUBCLASS_ECM
+    beq     2f
+    cmp     r2, #USB_CDC_SUBCLASS_NCM
+    bne     .Leth_advance
+2:
+    ldrb    r8, [r4, #2]
+    strb    r8, [r6]
+    b       .Leth_advance
+1:
+    cmp     r1, #USB_CLASS_CDC_DATA
+    bne     .Leth_advance
+    ldrb    r9, [r4, #2]
+    strb    r9, [r6, #1]
+    mov     r7, #1
+    b       .Leth_advance
+
+.Leth_endpoint:
+    cmp     r7, #0
+    beq     .Leth_advance
+    cmp     r0, #7
+    blo     .Leth_advance
+    ldrb    r1, [r4, #3]
+    and     r1, r1, #USB_ENDPOINT_ATTR_TYPE_MASK
+    cmp     r1, #USB_ENDPOINT_ATTR_BULK
+    bne     .Leth_advance
+    ldrb    r1, [r4, #2]
+    ldrb    r2, [r4, #4]
+    ldrb    r3, [r4, #5]
+    orr     r2, r2, r3, lsl #8
+    tst     r1, #USB_ENDPOINT_DIR_IN
+    beq     1f
+    mov     r10, r1
+    strb    r1, [r6, #2]
+    strh    r2, [r6, #4]
+    b       .Leth_advance
+1:
+    mov     r11, r1
+    strb    r1, [r6, #3]
+    strh    r2, [r6, #6]
+
+.Leth_advance:
+    add     r4, r4, r0
+    sub     r5, r5, r0
+    b       .Leth_next_desc
+
+.Leth_done:
+    cmp     r8, #0xff
+    beq     .Leth_fail
+    cmp     r9, #0xff
+    beq     .Leth_fail
+    cmp     r10, #0
+    beq     .Leth_fail
+    cmp     r11, #0
+    beq     .Leth_fail
+    mov     r0, #0
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+
+.Leth_fail:
+    mov     r0, #1
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+
+@ ==========================================================
+@ dwc2_find_mass_storage_config
+@ Arguments:
+@   r0 = configuration descriptor buffer
+@   r1 = buffer length
+@   r2 = output: interface, reserved, bulk_in_ep, bulk_out_ep,
+@                bulk_in_mps:u16, bulk_out_mps:u16
+@ Returns: r0 = 0 on supported SCSI/Bulk-Only mass storage config.
+@ ==========================================================
+dwc2_find_mass_storage_config:
+    push    {r4, r5, r6, r7, r8, r9, r10, lr}
+    cmp     r0, #0
+    beq     .Lmsc_fail
+    cmp     r1, #2
+    blo     .Lmsc_fail
+    cmp     r2, #0
+    beq     .Lmsc_fail
+    mov     r4, r0
+    mov     r5, r1
+    mov     r6, r2
+    mov     r7, #0
+    mov     r8, #0xff
+    mov     r9, #0
+    mov     r10, #0
+    mov     r0, #0
+    str     r0, [r6]
+    str     r0, [r6, #4]
+
+.Lmsc_next_desc:
+    cmp     r5, #2
+    blo     .Lmsc_done
+    ldrb    r0, [r4]
+    cmp     r0, #2
+    blo     .Lmsc_fail
+    cmp     r0, r5
+    bhi     .Lmsc_fail
+    ldrb    r1, [r4, #1]
+    cmp     r1, #USB_DESC_INTERFACE
+    beq     .Lmsc_interface
+    cmp     r1, #USB_DESC_ENDPOINT
+    beq     .Lmsc_endpoint
+    b       .Lmsc_advance
+
+.Lmsc_interface:
+    cmp     r0, #9
+    blo     .Lmsc_advance
+    mov     r7, #0
+    ldrb    r1, [r4, #5]
+    cmp     r1, #USB_CLASS_MASS_STORAGE
+    bne     .Lmsc_advance
+    ldrb    r1, [r4, #6]
+    cmp     r1, #USB_MSC_SUBCLASS_SCSI
+    bne     .Lmsc_advance
+    ldrb    r1, [r4, #7]
+    cmp     r1, #USB_MSC_PROTOCOL_BULK_ONLY
+    bne     .Lmsc_advance
+    ldrb    r8, [r4, #2]
+    strb    r8, [r6]
+    mov     r7, #1
+    b       .Lmsc_advance
+
+.Lmsc_endpoint:
+    cmp     r7, #0
+    beq     .Lmsc_advance
+    cmp     r0, #7
+    blo     .Lmsc_advance
+    ldrb    r1, [r4, #3]
+    and     r1, r1, #USB_ENDPOINT_ATTR_TYPE_MASK
+    cmp     r1, #USB_ENDPOINT_ATTR_BULK
+    bne     .Lmsc_advance
+    ldrb    r1, [r4, #2]
+    ldrb    r2, [r4, #4]
+    ldrb    r3, [r4, #5]
+    orr     r2, r2, r3, lsl #8
+    tst     r1, #USB_ENDPOINT_DIR_IN
+    beq     1f
+    mov     r9, r1
+    strb    r1, [r6, #2]
+    strh    r2, [r6, #4]
+    b       .Lmsc_advance
+1:
+    mov     r10, r1
+    strb    r1, [r6, #3]
+    strh    r2, [r6, #6]
+
+.Lmsc_advance:
+    add     r4, r4, r0
+    sub     r5, r5, r0
+    b       .Lmsc_next_desc
+
+.Lmsc_done:
+    cmp     r8, #0xff
+    beq     .Lmsc_fail
+    cmp     r9, #0
+    beq     .Lmsc_fail
+    cmp     r10, #0
+    beq     .Lmsc_fail
+    mov     r0, #0
+    pop     {r4, r5, r6, r7, r8, r9, r10, pc}
+
+.Lmsc_fail:
+    mov     r0, #1
+    pop     {r4, r5, r6, r7, r8, r9, r10, pc}
+
+@ ==========================================================
+@ dwc2_msc_scsi
+@ Arguments:
+@   r0 = dwc2_msc_dev_t
+@   r1 = CDB pointer
+@   r2 = CDB length (1..16)
+@   r3 = data buffer pointer, or 0 when data_len is 0
+@ Stack:
+@   [sp]   = data length
+@   [sp+4] = CBW flags (0x80 for IN, 0 for OUT/no data)
+@ Returns: r0 = 0 on valid BOT command/status sequence, 1 on failure.
+@ ==========================================================
+dwc2_msc_scsi:
+    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}
+    ldr     r8, [sp, #36]
+    ldr     r9, [sp, #40]
+    cmp     r0, #0
+    beq     .Lmsc_scsi_fail_pushed
+    cmp     r1, #0
+    beq     .Lmsc_scsi_fail_pushed
+    cmp     r2, #1
+    blo     .Lmsc_scsi_fail_pushed
+    cmp     r2, #16
+    bhi     .Lmsc_scsi_fail_pushed
+    cmp     r8, #0
+    beq     1f
+    cmp     r3, #0
+    beq     .Lmsc_scsi_fail_pushed
+1:
+    mov     r4, r0
+    mov     r5, r1
+    mov     r6, r2
+    mov     r7, r3
+    sub     sp, sp, #72
+
+    ldr     r10, [r4, #MSC_DEV_TAG]
+    add     r11, r10, #1
+    str     r11, [r4, #MSC_DEV_TAG]
+
+    mov     r0, #0
+    str     r0, [sp]
+    str     r0, [sp, #4]
+    str     r0, [sp, #8]
+    str     r0, [sp, #12]
+    str     r0, [sp, #16]
+    str     r0, [sp, #20]
+    str     r0, [sp, #24]
+    str     r0, [sp, #28]
+
+    ldr     r0, =USB_MSC_CBW_SIGNATURE
+    str     r0, [sp]
+    str     r10, [sp, #USB_MSC_CBW_TAG]
+    str     r8, [sp, #USB_MSC_CBW_DATA_LEN]
+    strb    r9, [sp, #USB_MSC_CBW_FLAGS]
+    mov     r0, #0
+    strb    r0, [sp, #USB_MSC_CBW_LUN]
+    strb    r6, [sp, #USB_MSC_CBW_CDB_LEN]
+
+    mov     r0, #0
+2:
+    cmp     r0, r6
+    bhs     3f
+    ldrb    r1, [r5, r0]
+    add     r2, sp, #USB_MSC_CBW_CDB
+    strb    r1, [r2, r0]
+    add     r0, r0, #1
+    b       2b
+
+3:
+    add     r0, sp, #48
+    mov     r1, sp
+    mov     r2, #USB_MSC_CBW_LEN
+    ldrb    r3, [r4, #MSC_DEV_BULK_OUT_EP]
+    ldrh    r11, [r4, #MSC_DEV_BULK_OUT_MPS]
+    mov     r12, #0
+    bl      _dwc2_msc_bulk_phase
+    cmp     r0, #0
+    bne     .Lmsc_scsi_fail_alloc
+
+    cmp     r8, #0
+    beq     4f
+    tst     r9, #USB_MSC_FLAG_IN
+    beq     5f
+    add     r0, sp, #48
+    mov     r1, r7
+    mov     r2, r8
+    ldrb    r3, [r4, #MSC_DEV_BULK_IN_EP]
+    ldrh    r11, [r4, #MSC_DEV_BULK_IN_MPS]
+    mov     r12, #USB_ENDPOINT_DIR_IN
+    bl      _dwc2_msc_bulk_phase
+    cmp     r0, #0
+    bne     .Lmsc_scsi_fail_alloc
+    b       4f
+5:
+    add     r0, sp, #48
+    mov     r1, r7
+    mov     r2, r8
+    ldrb    r3, [r4, #MSC_DEV_BULK_OUT_EP]
+    ldrh    r11, [r4, #MSC_DEV_BULK_OUT_MPS]
+    mov     r12, #0
+    bl      _dwc2_msc_bulk_phase
+    cmp     r0, #0
+    bne     .Lmsc_scsi_fail_alloc
+
+4:
+    add     r0, sp, #48
+    add     r1, sp, #32
+    mov     r2, #USB_MSC_CSW_LEN
+    ldrb    r3, [r4, #MSC_DEV_BULK_IN_EP]
+    ldrh    r11, [r4, #MSC_DEV_BULK_IN_MPS]
+    mov     r12, #USB_ENDPOINT_DIR_IN
+    bl      _dwc2_msc_bulk_phase
+    cmp     r0, #0
+    bne     .Lmsc_scsi_fail_alloc
+
+    ldr     r0, [sp, #32]
+    ldr     r1, =USB_MSC_CSW_SIGNATURE
+    cmp     r0, r1
+    bne     .Lmsc_scsi_fail_alloc
+    ldr     r0, [sp, #(32 + USB_MSC_CSW_TAG)]
+    cmp     r0, r10
+    bne     .Lmsc_scsi_fail_alloc
+    ldr     r0, [sp, #(32 + USB_MSC_CSW_RESIDUE)]
+    cmp     r0, #0
+    bne     .Lmsc_scsi_fail_alloc
+    ldrb    r0, [sp, #(32 + USB_MSC_CSW_STATUS)]
+    cmp     r0, #0
+    bne     .Lmsc_scsi_fail_alloc
+
+    mov     r0, #0
+    add     sp, sp, #72
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+
+.Lmsc_scsi_fail_alloc:
+    mov     r0, #1
+    add     sp, sp, #72
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+
+.Lmsc_scsi_fail_pushed:
+    mov     r0, #1
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+
+@ r0=xfer struct, r1=buffer, r2=len, r3=endpoint address,
+@ r4=dwc2_msc_dev_t, r11=mps, r12=direction.
+_dwc2_msc_bulk_phase:
+    push    {r5, lr}
+    mov     r5, r0
+    mov     r0, #0
+    str     r0, [r5, #XFER_ACTUAL]
+    str     r2, [r5, #XFER_LEN]
+    str     r1, [r5, #XFER_BUF]
+    and     r3, r3, #0x0f
+    strb    r3, [r5, #XFER_EPNUM]
+    mov     r0, #2
+    strb    r0, [r5, #XFER_EPTYPE]
+    strb    r12, [r5, #XFER_DIR]
+    strh    r11, [r5, #XFER_MPS]
+    ldrb    r0, [r4, #MSC_DEV_ADDR]
+    strb    r0, [r5, #XFER_DEVADDR]
+    ldrb    r0, [r4, #MSC_DEV_SPEED]
+    strb    r0, [r5, #XFER_SPEED]
+    mov     r0, r5
+    bl      dwc2_msc_bulk_xfer
+    cmp     r0, #USB_OK
+    moveq   r0, #0
+    movne   r0, #1
+    pop     {r5, pc}
+
+@ ==========================================================
+@ dwc2_msc_test_unit_ready(dev)
+@ Returns: r0 = 0 when CSW status is good.
+@ ==========================================================
+dwc2_msc_test_unit_ready:
+    push    {lr}
+    sub     sp, sp, #16
+    mov     r1, #0
+    str     r1, [sp]
+    str     r1, [sp, #4]
+    str     r1, [sp, #8]
+    str     r1, [sp, #12]
+    mov     r1, #USB_MSC_SCSI_TEST_READY
+    strb    r1, [sp]
+    mov     r1, sp
+    mov     r2, #6
+    mov     r3, #0
+    mov     r12, #0
+    push    {r12}
+    push    {r12}
+    bl      dwc2_msc_scsi
+    add     sp, sp, #8
+    add     sp, sp, #16
+    pop     {pc}
+
+@ ==========================================================
+@ dwc2_msc_inquiry(dev, out, len)
+@ Returns: r0 = 0 when INQUIRY data and CSW are received.
+@ ==========================================================
+dwc2_msc_inquiry:
+    push    {r4, r5, lr}
+    cmp     r1, #0
+    beq     .Lmsc_inquiry_fail
+    cmp     r2, #1
+    blo     .Lmsc_inquiry_fail
+    cmp     r2, #255
+    bhi     .Lmsc_inquiry_fail
+    mov     r4, r1
+    mov     r5, r2
+    sub     sp, sp, #16
+    mov     r1, #0
+    str     r1, [sp]
+    str     r1, [sp, #4]
+    str     r1, [sp, #8]
+    str     r1, [sp, #12]
+    mov     r1, #USB_MSC_SCSI_INQUIRY
+    strb    r1, [sp]
+    strb    r5, [sp, #4]
+    mov     r1, sp
+    mov     r2, #6
+    mov     r3, r4
+    mov     r12, #USB_MSC_FLAG_IN
+    push    {r12}
+    push    {r5}
+    bl      dwc2_msc_scsi
+    add     sp, sp, #8
+    add     sp, sp, #16
+    pop     {r4, r5, pc}
+.Lmsc_inquiry_fail:
+    mov     r0, #1
+    pop     {r4, r5, pc}
+
+@ ==========================================================
+@ dwc2_msc_read_capacity10(dev, out8)
+@ Returns: r0 = 0 when READ CAPACITY(10) data and CSW are received.
+@ ==========================================================
+dwc2_msc_read_capacity10:
+    push    {r4, lr}
+    cmp     r1, #0
+    beq     .Lmsc_cap_fail
+    mov     r4, r1
+    sub     sp, sp, #16
+    mov     r1, #0
+    str     r1, [sp]
+    str     r1, [sp, #4]
+    str     r1, [sp, #8]
+    str     r1, [sp, #12]
+    mov     r1, #USB_MSC_SCSI_READ_CAP10
+    strb    r1, [sp]
+    mov     r1, sp
+    mov     r2, #10
+    mov     r3, r4
+    mov     r12, #USB_MSC_FLAG_IN
+    push    {r12}
+    mov     r12, #8
+    push    {r12}
+    bl      dwc2_msc_scsi
+    add     sp, sp, #8
+    add     sp, sp, #16
+    pop     {r4, pc}
+.Lmsc_cap_fail:
+    mov     r0, #1
+    pop     {r4, pc}
+
+@ ==========================================================
+@ dwc2_msc_read10(dev, lba, buf512)
+@ Returns: r0 = 0 when one 512-byte block and CSW are received.
+@ ==========================================================
+dwc2_msc_read10:
+    push    {r4, r5, lr}
+    cmp     r2, #0
+    beq     .Lmsc_read10_fail
+    mov     r4, r2
+    mov     r5, r1
+    sub     sp, sp, #16
+    mov     r1, #0
+    str     r1, [sp]
+    str     r1, [sp, #4]
+    str     r1, [sp, #8]
+    str     r1, [sp, #12]
+    mov     r1, #USB_MSC_SCSI_READ10
+    strb    r1, [sp]
+    mov     r1, r5, lsr #24
+    strb    r1, [sp, #2]
+    mov     r1, r5, lsr #16
+    strb    r1, [sp, #3]
+    mov     r1, r5, lsr #8
+    strb    r1, [sp, #4]
+    strb    r5, [sp, #5]
+    mov     r1, #1
+    strb    r1, [sp, #8]
+    mov     r1, sp
+    mov     r2, #10
+    mov     r3, r4
+    mov     r12, #USB_MSC_FLAG_IN
+    push    {r12}
+    ldr     r12, =USB_MSC_BLOCK_SIZE
+    push    {r12}
+    bl      dwc2_msc_scsi
+    add     sp, sp, #8
+    add     sp, sp, #16
+    pop     {r4, r5, pc}
+.Lmsc_read10_fail:
+    mov     r0, #1
+    pop     {r4, r5, pc}
 
 @ ==========================================================
 @ dwc2_init — Reset core, set host mode, configure FIFOs
@@ -1113,3 +1695,6 @@ dwc2_mmio_write:
     ldr     r2, =DWC2_BASE
     str     r1, [r2, r0]
     bx      lr
+
+dwc2_msc_bulk_xfer:
+    b       dwc2_bulk_xfer

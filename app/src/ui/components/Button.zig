@@ -120,12 +120,7 @@ pub const IconButton = struct {
 
     pub fn render(self: IconButton, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         const paint = buttonPaint(self.variant, options);
-        if (paint.fill) |fill| {
-            try scene.pushRect(bounds.insetUniform(-button_shadow_inset), button_shadow, .shadow, radius, button_shadow_size);
-            try scene.pushGradientRect(bounds, fill, button_floor, radius);
-            try scene.pushRect(bounds.insetLtrb(1.0, 1.0, 1.0, bounds.h - button_rim_height), button_rim, .fill, radius, 0.0);
-        }
-        if (paint.border) |border| try scene.pushRect(bounds, border, .border, radius, 0.0);
+        try renderButtonFrame(scene, bounds, paint);
         try self.icon.renderColor(scene, iconButtonIconBounds(bounds), paint.text);
     }
 
@@ -159,13 +154,17 @@ pub const IconButton = struct {
 
 fn renderButton(scene: *ui.Scene, bounds: ui.Rect, button: Button, options: RenderOptions) ui.RenderError!void {
     const paint = buttonPaint(button.variant, options);
+    try renderButtonFrame(scene, bounds, paint);
+    try renderContent(scene, bounds, button.label, paint.text, button.icon_slot, labelPadding(options.control_size));
+}
+
+fn renderButtonFrame(scene: *ui.Scene, bounds: ui.Rect, paint: ButtonPaint) ui.RenderError!void {
     if (paint.fill) |fill| {
         try scene.pushRect(bounds.insetUniform(-button_shadow_inset), button_shadow, .shadow, radius, button_shadow_size);
         try scene.pushGradientRect(bounds, fill, button_floor, radius);
         try scene.pushRect(bounds.insetLtrb(1.0, 1.0, 1.0, bounds.h - button_rim_height), button_rim, .fill, radius, 0.0);
     }
     if (paint.border) |border| try scene.pushRect(bounds, border, .border, radius, 0.0);
-    try renderContent(scene, bounds, button.label, paint.text, button.icon_slot, labelPadding(options.control_size));
 }
 
 pub fn variantTag(variant: common.ButtonVariant) u16 {
@@ -319,7 +318,7 @@ fn buttonPaint(variant: common.ButtonVariant, options: RenderOptions) ButtonPain
     };
 }
 
-pub const radius: f32 = 7.0;
+pub const radius: f32 = 8.0;
 pub const height: f32 = 36.0;
 pub const label_height: f32 = 17.0;
 pub const label_padding: f32 = 16.0;
@@ -330,14 +329,14 @@ const icon_size: f32 = 18.0;
 const icon_gap: f32 = 8.0;
 const min_width: f32 = 44.0;
 const icon_button_size: f32 = 36.0;
-const button_danger = ui.Color{ .r = 225, .g = 29, .b = 72 };
+const button_danger = ui.Color{ .r = 225, .g = 48, .b = 72 };
 const button_danger_text = ui.Color{ .r = 255, .g = 255, .b = 255 };
-const button_primary_text = ui.Color{ .r = 244, .g = 255, .b = 251 };
-const button_shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 22 };
-const button_floor = ui.Color{ .r = 8, .g = 10, .b = 12, .a = 5 };
-const button_rim = ui.Color{ .r = 255, .g = 255, .b = 255, .a = 4 };
+const button_primary_text = ui.Color{ .r = 5, .g = 20, .b = 18 };
+const button_shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 42 };
+const button_floor = ui.Color{ .r = 3, .g = 8, .b = 10, .a = 22 };
+const button_rim = ui.Color{ .r = 255, .g = 255, .b = 255, .a = 9 };
 const button_shadow_inset: f32 = 1.0;
-const button_shadow_size: f32 = 2.0;
+const button_shadow_size: f32 = 3.0;
 const button_rim_height: f32 = 1.0;
 const trailing_button_flag: u16 = 0x0100;
 

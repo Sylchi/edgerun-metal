@@ -436,6 +436,7 @@ pub const BleFrameKind = enum(u8) {
     patch = 1,
     tree = 2,
     heartbeat = 3,
+    route = 4,
 };
 
 pub const ble_company_id: u16 = 0xffff;
@@ -456,6 +457,12 @@ pub const BleFrame = struct {
     body: []const u8,
 };
 
+pub const BleRoute = struct {
+    route_id: u8,
+    flags: u8,
+    name: []const u8,
+};
+
 pub fn encodeBleFrame(buf: []u8, stream_id: u8, sequence: u8, kind: BleFrameKind, body: []const u8) ?[]u8 {
     const total = ble_frame_header_size + body.len;
     if (total > ble_legacy_payload_max or buf.len < total) return null;
@@ -472,12 +479,33 @@ pub fn decodeBleFrame(buf: []const u8) ?BleFrame {
     if (buf.len < ble_frame_header_size or buf.len > ble_legacy_payload_max) return null;
     if (!std.mem.eql(u8, buf[0..ble_frame_magic.len], ble_frame_magic)) return null;
     if (buf[4] != ble_frame_version) return null;
-    if (buf[7] < @intFromEnum(BleFrameKind.patch) or buf[7] > @intFromEnum(BleFrameKind.heartbeat)) return null;
+    if (buf[7] < @intFromEnum(BleFrameKind.patch) or buf[7] > @intFromEnum(BleFrameKind.route)) return null;
     return .{
         .stream_id = buf[5],
         .sequence = buf[6],
         .kind = @enumFromInt(buf[7]),
         .body = buf[ble_frame_header_size..],
+    };
+}
+
+pub fn encodeBleRoute(buf: []u8, route_id: u8, flags: u8, name: []const u8) ?[]u8 {
+    const total = 3 + name.len;
+    if (name.len > 0xff or total > buf.len) return null;
+    buf[0] = route_id;
+    buf[1] = flags;
+    buf[2] = @intCast(name.len);
+    @memcpy(buf[3..][0..name.len], name);
+    return buf[0..total];
+}
+
+pub fn decodeBleRoute(buf: []const u8) ?BleRoute {
+    if (buf.len < 3) return null;
+    const name_len: usize = buf[2];
+    if (buf.len != 3 + name_len) return null;
+    return .{
+        .route_id = buf[0],
+        .flags = buf[1],
+        .name = buf[3..],
     };
 }
 
@@ -973,6 +1001,21 @@ test "ble frame rejects corrupt or oversized payloads" {
     const frame = encodeBleFrame(&frame_buf, 1, 2, .heartbeat, &.{}) orelse return error.TestUnexpectedResult;
     frame_buf[0] = 'x';
     try std.testing.expect(decodeBleFrame(frame) == null);
+}
+
+test "ble route advertisement identifies a self route" {
+    var route_buf: [16]u8 = undefined;
+    const route = encodeBleRoute(&route_buf, 9, 1, "tv").?;
+
+    var frame_buf: [ble_legacy_payload_max]u8 = undefined;
+    const frame = encodeBleFrame(&frame_buf, 2, 8, .route, route).?;
+    const decoded_frame = decodeBleFrame(frame).?;
+    try std.testing.expectEqual(BleFrameKind.route, decoded_frame.kind);
+
+    const decoded_route = decodeBleRoute(decoded_frame.body).?;
+    try std.testing.expectEqual(@as(u8, 9), decoded_route.route_id);
+    try std.testing.expectEqual(@as(u8, 1), decoded_route.flags);
+    try std.testing.expectEqualStrings("tv", decoded_route.name);
 }
 
 test "encode/decode accordion_open bool patch" {

@@ -41,9 +41,57 @@
 .equ GINT_DISC_INT,         (1 << 28)
 .equ FIFO_SIZE_128,         128
 .equ TRACE_LIMIT,           32
+.equ ETH_CTRL_IF,           0
+.equ ETH_DATA_IF,           1
+.equ ETH_BULK_IN_EP,        0x81
+.equ ETH_BULK_OUT_EP,       0x02
+.equ ETH_BULK_MPS,          64
+.equ MSC_IF,                2
+.equ MSC_BULK_IN_EP,        0x84
+.equ MSC_BULK_OUT_EP,       0x05
+.equ MSC_BULK_MPS,          64
+.equ MSC_DEV_ADDR_VALUE,    7
+.equ MSC_DEV_SPEED_VALUE,   1
+.equ MSC_TEST_LBA_BYTE0,    0x01
+.equ MSC_TEST_LBA_BYTE1,    0x23
+.equ MSC_TEST_LBA_BYTE2,    0x45
+.equ MSC_TEST_LBA_BYTE3,    0x67
+.equ XFER_DEVADDR,          0
+.equ XFER_EPNUM,            1
+.equ XFER_EPTYPE,           2
+.equ XFER_DIR,              3
+.equ XFER_MPS,              4
+.equ XFER_SPEED,            6
+.equ XFER_BUF,              8
+.equ XFER_LEN,              12
+.equ MSC_DEV_ADDR,          0
+.equ MSC_DEV_SPEED,         1
+.equ MSC_DEV_BULK_IN_EP,    2
+.equ MSC_DEV_BULK_OUT_EP,   3
+.equ MSC_DEV_BULK_IN_MPS,   4
+.equ MSC_DEV_BULK_OUT_MPS,  6
+.equ MSC_DEV_TAG,           8
+.equ USB_DIR_IN,            0x80
+.equ USB_MSC_CBW_SIGNATURE, 0x43425355
+.equ USB_MSC_CSW_SIGNATURE, 0x53425355
+.equ USB_MSC_CBW_LEN,       31
+.equ USB_MSC_CSW_LEN,       13
+.equ USB_MSC_BLOCK_SIZE,    512
+.equ USB_MSC_SCSI_READ10,   0x28
+.equ USB_MSC_SCSI_TEST_READY, 0x00
+.equ USB_MSC_SCSI_INQUIRY,  0x12
+.equ USB_MSC_SCSI_READ_CAP10, 0x25
+.equ MSC_TEST_TAG,          0x11223344
+.equ MSC_READ_MARKER,       0xa5c35a3c
 
 .extern dwc2_init
 .extern dwc2_port_detect
+.extern dwc2_find_ethernet_config
+.extern dwc2_find_mass_storage_config
+.extern dwc2_msc_test_unit_ready
+.extern dwc2_msc_inquiry
+.extern dwc2_msc_read_capacity10
+.extern dwc2_msc_read10
 
 .section .text.startup,"ax",%progbits
 .globl _start
@@ -86,6 +134,61 @@ _start:
     bne     .Lfail_code
 
     bl      test_dwc2_port_detect_rejects_null
+    cmp     r0, #0
+    movne   r4, r0
+    bne     .Lfail_code
+
+    bl      test_dwc2_find_ethernet_ecm
+    cmp     r0, #0
+    movne   r4, r0
+    bne     .Lfail_code
+
+    bl      test_dwc2_find_ethernet_ncm
+    cmp     r0, #0
+    movne   r4, r0
+    bne     .Lfail_code
+
+    bl      test_dwc2_rejects_incomplete_ethernet
+    cmp     r0, #0
+    movne   r4, r0
+    bne     .Lfail_code
+
+    bl      test_dwc2_find_mass_storage
+    cmp     r0, #0
+    movne   r4, r0
+    bne     .Lfail_code
+
+    bl      test_dwc2_rejects_incomplete_mass_storage
+    cmp     r0, #0
+    movne   r4, r0
+    bne     .Lfail_code
+
+    bl      test_dwc2_rejects_bad_mass_storage_protocol
+    cmp     r0, #0
+    movne   r4, r0
+    bne     .Lfail_code
+
+    bl      test_dwc2_msc_read10_bot
+    cmp     r0, #0
+    movne   r4, r0
+    bne     .Lfail_code
+
+    bl      test_dwc2_msc_test_unit_ready_bot
+    cmp     r0, #0
+    movne   r4, r0
+    bne     .Lfail_code
+
+    bl      test_dwc2_msc_inquiry_bot
+    cmp     r0, #0
+    movne   r4, r0
+    bne     .Lfail_code
+
+    bl      test_dwc2_msc_read_capacity_bot
+    cmp     r0, #0
+    movne   r4, r0
+    bne     .Lfail_code
+
+    bl      test_dwc2_msc_read10_rejects_bad_csw
     cmp     r0, #0
     movne   r4, r0
     bne     .Lfail_code
@@ -274,6 +377,286 @@ test_dwc2_port_detect_rejects_null:
     mov     r0, #0
     pop     {pc}
 
+test_dwc2_find_ethernet_ecm:
+    push    {lr}
+    ldr     r0, =ecm_config_desc
+    mov     r1, #ecm_config_desc_len
+    ldr     r2, =eth_out
+    bl      dwc2_find_ethernet_config
+    cmp     r0, #0
+    movne   r0, #61
+    popne   {pc}
+    bl      check_eth_out
+    cmp     r0, #0
+    moveq   r0, #0
+    movne   r0, #62
+    pop     {pc}
+
+test_dwc2_find_ethernet_ncm:
+    push    {lr}
+    ldr     r0, =ncm_config_desc
+    mov     r1, #ncm_config_desc_len
+    ldr     r2, =eth_out
+    bl      dwc2_find_ethernet_config
+    cmp     r0, #0
+    movne   r0, #63
+    popne   {pc}
+    bl      check_eth_out
+    cmp     r0, #0
+    moveq   r0, #0
+    movne   r0, #64
+    pop     {pc}
+
+test_dwc2_rejects_incomplete_ethernet:
+    push    {lr}
+    ldr     r0, =incomplete_config_desc
+    mov     r1, #incomplete_config_desc_len
+    ldr     r2, =eth_out
+    bl      dwc2_find_ethernet_config
+    cmp     r0, #1
+    movne   r0, #65
+    popne   {pc}
+    mov     r0, #0
+    pop     {pc}
+
+test_dwc2_find_mass_storage:
+    push    {lr}
+    ldr     r0, =msc_config_desc
+    mov     r1, #msc_config_desc_len
+    ldr     r2, =msc_out
+    bl      dwc2_find_mass_storage_config
+    cmp     r0, #0
+    movne   r0, #66
+    popne   {pc}
+    bl      check_msc_out
+    cmp     r0, #0
+    moveq   r0, #0
+    movne   r0, #67
+    pop     {pc}
+
+test_dwc2_rejects_incomplete_mass_storage:
+    push    {lr}
+    ldr     r0, =incomplete_msc_config_desc
+    mov     r1, #incomplete_msc_config_desc_len
+    ldr     r2, =msc_out
+    bl      dwc2_find_mass_storage_config
+    cmp     r0, #1
+    movne   r0, #68
+    popne   {pc}
+    mov     r0, #0
+    pop     {pc}
+
+test_dwc2_rejects_bad_mass_storage_protocol:
+    push    {lr}
+    ldr     r0, =bad_msc_protocol_desc
+    mov     r1, #bad_msc_protocol_desc_len
+    ldr     r2, =msc_out
+    bl      dwc2_find_mass_storage_config
+    cmp     r0, #1
+    movne   r0, #69
+    popne   {pc}
+    mov     r0, #0
+    pop     {pc}
+
+test_dwc2_msc_read10_bot:
+    push    {lr}
+    bl      reset_msc_bulk_emulator
+    ldr     r0, =msc_read_block
+    bl      set_msc_read10_expectation
+    ldr     r0, =msc_dev
+    ldr     r1, =0x01234567
+    ldr     r2, =msc_read_block
+    bl      dwc2_msc_read10
+    cmp     r0, #0
+    movne   r0, #70
+    popne   {pc}
+    ldr     r1, =msc_bulk_phase
+    ldr     r0, [r1]
+    cmp     r0, #3
+    movne   r0, #71
+    popne   {pc}
+    ldr     r1, =msc_dev
+    ldr     r0, [r1, #MSC_DEV_TAG]
+    ldr     r2, =(MSC_TEST_TAG + 1)
+    cmp     r0, r2
+    movne   r0, #72
+    popne   {pc}
+    ldr     r1, =msc_read_block
+    ldr     r0, [r1]
+    ldr     r2, =MSC_READ_MARKER
+    cmp     r0, r2
+    movne   r0, #73
+    popne   {pc}
+    mov     r0, #0
+    pop     {pc}
+
+test_dwc2_msc_test_unit_ready_bot:
+    push    {lr}
+    bl      reset_msc_bulk_emulator
+    mov     r0, #USB_MSC_SCSI_TEST_READY
+    mov     r1, #6
+    mov     r2, #0
+    mov     r3, #0
+    bl      set_msc_expectation
+    ldr     r0, =msc_dev
+    bl      dwc2_msc_test_unit_ready
+    cmp     r0, #0
+    movne   r0, #76
+    popne   {pc}
+    ldr     r1, =msc_bulk_phase
+    ldr     r0, [r1]
+    cmp     r0, #2
+    movne   r0, #77
+    popne   {pc}
+    mov     r0, #0
+    pop     {pc}
+
+test_dwc2_msc_inquiry_bot:
+    push    {lr}
+    bl      reset_msc_bulk_emulator
+    ldr     r3, =msc_inquiry_buf
+    mov     r0, #USB_MSC_SCSI_INQUIRY
+    mov     r1, #6
+    mov     r2, #36
+    bl      set_msc_expectation
+    ldr     r0, =msc_dev
+    ldr     r1, =msc_inquiry_buf
+    mov     r2, #36
+    bl      dwc2_msc_inquiry
+    cmp     r0, #0
+    movne   r0, #78
+    popne   {pc}
+    ldr     r1, =msc_inquiry_buf
+    ldr     r0, [r1]
+    ldr     r2, =MSC_READ_MARKER
+    cmp     r0, r2
+    movne   r0, #79
+    popne   {pc}
+    mov     r0, #0
+    pop     {pc}
+
+test_dwc2_msc_read_capacity_bot:
+    push    {lr}
+    bl      reset_msc_bulk_emulator
+    ldr     r3, =msc_capacity_buf
+    mov     r0, #USB_MSC_SCSI_READ_CAP10
+    mov     r1, #10
+    mov     r2, #8
+    bl      set_msc_expectation
+    ldr     r0, =msc_dev
+    ldr     r1, =msc_capacity_buf
+    bl      dwc2_msc_read_capacity10
+    cmp     r0, #0
+    movne   r0, #80
+    popne   {pc}
+    ldr     r1, =msc_capacity_buf
+    ldr     r0, [r1]
+    ldr     r2, =MSC_READ_MARKER
+    cmp     r0, r2
+    movne   r0, #81
+    popne   {pc}
+    mov     r0, #0
+    pop     {pc}
+
+test_dwc2_msc_read10_rejects_bad_csw:
+    push    {lr}
+    bl      reset_msc_bulk_emulator
+    ldr     r0, =msc_read_block
+    bl      set_msc_read10_expectation
+    ldr     r1, =msc_bulk_bad_csw
+    mov     r0, #1
+    str     r0, [r1]
+    ldr     r0, =msc_dev
+    ldr     r1, =0x01234567
+    ldr     r2, =msc_read_block
+    bl      dwc2_msc_read10
+    cmp     r0, #1
+    movne   r0, #74
+    popne   {pc}
+    ldr     r1, =msc_bulk_phase
+    ldr     r0, [r1]
+    cmp     r0, #3
+    movne   r0, #75
+    popne   {pc}
+    mov     r0, #0
+    pop     {pc}
+
+set_msc_read10_expectation:
+    push    {lr}
+    mov     r3, r0
+    mov     r0, #USB_MSC_SCSI_READ10
+    mov     r1, #10
+    ldr     r2, =USB_MSC_BLOCK_SIZE
+    bl      set_msc_expectation
+    pop     {pc}
+
+set_msc_expectation:
+    ldr     r12, =msc_expected_opcode
+    str     r0, [r12]
+    ldr     r12, =msc_expected_cdb_len
+    str     r1, [r12]
+    ldr     r12, =msc_expected_data_len
+    str     r2, [r12]
+    ldr     r12, =msc_expected_data_buf
+    str     r3, [r12]
+    bx      lr
+
+check_eth_out:
+    push    {lr}
+    ldr     r1, =eth_out
+    ldrb    r0, [r1]
+    cmp     r0, #ETH_CTRL_IF
+    movne   r0, #1
+    popne   {pc}
+    ldrb    r0, [r1, #1]
+    cmp     r0, #ETH_DATA_IF
+    movne   r0, #1
+    popne   {pc}
+    ldrb    r0, [r1, #2]
+    cmp     r0, #ETH_BULK_IN_EP
+    movne   r0, #1
+    popne   {pc}
+    ldrb    r0, [r1, #3]
+    cmp     r0, #ETH_BULK_OUT_EP
+    movne   r0, #1
+    popne   {pc}
+    ldrh    r0, [r1, #4]
+    cmp     r0, #ETH_BULK_MPS
+    movne   r0, #1
+    popne   {pc}
+    ldrh    r0, [r1, #6]
+    cmp     r0, #ETH_BULK_MPS
+    movne   r0, #1
+    popne   {pc}
+    mov     r0, #0
+    pop     {pc}
+
+check_msc_out:
+    push    {lr}
+    ldr     r1, =msc_out
+    ldrb    r0, [r1]
+    cmp     r0, #MSC_IF
+    movne   r0, #1
+    popne   {pc}
+    ldrb    r0, [r1, #2]
+    cmp     r0, #MSC_BULK_IN_EP
+    movne   r0, #1
+    popne   {pc}
+    ldrb    r0, [r1, #3]
+    cmp     r0, #MSC_BULK_OUT_EP
+    movne   r0, #1
+    popne   {pc}
+    ldrh    r0, [r1, #4]
+    cmp     r0, #MSC_BULK_MPS
+    movne   r0, #1
+    popne   {pc}
+    ldrh    r0, [r1, #6]
+    cmp     r0, #MSC_BULK_MPS
+    movne   r0, #1
+    popne   {pc}
+    mov     r0, #0
+    pop     {pc}
+
 check_usb_init_registers:
     push    {lr}
     ldr     r1, =grxfsiz_value
@@ -385,6 +768,41 @@ reset_usb_emulator:
     str     r0, [r1]
     ldr     r1, =speed_out
     str     r0, [r1]
+    pop     {pc}
+
+reset_msc_bulk_emulator:
+    push    {lr}
+    mov     r0, #0
+    ldr     r1, =msc_bulk_phase
+    str     r0, [r1]
+    ldr     r1, =msc_bulk_bad_csw
+    str     r0, [r1]
+    ldr     r1, =msc_captured_tag
+    str     r0, [r1]
+    ldr     r1, =msc_expected_opcode
+    str     r0, [r1]
+    ldr     r1, =msc_expected_cdb_len
+    str     r0, [r1]
+    ldr     r1, =msc_expected_data_len
+    str     r0, [r1]
+    ldr     r1, =msc_expected_data_buf
+    str     r0, [r1]
+    ldr     r1, =msc_read_block
+    str     r0, [r1]
+    ldr     r1, =msc_dev
+    mov     r0, #MSC_DEV_ADDR_VALUE
+    strb    r0, [r1, #MSC_DEV_ADDR]
+    mov     r0, #MSC_DEV_SPEED_VALUE
+    strb    r0, [r1, #MSC_DEV_SPEED]
+    mov     r0, #MSC_BULK_IN_EP
+    strb    r0, [r1, #MSC_DEV_BULK_IN_EP]
+    mov     r0, #MSC_BULK_OUT_EP
+    strb    r0, [r1, #MSC_DEV_BULK_OUT_EP]
+    mov     r0, #MSC_BULK_MPS
+    strh    r0, [r1, #MSC_DEV_BULK_IN_MPS]
+    strh    r0, [r1, #MSC_DEV_BULK_OUT_MPS]
+    ldr     r0, =MSC_TEST_TAG
+    str     r0, [r1, #MSC_DEV_TAG]
     pop     {pc}
 
 .globl dwc2_mmio_read
@@ -524,6 +942,169 @@ dwc2_mmio_write:
 2:
     bx      lr
 
+.globl dwc2_msc_bulk_xfer
+dwc2_msc_bulk_xfer:
+    push    {r4, r5, r6, r7, lr}
+    mov     r4, r0
+    ldr     r5, =msc_bulk_phase
+    ldr     r6, [r5]
+    cmp     r6, #0
+    beq     .Lmsc_bulk_cbw
+    cmp     r6, #1
+    beq     .Lmsc_bulk_data
+    cmp     r6, #2
+    beq     .Lmsc_bulk_csw
+    mov     r0, #1
+    pop     {r4, r5, r6, r7, pc}
+
+.Lmsc_bulk_cbw:
+    ldrb    r0, [r4, #XFER_DEVADDR]
+    cmp     r0, #MSC_DEV_ADDR_VALUE
+    movne   r0, #1
+    popne   {r4, r5, r6, r7, pc}
+    ldrb    r0, [r4, #XFER_EPNUM]
+    cmp     r0, #MSC_BULK_OUT_EP
+    movne   r0, #1
+    popne   {r4, r5, r6, r7, pc}
+    ldrb    r0, [r4, #XFER_DIR]
+    cmp     r0, #0
+    movne   r0, #1
+    popne   {r4, r5, r6, r7, pc}
+    ldr     r0, [r4, #XFER_LEN]
+    cmp     r0, #USB_MSC_CBW_LEN
+    movne   r0, #1
+    popne   {r4, r5, r6, r7, pc}
+    ldr     r7, [r4, #XFER_BUF]
+    ldr     r0, [r7]
+    ldr     r1, =USB_MSC_CBW_SIGNATURE
+    cmp     r0, r1
+    movne   r0, #1
+    popne   {r4, r5, r6, r7, pc}
+    ldr     r0, [r7, #4]
+    ldr     r1, =MSC_TEST_TAG
+    cmp     r0, r1
+    movne   r0, #1
+    popne   {r4, r5, r6, r7, pc}
+    ldr     r1, =msc_captured_tag
+    str     r0, [r1]
+    ldr     r0, [r7, #8]
+    ldr     r1, =msc_expected_data_len
+    ldr     r1, [r1]
+    cmp     r0, r1
+    movne   r0, #1
+    popne   {r4, r5, r6, r7, pc}
+    ldrb    r0, [r7, #12]
+    ldr     r1, =msc_expected_data_len
+    ldr     r1, [r1]
+    cmp     r1, #0
+    moveq   r1, #0
+    movne   r1, #USB_DIR_IN
+    cmp     r0, r1
+    movne   r0, #1
+    popne   {r4, r5, r6, r7, pc}
+    ldrb    r0, [r7, #14]
+    ldr     r1, =msc_expected_cdb_len
+    ldr     r1, [r1]
+    cmp     r0, r1
+    movne   r0, #1
+    popne   {r4, r5, r6, r7, pc}
+    ldrb    r0, [r7, #15]
+    ldr     r1, =msc_expected_opcode
+    ldr     r1, [r1]
+    cmp     r0, r1
+    movne   r0, #1
+    popne   {r4, r5, r6, r7, pc}
+    cmp     r0, #USB_MSC_SCSI_READ10
+    bne     .Lmsc_bulk_cbw_done
+    ldrb    r0, [r7, #17]
+    cmp     r0, #MSC_TEST_LBA_BYTE0
+    movne   r0, #1
+    popne   {r4, r5, r6, r7, pc}
+    ldrb    r0, [r7, #18]
+    cmp     r0, #MSC_TEST_LBA_BYTE1
+    movne   r0, #1
+    popne   {r4, r5, r6, r7, pc}
+    ldrb    r0, [r7, #19]
+    cmp     r0, #MSC_TEST_LBA_BYTE2
+    movne   r0, #1
+    popne   {r4, r5, r6, r7, pc}
+    ldrb    r0, [r7, #20]
+    cmp     r0, #MSC_TEST_LBA_BYTE3
+    movne   r0, #1
+    popne   {r4, r5, r6, r7, pc}
+    ldrb    r0, [r7, #23]
+    cmp     r0, #1
+    movne   r0, #1
+    popne   {r4, r5, r6, r7, pc}
+.Lmsc_bulk_cbw_done:
+    mov     r0, #1
+    str     r0, [r5]
+    mov     r0, #0
+    pop     {r4, r5, r6, r7, pc}
+
+.Lmsc_bulk_data:
+    ldr     r0, =msc_expected_data_len
+    ldr     r1, [r0]
+    cmp     r1, #0
+    beq     .Lmsc_bulk_csw
+    ldrb    r0, [r4, #XFER_EPNUM]
+    and     r0, r0, #0x0f
+    cmp     r0, #4
+    movne   r0, #1
+    popne   {r4, r5, r6, r7, pc}
+    ldrb    r0, [r4, #XFER_DIR]
+    cmp     r0, #USB_DIR_IN
+    movne   r0, #1
+    popne   {r4, r5, r6, r7, pc}
+    ldr     r0, [r4, #XFER_LEN]
+    ldr     r1, =msc_expected_data_len
+    ldr     r1, [r1]
+    cmp     r0, r1
+    movne   r0, #1
+    popne   {r4, r5, r6, r7, pc}
+    ldr     r7, [r4, #XFER_BUF]
+    ldr     r1, =msc_expected_data_buf
+    ldr     r1, [r1]
+    cmp     r7, r1
+    movne   r0, #1
+    popne   {r4, r5, r6, r7, pc}
+    ldr     r0, =MSC_READ_MARKER
+    str     r0, [r7]
+    mov     r0, #2
+    str     r0, [r5]
+    mov     r0, #0
+    pop     {r4, r5, r6, r7, pc}
+
+.Lmsc_bulk_csw:
+    ldrb    r0, [r4, #XFER_EPNUM]
+    and     r0, r0, #0x0f
+    cmp     r0, #4
+    movne   r0, #1
+    popne   {r4, r5, r6, r7, pc}
+    ldrb    r0, [r4, #XFER_DIR]
+    cmp     r0, #USB_DIR_IN
+    movne   r0, #1
+    popne   {r4, r5, r6, r7, pc}
+    ldr     r0, [r4, #XFER_LEN]
+    cmp     r0, #USB_MSC_CSW_LEN
+    movne   r0, #1
+    popne   {r4, r5, r6, r7, pc}
+    ldr     r7, [r4, #XFER_BUF]
+    ldr     r0, =USB_MSC_CSW_SIGNATURE
+    str     r0, [r7]
+    ldr     r1, =msc_captured_tag
+    ldr     r0, [r1]
+    str     r0, [r7, #4]
+    mov     r0, #0
+    str     r0, [r7, #8]
+    ldr     r1, =msc_bulk_bad_csw
+    ldr     r0, [r1]
+    strb    r0, [r7, #12]
+    add     r0, r6, #1
+    str     r0, [r5]
+    mov     r0, #0
+    pop     {r4, r5, r6, r7, pc}
+
 semihost_exit:
     ldr     r1, =exit_block
     str     r0, [r1, #4]
@@ -536,6 +1117,55 @@ semihost_exit:
 exit_block:
     .word   0x20026
     .word   0
+ecm_config_desc:
+    .byte   9, 2, ecm_config_desc_len, 0, 2, 1, 0, 0x80, 50
+    .byte   9, 4, ETH_CTRL_IF, 0, 1, 0x02, 0x06, 0x00, 0
+    .byte   5, 0x24, 0x00, 0x10, 0x01
+    .byte   7, 5, 0x83, 0x03, 8, 0, 16
+    .byte   9, 4, ETH_DATA_IF, 0, 2, 0x0a, 0x00, 0x00, 0
+    .byte   7, 5, ETH_BULK_IN_EP, 0x02, ETH_BULK_MPS, 0, 0
+    .byte   7, 5, ETH_BULK_OUT_EP, 0x02, ETH_BULK_MPS, 0, 0
+ecm_config_desc_end:
+.equ ecm_config_desc_len, ecm_config_desc_end - ecm_config_desc
+ncm_config_desc:
+    .byte   9, 2, ncm_config_desc_len, 0, 2, 1, 0, 0x80, 50
+    .byte   9, 4, ETH_CTRL_IF, 0, 1, 0x02, 0x0d, 0x00, 0
+    .byte   5, 0x24, 0x00, 0x10, 0x01
+    .byte   7, 5, 0x83, 0x03, 8, 0, 16
+    .byte   9, 4, ETH_DATA_IF, 0, 2, 0x0a, 0x00, 0x00, 0
+    .byte   7, 5, ETH_BULK_IN_EP, 0x02, ETH_BULK_MPS, 0, 0
+    .byte   7, 5, ETH_BULK_OUT_EP, 0x02, ETH_BULK_MPS, 0, 0
+ncm_config_desc_end:
+.equ ncm_config_desc_len, ncm_config_desc_end - ncm_config_desc
+incomplete_config_desc:
+    .byte   9, 2, incomplete_config_desc_len, 0, 2, 1, 0, 0x80, 50
+    .byte   9, 4, ETH_CTRL_IF, 0, 1, 0x02, 0x06, 0x00, 0
+    .byte   7, 5, 0x83, 0x03, 8, 0, 16
+    .byte   9, 4, ETH_DATA_IF, 0, 1, 0x0a, 0x00, 0x00, 0
+    .byte   7, 5, ETH_BULK_IN_EP, 0x02, ETH_BULK_MPS, 0, 0
+incomplete_config_desc_end:
+.equ incomplete_config_desc_len, incomplete_config_desc_end - incomplete_config_desc
+msc_config_desc:
+    .byte   9, 2, msc_config_desc_len, 0, 1, 1, 0, 0x80, 50
+    .byte   9, 4, MSC_IF, 0, 2, 0x08, 0x06, 0x50, 0
+    .byte   7, 5, MSC_BULK_IN_EP, 0x02, MSC_BULK_MPS, 0, 0
+    .byte   7, 5, MSC_BULK_OUT_EP, 0x02, MSC_BULK_MPS, 0, 0
+msc_config_desc_end:
+.equ msc_config_desc_len, msc_config_desc_end - msc_config_desc
+incomplete_msc_config_desc:
+    .byte   9, 2, incomplete_msc_config_desc_len, 0, 1, 1, 0, 0x80, 50
+    .byte   9, 4, MSC_IF, 0, 1, 0x08, 0x06, 0x50, 0
+    .byte   7, 5, MSC_BULK_IN_EP, 0x02, MSC_BULK_MPS, 0, 0
+incomplete_msc_config_desc_end:
+.equ incomplete_msc_config_desc_len, incomplete_msc_config_desc_end - incomplete_msc_config_desc
+bad_msc_protocol_desc:
+    .byte   9, 2, bad_msc_protocol_desc_len, 0, 1, 1, 0, 0x80, 50
+    .byte   9, 4, MSC_IF, 0, 2, 0x08, 0x06, 0x62, 0
+    .byte   7, 5, MSC_BULK_IN_EP, 0x02, MSC_BULK_MPS, 0, 0
+    .byte   7, 5, MSC_BULK_OUT_EP, 0x02, MSC_BULK_MPS, 0, 0
+bad_msc_protocol_desc_end:
+.equ bad_msc_protocol_desc_len, bad_msc_protocol_desc_end - bad_msc_protocol_desc
+.align 4
 
 .section .bss
 .align 4
@@ -575,6 +1205,32 @@ hprt_reset_seen:
     .space  4
 speed_out:
     .space  4
+eth_out:
+    .space  8
+msc_out:
+    .space  8
+msc_dev:
+    .space  12
+msc_bulk_phase:
+    .space  4
+msc_bulk_bad_csw:
+    .space  4
+msc_captured_tag:
+    .space  4
+msc_expected_opcode:
+    .space  4
+msc_expected_cdb_len:
+    .space  4
+msc_expected_data_len:
+    .space  4
+msc_expected_data_buf:
+    .space  4
+msc_read_block:
+    .space  512
+msc_inquiry_buf:
+    .space  36
+msc_capacity_buf:
+    .space  8
 stack_bottom:
     .space  4096
 stack_top:
