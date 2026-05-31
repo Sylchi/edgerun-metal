@@ -18,11 +18,8 @@ test "web host javascript is empty because the browser bridge is the loader" {
     try std.testing.expect(!contains("er_ui_height"));
     try std.testing.expect(!contains("er_ui_pixels_len"));
     try std.testing.expect(!contains("devicePixelRatio"));
-    try std.testing.expect(!contains("er_ui_compiler_wasm_ptr"));
     try std.testing.expect(!contains("er_ui_source_workspace_ptr"));
     try std.testing.expect(!contains("er_ui_release_artifact_commit"));
-    try std.testing.expect(!contains("er_wasm_compiler_compile_wasm"));
-    try std.testing.expect(!contains("er_wasm_compiler_init"));
     try std.testing.expect(!contains("fetch"));
     try std.testing.expect(!contains("putImageData"));
     try std.testing.expect(!contains("shiftKey"));

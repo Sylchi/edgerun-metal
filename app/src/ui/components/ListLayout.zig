@@ -116,6 +116,10 @@ pub fn clampedIndex(value: u16, item_count: u16) u16 {
     return @min(value, item_count - 1);
 }
 
+pub fn resolveIndex(controlled: ?u16, default_value: u16, item_count: u16) u16 {
+    return clampedIndex(controlled orelse default_value, item_count);
+}
+
 pub fn encodedIndexedId(id: u32, active: u16, item_count: u16) u32 {
     return id * item_count + clampedIndex(active, item_count);
 }

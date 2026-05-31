@@ -39,7 +39,7 @@ pub const Tooltip = struct {
     }
 
     pub fn collectInteractions(self: Tooltip, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-        try collector.addHit(triggerBounds(bounds), .overlay_trigger, self.id);
+        try collector.addHit(triggerBounds(bounds), .overlay_trigger, component_primitives.overlayTriggerId(self.id));
     }
 
     pub fn measure(self: Tooltip, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {

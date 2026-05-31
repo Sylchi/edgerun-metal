@@ -43,7 +43,7 @@ pub const Calendar = struct {
 
     pub fn collectInteractions(self: Calendar, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
         try collector.addHit(navBounds(bounds, 0), .button, self.id);
-        try collector.addHit(navBounds(bounds, 1), .button, self.id + 1);
+        try collector.addHit(navBounds(bounds, 1), .button, common.offsetId(self.id, 1));
         for (0..calendar_day_count) |index| {
             try collector.addHit(dayBounds(bounds, index), .button, self.id + calendar_day_id_offset + @as(u32, @intCast(index)));
         }

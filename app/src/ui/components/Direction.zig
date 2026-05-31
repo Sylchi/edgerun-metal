@@ -38,7 +38,7 @@ pub const Direction = struct {
     pub fn collectInteractions(self: Direction, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
         const widths = itemWidths();
         try collector.addHit(itemBounds(bounds, &widths, 0), .button, self.id);
-        try collector.addHit(itemBounds(bounds, &widths, 1), .button, self.id + 1);
+        try collector.addHit(itemBounds(bounds, &widths, 1), .button, common.offsetId(self.id, 1));
     }
 
     pub fn measure(self: Direction, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {

@@ -33,7 +33,7 @@ pub const RadioGroup = struct {
 
     pub fn collectInteractions(self: RadioGroup, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
         try collector.addHit(optionBounds(bounds, 0), .button, self.id);
-        try collector.addHit(optionBounds(bounds, 1), .button, self.id + 1);
+        try collector.addHit(optionBounds(bounds, 1), .button, common.offsetId(self.id, 1));
     }
 
     pub fn measure(self: RadioGroup, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {

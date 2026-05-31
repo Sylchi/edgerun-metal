@@ -39,7 +39,7 @@ pub const Breadcrumb = struct {
 
     pub fn collectInteractions(self: Breadcrumb, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
         try collector.addHit(itemBounds(self, bounds, 0), .button, self.id);
-        try collector.addHit(itemBounds(self, bounds, 1), .button, self.id + 1);
+        try collector.addHit(itemBounds(self, bounds, 1), .button, common.offsetId(self.id, 1));
     }
 
     pub fn measure(self: Breadcrumb, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {

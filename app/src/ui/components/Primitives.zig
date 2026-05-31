@@ -220,6 +220,26 @@ pub const MenuListLayout = struct {
     item_text_h: f32,
 };
 
+pub const overlay_trigger_offset: u32 = 0;
+pub const overlay_primary_offset: u32 = 1;
+pub const overlay_secondary_offset: u32 = 2;
+
+pub fn overlayTriggerId(id: u32) u32 {
+    return id + overlay_trigger_offset;
+}
+
+pub fn overlayPrimaryId(id: u32) u32 {
+    return id + overlay_primary_offset;
+}
+
+pub fn overlaySecondaryId(id: u32) u32 {
+    return id + overlay_secondary_offset;
+}
+
+pub fn overlayIndexedId(id: u32, index: usize) u32 {
+    return id + overlay_primary_offset + @as(u32, @intCast(index));
+}
+
 pub fn menuItemBounds(content: ui.Rect, index: usize, spec: MenuListLayout) ui.Rect {
     return ui.Rect.init(content.x + spec.padding, content.y + spec.padding + @as(f32, @floatFromInt(index)) * spec.item_pitch, @max(min_extent, content.w - spec.padding * 2.0), spec.item_h);
 }
@@ -278,18 +298,18 @@ pub fn measureSidePanelMenu(trigger: []const u8, first: []const u8, second: []co
 }
 
 pub fn collectSidePanelHits(collector: *interaction.Collector, trigger: ui.Rect, content: ui.Rect, id: u32) interaction.Error!void {
-    try collector.addHit(trigger, .overlay_trigger, id);
-    try collector.addHit(content, .button, id + 1);
+    try collector.addHit(trigger, .overlay_trigger, overlayTriggerId(id));
+    try collector.addHit(content, .button, overlayPrimaryId(id));
 }
 
 pub fn collectMenuListHits(collector: *interaction.Collector, content: ui.Rect, id: u32, spec: MenuListLayout, item_count: usize) interaction.Error!void {
     for (0..item_count) |index| {
-        try collector.addHit(menuItemBounds(content, index, spec), .row_item, id + @as(u32, @intCast(index + 1)));
+        try collector.addHit(menuItemBounds(content, index, spec), .row_item, overlayIndexedId(id, index));
     }
 }
 
 pub fn collectSidePanelMenuHits(collector: *interaction.Collector, bounds: ui.Rect, panel: SidePanelLayout, id: u32, spec: MenuListLayout, item_count: usize) interaction.Error!void {
-    try collector.addHit(sidePanelTriggerBounds(bounds, panel), .overlay_trigger, id);
+    try collector.addHit(sidePanelTriggerBounds(bounds, panel), .overlay_trigger, overlayTriggerId(id));
     try collectMenuListHits(collector, sidePanelContentBounds(bounds, panel), id, spec, item_count);
 }
 

@@ -37,7 +37,7 @@ pub const Sheet = struct {
 
     pub fn collectInteractions(self: Sheet, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
         try primitives.collectSidePanelHits(collector, triggerBounds(bounds), contentBounds(bounds), self.id);
-        try collector.addHit(closeBounds(bounds), .button, self.id + 2);
+        try collector.addHit(closeBounds(bounds), .button, primitives.overlaySecondaryId(self.id));
     }
 
     pub fn measure(self: Sheet, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {

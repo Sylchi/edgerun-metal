@@ -46,7 +46,7 @@ pub const Combobox = struct {
 
     pub fn collectInteractions(self: Combobox, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
         try collector.addHit(inputBounds(bounds), .input, self.id);
-        try collector.addHit(optionBounds(bounds), .button, self.id + 1);
+        try collector.addHit(optionBounds(bounds), .button, common.offsetId(self.id, 1));
     }
 
     pub fn measure(self: Combobox, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {

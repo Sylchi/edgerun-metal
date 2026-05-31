@@ -371,6 +371,7 @@ xhci_evt_p0: resq 1
 xhci_evt_st: resd 1
 xhci_evt_ctl: resd 1
 xhci_evt_rsv: resd 1
+xhci_tx_goal: resd 1
 
 %define VIRTIO_NET_STORAGE_size 4900
 virtio_net_dev:      resb VIRTIO_NET_DEVICE_size
@@ -1263,18 +1264,18 @@ er_fn er_kernel_main
 
     ; xHCI command/event TX/RX smoke test:
     ; submit two No-Op commands and count completion events.
-    xor     r10d, r10d          ; tx_ok
+    mov     dword [rel xhci_tx_goal], 0
     xor     r11d, r11d          ; rx_cmd_success
     xor     r9d, r9d            ; last completion code
     call    er_xhci_cmd_submit_noop
     test    eax, eax
     jnz     .xhci_txrx_submit2
-    inc     r10d
+    inc     dword [rel xhci_tx_goal]
 .xhci_txrx_submit2:
     call    er_xhci_cmd_submit_noop
     test    eax, eax
     jnz     .xhci_txrx_poll
-    inc     r10d
+    inc     dword [rel xhci_tx_goal]
 .xhci_txrx_poll:
     mov     edi, 10000
     lea     rsi, [rel xhci_evt_st]
@@ -1284,7 +1285,8 @@ er_fn er_kernel_main
     inc     r11d
     mov     eax, [rel xhci_evt_st]
     mov     r9d, eax
-    cmp     r10d, 1
+    mov     eax, [rel xhci_tx_goal]
+    cmp     eax, 1
     jbe     .xhci_txrx_done
 
 .xhci_txrx_second_wait:
@@ -1304,7 +1306,7 @@ er_fn er_kernel_main
     lea     rsi, [rel check_xhci_tx]
     call    er_serial_puts
     mov     rdi, COM1_PORT
-    mov     esi, r10d
+    mov     esi, [rel xhci_tx_goal]
     call    er_serial_putdec32
     mov     rdi, COM1_PORT
     lea     rsi, [rel check_xhci_rx]

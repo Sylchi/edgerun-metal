@@ -259,6 +259,10 @@ pub fn collectHit(collector: *interaction.Collector, bounds: ui.Rect, kind: ui.H
     return collector.addHit(bounds, kind, id);
 }
 
+pub fn offsetId(id: u32, offset: u32) u32 {
+    return id + offset;
+}
+
 pub const encoded_icon_count: u16 = @typeInfo(icon.Icon).@"enum".fields.len + 1;
 
 pub fn optionalIconTag(value: ?icon.Icon) u16 {

@@ -36,7 +36,7 @@ pub const Carousel = struct {
 
     pub fn collectInteractions(self: Carousel, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
         try collector.addHit(buttonBounds(bounds, 0), .button, self.id);
-        try collector.addHit(buttonBounds(bounds, 1), .button, self.id + 1);
+        try collector.addHit(buttonBounds(bounds, 1), .button, common.offsetId(self.id, 1));
     }
 
     pub fn measure(self: Carousel, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {

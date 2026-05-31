@@ -473,6 +473,7 @@ er_fn er_xhci_init
     add     edi, OP_USBCMD
     call    er_mmio_read32
     or      eax, CMD_HCRST
+    mov     esi, eax
     mov     edi, r14d
     add     edi, [xhci_port_off]
     add     edi, OP_USBCMD
@@ -592,6 +593,7 @@ er_fn er_xhci_init
     add     edi, OP_USBCMD
     call    er_mmio_read32
     or      eax, CMD_RUN
+    mov     esi, eax
     mov     edi, r14d
     add     edi, [xhci_port_off]
     add     edi, OP_USBCMD
@@ -629,6 +631,7 @@ er_fn er_xhci_init
     mov     rdi, rsi
     call    er_mmio_read32
     or      eax, PORTSC_PP
+    mov     esi, eax
     mov     rdi, rsi
     call    er_mmio_write32
     dec     edi
@@ -674,6 +677,27 @@ er_fn er_xhci_init
     mov     rdi, r15
     lea     rsi, [rel .to_run_s]
     call    er_serial_puts
+    ; Dump command/status registers for RUN timeout diagnosis.
+    mov     rdi, r15
+    lea     rsi, [rel .to_cmd_s]
+    call    er_serial_puts
+    mov     edi, r14d
+    add     edi, [xhci_port_off]
+    add     edi, OP_USBCMD
+    call    er_mmio_read32
+    mov     rdi, r15
+    mov     esi, eax
+    call    er_serial_puthex32
+    mov     rdi, r15
+    lea     rsi, [rel .to_sts_s]
+    call    er_serial_puts
+    mov     edi, r14d
+    add     edi, [xhci_port_off]
+    add     edi, OP_USBSTS
+    call    er_mmio_read32
+    mov     rdi, r15
+    mov     esi, eax
+    call    er_serial_puthex32
     mov     rdi, r15
     call    er_serial_crlf
 .fail:
@@ -687,6 +711,8 @@ er_fn er_xhci_init
 .ok_s: db "xhci_init: ok bar ",0
 .to_rst_s: db "xhci_init: timeout reset",0
 .to_run_s: db "xhci_init: timeout run",0
+.to_cmd_s: db " usbcmd ",0
+.to_sts_s: db " usbsts ",0
 
 ; ==================================================================
 ; er_xhci_get_info — fetch initialized controller summary

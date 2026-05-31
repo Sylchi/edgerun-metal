@@ -43,7 +43,7 @@ pub const Sidebar = struct {
 
     pub fn collectInteractions(self: Sidebar, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
         try collector.addHit(triggerBounds(bounds), .button, self.id);
-        try collector.addHit(itemBounds(bounds, self.title, self.item), .row_item, self.id + 1);
+        try collector.addHit(itemBounds(bounds, self.title, self.item), .row_item, common.offsetId(self.id, 1));
     }
 
     pub fn measure(self: Sidebar, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
