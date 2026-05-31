@@ -330,14 +330,14 @@ pub const State = struct {
 
     fn renderHeader(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
         const title_w = @max(260.0, bounds.w - 222.0);
-        try renderInteractiveComponent(.{ .card = .{ .title = "Hardware", .detail = self.detail(0), .variant = .elevated } }, ui.Rect.init(bounds.x, bounds.y, title_w, bounds.h), options);
-        try renderInteractiveComponent(.{ .badge = .{ .label = self.statusLabel(), .variant = .secondary } }, ui.Rect.init(bounds.x + bounds.w - 210.0, bounds.y + 19.0, 152.0, 28.0), options);
-        try renderInteractiveComponent(.{ .icon_button = .{
+        try (Component{ .card = .{ .title = "Hardware", .detail = self.detail(0), .variant = .elevated } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x, bounds.y, title_w, bounds.h), options);
+        try (Component{ .badge = .{ .label = self.statusLabel(), .variant = .secondary } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x + bounds.w - 210.0, bounds.y + 19.0, 152.0, 28.0), options);
+        try (Component{ .icon_button = .{
             .id = refresh_now_button_id,
             .label = "Refresh",
             .icon = IconComponent.Icon.named(.reload),
             .variant = .outline,
-        } }, ui.Rect.init(bounds.x + bounds.w - 44.0, bounds.y + 15.0, 40.0, 40.0), options);
+        } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x + bounds.w - 44.0, bounds.y + 15.0, 40.0, 40.0), options);
     }
 
     fn renderMetrics(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, metric_w: f32, gap: f32, options: RenderOptions) !void {
@@ -358,59 +358,59 @@ pub const State = struct {
                 metric_w,
                 row_h,
             );
-            try renderInteractiveComponent(.{ .card = .{ .title = entry.title, .detail = entry.detail, .variant = .panel } }, rect, options);
+            try (Component{ .card = .{ .title = entry.title, .detail = entry.detail, .variant = .panel } }).renderInteractive(scene, collector, rect, options);
         }
     }
 
     fn renderControls(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
         var y = bounds.y;
-        try renderInteractiveComponent(.{ .card = .{ .title = "Controls", .detail = "Display and keyboard hardware knobs.", .variant = .elevated } }, ui.Rect.init(bounds.x, y, bounds.w, 78.0), options);
+        try (Component{ .card = .{ .title = "Controls", .detail = "Display and keyboard hardware knobs.", .variant = .elevated } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x, y, bounds.w, 78.0), options);
         y += 92.0;
 
-        try renderInteractiveComponent(.{ .slider = .{ .id = brightness_slider_id, .label = "Screen Brightness", .value = self.screenBrightnessUnit() } }, ui.Rect.init(bounds.x, y, bounds.w, 56.0), options);
+        try (Component{ .slider = .{ .id = brightness_slider_id, .label = "Screen Brightness", .value = self.screenBrightnessUnit() } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x, y, bounds.w, 56.0), options);
         y += 66.0;
         const half_w = (bounds.w - 10.0) * 0.5;
-        try renderInteractiveComponent(.{ .button = .{ .id = brightness_down_button_id, .label = "Screen -", .variant = .outline, .icon_slot = IconComponent.IconSlot.named(.leading, .brightness_down) } }, ui.Rect.init(bounds.x, y, half_w, 36.0), options);
-        try renderInteractiveComponent(.{ .button = .{ .id = brightness_up_button_id, .label = "Screen +", .variant = .outline, .icon_slot = IconComponent.IconSlot.named(.leading, .brightness_up) } }, ui.Rect.init(bounds.x + half_w + 10.0, y, half_w, 36.0), options);
+        try (Component{ .button = .{ .id = brightness_down_button_id, .label = "Screen -", .variant = .outline, .icon_slot = IconComponent.IconSlot.named(.leading, .brightness_down) } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x, y, half_w, 36.0), options);
+        try (Component{ .button = .{ .id = brightness_up_button_id, .label = "Screen +", .variant = .outline, .icon_slot = IconComponent.IconSlot.named(.leading, .brightness_up) } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x + half_w + 10.0, y, half_w, 36.0), options);
         y += 50.0;
 
-        try renderInteractiveComponent(.{ .slider = .{ .id = kbd_slider_id, .label = "Keyboard Backlight", .value = self.keyboardBrightnessUnit() } }, ui.Rect.init(bounds.x, y, bounds.w, 56.0), options);
+        try (Component{ .slider = .{ .id = kbd_slider_id, .label = "Keyboard Backlight", .value = self.keyboardBrightnessUnit() } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x, y, bounds.w, 56.0), options);
         y += 66.0;
-        try renderInteractiveComponent(.{ .button = .{ .id = kbd_down_button_id, .label = "Keys -", .variant = .outline, .icon_slot = IconComponent.IconSlot.named(.leading, .adjustments_minus) } }, ui.Rect.init(bounds.x, y, half_w, 36.0), options);
-        try renderInteractiveComponent(.{ .button = .{ .id = kbd_up_button_id, .label = "Keys +", .variant = .outline, .icon_slot = IconComponent.IconSlot.named(.leading, .adjustments_plus) } }, ui.Rect.init(bounds.x + half_w + 10.0, y, half_w, 36.0), options);
+        try (Component{ .button = .{ .id = kbd_down_button_id, .label = "Keys -", .variant = .outline, .icon_slot = IconComponent.IconSlot.named(.leading, .adjustments_minus) } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x, y, half_w, 36.0), options);
+        try (Component{ .button = .{ .id = kbd_up_button_id, .label = "Keys +", .variant = .outline, .icon_slot = IconComponent.IconSlot.named(.leading, .adjustments_plus) } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x + half_w + 10.0, y, half_w, 36.0), options);
         y += 54.0;
 
-        try renderInteractiveComponent(.{ .switch_control = .{ .id = auto_refresh_switch_id, .label = "Auto Refresh", .checked = self.auto_refresh } }, ui.Rect.init(bounds.x, y, bounds.w, 32.0), options);
+        try (Component{ .switch_control = .{ .id = auto_refresh_switch_id, .label = "Auto Refresh", .checked = self.auto_refresh } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x, y, bounds.w, 32.0), options);
         y += 40.0;
-        try renderInteractiveComponent(.{ .switch_control = .{ .id = hide_unavailable_switch_id, .label = "Hide Unavailable", .checked = self.hide_unavailable } }, ui.Rect.init(bounds.x, y, bounds.w, 32.0), options);
+        try (Component{ .switch_control = .{ .id = hide_unavailable_switch_id, .label = "Hide Unavailable", .checked = self.hide_unavailable } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x, y, bounds.w, 32.0), options);
         y += 40.0;
-        try renderInteractiveComponent(.{ .switch_control = .{ .id = compact_rows_switch_id, .label = "Compact Density", .checked = self.compact_rows } }, ui.Rect.init(bounds.x, y, bounds.w, 32.0), options);
+        try (Component{ .switch_control = .{ .id = compact_rows_switch_id, .label = "Compact Density", .checked = self.compact_rows } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x, y, bounds.w, 32.0), options);
     }
 
     fn renderActivity(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
-        try renderInteractiveComponent(.{ .chart = .{ .id = 90_020, .label = "System Activity" } }, ui.Rect.init(bounds.x, bounds.y, bounds.w, @min(190.0, bounds.h * 0.42)), options);
+        try (Component{ .chart = .{ .id = 90_020, .label = "System Activity" } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x, bounds.y, bounds.w, @min(190.0, bounds.h * 0.42)), options);
         const y = bounds.y + @min(204.0, bounds.h * 0.45);
-        try renderInteractiveComponent(.{ .card = .{ .title = "Screen Level", .detail = self.detail(4), .variant = .panel } }, ui.Rect.init(bounds.x, y, bounds.w, 78.0), options);
-        try renderInteractiveComponent(.{ .progress = .{ .value = self.screenBrightnessUnit() } }, ui.Rect.init(bounds.x, y + 88.0, bounds.w, 18.0), options);
-        try renderInteractiveComponent(.{ .card = .{ .title = "Keyboard Level", .detail = self.detail(5), .variant = .panel } }, ui.Rect.init(bounds.x, y + 124.0, bounds.w, 78.0), options);
-        try renderInteractiveComponent(.{ .progress = .{ .value = self.keyboardBrightnessUnit() } }, ui.Rect.init(bounds.x, y + 212.0, bounds.w, 18.0), options);
+        try (Component{ .card = .{ .title = "Screen Level", .detail = self.detail(4), .variant = .panel } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x, y, bounds.w, 78.0), options);
+        try (Component{ .progress = .{ .value = self.screenBrightnessUnit() } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x, y + 88.0, bounds.w, 18.0), options);
+        try (Component{ .card = .{ .title = "Keyboard Level", .detail = self.detail(5), .variant = .panel } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x, y + 124.0, bounds.w, 78.0), options);
+        try (Component{ .progress = .{ .value = self.keyboardBrightnessUnit() } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x, y + 212.0, bounds.w, 18.0), options);
     }
 
     fn renderInventory(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
         var y = bounds.y;
-        try renderInteractiveComponent(.{ .card = .{ .title = "Inventory", .detail = "Detected hardware paths and runtime capabilities.", .variant = .elevated } }, ui.Rect.init(bounds.x, y, bounds.w, 78.0), options);
+        try (Component{ .card = .{ .title = "Inventory", .detail = "Detected hardware paths and runtime capabilities.", .variant = .elevated } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x, y, bounds.w, 78.0), options);
         y += 92.0;
         const row_h: f32 = if (self.compact_rows) 44.0 else 52.0;
         for (&rows, 0..) |row, index| {
             const row_detail = self.detail(index);
             if (self.hide_unavailable and std.mem.eql(u8, row_detail, unavailable_detail)) continue;
             if (y + row_h > bounds.y + bounds.h) break;
-            try renderInteractiveComponent(.{ .row_item = .{
+            try (Component{ .row_item = .{
                 .id = @intCast(index),
                 .title = row.title,
                 .detail = row_detail,
                 .leading_icon = IconComponent.IconSlot.named(.leading, row.icon_kind),
-            } }, ui.Rect.init(bounds.x, y, bounds.w, row_h), options);
+            } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x, y, bounds.w, row_h), options);
             y += row_h + 8.0;
         }
     }

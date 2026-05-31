@@ -10,6 +10,7 @@
 %include "x86_64/wasm_defines.inc"
 %include "x86_64/net/net_constants.inc"
 %include "x86_64/crypto/tor_constants.inc"
+%include "x86_64/crypto/tls_constants.inc"
 
 extern er_tcp_connect
 extern er_tls_connect
@@ -332,32 +333,38 @@ er_fn er_tor_link_handshake
 .connected2:
     mov     [tor_conn_id], eax
 
-    ; Build VERSIONS cell once (before the poll loop)
-    mov     rdi, tor_var_cell
-    call    _tor_build_versions_cell
-
-    ; Wait for TCP 3-way handshake to complete by polling
-    ; er_net_poll and retrying er_tcp_send until it succeeds.
-    ; The connection starts in SYN_SENT; er_net_poll processes
-    ; the SYN-ACK from the host and completes the handshake.
+    ; TLS is mandatory for Tor OR links. Start TLS and fail closed
+    ; until the TLS module reports an active encrypted record layer.
     mov     ecx, 500
-.wait_established:
+.wait_tls:
     push    rcx
     call    er_net_poll
     pop     rcx
 
     push    rcx
     mov     edi, [tor_conn_id]
-    mov     rsi, tor_var_cell
-    mov     edx, TOR_VAR_HEADER + 4
-    call    er_tls_send
+    call    er_tls_connect
     pop     rcx
 
     test    eax, eax
-    jns     .versions_sent
+    jns     .tls_ready
+    cmp     edx, ERROR_TLS_UNSUPPORTED
+    je      .proto_fail
     dec     ecx
-    jnz     .wait_established
+    jnz     .wait_tls
     jmp     .connect_fail
+
+.tls_ready:
+    ; Build VERSIONS cell once (before the poll loop)
+    mov     rdi, tor_var_cell
+    call    _tor_build_versions_cell
+
+    mov     edi, [tor_conn_id]
+    mov     rsi, tor_var_cell
+    mov     edx, TOR_VAR_HEADER + 4
+    call    er_tls_send
+    test    eax, eax
+    js      .send_fail
 
 .versions_sent:
 
