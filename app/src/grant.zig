@@ -106,6 +106,18 @@ pub const SpawnReceipt = struct {
                 (self.device_handles.amount != 0 and self.device_handle.valid()));
     }
 
+    pub fn permitsRoute(self: SpawnReceipt, route_handle: preimage.Hash) bool {
+        return self.valid() and
+            self.route_handles.amount != 0 and
+            bytes.eql(&self.route_handle, &route_handle);
+    }
+
+    pub fn permitsDevice(self: SpawnReceipt, device_handle: identity.Id) bool {
+        return self.valid() and
+            self.device_handles.amount != 0 and
+            self.device_handle.eql(device_handle);
+    }
+
     pub fn id(self: SpawnReceipt) ?[id_size]u8 {
         if (!self.valid()) return null;
 
@@ -284,9 +296,15 @@ test "spawn receipt deterministically records delegated resources" {
     try testing.expectEqual(@as(u64, 1), allocated_receipt.device_handles.amount);
     try testing.expect(bytes.eql(&route_handle, &allocated_receipt.route_handle));
     try testing.expect(allocated_receipt.device_handle.eql(device.id));
+    try testing.expect(allocated_receipt.permitsRoute(route_handle));
+    try testing.expect(allocated_receipt.permitsDevice(device.id));
+    try testing.expect(!receipt.permitsRoute(route_handle));
+    try testing.expect(!receipt.permitsDevice(device.id));
     try testing.expect(memory_only_receipt.valid());
     try testing.expectEqual(@as(u64, 0), memory_only_receipt.storage_bytes.amount);
     try testing.expectEqual(@as(u64, 0), memory_only_receipt.storage_slots.amount);
+    try testing.expect(!memory_only_receipt.permitsRoute(route_handle));
+    try testing.expect(!memory_only_receipt.permitsDevice(device.id));
     try testing.expect(spawnReceiptAllocated(parent, child, epoch, 16, 32, 2, 4, 1, 1, [_]u8{0} ** preimage.hash_size, device.id) == null);
     try testing.expect(spawnReceiptAllocated(parent, child, epoch, 16, 32, 2, 4, 1, 1, route_handle, .{ .bytes = [_]u8{0} ** identity.id_size }) == null);
 }

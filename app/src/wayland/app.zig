@@ -249,7 +249,7 @@ pub const NativeApp = struct {
                     if (state == protocol.wl_pointer_button_released) {
                         app_native_input.processPointerEvent(&self.state, &.{}, self.regionSlice(), null, .pointer_up);
                         if (self.hardware and self.state.last_action_kind == .activated) {
-                            self.hardware_app.activate(self.state.runtime.hoverHitId());
+                            self.hardware_app.activate(self.state.runtime.hovered, self.state.runtime.persisted_value);
                         }
                         try self.activateClientDecoration(client_ptr);
                     } else {
