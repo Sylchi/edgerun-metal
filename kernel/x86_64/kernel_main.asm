@@ -92,8 +92,9 @@ extern er_xhci_init
 extern er_hda_probe_init
 extern er_hda_codec_vendor_id
 extern er_hda_codec_root_nodes
-extern er_hda_alc295_prepare_speaker
-extern er_hda_alc295_prepare_mic
+extern er_hda_codec_has_probe_routes
+extern er_hda_prepare_speaker
+extern er_hda_prepare_mic
 extern er_hda_start_square_wave
 extern er_hda_start_mic_capture
 extern er_hda_get_start_stage
@@ -1361,12 +1362,15 @@ er_fn er_kernel_main
     mov     rdi, COM1_PORT
     mov     esi, [rel hda_root_nodes]
     call    er_serial_puthex32
-    cmp     dword [rel hda_codec_vendor], 0x10ec0295
-    jne     .hda_print_done
+    mov     edi, [rel hda_codec_vendor]
+    call    er_hda_codec_has_probe_routes
+    test    eax, eax
+    jz      .hda_print_done
     mov     dword [rel hda_tone_status], 0
     mov     edi, [rel hda_bar0]
     mov     esi, [rel hda_statests]
-    call    er_hda_alc295_prepare_speaker
+    mov     edx, [rel hda_codec_vendor]
+    call    er_hda_prepare_speaker
     test    eax, eax
     jnz     .hda_route_fail
     mov     edi, [rel hda_bar0]
@@ -1423,7 +1427,8 @@ er_fn er_kernel_main
     mov     dword [rel hda_mic_status], 0
     mov     edi, [rel hda_bar0]
     mov     esi, [rel hda_statests]
-    call    er_hda_alc295_prepare_mic
+    mov     edx, [rel hda_codec_vendor]
+    call    er_hda_prepare_mic
     test    eax, eax
     jnz     .hda_mic_route_fail
     mov     edi, [rel hda_bar0]

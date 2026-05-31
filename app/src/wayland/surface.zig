@@ -217,7 +217,6 @@ pub const Surface = struct {
     gpu_recorder: GpuRecorder = .{},
     gpu_buffer_device: renderer_gpu_buffer.CpuFilledDevice = .{},
     drm_buffer: ?linux_drm.DumbBuffer = null,
-    first_frame: bool = true,
 
     pub fn create(allocator: std.mem.Allocator, client_ptr: *client.WaylandClient, options: @import("options.zig").Options) !*Surface {
         const width = options.width;
@@ -255,7 +254,6 @@ pub const Surface = struct {
         self.gpu_recorder = .{};
         self.gpu_buffer_device = .{};
         self.drm_buffer = drm_buffer;
-        self.first_frame = true;
         return self;
     }
 
@@ -339,7 +337,6 @@ pub const Surface = struct {
                 if (!receipt.valid() or !sink_state.submitted) return error.WaylandCommitRejected;
                 @memcpy(self.base_pixels, self.pixels);
                 self.base_pixels_ready = true;
-                self.dumpPpm();
                 if (cursor_kind) |kind| {
                     self.cursor_damage = try self.renderCursorOverlay(cursor_x, cursor_y, kind);
                 }
@@ -454,25 +451,4 @@ pub const Surface = struct {
         if (!receipt.valid()) return error.InvalidSoftwareReceipt;
     }
 
-    fn dumpPpm(self: *Surface) void {
-        if (!self.first_frame) return;
-        self.first_frame = false;
-        const ppm_path = "/tmp/edgerun-hardware-dash.ppm";
-        const fd = @as(i32, @intCast(linux.openat(linux.AT.FDCWD, ppm_path, linux.O{ .ACCMODE = .WRONLY, .CREAT = true }, 0o644)));
-        if (fd < 0) return;
-        defer _ = linux.close(fd);
-        var header: [128]u8 = undefined;
-        const hdr = std.fmt.bufPrint(&header, "P6\n{d} {d}\n255\n", .{ self.width, self.height }) catch return;
-        _ = linux.write(fd, hdr.ptr, hdr.len);
-        var row: usize = 0;
-        const w = self.width;
-        const h = self.height;
-        while (row < h) : (row += 1) {
-            var col: usize = 0;
-            while (col < w) : (col += 1) {
-                const px = self.pixels[row * w + col];
-                _ = linux.write(fd, &[3]u8{ px.r, px.g, px.b }, 3);
-            }
-        }
-    }
 };

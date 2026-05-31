@@ -70,6 +70,7 @@ extern er_mmio_write8
 %define HDA_ALC295_MIC_PIN_BOOST 0x03
 %define HDA_ALC295_MIC_ADC_GAIN 0x3F
 %define HDA_VERB_ENTRY_BYTES 12
+%define HDA_CODEC_REALTEK_ALC295 0x10EC0295
 
 SECTION .rodata
 align 4
@@ -584,24 +585,51 @@ er_fn er_hda_codec_root_nodes
     jmp     er_hda_codec_get_parameter
 
 ; ==================================================================
-; er_hda_alc295_prepare_speaker — minimal ALC295 speaker route
-; int er_hda_alc295_prepare_speaker(uint32_t bar0, uint32_t statests)
+; er_hda_codec_has_probe_routes — return 1 for codecs with route tables.
+; uint32_t er_hda_codec_has_probe_routes(uint32_t vendor_id)
+; ==================================================================
+er_fn er_hda_codec_has_probe_routes
+    xor     eax, eax
+    cmp     edi, HDA_CODEC_REALTEK_ALC295
+    jne     .hr_out
+    mov     eax, 1
+.hr_out:
+    er_ok
+    ret
+
+; ==================================================================
+; er_hda_prepare_speaker — prepare known codec speaker route
+; int er_hda_prepare_speaker(uint32_t bar0, uint32_t statests,
+;                            uint32_t vendor_id)
 ; Route: DAC 0x02 -> speaker pin 0x14, D0 power, EAPD on, pin OUT.
 ; ==================================================================
-er_fn er_hda_alc295_prepare_speaker
+er_fn er_hda_prepare_speaker
+    cmp     edx, HDA_CODEC_REALTEK_ALC295
+    jne     .ps_unsupported
     lea     rdx, [rel hda_alc295_speaker_verbs]
     mov     ecx, hda_alc295_speaker_verb_count
     jmp     _hda_codec_send_table
+.ps_unsupported:
+    er_err  ERROR_UNSUPPORTED
+    mov     eax, -1
+    ret
 
 ; ==================================================================
-; er_hda_alc295_prepare_mic — minimal ALC295 internal microphone route
-; int er_hda_alc295_prepare_mic(uint32_t bar0, uint32_t statests)
+; er_hda_prepare_mic — prepare known codec internal microphone route
+; int er_hda_prepare_mic(uint32_t bar0, uint32_t statests,
+;                        uint32_t vendor_id)
 ; Route: internal mic pin 0x12 -> mixer 0x23 -> ADC 0x08, D0 power, pin IN.
 ; ==================================================================
-er_fn er_hda_alc295_prepare_mic
+er_fn er_hda_prepare_mic
+    cmp     edx, HDA_CODEC_REALTEK_ALC295
+    jne     .pm_unsupported
     lea     rdx, [rel hda_alc295_mic_verbs]
     mov     ecx, hda_alc295_mic_verb_count
     jmp     _hda_codec_send_table
+.pm_unsupported:
+    er_err  ERROR_UNSUPPORTED
+    mov     eax, -1
+    ret
 
 ; ==================================================================
 ; er_hda_start_square_wave — start one output stream on static tone buffer

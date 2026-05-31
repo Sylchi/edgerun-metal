@@ -813,7 +813,7 @@ er_fn er_tls_aes128_gcm_encrypt
     mov     dword [tls_gcm_ctr + 12], 0x01000000
     ; tag mask = E(K, J0)
     lea     rdi, [tls_gcm_tagmask]
-    lea     rsi, [tls_gcm_tagmask]
+    xor     esi, esi
     mov     edx, TLS_GCM_BLOCK_LEN
     call    er_memset
     lea     rdi, [tls_gcm_tagmask]

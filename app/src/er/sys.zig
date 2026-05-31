@@ -3,8 +3,8 @@
 // This module declares WASM imports from the host's "er" module and exposes
 // them as plain Zig functions.  It has zero dependencies on the UI runtime
 // (no state.zig, no app_frame, no render).  Any WASM target — whether the
-// built-in app_runtime, a compiled .er module, or a standalone Zig WASM
-// binary — can import this file to call host syscalls.
+// compiled .er module or standalone Zig WASM binary can import this file to
+// call host syscalls.
 //
 // Host-side implementation lives in asm/x86_64/crypto/ (local_cell.asm,
 // local_route.asm).  The kernel wires the import table into the WASM

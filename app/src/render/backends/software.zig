@@ -256,9 +256,6 @@ pub const Surface = struct {
         const bounds = textGlyphBounds(glyph_info.commands, glyph.x, glyph.baseline_y, scale) orelse return;
         if (!bounds.valid()) return;
 
-        var clip_buffer: [icon_alpha_mask_capacity]u8 = undefined;
-        var clip_mask = IconAlphaMask.init(bounds, self.width, self.height, clip_buffer[0..]);
-        var clip = IconClipState{ .mask = &clip_mask };
         var path = IconPathState{};
         path.beginFill(.nonzero);
         for (glyph_info.commands) |command| switch (command) {
@@ -272,7 +269,7 @@ pub const Surface = struct {
             },
             .close => path.closeFillSubpath(),
         };
-        self.fillIconPath(bounds, .{ .solid = glyph.color }, &path, &clip);
+        self.fillIconPathUnclipped(bounds, .{ .solid = glyph.color }, &path);
     }
 
     fn textPoint(bounds: ui.Rect, x: f32, baseline_y: f32, scale: f32, point: font_vector.Point) icon_vector.Point {
@@ -1315,6 +1312,23 @@ pub const Surface = struct {
             while (x < x_end) : (x += 1) {
                 const coverage = self.fillPathCoverage(bounds, path, x, y);
                 if (coverage != 0) self.blendPixel(x, y, paint.colorAt(bounds, paint_bounds, x, y), clip.apply(x, y, coverage));
+            }
+        }
+    }
+
+    fn fillIconPathUnclipped(self: Surface, bounds: ui.Rect, paint: IconPaint, path: *const IconPathState) void {
+        if (path.fill_point_len < min_fill_path_points) return;
+        const paint_bounds = fillPathPaintBounds(bounds, path);
+        const x_start = clampCoord(@intFromFloat(math.floorF(bounds.x)), self.width);
+        const y_start = clampCoord(@intFromFloat(math.floorF(bounds.y)), self.height);
+        const x_end = clampCoord(@intFromFloat(math.ceilF(bounds.x + bounds.w)), self.width);
+        const y_end = clampCoord(@intFromFloat(math.ceilF(bounds.y + bounds.h)), self.height);
+        var y = y_start;
+        while (y < y_end) : (y += 1) {
+            var x = x_start;
+            while (x < x_end) : (x += 1) {
+                const coverage = self.fillPathCoverage(bounds, path, x, y);
+                if (coverage != 0) self.blendPixel(x, y, paint.colorAt(bounds, paint_bounds, x, y), coverage);
             }
         }
     }
