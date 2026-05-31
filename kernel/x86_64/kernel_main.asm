@@ -89,6 +89,7 @@ extern er_xhci_probe
 extern er_xhci_init
 extern er_xhci_cmd_submit_noop
 extern er_xhci_event_pop
+extern er_xhci_cmd_wait_completion
 extern er_uvc_probe
 extern er_uvc_get_caps
 extern er_uvc_stream_config
@@ -1263,7 +1264,7 @@ er_fn er_kernel_main
     ; xHCI command/event TX/RX smoke test:
     ; submit two No-Op commands and count completion events.
     xor     r10d, r10d          ; tx_ok
-    xor     r11d, r11d          ; rx_events
+    xor     r11d, r11d          ; rx_cmd_success
     xor     r9d, r9d            ; last completion code
     call    er_xhci_cmd_submit_noop
     test    eax, eax
@@ -1275,25 +1276,26 @@ er_fn er_kernel_main
     jnz     .xhci_txrx_poll
     inc     r10d
 .xhci_txrx_poll:
-    mov     ecx, 10000
-.xhci_txrx_poll_loop:
-    lea     rdi, [rel xhci_evt_p0]
+    mov     edi, 10000
     lea     rsi, [rel xhci_evt_st]
-    lea     rdx, [rel xhci_evt_ctl]
-    lea     rcx, [rel xhci_evt_rsv]
-    call    er_xhci_event_pop
-    cmp     eax, 1
-    jne     .xhci_txrx_next_poll
+    call    er_xhci_cmd_wait_completion
+    test    eax, eax
+    jnz     .xhci_txrx_second_wait
     inc     r11d
     mov     eax, [rel xhci_evt_st]
-    shr     eax, 24
-    and     eax, 0xFF
     mov     r9d, eax
-    cmp     r11d, r10d
-    jae     .xhci_txrx_done
-.xhci_txrx_next_poll:
-    dec     ecx
-    jnz     .xhci_txrx_poll_loop
+    cmp     r10d, 1
+    jbe     .xhci_txrx_done
+
+.xhci_txrx_second_wait:
+    mov     edi, 10000
+    lea     rsi, [rel xhci_evt_st]
+    call    er_xhci_cmd_wait_completion
+    test    eax, eax
+    jnz     .xhci_txrx_done
+    inc     r11d
+    mov     eax, [rel xhci_evt_st]
+    mov     r9d, eax
 .xhci_txrx_done:
     mov     rdi, COM1_PORT
     lea     rsi, [rel check_xhci_txrx]

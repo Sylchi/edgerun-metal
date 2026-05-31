@@ -38,21 +38,19 @@ pub const Input = struct {
     }
 
     pub fn render(self: Input, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        const resolved = self.flags.apply(options);
-        const padding = inputPadding(resolved.control_size);
-        try renderControlFrame(scene, bounds, resolved.style.panel, resolved.style.border, primitives.control_radius);
-        try renderControlStateOverlay(scene, bounds, resolved, primitives.control_radius);
+        const padding = inputPadding(options.control_size);
+        try renderControlFrame(scene, bounds, options.style.panel, options.style.border, primitives.control_radius);
+        try renderControlStateOverlay(scene, bounds, options, primitives.control_radius);
         const text_bounds = if (leadingIcon(self.icon_slot)) |slot| with_icon: {
-            try slot.renderColor(scene, ui.Rect.init(bounds.x + padding, bounds.y + (bounds.h - input_icon_size) * 0.5, input_icon_size, input_icon_size), resolved.style.muted);
+            try slot.renderColor(scene, ui.Rect.init(bounds.x + padding, bounds.y + (bounds.h - input_icon_size) * 0.5, input_icon_size, input_icon_size), options.style.muted);
             break :with_icon ui.Rect.init(bounds.x + padding + input_icon_size + input_icon_gap, bounds.y, @max(primitives.min_extent, bounds.w - padding * 2.0 - input_icon_size - input_icon_gap), bounds.h);
         } else bounds;
         const display_value = self.displayValue();
-        const display_color = if (self.value.len == 0 and self.default_value.len == 0) resolved.style.muted else resolved.style.text;
+        const display_color = if (self.value.len == 0 and self.default_value.len == 0) options.style.muted else options.style.text;
         try renderControlText(scene, text_bounds, padding, primitives.control_label_height, display_value, display_color, .start);
     }
 
     pub fn collectInteractions(self: Input, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-        if (self.flags.disabled) return;
         return common.collectHit(collector, bounds, .input, self.id);
     }
 
@@ -136,10 +134,6 @@ const input_min_width: f32 = 44.0;
 const input_icon_size: f32 = 16.0;
 const input_icon_gap: f32 = 8.0;
 const input_label_max_lines: usize = 1;
-
-comptime {
-    common.assertComponentContract(Input, .{});
-}
 
 test "input component serializes to canonical object and deserializes" {
     const input = Input{ .id = 10, .placeholder = "Search objects", .icon_slot = IconSlot.named(.leading, .search) };

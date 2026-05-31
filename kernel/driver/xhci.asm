@@ -75,9 +75,12 @@ extern er_serial_crlf
 ; ─── TRB constants ──────────────────────────────────────────────────
 %define TRB_CMD_NOOP     23
 %define TRB_LINK         6
+%define TRB_EV_CMD_CMPL  33
 %define TRB_TYPE_SHIFT   10
 %define TRB_CYCLE        (1 << 0)
 %define TRB_LINK_TOGGLE  (1 << 1)
+%define TRB_TYPE_MASK    (0x3F << TRB_TYPE_SHIFT)
+%define XHCI_CC_SUCCESS  1
 
 ; ─── Ring sizes ─────────────────────────────────────────────────────
 %define CMD_RING_NTRB    16
@@ -108,6 +111,10 @@ xhci_cmd_enq_idx:   resd 1
 xhci_cmd_cycle:     resd 1
 xhci_evt_deq_idx:   resd 1
 xhci_evt_cycle:     resd 1
+xhci_cw_p0:         resq 1
+xhci_cw_st:         resd 1
+xhci_cw_ctl:        resd 1
+xhci_cw_rsv:        resd 1
 
 ; ─── Text ───────────────────────────────────────────────────────────
 SECTION .text
@@ -943,4 +950,78 @@ er_fn er_xhci_event_pop
 .ep_bad_arg:
     er_err  ERROR_BAD_ARGUMENT
     mov     eax, -1
+    ret
+
+; ==================================================================
+; er_xhci_cmd_wait_completion — wait for command completion event
+; int er_xhci_cmd_wait_completion(uint32_t spins, uint32_t* out_cc)
+; Returns: 0 on command completion, -1 on timeout/bad args/failure.
+; ==================================================================
+er_fn er_xhci_cmd_wait_completion
+    test    rsi, rsi
+    jz      .cw_bad_arg
+    test    edi, edi
+    jz      .cw_bad_arg
+
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+
+    mov     r12d, edi           ; spins remaining
+
+.cw_poll:
+    lea     rdi, [rel xhci_cw_p0]
+    lea     rsi, [rel xhci_cw_st]
+    lea     rdx, [rel xhci_cw_ctl]
+    lea     rcx, [rel xhci_cw_rsv]
+    call    er_xhci_event_pop
+    cmp     eax, 1
+    je      .cw_have_evt
+    cmp     eax, 0
+    jne     .cw_fail
+    dec     r12d
+    jnz     .cw_poll
+    jmp     .cw_timeout
+
+.cw_have_evt:
+    mov     eax, [rel xhci_cw_ctl]
+    and     eax, TRB_TYPE_MASK
+    cmp     eax, (TRB_EV_CMD_CMPL << TRB_TYPE_SHIFT)
+    jne     .cw_skip
+    mov     eax, [rel xhci_cw_st]
+    shr     eax, 24
+    and     eax, 0xFF
+    mov     [rsi], eax
+    cmp     eax, XHCI_CC_SUCCESS
+    jne     .cw_fail
+    xor     eax, eax
+    er_ok
+    jmp     .cw_out
+
+.cw_skip:
+    dec     r12d
+    jnz     .cw_poll
+    jmp     .cw_timeout
+
+.cw_timeout:
+    er_err  ERROR_TIMEOUT
+    mov     eax, -1
+    jmp     .cw_out
+
+.cw_fail:
+    er_err  ERROR_TIMEOUT
+    mov     eax, -1
+    jmp     .cw_out
+
+.cw_bad_arg:
+    er_err  ERROR_BAD_ARGUMENT
+    mov     eax, -1
+    ret
+
+.cw_out:
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
     ret

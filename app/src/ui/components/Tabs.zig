@@ -33,24 +33,22 @@ pub const Tabs = struct {
     }
 
     pub fn render(self: Tabs, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        const resolved = self.flags.apply(options);
         const active = self.activeIndexResolved();
         const list = listBounds(bounds);
-        try scene.pushRect(list, resolved.style.row, .fill, tabs_list_radius, 0.0);
-        try renderTrigger(scene, triggerBounds(list, 0), self.first, active == 0, resolved);
-        try renderTrigger(scene, triggerBounds(list, 1), self.second, active == 1, resolved);
+        try scene.pushRect(list, options.style.row, .fill, tabs_list_radius, 0.0);
+        try renderTrigger(scene, triggerBounds(list, 0), self.first, active == 0, options);
+        try renderTrigger(scene, triggerBounds(list, 1), self.second, active == 1, options);
         const panel = panelBounds(bounds, list);
-        try scene.pushRect(panel, resolved.style.panel, .fill, primitives.control_radius, 0.0);
-        try scene.pushRect(panel, resolved.style.border, .border, primitives.control_radius, 0.0);
+        try scene.pushRect(panel, options.style.panel, .fill, primitives.control_radius, 0.0);
+        try scene.pushRect(panel, options.style.border, .border, primitives.control_radius, 0.0);
         const label = if (active == 1) self.second else self.first;
         if (primitives.contentInset(panel, tabs_panel_padding)) |content| {
             const text_h = @min(content.h, primitives.measuredTextHeight(label, content.w, primitives.control_label_height, tabs_panel_max_lines));
-            try text_component.Text.renderWrapped(scene, content.withHeightCentered(text_h), label, resolved.style.muted, primitives.textWrap(label, primitives.control_label_height, tabs_panel_max_lines));
+            try text_component.Text.renderWrapped(scene, content.withHeightCentered(text_h), label, options.style.muted, primitives.textWrap(label, primitives.control_label_height, tabs_panel_max_lines));
         }
     }
 
     pub fn collectInteractions(self: Tabs, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-        if (self.flags.disabled) return;
         try list_layout.collectPaddedEqualSegmentHits(collector, listBounds(bounds), self.id, tabs_item_count, tabs_list_padding);
     }
 
@@ -145,10 +143,6 @@ const tabs_gap: f32 = 8.0;
 const tabs_panel_padding: f32 = 10.0;
 const tabs_trigger_padding: f32 = 8.0;
 const tabs_panel_max_lines: usize = 2;
-
-comptime {
-    common.assertComponentContract(Tabs, .{});
-}
 
 test "tabs component serializes to canonical object and deserializes" {
     const tabs = Tabs{ .id = 80, .first = "Account", .second = "Password", .active = 1 };

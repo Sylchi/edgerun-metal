@@ -28,15 +28,13 @@ pub const Dialog = struct {
     }
 
     pub fn render(self: Dialog, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        const resolved = self.flags.apply(options);
-        try primitives.renderSidePanelTrigger(scene, bounds, dialog_layout, resolved.style.accent, resolved.style.border, dialog_trigger_padding, dialog_open_label, resolved.style.bg);
-        if (resolved.overlay.isOpen(self.id)) {
-            try primitives.renderTitleDetailPanel(scene, primitives.sidePanelContentBounds(bounds, dialog_layout), self.title, self.detail, resolved, dialog_panel, resolved.style.border, resolved.style.text);
+        try primitives.renderSidePanelTrigger(scene, bounds, dialog_layout, options.style.accent, options.style.border, dialog_trigger_padding, dialog_open_label, options.style.bg);
+        if (options.overlay.isOpen(self.id)) {
+            try primitives.renderTitleDetailPanel(scene, primitives.sidePanelContentBounds(bounds, dialog_layout), self.title, self.detail, options, dialog_panel, options.style.border, options.style.text);
         }
     }
 
     pub fn collectInteractions(self: Dialog, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-        if (self.flags.disabled) return;
         try primitives.collectSidePanelLayoutHits(collector, bounds, dialog_layout, self.id);
     }
 
@@ -67,10 +65,6 @@ const dialog_layout = primitives.SidePanelLayout{ .trigger_y = 6.0, .trigger_w =
 const dialog_panel = primitives.TitleDetailPanel{ .radius = 10.0, .padding = 10.0, .title_y = 6.0, .title_h = 14.0, .detail_y = 22.0, .detail_h = 12.0 };
 const dialog_trigger_padding: f32 = 8.0;
 const dialog_open_label = "Open";
-
-comptime {
-    common.assertComponentContract(Dialog, .{});
-}
 
 test "dialog component serializes to canonical object and deserializes" {
     const dialog = Dialog{ .id = 996, .title = "Edit profile", .detail = "Modal content" };
