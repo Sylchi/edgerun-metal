@@ -6,6 +6,7 @@
 %include "driver/amdgpu_constants.inc"
 
 extern er_amdgpu_dcn_init
+extern er_amdgpu_program_otg0_timing
 
 %define AMDGPU_TEST_BAR0_SIZE 0x28000
 
@@ -18,6 +19,9 @@ fb: resb AMDGPU_FB_SIZE
 SECTION .rodata
 pass_msg: db "PASS amdgpu", 10, 0
 fail_msg: db "FAIL amdgpu", 10, 0
+timing_720p60:
+    dd 1650, 1390, 1430, 1280, 370
+    dd 750, 725, 730, 720, 30
 
 SECTION .text
 global _start
@@ -84,6 +88,25 @@ _start:
     ASSERT_EQ eax, 0x0000ffff
     mov     eax, [rel fb + 1919 * 4]
     ASSERT_EQ eax, 0
+
+    lea     rdi, [rel bar0]
+    lea     rsi, [rel timing_720p60]
+    call    er_amdgpu_program_otg0_timing
+    ASSERT_EQ eax, 0
+    mov     eax, [rel bar0 + DCN_OTG0_V_TOTAL]
+    ASSERT_EQ eax, 749
+    mov     eax, [rel bar0 + DCN_OTG0_H_TOTAL]
+    ASSERT_EQ eax, 1649
+    mov     eax, [rel bar0 + DCN_OTG0_H_SYNC_A]
+    ASSERT_EQ eax, (1429 << 16) | 1390
+    mov     eax, [rel bar0 + DCN_OTG0_V_SYNC_A]
+    ASSERT_EQ eax, (729 << 16) | 725
+    mov     eax, [rel bar0 + DCN_OTG0_H_BLANK_START_END]
+    ASSERT_EQ eax, (1279 << 16) | 370
+    mov     eax, [rel bar0 + DCN_OTG0_V_BLANK_START_END]
+    ASSERT_EQ eax, (719 << 16) | 30
+    mov     eax, [rel bar0 + DCN_OTG0_MASTER_EN]
+    ASSERT_EQ eax, 1
 
     mov     rax, [rel failed]
     test    rax, rax

@@ -42,6 +42,8 @@ exec_decoded_fast_supported:
 
 exec_decoded_fast_loop:
     er_frame_push
+    push    rbx
+    xor     edx, edx                    ; cached TOS valid flag
     mov     r8, [rel exec_decoded_index]
     mov     r9, [rel exec_decoded_end]
 .fast_loop:
@@ -143,48 +145,37 @@ exec_decoded_fast_loop:
 
     cmp     r14, [rel exec_local_count]
     jae     .fast_corrupt
-    mov     rax, [rel exec_stack_len]
-    test    rax, rax
-    jz      .fast_underflow
-    dec     rax
-    mov     [rel exec_stack_len], rax
-    mov     eax, [rel exec_stack + rax * 8]
+    call    .fast_pop_tos_i32
+    jc      .fast_underflow
     imul    eax, r12d
     add     eax, r13d
     mov     [rel exec_locals + r14 * 8], rax
-    mov     edx, eax
+    mov     edi, eax
     mov     ecx, r15d
-    shr     edx, cl
-    xor     eax, edx
-    mov     rcx, [rel exec_stack_len]
-    cmp     rcx, MAX_STACK
-    jae     .fast_overflow
-    mov     [rel exec_stack + rcx * 8], rax
-    inc     qword [rel exec_stack_len]
+    shr     edi, cl
+    xor     eax, edi
+    mov     ebx, eax
+    mov     edx, 1
     add     r8, 8
     jmp     .fast_loop
 
 .fast_i32_const:
     movsxd  rax, dword [r11 + 12]
-    jmp     .fast_push_rax
+    jmp     .fast_push_tos
 
 .fast_local_get:
     mov     ecx, [r11 + 12]
     cmp     rcx, [rel exec_local_count]
     jae     .fast_corrupt
     mov     rax, [rel exec_locals + rcx * 8]
-    jmp     .fast_push_rax
+    jmp     .fast_push_tos
 
 .fast_local_set:
     mov     ecx, [r11 + 12]
     cmp     rcx, [rel exec_local_count]
     jae     .fast_corrupt
-    mov     rax, [rel exec_stack_len]
-    test    rax, rax
-    jz      .fast_underflow
-    dec     rax
-    mov     [rel exec_stack_len], rax
-    mov     rax, [rel exec_stack + rax * 8]
+    call    .fast_pop_tos_qword
+    jc      .fast_underflow
     mov     [rel exec_locals + rcx * 8], rax
     jmp     .fast_loop
 
@@ -192,11 +183,8 @@ exec_decoded_fast_loop:
     mov     ecx, [r11 + 12]
     cmp     rcx, [rel exec_local_count]
     jae     .fast_corrupt
-    mov     rax, [rel exec_stack_len]
-    test    rax, rax
-    jz      .fast_underflow
-    dec     rax
-    mov     rax, [rel exec_stack + rax * 8]
+    call    .fast_peek_tos_qword
+    jc      .fast_underflow
     mov     [rel exec_locals + rcx * 8], rax
     jmp     .fast_loop
 
@@ -204,27 +192,40 @@ exec_decoded_fast_loop:
     call    .fast_pop_two_i32
     jc      .fast_underflow
     add     eax, ecx
-    jmp     .fast_push_rax
+    jmp     .fast_push_tos
 
 .fast_i32_mul:
     call    .fast_pop_two_i32
     jc      .fast_underflow
     imul    eax, ecx
-    jmp     .fast_push_rax
+    jmp     .fast_push_tos
 
 .fast_i32_xor:
     call    .fast_pop_two_i32
     jc      .fast_underflow
     xor     eax, ecx
-    jmp     .fast_push_rax
+    jmp     .fast_push_tos
 
 .fast_i32_shr_u:
     call    .fast_pop_two_i32
     jc      .fast_underflow
     shr     eax, cl
-    jmp     .fast_push_rax
+    jmp     .fast_push_tos
 
 .fast_pop_two_i32:
+    test    edx, edx
+    jz      .pop_two_from_stack
+    mov     rax, [rel exec_stack_len]
+    test    rax, rax
+    jz      .pop_two_underflow
+    dec     rax
+    mov     [rel exec_stack_len], rax
+    mov     ecx, ebx
+    mov     eax, [rel exec_stack + rax * 8]
+    xor     edx, edx
+    clc
+    ret
+.pop_two_from_stack:
     mov     rax, [rel exec_stack_len]
     cmp     rax, 2
     jb      .pop_two_underflow
@@ -238,12 +239,56 @@ exec_decoded_fast_loop:
     stc
     ret
 
-.fast_push_rax:
+.fast_pop_tos_qword:
+    test    edx, edx
+    jz      .pop_tos_stack
+    mov     rax, rbx
+    xor     edx, edx
+    clc
+    ret
+.pop_tos_stack:
+    mov     rax, [rel exec_stack_len]
+    test    rax, rax
+    jz      .pop_tos_underflow
+    dec     rax
+    mov     [rel exec_stack_len], rax
+    mov     rax, [rel exec_stack + rax * 8]
+    clc
+    ret
+.pop_tos_underflow:
+    stc
+    ret
+
+.fast_pop_tos_i32:
+    call    .fast_pop_tos_qword
+    ret
+
+.fast_peek_tos_qword:
+    test    edx, edx
+    jz      .peek_tos_stack
+    mov     rax, rbx
+    clc
+    ret
+.peek_tos_stack:
+    mov     rax, [rel exec_stack_len]
+    test    rax, rax
+    jz      .pop_tos_underflow
+    dec     rax
+    mov     rax, [rel exec_stack + rax * 8]
+    clc
+    ret
+
+.fast_push_tos:
+    test    edx, edx
+    jz      .store_tos
     mov     rcx, [rel exec_stack_len]
     cmp     rcx, MAX_STACK
     jae     .fast_overflow
-    mov     [rel exec_stack + rcx * 8], rax
+    mov     [rel exec_stack + rcx * 8], rbx
     inc     qword [rel exec_stack_len]
+.store_tos:
+    mov     rbx, rax
+    mov     edx, 1
     jmp     .fast_loop
 
 .fast_return:
@@ -252,12 +297,8 @@ exec_decoded_fast_loop:
     jz      .fast_ok
     cmp     rcx, 1
     jne     .fast_unsupported
-    mov     rax, [rel exec_stack_len]
-    test    rax, rax
-    jz      .fast_underflow
-    dec     rax
-    mov     [rel exec_stack_len], rax
-    mov     rax, [rel exec_stack + rax * 8]
+    call    .fast_pop_tos_qword
+    jc      .fast_underflow
     mov     [rel exec_result_values], rax
 .fast_ok:
     er_ok
@@ -274,6 +315,7 @@ exec_decoded_fast_loop:
 .fast_unsupported:
     er_err  ERROR_UNSUPPORTED
 .fast_done:
+    pop     rbx
     pop     rbp
     ret
 

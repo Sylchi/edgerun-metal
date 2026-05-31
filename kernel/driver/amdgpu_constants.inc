@@ -93,6 +93,19 @@
 %define AMDGPU_FB_PITCH             (AMDGPU_FB_WIDTH * 4)
 %define AMDGPU_FB_SIZE              (AMDGPU_FB_PITCH * AMDGPU_FB_HEIGHT)
 
+; ─── DCN timing plan structure offsets ─────────────────────────────
+%define AMDGPU_TIMING_H_TOTAL              0
+%define AMDGPU_TIMING_H_SYNC_START         4
+%define AMDGPU_TIMING_H_SYNC_END           8
+%define AMDGPU_TIMING_H_BLANK_START        12
+%define AMDGPU_TIMING_H_BLANK_END          16
+%define AMDGPU_TIMING_V_TOTAL              20
+%define AMDGPU_TIMING_V_SYNC_START         24
+%define AMDGPU_TIMING_V_SYNC_END           28
+%define AMDGPU_TIMING_V_BLANK_START        32
+%define AMDGPU_TIMING_V_BLANK_END          36
+%define AMDGPU_TIMING_SIZE                 40
+
 ; ─── AMDGPU driver error codes ────────────────────────────────────
 %define AMDGPU_ERR_NOT_FOUND        30
 %define AMDGPU_ERR_BAR_INVALID      31

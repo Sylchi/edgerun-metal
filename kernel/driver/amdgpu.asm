@@ -38,6 +38,9 @@ str_pg:        db " pg ", 0
 str_clk:       db " clk ", 0
 str_otg:       db " otg ", 0
 str_hubp:      db " hubp ", 0
+amdgpu_timing_1080p60:
+    dd 2200, 1968, 2000, 1920, 128
+    dd 1125, 1083, 1088, 1080, 4
 
 SECTION .text
 
@@ -481,9 +484,9 @@ er_fn er_amdgpu_dcn_init
     call    _write_test_pattern
 
     ; ─── Step 9: Basic OTG0 timing ───
-    ; Set up 1920x1080@60 timing on OTG0
     mov     rdi, r12
-    call    _setup_otg0
+    lea     rsi, [rel amdgpu_timing_1080p60]
+    call    er_amdgpu_program_otg0_timing
 
 .no_fb:
     xor     eax, eax
@@ -495,63 +498,73 @@ er_fn er_amdgpu_dcn_init
     ret
 
 ; ==================================================================
-; _setup_otg0 — configure OTG0 for 1920x1080@60
-; rdi = bar0
-;
-; Timing parameters for 1920x1080@60 (CVT-RB):
-;   H_total = 2200, H_blank_start = 1920, H_blank_end = 128
-;   H_sync_start = 1920 + 48 = 1968, H_sync_end = 1968 + 32 = 2000
-;   V_total = 1125, V_blank_start = 1080, V_blank_end = 4
-;   V_sync_start = 1080 + 3 = 1083, V_sync_end = 1083 + 5 = 1088
+; er_amdgpu_program_otg0_timing — program OTG0 from timing struct
+; int er_amdgpu_program_otg0_timing(uint64_t bar0, const uint32_t* timing)
 ; ==================================================================
-_setup_otg0:
+er_fn er_amdgpu_program_otg0_timing
     push    r12
     push    r13
+    test    rdi, rdi
+    jz      .bad_arg
+    test    rsi, rsi
+    jz      .bad_arg
     mov     r12, rdi            ; bar0
-    mov     r13, rdi
+    mov     r13, rsi            ; timing
 
     ; Set V_TOTAL
     mov     rdi, r12
     mov     esi, DCN_OTG0_V_TOTAL
-    mov     edx, 1124           ; V_TOTAL = 1125 - 1
+    mov     edx, [r13 + AMDGPU_TIMING_V_TOTAL]
+    dec     edx
     call    _mmio_write
 
     ; Set H_TOTAL
     mov     rdi, r12
     mov     esi, DCN_OTG0_H_TOTAL
-    mov     edx, 2199           ; H_TOTAL = 2200 - 1
+    mov     edx, [r13 + AMDGPU_TIMING_H_TOTAL]
+    dec     edx
     call    _mmio_write
 
-    ; Set H_SYNC_A (start = h_sync_start, end = h_sync_end - 1)
-    ; h_sync_start = 1968, h_sync_end = 2000
-    ; register value: (end-1) << 16 | start
-    ; But the register fields: H_SYNC_A_START and H_SYNC_A_END
-    ; Start in lower 16 bits, end in upper 16 bits
-    mov     edx, 1968           ; start = 1968
-    or      edx, (2000 - 1) << 16    ; end = 1999
+    ; Set H_SYNC_A: bits 15:0 = start, bits 31:16 = end - 1.
+    mov     edx, [r13 + AMDGPU_TIMING_H_SYNC_END]
+    dec     edx
+    shl     edx, 16
+    mov     eax, [r13 + AMDGPU_TIMING_H_SYNC_START]
+    and     eax, 0xffff
+    or      edx, eax
     mov     rdi, r12
     mov     esi, DCN_OTG0_H_SYNC_A
     call    _mmio_write
 
     ; Set V_SYNC_A
-    mov     edx, 1083           ; start = 1083
-    or      edx, (1088 - 1) << 16    ; end = 1087
+    mov     edx, [r13 + AMDGPU_TIMING_V_SYNC_END]
+    dec     edx
+    shl     edx, 16
+    mov     eax, [r13 + AMDGPU_TIMING_V_SYNC_START]
+    and     eax, 0xffff
+    or      edx, eax
     mov     rdi, r12
     mov     esi, DCN_OTG0_V_SYNC_A
     call    _mmio_write
 
     ; Set H_BLANK_START_END
-    ; start = blank_end = 128, end = blank_start - 1 = 1919
-    mov     edx, 128
-    or      edx, (1920 - 1) << 16     ; end = 1919
+    mov     edx, [r13 + AMDGPU_TIMING_H_BLANK_START]
+    dec     edx
+    shl     edx, 16
+    mov     eax, [r13 + AMDGPU_TIMING_H_BLANK_END]
+    and     eax, 0xffff
+    or      edx, eax
     mov     rdi, r12
     mov     esi, DCN_OTG0_H_BLANK_START_END
     call    _mmio_write
 
     ; Set V_BLANK_START_END
-    ; start = blank_end = 4, end = blank_start - 1 = 1079
-    mov     edx, 4
-    or      edx, (1080 - 1) << 16     ; end = 1079
+    mov     edx, [r13 + AMDGPU_TIMING_V_BLANK_START]
+    dec     edx
+    shl     edx, 16
+    mov     eax, [r13 + AMDGPU_TIMING_V_BLANK_END]
+    and     eax, 0xffff
+    or      edx, eax
     mov     rdi, r12
     mov     esi, DCN_OTG0_V_BLANK_START_END
     call    _mmio_write
@@ -568,6 +581,15 @@ _setup_otg0:
     mov     edx, 1
     call    _mmio_write
 
+    xor     eax, eax
+    er_ok
+    pop     r13
+    pop     r12
+    ret
+
+.bad_arg:
+    er_err  ERROR_BAD_ARGUMENT
+    mov     eax, -1
     pop     r13
     pop     r12
     ret
