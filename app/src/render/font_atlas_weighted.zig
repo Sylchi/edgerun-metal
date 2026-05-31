@@ -2,13 +2,11 @@ const std = @import("std");
 const font_builtin = @import("font.zig");
 const font_vector = @import("font.zig");
 const raster = @import("vector_raster.zig");
-const varfont = @import("varfont.zig");
 
 pub const width: usize = font_builtin.atlas_width;
 pub const height: usize = font_builtin.atlas_height;
 pub const bytes: usize = width * height;
 pub const channels: usize = 1;
-pub const format: varfont.AtlasFormat = .alpha8;
 
 pub const Error = error{
     Budget,
@@ -162,12 +160,12 @@ pub const Atlas = struct {
         return null;
     }
 
-    fn ensureGlyph(self: *Atlas, weight: font_builtin.Weight, cp: u21, px: u8) varfont.Error!Glyph {
+    fn ensureGlyph(self: *Atlas, weight: font_builtin.Weight, cp: u21, px: u8) (raster.Error || error{ GlyphCacheFull, UnsupportedGlyph })!Glyph {
         if (self.lookupGlyph(weight, cp, px)) |found| return found;
         return self.cacheGlyph(weight, cp, px);
     }
 
-    fn cacheGlyph(self: *Atlas, weight: font_builtin.Weight, cp: u21, px: u8) varfont.Error!Glyph {
+    fn cacheGlyph(self: *Atlas, weight: font_builtin.Weight, cp: u21, px: u8) (raster.Error || error{ GlyphCacheFull, UnsupportedGlyph })!Glyph {
         if (self.glyph_count >= self.glyphs.len) return error.GlyphCacheFull;
         const font = self.body(weight);
         const info = font.glyphForCodepoint(cp) orelse return error.UnsupportedGlyph;

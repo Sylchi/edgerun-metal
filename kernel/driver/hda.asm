@@ -10,6 +10,10 @@ extern er_pci_read32
 extern er_pci_write32
 extern er_mmio_read32
 extern er_mmio_write32
+extern er_mmio_read16
+extern er_mmio_write16
+extern er_mmio_read8
+extern er_mmio_write8
 
 %define HDA_CLASS       0x04
 %define HDA_SUBCLASS    0x03
@@ -41,6 +45,7 @@ extern er_mmio_write32
 %define HDA_SD_CTL_SRST 0x00000001
 %define HDA_SD_CTL_STREAM_TAG_SHIFT 20
 %define HDA_SD_STS_CLEAR 0x1C
+%define HDA_SD_LPIB 0x04
 %define HDA_SD_CBL 0x08
 %define HDA_SD_LVI 0x0C
 %define HDA_SD_FMT 0x12
@@ -55,6 +60,7 @@ hda_bdl:          resb 16
 align 128
 hda_tone_buffer:  resb HDA_TONE_BYTES
 hda_verb_sink:    resd 1
+hda_last_sd_base: resd 1
 
 SECTION .text
 
@@ -605,15 +611,16 @@ er_fn er_hda_start_square_wave
     add     eax, HDA_REG_SD_BASE
     add     eax, r12d
     mov     r14d, eax
+    mov     [rel hda_last_sd_base], eax
 
     ; Reset stream descriptor.
     mov     edi, r14d
     mov     esi, HDA_SD_CTL_SRST
-    call    er_mmio_write32
+    call    er_mmio_write8
     mov     ecx, 200000
 .sq_wait_srst:
     mov     edi, r14d
-    call    er_mmio_read32
+    call    er_mmio_read8
     test    eax, HDA_SD_CTL_SRST
     jnz     .sq_srst_set
     dec     ecx
@@ -622,11 +629,11 @@ er_fn er_hda_start_square_wave
 .sq_srst_set:
     mov     edi, r14d
     xor     esi, esi
-    call    er_mmio_write32
+    call    er_mmio_write8
     mov     ecx, 200000
 .sq_wait_clear:
     mov     edi, r14d
-    call    er_mmio_read32
+    call    er_mmio_read8
     test    eax, HDA_SD_CTL_SRST
     jz      .sq_ready
     dec     ecx
@@ -635,7 +642,8 @@ er_fn er_hda_start_square_wave
 .sq_ready:
     mov     edi, r14d
     add     edi, 0x03
-    mov     byte [rdi], HDA_SD_STS_CLEAR
+    mov     esi, HDA_SD_STS_CLEAR
+    call    er_mmio_write8
     mov     edi, r14d
     add     edi, HDA_SD_CBL
     mov     esi, HDA_TONE_BYTES
@@ -643,11 +651,11 @@ er_fn er_hda_start_square_wave
     mov     edi, r14d
     add     edi, HDA_SD_LVI
     xor     esi, esi
-    call    er_mmio_write32
+    call    er_mmio_write16
     mov     edi, r14d
     add     edi, HDA_SD_FMT
     mov     esi, HDA_FORMAT_PCM_48K_16_STEREO
-    call    er_mmio_write32
+    call    er_mmio_write16
     lea     rax, [rel hda_bdl]
     mov     edi, r14d
     add     edi, HDA_SD_BDPL
@@ -660,8 +668,21 @@ er_fn er_hda_start_square_wave
     mov     esi, eax
     call    er_mmio_write32
     mov     edi, r14d
-    mov     esi, HDA_SD_CTL_RUN | (HDA_STREAM_TAG << HDA_SD_CTL_STREAM_TAG_SHIFT)
-    call    er_mmio_write32
+    mov     esi, HDA_SD_CTL_RUN
+    call    er_mmio_write8
+    mov     edi, r14d
+    add     edi, 0x02
+    mov     esi, HDA_STREAM_TAG << 4
+    call    er_mmio_write8
+    mov     edi, r14d
+    call    er_mmio_read32
+    test    eax, HDA_SD_CTL_RUN
+    jz      .sq_timeout
+    mov     edi, r14d
+    add     edi, HDA_SD_CBL
+    call    er_mmio_read32
+    cmp     eax, HDA_TONE_BYTES
+    jne     .sq_timeout
     xor     eax, eax
     er_ok
     jmp     .sq_out

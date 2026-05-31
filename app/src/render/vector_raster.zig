@@ -1,7 +1,14 @@
 const std = @import("std");
 const math = @import("../math.zig");
 const font_vector = @import("font.zig");
-const varfont = @import("varfont.zig");
+
+pub const Error = error{
+    InvalidFont,
+    GlyphEdgeBudgetExceeded,
+    GlyphBitmapBudgetExceeded,
+};
+
+const max_edges: usize = 2048;
 
 pub const Point = struct { x: f32, y: f32 };
 const Edge = struct { a: Point, b: Point };
@@ -29,8 +36,8 @@ pub fn bakeAlpha(
     glyph_commands: []const font_vector.Command,
     scale: f32,
     px: u8,
-) varfont.Error!GlyphBitmap {
-    var edges: [varfont.max_edges]Edge = undefined;
+) Error!GlyphBitmap {
+    var edges: [max_edges]Edge = undefined;
     const edge_count = try flatten(glyph_commands, scale, &edges);
     const b = edgeBounds(edges[0..edge_count]) orelse return .{ .width = 0, .height = 0, .left = 0, .top = 0 };
     const left = @as(i16, @intFromFloat(@floor(b.x_min))) - padding_pixels;
@@ -46,7 +53,7 @@ pub fn bakeAlpha(
     return .{ .width = w, .height = h, .left = left, .top = top };
 }
 
-fn flatten(commands: []const font_vector.Command, scale: f32, edges: *[varfont.max_edges]Edge) varfont.Error!usize {
+fn flatten(commands: []const font_vector.Command, scale: f32, edges: *[max_edges]Edge) Error!usize {
     var n: usize = 0;
     var current = Point{ .x = 0, .y = 0 };
     var contour_start = current;
@@ -84,7 +91,7 @@ fn transform(p: font_vector.Point, scale: f32) Point {
     return .{ .x = p.x * scale, .y = -p.y * scale };
 }
 
-fn appendQuadratic(edges: *[varfont.max_edges]Edge, start_count: usize, p0: Point, p1: Point, p2: Point) varfont.Error!usize {
+fn appendQuadratic(edges: *[max_edges]Edge, start_count: usize, p0: Point, p1: Point, p2: Point) Error!usize {
     var count = start_count;
     var prev = p0;
     var step: usize = 1;
@@ -101,8 +108,8 @@ fn appendQuadratic(edges: *[varfont.max_edges]Edge, start_count: usize, p0: Poin
     return count;
 }
 
-fn appendEdge(edges: *[varfont.max_edges]Edge, count: usize, a: Point, b: Point) varfont.Error!usize {
-    if (count >= varfont.max_edges) return error.GlyphEdgeBudgetExceeded;
+fn appendEdge(edges: *[max_edges]Edge, count: usize, a: Point, b: Point) Error!usize {
+    if (count >= max_edges) return error.GlyphEdgeBudgetExceeded;
     if (a.x == b.x and a.y == b.y) return count;
     edges[count] = .{ .a = a, .b = b };
     return count + 1;
@@ -128,7 +135,7 @@ fn include(b: *Bounds, p: Point) void {
 fn fillAlpha(alpha: []u8, stride: usize, w: usize, h: usize, left_i: i16, top_i: i16, edges: []const Edge) void {
     const sample_count = raster_samples * raster_samples;
     const right_f = @as(f32, @floatFromInt(left_i)) + @as(f32, @floatFromInt(w));
-    var hits: [varfont.max_edges]Hit = undefined;
+    var hits: [max_edges]Hit = undefined;
     var y: usize = 0;
     while (y < h) : (y += 1) {
         const row = alpha[y * stride .. y * stride + w];
@@ -149,7 +156,7 @@ fn fillAlpha(alpha: []u8, stride: usize, w: usize, h: usize, left_i: i16, top_i:
     }
 }
 
-fn sortedHits(y: f32, edges: []const Edge, hits: *[varfont.max_edges]Hit) usize {
+fn sortedHits(y: f32, edges: []const Edge, hits: *[max_edges]Hit) usize {
     var count: usize = 0;
     for (edges) |e| {
         if (e.a.y <= y) {
@@ -165,7 +172,7 @@ fn xAtY(e: Edge, y: f32) f32 {
     return e.a.x + ((y - e.a.y) * (e.b.x - e.a.x)) / (e.b.y - e.a.y);
 }
 
-fn insertHit(hits: *[varfont.max_edges]Hit, count: *usize, hit: Hit) void {
+fn insertHit(hits: *[max_edges]Hit, count: *usize, hit: Hit) void {
     var i = count.*;
     while (i > 0 and hits[i - 1].x > hit.x) : (i -= 1) hits[i] = hits[i - 1];
     hits[i] = hit;

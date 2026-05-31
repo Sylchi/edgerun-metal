@@ -2,11 +2,7 @@ const std = @import("std");
 const bytes = @import("../bytes.zig");
 const clock = @import("../clock.zig");
 const object = @import("../object.zig");
-const varfont = @import("varfont.zig");
 
-pub const default_weight: f32 = 400.0;
-
-pub const max_commands = varfont.max_contour_points;
 pub const body_magic = "ERFNTV3\n".*;
 pub const header_size: usize = 48;
 pub const glyph_record_size: usize = 20;
@@ -14,13 +10,6 @@ pub const kern_record_size: usize = 12;
 pub const command_record_size: usize = 20;
 
 pub const Error = error{ Corrupt, UnsupportedObject };
-
-pub const CompileError = varfont.Error || error{
-    DuplicateCodepoint,
-    GlyphCommandBudgetExceeded,
-    GlyphRecordBudgetExceeded,
-    KernRecordBudgetExceeded,
-};
 
 const op_move_to: u32 = 1;
 const op_line_to: u32 = 2;
@@ -75,105 +64,6 @@ pub const Body = struct {
         return 0;
     }
 };
-
-pub const FixedFace = struct {
-    face: varfont.Face,
-    axis_values: [varfont.max_axes]f32,
-
-    pub fn geistDefault() varfont.Error!FixedFace {
-        const face = try varfont.Face.geist();
-        return .{ .face = face, .axis_values = face.fixedAxisValues("wght", default_weight) };
-    }
-
-    pub fn metrics(self: FixedFace) Metrics {
-        const value = self.face.metrics(@floatFromInt(self.face.units_per_em));
-        return .{ .units_per_em = value.units_per_em, .ascender = value.ascender, .descender = value.descender, .line_gap = value.line_gap, .y_min = value.y_min, .y_max = value.y_max };
-    }
-
-    pub fn glyphId(self: FixedFace, codepoint: u21) u16 {
-        return self.face.glyphId(codepoint);
-    }
-    pub fn advance(self: FixedFace, glyph_id: u16, px_size: f32) f32 {
-        return self.face.advance(glyph_id, px_size);
-    }
-    pub fn kern(self: FixedFace, left: u16, right: u16, px_size: f32) f32 {
-        return self.face.kern(left, right, px_size);
-    }
-
-    pub fn glyphPath(self: FixedFace, glyph_id: u16, out: []Command) varfont.Error![]const Command {
-        var points: [varfont.max_points]varfont.Point = undefined;
-        var contour_ends: [varfont.max_contours]u16 = undefined;
-        const outline = try self.face.outline(glyph_id, self.axis_values, &points, &contour_ends);
-        return emitGlyphPath(points[0..outline.points], contour_ends[0..outline.contours], out);
-    }
-};
-
-pub const Counts = struct { glyphs: usize, kerns: usize, commands: usize };
-
-pub fn countCodepoints(face: FixedFace, codepoints: []const u21) CompileError!Counts {
-    const metrics = face.metrics();
-    const design_size: f32 = @floatFromInt(metrics.units_per_em);
-    var tmp: [max_commands]Command = undefined;
-    var commands: usize = 0;
-    var kerns: usize = 0;
-
-    for (codepoints, 0..) |codepoint, i| {
-        if (containsCodepoint(codepoints[0..i], codepoint)) return error.DuplicateCodepoint;
-        const path = try face.glyphPath(face.glyphId(codepoint), &tmp);
-        commands += path.len;
-    }
-
-    for (codepoints) |left_cp| {
-        const left_id = face.glyphId(left_cp);
-        for (codepoints) |right_cp| {
-            const right_id = face.glyphId(right_cp);
-            if (face.kern(left_id, right_id, design_size) != 0) kerns += 1;
-        }
-    }
-
-    return .{ .glyphs = codepoints.len, .kerns = kerns, .commands = commands };
-}
-
-pub fn compileCodepoints(face: FixedFace, codepoints: []const u21, glyphs_out: []GlyphRecord, kerns_out: []KernRecord, commands_out: []Command) CompileError!Body {
-    if (codepoints.len > glyphs_out.len) return error.GlyphRecordBudgetExceeded;
-    const metrics = face.metrics();
-    const design_size: f32 = @floatFromInt(metrics.units_per_em);
-    var command_count: usize = 0;
-
-    for (codepoints, 0..) |codepoint, glyph_index| {
-        if (containsCodepoint(codepoints[0..glyph_index], codepoint)) return error.DuplicateCodepoint;
-        const glyph_id = face.glyphId(codepoint);
-        const path = try face.glyphPath(glyph_id, commands_out[command_count..]);
-        const start = command_count;
-        command_count += path.len;
-        glyphs_out[glyph_index] = .{ .codepoint = codepoint, .glyph_id = glyph_id, .command_offset = @intCast(start), .command_count = @intCast(path.len), .advance = face.advance(glyph_id, design_size) };
-    }
-
-    var kern_count: usize = 0;
-    for (glyphs_out[0..codepoints.len]) |left| {
-        for (glyphs_out[0..codepoints.len]) |right| {
-            const adjust = face.kern(left.glyph_id, right.glyph_id, design_size);
-            if (adjust == 0) continue;
-            if (kern_count >= kerns_out.len) return error.KernRecordBudgetExceeded;
-            kerns_out[kern_count] = .{ .left_codepoint = left.codepoint, .right_codepoint = right.codepoint, .advance_adjust = adjust };
-            kern_count += 1;
-        }
-    }
-
-    return .{ .metrics = metrics, .glyphs = glyphs_out[0..codepoints.len], .kerns = kerns_out[0..kern_count], .commands = commands_out[0..command_count] };
-}
-
-pub fn emitGlyphPath(points: []const varfont.Point, contour_ends: []const u16, out: []Command) varfont.Error![]const Command {
-    var count: usize = 0;
-    var start: usize = 0;
-    for (contour_ends) |end_u16| {
-        const end = @as(usize, end_u16);
-        if (end >= points.len or end < start) return error.InvalidFont;
-        try emitContour(points[start .. end + 1], out, &count);
-        start = end + 1;
-    }
-    return out[0..count];
-}
 
 pub fn serializedLen(glyph_count: usize, kern_count: usize, command_count: usize) ?usize {
     const glyph_bytes = std.math.mul(usize, glyph_count, glyph_record_size) catch return null;
@@ -357,50 +247,6 @@ fn decodeCommandRecord(in: []const u8) ?Command {
         op_close => if (bytes.zeroed(in[4..20])) .close else null,
         else => null,
     };
-}
-
-fn containsCodepoint(haystack: []const u21, needle: u21) bool {
-    for (haystack) |value| if (value == needle) return true;
-    return false;
-}
-
-fn emitContour(raw: []const varfont.Point, out: []Command, count: *usize) varfont.Error!void {
-    if (raw.len == 0) return error.InvalidFont;
-    const start = contourStart(raw);
-    try appendCommand(out, count, .{ .move_to = point(start) });
-    var i: usize = if (raw[0].on_curve) 1 else 0;
-    while (i < raw.len) {
-        const p = raw[i];
-        if (p.on_curve) {
-            try appendCommand(out, count, .{ .line_to = point(p) });
-            i += 1;
-            continue;
-        }
-        const next = raw[(i + 1) % raw.len];
-        const end = if (next.on_curve) next else midpoint(p, next);
-        try appendCommand(out, count, .{ .quad_to = .{ .control = point(p), .end = point(end) } });
-        i += if (next.on_curve) 2 else 1;
-    }
-    try appendCommand(out, count, .close);
-}
-
-fn contourStart(raw: []const varfont.Point) varfont.Point {
-    if (raw[0].on_curve) return raw[0];
-    if (raw[raw.len - 1].on_curve) return raw[raw.len - 1];
-    return midpoint(raw[raw.len - 1], raw[0]);
-}
-
-fn appendCommand(out: []Command, count: *usize, command: Command) varfont.Error!void {
-    if (count.* >= out.len) return error.GlyphPointBudgetExceeded;
-    out[count.*] = command;
-    count.* += 1;
-}
-
-fn point(value: varfont.Point) Point {
-    return .{ .x = value.x, .y = value.y };
-}
-fn midpoint(a: varfont.Point, b: varfont.Point) varfont.Point {
-    return .{ .x = (a.x + b.x) * 0.5, .y = (a.y + b.y) * 0.5, .on_curve = true };
 }
 
 test "font vector body round trips widened counts" {

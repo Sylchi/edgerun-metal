@@ -41,11 +41,43 @@ er_fn er_mmio_read32
     ret
 
 ; ==================================================================
+; er_mmio_read16 — read 16-bit from MMIO address
+; uint32_t er_mmio_read16(uint64_t addr)
+; ==================================================================
+er_fn er_mmio_read16
+    movzx   eax, word [rdi]
+    ret
+
+; ==================================================================
+; er_mmio_read8 — read 8-bit from MMIO address
+; uint32_t er_mmio_read8(uint64_t addr)
+; ==================================================================
+er_fn er_mmio_read8
+    movzx   eax, byte [rdi]
+    ret
+
+; ==================================================================
 ; er_mmio_write32 — write 32-bit to MMIO address
 ; void er_mmio_write32(uint64_t addr, uint32_t value)
 ; ==================================================================
 er_fn er_mmio_write32
     mov     [rdi], esi
+    ret
+
+; ==================================================================
+; er_mmio_write16 — write 16-bit to MMIO address
+; void er_mmio_write16(uint64_t addr, uint32_t value)
+; ==================================================================
+er_fn er_mmio_write16
+    mov     [rdi], si
+    ret
+
+; ==================================================================
+; er_mmio_write8 — write 8-bit to MMIO address
+; void er_mmio_write8(uint64_t addr, uint32_t value)
+; ==================================================================
+er_fn er_mmio_write8
+    mov     [rdi], sil
     ret
 
 ; ==================================================================
