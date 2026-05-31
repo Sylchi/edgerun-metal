@@ -114,9 +114,10 @@ fn renderFrame(scene: *ui.Scene, bounds: ui.Rect, variant: common.SurfaceVariant
         .panel, .elevated => options.style.panel,
         .subtle => options.style.row,
     };
-    try scene.pushRect(bounds, fill_color, .fill, frame_radius, 0.0);
+    try scene.pushGradientRect(bounds, fill_color, card_floor, frame_radius);
     if (variant == .elevated) {
         try scene.pushGradientRect(bounds.insetUniform(1.0), card_highlight, ui.Color.clear, frame_radius);
+        try scene.pushRect(bounds.insetLtrb(1.0, 1.0, 1.0, bounds.h - card_rim_height), card_rim, .fill, frame_radius, 0.0);
     }
     try scene.pushRect(bounds, options.style.border, .border, frame_radius, 0.0);
 }
@@ -162,7 +163,10 @@ const surface_elevated_radius_extra: f32 = 0.0;
 const surface_shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 112 };
 const surface_shadow_size: f32 = 14.0;
 const surface_shadow_inset: f32 = 1.0;
-const card_highlight = ui.Color{ .r = 255, .g = 255, .b = 255, .a = 12 };
+const card_highlight = ui.Color{ .r = 255, .g = 255, .b = 255, .a = 18 };
+const card_floor = ui.Color{ .r = 10, .g = 12, .b = 16, .a = 44 };
+const card_rim = ui.Color{ .r = 255, .g = 255, .b = 255, .a = 18 };
+const card_rim_height: f32 = 1.0;
 const surface_title_average_w: f32 = 8.5;
 const surface_title_max_lines: usize = 2;
 const surface_detail_average_w: f32 = 8.0;

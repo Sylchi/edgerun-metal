@@ -31,7 +31,9 @@ pub const Switch = struct {
 
     pub fn render(self: Switch, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         const pill = ui.Rect.init(bounds.x + bounds.w - switch_width, bounds.y + (bounds.h - switch_height) * 0.5, switch_width, switch_height);
-        try scene.pushRect(pill, if (self.checked) options.style.accent else options.style.row, .fill, switch_height * 0.5, 0.0);
+        const fill = if (self.checked) options.style.accent else options.style.row;
+        try scene.pushRect(pill.insetUniform(-switch_shadow_inset), switch_shadow, .shadow, switch_height * 0.5, switch_shadow_size);
+        try scene.pushGradientRect(pill, fill, switch_floor, switch_height * 0.5);
         try scene.pushRect(pill, options.style.border, .border, switch_height * 0.5, 0.0);
         const knob_x = if (self.checked) pill.x + pill.w - switch_knob_size - switch_knob_inset else pill.x + switch_knob_inset;
         const knob = ui.Rect.init(knob_x, pill.y + switch_knob_inset, switch_knob_size, switch_knob_size);
@@ -88,6 +90,10 @@ const switch_label_height: f32 = component_primitives.control_label_height;
 const switch_label_max_lines: usize = 2;
 const switch_min_width: f32 = 112.0;
 const switch_knob_shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 88 };
+const switch_shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 64 };
+const switch_floor = ui.Color{ .r = 6, .g = 8, .b = 11, .a = 54 };
+const switch_shadow_inset: f32 = 1.0;
+const switch_shadow_size: f32 = 4.0;
 
 test "switch component serializes to canonical object and deserializes" {
     const switch_control = Switch{ .id = 12, .label = "Public", .checked = false };

@@ -81,12 +81,14 @@ pub const Slider = struct {
 
 fn renderTrack(scene: *ui.Scene, track: ui.Rect, value: f32, options: RenderOptions) ui.RenderError!void {
     if (track.w <= 0.0 or track.h <= 0.0) return;
-    try scene.pushRect(track, options.style.row, .fill, slider_track_height * 0.5, 0.0);
+    try scene.pushRect(track.insetUniform(-slider_track_shadow_inset), slider_track_shadow, .shadow, slider_track_height * 0.5, slider_track_shadow_size);
+    try scene.pushGradientRect(track, options.style.row, slider_track_floor, slider_track_height * 0.5);
     try scene.pushRect(track, options.style.border, .border, slider_track_height * 0.5, 0.0);
     const clamped = ui.clampUnit(value);
     if (clamped <= 0.0) return;
     const fill_width = @min(track.w, @max(0.0, track.w * clamped));
-    try scene.pushRect(ui.Rect.init(track.x, track.y, fill_width, track.h), options.style.accent, .fill, slider_track_height * 0.5, 0.0);
+    const fill = ui.Rect.init(track.x, track.y, fill_width, track.h);
+    try scene.pushRect(fill, options.style.accent, .fill, slider_track_height * 0.5, 0.0);
 }
 
 const slider_label_height: f32 = 14.0;
@@ -97,6 +99,10 @@ pub const slider_thumb_size: f32 = 18.0;
 const slider_thumb_shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 104 };
 const slider_thumb_shadow_inset: f32 = 1.0;
 const slider_thumb_shadow_size: f32 = 6.0;
+const slider_track_shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 88 };
+const slider_track_floor = ui.Color{ .r = 5, .g = 7, .b = 10, .a = 80 };
+const slider_track_shadow_inset: f32 = 1.0;
+const slider_track_shadow_size: f32 = 3.0;
 const slider_min_width: f32 = 120.0;
 const slider_min_height: f32 = 32.0;
 

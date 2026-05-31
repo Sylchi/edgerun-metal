@@ -33,11 +33,12 @@ This means only the last of every 64 writes survives.
 
 Fixed to use `head & 63` (correct modulo) while optimizing away the `div`.
 
-### 4. Future: WASM JIT Compiler as Default
+### 4. Future: WASM JIT As Default
 
-The self-hosted WASM→x86_64 compiler (`wasm_compiler*.asm`, 92K) already exists.
-Making it the default execution path (instead of the interpreter) gives 10-50×
-speedup on compute-heavy workloads.
+The self-hosted WASM JIT already exists. The source-to-WASM compiler is now
+starting as host-side ASM emitter primitives under `kernel/x86_64/wasm/`.
+Making JIT execution the default after validation gives 10-50x speedup on
+compute-heavy workloads.
 
 ## Consolidation Opportunities
 

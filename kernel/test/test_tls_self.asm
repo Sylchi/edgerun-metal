@@ -15,6 +15,9 @@ extern er_tls_transcript_hash_ch_sh
 extern er_tls_derive_handshake_secrets
 extern er_tls_aes128_gcm_encrypt
 extern er_tls_aes128_gcm_decrypt
+extern er_tls_record_encrypt
+extern er_tls_record_decrypt
+extern er_tls_server_hs_record_decrypt
 extern er_tls_send
 extern er_tor_aes_ctr
 
@@ -32,6 +35,12 @@ gcm_ct: resb 16
 gcm_tag: resb 16
 gcm_pt_dec: resb 16
 aes_block: resb 16
+record_buf: resb 64
+record_plain: resb 16
+record_seq_enc: resq 1
+record_seq_dec: resq 1
+record_seq_bad: resq 1
+server_hs_seq_enc: resq 1
 random_calls: resd 1
 
 SECTION .rodata
@@ -70,8 +79,15 @@ gcm_key_zero:
     times 16 db 0
 gcm_iv_zero:
     times 12 db 0
+c0_key:
+    times 16 db 0xC0
+c0_iv:
+    times 12 db 0xC0
 gcm_pt_zero:
     times 16 db 0
+record_msg:
+    db "ping"
+record_msg_len equ $ - record_msg
 gcm_j0:
     times 15 db 0
     db 1
@@ -277,6 +293,91 @@ _start:
     add     rsp, 16
     ASSERT_EQ eax, -1
     xor     byte [rel gcm_tag], 1
+
+    ; TLS 1.3 protected record: header/AAD, nonce sequence, and inner type.
+    lea     rdi, [rel record_buf]
+    lea     rsi, [rel record_msg]
+    mov     edx, record_msg_len
+    mov     ecx, TLS_RECORD_HANDSHAKE
+    lea     r8, [rel gcm_key_zero]
+    lea     r9, [rel gcm_iv_zero]
+    lea     rax, [rel record_seq_enc]
+    push    rax
+    call    er_tls_record_encrypt
+    add     rsp, 8
+    ASSERT_EQ eax, record_msg_len + TLS_RECORD_OVERHEAD
+    movzx   eax, byte [rel record_buf]
+    ASSERT_EQ eax, TLS_RECORD_APPLICATION_DATA
+    movzx   eax, byte [rel record_buf + 1]
+    ASSERT_EQ eax, TLS_RECORD_VERSION_MAJOR
+    movzx   eax, byte [rel record_buf + 2]
+    ASSERT_EQ eax, TLS_LEGACY_VERSION_MINOR
+    movzx   eax, byte [rel record_buf + 4]
+    ASSERT_EQ eax, record_msg_len + TLS_INNER_CONTENT_TYPE_LEN + TLS_GCM_TAG_LEN
+    mov     rax, [rel record_seq_enc]
+    ASSERT_RAX 1
+
+    lea     rdi, [rel record_plain]
+    lea     rsi, [rel record_buf]
+    mov     edx, record_msg_len + TLS_RECORD_OVERHEAD
+    lea     r8, [rel gcm_key_zero]
+    lea     r9, [rel gcm_iv_zero]
+    lea     rax, [rel record_seq_dec]
+    push    rax
+    call    er_tls_record_decrypt
+    add     rsp, 8
+    ASSERT_EQ eax, record_msg_len
+    ASSERT_EQ ecx, TLS_RECORD_HANDSHAKE
+    lea     rdi, [rel record_plain]
+    lea     rsi, [rel record_msg]
+    mov     edx, record_msg_len
+    call    _mem_eq
+    ASSERT_EQ eax, 1
+    mov     rax, [rel record_seq_dec]
+    ASSERT_RAX 1
+
+    xor     byte [rel record_buf + TLS_RECORD_HEADER_LEN], 1
+    lea     rdi, [rel record_plain]
+    lea     rsi, [rel record_buf]
+    mov     edx, record_msg_len + TLS_RECORD_OVERHEAD
+    lea     r8, [rel gcm_key_zero]
+    lea     r9, [rel gcm_iv_zero]
+    lea     rax, [rel record_seq_bad]
+    push    rax
+    call    er_tls_record_decrypt
+    add     rsp, 8
+    ASSERT_EQ eax, -1
+    mov     rax, [rel record_seq_bad]
+    ASSERT_RAX 0
+    xor     byte [rel record_buf + TLS_RECORD_HEADER_LEN], 1
+
+    ; Derived server handshake traffic keys decrypt protected handshake records.
+    lea     rdi, [rel record_buf]
+    lea     rsi, [rel record_msg]
+    mov     edx, record_msg_len
+    mov     ecx, TLS_RECORD_HANDSHAKE
+    lea     r8, [rel c0_key]
+    lea     r9, [rel c0_iv]
+    lea     rax, [rel server_hs_seq_enc]
+    push    rax
+    call    er_tls_record_encrypt
+    add     rsp, 8
+    ASSERT_EQ eax, record_msg_len + TLS_RECORD_OVERHEAD
+    lea     rdi, [rel record_plain]
+    lea     rsi, [rel record_buf]
+    mov     edx, record_msg_len + TLS_RECORD_OVERHEAD
+    call    er_tls_server_hs_record_decrypt
+    ASSERT_EQ eax, record_msg_len
+    lea     rdi, [rel record_plain]
+    lea     rsi, [rel record_msg]
+    mov     edx, record_msg_len
+    call    _mem_eq
+    ASSERT_EQ eax, 1
+    lea     rdi, [rel record_plain]
+    lea     rsi, [rel record_buf]
+    mov     edx, record_msg_len + TLS_RECORD_OVERHEAD
+    call    er_tls_server_hs_record_decrypt
+    ASSERT_EQ eax, -1
 
     ; Encrypted record send must fail until the TLS state is active.
     xor     edi, edi

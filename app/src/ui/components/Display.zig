@@ -346,7 +346,7 @@ pub const Label = struct {
 
 fn renderTrack(scene: *ui.Scene, track: ui.Rect, value: f32, options: RenderOptions) ui.RenderError!void {
     if (track.w <= 0.0 or track.h <= 0.0) return;
-    try scene.pushRect(track, options.style.row, .fill, progress_height * 0.5, 0.0);
+    try scene.pushGradientRect(track, options.style.row, progress_floor, progress_height * 0.5);
     const clamped = ui.clampUnit(value);
     const fill_width = @min(track.w, @max(0.0, track.w * clamped));
     try scene.pushRect(ui.Rect.init(track.x, track.y, fill_width, track.h), options.style.accent, .fill, progress_height * 0.5, 0.0);
@@ -392,6 +392,7 @@ const spinner_start_turn: f32 = 0.08;
 const spinner_end_turn: f32 = 0.78;
 const progress_height: f32 = 8.0;
 const progress_min_width: f32 = 96.0;
+const progress_floor = ui.Color{ .r = 5, .g = 7, .b = 10, .a = 72 };
 const aspect_ratio_min_width: f32 = 160.0;
 const kbd_height: f32 = 24.0;
 const kbd_text_height: f32 = 12.0;

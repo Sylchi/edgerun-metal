@@ -26,14 +26,19 @@ pub const Chart = struct {
 
     pub fn render(self: Chart, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         const plot = plotBounds(bounds, self.label);
-        try scene.pushRect(bounds, options.style.panel, .fill, chart_radius, 0.0);
+        try scene.pushGradientRect(bounds, options.style.panel, chart_floor, chart_radius);
         try scene.pushRect(bounds, options.style.border, .border, chart_radius, 0.0);
         const label = labelBounds(bounds, self.label);
         try text_component.Text.renderWrapped(scene, label, self.label, options.style.text, component_primitives.textWrap(self.label, chart_label_h, chart_label_max_lines));
+        for (0..chart_grid_count) |index| {
+            const grid_y = plot.y + plot.h * (@as(f32, @floatFromInt(index + 1)) / @as(f32, @floatFromInt(chart_grid_count + 1)));
+            try scene.pushRect(ui.Rect.init(plot.x, grid_y, plot.w, chart_grid_height), options.style.border, .fill, 0.0, 0.0);
+        }
         try scene.pushRect(ui.Rect.init(plot.x, plot.y + plot.h - separator_height, plot.w, separator_height), options.style.border, .fill, 0.0, 0.0);
         for (0..chart_bar_count) |index| {
             const bar = barBounds(bounds, self.label, index);
-            try scene.pushRect(bar, if (index == chart_bar_count - 1) options.style.accent else options.style.row, .fill, chart_bar_radius, 0.0);
+            const top = if (index == chart_bar_count - 1) options.style.accent else options.style.row;
+            try scene.pushGradientRect(bar, top, chart_bar_floor, chart_bar_radius);
         }
     }
 
@@ -101,6 +106,7 @@ fn labelBounds(bounds: ui.Rect, label: []const u8) ui.Rect {
 
 const separator_height: f32 = 1.0;
 pub const chart_bar_count: usize = 5;
+const chart_grid_count: usize = 3;
 const chart_radius: f32 = 8.0;
 const chart_padding: f32 = 8.0;
 const chart_label_h: f32 = 14.0;
@@ -112,6 +118,9 @@ const chart_plot_min_h: f32 = 64.0;
 const chart_min_width: f32 = 120.0;
 const chart_min_height: f32 = 72.0;
 const chart_bar_values = [_]f32{ 0.45, 0.72, 0.38, 0.86, 0.62 };
+const chart_floor = ui.Color{ .r = 7, .g = 9, .b = 12, .a = 62 };
+const chart_bar_floor = ui.Color{ .r = 7, .g = 10, .b = 13, .a = 110 };
+const chart_grid_height: f32 = 1.0;
 
 test "chart component serializes to canonical object and deserializes" {
     const chart = Chart{ .id = 993, .label = "Visitors" };

@@ -111,6 +111,7 @@ KERNEL_ASM_SRCS="
 	ui/render_ir.asm
 	ui/sw_fb.asm
 	wasm/wasm_interpreter.asm
+	wasm/wasm_compiler.asm
 	wasm/wasm_test_data.asm
 	wasm/da_wasm_test.asm
 	entry.asm
@@ -327,6 +328,7 @@ cmd_test() {
 	cmd_test_tls
 	cmd_test_tor
 	cmd_test_x25519
+	cmd_test_wasm_compiler
 	cmd_test_wasm_jit
 	cmd_test_recursion_valid
 	cmd_test_recursion_invalid
@@ -365,6 +367,21 @@ cmd_test_recursion_invalid() {
 
 cmd_test_wasm_jit() {
 	local name="test_wasm_jit_self"
+	local src="${TEST_DIR}/${name}.asm"
+	local obj="${ASM_BUILD}/${name}.o"
+	local bin="${ASM_BUILD}/${name%_self}"
+	${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
+	local dep_obj="${ASM_BUILD}/runtime.o"
+	if [ ! -f "$dep_obj" ]; then
+		elf64 "${ASM_DIR}/rt/runtime.asm" "$dep_obj"
+	fi
+	ld -T "${TEST_DIR}/test_jit.ld" -nostdlib -static -o "$bin" "$obj" "$dep_obj"
+	echo "  LD  ${bin}"
+	"$bin"
+}
+
+cmd_test_wasm_compiler() {
+	local name="test_wasm_compiler_self"
 	local src="${TEST_DIR}/${name}.asm"
 	local obj="${ASM_BUILD}/${name}.o"
 	local bin="${ASM_BUILD}/${name%_self}"
@@ -667,6 +684,7 @@ EdgeRun build targets:
   kernel-efi          Build kernel.efi (native UEFI PE32+)
   install-efi         Build + install kernel.efi to ESP + add boot entry
   test                Run all self-hosted ASM tests
+  test-wasm-compiler  Run host-side WASM compiler self-test
   test-wasm-jit       Run WASM JIT self-test (self-hosted ASM runner)
   test-wasm-float     Run WASM float opcode test (self-hosted ASM runner)
   test-ctype          Run ctype test (self-hosted ASM runner)
@@ -707,6 +725,7 @@ case "${1:-help}" in
 	kernel-efi)     cmd_kernel_efi ;;
 	install-efi)    cmd_install_efi ;;
 	test)           cmd_test ;;
+	test-wasm-compiler) cmd_test_wasm_compiler ;;
 	test-wasm-jit)  cmd_test_wasm_jit ;;
 	test-wasm-float) cmd_test_wasm_float ;;
 	test-ctype)     cmd_test_ctype ;;

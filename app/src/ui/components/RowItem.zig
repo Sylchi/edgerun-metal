@@ -40,11 +40,12 @@ pub const RowItem = struct {
     }
 
     pub fn render(self: RowItem, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        try scene.pushRect(bounds, options.style.row, .fill, row_radius, 0.0);
+        try scene.pushGradientRect(bounds, options.style.row, row_floor, row_radius);
+        try scene.pushRect(bounds.insetLtrb(1.0, 1.0, 1.0, bounds.h - row_rim_height), row_rim, .fill, row_radius, 0.0);
         try scene.pushRect(bounds, options.style.border, .border, row_radius, 0.0);
         if (self.leading_icon.optional()) |icon| {
             const chip = ui.Rect.init(bounds.x + row_text_padding_x, bounds.y + (bounds.h - row_icon_chip_size) * 0.5, row_icon_chip_size, row_icon_chip_size);
-            try scene.pushRect(chip, options.style.panel, .fill, row_icon_chip_radius, 0.0);
+            try scene.pushRect(chip, row_icon_chip_glow, .fill, row_icon_chip_radius, 0.0);
             try scene.pushRect(chip, options.style.border, .border, row_icon_chip_radius, 0.0);
             try icon.renderColor(scene, chip.withHeightCentered(row_icon_size).withWidthCentered(row_icon_size), options.style.accent);
         }
@@ -177,6 +178,10 @@ const row_icon_size: f32 = 24.0;
 const row_icon_chip_size: f32 = 32.0;
 const row_icon_chip_radius: f32 = 8.0;
 const row_icon_text_gap: f32 = 12.0;
+const row_floor = ui.Color{ .r = 8, .g = 10, .b = 13, .a = 42 };
+const row_rim = ui.Color{ .r = 255, .g = 255, .b = 255, .a = 12 };
+const row_icon_chip_glow = ui.Color{ .r = 5, .g = 31, .b = 28, .a = 220 };
+const row_rim_height: f32 = 1.0;
 
 test "row item component serializes to canonical object and deserializes" {
     const row = RowItem{ .id = 20, .title = "object graph", .detail = "canonical data" };

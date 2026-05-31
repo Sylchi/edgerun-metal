@@ -40,18 +40,27 @@ const rows = [_]RowDef{
 };
 
 const Component = component_union.Component;
-const hardware_bg_top = ui.Color{ .r = 7, .g = 8, .b = 10 };
-const hardware_bg_bottom = ui.Color{ .r = 14, .g = 15, .b = 17 };
+const hardware_bg_top = ui.Color{ .r = 3, .g = 8, .b = 10 };
+const hardware_bg_bottom = ui.Color{ .r = 8, .g = 13, .b = 17 };
+const hardware_panel = ui.Color{ .r = 18, .g = 21, .b = 24 };
+const hardware_row = ui.Color{ .r = 29, .g = 33, .b = 38 };
+const hardware_border = ui.Color{ .r = 47, .g = 56, .b = 61 };
+const hardware_text = ui.Color{ .r = 242, .g = 246, .b = 241 };
+const hardware_muted = ui.Color{ .r = 143, .g = 154, .b = 158 };
+const hardware_accent = ui.Color{ .r = 12, .g = 207, .b = 154 };
+const hardware_accent_dim = ui.Color{ .r = 6, .g = 81, .b = 66, .a = 180 };
+const hardware_orb = ui.Color{ .r = 14, .g = 185, .b = 148, .a = 46 };
+const hardware_rim = ui.Color{ .r = 255, .g = 255, .b = 255, .a = 16 };
 
 fn hardwareStyle() ui.Style {
     return .{
         .bg = hardware_bg_top,
-        .panel = .{ .r = 24, .g = 24, .b = 25 },
-        .row = .{ .r = 33, .g = 33, .b = 35 },
-        .border = .{ .r = 50, .g = 50, .b = 54 },
-        .text = .{ .r = 239, .g = 239, .b = 241 },
-        .muted = .{ .r = 151, .g = 151, .b = 157 },
-        .accent = .{ .r = 13, .g = 191, .b = 141 },
+        .panel = hardware_panel,
+        .row = hardware_row,
+        .border = hardware_border,
+        .text = hardware_text,
+        .muted = hardware_muted,
+        .accent = hardware_accent,
     };
 }
 
@@ -273,6 +282,8 @@ pub const State = struct {
         var dashboard_options = options;
         dashboard_options.style = hardwareStyle();
         try scene.pushGradientRect(bounds, hardware_bg_top, hardware_bg_bottom, 0.0);
+        try scene.pushRect(ui.Rect.init(bounds.x + bounds.w * 0.58, bounds.y - 120.0, bounds.w * 0.34, 260.0), hardware_orb, .shadow, 180.0, 80.0);
+        try scene.pushRect(ui.Rect.init(bounds.x - 90.0, bounds.y + bounds.h * 0.62, bounds.w * 0.28, 220.0), hardware_orb, .shadow, 150.0, 70.0);
 
         const outer = bounds.insetUniform(if (bounds.w >= 1000.0) 20.0 else 12.0);
         if (outer.w >= 980.0) {
@@ -297,57 +308,66 @@ pub const State = struct {
     }
 
     fn renderWide(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
-        const gap: f32 = if (self.compact_rows) 10.0 else 14.0;
-        try self.renderHeader(scene, collector, ui.Rect.init(bounds.x, bounds.y, bounds.w, 74.0), options);
+        const gap: f32 = if (self.compact_rows) 12.0 else 16.0;
+        const header_h: f32 = 104.0;
+        const metric_h: f32 = 128.0;
+        try self.renderHeader(scene, collector, ui.Rect.init(bounds.x, bounds.y, bounds.w, header_h), options);
 
-        const metric_y = bounds.y + 74.0 + gap;
+        const metric_y = bounds.y + header_h + gap;
         const metric_w = (bounds.w - gap * 3.0) * 0.25;
-        try self.renderMetrics(scene, collector, ui.Rect.init(bounds.x, metric_y, bounds.w, 104.0), metric_w, gap, options);
+        try self.renderMetrics(scene, collector, ui.Rect.init(bounds.x, metric_y, bounds.w, metric_h), metric_w, gap, options);
 
-        const body_y = metric_y + 104.0 + gap;
+        const body_y = metric_y + metric_h + gap;
         const body_h = @max(1.0, bounds.y + bounds.h - body_y);
-        const side_w = @min(360.0, @max(304.0, bounds.w * 0.28));
-        const center_w = bounds.w - side_w * 2.0 - gap * 2.0;
-        try self.renderControls(scene, collector, ui.Rect.init(bounds.x, body_y, side_w, body_h), options);
-        try self.renderActivity(scene, collector, ui.Rect.init(bounds.x + side_w + gap, body_y, center_w, body_h), options);
-        try self.renderInventory(scene, collector, ui.Rect.init(bounds.x + side_w + gap + center_w + gap, body_y, side_w, body_h), options);
+        const controls_w = @min(410.0, @max(350.0, bounds.w * 0.27));
+        const inventory_w = @min(420.0, @max(350.0, bounds.w * 0.28));
+        const activity_w = bounds.w - controls_w - inventory_w - gap * 2.0;
+        try self.renderControls(scene, collector, ui.Rect.init(bounds.x, body_y, controls_w, body_h), options);
+        try self.renderActivity(scene, collector, ui.Rect.init(bounds.x + controls_w + gap, body_y, activity_w, body_h), options);
+        try self.renderInventory(scene, collector, ui.Rect.init(bounds.x + controls_w + gap + activity_w + gap, body_y, inventory_w, body_h), options);
     }
 
     fn renderStacked(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
         const gap: f32 = 12.0;
         var y = bounds.y;
-        try self.renderHeader(scene, collector, ui.Rect.init(bounds.x, y, bounds.w, 74.0), options);
-        y += 74.0 + gap;
+        try self.renderHeader(scene, collector, ui.Rect.init(bounds.x, y, bounds.w, 104.0), options);
+        y += 104.0 + gap;
         const metric_w = (bounds.w - gap) * 0.5;
-        try self.renderMetrics(scene, collector, ui.Rect.init(bounds.x, y, bounds.w, 220.0), metric_w, gap, options);
-        y += 220.0 + gap;
-        try self.renderControls(scene, collector, ui.Rect.init(bounds.x, y, bounds.w, 320.0), options);
-        y += 320.0 + gap;
-        try self.renderActivity(scene, collector, ui.Rect.init(bounds.x, y, bounds.w, 240.0), options);
-        y += 240.0 + gap;
+        try self.renderMetrics(scene, collector, ui.Rect.init(bounds.x, y, bounds.w, 260.0), metric_w, gap, options);
+        y += 260.0 + gap;
+        try self.renderControls(scene, collector, ui.Rect.init(bounds.x, y, bounds.w, 390.0), options);
+        y += 390.0 + gap;
+        try self.renderActivity(scene, collector, ui.Rect.init(bounds.x, y, bounds.w, 330.0), options);
+        y += 330.0 + gap;
         try self.renderInventory(scene, collector, ui.Rect.init(bounds.x, y, bounds.w, @max(260.0, bounds.y + bounds.h - y)), options);
     }
 
     fn renderHeader(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
-        const title_w = @max(260.0, bounds.w - 222.0);
-        try (Component{ .card = .{ .title = "Hardware", .detail = self.detail(0), .variant = .elevated } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x, bounds.y, title_w, bounds.h), options);
-        try (Component{ .badge = .{ .label = self.statusLabel(), .variant = .secondary } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x + bounds.w - 210.0, bounds.y + 19.0, 152.0, 28.0), options);
+        try (Component{ .card = .{ .title = "", .detail = "", .variant = .elevated } }).renderInteractive(scene, collector, bounds, options);
+        try scene.pushGradientRect(bounds.insetUniform(1.0), ui.Color{ .r = 9, .g = 74, .b = 61, .a = 92 }, ui.Color.clear, 12.0);
+        const chip = ui.Rect.init(bounds.x + 24.0, bounds.y + 22.0, 56.0, 56.0);
+        try scene.pushRect(chip, hardware_accent_dim, .fill, 14.0, 0.0);
+        try scene.pushRect(chip, hardware_border, .border, 14.0, 0.0);
+        try IconComponent.Icon.named(.device_desktop).renderColor(scene, chip.withHeightCentered(28.0).withWidthCentered(28.0), hardware_accent);
+        try scene.pushBoldText(ui.Rect.init(bounds.x + 96.0, bounds.y + 24.0, @max(1.0, bounds.w - 360.0), 28.0), "Hardware Command Center", options.style.text);
+        try scene.pushText(ui.Rect.init(bounds.x + 96.0, bounds.y + 58.0, @max(1.0, bounds.w - 360.0), 20.0), self.detail(0), options.style.muted);
+        try (Component{ .badge = .{ .label = self.statusLabel(), .variant = .secondary } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x + bounds.w - 254.0, bounds.y + 36.0, 176.0, 32.0), options);
         try (Component{ .icon_button = .{
             .id = refresh_now_button_id,
             .label = "Refresh",
             .icon = IconComponent.Icon.named(.reload),
             .variant = .outline,
-        } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x + bounds.w - 44.0, bounds.y + 15.0, 40.0, 40.0), options);
+        } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x + bounds.w - 62.0, bounds.y + 32.0, 40.0, 40.0), options);
     }
 
     fn renderMetrics(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, metric_w: f32, gap: f32, options: RenderOptions) !void {
         const cards_per_row: usize = if (bounds.w >= 980.0) 4 else 2;
         const row_h = if (cards_per_row == 4) bounds.h else (bounds.h - gap) * 0.5;
-        const data = [_]struct { title: []const u8, detail: []const u8 }{
-            .{ .title = "CPU Temp", .detail = self.detail(1) },
-            .{ .title = "Memory", .detail = self.detail(2) },
-            .{ .title = "Screen", .detail = self.detail(4) },
-            .{ .title = "Keyboard", .detail = self.detail(5) },
+        const data = [_]struct { title: []const u8, value: []const u8, detail: []const u8, icon_kind: icon.Icon }{
+            .{ .title = "Thermals", .value = self.detail(1), .detail = "CPU sensor", .icon_kind = .temperature },
+            .{ .title = "Memory", .value = self.detail(2), .detail = "Live pressure", .icon_kind = .database },
+            .{ .title = "Display", .value = self.detail(4), .detail = "Panel brightness", .icon_kind = .brightness },
+            .{ .title = "Keyboard", .value = self.detail(5), .detail = "Backlight level", .icon_kind = .keyboard },
         };
         for (data, 0..) |entry, index| {
             const col = index % cards_per_row;
@@ -358,61 +378,122 @@ pub const State = struct {
                 metric_w,
                 row_h,
             );
-            try (Component{ .card = .{ .title = entry.title, .detail = entry.detail, .variant = .panel } }).renderInteractive(scene, collector, rect, options);
+            try self.renderMetricCard(scene, collector, rect, entry.title, entry.value, entry.detail, entry.icon_kind, options);
         }
     }
 
     fn renderControls(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
-        var y = bounds.y;
-        try (Component{ .card = .{ .title = "Controls", .detail = "Display and keyboard hardware knobs.", .variant = .elevated } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x, y, bounds.w, 78.0), options);
-        y += 92.0;
+        try (Component{ .card = .{ .title = "", .detail = "", .variant = .elevated } }).renderInteractive(scene, collector, bounds, options);
+        const inner = bounds.insetUniform(20.0);
+        var y = inner.y;
+        try self.renderSectionHeader(scene, inner.x, y, "Controls", "Display and keyboard hardware knobs.", .adjustments_plus, options);
+        y += 74.0;
 
-        try (Component{ .slider = .{ .id = brightness_slider_id, .label = "Screen Brightness", .value = self.screenBrightnessUnit() } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x, y, bounds.w, 56.0), options);
-        y += 66.0;
-        const half_w = (bounds.w - 10.0) * 0.5;
-        try (Component{ .button = .{ .id = brightness_down_button_id, .label = "Screen -", .variant = .outline, .icon_slot = IconComponent.IconSlot.named(.leading, .brightness_down) } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x, y, half_w, 36.0), options);
-        try (Component{ .button = .{ .id = brightness_up_button_id, .label = "Screen +", .variant = .outline, .icon_slot = IconComponent.IconSlot.named(.leading, .brightness_up) } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x + half_w + 10.0, y, half_w, 36.0), options);
-        y += 50.0;
+        try self.renderControlGroup(scene, collector, ui.Rect.init(inner.x, y, inner.w, 144.0), "Screen", self.detail(4), brightness_slider_id, self.screenBrightnessUnit(), brightness_down_button_id, brightness_up_button_id, "Screen -", "Screen +", .brightness_down, .brightness_up, options);
+        y += 160.0;
 
-        try (Component{ .slider = .{ .id = kbd_slider_id, .label = "Keyboard Backlight", .value = self.keyboardBrightnessUnit() } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x, y, bounds.w, 56.0), options);
-        y += 66.0;
-        try (Component{ .button = .{ .id = kbd_down_button_id, .label = "Keys -", .variant = .outline, .icon_slot = IconComponent.IconSlot.named(.leading, .adjustments_minus) } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x, y, half_w, 36.0), options);
-        try (Component{ .button = .{ .id = kbd_up_button_id, .label = "Keys +", .variant = .outline, .icon_slot = IconComponent.IconSlot.named(.leading, .adjustments_plus) } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x + half_w + 10.0, y, half_w, 36.0), options);
-        y += 54.0;
+        try self.renderControlGroup(scene, collector, ui.Rect.init(inner.x, y, inner.w, 144.0), "Keyboard", self.detail(5), kbd_slider_id, self.keyboardBrightnessUnit(), kbd_down_button_id, kbd_up_button_id, "Keys -", "Keys +", .adjustments_minus, .adjustments_plus, options);
+        y += 164.0;
 
-        try (Component{ .switch_control = .{ .id = auto_refresh_switch_id, .label = "Auto Refresh", .checked = self.auto_refresh } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x, y, bounds.w, 32.0), options);
+        try scene.pushStrongText(ui.Rect.init(inner.x, y, inner.w, 20.0), "Session", options.style.text);
+        y += 34.0;
+        try (Component{ .switch_control = .{ .id = auto_refresh_switch_id, .label = "Auto Refresh", .checked = self.auto_refresh } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, y, inner.w, 32.0), options);
         y += 40.0;
-        try (Component{ .switch_control = .{ .id = hide_unavailable_switch_id, .label = "Hide Unavailable", .checked = self.hide_unavailable } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x, y, bounds.w, 32.0), options);
+        try (Component{ .switch_control = .{ .id = hide_unavailable_switch_id, .label = "Hide Unavailable", .checked = self.hide_unavailable } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, y, inner.w, 32.0), options);
         y += 40.0;
-        try (Component{ .switch_control = .{ .id = compact_rows_switch_id, .label = "Compact Density", .checked = self.compact_rows } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x, y, bounds.w, 32.0), options);
+        try (Component{ .switch_control = .{ .id = compact_rows_switch_id, .label = "Compact Density", .checked = self.compact_rows } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, y, inner.w, 32.0), options);
     }
 
     fn renderActivity(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
-        try (Component{ .chart = .{ .id = 90_020, .label = "System Activity" } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x, bounds.y, bounds.w, @min(190.0, bounds.h * 0.42)), options);
-        const y = bounds.y + @min(204.0, bounds.h * 0.45);
-        try (Component{ .card = .{ .title = "Screen Level", .detail = self.detail(4), .variant = .panel } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x, y, bounds.w, 78.0), options);
-        try (Component{ .progress = .{ .value = self.screenBrightnessUnit() } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x, y + 88.0, bounds.w, 18.0), options);
-        try (Component{ .card = .{ .title = "Keyboard Level", .detail = self.detail(5), .variant = .panel } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x, y + 124.0, bounds.w, 78.0), options);
-        try (Component{ .progress = .{ .value = self.keyboardBrightnessUnit() } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x, y + 212.0, bounds.w, 18.0), options);
+        try (Component{ .card = .{ .title = "", .detail = "", .variant = .elevated } }).renderInteractive(scene, collector, bounds, options);
+        const inner = bounds.insetUniform(20.0);
+        try self.renderSectionHeader(scene, inner.x, inner.y, "Live Hardware", "Readable telemetry with direct controls beside it.", .cpu, options);
+        const chart_h = @min(250.0, @max(150.0, bounds.h * 0.42));
+        try (Component{ .chart = .{ .id = 90_020, .label = "System Activity" } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, inner.y + 74.0, inner.w, chart_h), options);
+
+        const lower_y = inner.y + 90.0 + chart_h;
+        const card_gap: f32 = 14.0;
+        const card_h = @min(136.0, @max(110.0, bounds.y + bounds.h - lower_y - 20.0));
+        const half = (inner.w - card_gap) * 0.5;
+        try self.renderLevelCard(scene, collector, ui.Rect.init(inner.x, lower_y, half, card_h), "Screen Level", self.detail(4), self.screenBrightnessUnit(), .brightness, options);
+        try self.renderLevelCard(scene, collector, ui.Rect.init(inner.x + half + card_gap, lower_y, half, card_h), "Keyboard Level", self.detail(5), self.keyboardBrightnessUnit(), .keyboard, options);
+
+        const footer_y = lower_y + card_h + 16.0;
+        if (footer_y + 86.0 <= bounds.y + bounds.h) {
+            try (Component{ .card = .{ .title = "", .detail = "", .variant = .subtle } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, footer_y, inner.w, 86.0), options);
+            try scene.pushStrongText(ui.Rect.init(inner.x + 18.0, footer_y + 18.0, inner.w - 36.0, 20.0), "Demo posture", options.style.text);
+            try scene.pushText(ui.Rect.init(inner.x + 18.0, footer_y + 46.0, inner.w - 36.0, 18.0), if (self.auto_refresh) "Auto-refresh is live; sliders route through existing handlers." else "Auto-refresh paused; manual refresh remains available.", options.style.muted);
+        }
     }
 
     fn renderInventory(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
-        var y = bounds.y;
-        try (Component{ .card = .{ .title = "Inventory", .detail = "Detected hardware paths and runtime capabilities.", .variant = .elevated } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x, y, bounds.w, 78.0), options);
-        y += 92.0;
+        try (Component{ .card = .{ .title = "", .detail = "", .variant = .elevated } }).renderInteractive(scene, collector, bounds, options);
+        const inner = bounds.insetUniform(20.0);
+        var y = inner.y;
+        try self.renderSectionHeader(scene, inner.x, y, "Inventory", "Detected hardware paths and runtime capabilities.", .server, options);
+        y += 74.0;
         const row_h: f32 = if (self.compact_rows) 44.0 else 52.0;
         for (&rows, 0..) |row, index| {
             const row_detail = self.detail(index);
             if (self.hide_unavailable and std.mem.eql(u8, row_detail, unavailable_detail)) continue;
-            if (y + row_h > bounds.y + bounds.h) break;
+            if (y + row_h > inner.y + inner.h) break;
             try (Component{ .row_item = .{
                 .id = @intCast(index),
                 .title = row.title,
                 .detail = row_detail,
                 .leading_icon = IconComponent.IconSlot.named(.leading, row.icon_kind),
-            } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x, y, bounds.w, row_h), options);
+            } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, y, inner.w, row_h), options);
             y += row_h + 8.0;
         }
+    }
+
+    fn renderSectionHeader(self: *State, scene: *ui.Scene, x: f32, y: f32, title: []const u8, detail_text: []const u8, icon_kind: icon.Icon, options: RenderOptions) !void {
+        _ = self;
+        const chip = ui.Rect.init(x, y, 44.0, 44.0);
+        try scene.pushRect(chip, hardware_accent_dim, .fill, 12.0, 0.0);
+        try scene.pushRect(chip, hardware_border, .border, 12.0, 0.0);
+        try IconComponent.Icon.named(icon_kind).renderColor(scene, chip.withHeightCentered(24.0).withWidthCentered(24.0), options.style.accent);
+        try scene.pushBoldText(ui.Rect.init(x + 58.0, y + 1.0, 260.0, 24.0), title, options.style.text);
+        try scene.pushText(ui.Rect.init(x + 58.0, y + 30.0, 300.0, 18.0), detail_text, options.style.muted);
+    }
+
+    fn renderMetricCard(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, title: []const u8, value: []const u8, detail_text: []const u8, icon_kind: icon.Icon, options: RenderOptions) !void {
+        _ = self;
+        try (Component{ .card = .{ .title = "", .detail = "", .variant = .panel } }).renderInteractive(scene, collector, bounds, options);
+        const inner = bounds.insetUniform(18.0);
+        const chip = ui.Rect.init(inner.x, inner.y, 42.0, 42.0);
+        try scene.pushRect(chip, hardware_accent_dim, .fill, 12.0, 0.0);
+        try scene.pushRect(chip, hardware_border, .border, 12.0, 0.0);
+        try IconComponent.Icon.named(icon_kind).renderColor(scene, chip.withHeightCentered(23.0).withWidthCentered(23.0), options.style.accent);
+        try scene.pushStrongText(ui.Rect.init(inner.x + 56.0, inner.y + 1.0, inner.w - 56.0, 20.0), title, options.style.text);
+        try scene.pushText(ui.Rect.init(inner.x + 56.0, inner.y + 27.0, inner.w - 56.0, 16.0), detail_text, options.style.muted);
+        try scene.pushBoldText(ui.Rect.init(inner.x, inner.y + 68.0, inner.w, 28.0), displayValue(value), options.style.text);
+        try scene.pushRect(ui.Rect.init(inner.x, inner.y + inner.h - 3.0, inner.w, 3.0), hardware_border, .fill, 2.0, 0.0);
+        try scene.pushRect(ui.Rect.init(inner.x, inner.y + inner.h - 3.0, inner.w * 0.62, 3.0), options.style.accent, .fill, 2.0, 0.0);
+    }
+
+    fn renderControlGroup(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, title: []const u8, value: []const u8, slider_id: u32, slider_value: f32, down_id: u32, up_id: u32, down_label: []const u8, up_label: []const u8, down_icon: icon.Icon, up_icon: icon.Icon, options: RenderOptions) !void {
+        _ = self;
+        try (Component{ .card = .{ .title = "", .detail = "", .variant = .subtle } }).renderInteractive(scene, collector, bounds, options);
+        const inner = bounds.insetUniform(16.0);
+        try scene.pushStrongText(ui.Rect.init(inner.x, inner.y, inner.w * 0.55, 20.0), title, options.style.text);
+        try scene.pushText(ui.Rect.init(inner.x + inner.w * 0.55, inner.y, inner.w * 0.45, 18.0), displayValue(value), options.style.muted);
+        try (Component{ .slider = .{ .id = slider_id, .label = "", .value = slider_value } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, inner.y + 34.0, inner.w, 34.0), options);
+        const half_w = (inner.w - 10.0) * 0.5;
+        try (Component{ .button = .{ .id = down_id, .label = down_label, .variant = .outline, .icon_slot = IconComponent.IconSlot.named(.leading, down_icon) } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, inner.y + 82.0, half_w, 36.0), options);
+        try (Component{ .button = .{ .id = up_id, .label = up_label, .variant = .primary, .icon_slot = IconComponent.IconSlot.named(.leading, up_icon) } }).renderInteractive(scene, collector, ui.Rect.init(inner.x + half_w + 10.0, inner.y + 82.0, half_w, 36.0), options);
+    }
+
+    fn renderLevelCard(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, title: []const u8, value: []const u8, unit: f32, icon_kind: icon.Icon, options: RenderOptions) !void {
+        _ = self;
+        try (Component{ .card = .{ .title = "", .detail = "", .variant = .panel } }).renderInteractive(scene, collector, bounds, options);
+        const inner = bounds.insetUniform(16.0);
+        const chip = ui.Rect.init(inner.x, inner.y, 34.0, 34.0);
+        try scene.pushRect(chip, hardware_accent_dim, .fill, 10.0, 0.0);
+        try IconComponent.Icon.named(icon_kind).renderColor(scene, chip.withHeightCentered(20.0).withWidthCentered(20.0), options.style.accent);
+        try scene.pushStrongText(ui.Rect.init(inner.x + 46.0, inner.y, inner.w - 46.0, 20.0), title, options.style.text);
+        try scene.pushText(ui.Rect.init(inner.x + 46.0, inner.y + 25.0, inner.w - 46.0, 18.0), displayValue(value), options.style.muted);
+        try (Component{ .progress = .{ .value = unit } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, inner.y + inner.h - 24.0, inner.w, 18.0), options);
     }
 
     fn adjustBacklight(self: *State, kind: BacklightKind, direction: i32) void {
@@ -477,6 +558,10 @@ fn writeDetail(out: []u8, value: []const u8) void {
 
 fn writeUnavailable(out: []u8) void {
     writeDetail(out, unavailable_detail);
+}
+
+fn displayValue(value: []const u8) []const u8 {
+    return if (value.len == 0 or std.mem.eql(u8, value, unavailable_detail)) "N/A" else value;
 }
 
 fn trimBuf(buf: *[detail_bytes]u8) []const u8 {

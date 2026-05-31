@@ -1,7 +1,7 @@
 ; EdgeRun TLS transport — x86_64 assembly
 ;
 ; Owns TLS record framing and handshake state. This module intentionally
-; fails closed until encrypted record protection is implemented.
+; fails closed until full TLS 1.3 handshake validation completes.
 
 %include "x86_64/macros.inc"
 %include "x86_64/wasm_defines.inc"
@@ -75,7 +75,12 @@ tls_client_hs_key: resb 16
 tls_server_hs_key: resb 16
 tls_client_hs_iv: resb 12
 tls_server_hs_iv: resb 12
+tls_client_hs_seq: resq 1
+tls_server_hs_seq: resq 1
 tls_key_block: resb TLS_RANDOM_LEN
+tls_record_inner: resb TLS_PLAINTEXT_MAX + TLS_INNER_CONTENT_TYPE_LEN
+tls_record_nonce: resb TLS_GCM_IV_LEN
+tls_record_seq_ptr: resq 1
 tls_gcm_h: resb TLS_GCM_BLOCK_LEN
 tls_gcm_y: resb TLS_GCM_BLOCK_LEN
 tls_gcm_x: resb TLS_GCM_BLOCK_LEN
@@ -99,6 +104,8 @@ global er_tls_init
 er_fn er_tls_init
     mov     dword [tls_state], TLS_STATE_CLOSED
     mov     dword [tls_conn_id], -1
+    mov     qword [tls_client_hs_seq], 0
+    mov     qword [tls_server_hs_seq], 0
     xor     eax, eax
     er_ok
     er_ret
@@ -1058,6 +1065,267 @@ er_fn er_tls_aes128_gcm_decrypt
     er_ret
 
 ; ==================================================================
+; _tls_make_nonce — nonce = static_iv XOR padded sequence number.
+; rdi=out[12], rsi=iv[12], rdx=seq_ptr
+; ==================================================================
+_tls_make_nonce:
+    push    rbx
+    push    r12
+    mov     r12, rdi
+    mov     rbx, rdx
+    mov     edx, TLS_GCM_IV_LEN
+    call    er_memcpy
+    mov     rax, [rbx]
+    bswap   rax
+    xor     qword [r12 + 4], rax
+    pop     r12
+    pop     rbx
+    ret
+
+; ==================================================================
+; er_tls_record_encrypt
+; rdi=out_record, rsi=plain, edx=plain_len, ecx=inner_type, r8=key, r9=iv
+; [rsp+8]=seq_ptr. Returns eax=record_len.
+; ==================================================================
+global er_tls_record_encrypt
+er_fn er_tls_record_encrypt
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+
+    mov     r12, rdi
+    mov     r13, rsi
+    mov     r14d, edx
+    mov     ebx, ecx
+    mov     r15, r8
+    mov     r10, r9
+    mov     r11, [rsp + 48]
+    mov     [tls_record_seq_ptr], r11
+    test    r12, r12
+    jz      .bad_rec_enc
+    test    r13, r13
+    jz      .bad_rec_enc
+    test    r15, r15
+    jz      .bad_rec_enc
+    test    r10, r10
+    jz      .bad_rec_enc
+    test    r11, r11
+    jz      .bad_rec_enc
+    cmp     r14d, TLS_PLAINTEXT_MAX
+    ja      .bad_rec_enc
+    mov     eax, ebx
+    cmp     eax, TLS_RECORD_HANDSHAKE
+    je      .type_ok_enc
+    cmp     eax, TLS_RECORD_APPLICATION_DATA
+    jne     .bad_rec_enc
+.type_ok_enc:
+    lea     rdi, [tls_record_inner]
+    mov     rsi, r13
+    mov     edx, r14d
+    call    er_memcpy
+    mov     byte [tls_record_inner + r14], bl
+
+    ; Outer TLS 1.3 record is always application_data with legacy 0x0303.
+    mov     byte [r12], TLS_RECORD_APPLICATION_DATA
+    mov     byte [r12 + 1], TLS_RECORD_VERSION_MAJOR
+    mov     byte [r12 + 2], TLS_LEGACY_VERSION_MINOR
+    lea     eax, [r14d + TLS_INNER_CONTENT_TYPE_LEN + TLS_GCM_TAG_LEN]
+    mov     edx, eax
+    shr     edx, 8
+    mov     [r12 + 3], dl
+    mov     [r12 + 4], al
+
+    lea     rdi, [tls_record_nonce]
+    mov     rsi, r10
+    mov     rdx, r11
+    call    _tls_make_nonce
+
+    lea     rdi, [r12 + TLS_RECORD_HEADER_LEN]
+    lea     rsi, [tls_record_inner]
+    lea     edx, [r14d + TLS_INNER_CONTENT_TYPE_LEN]
+    mov     rcx, r12
+    mov     r8d, TLS_RECORD_AAD_LEN
+    mov     r9, r15
+    lea     rax, [r12 + TLS_RECORD_HEADER_LEN + r14 + TLS_INNER_CONTENT_TYPE_LEN]
+    push    rax
+    lea     rax, [tls_record_nonce]
+    push    rax
+    call    er_tls_aes128_gcm_encrypt
+    add     rsp, 16
+    test    eax, eax
+    js      .fail_rec_enc
+    mov     r11, [tls_record_seq_ptr]
+    inc     qword [r11]
+    lea     eax, [r14d + TLS_RECORD_OVERHEAD]
+    er_ok
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+.bad_rec_enc:
+    mov     eax, -1
+    er_err  ERROR_INVALID_PARAM
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+.fail_rec_enc:
+    mov     eax, -1
+    er_err  ERROR_TLS_RECORD
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+
+; ==================================================================
+; er_tls_record_decrypt
+; rdi=out_plain, rsi=record, edx=record_len, r8=key, r9=iv
+; [rsp+8]=seq_ptr. Returns eax=plain_len, ecx=inner_type.
+; ==================================================================
+global er_tls_record_decrypt
+er_fn er_tls_record_decrypt
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+
+    mov     r12, rdi
+    mov     r13, rsi
+    mov     r14d, edx
+    mov     r15, r8
+    mov     r10, r9
+    mov     r11, [rsp + 48]
+    mov     [tls_record_seq_ptr], r11
+    test    r12, r12
+    jz      .bad_rec_dec
+    test    r13, r13
+    jz      .bad_rec_dec
+    test    r15, r15
+    jz      .bad_rec_dec
+    test    r10, r10
+    jz      .bad_rec_dec
+    test    r11, r11
+    jz      .bad_rec_dec
+    cmp     r14d, TLS_RECORD_OVERHEAD
+    jb      .bad_rec_dec
+    cmp     r14d, TLS_RX_RECORD_MAX
+    ja      .bad_rec_dec
+    cmp     byte [r13], TLS_RECORD_APPLICATION_DATA
+    jne     .bad_rec_dec
+    cmp     byte [r13 + 1], TLS_RECORD_VERSION_MAJOR
+    jne     .bad_rec_dec
+    cmp     byte [r13 + 2], TLS_LEGACY_VERSION_MINOR
+    jne     .bad_rec_dec
+    movzx   eax, word [r13 + 3]
+    xchg    al, ah
+    lea     ecx, [r14d - TLS_RECORD_HEADER_LEN]
+    cmp     eax, ecx
+    jne     .bad_rec_dec
+    cmp     eax, TLS_GCM_TAG_LEN + TLS_INNER_CONTENT_TYPE_LEN
+    jb      .bad_rec_dec
+    mov     ebx, eax
+    sub     ebx, TLS_GCM_TAG_LEN
+
+    lea     rdi, [tls_record_nonce]
+    mov     rsi, r10
+    mov     rdx, r11
+    call    _tls_make_nonce
+
+    mov     rdi, r12
+    lea     rsi, [r13 + TLS_RECORD_HEADER_LEN]
+    mov     edx, ebx
+    mov     rcx, r13
+    mov     r8d, TLS_RECORD_AAD_LEN
+    mov     r9, r15
+    lea     rax, [r13 + TLS_RECORD_HEADER_LEN + rbx]
+    push    rax
+    lea     rax, [tls_record_nonce]
+    push    rax
+    call    er_tls_aes128_gcm_decrypt
+    add     rsp, 16
+    test    eax, eax
+    js      .fail_rec_dec
+
+    mov     ecx, ebx
+.scan_type_dec:
+    test    ecx, ecx
+    jz      .bad_rec_dec
+    dec     ecx
+    movzx   edx, byte [r12 + rcx]
+    test    edx, edx
+    jz      .scan_type_dec
+    cmp     edx, TLS_RECORD_HANDSHAKE
+    je      .type_ok_dec
+    cmp     edx, TLS_RECORD_APPLICATION_DATA
+    jne     .bad_rec_dec
+.type_ok_dec:
+    mov     r8d, edx
+    mov     r11, [tls_record_seq_ptr]
+    inc     qword [r11]
+    mov     eax, ecx
+    mov     ecx, r8d
+    er_ok
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+.bad_rec_dec:
+    mov     eax, -1
+    er_err  ERROR_INVALID_PARAM
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+.fail_rec_dec:
+    mov     eax, -1
+    er_err  ERROR_TLS_RECORD
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+
+; ==================================================================
+; er_tls_server_hs_record_decrypt
+; rdi=out_plain, rsi=record, edx=record_len
+; Returns eax=handshake_plain_len after authenticated decrypt.
+; ==================================================================
+global er_tls_server_hs_record_decrypt
+er_fn er_tls_server_hs_record_decrypt
+    lea     r8, [tls_server_hs_key]
+    lea     r9, [tls_server_hs_iv]
+    lea     rax, [tls_server_hs_seq]
+    push    rax
+    call    er_tls_record_decrypt
+    add     rsp, 8
+    test    eax, eax
+    js      .fail_server_hs
+    cmp     ecx, TLS_RECORD_HANDSHAKE
+    jne     .bad_server_hs
+    er_ok
+    er_ret
+.bad_server_hs:
+    mov     eax, -1
+    er_err  ERROR_TLS_RECORD
+    er_ret
+.fail_server_hs:
+    er_ret
+
+; ==================================================================
 ; er_tls_transcript_hash_ch_sh
 ; rdi=ServerHello record, esi=record len, rdx=out hash[32]
 ; Hashes ClientHello.handshake || ServerHello.handshake.
@@ -1341,8 +1609,47 @@ er_fn er_tls_connect
     test    eax, eax
     js      .fail
 
-    ; Certificate verification, Finished validation, and AEAD record
-    ; protection are required before application data can flow.
+    ; Read and authenticate the first encrypted server handshake flight.
+    mov     ecx, 500
+.wait_encrypted_hs:
+    push    rcx
+    call    er_net_poll
+    pop     rcx
+
+    push    rcx
+    mov     edi, ebx
+    lea     rsi, [tls_rx_record]
+    lea     rdx, [tls_rx_len]
+    mov     dword [tls_rx_len], TLS_RX_RECORD_MAX
+    call    er_tcp_recv
+    pop     rcx
+    test    eax, eax
+    jns     .got_encrypted_hs
+    dec     ecx
+    jnz     .wait_encrypted_hs
+    jmp     .fail
+
+.got_encrypted_hs:
+    cmp     dword [tls_rx_len], 0
+    jne     .process_encrypted_hs
+    dec     ecx
+    jnz     .wait_encrypted_hs
+    jmp     .fail
+
+.process_encrypted_hs:
+    lea     rdi, [tls_transcript]
+    lea     rsi, [tls_rx_record]
+    mov     edx, [tls_rx_len]
+    call    er_tls_server_hs_record_decrypt
+    test    eax, eax
+    js      .fail
+    cmp     eax, TLS_HANDSHAKE_HEADER_LEN
+    jb      .fail
+    cmp     byte [tls_transcript], TLS_HANDSHAKE_ENCRYPTED_EXTENSIONS
+    jne     .fail
+
+    ; Certificate verification and Finished validation are still required
+    ; before application data can flow.
     mov     eax, -1
     er_err  ERROR_TLS_UNSUPPORTED
     pop     rbx

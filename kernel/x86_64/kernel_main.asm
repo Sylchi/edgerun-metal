@@ -100,6 +100,7 @@ extern er_hda_start_square_wave
 extern er_hda_start_mic_capture
 extern er_hda_get_start_stage
 extern er_hda_get_capture_stage
+extern er_hda_get_capture_signal
 extern er_hda_get_stream_debug
 extern er_hda_get_capture_debug
 extern er_xhci_cmd_submit_noop
@@ -321,6 +322,9 @@ check_hda_ctl:   db " ctl ", 0
 check_hda_sts:   db " sts ", 0
 check_hda_lpib:  db " lpib ", 0
 check_hda_cbl:   db " cbl ", 0
+check_hda_sum:   db " sum ", 0
+check_hda_xor:   db " xor ", 0
+check_hda_or:    db " or ", 0
 check_intel_gpu: db "check: intel_gpu ", 0
 check_intel_gpu_abs: db "check: intel_gpu absent", 0
 ok_text:       db "ok", 0
@@ -438,6 +442,9 @@ hda_mic_ctl: resd 1
 hda_mic_sts: resd 1
 hda_mic_lpib: resd 1
 hda_mic_cbl: resd 1
+hda_mic_sum: resd 1
+hda_mic_xor: resd 1
+hda_mic_or: resd 1
 
 %define VIRTIO_NET_STORAGE_size 4900
 virtio_net_dev:      resb VIRTIO_NET_DEVICE_size
@@ -1486,6 +1493,30 @@ er_fn er_kernel_main
     call    er_serial_puts
     mov     rdi, COM1_PORT
     mov     esi, [rel hda_mic_cbl]
+    call    er_serial_puthex32
+    lea     rdi, [rel hda_mic_sum]
+    lea     rsi, [rel hda_mic_xor]
+    lea     rdx, [rel hda_mic_or]
+    call    er_hda_get_capture_signal
+    test    eax, eax
+    jnz     .hda_print_done
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_hda_sum]
+    call    er_serial_puts
+    mov     rdi, COM1_PORT
+    mov     esi, [rel hda_mic_sum]
+    call    er_serial_puthex32
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_hda_xor]
+    call    er_serial_puts
+    mov     rdi, COM1_PORT
+    mov     esi, [rel hda_mic_xor]
+    call    er_serial_puthex32
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_hda_or]
+    call    er_serial_puts
+    mov     rdi, COM1_PORT
+    mov     esi, [rel hda_mic_or]
     call    er_serial_puthex32
 .hda_print_done:
     call    .crlf

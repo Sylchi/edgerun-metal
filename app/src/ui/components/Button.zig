@@ -120,7 +120,11 @@ pub const IconButton = struct {
 
     pub fn render(self: IconButton, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         const paint = buttonPaint(self.variant, options);
-        if (paint.fill) |fill| try scene.pushRect(bounds, fill, .fill, radius, 0.0);
+        if (paint.fill) |fill| {
+            try scene.pushRect(bounds.insetUniform(-button_shadow_inset), button_shadow, .shadow, radius, button_shadow_size);
+            try scene.pushGradientRect(bounds, fill, button_floor, radius);
+            try scene.pushRect(bounds.insetLtrb(1.0, 1.0, 1.0, bounds.h - button_rim_height), button_rim, .fill, radius, 0.0);
+        }
         if (paint.border) |border| try scene.pushRect(bounds, border, .border, radius, 0.0);
         try self.icon.renderColor(scene, iconButtonIconBounds(bounds), paint.text);
     }
@@ -155,7 +159,11 @@ pub const IconButton = struct {
 
 fn renderButton(scene: *ui.Scene, bounds: ui.Rect, button: Button, options: RenderOptions) ui.RenderError!void {
     const paint = buttonPaint(button.variant, options);
-    if (paint.fill) |fill| try scene.pushRect(bounds, fill, .fill, radius, 0.0);
+    if (paint.fill) |fill| {
+        try scene.pushRect(bounds.insetUniform(-button_shadow_inset), button_shadow, .shadow, radius, button_shadow_size);
+        try scene.pushGradientRect(bounds, fill, button_floor, radius);
+        try scene.pushRect(bounds.insetLtrb(1.0, 1.0, 1.0, bounds.h - button_rim_height), button_rim, .fill, radius, 0.0);
+    }
     if (paint.border) |border| try scene.pushRect(bounds, border, .border, radius, 0.0);
     try renderContent(scene, bounds, button.label, paint.text, button.icon_slot, labelPadding(options.control_size));
 }
@@ -324,6 +332,12 @@ const min_width: f32 = 44.0;
 const icon_button_size: f32 = 36.0;
 const button_danger = ui.Color{ .r = 225, .g = 29, .b = 72 };
 const button_danger_text = ui.Color{ .r = 255, .g = 255, .b = 255 };
+const button_shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 72 };
+const button_floor = ui.Color{ .r = 7, .g = 9, .b = 12, .a = 36 };
+const button_rim = ui.Color{ .r = 255, .g = 255, .b = 255, .a = 18 };
+const button_shadow_inset: f32 = 1.0;
+const button_shadow_size: f32 = 8.0;
+const button_rim_height: f32 = 1.0;
 const trailing_button_flag: u16 = 0x0100;
 
 fn buttonHeight(size: common.ControlSize) f32 {

@@ -949,6 +949,56 @@ er_fn er_hda_get_capture_stage
     ret
 
 ; ==================================================================
+; er_hda_get_capture_signal — summarize the microphone capture buffer
+; int er_hda_get_capture_signal(uint32_t* out_sum, uint32_t* out_xor,
+;                               uint32_t* out_or)
+; A zero OR means the capture buffer is still entirely zero.
+; ==================================================================
+er_fn er_hda_get_capture_signal
+    push    rbx
+    push    r12
+    push    r13
+
+    mov     rbx, rdi
+    mov     r12, rsi
+    mov     r13, rdx
+    test    rbx, rbx
+    jz      .cs_bad_arg
+    test    r12, r12
+    jz      .cs_bad_arg
+    test    r13, r13
+    jz      .cs_bad_arg
+
+    lea     rdi, [rel hda_mic_buffer]
+    mov     ecx, HDA_MIC_BYTES / 4
+    xor     eax, eax
+    xor     esi, esi
+    xor     edx, edx
+.cs_loop:
+    mov     r8d, [rdi]
+    add     eax, r8d
+    xor     esi, r8d
+    or      edx, r8d
+    add     rdi, 4
+    dec     ecx
+    jnz     .cs_loop
+
+    mov     [rbx], eax
+    mov     [r12], esi
+    mov     [r13], edx
+    xor     eax, eax
+    er_ok
+    jmp     .cs_out
+.cs_bad_arg:
+    er_err  ERROR_BAD_ARGUMENT
+    mov     eax, -1
+.cs_out:
+    pop     r13
+    pop     r12
+    pop     rbx
+    ret
+
+; ==================================================================
 ; er_hda_get_stream_debug — read first output stream descriptor state
 ; int er_hda_get_stream_debug(uint32_t bar0, uint32_t gcap,
 ;                             uint32_t* out_ctl, uint32_t* out_sts,

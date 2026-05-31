@@ -124,12 +124,13 @@ verify the receipt
   append-only storage, sealed movement, grants, manifests, and receipts.
 - A deterministic x86_64 ASM EdgeRun WASM interpreter for running app code
   without WASI or a fake host filesystem.
+- A host-side x86_64 ASM WASM compiler emitter. The first committed slice emits
+  deterministic exported `i32.const` modules into caller-owned memory and proves
+  them through the canonical interpreter.
 - App containment tests for host-mediated spawn, reclaim, and child-memory
   boundaries.
-- An app runtime that embeds repo source as an object and edits it in
-  WASM-owned memory. Successor artifact compilation is intentionally routed to
-  the canonical host-side compiler/runtime path; there is no app-side Zig WASM
-  interpreter.
+- App authoring is converging on host-side compilation to WASM followed by the
+  canonical interpreter/JIT path. There is no browser app-runtime contract.
 - A shared app render contract consumed by web host, CPU software rendering,
   Wayland, GLES, and DRM/GBM host paths.
 - Repo-owned font, SVG icon, image, video, and audio decode/render paths.
@@ -331,6 +332,7 @@ Focused checks:
 ./build.sh test-serial
 ./build.sh test-sw-fb
 ./build.sh test-render-ir
+./build.sh test-wasm-compiler
 ./build.sh test-wasm-jit
 ./build.sh test-wasm-float
 ./build.sh test-recursion-valid
