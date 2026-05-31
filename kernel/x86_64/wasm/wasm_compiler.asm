@@ -33,8 +33,8 @@ SECTION .text
 
 ; er_wasmc_compile_source(out=rdi, cap=rsi, source=rdx, source_len=rcx)
 ; Source form for the first real host-side compiler slice:
-;   export name = decimal_i32;
-;   export name = decimal_i32 + decimal_i32;
+;   export name = signed_i32;
+;   export name = signed_i32 + signed_i32;
 ; Returns rax=bytes_written, rdx=ERROR_OK on success.
 er_fn er_wasmc_compile_source
     er_frame_push
@@ -568,8 +568,18 @@ er_fn _er_wasmc_parse_ident
 ; Returns eax=value, rcx=cursor_after_number, rdx=0.
 er_fn _er_wasmc_parse_i32
     push    rbx
+    push    r12
     mov     rbx, rdi
+    xor     r12d, r12d
 
+    cmp     rbx, rsi
+    jae     .bad
+    cmp     byte [rbx], '-'
+    jne     .digits
+    mov     r12d, 1
+    inc     rbx
+
+.digits:
     cmp     rbx, rsi
     jae     .bad
     movzx   edx, byte [rbx]
@@ -594,14 +604,20 @@ er_fn _er_wasmc_parse_i32
     jmp     .loop
 
 .finish:
+    test    r12d, r12d
+    jz      .ok
+    neg     eax
+.ok:
     mov     rcx, rbx
     xor     edx, edx
+    pop     r12
     pop     rbx
     ret
 .bad:
     xor     eax, eax
     xor     ecx, ecx
     mov     edx, ERROR_PARSE
+    pop     r12
     pop     rbx
     ret
 

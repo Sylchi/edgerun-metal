@@ -16,7 +16,10 @@ extern er_tls_transcript_append
 extern er_tls_transcript_hash_current
 extern er_tls_server_finished_verify
 extern er_tls_process_server_hs_plain
+extern er_tls_client_finished_record_build
+extern er_tls_derive_application_secrets
 extern er_tls_derive_handshake_secrets
+extern er_tls_connect
 extern er_tls_aes128_gcm_encrypt
 extern er_tls_aes128_gcm_decrypt
 extern er_tls_record_encrypt
@@ -24,6 +27,7 @@ extern er_tls_record_decrypt
 extern er_tls_server_hs_record_decrypt
 extern er_tls_send
 extern er_tor_aes_ctr
+extern er_memcpy
 
 SECTION .bss
 passed: resq 1
@@ -41,11 +45,14 @@ gcm_tag: resb 16
 gcm_pt_dec: resb 16
 aes_block: resb 16
 record_buf: resb 64
-record_plain: resb 16
+record_plain: resb 64
 record_seq_enc: resq 1
 record_seq_dec: resq 1
 record_seq_bad: resq 1
 server_hs_seq_enc: resq 1
+client_hs_seq_dec: resq 1
+connect_hs_seq_enc: resq 1
+tcp_recv_calls: resd 1
 random_calls: resd 1
 
 SECTION .rodata
@@ -272,6 +279,24 @@ _start:
     mov     esi, server_flight_len
     call    er_tls_process_server_hs_plain
     ASSERT_RAX 1
+    lea     rdi, [rel record_buf]
+    call    er_tls_client_finished_record_build
+    ASSERT_EQ eax, TLS_HANDSHAKE_HEADER_LEN + TLS_RANDOM_LEN + TLS_RECORD_OVERHEAD
+    lea     rdi, [rel record_plain]
+    lea     rsi, [rel record_buf]
+    mov     edx, TLS_HANDSHAKE_HEADER_LEN + TLS_RANDOM_LEN + TLS_RECORD_OVERHEAD
+    lea     r8, [rel c0_key]
+    lea     r9, [rel c0_iv]
+    lea     rax, [rel client_hs_seq_dec]
+    push    rax
+    call    er_tls_record_decrypt
+    add     rsp, 8
+    ASSERT_EQ eax, TLS_HANDSHAKE_HEADER_LEN + TLS_RANDOM_LEN
+    ASSERT_EQ ecx, TLS_RECORD_HANDSHAKE
+    movzx   eax, byte [rel record_plain]
+    ASSERT_EQ eax, TLS_HANDSHAKE_FINISHED
+    call    er_tls_derive_application_secrets
+    ASSERT_RAX 0
 
     ; AES block used as GCM tag mask: E(K, J0).
     lea     rdi, [rel aes_block]
@@ -436,6 +461,14 @@ _start:
     call    er_tls_send
     ASSERT_EQ eax, -1
 
+    ; Legacy TLS transport reaches active after Finished and app secrets.
+    call    er_tls_init
+    mov     dword [rel tcp_recv_calls], 0
+    mov     qword [rel connect_hs_seq_enc], 0
+    xor     edi, edi
+    call    er_tls_connect
+    ASSERT_RAX 0
+
     mov     rax, [rel failed]
     test    rax, rax
     jnz     .exit_fail
@@ -540,7 +573,56 @@ er_tor_sha256:
     ret
 
 er_tcp_send:
-er_tcp_recv:
 er_net_poll:
     xor     eax, eax
+    ret
+
+er_tcp_recv:
+    push    rbx
+    push    r12
+    push    r13
+
+    mov     r12, rsi
+    mov     r13, rdx
+    mov     ebx, [rel tcp_recv_calls]
+    inc     dword [rel tcp_recv_calls]
+    cmp     ebx, 0
+    je      .recv_server_hello
+    cmp     ebx, 1
+    je      .recv_server_flight
+    mov     dword [r13], 0
+    xor     eax, eax
+    pop     r13
+    pop     r12
+    pop     rbx
+    ret
+
+.recv_server_hello:
+    mov     rdi, r12
+    lea     rsi, [rel server_hello]
+    mov     edx, server_hello_len
+    call    er_memcpy
+    mov     dword [r13], server_hello_len
+    xor     eax, eax
+    pop     r13
+    pop     r12
+    pop     rbx
+    ret
+
+.recv_server_flight:
+    mov     rdi, r12
+    lea     rsi, [rel server_flight]
+    mov     edx, server_flight_len
+    mov     ecx, TLS_RECORD_HANDSHAKE
+    lea     r8, [rel c0_key]
+    lea     r9, [rel c0_iv]
+    lea     rax, [rel connect_hs_seq_enc]
+    push    rax
+    call    er_tls_record_encrypt
+    add     rsp, 8
+    mov     [r13], eax
+    xor     eax, eax
+    pop     r13
+    pop     r12
+    pop     rbx
     ret

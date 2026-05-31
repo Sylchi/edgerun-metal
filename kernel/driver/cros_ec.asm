@@ -44,10 +44,14 @@
 %define EC_MEMMAP_BATT_RATE        0x44
 %define EC_MEMMAP_BATT_CAP         0x48
 %define EC_MEMMAP_BATT_FLAG        0x4c
+%define EC_MEMMAP_BATT_DCAP        0x50
+%define EC_MEMMAP_BATT_DVLT        0x54
 %define EC_MEMMAP_BATT_LFCC        0x58
+%define EC_MEMMAP_BATT_CCNT        0x5c
 %define EC_TEMP_SENSOR_OFFSET      200
 %define EC_TEMP_SENSOR_NOT_PRESENT 0xff
 %define EC_FAN_SPEED_NOT_PRESENT   0xffff
+%define EC_SWITCH_LID_OPEN         0x01
 
 ; EC_CMD_HOST_CMD protocol version
 %define EC_HOST_CMD_VERSION  0x00
@@ -319,48 +323,6 @@ er_fn er_cros_ec_ec_write
     %endif
 
 ; ==================================================================
-; Chrome EC LPC v3 host command packet protocol
-;
-; The host command buffer lives at EC memory offset EC_MEMMAP_HOST_CMD
-; (0x0800). To issue a command:
-;
-;   1. Write struct ec_host_request (8 bytes) to the buffer
-;   2. Write any request data after the header
-;   3. Trigger command execution
-;   4. Read struct ec_host_response from the buffer
-;   5. Read response data after the header
-;
-; Packed struct layouts:
-;
-;   struct ec_host_request {
-;       uint8_t  struct_version;    // = EC_HOST_CMD_VERSION (3)
-;       uint8_t  checksum;          // sum of all bytes = 0
-;       uint16_t command;           // EC command code (LE)
-;       uint8_t  command_version;   // version of the command
-;       uint8_t  reserved;          // = 0
-;       uint16_t data_len;          // bytes of data after header (LE)
-;   };  // total: 8 bytes
-;
-;   struct ec_host_response {
-;       uint8_t  struct_version;    // = EC_HOST_CMD_VERSION
-;       uint8_t  checksum;
-;       uint16_t result;            // EC_RES_SUCCESS = 0 (LE)
-;       uint16_t data_len;          // bytes of data after header (LE)
-;       uint16_t reserved;          // = 0
-;   };  // total: 8 bytes
-;
-; The trigger mechanism writes a command to EC_MEMMAP_OLD_HOST_CMD
-; (0x0200), which the EC firmware interprets as "run the command
-; in the command buffer".
-;
-; Actual trigger value is EC_HOST_CMD_VERSION (byte 0 of the request
-; struct), written to offset 0x0200.
-;
-; After triggering, the EC writes the response struct to the same
-; buffer (0x0800), then sets the status register to indicate readiness.
-;
-; =================================================================
-
 ; Host request/response struct field offsets
 %define EC_HRQ_STRUCT_VERSION   0
 %define EC_HRQ_CHECKSUM         1
@@ -430,14 +392,6 @@ er_fn er_cros_ec_host_command
     mov     r13b, sil            ; r13 = version
     mov     r14, rdx             ; r14 = req_data pointer
     mov     r15d, ecx            ; r15 = req_len
-
-    ; Stack: [frame] [rsp+8 after 5 pushes] = r8, [rsp+16] = r9
-    ; Actually, r8 and r9 are already in register args after the 6th.
-    ; But we only have 6 args max via registers in SysV ABI.
-    ; Extra args go on the stack. Let me re-think.
-
-    ; Wait, we have 6 args: rdi, rsi, rdx, rcx, r8, r9. That works.
-    ; r8 = resp_data, r9 = resp_max_len
 
     mov     rbx, r8              ; rbx = resp_data
     mov     r12d, r9d            ; r12 = resp_max_len (reuse r12)
@@ -667,6 +621,91 @@ er_fn er_cros_ec_read_battery
 .rb_fail:
     mov     eax, 0xff
     add     rsp, 24
+    er_ret
+
+; ==================================================================
+; er_cros_ec_read_switches — read EC switch bitmap
+; int er_cros_ec_read_switches(uint32_t* out_switches)
+; =================================================================
+er_fn er_cros_ec_read_switches
+    test    rdi, rdi
+    jz      .sw_bad_arg
+    push    rbx
+    mov     rbx, rdi
+    mov     edi, EC_MEMMAP_SWITCHES
+    call    er_cros_ec_ec_read
+    movzx   eax, al
+    mov     [rbx], eax
+    pop     rbx
+    xor     eax, eax
+    er_ok
+    er_ret
+.sw_bad_arg:
+    er_err  ERROR_BAD_ARGUMENT
+    mov     eax, -1
+    er_ret
+
+; ==================================================================
+; er_cros_ec_lid_open — read lid switch as boolean
+; Returns: rax = 1 open, 0 closed
+; =================================================================
+er_fn er_cros_ec_lid_open
+    mov     edi, EC_MEMMAP_SWITCHES
+    call    er_cros_ec_ec_read
+    movzx   eax, al
+    and     eax, EC_SWITCH_LID_OPEN
+    cmp     eax, 0
+    setne   al
+    movzx   eax, al
+    er_ok
+    er_ret
+
+; ==================================================================
+; er_cros_ec_read_battery_static — read battery design/health fields
+; int er_cros_ec_read_battery_static(uint32_t* out_design_capacity,
+;                                    uint32_t* out_design_voltage,
+;                                    uint32_t* out_last_full_capacity,
+;                                    uint32_t* out_cycle_count)
+; =================================================================
+er_fn er_cros_ec_read_battery_static
+    test    rdi, rdi
+    jz      .bs_bad_arg
+    test    rsi, rsi
+    jz      .bs_bad_arg
+    test    rdx, rdx
+    jz      .bs_bad_arg
+    test    rcx, rcx
+    jz      .bs_bad_arg
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    mov     rbx, rdi
+    mov     r12, rsi
+    mov     r13, rdx
+    mov     r14, rcx
+    mov     edi, EC_MEMMAP_BATT_DCAP
+    call    _cros_ec_read_u32
+    mov     [rbx], eax
+    mov     edi, EC_MEMMAP_BATT_DVLT
+    call    _cros_ec_read_u32
+    mov     [r12], eax
+    mov     edi, EC_MEMMAP_BATT_LFCC
+    call    _cros_ec_read_u32
+    mov     [r13], eax
+    mov     edi, EC_MEMMAP_BATT_CCNT
+    call    _cros_ec_read_u32
+    mov     [r14], eax
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    xor     eax, eax
+    er_ok
+    er_ret
+.bs_bad_arg:
+    er_err  ERROR_BAD_ARGUMENT
+    mov     eax, -1
     er_ret
 
 ; ==================================================================

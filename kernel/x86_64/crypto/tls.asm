@@ -39,6 +39,12 @@ tls_label_client_hs_len equ $ - tls_label_client_hs
 tls_label_server_hs:
     db "s hs traffic"
 tls_label_server_hs_len equ $ - tls_label_server_hs
+tls_label_client_app:
+    db "c ap traffic"
+tls_label_client_app_len equ $ - tls_label_client_app
+tls_label_server_app:
+    db "s ap traffic"
+tls_label_server_app_len equ $ - tls_label_server_app
 tls_label_key:
     db "key"
 tls_label_key_len equ $ - tls_label_key
@@ -58,6 +64,7 @@ tls_tpm_rsp: resb 96
 tls_client_hello: resb TLS_CLIENT_HELLO_RECORD_LEN
 tls_rx_record: resb TLS_RX_RECORD_MAX
 tls_rx_len: resd 1
+tls_plain_max: resd 1
 tls_client_private: resb TLS_X25519_KEY_LEN
 tls_client_public: resb TLS_X25519_KEY_LEN
 tls_server_public: resb TLS_X25519_KEY_LEN
@@ -72,6 +79,9 @@ tls_transcript_hash: resb TLS_RANDOM_LEN
 tls_empty_hash: resb TLS_RANDOM_LEN
 tls_finished_key: resb TLS_RANDOM_LEN
 tls_finished_verify: resb TLS_RANDOM_LEN
+tls_master_secret: resb TLS_RANDOM_LEN
+tls_client_app_traffic_secret: resb TLS_RANDOM_LEN
+tls_server_app_traffic_secret: resb TLS_RANDOM_LEN
 tls_early_secret: resb TLS_RANDOM_LEN
 tls_derived_secret: resb TLS_RANDOM_LEN
 tls_handshake_secret: resb TLS_RANDOM_LEN
@@ -83,7 +93,14 @@ tls_client_hs_iv: resb 12
 tls_server_hs_iv: resb 12
 tls_client_hs_seq: resq 1
 tls_server_hs_seq: resq 1
+tls_client_app_key: resb 16
+tls_server_app_key: resb 16
+tls_client_app_iv: resb 12
+tls_server_app_iv: resb 12
+tls_client_app_seq: resq 1
+tls_server_app_seq: resq 1
 tls_key_block: resb TLS_RANDOM_LEN
+tls_client_finished_msg: resb TLS_HANDSHAKE_HEADER_LEN + TLS_RANDOM_LEN
 tls_record_inner: resb TLS_PLAINTEXT_MAX + TLS_INNER_CONTENT_TYPE_LEN
 tls_record_nonce: resb TLS_GCM_IV_LEN
 tls_record_seq_ptr: resq 1
@@ -112,6 +129,8 @@ er_fn er_tls_init
     mov     dword [tls_conn_id], -1
     mov     qword [tls_client_hs_seq], 0
     mov     qword [tls_server_hs_seq], 0
+    mov     qword [tls_client_app_seq], 0
+    mov     qword [tls_server_app_seq], 0
     mov     dword [tls_transcript_len], 0
     xor     eax, eax
     er_ok
@@ -1666,6 +1685,204 @@ er_fn er_tls_process_server_hs_plain
     er_ret
 
 ; ==================================================================
+; er_tls_client_finished_record_build
+; rdi=out_record. Returns eax=record_len.
+; Builds client Finished with client handshake traffic secret and appends it
+; to the transcript only after record encryption succeeds.
+; ==================================================================
+global er_tls_client_finished_record_build
+er_fn er_tls_client_finished_record_build
+    push    rbx
+    mov     rbx, rdi
+    test    rbx, rbx
+    jz      .bad_client_finished
+
+    lea     rdi, [tls_client_hs_traffic_secret]
+    lea     rsi, [rel tls_label_finished]
+    mov     edx, tls_label_finished_len
+    xor     ecx, ecx
+    xor     r8d, r8d
+    lea     r9, [tls_finished_key]
+    call    er_tls_hkdf_expand_label
+    test    eax, eax
+    js      .fail_client_finished
+
+    lea     rdi, [tls_transcript_hash]
+    call    er_tls_transcript_hash_current
+    test    eax, eax
+    js      .fail_client_finished
+
+    lea     rdi, [tls_finished_key]
+    mov     esi, TLS_RANDOM_LEN
+    lea     rdx, [tls_transcript_hash]
+    mov     ecx, TLS_RANDOM_LEN
+    lea     r8, [tls_finished_verify]
+    call    er_tor_hmac_sha256
+    cmp     eax, TLS_RANDOM_LEN
+    jne     .fail_client_finished
+
+    mov     byte [tls_client_finished_msg], TLS_HANDSHAKE_FINISHED
+    mov     byte [tls_client_finished_msg + 1], 0
+    mov     byte [tls_client_finished_msg + 2], 0
+    mov     byte [tls_client_finished_msg + 3], TLS_RANDOM_LEN
+    lea     rdi, [tls_client_finished_msg + TLS_HANDSHAKE_HEADER_LEN]
+    lea     rsi, [tls_finished_verify]
+    mov     edx, TLS_RANDOM_LEN
+    call    er_memcpy
+
+    mov     rdi, rbx
+    lea     rsi, [tls_client_finished_msg]
+    mov     edx, TLS_HANDSHAKE_HEADER_LEN + TLS_RANDOM_LEN
+    mov     ecx, TLS_RECORD_HANDSHAKE
+    lea     r8, [tls_client_hs_key]
+    lea     r9, [tls_client_hs_iv]
+    lea     rax, [tls_client_hs_seq]
+    push    rax
+    call    er_tls_record_encrypt
+    add     rsp, 8
+    test    eax, eax
+    js      .fail_client_finished
+    push    rax
+    lea     rdi, [tls_client_finished_msg]
+    mov     esi, TLS_HANDSHAKE_HEADER_LEN + TLS_RANDOM_LEN
+    call    er_tls_transcript_append
+    test    eax, eax
+    pop     rax
+    js      .fail_client_finished
+    er_ok
+    pop     rbx
+    er_ret
+.bad_client_finished:
+    mov     eax, -1
+    er_err  ERROR_INVALID_PARAM
+    pop     rbx
+    er_ret
+.fail_client_finished:
+    mov     eax, -1
+    er_err  ERROR_TLS_HANDSHAKE
+    pop     rbx
+    er_ret
+
+; ==================================================================
+; er_tls_derive_application_secrets
+; Derives master secret, application traffic secrets, and app record keys/IVs.
+; Requires transcript to include both server and client Finished.
+; ==================================================================
+global er_tls_derive_application_secrets
+er_fn er_tls_derive_application_secrets
+    ; derived_secret = Derive-Secret(handshake_secret, "derived", empty_hash)
+    lea     rdi, [tls_handshake_secret]
+    lea     rsi, [rel tls_label_derived]
+    mov     edx, tls_label_derived_len
+    lea     rcx, [tls_empty_hash]
+    mov     r8d, TLS_RANDOM_LEN
+    lea     r9, [tls_derived_secret]
+    call    er_tls_hkdf_expand_label
+    test    eax, eax
+    js      .fail_app
+
+    ; master_secret = HKDF-Extract(derived_secret, zero-length IKM)
+    lea     rdi, [tls_derived_secret]
+    mov     esi, TLS_RANDOM_LEN
+    lea     rdx, [rel tls_zero_secret]
+    xor     ecx, ecx
+    lea     r8, [tls_master_secret]
+    call    er_tls_hkdf_extract
+    test    eax, eax
+    js      .fail_app
+
+    lea     rdi, [tls_transcript_hash]
+    call    er_tls_transcript_hash_current
+    test    eax, eax
+    js      .fail_app
+
+    lea     rdi, [tls_master_secret]
+    lea     rsi, [rel tls_label_client_app]
+    mov     edx, tls_label_client_app_len
+    lea     rcx, [tls_transcript_hash]
+    mov     r8d, TLS_RANDOM_LEN
+    lea     r9, [tls_client_app_traffic_secret]
+    call    er_tls_hkdf_expand_label
+    test    eax, eax
+    js      .fail_app
+
+    lea     rdi, [tls_master_secret]
+    lea     rsi, [rel tls_label_server_app]
+    mov     edx, tls_label_server_app_len
+    lea     rcx, [tls_transcript_hash]
+    mov     r8d, TLS_RANDOM_LEN
+    lea     r9, [tls_server_app_traffic_secret]
+    call    er_tls_hkdf_expand_label
+    test    eax, eax
+    js      .fail_app
+
+    lea     rdi, [tls_client_app_traffic_secret]
+    lea     rsi, [rel tls_label_key]
+    mov     edx, tls_label_key_len
+    xor     ecx, ecx
+    xor     r8d, r8d
+    lea     r9, [tls_key_block]
+    call    er_tls_hkdf_expand_label
+    test    eax, eax
+    js      .fail_app
+    lea     rdi, [tls_client_app_key]
+    lea     rsi, [tls_key_block]
+    mov     edx, 16
+    call    er_memcpy
+
+    lea     rdi, [tls_server_app_traffic_secret]
+    lea     rsi, [rel tls_label_key]
+    mov     edx, tls_label_key_len
+    xor     ecx, ecx
+    xor     r8d, r8d
+    lea     r9, [tls_key_block]
+    call    er_tls_hkdf_expand_label
+    test    eax, eax
+    js      .fail_app
+    lea     rdi, [tls_server_app_key]
+    lea     rsi, [tls_key_block]
+    mov     edx, 16
+    call    er_memcpy
+
+    lea     rdi, [tls_client_app_traffic_secret]
+    lea     rsi, [rel tls_label_iv]
+    mov     edx, tls_label_iv_len
+    xor     ecx, ecx
+    xor     r8d, r8d
+    lea     r9, [tls_key_block]
+    call    er_tls_hkdf_expand_label
+    test    eax, eax
+    js      .fail_app
+    lea     rdi, [tls_client_app_iv]
+    lea     rsi, [tls_key_block]
+    mov     edx, 12
+    call    er_memcpy
+
+    lea     rdi, [tls_server_app_traffic_secret]
+    lea     rsi, [rel tls_label_iv]
+    mov     edx, tls_label_iv_len
+    xor     ecx, ecx
+    xor     r8d, r8d
+    lea     r9, [tls_key_block]
+    call    er_tls_hkdf_expand_label
+    test    eax, eax
+    js      .fail_app
+    lea     rdi, [tls_server_app_iv]
+    lea     rsi, [tls_key_block]
+    mov     edx, 12
+    call    er_memcpy
+
+    mov     qword [tls_client_app_seq], 0
+    mov     qword [tls_server_app_seq], 0
+    xor     eax, eax
+    er_ok
+    er_ret
+.fail_app:
+    mov     eax, -1
+    er_err  ERROR_TLS_HANDSHAKE
+    er_ret
+
+; ==================================================================
 ; er_tls_derive_handshake_secrets
 ; rdi=ServerHello record, esi=record len
 ; returns eax=0 after deriving early, derived, handshake,
@@ -1823,6 +2040,12 @@ er_fn er_tls_connect
     push    rbx
     mov     ebx, edi
 
+    cmp     dword [tls_state], TLS_STATE_CLIENT_HELLO_SENT
+    jne     .start_handshake
+    cmp     [tls_conn_id], ebx
+    je      .wait_server_hello_start
+
+.start_handshake:
     mov     rdi, tls_client_hello
     mov     esi, TLS_CLIENT_HELLO_RECORD_LEN
     xor     edx, edx
@@ -1840,6 +2063,7 @@ er_fn er_tls_connect
     mov     [tls_conn_id], ebx
     mov     dword [tls_state], TLS_STATE_CLIENT_HELLO_SENT
 
+.wait_server_hello_start:
     ; Read and process ServerHello.
     mov     ecx, 500
 .wait_server_hello:
@@ -1908,6 +2132,26 @@ er_fn er_tls_connect
     jmp     .fail
 
 .process_encrypted_hs:
+    ; TLS 1.3 middlebox compatibility permits a plaintext CCS before the
+    ; encrypted handshake flight. It carries no transcript data.
+    cmp     dword [tls_rx_len], TLS_RECORD_HEADER_LEN + 1
+    jne     .decrypt_encrypted_hs
+    cmp     byte [tls_rx_record], TLS_RECORD_CHANGE_CIPHER_SPEC
+    jne     .decrypt_encrypted_hs
+    cmp     byte [tls_rx_record + 1], TLS_RECORD_VERSION_MAJOR
+    jne     .decrypt_encrypted_hs
+    cmp     byte [tls_rx_record + 2], TLS_LEGACY_VERSION_MINOR
+    jne     .decrypt_encrypted_hs
+    cmp     byte [tls_rx_record + 3], 0
+    jne     .decrypt_encrypted_hs
+    cmp     byte [tls_rx_record + 4], 1
+    jne     .decrypt_encrypted_hs
+    cmp     byte [tls_rx_record + 5], 1
+    jne     .decrypt_encrypted_hs
+    mov     ecx, 500
+    jmp     .wait_encrypted_hs
+
+.decrypt_encrypted_hs:
     lea     rdi, [tls_transcript]
     lea     rsi, [tls_rx_record]
     mov     edx, [tls_rx_len]
@@ -1925,10 +2169,23 @@ er_fn er_tls_connect
     jmp     .wait_encrypted_hs
 
 .server_finished:
-    ; Certificate trust policy and application traffic secrets are still
-    ; required before application data can flow.
-    mov     eax, -1
-    er_err  ERROR_TLS_UNSUPPORTED
+    lea     rdi, [tls_rx_record]
+    call    er_tls_client_finished_record_build
+    test    eax, eax
+    js      .fail
+    mov     edi, ebx
+    lea     rsi, [tls_rx_record]
+    mov     edx, eax
+    call    er_tcp_send
+    test    eax, eax
+    js      .fail
+    call    er_tls_derive_application_secrets
+    test    eax, eax
+    js      .fail
+
+    mov     dword [tls_state], TLS_STATE_ACTIVE
+    xor     eax, eax
+    er_ok
     pop     rbx
     er_ret
 
@@ -1945,22 +2202,118 @@ er_fn er_tls_connect
 ; ==================================================================
 global er_tls_send
 er_fn er_tls_send
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+
+    mov     ebx, edi
+    mov     r12, rsi
+    mov     r13d, edx
     cmp     dword [tls_state], TLS_STATE_ACTIVE
     jne     .closed
+    lea     rdi, [tls_rx_record]
+    mov     rsi, r12
+    mov     edx, r13d
+    mov     ecx, TLS_RECORD_APPLICATION_DATA
+    lea     r8, [tls_client_app_key]
+    lea     r9, [tls_client_app_iv]
+    lea     rax, [tls_client_app_seq]
+    push    rax
+    call    er_tls_record_encrypt
+    add     rsp, 8
+    test    eax, eax
+    js      .record_fail
+    mov     r14d, eax
+    mov     edi, ebx
+    lea     rsi, [tls_rx_record]
+    mov     edx, r14d
     call    er_tcp_send
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
     er_ret
 .closed:
     mov     eax, -1
     er_err  ERROR_TLS_CLOSED
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+.record_fail:
+    mov     eax, -1
+    er_err  ERROR_TLS_RECORD
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
     er_ret
 
 global er_tls_recv
 er_fn er_tls_recv
+    push    rbx
+    push    r12
+    push    r13
+
+    mov     ebx, edi
+    mov     r12, rsi
+    mov     r13, rdx
     cmp     dword [tls_state], TLS_STATE_ACTIVE
     jne     .closed
+    mov     eax, [r13]
+    mov     [tls_plain_max], eax
+    mov     dword [tls_rx_len], TLS_RX_RECORD_MAX
+    mov     edi, ebx
+    lea     rsi, [tls_rx_record]
+    lea     rdx, [tls_rx_len]
     call    er_tcp_recv
+    test    eax, eax
+    js      .recv_fail
+    cmp     dword [tls_rx_len], 0
+    jne     .decrypt
+    mov     dword [r13], 0
+    xor     eax, eax
+    er_ok
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+.decrypt:
+    mov     rdi, r12
+    lea     rsi, [tls_rx_record]
+    mov     edx, [tls_rx_len]
+    lea     r8, [tls_server_app_key]
+    lea     r9, [tls_server_app_iv]
+    lea     rax, [tls_server_app_seq]
+    push    rax
+    call    er_tls_record_decrypt
+    add     rsp, 8
+    test    eax, eax
+    js      .recv_fail
+    cmp     ecx, TLS_RECORD_APPLICATION_DATA
+    jne     .recv_fail
+    cmp     eax, [tls_plain_max]
+    ja      .recv_fail
+    mov     [r13], eax
+    xor     eax, eax
+    er_ok
+    pop     r13
+    pop     r12
+    pop     rbx
     er_ret
 .closed:
     mov     eax, -1
     er_err  ERROR_TLS_CLOSED
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+.recv_fail:
+    mov     eax, -1
+    er_err  ERROR_TLS_RECORD
+    pop     r13
+    pop     r12
+    pop     rbx
     er_ret

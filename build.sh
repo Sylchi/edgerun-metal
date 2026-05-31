@@ -625,6 +625,26 @@ cmd_bench_wasm_jit() {
 	"$bin"
 }
 
+cmd_bench_zig_wasm() {
+	local zig_src="app/bench/zig_wasm_bench.zig"
+	local native_obj="${ASM_BUILD}/zig_wasm_bench_native.o"
+	local wasm_bin="${ASM_BUILD}/zig_wasm_bench.wasm"
+	local asm_src="${TEST_DIR}/bench_zig_wasm.asm"
+	local asm_obj="${ASM_BUILD}/bench_zig_wasm.o"
+	local bin="${ASM_BUILD}/bench_zig_wasm"
+	zig build-obj -O ReleaseFast -fstrip -target x86_64-linux -femit-bin="$native_obj" "$zig_src"
+	zig build-exe -O ReleaseFast -fstrip -target wasm32-freestanding -fno-entry -rdynamic -femit-bin="$wasm_bin" "$zig_src"
+	local wasm_abs="${PWD}/${wasm_bin}"
+	${YASM} -f elf64 ${ASM_INC} -DZIG_WASM_BENCH_PATH="\"${wasm_abs}\"" -o "$asm_obj" "$asm_src"
+	local runtime_o="${ASM_BUILD}/runtime.o"
+	if [ ! -f "$runtime_o" ]; then
+		elf64 "${ASM_DIR}/rt/runtime.asm" "$runtime_o"
+	fi
+	ld -T "${TEST_DIR}/test_jit.ld" -nostdlib -static -o "$bin" "$asm_obj" "$native_obj" "$runtime_o"
+	echo "  LD  ${bin}"
+	"$bin"
+}
+
 # ---- ARM / Pi Zero targets ----
 HOST_BUILD="${BUILD_DIR}/host"
 PI_BUILD="${BUILD_DIR}/pi"
@@ -719,6 +739,7 @@ EdgeRun build targets:
   test-x25519         Run X25519 scalar mult RFC 7748 test vectors (self-hosted ASM)
   test-bench-render-ir Run render_ir RDTSC benchmark (self-hosted ASM)
   bench-wasm-jit      Run WASM JIT vs native RDTSC benchmark (self-hosted ASM)
+  bench-zig-wasm      Compile same Zig code to x86_64 + WASM, then benchmark native/interpreter/JIT
   pi-kernel           Build Pi Zero W kernel.img (ARMv6)
   pi-usb-boot         Build Pi USB boot host tool (x86_64)
   pi-boot             Build + boot Pi Zero via USB
@@ -762,6 +783,7 @@ case "${1:-help}" in
 	test-x25519-debug) cmd_test_x25519_debug ;;
 	test-bench-render-ir) cmd_test_bench_render_ir ;;
 	bench-wasm-jit) cmd_bench_wasm_jit ;;
+	bench-zig-wasm) cmd_bench_zig_wasm ;;
 	pi-kernel)      cmd_pi_kernel ;;
 	pi-usb-boot)    cmd_pi_usb_boot ;;
 	pi-boot)        cmd_pi_boot ;;

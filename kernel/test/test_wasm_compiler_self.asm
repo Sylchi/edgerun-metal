@@ -20,12 +20,18 @@ source_add: db "export sum = 40 + 2;"
 SOURCE_ADD_LEN equ 20
 source_bad: db "export = 1;"
 SOURCE_BAD_LEN equ 11
-source_negative_bad: db "export f = -7;"
-SOURCE_NEGATIVE_BAD_LEN equ 13
+source_negative: db "export neg = -7;"
+SOURCE_NEGATIVE_LEN equ 16
+source_add_negative: db "export sum_neg = -40 + 2;"
+SOURCE_ADD_NEGATIVE_LEN equ 25
 answer_name: db "answer_1"
 ANSWER_NAME_LEN equ 8
 sum_name: db "sum"
 SUM_NAME_LEN equ 3
+neg_name: db "neg"
+NEG_NAME_LEN equ 3
+sum_neg_name: db "sum_neg"
+SUM_NEG_NAME_LEN equ 7
 
 SECTION .bss
 runtime: resb RUNTIME_SIZE
@@ -148,16 +154,48 @@ _start:
 
     lea     rdi, [rel compiled_wasm_b]
     mov     esi, 128
-    lea     rdx, [rel source_bad]
-    mov     ecx, SOURCE_BAD_LEN
+    lea     rdx, [rel source_negative]
+    mov     ecx, SOURCE_NEGATIVE_LEN
     call    er_wasmc_compile_source
-    cmp     rdx, ERROR_PARSE
+    test    rdx, rdx
+    jnz     .fail
+
+    mov     r12, rax
+    lea     rdi, [rel runtime]
+    lea     rsi, [rel compiled_wasm_b]
+    mov     rdx, r12
+    lea     rcx, [rel neg_name]
+    mov     r8d, NEG_NAME_LEN
+    call    er_fn_run
+    test    rdx, rdx
+    jz      .fail
+    cmp     eax, 0xfffffff9
     jne     .fail
 
     lea     rdi, [rel compiled_wasm_b]
     mov     esi, 128
-    lea     rdx, [rel source_negative_bad]
-    mov     ecx, SOURCE_NEGATIVE_BAD_LEN
+    lea     rdx, [rel source_add_negative]
+    mov     ecx, SOURCE_ADD_NEGATIVE_LEN
+    call    er_wasmc_compile_source
+    test    rdx, rdx
+    jnz     .fail
+
+    mov     r12, rax
+    lea     rdi, [rel runtime]
+    lea     rsi, [rel compiled_wasm_b]
+    mov     rdx, r12
+    lea     rcx, [rel sum_neg_name]
+    mov     r8d, SUM_NEG_NAME_LEN
+    call    er_fn_run
+    test    rdx, rdx
+    jz      .fail
+    cmp     eax, 0xffffffda
+    jne     .fail
+
+    lea     rdi, [rel compiled_wasm_b]
+    mov     esi, 128
+    lea     rdx, [rel source_bad]
+    mov     ecx, SOURCE_BAD_LEN
     call    er_wasmc_compile_source
     cmp     rdx, ERROR_PARSE
     jne     .fail

@@ -58,9 +58,8 @@ er_wasm_read_leb_i32:
     inc     r8d
     test    r9b, LEB_CONTINUE_MASK
     jnz     .leb_loop_s
-    ; sign extend if needed
     mov     ecx, r8d
-    shl     ecx, 3              ; total bits read = bytes * 7
+    imul    ecx, LEB_BITS_PER_BYTE
     cmp     ecx, 32
     jge     .done_s
     test    r9b, LEB_SIGN_MASK
@@ -100,7 +99,7 @@ er_wasm_read_leb_i64:
     test    r9b, LEB_CONTINUE_MASK
     jnz     .leb_loop_l
     mov     ecx, r8d
-    shl     ecx, 3
+    imul    ecx, LEB_BITS_PER_BYTE
     cmp     ecx, 64
     jge     .done_l
     test    r9b, LEB_SIGN_MASK

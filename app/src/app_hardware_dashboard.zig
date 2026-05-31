@@ -7,6 +7,7 @@ const IconComponent = @import("ui/components/Icon.zig");
 const RenderOptions = @import("ui/component_common.zig").RenderOptions;
 const interaction = @import("ui/interaction.zig");
 const ui_runtime = @import("ui/runtime.zig");
+const text_metrics = @import("ui/text_metrics.zig");
 
 const linux = std.os.linux;
 
@@ -40,17 +41,17 @@ const rows = [_]RowDef{
 };
 
 const Component = component_union.Component;
-const hardware_bg_top = ui.Color{ .r = 3, .g = 8, .b = 10 };
-const hardware_bg_bottom = ui.Color{ .r = 8, .g = 13, .b = 17 };
-const hardware_panel = ui.Color{ .r = 18, .g = 21, .b = 24 };
-const hardware_row = ui.Color{ .r = 29, .g = 33, .b = 38 };
-const hardware_border = ui.Color{ .r = 47, .g = 56, .b = 61 };
-const hardware_text = ui.Color{ .r = 242, .g = 246, .b = 241 };
-const hardware_muted = ui.Color{ .r = 143, .g = 154, .b = 158 };
-const hardware_accent = ui.Color{ .r = 12, .g = 207, .b = 154 };
-const hardware_accent_dim = ui.Color{ .r = 6, .g = 81, .b = 66, .a = 180 };
-const hardware_orb = ui.Color{ .r = 14, .g = 185, .b = 148, .a = 46 };
-const hardware_rim = ui.Color{ .r = 255, .g = 255, .b = 255, .a = 16 };
+const hardware_bg_top = ui.Color{ .r = 7, .g = 10, .b = 12 };
+const hardware_bg_bottom = ui.Color{ .r = 11, .g = 14, .b = 17 };
+const hardware_panel = ui.Color{ .r = 20, .g = 22, .b = 25 };
+const hardware_row = ui.Color{ .r = 27, .g = 30, .b = 34 };
+const hardware_border = ui.Color{ .r = 43, .g = 48, .b = 54 };
+const hardware_text = ui.Color{ .r = 239, .g = 242, .b = 239 };
+const hardware_muted = ui.Color{ .r = 150, .g = 156, .b = 160 };
+const hardware_accent = ui.Color{ .r = 54, .g = 194, .b = 160 };
+const hardware_accent_dim = ui.Color{ .r = 22, .g = 91, .b = 76, .a = 74 };
+const hardware_orb = ui.Color{ .r = 54, .g = 194, .b = 160, .a = 14 };
+const hardware_rim = ui.Color{ .r = 255, .g = 255, .b = 255, .a = 8 };
 
 fn hardwareStyle() ui.Style {
     return .{
@@ -164,7 +165,7 @@ pub const State = struct {
     pub fn tick(self: *State) bool {
         self.frame += 1;
         if (!self.auto_refresh) return false;
-        if (self.frame == 1 or self.frame - self.last_refresh_frame >= refresh_interval_frames) {
+        if (self.frame - self.last_refresh_frame >= refresh_interval_frames) {
             self.refresh();
             return true;
         }
@@ -348,13 +349,13 @@ pub const State = struct {
 
     fn renderHeader(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
         try (Component{ .card = .{ .title = "", .detail = "", .variant = .elevated } }).renderInteractive(scene, collector, bounds, options);
-        try scene.pushGradientRect(bounds.insetUniform(1.0), ui.Color{ .r = 9, .g = 74, .b = 61, .a = 92 }, ui.Color.clear, 12.0);
-        const chip = ui.Rect.init(bounds.x + 24.0, bounds.y + 22.0, 56.0, 56.0);
-        try scene.pushRect(chip, hardware_accent_dim, .fill, 14.0, 0.0);
-        try scene.pushRect(chip, hardware_border, .border, 14.0, 0.0);
-        try IconComponent.Icon.named(.device_desktop).renderColor(scene, chip.withHeightCentered(28.0).withWidthCentered(28.0), hardware_accent);
-        try scene.pushBoldText(ui.Rect.init(bounds.x + 96.0, bounds.y + 24.0, @max(1.0, bounds.w - 360.0), 28.0), "Hardware Command Center", options.style.text);
-        try scene.pushText(ui.Rect.init(bounds.x + 96.0, bounds.y + 58.0, @max(1.0, bounds.w - 360.0), 20.0), self.detail(0), options.style.muted);
+        try scene.pushGradientRect(bounds.insetUniform(1.0), ui.Color{ .r = 38, .g = 92, .b = 79, .a = 24 }, ui.Color.clear, 12.0);
+        const chip = ui.Rect.init(bounds.x + 24.0, bounds.y + 26.0, 48.0, 48.0);
+        try scene.pushRect(chip, hardware_accent_dim, .fill, 12.0, 0.0);
+        try scene.pushRect(chip, hardware_border, .border, 12.0, 0.0);
+        try IconComponent.Icon.named(.device_desktop).renderColor(scene, chip.withHeightCentered(24.0).withWidthCentered(24.0), hardware_accent);
+        try scene.pushBoldText(ui.Rect.init(bounds.x + 92.0, bounds.y + 24.0, @max(1.0, bounds.w - 356.0), 28.0), "Hardware Command Center", options.style.text);
+        try scene.pushText(ui.Rect.init(bounds.x + 92.0, bounds.y + 58.0, @max(1.0, bounds.w - 356.0), 20.0), fittedText(self.detail(0), @max(1.0, bounds.w - 356.0)), options.style.muted);
         try (Component{ .badge = .{ .label = self.statusLabel(), .variant = .secondary } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x + bounds.w - 254.0, bounds.y + 36.0, 176.0, 32.0), options);
         try (Component{ .icon_button = .{
             .id = refresh_now_button_id,
@@ -369,7 +370,7 @@ pub const State = struct {
         const row_h = if (cards_per_row == 4) bounds.h else (bounds.h - gap) * 0.5;
         const data = [_]struct { title: []const u8, value: []const u8, detail: []const u8, icon_kind: icon.Icon }{
             .{ .title = "Thermals", .value = self.detail(1), .detail = "CPU sensor", .icon_kind = .temperature },
-            .{ .title = "Memory", .value = self.detail(2), .detail = "Live pressure", .icon_kind = .database },
+            .{ .title = "Memory", .value = memoryMetricValue(self.detail(2)), .detail = "Live pressure", .icon_kind = .database },
             .{ .title = "Display", .value = self.detail(4), .detail = "Panel brightness", .icon_kind = .brightness },
             .{ .title = "Keyboard", .value = self.detail(5), .detail = "Backlight level", .icon_kind = .keyboard },
         };
@@ -390,7 +391,7 @@ pub const State = struct {
         try (Component{ .card = .{ .title = "", .detail = "", .variant = .elevated } }).renderInteractive(scene, collector, bounds, options);
         const inner = bounds.insetUniform(20.0);
         var y = inner.y;
-        try self.renderSectionHeader(scene, inner.x, y, "Controls", "Display and keyboard hardware knobs.", .adjustments_plus, options);
+        try self.renderSectionHeader(scene, inner.x, y, "Controls", "Display and keyboard knobs.", .adjustments_plus, options);
         y += 74.0;
 
         try self.renderControlGroup(scene, collector, ui.Rect.init(inner.x, y, inner.w, 144.0), "Screen", self.detail(4), brightness_slider_id, self.screenBrightnessUnit(), brightness_down_button_id, brightness_up_button_id, "Screen -", "Screen +", .brightness_down, .brightness_up, options);
@@ -411,7 +412,7 @@ pub const State = struct {
     fn renderActivity(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
         try (Component{ .card = .{ .title = "", .detail = "", .variant = .elevated } }).renderInteractive(scene, collector, bounds, options);
         const inner = bounds.insetUniform(20.0);
-        try self.renderSectionHeader(scene, inner.x, inner.y, "Live Hardware", "Readable telemetry with direct controls beside it.", .cpu, options);
+        try self.renderSectionHeader(scene, inner.x, inner.y, "Live Hardware", "Telemetry and direct controls.", .cpu, options);
         const chart_h = @min(250.0, @max(150.0, bounds.h * 0.42));
         try (Component{ .chart = .{ .id = 90_020, .label = "System Activity" } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, inner.y + 74.0, inner.w, chart_h), options);
 
@@ -434,7 +435,7 @@ pub const State = struct {
         try (Component{ .card = .{ .title = "", .detail = "", .variant = .elevated } }).renderInteractive(scene, collector, bounds, options);
         const inner = bounds.insetUniform(20.0);
         var y = inner.y;
-        try self.renderSectionHeader(scene, inner.x, y, "Inventory", "Detected hardware paths and runtime capabilities.", .server, options);
+        try self.renderSectionHeader(scene, inner.x, y, "Inventory", "Detected runtime capabilities.", .server, options);
         y += 74.0;
         const row_h: f32 = if (self.compact_rows) 44.0 else 52.0;
         for (&rows, 0..) |row, index| {
@@ -453,27 +454,25 @@ pub const State = struct {
 
     fn renderSectionHeader(self: *State, scene: *ui.Scene, x: f32, y: f32, title: []const u8, detail_text: []const u8, icon_kind: icon.Icon, options: RenderOptions) !void {
         _ = self;
-        const chip = ui.Rect.init(x, y, 44.0, 44.0);
-        try scene.pushRect(chip, hardware_accent_dim, .fill, 12.0, 0.0);
-        try scene.pushRect(chip, hardware_border, .border, 12.0, 0.0);
-        try IconComponent.Icon.named(icon_kind).renderColor(scene, chip.withHeightCentered(24.0).withWidthCentered(24.0), options.style.accent);
-        try scene.pushBoldText(ui.Rect.init(x + 58.0, y + 1.0, 260.0, 24.0), title, options.style.text);
-        try scene.pushText(ui.Rect.init(x + 58.0, y + 30.0, 300.0, 18.0), detail_text, options.style.muted);
+        const chip = ui.Rect.init(x, y + 2.0, 40.0, 40.0);
+        try scene.pushRect(chip, hardware_accent_dim, .fill, 10.0, 0.0);
+        try scene.pushRect(chip, hardware_border, .border, 10.0, 0.0);
+        try IconComponent.Icon.named(icon_kind).renderColor(scene, chip.withHeightCentered(22.0).withWidthCentered(22.0), options.style.accent);
+        try scene.pushBoldText(ui.Rect.init(x + 54.0, y + 1.0, 260.0, 24.0), title, options.style.text);
+        try scene.pushText(ui.Rect.init(x + 54.0, y + 30.0, 300.0, 18.0), fittedText(detail_text, 300.0), options.style.muted);
     }
 
     fn renderMetricCard(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, title: []const u8, value: []const u8, detail_text: []const u8, icon_kind: icon.Icon, options: RenderOptions) !void {
         _ = self;
         try (Component{ .card = .{ .title = "", .detail = "", .variant = .panel } }).renderInteractive(scene, collector, bounds, options);
         const inner = bounds.insetUniform(18.0);
-        const chip = ui.Rect.init(inner.x, inner.y, 42.0, 42.0);
-        try scene.pushRect(chip, hardware_accent_dim, .fill, 12.0, 0.0);
-        try scene.pushRect(chip, hardware_border, .border, 12.0, 0.0);
-        try IconComponent.Icon.named(icon_kind).renderColor(scene, chip.withHeightCentered(23.0).withWidthCentered(23.0), options.style.accent);
-        try scene.pushStrongText(ui.Rect.init(inner.x + 56.0, inner.y + 1.0, inner.w - 56.0, 20.0), title, options.style.text);
-        try scene.pushText(ui.Rect.init(inner.x + 56.0, inner.y + 27.0, inner.w - 56.0, 16.0), detail_text, options.style.muted);
-        try scene.pushBoldText(ui.Rect.init(inner.x, inner.y + 68.0, inner.w, 28.0), displayValue(value), options.style.text);
-        try scene.pushRect(ui.Rect.init(inner.x, inner.y + inner.h - 3.0, inner.w, 3.0), hardware_border, .fill, 2.0, 0.0);
-        try scene.pushRect(ui.Rect.init(inner.x, inner.y + inner.h - 3.0, inner.w * 0.62, 3.0), options.style.accent, .fill, 2.0, 0.0);
+        const chip = ui.Rect.init(inner.x, inner.y + 1.0, 38.0, 38.0);
+        try scene.pushRect(chip, hardware_accent_dim, .fill, 10.0, 0.0);
+        try scene.pushRect(chip, hardware_border, .border, 10.0, 0.0);
+        try IconComponent.Icon.named(icon_kind).renderColor(scene, chip.withHeightCentered(21.0).withWidthCentered(21.0), options.style.accent);
+        try scene.pushStrongText(ui.Rect.init(inner.x + 52.0, inner.y + 1.0, inner.w - 52.0, 20.0), title, options.style.text);
+        try scene.pushText(ui.Rect.init(inner.x + 52.0, inner.y + 27.0, inner.w - 52.0, 16.0), fittedText(detail_text, inner.w - 52.0), options.style.muted);
+        try scene.pushBoldText(ui.Rect.init(inner.x, inner.y + 68.0, inner.w, 28.0), fittedText(displayValue(value), inner.w), options.style.text);
     }
 
     fn renderControlGroup(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, title: []const u8, value: []const u8, slider_id: u32, slider_value: f32, down_id: u32, up_id: u32, down_label: []const u8, up_label: []const u8, down_icon: icon.Icon, up_icon: icon.Icon, options: RenderOptions) !void {
@@ -481,7 +480,7 @@ pub const State = struct {
         try (Component{ .card = .{ .title = "", .detail = "", .variant = .subtle } }).renderInteractive(scene, collector, bounds, options);
         const inner = bounds.insetUniform(16.0);
         try scene.pushStrongText(ui.Rect.init(inner.x, inner.y, inner.w * 0.55, 20.0), title, options.style.text);
-        try scene.pushText(ui.Rect.init(inner.x + inner.w * 0.55, inner.y, inner.w * 0.45, 18.0), displayValue(value), options.style.muted);
+        try scene.pushText(ui.Rect.init(inner.x + inner.w * 0.55, inner.y, inner.w * 0.45, 18.0), fittedText(displayValue(value), inner.w * 0.45), options.style.muted);
         try (Component{ .slider = .{ .id = slider_id, .label = "", .value = slider_value } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, inner.y + 34.0, inner.w, 34.0), options);
         const half_w = (inner.w - 10.0) * 0.5;
         try (Component{ .button = .{ .id = down_id, .label = down_label, .variant = .outline, .icon_slot = IconComponent.IconSlot.named(.leading, down_icon) } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, inner.y + 82.0, half_w, 36.0), options);
@@ -492,11 +491,11 @@ pub const State = struct {
         _ = self;
         try (Component{ .card = .{ .title = "", .detail = "", .variant = .panel } }).renderInteractive(scene, collector, bounds, options);
         const inner = bounds.insetUniform(16.0);
-        const chip = ui.Rect.init(inner.x, inner.y, 34.0, 34.0);
-        try scene.pushRect(chip, hardware_accent_dim, .fill, 10.0, 0.0);
+        const chip = ui.Rect.init(inner.x, inner.y, 32.0, 32.0);
+        try scene.pushRect(chip, hardware_accent_dim, .fill, 9.0, 0.0);
         try IconComponent.Icon.named(icon_kind).renderColor(scene, chip.withHeightCentered(20.0).withWidthCentered(20.0), options.style.accent);
-        try scene.pushStrongText(ui.Rect.init(inner.x + 46.0, inner.y, inner.w - 46.0, 20.0), title, options.style.text);
-        try scene.pushText(ui.Rect.init(inner.x + 46.0, inner.y + 25.0, inner.w - 46.0, 18.0), displayValue(value), options.style.muted);
+        try scene.pushStrongText(ui.Rect.init(inner.x + 44.0, inner.y, inner.w - 44.0, 20.0), title, options.style.text);
+        try scene.pushText(ui.Rect.init(inner.x + 44.0, inner.y + 25.0, inner.w - 44.0, 18.0), fittedText(displayValue(value), inner.w - 44.0), options.style.muted);
         try (Component{ .progress = .{ .value = unit } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, inner.y + inner.h - 24.0, inner.w, 18.0), options);
     }
 
@@ -566,6 +565,15 @@ fn writeUnavailable(out: []u8) void {
 
 fn displayValue(value: []const u8) []const u8 {
     return if (value.len == 0 or std.mem.eql(u8, value, unavailable_detail)) "N/A" else value;
+}
+
+fn fittedText(value: []const u8, width: f32) []const u8 {
+    return text_metrics.fitPrefix(value, text_metrics.default_text_px, width);
+}
+
+fn memoryMetricValue(value: []const u8) []const u8 {
+    if (std.mem.startsWith(u8, value, "Total:")) return "Memory online";
+    return value;
 }
 
 fn trimBuf(buf: *[detail_bytes]u8) []const u8 {

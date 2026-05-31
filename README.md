@@ -126,7 +126,7 @@ verify the receipt
   without WASI or a fake host filesystem.
 - A host-side x86_64 ASM WASM compiler emitter. The first committed slice emits
   deterministic exported integer modules into caller-owned memory, compiles
-  `export name = decimal_i32;` and `export name = a + b;` source buffers, and
+  `export name = signed_i32;` and `export name = a + b;` source buffers, and
   proves the result through the canonical interpreter.
 - App containment tests for host-mediated spawn, reclaim, and child-memory
   boundaries.
