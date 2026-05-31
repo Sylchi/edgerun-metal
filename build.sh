@@ -97,6 +97,7 @@ KERNEL_ASM_SRCS="
 	crypto/curve25519.asm
 	crypto/tor_ntor.asm
 	crypto/tor_aes.asm
+	crypto/tls.asm
 	crypto/tor_cell.asm
 	crypto/tor_digest.asm
 	crypto/tor.asm
@@ -323,6 +324,7 @@ cmd_test() {
 	cmd_test_render_ir
 	cmd_test_fe_mul
 	cmd_test_spi_flash
+	cmd_test_tls
 	cmd_test_tor
 	cmd_test_x25519
 	cmd_test_wasm_jit
@@ -472,6 +474,10 @@ cmd_test_fe_mul() {
 
 cmd_test_spi_flash() {
 	build_test "test_spi_flash_self" "${TEST_DIR}/test_spi_flash_self.asm"
+}
+
+cmd_test_tls() {
+	build_test "test_tls_self" "${TEST_DIR}/test_tls_self.asm" "crypto/tls" "rt/runtime"
 }
 
 cmd_test_tor() {
@@ -661,6 +667,7 @@ EdgeRun build targets:
   test-render-ir      Run render IR test (self-hosted ASM runner)
   test-fe-mul         Run _fe_mul field multiplication test (self-hosted ASM)
   test-spi-flash      Run SPI flash compile-check test (self-hosted ASM)
+  test-tls            Run TLS ClientHello self-test (self-hosted ASM)
   test-tor            Run Tor AES-128-CTR KAT test (self-hosted ASM)
   bench-tor           Run Tor local AES cell latency/throughput benchmark
   test-x25519         Run X25519 scalar mult RFC 7748 test vectors (self-hosted ASM)
@@ -700,6 +707,7 @@ case "${1:-help}" in
 	test-render-ir) cmd_test_render_ir ;;
 	test-fe-mul)    cmd_test_fe_mul ;;
 	test-spi-flash) cmd_test_spi_flash ;;
+	test-tls)       cmd_test_tls ;;
 	test-tor)       cmd_test_tor ;;
 	bench-tor)      cmd_bench_tor ;;
 	test-x25519)     cmd_test_x25519 ;;

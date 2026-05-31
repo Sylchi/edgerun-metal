@@ -156,6 +156,11 @@ pub const Component = union(enum) {
         }
     }
 
+    pub fn renderInteractive(self: Component, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) (ui.RenderError || interaction.Error)!void {
+        try self.render(scene, bounds, options);
+        try self.collectInteractions(collector, bounds, options);
+    }
+
     pub fn measure(self: Component, constraints: layout_types.Constraints, options: RenderOptions) layout_types.Measurement {
         return switch (self) {
             inline else => |component| component.measure(constraints, options),
@@ -310,6 +315,37 @@ test "component union dispatches button variants and collects hit targets" {
     try std.testing.expect(component_test.hasText(scene.written(), "Primary"));
     try std.testing.expect(component_test.hasText(scene.written(), "Outline"));
     try std.testing.expect(component_test.hasIcon(scene.written(), icon_pack.iconId(.search)));
+}
+
+test "component renderInteractive renders and collects through one canonical path" {
+    var commands: [16]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+    var regions: [2]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
+
+    const button = Component{ .button = .{ .id = 510, .label = "Launch" } };
+    try button.renderInteractive(&scene, &collector, ui.Rect.init(0, 0, 120, 36), .{});
+
+    try std.testing.expect(component_test.hasText(scene.written(), "Launch"));
+    try std.testing.expectEqual(@as(usize, 1), collector.written().len);
+    try std.testing.expectEqual(ui.HitKind.button, collector.written()[0].kind);
+    try std.testing.expectEqual(@as(u32, 510), collector.written()[0].id);
+}
+
+test "component renderInteractive honors disabled interaction state" {
+    var commands: [16]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+    var regions: [2]interaction.Region = undefined;
+    var collector = interaction.Collector.init(&regions);
+
+    const button = Component{ .button = .{ .id = 511, .label = "Disabled" } };
+    try button.renderInteractive(&scene, &collector, ui.Rect.init(0, 0, 120, 36), .{
+        .interaction = .{ .disabled_id = 511 },
+    });
+
+    try std.testing.expect(component_test.hasText(scene.written(), "Disabled"));
+    try std.testing.expect(component_test.hasFillColor(scene.written(), common.state_disabled_tint));
+    try std.testing.expectEqual(@as(usize, 0), collector.written().len);
 }
 
 test "component renderer exports shared sizing tokens for measurements" {

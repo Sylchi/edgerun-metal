@@ -775,6 +775,45 @@ test "wayland host pointer input updates hover activation and scroll state" {
     try std.testing.expect(state.scroll_y <= state.contentHeight(1280.0));
 }
 
+test "wayland native app supplies compositor routed hit to input runtime" {
+    const alloc = std.testing.allocator;
+    const surf = try alloc.create(surface_import.Surface);
+    defer alloc.destroy(surf);
+    surf.* = surface_import.Surface{
+        .allocator = alloc,
+        .width = 1280,
+        .height = 800,
+        .present = .cpu,
+        .dmabuf_fd = null,
+        .shm = undefined,
+        .pixels = &.{},
+        .base_pixels = &.{},
+        .gpu_primitives = &.{},
+        .font_atlas = undefined,
+    };
+    surf.font_atlas.initUtf8();
+    const app = try alloc.create(NativeApp);
+    defer alloc.destroy(app);
+    app.* = NativeApp{
+        .allocator = alloc,
+        .surface = surf,
+    };
+    var scene = ui.Scene.initWithClips(&app.commands, &app.clips);
+    var collector = interaction.Collector.init(&app.regions);
+    try renderNativeAppScene(&scene, &collector, app.surface.width, app.surface.height, app.state, &app.dashboard_app, app.dashboard, &app.hardware_app, app.hardware);
+    app.region_len = collector.written().len;
+
+    const backend = try hitRect(app.regionSlice(), app_location.source_workspace_button_id);
+    app.state.hover_x = backend.x + backend.w * 0.5;
+    app.state.hover_y = backend.y + backend.h * 0.5;
+    const routed = app.routedPointerHit().?;
+    try std.testing.expectEqual(app_location.source_workspace_button_id, routed.id);
+
+    app_native_input.processPointerEvent(&app.state, scene.written(), app.regionSlice(), routed, .pointer_move);
+    try std.testing.expectEqual(app_location.source_workspace_button_id, app.state.runtime.hoverHitId());
+    try std.testing.expectEqual(app_cursor.Kind.pointer, app.state.cursorKind());
+}
+
 test "wayland host appends scene cursor from native hover state" {
     const alloc = std.testing.allocator;
     const surf = try alloc.create(surface_import.Surface);

@@ -185,10 +185,10 @@ pub const Atlas = struct {
         self.atlas_row_h = @max(self.atlas_row_h, bitmap.height);
         self.atlas_x += bitmap.width + row_gap;
         const out = Glyph{
-            .u0 = if (bitmap.width == 0) 0 else (@as(f32, @floatFromInt(ax)) + 0.5) / @as(f32, @floatFromInt(self.width)),
-            .v0 = if (bitmap.height == 0) 0 else (@as(f32, @floatFromInt(ay)) + 0.5) / @as(f32, @floatFromInt(self.height)),
-            .u1 = if (bitmap.width == 0) 0 else (@as(f32, @floatFromInt(ax + bitmap.width)) - 0.5) / @as(f32, @floatFromInt(self.width)),
-            .v1 = if (bitmap.height == 0) 0 else (@as(f32, @floatFromInt(ay + bitmap.height)) - 0.5) / @as(f32, @floatFromInt(self.height)),
+            .u0 = if (bitmap.width == 0) 0 else @as(f32, @floatFromInt(ax)) / @as(f32, @floatFromInt(self.width)),
+            .v0 = if (bitmap.height == 0) 0 else @as(f32, @floatFromInt(ay)) / @as(f32, @floatFromInt(self.height)),
+            .u1 = if (bitmap.width == 0) 0 else @as(f32, @floatFromInt(ax + bitmap.width)) / @as(f32, @floatFromInt(self.width)),
+            .v1 = if (bitmap.height == 0) 0 else @as(f32, @floatFromInt(ay + bitmap.height)) / @as(f32, @floatFromInt(self.height)),
             .w = self.s(@floatFromInt(bitmap.width)),
             .h = self.s(@floatFromInt(bitmap.height)),
             .left = self.s(@floatFromInt(bitmap.left)),
@@ -291,6 +291,19 @@ test "prepareText mutates cache and lookup does not" {
     try std.testing.expect(maybe_glyph != null);
     try std.testing.expectEqual(glyphs_after_prepare, atlas.cachedGlyphCount());
     try std.testing.expectEqual(revision_after_prepare, atlas.cacheRevision());
+}
+
+test "glyph uv span maps the full atlas bitmap extent" {
+    var atlas: Atlas = undefined;
+    atlas.initUtf8();
+    try atlas.prepareText("A", 18, .regular);
+    atlas.setTextWeight(.regular);
+    const source = atlas.source();
+    const glyph_value = (try source.glyph(source.context, 'A', 18)).?;
+    try std.testing.expect(glyph_value.w > 0.0);
+    try std.testing.expect(glyph_value.h > 0.0);
+    try std.testing.expectApproxEqAbs(glyph_value.w * atlas.deviceScale(), (glyph_value.u1 - glyph_value.u0) * @as(f32, @floatFromInt(atlas.width)), 0.0001);
+    try std.testing.expectApproxEqAbs(glyph_value.h * atlas.deviceScale(), (glyph_value.v1 - glyph_value.v0) * @as(f32, @floatFromInt(atlas.height)), 0.0001);
 }
 
 test "prepareText rejects invalid utf8 without replacement fallback" {

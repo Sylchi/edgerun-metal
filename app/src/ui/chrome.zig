@@ -1,13 +1,13 @@
 const std = @import("std");
-const button_component = @import("components/Button.zig");
 const icon_component = @import("components/Icon.zig");
-const row_item_component = @import("components/RowItem.zig");
+const component_union = @import("components/Component.zig");
 const interaction = @import("interaction.zig");
 const ui = @import("core.zig");
 const ui_component_common = @import("component_common.zig");
 const text_component = @import("components/Text.zig");
 const design = @import("theme.zig");
 const app_location = @import("../location.zig");
+const Component = component_union.Component;
 
 pub const header_h: f32 = design.header_h;
 pub const surface_radius: f32 = design.surface_radius;
@@ -83,18 +83,17 @@ pub fn renderActionItem(scene: *ui.Scene, collector: *interaction.Collector, pro
         .active = props.active,
         .disabled = !props.enabled,
     };
-    const button = button_component.Button{
+    const button = Component{ .button = .{
         .id = props.id,
         .label = props.label,
         .variant = props.variant orelse activeVariant(props.active, .secondary, .outline),
         .icon_slot = props.icon_slot orelse .none,
-    };
-    try button.render(scene, props.bounds, .{
+    } };
+    try button.renderInteractive(scene, collector, props.bounds, .{
         .style = design.appStyle(),
         .control = control,
         .control_size = props.control_size orelse .default,
     });
-    try button.collectInteractions(collector, props.bounds);
 }
 
 pub fn renderRouteItem(scene: *ui.Scene, collector: *interaction.Collector, props: RouteNavProps) (ui.RenderError || interaction.Error)!void {
@@ -166,52 +165,48 @@ pub fn renderNavItem(scene: *ui.Scene, collector: *interaction.Collector, props:
         .top_text => {
             const variant = props.variant orelse activeVariant(props.active, .secondary, .ghost);
             const label = props.label orelse props.binding.row_title;
-            const component = button_component.Button{
+            const component = Component{ .button = .{
                 .id = props.binding.id,
                 .label = label,
                 .variant = variant,
                 .icon_slot = props.icon_slot orelse .none,
-            };
-            try component.render(scene, props.bounds, .{ .style = design.appStyle() });
-            try component.collectInteractions(collector, props.bounds);
+            } };
+            try component.renderInteractive(scene, collector, props.bounds, .{ .style = design.appStyle() });
         },
         .top_icon => {
             const variant = props.variant orelse activeVariant(props.active, .secondary, .ghost);
             const label = props.label orelse props.binding.icon.label;
             const icon = props.icon orelse props.binding.icon;
-            const component = button_component.IconButton{
+            const component = Component{ .icon_button = .{
                 .id = props.binding.id,
                 .label = label,
                 .icon = icon,
                 .variant = variant,
-            };
-            try component.render(scene, props.bounds, .{ .style = design.appStyle() });
-            try component.collectInteractions(collector, props.bounds);
+            } };
+            try component.renderInteractive(scene, collector, props.bounds, .{ .style = design.appStyle() });
         },
         .workspace_rail => {
             const icon = props.icon orelse props.binding.icon;
             const variant = props.variant orelse activeVariant(props.active, .secondary, .ghost);
-            const component = button_component.IconButton{
+            const component = Component{ .icon_button = .{
                 .id = props.binding.id,
                 .label = props.binding.rail_label,
                 .icon = icon,
                 .variant = variant,
-            };
-            try component.render(scene, props.bounds, .{ .style = design.appStyle() });
-            try component.collectInteractions(collector, props.bounds);
+            } };
+            try component.renderInteractive(scene, collector, props.bounds, .{ .style = design.appStyle() });
         },
         .workspace_sidebar => {
             const title = props.label orelse props.binding.row_title;
-            const component = row_item_component.RowItem{
+            const component = Component{ .row_item = .{
                 .id = props.binding.id,
                 .title = title,
                 .detail = props.binding.row_detail,
-            };
-            try component.render(scene, props.bounds, .{
+            } };
+            try component.renderInteractive(scene, collector, props.bounds, .{
                 .style = design.appStyle(),
                 .control = .{ .active = props.active },
             });
-            try component.collectInteractions(collector, props.bounds);
         },
     }
 }

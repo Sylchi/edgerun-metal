@@ -228,6 +228,7 @@ export fn er_ui_set_hover_hit(kind_raw: u32, hit_id: u32) u32 {
         .id = hit_id,
         .bounds = ui.Rect.init(0.0, 0.0, 1.0, 1.0),
     };
+    state.native_input_state.runtime.hovered = state.runtime_state.hovered;
     state.last_error = .ok;
     return @intFromEnum(state.ErrorCode.ok);
 }
@@ -258,66 +259,74 @@ export fn er_ui_last_action_to_index() u32 {
 // -----------------------------------------------------------------
 
 export fn er_ui_pointer_down(x: f32, y: f32) u32 {
-    state.pointer_hover_x = x;
-    state.pointer_hover_y = y;
-    idp.mixInteractionEntropy(.pointer_down, x, y);
-    const commands_slice = state.commands[0..state.last_command_count];
-    const regions_slice = state.interaction_regions[0..state.last_region_count];
-    app_native_input.processPointerEvent(&state.native_input_state, commands_slice, regions_slice, null, .pointer_down);
-    state.last_action_kind = @intFromEnum(state.native_input_state.last_action_kind);
-    state.last_action_hit_id = state.native_input_state.runtime.hoverHitId();
-    state.context_menu_open = false;
-    state.last_error = .ok;
-    return @intFromEnum(state.ErrorCode.ok);
+    return processExportPointerEvent(x, y, .pointer_down, null);
 }
 
 export fn er_ui_pointer_down_hit(x: f32, y: f32, kind_raw: u32, hit_id: u32) u32 {
-    const set_result = er_ui_set_hover_hit(kind_raw, hit_id);
-    if (set_result != @intFromEnum(state.ErrorCode.ok)) return set_result;
-    return er_ui_pointer_down(x, y);
+    return processExportPointerHitEvent(x, y, kind_raw, hit_id, .pointer_down);
 }
 
 export fn er_ui_pointer_move(x: f32, y: f32) u32 {
-    state.pointer_hover_x = x;
-    state.pointer_hover_y = y;
-    idp.mixInteractionEntropy(.pointer_move, x, y);
-    const commands_slice = state.commands[0..state.last_command_count];
-    const regions_slice = state.interaction_regions[0..state.last_region_count];
-    app_native_input.processPointerEvent(&state.native_input_state, commands_slice, regions_slice, null, .pointer_move);
-    state.last_action_kind = @intFromEnum(state.native_input_state.last_action_kind);
-    state.last_action_hit_id = state.native_input_state.runtime.hoverHitId();
-    state.last_error = .ok;
-    return @intFromEnum(state.ErrorCode.ok);
+    return processExportPointerEvent(x, y, .pointer_move, null);
 }
 
 export fn er_ui_pointer_move_hit(x: f32, y: f32, kind_raw: u32, hit_id: u32) u32 {
-    const set_result = er_ui_set_hover_hit(kind_raw, hit_id);
-    if (set_result != @intFromEnum(state.ErrorCode.ok)) return set_result;
-    return er_ui_pointer_move(x, y);
+    return processExportPointerHitEvent(x, y, kind_raw, hit_id, .pointer_move);
 }
 
 export fn er_ui_pointer_up(x: f32, y: f32) u32 {
-    idp.mixInteractionEntropy(.pointer_up, x, y);
-    state.source_pointer_drag_select = false;
-    const commands_slice = state.commands[0..state.last_command_count];
-    const regions_slice = state.interaction_regions[0..state.last_region_count];
-    app_native_input.processPointerEvent(&state.native_input_state, commands_slice, regions_slice, null, .pointer_up);
-    state.last_action_kind = @intFromEnum(state.native_input_state.last_action_kind);
-    state.last_action_hit_id = state.native_input_state.runtime.hoverHitId();
-    state.last_error = .ok;
-    return @intFromEnum(state.ErrorCode.ok);
+    return processExportPointerEvent(x, y, .pointer_up, null);
 }
 
 export fn er_ui_pointer_up_hit(x: f32, y: f32, kind_raw: u32, hit_id: u32) u32 {
-    const set_result = er_ui_set_hover_hit(kind_raw, hit_id);
-    if (set_result != @intFromEnum(state.ErrorCode.ok)) return set_result;
-    return er_ui_pointer_up(x, y);
+    return processExportPointerHitEvent(x, y, kind_raw, hit_id, .pointer_up);
 }
 
 export fn er_ui_app_pointer_up(x: f32, y: f32) u32 {
     state.pointer_hover_x = x;
     state.pointer_hover_y = y;
     return er_ui_pointer_up(x, y);
+}
+
+fn processExportPointerHitEvent(x: f32, y: f32, kind_raw: u32, hit_id: u32, event: app_input_event.Kind) u32 {
+    const hit = routedHitForExport(kind_raw, hit_id) orelse return render.finishError(.bad_input);
+    return processExportPointerEvent(x, y, event, hit);
+}
+
+fn processExportPointerEvent(x: f32, y: f32, event: app_input_event.Kind, routed_hit: ?interaction.Region) u32 {
+    state.pointer_hover_x = x;
+    state.pointer_hover_y = y;
+    state.native_input_state.hover_x = x;
+    state.native_input_state.hover_y = y;
+    idp.mixInteractionEntropy(entropyEventForPointer(event), x, y);
+    if (event == .pointer_up) state.source_pointer_drag_select = false;
+    const commands_slice = state.commands[0..state.last_command_count];
+    const regions_slice = state.interaction_regions[0..state.last_region_count];
+    state.native_input_state.runtime = state.runtime_state;
+    app_native_input.processPointerEvent(&state.native_input_state, commands_slice, regions_slice, routed_hit, event);
+    state.runtime_state = state.native_input_state.runtime;
+    state.last_action_kind = @intFromEnum(state.native_input_state.last_action_kind);
+    state.last_action_hit_id = state.runtime_state.hoverHitId();
+    if (event == .pointer_down) state.context_menu_open = false;
+    state.last_error = .ok;
+    return @intFromEnum(state.ErrorCode.ok);
+}
+
+fn routedHitForExport(kind_raw: u32, hit_id: u32) ?interaction.Region {
+    const kind = hitKindFromInt(kind_raw) orelse return null;
+    for (state.interaction_regions[0..state.last_region_count]) |region| {
+        if (region.id == hit_id and region.kind == kind) return region;
+    }
+    return null;
+}
+
+fn entropyEventForPointer(event: app_input_event.Kind) state.EntropyEvent {
+    return switch (event) {
+        .pointer_down => .pointer_down,
+        .pointer_move => .pointer_move,
+        .pointer_up => .pointer_up,
+        else => .pointer_move,
+    };
 }
 
 export fn er_ui_app_action_kind() u32 {
@@ -1103,6 +1112,27 @@ test "app runtime cursor is scene-drawn from runtime pointer state" {
 test "app runtime pointer up owns activation suppression policy" {
     try std.testing.expectEqual(@as(u32, 0), er_ui_pointer_down(100.0, 200.0));
     try std.testing.expectEqual(@as(u32, 0), er_ui_pointer_up(100.0, 200.0));
+}
+
+test "app runtime routed pointer exports use compositor supplied region" {
+    input.applyLocation(.{});
+    try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, -1.0, -1.0, 0.0));
+    var target: ?interaction.Region = null;
+    for (state.interaction_regions[0..state.last_region_count]) |region| {
+        if (region.id == app_location.source_workspace_button_id and region.kind == .button) {
+            target = region;
+            break;
+        }
+    }
+    try std.testing.expect(target != null);
+    const hit = target.?;
+    const x = hit.bounds.x + hit.bounds.w * 0.5;
+    const y = hit.bounds.y + hit.bounds.h * 0.5;
+
+    try std.testing.expectEqual(@as(u32, 0), er_ui_pointer_down_hit(x, y, @intFromEnum(hit.kind), hit.id));
+    try std.testing.expectEqual(@as(u32, 0), er_ui_pointer_up_hit(x, y, @intFromEnum(hit.kind), hit.id));
+    try std.testing.expectEqual(hit.id, state.last_action_hit_id);
+    try std.testing.expect(app_location.isSourceWorkspace(state.native_input_state.location));
 }
 
 test "app packed text preserves variable font descenders" {

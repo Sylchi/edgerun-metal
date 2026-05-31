@@ -1,5 +1,5 @@
 const std = @import("std");
-const app_input_event = @import("input/event.zig");
+const app_input_event = @import("app_input_event.zig");
 
 const output_file_permissions = std.Io.File.Permissions.default_file.setReadOnly(true);
 

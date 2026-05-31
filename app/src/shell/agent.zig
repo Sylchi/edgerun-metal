@@ -2,16 +2,16 @@ const std = @import("std");
 const math = @import("../math.zig");
 const bytes = @import("../bytes.zig");
 const badge_component = @import("../ui/components/Badge.zig");
-const button_component = @import("../ui/components/Button.zig");
 const card_component = @import("../ui/components/Card.zig");
 const display_component = @import("../ui/components/Display.zig");
 const icon_component = @import("../ui/components/Icon.zig");
+const component_union = @import("../ui/components/Component.zig");
 const interaction = @import("../ui/interaction.zig");
 const design = @import("../ui/theme.zig");
 const row_item_component = @import("../ui/components/RowItem.zig");
-const textarea_component = @import("../ui/components/Textarea.zig");
 const text_component = @import("../ui/components/Text.zig");
 const ui = @import("../ui/core.zig");
+const Component = component_union.Component;
 
 pub const assistant_component_id: u8 = 1;
 pub const status_component_id: u8 = 2;
@@ -162,12 +162,10 @@ pub fn render(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Re
     const prompt_h: f32 = 96.0;
     const prompt_rect = ui.Rect.init(content.x, y, content.w - 136.0, prompt_h);
     const run_rect = ui.Rect.init(prompt_rect.x + prompt_rect.w + 12.0, y + prompt_h - 40.0, 124.0, 40.0);
-    const textarea = textarea_component.Textarea{ .id = input_hit_id, .placeholder = state.input.slice() };
-    try textarea.render(scene, prompt_rect, .{ .style = style });
-    try textarea.collectInteractions(collector, prompt_rect);
-    const run_button = button_component.Button{ .id = run_hit_id, .label = state.run_label.slice(), .variant = .primary, .icon_slot = icon_component.IconSlot.named(.leading, .send) };
-    try run_button.render(scene, run_rect, .{ .style = style, .control = .{ .loading = state.thinking } });
-    try run_button.collectInteractions(collector, run_rect);
+    const textarea = Component{ .textarea = .{ .id = input_hit_id, .placeholder = state.input.slice() } };
+    try textarea.renderInteractive(scene, collector, prompt_rect, .{ .style = style });
+    const run_button = Component{ .button = .{ .id = run_hit_id, .label = state.run_label.slice(), .variant = .primary, .icon_slot = icon_component.IconSlot.named(.leading, .send) } };
+    try run_button.renderInteractive(scene, collector, run_rect, .{ .style = style, .control = .{ .loading = state.thinking } });
     y += prompt_h + gap;
 
     const agent_h: f32 = 306.0;
@@ -208,15 +206,14 @@ fn renderStatusCard(scene: *ui.Scene, collector: *interaction.Collector, bounds:
     const host_notice = if (state.host_launch_requested) host_launch_requested_notice else host_not_connected_notice;
     try text_component.Text.renderAligned(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 44.0, bounds.w - 32.0, 18.0), host_notice, style.text, .start);
     try text_component.Text.renderAligned(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 64.0, bounds.w - 32.0, 18.0), state.host_url, style.text, .start);
-    const launch_button = button_component.Button{
+    const launch_button = Component{ .button = .{
         .id = open_host_binary_button_id,
         .label = "Open host API",
         .variant = .secondary,
         .icon_slot = icon_component.IconSlot.named(.leading, .network),
-    };
+    } };
     const launch_rect = ui.Rect.init(bounds.x + 16.0, bounds.y + 84.0, bounds.w - 32.0, 22.0);
-    try launch_button.render(scene, launch_rect, .{ .style = style });
-    try launch_button.collectInteractions(collector, launch_rect);
+    try launch_button.renderInteractive(scene, collector, launch_rect, .{ .style = style });
 }
 
 fn renderContextCard(scene: *ui.Scene, bounds: ui.Rect, state: State, style: ui.Style) !void {
@@ -233,9 +230,8 @@ fn renderAgents(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.
     for (state.agents, 0..) |agent, index| {
         var detail_buf: [176]u8 = undefined;
         const detail = std.fmt.bufPrint(&detail_buf, "{s} · {s} · {d} tokens", .{ agent.role, agent.model, agent.context_used }) catch agent.role;
-        const row = row_item_component.RowItem{ .id = agent_row_id_base + @as(u32, @intCast(index)), .title = agent.name, .detail = detail };
-        try row.render(scene, ui.Rect.init(bounds.x + 8.0, y, bounds.w - 16.0, 34.0), .{ .style = style, .control = .{ .active = agent.active } });
-        try row.collectInteractions(collector, ui.Rect.init(bounds.x + 8.0, y, bounds.w - 16.0, 34.0));
+        const row = Component{ .row_item = .{ .id = agent_row_id_base + @as(u32, @intCast(index)), .title = agent.name, .detail = detail } };
+        try row.renderInteractive(scene, collector, ui.Rect.init(bounds.x + 8.0, y, bounds.w - 16.0, 34.0), .{ .style = style, .control = .{ .active = agent.active } });
         y += 36.0;
     }
 }

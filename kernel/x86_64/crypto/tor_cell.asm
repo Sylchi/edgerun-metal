@@ -12,8 +12,9 @@
 %include "x86_64/crypto/tor_constants.inc"
 
 extern er_tcp_connect
-extern er_tcp_send
-extern er_tcp_recv
+extern er_tls_connect
+extern er_tls_send
+extern er_tls_recv
 extern er_tcp_close
 extern er_net_poll
 extern er_memcpy
@@ -139,7 +140,7 @@ _tor_cell_send:
     mov     edi, [tor_conn_id]
     mov     rsi, rsi        ; cell
     mov     edx, TOR_CELL_LEN
-    call    er_tcp_send
+    call    er_tls_send
     ret
 
 _tor_cell_recv:
@@ -150,7 +151,7 @@ _tor_cell_recv:
     mov     edi, [tor_conn_id]
     mov     rsi, rbx
     lea     rdx, [tor_recv_len]
-    call    er_tcp_recv
+    call    er_tls_recv
 
     ; Receive remainder of cell
     ; TCP recv may return partial data; keep reading until full
@@ -158,7 +159,7 @@ _tor_cell_recv:
     lea     rsi, [rbx + 5]
     lea     rdx, [tor_recv_len]
     mov     dword [rdx], 509
-    call    er_tcp_recv
+    call    er_tls_recv
 
     xor     eax, eax
     er_ok
@@ -349,7 +350,7 @@ er_fn er_tor_link_handshake
     mov     edi, [tor_conn_id]
     mov     rsi, tor_var_cell
     mov     edx, TOR_VAR_HEADER + 4
-    call    er_tcp_send
+    call    er_tls_send
     pop     rcx
 
     test    eax, eax
@@ -365,7 +366,7 @@ er_fn er_tor_link_handshake
     mov     rsi, tor_var_cell
     lea     rdx, [tor_recv_len]
     mov     dword [rdx], TOR_VAR_HEADER + 4
-    call    er_tcp_recv
+    call    er_tls_recv
     test    eax, eax
     js      .recv_fail
 
@@ -390,7 +391,7 @@ er_fn er_tor_link_handshake
     movzx   edx, word [tor_var_cell + TOR_VAR_LEN]
     xchg    dl, dh
     add     edx, TOR_VAR_HEADER
-    call    er_tcp_send
+    call    er_tls_send
     test    eax, eax
     js      .send_fail
 
@@ -399,7 +400,7 @@ er_fn er_tor_link_handshake
     mov     rsi, tor_var_cell
     lea     rdx, [tor_recv_len]
     mov     dword [rdx], 256
-    call    er_tcp_recv
+    call    er_tls_recv
     test    eax, eax
     js      .recv_fail
 
@@ -412,7 +413,7 @@ er_fn er_tor_link_handshake
     mov     rsi, tor_var_cell
     lea     rdx, [tor_recv_len]
     mov     dword [rdx], 256
-    call    er_tcp_recv
+    call    er_tls_recv
     test    eax, eax
     js      .recv_fail
 
@@ -431,7 +432,7 @@ er_fn er_tor_link_handshake
     mov     edi, [tor_conn_id]
     mov     rsi, tor_var_cell
     mov     edx, TOR_VAR_HEADER + 1  ; 1 byte auth type
-    call    er_tcp_send
+    call    er_tls_send
     test    eax, eax
     js      .send_fail
 
@@ -444,7 +445,7 @@ er_fn er_tor_link_handshake
     movzx   edx, word [tor_var_cell + TOR_VAR_LEN]
     xchg    dl, dh
     add     edx, TOR_VAR_HEADER
-    call    er_tcp_send
+    call    er_tls_send
     test    eax, eax
     js      .send_fail
 
@@ -453,7 +454,7 @@ er_fn er_tor_link_handshake
     mov     rsi, tor_var_cell
     lea     rdx, [tor_recv_len]
     mov     dword [rdx], 256
-    call    er_tcp_recv
+    call    er_tls_recv
     test    eax, eax
     js      .recv_fail
 
@@ -538,7 +539,7 @@ _tor_send_create2:
     mov     edi, [tor_conn_id]
     mov     rsi, tor_tx_cell
     mov     edx, TOR_CELL_LEN
-    call    er_tcp_send
+    call    er_tls_send
 
     pop     r13
     pop     r12
@@ -559,7 +560,7 @@ _tor_recv_created2:
     mov     rsi, tor_rx_cell
     lea     rdx, [tor_recv_len]
     mov     dword [rdx], TOR_CELL_LEN
-    call    er_tcp_recv
+    call    er_tls_recv
     test    eax, eax
     js      .fail
 
@@ -989,7 +990,7 @@ er_fn er_tor_send_relay
     mov     edi, [tor_conn_id]
     mov     rsi, tor_tx_cell
     mov     edx, TOR_CELL_LEN
-    call    er_tcp_send
+    call    er_tls_send
     test    eax, eax
     js      .send_fail
 
@@ -1030,7 +1031,7 @@ er_fn er_tor_recv_relay
     mov     rsi, tor_rx_cell
     lea     rdx, [tor_recv_len]
     mov     dword [rdx], TOR_CELL_LEN
-    call    er_tcp_recv
+    call    er_tls_recv
     test    eax, eax
     js      .fail
 

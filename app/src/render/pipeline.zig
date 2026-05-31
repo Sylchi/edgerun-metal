@@ -1,5 +1,4 @@
 const std = @import("std");
-const math = @import("../math.zig");
 const renderer_font_atlas = @import("font_atlas_weighted.zig");
 const icon_line_buffer = @import("icon_line_buffer.zig");
 const renderer_ir = @import("ir.zig");
@@ -177,13 +176,7 @@ fn shouldSnapTextToPixelGrid(px: u8) bool {
 }
 
 fn snappedGlyphRect(gx: f32, gy: f32, w: f32, h: f32, px: u8) ui.Rect {
-    if (shouldSnapTextToPixelGrid(px)) {
-        const x0 = math.floorF(gx);
-        const y0 = math.floorF(gy);
-        const x1 = math.ceilF(gx + w);
-        const y1 = math.ceilF(gy + h);
-        return ui.Rect.init(x0, y0, @max(1.0, x1 - x0), @max(1.0, y1 - y0));
-    }
+    _ = px;
     return ui.Rect.init(gx, gy, @max(1.0, w), @max(1.0, h));
 }
 
@@ -215,7 +208,7 @@ test "render pipeline ignores invalid utf8 text during atlas prep" {
     try packScene(atlas_storage.buffers(), &font_atlas, scene.written());
 }
 
-test "render pipeline snaps small text glyph vertices to pixel grid" {
+test "render pipeline preserves glyph metrics with snapped small text baseline" {
     var font_atlas: renderer_font_atlas.Atlas = undefined;
     font_atlas.initUtf8();
     var commands: [1]ui.Command = undefined;
@@ -225,11 +218,17 @@ test "render pipeline snaps small text glyph vertices to pixel grid" {
     try packScene(storage.buffers(), &font_atlas, scene.written());
     const vertices = storage.buffers().liveTextVertices();
     try std.testing.expect(vertices.len != 0);
-    var index: usize = 0;
-    while (index < vertices.len) : (index += renderer_ir.text_vertex_float_stride) {
-        try std.testing.expect(isIntegral(vertices[index + renderer_ir.textured_x_index]));
-        try std.testing.expect(isIntegral(vertices[index + renderer_ir.textured_y_index]));
-    }
+    const source = font_atlas.source();
+    const metrics_value = source.metrics(source.context, 12);
+    const glyph_value = (try source.glyph(source.context, 'A', 12)).?;
+    const x0 = vertices[renderer_ir.textured_x_index];
+    const y0 = vertices[renderer_ir.textured_y_index];
+    const x1 = vertices[renderer_ir.text_vertex_float_stride + renderer_ir.textured_x_index];
+    const y2 = vertices[renderer_ir.text_vertex_float_stride * 2 + renderer_ir.textured_y_index];
+    try std.testing.expectApproxEqAbs(@round(10.35) + glyph_value.left, x0, 0.0001);
+    try std.testing.expectApproxEqAbs(@round(11.65 + metrics_value.ascender) + glyph_value.top, y0, 0.0001);
+    try std.testing.expectApproxEqAbs(glyph_value.w, x1 - x0, 0.0001);
+    try std.testing.expectApproxEqAbs(glyph_value.h, y2 - y0, 0.0001);
 }
 
 test "render pipeline preserves subpixel placement for large text" {

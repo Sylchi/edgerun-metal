@@ -210,7 +210,7 @@ pub const NativeApp = struct {
                 try client_ptr.sendHidePointerCursor(serial);
                 self.state.hover_x = fixedToFloat(std.mem.readInt(i32, message.payload[8..12], .little));
                 self.state.hover_y = fixedToFloat(std.mem.readInt(i32, message.payload[12..16], .little));
-                app_native_input.processPointerEvent(&self.state, &.{}, self.regionSlice(), null, .pointer_move);
+                app_native_input.processPointerEvent(&self.state, &.{}, self.regionSlice(), self.routedPointerHit(), .pointer_move);
                 return true;
             },
             protocol.wl_pointer_leave_event => {
@@ -232,7 +232,7 @@ pub const NativeApp = struct {
                 const old_kind = self.state.cursorKind();
                 self.state.hover_x = fixedToFloat(std.mem.readInt(i32, message.payload[4..8], .little));
                 self.state.hover_y = fixedToFloat(std.mem.readInt(i32, message.payload[8..12], .little));
-                app_native_input.processPointerEvent(&self.state, &.{}, self.regionSlice(), null, .pointer_move);
+                app_native_input.processPointerEvent(&self.state, &.{}, self.regionSlice(), self.routedPointerHit(), .pointer_move);
                 if (self.state.runtime.hoverHitId() != old_hit) return true;
                 if (self.surface.present == .cpu and self.surface.base_pixels_ready) {
                     try self.surface.renderCursorOnly(client_ptr, old_x, old_y, old_kind, self.state.hover_x, self.state.hover_y, self.state.cursorKind());
@@ -247,13 +247,13 @@ pub const NativeApp = struct {
                 const state = std.mem.readInt(u32, message.payload[12..16], .little);
                 if (button == protocol.wl_pointer_button_left) {
                     if (state == protocol.wl_pointer_button_released) {
-                        app_native_input.processPointerEvent(&self.state, &.{}, self.regionSlice(), null, .pointer_up);
+                        app_native_input.processPointerEvent(&self.state, &.{}, self.regionSlice(), self.routedPointerHit(), .pointer_up);
                         if (self.hardware and self.state.last_action_kind == .activated) {
                             self.hardware_app.activate(self.state.runtime.hovered, self.state.runtime.persisted_value);
                         }
                         try self.activateClientDecoration(client_ptr);
                     } else {
-                        app_native_input.processPointerEvent(&self.state, &.{}, self.regionSlice(), null, .pointer_down);
+                        app_native_input.processPointerEvent(&self.state, &.{}, self.regionSlice(), self.routedPointerHit(), .pointer_down);
                         if (self.state.runtime.hoverHitId() == protocol.client_decor_drag_id) try client_ptr.sendMove(serial);
                     }
                 }
@@ -272,6 +272,11 @@ pub const NativeApp = struct {
 
     pub fn regionSlice(self: *const NativeApp) []const interaction.Region {
         return self.regions[0..self.region_len];
+    }
+
+    pub fn routedPointerHit(self: *const NativeApp) ?interaction.Region {
+        if (self.state.hover_x < 0.0 or self.state.hover_y < 0.0) return null;
+        return interaction.hitTest(self.regionSlice(), self.state.hover_x, self.state.hover_y);
     }
 
     fn activateClientDecoration(self: *NativeApp, client_ptr: *client.WaylandClient) !void {
