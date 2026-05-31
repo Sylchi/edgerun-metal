@@ -77,8 +77,7 @@ pub const Select = struct {
     }
 
     pub fn fromView(view: object.View) Error!Select {
-        const select = try component_codec.nodeView(view, .select);
-        return fromNode(select);
+        return component_codec.decodeFromView(Select, .select, view);
     }
 
     pub fn fromNode(select: @FieldType(ui.Node, "select")) Error!Select {

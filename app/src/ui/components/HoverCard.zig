@@ -24,10 +24,7 @@ pub const HoverCard = struct {
     }
 
     pub fn render(self: HoverCard, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        try primitives.renderSidePanelTrigger(scene, bounds, hover_card_layout, options.style.panel, options.style.border, primitives.control_text_padding, self.trigger, options.style.text);
-        if (options.overlay.isOpen(self.id)) {
-            try primitives.renderTitleDetailPanel(scene, primitives.sidePanelContentBounds(bounds, hover_card_layout), self.content, hover_card_detail_label, options, hover_card_panel, options.style.border, options.style.text);
-        }
+        try primitives.renderSidePanelTitleDetail(scene, bounds, self.id, options, hover_card_layout, options.style.panel, options.style.border, primitives.control_text_padding, self.trigger, options.style.text, hover_card_panel, self.content, hover_card_detail_label, options.style.text);
     }
 
     pub fn collectInteractions(self: HoverCard, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
@@ -48,8 +45,7 @@ pub const HoverCard = struct {
     }
 
     pub fn fromView(view: object.View) Error!HoverCard {
-        const hover_card = try component_codec.nodeView(view, .hover_card);
-        return fromNode(hover_card);
+        return component_codec.decodeFromView(HoverCard, .hover_card, view);
     }
 
     pub fn fromNode(hover_card: @FieldType(ui.Node, "hover_card")) Error!HoverCard {

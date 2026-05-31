@@ -69,8 +69,7 @@ pub const Switch = struct {
     }
 
     pub fn fromView(view: object.View) Error!Switch {
-        const switch_control = try component_codec.nodeView(view, .switch_control);
-        return fromNode(switch_control);
+        return component_codec.decodeFromView(Switch, .switch_control, view);
     }
 
     pub fn fromNode(switch_control: @FieldType(ui.Node, "switch_control")) Error!Switch {

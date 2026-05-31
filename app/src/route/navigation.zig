@@ -10,7 +10,6 @@ pub const reveal_identity_button_id: u32 = 15_001;
 
 pub const Action = enum(u32) {
     reveal_identity,
-    compile_source,
     download_source_release,
     launch_source_release,
     reset_source,
@@ -222,7 +221,6 @@ pub fn topLevelWorkspaceBindings() []const TopLevelBinding {
 
 pub const action_bindings = [_]ActionBinding{
     .{ .id = reveal_identity_button_id, .action = .reveal_identity },
-    .{ .id = 90_001, .action = .compile_source },
     .{ .id = 90_002, .action = .download_source_release },
     .{ .id = 90_003, .action = .launch_source_release },
     .{ .id = 90_004, .action = .reset_source },

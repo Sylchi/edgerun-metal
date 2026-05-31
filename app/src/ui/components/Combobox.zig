@@ -75,8 +75,7 @@ pub const Combobox = struct {
     }
 
     pub fn fromView(view: object.View) Error!Combobox {
-        const combobox = try component_codec.nodeView(view, .combobox);
-        return fromNode(combobox);
+        return component_codec.decodeFromView(Combobox, .combobox, view);
     }
 
     pub fn fromNode(combobox: @FieldType(ui.Node, "combobox")) Error!Combobox {

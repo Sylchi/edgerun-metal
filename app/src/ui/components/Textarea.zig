@@ -76,8 +76,7 @@ pub const Textarea = struct {
     }
 
     pub fn fromView(view: object.View) Error!Textarea {
-        const textarea = try component_codec.nodeView(view, .textarea);
-        return fromNode(textarea);
+        return component_codec.decodeFromView(Textarea, .textarea, view);
     }
 
     pub fn fromNode(textarea: @FieldType(ui.Node, "textarea")) Error!Textarea {

@@ -73,8 +73,7 @@ pub const Sidebar = struct {
     }
 
     pub fn fromView(view: object.View) Error!Sidebar {
-        const sidebar = try component_codec.nodeView(view, .sidebar);
-        return fromNode(sidebar);
+        return component_codec.decodeFromView(Sidebar, .sidebar, view);
     }
 
     pub fn fromNode(sidebar: @FieldType(ui.Node, "sidebar")) Error!Sidebar {

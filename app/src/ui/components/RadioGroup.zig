@@ -53,9 +53,7 @@ pub const RadioGroup = struct {
     }
 
     pub fn toObject(self: RadioGroup, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
-        var writer = component_codec.Writer.init(ui_out, 1, 1, .column, 0, 0) orelse return null;
-        if (!self.writeRecord(&writer, 0)) return null;
-        return writer.objectNode(object_out, component_codec.requirements(), epoch);
+        return component_codec.singleObjectFromRecord(@TypeOf(self), self, ui_out, object_out, epoch);
     }
 
     pub fn writeRecord(self: RadioGroup, writer: *component_codec.Writer, index: usize) bool {
@@ -65,8 +63,7 @@ pub const RadioGroup = struct {
     }
 
     pub fn fromView(view: object.View) Error!RadioGroup {
-        const radio = try component_codec.nodeView(view, .radio_group);
-        return fromNode(radio);
+        return component_codec.decodeFromView(RadioGroup, .radio_group, view);
     }
 
     pub fn fromNode(radio: @FieldType(ui.Node, "radio_group")) Error!RadioGroup {

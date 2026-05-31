@@ -135,6 +135,13 @@ pub fn renderSidePanelTrigger(scene: *ui.Scene, bounds: ui.Rect, spec: SidePanel
     try renderControlTrigger(scene, sidePanelTriggerBounds(bounds, spec), fill, border, padding, label, text_color);
 }
 
+pub fn renderSidePanelTitleDetail(scene: *ui.Scene, bounds: ui.Rect, id: u32, options: common.RenderOptions, panel: SidePanelLayout, trigger_fill: ui.Color, trigger_border: ui.Color, trigger_padding: f32, trigger_label: []const u8, trigger_text_color: ui.Color, content: TitleDetailPanel, title: []const u8, detail: []const u8, title_color: ui.Color) ui.RenderError!void {
+    try renderSidePanelTrigger(scene, bounds, panel, trigger_fill, trigger_border, trigger_padding, trigger_label, trigger_text_color);
+    if (options.overlay.isOpen(id)) {
+        try renderTitleDetailPanel(scene, sidePanelContentBounds(bounds, panel), title, detail, options, content, trigger_border, title_color);
+    }
+}
+
 pub const TitleDetailPanel = struct {
     radius: f32,
     padding: f32,
@@ -229,6 +236,13 @@ pub fn renderTwoItemMenuPanel(scene: *ui.Scene, content: ui.Rect, first: []const
     try renderMenuItem(scene, menuItemBounds(content, 1, spec), second, options, spec);
 }
 
+pub fn renderSidePanelTwoItemMenu(scene: *ui.Scene, bounds: ui.Rect, id: u32, options: common.RenderOptions, panel: SidePanelLayout, trigger_fill: ui.Color, trigger_border: ui.Color, trigger_padding: f32, trigger_label: []const u8, trigger_text_color: ui.Color, first: []const u8, second: []const u8, radius: f32, menu: MenuListLayout) ui.RenderError!void {
+    try renderSidePanelTrigger(scene, bounds, panel, trigger_fill, trigger_border, trigger_padding, trigger_label, trigger_text_color);
+    if (options.overlay.isOpen(id)) {
+        try renderTwoItemMenuPanel(scene, sidePanelContentBounds(bounds, panel), first, second, options, radius, menu);
+    }
+}
+
 pub fn measureTwoItemMenuPanel(first: []const u8, second: []const u8, constraints: layout.Constraints, spec: MenuListLayout) layout.Measurement {
     const item_constraints = constraints.inner(.{ .left = spec.padding + spec.item_padding, .right = spec.padding + spec.item_padding, .top = spec.padding, .bottom = spec.padding });
     const first_text = text_component.Text.measureValue(first, item_constraints, textMetrics(first, spec.item_text_h, 1));
@@ -283,6 +297,11 @@ pub fn renderTextCell(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, fill
     try scene.pushRect(bounds, fill, .fill, radius, 0.0);
     try scene.pushRect(bounds, border, .border, radius, 0.0);
     try renderControlText(scene, bounds, padding, control_label_height, label, text_color, .center);
+}
+
+pub fn measuredLabelWidth(label: []const u8, line_height: f32, max_lines: usize, padding: f32) f32 {
+    const measured = text_component.Text.measureValue(label, .{ .width = .unconstrained, .text_wrap = .nowrap }, textMetrics(label, line_height, max_lines));
+    return measured.preferred.w + padding * 2.0;
 }
 
 pub const min_extent: f32 = 1.0;

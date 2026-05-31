@@ -57,9 +57,7 @@ pub const Direction = struct {
     }
 
     pub fn toObject(self: Direction, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
-        var writer = component_codec.Writer.init(ui_out, 1, 1, .column, 0, 0) orelse return null;
-        if (!self.writeRecord(&writer, 0)) return null;
-        return writer.objectNode(object_out, component_codec.requirements(), epoch);
+        return component_codec.singleObjectFromRecord(@TypeOf(self), self, ui_out, object_out, epoch);
     }
 
     pub fn writeRecord(self: Direction, writer: *component_codec.Writer, index: usize) bool {
@@ -67,8 +65,7 @@ pub const Direction = struct {
     }
 
     pub fn fromView(view: object.View) Error!Direction {
-        const direction = try component_codec.nodeView(view, .direction);
-        return fromNode(direction);
+        return component_codec.decodeFromView(Direction, .direction, view);
     }
 
     pub fn fromNode(direction: @FieldType(ui.Node, "direction")) Error!Direction {

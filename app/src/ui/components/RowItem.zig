@@ -96,8 +96,7 @@ pub const RowItem = struct {
     }
 
     pub fn fromView(view: object.View) Error!RowItem {
-        const row = try component_codec.nodeView(view, .row_item);
-        return fromNode(row);
+        return component_codec.decodeFromView(RowItem, .row_item, view);
     }
 
     pub fn fromNode(row: @FieldType(ui.Node, "row_item")) Error!RowItem {

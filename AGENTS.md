@@ -90,7 +90,10 @@ All targets are in `build.sh`. No Makefile, no C, no Zig in production paths.
   - `./build.sh test-math`
   - `./build.sh test-runtime`
   - `./build.sh test-serial`
-  - `./build.sh test-wasm`
+  - `./build.sh test-wasm-jit`
+  - `./build.sh test-wasm-float`
+  - `./build.sh test-recursion-valid`
+  - `./build.sh test-recursion-invalid`
   - `./build.sh test-tpm`
   - `./build.sh test-blake3`
   - `./build.sh test-acpi`

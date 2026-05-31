@@ -56,8 +56,7 @@ pub const Toggle = struct {
     }
 
     pub fn fromView(view: object.View) Error!Toggle {
-        const toggle = try component_codec.nodeView(view, .toggle);
-        return fromNode(toggle);
+        return component_codec.decodeFromView(Toggle, .toggle, view);
     }
 
     pub fn fromNode(toggle: @FieldType(ui.Node, "toggle")) Error!Toggle {

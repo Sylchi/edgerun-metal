@@ -45,9 +45,7 @@ pub const Badge = struct {
     }
 
     pub fn toObject(self: Badge, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
-        var writer = component_codec.Writer.init(ui_out, 1, 1, .column, 0, 0) orelse return null;
-        if (!self.writeRecord(&writer, 0)) return null;
-        return writer.objectNode(object_out, component_codec.requirements(), epoch);
+        return component_codec.singleObjectFromRecord(@TypeOf(self), self, ui_out, object_out, epoch);
     }
 
     pub fn writeRecord(self: Badge, writer: *component_codec.Writer, index: usize) bool {
@@ -56,8 +54,7 @@ pub const Badge = struct {
     }
 
     pub fn fromView(view: object.View) Error!Badge {
-        const badge = try component_codec.nodeView(view, .badge);
-        return fromNode(badge);
+        return component_codec.decodeFromView(Badge, .badge, view);
     }
 
     pub fn fromNode(badge: @FieldType(ui.Node, "badge")) Error!Badge {

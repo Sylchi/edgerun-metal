@@ -80,8 +80,7 @@ pub const Toast = struct {
     }
 
     pub fn fromView(view: object.View) Error!Toast {
-        const toast = try component_codec.nodeView(view, .toast);
-        return fromNode(toast);
+        return component_codec.decodeFromView(Toast, .toast, view);
     }
 
     pub fn fromNode(toast: @FieldType(ui.Node, "toast")) Error!Toast {

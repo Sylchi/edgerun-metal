@@ -62,8 +62,7 @@ pub const Text = struct {
     }
 
     pub fn fromView(view: object.View) Error!Text {
-        const text = try component_codec.nodeView(view, .text);
-        return fromNode(text);
+        return component_codec.decodeFromView(Text, .text, view);
     }
 
     pub fn fromNode(text: @FieldType(ui.Node, "text")) Error!Text {

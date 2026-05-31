@@ -57,8 +57,7 @@ pub const Resizable = struct {
     }
 
     pub fn fromView(view: object.View) Error!Resizable {
-        const resizable = try component_codec.nodeView(view, .resizable);
-        return fromNode(resizable);
+        return component_codec.decodeFromView(Resizable, .resizable, view);
     }
 
     pub fn fromNode(resizable: @FieldType(ui.Node, "resizable")) Error!Resizable {

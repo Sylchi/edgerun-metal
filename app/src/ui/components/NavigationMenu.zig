@@ -61,9 +61,7 @@ pub const NavigationMenu = struct {
     }
 
     pub fn toObject(self: NavigationMenu, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
-        var writer = component_codec.Writer.init(ui_out, 1, 1, .column, 0, 0) orelse return null;
-        if (!self.writeRecord(&writer, 0)) return null;
-        return writer.objectNode(object_out, component_codec.requirements(), epoch);
+        return component_codec.singleObjectFromRecord(@TypeOf(self), self, ui_out, object_out, epoch);
     }
 
     pub fn writeRecord(self: NavigationMenu, writer: *component_codec.Writer, index: usize) bool {
@@ -71,8 +69,7 @@ pub const NavigationMenu = struct {
     }
 
     pub fn fromView(view: object.View) Error!NavigationMenu {
-        const menu = try component_codec.nodeView(view, .navigation_menu);
-        return fromNode(menu);
+        return component_codec.decodeFromView(NavigationMenu, .navigation_menu, view);
     }
 
     pub fn fromNode(menu: @FieldType(ui.Node, "navigation_menu")) Error!NavigationMenu {
@@ -121,9 +118,8 @@ fn itemWidths(self: NavigationMenu) [navigation_menu_item_count]f32 {
 }
 
 fn itemWidth(label: []const u8, show_chevron: bool) f32 {
-    const measured = text_component.Text.measureValue(label, .{ .width = .unconstrained, .text_wrap = .nowrap }, component_primitives.textMetrics(label, component_primitives.control_label_height, navigation_menu_label_max_lines));
     const icon_space: f32 = if (show_chevron) navigation_menu_icon_space else 0.0;
-    return measured.preferred.w + navigation_menu_text_padding * 2.0 + icon_space;
+    return component_primitives.measuredLabelWidth(label, component_primitives.control_label_height, navigation_menu_label_max_lines, navigation_menu_text_padding) + icon_space;
 }
 
 pub const navigation_menu_item_count: u16 = 3;

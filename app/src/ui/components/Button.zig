@@ -49,9 +49,7 @@ pub const Button = struct {
     }
 
     pub fn toObject(self: Button, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
-        var writer = component_codec.Writer.init(ui_out, 1, 1, .column, 0, 0) orelse return null;
-        if (!self.writeRecord(&writer, 0)) return null;
-        return writer.objectNode(object_out, component_codec.requirements(), epoch);
+        return component_codec.singleObjectFromRecord(@TypeOf(self), self, ui_out, object_out, epoch);
     }
 
     pub fn writeRecord(self: Button, writer: *component_codec.Writer, index: usize) bool {
@@ -65,8 +63,7 @@ pub const Button = struct {
     }
 
     pub fn fromView(view: object.View) Error!Button {
-        const button = try component_codec.nodeView(view, .button);
-        return fromNode(button);
+        return component_codec.decodeFromView(Button, .button, view);
     }
 
     pub fn fromNode(button: @FieldType(ui.Node, "button")) Error!Button {
@@ -139,9 +136,7 @@ pub const IconButton = struct {
     }
 
     pub fn toObject(self: IconButton, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
-        var writer = component_codec.Writer.init(ui_out, 1, 1, .column, 0, 0) orelse return null;
-        if (!self.writeRecord(&writer, 0)) return null;
-        return writer.objectNode(object_out, component_codec.requirements(), epoch);
+        return component_codec.singleObjectFromRecord(@TypeOf(self), self, ui_out, object_out, epoch);
     }
 
     pub fn writeRecord(self: IconButton, writer: *component_codec.Writer, index: usize) bool {
@@ -150,8 +145,7 @@ pub const IconButton = struct {
     }
 
     pub fn fromView(view: object.View) Error!IconButton {
-        const button = try component_codec.nodeView(view, .icon_button);
-        return fromNode(button);
+        return component_codec.decodeFromView(IconButton, .icon_button, view);
     }
 
     pub fn fromNode(button: @FieldType(ui.Node, "icon_button")) Error!IconButton {

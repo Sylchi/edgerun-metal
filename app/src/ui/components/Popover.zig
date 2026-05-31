@@ -62,8 +62,7 @@ pub const Popover = struct {
     }
 
     pub fn fromView(view: object.View) Error!Popover {
-        const popover = try component_codec.nodeView(view, .popover);
-        return fromNode(popover);
+        return component_codec.decodeFromView(Popover, .popover, view);
     }
 
     pub fn fromNode(popover: @FieldType(ui.Node, "popover")) Error!Popover {

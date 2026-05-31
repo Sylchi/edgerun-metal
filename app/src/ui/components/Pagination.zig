@@ -55,8 +55,7 @@ pub const Pagination = struct {
     }
 
     pub fn fromView(view: object.View) Error!Pagination {
-        const pagination = try component_codec.nodeView(view, .pagination);
-        return fromNode(pagination);
+        return component_codec.decodeFromView(Pagination, .pagination, view);
     }
 
     pub fn fromNode(pagination: @FieldType(ui.Node, "pagination")) Error!Pagination {

@@ -75,8 +75,7 @@ pub const InputGroup = struct {
     }
 
     pub fn fromView(view: object.View) Error!InputGroup {
-        const input_group = try component_codec.nodeView(view, .input_group);
-        return fromNode(input_group);
+        return component_codec.decodeFromView(InputGroup, .input_group, view);
     }
 
     pub fn fromNode(input_group: @FieldType(ui.Node, "input_group")) Error!InputGroup {

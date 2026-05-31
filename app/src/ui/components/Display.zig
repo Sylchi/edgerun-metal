@@ -168,8 +168,7 @@ pub const Progress = struct {
     }
 
     pub fn fromView(view: object.View) Error!Progress {
-        const progress = try component_codec.nodeView(view, .progress);
-        return fromNode(progress);
+        return component_codec.decodeFromView(Progress, .progress, view);
     }
 
     pub fn fromNode(progress: @FieldType(ui.Node, "progress")) Error!Progress {
@@ -205,8 +204,7 @@ pub const AspectRatio = struct {
     }
 
     pub fn fromView(view: object.View) Error!AspectRatio {
-        const aspect_ratio = try component_codec.nodeView(view, .aspect_ratio);
-        return fromNode(aspect_ratio);
+        return component_codec.decodeFromView(AspectRatio, .aspect_ratio, view);
     }
 
     pub fn fromNode(aspect_ratio: @FieldType(ui.Node, "aspect_ratio")) Error!AspectRatio {
@@ -254,8 +252,7 @@ pub const Kbd = struct {
     }
 
     pub fn fromView(view: object.View) Error!Kbd {
-        const kbd = try component_codec.nodeView(view, .kbd);
-        return fromNode(kbd);
+        return component_codec.decodeFromView(Kbd, .kbd, view);
     }
 
     pub fn fromNode(kbd: @FieldType(ui.Node, "kbd")) Error!Kbd {
@@ -299,8 +296,7 @@ pub const Avatar = struct {
     }
 
     pub fn fromView(view: object.View) Error!Avatar {
-        const avatar = try component_codec.nodeView(view, .avatar);
-        return fromNode(avatar);
+        return component_codec.decodeFromView(Avatar, .avatar, view);
     }
 
     pub fn fromNode(avatar: @FieldType(ui.Node, "avatar")) Error!Avatar {
@@ -340,8 +336,7 @@ pub const Label = struct {
     }
 
     pub fn fromView(view: object.View) Error!Label {
-        const label = try component_codec.nodeView(view, .label);
-        return fromNode(label);
+        return component_codec.decodeFromView(Label, .label, view);
     }
 
     pub fn fromNode(label: @FieldType(ui.Node, "label")) Error!Label {

@@ -72,9 +72,7 @@ pub const Input = struct {
     }
 
     pub fn toObject(self: Input, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
-        var writer = component_codec.Writer.init(ui_out, 1, 1, .column, 0, 0) orelse return null;
-        if (!self.writeRecord(&writer, 0)) return null;
-        return writer.objectNode(object_out, component_codec.requirements(), epoch);
+        return component_codec.singleObjectFromRecord(@TypeOf(self), self, ui_out, object_out, epoch);
     }
 
     pub fn writeRecord(self: Input, writer: *component_codec.Writer, index: usize) bool {
@@ -83,8 +81,7 @@ pub const Input = struct {
     }
 
     pub fn fromView(view: object.View) Error!Input {
-        const input = try component_codec.nodeView(view, .input);
-        return fromNode(input);
+        return component_codec.decodeFromView(Input, .input, view);
     }
 
     pub fn fromNode(input: @FieldType(ui.Node, "input")) Error!Input {

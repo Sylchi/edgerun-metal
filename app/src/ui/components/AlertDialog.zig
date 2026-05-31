@@ -52,8 +52,7 @@ pub const AlertDialog = struct {
     }
 
     pub fn fromView(view: object.View) Error!AlertDialog {
-        const dialog = try component_codec.nodeView(view, .alert_dialog);
-        return fromNode(dialog);
+        return component_codec.decodeFromView(AlertDialog, .alert_dialog, view);
     }
 
     pub fn fromNode(dialog: @FieldType(ui.Node, "alert_dialog")) Error!AlertDialog {

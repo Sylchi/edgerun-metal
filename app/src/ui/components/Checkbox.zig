@@ -72,8 +72,7 @@ pub const Checkbox = struct {
     }
 
     pub fn fromView(view: object.View) Error!Checkbox {
-        const checkbox = try component_codec.nodeView(view, .checkbox);
-        return fromNode(checkbox);
+        return component_codec.decodeFromView(Checkbox, .checkbox, view);
     }
 
     pub fn fromNode(checkbox: @FieldType(ui.Node, "checkbox")) Error!Checkbox {

@@ -51,6 +51,10 @@ pub fn nodeView(view: object.View, comptime tag: std.meta.Tag(ui.Node)) Error!@F
     };
 }
 
+pub fn decodeFromView(comptime ComponentType: type, comptime tag: std.meta.Tag(ui.Node), view: object.View) Error!ComponentType {
+    return ComponentType.fromNode(try nodeView(view, tag));
+}
+
 pub fn emptyObject(kind: codec.RecordKind, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
     return recordObject(kind, 0, .{}, .{}, ui_out, object_out, epoch);
 }
@@ -126,6 +130,12 @@ pub fn singleWriter(ui_out: []u8) ?Writer {
 pub fn writeObject(comptime Component: type, component: Component, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
     var writer = codec.Writer.init(ui_out, 1, 1, .column, 0, 0) orelse return null;
     if (!writeRecord(Component, &writer, 0, component)) return null;
+    return writer.objectNode(object_out, requirements(), epoch);
+}
+
+pub fn singleObjectFromRecord(comptime T: type, value: T, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
+    var writer = singleWriter(ui_out) orelse return null;
+    if (!value.writeRecord(&writer, 0)) return null;
     return writer.objectNode(object_out, requirements(), epoch);
 }
 

@@ -49,11 +49,11 @@ extern er_serial_crlf
 %define OP_PORTSC        0x400
 
 ; ─── Runtime register offsets (from rts_off) ────────────────────────
-%define RT_ERSTSZ        0x08
-%define RT_ERSTBA_LO     0x10
-%define RT_ERSTBA_HI     0x14
-%define RT_ERDP_LO       0x18
-%define RT_ERDP_HI       0x1C
+%define RT_ERSTSZ        0x28    ; Interrupter 0 ERSTSZ
+%define RT_ERSTBA_LO     0x30    ; Interrupter 0 ERSTBA low
+%define RT_ERSTBA_HI     0x34    ; Interrupter 0 ERSTBA high
+%define RT_ERDP_LO       0x38    ; Interrupter 0 ERDP low
+%define RT_ERDP_HI       0x3C    ; Interrupter 0 ERDP high
 
 ; ─── USBCMD bits ────────────────────────────────────────────────────
 %define CMD_RUN          (1 << 0)
@@ -61,6 +61,7 @@ extern er_serial_crlf
 
 ; ─── USBSTS bits ────────────────────────────────────────────────────
 %define STS_HCH          (1 << 0)
+%define STS_CNR          (1 << 11)
 
 ; ─── CRCR bits ──────────────────────────────────────────────────────
 %define CRCR_RCS         (1 << 0)
@@ -236,7 +237,7 @@ er_fn er_xhci_probe
     lea     rsi, [rel .port_s]
     call    er_serial_puts
     mov     rdi, r15
-    mov     esi, eax
+    mov     esi, [xhci_max_ports]
     call    er_serial_putdec32
     mov     rdi, r15
     call    er_serial_crlf
@@ -317,26 +318,6 @@ er_fn er_xhci_probe
 .conn:
     mov     rdi, r15
     lea     rsi, [rel .con_s]
-    call    er_serial_puts
-
-    mov     eax, r13d
-    shr     eax, PORTSC_SPEED_SHIFT
-    and     eax, 0xF
-    mov     edi, eax
-    call    _xhci_speed_name
-    mov     rdi, r15
-    mov     rsi, rax
-    call    er_serial_puts
-
-    test    r13d, PORTSC_PED
-    jnz     .ena
-    mov     rdi, r15
-    lea     rsi, [rel .dis_s]
-    call    er_serial_puts
-    jmp     .pr
-.ena:
-    mov     rdi, r15
-    lea     rsi, [rel .en_s]
     call    er_serial_puts
 .pr:
     mov     rdi, r15
@@ -497,20 +478,34 @@ er_fn er_xhci_init
     add     edi, OP_USBCMD
     call    er_mmio_write32
 
-    ; Wait for reset (HCH = 0 in USBSTS)
+    ; Wait for reset completion (HCRST clears in USBCMD).
     mov     ecx, 200000
 .wait_rst:
     mov     edi, r14d
     add     edi, [xhci_port_off]
-    add     edi, OP_USBSTS
+    add     edi, OP_USBCMD
     call    er_mmio_read32
-    test    eax, STS_HCH
+    test    eax, CMD_HCRST
     jz      .rst_done
     dec     ecx
     jnz     .wait_rst
-    jmp     .timeout
+    jmp     .timeout_rst
 
 .rst_done:
+    ; Wait until controller is ready (USBSTS.CNR = 0) after reset.
+    mov     ecx, 20000000
+.wait_cnr:
+    mov     edi, r14d
+    add     edi, [xhci_port_off]
+    add     edi, OP_USBSTS
+    call    er_mmio_read32
+    test    eax, STS_CNR
+    jz      .cnr_done
+    dec     ecx
+    jnz     .wait_cnr
+    jmp     .timeout_rst
+.cnr_done:
+
     ; ─── 2. DCBAAP ────────────────────────────────────────────
     lea     rax, [rel xhci_dcbaa]
     mov     edi, r14d
@@ -603,7 +598,7 @@ er_fn er_xhci_init
     call    er_mmio_write32
 
     ; Wait for HCH to clear
-    mov     ecx, 200000
+    mov     ecx, 20000000
 .wait_run:
     mov     edi, r14d
     add     edi, [xhci_port_off]
@@ -613,7 +608,7 @@ er_fn er_xhci_init
     jz      .started
     dec     ecx
     jnz     .wait_run
-    jmp     .timeout
+    jmp     .timeout_run
 
 .started:
     ; Power up all ports (if PPC)
@@ -665,10 +660,19 @@ er_fn er_xhci_init
     er_ok
     ret
 
-.timeout:
+.timeout_rst:
     pop     rax             ; out_max_ports (discard)
     mov     rdi, r15
-    lea     rsi, [rel .to_s]
+    lea     rsi, [rel .to_rst_s]
+    call    er_serial_puts
+    mov     rdi, r15
+    call    er_serial_crlf
+    jmp     .fail
+
+.timeout_run:
+    pop     rax             ; out_max_ports (discard)
+    mov     rdi, r15
+    lea     rsi, [rel .to_run_s]
     call    er_serial_puts
     mov     rdi, r15
     call    er_serial_crlf
@@ -681,7 +685,8 @@ er_fn er_xhci_init
     er_err  ERROR_TIMEOUT
 
 .ok_s: db "xhci_init: ok bar ",0
-.to_s: db "xhci_init: timeout",0
+.to_rst_s: db "xhci_init: timeout reset",0
+.to_run_s: db "xhci_init: timeout run",0
 
 ; ==================================================================
 ; er_xhci_get_info — fetch initialized controller summary

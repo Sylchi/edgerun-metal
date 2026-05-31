@@ -79,8 +79,7 @@ pub const Table = struct {
     }
 
     pub fn fromView(view: object.View) Error!Table {
-        const table = try component_codec.nodeView(view, .table);
-        return fromNode(table);
+        return component_codec.decodeFromView(Table, .table, view);
     }
 
     pub fn fromNode(table: @FieldType(ui.Node, "table")) Error!Table {

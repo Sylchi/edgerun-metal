@@ -69,8 +69,7 @@ pub const Slider = struct {
     }
 
     pub fn fromView(view: object.View) Error!Slider {
-        const slider = try component_codec.nodeView(view, .slider);
-        return fromNode(slider);
+        return component_codec.decodeFromView(Slider, .slider, view);
     }
 
     pub fn fromNode(slider: @FieldType(ui.Node, "slider")) Error!Slider {

@@ -67,8 +67,7 @@ pub const Tooltip = struct {
     }
 
     pub fn fromView(view: object.View) Error!Tooltip {
-        const tooltip = try component_codec.nodeView(view, .tooltip);
-        return fromNode(tooltip);
+        return component_codec.decodeFromView(Tooltip, .tooltip, view);
     }
 
     pub fn fromNode(tooltip: @FieldType(ui.Node, "tooltip")) Error!Tooltip {

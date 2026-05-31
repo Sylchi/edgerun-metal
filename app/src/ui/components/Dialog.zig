@@ -28,10 +28,7 @@ pub const Dialog = struct {
     }
 
     pub fn render(self: Dialog, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        try primitives.renderSidePanelTrigger(scene, bounds, dialog_layout, options.style.accent, options.style.border, dialog_trigger_padding, dialog_open_label, options.style.bg);
-        if (options.overlay.isOpen(self.id)) {
-            try primitives.renderTitleDetailPanel(scene, primitives.sidePanelContentBounds(bounds, dialog_layout), self.title, self.detail, options, dialog_panel, options.style.border, options.style.text);
-        }
+        try primitives.renderSidePanelTitleDetail(scene, bounds, self.id, options, dialog_layout, options.style.accent, options.style.border, dialog_trigger_padding, dialog_open_label, options.style.bg, dialog_panel, self.title, self.detail, options.style.text);
     }
 
     pub fn collectInteractions(self: Dialog, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
@@ -52,8 +49,7 @@ pub const Dialog = struct {
     }
 
     pub fn fromView(view: object.View) Error!Dialog {
-        const dialog = try component_codec.nodeView(view, .dialog);
-        return fromNode(dialog);
+        return component_codec.decodeFromView(Dialog, .dialog, view);
     }
 
     pub fn fromNode(dialog: @FieldType(ui.Node, "dialog")) Error!Dialog {

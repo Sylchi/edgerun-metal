@@ -1,7 +1,6 @@
 const state = @import("runtime/state.zig");
 const render = @import("runtime/render.zig");
 const editor = @import("runtime/editor.zig");
-const compiler = @import("runtime/compiler.zig");
 const input = @import("runtime/input.zig");
 const idp = @import("runtime/identity.zig");
 
@@ -42,7 +41,6 @@ pub const packed_image_vertex_float_stride = state.packed_image_vertex_float_str
 pub const font_atlas_width = state.font_atlas_width;
 pub const font_atlas_height = state.font_atlas_height;
 pub const ErrorCode = state.ErrorCode;
-pub const CompilePhase = state.CompilePhase;
 pub const SourceEditorStatus = state.SourceEditorStatus;
 pub const EnvironmentAppearance = state.EnvironmentAppearance;
 pub const hover_hit_kind_none = state.hover_hit_kind_none;
@@ -259,14 +257,6 @@ export fn er_ui_outbox_clear() u32 {
 export fn er_ui_bootstrap_js_ptr() usize { return 0; }
 export fn er_ui_bootstrap_js_len() usize { return 0; }
 
-export fn er_ui_compiler_source_ptr() usize {
-    return @intFromPtr(&state.source_workspace);
-}
-
-export fn er_ui_compiler_source_len() usize {
-    return state.source_workspace_len;
-}
-
 export fn er_ui_source_workspace_ptr() usize {
     return @intFromPtr(&state.source_workspace);
 }
@@ -313,13 +303,6 @@ export fn er_ui_source_editor_cursor() usize { return state.source_editor_cursor
 export fn er_ui_source_editor_dirty() u32 { return @intFromBool(state.source_editor_dirty); }
 export fn er_ui_source_editor_status() u32 { return @intFromEnum(state.source_editor_status); }
 
-export fn er_ui_last_compiler_status() u32 { return state.last_compiler_status; }
-export fn er_ui_last_compiler_diagnostic_ptr() usize { return @intFromPtr(&state.last_compiler_diagnostic); }
-export fn er_ui_last_compiler_diagnostic_len() usize { return state.last_compiler_diagnostic_len; }
-export fn er_ui_last_compile_phase() u32 { return @intFromEnum(state.last_compile_phase); }
-export fn er_ui_last_compile_progress_permille() u32 { return state.last_compile_progress_permille; }
-export fn er_ui_last_compile_instructions() u64 { return state.last_compile_instructions; }
-
 export fn er_ui_release_artifact_ptr() usize { return @intFromPtr(&state.release_artifact); }
 export fn er_ui_release_artifact_len() usize { return state.release_artifact_len; }
 export fn er_ui_release_artifact_capacity() usize { return state.release_artifact.len; }
@@ -335,10 +318,6 @@ export fn er_ui_release_artifact_clear() u32 {
     state.release_artifact_len = 0;
     state.last_error = .ok;
     return @intFromEnum(state.ErrorCode.ok);
-}
-
-export fn er_ui_compile_workspace_wasm() u32 {
-    return compiler.compileWorkspaceInsideWasm();
 }
 
 export fn er_ui_request_release_artifact_download() u32 {
@@ -390,7 +369,6 @@ export fn er_ui_app_activate_hit(hit_id: u32) u32 {
         render.refreshRoutePath();
         render.refreshRouteHash();
     } else if (app_navigation.actionFromHit(hit_id)) |action_fn| switch (action_fn) {
-        .compile_source => {},
         .download_source_release => { input.queueOutboxMessage(@intFromEnum(state.OutboxKind.download_wasm)) catch {}; },
         .launch_source_release => { input.queueOutboxMessage(@intFromEnum(state.OutboxKind.launch_wasm)) catch {}; },
         .reset_source => {
@@ -849,7 +827,7 @@ test "app runtime exposes no secondary bootstrap javascript" {
 }
 
 test "app runtime exposes repo-owned source as canonical object bytes" {
-    try std.testing.expect(er_ui_compiler_source_len() > 0);
+    try std.testing.expect(er_ui_source_workspace_len() > 0);
 
     input.applyRoute(.{ .view = .frontend });
     try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, -1.0, -1.0, 0.0));
@@ -942,11 +920,6 @@ test "app runtime release artifact slot only commits wasm modules" {
     @memcpy(state.release_artifact[0..4], &buf);
     state.release_artifact_len = 4;
     try std.testing.expectEqual(@as(u32, 0), er_ui_release_artifact_commit(4));
-}
-
-test "app runtime compile request fails until compiler is implemented" {
-    state.release_artifact_len = 0;
-    try std.testing.expectEqual(@intFromEnum(state.ErrorCode.render_failed), er_ui_compile_workspace_wasm());
 }
 
 test "app runtime exports committed wasm artifact through generic byte bridge" {

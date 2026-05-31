@@ -3,7 +3,6 @@ const bytes = @import("../bytes.zig");
 const object = @import("../object.zig");
 const vfs = @import("../vfs.zig");
 const state = @import("state.zig");
-const compiler = @import("compiler.zig");
 
 pub const FileEntry = struct {
     path: []const u8,
@@ -156,12 +155,10 @@ pub fn handleSourceEditorKey(key: []const u8, ctrl: u32, meta: u32, alt: u32, sh
     ensureSourceEditor();
     if (state.source_editor_status != .ready and state.source_editor_status != .dirty) return false;
     if ((ctrl != 0 or meta != 0) and bytes.eql(key, "s")) {
-        _ = compiler.compileWorkspaceInsideWasm();
         return true;
     }
     if ((ctrl != 0 or meta != 0) and bytes.eql(key, "Enter")) {
-        _ = compiler.compileWorkspaceInsideWasm();
-        return true;
+        return false;
     }
     if ((ctrl != 0 or meta != 0) and (bytes.eql(key, "a") or bytes.eql(key, "A"))) {
         state.source_editor_selection_anchor = 0;
@@ -628,10 +625,10 @@ fn rebuildSourceWorkspaceFromEditor() state.SourceEditorStatus {
     if (!bytes.startsWith(workspace_view.body, "ERVFSWS1")) return .corrupt_workspace;
     if (workspace_view.body.len < state.workspace_manifest_header_bytes) return .corrupt_workspace;
     const file_count = bytes.load32(workspace_view.body[12..16]) orelse return .corrupt_workspace;
-    if (state.compiler_runtime_memory.len < object.header_size + workspace_view.body.len) return .workspace_full;
+    if (state.source_workspace_scratch.len < object.header_size + workspace_view.body.len) return .workspace_full;
 
     var body_len: usize = state.workspace_manifest_header_bytes;
-    @memcpy(state.compiler_runtime_memory[object.header_size..][0..state.workspace_manifest_header_bytes], workspace_view.body[0..state.workspace_manifest_header_bytes]);
+    @memcpy(state.source_workspace_scratch[object.header_size..][0..state.workspace_manifest_header_bytes], workspace_view.body[0..state.workspace_manifest_header_bytes]);
 
     var index: usize = state.workspace_manifest_header_bytes;
     var remaining = file_count;
@@ -650,34 +647,31 @@ fn rebuildSourceWorkspaceFromEditor() state.SourceEditorStatus {
             const file_view = object.View.decode(file_object) catch return .corrupt_workspace;
             const label_pos = object.header_size + body_len;
             const file_pos = label_pos + vfs.object_label_ref_bytes;
-            if (file_pos > state.compiler_runtime_memory.len) return .workspace_full;
-            const new_file = (object.NodeWriter{ .out = state.compiler_runtime_memory[file_pos..] }).bytesNode(file_view.header.requirements, file_view.header.epoch, state.source_editor_bytes[0..state.source_editor_len]) catch return .workspace_full;
+            if (file_pos > state.source_workspace_scratch.len) return .workspace_full;
+            const new_file = (object.NodeWriter{ .out = state.source_workspace_scratch[file_pos..] }).bytesNode(file_view.header.requirements, file_view.header.epoch, state.source_editor_bytes[0..state.source_editor_len]) catch return .workspace_full;
             const new_ref = vfs.prepareObjectLabelRef(state.source_editor_label, new_file) catch return .corrupt_workspace;
-            vfs.encodeObjectLabelRef(new_ref, state.compiler_runtime_memory[label_pos..][0..vfs.object_label_ref_bytes]) catch return .workspace_full;
+            vfs.encodeObjectLabelRef(new_ref, state.source_workspace_scratch[label_pos..][0..vfs.object_label_ref_bytes]) catch return .workspace_full;
             body_len += vfs.object_label_ref_bytes + new_file.len;
             replaced = true;
         } else {
             const raw_len = vfs.object_label_ref_bytes + file_object.len;
             const out_pos = object.header_size + body_len;
-            if (out_pos > state.compiler_runtime_memory.len or raw_len > state.compiler_runtime_memory.len - out_pos) return .workspace_full;
-            @memcpy(state.compiler_runtime_memory[out_pos..][0..vfs.object_label_ref_bytes], label_ref_raw);
-            @memcpy(state.compiler_runtime_memory[out_pos + vfs.object_label_ref_bytes ..][0..file_object.len], file_object);
+            if (out_pos > state.source_workspace_scratch.len or raw_len > state.source_workspace_scratch.len - out_pos) return .workspace_full;
+            @memcpy(state.source_workspace_scratch[out_pos..][0..vfs.object_label_ref_bytes], label_ref_raw);
+            @memcpy(state.source_workspace_scratch[out_pos + vfs.object_label_ref_bytes ..][0..file_object.len], file_object);
             body_len += raw_len;
         }
     }
     if (!replaced or index != workspace_view.body.len) return .corrupt_workspace;
 
-    const body = state.compiler_runtime_memory[object.header_size..][0..body_len];
-    const canonical = (object.NodeWriter{ .out = &state.compiler_runtime_memory }).bytesNode(workspace_view.header.requirements, workspace_view.header.epoch, body) catch return .workspace_full;
+    const body = state.source_workspace_scratch[object.header_size..][0..body_len];
+    const canonical = (object.NodeWriter{ .out = &state.source_workspace_scratch }).bytesNode(workspace_view.header.requirements, workspace_view.header.epoch, body) catch return .workspace_full;
     if (canonical.len > state.source_workspace.len) return .workspace_full;
     @memcpy(state.source_workspace[0..canonical.len], canonical);
     state.source_workspace_len = canonical.len;
     state.source_workspace_ready = true;
     state.source_file_cache_workspace_len = 0;
     state.release_artifact_len = 0;
-    state.last_compile_phase = .idle;
-    state.last_compile_progress_permille = 0;
-    compiler.setSourceCompileSummary() catch {};
     return .dirty;
 }
 

@@ -60,8 +60,7 @@ pub const Drawer = struct {
     }
 
     pub fn fromView(view: object.View) Error!Drawer {
-        const drawer = try component_codec.nodeView(view, .drawer);
-        return fromNode(drawer);
+        return component_codec.decodeFromView(Drawer, .drawer, view);
     }
 
     pub fn fromNode(drawer: @FieldType(ui.Node, "drawer")) Error!Drawer {

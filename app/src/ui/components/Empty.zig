@@ -64,8 +64,7 @@ pub const Empty = struct {
     }
 
     pub fn fromView(view: object.View) Error!Empty {
-        const empty = try component_codec.nodeView(view, .empty);
-        return fromNode(empty);
+        return component_codec.decodeFromView(Empty, .empty, view);
     }
 
     pub fn fromNode(empty: @FieldType(ui.Node, "empty")) Error!Empty {

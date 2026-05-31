@@ -59,8 +59,7 @@ pub const InputOtp = struct {
     }
 
     pub fn fromView(view: object.View) Error!InputOtp {
-        const input_otp = try component_codec.nodeView(view, .input_otp);
-        return fromNode(input_otp);
+        return component_codec.decodeFromView(InputOtp, .input_otp, view);
     }
 
     pub fn fromNode(input_otp: @FieldType(ui.Node, "input_otp")) Error!InputOtp {

@@ -75,8 +75,7 @@ pub const Field = struct {
     }
 
     pub fn fromView(view: object.View) Error!Field {
-        const field = try component_codec.nodeView(view, .field);
-        return fromNode(field);
+        return component_codec.decodeFromView(Field, .field, view);
     }
 
     pub fn fromNode(field: @FieldType(ui.Node, "field")) Error!Field {

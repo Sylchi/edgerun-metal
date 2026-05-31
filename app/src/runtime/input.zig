@@ -3,7 +3,6 @@ const bytes = @import("../bytes.zig");
 const state = @import("state.zig");
 const editor = @import("editor.zig");
 const identity = @import("identity.zig");
-const compiler = @import("compiler.zig");
 const app_frame = @import("../route/frame.zig");
 const component_gallery = @import("../ui/component_gallery.zig");
 
@@ -99,12 +98,6 @@ pub fn handleInputEventRecord(record: state.InputEventRecord, width: f32, height
             }
         },
         .key_down => {
-            if (record.ctrl != 0 or record.meta != 0) {
-                if (record.key.len == 1 and record.key[0] == 's') {
-                    _ = compiler.compileWorkspaceInsideWasm();
-                    return state.input_event_prevent_default;
-                }
-            }
             result = appKeyEvent(record.key, record.ctrl, record.meta, record.alt, record.shift);
         },
         .key_up => {
@@ -246,4 +239,3 @@ fn currentDragOverride() ?component_gallery.DragOverride {
     }
     return null;
 }
-

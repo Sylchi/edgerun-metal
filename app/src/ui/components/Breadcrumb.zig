@@ -71,8 +71,7 @@ pub const Breadcrumb = struct {
     }
 
     pub fn fromView(view: object.View) Error!Breadcrumb {
-        const breadcrumb = try component_codec.nodeView(view, .breadcrumb);
-        return fromNode(breadcrumb);
+        return component_codec.decodeFromView(Breadcrumb, .breadcrumb, view);
     }
 
     pub fn fromNode(breadcrumb: @FieldType(ui.Node, "breadcrumb")) Error!Breadcrumb {

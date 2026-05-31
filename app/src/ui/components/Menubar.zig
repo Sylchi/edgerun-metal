@@ -61,9 +61,7 @@ pub const Menubar = struct {
     }
 
     pub fn toObject(self: Menubar, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
-        var writer = component_codec.Writer.init(ui_out, 1, 1, .column, 0, 0) orelse return null;
-        if (!self.writeRecord(&writer, 0)) return null;
-        return writer.objectNode(object_out, component_codec.requirements(), epoch);
+        return component_codec.singleObjectFromRecord(@TypeOf(self), self, ui_out, object_out, epoch);
     }
 
     pub fn writeRecord(self: Menubar, writer: *component_codec.Writer, index: usize) bool {
@@ -71,8 +69,7 @@ pub const Menubar = struct {
     }
 
     pub fn fromView(view: object.View) Error!Menubar {
-        const menubar = try component_codec.nodeView(view, .menubar);
-        return fromNode(menubar);
+        return component_codec.decodeFromView(Menubar, .menubar, view);
     }
 
     pub fn fromNode(menubar: @FieldType(ui.Node, "menubar")) Error!Menubar {
@@ -111,8 +108,7 @@ fn itemWidths(self: Menubar) [menubar_item_count]f32 {
 }
 
 fn itemWidth(label: []const u8) f32 {
-    const measured = text_component.Text.measureValue(label, .{ .width = .unconstrained, .text_wrap = .nowrap }, component_primitives.textMetrics(label, component_primitives.control_label_height, menubar_label_max_lines));
-    return measured.preferred.w + menubar_item_padding_x * 2.0;
+    return component_primitives.measuredLabelWidth(label, component_primitives.control_label_height, menubar_label_max_lines, menubar_item_padding_x);
 }
 
 pub const menubar_item_count: u16 = 3;

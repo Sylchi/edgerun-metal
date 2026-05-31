@@ -23,7 +23,6 @@ pub const RouteHit = union(enum) {
 };
 
 pub const ActionHit = union(enum) {
-    source_compile,
     source_download,
     source_launch,
     source_reset,
@@ -92,7 +91,6 @@ const route_tag_top_level: u8 = 1;
 const route_tag_path: u8 = 2;
 
 const action_tag_none: u8 = 0;
-const action_tag_source_compile: u8 = 1;
 const action_tag_source_download: u8 = 2;
 const action_tag_source_launch: u8 = 3;
 const action_tag_source_reset: u8 = 4;
@@ -149,7 +147,6 @@ pub fn writeBytes(out: []u8, hit: Hit) !usize {
     // action
     if (hit.action) |action| {
         out[offset] = switch (action) {
-            .source_compile => action_tag_source_compile,
             .source_download => action_tag_source_download,
             .source_launch => action_tag_source_launch,
             .source_reset => action_tag_source_reset,
@@ -210,7 +207,6 @@ pub fn parseBytes(in: []const u8) !Hit {
         const tag = try readU8(in, &offset);
         break :action switch (tag) {
             action_tag_none => null,
-            action_tag_source_compile => .source_compile,
             action_tag_source_download => .source_download,
             action_tag_source_launch => .source_launch,
             action_tag_source_reset => .source_reset,
@@ -276,7 +272,7 @@ test "hit serialization round trips all field combinations" {
 
     const hits = [_]Hit{
         .{ .kind = .button, .id = 42 },
-        .{ .kind = .input, .id = 7, .route = .{ .top_level = 3 }, .action = .source_compile },
+        .{ .kind = .input, .id = 7, .route = .{ .top_level = 3 }, .action = .source_download },
         .{ .kind = .checkbox, .id = 99, .route = .{ .path = "/apps/editor" }, .source = .{ .file = 12 } },
         .{ .kind = .slider, .id = 0, .action = .reveal_identity, .source = .editor },
     };

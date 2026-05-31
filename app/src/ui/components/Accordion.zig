@@ -67,9 +67,7 @@ pub const Accordion = struct {
     }
 
     pub fn toObject(self: Accordion, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
-        var writer = component_codec.Writer.init(ui_out, 1, 1, .column, 0, 0) orelse return null;
-        if (!self.writeRecord(&writer, 0)) return null;
-        return writer.objectNode(object_out, component_codec.requirements(), epoch);
+        return component_codec.singleObjectFromRecord(@TypeOf(self), self, ui_out, object_out, epoch);
     }
 
     pub fn writeRecord(self: Accordion, writer: *component_codec.Writer, index: usize) bool {
@@ -79,8 +77,7 @@ pub const Accordion = struct {
     }
 
     pub fn fromView(view: object.View) Error!Accordion {
-        const accordion = try component_codec.nodeView(view, .accordion);
-        return fromNode(accordion);
+        return component_codec.decodeFromView(Accordion, .accordion, view);
     }
 
     pub fn fromNode(accordion: @FieldType(ui.Node, "accordion")) Error!Accordion {

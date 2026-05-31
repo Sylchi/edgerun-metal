@@ -107,8 +107,7 @@ pub const Command = struct {
     }
 
     pub fn fromView(view: object.View) Error!Command {
-        const command = try component_codec.nodeView(view, .command);
-        return fromNode(command);
+        return component_codec.decodeFromView(Command, .command, view);
     }
 
     pub fn fromNode(command: @FieldType(ui.Node, "command")) Error!Command {

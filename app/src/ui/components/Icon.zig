@@ -92,9 +92,7 @@ pub const Icon = struct {
     }
 
     pub fn toObject(self: Icon, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
-        var writer = component_codec.Writer.init(ui_out, 1, 1, .column, 0, 0) orelse return null;
-        if (!self.writeRecord(&writer, 0)) return null;
-        return writer.objectNode(object_out, component_codec.requirements(), epoch);
+        return component_codec.singleObjectFromRecord(@TypeOf(self), self, ui_out, object_out, epoch);
     }
 
     pub fn writeRecord(self: Icon, writer: *component_codec.Writer, index: usize) bool {
@@ -103,8 +101,7 @@ pub const Icon = struct {
     }
 
     pub fn fromView(view: object.View) Error!Icon {
-        const node_value = try component_codec.nodeView(view, .icon);
-        return fromNode(node_value);
+        return component_codec.decodeFromView(Icon, .icon, view);
     }
 
     pub fn fromNode(node_value: @FieldType(ui.Node, "icon")) Error!Icon {
