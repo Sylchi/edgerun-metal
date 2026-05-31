@@ -35,7 +35,7 @@ extern er_mmio_write8
 %define HDA_VERB_SET_PIN_WIDGET_CONTROL 0x707
 %define HDA_VERB_SET_EAPD_BTL 0x70C
 %define HDA_VERB_SET_CONVERTER_FORMAT 0x200
-%define HDA_VERB_SET_AMP_GAIN_MUTE 0x300
+%define HDA_VERB_SET_AMP_GAIN_MUTE 0x3
 %define HDA_PARAM_VENDOR_ID    0x00
 %define HDA_PARAM_SUB_NODE_COUNT 0x04
 %define HDA_FORMAT_PCM_48K_16_STEREO 0x0011
@@ -59,8 +59,16 @@ extern er_mmio_write8
 %define HDA_ALC295_NODE_MIC_ADC 0x08
 %define HDA_ALC295_NODE_SPK_PIN 0x14
 %define HDA_ALC295_NODE_MIC_PIN 0x12
+%define HDA_ALC295_NODE_MIC_MIXER 0x23
 %define HDA_PIN_CONTROL_IN 0x20
 %define HDA_PIN_CONTROL_OUT 0x40
+%define HDA_AMP_SET_INPUT 0x4000
+%define HDA_AMP_SET_LEFT 0x2000
+%define HDA_AMP_SET_RIGHT 0x1000
+%define HDA_AMP_INDEX_SHIFT 8
+%define HDA_ALC295_MIC_MIXER_INDEX 4
+%define HDA_ALC295_MIC_PIN_BOOST 0x03
+%define HDA_ALC295_MIC_ADC_GAIN 0x3F
 
 SECTION .bss
 align 128
@@ -368,8 +376,15 @@ er_fn er_hda_codec_send_verb
     ja      .sv_bad_arg
     cmp     r15d, 0xFFF
     ja      .sv_bad_arg
+    cmp     r15d, 0x0F
+    jbe     .sv_check_long_payload
     cmp     ebp, 0xFF
     ja      .sv_bad_arg
+    jmp     .sv_args_ok
+.sv_check_long_payload:
+    cmp     ebp, 0xFFFF
+    ja      .sv_bad_arg
+.sv_args_ok:
 
     mov     edi, r13d
     call    _hda_first_codec
@@ -381,7 +396,13 @@ er_fn er_hda_codec_send_verb
     shl     edx, 20
     or      eax, edx
     mov     ecx, r15d
+    cmp     ecx, 0x0F
+    ja      .sv_short_verb
+    shl     ecx, 16
+    jmp     .sv_pack_payload
+.sv_short_verb:
     shl     ecx, 8
+.sv_pack_payload:
     or      eax, ecx
     or      eax, ebp
     mov     r13d, eax
@@ -588,7 +609,7 @@ er_fn er_hda_alc295_prepare_mic
     mov     r12d, edi
     mov     r13d, esi
 
-    ; AFG, ADC, and internal mic pin to D0.
+    ; AFG, ADC, internal mic pin, and mic mixer to D0.
     mov     edi, r12d
     mov     esi, r13d
     mov     edx, HDA_ALC295_NODE_AFG
@@ -616,6 +637,15 @@ er_fn er_hda_alc295_prepare_mic
     call    er_hda_codec_send_verb
     test    eax, eax
     jnz     .pm_out
+    mov     edi, r12d
+    mov     esi, r13d
+    mov     edx, HDA_ALC295_NODE_MIC_MIXER
+    mov     ecx, HDA_VERB_SET_POWER_STATE
+    xor     r8d, r8d
+    lea     r9, [rel hda_verb_sink]
+    call    er_hda_codec_send_verb
+    test    eax, eax
+    jnz     .pm_out
 
     ; ADC 0x08 consumes capture stream tag 2/channel 0 at 48 kHz 16-bit stereo.
     mov     edi, r12d
@@ -632,6 +662,36 @@ er_fn er_hda_alc295_prepare_mic
     mov     edx, HDA_ALC295_NODE_MIC_ADC
     mov     ecx, HDA_VERB_SET_CONVERTER_FORMAT
     mov     r8d, HDA_FORMAT_PCM_48K_16_STEREO
+    lea     r9, [rel hda_verb_sink]
+    call    er_hda_codec_send_verb
+    test    eax, eax
+    jnz     .pm_out
+
+    ; Match Linux's active internal-mic route: unmute mixer input 4,
+    ; set pin boost to 3, and set ADC capture gain to max.
+    mov     edi, r12d
+    mov     esi, r13d
+    mov     edx, HDA_ALC295_NODE_MIC_MIXER
+    mov     ecx, HDA_VERB_SET_AMP_GAIN_MUTE
+    mov     r8d, HDA_AMP_SET_INPUT | HDA_AMP_SET_LEFT | HDA_AMP_SET_RIGHT | (HDA_ALC295_MIC_MIXER_INDEX << HDA_AMP_INDEX_SHIFT)
+    lea     r9, [rel hda_verb_sink]
+    call    er_hda_codec_send_verb
+    test    eax, eax
+    jnz     .pm_out
+    mov     edi, r12d
+    mov     esi, r13d
+    mov     edx, HDA_ALC295_NODE_MIC_PIN
+    mov     ecx, HDA_VERB_SET_AMP_GAIN_MUTE
+    mov     r8d, HDA_AMP_SET_INPUT | HDA_AMP_SET_LEFT | HDA_AMP_SET_RIGHT | HDA_ALC295_MIC_PIN_BOOST
+    lea     r9, [rel hda_verb_sink]
+    call    er_hda_codec_send_verb
+    test    eax, eax
+    jnz     .pm_out
+    mov     edi, r12d
+    mov     esi, r13d
+    mov     edx, HDA_ALC295_NODE_MIC_ADC
+    mov     ecx, HDA_VERB_SET_AMP_GAIN_MUTE
+    mov     r8d, HDA_AMP_SET_INPUT | HDA_AMP_SET_LEFT | HDA_AMP_SET_RIGHT | HDA_ALC295_MIC_ADC_GAIN
     lea     r9, [rel hda_verb_sink]
     call    er_hda_codec_send_verb
     test    eax, eax

@@ -484,9 +484,11 @@ cmd_test_tls() {
 	${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
 	local tls_o="${ASM_BUILD}/tls.o"
 	elf64 "${ASM_DIR}/crypto/tls.asm" "$tls_o"
+	local tor_aes_o="${ASM_BUILD}/tor_aes.o"
+	elf64 "${ASM_DIR}/crypto/tor_aes.asm" "$tor_aes_o"
 	local runtime_o="${ASM_BUILD}/runtime.o"
 	elf64 "${ASM_DIR}/rt/runtime.asm" "$runtime_o"
-	ld -nostdlib -static -o "$bin" "$obj" "$tls_o" "$runtime_o"
+	ld -nostdlib -static -o "$bin" "$obj" "$tls_o" "$tor_aes_o" "$runtime_o"
 	echo "  LD  ${bin}"
 	"$bin"
 }

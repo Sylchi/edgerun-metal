@@ -13,6 +13,7 @@ extern er_tls_hkdf_extract
 extern er_tls_hkdf_expand_label
 extern er_tls_transcript_hash_ch_sh
 extern er_tls_derive_handshake_secrets
+extern er_tls_aes128_gcm_encrypt
 extern er_tls_send
 
 SECTION .bss
@@ -25,6 +26,8 @@ server_key: resb TLS_X25519_KEY_LEN
 shared_buf: resb TLS_X25519_KEY_LEN
 hkdf_out: resb TLS_RANDOM_LEN
 hash_out: resb TLS_RANDOM_LEN
+gcm_ct: resb 16
+gcm_tag: resb 16
 random_calls: resd 1
 
 SECTION .rodata
@@ -59,6 +62,18 @@ hkdf_label:
 hkdf_label_len equ $ - hkdf_label
 hkdf_context:
     times TLS_RANDOM_LEN db 0x11
+gcm_key_zero:
+    times 16 db 0
+gcm_iv_zero:
+    times 12 db 0
+gcm_pt_zero:
+    times 16 db 0
+gcm_ct_expected:
+    db 0x03,0x88,0xda,0xce,0x60,0xb6,0xa3,0x92
+    db 0xf3,0x28,0xc2,0xb9,0x71,0xb2,0xfe,0x78
+gcm_tag_expected:
+    db 0xab,0x6e,0x47,0xd4,0x2c,0xec,0x13,0xbd
+    db 0xf5,0x3a,0x67,0xb2,0x12,0x57,0xbd,0xdf
 
 SECTION .text
 global _start
@@ -182,6 +197,31 @@ _start:
     call    er_tls_derive_handshake_secrets
     ASSERT_RAX 0
 
+    ; AES-128-GCM NIST SP 800-38D test case: zero key/IV, one zero block.
+    lea     rdi, [rel gcm_ct]
+    lea     rsi, [rel gcm_pt_zero]
+    mov     edx, 16
+    xor     ecx, ecx
+    xor     r8d, r8d
+    lea     r9, [rel gcm_key_zero]
+    lea     rax, [rel gcm_tag]
+    push    rax
+    lea     rax, [rel gcm_iv_zero]
+    push    rax
+    call    er_tls_aes128_gcm_encrypt
+    add     rsp, 16
+    ASSERT_RAX 0
+    lea     rdi, [rel gcm_ct]
+    lea     rsi, [rel gcm_ct_expected]
+    mov     edx, 16
+    call    _mem_eq
+    ASSERT_EQ eax, 1
+    lea     rdi, [rel gcm_tag]
+    lea     rsi, [rel gcm_tag_expected]
+    mov     edx, 16
+    call    _mem_eq
+    ASSERT_EQ eax, 1
+
     ; Encrypted record send must fail until the TLS state is active.
     xor     edi, edi
     lea     rsi, [rel out_buf]
@@ -199,6 +239,19 @@ _start:
 .exit:
     mov     eax, 60
     syscall
+
+_mem_eq:
+    push    rcx
+    push    rsi
+    push    rdi
+    mov     rcx, rdx
+    repe    cmpsb
+    setz    al
+    movzx   eax, al
+    pop     rdi
+    pop     rsi
+    pop     rcx
+    ret
 
 ; ------------------------------------------------------------------
 ; Test stubs for platform I/O and crypto dependency surfaces.

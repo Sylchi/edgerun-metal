@@ -16,7 +16,10 @@ extern er_tpm_parse_get_random
 extern er_tor_curve25519_scalar_mult
 extern er_tor_hmac_sha256
 extern er_tor_sha256
+extern er_tor_aes_ctr
 extern er_memcpy
+extern er_memcmp
+extern er_memset
 
 SECTION .rodata
 
@@ -73,6 +76,18 @@ tls_server_hs_key: resb 16
 tls_client_hs_iv: resb 12
 tls_server_hs_iv: resb 12
 tls_key_block: resb TLS_RANDOM_LEN
+tls_gcm_h: resb TLS_GCM_BLOCK_LEN
+tls_gcm_y: resb TLS_GCM_BLOCK_LEN
+tls_gcm_x: resb TLS_GCM_BLOCK_LEN
+tls_gcm_z: resb TLS_GCM_BLOCK_LEN
+tls_gcm_v: resb TLS_GCM_BLOCK_LEN
+tls_gcm_block: resb TLS_GCM_BLOCK_LEN
+tls_gcm_ctr: resb TLS_GCM_BLOCK_LEN
+tls_gcm_tagmask: resb TLS_GCM_BLOCK_LEN
+tls_gcm_len_block: resb TLS_GCM_BLOCK_LEN
+tls_gcm_key_ptr: resq 1
+tls_gcm_iv_ptr: resq 1
+tls_gcm_tag_ptr: resq 1
 
 SECTION .text
 
@@ -600,6 +615,277 @@ er_fn er_tls_hkdf_expand_label
 .fail_label:
     mov     eax, -1
     er_err  ERROR_TLS_HANDSHAKE
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+
+; ==================================================================
+; _tls_gcm_shift_v — shift V right by one bit, apply R when lsb was set.
+; ==================================================================
+_tls_gcm_shift_v:
+    push    rbx
+    movzx   ebx, byte [tls_gcm_v + 15]
+    and     ebx, 1
+    xor     edx, edx
+    xor     ecx, ecx
+.shift_loop:
+    cmp     ecx, TLS_GCM_BLOCK_LEN
+    jae     .shift_done
+    movzx   eax, byte [tls_gcm_v + rcx]
+    mov     r8d, eax
+    and     r8d, 1
+    shr     al, 1
+    test    edx, edx
+    jz      .no_carry
+    or      al, 0x80
+.no_carry:
+    mov     [tls_gcm_v + rcx], al
+    mov     edx, r8d
+    inc     ecx
+    jmp     .shift_loop
+.shift_done:
+    test    ebx, ebx
+    jz      .done
+    xor     byte [tls_gcm_v], 0xE1
+.done:
+    pop     rbx
+    ret
+
+; ==================================================================
+; _tls_gcm_mul — GF(2^128) multiply X by H into X.
+; ==================================================================
+_tls_gcm_mul:
+    push    rbx
+    push    r12
+    push    r13
+
+    lea     rdi, [tls_gcm_z]
+    xor     esi, esi
+    mov     edx, TLS_GCM_BLOCK_LEN
+    call    er_memset
+    lea     rdi, [tls_gcm_v]
+    lea     rsi, [tls_gcm_h]
+    mov     edx, TLS_GCM_BLOCK_LEN
+    call    er_memcpy
+
+    xor     r12d, r12d          ; byte index
+.byte_loop:
+    cmp     r12d, TLS_GCM_BLOCK_LEN
+    jae     .finish
+    movzx   r13d, byte [tls_gcm_x + r12]
+    mov     ebx, 0x80
+.bit_loop:
+    test    r13d, ebx
+    jz      .skip_xor
+    xor     ecx, ecx
+.xor_loop:
+    cmp     ecx, TLS_GCM_BLOCK_LEN
+    jae     .skip_xor
+    movzx   eax, byte [tls_gcm_v + rcx]
+    xor     [tls_gcm_z + rcx], al
+    inc     ecx
+    jmp     .xor_loop
+.skip_xor:
+    call    _tls_gcm_shift_v
+    shr     ebx, 1
+    jnz     .bit_loop
+    inc     r12d
+    jmp     .byte_loop
+
+.finish:
+    lea     rdi, [tls_gcm_x]
+    lea     rsi, [tls_gcm_z]
+    mov     edx, TLS_GCM_BLOCK_LEN
+    call    er_memcpy
+    pop     r13
+    pop     r12
+    pop     rbx
+    ret
+
+; ==================================================================
+; _tls_gcm_absorb — GHASH absorb bytes at rsi, edx=len.
+; ==================================================================
+_tls_gcm_absorb:
+    push    rbx
+    push    r12
+    push    r13
+
+    mov     r12, rsi
+    mov     r13d, edx
+.block_loop:
+    test    r13d, r13d
+    jz      .done
+    lea     rdi, [tls_gcm_block]
+    xor     esi, esi
+    mov     edx, TLS_GCM_BLOCK_LEN
+    call    er_memset
+    mov     ebx, TLS_GCM_BLOCK_LEN
+    cmp     r13d, ebx
+    jae     .copy
+    mov     ebx, r13d
+.copy:
+    lea     rdi, [tls_gcm_block]
+    mov     rsi, r12
+    mov     edx, ebx
+    call    er_memcpy
+    xor     ecx, ecx
+.xor:
+    cmp     ecx, TLS_GCM_BLOCK_LEN
+    jae     .mul
+    movzx   eax, byte [tls_gcm_block + rcx]
+    xor     [tls_gcm_x + rcx], al
+    inc     ecx
+    jmp     .xor
+.mul:
+    call    _tls_gcm_mul
+    add     r12, rbx
+    sub     r13d, ebx
+    jmp     .block_loop
+.done:
+    pop     r13
+    pop     r12
+    pop     rbx
+    ret
+
+; ==================================================================
+; er_tls_aes128_gcm_encrypt
+; rdi=out, rsi=in, edx=len, rcx=aad, r8d=aad_len, r9=key
+; [rsp+8]=iv12, [rsp+16]=tag16
+; ==================================================================
+global er_tls_aes128_gcm_encrypt
+er_fn er_tls_aes128_gcm_encrypt
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+
+    mov     r12, rdi
+    mov     r13, rsi
+    mov     r14d, edx
+    mov     r15, rcx
+    mov     ebx, r8d
+    mov     r10, r9
+    mov     r11, [rsp + 48]     ; iv12
+    mov     r9,  [rsp + 56]     ; tag
+    mov     [tls_gcm_key_ptr], r10
+    mov     [tls_gcm_iv_ptr], r11
+    mov     [tls_gcm_tag_ptr], r9
+    test    r12, r12
+    jz      .bad_gcm
+    test    r13, r13
+    jz      .bad_gcm
+    test    r10, r10
+    jz      .bad_gcm
+    test    r11, r11
+    jz      .bad_gcm
+    test    r9, r9
+    jz      .bad_gcm
+    test    ebx, ebx
+    jz      .aad_ok
+    test    r15, r15
+    jz      .bad_gcm
+.aad_ok:
+    ; H = AES_K(0^128)
+    lea     rdi, [tls_gcm_h]
+    xor     esi, esi
+    mov     edx, TLS_GCM_BLOCK_LEN
+    call    er_memset
+    lea     rdi, [tls_gcm_ctr]
+    xor     esi, esi
+    mov     edx, TLS_GCM_BLOCK_LEN
+    call    er_memset
+    lea     rdi, [tls_gcm_h]
+    lea     rsi, [tls_gcm_h]
+    mov     edx, TLS_GCM_BLOCK_LEN
+    mov     rcx, [tls_gcm_key_ptr]
+    lea     r8, [tls_gcm_ctr]
+    call    er_tor_aes_ctr
+
+    ; J0 = IV || 0x00000001
+    lea     rdi, [tls_gcm_ctr]
+    mov     rsi, [tls_gcm_iv_ptr]
+    mov     edx, TLS_GCM_IV_LEN
+    call    er_memcpy
+    mov     dword [tls_gcm_ctr + 12], 0x01000000
+    ; tag mask = E(K, J0)
+    lea     rdi, [tls_gcm_tagmask]
+    lea     rsi, [tls_gcm_tagmask]
+    mov     edx, TLS_GCM_BLOCK_LEN
+    call    er_memset
+    lea     rdi, [tls_gcm_tagmask]
+    lea     rsi, [tls_gcm_tagmask]
+    mov     edx, TLS_GCM_BLOCK_LEN
+    mov     rcx, [tls_gcm_key_ptr]
+    lea     r8, [tls_gcm_ctr]
+    call    er_tor_aes_ctr
+
+    ; Encrypt with inc32(J0).
+    lea     rdi, [tls_gcm_ctr]
+    mov     rsi, [tls_gcm_iv_ptr]
+    mov     edx, TLS_GCM_IV_LEN
+    call    er_memcpy
+    mov     dword [tls_gcm_ctr + 12], 0x02000000
+    mov     rdi, r12
+    mov     rsi, r13
+    mov     edx, r14d
+    mov     rcx, [tls_gcm_key_ptr]
+    lea     r8, [tls_gcm_ctr]
+    call    er_tor_aes_ctr
+
+    ; GHASH(AAD || ciphertext || lengths)
+    lea     rdi, [tls_gcm_x]
+    xor     esi, esi
+    mov     edx, TLS_GCM_BLOCK_LEN
+    call    er_memset
+    mov     rsi, r15
+    mov     edx, ebx
+    call    _tls_gcm_absorb
+    mov     rsi, r12
+    mov     edx, r14d
+    call    _tls_gcm_absorb
+
+    lea     rdi, [tls_gcm_len_block]
+    xor     esi, esi
+    mov     edx, TLS_GCM_BLOCK_LEN
+    call    er_memset
+    mov     eax, ebx
+    shl     rax, 3
+    bswap   rax
+    mov     [tls_gcm_len_block], rax
+    mov     eax, r14d
+    shl     rax, 3
+    bswap   rax
+    mov     [tls_gcm_len_block + 8], rax
+    mov     rsi, tls_gcm_len_block
+    mov     edx, TLS_GCM_BLOCK_LEN
+    call    _tls_gcm_absorb
+
+    xor     ecx, ecx
+.tag_loop:
+    cmp     ecx, TLS_GCM_TAG_LEN
+    jae     .ok_gcm
+    movzx   eax, byte [tls_gcm_x + rcx]
+    xor     al, [tls_gcm_tagmask + rcx]
+    mov     rdx, [tls_gcm_tag_ptr]
+    mov     [rdx + rcx], al
+    inc     ecx
+    jmp     .tag_loop
+.ok_gcm:
+    xor     eax, eax
+    er_ok
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+.bad_gcm:
+    mov     eax, -1
+    er_err  ERROR_INVALID_PARAM
     pop     r15
     pop     r14
     pop     r13
