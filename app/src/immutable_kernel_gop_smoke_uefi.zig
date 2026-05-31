@@ -2,7 +2,7 @@ const std = @import("std");
 const uefi = std.os.uefi;
 const app_frame = @import("shell/frame.zig");
 const app_location = @import("location.zig");
-const app_images = @import("ui/images.zig");
+const app_images = @import("app_images.zig");
 const gop_framebuffer = @import("boot/gop_framebuffer.zig");
 const interaction = @import("ui/interaction.zig");
 const renderer_font_atlas = @import("render/font_atlas_weighted.zig");
@@ -71,7 +71,7 @@ const SceneState = struct {
 };
 
 pub fn main() noreturn {
-    printLine("EdgeRun app-runtime virtio-gpu smoke");
+    printLine("EdgeRun native renderer virtio-gpu smoke");
     run() catch |err| {
         printText("FAIL ");
         printError(err);
@@ -108,7 +108,7 @@ fn run() Error!void {
         framebuffer.blitUiColorBytes(width, height, std.mem.sliceAsBytes(native_pixels));
         writeDebugconLine("check: blessed native pixels copied to gop fallback");
     }
-    writeDebugconLine("PASS immutable-kernel-app-runtime-qemu");
+    writeDebugconLine("PASS immutable-kernel-gop-smoke-qemu");
 }
 
 fn emptyFramebuffer() gop_framebuffer.Framebuffer {
@@ -173,6 +173,8 @@ fn renderDiagnosticBatch(
     image_texture: renderer_software.RgbaTexture,
     batch: DiagnosticBatch,
 ) Error!void {
+    const rect_len = buffers.rect_len.*;
+    const text_vertex_len = buffers.text_vertex_len.*;
     const icon_len = buffers.icon_vertex_len.*;
     const icon_line_len = buffers.icon_line_vertex_len.*;
     const image_len = buffers.image_vertex_len.*;
@@ -180,6 +182,8 @@ fn renderDiagnosticBatch(
     const overlay_icon_len = buffers.overlay_icon_vertex_len.*;
     const overlay_icon_line_len = buffers.overlay_icon_line_vertex_len.*;
 
+    buffers.rect_len.* = if (batch == .rects) rect_len else 0;
+    buffers.text_vertex_len.* = if (batch == .text) text_vertex_len else 0;
     buffers.icon_vertex_len.* = if (batch == .icons) icon_len else 0;
     buffers.icon_line_vertex_len.* = if (batch == .icons) icon_line_len else 0;
     buffers.image_vertex_len.* = if (batch == .icons) image_len else 0;
@@ -189,14 +193,18 @@ fn renderDiagnosticBatch(
 
     switch (batch) {
         .rects => writeDebugconLine("diag: software rect batch start"),
+        .text => writeDebugconLine("diag: software text batch start"),
         .icons => writeDebugconLine("diag: software icon batch start"),
     }
     _ = renderer_pipeline.renderSoftwareFrame(surface, buffers, renderer_pipeline.softwareResources(&font_atlas, image_texture), .bg) catch return error.NativeRenderFailed;
     switch (batch) {
         .rects => writeDebugconLine("diag: software rect batch ok"),
+        .text => writeDebugconLine("diag: software text batch ok"),
         .icons => writeDebugconLine("diag: software icon batch ok"),
     }
 
+    buffers.rect_len.* = rect_len;
+    buffers.text_vertex_len.* = text_vertex_len;
     buffers.icon_vertex_len.* = icon_len;
     buffers.icon_line_vertex_len.* = icon_line_len;
     buffers.image_vertex_len.* = image_len;

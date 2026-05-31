@@ -15,6 +15,7 @@ extern er_tls_transcript_hash_ch_sh
 extern er_tls_derive_handshake_secrets
 extern er_tls_aes128_gcm_encrypt
 extern er_tls_send
+extern er_tor_aes_ctr
 
 SECTION .bss
 passed: resq 1
@@ -28,6 +29,7 @@ hkdf_out: resb TLS_RANDOM_LEN
 hash_out: resb TLS_RANDOM_LEN
 gcm_ct: resb 16
 gcm_tag: resb 16
+aes_block: resb 16
 random_calls: resd 1
 
 SECTION .rodata
@@ -68,6 +70,12 @@ gcm_iv_zero:
     times 12 db 0
 gcm_pt_zero:
     times 16 db 0
+gcm_j0:
+    times 15 db 0
+    db 1
+gcm_j0_mask_expected:
+    db 0x58,0xe2,0xfc,0xce,0xfa,0x7e,0x30,0x61
+    db 0x36,0x7f,0x1d,0x57,0xa4,0xe7,0x45,0x5a
 gcm_ct_expected:
     db 0x03,0x88,0xda,0xce,0x60,0xb6,0xa3,0x92
     db 0xf3,0x28,0xc2,0xb9,0x71,0xb2,0xfe,0x78
@@ -196,6 +204,19 @@ _start:
     mov     esi, server_hello_len
     call    er_tls_derive_handshake_secrets
     ASSERT_RAX 0
+
+    ; AES block used as GCM tag mask: E(K, J0).
+    lea     rdi, [rel aes_block]
+    lea     rsi, [rel gcm_pt_zero]
+    mov     edx, 16
+    lea     rcx, [rel gcm_key_zero]
+    lea     r8, [rel gcm_j0]
+    call    er_tor_aes_ctr
+    lea     rdi, [rel aes_block]
+    lea     rsi, [rel gcm_j0_mask_expected]
+    mov     edx, 16
+    call    _mem_eq
+    ASSERT_EQ eax, 1
 
     ; AES-128-GCM NIST SP 800-38D test case: zero key/IV, one zero block.
     lea     rdi, [rel gcm_ct]

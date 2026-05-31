@@ -223,7 +223,6 @@ pub fn main(init: std.process.Init) !void {
         }
         return err;
     };
-    std.debug.print("args={any} options.hardware={}\n", .{ args, opts.hardware });
     const socket_path = try options_import.waylandSocketPath(init, allocator);
     defer allocator.free(socket_path);
     var client = try client_import.WaylandClient.connect(init.io, socket_path);

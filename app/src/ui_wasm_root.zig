@@ -1,1 +1,5 @@
-pub usingnamespace @import("ui/wasm.zig");
+const wasm = @import("ui/wasm.zig");
+
+comptime {
+    _ = wasm;
+}

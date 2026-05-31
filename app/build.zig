@@ -351,21 +351,21 @@ pub fn build(b: *std.Build) void {
     const uefi_target = b.resolveTargetQuery(std.Target.Query.parse(.{
         .arch_os_abi = "x86_64-uefi",
     }) catch unreachable);
-    const immutable_kernel_app_runtime = b.addExecutable(.{
+    const immutable_kernel_gop_smoke = b.addExecutable(.{
         .name = "BOOTX64.EFI",
         .root_module = b.createModule(.{
-            .root_source_file = b.path("src/immutable_kernel_app_runtime_uefi.zig"),
+            .root_source_file = b.path("src/immutable_kernel_gop_smoke_uefi.zig"),
             .target = uefi_target,
             // This image runs the native renderer and virtio-gpu path inside QEMU.
             // ReleaseSmall keeps the EFI smaller, but makes frame rendering dramatically slower.
             .optimize = .ReleaseFast,
         }),
     });
-    const install_immutable_kernel_app_runtime = b.addInstallArtifact(immutable_kernel_app_runtime, .{
-        .dest_dir = .{ .override = .{ .custom = "immutable-kernel-app-runtime" } },
+    const install_immutable_kernel_gop_smoke = b.addInstallArtifact(immutable_kernel_gop_smoke, .{
+        .dest_dir = .{ .override = .{ .custom = "immutable-kernel-gop-smoke" } },
     });
-    const immutable_kernel_app_runtime_step = b.step("immutable-kernel-app-runtime-efi", "Build the UEFI app-runtime GOP smoke");
-    immutable_kernel_app_runtime_step.dependOn(&install_immutable_kernel_app_runtime.step);
+    const immutable_kernel_gop_smoke_step = b.step("immutable-kernel-gop-smoke-efi", "Build the UEFI native renderer GOP smoke");
+    immutable_kernel_gop_smoke_step.dependOn(&install_immutable_kernel_gop_smoke.step);
 
     const tpm_real_check = b.addExecutable(.{
         .name = "edgerun-tpm-real-check-zig",

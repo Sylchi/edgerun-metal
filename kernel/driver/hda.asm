@@ -69,6 +69,35 @@ extern er_mmio_write8
 %define HDA_ALC295_MIC_MIXER_INDEX 4
 %define HDA_ALC295_MIC_PIN_BOOST 0x03
 %define HDA_ALC295_MIC_ADC_GAIN 0x3F
+%define HDA_VERB_ENTRY_BYTES 12
+
+SECTION .rodata
+align 4
+hda_alc295_speaker_verbs:
+    dd HDA_ALC295_NODE_AFG,     HDA_VERB_SET_POWER_STATE,        0
+    dd HDA_ALC295_NODE_SPK_DAC, HDA_VERB_SET_POWER_STATE,        0
+    dd HDA_ALC295_NODE_SPK_PIN, HDA_VERB_SET_POWER_STATE,        0
+    dd HDA_ALC295_NODE_SPK_DAC, HDA_VERB_SET_CHANNEL_STREAM_ID,  (HDA_STREAM_TAG << 4)
+    dd HDA_ALC295_NODE_SPK_DAC, HDA_VERB_SET_CONVERTER_FORMAT,   HDA_FORMAT_PCM_48K_16_STEREO
+    dd HDA_ALC295_NODE_SPK_DAC, HDA_VERB_SET_AMP_GAIN_MUTE,      0xB0
+    dd HDA_ALC295_NODE_SPK_PIN, HDA_VERB_SET_AMP_GAIN_MUTE,      0xB0
+    dd HDA_ALC295_NODE_SPK_PIN, HDA_VERB_SET_EAPD_BTL,           0x02
+    dd HDA_ALC295_NODE_SPK_PIN, HDA_VERB_SET_PIN_WIDGET_CONTROL, HDA_PIN_CONTROL_OUT
+hda_alc295_speaker_verb_count equ ($ - hda_alc295_speaker_verbs) / HDA_VERB_ENTRY_BYTES
+
+align 4
+hda_alc295_mic_verbs:
+    dd HDA_ALC295_NODE_AFG,       HDA_VERB_SET_POWER_STATE,        0
+    dd HDA_ALC295_NODE_MIC_ADC,   HDA_VERB_SET_POWER_STATE,        0
+    dd HDA_ALC295_NODE_MIC_PIN,   HDA_VERB_SET_POWER_STATE,        0
+    dd HDA_ALC295_NODE_MIC_MIXER, HDA_VERB_SET_POWER_STATE,        0
+    dd HDA_ALC295_NODE_MIC_ADC,   HDA_VERB_SET_CHANNEL_STREAM_ID,  (HDA_CAPTURE_STREAM_TAG << 4)
+    dd HDA_ALC295_NODE_MIC_ADC,   HDA_VERB_SET_CONVERTER_FORMAT,   HDA_FORMAT_PCM_48K_16_STEREO
+    dd HDA_ALC295_NODE_MIC_MIXER, HDA_VERB_SET_AMP_GAIN_MUTE,      HDA_AMP_SET_INPUT | HDA_AMP_SET_LEFT | HDA_AMP_SET_RIGHT | (HDA_ALC295_MIC_MIXER_INDEX << HDA_AMP_INDEX_SHIFT)
+    dd HDA_ALC295_NODE_MIC_PIN,   HDA_VERB_SET_AMP_GAIN_MUTE,      HDA_AMP_SET_INPUT | HDA_AMP_SET_LEFT | HDA_AMP_SET_RIGHT | HDA_ALC295_MIC_PIN_BOOST
+    dd HDA_ALC295_NODE_MIC_ADC,   HDA_VERB_SET_AMP_GAIN_MUTE,      HDA_AMP_SET_INPUT | HDA_AMP_SET_LEFT | HDA_AMP_SET_RIGHT | HDA_ALC295_MIC_ADC_GAIN
+    dd HDA_ALC295_NODE_MIC_PIN,   HDA_VERB_SET_PIN_WIDGET_CONTROL, HDA_PIN_CONTROL_IN
+hda_alc295_mic_verb_count equ ($ - hda_alc295_mic_verbs) / HDA_VERB_ENTRY_BYTES
 
 SECTION .bss
 align 128
@@ -476,6 +505,62 @@ er_fn er_hda_codec_send_verb
     pop     rbx
     ret
 
+; _hda_codec_send_table — run an ASM-owned codec verb table.
+; edi=bar0, esi=statests, rdx=table, ecx=count.
+; Each entry is three dwords: node, verb, payload.
+_hda_codec_send_table:
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+
+    mov     r12d, edi
+    mov     r13d, esi
+    mov     r14, rdx
+    mov     r15d, ecx
+    test    r12d, r12d
+    jz      .st_bad_arg
+    test    r13d, r13d
+    jz      .st_absent
+    test    r14, r14
+    jz      .st_bad_arg
+
+.st_loop:
+    test    r15d, r15d
+    jz      .st_done
+    mov     edi, r12d
+    mov     esi, r13d
+    mov     edx, [r14]
+    mov     ecx, [r14 + 4]
+    mov     r8d, [r14 + 8]
+    lea     r9, [rel hda_verb_sink]
+    call    er_hda_codec_send_verb
+    test    eax, eax
+    jnz     .st_out
+    add     r14, HDA_VERB_ENTRY_BYTES
+    dec     r15d
+    jmp     .st_loop
+
+.st_done:
+    xor     eax, eax
+    er_ok
+    jmp     .st_out
+.st_bad_arg:
+    er_err  ERROR_BAD_ARGUMENT
+    mov     eax, -1
+    jmp     .st_out
+.st_absent:
+    er_err  ERROR_NOT_PRESENT
+    mov     eax, -1
+.st_out:
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    ret
+
 ; ==================================================================
 ; er_hda_codec_vendor_id — read root Vendor ID parameter
 ; int er_hda_codec_vendor_id(uint32_t bar0, uint32_t statests,
@@ -504,99 +589,9 @@ er_fn er_hda_codec_root_nodes
 ; Route: DAC 0x02 -> speaker pin 0x14, D0 power, EAPD on, pin OUT.
 ; ==================================================================
 er_fn er_hda_alc295_prepare_speaker
-    push    r12
-    push    r13
-    mov     r12d, edi
-    mov     r13d, esi
-
-    ; AFG, DAC, and speaker pin to D0.
-    mov     edi, r12d
-    mov     esi, r13d
-    mov     edx, HDA_ALC295_NODE_AFG
-    mov     ecx, HDA_VERB_SET_POWER_STATE
-    xor     r8d, r8d
-    lea     r9, [rel hda_verb_sink]
-    call    er_hda_codec_send_verb
-    test    eax, eax
-    jnz     .ps_out
-    mov     edi, r12d
-    mov     esi, r13d
-    mov     edx, HDA_ALC295_NODE_SPK_DAC
-    mov     ecx, HDA_VERB_SET_POWER_STATE
-    xor     r8d, r8d
-    lea     r9, [rel hda_verb_sink]
-    call    er_hda_codec_send_verb
-    test    eax, eax
-    jnz     .ps_out
-    mov     edi, r12d
-    mov     esi, r13d
-    mov     edx, HDA_ALC295_NODE_SPK_PIN
-    mov     ecx, HDA_VERB_SET_POWER_STATE
-    xor     r8d, r8d
-    lea     r9, [rel hda_verb_sink]
-    call    er_hda_codec_send_verb
-    test    eax, eax
-    jnz     .ps_out
-
-    ; DAC 0x02 uses stream tag 1/channel 0 and 48 kHz 16-bit stereo.
-    mov     edi, r12d
-    mov     esi, r13d
-    mov     edx, HDA_ALC295_NODE_SPK_DAC
-    mov     ecx, HDA_VERB_SET_CHANNEL_STREAM_ID
-    mov     r8d, (HDA_STREAM_TAG << 4)
-    lea     r9, [rel hda_verb_sink]
-    call    er_hda_codec_send_verb
-    test    eax, eax
-    jnz     .ps_out
-    mov     edi, r12d
-    mov     esi, r13d
-    mov     edx, HDA_ALC295_NODE_SPK_DAC
-    mov     ecx, HDA_VERB_SET_CONVERTER_FORMAT
-    mov     r8d, HDA_FORMAT_PCM_48K_16_STEREO
-    lea     r9, [rel hda_verb_sink]
-    call    er_hda_codec_send_verb
-    test    eax, eax
-    jnz     .ps_out
-
-    ; Unmute DAC output and speaker pin output, then enable EAPD and OUT.
-    mov     edi, r12d
-    mov     esi, r13d
-    mov     edx, HDA_ALC295_NODE_SPK_DAC
-    mov     ecx, HDA_VERB_SET_AMP_GAIN_MUTE
-    mov     r8d, 0xB0
-    lea     r9, [rel hda_verb_sink]
-    call    er_hda_codec_send_verb
-    test    eax, eax
-    jnz     .ps_out
-    mov     edi, r12d
-    mov     esi, r13d
-    mov     edx, HDA_ALC295_NODE_SPK_PIN
-    mov     ecx, HDA_VERB_SET_AMP_GAIN_MUTE
-    mov     r8d, 0xB0
-    lea     r9, [rel hda_verb_sink]
-    call    er_hda_codec_send_verb
-    test    eax, eax
-    jnz     .ps_out
-    mov     edi, r12d
-    mov     esi, r13d
-    mov     edx, HDA_ALC295_NODE_SPK_PIN
-    mov     ecx, HDA_VERB_SET_EAPD_BTL
-    mov     r8d, 0x02
-    lea     r9, [rel hda_verb_sink]
-    call    er_hda_codec_send_verb
-    test    eax, eax
-    jnz     .ps_out
-    mov     edi, r12d
-    mov     esi, r13d
-    mov     edx, HDA_ALC295_NODE_SPK_PIN
-    mov     ecx, HDA_VERB_SET_PIN_WIDGET_CONTROL
-    mov     r8d, HDA_PIN_CONTROL_OUT
-    lea     r9, [rel hda_verb_sink]
-    call    er_hda_codec_send_verb
-.ps_out:
-    pop     r13
-    pop     r12
-    ret
+    lea     rdx, [rel hda_alc295_speaker_verbs]
+    mov     ecx, hda_alc295_speaker_verb_count
+    jmp     _hda_codec_send_table
 
 ; ==================================================================
 ; er_hda_alc295_prepare_mic — minimal ALC295 internal microphone route
@@ -604,110 +599,9 @@ er_fn er_hda_alc295_prepare_speaker
 ; Route: internal mic pin 0x12 -> mixer 0x23 -> ADC 0x08, D0 power, pin IN.
 ; ==================================================================
 er_fn er_hda_alc295_prepare_mic
-    push    r12
-    push    r13
-    mov     r12d, edi
-    mov     r13d, esi
-
-    ; AFG, ADC, internal mic pin, and mic mixer to D0.
-    mov     edi, r12d
-    mov     esi, r13d
-    mov     edx, HDA_ALC295_NODE_AFG
-    mov     ecx, HDA_VERB_SET_POWER_STATE
-    xor     r8d, r8d
-    lea     r9, [rel hda_verb_sink]
-    call    er_hda_codec_send_verb
-    test    eax, eax
-    jnz     .pm_out
-    mov     edi, r12d
-    mov     esi, r13d
-    mov     edx, HDA_ALC295_NODE_MIC_ADC
-    mov     ecx, HDA_VERB_SET_POWER_STATE
-    xor     r8d, r8d
-    lea     r9, [rel hda_verb_sink]
-    call    er_hda_codec_send_verb
-    test    eax, eax
-    jnz     .pm_out
-    mov     edi, r12d
-    mov     esi, r13d
-    mov     edx, HDA_ALC295_NODE_MIC_PIN
-    mov     ecx, HDA_VERB_SET_POWER_STATE
-    xor     r8d, r8d
-    lea     r9, [rel hda_verb_sink]
-    call    er_hda_codec_send_verb
-    test    eax, eax
-    jnz     .pm_out
-    mov     edi, r12d
-    mov     esi, r13d
-    mov     edx, HDA_ALC295_NODE_MIC_MIXER
-    mov     ecx, HDA_VERB_SET_POWER_STATE
-    xor     r8d, r8d
-    lea     r9, [rel hda_verb_sink]
-    call    er_hda_codec_send_verb
-    test    eax, eax
-    jnz     .pm_out
-
-    ; ADC 0x08 consumes capture stream tag 2/channel 0 at 48 kHz 16-bit stereo.
-    mov     edi, r12d
-    mov     esi, r13d
-    mov     edx, HDA_ALC295_NODE_MIC_ADC
-    mov     ecx, HDA_VERB_SET_CHANNEL_STREAM_ID
-    mov     r8d, (HDA_CAPTURE_STREAM_TAG << 4)
-    lea     r9, [rel hda_verb_sink]
-    call    er_hda_codec_send_verb
-    test    eax, eax
-    jnz     .pm_out
-    mov     edi, r12d
-    mov     esi, r13d
-    mov     edx, HDA_ALC295_NODE_MIC_ADC
-    mov     ecx, HDA_VERB_SET_CONVERTER_FORMAT
-    mov     r8d, HDA_FORMAT_PCM_48K_16_STEREO
-    lea     r9, [rel hda_verb_sink]
-    call    er_hda_codec_send_verb
-    test    eax, eax
-    jnz     .pm_out
-
-    ; Match Linux's active internal-mic route: unmute mixer input 4,
-    ; set pin boost to 3, and set ADC capture gain to max.
-    mov     edi, r12d
-    mov     esi, r13d
-    mov     edx, HDA_ALC295_NODE_MIC_MIXER
-    mov     ecx, HDA_VERB_SET_AMP_GAIN_MUTE
-    mov     r8d, HDA_AMP_SET_INPUT | HDA_AMP_SET_LEFT | HDA_AMP_SET_RIGHT | (HDA_ALC295_MIC_MIXER_INDEX << HDA_AMP_INDEX_SHIFT)
-    lea     r9, [rel hda_verb_sink]
-    call    er_hda_codec_send_verb
-    test    eax, eax
-    jnz     .pm_out
-    mov     edi, r12d
-    mov     esi, r13d
-    mov     edx, HDA_ALC295_NODE_MIC_PIN
-    mov     ecx, HDA_VERB_SET_AMP_GAIN_MUTE
-    mov     r8d, HDA_AMP_SET_INPUT | HDA_AMP_SET_LEFT | HDA_AMP_SET_RIGHT | HDA_ALC295_MIC_PIN_BOOST
-    lea     r9, [rel hda_verb_sink]
-    call    er_hda_codec_send_verb
-    test    eax, eax
-    jnz     .pm_out
-    mov     edi, r12d
-    mov     esi, r13d
-    mov     edx, HDA_ALC295_NODE_MIC_ADC
-    mov     ecx, HDA_VERB_SET_AMP_GAIN_MUTE
-    mov     r8d, HDA_AMP_SET_INPUT | HDA_AMP_SET_LEFT | HDA_AMP_SET_RIGHT | HDA_ALC295_MIC_ADC_GAIN
-    lea     r9, [rel hda_verb_sink]
-    call    er_hda_codec_send_verb
-    test    eax, eax
-    jnz     .pm_out
-
-    mov     edi, r12d
-    mov     esi, r13d
-    mov     edx, HDA_ALC295_NODE_MIC_PIN
-    mov     ecx, HDA_VERB_SET_PIN_WIDGET_CONTROL
-    mov     r8d, HDA_PIN_CONTROL_IN
-    lea     r9, [rel hda_verb_sink]
-    call    er_hda_codec_send_verb
-.pm_out:
-    pop     r13
-    pop     r12
-    ret
+    lea     rdx, [rel hda_alc295_mic_verbs]
+    mov     ecx, hda_alc295_mic_verb_count
+    jmp     _hda_codec_send_table
 
 ; ==================================================================
 ; er_hda_start_square_wave — start one output stream on static tone buffer
