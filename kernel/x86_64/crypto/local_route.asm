@@ -185,7 +185,7 @@ er_fn er_local_cell_init
     test    edx, edx
     jnz     .next
 
-    add     rdi, LOCAL_ID_RING
+    lea     rdi, [rax + LOCAL_ID_RING]
     call    er_local_ring_init
 
 .next:
@@ -286,7 +286,7 @@ er_fn er_local_route_unregister
     jnz     .bad
 
     ; Zero the hash (marks as free)
-    add     rdi, LOCAL_ID_HASH
+    lea     rdi, [rax + LOCAL_ID_HASH]
     xor     esi, esi
     mov     edx, 32
     call    er_memset
@@ -334,49 +334,6 @@ er_fn er_local_route_set_handler
     er_ret
 
 ; ==================================================================
-; _agent_dispatch — call agent handler for a slot
-; rdi = slot_id, rsi = cell_ptr
-;
-; If the slot has a registered handler with AGENT_FLAG_SYNC,
-; calls the handler directly. The handler receives:
-;   rdi = cell pointer
-;   rsi = sender slot_id (read from cell payload bytes 2-5)
-; ==================================================================
-_agent_dispatch:
-    push    rbx
-    push    r12
-
-    mov     r12, rsi            ; cell_ptr
-    mov     ebx, edi            ; slot_id
-
-    call    _local_route_entry_ptr
-    test    edx, edx
-    jnz     .done
-
-    ; Check flags for synchronous dispatch
-    movzx   ecx, byte [rax + LOCAL_ID_FLAGS]
-    test    cl, AGENT_FLAG_SYNC
-    jz      .done
-
-    ; Check if handler is set
-    mov     rcx, [rax + LOCAL_ID_HANDLER]
-    test    rcx, rcx
-    jz      .done
-
-    ; Get sender slot_id from cell payload bytes 2-5
-    lea     rdi, [r12 + LOCAL_CELL_PAYLOAD]
-    mov     esi, [rdi + 2]      ; sender slot_id
-
-    ; Call handler(rdi=cell_ptr, rsi=sender_slot_id)
-    mov     rdi, r12
-    call    rcx
-
-.done:
-    pop     r12
-    pop     rbx
-    ret
-
-; ==================================================================
 ; er_local_route_get_ring — get ring buffer pointer for a slot
 ; int er_local_route_get_ring(u32 slot_id)
 ; rdi = slot_id
@@ -411,19 +368,9 @@ er_fn er_local_cell_send
 
     mov     ebx, eax        ; slot_id
 
-    mov     edi, ebx
-    call    er_local_route_get_ring
-    test    edx, edx
-    jnz     .bad
-
-    mov     rdi, rax        ; ring_ptr
-    mov     rsi, r12        ; cell
-    call    er_local_ring_write
-
-    ; Dispatch to agent handler if registered
     mov     edi, ebx        ; slot_id
-    mov     rsi, r12        ; cell ptr
-    call    _agent_dispatch
+    mov     rsi, r12        ; cell
+    call    er_local_cell_send_to_slot
 
     pop     r12
     pop     rbx
@@ -477,22 +424,42 @@ er_fn er_local_cell_recv
 er_fn er_local_cell_send_to_slot
     push    rbx
     push    r12
+    push    r13
 
+    mov     ebx, edi        ; slot_id
     mov     r12, rsi        ; cell
 
-    call    er_local_route_get_ring
+    call    _local_route_entry_ptr
     test    edx, edx
     jnz     .bad
+    mov     r13, rax        ; route entry
 
-    mov     rdi, rax        ; ring_ptr
+    ; Synchronous handlers consume the cell immediately and do not queue it.
+    movzx   ecx, byte [r13 + LOCAL_ID_FLAGS]
+    test    cl, AGENT_FLAG_SYNC
+    jz      .enqueue
+    mov     rcx, [r13 + LOCAL_ID_HANDLER]
+    test    rcx, rcx
+    jz      .enqueue
+
+    mov     rdi, r12
+    mov     esi, [r12 + LOCAL_CELL_PAYLOAD + 2]
+    call    rcx
+    jmp     .done
+
+.enqueue:
+    lea     rdi, [r13 + LOCAL_ID_RING]
     mov     rsi, r12        ; cell
     call    er_local_ring_write
 
+.done:
+    pop     r13
     pop     r12
     pop     rbx
     er_ret
 
 .bad:
+    pop     r13
     pop     r12
     pop     rbx
     er_ret
@@ -508,8 +475,10 @@ er_fn er_local_cell_poll
     push    rbx
     push    r12
     push    r13
+    push    r14
 
     xor     r12d, r12d          ; slot index
+    xor     r14d, r14d          ; cells processed
 
 .loop:
     cmp     r12d, LOCAL_MAX_IDENTITIES
@@ -524,6 +493,13 @@ er_fn er_local_cell_poll
     mov     rcx, [rax + LOCAL_ID_HANDLER]
     test    rcx, rcx
     jz      .next
+
+    ; SYNC handlers are delivered by send_to_slot, not by queue polling.
+    movzx   ebx, byte [rax + LOCAL_ID_FLAGS]
+    test    bl, AGENT_FLAG_SYNC
+    jnz     .next
+
+    mov     rbx, rcx            ; handler, preserved across ring helpers
 
     ; Check ring for pending cells
     lea     r13, [rax + LOCAL_ID_RING]
@@ -544,7 +520,8 @@ er_fn er_local_cell_poll
     mov     rdi, rsp
     lea     rsi, [rsp + LOCAL_CELL_PAYLOAD + 2]
     mov     esi, [rsi]          ; sender slot_id from payload
-    call    rcx
+    call    rbx
+    inc     r14d
 
 .pop_next:
     add     rsp, LOCAL_CELL_SIZE
@@ -554,8 +531,9 @@ er_fn er_local_cell_poll
     jmp     .loop
 
 .done:
-    xor     eax, eax
+    mov     eax, r14d
     er_ok
+    pop     r14
     pop     r13
     pop     r12
     pop     rbx

@@ -76,14 +76,36 @@ TOR_RELAY_RESOLVED  equ 12
 TOR_RELAY_BEGIN_DIR equ 13
 TOR_RELAY_EXTEND2   equ 14
 TOR_RELAY_EXTENDED2 equ 15
+TOR_RELAY_ESTABLISH_INTRO equ 32
+TOR_RELAY_ESTABLISH_RENDEZVOUS equ 33
+TOR_RELAY_INTRODUCE1 equ 34
+TOR_RELAY_INTRODUCE2 equ 35
+TOR_RELAY_RENDEZVOUS1 equ 36
+TOR_RELAY_RENDEZVOUS2 equ 37
+TOR_RELAY_INTRO_ESTABLISHED equ 38
+TOR_RELAY_RENDEZVOUS_ESTABLISHED equ 39
+TOR_RELAY_INTRODUCE_ACK equ 40
 
 ; Relay cell header inside payload (11 bytes)
-TOR_RELAY_STREAM_ID   equ 0  ; 2 bytes
-TOR_RELAY_DIGEST      equ 2  ; 4 bytes (old SHA1, now truncated)
-TOR_RELAY_LEN         equ 6  ; 2 bytes (big-endian)
-TOR_RELAY_CMD         equ 8  ; 1 byte
-TOR_RELAY_RECOGNIZED  equ 9  ; 2 bytes (usually 0)
+TOR_RELAY_CMD         equ 0  ; 1 byte
+TOR_RELAY_RECOGNIZED  equ 1  ; 2 bytes, zero when recognized
+TOR_RELAY_STREAM_ID   equ 3  ; 2 bytes
+TOR_RELAY_DIGEST      equ 5  ; 4 bytes (old SHA1, now truncated)
+TOR_RELAY_LEN         equ 9  ; 2 bytes (big-endian)
 TOR_RELAY_DATA_OFFSET equ 11 ; relay payload starts here
+
+; Onion service message sizes
+TOR_HS_RENDEZVOUS_COOKIE_LEN equ 20
+TOR_HS_RELAY_DATA_MAX        equ TOR_CELL_PAYLOAD_LEN - 11
+TOR_HS_AUTH_KEY_TYPE_ED25519 equ 2
+TOR_HS_INTRO_AUTH_KEY_LEN    equ 32
+TOR_HS_INTRO_HANDSHAKE_AUTH_LEN equ 32
+TOR_HS_ED25519_SIG_LEN       equ 64
+TOR_HS_ESTABLISH_INTRO_BASE_LEN equ 70
+TOR_HS_INTRO_ACK_OK          equ 0
+TOR_HS_INTRO_ACK_NOT_RECOGNIZED equ 1
+TOR_HS_INTRO_ACK_BAD_MESSAGE equ 2
+TOR_HS_INTRO_ACK_CANT_RELAY  equ 3
 
 ; ==================================================================
 ; ntor protocol constants

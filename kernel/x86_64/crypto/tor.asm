@@ -1646,8 +1646,8 @@ er_fn er_tor_poll
     call    er_tor_relay_crypt
 
     ; Extract stream ID and relay command
-    movzx   r14d, word [tor_rx_cell + 5]   ; stream_id
-    movzx   r15d, byte [tor_rx_cell + 13]  ; relay_cmd
+    movzx   r14d, word [tor_rx_cell + TOR_CELL_PAYLOAD + TOR_RELAY_STREAM_ID]
+    movzx   r15d, byte [tor_rx_cell + TOR_CELL_PAYLOAD + TOR_RELAY_CMD]
 
     cmp     r15b, TOR_RELAY_CONNECTED
     je      .handle_connected
@@ -1675,7 +1675,7 @@ er_fn er_tor_poll
 
 .handle_data:
     ; Copy relay data to stream buffer
-    movzx   ecx, word [tor_rx_cell + 11]  ; data_len (big-endian)
+    movzx   ecx, word [tor_rx_cell + TOR_CELL_PAYLOAD + TOR_RELAY_LEN]
     xchg    cl, ch
 
     ; Fast-path: tunnel cell payload (exactly one local cell) for the

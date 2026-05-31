@@ -85,6 +85,7 @@
 
 ; HUBP pipe stride: each HUBPn is +0x370 bytes from HUBPn-1
 %define DCN_HUBP_PIPE_STRIDE               0x370
+%define DCN_HUBP_PIPE_COUNT                4
 
 ; ─── Framebuffer setup constants ───────────────────────────────────
 %define AMDGPU_FB_WIDTH             1920

@@ -516,38 +516,56 @@ er_fn er_amdgpu_dcn_init
 ; int er_amdgpu_program_hubp0_scanout(uint64_t bar0, const uint32_t* cfg)
 ; ==================================================================
 er_fn er_amdgpu_program_hubp0_scanout
+    mov     rdx, rsi
+    xor     esi, esi
+    jmp     er_amdgpu_program_hubp_scanout
+
+; ==================================================================
+; er_amdgpu_program_hubp_scanout — program HUBP surface state
+; int er_amdgpu_program_hubp_scanout(uint64_t bar0, uint32_t pipe,
+;                                    const uint32_t* cfg)
+; ==================================================================
+er_fn er_amdgpu_program_hubp_scanout
     push    r12
     push    r13
+    push    r14
     test    rdi, rdi
     jz      .bad_arg
+    cmp     esi, DCN_HUBP_PIPE_COUNT
+    jae     .bad_arg
     mov     r12, rdi
-    mov     r13, rsi
+    mov     r13, rdx
+    mov     r14d, esi
     mov     rdi, r13
     call    er_amdgpu_validate_scanout_config
     test    eax, eax
     jnz     .bad_arg
+    mov     eax, r14d
+    imul    eax, DCN_HUBP_PIPE_STRIDE
+    mov     r14d, eax
     mov     edx, [r13 + AMDGPU_SCANOUT_PITCH_PIXELS]
     mov     rdi, r12
-    mov     esi, DCN_HUBP0_SURFACE_PITCH
+    lea     esi, [r14d + DCN_HUBP0_SURFACE_PITCH]
     call    _mmio_write
     mov     edx, [r13 + AMDGPU_SCANOUT_ADDR_LO]
     mov     rdi, r12
-    mov     esi, DCN_HUBP0_PRIMARY_SURFACE_ADDR
+    lea     esi, [r14d + DCN_HUBP0_PRIMARY_SURFACE_ADDR]
     call    _mmio_write
     mov     edx, [r13 + AMDGPU_SCANOUT_ADDR_HI]
     mov     rdi, r12
-    mov     esi, DCN_HUBP0_PRIMARY_SURFACE_ADDR + 4
+    lea     esi, [r14d + DCN_HUBP0_PRIMARY_SURFACE_ADDR + 4]
     call    _mmio_write
     xor     edx, edx
     mov     rdi, r12
-    mov     esi, DCN_HUBP0_FLIP_CONTROL
+    lea     esi, [r14d + DCN_HUBP0_FLIP_CONTROL]
     call    _mmio_write
     mov     edx, 1
     mov     rdi, r12
-    mov     esi, DCN_HUBP0_DCHUBP_CNTL
+    lea     esi, [r14d + DCN_HUBP0_DCHUBP_CNTL]
     call    _mmio_write
     xor     eax, eax
     er_ok
+    pop     r14
     pop     r13
     pop     r12
     ret
@@ -555,6 +573,7 @@ er_fn er_amdgpu_program_hubp0_scanout
 .bad_arg:
     er_err  ERROR_BAD_ARGUMENT
     mov     eax, -1
+    pop     r14
     pop     r13
     pop     r12
     ret

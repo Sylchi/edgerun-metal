@@ -7,6 +7,7 @@
 %include "driver/amdgpu_constants.inc"
 
 extern er_amdgpu_dcn_init
+extern er_amdgpu_program_hubp_scanout
 extern er_amdgpu_program_hubp0_scanout
 extern er_amdgpu_program_otg0_mode
 extern er_amdgpu_program_otg0_timing
@@ -200,6 +201,32 @@ _start:
     ASSERT_EQ eax, 1
     mov     eax, [rel bar0 + DCN_HUBP0_DCHUBP_CNTL]
     ASSERT_EQ eax, 1
+
+    mov     dword [rel scanout_cfg + AMDGPU_SCANOUT_ADDR_LO], 0x22345000
+    mov     dword [rel scanout_cfg + AMDGPU_SCANOUT_ADDR_HI], 0x00000002
+    mov     dword [rel scanout_cfg + AMDGPU_SCANOUT_PITCH_PIXELS], 1280
+    mov     dword [rel scanout_cfg + AMDGPU_SCANOUT_WIDTH], 1280
+    mov     dword [rel scanout_cfg + AMDGPU_SCANOUT_HEIGHT], 720
+    lea     rdi, [rel bar0]
+    mov     esi, 1
+    lea     rdx, [rel scanout_cfg]
+    call    er_amdgpu_program_hubp_scanout
+    ASSERT_EQ eax, 0
+    mov     eax, [rel bar0 + DCN_HUBP0_SURFACE_PITCH + DCN_HUBP_PIPE_STRIDE]
+    ASSERT_EQ eax, 1280
+    mov     eax, [rel bar0 + DCN_HUBP0_PRIMARY_SURFACE_ADDR + DCN_HUBP_PIPE_STRIDE]
+    ASSERT_EQ eax, 0x22345000
+    mov     eax, [rel bar0 + DCN_HUBP0_PRIMARY_SURFACE_ADDR + DCN_HUBP_PIPE_STRIDE + 4]
+    ASSERT_EQ eax, 2
+    mov     eax, [rel bar0 + DCN_HUBP0_DCHUBP_CNTL + DCN_HUBP_PIPE_STRIDE]
+    ASSERT_EQ eax, 1
+
+    lea     rdi, [rel bar0]
+    mov     esi, DCN_HUBP_PIPE_COUNT
+    lea     rdx, [rel scanout_cfg]
+    call    er_amdgpu_program_hubp_scanout
+    ASSERT_EQ eax, -1
+    ASSERT_RDX ERROR_BAD_ARGUMENT
 
     mov     dword [rel scanout_cfg + AMDGPU_SCANOUT_PITCH_PIXELS], 0
     lea     rdi, [rel scanout_cfg]

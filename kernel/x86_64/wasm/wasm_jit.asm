@@ -932,36 +932,47 @@ er_wasm_jit_compile:
     je      .emit_imm_rotr
     ret
 .emit_imm_add:
+    mov     eax, r11d
     call    jit_emit_add_eax_imm32
     ret
 .emit_imm_sub:
+    mov     eax, r11d
     call    jit_emit_sub_eax_imm32
     ret
 .emit_imm_mul:
+    mov     eax, r11d
     call    jit_emit_imul_eax_imm32
     ret
 .emit_imm_and:
+    mov     eax, r11d
     call    jit_emit_and_eax_imm32
     ret
 .emit_imm_or:
+    mov     eax, r11d
     call    jit_emit_or_eax_imm32
     ret
 .emit_imm_xor:
+    mov     eax, r11d
     call    jit_emit_xor_eax_imm32
     ret
 .emit_imm_shl:
+    mov     eax, r11d
     call    jit_emit_shl_eax_imm8
     ret
 .emit_imm_shr_s:
+    mov     eax, r11d
     call    jit_emit_sar_eax_imm8
     ret
 .emit_imm_shr_u:
+    mov     eax, r11d
     call    jit_emit_shr_eax_imm8
     ret
 .emit_imm_rotl:
+    mov     eax, r11d
     call    jit_emit_rol_eax_imm8
     ret
 .emit_imm_rotr:
+    mov     eax, r11d
     call    jit_emit_ror_eax_imm8
     ret
 

@@ -100,6 +100,7 @@ KERNEL_ASM_SRCS="
 	crypto/tls.asm
 	crypto/tor_cell.asm
 	crypto/tor_digest.asm
+	crypto/tor_hs.asm
 	crypto/tor.asm
 	crypto/local_cell.asm
 	crypto/local_route.asm
@@ -329,6 +330,8 @@ cmd_test() {
 	cmd_test_spi_flash
 	cmd_test_tls
 	cmd_test_tor
+	cmd_test_tor_hs
+	cmd_test_local_route
 	cmd_test_x25519
 	cmd_test_wasm_compiler
 	cmd_test_wasm_jit
@@ -553,6 +556,14 @@ cmd_test_tor() {
 	ld -nostdlib -static -o "$bin" "$obj" "$tor_aes_o" "$tor_o" "$runtime_o"
 	echo "  LD  ${bin}"
 	"$bin"
+}
+
+cmd_test_tor_hs() {
+	build_test "test_tor_hs_self" "${TEST_DIR}/test_tor_hs_self.asm" "crypto/tor_hs" "rt/runtime"
+}
+
+cmd_test_local_route() {
+	build_test "test_local_route_self" "${TEST_DIR}/test_local_route_self.asm" "crypto/local_cell" "crypto/local_route" "crypto/local_circuit" "rt/runtime"
 }
 
 cmd_bench_tor() {
@@ -782,6 +793,8 @@ EdgeRun build targets:
   test-spi-flash      Run SPI flash compile-check test (self-hosted ASM)
   test-tls            Run TLS ClientHello self-test (self-hosted ASM)
   test-tor            Run Tor AES-128-CTR KAT test (self-hosted ASM)
+  test-tor-hs         Run Tor onion-service message tests (self-hosted ASM)
+  test-local-route    Run local cell route queue/dispatch test (self-hosted ASM)
   bench-tor           Run Tor local AES cell latency/throughput benchmark
   test-x25519         Run X25519 scalar mult RFC 7748 test vectors (self-hosted ASM)
   test-bench-render-ir Run render_ir RDTSC benchmark (self-hosted ASM)
@@ -826,6 +839,8 @@ case "${1:-help}" in
 	test-spi-flash) cmd_test_spi_flash ;;
 	test-tls)       cmd_test_tls ;;
 	test-tor)       cmd_test_tor ;;
+	test-tor-hs)    cmd_test_tor_hs ;;
+	test-local-route) cmd_test_local_route ;;
 	bench-tor)      cmd_bench_tor ;;
 	test-x25519)     cmd_test_x25519 ;;
 	test-x25519-debug) cmd_test_x25519_debug ;;

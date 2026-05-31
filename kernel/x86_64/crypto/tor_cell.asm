@@ -365,36 +365,6 @@ _tor_build_netinfo_cell:
     pop     rbx
     ret
 
-_tor_build_certs_cell:
-    ; circ_id = 0
-    mov     dword [rdi + TOR_VAR_CIRC_ID], 0
-    ; cmd = CERTS
-    mov     byte [rdi + TOR_VAR_CMD], TOR_CELL_CERTS
-    ; len = 3 (n_certs=0)
-    mov     byte [rdi + TOR_VAR_LEN], 0
-    mov     byte [rdi + TOR_VAR_LEN + 1], 1
-    ; n_certs = 0 (no certs for anonymous auth)
-    mov     byte [rdi + TOR_VAR_PAYLOAD], 0
-    ret
-
-_tor_build_authenticate_cell:
-    push    rbx
-    mov     rbx, rdi        ; cell
-    ; rsi = challenge (32 bytes)
-
-    ; circ_id = 0
-    mov     dword [rbx + TOR_VAR_CIRC_ID], 0
-    ; cmd = AUTHENTICATE
-    mov     byte [rbx + TOR_VAR_CMD], TOR_CELL_AUTHENTICATE
-    ; len = 1 (auth_type = ANON, no body)
-    mov     byte [rbx + TOR_VAR_LEN], 0
-    mov     byte [rbx + TOR_VAR_LEN + 1], 1
-    ; Auth type = 5 (anonymous)
-    mov     byte [rbx + TOR_VAR_PAYLOAD], TOR_AUTHTYPE_ANON
-
-    pop     rbx
-    ret
-
 er_fn er_tor_link_handshake
     push    rbx
     push    r12
@@ -721,15 +691,14 @@ _tor_build_extend2:
     mov     [r12], r13d
     mov     byte [r12 + 4], TOR_CELL_RELAY_EARLY
 
-    ; Relay header (cell payload offset 5):
-    mov     [r12 + 5], r14w        ; stream_id (2 bytes)
-    mov     dword [r12 + 7], 0     ; digest (zeroed, computed before encrypt)
-    ; data_len (big-endian) — EXTEND2 body size
+    ; Relay header inside cell payload.
+    mov     byte [r12 + TOR_CELL_PAYLOAD + TOR_RELAY_CMD], TOR_RELAY_EXTEND2
+    mov     word [r12 + TOR_CELL_PAYLOAD + TOR_RELAY_RECOGNIZED], 0
+    mov     [r12 + TOR_CELL_PAYLOAD + TOR_RELAY_STREAM_ID], r14w
+    mov     dword [r12 + TOR_CELL_PAYLOAD + TOR_RELAY_DIGEST], 0
     mov     eax, 119
     xchg    ah, al
-    mov     [r12 + 11], ax
-    mov     byte [r12 + 13], TOR_RELAY_EXTEND2  ; relay cmd
-    mov     word [r12 + 14], 0     ; recognized = 0
+    mov     [r12 + TOR_CELL_PAYLOAD + TOR_RELAY_LEN], ax
 
     ; EXTEND2 body starts at cell offset 16
     ; NSPEC = 2
@@ -1011,22 +980,13 @@ er_fn er_tor_send_relay
     mov     byte [tor_tx_cell + 4], TOR_CELL_RELAY
 
     ; Relay header (inside cell payload, offset 5 = TOR_CELL_PAYLOAD)
-    ; stream_id (2 bytes)
-    mov     [tor_tx_cell + 5], r13w
-
-    ; digest (4 bytes) — zero for now
-    mov     dword [tor_tx_cell + 7], 0
-
-    ; relay_data_len (2 bytes, big-endian)
+    mov     [tor_tx_cell + TOR_CELL_PAYLOAD + TOR_RELAY_CMD], r14b
+    mov     word [tor_tx_cell + TOR_CELL_PAYLOAD + TOR_RELAY_RECOGNIZED], 0
+    mov     [tor_tx_cell + TOR_CELL_PAYLOAD + TOR_RELAY_STREAM_ID], r13w
+    mov     dword [tor_tx_cell + TOR_CELL_PAYLOAD + TOR_RELAY_DIGEST], 0
     mov     eax, ebx
     xchg    ah, al
-    mov     [tor_tx_cell + 11], ax
-
-    ; relay_cmd (1 byte)
-    mov     [tor_tx_cell + 13], r14b
-
-    ; recognized (2 bytes) — usually 0
-    mov     word [tor_tx_cell + 14], 0
+    mov     [tor_tx_cell + TOR_CELL_PAYLOAD + TOR_RELAY_LEN], ax
 
     ; Relay payload starts at offset 16 (cell_header(5) + relay_header(11))
     cmp     ebx, 0
@@ -1071,7 +1031,7 @@ er_fn er_tor_send_relay
 
     ; Write first 4 bytes of new digest into cell's digest field
     mov     eax, [tor_digest_buf + 541]
-    mov     [tor_tx_cell + 7], eax
+    mov     [tor_tx_cell + TOR_CELL_PAYLOAD + TOR_RELAY_DIGEST], eax
 
     ; Update circuit's forward_digest with new full digest
     mov     edi, r12d
@@ -1155,17 +1115,17 @@ er_fn er_tor_recv_relay
     ; Verify relay digest
     ; ============================================================
     ; Save the current digest field (4 bytes)
-    mov     eax, [tor_rx_cell + 7]
+    mov     eax, [tor_rx_cell + TOR_CELL_PAYLOAD + TOR_RELAY_DIGEST]
     push    rax
 
     ; Zero the digest field for recomputation
-    mov     dword [tor_rx_cell + 7], 0
+    mov     dword [tor_rx_cell + TOR_CELL_PAYLOAD + TOR_RELAY_DIGEST], 0
 
     ; Get circuit pointer
     mov     edi, r12d
     call    _tor_circ_ptr
     test    rax, rax
-    jz      .digest_skip
+    jz      .digest_fail_saved
 
     push    rax                          ; save circuit ptr
 
@@ -1186,44 +1146,44 @@ er_fn er_tor_recv_relay
     lea     rdx, [tor_digest_buf + 541]
     call    er_tor_sha256
     test    eax, eax
-    jz      .digest_skip_pop
+    jz      .digest_fail_both
 
-    ; Compare first 4 bytes with saved digest
+    ; Compare first 4 bytes with saved digest.
     mov     eax, [tor_digest_buf + 541]
-    pop     rcx                          ; saved digest (from push at start)
+    pop     rdi                          ; circuit ptr
+    pop     rcx                          ; saved digest
     cmp     eax, ecx
     jne     .digest_fail
 
     ; Update circuit's backward_digest
-    mov     edi, r12d
-    call    _tor_circ_ptr
-    test    rax, rax
-    jz      .digest_skip
-    mov     rdi, rax
     add     rdi, TOR_CIRC_BACKWARD_DIGEST
     lea     rsi, [tor_digest_buf + 541]
     mov     edx, 32
     call    er_memcpy
-    jmp     .digest_skip
+    jmp     .digest_done
 
 .digest_fail:
     ; Digest mismatch — signal error
+    jmp     .fail
+
+.digest_fail_both:
     add     rsp, 16          ; pop circuit ptr + saved digest
     jmp     .fail
 
-.digest_skip_pop:
-    pop     rax              ; circuit ptr (not needed)
-.digest_skip:
-    pop     rax              ; saved digest value (from the push)
+.digest_fail_saved:
+    add     rsp, 8           ; pop saved digest
+    jmp     .fail
+
+.digest_done:
 
     ; Parse relay header
-    movzx   ecx, word [tor_rx_cell + 5]   ; stream_id
+    movzx   ecx, word [tor_rx_cell + TOR_CELL_PAYLOAD + TOR_RELAY_STREAM_ID]
     mov     [r13], cx
 
-    mov     al, byte [tor_rx_cell + 13]   ; relay_cmd
+    mov     al, byte [tor_rx_cell + TOR_CELL_PAYLOAD + TOR_RELAY_CMD]
     mov     [r14], al
 
-    movzx   ecx, word [tor_rx_cell + 11]  ; data_len (big-endian)
+    movzx   ecx, word [tor_rx_cell + TOR_CELL_PAYLOAD + TOR_RELAY_LEN]
     xchg    cl, ch
 
     ; Copy relay data to output
