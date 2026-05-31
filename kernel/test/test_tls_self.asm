@@ -275,7 +275,7 @@ _start:
     push    rax
     call    er_tls_aes128_gcm_decrypt
     add     rsp, 16
-    ASSERT_RAX -1
+    ASSERT_EQ eax, -1
     xor     byte [rel gcm_tag], 1
 
     ; Encrypted record send must fail until the TLS state is active.
