@@ -30,23 +30,16 @@ extern er_serial_getchar
 
 SECTION .data
 
-str_vendor:    db "1002", 0
-str_dev:       db " dev ", 0
-str_fn:        db " func ", 0
 str_bar0:      db " regs ", 0
 str_bar2:      db " fb ", 0
 str_rev:       db " rev 0x", 0
 str_gpu_id:    db " id 0x", 0
-str_absent:    db "absent", 0
-str_amdgpu:    db "amdgpu: ", 0
-str_bus:       db " bus ", 0
-str_dcn:       db " DCN init: ", 0
-str_dcn_ok:    db "ok", 0
-str_dcn_fail:  db "FAIL", 0
 str_pg:        db " pg ", 0
 str_clk:       db " clk ", 0
 str_otg:       db " otg ", 0
 str_hubp:      db " hubp ", 0
+
+SECTION .text
 
 ; Helper: MMIO read from BAR0 + offset
 ; rdi = bar0, rsi = byte_offset
@@ -289,7 +282,7 @@ er_fn er_amdgpu_dcn_dump_regs
 
     ; Read and print DOMAIN0_PG_STATUS
     mov     rdi, r12
-    lea     rsi, [rel DCN_DOMAIN0_PG_STATUS]
+    mov     esi, DCN_DOMAIN0_PG_STATUS
     call    _mmio_read
     mov     r14d, eax
     mov     rdi, r13
@@ -302,7 +295,7 @@ er_fn er_amdgpu_dcn_dump_regs
 
     ; DOMAIN16_PG_STATUS (DSC0)
     mov     rdi, r12
-    lea     rsi, [rel DCN_DOMAIN16_PG_STATUS]
+    mov     esi, DCN_DOMAIN16_PG_STATUS
     call    _mmio_read
     mov     rdi, r13
     mov     esi, eax
@@ -316,7 +309,7 @@ er_fn er_amdgpu_dcn_dump_regs
     call    er_serial_puts
 
     mov     rdi, r12
-    lea     rsi, [rel DCN_DCCG_GATE_DISABLE_CNTL]
+    mov     esi, DCN_DCCG_GATE_DISABLE_CNTL
     call    _mmio_read
     mov     rdi, r13
     mov     esi, eax
@@ -330,7 +323,7 @@ er_fn er_amdgpu_dcn_dump_regs
     call    er_serial_puts
 
     mov     rdi, r12
-    lea     rsi, [rel DCN_OTG0_CONTROL]
+    mov     esi, DCN_OTG0_CONTROL
     call    _mmio_read
     mov     rdi, r13
     mov     esi, eax
@@ -341,7 +334,7 @@ er_fn er_amdgpu_dcn_dump_regs
     call    er_serial_putchar
 
     mov     rdi, r12
-    lea     rsi, [rel DCN_OTG0_MASTER_EN]
+    mov     esi, DCN_OTG0_MASTER_EN
     call    _mmio_read
     mov     rdi, r13
     mov     esi, eax
@@ -355,7 +348,7 @@ er_fn er_amdgpu_dcn_dump_regs
     call    er_serial_puts
 
     mov     rdi, r12
-    lea     rsi, [rel DCN_HUBP0_DCHUBP_CNTL]
+    mov     esi, DCN_HUBP0_DCHUBP_CNTL
     call    _mmio_read
     mov     rdi, r13
     mov     esi, eax
@@ -384,32 +377,32 @@ er_fn er_amdgpu_dcn_init
     ; ─── Step 1: IP Request Enable ───
     ; Enable IP request access (needed for power gating control)
     mov     rdi, r12
-    lea     rsi, [rel DCN_DC_IP_REQUEST_CNTL]
+    mov     esi, DCN_DC_IP_REQUEST_CNTL
     mov     edx, 0x00000001     ; IP_REQUEST_EN = 1
     call    _mmio_write
 
     ; ─── Step 2: Clock gating ───
     ; Write 0 to DCCG_GATE_DISABLE_CNTL to enable all clock gating
     mov     rdi, r12
-    lea     rsi, [rel DCN_DCCG_GATE_DISABLE_CNTL]
+    mov     esi, DCN_DCCG_GATE_DISABLE_CNTL
     xor     edx, edx
     call    _mmio_write
 
     ; DCCG_GATE_DISABLE_CNTL2 = 0
     mov     rdi, r12
-    lea     rsi, [rel DCN_DCCG_GATE_DISABLE_CNTL2]
+    mov     esi, DCN_DCCG_GATE_DISABLE_CNTL2
     xor     edx, edx
     call    _mmio_write
 
     ; DCFCLK_CNTL: DCFCLK_GATE_DIS = 0 (bit 31)
     ; Read-modify-write to clear bit 31
     mov     rdi, r12
-    lea     rsi, [rel DCN_DCFCLK_CNTL]
+    mov     esi, DCN_DCFCLK_CNTL
     call    _mmio_read
     and     eax, 0x7FFFFFFF     ; clear bit 31
     mov     edx, eax
     mov     rdi, r12
-    lea     rsi, [rel DCN_DCFCLK_CNTL]
+    mov     esi, DCN_DCFCLK_CNTL
     call    _mmio_write
 
     ; ─── Step 3: Domain power gating ───
@@ -418,65 +411,65 @@ er_fn er_amdgpu_dcn_init
     ; For now, keep force_on = true (disable power gating) for stability
     ; DOMAIN0_PG_CONFIG: DOMAIN_POWER_FORCEON = 1, DOMAIN_POWER_GATE = 0
     mov     rdi, r12
-    lea     rsi, [rel DCN_DOMAIN0_PG_CONFIG]
+    mov     esi, DCN_DOMAIN0_PG_CONFIG
     mov     edx, 0x00000001     ; FORCEON=1, GATE=0
     call    _mmio_write
 
     mov     rdi, r12
-    lea     rsi, [rel DCN_DOMAIN1_PG_CONFIG]
+    mov     esi, DCN_DOMAIN1_PG_CONFIG
     mov     edx, 0x00000001
     call    _mmio_write
 
     mov     rdi, r12
-    lea     rsi, [rel DCN_DOMAIN2_PG_CONFIG]
+    mov     esi, DCN_DOMAIN2_PG_CONFIG
     mov     edx, 0x00000001
     call    _mmio_write
 
     mov     rdi, r12
-    lea     rsi, [rel DCN_DOMAIN3_PG_CONFIG]
+    mov     esi, DCN_DOMAIN3_PG_CONFIG
     mov     edx, 0x00000001
     call    _mmio_write
 
     ; DSC domains
     mov     rdi, r12
-    lea     rsi, [rel DCN_DOMAIN16_PG_CONFIG]
+    mov     esi, DCN_DOMAIN16_PG_CONFIG
     mov     edx, 0x00000001
     call    _mmio_write
 
     mov     rdi, r12
-    lea     rsi, [rel DCN_DOMAIN17_PG_CONFIG]
+    mov     esi, DCN_DOMAIN17_PG_CONFIG
     mov     edx, 0x00000001
     call    _mmio_write
 
     mov     rdi, r12
-    lea     rsi, [rel DCN_DOMAIN18_PG_CONFIG]
+    mov     esi, DCN_DOMAIN18_PG_CONFIG
     mov     edx, 0x00000001
     call    _mmio_write
 
     ; ─── Step 4: HPO HW control ───
     ; Disable HPO IO (no high-speed display output yet)
     mov     rdi, r12
-    lea     rsi, [rel DCN_HPO_TOP_HW_CONTROL]
+    mov     esi, DCN_HPO_TOP_HW_CONTROL
     xor     edx, edx
     call    _mmio_write
 
     ; ─── Step 5: DIO memory power on ───
     ; Write 0 to DIO_MEM_PWR_CTRL to power on DIO memory
     mov     rdi, r12
-    lea     rsi, [rel DCN_DIO_MEM_PWR_CTRL]
+    mov     esi, DCN_DIO_MEM_PWR_CTRL
     xor     edx, edx
     call    _mmio_write
 
     ; ─── Step 6: DCHUBBUB global timer ───
     ; Enable global timer, set refdiv = 2
     mov     rdi, r12
-    lea     rsi, [rel DCN_DCHUBBUB_GLOBAL_TIMER_CNTL]
+    mov     esi, DCN_DCHUBBUB_GLOBAL_TIMER_CNTL
     mov     edx, 0x00001202     ; REFDIV=2, ENABLE=1 (bit 12)
     call    _mmio_write
 
     ; ─── Step 7: Clear IP request enable ───
     mov     rdi, r12
-    lea     rsi, [rel DCN_DC_IP_REQUEST_CNTL]
+    mov     esi, DCN_DC_IP_REQUEST_CNTL
     xor     edx, edx
     call    _mmio_write
 
@@ -519,13 +512,13 @@ _setup_otg0:
 
     ; Set V_TOTAL
     mov     rdi, r12
-    lea     rsi, [rel DCN_OTG0_V_TOTAL]
+    mov     esi, DCN_OTG0_V_TOTAL
     mov     edx, 1124           ; V_TOTAL = 1125 - 1
     call    _mmio_write
 
     ; Set H_TOTAL
     mov     rdi, r12
-    lea     rsi, [rel DCN_OTG0_H_TOTAL]
+    mov     esi, DCN_OTG0_H_TOTAL
     mov     edx, 2199           ; H_TOTAL = 2200 - 1
     call    _mmio_write
 
@@ -536,17 +529,15 @@ _setup_otg0:
     ; Start in lower 16 bits, end in upper 16 bits
     mov     edx, 1968           ; start = 1968
     or      edx, (2000 - 1) << 16    ; end = 1999
-    ; Actually, let me double check the field layout.
-    ; OTG_H_SYNC_A: bits 15:0 = H_SYNC_A_START, bits 31:16 = H_SYNC_A_END
     mov     rdi, r12
-    lea     rsi, [rel DCN_OTG0_H_SYNC_A]
+    mov     esi, DCN_OTG0_H_SYNC_A
     call    _mmio_write
 
     ; Set V_SYNC_A
     mov     edx, 1083           ; start = 1083
     or      edx, (1088 - 1) << 16    ; end = 1087
     mov     rdi, r12
-    lea     rsi, [rel DCN_OTG0_V_SYNC_A]
+    mov     esi, DCN_OTG0_V_SYNC_A
     call    _mmio_write
 
     ; Set H_BLANK_START_END
@@ -554,7 +545,7 @@ _setup_otg0:
     mov     edx, 128
     or      edx, (1920 - 1) << 16     ; end = 1919
     mov     rdi, r12
-    lea     rsi, [rel DCN_OTG0_H_BLANK_START_END]
+    mov     esi, DCN_OTG0_H_BLANK_START_END
     call    _mmio_write
 
     ; Set V_BLANK_START_END
@@ -562,18 +553,18 @@ _setup_otg0:
     mov     edx, 4
     or      edx, (1080 - 1) << 16     ; end = 1079
     mov     rdi, r12
-    lea     rsi, [rel DCN_OTG0_V_BLANK_START_END]
+    mov     esi, DCN_OTG0_V_BLANK_START_END
     call    _mmio_write
 
     ; Disable interlace
     mov     rdi, r12
-    lea     rsi, [rel DCN_OTG0_INTERLACE_CONTROL]
+    mov     esi, DCN_OTG0_INTERLACE_CONTROL
     xor     edx, edx
     call    _mmio_write
 
     ; Enable OTG master
     mov     rdi, r12
-    lea     rsi, [rel DCN_OTG0_MASTER_EN]
+    mov     esi, DCN_OTG0_MASTER_EN
     mov     edx, 1
     call    _mmio_write
 

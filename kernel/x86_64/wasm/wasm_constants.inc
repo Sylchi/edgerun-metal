@@ -520,6 +520,9 @@ exec_control:   resb MAX_CONTROL_DEPTH * CONTROL_FRAME_SIZE
 ; Decoded op tracking
 exec_decoded_index: resq 1
 exec_decoded_end:   resq 1
+exec_fast_cache_start: resq 1
+exec_fast_cache_end:   resq 1
+exec_fast_cache_state: resq 1  ; 0 unknown, 1 supported, 2 unsupported
 
 ; Frame save area (for WASM function calls)
 ; Stores locals + stack + control frames as a flat stack

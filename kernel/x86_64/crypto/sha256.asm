@@ -308,8 +308,8 @@ er_fn er_sha256_update
 
 .full_blocks:
     ; Process full 64-byte blocks
-    mov     ecx, r14d
-    shr     ecx, 6             ; ecx = number of full blocks
+    mov     ebx, r14d
+    shr     ebx, 6             ; ebx = number of full blocks
     jz      .partial_copy
 
 .full_loop:
@@ -318,7 +318,7 @@ er_fn er_sha256_update
     call    _sha256_compress
     add     r13, 64
     sub     r14, 64
-    dec     ecx
+    dec     ebx
     jnz     .full_loop
 
 .partial_copy:

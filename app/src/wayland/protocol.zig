@@ -72,6 +72,7 @@ pub const wl_seat_capability_pointer: u32 = 1;
 pub const xdg_toplevel_decoration_mode_server_side: u32 = 2;
 
 pub const fixed_scale: f32 = 256.0;
+pub const wl_pointer_button_right: u32 = 0x111;
 
 pub const client_decor_h: f32 = 34.0;
 pub const client_decor_button_size: f32 = 24.0;

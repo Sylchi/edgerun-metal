@@ -321,6 +321,7 @@ cmd_test() {
 	cmd_test_http
 	cmd_test_serial
 	cmd_test_cros_ec
+	cmd_test_amdgpu
 	cmd_test_uvc
 	cmd_test_sw_fb
 	cmd_test_render_ir
@@ -507,6 +508,19 @@ cmd_test_cros_ec() {
 	"$bin"
 }
 
+cmd_test_amdgpu() {
+	local name="test_amdgpu_self"
+	local src="${TEST_DIR}/${name}.asm"
+	local obj="${ASM_BUILD}/${name}.o"
+	local bin="${ASM_BUILD}/${name%_self}"
+	${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
+	local amdgpu_o="${ASM_BUILD}/amdgpu_hosted.o"
+	${YASM} -f elf64 ${ASM_INC} -o "$amdgpu_o" "${ASM_DIR}/../driver/amdgpu.asm"
+	ld -nostdlib -static -o "$bin" "$obj" "$amdgpu_o"
+	echo "  LD  ${bin}"
+	"$bin"
+}
+
 cmd_test_tls() {
 	local name="test_tls_self"
 	local src="${TEST_DIR}/${name}.asm"
@@ -643,6 +657,38 @@ cmd_bench_zig_wasm() {
 	ld -T "${TEST_DIR}/test_jit.ld" -nostdlib -static -o "$bin" "$asm_obj" "$native_obj" "$runtime_o"
 	echo "  LD  ${bin}"
 	"$bin"
+	if ! command -v node >/dev/null 2>&1; then
+		echo "node is required for bench-zig-wasm V8 comparison" >&2
+		return 1
+	fi
+	local node_bench="${ASM_BUILD}/bench_zig_wasm_node.mjs"
+	cat > "$node_bench" <<'EOF'
+import { readFileSync } from 'node:fs';
+
+const wasmPath = process.argv[2];
+const bytes = readFileSync(wasmPath);
+const { instance } = await WebAssembly.instantiate(bytes, {});
+const erBench = instance.exports.er_bench;
+if (typeof erBench !== 'function') {
+  throw new Error('missing er_bench export');
+}
+
+let acc = 12345;
+for (let i = 0; i < 100000; i += 1) {
+  acc = erBench(acc >>> 0) >>> 0;
+}
+
+const iters = 5000000;
+const start = process.hrtime.bigint();
+for (let i = 0; i < iters; i += 1) {
+  acc = erBench(acc >>> 0) >>> 0;
+}
+const elapsed = process.hrtime.bigint() - start;
+const nsPerCall = elapsed / BigInt(iters);
+console.log(`v8_node_ns: ${nsPerCall.toString()}`);
+console.log(`v8_node_result: 0x${(acc >>> 0).toString(16).padStart(8, '0')}`);
+EOF
+	node "$node_bench" "$wasm_bin"
 }
 
 # ---- ARM / Pi Zero targets ----
@@ -728,6 +774,7 @@ EdgeRun build targets:
   test-recursion-invalid  Run WASM recursion-validation cycle-rejection test
   test-serial         Run serial test (self-hosted ASM runner)
   test-cros-ec        Run Chrome EC memmap parser test (self-hosted ASM)
+  test-amdgpu         Run AMDGPU DCN register-plan test (self-hosted ASM)
   test-uvc            Run UVC descriptor parse test (self-hosted ASM runner)
   test-sw-fb          Run software framebuffer test (self-hosted ASM runner)
   test-render-ir      Run render IR test (self-hosted ASM runner)
@@ -771,6 +818,7 @@ case "${1:-help}" in
 	test-recursion-invalid) cmd_test_recursion_invalid ;;
 	test-serial)     cmd_test_serial ;;
 	test-cros-ec)    cmd_test_cros_ec ;;
+	test-amdgpu)     cmd_test_amdgpu ;;
 	test-uvc)        cmd_test_uvc ;;
 	test-sw-fb)     cmd_test_sw_fb ;;
 	test-render-ir) cmd_test_render_ir ;;

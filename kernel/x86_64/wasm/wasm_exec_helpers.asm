@@ -183,7 +183,10 @@ er_fn exec_restore_frame_state
     mov     r8, [exec_frame_save + rdx]
     mov     r9, [exec_frame_save + rdx + 8]
     mov     rax, exec_control
+    push    rcx
+    imul    rcx, CONTROL_FRAME_SIZE
     add     rax, rcx
+    pop     rcx
     sub     rax, CONTROL_FRAME_SIZE
     mov     [rax], r8
     mov     [rax + 8], r9
@@ -201,7 +204,10 @@ er_fn exec_restore_frame_state
     sub     rdx, 8
     mov     r8, [exec_frame_save + rdx]
     mov     rax, exec_stack
+    push    rcx
+    shl     rcx, 3
     add     rax, rcx
+    pop     rcx
     sub     rax, 8
     mov     [rax], r8
     dec     rcx
@@ -218,7 +224,10 @@ er_fn exec_restore_frame_state
     sub     rdx, 8
     mov     r8, [exec_frame_save + rdx]
     mov     rax, exec_locals
+    push    rcx
+    shl     rcx, 3
     add     rax, rcx
+    pop     rcx
     sub     rax, 8
     mov     [rax], r8
     dec     rcx
@@ -470,4 +479,3 @@ er_fn exec_memory_check_range
     stc
     pop     rbp
     ret
-

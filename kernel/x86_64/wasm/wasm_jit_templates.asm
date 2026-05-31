@@ -65,6 +65,7 @@ er_fn jit_template_local_get
     call    jit_emit_load_global_to_reg
     mov     ecx, [rdi + 12]  ; local index
     shl     ecx, 3           ; *8
+    mov     r11d, ecx
     ; mov rax, [rdx + disp32]
     mov     cl, 1            ; REX.W
     call    jit_emit_rex_nob
@@ -72,7 +73,7 @@ er_fn jit_template_local_get
     call    jit_emit_byte
     mov     al, 0x82         ; ModRM: mod=10, reg=0(rax), rm=2(rdx)
     call    jit_emit_modrm
-    mov     eax, ecx
+    mov     eax, r11d
     call    jit_emit_dword
     ; push rax
     xor     ecx, ecx
@@ -94,6 +95,7 @@ er_fn jit_template_local_set
     call    jit_emit_load_global_to_reg
     mov     ecx, [rdi + 12]  ; local index
     shl     ecx, 3
+    mov     r11d, ecx
     ; mov [rdx + disp32], rax
     pop     rax              ; restore value
     push    rax
@@ -103,7 +105,7 @@ er_fn jit_template_local_set
     call    jit_emit_byte
     mov     al, 0x82         ; ModRM: mod=10, reg=0(rax), rm=2(rdx)
     call    jit_emit_modrm
-    mov     eax, ecx
+    mov     eax, r11d
     call    jit_emit_dword
     pop     rax              ; consumed
     ret
@@ -128,13 +130,14 @@ er_fn jit_template_local_tee
     call    jit_emit_load_global_to_reg
     mov     ecx, [rdi + 12]
     shl     ecx, 3
+    mov     r11d, ecx
     mov     cl, 1
     call    jit_emit_rex_nob
     mov     al, 0x89
     call    jit_emit_byte
     mov     al, 0x82         ; mov [rdx + disp32], rax
     call    jit_emit_modrm
-    mov     eax, ecx
+    mov     eax, r11d
     call    jit_emit_dword
     ret
 
@@ -152,13 +155,14 @@ er_fn jit_template_global_get
     ; Global layout: value_type(1) + mutable(1) + pad(6) + value_data(8) + value_tag(4) + pad(4) = 24, padded to 32
     ; value_data is at offset 8
     add     ecx, 8
+    mov     r11d, ecx
     mov     cl, 1
     call    jit_emit_rex_nob
     mov     al, 0x8B
     call    jit_emit_byte
     mov     al, 0x82
     call    jit_emit_modrm
-    mov     eax, ecx
+    mov     eax, r11d
     call    jit_emit_dword
     xor     ecx, ecx
     call    jit_emit_push_reg
@@ -177,6 +181,7 @@ er_fn jit_template_global_set
     mov     ecx, [rdi + 12]
     imul    ecx, 32
     add     ecx, 8           ; value_data offset
+    mov     r11d, ecx
     pop     rax
     push    rax
     mov     cl, 1
@@ -185,7 +190,7 @@ er_fn jit_template_global_set
     call    jit_emit_byte
     mov     al, 0x82
     call    jit_emit_modrm
-    mov     eax, ecx
+    mov     eax, r11d
     call    jit_emit_dword
     pop     rax
     ret

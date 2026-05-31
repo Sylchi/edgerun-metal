@@ -67,6 +67,9 @@ tls_rx_len: resd 1
 tls_plain_max: resd 1
 tls_rx_need: resd 1
 tls_rx_have: resd 1
+tls_plain_buf: resb TLS_PLAINTEXT_MAX
+tls_plain_len: resd 1
+tls_plain_off: resd 1
 tls_client_private: resb TLS_X25519_KEY_LEN
 tls_client_public: resb TLS_X25519_KEY_LEN
 tls_server_public: resb TLS_X25519_KEY_LEN
@@ -89,14 +92,14 @@ tls_derived_secret: resb TLS_RANDOM_LEN
 tls_handshake_secret: resb TLS_RANDOM_LEN
 tls_client_hs_traffic_secret: resb TLS_RANDOM_LEN
 tls_server_hs_traffic_secret: resb TLS_RANDOM_LEN
-tls_client_hs_key: resb 16
-tls_server_hs_key: resb 16
+tls_client_hs_key: resb TLS_AES_128_KEY_LEN
+tls_server_hs_key: resb TLS_AES_128_KEY_LEN
 tls_client_hs_iv: resb 12
 tls_server_hs_iv: resb 12
 tls_client_hs_seq: resq 1
 tls_server_hs_seq: resq 1
-tls_client_app_key: resb 16
-tls_server_app_key: resb 16
+tls_client_app_key: resb TLS_AES_128_KEY_LEN
+tls_server_app_key: resb TLS_AES_128_KEY_LEN
 tls_client_app_iv: resb 12
 tls_server_app_iv: resb 12
 tls_client_app_seq: resq 1
@@ -134,6 +137,8 @@ er_fn er_tls_init
     mov     qword [tls_client_app_seq], 0
     mov     qword [tls_server_app_seq], 0
     mov     dword [tls_transcript_len], 0
+    mov     dword [tls_plain_len], 0
+    mov     dword [tls_plain_off], 0
     xor     eax, eax
     er_ok
     er_ret
@@ -589,9 +594,28 @@ er_fn er_tls_hkdf_expand_label
     test    r15, r15
     jz      .bad_label
 .context_ok:
-    ; HkdfLabel.length = 32.
+    mov     r11d, TLS_RANDOM_LEN
+    cmp     r14d, tls_label_key_len
+    jne     .check_iv_len
+    cmp     byte [r13], 'k'
+    jne     .check_iv_len
+    cmp     byte [r13 + 1], 'e'
+    jne     .check_iv_len
+    cmp     byte [r13 + 2], 'y'
+    jne     .check_iv_len
+    mov     r11d, TLS_AES_128_KEY_LEN
+    jmp     .write_hkdf_len
+.check_iv_len:
+    cmp     r14d, tls_label_iv_len
+    jne     .write_hkdf_len
+    cmp     byte [r13], 'i'
+    jne     .write_hkdf_len
+    cmp     byte [r13 + 1], 'v'
+    jne     .write_hkdf_len
+    mov     r11d, TLS_GCM_IV_LEN
+.write_hkdf_len:
     mov     byte [tls_hkdf_info], 0
-    mov     byte [tls_hkdf_info + 1], TLS_RANDOM_LEN
+    mov     [tls_hkdf_info + 1], r11b
     ; HkdfLabel.label = "tls13 " || label.
     lea     eax, [r14d + TLS_HKDF_LABEL_PREFIX_LEN]
     mov     [tls_hkdf_info + 2], al
@@ -1829,7 +1853,7 @@ er_fn er_tls_derive_application_secrets
     js      .fail_app
     lea     rdi, [tls_client_app_key]
     lea     rsi, [tls_key_block]
-    mov     edx, 16
+    mov     edx, TLS_AES_128_KEY_LEN
     call    er_memcpy
 
     lea     rdi, [tls_server_app_traffic_secret]
@@ -1843,7 +1867,7 @@ er_fn er_tls_derive_application_secrets
     js      .fail_app
     lea     rdi, [tls_server_app_key]
     lea     rsi, [tls_key_block]
-    mov     edx, 16
+    mov     edx, TLS_AES_128_KEY_LEN
     call    er_memcpy
 
     lea     rdi, [tls_client_app_traffic_secret]
@@ -1975,7 +1999,7 @@ er_fn er_tls_derive_handshake_secrets
     js      .fail_derive
     lea     rdi, [tls_client_hs_key]
     lea     rsi, [tls_key_block]
-    mov     edx, 16
+    mov     edx, TLS_AES_128_KEY_LEN
     call    er_memcpy
 
     lea     rdi, [tls_server_hs_traffic_secret]
@@ -1989,7 +2013,7 @@ er_fn er_tls_derive_handshake_secrets
     js      .fail_derive
     lea     rdi, [tls_server_hs_key]
     lea     rsi, [tls_key_block]
-    mov     edx, 16
+    mov     edx, TLS_AES_128_KEY_LEN
     call    er_memcpy
 
     lea     rdi, [tls_client_hs_traffic_secret]
@@ -2034,6 +2058,87 @@ er_fn er_tls_derive_handshake_secrets
     er_ret
 
 ; ==================================================================
+; _tls_recv_record_into_rx — read exactly one TLS record into tls_rx_record.
+; edi = conn_id. Returns 0 with tls_rx_len set to record size.
+; ==================================================================
+_tls_recv_record_into_rx:
+    push    rbx
+
+    mov     ebx, edi
+    mov     dword [tls_rx_len], TLS_RECORD_HEADER_LEN
+    mov     ecx, 500
+.read_hdr:
+    push    rcx
+    mov     edi, ebx
+    lea     rsi, [tls_rx_record]
+    lea     rdx, [tls_rx_len]
+    call    er_tcp_recv
+    pop     rcx
+    test    eax, eax
+    js      .fail
+    cmp     dword [tls_rx_len], TLS_RECORD_HEADER_LEN
+    je      .have_hdr
+    cmp     dword [tls_rx_len], 0
+    jne     .fail
+    push    rcx
+    call    er_net_poll
+    pop     rcx
+    dec     ecx
+    jnz     .read_hdr
+    jmp     .fail
+
+.have_hdr:
+    movzx   eax, word [tls_rx_record + 3]
+    xchg    al, ah
+    cmp     eax, TLS_RX_RECORD_MAX - TLS_RECORD_HEADER_LEN
+    ja      .fail
+    mov     [tls_rx_need], eax
+    mov     dword [tls_rx_have], 0
+    mov     ecx, 500
+.read_body:
+    push    rcx
+    mov     eax, [tls_rx_need]
+    sub     eax, [tls_rx_have]
+    mov     [tls_rx_len], eax
+    mov     edi, ebx
+    lea     rsi, [tls_rx_record + TLS_RECORD_HEADER_LEN]
+    mov     eax, [tls_rx_have]
+    add     rsi, rax
+    lea     rdx, [tls_rx_len]
+    call    er_tcp_recv
+    pop     rcx
+    test    eax, eax
+    js      .fail
+    mov     eax, [tls_rx_len]
+    test    eax, eax
+    jz      .poll_body
+    add     [tls_rx_have], eax
+    mov     eax, [tls_rx_need]
+    cmp     [tls_rx_have], eax
+    je      .done
+.poll_body:
+    push    rcx
+    call    er_net_poll
+    pop     rcx
+    dec     ecx
+    jnz     .read_body
+    jmp     .fail
+
+.done:
+    mov     eax, [tls_rx_need]
+    add     eax, TLS_RECORD_HEADER_LEN
+    mov     [tls_rx_len], eax
+    xor     eax, eax
+    er_ok
+    pop     rbx
+    ret
+.fail:
+    mov     eax, -1
+    er_err  ERROR_TLS_RECORD
+    pop     rbx
+    ret
+
+; ==================================================================
 ; er_tls_connect — start TLS handshake on an established TCP conn
 ; edi = conn_id. Returns fail-closed until encrypted records exist.
 ; ==================================================================
@@ -2075,10 +2180,7 @@ er_fn er_tls_connect
 
     push    rcx
     mov     edi, ebx
-    lea     rsi, [tls_rx_record]
-    lea     rdx, [tls_rx_len]
-    mov     dword [tls_rx_len], TLS_RX_RECORD_MAX
-    call    er_tcp_recv
+    call    _tls_recv_record_into_rx
     pop     rcx
     test    eax, eax
     jns     .got_server_hello
@@ -2115,10 +2217,7 @@ er_fn er_tls_connect
 
     push    rcx
     mov     edi, ebx
-    lea     rsi, [tls_rx_record]
-    lea     rdx, [tls_rx_len]
-    mov     dword [tls_rx_len], TLS_RX_RECORD_MAX
-    call    er_tcp_recv
+    call    _tls_recv_record_into_rx
     pop     rcx
     test    eax, eax
     jns     .got_encrypted_hs
@@ -2199,6 +2298,105 @@ er_fn er_tls_connect
     er_ret
 
 ; ==================================================================
+; _tls_recv_app_record_into_plain — decrypt one application record into
+; tls_plain_buf. Returns eax=0 on record, eax=1 on idle/no data, eax=-1 on
+; record error.
+; edi = conn_id.
+; ==================================================================
+_tls_recv_app_record_into_plain:
+    push    rbx
+
+    mov     ebx, edi
+    mov     dword [tls_rx_len], TLS_RECORD_HEADER_LEN
+    mov     ecx, 500
+.read_hdr:
+    push    rcx
+    mov     edi, ebx
+    lea     rsi, [tls_rx_record]
+    lea     rdx, [tls_rx_len]
+    call    er_tcp_recv
+    pop     rcx
+    test    eax, eax
+    js      .fail
+    cmp     dword [tls_rx_len], 0
+    jne     .have_hdr
+    push    rcx
+    call    er_net_poll
+    pop     rcx
+    dec     ecx
+    jnz     .read_hdr
+    mov     dword [tls_plain_len], 0
+    mov     dword [tls_plain_off], 0
+    mov     eax, 1
+    er_ok
+    pop     rbx
+    ret
+.have_hdr:
+    cmp     dword [tls_rx_len], TLS_RECORD_HEADER_LEN
+    jne     .fail
+    movzx   eax, word [tls_rx_record + 3]
+    xchg    al, ah
+    cmp     eax, TLS_RX_RECORD_MAX - TLS_RECORD_HEADER_LEN
+    ja      .fail
+    mov     [tls_rx_need], eax
+    mov     dword [tls_rx_have], 0
+    mov     ecx, 500
+.read_body:
+    push    rcx
+    mov     eax, [tls_rx_need]
+    sub     eax, [tls_rx_have]
+    mov     [tls_rx_len], eax
+    mov     edi, ebx
+    lea     rsi, [tls_rx_record + TLS_RECORD_HEADER_LEN]
+    mov     eax, [tls_rx_have]
+    add     rsi, rax
+    lea     rdx, [tls_rx_len]
+    call    er_tcp_recv
+    pop     rcx
+    test    eax, eax
+    js      .fail
+    mov     eax, [tls_rx_len]
+    test    eax, eax
+    jz      .poll_body
+    add     [tls_rx_have], eax
+    mov     eax, [tls_rx_need]
+    cmp     [tls_rx_have], eax
+    je      .decrypt
+.poll_body:
+    push    rcx
+    call    er_net_poll
+    pop     rcx
+    dec     ecx
+    jnz     .read_body
+    jmp     .fail
+.decrypt:
+    lea     rdi, [tls_plain_buf]
+    lea     rsi, [tls_rx_record]
+    mov     edx, [tls_rx_need]
+    add     edx, TLS_RECORD_HEADER_LEN
+    lea     r8, [tls_server_app_key]
+    lea     r9, [tls_server_app_iv]
+    lea     rax, [tls_server_app_seq]
+    push    rax
+    call    er_tls_record_decrypt
+    add     rsp, 8
+    test    eax, eax
+    js      .fail
+    cmp     ecx, TLS_RECORD_APPLICATION_DATA
+    jne     .fail
+    mov     [tls_plain_len], eax
+    mov     dword [tls_plain_off], 0
+    xor     eax, eax
+    er_ok
+    pop     rbx
+    ret
+.fail:
+    mov     eax, -1
+    er_err  ERROR_TLS_RECORD
+    pop     rbx
+    ret
+
+; ==================================================================
 ; er_tls_send / er_tls_recv — encrypted record I/O
 ; Fail closed until TLS_STATE_ACTIVE.
 ; ==================================================================
@@ -2258,103 +2456,59 @@ er_fn er_tls_recv
     push    rbx
     push    r12
     push    r13
+    push    r14
+    push    r15
 
     mov     ebx, edi
     mov     r12, rsi
     mov     r13, rdx
     cmp     dword [tls_state], TLS_STATE_ACTIVE
     jne     .closed
-    mov     eax, [r13]
-    mov     [tls_plain_max], eax
 
-    ; Read exactly one TLS record from the TCP stream. TCP may coalesce
-    ; multiple TLS records, and decrypting coalesced bytes as one record is
-    ; a protocol error.
-    mov     dword [tls_rx_len], TLS_RECORD_HEADER_LEN
-    mov     ecx, 500
-.read_hdr:
-    push    rcx
+    mov     r14d, [r13]     ; requested bytes
+    xor     r15d, r15d      ; copied bytes
+    test    r14d, r14d
+    jz      .done
+
+.copy_loop:
+    mov     eax, [tls_plain_len]
+    sub     eax, [tls_plain_off]
+    jnz     .copy_plain
+
     mov     edi, ebx
-    lea     rsi, [tls_rx_record]
-    lea     rdx, [tls_rx_len]
-    call    er_tcp_recv
-    pop     rcx
+    call    _tls_recv_app_record_into_plain
     test    eax, eax
     js      .recv_fail
-    cmp     dword [tls_rx_len], 0
-    jne     .have_hdr
-    push    rcx
-    call    er_net_poll
-    pop     rcx
-    dec     ecx
-    jnz     .read_hdr
-    jmp     .no_data
-.have_hdr:
-    cmp     dword [tls_rx_len], TLS_RECORD_HEADER_LEN
-    jne     .recv_fail
-    movzx   eax, word [tls_rx_record + 3]
-    xchg    al, ah
-    cmp     eax, TLS_RX_RECORD_MAX - TLS_RECORD_HEADER_LEN
-    ja      .recv_fail
-    mov     [tls_rx_need], eax
-    mov     dword [tls_rx_have], 0
-    mov     ecx, 500
-.read_body:
-    push    rcx
-    mov     eax, [tls_rx_need]
-    sub     eax, [tls_rx_have]
-    mov     [tls_rx_len], eax
-    mov     edi, ebx
-    lea     rsi, [tls_rx_record + TLS_RECORD_HEADER_LEN]
-    mov     eax, [tls_rx_have]
-    add     rsi, rax
-    lea     rdx, [tls_rx_len]
-    call    er_tcp_recv
-    pop     rcx
-    test    eax, eax
-    js      .recv_fail
-    mov     eax, [tls_rx_len]
-    test    eax, eax
-    jz      .poll_body
-    add     [tls_rx_have], eax
-    mov     eax, [tls_rx_need]
-    cmp     [tls_rx_have], eax
-    je      .decrypt
-.poll_body:
-    push    rcx
-    call    er_net_poll
-    pop     rcx
-    dec     ecx
-    jnz     .read_body
-    jmp     .recv_fail
-.decrypt:
-    mov     rdi, r12
-    lea     rsi, [tls_rx_record]
-    mov     edx, [tls_rx_need]
-    add     edx, TLS_RECORD_HEADER_LEN
-    lea     r8, [tls_server_app_key]
-    lea     r9, [tls_server_app_iv]
-    lea     rax, [tls_server_app_seq]
+    cmp     eax, 1
+    je      .done
+    jmp     .copy_loop
+
+.copy_plain:
+    mov     ecx, r14d
+    sub     ecx, r15d
+    cmp     eax, ecx
+    jbe     .copy_len_ok
+    mov     eax, ecx
+.copy_len_ok:
     push    rax
-    call    er_tls_record_decrypt
-    add     rsp, 8
-    test    eax, eax
-    js      .recv_fail
-    cmp     ecx, TLS_RECORD_APPLICATION_DATA
-    jne     .recv_fail
-    cmp     eax, [tls_plain_max]
-    ja      .recv_fail
-    mov     [r13], eax
+    lea     rdi, [r12 + r15]
+    lea     rsi, [tls_plain_buf]
+    mov     edx, [tls_plain_off]
+    add     rsi, rdx
+    mov     edx, eax
+    call    er_memcpy
+    pop     rax
+    add     [tls_plain_off], eax
+    add     r15d, eax
+    cmp     r15d, r14d
+    jb      .copy_loop
+
+.done:
+    mov     [r13], r15d
     xor     eax, eax
     er_ok
-    pop     r13
-    pop     r12
-    pop     rbx
-    er_ret
-.no_data:
-    mov     dword [r13], 0
-    xor     eax, eax
-    er_ok
+    pop     r15
+    pop     r14
     pop     r13
     pop     r12
     pop     rbx
@@ -2362,6 +2516,8 @@ er_fn er_tls_recv
 .closed:
     mov     eax, -1
     er_err  ERROR_TLS_CLOSED
+    pop     r15
+    pop     r14
     pop     r13
     pop     r12
     pop     rbx
@@ -2369,6 +2525,8 @@ er_fn er_tls_recv
 .recv_fail:
     mov     eax, -1
     er_err  ERROR_TLS_RECORD
+    pop     r15
+    pop     r14
     pop     r13
     pop     r12
     pop     rbx

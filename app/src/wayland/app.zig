@@ -261,6 +261,9 @@ pub const NativeApp = struct {
                         app_native_input.processPointerEvent(&self.state, &.{}, self.regionSlice(), self.routedPointerHit(), .pointer_down);
                         if (self.state.runtime.hoverHitId() == protocol.client_decor_drag_id) try client_ptr.sendMove(serial);
                     }
+                } else if (button == protocol.wl_pointer_button_right and state == protocol.wl_pointer_button_released) {
+                    app_native_input.processPointerEvent(&self.state, &.{}, self.regionSlice(), self.routedPointerHit(), .pointer_move);
+                    if (self.hardware) self.hardware_app.openContext(self.state.runtime.hovered, self.state.hover_x, self.state.hover_y);
                 }
                 return true;
             },

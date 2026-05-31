@@ -43,6 +43,7 @@ pub const Switch = struct {
         const label_w = @max(component_primitives.min_extent, pill.x - bounds.x - switch_label_gap);
         const label_h = @min(bounds.h, component_primitives.measuredTextHeight(self.label, label_w, switch_label_height, switch_label_max_lines));
         try text_component.Text.renderWrapped(scene, ui.Rect.init(bounds.x, bounds.y, label_w, bounds.h).withHeightCentered(label_h), self.label, options.style.text, component_primitives.textWrap(self.label, switch_label_height, switch_label_max_lines));
+        try component_primitives.renderControlStateOverlay(scene, bounds, options, switch_height * 0.5);
     }
 
     pub fn collectInteractions(self: Switch, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
@@ -89,11 +90,11 @@ const switch_label_gap: f32 = 10.0;
 const switch_label_height: f32 = component_primitives.control_label_height;
 const switch_label_max_lines: usize = 2;
 const switch_min_width: f32 = 112.0;
-const switch_knob_shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 88 };
-const switch_shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 64 };
-const switch_floor = ui.Color{ .r = 6, .g = 8, .b = 11, .a = 54 };
+const switch_knob_shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 54 };
+const switch_shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 34 };
+const switch_floor = ui.Color{ .r = 6, .g = 8, .b = 11, .a = 24 };
 const switch_shadow_inset: f32 = 1.0;
-const switch_shadow_size: f32 = 4.0;
+const switch_shadow_size: f32 = 2.0;
 
 test "switch component serializes to canonical object and deserializes" {
     const switch_control = Switch{ .id = 12, .label = "Public", .checked = false };

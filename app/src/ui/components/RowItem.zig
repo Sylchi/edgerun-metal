@@ -45,7 +45,7 @@ pub const RowItem = struct {
         try scene.pushRect(bounds, options.style.border, .border, row_radius, 0.0);
         if (self.leading_icon.optional()) |icon| {
             const chip = ui.Rect.init(bounds.x + row_text_padding_x, bounds.y + (bounds.h - row_icon_chip_size) * 0.5, row_icon_chip_size, row_icon_chip_size);
-            try scene.pushRect(chip, row_icon_chip_glow, .fill, row_icon_chip_radius, 0.0);
+            try scene.pushRect(chip, row_icon_chip_fill, .fill, row_icon_chip_radius, 0.0);
             try scene.pushRect(chip, options.style.border, .border, row_icon_chip_radius, 0.0);
             try icon.renderColor(scene, chip.withHeightCentered(row_icon_size).withWidthCentered(row_icon_size), options.style.accent);
         }
@@ -53,6 +53,7 @@ pub const RowItem = struct {
             if (centeredTitleBounds(bounds, self.title, self)) |title_bounds| {
                 try text_component.Text.renderWrapped(scene, title_bounds, self.title, options.style.text, titleWrap(self.title));
             }
+            try component_primitives.renderControlStateOverlay(scene, bounds, options, row_radius);
             return;
         }
         if (stackedTitleBounds(bounds, self.title, self)) |title_bounds| {
@@ -61,6 +62,7 @@ pub const RowItem = struct {
         if (detailBounds(bounds, self.title, self.detail, self)) |detail_bounds| {
             try text_component.Text.renderWrapped(scene, detail_bounds, self.detail, options.style.muted, detailWrap(self.detail));
         }
+        try component_primitives.renderControlStateOverlay(scene, bounds, options, row_radius);
     }
 
     pub fn collectInteractions(self: RowItem, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
@@ -173,14 +175,14 @@ const row_min_width: f32 = 96.0;
 const row_min_height: f32 = 32.0;
 const row_title_line_height: f32 = 18.0;
 const row_detail_line_height: f32 = 16.0;
-const row_text_max_lines: usize = 2;
-const row_icon_size: f32 = 24.0;
+const row_text_max_lines: usize = 1;
+const row_icon_size: f32 = 21.0;
 const row_icon_chip_size: f32 = 32.0;
 const row_icon_chip_radius: f32 = 8.0;
 const row_icon_text_gap: f32 = 12.0;
-const row_floor = ui.Color{ .r = 8, .g = 10, .b = 13, .a = 42 };
-const row_rim = ui.Color{ .r = 255, .g = 255, .b = 255, .a = 12 };
-const row_icon_chip_glow = ui.Color{ .r = 5, .g = 31, .b = 28, .a = 220 };
+const row_floor = ui.Color{ .r = 8, .g = 10, .b = 13, .a = 18 };
+const row_rim = ui.Color{ .r = 255, .g = 255, .b = 255, .a = 7 };
+const row_icon_chip_fill = ui.Color{ .r = 12, .g = 16, .b = 18, .a = 210 };
 const row_rim_height: f32 = 1.0;
 
 test "row item component serializes to canonical object and deserializes" {
@@ -210,7 +212,22 @@ test "row item component renders title and detail through shared row renderer" {
     try std.testing.expect(detail.text.origin.y > title.text.origin.y);
 }
 
-test "row item measurement wraps long content under narrow constraints" {
+test "row item renders compact data rows as one title line and one detail line" {
+    const row = RowItem{ .id = 20, .title = "object graph wraps when allowed", .detail = "canonical data detail wraps when allowed" };
+    var commands: [12]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+
+    try row.render(&scene, ui.Rect.init(0, 0, 120, 52), .{});
+
+    var text_count: usize = 0;
+    for (scene.written()) |command| switch (command) {
+        .text => text_count += 1,
+        else => {},
+    };
+    try std.testing.expectEqual(@as(usize, 2), text_count);
+}
+
+test "row item measurement keeps data rows compact under narrow constraints" {
     const row = RowItem{
         .id = 20,
         .title = "object graph title wraps",
@@ -222,7 +239,7 @@ test "row item measurement wraps long content under narrow constraints" {
     const compact_measured = compact.measure(.{ .width = .{ .at_most = row_min_width }, .text_wrap = .wrap }, .{});
 
     try std.testing.expect(measured.preferred.w <= row_min_width);
-    try std.testing.expect(measured.preferred.h > compact_measured.preferred.h);
+    try std.testing.expectEqual(compact_measured.preferred.h, measured.preferred.h);
 }
 
 test "row item with icon serializes icon tag through round-trip" {

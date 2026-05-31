@@ -49,11 +49,17 @@ const hardware_border = ui.Color{ .r = 43, .g = 48, .b = 54 };
 const hardware_text = ui.Color{ .r = 239, .g = 242, .b = 239 };
 const hardware_muted = ui.Color{ .r = 150, .g = 156, .b = 160 };
 const hardware_accent = ui.Color{ .r = 54, .g = 194, .b = 160 };
+const hardware_accent_blue = ui.Color{ .r = 95, .g = 167, .b = 232 };
+const hardware_accent_gold = ui.Color{ .r = 226, .g = 176, .b = 86 };
 const hardware_accent_dim = ui.Color{ .r = 22, .g = 91, .b = 76, .a = 74 };
 const hardware_orb = ui.Color{ .r = 54, .g = 194, .b = 160, .a = 14 };
 const hardware_rim = ui.Color{ .r = 255, .g = 255, .b = 255, .a = 8 };
+const hardware_selection = ui.Color{ .r = 255, .g = 255, .b = 255, .a = 210 };
+const hardware_selection_fill = ui.Color{ .r = 255, .g = 255, .b = 255, .a = 14 };
+const editor_panel = ui.Color{ .r = 18, .g = 20, .b = 23, .a = 248 };
+const editor_scrim = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 64 };
 
-fn hardwareStyle() ui.Style {
+fn hardwareStyle(accent: ui.Color) ui.Style {
     return .{
         .bg = hardware_bg_top,
         .panel = hardware_panel,
@@ -61,7 +67,7 @@ fn hardwareStyle() ui.Style {
         .border = hardware_border,
         .text = hardware_text,
         .muted = hardware_muted,
-        .accent = hardware_accent,
+        .accent = accent,
     };
 }
 
@@ -149,6 +155,13 @@ pub const State = struct {
     keyboard_brightness_max: i32 = 1,
     screen_brightness_ready: bool = false,
     keyboard_brightness_ready: bool = false,
+    selected_component: ?interaction.Region = null,
+    context_open: bool = false,
+    editor_open: bool = false,
+    context_x: f32 = 0.0,
+    context_y: f32 = 0.0,
+    accent_index: u8 = 0,
+    selected_emphasis: bool = true,
 
     const refresh_now_button_id: u32 = 90_001;
     const auto_refresh_switch_id: u32 = 90_002;
@@ -161,6 +174,19 @@ pub const State = struct {
     const brightness_slider_id: u32 = 90_009;
     const kbd_slider_id: u32 = 90_010;
     const refresh_interval_frames: u64 = 600;
+    const select_header_id: u32 = 91_001;
+    const select_controls_id: u32 = 91_002;
+    const select_activity_id: u32 = 91_003;
+    const select_inventory_id: u32 = 91_004;
+    const select_metric_base_id: u32 = 91_020;
+    const select_control_base_id: u32 = 91_040;
+    const select_level_base_id: u32 = 91_060;
+    const context_open_editor_id: u32 = 91_080;
+    const context_close_id: u32 = 91_081;
+    const editor_close_id: u32 = 91_082;
+    const editor_accent_prev_id: u32 = 91_083;
+    const editor_accent_next_id: u32 = 91_084;
+    const editor_emphasis_switch_id: u32 = 91_085;
 
     pub fn tick(self: *State) bool {
         self.frame += 1;
@@ -185,8 +211,32 @@ pub const State = struct {
             kbd_up_button_id => self.adjustBacklight(.keyboard, 1),
             brightness_slider_id => if (hit) |region| self.setBacklightUnit(.screen, region, drag),
             kbd_slider_id => if (hit) |region| self.setBacklightUnit(.keyboard, region, drag),
+            context_open_editor_id => {
+                self.editor_open = true;
+                self.context_open = false;
+            },
+            context_close_id, editor_close_id => {
+                self.context_open = false;
+                self.editor_open = false;
+            },
+            editor_accent_prev_id => self.shiftAccent(-1),
+            editor_accent_next_id => self.shiftAccent(1),
+            editor_emphasis_switch_id => self.selected_emphasis = !self.selected_emphasis,
             else => {},
         }
+    }
+
+    pub fn openContext(self: *State, hit: ?interaction.Region, x: f32, y: f32) void {
+        const region = hit orelse {
+            self.context_open = false;
+            return;
+        };
+        if (isEditorControl(region.id)) return;
+        self.selected_component = region;
+        self.context_x = x;
+        self.context_y = y;
+        self.context_open = true;
+        self.editor_open = true;
     }
 
     pub fn refresh(self: *State) void {
@@ -285,7 +335,7 @@ pub const State = struct {
 
     pub fn render(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
         var dashboard_options = options;
-        dashboard_options.style = hardwareStyle();
+        dashboard_options.style = hardwareStyle(self.accentColor());
         try scene.pushGradientRect(bounds, hardware_bg_top, hardware_bg_bottom, 0.0);
         try scene.pushGradientRect(ui.Rect.init(bounds.x, bounds.y, bounds.w, 96.0), hardware_orb, ui.Color.clear, 0.0);
         try scene.pushRect(ui.Rect.init(bounds.x, bounds.y + bounds.h - 2.0, bounds.w, 2.0), hardware_rim, .fill, 0.0, 0.0);
@@ -296,6 +346,9 @@ pub const State = struct {
         } else {
             try self.renderStacked(scene, collector, outer, dashboard_options);
         }
+        self.refreshSelectedRegion(collector.written());
+        try self.renderSelectionOverlay(scene, bounds);
+        try self.renderContextAndEditor(scene, collector, bounds, dashboard_options);
     }
 
     fn detail(self: *const State, row: usize) []const u8 {
@@ -348,6 +401,7 @@ pub const State = struct {
     }
 
     fn renderHeader(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
+        try collector.addHit(bounds, .button, select_header_id);
         try (Component{ .card = .{ .title = "", .detail = "", .variant = .elevated } }).renderInteractive(scene, collector, bounds, options);
         try scene.pushGradientRect(bounds.insetUniform(1.0), ui.Color{ .r = 38, .g = 92, .b = 79, .a = 24 }, ui.Color.clear, 12.0);
         const chip = ui.Rect.init(bounds.x + 24.0, bounds.y + 26.0, 48.0, 48.0);
@@ -368,11 +422,11 @@ pub const State = struct {
     fn renderMetrics(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, metric_w: f32, gap: f32, options: RenderOptions) !void {
         const cards_per_row: usize = if (bounds.w >= 980.0) 4 else 2;
         const row_h = if (cards_per_row == 4) bounds.h else (bounds.h - gap) * 0.5;
-        const data = [_]struct { title: []const u8, value: []const u8, detail: []const u8, icon_kind: icon.Icon }{
-            .{ .title = "Thermals", .value = self.detail(1), .detail = "CPU sensor", .icon_kind = .temperature },
-            .{ .title = "Memory", .value = memoryMetricValue(self.detail(2)), .detail = "Live pressure", .icon_kind = .database },
-            .{ .title = "Display", .value = self.detail(4), .detail = "Panel brightness", .icon_kind = .brightness },
-            .{ .title = "Keyboard", .value = self.detail(5), .detail = "Backlight level", .icon_kind = .keyboard },
+        const data = [_]struct { id: u32, title: []const u8, value: []const u8, detail: []const u8, icon_kind: icon.Icon }{
+            .{ .id = select_metric_base_id, .title = "Thermals", .value = self.detail(1), .detail = "CPU sensor", .icon_kind = .temperature },
+            .{ .id = select_metric_base_id + 1, .title = "Memory", .value = memoryMetricValue(self.detail(2)), .detail = "Live pressure", .icon_kind = .database },
+            .{ .id = select_metric_base_id + 2, .title = "Display", .value = self.detail(4), .detail = "Panel brightness", .icon_kind = .brightness },
+            .{ .id = select_metric_base_id + 3, .title = "Keyboard", .value = self.detail(5), .detail = "Backlight level", .icon_kind = .keyboard },
         };
         for (data, 0..) |entry, index| {
             const col = index % cards_per_row;
@@ -383,21 +437,22 @@ pub const State = struct {
                 metric_w,
                 row_h,
             );
-            try self.renderMetricCard(scene, collector, rect, entry.title, entry.value, entry.detail, entry.icon_kind, options);
+            try self.renderMetricCard(scene, collector, rect, entry.id, entry.title, entry.value, entry.detail, entry.icon_kind, options);
         }
     }
 
     fn renderControls(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
+        try collector.addHit(bounds, .button, select_controls_id);
         try (Component{ .card = .{ .title = "", .detail = "", .variant = .elevated } }).renderInteractive(scene, collector, bounds, options);
         const inner = bounds.insetUniform(20.0);
         var y = inner.y;
         try self.renderSectionHeader(scene, inner.x, y, "Controls", "Display and keyboard knobs.", .adjustments_plus, options);
         y += 74.0;
 
-        try self.renderControlGroup(scene, collector, ui.Rect.init(inner.x, y, inner.w, 144.0), "Screen", self.detail(4), brightness_slider_id, self.screenBrightnessUnit(), brightness_down_button_id, brightness_up_button_id, "Screen -", "Screen +", .brightness_down, .brightness_up, options);
+        try self.renderControlGroup(scene, collector, ui.Rect.init(inner.x, y, inner.w, 144.0), select_control_base_id, "Screen", self.detail(4), brightness_slider_id, self.screenBrightnessUnit(), brightness_down_button_id, brightness_up_button_id, "Screen -", "Screen +", .brightness_down, .brightness_up, options);
         y += 160.0;
 
-        try self.renderControlGroup(scene, collector, ui.Rect.init(inner.x, y, inner.w, 144.0), "Keyboard", self.detail(5), kbd_slider_id, self.keyboardBrightnessUnit(), kbd_down_button_id, kbd_up_button_id, "Keys -", "Keys +", .adjustments_minus, .adjustments_plus, options);
+        try self.renderControlGroup(scene, collector, ui.Rect.init(inner.x, y, inner.w, 144.0), select_control_base_id + 1, "Keyboard", self.detail(5), kbd_slider_id, self.keyboardBrightnessUnit(), kbd_down_button_id, kbd_up_button_id, "Keys -", "Keys +", .adjustments_minus, .adjustments_plus, options);
         y += 164.0;
 
         try scene.pushStrongText(ui.Rect.init(inner.x, y, inner.w, 20.0), "Session", options.style.text);
@@ -410,6 +465,7 @@ pub const State = struct {
     }
 
     fn renderActivity(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
+        try collector.addHit(bounds, .button, select_activity_id);
         try (Component{ .card = .{ .title = "", .detail = "", .variant = .elevated } }).renderInteractive(scene, collector, bounds, options);
         const inner = bounds.insetUniform(20.0);
         try self.renderSectionHeader(scene, inner.x, inner.y, "Live Hardware", "Telemetry and direct controls.", .cpu, options);
@@ -420,8 +476,8 @@ pub const State = struct {
         const card_gap: f32 = 14.0;
         const card_h = @min(136.0, @max(110.0, bounds.y + bounds.h - lower_y - 20.0));
         const half = (inner.w - card_gap) * 0.5;
-        try self.renderLevelCard(scene, collector, ui.Rect.init(inner.x, lower_y, half, card_h), "Screen Level", self.detail(4), self.screenBrightnessUnit(), .brightness, options);
-        try self.renderLevelCard(scene, collector, ui.Rect.init(inner.x + half + card_gap, lower_y, half, card_h), "Keyboard Level", self.detail(5), self.keyboardBrightnessUnit(), .keyboard, options);
+        try self.renderLevelCard(scene, collector, ui.Rect.init(inner.x, lower_y, half, card_h), select_level_base_id, "Screen Level", self.detail(4), self.screenBrightnessUnit(), .brightness, options);
+        try self.renderLevelCard(scene, collector, ui.Rect.init(inner.x + half + card_gap, lower_y, half, card_h), select_level_base_id + 1, "Keyboard Level", self.detail(5), self.keyboardBrightnessUnit(), .keyboard, options);
 
         const footer_y = lower_y + card_h + 16.0;
         if (footer_y + 86.0 <= bounds.y + bounds.h) {
@@ -432,6 +488,7 @@ pub const State = struct {
     }
 
     fn renderInventory(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
+        try collector.addHit(bounds, .button, select_inventory_id);
         try (Component{ .card = .{ .title = "", .detail = "", .variant = .elevated } }).renderInteractive(scene, collector, bounds, options);
         const inner = bounds.insetUniform(20.0);
         var y = inner.y;
@@ -462,8 +519,9 @@ pub const State = struct {
         try scene.pushText(ui.Rect.init(x + 54.0, y + 30.0, 300.0, 18.0), fittedText(detail_text, 300.0), options.style.muted);
     }
 
-    fn renderMetricCard(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, title: []const u8, value: []const u8, detail_text: []const u8, icon_kind: icon.Icon, options: RenderOptions) !void {
+    fn renderMetricCard(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, select_id: u32, title: []const u8, value: []const u8, detail_text: []const u8, icon_kind: icon.Icon, options: RenderOptions) !void {
         _ = self;
+        try collector.addHit(bounds, .button, select_id);
         try (Component{ .card = .{ .title = "", .detail = "", .variant = .panel } }).renderInteractive(scene, collector, bounds, options);
         const inner = bounds.insetUniform(18.0);
         const chip = ui.Rect.init(inner.x, inner.y + 1.0, 38.0, 38.0);
@@ -475,8 +533,9 @@ pub const State = struct {
         try scene.pushBoldText(ui.Rect.init(inner.x, inner.y + 68.0, inner.w, 28.0), fittedText(displayValue(value), inner.w), options.style.text);
     }
 
-    fn renderControlGroup(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, title: []const u8, value: []const u8, slider_id: u32, slider_value: f32, down_id: u32, up_id: u32, down_label: []const u8, up_label: []const u8, down_icon: icon.Icon, up_icon: icon.Icon, options: RenderOptions) !void {
+    fn renderControlGroup(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, select_id: u32, title: []const u8, value: []const u8, slider_id: u32, slider_value: f32, down_id: u32, up_id: u32, down_label: []const u8, up_label: []const u8, down_icon: icon.Icon, up_icon: icon.Icon, options: RenderOptions) !void {
         _ = self;
+        try collector.addHit(bounds, .button, select_id);
         try (Component{ .card = .{ .title = "", .detail = "", .variant = .subtle } }).renderInteractive(scene, collector, bounds, options);
         const inner = bounds.insetUniform(16.0);
         try scene.pushStrongText(ui.Rect.init(inner.x, inner.y, inner.w * 0.55, 20.0), title, options.style.text);
@@ -487,8 +546,9 @@ pub const State = struct {
         try (Component{ .button = .{ .id = up_id, .label = up_label, .variant = .primary, .icon_slot = IconComponent.IconSlot.named(.leading, up_icon) } }).renderInteractive(scene, collector, ui.Rect.init(inner.x + half_w + 10.0, inner.y + 82.0, half_w, 36.0), options);
     }
 
-    fn renderLevelCard(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, title: []const u8, value: []const u8, unit: f32, icon_kind: icon.Icon, options: RenderOptions) !void {
+    fn renderLevelCard(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, select_id: u32, title: []const u8, value: []const u8, unit: f32, icon_kind: icon.Icon, options: RenderOptions) !void {
         _ = self;
+        try collector.addHit(bounds, .button, select_id);
         try (Component{ .card = .{ .title = "", .detail = "", .variant = .panel } }).renderInteractive(scene, collector, bounds, options);
         const inner = bounds.insetUniform(16.0);
         const chip = ui.Rect.init(inner.x, inner.y, 32.0, 32.0);
@@ -499,9 +559,94 @@ pub const State = struct {
         try (Component{ .progress = .{ .value = unit } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, inner.y + inner.h - 24.0, inner.w, 18.0), options);
     }
 
+    fn renderSelectionOverlay(self: *State, scene: *ui.Scene, bounds: ui.Rect) !void {
+        _ = bounds;
+        const selected = self.selected_component orelse return;
+        if (self.selected_emphasis) try scene.pushRect(selected.bounds, hardware_selection_fill, .fill, 12.0, 0.0);
+        try scene.pushRect(selected.bounds.insetUniform(-2.0), hardware_selection, .border, 14.0, 0.0);
+    }
+
+    fn renderContextAndEditor(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
+        if (self.context_open) try self.renderContextMenu(scene, collector, bounds, options);
+        if (self.editor_open) try self.renderEditor(scene, collector, bounds, options);
+    }
+
+    fn renderContextMenu(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
+        const menu_w: f32 = 220.0;
+        const menu_h: f32 = 118.0;
+        const x = std.math.clamp(self.context_x, bounds.x + 8.0, bounds.x + bounds.w - menu_w - 8.0);
+        const y = std.math.clamp(self.context_y, bounds.y + 8.0, bounds.y + bounds.h - menu_h - 8.0);
+        const menu = ui.Rect.init(x, y, menu_w, menu_h);
+        try scene.pushRect(menu.insetUniform(-2.0), ui.Color{ .r = 0, .g = 0, .b = 0, .a = 96 }, .shadow, 14.0, 8.0);
+        try scene.pushRect(menu, editor_panel, .fill, 12.0, 0.0);
+        try scene.pushRect(menu, options.style.border, .border, 12.0, 0.0);
+        try scene.pushStrongText(ui.Rect.init(menu.x + 14.0, menu.y + 12.0, menu.w - 28.0, 18.0), selectedComponentLabel(self.selected_component), options.style.text);
+        try scene.pushText(ui.Rect.init(menu.x + 14.0, menu.y + 36.0, menu.w - 28.0, 16.0), "Context menu", options.style.muted);
+        try (Component{ .button = .{ .id = context_open_editor_id, .label = "Open editor", .variant = .primary } }).renderInteractive(scene, collector, ui.Rect.init(menu.x + 12.0, menu.y + 66.0, 118.0, 34.0), options);
+        try (Component{ .button = .{ .id = context_close_id, .label = "Close", .variant = .outline } }).renderInteractive(scene, collector, ui.Rect.init(menu.x + 138.0, menu.y + 66.0, 70.0, 34.0), options);
+    }
+
+    fn renderEditor(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
+        const panel_w = @min(340.0, @max(280.0, bounds.w * 0.24));
+        const panel = ui.Rect.init(bounds.x + bounds.w - panel_w - 18.0, bounds.y + 18.0, panel_w, @min(430.0, bounds.h - 36.0));
+        try scene.pushRect(panel.insetUniform(-2.0), ui.Color{ .r = 0, .g = 0, .b = 0, .a = 110 }, .shadow, 18.0, 10.0);
+        try scene.pushRect(panel, editor_panel, .fill, 16.0, 0.0);
+        try scene.pushRect(panel, options.style.border, .border, 16.0, 0.0);
+        try scene.pushGradientRect(ui.Rect.init(panel.x, panel.y, panel.w, 96.0), editor_scrim, ui.Color.clear, 16.0);
+        const inner = panel.insetUniform(18.0);
+        try scene.pushBoldText(ui.Rect.init(inner.x, inner.y, inner.w - 42.0, 26.0), "Component Editor", options.style.text);
+        try (Component{ .icon_button = .{
+            .id = editor_close_id,
+            .label = "Close editor",
+            .icon = IconComponent.Icon.named(.x),
+            .variant = .outline,
+        } }).renderInteractive(scene, collector, ui.Rect.init(inner.x + inner.w - 36.0, inner.y - 2.0, 34.0, 34.0), options);
+        try scene.pushText(ui.Rect.init(inner.x, inner.y + 34.0, inner.w, 18.0), selectedComponentLabel(self.selected_component), options.style.muted);
+        try scene.pushText(ui.Rect.init(inner.x, inner.y + 60.0, inner.w, 18.0), "Live changes apply immediately.", options.style.muted);
+
+        const preview = ui.Rect.init(inner.x, inner.y + 96.0, inner.w, 82.0);
+        try (Component{ .card = .{ .title = "", .detail = "", .variant = .subtle } }).renderInteractive(scene, collector, preview, options);
+        try scene.pushStrongText(ui.Rect.init(preview.x + 16.0, preview.y + 14.0, preview.w - 32.0, 20.0), "Selected", options.style.text);
+        try scene.pushText(ui.Rect.init(preview.x + 16.0, preview.y + 42.0, preview.w - 32.0, 18.0), selectedComponentLabel(self.selected_component), options.style.muted);
+
+        const accent_y = inner.y + 204.0;
+        try scene.pushStrongText(ui.Rect.init(inner.x, accent_y, inner.w, 20.0), "Accent", options.style.text);
+        try scene.pushText(ui.Rect.init(inner.x, accent_y + 26.0, inner.w, 18.0), accentName(self.accent_index), options.style.muted);
+        const button_w = (inner.w - 10.0) * 0.5;
+        try (Component{ .button = .{ .id = editor_accent_prev_id, .label = "Accent -", .variant = .outline } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, accent_y + 56.0, button_w, 34.0), options);
+        try (Component{ .button = .{ .id = editor_accent_next_id, .label = "Accent +", .variant = .primary } }).renderInteractive(scene, collector, ui.Rect.init(inner.x + button_w + 10.0, accent_y + 56.0, button_w, 34.0), options);
+
+        try (Component{ .switch_control = .{ .id = editor_emphasis_switch_id, .label = "Selected emphasis", .checked = self.selected_emphasis } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, accent_y + 116.0, inner.w, 34.0), options);
+        try (Component{ .switch_control = .{ .id = compact_rows_switch_id, .label = "Compact inventory", .checked = self.compact_rows } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, accent_y + 160.0, inner.w, 34.0), options);
+    }
+
     fn adjustBacklight(self: *State, kind: BacklightKind, direction: i32) void {
         const resolved = readResolvedBacklight(kind) catch |err| return self.setStatus(backlightReadStatusForKind(kind, err));
         self.writeBacklight(kind, resolved.device, steppedBacklightValue(resolved.device, resolved.reading, direction));
+    }
+
+    fn refreshSelectedRegion(self: *State, regions: []const interaction.Region) void {
+        const selected = self.selected_component orelse return;
+        for (regions) |region| {
+            if (region.kind == selected.kind and region.id == selected.id) {
+                self.selected_component = region;
+                return;
+            }
+        }
+    }
+
+    fn accentColor(self: *const State) ui.Color {
+        return switch (self.accent_index) {
+            0 => hardware_accent,
+            1 => hardware_accent_blue,
+            else => hardware_accent_gold,
+        };
+    }
+
+    fn shiftAccent(self: *State, direction: i32) void {
+        const count: i32 = 3;
+        const current: i32 = @intCast(self.accent_index);
+        self.accent_index = @intCast(@mod(current + direction, count));
     }
 
     fn setStatus(self: *State, value: []const u8) void {
@@ -565,6 +710,57 @@ fn writeUnavailable(out: []u8) void {
 
 fn displayValue(value: []const u8) []const u8 {
     return if (value.len == 0 or std.mem.eql(u8, value, unavailable_detail)) "N/A" else value;
+}
+
+fn selectedComponentLabel(selected: ?interaction.Region) []const u8 {
+    const region = selected orelse return "No component selected";
+    if (region.kind == .row_item and region.id < rows.len) return rows[region.id].title;
+    return switch (region.id) {
+        State.select_header_id => "Header",
+        State.select_controls_id => "Controls panel",
+        State.select_activity_id => "Live hardware panel",
+        State.select_inventory_id => "Inventory panel",
+        State.select_metric_base_id => "Thermals metric",
+        State.select_metric_base_id + 1 => "Memory metric",
+        State.select_metric_base_id + 2 => "Display metric",
+        State.select_metric_base_id + 3 => "Keyboard metric",
+        State.select_control_base_id => "Screen controls",
+        State.select_control_base_id + 1 => "Keyboard controls",
+        State.select_level_base_id => "Screen level card",
+        State.select_level_base_id + 1 => "Keyboard level card",
+        State.refresh_now_button_id => "Refresh button",
+        State.auto_refresh_switch_id => "Auto refresh switch",
+        State.hide_unavailable_switch_id => "Hide unavailable switch",
+        State.compact_rows_switch_id => "Compact density switch",
+        State.brightness_down_button_id => "Screen down button",
+        State.brightness_up_button_id => "Screen up button",
+        State.kbd_down_button_id => "Keyboard down button",
+        State.kbd_up_button_id => "Keyboard up button",
+        State.brightness_slider_id => "Screen brightness slider",
+        State.kbd_slider_id => "Keyboard brightness slider",
+        else => "Component",
+    };
+}
+
+fn accentName(index: u8) []const u8 {
+    return switch (index) {
+        0 => "Graphite mint",
+        1 => "Instrument blue",
+        else => "Warm amber",
+    };
+}
+
+fn isEditorControl(id: u32) bool {
+    return switch (id) {
+        State.context_open_editor_id,
+        State.context_close_id,
+        State.editor_close_id,
+        State.editor_accent_prev_id,
+        State.editor_accent_next_id,
+        State.editor_emphasis_switch_id,
+        => true,
+        else => false,
+    };
 }
 
 fn fittedText(value: []const u8, width: f32) []const u8 {
@@ -860,4 +1056,26 @@ test "hardware dashboard tick reports whether a frame needs repaint" {
 
     try std.testing.expect(!state.tick());
     try std.testing.expectEqual(@as(u64, 1), state.frame);
+}
+
+test "hardware dashboard context menu selects component and opens live editor" {
+    var state = State{};
+    const region = interaction.Region{ .kind = .button, .id = State.select_metric_base_id + 2, .bounds = ui.Rect.init(10, 20, 120, 80) };
+
+    state.openContext(region, 42.0, 64.0);
+
+    try std.testing.expect(state.context_open);
+    try std.testing.expect(state.editor_open);
+    try std.testing.expectEqual(region.id, state.selected_component.?.id);
+    try std.testing.expectEqualStrings("Display metric", selectedComponentLabel(state.selected_component));
+}
+
+test "hardware dashboard editor accent controls wrap deterministically" {
+    var state = State{};
+
+    state.activate(.{ .kind = .button, .id = State.editor_accent_prev_id, .bounds = ui.Rect.init(0, 0, 10, 10) }, null);
+    try std.testing.expectEqual(@as(u8, 2), state.accent_index);
+
+    state.activate(.{ .kind = .button, .id = State.editor_accent_next_id, .bounds = ui.Rect.init(0, 0, 10, 10) }, null);
+    try std.testing.expectEqual(@as(u8, 0), state.accent_index);
 }

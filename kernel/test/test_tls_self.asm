@@ -53,6 +53,7 @@ server_hs_seq_enc: resq 1
 client_hs_seq_dec: resq 1
 connect_hs_seq_enc: resq 1
 tcp_recv_calls: resd 1
+tcp_flight_len: resd 1
 random_calls: resd 1
 
 SECTION .rodata
@@ -505,6 +506,8 @@ global er_tor_sha256
 global er_tcp_send
 global er_tcp_recv
 global er_net_poll
+global er_serial_putchar
+global er_serial_puthex32
 
 er_tpm_get_random:
     mov     rax, rdi
@@ -574,6 +577,8 @@ er_tor_sha256:
 
 er_tcp_send:
 er_net_poll:
+er_serial_putchar:
+er_serial_puthex32:
     xor     eax, eax
     ret
 
@@ -587,9 +592,13 @@ er_tcp_recv:
     mov     ebx, [rel tcp_recv_calls]
     inc     dword [rel tcp_recv_calls]
     cmp     ebx, 0
-    je      .recv_server_hello
+    je      .recv_server_hello_hdr
     cmp     ebx, 1
-    je      .recv_server_flight
+    je      .recv_server_hello_body
+    cmp     ebx, 2
+    je      .recv_server_flight_hdr
+    cmp     ebx, 3
+    je      .recv_server_flight_body
     mov     dword [r13], 0
     xor     eax, eax
     pop     r13
@@ -597,20 +606,32 @@ er_tcp_recv:
     pop     rbx
     ret
 
-.recv_server_hello:
+.recv_server_hello_hdr:
     mov     rdi, r12
     lea     rsi, [rel server_hello]
-    mov     edx, server_hello_len
+    mov     edx, TLS_RECORD_HEADER_LEN
     call    er_memcpy
-    mov     dword [r13], server_hello_len
+    mov     dword [r13], TLS_RECORD_HEADER_LEN
     xor     eax, eax
     pop     r13
     pop     r12
     pop     rbx
     ret
 
-.recv_server_flight:
+.recv_server_hello_body:
     mov     rdi, r12
+    lea     rsi, [rel server_hello + TLS_RECORD_HEADER_LEN]
+    mov     edx, server_hello_len - TLS_RECORD_HEADER_LEN
+    call    er_memcpy
+    mov     dword [r13], server_hello_len - TLS_RECORD_HEADER_LEN
+    xor     eax, eax
+    pop     r13
+    pop     r12
+    pop     rbx
+    ret
+
+.recv_server_flight_hdr:
+    lea     rdi, [rel record_buf]
     lea     rsi, [rel server_flight]
     mov     edx, server_flight_len
     mov     ecx, TLS_RECORD_HANDSHAKE
@@ -620,6 +641,26 @@ er_tcp_recv:
     push    rax
     call    er_tls_record_encrypt
     add     rsp, 8
+    mov     [rel tcp_flight_len], eax
+    mov     rdi, r12
+    lea     rsi, [rel record_buf]
+    mov     edx, TLS_RECORD_HEADER_LEN
+    call    er_memcpy
+    mov     dword [r13], TLS_RECORD_HEADER_LEN
+    xor     eax, eax
+    pop     r13
+    pop     r12
+    pop     rbx
+    ret
+
+.recv_server_flight_body:
+    mov     rdi, r12
+    lea     rsi, [rel record_buf + TLS_RECORD_HEADER_LEN]
+    mov     edx, [rel tcp_flight_len]
+    sub     edx, TLS_RECORD_HEADER_LEN
+    call    er_memcpy
+    mov     eax, [rel tcp_flight_len]
+    sub     eax, TLS_RECORD_HEADER_LEN
     mov     [r13], eax
     xor     eax, eax
     pop     r13

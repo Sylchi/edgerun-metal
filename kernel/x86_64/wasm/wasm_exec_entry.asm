@@ -50,6 +50,7 @@ er_fn er_fn_exec
     mov     rax, [code_buf + r10 + 24] ; decoded_start
     mov     [exec_decoded_index], rax
     mov     rax, [code_buf + r10 + 32] ; decoded_count
+    add     rax, [exec_decoded_index]
     mov     [exec_decoded_end], rax
     pop     r10
 
@@ -103,8 +104,37 @@ er_fn er_fn_exec
     mov     qword [exec_control_len], 0
     mov     qword [exec_reader_offset], 0
 
-    ; Canonical execution path. JIT execution is explicit via er_wasm_jit_exec.
+    mov     rax, [exec_decoded_index]
+    cmp     rax, [exec_fast_cache_start]
+    jne     .fast_cache_miss
+    mov     rax, [exec_decoded_end]
+    cmp     rax, [exec_fast_cache_end]
+    jne     .fast_cache_miss
+    mov     rax, [exec_fast_cache_state]
+    cmp     rax, 1
+    je      .dispatch_fast
+    cmp     rax, 2
+    je      .dispatch_full
+
+.fast_cache_miss:
+    mov     rax, [exec_decoded_index]
+    mov     [exec_fast_cache_start], rax
+    mov     rax, [exec_decoded_end]
+    mov     [exec_fast_cache_end], rax
+    call    exec_decoded_fast_supported
+    test    rdx, rdx
+    jnz     .fast_mark_unsupported
+    mov     qword [exec_fast_cache_state], 1
+.dispatch_fast:
+    call    exec_decoded_fast_loop
+    jmp     .dispatch_done
+
+.fast_mark_unsupported:
+    mov     qword [exec_fast_cache_state], 2
+.dispatch_full:
     call    exec_dispatch_loop
+
+.dispatch_done:
     mov     r15, rax      ; save return value
     mov     r14, rdx      ; save error code
 

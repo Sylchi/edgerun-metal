@@ -38,6 +38,7 @@ str_title:  db "zig native x86 vs wasm interpreter vs wasm jit", 10, 0
 str_native: db "native_x86_cycles: ", 0
 str_interp: db "wasm_interp_cycles: ", 0
 str_jit:    db "wasm_jit_cycles:    ", 0
+str_jit_direct: db "wasm_jit_direct_cycles: ", 0
 str_fail:   db "FAIL", 10, 0
 str_done:   db "done", 10, 0
 
@@ -121,24 +122,43 @@ _start:
     cmp     eax, r12d
     jne     fail
 
+    call    clear_exec_frame
+    mov     qword [rel fail_stage], 8
     call    bench_native
+    mov     r12, rax
     lea     rdi, [rel str_native]
     call    puts
-    mov     rdi, rax
+    mov     rdi, r12
     call    puthex64
     call    newline
 
+    call    clear_exec_frame
+    mov     qword [rel fail_stage], 9
     call    bench_interp
+    mov     r12, rax
     lea     rdi, [rel str_interp]
     call    puts
-    mov     rdi, rax
+    mov     rdi, r12
     call    puthex64
     call    newline
 
+    call    clear_exec_frame
+    mov     qword [rel fail_stage], 10
     call    bench_jit
+    mov     r12, rax
     lea     rdi, [rel str_jit]
     call    puts
-    mov     rdi, rax
+    mov     rdi, r12
+    call    puthex64
+    call    newline
+
+    call    clear_exec_frame
+    mov     qword [rel fail_stage], 11
+    call    bench_jit_direct
+    mov     r12, rax
+    lea     rdi, [rel str_jit_direct]
+    call    puts
+    mov     rdi, r12
     call    puthex64
     call    newline
 
@@ -180,6 +200,14 @@ make_jit_cache_executable:
     jnz     fail
     ret
 
+clear_exec_frame:
+    mov     qword [rel exec_local_count], 0
+    mov     qword [rel exec_stack_len], 0
+    mov     qword [rel exec_control_len], 0
+    mov     qword [rel exec_reader_offset], 0
+    mov     qword [rel exec_frame_save_ptr], 0
+    ret
+
 bench_native:
     rdtscp
     shl     rdx, 32
@@ -212,7 +240,7 @@ bench_interp:
     mov     edx, 1
     call    er_fn_exec
     test    rdx, rdx
-    jnz     fail
+    jnz     fail_error
     dec     r13d
     jnz     .loop
     rdtscp
@@ -236,7 +264,32 @@ bench_jit:
     mov     edx, 1
     call    er_wasm_jit_exec
     test    rdx, rdx
-    jnz     fail
+    jnz     fail_error
+    dec     r13d
+    jnz     .loop
+    rdtscp
+    shl     rdx, 32
+    or      rax, rdx
+    sub     rax, r14
+    xor     edx, edx
+    mov     r13d, ITERS_JIT
+    div     r13
+    ret
+
+bench_jit_direct:
+    mov     rbx, [rel func_idx]
+    mov     rbx, [rel jit_table + rbx * 8]
+    test    rbx, rbx
+    jz      fail
+    rdtscp
+    shl     rdx, 32
+    or      rax, rdx
+    mov     r14, rax
+    mov     r13d, ITERS_JIT
+.loop:
+    mov     qword [rel exec_locals], 12345
+    lea     r15, [rel jit_globals]
+    call    rbx
     dec     r13d
     jnz     .loop
     rdtscp

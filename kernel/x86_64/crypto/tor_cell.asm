@@ -13,6 +13,7 @@
 %include "x86_64/crypto/tls_constants.inc"
 
 extern er_tcp_connect
+extern er_tcp_get_state
 extern er_tls_connect
 extern er_tls_send
 extern er_tls_recv
@@ -152,18 +153,120 @@ _tor_cell_recv:
     mov     edi, [tor_conn_id]
     mov     rsi, rbx
     lea     rdx, [tor_recv_len]
+    mov     dword [rdx], TOR_CELL_HEADER_LEN
     call    er_tls_recv
+    test    eax, eax
+    js      .fail
+    cmp     dword [tor_recv_len], TOR_CELL_HEADER_LEN
+    jne     .fail
 
     ; Receive remainder of cell
     ; TCP recv may return partial data; keep reading until full
     mov     edi, [tor_conn_id]
-    lea     rsi, [rbx + 5]
+    lea     rsi, [rbx + TOR_CELL_HEADER_LEN]
     lea     rdx, [tor_recv_len]
-    mov     dword [rdx], 509
+    mov     dword [rdx], TOR_CELL_PAYLOAD_LEN
     call    er_tls_recv
+    test    eax, eax
+    js      .fail
+    cmp     dword [tor_recv_len], TOR_CELL_PAYLOAD_LEN
+    jne     .fail
 
     xor     eax, eax
     er_ok
+    pop     rbx
+    ret
+.fail:
+    mov     eax, -1
+    er_err  ERROR_TOR_PROTOCOL_ERR
+    pop     rbx
+    ret
+
+_tor_recv_versions_cell:
+    push    rbx
+    push    r12
+
+    mov     rbx, rdi
+    mov     edi, [tor_conn_id]
+    mov     rsi, rbx
+    lea     rdx, [tor_recv_len]
+    mov     dword [rdx], TOR_VERSIONS_HEADER
+    call    er_tls_recv
+    test    eax, eax
+    js      .fail
+    cmp     dword [tor_recv_len], TOR_VERSIONS_HEADER
+    jne     .fail
+    cmp     byte [rbx + 2], TOR_CELL_VERSIONS
+    jne     .fail
+
+    movzx   r12d, word [rbx + 3]
+    rol     r12w, 8
+    cmp     r12d, TOR_CELL_VAR_MAX
+    ja      .fail
+    test    r12d, 1
+    jnz     .fail
+
+    mov     edi, [tor_conn_id]
+    lea     rsi, [rbx + TOR_VERSIONS_HEADER]
+    lea     rdx, [tor_recv_len]
+    mov     [rdx], r12d
+    call    er_tls_recv
+    test    eax, eax
+    js      .fail
+    cmp     [tor_recv_len], r12d
+    jne     .fail
+
+    xor     eax, eax
+    er_ok
+    pop     r12
+    pop     rbx
+    ret
+.fail:
+    mov     eax, -1
+    er_err  ERROR_TOR_PROTOCOL_ERR
+    pop     r12
+    pop     rbx
+    ret
+
+_tor_recv_var_cell:
+    push    rbx
+    push    r12
+
+    mov     rbx, rdi
+    mov     edi, [tor_conn_id]
+    mov     rsi, rbx
+    lea     rdx, [tor_recv_len]
+    mov     dword [rdx], TOR_VAR_HEADER
+    call    er_tls_recv
+    test    eax, eax
+    js      .fail
+    cmp     dword [tor_recv_len], TOR_VAR_HEADER
+    jne     .fail
+
+    movzx   r12d, word [rbx + TOR_VAR_LEN]
+    rol     r12w, 8
+    cmp     r12d, TOR_CELL_VAR_MAX
+    ja      .fail
+
+    mov     edi, [tor_conn_id]
+    lea     rsi, [rbx + TOR_VAR_PAYLOAD]
+    lea     rdx, [tor_recv_len]
+    mov     [rdx], r12d
+    call    er_tls_recv
+    test    eax, eax
+    js      .fail
+    cmp     [tor_recv_len], r12d
+    jne     .fail
+
+    xor     eax, eax
+    er_ok
+    pop     r12
+    pop     rbx
+    ret
+.fail:
+    mov     eax, -1
+    er_err  ERROR_TOR_PROTOCOL_ERR
+    pop     r12
     pop     rbx
     ret
 
@@ -175,14 +278,17 @@ SECTION .text
 
 _tor_build_versions_cell:
     ; circ_id = 0
-    mov     dword [rdi + TOR_VAR_CIRC_ID], 0
+    mov     word [rdi], 0
     ; cmd = VERSIONS
-    mov     byte [rdi + TOR_VAR_CMD], TOR_CELL_VERSIONS
+    mov     byte [rdi + 2], TOR_CELL_VERSIONS
     ; len = 4 (two 16-bit versions)
-    mov     word [rdi + TOR_VAR_LEN], 0x0004  ; big-endian
+    mov     byte [rdi + 3], 0
+    mov     byte [rdi + 4], 4
     ; versions: [4, 5]
-    mov     word [rdi + TOR_VAR_PAYLOAD], 0x0004
-    mov     word [rdi + TOR_VAR_PAYLOAD + 2], 0x0005
+    mov     byte [rdi + TOR_VERSIONS_HEADER], 0
+    mov     byte [rdi + TOR_VERSIONS_HEADER + 1], TOR_LINK_V4
+    mov     byte [rdi + TOR_VERSIONS_HEADER + 2], 0
+    mov     byte [rdi + TOR_VERSIONS_HEADER + 3], TOR_LINK_V5
     ret
 
 _tor_parse_versions:
@@ -190,62 +296,73 @@ _tor_parse_versions:
     mov     rbx, rdi        ; cell
 
     ; Cell is variable-length
-    ; payload starts at offset 7
-    lea     rsi, [rbx + TOR_VAR_PAYLOAD]
-    movzx   ecx, word [rbx + TOR_VAR_LEN]
+    ; Initial VERSIONS uses v=0, so the payload starts after a
+    ; 2-byte CircID, 1-byte command, and 2-byte length.
+    lea     rsi, [rbx + TOR_VERSIONS_HEADER]
+    movzx   ecx, word [rbx + 3]
     xchg    cl, ch           ; big-endian to host
     shr     ecx, 1           ; number of version entries
 
-    xor     eax, eax         ; result = -1
-    dec     eax
+    xor     eax, eax         ; highest supported common version
 
 .check_ver:
     test    ecx, ecx
-    jz      .done
-    movzx   r8d, word [rsi]
-    xchg    r8b, r8b         ; big-endian to host
+    jz      .done_check
+    movzx   r8d, byte [rsi]
+    shl     r8d, 8
+    movzx   r9d, byte [rsi + 1]
+    or      r8d, r9d
 
     ; Check if we support this version (4 or 5)
     cmp     r8w, TOR_LINK_V4
-    je      .found
+    je      .maybe_found
     cmp     r8w, TOR_LINK_V5
-    je      .found
-    cmp     r8w, TOR_LINK_V3
-    je      .found
+    je      .maybe_found
 
     add     rsi, 2
     dec     ecx
     jmp     .check_ver
 
-.found:
-    movzx   eax, r8w        ; return this version
+.maybe_found:
+    cmp     r8d, eax
+    jbe     .next_ver
+    mov     eax, r8d
+.next_ver:
+    add     rsi, 2
+    dec     ecx
+    jmp     .check_ver
 
+.done_check:
+    test    eax, eax
+    jnz     .done
+    mov     eax, -1
 .done:
     pop     rbx
     ret
 
 _tor_build_netinfo_cell:
-    ; circ_id = 0
-    mov     dword [rdi + TOR_VAR_CIRC_ID], 0
-    ; cmd = NETINFO
-    mov     byte [rdi + TOR_VAR_CMD], TOR_CELL_NETINFO
-    ; len = 2 (+ timestamp + my_addr + other_addr)
-    ; Minimal: timestamp=0, my_addr type=4 (IPv4), len=4, addr=0, other=0
-    ; Total: 2 + 4 + 1 + 1 + 4 + 1 + 0 = 13
-    mov     word [rdi + TOR_VAR_LEN], 0x000D
+    push    rbx
+    mov     rbx, rdi
+    xor     esi, esi
+    mov     edx, TOR_CELL_LEN
+    call    er_memset
 
-    ; Timestamp (4 bytes, big-endian)
-    mov     dword [rdi + TOR_VAR_PAYLOAD], 0
+    ; NETINFO is a fixed-length cell after link version negotiation.
+    mov     dword [rbx + TOR_CELL_CIRC_ID], 0
+    mov     byte [rbx + TOR_CELL_CMD], TOR_CELL_NETINFO
 
-    ; My address: type=4 (IPv4), len=4
-    mov     byte [rdi + TOR_VAR_PAYLOAD + 4], 4
-    mov     byte [rdi + TOR_VAR_PAYLOAD + 5], 4
-    ; IP address (big-endian, 0 = any)
-    mov     dword [rdi + TOR_VAR_PAYLOAD + 6], 0
+    ; Client timestamp is zero to avoid fingerprinting.
+    mov     dword [rbx + TOR_CELL_PAYLOAD], 0
 
-    ; Other addresses: type=0 (none)
-    mov     byte [rdi + TOR_VAR_PAYLOAD + 10], 0
+    ; OTHERADDR: IPv4 0.0.0.0 when the observed address is unknown.
+    mov     byte [rbx + TOR_CELL_PAYLOAD + 4], 4
+    mov     byte [rbx + TOR_CELL_PAYLOAD + 5], 4
+    mov     dword [rbx + TOR_CELL_PAYLOAD + 6], 0
 
+    ; Clients send no advertised addresses of their own.
+    mov     byte [rbx + TOR_CELL_PAYLOAD + 10], 0
+
+    pop     rbx
     ret
 
 _tor_build_certs_cell:
@@ -254,7 +371,8 @@ _tor_build_certs_cell:
     ; cmd = CERTS
     mov     byte [rdi + TOR_VAR_CMD], TOR_CELL_CERTS
     ; len = 3 (n_certs=0)
-    mov     word [rdi + TOR_VAR_LEN], 0x0001
+    mov     byte [rdi + TOR_VAR_LEN], 0
+    mov     byte [rdi + TOR_VAR_LEN + 1], 1
     ; n_certs = 0 (no certs for anonymous auth)
     mov     byte [rdi + TOR_VAR_PAYLOAD], 0
     ret
@@ -269,7 +387,8 @@ _tor_build_authenticate_cell:
     ; cmd = AUTHENTICATE
     mov     byte [rbx + TOR_VAR_CMD], TOR_CELL_AUTHENTICATE
     ; len = 1 (auth_type = ANON, no body)
-    mov     word [rbx + TOR_VAR_LEN], 0x0001
+    mov     byte [rbx + TOR_VAR_LEN], 0
+    mov     byte [rbx + TOR_VAR_LEN + 1], 1
     ; Auth type = 5 (anonymous)
     mov     byte [rbx + TOR_VAR_PAYLOAD], TOR_AUTHTYPE_ANON
 
@@ -333,6 +452,25 @@ er_fn er_tor_link_handshake
 .connected2:
     mov     [tor_conn_id], eax
 
+    mov     ecx, TOR_TCP_ESTABLISH_POLLS
+.wait_tcp_established:
+    push    rcx
+    call    er_net_poll
+    pop     rcx
+
+    push    rcx
+    mov     edi, [tor_conn_id]
+    call    er_tcp_get_state
+    pop     rcx
+    test    eax, eax
+    js      .connect_fail
+    cmp     eax, TCP_ESTABLISHED
+    je      .tcp_ready
+    dec     ecx
+    jnz     .wait_tcp_established
+    jmp     .connect_fail
+
+.tcp_ready:
     ; TLS is mandatory for Tor OR links. Start TLS and fail closed
     ; until the TLS module reports an active encrypted record layer.
     mov     ecx, 500
@@ -361,7 +499,7 @@ er_fn er_tor_link_handshake
 
     mov     edi, [tor_conn_id]
     mov     rsi, tor_var_cell
-    mov     edx, TOR_VAR_HEADER + 4
+    mov     edx, TOR_VERSIONS_HEADER + 4
     call    er_tls_send
     test    eax, eax
     js      .send_fail
@@ -369,16 +507,13 @@ er_fn er_tor_link_handshake
 .versions_sent:
 
     ; Read VERSIONS cell response
-    mov     edi, [tor_conn_id]
-    mov     rsi, tor_var_cell
-    lea     rdx, [tor_recv_len]
-    mov     dword [rdx], TOR_VAR_HEADER + 4
-    call    er_tls_recv
+    mov     rdi, tor_var_cell
+    call    _tor_recv_versions_cell
     test    eax, eax
     js      .recv_fail
 
     ; Check command is VERSIONS
-    cmp     byte [tor_var_cell + TOR_VAR_CMD], TOR_CELL_VERSIONS
+    cmp     byte [tor_var_cell + 2], TOR_CELL_VERSIONS
     jne     .proto_fail
 
     ; Parse versions
@@ -389,25 +524,9 @@ er_fn er_tor_link_handshake
 
     mov     [tor_link_version], eax
 
-    ; Send CERTS cell (no certs for anonymous)
-    mov     rdi, tor_var_cell
-    call    _tor_build_certs_cell
-
-    mov     edi, [tor_conn_id]
-    mov     rsi, tor_var_cell
-    movzx   edx, word [tor_var_cell + TOR_VAR_LEN]
-    xchg    dl, dh
-    add     edx, TOR_VAR_HEADER
-    call    er_tls_send
-    test    eax, eax
-    js      .send_fail
-
     ; Wait for CERTS from relay
-    mov     edi, [tor_conn_id]
-    mov     rsi, tor_var_cell
-    lea     rdx, [tor_recv_len]
-    mov     dword [rdx], 256
-    call    er_tls_recv
+    mov     rdi, tor_var_cell
+    call    _tor_recv_var_cell
     test    eax, eax
     js      .recv_fail
 
@@ -416,11 +535,8 @@ er_fn er_tor_link_handshake
     jne     .proto_fail
 
     ; Wait for AUTH_CHALLENGE
-    mov     edi, [tor_conn_id]
-    mov     rsi, tor_var_cell
-    lea     rdx, [tor_recv_len]
-    mov     dword [rdx], 256
-    call    er_tls_recv
+    mov     rdi, tor_var_cell
+    call    _tor_recv_var_cell
     test    eax, eax
     js      .recv_fail
 
@@ -432,16 +548,13 @@ er_fn er_tor_link_handshake
     ; Format: challenge_len(2) + challenge(len) + methods_len(1) + methods
     lea     rsi, [tor_var_cell + TOR_VAR_PAYLOAD]
 
-    ; Send AUTHENTICATE (anonymous)
-    mov     rdi, tor_var_cell
-    call    _tor_build_authenticate_cell
-
-    mov     edi, [tor_conn_id]
-    mov     rsi, tor_var_cell
-    mov     edx, TOR_VAR_HEADER + 1  ; 1 byte auth type
-    call    er_tls_send
+    ; Wait for responder NETINFO before sending our client NETINFO.
+    mov     rsi, tor_rx_cell
+    call    _tor_cell_recv
     test    eax, eax
-    js      .send_fail
+    js      .recv_fail
+    cmp     byte [tor_rx_cell + TOR_CELL_CMD], TOR_CELL_NETINFO
+    jne     .proto_fail
 
     ; Send NETINFO
     mov     rdi, tor_var_cell
@@ -449,25 +562,10 @@ er_fn er_tor_link_handshake
 
     mov     edi, [tor_conn_id]
     mov     rsi, tor_var_cell
-    movzx   edx, word [tor_var_cell + TOR_VAR_LEN]
-    xchg    dl, dh
-    add     edx, TOR_VAR_HEADER
+    mov     edx, TOR_CELL_LEN
     call    er_tls_send
     test    eax, eax
     js      .send_fail
-
-    ; Wait for NETINFO from relay
-    mov     edi, [tor_conn_id]
-    mov     rsi, tor_var_cell
-    lea     rdx, [tor_recv_len]
-    mov     dword [rdx], 256
-    call    er_tls_recv
-    test    eax, eax
-    js      .recv_fail
-
-    ; Verify NETINFO
-    cmp     byte [tor_var_cell + TOR_VAR_CMD], TOR_CELL_NETINFO
-    jne     .proto_fail
 
     ; Link established!
     mov     dword [tor_link_established], 1

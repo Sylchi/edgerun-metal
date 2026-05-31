@@ -453,7 +453,134 @@ er_wasm_jit_compile:
     cmp     bl, 0x0F
     je      .handle_return
 
+    cmp     bl, 0x22
+    je      .try_local_tee_xor_shift_fuse
+    cmp     bl, 0x41
+    je      .try_i32_const_fuse
+
     ; --- All other ops: use template table ---
+    lea     rax, [rel jit_template_table]
+    mov     rax, [rax + rbx * 8]
+    lea     rcx, [rel jit_template_unsupported]
+    cmp     rax, rcx
+    je      .unsupported_template
+
+    mov     qword [rel jit_template_error], 0
+    push    r13
+    push    r14
+    call    rax
+    pop     r14
+    pop     r13
+
+    mov     rdx, [rel jit_template_error]
+    test    rdx, rdx
+    jnz     .compile_error
+
+    inc     r13
+    jmp     .compile_loop
+
+.try_local_tee_xor_shift_fuse:
+    mov     rax, r13
+    add     rax, 4
+    cmp     rax, r14
+    jae     .compile_template_current
+
+    mov     rsi, r13
+    inc     rsi
+    imul    rsi, DECODED_OP_SIZE
+    lea     rsi, [rel decoded_ops + rsi]
+    cmp     byte [rsi + 8], 0x41      ; i32.const
+    jne     .compile_template_current
+    mov     r11d, [rsi + 12]          ; shift amount
+
+    mov     rax, r13
+    add     rax, 2
+    imul    rax, DECODED_OP_SIZE
+    lea     rsi, [rel decoded_ops + rax]
+    cmp     byte [rsi + 8], 0x76      ; i32.shr_u
+    jne     .compile_template_current
+
+    mov     rax, r13
+    add     rax, 3
+    imul    rax, DECODED_OP_SIZE
+    lea     rsi, [rel decoded_ops + rax]
+    cmp     byte [rsi + 8], 0x20      ; local.get
+    jne     .compile_template_current
+    mov     eax, [rsi + 12]
+    cmp     eax, [rdi + 12]
+    jne     .compile_template_current
+
+    mov     rax, r13
+    add     rax, 4
+    imul    rax, DECODED_OP_SIZE
+    lea     rsi, [rel decoded_ops + rax]
+    cmp     byte [rsi + 8], 0x73      ; i32.xor
+    jne     .compile_template_current
+
+    xor     ecx, ecx
+    call    jit_emit_pop_reg          ; rax = tee value
+    call    jit_emit_mov_ecx_eax
+    mov     eax, r11d
+    call    jit_emit_shr_ecx_imm8
+    call    jit_emit_xor32
+    xor     ecx, ecx
+    call    jit_emit_push_reg
+    add     r13, 5
+    jmp     .compile_loop
+
+.try_i32_const_fuse:
+    mov     rax, r13
+    inc     rax
+    cmp     rax, r14
+    jae     .compile_template_current
+
+    mov     rsi, rax
+    imul    rsi, DECODED_OP_SIZE
+    lea     rsi, [rel decoded_ops + rsi]
+    movzx   eax, byte [rsi + 8]
+
+    cmp     al, 0x6A
+    je      .fuse_i32_const_add
+    cmp     al, 0x6C
+    je      .fuse_i32_const_mul
+    cmp     al, 0x76
+    je      .fuse_i32_const_shr_u
+    jmp     .compile_template_current
+
+.fuse_i32_const_add:
+    mov     r11d, [rdi + 12]
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    mov     eax, r11d
+    call    jit_emit_add_eax_imm32
+    xor     ecx, ecx
+    call    jit_emit_push_reg
+    add     r13, 2
+    jmp     .compile_loop
+
+.fuse_i32_const_mul:
+    mov     r11d, [rdi + 12]
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    mov     eax, r11d
+    call    jit_emit_imul_eax_imm32
+    xor     ecx, ecx
+    call    jit_emit_push_reg
+    add     r13, 2
+    jmp     .compile_loop
+
+.fuse_i32_const_shr_u:
+    mov     r11d, [rdi + 12]
+    xor     ecx, ecx
+    call    jit_emit_pop_reg
+    mov     eax, r11d
+    call    jit_emit_shr_eax_imm8
+    xor     ecx, ecx
+    call    jit_emit_push_reg
+    add     r13, 2
+    jmp     .compile_loop
+
+.compile_template_current:
     lea     rax, [rel jit_template_table]
     mov     rax, [rax + rbx * 8]
     lea     rcx, [rel jit_template_unsupported]
@@ -769,7 +896,7 @@ er_wasm_jit_exec:
 
     mov     r12, rdi            ; function_index
     mov     r13, rsi            ; args ptr
-    mov     r14, rdx            ; args count
+    xor     r14d, r14d          ; saved-frame flag
 
     ; Ensure init
     cmp     byte [rel jit_initialized], 0
@@ -796,6 +923,7 @@ er_wasm_jit_exec:
     je      .exec_no_save
     call    exec_save_frame_state
     jc      .exec_error
+    mov     r14d, 1
 .exec_no_save:
 
     ; Set up locals from args (same as interpreter)
@@ -856,13 +984,23 @@ er_wasm_jit_exec:
     ; Normal compiled arithmetic returns only rax. Compile-time refusals are
     ; surfaced before this call; runtime traps must use explicit trap paths.
     mov     r15, rax             ; save return value
-    xor     r14d, r14d           ; save error code
+    xor     r13d, r13d           ; save error code
 
-    ; Restore previous frame
+    ; Restore previous frame only when this call interrupted an active frame.
+    test    r14, r14
+    jz      .exec_clear_top_frame
     call    exec_restore_frame_state
+    jmp     .exec_return_ok
 
+.exec_clear_top_frame:
+    mov     qword [rel exec_local_count], 0
+    mov     qword [rel exec_stack_len], 0
+    mov     qword [rel exec_control_len], 0
+    mov     qword [rel exec_reader_offset], 0
+
+.exec_return_ok:
     mov     rax, r15
-    mov     rdx, r14
+    mov     rdx, r13
     jmp     .exec_done
 
 .exec_error:

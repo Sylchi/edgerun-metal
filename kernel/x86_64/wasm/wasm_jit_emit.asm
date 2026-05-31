@@ -58,18 +58,20 @@ er_fn jit_emit_sib
 
 ; ------------------------------------------------------------------
 ; Build ModRM: mod + reg + rm
-; cl = mod (0-3), ch = reg (0-7), edx_low = rm (0-7)
+; edi = mod (0-3), ecx = reg (0-7), edx = rm (0-7)
 ; Returns ModRM byte in al
 ; -----------------------------------------------------------------+
 er_fn jit_build_modrm
-    shl     ecx, 3          ; reg << 3
-    or      ecx, edx        ; | rm
-    mov     eax, ecx
-    and     al, 0xC7        ; mask mod bits to 0
-    mov     ecx, edi        ; mod
-    and     ecx, 3
-    shl     ecx, 6          ; mod << 6
-    or      eax, ecx
+    mov     eax, edi        ; mod
+    and     eax, 3
+    shl     eax, 6
+    mov     r10d, ecx       ; reg
+    and     r10d, 7
+    shl     r10d, 3
+    or      eax, r10d
+    mov     r10d, edx       ; rm
+    and     r10d, 7
+    or      eax, r10d
     ret
 
 ; ------------------------------------------------------------------
@@ -244,6 +246,70 @@ er_fn jit_emit_add32
     call    jit_emit_byte
     mov     al, 0xC8         ; ModRM: mod=11, reg=1(ecx), rm=0(eax) → add eax, ecx
     call    jit_emit_modrm
+    ret
+
+; ------------------------------------------------------------------
+; Emit: add eax, imm32
+; eax = imm32
+; -----------------------------------------------------------------+
+er_fn jit_emit_add_eax_imm32
+    push    rax
+    mov     al, 0x05
+    call    jit_emit_byte
+    pop     rax
+    call    jit_emit_dword
+    ret
+
+; ------------------------------------------------------------------
+; Emit: imul eax, eax, imm32
+; eax = imm32
+; -----------------------------------------------------------------+
+er_fn jit_emit_imul_eax_imm32
+    push    rax
+    mov     al, 0x69
+    call    jit_emit_byte
+    mov     al, 0xC0
+    call    jit_emit_modrm
+    pop     rax
+    call    jit_emit_dword
+    ret
+
+; ------------------------------------------------------------------
+; Emit: shr eax, imm8
+; al = imm8
+; -----------------------------------------------------------------+
+er_fn jit_emit_shr_eax_imm8
+    push    rax
+    mov     al, 0xC1
+    call    jit_emit_byte
+    mov     al, 0xE8
+    call    jit_emit_modrm
+    pop     rax
+    call    jit_emit_byte
+    ret
+
+; ------------------------------------------------------------------
+; Emit: mov ecx, eax
+; -----------------------------------------------------------------+
+er_fn jit_emit_mov_ecx_eax
+    mov     al, 0x89
+    call    jit_emit_byte
+    mov     al, 0xC1
+    call    jit_emit_modrm
+    ret
+
+; ------------------------------------------------------------------
+; Emit: shr ecx, imm8
+; al = imm8
+; -----------------------------------------------------------------+
+er_fn jit_emit_shr_ecx_imm8
+    push    rax
+    mov     al, 0xC1
+    call    jit_emit_byte
+    mov     al, 0xE9
+    call    jit_emit_modrm
+    pop     rax
+    call    jit_emit_byte
     ret
 
 ; ------------------------------------------------------------------

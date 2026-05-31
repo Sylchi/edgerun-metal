@@ -32,16 +32,22 @@ pub const Slider = struct {
     pub fn render(self: Slider, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         const value = options.drag_value orelse self.value;
         const clamped = ui.clampUnit(value);
-        const label_h = @min(bounds.h, component_primitives.measuredTextHeight(self.label, bounds.w, slider_label_height, slider_label_max_lines));
-        try text_component.Text.renderWrapped(scene, ui.Rect.init(bounds.x, bounds.y, bounds.w, label_h), self.label, options.style.text, component_primitives.textWrap(self.label, slider_label_height, slider_label_max_lines));
-        const track_y = bounds.y + @min(label_h + slider_label_track_gap, @max(0.0, bounds.h - slider_track_height));
+        const label_h = if (self.label.len == 0) 0.0 else @min(bounds.h, component_primitives.measuredTextHeight(self.label, bounds.w, slider_label_height, slider_label_max_lines));
+        if (self.label.len != 0) {
+            try text_component.Text.renderWrapped(scene, ui.Rect.init(bounds.x, bounds.y, bounds.w, label_h), self.label, options.style.text, component_primitives.textWrap(self.label, slider_label_height, slider_label_max_lines));
+        }
+        const track_y = if (self.label.len == 0)
+            bounds.y + (bounds.h - slider_track_height) * 0.5
+        else
+            bounds.y + @min(label_h + slider_label_track_gap, @max(0.0, bounds.h - slider_track_height));
         const track = ui.Rect.init(bounds.x, track_y, bounds.w, slider_track_height);
         try renderTrack(scene, track, clamped, options);
-        const thumb_center = track.x + track.w * clamped;
+        const thumb_center = std.math.clamp(track.x + track.w * clamped, track.x + slider_thumb_size * 0.5, track.x + track.w - slider_thumb_size * 0.5);
         const thumb = ui.Rect.init(thumb_center - slider_thumb_size * 0.5, track.y + (track.h - slider_thumb_size) * 0.5, slider_thumb_size, slider_thumb_size);
         try scene.pushRect(thumb.insetUniform(-slider_thumb_shadow_inset), slider_thumb_shadow, .shadow, slider_thumb_size * 0.5, slider_thumb_shadow_size);
         try scene.pushRect(thumb, options.style.panel, .fill, slider_thumb_size * 0.5, 0.0);
         try scene.pushRect(thumb.insetUniform(3.0), options.style.accent, .fill, (slider_thumb_size - 6.0) * 0.5, 0.0);
+        try component_primitives.renderControlStateOverlay(scene, bounds, options, slider_track_height * 0.5);
     }
 
     pub fn collectInteractions(self: Slider, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
@@ -96,13 +102,13 @@ const slider_label_max_lines: usize = 2;
 const slider_label_track_gap: f32 = 12.0;
 const slider_track_height: f32 = 8.0;
 pub const slider_thumb_size: f32 = 18.0;
-const slider_thumb_shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 104 };
+const slider_thumb_shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 64 };
 const slider_thumb_shadow_inset: f32 = 1.0;
-const slider_thumb_shadow_size: f32 = 6.0;
-const slider_track_shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 88 };
-const slider_track_floor = ui.Color{ .r = 5, .g = 7, .b = 10, .a = 80 };
+const slider_thumb_shadow_size: f32 = 4.0;
+const slider_track_shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 46 };
+const slider_track_floor = ui.Color{ .r = 5, .g = 7, .b = 10, .a = 34 };
 const slider_track_shadow_inset: f32 = 1.0;
-const slider_track_shadow_size: f32 = 3.0;
+const slider_track_shadow_size: f32 = 2.0;
 const slider_min_width: f32 = 120.0;
 const slider_min_height: f32 = 32.0;
 
@@ -131,6 +137,23 @@ test "slider component clamps rendered fill and thumb to track" {
     try std.testing.expectEqual(@as(f32, 120.0), fill.w);
     const thumb = component_test.lastFillRect(scene.written()).?;
     try std.testing.expect(thumb.x + thumb.w <= bounds.x + bounds.w + slider_thumb_size * 0.5);
+}
+
+test "slider with empty label centers track and keeps thumb inside bounds" {
+    const slider = Slider{ .id = 13, .label = "", .value = 0.0 };
+    var commands: [16]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+    const bounds = ui.Rect.init(10, 20, 120, 34);
+
+    try slider.render(&scene, bounds, .{});
+
+    const thumb = component_test.lastFillRect(scene.written()).?;
+    try std.testing.expect(thumb.x >= bounds.x);
+    try std.testing.expect(thumb.x + thumb.w <= bounds.x + bounds.w);
+    for (scene.written()) |command| switch (command) {
+        .text => return error.UnexpectedText,
+        else => {},
+    };
 }
 
 test "slider measurement wraps long labels under narrow constraints" {

@@ -37,6 +37,7 @@ TLS_HANDSHAKE_HEADER_LEN        equ 4
 TLS_RANDOM_LEN                  equ 32
 TLS_SESSION_ID_LEN              equ 32
 TLS_X25519_KEY_LEN              equ 32
+TLS_AES_128_KEY_LEN             equ 16
 
 TLS_EXT_SUPPORTED_VERSIONS_LEN  equ 7
 TLS_EXT_SUPPORTED_GROUPS_LEN    equ 8

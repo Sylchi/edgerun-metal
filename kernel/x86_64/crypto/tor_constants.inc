@@ -29,6 +29,7 @@ TOR_CELL_RESOLVED    equ 133
 TOR_CELL_LEN         equ 514   ; fixed-length cell (2 + 1 + 1 + 509 + 1 padding)
 TOR_CELL_HEADER_LEN  equ 5     ; circ_id(2) + cmd(1) + payload(1+...)
 TOR_CELL_PAYLOAD_LEN equ 509   ; fixed cell payload
+TOR_VERSIONS_HEADER  equ 5     ; initial VERSIONS uses v=0: circ_id(2)+cmd(1)+len(2)
 TOR_CELL_VAR_HEADER  equ 7     ; var cell: circ_id(4) + cmd(1) + len(2)
 TOR_CELL_VAR_MAX     equ 65535 ; max variable cell payload
 TOR_VAR_HEADER       equ TOR_CELL_VAR_HEADER  ; alias for convenience
@@ -176,6 +177,7 @@ TOR_RECV_BUF_SIZE        equ 65536
 TOR_MAX_CIRCUITS         equ 4
 TOR_MAX_STREAMS          equ 8
 TOR_MAX_RELAYS           equ 8     ; max hops in a circuit
+TOR_TCP_ESTABLISH_POLLS  equ 65536
 
 ; ==================================================================
 ; Circuit data structure (per-circuit)

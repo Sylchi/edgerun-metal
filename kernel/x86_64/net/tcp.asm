@@ -7,6 +7,7 @@
 %include "x86_64/net/net_constants.inc"
 
 extern er_ip_send
+extern er_net_get_ip
 extern er_checksum
 extern er_memcpy
 extern er_memset
@@ -116,6 +117,11 @@ er_fn er_tcp_connect
     mov     r13w, si        ; dst_port (host order)
     mov     r14d, edx       ; src_ip (network order)
     mov     r15w, cx        ; src_port (host order, 0 = auto)
+    test    r14d, r14d
+    jnz     .have_src_ip
+    call    er_net_get_ip
+    mov     r14d, eax
+.have_src_ip:
 
     ; Find free connection slot
     xor     ebx, ebx
