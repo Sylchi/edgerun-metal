@@ -92,6 +92,7 @@ extern er_xhci_cmd_submit_enable_slot
 extern er_xhci_event_pop
 extern er_xhci_cmd_wait_completion
 extern er_xhci_get_cmd_debug
+extern er_xhci_evt_get_slot_id
 extern er_uvc_probe
 extern er_uvc_get_caps
 extern er_uvc_stream_config
@@ -278,6 +279,7 @@ check_xhci_enq: db " enq ", 0
 check_xhci_cyc: db " cyc ", 0
 check_xhci_st: db " st ", 0
 check_xhci_ctl: db " ctl ", 0
+check_xhci_sid: db " sid ", 0
 check_uvc_abs: db "absent", 0
 check_uvc_caps: db " caps ", 0
 check_uvc_rgb: db " rgb ", 0
@@ -389,6 +391,7 @@ xhci_dbg_enq: resd 1
 xhci_dbg_cyc: resd 1
 xhci_rx_count: resd 1
 xhci_last_cc: resd 1
+xhci_slot_id: resd 1
 
 %define VIRTIO_NET_STORAGE_size 4900
 virtio_net_dev:      resb VIRTIO_NET_DEVICE_size
@@ -1309,6 +1312,9 @@ er_fn er_kernel_main
     shr     eax, 10
     and     eax, 0x3F
     mov     [rel xhci_evt_type], eax
+    mov     edi, [rel xhci_evt_ctl]
+    call    er_xhci_evt_get_slot_id
+    mov     [rel xhci_slot_id], eax
     mov     rdi, COM1_PORT
     lea     rsi, [rel check_xhci_txrx]
     call    er_serial_puts
@@ -1378,6 +1384,12 @@ er_fn er_kernel_main
     mov     rdi, COM1_PORT
     mov     esi, [rel xhci_evt_ctl]
     call    er_serial_puthex32
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_xhci_sid]
+    call    er_serial_puts
+    mov     rdi, COM1_PORT
+    mov     esi, [rel xhci_slot_id]
+    call    er_serial_putdec32
 
     mov     edi, 1
     call    er_uvc_probe

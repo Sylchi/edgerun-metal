@@ -247,11 +247,11 @@ pub fn clampAppScrollToViewport(width: u32, height: u32) void {
 }
 
 pub fn refreshLocationPathProjection() void {
-    state.route_len = state.app_navigation.writePathProjection(&state.route_bytes, state.native_input_state.route) catch unreachable;
+    state.location_path_projection_len = state.app_navigation.writePathProjection(&state.location_path_projection_bytes, state.native_input_state.location) catch unreachable;
 }
 
 pub fn refreshLocationHashProjection() void {
-    state.route_hash_len = state.app_navigation.writeHashProjection(&state.route_hash_bytes, state.native_input_state.route) catch unreachable;
+    state.location_hash_projection_len = state.app_navigation.writeHashProjection(&state.location_hash_projection_bytes, state.native_input_state.location) catch unreachable;
 }
 
 pub fn recordAction(action: state.ui_runtime.Action) void {
@@ -287,10 +287,10 @@ pub fn hasIconId(items: []const state.ui.Command, icon_id: u32) bool {
     return false;
 }
 
-pub fn sourceLabelForHit(route: state.app_navigation.Location, hit_id: u32, out: []u8) ?[]const u8 {
+pub fn sourceLabelForHit(location: state.app_navigation.Location, hit_id: u32, out: []u8) ?[]const u8 {
     if (hit_id == 0) return null;
     const component_gallery = @import("../ui/component_gallery.zig");
-    if (!state.app_navigation.isAppPreview(route)) return null;
+    if (!state.app_navigation.isAppPreview(location)) return null;
     const index = component_gallery.indexByCatalogHit(hit_id) orelse component_gallery.indexByPreviewHit(hit_id) orelse return null;
     return component_gallery.sourcePathForIndex(index, out);
 }

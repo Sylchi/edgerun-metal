@@ -7,14 +7,10 @@ pub const object_id_bytes = 32;
 pub const object_id_hex_bytes = object_id_bytes * 2;
 pub const object_projection_prefix = "/o/";
 pub const object_hash_projection_prefix = "#/o/";
-pub const location_path_capacity: usize = object_projection_prefix.len + object_id_hex_bytes;
-pub const location_hash_capacity: usize = object_hash_projection_prefix.len + object_id_hex_bytes;
-pub const route_path_capacity: usize = location_path_capacity;
-pub const route_hash_capacity: usize = location_hash_capacity;
+pub const path_projection_capacity: usize = object_projection_prefix.len + object_id_hex_bytes;
+pub const hash_projection_capacity: usize = object_hash_projection_prefix.len + object_id_hex_bytes;
 pub const source_workspace_button_id: u32 = 30_012;
 pub const app_preview_button_id: u32 = 30_000;
-pub const backend_button_id: u32 = source_workspace_button_id;
-pub const frontend_button_id: u32 = app_preview_button_id;
 pub const reveal_identity_button_id: u32 = 15_001;
 
 pub const TypeObject = struct {
@@ -55,16 +51,12 @@ pub const Location = struct {
     object: ObjectId = source_workspace_location_object,
 };
 
-pub const Route = Location;
-
 pub const LocationFixture = struct {
     name: []const u8,
     location: Location,
     path: []const u8,
     hash: []const u8,
 };
-
-pub const RouteFixture = LocationFixture;
 
 pub const source_workspace_location_object = hexId("3ceeb2766f06e254fd48cf0a0767fd75117e03b14931b1a0d93a2f0657815a34");
 pub const app_preview_location_object = hexId("db0ce6ac80b7fe48a3d8bb96cfb9106428626754c15be4a410d9c197bab19675");
@@ -84,15 +76,11 @@ pub const location_fixtures = [_]LocationFixture{
     },
 };
 
-pub const route_fixtures = location_fixtures;
-
 pub const LocationFor = union(enum) {
     button: MainButton,
     action: Action,
     object: ObjectId,
 };
-
-pub const RouteFor = LocationFor;
 
 pub fn subNavBinding(kind: SubNavBinding) TopLevelBinding {
     return switch (kind) {
@@ -109,16 +97,8 @@ pub fn locationFor(target: LocationFor) ?Location {
     };
 }
 
-pub fn routeFor(target: RouteFor) ?Route {
-    return locationFor(target);
-}
-
 pub fn locationForButton(button: MainButton) Location {
     return topLevelBinding(button).location;
-}
-
-pub fn routeForButton(button: MainButton) Route {
-    return locationForButton(button);
 }
 
 pub fn locationForAction(action: Action) ?Location {
@@ -126,24 +106,15 @@ pub fn locationForAction(action: Action) ?Location {
     return null;
 }
 
-pub fn routeForAction(action: Action) ?Route {
-    return locationForAction(action);
-}
-
 pub fn locationForObject(object: ObjectId) Location {
     return .{ .object = object };
 }
 
-pub fn routeForSlug(slug: []const u8) Route {
-    _ = slug;
-    return .{};
-}
-
-pub fn fromPath(path: []const u8) Location {
+pub fn fromPathProjection(path: []const u8) Location {
     return parseProjection(path) catch .{};
 }
 
-pub fn fromHash(hash: []const u8) Location {
+pub fn fromHashProjection(hash: []const u8) Location {
     return parseProjection(hash) catch .{};
 }
 
@@ -169,16 +140,16 @@ pub fn actionId(action: Action) u32 {
     unreachable;
 }
 
-pub fn writePath(out: []u8, location: Location) error{RouteBufferTooSmall}!usize {
+pub fn writePathProjection(out: []u8, location: Location) error{ProjectionBufferTooSmall}!usize {
     return writeProjection(out, object_projection_prefix, location.object);
 }
 
-pub fn writeHash(out: []u8, location: Location) error{RouteBufferTooSmall}!usize {
+pub fn writeHashProjection(out: []u8, location: Location) error{ProjectionBufferTooSmall}!usize {
     return writeProjection(out, object_hash_projection_prefix, location.object);
 }
 
-pub fn pathFromHash(hash: []const u8) error{InvalidRouteHash}![]const u8 {
-    if (!bytes.startsWith(hash, object_hash_projection_prefix)) return error.InvalidRouteHash;
+pub fn pathProjectionFromHashProjection(hash: []const u8) error{InvalidLocationProjection}![]const u8 {
+    if (!bytes.startsWith(hash, object_hash_projection_prefix)) return error.InvalidLocationProjection;
     return hash[1..];
 }
 
@@ -191,7 +162,6 @@ pub fn isAppPreview(location: Location) bool {
 }
 
 pub const LocationBinding = struct { id: u32, location: Location };
-pub const HitRoute = LocationBinding;
 pub const ActionBinding = struct { id: u32, action: Action };
 
 pub const Contract = struct {
@@ -262,8 +232,6 @@ pub const static_locations = [_]LocationBinding{
     .{ .id = app_preview_button_id, .location = .{ .object = app_preview_location_object } },
 };
 
-pub const static_routes = static_locations;
-
 pub fn contract() Contract {
     return .{
         .static_locations = &static_locations,
@@ -271,21 +239,21 @@ pub fn contract() Contract {
     };
 }
 
-fn writeProjection(out: []u8, prefix: []const u8, object: ObjectId) error{RouteBufferTooSmall}!usize {
-    if (prefix.len + object_id_hex_bytes > out.len) return error.RouteBufferTooSmall;
+fn writeProjection(out: []u8, prefix: []const u8, object: ObjectId) error{ProjectionBufferTooSmall}!usize {
+    if (prefix.len + object_id_hex_bytes > out.len) return error.ProjectionBufferTooSmall;
     @memcpy(out[0..prefix.len], prefix);
     writeHex(out[prefix.len..][0..object_id_hex_bytes], object);
     return prefix.len + object_id_hex_bytes;
 }
 
-fn parseProjection(value: []const u8) error{InvalidRouteHash}!Location {
+fn parseProjection(value: []const u8) error{InvalidLocationProjection}!Location {
     const raw = if (bytes.startsWith(value, object_hash_projection_prefix))
         value[object_hash_projection_prefix.len..]
     else if (bytes.startsWith(value, object_projection_prefix))
         value[object_projection_prefix.len..]
     else
-        return error.InvalidRouteHash;
-    if (raw.len != object_id_hex_bytes) return error.InvalidRouteHash;
+        return error.InvalidLocationProjection;
+    if (raw.len != object_id_hex_bytes) return error.InvalidLocationProjection;
     var object: ObjectId = undefined;
     try readHex(raw, &object);
     return .{ .object = object };
@@ -298,10 +266,10 @@ fn writeHex(out: []u8, value: ObjectId) void {
     }
 }
 
-fn readHex(raw: []const u8, out: *ObjectId) error{InvalidRouteHash}!void {
+fn readHex(raw: []const u8, out: *ObjectId) error{InvalidLocationProjection}!void {
     for (out, 0..) |*byte, index| {
-        const hi = hexValue(raw[index * 2]) orelse return error.InvalidRouteHash;
-        const lo = hexValue(raw[index * 2 + 1]) orelse return error.InvalidRouteHash;
+        const hi = hexValue(raw[index * 2]) orelse return error.InvalidLocationProjection;
+        const lo = hexValue(raw[index * 2 + 1]) orelse return error.InvalidLocationProjection;
         byte.* = (hi << 4) | lo;
     }
 }
@@ -354,16 +322,16 @@ comptime {
 
 test "navigation projections are content object ids" {
     for (location_fixtures) |snapshot| {
-        var path: [location_path_capacity]u8 = undefined;
-        var hash: [location_hash_capacity]u8 = undefined;
+        var path: [path_projection_capacity]u8 = undefined;
+        var hash: [hash_projection_capacity]u8 = undefined;
 
-        const path_len = try writePath(&path, snapshot.location);
+        const path_len = try writePathProjection(&path, snapshot.location);
         try std.testing.expectEqualStrings(snapshot.path, path[0..path_len]);
-        try std.testing.expectEqual(snapshot.location, fromPath(snapshot.path));
+        try std.testing.expectEqual(snapshot.location, fromPathProjection(snapshot.path));
 
-        const hash_len = try writeHash(&hash, snapshot.location);
+        const hash_len = try writeHashProjection(&hash, snapshot.location);
         try std.testing.expectEqualStrings(snapshot.hash, hash[0..hash_len]);
-        try std.testing.expectEqual(snapshot.location, fromHash(snapshot.hash));
+        try std.testing.expectEqual(snapshot.location, fromHashProjection(snapshot.hash));
     }
 
     try std.testing.expect(isSourceWorkspace(locationForButton(.source_workspace)));

@@ -53,7 +53,7 @@ pub fn clearHover(state: *State) void {
     state.last_action_kind = .none;
 }
 
-pub fn applyRoute(state: *State, location: app_navigation.Location) void {
+pub fn applyLocation(state: *State, location: app_navigation.Location) void {
     state.location = location;
     state.scroll_y = 0.0;
 }
@@ -61,7 +61,7 @@ pub fn applyRoute(state: *State, location: app_navigation.Location) void {
 pub fn activateHovered(state: *State) void {
     const hover_hit_id = state.runtime.hoverHitId();
     if (app_navigation.fromHit(hover_hit_id, state.location)) |location| {
-        applyRoute(state, location);
+        applyLocation(state, location);
         return;
     }
     if (hover_hit_id == app_agent.open_host_binary_button_id) {
@@ -182,8 +182,8 @@ fn expectLocation(actual: app_navigation.Location, expected: app_navigation.Loca
 }
 
 fn expectLocationProjections(location: app_navigation.Location, expected_path: []const u8, expected_hash: []const u8) !void {
-    var path_buf: [app_navigation.path_projection_capacity]u8 = undefined;
-    var hash_buf: [app_navigation.hash_projection_capacity]u8 = undefined;
+    var path_buf: [app_navigation.location_path_capacity]u8 = undefined;
+    var hash_buf: [app_navigation.location_hash_capacity]u8 = undefined;
 
     const path_len = try app_navigation.writePathProjection(&path_buf, location);
     const hash_len = try app_navigation.writeHashProjection(&hash_buf, location);

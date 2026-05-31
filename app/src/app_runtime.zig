@@ -325,11 +325,11 @@ export fn er_ui_app_action_kind() u32 {
 }
 
 export fn er_ui_app_action_url_ptr() usize {
-    return @intFromPtr(&state.route_bytes);
+    return @intFromPtr(&state.location_path_projection_bytes);
 }
 
 export fn er_ui_app_action_url_len() usize {
-    return state.route_len;
+    return state.location_path_projection_len;
 }
 
 // -----------------------------------------------------------------
@@ -352,12 +352,12 @@ export fn er_ui_outbox_id(index: u32) u32 {
 
 export fn er_ui_outbox_target_ptr(index: u32) usize {
     _ = index;
-    return @intFromPtr(&state.route_bytes);
+    return @intFromPtr(&state.location_path_projection_bytes);
 }
 
 export fn er_ui_outbox_target_len(index: u32) usize {
     _ = index;
-    return state.route_len;
+    return state.location_path_projection_len;
 }
 
 export fn er_ui_outbox_payload_ptr(index: u32) usize {
@@ -480,26 +480,26 @@ export fn er_ui_request_release_artifact_launch() u32 {
 }
 
 // -----------------------------------------------------------------
-// Route / navigation exports
+// Location/navigation exports
 // -----------------------------------------------------------------
 
-export fn er_ui_app_route_hash_ptr() usize {
-    return @intFromPtr(&state.route_hash_bytes);
+export fn er_ui_app_location_hash_projection_ptr() usize {
+    return @intFromPtr(&state.location_hash_projection_bytes);
 }
-export fn er_ui_app_route_hash_len() usize {
-    return state.route_hash_len;
+export fn er_ui_app_location_hash_projection_len() usize {
+    return state.location_hash_projection_len;
 }
-export fn er_ui_app_route_path_ptr() usize {
-    return @intFromPtr(&state.route_bytes);
+export fn er_ui_app_location_path_projection_ptr() usize {
+    return @intFromPtr(&state.location_path_projection_bytes);
 }
-export fn er_ui_app_route_path_len() usize {
-    return state.route_len;
+export fn er_ui_app_location_path_projection_len() usize {
+    return state.location_path_projection_len;
 }
 
-export fn er_ui_app_set_route_path(path_len: usize) u32 {
+export fn er_ui_app_set_location_path_projection(path_len: usize) u32 {
     const path = state.input_bytes[0..path_len];
-    const route = app_navigation.fromPathProjection(path);
-    input.applyLocation(route);
+    const location = app_navigation.fromPathProjection(path);
+    input.applyLocation(location);
     render.refreshLocationPathProjection();
     render.refreshLocationHashProjection();
     state.native_input_state.public_identity_ready = false;
@@ -508,10 +508,10 @@ export fn er_ui_app_set_route_path(path_len: usize) u32 {
     return @intFromEnum(state.ErrorCode.ok);
 }
 
-export fn er_ui_app_set_route_hash(hash_len: usize) u32 {
+export fn er_ui_app_set_location_hash_projection(hash_len: usize) u32 {
     const hash = state.input_bytes[0..hash_len];
-    const route = app_navigation.fromHashProjection(hash);
-    input.applyLocation(route);
+    const location = app_navigation.fromHashProjection(hash);
+    input.applyLocation(location);
     render.refreshLocationPathProjection();
     render.refreshLocationHashProjection();
     state.last_error = .ok;
@@ -519,8 +519,8 @@ export fn er_ui_app_set_route_hash(hash_len: usize) u32 {
 }
 
 export fn er_ui_app_activate_hit(hit_id: u32) u32 {
-    if (app_navigation.fromHit(hit_id, state.native_input_state.route)) |route| {
-        input.applyLocation(route);
+    if (app_navigation.fromHit(hit_id, state.native_input_state.location)) |location| {
+        input.applyLocation(location);
         render.refreshLocationPathProjection();
         render.refreshLocationHashProjection();
     } else if (app_navigation.actionFromHit(hit_id)) |action_fn| switch (action_fn) {
@@ -540,7 +540,7 @@ export fn er_ui_app_activate_hit(hit_id: u32) u32 {
         },
         .open_context_source => {
             var path_buf: [256]u8 = undefined;
-            if (render.sourceLabelForHit(state.native_input_state.route, hit_id, &path_buf)) |path| {
+            if (render.sourceLabelForHit(state.native_input_state.location, hit_id, &path_buf)) |path| {
                 state.source_editor_label = path;
                 state.source_editor_label = state.source_editor_label;
                 state.source_editor_loaded = false;
@@ -557,7 +557,7 @@ export fn er_ui_app_activate_hit(hit_id: u32) u32 {
 }
 
 export fn er_ui_app_context_menu(x: f32, y: f32) u32 {
-    if (app_navigation.isSourceWorkspace(state.native_input_state.route)) {
+    if (app_navigation.isSourceWorkspace(state.native_input_state.location)) {
         state.context_menu_open = true;
         state.context_menu_x = x;
         state.context_menu_y = y;
@@ -802,7 +802,7 @@ fn expectLocationFixture(fixture: app_navigation.LocationFixture) !void {
 }
 
 fn expectLocationState(expected: app_navigation.Location) !void {
-    try std.testing.expectEqual(expected, state.native_input_state.route);
+    try std.testing.expectEqual(expected, state.native_input_state.location);
 }
 
 test "wasm render bridge exports neutral frame and outbox names" {
@@ -895,7 +895,7 @@ test "app runtime landing builds packed app buffers and hit state" {
     try std.testing.expectEqual(@intFromEnum(ui.HitKind.button), er_ui_hover_hit_kind());
 }
 
-test "app runtime route snapshots cover canonical fixtures and dynamic families" {
+test "app runtime location snapshots cover canonical fixtures and dynamic families" {
     for (app_navigation.location_fixtures) |fixture| {
         input.applyLocation(fixture.location);
         try expectLocationFixture(fixture);
@@ -911,14 +911,14 @@ test "app runtime frontend builds packed app buffers" {
 test "app runtime activation keeps page state in wasm" {
     input.applyLocation(app_navigation.locationForButton(.app_preview));
     try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, -1.0, -1.0, 0.0));
-    try std.testing.expect(app_navigation.isAppPreview(state.native_input_state.route));
+    try std.testing.expect(app_navigation.isAppPreview(state.native_input_state.location));
 }
 
-test "app runtime route sync owns URL path state" {
+test "app runtime location projection sync owns URL path state" {
     input.applyLocation(app_navigation.locationForButton(.app_preview));
     er_ui_build_app_frame(1280, 800, -1.0, -1.0, 0.0);
-    try std.testing.expect(state.route_len > 0);
-    try std.testing.expect(state.route_hash_len > 0);
+    try std.testing.expect(state.location_path_projection_len > 0);
+    try std.testing.expect(state.location_hash_projection_len > 0);
 }
 
 test "app runtime context source jump opens exact component file" {
@@ -987,10 +987,10 @@ test "app runtime source workspace is mutable app source" {
     try std.testing.expectEqual(@as(u32, 0), er_ui_source_editor_select_label(@intCast(label.len)));
 }
 
-test "app runtime source route initializes embedded editor state" {
+test "app runtime source location initializes embedded editor state" {
     input.applyLocation(app_navigation.locationForButton(.source_workspace));
     try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, -1.0, -1.0, 0.0));
-    try std.testing.expect(app_navigation.isSourceWorkspace(state.native_input_state.route));
+    try std.testing.expect(app_navigation.isSourceWorkspace(state.native_input_state.location));
 }
 
 test "app runtime source editor rewrites a canonical vfs file" {

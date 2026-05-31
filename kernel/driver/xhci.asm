@@ -1153,3 +1153,14 @@ er_fn er_xhci_get_cmd_debug
     er_err  ERROR_BAD_ARGUMENT
     mov     eax, -1
     ret
+
+; ==================================================================
+; er_xhci_evt_get_slot_id — extract slot ID from event TRB control dword
+; uint32_t er_xhci_evt_get_slot_id(uint32_t evt_ctl)
+; ==================================================================
+er_fn er_xhci_evt_get_slot_id
+    mov     eax, edi
+    shr     eax, 24
+    and     eax, 0xFF
+    er_ok
+    ret

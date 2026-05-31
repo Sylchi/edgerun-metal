@@ -24,8 +24,8 @@ pub fn appKeyEvent(key: []const u8, ctrl: u32, meta: u32, alt: u32, shift: u32) 
     if (state.runtime_state.overlays.count == 0) {
         if (input_kind == .enter or input_kind == .space) {
             const hit_id = state.runtime_state.hoverHitId();
-            if (state.app_navigation.fromHit(hit_id, state.native_input_state.route)) |route| {
-                state.native_input_state.route = route;
+            if (state.app_navigation.fromHit(hit_id, state.native_input_state.location)) |location| {
+                state.native_input_state.location = location;
                 state.native_input_state.scroll_y = 0.0;
                 state.context_menu_open = false;
             } else if (state.app_navigation.actionFromHit(hit_id)) |action_fn| switch (action_fn) {
@@ -135,7 +135,7 @@ pub fn handleInputEventRecord(record: state.InputEventRecord, width: f32, height
             }
         },
         .context_menu => {
-            if (state.app_navigation.isSourceWorkspace(state.native_input_state.route)) {
+            if (state.app_navigation.isSourceWorkspace(state.native_input_state.location)) {
                 state.context_menu_open = true;
                 state.context_menu_x = record.x;
                 state.context_menu_y = record.y;
@@ -204,13 +204,13 @@ pub fn clearOutboxMessages() void {
     state.outbox_message_len = 0;
 }
 
-pub fn applyRoute(route: state.app_navigation.Location) void {
+pub fn applyLocation(location: state.app_navigation.Location) void {
     state.context_menu_open = false;
-    state.app_native_input.applyLocation(&state.native_input_state, route);
+    state.app_native_input.applyLocation(&state.native_input_state, location);
 }
 
 pub fn currentLocation() state.app_navigation.Location {
-    return state.native_input_state.route;
+    return state.native_input_state.location;
 }
 
 pub fn currentAppFrameState(hover_x: f32, hover_y: f32, frame_ms: f32) app_frame.State {
