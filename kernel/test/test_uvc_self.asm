@@ -4,11 +4,15 @@
 
 extern er_uvc_parse_config_caps
 extern er_uvc_set_config_blob
+extern er_xhci_set_port_config_blob
+extern er_xhci_get_port_config_blob
 
 SECTION .bss
 passed:     resq 1
 failed:     resq 1
 caps_out:   resd 1
+ptr_out:    resq 1
+len_out:    resq 1
 
 SECTION .rodata
 ; VideoControl interface + VideoStreaming interface + MJPEG format descriptor.
@@ -48,6 +52,40 @@ cfg_bad_len equ $ - cfg_bad
 SECTION .text
 global _start
 _start:
+    ; Test -1: xHCI per-port blob registry set/get/clear
+    mov     edi, 1
+    lea     rsi, [rel cfg_mjpeg]
+    mov     rdx, cfg_mjpeg_len
+    call    er_xhci_set_port_config_blob
+    cmp     eax, 0
+    jne     .fail_case
+    mov     edi, 1
+    lea     rsi, [rel ptr_out]
+    lea     rdx, [rel len_out]
+    call    er_xhci_get_port_config_blob
+    cmp     eax, 0
+    jne     .fail_case
+    mov     rax, [rel ptr_out]
+    lea     rbx, [rel cfg_mjpeg]
+    cmp     rax, rbx
+    jne     .fail_case
+    mov     rax, [rel len_out]
+    cmp     rax, cfg_mjpeg_len
+    jne     .fail_case
+    mov     edi, 1
+    xor     rsi, rsi
+    xor     rdx, rdx
+    call    er_xhci_set_port_config_blob
+    cmp     eax, 0
+    jne     .fail_case
+    mov     edi, 1
+    lea     rsi, [rel ptr_out]
+    lea     rdx, [rel len_out]
+    call    er_xhci_get_port_config_blob
+    cmp     eax, -1
+    jne     .fail_case
+    inc     qword [rel passed]
+
     ; Test 0: set/clear config blob API
     lea     rdi, [rel cfg_mjpeg]
     mov     rsi, cfg_mjpeg_len

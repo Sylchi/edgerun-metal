@@ -7,6 +7,7 @@
 
 extern er_xhci_get_info
 extern er_xhci_read_portsc
+extern er_xhci_get_port_config_blob
 
 ; Stream kinds
 %define UVC_STREAM_RGB 0
@@ -48,6 +49,8 @@ uvc_xhci_max_ports:   resd 1
 uvc_last_portsc:      resd 1
 uvc_cfg_blob_ptr:     resq 1
 uvc_cfg_blob_len:     resq 1
+uvc_port_blob_ptr:    resq 1
+uvc_port_blob_len:    resq 1
 
 SECTION .text
 
@@ -196,28 +199,64 @@ er_fn er_uvc_probe
 .port_done:
     test    r8d, r8d
     jz      .no_xhci
-    ; We have at least one attached USB device on xHCI ports.
     mov     byte [uvc_attached], 1
     mov     dword [uvc_capabilities], 0
+    mov     ecx, 1
+.caps_port_loop:
+    cmp     ecx, [uvc_xhci_max_ports]
+    ja      .caps_fallback
+    mov     edi, ecx
+    lea     rsi, [uvc_last_portsc]
+    call    er_xhci_read_portsc
+    test    eax, eax
+    jnz     .caps_next_port
+    mov     eax, [uvc_last_portsc]
+    test    eax, XHCI_PORTSC_CCS
+    jz      .caps_next_port
+    mov     edi, ecx
+    lea     rsi, [uvc_port_blob_ptr]
+    lea     rdx, [uvc_port_blob_len]
+    call    er_xhci_get_port_config_blob
+    test    eax, eax
+    jnz     .caps_next_port
+    mov     rdi, [uvc_port_blob_ptr]
+    mov     rsi, [uvc_port_blob_len]
+    lea     rdx, [uvc_last_portsc]
+    call    er_uvc_parse_config_caps
+    test    eax, eax
+    jnz     .probe_parse_fail
+    mov     eax, [uvc_capabilities]
+    or      eax, [uvc_last_portsc]
+    mov     [uvc_capabilities], eax
+.caps_next_port:
+    inc     ecx
+    jmp     .caps_port_loop
+
+.caps_fallback:
     mov     rdi, [uvc_cfg_blob_ptr]
     mov     rsi, [uvc_cfg_blob_len]
     test    rdi, rdi
     jz      .probe_ok
     test    rsi, rsi
     jz      .probe_ok
-    lea     rdx, [uvc_capabilities]
+    lea     rdx, [uvc_last_portsc]
     call    er_uvc_parse_config_caps
     test    eax, eax
-    jz      .probe_ok
-    mov     dword [uvc_capabilities], 0
-    mov     dword [uvc_last_status], ERROR_BAD_ARGUMENT
-    mov     eax, -1
-    er_err  ERROR_BAD_ARGUMENT
-    ret
+    jnz     .probe_parse_fail
+    mov     eax, [uvc_capabilities]
+    or      eax, [uvc_last_portsc]
+    mov     [uvc_capabilities], eax
 .probe_ok:
     mov     dword [uvc_last_status], ERROR_OK
     mov     eax, 1
     er_ok
+    ret
+
+.probe_parse_fail:
+    mov     dword [uvc_capabilities], 0
+    mov     dword [uvc_last_status], ERROR_BAD_ARGUMENT
+    mov     eax, -1
+    er_err  ERROR_BAD_ARGUMENT
     ret
 
 .no_xhci:

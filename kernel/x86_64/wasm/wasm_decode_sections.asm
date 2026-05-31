@@ -690,6 +690,7 @@ er_wasm_parse_global_section:
     push    rbx
     push    r12
     push    r13
+    push    r14
 
     mov     rsi, r12
     er_call er_wasm_read_leb_u32, .error
@@ -706,7 +707,7 @@ er_wasm_parse_global_section:
 
     ; Read value type
     er_call er_wasm_read_value_type, .error
-    push    rax                 ; save value_type
+    mov     r14, rax            ; save value_type
 
     ; Read mutability
     movzx   r11d, byte [rsi]
@@ -715,7 +716,7 @@ er_wasm_parse_global_section:
     ja      .corrupt
 
     ; Read constant expression
-    pop     rdi                 ; value_type for read_constant
+    mov     rdi, r14            ; value_type for read_constant
     er_call er_wasm_read_constant_value, .error
 
     ; Store global
@@ -723,7 +724,7 @@ er_wasm_parse_global_section:
     push    r10
         mov     r10, rdi
         imul    r10, GLOBAL_SIZE
-    mov     [globals_buf + r10], al      ; value_type (from read_value_type — need to save properly)
+    mov     [globals_buf + r10], r14b    ; value_type
         pop     r10
     push    r10
         mov     r10, rdi
@@ -753,6 +754,7 @@ er_wasm_parse_global_section:
 .error:
     mov     edx, edx
 .out:
+    pop     r14
     pop     r13
     pop     r12
     pop     rbx

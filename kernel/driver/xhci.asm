@@ -78,6 +78,7 @@ extern er_serial_crlf
 ; ─── Ring sizes ─────────────────────────────────────────────────────
 %define CMD_RING_NTRB    16
 %define EVT_RING_NTRB    16
+%define XHCI_BLOB_PORT_SLOTS 32
 
 ; ─── BSS ────────────────────────────────────────────────────────────
 SECTION .bss
@@ -97,6 +98,8 @@ xhci_db_off:       resd 1
 xhci_max_slots:    resd 1
 xhci_max_ports:    resd 1
 xhci_hci_rev:      resd 1
+xhci_cfg_blob_ptrs: resq XHCI_BLOB_PORT_SLOTS
+xhci_cfg_blob_lens: resq XHCI_BLOB_PORT_SLOTS
 
 ; ─── Text ───────────────────────────────────────────────────────────
 SECTION .text
@@ -685,6 +688,84 @@ er_fn er_xhci_read_portsc
     mov     eax, -1
     ret
 .rp_absent:
+    er_err  ERROR_NOT_PRESENT
+    mov     eax, -1
+    ret
+
+; ==================================================================
+; er_xhci_set_port_config_blob — install/clear descriptor blob for port
+; int er_xhci_set_port_config_blob(uint32_t port_index, const void* ptr, uint64_t len)
+; port_index is 1-based. clear by ptr=0,len=0.
+; ==================================================================
+er_fn er_xhci_set_port_config_blob
+    cmp     edi, 1
+    jb      .sp_bad_arg
+    cmp     edi, XHCI_BLOB_PORT_SLOTS
+    ja      .sp_bad_arg
+    test    rsi, rsi
+    jz      .sp_clear_or_bad
+    test    rdx, rdx
+    jz      .sp_bad_arg
+    mov     eax, edi
+    dec     eax
+    lea     rcx, [xhci_cfg_blob_ptrs]
+    lea     r8, [xhci_cfg_blob_lens]
+    mov     [rcx + rax*8], rsi
+    mov     [r8 + rax*8], rdx
+    xor     eax, eax
+    er_ok
+    ret
+.sp_clear_or_bad:
+    test    rdx, rdx
+    jnz     .sp_bad_arg
+    mov     eax, edi
+    dec     eax
+    lea     rcx, [xhci_cfg_blob_ptrs]
+    lea     r8, [xhci_cfg_blob_lens]
+    mov     qword [rcx + rax*8], 0
+    mov     qword [r8 + rax*8], 0
+    xor     eax, eax
+    er_ok
+    ret
+.sp_bad_arg:
+    er_err  ERROR_BAD_ARGUMENT
+    mov     eax, -1
+    ret
+
+; ==================================================================
+; er_xhci_get_port_config_blob — fetch descriptor blob for port
+; int er_xhci_get_port_config_blob(uint32_t port_index, uint64_t* out_ptr, uint64_t* out_len)
+; Returns ERROR_NOT_PRESENT when no blob installed for the port.
+; ==================================================================
+er_fn er_xhci_get_port_config_blob
+    cmp     edi, 1
+    jb      .gp_bad_arg
+    cmp     edi, XHCI_BLOB_PORT_SLOTS
+    ja      .gp_bad_arg
+    test    rsi, rsi
+    jz      .gp_bad_arg
+    test    rdx, rdx
+    jz      .gp_bad_arg
+    mov     eax, edi
+    dec     eax
+    lea     rcx, [xhci_cfg_blob_ptrs]
+    lea     r8, [xhci_cfg_blob_lens]
+    mov     r9, [rcx + rax*8]
+    mov     r10, [r8 + rax*8]
+    test    r9, r9
+    jz      .gp_absent
+    test    r10, r10
+    jz      .gp_absent
+    mov     [rsi], r9
+    mov     [rdx], r10
+    xor     eax, eax
+    er_ok
+    ret
+.gp_bad_arg:
+    er_err  ERROR_BAD_ARGUMENT
+    mov     eax, -1
+    ret
+.gp_absent:
     er_err  ERROR_NOT_PRESENT
     mov     eax, -1
     ret

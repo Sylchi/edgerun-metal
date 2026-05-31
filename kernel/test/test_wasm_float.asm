@@ -536,6 +536,12 @@ str_t52: db "  f64 trunc NaN trap...", 0
 str_pass: db "PASS", 0
 str_fail: db "FAIL", 0
 nl: db 10
+global_section_i32:
+    db 0x01              ; global count
+    db 0x7F              ; i32
+    db 0x00              ; immutable
+    db 0x41, 0x2A        ; i32.const 42
+    db 0x0B              ; end
 
 ; ==================================================================
 ; BSS
@@ -552,6 +558,23 @@ global _start
 _start:
 
     mov     qword [rel test_fail], 0
+
+    ; Global parser must preserve the declared value type separately
+    ; from the constant expression value returned in rax.
+    mov     qword [rel global_count], 0
+    lea     r12, [rel global_section_i32]
+    call    er_wasm_parse_global_section
+    test    rdx, rdx
+    jnz     .fail
+    cmp     qword [rel global_count], 1
+    jne     .fail
+    cmp     byte [rel globals_buf], VALUE_TAG_I32
+    jne     .fail
+    cmp     byte [rel globals_buf + 1], 0
+    jne     .fail
+    cmp     qword [rel globals_buf + 8], 42
+    jne     .fail
+    mov     qword [rel global_count], 0
 
     ; --- Common runtime memory setup ---
     lea     rax, [rel dummy_mem]

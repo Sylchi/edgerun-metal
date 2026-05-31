@@ -54,8 +54,8 @@ pub fn renderNativeAppScene(scene: *ui.Scene, collector: *interaction.Collector,
     }
     if (hardware_mode) {
         if (hardware_state) |hs| {
-            hs.refresh();
-            try hs.render(scene, bounds, .{});
+            hs.tick();
+            try hs.render(scene, collector, bounds, hardwareRenderOptions(state));
         }
         return;
     }
@@ -168,7 +168,6 @@ pub const NativeApp = struct {
     }
 
     pub fn render(self: *NativeApp, client_ptr: *client.WaylandClient) !void {
-        std.debug.print("RENDER hardware={} dashboard={}\n", .{ self.hardware, self.dashboard });
         var scene = ui.Scene.initWithClips(&self.commands, &self.clips);
         var collector = interaction.Collector.init(&self.regions);
         try renderNativeAppScene(&scene, &collector, self.surface.width, self.surface.height, self.state, &self.dashboard_app, self.dashboard, &self.hardware_app, self.hardware);
@@ -254,6 +253,9 @@ pub const NativeApp = struct {
                 if (button == protocol.wl_pointer_button_left) {
                     if (state == protocol.wl_pointer_button_released) {
                         app_native_input.processPointerEvent(&self.state, &.{}, self.regionSlice(), .pointer_up);
+                        if (self.hardware and self.state.last_action_kind == .activated) {
+                            self.hardware_app.activate(self.state.runtime.hoverHitId());
+                        }
                         try self.activateClientDecoration(client_ptr);
                     } else {
                         app_native_input.processPointerEvent(&self.state, &.{}, self.regionSlice(), .pointer_down);
@@ -291,6 +293,16 @@ pub fn hasText(commands: []const ui.Command, value: []const u8) bool {
         if (command == .text and bytes_mod.eql(command.text.value, value)) return true;
     }
     return false;
+}
+
+fn hardwareRenderOptions(state: AppState) @import("../ui/component_common.zig").RenderOptions {
+    return .{
+        .interaction = .{
+            .hovered_id = if (state.runtime.hovered) |hit| hit.id else null,
+            .active_id = if (state.runtime.active) |hit| hit.id else null,
+            .focused_id = if (state.runtime.focused) |hit| hit.id else null,
+        },
+    };
 }
 
 pub fn hasRectColor(commands: []const ui.Command, color: ui.Color) bool {
