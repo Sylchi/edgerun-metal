@@ -149,6 +149,10 @@ pub const State = struct {
 
     pub fn pointerDown(self: *State, commands: []const ui.Command, regions: []const interaction.Region, x: f32, y: f32) Action {
         const hit = input.hitTest(regions, x, y);
+        return self.pointerDownRouted(commands, hit, x, y);
+    }
+
+    pub fn pointerDownRouted(self: *State, commands: []const ui.Command, hit: ?interaction.Region, x: f32, y: f32) Action {
         self.hovered = hit;
         self.active = hit;
         self.focused = hit orelse self.focused;
@@ -275,7 +279,11 @@ pub const State = struct {
     }
 
     pub fn pointerMove(self: *State, commands: []const ui.Command, regions: []const interaction.Region, x: f32, y: f32) Action {
-        self.hovered = input.hitTest(regions, x, y);
+        return self.pointerMoveRouted(commands, input.hitTest(regions, x, y), x, y);
+    }
+
+    pub fn pointerMoveRouted(self: *State, commands: []const ui.Command, hit: ?interaction.Region, x: f32, y: f32) Action {
+        self.hovered = hit;
         if (self.drag) |*drag| {
             drag.current_x = x;
             drag.current_y = y;
@@ -296,8 +304,14 @@ pub const State = struct {
     }
 
     pub fn pointerUp(self: *State, commands: []const ui.Command, regions: []const interaction.Region, x: f32, y: f32) Action {
+        return self.pointerUpRouted(commands, input.hitTest(regions, x, y), x, y);
+    }
+
+    pub fn pointerUpRouted(self: *State, commands: []const ui.Command, hit: ?interaction.Region, x: f32, y: f32) Action {
+        _ = x;
+        _ = y;
         _ = commands;
-        self.hovered = input.hitTest(regions, x, y);
+        self.hovered = hit;
 
         self.persisted_value = self.drag_value;
         self.drag_value = null;

@@ -84,7 +84,7 @@ const SceneState = struct {
             .w = @floatFromInt(width),
             .h = @floatFromInt(height),
         }, .{
-            .route = app_navigation.locationForButton(.app_preview),
+            .location = app_navigation.locationForButton(.app_preview),
             .public_identity = "drm-gbm-gpu",
             .public_identity_ready = true,
         });

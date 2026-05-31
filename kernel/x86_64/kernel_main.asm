@@ -88,8 +88,10 @@ extern er_nvme_print_ns_info
 extern er_xhci_probe
 extern er_xhci_init
 extern er_xhci_cmd_submit_noop
+extern er_xhci_cmd_submit_enable_slot
 extern er_xhci_event_pop
 extern er_xhci_cmd_wait_completion
+extern er_xhci_get_cmd_debug
 extern er_uvc_probe
 extern er_uvc_get_caps
 extern er_uvc_stream_config
@@ -270,6 +272,12 @@ check_xhci_rx: db " rx ", 0
 check_xhci_rxcc: db " cc ", 0
 check_xhci_evt: db " evt ", 0
 check_xhci_ptr: db " cmdtrb ", 0
+check_xhci_ring: db " ring ", 0
+check_xhci_last: db " last ", 0
+check_xhci_enq: db " enq ", 0
+check_xhci_cyc: db " cyc ", 0
+check_xhci_st: db " st ", 0
+check_xhci_ctl: db " ctl ", 0
 check_uvc_abs: db "absent", 0
 check_uvc_caps: db " caps ", 0
 check_uvc_rgb: db " rgb ", 0
@@ -375,6 +383,12 @@ xhci_evt_ctl: resd 1
 xhci_evt_rsv: resd 1
 xhci_tx_goal: resd 1
 xhci_evt_type: resd 1
+xhci_dbg_ring: resq 1
+xhci_dbg_last: resq 1
+xhci_dbg_enq: resd 1
+xhci_dbg_cyc: resd 1
+xhci_rx_count: resd 1
+xhci_last_cc: resd 1
 
 %define VIRTIO_NET_STORAGE_size 4900
 virtio_net_dev:      resb VIRTIO_NET_DEVICE_size
@@ -1268,14 +1282,9 @@ er_fn er_kernel_main
     ; xHCI command/event TX/RX smoke test:
     ; submit two No-Op commands and count completion events.
     mov     dword [rel xhci_tx_goal], 0
-    xor     r11d, r11d          ; rx_cmd_success
-    xor     r9d, r9d            ; last completion code
-    call    er_xhci_cmd_submit_noop
-    test    eax, eax
-    jnz     .xhci_txrx_submit2
-    inc     dword [rel xhci_tx_goal]
-.xhci_txrx_submit2:
-    call    er_xhci_cmd_submit_noop
+    mov     dword [rel xhci_rx_count], 0
+    mov     dword [rel xhci_last_cc], 0
+    call    er_xhci_cmd_submit_enable_slot
     test    eax, eax
     jnz     .xhci_txrx_poll
     inc     dword [rel xhci_tx_goal]
@@ -1286,26 +1295,16 @@ er_fn er_kernel_main
     lea     rcx, [rel xhci_evt_p0]
     call    er_xhci_cmd_wait_completion
     test    eax, eax
-    jnz     .xhci_txrx_second_wait
-    inc     r11d
-    mov     eax, [rel xhci_evt_st]
-    mov     r9d, eax
-    mov     eax, [rel xhci_tx_goal]
-    cmp     eax, 1
-    jbe     .xhci_txrx_done
-
-.xhci_txrx_second_wait:
-    mov     edi, 10000
-    lea     rsi, [rel xhci_evt_st]
-    lea     rdx, [rel xhci_evt_ctl]
-    lea     rcx, [rel xhci_evt_p0]
-    call    er_xhci_cmd_wait_completion
-    test    eax, eax
     jnz     .xhci_txrx_done
-    inc     r11d
+    inc     dword [rel xhci_rx_count]
     mov     eax, [rel xhci_evt_st]
-    mov     r9d, eax
+    mov     [rel xhci_last_cc], eax
 .xhci_txrx_done:
+    lea     rdi, [rel xhci_dbg_ring]
+    lea     rsi, [rel xhci_dbg_last]
+    lea     rdx, [rel xhci_dbg_enq]
+    lea     rcx, [rel xhci_dbg_cyc]
+    call    er_xhci_get_cmd_debug
     mov     eax, [rel xhci_evt_ctl]
     shr     eax, 10
     and     eax, 0x3F
@@ -1323,13 +1322,13 @@ er_fn er_kernel_main
     lea     rsi, [rel check_xhci_rx]
     call    er_serial_puts
     mov     rdi, COM1_PORT
-    mov     esi, r11d
+    mov     esi, [rel xhci_rx_count]
     call    er_serial_putdec32
     mov     rdi, COM1_PORT
     lea     rsi, [rel check_xhci_rxcc]
     call    er_serial_puts
     mov     rdi, COM1_PORT
-    mov     esi, r9d
+    mov     esi, [rel xhci_last_cc]
     call    er_serial_putdec32
     mov     rdi, COM1_PORT
     lea     rsi, [rel check_xhci_evt]
@@ -1343,6 +1342,42 @@ er_fn er_kernel_main
     mov     rdi, COM1_PORT
     mov     rsi, [rel xhci_evt_p0]
     call    er_serial_puthex64
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_xhci_ring]
+    call    er_serial_puts
+    mov     rdi, COM1_PORT
+    mov     rsi, [rel xhci_dbg_ring]
+    call    er_serial_puthex64
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_xhci_last]
+    call    er_serial_puts
+    mov     rdi, COM1_PORT
+    mov     rsi, [rel xhci_dbg_last]
+    call    er_serial_puthex64
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_xhci_enq]
+    call    er_serial_puts
+    mov     rdi, COM1_PORT
+    mov     esi, [rel xhci_dbg_enq]
+    call    er_serial_putdec32
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_xhci_cyc]
+    call    er_serial_puts
+    mov     rdi, COM1_PORT
+    mov     esi, [rel xhci_dbg_cyc]
+    call    er_serial_putdec32
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_xhci_st]
+    call    er_serial_puts
+    mov     rdi, COM1_PORT
+    mov     esi, [rel xhci_evt_st]
+    call    er_serial_puthex32
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_xhci_ctl]
+    call    er_serial_puts
+    mov     rdi, COM1_PORT
+    mov     esi, [rel xhci_evt_ctl]
+    call    er_serial_puthex32
 
     mov     edi, 1
     call    er_uvc_probe

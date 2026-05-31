@@ -60,7 +60,7 @@ pub fn renderNativeAppScene(scene: *ui.Scene, collector: *interaction.Collector,
         return;
     }
     try app_frame.render(scene, collector, bounds, .{
-        .route = state.route,
+        .location = state.location,
         .scroll_y = state.scroll_y,
         .hover_x = state.hover_x,
         .hover_y = state.hover_y,
@@ -146,7 +146,7 @@ pub const NativeApp = struct {
         self.allocator = allocator;
         self.region_len = 0;
         self.state = .{
-            .route = app_navigation.fromPath(options.path),
+            .location = app_navigation.fromPathProjection(options.path),
             .public_identity = "native-wayland",
             .reveal_identity = "native-wayland",
         };
@@ -215,7 +215,7 @@ pub const NativeApp = struct {
                 try client_ptr.sendHidePointerCursor(serial);
                 self.state.hover_x = fixedToFloat(std.mem.readInt(i32, message.payload[8..12], .little));
                 self.state.hover_y = fixedToFloat(std.mem.readInt(i32, message.payload[12..16], .little));
-                app_native_input.processPointerEvent(&self.state, &.{}, self.regionSlice(), .pointer_move);
+                app_native_input.processPointerEvent(&self.state, &.{}, self.regionSlice(), null, .pointer_move);
                 return true;
             },
             protocol.wl_pointer_leave_event => {
@@ -237,7 +237,7 @@ pub const NativeApp = struct {
                 const old_kind = self.state.cursorKind();
                 self.state.hover_x = fixedToFloat(std.mem.readInt(i32, message.payload[4..8], .little));
                 self.state.hover_y = fixedToFloat(std.mem.readInt(i32, message.payload[8..12], .little));
-                app_native_input.processPointerEvent(&self.state, &.{}, self.regionSlice(), .pointer_move);
+                app_native_input.processPointerEvent(&self.state, &.{}, self.regionSlice(), null, .pointer_move);
                 if (self.state.runtime.hoverHitId() != old_hit) return true;
                 if (self.surface.present == .cpu and self.surface.base_pixels_ready) {
                     try self.surface.renderCursorOnly(client_ptr, old_x, old_y, old_kind, self.state.hover_x, self.state.hover_y, self.state.cursorKind());
@@ -252,13 +252,13 @@ pub const NativeApp = struct {
                 const state = std.mem.readInt(u32, message.payload[12..16], .little);
                 if (button == protocol.wl_pointer_button_left) {
                     if (state == protocol.wl_pointer_button_released) {
-                        app_native_input.processPointerEvent(&self.state, &.{}, self.regionSlice(), .pointer_up);
+                        app_native_input.processPointerEvent(&self.state, &.{}, self.regionSlice(), null, .pointer_up);
                         if (self.hardware and self.state.last_action_kind == .activated) {
                             self.hardware_app.activate(self.state.runtime.hoverHitId());
                         }
                         try self.activateClientDecoration(client_ptr);
                     } else {
-                        app_native_input.processPointerEvent(&self.state, &.{}, self.regionSlice(), .pointer_down);
+                        app_native_input.processPointerEvent(&self.state, &.{}, self.regionSlice(), null, .pointer_down);
                         if (self.state.runtime.hoverHitId() == protocol.client_decor_drag_id) try client_ptr.sendMove(serial);
                     }
                 }

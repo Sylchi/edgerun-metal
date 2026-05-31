@@ -622,20 +622,20 @@ test "wayland host renders the source app scene through the shared frame" {
     var collector = interaction.Collector.init(&regions);
     var dash_state: app_dashboard.State = .{};
     try renderNativeAppScene(&scene, &collector, 1280, 800, .{
-        .route = app_navigation.locationForButton(.source_workspace),
+        .location = app_navigation.locationForButton(.source_workspace),
     }, &dash_state, false, null, false);
     try std.testing.expect(hasText(scene.written(), "workspace"));
     try std.testing.expect(scene.written().len > 0);
 }
 
-test "wayland host renders frontend route through canonical ir" {
+test "wayland host renders frontend location through canonical ir" {
     var commands: [max_commands]ui.Command = undefined;
     var clips: [max_clips]ui.Rect = undefined;
     var regions: [max_interaction_regions]interaction.Region = undefined;
     var scene = ui.Scene.initWithClips(&commands, &clips);
     var collector = interaction.Collector.init(&regions);
     var dash_b: app_dashboard.State = .{};
-    try renderNativeAppScene(&scene, &collector, 1280, 1800, .{ .route = app_navigation.locationForButton(.app_preview) }, &dash_b, false, null, false);
+    try renderNativeAppScene(&scene, &collector, 1280, 1800, .{ .location = app_navigation.locationForButton(.app_preview) }, &dash_b, false, null, false);
     try std.testing.expect(scene.written().len > 0);
 }
 
@@ -646,19 +646,19 @@ test "wayland host renders current docs routes through the shared app frame" {
     var scene = ui.Scene.initWithClips(&commands, &clips);
     var collector = interaction.Collector.init(&regions);
     var dash_c: app_dashboard.State = .{};
-    try renderNativeAppScene(&scene, &collector, 1280, 1800, .{ .route = app_navigation.fromPath("/docs/fonts") }, &dash_c, false, null, false);
+    try renderNativeAppScene(&scene, &collector, 1280, 1800, .{ .location = app_navigation.locationForButton(.app_preview) }, &dash_c, false, null, false);
 
     try std.testing.expect(hasText(scene.written(), "EdgeRun Native"));
 }
 
-test "wayland host packs docs overview route at launch size" {
+test "wayland host packs docs overview location at launch size" {
     var commands: [max_commands]ui.Command = undefined;
     var clips: [max_clips]ui.Rect = undefined;
     var regions: [max_interaction_regions]interaction.Region = undefined;
     var scene = ui.Scene.initWithClips(&commands, &clips);
     var collector = interaction.Collector.init(&regions);
     var dash_d: app_dashboard.State = .{};
-    try renderNativeAppScene(&scene, &collector, 1280, 900, .{ .route = app_navigation.fromPath("/docs") }, &dash_d, false, null, false);
+    try renderNativeAppScene(&scene, &collector, 1280, 900, .{ .location = app_navigation.locationForButton(.app_preview) }, &dash_d, false, null, false);
 
     var ir_storage = IrStorage{};
     const buffers = ir_storage.buffers();
@@ -673,7 +673,7 @@ test "wayland host packs docs overview route at launch size" {
 
 test "wayland host renders client side decoration above app content" {
     var state = AppState{};
-    state.route = app_navigation.fromPath("/academy");
+    state.location = app_navigation.locationForButton(.app_preview);
     var commands: [max_commands]ui.Command = undefined;
     var clips: [max_clips]ui.Rect = undefined;
     var regions: [max_interaction_regions]interaction.Region = undefined;

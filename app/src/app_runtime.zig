@@ -19,9 +19,6 @@ const renderer_pipeline = state.renderer_pipeline;
 const renderer_font_atlas = state.renderer_font_atlas;
 const ui_component_common = state.ui_component_common;
 const ui_runtime = state.ui_runtime;
-const ui_codec = @import("ui/codec.zig");
-const component_union = @import("ui/components/Component.zig");
-const node_renderer = @import("ui/components/NodeRenderer.zig");
 const identity = @import("identity.zig");
 const clock = @import("clock.zig");
 const gles_wasm = @import("render/backends/gles_wasm.zig");
@@ -49,52 +46,126 @@ pub const hover_hit_kind_none = state.hover_hit_kind_none;
 // Buffer / size query exports
 // -----------------------------------------------------------------
 
-export fn er_ui_max_width() u32 { return state.max_width; }
-export fn er_ui_max_height() u32 { return state.max_height; }
-export fn er_ui_pixels_ptr() usize { return @intFromPtr(&state.pixels); }
-export fn er_ui_pixels_len() usize { return state.pixels.len; }
+export fn er_ui_max_width() u32 {
+    return state.max_width;
+}
+export fn er_ui_max_height() u32 {
+    return state.max_height;
+}
+export fn er_ui_pixels_ptr() usize {
+    return @intFromPtr(&state.pixels);
+}
+export fn er_ui_pixels_len() usize {
+    return state.pixels.len;
+}
 
-export fn er_ui_packed_rect_float_stride() u32 { return state.packed_rect_float_stride; }
-export fn er_ui_packed_rect_buffer_ptr() usize { return @intFromPtr(&state.packed_rect_floats); }
-export fn er_ui_packed_rect_buffer_len() usize { return state.packed_rect_floats.len; }
+export fn er_ui_packed_rect_float_stride() u32 {
+    return state.packed_rect_float_stride;
+}
+export fn er_ui_packed_rect_buffer_ptr() usize {
+    return @intFromPtr(&state.packed_rect_floats);
+}
+export fn er_ui_packed_rect_buffer_len() usize {
+    return state.packed_rect_floats.len;
+}
 
-export fn er_ui_packed_icon_vertex_float_stride() u32 { return state.packed_icon_vertex_float_stride; }
-export fn er_ui_packed_icon_vertex_buffer_ptr() usize { return @intFromPtr(&state.packed_icon_vertex_floats); }
-export fn er_ui_packed_icon_vertex_buffer_len() usize { return state.packed_icon_vertex_floats.len; }
+export fn er_ui_packed_icon_vertex_float_stride() u32 {
+    return state.packed_icon_vertex_float_stride;
+}
+export fn er_ui_packed_icon_vertex_buffer_ptr() usize {
+    return @intFromPtr(&state.packed_icon_vertex_floats);
+}
+export fn er_ui_packed_icon_vertex_buffer_len() usize {
+    return state.packed_icon_vertex_floats.len;
+}
 
-export fn er_ui_packed_icon_line_vertex_float_stride() u32 { return state.packed_icon_line_vertex_float_stride; }
-export fn er_ui_packed_icon_line_vertex_buffer_ptr() usize { return @intFromPtr(&state.packed_icon_line_vertex_floats); }
-export fn er_ui_packed_icon_line_vertex_buffer_len() usize { return state.packed_icon_line_vertex_floats.len; }
+export fn er_ui_packed_icon_line_vertex_float_stride() u32 {
+    return state.packed_icon_line_vertex_float_stride;
+}
+export fn er_ui_packed_icon_line_vertex_buffer_ptr() usize {
+    return @intFromPtr(&state.packed_icon_line_vertex_floats);
+}
+export fn er_ui_packed_icon_line_vertex_buffer_len() usize {
+    return state.packed_icon_line_vertex_floats.len;
+}
 
-export fn er_ui_packed_image_vertex_float_stride() u32 { return state.packed_image_vertex_float_stride; }
-export fn er_ui_packed_image_vertex_buffer_ptr() usize { return @intFromPtr(&state.packed_image_vertex_floats); }
-export fn er_ui_packed_image_vertex_buffer_len() usize { return state.packed_image_vertex_floats.len; }
+export fn er_ui_packed_image_vertex_float_stride() u32 {
+    return state.packed_image_vertex_float_stride;
+}
+export fn er_ui_packed_image_vertex_buffer_ptr() usize {
+    return @intFromPtr(&state.packed_image_vertex_floats);
+}
+export fn er_ui_packed_image_vertex_buffer_len() usize {
+    return state.packed_image_vertex_floats.len;
+}
 
-export fn er_ui_packed_overlay_rect_buffer_ptr() usize { return @intFromPtr(&state.packed_overlay_rect_floats); }
-export fn er_ui_packed_overlay_rect_buffer_len() usize { return state.packed_overlay_rect_floats.len; }
-export fn er_ui_packed_overlay_icon_vertex_buffer_ptr() usize { return @intFromPtr(&state.packed_overlay_icon_vertex_floats); }
-export fn er_ui_packed_overlay_icon_vertex_buffer_len() usize { return state.packed_overlay_icon_vertex_floats.len; }
-export fn er_ui_packed_overlay_icon_line_vertex_buffer_ptr() usize { return @intFromPtr(&state.packed_overlay_icon_line_vertex_floats); }
-export fn er_ui_packed_overlay_icon_line_vertex_buffer_len() usize { return state.packed_overlay_icon_line_vertex_floats.len; }
+export fn er_ui_packed_overlay_rect_buffer_ptr() usize {
+    return @intFromPtr(&state.packed_overlay_rect_floats);
+}
+export fn er_ui_packed_overlay_rect_buffer_len() usize {
+    return state.packed_overlay_rect_floats.len;
+}
+export fn er_ui_packed_overlay_icon_vertex_buffer_ptr() usize {
+    return @intFromPtr(&state.packed_overlay_icon_vertex_floats);
+}
+export fn er_ui_packed_overlay_icon_vertex_buffer_len() usize {
+    return state.packed_overlay_icon_vertex_floats.len;
+}
+export fn er_ui_packed_overlay_icon_line_vertex_buffer_ptr() usize {
+    return @intFromPtr(&state.packed_overlay_icon_line_vertex_floats);
+}
+export fn er_ui_packed_overlay_icon_line_vertex_buffer_len() usize {
+    return state.packed_overlay_icon_line_vertex_floats.len;
+}
 
-export fn er_ui_post_image_rgba_ptr() usize { return @intFromPtr(&state.pixels); }
-export fn er_ui_post_image_rgba_len() usize { return state.pixels.len * @sizeOf(u32); }
-export fn er_ui_post_image_width() u32 { return @intCast(state.frame_width); }
-export fn er_ui_post_image_height() u32 { return @intCast(state.frame_height); }
+export fn er_ui_post_image_rgba_ptr() usize {
+    return @intFromPtr(&state.pixels);
+}
+export fn er_ui_post_image_rgba_len() usize {
+    return state.pixels.len * @sizeOf(u32);
+}
+export fn er_ui_post_image_width() u32 {
+    return @intCast(state.frame_width);
+}
+export fn er_ui_post_image_height() u32 {
+    return @intCast(state.frame_height);
+}
 
-export fn er_ui_font_atlas_width() u32 { return state.font_atlas_width; }
-export fn er_ui_font_atlas_height() u32 { return state.font_atlas_height; }
-export fn er_ui_font_atlas_ptr() usize { return @intFromPtr(state.font_atlas.alphaSlice().ptr); }
-export fn er_ui_font_atlas_generation() u32 { return if (state.font_atlas_ready) 1 else 0; }
+export fn er_ui_font_atlas_width() u32 {
+    return state.font_atlas_width;
+}
+export fn er_ui_font_atlas_height() u32 {
+    return state.font_atlas_height;
+}
+export fn er_ui_font_atlas_ptr() usize {
+    return @intFromPtr(state.font_atlas.alphaSlice().ptr);
+}
+export fn er_ui_font_atlas_generation() u32 {
+    return if (state.font_atlas_ready) 1 else 0;
+}
 
-export fn er_ui_width() u32 { return @intCast(state.frame_width); }
-export fn er_ui_height() u32 { return @intCast(state.frame_height); }
-export fn er_ui_input_ptr() usize { return @intFromPtr(&state.input_bytes); }
-export fn er_ui_input_capacity() usize { return state.input_bytes.len; }
-export fn er_ui_last_error() u32 { return @intFromEnum(state.last_error); }
+export fn er_ui_width() u32 {
+    return @intCast(state.frame_width);
+}
+export fn er_ui_height() u32 {
+    return @intCast(state.frame_height);
+}
+export fn er_ui_input_ptr() usize {
+    return @intFromPtr(&state.input_bytes);
+}
+export fn er_ui_input_capacity() usize {
+    return state.input_bytes.len;
+}
+export fn er_ui_last_error() u32 {
+    return @intFromEnum(state.last_error);
+}
 
-export fn er_ui_app_public_identity_ptr() usize { return @intFromPtr(&state.native_input_state.public_identity); }
-export fn er_ui_app_public_identity_len() usize { return state.native_input_state.public_identity.len; }
+export fn er_ui_app_public_identity_ptr() usize {
+    return @intFromPtr(&state.native_input_state.public_identity);
+}
+export fn er_ui_app_public_identity_len() usize {
+    return state.native_input_state.public_identity.len;
+}
 
 // -----------------------------------------------------------------
 // Appearance exports
@@ -135,16 +206,52 @@ export fn er_ui_hover_hit_id() u32 {
     return state.runtime_state.hoverHitId();
 }
 
+fn hitKindFromInt(value: u32) ?ui.HitKind {
+    return switch (value) {
+        @intFromEnum(ui.HitKind.button) => .button,
+        @intFromEnum(ui.HitKind.row_item) => .row_item,
+        @intFromEnum(ui.HitKind.checkbox) => .checkbox,
+        @intFromEnum(ui.HitKind.switch_control) => .switch_control,
+        @intFromEnum(ui.HitKind.slider) => .slider,
+        @intFromEnum(ui.HitKind.textarea) => .textarea,
+        @intFromEnum(ui.HitKind.select) => .select,
+        @intFromEnum(ui.HitKind.overlay_trigger) => .overlay_trigger,
+        @intFromEnum(ui.HitKind.input) => .input,
+        else => null,
+    };
+}
+
+export fn er_ui_set_hover_hit(kind_raw: u32, hit_id: u32) u32 {
+    const kind = hitKindFromInt(kind_raw) orelse return render.finishError(.bad_input);
+    state.runtime_state.hovered = .{
+        .kind = kind,
+        .id = hit_id,
+        .bounds = ui.Rect.init(0.0, 0.0, 1.0, 1.0),
+    };
+    state.last_error = .ok;
+    return @intFromEnum(state.ErrorCode.ok);
+}
+
 export fn er_ui_cursor_kind() u32 {
     const action_kind: ui_runtime.ActionKind = @enumFromInt(@as(u8, @intCast(state.last_action_kind)));
     return @intFromEnum(app_cursor.fromState(action_kind, state.runtime_state.hoverKind()));
 }
 
-export fn er_ui_last_action_kind() u32 { return state.last_action_kind; }
-export fn er_ui_last_action_hit_id() u32 { return state.last_action_hit_id; }
-export fn er_ui_last_action_scope_id() u32 { return state.last_action_scope_id; }
-export fn er_ui_last_action_from_index() u32 { return state.last_action_from_index; }
-export fn er_ui_last_action_to_index() u32 { return state.last_action_to_index; }
+export fn er_ui_last_action_kind() u32 {
+    return state.last_action_kind;
+}
+export fn er_ui_last_action_hit_id() u32 {
+    return state.last_action_hit_id;
+}
+export fn er_ui_last_action_scope_id() u32 {
+    return state.last_action_scope_id;
+}
+export fn er_ui_last_action_from_index() u32 {
+    return state.last_action_from_index;
+}
+export fn er_ui_last_action_to_index() u32 {
+    return state.last_action_to_index;
+}
 
 // -----------------------------------------------------------------
 // Pointer event exports
@@ -156,12 +263,18 @@ export fn er_ui_pointer_down(x: f32, y: f32) u32 {
     idp.mixInteractionEntropy(.pointer_down, x, y);
     const commands_slice = state.commands[0..state.last_command_count];
     const regions_slice = state.interaction_regions[0..state.last_region_count];
-    app_native_input.processPointerEvent(&state.native_input_state, commands_slice, regions_slice, .pointer_down);
+    app_native_input.processPointerEvent(&state.native_input_state, commands_slice, regions_slice, null, .pointer_down);
     state.last_action_kind = @intFromEnum(state.native_input_state.last_action_kind);
     state.last_action_hit_id = state.native_input_state.runtime.hoverHitId();
     state.context_menu_open = false;
     state.last_error = .ok;
     return @intFromEnum(state.ErrorCode.ok);
+}
+
+export fn er_ui_pointer_down_hit(x: f32, y: f32, kind_raw: u32, hit_id: u32) u32 {
+    const set_result = er_ui_set_hover_hit(kind_raw, hit_id);
+    if (set_result != @intFromEnum(state.ErrorCode.ok)) return set_result;
+    return er_ui_pointer_down(x, y);
 }
 
 export fn er_ui_pointer_move(x: f32, y: f32) u32 {
@@ -170,11 +283,17 @@ export fn er_ui_pointer_move(x: f32, y: f32) u32 {
     idp.mixInteractionEntropy(.pointer_move, x, y);
     const commands_slice = state.commands[0..state.last_command_count];
     const regions_slice = state.interaction_regions[0..state.last_region_count];
-    app_native_input.processPointerEvent(&state.native_input_state, commands_slice, regions_slice, .pointer_move);
+    app_native_input.processPointerEvent(&state.native_input_state, commands_slice, regions_slice, null, .pointer_move);
     state.last_action_kind = @intFromEnum(state.native_input_state.last_action_kind);
     state.last_action_hit_id = state.native_input_state.runtime.hoverHitId();
     state.last_error = .ok;
     return @intFromEnum(state.ErrorCode.ok);
+}
+
+export fn er_ui_pointer_move_hit(x: f32, y: f32, kind_raw: u32, hit_id: u32) u32 {
+    const set_result = er_ui_set_hover_hit(kind_raw, hit_id);
+    if (set_result != @intFromEnum(state.ErrorCode.ok)) return set_result;
+    return er_ui_pointer_move(x, y);
 }
 
 export fn er_ui_pointer_up(x: f32, y: f32) u32 {
@@ -182,11 +301,17 @@ export fn er_ui_pointer_up(x: f32, y: f32) u32 {
     state.source_pointer_drag_select = false;
     const commands_slice = state.commands[0..state.last_command_count];
     const regions_slice = state.interaction_regions[0..state.last_region_count];
-    app_native_input.processPointerEvent(&state.native_input_state, commands_slice, regions_slice, .pointer_up);
+    app_native_input.processPointerEvent(&state.native_input_state, commands_slice, regions_slice, null, .pointer_up);
     state.last_action_kind = @intFromEnum(state.native_input_state.last_action_kind);
     state.last_action_hit_id = state.native_input_state.runtime.hoverHitId();
     state.last_error = .ok;
     return @intFromEnum(state.ErrorCode.ok);
+}
+
+export fn er_ui_pointer_up_hit(x: f32, y: f32, kind_raw: u32, hit_id: u32) u32 {
+    const set_result = er_ui_set_hover_hit(kind_raw, hit_id);
+    if (set_result != @intFromEnum(state.ErrorCode.ok)) return set_result;
+    return er_ui_pointer_up(x, y);
 }
 
 export fn er_ui_app_pointer_up(x: f32, y: f32) u32 {
@@ -211,7 +336,9 @@ export fn er_ui_app_action_url_len() usize {
 // Outbox exports
 // -----------------------------------------------------------------
 
-export fn er_ui_outbox_count() u32 { return @intCast(state.outbox_message_len); }
+export fn er_ui_outbox_count() u32 {
+    return @intCast(state.outbox_message_len);
+}
 
 export fn er_ui_outbox_kind(index: u32) u32 {
     if (index >= state.outbox_message_len) return 0;
@@ -254,8 +381,12 @@ export fn er_ui_outbox_clear() u32 {
 // Bootstrap / workspace exports
 // -----------------------------------------------------------------
 
-export fn er_ui_bootstrap_js_ptr() usize { return 0; }
-export fn er_ui_bootstrap_js_len() usize { return 0; }
+export fn er_ui_bootstrap_js_ptr() usize {
+    return 0;
+}
+export fn er_ui_bootstrap_js_len() usize {
+    return 0;
+}
 
 export fn er_ui_source_workspace_ptr() usize {
     return @intFromPtr(&state.source_workspace);
@@ -297,15 +428,31 @@ export fn er_ui_source_workspace_reset() u32 {
 // Source editor state exports
 // -----------------------------------------------------------------
 
-export fn er_ui_source_editor_ptr() usize { return @intFromPtr(&state.source_editor_bytes); }
-export fn er_ui_source_editor_len() usize { return state.source_editor_len; }
-export fn er_ui_source_editor_cursor() usize { return state.source_editor_cursor; }
-export fn er_ui_source_editor_dirty() u32 { return @intFromBool(state.source_editor_dirty); }
-export fn er_ui_source_editor_status() u32 { return @intFromEnum(state.source_editor_status); }
+export fn er_ui_source_editor_ptr() usize {
+    return @intFromPtr(&state.source_editor_bytes);
+}
+export fn er_ui_source_editor_len() usize {
+    return state.source_editor_len;
+}
+export fn er_ui_source_editor_cursor() usize {
+    return state.source_editor_cursor;
+}
+export fn er_ui_source_editor_dirty() u32 {
+    return @intFromBool(state.source_editor_dirty);
+}
+export fn er_ui_source_editor_status() u32 {
+    return @intFromEnum(state.source_editor_status);
+}
 
-export fn er_ui_release_artifact_ptr() usize { return @intFromPtr(&state.release_artifact); }
-export fn er_ui_release_artifact_len() usize { return state.release_artifact_len; }
-export fn er_ui_release_artifact_capacity() usize { return state.release_artifact.len; }
+export fn er_ui_release_artifact_ptr() usize {
+    return @intFromPtr(&state.release_artifact);
+}
+export fn er_ui_release_artifact_len() usize {
+    return state.release_artifact_len;
+}
+export fn er_ui_release_artifact_capacity() usize {
+    return state.release_artifact.len;
+}
 
 export fn er_ui_release_artifact_commit(artifact_len: usize) u32 {
     if (artifact_len > state.release_artifact.len) return render.finishError(.bad_input);
@@ -336,17 +483,25 @@ export fn er_ui_request_release_artifact_launch() u32 {
 // Route / navigation exports
 // -----------------------------------------------------------------
 
-export fn er_ui_app_route_hash_ptr() usize { return @intFromPtr(&state.route_hash_bytes); }
-export fn er_ui_app_route_hash_len() usize { return state.route_hash_len; }
-export fn er_ui_app_route_path_ptr() usize { return @intFromPtr(&state.route_bytes); }
-export fn er_ui_app_route_path_len() usize { return state.route_len; }
+export fn er_ui_app_route_hash_ptr() usize {
+    return @intFromPtr(&state.route_hash_bytes);
+}
+export fn er_ui_app_route_hash_len() usize {
+    return state.route_hash_len;
+}
+export fn er_ui_app_route_path_ptr() usize {
+    return @intFromPtr(&state.route_bytes);
+}
+export fn er_ui_app_route_path_len() usize {
+    return state.route_len;
+}
 
 export fn er_ui_app_set_route_path(path_len: usize) u32 {
     const path = state.input_bytes[0..path_len];
-    const route = app_navigation.fromPath(path);
-    input.applyRoute(route);
-    render.refreshRoutePath();
-    render.refreshRouteHash();
+    const route = app_navigation.fromPathProjection(path);
+    input.applyLocation(route);
+    render.refreshLocationPathProjection();
+    render.refreshLocationHashProjection();
     state.native_input_state.public_identity_ready = false;
     state.native_input_state.public_identity = "idle";
     state.last_error = .ok;
@@ -355,29 +510,33 @@ export fn er_ui_app_set_route_path(path_len: usize) u32 {
 
 export fn er_ui_app_set_route_hash(hash_len: usize) u32 {
     const hash = state.input_bytes[0..hash_len];
-    const route = app_navigation.fromHash(hash);
-    input.applyRoute(route);
-    render.refreshRoutePath();
-    render.refreshRouteHash();
+    const route = app_navigation.fromHashProjection(hash);
+    input.applyLocation(route);
+    render.refreshLocationPathProjection();
+    render.refreshLocationHashProjection();
     state.last_error = .ok;
     return @intFromEnum(state.ErrorCode.ok);
 }
 
 export fn er_ui_app_activate_hit(hit_id: u32) u32 {
-    if (app_navigation.fromHit(hit_id, state.native_input_state.location)) |route| {
-        input.applyRoute(route);
-        render.refreshRoutePath();
-        render.refreshRouteHash();
+    if (app_navigation.fromHit(hit_id, state.native_input_state.route)) |route| {
+        input.applyLocation(route);
+        render.refreshLocationPathProjection();
+        render.refreshLocationHashProjection();
     } else if (app_navigation.actionFromHit(hit_id)) |action_fn| switch (action_fn) {
-        .download_source_release => { input.queueOutboxMessage(@intFromEnum(state.OutboxKind.download_wasm)) catch {}; },
-        .launch_source_release => { input.queueOutboxMessage(@intFromEnum(state.OutboxKind.launch_wasm)) catch {}; },
+        .download_source_release => {
+            input.queueOutboxMessage(@intFromEnum(state.OutboxKind.download_wasm)) catch {};
+        },
+        .launch_source_release => {
+            input.queueOutboxMessage(@intFromEnum(state.OutboxKind.launch_wasm)) catch {};
+        },
         .reset_source => {
             state.source_workspace_ready = false;
             state.source_workspace_len = 0;
             state.source_editor_loaded = false;
-            input.applyRoute(app_navigation.Route{});
-            render.refreshRoutePath();
-            render.refreshRouteHash();
+            input.applyLocation(app_navigation.Location{});
+            render.refreshLocationPathProjection();
+            render.refreshLocationHashProjection();
         },
         .open_context_source => {
             var path_buf: [256]u8 = undefined;
@@ -463,7 +622,9 @@ export fn er_ui_app_scroll_by(delta_y: f32, width: f32, height: f32) u32 {
     return @intFromEnum(state.ErrorCode.ok);
 }
 
-export fn er_ui_app_scroll_y() f32 { return state.native_input_state.scroll_y; }
+export fn er_ui_app_scroll_y() f32 {
+    return state.native_input_state.scroll_y;
+}
 
 export fn er_ui_app_content_height(width: f32) f32 {
     return app_frame.contentHeight(width, input.currentAppFrameState(state.pointer_hover_x, state.pointer_hover_y, 0.0));
@@ -578,20 +739,6 @@ export fn er_ui_render_icon_svg_tuning_test(icon_id: u32, width: u32, height: u3
     return er_ui_render_icon_svg_test(icon_id, width, height);
 }
 
-export fn er_ui_render_input_object(input_len: usize, width: u32, height: u32) u32 {
-    if (input_len == 0 or input_len > state.input_bytes.len) return render.finishError(.bad_input);
-    const surface = render.beginFrame(width, height) orelse return render.finishError(.bad_size);
-    const root = ui_codec.decodeObject(state.input_bytes[0..input_len], &state.nodes) catch return render.finishError(.bad_ui);
-    var scene = ui.Scene.init(&state.commands);
-    node_renderer.renderNode(component_union.Component, &scene, .{
-        .x = 0,
-        .y = 0,
-        .w = @floatFromInt(state.frame_width),
-        .h = @floatFromInt(state.frame_height),
-    }, root, .{}) catch return render.finishError(.render_failed);
-    return render.finishCpuSceneFrame(surface, scene, &.{}, .{ .enabled = false }, state.ui.Color.bg);
-}
-
 // -----------------------------------------------------------------
 // Local cell / identity routing — export wrappers
 //
@@ -645,16 +792,16 @@ fn hasFocusRingCommand(items: []const ui.Command) bool {
     return false;
 }
 
-fn expectRouteFixture(fixture: app_navigation.RouteFixture) !void {
-    var path_buf: [app_navigation.route_path_capacity]u8 = undefined;
-    var hash_buf: [app_navigation.route_hash_capacity]u8 = undefined;
-    const path_len = app_navigation.writePath(&path_buf, fixture.location) catch unreachable;
-    const hash_len = app_navigation.writeHash(&hash_buf, fixture.location) catch unreachable;
+fn expectLocationFixture(fixture: app_navigation.LocationFixture) !void {
+    var path_buf: [app_navigation.path_projection_capacity]u8 = undefined;
+    var hash_buf: [app_navigation.hash_projection_capacity]u8 = undefined;
+    const path_len = app_navigation.writePathProjection(&path_buf, fixture.location) catch unreachable;
+    const hash_len = app_navigation.writeHashProjection(&hash_buf, fixture.location) catch unreachable;
     try std.testing.expectEqualStrings(fixture.path, path_buf[0..path_len]);
     try std.testing.expectEqualStrings(fixture.hash, hash_buf[0..hash_len]);
 }
 
-fn expectRouteState(expected: app_navigation.Route) !void {
+fn expectLocationState(expected: app_navigation.Location) !void {
     try std.testing.expectEqual(expected, state.native_input_state.route);
 }
 
@@ -711,7 +858,7 @@ test "app runtime draws deterministic focus ring from runtime focus state" {
 
 test "app runtime component catalog builds packed app buffers and app-ready icon lines" {
     state.font_atlas_ready = false;
-    input.applyRoute(app_navigation.locationForButton(.app_preview));
+    input.applyLocation(app_navigation.locationForButton(.app_preview));
     const code = er_ui_build_app_frame(960, 640, -1.0, -1.0, 0.0);
     try std.testing.expectEqual(@as(u32, 0), code);
     try std.testing.expect(state.font_atlas_ready);
@@ -724,7 +871,7 @@ test "app runtime component catalog builds packed app buffers and app-ready icon
 }
 
 test "app runtime component catalog render uses canonical ir buffers" {
-    input.applyRoute(app_navigation.locationForButton(.app_preview));
+    input.applyLocation(app_navigation.locationForButton(.app_preview));
     const code = er_ui_render_frame(480, 360, 0.0);
     try std.testing.expectEqual(@as(u32, 0), code);
     try std.testing.expectEqual(renderer_pipeline.Transport.pixel_bytes, state.last_present_transport);
@@ -739,7 +886,7 @@ test "app runtime component catalog render uses canonical ir buffers" {
 }
 
 test "app runtime landing builds packed app buffers and hit state" {
-    input.applyRoute(.{});
+    input.applyLocation(.{});
     const code = er_ui_build_app_frame(1280, 800, 1065.0, 32.0, 0.0);
     try std.testing.expectEqual(@as(u32, 0), code);
     try std.testing.expect(state.packed_rect_float_len > 0);
@@ -749,33 +896,33 @@ test "app runtime landing builds packed app buffers and hit state" {
 }
 
 test "app runtime route snapshots cover canonical fixtures and dynamic families" {
-    for (app_navigation.route_fixtures) |fixture| {
-        input.applyRoute(fixture.location);
-        try expectRouteFixture(fixture);
+    for (app_navigation.location_fixtures) |fixture| {
+        input.applyLocation(fixture.location);
+        try expectLocationFixture(fixture);
         try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, 111.0, 32.0, 0.0));
     }
 }
 
 test "app runtime frontend builds packed app buffers" {
-    input.applyRoute(app_navigation.locationForButton(.app_preview));
+    input.applyLocation(app_navigation.locationForButton(.app_preview));
     try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, 640.0, 500.0, 0.0));
 }
 
 test "app runtime activation keeps page state in wasm" {
-    input.applyRoute(app_navigation.locationForButton(.app_preview));
+    input.applyLocation(app_navigation.locationForButton(.app_preview));
     try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, -1.0, -1.0, 0.0));
     try std.testing.expect(app_navigation.isAppPreview(state.native_input_state.route));
 }
 
 test "app runtime route sync owns URL path state" {
-    input.applyRoute(app_navigation.locationForButton(.app_preview));
+    input.applyLocation(app_navigation.locationForButton(.app_preview));
     er_ui_build_app_frame(1280, 800, -1.0, -1.0, 0.0);
     try std.testing.expect(state.route_len > 0);
     try std.testing.expect(state.route_hash_len > 0);
 }
 
 test "app runtime context source jump opens exact component file" {
-    input.applyRoute(app_navigation.locationForButton(.app_preview));
+    input.applyLocation(app_navigation.locationForButton(.app_preview));
     try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, 30.0, 150.0, 0.0));
 }
 
@@ -829,7 +976,7 @@ test "app runtime exposes no secondary bootstrap javascript" {
 test "app runtime exposes repo-owned source as canonical object bytes" {
     try std.testing.expect(er_ui_source_workspace_len() > 0);
 
-    input.applyRoute(app_navigation.locationForButton(.app_preview));
+    input.applyLocation(app_navigation.locationForButton(.app_preview));
     try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, -1.0, -1.0, 0.0));
 }
 
@@ -841,13 +988,13 @@ test "app runtime source workspace is mutable app source" {
 }
 
 test "app runtime source route initializes embedded editor state" {
-    input.applyRoute(app_navigation.locationForButton(.source_workspace));
+    input.applyLocation(app_navigation.locationForButton(.source_workspace));
     try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, -1.0, -1.0, 0.0));
     try std.testing.expect(app_navigation.isSourceWorkspace(state.native_input_state.route));
 }
 
 test "app runtime source editor rewrites a canonical vfs file" {
-    input.applyRoute(app_navigation.locationForButton(.source_workspace));
+    input.applyLocation(app_navigation.locationForButton(.source_workspace));
     const label = "src/er/test_main.er";
     @memcpy(state.input_bytes[0..label.len], label);
     try std.testing.expectEqual(@as(u32, 0), er_ui_source_editor_select_label(@intCast(label.len)));
@@ -856,7 +1003,7 @@ test "app runtime source editor rewrites a canonical vfs file" {
 }
 
 test "app runtime source editor pointer focus places caret before editing" {
-    input.applyRoute(app_navigation.locationForButton(.source_workspace));
+    input.applyLocation(app_navigation.locationForButton(.source_workspace));
     editor.ensureSourceEditor();
     try std.testing.expect(state.source_editor_len > 0);
     state.source_editor_status = .ready;
@@ -865,7 +1012,7 @@ test "app runtime source editor pointer focus places caret before editing" {
 }
 
 test "app runtime source explorer rows open real workspace files" {
-    input.applyRoute(app_navigation.locationForButton(.source_workspace));
+    input.applyLocation(app_navigation.locationForButton(.source_workspace));
     editor.ensureSourceEditor();
     try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, -1.0, -1.0, 0.0));
     const files = editor.currentSourceFiles();
@@ -873,21 +1020,21 @@ test "app runtime source explorer rows open real workspace files" {
 }
 
 test "app runtime source explorer search is edited inside wasm" {
-    input.applyRoute(app_navigation.locationForButton(.source_workspace));
+    input.applyLocation(app_navigation.locationForButton(.source_workspace));
     editor.ensureSourceEditor();
     _ = editor.handleSourceSearchKey("a", 0, 0, 0);
     try std.testing.expect(state.source_search_len > 0);
 }
 
 test "app runtime source editor moves by visual lines" {
-    input.applyRoute(app_navigation.locationForButton(.source_workspace));
+    input.applyLocation(app_navigation.locationForButton(.source_workspace));
     editor.ensureSourceEditor();
     state.source_editor_status = .ready;
     _ = editor.handleSourceEditorKey("ArrowDown", 0, 0, 0, 0);
 }
 
 test "app runtime source editor handles full event records and edit history" {
-    input.applyRoute(app_navigation.locationForButton(.source_workspace));
+    input.applyLocation(app_navigation.locationForButton(.source_workspace));
     editor.ensureSourceEditor();
     state.source_editor_status = .ready;
     try std.testing.expect(editor.handleSourceEditorKey("End", 0, 0, 0, 0));
@@ -895,7 +1042,7 @@ test "app runtime source editor handles full event records and edit history" {
 }
 
 test "app runtime source editor uses workspace file list and pointer selection" {
-    input.applyRoute(app_navigation.locationForButton(.source_workspace));
+    input.applyLocation(app_navigation.locationForButton(.source_workspace));
     editor.ensureSourceEditor();
     try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, -1.0, -1.0, 0.0));
     const files = editor.currentSourceFiles();
@@ -905,7 +1052,7 @@ test "app runtime source editor uses workspace file list and pointer selection" 
 }
 
 test "app runtime source editor scrolls editor viewport without page scroll" {
-    input.applyRoute(app_navigation.locationForButton(.source_workspace));
+    input.applyLocation(app_navigation.locationForButton(.source_workspace));
     editor.ensureSourceEditor();
     state.source_editor_status = .ready;
     try std.testing.expect(editor.scrollSourceEditorByWheel(120.0));
@@ -927,7 +1074,7 @@ test "app runtime exports committed wasm artifact through generic byte bridge" {
 }
 
 test "app runtime app state owns scroll position" {
-    input.applyRoute(.{});
+    input.applyLocation(.{});
     try std.testing.expectEqual(@as(f32, 0.0), er_ui_app_scroll_y());
     try std.testing.expectEqual(@as(u32, 0), er_ui_app_scroll_by(-100.0, 1280.0, 800.0));
     try std.testing.expectEqual(@as(f32, 0.0), er_ui_app_scroll_y());
@@ -957,7 +1104,7 @@ test "app runtime pointer up owns activation suppression policy" {
 }
 
 test "app packed text preserves variable font descenders" {
-    input.applyRoute(app_navigation.locationForButton(.app_preview));
+    input.applyLocation(app_navigation.locationForButton(.app_preview));
     try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, -1.0, -1.0, 0.0));
 }
 
@@ -978,7 +1125,7 @@ test "app font atlas populates glyphs on demand" {
 }
 
 test "app icon buffer stores semantic icon instances" {
-    input.applyRoute(app_navigation.locationForButton(.app_preview));
+    input.applyLocation(app_navigation.locationForButton(.app_preview));
     try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, -1.0, -1.0, 0.0));
 }
 

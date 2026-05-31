@@ -24,7 +24,7 @@ pub fn appKeyEvent(key: []const u8, ctrl: u32, meta: u32, alt: u32, shift: u32) 
     if (state.runtime_state.overlays.count == 0) {
         if (input_kind == .enter or input_kind == .space) {
             const hit_id = state.runtime_state.hoverHitId();
-            if (state.app_navigation.fromHit(hit_id, state.native_input_state.location)) |route| {
+            if (state.app_navigation.fromHit(hit_id, state.native_input_state.route)) |route| {
                 state.native_input_state.route = route;
                 state.native_input_state.scroll_y = 0.0;
                 state.context_menu_open = false;
@@ -67,7 +67,7 @@ pub fn handleInputEventRecord(record: state.InputEventRecord, width: f32, height
             }
             const commands_slice = state.commands[0..state.last_command_count];
             const regions_slice = state.interaction_regions[0..state.last_region_count];
-            state.app_native_input.processPointerEvent(&state.native_input_state, commands_slice, regions_slice, record.kind);
+            state.app_native_input.processPointerEvent(&state.native_input_state, commands_slice, regions_slice, null, @enumFromInt(@intFromEnum(record.kind)));
             state.last_action_kind = @intFromEnum(state.native_input_state.last_action_kind);
             state.last_action_hit_id = state.native_input_state.runtime.hoverHitId();
             state.context_menu_open = false;
@@ -80,7 +80,7 @@ pub fn handleInputEventRecord(record: state.InputEventRecord, width: f32, height
             }
             const commands_slice = state.commands[0..state.last_command_count];
             const regions_slice = state.interaction_regions[0..state.last_region_count];
-            state.app_native_input.processPointerEvent(&state.native_input_state, commands_slice, regions_slice, record.kind);
+            state.app_native_input.processPointerEvent(&state.native_input_state, commands_slice, regions_slice, null, @enumFromInt(@intFromEnum(record.kind)));
             state.last_action_kind = @intFromEnum(state.native_input_state.last_action_kind);
             state.last_action_hit_id = state.native_input_state.runtime.hoverHitId();
             result = state.input_event_prevent_default | state.input_event_schedule_frame;
@@ -204,12 +204,12 @@ pub fn clearOutboxMessages() void {
     state.outbox_message_len = 0;
 }
 
-pub fn applyRoute(route: state.app_navigation.Route) void {
+pub fn applyRoute(route: state.app_navigation.Location) void {
     state.context_menu_open = false;
-    state.app_native_input.applyRoute(&state.native_input_state, route);
+    state.app_native_input.applyLocation(&state.native_input_state, route);
 }
 
-pub fn currentRoute() state.app_navigation.Route {
+pub fn currentLocation() state.app_navigation.Location {
     return state.native_input_state.route;
 }
 

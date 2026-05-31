@@ -10,7 +10,7 @@ const ui = @import("../ui/core.zig");
 const ui_runtime = @import("../ui/runtime.zig");
 
 pub const State = struct {
-    route: app_navigation.Route = .{},
+    location: app_navigation.Location = .{},
     scroll_y: f32 = 0.0,
     hover_x: f32 = -1.0,
     hover_y: f32 = -1.0,
@@ -23,7 +23,7 @@ pub const State = struct {
 
     pub fn frameState(self: State) app_frame.State {
         return .{
-            .route = self.route,
+            .location = self.location,
             .scroll_y = self.scroll_y,
             .hover_x = self.hover_x,
             .hover_y = self.hover_y,
@@ -53,15 +53,15 @@ pub fn clearHover(state: *State) void {
     state.last_action_kind = .none;
 }
 
-pub fn applyRoute(state: *State, route: app_navigation.Route) void {
-    state.route = route;
+pub fn applyRoute(state: *State, location: app_navigation.Location) void {
+    state.location = location;
     state.scroll_y = 0.0;
 }
 
 pub fn activateHovered(state: *State) void {
     const hover_hit_id = state.runtime.hoverHitId();
-    if (app_navigation.fromHit(hover_hit_id, state.location)) |route| {
-        applyRoute(state, route);
+    if (app_navigation.fromHit(hover_hit_id, state.location)) |location| {
+        applyRoute(state, location);
         return;
     }
     if (hover_hit_id == app_agent.open_host_binary_button_id) {
@@ -79,16 +79,18 @@ pub fn activateHovered(state: *State) void {
     };
 }
 
-pub fn processPointerEvent(state: *State, commands: []const ui.Command, regions: []const interaction.Region, event: app_input_event.Kind) void {
+pub fn processPointerEvent(state: *State, commands: []const ui.Command, regions: []const interaction.Region, routed_hit: ?interaction.Region, event: app_input_event.Kind) void {
+    _ = regions;
+    const hit = routed_hit orelse state.runtime.hovered;
     state.last_action_kind = switch (event) {
-        .pointer_move => state.runtime.pointerMove(commands, regions, state.hover_x, state.hover_y).kind,
+        .pointer_move => state.runtime.pointerMoveRouted(commands, hit, state.hover_x, state.hover_y).kind,
         .pointer_leave => blk: {
             state.runtime.clearHover();
             break :blk ui_runtime.ActionKind.none;
         },
-        .pointer_down => state.runtime.pointerDown(commands, regions, state.hover_x, state.hover_y).kind,
+        .pointer_down => state.runtime.pointerDownRouted(commands, hit, state.hover_x, state.hover_y).kind,
         .pointer_up => blk: {
-            const action = state.runtime.pointerUp(commands, regions, state.hover_x, state.hover_y);
+            const action = state.runtime.pointerUpRouted(commands, hit, state.hover_x, state.hover_y);
             if (action.kind != .reordered) activateHovered(state);
             break :blk action.kind;
         },
@@ -109,7 +111,7 @@ test "native input activates routes and resets scroll through shared state" {
 
     activateHovered(&state);
 
-    try std.testing.expect(app_navigation.isAppPreview(state.route));
+    try std.testing.expect(app_navigation.isAppPreview(state.location));
     try std.testing.expectEqual(@as(f32, 0.0), state.scroll_y);
 }
 
@@ -142,16 +144,16 @@ test "native input pointer path uses shared runtime activation" {
     try collector.addHit(ui.Rect.init(0, 0, 20, 20), .button, app_navigation.app_preview_button_id);
     var state = State{ .hover_x = 8.0, .hover_y = 8.0 };
 
-    processPointerEvent(&state, scene.written(), collector.written(), .pointer_down);
-    processPointerEvent(&state, scene.written(), collector.written(), .pointer_up);
+    processPointerEvent(&state, scene.written(), collector.written(), collector.written()[0], .pointer_down);
+    processPointerEvent(&state, scene.written(), collector.written(), collector.written()[0], .pointer_up);
 
     try std.testing.expectEqual(ui_runtime.ActionKind.activated, state.last_action_kind);
-    try std.testing.expect(app_navigation.isAppPreview(state.route));
+    try std.testing.expect(app_navigation.isAppPreview(state.location));
 }
 
 test "native input routes all canonical fixtures through shared top-level binding path" {
-    for (app_navigation.route_fixtures) |fixture| {
-        var state = State{ .route = fixture.location };
+    for (app_navigation.location_fixtures) |fixture| {
+        var state = State{ .location = fixture.location };
         var matching_binding: ?app_navigation.TopLevelBinding = null;
 
         for (app_navigation.topLevelBindings()) |binding| {
@@ -165,28 +167,26 @@ test "native input routes all canonical fixtures through shared top-level bindin
 
         activateHovered(&state);
 
-        try expectRoute(state.route, fixture.location);
+        try expectLocation(state.location, fixture.location);
     }
 }
 
-test "native input route fixtures keep deterministic path/hash mapping" {
-    for (app_navigation.route_fixtures) |fixture| {
-        try expectRoutePathHash(fixture.location, fixture.path, fixture.hash);
+test "native input location fixtures keep deterministic path/hash mapping" {
+    for (app_navigation.location_fixtures) |fixture| {
+        try expectLocationProjections(fixture.location, fixture.path, fixture.hash);
     }
 }
 
-
-
-fn expectRoute(actual: app_navigation.Route, expected: app_navigation.Route) !void {
+fn expectLocation(actual: app_navigation.Location, expected: app_navigation.Location) !void {
     try std.testing.expectEqual(expected, actual);
 }
 
-fn expectRoutePathHash(route: app_navigation.Route, expected_path: []const u8, expected_hash: []const u8) !void {
-    var path_buf: [app_navigation.route_path_capacity]u8 = undefined;
-    var hash_buf: [app_navigation.route_hash_capacity]u8 = undefined;
+fn expectLocationProjections(location: app_navigation.Location, expected_path: []const u8, expected_hash: []const u8) !void {
+    var path_buf: [app_navigation.path_projection_capacity]u8 = undefined;
+    var hash_buf: [app_navigation.hash_projection_capacity]u8 = undefined;
 
-    const path_len = try app_navigation.writePath(&path_buf, route);
-    const hash_len = try app_navigation.writeHash(&hash_buf, route);
+    const path_len = try app_navigation.writePathProjection(&path_buf, location);
+    const hash_len = try app_navigation.writeHashProjection(&hash_buf, location);
 
     try std.testing.expectEqualStrings(expected_path, path_buf[0..path_len]);
     try std.testing.expectEqualStrings(expected_hash, hash_buf[0..hash_len]);

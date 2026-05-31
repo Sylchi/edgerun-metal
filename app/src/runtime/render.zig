@@ -15,6 +15,8 @@ pub fn packedBuffers() state.renderer_pipeline.Buffers {
         .icon_vertex_len = &state.packed_icon_vertex_float_len,
         .icon_line_vertices = state.packed_icon_line_vertex_floats[0..],
         .icon_line_vertex_len = &state.packed_icon_line_vertex_float_len,
+        .text_vertices = state.packed_text_vertex_floats[0..],
+        .text_vertex_len = &state.packed_text_vertex_float_len,
         .image_vertices = state.packed_image_vertex_floats[0..],
         .image_vertex_len = &state.packed_image_vertex_float_len,
         .overlay_rects = state.packed_overlay_rect_floats[0..],
@@ -244,12 +246,12 @@ pub fn clampAppScrollToViewport(width: u32, height: u32) void {
     state.native_input_state.scroll_y = @min(state.native_input_state.scroll_y, appScrollLimit(@floatFromInt(width), @floatFromInt(height)));
 }
 
-pub fn refreshRoutePath() void {
-    state.route_len = state.app_navigation.writePath(&state.route_bytes, state.native_input_state.route) catch unreachable;
+pub fn refreshLocationPathProjection() void {
+    state.route_len = state.app_navigation.writePathProjection(&state.route_bytes, state.native_input_state.route) catch unreachable;
 }
 
-pub fn refreshRouteHash() void {
-    state.route_hash_len = state.app_navigation.writeHash(&state.route_hash_bytes, state.native_input_state.route) catch unreachable;
+pub fn refreshLocationHashProjection() void {
+    state.route_hash_len = state.app_navigation.writeHashProjection(&state.route_hash_bytes, state.native_input_state.route) catch unreachable;
 }
 
 pub fn recordAction(action: state.ui_runtime.Action) void {
@@ -285,7 +287,7 @@ pub fn hasIconId(items: []const state.ui.Command, icon_id: u32) bool {
     return false;
 }
 
-pub fn sourceLabelForHit(route: state.app_navigation.Route, hit_id: u32, out: []u8) ?[]const u8 {
+pub fn sourceLabelForHit(route: state.app_navigation.Location, hit_id: u32, out: []u8) ?[]const u8 {
     if (hit_id == 0) return null;
     const component_gallery = @import("../ui/component_gallery.zig");
     if (!state.app_navigation.isAppPreview(route)) return null;

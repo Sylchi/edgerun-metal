@@ -75,6 +75,7 @@ extern er_serial_crlf
 
 ; ─── TRB constants ──────────────────────────────────────────────────
 %define TRB_CMD_NOOP     23
+%define TRB_CMD_ENABLE_SLOT 9
 %define TRB_LINK         6
 %define TRB_EV_CMD_CMPL  33
 %define TRB_TYPE_SHIFT   10
@@ -112,6 +113,7 @@ xhci_cmd_enq_idx:   resd 1
 xhci_cmd_cycle:     resd 1
 xhci_evt_deq_idx:   resd 1
 xhci_evt_cycle:     resd 1
+xhci_last_cmd_ptr:  resq 1
 xhci_cw_p0:         resq 1
 xhci_cw_st:         resd 1
 xhci_cw_ctl:        resd 1
@@ -456,6 +458,7 @@ er_fn er_xhci_init
     mov     dword [xhci_cmd_cycle], 1
     mov     dword [xhci_evt_deq_idx], 0
     mov     dword [xhci_evt_cycle], 1
+    mov     qword [xhci_last_cmd_ptr], 0
 
     ; Clear per-port descriptor blob registry.
     lea     rdi, [rel xhci_cfg_blob_ptrs]
@@ -874,6 +877,7 @@ er_fn er_xhci_cmd_submit_noop
     mov     eax, ecx
     shl     eax, 4
     add     rdi, rax
+    mov     [xhci_last_cmd_ptr], rdi
     ; TRB parameter/status are zero for No-Op.
     mov     qword [rdi + 0], 0
     mov     dword [rdi + 8], 0
@@ -908,6 +912,59 @@ er_fn er_xhci_cmd_submit_noop
     mov     eax, -1
     ret
 .cn_bad_state:
+    er_err  ERROR_BAD_ARGUMENT
+    mov     eax, -1
+    ret
+
+; ==================================================================
+; er_xhci_cmd_submit_enable_slot — enqueue Enable Slot command TRB
+; int er_xhci_cmd_submit_enable_slot(void)
+; Returns: 0 on success, -1 on controller-not-present/bad-state.
+; ==================================================================
+er_fn er_xhci_cmd_submit_enable_slot
+    mov     eax, [xhci_bar0]
+    test    eax, eax
+    jz      .ce_absent
+
+    mov     ecx, [xhci_cmd_enq_idx]
+    cmp     ecx, (CMD_RING_NTRB - 1)
+    jae     .ce_bad_state
+    lea     rdi, [rel xhci_cmd_ring]
+    mov     eax, ecx
+    shl     eax, 4
+    add     rdi, rax
+    mov     [xhci_last_cmd_ptr], rdi
+    mov     qword [rdi + 0], 0
+    mov     dword [rdi + 8], 0
+    mov     eax, (TRB_CMD_ENABLE_SLOT << TRB_TYPE_SHIFT)
+    mov     edx, [xhci_cmd_cycle]
+    and     edx, TRB_CYCLE
+    or      eax, edx
+    mov     [rdi + 12], eax
+
+    mov     eax, ecx
+    inc     eax
+    cmp     eax, (CMD_RING_NTRB - 1)
+    jb      .ce_store_idx
+    mov     eax, 0
+    mov     edx, [xhci_cmd_cycle]
+    xor     edx, 1
+    mov     [xhci_cmd_cycle], edx
+.ce_store_idx:
+    mov     [xhci_cmd_enq_idx], eax
+
+    mov     edi, [xhci_bar0]
+    add     edi, [xhci_db_off]
+    xor     esi, esi
+    call    er_mmio_write32
+    xor     eax, eax
+    er_ok
+    ret
+.ce_absent:
+    er_err  ERROR_NOT_PRESENT
+    mov     eax, -1
+    ret
+.ce_bad_state:
     er_err  ERROR_BAD_ARGUMENT
     mov     eax, -1
     ret
@@ -1065,4 +1122,34 @@ er_fn er_xhci_cmd_wait_completion
     pop     r14
     pop     r13
     pop     r12
+    ret
+
+; ==================================================================
+; er_xhci_get_cmd_debug — fetch command ring debug state
+; int er_xhci_get_cmd_debug(uint64_t* out_ring_base, uint64_t* out_last_cmd_ptr,
+;                           uint32_t* out_enq_idx, uint32_t* out_cycle)
+; ==================================================================
+er_fn er_xhci_get_cmd_debug
+    test    rdi, rdi
+    jz      .gd_bad_arg
+    test    rsi, rsi
+    jz      .gd_bad_arg
+    test    rdx, rdx
+    jz      .gd_bad_arg
+    test    rcx, rcx
+    jz      .gd_bad_arg
+    lea     r8, [rel xhci_cmd_ring]
+    mov     [rdi], r8
+    mov     r8, [xhci_last_cmd_ptr]
+    mov     [rsi], r8
+    mov     eax, [xhci_cmd_enq_idx]
+    mov     [rdx], eax
+    mov     eax, [xhci_cmd_cycle]
+    mov     [rcx], eax
+    xor     eax, eax
+    er_ok
+    ret
+.gd_bad_arg:
+    er_err  ERROR_BAD_ARGUMENT
+    mov     eax, -1
     ret

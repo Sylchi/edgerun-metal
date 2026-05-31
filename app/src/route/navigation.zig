@@ -1,14 +1,9 @@
 const std = @import("std");
 const bytes = @import("../bytes.zig");
-const preimage = @import("../preimage.zig");
 const icon_component = @import("../ui/components/Icon.zig");
 
-comptime {
-    @setEvalBranchQuota(100000);
-}
-
-pub const ObjectId = preimage.Hash;
-pub const object_id_bytes = preimage.hash_size;
+pub const ObjectId = [32]u8;
+pub const object_id_bytes = 32;
 pub const object_id_hex_bytes = object_id_bytes * 2;
 pub const object_projection_prefix = "/o/";
 pub const object_hash_projection_prefix = "#/o/";
@@ -23,17 +18,17 @@ pub const frontend_button_id: u32 = app_preview_button_id;
 pub const reveal_identity_button_id: u32 = 15_001;
 
 pub const TypeObject = struct {
-    pub const type_definition = preimage.hash("edgerun:object:type", "type");
-    pub const location = preimage.hash("edgerun:object:type", "location");
-    pub const ui_surface = preimage.hash("edgerun:object:type", "ui.surface");
-    pub const source_workspace = preimage.hash("edgerun:object:type", "source.workspace");
-    pub const app_preview = preimage.hash("edgerun:object:type", "app.preview");
-    pub const intent = preimage.hash("edgerun:object:type", "intent");
+    pub const type_definition = hexId("e135fafe25277aae6cb2fe6dbc2666624f6fbc1edd954fb36c6f0a7103ba53e5");
+    pub const location = hexId("aa63d9733d7f22608efa74fd8e5b635470892d608bb39ee48228a492855610d3");
+    pub const ui_surface = hexId("430640c20e87a74b0473a00687586f2d53231428c8a7a122492445958e17d43b");
+    pub const source_workspace = hexId("0d2134ea795c834ebed586d8e35b9644742cdb99eb980d9dff06bf2ce871727c");
+    pub const app_preview = hexId("8ac05974c9952c884df4391fbea4af98d8a9c374981f8ba6ccb087e8da5b5401");
+    pub const intent = hexId("f6856cf01cce2546fec5239fd0aa71d72f826ae512944953cae326d498e9213f");
 };
 
 pub const SurfaceObject = struct {
-    pub const source_workspace = typedObjectId(TypeObject.ui_surface, "surface:source-workspace");
-    pub const app_preview = typedObjectId(TypeObject.ui_surface, "surface:app-preview");
+    pub const source_workspace = hexId("205ac3c9c7ca2ec8c2f83bee439853d05816c53d4f3c3e440367442717aacaa1");
+    pub const app_preview = hexId("b95d242bccbc36d7d33f3d2c6ad0ce966a3885cd64340080c32e067e20195963");
 };
 
 pub const Action = enum(u32) {
@@ -71,8 +66,8 @@ pub const LocationFixture = struct {
 
 pub const RouteFixture = LocationFixture;
 
-pub const source_workspace_location_object = locationObjectId(SurfaceObject.source_workspace);
-pub const app_preview_location_object = locationObjectId(SurfaceObject.app_preview);
+pub const source_workspace_location_object = hexId("3ceeb2766f06e254fd48cf0a0767fd75117e03b14931b1a0d93a2f0657815a34");
+pub const app_preview_location_object = hexId("db0ce6ac80b7fe48a3d8bb96cfb9106428626754c15be4a410d9c197bab19675");
 
 pub const location_fixtures = [_]LocationFixture{
     .{
@@ -276,20 +271,6 @@ pub fn contract() Contract {
     };
 }
 
-fn typedObjectId(type_id: ObjectId, name: []const u8) ObjectId {
-    var builder = preimage.Builder.init("edgerun:object:typed");
-    builder.hash(type_id);
-    builder.bytes(name);
-    return builder.final();
-}
-
-fn locationObjectId(surface: ObjectId) ObjectId {
-    var builder = preimage.Builder.init("edgerun:object:location");
-    builder.hash(TypeObject.location);
-    builder.hash(surface);
-    return builder.final();
-}
-
 fn writeProjection(out: []u8, prefix: []const u8, object: ObjectId) error{RouteBufferTooSmall}!usize {
     if (prefix.len + object_id_hex_bytes > out.len) return error.RouteBufferTooSmall;
     @memcpy(out[0..prefix.len], prefix);
@@ -336,6 +317,20 @@ fn hexValue(value: u8) ?u8 {
         'A'...'F' => value - 'A' + 10,
         else => null,
     };
+}
+
+fn hexId(comptime raw: []const u8) ObjectId {
+    comptime {
+        if (raw.len != object_id_hex_bytes) @compileError("object id hex must be 32 bytes");
+        var out: ObjectId = undefined;
+        var index: usize = 0;
+        while (index < object_id_bytes) : (index += 1) {
+            const hi = hexValue(raw[index * 2]) orelse @compileError("invalid object id hex");
+            const lo = hexValue(raw[index * 2 + 1]) orelse @compileError("invalid object id hex");
+            out[index] = (hi << 4) | lo;
+        }
+        return out;
+    }
 }
 
 fn comptimeProjection(comptime prefix: []const u8, comptime object: ObjectId) []const u8 {
