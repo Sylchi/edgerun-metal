@@ -85,6 +85,7 @@ tls_gcm_block: resb TLS_GCM_BLOCK_LEN
 tls_gcm_ctr: resb TLS_GCM_BLOCK_LEN
 tls_gcm_tagmask: resb TLS_GCM_BLOCK_LEN
 tls_gcm_len_block: resb TLS_GCM_BLOCK_LEN
+tls_gcm_calc_tag: resb TLS_GCM_TAG_LEN
 tls_gcm_key_ptr: resq 1
 tls_gcm_iv_ptr: resq 1
 tls_gcm_tag_ptr: resq 1
@@ -884,6 +885,161 @@ er_fn er_tls_aes128_gcm_encrypt
     pop     rbx
     er_ret
 .bad_gcm:
+    mov     eax, -1
+    er_err  ERROR_INVALID_PARAM
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+
+; ==================================================================
+; er_tls_aes128_gcm_decrypt
+; rdi=out, rsi=in, edx=len, rcx=aad, r8d=aad_len, r9=key
+; [rsp+8]=iv12, [rsp+16]=tag16
+; ==================================================================
+global er_tls_aes128_gcm_decrypt
+er_fn er_tls_aes128_gcm_decrypt
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+
+    mov     r12, rdi
+    mov     r13, rsi
+    mov     r14d, edx
+    mov     r15, rcx
+    mov     ebx, r8d
+    mov     r10, r9
+    mov     r11, [rsp + 48]     ; iv12
+    mov     r9,  [rsp + 56]     ; tag
+    mov     [tls_gcm_key_ptr], r10
+    mov     [tls_gcm_iv_ptr], r11
+    mov     [tls_gcm_tag_ptr], r9
+    test    r12, r12
+    jz      .bad_gcm_dec
+    test    r13, r13
+    jz      .bad_gcm_dec
+    test    r10, r10
+    jz      .bad_gcm_dec
+    test    r11, r11
+    jz      .bad_gcm_dec
+    test    r9, r9
+    jz      .bad_gcm_dec
+    test    ebx, ebx
+    jz      .aad_ok_dec
+    test    r15, r15
+    jz      .bad_gcm_dec
+.aad_ok_dec:
+    ; H = AES_K(0^128)
+    lea     rdi, [tls_gcm_h]
+    xor     esi, esi
+    mov     edx, TLS_GCM_BLOCK_LEN
+    call    er_memset
+    lea     rdi, [tls_gcm_ctr]
+    xor     esi, esi
+    mov     edx, TLS_GCM_BLOCK_LEN
+    call    er_memset
+    lea     rdi, [tls_gcm_h]
+    lea     rsi, [tls_gcm_h]
+    mov     edx, TLS_GCM_BLOCK_LEN
+    mov     rcx, [tls_gcm_key_ptr]
+    lea     r8, [tls_gcm_ctr]
+    call    er_tor_aes_ctr
+
+    ; J0 = IV || 0x00000001, tag mask = E(K, J0)
+    lea     rdi, [tls_gcm_ctr]
+    mov     rsi, [tls_gcm_iv_ptr]
+    mov     edx, TLS_GCM_IV_LEN
+    call    er_memcpy
+    mov     dword [tls_gcm_ctr + 12], 0x01000000
+    lea     rdi, [tls_gcm_tagmask]
+    xor     esi, esi
+    mov     edx, TLS_GCM_BLOCK_LEN
+    call    er_memset
+    lea     rdi, [tls_gcm_tagmask]
+    lea     rsi, [tls_gcm_tagmask]
+    mov     edx, TLS_GCM_BLOCK_LEN
+    mov     rcx, [tls_gcm_key_ptr]
+    lea     r8, [tls_gcm_ctr]
+    call    er_tor_aes_ctr
+
+    ; GHASH(AAD || ciphertext || lengths)
+    lea     rdi, [tls_gcm_x]
+    xor     esi, esi
+    mov     edx, TLS_GCM_BLOCK_LEN
+    call    er_memset
+    mov     rsi, r15
+    mov     edx, ebx
+    call    _tls_gcm_absorb
+    mov     rsi, r13
+    mov     edx, r14d
+    call    _tls_gcm_absorb
+    lea     rdi, [tls_gcm_len_block]
+    xor     esi, esi
+    mov     edx, TLS_GCM_BLOCK_LEN
+    call    er_memset
+    mov     eax, ebx
+    shl     rax, 3
+    bswap   rax
+    mov     [tls_gcm_len_block], rax
+    mov     eax, r14d
+    shl     rax, 3
+    bswap   rax
+    mov     [tls_gcm_len_block + 8], rax
+    mov     rsi, tls_gcm_len_block
+    mov     edx, TLS_GCM_BLOCK_LEN
+    call    _tls_gcm_absorb
+
+    xor     ecx, ecx
+.tag_dec_loop:
+    cmp     ecx, TLS_GCM_TAG_LEN
+    jae     .check_tag_dec
+    movzx   eax, byte [tls_gcm_x + rcx]
+    xor     al, [tls_gcm_tagmask + rcx]
+    mov     [tls_gcm_calc_tag + rcx], al
+    inc     ecx
+    jmp     .tag_dec_loop
+.check_tag_dec:
+    lea     rdi, [tls_gcm_calc_tag]
+    mov     rsi, [tls_gcm_tag_ptr]
+    mov     edx, TLS_GCM_TAG_LEN
+    call    er_memcmp
+    test    eax, eax
+    jnz     .auth_fail_dec
+
+    ; Decrypt with inc32(J0).
+    lea     rdi, [tls_gcm_ctr]
+    mov     rsi, [tls_gcm_iv_ptr]
+    mov     edx, TLS_GCM_IV_LEN
+    call    er_memcpy
+    mov     dword [tls_gcm_ctr + 12], 0x02000000
+    mov     rdi, r12
+    mov     rsi, r13
+    mov     edx, r14d
+    mov     rcx, [tls_gcm_key_ptr]
+    lea     r8, [tls_gcm_ctr]
+    call    er_tor_aes_ctr
+    xor     eax, eax
+    er_ok
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+.auth_fail_dec:
+    mov     eax, -1
+    er_err  ERROR_TLS_RECORD
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+.bad_gcm_dec:
     mov     eax, -1
     er_err  ERROR_INVALID_PARAM
     pop     r15

@@ -112,6 +112,7 @@ hda_mic_buffer:   resb HDA_MIC_BYTES
 hda_verb_sink:    resd 1
 hda_last_start_stage: resd 1
 hda_last_capture_stage: resd 1
+hda_last_route_stage: resd 1
 
 SECTION .text
 
@@ -520,16 +521,19 @@ _hda_codec_send_table:
     mov     r13d, esi
     mov     r14, rdx
     mov     r15d, ecx
+    mov     dword [rel hda_last_route_stage], 0
     test    r12d, r12d
     jz      .st_bad_arg
     test    r13d, r13d
     jz      .st_absent
     test    r14, r14
     jz      .st_bad_arg
+    mov     ebx, 1
 
 .st_loop:
     test    r15d, r15d
     jz      .st_done
+    mov     [rel hda_last_route_stage], ebx
     mov     edi, r12d
     mov     esi, r13d
     mov     edx, [r14]
@@ -540,10 +544,12 @@ _hda_codec_send_table:
     test    eax, eax
     jnz     .st_out
     add     r14, HDA_VERB_ENTRY_BYTES
+    inc     ebx
     dec     r15d
     jmp     .st_loop
 
 .st_done:
+    mov     dword [rel hda_last_route_stage], 0
     xor     eax, eax
     er_ok
     jmp     .st_out
@@ -560,6 +566,16 @@ _hda_codec_send_table:
     pop     r13
     pop     r12
     pop     rbx
+    ret
+
+; ==================================================================
+; er_hda_get_route_stage — read failed codec route table entry index
+; uint32_t er_hda_get_route_stage(void)
+; 0=success/not-run, otherwise 1-based route table entry that failed.
+; ==================================================================
+er_fn er_hda_get_route_stage
+    mov     eax, [rel hda_last_route_stage]
+    er_ok
     ret
 
 ; ==================================================================

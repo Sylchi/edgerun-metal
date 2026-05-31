@@ -95,6 +95,7 @@ extern er_hda_codec_root_nodes
 extern er_hda_codec_has_probe_routes
 extern er_hda_prepare_speaker
 extern er_hda_prepare_mic
+extern er_hda_get_route_stage
 extern er_hda_start_square_wave
 extern er_hda_start_mic_capture
 extern er_hda_get_start_stage
@@ -1383,7 +1384,9 @@ er_fn er_kernel_main
     mov     [rel hda_tone_status], eax
     jmp     .hda_tone_print
 .hda_route_fail:
-    mov     dword [rel hda_tone_status], 10
+    call    er_hda_get_route_stage
+    add     eax, 100
+    mov     [rel hda_tone_status], eax
 .hda_tone_print:
     mov     rdi, COM1_PORT
     lea     rsi, [rel check_hda_tone]
@@ -1441,7 +1444,9 @@ er_fn er_kernel_main
     mov     [rel hda_mic_status], eax
     jmp     .hda_mic_print
 .hda_mic_route_fail:
-    mov     dword [rel hda_mic_status], 10
+    call    er_hda_get_route_stage
+    add     eax, 100
+    mov     [rel hda_mic_status], eax
 .hda_mic_print:
     mov     rdi, COM1_PORT
     lea     rsi, [rel check_hda_mic]
