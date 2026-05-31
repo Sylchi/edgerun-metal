@@ -13,6 +13,7 @@ extern er_mmio_read32
 
 %define RTL8922_VENDOR 0x10EC
 %define RTL8922_DEVICE 0x8922
+%define RTL8922_FW_MIN_SIZE 256
 
 SECTION .text
 
@@ -121,3 +122,51 @@ er_fn er_rtl8922_mmio_probe
     er_err  ERROR_NOT_PRESENT
     mov     eax, -1
     ret
+
+; int er_rtl8922_fw_ingest(const void* fw_ptr, uint64_t fw_size)
+; Minimal validation + register blob for future upload path.
+er_fn er_rtl8922_fw_ingest
+    test    rdi, rdi
+    jz      .fw_bad_arg
+    cmp     rsi, RTL8922_FW_MIN_SIZE
+    jb      .fw_bad_arg
+    mov     [rtl8922_fw_ptr], rdi
+    mov     [rtl8922_fw_size], rsi
+    er_ok
+    xor     eax, eax
+    ret
+
+.fw_bad_arg:
+    er_err  ERROR_BAD_ARGUMENT
+    mov     eax, -1
+    ret
+
+; int er_rtl8922_fw_get_blob(uint64_t* out_ptr, uint64_t* out_size)
+er_fn er_rtl8922_fw_get_blob
+    test    rdi, rdi
+    jz      .fwget_bad_arg
+    test    rsi, rsi
+    jz      .fwget_bad_arg
+    mov     rax, [rtl8922_fw_ptr]
+    test    rax, rax
+    jz      .fwget_missing
+    mov     [rdi], rax
+    mov     rax, [rtl8922_fw_size]
+    mov     [rsi], rax
+    er_ok
+    xor     eax, eax
+    ret
+
+.fwget_bad_arg:
+    er_err  ERROR_BAD_ARGUMENT
+    mov     eax, -1
+    ret
+
+.fwget_missing:
+    er_err  ERROR_NOT_PRESENT
+    mov     eax, -1
+    ret
+
+SECTION .bss
+rtl8922_fw_ptr:  resq 1
+rtl8922_fw_size: resq 1

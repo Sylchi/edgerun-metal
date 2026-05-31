@@ -5,7 +5,7 @@ const renderer_pipeline = @import("render/pipeline.zig");
 const renderer_software = @import("render/backends/software.zig");
 const component_union = @import("ui/components/Component.zig");
 const node_renderer = @import("ui/components/NodeRenderer.zig");
-const ui = @import("ui.zig");
+const ui = @import("ui/core.zig");
 
 const width: usize = 2560;
 const height: usize = 1440;
@@ -20,10 +20,8 @@ const fnv64_offset_basis: u64 = 0xcbf29ce484222325;
 const fnv64_prime: u64 = 0x100000001b3;
 const SnapshotIrStorage = renderer_ir.FixedBuffers(
     max_rects,
-    max_text_vertices,
     max_icon_vertices,
-    empty_texture_vertices,
-    empty_texture_vertices,
+    max_text_vertices,
     empty_texture_vertices,
     empty_texture_vertices,
     max_icon_vertices * 256,
