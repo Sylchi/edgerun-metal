@@ -155,6 +155,44 @@ da_msg_dispatch_count: dq (da_msg_dispatch_table_end - da_msg_dispatch_table) / 
 ; ==================================================================
 SECTION .text
 
+%macro da_pool_append_from_payload 7
+    ; %1=len_off %2=ptr_off %3=cap_off %4=pool_sym %5=pool_cap %6=item_bytes %7=payload_src_off
+    mov     r8d, [r15 + %1]            ; current_len
+    mov     edx, %5
+    sub     edx, r8d                   ; available
+    jle     %%done
+    cmp     ecx, edx
+    cmova   ecx, edx
+
+    mov     eax, r14d
+    imul    eax, %5 * %6               ; per-surface bytes
+    mov     edx, r8d
+    imul    edx, %6
+    add     eax, edx
+    lea     rdi, [rel %4 + rax]
+
+    lea     rsi, [r12 + LOCAL_CELL_PAYLOAD + %7]
+    mov     r11d, ecx
+    mov     eax, ecx
+    imul    eax, %6
+    mov     edx, eax
+    call    er_memcpy
+
+    mov     eax, [r15 + %1]
+    add     eax, r11d
+    mov     [r15 + %1], eax
+
+    mov     eax, r14d
+    imul    eax, %5 * %6
+    lea     rax, [rel %4 + rax]
+    mov     [r15 + %2], rax
+
+    cmp     qword [r15 + %3], 0
+    jnz     %%done
+    mov     qword [r15 + %3], %5
+%%done:
+%endmacro
+
 ; ==================================================================
 ; er_da_init
 ; ==================================================================
@@ -312,6 +350,63 @@ _da_find_surface_by_hash:
     ret
 
 ; ==================================================================
+; _da_surface_ptr_by_slot
+; edi = slot_index
+; returns rax = &da_surface_registry[slot]
+; ==================================================================
+_da_surface_ptr_by_slot:
+    mov     eax, edi
+    imul    eax, DA_SURFACE_SIZE
+    lea     rax, [rel da_surface_registry + rax]
+    ret
+
+; ==================================================================
+; _da_focus_clear_state
+; Clears focused slot + focused hash
+; ==================================================================
+_da_focus_clear_state:
+    mov     dword [rel da_focused_slot], -1
+    lea     rdi, [rel da_focused_hash]
+    xor     esi, esi
+    mov     edx, 32
+    call    er_memset
+    ret
+
+; ==================================================================
+; _da_focus_clear_all_flags
+; Clears DA_SURFACE_FOCUSED on all registered surfaces.
+; ==================================================================
+_da_focus_clear_all_flags:
+    push    rbx
+    xor     ebx, ebx
+.loop:
+    cmp     ebx, [rel da_surface_count]
+    jae     .done
+    mov     edi, ebx
+    call    _da_surface_ptr_by_slot
+    and     byte [rax + DA_SURFACE_FLAGS], ~DA_SURFACE_FOCUSED
+    inc     ebx
+    jmp     .loop
+.done:
+    pop     rbx
+    ret
+
+; ==================================================================
+; _da_focus_assign_slot
+; edi = slot_index
+; Sets focused slot, focused flag, and focused hash.
+; ==================================================================
+_da_focus_assign_slot:
+    mov     [rel da_focused_slot], edi
+    call    _da_surface_ptr_by_slot
+    or      byte [rax + DA_SURFACE_FLAGS], DA_SURFACE_FOCUSED
+    lea     rdi, [rel da_focused_hash]
+    lea     rsi, [rax + DA_SURFACE_HASH]
+    mov     edx, 32
+    call    er_memcpy
+    ret
+
+; ==================================================================
 ; _da_register_surface — register a surface from cell payload
 ; rdi = cell_ptr, esi = sender_slot_id
 ; Cell payload: [type:1][layer:1][flags:1][rect_count:2][hash:32][rect_data...]
@@ -386,13 +481,8 @@ _da_register_surface:
     je      .no_autofocus
     cmp     cl, DA_LAYER_TOAST
     je      .no_autofocus
-    mov     [rel da_focused_slot], r13d
-    or      byte [rbx + DA_SURFACE_FLAGS], DA_SURFACE_FOCUSED
-    ; Copy focused app hash for input_kbd agent
-    lea     rdi, [rel da_focused_hash]
-    lea     rsi, [rbx + DA_SURFACE_HASH]
-    mov     edx, 32
-    call    er_memcpy
+    mov     edi, r13d
+    call    _da_focus_assign_slot
 .no_autofocus:
 
     inc     dword [rel da_surface_count]
@@ -456,11 +546,7 @@ _da_unregister_surface:
     ; If this was the focused surface, clear focus
     cmp     ebx, [rel da_focused_slot]
     jne     .no_focus_clear
-    mov     dword [rel da_focused_slot], -1
-    lea     rdi, [rel da_focused_hash]
-    xor     esi, esi
-    mov     edx, 32
-    call    er_memset
+    call    _da_focus_clear_state
 .no_focus_clear:
 
     dec     dword [rel da_surface_count]
@@ -525,46 +611,7 @@ _da_update_surface:
     test    ecx, ecx
     jz      .us_check_icons          ; no rects to copy
 
-    ; Calculate space remaining in pool
-    mov     r8d, [r15 + DA_SURFACE_RECT_LEN]  ; r8d = current_len
-    mov     edx, DA_SURFACE_POOL_RECTS
-    sub     edx, r8d                 ; edx = available slots
-    jle     .us_check_icons          ; pool full
-    cmp     ecx, edx
-    cmova   ecx, edx                 ; cap rect_count to available
-
-    ; dst = pool_base + slot_index * (POOL_RECTS * 60) + current_len * 60
-    mov     eax, r14d
-    imul    eax, DA_SURFACE_POOL_RECTS * 15 * 4  ; per-surface rect pool bytes
-    mov     edx, r8d
-    imul    edx, 15 * 4              ; current_len * 60 bytes
-    add     eax, edx
-    lea     rdi, [rel da_surface_rect_pool + rax]
-
-    ; src = cell payload + 36
-    lea     rsi, [r12 + LOCAL_CELL_PAYLOAD + 36]
-
-    ; bytes_to_copy = rect_count * 15 floats * 4 bytes
-    mov     eax, ecx
-    imul    eax, 15 * 4
-    mov     edx, eax
-    call    er_memcpy
-
-    ; Update rect_len: current_len + rect_count
-    mov     eax, [r15 + DA_SURFACE_RECT_LEN]
-    add     eax, ecx
-    mov     [r15 + DA_SURFACE_RECT_LEN], eax
-
-    ; Ensure surface rect_ptr points to its pool slot
-    mov     eax, r14d
-    imul    eax, DA_SURFACE_POOL_RECTS * 15 * 4
-    lea     rax, [rel da_surface_rect_pool + rax]
-    mov     [r15 + DA_SURFACE_RECT_PTR], rax
-
-    ; Set rect_cap to POOL_RECTS (stays constant after first update)
-    cmp     qword [r15 + DA_SURFACE_RECT_CAP], 0
-    jnz     .us_check_icons
-    mov     qword [r15 + DA_SURFACE_RECT_CAP], DA_SURFACE_POOL_RECTS
+    da_pool_append_from_payload DA_SURFACE_RECT_LEN, DA_SURFACE_RECT_PTR, DA_SURFACE_RECT_CAP, da_surface_rect_pool, DA_SURFACE_POOL_RECTS, (15 * 4), 36
 
 .us_check_icons:
     ; ── Handle icon updates (same pattern, reserved for future) ──
@@ -586,38 +633,7 @@ _da_update_surface:
     test    ecx, ecx
     jz      .us_done
 
-    mov     r8d, [r15 + DA_SURFACE_ICON_LEN]
-    mov     edx, DA_SURFACE_POOL_ICONS
-    sub     edx, r8d
-    jle     .us_done
-    cmp     ecx, edx
-    cmova   ecx, edx
-
-    mov     eax, r14d
-    imul    eax, DA_SURFACE_POOL_ICONS * 9 * 4
-    mov     edx, r8d
-    imul    edx, 9 * 4
-    add     eax, edx
-    lea     rdi, [rel da_surface_icon_pool + rax]
-
-    lea     rsi, [r12 + LOCAL_CELL_PAYLOAD + 36 + 0]  ; icon data after rects
-    mov     eax, ecx
-    imul    eax, 9 * 4
-    mov     edx, eax
-    call    er_memcpy
-
-    mov     eax, [r15 + DA_SURFACE_ICON_LEN]
-    add     eax, ecx
-    mov     [r15 + DA_SURFACE_ICON_LEN], eax
-
-    mov     eax, r14d
-    imul    eax, DA_SURFACE_POOL_ICONS * 9 * 4
-    lea     rax, [rel da_surface_icon_pool + rax]
-    mov     [r15 + DA_SURFACE_ICON_PTR], rax
-
-    cmp     qword [r15 + DA_SURFACE_ICON_CAP], 0
-    jnz     .us_done
-    mov     qword [r15 + DA_SURFACE_ICON_CAP], DA_SURFACE_POOL_ICONS
+    da_pool_append_from_payload DA_SURFACE_ICON_LEN, DA_SURFACE_ICON_PTR, DA_SURFACE_ICON_CAP, da_surface_icon_pool, DA_SURFACE_POOL_ICONS, (9 * 4), 36
 
 .us_done:
     pop     r15
@@ -847,35 +863,9 @@ _da_focus_surface:
 
     mov     r13d, eax               ; new focus slot
 
-    ; Clear FOCUSED flag on all surfaces
-    xor     ebx, ebx
-.clear_loop:
-    cmp     ebx, [rel da_surface_count]
-    jae     .set_new
-    mov     eax, ebx
-    imul    eax, DA_SURFACE_SIZE
-    lea     rdi, [rel da_surface_registry + rax]
-    and     byte [rdi + DA_SURFACE_FLAGS], ~DA_SURFACE_FOCUSED
-    inc     ebx
-    jmp     .clear_loop
-
-.set_new:
-    ; Set FOCUSED flag on the new surface
-    mov     eax, r13d
-    imul    eax, DA_SURFACE_SIZE
-    lea     rdi, [rel da_surface_registry + rax]
-    or      byte [rdi + DA_SURFACE_FLAGS], DA_SURFACE_FOCUSED
-
-    ; Update focused slot
-    mov     [rel da_focused_slot], r13d
-
-    ; Copy focused app hash for input_kbd agent
-    mov     eax, r13d
-    imul    eax, DA_SURFACE_SIZE
-    lea     rsi, [rel da_surface_registry + rax + DA_SURFACE_HASH]
-    lea     rdi, [rel da_focused_hash]
-    mov     edx, 32
-    call    er_memcpy
+    call    _da_focus_clear_all_flags
+    mov     edi, r13d
+    call    _da_focus_assign_slot
 
 .done:
     pop     r13

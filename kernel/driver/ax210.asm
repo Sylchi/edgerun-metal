@@ -9,6 +9,7 @@
 extern er_pci_find_device
 extern er_pci_read32
 extern er_pci_write32
+extern er_mmio_read32
 
 %define AX210_VENDOR 0x8086
 %define AX210_DEVICE 0x2725
@@ -269,6 +270,38 @@ er_fn er_ax210_fw_get_tlv_stats
 
 .stats_bad:
     er_err  ERROR_BAD_ARGUMENT
+    mov     eax, -1
+    ret
+
+; ==================================================================
+; er_ax210_mmio_probe — read a stable MMIO dword as liveness signal
+; int er_ax210_mmio_probe(uint64_t bar0, uint32_t* out_val)
+;
+; Reads BAR0+0x0. Rejects all-zeros or all-ones as invalid probe values.
+; Returns: eax = 0 on success, -1 on failure.
+; ==================================================================
+er_fn er_ax210_mmio_probe
+    test    rdi, rdi
+    jz      .mmio_bad_arg
+    test    rsi, rsi
+    jz      .mmio_bad_arg
+    call    er_mmio_read32
+    cmp     eax, 0
+    je      .mmio_bad
+    cmp     eax, 0xFFFFFFFF
+    je      .mmio_bad
+    mov     [rsi], eax
+    er_ok
+    xor     eax, eax
+    ret
+
+.mmio_bad_arg:
+    er_err  ERROR_BAD_ARGUMENT
+    mov     eax, -1
+    ret
+
+.mmio_bad:
+    er_err  ERROR_NOT_PRESENT
     mov     eax, -1
     ret
 

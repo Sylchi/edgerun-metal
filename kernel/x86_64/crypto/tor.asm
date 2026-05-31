@@ -27,6 +27,7 @@ extern er_serial_puthex32
 extern er_serial_crlf
 extern er_memcpy
 extern er_memset
+extern er_memcmp
 extern er_http_parse_status
 extern er_http_find_body
 ; er_sprintf not available
@@ -338,6 +339,9 @@ er_fn er_tor_directory_fetch_consensus
     call    _tor_parse_consensus_first_relay
     test    eax, eax
     js      .fail
+    call    er_tor_directory_fetch_guard_descriptor
+    test    eax, eax
+    js      .fail
 
     xor     eax, eax
     er_ok
@@ -504,6 +508,346 @@ _tor_decode_b64_20:
     pop     r12
     pop     rbx
     ret
+
+; ==================================================================
+; _tor_decode_b64_32 — decode base64 token to 32 bytes
+; rdi=token ptr, esi=token len, rdx=out[32]
+; returns eax=0 success, -1 failure
+; ==================================================================
+_tor_decode_b64_32:
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+
+    mov     r12, rdi
+    mov     r13d, esi
+    mov     r14, rdx
+    xor     r15d, r15d
+    xor     ebx, ebx
+
+.loop:
+    cmp     ebx, 32
+    jae     .ok
+    cmp     r15d, r13d
+    jae     .fail
+    movzx   edi, byte [r12 + r15]
+    inc     r15d
+    call    _tor_b64_val
+    cmp     eax, -1
+    je      .fail
+    mov     ecx, eax
+
+    cmp     r15d, r13d
+    jae     .fail
+    movzx   edi, byte [r12 + r15]
+    inc     r15d
+    call    _tor_b64_val
+    cmp     eax, -1
+    je      .fail
+    mov     edx, eax
+
+    mov     eax, ecx
+    shl     eax, 2
+    mov     esi, edx
+    shr     esi, 4
+    or      eax, esi
+    mov     [r14 + rbx], al
+    inc     ebx
+    cmp     ebx, 32
+    jae     .ok
+
+    cmp     r15d, r13d
+    jae     .ok
+    movzx   edi, byte [r12 + r15]
+    cmp     dil, '='
+    je      .ok
+    inc     r15d
+    call    _tor_b64_val
+    cmp     eax, -1
+    je      .fail
+    mov     esi, eax
+
+    mov     eax, edx
+    and     eax, 0x0F
+    shl     eax, 4
+    mov     ecx, esi
+    shr     ecx, 2
+    or      eax, ecx
+    mov     [r14 + rbx], al
+    inc     ebx
+    cmp     ebx, 32
+    jae     .ok
+
+    cmp     r15d, r13d
+    jae     .ok
+    movzx   edi, byte [r12 + r15]
+    cmp     dil, '='
+    je      .ok
+    inc     r15d
+    call    _tor_b64_val
+    cmp     eax, -1
+    je      .fail
+
+    mov     ecx, esi
+    and     ecx, 0x03
+    shl     ecx, 6
+    or      ecx, eax
+    mov     [r14 + rbx], cl
+    inc     ebx
+    jmp     .loop
+
+.ok:
+    xor     eax, eax
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    ret
+.fail:
+    mov     eax, -1
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    ret
+
+; ==================================================================
+; _tor_hex_encode_20_upper — encode 20 bytes as 40 hex uppercase
+; rdi=in[20], rsi=out[40]
+; ==================================================================
+_tor_hex_encode_20_upper:
+    push    rbx
+    xor     ecx, ecx
+.hex_loop:
+    cmp     ecx, 20
+    jae     .hex_done
+    movzx   eax, byte [rdi + rcx]
+    mov     ebx, eax
+    shr     ebx, 4
+    and     eax, 0x0F
+    cmp     bl, 9
+    jbe     .hi_num
+    add     bl, 'A' - 10
+    jmp     .hi_store
+.hi_num:
+    add     bl, '0'
+.hi_store:
+    mov     [rsi + rcx*2], bl
+    cmp     al, 9
+    jbe     .lo_num
+    add     al, 'A' - 10
+    jmp     .lo_store
+.lo_num:
+    add     al, '0'
+.lo_store:
+    mov     [rsi + rcx*2 + 1], al
+    inc     ecx
+    jmp     .hex_loop
+.hex_done:
+    pop     rbx
+    ret
+
+; ==================================================================
+; _tor_parse_descriptor_ntor_key — parse ntor-onion-key from descriptor
+; returns eax=0 success, -1 failure
+; ==================================================================
+_tor_parse_descriptor_ntor_key:
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+
+    lea     r12, [tor_dir_body_buf]
+    mov     r13d, [tor_dir_body_len]
+    xor     r14d, r14d
+
+.scan:
+    cmp     r14d, r13d
+    jae     .fail
+    mov     eax, r13d
+    sub     eax, r14d
+    cmp     eax, str_tor_ntor_key_prefix_len
+    jb      .next_line
+    lea     rdi, [r12 + r14]
+    lea     rsi, [rel str_tor_ntor_key_prefix]
+    mov     edx, str_tor_ntor_key_prefix_len
+    call    er_memcmp
+    test    eax, eax
+    jz      .found
+.next_line:
+    cmp     r14d, r13d
+    jae     .fail
+    cmp     byte [r12 + r14], 0x0A
+    je      .adv
+    inc     r14d
+    jmp     .next_line
+.adv:
+    inc     r14d
+    jmp     .scan
+
+.found:
+    add     r14d, str_tor_ntor_key_prefix_len
+    mov     r15d, r14d
+.tok_end:
+    cmp     r15d, r13d
+    jae     .decode
+    movzx   ebx, byte [r12 + r15]
+    cmp     bl, 0x0D
+    je      .decode
+    cmp     bl, 0x0A
+    je      .decode
+    inc     r15d
+    jmp     .tok_end
+.decode:
+    lea     rdi, [r12 + r14]
+    mov     esi, r15d
+    sub     esi, r14d
+    lea     rdx, [tor_guard_onion_key]
+    call    _tor_decode_b64_32
+    test    eax, eax
+    js      .fail
+    xor     eax, eax
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    ret
+
+.fail:
+    mov     eax, -1
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    ret
+
+; ==================================================================
+; er_tor_directory_fetch_guard_descriptor — fetch selected relay descriptor
+; returns eax=0 success, -1 failure
+; ==================================================================
+global er_tor_directory_fetch_guard_descriptor
+er_fn er_tor_directory_fetch_guard_descriptor
+    push    rbx
+    push    r12
+
+    ; Force fresh BEGIN_DIR stream for this fetch
+    mov     dword [tor_dir_stream_open], 0
+
+    ; Build GET /tor/server/fp/<HEX40> request in tor_test_buf
+    lea     rdi, [tor_test_buf]
+    lea     rsi, [rel str_tor_dir_desc_get_prefix]
+    mov     edx, str_tor_dir_desc_get_prefix_len
+    call    er_memcpy
+    mov     ebx, str_tor_dir_desc_get_prefix_len
+
+    lea     rdi, [tor_state + TOR_STATE_GUARD_FINGERPRINT]
+    lea     rsi, [tor_test_buf + rbx]
+    call    _tor_hex_encode_20_upper
+    add     ebx, 40
+
+    lea     rdi, [tor_test_buf + rbx]
+    lea     rsi, [rel str_tor_dir_desc_get_suffix]
+    mov     edx, str_tor_dir_desc_get_suffix_len
+    call    er_memcpy
+    add     ebx, str_tor_dir_desc_get_suffix_len
+
+    call    er_tor_open_directory_channel
+    test    eax, eax
+    js      .fail
+
+    mov     edi, [tor_circ_id_app]
+    movzx   esi, word [tor_dir_stream_id]
+    mov     edx, TOR_RELAY_DATA
+    lea     rcx, [tor_test_buf]
+    mov     r8d, ebx
+    call    er_tor_send_relay
+    test    eax, eax
+    js      .fail
+
+    xor     r12d, r12d
+    mov     dword [tor_dir_resp_len], 0
+    mov     ebx, 2048
+.recv_loop:
+    mov     edi, [tor_circ_id_app]
+    lea     rsi, [tor_dir_tmp_stream]
+    lea     rdx, [tor_dir_tmp_cmd]
+    lea     rcx, [tor_dir_tmp_data]
+    lea     r8, [tor_dir_tmp_len]
+    call    er_tor_recv_relay
+    test    eax, eax
+    js      .next
+    movzx   eax, word [tor_dir_tmp_stream]
+    cmp     ax, [tor_dir_stream_id]
+    jne     .next
+    movzx   eax, byte [tor_dir_tmp_cmd]
+    cmp     al, TOR_RELAY_CONNECTED
+    je      .next
+    cmp     al, TOR_RELAY_END
+    je      .parse
+    cmp     al, TOR_RELAY_DATA
+    jne     .next
+    mov     eax, [tor_dir_tmp_len]
+    test    eax, eax
+    jle     .next
+    mov     edx, TOR_RECV_BUF_SIZE
+    sub     edx, r12d
+    jbe     .fail
+    cmp     eax, edx
+    jbe     .cpsz
+    mov     eax, edx
+.cpsz:
+    lea     rdi, [tor_dir_resp_buf + r12]
+    lea     rsi, [tor_dir_tmp_data]
+    mov     edx, eax
+    call    er_memcpy
+    add     r12d, eax
+.next:
+    dec     ebx
+    jnz     .recv_loop
+    jmp     .fail
+.parse:
+    cmp     r12d, 0
+    je      .fail
+    mov     [tor_dir_resp_len], r12d
+    lea     rdi, [tor_dir_resp_buf]
+    mov     esi, r12d
+    call    er_http_parse_status
+    cmp     eax, 200
+    jne     .fail
+    lea     rdi, [tor_dir_resp_buf]
+    mov     esi, r12d
+    call    er_http_find_body
+    test    rax, rax
+    jz      .fail
+    lea     rdx, [tor_dir_resp_buf + r12]
+    sub     rdx, rax
+    test    edx, edx
+    jle     .fail
+    mov     [tor_dir_body_len], edx
+    lea     rdi, [tor_dir_body_buf]
+    mov     rsi, rax
+    call    er_memcpy
+    call    _tor_parse_descriptor_ntor_key
+    test    eax, eax
+    js      .fail
+    xor     eax, eax
+    er_ok
+    pop     r12
+    pop     rbx
+    er_ret
+.fail:
+    mov     eax, -1
+    er_err  ERROR_TOR_PROTOCOL_ERR
+    pop     r12
+    pop     rbx
+    er_ret
 
 ; ==================================================================
 ; _tor_parse_u16_dec — parse unsigned decimal port
@@ -720,9 +1064,97 @@ _tor_parse_consensus_first_relay:
 
 .tok_line_end:
     cmp     dword [tor_state + TOR_STATE_GUARD_IP], 0
-    je      .fail
+    je      .next_line
     cmp     word [tor_state + TOR_STATE_GUARD_PORT], 0
-    je      .fail
+    je      .next_line
+    ; Enforce guard policy from following "s " flags line:
+    ; require Running + Valid + Guard for selected relay.
+    mov     r10d, r14d
+    add     r10d, 2
+    add     r10d, r9d
+    xor     r11d, r11d
+
+.flags_seek:
+    cmp     r10d, r13d
+    jae     .fail
+    cmp     byte [r12 + r10], 0x0A
+    jne     .flags_line_check
+    inc     r10d
+    jmp     .flags_seek
+.flags_line_check:
+    cmp     byte [r12 + r10], 'r'
+    jne     .check_s
+    cmp     r10d, r13d
+    jae     .fail
+    cmp     byte [r12 + r10 + 1], ' '
+    je      .line_advance
+.check_s:
+    cmp     byte [r12 + r10], 's'
+    jne     .flags_skip_line
+    cmp     r10d, r13d
+    jae     .fail
+    cmp     byte [r12 + r10 + 1], ' '
+    jne     .flags_skip_line
+    add     r10d, 2
+    xor     r11d, r11d           ; bit0=Guard bit1=Running bit2=Valid
+.flags_tok_seek:
+    cmp     r10d, r13d
+    jae     .flags_done
+    movzx   eax, byte [r12 + r10]
+    cmp     al, 0x0A
+    je      .flags_done
+    cmp     al, ' '
+    jne     .flags_tok_start
+    inc     r10d
+    jmp     .flags_tok_seek
+.flags_tok_start:
+    mov     r8d, r10d
+    xor     r9d, r9d
+.flags_tok_len:
+    cmp     r10d, r13d
+    jae     .flags_tok_eval
+    movzx   eax, byte [r12 + r10]
+    cmp     al, 0x0A
+    je      .flags_tok_eval
+    cmp     al, ' '
+    je      .flags_tok_eval
+    inc     r10d
+    inc     r9d
+    jmp     .flags_tok_len
+.flags_tok_eval:
+    cmp     r9d, 5
+    jne     .flags_chk_run
+    lea     rdi, [r12 + r8]
+    lea     rsi, [rel str_flag_guard]
+    mov     edx, 5
+    call    er_memcmp
+    test    eax, eax
+    jnz     .flags_chk_run
+    or      r11d, 1
+.flags_chk_run:
+    cmp     r9d, 7
+    jne     .flags_chk_valid
+    lea     rdi, [r12 + r8]
+    lea     rsi, [rel str_flag_running]
+    mov     edx, 7
+    call    er_memcmp
+    test    eax, eax
+    jnz     .flags_chk_valid
+    or      r11d, 2
+.flags_chk_valid:
+    cmp     r9d, 5
+    jne     .flags_tok_seek
+    lea     rdi, [r12 + r8]
+    lea     rsi, [rel str_flag_valid]
+    mov     edx, 5
+    call    er_memcmp
+    test    eax, eax
+    jnz     .flags_tok_seek
+    or      r11d, 4
+    jmp     .flags_tok_seek
+.flags_done:
+    cmp     r11d, 7
+    jne     .flags_skip_line
     xor     eax, eax
     pop     r15
     pop     r14
@@ -730,6 +1162,11 @@ _tor_parse_consensus_first_relay:
     pop     r12
     pop     rbx
     ret
+
+.flags_skip_line:
+    ; Continue searching from current probe position
+    mov     r14d, r10d
+    jmp     .scan_lines
 
 .fail:
     mov     eax, -1
@@ -978,13 +1415,9 @@ er_fn er_tor_init
     lea     rdi, [rel str_tor_link_ok]
     call    _tor_print_status
 
-    ; === Phase 2: Build circuit ===
-    ; Use a well-known relay's node ID and onion key
-    ; For testing, we use dummy identity (the real handshake will fail)
-    ; In production, these come from the Tor directory consensus
-
-    ; For now, we just test the circuit creation machinery
-    ; with a simple handshake to the guard itself
+    ; === Phase 2: Build bootstrap circuit ===
+    ; Bootstrap uses temporary key material to bring up a one-hop
+    ; directory channel. A real app circuit is built after descriptor fetch.
 
     sub     rsp, 128        ; node_id(20) + onion_key(32) + padding
 
@@ -1021,10 +1454,28 @@ er_fn er_tor_init
     ; Mark ready before directory channel setup/fetch
     mov     dword [tor_state + TOR_STATE_LINK_ESTABLISHED], 1
 
-    ; === Phase 3: Fetch directory consensus over BEGIN_DIR ===
+    ; === Phase 3: Fetch directory consensus + descriptor over BEGIN_DIR ===
     call    er_tor_directory_fetch_consensus
     test    eax, eax
     js      .dir_fail
+
+    ; === Phase 4: Build real circuit using parsed relay material ===
+    sub     rsp, 64
+    lea     rdi, [rsp]
+    lea     rsi, [tor_state + TOR_STATE_GUARD_FINGERPRINT]
+    mov     edx, 20
+    call    er_memcpy
+    lea     rdi, [rsp + 20]
+    lea     rsi, [tor_guard_onion_key]
+    mov     edx, 32
+    call    er_memcpy
+    lea     rdi, [tor_circ_id_app]
+    mov     rsi, rsp
+    lea     rdx, [rsp + 20]
+    call    er_tor_circuit_create
+    add     rsp, 64
+    test    eax, eax
+    js      .circ_fail
 
     xor     eax, eax
     er_ok
@@ -1133,6 +1584,9 @@ str_tor_dir_desc_get_suffix: db " HTTP/1.1", 0x0D, 0x0A, "Host: tor", 0x0D, 0x0A
 str_tor_dir_desc_get_suffix_len equ $ - str_tor_dir_desc_get_suffix
 str_tor_ntor_key_prefix: db "ntor-onion-key "
 str_tor_ntor_key_prefix_len equ $ - str_tor_ntor_key_prefix
+str_flag_guard: db "Guard"
+str_flag_running: db "Running"
+str_flag_valid: db "Valid"
 
 SECTION .text
 

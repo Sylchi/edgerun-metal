@@ -21,99 +21,20 @@ er_fn er_fn_run
     mov     r14, rdx        ; wasm_len
     mov     r15, rcx        ; export_name
 
-    ; Initialize runtime context
-    mov     rdi, [r12 + RUNTIME_MEMORY_PTR_OFF]
-    mov     rsi, [r12 + RUNTIME_MEMORY_LEN_OFF]
-    mov     rdx, [r12 + RUNTIME_TICKS_PTR_OFF]
-    call    er_fn_init
+    mov     rdi, r12
+    call    _er_wasm_stage_runtime_for_module
 
-    ; Store grow function pointers if present
-    mov     rax, [r12 + RUNTIME_MEM_GROW_FN_OFF]
-    mov     [runtime_memory_grow_fn], rax
-    mov     rax, [r12 + RUNTIME_MEM_GROW_CTX_OFF]
-    mov     [runtime_memory_grow_ctx], rax
-    mov     rax, [r12 + RUNTIME_TABLE_GROW_FN_OFF]
-    mov     [runtime_table_grow_fn], rax
-    mov     rax, [r12 + RUNTIME_TABLE_GROW_CTX_OFF]
-    mov     [runtime_table_grow_ctx], rax
-    mov     rax, [r12 + RUNTIME_INITIAL_PAGES_OFF]
-    mov     [runtime_initial_pages], rax
-    movzx   eax, byte [r12 + RUNTIME_HAS_PAGES_OFF]
-    mov     [runtime_has_initial_pages], al
-
-    ; Store host imports table
-    mov     rax, [r12 + RUNTIME_IMPORTS_PTR_OFF]
-    mov     [runtime_imports_ptr], rax
-    mov     rax, [r12 + RUNTIME_IMPORTS_LEN_OFF]
-    mov     [runtime_imports_len], rax
-
-    ; Reset parser state
-    mov     byte [exec_storage_module_valid], 0
-    mov     byte [exec_storage_start_ran], 0
-    mov     qword [exec_frame_save_ptr], 0
-    ; Clear JIT table — per-module entries become stale on re-run
-    cld
-    lea     rdi, [rel jit_table]
-    xor     eax, eax
-    mov     ecx, MAX_FUNCTIONS
-    rep stosq
-
-    ; Parse module
     mov     rdi, r13
     mov     rsi, r14
-    call    er_wasm_parse_module
+    call    _er_wasm_parse_resolve_validate
     test    rdx, rdx
     jnz     .error
 
-    ; Resolve imports against host-provided table
-    call    er_wasm_resolve_imports
+    mov     edi, 1
+    call    _er_wasm_prime_loaded_module
     test    rdx, rdx
     jnz     .error
 
-    ; Validate no recursion in call graph
-    call    er_wasm_validate_no_recursion
-    test    rdx, rdx
-    jnz     .error
-
-    mov     byte [exec_storage_module_valid], 1
-
-    ; Determine initial memory pages
-    cmp     byte [runtime_has_initial_pages], 0
-    je      .use_module_memory_pages
-    mov     rax, [runtime_initial_pages]
-    jmp     .set_memory_pages
-.use_module_memory_pages:
-    mov     rax, [memory_min_pages]
-.set_memory_pages:
-    call    _er_wasm_validate_launch_pages
-    test    rdx, rdx
-    jnz     .error
-    mov     [executor_memory_pages], rax
-    ; Calculate memory limit: pages * 65536
-    shl     rax, WASM_PAGE_SHIFT
-    mov     [executor_memory_limit], rax
-
-    ; Run start function if present
-    cmp     byte [exec_storage_start_ran], 0
-    jne     .skip_start
-
-    cmp     qword [start_function_index], -1
-    je      .no_start
-
-    mov     rdi, [start_function_index]
-    xor     rsi, rsi
-    xor     rdx, rdx
-    call    er_fn_exec
-    test    rdx, rdx
-    jnz     .error
-    ; Check that start function returned no results
-    cmp     qword [exec_result_count], 0
-    jne     .corrupt_error_label
-
-.no_start:
-    mov     byte [exec_storage_start_ran], 1
-
-.skip_start:
     ; Find the export
     mov     rdi, r15
     mov     rsi, [rbp - 48]
@@ -151,11 +72,6 @@ er_fn er_fn_run
     mov     rdx, [exec_result_count]
     jmp     .done
 
-.corrupt_error_label:
-    er_err  ERROR_CORRUPT
-.no_memory:
-    er_err  ERROR_NO_MEMORY
-    jmp     .error
 .error:
     mov     rax, -1
 .done:
@@ -213,108 +129,22 @@ er_fn er_fn_load
     ; Update runtime pointer for import wrappers
     mov     [rel er_wasm_runtime_ptr], r12
 
-    ; Initialize runtime context
-    mov     rdi, [r12 + RUNTIME_MEMORY_PTR_OFF]
-    mov     rsi, [r12 + RUNTIME_MEMORY_LEN_OFF]
-    mov     rdx, [r12 + RUNTIME_TICKS_PTR_OFF]
-    call    er_fn_init
+    mov     rdi, r12
+    call    _er_wasm_stage_runtime_for_module
 
-    ; Store grow function pointers
-    mov     rax, [r12 + RUNTIME_MEM_GROW_FN_OFF]
-    mov     [runtime_memory_grow_fn], rax
-    mov     rax, [r12 + RUNTIME_MEM_GROW_CTX_OFF]
-    mov     [runtime_memory_grow_ctx], rax
-    mov     rax, [r12 + RUNTIME_TABLE_GROW_FN_OFF]
-    mov     [runtime_table_grow_fn], rax
-    mov     rax, [r12 + RUNTIME_TABLE_GROW_CTX_OFF]
-    mov     [runtime_table_grow_ctx], rax
-    mov     rax, [r12 + RUNTIME_INITIAL_PAGES_OFF]
-    mov     [runtime_initial_pages], rax
-    movzx   eax, byte [r12 + RUNTIME_HAS_PAGES_OFF]
-    mov     [runtime_has_initial_pages], al
-
-    ; Store host imports table
-    mov     rax, [r12 + RUNTIME_IMPORTS_PTR_OFF]
-    mov     [runtime_imports_ptr], rax
-    mov     rax, [r12 + RUNTIME_IMPORTS_LEN_OFF]
-    mov     [runtime_imports_len], rax
-
-    ; Reset parser state
-    mov     byte [exec_storage_module_valid], 0
-    mov     byte [exec_storage_start_ran], 0
-    mov     qword [exec_frame_save_ptr], 0
-    ; Clear JIT table
-    cld
-    lea     rdi, [rel jit_table]
-    xor     eax, eax
-    mov     ecx, MAX_FUNCTIONS
-    rep stosq
-
-    ; Parse module
     mov     rdi, r13
     mov     rsi, r14
-    call    er_wasm_parse_module
+    call    _er_wasm_parse_resolve_validate
     test    rdx, rdx
     jnz     .error
 
-    ; Resolve imports
-    call    er_wasm_resolve_imports
+    xor     edi, edi
+    call    _er_wasm_prime_loaded_module
     test    rdx, rdx
     jnz     .error
-
-    ; Validate no recursion
-    call    er_wasm_validate_no_recursion
-    test    rdx, rdx
-    jnz     .error
-
-    mov     byte [exec_storage_module_valid], 1
-
-    ; Determine initial memory pages
-    cmp     byte [runtime_has_initial_pages], 0
-    je      .use_module_memory_pages
-    mov     rax, [runtime_initial_pages]
-    jmp     .set_memory_pages
-.use_module_memory_pages:
-    mov     rax, [memory_min_pages]
-.set_memory_pages:
-    call    _er_wasm_validate_launch_pages
-    test    rdx, rdx
-    jnz     .error
-    mov     [executor_memory_pages], rax
-    shl     rax, WASM_PAGE_SHIFT
-    mov     [executor_memory_limit], rax
-
-    ; Run start function if present
-    cmp     byte [exec_storage_start_ran], 0
-    jne     .skip_start
-
-    cmp     qword [start_function_index], -1
-    je      .no_start
-
-    mov     rdi, [start_function_index]
-    xor     rsi, rsi
-    xor     rdx, rdx
-    call    er_fn_exec
-    test    rdx, rdx
-    jnz     .error
-    cmp     qword [exec_result_count], 0
-    jne     .error
-
-.no_start:
-    mov     byte [exec_storage_start_ran], 1
-
-.skip_start:
-    ; Apply data segments
-    mov     rdi, [runtime_memory_ptr]
-    mov     rsi, [executor_memory_pages]
-    call    er_wasm_apply_data_segments
 
     xor     edx, edx
     jmp     .done
-
-.no_memory:
-    er_err  ERROR_NO_MEMORY
-    jmp     .error
 .error:
     mov     rax, -1
 .done:
@@ -357,6 +187,125 @@ _er_wasm_validate_launch_pages:
 
 .no_memory:
     er_err  ERROR_NO_MEMORY
+    ret
+
+; ==================================================================
+; _er_wasm_stage_runtime_for_module
+; rdi = runtime_ptr
+; Initializes runtime globals and clears per-module execution state.
+; ==================================================================
+_er_wasm_stage_runtime_for_module:
+    push    rbx
+    mov     rbx, rdi
+
+    ; Initialize runtime context memory/ticks
+    mov     rdi, [rbx + RUNTIME_MEMORY_PTR_OFF]
+    mov     rsi, [rbx + RUNTIME_MEMORY_LEN_OFF]
+    mov     rdx, [rbx + RUNTIME_TICKS_PTR_OFF]
+    call    er_fn_init
+
+    ; Stage growth hooks and page policy inputs
+    mov     rax, [rbx + RUNTIME_MEM_GROW_FN_OFF]
+    mov     [runtime_memory_grow_fn], rax
+    mov     rax, [rbx + RUNTIME_MEM_GROW_CTX_OFF]
+    mov     [runtime_memory_grow_ctx], rax
+    mov     rax, [rbx + RUNTIME_TABLE_GROW_FN_OFF]
+    mov     [runtime_table_grow_fn], rax
+    mov     rax, [rbx + RUNTIME_TABLE_GROW_CTX_OFF]
+    mov     [runtime_table_grow_ctx], rax
+    mov     rax, [rbx + RUNTIME_INITIAL_PAGES_OFF]
+    mov     [runtime_initial_pages], rax
+    movzx   eax, byte [rbx + RUNTIME_HAS_PAGES_OFF]
+    mov     [runtime_has_initial_pages], al
+
+    ; Stage host imports table
+    mov     rax, [rbx + RUNTIME_IMPORTS_PTR_OFF]
+    mov     [runtime_imports_ptr], rax
+    mov     rax, [rbx + RUNTIME_IMPORTS_LEN_OFF]
+    mov     [runtime_imports_len], rax
+
+    ; Reset per-module parser/execution state
+    mov     byte [exec_storage_module_valid], 0
+    mov     byte [exec_storage_start_ran], 0
+    mov     qword [exec_frame_save_ptr], 0
+    cld
+    lea     rdi, [rel jit_table]
+    xor     eax, eax
+    mov     ecx, MAX_FUNCTIONS
+    rep stosq
+
+    pop     rbx
+    ret
+
+; ==================================================================
+; _er_wasm_parse_resolve_validate
+; rdi = wasm_bytes_ptr, rsi = wasm_bytes_len
+; Returns rdx = 0 on success, error otherwise.
+; ==================================================================
+_er_wasm_parse_resolve_validate:
+    call    er_wasm_parse_module
+    test    rdx, rdx
+    jnz     .done
+
+    call    er_wasm_resolve_imports
+    test    rdx, rdx
+    jnz     .done
+
+    call    er_wasm_validate_no_recursion
+    test    rdx, rdx
+    jnz     .done
+
+    mov     byte [exec_storage_module_valid], 1
+    er_ok
+.done:
+    ret
+
+; ==================================================================
+; _er_wasm_prime_loaded_module
+; Validates initial pages, runs start once, applies data segments.
+; Returns rdx = 0 on success, error otherwise.
+; ==================================================================
+_er_wasm_prime_loaded_module:
+    cmp     byte [runtime_has_initial_pages], 0
+    je      .use_module_memory_pages
+    mov     rax, [runtime_initial_pages]
+    jmp     .set_memory_pages
+.use_module_memory_pages:
+    mov     rax, [memory_min_pages]
+.set_memory_pages:
+    call    _er_wasm_validate_launch_pages
+    test    rdx, rdx
+    jnz     .done
+    mov     [executor_memory_pages], rax
+    shl     rax, WASM_PAGE_SHIFT
+    mov     [executor_memory_limit], rax
+
+    cmp     byte [exec_storage_start_ran], 0
+    jne     .apply_data
+
+    cmp     qword [start_function_index], -1
+    je      .mark_start_ran
+
+    mov     rdi, [start_function_index]
+    xor     rsi, rsi
+    xor     rdx, rdx
+    call    er_fn_exec
+    test    rdx, rdx
+    jnz     .done
+    cmp     qword [exec_result_count], 0
+    je      .mark_start_ran
+    er_err  ERROR_CORRUPT
+    jmp     .done
+
+.mark_start_ran:
+    mov     byte [exec_storage_start_ran], 1
+
+.apply_data:
+    mov     rdi, [runtime_memory_ptr]
+    mov     rsi, [executor_memory_pages]
+    call    er_wasm_apply_data_segments
+    er_ok
+.done:
     ret
 
 ; ==================================================================
