@@ -470,10 +470,6 @@ pub const State = struct {
 
 };
 
-fn renderComponent(scene: *ui.Scene, collector: *interaction.Collector, component: Component, bounds: ui.Rect, options: RenderOptions) !void {
-    try component.renderInteractive(scene, collector, bounds, options);
-}
-
 fn writeDetail(out: []u8, value: []const u8) void {
     bytes.zero(out);
     const len = @min(value.len, out.len - 1);
