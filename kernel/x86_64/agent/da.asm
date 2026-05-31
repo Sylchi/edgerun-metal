@@ -694,6 +694,86 @@ _da_publish_app_hash:
     ret
 
 ; ==================================================================
+; _da_launch_common — shared launch core
+; rdi = wasm_bytes_ptr
+; rsi = wasm_bytes_len
+; rdx = export_name_ptr
+; rcx = export_name_len
+; r8d = app_slot (sender slot or -1)
+; Returns: rdx = error code (0 on success)
+; ==================================================================
+_da_launch_common:
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+
+    mov     r12, rdi
+    mov     r13, rsi
+    mov     r14, rdx
+    mov     r15, rcx
+
+    mov     ebx, [rel da_app_count]
+    cmp     ebx, DA_MAX_APPS
+    jae     .full
+
+    mov     eax, ebx
+    imul    eax, DA_APP_SIZE
+    lea     r9, [rel da_app_registry + rax]
+
+    mov     rdi, r12
+    mov     rsi, r13
+    lea     rdx, [r9 + DA_APP_HASH]
+    call    er_blake3_hash_bytes
+    test    rax, rax
+    jz      .hash_fail
+
+    mov     [r9 + DA_APP_SLOT], r8d
+    mov     byte [r9 + DA_APP_STATE], 1
+
+    call    _da_prepare_wasm_runtime
+    mov     rbx, rax
+
+    mov     rdi, r14
+    mov     rsi, r15
+    call    _da_store_export_name
+
+    lea     rdi, [r9 + DA_APP_HASH]
+    call    _da_publish_app_hash
+
+    mov     rdi, rbx
+    mov     rsi, r12
+    mov     rdx, r13
+    call    er_fn_load
+    test    edx, edx
+    jnz     .load_fail
+
+    mov     byte [rel da_app_loaded], 1
+    inc     dword [rel da_app_count]
+    er_ok
+    jmp     .done
+
+.full:
+    er_err  ERROR_LOCAL_FULL
+    jmp     .done
+
+.hash_fail:
+    er_err  ERROR_CORRUPT
+    jmp     .done
+
+.load_fail:
+    mov     byte [r9 + DA_APP_STATE], 0
+
+.done:
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    ret
+
+; ==================================================================
 ; _da_launch_app — launch a WASM app from cell payload
 ; rdi = cell_ptr, esi = sender_slot_id
 ; Cell payload: [type:1][wasm_len:4][export_len:1][export_name...][wasm_bytes...]
@@ -701,88 +781,17 @@ _da_publish_app_hash:
 _da_launch_app:
     push    rbx
     push    r12
-    push    r13
-    push    r14
-    push    r15
-    mov     r12, rdi            ; cell_ptr
-    mov     r13d, esi           ; sender_slot_id
+    mov     r12, rdi
+    mov     ebx, esi
 
-    ; Track app in registry
-    mov     ebx, [rel da_app_count]
-    cmp     ebx, DA_MAX_APPS
-    jae     .full
+    movzx   ecx, byte [r12 + LOCAL_CELL_PAYLOAD + 5] ; export_name_len
+    lea     rdx, [r12 + LOCAL_CELL_PAYLOAD + 6]      ; export_name_ptr
+    lea     rdi, [r12 + LOCAL_CELL_PAYLOAD + 6]      ; base for wasm_ptr
+    add     rdi, rcx
+    mov     esi, [r12 + LOCAL_CELL_PAYLOAD + 1]      ; wasm_len
+    mov     r8d, ebx                                 ; app_slot=sender_slot
+    call    _da_launch_common
 
-    mov     eax, ebx
-    imul    eax, DA_APP_SIZE
-    lea     r15, [rel da_app_registry + rax]
-
-    ; Read wasm length and export info from cell
-    mov     edx, [r12 + LOCAL_CELL_PAYLOAD + 1]  ; wasm_len
-    movzx   r8d, byte [r12 + LOCAL_CELL_PAYLOAD + 5]  ; export_name_len
-
-    ; Store export name in DA BSS for persistent ticks
-    lea     rdi, [r12 + LOCAL_CELL_PAYLOAD + 6]
-    mov     rsi, r8
-    push    rdx
-    call    _da_store_export_name
-    pop     rdx
-
-    ; WASM bytes pointer (after export name)
-    lea     rsi, [r12 + LOCAL_CELL_PAYLOAD + 6]
-    add     rsi, r8
-
-    ; App identity = BLAKE3(wasm_bytes)
-    mov     rdi, rsi
-    mov     rsi, rdx
-    lea     rdx, [r15 + DA_APP_HASH]
-    call    er_blake3_hash_bytes
-    test    rax, rax
-    jz      .hash_fail
-    mov     [r15 + DA_APP_SLOT], r13d
-    mov     byte [r15 + DA_APP_STATE], 1
-
-    ; Set up DA's WASM runtime
-    call    _da_prepare_wasm_runtime
-    mov     r14, rax
-
-    ; Load the WASM module (parse, validate, start, data segments)
-    lea     rdi, [r15 + DA_APP_HASH]
-    call    _da_publish_app_hash
-
-    mov     rdi, r14            ; runtime
-    lea     rsi, [r12 + LOCAL_CELL_PAYLOAD + 6]
-    add     rsi, r8
-    mov     rdx, [r12 + LOCAL_CELL_PAYLOAD + 1]
-    call    er_fn_load
-    test    edx, edx
-    jnz     .load_fail
-
-    ; Mark app as ready for persistent ticks
-    mov     byte [rel da_app_loaded], 1
-    ; App state stays = 1 (running) — not exited
-
-    inc     dword [rel da_app_count]
-    xor     eax, eax
-    er_ok
-    jmp     .done
-
-.full:
-    xor     eax, eax
-    er_err  ERROR_LOCAL_FULL
-    jmp     .done
-
-.hash_fail:
-    xor     eax, eax
-    er_err  ERROR_CORRUPT
-    jmp     .done
-
-.load_fail:
-    mov     byte [r15 + DA_APP_STATE], 0
-
-.done:
-    pop     r15
-    pop     r14
-    pop     r13
     pop     r12
     pop     rbx
     ret
@@ -877,89 +886,8 @@ _da_focus_surface:
 ; ==================================================================
 global er_da_launch_app
 er_fn er_da_launch_app
-    push    rbx
-    push    r12
-    push    r13
-    push    r14
-    push    r15
-    sub     rsp, 8
-
-    mov     r12, rdi        ; wasm_bytes_ptr
-    mov     r13, rsi        ; wasm_bytes_len
-    mov     r14, rdx        ; export_name_ptr
-    mov     r15, rcx        ; export_name_len
-
-    ; Track in app registry
-    mov     ebx, [rel da_app_count]
-    cmp     ebx, DA_MAX_APPS
-    jae     .full
-
-    mov     eax, ebx
-    imul    eax, DA_APP_SIZE
-    lea     r10, [rel da_app_registry + rax]
-    mov     [rsp], r10
-
-    ; App identity = BLAKE3(wasm_bytes)
-    mov     rdi, r12
-    mov     rsi, r13
-    lea     rdx, [r10 + DA_APP_HASH]
-    call    er_blake3_hash_bytes
-    test    rax, rax
-    jz      .hash_fail
-    mov     dword [r10 + DA_APP_SLOT], -1
-    mov     byte [r10 + DA_APP_STATE], 1
-
-    ; Set up DA's WASM runtime
-    call    _da_prepare_wasm_runtime
-    mov     rbx, rax
-
-    ; Store export name for persistent ticks
-    mov     rdi, r14
-    mov     rsi, r15
-    call    _da_store_export_name
-
-    ; Load the module (parse, validate, start, data segments)
-    mov     r10, [rsp]
-    lea     rdi, [r10 + DA_APP_HASH]
-    call    _da_publish_app_hash
-
-    mov     rdi, rbx
-    mov     rsi, r12
-    mov     rdx, r13
-    call    er_fn_load
-    test    edx, edx
-    jnz     .load_fail
-
-    ; Mark as ready for persistent ticks
-    mov     byte [rel da_app_loaded], 1
-    ; App state stays = 1 (running)
-
-    inc     dword [rel da_app_count]
-    xor     eax, eax
-    er_ok
-    jmp     .fail
-
-.full:
-    xor     eax, eax
-    er_err  ERROR_LOCAL_FULL
-    jmp     .fail
-
-.hash_fail:
-    xor     eax, eax
-    er_err  ERROR_CORRUPT
-    jmp     .fail
-
-.load_fail:
-    mov     r10, [rsp]
-    mov     byte [r10 + DA_APP_STATE], 0
-
-.fail:
-    add     rsp, 8
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     rbx
+    mov     r8d, -1
+    call    _da_launch_common
     er_ret
 
 ; ==================================================================

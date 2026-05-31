@@ -73,6 +73,7 @@ extern er_pci_find_nvme
 extern er_pci_find_class
 extern er_pci_read32
 extern er_ax210_probe_init
+extern er_ax210_fw_get_blob
 extern er_nvme_probe
 extern er_nvme_init
 extern er_nvme_print_info
@@ -238,6 +239,8 @@ check_ble:     db "check: ble ", 0
 check_ble_usb_unsupported: db "usb transport unsupported", 0
 check_wifi:    db "check: wifi ax210 ", 0
 check_wifi_bar: db " bar ", 0
+check_wifi_fw_missing: db " fw missing", 0
+check_wifi_fw_ready: db " fw ready ", 0
 check_abs:     db "absent", 0
 check_virtio_net: db "check: virtio_net ", 0
 check_amdgpu:  db "check: amdgpu ", 0
@@ -325,6 +328,8 @@ device_flags:
     .intel_gpu: resb 1
 ax210_present: resb 1
 ax210_bar0:    resq 1
+ax210_fw_ptr:  resq 1
+ax210_fw_size: resq 1
 
 %define VIRTIO_NET_STORAGE_size 4900
 virtio_net_dev:      resb VIRTIO_NET_DEVICE_size
@@ -1345,6 +1350,25 @@ er_fn er_kernel_main
     call    er_serial_putchar
     mov     rdi, COM1_PORT
     lea     rsi, [rel check_ble_usb_unsupported]
+    call    er_serial_puts
+
+    ; Require ingested firmware blob before AX210 transport bring-up.
+    lea     rdi, [rel ax210_fw_ptr]
+    lea     rsi, [rel ax210_fw_size]
+    call    er_ax210_fw_get_blob
+    test    eax, eax
+    jnz     .wifi_fw_missing
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_wifi_fw_ready]
+    call    er_serial_puts
+    mov     rdi, COM1_PORT
+    mov     esi, [rel ax210_fw_size]
+    call    er_serial_puthex32
+    jmp     .wifi_done
+
+.wifi_fw_missing:
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_wifi_fw_missing]
     call    er_serial_puts
     jmp     .wifi_done
 .wifi_absent:
