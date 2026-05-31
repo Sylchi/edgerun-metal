@@ -105,6 +105,9 @@
 %define AMDGPU_TIMING_V_BLANK_START        32
 %define AMDGPU_TIMING_V_BLANK_END          36
 %define AMDGPU_TIMING_SIZE                 40
+%define AMDGPU_MODE_1080P60                0
+%define AMDGPU_MODE_720P60                 1
+%define AMDGPU_MODE_COUNT                  2
 
 ; ─── AMDGPU driver error codes ────────────────────────────────────
 %define AMDGPU_ERR_NOT_FOUND        30

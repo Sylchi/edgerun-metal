@@ -41,6 +41,9 @@ str_hubp:      db " hubp ", 0
 amdgpu_timing_1080p60:
     dd 2200, 1968, 2000, 1920, 128
     dd 1125, 1083, 1088, 1080, 4
+amdgpu_timing_720p60:
+    dd 1650, 1390, 1430, 1280, 370
+    dd 750, 725, 730, 720, 30
 
 SECTION .text
 
@@ -485,8 +488,8 @@ er_fn er_amdgpu_dcn_init
 
     ; ─── Step 9: Basic OTG0 timing ───
     mov     rdi, r12
-    lea     rsi, [rel amdgpu_timing_1080p60]
-    call    er_amdgpu_program_otg0_timing
+    mov     esi, AMDGPU_MODE_1080P60
+    call    er_amdgpu_program_otg0_mode
 
 .no_fb:
     xor     eax, eax
@@ -494,6 +497,34 @@ er_fn er_amdgpu_dcn_init
     pop     r15
     pop     r14
     pop     r13
+    pop     r12
+    ret
+
+; ==================================================================
+; er_amdgpu_program_otg0_mode — program OTG0 using a known mode ID
+; int er_amdgpu_program_otg0_mode(uint64_t bar0, uint32_t mode)
+; ==================================================================
+er_fn er_amdgpu_program_otg0_mode
+    push    r12
+    mov     r12, rdi
+    cmp     esi, AMDGPU_MODE_1080P60
+    je      .mode_1080
+    cmp     esi, AMDGPU_MODE_720P60
+    je      .mode_720
+    er_err  ERROR_BAD_ARGUMENT
+    mov     eax, -1
+    pop     r12
+    ret
+.mode_1080:
+    mov     rdi, r12
+    lea     rsi, [rel amdgpu_timing_1080p60]
+    call    er_amdgpu_program_otg0_timing
+    pop     r12
+    ret
+.mode_720:
+    mov     rdi, r12
+    lea     rsi, [rel amdgpu_timing_720p60]
+    call    er_amdgpu_program_otg0_timing
     pop     r12
     ret
 

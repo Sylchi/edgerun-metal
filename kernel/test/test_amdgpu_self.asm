@@ -2,11 +2,12 @@
 ; Tests DCN MMIO writes against hosted memory.
 
 %include "x86_64/macros.inc"
+%include "x86_64/wasm_defines.inc"
 %include "test/test_macros.inc"
 %include "driver/amdgpu_constants.inc"
 
 extern er_amdgpu_dcn_init
-extern er_amdgpu_program_otg0_timing
+extern er_amdgpu_program_otg0_mode
 
 %define AMDGPU_TEST_BAR0_SIZE 0x28000
 
@@ -19,9 +20,6 @@ fb: resb AMDGPU_FB_SIZE
 SECTION .rodata
 pass_msg: db "PASS amdgpu", 10, 0
 fail_msg: db "FAIL amdgpu", 10, 0
-timing_720p60:
-    dd 1650, 1390, 1430, 1280, 370
-    dd 750, 725, 730, 720, 30
 
 SECTION .text
 global _start
@@ -90,8 +88,8 @@ _start:
     ASSERT_EQ eax, 0
 
     lea     rdi, [rel bar0]
-    lea     rsi, [rel timing_720p60]
-    call    er_amdgpu_program_otg0_timing
+    mov     esi, AMDGPU_MODE_720P60
+    call    er_amdgpu_program_otg0_mode
     ASSERT_EQ eax, 0
     mov     eax, [rel bar0 + DCN_OTG0_V_TOTAL]
     ASSERT_EQ eax, 749
@@ -107,6 +105,12 @@ _start:
     ASSERT_EQ eax, (719 << 16) | 30
     mov     eax, [rel bar0 + DCN_OTG0_MASTER_EN]
     ASSERT_EQ eax, 1
+
+    lea     rdi, [rel bar0]
+    mov     esi, AMDGPU_MODE_COUNT
+    call    er_amdgpu_program_otg0_mode
+    ASSERT_EQ eax, -1
+    ASSERT_RDX ERROR_BAD_ARGUMENT
 
     mov     rax, [rel failed]
     test    rax, rax
