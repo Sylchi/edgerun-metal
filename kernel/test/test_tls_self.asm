@@ -87,7 +87,7 @@ _start:
     lea     rsi, [rel out_buf]
     mov     edx, TLS_CLIENT_HELLO_RECORD_LEN
     call    er_tls_send
-    ASSERT_RAX -1
+    ASSERT_EQ eax, -1
 
     mov     rax, [rel failed]
     test    rax, rax

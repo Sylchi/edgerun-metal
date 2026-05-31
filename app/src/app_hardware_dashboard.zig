@@ -27,16 +27,16 @@ const RowDef = struct {
 
 const rows = [_]RowDef{
     .{ .icon_kind = .device_desktop, .title = "Platform" },
-    .{ .icon_kind = .temperature,    .title = "CPU Temp" },
-    .{ .icon_kind = .database,       .title = "Memory" },
-    .{ .icon_kind = .battery,        .title = "Battery" },
-    .{ .icon_kind = .brightness,     .title = "Screen" },
-    .{ .icon_kind = .keyboard,       .title = "Keyboard" },
-    .{ .icon_kind = .server,         .title = "EC" },
-    .{ .icon_kind = .cpu,            .title = "GPU" },
-    .{ .icon_kind = .shield_check,   .title = "TPM" },
+    .{ .icon_kind = .temperature, .title = "CPU Temp" },
+    .{ .icon_kind = .database, .title = "Memory" },
+    .{ .icon_kind = .battery, .title = "Battery" },
+    .{ .icon_kind = .brightness, .title = "Screen" },
+    .{ .icon_kind = .keyboard, .title = "Keyboard" },
+    .{ .icon_kind = .server, .title = "EC" },
+    .{ .icon_kind = .cpu, .title = "GPU" },
+    .{ .icon_kind = .shield_check, .title = "TPM" },
     .{ .icon_kind = .device_desktop, .title = "PCI Devices" },
-    .{ .icon_kind = .network,        .title = "Network" },
+    .{ .icon_kind = .network, .title = "Network" },
 };
 
 const Component = component_union.Component;
@@ -467,7 +467,6 @@ pub const State = struct {
         if (!self.keyboard_brightness_ready or self.keyboard_brightness_max <= 0) return 0.0;
         return ui.clampUnit(@as(f32, @floatFromInt(self.keyboard_brightness)) / @as(f32, @floatFromInt(self.keyboard_brightness_max)));
     }
-
 };
 
 fn writeDetail(out: []u8, value: []const u8) void {
