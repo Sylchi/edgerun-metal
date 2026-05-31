@@ -46,6 +46,8 @@ uvc_last_status:      resd 1
 uvc_xhci_bar0:        resq 1
 uvc_xhci_max_ports:   resd 1
 uvc_last_portsc:      resd 1
+uvc_cfg_blob_ptr:     resq 1
+uvc_cfg_blob_len:     resq 1
 
 SECTION .text
 
@@ -137,6 +139,32 @@ er_fn er_uvc_parse_config_caps
     er_err  ERROR_BAD_ARGUMENT
     ret
 
+; int er_uvc_set_config_blob(const uint8_t* buf, uint64_t len)
+; Installs a descriptor blob source for capability derivation in er_uvc_probe.
+; Pass buf=0,len=0 to clear.
+er_fn er_uvc_set_config_blob
+    test    rdi, rdi
+    jz      .sb_clear_or_bad
+    test    rsi, rsi
+    jz      .sb_bad_arg
+    mov     [uvc_cfg_blob_ptr], rdi
+    mov     [uvc_cfg_blob_len], rsi
+    xor     eax, eax
+    er_ok
+    ret
+.sb_clear_or_bad:
+    test    rsi, rsi
+    jnz     .sb_bad_arg
+    mov     qword [uvc_cfg_blob_ptr], 0
+    mov     qword [uvc_cfg_blob_len], 0
+    xor     eax, eax
+    er_ok
+    ret
+.sb_bad_arg:
+    mov     eax, -1
+    er_err  ERROR_BAD_ARGUMENT
+    ret
+
 ; int er_uvc_probe(uint64_t xhci_ok_hint)
 ; Hint is non-zero when at least one xHCI controller initialized.
 ; Returns: eax=1 if a UVC-capable topology is considered present, else 0.
@@ -171,6 +199,22 @@ er_fn er_uvc_probe
     ; We have at least one attached USB device on xHCI ports.
     mov     byte [uvc_attached], 1
     mov     dword [uvc_capabilities], 0
+    mov     rdi, [uvc_cfg_blob_ptr]
+    mov     rsi, [uvc_cfg_blob_len]
+    test    rdi, rdi
+    jz      .probe_ok
+    test    rsi, rsi
+    jz      .probe_ok
+    lea     rdx, [uvc_capabilities]
+    call    er_uvc_parse_config_caps
+    test    eax, eax
+    jz      .probe_ok
+    mov     dword [uvc_capabilities], 0
+    mov     dword [uvc_last_status], ERROR_BAD_ARGUMENT
+    mov     eax, -1
+    er_err  ERROR_BAD_ARGUMENT
+    ret
+.probe_ok:
     mov     dword [uvc_last_status], ERROR_OK
     mov     eax, 1
     er_ok

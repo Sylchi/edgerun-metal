@@ -371,7 +371,7 @@ type_count:     resq 1
 ;  +16: func_name_ptr(8)   — pointer into names_buf
 ;  +24: func_name_len(8)
 ;  +32: type_index(8)
-;  +40: resolved_module_id(8) — -1 = unresolved, else index into module_registry
+;  +40: resolved_module_id(8) — reserved; host import resolution uses +48
 ;  +48: resolved_func_index(8) — function index in the resolved module
 ;  +56: (unused padding)
 IMPORTED_FUNC_SIZE equ 64
@@ -483,36 +483,7 @@ executor_module_ptr:   resq 1
 executor_memory_pages: resq 1
 executor_memory_limit: resq 1
 
-; -- Module state save/restore (for cross-module calls)
-; State is saved/restored by module_state_save / module_state_restore.
-; Each saved module includes: types, imports, functions, code, local_types,
-; exports, globals, tables, segments, decoded_ops, etc.
-; Total per-module: types_buf(32KB) + imports_buf(1KB) + funcs(16KB) +
-;   code(64KB) + local_types(1MB) + exports(32KB) + globals(512B) +
-;   table(256B) + element_segments(4KB) + data_segments(256B) +
-;   decoded_ops(16MB) + misc(~1KB) ≈ 17.4MB. Round up to 18MB.
-MODULE_STATE_SIZE equ 18 * 1024 * 1024
 MAX_MODULES equ 4
-
-; Module registry: each entry describes a loaded module
-; struct ModuleEntry {
-;   name_ptr:   u64   ; module name (for matching imports)
-;   name_len:   u64
-;   state_ptr:  u64   ; pointer to saved module state
-; }
-MODULE_ENTRY_SIZE equ 24
-module_registry:     resb MAX_MODULES * MODULE_ENTRY_SIZE
-module_registry_count: resq 1
-
-; Module state save area — holds snapshots of per-module BSS
-module_save_areas: resb MAX_MODULES * MODULE_STATE_SIZE
-
-; Active module ID for cross-module call dispatch
-; 0 = the last-decoded (primary) module, 1..MAX_MODULES-1 = imported modules
-module_active_id:   resq 1
-
-; Scratch area for swapping module states
-module_swap_temp:   resb 256
 
 ; -- Names buffer (for import/export name strings)
 ; Simple bump allocator — caller writes names here before parsing

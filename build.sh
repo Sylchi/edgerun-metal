@@ -392,13 +392,9 @@ cmd_test_uvc() {
 	${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
 	${YASM} -f elf64 ${ASM_INC} -o "$stub_obj" "$stub_src"
 	local uvc_o="${ASM_BUILD}/uvc.o"
-	if [ ! -f "$uvc_o" ]; then
-		elf64 "${ASM_DIR}/../driver/uvc.asm" "$uvc_o"
-	fi
+	elf64 "${ASM_DIR}/../driver/uvc.asm" "$uvc_o"
 	local xhci_o="${ASM_BUILD}/xhci.o"
-	if [ ! -f "$xhci_o" ]; then
-		elf64 "${ASM_DIR}/../driver/xhci.asm" "$xhci_o"
-	fi
+	elf64 "${ASM_DIR}/../driver/xhci.asm" "$xhci_o"
 	ld -nostdlib -static -o "$bin" "$obj" "$uvc_o" "$xhci_o" "$stub_obj"
 	echo "  LD  ${bin}"
 	"$bin"

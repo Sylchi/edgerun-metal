@@ -1197,17 +1197,6 @@ _start:
     ; Run tests
     ; =================================================================
 
-    ; Disable JIT: set all template entries to fallback so every
-    ; compile attempt fails → interpreter path always used.
-    lea     rdi, [rel jit_template_table]
-    mov     ecx, 256
-    lea     rax, [rel jit_template_fallback]
-.tmpl_clr:
-    mov     [rdi + rcx*8 - 8], rax
-    dec     ecx
-    jnz     .tmpl_clr
-    mov     byte [rel jit_initialized], 1
-
     ; Clear jit_table as well (defensive)
     xor     eax, eax
     mov     ecx, 53

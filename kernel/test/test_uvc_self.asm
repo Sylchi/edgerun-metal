@@ -3,6 +3,7 @@
 %include "x86_64/macros.inc"
 
 extern er_uvc_parse_config_caps
+extern er_uvc_set_config_blob
 
 SECTION .bss
 passed:     resq 1
@@ -47,6 +48,24 @@ cfg_bad_len equ $ - cfg_bad
 SECTION .text
 global _start
 _start:
+    ; Test 0: set/clear config blob API
+    lea     rdi, [rel cfg_mjpeg]
+    mov     rsi, cfg_mjpeg_len
+    call    er_uvc_set_config_blob
+    cmp     eax, 0
+    jne     .fail_case
+    xor     rdi, rdi
+    xor     rsi, rsi
+    call    er_uvc_set_config_blob
+    cmp     eax, 0
+    jne     .fail_case
+    xor     rdi, rdi
+    mov     rsi, 8
+    call    er_uvc_set_config_blob
+    cmp     eax, -1
+    jne     .fail_case
+    inc     qword [rel passed]
+
     ; Test 1: MJPEG + VC/VS interfaces -> controls + rgb + mjpeg
     lea     rdi, [rel cfg_mjpeg]
     mov     rsi, cfg_mjpeg_len
