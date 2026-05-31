@@ -288,10 +288,8 @@ pub fn hasIconId(items: []const state.ui.Command, icon_id: u32) bool {
 pub fn sourceLabelForHit(route: state.app_navigation.Route, hit_id: u32, out: []u8) ?[]const u8 {
     if (hit_id == 0) return null;
     const component_gallery = @import("../ui/component_gallery.zig");
-    const index = switch (route.view) {
-        .frontend => component_gallery.indexByCatalogHit(hit_id) orelse component_gallery.indexByPreviewHit(hit_id),
-        .backend => null,
-    } orelse return null;
+    if (!state.app_navigation.isAppPreview(route)) return null;
+    const index = component_gallery.indexByCatalogHit(hit_id) orelse component_gallery.indexByPreviewHit(hit_id) orelse return null;
     return component_gallery.sourcePathForIndex(index, out);
 }
 

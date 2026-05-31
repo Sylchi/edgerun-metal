@@ -60,7 +60,7 @@ pub fn applyRoute(state: *State, route: app_navigation.Route) void {
 
 pub fn activateHovered(state: *State) void {
     const hover_hit_id = state.runtime.hoverHitId();
-    if (app_navigation.fromHit(hover_hit_id, state.route)) |route| {
+    if (app_navigation.fromHit(hover_hit_id, state.location)) |route| {
         applyRoute(state, route);
         return;
     }
@@ -105,11 +105,11 @@ pub fn scrollBy(state: *State, width: f32, viewport_height: f32, delta_y: f32) v
 
 test "native input activates routes and resets scroll through shared state" {
     var state = State{ .scroll_y = 120.0 };
-    state.runtime.hovered = .{ .kind = .button, .id = app_navigation.frontend_button_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
+    state.runtime.hovered = .{ .kind = .button, .id = app_navigation.app_preview_button_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
 
     activateHovered(&state);
 
-    try std.testing.expectEqual(app_navigation.View.frontend, state.route.view);
+    try std.testing.expect(app_navigation.isAppPreview(state.route));
     try std.testing.expectEqual(@as(f32, 0.0), state.scroll_y);
 }
 
@@ -139,23 +139,23 @@ test "native input pointer path uses shared runtime activation" {
     var scene = ui.Scene.init(&commands);
     var regions: [1]interaction.Region = undefined;
     var collector = interaction.Collector.init(&regions);
-    try collector.addHit(ui.Rect.init(0, 0, 20, 20), .button, app_navigation.frontend_button_id);
+    try collector.addHit(ui.Rect.init(0, 0, 20, 20), .button, app_navigation.app_preview_button_id);
     var state = State{ .hover_x = 8.0, .hover_y = 8.0 };
 
     processPointerEvent(&state, scene.written(), collector.written(), .pointer_down);
     processPointerEvent(&state, scene.written(), collector.written(), .pointer_up);
 
     try std.testing.expectEqual(ui_runtime.ActionKind.activated, state.last_action_kind);
-    try std.testing.expectEqual(app_navigation.View.frontend, state.route.view);
+    try std.testing.expect(app_navigation.isAppPreview(state.route));
 }
 
 test "native input routes all canonical fixtures through shared top-level binding path" {
     for (app_navigation.route_fixtures) |fixture| {
-        var state = State{ .route = fixture.route };
+        var state = State{ .route = fixture.location };
         var matching_binding: ?app_navigation.TopLevelBinding = null;
 
         for (app_navigation.topLevelBindings()) |binding| {
-            if (std.meta.eql(binding.route, fixture.route)) {
+            if (std.meta.eql(binding.location, fixture.location)) {
                 matching_binding = binding;
                 break;
             }
@@ -165,20 +165,20 @@ test "native input routes all canonical fixtures through shared top-level bindin
 
         activateHovered(&state);
 
-        try expectRoute(state.route, fixture.route);
+        try expectRoute(state.route, fixture.location);
     }
 }
 
 test "native input route fixtures keep deterministic path/hash mapping" {
     for (app_navigation.route_fixtures) |fixture| {
-        try expectRoutePathHash(fixture.route, fixture.path, fixture.hash);
+        try expectRoutePathHash(fixture.location, fixture.path, fixture.hash);
     }
 }
 
 
 
 fn expectRoute(actual: app_navigation.Route, expected: app_navigation.Route) !void {
-    try std.testing.expectEqual(expected.view, actual.view);
+    try std.testing.expectEqual(expected, actual);
 }
 
 fn expectRoutePathHash(route: app_navigation.Route, expected_path: []const u8, expected_hash: []const u8) !void {

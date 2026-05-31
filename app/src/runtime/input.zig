@@ -24,7 +24,7 @@ pub fn appKeyEvent(key: []const u8, ctrl: u32, meta: u32, alt: u32, shift: u32) 
     if (state.runtime_state.overlays.count == 0) {
         if (input_kind == .enter or input_kind == .space) {
             const hit_id = state.runtime_state.hoverHitId();
-            if (state.app_navigation.fromHit(hit_id, state.native_input_state.route)) |route| {
+            if (state.app_navigation.fromHit(hit_id, state.native_input_state.location)) |route| {
                 state.native_input_state.route = route;
                 state.native_input_state.scroll_y = 0.0;
                 state.context_menu_open = false;
@@ -135,7 +135,7 @@ pub fn handleInputEventRecord(record: state.InputEventRecord, width: f32, height
             }
         },
         .context_menu => {
-            if (state.native_input_state.route.view == .backend) {
+            if (state.app_navigation.isSourceWorkspace(state.native_input_state.route)) {
                 state.context_menu_open = true;
                 state.context_menu_x = record.x;
                 state.context_menu_y = record.y;

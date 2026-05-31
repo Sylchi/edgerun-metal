@@ -55,7 +55,7 @@ fn renderWorkspace(scene: *ui.Scene, collector: *interaction.Collector, bounds: 
     const sidebar = ui.Rect.init(rail.x + rail.w, bounds.y + workspace_top_h, workspace_sidebar_w, @max(1.0, bounds.h - workspace_top_h - workspace_status_h));
     const main = ui.Rect.init(sidebar.x + sidebar.w, bounds.y + workspace_top_h, @max(1.0, bounds.w - rail.w - sidebar.w), @max(1.0, bounds.h - workspace_top_h - workspace_status_h));
     const status = ui.Rect.init(bounds.x, bounds.y + bounds.h - workspace_status_h, bounds.w, workspace_status_h);
-    try renderWorkspaceRail(scene, collector, rail, state.route.view);
+    try renderWorkspaceRail(scene, collector, rail, state.route);
     try renderWorkspaceTop(scene, collector, top, state);
     try renderWorkspaceSidebar(scene, collector, sidebar, state);
     try renderWorkspaceMain(scene, collector, main, state);
@@ -69,7 +69,7 @@ fn renderWorkspaceTop(scene: *ui.Scene, _collector: *interaction.Collector, boun
     try text_component.Text.renderAligned(scene, ui.Rect.init(bounds.x + 16.0, bounds.y + 18.0, bounds.w - 32.0, 16.0), statusText(state.route), design.Palette.text, .start);
 }
 
-fn renderWorkspaceRail(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, active: app_navigation.View) !void {
+fn renderWorkspaceRail(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, active: app_navigation.Location) !void {
     try scene.pushRect(bounds, workspace_rail_bg, .fill, 0.0, 0.0);
     const items = app_navigation.topLevelWorkspaceBindings();
     var y = bounds.y + workspace_rail_pad;
@@ -79,9 +79,9 @@ fn renderWorkspaceRail(scene: *ui.Scene, collector: *interaction.Collector, boun
             .kind = .workspace_rail,
             .binding = item,
             .bounds = item_bounds,
-            .active = active == item.route.view,
+            .active = std.meta.eql(active, item.location),
         });
-        if (active == item.route.view) try scene.pushRect(ui.Rect.init(bounds.x, item_bounds.y + 5.0, 2.0, item_bounds.h - 10.0), design.Palette.primary, .fill, 0.0, 0.0);
+        if (std.meta.eql(active, item.location)) try scene.pushRect(ui.Rect.init(bounds.x, item_bounds.y + 5.0, 2.0, item_bounds.h - 10.0), design.Palette.primary, .fill, 0.0, 0.0);
         y += workspace_icon_button + 8.0;
     }
 }
@@ -99,7 +99,7 @@ fn renderWorkspaceSidebar(scene: *ui.Scene, collector: *interaction.Collector, b
             .kind = .workspace_sidebar,
             .binding = row,
             .bounds = row_bounds,
-            .active = state.route.view == row.route.view,
+            .active = std.meta.eql(state.route, row.location),
         });
         y += 46.0;
     }
@@ -123,10 +123,9 @@ fn shiftedPageBounds(bounds: ui.Rect) ui.Rect {
 }
 
 fn statusText(route: app_navigation.Route) []const u8 {
-    return switch (route.view) {
-        .backend => "workspace",
-        .frontend => "preview",
-    };
+    if (app_navigation.isSourceWorkspace(route)) return "workspace";
+    if (app_navigation.isAppPreview(route)) return "preview";
+    return "object";
 }
 
 test "app frame renders agent workspace" {
@@ -136,7 +135,7 @@ test "app frame renders agent workspace" {
     var scene = ui.Scene.initWithClips(&commands, &clips);
     var collector = interaction.Collector.init(&regions);
     try render(&scene, &collector, ui.Rect.init(0, 0, 1280, 800), .{
-        .route = .{ .view = .frontend },
+        .route = app_navigation.locationForButton(.app_preview),
         .public_identity = "test-principal",
         .public_identity_ready = true,
     });
@@ -152,8 +151,8 @@ test "app frame routes through workspace sidebar" {
 
     try render(&scene, &collector, ui.Rect.init(0, 0, 1280, 800), .{ .route = .{} });
 
-    try expectHit(collector.written(), app_navigation.topLevelButtonId(.backend));
-    try expectHit(collector.written(), app_navigation.topLevelButtonId(.frontend));
+    try expectHit(collector.written(), app_navigation.topLevelButtonId(.source_workspace));
+    try expectHit(collector.written(), app_navigation.topLevelButtonId(.app_preview));
 }
 
 test "app frame renders agent as workspace content" {
@@ -171,8 +170,8 @@ test "app frame renders agent as workspace content" {
 
 test "route state drives content height" {
     const width: f32 = 1280.0;
-    try std.testing.expect(contentHeight(width, .{ .route = .{ .view = .frontend } }) > 0);
-    try std.testing.expect(contentHeight(width, .{ .route = .{ .view = .backend } }) > 0);
+    try std.testing.expect(contentHeight(width, .{ .route = app_navigation.locationForButton(.app_preview) }) > 0);
+    try std.testing.expect(contentHeight(width, .{ .route = app_navigation.locationForButton(.source_workspace) }) > 0);
 }
 
 test "host render callers do not bypass the shared app frame builder" {

@@ -3,6 +3,10 @@ const bytes = @import("../bytes.zig");
 const preimage = @import("../preimage.zig");
 const icon_component = @import("../ui/components/Icon.zig");
 
+comptime {
+    @setEvalBranchQuota(100000);
+}
+
 pub const ObjectId = preimage.Hash;
 pub const object_id_bytes = preimage.hash_size;
 pub const object_id_hex_bytes = object_id_bytes * 2;

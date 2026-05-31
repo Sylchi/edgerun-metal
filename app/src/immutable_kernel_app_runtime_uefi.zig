@@ -1,6 +1,7 @@
 const std = @import("std");
 const uefi = std.os.uefi;
 const app_frame = @import("route/frame.zig");
+const app_navigation = @import("route/navigation.zig");
 const app_images = @import("ui/images.zig");
 const gop_framebuffer = @import("boot/gop_framebuffer.zig");
 const interaction = @import("ui/interaction.zig");
@@ -57,7 +58,7 @@ const SceneState = struct {
         var scene = ui.Scene.initWithClips(&self.commands, &self.clips);
         var collector = interaction.Collector.init(&self.regions);
         app_frame.render(&scene, &collector, ui.Rect.init(0, 0, @floatFromInt(width), @floatFromInt(height)), .{
-            .route = .{ .view = .frontend },
+            .route = app_navigation.locationForButton(.app_preview),
             .public_identity = "blessed-native-renderer",
             .public_identity_ready = true,
         }) catch return error.AppFrameBuildFailed;

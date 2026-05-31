@@ -622,7 +622,7 @@ test "wayland host renders the source app scene through the shared frame" {
     var collector = interaction.Collector.init(&regions);
     var dash_state: app_dashboard.State = .{};
     try renderNativeAppScene(&scene, &collector, 1280, 800, .{
-        .route = .{ .view = .backend },
+        .route = app_navigation.locationForButton(.source_workspace),
     }, &dash_state, false, null, false);
     try std.testing.expect(hasText(scene.written(), "workspace"));
     try std.testing.expect(scene.written().len > 0);
@@ -635,7 +635,7 @@ test "wayland host renders frontend route through canonical ir" {
     var scene = ui.Scene.initWithClips(&commands, &clips);
     var collector = interaction.Collector.init(&regions);
     var dash_b: app_dashboard.State = .{};
-    try renderNativeAppScene(&scene, &collector, 1280, 1800, .{ .route = .{ .view = .frontend } }, &dash_b, false, null, false);
+    try renderNativeAppScene(&scene, &collector, 1280, 1800, .{ .route = app_navigation.locationForButton(.app_preview) }, &dash_b, false, null, false);
     try std.testing.expect(scene.written().len > 0);
 }
 
@@ -687,7 +687,7 @@ test "wayland host renders client side decoration above app content" {
     try std.testing.expectEqual(@as(f32, 0.0), (try hitRect(collector.written(), client_decor_drag_id)).y);
     try std.testing.expect((try hitRect(collector.written(), client_decor_close_id)).x > 1200.0);
 
-    const backend = try hitRect(collector.written(), app_navigation.backend_button_id);
+    const backend = try hitRect(collector.written(), app_navigation.source_workspace_button_id);
     try std.testing.expect(backend.y >= client_decor_h);
 }
 
@@ -755,7 +755,7 @@ test "wayland host pointer input updates hover activation and scroll state" {
     updateHoverHitForState(&state, collector.written());
     try std.testing.expect(state.runtime.hovered == null);
 
-    const backend = try hitRect(collector.written(), app_navigation.backend_button_id);
+    const backend = try hitRect(collector.written(), app_navigation.source_workspace_button_id);
     state.hover_x = backend.x + backend.w * 0.5;
     state.hover_y = backend.y + backend.h * 0.5;
     updateHoverHitForState(&state, collector.written());
@@ -799,7 +799,7 @@ test "wayland host appends scene cursor from native hover state" {
     var collector = interaction.Collector.init(&app.regions);
     try renderNativeAppScene(&scene, &collector, app.surface.width, app.surface.height, app.state, &app.dashboard_app, app.dashboard, &app.hardware_app, app.hardware);
     app.region_len = collector.written().len;
-    const backend = try hitRect(app.regionSlice(), app_navigation.backend_button_id);
+    const backend = try hitRect(app.regionSlice(), app_navigation.source_workspace_button_id);
     app.state.hover_x = backend.x + backend.w * 0.5;
     app.state.hover_y = backend.y + backend.h * 0.5;
     app.updateHoverHit(app.regionSlice());

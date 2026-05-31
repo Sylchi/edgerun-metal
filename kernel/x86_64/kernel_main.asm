@@ -268,6 +268,8 @@ check_xhci_txrx: db " txrx ", 0
 check_xhci_tx: db " tx ", 0
 check_xhci_rx: db " rx ", 0
 check_xhci_rxcc: db " cc ", 0
+check_xhci_evt: db " evt ", 0
+check_xhci_ptr: db " cmdtrb ", 0
 check_uvc_abs: db "absent", 0
 check_uvc_caps: db " caps ", 0
 check_uvc_rgb: db " rgb ", 0
@@ -372,6 +374,7 @@ xhci_evt_st: resd 1
 xhci_evt_ctl: resd 1
 xhci_evt_rsv: resd 1
 xhci_tx_goal: resd 1
+xhci_evt_type: resd 1
 
 %define VIRTIO_NET_STORAGE_size 4900
 virtio_net_dev:      resb VIRTIO_NET_DEVICE_size
@@ -1279,6 +1282,8 @@ er_fn er_kernel_main
 .xhci_txrx_poll:
     mov     edi, 10000
     lea     rsi, [rel xhci_evt_st]
+    lea     rdx, [rel xhci_evt_ctl]
+    lea     rcx, [rel xhci_evt_p0]
     call    er_xhci_cmd_wait_completion
     test    eax, eax
     jnz     .xhci_txrx_second_wait
@@ -1292,6 +1297,8 @@ er_fn er_kernel_main
 .xhci_txrx_second_wait:
     mov     edi, 10000
     lea     rsi, [rel xhci_evt_st]
+    lea     rdx, [rel xhci_evt_ctl]
+    lea     rcx, [rel xhci_evt_p0]
     call    er_xhci_cmd_wait_completion
     test    eax, eax
     jnz     .xhci_txrx_done
@@ -1299,6 +1306,10 @@ er_fn er_kernel_main
     mov     eax, [rel xhci_evt_st]
     mov     r9d, eax
 .xhci_txrx_done:
+    mov     eax, [rel xhci_evt_ctl]
+    shr     eax, 10
+    and     eax, 0x3F
+    mov     [rel xhci_evt_type], eax
     mov     rdi, COM1_PORT
     lea     rsi, [rel check_xhci_txrx]
     call    er_serial_puts
@@ -1320,6 +1331,18 @@ er_fn er_kernel_main
     mov     rdi, COM1_PORT
     mov     esi, r9d
     call    er_serial_putdec32
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_xhci_evt]
+    call    er_serial_puts
+    mov     rdi, COM1_PORT
+    mov     esi, [rel xhci_evt_type]
+    call    er_serial_putdec32
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_xhci_ptr]
+    call    er_serial_puts
+    mov     rdi, COM1_PORT
+    mov     rsi, [rel xhci_evt_p0]
+    call    er_serial_puthex64
 
     mov     edi, 1
     call    er_uvc_probe

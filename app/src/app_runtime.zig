@@ -355,7 +355,7 @@ export fn er_ui_app_set_route_path(path_len: usize) u32 {
 
 export fn er_ui_app_set_route_hash(hash_len: usize) u32 {
     const hash = state.input_bytes[0..hash_len];
-    const route = app_navigation.fromPath(hash);
+    const route = app_navigation.fromHash(hash);
     input.applyRoute(route);
     render.refreshRoutePath();
     render.refreshRouteHash();
@@ -364,7 +364,7 @@ export fn er_ui_app_set_route_hash(hash_len: usize) u32 {
 }
 
 export fn er_ui_app_activate_hit(hit_id: u32) u32 {
-    if (app_navigation.fromHit(hit_id, state.native_input_state.route)) |route| {
+    if (app_navigation.fromHit(hit_id, state.native_input_state.location)) |route| {
         input.applyRoute(route);
         render.refreshRoutePath();
         render.refreshRouteHash();
@@ -398,7 +398,7 @@ export fn er_ui_app_activate_hit(hit_id: u32) u32 {
 }
 
 export fn er_ui_app_context_menu(x: f32, y: f32) u32 {
-    if (state.native_input_state.route.view == .backend) {
+    if (app_navigation.isSourceWorkspace(state.native_input_state.route)) {
         state.context_menu_open = true;
         state.context_menu_x = x;
         state.context_menu_y = y;
@@ -648,14 +648,14 @@ fn hasFocusRingCommand(items: []const ui.Command) bool {
 fn expectRouteFixture(fixture: app_navigation.RouteFixture) !void {
     var path_buf: [app_navigation.route_path_capacity]u8 = undefined;
     var hash_buf: [app_navigation.route_hash_capacity]u8 = undefined;
-    const path_len = app_navigation.writePath(&path_buf, fixture.route) catch unreachable;
-    const hash_len = app_navigation.writeHash(&hash_buf, fixture.route) catch unreachable;
+    const path_len = app_navigation.writePath(&path_buf, fixture.location) catch unreachable;
+    const hash_len = app_navigation.writeHash(&hash_buf, fixture.location) catch unreachable;
     try std.testing.expectEqualStrings(fixture.path, path_buf[0..path_len]);
     try std.testing.expectEqualStrings(fixture.hash, hash_buf[0..hash_len]);
 }
 
 fn expectRouteState(expected: app_navigation.Route) !void {
-    try std.testing.expectEqual(expected.view, state.native_input_state.route.view);
+    try std.testing.expectEqual(expected, state.native_input_state.route);
 }
 
 test "wasm render bridge exports neutral frame and outbox names" {
@@ -711,7 +711,7 @@ test "app runtime draws deterministic focus ring from runtime focus state" {
 
 test "app runtime component catalog builds packed app buffers and app-ready icon lines" {
     state.font_atlas_ready = false;
-    input.applyRoute(.{ .view = .frontend });
+    input.applyRoute(app_navigation.locationForButton(.app_preview));
     const code = er_ui_build_app_frame(960, 640, -1.0, -1.0, 0.0);
     try std.testing.expectEqual(@as(u32, 0), code);
     try std.testing.expect(state.font_atlas_ready);
@@ -724,7 +724,7 @@ test "app runtime component catalog builds packed app buffers and app-ready icon
 }
 
 test "app runtime component catalog render uses canonical ir buffers" {
-    input.applyRoute(.{ .view = .frontend });
+    input.applyRoute(app_navigation.locationForButton(.app_preview));
     const code = er_ui_render_frame(480, 360, 0.0);
     try std.testing.expectEqual(@as(u32, 0), code);
     try std.testing.expectEqual(renderer_pipeline.Transport.pixel_bytes, state.last_present_transport);
@@ -750,32 +750,32 @@ test "app runtime landing builds packed app buffers and hit state" {
 
 test "app runtime route snapshots cover canonical fixtures and dynamic families" {
     for (app_navigation.route_fixtures) |fixture| {
-        input.applyRoute(fixture.route);
+        input.applyRoute(fixture.location);
         try expectRouteFixture(fixture);
         try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, 111.0, 32.0, 0.0));
     }
 }
 
 test "app runtime frontend builds packed app buffers" {
-    input.applyRoute(.{ .view = .frontend });
+    input.applyRoute(app_navigation.locationForButton(.app_preview));
     try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, 640.0, 500.0, 0.0));
 }
 
 test "app runtime activation keeps page state in wasm" {
-    input.applyRoute(.{ .view = .frontend });
+    input.applyRoute(app_navigation.locationForButton(.app_preview));
     try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, -1.0, -1.0, 0.0));
-    try std.testing.expectEqual(app_navigation.View.frontend, state.native_input_state.route.view);
+    try std.testing.expect(app_navigation.isAppPreview(state.native_input_state.route));
 }
 
 test "app runtime route sync owns URL path state" {
-    input.applyRoute(.{ .view = .frontend });
+    input.applyRoute(app_navigation.locationForButton(.app_preview));
     er_ui_build_app_frame(1280, 800, -1.0, -1.0, 0.0);
     try std.testing.expect(state.route_len > 0);
     try std.testing.expect(state.route_hash_len > 0);
 }
 
 test "app runtime context source jump opens exact component file" {
-    input.applyRoute(.{ .view = .frontend });
+    input.applyRoute(app_navigation.locationForButton(.app_preview));
     try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, 30.0, 150.0, 0.0));
 }
 
@@ -829,7 +829,7 @@ test "app runtime exposes no secondary bootstrap javascript" {
 test "app runtime exposes repo-owned source as canonical object bytes" {
     try std.testing.expect(er_ui_source_workspace_len() > 0);
 
-    input.applyRoute(.{ .view = .frontend });
+    input.applyRoute(app_navigation.locationForButton(.app_preview));
     try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, -1.0, -1.0, 0.0));
 }
 
@@ -841,13 +841,13 @@ test "app runtime source workspace is mutable app source" {
 }
 
 test "app runtime source route initializes embedded editor state" {
-    input.applyRoute(.{ .view = .backend });
+    input.applyRoute(app_navigation.locationForButton(.source_workspace));
     try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, -1.0, -1.0, 0.0));
-    try std.testing.expectEqual(app_navigation.View.backend, state.native_input_state.route.view);
+    try std.testing.expect(app_navigation.isSourceWorkspace(state.native_input_state.route));
 }
 
 test "app runtime source editor rewrites a canonical vfs file" {
-    input.applyRoute(.{ .view = .backend });
+    input.applyRoute(app_navigation.locationForButton(.source_workspace));
     const label = "src/er/test_main.er";
     @memcpy(state.input_bytes[0..label.len], label);
     try std.testing.expectEqual(@as(u32, 0), er_ui_source_editor_select_label(@intCast(label.len)));
@@ -856,7 +856,7 @@ test "app runtime source editor rewrites a canonical vfs file" {
 }
 
 test "app runtime source editor pointer focus places caret before editing" {
-    input.applyRoute(.{ .view = .backend });
+    input.applyRoute(app_navigation.locationForButton(.source_workspace));
     editor.ensureSourceEditor();
     try std.testing.expect(state.source_editor_len > 0);
     state.source_editor_status = .ready;
@@ -865,7 +865,7 @@ test "app runtime source editor pointer focus places caret before editing" {
 }
 
 test "app runtime source explorer rows open real workspace files" {
-    input.applyRoute(.{ .view = .backend });
+    input.applyRoute(app_navigation.locationForButton(.source_workspace));
     editor.ensureSourceEditor();
     try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, -1.0, -1.0, 0.0));
     const files = editor.currentSourceFiles();
@@ -873,21 +873,21 @@ test "app runtime source explorer rows open real workspace files" {
 }
 
 test "app runtime source explorer search is edited inside wasm" {
-    input.applyRoute(.{ .view = .backend });
+    input.applyRoute(app_navigation.locationForButton(.source_workspace));
     editor.ensureSourceEditor();
     _ = editor.handleSourceSearchKey("a", 0, 0, 0);
     try std.testing.expect(state.source_search_len > 0);
 }
 
 test "app runtime source editor moves by visual lines" {
-    input.applyRoute(.{ .view = .backend });
+    input.applyRoute(app_navigation.locationForButton(.source_workspace));
     editor.ensureSourceEditor();
     state.source_editor_status = .ready;
     _ = editor.handleSourceEditorKey("ArrowDown", 0, 0, 0, 0);
 }
 
 test "app runtime source editor handles full event records and edit history" {
-    input.applyRoute(.{ .view = .backend });
+    input.applyRoute(app_navigation.locationForButton(.source_workspace));
     editor.ensureSourceEditor();
     state.source_editor_status = .ready;
     try std.testing.expect(editor.handleSourceEditorKey("End", 0, 0, 0, 0));
@@ -895,7 +895,7 @@ test "app runtime source editor handles full event records and edit history" {
 }
 
 test "app runtime source editor uses workspace file list and pointer selection" {
-    input.applyRoute(.{ .view = .backend });
+    input.applyRoute(app_navigation.locationForButton(.source_workspace));
     editor.ensureSourceEditor();
     try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, -1.0, -1.0, 0.0));
     const files = editor.currentSourceFiles();
@@ -905,7 +905,7 @@ test "app runtime source editor uses workspace file list and pointer selection" 
 }
 
 test "app runtime source editor scrolls editor viewport without page scroll" {
-    input.applyRoute(.{ .view = .backend });
+    input.applyRoute(app_navigation.locationForButton(.source_workspace));
     editor.ensureSourceEditor();
     state.source_editor_status = .ready;
     try std.testing.expect(editor.scrollSourceEditorByWheel(120.0));
@@ -957,7 +957,7 @@ test "app runtime pointer up owns activation suppression policy" {
 }
 
 test "app packed text preserves variable font descenders" {
-    input.applyRoute(.{ .view = .frontend });
+    input.applyRoute(app_navigation.locationForButton(.app_preview));
     try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, -1.0, -1.0, 0.0));
 }
 
@@ -978,7 +978,7 @@ test "app font atlas populates glyphs on demand" {
 }
 
 test "app icon buffer stores semantic icon instances" {
-    input.applyRoute(.{ .view = .frontend });
+    input.applyRoute(app_navigation.locationForButton(.app_preview));
     try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, -1.0, -1.0, 0.0));
 }
 

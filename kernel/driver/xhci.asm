@@ -984,11 +984,16 @@ er_fn er_xhci_event_pop
 
 ; ==================================================================
 ; er_xhci_cmd_wait_completion — wait for command completion event
-; int er_xhci_cmd_wait_completion(uint32_t spins, uint32_t* out_cc)
+; int er_xhci_cmd_wait_completion(uint32_t spins, uint32_t* out_cc,
+;                                 uint32_t* out_evt_ctl, uint64_t* out_evt_p0)
 ; Returns: 0 on command completion, -1 on timeout/bad args/failure.
 ; ==================================================================
 er_fn er_xhci_cmd_wait_completion
     test    rsi, rsi
+    jz      .cw_bad_arg
+    test    rdx, rdx
+    jz      .cw_bad_arg
+    test    rcx, rcx
     jz      .cw_bad_arg
     test    edi, edi
     jz      .cw_bad_arg
@@ -999,6 +1004,9 @@ er_fn er_xhci_cmd_wait_completion
     push    r15
 
     mov     r12d, edi           ; spins remaining
+    mov     r13, rsi            ; out_cc
+    mov     r14, rdx            ; out_evt_ctl
+    mov     r15, rcx            ; out_evt_p0
 
 .cw_poll:
     lea     rdi, [rel xhci_cw_p0]
@@ -1016,13 +1024,16 @@ er_fn er_xhci_cmd_wait_completion
 
 .cw_have_evt:
     mov     eax, [rel xhci_cw_ctl]
+    mov     [r14], eax
+    mov     rdx, [rel xhci_cw_p0]
+    mov     [r15], rdx
     and     eax, TRB_TYPE_MASK
     cmp     eax, (TRB_EV_CMD_CMPL << TRB_TYPE_SHIFT)
     jne     .cw_skip
     mov     eax, [rel xhci_cw_st]
     shr     eax, 24
     and     eax, 0xFF
-    mov     [rsi], eax
+    mov     [r13], eax
     cmp     eax, XHCI_CC_SUCCESS
     jne     .cw_fail
     xor     eax, eax
