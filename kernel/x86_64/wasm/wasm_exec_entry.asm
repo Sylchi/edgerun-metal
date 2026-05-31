@@ -103,24 +103,7 @@ er_fn er_fn_exec
     mov     qword [exec_control_len], 0
     mov     qword [exec_reader_offset], 0
 
-    ; --- Try JIT path first ---
-    mov     rax, [rel jit_table + r12 * 8]
-    test    rax, rax
-    jnz     .jit_exec
-    mov     rdi, r12
-    call    er_wasm_jit_compile
-    test    rdx, rdx
-    jnz     .interp_path
-.jit_exec:
-    lea     r15, [rel jit_globals]
-    call    rax
-    xor     edx, edx
-    mov     [rel exec_result_values], rax
-    mov     r15, rax
-    mov     r14, rdx
-    jmp     .after_dispatch
-
-.interp_path:
+    ; Canonical execution path. JIT execution is explicit via er_wasm_jit_exec.
     call    exec_dispatch_loop
     mov     r15, rax      ; save return value
     mov     r14, rdx      ; save error code

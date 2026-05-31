@@ -19,6 +19,13 @@ extern er_xhci_read_portsc
 %define UVC_CAP_YUY2          (1 << 3)
 %define UVC_CAP_CONTROLS      (1 << 4)
 %define XHCI_PORTSC_CCS       (1 << 0)
+%define USB_DESC_INTERFACE    0x04
+%define USB_DESC_CS_INTERFACE 0x24
+%define USB_CLASS_VIDEO       0x0E
+%define UVC_SC_VIDEOCONTROL   0x01
+%define UVC_SC_VIDEOSTREAMING 0x02
+%define UVC_VS_FORMAT_UNCOMPRESSED 0x04
+%define UVC_VS_FORMAT_MJPEG   0x06
 
 ; Stream state layout
 %define UVC_STREAM_ENABLED    0   ; u8
@@ -41,6 +48,94 @@ uvc_xhci_max_ports:   resd 1
 uvc_last_portsc:      resd 1
 
 SECTION .text
+
+; int er_uvc_parse_config_caps(const uint8_t* buf, uint64_t len, uint32_t* out_caps)
+; Derives stream/control capability hints from a USB configuration descriptor blob.
+er_fn er_uvc_parse_config_caps
+    test    rdi, rdi
+    jz      .pc_bad_arg
+    test    rdx, rdx
+    jz      .pc_bad_arg
+
+    xor     r9d, r9d             ; caps
+    mov     r8, rdi              ; cursor
+    mov     rcx, rsi             ; remaining
+
+.pc_loop:
+    cmp     rcx, 2
+    jb      .pc_done
+    movzx   eax, byte [r8]       ; bLength
+    cmp     eax, 2
+    jb      .pc_bad_arg
+    cmp     rax, rcx
+    ja      .pc_bad_arg
+    movzx   esi, byte [r8 + 1]   ; bDescriptorType
+    cmp     esi, USB_DESC_INTERFACE
+    je      .pc_interface
+    cmp     esi, USB_DESC_CS_INTERFACE
+    je      .pc_cs_interface
+    jmp     .pc_next
+
+.pc_interface:
+    cmp     eax, 9
+    jb      .pc_next
+    movzx   esi, byte [r8 + 5]   ; bInterfaceClass
+    cmp     esi, USB_CLASS_VIDEO
+    jne     .pc_next
+    movzx   esi, byte [r8 + 6]   ; bInterfaceSubClass
+    cmp     esi, UVC_SC_VIDEOCONTROL
+    jne     .pc_streaming_if
+    or      r9d, UVC_CAP_CONTROLS
+    jmp     .pc_next
+.pc_streaming_if:
+    cmp     esi, UVC_SC_VIDEOSTREAMING
+    jne     .pc_next
+    or      r9d, UVC_CAP_RGB_PRESENT
+    jmp     .pc_next
+
+.pc_cs_interface:
+    cmp     eax, 3
+    jb      .pc_next
+    movzx   esi, byte [r8 + 2]   ; bDescriptorSubtype
+    cmp     esi, UVC_VS_FORMAT_MJPEG
+    jne     .pc_check_uncomp
+    or      r9d, UVC_CAP_MJPEG | UVC_CAP_RGB_PRESENT
+    jmp     .pc_next
+.pc_check_uncomp:
+    cmp     esi, UVC_VS_FORMAT_UNCOMPRESSED
+    jne     .pc_next
+    cmp     eax, 0x1B            ; includes 16-byte guidFormat
+    jb      .pc_next
+    ; guidFormat first dword carries fourcc in little-endian for common formats.
+    mov     esi, dword [r8 + 5]
+    cmp     esi, 0x32595559      ; "YUY2"
+    jne     .pc_check_y800
+    or      r9d, UVC_CAP_YUY2 | UVC_CAP_RGB_PRESENT
+    jmp     .pc_next
+.pc_check_y800:
+    cmp     esi, 0x30303859      ; "Y800" (grayscale; often IR/mono sensors)
+    jne     .pc_check_y16
+    or      r9d, UVC_CAP_IR_PRESENT
+    jmp     .pc_next
+.pc_check_y16:
+    cmp     esi, 0x20363159      ; "Y16 "
+    jne     .pc_next
+    or      r9d, UVC_CAP_IR_PRESENT
+
+.pc_next:
+    add     r8, rax
+    sub     rcx, rax
+    jmp     .pc_loop
+
+.pc_done:
+    mov     [rdx], r9d
+    xor     eax, eax
+    er_ok
+    ret
+.pc_bad_arg:
+    mov     eax, -1
+    er_err  ERROR_BAD_ARGUMENT
+    ret
 
 ; int er_uvc_probe(uint64_t xhci_ok_hint)
 ; Hint is non-zero when at least one xHCI controller initialized.
@@ -74,9 +169,8 @@ er_fn er_uvc_probe
     test    r8d, r8d
     jz      .no_xhci
     ; We have at least one attached USB device on xHCI ports.
-    ; UVC class-specific descriptor/endpoint parsing is next step.
     mov     byte [uvc_attached], 1
-    mov     dword [uvc_capabilities], UVC_CAP_RGB_PRESENT | UVC_CAP_IR_PRESENT
+    mov     dword [uvc_capabilities], 0
     mov     dword [uvc_last_status], ERROR_OK
     mov     eax, 1
     er_ok

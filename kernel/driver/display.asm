@@ -54,7 +54,7 @@ extern er_memset
 ; void er_display_init(void)
 ;
 ; Tries: multiboot framebuffer → native framebuffer.
-; No legacy text-mode fallback.
+; Legacy text mode is not used.
 ; ==================================================================
 er_fn er_display_init
     push    rdi

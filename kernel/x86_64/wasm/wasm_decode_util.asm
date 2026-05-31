@@ -109,19 +109,10 @@ er_wasm_find_export:
     jae     .not_found
 
     push    r11
-    ; Compare export name
-    push    r10
-        mov     r10, r11
-        imul    r10, EXPORT_SIZE
-    mov     rdi, [exports_buf + r10]  ; name ptr
-        pop     r10
-    push    r10
-        mov     r10, r11
-        imul    r10, EXPORT_SIZE
-    mov     rsi, [exports_buf + r10 + 8]  ; name len (need to save this)
-        pop     r10
-    ; TODO: proper name length storage
-    ; For now, compare using the name in the exports buf
+    mov     rbx, r11
+    imul    rbx, EXPORT_SIZE
+    mov     rdi, [exports_buf + rbx]      ; export name ptr
+    mov     rsi, [exports_buf + rbx + 8]  ; export name len
     mov     rdx, r12
     mov     rcx, r13
     call    er_wasm_eql

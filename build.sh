@@ -313,6 +313,7 @@ cmd_test() {
 	cmd_test_clock
 	cmd_test_http
 	cmd_test_serial
+	cmd_test_uvc
 	cmd_test_sw_fb
 	cmd_test_render_ir
 	cmd_test_fe_mul
@@ -380,6 +381,27 @@ cmd_test_clock() {
 
 cmd_test_serial() {
 	build_test "test_serial_self" "${TEST_DIR}/test_serial_self.asm" "../driver/serial" "rt/runtime"
+}
+
+cmd_test_uvc() {
+	local src="${TEST_DIR}/test_uvc_self.asm"
+	local obj="${ASM_BUILD}/test_uvc_self.o"
+	local stub_src="${TEST_DIR}/stubs_xhci.asm"
+	local stub_obj="${ASM_BUILD}/stubs_xhci.o"
+	local bin="${ASM_BUILD}/test_uvc"
+	${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
+	${YASM} -f elf64 ${ASM_INC} -o "$stub_obj" "$stub_src"
+	local uvc_o="${ASM_BUILD}/uvc.o"
+	if [ ! -f "$uvc_o" ]; then
+		elf64 "${ASM_DIR}/../driver/uvc.asm" "$uvc_o"
+	fi
+	local xhci_o="${ASM_BUILD}/xhci.o"
+	if [ ! -f "$xhci_o" ]; then
+		elf64 "${ASM_DIR}/../driver/xhci.asm" "$xhci_o"
+	fi
+	ld -nostdlib -static -o "$bin" "$obj" "$uvc_o" "$xhci_o" "$stub_obj"
+	echo "  LD  ${bin}"
+	"$bin"
 }
 
 cmd_test_http() {
@@ -602,6 +624,7 @@ EdgeRun build targets:
   test-recursion-valid    Run WASM recursion-validation valid-DAG test
   test-recursion-invalid  Run WASM recursion-validation cycle-rejection test
   test-serial         Run serial test (self-hosted ASM runner)
+  test-uvc            Run UVC descriptor parse test (self-hosted ASM runner)
   test-sw-fb          Run software framebuffer test (self-hosted ASM runner)
   test-render-ir      Run render IR test (self-hosted ASM runner)
   test-fe-mul         Run _fe_mul field multiplication test (self-hosted ASM)
@@ -638,6 +661,7 @@ case "${1:-help}" in
 	test-recursion-valid) cmd_test_recursion_valid ;;
 	test-recursion-invalid) cmd_test_recursion_invalid ;;
 	test-serial)     cmd_test_serial ;;
+	test-uvc)        cmd_test_uvc ;;
 	test-sw-fb)     cmd_test_sw_fb ;;
 	test-render-ir) cmd_test_render_ir ;;
 	test-fe-mul)    cmd_test_fe_mul ;;

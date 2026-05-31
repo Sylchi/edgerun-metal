@@ -200,7 +200,7 @@ _start:
     jne     .fail
 
     ; =================================================================
-    ; Test 1.5: Call func 0 through er_fn_exec (like the call template does)
+    ; Test 1.5: Call func 0 through the explicit JIT executor
     ; =================================================================
     lea     rdi, [rel .str_test1b]
     call    jit_debug_print_str
@@ -209,7 +209,7 @@ _start:
     xor     edi, edi            ; func_idx = 0
     xor     esi, esi            ; args = NULL (0 params)
     xor     edx, edx            ; arg_count = 0
-    call    er_fn_exec
+    call    er_wasm_jit_exec
 
     mov     rdx, 0
     cmp     rax, 42
@@ -219,7 +219,7 @@ _start:
     jne     .fail
 
     ; =================================================================
-    ; Test 1.6: Same but after clearing jit_table (like func 1's call does)
+    ; Test 1.6: Same but after clearing jit_table
     ; =================================================================
     lea     rdi, [rel .str_test1c]
     call    jit_debug_print_str
@@ -233,7 +233,7 @@ _start:
     xor     edi, edi            ; func_idx = 0
     xor     esi, esi            ; args = NULL (0 params)
     xor     edx, edx            ; arg_count = 0
-    call    er_fn_exec
+    call    er_wasm_jit_exec
 
     mov     rdx, 0
     cmp     rax, 42
@@ -274,11 +274,11 @@ _start:
     sub     rsi, [rel jit_state.cache_base]
     call    jit_debug_dump_code
 
-    ; Execute func 1 via er_fn_exec (which will use JIT internally)
+    ; Execute func 1 via the explicit JIT executor.
     xor     edx, edx
     xor     esi, esi
     mov     edi, 1
-    call    er_fn_exec
+    call    er_wasm_jit_exec
 
     ; SAVE raw result before any debug output
     mov     qword [rel saved_rax], rax
@@ -322,8 +322,8 @@ _start:
     syscall
 
 .str_test1:  db "=== Test 1: func 0 (block i32.const 42 end) ===", 0
-.str_test1b: db "=== Test 1.5: func 0 via er_fn_exec ===", 0
-.str_test1c: db "=== Test 1.6: func 0 via er_fn_exec (jit_table cleared) ===", 0
+.str_test1b: db "=== Test 1.5: func 0 via er_wasm_jit_exec ===", 0
+.str_test1c: db "=== Test 1.6: func 0 via er_wasm_jit_exec (jit_table cleared) ===", 0
 .str_test2:  db "=== Test 2: func 1 (call(0) end) ===", 0
 .str_raw:    db "raw rax=", 0
 .str_comma:  db ", rdx=", 0

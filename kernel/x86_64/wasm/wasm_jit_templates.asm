@@ -1537,7 +1537,7 @@ er_fn jit_template_i64_rotr
 ;   mov  rdi, func_idx
 ;   mov  rsi, rsp     ; buffer
 ;   mov  edx, n       ; param_count
-;   mov  rax, er_fn_exec
+;   mov  rax, er_wasm_jit_exec
 ;   call rax
 ;   add  rsp, n*8     ; free buffer
 ;   ; if result_count > 0: push rax
@@ -1592,7 +1592,7 @@ er_fn jit_template_call
     call    jit_emit_mov_rsi_rsp
     mov     eax, r11d
     call    jit_emit_mov_edx_imm32
-    mov     rax, er_fn_exec
+    mov     rax, er_wasm_jit_exec
     call    jit_emit_mov_rax_imm64
     call    jit_emit_call_rax
 
@@ -1633,7 +1633,7 @@ er_fn jit_template_call
 ;   ; copy params from WASM stack to buffer (WASM order)
 ;   mov  rsi, rsp     ; buffer
 ;   mov  edx, n       ; param_count
-;   mov  rax, er_fn_exec
+;   mov  rax, er_wasm_jit_exec
 ;   call rax
 ;   add  rsp, n*8     ; free buffer
 ;   ; if result_count > 0: push rax
@@ -1684,7 +1684,7 @@ er_fn jit_template_call_indirect
     call    jit_emit_mov_rsi_rsp
     mov     eax, r11d
     call    jit_emit_mov_edx_imm32
-    mov     rax, er_fn_exec
+    mov     rax, er_wasm_jit_exec
     call    jit_emit_mov_rax_imm64
     call    jit_emit_call_rax
 
@@ -2837,7 +2837,7 @@ er_fn jit_template_f64_copysign
 ; -----------------------------------------------------------------+
 ; Compile refusal template — emit nothing, let orchestrator return ERROR_NOT_IMPLEMENTED
 ; -----------------------------------------------------------------+
-er_fn jit_template_fallback
+er_fn jit_template_unsupported
     ret
 
 ; ------------------------------------------------------------------

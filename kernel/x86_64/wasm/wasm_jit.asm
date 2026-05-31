@@ -144,8 +144,8 @@ er_wasm_jit_init:
     mov     [rel jit_globals + JitGlobals.memory_pages], rax
 
     ; --- fill template dispatch table ---
-    ; Default all entries to jit_template_fallback (compile refusal path).
-    lea     rax, [rel jit_template_fallback]
+    ; Default all entries to jit_template_unsupported (compile refusal path).
+    lea     rax, [rel jit_template_unsupported]
     mov     ecx, 256
     lea     rdx, [rel jit_template_table]
 .tmpl_fill:
@@ -454,9 +454,9 @@ er_wasm_jit_compile:
     ; --- All other ops: use template table ---
     lea     rax, [rel jit_template_table]
     mov     rax, [rax + rbx * 8]
-    lea     rcx, [rel jit_template_fallback]
+    lea     rcx, [rel jit_template_unsupported]
     cmp     rax, rcx
-    je      .fallback
+    je      .unsupported_template
 
     push    r13
     push    r14
@@ -722,7 +722,7 @@ er_wasm_jit_compile:
     er_ok
     jmp     .out
 
-.fallback:
+.unsupported_template:
     ; Opcode not JIT-supported — don't compile
     xor     eax, eax            ; code_ptr = 0
     er_err  ERROR_NOT_IMPLEMENTED
@@ -780,7 +780,7 @@ er_wasm_jit_exec:
     mov     rdi, r12
     call    er_wasm_jit_compile
     test    rdx, rdx
-    jnz     .exec_error         ; compilation failed — call interpreter instead
+    jnz     .exec_error         ; compilation failed
 
 .exec_compiled:
     mov     rbx, rax            ; code_ptr
