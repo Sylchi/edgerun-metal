@@ -44,6 +44,14 @@ pub const textured_color_r_index: usize = 4;
 pub const textured_color_g_index: usize = 5;
 pub const textured_color_b_index: usize = 6;
 pub const textured_color_a_index: usize = 7;
+pub const text_glyph_x_index: usize = 0;
+pub const text_glyph_baseline_y_index: usize = 1;
+pub const text_glyph_px_index: usize = 2;
+pub const text_glyph_codepoint_weight_index: usize = 3;
+pub const text_glyph_color_r_index: usize = 4;
+pub const text_glyph_color_g_index: usize = 5;
+pub const text_glyph_color_b_index: usize = 6;
+pub const text_glyph_color_a_index: usize = 7;
 pub const icon_x_index: usize = 0;
 pub const icon_y_index: usize = 1;
 pub const icon_w_index: usize = 2;
@@ -88,6 +96,15 @@ pub const TexturedQuad = struct {
     v0: f32,
     u1: f32,
     v1: f32,
+    color: ui.Color,
+};
+
+pub const TextGlyph = struct {
+    x: f32,
+    baseline_y: f32,
+    px: f32,
+    codepoint: u21,
+    weight: ui.FontWeight,
     color: ui.Color,
 };
 
@@ -355,6 +372,14 @@ pub fn pushImage(buffers: Buffers, quad: ui.Quad) Error!void {
     try pushClippedTexturedQuad(buffers.image_vertices, buffers.image_vertex_len, quad.bounds, quad.bounds, quad.u0, quad.v0, quad.u1, quad.v1, quad.color);
 }
 
+pub fn pushTextGlyph(buffers: Buffers, x: f32, baseline_y: f32, px: f32, codepoint: u21, weight: ui.FontWeight, color: ui.Color) Error!void {
+    if (buffers.text_vertex_len.* + text_vertex_float_stride > buffers.text_vertices.len) return error.Budget;
+    const packed = @as(u32, codepoint) * 4 + @intFromEnum(weight);
+    const values = [_]f32{ x, baseline_y, px, @floatFromInt(packed), channel(color.r), channel(color.g), channel(color.b), channel(color.a) };
+    @memcpy(buffers.text_vertices[buffers.text_vertex_len.* .. buffers.text_vertex_len.* + text_vertex_float_stride], &values);
+    buffers.text_vertex_len.* += text_vertex_float_stride;
+}
+
 pub fn pushClippedTexturedQuad(buffer: []f32, len: *usize, clip: ui.Rect, bounds: ui.Rect, tex_u0: f32, tex_v0: f32, tex_u1: f32, tex_v1: f32, color: ui.Color) Error!void {
     const clipped = bounds.intersect(clip) orelse return;
     if (len.* + text_vertex_float_stride * textured_quad_vertex_count > buffer.len) return error.Budget;
@@ -543,12 +568,58 @@ pub fn bodyFloatCount(hdr: BodyHeader) usize {
 pub fn batchPrimitiveCount(batch: DrawBatch) Error!usize {
     return switch (batch) {
         .rects, .overlay_rects => |rects| rectCount(rects),
-        .text => |vertices| texturedQuadCount(vertices),
+        .text => |vertices| textGlyphCount(vertices),
         .image => |vertices| texturedQuadCount(vertices),
         .svg, .overlay_icon => |instances| iconCount(instances),
         .icon_lines, .overlay_icon_lines => 0,
     };
 }
+
+pub fn textGlyphCount(values: []const f32) Error!usize {
+    if (values.len % text_vertex_float_stride != 0) return error.InvalidBuffer;
+    return values.len / text_vertex_float_stride;
+}
+
+pub fn textGlyphAt(values: []const f32, index: usize) Error!TextGlyph {
+    const count = try textGlyphCount(values);
+    if (index >= count) return error.InvalidBuffer;
+    const start = index * text_vertex_float_stride;
+    const glyph = values[start .. start + text_vertex_float_stride];
+    const packed: u32 = @intFromFloat(glyph[text_glyph_codepoint_weight_index]);
+    const weight_raw: u8 = @intCast(packed & 3);
+    const codepoint_raw = packed / 4;
+    if (codepoint_raw > std.math.maxInt(u21)) return error.InvalidBuffer;
+    return .{
+        .x = glyph[text_glyph_x_index],
+        .baseline_y = glyph[text_glyph_baseline_y_index],
+        .px = glyph[text_glyph_px_index],
+        .codepoint = @intCast(codepoint_raw),
+        .weight = switch (weight_raw) {
+            @intFromEnum(ui.FontWeight.regular) => .regular,
+            @intFromEnum(ui.FontWeight.semibold) => .semibold,
+            @intFromEnum(ui.FontWeight.bold) => .bold,
+            else => return error.InvalidBuffer,
+        },
+        .color = colorFromChannels(glyph[text_glyph_color_r_index], glyph[text_glyph_color_g_index], glyph[text_glyph_color_b_index], glyph[text_glyph_color_a_index]),
+    };
+}
+
+pub const TextGlyphIterator = struct {
+    values: []const f32,
+    index: usize = 0,
+    count: usize,
+
+    pub fn init(values: []const f32) Error!TextGlyphIterator {
+        return .{ .values = values, .count = try textGlyphCount(values) };
+    }
+
+    pub fn next(self: *TextGlyphIterator) Error!?TextGlyph {
+        if (self.index >= self.count) return null;
+        const glyph = try textGlyphAt(self.values, self.index);
+        self.index += 1;
+        return glyph;
+    }
+};
 
 pub fn iconCount(values: []const f32) Error!usize {
     if (values.len % icon_instance_float_stride != 0) return error.InvalidBuffer;

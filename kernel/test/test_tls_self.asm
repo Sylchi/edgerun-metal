@@ -11,6 +11,8 @@ extern er_tls_server_hello_parse
 extern er_tls_shared_secret_from_server_hello
 extern er_tls_hkdf_extract
 extern er_tls_hkdf_expand_label
+extern er_tls_transcript_hash_ch_sh
+extern er_tls_derive_handshake_secrets
 extern er_tls_send
 
 SECTION .bss
@@ -22,6 +24,7 @@ priv_buf: resb TLS_X25519_KEY_LEN
 server_key: resb TLS_X25519_KEY_LEN
 shared_buf: resb TLS_X25519_KEY_LEN
 hkdf_out: resb TLS_RANDOM_LEN
+hash_out: resb TLS_RANDOM_LEN
 random_calls: resd 1
 
 SECTION .rodata
@@ -166,6 +169,19 @@ _start:
     movzx   eax, byte [rel hkdf_out]
     ASSERT_EQ eax, 0xC0
 
+    lea     rdi, [rel server_hello]
+    mov     esi, server_hello_len
+    lea     rdx, [rel hash_out]
+    call    er_tls_transcript_hash_ch_sh
+    ASSERT_RAX 0
+    movzx   eax, byte [rel hash_out]
+    ASSERT_EQ eax, 0xD0
+
+    lea     rdi, [rel server_hello]
+    mov     esi, server_hello_len
+    call    er_tls_derive_handshake_secrets
+    ASSERT_RAX 0
+
     ; Encrypted record send must fail until the TLS state is active.
     xor     edi, edi
     lea     rsi, [rel out_buf]
@@ -192,8 +208,10 @@ global er_tpm_crb_transfer
 global er_tpm_parse_get_random
 global er_tor_curve25519_scalar_mult
 global er_tor_hmac_sha256
+global er_tor_sha256
 global er_tcp_send
 global er_tcp_recv
+global er_net_poll
 
 er_tpm_get_random:
     mov     rax, rdi
@@ -248,7 +266,21 @@ er_tor_hmac_sha256:
     pop     rcx
     ret
 
+er_tor_sha256:
+    push    rcx
+    mov     rdi, rdx
+    mov     ecx, TLS_RANDOM_LEN
+.sha:
+    mov     byte [rdi], 0xD0
+    inc     rdi
+    dec     ecx
+    jnz     .sha
+    mov     eax, TLS_RANDOM_LEN
+    pop     rcx
+    ret
+
 er_tcp_send:
 er_tcp_recv:
+er_net_poll:
     xor     eax, eax
     ret

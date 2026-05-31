@@ -94,6 +94,7 @@ extern er_hda_codec_vendor_id
 extern er_hda_codec_root_nodes
 extern er_hda_alc295_prepare_speaker
 extern er_hda_start_square_wave
+extern er_hda_get_start_stage
 extern er_hda_get_stream_debug
 extern er_xhci_cmd_submit_noop
 extern er_xhci_cmd_submit_enable_slot
@@ -1357,14 +1358,18 @@ er_fn er_kernel_main
     mov     esi, [rel hda_statests]
     call    er_hda_alc295_prepare_speaker
     test    eax, eax
-    jnz     .hda_tone_fail
+    jnz     .hda_route_fail
     mov     edi, [rel hda_bar0]
     mov     esi, [rel hda_gcap]
     call    er_hda_start_square_wave
     test    eax, eax
     jz      .hda_tone_print
-.hda_tone_fail:
-    mov     dword [rel hda_tone_status], 1
+    call    er_hda_get_start_stage
+    add     eax, 20
+    mov     [rel hda_tone_status], eax
+    jmp     .hda_tone_print
+.hda_route_fail:
+    mov     dword [rel hda_tone_status], 10
 .hda_tone_print:
     mov     rdi, COM1_PORT
     lea     rsi, [rel check_hda_tone]

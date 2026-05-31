@@ -61,6 +61,7 @@ align 128
 hda_tone_buffer:  resb HDA_TONE_BYTES
 hda_verb_sink:    resd 1
 hda_last_sd_base: resd 1
+hda_last_start_stage: resd 1
 
 SECTION .text
 
@@ -576,6 +577,7 @@ er_fn er_hda_start_square_wave
 
     mov     r12d, edi
     mov     r13d, esi
+    mov     dword [rel hda_last_start_stage], 0
     test    r12d, r12d
     jz      .sq_bad_arg
 
@@ -625,6 +627,7 @@ er_fn er_hda_start_square_wave
     jnz     .sq_srst_set
     dec     ecx
     jnz     .sq_wait_srst
+    mov     dword [rel hda_last_start_stage], 2
     jmp     .sq_timeout
 .sq_srst_set:
     mov     edi, r14d
@@ -638,6 +641,7 @@ er_fn er_hda_start_square_wave
     jz      .sq_ready
     dec     ecx
     jnz     .sq_wait_clear
+    mov     dword [rel hda_last_start_stage], 3
     jmp     .sq_timeout
 .sq_ready:
     mov     edi, r14d
@@ -677,16 +681,23 @@ er_fn er_hda_start_square_wave
     mov     edi, r14d
     call    er_mmio_read32
     test    eax, HDA_SD_CTL_RUN
-    jz      .sq_timeout
+    jnz     .sq_run_ok
+    mov     dword [rel hda_last_start_stage], 4
+    jmp     .sq_timeout
+.sq_run_ok:
     mov     edi, r14d
     add     edi, HDA_SD_CBL
     call    er_mmio_read32
     cmp     eax, HDA_TONE_BYTES
-    jne     .sq_timeout
+    je      .sq_success
+    mov     dword [rel hda_last_start_stage], 5
+    jmp     .sq_timeout
+.sq_success:
     xor     eax, eax
     er_ok
     jmp     .sq_out
 .sq_bad_arg:
+    mov     dword [rel hda_last_start_stage], 1
     er_err  ERROR_BAD_ARGUMENT
     mov     eax, -1
     jmp     .sq_out
@@ -698,6 +709,17 @@ er_fn er_hda_start_square_wave
     pop     r13
     pop     r12
     pop     rbx
+    ret
+
+; ==================================================================
+; er_hda_get_start_stage — read last square-wave start stage
+; uint32_t er_hda_get_start_stage(void)
+; 0=success/not-run, 1=bad-arg, 2=reset-assert timeout,
+; 3=reset-clear timeout, 4=RUN did not stick, 5=CBL mismatch.
+; ==================================================================
+er_fn er_hda_get_start_stage
+    mov     eax, [rel hda_last_start_stage]
+    er_ok
     ret
 
 ; ==================================================================

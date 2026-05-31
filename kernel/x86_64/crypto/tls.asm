@@ -9,11 +9,13 @@
 
 extern er_tcp_send
 extern er_tcp_recv
+extern er_net_poll
 extern er_tpm_get_random
 extern er_tpm_crb_transfer
 extern er_tpm_parse_get_random
 extern er_tor_curve25519_scalar_mult
 extern er_tor_hmac_sha256
+extern er_tor_sha256
 extern er_memcpy
 
 SECTION .rodata
@@ -25,6 +27,15 @@ tls_hkdf_label_prefix:
     db "tls13 "
 tls_zero_secret:
     times 32 db 0
+tls_label_derived:
+    db "derived"
+tls_label_derived_len equ $ - tls_label_derived
+tls_label_client_hs:
+    db "c hs traffic"
+tls_label_client_hs_len equ $ - tls_label_client_hs
+tls_label_server_hs:
+    db "s hs traffic"
+tls_label_server_hs_len equ $ - tls_label_server_hs
 
 SECTION .bss
 
@@ -33,12 +44,24 @@ tls_conn_id: resd 1
 tls_tpm_cmd: resb 64
 tls_tpm_rsp: resb 96
 tls_client_hello: resb TLS_CLIENT_HELLO_RECORD_LEN
+tls_rx_record: resb TLS_RX_RECORD_MAX
+tls_rx_len: resd 1
 tls_client_private: resb TLS_X25519_KEY_LEN
 tls_client_public: resb TLS_X25519_KEY_LEN
 tls_server_public: resb TLS_X25519_KEY_LEN
 tls_shared_secret: resb TLS_X25519_KEY_LEN
+tls_parse_flags: resd 1
+tls_hkdf_out_ptr: resq 1
 tls_hkdf_info: resb TLS_HKDF_INFO_MAX_LEN
 tls_hkdf_msg: resb TLS_HKDF_INFO_MAX_LEN + 1
+tls_transcript: resb TLS_CLIENT_HELLO_PAYLOAD_LEN + TLS_RX_RECORD_MAX
+tls_transcript_hash: resb TLS_RANDOM_LEN
+tls_empty_hash: resb TLS_RANDOM_LEN
+tls_early_secret: resb TLS_RANDOM_LEN
+tls_derived_secret: resb TLS_RANDOM_LEN
+tls_handshake_secret: resb TLS_RANDOM_LEN
+tls_client_hs_traffic_secret: resb TLS_RANDOM_LEN
+tls_server_hs_traffic_secret: resb TLS_RANDOM_LEN
 
 SECTION .text
 
@@ -335,7 +358,7 @@ er_fn er_tls_server_hello_parse
     cmp     r11, rcx
     jne     .bad_handshake
 
-    xor     r8d, r8d                   ; bit0 supported_versions, bit1 key_share
+    mov     dword [tls_parse_flags], 0 ; bit0 supported_versions, bit1 key_share
 .ext_loop:
     cmp     r15, r11
     jae     .ext_done
@@ -367,7 +390,7 @@ er_fn er_tls_server_hello_parse
     jne     .bad_handshake
     cmp     byte [r15 + 1], 0x04
     jne     .bad_handshake
-    or      r8d, 1
+    or      dword [tls_parse_flags], 1
     mov     r15, r9
     jmp     .ext_loop
 
@@ -386,12 +409,12 @@ er_fn er_tls_server_hello_parse
     lea     rsi, [r15 + 4]
     mov     edx, TLS_X25519_KEY_LEN
     call    er_memcpy
-    or      r8d, 2
+    or      dword [tls_parse_flags], 2
     mov     r15, r9
     jmp     .ext_loop
 
 .ext_done:
-    cmp     r8d, 3
+    cmp     dword [tls_parse_flags], 3
     jne     .bad_handshake
     xor     eax, eax
     er_ok
@@ -487,13 +510,13 @@ er_fn er_tls_hkdf_expand_label
     mov     r14d, edx
     mov     r15, rcx
     mov     ebx, r8d
-    mov     r11, r9
+    mov     [tls_hkdf_out_ptr], r9
 
     test    r12, r12
     jz      .bad_label
     test    r13, r13
     jz      .bad_label
-    test    r11, r11
+    cmp     qword [tls_hkdf_out_ptr], 0
     jz      .bad_label
     cmp     r14d, TLS_HKDF_LABEL_MAX_LEN
     ja      .bad_label
@@ -541,7 +564,7 @@ er_fn er_tls_hkdf_expand_label
     mov     esi, TLS_RANDOM_LEN
     lea     rdx, [tls_hkdf_msg]
     mov     ecx, r10d
-    mov     r8, r11
+    mov     r8, [tls_hkdf_out_ptr]
     call    er_tor_hmac_sha256
     cmp     eax, TLS_RANDOM_LEN
     jne     .fail_label
@@ -574,6 +597,167 @@ er_fn er_tls_hkdf_expand_label
     er_ret
 
 ; ==================================================================
+; er_tls_transcript_hash_ch_sh
+; rdi=ServerHello record, esi=record len, rdx=out hash[32]
+; Hashes ClientHello.handshake || ServerHello.handshake.
+; ==================================================================
+global er_tls_transcript_hash_ch_sh
+er_fn er_tls_transcript_hash_ch_sh
+    push    rbx
+    push    r12
+    push    r13
+
+    mov     r12, rdi
+    mov     r13d, esi
+    mov     rbx, rdx
+    test    r12, r12
+    jz      .bad_hash
+    test    rbx, rbx
+    jz      .bad_hash
+    cmp     r13d, TLS_RECORD_HEADER_LEN + TLS_HANDSHAKE_HEADER_LEN
+    jb      .bad_hash
+    cmp     r13d, TLS_RX_RECORD_MAX
+    ja      .bad_hash
+    cmp     byte [r12], TLS_RECORD_HANDSHAKE
+    jne     .bad_hash
+
+    movzx   eax, word [r12 + 3]
+    xchg    al, ah
+    lea     ecx, [r13d - TLS_RECORD_HEADER_LEN]
+    cmp     eax, ecx
+    jne     .bad_hash
+
+    lea     rdi, [tls_transcript]
+    lea     rsi, [tls_client_hello + TLS_RECORD_HEADER_LEN]
+    mov     edx, TLS_CLIENT_HELLO_PAYLOAD_LEN
+    call    er_memcpy
+    lea     rdi, [tls_transcript + TLS_CLIENT_HELLO_PAYLOAD_LEN]
+    lea     rsi, [r12 + TLS_RECORD_HEADER_LEN]
+    lea     edx, [r13d - TLS_RECORD_HEADER_LEN]
+    call    er_memcpy
+
+    lea     rdi, [tls_transcript]
+    lea     esi, [r13d - TLS_RECORD_HEADER_LEN + TLS_CLIENT_HELLO_PAYLOAD_LEN]
+    mov     rdx, rbx
+    call    er_tor_sha256
+    cmp     eax, TLS_RANDOM_LEN
+    jne     .fail_hash
+
+    xor     eax, eax
+    er_ok
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+
+.bad_hash:
+    mov     eax, -1
+    er_err  ERROR_INVALID_PARAM
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+.fail_hash:
+    mov     eax, -1
+    er_err  ERROR_TLS_HANDSHAKE
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+
+; ==================================================================
+; er_tls_derive_handshake_secrets
+; rdi=ServerHello record, esi=record len
+; returns eax=0 after deriving early, derived, handshake,
+; client handshake traffic, and server handshake traffic secrets.
+; ==================================================================
+global er_tls_derive_handshake_secrets
+er_fn er_tls_derive_handshake_secrets
+    push    rbx
+    push    r12
+
+    mov     r12, rdi
+    mov     ebx, esi
+
+    lea     rdx, [tls_transcript_hash]
+    call    er_tls_transcript_hash_ch_sh
+    test    eax, eax
+    js      .fail_derive
+
+    ; early_secret = HKDF-Extract(0, 0-length IKM)
+    xor     rdi, rdi
+    xor     esi, esi
+    lea     rdx, [rel tls_zero_secret]
+    xor     ecx, ecx
+    lea     r8, [tls_early_secret]
+    call    er_tls_hkdf_extract
+    test    eax, eax
+    js      .fail_derive
+
+    ; empty_hash = SHA256("")
+    lea     rdi, [rel tls_zero_secret]
+    xor     esi, esi
+    lea     rdx, [tls_empty_hash]
+    call    er_tor_sha256
+    cmp     eax, TLS_RANDOM_LEN
+    jne     .fail_derive
+
+    ; derived_secret = Derive-Secret(early_secret, "derived", empty_hash)
+    lea     rdi, [tls_early_secret]
+    lea     rsi, [rel tls_label_derived]
+    mov     edx, tls_label_derived_len
+    lea     rcx, [tls_empty_hash]
+    mov     r8d, TLS_RANDOM_LEN
+    lea     r9, [tls_derived_secret]
+    call    er_tls_hkdf_expand_label
+    test    eax, eax
+    js      .fail_derive
+
+    ; handshake_secret = HKDF-Extract(derived_secret, ECDHE shared secret)
+    lea     rdi, [tls_derived_secret]
+    mov     esi, TLS_RANDOM_LEN
+    lea     rdx, [tls_shared_secret]
+    mov     ecx, TLS_RANDOM_LEN
+    lea     r8, [tls_handshake_secret]
+    call    er_tls_hkdf_extract
+    test    eax, eax
+    js      .fail_derive
+
+    ; client/server handshake traffic secrets.
+    lea     rdi, [tls_handshake_secret]
+    lea     rsi, [rel tls_label_client_hs]
+    mov     edx, tls_label_client_hs_len
+    lea     rcx, [tls_transcript_hash]
+    mov     r8d, TLS_RANDOM_LEN
+    lea     r9, [tls_client_hs_traffic_secret]
+    call    er_tls_hkdf_expand_label
+    test    eax, eax
+    js      .fail_derive
+
+    lea     rdi, [tls_handshake_secret]
+    lea     rsi, [rel tls_label_server_hs]
+    mov     edx, tls_label_server_hs_len
+    lea     rcx, [tls_transcript_hash]
+    mov     r8d, TLS_RANDOM_LEN
+    lea     r9, [tls_server_hs_traffic_secret]
+    call    er_tls_hkdf_expand_label
+    test    eax, eax
+    js      .fail_derive
+
+    xor     eax, eax
+    er_ok
+    pop     r12
+    pop     rbx
+    er_ret
+
+.fail_derive:
+    mov     eax, -1
+    er_err  ERROR_TLS_HANDSHAKE
+    pop     r12
+    pop     rbx
+    er_ret
+
+; ==================================================================
 ; er_tls_connect — start TLS handshake on an established TCP conn
 ; edi = conn_id. Returns fail-closed until encrypted records exist.
 ; ==================================================================
@@ -599,8 +783,47 @@ er_fn er_tls_connect
     mov     [tls_conn_id], ebx
     mov     dword [tls_state], TLS_STATE_CLIENT_HELLO_SENT
 
-    ; ServerHello parsing, transcript hash, HKDF traffic secrets,
-    ; certificate verification, Finished validation, and AEAD record
+    ; Read and process ServerHello.
+    mov     ecx, 500
+.wait_server_hello:
+    push    rcx
+    call    er_net_poll
+    pop     rcx
+
+    push    rcx
+    mov     edi, ebx
+    lea     rsi, [tls_rx_record]
+    lea     rdx, [tls_rx_len]
+    mov     dword [tls_rx_len], TLS_RX_RECORD_MAX
+    call    er_tcp_recv
+    pop     rcx
+    test    eax, eax
+    jns     .got_server_hello
+    dec     ecx
+    jnz     .wait_server_hello
+    jmp     .fail
+
+.got_server_hello:
+    cmp     dword [tls_rx_len], 0
+    jne     .process_server_hello
+    dec     ecx
+    jnz     .wait_server_hello
+    jmp     .fail
+
+.process_server_hello:
+    lea     rdi, [tls_rx_record]
+    mov     esi, [tls_rx_len]
+    lea     rdx, [tls_shared_secret]
+    call    er_tls_shared_secret_from_server_hello
+    test    eax, eax
+    js      .fail
+    lea     rdi, [tls_rx_record]
+    mov     esi, [tls_rx_len]
+    call    er_tls_derive_handshake_secrets
+    test    eax, eax
+    js      .fail
+
+    ; Certificate verification, Finished validation, and AEAD record
     ; protection are required before application data can flow.
     mov     eax, -1
     er_err  ERROR_TLS_UNSUPPORTED
