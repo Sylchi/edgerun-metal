@@ -502,43 +502,65 @@ er_wasm_jit_compile:
     call    jit_emit_load_ecx_from_rdx_disp32
     ret
 
+.emit_store_current_rax_to_tee_local:
+    push    rax
+    mov     eax, [rdi + 12]
+    call    .emit_store_rax_to_local_index
+    pop     rax
+    ret
+
+.decoded_op_ptr_from_offset:
+    add     rax, r13
+    imul    rax, DECODED_OP_SIZE
+    lea     rsi, [rel decoded_ops + rax]
+    ret
+
+.require_op_at_offset:
+    call    .decoded_op_ptr_from_offset
+    cmp     byte [rsi + 8], cl
+    jne     .require_bad
+    clc
+    ret
+
+.require_same_local_get_at_offset:
+    call    .decoded_op_ptr_from_offset
+    cmp     byte [rsi + 8], 0x20
+    jne     .require_bad
+    mov     eax, [rsi + 12]
+    cmp     eax, [rdi + 12]
+    jne     .require_bad
+    clc
+    ret
+
+.require_bad:
+    stc
+    ret
+
 .try_local_tee_xor_shift_fuse:
     mov     rax, r13
     add     rax, 4
     cmp     rax, r14
     jae     .try_local_tee_get_fuse
 
-    mov     rsi, r13
-    inc     rsi
-    imul    rsi, DECODED_OP_SIZE
-    lea     rsi, [rel decoded_ops + rsi]
-    cmp     byte [rsi + 8], 0x41      ; i32.const
-    jne     .try_local_tee_get_fuse
+    mov     eax, 1
+    mov     cl, 0x41                  ; i32.const
+    call    .require_op_at_offset
+    jc      .try_local_tee_get_fuse
     mov     r11d, [rsi + 12]          ; shift amount
 
-    mov     rax, r13
-    add     rax, 2
-    imul    rax, DECODED_OP_SIZE
-    lea     rsi, [rel decoded_ops + rax]
-    cmp     byte [rsi + 8], 0x76      ; i32.shr_u
-    jne     .try_local_tee_shl_shr_xor_fuse
+    mov     eax, 2
+    mov     cl, 0x76                  ; i32.shr_u
+    call    .require_op_at_offset
+    jc      .try_local_tee_shl_shr_xor_fuse
 
-    mov     rax, r13
-    add     rax, 3
-    imul    rax, DECODED_OP_SIZE
-    lea     rsi, [rel decoded_ops + rax]
-    cmp     byte [rsi + 8], 0x20      ; local.get
-    jne     .try_local_tee_get_fuse
-    mov     eax, [rsi + 12]
-    cmp     eax, [rdi + 12]
-    jne     .try_local_tee_get_fuse
+    mov     eax, 3
+    call    .require_same_local_get_at_offset
+    jc      .try_local_tee_get_fuse
 
-    mov     rax, r13
-    add     rax, 4
-    imul    rax, DECODED_OP_SIZE
-    lea     rsi, [rel decoded_ops + rax]
-    cmp     byte [rsi + 8], 0x73      ; i32.xor
-    jne     .try_local_tee_get_fuse
+    mov     eax, 4
+    mov     cl, 0x73                  ; i32.xor
+    call    .require_op_at_offset
+    jc      .try_local_tee_get_fuse
 
     mov     r10d, 0
     mov     rax, r13
@@ -546,45 +568,34 @@ er_wasm_jit_compile:
     cmp     rax, r14
     jae     .emit_local_tee_xor_shift
 
-    mov     rax, r13
-    add     rax, 5
-    imul    rax, DECODED_OP_SIZE
-    lea     rsi, [rel decoded_ops + rax]
-    cmp     byte [rsi + 8], 0x41      ; i32.const multiply
-    jne     .emit_local_tee_xor_shift
+    mov     eax, 5
+    mov     cl, 0x41                  ; i32.const multiply
+    call    .require_op_at_offset
+    jc      .emit_local_tee_xor_shift
     mov     r10d, [rsi + 12]
 
-    mov     rax, r13
-    add     rax, 6
-    imul    rax, DECODED_OP_SIZE
-    lea     rsi, [rel decoded_ops + rax]
-    cmp     byte [rsi + 8], 0x6C      ; i32.mul
-    jne     .emit_local_tee_xor_shift
+    mov     eax, 6
+    mov     cl, 0x6C                  ; i32.mul
+    call    .require_op_at_offset
+    jc      .emit_local_tee_xor_shift
 
-    mov     rax, r13
-    add     rax, 7
-    imul    rax, DECODED_OP_SIZE
-    lea     rsi, [rel decoded_ops + rax]
-    cmp     byte [rsi + 8], 0x41      ; i32.const rotate
-    jne     .emit_local_tee_xor_shift
+    mov     eax, 7
+    mov     cl, 0x41                  ; i32.const rotate
+    call    .require_op_at_offset
+    jc      .emit_local_tee_xor_shift
     mov     ebx, [rsi + 12]
 
-    mov     rax, r13
-    add     rax, 8
-    imul    rax, DECODED_OP_SIZE
-    lea     rsi, [rel decoded_ops + rax]
-    cmp     byte [rsi + 8], 0x77      ; i32.rotl
-    jne     .emit_local_tee_xor_shift
+    mov     eax, 8
+    mov     cl, 0x77                  ; i32.rotl
+    call    .require_op_at_offset
+    jc      .emit_local_tee_xor_shift
 
     xor     ecx, ecx
     call    jit_emit_pop_reg          ; rax = tee value
     push    r11
     push    r10
     push    rbx
-    push    rax
-    mov     eax, [rdi + 12]
-    call    .emit_store_rax_to_local_index
-    pop     rax
+    call    .emit_store_current_rax_to_tee_local
     pop     rbx
     pop     r10
     pop     r11
@@ -604,10 +615,7 @@ er_wasm_jit_compile:
 .emit_local_tee_xor_shift:
     xor     ecx, ecx
     call    jit_emit_pop_reg          ; rax = tee value
-    push    rax
-    mov     eax, [rdi + 12]
-    call    .emit_store_rax_to_local_index
-    pop     rax
+    call    .emit_store_current_rax_to_tee_local
     call    jit_emit_mov_ecx_eax
     mov     eax, r11d
     call    jit_emit_shr_ecx_imm8
@@ -623,70 +631,45 @@ er_wasm_jit_compile:
     cmp     rax, r14
     jae     .try_local_tee_get_fuse
 
-    mov     rax, r13
-    add     rax, 2
-    imul    rax, DECODED_OP_SIZE
-    lea     rsi, [rel decoded_ops + rax]
-    cmp     byte [rsi + 8], 0x74      ; i32.shl
-    jne     .try_local_tee_get_fuse
+    mov     eax, 2
+    mov     cl, 0x74                  ; i32.shl
+    call    .require_op_at_offset
+    jc      .try_local_tee_get_fuse
 
-    mov     rax, r13
-    add     rax, 3
-    imul    rax, DECODED_OP_SIZE
-    lea     rsi, [rel decoded_ops + rax]
-    cmp     byte [rsi + 8], 0x20      ; local.get
-    jne     .try_local_tee_get_fuse
-    mov     eax, [rsi + 12]
-    cmp     eax, [rdi + 12]
-    jne     .try_local_tee_get_fuse
+    mov     eax, 3
+    call    .require_same_local_get_at_offset
+    jc      .try_local_tee_get_fuse
 
-    mov     rax, r13
-    add     rax, 4
-    imul    rax, DECODED_OP_SIZE
-    lea     rsi, [rel decoded_ops + rax]
-    cmp     byte [rsi + 8], 0x41      ; i32.const right shift
-    jne     .try_local_tee_get_fuse
+    mov     eax, 4
+    mov     cl, 0x41                  ; i32.const right shift
+    call    .require_op_at_offset
+    jc      .try_local_tee_get_fuse
     mov     r10d, [rsi + 12]
 
-    mov     rax, r13
-    add     rax, 5
-    imul    rax, DECODED_OP_SIZE
-    lea     rsi, [rel decoded_ops + rax]
-    cmp     byte [rsi + 8], 0x76      ; i32.shr_u
-    jne     .try_local_tee_get_fuse
+    mov     eax, 5
+    mov     cl, 0x76                  ; i32.shr_u
+    call    .require_op_at_offset
+    jc      .try_local_tee_get_fuse
 
-    mov     rax, r13
-    add     rax, 6
-    imul    rax, DECODED_OP_SIZE
-    lea     rsi, [rel decoded_ops + rax]
-    cmp     byte [rsi + 8], 0x6A      ; i32.add
-    jne     .try_local_tee_get_fuse
+    mov     eax, 6
+    mov     cl, 0x6A                  ; i32.add
+    call    .require_op_at_offset
+    jc      .try_local_tee_get_fuse
 
-    mov     rax, r13
-    add     rax, 7
-    imul    rax, DECODED_OP_SIZE
-    lea     rsi, [rel decoded_ops + rax]
-    cmp     byte [rsi + 8], 0x20      ; local.get
-    jne     .try_local_tee_get_fuse
-    mov     eax, [rsi + 12]
-    cmp     eax, [rdi + 12]
-    jne     .try_local_tee_get_fuse
+    mov     eax, 7
+    call    .require_same_local_get_at_offset
+    jc      .try_local_tee_get_fuse
 
-    mov     rax, r13
-    add     rax, 8
-    imul    rax, DECODED_OP_SIZE
-    lea     rsi, [rel decoded_ops + rax]
-    cmp     byte [rsi + 8], 0x73      ; i32.xor
-    jne     .try_local_tee_get_fuse
+    mov     eax, 8
+    mov     cl, 0x73                  ; i32.xor
+    call    .require_op_at_offset
+    jc      .try_local_tee_get_fuse
 
     xor     ecx, ecx
     call    jit_emit_pop_reg          ; rax = tee value
     push    r11
     push    r10
-    push    rax
-    mov     eax, [rdi + 12]
-    call    .emit_store_rax_to_local_index
-    pop     rax
+    call    .emit_store_current_rax_to_tee_local
     pop     r10
     pop     r11
     call    jit_emit_mov_ecx_eax
@@ -708,65 +691,47 @@ er_wasm_jit_compile:
     cmp     rax, r14
     jae     .compile_template_current
 
-    mov     rsi, rax
-    imul    rsi, DECODED_OP_SIZE
-    lea     rsi, [rel decoded_ops + rsi]
-    cmp     byte [rsi + 8], 0x20
-    jne     .compile_template_current
-    mov     eax, [rsi + 12]
-    cmp     eax, [rdi + 12]
-    jne     .compile_template_current
+    mov     eax, 1
+    call    .require_same_local_get_at_offset
+    jc      .compile_template_current
 
     mov     rax, r13
     add     rax, 6
     cmp     rax, r14
     jae     .emit_local_tee_get_dup
 
-    mov     rax, r13
-    add     rax, 2
-    imul    rax, DECODED_OP_SIZE
-    lea     rsi, [rel decoded_ops + rax]
-    cmp     byte [rsi + 8], 0x41      ; i32.const and-mask
-    jne     .emit_local_tee_get_dup
+    mov     eax, 2
+    mov     cl, 0x41                  ; i32.const and-mask
+    call    .require_op_at_offset
+    jc      .emit_local_tee_get_dup
     mov     r10d, [rsi + 12]
 
-    mov     rax, r13
-    add     rax, 3
-    imul    rax, DECODED_OP_SIZE
-    lea     rsi, [rel decoded_ops + rax]
-    cmp     byte [rsi + 8], 0x71      ; i32.and
-    jne     .emit_local_tee_get_dup
+    mov     eax, 3
+    mov     cl, 0x71                  ; i32.and
+    call    .require_op_at_offset
+    jc      .emit_local_tee_get_dup
 
-    mov     rax, r13
-    add     rax, 4
-    imul    rax, DECODED_OP_SIZE
-    lea     rsi, [rel decoded_ops + rax]
-    cmp     byte [rsi + 8], 0x41      ; i32.const or-mask
-    jne     .emit_local_tee_get_dup
+    mov     eax, 4
+    mov     cl, 0x41                  ; i32.const or-mask
+    call    .require_op_at_offset
+    jc      .emit_local_tee_get_dup
     mov     r11d, [rsi + 12]
 
-    mov     rax, r13
-    add     rax, 5
-    imul    rax, DECODED_OP_SIZE
-    lea     rsi, [rel decoded_ops + rax]
-    cmp     byte [rsi + 8], 0x72      ; i32.or
-    jne     .emit_local_tee_get_dup
+    mov     eax, 5
+    mov     cl, 0x72                  ; i32.or
+    call    .require_op_at_offset
+    jc      .emit_local_tee_get_dup
 
-    mov     rax, r13
-    add     rax, 6
-    imul    rax, DECODED_OP_SIZE
-    lea     rsi, [rel decoded_ops + rax]
-    cmp     byte [rsi + 8], 0x6B      ; i32.sub
-    jne     .emit_local_tee_get_dup
+    mov     eax, 6
+    mov     cl, 0x6B                  ; i32.sub
+    call    .require_op_at_offset
+    jc      .emit_local_tee_get_dup
 
     xor     ecx, ecx
     call    jit_emit_pop_reg          ; rax = tee value
     push    r10
     push    r11
-    push    rax
-    mov     eax, [rdi + 12]
-    call    .emit_store_rax_to_local_index
-    pop     rax
+    call    .emit_store_current_rax_to_tee_local
     pop     r11
     pop     r10
     call    jit_emit_mov_ecx_eax
@@ -799,27 +764,27 @@ er_wasm_jit_compile:
     movzx   eax, byte [rsi + 8]
 
     cmp     al, 0x6A
-    je      .fuse_local_get_add
+    je      .fuse_local_get_binary
     cmp     al, 0x6B
-    je      .fuse_local_get_sub
+    je      .fuse_local_get_binary
     cmp     al, 0x6C
-    je      .fuse_local_get_mul
+    je      .fuse_local_get_binary
     cmp     al, 0x71
-    je      .fuse_local_get_and
+    je      .fuse_local_get_binary
     cmp     al, 0x72
-    je      .fuse_local_get_or
+    je      .fuse_local_get_binary
     cmp     al, 0x73
-    je      .fuse_local_get_xor
+    je      .fuse_local_get_binary
     cmp     al, 0x74
-    je      .fuse_local_get_shl
+    je      .fuse_local_get_binary
     cmp     al, 0x75
-    je      .fuse_local_get_shr_s
+    je      .fuse_local_get_binary
     cmp     al, 0x76
-    je      .fuse_local_get_shr_u
+    je      .fuse_local_get_binary
     cmp     al, 0x77
-    je      .fuse_local_get_rotl
+    je      .fuse_local_get_binary
     cmp     al, 0x78
-    je      .fuse_local_get_rotr
+    je      .fuse_local_get_binary
     jmp     .compile_template_current
 
 .emit_local_get_rhs:
@@ -829,56 +794,76 @@ er_wasm_jit_compile:
     call    jit_emit_pop_reg
     ret
 
-.finish_local_get_binary_fuse:
+.finish_i32_binary_fuse:
     xor     ecx, ecx
     call    jit_emit_push_reg
     add     r13, 2
     jmp     .compile_loop
 
-.fuse_local_get_add:
-    call    .emit_local_get_rhs
+.emit_i32_reg_binary_for_opcode:
+    cmp     al, 0x6A
+    je      .emit_reg_add
+    cmp     al, 0x6B
+    je      .emit_reg_sub
+    cmp     al, 0x6C
+    je      .emit_reg_mul
+    cmp     al, 0x71
+    je      .emit_reg_and
+    cmp     al, 0x72
+    je      .emit_reg_or
+    cmp     al, 0x73
+    je      .emit_reg_xor
+    cmp     al, 0x74
+    je      .emit_reg_shl
+    cmp     al, 0x75
+    je      .emit_reg_shr_s
+    cmp     al, 0x76
+    je      .emit_reg_shr_u
+    cmp     al, 0x77
+    je      .emit_reg_rotl
+    cmp     al, 0x78
+    je      .emit_reg_rotr
+    ret
+.emit_reg_add:
     call    jit_emit_add32
-    jmp     .finish_local_get_binary_fuse
-.fuse_local_get_sub:
-    call    .emit_local_get_rhs
+    ret
+.emit_reg_sub:
     call    jit_emit_sub32
-    jmp     .finish_local_get_binary_fuse
-.fuse_local_get_mul:
-    call    .emit_local_get_rhs
+    ret
+.emit_reg_mul:
     call    jit_emit_imul32
-    jmp     .finish_local_get_binary_fuse
-.fuse_local_get_and:
-    call    .emit_local_get_rhs
+    ret
+.emit_reg_and:
     call    jit_emit_and32
-    jmp     .finish_local_get_binary_fuse
-.fuse_local_get_or:
-    call    .emit_local_get_rhs
+    ret
+.emit_reg_or:
     call    jit_emit_or32
-    jmp     .finish_local_get_binary_fuse
-.fuse_local_get_xor:
-    call    .emit_local_get_rhs
+    ret
+.emit_reg_xor:
     call    jit_emit_xor32
-    jmp     .finish_local_get_binary_fuse
-.fuse_local_get_shl:
-    call    .emit_local_get_rhs
+    ret
+.emit_reg_shl:
     call    jit_emit_shl32
-    jmp     .finish_local_get_binary_fuse
-.fuse_local_get_shr_s:
-    call    .emit_local_get_rhs
+    ret
+.emit_reg_shr_s:
     call    jit_emit_sar32
-    jmp     .finish_local_get_binary_fuse
-.fuse_local_get_shr_u:
-    call    .emit_local_get_rhs
+    ret
+.emit_reg_shr_u:
     call    jit_emit_shr32
-    jmp     .finish_local_get_binary_fuse
-.fuse_local_get_rotl:
-    call    .emit_local_get_rhs
+    ret
+.emit_reg_rotl:
     call    jit_emit_rol32
-    jmp     .finish_local_get_binary_fuse
-.fuse_local_get_rotr:
-    call    .emit_local_get_rhs
+    ret
+.emit_reg_rotr:
     call    jit_emit_ror32
-    jmp     .finish_local_get_binary_fuse
+    ret
+
+.fuse_local_get_binary:
+    push    rax
+    call    .emit_local_get_rhs
+    pop     rax
+    call    .emit_i32_reg_binary_for_opcode
+    jmp     .finish_i32_binary_fuse
 
 .try_i32_const_fuse:
     mov     rax, r13
@@ -892,149 +877,100 @@ er_wasm_jit_compile:
     movzx   eax, byte [rsi + 8]
 
     cmp     al, 0x6A
-    je      .fuse_i32_const_add
+    je      .fuse_i32_const_binary
     cmp     al, 0x6B
-    je      .fuse_i32_const_sub
+    je      .fuse_i32_const_binary
     cmp     al, 0x6C
-    je      .fuse_i32_const_mul
+    je      .fuse_i32_const_binary
     cmp     al, 0x71
-    je      .fuse_i32_const_and
+    je      .fuse_i32_const_binary
     cmp     al, 0x72
-    je      .fuse_i32_const_or
+    je      .fuse_i32_const_binary
     cmp     al, 0x73
-    je      .fuse_i32_const_xor
+    je      .fuse_i32_const_binary
     cmp     al, 0x74
-    je      .fuse_i32_const_shl
+    je      .fuse_i32_const_binary
     cmp     al, 0x75
-    je      .fuse_i32_const_shr_s
+    je      .fuse_i32_const_binary
     cmp     al, 0x76
-    je      .fuse_i32_const_shr_u
+    je      .fuse_i32_const_binary
     cmp     al, 0x77
-    je      .fuse_i32_const_rotl
+    je      .fuse_i32_const_binary
     cmp     al, 0x78
-    je      .fuse_i32_const_rotr
+    je      .fuse_i32_const_binary
     jmp     .compile_template_current
 
-.fuse_i32_const_add:
+.emit_i32_const_rhs:
     mov     r11d, [rdi + 12]
     xor     ecx, ecx
     call    jit_emit_pop_reg
     mov     eax, r11d
+    ret
+
+.emit_i32_imm_binary_for_opcode:
+    cmp     al, 0x6A
+    je      .emit_imm_add
+    cmp     al, 0x6B
+    je      .emit_imm_sub
+    cmp     al, 0x6C
+    je      .emit_imm_mul
+    cmp     al, 0x71
+    je      .emit_imm_and
+    cmp     al, 0x72
+    je      .emit_imm_or
+    cmp     al, 0x73
+    je      .emit_imm_xor
+    cmp     al, 0x74
+    je      .emit_imm_shl
+    cmp     al, 0x75
+    je      .emit_imm_shr_s
+    cmp     al, 0x76
+    je      .emit_imm_shr_u
+    cmp     al, 0x77
+    je      .emit_imm_rotl
+    cmp     al, 0x78
+    je      .emit_imm_rotr
+    ret
+.emit_imm_add:
     call    jit_emit_add_eax_imm32
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    add     r13, 2
-    jmp     .compile_loop
-
-.fuse_i32_const_sub:
-    mov     r11d, [rdi + 12]
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
-    mov     eax, r11d
+    ret
+.emit_imm_sub:
     call    jit_emit_sub_eax_imm32
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    add     r13, 2
-    jmp     .compile_loop
-
-.fuse_i32_const_mul:
-    mov     r11d, [rdi + 12]
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
-    mov     eax, r11d
+    ret
+.emit_imm_mul:
     call    jit_emit_imul_eax_imm32
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    add     r13, 2
-    jmp     .compile_loop
-
-.fuse_i32_const_and:
-    mov     r11d, [rdi + 12]
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
-    mov     eax, r11d
+    ret
+.emit_imm_and:
     call    jit_emit_and_eax_imm32
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    add     r13, 2
-    jmp     .compile_loop
-
-.fuse_i32_const_or:
-    mov     r11d, [rdi + 12]
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
-    mov     eax, r11d
+    ret
+.emit_imm_or:
     call    jit_emit_or_eax_imm32
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    add     r13, 2
-    jmp     .compile_loop
-
-.fuse_i32_const_xor:
-    mov     r11d, [rdi + 12]
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
-    mov     eax, r11d
+    ret
+.emit_imm_xor:
     call    jit_emit_xor_eax_imm32
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    add     r13, 2
-    jmp     .compile_loop
-
-.fuse_i32_const_shl:
-    mov     r11d, [rdi + 12]
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
-    mov     eax, r11d
+    ret
+.emit_imm_shl:
     call    jit_emit_shl_eax_imm8
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    add     r13, 2
-    jmp     .compile_loop
-
-.fuse_i32_const_shr_s:
-    mov     r11d, [rdi + 12]
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
-    mov     eax, r11d
+    ret
+.emit_imm_shr_s:
     call    jit_emit_sar_eax_imm8
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    add     r13, 2
-    jmp     .compile_loop
-
-.fuse_i32_const_shr_u:
-    mov     r11d, [rdi + 12]
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
-    mov     eax, r11d
+    ret
+.emit_imm_shr_u:
     call    jit_emit_shr_eax_imm8
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    add     r13, 2
-    jmp     .compile_loop
-
-.fuse_i32_const_rotl:
-    mov     r11d, [rdi + 12]
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
-    mov     eax, r11d
+    ret
+.emit_imm_rotl:
     call    jit_emit_rol_eax_imm8
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    add     r13, 2
-    jmp     .compile_loop
-
-.fuse_i32_const_rotr:
-    mov     r11d, [rdi + 12]
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
-    mov     eax, r11d
+    ret
+.emit_imm_rotr:
     call    jit_emit_ror_eax_imm8
-    xor     ecx, ecx
-    call    jit_emit_push_reg
-    add     r13, 2
-    jmp     .compile_loop
+    ret
+
+.fuse_i32_const_binary:
+    push    rax
+    call    .emit_i32_const_rhs
+    pop     rax
+    call    .emit_i32_imm_binary_for_opcode
+    jmp     .finish_i32_binary_fuse
 
 .compile_template_current:
     lea     rax, [rel jit_template_table]

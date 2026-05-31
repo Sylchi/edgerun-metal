@@ -360,6 +360,8 @@ er_fn er_amdgpu_dcn_init
     push    r14
     push    r15
 
+    test    rdi, rdi
+    jz      .bad_arg
     mov     r12, rdi            ; BAR0
     mov     r13, rsi            ; fb_addr
 
@@ -480,15 +482,29 @@ er_fn er_amdgpu_dcn_init
     mov     rsi, rsp
     call    er_amdgpu_program_hubp0_scanout
     add     rsp, 24
+    test    eax, eax
+    jnz     .fail
 
     ; ─── Step 9: Basic OTG0 timing ───
     mov     rdi, r12
     mov     esi, AMDGPU_MODE_1080P60
     call    er_amdgpu_program_otg0_mode
+    test    eax, eax
+    jnz     .fail
 
 .no_fb:
     xor     eax, eax
     er_ok
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    ret
+
+.bad_arg:
+    er_err  ERROR_BAD_ARGUMENT
+    mov     eax, -1
+.fail:
     pop     r15
     pop     r14
     pop     r13

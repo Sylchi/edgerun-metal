@@ -42,6 +42,12 @@ global er_serial_crlf
 global er_serial_putnewline
 global er_serial_getchar
 _start:
+    xor     edi, edi
+    lea     rsi, [rel fb]
+    call    er_amdgpu_dcn_init
+    ASSERT_EQ eax, -1
+    ASSERT_RDX ERROR_BAD_ARGUMENT
+
     mov     dword [rel bar0 + DCN_DCFCLK_CNTL], 0x80000005
 
     lea     rdi, [rel bar0]
