@@ -51,6 +51,7 @@ uvc_cfg_blob_ptr:     resq 1
 uvc_cfg_blob_len:     resq 1
 uvc_port_blob_ptr:    resq 1
 uvc_port_blob_len:    resq 1
+uvc_caps_seen:        resd 1
 
 SECTION .text
 
@@ -199,7 +200,8 @@ er_fn er_uvc_probe
 .port_done:
     test    r8d, r8d
     jz      .no_xhci
-    mov     byte [uvc_attached], 1
+    mov     dword [uvc_caps_seen], 0
+    mov     byte [uvc_attached], 0
     mov     dword [uvc_capabilities], 0
     mov     ecx, 1
 .caps_port_loop:
@@ -225,6 +227,7 @@ er_fn er_uvc_probe
     call    er_uvc_parse_config_caps
     test    eax, eax
     jnz     .probe_parse_fail
+    mov     dword [uvc_caps_seen], 1
     mov     eax, [uvc_capabilities]
     or      eax, [uvc_last_portsc]
     mov     [uvc_capabilities], eax
@@ -243,10 +246,31 @@ er_fn er_uvc_probe
     call    er_uvc_parse_config_caps
     test    eax, eax
     jnz     .probe_parse_fail
+    mov     dword [uvc_caps_seen], 1
     mov     eax, [uvc_capabilities]
     or      eax, [uvc_last_portsc]
     mov     [uvc_capabilities], eax
 .probe_ok:
+    cmp     dword [uvc_caps_seen], 0
+    jne     .probe_have_caps
+    ; We have USB connectivity but no parsed video descriptor source yet.
+    ; Do not claim UVC is attached.
+    mov     byte [uvc_attached], 0
+    mov     dword [uvc_last_status], ERROR_NOT_PRESENT
+    xor     eax, eax
+    er_ok
+    ret
+.probe_have_caps:
+    mov     eax, [uvc_capabilities]
+    test    eax, (UVC_CAP_RGB_PRESENT | UVC_CAP_IR_PRESENT | UVC_CAP_MJPEG | UVC_CAP_YUY2 | UVC_CAP_CONTROLS)
+    jnz     .probe_mark_attached
+    mov     byte [uvc_attached], 0
+    mov     dword [uvc_last_status], ERROR_NOT_PRESENT
+    xor     eax, eax
+    er_ok
+    ret
+.probe_mark_attached:
+    mov     byte [uvc_attached], 1
     mov     dword [uvc_last_status], ERROR_OK
     mov     eax, 1
     er_ok
