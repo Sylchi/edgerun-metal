@@ -109,6 +109,14 @@
 %define AMDGPU_MODE_720P60                 1
 %define AMDGPU_MODE_COUNT                  2
 
+; ─── DCN HUBP scanout config structure offsets ─────────────────────
+%define AMDGPU_SCANOUT_ADDR_LO             0
+%define AMDGPU_SCANOUT_ADDR_HI             4
+%define AMDGPU_SCANOUT_PITCH_PIXELS        8
+%define AMDGPU_SCANOUT_WIDTH               12
+%define AMDGPU_SCANOUT_HEIGHT              16
+%define AMDGPU_SCANOUT_SIZE                20
+
 ; ─── AMDGPU driver error codes ────────────────────────────────────
 %define AMDGPU_ERR_NOT_FOUND        30
 %define AMDGPU_ERR_BAR_INVALID      31

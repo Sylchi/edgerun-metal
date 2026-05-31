@@ -7,6 +7,7 @@
 %include "driver/amdgpu_constants.inc"
 
 extern er_amdgpu_dcn_init
+extern er_amdgpu_program_hubp0_scanout
 extern er_amdgpu_program_otg0_mode
 
 %define AMDGPU_TEST_BAR0_SIZE 0x28000
@@ -16,6 +17,7 @@ passed: resq 1
 failed: resq 1
 bar0: resb AMDGPU_TEST_BAR0_SIZE
 fb: resb AMDGPU_FB_SIZE
+scanout_cfg: resd 5
 
 SECTION .rodata
 pass_msg: db "PASS amdgpu", 10, 0
@@ -63,6 +65,15 @@ _start:
     ASSERT_EQ eax, 0
     mov     eax, [rel bar0 + DCN_DCHUBBUB_GLOBAL_TIMER_CNTL]
     ASSERT_EQ eax, 0x00001202
+    mov     eax, [rel bar0 + DCN_HUBP0_SURFACE_PITCH]
+    ASSERT_EQ eax, AMDGPU_FB_WIDTH
+    mov     eax, [rel bar0 + DCN_HUBP0_PRIMARY_SURFACE_ADDR]
+    lea     rbx, [rel fb]
+    ASSERT_EQ eax, ebx
+    mov     eax, [rel bar0 + DCN_HUBP0_FLIP_CONTROL]
+    ASSERT_EQ eax, 0
+    mov     eax, [rel bar0 + DCN_HUBP0_DCHUBP_CNTL]
+    ASSERT_EQ eax, 1
     mov     eax, [rel bar0 + DCN_OTG0_V_TOTAL]
     ASSERT_EQ eax, 1124
     mov     eax, [rel bar0 + DCN_OTG0_H_TOTAL]
@@ -109,6 +120,31 @@ _start:
     lea     rdi, [rel bar0]
     mov     esi, AMDGPU_MODE_COUNT
     call    er_amdgpu_program_otg0_mode
+    ASSERT_EQ eax, -1
+    ASSERT_RDX ERROR_BAD_ARGUMENT
+
+    mov     dword [rel scanout_cfg + AMDGPU_SCANOUT_ADDR_LO], 0x12345000
+    mov     dword [rel scanout_cfg + AMDGPU_SCANOUT_ADDR_HI], 0x00000001
+    mov     dword [rel scanout_cfg + AMDGPU_SCANOUT_PITCH_PIXELS], 1280
+    mov     dword [rel scanout_cfg + AMDGPU_SCANOUT_WIDTH], 1280
+    mov     dword [rel scanout_cfg + AMDGPU_SCANOUT_HEIGHT], 720
+    lea     rdi, [rel bar0]
+    lea     rsi, [rel scanout_cfg]
+    call    er_amdgpu_program_hubp0_scanout
+    ASSERT_EQ eax, 0
+    mov     eax, [rel bar0 + DCN_HUBP0_SURFACE_PITCH]
+    ASSERT_EQ eax, 1280
+    mov     eax, [rel bar0 + DCN_HUBP0_PRIMARY_SURFACE_ADDR]
+    ASSERT_EQ eax, 0x12345000
+    mov     eax, [rel bar0 + DCN_HUBP0_PRIMARY_SURFACE_ADDR + 4]
+    ASSERT_EQ eax, 1
+    mov     eax, [rel bar0 + DCN_HUBP0_DCHUBP_CNTL]
+    ASSERT_EQ eax, 1
+
+    mov     dword [rel scanout_cfg + AMDGPU_SCANOUT_PITCH_PIXELS], 0
+    lea     rdi, [rel bar0]
+    lea     rsi, [rel scanout_cfg]
+    call    er_amdgpu_program_hubp0_scanout
     ASSERT_EQ eax, -1
     ASSERT_RDX ERROR_BAD_ARGUMENT
 

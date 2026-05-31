@@ -44,6 +44,8 @@ amdgpu_timing_1080p60:
 amdgpu_timing_720p60:
     dd 1650, 1390, 1430, 1280, 370
     dd 750, 725, 730, 720, 30
+amdgpu_scanout_1080p:
+    dd 0, 0, AMDGPU_FB_WIDTH, AMDGPU_FB_WIDTH, AMDGPU_FB_HEIGHT
 
 SECTION .text
 
@@ -485,6 +487,14 @@ er_fn er_amdgpu_dcn_init
 
     mov     rdi, r13
     call    _write_test_pattern
+    mov     eax, r13d
+    mov     [rel amdgpu_scanout_1080p + AMDGPU_SCANOUT_ADDR_LO], eax
+    mov     rax, r13
+    shr     rax, 32
+    mov     [rel amdgpu_scanout_1080p + AMDGPU_SCANOUT_ADDR_HI], eax
+    mov     rdi, r12
+    lea     rsi, [rel amdgpu_scanout_1080p]
+    call    er_amdgpu_program_hubp0_scanout
 
     ; ─── Step 9: Basic OTG0 timing ───
     mov     rdi, r12
@@ -496,6 +506,54 @@ er_fn er_amdgpu_dcn_init
     er_ok
     pop     r15
     pop     r14
+    pop     r13
+    pop     r12
+    ret
+
+; ==================================================================
+; er_amdgpu_program_hubp0_scanout — program HUBP0 surface state
+; int er_amdgpu_program_hubp0_scanout(uint64_t bar0, const uint32_t* cfg)
+; ==================================================================
+er_fn er_amdgpu_program_hubp0_scanout
+    push    r12
+    push    r13
+    test    rdi, rdi
+    jz      .bad_arg
+    test    rsi, rsi
+    jz      .bad_arg
+    mov     r12, rdi
+    mov     r13, rsi
+    mov     edx, [r13 + AMDGPU_SCANOUT_PITCH_PIXELS]
+    test    edx, edx
+    jz      .bad_arg
+    mov     rdi, r12
+    mov     esi, DCN_HUBP0_SURFACE_PITCH
+    call    _mmio_write
+    mov     edx, [r13 + AMDGPU_SCANOUT_ADDR_LO]
+    mov     rdi, r12
+    mov     esi, DCN_HUBP0_PRIMARY_SURFACE_ADDR
+    call    _mmio_write
+    mov     edx, [r13 + AMDGPU_SCANOUT_ADDR_HI]
+    mov     rdi, r12
+    mov     esi, DCN_HUBP0_PRIMARY_SURFACE_ADDR + 4
+    call    _mmio_write
+    xor     edx, edx
+    mov     rdi, r12
+    mov     esi, DCN_HUBP0_FLIP_CONTROL
+    call    _mmio_write
+    mov     edx, 1
+    mov     rdi, r12
+    mov     esi, DCN_HUBP0_DCHUBP_CNTL
+    call    _mmio_write
+    xor     eax, eax
+    er_ok
+    pop     r13
+    pop     r12
+    ret
+
+.bad_arg:
+    er_err  ERROR_BAD_ARGUMENT
+    mov     eax, -1
     pop     r13
     pop     r12
     ret
