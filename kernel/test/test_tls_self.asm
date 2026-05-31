@@ -14,6 +14,7 @@ extern er_tls_hkdf_expand_label
 extern er_tls_transcript_hash_ch_sh
 extern er_tls_derive_handshake_secrets
 extern er_tls_aes128_gcm_encrypt
+extern er_tls_aes128_gcm_decrypt
 extern er_tls_send
 extern er_tor_aes_ctr
 
@@ -29,6 +30,7 @@ hkdf_out: resb TLS_RANDOM_LEN
 hash_out: resb TLS_RANDOM_LEN
 gcm_ct: resb 16
 gcm_tag: resb 16
+gcm_pt_dec: resb 16
 aes_block: resb 16
 random_calls: resd 1
 
@@ -242,6 +244,39 @@ _start:
     mov     edx, 16
     call    _mem_eq
     ASSERT_EQ eax, 1
+    lea     rdi, [rel gcm_pt_dec]
+    lea     rsi, [rel gcm_ct]
+    mov     edx, 16
+    xor     ecx, ecx
+    xor     r8d, r8d
+    lea     r9, [rel gcm_key_zero]
+    lea     rax, [rel gcm_tag]
+    push    rax
+    lea     rax, [rel gcm_iv_zero]
+    push    rax
+    call    er_tls_aes128_gcm_decrypt
+    add     rsp, 16
+    ASSERT_RAX 0
+    lea     rdi, [rel gcm_pt_dec]
+    lea     rsi, [rel gcm_pt_zero]
+    mov     edx, 16
+    call    _mem_eq
+    ASSERT_EQ eax, 1
+    xor     byte [rel gcm_tag], 1
+    lea     rdi, [rel gcm_pt_dec]
+    lea     rsi, [rel gcm_ct]
+    mov     edx, 16
+    xor     ecx, ecx
+    xor     r8d, r8d
+    lea     r9, [rel gcm_key_zero]
+    lea     rax, [rel gcm_tag]
+    push    rax
+    lea     rax, [rel gcm_iv_zero]
+    push    rax
+    call    er_tls_aes128_gcm_decrypt
+    add     rsp, 16
+    ASSERT_RAX -1
+    xor     byte [rel gcm_tag], 1
 
     ; Encrypted record send must fail until the TLS state is active.
     xor     edi, edi
