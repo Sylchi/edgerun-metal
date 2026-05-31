@@ -13,6 +13,7 @@ extern er_tpm_get_random
 extern er_tpm_crb_transfer
 extern er_tpm_parse_get_random
 extern er_tor_curve25519_scalar_mult
+extern er_tor_hmac_sha256
 extern er_memcpy
 
 SECTION .rodata
@@ -20,6 +21,10 @@ SECTION .rodata
 tls_x25519_basepoint:
     db 9
     times 31 db 0
+tls_hkdf_label_prefix:
+    db "tls13 "
+tls_zero_secret:
+    times 32 db 0
 
 SECTION .bss
 
@@ -30,6 +35,10 @@ tls_tpm_rsp: resb 96
 tls_client_hello: resb TLS_CLIENT_HELLO_RECORD_LEN
 tls_client_private: resb TLS_X25519_KEY_LEN
 tls_client_public: resb TLS_X25519_KEY_LEN
+tls_server_public: resb TLS_X25519_KEY_LEN
+tls_shared_secret: resb TLS_X25519_KEY_LEN
+tls_hkdf_info: resb TLS_HKDF_INFO_MAX_LEN
+tls_hkdf_msg: resb TLS_HKDF_INFO_MAX_LEN + 1
 
 SECTION .text
 
@@ -237,6 +246,327 @@ er_fn er_tls_client_hello_build
 .fail:
     mov     eax, -1
     er_err  ERROR_TLS_HANDSHAKE
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+
+; ==================================================================
+; er_tls_server_hello_parse
+; rdi = TLS record, esi = record length, rdx = out key_share[32]
+; Returns eax=0 on success.
+; ==================================================================
+global er_tls_server_hello_parse
+er_fn er_tls_server_hello_parse
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+
+    mov     r12, rdi
+    mov     r13d, esi
+    mov     r14, rdx
+
+    test    r12, r12
+    jz      .bad_record
+    test    r14, r14
+    jz      .bad_record
+    cmp     r13d, TLS_RECORD_HEADER_LEN + TLS_HANDSHAKE_HEADER_LEN + 38
+    jb      .bad_record
+
+    cmp     byte [r12], TLS_RECORD_HANDSHAKE
+    jne     .bad_record
+    cmp     byte [r12 + 1], TLS_RECORD_VERSION_MAJOR
+    jne     .bad_record
+    movzx   eax, word [r12 + 3]
+    xchg    al, ah
+    lea     ecx, [r13d - TLS_RECORD_HEADER_LEN]
+    cmp     eax, ecx
+    jne     .bad_record
+
+    lea     rbx, [r12 + TLS_RECORD_HEADER_LEN]
+    cmp     byte [rbx], TLS_HANDSHAKE_SERVER_HELLO
+    jne     .bad_handshake
+    movzx   eax, byte [rbx + 1]
+    test    eax, eax
+    jne     .bad_handshake
+    movzx   eax, byte [rbx + 2]
+    shl     eax, 8
+    movzx   ecx, byte [rbx + 3]
+    or      eax, ecx
+    lea     ecx, [r13d - TLS_RECORD_HEADER_LEN - TLS_HANDSHAKE_HEADER_LEN]
+    cmp     eax, ecx
+    jne     .bad_handshake
+
+    ; legacy_version must be 0x0303.
+    cmp     byte [rbx + 4], TLS_RECORD_VERSION_MAJOR
+    jne     .bad_handshake
+    cmp     byte [rbx + 5], TLS_LEGACY_VERSION_MINOR
+    jne     .bad_handshake
+
+    ; cursor = handshake body after random.
+    lea     r15, [rbx + TLS_HANDSHAKE_HEADER_LEN + 2 + TLS_RANDOM_LEN]
+    movzx   eax, byte [r15]            ; session_id_echo len
+    inc     r15
+    cmp     eax, TLS_SESSION_ID_LEN
+    ja      .bad_handshake
+    add     r15, rax
+
+    ; Need cipher_suite + compression + extensions_len.
+    lea     rax, [r12 + r13]
+    mov     rcx, rax
+    sub     rcx, r15
+    cmp     rcx, 5
+    jb      .bad_handshake
+    cmp     byte [r15], 0x13
+    jne     .bad_handshake
+    cmp     byte [r15 + 1], 0x01
+    jne     .bad_handshake
+    cmp     byte [r15 + 2], 0
+    jne     .bad_handshake
+    movzx   eax, word [r15 + 3]
+    xchg    al, ah
+    lea     r15, [r15 + 5]             ; extension cursor
+    mov     r11, r15
+    add     r11, rax                   ; extension end
+    lea     rcx, [r12 + r13]
+    cmp     r11, rcx
+    jne     .bad_handshake
+
+    xor     r8d, r8d                   ; bit0 supported_versions, bit1 key_share
+.ext_loop:
+    cmp     r15, r11
+    jae     .ext_done
+    mov     rcx, r11
+    sub     rcx, r15
+    cmp     rcx, 4
+    jb      .bad_handshake
+    movzx   eax, word [r15]
+    xchg    al, ah
+    movzx   ecx, word [r15 + 2]
+    xchg    cl, ch
+    lea     r15, [r15 + 4]
+    mov     r9, r15
+    add     r9, rcx
+    cmp     r9, r11
+    ja      .bad_handshake
+
+    cmp     eax, TLS_EXT_SUPPORTED_VERSIONS
+    je      .ext_versions
+    cmp     eax, TLS_EXT_KEY_SHARE
+    je      .ext_key_share
+    mov     r15, r9
+    jmp     .ext_loop
+
+.ext_versions:
+    cmp     ecx, 2
+    jne     .bad_handshake
+    cmp     byte [r15], 0x03
+    jne     .bad_handshake
+    cmp     byte [r15 + 1], 0x04
+    jne     .bad_handshake
+    or      r8d, 1
+    mov     r15, r9
+    jmp     .ext_loop
+
+.ext_key_share:
+    cmp     ecx, 36
+    jne     .bad_handshake
+    cmp     byte [r15], 0
+    jne     .bad_handshake
+    cmp     byte [r15 + 1], 0x1D
+    jne     .bad_handshake
+    cmp     byte [r15 + 2], 0
+    jne     .bad_handshake
+    cmp     byte [r15 + 3], TLS_X25519_KEY_LEN
+    jne     .bad_handshake
+    mov     rdi, r14
+    lea     rsi, [r15 + 4]
+    mov     edx, TLS_X25519_KEY_LEN
+    call    er_memcpy
+    or      r8d, 2
+    mov     r15, r9
+    jmp     .ext_loop
+
+.ext_done:
+    cmp     r8d, 3
+    jne     .bad_handshake
+    xor     eax, eax
+    er_ok
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+
+.bad_handshake:
+.bad_record:
+    mov     eax, -1
+    er_err  ERROR_TLS_HANDSHAKE
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+
+; ==================================================================
+; er_tls_shared_secret_from_server_hello
+; rdi = TLS ServerHello record, esi = record length, rdx = out shared[32]
+; ==================================================================
+global er_tls_shared_secret_from_server_hello
+er_fn er_tls_shared_secret_from_server_hello
+    push    rbx
+    mov     rbx, rdx
+    lea     rdx, [tls_server_public]
+    call    er_tls_server_hello_parse
+    test    eax, eax
+    js      .fail
+    mov     rdi, rbx
+    lea     rsi, [tls_client_private]
+    lea     rdx, [tls_server_public]
+    call    er_tor_curve25519_scalar_mult
+    xor     eax, eax
+    er_ok
+    pop     rbx
+    er_ret
+.fail:
+    mov     eax, -1
+    er_err  ERROR_TLS_HANDSHAKE
+    pop     rbx
+    er_ret
+
+; ==================================================================
+; er_tls_hkdf_extract
+; rdi=salt, esi=salt_len, rdx=ikm, ecx=ikm_len, r8=out[32]
+; ==================================================================
+global er_tls_hkdf_extract
+er_fn er_tls_hkdf_extract
+    test    rdx, rdx
+    jz      .bad
+    test    r8, r8
+    jz      .bad
+    test    rdi, rdi
+    jnz     .have_salt
+    lea     rdi, [rel tls_zero_secret]
+    mov     esi, TLS_RANDOM_LEN
+.have_salt:
+    call    er_tor_hmac_sha256
+    cmp     eax, TLS_RANDOM_LEN
+    jne     .fail
+    xor     eax, eax
+    er_ok
+    er_ret
+.bad:
+    mov     eax, -1
+    er_err  ERROR_INVALID_PARAM
+    er_ret
+.fail:
+    mov     eax, -1
+    er_err  ERROR_TLS_HANDSHAKE
+    er_ret
+
+; ==================================================================
+; er_tls_hkdf_expand_label
+; rdi=secret[32], rsi=label, edx=label_len, rcx=context, r8d=context_len, r9=out[32]
+; Supports one 32-byte SHA-256 block, enough for TLS 1.3 traffic secrets.
+; ==================================================================
+global er_tls_hkdf_expand_label
+er_fn er_tls_hkdf_expand_label
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+
+    mov     r12, rdi
+    mov     r13, rsi
+    mov     r14d, edx
+    mov     r15, rcx
+    mov     ebx, r8d
+    mov     r11, r9
+
+    test    r12, r12
+    jz      .bad_label
+    test    r13, r13
+    jz      .bad_label
+    test    r11, r11
+    jz      .bad_label
+    cmp     r14d, TLS_HKDF_LABEL_MAX_LEN
+    ja      .bad_label
+    cmp     ebx, TLS_HKDF_CONTEXT_MAX_LEN
+    ja      .bad_label
+    test    ebx, ebx
+    jz      .context_ok
+    test    r15, r15
+    jz      .bad_label
+.context_ok:
+    ; HkdfLabel.length = 32.
+    mov     byte [tls_hkdf_info], 0
+    mov     byte [tls_hkdf_info + 1], TLS_RANDOM_LEN
+    ; HkdfLabel.label = "tls13 " || label.
+    lea     eax, [r14d + TLS_HKDF_LABEL_PREFIX_LEN]
+    mov     [tls_hkdf_info + 2], al
+    lea     rdi, [tls_hkdf_info + 3]
+    lea     rsi, [rel tls_hkdf_label_prefix]
+    mov     edx, TLS_HKDF_LABEL_PREFIX_LEN
+    call    er_memcpy
+    lea     rdi, [tls_hkdf_info + 3 + TLS_HKDF_LABEL_PREFIX_LEN]
+    mov     rsi, r13
+    mov     edx, r14d
+    call    er_memcpy
+    lea     r10d, [r14d + TLS_HKDF_LABEL_PREFIX_LEN + 3]
+    mov     [tls_hkdf_info + r10], bl
+    inc     r10d
+    test    ebx, ebx
+    jz      .copy_done
+    lea     rdi, [tls_hkdf_info + r10]
+    mov     rsi, r15
+    mov     edx, ebx
+    call    er_memcpy
+    add     r10d, ebx
+.copy_done:
+    ; HKDF-Expand single block: HMAC(secret, info || 0x01).
+    lea     rdi, [tls_hkdf_msg]
+    lea     rsi, [tls_hkdf_info]
+    mov     edx, r10d
+    call    er_memcpy
+    mov     byte [tls_hkdf_msg + r10], 1
+    inc     r10d
+
+    mov     rdi, r12
+    mov     esi, TLS_RANDOM_LEN
+    lea     rdx, [tls_hkdf_msg]
+    mov     ecx, r10d
+    mov     r8, r11
+    call    er_tor_hmac_sha256
+    cmp     eax, TLS_RANDOM_LEN
+    jne     .fail_label
+    xor     eax, eax
+    er_ok
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+
+.bad_label:
+    mov     eax, -1
+    er_err  ERROR_INVALID_PARAM
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+.fail_label:
+    mov     eax, -1
+    er_err  ERROR_TLS_HANDSHAKE
+    pop     r15
     pop     r14
     pop     r13
     pop     r12

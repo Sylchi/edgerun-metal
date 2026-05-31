@@ -477,7 +477,18 @@ cmd_test_spi_flash() {
 }
 
 cmd_test_tls() {
-	build_test "test_tls_self" "${TEST_DIR}/test_tls_self.asm" "crypto/tls" "rt/runtime"
+	local name="test_tls_self"
+	local src="${TEST_DIR}/${name}.asm"
+	local obj="${ASM_BUILD}/${name}.o"
+	local bin="${ASM_BUILD}/${name%_self}"
+	${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
+	local tls_o="${ASM_BUILD}/tls.o"
+	elf64 "${ASM_DIR}/crypto/tls.asm" "$tls_o"
+	local runtime_o="${ASM_BUILD}/runtime.o"
+	elf64 "${ASM_DIR}/rt/runtime.asm" "$runtime_o"
+	ld -nostdlib -static -o "$bin" "$obj" "$tls_o" "$runtime_o"
+	echo "  LD  ${bin}"
+	"$bin"
 }
 
 cmd_test_tor() {

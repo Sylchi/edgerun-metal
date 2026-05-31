@@ -94,6 +94,7 @@ extern er_hda_codec_vendor_id
 extern er_hda_codec_root_nodes
 extern er_hda_alc295_prepare_speaker
 extern er_hda_start_square_wave
+extern er_hda_get_stream_debug
 extern er_xhci_cmd_submit_noop
 extern er_xhci_cmd_submit_enable_slot
 extern er_xhci_cmd_submit_address_device
@@ -308,6 +309,10 @@ check_hda_state: db " statests ", 0
 check_hda_codec: db " codec ", 0
 check_hda_nodes: db " nodes ", 0
 check_hda_tone:  db " tone ", 0
+check_hda_ctl:   db " ctl ", 0
+check_hda_sts:   db " sts ", 0
+check_hda_lpib:  db " lpib ", 0
+check_hda_cbl:   db " cbl ", 0
 check_intel_gpu: db "check: intel_gpu ", 0
 check_intel_gpu_abs: db "check: intel_gpu absent", 0
 ok_text:       db "ok", 0
@@ -416,6 +421,10 @@ hda_statests: resd 1
 hda_codec_vendor: resd 1
 hda_root_nodes: resd 1
 hda_tone_status: resd 1
+hda_stream_ctl: resd 1
+hda_stream_sts: resd 1
+hda_stream_lpib: resd 1
+hda_stream_cbl: resd 1
 
 %define VIRTIO_NET_STORAGE_size 4900
 virtio_net_dev:      resb VIRTIO_NET_DEVICE_size
@@ -1363,6 +1372,39 @@ er_fn er_kernel_main
     mov     rdi, COM1_PORT
     mov     esi, [rel hda_tone_status]
     call    er_serial_putdec32
+    mov     edi, [rel hda_bar0]
+    mov     esi, [rel hda_gcap]
+    lea     rdx, [rel hda_stream_ctl]
+    lea     rcx, [rel hda_stream_sts]
+    lea     r8, [rel hda_stream_lpib]
+    lea     r9, [rel hda_stream_cbl]
+    call    er_hda_get_stream_debug
+    test    eax, eax
+    jnz     .hda_print_done
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_hda_ctl]
+    call    er_serial_puts
+    mov     rdi, COM1_PORT
+    mov     esi, [rel hda_stream_ctl]
+    call    er_serial_puthex32
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_hda_sts]
+    call    er_serial_puts
+    mov     rdi, COM1_PORT
+    mov     esi, [rel hda_stream_sts]
+    call    er_serial_puthex32
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_hda_lpib]
+    call    er_serial_puts
+    mov     rdi, COM1_PORT
+    mov     esi, [rel hda_stream_lpib]
+    call    er_serial_puthex32
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_hda_cbl]
+    call    er_serial_puts
+    mov     rdi, COM1_PORT
+    mov     esi, [rel hda_stream_cbl]
+    call    er_serial_puthex32
 .hda_print_done:
     call    .crlf
     jmp     .hda_next_func

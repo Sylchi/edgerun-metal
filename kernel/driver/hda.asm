@@ -699,3 +699,69 @@ er_fn er_hda_start_square_wave
     pop     r12
     pop     rbx
     ret
+
+; ==================================================================
+; er_hda_get_stream_debug — read first output stream descriptor state
+; int er_hda_get_stream_debug(uint32_t bar0, uint32_t gcap,
+;                             uint32_t* out_ctl, uint32_t* out_sts,
+;                             uint32_t* out_lpib, uint32_t* out_cbl)
+; ==================================================================
+er_fn er_hda_get_stream_debug
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+
+    mov     r12d, edi           ; bar0
+    mov     r13d, esi           ; gcap
+    mov     rbx, rdx            ; out_ctl
+    mov     r14, rcx            ; out_sts
+    mov     r15, r8             ; out_lpib
+    test    r12d, r12d
+    jz      .sd_bad_arg
+    test    rbx, rbx
+    jz      .sd_bad_arg
+    test    r14, r14
+    jz      .sd_bad_arg
+    test    r15, r15
+    jz      .sd_bad_arg
+    test    r9, r9
+    jz      .sd_bad_arg
+
+    mov     eax, r13d
+    shr     eax, 8
+    and     eax, 0x0F
+    imul    eax, HDA_SD_BYTES
+    add     eax, HDA_REG_SD_BASE
+    add     eax, r12d
+    mov     r13d, eax
+
+    mov     edi, r13d
+    call    er_mmio_read32
+    mov     [rbx], eax
+    mov     edi, r13d
+    add     edi, 0x03
+    call    er_mmio_read8
+    mov     [r14], eax
+    mov     edi, r13d
+    add     edi, HDA_SD_LPIB
+    call    er_mmio_read32
+    mov     [r15], eax
+    mov     edi, r13d
+    add     edi, HDA_SD_CBL
+    call    er_mmio_read32
+    mov     [r9], eax
+    xor     eax, eax
+    er_ok
+    jmp     .sd_out
+.sd_bad_arg:
+    er_err  ERROR_BAD_ARGUMENT
+    mov     eax, -1
+.sd_out:
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    ret

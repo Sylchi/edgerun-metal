@@ -559,18 +559,6 @@ pub fn build(b: *std.Build) void {
     const pi_usb_control_step = b.step("pi-usb-control", "Send Edgerun Pi USB control commands over Linux usbfs without external dependencies");
     pi_usb_control_step.dependOn(&pi_usb_control.step);
 
-    const gen_atlas = b.addExecutable(.{
-        .name = "gen-atlas",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/gen_atlas.zig"),
-            .target = b.graph.host,
-            .optimize = optimize,
-        }),
-    });
-    const run_gen_atlas = b.addRunArtifact(gen_atlas);
-    const gen_atlas_step = b.step("gen-atlas", "Generate font atlas bitmap and glyph table from pre-compiled font objects");
-    gen_atlas_step.dependOn(&run_gen_atlas.step);
-
     const gen_icon_objects = b.addExecutable(.{
         .name = "gen-icon-objects",
         .root_module = b.createModule(.{
