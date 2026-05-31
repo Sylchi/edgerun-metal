@@ -21,11 +21,27 @@ exec_decoded_fast_supported:
     je      .scan_next
     cmp     al, 0x41
     je      .scan_next
+    cmp     al, 0x46
+    je      .scan_next
+    cmp     al, 0x47
+    je      .scan_next
+    cmp     al, 0x48
+    je      .scan_next
+    cmp     al, 0x4A
+    je      .scan_next
+    cmp     al, 0x4C
+    je      .scan_next
+    cmp     al, 0x4E
+    je      .scan_next
     cmp     al, 0x6A
     je      .scan_next
     cmp     al, 0x6B
     je      .scan_next
     cmp     al, 0x6C
+    je      .scan_next
+    cmp     al, 0x6D
+    je      .scan_next
+    cmp     al, 0x6F
     je      .scan_next
     cmp     al, 0x71
     je      .scan_next
@@ -236,12 +252,28 @@ exec_decoded_fast_loop:
     je      .fast_local_tee
     cmp     al, 0x41
     je      .try_fast_round_fuse
+    cmp     al, 0x46
+    je      .fast_i32_eq
+    cmp     al, 0x47
+    je      .fast_i32_ne
+    cmp     al, 0x48
+    je      .fast_i32_lt_s
+    cmp     al, 0x4A
+    je      .fast_i32_gt_s
+    cmp     al, 0x4C
+    je      .fast_i32_le_s
+    cmp     al, 0x4E
+    je      .fast_i32_ge_s
     cmp     al, 0x6A
     je      .fast_i32_add
     cmp     al, 0x6B
     je      .fast_i32_sub
     cmp     al, 0x6C
     je      .fast_i32_mul
+    cmp     al, 0x6D
+    je      .fast_i32_div_s
+    cmp     al, 0x6F
+    je      .fast_i32_rem_s
     cmp     al, 0x71
     je      .fast_i32_and
     cmp     al, 0x72
@@ -382,6 +414,10 @@ exec_decoded_fast_loop:
     je      .fast_const_sub
     cmp     al, 0x6C
     je      .fast_const_mul
+    cmp     al, 0x6D
+    je      .fast_const_div_s
+    cmp     al, 0x6F
+    je      .fast_const_rem_s
     cmp     al, 0x71
     je      .fast_const_and
     cmp     al, 0x72
@@ -412,6 +448,39 @@ exec_decoded_fast_loop:
     jmp     .fast_loop
 .fast_const_mul:
     imul    ebx, ecx
+    add     r8, DECODED_OP_SIZE
+    jmp     .fast_loop
+.fast_const_div_s:
+    test    ecx, ecx
+    jz      .fast_arithmetic_trap
+    cmp     ebx, 0x80000000
+    jne     .fast_const_div_s_ok
+    cmp     ecx, -1
+    je      .fast_arithmetic_trap
+.fast_const_div_s_ok:
+    mov     eax, ebx
+    cdq
+    idiv    ecx
+    mov     ebx, eax
+    mov     edx, 1
+    add     r8, DECODED_OP_SIZE
+    jmp     .fast_loop
+.fast_const_rem_s:
+    test    ecx, ecx
+    jz      .fast_arithmetic_trap
+    cmp     ebx, 0x80000000
+    jne     .fast_const_rem_s_ok
+    cmp     ecx, -1
+    jne     .fast_const_rem_s_ok
+    xor     ebx, ebx
+    add     r8, DECODED_OP_SIZE
+    jmp     .fast_loop
+.fast_const_rem_s_ok:
+    mov     eax, ebx
+    cdq
+    idiv    ecx
+    mov     ebx, edx
+    mov     edx, 1
     add     r8, DECODED_OP_SIZE
     jmp     .fast_loop
 .fast_const_and:
@@ -588,6 +657,88 @@ exec_decoded_fast_loop:
     imul    eax, ecx
     jmp     .fast_push_tos
 
+.fast_i32_eq:
+    call    .fast_pop_two_i32
+    jc      .fast_underflow
+    cmp     eax, ecx
+    sete    al
+    movzx   eax, al
+    jmp     .fast_push_tos
+
+.fast_i32_ne:
+    call    .fast_pop_two_i32
+    jc      .fast_underflow
+    cmp     eax, ecx
+    setne   al
+    movzx   eax, al
+    jmp     .fast_push_tos
+
+.fast_i32_lt_s:
+    call    .fast_pop_two_i32
+    jc      .fast_underflow
+    cmp     eax, ecx
+    setl    al
+    movzx   eax, al
+    jmp     .fast_push_tos
+
+.fast_i32_gt_s:
+    call    .fast_pop_two_i32
+    jc      .fast_underflow
+    cmp     eax, ecx
+    setg    al
+    movzx   eax, al
+    jmp     .fast_push_tos
+
+.fast_i32_le_s:
+    call    .fast_pop_two_i32
+    jc      .fast_underflow
+    cmp     eax, ecx
+    setle   al
+    movzx   eax, al
+    jmp     .fast_push_tos
+
+.fast_i32_ge_s:
+    call    .fast_pop_two_i32
+    jc      .fast_underflow
+    cmp     eax, ecx
+    setge   al
+    movzx   eax, al
+    jmp     .fast_push_tos
+
+.fast_i32_div_s:
+    call    .fast_pop_two_i32
+    jc      .fast_underflow
+    test    ecx, ecx
+    jz      .fast_arithmetic_trap
+    cmp     eax, 0x80000000
+    jne     .fast_i32_div_s_ok
+    cmp     ecx, -1
+    je      .fast_arithmetic_trap
+.fast_i32_div_s_ok:
+    cdq
+    idiv    ecx
+    xor     edx, edx
+    jmp     .fast_push_tos
+
+.fast_i32_rem_s:
+    call    .fast_pop_two_i32
+    jc      .fast_underflow
+    test    ecx, ecx
+    jz      .fast_arithmetic_trap
+    cmp     eax, 0x80000000
+    jne     .fast_i32_rem_s_ok
+    cmp     ecx, -1
+    jne     .fast_i32_rem_s_ok
+    xor     eax, eax
+    xor     edx, edx
+    jmp     .fast_push_tos
+.fast_i32_rem_s_ok:
+    cdq
+    idiv    ecx
+    mov     eax, edx
+    xor     edx, edx
+    jmp     .fast_push_tos
+
 .fast_i32_and:
     call    .fast_pop_two_i32
     jc      .fast_underflow
@@ -735,6 +886,9 @@ exec_decoded_fast_loop:
     jmp     .fast_done
 .fast_overflow:
     er_err  ERROR_STACK_OVERFLOW
+    jmp     .fast_done
+.fast_arithmetic_trap:
+    er_err  ERROR_ARITHMETIC_TRAP
     jmp     .fast_done
 .fast_unsupported:
     er_err  ERROR_UNSUPPORTED

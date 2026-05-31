@@ -23,10 +23,12 @@ extern er_memcpy
 %define SYS_socket    41
 %define SYS_connect   42
 %define SYS_exit      60
+%define SYS_clock_gettime 228
 %define SYS_getrandom 318
 
 %define AF_INET       2
 %define SOCK_STREAM   1
+%define CLOCK_MONOTONIC 1
 %ifndef TOR_HOST_PORT
 %define TOR_HOST_PORT 19001
 %endif
@@ -58,8 +60,11 @@ msg_tls_ok:  db "tls ok", 10
 msg_tls_ok_len equ $ - msg_tls_ok
 msg_link_ok: db "tor link ok", 10
 msg_link_ok_len equ $ - msg_link_ok
+msg_elapsed: db "elapsed_ms "
+msg_elapsed_len equ $ - msg_elapsed
 msg_fail:    db "tor live host FAIL", 10
 msg_fail_len equ $ - msg_fail
+nl: db 10
 
 versions_cell:
     db 0, 0, TOR_CELL_VERSIONS, 0, 4, 0, TOR_LINK_V4, 0, TOR_LINK_V5
@@ -67,6 +72,9 @@ versions_cell_len equ $ - versions_cell
 
 SECTION .bss
 live_fd: resd 1
+start_ts: resq 2
+end_ts: resq 2
+dec_buf: resb 32
 rx_cell: resb TLS_PLAINTEXT_MAX
 rx_len: resd 1
 tx_netinfo: resb TOR_CELL_LEN
@@ -80,6 +88,8 @@ SECTION .text
 global _start
 _start:
     call    er_tls_init
+    lea     rdi, [rel start_ts]
+    call    monotonic_now
 
     mov     eax, SYS_socket
     mov     edi, AF_INET
@@ -147,6 +157,10 @@ _start:
     lea     rsi, [rel msg_link_ok]
     mov     edx, msg_link_ok_len
     call    write_stdout
+
+    lea     rdi, [rel end_ts]
+    call    monotonic_now
+    call    print_elapsed_ms
 %if TOR_LIVE_BENCH_CELLS > 0
     call    build_padding
     mov     r12d, TOR_LIVE_BENCH_CELLS
@@ -185,6 +199,67 @@ write_stdout:
     mov     eax, SYS_write
     mov     edi, 1
     syscall
+    ret
+
+monotonic_now:
+    mov     rsi, rdi
+    mov     edi, CLOCK_MONOTONIC
+    mov     eax, SYS_clock_gettime
+    syscall
+    ret
+
+print_elapsed_ms:
+    lea     rsi, [rel msg_elapsed]
+    mov     edx, msg_elapsed_len
+    call    write_stdout
+
+    mov     rax, [rel end_ts]
+    sub     rax, [rel start_ts]
+    mov     rbx, [rel end_ts + 8]
+    mov     rdx, [rel start_ts + 8]
+    cmp     rbx, rdx
+    jae     .no_borrow
+    dec     rax
+    add     rbx, 1000000000
+.no_borrow:
+    sub     rbx, rdx
+    mov     rcx, 1000
+    mul     rcx
+    mov     rcx, 1000000
+    mov     rdx, 0
+    mov     rdi, rax
+    mov     rax, rbx
+    div     rcx
+    add     rax, rdi
+    mov     rdi, rax
+    call    putdec64
+    lea     rsi, [rel nl]
+    mov     edx, 1
+    call    write_stdout
+    ret
+
+putdec64:
+    lea     rsi, [rel dec_buf + 32]
+    mov     rax, rdi
+    test    rax, rax
+    jnz     .digits
+    dec     rsi
+    mov     byte [rsi], '0'
+    jmp     .write
+.digits:
+    mov     rbx, 10
+.loop:
+    xor     rdx, rdx
+    div     rbx
+    add     dl, '0'
+    dec     rsi
+    mov     [rsi], dl
+    test    rax, rax
+    jnz     .loop
+.write:
+    lea     rdx, [rel dec_buf + 32]
+    sub     rdx, rsi
+    call    write_stdout
     ret
 
 recv_versions:

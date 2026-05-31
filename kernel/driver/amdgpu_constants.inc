@@ -3,7 +3,7 @@
 ;
 ; Target: Framework 13 AMD 7840U — integrated Radeon 780M (gfx1103, DCN 3.1.4)
 ;
-; Reference: Linux drivers/gpu/drm/amd/amdgpu + umr (amdgpu debug tool)
+; Register offsets are project-owned constants for bare-metal DCN programming.
 
 ; ─── PCI IDs ────────────────────────────────────────────────────────
 %define AMD_VENDOR_ID               0x1002
@@ -88,6 +88,57 @@
 %define DCN_HUBP_PIPE_STRIDE               0x370
 %define DCN_HUBP_PIPE_COUNT                4
 
+; ─── DPP/CNVC/DSCL registers (DPP0, DCN 3.1.4 generated offsets) ──
+%define DCN_DPP0_DPP_CONTROL               0x3334
+%define DCN_DPP0_CNVC_SURFACE_PIXEL_FORMAT 0x333C
+%define DCN_DPP0_FORMAT_CONTROL            0x3340
+%define DCN_DPP0_CNVC_PRE_DEALPHA          0x3378
+%define DCN_DPP0_CNVC_PRE_CSC_MODE         0x337C
+%define DCN_DPP0_CNVC_PRE_DEGAM            0x33B4
+%define DCN_DPP0_CNVC_PRE_REALPHA          0x33B8
+%define DCN_DPP0_DSCL_SCL_MODE             0x33EC
+%define DCN_DPP0_DSCL_CONTROL              0x33F4
+%define DCN_DPP0_RECOUT_START              0x3444
+%define DCN_DPP0_RECOUT_SIZE               0x3448
+%define DCN_DPP0_MPC_SIZE                  0x344C
+%define DCN_DPP0_LB_DATA_FORMAT            0x3450
+%define DCN_DPP_PIPE_STRIDE                0x5AC
+%define DCN_DPP_PIPE_COUNT                 4
+
+%define AMDGPU_DPP_CONTROL_ENABLE          1
+%define AMDGPU_DPP_SURFACE_FORMAT_ARGB8888 3
+%define AMDGPU_DPP_PIPE_BYPASS             0
+%define AMDGPU_DPP_SIZE_FIELD_LIMIT        0x10000
+%define AMDGPU_SCANOUT_ADDR_ALIGN_MASK     0x0FFF
+%define AMDGPU_DPP_DIRECT_PLAN_COUNT       10
+%define AMDGPU_DCN_DOMAIN_POWER_FORCEON    1
+%define AMDGPU_DCN_POWER_DOMAIN_COUNT      7
+%define AMDGPU_DCN_GLOBAL_TIMER_REFDIV2_EN 0x00001202
+
+; ─── DCN init stage latch values ───────────────────────────────────
+%define AMDGPU_DCN_STAGE_IDLE              0
+%define AMDGPU_DCN_STAGE_BAD_ARG           1
+%define AMDGPU_DCN_STAGE_IP_REQUEST        2
+%define AMDGPU_DCN_STAGE_CLOCK_GATING      3
+%define AMDGPU_DCN_STAGE_POWER_DOMAINS     4
+%define AMDGPU_DCN_STAGE_HPO               5
+%define AMDGPU_DCN_STAGE_DIO_MEM           6
+%define AMDGPU_DCN_STAGE_GLOBAL_TIMER      7
+%define AMDGPU_DCN_STAGE_CLEAR_IP_REQUEST  8
+%define AMDGPU_DCN_STAGE_TEST_PATTERN      9
+%define AMDGPU_DCN_STAGE_PIPE              10
+%define AMDGPU_DCN_STAGE_OK                11
+
+; ─── AMDGPU probe stage latch values ───────────────────────────────
+%define AMDGPU_PROBE_STAGE_IDLE            0
+%define AMDGPU_PROBE_STAGE_READ_ID         1
+%define AMDGPU_PROBE_STAGE_UNSUPPORTED_ID  2
+%define AMDGPU_PROBE_STAGE_BAR0            3
+%define AMDGPU_PROBE_STAGE_BAR2            4
+%define AMDGPU_PROBE_STAGE_MMIO            5
+%define AMDGPU_PROBE_STAGE_PCI_COMMAND     6
+%define AMDGPU_PROBE_STAGE_OK              7
+
 ; ─── Host eDP framebuffer setup constants ─────────────────────────
 ; Framework 13 AMD Phoenix panel: BOE NE135FBM-N41, eDP-1, 2256x1504@60.
 %define AMDGPU_FB_WIDTH             2256
@@ -120,11 +171,6 @@
 %define AMDGPU_SCANOUT_WIDTH               12
 %define AMDGPU_SCANOUT_HEIGHT              16
 %define AMDGPU_SCANOUT_SIZE                20
-
-; ─── AMDGPU driver error codes ────────────────────────────────────
-%define AMDGPU_ERR_NOT_FOUND        30
-%define AMDGPU_ERR_BAR_INVALID      31
-%define AMDGPU_ERR_INIT             32
 
 ; ─── Power gating domain mapping (DCN 3.1.4) ──────────────────────
 ; DOMAIN0    → HUBP0, DPP0

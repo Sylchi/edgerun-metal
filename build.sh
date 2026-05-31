@@ -23,6 +23,9 @@ KERNEL_EFI_LD="${ASM_DIR}/efi_linker.ld"
 KERNEL_ELF="${ASM_BUILD}/kernel.elf"
 KERNEL_EFI="${ASM_BUILD}/kernel.efi"
 KERNEL_BIN="${ASM_BUILD}/kernel.bin"
+EFI_ESP="${EFI_ESP:-/boot}"
+EFI_BOOT_DIR="${EFI_ESP}/EFI/edgerun"
+EFI_BOOT_PATH="${EFI_BOOT_DIR}/bootx64.efi"
 
 # ---- helpers ----
 mkdir -p "${ASM_BUILD}"
@@ -102,6 +105,7 @@ KERNEL_ASM_SRCS="
 	crypto/tor_cell.asm
 	crypto/tor_digest.asm
 	crypto/tor_hs.asm
+	crypto/tor_hs_app.asm
 	crypto/tor.asm
 	crypto/local_cell.asm
 	crypto/local_route.asm
@@ -188,34 +192,28 @@ cmd_kernel_efi() {
 		-o "${KERNEL_EFI}" ${objs}
 	local esize=$(stat -c '%s' "${KERNEL_EFI}")
 	printf 'efi:  %s (%d bytes)\n' "${KERNEL_EFI}" "${esize}"
+	sync_kernel_efi_to_esp
+}
+
+sync_kernel_efi_to_esp() {
+	if ! sudo -n test -d "${EFI_ESP}/EFI"; then
+		echo "error: ESP not mounted at ${EFI_ESP}" >&2
+		exit 1
+	fi
+	sudo -n mkdir -p "${EFI_BOOT_DIR}"
+	sudo -n install -m 0644 "${KERNEL_EFI}" "${EFI_BOOT_PATH}"
+	sudo -n sync
+	echo "installed ${KERNEL_EFI} -> ${EFI_BOOT_PATH}"
 }
 
 cmd_install_efi() {
 	cmd_kernel_efi
-	local esp="/boot"
-	# check with sudo because /boot/EFI is often root-owned
-	if ! sudo test -d "${esp}/EFI"; then
-		echo "error: ESP not mounted at ${esp}" >&2
-		exit 1
-	fi
-	local efi_dir="${esp}/EFI/edgerun"
-	echo "This will:"
-	echo "  cp ${KERNEL_EFI} -> ${efi_dir}/bootx64.efi"
-	echo "  add UEFI boot entry 'EdgeRun' via efibootmgr"
-	read -r -p "Proceed? [y/N] " reply
-	case "${reply}" in
-		[yY]|[yY][eE][sS]) ;;
-		*) echo "abort."; exit 1 ;;
-	esac
-	sudo mkdir -p "${efi_dir}"
-	sudo cp "${KERNEL_EFI}" "${efi_dir}/bootx64.efi"
 	if efibootmgr 2>/dev/null | grep -qi 'edgerun'; then
 		echo "edgerun boot entry already exists"
 	else
-		sudo efibootmgr -c -L "EdgeRun" -l "\\EFI\\edgerun\\bootx64.efi" \
+		sudo -n efibootmgr -c -L "EdgeRun" -l "\\EFI\\edgerun\\bootx64.efi" \
 			-d /dev/nvme0n1 -p 1 2>&1
 	fi
-	echo "installed ${KERNEL_EFI} -> ${efi_dir}/bootx64.efi"
 	echo "reboot and select 'EdgeRun' from boot menu"
 }
 
@@ -329,10 +327,12 @@ cmd_test() {
 	cmd_test_render_ir
 	cmd_test_fe_mul
 	cmd_test_spi_flash
+	cmd_test_pi_wifi_sdio
 	cmd_test_sha3
 	cmd_test_tls
 	cmd_test_tor
 	cmd_test_tor_hs
+	cmd_test_tor_hs_app
 	cmd_test_local_route
 	cmd_test_x25519
 	cmd_test_wasm_compiler
@@ -500,6 +500,18 @@ cmd_test_spi_flash() {
 	build_test "test_spi_flash_self" "${TEST_DIR}/test_spi_flash_self.asm"
 }
 
+cmd_test_pi_wifi_sdio() {
+	mkdir -p "${PI_BUILD}"
+	local test_obj="${PI_BUILD}/test_pi_wifi_sdio_self.o"
+	local emmc_obj="${PI_BUILD}/emmc_test.o"
+	local elf="${PI_BUILD}/test_pi_wifi_sdio.elf"
+	${ARM_AS} -mcpu=arm1176jzf-s -I kernel -o "$test_obj" "${TEST_DIR}/test_pi_wifi_sdio_self.asm"
+	arm_obj "${ASM_ARM_DIR}/emmc.asm" "$emmc_obj"
+	${ARM_LD} -T "${ARM_LD_SCRIPT}" -o "$elf" "$test_obj" "$emmc_obj"
+	echo "  LD  ${elf}"
+	timeout 8s qemu-system-arm -M raspi0 -semihosting -display none -serial none -kernel "$elf"
+}
+
 cmd_test_cros_ec() {
 	local name="test_cros_ec_self"
 	local src="${TEST_DIR}/${name}.asm"
@@ -568,6 +580,10 @@ cmd_test_tor_hs() {
 	build_test "test_tor_hs_self" "${TEST_DIR}/test_tor_hs_self.asm" "crypto/tor_hs" "crypto/sha3" "crypto/tor_aes" "crypto/curve25519" "rt/runtime"
 }
 
+cmd_test_tor_hs_app() {
+	build_test "test_tor_hs_app_self" "${TEST_DIR}/test_tor_hs_app_self.asm" "crypto/tor_hs_app" "rt/runtime"
+}
+
 cmd_test_local_route() {
 	build_test "test_local_route_self" "${TEST_DIR}/test_local_route_self.asm" "crypto/local_cell" "crypto/local_route" "crypto/local_circuit" "rt/runtime"
 }
@@ -585,6 +601,27 @@ cmd_bench_tor() {
 	local runtime_o="${ASM_BUILD}/runtime.o"
 	elf64 "${ASM_DIR}/rt/runtime.asm" "$runtime_o"
 	ld -nostdlib -static -o "$bin" "$obj" "$tor_aes_o" "$tor_o" "$runtime_o"
+	echo "  LD  ${bin}"
+	"$bin"
+}
+
+cmd_bench_tor_hs() {
+	local name="bench_tor_hs"
+	local src="${TEST_DIR}/test_tor_hs_self.asm"
+	local obj="${ASM_BUILD}/${name}.o"
+	local bin="${ASM_BUILD}/${name}"
+	${YASM} -f elf64 ${ASM_INC} -DHS_BENCH -o "$obj" "$src"
+	local tor_hs_o="${ASM_BUILD}/tor_hs.o"
+	elf64 "${ASM_DIR}/crypto/tor_hs.asm" "$tor_hs_o"
+	local sha3_o="${ASM_BUILD}/sha3.o"
+	elf64 "${ASM_DIR}/crypto/sha3.asm" "$sha3_o"
+	local tor_aes_o="${ASM_BUILD}/tor_aes.o"
+	elf64 "${ASM_DIR}/crypto/tor_aes.asm" "$tor_aes_o"
+	local curve25519_o="${ASM_BUILD}/curve25519.o"
+	elf64 "${ASM_DIR}/crypto/curve25519.asm" "$curve25519_o"
+	local runtime_o="${ASM_BUILD}/runtime.o"
+	elf64 "${ASM_DIR}/rt/runtime.asm" "$runtime_o"
+	ld -nostdlib -static -o "$bin" "$obj" "$tor_hs_o" "$sha3_o" "$tor_aes_o" "$curve25519_o" "$runtime_o"
 	echo "  LD  ${bin}"
 	"$bin"
 }
@@ -708,6 +745,17 @@ EOF
 	node "$node_bench" "$wasm_bin"
 }
 
+cmd_signing_wasm() {
+	local manifest="app/edgerun-signing/Cargo.toml"
+	local cargo_target="${BUILD_DIR}/cargo-target"
+	local wasm_src="${cargo_target}/wasm32-unknown-unknown/release/edgerun_signing.wasm"
+	local wasm_dst="${ASM_BUILD}/edgerun_signing.wasm"
+	cargo build --manifest-path "$manifest" --target wasm32-unknown-unknown --release --target-dir "$cargo_target"
+	cp "$wasm_src" "$wasm_dst"
+	local wsize=$(stat -c '%s' "$wasm_dst")
+	printf 'signing-wasm: %s (%d bytes)\n' "$wasm_dst" "$wsize"
+}
+
 # ---- ARM / Pi Zero targets ----
 HOST_BUILD="${BUILD_DIR}/host"
 PI_BUILD="${BUILD_DIR}/pi"
@@ -778,7 +826,7 @@ EdgeRun build targets:
   kernel-net-tor      Build kernel with Tor autostart + run QEMU net/TPM
   kernel-tpm-live-test    Build kernel with TPM live test main
   kernel-tpm-live-test-qemu Build + run in QEMU with swtpm
-  kernel-efi          Build kernel.efi (native UEFI PE32+)
+  kernel-efi          Build kernel.efi and copy it to the EdgeRun ESP path
   install-efi         Build + install kernel.efi to ESP + add boot entry
   test                Run all self-hosted ASM tests
   test-wasm-compiler  Run host-side WASM compiler self-test
@@ -797,16 +845,19 @@ EdgeRun build targets:
   test-render-ir      Run render IR test (self-hosted ASM runner)
   test-fe-mul         Run _fe_mul field multiplication test (self-hosted ASM)
   test-spi-flash      Run SPI flash compile-check test (self-hosted ASM)
+  test-pi-wifi-sdio   Run Pi Zero W CYW43438 SDIO probe emulator test
   test-sha3           Run SHA3-256 known-answer tests (self-hosted ASM)
   test-tls            Run TLS ClientHello self-test (self-hosted ASM)
   test-tor            Run Tor AES-128-CTR KAT test (self-hosted ASM)
   test-tor-hs         Run Tor onion-service message tests (self-hosted ASM)
   test-local-route    Run local cell route queue/dispatch test (self-hosted ASM)
   bench-tor           Run Tor local AES cell latency/throughput benchmark
+  bench-tor-hs        Run hidden-service local self-connect benchmark
   test-x25519         Run X25519 scalar mult RFC 7748 test vectors (self-hosted ASM)
   test-bench-render-ir Run render_ir RDTSC benchmark (self-hosted ASM)
   bench-wasm-jit      Run WASM JIT vs native RDTSC benchmark (self-hosted ASM)
   bench-zig-wasm      Compile same Zig code to x86_64 + WASM, then benchmark native/interpreter/JIT
+  signing-wasm        Compile Ed25519 signing WASM guest
   pi-kernel           Build Pi Zero W kernel.img (ARMv6)
   pi-usb-boot         Build Pi USB boot host tool (x86_64)
   pi-boot             Build + boot Pi Zero via USB
@@ -844,17 +895,21 @@ case "${1:-help}" in
 	test-render-ir) cmd_test_render_ir ;;
 	test-fe-mul)    cmd_test_fe_mul ;;
 	test-spi-flash) cmd_test_spi_flash ;;
+	test-pi-wifi-sdio) cmd_test_pi_wifi_sdio ;;
 	test-sha3)      cmd_test_sha3 ;;
 	test-tls)       cmd_test_tls ;;
 	test-tor)       cmd_test_tor ;;
 	test-tor-hs)    cmd_test_tor_hs ;;
+	test-tor-hs-app) cmd_test_tor_hs_app ;;
 	test-local-route) cmd_test_local_route ;;
 	bench-tor)      cmd_bench_tor ;;
+	bench-tor-hs)   cmd_bench_tor_hs ;;
 	test-x25519)     cmd_test_x25519 ;;
 	test-x25519-debug) cmd_test_x25519_debug ;;
 	test-bench-render-ir) cmd_test_bench_render_ir ;;
 	bench-wasm-jit) cmd_bench_wasm_jit ;;
 	bench-zig-wasm) cmd_bench_zig_wasm ;;
+	signing-wasm)    cmd_signing_wasm ;;
 	pi-kernel)      cmd_pi_kernel ;;
 	pi-usb-boot)    cmd_pi_usb_boot ;;
 	pi-boot)        cmd_pi_boot ;;

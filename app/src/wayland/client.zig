@@ -13,7 +13,7 @@ pub const WaylandClient = struct {
     state: protocol.WaylandState = .{},
     read_buffer: [max_socket_read_bytes]u8 = undefined,
     read_len: usize = 0,
-    object_kinds: [32]protocol.ObjectKind = [_]protocol.ObjectKind{.unknown} ** 32,
+    object_kinds: [128]protocol.ObjectKind = [_]protocol.ObjectKind{.unknown} ** 128,
 
     pub fn connect(io: std.Io, path: []const u8) !WaylandClient {
         const address = try std.Io.net.UnixAddress.init(path);
@@ -49,13 +49,18 @@ pub const WaylandClient = struct {
         while (!self.state.registry_done) try self.readEventsBlocking();
         const compositor = self.state.registry.find(.compositor) orelse return error.MissingWaylandCompositor;
         const shm = self.state.registry.find(.shm) orelse return error.MissingWaylandShm;
-        const wm_base = self.state.registry.find(.wm_base) orelse return error.MissingXdgWmBase;
+        const wm_base = self.state.registry.find(.wm_base);
         const seat = self.state.registry.find(.seat);
         try self.sendBind(compositor.name, "wl_compositor", @min(compositor.version, 4), protocol.compositor_id);
         try self.sendBind(shm.name, "wl_shm", @min(shm.version, 1), protocol.shm_id);
-        try self.sendBind(wm_base.name, "xdg_wm_base", @min(wm_base.version, 1), protocol.wm_base_id);
-        if (seat) |value| {
-            try self.sendBind(value.name, "wl_seat", value.version, protocol.seat_id);
+        if (wm_base) |value| {
+            try self.sendBind(value.name, "xdg_wm_base", @min(value.version, 1), protocol.wm_base_id);
+            self.state.xdg_available = true;
+        }
+        if (self.state.xdg_available) {
+            if (seat) |value| {
+                try self.sendBind(value.name, "wl_seat", @min(value.version, 1), protocol.seat_id);
+            }
         }
         try self.send(messages.makeSync);
         self.state.registry_done = false;
@@ -72,6 +77,10 @@ pub const WaylandClient = struct {
         _ = width;
         _ = height;
         try self.send(messages.makeCreateSurface);
+        if (!self.state.xdg_available) {
+            self.state.configured = true;
+            return;
+        }
         try self.send(messages.makeGetXdgSurface);
         try self.send(messages.makeGetToplevel);
         try self.sendTitle("EdgeRun Native Wayland");
@@ -152,6 +161,7 @@ pub const WaylandClient = struct {
     fn sendBind(self: WaylandClient, name: u32, interface: []const u8, version: u32, new_id: u32) !void {
         var buffer: [max_message_bytes]u8 = undefined;
         const bytes = try messages.makeBind(&buffer, name, interface, version, new_id);
+        std.debug.print("wayland bind global {d}: {s} v{d} -> object {d}\n", .{ name, interface, version, new_id });
         try messages.writeAll(self.fd, bytes);
     }
 
@@ -168,11 +178,13 @@ pub const WaylandClient = struct {
     }
 
     pub fn sendMove(self: WaylandClient, serial: u32) !void {
+        if (!self.state.xdg_available) return;
         var buffer: [max_message_bytes]u8 = undefined;
         try messages.writeAll(self.fd, try messages.makeMove(&buffer, serial));
     }
 
     pub fn sendMinimize(self: WaylandClient) !void {
+        if (!self.state.xdg_available) return;
         var buffer: [max_message_bytes]u8 = undefined;
         try messages.writeAll(self.fd, try messages.makeSetMinimized(&buffer));
     }

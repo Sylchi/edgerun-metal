@@ -282,13 +282,34 @@
     mov     rax, [exec_control_len]
     test    rax, rax
     jz      .corrupt_error
-    ; Pop control, push if_else (already at else body)
+    ; The then arm already ran, so pop the if frame and skip the else arm.
     dec     rax
     mov     [exec_control_len], rax
-    push    qword [exec_reader_offset]
-    push    CONTROL_IF_ELSE
-    call    exec_control_push
-    jmp     .dispatch_next
+    xor     r15d, r15d
+.skip_else_loop:
+    call    reader_read_byte
+    jc      .corrupt_error
+    movzx   ebx, al
+    cmp     bl, 0x02         ; block
+    je      .skip_else_block
+    cmp     bl, 0x03         ; loop
+    je      .skip_else_block
+    cmp     bl, 0x04         ; if
+    je      .skip_else_block
+    cmp     bl, 0x0b         ; end
+    je      .skip_else_end
+    call    .skip_opcode_immediates
+    jmp     .skip_else_loop
+.skip_else_block:
+    inc     r15d
+    call    reader_read_byte
+    jc      .corrupt_error
+    jmp     .skip_else_loop
+.skip_else_end:
+    test    r15d, r15d
+    jz      .dispatch_next
+    dec     r15d
+    jmp     .skip_else_loop
 
 .op_br:
     ; Read branch depth
@@ -559,16 +580,18 @@
     test    ecx, ecx
     jz      .arithmetic_trap
     mov     r8d, eax        ; save dividend
-    cdq
-    idiv    ecx
-    mov     eax, edx        ; remainder
     ; If dividend was INT_MIN and divisor was -1, remainder = 0
     cmp     r8d, 0x80000000
     jne     .rem_s_done
     cmp     ecx, -1
     jne     .rem_s_done
     xor     eax, eax
+    jmp     .rem_s_push
 .rem_s_done:
+    cdq
+    idiv    ecx
+    mov     eax, edx        ; remainder
+.rem_s_push:
     call    exec_stack_push
     jc      .overflow_error
     jmp     .dispatch_next

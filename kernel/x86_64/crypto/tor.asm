@@ -45,8 +45,25 @@ SECTION .rodata
 ; 131.188.40.189 = 0xBD28B683 (but in network byte order)
 ; For testing in QEMU with local Tor: 10.0.2.2 = localhost via host
 ; We use a compile-time default that can be overridden
-tor_default_guard_ip:       db 0x0A, 0x00, 0x02, 0x64  ; 10.0.2.100 (QEMU host)
-tor_default_guard_port: dw 19001
+%ifndef TOR_DEFAULT_GUARD_IP_A
+%define TOR_DEFAULT_GUARD_IP_A 0x0A
+%endif
+%ifndef TOR_DEFAULT_GUARD_IP_B
+%define TOR_DEFAULT_GUARD_IP_B 0x00
+%endif
+%ifndef TOR_DEFAULT_GUARD_IP_C
+%define TOR_DEFAULT_GUARD_IP_C 0x02
+%endif
+%ifndef TOR_DEFAULT_GUARD_IP_D
+%define TOR_DEFAULT_GUARD_IP_D 0x64
+%endif
+%ifndef TOR_DEFAULT_GUARD_PORT
+%define TOR_DEFAULT_GUARD_PORT 19001
+%endif
+tor_default_guard_ip:
+    db TOR_DEFAULT_GUARD_IP_A, TOR_DEFAULT_GUARD_IP_B
+    db TOR_DEFAULT_GUARD_IP_C, TOR_DEFAULT_GUARD_IP_D
+tor_default_guard_port: dw TOR_DEFAULT_GUARD_PORT
 
 ; Status strings
 str_tor_init:    db "tor: init", 0x0A, 0
@@ -850,6 +867,367 @@ er_fn er_tor_directory_fetch_guard_descriptor
     er_ret
 
 ; ==================================================================
+; _tor_append_u32_dec — append unsigned decimal
+; rdi = output cursor, esi = value
+; returns rax = next output cursor
+; ==================================================================
+_tor_append_u32_dec:
+    push    rbx
+    push    rcx
+    push    rdx
+    mov     r8, rdi
+    mov     eax, esi
+    test    eax, eax
+    jnz     .digits
+    mov     byte [r8], '0'
+    lea     rax, [r8 + 1]
+    pop     rdx
+    pop     rcx
+    pop     rbx
+    ret
+.digits:
+    sub     rsp, 16
+    xor     ecx, ecx
+    mov     ebx, 10
+.div_loop:
+    xor     edx, edx
+    div     ebx
+    add     dl, '0'
+    mov     [rsp + rcx], dl
+    inc     ecx
+    test    eax, eax
+    jnz     .div_loop
+.copy_loop:
+    dec     ecx
+    mov     al, [rsp + rcx]
+    mov     [r8], al
+    inc     r8
+    test    ecx, ecx
+    jnz     .copy_loop
+    mov     rax, r8
+    add     rsp, 16
+    pop     rdx
+    pop     rcx
+    pop     rbx
+    ret
+
+; ==================================================================
+; er_tor_hsdir_build_publish_header(out, cap, descriptor_len)
+; Builds the HTTP/1.1 POST header for v3 onion-service descriptor upload.
+; returns eax = header length, or -1.
+; ==================================================================
+global er_tor_hsdir_build_publish_header
+er_fn er_tor_hsdir_build_publish_header
+    push    rbx
+    push    r12
+    mov     rbx, rdi
+    mov     r12d, edx
+    test    rbx, rbx
+    jz      .fail
+    cmp     r12d, TOR_HS_DESCRIPTOR_MAX_LEN
+    ja      .fail
+    mov     eax, str_tor_hs_publish_prefix_len + str_tor_hs_publish_suffix_len + 5
+    cmp     eax, esi
+    ja      .fail
+
+    lea     rdi, [rbx]
+    lea     rsi, [rel str_tor_hs_publish_prefix]
+    mov     edx, str_tor_hs_publish_prefix_len
+    call    er_memcpy
+    lea     rdi, [rbx + str_tor_hs_publish_prefix_len]
+    mov     esi, r12d
+    call    _tor_append_u32_dec
+    mov     r12, rax
+    mov     rdi, rax
+    lea     rsi, [rel str_tor_hs_publish_suffix]
+    mov     edx, str_tor_hs_publish_suffix_len
+    call    er_memcpy
+    lea     rax, [r12 + str_tor_hs_publish_suffix_len]
+    sub     rax, rbx
+    er_ok
+    pop     r12
+    pop     rbx
+    er_ret
+.fail:
+    mov     eax, -1
+    pop     r12
+    pop     rbx
+    er_ret
+
+; ==================================================================
+; er_tor_hsdir_build_fetch_request(out, cap, blinded_key_b64, key_len)
+; Builds the HTTP/1.1 GET request for v3 onion-service descriptor fetch.
+; returns eax = request length, or -1.
+; ==================================================================
+global er_tor_hsdir_build_fetch_request
+er_fn er_tor_hsdir_build_fetch_request
+    push    rbx
+    push    r12
+    push    r13
+    mov     rbx, rdi
+    mov     r12, rdx
+    mov     r13d, ecx
+    test    rbx, rbx
+    jz      .fail
+    test    r12, r12
+    jz      .fail
+    test    r13d, r13d
+    jz      .fail
+    cmp     r13d, 96
+    ja      .fail
+    mov     eax, str_tor_hs_fetch_prefix_len + str_tor_hs_fetch_suffix_len
+    add     eax, r13d
+    cmp     eax, esi
+    ja      .fail
+
+    lea     rdi, [rbx]
+    lea     rsi, [rel str_tor_hs_fetch_prefix]
+    mov     edx, str_tor_hs_fetch_prefix_len
+    call    er_memcpy
+    lea     rdi, [rbx + str_tor_hs_fetch_prefix_len]
+    mov     rsi, r12
+    mov     edx, r13d
+    call    er_memcpy
+    lea     rdi, [rbx + str_tor_hs_fetch_prefix_len + r13]
+    lea     rsi, [rel str_tor_hs_fetch_suffix]
+    mov     edx, str_tor_hs_fetch_suffix_len
+    call    er_memcpy
+    mov     eax, str_tor_hs_fetch_prefix_len + str_tor_hs_fetch_suffix_len
+    add     eax, r13d
+    er_ok
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+.fail:
+    mov     eax, -1
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+
+; ==================================================================
+; _tor_hsdir_recv_http — collect one directory HTTP response.
+; returns eax = HTTP status, or -1 on protocol error.
+; ==================================================================
+_tor_hsdir_recv_http:
+    push    rbx
+    push    r12
+    xor     r12d, r12d
+    mov     dword [tor_dir_resp_len], 0
+    mov     ebx, 2048
+.recv_loop:
+    mov     edi, [tor_circ_id_app]
+    lea     rsi, [tor_dir_tmp_stream]
+    lea     rdx, [tor_dir_tmp_cmd]
+    lea     rcx, [tor_dir_tmp_data]
+    lea     r8, [tor_dir_tmp_len]
+    call    er_tor_recv_relay
+    test    eax, eax
+    js      .next
+    movzx   eax, word [tor_dir_tmp_stream]
+    cmp     ax, [tor_dir_stream_id]
+    jne     .next
+    movzx   eax, byte [tor_dir_tmp_cmd]
+    cmp     al, TOR_RELAY_CONNECTED
+    je      .next
+    cmp     al, TOR_RELAY_END
+    je      .parse
+    cmp     al, TOR_RELAY_DATA
+    jne     .next
+    mov     eax, [tor_dir_tmp_len]
+    test    eax, eax
+    jle     .next
+    mov     edx, TOR_RECV_BUF_SIZE
+    sub     edx, r12d
+    jbe     .fail
+    cmp     eax, edx
+    jbe     .copy
+    mov     eax, edx
+.copy:
+    lea     rdi, [tor_dir_resp_buf + r12]
+    lea     rsi, [tor_dir_tmp_data]
+    mov     edx, eax
+    call    er_memcpy
+    add     r12d, eax
+.next:
+    dec     ebx
+    jnz     .recv_loop
+    jmp     .fail
+.parse:
+    cmp     r12d, 0
+    je      .fail
+    mov     [tor_dir_resp_len], r12d
+    lea     rdi, [tor_dir_resp_buf]
+    mov     esi, r12d
+    call    er_http_parse_status
+    pop     r12
+    pop     rbx
+    ret
+.fail:
+    mov     eax, -1
+    pop     r12
+    pop     rbx
+    ret
+
+; ==================================================================
+; er_tor_hsdir_publish_descriptor(descriptor, descriptor_len)
+; Uploads a complete v3 onion-service descriptor over BEGIN_DIR using
+; POST /tor/hs/3/publish. The descriptor must already be signed/encrypted.
+; ==================================================================
+global er_tor_hsdir_publish_descriptor
+er_fn er_tor_hsdir_publish_descriptor
+    push    rbx
+    push    r12
+    push    r13
+    mov     rbx, rdi
+    mov     r12d, esi
+    test    rbx, rbx
+    jz      .fail
+    test    r12d, r12d
+    jz      .fail
+    cmp     r12d, TOR_HS_DESCRIPTOR_MAX_LEN
+    ja      .fail
+
+    mov     dword [tor_dir_stream_open], 0
+    call    er_tor_open_directory_channel
+    test    eax, eax
+    js      .fail
+
+    lea     rdi, [tor_test_buf]
+    mov     esi, 512
+    mov     edx, r12d
+    call    er_tor_hsdir_build_publish_header
+    test    eax, eax
+    js      .fail
+    mov     edi, [tor_circ_id_app]
+    movzx   esi, word [tor_dir_stream_id]
+    mov     edx, TOR_RELAY_DATA
+    lea     rcx, [tor_test_buf]
+    mov     r8d, eax
+    call    er_tor_send_relay
+    test    eax, eax
+    js      .fail
+
+    xor     r13d, r13d
+.send_body:
+    cmp     r13d, r12d
+    jae     .wait_response
+    mov     r8d, r12d
+    sub     r8d, r13d
+    cmp     r8d, TOR_HS_RELAY_DATA_MAX
+    jbe     .chunk_ready
+    mov     r8d, TOR_HS_RELAY_DATA_MAX
+.chunk_ready:
+    mov     edi, [tor_circ_id_app]
+    movzx   esi, word [tor_dir_stream_id]
+    mov     edx, TOR_RELAY_DATA
+    lea     rcx, [rbx + r13]
+    call    er_tor_send_relay
+    test    eax, eax
+    js      .fail
+    add     r13d, r8d
+    jmp     .send_body
+
+.wait_response:
+    call    _tor_hsdir_recv_http
+    cmp     eax, 200
+    jb      .fail
+    cmp     eax, 299
+    ja      .fail
+    xor     eax, eax
+    er_ok
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+.fail:
+    mov     eax, -1
+    er_err  ERROR_TOR_PROTOCOL_ERR
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+
+; ==================================================================
+; er_tor_hsdir_fetch_descriptor(blinded_key_b64, key_len, out, cap, out_len)
+; Downloads a v3 onion-service descriptor from an HSDir over BEGIN_DIR.
+; ==================================================================
+global er_tor_hsdir_fetch_descriptor
+er_fn er_tor_hsdir_fetch_descriptor
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+    mov     rbx, rdi
+    mov     r12d, esi
+    mov     r13, rdx
+    mov     r14d, ecx
+    mov     r15, r8
+    test    r13, r13
+    jz      .fail
+    test    r15, r15
+    jz      .fail
+
+    mov     dword [tor_dir_stream_open], 0
+    call    er_tor_open_directory_channel
+    test    eax, eax
+    js      .fail
+
+    lea     rdi, [tor_test_buf]
+    mov     esi, 512
+    mov     rdx, rbx
+    mov     ecx, r12d
+    call    er_tor_hsdir_build_fetch_request
+    test    eax, eax
+    js      .fail
+    mov     edi, [tor_circ_id_app]
+    movzx   esi, word [tor_dir_stream_id]
+    mov     edx, TOR_RELAY_DATA
+    lea     rcx, [tor_test_buf]
+    mov     r8d, eax
+    call    er_tor_send_relay
+    test    eax, eax
+    js      .fail
+
+    call    _tor_hsdir_recv_http
+    cmp     eax, 200
+    jne     .fail
+    lea     rdi, [tor_dir_resp_buf]
+    mov     esi, [tor_dir_resp_len]
+    call    er_http_find_body
+    test    rax, rax
+    jz      .fail
+    lea     rdx, [tor_dir_resp_buf]
+    mov     ecx, [tor_dir_resp_len]
+    add     rdx, rcx
+    sub     rdx, rax
+    cmp     edx, r14d
+    ja      .fail
+    mov     [r15], edx
+    mov     rdi, r13
+    mov     rsi, rax
+    call    er_memcpy
+    xor     eax, eax
+    er_ok
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+.fail:
+    mov     eax, -1
+    er_err  ERROR_TOR_PROTOCOL_ERR
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+
+; ==================================================================
 ; _tor_parse_u16_dec — parse unsigned decimal port
 ; rdi=ptr, esi=len, returns eax=value or -1
 ; ==================================================================
@@ -1582,6 +1960,14 @@ str_tor_dir_desc_get_prefix: db "GET /tor/server/fp/"
 str_tor_dir_desc_get_prefix_len equ $ - str_tor_dir_desc_get_prefix
 str_tor_dir_desc_get_suffix: db " HTTP/1.1", 0x0D, 0x0A, "Host: tor", 0x0D, 0x0A, "Connection: close", 0x0D, 0x0A, 0x0D, 0x0A
 str_tor_dir_desc_get_suffix_len equ $ - str_tor_dir_desc_get_suffix
+str_tor_hs_fetch_prefix: db "GET /tor/hs/3/"
+str_tor_hs_fetch_prefix_len equ $ - str_tor_hs_fetch_prefix
+str_tor_hs_fetch_suffix: db " HTTP/1.1", 0x0D, 0x0A, "Host: tor", 0x0D, 0x0A, "Connection: close", 0x0D, 0x0A, 0x0D, 0x0A
+str_tor_hs_fetch_suffix_len equ $ - str_tor_hs_fetch_suffix
+str_tor_hs_publish_prefix: db "POST /tor/hs/3/publish HTTP/1.1", 0x0D, 0x0A, "Host: tor", 0x0D, 0x0A, "Content-Length: "
+str_tor_hs_publish_prefix_len equ $ - str_tor_hs_publish_prefix
+str_tor_hs_publish_suffix: db 0x0D, 0x0A, "Connection: close", 0x0D, 0x0A, 0x0D, 0x0A
+str_tor_hs_publish_suffix_len equ $ - str_tor_hs_publish_suffix
 str_tor_ntor_key_prefix: db "ntor-onion-key "
 str_tor_ntor_key_prefix_len equ $ - str_tor_ntor_key_prefix
 str_flag_guard: db "Guard"

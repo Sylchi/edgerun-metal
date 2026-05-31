@@ -527,6 +527,20 @@ pub const State = struct {
         try (Component{ .switch_control = .{ .id = hide_unavailable_switch_id, .label = "Hide Unavailable", .checked = self.hide_unavailable } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, y, inner.w, 32.0), options);
         y += 38.0;
         try (Component{ .switch_control = .{ .id = compact_rows_switch_id, .label = "Compact Density", .checked = self.compact_rows } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, y, inner.w, 32.0), options);
+        y += 46.0;
+
+        if (y + 108.0 <= inner.y + inner.h) {
+            try scene.pushStrongText(ui.Rect.init(inner.x, y, inner.w, 20.0), "Profile", options.style.text);
+            y += 28.0;
+            try (Component{ .input = .{
+                .id = profile_input_id,
+                .placeholder = "Dashboard profile",
+                .value = profileName(self.profile_index),
+                .icon_slot = IconComponent.IconSlot.named(.leading, .edit),
+            } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, y, inner.w, 34.0), options);
+            y += 44.0;
+            try (Component{ .button = .{ .id = profile_cycle_button_id, .label = "Cycle profile", .variant = .outline, .icon_slot = IconComponent.IconSlot.named(.leading, .adjustments) } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, y, inner.w, 34.0), options);
+        }
     }
 
     fn renderActivity(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
@@ -763,6 +777,44 @@ pub const State = struct {
         } else |_| {}
     }
 
+    fn cycleProfile(self: *State) void {
+        self.profile_index = (self.profile_index + 1) % 3;
+        self.setStatus(profileName(self.profile_index));
+    }
+
+    fn appendNote(self: *State) void {
+        const text = selectedComponentLabel(self.selected_component);
+        if (text.len == 0) return;
+        if (self.note_len != 0 and self.note_len < self.note.len - 1) {
+            self.note[self.note_len] = '\n';
+            self.note_len += 1;
+        }
+        const available = self.note.len - self.note_len;
+        if (available <= 1) return self.setStatus("Note full");
+        const copied = @min(text.len, available - 1);
+        _ = bytes.copy(self.note[self.note_len..][0..copied], text[0..copied]);
+        self.note_len += copied;
+        self.note[self.note_len] = 0;
+        self.setStatus("Note updated");
+    }
+
+    fn clearNote(self: *State) void {
+        bytes.zero(self.note[0..]);
+        self.note_len = 0;
+        self.setStatus("Note cleared");
+    }
+
+    fn recordTelemetrySamples(self: *State) void {
+        if (parseTemperatureCelsius(self.detail(1))) |temperature| {
+            self.temp_samples[self.temp_sample_index] = temperature;
+            self.temp_sample_index = (self.temp_sample_index + 1) % self.temp_samples.len;
+            self.temp_sample_len = @min(self.temp_sample_len + 1, self.temp_samples.len);
+        }
+        self.memory_pressure = parseMemoryPressure(self.detail(2)) orelse self.memory_pressure;
+        self.battery_unit = parseBatteryUnit(self.detail(3)) orelse self.battery_unit;
+        self.battery_ready = !std.mem.eql(u8, self.detail(3), unavailable_detail);
+    }
+
     fn updateBacklightState(self: *State, kind: BacklightKind, reading: BacklightReading) void {
         switch (kind) {
             .screen => {
@@ -841,6 +893,14 @@ fn accentName(index: u8) []const u8 {
     };
 }
 
+fn profileName(index: u8) []const u8 {
+    return switch (index % 3) {
+        0 => "Bring-up",
+        1 => "Diagnostics",
+        else => "Operator",
+    };
+}
+
 fn transitionProgress(frame: u64, opened_at: u64) f32 {
     const elapsed = if (frame >= opened_at) frame - opened_at + 1 else 1;
     const unit = @min(@as(f32, 1.0), @as(f32, @floatFromInt(elapsed)) / @as(f32, @floatFromInt(State.transition_frames)));
@@ -873,6 +933,37 @@ fn fittedText(value: []const u8, width: f32) []const u8 {
 fn memoryMetricValue(value: []const u8) []const u8 {
     if (std.mem.startsWith(u8, value, "Total:")) return "Memory online";
     return value;
+}
+
+fn parseTemperatureCelsius(value: []const u8) ?f32 {
+    var fields = std.mem.tokenizeAny(u8, value, " ");
+    const first = fields.next() orelse return null;
+    return std.fmt.parseFloat(f32, first) catch null;
+}
+
+fn parseMemoryPressure(value: []const u8) ?f32 {
+    if (!std.mem.startsWith(u8, value, "Total:")) return null;
+    var total_mb: u32 = 0;
+    var avail_mb: u32 = 0;
+    var fields = std.mem.tokenizeAny(u8, value, " ,:");
+    while (fields.next()) |field| {
+        if (std.mem.eql(u8, field, "Total")) {
+            const raw = fields.next() orelse return null;
+            total_mb = std.fmt.parseUnsigned(u32, raw, 10) catch return null;
+        } else if (std.mem.eql(u8, field, "Avail")) {
+            const raw = fields.next() orelse return null;
+            avail_mb = std.fmt.parseUnsigned(u32, raw, 10) catch return null;
+        }
+    }
+    if (total_mb == 0 or avail_mb > total_mb) return null;
+    return 1.0 - (@as(f32, @floatFromInt(avail_mb)) / @as(f32, @floatFromInt(total_mb)));
+}
+
+fn parseBatteryUnit(value: []const u8) ?f32 {
+    const percent = std.mem.indexOfScalar(u8, value, '%') orelse return null;
+    const raw = std.mem.trim(u8, value[0..percent], &[_]u8{ ' ', '\t' });
+    const battery = std.fmt.parseUnsigned(u32, raw, 10) catch return null;
+    return ui.clampUnit(@as(f32, @floatFromInt(battery)) / 100.0);
 }
 
 fn trimBuf(buf: *[detail_bytes]u8) []const u8 {
@@ -1110,6 +1201,210 @@ fn readNetwork(buf: *[detail_bytes]u8) !void {
         if (rx_bytes > 0) up_count += 1;
     }
     writeBuf(buf, "{d}/{d} interfaces up", .{ up_count, total });
+}
+
+fn readStorage(buf: *[detail_bytes]u8) !void {
+    var content: [4096]u8 = undefined;
+    const n = try readSysfsStr("/proc/mounts", &content);
+    const text = content[0..n];
+    var rw_count: u32 = 0;
+    var total: u32 = 0;
+    var lines = std.mem.splitScalar(u8, text, '\n');
+    while (lines.next()) |line| {
+        if (line.len == 0) continue;
+        var fields = std.mem.splitScalar(u8, line, ' ');
+        _ = fields.next() orelse continue;
+        const mountpoint = fields.next() orelse continue;
+        const fstype = fields.next() orelse continue;
+        const opts = fields.next() orelse continue;
+        if (std.mem.eql(u8, fstype, "proc") or
+            std.mem.eql(u8, fstype, "sysfs") or
+            std.mem.eql(u8, fstype, "devtmpfs") or
+            std.mem.eql(u8, fstype, "devpts") or
+            std.mem.eql(u8, fstype, "tmpfs"))
+        {
+            continue;
+        }
+        total += 1;
+        if (std.mem.indexOf(u8, opts, "rw") != null) rw_count += 1;
+        if (std.mem.eql(u8, mountpoint, "/")) {
+            writeBuf(buf, "root {s}", .{opts});
+            return;
+        }
+    }
+    if (total == 0) return error.ParseFailed;
+    writeBuf(buf, "{d}/{d} mounts writable", .{ rw_count, total });
+}
+
+fn readAudio(buf: *[detail_bytes]u8) !void {
+    var content: [1024]u8 = undefined;
+    if (readSysfsStr("/proc/asound/cards", &content)) |n| {
+        const text = content[0..n];
+        if (std.mem.indexOf(u8, text, "no soundcards") == null) {
+            var count: u32 = 0;
+            var lines = std.mem.splitScalar(u8, text, '\n');
+            while (lines.next()) |line| {
+                const trimmed = std.mem.trim(u8, line, &[_]u8{ ' ', '\t' });
+                if (trimmed.len != 0 and trimmed[0] >= '0' and trimmed[0] <= '9') count += 1;
+            }
+            if (count != 0) {
+                writeBuf(buf, "{d} ALSA cards", .{count});
+                return;
+            }
+        }
+    } else |_| {}
+
+    const nodes = countDirEntries("/dev/snd") catch return error.ReadFailed;
+    if (nodes == 0) return error.ParseFailed;
+    writeBuf(buf, "{d} sound nodes", .{nodes});
+}
+
+fn readCamera(buf: *[detail_bytes]u8) !void {
+    const prefixes = [_][]const u8{ "video", "media" };
+    const nodes = countDirPrefixes("/dev", &prefixes) catch return error.ReadFailed;
+    if (nodes == 0) return error.ParseFailed;
+    writeBuf(buf, "{d} camera nodes", .{nodes});
+}
+
+fn readWireless(buf: *[detail_bytes]u8) !void {
+    var content: [2048]u8 = undefined;
+    if (readSysfsStr("/proc/net/wireless", &content)) |n| {
+        const text = content[0..n];
+        var count: u32 = 0;
+        var first_if: []const u8 = "";
+        var first_quality: []const u8 = "";
+        var lines = std.mem.splitScalar(u8, text, '\n');
+        while (lines.next()) |line| {
+            const colon = std.mem.indexOfScalar(u8, line, ':') orelse continue;
+            const ifname = std.mem.trim(u8, line[0..colon], &[_]u8{ ' ', '\t' });
+            if (ifname.len == 0) continue;
+            count += 1;
+            if (first_if.len == 0) {
+                first_if = ifname;
+                var fields = std.mem.tokenizeAny(u8, line[colon + 1 ..], " \t");
+                _ = fields.next();
+                first_quality = fields.next() orelse "";
+            }
+        }
+        if (count != 0) {
+            if (first_quality.len != 0) {
+                writeBuf(buf, "{s} link {s}", .{ first_if, first_quality });
+            } else {
+                writeBuf(buf, "{d} wireless links", .{count});
+            }
+            return;
+        }
+    } else |_| {}
+
+    const prefixes = [_][]const u8{ "wlan", "wl" };
+    var radio_buf: [32]u8 = [_]u8{0} ** 32;
+    const radio = firstDirPrefix("/sys/class/net", &prefixes, &radio_buf) catch return error.ReadFailed;
+    if (radio.len == 0) return error.ParseFailed;
+    var path_buf: [96]u8 = undefined;
+    const state_path = std.fmt.bufPrint(&path_buf, "/sys/class/net/{s}/operstate", .{radio}) catch return error.ParseFailed;
+    var state_buf: [24]u8 = undefined;
+    const sn = readSysfsStr(state_path, &state_buf) catch return error.ReadFailed;
+    const state = std.mem.trimEnd(u8, state_buf[0..sn], &[_]u8{ '\n', ' ', '\r' });
+    writeBuf(buf, "{s} {s}", .{ radio, state });
+}
+
+fn countDirEntries(path: []const u8) !u32 {
+    const fd = try openDir(path);
+    defer _ = linux.close(fd);
+    var dir_buf: [2048]u8 = undefined;
+    var count: u32 = 0;
+    while (try nextDirBatch(fd, &dir_buf)) |bytes_read| {
+        var offset: usize = 0;
+        while (offset < bytes_read) {
+            const entry = dirEntryName(dir_buf[offset..bytes_read]) orelse return error.ParseFailed;
+            if (!isDotDir(entry.name)) count += 1;
+            offset += entry.reclen;
+        }
+    }
+    return count;
+}
+
+fn countDirPrefixes(path: []const u8, prefixes: []const []const u8) !u32 {
+    const fd = try openDir(path);
+    defer _ = linux.close(fd);
+    var dir_buf: [2048]u8 = undefined;
+    var count: u32 = 0;
+    while (try nextDirBatch(fd, &dir_buf)) |bytes_read| {
+        var offset: usize = 0;
+        while (offset < bytes_read) {
+            const entry = dirEntryName(dir_buf[offset..bytes_read]) orelse return error.ParseFailed;
+            if (!isDotDir(entry.name) and hasAnyPrefix(entry.name, prefixes)) count += 1;
+            offset += entry.reclen;
+        }
+    }
+    return count;
+}
+
+fn firstDirPrefix(path: []const u8, prefixes: []const []const u8, out: *[32]u8) ![]const u8 {
+    const fd = try openDir(path);
+    defer _ = linux.close(fd);
+    var dir_buf: [2048]u8 = undefined;
+    while (try nextDirBatch(fd, &dir_buf)) |bytes_read| {
+        var offset: usize = 0;
+        while (offset < bytes_read) {
+            const entry = dirEntryName(dir_buf[offset..bytes_read]) orelse return error.ParseFailed;
+            if (!isDotDir(entry.name) and hasAnyPrefix(entry.name, prefixes)) {
+                const len = @min(entry.name.len, out.len - 1);
+                bytes.zero(out[0..]);
+                _ = bytes.copy(out[0..len], entry.name[0..len]);
+                return out[0..len];
+            }
+            offset += entry.reclen;
+        }
+    }
+    return "";
+}
+
+const DirEntry = struct {
+    name: []const u8,
+    reclen: usize,
+};
+
+fn openDir(path: []const u8) !i32 {
+    var path_buf: [256]u8 = [_]u8{0} ** 256;
+    if (path.len >= path_buf.len) return error.ReadFailed;
+    @memcpy(path_buf[0..path.len], path);
+    const rc = linux.openat(linux.AT.FDCWD, @ptrCast(&path_buf), linux.O{ .ACCMODE = .RDONLY, .DIRECTORY = true }, 0);
+    if (@as(isize, @bitCast(rc)) < 0) return error.ReadFailed;
+    return @intCast(rc);
+}
+
+fn nextDirBatch(fd: i32, dir_buf: *[2048]u8) !?usize {
+    const rc = linux.getdents64(fd, dir_buf.ptr, dir_buf.len);
+    if (@as(isize, @bitCast(rc)) < 0) return error.ReadFailed;
+    if (rc == 0) return null;
+    return rc;
+}
+
+fn dirEntryName(raw: []const u8) ?DirEntry {
+    const reclen_offset: usize = 16;
+    const name_offset: usize = 19;
+    if (raw.len < name_offset) return null;
+    const reclen = std.mem.readInt(u16, raw[reclen_offset..][0..2], .little);
+    if (reclen < name_offset or reclen > raw.len) return null;
+    const name_raw = raw[name_offset..reclen];
+    var name_len: usize = 0;
+    while (name_len < name_raw.len and name_raw[name_len] != 0) : (name_len += 1) {}
+    return .{
+        .name = name_raw[0..name_len],
+        .reclen = reclen,
+    };
+}
+
+fn isDotDir(name: []const u8) bool {
+    return std.mem.eql(u8, name, ".") or std.mem.eql(u8, name, "..");
+}
+
+fn hasAnyPrefix(name: []const u8, prefixes: []const []const u8) bool {
+    for (prefixes) |prefix| {
+        if (std.mem.startsWith(u8, name, prefix)) return true;
+    }
+    return false;
 }
 
 fn writeBuf(buf: *[detail_bytes]u8, comptime format: []const u8, args: anytype) void {

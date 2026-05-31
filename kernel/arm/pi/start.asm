@@ -11,7 +11,6 @@
 @ Peripheral base for Pi Zero W v1.1 (BCM2835)
 .equ PERIPHERAL_BASE, 0x20000000
 .equ PL011_BASE,      PERIPHERAL_BASE + 0x00201000
-.equ GP_BASE,         PERIPHERAL_BASE + 0x00200000
 .equ MAILBOX_BASE,    PERIPHERAL_BASE + 0x0000b880
 
 @ PL011 register offsets
@@ -65,9 +64,12 @@
 @ External references
 .extern emmc_init
 .extern emmc_read_block
+.extern emmc_sdio_wifi_enable
 .extern dwc2_init
 .extern dwc2_port_detect
 .extern dwc2_enumerate
+.extern gpio_led_init
+.extern gpio_led_on
 
 @ USB speed constants (from dwc2.asm)
 .equ USB_SPEED_HS, 0
@@ -265,31 +267,6 @@ pl011_putdec32:
     bl      pl011_puts
     pop     {r4, r5, pc}
 
-@ GPIO helpers (ACT LED = GPIO 47 on Pi Zero W)
-gpio_led_init:
-    push    {lr}
-    @ GPFSEL4: GPIO 47 in bits 21-23, set to 001 (output)
-    ldr     r1, =GP_BASE
-    ldr     r0, [r1, #0x10]
-    bic     r0, r0, #0x00700000
-    orr     r0, r0, #0x00100000
-    str     r0, [r1, #0x10]
-    pop     {pc}
-
-gpio_led_on:
-    @ GPSET1: GPIO 47 is bit 15
-    ldr     r1, =GP_BASE
-    mov     r0, #(1 << 15)
-    str     r0, [r1, #0x20]
-    bx      lr
-
-gpio_led_off:
-    @ GPCLR1: GPIO 47 is bit 15
-    ldr     r1, =GP_BASE
-    mov     r0, #(1 << 15)
-    str     r0, [r1, #0x2c]
-    bx      lr
-
 @ __udivmod -- unsigned division
 @ r0 = quotient on return, r1 = remainder
 __udivmod:
@@ -470,6 +447,61 @@ kernel_main:
     bl      pl011_puts
     bl      pl011_crlf
 
+    @ Probe Pi Zero W CYW43438 SDIO before SD-memory init.
+    ldr     r0, =msg_wifi_probe
+    bl      pl011_puts
+    ldr     r0, =wifi_probe_buf
+    bl      emmc_sdio_wifi_enable
+    cmp     r0, #0
+    bne     .Lwifi_fail
+    ldr     r0, =msg_ok
+    bl      pl011_puts
+    ldr     r0, =msg_wifi_ocr
+    bl      pl011_puts
+    ldr     r0, =wifi_probe_buf
+    ldr     r0, [r0]
+    bl      pl011_puthex32
+    ldr     r0, =msg_wifi_cccr
+    bl      pl011_puts
+    ldr     r0, =wifi_probe_buf
+    ldr     r0, [r0, #4]
+    bl      pl011_puthex32
+    ldr     r0, =msg_wifi_ready
+    bl      pl011_puts
+    ldr     r0, =wifi_probe_buf
+    ldr     r0, [r0, #8]
+    bl      pl011_puthex32
+    ldr     r0, =msg_wifi_bus
+    bl      pl011_puts
+    ldr     r0, =wifi_probe_buf
+    ldr     r0, [r0, #12]
+    bl      pl011_puthex32
+    ldr     r0, =msg_wifi_block
+    bl      pl011_puts
+    ldr     r0, =wifi_probe_buf
+    ldr     r0, [r0, #16]
+    bl      pl011_puthex32
+    ldr     r0, =msg_wifi_clk
+    bl      pl011_puts
+    ldr     r0, =wifi_probe_buf
+    ldr     r0, [r0, #20]
+    bl      pl011_puthex32
+    ldr     r0, =msg_wifi_sig
+    bl      pl011_puts
+    ldr     r0, =wifi_probe_buf
+    ldr     r0, [r0, #24]
+    bl      pl011_puthex32
+    bl      pl011_crlf
+    b       .Lwifi_done
+
+.Lwifi_fail:
+    ldr     r0, =msg_fail
+    bl      pl011_puts
+    bl      pl011_crlf
+    b       hang
+
+.Lwifi_done:
+
     @ Init SD card
     ldr     r0, =msg_sd_init
     bl      pl011_puts
@@ -616,6 +648,14 @@ msg_hz:     .asciz " Hz"
 msg_sd_init:.asciz "\r\nSD init: "
 msg_sd_read:.asciz "\r\nSD read:  "
 msg_sig:    .asciz "\r\nMBR sig:  0x"
+msg_wifi_probe:.asciz "\r\nWiFi SDIO probe: "
+msg_wifi_ocr:.asciz " OCR="
+msg_wifi_cccr:.asciz " CCCR="
+msg_wifi_ready:.asciz " READY="
+msg_wifi_bus:.asciz " BUS="
+msg_wifi_block:.asciz " BLK="
+msg_wifi_clk:.asciz " CLK="
+msg_wifi_sig:.asciz " SIG="
 msg_ok:     .asciz "ok"
 msg_fail:   .asciz "FAIL"
 msg_usb_init:.asciz "\r\nUSB init: "
@@ -708,3 +748,7 @@ stack_top:
 .balign 512
 sector_buf:
     .space 512
+
+.align 4
+wifi_probe_buf:
+    .space 28

@@ -10,6 +10,8 @@ extern er_tor_aes256_ctr
 extern er_tor_set_role
 extern er_tor_get_role
 extern er_tor_get_role_caps
+extern er_tor_hsdir_build_publish_header
+extern er_tor_hsdir_build_fetch_request
 extern er_memcpy
 
 SECTION .data
@@ -55,9 +57,23 @@ test_ct256:
           db 0xe8, 0x70, 0x17, 0xba, 0x2d, 0x84, 0x98, 0x8d
           db 0xdf, 0xc9, 0xc5, 0x8d, 0xb6, 0x7a, 0xad, 0xa6
           db 0x13, 0xc2, 0xdd, 0x08, 0x45, 0x79, 0x41, 0xa6
+hsdir_blinded: db "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789+abc"
+hsdir_blinded_len equ $ - hsdir_blinded
+hsdir_publish_expected:
+          db "POST /tor/hs/3/publish HTTP/1.1", 0x0D, 0x0A
+          db "Host: tor", 0x0D, 0x0A
+          db "Content-Length: 123", 0x0D, 0x0A
+          db "Connection: close", 0x0D, 0x0A, 0x0D, 0x0A
+hsdir_publish_expected_len equ $ - hsdir_publish_expected
+hsdir_fetch_expected:
+          db "GET /tor/hs/3/AbCdEfGhIjKlMnOpQrStUvWxYz0123456789+abc HTTP/1.1", 0x0D, 0x0A
+          db "Host: tor", 0x0D, 0x0A
+          db "Connection: close", 0x0D, 0x0A, 0x0D, 0x0A
+hsdir_fetch_expected_len equ $ - hsdir_fetch_expected
 
 SECTION .bss
 buf:      resb 64
+req_buf:  resb 512
 iv_copy:  resb 16
 bench_buf: resb TOR_CELL_LEN
 tor_conn_id: resd 1
@@ -363,6 +379,37 @@ _start:
     ASSERT_EQ eax, -1
     call    er_tor_get_role
     ASSERT_EQ eax, TOR_ROLE_HS_RENDEZVOUS
+
+; ================================================================
+; Test 10: HSDir v3 publish POST header
+; ================================================================
+    TEST_LABEL "10"
+    lea     rdi, [rel req_buf]
+    mov     esi, 512
+    mov     edx, 123
+    call    er_tor_hsdir_build_publish_header
+    ASSERT_EQ eax, hsdir_publish_expected_len
+    lea     rdi, [rel hsdir_publish_expected]
+    lea     rsi, [rel req_buf]
+    mov     edx, hsdir_publish_expected_len
+    call    _mem_eq
+    ASSERT eax
+
+; ================================================================
+; Test 11: HSDir v3 descriptor fetch GET request
+; ================================================================
+    TEST_LABEL "11"
+    lea     rdi, [rel req_buf]
+    mov     esi, 512
+    lea     rdx, [rel hsdir_blinded]
+    mov     ecx, hsdir_blinded_len
+    call    er_tor_hsdir_build_fetch_request
+    ASSERT_EQ eax, hsdir_fetch_expected_len
+    lea     rdi, [rel hsdir_fetch_expected]
+    lea     rsi, [rel req_buf]
+    mov     edx, hsdir_fetch_expected_len
+    call    _mem_eq
+    ASSERT eax
 
 %ifdef TOR_BENCH
 ; ================================================================

@@ -564,7 +564,7 @@ er_wasm_parse_code_section:
     push    r10
         mov     r10, r14
         imul    r10, CODE_SIZE
-    mov     [code_buf + r10], rsi         ; body_offset (pointer into wasm bytes)
+    mov     [code_buf + r10], rsi         ; provisional body_offset before locals
         pop     r10
     ; body_len = r15 - rsi (computed later after locals)
     push    r10
@@ -610,6 +610,12 @@ er_wasm_parse_code_section:
     jmp     .local_group_loop
 
 .locals_done:
+    ; Store the executable body start after local declarations.
+    push    r10
+        mov     r10, r14
+        imul    r10, CODE_SIZE
+    mov     [code_buf + r10], rsi         ; body_offset (pointer into wasm bytes)
+        pop     r10
     ; Store local count
     push    r10
         mov     r10, r14

@@ -195,7 +195,10 @@ pub fn nextMessage(buffer: []const u8) ?protocol.Message {
 
 pub fn handleMessage(state: *protocol.WaylandState, kind: protocol.ObjectKind, message: protocol.Message) !void {
     switch (kind) {
-        .display => if (message.opcode == protocol.wl_display_error_event) return error.WaylandProtocolError,
+        .display => if (message.opcode == protocol.wl_display_error_event) {
+            printDisplayError(message.payload);
+            return error.WaylandProtocolError;
+        },
         .registry => if (message.opcode == protocol.wl_registry_global_event) {
             const global = try parseRegistryGlobal(message.payload);
             try state.registry.add(global);
@@ -221,6 +224,22 @@ pub fn handleMessage(state: *protocol.WaylandState, kind: protocol.ObjectKind, m
     }
 }
 
+fn printDisplayError(payload: []const u8) void {
+    if (payload.len < 12) {
+        std.debug.print("wayland error: truncated display error\n", .{});
+        return;
+    }
+    const object_id = std.mem.readInt(u32, payload[0..4], .little);
+    const code = std.mem.readInt(u32, payload[4..8], .little);
+    const wire_len = std.mem.readInt(u32, payload[8..12], .little);
+    if (wire_len == 0 or 12 + wire_len > payload.len) {
+        std.debug.print("wayland error: object {d} code {d}\n", .{ object_id, code });
+        return;
+    }
+    const raw = payload[12 .. 12 + wire_len - 1];
+    std.debug.print("wayland error: object {d} code {d}: {s}\n", .{ object_id, code, raw });
+}
+
 pub fn parseRegistryGlobal(payload: []const u8) !protocol.RegistryGlobal {
     if (payload.len < 12) return error.InvalidWaylandMessage;
     const name = std.mem.readInt(u32, payload[0..4], .little);
@@ -230,6 +249,7 @@ pub fn parseRegistryGlobal(payload: []const u8) !protocol.RegistryGlobal {
     if (payload.len < 8 + padded + 4) return error.InvalidWaylandMessage;
     const interface_name = payload[8 .. 8 + string_len - 1];
     const version = std.mem.readInt(u32, payload[8 + padded ..][0..4], .little);
+    std.debug.print("wayland global {d}: {s} v{d}\n", .{ name, interface_name, version });
     return .{ .name = name, .interface = registryInterface(interface_name), .version = version };
 }
 

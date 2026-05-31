@@ -137,6 +137,7 @@ extern fb_cursor_x, fb_cursor_y
 extern fb_addr
 
 extern er_amdgpu_probe
+extern er_amdgpu_probe_get_stage
 extern er_amdgpu_print_info
 extern er_amdgpu_init
 extern er_amdgpu_dcn_init
@@ -306,6 +307,7 @@ check_abs:     db "absent", 0
 check_virtio_net: db "check: virtio_net ", 0
 check_amdgpu:  db "check: amdgpu ", 0
 check_amdgpu_abs: db "check: amdgpu absent", 0
+check_amdgpu_stage: db " stage ", 0
 check_amdgpu_dcn: db " DCN init: ", 0
 check_sdhci:     db "check: sdhci ", 0
 check_sdhci_abs: db "check: sdhci absent", 0
@@ -2304,6 +2306,11 @@ er_fn er_kernel_main
     mov     edi, 0x6402000A        ; 10.0.2.100
     lea     rsi, [rel .gw_mac]
     call    er_arp_add_static
+    ; Static ARP entry for QEMU user-mode gateway (10.0.2.2 -> 52:55:0a:00:02:02)
+    ; Needed for direct public ORPort traffic that routes off-subnet.
+    mov     edi, 0x0202000A        ; 10.0.2.2
+    lea     rsi, [rel .qemu_gw_mac]
+    call    er_arp_add_static
     ; Debug: verify ARP cache entry exists
     sub     rsp, 8             ; stack space for MAC output
     mov     edi, 0x6402000A   ; 10.0.2.100
@@ -2326,6 +2333,8 @@ er_fn er_kernel_main
 
 .gw_mac:
     db 0x52, 0x55, 0x0a, 0x00, 0x02, 0x64
+.qemu_gw_mac:
+    db 0x52, 0x55, 0x0a, 0x00, 0x02, 0x02
 
 .virtio_net_absent:
     mov     rdi, COM1_PORT
@@ -2426,6 +2435,19 @@ er_fn er_kernel_main
 
 .amdgpu_fail:
     add     rsp, 16
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_amdgpu_abs]
+    call    er_serial_puts
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_amdgpu_stage]
+    call    er_serial_puts
+    call    er_amdgpu_probe_get_stage
+    mov     rdi, COM1_PORT
+    mov     esi, eax
+    call    er_serial_puthex32
+    call    .crlf
+    add     rsp, 3
+    jmp     .intel_gpu_check
 .amdgpu_absent:
     mov     rdi, COM1_PORT
     lea     rsi, [rel check_amdgpu_abs]
