@@ -361,6 +361,24 @@ SECTION .text
     pop     r12
 %endmacro
 
+%macro ser_puts 1
+    mov     rdi, COM1_PORT
+    mov     rsi, %1
+    call    er_serial_puts
+%endmacro
+
+%macro ser_putchar_imm 1
+    mov     rdi, COM1_PORT
+    mov     rsi, %1
+    call    er_serial_putchar
+%endmacro
+
+%macro ser_putchar_sil_imm 1
+    mov     rdi, COM1_PORT
+    mov     sil, %1
+    call    er_serial_putchar
+%endmacro
+
 er_fn er_kernel_main
     push    rbx
     push    r12
@@ -368,9 +386,7 @@ er_fn er_kernel_main
     push    r14
     push    r15
 
-    mov     rdi, COM1_PORT
-    mov     rsi, 'Z'
-    call    er_serial_putchar
+    ser_putchar_imm 'Z'
 
     ; Initialize serial COM1 at 115200 baud
     mov     rdi, COM1_PORT
@@ -378,9 +394,7 @@ er_fn er_kernel_main
     call    er_serial_init
 
     ; Print banner
-    mov     rdi, COM1_PORT
-    mov     rsi, banner
-    call    er_serial_puts
+    ser_puts banner
     call    .crlf
 
     ; Initialize optional display capability.
@@ -388,18 +402,14 @@ er_fn er_kernel_main
 
     ; ─── TPM ────────────────────────────────────────────────────────
     ; Debug: test MMIO reads from UC 2MB page
-    mov     rdi, COM1_PORT
-    mov     sil, 'I'
-    call    er_serial_putchar
+    ser_putchar_sil_imm 'I'
     mov     edi, 0xFEC00000       ; IOAPIC ID register
     call    er_mmio_read32
     push    rax
     mov     rdi, COM1_PORT
     mov     esi, eax
     call    er_serial_puthex32
-    mov     rdi, COM1_PORT
-    mov     sil, ' '
-    call    er_serial_putchar
+    ser_putchar_sil_imm ' '
     pop     rax
     mov     edi, 0xFED40030       ; TPM CRB_INTF_ID
     call    er_mmio_read32
@@ -407,9 +417,7 @@ er_fn er_kernel_main
     mov     rdi, COM1_PORT
     mov     esi, eax
     call    er_serial_puthex32
-    mov     rdi, COM1_PORT
-    mov     sil, ' '
-    call    er_serial_putchar
+    ser_putchar_sil_imm ' '
     pop     rax
     call    er_tpm_crb_present
     test    eax, eax
@@ -1877,15 +1885,11 @@ er_fn er_kernel_main
     mov     r8, 1
     call    er_fn_run
     push    rax
-    mov     rdi, COM1_PORT
-    lea     rsi, [rel check_minimal]
-    call    er_serial_puts
+    ser_puts check_minimal
     pop     rsi
     mov     rdi, COM1_PORT
     call    er_serial_puthex64
-    mov     rdi, COM1_PORT
-    mov     sil, ' '
-    call    er_serial_putchar
+    ser_putchar_sil_imm ' '
     call    .crlf
 
     ; ── Test 3: DA test (wasm imports, memory, calls da_surface_register) ──
@@ -1903,15 +1907,11 @@ er_fn er_kernel_main
     call    er_fn_run
     push    rax
     push    rdx
-    mov     rdi, COM1_PORT
-    lea     rsi, [rel check_da_wasm]
-    call    er_serial_puts
+    ser_puts check_da_wasm
     pop     rsi
     mov     rdi, COM1_PORT
     call    er_serial_puthex64
-    mov     rdi, COM1_PORT
-    mov     sil, ' '
-    call    er_serial_putchar
+    ser_putchar_sil_imm ' '
     pop     rsi
     mov     rdi, COM1_PORT
     call    er_serial_puthex64
@@ -1922,9 +1922,7 @@ er_fn er_kernel_main
 
 .pass:
     ; PASS — serial
-    mov     rdi, COM1_PORT
-    mov     rsi, pass_text
-    call    er_serial_puts
+    ser_puts pass_text
     call    .crlf
 
     ; PASS — VGA/fb display
@@ -1935,33 +1933,23 @@ er_fn er_kernel_main
 
     ; ─── Tor client init ─────────────────────────────────────
     call    er_tor_init
-    mov     rdi, COM1_PORT
-    lea     rsi, [rel .dbg_tor]
-    call    er_serial_puts
+    ser_puts .dbg_tor
 
     ; ─── Local cell transport init ───────────────────────────
     call    er_local_cell_init
-    mov     rdi, COM1_PORT
-    lea     rsi, [rel .dbg_cell]
-    call    er_serial_puts
+    ser_puts .dbg_cell
 
     ; ─── Local circuit transport init ────────────────────────
     call    er_local_circuit_init
-    mov     rdi, COM1_PORT
-    lea     rsi, [rel .dbg_circ]
-    call    er_serial_puts
+    ser_puts .dbg_circ
 
     ; ─── Agent init ──────────────────────────────────────────
     call    er_agent_http_init
-    mov     rdi, COM1_PORT
-    lea     rsi, [rel .dbg_agent]
-    call    er_serial_puts
+    ser_puts .dbg_agent
 
     ; ─── Display Agent init ──────────────────────────────────
     call    er_da_init
-    mov     rdi, COM1_PORT
-    lea     rsi, [rel .dbg_da_init]
-    call    er_serial_puts
+    ser_puts .dbg_da_init
 
     ; ─── Keyboard Input Agent init ──────────────────────────
     call    er_input_kbd_init
@@ -1994,9 +1982,7 @@ er_fn er_kernel_main
 .main_loop:
     push    rdi
     push    rsi
-    mov     edi, COM1_PORT
-    mov     esi, '.'
-    call    er_serial_putchar
+    ser_putchar_imm '.'
     pop     rsi
     pop     rdi
     ; Advance kernel clock by 1 tick per iteration

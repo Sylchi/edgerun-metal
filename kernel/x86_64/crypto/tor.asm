@@ -92,6 +92,7 @@ tor_dir_tmp_cmd: resb 1
 tor_dir_tmp_len: resd 1
 tor_dir_tmp_data: resb 512
 tor_dir_guard_id: resb 20
+tor_guard_onion_key: resb 32
 
 SECTION .text
 
@@ -1126,6 +1127,12 @@ tor_80: dw 80
 str_http_request: db "GET / HTTP/1.1", 0x0D, 0x0A, "Host: check.torproject.org", 0x0D, 0x0A, "Connection: close", 0x0D, 0x0A, 0x0D, 0x0A, 0
 str_tor_dir_consensus_get: db "GET /tor/status-vote/current/consensus HTTP/1.1", 0x0D, 0x0A, "Host: tor", 0x0D, 0x0A, "Connection: close", 0x0D, 0x0A, 0x0D, 0x0A
 str_tor_dir_consensus_get_len equ $ - str_tor_dir_consensus_get
+str_tor_dir_desc_get_prefix: db "GET /tor/server/fp/"
+str_tor_dir_desc_get_prefix_len equ $ - str_tor_dir_desc_get_prefix
+str_tor_dir_desc_get_suffix: db " HTTP/1.1", 0x0D, 0x0A, "Host: tor", 0x0D, 0x0A, "Connection: close", 0x0D, 0x0A, 0x0D, 0x0A
+str_tor_dir_desc_get_suffix_len equ $ - str_tor_dir_desc_get_suffix
+str_tor_ntor_key_prefix: db "ntor-onion-key "
+str_tor_ntor_key_prefix_len equ $ - str_tor_ntor_key_prefix
 
 SECTION .text
 

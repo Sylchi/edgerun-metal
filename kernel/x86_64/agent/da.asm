@@ -130,17 +130,23 @@ shell_bar_count: dq (shell_bar_rects_end - shell_bar_rects) / 60
 ; DA message dispatch table: [msg_type:1][pad:7][handler_ptr:8]
 da_msg_dispatch_table:
     db DA_MSG_SURFACE_REGISTER, 0, 0, 0, 0, 0, 0, 0
-    dq _da_dispatch_register
+    dd _da_dispatch_register
+    dd 0
     db DA_MSG_SURFACE_UPDATE, 0, 0, 0, 0, 0, 0, 0
-    dq _da_dispatch_update
+    dd _da_dispatch_update
+    dd 0
     db DA_MSG_SURFACE_UNREGISTER, 0, 0, 0, 0, 0, 0, 0
-    dq _da_dispatch_unregister
+    dd _da_dispatch_unregister
+    dd 0
     db DA_MSG_LAUNCH_APP, 0, 0, 0, 0, 0, 0, 0
-    dq _da_dispatch_launch
+    dd _da_dispatch_launch
+    dd 0
     db DA_MSG_APP_EXIT, 0, 0, 0, 0, 0, 0, 0
-    dq _da_dispatch_exit
+    dd _da_dispatch_exit
+    dd 0
     db DA_MSG_SURFACE_FOCUS, 0, 0, 0, 0, 0, 0, 0
-    dq _da_dispatch_focus
+    dd _da_dispatch_focus
+    dd 0
 da_msg_dispatch_table_end:
 da_msg_dispatch_count: dq (da_msg_dispatch_table_end - da_msg_dispatch_table) / 16
 
@@ -227,7 +233,8 @@ _da_handler:
 .dispatch_hit:
     mov     rdi, r12
     mov     esi, r13d
-    call    qword [rax + 8]
+    mov     eax, dword [rax + 8]
+    call    rax
     jmp     .done
 
 .unknown:
