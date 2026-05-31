@@ -17,6 +17,7 @@ const renderControlText = primitives.renderControlText;
 
 pub const Calendar = struct {
     id: u32,
+    flags: common.ComponentFlags = .{},
     month: []const u8,
     selected_day: u16,
 

@@ -18,6 +18,7 @@ const contentInset = component_primitives.contentInset;
 
 pub const Menubar = struct {
     id: u32,
+    flags: common.ComponentFlags = .{},
     first: []const u8,
     second: []const u8,
     active: u16 = 0,

@@ -30,7 +30,6 @@ const ui_codec = @import("../ui/codec.zig");
 pub const ui_component_common = @import("../ui/component_common.zig");
 const vfs = @import("../vfs.zig");
 pub const ui_runtime = @import("../ui/runtime.zig");
-pub const wasm_interpreter = @import("../wasm/root.zig");
 
 pub const max_width: usize = 4096;
 pub const max_height: usize = 2880;

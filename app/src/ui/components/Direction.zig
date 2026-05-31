@@ -20,6 +20,7 @@ const Icon = icon_component.Icon;
 
 pub const Direction = struct {
     id: u32,
+    flags: common.ComponentFlags = .{},
     active: u16,
 
     pub fn node(self: Direction) ui.Node {

@@ -18,6 +18,7 @@ const Icon = icon_component.Icon;
 
 pub const Breadcrumb = struct {
     id: u32,
+    flags: common.ComponentFlags = .{},
     first: []const u8,
     current: []const u8,
 

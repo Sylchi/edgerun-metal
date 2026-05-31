@@ -190,6 +190,40 @@ pub const ControlState = struct {
     }
 };
 
+pub const ComponentFlags = struct {
+    disabled: bool = false,
+    readonly: bool = false,
+    invalid: bool = false,
+    loading: bool = false,
+
+    pub fn apply(self: ComponentFlags, options: RenderOptions) RenderOptions {
+        var next = options;
+        next.control.disabled = next.control.disabled or self.disabled;
+        next.control.invalid = next.control.invalid or self.invalid;
+        next.control.loading = next.control.loading or self.loading;
+        return next;
+    }
+};
+
+pub const ComponentContract = struct {
+    requires_id: bool = true,
+    requires_flags: bool = true,
+    requires_accessibility: bool = true,
+    requires_interactions: bool = false,
+};
+
+pub fn assertComponentContract(comptime T: type, comptime contract: ComponentContract) void {
+    if (!@hasDecl(T, "node")) @compileError(@typeName(T) ++ " must define node");
+    if (!@hasDecl(T, "render")) @compileError(@typeName(T) ++ " must define render");
+    if (!@hasDecl(T, "measure")) @compileError(@typeName(T) ++ " must define measure");
+    if (contract.requires_interactions and !@hasDecl(T, "collectInteractions")) @compileError(@typeName(T) ++ " must define collectInteractions");
+    if (!@hasDecl(T, "writeRecord")) @compileError(@typeName(T) ++ " must define writeRecord");
+    if (!@hasDecl(T, "fromNode")) @compileError(@typeName(T) ++ " must define fromNode");
+    if (contract.requires_accessibility and !@hasDecl(T, "accessibility")) @compileError(@typeName(T) ++ " must define accessibility");
+    if (contract.requires_id and !@hasField(T, "id")) @compileError(@typeName(T) ++ " must define id field");
+    if (contract.requires_flags and !@hasField(T, "flags")) @compileError(@typeName(T) ++ " must define flags field");
+}
+
 pub const InteractionState = struct {
     hovered_id: ?u32 = null,
     active_id: ?u32 = null,

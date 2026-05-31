@@ -37,16 +37,16 @@ The repository has two code worlds separated by a hard boundary:
   assembly using the project's own DSL (`macros.inc`). Owns the kernel, drivers,
   boot path, PCI, MMIO, serial, TPM, framebuffer, WASM interpreter, render IR,
   UI shell, and all host tooling.
-- **App-side** — Zig source compiled to WASM. Runs inside the EdgeRun WASM
-  interpreter. Must have zero host assumptions: no syscalls, no libc, no POSIX,
-  no platform intrinsics. Authority enters only through explicit EdgeRun
-  import contracts backed by requirements and receipts.
+- **App-side** — Zig source compiled to WASM. Runs inside the canonical
+  host-side EdgeRun WASM interpreter. Must have zero host assumptions: no
+  syscalls, no libc, no POSIX, no platform intrinsics. Authority enters only
+  through explicit EdgeRun import contracts backed by requirements and receipts.
 
 ## Workspace & Language
 
 - **The project has two languages, each owning its side of the boundary:**
   - **Host-side:** x86_64 assembly DSL defined in `kernel/x86_64/macros.inc` — `er_fn`, `er_fnstr`, `er_frame_push`, `er_push_all`, etc. This IS the dogfooding target. All host-side production code must be written in this DSL.
-  - **App-side:** Zig source compiled to WASM. This is the intended path for application logic that runs inside the WASM interpreter. Zig is the app-side language — not deprecated, not frozen.
+  - **App-side:** Zig source compiled to WASM. This is an app-authoring path for application logic that runs inside the host-side WASM interpreter. App-side code must not contain a competing WASM interpreter.
 - `kernel/x86_64/` — canonical hardware-near implementation, organized by subsystem:
   - Root: `macros.inc`, `wasm_defines.inc`, `entry.asm`, `kernel_main.asm`, `efi_entry.asm`, `linker.ld`, `efi_linker.ld`
   - `drv/` — hardware drivers
@@ -62,7 +62,7 @@ The repository has two code worlds separated by a hard boundary:
 - `kernel/arm/pi/` — Raspberry Pi Zero W kernel, mailbox, EMMC, DWC2 USB.
 - `kernel/host/` — Linux userspace host tools (Pi USB boot, ESP32 serial boot).
 - `kernel/driver/` — hardware drivers (serial, i8042, pci, virtio*, xhci, nvme, rtl8125, amdgpu, intel_*, i2c_hid, cros_ec, spi_flash, display, fb_text, etc.)
-- `edgerun-zig/` — app-side Zig frontend (compiles to WASM). This is the primary app development path — write apps here, compile to WASM, run on the WASM interpreter. The self-hosted WASM compiler (`kernel/x86_64/wasm_compiler*.asm`) is a host-side build tool replacement, not a replacement for app-side Zig.
+- `app/` — app-side Zig frontend and browser-facing app runtime. App code compiles to WASM and runs on the canonical host-side WASM interpreter/import contract. Do not add an app-side WASM interpreter.
 - `build.sh` — all build commands.
 
 ## External Dependencies (to eliminate)

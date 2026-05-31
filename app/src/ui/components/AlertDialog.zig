@@ -15,6 +15,7 @@ const RenderOptions = common.RenderOptions;
 
 pub const AlertDialog = struct {
     id: u32,
+    flags: common.ComponentFlags = .{},
     title: []const u8,
     detail: []const u8,
 

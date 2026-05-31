@@ -8,10 +8,11 @@ The repository has two distinct code worlds with a hard boundary:
   (`kernel/x86_64/macros.inc`). This owns the kernel, drivers, boot path, PCI, MMIO,
   serial, TPM, framebuffer, interrupt management, and the WASM interpreter.
   No C, no Zig, no external runtime. Built with `yasm` + `ld` via `build.sh`.
-- **App-side code** — Zig, compiled to WASM, running inside the EdgeRun WASM
-  interpreter. Apps must have zero host assumptions: no syscalls, no libc,
-  no POSIX, no platform intrinsics. Authority enters only through explicit
-  EdgeRun import contracts backed by requirements and receipts.
+- **App-side code** — Zig, compiled to WASM, running inside the canonical
+  host-side EdgeRun WASM interpreter. Apps must have zero host assumptions:
+  no syscalls, no libc, no POSIX, no platform intrinsics. Authority enters
+  only through explicit EdgeRun import contracts backed by requirements and
+  receipts.
   The Zig toolchain is being removed from production boot paths and retained
   only as an app-authoring frontend until the self-hosted compiler replaces it.
 
@@ -107,8 +108,8 @@ verify the receipt
   - `kernel/host/` — x86_64 ASM Linux userspace host tools for Pi USB boot and
     ESP32 serial boot.
   - `kernel/test/` — self-hosted ASM test runners.
-- `app/` — app-side Zig frontend. Zig remains the app-authoring path: source is
-  compiled to WASM and run inside EdgeRun's interpreter/import contract.
+- `app/` — app-side Zig frontend. Zig remains an app-authoring path: source is
+  compiled to WASM and run by the host-side EdgeRun interpreter/import contract.
   - `app/src/` — app object model, identity, clock, storage, grants, receipts,
     media, UI, UEFI smoke paths, Pi helpers, and host-facing dev tools.
   - `app/src/ui/` — shared app render contract consumed by web, CPU, Wayland,
@@ -120,12 +121,14 @@ verify the receipt
 
 - A Zig core for canonical objects, identities, deterministic clocks,
   append-only storage, sealed movement, grants, manifests, and receipts.
-- A deterministic EdgeRun WASM interpreter for running app code without WASI or
-  a fake host filesystem.
+- A deterministic x86_64 ASM EdgeRun WASM interpreter for running app code
+  without WASI or a fake host filesystem.
 - App containment tests for host-mediated spawn, reclaim, and child-memory
   boundaries.
-- An app runtime that embeds repo source as an object, edits it in WASM-owned
-  memory, and runs an embedded compiler path toward successor WASM.
+- An app runtime that embeds repo source as an object and edits it in
+  WASM-owned memory. Successor artifact compilation is intentionally routed to
+  the canonical host-side compiler/runtime path; there is no app-side Zig WASM
+  interpreter.
 - A shared app render contract consumed by web host, CPU software rendering,
   Wayland, GLES, and DRM/GBM host paths.
 - Repo-owned font, SVG icon, image, video, and audio decode/render paths.

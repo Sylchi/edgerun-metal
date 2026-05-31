@@ -17,6 +17,7 @@ const constrainPreferredSize = component_primitives.constrainPreferredSize;
 
 pub const Slider = struct {
     id: u32,
+    flags: common.ComponentFlags = .{},
     label: []const u8,
     value: f32,
 

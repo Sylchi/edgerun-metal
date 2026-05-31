@@ -28,7 +28,6 @@ const gles_wasm = @import("render/backends/gles_wasm.zig");
 const wasm_gl = @import("render/wasm_gl.zig");
 const gl_contract = @import("render/gl_contract.zig");
 const app_input_event = @import("input/event.zig");
-const wasm_interpreter = state.wasm_interpreter;
 const er = @import("er");
 
 pub const max_width = state.max_width;
@@ -319,9 +318,6 @@ export fn er_ui_last_compiler_diagnostic_len() usize { return state.last_compile
 export fn er_ui_last_compile_phase() u32 { return @intFromEnum(state.last_compile_phase); }
 export fn er_ui_last_compile_progress_permille() u32 { return state.last_compile_progress_permille; }
 export fn er_ui_last_compile_instructions() u64 { return state.last_compile_instructions; }
-
-export fn er_ui_compiler_wasm_ptr() usize { return @intFromPtr(&state.compiler_runtime_memory); }
-export fn er_ui_compiler_wasm_len() usize { return state.compiler_runtime_memory.len; }
 
 export fn er_ui_release_artifact_ptr() usize { return @intFromPtr(&state.release_artifact); }
 export fn er_ui_release_artifact_len() usize { return state.release_artifact_len; }
@@ -858,10 +854,6 @@ test "app runtime exposes repo-owned source as canonical object bytes" {
     try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, -1.0, -1.0, 0.0));
 }
 
-test "app runtime embeds compiler wasm bytes into parent app" {
-    try std.testing.expect(er_ui_compiler_wasm_len() > 0);
-}
-
 test "app runtime source workspace is mutable app source" {
     try std.testing.expect(er_ui_source_workspace_len() > 0);
     const label = "src/er/test_main.er";
@@ -951,9 +943,9 @@ test "app runtime release artifact slot only commits wasm modules" {
     try std.testing.expectEqual(@as(u32, 0), er_ui_release_artifact_commit(4));
 }
 
-test "app runtime emits successor artifact with source workspace embedded" {
+test "app runtime compile request fails until compiler is implemented" {
     state.release_artifact_len = 0;
-    try std.testing.expectEqual(@as(u32, 0), er_ui_compile_workspace_wasm());
+    try std.testing.expectEqual(@intFromEnum(state.ErrorCode.render_failed), er_ui_compile_workspace_wasm());
 }
 
 test "app runtime exports committed wasm artifact through generic byte bridge" {

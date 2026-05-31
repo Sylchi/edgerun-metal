@@ -19,6 +19,7 @@ const Icon = icon_component.Icon;
 
 pub const Checkbox = struct {
     id: u32,
+    flags: common.ComponentFlags = .{},
     label: []const u8,
     checked: bool,
 

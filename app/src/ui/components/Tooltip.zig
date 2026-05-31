@@ -17,6 +17,7 @@ const constrainPreferredSize = component_primitives.constrainPreferredSize;
 
 pub const Tooltip = struct {
     id: u32,
+    flags: common.ComponentFlags = .{},
     trigger: []const u8,
     content: []const u8,
 

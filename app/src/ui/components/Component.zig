@@ -131,7 +131,7 @@ pub const Component = union(enum) {
     }
 
     pub fn render(self: Component, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        const resolved_options = options.withControlId(self.controlId());
+        const resolved_options = self.componentFlags().apply(options.withControlId(self.controlId()));
         switch (self) {
             inline else => |component| try component.render(scene, bounds, resolved_options),
         }
@@ -139,13 +139,15 @@ pub const Component = union(enum) {
     }
 
     pub fn collectInteractions(self: Component, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) interaction.Error!void {
+        const resolved_options = self.componentFlags().apply(options.withControlId(self.controlId()));
+        if (resolved_options.control.disabled) return;
         switch (self) {
             inline else => |component| {
                 if (comptime @hasDecl(@TypeOf(component), "collectInteractions")) {
                     const T = @TypeOf(component);
                     const fn_info = @typeInfo(@TypeOf(T.collectInteractions)).@"fn";
                     if (fn_info.params.len >= 4) {
-                        try component.collectInteractions(collector, bounds, options);
+                        try component.collectInteractions(collector, bounds, resolved_options);
                     } else {
                         try component.collectInteractions(collector, bounds);
                     }
@@ -175,6 +177,12 @@ pub const Component = union(enum) {
 
     fn controlId(self: Component) ?u32 {
         return self.accessibility().control_id;
+    }
+
+    fn componentFlags(self: Component) common.ComponentFlags {
+        return switch (self) {
+            inline else => |component| if (comptime @hasField(@TypeOf(component), "flags")) component.flags else .{},
+        };
     }
 
     pub fn toObject(self: Component, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
@@ -218,6 +226,7 @@ comptime {
         if (!@hasDecl(entry.type, "measure")) @compileError(@typeName(entry.type) ++ " must own measure");
         if (!@hasDecl(entry.type, "writeRecord")) @compileError(@typeName(entry.type) ++ " must own writeRecord");
         if (!@hasDecl(entry.type, "fromNode")) @compileError(@typeName(entry.type) ++ " must own fromNode");
+        common.assertComponentContract(entry.type, .{});
     }
 }
 

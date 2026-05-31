@@ -16,6 +16,7 @@ const RenderOptions = common.RenderOptions;
 
 pub const RadioGroup = struct {
     id: u32,
+    flags: common.ComponentFlags = .{},
     first: []const u8,
     second: []const u8,
     selected: u16 = 0,

@@ -20,10 +20,12 @@ pub const Tabs = struct {
     id: u32,
     first: []const u8,
     second: []const u8,
-    active: u16 = 0,
+    active: ?u16 = null,
+    default_active: u16 = 0,
+    flags: common.ComponentFlags = .{},
 
     pub fn node(self: Tabs) ui.Node {
-        return ui.tabsNode(self.id, self.first, self.second, activeIndex(self.active));
+        return ui.tabsNode(self.id, self.first, self.second, self.activeIndexResolved());
     }
 
     pub fn accessibility(self: Tabs) common.Accessibility {
@@ -31,22 +33,24 @@ pub const Tabs = struct {
     }
 
     pub fn render(self: Tabs, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        const active = activeIndex(self.active);
+        const resolved = self.flags.apply(options);
+        const active = self.activeIndexResolved();
         const list = listBounds(bounds);
-        try scene.pushRect(list, options.style.row, .fill, tabs_list_radius, 0.0);
-        try renderTrigger(scene, triggerBounds(list, 0), self.first, active == 0, options);
-        try renderTrigger(scene, triggerBounds(list, 1), self.second, active == 1, options);
+        try scene.pushRect(list, resolved.style.row, .fill, tabs_list_radius, 0.0);
+        try renderTrigger(scene, triggerBounds(list, 0), self.first, active == 0, resolved);
+        try renderTrigger(scene, triggerBounds(list, 1), self.second, active == 1, resolved);
         const panel = panelBounds(bounds, list);
-        try scene.pushRect(panel, options.style.panel, .fill, primitives.control_radius, 0.0);
-        try scene.pushRect(panel, options.style.border, .border, primitives.control_radius, 0.0);
+        try scene.pushRect(panel, resolved.style.panel, .fill, primitives.control_radius, 0.0);
+        try scene.pushRect(panel, resolved.style.border, .border, primitives.control_radius, 0.0);
         const label = if (active == 1) self.second else self.first;
         if (primitives.contentInset(panel, tabs_panel_padding)) |content| {
             const text_h = @min(content.h, primitives.measuredTextHeight(label, content.w, primitives.control_label_height, tabs_panel_max_lines));
-            try text_component.Text.renderWrapped(scene, content.withHeightCentered(text_h), label, options.style.muted, primitives.textWrap(label, primitives.control_label_height, tabs_panel_max_lines));
+            try text_component.Text.renderWrapped(scene, content.withHeightCentered(text_h), label, resolved.style.muted, primitives.textWrap(label, primitives.control_label_height, tabs_panel_max_lines));
         }
     }
 
     pub fn collectInteractions(self: Tabs, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+        if (self.flags.disabled) return;
         try list_layout.collectPaddedEqualSegmentHits(collector, listBounds(bounds), self.id, tabs_item_count, tabs_list_padding);
     }
 
@@ -57,7 +61,7 @@ pub const Tabs = struct {
             .item_count = tabs_item_count,
             .padding = tabs_trigger_padding + tabs_list_padding,
         });
-        const panel_label = if (activeIndex(self.active) == 1) self.second else self.first;
+        const panel_label = if (self.activeIndexResolved() == 1) self.second else self.first;
         const panel = text_component.Text.measureValue(
             panel_label,
             constraints.inner(.{ .left = tabs_panel_padding, .right = tabs_panel_padding, .top = tabs_panel_padding, .bottom = tabs_panel_padding }),
@@ -86,7 +90,7 @@ pub const Tabs = struct {
     pub fn writeRecord(self: Tabs, writer: *component_codec.Writer, index: usize) bool {
         const first_ref = writer.string(self.first) orelse return false;
         const second_ref = writer.string(self.second) orelse return false;
-        return writer.record(index, .tabs, encodedId(self.id, self.active), first_ref, second_ref);
+        return writer.record(index, .tabs, encodedId(self.id, self.activeIndexResolved()), first_ref, second_ref);
     }
 
     pub fn fromView(view: object.View) Error!Tabs {
@@ -96,6 +100,11 @@ pub const Tabs = struct {
 
     pub fn fromNode(tabs: @FieldType(ui.Node, "tabs")) Error!Tabs {
         return .{ .id = tabs.id, .first = tabs.first, .second = tabs.second, .active = activeIndex(tabs.active) };
+    }
+
+    fn activeIndexResolved(self: Tabs) u16 {
+        if (self.active) |value| return activeIndex(value);
+        return activeIndex(self.default_active);
     }
 };
 
@@ -137,6 +146,10 @@ const tabs_panel_padding: f32 = 10.0;
 const tabs_trigger_padding: f32 = 8.0;
 const tabs_panel_max_lines: usize = 2;
 
+comptime {
+    common.assertComponentContract(Tabs, .{});
+}
+
 test "tabs component serializes to canonical object and deserializes" {
     const tabs = Tabs{ .id = 80, .first = "Account", .second = "Password", .active = 1 };
     var ui_raw: [160]u8 = undefined;
@@ -148,7 +161,7 @@ test "tabs component serializes to canonical object and deserializes" {
     try std.testing.expectEqual(tabs.id, decoded.id);
     try std.testing.expectEqualStrings(tabs.first, decoded.first);
     try std.testing.expectEqualStrings(tabs.second, decoded.second);
-    try std.testing.expectEqual(@as(u16, 1), decoded.active);
+    try std.testing.expectEqual(@as(?u16, 1), decoded.active);
 }
 
 test "tabs component renders active trigger and trigger hits" {

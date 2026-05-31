@@ -19,6 +19,7 @@ const Icon = icon_component.Icon;
 
 pub const Toast = struct {
     id: u32,
+    flags: common.ComponentFlags = .{},
     title: []const u8,
     detail: []const u8,
 

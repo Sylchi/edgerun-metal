@@ -74,6 +74,10 @@ extern er_serial_crlf
 
 ; ─── TRB constants ──────────────────────────────────────────────────
 %define TRB_CMD_NOOP     23
+%define TRB_LINK         6
+%define TRB_TYPE_SHIFT   10
+%define TRB_CYCLE        (1 << 0)
+%define TRB_LINK_TOGGLE  (1 << 1)
 
 ; ─── Ring sizes ─────────────────────────────────────────────────────
 %define CMD_RING_NTRB    16
@@ -100,6 +104,8 @@ xhci_max_ports:    resd 1
 xhci_hci_rev:      resd 1
 xhci_cfg_blob_ptrs: resq XHCI_BLOB_PORT_SLOTS
 xhci_cfg_blob_lens: resq XHCI_BLOB_PORT_SLOTS
+xhci_cmd_enq_idx:   resd 1
+xhci_cmd_cycle:     resd 1
 
 ; ─── Text ───────────────────────────────────────────────────────────
 SECTION .text
@@ -429,6 +435,45 @@ er_fn er_xhci_init
     lea     rdi, [r14 + XHCI_RTSOFF]
     call    er_mmio_read32
     mov     [xhci_rts_off], eax
+
+    ; ─── 0. Initialize software/hardware ring backing storage ──────
+    ; Clear command ring
+    lea     rdi, [rel xhci_cmd_ring]
+    xor     eax, eax
+    mov     ecx, (CMD_RING_NTRB * 16) / 8
+    rep stosq
+    ; Clear event ring
+    lea     rdi, [rel xhci_evt_ring]
+    xor     eax, eax
+    mov     ecx, (EVT_RING_NTRB * 16) / 8
+    rep stosq
+    ; Clear ERST entry then populate with event ring base + size
+    lea     rdi, [rel xhci_erst]
+    xor     eax, eax
+    mov     ecx, 16 / 8
+    rep stosq
+    lea     rax, [rel xhci_evt_ring]
+    mov     [rel xhci_erst + 0], rax
+    mov     dword [rel xhci_erst + 8], EVT_RING_NTRB
+
+    ; Command ring needs a terminal Link TRB back to ring base.
+    lea     rax, [rel xhci_cmd_ring]
+    lea     rdi, [rel xhci_cmd_ring + ((CMD_RING_NTRB - 1) * 16)]
+    mov     [rdi + 0], rax
+    mov     dword [rdi + 8], 0
+    mov     dword [rdi + 12], (TRB_LINK << TRB_TYPE_SHIFT) | TRB_LINK_TOGGLE
+    mov     dword [xhci_cmd_enq_idx], 0
+    mov     dword [xhci_cmd_cycle], 1
+
+    ; Clear per-port descriptor blob registry.
+    lea     rdi, [rel xhci_cfg_blob_ptrs]
+    xor     eax, eax
+    mov     ecx, (XHCI_BLOB_PORT_SLOTS * 8) / 8
+    rep stosq
+    lea     rdi, [rel xhci_cfg_blob_lens]
+    xor     eax, eax
+    mov     ecx, (XHCI_BLOB_PORT_SLOTS * 8) / 8
+    rep stosq
 
     ; ─── 1. Reset controller ──────────────────────────────────
     mov     edi, r14d

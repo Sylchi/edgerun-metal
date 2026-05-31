@@ -17,6 +17,7 @@ const contentInset = component_primitives.contentInset;
 
 pub const InputOtp = struct {
     id: u32,
+    flags: common.ComponentFlags = .{},
     value: []const u8 = "",
 
     pub fn node(self: InputOtp) ui.Node {

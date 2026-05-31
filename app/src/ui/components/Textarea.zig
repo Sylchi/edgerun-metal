@@ -18,6 +18,7 @@ const contentInset = component_primitives.contentInset;
 
 pub const Textarea = struct {
     id: u32,
+    flags: common.ComponentFlags = .{},
     placeholder: []const u8,
 
     pub fn node(self: Textarea) ui.Node {

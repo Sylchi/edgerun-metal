@@ -17,6 +17,7 @@ const contentInset = component_primitives.contentInset;
 
 pub const Carousel = struct {
     id: u32,
+    flags: common.ComponentFlags = .{},
     label: []const u8,
 
     pub fn node(self: Carousel) ui.Node {

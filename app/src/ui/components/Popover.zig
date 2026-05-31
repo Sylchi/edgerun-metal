@@ -15,6 +15,7 @@ const RenderOptions = common.RenderOptions;
 
 pub const Popover = struct {
     id: u32,
+    flags: common.ComponentFlags = .{},
     trigger: []const u8,
     content: []const u8,
 

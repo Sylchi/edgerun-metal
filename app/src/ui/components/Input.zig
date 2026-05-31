@@ -25,7 +25,9 @@ pub const Input = struct {
     id: u32,
     placeholder: []const u8,
     value: []const u8 = "",
+    default_value: []const u8 = "",
     icon_slot: IconSlot = .none,
+    flags: common.ComponentFlags = .{},
 
     pub fn node(self: Input) ui.Node {
         return ui.inputDetailNode(self.id, self.placeholder, leadingIconTag(self.icon_slot));
@@ -36,26 +38,28 @@ pub const Input = struct {
     }
 
     pub fn render(self: Input, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        const padding = inputPadding(options.control_size);
-        try renderControlFrame(scene, bounds, options.style.panel, options.style.border, primitives.control_radius);
-        try renderControlStateOverlay(scene, bounds, options, primitives.control_radius);
+        const resolved = self.flags.apply(options);
+        const padding = inputPadding(resolved.control_size);
+        try renderControlFrame(scene, bounds, resolved.style.panel, resolved.style.border, primitives.control_radius);
+        try renderControlStateOverlay(scene, bounds, resolved, primitives.control_radius);
         const text_bounds = if (leadingIcon(self.icon_slot)) |slot| with_icon: {
-            try slot.renderColor(scene, ui.Rect.init(bounds.x + padding, bounds.y + (bounds.h - input_icon_size) * 0.5, input_icon_size, input_icon_size), options.style.muted);
+            try slot.renderColor(scene, ui.Rect.init(bounds.x + padding, bounds.y + (bounds.h - input_icon_size) * 0.5, input_icon_size, input_icon_size), resolved.style.muted);
             break :with_icon ui.Rect.init(bounds.x + padding + input_icon_size + input_icon_gap, bounds.y, @max(primitives.min_extent, bounds.w - padding * 2.0 - input_icon_size - input_icon_gap), bounds.h);
         } else bounds;
-        const display_value = if (self.value.len == 0) self.placeholder else self.value;
-        const display_color = if (self.value.len == 0) options.style.muted else options.style.text;
+        const display_value = self.displayValue();
+        const display_color = if (self.value.len == 0 and self.default_value.len == 0) resolved.style.muted else resolved.style.text;
         try renderControlText(scene, text_bounds, padding, primitives.control_label_height, display_value, display_color, .start);
     }
 
     pub fn collectInteractions(self: Input, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+        if (self.flags.disabled) return;
         return common.collectHit(collector, bounds, .input, self.id);
     }
 
     pub fn measure(self: Input, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         const padding = inputPadding(options.control_size);
         const icon_w = if (leadingIcon(self.icon_slot) != null) input_icon_size + input_icon_gap else 0.0;
-        const display_value = if (self.value.len == 0) self.placeholder else self.value;
+        const display_value = self.displayValue();
         const label = text_component.Text.measureValue(display_value, .{ .width = .unconstrained, .text_wrap = .nowrap }, primitives.textMetrics(display_value, primitives.control_label_height, input_label_max_lines));
         const height = controlHeight(options.control_size);
         const preferred = primitives.constrainPreferredSize(.{
@@ -87,6 +91,12 @@ pub const Input = struct {
 
     pub fn fromNode(input: @FieldType(ui.Node, "input")) Error!Input {
         return .{ .id = input.id, .placeholder = input.placeholder, .icon_slot = try IconSlot.fromTag(.leading, input.leading_icon) };
+    }
+
+    fn displayValue(self: Input) []const u8 {
+        if (self.value.len != 0) return self.value;
+        if (self.default_value.len != 0) return self.default_value;
+        return self.placeholder;
     }
 };
 
@@ -126,6 +136,10 @@ const input_min_width: f32 = 44.0;
 const input_icon_size: f32 = 16.0;
 const input_icon_gap: f32 = 8.0;
 const input_label_max_lines: usize = 1;
+
+comptime {
+    common.assertComponentContract(Input, .{});
+}
 
 test "input component serializes to canonical object and deserializes" {
     const input = Input{ .id = 10, .placeholder = "Search objects", .icon_slot = IconSlot.named(.leading, .search) };

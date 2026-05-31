@@ -5,6 +5,7 @@ const node_renderer = @import("NodeRenderer.zig");
 
 pub const Target = union(enum) {
     hit_id: u32,
+    flags: common.ComponentFlags = .{},
     path: []const u8,
     slug: []const u8,
 };

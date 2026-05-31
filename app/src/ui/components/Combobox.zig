@@ -21,6 +21,7 @@ const Icon = icon_component.Icon;
 
 pub const Combobox = struct {
     id: u32,
+    flags: common.ComponentFlags = .{},
     placeholder: []const u8,
     selected: []const u8,
 

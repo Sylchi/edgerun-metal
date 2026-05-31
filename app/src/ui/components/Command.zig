@@ -22,6 +22,7 @@ const IconSlot = icon_component.IconSlot;
 
 pub const Command = struct {
     id: u32,
+    flags: common.ComponentFlags = .{},
     placeholder: []const u8,
     icon_slot: IconSlot = IconSlot.named(.leading, .search),
 

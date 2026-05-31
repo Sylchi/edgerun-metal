@@ -21,6 +21,7 @@ const IconSlot = icon_component.IconSlot;
 
 pub const Select = struct {
     id: u32,
+    flags: common.ComponentFlags = .{},
     label: []const u8,
     icon_slot: IconSlot = IconSlot.named(.trailing, .chevron_right),
 

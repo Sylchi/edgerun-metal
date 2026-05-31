@@ -18,6 +18,7 @@ const Icon = icon_component.Icon;
 
 pub const Accordion = struct {
     id: u32,
+    flags: common.ComponentFlags = .{},
     title: []const u8,
     detail: []const u8,
     open: bool = false,

@@ -23,6 +23,7 @@ pub const Table = struct {
     id: u32,
     name: []const u8,
     role: []const u8,
+    flags: common.ComponentFlags = .{},
 
     pub fn node(self: Table) ui.Node {
         return ui.tableNode(self.id, self.name, self.role);
@@ -33,18 +34,20 @@ pub const Table = struct {
     }
 
     pub fn render(self: Table, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        try scene.pushRect(bounds, options.style.panel, .fill, table_radius, 0.0);
-        try scene.pushRect(bounds, options.style.border, .border, table_radius, 0.0);
-        try renderHeader(scene, bounds, .name, options);
-        try renderHeader(scene, bounds, .role, options);
-        try scene.pushRect(ui.Rect.init(bounds.x, bounds.y + table_header_h, bounds.w, separator_height), options.style.border, .fill, 0.0, 0.0);
+        const resolved = self.flags.apply(options);
+        try scene.pushRect(bounds, resolved.style.panel, .fill, table_radius, 0.0);
+        try scene.pushRect(bounds, resolved.style.border, .border, table_radius, 0.0);
+        try renderHeader(scene, bounds, .name, resolved);
+        try renderHeader(scene, bounds, .role, resolved);
+        try scene.pushRect(ui.Rect.init(bounds.x, bounds.y + table_header_h, bounds.w, separator_height), resolved.style.border, .fill, 0.0, 0.0);
         const row = rowBounds(bounds);
-        try scene.pushRect(row.insetUniform(table_row_inset), options.style.row, .fill, table_row_radius, 0.0);
-        try text_component.Text.renderWrapped(scene, bodyCellBounds(bounds, 0, self.name), self.name, options.style.text, primitives.textWrap(self.name, table_body_text_h, table_body_max_lines));
-        try text_component.Text.renderWrapped(scene, bodyCellBounds(bounds, 1, self.role), self.role, options.style.muted, primitives.textWrap(self.role, table_body_text_h, table_body_max_lines));
+        try scene.pushRect(row.insetUniform(table_row_inset), resolved.style.row, .fill, table_row_radius, 0.0);
+        try text_component.Text.renderWrapped(scene, bodyCellBounds(bounds, 0, self.name), self.name, resolved.style.text, primitives.textWrap(self.name, table_body_text_h, table_body_max_lines));
+        try text_component.Text.renderWrapped(scene, bodyCellBounds(bounds, 1, self.role), self.role, resolved.style.muted, primitives.textWrap(self.role, table_body_text_h, table_body_max_lines));
     }
 
     pub fn collectInteractions(self: Table, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+        if (self.flags.disabled) return;
         try collector.addHit(headerBounds(bounds, .name, table_header_name), .button, self.id + name_header_id_offset);
         try collector.addHit(headerBounds(bounds, .role, table_header_role), .button, self.id + role_header_id_offset);
         try collector.addHit(rowBounds(bounds), .row_item, self.id + row_id_offset);
@@ -166,6 +169,10 @@ const table_header_name_desc = "Name v";
 const table_header_role_asc = "Role ^";
 const table_header_role_desc = "Role v";
 const separator_height: f32 = 1.0;
+
+comptime {
+    common.assertComponentContract(Table, .{});
+}
 
 test "table component serializes to canonical object and deserializes" {
     const table = Table{ .id = 660, .name = "Sarah Chen", .role = "Engineer" };

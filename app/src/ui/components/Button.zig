@@ -25,6 +25,7 @@ pub const Button = struct {
     label: []const u8,
     variant: common.ButtonVariant = .primary,
     icon_slot: IconSlot = .none,
+    flags: common.ComponentFlags = .{},
 
     pub fn node(self: Button) ui.Node {
         const tags = iconSlotTags(self.icon_slot);
@@ -36,10 +37,11 @@ pub const Button = struct {
     }
 
     pub fn render(self: Button, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return renderButton(scene, bounds, self, options);
+        return renderButton(scene, bounds, self, self.flags.apply(options));
     }
 
     pub fn collectInteractions(self: Button, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+        if (self.flags.disabled) return;
         return collectButtonInteractions(collector, bounds, self);
     }
 
@@ -110,6 +112,7 @@ pub const IconButton = struct {
     label: []const u8,
     icon: Icon,
     variant: common.ButtonVariant = .outline,
+    flags: common.ComponentFlags = .{},
 
     pub fn node(self: IconButton) ui.Node {
         return ui.iconButtonNode(self.id, self.label, common.optionalIconTag(self.icon.value), variantTag(self.variant));
@@ -120,13 +123,14 @@ pub const IconButton = struct {
     }
 
     pub fn render(self: IconButton, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        const paint = buttonPaint(self.variant, options);
+        const paint = buttonPaint(self.variant, self.flags.apply(options));
         if (paint.fill) |fill| try scene.pushRect(bounds, fill, .fill, radius, 0.0);
         if (paint.border) |border| try scene.pushRect(bounds, border, .border, radius, 0.0);
         try self.icon.renderColor(scene, iconButtonIconBounds(bounds), paint.text);
     }
 
     pub fn collectInteractions(self: IconButton, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+        if (self.flags.disabled) return;
         try collector.addHit(bounds, .button, self.id);
     }
 
@@ -360,6 +364,11 @@ fn iconButtonSize(size: common.ControlSize) f32 {
         .default => icon_button_size,
         .large => 44.0,
     };
+}
+
+comptime {
+    common.assertComponentContract(Button, .{});
+    common.assertComponentContract(IconButton, .{});
 }
 
 test "button component serializes to canonical object and deserializes" {

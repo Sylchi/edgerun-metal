@@ -14,6 +14,7 @@ const RenderOptions = common.RenderOptions;
 
 pub const Resizable = struct {
     id: u32,
+    flags: common.ComponentFlags = .{},
     ratio: f32 = 0.58,
 
     pub fn node(self: Resizable) ui.Node {

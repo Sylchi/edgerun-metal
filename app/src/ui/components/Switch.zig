@@ -17,6 +17,7 @@ const constrainPreferredSize = component_primitives.constrainPreferredSize;
 
 pub const Switch = struct {
     id: u32,
+    flags: common.ComponentFlags = .{},
     label: []const u8,
     checked: bool,
 

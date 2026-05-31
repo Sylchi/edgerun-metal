@@ -15,6 +15,7 @@ const RenderOptions = common.RenderOptions;
 
 pub const Pagination = struct {
     id: u32,
+    flags: common.ComponentFlags = .{},
     page: u16 = 0,
 
     pub fn node(self: Pagination) ui.Node {

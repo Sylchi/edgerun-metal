@@ -19,6 +19,7 @@ const contentInset = component_primitives.contentInset;
 
 pub const InputGroup = struct {
     id: u32,
+    flags: common.ComponentFlags = .{},
     addon: []const u8,
     placeholder: []const u8,
 

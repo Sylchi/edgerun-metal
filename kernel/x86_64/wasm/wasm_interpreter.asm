@@ -1,6 +1,6 @@
 ; EdgeRun freestanding WASM interpreter — x86_64 assembly
 ; System V AMD64 ABI: arg1=rdi, arg2=rsi, arg3=rdx, arg4=rcx, arg5=r8, arg6=r9, retval=rax
-; Port of edgerun-zig/src/wasm/root.zig
+; Canonical EdgeRun WASM runtime implementation.
 ; No libc, no external dependencies.
 ;
 ; This file is the umbrella that includes all sub-modules:

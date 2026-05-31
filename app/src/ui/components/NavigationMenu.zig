@@ -20,6 +20,7 @@ const Icon = icon_component.Icon;
 
 pub const NavigationMenu = struct {
     id: u32,
+    flags: common.ComponentFlags = .{},
     first: []const u8,
     second: []const u8,
     active: u16 = 0,

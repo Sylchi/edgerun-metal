@@ -15,6 +15,7 @@ const RenderOptions = common.RenderOptions;
 
 pub const Toggle = struct {
     id: u32,
+    flags: common.ComponentFlags = .{},
     label: []const u8,
     pressed: bool = false,
 

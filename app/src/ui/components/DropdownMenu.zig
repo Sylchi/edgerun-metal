@@ -15,6 +15,7 @@ const RenderOptions = common.RenderOptions;
 
 pub const DropdownMenu = struct {
     id: u32,
+    flags: common.ComponentFlags = .{},
     first: []const u8,
     second: []const u8,
 

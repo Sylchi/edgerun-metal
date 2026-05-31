@@ -19,6 +19,7 @@ const renderControlStateOverlay = primitives.renderControlStateOverlay;
 
 pub const Field = struct {
     id: u32,
+    flags: common.ComponentFlags = .{},
     label: []const u8,
     placeholder: []const u8,
 
