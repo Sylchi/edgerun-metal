@@ -258,46 +258,39 @@ _wasm_import_da_surface_update:
     mov     rdi, rbp
     sub     rdi, 256
 
-    ; [0] type = DA_MSG_SURFACE_UPDATE (2)
-    mov     byte [rdi + LOCAL_CELL_PAYLOAD + 0], DA_MSG_SURFACE_UPDATE
-    ; [1] update_flags
-    mov     [rdi + LOCAL_CELL_PAYLOAD + 1], r13b
-    ; [2-33] app hash (32 bytes)
+    mov     byte [rdi + LOCAL_CELL_PAYLOAD + DA_UPDATE_PAYLOAD_TYPE_OFF], DA_MSG_SURFACE_UPDATE
+    mov     [rdi + LOCAL_CELL_PAYLOAD + DA_UPDATE_PAYLOAD_FLAGS_OFF], r13b
     lea     rsi, [rel da_wasm_app_hash]
-    lea     rdi, [rdi + LOCAL_CELL_PAYLOAD + 2]
+    lea     rdi, [rdi + LOCAL_CELL_PAYLOAD + DA_UPDATE_PAYLOAD_HASH_OFF]
     mov     edx, 32
     call    er_memcpy
 
-    ; [34-35] rect_count
     mov     rdi, rbp
     sub     rdi, 256
-    mov     [rdi + LOCAL_CELL_PAYLOAD + 34], bx
-    ; [36-37] icon_count
-    mov     [rdi + LOCAL_CELL_PAYLOAD + 36], r8w
-    ; [38-39] reserved
-    mov     word [rdi + LOCAL_CELL_PAYLOAD + 38], 0
+    mov     [rdi + LOCAL_CELL_PAYLOAD + DA_UPDATE_PAYLOAD_RECT_COUNT_OFF], bx
+    mov     [rdi + LOCAL_CELL_PAYLOAD + DA_UPDATE_PAYLOAD_ICON_COUNT_OFF], r8w
+    mov     word [rdi + LOCAL_CELL_PAYLOAD + DA_UPDATE_PAYLOAD_RESERVED_OFF], 0
 
     ; Clamp rect_count to fit payload budget.
-    ; Header = 40 bytes, payload max = 251 bytes, rect = 60 bytes.
     test    ebx, ebx
     jz      .rect_done
 
-    cmp     ebx, 3
+    cmp     ebx, DA_UPDATE_MAX_RECTS_INLINE
     jbe     .rect_count_prelim_ok
-    mov     ebx, 3
+    mov     ebx, DA_UPDATE_MAX_RECTS_INLINE
 .rect_count_prelim_ok:
     mov     eax, ebx
-    imul    eax, 60
-    cmp     eax, 211               ; 251 - 40
+    imul    eax, DA_RECT_BYTES
+    cmp     eax, DA_UPDATE_PAYLOAD_DATA_BYTES
     jbe     .rect_count_ok_update
-    mov     ebx, 3                 ; defensive
+    mov     ebx, DA_UPDATE_MAX_RECTS_INLINE
 .rect_count_ok_update:
-    mov     [rdi + LOCAL_CELL_PAYLOAD + 34], bx
+    mov     [rdi + LOCAL_CELL_PAYLOAD + DA_UPDATE_PAYLOAD_RECT_COUNT_OFF], bx
 
     mov     eax, ebx
-    imul    eax, 60
+    imul    eax, DA_RECT_BYTES
     mov     edx, eax
-    lea     rdi, [rdi + LOCAL_CELL_PAYLOAD + 40]
+    lea     rdi, [rdi + LOCAL_CELL_PAYLOAD + DA_UPDATE_PAYLOAD_DATA_OFF]
     mov     esi, ecx
     add     rsi, r14
     call    er_memcpy
@@ -308,14 +301,14 @@ _wasm_import_da_surface_update:
     jz      .send
 
     mov     eax, ebx
-    imul    eax, 60
+    imul    eax, DA_RECT_BYTES
     mov     r10d, eax                 ; rect_bytes
-    mov     r11d, 211
+    mov     r11d, DA_UPDATE_PAYLOAD_DATA_BYTES
     sub     r11d, r10d                ; remaining bytes
     jle     .icons_zero
     mov     eax, r11d
     xor     edx, edx
-    mov     ecx, 36
+    mov     ecx, DA_ICON_BYTES
     div     ecx
     cmp     r8d, eax
     jbe     .icon_count_ok
@@ -323,16 +316,16 @@ _wasm_import_da_surface_update:
 .icon_count_ok:
     mov     rdi, rbp
     sub     rdi, 256
-    mov     [rdi + LOCAL_CELL_PAYLOAD + 36], r8w
+    mov     [rdi + LOCAL_CELL_PAYLOAD + DA_UPDATE_PAYLOAD_ICON_COUNT_OFF], r8w
 
     test    r8d, r8d
     jz      .send
-    lea     rdi, [rdi + LOCAL_CELL_PAYLOAD + 40]
+    lea     rdi, [rdi + LOCAL_CELL_PAYLOAD + DA_UPDATE_PAYLOAD_DATA_OFF]
     add     rdi, r10
     mov     esi, r9d
     add     rsi, r14
     mov     eax, r8d
-    imul    eax, 36
+    imul    eax, DA_ICON_BYTES
     mov     edx, eax
     call    er_memcpy
     jmp     .send
@@ -340,7 +333,7 @@ _wasm_import_da_surface_update:
 .icons_zero:
     mov     rdi, rbp
     sub     rdi, 256
-    mov     word [rdi + LOCAL_CELL_PAYLOAD + 36], 0
+    mov     word [rdi + LOCAL_CELL_PAYLOAD + DA_UPDATE_PAYLOAD_ICON_COUNT_OFF], 0
 
 .send:
     mov     rdi, rbp

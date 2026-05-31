@@ -43,6 +43,8 @@ DA_MAX_SURFACES      equ 8
 ; Chosen so MAX_SURFACES * POOL <= COMPOSITE_MAX for that type.
 DA_SURFACE_POOL_RECTS  equ 32
 DA_SURFACE_POOL_ICONS  equ 16
+DA_RECT_BYTES          equ 15 * 4
+DA_ICON_BYTES          equ 9 * 4
 
 ; Surface update flags (bitmask for DA_MSG_SURFACE_UPDATE update_flags byte)
 DA_UPDATE_REPLACE_RECTS  equ 1   ; replace all rects with new data
@@ -52,14 +54,25 @@ DA_UPDATE_REPLACE_ICONS  equ 8   ; replace all icons
 DA_UPDATE_APPEND_ICONS   equ 16  ; append icons
 DA_UPDATE_CLEAR_ICONS    equ 32  ; clear all icons
 
+; DA_MSG_SURFACE_UPDATE cell payload layout
+DA_UPDATE_PAYLOAD_TYPE_OFF       equ 0
+DA_UPDATE_PAYLOAD_FLAGS_OFF      equ 1
+DA_UPDATE_PAYLOAD_HASH_OFF       equ 2
+DA_UPDATE_PAYLOAD_RECT_COUNT_OFF equ 34
+DA_UPDATE_PAYLOAD_ICON_COUNT_OFF equ 36
+DA_UPDATE_PAYLOAD_RESERVED_OFF   equ 38
+DA_UPDATE_PAYLOAD_DATA_OFF       equ 40
+DA_UPDATE_PAYLOAD_DATA_BYTES     equ 251 - DA_UPDATE_PAYLOAD_DATA_OFF
+DA_UPDATE_MAX_RECTS_INLINE       equ DA_UPDATE_PAYLOAD_DATA_BYTES / DA_RECT_BYTES
+
 ; Compositing output buffer limits (per frame)
 DA_COMPOSITE_MAX_RECTS   equ 256
 DA_COMPOSITE_MAX_ICONS   equ 128
 DA_COMPOSITE_MAX_VTX     equ 256
 
 ; Composit buffer sizes in bytes
-DA_COMPOSITE_RECT_BYTES  equ DA_COMPOSITE_MAX_RECTS * 60   ; 15 * 4 bytes per rect
-DA_COMPOSITE_ICON_BYTES  equ DA_COMPOSITE_MAX_ICONS * 36   ; 9 * 4 bytes per icon
+DA_COMPOSITE_RECT_BYTES  equ DA_COMPOSITE_MAX_RECTS * DA_RECT_BYTES
+DA_COMPOSITE_ICON_BYTES  equ DA_COMPOSITE_MAX_ICONS * DA_ICON_BYTES
 
 ; DA identity label length
 DA_LABEL_LEN equ 16

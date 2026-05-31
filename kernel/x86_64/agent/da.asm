@@ -127,22 +127,22 @@ shell_bar_rects:
 shell_bar_rects_end:
 shell_bar_count: dq (shell_bar_rects_end - shell_bar_rects) / 60
 
-; DA message dispatch table: [msg_type:1][pad:7][handler_ptr:8]
+; DA message dispatch table: [msg_type:1][pad:3][handler_addr:4]
 da_msg_dispatch_table:
-    db DA_MSG_SURFACE_REGISTER, 0, 0, 0, 0, 0, 0, 0
-    dq _da_dispatch_register
-    db DA_MSG_SURFACE_UPDATE, 0, 0, 0, 0, 0, 0, 0
-    dq _da_dispatch_update
-    db DA_MSG_SURFACE_UNREGISTER, 0, 0, 0, 0, 0, 0, 0
-    dq _da_dispatch_unregister
-    db DA_MSG_LAUNCH_APP, 0, 0, 0, 0, 0, 0, 0
-    dq _da_dispatch_launch
-    db DA_MSG_APP_EXIT, 0, 0, 0, 0, 0, 0, 0
-    dq _da_dispatch_exit
-    db DA_MSG_SURFACE_FOCUS, 0, 0, 0, 0, 0, 0, 0
-    dq _da_dispatch_focus
+    db DA_MSG_SURFACE_REGISTER, 0, 0, 0
+    dd _da_dispatch_register
+    db DA_MSG_SURFACE_UPDATE, 0, 0, 0
+    dd _da_dispatch_update
+    db DA_MSG_SURFACE_UNREGISTER, 0, 0, 0
+    dd _da_dispatch_unregister
+    db DA_MSG_LAUNCH_APP, 0, 0, 0
+    dd _da_dispatch_launch
+    db DA_MSG_APP_EXIT, 0, 0, 0
+    dd _da_dispatch_exit
+    db DA_MSG_SURFACE_FOCUS, 0, 0, 0
+    dd _da_dispatch_focus
 da_msg_dispatch_table_end:
-da_msg_dispatch_count: dq (da_msg_dispatch_table_end - da_msg_dispatch_table) / 16
+da_msg_dispatch_count: dq (da_msg_dispatch_table_end - da_msg_dispatch_table) / 8
 
 ; ==================================================================
 ; .text
@@ -258,14 +258,15 @@ _da_handler:
     jz      .unknown
     cmp     bl, byte [rax]
     je      .dispatch_hit
-    add     rax, 16
+    add     rax, 8
     dec     rcx
     jmp     .dispatch_loop
 
 .dispatch_hit:
     mov     rdi, r12
     mov     esi, r13d
-    call    qword [rax + 8]
+    mov     edx, [rax + 4]
+    call    rdx
     jmp     .done
 
 .unknown:
@@ -612,13 +613,7 @@ _da_unregister_surface:
 ; _da_update_surface — update a registered surface's rect/icon data
 ; rdi = cell_ptr, esi = sender_slot_id
 ; Cell payload:
-;   [0] type=2 (DA_MSG_SURFACE_UPDATE, already consumed by handler)
-;   [1] update_flags (DA_UPDATE_* bitmask)
-;   [2] 32-byte app identity hash
-;   [34..35] rect_count (u16 LE)
-;   [36..37] icon_count (u16 LE)
-;   [38..39] reserved
-;   [40..] rect bytes then icon bytes
+;   See DA_UPDATE_PAYLOAD_* constants in da_constants.inc.
 ; ==================================================================
 _da_update_surface:
     push    rbx
@@ -629,8 +624,8 @@ _da_update_surface:
     mov     r12, rdi                 ; cell_ptr
     mov     r13d, esi                ; sender_slot_id (unused)
 
-    ; Find surface by identity hash at payload[2..33]
-    lea     rdi, [r12 + LOCAL_CELL_PAYLOAD + 2]
+    ; Find surface by identity hash.
+    lea     rdi, [r12 + LOCAL_CELL_PAYLOAD + DA_UPDATE_PAYLOAD_HASH_OFF]
     call    _da_find_surface_by_hash
     test    edx, edx
     jnz     .us_return              ; not found — return error
@@ -640,7 +635,7 @@ _da_update_surface:
     imul    eax, DA_SURFACE_SIZE
     lea     r15, [rel da_surface_registry + rax]  ; r15 = surface entry
 
-    movzx   ebx, byte [r12 + LOCAL_CELL_PAYLOAD + 1]  ; bl = update_flags
+    movzx   ebx, byte [r12 + LOCAL_CELL_PAYLOAD + DA_UPDATE_PAYLOAD_FLAGS_OFF]
 
     ; ── Handle rect updates ──
     test    bl, DA_UPDATE_CLEAR_RECTS
@@ -658,12 +653,11 @@ _da_update_surface:
     test    bl, DA_UPDATE_APPEND_RECTS | DA_UPDATE_REPLACE_RECTS
     jz      .us_check_icons          ; no rect changes
 
-    ; Read rect_count from payload[34..35]
-    movzx   ecx, word [r12 + LOCAL_CELL_PAYLOAD + 34]
+    movzx   ecx, word [r12 + LOCAL_CELL_PAYLOAD + DA_UPDATE_PAYLOAD_RECT_COUNT_OFF]
     test    ecx, ecx
     jz      .us_check_icons          ; no rects to copy
 
-    da_pool_append_from_payload DA_SURFACE_RECT_LEN, DA_SURFACE_RECT_PTR, DA_SURFACE_RECT_CAP, da_surface_rect_pool, DA_SURFACE_POOL_RECTS, (15 * 4), 40
+    da_pool_append_from_payload DA_SURFACE_RECT_LEN, DA_SURFACE_RECT_PTR, DA_SURFACE_RECT_CAP, da_surface_rect_pool, DA_SURFACE_POOL_RECTS, DA_RECT_BYTES, DA_UPDATE_PAYLOAD_DATA_OFF
 
 .us_check_icons:
     ; ── Handle icon updates (same pattern, reserved for future) ──
@@ -681,7 +675,7 @@ _da_update_surface:
     test    bl, DA_UPDATE_APPEND_ICONS | DA_UPDATE_REPLACE_ICONS
     jz      .us_done
 
-    movzx   ecx, word [r12 + LOCAL_CELL_PAYLOAD + 36]
+    movzx   ecx, word [r12 + LOCAL_CELL_PAYLOAD + DA_UPDATE_PAYLOAD_ICON_COUNT_OFF]
     test    ecx, ecx
     jz      .us_done
 
@@ -694,22 +688,22 @@ _da_update_surface:
 
     ; dst = icon_pool[slot] + current_len * 36
     mov     eax, r14d
-    imul    eax, DA_SURFACE_POOL_ICONS * 9 * 4
+    imul    eax, DA_SURFACE_POOL_ICONS * DA_ICON_BYTES
     mov     edx, r8d
-    imul    edx, 9 * 4
+    imul    edx, DA_ICON_BYTES
     add     eax, edx
     lea     rdi, [rel da_surface_icon_pool + rax]
 
-    ; src = payload + 40 + rect_count*60
-    movzx   eax, word [r12 + LOCAL_CELL_PAYLOAD + 34]
-    imul    eax, 15 * 4
-    add     eax, 40
+    ; src = payload data + rect_count*rect_bytes
+    movzx   eax, word [r12 + LOCAL_CELL_PAYLOAD + DA_UPDATE_PAYLOAD_RECT_COUNT_OFF]
+    imul    eax, DA_RECT_BYTES
+    add     eax, DA_UPDATE_PAYLOAD_DATA_OFF
     lea     rsi, [r12 + LOCAL_CELL_PAYLOAD]
     add     rsi, rax
 
     mov     r11d, ecx
     mov     eax, ecx
-    imul    eax, 9 * 4
+    imul    eax, DA_ICON_BYTES
     mov     edx, eax
     call    er_memcpy
 
@@ -718,7 +712,7 @@ _da_update_surface:
     mov     [r15 + DA_SURFACE_ICON_LEN], eax
 
     mov     eax, r14d
-    imul    eax, DA_SURFACE_POOL_ICONS * 9 * 4
+    imul    eax, DA_SURFACE_POOL_ICONS * DA_ICON_BYTES
     lea     rax, [rel da_surface_icon_pool + rax]
     mov     [r15 + DA_SURFACE_ICON_PTR], rax
 
@@ -886,13 +880,14 @@ _da_launch_common:
     cmp     byte [r9 + DA_APP_STATE], 1
     jne     .reuse_entry
 
-    ; Already running: launch means focus existing surface.
-    call    _da_focus_clear_all_flags
+    ; Already running: launch means focus existing surface if it exists.
     lea     rdi, [rsp]
     call    _da_find_surface_by_hash
     test    edx, edx
     jnz     .already_running
-    mov     edi, eax
+    mov     ebx, eax
+    call    _da_focus_clear_all_flags
+    mov     edi, ebx
     call    _da_focus_assign_slot
 .already_running:
     er_ok

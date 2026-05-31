@@ -206,21 +206,6 @@ pub fn build(b: *std.Build) void {
     const component_gallery_test_step = b.step("component-gallery-test", "Run canonical component gallery tests");
     component_gallery_test_step.dependOn(&run_component_gallery_tests.step);
 
-    const ui_snapshot = b.addExecutable(.{
-        .name = "edgerun-ui-snapshot-zig",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/ui_snapshot.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
-    });
-    if (math_obj) |obj| ui_snapshot.root_module.addObjectFile(obj);
-    if (runtime_obj) |obj| ui_snapshot.root_module.addObjectFile(obj);
-
-    const run_ui_snapshot = b.addRunArtifact(ui_snapshot);
-    const ui_snapshot_step = b.step("ui-snapshot", "Render the Zig UI prototype snapshot");
-    ui_snapshot_step.dependOn(&run_ui_snapshot.step);
-
     const build_dashboard = b.addExecutable(.{
         .name = "edgerun-build-dashboard",
         .root_module = b.createModule(.{

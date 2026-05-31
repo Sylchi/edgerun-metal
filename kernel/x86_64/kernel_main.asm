@@ -1961,6 +1961,9 @@ er_fn er_kernel_main
     add     rsp, 3
 
 .wasm_check:
+%ifndef ER_KERNEL_BOOT_SELFTESTS
+    jmp     .pass
+%else
     ; ─── WASM module execution test ──────────────────────────────
     ; Set up RuntimeConfig struct on stack (88 bytes)
     sub     rsp, 96
@@ -2058,6 +2061,7 @@ er_fn er_kernel_main
     call    er_serial_crlf
 
     add     rsp, 96
+%endif
 
 .pass:
     ; PASS — serial
@@ -2096,6 +2100,7 @@ er_fn er_kernel_main
     lea     rsi, [rel .dbg_input_kbd_init]
     call    er_serial_puts
 
+%ifdef ER_KERNEL_BOOT_SELFTESTS
     ; ─── DA WASM Registration Test ────────────────────────────
     xor     edi, edi        ; params at WASM memory offset 0
     call    _wasm_import_da_surface_register
@@ -2108,6 +2113,7 @@ er_fn er_kernel_main
     call    er_serial_puthex64
     mov     rdi, COM1_PORT
     call    er_serial_crlf
+%endif
 
     ; ─── Kernel clock init ──────────────────────────────────────
     lea     rdi, [rel kernel_keeper_id]
