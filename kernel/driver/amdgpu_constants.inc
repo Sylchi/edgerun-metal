@@ -76,6 +76,7 @@
 
 ; OTG pipe stride: each OTGn is +0x370 bytes from OTGn-1
 %define DCN_OTG_PIPE_STRIDE                0x370
+%define DCN_OTG_PIPE_COUNT                 4
 
 ; ─── HUBP registers (HUBP0, base_seg=0x34C0) ────────────────────
 %define DCN_HUBP0_DCHUBP_CNTL              0xEACC

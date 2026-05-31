@@ -365,6 +365,50 @@ er_fn er_tor_hs_establish_intro
     pop     rbx
     er_ret
 
+; er_tor_hs_send_introduce1(circ_id, auth_key, encrypted, encrypted_len)
+; Sends INTRODUCE1 and waits for INTRODUCE_ACK status 0.
+global er_tor_hs_send_introduce1
+er_fn er_tor_hs_send_introduce1
+    push    rbx
+    mov     ebx, edi
+    lea     rdi, [rel tor_hs_msg]
+    call    er_tor_hs_build_introduce1_prefix
+    test    eax, eax
+    js      .fail
+    mov     edi, ebx
+    xor     esi, esi
+    mov     edx, TOR_RELAY_INTRODUCE1
+    lea     rcx, [rel tor_hs_msg]
+    mov     r8d, eax
+    call    er_tor_send_relay
+    test    eax, eax
+    js      .fail
+    mov     edi, ebx
+    lea     rsi, [rel tor_hs_tmp_stream]
+    lea     rdx, [rel tor_hs_tmp_cmd]
+    lea     rcx, [rel tor_hs_msg]
+    lea     r8, [rel tor_hs_tmp_len]
+    call    er_tor_recv_relay
+    test    eax, eax
+    js      .fail
+    cmp     byte [rel tor_hs_tmp_cmd], TOR_RELAY_INTRODUCE_ACK
+    jne     .fail
+    lea     rdi, [rel tor_hs_msg]
+    mov     esi, [rel tor_hs_tmp_len]
+    call    er_tor_hs_parse_introduce_ack
+    test    eax, eax
+    js      .fail
+    cmp     eax, TOR_HS_INTRO_ACK_OK
+    jne     .fail
+    xor     eax, eax
+    er_ok
+    pop     rbx
+    er_ret
+.fail:
+    mov     eax, -1
+    pop     rbx
+    er_ret
+
 ; er_tor_hs_send_rendezvous1(circ_id, cookie, handshake_info, handshake_len)
 global er_tor_hs_send_rendezvous1
 er_fn er_tor_hs_send_rendezvous1

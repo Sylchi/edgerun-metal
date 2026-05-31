@@ -9,7 +9,9 @@
 extern er_amdgpu_dcn_init
 extern er_amdgpu_program_hubp_scanout
 extern er_amdgpu_program_hubp0_scanout
+extern er_amdgpu_program_otg_mode
 extern er_amdgpu_program_otg0_mode
+extern er_amdgpu_program_otg_timing
 extern er_amdgpu_program_otg0_timing
 extern er_amdgpu_validate_scanout_config
 extern er_amdgpu_validate_timing
@@ -129,6 +131,27 @@ _start:
     ASSERT_EQ eax, 1
 
     lea     rdi, [rel bar0]
+    mov     esi, 1
+    mov     edx, AMDGPU_MODE_720P60
+    call    er_amdgpu_program_otg_mode
+    ASSERT_EQ eax, 0
+    mov     eax, [rel bar0 + DCN_OTG0_V_TOTAL + DCN_OTG_PIPE_STRIDE]
+    ASSERT_EQ eax, 749
+    mov     eax, [rel bar0 + DCN_OTG0_H_TOTAL + DCN_OTG_PIPE_STRIDE]
+    ASSERT_EQ eax, 1649
+    mov     eax, [rel bar0 + DCN_OTG0_H_SYNC_A + DCN_OTG_PIPE_STRIDE]
+    ASSERT_EQ eax, (1429 << 16) | 1390
+    mov     eax, [rel bar0 + DCN_OTG0_MASTER_EN + DCN_OTG_PIPE_STRIDE]
+    ASSERT_EQ eax, 1
+
+    lea     rdi, [rel bar0]
+    mov     esi, DCN_OTG_PIPE_COUNT
+    mov     edx, AMDGPU_MODE_720P60
+    call    er_amdgpu_program_otg_mode
+    ASSERT_EQ eax, -1
+    ASSERT_RDX ERROR_BAD_ARGUMENT
+
+    lea     rdi, [rel bar0]
     mov     esi, AMDGPU_MODE_COUNT
     call    er_amdgpu_program_otg0_mode
     ASSERT_EQ eax, -1
@@ -153,6 +176,13 @@ _start:
     ASSERT_EQ eax, 0
     mov     eax, [rel bar0 + DCN_OTG0_H_TOTAL]
     ASSERT_EQ eax, 1649
+    lea     rdi, [rel bar0]
+    mov     esi, 1
+    lea     rdx, [rel timing_cfg]
+    call    er_amdgpu_program_otg_timing
+    ASSERT_EQ eax, 0
+    mov     eax, [rel bar0 + DCN_OTG0_H_TOTAL + DCN_OTG_PIPE_STRIDE]
+    ASSERT_EQ eax, 1649
 
     mov     dword [rel timing_cfg + AMDGPU_TIMING_H_TOTAL], 0
     lea     rdi, [rel timing_cfg]
@@ -162,6 +192,12 @@ _start:
     lea     rdi, [rel bar0]
     lea     rsi, [rel timing_cfg]
     call    er_amdgpu_program_otg0_timing
+    ASSERT_EQ eax, -1
+    ASSERT_RDX ERROR_BAD_ARGUMENT
+    lea     rdi, [rel bar0]
+    mov     esi, DCN_OTG_PIPE_COUNT
+    lea     rdx, [rel timing_cfg]
+    call    er_amdgpu_program_otg_timing
     ASSERT_EQ eax, -1
     ASSERT_RDX ERROR_BAD_ARGUMENT
 

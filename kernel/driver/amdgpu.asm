@@ -661,26 +661,45 @@ er_fn er_amdgpu_validate_timing
 ; int er_amdgpu_program_otg0_mode(uint64_t bar0, uint32_t mode)
 ; ==================================================================
 er_fn er_amdgpu_program_otg0_mode
+    mov     edx, esi
+    xor     esi, esi
+    jmp     er_amdgpu_program_otg_mode
+
+; ==================================================================
+; er_amdgpu_program_otg_mode — program OTG timing using a known mode ID
+; int er_amdgpu_program_otg_mode(uint64_t bar0, uint32_t pipe, uint32_t mode)
+; ==================================================================
+er_fn er_amdgpu_program_otg_mode
     push    r12
+    push    r13
     mov     r12, rdi
-    cmp     esi, AMDGPU_MODE_1080P60
+    mov     r13d, esi
+    cmp     esi, DCN_OTG_PIPE_COUNT
+    jae     .bad_arg
+    cmp     edx, AMDGPU_MODE_1080P60
     je      .mode_1080
-    cmp     esi, AMDGPU_MODE_720P60
+    cmp     edx, AMDGPU_MODE_720P60
     je      .mode_720
+.bad_arg:
     er_err  ERROR_BAD_ARGUMENT
     mov     eax, -1
+    pop     r13
     pop     r12
     ret
 .mode_1080:
     mov     rdi, r12
-    lea     rsi, [rel amdgpu_timing_1080p60]
-    call    er_amdgpu_program_otg0_timing
+    mov     esi, r13d
+    lea     rdx, [rel amdgpu_timing_1080p60]
+    call    er_amdgpu_program_otg_timing
+    pop     r13
     pop     r12
     ret
 .mode_720:
     mov     rdi, r12
-    lea     rsi, [rel amdgpu_timing_720p60]
-    call    er_amdgpu_program_otg0_timing
+    mov     esi, r13d
+    lea     rdx, [rel amdgpu_timing_720p60]
+    call    er_amdgpu_program_otg_timing
+    pop     r13
     pop     r12
     ret
 
@@ -689,27 +708,44 @@ er_fn er_amdgpu_program_otg0_mode
 ; int er_amdgpu_program_otg0_timing(uint64_t bar0, const uint32_t* timing)
 ; ==================================================================
 er_fn er_amdgpu_program_otg0_timing
+    mov     rdx, rsi
+    xor     esi, esi
+    jmp     er_amdgpu_program_otg_timing
+
+; ==================================================================
+; er_amdgpu_program_otg_timing — program OTG from timing struct
+; int er_amdgpu_program_otg_timing(uint64_t bar0, uint32_t pipe,
+;                                  const uint32_t* timing)
+; ==================================================================
+er_fn er_amdgpu_program_otg_timing
     push    r12
     push    r13
+    push    r14
     test    rdi, rdi
     jz      .bad_arg
+    cmp     esi, DCN_OTG_PIPE_COUNT
+    jae     .bad_arg
     mov     r12, rdi            ; bar0
-    mov     r13, rsi            ; timing
+    mov     r13, rdx            ; timing
+    mov     r14d, esi
     mov     rdi, r13
     call    er_amdgpu_validate_timing
     test    eax, eax
     jnz     .bad_arg
+    mov     eax, r14d
+    imul    eax, DCN_OTG_PIPE_STRIDE
+    mov     r14d, eax
 
     ; Set V_TOTAL
     mov     rdi, r12
-    mov     esi, DCN_OTG0_V_TOTAL
+    lea     esi, [r14d + DCN_OTG0_V_TOTAL]
     mov     edx, [r13 + AMDGPU_TIMING_V_TOTAL]
     dec     edx
     call    _mmio_write
 
     ; Set H_TOTAL
     mov     rdi, r12
-    mov     esi, DCN_OTG0_H_TOTAL
+    lea     esi, [r14d + DCN_OTG0_H_TOTAL]
     mov     edx, [r13 + AMDGPU_TIMING_H_TOTAL]
     dec     edx
     call    _mmio_write
@@ -722,7 +758,7 @@ er_fn er_amdgpu_program_otg0_timing
     and     eax, 0xffff
     or      edx, eax
     mov     rdi, r12
-    mov     esi, DCN_OTG0_H_SYNC_A
+    lea     esi, [r14d + DCN_OTG0_H_SYNC_A]
     call    _mmio_write
 
     ; Set V_SYNC_A
@@ -733,7 +769,7 @@ er_fn er_amdgpu_program_otg0_timing
     and     eax, 0xffff
     or      edx, eax
     mov     rdi, r12
-    mov     esi, DCN_OTG0_V_SYNC_A
+    lea     esi, [r14d + DCN_OTG0_V_SYNC_A]
     call    _mmio_write
 
     ; Set H_BLANK_START_END
@@ -744,7 +780,7 @@ er_fn er_amdgpu_program_otg0_timing
     and     eax, 0xffff
     or      edx, eax
     mov     rdi, r12
-    mov     esi, DCN_OTG0_H_BLANK_START_END
+    lea     esi, [r14d + DCN_OTG0_H_BLANK_START_END]
     call    _mmio_write
 
     ; Set V_BLANK_START_END
@@ -755,23 +791,24 @@ er_fn er_amdgpu_program_otg0_timing
     and     eax, 0xffff
     or      edx, eax
     mov     rdi, r12
-    mov     esi, DCN_OTG0_V_BLANK_START_END
+    lea     esi, [r14d + DCN_OTG0_V_BLANK_START_END]
     call    _mmio_write
 
     ; Disable interlace
     mov     rdi, r12
-    mov     esi, DCN_OTG0_INTERLACE_CONTROL
+    lea     esi, [r14d + DCN_OTG0_INTERLACE_CONTROL]
     xor     edx, edx
     call    _mmio_write
 
     ; Enable OTG master
     mov     rdi, r12
-    mov     esi, DCN_OTG0_MASTER_EN
+    lea     esi, [r14d + DCN_OTG0_MASTER_EN]
     mov     edx, 1
     call    _mmio_write
 
     xor     eax, eax
     er_ok
+    pop     r14
     pop     r13
     pop     r12
     ret
@@ -779,6 +816,7 @@ er_fn er_amdgpu_program_otg0_timing
 .bad_arg:
     er_err  ERROR_BAD_ARGUMENT
     mov     eax, -1
+    pop     r14
     pop     r13
     pop     r12
     ret

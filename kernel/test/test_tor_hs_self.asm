@@ -13,6 +13,7 @@ extern er_tor_hs_build_establish_intro_v3
 extern er_tor_hs_parse_intro_established
 extern er_tor_hs_establish_rendezvous
 extern er_tor_hs_establish_intro
+extern er_tor_hs_send_introduce1
 extern er_tor_hs_send_rendezvous1
 extern er_memcpy
 
@@ -193,6 +194,17 @@ _start:
     ASSERT_EQ byte [rel last_cmd], TOR_RELAY_ESTABLISH_INTRO
     ASSERT_EQ dword [rel last_len], TOR_HS_ESTABLISH_INTRO_BASE_LEN + TOR_HS_ED25519_SIG_LEN
 
+    mov     edi, 6
+    lea     rsi, [rel auth_key]
+    lea     rdx, [rel encrypted]
+    mov     ecx, 8
+    call    er_tor_hs_send_introduce1
+    ASSERT_EQ eax, 0
+    ASSERT_EQ dword [rel last_circ], 6
+    ASSERT_EQ word [rel last_stream], 0
+    ASSERT_EQ byte [rel last_cmd], TOR_RELAY_INTRODUCE1
+    ASSERT_EQ dword [rel last_len], 64
+
     mov     edi, 9
     lea     rsi, [rel cookie]
     lea     rdx, [rel handshake]
@@ -248,6 +260,8 @@ er_tor_recv_relay:
     mov     word [rsi], 0
     cmp     byte [rel last_cmd], TOR_RELAY_ESTABLISH_INTRO
     je      .intro_established
+    cmp     byte [rel last_cmd], TOR_RELAY_INTRODUCE1
+    je      .introduce_ack
     mov     byte [rdx], TOR_RELAY_RENDEZVOUS_ESTABLISHED
     mov     dword [r8], 0
     xor     eax, eax
@@ -256,5 +270,13 @@ er_tor_recv_relay:
     mov     byte [rdx], TOR_RELAY_INTRO_ESTABLISHED
     mov     byte [rcx], 0
     mov     dword [r8], 1
+    xor     eax, eax
+    ret
+.introduce_ack:
+    mov     byte [rdx], TOR_RELAY_INTRODUCE_ACK
+    mov     byte [rcx], 0
+    mov     byte [rcx + 1], 0
+    mov     byte [rcx + 2], 0
+    mov     dword [r8], 3
     xor     eax, eax
     ret
