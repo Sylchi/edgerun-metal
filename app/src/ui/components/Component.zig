@@ -226,7 +226,12 @@ comptime {
         if (!@hasDecl(entry.type, "measure")) @compileError(@typeName(entry.type) ++ " must own measure");
         if (!@hasDecl(entry.type, "writeRecord")) @compileError(@typeName(entry.type) ++ " must own writeRecord");
         if (!@hasDecl(entry.type, "fromNode")) @compileError(@typeName(entry.type) ++ " must own fromNode");
-        common.assertComponentContract(entry.type, .{});
+        common.assertComponentContract(entry.type, .{
+            .requires_id = @hasField(entry.type, "id"),
+            .requires_flags = @hasField(entry.type, "flags"),
+            .requires_accessibility = @hasDecl(entry.type, "accessibility"),
+            .requires_interactions = @hasDecl(entry.type, "collectInteractions"),
+        });
     }
 }
 

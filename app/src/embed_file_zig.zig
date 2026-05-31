@@ -32,7 +32,7 @@ pub fn main(init: std.process.Init) !void {
     const mode_text = args.next() orelse return error.MissingMode;
     const mode = parseMode(mode_text) orelse return error.BadMode;
     const input_path = args.next() orelse return error.MissingInputPath;
-    var output_path = args.next() orelse return error.MissingOutputPath;
+    const output_path = args.next() orelse return error.MissingOutputPath;
     if (args.next() != null) return error.TooManyArguments;
 
     const embedded_bytes = switch (mode) {

@@ -106,6 +106,8 @@ xhci_cfg_blob_ptrs: resq XHCI_BLOB_PORT_SLOTS
 xhci_cfg_blob_lens: resq XHCI_BLOB_PORT_SLOTS
 xhci_cmd_enq_idx:   resd 1
 xhci_cmd_cycle:     resd 1
+xhci_evt_deq_idx:   resd 1
+xhci_evt_cycle:     resd 1
 
 ; ─── Text ───────────────────────────────────────────────────────────
 SECTION .text
@@ -464,6 +466,8 @@ er_fn er_xhci_init
     mov     dword [rdi + 12], (TRB_LINK << TRB_TYPE_SHIFT) | TRB_LINK_TOGGLE
     mov     dword [xhci_cmd_enq_idx], 0
     mov     dword [xhci_cmd_cycle], 1
+    mov     dword [xhci_evt_deq_idx], 0
+    mov     dword [xhci_evt_cycle], 1
 
     ; Clear per-port descriptor blob registry.
     lea     rdi, [rel xhci_cfg_blob_ptrs]
@@ -812,5 +816,131 @@ er_fn er_xhci_get_port_config_blob
     ret
 .gp_absent:
     er_err  ERROR_NOT_PRESENT
+    mov     eax, -1
+    ret
+
+; ==================================================================
+; er_xhci_cmd_submit_noop — enqueue a command No-Op TRB and ring doorbell 0
+; int er_xhci_cmd_submit_noop(void)
+; Returns: 0 on success, -1 on controller-not-present.
+; ==================================================================
+er_fn er_xhci_cmd_submit_noop
+    mov     eax, [xhci_bar0]
+    test    eax, eax
+    jz      .cn_absent
+
+    mov     ecx, [xhci_cmd_enq_idx]
+    cmp     ecx, (CMD_RING_NTRB - 1)
+    jb      .cn_have_slot
+    mov     ecx, 0
+    mov     eax, [xhci_cmd_cycle]
+    xor     eax, 1
+    mov     [xhci_cmd_cycle], eax
+.cn_have_slot:
+    lea     rdi, [rel xhci_cmd_ring]
+    mov     eax, ecx
+    shl     eax, 4
+    add     rdi, rax
+    ; TRB parameter/status are zero for No-Op.
+    mov     qword [rdi + 0], 0
+    mov     dword [rdi + 8], 0
+    mov     eax, (TRB_CMD_NOOP << TRB_TYPE_SHIFT)
+    mov     edx, [xhci_cmd_cycle]
+    and     edx, TRB_CYCLE
+    or      eax, edx
+    mov     [rdi + 12], eax
+
+    ; Advance enqueue pointer, skipping permanent Link TRB at tail.
+    mov     eax, ecx
+    inc     eax
+    cmp     eax, (CMD_RING_NTRB - 1)
+    jb      .cn_store_idx
+    mov     eax, 0
+    mov     edx, [xhci_cmd_cycle]
+    xor     edx, 1
+    mov     [xhci_cmd_cycle], edx
+.cn_store_idx:
+    mov     [xhci_cmd_enq_idx], eax
+
+    ; Ring command doorbell (DB0 target 0, stream 0).
+    mov     edi, [xhci_bar0]
+    add     edi, [xhci_db_off]
+    xor     esi, esi
+    call    er_mmio_write32
+    xor     eax, eax
+    er_ok
+    ret
+.cn_absent:
+    er_err  ERROR_NOT_PRESENT
+    mov     eax, -1
+    ret
+
+; ==================================================================
+; er_xhci_event_pop — pop next event TRB if present
+; int er_xhci_event_pop(uint64_t* out_p0, uint32_t* out_status,
+;                       uint32_t* out_control, uint32_t* out_reserved)
+; Returns: 1 when an event is popped, 0 when no event available, -1 bad args.
+; ==================================================================
+er_fn er_xhci_event_pop
+    test    rdi, rdi
+    jz      .ep_bad_arg
+    test    rsi, rsi
+    jz      .ep_bad_arg
+    test    rdx, rdx
+    jz      .ep_bad_arg
+    test    rcx, rcx
+    jz      .ep_bad_arg
+
+    mov     eax, [xhci_evt_deq_idx]
+    cmp     eax, EVT_RING_NTRB
+    jb      .ep_idx_ok
+    mov     eax, 0
+    mov     [xhci_evt_deq_idx], eax
+.ep_idx_ok:
+    lea     r8, [rel xhci_evt_ring]
+    mov     r9d, eax
+    shl     r9d, 4
+    add     r8, r9
+    mov     r10d, [r8 + 12]
+    mov     r11d, [xhci_evt_cycle]
+    and     r11d, TRB_CYCLE
+    mov     eax, r10d
+    and     eax, TRB_CYCLE
+    cmp     eax, r11d
+    jne     .ep_empty
+
+    mov     rax, [r8 + 0]
+    mov     [rdi], rax
+    mov     eax, [r8 + 8]
+    mov     [rsi], eax
+    mov     eax, [r8 + 12]
+    mov     [rdx], eax
+    mov     dword [rcx], 0
+
+    ; Software consumes event entry by clearing it.
+    mov     qword [r8 + 0], 0
+    mov     dword [r8 + 8], 0
+    mov     dword [r8 + 12], 0
+
+    mov     eax, [xhci_evt_deq_idx]
+    inc     eax
+    cmp     eax, EVT_RING_NTRB
+    jb      .ep_store_next
+    mov     eax, 0
+    mov     edx, [xhci_evt_cycle]
+    xor     edx, 1
+    mov     [xhci_evt_cycle], edx
+.ep_store_next:
+    mov     [xhci_evt_deq_idx], eax
+    mov     eax, 1
+    er_ok
+    ret
+
+.ep_empty:
+    xor     eax, eax
+    er_ok
+    ret
+.ep_bad_arg:
+    er_err  ERROR_BAD_ARGUMENT
     mov     eax, -1
     ret
