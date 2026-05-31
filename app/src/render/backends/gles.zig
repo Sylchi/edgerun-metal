@@ -1,5 +1,6 @@
 const std = @import("std");
 const renderer_font_atlas = @import("../font_atlas_weighted.zig");
+const font_vector = @import("../font.zig");
 const gl_contract = @import("../gl_contract.zig");
 const renderer_ir = @import("../ir.zig");
 const renderer_present = @import("../present.zig");
@@ -11,6 +12,7 @@ pub const RgbaTexture = renderer_ir.RgbaTexture;
 
 pub const State = struct {
     gles: *const gles_gl.Gles2,
+    font_atlas: *renderer_font_atlas.Atlas,
     rect_program: gles_gl.GLuint,
     textured_program: gles_gl.GLuint,
     image_program: gles_gl.GLuint,
@@ -67,6 +69,7 @@ pub fn initState(font_atlas: *renderer_font_atlas.Atlas, image: ?RgbaTexture, gl
     } else null;
     return .{
         .gles = gles,
+        .font_atlas = font_atlas,
         .rect_program = try makeProgram(gles, gl_contract.rect_vertex_shader, gl_contract.rect_fragment_shader),
         .textured_program = try makeProgram(gles, gl_contract.textured_vertex_shader, gl_contract.text_fragment_shader),
         .image_program = try makeProgram(gles, gl_contract.textured_vertex_shader, gl_contract.image_fragment_shader),
@@ -80,11 +83,11 @@ pub fn initState(font_atlas: *renderer_font_atlas.Atlas, image: ?RgbaTexture, gl
 }
 
 pub fn deinit(gl: *State) void {
-    if (gl.image_texture) |texture| gl.gles.glDeleteTextures(1, &texture);
-    gl.gles.glDeleteTextures(1, &gl.font_texture);
-    gl.gles.glDeleteBuffers(1, &gl.rect_vbo);
-    gl.gles.glDeleteBuffers(1, &gl.textured_vbo);
-    gl.gles.glDeleteBuffers(1, &gl.line_vbo);
+    if (gl.image_texture) |*texture| gl.gles.glDeleteTextures(1, @ptrCast(texture));
+    gl.gles.glDeleteTextures(1, @ptrCast(&gl.font_texture));
+    gl.gles.glDeleteBuffers(1, @ptrCast(&gl.rect_vbo));
+    gl.gles.glDeleteBuffers(1, @ptrCast(&gl.textured_vbo));
+    gl.gles.glDeleteBuffers(1, @ptrCast(&gl.line_vbo));
     gl.gles.glDeleteProgram(gl.rect_program);
     gl.gles.glDeleteProgram(gl.textured_program);
     gl.gles.glDeleteProgram(gl.image_program);
@@ -114,7 +117,13 @@ pub fn renderFrameToViewport(gl: State, logical_width: i32, logical_height: i32,
 
 fn drawText(gl: State, width: i32, height: i32, values: []const f32) !void {
     if (values.len == 0) return;
-    try drawTexturedWithProgram(gl, width, height, values, gl.font_texture, gl.textured_program);
+    var iter = renderer_ir.TextGlyphIterator.init(values) catch return error.InvalidIrBuffer;
+    while (try iter.next()) |glyph| {
+        var vertices: [renderer_ir.text_vertex_float_stride * renderer_ir.textured_quad_vertex_count]f32 = undefined;
+        var vertex_len: usize = 0;
+        try appendGlyphQuad(gl.font_atlas, &vertices, &vertex_len, glyph);
+        if (vertex_len != 0) try drawTexturedWithProgram(gl, width, height, vertices[0..vertex_len], gl.font_texture, gl.textured_program);
+    }
 }
 
 fn drawImage(gl: State, width: i32, height: i32, values: []const f32) !void {
@@ -139,10 +148,10 @@ pub fn readFramePixels(gles: *const gles_gl.Gles2, width: i32, height: i32, out:
 pub fn renderFrameToRgbaPixels(gl: State, width: i32, height: i32, buffers: renderer_ir.Buffers, out: []ui.Color) !void {
     if (width <= 0 or height <= 0) return error.InvalidFramebufferSize;
     const texture = makeEmptyRgbaTexture(gl.gles, @intCast(width), @intCast(height));
-    defer gl.gles.glDeleteTextures(1, &texture);
+    defer gl.gles.glDeleteTextures(1, @ptrCast(&texture));
     var framebuffer: gles_gl.GLuint = 0;
-    gl.gles.glGenFramebuffers(1, &framebuffer);
-    defer gl.gles.glDeleteFramebuffers(1, &framebuffer);
+    gl.gles.glGenFramebuffers(1, @ptrCast(&framebuffer));
+    defer gl.gles.glDeleteFramebuffers(1, @ptrCast(&framebuffer));
     gl.gles.glBindFramebuffer(gles_gl.gl_framebuffer, framebuffer);
     defer gl.gles.glBindFramebuffer(gles_gl.gl_framebuffer, 0);
     gl.gles.glFramebufferTexture2D(gles_gl.gl_framebuffer, gles_gl.gl_color_attachment0, gles_gl.gl_texture_2d, texture, 0);
@@ -169,7 +178,7 @@ fn readBoundFramePixels(gles: *const gles_gl.Gles2, width: i32, height: i32, out
 
 pub fn requireHardwareGl(gles: *const gles_gl.Gles2) !void {
     const renderer_raw = gles.glGetString(gles_gl.gl_renderer) orelse return error.GlRendererUnavailable;
-    const renderer = std.mem.span(@as([*:0]const u8, @ptrCast(renderer_raw.?)));
+    const renderer = std.mem.span(@as([*:0]const u8, @ptrCast(renderer_raw)));
     if (isSoftwareRenderer(renderer)) return error.SoftwareGlRendererRejected;
 }
 
@@ -304,6 +313,43 @@ fn drawTexturedWithProgram(gl: State, width: i32, height: i32, values: []const f
     gl.gles.glDrawArrays(gles_gl.gl_triangles, 0, @intCast(values.len / renderer_ir.text_vertex_float_stride));
 }
 
+fn appendGlyphQuad(font_atlas: *renderer_font_atlas.Atlas, out: []f32, out_len: *usize, glyph: renderer_ir.TextGlyph) !void {
+    const px = glyphPx(glyph.px) orelse return error.InvalidIrBuffer;
+    font_atlas.setTextWeight(fontWeightForGlyph(glyph.weight));
+    const atlas_glyph = (try font_atlas.source().glyph(font_atlas, glyph.codepoint, px)) orelse return;
+    if (atlas_glyph.w <= 0.0 or atlas_glyph.h <= 0.0) return;
+    const bounds = ui.Rect.init(
+        glyph.x + atlas_glyph.left,
+        glyph.baseline_y + atlas_glyph.top,
+        atlas_glyph.w,
+        atlas_glyph.h,
+    );
+    try renderer_ir.pushClippedTexturedQuad(
+        out,
+        out_len,
+        bounds,
+        bounds,
+        atlas_glyph.u0,
+        atlas_glyph.v0,
+        atlas_glyph.u1,
+        atlas_glyph.v1,
+        glyph.color,
+    );
+}
+
+fn fontWeightForGlyph(weight: ui.FontWeight) font_vector.Weight {
+    return switch (weight) {
+        .regular => .regular,
+        .semibold => .semibold,
+        .bold => .bold,
+    };
+}
+
+fn glyphPx(value: f32) ?u8 {
+    if (value <= 0.0 or value > @as(f32, @floatFromInt(std.math.maxInt(u8)))) return null;
+    return @intFromFloat(@round(value));
+}
+
 fn drawIconLines(gl: State, width: i32, height: i32, values: []const f32) !void {
     if (values.len == 0) return;
     if (values.len % renderer_ir.icon_line_vertex_float_stride != 0) return error.InvalidIrBuffer;
@@ -320,13 +366,13 @@ fn drawIconLines(gl: State, width: i32, height: i32, values: []const f32) !void 
 
 fn makeBuffer(gles: *const gles_gl.Gles2) gles_gl.GLuint {
     var buffer: gles_gl.GLuint = 0;
-    gles.glGenBuffers(1, &buffer);
+    gles.glGenBuffers(1, @ptrCast(&buffer));
     return buffer;
 }
 
 fn makeAlphaTextureFiltered(gles: *const gles_gl.Gles2, width: usize, height: usize, alpha: []const u8, filter: gles_gl.GLint) gles_gl.GLuint {
     var texture: gles_gl.GLuint = 0;
-    gles.glGenTextures(1, &texture);
+    gles.glGenTextures(1, @ptrCast(&texture));
     gles.glBindTexture(gles_gl.gl_texture_2d, texture);
     gles.glTexParameteri(gles_gl.gl_texture_2d, gles_gl.gl_texture_min_filter, filter);
     gles.glTexParameteri(gles_gl.gl_texture_2d, gles_gl.gl_texture_mag_filter, filter);
@@ -339,7 +385,7 @@ fn makeAlphaTextureFiltered(gles: *const gles_gl.Gles2, width: usize, height: us
 
 fn makeRgbaTexture(gles: *const gles_gl.Gles2, width: usize, height: usize, pixels: []const ui.Color) gles_gl.GLuint {
     var texture: gles_gl.GLuint = 0;
-    gles.glGenTextures(1, &texture);
+    gles.glGenTextures(1, @ptrCast(&texture));
     gles.glBindTexture(gles_gl.gl_texture_2d, texture);
     gles.glTexParameteri(gles_gl.gl_texture_2d, gles_gl.gl_texture_min_filter, gles_gl.gl_linear);
     gles.glTexParameteri(gles_gl.gl_texture_2d, gles_gl.gl_texture_mag_filter, gles_gl.gl_linear);
@@ -352,7 +398,7 @@ fn makeRgbaTexture(gles: *const gles_gl.Gles2, width: usize, height: usize, pixe
 
 fn makeEmptyRgbaTexture(gles: *const gles_gl.Gles2, width: usize, height: usize) gles_gl.GLuint {
     var texture: gles_gl.GLuint = 0;
-    gles.glGenTextures(1, &texture);
+    gles.glGenTextures(1, @ptrCast(&texture));
     gles.glBindTexture(gles_gl.gl_texture_2d, texture);
     gles.glTexParameteri(gles_gl.gl_texture_2d, gles_gl.gl_texture_min_filter, gles_gl.gl_nearest);
     gles.glTexParameteri(gles_gl.gl_texture_2d, gles_gl.gl_texture_mag_filter, gles_gl.gl_nearest);
@@ -390,7 +436,7 @@ fn makeProgram(gles: *const gles_gl.Gles2, vertex_source: [:0]const u8, fragment
 fn makeShader(gles: *const gles_gl.Gles2, kind: gles_gl.GLenum, source: [:0]const u8) !gles_gl.GLuint {
     const shader = gles.glCreateShader(kind);
     var ptr = source.ptr;
-    gles.glShaderSource(shader, 1, &ptr, null);
+    gles.glShaderSource(shader, 1, @ptrCast(&ptr), null);
     gles.glCompileShader(shader);
     var ok: gles_gl.GLint = 0;
     gles.glGetShaderiv(shader, gles_gl.gl_compile_status, &ok);

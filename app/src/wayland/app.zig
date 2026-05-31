@@ -12,6 +12,7 @@ const app_location = @import("../location.zig");
 const app_native_input = @import("../input/native.zig");
 const app_dashboard = @import("../app_dashboard.zig");
 const app_hardware_dashboard = @import("../app_hardware_dashboard.zig");
+const app_encrypted_chat = @import("../app_encrypted_chat.zig");
 const icon_component = @import("../ui/components/Icon.zig");
 const ui = @import("../ui/core.zig");
 const text_component = @import("../ui/components/Text.zig");
@@ -42,7 +43,7 @@ pub const unionPixelRect = surface.unionPixelRect;
 pub const fixedToFloat = surface.fixedToFloat;
 pub const appBackground = surface.defaultBackground;
 
-pub fn renderNativeAppScene(scene: *ui.Scene, collector: *interaction.Collector, width: u32, height: u32, state: AppState, dashboard_state: *app_dashboard.State, dashboard_mode: bool, hardware_state: ?*app_hardware_dashboard.State, hardware_mode: bool) !void {
+pub fn renderNativeAppScene(scene: *ui.Scene, collector: *interaction.Collector, width: u32, height: u32, state: AppState, dashboard_state: *app_dashboard.State, dashboard_mode: bool, hardware_state: ?*app_hardware_dashboard.State, hardware_mode: bool, chat_state: ?*app_encrypted_chat.State, chat_mode: bool) !void {
     try renderClientDecoration(scene, collector, @floatFromInt(width));
     const content_y = protocol.client_decor_h;
     const content_h = @max(1.0, @as(f32, @floatFromInt(height)) - content_y);
@@ -55,6 +56,12 @@ pub fn renderNativeAppScene(scene: *ui.Scene, collector: *interaction.Collector,
     if (hardware_mode) {
         if (hardware_state) |hs| {
             try hs.render(scene, collector, bounds, hardwareRenderOptions(state));
+        }
+        return;
+    }
+    if (chat_mode) {
+        if (chat_state) |cs| {
+            try cs.render(scene, collector, bounds, hardwareRenderOptions(state));
         }
         return;
     }
@@ -129,8 +136,11 @@ pub const NativeApp = struct {
     state: AppState = .{ .public_identity = "native-wayland", .reveal_identity = "native-wayland" },
     dashboard_app: app_dashboard.State = .{},
     hardware_app: app_hardware_dashboard.State = .{},
+    chat_app: app_encrypted_chat.State = undefined,
     dashboard: bool = false,
     hardware: bool = false,
+    chat: bool = false,
+    ui_stream: @import("options.zig").UiStreamMode = .off,
 
     pub fn create(client_ptr: *client.WaylandClient, allocator: std.mem.Allocator, options: @import("options.zig").Options) !*NativeApp {
         const surf = try surface.Surface.create(allocator, client_ptr, options);
@@ -147,8 +157,11 @@ pub const NativeApp = struct {
         };
         self.dashboard_app = .{};
         self.hardware_app = .{};
+        self.chat_app = try app_encrypted_chat.State.initDemo();
         self.dashboard = options.dashboard;
         self.hardware = options.hardware;
+        self.chat = options.chat;
+        self.ui_stream = options.ui_stream;
         if (self.hardware) self.hardware_app.refresh();
         return self;
     }
@@ -166,7 +179,7 @@ pub const NativeApp = struct {
     pub fn render(self: *NativeApp, client_ptr: *client.WaylandClient) !void {
         var scene = ui.Scene.initWithClips(&self.commands, &self.clips);
         var collector = interaction.Collector.init(&self.regions);
-        try renderNativeAppScene(&scene, &collector, self.surface.width, self.surface.height, self.state, &self.dashboard_app, self.dashboard, &self.hardware_app, self.hardware);
+        try renderNativeAppScene(&scene, &collector, self.surface.width, self.surface.height, self.state, &self.dashboard_app, self.dashboard, &self.hardware_app, self.hardware, &self.chat_app, self.chat);
         self.region_len = collector.written().len;
         const cursor_kind = self.state.cursorKind();
         if (self.surface.present != .cpu) try app_cursor.render(&scene, self.state.hover_x, self.state.hover_y, cursor_kind);

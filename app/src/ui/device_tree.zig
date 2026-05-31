@@ -3,7 +3,6 @@ const bytes = @import("../bytes.zig");
 const arena = @import("../arena.zig");
 const codec = @import("codec.zig");
 const ui = @import("core.zig");
-const ui_stream = @import("codec.zig");
 
 pub const Error = error{
     Corrupt,
@@ -146,11 +145,17 @@ pub const DeviceTree = struct {
     }
 
     pub fn applyWirePatch(self: *DeviceTree, wire_bytes: []const u8) Error!void {
-        const decoded = ui_stream.decodePatch(wire_bytes) orelse return error.Corrupt;
+        const decoded = codec.decodePatch(wire_bytes) orelse return error.Corrupt;
         var patch = decoded.patch;
         try self.allocatePatchStrings(&patch);
         const node = self.findNode(decoded.component_id) orelse return error.NodeNotFound;
         ui.applyPatch(node, patch) catch return error.NodeNotFound;
+    }
+
+    pub fn applyBleAdvertisement(self: *DeviceTree, scan_record: []const u8) Error!void {
+        const frame = codec.decodeBleManufacturerAd(scan_record) orelse return error.Corrupt;
+        if (frame.kind != .patch) return error.Corrupt;
+        try self.applyWirePatch(frame.body);
     }
 
     pub fn render(self: *DeviceTree, scene: *ui.Scene, bounds: ui.Rect, style: ui.Style) Error!void {
@@ -175,7 +180,7 @@ test "device tree applies f32 wire patch and re-renders" {
 
     // Apply BLE-sized wire patch: component_id=1, text_value="28.3°C" (8 bytes wire)
     var patch_buf: [16]u8 = undefined;
-    const wire = ui_stream.encodePatch(&patch_buf, 1, ui.Patch{ .text_value = "28.3°C" }).?;
+    const wire = codec.encodePatch(&patch_buf, 1, ui.Patch{ .text_value = "28.3°C" }).?;
     try std.testing.expect(wire.len <= 12); // fits in BLE advertisement
     try tree.applyWirePatch(wire);
 
@@ -196,6 +201,25 @@ test "device tree applies f32 wire patch and re-renders" {
         else => {},
     };
     try std.testing.expect(found);
+}
+
+test "device tree applies patch from BLE advertisement scan record" {
+    var arena_mem: [2048]u8 = undefined;
+    var nodes = [_]ui.Node{
+        ui.textNode("Switch", null),
+        ui.textNode("OFF", null),
+    };
+    var tree = DeviceTree.init(1, "switch-1", ui.columnStack(4, 0, &nodes), &arena_mem);
+
+    var patch_buf: [16]u8 = undefined;
+    const patch = codec.encodePatch(&patch_buf, 1, ui.Patch{ .text_value = "ON" }).?;
+    var frame_buf: [codec.ble_legacy_payload_max]u8 = undefined;
+    const frame = codec.encodeBleFrame(&frame_buf, 1, 7, .patch, patch).?;
+    var scan_record: [codec.ble_legacy_ad_max]u8 = undefined;
+    const ad = codec.encodeBleManufacturerAd(&scan_record, frame).?;
+
+    try tree.applyBleAdvertisement(ad);
+    try std.testing.expectEqualStrings("ON", tree.root.stack.children[1].text.value);
 }
 
 test "device tree from codec decodes cleanly" {

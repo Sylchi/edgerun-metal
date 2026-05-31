@@ -77,9 +77,9 @@
 @ CMD8 — SEND_IF_COND, 48-bit response
 .equ CMD8_VAL,              (8 << 24) | CMDTM_RESP_48 | CMDTM_CRC_CHK_EN | CMDTM_IDX_CHK_EN
 @ CMD17 — READ_SINGLE_BLOCK, 48-bit response, data read
-.equ CMD17_VAL,             (17 << 24) | CMDTM_RESP_48 | CMDTM_CRC_CHK_EN | CMDTM_IDX_CHK_EN | CMDTM_IS_DATA | CMDTM_DIR_READ
+.equ CMD17_VAL,             (17 << 24) | CMDTM_RESP_48 | CMDTM_CRC_CHK_EN | CMDTM_IDX_CHK_EN | CMDTM_IS_DATA | CMDTM_BLKCNT_EN | CMDTM_DIR_READ
 @ CMD24 — WRITE_BLOCK, 48-bit response, data write
-.equ CMD24_VAL,             (24 << 24) | CMDTM_RESP_48 | CMDTM_CRC_CHK_EN | CMDTM_IDX_CHK_EN | CMDTM_IS_DATA | CMDTM_DIR_WRITE
+.equ CMD24_VAL,             (24 << 24) | CMDTM_RESP_48 | CMDTM_CRC_CHK_EN | CMDTM_IDX_CHK_EN | CMDTM_IS_DATA | CMDTM_BLKCNT_EN | CMDTM_DIR_WRITE
 @ CMD52 — IO_RW_DIRECT, 48-bit R5 response
 .equ CMD52_VAL,             (52 << 24) | CMDTM_RESP_48 | CMDTM_CRC_CHK_EN | CMDTM_IDX_CHK_EN
 @ CMD53 — IO_RW_EXTENDED, 48-bit R5 response, data write
@@ -145,6 +145,12 @@
 .equ SBSDIO_FORCE_ALP_VALUE, (SBSDIO_FORCE_HW_CLKREQ_OFF | SBSDIO_FORCE_ALP)
 .equ SDIO_CLOCK_POLLS,       1000
 
+@ ---- SD block transfer fields ----
+.equ SD_BLOCK_BYTES,         512
+.equ SD_BLOCK_WORDS,         128
+.equ SD_BLOCK_COUNT_ONE,     1
+.equ SD_BLKSIZECNT_SINGLE,   SD_BLOCK_BYTES | (SD_BLOCK_COUNT_ONE << 16)
+
 @ ---- CMD8 check pattern ----
 .equ IF_COND_VHS_3V3,       (1 << 8)
 .equ IF_COND_CHECK_PATTERN, 0xAA
@@ -169,6 +175,8 @@
 .globl emmc_sdio_func2_write_backplane_words
 .weak emmc_sdio_cmd
 .weak emmc_sdio_write_words_cmd53
+.weak emmc_mmio_read
+.weak emmc_mmio_write
 
 
 @ ---- emmc_init ----
@@ -966,43 +974,55 @@ emmc_sdio_cmd:
 
 @ Wait for CMD_DONE interrupt, return 0 on success, 1 on error/timeout
 emmc_wait_cmd_done:
-    ldr     r1, =EMMC_BASE
-    mov     r2, #0x1000000
-1:  ldr     r0, [r1, #EMMC_INTERRUPT]
+    push    {r4, r5, lr}
+    mov     r4, #0x1000000
+    mov     r5, #EMMC_INTERRUPT
+1:  mov     r0, r5
+    bl      emmc_mmio_read
     tst     r0, #INT_CMD_DONE
     bne     2f
     tst     r0, #INT_ERROR
     bne     3f
-    subs    r2, r2, #1
+    subs    r4, r4, #1
     bne     1b
 3:  @ Error or timeout
     mvn     r0, #0
-    str     r0, [r1, #EMMC_INTERRUPT]
+    mov     r1, r0
+    mov     r0, r5
+    bl      emmc_mmio_write
     mov     r0, #1
-    bx      lr
+    pop     {r4, r5, pc}
 2:  @ Success
-    str     r0, [r1, #EMMC_INTERRUPT]
+    mov     r1, r0
+    mov     r0, r5
+    bl      emmc_mmio_write
     mov     r0, #0
-    bx      lr
+    pop     {r4, r5, pc}
 
 @ Wait for DATA_DONE interrupt or data_ready bit, return 0 on success
 emmc_wait_data_done:
-    ldr     r1, =EMMC_BASE
-    mov     r2, #0x1000000
-1:  ldr     r0, [r1, #EMMC_INTERRUPT]
+    push    {r4, r5, lr}
+    mov     r4, #0x1000000
+    mov     r5, #EMMC_INTERRUPT
+1:  mov     r0, r5
+    bl      emmc_mmio_read
     tst     r0, #INT_DATA_DONE
     bne     2f
     tst     r0, #INT_ERROR
     bne     3f
-    subs    r2, r2, #1
+    subs    r4, r4, #1
     bne     1b
 3:  mvn     r0, #0
-    str     r0, [r1, #EMMC_INTERRUPT]
+    mov     r1, r0
+    mov     r0, r5
+    bl      emmc_mmio_write
     mov     r0, #1
-    bx      lr
-2:  str     r0, [r1, #EMMC_INTERRUPT]
+    pop     {r4, r5, pc}
+2:  mov     r1, r0
+    mov     r0, r5
+    bl      emmc_mmio_write
     mov     r0, #0
-    bx      lr
+    pop     {r4, r5, pc}
 
 @ ---- emmc_read_block ----
 @ r0 = LBA (sector number)
@@ -1012,10 +1032,14 @@ emmc_read_block:
     push    {r4, r5, r6, lr}
     mov     r4, r0
     mov     r5, r1
-    ldr     r6, =EMMC_BASE
+    cmp     r5, #0
+    beq     .Lread_fail
+    tst     r5, #3
+    bne     .Lread_fail
 
     @ Compute byte address or LBA based on capacity flag
-    ldr     r0, [r6, #EMMC_SCRATCH]
+    mov     r0, #EMMC_SCRATCH
+    bl      emmc_mmio_read
     cmp     r0, #0
     bne     1f
     @ SDSC: multiply LBA by 512
@@ -1023,37 +1047,45 @@ emmc_read_block:
     b       2f
 1:  @ SDHC: use LBA directly
     mov     r0, r4
-2:  str     r0, [r6, #EMMC_ARG1]
+2:  mov     r1, r0
+    mov     r0, #EMMC_ARG1
+    bl      emmc_mmio_write
 
-    @ BLKSIZECNT = (512 << 16) | 1
-    mov     r0, #512
-    orr     r0, r0, #1
-    str     r0, [r6, #EMMC_BLKSIZECNT]
+    ldr     r0, =SD_BLKSIZECNT_SINGLE
+    mov     r1, r0
+    mov     r0, #EMMC_BLKSIZECNT
+    bl      emmc_mmio_write
 
     @ Send CMD17
     ldr     r0, =CMD17_VAL
-    str     r0, [r6, #EMMC_CMDTM]
+    mov     r1, r0
+    mov     r0, #EMMC_CMDTM
+    bl      emmc_mmio_write
     bl      emmc_wait_cmd_done
     cmp     r0, #0
     bne     .Lread_fail
 
     @ Wait for READ_READY
-    mov     r2, #0x1000000
-1:  ldr     r0, [r6, #EMMC_INTERRUPT]
+    mov     r6, #0x1000000
+1:  mov     r0, #EMMC_INTERRUPT
+    bl      emmc_mmio_read
     tst     r0, #INT_READ_READY
     bne     2f
     tst     r0, #INT_ERROR
     bne     .Lread_fail
-    subs    r2, r2, #1
+    subs    r6, r6, #1
     bne     1b
     b       .Lread_fail
-2:  str     r0, [r6, #EMMC_INTERRUPT]
+2:  mov     r1, r0
+    mov     r0, #EMMC_INTERRUPT
+    bl      emmc_mmio_write
 
-    @ Read 128 words from DATA FIFO
-    mov     r3, #128
-1:  ldr     r0, [r6, #EMMC_DATA]
+    @ Read one 512-byte block from DATA FIFO.
+    mov     r6, #SD_BLOCK_WORDS
+1:  mov     r0, #EMMC_DATA
+    bl      emmc_mmio_read
     str     r0, [r5], #4
-    subs    r3, r3, #1
+    subs    r6, r6, #1
     bne     1b
 
     @ Wait for DATA_DONE
@@ -1075,43 +1107,57 @@ emmc_write_block:
     push    {r4, r5, r6, lr}
     mov     r4, r0
     mov     r5, r1
-    ldr     r6, =EMMC_BASE
+    cmp     r5, #0
+    beq     .Lwrite_fail
+    tst     r5, #3
+    bne     .Lwrite_fail
 
-    ldr     r0, [r6, #EMMC_SCRATCH]
+    mov     r0, #EMMC_SCRATCH
+    bl      emmc_mmio_read
     cmp     r0, #0
     bne     1f
     mov     r0, r4, lsl #9
     b       2f
 1:  mov     r0, r4
-2:  str     r0, [r6, #EMMC_ARG1]
+2:  mov     r1, r0
+    mov     r0, #EMMC_ARG1
+    bl      emmc_mmio_write
 
-    mov     r0, #512
-    orr     r0, r0, #1
-    str     r0, [r6, #EMMC_BLKSIZECNT]
+    ldr     r0, =SD_BLKSIZECNT_SINGLE
+    mov     r1, r0
+    mov     r0, #EMMC_BLKSIZECNT
+    bl      emmc_mmio_write
 
     ldr     r0, =CMD24_VAL
-    str     r0, [r6, #EMMC_CMDTM]
+    mov     r1, r0
+    mov     r0, #EMMC_CMDTM
+    bl      emmc_mmio_write
     bl      emmc_wait_cmd_done
     cmp     r0, #0
     bne     .Lwrite_fail
 
     @ Wait for WRITE_READY
-    mov     r2, #0x1000000
-1:  ldr     r0, [r6, #EMMC_INTERRUPT]
+    mov     r6, #0x1000000
+1:  mov     r0, #EMMC_INTERRUPT
+    bl      emmc_mmio_read
     tst     r0, #INT_WRITE_READY
     bne     2f
     tst     r0, #INT_ERROR
     bne     .Lwrite_fail
-    subs    r2, r2, #1
+    subs    r6, r6, #1
     bne     1b
     b       .Lwrite_fail
-2:  str     r0, [r6, #EMMC_INTERRUPT]
+2:  mov     r1, r0
+    mov     r0, #EMMC_INTERRUPT
+    bl      emmc_mmio_write
 
-    @ Write 128 words to DATA FIFO
-    mov     r3, #128
+    @ Write one 512-byte block to DATA FIFO.
+    mov     r6, #SD_BLOCK_WORDS
 1:  ldr     r0, [r5], #4
-    str     r0, [r6, #EMMC_DATA]
-    subs    r3, r3, #1
+    mov     r1, r0
+    mov     r0, #EMMC_DATA
+    bl      emmc_mmio_write
+    subs    r6, r6, #1
     bne     1b
 
     bl      emmc_wait_data_done
@@ -1123,3 +1169,14 @@ emmc_write_block:
 .Lwrite_fail:
     mov     r0, #1
     pop     {r4, r5, r6, pc}
+
+@ ---- default MMIO hooks ----
+emmc_mmio_read:
+    ldr     r1, =EMMC_BASE
+    ldr     r0, [r1, r0]
+    bx      lr
+
+emmc_mmio_write:
+    ldr     r2, =EMMC_BASE
+    str     r1, [r2, r0]
+    bx      lr

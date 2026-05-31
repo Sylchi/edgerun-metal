@@ -14,12 +14,33 @@
 extern er_tor_cell_init
 extern er_tor_link_handshake
 extern er_tor_circuit_create
+extern er_tor_circuit_extend
 extern er_tor_send_relay
 extern er_tor_recv_relay
 extern er_tor_open_stream
 extern er_tor_open_dir_stream
+extern er_tor_hs_desc_parse_intro
+extern er_tor_hs_desc_build_v3
+extern er_tor_hs_cert_build
+extern er_tor_hs_cert_armor_ed25519
+extern er_tor_hs_parse_linkspecs
+extern er_tor_hs_build_linkspecs
+extern er_tor_hs_client_connect
+extern er_tor_hs_client_connect_from_desc
+extern er_tor_hs_client_introduce_from_desc
+extern er_tor_hs_open_client_stream
+extern er_tor_hs_establish_intro
+extern er_tor_hs_wait_rendezvous2
+extern er_tor_hs_service_wait_introduce2
+extern er_tor_hs_parse_introduce_plaintext
+extern er_tor_hs_send_rendezvous1
 extern er_tor_ntor_keygen
 extern er_tcp_recv
+extern er_fn_load_trusted
+extern er_fn_call_args
+extern er_wasm_runtime_ptr
+extern edgerun_signing_wasm_start
+extern edgerun_signing_wasm_len
 
 extern er_serial_puts
 extern er_serial_putchar
@@ -76,6 +97,14 @@ str_tor_dir_fail: db "tor: directory FAIL", 0x0A, 0
 str_tor_stream:  db "tor: stream ", 0
 str_tor_ok:      db "ok", 0x0A, 0
 str_tor_arrow:   db " -> ", 0
+tor_signing_name_sign: db "edgerun_signing_sign"
+tor_signing_name_sign_len equ $ - tor_signing_name_sign
+tor_signing_name_blind_sign: db "edgerun_signing_blind_sign"
+tor_signing_name_blind_sign_len equ $ - tor_signing_name_blind_sign
+tor_hs_desc_sig_prefix: db "Tor onion service descriptor sig v3"
+tor_hs_desc_sig_prefix_len equ $ - tor_hs_desc_sig_prefix
+tor_hs_desc_signature_line: db "signature "
+tor_hs_desc_signature_line_len equ $ - tor_hs_desc_signature_line
 
 SECTION .bss
 
@@ -111,8 +140,573 @@ tor_dir_tmp_len: resd 1
 tor_dir_tmp_data: resb 512
 tor_dir_guard_id: resb 20
 tor_guard_onion_key: resb 32
+tor_hs_intro_circ_id: resd 1
+tor_hs_rend_circ_id: resd 1
+tor_hs_service_intro_circ_id: resd 1
+tor_hs_intro_relay_id: resb 20
+tor_hs_intro_relay_ip: resd 1
+tor_hs_intro_relay_port: resw 1
+tor_hs_intro_relay_onion_key: resb 32
+tor_hs_intro_auth_key: resb TOR_HS_INTRO_AUTH_KEY_LEN
+tor_hs_intro_service_onion_key: resb TOR_HS_ONION_KEY_LEN_NTOR
+tor_hs_intro_enc_key: resb TOR_HS_ONION_KEY_LEN_NTOR
+tor_hs_intro_linkspecs_len: resd 1
+tor_hs_intro_linkspecs: resb TOR_HS_RELAY_DATA_MAX
+tor_hs_rend_linkspecs_len: resd 1
+tor_hs_rend_linkspecs: resb 64
+tor_hs_service_rend_circ_id: resd 1
+tor_hs_service_intro_plain_len: resd 1
+tor_hs_service_intro_plain: resb TOR_HS_RELAY_DATA_MAX
+tor_hs_service_cookie: resb TOR_HS_RENDEZVOUS_COOKIE_LEN
+tor_hs_service_rend_onion_key: resb TOR_HS_ONION_KEY_LEN_NTOR
+tor_hs_service_rend_linkspecs_len: resd 1
+tor_hs_service_rend_linkspecs: resb 64
+tor_hs_service_rend_relay_id: resb 20
+tor_hs_service_rend_relay_ip: resd 1
+tor_hs_service_rend_relay_port: resw 1
+tor_hs_service_rend_relay_onion_key: resb 32
+tor_hs_live_stream_next_id: resw 1
+tor_signing_runtime: resb RUNTIME_SIZE
+tor_signing_memory: resb 17 * 65536
+tor_signing_ticks: resq 1
+tor_signing_args: resq 6
+tor_signing_loaded: resd 1
+tor_signing_zero_sig: resb TOR_HS_ED25519_SIG_LEN
+tor_signing_cert_buf: resb 160
+tor_signing_sig_buf: resb TOR_HS_ED25519_SIG_LEN
+tor_hs_signing_cert_armor: resb 512
+tor_hs_descriptor_sig_msg: resb TOR_RECV_BUF_SIZE
+
+%define TOR_SIGNING_PAGES 17
+%define TOR_SIGNING_MEM_SIZE (17 * 65536)
+%define TOR_SIGNING_SEED_OFF 1050000
+%define TOR_SIGNING_BLIND_OFF (TOR_SIGNING_SEED_OFF + 32)
+%define TOR_SIGNING_MSG_OFF (TOR_SIGNING_BLIND_OFF + 32)
+%define TOR_SIGNING_SIG_OFF (TOR_SIGNING_MSG_OFF + 16384)
+%define TOR_SIGNING_PUB_OFF (TOR_SIGNING_SIG_OFF + 64)
+%define TOR_SIGNING_MAX_MSG 16384
 
 SECTION .text
+
+; ==================================================================
+; _tor_signing_prepare_runtime
+; Loads the embedded signing WASM once into a private runtime/memory.
+; ==================================================================
+_tor_signing_prepare_runtime:
+    cmp     dword [tor_signing_loaded], 1
+    je      .ok
+    push    rbx
+
+    lea     rdi, [tor_signing_memory]
+    xor     esi, esi
+    mov     edx, TOR_SIGNING_MEM_SIZE
+    call    er_memset
+
+    lea     rbx, [tor_signing_runtime]
+    lea     rax, [tor_signing_memory]
+    mov     [rbx + RUNTIME_MEMORY_PTR_OFF], rax
+    mov     qword [rbx + RUNTIME_MEMORY_LEN_OFF], TOR_SIGNING_MEM_SIZE
+    lea     rax, [tor_signing_ticks]
+    mov     [rbx + RUNTIME_TICKS_PTR_OFF], rax
+    mov     qword [rbx + RUNTIME_MEM_GROW_FN_OFF], 0
+    mov     qword [rbx + RUNTIME_MEM_GROW_CTX_OFF], 0
+    mov     qword [rbx + RUNTIME_TABLE_GROW_FN_OFF], 0
+    mov     qword [rbx + RUNTIME_TABLE_GROW_CTX_OFF], 0
+    mov     qword [rbx + RUNTIME_INITIAL_PAGES_OFF], TOR_SIGNING_PAGES
+    mov     byte [rbx + RUNTIME_HAS_PAGES_OFF], 1
+    mov     qword [rbx + RUNTIME_IMPORTS_PTR_OFF], 0
+    mov     qword [rbx + RUNTIME_IMPORTS_LEN_OFF], 0
+    mov     [rel er_wasm_runtime_ptr], rbx
+
+    mov     rdi, rbx
+    lea     rsi, [rel edgerun_signing_wasm_start]
+    mov     rdx, [rel edgerun_signing_wasm_len]
+    call    er_fn_load_trusted
+    test    rdx, rdx
+    jnz     .fail_pop
+    mov     dword [tor_signing_loaded], 1
+    xor     eax, eax
+    er_ok
+    pop     rbx
+    ret
+.fail_pop:
+    mov     dword [tor_signing_loaded], 0
+    mov     eax, -1
+    er_err  ERROR_TOR_PROTOCOL_ERR
+    pop     rbx
+    ret
+.ok:
+    xor     eax, eax
+    er_ok
+    ret
+
+; ==================================================================
+; er_tor_hs_signing_sign
+; rdi=seed32, rsi=msg, edx=msg_len, rcx=out_sig64
+; ==================================================================
+global er_tor_hs_signing_sign
+er_fn er_tor_hs_signing_sign
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    mov     rbx, rdi
+    mov     r12, rsi
+    mov     r13d, edx
+    mov     r14, rcx
+    test    rbx, rbx
+    jz      .fail
+    test    r14, r14
+    jz      .fail
+    test    r13d, r13d
+    jz      .msg_ready
+    test    r12, r12
+    jz      .fail
+.msg_ready:
+    cmp     r13d, TOR_SIGNING_MAX_MSG
+    ja      .fail
+    call    _tor_signing_prepare_runtime
+    test    eax, eax
+    js      .fail
+
+    lea     rdi, [tor_signing_memory + TOR_SIGNING_SEED_OFF]
+    mov     rsi, rbx
+    mov     edx, 32
+    call    er_memcpy
+    test    r13d, r13d
+    jz      .call
+    lea     rdi, [tor_signing_memory + TOR_SIGNING_MSG_OFF]
+    mov     rsi, r12
+    mov     edx, r13d
+    call    er_memcpy
+.call:
+    mov     qword [tor_signing_args], TOR_SIGNING_SEED_OFF
+    mov     qword [tor_signing_args + 8], TOR_SIGNING_MSG_OFF
+    mov     [tor_signing_args + 16], r13
+    mov     qword [tor_signing_args + 24], TOR_SIGNING_SIG_OFF
+    lea     rdi, [tor_signing_runtime]
+    lea     rsi, [rel tor_signing_name_sign]
+    mov     edx, tor_signing_name_sign_len
+    lea     rcx, [tor_signing_args]
+    mov     r8d, 4
+    call    er_fn_call_args
+    test    rdx, rdx
+    jnz     .fail
+    test    eax, eax
+    jnz     .fail
+
+    mov     rdi, r14
+    lea     rsi, [tor_signing_memory + TOR_SIGNING_SIG_OFF]
+    mov     edx, TOR_HS_ED25519_SIG_LEN
+    call    er_memcpy
+    xor     eax, eax
+    er_ok
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+.fail:
+    mov     eax, -1
+    er_err  ERROR_TOR_PROTOCOL_ERR
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+
+; ==================================================================
+; er_tor_hs_signing_blind_sign
+; rdi=identity_seed32, rsi=blind_factor32, rdx=msg, ecx=msg_len,
+; r8=out_sig64, r9=out_blinded_pub32_or_null
+; ==================================================================
+global er_tor_hs_signing_blind_sign
+er_fn er_tor_hs_signing_blind_sign
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+    sub     rsp, 16
+    mov     rbx, rdi
+    mov     r12, rsi
+    mov     r13, rdx
+    mov     r14d, ecx
+    mov     r15, r8
+    mov     [rsp], r9
+    test    rbx, rbx
+    jz      .fail
+    test    r12, r12
+    jz      .fail
+    test    r15, r15
+    jz      .fail
+    test    r14d, r14d
+    jz      .msg_ready
+    test    r13, r13
+    jz      .fail
+.msg_ready:
+    cmp     r14d, TOR_SIGNING_MAX_MSG
+    ja      .fail
+    call    _tor_signing_prepare_runtime
+    test    eax, eax
+    js      .fail
+
+    lea     rdi, [tor_signing_memory + TOR_SIGNING_SEED_OFF]
+    mov     rsi, rbx
+    mov     edx, 32
+    call    er_memcpy
+    lea     rdi, [tor_signing_memory + TOR_SIGNING_BLIND_OFF]
+    mov     rsi, r12
+    mov     edx, 32
+    call    er_memcpy
+    test    r14d, r14d
+    jz      .call
+    lea     rdi, [tor_signing_memory + TOR_SIGNING_MSG_OFF]
+    mov     rsi, r13
+    mov     edx, r14d
+    call    er_memcpy
+.call:
+    mov     qword [tor_signing_args], TOR_SIGNING_SEED_OFF
+    mov     qword [tor_signing_args + 8], TOR_SIGNING_BLIND_OFF
+    mov     qword [tor_signing_args + 16], TOR_SIGNING_MSG_OFF
+    mov     [tor_signing_args + 24], r14
+    mov     qword [tor_signing_args + 32], TOR_SIGNING_SIG_OFF
+    mov     qword [tor_signing_args + 40], TOR_SIGNING_PUB_OFF
+    lea     rdi, [tor_signing_runtime]
+    lea     rsi, [rel tor_signing_name_blind_sign]
+    mov     edx, tor_signing_name_blind_sign_len
+    lea     rcx, [tor_signing_args]
+    mov     r8d, 6
+    call    er_fn_call_args
+    test    rdx, rdx
+    jnz     .fail
+    test    eax, eax
+    jnz     .fail
+
+    mov     rdi, r15
+    lea     rsi, [tor_signing_memory + TOR_SIGNING_SIG_OFF]
+    mov     edx, TOR_HS_ED25519_SIG_LEN
+    call    er_memcpy
+    cmp     qword [rsp], 0
+    je      .done
+    mov     rdi, [rsp]
+    lea     rsi, [tor_signing_memory + TOR_SIGNING_PUB_OFF]
+    mov     edx, 32
+    call    er_memcpy
+.done:
+    xor     eax, eax
+    er_ok
+    add     rsp, 16
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+.fail:
+    mov     eax, -1
+    er_err  ERROR_TOR_PROTOCOL_ERR
+    add     rsp, 16
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+
+; ==================================================================
+; er_tor_hs_build_descriptor_signing_cert_armor
+; rdi=identity_seed32, rsi=blind_factor32, rdx=descriptor_signing_pub32,
+; ecx=expiration_hours, r8=out_armor, r9d=armor_cap
+; returns eax=armor_len
+; ==================================================================
+global er_tor_hs_build_descriptor_signing_cert_armor
+er_fn er_tor_hs_build_descriptor_signing_cert_armor
+    push    rbp
+    mov     rbp, rsp
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+    sub     rsp, 16
+    mov     rbx, rdi
+    mov     r12, rsi
+    mov     r13, rdx
+    mov     r14d, ecx
+    mov     r15, r8
+    mov     [rsp], r9
+    test    rbx, rbx
+    jz      .fail
+    test    r12, r12
+    jz      .fail
+    test    r13, r13
+    jz      .fail
+    test    r15, r15
+    jz      .fail
+    cmp     dword [rsp], 0
+    jle     .fail
+
+    lea     rax, [tor_signing_zero_sig]
+    push    rax
+    lea     rdi, [tor_signing_cert_buf]
+    mov     esi, 160
+    mov     edx, 8
+    mov     ecx, r14d
+    mov     r8, r13
+    xor     r9d, r9d
+    call    er_tor_hs_cert_build
+    add     rsp, 8
+    cmp     eax, 104
+    jne     .fail
+
+    lea     rdx, [tor_signing_cert_buf]
+    mov     ecx, 40
+    mov     rdi, rbx
+    mov     rsi, r12
+    lea     r8, [tor_signing_sig_buf]
+    xor     r9d, r9d
+    call    er_tor_hs_signing_blind_sign
+    test    eax, eax
+    js      .fail
+
+    lea     rax, [tor_signing_sig_buf]
+    push    rax
+    lea     rdi, [tor_signing_cert_buf]
+    mov     esi, 160
+    mov     edx, 8
+    mov     ecx, r14d
+    mov     r8, r13
+    xor     r9d, r9d
+    call    er_tor_hs_cert_build
+    add     rsp, 8
+    cmp     eax, 104
+    jne     .fail
+
+    mov     rdi, r15
+    mov     esi, [rsp]
+    lea     rdx, [tor_signing_cert_buf]
+    mov     ecx, 104
+    call    er_tor_hs_cert_armor_ed25519
+    test    eax, eax
+    js      .fail
+    er_ok
+    add     rsp, 16
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
+    er_ret
+.fail:
+    mov     eax, -1
+    er_err  ERROR_TOR_PROTOCOL_ERR
+    add     rsp, 16
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
+    er_ret
+
+; _tor_find_signature_line(buf, len) -> rax=offset or -1
+_tor_find_signature_line:
+    push    rbx
+    push    r12
+    mov     rbx, rdi
+    mov     r12d, esi
+    xor     eax, eax
+    cmp     r12d, tor_hs_desc_signature_line_len
+    jb      .not_found
+.loop:
+    mov     edx, eax
+    add     edx, tor_hs_desc_signature_line_len
+    cmp     edx, r12d
+    ja      .not_found
+    lea     rdi, [rbx + rax]
+    lea     rsi, [rel tor_hs_desc_signature_line]
+    mov     edx, tor_hs_desc_signature_line_len
+    push    rax
+    call    er_memcmp
+    test    eax, eax
+    pop     rax
+    jz      .done
+    inc     eax
+    jmp     .loop
+.not_found:
+    mov     eax, -1
+.done:
+    pop     r12
+    pop     rbx
+    ret
+
+; ==================================================================
+; er_tor_hs_service_publish_signed_v3_descriptor
+; rdi=blinded_key_b64, esi=blinded_len, rdx=descriptor_signing_seed32,
+; rcx=identity_seed32, r8=blind_factor32, r9=descriptor_signing_pub32,
+; [rbp+16]=revision_counter, [rbp+24]=lifetime_minutes,
+; [rbp+32]=superencrypted_armor, [rbp+40]=superencrypted_len,
+; [rbp+48]=cert_expiration_hours, [rbp+56]=out_descriptor_len_or_null
+; ==================================================================
+global er_tor_hs_service_publish_signed_v3_descriptor
+er_fn er_tor_hs_service_publish_signed_v3_descriptor
+    push    rbp
+    mov     rbp, rsp
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+    sub     rsp, 32
+    mov     rbx, rdi
+    mov     r12d, esi
+    mov     r13, rdx
+    mov     r14, rcx
+    mov     r15, r8
+    mov     [rbp - 48], r9
+    test    rbx, rbx
+    jz      .fail
+    test    r12d, r12d
+    jle     .fail
+    test    r13, r13
+    jz      .fail
+    test    r14, r14
+    jz      .fail
+    test    r15, r15
+    jz      .fail
+    cmp     qword [rbp - 48], 0
+    je      .fail
+    cmp     qword [rbp + 32], 0
+    je      .fail
+    cmp     dword [rbp + 40], 0
+    jle     .fail
+
+    lea     r8, [tor_hs_signing_cert_armor]
+    mov     r9d, 512
+    mov     rdi, r14
+    mov     rsi, r15
+    mov     rdx, [rbp - 48]
+    mov     ecx, [rbp + 48]
+    call    er_tor_hs_build_descriptor_signing_cert_armor
+    test    eax, eax
+    js      .fail
+    mov     [rbp - 56], eax
+
+    sub     rsp, 40
+    mov     eax, [rbp + 16]
+    mov     [rsp], rax
+    mov     rax, [rbp + 24]
+    mov     [rsp + 8], rax
+    mov     rax, [rbp + 32]
+    mov     [rsp + 16], rax
+    mov     eax, [rbp + 40]
+    mov     [rsp + 24], rax
+    lea     rax, [tor_signing_zero_sig]
+    mov     [rsp + 32], rax
+    lea     rdi, [tor_dir_body_buf]
+    mov     esi, TOR_RECV_BUF_SIZE
+    mov     rdx, rbx
+    mov     ecx, r12d
+    lea     r8, [tor_hs_signing_cert_armor]
+    mov     r9d, [rbp - 56]
+    call    er_tor_hs_desc_build_v3
+    add     rsp, 40
+    test    eax, eax
+    js      .fail
+    mov     [rbp - 60], eax
+
+    lea     rdi, [tor_dir_body_buf]
+    mov     esi, eax
+    call    _tor_find_signature_line
+    test    eax, eax
+    js      .fail
+    mov     [rbp - 64], eax
+    mov     edx, eax
+    add     edx, tor_hs_desc_sig_prefix_len
+    cmp     edx, TOR_RECV_BUF_SIZE
+    ja      .fail
+
+    lea     rdi, [tor_hs_descriptor_sig_msg]
+    lea     rsi, [rel tor_hs_desc_sig_prefix]
+    mov     edx, tor_hs_desc_sig_prefix_len
+    call    er_memcpy
+    lea     rdi, [tor_hs_descriptor_sig_msg + tor_hs_desc_sig_prefix_len]
+    lea     rsi, [tor_dir_body_buf]
+    mov     edx, [rbp - 64]
+    call    er_memcpy
+
+    mov     rdi, r13
+    lea     rsi, [tor_hs_descriptor_sig_msg]
+    mov     edx, [rbp - 64]
+    add     edx, tor_hs_desc_sig_prefix_len
+    lea     rcx, [tor_signing_sig_buf]
+    call    er_tor_hs_signing_sign
+    test    eax, eax
+    js      .fail
+
+    sub     rsp, 40
+    mov     eax, [rbp + 16]
+    mov     [rsp], rax
+    mov     rax, [rbp + 24]
+    mov     [rsp + 8], rax
+    mov     rax, [rbp + 32]
+    mov     [rsp + 16], rax
+    mov     eax, [rbp + 40]
+    mov     [rsp + 24], rax
+    lea     rax, [tor_signing_sig_buf]
+    mov     [rsp + 32], rax
+    lea     rdi, [tor_dir_body_buf]
+    mov     esi, TOR_RECV_BUF_SIZE
+    mov     rdx, rbx
+    mov     ecx, r12d
+    lea     r8, [tor_hs_signing_cert_armor]
+    mov     r9d, [rbp - 56]
+    call    er_tor_hs_desc_build_v3
+    add     rsp, 40
+    test    eax, eax
+    js      .fail
+    mov     [rbp - 60], eax
+
+    sub     rsp, 16
+    lea     rax, [tor_dir_body_buf]
+    mov     [rsp], rax
+    mov     eax, [rbp - 60]
+    mov     [rsp + 8], rax
+    mov     rdi, rbx
+    mov     esi, r12d
+    call    er_tor_hsdir_publish_descriptor
+    add     rsp, 16
+    test    eax, eax
+    js      .fail
+    cmp     qword [rbp + 56], 0
+    je      .done
+    mov     rdi, [rbp + 56]
+    mov     eax, [rbp - 60]
+    mov     [rdi], eax
+.done:
+    xor     eax, eax
+    er_ok
+    add     rsp, 32
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
+    er_ret
+.fail:
+    mov     eax, -1
+    er_err  ERROR_TOR_PROTOCOL_ERR
+    add     rsp, 32
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
+    er_ret
 
 ; ==================================================================
 ; _tor_caps_from_role — map role enum to capability mask
@@ -138,6 +732,10 @@ _tor_caps_from_role:
     je      .hs_intro
     cmp     edi, TOR_ROLE_HS_RENDEZVOUS
     je      .hs_rendezvous
+    cmp     edi, TOR_ROLE_HS_PEER
+    je      .hs_peer
+    cmp     edi, TOR_ROLE_HS_FULL
+    je      .hs_full
     mov     eax, -1
     ret
 .client:
@@ -167,6 +765,12 @@ _tor_caps_from_role:
 .hs_rendezvous:
     mov     eax, TOR_CAP_HS_RENDEZVOUS
     ret
+.hs_peer:
+    mov     eax, TOR_CAP_HS_PEER
+    ret
+.hs_full:
+    mov     eax, TOR_CAP_HS_FULL
+    ret
 
 ; ==================================================================
 ; er_tor_set_role — configure Tor operating role
@@ -180,6 +784,49 @@ er_fn er_tor_set_role
     je      .bad_role
     mov     [tor_state + TOR_STATE_ROLE], edi
     mov     [tor_state + TOR_STATE_ROLE_CAPS], eax
+    xor     eax, eax
+    er_ok
+    er_ret
+.bad_role:
+    mov     eax, -1
+    er_err  ERROR_TOR_ROLE_INVALID
+    er_ret
+
+; ==================================================================
+; er_tor_set_role_caps — configure explicit role capabilities
+; edi = TOR_CAP_* bitmask
+; returns eax=0 on success, -1 on invalid/empty/unknown caps
+; ==================================================================
+global er_tor_set_role_caps
+er_fn er_tor_set_role_caps
+    test    edi, edi
+    jz      .bad_caps
+    mov     eax, edi
+    and     eax, ~TOR_CAP_KNOWN_MASK
+    test    eax, eax
+    jnz     .bad_caps
+    mov     [tor_state + TOR_STATE_ROLE], dword -1
+    mov     [tor_state + TOR_STATE_ROLE_CAPS], edi
+    xor     eax, eax
+    er_ok
+    er_ret
+.bad_caps:
+    mov     eax, -1
+    er_err  ERROR_TOR_ROLE_INVALID
+    er_ret
+
+; ==================================================================
+; er_tor_enable_role — OR one role's capabilities into current role caps
+; edi = role (TOR_ROLE_*)
+; returns eax=0 on success, -1 on invalid role
+; ==================================================================
+global er_tor_enable_role
+er_fn er_tor_enable_role
+    call    _tor_caps_from_role
+    cmp     eax, -1
+    je      .bad_role
+    or      [tor_state + TOR_STATE_ROLE_CAPS], eax
+    mov     [tor_state + TOR_STATE_ROLE], dword -1
     xor     eax, eax
     er_ok
     er_ret
@@ -673,11 +1320,16 @@ _tor_hex_encode_20_upper:
 ; returns eax=0 success, -1 failure
 ; ==================================================================
 _tor_parse_descriptor_ntor_key:
+    lea     rdi, [tor_guard_onion_key]
+
+_tor_parse_descriptor_ntor_key_to:
+    push    rbp
     push    rbx
     push    r12
     push    r13
     push    r14
     push    r15
+    mov     rbp, rdi
 
     lea     r12, [tor_dir_body_buf]
     mov     r13d, [tor_dir_body_len]
@@ -724,7 +1376,7 @@ _tor_parse_descriptor_ntor_key:
     lea     rdi, [r12 + r14]
     mov     esi, r15d
     sub     esi, r14d
-    lea     rdx, [tor_guard_onion_key]
+    mov     rdx, rbp
     call    _tor_decode_b64_32
     test    eax, eax
     js      .fail
@@ -734,6 +1386,7 @@ _tor_parse_descriptor_ntor_key:
     pop     r13
     pop     r12
     pop     rbx
+    pop     rbp
     ret
 
 .fail:
@@ -743,6 +1396,7 @@ _tor_parse_descriptor_ntor_key:
     pop     r13
     pop     r12
     pop     rbx
+    pop     rbp
     ret
 
 ; ==================================================================
@@ -864,6 +1518,918 @@ er_fn er_tor_directory_fetch_guard_descriptor
     er_err  ERROR_TOR_PROTOCOL_ERR
     pop     r12
     pop     rbx
+    er_ret
+
+; ==================================================================
+; er_tor_directory_fetch_relay_descriptor — fetch relay descriptor by
+; fingerprint and extract its ntor-onion-key.
+; rdi=fingerprint20, rsi=out_ntor_key32
+; returns eax=0 success, -1 failure
+; ==================================================================
+global er_tor_directory_fetch_relay_descriptor
+er_fn er_tor_directory_fetch_relay_descriptor
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+    mov     r13, rdi
+    mov     r15, rsi
+    test    r13, r13
+    jz      .fail
+    test    r15, r15
+    jz      .fail
+
+    mov     dword [tor_dir_stream_open], 0
+
+    lea     rdi, [tor_test_buf]
+    lea     rsi, [rel str_tor_dir_desc_get_prefix]
+    mov     edx, str_tor_dir_desc_get_prefix_len
+    call    er_memcpy
+    mov     ebx, str_tor_dir_desc_get_prefix_len
+
+    mov     rdi, r13
+    lea     rsi, [tor_test_buf + rbx]
+    call    _tor_hex_encode_20_upper
+    add     ebx, 40
+
+    lea     rdi, [tor_test_buf + rbx]
+    lea     rsi, [rel str_tor_dir_desc_get_suffix]
+    mov     edx, str_tor_dir_desc_get_suffix_len
+    call    er_memcpy
+    add     ebx, str_tor_dir_desc_get_suffix_len
+
+    call    er_tor_open_directory_channel
+    test    eax, eax
+    js      .fail
+
+    mov     edi, [tor_circ_id_app]
+    movzx   esi, word [tor_dir_stream_id]
+    mov     edx, TOR_RELAY_DATA
+    lea     rcx, [tor_test_buf]
+    mov     r8d, ebx
+    call    er_tor_send_relay
+    test    eax, eax
+    js      .fail
+
+    xor     r12d, r12d
+    mov     dword [tor_dir_resp_len], 0
+    mov     ebx, 2048
+.recv_loop:
+    mov     edi, [tor_circ_id_app]
+    lea     rsi, [tor_dir_tmp_stream]
+    lea     rdx, [tor_dir_tmp_cmd]
+    lea     rcx, [tor_dir_tmp_data]
+    lea     r8, [tor_dir_tmp_len]
+    call    er_tor_recv_relay
+    test    eax, eax
+    js      .next
+    movzx   eax, word [tor_dir_tmp_stream]
+    cmp     ax, [tor_dir_stream_id]
+    jne     .next
+    movzx   eax, byte [tor_dir_tmp_cmd]
+    cmp     al, TOR_RELAY_CONNECTED
+    je      .next
+    cmp     al, TOR_RELAY_END
+    je      .parse
+    cmp     al, TOR_RELAY_DATA
+    jne     .next
+    mov     eax, [tor_dir_tmp_len]
+    test    eax, eax
+    jle     .next
+    mov     edx, TOR_RECV_BUF_SIZE
+    sub     edx, r12d
+    jbe     .fail
+    cmp     eax, edx
+    jbe     .cpsz
+    mov     eax, edx
+.cpsz:
+    lea     rdi, [tor_dir_resp_buf + r12]
+    lea     rsi, [tor_dir_tmp_data]
+    mov     edx, eax
+    call    er_memcpy
+    add     r12d, eax
+.next:
+    dec     ebx
+    jnz     .recv_loop
+    jmp     .fail
+.parse:
+    cmp     r12d, 0
+    je      .fail
+    mov     [tor_dir_resp_len], r12d
+    lea     rdi, [tor_dir_resp_buf]
+    mov     esi, r12d
+    call    er_http_parse_status
+    cmp     eax, 200
+    jne     .fail
+    lea     rdi, [tor_dir_resp_buf]
+    mov     esi, r12d
+    call    er_http_find_body
+    test    rax, rax
+    jz      .fail
+    lea     rdx, [tor_dir_resp_buf + r12]
+    sub     rdx, rax
+    test    edx, edx
+    jle     .fail
+    mov     [tor_dir_body_len], edx
+    lea     rdi, [tor_dir_body_buf]
+    mov     rsi, rax
+    call    er_memcpy
+    mov     rdi, r15
+    call    _tor_parse_descriptor_ntor_key_to
+    test    eax, eax
+    js      .fail
+    xor     eax, eax
+    er_ok
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+.fail:
+    mov     eax, -1
+    er_err  ERROR_TOR_PROTOCOL_ERR
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+
+; ==================================================================
+; er_tor_hs_build_intro_circuit_from_desc
+; rdi=out_circ_id, rsi=decrypted second-layer descriptor, edx=descriptor_len
+; Builds a fresh circuit through the current guard and extends it to the first
+; descriptor introduction relay.
+; ==================================================================
+global er_tor_hs_build_intro_circuit_from_desc
+er_fn er_tor_hs_build_intro_circuit_from_desc
+    push    rbx
+    push    r12
+    push    r13
+    mov     rbx, rdi
+    mov     r12, rsi
+    mov     r13d, edx
+    test    rbx, rbx
+    jz      .fail
+    test    r12, r12
+    jz      .fail
+    test    r13d, r13d
+    jle     .fail
+    cmp     dword [tor_state + TOR_STATE_LINK_ESTABLISHED], 1
+    jne     .fail
+
+    sub     rsp, 16
+    mov     [rsp], r12
+    mov     [rsp + 8], r13
+    lea     rdi, [tor_hs_intro_auth_key]
+    lea     rsi, [tor_hs_intro_service_onion_key]
+    lea     rdx, [tor_hs_intro_enc_key]
+    lea     rcx, [tor_hs_intro_linkspecs]
+    mov     r8d, TOR_HS_RELAY_DATA_MAX
+    lea     r9, [tor_hs_intro_linkspecs_len]
+    call    er_tor_hs_desc_parse_intro
+    add     rsp, 16
+    test    eax, eax
+    js      .fail
+
+    lea     rdi, [tor_hs_intro_relay_id]
+    lea     rsi, [tor_hs_intro_relay_ip]
+    lea     rdx, [tor_hs_intro_relay_port]
+    lea     rcx, [tor_hs_intro_linkspecs]
+    mov     r8d, [tor_hs_intro_linkspecs_len]
+    call    er_tor_hs_parse_linkspecs
+    test    eax, eax
+    js      .fail
+
+    lea     rdi, [tor_hs_intro_relay_id]
+    lea     rsi, [tor_hs_intro_relay_onion_key]
+    call    er_tor_directory_fetch_relay_descriptor
+    test    eax, eax
+    js      .fail
+
+    lea     rdi, [tor_hs_intro_circ_id]
+    lea     rsi, [tor_state + TOR_STATE_GUARD_FINGERPRINT]
+    lea     rdx, [tor_guard_onion_key]
+    call    er_tor_circuit_create
+    test    eax, eax
+    js      .fail
+
+    mov     edi, [tor_hs_intro_circ_id]
+    lea     rsi, [tor_hs_intro_relay_id]
+    lea     rdx, [tor_hs_intro_relay_onion_key]
+    mov     ecx, [tor_hs_intro_relay_ip]
+    movzx   r8d, word [tor_hs_intro_relay_port]
+    call    er_tor_circuit_extend
+    test    eax, eax
+    js      .fail
+
+    mov     eax, [tor_hs_intro_circ_id]
+    mov     [rbx], eax
+    xor     eax, eax
+    er_ok
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+.fail:
+    mov     eax, -1
+    er_err  ERROR_TOR_CIRC_BUILD_FAIL
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+
+; ==================================================================
+; er_tor_hs_client_connect_live_from_desc
+; rdi=decrypted second-layer descriptor, esi=descriptor_len, rdx=cookie,
+; rcx=client_priv32, r8=client_pub32, r9=subcred32,
+; [rbp+16]=out_handshake64, [rbp+24]=out_len
+; Builds the intro and rendezvous circuits, then performs INTRODUCE1 and waits
+; for RENDEZVOUS2.
+; ==================================================================
+global er_tor_hs_client_connect_live_from_desc
+er_fn er_tor_hs_client_connect_live_from_desc
+    push    rbp
+    mov     rbp, rsp
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+    sub     rsp, 16
+    mov     rbx, rdi        ; desc
+    mov     r12d, esi       ; desc_len
+    mov     r13, rdx        ; cookie
+    mov     r14, rcx        ; client_priv
+    mov     r15, r8         ; client_pub
+    mov     [rbp - 48], r9  ; subcred
+    test    rbx, rbx
+    jz      .fail
+    test    r12d, r12d
+    jle     .fail
+    test    r13, r13
+    jz      .fail
+    test    r14, r14
+    jz      .fail
+    test    r15, r15
+    jz      .fail
+    cmp     qword [rbp - 48], 0
+    je      .fail
+    cmp     qword [rbp + 16], 0
+    je      .fail
+    cmp     qword [rbp + 24], 0
+    je      .fail
+    cmp     dword [tor_state + TOR_STATE_LINK_ESTABLISHED], 1
+    jne     .fail
+
+    lea     rdi, [tor_hs_intro_circ_id]
+    mov     rsi, rbx
+    mov     edx, r12d
+    call    er_tor_hs_build_intro_circuit_from_desc
+    test    eax, eax
+    js      .fail
+
+    lea     rdi, [tor_hs_rend_circ_id]
+    lea     rsi, [tor_state + TOR_STATE_GUARD_FINGERPRINT]
+    lea     rdx, [tor_guard_onion_key]
+    call    er_tor_circuit_create
+    test    eax, eax
+    js      .fail
+
+    lea     rdi, [tor_hs_rend_linkspecs]
+    mov     esi, [tor_state + TOR_STATE_GUARD_IP]
+    movzx   edx, word [tor_state + TOR_STATE_GUARD_PORT]
+    lea     rcx, [tor_state + TOR_STATE_GUARD_FINGERPRINT]
+    call    er_tor_hs_build_linkspecs
+    test    eax, eax
+    js      .fail
+    mov     [tor_hs_rend_linkspecs_len], eax
+
+    sub     rsp, 48
+    mov     [rsp], r15
+    mov     rax, [rbp - 48]
+    mov     [rsp + 8], rax
+    lea     rax, [tor_hs_rend_linkspecs]
+    mov     [rsp + 16], rax
+    mov     eax, [tor_hs_rend_linkspecs_len]
+    mov     [rsp + 24], rax
+    mov     rax, [rbp + 16]
+    mov     [rsp + 32], rax
+    mov     rax, [rbp + 24]
+    mov     [rsp + 40], rax
+    mov     edi, [tor_hs_intro_circ_id]
+    mov     esi, [tor_hs_rend_circ_id]
+    mov     rdx, r13
+    lea     rcx, [tor_hs_intro_auth_key]
+    lea     r8, [tor_hs_intro_service_onion_key]
+    mov     r9, r14
+    call    er_tor_hs_client_connect
+    add     rsp, 48
+    test    eax, eax
+    js      .fail
+
+    xor     eax, eax
+    er_ok
+    add     rsp, 16
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
+    er_ret
+.fail:
+    mov     eax, -1
+    er_err  ERROR_TOR_CIRC_BUILD_FAIL
+    add     rsp, 16
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
+    er_ret
+
+; ==================================================================
+; er_tor_hs_open_stream_live_from_desc
+; Same register args as er_tor_hs_client_connect_live_from_desc.
+; Stack: [rbp+16]=host, [rbp+24]=host_len, [rbp+32]=port,
+;        [rbp+40]=out_handshake64, [rbp+48]=out_len
+; Connects to the onion service and opens a BEGIN stream on the rendezvous
+; circuit. The stream id is allocated from a small HS-local counter.
+; ==================================================================
+global er_tor_hs_open_stream_live_from_desc
+er_fn er_tor_hs_open_stream_live_from_desc
+    push    rbp
+    mov     rbp, rsp
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+    sub     rsp, 16
+    mov     rbx, rdi
+    mov     r12d, esi
+    mov     r13, rdx
+    mov     r14, rcx
+    mov     r15, r8
+    mov     [rbp - 48], r9
+    cmp     qword [rbp + 16], 0
+    je      .fail
+    cmp     dword [rbp + 24], 0
+    jle     .fail
+    cmp     dword [rbp + 32], 65535
+    ja      .fail
+    cmp     qword [rbp + 40], 0
+    je      .fail
+    cmp     qword [rbp + 48], 0
+    je      .fail
+
+    sub     rsp, 16
+    mov     rax, [rbp + 40]
+    mov     [rsp], rax
+    mov     rax, [rbp + 48]
+    mov     [rsp + 8], rax
+    mov     rdi, rbx
+    mov     esi, r12d
+    mov     rdx, r13
+    mov     rcx, r14
+    mov     r8, r15
+    mov     r9, [rbp - 48]
+    call    er_tor_hs_client_connect_live_from_desc
+    add     rsp, 16
+    test    eax, eax
+    js      .fail
+
+    movzx   esi, word [tor_hs_live_stream_next_id]
+    test    esi, esi
+    jnz     .stream_id_ok
+    mov     esi, 1
+.stream_id_ok:
+    inc     word [tor_hs_live_stream_next_id]
+    mov     edi, [tor_hs_rend_circ_id]
+    mov     rdx, [rbp + 16]
+    mov     ecx, [rbp + 24]
+    mov     r8d, [rbp + 32]
+    call    er_tor_hs_open_client_stream
+    test    eax, eax
+    js      .fail
+
+    xor     eax, eax
+    er_ok
+    add     rsp, 16
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
+    er_ret
+.fail:
+    mov     eax, -1
+    er_err  ERROR_TOR_STREAM_FAIL
+    add     rsp, 16
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
+    er_ret
+
+; ==================================================================
+; er_tor_hs_self_connect_stream_live_from_desc
+; rdi=service_intro_circ, rsi=decrypted second-layer descriptor, edx=desc_len,
+; rcx=cookie20, r8=client_priv32, r9=client_pub32,
+; [rbp+16]=subcred32, [rbp+24]=service_auth_key32,
+; [rbp+32]=service_onion_priv32, [rbp+40]=service_onion_pub32,
+; [rbp+48]=service_rendezvous_handshake, [rbp+56]=handshake_len,
+; [rbp+64]=host, [rbp+72]=host_len, [rbp+80]=port,
+; [rbp+88]=out_client_handshake64, [rbp+96]=out_client_handshake_len,
+; [rbp+104]=out_service_rend_circ_or_null
+; Drives a single-threaded self-connect:
+; client INTRODUCE1/ACK, service INTRODUCE2/RENDEZVOUS1, client RENDEZVOUS2,
+; then client BEGIN on the rendezvous circuit.
+; ==================================================================
+global er_tor_hs_self_connect_stream_live_from_desc
+er_fn er_tor_hs_self_connect_stream_live_from_desc
+    push    rbp
+    mov     rbp, rsp
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+    sub     rsp, 16
+    mov     ebx, edi        ; service intro circuit
+    mov     r12, rsi        ; descriptor plaintext
+    mov     r13d, edx       ; descriptor length
+    mov     r14, rcx        ; rendezvous cookie
+    mov     r15, r8         ; client private key
+    mov     [rbp - 48], r9  ; client public key
+
+    test    ebx, ebx
+    jz      .fail
+    test    r12, r12
+    jz      .fail
+    test    r13d, r13d
+    jle     .fail
+    test    r14, r14
+    jz      .fail
+    test    r15, r15
+    jz      .fail
+    cmp     qword [rbp - 48], 0
+    je      .fail
+    cmp     qword [rbp + 16], 0
+    je      .fail
+    cmp     qword [rbp + 24], 0
+    je      .fail
+    cmp     qword [rbp + 32], 0
+    je      .fail
+    cmp     qword [rbp + 40], 0
+    je      .fail
+    cmp     qword [rbp + 48], 0
+    je      .fail
+    cmp     dword [rbp + 56], TOR_HS_RELAY_DATA_MAX - TOR_HS_RENDEZVOUS_COOKIE_LEN
+    ja      .fail
+    cmp     qword [rbp + 64], 0
+    je      .fail
+    cmp     dword [rbp + 72], 0
+    jle     .fail
+    cmp     dword [rbp + 80], 65535
+    ja      .fail
+    cmp     qword [rbp + 88], 0
+    je      .fail
+    cmp     qword [rbp + 96], 0
+    je      .fail
+    cmp     dword [tor_state + TOR_STATE_LINK_ESTABLISHED], 1
+    jne     .fail
+
+    lea     rdi, [tor_hs_intro_circ_id]
+    mov     rsi, r12
+    mov     edx, r13d
+    call    er_tor_hs_build_intro_circuit_from_desc
+    test    eax, eax
+    js      .fail
+
+    lea     rdi, [tor_hs_rend_circ_id]
+    lea     rsi, [tor_state + TOR_STATE_GUARD_FINGERPRINT]
+    lea     rdx, [tor_guard_onion_key]
+    call    er_tor_circuit_create
+    test    eax, eax
+    js      .fail
+
+    lea     rdi, [tor_hs_rend_linkspecs]
+    mov     esi, [tor_state + TOR_STATE_GUARD_IP]
+    movzx   edx, word [tor_state + TOR_STATE_GUARD_PORT]
+    lea     rcx, [tor_state + TOR_STATE_GUARD_FINGERPRINT]
+    call    er_tor_hs_build_linkspecs
+    test    eax, eax
+    js      .fail
+    mov     [tor_hs_rend_linkspecs_len], eax
+
+    sub     rsp, 32
+    mov     [rsp], r12
+    mov     [rsp + 8], r13d
+    lea     rax, [tor_hs_rend_linkspecs]
+    mov     [rsp + 16], rax
+    mov     eax, [tor_hs_rend_linkspecs_len]
+    mov     [rsp + 24], rax
+    mov     edi, [tor_hs_intro_circ_id]
+    mov     esi, [tor_hs_rend_circ_id]
+    mov     rdx, r14
+    mov     rcx, r15
+    mov     r8, [rbp - 48]
+    mov     r9, [rbp + 16]
+    call    er_tor_hs_client_introduce_from_desc
+    add     rsp, 32
+    test    eax, eax
+    js      .fail
+
+    sub     rsp, 16
+    mov     eax, [rbp + 56]
+    mov     [rsp], rax
+    lea     rax, [tor_hs_service_rend_circ_id]
+    mov     [rsp + 8], rax
+    mov     edi, ebx
+    mov     rsi, [rbp + 24]
+    mov     rdx, [rbp + 32]
+    mov     rcx, [rbp + 40]
+    mov     r8, [rbp + 16]
+    mov     r9, [rbp + 48]
+    call    er_tor_hs_service_accept_intro_and_rendezvous
+    add     rsp, 16
+    test    eax, eax
+    js      .fail
+
+    mov     edi, [tor_hs_rend_circ_id]
+    mov     rsi, [rbp + 88]
+    mov     rdx, [rbp + 96]
+    call    er_tor_hs_wait_rendezvous2
+    test    eax, eax
+    js      .fail
+
+    movzx   esi, word [tor_hs_live_stream_next_id]
+    test    esi, esi
+    jnz     .stream_id_ok
+    mov     esi, 1
+.stream_id_ok:
+    inc     word [tor_hs_live_stream_next_id]
+    mov     edi, [tor_hs_rend_circ_id]
+    mov     rdx, [rbp + 64]
+    mov     ecx, [rbp + 72]
+    mov     r8d, [rbp + 80]
+    call    er_tor_hs_open_client_stream
+    test    eax, eax
+    js      .fail
+
+    cmp     qword [rbp + 104], 0
+    je      .ok
+    mov     rdi, [rbp + 104]
+    mov     eax, [tor_hs_service_rend_circ_id]
+    mov     [rdi], eax
+.ok:
+    xor     eax, eax
+    er_ok
+    add     rsp, 16
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
+    er_ret
+.fail:
+    mov     eax, -1
+    er_err  ERROR_TOR_CIRC_BUILD_FAIL
+    add     rsp, 16
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
+    er_ret
+
+; ==================================================================
+; er_tor_hs_service_establish_intro
+; rdi=out_circ_id, rsi=intro_relay_id20, rdx=intro_relay_onion_key32,
+; ecx=intro_relay_ipv4, r8d=intro_relay_port, r9=auth_key32,
+; [rbp+16]=handshake_auth32, [rbp+24]=sig, [rbp+32]=sig_len
+; Builds a fresh circuit through the current guard, extends it to the selected
+; intro relay, then sends ESTABLISH_INTRO.
+; ==================================================================
+global er_tor_hs_service_establish_intro
+er_fn er_tor_hs_service_establish_intro
+    push    rbp
+    mov     rbp, rsp
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+    sub     rsp, 16
+    mov     rbx, rdi        ; out_circ_id
+    mov     r12, rsi        ; intro relay identity
+    mov     r13, rdx        ; intro relay ntor onion key
+    mov     r14d, ecx       ; intro relay ip
+    mov     r15d, r8d       ; intro relay port
+    mov     [rbp - 48], r9  ; auth_key
+    test    rbx, rbx
+    jz      .fail
+    test    r12, r12
+    jz      .fail
+    test    r13, r13
+    jz      .fail
+    cmp     r15d, 65535
+    ja      .fail
+    cmp     qword [rbp - 48], 0
+    je      .fail
+    cmp     qword [rbp + 16], 0
+    je      .fail
+    cmp     dword [rbp + 32], TOR_HS_ED25519_SIG_LEN
+    ja      .fail
+    cmp     dword [tor_state + TOR_STATE_LINK_ESTABLISHED], 1
+    jne     .fail
+
+    lea     rdi, [tor_hs_service_intro_circ_id]
+    lea     rsi, [tor_state + TOR_STATE_GUARD_FINGERPRINT]
+    lea     rdx, [tor_guard_onion_key]
+    call    er_tor_circuit_create
+    test    eax, eax
+    js      .fail
+
+    mov     edi, [tor_hs_service_intro_circ_id]
+    mov     rsi, r12
+    mov     rdx, r13
+    mov     ecx, r14d
+    mov     r8d, r15d
+    call    er_tor_circuit_extend
+    test    eax, eax
+    js      .fail
+
+    mov     edi, [tor_hs_service_intro_circ_id]
+    mov     rsi, [rbp - 48]
+    mov     rdx, [rbp + 16]
+    mov     rcx, [rbp + 24]
+    mov     r8d, [rbp + 32]
+    call    er_tor_hs_establish_intro
+    test    eax, eax
+    js      .fail
+
+    mov     eax, [tor_hs_service_intro_circ_id]
+    mov     [rbx], eax
+    xor     eax, eax
+    er_ok
+    add     rsp, 16
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
+    er_ret
+.fail:
+    mov     eax, -1
+    er_err  ERROR_TOR_CIRC_BUILD_FAIL
+    add     rsp, 16
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
+    er_ret
+
+; ==================================================================
+; er_tor_hs_service_accept_intro_and_rendezvous
+; rdi=intro_circ_id, rsi=auth_key32, rdx=onion_priv32, rcx=onion_pub32,
+; r8=subcred32, r9=service_handshake, [rbp+16]=handshake_len,
+; [rbp+24]=out_rend_circ_id
+; Waits for INTRODUCE2 on an established intro circuit, opens it, builds a
+; rendezvous circuit to the relay named by the client, and sends RENDEZVOUS1.
+; ==================================================================
+global er_tor_hs_service_accept_intro_and_rendezvous
+er_fn er_tor_hs_service_accept_intro_and_rendezvous
+    push    rbp
+    mov     rbp, rsp
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+    sub     rsp, 48
+    mov     ebx, edi        ; intro circuit
+    mov     r12, rsi        ; auth key
+    mov     r13, rdx        ; service onion priv
+    mov     r14, rcx        ; service onion pub
+    mov     r15, r8         ; subcredential
+    mov     [rbp - 48], r9  ; service RENDEZVOUS1 handshake
+    test    r12, r12
+    jz      .fail
+    test    r13, r13
+    jz      .fail
+    test    r14, r14
+    jz      .fail
+    test    r15, r15
+    jz      .fail
+    cmp     qword [rbp - 48], 0
+    je      .fail
+    cmp     dword [rbp + 16], TOR_HS_RELAY_DATA_MAX - TOR_HS_RENDEZVOUS_COOKIE_LEN
+    ja      .fail
+    cmp     qword [rbp + 24], 0
+    je      .fail
+    cmp     dword [tor_state + TOR_STATE_LINK_ESTABLISHED], 1
+    jne     .fail
+
+    sub     rsp, 8
+    mov     [rsp], r15
+    mov     edi, ebx
+    lea     rsi, [tor_hs_service_intro_plain]
+    lea     rdx, [tor_hs_service_intro_plain_len]
+    mov     rcx, r12
+    mov     r8, r13
+    mov     r9, r14
+    call    er_tor_hs_service_wait_introduce2
+    add     rsp, 8
+    test    eax, eax
+    js      .fail
+
+    sub     rsp, 16
+    lea     rax, [tor_hs_service_intro_plain]
+    mov     [rsp], rax
+    mov     eax, [tor_hs_service_intro_plain_len]
+    mov     [rsp + 8], rax
+    lea     rdi, [tor_hs_service_cookie]
+    lea     rsi, [tor_hs_service_rend_onion_key]
+    lea     rdx, [tor_hs_service_rend_linkspecs]
+    mov     ecx, 64
+    lea     r8, [tor_hs_service_rend_linkspecs_len]
+    call    er_tor_hs_parse_introduce_plaintext
+    add     rsp, 16
+    test    eax, eax
+    js      .fail
+
+    lea     rdi, [tor_hs_service_rend_relay_id]
+    lea     rsi, [tor_hs_service_rend_relay_ip]
+    lea     rdx, [tor_hs_service_rend_relay_port]
+    lea     rcx, [tor_hs_service_rend_linkspecs]
+    mov     r8d, [tor_hs_service_rend_linkspecs_len]
+    call    er_tor_hs_parse_linkspecs
+    test    eax, eax
+    js      .fail
+
+    lea     rdi, [tor_hs_service_rend_relay_id]
+    lea     rsi, [tor_hs_service_rend_relay_onion_key]
+    call    er_tor_directory_fetch_relay_descriptor
+    test    eax, eax
+    js      .fail
+
+    lea     rdi, [tor_hs_service_rend_circ_id]
+    lea     rsi, [tor_state + TOR_STATE_GUARD_FINGERPRINT]
+    lea     rdx, [tor_guard_onion_key]
+    call    er_tor_circuit_create
+    test    eax, eax
+    js      .fail
+
+    mov     edi, [tor_hs_service_rend_circ_id]
+    lea     rsi, [tor_hs_service_rend_relay_id]
+    lea     rdx, [tor_hs_service_rend_relay_onion_key]
+    mov     ecx, [tor_hs_service_rend_relay_ip]
+    movzx   r8d, word [tor_hs_service_rend_relay_port]
+    call    er_tor_circuit_extend
+    test    eax, eax
+    js      .fail
+
+    mov     edi, [tor_hs_service_rend_circ_id]
+    lea     rsi, [tor_hs_service_cookie]
+    mov     rdx, [rbp - 48]
+    mov     ecx, [rbp + 16]
+    call    er_tor_hs_send_rendezvous1
+    test    eax, eax
+    js      .fail
+
+    mov     rdi, [rbp + 24]
+    mov     eax, [tor_hs_service_rend_circ_id]
+    mov     [rdi], eax
+    xor     eax, eax
+    er_ok
+    add     rsp, 48
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
+    er_ret
+.fail:
+    mov     eax, -1
+    er_err  ERROR_TOR_CIRC_BUILD_FAIL
+    add     rsp, 48
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
+    er_ret
+
+; ==================================================================
+; er_tor_hs_service_publish_v3_descriptor
+; rdi=blinded_key_b64, esi=blinded_len, rdx=signing_cert_armor,
+; ecx=signing_cert_len, r8d=revision_counter, r9d=lifetime_minutes,
+; [rbp+16]=superencrypted_armor, [rbp+24]=superencrypted_len,
+; [rbp+32]=sig64, [rbp+40]=out_descriptor_len_or_null
+; Builds a complete v3 descriptor and publishes it to the selected HSDir
+; through the existing BEGIN_DIR HTTP path.
+; ==================================================================
+global er_tor_hs_service_publish_v3_descriptor
+er_fn er_tor_hs_service_publish_v3_descriptor
+    push    rbp
+    mov     rbp, rsp
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+    sub     rsp, 48
+    mov     rbx, rdi
+    mov     r12d, esi
+    mov     r13, rdx
+    mov     r14d, ecx
+    mov     r15d, r8d
+    mov     [rbp - 48], r9
+    test    rbx, rbx
+    jz      .fail
+    test    r12d, r12d
+    jle     .fail
+    test    r13, r13
+    jz      .fail
+    test    r14d, r14d
+    jle     .fail
+    cmp     qword [rbp + 16], 0
+    je      .fail
+    cmp     dword [rbp + 24], 0
+    jle     .fail
+    cmp     qword [rbp + 32], 0
+    je      .fail
+    cmp     dword [tor_state + TOR_STATE_LINK_ESTABLISHED], 1
+    jne     .fail
+
+    sub     rsp, 40
+    mov     eax, r15d
+    mov     [rsp], rax
+    mov     rax, [rbp - 48]
+    mov     [rsp + 8], rax
+    mov     rax, [rbp + 16]
+    mov     [rsp + 16], rax
+    mov     eax, [rbp + 24]
+    mov     [rsp + 24], rax
+    mov     rax, [rbp + 32]
+    mov     [rsp + 32], rax
+    lea     rdi, [tor_dir_body_buf]
+    mov     esi, TOR_RECV_BUF_SIZE
+    mov     rdx, rbx
+    mov     ecx, r12d
+    mov     r8, r13
+    mov     r9d, r14d
+    call    er_tor_hs_desc_build_v3
+    add     rsp, 40
+    test    eax, eax
+    js      .fail
+    mov     r15d, eax
+    cmp     qword [rbp + 40], 0
+    je      .publish
+    mov     rdi, [rbp + 40]
+    mov     [rdi], r15d
+.publish:
+    lea     rdi, [tor_dir_body_buf]
+    mov     esi, r15d
+    call    er_tor_hsdir_publish_descriptor
+    test    eax, eax
+    js      .fail
+    xor     eax, eax
+    er_ok
+    add     rsp, 48
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
+    er_ret
+.fail:
+    mov     eax, -1
+    er_err  ERROR_TOR_PROTOCOL_ERR
+    add     rsp, 48
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
     er_ret
 
 ; ==================================================================
@@ -1753,6 +3319,7 @@ er_fn er_tor_init
     mov     word [tor_tunnel_stream_id], 0
     mov     dword [tor_dir_stream_open], 0
     mov     word [tor_dir_stream_id], 0
+    mov     word [tor_hs_live_stream_next_id], 1
     mov     dword [tor_tunnel_rx_head], 0
     mov     dword [tor_tunnel_rx_tail], 0
 

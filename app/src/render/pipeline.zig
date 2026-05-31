@@ -53,8 +53,21 @@ fn packPreparedRange(buffers: renderer_ir.Buffers, commands: []const ui.Command,
 }
 
 pub fn prepareSceneAssets(font_atlas: *renderer_font_atlas.Atlas, commands: []const ui.Command) renderer_ir.Error!void {
-    _ = font_atlas;
-    _ = commands;
+    for (commands) |command| switch (command) {
+        .text => |text_command| try prepareText(font_atlas, text_command),
+        .overlay_text => |text_command| try prepareText(font_atlas, text_command),
+        else => {},
+    };
+}
+
+fn prepareText(font_atlas: *renderer_font_atlas.Atlas, text_command: anytype) renderer_ir.Error!void {
+    if (text_command.value.len == 0) return;
+    const px: u8 = @intFromFloat(@ceil(text_command.origin.h));
+    font_atlas.setTextWeight(fontWeightForText(text_command.weight));
+    font_atlas.prepareText(text_command.value, px, fontWeightForText(text_command.weight)) catch |err| switch (err) {
+        error.Budget => return error.Budget,
+        error.InvalidBuffer => return error.InvalidBuffer,
+    };
 }
 
 fn fontWeightForText(weight: ui.FontWeight) font_vector.Weight {

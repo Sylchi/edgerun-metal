@@ -360,12 +360,6 @@ fn recordToNode(kind: RecordKind, id: u32, first: []const u8, second: []const u8
 
 pub const Error = error{
     Corrupt,
-    UnsupportedPatchKind,
-};
-
-pub const MessageType = enum(u8) {
-    tree = 0,
-    patch = 1,
 };
 
 /// Wire format:
@@ -438,7 +432,83 @@ pub const PatchKind = enum(u8) {
     style_color = 50,
 };
 
-const header_len = 2;
+pub const BleFrameKind = enum(u8) {
+    patch = 1,
+    tree = 2,
+    heartbeat = 3,
+};
+
+pub const ble_company_id: u16 = 0xffff;
+pub const ble_frame_magic = "ERUI";
+pub const ble_frame_version: u8 = 1;
+pub const ble_frame_header_size: usize = 8;
+pub const ble_legacy_ad_max: usize = 31;
+const ble_manufacturer_type: u8 = 0xff;
+const ble_company_id_size: usize = 2;
+const ble_ad_header_size: usize = 2;
+const ble_manufacturer_ad_overhead: usize = ble_ad_header_size + ble_company_id_size;
+pub const ble_legacy_payload_max: usize = ble_legacy_ad_max - ble_manufacturer_ad_overhead;
+
+pub const BleFrame = struct {
+    stream_id: u8,
+    sequence: u8,
+    kind: BleFrameKind,
+    body: []const u8,
+};
+
+pub fn encodeBleFrame(buf: []u8, stream_id: u8, sequence: u8, kind: BleFrameKind, body: []const u8) ?[]u8 {
+    const total = ble_frame_header_size + body.len;
+    if (total > ble_legacy_payload_max or buf.len < total) return null;
+    @memcpy(buf[0..ble_frame_magic.len], ble_frame_magic);
+    buf[4] = ble_frame_version;
+    buf[5] = stream_id;
+    buf[6] = sequence;
+    buf[7] = @intFromEnum(kind);
+    @memcpy(buf[ble_frame_header_size..][0..body.len], body);
+    return buf[0..total];
+}
+
+pub fn decodeBleFrame(buf: []const u8) ?BleFrame {
+    if (buf.len < ble_frame_header_size or buf.len > ble_legacy_payload_max) return null;
+    if (!std.mem.eql(u8, buf[0..ble_frame_magic.len], ble_frame_magic)) return null;
+    if (buf[4] != ble_frame_version) return null;
+    if (buf[7] < @intFromEnum(BleFrameKind.patch) or buf[7] > @intFromEnum(BleFrameKind.heartbeat)) return null;
+    return .{
+        .stream_id = buf[5],
+        .sequence = buf[6],
+        .kind = @enumFromInt(buf[7]),
+        .body = buf[ble_frame_header_size..],
+    };
+}
+
+pub fn encodeBleManufacturerAd(buf: []u8, frame_payload: []const u8) ?[]u8 {
+    const ad_len = 1 + ble_company_id_size + frame_payload.len;
+    const total = ble_ad_header_size + ble_company_id_size + frame_payload.len;
+    if (frame_payload.len > ble_legacy_payload_max or ad_len > 0xff or buf.len < total) return null;
+    buf[0] = @intCast(ad_len);
+    buf[1] = ble_manufacturer_type;
+    std.mem.writeInt(u16, buf[2..4], ble_company_id, .little);
+    @memcpy(buf[4..][0..frame_payload.len], frame_payload);
+    return buf[0..total];
+}
+
+pub fn decodeBleManufacturerAd(scan_record: []const u8) ?BleFrame {
+    var index: usize = 0;
+    while (index < scan_record.len) {
+        const ad_len: usize = scan_record[index];
+        if (ad_len == 0) return null;
+        const next = index + 1 + ad_len;
+        if (next > scan_record.len) return null;
+        const ad = scan_record[index + 1 .. next];
+        if (ad.len >= 1 + ble_company_id_size and ad[0] == ble_manufacturer_type) {
+            if (std.mem.readInt(u16, ad[1..3], .little) == ble_company_id) {
+                return decodeBleFrame(ad[3..]);
+            }
+        }
+        index = next;
+    }
+    return null;
+}
 
 fn encodeBool(buf: []u8, kind: PatchKind, component_id: u8, value: bool) ?[]u8 {
     if (buf.len < 3) return null;
@@ -855,6 +925,54 @@ pub fn decodePatch(buf: []const u8) ?struct { component_id: u8, patch: ui.Patch 
             return .{ .component_id = d.component_id, .patch = .{ .style_color = d.color } };
         },
     };
+}
+
+test "ble frame wraps existing ui patch wire bytes" {
+    var patch_buf: [16]u8 = undefined;
+    const patch = encodePatch(&patch_buf, 1, ui.Patch{ .text_value = "ON" }).?;
+
+    var frame_buf: [ble_legacy_payload_max]u8 = undefined;
+    const frame = encodeBleFrame(&frame_buf, 7, 42, .patch, patch).?;
+    try std.testing.expect(frame.len <= ble_legacy_payload_max);
+
+    const decoded_frame = decodeBleFrame(frame).?;
+    try std.testing.expectEqual(@as(u8, 7), decoded_frame.stream_id);
+    try std.testing.expectEqual(@as(u8, 42), decoded_frame.sequence);
+    try std.testing.expectEqual(BleFrameKind.patch, decoded_frame.kind);
+
+    const decoded_patch = decodePatch(decoded_frame.body).?;
+    try std.testing.expectEqual(@as(u8, 1), decoded_patch.component_id);
+    try std.testing.expectEqualStrings("ON", decoded_patch.patch.text_value);
+}
+
+test "ble manufacturer advertisement decodes from tv scan record bytes" {
+    var patch_buf: [16]u8 = undefined;
+    const patch = encodePatch(&patch_buf, 1, ui.Patch{ .switch_checked = true }).?;
+
+    var frame_buf: [ble_legacy_payload_max]u8 = undefined;
+    const frame = encodeBleFrame(&frame_buf, 3, 21, .patch, patch).?;
+
+    var scan_record: [ble_legacy_ad_max]u8 = undefined;
+    const ad = encodeBleManufacturerAd(&scan_record, frame).?;
+
+    const decoded_frame = decodeBleManufacturerAd(ad).?;
+    try std.testing.expectEqual(@as(u8, 3), decoded_frame.stream_id);
+    try std.testing.expectEqual(@as(u8, 21), decoded_frame.sequence);
+    try std.testing.expectEqual(BleFrameKind.patch, decoded_frame.kind);
+
+    const decoded_patch = decodePatch(decoded_frame.body).?;
+    try std.testing.expectEqual(@as(u8, 1), decoded_patch.component_id);
+    try std.testing.expect(decoded_patch.patch.switch_checked);
+}
+
+test "ble frame rejects corrupt or oversized payloads" {
+    var frame_buf: [ble_legacy_payload_max]u8 = undefined;
+    var oversized: [ble_legacy_payload_max - ble_frame_header_size + 1]u8 = undefined;
+    try std.testing.expect(encodeBleFrame(&frame_buf, 0, 0, .patch, &oversized) == null);
+
+    const frame = encodeBleFrame(&frame_buf, 1, 2, .heartbeat, &.{}) orelse return error.TestUnexpectedResult;
+    frame_buf[0] = 'x';
+    try std.testing.expect(decodeBleFrame(frame) == null);
 }
 
 test "encode/decode accordion_open bool patch" {

@@ -120,6 +120,7 @@ KERNEL_ASM_SRCS="
 	wasm/wasm_compiler.asm
 	wasm/wasm_test_data.asm
 	wasm/da_wasm_test.asm
+	wasm/edgerun_signing_wasm.asm
 	entry.asm
 "
 
@@ -162,6 +163,7 @@ assemble_kernel_efi() {
 
 # ---- targets ----
 cmd_kernel() {
+	cmd_signing_wasm
 	assemble_kernel
 	local objs=$(kernel_objs "kernel" ".o" "kernel_main_elf32.o")
 	ld -m elf_i386 -T "${KERNEL_LD}" -o "${KERNEL_ELF}" ${objs}
@@ -186,6 +188,7 @@ cmd_kernel_vnc() {
 }
 
 cmd_kernel_efi() {
+	cmd_signing_wasm
 	assemble_kernel_efi
 	local objs=$(kernel_objs "kernel_efi" ".o" "kernel_main_efi64.o")
 	ld -m i386pep -T "${KERNEL_EFI_LD}" --subsystem 10 --image-base 0x100000 \
@@ -327,10 +330,17 @@ cmd_test() {
 	cmd_test_render_ir
 	cmd_test_fe_mul
 	cmd_test_spi_flash
+	cmd_test_pi_audio
+	cmd_test_pi_bt
+	cmd_test_pi_gpu
+	cmd_test_pi_gpio
+	cmd_test_pi_sd
+	cmd_test_pi_usb
 	cmd_test_pi_wifi_sdio
 	cmd_test_sha3
 	cmd_test_tls
 	cmd_test_tor
+	cmd_test_tor_cell
 	cmd_test_tor_hs
 	cmd_test_tor_hs_app
 	cmd_test_local_route
@@ -500,16 +510,51 @@ cmd_test_spi_flash() {
 	build_test "test_spi_flash_self" "${TEST_DIR}/test_spi_flash_self.asm"
 }
 
-cmd_test_pi_wifi_sdio() {
+cmd_test_pi_arm() {
 	mkdir -p "${PI_BUILD}"
-	local test_obj="${PI_BUILD}/test_pi_wifi_sdio_self.o"
-	local emmc_obj="${PI_BUILD}/emmc_test.o"
-	local elf="${PI_BUILD}/test_pi_wifi_sdio.elf"
-	${ARM_AS} -mcpu=arm1176jzf-s -I kernel -o "$test_obj" "${TEST_DIR}/test_pi_wifi_sdio_self.asm"
-	arm_obj "${ASM_ARM_DIR}/emmc.asm" "$emmc_obj"
-	${ARM_LD} -T "${ARM_LD_SCRIPT}" -o "$elf" "$test_obj" "$emmc_obj"
+	local name="$1"
+	local test_obj="${PI_BUILD}/${name}.o"
+	local elf="${PI_BUILD}/${name%_self}.elf"
+	shift
+	${ARM_AS} -mcpu=arm1176jzf-s -I kernel -o "$test_obj" "${TEST_DIR}/${name}.asm"
+	local objs=("$test_obj")
+	local src
+	for src in "$@"; do
+		local obj="${PI_BUILD}/$(basename "${src%.asm}")_${name}.o"
+		arm_obj "$src" "$obj"
+		objs+=("$obj")
+	done
+	${ARM_LD} -T "${ARM_LD_SCRIPT}" -o "$elf" "${objs[@]}"
 	echo "  LD  ${elf}"
 	timeout 8s qemu-system-arm -M raspi0 -semihosting -display none -serial none -kernel "$elf"
+}
+
+cmd_test_pi_bt() {
+	cmd_test_pi_arm "test_pi_bt_self" "${ASM_ARM_DIR}/bt.asm" "${ASM_ARM_DIR}/gpio.asm"
+}
+
+cmd_test_pi_audio() {
+	cmd_test_pi_arm "test_pi_audio_self" "${ASM_ARM_DIR}/audio.asm"
+}
+
+cmd_test_pi_gpu() {
+	cmd_test_pi_arm "test_pi_gpu_self" "${ASM_ARM_DIR}/gpu.asm"
+}
+
+cmd_test_pi_wifi_sdio() {
+	cmd_test_pi_arm "test_pi_wifi_sdio_self" "${ASM_ARM_DIR}/emmc.asm"
+}
+
+cmd_test_pi_gpio() {
+	cmd_test_pi_arm "test_pi_gpio_self" "${ASM_ARM_DIR}/gpio.asm"
+}
+
+cmd_test_pi_sd() {
+	cmd_test_pi_arm "test_pi_sd_self" "${ASM_ARM_DIR}/emmc.asm"
+}
+
+cmd_test_pi_usb() {
+	cmd_test_pi_arm "test_pi_usb_self" "${ASM_ARM_DIR}/dwc2.asm"
 }
 
 cmd_test_cros_ec() {
@@ -574,6 +619,10 @@ cmd_test_tor() {
 	ld -nostdlib -static -o "$bin" "$obj" "$tor_aes_o" "$tor_o" "$runtime_o"
 	echo "  LD  ${bin}"
 	"$bin"
+}
+
+cmd_test_tor_cell() {
+	build_test "test_tor_cell_self" "${TEST_DIR}/test_tor_cell_self.asm" "crypto/tor_cell"
 }
 
 cmd_test_tor_hs() {
@@ -756,6 +805,75 @@ cmd_signing_wasm() {
 	printf 'signing-wasm: %s (%d bytes)\n' "$wasm_dst" "$wsize"
 }
 
+cmd_lib_tor() {
+	local lib_dir="${BUILD_DIR}/lib"
+	mkdir -p "${lib_dir}" "${ASM_BUILD}"
+
+	local runtime_o="${ASM_BUILD}/lib_runtime.o"
+	local sha256_o="${ASM_BUILD}/lib_sha256.o"
+	local sha3_o="${ASM_BUILD}/lib_sha3.o"
+	local tor_aes_o="${ASM_BUILD}/lib_tor_aes.o"
+	local curve25519_o="${ASM_BUILD}/lib_curve25519.o"
+	local tls_o="${ASM_BUILD}/lib_tls.o"
+	local tor_ntor_o="${ASM_BUILD}/lib_tor_ntor.o"
+	local tor_digest_o="${ASM_BUILD}/lib_tor_digest.o"
+	local tor_cell_o="${ASM_BUILD}/lib_tor_cell.o"
+	local tor_hs_o="${ASM_BUILD}/lib_tor_hs.o"
+	local tor_hs_app_o="${ASM_BUILD}/lib_tor_hs_app.o"
+	local tor_o="${ASM_BUILD}/lib_tor.o"
+
+	elf64 "${ASM_DIR}/rt/runtime.asm" "$runtime_o"
+	elf64 "${ASM_DIR}/crypto/sha256.asm" "$sha256_o"
+	elf64 "${ASM_DIR}/crypto/sha3.asm" "$sha3_o"
+	elf64 "${ASM_DIR}/crypto/tor_aes.asm" "$tor_aes_o"
+	elf64 "${ASM_DIR}/crypto/curve25519.asm" "$curve25519_o"
+	elf64 "${ASM_DIR}/crypto/tls.asm" "$tls_o"
+	elf64 "${ASM_DIR}/crypto/tor_ntor.asm" "$tor_ntor_o"
+	elf64 "${ASM_DIR}/crypto/tor_digest.asm" "$tor_digest_o"
+	elf64 "${ASM_DIR}/crypto/tor_cell.asm" "$tor_cell_o"
+	elf64 "${ASM_DIR}/crypto/tor_hs.asm" "$tor_hs_o"
+	elf64 "${ASM_DIR}/crypto/tor_hs_app.asm" "$tor_hs_app_o"
+	elf64 "${ASM_DIR}/crypto/tor.asm" "$tor_o"
+
+	ar rcs "${lib_dir}/libedgerun_tor_hs.a" \
+		"$tor_hs_o" "$sha3_o" "$tor_aes_o" "$curve25519_o" "$runtime_o"
+	ar rcs "${lib_dir}/libedgerun_tor_hs_app.a" \
+		"$tor_hs_app_o" "$runtime_o"
+	ar rcs "${lib_dir}/libedgerun_tor_core.a" \
+		"$tor_o" "$tor_cell_o" "$tor_hs_o" "$tor_hs_app_o" \
+		"$tls_o" "$sha256_o" "$sha3_o" "$tor_aes_o" \
+		"$tor_ntor_o" "$curve25519_o" "$tor_digest_o" "$runtime_o"
+
+	echo "  AR  ${lib_dir}/libedgerun_tor_hs.a"
+	echo "  AR  ${lib_dir}/libedgerun_tor_hs_app.a"
+	echo "  AR  ${lib_dir}/libedgerun_tor_core.a"
+}
+
+cmd_tor_hs_host() {
+	cmd_lib_tor
+	mkdir -p "${HOST_BUILD}"
+	local obj="${HOST_BUILD}/tor_hs_host.o"
+	local bin="${HOST_BUILD}/tor_hs_host"
+	${YASM} -f elf64 ${ASM_INC} -o "$obj" "${TEST_DIR}/test_tor_hs_self.asm"
+	ld -nostdlib -static -o "$bin" "$obj" "${BUILD_DIR}/lib/libedgerun_tor_hs.a"
+	echo "  LD  ${bin}"
+}
+
+cmd_tor_live_host() {
+	cmd_lib_tor
+	mkdir -p "${HOST_BUILD}"
+	local obj="${HOST_BUILD}/tor_live_host.o"
+	local bin="${HOST_BUILD}/tor_live_host"
+	${YASM} -f elf64 ${ASM_INC} ${ASM_DEFS:-} -o "$obj" "${TEST_DIR}/test_tor_live_host.asm"
+	ld -nostdlib -static -o "$bin" "$obj" "${BUILD_DIR}/lib/libedgerun_tor_core.a"
+	echo "  LD  ${bin}"
+}
+
+cmd_test_tor_live_host() {
+	cmd_tor_live_host
+	"${HOST_BUILD}/tor_live_host"
+}
+
 # ---- ARM / Pi Zero targets ----
 HOST_BUILD="${BUILD_DIR}/host"
 PI_BUILD="${BUILD_DIR}/pi"
@@ -777,7 +895,11 @@ cmd_pi_kernel() {
 	arm_obj "${ASM_ARM_DIR}/start.asm" "${PI_BUILD}/start.o"
 	arm_obj "${ASM_ARM_DIR}/emmc.asm" "${PI_BUILD}/emmc.o"
 	arm_obj "${ASM_ARM_DIR}/dwc2.asm" "${PI_BUILD}/dwc2.o"
-	${ARM_LD} -T "${ARM_LD_SCRIPT}" -o "${PI_KERNEL_ELF}" "${PI_BUILD}/start.o" "${PI_BUILD}/emmc.o" "${PI_BUILD}/dwc2.o"
+	arm_obj "${ASM_ARM_DIR}/gpio.asm" "${PI_BUILD}/gpio.o"
+	arm_obj "${ASM_ARM_DIR}/audio.asm" "${PI_BUILD}/audio.o"
+	arm_obj "${ASM_ARM_DIR}/bt.asm" "${PI_BUILD}/bt.o"
+	arm_obj "${ASM_ARM_DIR}/gpu.asm" "${PI_BUILD}/gpu.o"
+	${ARM_LD} -T "${ARM_LD_SCRIPT}" -o "${PI_KERNEL_ELF}" "${PI_BUILD}/start.o" "${PI_BUILD}/emmc.o" "${PI_BUILD}/dwc2.o" "${PI_BUILD}/gpio.o" "${PI_BUILD}/audio.o" "${PI_BUILD}/bt.o" "${PI_BUILD}/gpu.o"
 	${ARM_OBJCOPY} -O binary "${PI_KERNEL_ELF}" "${PI_KERNEL_IMG}"
 	local esize=$(stat -c '%s' "${PI_KERNEL_ELF}" 2>/dev/null || echo 0)
 	local bsize=$(stat -c '%s' "${PI_KERNEL_IMG}" 2>/dev/null || echo 0)
@@ -845,10 +967,17 @@ EdgeRun build targets:
   test-render-ir      Run render IR test (self-hosted ASM runner)
   test-fe-mul         Run _fe_mul field multiplication test (self-hosted ASM)
   test-spi-flash      Run SPI flash compile-check test (self-hosted ASM)
+  test-pi-audio       Run Pi Zero W BCM2835 PWM audio emulator test
+  test-pi-bt          Run Pi Zero W CYW43438 Bluetooth UART emulator test
+  test-pi-gpu         Run Pi Zero W VideoCore mailbox framebuffer emulator test
+  test-pi-gpio        Run Pi Zero W BCM2835 GPIO emulator test
+  test-pi-sd          Run Pi Zero W EMMC SD block emulator test
+  test-pi-usb         Run Pi Zero W DWC2 USB host init emulator test
   test-pi-wifi-sdio   Run Pi Zero W CYW43438 SDIO probe emulator test
   test-sha3           Run SHA3-256 known-answer tests (self-hosted ASM)
   test-tls            Run TLS ClientHello self-test (self-hosted ASM)
   test-tor            Run Tor AES-128-CTR KAT test (self-hosted ASM)
+  test-tor-cell       Run Tor cell EXTEND2 helper test (self-hosted ASM)
   test-tor-hs         Run Tor onion-service message tests (self-hosted ASM)
   test-local-route    Run local cell route queue/dispatch test (self-hosted ASM)
   bench-tor           Run Tor local AES cell latency/throughput benchmark
@@ -858,6 +987,10 @@ EdgeRun build targets:
   bench-wasm-jit      Run WASM JIT vs native RDTSC benchmark (self-hosted ASM)
   bench-zig-wasm      Compile same Zig code to x86_64 + WASM, then benchmark native/interpreter/JIT
   signing-wasm        Compile Ed25519 signing WASM guest
+  lib-tor             Build reusable Tor static archives under .build/lib
+  tor-hs-host         Build hosted hidden-service library smoke binary
+  tor-live-host       Build hosted live Tor ORPort probe binary
+  test-tor-live-host  Build + run hosted live Tor ORPort probe
   pi-kernel           Build Pi Zero W kernel.img (ARMv6)
   pi-usb-boot         Build Pi USB boot host tool (x86_64)
   pi-boot             Build + boot Pi Zero via USB
@@ -895,10 +1028,17 @@ case "${1:-help}" in
 	test-render-ir) cmd_test_render_ir ;;
 	test-fe-mul)    cmd_test_fe_mul ;;
 	test-spi-flash) cmd_test_spi_flash ;;
+	test-pi-audio) cmd_test_pi_audio ;;
+	test-pi-bt) cmd_test_pi_bt ;;
+	test-pi-gpu) cmd_test_pi_gpu ;;
+	test-pi-gpio) cmd_test_pi_gpio ;;
+	test-pi-sd) cmd_test_pi_sd ;;
+	test-pi-usb) cmd_test_pi_usb ;;
 	test-pi-wifi-sdio) cmd_test_pi_wifi_sdio ;;
 	test-sha3)      cmd_test_sha3 ;;
 	test-tls)       cmd_test_tls ;;
 	test-tor)       cmd_test_tor ;;
+	test-tor-cell)  cmd_test_tor_cell ;;
 	test-tor-hs)    cmd_test_tor_hs ;;
 	test-tor-hs-app) cmd_test_tor_hs_app ;;
 	test-local-route) cmd_test_local_route ;;
@@ -910,6 +1050,10 @@ case "${1:-help}" in
 	bench-wasm-jit) cmd_bench_wasm_jit ;;
 	bench-zig-wasm) cmd_bench_zig_wasm ;;
 	signing-wasm)    cmd_signing_wasm ;;
+	lib-tor)         cmd_lib_tor ;;
+	tor-hs-host)     cmd_tor_hs_host ;;
+	tor-live-host)   cmd_tor_live_host ;;
+	test-tor-live-host) cmd_test_tor_live_host ;;
 	pi-kernel)      cmd_pi_kernel ;;
 	pi-usb-boot)    cmd_pi_usb_boot ;;
 	pi-boot)        cmd_pi_boot ;;

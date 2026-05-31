@@ -104,6 +104,36 @@ pub fn build(b: *std.Build) void {
     const storage_test_step = b.step("storage-test", "Run Zig storage tests");
     storage_test_step.dependOn(&run_storage_tests.step);
 
+    const chat_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/encrypted_chat.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    if (math_obj) |obj| chat_tests.root_module.addObjectFile(obj);
+    if (runtime_obj) |obj| chat_tests.root_module.addObjectFile(obj);
+
+    const run_chat_tests = b.addRunArtifact(chat_tests);
+    const chat_test_step = b.step("chat-test", "Run encrypted chat app state tests");
+    chat_test_step.dependOn(&run_chat_tests.step);
+    test_step.dependOn(&run_chat_tests.step);
+
+    const chat_ui_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/app_encrypted_chat.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    if (math_obj) |obj| chat_ui_tests.root_module.addObjectFile(obj);
+    if (runtime_obj) |obj| chat_ui_tests.root_module.addObjectFile(obj);
+
+    const run_chat_ui_tests = b.addRunArtifact(chat_ui_tests);
+    const chat_ui_test_step = b.step("chat-ui-test", "Run encrypted chat app UI tests");
+    chat_ui_test_step.dependOn(&run_chat_ui_tests.step);
+    test_step.dependOn(&run_chat_ui_tests.step);
+
     const sdk_tests = b.addTest(.{
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/sdk.zig"),
@@ -196,6 +226,21 @@ pub fn build(b: *std.Build) void {
     const ui_core_test_step = b.step("ui-core-test", "Run Zig UI core tests");
     ui_core_test_step.dependOn(&run_ui_core_tests.step);
 
+    const ui_codec_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/ui_codec_test.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    if (math_obj) |obj| ui_codec_tests.root_module.addObjectFile(obj);
+    if (runtime_obj) |obj| ui_codec_tests.root_module.addObjectFile(obj);
+
+    const run_ui_codec_tests = b.addRunArtifact(ui_codec_tests);
+    const ui_codec_test_step = b.step("ui-codec-test", "Run Zig UI codec and stream tests");
+    ui_codec_test_step.dependOn(&run_ui_codec_tests.step);
+    test_step.dependOn(&run_ui_codec_tests.step);
+
     const component_gallery_tests = b.addTest(.{
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/ui/component_gallery.zig"),
@@ -225,6 +270,22 @@ pub fn build(b: *std.Build) void {
     const run_build_dashboard = b.addRunArtifact(build_dashboard);
     const build_dashboard_step = b.step("build-dashboard", "Render the build dashboard PPM");
     build_dashboard_step.dependOn(&run_build_dashboard.step);
+
+    const chat_preview = b.addExecutable(.{
+        .name = "edgerun-chat-preview",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/encrypted_chat_preview.zig"),
+            .target = target,
+            .optimize = optimize,
+            .strip = strip_release,
+        }),
+    });
+    if (math_obj) |obj| chat_preview.root_module.addObjectFile(obj);
+    if (runtime_obj) |obj| chat_preview.root_module.addObjectFile(obj);
+
+    const run_chat_preview = b.addRunArtifact(chat_preview);
+    const chat_preview_step = b.step("chat-preview", "Render encrypted chat UI preview PPM");
+    chat_preview_step.dependOn(&run_chat_preview.step);
 
     const ui_bench = b.addExecutable(.{
         .name = "edgerun-ui-bench-zig",

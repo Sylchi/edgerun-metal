@@ -13,6 +13,81 @@ SECTION .data
 dummy_mem: times 256 db 0
 export_name: db "f"
 EXPORT_NAME_LEN equ $ - export_name
+call_export_name: db "call_sum"
+CALL_EXPORT_NAME_LEN equ $ - call_export_name
+add_export_name: db "add"
+ADD_EXPORT_NAME_LEN equ $ - add_export_name
+wasm_add_i32:
+    db 0x00,0x61,0x73,0x6d, 0x01,0x00,0x00,0x00
+    db 0x01,0x07,0x01,0x60,0x02,0x7f,0x7f,0x01,0x7f
+    db 0x03,0x02,0x01,0x00
+    db 0x07,0x07,0x01,0x03,0x61,0x64,0x64,0x00,0x00
+    db 0x0a,0x09,0x01,0x07,0x00,0x20,0x00,0x20,0x01,0x6a,0x0b
+wasm_add_i32_len equ $ - wasm_add_i32
+body_i32_40: db 0x41, 0x28
+BODY_I32_40_LEN equ $ - body_i32_40
+body_call0_add2: db 0x10, 0x00, 0x41, 0x02, 0x6a
+BODY_CALL0_ADD2_LEN equ $ - body_call0_add2
+source_call_pair: db "export base = 40; export call_sum = base() + 2;"
+SOURCE_CALL_PAIR_LEN equ $ - source_call_pair
+source_call_id: db "export base = 42; export call_id = base();"
+SOURCE_CALL_ID_LEN equ $ - source_call_id
+source_call_product: db "export base = 6; export call_product = base() * 7;"
+SOURCE_CALL_PRODUCT_LEN equ $ - source_call_product
+source_call_eq: db "export base = 42; export call_eq = base() == 42;"
+SOURCE_CALL_EQ_LEN equ $ - source_call_eq
+source_call_rhs_sub: db "export base = 8; export call_rhs_sub = 50 - base();"
+SOURCE_CALL_RHS_SUB_LEN equ $ - source_call_rhs_sub
+source_call_rhs_eq: db "export base = 42; export call_rhs_eq = 42 == base();"
+SOURCE_CALL_RHS_EQ_LEN equ $ - source_call_rhs_eq
+source_call_callee_expr: db "export base = 6 * 7; export call_callee_expr = base();"
+SOURCE_CALL_CALLEE_EXPR_LEN equ $ - source_call_callee_expr
+source_call_callee_rhs: db "export base = 50 - 8; export call_callee_rhs = 84 / base();"
+SOURCE_CALL_CALLEE_RHS_LEN equ $ - source_call_callee_rhs
+source_call_callee_chain: db "export base = 10 + 20 + 12; export call_callee_chain = base();"
+SOURCE_CALL_CALLEE_CHAIN_LEN equ $ - source_call_callee_chain
+source_call_callee_paren: db "export base = (6 + 1) * 6; export call_callee_paren = base();"
+SOURCE_CALL_CALLEE_PAREN_LEN equ $ - source_call_callee_paren
+source_call_callee_precedence: db "export base = 2 + 4 * 10; export call_callee_precedence = base();"
+SOURCE_CALL_CALLEE_PRECEDENCE_LEN equ $ - source_call_callee_precedence
+source_call_chain: db "export base = 5; export call_chain = base() + 10 + 27;"
+SOURCE_CALL_CHAIN_LEN equ $ - source_call_chain
+source_call_paren: db "export base = 6; export call_paren = (base() + 1) * 6;"
+SOURCE_CALL_PAREN_LEN equ $ - source_call_paren
+source_call_precedence: db "export base = 4; export call_precedence = 2 + base() * 10;"
+SOURCE_CALL_PRECEDENCE_LEN equ $ - source_call_precedence
+source_call_twice_add: db "export base = 21; export call_twice_add = base() + base();"
+SOURCE_CALL_TWICE_ADD_LEN equ $ - source_call_twice_add
+source_call_twice_mul: db "export base = 6; export call_twice_mul = base() * base() + 6;"
+SOURCE_CALL_TWICE_MUL_LEN equ $ - source_call_twice_mul
+source_call_named_callee: db "export seed = 14; export call_named_callee = seed() * 3;"
+SOURCE_CALL_NAMED_CALLEE_LEN equ $ - source_call_named_callee
+source_call_div_zero: db "export base = 42; export call_div_zero = base() / 0;"
+SOURCE_CALL_DIV_ZERO_LEN equ $ - source_call_div_zero
+source_call_rhs_div_zero: db "export base = 0; export call_rhs_div_zero = 84 / base();"
+SOURCE_CALL_RHS_DIV_ZERO_LEN equ $ - source_call_rhs_div_zero
+source_call_rhs_rem_zero: db "export base = 0; export call_rhs_rem_zero = 84 % base();"
+SOURCE_CALL_RHS_REM_ZERO_LEN equ $ - source_call_rhs_rem_zero
+source_call_callee_div_zero: db "export base = 42 / 0; export call_callee_div_zero = base();"
+SOURCE_CALL_CALLEE_DIV_ZERO_LEN equ $ - source_call_callee_div_zero
+source_call_callee_rem_zero: db "export base = 42 % 0; export call_callee_rem_zero = base();"
+SOURCE_CALL_CALLEE_REM_ZERO_LEN equ $ - source_call_callee_rem_zero
+source_call_callee_div_over: db "export base = -2147483648 / -1; export call_callee_div_over = base();"
+SOURCE_CALL_CALLEE_DIV_OVER_LEN equ $ - source_call_callee_div_over
+source_call_unknown: db "export base = 40; export bad_call = missing() + 2;"
+SOURCE_CALL_UNKNOWN_LEN equ $ - source_call_unknown
+source_call_unknown_after_call: db "export base = 40; export bad_call_after = base() + missing();"
+SOURCE_CALL_UNKNOWN_AFTER_CALL_LEN equ $ - source_call_unknown_after_call
+source_call_prefix_unknown: db "export seed = 40; export bad_prefix = seed_extra() + 2;"
+SOURCE_CALL_PREFIX_UNKNOWN_LEN equ $ - source_call_prefix_unknown
+source_call_dup_export: db "export base = 40; export base = base() + 2;"
+SOURCE_CALL_DUP_EXPORT_LEN equ $ - source_call_dup_export
+source_call_bad_arity: db "export base = 40; export bad_arity = base(1);"
+SOURCE_CALL_BAD_ARITY_LEN equ $ - source_call_bad_arity
+source_call_rhs_bad_arity: db "export base = 40; export bad_arity_rhs = 1 + base(1);"
+SOURCE_CALL_RHS_BAD_ARITY_LEN equ $ - source_call_rhs_bad_arity
+source_call_group_bad_arity: db "export base = 40; export bad_arity_group = (base(1));"
+SOURCE_CALL_GROUP_BAD_ARITY_LEN equ $ - source_call_group_bad_arity
 source_return42: db "export f = 42;"
 SOURCE_RETURN42_LEN equ $ - source_return42
 source_named: db "  export answer_1 = 123;  "
@@ -169,6 +244,23 @@ wasm_compile_run_cases:
     dq source_if_false, SOURCE_IF_FALSE_LEN, 42
     dq source_if_expr, SOURCE_IF_EXPR_LEN, 42
     dq source_if_local, SOURCE_IF_LOCAL_LEN, 42
+    dq source_call_pair, SOURCE_CALL_PAIR_LEN, 42
+    dq source_call_id, SOURCE_CALL_ID_LEN, 42
+    dq source_call_product, SOURCE_CALL_PRODUCT_LEN, 42
+    dq source_call_eq, SOURCE_CALL_EQ_LEN, 1
+    dq source_call_rhs_sub, SOURCE_CALL_RHS_SUB_LEN, 42
+    dq source_call_rhs_eq, SOURCE_CALL_RHS_EQ_LEN, 1
+    dq source_call_callee_expr, SOURCE_CALL_CALLEE_EXPR_LEN, 42
+    dq source_call_callee_rhs, SOURCE_CALL_CALLEE_RHS_LEN, 2
+    dq source_call_callee_chain, SOURCE_CALL_CALLEE_CHAIN_LEN, 42
+    dq source_call_callee_paren, SOURCE_CALL_CALLEE_PAREN_LEN, 42
+    dq source_call_callee_precedence, SOURCE_CALL_CALLEE_PRECEDENCE_LEN, 42
+    dq source_call_chain, SOURCE_CALL_CHAIN_LEN, 42
+    dq source_call_paren, SOURCE_CALL_PAREN_LEN, 42
+    dq source_call_precedence, SOURCE_CALL_PRECEDENCE_LEN, 42
+    dq source_call_twice_add, SOURCE_CALL_TWICE_ADD_LEN, 42
+    dq source_call_twice_mul, SOURCE_CALL_TWICE_MUL_LEN, 42
+    dq source_call_named_callee, SOURCE_CALL_NAMED_CALLEE_LEN, 42
     dq source_add, SOURCE_ADD_LEN, 42
     dq source_sub, SOURCE_SUB_LEN, 42
     dq source_mul, SOURCE_MUL_LEN, 42
@@ -228,6 +320,10 @@ wasm_compile_parse_error_cases:
     dq source_dup_local, SOURCE_DUP_LOCAL_LEN
     dq source_if_missing_else, SOURCE_IF_MISSING_ELSE_LEN
     dq source_if_bad_arm, SOURCE_IF_BAD_ARM_LEN
+    dq source_call_dup_export, SOURCE_CALL_DUP_EXPORT_LEN
+    dq source_call_bad_arity, SOURCE_CALL_BAD_ARITY_LEN
+    dq source_call_rhs_bad_arity, SOURCE_CALL_RHS_BAD_ARITY_LEN
+    dq source_call_group_bad_arity, SOURCE_CALL_GROUP_BAD_ARITY_LEN
 WASM_COMPILE_PARSE_ERROR_CASE_SIZE equ 16
 wasm_compile_parse_error_cases_end:
 WASM_COMPILE_PARSE_ERROR_CASES equ (wasm_compile_parse_error_cases_end - wasm_compile_parse_error_cases) / WASM_COMPILE_PARSE_ERROR_CASE_SIZE
@@ -248,6 +344,19 @@ wasm_compile_run_error_cases:
     dq source_dup_local, SOURCE_DUP_LOCAL_LEN, ERROR_PARSE
     dq source_if_missing_else, SOURCE_IF_MISSING_ELSE_LEN, ERROR_PARSE
     dq source_if_bad_arm, SOURCE_IF_BAD_ARM_LEN, ERROR_PARSE
+    dq source_call_unknown, SOURCE_CALL_UNKNOWN_LEN, ERROR_PARSE
+    dq source_call_unknown_after_call, SOURCE_CALL_UNKNOWN_AFTER_CALL_LEN, ERROR_PARSE
+    dq source_call_prefix_unknown, SOURCE_CALL_PREFIX_UNKNOWN_LEN, ERROR_PARSE
+    dq source_call_dup_export, SOURCE_CALL_DUP_EXPORT_LEN, ERROR_PARSE
+    dq source_call_bad_arity, SOURCE_CALL_BAD_ARITY_LEN, ERROR_PARSE
+    dq source_call_rhs_bad_arity, SOURCE_CALL_RHS_BAD_ARITY_LEN, ERROR_PARSE
+    dq source_call_group_bad_arity, SOURCE_CALL_GROUP_BAD_ARITY_LEN, ERROR_PARSE
+    dq source_call_div_zero, SOURCE_CALL_DIV_ZERO_LEN, ERROR_ARITHMETIC_TRAP
+    dq source_call_rhs_div_zero, SOURCE_CALL_RHS_DIV_ZERO_LEN, ERROR_ARITHMETIC_TRAP
+    dq source_call_rhs_rem_zero, SOURCE_CALL_RHS_REM_ZERO_LEN, ERROR_ARITHMETIC_TRAP
+    dq source_call_callee_div_zero, SOURCE_CALL_CALLEE_DIV_ZERO_LEN, ERROR_ARITHMETIC_TRAP
+    dq source_call_callee_rem_zero, SOURCE_CALL_CALLEE_REM_ZERO_LEN, ERROR_ARITHMETIC_TRAP
+    dq source_call_callee_div_over, SOURCE_CALL_CALLEE_DIV_OVER_LEN, ERROR_ARITHMETIC_TRAP
     dq source_div_zero, SOURCE_DIV_ZERO_LEN, ERROR_ARITHMETIC_TRAP
     dq source_rem_zero, SOURCE_REM_ZERO_LEN, ERROR_ARITHMETIC_TRAP
 WASM_COMPILE_RUN_ERROR_CASE_SIZE equ 24
@@ -258,6 +367,7 @@ SECTION .bss
 runtime: resb RUNTIME_SIZE
 compiled_wasm: resb 128
 compiled_wasm_b: resb 128
+call_args: resq 2
 
 global er_wasm_runtime_ptr
 er_wasm_runtime_ptr: resq 1
@@ -302,6 +412,42 @@ _start:
     cmp     rax, 42
     jne     .fail
 
+    mov     qword [rel call_args], 19
+    mov     qword [rel call_args + 8], 23
+    mov     eax, 2
+    push    rax
+    lea     rdi, [rel runtime]
+    lea     rsi, [rel wasm_add_i32]
+    mov     edx, wasm_add_i32_len
+    lea     rcx, [rel add_export_name]
+    mov     r8d, ADD_EXPORT_NAME_LEN
+    lea     r9, [rel call_args]
+    call    er_fn_run_args
+    add     rsp, 8
+    test    rdx, rdx
+    jz      .fail
+    cmp     rax, 42
+    jne     .fail
+
+    lea     rdi, [rel runtime]
+    lea     rsi, [rel wasm_add_i32]
+    mov     rdx, wasm_add_i32_len
+    call    er_fn_load
+    test    rdx, rdx
+    jnz     .fail
+    mov     qword [rel call_args], 40
+    mov     qword [rel call_args + 8], 2
+    lea     rdi, [rel runtime]
+    lea     rsi, [rel add_export_name]
+    mov     edx, ADD_EXPORT_NAME_LEN
+    lea     rcx, [rel call_args]
+    mov     r8d, 2
+    call    er_fn_call_args
+    test    rdx, rdx
+    jnz     .fail
+    cmp     rax, 42
+    jne     .fail
+
     lea     rdi, [rel compiled_wasm]
     mov     esi, 128
     lea     rdx, [rel source_return42]
@@ -331,6 +477,189 @@ _start:
     test    rdx, rdx
     jz      .fail
     cmp     rax, 42
+    jne     .fail
+
+    lea     rdi, [rel compiled_wasm]
+    mov     esi, 128
+    lea     rdx, [rel body_i32_40]
+    mov     ecx, BODY_I32_40_LEN
+    lea     r8, [rel body_call0_add2]
+    mov     r9d, BODY_CALL0_ADD2_LEN
+    lea     r10, [rel call_export_name]
+    mov     r11d, CALL_EXPORT_NAME_LEN
+    call    er_wasmc_emit_i32_two_body_export
+    test    rdx, rdx
+    jnz     .fail
+    mov     r12, rax
+
+    lea     rdi, [rel compiled_wasm_b]
+    mov     esi, 128
+    lea     rdx, [rel body_i32_40]
+    mov     ecx, BODY_I32_40_LEN
+    lea     r8, [rel body_call0_add2]
+    mov     r9d, BODY_CALL0_ADD2_LEN
+    lea     r10, [rel call_export_name]
+    mov     r11d, CALL_EXPORT_NAME_LEN
+    call    er_wasmc_emit_i32_two_body_export
+    test    rdx, rdx
+    jnz     .fail
+    cmp     rax, r12
+    jne     .fail
+
+    lea     rdi, [rel compiled_wasm]
+    lea     rsi, [rel compiled_wasm_b]
+    mov     rdx, r12
+    call    _bytes_equal
+    test    rax, rax
+    jz      .fail
+
+    lea     rdi, [rel runtime]
+    lea     rsi, [rel compiled_wasm]
+    mov     rdx, r12
+    lea     rcx, [rel call_export_name]
+    mov     r8d, CALL_EXPORT_NAME_LEN
+    call    er_fn_run
+    test    rdx, rdx
+    jz      .fail
+    cmp     rax, 42
+    jne     .fail
+
+    lea     rdi, [rel compiled_wasm]
+    mov     esi, 128
+    lea     rdx, [rel source_call_pair]
+    mov     ecx, SOURCE_CALL_PAIR_LEN
+    call    er_wasmc_compile_call_source
+    test    rdx, rdx
+    jnz     .fail
+    mov     r12, rax
+
+    lea     rdi, [rel compiled_wasm_b]
+    mov     esi, 128
+    lea     rdx, [rel source_call_pair]
+    mov     ecx, SOURCE_CALL_PAIR_LEN
+    call    er_wasmc_compile_call_source
+    test    rdx, rdx
+    jnz     .fail
+    cmp     rax, r12
+    jne     .fail
+
+    lea     rdi, [rel compiled_wasm]
+    lea     rsi, [rel compiled_wasm_b]
+    mov     rdx, r12
+    call    _bytes_equal
+    test    rax, rax
+    jz      .fail
+
+    lea     rdi, [rel runtime]
+    lea     rsi, [rel compiled_wasm]
+    mov     rdx, r12
+    lea     rcx, [rel call_export_name]
+    mov     r8d, CALL_EXPORT_NAME_LEN
+    call    er_fn_run
+    test    rdx, rdx
+    jz      .fail
+    cmp     rax, 42
+    jne     .fail
+
+    lea     rdi, [rel compiled_wasm_b]
+    mov     esi, 128
+    lea     rdx, [rel source_call_unknown]
+    mov     ecx, SOURCE_CALL_UNKNOWN_LEN
+    call    er_wasmc_compile_call_source
+    cmp     rdx, ERROR_PARSE
+    jne     .fail
+
+    lea     rdi, [rel compiled_wasm_b]
+    mov     esi, 128
+    lea     rdx, [rel source_call_unknown_after_call]
+    mov     ecx, SOURCE_CALL_UNKNOWN_AFTER_CALL_LEN
+    call    er_wasmc_compile_call_source
+    cmp     rdx, ERROR_PARSE
+    jne     .fail
+
+    lea     rdi, [rel compiled_wasm_b]
+    mov     esi, 128
+    lea     rdx, [rel source_call_prefix_unknown]
+    mov     ecx, SOURCE_CALL_PREFIX_UNKNOWN_LEN
+    call    er_wasmc_compile_call_source
+    cmp     rdx, ERROR_PARSE
+    jne     .fail
+
+    lea     rdi, [rel compiled_wasm_b]
+    mov     esi, 128
+    lea     rdx, [rel source_call_dup_export]
+    mov     ecx, SOURCE_CALL_DUP_EXPORT_LEN
+    call    er_wasmc_compile_call_source
+    cmp     rdx, ERROR_PARSE
+    jne     .fail
+
+    lea     rdi, [rel compiled_wasm_b]
+    mov     esi, 128
+    lea     rdx, [rel source_call_bad_arity]
+    mov     ecx, SOURCE_CALL_BAD_ARITY_LEN
+    call    er_wasmc_compile_call_source
+    cmp     rdx, ERROR_PARSE
+    jne     .fail
+
+    lea     rdi, [rel compiled_wasm_b]
+    mov     esi, 128
+    lea     rdx, [rel source_call_rhs_bad_arity]
+    mov     ecx, SOURCE_CALL_RHS_BAD_ARITY_LEN
+    call    er_wasmc_compile_call_source
+    cmp     rdx, ERROR_PARSE
+    jne     .fail
+
+    lea     rdi, [rel compiled_wasm_b]
+    mov     esi, 128
+    lea     rdx, [rel source_call_group_bad_arity]
+    mov     ecx, SOURCE_CALL_GROUP_BAD_ARITY_LEN
+    call    er_wasmc_compile_call_source
+    cmp     rdx, ERROR_PARSE
+    jne     .fail
+
+    lea     rdi, [rel compiled_wasm]
+    mov     esi, 128
+    lea     rdx, [rel source_call_pair]
+    mov     ecx, SOURCE_CALL_PAIR_LEN
+    call    er_wasmc_compile_source
+    test    rdx, rdx
+    jnz     .fail
+    mov     r12, rax
+
+    lea     rdi, [rel compiled_wasm_b]
+    mov     esi, 128
+    lea     rdx, [rel source_call_pair]
+    mov     ecx, SOURCE_CALL_PAIR_LEN
+    call    er_wasmc_compile_source
+    test    rdx, rdx
+    jnz     .fail
+    cmp     rax, r12
+    jne     .fail
+
+    lea     rdi, [rel compiled_wasm]
+    lea     rsi, [rel compiled_wasm_b]
+    mov     rdx, r12
+    call    _bytes_equal
+    test    rax, rax
+    jz      .fail
+
+    lea     rdi, [rel runtime]
+    lea     rsi, [rel compiled_wasm]
+    mov     rdx, r12
+    lea     rcx, [rel call_export_name]
+    mov     r8d, CALL_EXPORT_NAME_LEN
+    call    er_fn_run
+    test    rdx, rdx
+    jz      .fail
+    cmp     rax, 42
+    jne     .fail
+
+    lea     rdi, [rel compiled_wasm_b]
+    mov     esi, 128
+    lea     rdx, [rel source_call_unknown]
+    mov     ecx, SOURCE_CALL_UNKNOWN_LEN
+    call    er_wasmc_compile_source
+    cmp     rdx, ERROR_PARSE
     jne     .fail
 
     lea     rbx, [rel wasm_compile_run_cases]

@@ -65,7 +65,7 @@ er_fn exec_save_frame_state
     mov     rax, [exec_frame_save_ptr]
     mov     rcx, [exec_local_count]
 
-    ; Check space: local_count*8 + stack_len*8 + control_len*16 + 40 <= FRAME_SAVE_SIZE - save_ptr
+    ; Check space: local_count*8 + stack_len*8 + control_len*16 + 80 <= FRAME_SAVE_SIZE - save_ptr
     push    rcx
     imul    rcx, 8
     add     rax, rcx
@@ -76,7 +76,7 @@ er_fn exec_save_frame_state
     mov     rcx, [exec_control_len]
     imul    rcx, CONTROL_FRAME_SIZE
     add     rax, rcx
-    add     rax, 40
+    add     rax, 80
     cmp     rax, FRAME_SAVE_SIZE
     ja      .overflow
 
@@ -130,7 +130,7 @@ er_fn exec_save_frame_state
     mov     [exec_frame_save_ptr], rdx
 
 .save_meta:
-    ; Push metadata: local_count, stack_len, control_len, dec_idx, dec_end
+    ; Push frame metadata.
     mov     rdx, [exec_frame_save_ptr]
     mov     rax, [exec_local_count]
     mov     [exec_frame_save + rdx], rax
@@ -142,7 +142,17 @@ er_fn exec_save_frame_state
     mov     [exec_frame_save + rdx + 24], rax
     mov     rax, [exec_decoded_end]
     mov     [exec_frame_save + rdx + 32], rax
-    add     qword [exec_frame_save_ptr], 40
+    mov     rax, [exec_type_index]
+    mov     [exec_frame_save + rdx + 40], rax
+    mov     rax, [exec_code_body_ptr]
+    mov     [exec_frame_save + rdx + 48], rax
+    mov     rax, [exec_code_body_len]
+    mov     [exec_frame_save + rdx + 56], rax
+    mov     rax, [exec_reader_offset]
+    mov     [exec_frame_save + rdx + 64], rax
+    mov     rax, [exec_result_count]
+    mov     [exec_frame_save + rdx + 72], rax
+    add     qword [exec_frame_save_ptr], 80
     clc
     pop     rbp
     ret
@@ -160,7 +170,7 @@ er_fn exec_restore_frame_state
 
     ; First read metadata at the end
     mov     rax, [exec_frame_save_ptr]
-    sub     rax, 40
+    sub     rax, 80
     mov     rcx, [exec_frame_save + rax]
     mov     [exec_local_count], rcx
     mov     rcx, [exec_frame_save + rax + 8]
@@ -171,6 +181,16 @@ er_fn exec_restore_frame_state
     mov     [exec_decoded_index], rcx
     mov     rcx, [exec_frame_save + rax + 32]
     mov     [exec_decoded_end], rcx
+    mov     rcx, [exec_frame_save + rax + 40]
+    mov     [exec_type_index], rcx
+    mov     rcx, [exec_frame_save + rax + 48]
+    mov     [exec_code_body_ptr], rcx
+    mov     rcx, [exec_frame_save + rax + 56]
+    mov     [exec_code_body_len], rcx
+    mov     rcx, [exec_frame_save + rax + 64]
+    mov     [exec_reader_offset], rcx
+    mov     rcx, [exec_frame_save + rax + 72]
+    mov     [exec_result_count], rcx
     mov     [exec_frame_save_ptr], rax
 
     ; Pop control frames

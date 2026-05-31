@@ -8,6 +8,13 @@ pub const PresentMode = enum {
     gpu_dmabuf,
 };
 
+pub const UiStreamMode = enum {
+    off,
+    broadcast,
+    receive,
+    both,
+};
+
 pub const Options = struct {
     width: u32 = default_width,
     height: u32 = default_height,
@@ -18,6 +25,8 @@ pub const Options = struct {
     path: []const u8 = app_location.source_workspace_path_projection,
     dashboard: bool = false,
     hardware: bool = false,
+    chat: bool = false,
+    ui_stream: UiStreamMode = .off,
 };
 
 const default_width: u32 = 960;
@@ -61,6 +70,12 @@ pub fn parseOptions(args: []const [:0]const u8) !Options {
             options.dashboard = true;
         } else if (bytes_mod.eql(arg, "--hardware")) {
             options.hardware = true;
+        } else if (bytes_mod.eql(arg, "--chat")) {
+            options.chat = true;
+        } else if (bytes_mod.eql(arg, "--ui-stream")) {
+            index += 1;
+            if (index >= args.len) return error.InvalidArguments;
+            options.ui_stream = try parseUiStreamMode(args[index]);
         } else if (bytes_mod.eql(arg, "--help")) {
             return error.HelpRequested;
         } else {
@@ -82,6 +97,8 @@ pub fn help() void {
         \\  --seconds <n>       Run for n seconds (default: 5)
         \\  --dashboard         Show network dashboard
         \\  --hardware          Show hardware dashboard
+        \\  --chat              Show encrypted chat UI
+        \\  --ui-stream <mode>  UI BLE stream mode: off, broadcast, receive, both
         \\  --help              Show this help
         \\
     , .{});
@@ -92,6 +109,22 @@ pub fn parsePresentMode(value: []const u8) !PresentMode {
     if (bytes_mod.eql(value, "gpu-record")) return .gpu_record;
     if (bytes_mod.eql(value, "gpu-dmabuf")) return .gpu_dmabuf;
     return error.InvalidArguments;
+}
+
+pub fn parseUiStreamMode(value: []const u8) !UiStreamMode {
+    if (bytes_mod.eql(value, "off")) return .off;
+    if (bytes_mod.eql(value, "broadcast")) return .broadcast;
+    if (bytes_mod.eql(value, "receive")) return .receive;
+    if (bytes_mod.eql(value, "both")) return .both;
+    return error.InvalidArguments;
+}
+
+test "parse ui stream modes" {
+    try std.testing.expectEqual(UiStreamMode.off, try parseUiStreamMode("off"));
+    try std.testing.expectEqual(UiStreamMode.broadcast, try parseUiStreamMode("broadcast"));
+    try std.testing.expectEqual(UiStreamMode.receive, try parseUiStreamMode("receive"));
+    try std.testing.expectEqual(UiStreamMode.both, try parseUiStreamMode("both"));
+    try std.testing.expectError(error.InvalidArguments, parseUiStreamMode("mirror"));
 }
 
 pub fn parseHostIp(url: []const u8) ?[]const u8 {

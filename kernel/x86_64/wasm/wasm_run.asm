@@ -71,6 +71,90 @@ er_fn er_fn_run
     ret
 
 ; ==================================================================
+; er_fn_run_args: Top-level entry point with WASM value arguments
+; rdi = runtime_ptr
+; rsi = wasm_bytes_ptr
+; rdx = wasm_bytes_len
+; rcx = export_name_ptr
+; r8  = export_name_len
+; r9  = args pointer
+; [rbp+16] = args count
+; Returns: rax = result value, rdx = error code
+; =================================================================+
+er_fn er_fn_run_args
+    er_frame_push
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+    push    r8              ; save export_name_len
+    push    r9              ; save args ptr
+
+    mov     r12, rdi        ; runtime_ptr
+    mov     r13, rsi        ; wasm_bytes
+    mov     r14, rdx        ; wasm_len
+    mov     r15, rcx        ; export_name
+
+    mov     [rel er_wasm_runtime_ptr], r12
+    mov     rdi, r12
+    call    _er_wasm_stage_runtime_for_module
+
+    mov     rdi, r13
+    mov     rsi, r14
+    call    _er_wasm_parse_resolve_validate
+    test    rdx, rdx
+    jnz     .error
+
+    mov     edi, 1
+    call    _er_wasm_prime_loaded_module
+    test    rdx, rdx
+    jnz     .error
+
+    mov     rdi, r15
+    mov     rsi, [rbp - 48]
+    call    _er_wasm_resolve_export_function_index
+    test    rdx, rdx
+    jnz     .error
+    mov     r15, rax
+
+    mov     rbx, [rbp + 16] ; args count
+    test    rbx, rbx
+    jz      .exec
+    cmp     qword [rbp - 56], 0
+    je      .bad_args
+.exec:
+    mov     rdi, r15
+    mov     rsi, [rbp - 56]
+    mov     rdx, rbx
+    call    er_fn_exec
+    test    rdx, rdx
+    jnz     .error
+
+    mov     rax, [exec_result_values]
+    mov     rdx, [exec_result_count]
+    jmp     .done
+
+.bad_args:
+    mov     rax, -1
+    er_err  ERROR_BAD_ARGUMENT
+    jmp     .done
+.error:
+    mov     rax, -1
+    mov     byte [exec_storage_module_valid], 0
+    mov     qword [executor_runtime_ptr], 0
+.done:
+    pop     r9
+    pop     r8
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
+    ret
+
+; ==================================================================
 ; Initialize the runtime context
 ; er_fn_init(memory_ptr=rdi, memory_len=rsi, ticks_ptr=rdx)
 ; =================================================================+
@@ -121,6 +205,53 @@ er_fn er_fn_load
     mov     rdi, r13
     mov     rsi, r14
     call    _er_wasm_parse_resolve_validate
+    test    rdx, rdx
+    jnz     .error
+
+    xor     edi, edi
+    call    _er_wasm_prime_loaded_module
+    test    rdx, rdx
+    jnz     .error
+
+    xor     edx, edx
+    jmp     .done
+.error:
+    mov     rax, -1
+    mov     byte [exec_storage_module_valid], 0
+    mov     qword [executor_runtime_ptr], 0
+.done:
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
+    ret
+
+; ==================================================================
+; er_fn_load_trusted — Load a trusted internal WASM module.
+; Same ABI as er_fn_load, but skips the no-recursion policy validator.
+; Use for built-in modules that the kernel ships, not untrusted payloads.
+; =================================================================+
+er_fn er_fn_load_trusted
+    er_frame_push
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+
+    mov     r12, rdi
+    mov     r13, rsi
+    mov     r14, rdx
+    mov     [rel er_wasm_runtime_ptr], r12
+
+    mov     rdi, r12
+    call    _er_wasm_stage_runtime_for_module
+
+    mov     rdi, r13
+    mov     rsi, r14
+    call    _er_wasm_parse_resolve_trusted
     test    rdx, rdx
     jnz     .error
 
@@ -217,6 +348,7 @@ _er_wasm_stage_runtime_for_module:
     mov     byte [exec_storage_module_valid], 0
     mov     byte [exec_storage_start_ran], 0
     mov     qword [exec_frame_save_ptr], 0
+    mov     qword [exec_call_depth], 0
     cld
     lea     rdi, [rel jit_table]
     xor     eax, eax
@@ -241,6 +373,25 @@ _er_wasm_parse_resolve_validate:
     jnz     .done
 
     call    er_wasm_validate_no_recursion
+    test    rdx, rdx
+    jnz     .done
+
+    mov     byte [exec_storage_module_valid], 1
+    er_ok
+.done:
+    ret
+
+; ==================================================================
+; _er_wasm_parse_resolve_trusted
+; rdi = wasm_bytes_ptr, rsi = wasm_bytes_len
+; Returns rdx = 0 on success, error otherwise.
+; ==================================================================
+_er_wasm_parse_resolve_trusted:
+    call    er_wasm_parse_module
+    test    rdx, rdx
+    jnz     .done
+
+    call    er_wasm_resolve_imports
     test    rdx, rdx
     jnz     .done
 
@@ -374,6 +525,73 @@ er_fn er_fn_call
 .error:
     xor     eax, eax
     ; rdx already set by failing call
+    jmp     .done
+.bad_loaded_state:
+    xor     eax, eax
+    er_err  ERROR_BAD_ARGUMENT
+.done:
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
+    ret
+
+; ==================================================================
+; er_fn_call_args — Call an exported function of a loaded module with args
+; rdi = runtime_ptr, rsi = export_name_ptr, rdx = export_name_len
+; rcx = args pointer, r8 = args count
+; Returns: rax = result value, rdx = error code
+;
+; Args are 64-bit slots, one per WASM value, matching er_fn_exec.
+; =================================================================+
+er_fn er_fn_call_args
+    er_frame_push
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+
+    mov     r12, rdi        ; runtime_ptr
+    mov     r13, rsi        ; export_name_ptr
+    mov     r14, rdx        ; export_name_len
+    mov     r15, rcx        ; args ptr
+    mov     rbx, r8         ; args count
+
+    ; Update runtime pointer for import wrappers
+    mov     [rel er_wasm_runtime_ptr], r12
+
+    cmp     byte [exec_storage_module_valid], 1
+    jne     .bad_loaded_state
+    cmp     r12, [executor_runtime_ptr]
+    jne     .bad_loaded_state
+    test    rbx, rbx
+    jz      .resolve
+    test    r15, r15
+    jz      .bad_loaded_state
+
+.resolve:
+    mov     rdi, r13
+    mov     rsi, r14
+    call    _er_wasm_resolve_export_function_index
+    test    rdx, rdx
+    jnz     .error
+
+    mov     rdi, rax
+    mov     rsi, r15
+    mov     rdx, rbx
+    call    er_fn_exec
+    test    rdx, rdx
+    jnz     .error
+
+    mov     rax, [exec_result_values]
+    xor     edx, edx
+    jmp     .done
+
+.error:
+    xor     eax, eax
     jmp     .done
 .bad_loaded_state:
     xor     eax, eax

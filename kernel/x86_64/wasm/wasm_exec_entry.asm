@@ -11,17 +11,20 @@ er_fn er_fn_exec
     push    r13
     push    r14
     push    r15
+    sub     rsp, 8
 
     mov     r12, rdi        ; function_index
     mov     r13, rsi        ; args ptr
     mov     r14, rdx        ; args count
+    mov     qword [rbp - 48], 0
 
-    ; Save current frame if we have locals
-    cmp     qword [exec_local_count], 0
+    cmp     qword [exec_call_depth], 0
     je      .no_save
     call    exec_save_frame_state
-    jc      .depth_error
+    jc      .depth_error_no_frame
+    mov     qword [rbp - 48], 1
 .no_save:
+    inc     qword [exec_call_depth]
 
     ; Check if imported function
     mov     rax, r12
@@ -150,30 +153,42 @@ er_fn er_fn_exec
     mov     r14, rdx      ; save error code
 
 .after_dispatch:
-    ; Restore previous frame (only if a save was done)
-    cmp     qword [exec_frame_save_ptr], 0
-    je      .after_restore
-    call    exec_restore_frame_state
-.after_restore:
-
-    mov     rax, r15
-    mov     rdx, r14
-    jmp     .done
+    jmp     .finish_entered
 
 .imported_func:
     ; Imported function - call through host import dispatch
     call    er_wasm_call_imported
-    jmp     .done
+    mov     r15, rax
+    mov     r14, rdx
+    jmp     .finish_entered
 
 .depth_error:
     er_err  ERROR_UNSUPPORTED
-    jmp     .done
+    xor     r15d, r15d
+    mov     r14, rdx
+    jmp     .finish_entered
+.depth_error_no_frame:
+    er_err  ERROR_UNSUPPORTED
+    jmp     .done_no_frame
 .unsupported_error:
     er_err  ERROR_UNSUPPORTED
-    jmp     .done
+    xor     r15d, r15d
+    mov     r14, rdx
+    jmp     .finish_entered
 .error:
     ; rdx already set
-.done:
+    xor     r15d, r15d
+    mov     r14, rdx
+.finish_entered:
+    dec     qword [exec_call_depth]
+    cmp     qword [rbp - 48], 0
+    je      .after_restore
+    call    exec_restore_frame_state
+.after_restore:
+    mov     rax, r15
+    mov     rdx, r14
+.done_no_frame:
+    add     rsp, 8
     pop     r15
     pop     r14
     pop     r13

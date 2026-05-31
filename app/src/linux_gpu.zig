@@ -118,7 +118,7 @@ pub const Egl = struct {
     eglSwapInterval: PFNEGLSWAPINTERVALPROC,
 
     pub fn open() !Egl {
-        var lib = if (std.DynLib.openZ("libEGL.so.1")) |l| l else |_| try std.DynLib.openZ("libEGL.so");
+        var lib = try openEglLibrary();
         errdefer lib.close();
         return Egl{
             .lib = lib,
@@ -152,6 +152,21 @@ pub const Egl = struct {
         return if (ptr == null) null else std.mem.sliceTo(ptr.?, 0);
     }
 };
+
+fn openEglLibrary() !std.DynLib {
+    if (std.DynLib.openZ("libEGL.so.1")) |opened| {
+        var lib = opened;
+        if (lib.lookup(PFNEGLGETDISPLAYPROC, "eglGetDisplay") != null) return lib;
+        lib.close();
+    } else |_| {}
+    if (std.DynLib.openZ("libEGL.so")) |opened| {
+        var lib = opened;
+        if (lib.lookup(PFNEGLGETDISPLAYPROC, "eglGetDisplay") != null) return lib;
+        lib.close();
+    } else |_| {}
+    if (std.DynLib.openZ("libmali.so.0")) |lib| return lib else |_| {}
+    return std.DynLib.openZ("libmali.so");
+}
 
 // ─── GBM types ──────────────────────────────────────────────
 

@@ -8,6 +8,8 @@
 extern er_tor_aes_ctr
 extern er_tor_aes256_ctr
 extern er_tor_set_role
+extern er_tor_set_role_caps
+extern er_tor_enable_role
 extern er_tor_get_role
 extern er_tor_get_role_caps
 extern er_tor_hsdir_build_publish_header
@@ -367,8 +369,20 @@ _start:
     call    er_tor_get_role_caps
     ASSERT_EQ eax, TOR_CAP_HS_RENDEZVOUS
 
+    mov     edi, TOR_ROLE_HS_PEER
+    call    er_tor_set_role
+    ASSERT_EQ eax, 0
+    call    er_tor_get_role_caps
+    ASSERT_EQ eax, TOR_CAP_HS_PEER
+
+    mov     edi, TOR_ROLE_HS_FULL
+    call    er_tor_set_role
+    ASSERT_EQ eax, 0
+    call    er_tor_get_role_caps
+    ASSERT_EQ eax, TOR_CAP_HS_FULL
+
     call    er_tor_get_role
-    ASSERT_EQ eax, TOR_ROLE_HS_RENDEZVOUS
+    ASSERT_EQ eax, TOR_ROLE_HS_FULL
 
 ; ================================================================
 ; Test 9: Invalid roles fail without changing current role
@@ -378,7 +392,25 @@ _start:
     call    er_tor_set_role
     ASSERT_EQ eax, -1
     call    er_tor_get_role
-    ASSERT_EQ eax, TOR_ROLE_HS_RENDEZVOUS
+    ASSERT_EQ eax, TOR_ROLE_HS_FULL
+
+    mov     edi, TOR_CAP_HS_PEER
+    call    er_tor_set_role_caps
+    ASSERT_EQ eax, 0
+    call    er_tor_get_role
+    ASSERT_EQ eax, -1
+    call    er_tor_get_role_caps
+    ASSERT_EQ eax, TOR_CAP_HS_PEER
+
+    mov     edi, TOR_ROLE_HS_RENDEZVOUS
+    call    er_tor_enable_role
+    ASSERT_EQ eax, 0
+    call    er_tor_get_role_caps
+    ASSERT_EQ eax, TOR_CAP_HS_PEER | TOR_CAP_HS_RENDEZVOUS
+
+    mov     edi, TOR_CAP_KNOWN_MASK + 1
+    call    er_tor_set_role_caps
+    ASSERT_EQ eax, -1
 
 ; ================================================================
 ; Test 10: HSDir v3 publish POST header
@@ -563,12 +595,33 @@ SECTION .text
 global er_tor_cell_init
 global er_tor_link_handshake
 global er_tor_circuit_create
+global er_tor_circuit_extend
 global er_tor_send_relay
 global er_tor_recv_relay
 global er_tor_open_stream
 global er_tor_open_dir_stream
+global er_tor_hs_desc_parse_intro
+global er_tor_hs_desc_build_v3
+global er_tor_hs_parse_linkspecs
+global er_tor_hs_build_linkspecs
+global er_tor_hs_client_connect
+global er_tor_hs_client_connect_from_desc
+global er_tor_hs_client_introduce_from_desc
+global er_tor_hs_open_client_stream
+global er_tor_hs_establish_intro
+global er_tor_hs_wait_rendezvous2
+global er_tor_hs_service_wait_introduce2
+global er_tor_hs_parse_introduce_plaintext
+global er_tor_hs_send_rendezvous1
+global er_tor_hs_cert_build
+global er_tor_hs_cert_armor_ed25519
 global er_tor_ntor_keygen
 global er_tcp_recv
+global er_fn_load_trusted
+global er_fn_call_args
+global er_wasm_runtime_ptr
+global edgerun_signing_wasm_start
+global edgerun_signing_wasm_len
 global er_serial_puts
 global er_serial_putchar
 global er_serial_puthex32
@@ -583,12 +636,30 @@ global tor_recv_len
 er_tor_cell_init:
 er_tor_link_handshake:
 er_tor_circuit_create:
+er_tor_circuit_extend:
 er_tor_send_relay:
 er_tor_recv_relay:
 er_tor_open_stream:
 er_tor_open_dir_stream:
+er_tor_hs_desc_parse_intro:
+er_tor_hs_desc_build_v3:
+er_tor_hs_parse_linkspecs:
+er_tor_hs_build_linkspecs:
+er_tor_hs_client_connect:
+er_tor_hs_client_connect_from_desc:
+er_tor_hs_client_introduce_from_desc:
+er_tor_hs_open_client_stream:
+er_tor_hs_establish_intro:
+er_tor_hs_wait_rendezvous2:
+er_tor_hs_service_wait_introduce2:
+er_tor_hs_parse_introduce_plaintext:
+er_tor_hs_send_rendezvous1:
+er_tor_hs_cert_build:
+er_tor_hs_cert_armor_ed25519:
 er_tor_ntor_keygen:
 er_tcp_recv:
+er_fn_load_trusted:
+er_fn_call_args:
 er_serial_puts:
 er_serial_putchar:
 er_serial_puthex32:
@@ -598,3 +669,7 @@ er_http_find_body:
 er_tor_relay_crypt:
     xor     eax, eax
     ret
+
+er_wasm_runtime_ptr: dq 0
+edgerun_signing_wasm_start: db 0
+edgerun_signing_wasm_len: dq 0

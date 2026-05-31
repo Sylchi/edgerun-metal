@@ -294,16 +294,14 @@
 .equ CTRL_STATUS,            24
 .equ CTRL_STRUCT_SIZE,       28
 
-@ ---- Scratch and status fields ----
-.equ DWC_SCRATCH,            0x100   @ within DWC2 reg space, unused
-.equ DWC_SCRATCH_DEVADDR,    0x104
-
 @ ---- Functions ----
 .globl dwc2_init
 .globl dwc2_port_detect
 .globl dwc2_control_xfer
 .globl dwc2_bulk_xfer
 .globl dwc2_enumerate
+.weak dwc2_mmio_read
+.weak dwc2_mmio_write
 
 @ ==========================================================
 @ dwc2_init — Reset core, set host mode, configure FIFOs
@@ -313,10 +311,10 @@
 @ ==========================================================
 dwc2_init:
     push    {r4, r5, lr}
-    ldr     r4, =DWC2_BASE
 
     @ 1. Read core ID to verify controller presence
-    ldr     r0, [r4, #DWC_CID]
+    mov     r0, #DWC_CID
+    bl      dwc2_mmio_read
     ldr     r1, =DWC2_CORE_ID_310
     cmp     r0, r1
     beq     .Linit_ok_cid
@@ -336,7 +334,8 @@ dwc2_init:
 
     @ 2. Wait for AHB idle
     mov     r5, #0x100000
-1:  ldr     r0, [r4, #DWC_GRSTCTL]
+1:  mov     r0, #DWC_GRSTCTL
+    bl      dwc2_mmio_read
     tst     r0, #GRSTCTL_AHBIDLE
     bne     2f
     subs    r5, r5, #1
@@ -346,9 +345,12 @@ dwc2_init:
 2:
     @ 3. Soft reset
     ldr     r0, =GRSTCTL_CSFTRST
-    str     r0, [r4, #DWC_GRSTCTL]
+    mov     r1, r0
+    mov     r0, #DWC_GRSTCTL
+    bl      dwc2_mmio_write
     mov     r5, #0x100000
-1:  ldr     r0, [r4, #DWC_GRSTCTL]
+1:  mov     r0, #DWC_GRSTCTL
+    bl      dwc2_mmio_read
     tst     r0, #GRSTCTL_CSFTRST
     beq     2f
     subs    r5, r5, #1
@@ -358,31 +360,41 @@ dwc2_init:
 2:
 
     @ 4. Disable global interrupt
-    ldr     r0, [r4, #DWC_GAHBCFG]
+    mov     r0, #DWC_GAHBCFG
+    bl      dwc2_mmio_read
     bic     r0, r0, #GAHBCFG_GLBL_INTR_EN
-    str     r0, [r4, #DWC_GAHBCFG]
+    mov     r1, r0
+    mov     r0, #DWC_GAHBCFG
+    bl      dwc2_mmio_write
 
     @ 5. Set GUSBCFG: select UTMI+ interface, FS PHY
     @ On BCM2835, the PHY interface is UTMI+ (not ULPI).
     @ TRDT = 0x5 (5+1 = 6 PHY clocks turnaround, typical for UTMI+)
-    ldr     r0, [r4, #DWC_GUSBCFG]
+    mov     r0, #DWC_GUSBCFG
+    bl      dwc2_mmio_read
     bic     r0, r0, #GUSBCFG_TRDT_MASK
     bic     r0, r0, #GUSBCFG_PHYIF
     bic     r0, r0, #GUSBCFG_FS_INTF
     bic     r0, r0, #GUSBCFG_ULPI_UTMI_SEL
     orr     r0, r0, #(5 << GUSBCFG_TRDT_SHIFT)
-    str     r0, [r4, #DWC_GUSBCFG]
+    mov     r1, r0
+    mov     r0, #DWC_GUSBCFG
+    bl      dwc2_mmio_write
 
     @ 6. Force host mode (clear HNPCAP and SRPCAP, but on BCM2835
     @ the USB controller is in host mode only — no OTG support)
-    ldr     r0, [r4, #DWC_GUSBCFG]
+    mov     r0, #DWC_GUSBCFG
+    bl      dwc2_mmio_read
     bic     r0, r0, #GUSBCFG_HNPCAP
     bic     r0, r0, #GUSBCFG_SRPCAP
-    str     r0, [r4, #DWC_GUSBCFG]
+    mov     r1, r0
+    mov     r0, #DWC_GUSBCFG
+    bl      dwc2_mmio_write
 
     @ 7. Wait for host mode to take effect (DWC_OTGCTL.HNNF_REQ = 0)
     mov     r5, #0x100000
-1:  ldr     r0, [r4, #DWC_OTGCTL]
+1:  mov     r0, #DWC_OTGCTL
+    bl      dwc2_mmio_read
     tst     r0, #OTGCTL_HNNF_REQ
     beq     2f
     subs    r5, r5, #1
@@ -392,46 +404,58 @@ dwc2_init:
 2:
 
     @ 8. Configure host: full-speed host, enable port power
-    ldr     r0, [r4, #DWC_HCFG]
+    ldr     r0, =DWC_HCFG
+    bl      dwc2_mmio_read
     bic     r0, r0, #HCFG_FSLSS   @ not FS/LS split
     bic     r0, r0, #HCFG_FSLS_PHOST @ not FS/LS only
-    str     r0, [r4, #DWC_HCFG]
+    mov     r1, r0
+    ldr     r0, =DWC_HCFG
+    bl      dwc2_mmio_write
 
     @ 9. Set frame interval for FS (60000 = 1ms at 60MHz)
     ldr     r0, =60000
-    str     r0, [r4, #DWC_HFIR]
+    mov     r1, r0
+    ldr     r0, =DWC_HFIR
+    bl      dwc2_mmio_write
 
     @ 10. Configure FIFO sizes
     @ Rx FIFO: 128 words
     ldr     r0, =FIFO_SIZE_128
-    str     r0, [r4, #DWC_GRXFSIZ]
+    mov     r1, r0
+    mov     r0, #DWC_GRXFSIZ
+    bl      dwc2_mmio_write
 
     @ Non-periodic Tx FIFO: 128 words (offset after Rx FIFO)
     ldr     r0, =FIFO_SIZE_128
     ldr     r1, =FIFO_SIZE_128
     lsl     r1, r1, #16
     orr     r0, r0, r1
-    str     r0, [r4, #DWC_GNPTXFSIZ]
+    mov     r1, r0
+    mov     r0, #DWC_GNPTXFSIZ
+    bl      dwc2_mmio_write
 
     @ Periodic Tx FIFO: 128 words (offset after Rx FIFO + NP Tx FIFO)
     ldr     r0, =FIFO_SIZE_128
     ldr     r1, =(FIFO_SIZE_128 + FIFO_SIZE_128)
     lsl     r1, r1, #16
     orr     r0, r0, r1
-    str     r0, [r4, #DWC_HPTXFSIZ]
+    mov     r1, r0
+    ldr     r0, =DWC_HPTXFSIZ
+    bl      dwc2_mmio_write
 
     @ 11. Enable host channel interrupt and port interrupt
     ldr     r0, =(GINT_HC_INT | GINT_PRT_INT | GINT_DISC_INT)
-    str     r0, [r4, #DWC_GINTMSK]
+    mov     r1, r0
+    mov     r0, #DWC_GINTMSK
+    bl      dwc2_mmio_write
 
     @ 12. Enable global interrupt in AHB config
-    ldr     r0, [r4, #DWC_GAHBCFG]
+    mov     r0, #DWC_GAHBCFG
+    bl      dwc2_mmio_read
     orr     r0, r0, #GAHBCFG_GLBL_INTR_EN
-    str     r0, [r4, #DWC_GAHBCFG]
-
-    @ 13. Store success marker in scratch
-    mov     r0, #1
-    str     r0, [r4, #DWC_SCRATCH]
+    mov     r1, r0
+    mov     r0, #DWC_GAHBCFG
+    bl      dwc2_mmio_write
 
     mov     r0, #0
     pop     {r4, r5, pc}
@@ -444,29 +468,36 @@ dwc2_init:
 dwc2_port_detect:
     push    {r4, r5, r6, lr}
     mov     r6, r0
-    ldr     r4, =DWC2_BASE
+    cmp     r6, #0
+    beq     .Lport_fail
 
     @ 1. Power on the port
-    ldr     r0, [r4, #DWC_HPRT]
+    ldr     r0, =DWC_HPRT
+    bl      dwc2_mmio_read
     orr     r0, r0, #HPRT_PRTPWR
-    str     r0, [r4, #DWC_HPRT]
+    mov     r1, r0
+    ldr     r0, =DWC_HPRT
+    bl      dwc2_mmio_write
 
     @ 2. Wait up to 5 seconds for connection
     ldr     r5, =50000000
-1:  ldr     r0, [r4, #DWC_HPRT]
+1:  ldr     r0, =DWC_HPRT
+    bl      dwc2_mmio_read
     tst     r0, #HPRT_PRTCONNDET
     bne     2f
     subs    r5, r5, #1
     bne     1b
-    mov     r0, #1
-    pop     {r4, r5, r6, pc}
+    b       .Lport_fail
 2:
     @ 3. Clear connection detect bit by writing it
-    str     r0, [r4, #DWC_HPRT]
+    mov     r1, r0
+    ldr     r0, =DWC_HPRT
+    bl      dwc2_mmio_write
 
     @ 4. Wait for port enable
     ldr     r5, =5000000
-1:  ldr     r0, [r4, #DWC_HPRT]
+1:  ldr     r0, =DWC_HPRT
+    bl      dwc2_mmio_read
     tst     r0, #HPRT_PRTENA
     bne     2f
     subs    r5, r5, #1
@@ -475,7 +506,8 @@ dwc2_port_detect:
     b       3f
 2:
     @ 5. Read port speed and store
-    ldr     r0, [r4, #DWC_HPRT]
+    ldr     r0, =DWC_HPRT
+    bl      dwc2_mmio_read
     and     r0, r0, #HPRR_PRT_SPD_MASK
     lsr     r0, r0, #HPRR_PRT_SPD_SHIFT
     strb    r0, [r6]
@@ -483,24 +515,32 @@ dwc2_port_detect:
     pop     {r4, r5, r6, pc}
 
     @ 4b. Reset the port
-3:  ldr     r0, [r4, #DWC_HPRT]
+3:  ldr     r0, =DWC_HPRT
+    bl      dwc2_mmio_read
     orr     r0, r0, #HPRT_PRTRST
-    str     r0, [r4, #DWC_HPRT]
+    mov     r1, r0
+    ldr     r0, =DWC_HPRT
+    bl      dwc2_mmio_write
     ldr     r5, =50000
 1:  subs    r5, r5, #1
     bne     1b
-    ldr     r0, [r4, #DWC_HPRT]
+    ldr     r0, =DWC_HPRT
+    bl      dwc2_mmio_read
     bic     r0, r0, #HPRT_PRTRST
-    str     r0, [r4, #DWC_HPRT]
+    mov     r1, r0
+    ldr     r0, =DWC_HPRT
+    bl      dwc2_mmio_write
 
     @ Wait for port enable after reset
     ldr     r5, =5000000
-1:  ldr     r0, [r4, #DWC_HPRT]
+1:  ldr     r0, =DWC_HPRT
+    bl      dwc2_mmio_read
     tst     r0, #HPRT_PRTENA
     bne     2b     @ jump to speed-read above
     subs    r5, r5, #1
     bne     1b
 
+.Lport_fail:
     mov     r0, #1
     pop     {r4, r5, r6, pc}
 
@@ -1062,3 +1102,14 @@ dwc2_enumerate:
     mov     r0, #0
     add     sp, sp, #72
     pop     {r4, r5, r6, r7, r8, pc}
+
+@ ---- default MMIO hooks ----
+dwc2_mmio_read:
+    ldr     r1, =DWC2_BASE
+    ldr     r0, [r1, r0]
+    bx      lr
+
+dwc2_mmio_write:
+    ldr     r2, =DWC2_BASE
+    str     r1, [r2, r0]
+    bx      lr

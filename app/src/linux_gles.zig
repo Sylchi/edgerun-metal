@@ -93,7 +93,7 @@ pub const PFNGLUNIFORM1IPROC = *const fn (location: GLint, v0: GLint) callconv(.
 pub const PFNGLUNIFORM2FPROC = *const fn (location: GLint, v0: GLfloat, v1: GLfloat) callconv(.c) void;
 pub const PFNGLUNIFORM4FPROC = *const fn (location: GLint, v0: GLfloat, v1: GLfloat, v2: GLfloat, v3: GLfloat) callconv(.c) void;
 pub const PFNGLUSEPROGRAMPROC = *const fn (program: GLuint) callconv(.c) void;
-pub const PFNGLVERTEXATTRIBPOINTERPROC = *const fn (index: GLuint, size: GLint, type_: GLenum, normalized: GLboolean, stride: GLsizei, pointer: *const anyopaque) callconv(.c) void;
+pub const PFNGLVERTEXATTRIBPOINTERPROC = *const fn (index: GLuint, size: GLint, type_: GLenum, normalized: GLboolean, stride: GLsizei, pointer: ?*const anyopaque) callconv(.c) void;
 pub const PFNGLVIEWPORTPROC = *const fn (x: GLint, y: GLint, width: GLsizei, height: GLsizei) callconv(.c) void;
 
 pub const Gles2 = struct {
@@ -147,7 +147,7 @@ pub const Gles2 = struct {
     glViewport: PFNGLVIEWPORTPROC,
 
     pub fn open() !Gles2 {
-        var lib = if (std.DynLib.openZ("libGLESv2.so.2")) |l| l else |_| try std.DynLib.openZ("libGLESv2.so");
+        var lib = try openGlesLibrary();
         errdefer lib.close();
         return Gles2{
             .lib = lib,
@@ -201,3 +201,18 @@ pub const Gles2 = struct {
         };
     }
 };
+
+fn openGlesLibrary() !std.DynLib {
+    if (std.DynLib.openZ("libGLESv2.so.2")) |opened| {
+        var lib = opened;
+        if (lib.lookup(PFNGLCLEARCOLORPROC, "glClearColor") != null) return lib;
+        lib.close();
+    } else |_| {}
+    if (std.DynLib.openZ("libGLESv2.so")) |opened| {
+        var lib = opened;
+        if (lib.lookup(PFNGLCLEARCOLORPROC, "glClearColor") != null) return lib;
+        lib.close();
+    } else |_| {}
+    if (std.DynLib.openZ("libmali.so.0")) |lib| return lib else |_| {}
+    return std.DynLib.openZ("libmali.so");
+}

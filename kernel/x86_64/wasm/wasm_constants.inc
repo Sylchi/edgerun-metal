@@ -530,10 +530,12 @@ exec_fast_cache_state: resq 1  ; 0 unknown, 1 fast, 2 unsupported, 3 trace
 ;   [locals data (local_count * 8 bytes)]
 ;   [stack data (stack_len * 8 bytes)]
 ;   [control data (control_len * 16 bytes)]
-;   [metadata: local_count, stack_len, control_len, dec_idx, dec_end = 40 bytes]
+;   [metadata: local_count, stack_len, control_len, dec_idx, dec_end,
+;              type_idx, body_ptr, body_len, reader_offset, result_count = 80 bytes]
 FRAME_SAVE_SIZE equ 1024 * 1024  ; 1MB save area (enough for deep recursion with moderate locals)
 exec_frame_save:  resb FRAME_SAVE_SIZE
 exec_frame_save_ptr: resq 1  ; offset into save area (grows upward)
+exec_call_depth: resq 1
 
 ; Current function info for dispatch
 exec_function_type_ptr: resq 1  ; pointer to current FuncType

@@ -11,9 +11,15 @@ extern er_tor_hs_desc_armor_message
 extern er_tor_hs_desc_unarmor_message
 extern er_tor_hs_desc_decrypt
 extern er_tor_hs_desc_encrypt
+extern er_tor_hs_cert_build
+extern er_tor_hs_cert_armor_ed25519
 extern er_tor_hs_cert_get_certified_key
 extern er_tor_hs_cert_get_signing_key_ext
 extern er_tor_hs_desc_parse_intro
+extern er_tor_hs_parse_linkspecs
+extern er_tor_hs_build_linkspecs
+extern er_tor_hs_desc_build_intro_plaintext
+extern er_tor_hs_desc_build_v3
 extern er_tor_hs_mac32_sha3
 extern er_tor_hs_kdf_sha3
 extern er_tor_hs_derive_intro_keys
@@ -24,6 +30,8 @@ extern er_tor_hs_parse_introduce_ack
 extern er_tor_hs_build_introduce1_prefix
 extern er_tor_hs_build_introduce1_plaintext
 extern er_tor_hs_build_introduce1_encrypted
+extern er_tor_hs_parse_introduce_plaintext
+extern er_tor_hs_extract_introduce_encrypted
 extern er_tor_hs_build_introduce1_ntor_encrypted
 extern er_tor_hs_derive_intro_keys_service
 extern er_tor_hs_open_introduce2
@@ -101,8 +109,11 @@ armor_expected:
     db "Zm9vYmFy", 10
     db "-----END MESSAGE-----"
 armor_expected_len equ $ - armor_expected
+blinded_key_b64: db "AbCdEfGhIjKl"
+blinded_key_b64_len equ $ - blinded_key_b64
 cert_subject: times 32 db 0x44
 cert_signer: times 32 db 0x99
+cert_sig: times 64 db 0xaa
 cert_blob:
     db 1, 9
     db 0, 0, 0, 1
@@ -113,6 +124,11 @@ cert_blob:
     times 32 db 0x99
     times 64 db 0xaa
 cert_blob_len equ $ - cert_blob
+auth_cert_armor:
+    db "-----BEGIN ED25519 CERT-----", 10
+    db "AQkAAAABAUREREREREREREREREREREREREREREREREREREREREREAQAgBACZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmaqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo=", 10
+    db "-----END ED25519 CERT-----", 10
+auth_cert_armor_len equ $ - auth_cert_armor
 desc_intro_text:
     db "create2-formats 2", 10
     db "introduction-point AAZ/AAABIykCFH5+fn5+fn5+fn5+fn5+fn5+fn5+", 10
@@ -123,6 +139,20 @@ desc_intro_text:
     db "-----END ED25519 CERT-----", 10
     db "enc-key ntor ISEhISEhISEhISEhISEhISEhISEhISEhISEhISEhISE=", 10
 desc_intro_text_len equ $ - desc_intro_text
+desc_v3_expected:
+    db "hs-descriptor 3", 10
+    db "descriptor-lifetime 180", 10
+    db "descriptor-signing-key-cert", 10
+    db "-----BEGIN ED25519 CERT-----", 10
+    db "AQkAAAABAUREREREREREREREREREREREREREREREREREREREREREAQAgBACZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmaqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo=", 10
+    db "-----END ED25519 CERT-----", 10
+    db "revision-counter 7", 10
+    db "superencrypted", 10
+    db "-----BEGIN MESSAGE-----", 10
+    db "Zm9vYmFy", 10
+    db "-----END MESSAGE-----", 10
+    db "signature w8PDw8PDw8PDw8PDw8PDw8PDw8PDw8PDw8PDw8PDw8PDw8PDw8PDw8PDw8PDw8PDw8PDw8PDw8PDw8PDw8PDww==", 10
+desc_v3_expected_len equ $ - desc_v3_expected
 desc_expected:
     db 0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07
     db 0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f
@@ -155,6 +185,7 @@ intro_ack_cant_relay: db 0, TOR_HS_INTRO_ACK_CANT_RELAY, 0
 SECTION .bss
 buf: resb TOR_HS_RELAY_DATA_MAX
 copy_buf: resb TOR_HS_RELAY_DATA_MAX
+desc_text_out: resb 768
 crypto_out: resb 64
 service_keys: resb 64
 service_onion_pub: resb TOR_HS_ONION_KEY_LEN_NTOR
@@ -162,7 +193,8 @@ derived_client_pub: resb TOR_HS_CLIENT_PK_LEN
 client_hs_out: resb 64
 onion_out: resb 62
 desc_out: resb 128
-armor_out: resb 128
+cert_out: resb 160
+armor_out: resb 256
 decode_out: resb 128
 plain_out: resb 128
 plain_len: resd 1
@@ -170,6 +202,13 @@ cert_key_out: resb 32
 parse_auth_out: resb 32
 parse_onion_out: resb 32
 parse_enc_out: resb 32
+parse_link_id_out: resb 20
+parse_link_ip_out: resd 1
+parse_link_port_out: resw 1
+parse_linkspecs_out: resb 64
+parse_linkspecs_len_out: resd 1
+intro_encrypted_ptr_out: resq 1
+intro_encrypted_len_out: resd 1
 iv_copy: resb 16
 copy_len: resd 1
 last_circ: resd 1
@@ -257,6 +296,33 @@ _start:
     mov     edx, 6
     call    _mem_eq
     ASSERT eax
+    lea     rax, [rel cert_sig]
+    push    rax
+    lea     rdi, [rel cert_out]
+    mov     esi, 160
+    mov     edx, 9
+    mov     ecx, 1
+    lea     r8, [rel cert_subject]
+    lea     r9, [rel cert_signer]
+    call    er_tor_hs_cert_build
+    add     rsp, 8
+    ASSERT_EQ eax, cert_blob_len
+    lea     rdi, [rel cert_blob]
+    lea     rsi, [rel cert_out]
+    mov     edx, cert_blob_len
+    call    _mem_eq
+    ASSERT eax
+    lea     rdi, [rel armor_out]
+    mov     esi, 256
+    lea     rdx, [rel cert_out]
+    mov     ecx, cert_blob_len
+    call    er_tor_hs_cert_armor_ed25519
+    ASSERT_EQ eax, auth_cert_armor_len
+    lea     rdi, [rel auth_cert_armor]
+    lea     rsi, [rel armor_out]
+    mov     edx, auth_cert_armor_len
+    call    _mem_eq
+    ASSERT eax
     lea     rdi, [rel cert_key_out]
     lea     rsi, [rel cert_blob]
     mov     edx, cert_blob_len
@@ -308,6 +374,62 @@ _start:
     lea     rdi, [rel linkspecs]
     lea     rsi, [rel copy_buf]
     mov     edx, 30
+    call    _mem_eq
+    ASSERT eax
+    sub     rsp, 16
+    mov     qword [rsp], auth_cert_armor_len
+    lea     rax, [rel client_pk]
+    mov     [rsp + 8], rax
+    lea     rdi, [rel desc_text_out]
+    mov     esi, 768
+    lea     rdx, [rel linkspecs]
+    mov     ecx, 30
+    lea     r8, [rel onion_key]
+    lea     r9, [rel auth_cert_armor]
+    call    er_tor_hs_desc_build_intro_plaintext
+    add     rsp, 16
+    ASSERT_EQ eax, desc_intro_text_len
+    lea     rdi, [rel desc_intro_text]
+    lea     rsi, [rel desc_text_out]
+    mov     edx, desc_intro_text_len
+    call    _mem_eq
+    ASSERT eax
+
+    sub     rsp, 40
+    mov     qword [rsp], 7
+    mov     qword [rsp + 8], 180
+    lea     rax, [rel armor_expected]
+    mov     [rsp + 16], rax
+    mov     qword [rsp + 24], armor_expected_len
+    lea     rax, [rel intro_sig]
+    mov     [rsp + 32], rax
+    lea     rdi, [rel desc_text_out]
+    mov     esi, 768
+    lea     rdx, [rel blinded_key_b64]
+    mov     ecx, blinded_key_b64_len
+    lea     r8, [rel auth_cert_armor]
+    mov     r9d, auth_cert_armor_len
+    call    er_tor_hs_desc_build_v3
+    add     rsp, 40
+    ASSERT_EQ eax, desc_v3_expected_len
+    lea     rdi, [rel desc_v3_expected]
+    lea     rsi, [rel desc_text_out]
+    mov     edx, desc_v3_expected_len
+    call    _mem_eq
+    ASSERT eax
+
+    lea     rdi, [rel parse_link_id_out]
+    lea     rsi, [rel parse_link_ip_out]
+    lea     rdx, [rel parse_link_port_out]
+    lea     rcx, [rel copy_buf]
+    mov     r8d, 30
+    call    er_tor_hs_parse_linkspecs
+    ASSERT_EQ eax, 0
+    ASSERT_EQ dword [rel parse_link_ip_out], 0x0100007f
+    ASSERT_EQ word [rel parse_link_port_out], 9001
+    lea     rdi, [rel linkspecs + 10]
+    lea     rsi, [rel parse_link_id_out]
+    mov     edx, 20
     call    _mem_eq
     ASSERT eax
 
@@ -504,6 +626,47 @@ _start:
     call    _mem_eq
     ASSERT eax
 
+    lea     rdi, [rel parse_linkspecs_out]
+    mov     esi, 0x0100007f
+    mov     edx, 9001
+    lea     rcx, [rel linkspecs + 10]
+    call    er_tor_hs_build_linkspecs
+    ASSERT_EQ eax, 30
+    lea     rdi, [rel linkspecs]
+    lea     rsi, [rel parse_linkspecs_out]
+    mov     edx, 30
+    call    _mem_eq
+    ASSERT eax
+
+    sub     rsp, 16
+    lea     rax, [rel buf]
+    mov     [rsp], rax
+    mov     qword [rsp + 8], TOR_HS_INTRODUCE1_PLAINTEXT_BASE_LEN + 30
+    lea     rdi, [rel copy_buf]
+    lea     rsi, [rel parse_onion_out]
+    lea     rdx, [rel parse_linkspecs_out]
+    mov     ecx, 64
+    lea     r8, [rel parse_linkspecs_len_out]
+    call    er_tor_hs_parse_introduce_plaintext
+    add     rsp, 16
+    ASSERT_EQ eax, 0
+    ASSERT_EQ dword [rel parse_linkspecs_len_out], 30
+    lea     rdi, [rel cookie]
+    lea     rsi, [rel copy_buf]
+    mov     edx, TOR_HS_RENDEZVOUS_COOKIE_LEN
+    call    _mem_eq
+    ASSERT eax
+    lea     rdi, [rel onion_key]
+    lea     rsi, [rel parse_onion_out]
+    mov     edx, TOR_HS_ONION_KEY_LEN_NTOR
+    call    _mem_eq
+    ASSERT eax
+    lea     rdi, [rel linkspecs]
+    lea     rsi, [rel parse_linkspecs_out]
+    mov     edx, 30
+    call    _mem_eq
+    ASSERT eax
+
     lea     rdi, [rel buf]
     lea     rsi, [rel client_pk]
     lea     rdx, [rel encrypted]
@@ -618,6 +781,33 @@ _start:
     add     rsp, 16
     ASSERT_EQ eax, TOR_HS_CLIENT_PK_LEN + 8 + TOR_HS_INTRODUCE1_MAC_LEN
     mov     [rel copy_len], eax
+
+    lea     rdi, [rel copy_buf]
+    lea     rsi, [rel auth_key]
+    lea     rdx, [rel buf]
+    mov     ecx, [rel copy_len]
+    call    er_tor_hs_build_introduce1_prefix
+    ASSERT_EQ eax, TOR_HS_INTRODUCE1_PREFIX_LEN + TOR_HS_CLIENT_PK_LEN + 8 + TOR_HS_INTRODUCE1_MAC_LEN
+    lea     rdi, [rel intro_encrypted_ptr_out]
+    lea     rsi, [rel intro_encrypted_len_out]
+    lea     rdx, [rel copy_buf]
+    mov     ecx, eax
+    call    er_tor_hs_extract_introduce_encrypted
+    ASSERT_EQ eax, 0
+    ASSERT_EQ dword [rel intro_encrypted_len_out], TOR_HS_CLIENT_PK_LEN + 8 + TOR_HS_INTRODUCE1_MAC_LEN
+    mov     rax, [rel intro_encrypted_ptr_out]
+    lea     rdx, [rel copy_buf + TOR_HS_INTRODUCE1_PREFIX_LEN]
+    cmp     rax, rdx
+    sete    al
+    movzx   eax, al
+    ASSERT eax
+    lea     rdi, [rel intro_encrypted_ptr_out]
+    lea     rsi, [rel intro_encrypted_len_out]
+    lea     rdx, [rel buf]
+    mov     ecx, [rel copy_len]
+    call    er_tor_hs_extract_introduce_encrypted
+    ASSERT_EQ eax, 0
+    ASSERT_EQ dword [rel intro_encrypted_len_out], TOR_HS_CLIENT_PK_LEN + 8 + TOR_HS_INTRODUCE1_MAC_LEN
 
     sub     rsp, 16
     lea     rax, [rel buf]

@@ -243,7 +243,15 @@ TOR_CIRC_BACKWARD_IV   equ 65600 ; 16 bytes AES backward IV
 TOR_CIRC_FORWARD_DIGEST equ 65616 ; 32 bytes running forward digest state
 TOR_CIRC_BACKWARD_DIGEST equ 65648 ; 32 bytes running backward digest state
 TOR_CIRC_NTOR_KEYS     equ 65680 ; ntor key material (repeated for each hop)
-TOR_CIRC_SIZE          equ 66144 ; total per-circuit (slack for >5 hops)
+TOR_CIRC_SIZE          equ 66208 ; total per-circuit with four hop key slots
+TOR_CIRC_MAX_HOPS      equ 4     ; fits in TOR_CIRC_NTOR_KEYS slack
+TOR_CIRC_HOP_FWD_KEY   equ 0     ; 16 bytes
+TOR_CIRC_HOP_BWD_KEY   equ 16    ; 16 bytes
+TOR_CIRC_HOP_FWD_IV    equ 32    ; 16 bytes
+TOR_CIRC_HOP_BWD_IV    equ 48    ; 16 bytes
+TOR_CIRC_HOP_FWD_DIGEST equ 64   ; 32 bytes
+TOR_CIRC_HOP_BWD_DIGEST equ 96   ; 32 bytes
+TOR_CIRC_HOP_SIZE      equ 128
 
 ; ==================================================================
 ; Stream data structure (per-stream)
@@ -282,6 +290,8 @@ TOR_ROLE_BRIDGE            equ 5
 TOR_ROLE_HS_SERVICE        equ 6
 TOR_ROLE_HS_INTRO          equ 7
 TOR_ROLE_HS_RENDEZVOUS     equ 8
+TOR_ROLE_HS_PEER           equ 9
+TOR_ROLE_HS_FULL           equ 10
 
 ; Capabilities bitset for TOR_STATE_ROLE_CAPS
 TOR_CAP_CLIENT             equ 0x0001
@@ -292,3 +302,6 @@ TOR_CAP_BRIDGE             equ 0x0010
 TOR_CAP_HS_SERVICE         equ 0x0020
 TOR_CAP_HS_INTRO           equ 0x0040
 TOR_CAP_HS_RENDEZVOUS      equ 0x0080
+TOR_CAP_HS_PEER            equ TOR_CAP_CLIENT | TOR_CAP_HS_SERVICE
+TOR_CAP_HS_FULL            equ TOR_CAP_CLIENT | TOR_CAP_OR_RELAY | TOR_CAP_HS_SERVICE | TOR_CAP_HS_INTRO | TOR_CAP_HS_RENDEZVOUS
+TOR_CAP_KNOWN_MASK         equ TOR_CAP_CLIENT | TOR_CAP_OR_RELAY | TOR_CAP_EXIT | TOR_CAP_DIRECTORY | TOR_CAP_BRIDGE | TOR_CAP_HS_SERVICE | TOR_CAP_HS_INTRO | TOR_CAP_HS_RENDEZVOUS

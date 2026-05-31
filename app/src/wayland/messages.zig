@@ -249,7 +249,6 @@ pub fn parseRegistryGlobal(payload: []const u8) !protocol.RegistryGlobal {
     if (payload.len < 8 + padded + 4) return error.InvalidWaylandMessage;
     const interface_name = payload[8 .. 8 + string_len - 1];
     const version = std.mem.readInt(u32, payload[8 + padded ..][0..4], .little);
-    std.debug.print("wayland global {d}: {s} v{d}\n", .{ name, interface_name, version });
     return .{ .name = name, .interface = registryInterface(interface_name), .version = version };
 }
 

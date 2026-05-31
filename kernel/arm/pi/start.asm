@@ -11,7 +11,6 @@
 @ Peripheral base for Pi Zero W v1.1 (BCM2835)
 .equ PERIPHERAL_BASE, 0x20000000
 .equ PL011_BASE,      PERIPHERAL_BASE + 0x00201000
-.equ MAILBOX_BASE,    PERIPHERAL_BASE + 0x0000b880
 
 @ PL011 register offsets
 .equ PL011_DR,    0x000
@@ -35,19 +34,6 @@
 .equ PL011_CR_TXE,    (1 << 8)
 .equ PL011_CR_RXE,    (1 << 9)
 
-@ Mailbox registers (offset from MAILBOX_BASE)
-.equ MAILBOX_RD,   0x00
-.equ MAILBOX_WR,   0x00
-.equ MAILBOX_STA,  0x18
-.equ MAILBOX_CFG,  0x1c
-
-@ Mailbox status flags
-.equ MAILBOX_FULL,     (1 << 31)
-.equ MAILBOX_EMPTY,    (1 << 30)
-
-@ Mailbox property channel
-.equ PROPERTY_CHANNEL, 8
-
 @ Mailbox property tags
 .equ TAG_GET_BOARD_REV,     0x00010002
 .equ TAG_GET_BOARD_SERIAL,  0x00010004
@@ -70,6 +56,7 @@
 .extern dwc2_enumerate
 .extern gpio_led_init
 .extern gpio_led_on
+.extern mailbox_call
 
 @ USB speed constants (from dwc2.asm)
 .equ USB_SPEED_HS, 0
@@ -296,57 +283,6 @@ __udivmod:
 .Ldiv_end:
     pop     {r2, r3}
     bx      lr
-
-@ ==================================================================
-@ Mailbox functions
-@ ==================================================================
-
-@ mailbox_write — write value to property channel
-@ r0 = 28-bit aligned value (will be ORed with channel 8)
-mailbox_write:
-    ldr     r1, =MAILBOX_BASE
-    and     r0, r0, #0xfffffff0
-    orr     r0, r0, #PROPERTY_CHANNEL
-.Lwait_wr:
-    ldr     r2, [r1, #MAILBOX_STA]
-    tst     r2, #MAILBOX_FULL
-    bne     .Lwait_wr
-    str     r0, [r1, #MAILBOX_WR]
-    bx      lr
-
-@ mailbox_read — read value from property channel
-@ Returns: r0 = 28-bit aligned value
-mailbox_read:
-    ldr     r1, =MAILBOX_BASE
-.Lwait_rd:
-    ldr     r2, [r1, #MAILBOX_STA]
-    tst     r2, #MAILBOX_EMPTY
-    bne     .Lwait_rd
-    ldr     r2, [r1, #MAILBOX_RD]   @ read once: bits 3:0 = channel
-    and     r3, r2, #0xf            @ extract channel
-    cmp     r3, #PROPERTY_CHANNEL
-    bne     .Lwait_rd               @ wrong channel, retry
-    and     r0, r2, #0xfffffff0     @ extract data (28-bit aligned)
-    bx      lr
-
-@ mailbox_call — send property tag request and wait for response
-@ r0 = 28-bit aligned buffer address
-@ Buffer format:
-@   [0-3]:   buffer size (32-bit)
-@   [4-7]:   request code (0 = request)
-@   [8...]:  tags (each 16-byte aligned)
-@   [...]:   0 (end tag)
-@ Returns: r0 = 0 on success, non-zero on failure
-mailbox_call:
-    push    {lr}
-    bl      mailbox_write
-    bl      mailbox_read
-    @ Check response code at buffer[4]
-    ldr     r1, [r0, #4]
-    cmp     r1, #0x80000000
-    movne   r0, #1
-    moveq   r0, #0
-    pop     {pc}
 
 @ ==================================================================
 @ kernel_main — entry from reset_handler
