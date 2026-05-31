@@ -1,7 +1,7 @@
 const std = @import("std");
 const math = @import("../math.zig");
 const interaction = @import("../ui/interaction.zig");
-const app_frame = @import("../route/frame.zig");
+const app_frame = @import("../shell/frame.zig");
 const app_images = @import("../app_images.zig");
 const app_cursor = @import("../ui/cursor.zig");
 const state = @import("state.zig");
@@ -77,7 +77,6 @@ pub fn finishCpuSceneFrame(surface: state.renderer_pipeline.SoftwareFramebuffer,
 
 pub fn prepareFrameScene(scene: state.ui.Scene, regions: []const interaction.Region, hover: state.HoverUpdate) !state.ui.Scene {
     try storeLastRegions(regions);
-    if (hover.enabled) state.runtime_state.refreshHover(lastRegions(), hover.x, hover.y);
     var frame_scene = scene;
     state.runtime_state.refreshFocus(lastRegions());
     try renderRuntimeFocusRing(&frame_scene);
@@ -247,11 +246,11 @@ pub fn clampAppScrollToViewport(width: u32, height: u32) void {
 }
 
 pub fn refreshLocationPathProjection() void {
-    state.location_path_projection_len = state.app_navigation.writePathProjection(&state.location_path_projection_bytes, state.native_input_state.location) catch unreachable;
+    state.location_path_projection_len = state.app_location.writePathProjection(&state.location_path_projection_bytes, state.native_input_state.location) catch unreachable;
 }
 
 pub fn refreshLocationHashProjection() void {
-    state.location_hash_projection_len = state.app_navigation.writeHashProjection(&state.location_hash_projection_bytes, state.native_input_state.location) catch unreachable;
+    state.location_hash_projection_len = state.app_location.writeHashProjection(&state.location_hash_projection_bytes, state.native_input_state.location) catch unreachable;
 }
 
 pub fn recordAction(action: state.ui_runtime.Action) void {
@@ -287,10 +286,10 @@ pub fn hasIconId(items: []const state.ui.Command, icon_id: u32) bool {
     return false;
 }
 
-pub fn sourceLabelForHit(location: state.app_navigation.Location, hit_id: u32, out: []u8) ?[]const u8 {
+pub fn sourceLabelForHit(location: state.app_location.Location, hit_id: u32, out: []u8) ?[]const u8 {
     if (hit_id == 0) return null;
     const component_gallery = @import("../ui/component_gallery.zig");
-    if (!state.app_navigation.isAppPreview(location)) return null;
+    if (!state.app_location.isAppPreview(location)) return null;
     const index = component_gallery.indexByCatalogHit(hit_id) orelse component_gallery.indexByPreviewHit(hit_id) orelse return null;
     return component_gallery.sourcePathForIndex(index, out);
 }

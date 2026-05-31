@@ -17,7 +17,7 @@ pub const Role = enum {
     search,
 };
 
-pub const RouteHit = union(enum) {
+pub const LocationHit = union(enum) {
     top_level: u32,
     path: []const u8,
 };
@@ -39,7 +39,7 @@ pub const SourceHit = union(enum) {
 pub const Hit = struct {
     kind: ui.HitKind,
     id: HitId,
-    route: ?RouteHit = null,
+    location: ?LocationHit = null,
     action: ?ActionHit = null,
     source: ?SourceHit = null,
 };
@@ -86,9 +86,9 @@ fn updateHash(initial: u32, value: []const u8) u32 {
     return hash;
 }
 
-const route_tag_none: u8 = 0;
-const route_tag_top_level: u8 = 1;
-const route_tag_path: u8 = 2;
+const location_tag_none: u8 = 0;
+const location_tag_top_level: u8 = 1;
+const location_tag_path: u8 = 2;
 
 const action_tag_none: u8 = 0;
 const action_tag_source_download: u8 = 2;
@@ -120,17 +120,17 @@ pub fn writeBytes(out: []u8, hit: Hit) !usize {
     offset += writeU32(out, @intFromEnum(hit.kind));
     offset += writeU32(out[offset..], hit.id);
 
-    // route
-    if (hit.route) |route| {
-        switch (route) {
+    // location
+    if (hit.location) |location| {
+        switch (location) {
             .top_level => |val| {
-                out[offset] = route_tag_top_level;
+                out[offset] = location_tag_top_level;
                 offset += 1;
                 if (offset + 4 > out.len) return error.NoSpace;
                 offset += writeU32(out[offset..], val);
             },
             .path => |val| {
-                out[offset] = route_tag_path;
+                out[offset] = location_tag_path;
                 offset += 1;
                 if (offset + 4 + val.len > out.len) return error.NoSpace;
                 offset += writeU32(out[offset..], @as(u32, @intCast(val.len)));
@@ -140,7 +140,7 @@ pub fn writeBytes(out: []u8, hit: Hit) !usize {
         }
     } else {
         if (offset + 1 > out.len) return error.NoSpace;
-        out[offset] = route_tag_none;
+        out[offset] = location_tag_none;
         offset += 1;
     }
 
@@ -194,12 +194,12 @@ pub fn parseBytes(in: []const u8) !Hit {
     const kind = if (kind_val < @typeInfo(ui.HitKind).@"enum".fields.len)
         @as(ui.HitKind, @enumFromInt(@as(u8, @intCast(kind_val)))) else return error.Corrupt;
     const id = try readU32(in, &offset);
-    const route: ?RouteHit = route: {
+    const location: ?LocationHit = location: {
         const tag = try readU8(in, &offset);
-        break :route switch (tag) {
-            route_tag_none => null,
-            route_tag_top_level => .{ .top_level = try readU32(in, &offset) },
-            route_tag_path => .{ .path = try readBytes(in, &offset) },
+        break :location switch (tag) {
+            location_tag_none => null,
+            location_tag_top_level => .{ .top_level = try readU32(in, &offset) },
+            location_tag_path => .{ .path = try readBytes(in, &offset) },
             else => return error.Corrupt,
         };
     };
@@ -226,7 +226,7 @@ pub fn parseBytes(in: []const u8) !Hit {
         };
     };
     if (offset != in.len) return error.Corrupt;
-    return .{ .kind = kind, .id = id, .route = route, .action = action, .source = source };
+    return .{ .kind = kind, .id = id, .location = location, .action = action, .source = source };
 }
 
 pub fn encodeObject(hit: Hit, epoch: clock.Stamp, out: []u8) ![]u8 {
@@ -272,8 +272,8 @@ test "hit serialization round trips all field combinations" {
 
     const hits = [_]Hit{
         .{ .kind = .button, .id = 42 },
-        .{ .kind = .input, .id = 7, .route = .{ .top_level = 3 }, .action = .source_download },
-        .{ .kind = .checkbox, .id = 99, .route = .{ .path = "/apps/editor" }, .source = .{ .file = 12 } },
+        .{ .kind = .input, .id = 7, .location = .{ .top_level = 3 }, .action = .source_download },
+        .{ .kind = .checkbox, .id = 99, .location = .{ .path = "/apps/editor" }, .source = .{ .file = 12 } },
         .{ .kind = .slider, .id = 0, .action = .reveal_identity, .source = .editor },
     };
 
@@ -282,13 +282,13 @@ test "hit serialization round trips all field combinations" {
         const decoded = try decodeObject(canonical);
         try std.testing.expectEqual(hit.kind, decoded.kind);
         try std.testing.expectEqual(hit.id, decoded.id);
-        if (hit.route) |r| {
-            const d = decoded.route orelse return error.TestUnexpectedResult;
+        if (hit.location) |r| {
+            const d = decoded.location orelse return error.TestUnexpectedResult;
             switch (r) {
                 .top_level => |v| try std.testing.expectEqual(v, d.top_level),
                 .path => |p| try std.testing.expectEqualStrings(p, d.path),
             }
-        } else try std.testing.expect(decoded.route == null);
+        } else try std.testing.expect(decoded.location == null);
         try std.testing.expectEqual(hit.action, decoded.action);
         if (hit.source) |s| {
             const d = decoded.source orelse return error.TestUnexpectedResult;
@@ -323,7 +323,7 @@ test "hit parse rejects trailing bytes" {
     try std.testing.expectError(error.Corrupt, parseBytes(buf[0 .. len + 1]));
 }
 
-test "hit parse rejects unknown route tag" {
+test "hit parse rejects unknown location tag" {
     var buf: [16]u8 = undefined;
     _ = bytes.store32(buf[0..4], @intFromEnum(ui.HitKind.button));
     _ = bytes.store32(buf[4..8], @as(u32, 1));

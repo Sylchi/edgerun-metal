@@ -7,7 +7,7 @@ const ui = @import("core.zig");
 const ui_component_common = @import("component_common.zig");
 const text_component = @import("components/Text.zig");
 const design = @import("theme.zig");
-const app_navigation = @import("../route/navigation.zig");
+const app_location = @import("../location.zig");
 
 pub const header_h: f32 = design.header_h;
 pub const surface_radius: f32 = design.surface_radius;
@@ -36,7 +36,7 @@ pub const NavKind = enum {
 
 pub const NavProps = struct {
     kind: NavKind,
-    binding: app_navigation.TopLevelBinding,
+    binding: app_location.TopLevelBinding,
     bounds: ui.Rect,
     active: bool,
     label: ?[]const u8 = null,
@@ -58,7 +58,7 @@ pub const ActionNavProps = struct {
 
 pub const RouteNavProps = struct {
     kind: NavKind,
-    button: app_navigation.MainButton,
+    button: app_location.MainButton,
     bounds: ui.Rect,
     active: bool,
     label: ?[]const u8 = null,
@@ -68,7 +68,7 @@ pub const RouteNavProps = struct {
 };
 
 pub const ActionRouteNavProps = struct {
-    action: app_navigation.Action,
+    action: app_location.Action,
     bounds: ui.Rect,
     label: []const u8,
     active: bool = false,
@@ -98,7 +98,7 @@ pub fn renderActionItem(scene: *ui.Scene, collector: *interaction.Collector, pro
 }
 
 pub fn renderRouteItem(scene: *ui.Scene, collector: *interaction.Collector, props: RouteNavProps) (ui.RenderError || interaction.Error)!void {
-    const binding = app_navigation.topLevelBinding(props.button);
+    const binding = app_location.topLevelBinding(props.button);
     try renderNavItem(scene, collector, .{
         .kind = props.kind,
         .binding = binding,
@@ -112,7 +112,7 @@ pub fn renderRouteItem(scene: *ui.Scene, collector: *interaction.Collector, prop
 }
 
 pub fn renderActionRouteItem(scene: *ui.Scene, collector: *interaction.Collector, props: ActionRouteNavProps) (ui.RenderError || interaction.Error)!void {
-    const id = app_navigation.actionId(props.action);
+    const id = app_location.actionId(props.action);
     try renderActionItem(scene, collector, .{
         .id = id,
         .bounds = props.bounds,
@@ -139,7 +139,7 @@ pub fn headerMode(content_w: f32) HeaderMode {
 }
 
 pub fn renderHeader(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, content: ui.Rect, _: ActiveNav) (ui.RenderError || interaction.Error)!void {
-    const logo_binding = app_navigation.subNavBinding(.logo);
+    const logo_binding = app_location.subNavBinding(.logo);
 
     try fill(scene, bounds, palette.bg, 0.0);
     try fill(scene, ui.Rect.init(bounds.x, bounds.y + bounds.h - 1.0, bounds.w, 1.0), palette.border, 0.0);
@@ -152,7 +152,7 @@ pub fn renderHeader(scene: *ui.Scene, collector: *interaction.Collector, bounds:
 }
 
 fn renderCompactHeader(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, content: ui.Rect, _: ActiveNav) (ui.RenderError || interaction.Error)!void {
-    const logo_binding = app_navigation.subNavBinding(.logo);
+    const logo_binding = app_location.subNavBinding(.logo);
 
     const logo = ui.Rect.init(content.x, bounds.y + 16.0, design.Icon.logo_box, design.Icon.logo_box);
     try fill(scene, logo, palette.primary, 7.0);

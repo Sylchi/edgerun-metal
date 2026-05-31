@@ -47,7 +47,7 @@ pub const AgentSlot = struct {
 };
 
 const default_agents = [_]AgentSlot{
-    .{ .name = "Router", .role = "classifies task and selects pipeline", .model = "devstral-20b", .context_used = 2048, .active = true },
+    .{ .name = "Dispatcher", .role = "classifies task and selects pipeline", .model = "devstral-20b", .context_used = 2048, .active = true },
     .{ .name = "Codebase", .role = "keeps repo map and relevant files warm", .model = "devstral-20b", .context_used = 8192 },
     .{ .name = "Architect", .role = "compresses plan into minimal change set", .model = "devstral-20b", .context_used = 6144 },
     .{ .name = "Toolsmith", .role = "chooses exact shell/fs/test tools", .model = "devstral-20b", .context_used = 3072 },
@@ -59,8 +59,8 @@ const default_agents = [_]AgentSlot{
 pub const State = struct {
     status: TextBuf(max_small_text_bytes) = TextBuf(max_small_text_bytes).init("offline"),
     run_label: TextBuf(64) = TextBuf(64).init("Run pipeline"),
-    input: TextBuf(max_small_text_bytes) = TextBuf(max_small_text_bytes).init("Describe the outcome. The pipeline will route, plan, execute, review, and summarize automatically."),
-    assistant: TextBuf(max_text_bytes) = TextBuf(max_text_bytes).init("Pipeline mode: Router → Codebase → Architect → Toolsmith → Executor → Reviewer → Summarizer. Fixed role prompts improve cache locality and keep each step under the 32k context budget."),
+    input: TextBuf(max_small_text_bytes) = TextBuf(max_small_text_bytes).init("Describe the outcome. The pipeline will dispatch, plan, execute, review, and summarize automatically."),
+    assistant: TextBuf(max_text_bytes) = TextBuf(max_text_bytes).init("Pipeline mode: Dispatcher → Codebase → Architect → Toolsmith → Executor → Reviewer → Summarizer. Fixed role prompts improve cache locality and keep each step under the 32k context budget."),
     progress: f32 = 0.0,
     connected: bool = false,
     host_url: []const u8 = default_host_api_url,
@@ -185,7 +185,7 @@ fn renderHero(scene: *ui.Scene, bounds: ui.Rect, state: State, style: ui.Style) 
     _ = state;
     try (card_component.Card{
         .title = "Owned local agent pipeline",
-        .detail = "User gives one request. Router classifies it; Codebase selects context; Architect compresses the plan; Toolsmith chooses tools; Executor makes one focused patch; Reviewer checks it; Summarizer writes durable memory. Fixed prompts keep devstral-20b cache-friendly on 32k context.",
+        .detail = "User gives one request. Dispatcher classifies it; Codebase selects context; Architect compresses the plan; Toolsmith chooses tools; Executor makes one focused patch; Reviewer checks it; Summarizer writes durable memory. Fixed prompts keep devstral-20b cache-friendly on 32k context.",
         .variant = .elevated,
     }).render(scene, bounds, .{ .style = style });
 }

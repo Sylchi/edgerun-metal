@@ -88,6 +88,8 @@ extern er_serial_crlf
 %define CMD_RING_NTRB    16
 %define EVT_RING_NTRB    16
 %define XHCI_BLOB_PORT_SLOTS 32
+%define XHCI_PORT_POLICY_DENY  0
+%define XHCI_PORT_POLICY_ALLOW 1
 
 ; ─── BSS ────────────────────────────────────────────────────────────
 SECTION .bss
@@ -109,6 +111,7 @@ xhci_max_ports:    resd 1
 xhci_hci_rev:      resd 1
 xhci_cfg_blob_ptrs: resq XHCI_BLOB_PORT_SLOTS
 xhci_cfg_blob_lens: resq XHCI_BLOB_PORT_SLOTS
+xhci_port_policy:   resb XHCI_BLOB_PORT_SLOTS
 xhci_cmd_enq_idx:   resd 1
 xhci_cmd_cycle:     resd 1
 xhci_evt_deq_idx:   resd 1
@@ -469,6 +472,10 @@ er_fn er_xhci_init
     xor     eax, eax
     mov     ecx, (XHCI_BLOB_PORT_SLOTS * 8) / 8
     rep stosq
+    lea     rdi, [rel xhci_port_policy]
+    xor     eax, eax
+    mov     ecx, XHCI_BLOB_PORT_SLOTS
+    rep stosb
 
     ; ─── 1. Reset controller ──────────────────────────────────
     mov     edi, r14d
@@ -857,6 +864,54 @@ er_fn er_xhci_get_port_config_blob
     ret
 .gp_absent:
     er_err  ERROR_NOT_PRESENT
+    mov     eax, -1
+    ret
+
+; ==================================================================
+; er_xhci_set_port_policy — set ownership policy for a port
+; int er_xhci_set_port_policy(uint32_t port_index, uint32_t policy)
+; policy: 0=deny (default), 1=allow
+; ==================================================================
+er_fn er_xhci_set_port_policy
+    cmp     edi, 1
+    jb      .pp_bad_arg
+    cmp     edi, XHCI_BLOB_PORT_SLOTS
+    ja      .pp_bad_arg
+    cmp     esi, XHCI_PORT_POLICY_ALLOW
+    ja      .pp_bad_arg
+    mov     eax, edi
+    dec     eax
+    lea     rcx, [xhci_port_policy]
+    mov     [rcx + rax], sil
+    xor     eax, eax
+    er_ok
+    ret
+.pp_bad_arg:
+    er_err  ERROR_BAD_ARGUMENT
+    mov     eax, -1
+    ret
+
+; ==================================================================
+; er_xhci_get_port_policy — get ownership policy for a port
+; int er_xhci_get_port_policy(uint32_t port_index, uint32_t* out_policy)
+; ==================================================================
+er_fn er_xhci_get_port_policy
+    cmp     edi, 1
+    jb      .pg_bad_arg
+    cmp     edi, XHCI_BLOB_PORT_SLOTS
+    ja      .pg_bad_arg
+    test    rsi, rsi
+    jz      .pg_bad_arg
+    mov     eax, edi
+    dec     eax
+    lea     rcx, [xhci_port_policy]
+    movzx   edx, byte [rcx + rax]
+    mov     [rsi], edx
+    xor     eax, eax
+    er_ok
+    ret
+.pg_bad_arg:
+    er_err  ERROR_BAD_ARGUMENT
     mov     eax, -1
     ret
 

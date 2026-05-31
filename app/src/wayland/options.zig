@@ -1,5 +1,6 @@
 const std = @import("std");
 const bytes_mod = @import("../bytes.zig");
+const app_location = @import("../location.zig");
 
 pub const PresentMode = enum {
     cpu,
@@ -14,7 +15,7 @@ pub const Options = struct {
     present: PresentMode = .cpu,
     drm_device: []const u8 = @import("../linux_drm.zig").default_device_path,
     dmabuf_fd: ?std.posix.fd_t = null,
-    path: []const u8 = "/",
+    path: []const u8 = app_location.source_workspace_path_projection,
     dashboard: bool = false,
     hardware: bool = false,
 };

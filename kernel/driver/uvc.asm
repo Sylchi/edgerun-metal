@@ -8,6 +8,7 @@
 extern er_xhci_get_info
 extern er_xhci_read_portsc
 extern er_xhci_get_port_config_blob
+extern er_xhci_get_port_policy
 
 ; Stream kinds
 %define UVC_STREAM_RGB 0
@@ -20,6 +21,7 @@ extern er_xhci_get_port_config_blob
 %define UVC_CAP_YUY2          (1 << 3)
 %define UVC_CAP_CONTROLS      (1 << 4)
 %define XHCI_PORTSC_CCS       (1 << 0)
+%define XHCI_PORT_POLICY_ALLOW 1
 %define USB_DESC_INTERFACE    0x04
 %define USB_DESC_CS_INTERFACE 0x24
 %define USB_CLASS_VIDEO       0x0E
@@ -52,6 +54,7 @@ uvc_cfg_blob_len:     resq 1
 uvc_port_blob_ptr:    resq 1
 uvc_port_blob_len:    resq 1
 uvc_caps_seen:        resd 1
+uvc_port_policy:      resd 1
 
 SECTION .text
 
@@ -215,6 +218,13 @@ er_fn er_uvc_probe
     mov     eax, [uvc_last_portsc]
     test    eax, XHCI_PORTSC_CCS
     jz      .caps_next_port
+    mov     edi, ecx
+    lea     rsi, [uvc_port_policy]
+    call    er_xhci_get_port_policy
+    test    eax, eax
+    jnz     .caps_next_port
+    cmp     dword [uvc_port_policy], XHCI_PORT_POLICY_ALLOW
+    jne     .caps_next_port
     mov     edi, ecx
     lea     rsi, [uvc_port_blob_ptr]
     lea     rdx, [uvc_port_blob_len]

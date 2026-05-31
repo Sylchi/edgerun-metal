@@ -225,7 +225,7 @@ const required_emoji = [_]EmojiSpec{
     .{ .key = "warning", .label = "warning" },
     .{ .key = "locked", .label = "locked" },
     .{ .key = "unlocked", .label = "unlocked" },
-    .{ .key = "route", .label = "route" },
+    .{ .key = "relay", .label = "relay" },
     .{ .key = "storage", .label = "storage" },
     .{ .key = "document", .label = "document" },
     .{ .key = "surface", .label = "surface" },

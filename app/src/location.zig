@@ -1,6 +1,6 @@
 const std = @import("std");
-const bytes = @import("../bytes.zig");
-const icon_component = @import("../ui/components/Icon.zig");
+const bytes = @import("bytes.zig");
+const icon_component = @import("ui/components/Icon.zig");
 
 pub const ObjectId = [32]u8;
 pub const object_id_bytes = 32;
@@ -60,19 +60,23 @@ pub const LocationFixture = struct {
 
 pub const source_workspace_location_object = hexId("3ceeb2766f06e254fd48cf0a0767fd75117e03b14931b1a0d93a2f0657815a34");
 pub const app_preview_location_object = hexId("db0ce6ac80b7fe48a3d8bb96cfb9106428626754c15be4a410d9c197bab19675");
+pub const source_workspace_path_projection = comptimeProjection(object_projection_prefix, source_workspace_location_object);
+pub const source_workspace_hash_projection = comptimeProjection(object_hash_projection_prefix, source_workspace_location_object);
+pub const app_preview_path_projection = comptimeProjection(object_projection_prefix, app_preview_location_object);
+pub const app_preview_hash_projection = comptimeProjection(object_hash_projection_prefix, app_preview_location_object);
 
 pub const location_fixtures = [_]LocationFixture{
     .{
         .name = "source-workspace",
         .location = .{ .object = source_workspace_location_object },
-        .path = comptimeProjection(object_projection_prefix, source_workspace_location_object),
-        .hash = comptimeProjection(object_hash_projection_prefix, source_workspace_location_object),
+        .path = source_workspace_path_projection,
+        .hash = source_workspace_hash_projection,
     },
     .{
         .name = "app-preview",
         .location = .{ .object = app_preview_location_object },
-        .path = comptimeProjection(object_projection_prefix, app_preview_location_object),
-        .hash = comptimeProjection(object_hash_projection_prefix, app_preview_location_object),
+        .path = app_preview_path_projection,
+        .hash = app_preview_hash_projection,
     },
 };
 
@@ -110,12 +114,12 @@ pub fn locationForObject(object: ObjectId) Location {
     return .{ .object = object };
 }
 
-pub fn fromPathProjection(path: []const u8) Location {
-    return parseProjection(path) catch .{};
+pub fn fromPathProjection(path: []const u8) error{InvalidLocationProjection}!Location {
+    return parseProjection(path);
 }
 
-pub fn fromHashProjection(hash: []const u8) Location {
-    return parseProjection(hash) catch .{};
+pub fn fromHashProjection(hash: []const u8) error{InvalidLocationProjection}!Location {
+    return parseProjection(hash);
 }
 
 pub fn fromHit(hit_id: u32, _current: Location) ?Location {
@@ -320,25 +324,25 @@ comptime {
     }
 }
 
-test "navigation projections are content object ids" {
+test "location projections are content object ids" {
     for (location_fixtures) |snapshot| {
         var path: [path_projection_capacity]u8 = undefined;
         var hash: [hash_projection_capacity]u8 = undefined;
 
         const path_len = try writePathProjection(&path, snapshot.location);
         try std.testing.expectEqualStrings(snapshot.path, path[0..path_len]);
-        try std.testing.expectEqual(snapshot.location, fromPathProjection(snapshot.path));
+        try std.testing.expectEqual(snapshot.location, try fromPathProjection(snapshot.path));
 
         const hash_len = try writeHashProjection(&hash, snapshot.location);
         try std.testing.expectEqualStrings(snapshot.hash, hash[0..hash_len]);
-        try std.testing.expectEqual(snapshot.location, fromHashProjection(snapshot.hash));
+        try std.testing.expectEqual(snapshot.location, try fromHashProjection(snapshot.hash));
     }
 
     try std.testing.expect(isSourceWorkspace(locationForButton(.source_workspace)));
     try std.testing.expect(isAppPreview(locationForButton(.app_preview)));
 }
 
-test "navigation hit ids resolve to object locations and intents" {
+test "hit ids resolve to object locations and intents" {
     for (static_locations) |entry| {
         try std.testing.expectEqual(entry.location, fromHit(entry.id, .{}) orelse unreachable);
     }

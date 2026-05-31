@@ -97,7 +97,7 @@ pub const Category = enum {
 pub const ComponentSpec = struct {
     name: []const u8,
     slug: []const u8,
-    route: []const u8,
+    component_path: []const u8,
     category: Category,
     source_component: []const u8,
     edge_builder: []const u8,
@@ -174,7 +174,7 @@ pub const CategorySummary = struct {
     count: usize,
 };
 
-const catalog_eval_branch_quota: u32 = component_route_count * component_route_count * 2;
+const catalog_eval_branch_quota: u32 = component_path_count * component_path_count * 2;
 
 pub const component_catalog = blk: {
     @setEvalBranchQuota(catalog_eval_branch_quota);
@@ -246,7 +246,7 @@ fn componentSpec(name: []const u8, slug: []const u8, category: Category, source_
     return .{
         .name = name,
         .slug = slug,
-        .route = routeFor(slug),
+        .component_path = componentPathFor(slug),
         .category = category,
         .source_component = source_component,
         .edge_builder = edge_builder,
@@ -314,81 +314,81 @@ pub fn categorySummary(category: Category) CategorySummary {
     return .{ .category = category, .label = category.label(), .count = countByCategory(category) };
 }
 
-fn routeFor(slug: []const u8) []const u8 {
-    inline for (component_routes) |entry| {
-        if (bytes.eql(slug, entry.slug)) return entry.route;
+fn componentPathFor(slug: []const u8) []const u8 {
+    inline for (component_paths) |entry| {
+        if (bytes.eql(slug, entry.slug)) return entry.component_path;
     }
     return "";
 }
 
-const Route = struct {
+const ComponentPath = struct {
     slug: []const u8,
-    route: []const u8,
+    component_path: []const u8,
 };
 
-const component_route_count: u32 = 58;
+const component_path_count: u32 = 58;
 
-const component_routes = [_]Route{
-    .{ .slug = "accordion", .route = "/docs/components/accordion" },
-    .{ .slug = "alert", .route = "/docs/components/alert" },
-    .{ .slug = "alert-dialog", .route = "/docs/components/alert-dialog" },
-    .{ .slug = "aspect-ratio", .route = "/docs/components/aspect-ratio" },
-    .{ .slug = "avatar", .route = "/docs/components/avatar" },
-    .{ .slug = "badge", .route = "/docs/components/badge" },
-    .{ .slug = "breadcrumb", .route = "/docs/components/breadcrumb" },
-    .{ .slug = "button", .route = "/docs/components/button" },
-    .{ .slug = "button-group", .route = "/docs/components/button-group" },
-    .{ .slug = "calendar", .route = "/docs/components/calendar" },
-    .{ .slug = "card", .route = "/docs/components/card" },
-    .{ .slug = "carousel", .route = "/docs/components/carousel" },
-    .{ .slug = "chart", .route = "/docs/components/chart" },
-    .{ .slug = "checkbox", .route = "/docs/components/checkbox" },
-    .{ .slug = "collapsible", .route = "/docs/components/collapsible" },
-    .{ .slug = "combobox", .route = "/docs/components/combobox" },
-    .{ .slug = "command", .route = "/docs/components/command" },
-    .{ .slug = "context-menu", .route = "/docs/components/context-menu" },
-    .{ .slug = "data-table", .route = "/docs/components/data-table" },
-    .{ .slug = "date-picker", .route = "/docs/components/date-picker" },
-    .{ .slug = "dialog", .route = "/docs/components/dialog" },
-    .{ .slug = "direction", .route = "/docs/components/direction" },
-    .{ .slug = "drawer", .route = "/docs/components/drawer" },
-    .{ .slug = "dropdown-menu", .route = "/docs/components/dropdown-menu" },
-    .{ .slug = "empty", .route = "/docs/components/empty" },
-    .{ .slug = "field", .route = "/docs/components/field" },
-    .{ .slug = "hover-card", .route = "/docs/components/hover-card" },
-    .{ .slug = "icon", .route = "/docs/components/icon" },
-    .{ .slug = "icon-button", .route = "/docs/components/icon-button" },
-    .{ .slug = "input", .route = "/docs/components/input" },
-    .{ .slug = "input-group", .route = "/docs/components/input-group" },
-    .{ .slug = "input-otp", .route = "/docs/components/input-otp" },
-    .{ .slug = "item", .route = "/docs/components/item" },
-    .{ .slug = "kbd", .route = "/docs/components/kbd" },
-    .{ .slug = "label", .route = "/docs/components/label" },
-    .{ .slug = "menubar", .route = "/docs/components/menubar" },
-    .{ .slug = "native-select", .route = "/docs/components/native-select" },
-    .{ .slug = "navigation-menu", .route = "/docs/components/navigation-menu" },
-    .{ .slug = "pagination", .route = "/docs/components/pagination" },
-    .{ .slug = "popover", .route = "/docs/components/popover" },
-    .{ .slug = "progress", .route = "/docs/components/progress" },
-    .{ .slug = "radio-group", .route = "/docs/components/radio-group" },
-    .{ .slug = "resizable", .route = "/docs/components/resizable" },
-    .{ .slug = "scroll-area", .route = "/docs/components/scroll-area" },
-    .{ .slug = "select", .route = "/docs/components/select" },
-    .{ .slug = "separator", .route = "/docs/components/separator" },
-    .{ .slug = "sheet", .route = "/docs/components/sheet" },
-    .{ .slug = "sidebar", .route = "/docs/components/sidebar" },
-    .{ .slug = "skeleton", .route = "/docs/components/skeleton" },
-    .{ .slug = "spinner", .route = "/docs/components/spinner" },
-    .{ .slug = "slider", .route = "/docs/components/slider" },
-    .{ .slug = "sonner", .route = "/docs/components/sonner" },
-    .{ .slug = "switch", .route = "/docs/components/switch" },
-    .{ .slug = "table", .route = "/docs/components/table" },
-    .{ .slug = "tabs", .route = "/docs/components/tabs" },
-    .{ .slug = "textarea", .route = "/docs/components/textarea" },
-    .{ .slug = "toast", .route = "/docs/components/toast" },
-    .{ .slug = "toggle", .route = "/docs/components/toggle" },
-    .{ .slug = "toggle-group", .route = "/docs/components/toggle-group" },
-    .{ .slug = "tooltip", .route = "/docs/components/tooltip" },
+const component_paths = [_]ComponentPath{
+    .{ .slug = "accordion", .component_path = "/docs/components/accordion" },
+    .{ .slug = "alert", .component_path = "/docs/components/alert" },
+    .{ .slug = "alert-dialog", .component_path = "/docs/components/alert-dialog" },
+    .{ .slug = "aspect-ratio", .component_path = "/docs/components/aspect-ratio" },
+    .{ .slug = "avatar", .component_path = "/docs/components/avatar" },
+    .{ .slug = "badge", .component_path = "/docs/components/badge" },
+    .{ .slug = "breadcrumb", .component_path = "/docs/components/breadcrumb" },
+    .{ .slug = "button", .component_path = "/docs/components/button" },
+    .{ .slug = "button-group", .component_path = "/docs/components/button-group" },
+    .{ .slug = "calendar", .component_path = "/docs/components/calendar" },
+    .{ .slug = "card", .component_path = "/docs/components/card" },
+    .{ .slug = "carousel", .component_path = "/docs/components/carousel" },
+    .{ .slug = "chart", .component_path = "/docs/components/chart" },
+    .{ .slug = "checkbox", .component_path = "/docs/components/checkbox" },
+    .{ .slug = "collapsible", .component_path = "/docs/components/collapsible" },
+    .{ .slug = "combobox", .component_path = "/docs/components/combobox" },
+    .{ .slug = "command", .component_path = "/docs/components/command" },
+    .{ .slug = "context-menu", .component_path = "/docs/components/context-menu" },
+    .{ .slug = "data-table", .component_path = "/docs/components/data-table" },
+    .{ .slug = "date-picker", .component_path = "/docs/components/date-picker" },
+    .{ .slug = "dialog", .component_path = "/docs/components/dialog" },
+    .{ .slug = "direction", .component_path = "/docs/components/direction" },
+    .{ .slug = "drawer", .component_path = "/docs/components/drawer" },
+    .{ .slug = "dropdown-menu", .component_path = "/docs/components/dropdown-menu" },
+    .{ .slug = "empty", .component_path = "/docs/components/empty" },
+    .{ .slug = "field", .component_path = "/docs/components/field" },
+    .{ .slug = "hover-card", .component_path = "/docs/components/hover-card" },
+    .{ .slug = "icon", .component_path = "/docs/components/icon" },
+    .{ .slug = "icon-button", .component_path = "/docs/components/icon-button" },
+    .{ .slug = "input", .component_path = "/docs/components/input" },
+    .{ .slug = "input-group", .component_path = "/docs/components/input-group" },
+    .{ .slug = "input-otp", .component_path = "/docs/components/input-otp" },
+    .{ .slug = "item", .component_path = "/docs/components/item" },
+    .{ .slug = "kbd", .component_path = "/docs/components/kbd" },
+    .{ .slug = "label", .component_path = "/docs/components/label" },
+    .{ .slug = "menubar", .component_path = "/docs/components/menubar" },
+    .{ .slug = "native-select", .component_path = "/docs/components/native-select" },
+    .{ .slug = "navigation-menu", .component_path = "/docs/components/navigation-menu" },
+    .{ .slug = "pagination", .component_path = "/docs/components/pagination" },
+    .{ .slug = "popover", .component_path = "/docs/components/popover" },
+    .{ .slug = "progress", .component_path = "/docs/components/progress" },
+    .{ .slug = "radio-group", .component_path = "/docs/components/radio-group" },
+    .{ .slug = "resizable", .component_path = "/docs/components/resizable" },
+    .{ .slug = "scroll-area", .component_path = "/docs/components/scroll-area" },
+    .{ .slug = "select", .component_path = "/docs/components/select" },
+    .{ .slug = "separator", .component_path = "/docs/components/separator" },
+    .{ .slug = "sheet", .component_path = "/docs/components/sheet" },
+    .{ .slug = "sidebar", .component_path = "/docs/components/sidebar" },
+    .{ .slug = "skeleton", .component_path = "/docs/components/skeleton" },
+    .{ .slug = "spinner", .component_path = "/docs/components/spinner" },
+    .{ .slug = "slider", .component_path = "/docs/components/slider" },
+    .{ .slug = "sonner", .component_path = "/docs/components/sonner" },
+    .{ .slug = "switch", .component_path = "/docs/components/switch" },
+    .{ .slug = "table", .component_path = "/docs/components/table" },
+    .{ .slug = "tabs", .component_path = "/docs/components/tabs" },
+    .{ .slug = "textarea", .component_path = "/docs/components/textarea" },
+    .{ .slug = "toast", .component_path = "/docs/components/toast" },
+    .{ .slug = "toggle", .component_path = "/docs/components/toggle" },
+    .{ .slug = "toggle-group", .component_path = "/docs/components/toggle-group" },
+    .{ .slug = "tooltip", .component_path = "/docs/components/tooltip" },
 };
 
 pub const ComponentGalleryState = struct {
@@ -493,7 +493,7 @@ fn renderCatalogSection(scene: *ui.Scene, collector: *interaction.Collector, bou
     }
 
     try text(scene, bounds.x, cursor_y, bounds.w, 22, "Component Catalog", palette.text);
-    try wrappedText(scene, ui.Rect.init(bounds.x, cursor_y + 32, bounds.w, 42), "Every public component starts here. Cards, previews, and opened component pages route through the shared component system used by web host, CPU, and GPU hosts.", palette.muted, 18, 9.4, 2);
+    try wrappedText(scene, ui.Rect.init(bounds.x, cursor_y + 32, bounds.w, 42), "Every public component starts here. Cards, previews, and opened component pages use the shared component system used by web host, CPU, and GPU hosts.", palette.muted, 18, 9.4, 2);
 
     const card_w = (bounds.w - gap * @as(f32, @floatFromInt(columns - 1))) / @as(f32, @floatFromInt(columns));
     for (component_catalog, 0..) |entry, index| {
@@ -617,7 +617,7 @@ fn renderComponentApi(scene: *ui.Scene, bounds: ui.Rect, entry: ComponentSpec) G
     }).render(scene, bounds, .{ .style = api_style });
     const content_w = @max(1.0, bounds.w - card_content_x * 2);
     var cursor_y = bounds.y + 50;
-    cursor_y = try renderApiField(scene, ui.Rect.init(bounds.x + card_content_x, cursor_y, content_w, bounds.h - 50), "route", entry.route);
+    cursor_y = try renderApiField(scene, ui.Rect.init(bounds.x + card_content_x, cursor_y, content_w, bounds.h - 50), "component path", entry.component_path);
     cursor_y = try renderApiField(scene, ui.Rect.init(bounds.x + card_content_x, cursor_y + 12, content_w, bounds.h - cursor_y), "source component", entry.source_component);
     _ = try renderApiField(scene, ui.Rect.init(bounds.x + card_content_x, cursor_y + 12, content_w, bounds.h - cursor_y), "builder", entry.edge_builder);
 }
@@ -941,7 +941,7 @@ fn hovered(bounds: ui.Rect) bool {
 
 test "component gallery catalog is the authoritative component list" {
     try std.testing.expectEqual(@as(usize, 60), component_catalog.len);
-    try std.testing.expectEqualStrings("/docs/components/input-group", findBySlug("input-group").?.route);
+    try std.testing.expectEqualStrings("/docs/components/input-group", findBySlug("input-group").?.component_path);
     try std.testing.expectEqualStrings("Button", findBySourceComponent("Button").?.source_component);
     try std.testing.expectEqual(@as(usize, 7), indexBySlug("button").?);
     try std.testing.expectEqual(@as(usize, 7), indexByCatalogHit(first_catalog_card_id + 7).?);
@@ -1014,7 +1014,7 @@ test "component gallery renders component wall commands and interaction regions"
     try std.testing.expect(hasText(scene.written(), "Tooltip"));
 }
 
-test "component gallery selected route renders selected component panel" {
+test "component gallery selected component renders selected component panel" {
     var commands: [4096]ui.Command = undefined;
     var clips: [128]ui.Rect = undefined;
     var regions: [512]interaction.Region = undefined;

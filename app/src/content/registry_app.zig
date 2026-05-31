@@ -111,7 +111,7 @@ pub const Registry = struct {
         return error.NotFound;
     }
 
-    pub fn route(self: Registry, allocator: kernel.Allocator, envelope: MessageEnvelope, source_view: kernel.MemoryView) Error!EndpointRegistration {
+    pub fn resolve(self: Registry, allocator: kernel.Allocator, envelope: MessageEnvelope, source_view: kernel.MemoryView) Error!EndpointRegistration {
         if (!envelope.valid()) return error.BadArgument;
         if (allocator.clock_tick > envelope.valid_until_tick) return error.Expired;
         if (!sameChunk(envelope.source_view_id, source_view.id)) return error.BadArgument;
@@ -139,7 +139,7 @@ fn chunk(value: []const u8) data_chunk.DataChunk {
     return data_chunk.DataChunk.init(value);
 }
 
-test "registry app routes message definitions to live endpoints" {
+test "registry app resolves message definitions to live endpoints" {
     const testing = @import("std").testing;
     var allocation_slots: [2]kernel.Allocation = undefined;
     var registration_slots: [2]EndpointRegistration = undefined;
@@ -151,10 +151,10 @@ test "registry app routes message definitions to live endpoints" {
     try registry.register(allocator, EndpointRegistration.init(chunk("receiver-endpoint"), chunk("receiver-state"), chunk("receiver-allocation"), chunk("message-definition"), null, 10));
 
     const view = try allocator.createView(kernel.MemoryView.init(chunk("view-a"), kernel.AddressRange.init(chunk("sender-allocation"), 8, 12), chunk("sender-endpoint"), false, 10));
-    const routed = try registry.route(allocator, MessageEnvelope.init(chunk("sender-endpoint"), chunk("receiver-endpoint"), chunk("message-definition"), chunk("view-a"), 10), view);
+    const resolved = try registry.resolve(allocator, MessageEnvelope.init(chunk("sender-endpoint"), chunk("receiver-endpoint"), chunk("message-definition"), chunk("view-a"), 10), view);
 
-    try testing.expectEqualStrings("receiver-state", routed.app_state_id.body());
-    try testing.expectEqualStrings("receiver-allocation", routed.allocation_id.body());
+    try testing.expectEqualStrings("receiver-state", resolved.app_state_id.body());
+    try testing.expectEqualStrings("receiver-allocation", resolved.allocation_id.body());
 }
 
 test "registry app enforces optional sender restrictions" {
@@ -169,10 +169,10 @@ test "registry app enforces optional sender restrictions" {
     try registry.register(allocator, EndpointRegistration.init(chunk("receiver-endpoint"), chunk("receiver-state"), chunk("receiver-allocation"), chunk("message-definition"), chunk("allowed-sender"), 10));
 
     const view = try allocator.createView(kernel.MemoryView.init(chunk("view-a"), kernel.AddressRange.init(chunk("sender-allocation"), 0, 4), chunk("allowed-sender"), false, 10));
-    _ = try registry.route(allocator, MessageEnvelope.init(chunk("allowed-sender"), chunk("receiver-endpoint"), chunk("message-definition"), chunk("view-a"), 10), view);
+    _ = try registry.resolve(allocator, MessageEnvelope.init(chunk("allowed-sender"), chunk("receiver-endpoint"), chunk("message-definition"), chunk("view-a"), 10), view);
 
     const denied = MessageEnvelope.init(chunk("other-sender"), chunk("receiver-endpoint"), chunk("message-definition"), chunk("view-a"), 10);
-    try testing.expectError(error.Unauthorized, registry.route(allocator, denied, view));
+    try testing.expectError(error.Unauthorized, registry.resolve(allocator, denied, view));
 }
 
 test "registry app rejects expired registrations and envelopes" {
@@ -189,8 +189,8 @@ test "registry app rejects expired registrations and envelopes" {
     try allocator.advance(2);
 
     const expired_registration = MessageEnvelope.init(chunk("sender-endpoint"), chunk("receiver-endpoint"), chunk("message-definition"), chunk("view-a"), 4);
-    try testing.expectError(error.Expired, registry.route(allocator, expired_registration, view));
+    try testing.expectError(error.Expired, registry.resolve(allocator, expired_registration, view));
 
     const expired_envelope = MessageEnvelope.init(chunk("sender-endpoint"), chunk("receiver-endpoint"), chunk("message-definition"), chunk("view-a"), 1);
-    try testing.expectError(error.Expired, registry.route(allocator, expired_envelope, view));
+    try testing.expectError(error.Expired, registry.resolve(allocator, expired_envelope, view));
 }

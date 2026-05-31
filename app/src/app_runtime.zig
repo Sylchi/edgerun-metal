@@ -7,10 +7,10 @@ const idp = @import("runtime/identity.zig");
 const std = @import("std");
 const bytes = @import("bytes.zig");
 const math = @import("math.zig");
-const app_frame = @import("route/frame.zig");
+const app_frame = @import("shell/frame.zig");
 const app_images = @import("ui/images.zig");
 const app_native_input = @import("input/native.zig");
-const app_navigation = state.app_navigation;
+const app_location = state.app_location;
 const app_cursor = @import("ui/cursor.zig");
 const component_gallery = @import("ui/component_gallery.zig");
 const interaction = state.interaction;
@@ -480,7 +480,7 @@ export fn er_ui_request_release_artifact_launch() u32 {
 }
 
 // -----------------------------------------------------------------
-// Location/navigation exports
+// Location projection exports
 // -----------------------------------------------------------------
 
 export fn er_ui_app_location_hash_projection_ptr() usize {
@@ -497,8 +497,9 @@ export fn er_ui_app_location_path_projection_len() usize {
 }
 
 export fn er_ui_app_set_location_path_projection(path_len: usize) u32 {
+    if (path_len > state.input_bytes.len) return render.finishError(.bad_input);
     const path = state.input_bytes[0..path_len];
-    const location = app_navigation.fromPathProjection(path);
+    const location = app_location.fromPathProjection(path) catch return render.finishError(.bad_input);
     input.applyLocation(location);
     render.refreshLocationPathProjection();
     render.refreshLocationHashProjection();
@@ -509,8 +510,9 @@ export fn er_ui_app_set_location_path_projection(path_len: usize) u32 {
 }
 
 export fn er_ui_app_set_location_hash_projection(hash_len: usize) u32 {
+    if (hash_len > state.input_bytes.len) return render.finishError(.bad_input);
     const hash = state.input_bytes[0..hash_len];
-    const location = app_navigation.fromHashProjection(hash);
+    const location = app_location.fromHashProjection(hash) catch return render.finishError(.bad_input);
     input.applyLocation(location);
     render.refreshLocationPathProjection();
     render.refreshLocationHashProjection();
@@ -519,11 +521,11 @@ export fn er_ui_app_set_location_hash_projection(hash_len: usize) u32 {
 }
 
 export fn er_ui_app_activate_hit(hit_id: u32) u32 {
-    if (app_navigation.fromHit(hit_id, state.native_input_state.location)) |location| {
+    if (app_location.fromHit(hit_id, state.native_input_state.location)) |location| {
         input.applyLocation(location);
         render.refreshLocationPathProjection();
         render.refreshLocationHashProjection();
-    } else if (app_navigation.actionFromHit(hit_id)) |action_fn| switch (action_fn) {
+    } else if (app_location.actionFromHit(hit_id)) |action_fn| switch (action_fn) {
         .download_source_release => {
             input.queueOutboxMessage(@intFromEnum(state.OutboxKind.download_wasm)) catch {};
         },
@@ -534,7 +536,7 @@ export fn er_ui_app_activate_hit(hit_id: u32) u32 {
             state.source_workspace_ready = false;
             state.source_workspace_len = 0;
             state.source_editor_loaded = false;
-            input.applyLocation(app_navigation.Location{});
+            input.applyLocation(app_location.Location{});
             render.refreshLocationPathProjection();
             render.refreshLocationHashProjection();
         },
@@ -557,7 +559,7 @@ export fn er_ui_app_activate_hit(hit_id: u32) u32 {
 }
 
 export fn er_ui_app_context_menu(x: f32, y: f32) u32 {
-    if (app_navigation.isSourceWorkspace(state.native_input_state.location)) {
+    if (app_location.isSourceWorkspace(state.native_input_state.location)) {
         state.context_menu_open = true;
         state.context_menu_x = x;
         state.context_menu_y = y;
@@ -792,16 +794,16 @@ fn hasFocusRingCommand(items: []const ui.Command) bool {
     return false;
 }
 
-fn expectLocationFixture(fixture: app_navigation.LocationFixture) !void {
-    var path_buf: [app_navigation.path_projection_capacity]u8 = undefined;
-    var hash_buf: [app_navigation.hash_projection_capacity]u8 = undefined;
-    const path_len = app_navigation.writePathProjection(&path_buf, fixture.location) catch unreachable;
-    const hash_len = app_navigation.writeHashProjection(&hash_buf, fixture.location) catch unreachable;
+fn expectLocationFixture(fixture: app_location.LocationFixture) !void {
+    var path_buf: [app_location.path_projection_capacity]u8 = undefined;
+    var hash_buf: [app_location.hash_projection_capacity]u8 = undefined;
+    const path_len = app_location.writePathProjection(&path_buf, fixture.location) catch unreachable;
+    const hash_len = app_location.writeHashProjection(&hash_buf, fixture.location) catch unreachable;
     try std.testing.expectEqualStrings(fixture.path, path_buf[0..path_len]);
     try std.testing.expectEqualStrings(fixture.hash, hash_buf[0..hash_len]);
 }
 
-fn expectLocationState(expected: app_navigation.Location) !void {
+fn expectLocationState(expected: app_location.Location) !void {
     try std.testing.expectEqual(expected, state.native_input_state.location);
 }
 
@@ -858,7 +860,7 @@ test "app runtime draws deterministic focus ring from runtime focus state" {
 
 test "app runtime component catalog builds packed app buffers and app-ready icon lines" {
     state.font_atlas_ready = false;
-    input.applyLocation(app_navigation.locationForButton(.app_preview));
+    input.applyLocation(app_location.locationForButton(.app_preview));
     const code = er_ui_build_app_frame(960, 640, -1.0, -1.0, 0.0);
     try std.testing.expectEqual(@as(u32, 0), code);
     try std.testing.expect(state.font_atlas_ready);
@@ -871,7 +873,7 @@ test "app runtime component catalog builds packed app buffers and app-ready icon
 }
 
 test "app runtime component catalog render uses canonical ir buffers" {
-    input.applyLocation(app_navigation.locationForButton(.app_preview));
+    input.applyLocation(app_location.locationForButton(.app_preview));
     const code = er_ui_render_frame(480, 360, 0.0);
     try std.testing.expectEqual(@as(u32, 0), code);
     try std.testing.expectEqual(renderer_pipeline.Transport.pixel_bytes, state.last_present_transport);
@@ -896,7 +898,7 @@ test "app runtime landing builds packed app buffers and hit state" {
 }
 
 test "app runtime location snapshots cover canonical fixtures and dynamic families" {
-    for (app_navigation.location_fixtures) |fixture| {
+    for (app_location.location_fixtures) |fixture| {
         input.applyLocation(fixture.location);
         try expectLocationFixture(fixture);
         try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, 111.0, 32.0, 0.0));
@@ -904,25 +906,25 @@ test "app runtime location snapshots cover canonical fixtures and dynamic famili
 }
 
 test "app runtime frontend builds packed app buffers" {
-    input.applyLocation(app_navigation.locationForButton(.app_preview));
+    input.applyLocation(app_location.locationForButton(.app_preview));
     try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, 640.0, 500.0, 0.0));
 }
 
 test "app runtime activation keeps page state in wasm" {
-    input.applyLocation(app_navigation.locationForButton(.app_preview));
+    input.applyLocation(app_location.locationForButton(.app_preview));
     try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, -1.0, -1.0, 0.0));
-    try std.testing.expect(app_navigation.isAppPreview(state.native_input_state.location));
+    try std.testing.expect(app_location.isAppPreview(state.native_input_state.location));
 }
 
 test "app runtime location projection sync owns URL path state" {
-    input.applyLocation(app_navigation.locationForButton(.app_preview));
+    input.applyLocation(app_location.locationForButton(.app_preview));
     er_ui_build_app_frame(1280, 800, -1.0, -1.0, 0.0);
     try std.testing.expect(state.location_path_projection_len > 0);
     try std.testing.expect(state.location_hash_projection_len > 0);
 }
 
 test "app runtime context source jump opens exact component file" {
-    input.applyLocation(app_navigation.locationForButton(.app_preview));
+    input.applyLocation(app_location.locationForButton(.app_preview));
     try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, 30.0, 150.0, 0.0));
 }
 
@@ -976,7 +978,7 @@ test "app runtime exposes no secondary bootstrap javascript" {
 test "app runtime exposes repo-owned source as canonical object bytes" {
     try std.testing.expect(er_ui_source_workspace_len() > 0);
 
-    input.applyLocation(app_navigation.locationForButton(.app_preview));
+    input.applyLocation(app_location.locationForButton(.app_preview));
     try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, -1.0, -1.0, 0.0));
 }
 
@@ -988,13 +990,13 @@ test "app runtime source workspace is mutable app source" {
 }
 
 test "app runtime source location initializes embedded editor state" {
-    input.applyLocation(app_navigation.locationForButton(.source_workspace));
+    input.applyLocation(app_location.locationForButton(.source_workspace));
     try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, -1.0, -1.0, 0.0));
-    try std.testing.expect(app_navigation.isSourceWorkspace(state.native_input_state.location));
+    try std.testing.expect(app_location.isSourceWorkspace(state.native_input_state.location));
 }
 
 test "app runtime source editor rewrites a canonical vfs file" {
-    input.applyLocation(app_navigation.locationForButton(.source_workspace));
+    input.applyLocation(app_location.locationForButton(.source_workspace));
     const label = "src/er/test_main.er";
     @memcpy(state.input_bytes[0..label.len], label);
     try std.testing.expectEqual(@as(u32, 0), er_ui_source_editor_select_label(@intCast(label.len)));
@@ -1003,7 +1005,7 @@ test "app runtime source editor rewrites a canonical vfs file" {
 }
 
 test "app runtime source editor pointer focus places caret before editing" {
-    input.applyLocation(app_navigation.locationForButton(.source_workspace));
+    input.applyLocation(app_location.locationForButton(.source_workspace));
     editor.ensureSourceEditor();
     try std.testing.expect(state.source_editor_len > 0);
     state.source_editor_status = .ready;
@@ -1012,7 +1014,7 @@ test "app runtime source editor pointer focus places caret before editing" {
 }
 
 test "app runtime source explorer rows open real workspace files" {
-    input.applyLocation(app_navigation.locationForButton(.source_workspace));
+    input.applyLocation(app_location.locationForButton(.source_workspace));
     editor.ensureSourceEditor();
     try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, -1.0, -1.0, 0.0));
     const files = editor.currentSourceFiles();
@@ -1020,21 +1022,21 @@ test "app runtime source explorer rows open real workspace files" {
 }
 
 test "app runtime source explorer search is edited inside wasm" {
-    input.applyLocation(app_navigation.locationForButton(.source_workspace));
+    input.applyLocation(app_location.locationForButton(.source_workspace));
     editor.ensureSourceEditor();
     _ = editor.handleSourceSearchKey("a", 0, 0, 0);
     try std.testing.expect(state.source_search_len > 0);
 }
 
 test "app runtime source editor moves by visual lines" {
-    input.applyLocation(app_navigation.locationForButton(.source_workspace));
+    input.applyLocation(app_location.locationForButton(.source_workspace));
     editor.ensureSourceEditor();
     state.source_editor_status = .ready;
     _ = editor.handleSourceEditorKey("ArrowDown", 0, 0, 0, 0);
 }
 
 test "app runtime source editor handles full event records and edit history" {
-    input.applyLocation(app_navigation.locationForButton(.source_workspace));
+    input.applyLocation(app_location.locationForButton(.source_workspace));
     editor.ensureSourceEditor();
     state.source_editor_status = .ready;
     try std.testing.expect(editor.handleSourceEditorKey("End", 0, 0, 0, 0));
@@ -1042,7 +1044,7 @@ test "app runtime source editor handles full event records and edit history" {
 }
 
 test "app runtime source editor uses workspace file list and pointer selection" {
-    input.applyLocation(app_navigation.locationForButton(.source_workspace));
+    input.applyLocation(app_location.locationForButton(.source_workspace));
     editor.ensureSourceEditor();
     try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, -1.0, -1.0, 0.0));
     const files = editor.currentSourceFiles();
@@ -1052,7 +1054,7 @@ test "app runtime source editor uses workspace file list and pointer selection" 
 }
 
 test "app runtime source editor scrolls editor viewport without page scroll" {
-    input.applyLocation(app_navigation.locationForButton(.source_workspace));
+    input.applyLocation(app_location.locationForButton(.source_workspace));
     editor.ensureSourceEditor();
     state.source_editor_status = .ready;
     try std.testing.expect(editor.scrollSourceEditorByWheel(120.0));
@@ -1104,7 +1106,7 @@ test "app runtime pointer up owns activation suppression policy" {
 }
 
 test "app packed text preserves variable font descenders" {
-    input.applyLocation(app_navigation.locationForButton(.app_preview));
+    input.applyLocation(app_location.locationForButton(.app_preview));
     try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, -1.0, -1.0, 0.0));
 }
 
@@ -1125,7 +1127,7 @@ test "app font atlas populates glyphs on demand" {
 }
 
 test "app icon buffer stores semantic icon instances" {
-    input.applyLocation(app_navigation.locationForButton(.app_preview));
+    input.applyLocation(app_location.locationForButton(.app_preview));
     try std.testing.expectEqual(@as(u32, 0), er_ui_build_app_frame(1280, 800, -1.0, -1.0, 0.0));
 }
 

@@ -3,7 +3,7 @@ const bytes = @import("../bytes.zig");
 const state = @import("state.zig");
 const editor = @import("editor.zig");
 const identity = @import("identity.zig");
-const app_frame = @import("../route/frame.zig");
+const app_frame = @import("../shell/frame.zig");
 const component_gallery = @import("../ui/component_gallery.zig");
 
 pub fn appKeyEvent(key: []const u8, ctrl: u32, meta: u32, alt: u32, shift: u32) u32 {
@@ -24,11 +24,11 @@ pub fn appKeyEvent(key: []const u8, ctrl: u32, meta: u32, alt: u32, shift: u32) 
     if (state.runtime_state.overlays.count == 0) {
         if (input_kind == .enter or input_kind == .space) {
             const hit_id = state.runtime_state.hoverHitId();
-            if (state.app_navigation.fromHit(hit_id, state.native_input_state.location)) |location| {
+            if (state.app_location.fromHit(hit_id, state.native_input_state.location)) |location| {
                 state.native_input_state.location = location;
                 state.native_input_state.scroll_y = 0.0;
                 state.context_menu_open = false;
-            } else if (state.app_navigation.actionFromHit(hit_id)) |action_fn| switch (action_fn) {
+            } else if (state.app_location.actionFromHit(hit_id)) |action_fn| switch (action_fn) {
                 .reveal_identity => {
                     state.native_input_state.public_identity_ready = true;
                     state.native_input_state.public_identity = state.native_input_state.reveal_identity;
@@ -135,7 +135,7 @@ pub fn handleInputEventRecord(record: state.InputEventRecord, width: f32, height
             }
         },
         .context_menu => {
-            if (state.app_navigation.isSourceWorkspace(state.native_input_state.location)) {
+            if (state.app_location.isSourceWorkspace(state.native_input_state.location)) {
                 state.context_menu_open = true;
                 state.context_menu_x = record.x;
                 state.context_menu_y = record.y;
@@ -204,12 +204,12 @@ pub fn clearOutboxMessages() void {
     state.outbox_message_len = 0;
 }
 
-pub fn applyLocation(location: state.app_navigation.Location) void {
+pub fn applyLocation(location: state.app_location.Location) void {
     state.context_menu_open = false;
     state.app_native_input.applyLocation(&state.native_input_state, location);
 }
 
-pub fn currentLocation() state.app_navigation.Location {
+pub fn currentLocation() state.app_location.Location {
     return state.native_input_state.location;
 }
 

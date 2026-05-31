@@ -31,7 +31,7 @@ pub const Direction = struct {
         const active = list_layout.clampedIndex(self.active, direction_item_count);
         const widths = itemWidths();
         try renderItem(scene, itemBounds(bounds, &widths, 0), direction_ltr_label, active == 0, options);
-        try Icon.named(.route).renderColor(scene, iconBounds(bounds, widths[0]), options.style.muted);
+        try Icon.named(.arrows_exchange).renderColor(scene, iconBounds(bounds, widths[0]), options.style.muted);
         try renderItem(scene, itemBounds(bounds, &widths, 1), direction_rtl_label, active == 1, options);
     }
 

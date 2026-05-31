@@ -4,8 +4,8 @@ const renderer_font_atlas = @import("render/font_atlas_weighted.zig");
 const renderer_gles = @import("render/backends/gles.zig");
 const renderer_ir = @import("render/ir.zig");
 const renderer_pipeline = @import("render/pipeline.zig");
-const app_frame = @import("route/frame.zig");
-const app_navigation = @import("route/navigation.zig");
+const app_frame = @import("shell/frame.zig");
+const app_location = @import("location.zig");
 const ui = @import("ui/core.zig");
 const interaction = @import("ui/interaction.zig");
 const drm = @import("linux_drm.zig");
@@ -84,7 +84,7 @@ const SceneState = struct {
             .w = @floatFromInt(width),
             .h = @floatFromInt(height),
         }, .{
-            .location = app_navigation.locationForButton(.app_preview),
+            .location = app_location.locationForButton(.app_preview),
             .public_identity = "drm-gbm-gpu",
             .public_identity_ready = true,
         });

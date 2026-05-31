@@ -49,19 +49,19 @@ fn runChecks() uefi.Status {
         4,
     )) catch |err| return fail("register endpoint", err);
 
-    const routed = registry.route(allocator, registry_app.MessageEnvelope.init(
+    const resolved = registry.resolve(allocator, registry_app.MessageEnvelope.init(
         chunk("sender-endpoint"),
         chunk("receiver-endpoint"),
         chunk("message-definition"),
         chunk("view-a"),
         4,
-    ), view) catch |err| return fail("route message", err);
-    if (!sameChunk(routed.app_state_id, chunk("receiver-state"))) {
-        return failText("route returned wrong app state");
+    ), view) catch |err| return fail("resolve message", err);
+    if (!sameChunk(resolved.app_state_id, chunk("receiver-state"))) {
+        return failText("resolve returned wrong app state");
     }
-    printLine("check: registry-route ok");
+    printLine("check: registry-resolve ok");
 
-    _ = registry.route(allocator, registry_app.MessageEnvelope.init(
+    _ = registry.resolve(allocator, registry_app.MessageEnvelope.init(
         chunk("wrong-sender"),
         chunk("receiver-endpoint"),
         chunk("message-definition"),
@@ -75,7 +75,7 @@ fn runChecks() uefi.Status {
     };
 
     allocator.advance(5) catch |err| return fail("advance clock", err);
-    _ = registry.route(allocator, registry_app.MessageEnvelope.init(
+    _ = registry.resolve(allocator, registry_app.MessageEnvelope.init(
         chunk("sender-endpoint"),
         chunk("receiver-endpoint"),
         chunk("message-definition"),
@@ -90,7 +90,7 @@ fn runChecks() uefi.Status {
         else => return fail("clock expiry", err),
     };
 
-    return failText("expired route unexpectedly succeeded");
+    return failText("expired resolve unexpectedly succeeded");
 }
 
 fn fail(step: []const u8, err: registry_app.Error) uefi.Status {

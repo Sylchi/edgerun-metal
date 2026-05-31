@@ -4,11 +4,11 @@ const client = @import("client.zig");
 
 const interaction = @import("../ui/interaction.zig");
 const app_chrome = @import("../ui/chrome.zig");
-const app_agent = @import("../route/agent.zig");
+const app_agent = @import("../shell/agent.zig");
 const app_cursor = @import("../ui/cursor.zig");
-const app_frame = @import("../route/frame.zig");
+const app_frame = @import("../shell/frame.zig");
 const app_images = @import("../app_images.zig");
-const app_navigation = @import("../route/navigation.zig");
+const app_location = @import("../location.zig");
 const app_native_input = @import("../input/native.zig");
 const app_dashboard = @import("../app_dashboard.zig");
 const app_hardware_dashboard = @import("../app_hardware_dashboard.zig");
@@ -99,10 +99,6 @@ fn centeredRect(bounds: ui.Rect, w: f32, h: f32) ui.Rect {
     return ui.Rect.init(bounds.x + (bounds.w - w) * 0.5, bounds.y + (bounds.h - h) * 0.5, w, h);
 }
 
-pub fn updateHoverHitForState(state: *AppState, regions: []const interaction.Region) void {
-    app_native_input.refreshHover(state, regions);
-}
-
 pub fn activateClientDecorationForState(state: *AppState, client_ptr: ?*client.WaylandClient) !void {
     const hover_hit_id = state.runtime.hoverHitId();
     switch (hover_hit_id) {
@@ -146,7 +142,7 @@ pub const NativeApp = struct {
         self.allocator = allocator;
         self.region_len = 0;
         self.state = .{
-            .location = app_navigation.fromPathProjection(options.path),
+            .location = try app_location.fromPathProjection(options.path),
             .public_identity = "native-wayland",
             .reveal_identity = "native-wayland",
         };
@@ -172,7 +168,6 @@ pub const NativeApp = struct {
         var collector = interaction.Collector.init(&self.regions);
         try renderNativeAppScene(&scene, &collector, self.surface.width, self.surface.height, self.state, &self.dashboard_app, self.dashboard, &self.hardware_app, self.hardware);
         self.region_len = collector.written().len;
-        self.updateHoverHit(self.regionSlice());
         const cursor_kind = self.state.cursorKind();
         if (self.surface.present != .cpu) try app_cursor.render(&scene, self.state.hover_x, self.state.hover_y, cursor_kind);
         const cursor_for_surface: ?app_cursor.Kind = if (self.surface.present == .cpu) cursor_kind else null;
@@ -273,10 +268,6 @@ pub const NativeApp = struct {
             },
             else => return false,
         }
-    }
-
-    pub fn updateHoverHit(self: *NativeApp, regions: []const interaction.Region) void {
-        app_native_input.refreshHover(&self.state, regions);
     }
 
     pub fn regionSlice(self: *const NativeApp) []const interaction.Region {
