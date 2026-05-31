@@ -73,6 +73,7 @@ KERNEL_ASM_SRCS="
 	../driver/acpi.asm
 	../driver/portio.asm
 	../driver/xhci.asm
+	../driver/uvc.asm
 	../driver/rtl8125.asm
 	../driver/rtl8922.asm
 	../driver/ax210.asm

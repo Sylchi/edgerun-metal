@@ -87,6 +87,10 @@ extern er_nvme_identify_ns
 extern er_nvme_print_ns_info
 extern er_xhci_probe
 extern er_xhci_init
+extern er_uvc_probe
+extern er_uvc_get_caps
+extern er_uvc_stream_config
+extern er_uvc_stream_start
 extern er_rtl8125_probe
 extern er_rtl8125_init
 extern er_virtio_net_init
@@ -256,6 +260,11 @@ check_wifi_rtl8922: db "check: wifi rtl8922 ", 0
 check_wifi_rtl8922_bar: db " bar ", 0
 check_wifi_rtl8922_mmio: db " mmio ", 0
 check_wifi_rtl8922_bad: db " mmio bad", 0
+check_uvc: db "check: uvc ", 0
+check_uvc_abs: db "absent", 0
+check_uvc_caps: db " caps ", 0
+check_uvc_rgb: db " rgb ", 0
+check_uvc_ir: db " ir ", 0
 check_abs:     db "absent", 0
 check_virtio_net: db "check: virtio_net ", 0
 check_amdgpu:  db "check: amdgpu ", 0
@@ -350,6 +359,7 @@ ax210_mac: resb 6
 rtl8922_present: resb 1
 rtl8922_bar: resq 1
 rtl8922_mmio_probe: resd 1
+uvc_caps: resd 1
 
 %define VIRTIO_NET_STORAGE_size 4900
 virtio_net_dev:      resb VIRTIO_NET_DEVICE_size
@@ -1235,6 +1245,76 @@ er_fn er_kernel_main
 
     test    r13d, r13d
     jz      .xhci_absent
+    mov     byte [device_flags + DEV_XHCI], 2
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_uvc]
+    call    er_serial_puts
+    mov     edi, 1
+    call    er_uvc_probe
+    test    eax, eax
+    jz      .uvc_absent
+    lea     rdi, [rel uvc_caps]
+    call    er_uvc_get_caps
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_uvc_caps]
+    call    er_serial_puts
+    mov     rdi, COM1_PORT
+    mov     esi, [rel uvc_caps]
+    call    er_serial_puthex32
+
+    ; Configure RGB stream scaffold (1280x720@30)
+    mov     edi, 0
+    mov     esi, 1280
+    mov     edx, 720
+    mov     ecx, 30
+    call    er_uvc_stream_config
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_uvc_rgb]
+    call    er_serial_puts
+    mov     edi, 0
+    call    er_uvc_stream_start
+    test    eax, eax
+    jnz     .uvc_rgb_fail
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel ok_text]
+    call    er_serial_puts
+    jmp     .uvc_ir_cfg
+.uvc_rgb_fail:
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel fail_text]
+    call    er_serial_puts
+
+.uvc_ir_cfg:
+    ; Configure IR stream scaffold (640x480@30)
+    mov     edi, 1
+    mov     esi, 640
+    mov     edx, 480
+    mov     ecx, 30
+    call    er_uvc_stream_config
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_uvc_ir]
+    call    er_serial_puts
+    mov     edi, 1
+    call    er_uvc_stream_start
+    test    eax, eax
+    jnz     .uvc_ir_fail
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel ok_text]
+    call    er_serial_puts
+    jmp     .uvc_done
+.uvc_ir_fail:
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel fail_text]
+    call    er_serial_puts
+    jmp     .uvc_done
+
+.uvc_absent:
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_uvc_abs]
+    call    er_serial_puts
+
+.uvc_done:
+    call    .crlf
     jmp     .acpi_check
 
 .xhci_absent:
