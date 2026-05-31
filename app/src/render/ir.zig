@@ -137,6 +137,7 @@ pub fn iconOpIteratorFromSource(source: []const f32) IconOpIterator {
 pub const DrawBatch = union(enum) {
     rects: []const f32,
     text: []const f32,
+    overlay_text: []const f32,
     image: []const f32,
     svg: []const f32,
     icon_lines: []const f32,
@@ -154,6 +155,8 @@ pub const Buffers = struct {
     icon_line_vertex_len: *usize,
     text_vertices: []f32,
     text_vertex_len: *usize,
+    overlay_text_vertices: []f32,
+    overlay_text_vertex_len: *usize,
     image_vertices: []f32,
     image_vertex_len: *usize,
     overlay_rects: []f32,
@@ -173,6 +176,7 @@ pub const Buffers = struct {
 
     pub fn clearOverlay(self: Buffers) void {
         self.overlay_rect_len.* = 0;
+        self.overlay_text_vertex_len.* = 0;
         self.overlay_icon_vertex_len.* = 0;
         self.overlay_icon_line_vertex_len.* = 0;
     }
@@ -195,6 +199,10 @@ pub const Buffers = struct {
 
     pub fn liveTextVertices(self: Buffers) []const f32 {
         return self.text_vertices[0..self.text_vertex_len.*];
+    }
+
+    pub fn liveOverlayTextVertices(self: Buffers) []const f32 {
+        return self.overlay_text_vertices[0..self.overlay_text_vertex_len.*];
     }
 
     pub fn liveOverlayRects(self: Buffers) []const f32 {
@@ -223,6 +231,7 @@ pub fn validateBuffers(buffers: Buffers) Error!void {
         buffers.icon_vertex_len.* > buffers.icon_vertices.len or
         buffers.icon_line_vertex_len.* > buffers.icon_line_vertices.len or
         buffers.text_vertex_len.* > buffers.text_vertices.len or
+        buffers.overlay_text_vertex_len.* > buffers.overlay_text_vertices.len or
         buffers.image_vertex_len.* > buffers.image_vertices.len or
         buffers.overlay_rect_len.* > buffers.overlay_rects.len or
         buffers.overlay_icon_vertex_len.* > buffers.overlay_icon_vertices.len or
@@ -232,7 +241,7 @@ pub fn validateBuffers(buffers: Buffers) Error!void {
     }
 }
 
-pub fn drawBatches(buffers: Buffers) [8]DrawBatch {
+pub fn drawBatches(buffers: Buffers) [9]DrawBatch {
     return .{
         .{ .rects = buffers.liveRects() },
         .{ .text = buffers.liveTextVertices() },
@@ -240,6 +249,7 @@ pub fn drawBatches(buffers: Buffers) [8]DrawBatch {
         .{ .svg = buffers.liveIconVertices() },
         .{ .icon_lines = buffers.liveIconLineVertices() },
         .{ .overlay_rects = buffers.liveOverlayRects() },
+        .{ .overlay_text = buffers.liveOverlayTextVertices() },
         .{ .overlay_icon = buffers.liveOverlayIconVertices() },
         .{ .overlay_icon_lines = buffers.liveOverlayIconLineVertices() },
     };
@@ -249,6 +259,7 @@ pub fn batchValues(batch: DrawBatch) []const f32 {
     return switch (batch) {
         .rects,
         .text,
+        .overlay_text,
         .image,
         .svg,
         .icon_lines,
@@ -273,6 +284,7 @@ pub fn FixedBuffers(
         icon_vertices: [icon_vertices_count * icon_instance_float_stride]f32 = undefined,
         icon_line_vertices: [icon_line_vertices_count * icon_line_vertex_float_stride]f32 = undefined,
         text_vertices: [image_vertices_count * image_vertex_float_stride]f32 = undefined,
+        overlay_text_vertices: [overlay_rect_instances * text_vertex_float_stride * 32]f32 = undefined,
         image_vertices: [image_vertices_count * image_vertex_float_stride]f32 = undefined,
         overlay_rects: [overlay_rect_instances * rect_float_stride]f32 = undefined,
         overlay_icon_vertices: [overlay_icon_vertices_count * icon_instance_float_stride]f32 = undefined,
@@ -281,6 +293,7 @@ pub fn FixedBuffers(
         icon_vertex_len: usize = 0,
         icon_line_vertex_len: usize = 0,
         text_vertex_len: usize = 0,
+        overlay_text_vertex_len: usize = 0,
         image_vertex_len: usize = 0,
         overlay_rect_len: usize = 0,
         overlay_icon_vertex_len: usize = 0,
@@ -296,6 +309,8 @@ pub fn FixedBuffers(
                 .icon_line_vertex_len = &self.icon_line_vertex_len,
                 .text_vertices = &self.text_vertices,
                 .text_vertex_len = &self.text_vertex_len,
+                .overlay_text_vertices = &self.overlay_text_vertices,
+                .overlay_text_vertex_len = &self.overlay_text_vertex_len,
                 .image_vertices = &self.image_vertices,
                 .image_vertex_len = &self.image_vertex_len,
                 .overlay_rects = &self.overlay_rects,
@@ -373,11 +388,19 @@ pub fn pushImage(buffers: Buffers, quad: ui.Quad) Error!void {
 }
 
 pub fn pushTextGlyph(buffers: Buffers, x: f32, baseline_y: f32, px: f32, codepoint: u21, weight: ui.FontWeight, color: ui.Color) Error!void {
-    if (buffers.text_vertex_len.* + text_vertex_float_stride > buffers.text_vertices.len) return error.Budget;
+    try pushTextGlyphTo(buffers.text_vertices, buffers.text_vertex_len, x, baseline_y, px, codepoint, weight, color);
+}
+
+pub fn pushOverlayTextGlyph(buffers: Buffers, x: f32, baseline_y: f32, px: f32, codepoint: u21, weight: ui.FontWeight, color: ui.Color) Error!void {
+    try pushTextGlyphTo(buffers.overlay_text_vertices, buffers.overlay_text_vertex_len, x, baseline_y, px, codepoint, weight, color);
+}
+
+fn pushTextGlyphTo(out: []f32, out_len: *usize, x: f32, baseline_y: f32, px: f32, codepoint: u21, weight: ui.FontWeight, color: ui.Color) Error!void {
+    if (out_len.* + text_vertex_float_stride > out.len) return error.Budget;
     const glyph_key = @as(u32, codepoint) * 4 + @intFromEnum(weight);
     const values = [_]f32{ x, baseline_y, px, @floatFromInt(glyph_key), channel(color.r), channel(color.g), channel(color.b), channel(color.a) };
-    @memcpy(buffers.text_vertices[buffers.text_vertex_len.* .. buffers.text_vertex_len.* + text_vertex_float_stride], &values);
-    buffers.text_vertex_len.* += text_vertex_float_stride;
+    @memcpy(out[out_len.* .. out_len.* + text_vertex_float_stride], &values);
+    out_len.* += text_vertex_float_stride;
 }
 
 pub fn pushClippedTexturedQuad(buffer: []f32, len: *usize, clip: ui.Rect, bounds: ui.Rect, tex_u0: f32, tex_v0: f32, tex_u1: f32, tex_v1: f32, color: ui.Color) Error!void {
@@ -469,7 +492,7 @@ pub fn primitiveCount(buffers: Buffers) Error!usize {
     return count;
 }
 
-pub const body_header_size: usize = 32;
+pub const body_header_size: usize = 36;
 
 pub fn bodySize(buffers: Buffers) usize {
     return body_header_size +
@@ -479,6 +502,7 @@ pub fn bodySize(buffers: Buffers) usize {
             buffers.text_vertex_len.* +
             buffers.image_vertex_len.* +
             buffers.overlay_rect_len.* +
+            buffers.overlay_text_vertex_len.* +
             buffers.overlay_icon_vertex_len.* +
             buffers.overlay_icon_line_vertex_len.*) * @sizeOf(f32);
 }
@@ -490,6 +514,7 @@ pub const BodyHeader = struct {
     icon_line_floats: u32,
     image_floats: u32,
     overlay_rect_floats: u32,
+    overlay_text_floats: u32,
     overlay_icon_floats: u32,
     overlay_icon_line_floats: u32,
 };
@@ -502,6 +527,7 @@ pub fn encodeBody(buffers: Buffers, out: []u8) void {
         .icon_line_floats = @intCast(buffers.icon_line_vertex_len.*),
         .image_floats = @intCast(buffers.image_vertex_len.*),
         .overlay_rect_floats = @intCast(buffers.overlay_rect_len.*),
+        .overlay_text_floats = @intCast(buffers.overlay_text_vertex_len.*),
         .overlay_icon_floats = @intCast(buffers.overlay_icon_vertex_len.*),
         .overlay_icon_line_floats = @intCast(buffers.overlay_icon_line_vertex_len.*),
     };
@@ -515,6 +541,7 @@ pub fn encodeBody(buffers: Buffers, out: []u8) void {
         buffers.liveIconLineVertices(),
         buffers.liveImageVertices(),
         buffers.liveOverlayRects(),
+        buffers.liveOverlayTextVertices(),
         buffers.liveOverlayIconVertices(),
         buffers.liveOverlayIconLineVertices(),
     }) |slice| {
@@ -532,8 +559,9 @@ pub fn decodeBody(body: []const u8) BodyHeader {
         .icon_line_floats = std.mem.readInt(u32, body[12..16], .little),
         .image_floats = std.mem.readInt(u32, body[16..20], .little),
         .overlay_rect_floats = std.mem.readInt(u32, body[20..24], .little),
-        .overlay_icon_floats = std.mem.readInt(u32, body[24..28], .little),
-        .overlay_icon_line_floats = std.mem.readInt(u32, body[28..32], .little),
+        .overlay_text_floats = std.mem.readInt(u32, body[24..28], .little),
+        .overlay_icon_floats = std.mem.readInt(u32, body[28..32], .little),
+        .overlay_icon_line_floats = std.mem.readInt(u32, body[32..36], .little),
     };
     return hdr;
 }
@@ -548,6 +576,7 @@ pub fn applyBody(body: []const u8, buffers: *Buffers) void {
         .{ .dst = buffers.icon_line_vertices, .len = &buffers.icon_line_vertex_len.*, .count = hdr.icon_line_floats },
         .{ .dst = buffers.image_vertices, .len = &buffers.image_vertex_len.*, .count = hdr.image_floats },
         .{ .dst = buffers.overlay_rects, .len = &buffers.overlay_rect_len.*, .count = hdr.overlay_rect_floats },
+        .{ .dst = buffers.overlay_text_vertices, .len = &buffers.overlay_text_vertex_len.*, .count = hdr.overlay_text_floats },
         .{ .dst = buffers.overlay_icon_vertices, .len = &buffers.overlay_icon_vertex_len.*, .count = hdr.overlay_icon_floats },
         .{ .dst = buffers.overlay_icon_line_vertices, .len = &buffers.overlay_icon_line_vertex_len.*, .count = hdr.overlay_icon_line_floats },
     }) |field| {
@@ -562,13 +591,13 @@ pub fn applyBody(body: []const u8, buffers: *Buffers) void {
 
 pub fn bodyFloatCount(hdr: BodyHeader) usize {
     return hdr.rect_floats + hdr.text_floats + hdr.icon_floats + hdr.icon_line_floats + hdr.image_floats +
-        hdr.overlay_rect_floats + hdr.overlay_icon_floats + hdr.overlay_icon_line_floats;
+        hdr.overlay_rect_floats + hdr.overlay_text_floats + hdr.overlay_icon_floats + hdr.overlay_icon_line_floats;
 }
 
 pub fn batchPrimitiveCount(batch: DrawBatch) Error!usize {
     return switch (batch) {
         .rects, .overlay_rects => |rects| rectCount(rects),
-        .text => |vertices| textGlyphCount(vertices),
+        .text, .overlay_text => |vertices| textGlyphCount(vertices),
         .image => |vertices| texturedQuadCount(vertices),
         .svg, .overlay_icon => |instances| iconCount(instances),
         .icon_lines, .overlay_icon_lines => 0,
@@ -856,15 +885,16 @@ test "renderer ir iterates rects and textured quads" {
 test "renderer ir owns canonical draw batch order" {
     var storage = FixedBuffers(1, 1, textured_quad_vertex_count, 1, 1, 1, 1){};
     const batches = drawBatches(storage.buffers());
-    try std.testing.expectEqual(@as(usize, 8), batches.len);
+    try std.testing.expectEqual(@as(usize, 9), batches.len);
     try std.testing.expectEqual(DrawBatch{ .rects = storage.rects[0..0] }, batches[0]);
     try std.testing.expectEqual(DrawBatch{ .text = storage.text_vertices[0..0] }, batches[1]);
     try std.testing.expectEqual(DrawBatch{ .image = storage.image_vertices[0..0] }, batches[2]);
     try std.testing.expectEqual(DrawBatch{ .svg = storage.icon_vertices[0..0] }, batches[3]);
     try std.testing.expectEqual(DrawBatch{ .icon_lines = storage.icon_line_vertices[0..0] }, batches[4]);
     try std.testing.expectEqual(DrawBatch{ .overlay_rects = storage.overlay_rects[0..0] }, batches[5]);
-    try std.testing.expectEqual(DrawBatch{ .overlay_icon = storage.overlay_icon_vertices[0..0] }, batches[6]);
-    try std.testing.expectEqual(DrawBatch{ .overlay_icon_lines = storage.overlay_icon_line_vertices[0..0] }, batches[7]);
+    try std.testing.expectEqual(DrawBatch{ .overlay_text = storage.overlay_text_vertices[0..0] }, batches[6]);
+    try std.testing.expectEqual(DrawBatch{ .overlay_icon = storage.overlay_icon_vertices[0..0] }, batches[7]);
+    try std.testing.expectEqual(DrawBatch{ .overlay_icon_lines = storage.overlay_icon_line_vertices[0..0] }, batches[8]);
     try std.testing.expectEqual(storage.image_vertices[0..0], batchValues(batches[2]));
 }
 
@@ -898,6 +928,7 @@ test "renderer ir separates overlay commands from base buffers" {
     var icon_vertices: [icon_instance_float_stride]f32 = undefined;
     var icon_line_vertices: [icon_line_vertex_float_stride]f32 = undefined;
     var text_vertices: [image_vertex_float_stride * textured_quad_vertex_count]f32 = undefined;
+    var overlay_text_vertices: [image_vertex_float_stride * textured_quad_vertex_count]f32 = undefined;
     var image_vertices: [image_vertex_float_stride * textured_quad_vertex_count]f32 = undefined;
     var overlay_rects: [rect_float_stride]f32 = undefined;
     var overlay_icon_vertices: [icon_instance_float_stride]f32 = undefined;
@@ -906,6 +937,7 @@ test "renderer ir separates overlay commands from base buffers" {
     var icon_vertex_len: usize = 0;
     var icon_line_vertex_len: usize = 0;
     var text_vertex_len: usize = 0;
+    var overlay_text_vertex_len: usize = 0;
     var image_vertex_len: usize = 0;
     var overlay_rect_len: usize = 0;
     var overlay_icon_vertex_len: usize = 0;
@@ -919,6 +951,8 @@ test "renderer ir separates overlay commands from base buffers" {
         .icon_line_vertex_len = &icon_line_vertex_len,
         .text_vertices = &text_vertices,
         .text_vertex_len = &text_vertex_len,
+        .overlay_text_vertices = &overlay_text_vertices,
+        .overlay_text_vertex_len = &overlay_text_vertex_len,
         .image_vertices = &image_vertices,
         .image_vertex_len = &image_vertex_len,
         .overlay_rects = &overlay_rects,

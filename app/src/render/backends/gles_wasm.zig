@@ -93,6 +93,7 @@ pub fn renderFrame(gl: *State, width: i32, height: i32, scale: f32, buffers: ren
     drawImage(gl, width, height, buffers.liveImageVertices());
     drawIconLines(gl, width, height, buffers.liveIconLineVertices());
     try drawRects(gl, width, height, scale, buffers.liveOverlayRects());
+    drawText(gl, width, height, buffers.liveOverlayTextVertices());
     drawIconLines(gl, width, height, buffers.liveOverlayIconLineVertices());
 }
 

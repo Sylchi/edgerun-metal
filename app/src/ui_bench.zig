@@ -178,7 +178,7 @@ fn nowNs() u64 {
 fn commandChecksum(commands: []const ui.Command) u64 {
     var sum: u64 = 0xcbf29ce484222325;
     for (commands) |command| switch (command) {
-        .rect => |rect| {
+        .rect, .overlay_rect => |rect| {
             sum = mix(sum, rect.color.r);
             sum = mix(sum, rect.color.g);
             sum = mix(sum, rect.color.b);

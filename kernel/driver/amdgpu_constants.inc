@@ -88,9 +88,10 @@
 %define DCN_HUBP_PIPE_STRIDE               0x370
 %define DCN_HUBP_PIPE_COUNT                4
 
-; ─── Framebuffer setup constants ───────────────────────────────────
-%define AMDGPU_FB_WIDTH             1920
-%define AMDGPU_FB_HEIGHT            1080
+; ─── Host eDP framebuffer setup constants ─────────────────────────
+; Framework 13 AMD Phoenix panel: BOE NE135FBM-N41, eDP-1, 2256x1504@60.
+%define AMDGPU_FB_WIDTH             2256
+%define AMDGPU_FB_HEIGHT            1504
 %define AMDGPU_FB_BPP               32         ; XRGB8888
 %define AMDGPU_FB_PITCH             (AMDGPU_FB_WIDTH * 4)
 %define AMDGPU_FB_SIZE              (AMDGPU_FB_PITCH * AMDGPU_FB_HEIGHT)
@@ -107,9 +108,10 @@
 %define AMDGPU_TIMING_V_BLANK_START        32
 %define AMDGPU_TIMING_V_BLANK_END          36
 %define AMDGPU_TIMING_SIZE                 40
-%define AMDGPU_MODE_1080P60                0
-%define AMDGPU_MODE_720P60                 1
-%define AMDGPU_MODE_COUNT                  2
+%define AMDGPU_MODE_EDP_NATIVE_2256X1504_60 0
+%define AMDGPU_MODE_1080P60                1
+%define AMDGPU_MODE_720P60                 2
+%define AMDGPU_MODE_COUNT                  3
 
 ; ─── DCN HUBP scanout config structure offsets ─────────────────────
 %define AMDGPU_SCANOUT_ADDR_LO             0

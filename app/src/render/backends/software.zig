@@ -133,7 +133,7 @@ pub const Surface = struct {
 
     pub fn rasterizeScaled(self: Surface, commands: []const ui.Command, scale: f32) Error!void {
         for (commands) |command| switch (command) {
-            .rect => |rect| self.drawRect(rect, scale),
+            .rect, .overlay_rect => |rect| self.drawRect(rect, scale),
             .border => |border| {
                 const bounds = scaleRect(border.bounds, scale);
                 const border_width = @max(min_border_width, scale);
@@ -142,8 +142,8 @@ pub const Surface = struct {
                 self.fill(.{ .x = bounds.x, .y = bounds.y, .w = border_width, .h = bounds.h }, border.color);
                 self.fill(.{ .x = bounds.x + bounds.w - border_width, .y = bounds.y, .w = border_width, .h = bounds.h }, border.color);
             },
-            .text => return error.UnsupportedIrPrimitive,
-            .icon_quad => |quad| self.drawIconQuad(quad, scale),
+            .text, .overlay_text => return error.UnsupportedIrPrimitive,
+            .icon_quad, .overlay_icon_quad => |quad| self.drawIconQuad(quad, scale),
             .svg_quad => |quad| self.drawIconInstance(quad.bounds, quad.color, quad.svg.icon_id, scale),
             .drag_source, .drop_target, .text_quad, .image_quad, .transition => {},
         };
@@ -155,7 +155,7 @@ pub const Surface = struct {
         for (renderer_ir.drawBatches(buffers)) |batch| switch (batch) {
             .rects, .overlay_rects => |rects| try self.rasterizeIrRects(rects),
             .svg, .overlay_icon => |icons| try self.rasterizeIrIcons(icons),
-            .text, .image, .icon_lines, .overlay_icon_lines => {},
+            .text, .overlay_text, .image, .icon_lines, .overlay_icon_lines => {},
         };
     }
 
@@ -169,7 +169,7 @@ pub const Surface = struct {
 
         for (renderer_ir.drawBatches(buffers)) |batch| switch (batch) {
             .rects, .overlay_rects => |rects| try self.rasterizeIrRects(rects),
-            .text => |vertices| {
+            .text, .overlay_text => |vertices| {
                 if (vertices.len != 0) try self.rasterizeVectorText(vertices);
             },
             .image => |vertices| {
@@ -3079,11 +3079,13 @@ fn renderTestSceneIr(surface: Surface, commands: []const ui.Command) !void {
     buffers.clearBase();
     for (commands) |cmd| switch (cmd) {
         .rect => |r| try renderer_ir.pushRect(buffers, .base, r.bounds, r.color, r.color2, r.radius, r.shadow, renderer_ir.rectModeCode(r.mode)),
+        .overlay_rect => |r| try renderer_ir.pushRect(buffers, .overlay, r.bounds, r.color, r.color2, r.radius, r.shadow, renderer_ir.rectModeCode(r.mode)),
         .border => |b| try renderer_ir.pushRect(buffers, .base, b.bounds, b.color, .clear, 0, 0, renderer_ir.rectModeCode(.border)),
         .icon_quad => |q| try renderer_ir.pushSvgQuad(buffers, .base, q),
+        .overlay_icon_quad => |q| try renderer_ir.pushSvgQuad(buffers, .overlay, q),
         .svg_quad => |q| try renderer_ir.pushSvgQuad(buffers, .base, q),
         .image_quad => |q| try renderer_ir.pushImage(buffers, q),
-        .text, .text_quad, .drag_source, .drop_target, .transition => {},
+        .text, .overlay_text, .text_quad, .drag_source, .drop_target, .transition => {},
     };
     const alpha = [_]u8{255};
     try surface.rasterizeIrWithResources(buffers, .{

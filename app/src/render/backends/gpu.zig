@@ -370,7 +370,7 @@ fn encodeIrBuffers(
 ) Error!void {
     for (renderer_ir.drawBatches(buffers)) |batch| switch (batch) {
         .rects, .overlay_rects => |rects| try encodeIrRects(rects, out),
-        .text => |vertices| try encodeIrTextured(.text_quad, vertices, out),
+        .text, .overlay_text => |vertices| try encodeIrTextured(.text_quad, vertices, out),
         .image => |vertices| try encodeIrTextured(.image_quad, vertices, out),
         .svg, .overlay_icon => |instances| try encodeIrIcons(instances, out),
         .icon_lines, .overlay_icon_lines => {},
@@ -453,11 +453,13 @@ fn markDirtyRect(
 fn packGpuCommand(buffers: renderer_ir.Buffers, command: ui.Command) Error!void {
     switch (command) {
         .rect => |r| try renderer_ir.pushRect(buffers, .base, r.bounds, r.color, r.color2, r.radius, r.shadow, renderer_ir.rectModeCode(r.mode)),
+        .overlay_rect => |r| try renderer_ir.pushRect(buffers, .overlay, r.bounds, r.color, r.color2, r.radius, r.shadow, renderer_ir.rectModeCode(r.mode)),
         .border => |b| try renderer_ir.pushRect(buffers, .base, b.bounds, b.color, .clear, 0, 0, renderer_ir.rectModeCode(.border)),
         .icon_quad => |q| try renderer_ir.pushSvgQuad(buffers, .base, q),
+        .overlay_icon_quad => |q| try renderer_ir.pushSvgQuad(buffers, .overlay, q),
         .image_quad => |q| try renderer_ir.pushImage(buffers, q),
         .svg_quad => |q| try renderer_ir.pushSvgQuad(buffers, .base, q),
-        .text, .drag_source, .drop_target, .text_quad, .transition => {},
+        .text, .overlay_text, .drag_source, .drop_target, .text_quad, .transition => {},
     }
 }
 

@@ -38,6 +38,9 @@ str_pg:        db " pg ", 0
 str_clk:       db " clk ", 0
 str_otg:       db " otg ", 0
 str_hubp:      db " hubp ", 0
+amdgpu_timing_edp_native_2256x1504_60:
+    dd 2536, 2304, 2336, 2256, 280
+    dd 1549, 1507, 1513, 1504, 45
 amdgpu_timing_1080p60:
     dd 2200, 1968, 2000, 1920, 128
     dd 1125, 1083, 1088, 1080, 4
@@ -485,9 +488,9 @@ er_fn er_amdgpu_dcn_init
     test    eax, eax
     jnz     .fail
 
-    ; ─── Step 9: Basic OTG0 timing ───
+    ; ─── Step 9: Host-native eDP OTG0 timing ───
     mov     rdi, r12
-    mov     esi, AMDGPU_MODE_1080P60
+    mov     esi, AMDGPU_MODE_EDP_NATIVE_2256X1504_60
     call    er_amdgpu_program_otg0_mode
     test    eax, eax
     jnz     .fail
@@ -676,6 +679,8 @@ er_fn er_amdgpu_program_otg_mode
     mov     r13d, esi
     cmp     esi, DCN_OTG_PIPE_COUNT
     jae     .bad_arg
+    cmp     edx, AMDGPU_MODE_EDP_NATIVE_2256X1504_60
+    je      .mode_edp_native
     cmp     edx, AMDGPU_MODE_1080P60
     je      .mode_1080
     cmp     edx, AMDGPU_MODE_720P60
@@ -683,6 +688,14 @@ er_fn er_amdgpu_program_otg_mode
 .bad_arg:
     er_err  ERROR_BAD_ARGUMENT
     mov     eax, -1
+    pop     r13
+    pop     r12
+    ret
+.mode_edp_native:
+    mov     rdi, r12
+    mov     esi, r13d
+    lea     rdx, [rel amdgpu_timing_edp_native_2256x1504_60]
+    call    er_amdgpu_program_otg_timing
     pop     r13
     pop     r12
     ret

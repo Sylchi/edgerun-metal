@@ -4,11 +4,15 @@
 %include "x86_64/crypto/tor_constants.inc"
 
 extern er_tor_hs_build_establish_rendezvous
+extern er_tor_hs_mac32_sha3
+extern er_tor_hs_kdf_sha3
 extern er_tor_hs_parse_rendezvous_established
 extern er_tor_hs_build_rendezvous1
 extern er_tor_hs_parse_rendezvous2
 extern er_tor_hs_parse_introduce_ack
 extern er_tor_hs_build_introduce1_prefix
+extern er_tor_hs_build_introduce1_plaintext
+extern er_tor_hs_build_introduce1_encrypted
 extern er_tor_hs_build_establish_intro_v3
 extern er_tor_hs_parse_intro_established
 extern er_tor_hs_establish_rendezvous
@@ -25,9 +29,37 @@ cookie: db 0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09
         db 0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,0x10,0x11,0x12,0x13
 handshake: times 64 db 0x5a
 auth_key: times TOR_HS_INTRO_AUTH_KEY_LEN db 0xa5
+onion_key: times TOR_HS_ONION_KEY_LEN_NTOR db 0x4b
 handshake_auth: times TOR_HS_INTRO_HANDSHAKE_AUTH_LEN db 0x3c
 intro_sig: times TOR_HS_ED25519_SIG_LEN db 0xc3
 encrypted: db 1,2,3,4,5,6,7,8
+client_pk: times TOR_HS_CLIENT_PK_LEN db 0x21
+intro_mac: times TOR_HS_INTRODUCE1_MAC_LEN db 0x9d
+linkspecs:
+    db 0,6,127,0,0,1,35,41
+    db 2,20
+    times 20 db 0x7e
+crypto_tag: db "tag"
+crypto_key:
+    db 0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07
+    db 0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f
+    db 0x10,0x11,0x12,0x13,0x14,0x15,0x16,0x17
+    db 0x18,0x19,0x1a,0x1b,0x1c,0x1d,0x1e,0x1f
+crypto_msg: db "abc"
+crypto_mac_expected:
+    db 0xd4,0x1b,0x54,0x24,0x30,0x1c,0x2d,0xba
+    db 0x73,0x29,0x52,0x54,0x0f,0x72,0x75,0xf8
+    db 0x1a,0x39,0x78,0xe3,0x3f,0xea,0x94,0xea
+    db 0xb5,0xa0,0x05,0xf3,0x33,0x0c,0x56,0x99
+crypto_kdf_expected:
+    db 0xd4,0xd5,0xbd,0xec,0x5f,0x4b,0xb4,0xef
+    db 0x43,0xc7,0xd2,0x0b,0xe8,0xbf,0xee,0xac
+    db 0x16,0x4e,0xf4,0x92,0x68,0x41,0xf6,0x50
+    db 0xd5,0xa0,0xd9,0xef,0x82,0xfc,0x74,0x1d
+    db 0x99,0x39,0xaa,0x9e,0x33,0x0c,0x36,0x73
+    db 0x51,0x80,0x92,0xfd,0x62,0xc0,0xac,0xd9
+    db 0xf1,0x43,0x99,0xc1,0x30,0x07,0x94,0x8d
+    db 0xbd,0xab,0x87,0x08,0x2d,0x97,0x99,0x56
 intro_established_ok: db 0
 intro_ack_ok: db 0,0,0
 intro_ack_cant_relay: db 0, TOR_HS_INTRO_ACK_CANT_RELAY, 0
@@ -35,6 +67,7 @@ intro_ack_cant_relay: db 0, TOR_HS_INTRO_ACK_CANT_RELAY, 0
 SECTION .bss
 buf: resb TOR_HS_RELAY_DATA_MAX
 copy_buf: resb TOR_HS_RELAY_DATA_MAX
+crypto_out: resb 64
 copy_len: resd 1
 last_circ: resd 1
 last_stream: resw 1
@@ -65,6 +98,34 @@ last_body: resb TOR_HS_RELAY_DATA_MAX
 SECTION .text
 global _start
 _start:
+
+    lea     rdi, [rel crypto_out]
+    lea     rsi, [rel crypto_tag]
+    mov     edx, 3
+    lea     rcx, [rel crypto_key]
+    lea     r8, [rel crypto_msg]
+    mov     r9d, 3
+    call    er_tor_hs_mac32_sha3
+    ASSERT_EQ eax, 0
+    lea     rdi, [rel crypto_mac_expected]
+    lea     rsi, [rel crypto_out]
+    mov     edx, 32
+    call    _mem_eq
+    ASSERT eax
+
+    lea     rdi, [rel crypto_out]
+    mov     esi, 64
+    lea     rdx, [rel crypto_tag]
+    mov     ecx, 3
+    lea     r8, [rel crypto_msg]
+    mov     r9d, 3
+    call    er_tor_hs_kdf_sha3
+    ASSERT_EQ eax, 0
+    lea     rdi, [rel crypto_kdf_expected]
+    lea     rsi, [rel crypto_out]
+    mov     edx, 64
+    call    _mem_eq
+    ASSERT eax
 
     lea     rdi, [rel buf]
     lea     rsi, [rel cookie]
@@ -136,6 +197,58 @@ _start:
     lea     rdi, [rel encrypted]
     lea     rsi, [rel buf + 56]
     mov     edx, 8
+    call    _mem_eq
+    ASSERT eax
+
+    lea     rdi, [rel buf]
+    lea     rsi, [rel cookie]
+    lea     rdx, [rel onion_key]
+    mov     ecx, 2
+    lea     r8, [rel linkspecs]
+    mov     r9d, 30
+    call    er_tor_hs_build_introduce1_plaintext
+    ASSERT_EQ eax, TOR_HS_INTRODUCE1_PLAINTEXT_BASE_LEN + 30
+    ASSERT_EQ byte [rel buf + 20], 0
+    ASSERT_EQ byte [rel buf + 21], TOR_HS_ONION_KEY_TYPE_NTOR
+    ASSERT_EQ byte [rel buf + 22], 0
+    ASSERT_EQ byte [rel buf + 23], TOR_HS_ONION_KEY_LEN_NTOR
+    ASSERT_EQ byte [rel buf + 56], 2
+    lea     rdi, [rel cookie]
+    lea     rsi, [rel buf]
+    mov     edx, TOR_HS_RENDEZVOUS_COOKIE_LEN
+    call    _mem_eq
+    ASSERT eax
+    lea     rdi, [rel onion_key]
+    lea     rsi, [rel buf + 24]
+    mov     edx, TOR_HS_ONION_KEY_LEN_NTOR
+    call    _mem_eq
+    ASSERT eax
+    lea     rdi, [rel linkspecs]
+    lea     rsi, [rel buf + TOR_HS_INTRODUCE1_PLAINTEXT_BASE_LEN]
+    mov     edx, 30
+    call    _mem_eq
+    ASSERT eax
+
+    lea     rdi, [rel buf]
+    lea     rsi, [rel client_pk]
+    lea     rdx, [rel encrypted]
+    mov     ecx, 8
+    lea     r8, [rel intro_mac]
+    call    er_tor_hs_build_introduce1_encrypted
+    ASSERT_EQ eax, TOR_HS_CLIENT_PK_LEN + 8 + TOR_HS_INTRODUCE1_MAC_LEN
+    lea     rdi, [rel client_pk]
+    lea     rsi, [rel buf]
+    mov     edx, TOR_HS_CLIENT_PK_LEN
+    call    _mem_eq
+    ASSERT eax
+    lea     rdi, [rel encrypted]
+    lea     rsi, [rel buf + TOR_HS_CLIENT_PK_LEN]
+    mov     edx, 8
+    call    _mem_eq
+    ASSERT eax
+    lea     rdi, [rel intro_mac]
+    lea     rsi, [rel buf + TOR_HS_CLIENT_PK_LEN + 8]
+    mov     edx, TOR_HS_INTRODUCE1_MAC_LEN
     call    _mem_eq
     ASSERT eax
 

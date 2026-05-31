@@ -134,7 +134,7 @@ test "painter facade pushes scene commands" {
     var text_quads: usize = 0;
     var transitions: usize = 0;
     for (scene.written()) |command| switch (command) {
-        .rect => rects += 1,
+        .rect, .overlay_rect => rects += 1,
         .drag_source => drag_sources += 1,
         .drop_target => drop_targets += 1,
         .icon_quad => icon_quads += 1,

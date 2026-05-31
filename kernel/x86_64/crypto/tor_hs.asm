@@ -6,16 +6,203 @@
 %include "x86_64/crypto/tor_constants.inc"
 
 extern er_memcpy
+extern er_sha3_256
+extern er_shake256
 extern er_tor_send_relay
 extern er_tor_recv_relay
 
 SECTION .bss
 tor_hs_msg: resb TOR_HS_RELAY_DATA_MAX
+tor_hs_crypto_buf: resb TOR_HS_CRYPTO_BUF_MAX
 tor_hs_tmp_stream: resw 1
 tor_hs_tmp_cmd: resb 1
 tor_hs_tmp_len: resd 1
 
 SECTION .text
+
+_tor_hs_store_u64_be:
+    mov     rax, rsi
+    mov     [rdi + 7], al
+    shr     rax, 8
+    mov     [rdi + 6], al
+    shr     rax, 8
+    mov     [rdi + 5], al
+    shr     rax, 8
+    mov     [rdi + 4], al
+    shr     rax, 8
+    mov     [rdi + 3], al
+    shr     rax, 8
+    mov     [rdi + 2], al
+    shr     rax, 8
+    mov     [rdi + 1], al
+    shr     rax, 8
+    mov     [rdi], al
+    ret
+
+; er_tor_hs_mac32_sha3(out, tag, tag_len, key32, msg, msg_len)
+; Implements ntor-v3 MAC(k,msg,t) = SHA3_256(ENCAP(t)|ENCAP(k)|msg)
+; for a fixed 32-byte MAC key.
+global er_tor_hs_mac32_sha3
+er_fn er_tor_hs_mac32_sha3
+    push    rbx
+    push    rbp
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+    mov     rbx, rdi
+    mov     r12, rsi
+    mov     r13d, edx
+    mov     r14, rcx
+    mov     r15, r8
+    mov     ebp, r9d
+    test    rbx, rbx
+    jz      .fail
+    test    r12, r12
+    jz      .fail
+    test    r14, r14
+    jz      .fail
+    test    ebp, ebp
+    jz      .msg_ok
+    test    r15, r15
+    jz      .fail
+.msg_ok:
+    mov     eax, TOR_HS_ENCAP_LEN + TOR_HS_ENCAP_LEN + TOR_HS_MAC_KEY_LEN
+    add     eax, r13d
+    add     eax, ebp
+    cmp     eax, TOR_HS_CRYPTO_BUF_MAX
+    ja      .fail
+
+    lea     rdi, [rel tor_hs_crypto_buf]
+    mov     esi, r13d
+    call    _tor_hs_store_u64_be
+    lea     rdi, [rel tor_hs_crypto_buf + TOR_HS_ENCAP_LEN]
+    mov     rsi, r12
+    mov     edx, r13d
+    call    er_memcpy
+
+    mov     eax, r13d
+    add     eax, TOR_HS_ENCAP_LEN
+    lea     rdi, [rel tor_hs_crypto_buf + rax]
+    mov     esi, TOR_HS_MAC_KEY_LEN
+    call    _tor_hs_store_u64_be
+
+    mov     eax, r13d
+    add     eax, TOR_HS_ENCAP_LEN + TOR_HS_ENCAP_LEN
+    lea     rdi, [rel tor_hs_crypto_buf + rax]
+    mov     rsi, r14
+    mov     edx, TOR_HS_MAC_KEY_LEN
+    call    er_memcpy
+
+    test    ebp, ebp
+    jz      .hash
+    mov     eax, r13d
+    add     eax, TOR_HS_ENCAP_LEN + TOR_HS_ENCAP_LEN + TOR_HS_MAC_KEY_LEN
+    lea     rdi, [rel tor_hs_crypto_buf + rax]
+    mov     rsi, r15
+    mov     edx, ebp
+    call    er_memcpy
+
+.hash:
+    mov     esi, TOR_HS_ENCAP_LEN + TOR_HS_ENCAP_LEN + TOR_HS_MAC_KEY_LEN
+    add     esi, r13d
+    add     esi, ebp
+    lea     rdi, [rel tor_hs_crypto_buf]
+    mov     rdx, rbx
+    call    er_sha3_256
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbp
+    pop     rbx
+    er_ret
+.fail:
+    mov     eax, -1
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbp
+    pop     rbx
+    er_ret
+
+; er_tor_hs_kdf_sha3(out, out_len, tag, tag_len, msg, msg_len)
+; Implements ntor-v3 KDF(s,t) = SHAKE256(ENCAP(t)|s).
+global er_tor_hs_kdf_sha3
+er_fn er_tor_hs_kdf_sha3
+    push    rbx
+    push    rbp
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+    mov     rbx, rdi
+    mov     rbp, rsi
+    mov     r12, rdx
+    mov     r13d, ecx
+    mov     r14, r8
+    mov     r15d, r9d
+    test    rbp, rbp
+    jz      .ok_empty
+    test    rbx, rbx
+    jz      .fail
+    test    r12, r12
+    jz      .fail
+    test    r15d, r15d
+    jz      .msg_ok
+    test    r14, r14
+    jz      .fail
+.msg_ok:
+    mov     eax, TOR_HS_ENCAP_LEN
+    add     eax, r13d
+    add     eax, r15d
+    cmp     eax, TOR_HS_CRYPTO_BUF_MAX
+    ja      .fail
+
+    lea     rdi, [rel tor_hs_crypto_buf]
+    mov     esi, r13d
+    call    _tor_hs_store_u64_be
+    lea     rdi, [rel tor_hs_crypto_buf + TOR_HS_ENCAP_LEN]
+    mov     rsi, r12
+    mov     edx, r13d
+    call    er_memcpy
+    test    r15d, r15d
+    jz      .shake
+    mov     eax, r13d
+    add     eax, TOR_HS_ENCAP_LEN
+    lea     rdi, [rel tor_hs_crypto_buf + rax]
+    mov     rsi, r14
+    mov     edx, r15d
+    call    er_memcpy
+.shake:
+    mov     esi, TOR_HS_ENCAP_LEN
+    add     esi, r13d
+    add     esi, r15d
+    lea     rdi, [rel tor_hs_crypto_buf]
+    mov     rdx, rbx
+    mov     rcx, rbp
+    call    er_shake256
+    jmp     .done
+.ok_empty:
+    xor     eax, eax
+.done:
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbp
+    pop     rbx
+    er_ret
+.fail:
+    mov     eax, -1
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbp
+    pop     rbx
+    er_ret
 
 ; er_tor_hs_build_establish_rendezvous(out, cookie)
 ; returns eax = body length, or -1.
@@ -183,6 +370,136 @@ er_fn er_tor_hs_build_introduce1_prefix
     er_ret
 .fail:
     mov     eax, -1
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+
+; er_tor_hs_build_introduce1_plaintext(out, cookie, onion_key, nspec, linkspecs, linkspecs_len)
+; Builds decrypted INTRODUCE1 plaintext with no encrypted extensions or padding.
+; returns eax = plaintext length, or -1.
+global er_tor_hs_build_introduce1_plaintext
+er_fn er_tor_hs_build_introduce1_plaintext
+    push    rbx
+    push    rbp
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+    mov     rbx, rdi
+    mov     r12, rsi
+    mov     r13, rdx
+    mov     ebp, ecx
+    mov     r14, r8
+    mov     r15d, r9d
+    test    rbx, rbx
+    jz      .fail
+    test    r12, r12
+    jz      .fail
+    test    r13, r13
+    jz      .fail
+    cmp     ebp, 255
+    ja      .fail
+    cmp     r15d, TOR_HS_INTRODUCE1_MAX_LEN - TOR_HS_INTRODUCE1_PLAINTEXT_BASE_LEN
+    ja      .fail
+    test    r15d, r15d
+    jz      .copy_cookie
+    test    r14, r14
+    jz      .fail
+.copy_cookie:
+    mov     rdi, rbx
+    mov     rsi, r12
+    mov     edx, TOR_HS_RENDEZVOUS_COOKIE_LEN
+    call    er_memcpy
+    mov     byte [rbx + 20], 0
+    mov     byte [rbx + 21], TOR_HS_ONION_KEY_TYPE_NTOR
+    mov     byte [rbx + 22], 0
+    mov     byte [rbx + 23], TOR_HS_ONION_KEY_LEN_NTOR
+    lea     rdi, [rbx + 24]
+    mov     rsi, r13
+    mov     edx, TOR_HS_ONION_KEY_LEN_NTOR
+    call    er_memcpy
+    mov     [rbx + 56], bpl
+    test    r15d, r15d
+    jz      .done
+    lea     rdi, [rbx + TOR_HS_INTRODUCE1_PLAINTEXT_BASE_LEN]
+    mov     rsi, r14
+    mov     edx, r15d
+    call    er_memcpy
+.done:
+    lea     eax, [r15d + TOR_HS_INTRODUCE1_PLAINTEXT_BASE_LEN]
+    er_ok
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbp
+    pop     rbx
+    er_ret
+.fail:
+    mov     eax, -1
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbp
+    pop     rbx
+    er_ret
+
+; er_tor_hs_build_introduce1_encrypted(out, client_pk, encrypted_data, encrypted_len, mac)
+; Serializes the hs-ntor ENCRYPTED field: CLIENT_PK | ENCRYPTED_DATA | MAC.
+; returns eax = encrypted field length, or -1.
+global er_tor_hs_build_introduce1_encrypted
+er_fn er_tor_hs_build_introduce1_encrypted
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+    mov     rbx, rdi
+    mov     r12, rsi
+    mov     r13, rdx
+    mov     r14d, ecx
+    mov     r15, r8
+    test    rbx, rbx
+    jz      .fail
+    test    r12, r12
+    jz      .fail
+    test    r15, r15
+    jz      .fail
+    cmp     r14d, TOR_HS_INTRODUCE1_MAX_LEN - TOR_HS_CLIENT_PK_LEN - TOR_HS_INTRODUCE1_MAC_LEN
+    ja      .fail
+    test    r14d, r14d
+    jz      .copy_client_pk
+    test    r13, r13
+    jz      .fail
+.copy_client_pk:
+    mov     rsi, r12
+    mov     edx, TOR_HS_CLIENT_PK_LEN
+    call    er_memcpy
+    test    r14d, r14d
+    jz      .copy_mac
+    lea     rdi, [rbx + TOR_HS_CLIENT_PK_LEN]
+    mov     rsi, r13
+    mov     edx, r14d
+    call    er_memcpy
+.copy_mac:
+    lea     rdi, [rbx + TOR_HS_CLIENT_PK_LEN + r14]
+    mov     rsi, r15
+    mov     edx, TOR_HS_INTRODUCE1_MAC_LEN
+    call    er_memcpy
+    lea     eax, [r14d + TOR_HS_CLIENT_PK_LEN + TOR_HS_INTRODUCE1_MAC_LEN]
+    er_ok
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+.fail:
+    mov     eax, -1
+    pop     r15
+    pop     r14
     pop     r13
     pop     r12
     pop     rbx

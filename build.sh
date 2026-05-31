@@ -94,6 +94,7 @@ KERNEL_ASM_SRCS="
 	net/tcp.asm
 	net/http.asm
 	crypto/sha256.asm
+	crypto/sha3.asm
 	crypto/curve25519.asm
 	crypto/tor_ntor.asm
 	crypto/tor_aes.asm
@@ -328,6 +329,7 @@ cmd_test() {
 	cmd_test_render_ir
 	cmd_test_fe_mul
 	cmd_test_spi_flash
+	cmd_test_sha3
 	cmd_test_tls
 	cmd_test_tor
 	cmd_test_tor_hs
@@ -541,6 +543,10 @@ cmd_test_tls() {
 	"$bin"
 }
 
+cmd_test_sha3() {
+	build_test "test_sha3_self" "${TEST_DIR}/test_sha3_self.asm" "crypto/sha3"
+}
+
 cmd_test_tor() {
 	local name="test_tor_self"
 	local src="${TEST_DIR}/${name}.asm"
@@ -559,7 +565,7 @@ cmd_test_tor() {
 }
 
 cmd_test_tor_hs() {
-	build_test "test_tor_hs_self" "${TEST_DIR}/test_tor_hs_self.asm" "crypto/tor_hs" "rt/runtime"
+	build_test "test_tor_hs_self" "${TEST_DIR}/test_tor_hs_self.asm" "crypto/tor_hs" "crypto/sha3" "rt/runtime"
 }
 
 cmd_test_local_route() {
@@ -791,6 +797,7 @@ EdgeRun build targets:
   test-render-ir      Run render IR test (self-hosted ASM runner)
   test-fe-mul         Run _fe_mul field multiplication test (self-hosted ASM)
   test-spi-flash      Run SPI flash compile-check test (self-hosted ASM)
+  test-sha3           Run SHA3-256 known-answer tests (self-hosted ASM)
   test-tls            Run TLS ClientHello self-test (self-hosted ASM)
   test-tor            Run Tor AES-128-CTR KAT test (self-hosted ASM)
   test-tor-hs         Run Tor onion-service message tests (self-hosted ASM)
@@ -837,6 +844,7 @@ case "${1:-help}" in
 	test-render-ir) cmd_test_render_ir ;;
 	test-fe-mul)    cmd_test_fe_mul ;;
 	test-spi-flash) cmd_test_spi_flash ;;
+	test-sha3)      cmd_test_sha3 ;;
 	test-tls)       cmd_test_tls ;;
 	test-tor)       cmd_test_tor ;;
 	test-tor-hs)    cmd_test_tor_hs ;;

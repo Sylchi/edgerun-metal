@@ -26,6 +26,7 @@ var icon_line_vertex_len: usize = 0;
 var text_vertex_len: usize = 0;
 var image_vertex_len: usize = 0;
 var overlay_rect_len: usize = 0;
+var overlay_text_vertex_len: usize = 0;
 var overlay_icon_vertex_len: usize = 0;
 var overlay_icon_line_vertex_len: usize = 0;
 
@@ -75,6 +76,7 @@ pub fn rasterize(
     text_vertex_len = image_filled;
     image_vertex_len = 0;
     overlay_rect_len = 0;
+    overlay_text_vertex_len = 0;
     overlay_icon_vertex_len = 0;
     overlay_icon_line_vertex_len = 0;
 
@@ -87,6 +89,8 @@ pub fn rasterize(
         .icon_line_vertex_len = &icon_line_vertex_len,
         .text_vertices = text_vertices,
         .text_vertex_len = &text_vertex_len,
+        .overlay_text_vertices = &[_]f32{},
+        .overlay_text_vertex_len = &overlay_text_vertex_len,
         .image_vertices = &[_]f32{},
         .image_vertex_len = &image_vertex_len,
         .overlay_rects = &[_]f32{},

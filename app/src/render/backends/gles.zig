@@ -108,6 +108,7 @@ pub fn renderFrameToViewport(gl: State, logical_width: i32, logical_height: i32,
     try drawImage(gl, logical_width, logical_height, buffers.liveImageVertices());
     try drawIconLines(gl, logical_width, logical_height, buffers.liveIconLineVertices());
     try drawRects(gl, logical_width, logical_height, scale, buffers.liveOverlayRects());
+    try drawText(gl, logical_width, logical_height, buffers.liveOverlayTextVertices());
     try drawIconLines(gl, logical_width, logical_height, buffers.liveOverlayIconLineVertices());
 }
 

@@ -630,11 +630,14 @@ pub fn easingSample(easing: Easing, value: f32) f32 {
 
 pub const Command = union(enum) {
     rect: struct { bounds: Rect, color: Color, color2: Color = .clear, mode: RectMode = .fill, radius: f32 = 0.0, shadow: f32 = 0.0 },
+    overlay_rect: struct { bounds: Rect, color: Color, color2: Color = .clear, mode: RectMode = .fill, radius: f32 = 0.0, shadow: f32 = 0.0 },
     border: struct { bounds: Rect, color: Color },
     text: struct { origin: Rect, value: []const u8, color: Color, alignment: TextAlign = .start, weight: FontWeight = .regular },
+    overlay_text: struct { origin: Rect, value: []const u8, color: Color, alignment: TextAlign = .start, weight: FontWeight = .regular },
     drag_source: DragSource,
     drop_target: DropTarget,
     icon_quad: IconQuad,
+    overlay_icon_quad: IconQuad,
     svg_quad: SvgQuad,
     text_quad: Quad,
     image_quad: Quad,
@@ -683,6 +686,14 @@ pub const Scene = struct {
         try self.pushRectPair(bounds, top_color, bottom_color, .linear_gradient, radius, 0.0);
     }
 
+    pub fn pushOverlayRect(self: *Scene, bounds: Rect, color: Color, mode: RectMode, radius: f32, shadow: f32) RenderError!void {
+        try self.pushOverlayRectPair(bounds, color, .clear, mode, radius, shadow);
+    }
+
+    pub fn pushOverlayGradientRect(self: *Scene, bounds: Rect, top_color: Color, bottom_color: Color, radius: f32) RenderError!void {
+        try self.pushOverlayRectPair(bounds, top_color, bottom_color, .linear_gradient, radius, 0.0);
+    }
+
     pub fn pushPieSlice(self: *Scene, bounds: Rect, color: Color, start_turn: f32, end_turn: f32) RenderError!void {
         if (!geometry.finite(start_turn) or !geometry.finite(end_turn)) return;
         if (end_turn <= start_turn) return;
@@ -691,15 +702,25 @@ pub const Scene = struct {
     }
 
     fn pushRectPair(self: *Scene, bounds: Rect, color: Color, color2: Color, mode: RectMode, radius: f32, shadow: f32) RenderError!void {
+        const normalized = normalizePair(self.*, bounds, radius, shadow) orelse return;
+        try self.push(.{ .rect = .{ .bounds = normalized.bounds, .color = color, .color2 = color2, .mode = mode, .radius = normalized.radius, .shadow = normalized.shadow } });
+    }
+
+    fn pushOverlayRectPair(self: *Scene, bounds: Rect, color: Color, color2: Color, mode: RectMode, radius: f32, shadow: f32) RenderError!void {
+        const normalized = normalizePair(self.*, bounds, radius, shadow) orelse return;
+        try self.push(.{ .overlay_rect = .{ .bounds = normalized.bounds, .color = color, .color2 = color2, .mode = mode, .radius = normalized.radius, .shadow = normalized.shadow } });
+    }
+
+    fn normalizePair(self: Scene, bounds: Rect, radius: f32, shadow: f32) ?struct { bounds: Rect, radius: f32, shadow: f32 } {
         var normalized_bounds = bounds;
         var normalized_radius = radius;
         var normalized_shadow = shadow;
-        if (!normalizeRect(&normalized_bounds, &normalized_radius, &normalized_shadow)) return;
+        if (!normalizeRect(&normalized_bounds, &normalized_radius, &normalized_shadow)) return null;
         if (self.clipRect(normalized_bounds)) |clipped| {
             normalized_bounds = clipped;
             normalized_radius = @min(normalized_radius, @min(clipped.w * 0.5, clipped.h * 0.5));
-        } else return;
-        try self.push(.{ .rect = .{ .bounds = normalized_bounds, .color = color, .color2 = color2, .mode = mode, .radius = normalized_radius, .shadow = normalized_shadow } });
+        } else return null;
+        return .{ .bounds = normalized_bounds, .radius = normalized_radius, .shadow = normalized_shadow };
     }
 
     pub fn pushDragSource(self: *Scene, source: DragSource) RenderError!void {
@@ -718,6 +739,11 @@ pub const Scene = struct {
     pub fn pushIconQuad(self: *Scene, quad: IconQuad) RenderError!void {
         if (quad.icon_id == 0) return;
         if (self.clipRect(quad.bounds)) |clipped| try self.push(.{ .icon_quad = .{ .bounds = clipped, .icon_id = quad.icon_id, .color = quad.color } });
+    }
+
+    pub fn pushOverlayIconQuad(self: *Scene, quad: IconQuad) RenderError!void {
+        if (quad.icon_id == 0) return;
+        if (self.clipRect(quad.bounds)) |clipped| try self.push(.{ .overlay_icon_quad = .{ .bounds = clipped, .icon_id = quad.icon_id, .color = quad.color } });
     }
 
     pub fn pushSvgQuad(self: *Scene, quad: SvgQuad) RenderError!void {
@@ -740,6 +766,15 @@ pub const Scene = struct {
     pub fn pushBoldText(self: *Scene, origin: Rect, value: []const u8, color: Color) RenderError!void {
         try self.pushAlignedTextWeight(origin, value, color, .start, .bold);
     }
+    pub fn pushOverlayText(self: *Scene, origin: Rect, value: []const u8, color: Color) RenderError!void {
+        try self.pushAlignedOverlayTextWeight(origin, value, color, .start, .regular);
+    }
+    pub fn pushOverlayStrongText(self: *Scene, origin: Rect, value: []const u8, color: Color) RenderError!void {
+        try self.pushAlignedOverlayTextWeight(origin, value, color, .start, .semibold);
+    }
+    pub fn pushOverlayBoldText(self: *Scene, origin: Rect, value: []const u8, color: Color) RenderError!void {
+        try self.pushAlignedOverlayTextWeight(origin, value, color, .start, .bold);
+    }
     pub fn pushAlignedText(self: *Scene, origin: Rect, value: []const u8, color: Color, alignment: TextAlign) RenderError!void {
         try self.pushAlignedTextWeight(origin, value, color, alignment, .regular);
     }
@@ -747,6 +782,11 @@ pub const Scene = struct {
     pub fn pushAlignedTextWeight(self: *Scene, origin: Rect, value: []const u8, color: Color, alignment: TextAlign, weight: FontWeight) RenderError!void {
         if (value.len == 0) return;
         if (self.clipRect(origin)) |clipped| try self.push(.{ .text = .{ .origin = clipped, .value = value, .color = color, .alignment = alignment, .weight = weight } });
+    }
+
+    pub fn pushAlignedOverlayTextWeight(self: *Scene, origin: Rect, value: []const u8, color: Color, alignment: TextAlign, weight: FontWeight) RenderError!void {
+        if (value.len == 0) return;
+        if (self.clipRect(origin)) |clipped| try self.push(.{ .overlay_text = .{ .origin = clipped, .value = value, .color = color, .alignment = alignment, .weight = weight } });
     }
 
     pub fn pushWrappedText(self: *Scene, bounds: Rect, value: []const u8, color: Color, wrap: TextWrap) RenderError!void {
@@ -784,13 +824,13 @@ pub const Scene = struct {
     pub fn stats(self: Scene) Stats {
         var out = Stats{ .clips = self.clips.len };
         for (self.written()) |command| switch (command) {
-            .rect, .border => out.rects += 1,
+            .rect, .overlay_rect, .border => out.rects += 1,
             .drag_source => out.drag_sources += 1,
             .drop_target => out.drop_targets += 1,
             .transition => out.transitions += 1,
-            .icon_quad => out.icon_quads += 1,
+            .icon_quad, .overlay_icon_quad => out.icon_quads += 1,
             .svg_quad => out.svg_quads += 1,
-            .text_quad, .text => out.text_quads += 1,
+            .text_quad, .text, .overlay_text => out.text_quads += 1,
             .image_quad => out.image_quads += 1,
         };
         return out;
@@ -800,9 +840,11 @@ pub const Scene = struct {
         const alpha = geometry.clamp(opacity, 0.0, 1.0);
         for (self.commands.mutableSlice()[mark.commands..]) |*command| switch (command.*) {
             .rect => |*rect_cmd| rect_cmd.color.a = scaleAlpha(rect_cmd.color.a, alpha),
+            .overlay_rect => |*rect_cmd| rect_cmd.color.a = scaleAlpha(rect_cmd.color.a, alpha),
             .border => |*border| border.color.a = scaleAlpha(border.color.a, alpha),
             .text => |*text_cmd| text_cmd.color.a = scaleAlpha(text_cmd.color.a, alpha),
-            .icon_quad => |*quad| quad.color.a = scaleAlpha(quad.color.a, alpha),
+            .overlay_text => |*text_cmd| text_cmd.color.a = scaleAlpha(text_cmd.color.a, alpha),
+            .icon_quad, .overlay_icon_quad => |*quad| quad.color.a = scaleAlpha(quad.color.a, alpha),
             .svg_quad => |*quad| quad.color.a = scaleAlpha(quad.color.a, alpha),
             .text_quad => |*quad| quad.color.a = scaleAlpha(quad.color.a, alpha),
             .image_quad => |*quad| quad.color.a = scaleAlpha(quad.color.a, alpha),
@@ -814,16 +856,29 @@ pub const Scene = struct {
         if (!geometry.finite(dx) or !geometry.finite(dy)) return;
         for (self.commands.mutableSlice()[mark.commands..]) |*command| switch (command.*) {
             .rect => |*rect_cmd| translateRect(&rect_cmd.bounds, dx, dy),
+            .overlay_rect => |*rect_cmd| translateRect(&rect_cmd.bounds, dx, dy),
             .border => |*border| translateRect(&border.bounds, dx, dy),
             .text => |*text_cmd| translateRect(&text_cmd.origin, dx, dy),
+            .overlay_text => |*text_cmd| translateRect(&text_cmd.origin, dx, dy),
             .drag_source => |*source| translateRect(&source.bounds, dx, dy),
             .drop_target => |*target| translateRect(&target.bounds, dx, dy),
-            .icon_quad => |*quad| translateRect(&quad.bounds, dx, dy),
+            .icon_quad, .overlay_icon_quad => |*quad| translateRect(&quad.bounds, dx, dy),
             .svg_quad => |*quad| translateRect(&quad.bounds, dx, dy),
             .text_quad => |*quad| translateRect(&quad.bounds, dx, dy),
             .image_quad => |*quad| translateRect(&quad.bounds, dx, dy),
             else => {},
         };
+    }
+
+    pub fn promoteSinceToOverlay(self: *Scene, mark: Cursor) void {
+        for (self.commands.mutableSlice()[mark.commands..]) |*command| {
+            command.* = switch (command.*) {
+                .rect => |rect| .{ .overlay_rect = .{ .bounds = rect.bounds, .color = rect.color, .color2 = rect.color2, .mode = rect.mode, .radius = rect.radius, .shadow = rect.shadow } },
+                .text => |text| .{ .overlay_text = .{ .origin = text.origin, .value = text.value, .color = text.color, .alignment = text.alignment, .weight = text.weight } },
+                .icon_quad => |quad| .{ .overlay_icon_quad = .{ .bounds = quad.bounds, .icon_id = quad.icon_id, .color = quad.color } },
+                else => command.*,
+            };
+        }
     }
 
     fn currentClip(self: Scene) ?Rect {

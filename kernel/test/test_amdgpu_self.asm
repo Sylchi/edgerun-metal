@@ -88,17 +88,17 @@ _start:
     mov     eax, [rel bar0 + DCN_HUBP0_DCHUBP_CNTL]
     ASSERT_EQ eax, 1
     mov     eax, [rel bar0 + DCN_OTG0_V_TOTAL]
-    ASSERT_EQ eax, 1124
+    ASSERT_EQ eax, 1548
     mov     eax, [rel bar0 + DCN_OTG0_H_TOTAL]
-    ASSERT_EQ eax, 2199
+    ASSERT_EQ eax, 2535
     mov     eax, [rel bar0 + DCN_OTG0_H_SYNC_A]
-    ASSERT_EQ eax, (1999 << 16) | 1968
+    ASSERT_EQ eax, (2335 << 16) | 2304
     mov     eax, [rel bar0 + DCN_OTG0_V_SYNC_A]
-    ASSERT_EQ eax, (1087 << 16) | 1083
+    ASSERT_EQ eax, (1512 << 16) | 1507
     mov     eax, [rel bar0 + DCN_OTG0_H_BLANK_START_END]
-    ASSERT_EQ eax, (1919 << 16) | 128
+    ASSERT_EQ eax, (2255 << 16) | 280
     mov     eax, [rel bar0 + DCN_OTG0_V_BLANK_START_END]
-    ASSERT_EQ eax, (1079 << 16) | 4
+    ASSERT_EQ eax, (1503 << 16) | 45
     mov     eax, [rel bar0 + DCN_OTG0_INTERLACE_CONTROL]
     ASSERT_EQ eax, 0
     mov     eax, [rel bar0 + DCN_OTG0_MASTER_EN]
@@ -106,10 +106,17 @@ _start:
 
     mov     eax, [rel fb]
     ASSERT_EQ eax, 0x00ffffff
-    mov     eax, [rel fb + 240 * 4]
+    mov     eax, [rel fb + 282 * 4]
     ASSERT_EQ eax, 0x0000ffff
-    mov     eax, [rel fb + 1919 * 4]
+    mov     eax, [rel fb + 2255 * 4]
     ASSERT_EQ eax, 0
+
+    lea     rdi, [rel bar0]
+    mov     esi, AMDGPU_MODE_EDP_NATIVE_2256X1504_60
+    call    er_amdgpu_program_otg0_mode
+    ASSERT_EQ eax, 0
+    mov     eax, [rel bar0 + DCN_OTG0_H_TOTAL]
+    ASSERT_EQ eax, 2535
 
     lea     rdi, [rel bar0]
     mov     esi, AMDGPU_MODE_720P60

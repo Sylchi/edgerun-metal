@@ -159,6 +159,9 @@ pub const State = struct {
     selected_component: ?interaction.Region = null,
     context_open: bool = false,
     editor_open: bool = false,
+    context_open_frame: u64 = 0,
+    editor_open_frame: u64 = 0,
+    selected_frame: u64 = 0,
     context_x: f32 = 0.0,
     context_y: f32 = 0.0,
     accent_index: u8 = 0,
@@ -175,6 +178,7 @@ pub const State = struct {
     const brightness_slider_id: u32 = 90_009;
     const kbd_slider_id: u32 = 90_010;
     const refresh_interval_frames: u64 = 600;
+    const transition_frames: u64 = 14;
     const select_header_id: u32 = 91_001;
     const select_controls_id: u32 = 91_002;
     const select_activity_id: u32 = 91_003;
@@ -191,12 +195,13 @@ pub const State = struct {
 
     pub fn tick(self: *State) bool {
         self.frame += 1;
-        if (!self.auto_refresh) return false;
+        var needs_repaint = self.animationActive();
+        if (!self.auto_refresh) return needs_repaint;
         if (self.frame - self.last_refresh_frame >= refresh_interval_frames) {
             self.refresh();
-            return true;
+            needs_repaint = true;
         }
-        return false;
+        return needs_repaint;
     }
 
     pub fn activate(self: *State, hit: ?interaction.Region, drag: ?ui_runtime.DragValue) void {
@@ -214,6 +219,7 @@ pub const State = struct {
             kbd_slider_id => if (hit) |region| self.setBacklightUnit(.keyboard, region, drag),
             context_open_editor_id => {
                 self.editor_open = true;
+                self.editor_open_frame = self.frame;
                 self.context_open = false;
             },
             context_close_id, editor_close_id => {
@@ -234,10 +240,13 @@ pub const State = struct {
         };
         if (isEditorControl(region.id)) return;
         self.selected_component = region;
+        self.selected_frame = self.frame;
         self.context_x = x;
         self.context_y = y;
         self.context_open = true;
         self.editor_open = true;
+        self.context_open_frame = self.frame;
+        self.editor_open_frame = self.frame;
     }
 
     pub fn refresh(self: *State) void {
@@ -560,8 +569,9 @@ pub const State = struct {
     fn renderSelectionOverlay(self: *State, scene: *ui.Scene, bounds: ui.Rect) !void {
         _ = bounds;
         const selected = self.selected_component orelse return;
-        if (self.selected_emphasis) try scene.pushRect(selected.bounds, hardware_selection_fill, .fill, 12.0, 0.0);
-        try scene.pushRect(selected.bounds.insetUniform(-2.0), hardware_selection, .border, 14.0, 0.0);
+        const progress = self.selectionProgress();
+        if (self.selected_emphasis) try scene.pushOverlayRect(selected.bounds, scaleAlpha(hardware_selection_fill, progress), .fill, 12.0, 0.0);
+        try scene.pushOverlayRect(selected.bounds.insetUniform(-2.0), scaleAlpha(hardware_selection, progress), .border, 14.0, 0.0);
     }
 
     fn renderContextAndEditor(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
@@ -570,6 +580,7 @@ pub const State = struct {
     }
 
     fn renderContextMenu(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
+        const mark = scene.cursor();
         const menu_w: f32 = 220.0;
         const menu_h: f32 = 118.0;
         const x = std.math.clamp(self.context_x, bounds.x + 8.0, bounds.x + bounds.w - menu_w - 8.0);
@@ -582,9 +593,14 @@ pub const State = struct {
         try scene.pushText(ui.Rect.init(menu.x + 14.0, menu.y + 36.0, menu.w - 28.0, 16.0), "Context menu", options.style.muted);
         try (Component{ .button = .{ .id = context_open_editor_id, .label = "Open editor", .variant = .primary } }).renderInteractive(scene, collector, ui.Rect.init(menu.x + 12.0, menu.y + 66.0, 118.0, 34.0), options);
         try (Component{ .button = .{ .id = context_close_id, .label = "Close", .variant = .outline } }).renderInteractive(scene, collector, ui.Rect.init(menu.x + 138.0, menu.y + 66.0, 70.0, 34.0), options);
+        const progress = self.contextProgress();
+        scene.applyOpacitySince(mark, progress);
+        scene.translateSince(mark, 0.0, (1.0 - progress) * 8.0);
+        scene.promoteSinceToOverlay(mark);
     }
 
     fn renderEditor(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
+        const mark = scene.cursor();
         const panel_w = @min(360.0, @max(300.0, bounds.w * 0.24));
         const panel = ui.Rect.init(bounds.x + bounds.w - panel_w - 18.0, bounds.y + 18.0, panel_w, @min(398.0, bounds.h - 36.0));
         try scene.pushRect(panel.insetUniform(-1.0), ui.Color{ .r = 0, .g = 0, .b = 0, .a = 82 }, .shadow, 16.0, 8.0);
@@ -617,6 +633,10 @@ pub const State = struct {
         try scene.pushRect(ui.Rect.init(inner.x, accent_y + 106.0, inner.w, 1.0), subtle_divider, .fill, 0.0, 0.0);
         try (Component{ .switch_control = .{ .id = editor_emphasis_switch_id, .label = "Selected emphasis", .checked = self.selected_emphasis } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, accent_y + 122.0, inner.w, 32.0), options);
         try (Component{ .switch_control = .{ .id = compact_rows_switch_id, .label = "Compact inventory", .checked = self.compact_rows } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, accent_y + 162.0, inner.w, 32.0), options);
+        const progress = self.editorProgress();
+        scene.applyOpacitySince(mark, progress);
+        scene.translateSince(mark, (1.0 - progress) * 18.0, 0.0);
+        scene.promoteSinceToOverlay(mark);
     }
 
     fn adjustBacklight(self: *State, kind: BacklightKind, direction: i32) void {
@@ -646,6 +666,22 @@ pub const State = struct {
         const count: i32 = 3;
         const current: i32 = @intCast(self.accent_index);
         self.accent_index = @intCast(@mod(current + direction, count));
+    }
+
+    fn animationActive(self: *const State) bool {
+        return self.contextProgress() < 1.0 or self.editorProgress() < 1.0 or self.selectionProgress() < 1.0;
+    }
+
+    fn contextProgress(self: *const State) f32 {
+        return if (self.context_open) transitionProgress(self.frame, self.context_open_frame) else 1.0;
+    }
+
+    fn editorProgress(self: *const State) f32 {
+        return if (self.editor_open) transitionProgress(self.frame, self.editor_open_frame) else 1.0;
+    }
+
+    fn selectionProgress(self: *const State) f32 {
+        return if (self.selected_component != null) transitionProgress(self.frame, self.selected_frame) else 1.0;
     }
 
     fn setStatus(self: *State, value: []const u8) void {
@@ -747,6 +783,18 @@ fn accentName(index: u8) []const u8 {
         1 => "Instrument blue",
         else => "Warm amber",
     };
+}
+
+fn transitionProgress(frame: u64, opened_at: u64) f32 {
+    const elapsed = if (frame >= opened_at) frame - opened_at + 1 else 1;
+    const unit = @min(@as(f32, 1.0), @as(f32, @floatFromInt(elapsed)) / @as(f32, @floatFromInt(State.transition_frames)));
+    return ui.easingSample(.ease_out, unit);
+}
+
+fn scaleAlpha(color: ui.Color, unit: f32) ui.Color {
+    var out = color;
+    out.a = @intFromFloat(@round(@as(f32, @floatFromInt(color.a)) * ui.clampUnit(unit)));
+    return out;
 }
 
 fn isEditorControl(id: u32) bool {

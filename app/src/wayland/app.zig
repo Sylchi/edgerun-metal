@@ -311,7 +311,7 @@ fn hardwareRenderOptions(state: AppState) @import("../ui/component_common.zig").
 
 pub fn hasRectColor(commands: []const ui.Command, color: ui.Color) bool {
     for (commands) |command| switch (command) {
-        .rect => |rect| if (std.meta.eql(rect.color, color)) return true,
+        .rect, .overlay_rect => |rect| if (std.meta.eql(rect.color, color)) return true,
         else => {},
     };
     return false;

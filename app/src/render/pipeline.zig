@@ -41,9 +41,11 @@ fn packPreparedScene(buffers: renderer_ir.Buffers, commands: []const ui.Command)
 fn packPreparedRange(buffers: renderer_ir.Buffers, commands: []const ui.Command, layer: renderer_ir.Layer) renderer_ir.Error!void {
     for (commands) |command| switch (command) {
         .rect => |rect| try renderer_ir.pushRect(buffers, layer, rect.bounds, rect.color, rect.color2, rect.radius, rect.shadow, renderer_ir.rectModeCode(rect.mode)),
+        .overlay_rect => |rect| try renderer_ir.pushRect(buffers, .overlay, rect.bounds, rect.color, rect.color2, rect.radius, rect.shadow, renderer_ir.rectModeCode(rect.mode)),
         .border => |border| try renderer_ir.pushRect(buffers, layer, border.bounds, border.color, .clear, 0, 0, renderer_ir.rectModeCode(.border)),
-        .text => {},
+        .text, .overlay_text => {},
         .icon_quad => |quad| try renderer_ir.pushSvgQuad(buffers, layer, quad),
+        .overlay_icon_quad => |quad| try renderer_ir.pushSvgQuad(buffers, .overlay, quad),
         .svg_quad => |quad| try renderer_ir.pushSvgQuad(buffers, layer, quad),
         .image_quad => |quad| if (layer == .base) try renderer_ir.pushImage(buffers, quad),
         .drag_source, .drop_target, .text_quad, .transition => {},
@@ -108,8 +110,14 @@ pub fn packBufferIconLines(buffers: renderer_ir.Buffers) icon_line_buffer.Error!
 pub fn packTextQuads(buffers: renderer_ir.Buffers, commands: []const ui.Command) renderer_ir.Error!void {
     for (commands) |command| switch (command) {
         .text_quad => |quad| try renderer_ir.pushImage(buffers, quad),
-        .text => |text_command| {
-            if (text_command.value.len == 0) continue;
+        .text => |text_command| try packTextCommand(buffers, text_command, false),
+        .overlay_text => |text_command| try packTextCommand(buffers, text_command, true),
+        else => {},
+    };
+}
+
+fn packTextCommand(buffers: renderer_ir.Buffers, text_command: anytype, overlay: bool) renderer_ir.Error!void {
+            if (text_command.value.len == 0) return;
             const px: u8 = @intFromFloat(@ceil(text_command.origin.h));
             const font_body = font_vector.body(fontWeightForText(text_command.weight));
             const font_scale = @as(f32, @floatFromInt(px)) / @as(f32, @floatFromInt(font_body.metrics.units_per_em));
@@ -145,15 +153,16 @@ pub fn packTextQuads(buffers: renderer_ir.Buffers, commands: []const ui.Command)
                     continue;
                 };
                 if (glyph_value.commands.len != 0) {
-                    try renderer_ir.pushTextGlyph(buffers, pen_x, baseline, @floatFromInt(px), codepoint, text_command.weight, text_command.color);
+                    if (overlay) {
+                        try renderer_ir.pushOverlayTextGlyph(buffers, pen_x, baseline, @floatFromInt(px), codepoint, text_command.weight, text_command.color);
+                    } else {
+                        try renderer_ir.pushTextGlyph(buffers, pen_x, baseline, @floatFromInt(px), codepoint, text_command.weight, text_command.color);
+                    }
                 }
                 pen_x += glyph_value.advance * font_scale;
                 previous = codepoint;
                 if (pen_x > text_command.origin.x + text_command.origin.w) break;
             }
-        },
-        else => {},
-    };
 }
 
 fn vectorTextWidth(font_body: font_vector.Body, value: []const u8, scale: f32) f32 {
@@ -228,6 +237,21 @@ test "render pipeline packs vector glyphs with snapped small text baseline" {
     try std.testing.expectApproxEqAbs(@round(11.65 + font_body.metrics.ascender * font_scale), glyph.baseline_y, 0.0001);
     try std.testing.expectEqual(@as(u21, 'A'), glyph.codepoint);
     try std.testing.expectEqual(ui.FontWeight.regular, glyph.weight);
+}
+
+test "render pipeline packs overlay text into overlay buffer" {
+    var font_atlas: renderer_font_atlas.Atlas = undefined;
+    font_atlas.initUtf8();
+    var commands: [2]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+    try scene.pushText(ui.Rect.init(0, 0, 80, 16), "Base", .text);
+    try scene.pushOverlayText(ui.Rect.init(0, 20, 80, 16), "Editor", .text);
+
+    var storage = renderer_ir.FixedBuffers(0, 0, renderer_ir.textured_quad_vertex_count, 1, 0, 0, 0){};
+    try packScene(storage.buffers(), &font_atlas, scene.written());
+
+    try std.testing.expect(storage.text_vertex_len != 0);
+    try std.testing.expect(storage.overlay_text_vertex_len != 0);
 }
 
 test "render pipeline preserves subpixel placement for large text" {
