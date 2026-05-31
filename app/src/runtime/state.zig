@@ -21,7 +21,7 @@ const app_frame = @import("../route/frame.zig");
 const app_images = @import("../app_images.zig");
 pub const app_input_event = @import("../app_input_event.zig");
 pub const app_native_input = @import("../input/native.zig");
-pub const app_navigation = @import("../app_navigation.zig");
+pub const app_navigation = @import("../route/navigation.zig");
 const component_union = @import("../ui/components/Component.zig");
 const icon_component = @import("../ui/components/Icon.zig");
 const node_renderer = @import("../ui/components/NodeRenderer.zig");
@@ -233,7 +233,6 @@ pub const input_event_error: u32 = 1 << 8;
 
 pub const CursorKind = app_cursor.Kind;
 
-pub const AppView = app_navigation.View;
 pub const InputEventKind = app_input_event.Kind;
 pub const InputEventRecord = app_input_event.Record;
 pub const input_event_flag_ctrl = app_input_event.flag_ctrl;

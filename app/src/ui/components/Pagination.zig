@@ -23,7 +23,7 @@ pub const Pagination = struct {
     }
 
     pub fn render(self: Pagination, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        const page = selectedPage(self.page);
+        const page = list_layout.clampedIndex(self.page, pagination_page_count);
         for (0..pagination_item_count) |index| {
             const item = itemBounds(bounds, index);
             const active = index == page + 1;
@@ -47,11 +47,11 @@ pub const Pagination = struct {
     }
 
     pub fn toObject(self: Pagination, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
-        return component_codec.refObject(.pagination, encodedId(self.id, self.page), .{}, ui_out, object_out, epoch);
+        return component_codec.refObject(.pagination, list_layout.encodedIndexedId(self.id, self.page, pagination_page_count), .{}, ui_out, object_out, epoch);
     }
 
     pub fn writeRecord(self: Pagination, writer: *component_codec.Writer, index: usize) bool {
-        return writer.record(index, .pagination, encodedId(self.id, self.page), .{}, .{});
+        return writer.record(index, .pagination, list_layout.encodedIndexedId(self.id, self.page, pagination_page_count), .{}, .{});
     }
 
     pub fn fromView(view: object.View) Error!Pagination {
@@ -59,17 +59,9 @@ pub const Pagination = struct {
     }
 
     pub fn fromNode(pagination: @FieldType(ui.Node, "pagination")) Error!Pagination {
-        return .{ .id = pagination.id, .page = selectedPage(pagination.page) };
+        return .{ .id = pagination.id, .page = list_layout.clampedIndex(pagination.page, pagination_page_count) };
     }
 };
-
-fn selectedPage(page: u16) u16 {
-    return list_layout.clampedIndex(page, pagination_page_count);
-}
-
-fn encodedId(id: u32, page: u16) u32 {
-    return list_layout.encodedIndexedId(id, page, pagination_page_count);
-}
 
 const pagination_page_count: u16 = 3;
 const pagination_item_count: usize = 5;

@@ -22,11 +22,11 @@ pub const RadioGroup = struct {
     selected: u16 = 0,
 
     pub fn node(self: RadioGroup) ui.Node {
-        return ui.radioGroupNode(self.id, self.first, self.second, selectedIndex(self.selected));
+        return ui.radioGroupNode(self.id, self.first, self.second, list_layout.clampedIndex(self.selected, radio_item_count));
     }
 
     pub fn render(self: RadioGroup, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        const selected = selectedIndex(self.selected);
+        const selected = list_layout.clampedIndex(self.selected, radio_item_count);
         try renderOption(scene, optionBounds(bounds, 0), self.first, selected == 0, options);
         try renderOption(scene, optionBounds(bounds, 1), self.second, selected == 1, options);
     }
@@ -59,7 +59,7 @@ pub const RadioGroup = struct {
     pub fn writeRecord(self: RadioGroup, writer: *component_codec.Writer, index: usize) bool {
         const first_ref = writer.string(self.first) orelse return false;
         const second_ref = writer.string(self.second) orelse return false;
-        return writer.record(index, .radio_group, encodedId(self.id, self.selected), first_ref, second_ref);
+        return writer.record(index, .radio_group, list_layout.encodedIndexedId(self.id, self.selected, radio_item_count), first_ref, second_ref);
     }
 
     pub fn fromView(view: object.View) Error!RadioGroup {
@@ -67,17 +67,9 @@ pub const RadioGroup = struct {
     }
 
     pub fn fromNode(radio: @FieldType(ui.Node, "radio_group")) Error!RadioGroup {
-        return .{ .id = radio.id, .first = radio.first, .second = radio.second, .selected = selectedIndex(radio.selected) };
+        return .{ .id = radio.id, .first = radio.first, .second = radio.second, .selected = list_layout.clampedIndex(radio.selected, radio_item_count) };
     }
 };
-
-fn selectedIndex(value: u16) u16 {
-    return list_layout.clampedIndex(value, radio_item_count);
-}
-
-fn encodedId(id: u32, selected: u16) u32 {
-    return list_layout.encodedIndexedId(id, selected, radio_item_count);
-}
 
 const radio_item_count: u16 = 2;
 

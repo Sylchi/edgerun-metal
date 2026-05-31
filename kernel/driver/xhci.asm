@@ -96,7 +96,7 @@ align 64
 xhci_erst:         resb 16            ; 1 × 16 bytes
 align 64
 xhci_evt_ring:     resb (EVT_RING_NTRB * 16)
-align 16
+align 64
 xhci_cmd_ring:     resb (CMD_RING_NTRB * 16)
 
 xhci_bar0:         resd 1
@@ -451,7 +451,7 @@ er_fn er_xhci_init
     lea     rdi, [rel xhci_cmd_ring + ((CMD_RING_NTRB - 1) * 16)]
     mov     [rdi + 0], rax
     mov     dword [rdi + 8], 0
-    mov     dword [rdi + 12], (TRB_LINK << TRB_TYPE_SHIFT) | TRB_LINK_TOGGLE
+    mov     dword [rdi + 12], (TRB_LINK << TRB_TYPE_SHIFT) | TRB_LINK_TOGGLE | TRB_CYCLE
     mov     dword [xhci_cmd_enq_idx], 0
     mov     dword [xhci_cmd_cycle], 1
     mov     dword [xhci_evt_deq_idx], 0
@@ -869,12 +869,7 @@ er_fn er_xhci_cmd_submit_noop
 
     mov     ecx, [xhci_cmd_enq_idx]
     cmp     ecx, (CMD_RING_NTRB - 1)
-    jb      .cn_have_slot
-    mov     ecx, 0
-    mov     eax, [xhci_cmd_cycle]
-    xor     eax, 1
-    mov     [xhci_cmd_cycle], eax
-.cn_have_slot:
+    jae     .cn_bad_state
     lea     rdi, [rel xhci_cmd_ring]
     mov     eax, ecx
     shl     eax, 4
@@ -910,6 +905,10 @@ er_fn er_xhci_cmd_submit_noop
     ret
 .cn_absent:
     er_err  ERROR_NOT_PRESENT
+    mov     eax, -1
+    ret
+.cn_bad_state:
+    er_err  ERROR_BAD_ARGUMENT
     mov     eax, -1
     ret
 

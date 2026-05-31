@@ -24,7 +24,7 @@ pub const Menubar = struct {
     active: u16 = 0,
 
     pub fn node(self: Menubar) ui.Node {
-        return ui.menubarNode(self.id, self.first, self.second, activeIndex(self.active));
+        return ui.menubarNode(self.id, self.first, self.second, list_layout.clampedIndex(self.active, menubar_item_count));
     }
 
     pub fn accessibility(self: Menubar) common.Accessibility {
@@ -32,7 +32,7 @@ pub const Menubar = struct {
     }
 
     pub fn render(self: Menubar, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        const active = activeIndex(self.active);
+        const active = list_layout.clampedIndex(self.active, menubar_item_count);
         try scene.pushRect(bounds, options.style.panel, .fill, component_primitives.control_radius, 0.0);
         try scene.pushRect(bounds, options.style.border, .border, component_primitives.control_radius, 0.0);
         const widths = itemWidths(self);
@@ -65,7 +65,7 @@ pub const Menubar = struct {
     }
 
     pub fn writeRecord(self: Menubar, writer: *component_codec.Writer, index: usize) bool {
-        return component_codec.twoStringRecord(writer, index, .menubar, encodedId(self.id, self.active), self.first, self.second);
+        return component_codec.twoStringRecord(writer, index, .menubar, list_layout.encodedIndexedId(self.id, self.active, menubar_item_count), self.first, self.second);
     }
 
     pub fn fromView(view: object.View) Error!Menubar {
@@ -73,17 +73,9 @@ pub const Menubar = struct {
     }
 
     pub fn fromNode(menubar: @FieldType(ui.Node, "menubar")) Error!Menubar {
-        return .{ .id = menubar.id, .first = menubar.first, .second = menubar.second, .active = activeIndex(menubar.active) };
+        return .{ .id = menubar.id, .first = menubar.first, .second = menubar.second, .active = list_layout.clampedIndex(menubar.active, menubar_item_count) };
     }
 };
-
-fn activeIndex(value: u16) u16 {
-    return list_layout.clampedIndex(value, menubar_item_count);
-}
-
-fn encodedId(id: u32, active: u16) u32 {
-    return list_layout.encodedIndexedId(id, active, menubar_item_count);
-}
 
 pub const menubar_id_stride: u32 = menubar_item_count;
 

@@ -21,11 +21,11 @@ pub const ToggleGroup = struct {
     active: u16 = 0,
 
     pub fn node(self: ToggleGroup) ui.Node {
-        return ui.toggleGroupNode(self.id, self.first, self.second, activeIndex(self.active));
+        return ui.toggleGroupNode(self.id, self.first, self.second, list_layout.clampedIndex(self.active, toggle_group_item_count));
     }
 
     pub fn render(self: ToggleGroup, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        const active = activeIndex(self.active);
+        const active = list_layout.clampedIndex(self.active, toggle_group_item_count);
         try list_layout.renderSegment(scene, itemBounds(bounds, 0), self.first, active == 0, segmentPaint(options));
         try list_layout.renderSegment(scene, itemBounds(bounds, 1), self.second, active == 1, segmentPaint(options));
         try list_layout.renderSegment(scene, itemBounds(bounds, 2), toggle_group_third_label, active == 2, segmentPaint(options));
@@ -51,7 +51,7 @@ pub const ToggleGroup = struct {
     }
 
     pub fn writeRecord(self: ToggleGroup, writer: *component_codec.Writer, index: usize) bool {
-        return component_codec.twoStringRecord(writer, index, .toggle_group, encodedId(self.id, self.active), self.first, self.second);
+        return component_codec.twoStringRecord(writer, index, .toggle_group, list_layout.encodedIndexedId(self.id, self.active, toggle_group_item_count), self.first, self.second);
     }
 
     pub fn fromView(view: object.View) Error!ToggleGroup {
@@ -59,17 +59,9 @@ pub const ToggleGroup = struct {
     }
 
     pub fn fromNode(group: @FieldType(ui.Node, "toggle_group")) Error!ToggleGroup {
-        return .{ .id = group.id, .first = group.first, .second = group.second, .active = activeIndex(group.active) };
+        return .{ .id = group.id, .first = group.first, .second = group.second, .active = list_layout.clampedIndex(group.active, toggle_group_item_count) };
     }
 };
-
-fn activeIndex(value: u16) u16 {
-    return list_layout.clampedIndex(value, toggle_group_item_count);
-}
-
-fn encodedId(id: u32, active: u16) u32 {
-    return list_layout.encodedIndexedId(id, active, toggle_group_item_count);
-}
 
 pub const toggle_group_id_stride: u32 = toggle_group_item_count;
 

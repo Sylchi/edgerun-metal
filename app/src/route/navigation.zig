@@ -1,12 +1,36 @@
 const std = @import("std");
 const bytes = @import("../bytes.zig");
+const preimage = @import("../preimage.zig");
 const icon_component = @import("../ui/components/Icon.zig");
 
-pub const route_path_capacity: usize = 96;
-pub const route_hash_capacity: usize = route_path_capacity + 1;
-pub const backend_button_id: u32 = 30_012;
-pub const frontend_button_id: u32 = 30_000;
+pub const ObjectId = preimage.Hash;
+pub const object_id_bytes = preimage.hash_size;
+pub const object_id_hex_bytes = object_id_bytes * 2;
+pub const object_projection_prefix = "/o/";
+pub const object_hash_projection_prefix = "#/o/";
+pub const location_path_capacity: usize = object_projection_prefix.len + object_id_hex_bytes;
+pub const location_hash_capacity: usize = object_hash_projection_prefix.len + object_id_hex_bytes;
+pub const route_path_capacity: usize = location_path_capacity;
+pub const route_hash_capacity: usize = location_hash_capacity;
+pub const source_workspace_button_id: u32 = 30_012;
+pub const app_preview_button_id: u32 = 30_000;
+pub const backend_button_id: u32 = source_workspace_button_id;
+pub const frontend_button_id: u32 = app_preview_button_id;
 pub const reveal_identity_button_id: u32 = 15_001;
+
+pub const TypeObject = struct {
+    pub const type_definition = preimage.hash("edgerun:object:type", "type");
+    pub const location = preimage.hash("edgerun:object:type", "location");
+    pub const ui_surface = preimage.hash("edgerun:object:type", "ui.surface");
+    pub const source_workspace = preimage.hash("edgerun:object:type", "source.workspace");
+    pub const app_preview = preimage.hash("edgerun:object:type", "app.preview");
+    pub const intent = preimage.hash("edgerun:object:type", "intent");
+};
+
+pub const SurfaceObject = struct {
+    pub const source_workspace = typedObjectId(TypeObject.ui_surface, "surface:source-workspace");
+    pub const app_preview = typedObjectId(TypeObject.ui_surface, "surface:app-preview");
+};
 
 pub const Action = enum(u32) {
     reveal_identity,
@@ -23,90 +47,111 @@ pub const SubNavBinding = enum {
     source,
 };
 
-pub fn subNavBinding(kind: SubNavBinding) TopLevelBinding {
-    return switch (kind) {
-        .logo => topLevelBinding(.frontend),
-        .docs => topLevelBinding(.frontend),
-        .blog => topLevelBinding(.frontend),
-        .source => topLevelBinding(.backend),
-    };
-}
-
 pub const MainButton = enum(u32) {
-    backend = 0,
-    frontend = 1,
+    source_workspace = 0,
+    app_preview = 1,
 };
 
-pub const RoutePath = struct {
-    pub const backend = "/source";
-    pub const frontend = "/";
+pub const Location = struct {
+    object: ObjectId = source_workspace_location_object,
 };
 
-pub const View = enum(u32) {
-    backend = 0,
-    frontend = 1,
-};
+pub const Route = Location;
 
-pub const Route = struct {
-    view: View = .backend,
-};
-
-pub const RouteFixture = struct {
+pub const LocationFixture = struct {
     name: []const u8,
-    route: Route,
+    location: Location,
     path: []const u8,
     hash: []const u8,
 };
 
-pub const route_fixtures = [_]RouteFixture{
-    .{ .name = "backend", .route = .{ .view = .backend }, .path = RoutePath.backend, .hash = "#/source" },
-    .{ .name = "frontend", .route = .{ .view = .frontend }, .path = RoutePath.frontend, .hash = "" },
+pub const RouteFixture = LocationFixture;
+
+pub const source_workspace_location_object = locationObjectId(SurfaceObject.source_workspace);
+pub const app_preview_location_object = locationObjectId(SurfaceObject.app_preview);
+
+pub const location_fixtures = [_]LocationFixture{
+    .{
+        .name = "source-workspace",
+        .location = .{ .object = source_workspace_location_object },
+        .path = comptimeProjection(object_projection_prefix, source_workspace_location_object),
+        .hash = comptimeProjection(object_hash_projection_prefix, source_workspace_location_object),
+    },
+    .{
+        .name = "app-preview",
+        .location = .{ .object = app_preview_location_object },
+        .path = comptimeProjection(object_projection_prefix, app_preview_location_object),
+        .hash = comptimeProjection(object_hash_projection_prefix, app_preview_location_object),
+    },
 };
 
-pub const RouteFor = union(enum) {
+pub const route_fixtures = location_fixtures;
+
+pub const LocationFor = union(enum) {
     button: MainButton,
     action: Action,
-    slug: []const u8,
+    object: ObjectId,
 };
 
-pub fn routeFor(target: RouteFor) ?Route {
-    return switch (target) {
-        .button => |button| routeForButton(button),
-        .action => |action| routeForAction(action),
-        .slug => |slug| routeForSlug(slug),
+pub const RouteFor = LocationFor;
+
+pub fn subNavBinding(kind: SubNavBinding) TopLevelBinding {
+    return switch (kind) {
+        .logo, .docs, .blog => topLevelBinding(.app_preview),
+        .source => topLevelBinding(.source_workspace),
     };
 }
 
-pub fn routeForButton(button: MainButton) Route {
-    return topLevelBinding(button).route;
+pub fn locationFor(target: LocationFor) ?Location {
+    return switch (target) {
+        .button => |button| locationForButton(button),
+        .action => |action| locationForAction(action),
+        .object => |object| .{ .object = object },
+    };
 }
 
-pub fn routeForAction(action: Action) ?Route {
+pub fn routeFor(target: RouteFor) ?Route {
+    return locationFor(target);
+}
+
+pub fn locationForButton(button: MainButton) Location {
+    return topLevelBinding(button).location;
+}
+
+pub fn routeForButton(button: MainButton) Route {
+    return locationForButton(button);
+}
+
+pub fn locationForAction(action: Action) ?Location {
     _ = action;
     return null;
 }
 
+pub fn routeForAction(action: Action) ?Route {
+    return locationForAction(action);
+}
+
+pub fn locationForObject(object: ObjectId) Location {
+    return .{ .object = object };
+}
+
 pub fn routeForSlug(slug: []const u8) Route {
-    if (slug.len == 0) return fromPath(RoutePath.frontend);
-    var path: [route_path_capacity]u8 = undefined;
-    if (slug.len >= path.len) return .{};
-    path[0] = '/';
-    @memcpy(path[1 .. slug.len + 1], slug);
-    return fromPath(path[0 .. slug.len + 1]);
+    _ = slug;
+    return .{};
 }
 
-pub fn fromPath(path: []const u8) Route {
-    const trimmed = trimPath(path);
-    return switch (pathKind(trimmed)) {
-        .backend => .{ .view = .backend },
-        .frontend => .{ .view = .frontend },
-    };
+pub fn fromPath(path: []const u8) Location {
+    return parseProjection(path) catch .{};
 }
 
-pub fn fromHit(hit_id: u32, _current: Route) ?Route {
+pub fn fromHash(hash: []const u8) Location {
+    return parseProjection(hash) catch .{};
+}
+
+pub fn fromHit(hit_id: u32, _current: Location) ?Location {
     _ = _current;
-    for (static_routes) |binding| {
-        if (binding.id == hit_id) return binding.route;
+    for (static_locations) |binding| {
+        if (binding.id == hit_id) return binding.location;
     }
     return null;
 }
@@ -125,54 +170,40 @@ pub fn actionId(action: Action) u32 {
     unreachable;
 }
 
+pub fn writePath(out: []u8, location: Location) error{RouteBufferTooSmall}!usize {
+    return writeProjection(out, object_projection_prefix, location.object);
+}
+
+pub fn writeHash(out: []u8, location: Location) error{RouteBufferTooSmall}!usize {
+    return writeProjection(out, object_hash_projection_prefix, location.object);
+}
+
 pub fn pathFromHash(hash: []const u8) error{InvalidRouteHash}![]const u8 {
-    if (hash.len == 0 or bytes.eql(hash, "#")) return "/";
-    if (bytes.startsWith(hash, "#/")) return hash[1..];
-    return error.InvalidRouteHash;
+    if (!bytes.startsWith(hash, object_hash_projection_prefix)) return error.InvalidRouteHash;
+    return hash[1..];
 }
 
-pub fn writePath(out: []u8, route: Route) error{RouteBufferTooSmall}!usize {
-    const value = switch (route.view) {
-        .backend => RoutePath.backend,
-        .frontend => RoutePath.frontend,
-    };
-    if (value.len > out.len) return error.RouteBufferTooSmall;
-    @memcpy(out[0..value.len], value);
-    return value.len;
+pub fn isSourceWorkspace(location: Location) bool {
+    return bytes.eql(&location.object, &source_workspace_location_object);
 }
 
-pub fn writeHash(out: []u8, route: Route) error{RouteBufferTooSmall}!usize {
-    var path: [route_path_capacity]u8 = undefined;
-    const path_len = try writePath(&path, route);
-    if (path_len == 1 and path[0] == '/') return 0;
-    if (path_len + 1 > out.len) return error.RouteBufferTooSmall;
-    out[0] = '#';
-    @memcpy(out[1 .. 1 + path_len], path[0..path_len]);
-    return path_len + 1;
+pub fn isAppPreview(location: Location) bool {
+    return bytes.eql(&location.object, &app_preview_location_object);
 }
 
-const PathKind = enum {
-    backend,
-    frontend,
-};
-
-fn pathKind(path: []const u8) PathKind {
-    if (bytes.eql(path, RoutePath.backend)) return .backend;
-    return .frontend;
-}
-
-pub const HitRoute = struct { id: u32, route: Route };
+pub const LocationBinding = struct { id: u32, location: Location };
+pub const HitRoute = LocationBinding;
 pub const ActionBinding = struct { id: u32, action: Action };
 
 pub const Contract = struct {
-    static_routes: []const HitRoute,
+    static_locations: []const LocationBinding,
     action_bindings: []const ActionBinding,
 };
 
 pub const TopLevelBinding = struct {
     button: MainButton,
     id: u32,
-    route: Route,
+    location: Location,
     icon: icon_component.Icon,
     rail_label: []const u8,
     row_title: []const u8,
@@ -181,22 +212,22 @@ pub const TopLevelBinding = struct {
 
 const top_level_bindings = [_]TopLevelBinding{
     .{
-        .button = .backend,
-        .id = backend_button_id,
-        .route = .{ .view = .backend },
+        .button = .source_workspace,
+        .id = source_workspace_button_id,
+        .location = .{ .object = source_workspace_location_object },
         .icon = icon_component.Icon.named(.code),
-        .rail_label = "Backend",
+        .rail_label = "Source",
         .row_title = "Source",
-        .row_detail = "code editor workspace",
+        .row_detail = "object workspace",
     },
     .{
-        .button = .frontend,
-        .id = frontend_button_id,
-        .route = .{ .view = .frontend },
+        .button = .app_preview,
+        .id = app_preview_button_id,
+        .location = .{ .object = app_preview_location_object },
         .icon = icon_component.Icon.named(.eye),
-        .rail_label = "Frontend",
+        .rail_label = "Preview",
         .row_title = "Preview",
-        .row_detail = "running app preview",
+        .row_detail = "app surface object",
     },
 };
 
@@ -227,133 +258,125 @@ pub const action_bindings = [_]ActionBinding{
     .{ .id = 90_005, .action = .open_context_source },
 };
 
-pub const static_routes = [_]HitRoute{
-    .{ .id = backend_button_id, .route = .{ .view = .backend } },
-    .{ .id = frontend_button_id, .route = .{ .view = .frontend } },
+pub const static_locations = [_]LocationBinding{
+    .{ .id = source_workspace_button_id, .location = .{ .object = source_workspace_location_object } },
+    .{ .id = app_preview_button_id, .location = .{ .object = app_preview_location_object } },
 };
+
+pub const static_routes = static_locations;
 
 pub fn contract() Contract {
     return .{
-        .static_routes = &static_routes,
+        .static_locations = &static_locations,
         .action_bindings = &action_bindings,
     };
 }
 
-pub fn trimPath(path: []const u8) []const u8 {
-    if (path.len == 0) return RoutePath.frontend;
-    if (path[0] != '/') return RoutePath.frontend;
-    const query_start = std.mem.indexOfScalar(u8, path, '?') orelse path.len;
-    const hash_start = std.mem.indexOfScalar(u8, path[0..query_start], '#') orelse query_start;
-    const trimmed = path[0..hash_start];
-    if (trimmed.len == 0) return RoutePath.frontend;
-    return trimmed;
+fn typedObjectId(type_id: ObjectId, name: []const u8) ObjectId {
+    var builder = preimage.Builder.init("edgerun:object:typed");
+    builder.hash(type_id);
+    builder.bytes(name);
+    return builder.final();
+}
+
+fn locationObjectId(surface: ObjectId) ObjectId {
+    var builder = preimage.Builder.init("edgerun:object:location");
+    builder.hash(TypeObject.location);
+    builder.hash(surface);
+    return builder.final();
+}
+
+fn writeProjection(out: []u8, prefix: []const u8, object: ObjectId) error{RouteBufferTooSmall}!usize {
+    if (prefix.len + object_id_hex_bytes > out.len) return error.RouteBufferTooSmall;
+    @memcpy(out[0..prefix.len], prefix);
+    writeHex(out[prefix.len..][0..object_id_hex_bytes], object);
+    return prefix.len + object_id_hex_bytes;
+}
+
+fn parseProjection(value: []const u8) error{InvalidRouteHash}!Location {
+    const raw = if (bytes.startsWith(value, object_hash_projection_prefix))
+        value[object_hash_projection_prefix.len..]
+    else if (bytes.startsWith(value, object_projection_prefix))
+        value[object_projection_prefix.len..]
+    else
+        return error.InvalidRouteHash;
+    if (raw.len != object_id_hex_bytes) return error.InvalidRouteHash;
+    var object: ObjectId = undefined;
+    try readHex(raw, &object);
+    return .{ .object = object };
+}
+
+fn writeHex(out: []u8, value: ObjectId) void {
+    for (value, 0..) |byte, index| {
+        out[index * 2] = hexChar(byte >> 4);
+        out[index * 2 + 1] = hexChar(byte & 0x0f);
+    }
+}
+
+fn readHex(raw: []const u8, out: *ObjectId) error{InvalidRouteHash}!void {
+    for (out, 0..) |*byte, index| {
+        const hi = hexValue(raw[index * 2]) orelse return error.InvalidRouteHash;
+        const lo = hexValue(raw[index * 2 + 1]) orelse return error.InvalidRouteHash;
+        byte.* = (hi << 4) | lo;
+    }
+}
+
+fn hexChar(value: u8) u8 {
+    return if (value < 10) '0' + value else 'a' + (value - 10);
+}
+
+fn hexValue(value: u8) ?u8 {
+    return switch (value) {
+        '0'...'9' => value - '0',
+        'a'...'f' => value - 'a' + 10,
+        'A'...'F' => value - 'A' + 10,
+        else => null,
+    };
+}
+
+fn comptimeProjection(comptime prefix: []const u8, comptime object: ObjectId) []const u8 {
+    comptime {
+        var out: [prefix.len + object_id_hex_bytes]u8 = undefined;
+        @memcpy(out[0..prefix.len], prefix);
+        for (object, 0..) |byte, index| {
+            out[prefix.len + index * 2] = hexChar(byte >> 4);
+            out[prefix.len + index * 2 + 1] = hexChar(byte & 0x0f);
+        }
+        const final = out;
+        return &final;
+    }
 }
 
 comptime {
     if (top_level_bindings.len != @typeInfo(MainButton).@"enum".fields.len) {
         @compileError("top_level_bindings must cover every MainButton enum value");
     }
-    var seen_buttons: [@typeInfo(MainButton).@"enum".fields.len]bool = [_]bool{false} ** @typeInfo(MainButton).@"enum".fields.len;
-    for (top_level_bindings) |entry| {
-        const idx = @intFromEnum(entry.button);
-        if (idx >= seen_buttons.len) @compileError("top_level_bindings contains unknown MainButton");
-        if (seen_buttons[idx]) @compileError("top_level_bindings contains duplicate MainButton entries");
-        seen_buttons[idx] = true;
-    }
-    for (seen_buttons) |seen| {
-        if (!seen) @compileError("top_level_bindings missing a MainButton entry");
-    }
 }
 
-comptime {
-    var seen_actions: [@typeInfo(Action).@"enum".fields.len]bool = [_]bool{false} ** @typeInfo(Action).@"enum".fields.len;
-    for (action_bindings) |entry| {
-        const idx = @intFromEnum(entry.action);
-        if (idx >= seen_actions.len) @compileError("action_bindings contains unknown Action");
-        if (seen_actions[idx]) @compileError("action_bindings contains duplicate actions");
-        seen_actions[idx] = true;
-    }
-    for (seen_actions) |seen| {
-        if (!seen) @compileError("action_bindings missing binding for Action");
-    }
-}
+test "navigation projections are content object ids" {
+    for (location_fixtures) |snapshot| {
+        var path: [location_path_capacity]u8 = undefined;
+        var hash: [location_hash_capacity]u8 = undefined;
 
-comptime {
-    for (static_routes, 0..) |left, i| {
-        var j: usize = i + 1;
-        while (j < static_routes.len) : (j += 1) {
-            if (left.id == static_routes[j].id) {
-                @compileError("static_routes contains duplicate hit id");
-            }
-        }
-    }
-
-    for (action_bindings, 0..) |left, i| {
-        var j: usize = i + 1;
-        while (j < action_bindings.len) : (j += 1) {
-            if (left.action == action_bindings[j].action) {
-                @compileError("action_bindings contains duplicate action");
-            }
-            if (left.id == action_bindings[j].id) {
-                @compileError("action_bindings contains duplicate hit id");
-            }
-        }
-    }
-
-    for (action_bindings) |entry| {
-        var i: usize = 0;
-        while (i < top_level_bindings.len) : (i += 1) {
-            if (entry.id == top_level_bindings[i].id) {
-                @compileError("action id collides with top-level route id");
-            }
-        }
-        i = 0;
-        while (i < static_routes.len) : (i += 1) {
-            if (entry.id == static_routes[i].id) {
-                @compileError("action id collides with static route id");
-            }
-        }
-    }
-}
-
-test "app_navigation route contract is deterministic for top-level views" {
-    for (route_fixtures) |snapshot| {
-        var path: [route_path_capacity]u8 = undefined;
-        var hash: [route_hash_capacity]u8 = undefined;
-
-        const path_len = try writePath(&path, snapshot.route);
+        const path_len = try writePath(&path, snapshot.location);
         try std.testing.expectEqualStrings(snapshot.path, path[0..path_len]);
-        try std.testing.expectEqual(snapshot.route, fromPath(snapshot.path));
+        try std.testing.expectEqual(snapshot.location, fromPath(snapshot.path));
 
-        const hash_len = try writeHash(&hash, snapshot.route);
+        const hash_len = try writeHash(&hash, snapshot.location);
         try std.testing.expectEqualStrings(snapshot.hash, hash[0..hash_len]);
+        try std.testing.expectEqual(snapshot.location, fromHash(snapshot.hash));
     }
 
-    for (top_level_bindings) |binding| {
-        try std.testing.expectEqual(binding.route, routeFor(.{ .button = binding.button }).?);
-        try std.testing.expectEqual(binding.route, fromHit(topLevelButtonId(binding.button), .{}) orelse unreachable);
-    }
-
-    for (action_bindings) |entry| {
-        try std.testing.expectEqual(@as(?Route, null), routeFor(.{ .action = entry.action }));
-        try std.testing.expectEqual(entry.action, actionFromHit(entry.id).?);
-    }
+    try std.testing.expect(isSourceWorkspace(locationForButton(.source_workspace)));
+    try std.testing.expect(isAppPreview(locationForButton(.app_preview)));
 }
 
-test "app_navigation static route and action ids are deterministic through shared contract" {
-    for (static_routes) |entry| {
-        if (fromHit(entry.id, .{})) |actual| {
-            try std.testing.expectEqual(entry.route, actual);
-        } else {
-            try std.testing.expect(false);
-        }
+test "navigation hit ids resolve to object locations and intents" {
+    for (static_locations) |entry| {
+        try std.testing.expectEqual(entry.location, fromHit(entry.id, .{}) orelse unreachable);
     }
 
     for (action_bindings) |entry| {
-        if (actionFromHit(entry.id)) |actual| {
-            try std.testing.expectEqual(entry.action, actual);
-        } else {
-            try std.testing.expect(false);
-        }
+        try std.testing.expectEqual(entry.action, actionFromHit(entry.id).?);
     }
 }

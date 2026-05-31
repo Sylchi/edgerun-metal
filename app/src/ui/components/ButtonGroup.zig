@@ -21,11 +21,11 @@ pub const ButtonGroup = struct {
     active: u16 = 0,
 
     pub fn node(self: ButtonGroup) ui.Node {
-        return ui.buttonGroupNode(self.id, self.first, self.second, activeIndex(self.active));
+        return ui.buttonGroupNode(self.id, self.first, self.second, list_layout.clampedIndex(self.active, group_item_count));
     }
 
     pub fn render(self: ButtonGroup, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        const active = activeIndex(self.active);
+        const active = list_layout.clampedIndex(self.active, group_item_count);
         try list_layout.renderSegment(scene, segmentBounds(bounds, 0), self.first, active == 0, segmentPaint(options));
         try list_layout.renderSegment(scene, segmentBounds(bounds, 1), self.second, active == 1, segmentPaint(options));
     }
@@ -50,7 +50,7 @@ pub const ButtonGroup = struct {
     pub fn writeRecord(self: ButtonGroup, writer: *component_codec.Writer, index: usize) bool {
         const first_ref = writer.string(self.first) orelse return false;
         const second_ref = writer.string(self.second) orelse return false;
-        return writer.record(index, .button_group, encodedId(self.id, self.active), first_ref, second_ref);
+        return writer.record(index, .button_group, list_layout.encodedIndexedId(self.id, self.active, group_item_count), first_ref, second_ref);
     }
 
     pub fn fromView(view: object.View) Error!ButtonGroup {
@@ -58,17 +58,9 @@ pub const ButtonGroup = struct {
     }
 
     pub fn fromNode(group: @FieldType(ui.Node, "button_group")) Error!ButtonGroup {
-        return .{ .id = group.id, .first = group.first, .second = group.second, .active = activeIndex(group.active) };
+        return .{ .id = group.id, .first = group.first, .second = group.second, .active = list_layout.clampedIndex(group.active, group_item_count) };
     }
 };
-
-fn activeIndex(value: u16) u16 {
-    return list_layout.clampedIndex(value, group_item_count);
-}
-
-fn encodedId(id: u32, active: u16) u32 {
-    return list_layout.encodedIndexedId(id, active, group_item_count);
-}
 
 fn segmentPaint(options: RenderOptions) list_layout.SegmentPaint {
     return .{

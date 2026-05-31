@@ -28,7 +28,7 @@ pub const Direction = struct {
     }
 
     pub fn render(self: Direction, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        const active = activeIndex(self.active);
+        const active = list_layout.clampedIndex(self.active, direction_item_count);
         const widths = itemWidths();
         try renderItem(scene, itemBounds(bounds, &widths, 0), direction_ltr_label, active == 0, options);
         try Icon.named(.route).renderColor(scene, iconBounds(bounds, widths[0]), options.style.muted);
@@ -69,13 +69,9 @@ pub const Direction = struct {
     }
 
     pub fn fromNode(direction: @FieldType(ui.Node, "direction")) Error!Direction {
-        return .{ .id = direction.id, .active = direction.active };
+        return .{ .id = direction.id, .active = list_layout.clampedIndex(direction.active, direction_item_count) };
     }
 };
-
-fn activeIndex(value: u16) u16 {
-    return list_layout.clampedIndex(value, direction_item_count);
-}
 
 fn renderItem(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, active: bool, options: RenderOptions) ui.RenderError!void {
     try scene.pushRect(bounds, if (active) options.style.accent else options.style.row, .fill, direction_item_radius, 0.0);

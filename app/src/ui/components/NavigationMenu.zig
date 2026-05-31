@@ -26,7 +26,7 @@ pub const NavigationMenu = struct {
     active: u16 = 0,
 
     pub fn node(self: NavigationMenu) ui.Node {
-        return ui.navigationMenuNode(self.id, self.first, self.second, activeIndex(self.active));
+        return ui.navigationMenuNode(self.id, self.first, self.second, list_layout.clampedIndex(self.active, navigation_menu_item_count));
     }
 
     pub fn accessibility(self: NavigationMenu) common.Accessibility {
@@ -34,7 +34,7 @@ pub const NavigationMenu = struct {
     }
 
     pub fn render(self: NavigationMenu, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        const active = activeIndex(self.active);
+        const active = list_layout.clampedIndex(self.active, navigation_menu_item_count);
         const widths = itemWidths(self);
         try renderItem(scene, itemBounds(bounds, &widths, 0), self.first, active == 0, true, options);
         try renderItem(scene, itemBounds(bounds, &widths, 1), self.second, active == 1, true, options);
@@ -65,7 +65,7 @@ pub const NavigationMenu = struct {
     }
 
     pub fn writeRecord(self: NavigationMenu, writer: *component_codec.Writer, index: usize) bool {
-        return component_codec.twoStringRecord(writer, index, .navigation_menu, encodedId(self.id, self.active), self.first, self.second);
+        return component_codec.twoStringRecord(writer, index, .navigation_menu, list_layout.encodedIndexedId(self.id, self.active, navigation_menu_item_count), self.first, self.second);
     }
 
     pub fn fromView(view: object.View) Error!NavigationMenu {
@@ -73,17 +73,9 @@ pub const NavigationMenu = struct {
     }
 
     pub fn fromNode(menu: @FieldType(ui.Node, "navigation_menu")) Error!NavigationMenu {
-        return .{ .id = menu.id, .first = menu.first, .second = menu.second, .active = activeIndex(menu.active) };
+        return .{ .id = menu.id, .first = menu.first, .second = menu.second, .active = list_layout.clampedIndex(menu.active, navigation_menu_item_count) };
     }
 };
-
-fn activeIndex(value: u16) u16 {
-    return list_layout.clampedIndex(value, navigation_menu_item_count);
-}
-
-fn encodedId(id: u32, active: u16) u32 {
-    return list_layout.encodedIndexedId(id, active, navigation_menu_item_count);
-}
 
 pub const navigation_menu_id_stride: u32 = navigation_menu_item_count;
 

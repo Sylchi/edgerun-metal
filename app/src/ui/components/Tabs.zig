@@ -86,7 +86,7 @@ pub const Tabs = struct {
     pub fn writeRecord(self: Tabs, writer: *component_codec.Writer, index: usize) bool {
         const first_ref = writer.string(self.first) orelse return false;
         const second_ref = writer.string(self.second) orelse return false;
-        return writer.record(index, .tabs, encodedId(self.id, self.activeIndexResolved()), first_ref, second_ref);
+        return writer.record(index, .tabs, list_layout.encodedIndexedId(self.id, self.activeIndexResolved(), tabs_item_count), first_ref, second_ref);
     }
 
     pub fn fromView(view: object.View) Error!Tabs {
@@ -94,22 +94,13 @@ pub const Tabs = struct {
     }
 
     pub fn fromNode(tabs: @FieldType(ui.Node, "tabs")) Error!Tabs {
-        return .{ .id = tabs.id, .first = tabs.first, .second = tabs.second, .active = activeIndex(tabs.active) };
+        return .{ .id = tabs.id, .first = tabs.first, .second = tabs.second, .active = list_layout.clampedIndex(tabs.active, tabs_item_count) };
     }
 
     fn activeIndexResolved(self: Tabs) u16 {
-        if (self.active) |value| return activeIndex(value);
-        return activeIndex(self.default_active);
+        return list_layout.resolveIndex(self.active, self.default_active, tabs_item_count);
     }
 };
-
-fn activeIndex(value: u16) u16 {
-    return list_layout.clampedIndex(value, tabs_item_count);
-}
-
-fn encodedId(id: u32, active: u16) u32 {
-    return list_layout.encodedIndexedId(id, active, tabs_item_count);
-}
 
 fn listBounds(bounds: ui.Rect) ui.Rect {
     const height = @min(bounds.h, primitives.control_label_height + (tabs_trigger_padding + tabs_list_padding) * 2.0);
