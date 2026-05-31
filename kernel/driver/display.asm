@@ -76,7 +76,7 @@ er_fn er_display_init
 
 .display_unavailable:
     mov     byte [display_mode], 0
-    er_err  ERROR_NOT_PRESENT
+    er_ok
 
 .done_init:
     pop     rdi
@@ -224,7 +224,7 @@ _bochs_vbe_init:
 er_fn er_display_clear
     cmp     byte [display_mode], 1
     je      er_fb_text_clear
-    er_err  ERROR_NOT_PRESENT
+    er_ok
     ret
 
 ; ==================================================================
@@ -259,7 +259,7 @@ _vga_scroll:
 er_fn er_display_putchar
     cmp     byte [display_mode], 1
     je      er_fb_text_putchar
-    er_err  ERROR_NOT_PRESENT
+    er_ok
     ret
 
 ; ==================================================================
@@ -269,5 +269,5 @@ er_fn er_display_putchar
 er_fn er_display_puts
     cmp     byte [display_mode], 1
     je      er_fb_text_puts
-    er_err  ERROR_NOT_PRESENT
+    er_ok
     ret

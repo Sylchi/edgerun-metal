@@ -1182,33 +1182,37 @@ er_fn er_tor_open_stream
     ; Format: IP in dotted decimal + ":" + port + "\0"
     ; Max: "255.255.255.255:65535\0" = 21 bytes
 
-    ; Extract bytes from IP (network order)
-    movzx   eax, r13b      ; first byte
-    call    .push_byte
+    ; Extract bytes from IP (network-order dword bytes in memory)
+    mov     eax, r13d      ; first byte
+    and     eax, 0xFF
+    call    _tor_push_dec
     mov     byte [rdi], '.'
     inc     rdi
 
-    movzx   eax, r13b
+    mov     eax, r13d
     shr     eax, 8
-    call    .push_byte
+    and     eax, 0xFF
+    call    _tor_push_dec
     mov     byte [rdi], '.'
     inc     rdi
 
-    movzx   eax, r13b
+    mov     eax, r13d
     shr     eax, 16
-    call    .push_byte
+    and     eax, 0xFF
+    call    _tor_push_dec
     mov     byte [rdi], '.'
     inc     rdi
 
-    movzx   eax, r13b
+    mov     eax, r13d
     shr     eax, 24
-    call    .push_byte
+    and     eax, 0xFF
+    call    _tor_push_dec
 
     ; Add port
     mov     byte [rdi], ':'
     inc     rdi
     movzx   eax, r14w
-    call    .push_byte
+    call    _tor_push_dec
 
     ; Null terminate
     mov     byte [rdi], 0
@@ -1242,8 +1246,47 @@ er_fn er_tor_open_stream
     pop     rbx
     er_ret
 
+; ==================================================================
+; er_tor_open_dir_stream — open a directory stream on a circuit
+; int er_tor_open_dir_stream(u32 circ_id, u16 *out_stream_id)
+; rdi = circ_id, rsi = out_stream_id
+; ==================================================================
+global er_tor_open_dir_stream
+er_fn er_tor_open_dir_stream
+    push    rbx
+    push    r12
+
+    mov     r12d, edi       ; circ_id
+    mov     rbx, rsi        ; out_stream_id ptr
+
+    ; Allocate stream ID from same allocator
+    movzx   eax, word [tor_stream_next_id]
+    cmp     eax, TOR_MAX_STREAMS
+    jae     .full
+    mov     [rbx], ax
+    inc     word [tor_stream_next_id]
+
+    ; RELAY_BEGIN_DIR has no payload
+    mov     edi, r12d
+    movzx   esi, word [rbx]
+    mov     edx, TOR_RELAY_BEGIN_DIR
+    xor     ecx, ecx
+    xor     r8d, r8d
+    call    er_tor_send_relay
+
+    pop     r12
+    pop     rbx
+    er_ret
+
+.full:
+    mov     eax, -1
+    er_err  ERROR_BUSY
+    pop     r12
+    pop     rbx
+    er_ret
+
 ; Helper to push a decimal number as string
-.push_byte:
+_tor_push_dec:
     push    rbx
     push    rdx
     xor     ecx, ecx

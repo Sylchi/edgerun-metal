@@ -375,7 +375,7 @@ er_fn er_kernel_main
     call    er_serial_puts
     call    .crlf
 
-    ; Initialize display (tries framebuffer first, falls back to VGA)
+    ; Initialize optional display capability.
     call    er_display_init
 
     ; ─── TPM ────────────────────────────────────────────────────────

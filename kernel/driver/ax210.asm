@@ -12,6 +12,9 @@ extern er_pci_write32
 
 %define AX210_VENDOR 0x8086
 %define AX210_DEVICE 0x2725
+%define IWL_HDR_MAGIC0 0x00000000
+%define IWL_HDR_MAGIC1 0x0A4C5749    ; "IWL\n" little-endian
+%define AX210_FW_MIN_SIZE 64
 
 SECTION .text
 
@@ -99,3 +102,78 @@ er_fn er_ax210_probe_init
     pop     r13
     pop     r12
     ret
+
+; ==================================================================
+; er_ax210_fw_ingest — register a caller-provided AX210 firmware blob
+; int er_ax210_fw_ingest(const void* fw_ptr, uint64_t fw_size)
+;
+; Performs minimal container validation:
+;   - non-null pointer
+;   - size >= AX210_FW_MIN_SIZE
+;   - dword0 == 0 and dword1 == "IWL\n"
+;
+; Returns: eax = 0 on success, -1 on failure
+; ==================================================================
+er_fn er_ax210_fw_ingest
+    test    rdi, rdi
+    jz      .bad_arg
+    cmp     rsi, AX210_FW_MIN_SIZE
+    jb      .bad_arg
+
+    mov     eax, dword [rdi]
+    cmp     eax, IWL_HDR_MAGIC0
+    jne     .bad_blob
+    mov     eax, dword [rdi + 4]
+    cmp     eax, IWL_HDR_MAGIC1
+    jne     .bad_blob
+
+    mov     [ax210_fw_ptr], rdi
+    mov     [ax210_fw_size], rsi
+    er_ok
+    xor     eax, eax
+    ret
+
+.bad_arg:
+    er_err  ERROR_BAD_ARGUMENT
+    mov     eax, -1
+    ret
+
+.bad_blob:
+    er_err  ERROR_CORRUPT
+    mov     eax, -1
+    ret
+
+; ==================================================================
+; er_ax210_fw_get_blob — fetch previously ingested firmware blob
+; int er_ax210_fw_get_blob(uint64_t* out_ptr, uint64_t* out_size)
+;
+; Returns: eax = 0 on success, -1 if blob is not registered.
+; ==================================================================
+er_fn er_ax210_fw_get_blob
+    test    rdi, rdi
+    jz      .get_bad_arg
+    test    rsi, rsi
+    jz      .get_bad_arg
+    mov     rax, [ax210_fw_ptr]
+    test    rax, rax
+    jz      .not_ready
+    mov     [rdi], rax
+    mov     rax, [ax210_fw_size]
+    mov     [rsi], rax
+    er_ok
+    xor     eax, eax
+    ret
+
+.get_bad_arg:
+    er_err  ERROR_BAD_ARGUMENT
+    mov     eax, -1
+    ret
+
+.not_ready:
+    er_err  ERROR_NOT_PRESENT
+    mov     eax, -1
+    ret
+
+SECTION .bss
+ax210_fw_ptr:  resq 1
+ax210_fw_size: resq 1

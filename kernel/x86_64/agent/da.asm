@@ -27,6 +27,8 @@ extern er_fn_load
 extern er_fn_call
 extern da_wasm_app_hash
 extern da_wasm_ready
+extern er_local_cell_imports
+extern er_local_cell_import_count
 
 ; Framebuffer info from fb_text.asm
 extern fb_addr, fb_width, fb_height, fb_pitch
@@ -632,6 +634,66 @@ _da_update_surface:
     ret
 
 ; ==================================================================
+; _da_store_export_name
+; rdi = export_name_ptr, rsi = export_name_len
+; ==================================================================
+_da_store_export_name:
+    mov     [rel da_app_export_len], sil
+    test    rsi, rsi
+    jz      .done
+    cmp     rsi, 64
+    ja      .done
+    push    rdx
+    lea     rdi, [rel da_app_export]
+    mov     rdx, rsi
+    call    er_memcpy
+    pop     rdx
+.done:
+    ret
+
+; ==================================================================
+; _da_prepare_wasm_runtime
+; Returns rax = &da_wasm_runtime
+; ==================================================================
+_da_prepare_wasm_runtime:
+    lea     rax, [rel da_wasm_runtime]
+    lea     rdx, [rel da_wasm_memory]
+    mov     [rax + RUNTIME_MEMORY_PTR_OFF], rdx
+    mov     qword [rax + RUNTIME_MEMORY_LEN_OFF], 65536
+    lea     rdx, [rel da_wasm_ticks]
+    mov     [rax + RUNTIME_TICKS_PTR_OFF], rdx
+    xor     edx, edx
+    mov     [rax + RUNTIME_MEM_GROW_FN_OFF], rdx
+    mov     [rax + RUNTIME_MEM_GROW_CTX_OFF], rdx
+    mov     [rax + RUNTIME_TABLE_GROW_FN_OFF], rdx
+    mov     [rax + RUNTIME_TABLE_GROW_CTX_OFF], rdx
+    mov     [rax + RUNTIME_INITIAL_PAGES_OFF], rdx
+    mov     byte [rax + RUNTIME_HAS_PAGES_OFF], 0
+    lea     rdx, [rel er_local_cell_imports]
+    mov     [rax + RUNTIME_IMPORTS_PTR_OFF], rdx
+    mov     rdx, [rel er_local_cell_import_count]
+    mov     [rax + RUNTIME_IMPORTS_LEN_OFF], rdx
+
+    lea     rdi, [rel da_wasm_memory]
+    xor     esi, esi
+    mov     edx, 65536
+    call    er_memset
+    mov     qword [rel da_wasm_ticks], 0
+    ret
+
+; ==================================================================
+; _da_publish_app_hash
+; rdi = app_hash_ptr (32 bytes)
+; ==================================================================
+_da_publish_app_hash:
+    mov     rsi, rdi
+    lea     rdi, [rel da_wasm_app_hash]
+    mov     edx, 32
+    call    er_memcpy
+    mov     byte [rel da_wasm_ready], 0
+    ret
+
+; ==================================================================
 ; _da_launch_app — launch a WASM app from cell payload
 ; rdi = cell_ptr, esi = sender_slot_id
 ; Cell payload: [type:1][wasm_len:4][export_len:1][export_name...][wasm_bytes...]
@@ -659,20 +721,11 @@ _da_launch_app:
     movzx   r8d, byte [r12 + LOCAL_CELL_PAYLOAD + 5]  ; export_name_len
 
     ; Store export name in DA BSS for persistent ticks
-    mov     [rel da_app_export_len], r8b
-    test    r8d, r8d
-    jz      .skip_export_copy
-    cmp     r8d, 64
-    ja      .skip_export_copy
-    push    rcx
+    lea     rdi, [r12 + LOCAL_CELL_PAYLOAD + 6]
+    mov     rsi, r8
     push    rdx
-    lea     rdi, [rel da_app_export]
-    lea     rsi, [r12 + LOCAL_CELL_PAYLOAD + 6]
-    mov     edx, r8d
-    call    er_memcpy
+    call    _da_store_export_name
     pop     rdx
-    pop     rcx
-.skip_export_copy:
 
     ; WASM bytes pointer (after export name)
     lea     rsi, [r12 + LOCAL_CELL_PAYLOAD + 6]
@@ -689,41 +742,12 @@ _da_launch_app:
     mov     byte [r15 + DA_APP_STATE], 1
 
     ; Set up DA's WASM runtime
-    lea     r14, [rel da_wasm_runtime]
-    lea     rax, [rel da_wasm_memory]
-    mov     [r14 + RUNTIME_MEMORY_PTR_OFF], rax
-    mov     qword [r14 + RUNTIME_MEMORY_LEN_OFF], 65536
-    lea     rax, [rel da_wasm_ticks]
-    mov     [r14 + RUNTIME_TICKS_PTR_OFF], rax
-    xor     eax, eax
-    mov     [r14 + RUNTIME_MEM_GROW_FN_OFF], rax
-    mov     [r14 + RUNTIME_MEM_GROW_CTX_OFF], rax
-    mov     [r14 + RUNTIME_TABLE_GROW_FN_OFF], rax
-    mov     [r14 + RUNTIME_TABLE_GROW_CTX_OFF], rax
-    mov     [r14 + RUNTIME_INITIAL_PAGES_OFF], rax
-    mov     byte [r14 + RUNTIME_HAS_PAGES_OFF], 0
-    extern er_local_cell_imports
-    extern er_local_cell_import_count
-    lea     rax, [rel er_local_cell_imports]
-    mov     [r14 + RUNTIME_IMPORTS_PTR_OFF], rax
-    mov     rax, [rel er_local_cell_import_count]
-    mov     [r14 + RUNTIME_IMPORTS_LEN_OFF], rax
-
-    ; Clear WASM memory
-    lea     rdi, [rel da_wasm_memory]
-    xor     esi, esi
-    mov     edx, 65536
-    call    er_memset
-
-    ; Clear tick counter
-    mov     qword [rel da_wasm_ticks], 0
+    call    _da_prepare_wasm_runtime
+    mov     r14, rax
 
     ; Load the WASM module (parse, validate, start, data segments)
-    lea     rdi, [rel da_wasm_app_hash]
-    lea     rsi, [r15 + DA_APP_HASH]
-    mov     edx, 32
-    call    er_memcpy
-    mov     byte [rel da_wasm_ready], 0
+    lea     rdi, [r15 + DA_APP_HASH]
+    call    _da_publish_app_hash
 
     mov     rdi, r14            ; runtime
     lea     rsi, [r12 + LOCAL_CELL_PAYLOAD + 6]
@@ -886,55 +910,18 @@ er_fn er_da_launch_app
     mov     byte [r10 + DA_APP_STATE], 1
 
     ; Set up DA's WASM runtime
-    lea     rbx, [rel da_wasm_runtime]
-    lea     rax, [rel da_wasm_memory]
-    mov     [rbx + RUNTIME_MEMORY_PTR_OFF], rax
-    mov     qword [rbx + RUNTIME_MEMORY_LEN_OFF], 65536
-    lea     rax, [rel da_wasm_ticks]
-    mov     [rbx + RUNTIME_TICKS_PTR_OFF], rax
-    xor     eax, eax
-    mov     [rbx + RUNTIME_MEM_GROW_FN_OFF], rax
-    mov     [rbx + RUNTIME_MEM_GROW_CTX_OFF], rax
-    mov     [rbx + RUNTIME_TABLE_GROW_FN_OFF], rax
-    mov     [rbx + RUNTIME_TABLE_GROW_CTX_OFF], rax
-    mov     [rbx + RUNTIME_INITIAL_PAGES_OFF], rax
-    mov     byte [rbx + RUNTIME_HAS_PAGES_OFF], 0
-    lea     rax, [rel er_local_cell_imports]
-    mov     [rbx + RUNTIME_IMPORTS_PTR_OFF], rax
-    mov     rax, [rel er_local_cell_import_count]
-    mov     [rbx + RUNTIME_IMPORTS_LEN_OFF], rax
-
-    ; Clear WASM memory
-    lea     rdi, [rel da_wasm_memory]
-    xor     esi, esi
-    mov     edx, 65536
-    call    er_memset
-
-    mov     qword [rel da_wasm_ticks], 0
+    call    _da_prepare_wasm_runtime
+    mov     rbx, rax
 
     ; Store export name for persistent ticks
-    mov     [rel da_app_export_len], r15b
-    test    r15, r15
-    jz      .skip_export_copy
-    cmp     r15, 64
-    ja      .skip_export_copy
-    push    rcx
-    push    rdx
-    lea     rdi, [rel da_app_export]
-    mov     rsi, r14
-    mov     edx, r15d
-    call    er_memcpy
-    pop     rdx
-    pop     rcx
-.skip_export_copy:
+    mov     rdi, r14
+    mov     rsi, r15
+    call    _da_store_export_name
 
     ; Load the module (parse, validate, start, data segments)
     mov     r10, [rsp]
-    lea     rdi, [rel da_wasm_app_hash]
-    lea     rsi, [r10 + DA_APP_HASH]
-    mov     edx, 32
-    call    er_memcpy
-    mov     byte [rel da_wasm_ready], 0
+    lea     rdi, [r10 + DA_APP_HASH]
+    call    _da_publish_app_hash
 
     mov     rdi, rbx
     mov     rsi, r12

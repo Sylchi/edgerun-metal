@@ -7,6 +7,7 @@
 %include "x86_64/macros.inc"
 %include "x86_64/wasm_defines.inc"
 %include "x86_64/crypto/tor_constants.inc"
+%include "x86_64/crypto/local_constants.inc"
 
 %define COM1_PORT 0x3f8
 
@@ -14,7 +15,9 @@ extern er_tor_cell_init
 extern er_tor_link_handshake
 extern er_tor_circuit_create
 extern er_tor_send_relay
+extern er_tor_recv_relay
 extern er_tor_open_stream
+extern er_tor_open_dir_stream
 extern er_tor_ntor_keygen
 extern er_tcp_recv
 
@@ -23,6 +26,8 @@ extern er_serial_putchar
 extern er_serial_puthex32
 extern er_serial_crlf
 extern er_memcpy
+extern er_http_parse_status
+extern er_http_find_body
 ; er_sprintf not available
 
 ; Externs from tor_cell.asm
@@ -48,6 +53,7 @@ str_tor_link_ok: db "tor: link ok", 0x0A, 0
 str_tor_link_fail: db "tor: link FAIL", 0x0A, 0
 str_tor_circ_ok: db "tor: circuit ok", 0x0A, 0
 str_tor_circ_fail: db "tor: circuit FAIL", 0x0A, 0
+str_tor_dir_fail: db "tor: directory FAIL", 0x0A, 0
 str_tor_stream:  db "tor: stream ", 0
 str_tor_ok:      db "ok", 0x0A, 0
 str_tor_arrow:   db " -> ", 0
@@ -63,6 +69,27 @@ tor_stream_id_app: resw 1  ; primary stream for app traffic
 
 ; Buffer for building test traffic
 tor_test_buf: resb 512
+
+; Tor cell-tunnel state (local cell format over RELAY_DATA)
+tor_tunnel_dst_ip: resd 1
+tor_tunnel_dst_port: resw 1
+tor_tunnel_stream_id: resw 1
+tor_tunnel_stream_open: resd 1
+tor_dir_stream_id: resw 1
+tor_dir_stream_open: resd 1
+tor_tunnel_rx_head: resd 1
+tor_tunnel_rx_tail: resd 1
+tor_tunnel_rx_ring: resb LOCAL_CELL_SIZE * 4
+
+; Directory fetch buffers/state
+tor_dir_resp_len: resd 1
+tor_dir_resp_buf: resb TOR_RECV_BUF_SIZE
+tor_dir_body_len: resd 1
+tor_dir_body_buf: resb TOR_RECV_BUF_SIZE
+tor_dir_tmp_stream: resw 1
+tor_dir_tmp_cmd: resb 1
+tor_dir_tmp_len: resd 1
+tor_dir_tmp_data: resb 512
 
 SECTION .text
 
@@ -158,6 +185,260 @@ global er_tor_get_role
 er_fn er_tor_get_role
     mov     eax, [tor_state + TOR_STATE_ROLE]
     er_ok
+    er_ret
+
+; ==================================================================
+; er_tor_tunnel_set_exit — set destination endpoint for tunnel stream
+; edi = dst IPv4 (network byte order), esi = dst port (host order)
+; ==================================================================
+global er_tor_tunnel_set_exit
+er_fn er_tor_tunnel_set_exit
+    mov     [tor_tunnel_dst_ip], edi
+    mov     [tor_tunnel_dst_port], si
+    mov     dword [tor_tunnel_stream_open], 0
+    mov     word [tor_tunnel_stream_id], 0
+    xor     eax, eax
+    er_ok
+    er_ret
+
+; ==================================================================
+; er_tor_open_directory_channel — open BEGIN_DIR stream on app circuit
+; returns eax=0 on success, -1 on failure
+; ==================================================================
+global er_tor_open_directory_channel
+er_fn er_tor_open_directory_channel
+    cmp     dword [tor_state + TOR_STATE_LINK_ESTABLISHED], 1
+    jne     .fail
+    cmp     dword [tor_circ_id_app], 0
+    je      .fail
+    cmp     dword [tor_dir_stream_open], 1
+    je      .ok
+
+    mov     edi, [tor_circ_id_app]
+    lea     rsi, [tor_dir_stream_id]
+    call    er_tor_open_dir_stream
+    test    eax, eax
+    js      .fail
+    mov     dword [tor_dir_stream_open], 1
+
+.ok:
+    xor     eax, eax
+    er_ok
+    er_ret
+.fail:
+    mov     eax, -1
+    er_err  ERROR_TOR_STREAM_FAIL
+    er_ret
+
+; ==================================================================
+; er_tor_directory_fetch_consensus — fetch current consensus over BEGIN_DIR
+; returns eax=0 on success, -1 on failure
+; ==================================================================
+global er_tor_directory_fetch_consensus
+er_fn er_tor_directory_fetch_consensus
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+
+    call    er_tor_open_directory_channel
+    test    eax, eax
+    js      .fail
+
+    ; Send HTTP GET over directory stream
+    mov     edi, [tor_circ_id_app]
+    movzx   esi, word [tor_dir_stream_id]
+    mov     edx, TOR_RELAY_DATA
+    lea     rcx, [rel str_tor_dir_consensus_get]
+    mov     r8d, str_tor_dir_consensus_get_len
+    call    er_tor_send_relay
+    test    eax, eax
+    js      .fail
+
+    xor     r12d, r12d                  ; bytes collected
+    mov     r13d, 2048                  ; bounded receive loop
+
+.recv_loop:
+    mov     edi, [tor_circ_id_app]
+    lea     rsi, [tor_dir_tmp_stream]
+    lea     rdx, [tor_dir_tmp_cmd]
+    lea     rcx, [tor_dir_tmp_data]
+    lea     r8, [tor_dir_tmp_len]
+    call    er_tor_recv_relay
+    test    eax, eax
+    js      .next
+
+    movzx   eax, word [tor_dir_tmp_stream]
+    cmp     ax, [tor_dir_stream_id]
+    jne     .next
+
+    movzx   eax, byte [tor_dir_tmp_cmd]
+    cmp     al, TOR_RELAY_CONNECTED
+    je      .next
+    cmp     al, TOR_RELAY_END
+    je      .parse_http
+    cmp     al, TOR_RELAY_DATA
+    jne     .next
+
+    mov     ebx, [tor_dir_tmp_len]
+    cmp     ebx, 0
+    je      .next
+
+    mov     eax, TOR_RECV_BUF_SIZE
+    sub     eax, r12d
+    jbe     .fail
+    cmp     ebx, eax
+    jbe     .copy_chunk
+    mov     ebx, eax
+
+.copy_chunk:
+    lea     rdi, [tor_dir_resp_buf + r12]
+    lea     rsi, [tor_dir_tmp_data]
+    mov     edx, ebx
+    call    er_memcpy
+    add     r12d, ebx
+
+.next:
+    dec     r13d
+    jnz     .recv_loop
+    jmp     .fail
+
+.parse_http:
+    cmp     r12d, 0
+    je      .fail
+    mov     [tor_dir_resp_len], r12d
+
+    lea     rdi, [tor_dir_resp_buf]
+    mov     esi, r12d
+    call    er_http_parse_status
+    cmp     eax, 200
+    jne     .fail
+
+    lea     rdi, [tor_dir_resp_buf]
+    mov     esi, r12d
+    call    er_http_find_body
+    test    rax, rax
+    jz      .fail
+    mov     r14, rax
+
+    lea     rax, [tor_dir_resp_buf + r12]
+    sub     rax, r14
+    test    eax, eax
+    jle     .fail
+    mov     [tor_dir_body_len], eax
+    mov     edx, eax
+    lea     rdi, [tor_dir_body_buf]
+    mov     rsi, r14
+    call    er_memcpy
+
+    xor     eax, eax
+    er_ok
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+
+.fail:
+    mov     eax, -1
+    er_err  ERROR_TOR_PROTOCOL_ERR
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+
+; ==================================================================
+; _tor_tunnel_open_if_needed — open stream if not already open
+; returns eax=0 success, -1 on failure
+; ==================================================================
+_tor_tunnel_open_if_needed:
+    cmp     dword [tor_tunnel_stream_open], 1
+    je      .ok
+    cmp     dword [tor_state + TOR_STATE_LINK_ESTABLISHED], 1
+    jne     .fail
+    cmp     dword [tor_circ_id_app], 0
+    je      .fail
+
+    mov     edi, [tor_circ_id_app]
+    mov     esi, [tor_tunnel_dst_ip]
+    movzx   edx, word [tor_tunnel_dst_port]
+    lea     rcx, [tor_tunnel_stream_id]
+    call    er_tor_open_stream
+    test    eax, eax
+    js      .fail
+
+    mov     dword [tor_tunnel_stream_open], 1
+.ok:
+    xor     eax, eax
+    ret
+.fail:
+    mov     eax, -1
+    ret
+
+; ==================================================================
+; er_tor_tunnel_send_cell — send one 256-byte local cell over Tor
+; rdi = cell_ptr (LOCAL_CELL_SIZE)
+; ==================================================================
+global er_tor_tunnel_send_cell
+er_fn er_tor_tunnel_send_cell
+    push    rbx
+    mov     rbx, rdi
+    call    _tor_tunnel_open_if_needed
+    test    eax, eax
+    js      .fail
+
+    mov     edi, [tor_circ_id_app]
+    movzx   esi, word [tor_tunnel_stream_id]
+    mov     edx, TOR_RELAY_DATA
+    mov     rcx, rbx
+    mov     r8d, LOCAL_CELL_SIZE
+    call    er_tor_send_relay
+    test    eax, eax
+    js      .fail
+
+    xor     eax, eax
+    er_ok
+    pop     rbx
+    er_ret
+.fail:
+    mov     eax, -1
+    er_err  ERROR_TOR_STREAM_FAIL
+    pop     rbx
+    er_ret
+
+; ==================================================================
+; er_tor_tunnel_recv_cell — recv one tunneled local cell (non-blocking)
+; rdi = out_cell_ptr (LOCAL_CELL_SIZE)
+; ==================================================================
+global er_tor_tunnel_recv_cell
+er_fn er_tor_tunnel_recv_cell
+    push    rbx
+    push    r12
+    mov     r12, rdi
+    mov     eax, [tor_tunnel_rx_head]
+    mov     ebx, [tor_tunnel_rx_tail]
+    cmp     eax, ebx
+    je      .empty
+
+    and     ebx, 3
+    imul    ebx, LOCAL_CELL_SIZE
+    lea     rsi, [tor_tunnel_rx_ring + rbx]
+    mov     rdi, r12
+    mov     edx, LOCAL_CELL_SIZE
+    call    er_memcpy
+
+    inc     dword [tor_tunnel_rx_tail]
+    xor     eax, eax
+    er_ok
+    pop     r12
+    pop     rbx
+    er_ret
+.empty:
+    mov     eax, -1
+    er_err  ERROR_LOCAL_EMPTY
+    pop     r12
+    pop     rbx
     er_ret
 
 ; ==================================================================
@@ -259,6 +540,14 @@ er_fn er_tor_init
     call    er_tor_set_role
     test    eax, eax
     js      .link_fail
+    mov     dword [tor_tunnel_dst_ip], 0x607C10A8   ; 104.16.124.96
+    mov     word [tor_tunnel_dst_port], 80
+    mov     dword [tor_tunnel_stream_open], 0
+    mov     word [tor_tunnel_stream_id], 0
+    mov     dword [tor_dir_stream_open], 0
+    mov     word [tor_dir_stream_id], 0
+    mov     dword [tor_tunnel_rx_head], 0
+    mov     dword [tor_tunnel_rx_tail], 0
 
     ; === Phase 1: Connect to guard relay ===
     lea     rdi, [rel str_tor_connect]
@@ -337,8 +626,13 @@ er_fn er_tor_init
 
     add     rsp, 128
 
-    ; === Phase 3: Done ===
+    ; Mark ready before directory channel setup/fetch
     mov     dword [tor_state + TOR_STATE_LINK_ESTABLISHED], 1
+
+    ; === Phase 3: Fetch directory consensus over BEGIN_DIR ===
+    call    er_tor_directory_fetch_consensus
+    test    eax, eax
+    js      .dir_fail
 
     xor     eax, eax
     er_ok
@@ -365,6 +659,17 @@ er_fn er_tor_init
     add     rsp, 128
     mov     eax, -1
     er_err  ERROR_TOR_CIRC_BUILD_FAIL
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+
+.dir_fail:
+    lea     rdi, [rel str_tor_dir_fail]
+    call    _tor_print_status
+    mov     eax, -1
+    er_err  ERROR_TOR_PROTOCOL_ERR
     pop     r14
     pop     r13
     pop     r12
@@ -428,6 +733,8 @@ er_fn er_tor_test_fetch
 SECTION .rodata
 tor_80: dw 80
 str_http_request: db "GET / HTTP/1.1", 0x0D, 0x0A, "Host: check.torproject.org", 0x0D, 0x0A, "Connection: close", 0x0D, 0x0A, 0x0D, 0x0A, 0
+str_tor_dir_consensus_get: db "GET /tor/status-vote/current/consensus HTTP/1.1", 0x0D, 0x0A, "Host: tor", 0x0D, 0x0A, "Connection: close", 0x0D, 0x0A, 0x0D, 0x0A
+str_tor_dir_consensus_get_len equ $ - str_tor_dir_consensus_get
 
 SECTION .text
 
@@ -519,6 +826,29 @@ er_fn er_tor_poll
     movzx   ecx, word [tor_rx_cell + 11]  ; data_len (big-endian)
     xchg    cl, ch
 
+    ; Fast-path: tunnel cell payload (exactly one local cell) for the
+    ; configured tunnel stream. Drop when ring is full.
+    movzx   eax, word [tor_tunnel_stream_id]
+    cmp     r14w, ax
+    jne     .print_data
+    cmp     ecx, LOCAL_CELL_SIZE
+    jne     .print_data
+    mov     eax, [tor_tunnel_rx_head]
+    mov     edx, [tor_tunnel_rx_tail]
+    sub     eax, edx
+    cmp     eax, 4
+    jae     .done
+    mov     eax, [tor_tunnel_rx_head]
+    and     eax, 3
+    imul    eax, LOCAL_CELL_SIZE
+    lea     rdi, [tor_tunnel_rx_ring + rax]
+    lea     rsi, [tor_rx_cell + 16]
+    mov     edx, LOCAL_CELL_SIZE
+    call    er_memcpy
+    inc     dword [tor_tunnel_rx_head]
+    jmp     .done
+
+.print_data:
     ; Print received data length
     push    rcx
     lea     rsi, [rel str_tor_stream]

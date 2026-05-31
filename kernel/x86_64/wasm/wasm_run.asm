@@ -85,22 +85,9 @@ er_fn er_fn_run
 .use_module_memory_pages:
     mov     rax, [memory_min_pages]
 .set_memory_pages:
-    cmp     rax, [memory_min_pages]
-    jb      .no_memory
-    mov     rcx, [memory_max_pages]
-    test    rcx, rcx
-    jz      .check_initial_bytes
-    cmp     rax, rcx
-    ja      .no_memory
-.check_initial_bytes:
-    push    rax
-    mov     rdi, rax
-    call    er_wasm_pages_to_bytes
+    call    _er_wasm_validate_launch_pages
     test    rdx, rdx
-    jnz     .initial_pages_error
-    cmp     rax, [runtime_memory_len]
-    ja      .initial_pages_nomem
-    pop     rax
+    jnz     .error
     mov     [executor_memory_pages], rax
     ; Calculate memory limit: pages * 65536
     shl     rax, WASM_PAGE_SHIFT
@@ -169,12 +156,6 @@ er_fn er_fn_run
 .no_memory:
     er_err  ERROR_NO_MEMORY
     jmp     .error
-.initial_pages_nomem:
-    pop     rax
-    er_err  ERROR_NO_MEMORY
-    jmp     .error
-.initial_pages_error:
-    pop     rax
 .error:
     mov     rax, -1
 .done:
@@ -296,22 +277,9 @@ er_fn er_fn_load
 .use_module_memory_pages:
     mov     rax, [memory_min_pages]
 .set_memory_pages:
-    cmp     rax, [memory_min_pages]
-    jb      .no_memory
-    mov     rcx, [memory_max_pages]
-    test    rcx, rcx
-    jz      .check_initial_bytes
-    cmp     rax, rcx
-    ja      .no_memory
-.check_initial_bytes:
-    push    rax
-    mov     rdi, rax
-    call    er_wasm_pages_to_bytes
+    call    _er_wasm_validate_launch_pages
     test    rdx, rdx
-    jnz     .initial_pages_error
-    cmp     rax, [runtime_memory_len]
-    ja      .initial_pages_nomem
-    pop     rax
+    jnz     .error
     mov     [executor_memory_pages], rax
     shl     rax, WASM_PAGE_SHIFT
     mov     [executor_memory_limit], rax
@@ -347,12 +315,6 @@ er_fn er_fn_load
 .no_memory:
     er_err  ERROR_NO_MEMORY
     jmp     .error
-.initial_pages_nomem:
-    pop     rax
-    er_err  ERROR_NO_MEMORY
-    jmp     .error
-.initial_pages_error:
-    pop     rax
 .error:
     mov     rax, -1
 .done:
@@ -362,6 +324,39 @@ er_fn er_fn_load
     pop     r12
     pop     rbx
     pop     rbp
+    ret
+
+; ==================================================================
+; _er_wasm_validate_launch_pages
+; rax = requested initial pages
+; Returns: rax unchanged on success, rdx=0
+;          rdx=ERROR_NO_MEMORY on policy/backing violation
+; ==================================================================
+_er_wasm_validate_launch_pages:
+    mov     rcx, [memory_min_pages]
+    cmp     rax, rcx
+    jb      .no_memory
+
+    mov     rcx, [memory_max_pages]
+    test    rcx, rcx
+    jz      .check_backing
+    cmp     rax, rcx
+    ja      .no_memory
+
+.check_backing:
+    mov     rdi, rax
+    call    er_wasm_pages_to_bytes
+    test    rdx, rdx
+    jnz     .no_memory
+    cmp     rax, [runtime_memory_len]
+    ja      .no_memory
+
+    shr     rax, WASM_PAGE_SHIFT
+    er_ok
+    ret
+
+.no_memory:
+    er_err  ERROR_NO_MEMORY
     ret
 
 ; ==================================================================
