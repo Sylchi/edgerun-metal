@@ -35,7 +35,9 @@ pub const Switch = struct {
         try scene.pushRect(pill, options.style.border, .border, switch_height * 0.5, 0.0);
         const knob_x = if (self.checked) pill.x + pill.w - switch_knob_size - switch_knob_inset else pill.x + switch_knob_inset;
         const knob = ui.Rect.init(knob_x, pill.y + switch_knob_inset, switch_knob_size, switch_knob_size);
+        try scene.pushRect(knob.insetUniform(-1.0), switch_knob_shadow, .shadow, switch_knob_size * 0.5, 4.0);
         try scene.pushRect(knob, options.style.panel, .fill, switch_knob_size * 0.5, 0.0);
+        if (self.checked) try scene.pushRect(knob.insetUniform(5.0), options.style.accent, .fill, 4.0, 0.0);
         const label_w = @max(component_primitives.min_extent, pill.x - bounds.x - switch_label_gap);
         const label_h = @min(bounds.h, component_primitives.measuredTextHeight(self.label, label_w, switch_label_height, switch_label_max_lines));
         try text_component.Text.renderWrapped(scene, ui.Rect.init(bounds.x, bounds.y, label_w, bounds.h).withHeightCentered(label_h), self.label, options.style.text, component_primitives.textWrap(self.label, switch_label_height, switch_label_max_lines));
@@ -85,6 +87,7 @@ const switch_label_gap: f32 = 10.0;
 const switch_label_height: f32 = component_primitives.control_label_height;
 const switch_label_max_lines: usize = 2;
 const switch_min_width: f32 = 112.0;
+const switch_knob_shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 88 };
 
 test "switch component serializes to canonical object and deserializes" {
     const switch_control = Switch{ .id = 12, .label = "Public", .checked = false };

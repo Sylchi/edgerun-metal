@@ -39,7 +39,9 @@ pub const Slider = struct {
         try renderTrack(scene, track, clamped, options);
         const thumb_center = track.x + track.w * clamped;
         const thumb = ui.Rect.init(thumb_center - slider_thumb_size * 0.5, track.y + (track.h - slider_thumb_size) * 0.5, slider_thumb_size, slider_thumb_size);
-        try scene.pushRect(thumb, options.style.text, .fill, slider_thumb_size * 0.5, 0.0);
+        try scene.pushRect(thumb.insetUniform(-slider_thumb_shadow_inset), slider_thumb_shadow, .shadow, slider_thumb_size * 0.5, slider_thumb_shadow_size);
+        try scene.pushRect(thumb, options.style.panel, .fill, slider_thumb_size * 0.5, 0.0);
+        try scene.pushRect(thumb.insetUniform(3.0), options.style.accent, .fill, (slider_thumb_size - 6.0) * 0.5, 0.0);
     }
 
     pub fn collectInteractions(self: Slider, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
@@ -80,6 +82,7 @@ pub const Slider = struct {
 fn renderTrack(scene: *ui.Scene, track: ui.Rect, value: f32, options: RenderOptions) ui.RenderError!void {
     if (track.w <= 0.0 or track.h <= 0.0) return;
     try scene.pushRect(track, options.style.row, .fill, slider_track_height * 0.5, 0.0);
+    try scene.pushRect(track, options.style.border, .border, slider_track_height * 0.5, 0.0);
     const clamped = ui.clampUnit(value);
     if (clamped <= 0.0) return;
     const fill_width = @min(track.w, @max(0.0, track.w * clamped));
@@ -89,8 +92,11 @@ fn renderTrack(scene: *ui.Scene, track: ui.Rect, value: f32, options: RenderOpti
 const slider_label_height: f32 = 14.0;
 const slider_label_max_lines: usize = 2;
 const slider_label_track_gap: f32 = 12.0;
-const slider_track_height: f32 = 6.0;
-pub const slider_thumb_size: f32 = 16.0;
+const slider_track_height: f32 = 8.0;
+pub const slider_thumb_size: f32 = 18.0;
+const slider_thumb_shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 104 };
+const slider_thumb_shadow_inset: f32 = 1.0;
+const slider_thumb_shadow_size: f32 = 6.0;
 const slider_min_width: f32 = 120.0;
 const slider_min_height: f32 = 32.0;
 

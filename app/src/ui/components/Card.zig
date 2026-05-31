@@ -115,6 +115,9 @@ fn renderFrame(scene: *ui.Scene, bounds: ui.Rect, variant: common.SurfaceVariant
         .subtle => options.style.row,
     };
     try scene.pushRect(bounds, fill_color, .fill, frame_radius, 0.0);
+    if (variant == .elevated) {
+        try scene.pushGradientRect(bounds.insetUniform(1.0), card_highlight, ui.Color.clear, frame_radius);
+    }
     try scene.pushRect(bounds, options.style.border, .border, frame_radius, 0.0);
 }
 
@@ -155,10 +158,11 @@ pub const surface_title_height: f32 = tokens.Component.surface_title_height;
 pub const surface_detail_height: f32 = tokens.Component.surface_detail_height;
 pub const surface_detail_gap: f32 = tokens.Component.surface_detail_gap;
 pub const surface_radius: f32 = tokens.Component.surface_radius;
-const surface_elevated_radius_extra: f32 = 2.0;
-const surface_shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 96 };
-const surface_shadow_size: f32 = 8.0;
+const surface_elevated_radius_extra: f32 = 0.0;
+const surface_shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 112 };
+const surface_shadow_size: f32 = 14.0;
 const surface_shadow_inset: f32 = 1.0;
+const card_highlight = ui.Color{ .r = 255, .g = 255, .b = 255, .a = 12 };
 const surface_title_average_w: f32 = 8.5;
 const surface_title_max_lines: usize = 2;
 const surface_detail_average_w: f32 = 8.0;

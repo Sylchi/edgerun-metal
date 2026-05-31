@@ -1,8 +1,8 @@
 ; EdgeRun Tor client — x86_64 assembly
 ; Main orchestrator: bootstrap, connect, circuit management, streaming.
 ;
-; Entry point: er_tor_init() — called from kernel_main
-;              er_tor_poll() — called from main loop
+; Entry point: er_tor_init() — called explicitly by a Tor role owner
+;              er_tor_poll() — called explicitly by a Tor role owner
 
 %include "x86_64/macros.inc"
 %include "x86_64/wasm_defines.inc"
@@ -158,12 +158,6 @@ _tor_caps_from_role:
 ; ==================================================================
 global er_tor_set_role
 er_fn er_tor_set_role
-    ; Keep Tor integrated with the current kernel operating model:
-    ; only the client path is implemented end-to-end right now.
-    ; Other roles stay hard-fail until corresponding handlers land in
-    ; the existing identity/cell pipeline.
-    cmp     edi, TOR_ROLE_CLIENT
-    jne     .unsupported_role
     call    _tor_caps_from_role
     cmp     eax, -1
     je      .bad_role
@@ -176,10 +170,6 @@ er_fn er_tor_set_role
     mov     eax, -1
     er_err  ERROR_TOR_ROLE_INVALID
     er_ret
-.unsupported_role:
-    mov     eax, -1
-    er_err  ERROR_TOR_ROLE_UNSUPPORTED
-    er_ret
 
 ; ==================================================================
 ; er_tor_get_role — read current role
@@ -188,6 +178,16 @@ er_fn er_tor_set_role
 global er_tor_get_role
 er_fn er_tor_get_role
     mov     eax, [tor_state + TOR_STATE_ROLE]
+    er_ok
+    er_ret
+
+; ==================================================================
+; er_tor_get_role_caps — read current role capability mask
+; returns eax = TOR_CAP_* bitmask
+; ==================================================================
+global er_tor_get_role_caps
+er_fn er_tor_get_role_caps
+    mov     eax, [tor_state + TOR_STATE_ROLE_CAPS]
     er_ok
     er_ret
 

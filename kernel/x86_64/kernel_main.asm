@@ -31,8 +31,10 @@ extern er_cpu_id
 extern er_rdtsc
 extern er_net_poll
 extern er_halt
+%ifdef ER_KERNEL_TOR_AUTOSTART
 extern er_tor_init
 extern er_tor_poll
+%endif
 extern er_local_cell_init
 extern er_local_cell_poll
 extern er_local_circuit_init
@@ -89,6 +91,7 @@ extern er_xhci_probe
 extern er_xhci_init
 extern er_xhci_cmd_submit_noop
 extern er_xhci_cmd_submit_enable_slot
+extern er_xhci_cmd_submit_address_device
 extern er_xhci_event_pop
 extern er_xhci_cmd_wait_completion
 extern er_xhci_get_cmd_debug
@@ -280,6 +283,7 @@ check_xhci_cyc: db " cyc ", 0
 check_xhci_st: db " st ", 0
 check_xhci_ctl: db " ctl ", 0
 check_xhci_sid: db " sid ", 0
+check_xhci_addr: db " addr ", 0
 check_uvc_abs: db "absent", 0
 check_uvc_caps: db " caps ", 0
 check_uvc_rgb: db " rgb ", 0
@@ -392,6 +396,7 @@ xhci_dbg_cyc: resd 1
 xhci_rx_count: resd 1
 xhci_last_cc: resd 1
 xhci_slot_id: resd 1
+xhci_addr_cc: resd 1
 
 %define VIRTIO_NET_STORAGE_size 4900
 virtio_net_dev:      resb VIRTIO_NET_DEVICE_size
@@ -1390,6 +1395,24 @@ er_fn er_kernel_main
     mov     rdi, COM1_PORT
     mov     esi, [rel xhci_slot_id]
     call    er_serial_putdec32
+    mov     dword [rel xhci_addr_cc], 0
+    mov     edi, [rel xhci_slot_id]
+    mov     esi, 1
+    call    er_xhci_cmd_submit_address_device
+    test    eax, eax
+    jnz     .xhci_addr_done
+    mov     edi, 10000
+    lea     rsi, [rel xhci_addr_cc]
+    lea     rdx, [rel xhci_evt_ctl]
+    lea     rcx, [rel xhci_evt_p0]
+    call    er_xhci_cmd_wait_completion
+.xhci_addr_done:
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_xhci_addr]
+    call    er_serial_puts
+    mov     rdi, COM1_PORT
+    mov     esi, [rel xhci_addr_cc]
+    call    er_serial_putdec32
 
     mov     edi, 1
     call    er_uvc_probe
@@ -2296,9 +2319,11 @@ er_fn er_kernel_main
     mov     rdi, 0x0A
     call    er_display_putchar
 
+%ifdef ER_KERNEL_TOR_AUTOSTART
     ; ─── Tor client init ─────────────────────────────────────
     call    er_tor_init
     ser_puts .dbg_tor
+%endif
 
     ; ─── Local cell transport init ───────────────────────────
     call    er_local_cell_init
@@ -2359,7 +2384,9 @@ er_fn er_kernel_main
 
     ; Pipeline stages — each returns cells processed (0 = idle)
     call    er_net_poll
+%ifdef ER_KERNEL_TOR_AUTOSTART
     call    er_tor_poll
+%endif
     call    er_local_cell_poll
     call    er_input_kbd_poll
     call    er_da_tick

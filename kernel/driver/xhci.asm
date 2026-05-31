@@ -36,6 +36,7 @@ extern er_serial_crlf
 
 ; ─── HCCPARAMS1 bits ────────────────────────────────────────────────
 %define HCC1_PPC         (1 << 4)
+%define HCC1_CSZ         (1 << 2)
 %define HCC1_64BIT       (1 << 0)
 
 ; ─── Operational register offsets (from port_off = CAPLENGTH) ──────
@@ -76,6 +77,7 @@ extern er_serial_crlf
 ; ─── TRB constants ──────────────────────────────────────────────────
 %define TRB_CMD_NOOP     23
 %define TRB_CMD_ENABLE_SLOT 9
+%define TRB_CMD_ADDRESS_DEVICE 11
 %define TRB_LINK         6
 %define TRB_EV_CMD_CMPL  33
 %define TRB_TYPE_SHIFT   10
@@ -88,6 +90,24 @@ extern er_serial_crlf
 %define CMD_RING_NTRB    16
 %define EVT_RING_NTRB    16
 %define XHCI_BLOB_PORT_SLOTS 32
+%define XHCI_CTX_SIZE_32 32
+%define XHCI_CTX_SIZE_64 64
+%define XHCI_CTX_COUNT   32
+%define XHCI_INPUT_CTX_BYTES 4096
+%define XHCI_DEVICE_CTX_BYTES 4096
+%define XHCI_EP0_RING_NTRB 16
+%define XHCI_SPEED_LOW   2
+%define XHCI_SPEED_FULL  1
+%define XHCI_SPEED_HIGH  3
+%define XHCI_SPEED_SUPER 4
+%define XHCI_SLOT_CTX_ENTRIES_SHIFT 27
+%define XHCI_SLOT_CTX_PORT_SHIFT    16
+%define XHCI_SLOT_CTX_SPEED_SHIFT   20
+%define XHCI_EP_TYPE_CONTROL        4
+%define XHCI_EP_CTX_CERR_SHIFT      1
+%define XHCI_EP_CTX_TYPE_SHIFT      3
+%define XHCI_EP_CTX_MPS_SHIFT       16
+%define XHCI_TRANSFER_DCS           1
 
 ; ─── BSS ────────────────────────────────────────────────────────────
 SECTION .bss
@@ -99,6 +119,12 @@ align 64
 xhci_evt_ring:     resb (EVT_RING_NTRB * 16)
 align 64
 xhci_cmd_ring:     resb (CMD_RING_NTRB * 16)
+align 64
+xhci_input_ctx:    resb XHCI_INPUT_CTX_BYTES
+align 64
+xhci_device_ctx:   resb XHCI_DEVICE_CTX_BYTES
+align 64
+xhci_ep0_ring:     resb (XHCI_EP0_RING_NTRB * 16)
 
 xhci_bar0:         resd 1
 xhci_port_off:     resd 1
@@ -107,6 +133,8 @@ xhci_db_off:       resd 1
 xhci_max_slots:    resd 1
 xhci_max_ports:    resd 1
 xhci_hci_rev:      resd 1
+xhci_ctx_size:     resd 1
+xhci_last_port:    resd 1
 xhci_cfg_blob_ptrs: resq XHCI_BLOB_PORT_SLOTS
 xhci_cfg_blob_lens: resq XHCI_BLOB_PORT_SLOTS
 xhci_cmd_enq_idx:   resd 1
@@ -427,6 +455,14 @@ er_fn er_xhci_init
     lea     rdi, [r14 + XHCI_RTSOFF]
     call    er_mmio_read32
     mov     [xhci_rts_off], eax
+    lea     rdi, [r14 + XHCI_HCCPARAMS1]
+    call    er_mmio_read32
+    mov     ecx, XHCI_CTX_SIZE_32
+    test    eax, HCC1_CSZ
+    jz      .ctx_size_ready
+    mov     ecx, XHCI_CTX_SIZE_64
+.ctx_size_ready:
+    mov     [xhci_ctx_size], ecx
 
     ; ─── 0. Initialize software/hardware ring backing storage ──────
     ; Clear command ring
@@ -468,6 +504,18 @@ er_fn er_xhci_init
     lea     rdi, [rel xhci_cfg_blob_lens]
     xor     eax, eax
     mov     ecx, (XHCI_BLOB_PORT_SLOTS * 8) / 8
+    rep stosq
+    lea     rdi, [rel xhci_input_ctx]
+    xor     eax, eax
+    mov     ecx, XHCI_INPUT_CTX_BYTES / 8
+    rep stosq
+    lea     rdi, [rel xhci_device_ctx]
+    xor     eax, eax
+    mov     ecx, XHCI_DEVICE_CTX_BYTES / 8
+    rep stosq
+    lea     rdi, [rel xhci_ep0_ring]
+    xor     eax, eax
+    mov     ecx, (XHCI_EP0_RING_NTRB * 16) / 8
     rep stosq
 
     ; ─── 1. Reset controller ──────────────────────────────────
@@ -860,46 +908,40 @@ er_fn er_xhci_get_port_config_blob
     mov     eax, -1
     ret
 
-; ==================================================================
-; er_xhci_cmd_submit_noop — enqueue a command No-Op TRB and ring doorbell 0
-; int er_xhci_cmd_submit_noop(void)
-; Returns: 0 on success, -1 on controller-not-present.
-; ==================================================================
-er_fn er_xhci_cmd_submit_noop
+; _xhci_cmd_enqueue — write one command TRB and ring doorbell 0.
+; rdi=parameter, esi=status, edx=control without cycle bit.
+; Returns eax=0 or -1. Clobbers caller-saved registers.
+_xhci_cmd_enqueue:
     mov     eax, [xhci_bar0]
     test    eax, eax
-    jz      .cn_absent
-
+    jz      .qe_absent
     mov     ecx, [xhci_cmd_enq_idx]
     cmp     ecx, (CMD_RING_NTRB - 1)
-    jae     .cn_bad_state
-    lea     rdi, [rel xhci_cmd_ring]
+    jae     .qe_bad_state
+    lea     r8, [rel xhci_cmd_ring]
     mov     eax, ecx
     shl     eax, 4
-    add     rdi, rax
-    mov     [xhci_last_cmd_ptr], rdi
-    ; TRB parameter/status are zero for No-Op.
-    mov     qword [rdi + 0], 0
-    mov     dword [rdi + 8], 0
-    mov     eax, (TRB_CMD_NOOP << TRB_TYPE_SHIFT)
+    add     r8, rax
+    mov     [xhci_last_cmd_ptr], r8
+    mov     [r8 + 0], rdi
+    mov     [r8 + 8], esi
+    mov     eax, edx
     mov     edx, [xhci_cmd_cycle]
     and     edx, TRB_CYCLE
     or      eax, edx
-    mov     [rdi + 12], eax
+    mov     [r8 + 12], eax
 
-    ; Advance enqueue pointer, skipping permanent Link TRB at tail.
     mov     eax, ecx
     inc     eax
     cmp     eax, (CMD_RING_NTRB - 1)
-    jb      .cn_store_idx
+    jb      .qe_store_idx
     mov     eax, 0
     mov     edx, [xhci_cmd_cycle]
     xor     edx, 1
     mov     [xhci_cmd_cycle], edx
-.cn_store_idx:
+.qe_store_idx:
     mov     [xhci_cmd_enq_idx], eax
 
-    ; Ring command doorbell (DB0 target 0, stream 0).
     mov     edi, [xhci_bar0]
     add     edi, [xhci_db_off]
     xor     esi, esi
@@ -907,14 +949,25 @@ er_fn er_xhci_cmd_submit_noop
     xor     eax, eax
     er_ok
     ret
-.cn_absent:
+.qe_absent:
     er_err  ERROR_NOT_PRESENT
     mov     eax, -1
     ret
-.cn_bad_state:
+.qe_bad_state:
     er_err  ERROR_BAD_ARGUMENT
     mov     eax, -1
     ret
+
+; ==================================================================
+; er_xhci_cmd_submit_noop — enqueue a command No-Op TRB and ring doorbell 0
+; int er_xhci_cmd_submit_noop(void)
+; Returns: 0 on success, -1 on controller-not-present.
+; ==================================================================
+er_fn er_xhci_cmd_submit_noop
+    xor     edi, edi
+    xor     esi, esi
+    mov     edx, (TRB_CMD_NOOP << TRB_TYPE_SHIFT)
+    jmp     _xhci_cmd_enqueue
 
 ; ==================================================================
 ; er_xhci_cmd_submit_enable_slot — enqueue Enable Slot command TRB
@@ -922,51 +975,158 @@ er_fn er_xhci_cmd_submit_noop
 ; Returns: 0 on success, -1 on controller-not-present/bad-state.
 ; ==================================================================
 er_fn er_xhci_cmd_submit_enable_slot
+    xor     edi, edi
+    xor     esi, esi
+    mov     edx, (TRB_CMD_ENABLE_SLOT << TRB_TYPE_SHIFT)
+    jmp     _xhci_cmd_enqueue
+
+; ==================================================================
+; er_xhci_cmd_submit_address_device — build input ctx and enqueue Address Device
+; int er_xhci_cmd_submit_address_device(uint32_t slot_id, uint32_t port_index)
+; Returns: 0 after command TRB is submitted; completion is read with
+; er_xhci_cmd_wait_completion.
+; ==================================================================
+er_fn er_xhci_cmd_submit_address_device
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+    push    rbx
+
+    mov     r12d, edi           ; slot id
+    mov     r13d, esi           ; 1-based port index
     mov     eax, [xhci_bar0]
     test    eax, eax
-    jz      .ce_absent
+    jz      .ad_absent
+    cmp     r12d, 1
+    jb      .ad_bad_arg
+    mov     eax, [xhci_max_slots]
+    cmp     r12d, eax
+    ja      .ad_bad_arg
+    cmp     r13d, 1
+    jb      .ad_bad_arg
+    mov     eax, [xhci_max_ports]
+    cmp     r13d, eax
+    ja      .ad_bad_arg
 
-    mov     ecx, [xhci_cmd_enq_idx]
-    cmp     ecx, (CMD_RING_NTRB - 1)
-    jae     .ce_bad_state
-    lea     rdi, [rel xhci_cmd_ring]
-    mov     eax, ecx
-    shl     eax, 4
-    add     rdi, rax
-    mov     [xhci_last_cmd_ptr], rdi
-    mov     qword [rdi + 0], 0
-    mov     dword [rdi + 8], 0
-    mov     eax, (TRB_CMD_ENABLE_SLOT << TRB_TYPE_SHIFT)
-    mov     edx, [xhci_cmd_cycle]
-    and     edx, TRB_CYCLE
-    or      eax, edx
-    mov     [rdi + 12], eax
+    mov     edi, r13d
+    lea     rsi, [rel xhci_last_port]
+    call    er_xhci_read_portsc
+    test    eax, eax
+    jnz     .ad_absent
+    mov     eax, [rel xhci_last_port]
+    test    eax, PORTSC_CCS
+    jz      .ad_absent
+    shr     eax, PORTSC_SPEED_SHIFT
+    and     eax, 0x0F
+    mov     r14d, eax           ; port speed id
 
-    mov     eax, ecx
-    inc     eax
-    cmp     eax, (CMD_RING_NTRB - 1)
-    jb      .ce_store_idx
-    mov     eax, 0
-    mov     edx, [xhci_cmd_cycle]
-    xor     edx, 1
-    mov     [xhci_cmd_cycle], edx
-.ce_store_idx:
-    mov     [xhci_cmd_enq_idx], eax
+    cmp     r14d, XHCI_SPEED_LOW
+    je      .ad_mps_low
+    cmp     r14d, XHCI_SPEED_FULL
+    je      .ad_mps_full_high
+    cmp     r14d, XHCI_SPEED_HIGH
+    je      .ad_mps_full_high
+    cmp     r14d, XHCI_SPEED_SUPER
+    jae     .ad_mps_super
+    jmp     .ad_bad_state
+.ad_mps_low:
+    mov     r15d, 8
+    jmp     .ad_build
+.ad_mps_full_high:
+    mov     r15d, 64
+    jmp     .ad_build
+.ad_mps_super:
+    mov     r15d, 512
 
-    mov     edi, [xhci_bar0]
-    add     edi, [xhci_db_off]
-    xor     esi, esi
-    call    er_mmio_write32
+.ad_build:
+    lea     rdi, [rel xhci_input_ctx]
     xor     eax, eax
-    er_ok
-    ret
-.ce_absent:
+    mov     ecx, XHCI_INPUT_CTX_BYTES / 8
+    rep stosq
+    lea     rdi, [rel xhci_device_ctx]
+    xor     eax, eax
+    mov     ecx, XHCI_DEVICE_CTX_BYTES / 8
+    rep stosq
+    lea     rdi, [rel xhci_ep0_ring]
+    xor     eax, eax
+    mov     ecx, (XHCI_EP0_RING_NTRB * 16) / 8
+    rep stosq
+
+    ; DCBAA[slot_id] points to the output device context before Address Device.
+    lea     rbx, [rel xhci_dcbaa]
+    lea     rax, [rel xhci_device_ctx]
+    mov     [rbx + r12*8], rax
+
+    ; Input Control Context: add Slot Context and Endpoint 0 Context.
+    mov     dword [rel xhci_input_ctx + 4], 0x00000003
+
+    ; Slot Context at input + context_size.
+    mov     ebx, [xhci_ctx_size]
+    lea     r10, [rel xhci_input_ctx]
+    add     r10, rbx
+    mov     eax, 1
+    shl     eax, XHCI_SLOT_CTX_ENTRIES_SHIFT
+    mov     edx, r13d
+    shl     edx, XHCI_SLOT_CTX_PORT_SHIFT
+    or      eax, edx
+    mov     edx, r14d
+    shl     edx, XHCI_SLOT_CTX_SPEED_SHIFT
+    or      eax, edx
+    mov     [r10 + 0], eax
+
+    ; Endpoint 0 Context at input + context_size * 2.
+    lea     r11, [rel xhci_input_ctx]
+    mov     eax, ebx
+    shl     eax, 1
+    add     r11, rax
+    mov     eax, 3
+    shl     eax, XHCI_EP_CTX_CERR_SHIFT
+    mov     edx, XHCI_EP_TYPE_CONTROL
+    shl     edx, XHCI_EP_CTX_TYPE_SHIFT
+    or      eax, edx
+    mov     edx, r15d
+    shl     edx, XHCI_EP_CTX_MPS_SHIFT
+    or      eax, edx
+    mov     [r11 + 4], eax
+    lea     rax, [rel xhci_ep0_ring]
+    or      rax, XHCI_TRANSFER_DCS
+    mov     [r11 + 8], rax
+    mov     dword [r11 + 16], 8
+
+    ; EP0 transfer ring is empty but valid for later control transfers.
+    lea     rax, [rel xhci_ep0_ring]
+    lea     rdi, [rel xhci_ep0_ring + ((XHCI_EP0_RING_NTRB - 1) * 16)]
+    mov     [rdi + 0], rax
+    mov     dword [rdi + 8], 0
+    mov     dword [rdi + 12], (TRB_LINK << TRB_TYPE_SHIFT) | TRB_LINK_TOGGLE | TRB_CYCLE
+
+    lea     rdi, [rel xhci_input_ctx]
+    xor     esi, esi
+    mov     edx, (TRB_CMD_ADDRESS_DEVICE << TRB_TYPE_SHIFT)
+    mov     eax, r12d
+    shl     eax, 24
+    or      edx, eax
+    call    _xhci_cmd_enqueue
+    jmp     .ad_out
+
+.ad_absent:
     er_err  ERROR_NOT_PRESENT
     mov     eax, -1
-    ret
-.ce_bad_state:
+    jmp     .ad_out
+.ad_bad_arg:
     er_err  ERROR_BAD_ARGUMENT
     mov     eax, -1
+    jmp     .ad_out
+.ad_bad_state:
+    er_err  ERROR_BAD_ARGUMENT
+    mov     eax, -1
+.ad_out:
+    pop     rbx
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
     ret
 
 ; ==================================================================

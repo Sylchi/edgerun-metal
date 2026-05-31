@@ -24,7 +24,7 @@ No web framework. No pile of native dependencies.
 
 ```text
 one app
-with its own compiler
+with its own source object
 with its own UI system
 with its own object store
 with its own runtime receipts
@@ -32,8 +32,9 @@ that runs through web host, native, CPU, GPU, and real-hardware paths
 ```
 
 The crazy part is not that it renders a page. The crazy part is that the app can
-carry its source as data, edit that source inside its own memory, compile the
-next app artifact, and keep the whole chain explainable.
+carry its source as data, edit that source inside its own memory, request a
+successor artifact through the explicit build/runtime contract, and keep the
+whole chain explainable.
 
 ## Why This Deserves Attention
 
@@ -49,7 +50,7 @@ about:
 ```text
 Here is the app.
 Here is the source object.
-Here is the compiler object.
+Here is the build contract.
 Here is what it asks for.
 Here is what your machine granted.
 Here is the receipt for what happened.
@@ -60,7 +61,7 @@ That makes the project interesting even before it is finished:
 - Apps do not automatically inherit your files, network, devices, identity, or
   another app's memory.
 - The UI is built into the system instead of outsourced to a web framework.
-- The compiler path is part of the app loop instead of a separate developer
+- The build path is part of the app loop instead of a separate developer
   machine ritual.
 - Important data is stored as canonical objects, not vague files or hidden state.
 - Work produces receipts, so execution can be replayed, checked, and explained.
@@ -76,7 +77,7 @@ own next version, run wherever it is granted resources, and explain what it did.
 
 EdgeRun treats apps as self-contained object graphs.
 
-An EdgeRun app can contain source, compiler bytes, UI components, media,
+An EdgeRun app can contain source objects, UI components, media,
 requirements, and receipts. When it wants to run, the local machine grants exact
 slices of memory, storage, identity, and device authority. The app does its work
 inside those bounds and emits receipts.

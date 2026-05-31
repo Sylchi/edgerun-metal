@@ -41,9 +41,12 @@ pub const RowItem = struct {
 
     pub fn render(self: RowItem, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
         try scene.pushRect(bounds, options.style.row, .fill, row_radius, 0.0);
+        try scene.pushRect(bounds, options.style.border, .border, row_radius, 0.0);
         if (self.leading_icon.optional()) |icon| {
-            const icon_bounds = ui.Rect.init(bounds.x + 8, bounds.y + (bounds.h - row_icon_size) * 0.5, row_icon_size, row_icon_size);
-            try icon.render(scene, icon_bounds, options);
+            const chip = ui.Rect.init(bounds.x + row_text_padding_x, bounds.y + (bounds.h - row_icon_chip_size) * 0.5, row_icon_chip_size, row_icon_chip_size);
+            try scene.pushRect(chip, options.style.panel, .fill, row_icon_chip_radius, 0.0);
+            try scene.pushRect(chip, options.style.border, .border, row_icon_chip_radius, 0.0);
+            try icon.renderColor(scene, chip.withHeightCentered(row_icon_size).withWidthCentered(row_icon_size), options.style.accent);
         }
         if (self.detail.len == 0) {
             if (centeredTitleBounds(bounds, self.title, self)) |title_bounds| {
@@ -65,7 +68,7 @@ pub const RowItem = struct {
 
     pub fn measure(self: RowItem, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
         _ = options;
-        const icon_extra: f32 = if (hasIcon(self)) row_icon_size + row_icon_text_gap else 0.0;
+        const icon_extra: f32 = if (hasIcon(self)) row_icon_chip_size + row_icon_text_gap else 0.0;
         const inner = constraints.inner(.{ .left = row_text_padding_x + icon_extra, .right = row_text_padding_x });
         const title = text_component.Text.measureValue(self.title, inner, titleMetrics(self.title));
         const detail = if (self.detail.len == 0)
@@ -75,7 +78,7 @@ pub const RowItem = struct {
         const gap: f32 = if (self.detail.len == 0) 0.0 else row_text_gap;
         const preferred = component_primitives.constrainPreferredSize(.{
             .w = @max(row_min_width, @max(title.preferred.w, detail.preferred.w) + row_text_padding_x * 2.0 + icon_extra),
-            .h = @max(row_padding_y * 2.0 + title.preferred.h + gap + detail.preferred.h, row_icon_size + row_padding_y * 2.0),
+            .h = @max(row_padding_y * 2.0 + title.preferred.h + gap + detail.preferred.h, row_icon_chip_size + row_padding_y * 2.0),
         }, constraints);
         return layout.Measurement.flexible(
             .{ .w = @min(row_min_width, preferred.w), .h = @min(row_min_height, preferred.h) },
@@ -131,13 +134,13 @@ fn detailBounds(bounds: ui.Rect, title: []const u8, detail: []const u8, row: Row
 }
 
 fn textBounds(bounds: ui.Rect, has_icon: bool) ?ui.Rect {
-    const icon_left: f32 = if (has_icon) row_icon_size + row_icon_text_gap else 0.0;
+    const icon_left: f32 = if (has_icon) row_icon_chip_size + row_icon_text_gap else 0.0;
     const out = bounds.insetLtrb(row_text_padding_x + icon_left, 0.0, row_text_padding_x, 0.0);
     return if (out.valid()) out else null;
 }
 
 fn textWidth(bounds: ui.Rect, has_icon: bool) f32 {
-    const icon_left: f32 = if (has_icon) row_icon_size + row_icon_text_gap else 0.0;
+    const icon_left: f32 = if (has_icon) row_icon_chip_size + row_icon_text_gap else 0.0;
     return @max(component_primitives.min_extent, bounds.w - row_text_padding_x * 2.0 - icon_left);
 }
 
@@ -171,7 +174,9 @@ const row_title_line_height: f32 = 18.0;
 const row_detail_line_height: f32 = 16.0;
 const row_text_max_lines: usize = 2;
 const row_icon_size: f32 = 24.0;
-const row_icon_text_gap: f32 = 8.0;
+const row_icon_chip_size: f32 = 32.0;
+const row_icon_chip_radius: f32 = 8.0;
+const row_icon_text_gap: f32 = 12.0;
 
 test "row item component serializes to canonical object and deserializes" {
     const row = RowItem{ .id = 20, .title = "object graph", .detail = "canonical data" };
