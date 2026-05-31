@@ -5,6 +5,9 @@
 %include "x86_64/macros.inc"
 %include "x86_64/wasm_defines.inc"
 
+extern er_xhci_get_info
+extern er_xhci_read_portsc
+
 ; Stream kinds
 %define UVC_STREAM_RGB 0
 %define UVC_STREAM_IR  1
@@ -15,6 +18,7 @@
 %define UVC_CAP_MJPEG         (1 << 2)
 %define UVC_CAP_YUY2          (1 << 3)
 %define UVC_CAP_CONTROLS      (1 << 4)
+%define XHCI_PORTSC_CCS       (1 << 0)
 
 ; Stream state layout
 %define UVC_STREAM_ENABLED    0   ; u8
@@ -32,6 +36,9 @@ uvc_attached:         resb 1
 uvc_rgb_state:        resb UVC_STREAM_SIZE
 uvc_ir_state:         resb UVC_STREAM_SIZE
 uvc_last_status:      resd 1
+uvc_xhci_bar0:        resq 1
+uvc_xhci_max_ports:   resd 1
+uvc_last_portsc:      resd 1
 
 SECTION .text
 
@@ -39,11 +46,35 @@ SECTION .text
 ; Hint is non-zero when at least one xHCI controller initialized.
 ; Returns: eax=1 if a UVC-capable topology is considered present, else 0.
 er_fn er_uvc_probe
-    test    rdi, rdi
-    jz      .no_xhci
+    lea     rdi, [uvc_xhci_bar0]
+    lea     rsi, [uvc_xhci_max_ports]
+    call    er_xhci_get_info
+    test    eax, eax
+    jnz     .no_xhci
 
-    ; Scaffold defaults: mark attached with RGB+IR capability bits present.
-    ; Real descriptor-driven detection will overwrite this.
+    xor     r8d, r8d             ; connected_count
+    mov     ecx, 1               ; port index (1-based)
+.port_loop:
+    cmp     ecx, [uvc_xhci_max_ports]
+    ja      .port_done
+    mov     edi, ecx
+    lea     rsi, [uvc_last_portsc]
+    call    er_xhci_read_portsc
+    test    eax, eax
+    jnz     .port_next
+    mov     eax, [uvc_last_portsc]
+    test    eax, XHCI_PORTSC_CCS
+    jz      .port_next
+    inc     r8d
+.port_next:
+    inc     ecx
+    jmp     .port_loop
+
+.port_done:
+    test    r8d, r8d
+    jz      .no_xhci
+    ; We have at least one attached USB device on xHCI ports.
+    ; UVC class-specific descriptor/endpoint parsing is next step.
     mov     byte [uvc_attached], 1
     mov     dword [uvc_capabilities], UVC_CAP_RGB_PRESENT | UVC_CAP_IR_PRESENT
     mov     dword [uvc_last_status], ERROR_OK

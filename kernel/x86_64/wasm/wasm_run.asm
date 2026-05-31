@@ -58,6 +58,8 @@ er_fn er_fn_run
 
 .error:
     mov     rax, -1
+    mov     byte [exec_storage_module_valid], 0
+    mov     qword [executor_runtime_ptr], 0
 .done:
     pop     r8              ; restore export_name_len
     pop     r15
@@ -131,6 +133,8 @@ er_fn er_fn_load
     jmp     .done
 .error:
     mov     rax, -1
+    mov     byte [exec_storage_module_valid], 0
+    mov     qword [executor_runtime_ptr], 0
 .done:
     pop     r15
     pop     r14
@@ -181,6 +185,7 @@ _er_wasm_validate_launch_pages:
 _er_wasm_stage_runtime_for_module:
     push    rbx
     mov     rbx, rdi
+    mov     [executor_runtime_ptr], rbx
 
     ; Initialize runtime context memory/ticks
     mov     rdi, [rbx + RUNTIME_MEMORY_PTR_OFF]
@@ -340,6 +345,11 @@ er_fn er_fn_call
     ; Update runtime pointer for import wrappers
     mov     [rel er_wasm_runtime_ptr], r12
 
+    cmp     byte [exec_storage_module_valid], 1
+    jne     .bad_loaded_state
+    cmp     r12, [executor_runtime_ptr]
+    jne     .bad_loaded_state
+
     ; Resolve export to function index
     mov     rdi, r13
     mov     rsi, r14
@@ -364,6 +374,10 @@ er_fn er_fn_call
 .error:
     xor     eax, eax
     ; rdx already set by failing call
+    jmp     .done
+.bad_loaded_state:
+    xor     eax, eax
+    er_err  ERROR_BAD_ARGUMENT
 .done:
     pop     r15
     pop     r14

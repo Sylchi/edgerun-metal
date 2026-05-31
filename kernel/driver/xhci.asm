@@ -623,3 +623,68 @@ er_fn er_xhci_init
 
 .ok_s: db "xhci_init: ok bar ",0
 .to_s: db "xhci_init: timeout",0
+
+; ==================================================================
+; er_xhci_get_info — fetch initialized controller summary
+; int er_xhci_get_info(uint64_t* out_bar0, uint32_t* out_max_ports)
+; Returns: eax=0 on success, -1 if controller state is unavailable.
+; ==================================================================
+er_fn er_xhci_get_info
+    test    rdi, rdi
+    jz      .gi_bad_arg
+    test    rsi, rsi
+    jz      .gi_bad_arg
+    mov     eax, [xhci_bar0]
+    test    eax, eax
+    jz      .gi_absent
+    mov     [rdi], rax
+    mov     eax, [xhci_max_ports]
+    mov     [rsi], eax
+    er_ok
+    xor     eax, eax
+    ret
+.gi_bad_arg:
+    er_err  ERROR_BAD_ARGUMENT
+    mov     eax, -1
+    ret
+.gi_absent:
+    er_err  ERROR_NOT_PRESENT
+    mov     eax, -1
+    ret
+
+; ==================================================================
+; er_xhci_read_portsc — read xHCI PORTSC for a given 1-based port index
+; int er_xhci_read_portsc(uint32_t port_index, uint32_t* out_portsc)
+; Returns: eax=0 on success, -1 on bad args/state.
+; ==================================================================
+er_fn er_xhci_read_portsc
+    test    rsi, rsi
+    jz      .rp_bad_arg
+    cmp     edi, 1
+    jb      .rp_bad_arg
+    mov     eax, [xhci_max_ports]
+    cmp     edi, eax
+    ja      .rp_bad_arg
+    mov     eax, [xhci_bar0]
+    test    eax, eax
+    jz      .rp_absent
+    mov     edx, edi
+    dec     edx
+    shl     edx, 4
+    add     edx, OP_PORTSC
+    add     edx, [xhci_port_off]
+    add     edx, [xhci_bar0]
+    mov     rdi, rdx
+    call    er_mmio_read32
+    mov     [rsi], eax
+    er_ok
+    xor     eax, eax
+    ret
+.rp_bad_arg:
+    er_err  ERROR_BAD_ARGUMENT
+    mov     eax, -1
+    ret
+.rp_absent:
+    er_err  ERROR_NOT_PRESENT
+    mov     eax, -1
+    ret

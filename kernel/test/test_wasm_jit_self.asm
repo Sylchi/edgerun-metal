@@ -32,11 +32,15 @@ BODY0_LEN     equ 5
 ; WASM bytecode for func 1: call(0) end → calls func 0, returns its result
 body1:        db 0x10, 0x00, 0x0B
 BODY1_LEN     equ 3
+missing_export_name: db "missing"
+MISSING_EXPORT_NAME_LEN equ 7
 
 SECTION .bss
 test_fail: resq 1
 saved_rax: resq 1
 saved_rdx: resq 1
+runtime_a: resb RUNTIME_SIZE
+runtime_b: resb RUNTIME_SIZE
 
 ; er_wasm_runtime_ptr provided here so wasm_run.asm doesn't extern it
 global er_wasm_runtime_ptr
@@ -48,6 +52,27 @@ _start:
 
     call    jit_debug_init
     mov     qword [rel test_fail], 0
+
+    ; er_fn_call requires a successfully loaded module for the same runtime.
+    mov     byte [rel exec_storage_module_valid], 0
+    lea     rdi, [rel runtime_a]
+    lea     rsi, [rel missing_export_name]
+    mov     edx, MISSING_EXPORT_NAME_LEN
+    call    er_fn_call
+    cmp     rdx, ERROR_BAD_ARGUMENT
+    jne     .fail
+
+    mov     byte [rel exec_storage_module_valid], 1
+    lea     rax, [rel runtime_a]
+    mov     [rel executor_runtime_ptr], rax
+    lea     rdi, [rel runtime_b]
+    lea     rsi, [rel missing_export_name]
+    mov     edx, MISSING_EXPORT_NAME_LEN
+    call    er_fn_call
+    cmp     rdx, ERROR_BAD_ARGUMENT
+    jne     .fail
+    mov     byte [rel exec_storage_module_valid], 0
+    mov     qword [rel executor_runtime_ptr], 0
 
     lea     rdi, [rel jit_code_cache]
     and     rdi, LINUX_PAGE_MASK
