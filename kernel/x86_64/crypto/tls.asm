@@ -1003,11 +1003,19 @@ er_fn er_tls_aes128_gcm_decrypt
     inc     ecx
     jmp     .tag_dec_loop
 .check_tag_dec:
-    lea     rdi, [tls_gcm_calc_tag]
     mov     rsi, [tls_gcm_tag_ptr]
-    mov     edx, TLS_GCM_TAG_LEN
-    call    er_memcmp
-    test    eax, eax
+    xor     eax, eax
+    xor     ecx, ecx
+.cmp_tag_dec:
+    cmp     ecx, TLS_GCM_TAG_LEN
+    jae     .cmp_done_dec
+    movzx   edx, byte [tls_gcm_calc_tag + rcx]
+    xor     dl, [rsi + rcx]
+    or      al, dl
+    inc     ecx
+    jmp     .cmp_tag_dec
+.cmp_done_dec:
+    test    al, al
     jnz     .auth_fail_dec
 
     ; Decrypt with inc32(J0).
