@@ -5,7 +5,7 @@ const editor = @import("editor.zig");
 const identity = @import("identity.zig");
 const compiler = @import("compiler.zig");
 const app_frame = @import("../route/frame.zig");
-const component_gallery = @import("../component_gallery.zig");
+const component_gallery = @import("../ui/component_gallery.zig");
 
 pub fn appKeyEvent(key: []const u8, ctrl: u32, meta: u32, alt: u32, shift: u32) u32 {
     if (editor.sourceEditorFocused()) {
@@ -246,5 +246,4 @@ fn currentDragOverride() ?component_gallery.DragOverride {
     }
     return null;
 }
-
 

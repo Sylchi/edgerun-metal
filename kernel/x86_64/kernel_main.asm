@@ -87,6 +87,8 @@ extern er_nvme_identify_ns
 extern er_nvme_print_ns_info
 extern er_xhci_probe
 extern er_xhci_init
+extern er_xhci_cmd_submit_noop
+extern er_xhci_event_pop
 extern er_uvc_probe
 extern er_uvc_get_caps
 extern er_uvc_stream_config
@@ -261,6 +263,10 @@ check_wifi_rtl8922_bar: db " bar ", 0
 check_wifi_rtl8922_mmio: db " mmio ", 0
 check_wifi_rtl8922_bad: db " mmio bad", 0
 check_uvc: db "check: uvc ", 0
+check_xhci_txrx: db " txrx ", 0
+check_xhci_tx: db " tx ", 0
+check_xhci_rx: db " rx ", 0
+check_xhci_rxcc: db " cc ", 0
 check_uvc_abs: db "absent", 0
 check_uvc_caps: db " caps ", 0
 check_uvc_rgb: db " rgb ", 0
@@ -360,6 +366,10 @@ rtl8922_present: resb 1
 rtl8922_bar: resq 1
 rtl8922_mmio_probe: resd 1
 uvc_caps: resd 1
+xhci_evt_p0: resq 1
+xhci_evt_st: resd 1
+xhci_evt_ctl: resd 1
+xhci_evt_rsv: resd 1
 
 %define VIRTIO_NET_STORAGE_size 4900
 virtio_net_dev:      resb VIRTIO_NET_DEVICE_size
@@ -1249,6 +1259,64 @@ er_fn er_kernel_main
     mov     rdi, COM1_PORT
     lea     rsi, [rel check_uvc]
     call    er_serial_puts
+
+    ; xHCI command/event TX/RX smoke test:
+    ; submit two No-Op commands and count completion events.
+    xor     r10d, r10d          ; tx_ok
+    xor     r11d, r11d          ; rx_events
+    xor     r9d, r9d            ; last completion code
+    call    er_xhci_cmd_submit_noop
+    test    eax, eax
+    jnz     .xhci_txrx_submit2
+    inc     r10d
+.xhci_txrx_submit2:
+    call    er_xhci_cmd_submit_noop
+    test    eax, eax
+    jnz     .xhci_txrx_poll
+    inc     r10d
+.xhci_txrx_poll:
+    mov     ecx, 10000
+.xhci_txrx_poll_loop:
+    lea     rdi, [rel xhci_evt_p0]
+    lea     rsi, [rel xhci_evt_st]
+    lea     rdx, [rel xhci_evt_ctl]
+    lea     rcx, [rel xhci_evt_rsv]
+    call    er_xhci_event_pop
+    cmp     eax, 1
+    jne     .xhci_txrx_next_poll
+    inc     r11d
+    mov     eax, [rel xhci_evt_st]
+    shr     eax, 24
+    and     eax, 0xFF
+    mov     r9d, eax
+    cmp     r11d, r10d
+    jae     .xhci_txrx_done
+.xhci_txrx_next_poll:
+    dec     ecx
+    jnz     .xhci_txrx_poll_loop
+.xhci_txrx_done:
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_xhci_txrx]
+    call    er_serial_puts
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_xhci_tx]
+    call    er_serial_puts
+    mov     rdi, COM1_PORT
+    mov     esi, r10d
+    call    er_serial_putdec32
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_xhci_rx]
+    call    er_serial_puts
+    mov     rdi, COM1_PORT
+    mov     esi, r11d
+    call    er_serial_putdec32
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_xhci_rxcc]
+    call    er_serial_puts
+    mov     rdi, COM1_PORT
+    mov     esi, r9d
+    call    er_serial_putdec32
+
     mov     edi, 1
     call    er_uvc_probe
     test    eax, eax

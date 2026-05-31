@@ -1,6 +1,7 @@
 const state = @import("runtime/state.zig");
 const render = @import("runtime/render.zig");
 const editor = @import("runtime/editor.zig");
+const compiler = @import("runtime/compiler.zig");
 const input = @import("runtime/input.zig");
 const idp = @import("runtime/identity.zig");
 
@@ -10,8 +11,8 @@ const math = @import("math.zig");
 const app_frame = @import("route/frame.zig");
 const app_images = @import("ui/images.zig");
 const app_native_input = @import("input/native.zig");
-const app_navigation = @import("route/navigation.zig");
-const app_cursor = @import("ui/runtime.zig");
+const app_navigation = state.app_navigation;
+const app_cursor = @import("ui/cursor.zig");
 const component_gallery = @import("ui/component_gallery.zig");
 const interaction = state.interaction;
 const ui = state.ui;
@@ -27,7 +28,7 @@ const clock = @import("clock.zig");
 const gles_wasm = @import("render/backends/gles_wasm.zig");
 const wasm_gl = @import("render/wasm_gl.zig");
 const gl_contract = @import("render/gl_contract.zig");
-const app_input_event = @import("input/event.zig");
+const app_input_event = state.app_input_event;
 const er = @import("er");
 
 pub const max_width = state.max_width;
@@ -337,7 +338,7 @@ export fn er_ui_release_artifact_clear() u32 {
 }
 
 export fn er_ui_compile_workspace_wasm() u32 {
-    return @intFromEnum(state.ErrorCode.render_failed);
+    return compiler.compileWorkspaceInsideWasm();
 }
 
 export fn er_ui_request_release_artifact_download() u32 {

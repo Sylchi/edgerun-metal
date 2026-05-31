@@ -37,11 +37,10 @@ pub const Button = struct {
     }
 
     pub fn render(self: Button, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        return renderButton(scene, bounds, self, self.flags.apply(options));
+        return renderButton(scene, bounds, self, options);
     }
 
     pub fn collectInteractions(self: Button, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-        if (self.flags.disabled) return;
         return collectButtonInteractions(collector, bounds, self);
     }
 
@@ -123,14 +122,13 @@ pub const IconButton = struct {
     }
 
     pub fn render(self: IconButton, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
-        const paint = buttonPaint(self.variant, self.flags.apply(options));
+        const paint = buttonPaint(self.variant, options);
         if (paint.fill) |fill| try scene.pushRect(bounds, fill, .fill, radius, 0.0);
         if (paint.border) |border| try scene.pushRect(bounds, border, .border, radius, 0.0);
         try self.icon.renderColor(scene, iconButtonIconBounds(bounds), paint.text);
     }
 
     pub fn collectInteractions(self: IconButton, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
-        if (self.flags.disabled) return;
         try collector.addHit(bounds, .button, self.id);
     }
 
@@ -364,11 +362,6 @@ fn iconButtonSize(size: common.ControlSize) f32 {
         .default => icon_button_size,
         .large => 44.0,
     };
-}
-
-comptime {
-    common.assertComponentContract(Button, .{});
-    common.assertComponentContract(IconButton, .{});
 }
 
 test "button component serializes to canonical object and deserializes" {

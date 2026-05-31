@@ -5,7 +5,7 @@ const app_frame = @import("../route/frame.zig");
 const app_images = @import("../app_images.zig");
 const app_cursor = @import("../ui/cursor.zig");
 const state = @import("state.zig");
-const input = @import("input/hit.zig");
+const input = @import("input.zig");
 
 pub fn packedBuffers() state.renderer_pipeline.Buffers {
     return .{
@@ -287,7 +287,7 @@ pub fn hasIconId(items: []const state.ui.Command, icon_id: u32) bool {
 
 pub fn sourceLabelForHit(route: state.app_navigation.Route, hit_id: u32, out: []u8) ?[]const u8 {
     if (hit_id == 0) return null;
-    const component_gallery = @import("../component_gallery.zig");
+    const component_gallery = @import("../ui/component_gallery.zig");
     const index = switch (route.view) {
         .frontend => component_gallery.indexByCatalogHit(hit_id) orelse component_gallery.indexByPreviewHit(hit_id),
         .backend => null,
