@@ -1807,11 +1807,11 @@ er_fn er_tls_derive_application_secrets
     test    eax, eax
     js      .fail_app
 
-    ; master_secret = HKDF-Extract(derived_secret, zero-length IKM)
+    ; master_secret = HKDF-Extract(derived_secret, zero-valued IKM)
     lea     rdi, [tls_derived_secret]
     mov     esi, TLS_RANDOM_LEN
     lea     rdx, [rel tls_zero_secret]
-    xor     ecx, ecx
+    mov     ecx, TLS_RANDOM_LEN
     lea     r8, [tls_master_secret]
     call    er_tls_hkdf_extract
     test    eax, eax
@@ -2270,6 +2270,10 @@ er_fn er_tls_connect
     jmp     .wait_encrypted_hs
 
 .server_finished:
+    call    er_tls_derive_application_secrets
+    test    eax, eax
+    js      .fail
+
     lea     rdi, [tls_rx_record]
     call    er_tls_client_finished_record_build
     test    eax, eax
@@ -2278,9 +2282,6 @@ er_fn er_tls_connect
     lea     rsi, [tls_rx_record]
     mov     edx, eax
     call    er_tcp_send
-    test    eax, eax
-    js      .fail
-    call    er_tls_derive_application_secrets
     test    eax, eax
     js      .fail
 
@@ -2383,7 +2384,17 @@ _tls_recv_app_record_into_plain:
     test    eax, eax
     js      .fail
     cmp     ecx, TLS_RECORD_APPLICATION_DATA
+    je      .have_application_plain
+    cmp     ecx, TLS_RECORD_HANDSHAKE
     jne     .fail
+    cmp     byte [tls_plain_buf], TLS_HANDSHAKE_NEW_SESSION_TICKET
+    jne     .fail
+    mov     dword [tls_plain_len], 0
+    mov     dword [tls_plain_off], 0
+    mov     dword [tls_rx_len], TLS_RECORD_HEADER_LEN
+    mov     ecx, 500
+    jmp     .read_hdr
+.have_application_plain:
     mov     [tls_plain_len], eax
     mov     dword [tls_plain_off], 0
     xor     eax, eax

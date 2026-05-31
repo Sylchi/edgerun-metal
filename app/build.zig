@@ -3,6 +3,7 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    const strip_release = optimize != .Debug;
 
     const is_x86_64 = target.result.cpu.arch == .x86_64;
 
@@ -123,6 +124,7 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("src/sdk_cli.zig"),
             .target = target,
             .optimize = optimize,
+            .strip = strip_release,
         }),
     });
     if (math_obj) |obj| sdk_cli.root_module.addObjectFile(obj);
@@ -139,6 +141,7 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("src/sdk_bench.zig"),
             .target = target,
             .optimize = optimize,
+            .strip = strip_release,
         }),
     });
     if (math_obj) |obj| sdk_bench.root_module.addObjectFile(obj);
@@ -154,6 +157,7 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("src/media_video_dump.zig"),
             .target = target,
             .optimize = optimize,
+            .strip = strip_release,
         }),
     });
     if (math_obj) |obj| media_video_dump.root_module.addObjectFile(obj);
@@ -212,6 +216,7 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("src/build_dashboard.zig"),
             .target = target,
             .optimize = optimize,
+            .strip = strip_release,
         }),
     });
     if (math_obj) |obj| build_dashboard.root_module.addObjectFile(obj);
@@ -227,6 +232,7 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("src/ui_bench.zig"),
             .target = target,
             .optimize = optimize,
+            .strip = strip_release,
         }),
     });
     if (math_obj) |obj| ui_bench.root_module.addObjectFile(obj);
@@ -242,6 +248,7 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("src/wayland_window_host.zig"),
             .target = target,
             .optimize = optimize,
+            .strip = strip_release,
         }),
     });
     if (math_obj) |obj| wayland_window.root_module.addObjectFile(obj);
@@ -284,6 +291,7 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("src/drm_gbm_host.zig"),
             .target = target,
             .optimize = optimize,
+            .strip = strip_release,
         }),
     });
     if (math_obj) |obj| drm_gbm_window.root_module.addObjectFile(obj);
@@ -318,6 +326,7 @@ pub fn build(b: *std.Build) void {
             .target = wasm32_freestanding_target,
             .optimize = optimize,
             .single_threaded = true,
+            .strip = strip_release,
         }),
     });
     ui_wasm.entry = .disabled;
@@ -359,6 +368,7 @@ pub fn build(b: *std.Build) void {
             // This image runs the native renderer and virtio-gpu path inside QEMU.
             // ReleaseSmall keeps the EFI smaller, but makes frame rendering dramatically slower.
             .optimize = .ReleaseFast,
+            .strip = true,
         }),
     });
     const install_immutable_kernel_gop_smoke = b.addInstallArtifact(immutable_kernel_gop_smoke, .{
@@ -373,6 +383,7 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("src/tpm_real_check.zig"),
             .target = target,
             .optimize = optimize,
+            .strip = strip_release,
         }),
     });
     if (math_obj) |obj| tpm_real_check.root_module.addObjectFile(obj);
@@ -388,6 +399,7 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("src/ifstatus.zig"),
             .target = target,
             .optimize = optimize,
+            .strip = strip_release,
         }),
     });
     if (math_obj) |obj| ifstatus.root_module.addObjectFile(obj);
@@ -404,6 +416,7 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("src/pi_usb_boot_host.zig"),
             .target = target,
             .optimize = optimize,
+            .strip = strip_release,
         }),
     });
     if (math_obj) |obj| pi_usb_boot_host.root_module.addObjectFile(obj);
@@ -420,6 +433,7 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("src/pi_usb_control_host.zig"),
             .target = target,
             .optimize = optimize,
+            .strip = strip_release,
         }),
     });
     if (math_obj) |obj| pi_usb_control_host.root_module.addObjectFile(obj);
@@ -436,6 +450,7 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("src/gen_icon_objects.zig"),
             .target = b.graph.host,
             .optimize = optimize,
+            .strip = strip_release,
         }),
     });
     const run_gen_icon_objects = b.addRunArtifact(gen_icon_objects);

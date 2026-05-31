@@ -115,12 +115,23 @@ er_fn er_fn_exec
     je      .dispatch_fast
     cmp     rax, 2
     je      .dispatch_full
+    cmp     rax, 3
+    je      .dispatch_trace
 
 .fast_cache_miss:
     mov     rax, [exec_decoded_index]
     mov     [exec_fast_cache_start], rax
     mov     rax, [exec_decoded_end]
     mov     [exec_fast_cache_end], rax
+    call    exec_decoded_round_trace_supported
+    test    rdx, rdx
+    jnz     .fast_check_supported
+    mov     qword [exec_fast_cache_state], 3
+.dispatch_trace:
+    call    exec_decoded_round_trace_loop
+    jmp     .dispatch_done
+
+.fast_check_supported:
     call    exec_decoded_fast_supported
     test    rdx, rdx
     jnz     .fast_mark_unsupported

@@ -570,6 +570,58 @@ er_fn er_amdgpu_validate_scanout_config
     ret
 
 ; ==================================================================
+; er_amdgpu_validate_timing — validate OTG timing fields
+; int er_amdgpu_validate_timing(const uint32_t* timing)
+; ==================================================================
+er_fn er_amdgpu_validate_timing
+    test    rdi, rdi
+    jz      .bad_arg
+
+    mov     ecx, [rdi + AMDGPU_TIMING_H_TOTAL]
+    test    ecx, ecx
+    jz      .bad_arg
+    mov     eax, [rdi + AMDGPU_TIMING_H_SYNC_START]
+    mov     edx, [rdi + AMDGPU_TIMING_H_SYNC_END]
+    cmp     eax, edx
+    jae     .bad_arg
+    cmp     edx, ecx
+    ja      .bad_arg
+    mov     eax, [rdi + AMDGPU_TIMING_H_BLANK_START]
+    test    eax, eax
+    jz      .bad_arg
+    cmp     eax, ecx
+    ja      .bad_arg
+    mov     edx, [rdi + AMDGPU_TIMING_H_BLANK_END]
+    cmp     edx, eax
+    jae     .bad_arg
+
+    mov     ecx, [rdi + AMDGPU_TIMING_V_TOTAL]
+    test    ecx, ecx
+    jz      .bad_arg
+    mov     eax, [rdi + AMDGPU_TIMING_V_SYNC_START]
+    mov     edx, [rdi + AMDGPU_TIMING_V_SYNC_END]
+    cmp     eax, edx
+    jae     .bad_arg
+    cmp     edx, ecx
+    ja      .bad_arg
+    mov     eax, [rdi + AMDGPU_TIMING_V_BLANK_START]
+    test    eax, eax
+    jz      .bad_arg
+    cmp     eax, ecx
+    ja      .bad_arg
+    mov     edx, [rdi + AMDGPU_TIMING_V_BLANK_END]
+    cmp     edx, eax
+    jae     .bad_arg
+
+    xor     eax, eax
+    er_ok
+    ret
+.bad_arg:
+    er_err  ERROR_BAD_ARGUMENT
+    mov     eax, -1
+    ret
+
+; ==================================================================
 ; er_amdgpu_program_otg0_mode — program OTG0 using a known mode ID
 ; int er_amdgpu_program_otg0_mode(uint64_t bar0, uint32_t mode)
 ; ==================================================================
@@ -606,10 +658,12 @@ er_fn er_amdgpu_program_otg0_timing
     push    r13
     test    rdi, rdi
     jz      .bad_arg
-    test    rsi, rsi
-    jz      .bad_arg
     mov     r12, rdi            ; bar0
     mov     r13, rsi            ; timing
+    mov     rdi, r13
+    call    er_amdgpu_validate_timing
+    test    eax, eax
+    jnz     .bad_arg
 
     ; Set V_TOTAL
     mov     rdi, r12

@@ -100,13 +100,13 @@ fn renderTrack(scene: *ui.Scene, track: ui.Rect, value: f32, options: RenderOpti
 const slider_label_height: f32 = 14.0;
 const slider_label_max_lines: usize = 2;
 const slider_label_track_gap: f32 = 12.0;
-const slider_track_height: f32 = 8.0;
-pub const slider_thumb_size: f32 = 18.0;
-const slider_thumb_shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 64 };
+const slider_track_height: f32 = 5.0;
+pub const slider_thumb_size: f32 = 12.0;
+const slider_thumb_shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 34 };
 const slider_thumb_shadow_inset: f32 = 1.0;
 const slider_thumb_shadow_size: f32 = 4.0;
-const slider_track_shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 46 };
-const slider_track_floor = ui.Color{ .r = 5, .g = 7, .b = 10, .a = 34 };
+const slider_track_shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 22 };
+const slider_track_floor = ui.Color{ .r = 5, .g = 7, .b = 10, .a = 18 };
 const slider_track_shadow_inset: f32 = 1.0;
 const slider_track_shadow_size: f32 = 2.0;
 const slider_min_width: f32 = 120.0;

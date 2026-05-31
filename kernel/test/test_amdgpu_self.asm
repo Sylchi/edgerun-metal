@@ -9,7 +9,9 @@
 extern er_amdgpu_dcn_init
 extern er_amdgpu_program_hubp0_scanout
 extern er_amdgpu_program_otg0_mode
+extern er_amdgpu_program_otg0_timing
 extern er_amdgpu_validate_scanout_config
+extern er_amdgpu_validate_timing
 
 %define AMDGPU_TEST_BAR0_SIZE 0x28000
 
@@ -19,6 +21,7 @@ failed: resq 1
 bar0: resb AMDGPU_TEST_BAR0_SIZE
 fb: resb AMDGPU_FB_SIZE
 scanout_cfg: resb AMDGPU_SCANOUT_SIZE
+timing_cfg: resb AMDGPU_TIMING_SIZE
 
 SECTION .rodata
 pass_msg: db "PASS amdgpu", 10, 0
@@ -121,6 +124,53 @@ _start:
     lea     rdi, [rel bar0]
     mov     esi, AMDGPU_MODE_COUNT
     call    er_amdgpu_program_otg0_mode
+    ASSERT_EQ eax, -1
+    ASSERT_RDX ERROR_BAD_ARGUMENT
+
+    mov     dword [rel timing_cfg + AMDGPU_TIMING_H_TOTAL], 1650
+    mov     dword [rel timing_cfg + AMDGPU_TIMING_H_SYNC_START], 1390
+    mov     dword [rel timing_cfg + AMDGPU_TIMING_H_SYNC_END], 1430
+    mov     dword [rel timing_cfg + AMDGPU_TIMING_H_BLANK_START], 1280
+    mov     dword [rel timing_cfg + AMDGPU_TIMING_H_BLANK_END], 370
+    mov     dword [rel timing_cfg + AMDGPU_TIMING_V_TOTAL], 750
+    mov     dword [rel timing_cfg + AMDGPU_TIMING_V_SYNC_START], 725
+    mov     dword [rel timing_cfg + AMDGPU_TIMING_V_SYNC_END], 730
+    mov     dword [rel timing_cfg + AMDGPU_TIMING_V_BLANK_START], 720
+    mov     dword [rel timing_cfg + AMDGPU_TIMING_V_BLANK_END], 30
+    lea     rdi, [rel timing_cfg]
+    call    er_amdgpu_validate_timing
+    ASSERT_EQ eax, 0
+    lea     rdi, [rel bar0]
+    lea     rsi, [rel timing_cfg]
+    call    er_amdgpu_program_otg0_timing
+    ASSERT_EQ eax, 0
+    mov     eax, [rel bar0 + DCN_OTG0_H_TOTAL]
+    ASSERT_EQ eax, 1649
+
+    mov     dword [rel timing_cfg + AMDGPU_TIMING_H_TOTAL], 0
+    lea     rdi, [rel timing_cfg]
+    call    er_amdgpu_validate_timing
+    ASSERT_EQ eax, -1
+    ASSERT_RDX ERROR_BAD_ARGUMENT
+    lea     rdi, [rel bar0]
+    lea     rsi, [rel timing_cfg]
+    call    er_amdgpu_program_otg0_timing
+    ASSERT_EQ eax, -1
+    ASSERT_RDX ERROR_BAD_ARGUMENT
+
+    mov     dword [rel timing_cfg + AMDGPU_TIMING_H_TOTAL], 1650
+    mov     dword [rel timing_cfg + AMDGPU_TIMING_H_SYNC_START], 1430
+    mov     dword [rel timing_cfg + AMDGPU_TIMING_H_SYNC_END], 1390
+    lea     rdi, [rel timing_cfg]
+    call    er_amdgpu_validate_timing
+    ASSERT_EQ eax, -1
+    ASSERT_RDX ERROR_BAD_ARGUMENT
+
+    mov     dword [rel timing_cfg + AMDGPU_TIMING_H_SYNC_START], 1390
+    mov     dword [rel timing_cfg + AMDGPU_TIMING_H_SYNC_END], 1430
+    mov     dword [rel timing_cfg + AMDGPU_TIMING_V_BLANK_START], 751
+    lea     rdi, [rel timing_cfg]
+    call    er_amdgpu_validate_timing
     ASSERT_EQ eax, -1
     ASSERT_RDX ERROR_BAD_ARGUMENT
 

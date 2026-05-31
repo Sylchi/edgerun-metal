@@ -60,12 +60,12 @@ er_fn jit_template_drop
 ;       push rax
 ; -----------------------------------------------------------------+
 er_fn jit_template_local_get
+    mov     eax, [rdi + 12]  ; local index
+    shl     eax, 3           ; *8
+    mov     r11d, eax
     mov     cl, 2            ; rdx
     mov     eax, JitGlobals.locals
     call    jit_emit_load_global_to_reg
-    mov     ecx, [rdi + 12]  ; local index
-    shl     ecx, 3           ; *8
-    mov     r11d, ecx
     ; mov rax, [rdx + disp32]
     mov     cl, 1            ; REX.W
     call    jit_emit_rex_nob
@@ -85,6 +85,9 @@ er_fn jit_template_local_get
 ; Emit: pop rax; mov rdx, [r15 + JitGlobals.locals]; mov [rdx + index*8], rax
 ; -----------------------------------------------------------------+
 er_fn jit_template_local_set
+    mov     eax, [rdi + 12]  ; local index
+    shl     eax, 3
+    mov     r11d, eax
     ; pop rax
     xor     ecx, ecx         ; rax
     call    jit_emit_pop_reg
@@ -93,9 +96,6 @@ er_fn jit_template_local_set
     mov     cl, 2            ; rdx
     mov     eax, JitGlobals.locals
     call    jit_emit_load_global_to_reg
-    mov     ecx, [rdi + 12]  ; local index
-    shl     ecx, 3
-    mov     r11d, ecx
     ; mov [rdx + disp32], rax
     pop     rax              ; restore value
     push    rax
@@ -115,6 +115,9 @@ er_fn jit_template_local_set
 ; Emit: same as local.set but keep value on stack
 ; -----------------------------------------------------------------+
 er_fn jit_template_local_tee
+    mov     eax, [rdi + 12]
+    shl     eax, 3
+    mov     r11d, eax
     ; read TOS without consuming it
     mov     cl, 1            ; REX.W
     call    jit_emit_rex_nob
@@ -128,9 +131,6 @@ er_fn jit_template_local_tee
     mov     cl, 2
     mov     eax, JitGlobals.locals
     call    jit_emit_load_global_to_reg
-    mov     ecx, [rdi + 12]
-    shl     ecx, 3
-    mov     r11d, ecx
     mov     cl, 1
     call    jit_emit_rex_nob
     mov     al, 0x89
@@ -146,16 +146,16 @@ er_fn jit_template_local_tee
 ; Emit: mov rdx, [r15 + JitGlobals.globals_buf]; mov rax, [rdx + index*32]; push rax
 ; -----------------------------------------------------------------+
 er_fn jit_template_global_get
+    mov     ecx, [rdi + 12]
+    imul    ecx, 32          ; GLOBAL_SIZE = 32
+    add     ecx, 8           ; value_data offset
+    mov     r11d, ecx
     mov     cl, 2
     mov     eax, JitGlobals.globals_buf
     call    jit_emit_load_global_to_reg
-    mov     ecx, [rdi + 12]
-    imul    ecx, 32          ; GLOBAL_SIZE = 32
     ; mov rax, [rdx + rcx] — just load value_data at offset 8 within Global struct
     ; Global layout: value_type(1) + mutable(1) + pad(6) + value_data(8) + value_tag(4) + pad(4) = 24, padded to 32
     ; value_data is at offset 8
-    add     ecx, 8
-    mov     r11d, ecx
     mov     cl, 1
     call    jit_emit_rex_nob
     mov     al, 0x8B
@@ -172,16 +172,16 @@ er_fn jit_template_global_get
 ; Template: global.set index (0x24)
 ; -----------------------------------------------------------------+
 er_fn jit_template_global_set
+    mov     ecx, [rdi + 12]
+    imul    ecx, 32
+    add     ecx, 8           ; value_data offset
+    mov     r11d, ecx
     xor     ecx, ecx
     call    jit_emit_pop_reg
     push    rax
     mov     cl, 2
     mov     eax, JitGlobals.globals_buf
     call    jit_emit_load_global_to_reg
-    mov     ecx, [rdi + 12]
-    imul    ecx, 32
-    add     ecx, 8           ; value_data offset
-    mov     r11d, ecx
     pop     rax
     push    rax
     mov     cl, 1
@@ -266,8 +266,10 @@ er_fn jit_template_i32_const
 ; Emit: push imm64 — uses mov rax, imm64; push rax
 ; -----------------------------------------------------------------+
 er_fn jit_template_i64_const
-    mov     eax, [rdi + 12]  ; imm0 (low)
-    mov     edx, [rdi + 16]  ; imm1 (high)
+    mov     r10d, [rdi + 12]  ; imm0 (low)
+    mov     r11d, [rdi + 16]  ; imm1 (high)
+    mov     eax, r10d
+    mov     edx, r11d
     shl     rdx, 32
     or      rax, rdx
     ; mov rax, imm64
@@ -278,8 +280,8 @@ er_fn jit_template_i64_const
     call    jit_emit_rex
     mov     al, 0xB8         ; mov rax, imm64
     call    jit_emit_byte
-    mov     eax, [rdi + 12]
-    mov     edx, [rdi + 16]
+    mov     eax, r10d
+    mov     edx, r11d
     shl     rdx, 32
     or      rax, rdx
     call    jit_emit_qword
@@ -1922,8 +1924,10 @@ er_fn jit_template_f32_const
 ; f64.const (0x44) — push imm64 float bits
 ; -----------------------------------------------------------------+
 er_fn jit_template_f64_const
-    mov     eax, [rdi + 12]
-    mov     edx, [rdi + 16]
+    mov     r10d, [rdi + 12]
+    mov     r11d, [rdi + 16]
+    mov     eax, r10d
+    mov     edx, r11d
     shl     rdx, 32
     or      rax, rdx
     mov     cl, 1
@@ -1933,8 +1937,8 @@ er_fn jit_template_f64_const
     call    jit_emit_rex
     mov     al, 0xB8
     call    jit_emit_byte
-    mov     eax, [rdi + 12]
-    mov     edx, [rdi + 16]
+    mov     eax, r10d
+    mov     edx, r11d
     shl     rdx, 32
     or      rax, rdx
     call    jit_emit_qword

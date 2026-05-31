@@ -41,24 +41,24 @@ const rows = [_]RowDef{
 };
 
 const Component = component_union.Component;
-const hardware_bg_top = ui.Color{ .r = 8, .g = 8, .b = 9 };
-const hardware_bg_bottom = ui.Color{ .r = 13, .g = 14, .b = 15 };
-const hardware_panel = ui.Color{ .r = 22, .g = 22, .b = 24 };
-const hardware_row = ui.Color{ .r = 31, .g = 31, .b = 34 };
-const hardware_border = ui.Color{ .r = 45, .g = 45, .b = 49 };
-const hardware_text = ui.Color{ .r = 238, .g = 238, .b = 236 };
-const hardware_muted = ui.Color{ .r = 157, .g = 157, .b = 162 };
-const hardware_accent = ui.Color{ .r = 38, .g = 166, .b = 132 };
-const hardware_accent_blue = ui.Color{ .r = 88, .g = 145, .b = 214 };
-const hardware_accent_gold = ui.Color{ .r = 210, .g = 157, .b = 72 };
-const hardware_accent_dim = ui.Color{ .r = 23, .g = 72, .b = 62, .a = 76 };
-const hardware_orb = ui.Color{ .r = 38, .g = 166, .b = 132, .a = 9 };
-const hardware_rim = ui.Color{ .r = 255, .g = 255, .b = 255, .a = 8 };
-const hardware_selection = ui.Color{ .r = 190, .g = 224, .b = 213, .a = 190 };
-const hardware_selection_fill = ui.Color{ .r = 190, .g = 224, .b = 213, .a = 10 };
-const editor_panel = ui.Color{ .r = 20, .g = 20, .b = 22, .a = 250 };
-const editor_scrim = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 38 };
-const subtle_divider = ui.Color{ .r = 255, .g = 255, .b = 255, .a = 10 };
+const hardware_bg_top = ui.Color{ .r = 8, .g = 9, .b = 10 };
+const hardware_bg_bottom = ui.Color{ .r = 9, .g = 9, .b = 11 };
+const hardware_panel = ui.Color{ .r = 24, .g = 24, .b = 27, .a = 224 };
+const hardware_row = ui.Color{ .r = 39, .g = 39, .b = 42, .a = 158 };
+const hardware_border = ui.Color{ .r = 63, .g = 63, .b = 70, .a = 82 };
+const hardware_text = ui.Color{ .r = 250, .g = 250, .b = 250 };
+const hardware_muted = ui.Color{ .r = 161, .g = 161, .b = 170 };
+const hardware_accent = ui.Color{ .r = 23, .g = 166, .b = 135 };
+const hardware_accent_blue = ui.Color{ .r = 71, .g = 143, .b = 235 };
+const hardware_accent_gold = ui.Color{ .r = 235, .g = 168, .b = 64 };
+const hardware_accent_dim = ui.Color{ .r = 23, .g = 80, .b = 68, .a = 26 };
+const hardware_orb = ui.Color{ .r = 23, .g = 166, .b = 135, .a = 2 };
+const hardware_rim = ui.Color{ .r = 255, .g = 255, .b = 255, .a = 3 };
+const hardware_selection = ui.Color{ .r = 161, .g = 161, .b = 170, .a = 150 };
+const hardware_selection_fill = ui.Color{ .r = 161, .g = 161, .b = 170, .a = 7 };
+const editor_panel = ui.Color{ .r = 24, .g = 24, .b = 27, .a = 246 };
+const editor_scrim = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 24 };
+const subtle_divider = ui.Color{ .r = 255, .g = 255, .b = 255, .a = 7 };
 
 fn hardwareStyle(accent: ui.Color) ui.Style {
     return .{
@@ -341,7 +341,7 @@ pub const State = struct {
         try scene.pushGradientRect(ui.Rect.init(bounds.x, bounds.y, bounds.w, 96.0), hardware_orb, ui.Color.clear, 0.0);
         try scene.pushRect(ui.Rect.init(bounds.x, bounds.y + bounds.h - 2.0, bounds.w, 2.0), hardware_rim, .fill, 0.0, 0.0);
 
-        const outer = bounds.insetUniform(if (bounds.w >= 1000.0) 18.0 else 12.0);
+        const outer = bounds.insetUniform(if (bounds.w >= 1000.0) 22.0 else 12.0);
         if (outer.w >= 980.0) {
             try self.renderWide(scene, collector, outer, dashboard_options);
         } else {
@@ -367,9 +367,9 @@ pub const State = struct {
     }
 
     fn renderWide(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
-        const gap: f32 = if (self.compact_rows) 12.0 else 14.0;
-        const header_h: f32 = 88.0;
-        const metric_h: f32 = 112.0;
+        const gap: f32 = if (self.compact_rows) 14.0 else 16.0;
+        const header_h: f32 = 78.0;
+        const metric_h: f32 = 96.0;
         try self.renderHeader(scene, collector, ui.Rect.init(bounds.x, bounds.y, bounds.w, header_h), options);
 
         const metric_y = bounds.y + header_h + gap;
@@ -378,8 +378,8 @@ pub const State = struct {
 
         const body_y = metric_y + metric_h + gap;
         const body_h = @max(1.0, bounds.y + bounds.h - body_y);
-        const controls_w = @min(390.0, @max(340.0, bounds.w * 0.26));
-        const inventory_w = @min(410.0, @max(340.0, bounds.w * 0.27));
+        const controls_w = @min(370.0, @max(330.0, bounds.w * 0.24));
+        const inventory_w = @min(390.0, @max(330.0, bounds.w * 0.25));
         const activity_w = bounds.w - controls_w - inventory_w - gap * 2.0;
         try self.renderControls(scene, collector, ui.Rect.init(bounds.x, body_y, controls_w, body_h), options);
         try self.renderActivity(scene, collector, ui.Rect.init(bounds.x + controls_w + gap, body_y, activity_w, body_h), options);
@@ -389,8 +389,8 @@ pub const State = struct {
     fn renderStacked(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
         const gap: f32 = 12.0;
         var y = bounds.y;
-        try self.renderHeader(scene, collector, ui.Rect.init(bounds.x, y, bounds.w, 88.0), options);
-        y += 88.0 + gap;
+        try self.renderHeader(scene, collector, ui.Rect.init(bounds.x, y, bounds.w, 78.0), options);
+        y += 78.0 + gap;
         const metric_w = (bounds.w - gap) * 0.5;
         try self.renderMetrics(scene, collector, ui.Rect.init(bounds.x, y, bounds.w, 230.0), metric_w, gap, options);
         y += 230.0 + gap;
@@ -404,20 +404,19 @@ pub const State = struct {
     fn renderHeader(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
         try collector.addHit(bounds, .button, select_header_id);
         try (Component{ .card = .{ .title = "", .detail = "", .variant = .elevated } }).renderInteractive(scene, collector, bounds, options);
-        try scene.pushGradientRect(bounds.insetUniform(1.0), ui.Color{ .r = 38, .g = 92, .b = 79, .a = 24 }, ui.Color.clear, 12.0);
-        const chip = ui.Rect.init(bounds.x + 24.0, bounds.y + 26.0, 48.0, 48.0);
-        try scene.pushRect(chip, hardware_accent_dim, .fill, 12.0, 0.0);
-        try scene.pushRect(chip, hardware_border, .border, 12.0, 0.0);
-        try IconComponent.Icon.named(.device_desktop).renderColor(scene, chip.withHeightCentered(24.0).withWidthCentered(24.0), hardware_accent);
-        try scene.pushBoldText(ui.Rect.init(bounds.x + 92.0, bounds.y + 24.0, @max(1.0, bounds.w - 356.0), 28.0), "Hardware Command Center", options.style.text);
-        try scene.pushText(ui.Rect.init(bounds.x + 92.0, bounds.y + 58.0, @max(1.0, bounds.w - 356.0), 20.0), fittedText(self.detail(0), @max(1.0, bounds.w - 356.0)), options.style.muted);
-        try (Component{ .badge = .{ .label = self.statusLabel(), .variant = .secondary } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x + bounds.w - 254.0, bounds.y + 36.0, 176.0, 32.0), options);
+        try scene.pushGradientRect(bounds.insetUniform(1.0), ui.Color{ .r = 38, .g = 92, .b = 79, .a = 7 }, ui.Color.clear, 12.0);
+        const chip = ui.Rect.init(bounds.x + 20.0, bounds.y + 20.0, 36.0, 36.0);
+        try scene.pushRect(chip, hardware_accent_dim, .fill, 9.0, 0.0);
+        try IconComponent.Icon.named(.device_desktop).renderColor(scene, chip.withHeightCentered(18.0).withWidthCentered(18.0), options.style.accent);
+        try scene.pushStrongText(ui.Rect.init(bounds.x + 72.0, bounds.y + 17.0, @max(1.0, bounds.w - 330.0), 22.0), "Hardware Command Center", options.style.text);
+        try scene.pushText(ui.Rect.init(bounds.x + 72.0, bounds.y + 46.0, @max(1.0, bounds.w - 330.0), 16.0), fittedText(self.detail(0), @max(1.0, bounds.w - 330.0)), options.style.muted);
+        try (Component{ .badge = .{ .label = self.statusLabel(), .variant = .secondary } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x + bounds.w - 230.0, bounds.y + 24.0, 150.0, 28.0), options);
         try (Component{ .icon_button = .{
             .id = refresh_now_button_id,
             .label = "Refresh",
             .icon = IconComponent.Icon.named(.reload),
             .variant = .outline,
-        } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x + bounds.w - 62.0, bounds.y + 32.0, 40.0, 40.0), options);
+        } }).renderInteractive(scene, collector, ui.Rect.init(bounds.x + bounds.w - 54.0, bounds.y + 21.0, 34.0, 34.0), options);
     }
 
     fn renderMetrics(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, metric_w: f32, gap: f32, options: RenderOptions) !void {
@@ -445,57 +444,57 @@ pub const State = struct {
     fn renderControls(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
         try collector.addHit(bounds, .button, select_controls_id);
         try (Component{ .card = .{ .title = "", .detail = "", .variant = .elevated } }).renderInteractive(scene, collector, bounds, options);
-        const inner = bounds.insetUniform(20.0);
+        const inner = bounds.insetUniform(18.0);
         var y = inner.y;
         try self.renderSectionHeader(scene, inner.x, y, "Controls", "Display and keyboard knobs.", .adjustments_plus, options);
-        y += 74.0;
+        y += 54.0;
 
-        try self.renderControlGroup(scene, collector, ui.Rect.init(inner.x, y, inner.w, 144.0), select_control_base_id, "Screen", self.detail(4), brightness_slider_id, self.screenBrightnessUnit(), brightness_down_button_id, brightness_up_button_id, "Screen -", "Screen +", .brightness_down, .brightness_up, options);
-        y += 160.0;
+        try self.renderControlGroup(scene, collector, ui.Rect.init(inner.x, y, inner.w, 112.0), select_control_base_id, "Screen", self.detail(4), brightness_slider_id, self.screenBrightnessUnit(), brightness_down_button_id, brightness_up_button_id, "Screen -", "Screen +", .brightness_down, .brightness_up, options);
+        y += 126.0;
 
-        try self.renderControlGroup(scene, collector, ui.Rect.init(inner.x, y, inner.w, 144.0), select_control_base_id + 1, "Keyboard", self.detail(5), kbd_slider_id, self.keyboardBrightnessUnit(), kbd_down_button_id, kbd_up_button_id, "Keys -", "Keys +", .adjustments_minus, .adjustments_plus, options);
-        y += 164.0;
+        try self.renderControlGroup(scene, collector, ui.Rect.init(inner.x, y, inner.w, 112.0), select_control_base_id + 1, "Keyboard", self.detail(5), kbd_slider_id, self.keyboardBrightnessUnit(), kbd_down_button_id, kbd_up_button_id, "Keys -", "Keys +", .adjustments_minus, .adjustments_plus, options);
+        y += 132.0;
 
         try scene.pushStrongText(ui.Rect.init(inner.x, y, inner.w, 20.0), "Session", options.style.text);
-        y += 34.0;
+        y += 30.0;
         try (Component{ .switch_control = .{ .id = auto_refresh_switch_id, .label = "Auto Refresh", .checked = self.auto_refresh } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, y, inner.w, 32.0), options);
-        y += 40.0;
+        y += 38.0;
         try (Component{ .switch_control = .{ .id = hide_unavailable_switch_id, .label = "Hide Unavailable", .checked = self.hide_unavailable } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, y, inner.w, 32.0), options);
-        y += 40.0;
+        y += 38.0;
         try (Component{ .switch_control = .{ .id = compact_rows_switch_id, .label = "Compact Density", .checked = self.compact_rows } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, y, inner.w, 32.0), options);
     }
 
     fn renderActivity(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
         try collector.addHit(bounds, .button, select_activity_id);
         try (Component{ .card = .{ .title = "", .detail = "", .variant = .elevated } }).renderInteractive(scene, collector, bounds, options);
-        const inner = bounds.insetUniform(20.0);
+        const inner = bounds.insetUniform(18.0);
         try self.renderSectionHeader(scene, inner.x, inner.y, "Live Hardware", "Telemetry and direct controls.", .cpu, options);
-        const chart_h = @min(250.0, @max(150.0, bounds.h * 0.42));
-        try (Component{ .chart = .{ .id = 90_020, .label = "System Activity" } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, inner.y + 74.0, inner.w, chart_h), options);
+        const chart_h = @min(330.0, @max(190.0, bounds.h * 0.48));
+        try (Component{ .chart = .{ .id = 90_020, .label = "System Activity" } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, inner.y + 54.0, inner.w, chart_h), options);
 
-        const lower_y = inner.y + 90.0 + chart_h;
-        const card_gap: f32 = 14.0;
-        const card_h = @min(136.0, @max(110.0, bounds.y + bounds.h - lower_y - 20.0));
+        const lower_y = inner.y + 68.0 + chart_h;
+        const card_gap: f32 = 12.0;
+        const card_h = @min(122.0, @max(102.0, bounds.y + bounds.h - lower_y - 20.0));
         const half = (inner.w - card_gap) * 0.5;
         try self.renderLevelCard(scene, collector, ui.Rect.init(inner.x, lower_y, half, card_h), select_level_base_id, "Screen Level", self.detail(4), self.screenBrightnessUnit(), .brightness, options);
         try self.renderLevelCard(scene, collector, ui.Rect.init(inner.x + half + card_gap, lower_y, half, card_h), select_level_base_id + 1, "Keyboard Level", self.detail(5), self.keyboardBrightnessUnit(), .keyboard, options);
 
-        const footer_y = lower_y + card_h + 16.0;
-        if (footer_y + 86.0 <= bounds.y + bounds.h) {
-            try (Component{ .card = .{ .title = "", .detail = "", .variant = .subtle } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, footer_y, inner.w, 86.0), options);
-            try scene.pushStrongText(ui.Rect.init(inner.x + 18.0, footer_y + 18.0, inner.w - 36.0, 20.0), "Demo posture", options.style.text);
-            try scene.pushText(ui.Rect.init(inner.x + 18.0, footer_y + 46.0, inner.w - 36.0, 18.0), if (self.auto_refresh) "Auto-refresh is live; sliders route through existing handlers." else "Auto-refresh paused; manual refresh remains available.", options.style.muted);
+        const footer_y = lower_y + card_h + 12.0;
+        if (footer_y + 76.0 <= bounds.y + bounds.h) {
+            try (Component{ .card = .{ .title = "", .detail = "", .variant = .subtle } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, footer_y, inner.w, 76.0), options);
+            try scene.pushStrongText(ui.Rect.init(inner.x + 16.0, footer_y + 15.0, inner.w - 32.0, 20.0), "Demo posture", options.style.text);
+            try scene.pushText(ui.Rect.init(inner.x + 16.0, footer_y + 42.0, inner.w - 32.0, 18.0), if (self.auto_refresh) "Auto-refresh is live; sliders route through existing handlers." else "Auto-refresh paused; manual refresh remains available.", options.style.muted);
         }
     }
 
     fn renderInventory(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
         try collector.addHit(bounds, .button, select_inventory_id);
         try (Component{ .card = .{ .title = "", .detail = "", .variant = .elevated } }).renderInteractive(scene, collector, bounds, options);
-        const inner = bounds.insetUniform(20.0);
+        const inner = bounds.insetUniform(18.0);
         var y = inner.y;
         try self.renderSectionHeader(scene, inner.x, y, "Inventory", "Detected runtime capabilities.", .server, options);
-        y += 74.0;
-        const row_h: f32 = if (self.compact_rows) 44.0 else 52.0;
+        y += 54.0;
+        const row_h: f32 = if (self.compact_rows) 42.0 else 50.0;
         for (&rows, 0..) |row, index| {
             const row_detail = self.detail(index);
             if (self.hide_unavailable and std.mem.eql(u8, row_detail, unavailable_detail)) continue;
@@ -506,45 +505,43 @@ pub const State = struct {
                 .detail = row_detail,
                 .leading_icon = IconComponent.IconSlot.named(.leading, row.icon_kind),
             } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, y, inner.w, row_h), options);
-            y += row_h + 8.0;
+            y += row_h + 6.0;
         }
     }
 
     fn renderSectionHeader(self: *State, scene: *ui.Scene, x: f32, y: f32, title: []const u8, detail_text: []const u8, icon_kind: icon.Icon, options: RenderOptions) !void {
         _ = self;
-        const chip = ui.Rect.init(x, y + 2.0, 40.0, 40.0);
-        try scene.pushRect(chip, hardware_accent_dim, .fill, 10.0, 0.0);
-        try scene.pushRect(chip, hardware_border, .border, 10.0, 0.0);
-        try IconComponent.Icon.named(icon_kind).renderColor(scene, chip.withHeightCentered(22.0).withWidthCentered(22.0), options.style.accent);
-        try scene.pushBoldText(ui.Rect.init(x + 54.0, y + 1.0, 260.0, 24.0), title, options.style.text);
-        try scene.pushText(ui.Rect.init(x + 54.0, y + 30.0, 300.0, 18.0), fittedText(detail_text, 300.0), options.style.muted);
+        const chip = ui.Rect.init(x, y + 2.0, 28.0, 28.0);
+        try scene.pushRect(chip, hardware_accent_dim, .fill, 7.0, 0.0);
+        try IconComponent.Icon.named(icon_kind).renderColor(scene, chip.withHeightCentered(15.0).withWidthCentered(15.0), options.style.accent);
+        try scene.pushStrongText(ui.Rect.init(x + 42.0, y, 260.0, 18.0), title, options.style.text);
+        try scene.pushText(ui.Rect.init(x + 42.0, y + 23.0, 300.0, 15.0), fittedText(detail_text, 300.0), options.style.muted);
     }
 
     fn renderMetricCard(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, select_id: u32, title: []const u8, value: []const u8, detail_text: []const u8, icon_kind: icon.Icon, options: RenderOptions) !void {
         _ = self;
         try collector.addHit(bounds, .button, select_id);
         try (Component{ .card = .{ .title = "", .detail = "", .variant = .panel } }).renderInteractive(scene, collector, bounds, options);
-        const inner = bounds.insetUniform(18.0);
-        const chip = ui.Rect.init(inner.x, inner.y + 1.0, 38.0, 38.0);
-        try scene.pushRect(chip, hardware_accent_dim, .fill, 10.0, 0.0);
-        try scene.pushRect(chip, hardware_border, .border, 10.0, 0.0);
-        try IconComponent.Icon.named(icon_kind).renderColor(scene, chip.withHeightCentered(21.0).withWidthCentered(21.0), options.style.accent);
-        try scene.pushStrongText(ui.Rect.init(inner.x + 52.0, inner.y + 1.0, inner.w - 52.0, 20.0), title, options.style.text);
-        try scene.pushText(ui.Rect.init(inner.x + 52.0, inner.y + 27.0, inner.w - 52.0, 16.0), fittedText(detail_text, inner.w - 52.0), options.style.muted);
-        try scene.pushBoldText(ui.Rect.init(inner.x, inner.y + 68.0, inner.w, 28.0), fittedText(displayValue(value), inner.w), options.style.text);
+        const inner = bounds.insetUniform(14.0);
+        const chip = ui.Rect.init(inner.x, inner.y, 28.0, 28.0);
+        try scene.pushRect(chip, hardware_accent_dim, .fill, 7.0, 0.0);
+        try IconComponent.Icon.named(icon_kind).renderColor(scene, chip.withHeightCentered(15.0).withWidthCentered(15.0), options.style.accent);
+        try scene.pushStrongText(ui.Rect.init(inner.x + 40.0, inner.y - 1.0, inner.w - 40.0, 17.0), title, options.style.text);
+        try scene.pushText(ui.Rect.init(inner.x + 40.0, inner.y + 21.0, inner.w - 40.0, 14.0), fittedText(detail_text, inner.w - 40.0), options.style.muted);
+        try scene.pushText(ui.Rect.init(inner.x, inner.y + 58.0, inner.w, 20.0), fittedText(displayValue(value), inner.w), options.style.text);
     }
 
     fn renderControlGroup(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, select_id: u32, title: []const u8, value: []const u8, slider_id: u32, slider_value: f32, down_id: u32, up_id: u32, down_label: []const u8, up_label: []const u8, down_icon: icon.Icon, up_icon: icon.Icon, options: RenderOptions) !void {
         _ = self;
         try collector.addHit(bounds, .button, select_id);
         try (Component{ .card = .{ .title = "", .detail = "", .variant = .subtle } }).renderInteractive(scene, collector, bounds, options);
-        const inner = bounds.insetUniform(16.0);
-        try scene.pushStrongText(ui.Rect.init(inner.x, inner.y, inner.w * 0.55, 20.0), title, options.style.text);
-        try scene.pushText(ui.Rect.init(inner.x + inner.w * 0.55, inner.y, inner.w * 0.45, 18.0), fittedText(displayValue(value), inner.w * 0.45), options.style.muted);
-        try (Component{ .slider = .{ .id = slider_id, .label = "", .value = slider_value } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, inner.y + 34.0, inner.w, 34.0), options);
+        const inner = bounds.insetUniform(14.0);
+        try scene.pushStrongText(ui.Rect.init(inner.x, inner.y, inner.w * 0.55, 18.0), title, options.style.text);
+        try scene.pushText(ui.Rect.init(inner.x + inner.w * 0.55, inner.y + 1.0, inner.w * 0.45, 15.0), fittedText(displayValue(value), inner.w * 0.45), options.style.muted);
+        try (Component{ .slider = .{ .id = slider_id, .label = "", .value = slider_value } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, inner.y + 27.0, inner.w, 26.0), options);
         const half_w = (inner.w - 10.0) * 0.5;
-        try (Component{ .button = .{ .id = down_id, .label = down_label, .variant = .outline, .icon_slot = IconComponent.IconSlot.named(.leading, down_icon) } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, inner.y + 82.0, half_w, 36.0), options);
-        try (Component{ .button = .{ .id = up_id, .label = up_label, .variant = .primary, .icon_slot = IconComponent.IconSlot.named(.leading, up_icon) } }).renderInteractive(scene, collector, ui.Rect.init(inner.x + half_w + 10.0, inner.y + 82.0, half_w, 36.0), options);
+        try (Component{ .button = .{ .id = down_id, .label = down_label, .variant = .outline, .icon_slot = IconComponent.IconSlot.named(.leading, down_icon) } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, inner.y + 66.0, half_w, 32.0), options);
+        try (Component{ .button = .{ .id = up_id, .label = up_label, .variant = .primary, .icon_slot = IconComponent.IconSlot.named(.leading, up_icon) } }).renderInteractive(scene, collector, ui.Rect.init(inner.x + half_w + 10.0, inner.y + 66.0, half_w, 32.0), options);
     }
 
     fn renderLevelCard(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, select_id: u32, title: []const u8, value: []const u8, unit: f32, icon_kind: icon.Icon, options: RenderOptions) !void {
@@ -552,11 +549,11 @@ pub const State = struct {
         try collector.addHit(bounds, .button, select_id);
         try (Component{ .card = .{ .title = "", .detail = "", .variant = .panel } }).renderInteractive(scene, collector, bounds, options);
         const inner = bounds.insetUniform(16.0);
-        const chip = ui.Rect.init(inner.x, inner.y, 32.0, 32.0);
-        try scene.pushRect(chip, hardware_accent_dim, .fill, 9.0, 0.0);
-        try IconComponent.Icon.named(icon_kind).renderColor(scene, chip.withHeightCentered(20.0).withWidthCentered(20.0), options.style.accent);
-        try scene.pushStrongText(ui.Rect.init(inner.x + 44.0, inner.y, inner.w - 44.0, 20.0), title, options.style.text);
-        try scene.pushText(ui.Rect.init(inner.x + 44.0, inner.y + 25.0, inner.w - 44.0, 18.0), fittedText(displayValue(value), inner.w - 44.0), options.style.muted);
+        const chip = ui.Rect.init(inner.x, inner.y, 28.0, 28.0);
+        try scene.pushRect(chip, hardware_accent_dim, .fill, 7.0, 0.0);
+        try IconComponent.Icon.named(icon_kind).renderColor(scene, chip.withHeightCentered(16.0).withWidthCentered(16.0), options.style.accent);
+        try scene.pushStrongText(ui.Rect.init(inner.x + 40.0, inner.y, inner.w - 40.0, 18.0), title, options.style.text);
+        try scene.pushText(ui.Rect.init(inner.x + 40.0, inner.y + 22.0, inner.w - 40.0, 15.0), fittedText(displayValue(value), inner.w - 40.0), options.style.muted);
         try (Component{ .progress = .{ .value = unit } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, inner.y + inner.h - 24.0, inner.w, 18.0), options);
     }
 
@@ -588,37 +585,38 @@ pub const State = struct {
     }
 
     fn renderEditor(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
-        const panel_w = @min(340.0, @max(280.0, bounds.w * 0.24));
-        const panel = ui.Rect.init(bounds.x + bounds.w - panel_w - 18.0, bounds.y + 18.0, panel_w, @min(430.0, bounds.h - 36.0));
-        try scene.pushRect(panel.insetUniform(-2.0), ui.Color{ .r = 0, .g = 0, .b = 0, .a = 110 }, .shadow, 18.0, 10.0);
-        try scene.pushRect(panel, editor_panel, .fill, 16.0, 0.0);
-        try scene.pushRect(panel, options.style.border, .border, 16.0, 0.0);
-        try scene.pushGradientRect(ui.Rect.init(panel.x, panel.y, panel.w, 96.0), editor_scrim, ui.Color.clear, 16.0);
-        const inner = panel.insetUniform(18.0);
-        try scene.pushBoldText(ui.Rect.init(inner.x, inner.y, inner.w - 42.0, 26.0), "Component Editor", options.style.text);
+        const panel_w = @min(360.0, @max(300.0, bounds.w * 0.24));
+        const panel = ui.Rect.init(bounds.x + bounds.w - panel_w - 18.0, bounds.y + 18.0, panel_w, @min(398.0, bounds.h - 36.0));
+        try scene.pushRect(panel.insetUniform(-1.0), ui.Color{ .r = 0, .g = 0, .b = 0, .a = 82 }, .shadow, 16.0, 8.0);
+        try scene.pushRect(panel, editor_panel, .fill, 14.0, 0.0);
+        try scene.pushRect(panel, options.style.border, .border, 14.0, 0.0);
+        try scene.pushGradientRect(ui.Rect.init(panel.x, panel.y, panel.w, 76.0), editor_scrim, ui.Color.clear, 14.0);
+        const inner = panel.insetUniform(16.0);
+        try scene.pushBoldText(ui.Rect.init(inner.x, inner.y, inner.w - 42.0, 24.0), "Component Editor", options.style.text);
         try (Component{ .icon_button = .{
             .id = editor_close_id,
             .label = "Close editor",
             .icon = IconComponent.Icon.named(.x),
             .variant = .outline,
-        } }).renderInteractive(scene, collector, ui.Rect.init(inner.x + inner.w - 36.0, inner.y - 2.0, 34.0, 34.0), options);
-        try scene.pushText(ui.Rect.init(inner.x, inner.y + 34.0, inner.w, 18.0), selectedComponentLabel(self.selected_component), options.style.muted);
-        try scene.pushText(ui.Rect.init(inner.x, inner.y + 60.0, inner.w, 18.0), "Live changes apply immediately.", options.style.muted);
+        } }).renderInteractive(scene, collector, ui.Rect.init(inner.x + inner.w - 34.0, inner.y - 2.0, 32.0, 32.0), options);
+        try scene.pushText(ui.Rect.init(inner.x, inner.y + 31.0, inner.w, 17.0), selectedComponentLabel(self.selected_component), options.style.muted);
+        try scene.pushText(ui.Rect.init(inner.x, inner.y + 54.0, inner.w, 17.0), "Live changes apply immediately.", options.style.muted);
 
-        const preview = ui.Rect.init(inner.x, inner.y + 96.0, inner.w, 82.0);
+        const preview = ui.Rect.init(inner.x, inner.y + 86.0, inner.w, 74.0);
         try (Component{ .card = .{ .title = "", .detail = "", .variant = .subtle } }).renderInteractive(scene, collector, preview, options);
-        try scene.pushStrongText(ui.Rect.init(preview.x + 16.0, preview.y + 14.0, preview.w - 32.0, 20.0), "Selected", options.style.text);
-        try scene.pushText(ui.Rect.init(preview.x + 16.0, preview.y + 42.0, preview.w - 32.0, 18.0), selectedComponentLabel(self.selected_component), options.style.muted);
+        try scene.pushStrongText(ui.Rect.init(preview.x + 14.0, preview.y + 12.0, preview.w - 28.0, 19.0), "Selected", options.style.text);
+        try scene.pushText(ui.Rect.init(preview.x + 14.0, preview.y + 39.0, preview.w - 28.0, 17.0), selectedComponentLabel(self.selected_component), options.style.muted);
 
-        const accent_y = inner.y + 204.0;
+        const accent_y = inner.y + 184.0;
         try scene.pushStrongText(ui.Rect.init(inner.x, accent_y, inner.w, 20.0), "Accent", options.style.text);
-        try scene.pushText(ui.Rect.init(inner.x, accent_y + 26.0, inner.w, 18.0), accentName(self.accent_index), options.style.muted);
+        try scene.pushText(ui.Rect.init(inner.x, accent_y + 25.0, inner.w, 18.0), accentName(self.accent_index), options.style.muted);
         const button_w = (inner.w - 10.0) * 0.5;
-        try (Component{ .button = .{ .id = editor_accent_prev_id, .label = "Accent -", .variant = .outline } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, accent_y + 56.0, button_w, 34.0), options);
-        try (Component{ .button = .{ .id = editor_accent_next_id, .label = "Accent +", .variant = .primary } }).renderInteractive(scene, collector, ui.Rect.init(inner.x + button_w + 10.0, accent_y + 56.0, button_w, 34.0), options);
+        try (Component{ .button = .{ .id = editor_accent_prev_id, .label = "Accent -", .variant = .outline } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, accent_y + 52.0, button_w, 34.0), options);
+        try (Component{ .button = .{ .id = editor_accent_next_id, .label = "Accent +", .variant = .primary } }).renderInteractive(scene, collector, ui.Rect.init(inner.x + button_w + 10.0, accent_y + 52.0, button_w, 34.0), options);
 
-        try (Component{ .switch_control = .{ .id = editor_emphasis_switch_id, .label = "Selected emphasis", .checked = self.selected_emphasis } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, accent_y + 116.0, inner.w, 34.0), options);
-        try (Component{ .switch_control = .{ .id = compact_rows_switch_id, .label = "Compact inventory", .checked = self.compact_rows } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, accent_y + 160.0, inner.w, 34.0), options);
+        try scene.pushRect(ui.Rect.init(inner.x, accent_y + 106.0, inner.w, 1.0), subtle_divider, .fill, 0.0, 0.0);
+        try (Component{ .switch_control = .{ .id = editor_emphasis_switch_id, .label = "Selected emphasis", .checked = self.selected_emphasis } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, accent_y + 122.0, inner.w, 32.0), options);
+        try (Component{ .switch_control = .{ .id = compact_rows_switch_id, .label = "Compact inventory", .checked = self.compact_rows } }).renderInteractive(scene, collector, ui.Rect.init(inner.x, accent_y + 162.0, inner.w, 32.0), options);
     }
 
     fn adjustBacklight(self: *State, kind: BacklightKind, direction: i32) void {

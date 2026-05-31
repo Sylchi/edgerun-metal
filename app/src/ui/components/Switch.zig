@@ -82,17 +82,17 @@ pub const Switch = struct {
     }
 };
 
-const switch_width: f32 = 42.0;
-const switch_height: f32 = 24.0;
-const switch_knob_size: f32 = 18.0;
+const switch_width: f32 = 36.0;
+const switch_height: f32 = 20.0;
+const switch_knob_size: f32 = 14.0;
 const switch_knob_inset: f32 = 3.0;
 const switch_label_gap: f32 = 10.0;
 const switch_label_height: f32 = component_primitives.control_label_height;
 const switch_label_max_lines: usize = 2;
 const switch_min_width: f32 = 112.0;
-const switch_knob_shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 54 };
-const switch_shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 34 };
-const switch_floor = ui.Color{ .r = 6, .g = 8, .b = 11, .a = 24 };
+const switch_knob_shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 30 };
+const switch_shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 18 };
+const switch_floor = ui.Color{ .r = 6, .g = 8, .b = 11, .a = 12 };
 const switch_shadow_inset: f32 = 1.0;
 const switch_shadow_size: f32 = 2.0;
 

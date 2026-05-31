@@ -23,11 +23,25 @@ exec_decoded_fast_supported:
     je      .scan_next
     cmp     al, 0x6A
     je      .scan_next
+    cmp     al, 0x6B
+    je      .scan_next
     cmp     al, 0x6C
+    je      .scan_next
+    cmp     al, 0x71
+    je      .scan_next
+    cmp     al, 0x72
     je      .scan_next
     cmp     al, 0x73
     je      .scan_next
+    cmp     al, 0x74
+    je      .scan_next
+    cmp     al, 0x75
+    je      .scan_next
     cmp     al, 0x76
+    je      .scan_next
+    cmp     al, 0x77
+    je      .scan_next
+    cmp     al, 0x78
     je      .scan_next
     er_err  ERROR_UNSUPPORTED
     pop     rbp
@@ -37,6 +51,157 @@ exec_decoded_fast_supported:
     jmp     .scan_loop
 .supported:
     er_ok
+    pop     rbp
+    ret
+
+exec_decoded_round_trace_supported:
+    er_frame_push
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+
+    mov     r8, [rel exec_decoded_index]
+    mov     r9, [rel exec_decoded_end]
+    mov     rax, r9
+    sub     rax, r8
+    cmp     rax, 11
+    jb      .unsupported
+    cmp     qword [rel exec_result_count], 1
+    jne     .unsupported
+
+    imul    r8, DECODED_OP_SIZE
+    lea     r8, [rel decoded_ops + r8]
+    imul    r9, DECODED_OP_SIZE
+    lea     r9, [rel decoded_ops + r9]
+
+    cmp     byte [r8 + 8], 0x20        ; initial local.get
+    jne     .unsupported
+    mov     r12d, [r8 + 12]            ; input local
+    add     r8, DECODED_OP_SIZE
+
+    lea     rax, [r8 + DECODED_OP_SIZE * 9]
+    cmp     rax, r9
+    ja      .unsupported
+    call    .validate_round
+    jc      .unsupported
+    mov     r13d, ebx                  ; multiply constant
+    mov     r14d, ecx                  ; local.tee/local.get index
+    mov     r12d, edx                  ; shift constant
+    add     r8, DECODED_OP_SIZE * 9
+
+.scan_rounds:
+    cmp     r8, r9
+    jae     .unsupported
+    cmp     byte [r8 + 8], 0x0B        ; end
+    je      .supported
+    lea     rax, [r8 + DECODED_OP_SIZE * 9]
+    cmp     rax, r9
+    ja      .unsupported
+    call    .validate_round
+    jc      .unsupported
+    cmp     ebx, r13d
+    jne     .unsupported
+    cmp     ecx, r14d
+    jne     .unsupported
+    cmp     edx, r12d
+    jne     .unsupported
+    add     r8, DECODED_OP_SIZE * 9
+    jmp     .scan_rounds
+
+.validate_round:
+    cmp     byte [r8 + 8], 0x41
+    jne     .validate_bad
+    mov     ebx, [r8 + 12]
+    cmp     byte [r8 + DECODED_OP_SIZE + 8], 0x6C
+    jne     .validate_bad
+    cmp     byte [r8 + DECODED_OP_SIZE * 2 + 8], 0x41
+    jne     .validate_bad
+    cmp     byte [r8 + DECODED_OP_SIZE * 3 + 8], 0x6A
+    jne     .validate_bad
+    cmp     byte [r8 + DECODED_OP_SIZE * 4 + 8], 0x22
+    jne     .validate_bad
+    mov     ecx, [r8 + DECODED_OP_SIZE * 4 + 12]
+    cmp     byte [r8 + DECODED_OP_SIZE * 5 + 8], 0x41
+    jne     .validate_bad
+    mov     edx, [r8 + DECODED_OP_SIZE * 5 + 12]
+    cmp     byte [r8 + DECODED_OP_SIZE * 6 + 8], 0x76
+    jne     .validate_bad
+    cmp     byte [r8 + DECODED_OP_SIZE * 7 + 8], 0x20
+    jne     .validate_bad
+    cmp     ecx, [r8 + DECODED_OP_SIZE * 7 + 12]
+    jne     .validate_bad
+    cmp     byte [r8 + DECODED_OP_SIZE * 8 + 8], 0x73
+    jne     .validate_bad
+    clc
+    ret
+.validate_bad:
+    stc
+    ret
+
+.supported:
+    er_ok
+    jmp     .done
+.unsupported:
+    er_err  ERROR_UNSUPPORTED
+.done:
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
+    ret
+
+exec_decoded_round_trace_loop:
+    er_frame_push
+    push    rbx
+    push    r12
+    push    r15
+
+    mov     r8, [rel exec_decoded_index]
+    imul    r8, DECODED_OP_SIZE
+    lea     r8, [rel decoded_ops + r8]
+    mov     r9, [rel exec_decoded_end]
+    imul    r9, DECODED_OP_SIZE
+    lea     r9, [rel decoded_ops + r9]
+
+    mov     ecx, [r8 + 12]
+    cmp     rcx, [rel exec_local_count]
+    jae     .corrupt
+    mov     ebx, [rel exec_locals + rcx * 8]
+    add     r8, DECODED_OP_SIZE
+
+    mov     rax, [r8 + DECODED_OP_SIZE * 4 + 12]
+    cmp     rax, [rel exec_local_count]
+    jae     .corrupt
+    mov     r15d, [r8 + 12]
+    mov     r12d, [r8 + DECODED_OP_SIZE * 5 + 12]
+
+.round_loop:
+    cmp     byte [r8 + 8], 0x0B
+    je      .return
+    mov     eax, ebx
+    imul    eax, r15d
+    add     eax, [r8 + DECODED_OP_SIZE * 2 + 12]
+    mov     edi, eax
+    mov     ecx, r12d
+    shr     edi, cl
+    xor     eax, edi
+    mov     ebx, eax
+    add     r8, DECODED_OP_SIZE * 9
+    jmp     .round_loop
+
+.return:
+    mov     eax, ebx
+    mov     [rel exec_result_values], rax
+    er_ok
+    jmp     .done
+.corrupt:
+    er_err  ERROR_CORRUPT
+.done:
+    pop     r15
+    pop     r12
+    pop     rbx
     pop     rbp
     ret
 
@@ -73,12 +238,26 @@ exec_decoded_fast_loop:
     je      .try_fast_round_fuse
     cmp     al, 0x6A
     je      .fast_i32_add
+    cmp     al, 0x6B
+    je      .fast_i32_sub
     cmp     al, 0x6C
     je      .fast_i32_mul
+    cmp     al, 0x71
+    je      .fast_i32_and
+    cmp     al, 0x72
+    je      .fast_i32_or
     cmp     al, 0x73
     je      .fast_i32_xor
+    cmp     al, 0x74
+    je      .fast_i32_shl
+    cmp     al, 0x75
+    je      .fast_i32_shr_s
     cmp     al, 0x76
     je      .fast_i32_shr_u
+    cmp     al, 0x77
+    je      .fast_i32_rotl
+    cmp     al, 0x78
+    je      .fast_i32_rotr
     er_err  ERROR_UNSUPPORTED
     jmp     .fast_done
 
@@ -191,15 +370,173 @@ exec_decoded_fast_loop:
     jmp     .fast_fuse_next
 
 .fast_i32_const:
+    test    edx, edx
+    jz      .fast_i32_const_push
+    cmp     r8, r9
+    jae     .fast_i32_const_push
+    movzx   eax, byte [r8 + 8]
+    mov     ecx, [r11 + 12]
+    cmp     al, 0x6A
+    je      .fast_const_add
+    cmp     al, 0x6B
+    je      .fast_const_sub
+    cmp     al, 0x6C
+    je      .fast_const_mul
+    cmp     al, 0x71
+    je      .fast_const_and
+    cmp     al, 0x72
+    je      .fast_const_or
+    cmp     al, 0x73
+    je      .fast_const_xor
+    cmp     al, 0x74
+    je      .fast_const_shl
+    cmp     al, 0x75
+    je      .fast_const_shr_s
+    cmp     al, 0x76
+    je      .fast_const_shr_u
+    cmp     al, 0x77
+    je      .fast_const_rotl
+    cmp     al, 0x78
+    je      .fast_const_rotr
+.fast_i32_const_push:
     movsxd  rax, dword [r11 + 12]
     jmp     .fast_push_tos
+
+.fast_const_add:
+    add     ebx, ecx
+    add     r8, DECODED_OP_SIZE
+    jmp     .fast_loop
+.fast_const_sub:
+    sub     ebx, ecx
+    add     r8, DECODED_OP_SIZE
+    jmp     .fast_loop
+.fast_const_mul:
+    imul    ebx, ecx
+    add     r8, DECODED_OP_SIZE
+    jmp     .fast_loop
+.fast_const_and:
+    and     ebx, ecx
+    add     r8, DECODED_OP_SIZE
+    jmp     .fast_loop
+.fast_const_or:
+    or      ebx, ecx
+    add     r8, DECODED_OP_SIZE
+    jmp     .fast_loop
+.fast_const_xor:
+    xor     ebx, ecx
+    add     r8, DECODED_OP_SIZE
+    jmp     .fast_loop
+.fast_const_shl:
+    shl     ebx, cl
+    add     r8, DECODED_OP_SIZE
+    jmp     .fast_loop
+.fast_const_shr_s:
+    sar     ebx, cl
+    add     r8, DECODED_OP_SIZE
+    jmp     .fast_loop
+.fast_const_shr_u:
+    shr     ebx, cl
+    add     r8, DECODED_OP_SIZE
+    jmp     .fast_loop
+.fast_const_rotl:
+    rol     ebx, cl
+    add     r8, DECODED_OP_SIZE
+    jmp     .fast_loop
+.fast_const_rotr:
+    ror     ebx, cl
+    add     r8, DECODED_OP_SIZE
+    jmp     .fast_loop
 
 .fast_local_get:
     mov     ecx, [r11 + 12]
     cmp     rcx, [rel exec_local_count]
     jae     .fast_corrupt
+    test    edx, edx
+    jz      .fast_local_get_push
+    cmp     r8, r9
+    jae     .fast_local_get_push
+    movzx   eax, byte [r8 + 8]
+    cmp     al, 0x6A
+    je      .fast_local_add
+    cmp     al, 0x6B
+    je      .fast_local_sub
+    cmp     al, 0x6C
+    je      .fast_local_mul
+    cmp     al, 0x71
+    je      .fast_local_and
+    cmp     al, 0x72
+    je      .fast_local_or
+    cmp     al, 0x73
+    je      .fast_local_xor
+    cmp     al, 0x74
+    je      .fast_local_shl
+    cmp     al, 0x75
+    je      .fast_local_shr_s
+    cmp     al, 0x76
+    je      .fast_local_shr_u
+    cmp     al, 0x77
+    je      .fast_local_rotl
+    cmp     al, 0x78
+    je      .fast_local_rotr
+.fast_local_get_push:
     mov     rax, [rel exec_locals + rcx * 8]
     jmp     .fast_push_tos
+
+.fast_local_add:
+    mov     ecx, [rel exec_locals + rcx * 8]
+    add     ebx, ecx
+    add     r8, DECODED_OP_SIZE
+    jmp     .fast_loop
+.fast_local_sub:
+    mov     ecx, [rel exec_locals + rcx * 8]
+    sub     ebx, ecx
+    add     r8, DECODED_OP_SIZE
+    jmp     .fast_loop
+.fast_local_mul:
+    mov     ecx, [rel exec_locals + rcx * 8]
+    imul    ebx, ecx
+    add     r8, DECODED_OP_SIZE
+    jmp     .fast_loop
+.fast_local_and:
+    mov     ecx, [rel exec_locals + rcx * 8]
+    and     ebx, ecx
+    add     r8, DECODED_OP_SIZE
+    jmp     .fast_loop
+.fast_local_or:
+    mov     ecx, [rel exec_locals + rcx * 8]
+    or      ebx, ecx
+    add     r8, DECODED_OP_SIZE
+    jmp     .fast_loop
+.fast_local_xor:
+    mov     ecx, [rel exec_locals + rcx * 8]
+    xor     ebx, ecx
+    add     r8, DECODED_OP_SIZE
+    jmp     .fast_loop
+.fast_local_shl:
+    mov     ecx, [rel exec_locals + rcx * 8]
+    shl     ebx, cl
+    add     r8, DECODED_OP_SIZE
+    jmp     .fast_loop
+.fast_local_shr_s:
+    mov     ecx, [rel exec_locals + rcx * 8]
+    sar     ebx, cl
+    add     r8, DECODED_OP_SIZE
+    jmp     .fast_loop
+.fast_local_shr_u:
+    mov     ecx, [rel exec_locals + rcx * 8]
+    shr     ebx, cl
+    add     r8, DECODED_OP_SIZE
+    jmp     .fast_loop
+.fast_local_rotl:
+    mov     ecx, [rel exec_locals + rcx * 8]
+    rol     ebx, cl
+    add     r8, DECODED_OP_SIZE
+    jmp     .fast_loop
+.fast_local_rotr:
+    mov     ecx, [rel exec_locals + rcx * 8]
+    ror     ebx, cl
+    add     r8, DECODED_OP_SIZE
+    jmp     .fast_loop
 
 .fast_local_set:
     mov     ecx, [r11 + 12]
@@ -217,6 +554,20 @@ exec_decoded_fast_loop:
     call    .fast_peek_tos_qword
     jc      .fast_underflow
     mov     [rel exec_locals + rcx * 8], rax
+    test    edx, edx
+    jz      .fast_loop
+    cmp     r8, r9
+    jae     .fast_loop
+    cmp     byte [r8 + 8], 0x20
+    jne     .fast_loop
+    cmp     ecx, [r8 + 12]
+    jne     .fast_loop
+    mov     rax, [rel exec_stack_len]
+    cmp     rax, MAX_STACK
+    jae     .fast_overflow
+    mov     [rel exec_stack + rax * 8], rbx
+    inc     qword [rel exec_stack_len]
+    add     r8, DECODED_OP_SIZE
     jmp     .fast_loop
 
 .fast_i32_add:
@@ -225,10 +576,28 @@ exec_decoded_fast_loop:
     add     eax, ecx
     jmp     .fast_push_tos
 
+.fast_i32_sub:
+    call    .fast_pop_two_i32
+    jc      .fast_underflow
+    sub     eax, ecx
+    jmp     .fast_push_tos
+
 .fast_i32_mul:
     call    .fast_pop_two_i32
     jc      .fast_underflow
     imul    eax, ecx
+    jmp     .fast_push_tos
+
+.fast_i32_and:
+    call    .fast_pop_two_i32
+    jc      .fast_underflow
+    and     eax, ecx
+    jmp     .fast_push_tos
+
+.fast_i32_or:
+    call    .fast_pop_two_i32
+    jc      .fast_underflow
+    or      eax, ecx
     jmp     .fast_push_tos
 
 .fast_i32_xor:
@@ -237,10 +606,34 @@ exec_decoded_fast_loop:
     xor     eax, ecx
     jmp     .fast_push_tos
 
+.fast_i32_shl:
+    call    .fast_pop_two_i32
+    jc      .fast_underflow
+    shl     eax, cl
+    jmp     .fast_push_tos
+
+.fast_i32_shr_s:
+    call    .fast_pop_two_i32
+    jc      .fast_underflow
+    sar     eax, cl
+    jmp     .fast_push_tos
+
 .fast_i32_shr_u:
     call    .fast_pop_two_i32
     jc      .fast_underflow
     shr     eax, cl
+    jmp     .fast_push_tos
+
+.fast_i32_rotl:
+    call    .fast_pop_two_i32
+    jc      .fast_underflow
+    rol     eax, cl
+    jmp     .fast_push_tos
+
+.fast_i32_rotr:
+    call    .fast_pop_two_i32
+    jc      .fast_underflow
+    ror     eax, cl
     jmp     .fast_push_tos
 
 .fast_pop_two_i32:

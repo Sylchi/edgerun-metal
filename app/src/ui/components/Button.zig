@@ -333,11 +333,11 @@ const icon_button_size: f32 = 36.0;
 const button_danger = ui.Color{ .r = 225, .g = 29, .b = 72 };
 const button_danger_text = ui.Color{ .r = 255, .g = 255, .b = 255 };
 const button_primary_text = ui.Color{ .r = 244, .g = 255, .b = 251 };
-const button_shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 36 };
-const button_floor = ui.Color{ .r = 8, .g = 10, .b = 12, .a = 10 };
-const button_rim = ui.Color{ .r = 255, .g = 255, .b = 255, .a = 8 };
+const button_shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 22 };
+const button_floor = ui.Color{ .r = 8, .g = 10, .b = 12, .a = 5 };
+const button_rim = ui.Color{ .r = 255, .g = 255, .b = 255, .a = 4 };
 const button_shadow_inset: f32 = 1.0;
-const button_shadow_size: f32 = 4.0;
+const button_shadow_size: f32 = 2.0;
 const button_rim_height: f32 = 1.0;
 const trailing_button_flag: u16 = 0x0100;
 

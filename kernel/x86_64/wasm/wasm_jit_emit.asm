@@ -275,6 +275,44 @@ er_fn jit_emit_imul_eax_imm32
     ret
 
 ; ------------------------------------------------------------------
+; Emit: or eax, imm32
+; eax = imm32
+; -----------------------------------------------------------------+
+er_fn jit_emit_or_eax_imm32
+    push    rax
+    mov     al, 0x0D
+    call    jit_emit_byte
+    pop     rax
+    call    jit_emit_dword
+    ret
+
+; ------------------------------------------------------------------
+; Emit: xor eax, imm32
+; eax = imm32
+; -----------------------------------------------------------------+
+er_fn jit_emit_xor_eax_imm32
+    push    rax
+    mov     al, 0x35
+    call    jit_emit_byte
+    pop     rax
+    call    jit_emit_dword
+    ret
+
+; ------------------------------------------------------------------
+; Emit: shl eax, imm8
+; al = imm8
+; -----------------------------------------------------------------+
+er_fn jit_emit_shl_eax_imm8
+    push    rax
+    mov     al, 0xC1
+    call    jit_emit_byte
+    mov     al, 0xE0
+    call    jit_emit_modrm
+    pop     rax
+    call    jit_emit_byte
+    ret
+
+; ------------------------------------------------------------------
 ; Emit: shr eax, imm8
 ; al = imm8
 ; -----------------------------------------------------------------+
@@ -289,6 +327,62 @@ er_fn jit_emit_shr_eax_imm8
     ret
 
 ; ------------------------------------------------------------------
+; Emit: shr edx, imm8
+; al = imm8
+; -----------------------------------------------------------------+
+er_fn jit_emit_shr_edx_imm8
+    push    rax
+    mov     al, 0xC1
+    call    jit_emit_byte
+    mov     al, 0xEA
+    call    jit_emit_modrm
+    pop     rax
+    call    jit_emit_byte
+    ret
+
+; ------------------------------------------------------------------
+; Emit: sar eax, imm8
+; al = imm8
+; -----------------------------------------------------------------+
+er_fn jit_emit_sar_eax_imm8
+    push    rax
+    mov     al, 0xC1
+    call    jit_emit_byte
+    mov     al, 0xF8
+    call    jit_emit_modrm
+    pop     rax
+    call    jit_emit_byte
+    ret
+
+; ------------------------------------------------------------------
+; Emit: rol eax, imm8
+; al = imm8
+; -----------------------------------------------------------------+
+er_fn jit_emit_rol_eax_imm8
+    push    rax
+    mov     al, 0xC1
+    call    jit_emit_byte
+    mov     al, 0xC0
+    call    jit_emit_modrm
+    pop     rax
+    call    jit_emit_byte
+    ret
+
+; ------------------------------------------------------------------
+; Emit: ror eax, imm8
+; al = imm8
+; -----------------------------------------------------------------+
+er_fn jit_emit_ror_eax_imm8
+    push    rax
+    mov     al, 0xC1
+    call    jit_emit_byte
+    mov     al, 0xC8
+    call    jit_emit_modrm
+    pop     rax
+    call    jit_emit_byte
+    ret
+
+; ------------------------------------------------------------------
 ; Emit: mov ecx, eax
 ; -----------------------------------------------------------------+
 er_fn jit_emit_mov_ecx_eax
@@ -296,6 +390,56 @@ er_fn jit_emit_mov_ecx_eax
     call    jit_emit_byte
     mov     al, 0xC1
     call    jit_emit_modrm
+    ret
+
+; ------------------------------------------------------------------
+; Emit: mov edx, ecx
+; -----------------------------------------------------------------+
+er_fn jit_emit_mov_edx_ecx
+    mov     al, 0x89
+    call    jit_emit_byte
+    mov     al, 0xCA
+    call    jit_emit_modrm
+    ret
+
+; ------------------------------------------------------------------
+; Emit: add eax, edx
+; -----------------------------------------------------------------+
+er_fn jit_emit_add_eax_edx
+    mov     al, 0x01
+    call    jit_emit_byte
+    mov     al, 0xD0
+    call    jit_emit_modrm
+    ret
+
+; ------------------------------------------------------------------
+; Emit: mov ecx, [rdx + disp32]
+; eax = disp32
+; -----------------------------------------------------------------+
+er_fn jit_emit_load_ecx_from_rdx_disp32
+    push    rax
+    mov     al, 0x8B
+    call    jit_emit_byte
+    mov     al, 0x8A
+    call    jit_emit_modrm
+    pop     rax
+    call    jit_emit_dword
+    ret
+
+; ------------------------------------------------------------------
+; Emit: mov [rdx + disp32], rax
+; eax = disp32
+; -----------------------------------------------------------------+
+er_fn jit_emit_store_rax_to_rdx_disp32
+    push    rax
+    mov     cl, 1
+    call    jit_emit_rex_nob
+    mov     al, 0x89
+    call    jit_emit_byte
+    mov     al, 0x82
+    call    jit_emit_modrm
+    pop     rax
+    call    jit_emit_dword
     ret
 
 ; ------------------------------------------------------------------
@@ -1552,6 +1696,19 @@ er_fn jit_emit_and_ecx_imm32
     mov     al, 0x81
     call    jit_emit_byte
     mov     al, 0xE1
+    call    jit_emit_modrm
+    pop     rax
+    jmp     jit_emit_dword
+
+; ------------------------------------------------------------------
+; Emit: or ecx, imm32  (81 C9 <imm32>)
+; eax = imm32 value
+; -----------------------------------------------------------------+
+er_fn jit_emit_or_ecx_imm32
+    push    rax
+    mov     al, 0x81
+    call    jit_emit_byte
+    mov     al, 0xC9
     call    jit_emit_modrm
     pop     rax
     jmp     jit_emit_dword

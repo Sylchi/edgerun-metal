@@ -1,5 +1,5 @@
 ; EdgeRun live Tor ORPort host probe — x86_64 Linux assembly.
-; Connects to 127.0.0.1:19001, completes repo TLS, then performs the
+; Connects to TOR_HOST_IPV4:TOR_HOST_PORT, completes repo TLS, then performs the
 ; client side of the Tor channel link handshake through NETINFO.
 
 %include "x86_64/macros.inc"
@@ -30,13 +30,28 @@ extern er_memcpy
 %ifndef TOR_HOST_PORT
 %define TOR_HOST_PORT 19001
 %endif
+%ifndef TOR_HOST_IPV4_A
+%define TOR_HOST_IPV4_A 127
+%endif
+%ifndef TOR_HOST_IPV4_B
+%define TOR_HOST_IPV4_B 0
+%endif
+%ifndef TOR_HOST_IPV4_C
+%define TOR_HOST_IPV4_C 0
+%endif
+%ifndef TOR_HOST_IPV4_D
+%define TOR_HOST_IPV4_D 1
+%endif
+%ifndef TOR_LIVE_BENCH_CELLS
+%define TOR_LIVE_BENCH_CELLS 0
+%endif
 %define SHA256_CTX_SIZE 108
 
 SECTION .data
 sockaddr:
     dw AF_INET
     dw ((TOR_HOST_PORT & 0xff) << 8) | ((TOR_HOST_PORT >> 8) & 0xff)
-    db 127, 0, 0, 1
+    db TOR_HOST_IPV4_A, TOR_HOST_IPV4_B, TOR_HOST_IPV4_C, TOR_HOST_IPV4_D
     dq 0
 
 msg_tls_ok:  db "tls ok", 10
@@ -52,7 +67,7 @@ versions_cell_len equ $ - versions_cell
 
 SECTION .bss
 live_fd: resd 1
-rx_cell: resb TOR_CELL_LEN
+rx_cell: resb TLS_PLAINTEXT_MAX
 rx_len: resd 1
 tx_netinfo: resb TOR_CELL_LEN
 sha_ctx: resb SHA256_CTX_SIZE
@@ -132,6 +147,19 @@ _start:
     lea     rsi, [rel msg_link_ok]
     mov     edx, msg_link_ok_len
     call    write_stdout
+%if TOR_LIVE_BENCH_CELLS > 0
+    call    build_padding
+    mov     r12d, TOR_LIVE_BENCH_CELLS
+.bench_send:
+    mov     edi, [rel live_fd]
+    lea     rsi, [rel tx_netinfo]
+    mov     edx, TOR_CELL_LEN
+    call    er_tls_send
+    test    eax, eax
+    js      .fail
+    dec     r12d
+    jnz     .bench_send
+%endif
     mov     edi, [rel live_fd]
     mov     eax, SYS_close
     syscall
@@ -222,6 +250,13 @@ build_netinfo:
     mov     byte [rel tx_netinfo + TOR_CELL_PAYLOAD + 4], 4
     mov     byte [rel tx_netinfo + TOR_CELL_PAYLOAD + 5], 4
     mov     byte [rel tx_netinfo + TOR_CELL_PAYLOAD + 10], 0
+    ret
+
+build_padding:
+    lea     rdi, [rel tx_netinfo]
+    xor     eax, eax
+    mov     ecx, TOR_CELL_LEN
+    rep     stosb
     ret
 
 ; ------------------------------------------------------------------
