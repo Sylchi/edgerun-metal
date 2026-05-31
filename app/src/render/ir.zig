@@ -374,8 +374,8 @@ pub fn pushImage(buffers: Buffers, quad: ui.Quad) Error!void {
 
 pub fn pushTextGlyph(buffers: Buffers, x: f32, baseline_y: f32, px: f32, codepoint: u21, weight: ui.FontWeight, color: ui.Color) Error!void {
     if (buffers.text_vertex_len.* + text_vertex_float_stride > buffers.text_vertices.len) return error.Budget;
-    const packed = @as(u32, codepoint) * 4 + @intFromEnum(weight);
-    const values = [_]f32{ x, baseline_y, px, @floatFromInt(packed), channel(color.r), channel(color.g), channel(color.b), channel(color.a) };
+    const glyph_key = @as(u32, codepoint) * 4 + @intFromEnum(weight);
+    const values = [_]f32{ x, baseline_y, px, @floatFromInt(glyph_key), channel(color.r), channel(color.g), channel(color.b), channel(color.a) };
     @memcpy(buffers.text_vertices[buffers.text_vertex_len.* .. buffers.text_vertex_len.* + text_vertex_float_stride], &values);
     buffers.text_vertex_len.* += text_vertex_float_stride;
 }
@@ -554,7 +554,7 @@ pub fn applyBody(body: []const u8, buffers: *Buffers) void {
         const n: usize = field.count;
         field.len.* = n;
         if (n == 0) continue;
-        const src = std.mem.bytesAsSlice(f32, body[pos..][0..n * @sizeOf(f32)]);
+        const src = std.mem.bytesAsSlice(f32, body[pos..][0 .. n * @sizeOf(f32)]);
         @memcpy(field.dst[0..n], src);
         pos += n * @sizeOf(f32);
     }
@@ -585,9 +585,9 @@ pub fn textGlyphAt(values: []const f32, index: usize) Error!TextGlyph {
     if (index >= count) return error.InvalidBuffer;
     const start = index * text_vertex_float_stride;
     const glyph = values[start .. start + text_vertex_float_stride];
-    const packed: u32 = @intFromFloat(glyph[text_glyph_codepoint_weight_index]);
-    const weight_raw: u8 = @intCast(packed & 3);
-    const codepoint_raw = packed / 4;
+    const glyph_key: u32 = @intFromFloat(glyph[text_glyph_codepoint_weight_index]);
+    const weight_raw: u8 = @intCast(glyph_key & 3);
+    const codepoint_raw = glyph_key / 4;
     if (codepoint_raw > std.math.maxInt(u21)) return error.InvalidBuffer;
     return .{
         .x = glyph[text_glyph_x_index],
@@ -809,8 +809,6 @@ test "renderer ir publishes packed frame field layout" {
     try std.testing.expectEqual(@as(usize, 9), icon_instance_float_stride);
     try std.testing.expectEqual(icon_instance_float_stride - 1, icon_id_index);
 }
-
-
 
 test "renderer ir fixed buffers expose writable canonical buffer view" {
     var storage = FixedBuffers(1, 0, 0, 0, 0, 0, 0){};

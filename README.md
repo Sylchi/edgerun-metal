@@ -257,7 +257,6 @@ No separate fragment protocol. See `object.zig`: `Child`, `View.decode`.
 | `ui_renderer.zig` | Component tree → IR (WASM-facing) | yes |
 | `app_input_event.zig` | Input event binary format | yes |
 | `object.zig` | Canonical object format | yes |
-| `app_runtime.zig` | WASM host bridge exports | no |
 | `runtime/render.zig` | Frame orchestration (scene→IR→render) | no |
 
 ---
@@ -342,19 +341,18 @@ Focused checks:
 ./build.sh test-x25519
 ```
 
-Build the app-side WASM runtime:
+Build the standalone component WASM artifact:
 
 ```sh
 cd app
-zig build --cache-dir ../.build/app app-runtime
-cd zig-out
-python3 -m http.server 8765 --bind 127.0.0.1
+zig build --cache-dir ../.build/app ui-components-wasm
 ```
 
-Then open:
+Open the native UI preview:
 
-```text
-http://127.0.0.1:8765/web/index.html
+```sh
+cd app
+zig build wayland-window
 ```
 
 Build and run the main host-side kernel paths:

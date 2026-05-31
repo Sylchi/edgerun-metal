@@ -1,5 +1,6 @@
 const std = @import("std");
 const math = @import("../../math.zig");
+const font_vector = @import("../font.zig");
 const icon_vector = @import("../../ui/icon_vector.zig");
 const renderer_icon_mask = @import("../icon_mask.zig");
 const renderer_ir = @import("../ir.zig");
@@ -84,7 +85,7 @@ pub const IrResources = struct {
 
     pub fn presentationResources(self: IrResources) renderer_present.Resources {
         return .{
-            .font_atlas = self.font.valid(),
+            .font_atlas = false,
             .image_texture = if (self.image) |image| image.valid() else false,
         };
     }
@@ -160,9 +161,7 @@ pub const Surface = struct {
 
     pub fn rasterizeIrWithResources(self: Surface, buffers: renderer_ir.Buffers, resources: IrResources) Error!void {
         renderer_ir.validateBuffers(buffers) catch return error.InvalidIrBuffer;
-        const needs_text = buffers.hasTextVertices();
         const needs_image = buffers.hasImageVertices();
-        if (needs_text and !resources.font.valid()) return error.InvalidIrResource;
         const image_texture = if (!needs_image) null else resources.image orelse return error.InvalidIrResource;
         if (image_texture) |texture| {
             if (!texture.valid()) return error.InvalidIrResource;
@@ -171,7 +170,7 @@ pub const Surface = struct {
         for (renderer_ir.drawBatches(buffers)) |batch| switch (batch) {
             .rects, .overlay_rects => |rects| try self.rasterizeIrRects(rects),
             .text => |vertices| {
-                if (vertices.len != 0) try self.rasterizeAlphaTexturedQuads(vertices, resources.font);
+                if (vertices.len != 0) try self.rasterizeVectorText(vertices);
             },
             .image => |vertices| {
                 if (vertices.len != 0) try self.rasterizeRgbaTexturedQuads(vertices, image_texture.?);
@@ -240,6 +239,92 @@ pub const Surface = struct {
                 if (alpha != 0) self.blendPixel(x, y, color, alpha);
             }
         }
+    }
+
+    fn rasterizeVectorText(self: Surface, values: []const f32) Error!void {
+        var iter = renderer_ir.TextGlyphIterator.init(values) catch return error.InvalidIrBuffer;
+        while (iter.next() catch return error.InvalidIrBuffer) |glyph| {
+            self.drawTextGlyph(glyph);
+        }
+    }
+
+    fn drawTextGlyph(self: Surface, glyph: renderer_ir.TextGlyph) void {
+        const font_body = font_vector.body(fontWeightForGlyph(glyph.weight));
+        const glyph_info = font_body.glyphForCodepoint(glyph.codepoint) orelse return;
+        if (glyph_info.commands.len == 0) return;
+        const scale = glyph.px / @as(f32, @floatFromInt(font_body.metrics.units_per_em));
+        const bounds = textGlyphBounds(glyph_info.commands, glyph.x, glyph.baseline_y, scale) orelse return;
+        if (!bounds.valid()) return;
+
+        var clip_buffer: [icon_alpha_mask_capacity]u8 = undefined;
+        var clip_mask = IconAlphaMask.init(bounds, self.width, self.height, clip_buffer[0..]);
+        var clip = IconClipState{ .mask = &clip_mask };
+        var path = IconPathState{};
+        path.beginFill(.nonzero);
+        for (glyph_info.commands) |command| switch (command) {
+            .move_to => |point| path.fillMoveTo(textPoint(bounds, glyph.x, glyph.baseline_y, scale, point)),
+            .line_to => |point| path.fillLineTo(textPoint(bounds, glyph.x, glyph.baseline_y, scale, point)),
+            .quad_to => |quad| {
+                const control = textPoint(bounds, glyph.x, glyph.baseline_y, scale, quad.control);
+                const end = textPoint(bounds, glyph.x, glyph.baseline_y, scale, quad.end);
+                if (path.current) |current| self.fillQuadraticPath(&path, current, control, end);
+                path.lineTo(end);
+            },
+            .close => path.closeFillSubpath(),
+        };
+        self.fillIconPath(bounds, .{ .solid = glyph.color }, &path, &clip);
+    }
+
+    fn textPoint(bounds: ui.Rect, x: f32, baseline_y: f32, scale: f32, point: font_vector.Point) icon_vector.Point {
+        const pixel_point = textPixelPoint(x, baseline_y, scale, point);
+        return .{
+            .x = if (bounds.w == 0.0) 0.0 else (pixel_point.x - bounds.x) / bounds.w,
+            .y = if (bounds.h == 0.0) 0.0 else (pixel_point.y - bounds.y) / bounds.h,
+        };
+    }
+
+    fn textGlyphBounds(commands: []const font_vector.Command, x: f32, baseline_y: f32, scale: f32) ?ui.Rect {
+        var min_x: f32 = 0.0;
+        var min_y: f32 = 0.0;
+        var max_x: f32 = 0.0;
+        var max_y: f32 = 0.0;
+        var initialized = false;
+        for (commands) |command| switch (command) {
+            .move_to => |point| includeTextPoint(&min_x, &min_y, &max_x, &max_y, &initialized, x, baseline_y, scale, point),
+            .line_to => |point| includeTextPoint(&min_x, &min_y, &max_x, &max_y, &initialized, x, baseline_y, scale, point),
+            .quad_to => |quad| {
+                includeTextPoint(&min_x, &min_y, &max_x, &max_y, &initialized, x, baseline_y, scale, quad.control);
+                includeTextPoint(&min_x, &min_y, &max_x, &max_y, &initialized, x, baseline_y, scale, quad.end);
+            },
+            .close => {},
+        };
+        if (!initialized) return null;
+        return ui.Rect.init(
+            min_x - text_glyph_bounds_pad,
+            min_y - text_glyph_bounds_pad,
+            @max(min_text_glyph_extent, max_x - min_x + text_glyph_bounds_pad * 2.0),
+            @max(min_text_glyph_extent, max_y - min_y + text_glyph_bounds_pad * 2.0),
+        );
+    }
+
+    fn includeTextPoint(min_x: *f32, min_y: *f32, max_x: *f32, max_y: *f32, initialized: *bool, x: f32, baseline_y: f32, scale: f32, point: font_vector.Point) void {
+        const pixel_point = textPixelPoint(x, baseline_y, scale, point);
+        if (!initialized.*) {
+            min_x.* = pixel_point.x;
+            min_y.* = pixel_point.y;
+            max_x.* = pixel_point.x;
+            max_y.* = pixel_point.y;
+            initialized.* = true;
+            return;
+        }
+        min_x.* = @min(min_x.*, pixel_point.x);
+        min_y.* = @min(min_y.*, pixel_point.y);
+        max_x.* = @max(max_x.*, pixel_point.x);
+        max_y.* = @max(max_y.*, pixel_point.y);
+    }
+
+    fn textPixelPoint(x: f32, baseline_y: f32, scale: f32, point: font_vector.Point) font_vector.Point {
+        return .{ .x = x + point.x * scale, .y = baseline_y - point.y * scale };
     }
 
     fn rasterizeAlphaTexturedQuads(self: Surface, vertices: []const f32, atlas: AlphaAtlas) Error!void {
@@ -1522,6 +1607,8 @@ const icon_large_arc_step_divisor_default: f32 = 10.0;
 const icon_arc_step_divisor_min: f32 = 8.0;
 const icon_arc_step_divisor_max: f32 = 64.0;
 const icon_alpha_mask_capacity: usize = 512 * 512;
+const text_glyph_bounds_pad: f32 = 1.0;
+const min_text_glyph_extent: f32 = 1.0;
 const svg_arc_denominator_min: f32 = 0.000001;
 const max_fill_path_points: usize = 512;
 const max_fill_path_subpaths: usize = 64;
@@ -1537,6 +1624,14 @@ const FillRule = enum {
     nonzero,
     evenodd,
 };
+
+fn fontWeightForGlyph(weight: ui.FontWeight) font_vector.Weight {
+    return switch (weight) {
+        .regular => .regular,
+        .semibold => .semibold,
+        .bold => .bold,
+    };
+}
 
 const IconPathState = struct {
     current: ?icon_vector.Point = null,
@@ -2908,6 +3003,26 @@ test "software renderer rasterizes image ir with supplied rgba texture" {
     try std.testing.expect(pixel.r < 140);
     try std.testing.expectEqual(@as(u8, 0), pixel.g);
     try std.testing.expectEqual(@as(u8, 0), pixel.b);
+}
+
+test "software renderer rasterizes vector font glyphs without atlas resources" {
+    var pixels: [64 * 32]ui.Color = undefined;
+    const surface = try Surface.init(64, 32, &pixels);
+    surface.clear(.clear);
+
+    var storage = renderer_ir.FixedBuffers(0, 0, 4, 0, 0, 0, 0){};
+    const buffers = storage.buffers();
+    try renderer_ir.pushTextGlyph(buffers, 4.0, 24.0, 24.0, 'A', .regular, .{ .r = 240, .g = 240, .b = 240, .a = 255 });
+
+    const receipt = try surface.renderIrFrameWithResources(buffers, .{ .font = .{ .width = 0, .height = 0, .alpha = &.{} } });
+    try std.testing.expect(receipt.valid());
+    try std.testing.expect(!receipt.requirements.font_atlas);
+
+    var painted: usize = 0;
+    for (pixels) |pixel| {
+        if (pixel.a != 0) painted += 1;
+    }
+    try std.testing.expect(painted > 0);
 }
 
 test "software renderer frame rejects missing image texture through presentation contract" {

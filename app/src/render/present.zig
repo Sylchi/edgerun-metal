@@ -113,7 +113,7 @@ pub fn validateResources(buffers: renderer_ir.Buffers, resources: Resources) Err
 
 pub fn bufferRequirements(buffers: renderer_ir.Buffers) Requirements {
     return .{
-        .font_atlas = buffers.text_vertex_len.* != 0,
+        .font_atlas = false,
         .image_texture = buffers.image_vertex_len.* != 0,
     };
 }

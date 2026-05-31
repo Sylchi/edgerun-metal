@@ -10,11 +10,11 @@ pub fn build(b: *std.Build) void {
     var runtime_obj: ?std.Build.LazyPath = null;
     if (is_x86_64) {
         {
-            const cmd = b.addSystemCommand(&.        { "yasm", "-f", "elf64", "-I", "../kernel", "../kernel/x86_64/rt/math.asm", "-o" });
+            const cmd = b.addSystemCommand(&.{ "yasm", "-f", "elf64", "-I", "../kernel", "../kernel/x86_64/rt/math.asm", "-o" });
             math_obj = cmd.addOutputFileArg("math.o");
         }
         {
-            const cmd = b.addSystemCommand(&.        { "yasm", "-f", "elf64", "-I", "../kernel", "../kernel/x86_64/rt/runtime.asm", "-o" });
+            const cmd = b.addSystemCommand(&.{ "yasm", "-f", "elf64", "-I", "../kernel", "../kernel/x86_64/rt/runtime.asm", "-o" });
             runtime_obj = cmd.addOutputFileArg("runtime.o");
         }
     }
@@ -307,142 +307,15 @@ pub fn build(b: *std.Build) void {
     drm_gbm_test_step.dependOn(&run_drm_gbm_tests.step);
     test_step.dependOn(&run_drm_gbm_tests.step);
 
-    const app_runtime_target = b.resolveTargetQuery(std.Target.Query.parse(.{
+    const wasm32_freestanding_target = b.resolveTargetQuery(std.Target.Query.parse(.{
         .arch_os_abi = "wasm32-freestanding",
     }) catch unreachable);
-    const embed_file_zig_module = b.createModule(.{
-        .root_source_file = b.path("src/embed_file_zig.zig"),
-        .target = b.graph.host,
-        .optimize = optimize,
-    });
-    const embed_file_zig = b.addExecutable(.{
-        .name = "edgerun-embed-file-zig",
-        .root_module = embed_file_zig_module,
-    });
-    const run_embed_source_object = b.addRunArtifact(embed_file_zig);
-    run_embed_source_object.addArg("workspace");
-    run_embed_source_object.addDirectoryArg(b.path("."));
-    const embedded_source_object = run_embed_source_object.addOutputFileArg("embedded_source_object.zig");
-    const app_runtime = b.addExecutable(.{
-        .name = "edgerun-app-runtime",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/app_runtime.zig"),
-            .target = app_runtime_target,
-            .optimize = optimize,
-            .single_threaded = true,
-        }),
-    });
-    app_runtime.root_module.addAnonymousImport("embedded_source_object", .{
-        .root_source_file = embedded_source_object,
-    });
-
-    // Register the er SDK module so any WASM target can @import("er").
-    const er_module = b.createModule(.{
-        .root_source_file = b.path("src/er/sys.zig"),
-        .target = app_runtime_target,
-        .optimize = optimize,
-        .single_threaded = true,
-    });
-    app_runtime.root_module.addImport("er", er_module);
-
-    app_runtime.entry = .disabled;
-    app_runtime.export_memory = true;
-    app_runtime.stack_size = 8 * 1024 * 1024;
-    app_runtime.root_module.export_symbol_names = &.{
-        "er_ui_max_width",
-        "er_ui_max_height",
-        "er_ui_pixels_ptr",
-        "er_ui_pixels_len",
-        "er_ui_packed_rect_float_stride",
-        "er_ui_packed_rect_buffer_ptr",
-        "er_ui_packed_rect_buffer_len",
-
-        "er_ui_packed_icon_vertex_float_stride",
-        "er_ui_packed_icon_vertex_buffer_ptr",
-        "er_ui_packed_icon_vertex_buffer_len",
-        "er_ui_packed_icon_line_vertex_float_stride",
-        "er_ui_packed_icon_line_vertex_buffer_ptr",
-        "er_ui_packed_icon_line_vertex_buffer_len",
-        "er_ui_packed_image_vertex_float_stride",
-        "er_ui_packed_image_vertex_buffer_ptr",
-        "er_ui_packed_image_vertex_buffer_len",
-        "er_ui_packed_overlay_rect_buffer_ptr",
-        "er_ui_packed_overlay_rect_buffer_len",
-
-        "er_ui_packed_overlay_icon_vertex_buffer_ptr",
-        "er_ui_packed_overlay_icon_vertex_buffer_len",
-        "er_ui_packed_overlay_icon_line_vertex_buffer_ptr",
-        "er_ui_packed_overlay_icon_line_vertex_buffer_len",
-        "er_ui_post_image_rgba_ptr",
-        "er_ui_post_image_rgba_len",
-        "er_ui_post_image_width",
-        "er_ui_post_image_height",
-        "er_ui_font_atlas_width",
-        "er_ui_font_atlas_height",
-        "er_ui_font_atlas_ptr",
-        "er_ui_font_atlas_generation",
-        "er_ui_width",
-        "er_ui_height",
-        "er_ui_input_ptr",
-        "er_ui_input_capacity",
-        "er_ui_last_error",
-        "er_ui_set_device_scale",
-        "er_ui_boot",
-        "er_ui_event",
-        "er_ui_event_bytes",
-        "er_ui_outbox_count",
-        "er_ui_outbox_kind",
-        "er_ui_outbox_id",
-        "er_ui_outbox_target_ptr",
-        "er_ui_outbox_target_len",
-        "er_ui_outbox_payload_ptr",
-        "er_ui_outbox_payload_len",
-        "er_ui_outbox_clear",
-        "er_ui_bootstrap_js_ptr",
-        "er_ui_bootstrap_js_len",
-        "er_ui_request_release_artifact_download",
-        "er_ui_request_release_artifact_launch",
-        "er_ui_build_frame",
-        "er_ui_render_frame",
-        "er_ui_render_frame_hd",
-        "er_ui_wasm_gl_init",
-        "er_ui_render_frame_wasm",
-        "er_ui_render_icon_svg_test",
-        "er_ui_render_icon_svg_tuning_test",
-        "er_identity_register",
-        "er_identity_lookup",
-        "er_identity_unregister",
-        "er_cell_send",
-        "er_cell_recv",
-        "er_cell_available",
-    };
-    const install_app_runtime = b.addInstallArtifact(app_runtime, .{});
-    const install_web_app_runtime = b.addInstallFile(app_runtime.getEmittedBin(), "web/a.wasm");
-    const wasm_entry = b.addExecutable(.{
-        .name = "edgerun-wasm-entry",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/wasm_entry.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
-    });
-    const run_wasm_entry = b.addRunArtifact(wasm_entry);
-    const wasm_entry_html = run_wasm_entry.addOutputFileArg("index.html");
-    const install_wasm_entry = b.addInstallFile(wasm_entry_html, "web/index.html");
-    const wasm_entry_step = b.step("wasm-entry", "Generate the minimal web host entry point");
-    wasm_entry_step.dependOn(&install_wasm_entry.step);
-    wasm_entry_step.dependOn(&install_web_app_runtime.step);
-
-    const app_runtime_step = b.step("app-runtime", "Build the host-agnostic app runtime wasm");
-    app_runtime_step.dependOn(&install_app_runtime.step);
-    app_runtime_step.dependOn(&install_web_app_runtime.step);
-    app_runtime_step.dependOn(&install_wasm_entry.step);
 
     const ui_wasm = b.addExecutable(.{
         .name = "edgerun-ui-components",
         .root_module = b.createModule(.{
-            .root_source_file = b.path("src/ui/wasm.zig"),
-            .target = app_runtime_target,
+            .root_source_file = b.path("src/ui_wasm_root.zig"),
+            .target = wasm32_freestanding_target,
             .optimize = optimize,
             .single_threaded = true,
         }),
@@ -474,8 +347,6 @@ pub fn build(b: *std.Build) void {
     const install_ui_wasm = b.addInstallArtifact(ui_wasm, .{});
     const ui_wasm_step = b.step("ui-components-wasm", "Build the standalone UI component library wasm");
     ui_wasm_step.dependOn(&install_ui_wasm.step);
-
-
 
     const uefi_target = b.resolveTargetQuery(std.Target.Query.parse(.{
         .arch_os_abi = "x86_64-uefi",

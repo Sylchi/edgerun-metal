@@ -1,9 +1,12 @@
 const std = @import("std");
+const font_vector = @import("font.zig");
 const renderer_ir = @import("ir.zig");
 const ui = @import("../ui/core.zig");
 
 pub const bytes_per_pixel: u32 = 4;
 pub const dirty_tile_id_bytes: u32 = 4;
+const text_glyph_dirty_pad: f32 = 1.0;
+const min_text_glyph_dirty_extent: f32 = 1.0;
 
 pub const PixelFormat = enum {
     rgbx,
@@ -289,7 +292,7 @@ pub fn dirtyTilesMarkIrBuffers(plan: TilePlan, buffers: renderer_ir.Buffers, til
     for (renderer_ir.drawBatches(buffers)) |batch| {
         const marked = switch (batch) {
             .rects, .overlay_rects => |rects| dirtyTilesMarkIrRects(plan, rects, tile_marks, list),
-            .text => |vertices| dirtyTilesMarkIrTextured(plan, vertices, tile_marks, list),
+            .text => |vertices| dirtyTilesMarkIrTextGlyphs(plan, vertices, tile_marks, list),
             .image => |vertices| dirtyTilesMarkIrTextured(plan, vertices, tile_marks, list),
             .svg, .overlay_icon => |icons| dirtyTilesMarkIrIcons(plan, icons, tile_marks, list),
             .icon_lines, .overlay_icon_lines => true,
@@ -404,6 +407,70 @@ fn dirtyTilesMarkIrTextured(plan: TilePlan, values: []const f32, tile_marks: []u
         if (!dirtyTilesMarkRect(plan, quad.bounds.x, quad.bounds.y, quad.bounds.w, quad.bounds.h, tile_marks, list)) return false;
     }
     return true;
+}
+
+fn dirtyTilesMarkIrTextGlyphs(plan: TilePlan, values: []const f32, tile_marks: []u8, list: *DirtyTileList) bool {
+    var iter = renderer_ir.TextGlyphIterator.init(values) catch return false;
+    while (iter.next() catch return false) |glyph| {
+        const font_body = font_vector.body(fontWeightForGlyph(glyph.weight));
+        const glyph_info = font_body.glyphForCodepoint(glyph.codepoint) orelse continue;
+        const scale = glyph.px / @as(f32, @floatFromInt(font_body.metrics.units_per_em));
+        const bounds = textGlyphDirtyBounds(glyph_info.commands, glyph.x, glyph.baseline_y, scale) orelse continue;
+        if (!dirtyTilesMarkRect(plan, bounds.x, bounds.y, bounds.w, bounds.h, tile_marks, list)) return false;
+    }
+    return true;
+}
+
+fn textGlyphDirtyBounds(commands: []const font_vector.Command, x: f32, baseline_y: f32, scale: f32) ?ui.Rect {
+    var min_x: f32 = 0.0;
+    var min_y: f32 = 0.0;
+    var max_x: f32 = 0.0;
+    var max_y: f32 = 0.0;
+    var initialized = false;
+    for (commands) |command| switch (command) {
+        .move_to => |point| includeTextDirtyPoint(&min_x, &min_y, &max_x, &max_y, &initialized, x, baseline_y, scale, point),
+        .line_to => |point| includeTextDirtyPoint(&min_x, &min_y, &max_x, &max_y, &initialized, x, baseline_y, scale, point),
+        .quad_to => |quad| {
+            includeTextDirtyPoint(&min_x, &min_y, &max_x, &max_y, &initialized, x, baseline_y, scale, quad.control);
+            includeTextDirtyPoint(&min_x, &min_y, &max_x, &max_y, &initialized, x, baseline_y, scale, quad.end);
+        },
+        .close => {},
+    };
+    if (!initialized) return null;
+    return ui.Rect.init(
+        min_x - text_glyph_dirty_pad,
+        min_y - text_glyph_dirty_pad,
+        @max(min_text_glyph_dirty_extent, max_x - min_x + text_glyph_dirty_pad * 2.0),
+        @max(min_text_glyph_dirty_extent, max_y - min_y + text_glyph_dirty_pad * 2.0),
+    );
+}
+
+fn includeTextDirtyPoint(min_x: *f32, min_y: *f32, max_x: *f32, max_y: *f32, initialized: *bool, x: f32, baseline_y: f32, scale: f32, point: font_vector.Point) void {
+    const pixel_point = textDirtyPixelPoint(x, baseline_y, scale, point);
+    if (!initialized.*) {
+        min_x.* = pixel_point.x;
+        min_y.* = pixel_point.y;
+        max_x.* = pixel_point.x;
+        max_y.* = pixel_point.y;
+        initialized.* = true;
+        return;
+    }
+    min_x.* = @min(min_x.*, pixel_point.x);
+    min_y.* = @min(min_y.*, pixel_point.y);
+    max_x.* = @max(max_x.*, pixel_point.x);
+    max_y.* = @max(max_y.*, pixel_point.y);
+}
+
+fn textDirtyPixelPoint(x: f32, baseline_y: f32, scale: f32, point: font_vector.Point) font_vector.Point {
+    return .{ .x = x + point.x * scale, .y = baseline_y - point.y * scale };
+}
+
+fn fontWeightForGlyph(weight: ui.FontWeight) font_vector.Weight {
+    return switch (weight) {
+        .regular => .regular,
+        .semibold => .semibold,
+        .bold => .bold,
+    };
 }
 
 fn dirtyTilesMarkIrIcons(plan: TilePlan, values: []const f32, tile_marks: []u8, list: *DirtyTileList) bool {

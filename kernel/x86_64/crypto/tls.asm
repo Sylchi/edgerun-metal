@@ -36,6 +36,12 @@ tls_label_client_hs_len equ $ - tls_label_client_hs
 tls_label_server_hs:
     db "s hs traffic"
 tls_label_server_hs_len equ $ - tls_label_server_hs
+tls_label_key:
+    db "key"
+tls_label_key_len equ $ - tls_label_key
+tls_label_iv:
+    db "iv"
+tls_label_iv_len equ $ - tls_label_iv
 
 SECTION .bss
 
@@ -62,6 +68,11 @@ tls_derived_secret: resb TLS_RANDOM_LEN
 tls_handshake_secret: resb TLS_RANDOM_LEN
 tls_client_hs_traffic_secret: resb TLS_RANDOM_LEN
 tls_server_hs_traffic_secret: resb TLS_RANDOM_LEN
+tls_client_hs_key: resb 16
+tls_server_hs_key: resb 16
+tls_client_hs_iv: resb 12
+tls_server_hs_iv: resb 12
+tls_key_block: resb TLS_RANDOM_LEN
 
 SECTION .text
 
@@ -743,6 +754,63 @@ er_fn er_tls_derive_handshake_secrets
     call    er_tls_hkdf_expand_label
     test    eax, eax
     js      .fail_derive
+
+    ; client/server handshake record keys and IVs.
+    lea     rdi, [tls_client_hs_traffic_secret]
+    lea     rsi, [rel tls_label_key]
+    mov     edx, tls_label_key_len
+    xor     ecx, ecx
+    xor     r8d, r8d
+    lea     r9, [tls_key_block]
+    call    er_tls_hkdf_expand_label
+    test    eax, eax
+    js      .fail_derive
+    lea     rdi, [tls_client_hs_key]
+    lea     rsi, [tls_key_block]
+    mov     edx, 16
+    call    er_memcpy
+
+    lea     rdi, [tls_server_hs_traffic_secret]
+    lea     rsi, [rel tls_label_key]
+    mov     edx, tls_label_key_len
+    xor     ecx, ecx
+    xor     r8d, r8d
+    lea     r9, [tls_key_block]
+    call    er_tls_hkdf_expand_label
+    test    eax, eax
+    js      .fail_derive
+    lea     rdi, [tls_server_hs_key]
+    lea     rsi, [tls_key_block]
+    mov     edx, 16
+    call    er_memcpy
+
+    lea     rdi, [tls_client_hs_traffic_secret]
+    lea     rsi, [rel tls_label_iv]
+    mov     edx, tls_label_iv_len
+    xor     ecx, ecx
+    xor     r8d, r8d
+    lea     r9, [tls_key_block]
+    call    er_tls_hkdf_expand_label
+    test    eax, eax
+    js      .fail_derive
+    lea     rdi, [tls_client_hs_iv]
+    lea     rsi, [tls_key_block]
+    mov     edx, 12
+    call    er_memcpy
+
+    lea     rdi, [tls_server_hs_traffic_secret]
+    lea     rsi, [rel tls_label_iv]
+    mov     edx, tls_label_iv_len
+    xor     ecx, ecx
+    xor     r8d, r8d
+    lea     r9, [tls_key_block]
+    call    er_tls_hkdf_expand_label
+    test    eax, eax
+    js      .fail_derive
+    lea     rdi, [tls_server_hs_iv]
+    lea     rsi, [tls_key_block]
+    mov     edx, 12
+    call    er_memcpy
 
     xor     eax, eax
     er_ok

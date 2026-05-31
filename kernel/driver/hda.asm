@@ -40,10 +40,10 @@ extern er_mmio_write8
 %define HDA_PARAM_SUB_NODE_COUNT 0x04
 %define HDA_FORMAT_PCM_48K_16_STEREO 0x0011
 %define HDA_STREAM_TAG 1
+%define HDA_CAPTURE_STREAM_TAG 2
 %define HDA_SD_BYTES 0x20
 %define HDA_SD_CTL_RUN 0x00000002
 %define HDA_SD_CTL_SRST 0x00000001
-%define HDA_SD_CTL_STREAM_TAG_SHIFT 20
 %define HDA_SD_STS_CLEAR 0x1C
 %define HDA_SD_LPIB 0x04
 %define HDA_SD_CBL 0x08
@@ -52,16 +52,28 @@ extern er_mmio_write8
 %define HDA_SD_BDPL 0x18
 %define HDA_SD_BDPU 0x1C
 %define HDA_TONE_BYTES 4096
+%define HDA_MIC_BYTES 4096
 %define HDA_TONE_PHASE_BIT 16
+%define HDA_ALC295_NODE_AFG 0x01
+%define HDA_ALC295_NODE_SPK_DAC 0x02
+%define HDA_ALC295_NODE_MIC_ADC 0x08
+%define HDA_ALC295_NODE_SPK_PIN 0x14
+%define HDA_ALC295_NODE_MIC_PIN 0x12
+%define HDA_PIN_CONTROL_IN 0x20
+%define HDA_PIN_CONTROL_OUT 0x40
 
 SECTION .bss
 align 128
 hda_bdl:          resb 16
 align 128
+hda_mic_bdl:      resb 16
+align 128
 hda_tone_buffer:  resb HDA_TONE_BYTES
+align 128
+hda_mic_buffer:   resb HDA_MIC_BYTES
 hda_verb_sink:    resd 1
-hda_last_sd_base: resd 1
 hda_last_start_stage: resd 1
+hda_last_capture_stage: resd 1
 
 SECTION .text
 
@@ -479,7 +491,7 @@ er_fn er_hda_alc295_prepare_speaker
     ; AFG, DAC, and speaker pin to D0.
     mov     edi, r12d
     mov     esi, r13d
-    mov     edx, 0x01
+    mov     edx, HDA_ALC295_NODE_AFG
     mov     ecx, HDA_VERB_SET_POWER_STATE
     xor     r8d, r8d
     lea     r9, [rel hda_verb_sink]
@@ -488,7 +500,7 @@ er_fn er_hda_alc295_prepare_speaker
     jnz     .ps_out
     mov     edi, r12d
     mov     esi, r13d
-    mov     edx, 0x02
+    mov     edx, HDA_ALC295_NODE_SPK_DAC
     mov     ecx, HDA_VERB_SET_POWER_STATE
     xor     r8d, r8d
     lea     r9, [rel hda_verb_sink]
@@ -497,7 +509,7 @@ er_fn er_hda_alc295_prepare_speaker
     jnz     .ps_out
     mov     edi, r12d
     mov     esi, r13d
-    mov     edx, 0x14
+    mov     edx, HDA_ALC295_NODE_SPK_PIN
     mov     ecx, HDA_VERB_SET_POWER_STATE
     xor     r8d, r8d
     lea     r9, [rel hda_verb_sink]
@@ -508,7 +520,7 @@ er_fn er_hda_alc295_prepare_speaker
     ; DAC 0x02 uses stream tag 1/channel 0 and 48 kHz 16-bit stereo.
     mov     edi, r12d
     mov     esi, r13d
-    mov     edx, 0x02
+    mov     edx, HDA_ALC295_NODE_SPK_DAC
     mov     ecx, HDA_VERB_SET_CHANNEL_STREAM_ID
     mov     r8d, (HDA_STREAM_TAG << 4)
     lea     r9, [rel hda_verb_sink]
@@ -517,7 +529,7 @@ er_fn er_hda_alc295_prepare_speaker
     jnz     .ps_out
     mov     edi, r12d
     mov     esi, r13d
-    mov     edx, 0x02
+    mov     edx, HDA_ALC295_NODE_SPK_DAC
     mov     ecx, HDA_VERB_SET_CONVERTER_FORMAT
     mov     r8d, HDA_FORMAT_PCM_48K_16_STEREO
     lea     r9, [rel hda_verb_sink]
@@ -528,7 +540,7 @@ er_fn er_hda_alc295_prepare_speaker
     ; Unmute DAC output and speaker pin output, then enable EAPD and OUT.
     mov     edi, r12d
     mov     esi, r13d
-    mov     edx, 0x02
+    mov     edx, HDA_ALC295_NODE_SPK_DAC
     mov     ecx, HDA_VERB_SET_AMP_GAIN_MUTE
     mov     r8d, 0xB0
     lea     r9, [rel hda_verb_sink]
@@ -537,7 +549,7 @@ er_fn er_hda_alc295_prepare_speaker
     jnz     .ps_out
     mov     edi, r12d
     mov     esi, r13d
-    mov     edx, 0x14
+    mov     edx, HDA_ALC295_NODE_SPK_PIN
     mov     ecx, HDA_VERB_SET_AMP_GAIN_MUTE
     mov     r8d, 0xB0
     lea     r9, [rel hda_verb_sink]
@@ -546,7 +558,7 @@ er_fn er_hda_alc295_prepare_speaker
     jnz     .ps_out
     mov     edi, r12d
     mov     esi, r13d
-    mov     edx, 0x14
+    mov     edx, HDA_ALC295_NODE_SPK_PIN
     mov     ecx, HDA_VERB_SET_EAPD_BTL
     mov     r8d, 0x02
     lea     r9, [rel hda_verb_sink]
@@ -555,12 +567,84 @@ er_fn er_hda_alc295_prepare_speaker
     jnz     .ps_out
     mov     edi, r12d
     mov     esi, r13d
-    mov     edx, 0x14
+    mov     edx, HDA_ALC295_NODE_SPK_PIN
     mov     ecx, HDA_VERB_SET_PIN_WIDGET_CONTROL
-    mov     r8d, 0x40
+    mov     r8d, HDA_PIN_CONTROL_OUT
     lea     r9, [rel hda_verb_sink]
     call    er_hda_codec_send_verb
 .ps_out:
+    pop     r13
+    pop     r12
+    ret
+
+; ==================================================================
+; er_hda_alc295_prepare_mic — minimal ALC295 internal microphone route
+; int er_hda_alc295_prepare_mic(uint32_t bar0, uint32_t statests)
+; Route: internal mic pin 0x12 -> mixer 0x23 -> ADC 0x08, D0 power, pin IN.
+; ==================================================================
+er_fn er_hda_alc295_prepare_mic
+    push    r12
+    push    r13
+    mov     r12d, edi
+    mov     r13d, esi
+
+    ; AFG, ADC, and internal mic pin to D0.
+    mov     edi, r12d
+    mov     esi, r13d
+    mov     edx, HDA_ALC295_NODE_AFG
+    mov     ecx, HDA_VERB_SET_POWER_STATE
+    xor     r8d, r8d
+    lea     r9, [rel hda_verb_sink]
+    call    er_hda_codec_send_verb
+    test    eax, eax
+    jnz     .pm_out
+    mov     edi, r12d
+    mov     esi, r13d
+    mov     edx, HDA_ALC295_NODE_MIC_ADC
+    mov     ecx, HDA_VERB_SET_POWER_STATE
+    xor     r8d, r8d
+    lea     r9, [rel hda_verb_sink]
+    call    er_hda_codec_send_verb
+    test    eax, eax
+    jnz     .pm_out
+    mov     edi, r12d
+    mov     esi, r13d
+    mov     edx, HDA_ALC295_NODE_MIC_PIN
+    mov     ecx, HDA_VERB_SET_POWER_STATE
+    xor     r8d, r8d
+    lea     r9, [rel hda_verb_sink]
+    call    er_hda_codec_send_verb
+    test    eax, eax
+    jnz     .pm_out
+
+    ; ADC 0x08 consumes capture stream tag 2/channel 0 at 48 kHz 16-bit stereo.
+    mov     edi, r12d
+    mov     esi, r13d
+    mov     edx, HDA_ALC295_NODE_MIC_ADC
+    mov     ecx, HDA_VERB_SET_CHANNEL_STREAM_ID
+    mov     r8d, (HDA_CAPTURE_STREAM_TAG << 4)
+    lea     r9, [rel hda_verb_sink]
+    call    er_hda_codec_send_verb
+    test    eax, eax
+    jnz     .pm_out
+    mov     edi, r12d
+    mov     esi, r13d
+    mov     edx, HDA_ALC295_NODE_MIC_ADC
+    mov     ecx, HDA_VERB_SET_CONVERTER_FORMAT
+    mov     r8d, HDA_FORMAT_PCM_48K_16_STEREO
+    lea     r9, [rel hda_verb_sink]
+    call    er_hda_codec_send_verb
+    test    eax, eax
+    jnz     .pm_out
+
+    mov     edi, r12d
+    mov     esi, r13d
+    mov     edx, HDA_ALC295_NODE_MIC_PIN
+    mov     ecx, HDA_VERB_SET_PIN_WIDGET_CONTROL
+    mov     r8d, HDA_PIN_CONTROL_IN
+    lea     r9, [rel hda_verb_sink]
+    call    er_hda_codec_send_verb
+.pm_out:
     pop     r13
     pop     r12
     ret
@@ -613,7 +697,6 @@ er_fn er_hda_start_square_wave
     add     eax, HDA_REG_SD_BASE
     add     eax, r12d
     mov     r14d, eax
-    mov     [rel hda_last_sd_base], eax
 
     ; Reset stream descriptor.
     mov     edi, r14d
@@ -672,11 +755,11 @@ er_fn er_hda_start_square_wave
     mov     esi, eax
     call    er_mmio_write32
     mov     edi, r14d
-    mov     esi, HDA_SD_CTL_RUN
-    call    er_mmio_write8
-    mov     edi, r14d
     add     edi, 0x02
     mov     esi, HDA_STREAM_TAG << 4
+    call    er_mmio_write8
+    mov     edi, r14d
+    mov     esi, HDA_SD_CTL_RUN
     call    er_mmio_write8
     mov     edi, r14d
     call    er_mmio_read32
@@ -712,6 +795,140 @@ er_fn er_hda_start_square_wave
     ret
 
 ; ==================================================================
+; er_hda_start_mic_capture — start first input stream into a static buffer
+; int er_hda_start_mic_capture(uint32_t bar0, uint32_t gcap)
+; ==================================================================
+er_fn er_hda_start_mic_capture
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+
+    mov     r12d, edi
+    mov     r13d, esi
+    mov     dword [rel hda_last_capture_stage], 0
+    test    r12d, r12d
+    jz      .mc_bad_arg
+    mov     eax, r13d
+    shr     eax, 8
+    and     eax, 0x0F
+    test    eax, eax
+    jz      .mc_bad_arg
+
+    lea     rdi, [rel hda_mic_buffer]
+    mov     ecx, HDA_MIC_BYTES / 4
+    xor     eax, eax
+.mc_clear:
+    mov     [rdi], eax
+    add     rdi, 4
+    dec     ecx
+    jnz     .mc_clear
+
+    lea     rax, [rel hda_mic_buffer]
+    mov     [rel hda_mic_bdl + 0], rax
+    mov     dword [rel hda_mic_bdl + 8], HDA_MIC_BYTES
+    mov     dword [rel hda_mic_bdl + 12], 1
+
+    ; First input stream descriptor starts at SD_BASE.
+    mov     r14d, r12d
+    add     r14d, HDA_REG_SD_BASE
+
+    mov     edi, r14d
+    mov     esi, HDA_SD_CTL_SRST
+    call    er_mmio_write8
+    mov     ecx, 200000
+.mc_wait_srst:
+    mov     edi, r14d
+    call    er_mmio_read8
+    test    eax, HDA_SD_CTL_SRST
+    jnz     .mc_srst_set
+    dec     ecx
+    jnz     .mc_wait_srst
+    mov     dword [rel hda_last_capture_stage], 2
+    jmp     .mc_timeout
+.mc_srst_set:
+    mov     edi, r14d
+    xor     esi, esi
+    call    er_mmio_write8
+    mov     ecx, 200000
+.mc_wait_clear:
+    mov     edi, r14d
+    call    er_mmio_read8
+    test    eax, HDA_SD_CTL_SRST
+    jz      .mc_ready
+    dec     ecx
+    jnz     .mc_wait_clear
+    mov     dword [rel hda_last_capture_stage], 3
+    jmp     .mc_timeout
+.mc_ready:
+    mov     edi, r14d
+    add     edi, 0x03
+    mov     esi, HDA_SD_STS_CLEAR
+    call    er_mmio_write8
+    mov     edi, r14d
+    add     edi, HDA_SD_CBL
+    mov     esi, HDA_MIC_BYTES
+    call    er_mmio_write32
+    mov     edi, r14d
+    add     edi, HDA_SD_LVI
+    xor     esi, esi
+    call    er_mmio_write16
+    mov     edi, r14d
+    add     edi, HDA_SD_FMT
+    mov     esi, HDA_FORMAT_PCM_48K_16_STEREO
+    call    er_mmio_write16
+    lea     rax, [rel hda_mic_bdl]
+    mov     edi, r14d
+    add     edi, HDA_SD_BDPL
+    mov     esi, eax
+    call    er_mmio_write32
+    lea     rax, [rel hda_mic_bdl]
+    shr     rax, 32
+    mov     edi, r14d
+    add     edi, HDA_SD_BDPU
+    mov     esi, eax
+    call    er_mmio_write32
+    mov     edi, r14d
+    add     edi, 0x02
+    mov     esi, HDA_CAPTURE_STREAM_TAG << 4
+    call    er_mmio_write8
+    mov     edi, r14d
+    mov     esi, HDA_SD_CTL_RUN
+    call    er_mmio_write8
+    mov     edi, r14d
+    call    er_mmio_read32
+    test    eax, HDA_SD_CTL_RUN
+    jnz     .mc_run_ok
+    mov     dword [rel hda_last_capture_stage], 4
+    jmp     .mc_timeout
+.mc_run_ok:
+    mov     edi, r14d
+    add     edi, HDA_SD_CBL
+    call    er_mmio_read32
+    cmp     eax, HDA_MIC_BYTES
+    je      .mc_success
+    mov     dword [rel hda_last_capture_stage], 5
+    jmp     .mc_timeout
+.mc_success:
+    xor     eax, eax
+    er_ok
+    jmp     .mc_out
+.mc_bad_arg:
+    mov     dword [rel hda_last_capture_stage], 1
+    er_err  ERROR_BAD_ARGUMENT
+    mov     eax, -1
+    jmp     .mc_out
+.mc_timeout:
+    er_err  ERROR_TIMEOUT
+    mov     eax, -1
+.mc_out:
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    ret
+
+; ==================================================================
 ; er_hda_get_start_stage — read last square-wave start stage
 ; uint32_t er_hda_get_start_stage(void)
 ; 0=success/not-run, 1=bad-arg, 2=reset-assert timeout,
@@ -719,6 +936,17 @@ er_fn er_hda_start_square_wave
 ; ==================================================================
 er_fn er_hda_get_start_stage
     mov     eax, [rel hda_last_start_stage]
+    er_ok
+    ret
+
+; ==================================================================
+; er_hda_get_capture_stage — read last microphone capture start stage
+; uint32_t er_hda_get_capture_stage(void)
+; 0=success/not-run, 1=bad-arg, 2=reset-assert timeout,
+; 3=reset-clear timeout, 4=RUN did not stick, 5=CBL mismatch.
+; ==================================================================
+er_fn er_hda_get_capture_stage
+    mov     eax, [rel hda_last_capture_stage]
     er_ok
     ret
 
@@ -734,12 +962,14 @@ er_fn er_hda_get_stream_debug
     push    r13
     push    r14
     push    r15
+    push    rbp
 
     mov     r12d, edi           ; bar0
     mov     r13d, esi           ; gcap
     mov     rbx, rdx            ; out_ctl
     mov     r14, rcx            ; out_sts
     mov     r15, r8             ; out_lpib
+    mov     rbp, r9             ; out_cbl
     test    r12d, r12d
     jz      .sd_bad_arg
     test    rbx, rbx
@@ -748,7 +978,7 @@ er_fn er_hda_get_stream_debug
     jz      .sd_bad_arg
     test    r15, r15
     jz      .sd_bad_arg
-    test    r9, r9
+    test    rbp, rbp
     jz      .sd_bad_arg
 
     mov     eax, r13d
@@ -773,7 +1003,7 @@ er_fn er_hda_get_stream_debug
     mov     edi, r13d
     add     edi, HDA_SD_CBL
     call    er_mmio_read32
-    mov     [r9], eax
+    mov     [rbp], eax
     xor     eax, eax
     er_ok
     jmp     .sd_out
@@ -781,6 +1011,70 @@ er_fn er_hda_get_stream_debug
     er_err  ERROR_BAD_ARGUMENT
     mov     eax, -1
 .sd_out:
+    pop     rbp
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    ret
+
+; ==================================================================
+; er_hda_get_capture_debug — read first input stream descriptor state
+; int er_hda_get_capture_debug(uint32_t bar0, uint32_t gcap,
+;                              uint32_t* out_ctl, uint32_t* out_sts,
+;                              uint32_t* out_lpib, uint32_t* out_cbl)
+; ==================================================================
+er_fn er_hda_get_capture_debug
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+    push    rbp
+
+    mov     r12d, edi           ; bar0
+    mov     rbx, rdx            ; out_ctl
+    mov     r13, rcx            ; out_sts
+    mov     r14, r8             ; out_lpib
+    mov     rbp, r9             ; out_cbl
+    test    r12d, r12d
+    jz      .cd_bad_arg
+    test    rbx, rbx
+    jz      .cd_bad_arg
+    test    r13, r13
+    jz      .cd_bad_arg
+    test    r14, r14
+    jz      .cd_bad_arg
+    test    rbp, rbp
+    jz      .cd_bad_arg
+
+    mov     r15d, r12d
+    add     r15d, HDA_REG_SD_BASE
+
+    mov     edi, r15d
+    call    er_mmio_read32
+    mov     [rbx], eax
+    mov     edi, r15d
+    add     edi, 0x03
+    call    er_mmio_read8
+    mov     [r13], eax
+    mov     edi, r15d
+    add     edi, HDA_SD_LPIB
+    call    er_mmio_read32
+    mov     [r14], eax
+    mov     edi, r15d
+    add     edi, HDA_SD_CBL
+    call    er_mmio_read32
+    mov     [rbp], eax
+    xor     eax, eax
+    er_ok
+    jmp     .cd_out
+.cd_bad_arg:
+    er_err  ERROR_BAD_ARGUMENT
+    mov     eax, -1
+.cd_out:
+    pop     rbp
     pop     r15
     pop     r14
     pop     r13

@@ -1,4 +1,5 @@
 const std = @import("std");
+const font_vector = @import("font.zig");
 const renderer_font_atlas = @import("font_atlas_weighted.zig");
 const icon_line_buffer = @import("icon_line_buffer.zig");
 const renderer_ir = @import("ir.zig");
@@ -27,7 +28,7 @@ const small_text_snap_max_px: u8 = 18;
 pub fn packScene(buffers: renderer_ir.Buffers, font_atlas: *renderer_font_atlas.Atlas, commands: []const ui.Command) (renderer_ir.Error || icon_line_buffer.Error)!void {
     try prepareSceneAssets(font_atlas, commands);
     try packPreparedScene(buffers, commands);
-    try packTextQuads(buffers, font_atlas, commands);
+    try packTextQuads(buffers, commands);
 }
 
 fn packPreparedScene(buffers: renderer_ir.Buffers, commands: []const ui.Command) (renderer_ir.Error || icon_line_buffer.Error)!void {
@@ -50,20 +51,11 @@ fn packPreparedRange(buffers: renderer_ir.Buffers, commands: []const ui.Command,
 }
 
 pub fn prepareSceneAssets(font_atlas: *renderer_font_atlas.Atlas, commands: []const ui.Command) renderer_ir.Error!void {
-    for (commands) |command| switch (command) {
-        .text => |text_command| font_atlas.prepareText(
-            text_command.value,
-            @as(u8, @intFromFloat(@ceil(text_command.origin.h))),
-            fontWeightForText(text_command.weight),
-        ) catch |err| switch (err) {
-            error.InvalidBuffer => {},
-            else => return err,
-        },
-        else => {},
-    };
+    _ = font_atlas;
+    _ = commands;
 }
 
-fn fontWeightForText(weight: ui.FontWeight) @import("font.zig").Weight {
+fn fontWeightForText(weight: ui.FontWeight) font_vector.Weight {
     return switch (weight) {
         .regular => .regular,
         .semibold => .semibold,
@@ -113,15 +105,15 @@ pub fn packBufferIconLines(buffers: renderer_ir.Buffers) icon_line_buffer.Error!
     try packIconLines(buffers.liveOverlayIconVertices(), buffers.overlay_icon_line_vertices, buffers.overlay_icon_line_vertex_len);
 }
 
-pub fn packTextQuads(buffers: renderer_ir.Buffers, font_atlas: *renderer_font_atlas.Atlas, commands: []const ui.Command) renderer_ir.Error!void {
-    const font_source = font_atlas.source();
+pub fn packTextQuads(buffers: renderer_ir.Buffers, commands: []const ui.Command) renderer_ir.Error!void {
     for (commands) |command| switch (command) {
         .text_quad => |quad| try renderer_ir.pushImage(buffers, quad),
         .text => |text_command| {
             if (text_command.value.len == 0) continue;
             const px: u8 = @intFromFloat(@ceil(text_command.origin.h));
-            const metrics_value = font_source.metrics(font_source.context, px);
-            const text_width = font_source.width(font_source.context, text_command.value, px);
+            const font_body = font_vector.body(fontWeightForText(text_command.weight));
+            const font_scale = @as(f32, @floatFromInt(px)) / @as(f32, @floatFromInt(font_body.metrics.units_per_em));
+            const text_width = vectorTextWidth(font_body, text_command.value, font_scale);
             const align_offset: f32 = switch (text_command.alignment) {
                 .start => 0.0,
                 .center => @max(0.0, (text_command.origin.w - text_width) * 0.5),
@@ -130,9 +122,10 @@ pub fn packTextQuads(buffers: renderer_ir.Buffers, font_atlas: *renderer_font_at
             var pen_x = text_command.origin.x + align_offset;
             if (shouldSnapTextToPixelGrid(px)) pen_x = @round(pen_x);
             const baseline = if (shouldSnapTextToPixelGrid(px))
-                @round(text_command.origin.y + metrics_value.ascender)
+                @round(text_command.origin.y + font_body.metrics.ascender * font_scale)
             else
-                text_command.origin.y + metrics_value.ascender;
+                text_command.origin.y + font_body.metrics.ascender * font_scale;
+            var previous: ?u21 = null;
             var index: usize = 0;
             while (index < text_command.value.len) {
                 const cp_len = std.unicode.utf8ByteSequenceLength(text_command.value[index]) catch {
@@ -146,24 +139,16 @@ pub fn packTextQuads(buffers: renderer_ir.Buffers, font_atlas: *renderer_font_at
                     continue;
                 };
                 index = end;
-                const glyph_value = (try font_source.glyph(font_source.context, codepoint, px)) orelse continue;
-                if (glyph_value.w > 0.0 and glyph_value.h > 0.0) {
-                    const gx = pen_x + glyph_value.left;
-                    const gy = baseline + glyph_value.top;
-                    const snapped = snappedGlyphRect(gx, gy, glyph_value.w, glyph_value.h, px);
-                    try renderer_ir.pushClippedTexturedQuad(
-                        buffers.text_vertices,
-                        buffers.text_vertex_len,
-                        snapped,
-                        snapped,
-                        glyph_value.u0,
-                        glyph_value.v0,
-                        glyph_value.u1,
-                        glyph_value.v1,
-                        text_command.color,
-                    );
+                if (previous) |prev| pen_x += font_body.kern(prev, codepoint) * font_scale;
+                const glyph_value = font_body.glyphForCodepoint(codepoint) orelse {
+                    previous = codepoint;
+                    continue;
+                };
+                if (glyph_value.commands.len != 0) {
+                    try renderer_ir.pushTextGlyph(buffers, pen_x, baseline, @floatFromInt(px), codepoint, text_command.weight, text_command.color);
                 }
-                pen_x += glyph_value.advance;
+                pen_x += glyph_value.advance * font_scale;
+                previous = codepoint;
                 if (pen_x > text_command.origin.x + text_command.origin.w) break;
             }
         },
@@ -171,13 +156,31 @@ pub fn packTextQuads(buffers: renderer_ir.Buffers, font_atlas: *renderer_font_at
     };
 }
 
-fn shouldSnapTextToPixelGrid(px: u8) bool {
-    return px <= small_text_snap_max_px;
+fn vectorTextWidth(font_body: font_vector.Body, value: []const u8, scale: f32) f32 {
+    var width: f32 = 0.0;
+    var previous: ?u21 = null;
+    var index: usize = 0;
+    while (index < value.len) {
+        const cp_len = std.unicode.utf8ByteSequenceLength(value[index]) catch {
+            index += 1;
+            continue;
+        };
+        const end = index + cp_len;
+        if (end > value.len) break;
+        const codepoint = std.unicode.utf8Decode(value[index..end]) catch {
+            index = end;
+            continue;
+        };
+        index = end;
+        if (previous) |prev| width += font_body.kern(prev, codepoint) * scale;
+        if (font_body.glyphForCodepoint(codepoint)) |glyph_value| width += glyph_value.advance * scale;
+        previous = codepoint;
+    }
+    return width;
 }
 
-fn snappedGlyphRect(gx: f32, gy: f32, w: f32, h: f32, px: u8) ui.Rect {
-    _ = px;
-    return ui.Rect.init(gx, gy, @max(1.0, w), @max(1.0, h));
+fn shouldSnapTextToPixelGrid(px: u8) bool {
+    return px <= small_text_snap_max_px;
 }
 
 fn isIntegral(value: f32) bool {
@@ -208,7 +211,7 @@ test "render pipeline ignores invalid utf8 text during atlas prep" {
     try packScene(atlas_storage.buffers(), &font_atlas, scene.written());
 }
 
-test "render pipeline preserves glyph metrics with snapped small text baseline" {
+test "render pipeline packs vector glyphs with snapped small text baseline" {
     var font_atlas: renderer_font_atlas.Atlas = undefined;
     font_atlas.initUtf8();
     var commands: [1]ui.Command = undefined;
@@ -218,17 +221,13 @@ test "render pipeline preserves glyph metrics with snapped small text baseline" 
     try packScene(storage.buffers(), &font_atlas, scene.written());
     const vertices = storage.buffers().liveTextVertices();
     try std.testing.expect(vertices.len != 0);
-    const source = font_atlas.source();
-    const metrics_value = source.metrics(source.context, 12);
-    const glyph_value = (try source.glyph(source.context, 'A', 12)).?;
-    const x0 = vertices[renderer_ir.textured_x_index];
-    const y0 = vertices[renderer_ir.textured_y_index];
-    const x1 = vertices[renderer_ir.text_vertex_float_stride + renderer_ir.textured_x_index];
-    const y2 = vertices[renderer_ir.text_vertex_float_stride * 2 + renderer_ir.textured_y_index];
-    try std.testing.expectApproxEqAbs(@round(10.35) + glyph_value.left, x0, 0.0001);
-    try std.testing.expectApproxEqAbs(@round(11.65 + metrics_value.ascender) + glyph_value.top, y0, 0.0001);
-    try std.testing.expectApproxEqAbs(glyph_value.w, x1 - x0, 0.0001);
-    try std.testing.expectApproxEqAbs(glyph_value.h, y2 - y0, 0.0001);
+    const glyph = try renderer_ir.textGlyphAt(vertices, 0);
+    const font_body = font_vector.body(.regular);
+    const font_scale = @as(f32, 12.0) / @as(f32, @floatFromInt(font_body.metrics.units_per_em));
+    try std.testing.expectApproxEqAbs(@round(10.35), glyph.x, 0.0001);
+    try std.testing.expectApproxEqAbs(@round(11.65 + font_body.metrics.ascender * font_scale), glyph.baseline_y, 0.0001);
+    try std.testing.expectEqual(@as(u21, 'A'), glyph.codepoint);
+    try std.testing.expectEqual(ui.FontWeight.regular, glyph.weight);
 }
 
 test "render pipeline preserves subpixel placement for large text" {
@@ -241,13 +240,6 @@ test "render pipeline preserves subpixel placement for large text" {
     try packScene(storage.buffers(), &font_atlas, scene.written());
     const vertices = storage.buffers().liveTextVertices();
     try std.testing.expect(vertices.len != 0);
-    var has_subpixel = false;
-    var index: usize = 0;
-    while (index < vertices.len) : (index += renderer_ir.text_vertex_float_stride) {
-        if (!isIntegral(vertices[index + renderer_ir.textured_x_index]) or !isIntegral(vertices[index + renderer_ir.textured_y_index])) {
-            has_subpixel = true;
-            break;
-        }
-    }
-    try std.testing.expect(has_subpixel);
+    const glyph = try renderer_ir.textGlyphAt(vertices, 0);
+    try std.testing.expect(!isIntegral(glyph.x) or !isIntegral(glyph.baseline_y));
 }

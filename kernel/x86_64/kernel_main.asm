@@ -93,9 +93,13 @@ extern er_hda_probe_init
 extern er_hda_codec_vendor_id
 extern er_hda_codec_root_nodes
 extern er_hda_alc295_prepare_speaker
+extern er_hda_alc295_prepare_mic
 extern er_hda_start_square_wave
+extern er_hda_start_mic_capture
 extern er_hda_get_start_stage
+extern er_hda_get_capture_stage
 extern er_hda_get_stream_debug
+extern er_hda_get_capture_debug
 extern er_xhci_cmd_submit_noop
 extern er_xhci_cmd_submit_enable_slot
 extern er_xhci_cmd_submit_address_device
@@ -310,6 +314,7 @@ check_hda_state: db " statests ", 0
 check_hda_codec: db " codec ", 0
 check_hda_nodes: db " nodes ", 0
 check_hda_tone:  db " tone ", 0
+check_hda_mic:   db " mic ", 0
 check_hda_ctl:   db " ctl ", 0
 check_hda_sts:   db " sts ", 0
 check_hda_lpib:  db " lpib ", 0
@@ -426,6 +431,11 @@ hda_stream_ctl: resd 1
 hda_stream_sts: resd 1
 hda_stream_lpib: resd 1
 hda_stream_cbl: resd 1
+hda_mic_status: resd 1
+hda_mic_ctl: resd 1
+hda_mic_sts: resd 1
+hda_mic_lpib: resd 1
+hda_mic_cbl: resd 1
 
 %define VIRTIO_NET_STORAGE_size 4900
 virtio_net_dev:      resb VIRTIO_NET_DEVICE_size
@@ -1409,6 +1419,63 @@ er_fn er_kernel_main
     call    er_serial_puts
     mov     rdi, COM1_PORT
     mov     esi, [rel hda_stream_cbl]
+    call    er_serial_puthex32
+    mov     dword [rel hda_mic_status], 0
+    mov     edi, [rel hda_bar0]
+    mov     esi, [rel hda_statests]
+    call    er_hda_alc295_prepare_mic
+    test    eax, eax
+    jnz     .hda_mic_route_fail
+    mov     edi, [rel hda_bar0]
+    mov     esi, [rel hda_gcap]
+    call    er_hda_start_mic_capture
+    test    eax, eax
+    jz      .hda_mic_print
+    call    er_hda_get_capture_stage
+    add     eax, 20
+    mov     [rel hda_mic_status], eax
+    jmp     .hda_mic_print
+.hda_mic_route_fail:
+    mov     dword [rel hda_mic_status], 10
+.hda_mic_print:
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_hda_mic]
+    call    er_serial_puts
+    mov     rdi, COM1_PORT
+    mov     esi, [rel hda_mic_status]
+    call    er_serial_putdec32
+    mov     edi, [rel hda_bar0]
+    mov     esi, [rel hda_gcap]
+    lea     rdx, [rel hda_mic_ctl]
+    lea     rcx, [rel hda_mic_sts]
+    lea     r8, [rel hda_mic_lpib]
+    lea     r9, [rel hda_mic_cbl]
+    call    er_hda_get_capture_debug
+    test    eax, eax
+    jnz     .hda_print_done
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_hda_ctl]
+    call    er_serial_puts
+    mov     rdi, COM1_PORT
+    mov     esi, [rel hda_mic_ctl]
+    call    er_serial_puthex32
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_hda_sts]
+    call    er_serial_puts
+    mov     rdi, COM1_PORT
+    mov     esi, [rel hda_mic_sts]
+    call    er_serial_puthex32
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_hda_lpib]
+    call    er_serial_puts
+    mov     rdi, COM1_PORT
+    mov     esi, [rel hda_mic_lpib]
+    call    er_serial_puthex32
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_hda_cbl]
+    call    er_serial_puts
+    mov     rdi, COM1_PORT
+    mov     esi, [rel hda_mic_cbl]
     call    er_serial_puthex32
 .hda_print_done:
     call    .crlf
