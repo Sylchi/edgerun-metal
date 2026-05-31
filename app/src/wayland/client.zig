@@ -83,10 +83,14 @@ pub const WaylandClient = struct {
     pub fn eventLoop(self: *WaylandClient, seconds: u32, app: anytype) !void {
         var remaining_ms: i32 = @intCast(seconds * std.time.ms_per_s);
         while (!self.state.closed and remaining_ms > 0) {
-            const step_ms: i32 = @min(remaining_ms, 100);
+            const step_ms: i32 = @min(remaining_ms, frame_poll_ms);
             var fds = [_]posix.pollfd{.{ .fd = self.fd, .events = linux.POLL.IN, .revents = 0 }};
             const ready = try posix.poll(&fds, step_ms);
-            if (ready != 0 and (fds[0].revents & linux.POLL.IN) != 0) try self.readEvents(app);
+            if (ready != 0 and (fds[0].revents & linux.POLL.IN) != 0) {
+                try self.readEvents(app);
+            } else {
+                app.tickIdleFrame(self);
+            }
             remaining_ms -= step_ms;
         }
     }
@@ -266,3 +270,5 @@ pub const WaylandClient = struct {
         }
     }
 };
+
+const frame_poll_ms: i32 = 16;

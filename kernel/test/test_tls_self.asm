@@ -12,6 +12,10 @@ extern er_tls_shared_secret_from_server_hello
 extern er_tls_hkdf_extract
 extern er_tls_hkdf_expand_label
 extern er_tls_transcript_hash_ch_sh
+extern er_tls_transcript_append
+extern er_tls_transcript_hash_current
+extern er_tls_server_finished_verify
+extern er_tls_process_server_hs_plain
 extern er_tls_derive_handshake_secrets
 extern er_tls_aes128_gcm_encrypt
 extern er_tls_aes128_gcm_decrypt
@@ -31,6 +35,7 @@ server_key: resb TLS_X25519_KEY_LEN
 shared_buf: resb TLS_X25519_KEY_LEN
 hkdf_out: resb TLS_RANDOM_LEN
 hash_out: resb TLS_RANDOM_LEN
+hash_out2: resb TLS_RANDOM_LEN
 gcm_ct: resb 16
 gcm_tag: resb 16
 gcm_pt_dec: resb 16
@@ -88,6 +93,25 @@ gcm_pt_zero:
 record_msg:
     db "ping"
 record_msg_len equ $ - record_msg
+encrypted_extensions:
+    db TLS_HANDSHAKE_ENCRYPTED_EXTENSIONS, 0, 0, 2
+    db 0, 0
+encrypted_extensions_len equ $ - encrypted_extensions
+finished_msg:
+    db TLS_HANDSHAKE_FINISHED, 0, 0, TLS_RANDOM_LEN
+    times TLS_RANDOM_LEN db 0xC0
+finished_msg_len equ $ - finished_msg
+finished_bad:
+    db TLS_HANDSHAKE_FINISHED, 0, 0, TLS_RANDOM_LEN
+    db 0xC1
+    times TLS_RANDOM_LEN - 1 db 0xC0
+finished_bad_len equ $ - finished_bad
+server_flight:
+    db TLS_HANDSHAKE_ENCRYPTED_EXTENSIONS, 0, 0, 2
+    db 0, 0
+    db TLS_HANDSHAKE_FINISHED, 0, 0, TLS_RANDOM_LEN
+    times TLS_RANDOM_LEN db 0xC0
+server_flight_len equ $ - server_flight
 gcm_j0:
     times 15 db 0
     db 1
@@ -222,6 +246,32 @@ _start:
     mov     esi, server_hello_len
     call    er_tls_derive_handshake_secrets
     ASSERT_RAX 0
+    lea     rdi, [rel encrypted_extensions]
+    mov     esi, encrypted_extensions_len
+    call    er_tls_transcript_append
+    ASSERT_RAX 0
+    lea     rdi, [rel hash_out2]
+    call    er_tls_transcript_hash_current
+    ASSERT_RAX 0
+    movzx   eax, byte [rel hash_out2]
+    ASSERT_EQ eax, 0xD0
+    lea     rdi, [rel finished_bad]
+    mov     esi, finished_bad_len
+    call    er_tls_server_finished_verify
+    ASSERT_EQ eax, -1
+    lea     rdi, [rel finished_msg]
+    mov     esi, finished_msg_len
+    call    er_tls_server_finished_verify
+    ASSERT_RAX 0
+    call    er_tls_init
+    lea     rdi, [rel server_hello]
+    mov     esi, server_hello_len
+    call    er_tls_derive_handshake_secrets
+    ASSERT_RAX 0
+    lea     rdi, [rel server_flight]
+    mov     esi, server_flight_len
+    call    er_tls_process_server_hs_plain
+    ASSERT_RAX 1
 
     ; AES block used as GCM tag mask: E(K, J0).
     lea     rdi, [rel aes_block]

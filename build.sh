@@ -320,6 +320,7 @@ cmd_test() {
 	cmd_test_clock
 	cmd_test_http
 	cmd_test_serial
+	cmd_test_cros_ec
 	cmd_test_uvc
 	cmd_test_sw_fb
 	cmd_test_render_ir
@@ -491,6 +492,19 @@ cmd_test_fe_mul() {
 
 cmd_test_spi_flash() {
 	build_test "test_spi_flash_self" "${TEST_DIR}/test_spi_flash_self.asm"
+}
+
+cmd_test_cros_ec() {
+	local name="test_cros_ec_self"
+	local src="${TEST_DIR}/${name}.asm"
+	local obj="${ASM_BUILD}/${name}.o"
+	local bin="${ASM_BUILD}/${name%_self}"
+	${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
+	local cros_ec_o="${ASM_BUILD}/cros_ec_hosted.o"
+	${YASM} -f elf64 ${ASM_INC} -dHOSTED_TEST -o "$cros_ec_o" "${ASM_DIR}/../driver/cros_ec.asm"
+	ld -nostdlib -static -o "$bin" "$obj" "$cros_ec_o"
+	echo "  LD  ${bin}"
+	"$bin"
 }
 
 cmd_test_tls() {
@@ -693,6 +707,7 @@ EdgeRun build targets:
   test-recursion-valid    Run WASM recursion-validation valid-DAG test
   test-recursion-invalid  Run WASM recursion-validation cycle-rejection test
   test-serial         Run serial test (self-hosted ASM runner)
+  test-cros-ec        Run Chrome EC memmap parser test (self-hosted ASM)
   test-uvc            Run UVC descriptor parse test (self-hosted ASM runner)
   test-sw-fb          Run software framebuffer test (self-hosted ASM runner)
   test-render-ir      Run render IR test (self-hosted ASM runner)
@@ -734,6 +749,7 @@ case "${1:-help}" in
 	test-recursion-valid) cmd_test_recursion_valid ;;
 	test-recursion-invalid) cmd_test_recursion_invalid ;;
 	test-serial)     cmd_test_serial ;;
+	test-cros-ec)    cmd_test_cros_ec ;;
 	test-uvc)        cmd_test_uvc ;;
 	test-sw-fb)     cmd_test_sw_fb ;;
 	test-render-ir) cmd_test_render_ir ;;

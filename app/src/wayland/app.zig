@@ -54,7 +54,6 @@ pub fn renderNativeAppScene(scene: *ui.Scene, collector: *interaction.Collector,
     }
     if (hardware_mode) {
         if (hardware_state) |hs| {
-            hs.tick();
             try hs.render(scene, collector, bounds, hardwareRenderOptions(state));
         }
         return;
@@ -150,6 +149,7 @@ pub const NativeApp = struct {
         self.hardware_app = .{};
         self.dashboard = options.dashboard;
         self.hardware = options.hardware;
+        if (self.hardware) self.hardware_app.refresh();
         return self;
     }
 
@@ -179,6 +179,11 @@ pub const NativeApp = struct {
             std.debug.print("render error: {s}\n", .{@errorName(err)});
             self.refreshAgentHostConnectivity();
         };
+    }
+
+    pub fn tickIdleFrame(self: *NativeApp, client_ptr: *client.WaylandClient) void {
+        if (!self.hardware) return;
+        if (self.hardware_app.tick()) self.renderSafe(client_ptr);
     }
 
     pub fn refreshAgentHostConnectivity(self: *NativeApp) void {
@@ -233,11 +238,11 @@ pub const NativeApp = struct {
                 self.state.hover_x = fixedToFloat(std.mem.readInt(i32, message.payload[4..8], .little));
                 self.state.hover_y = fixedToFloat(std.mem.readInt(i32, message.payload[8..12], .little));
                 app_native_input.processPointerEvent(&self.state, &.{}, self.regionSlice(), self.routedPointerHit(), .pointer_move);
-                if (self.state.runtime.hoverHitId() != old_hit) return true;
                 if (self.surface.present == .cpu and self.surface.base_pixels_ready) {
                     try self.surface.renderCursorOnly(client_ptr, old_x, old_y, old_kind, self.state.hover_x, self.state.hover_y, self.state.cursorKind());
                     return false;
                 }
+                if (self.state.runtime.hoverHitId() != old_hit) return true;
                 return @abs(self.state.hover_x - old_x) >= 8.0 or @abs(self.state.hover_y - old_y) >= 8.0;
             },
             protocol.wl_pointer_button_event => {

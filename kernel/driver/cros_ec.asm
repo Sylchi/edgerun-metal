@@ -37,6 +37,17 @@
 ; Chrome EC shared memory offsets (in EC address space)
 %define EC_MEMMAP_HOST_CMD  0x0800  ; Host command packet buffer
 %define EC_MEMMAP_OLD_HOST_CMD 0x0200 ; Legacy trigger
+%define EC_MEMMAP_TEMP_SENSOR      0x00
+%define EC_MEMMAP_FAN              0x10
+%define EC_MEMMAP_SWITCHES         0x30
+%define EC_MEMMAP_BATT_VOLT        0x40
+%define EC_MEMMAP_BATT_RATE        0x44
+%define EC_MEMMAP_BATT_CAP         0x48
+%define EC_MEMMAP_BATT_FLAG        0x4c
+%define EC_MEMMAP_BATT_LFCC        0x58
+%define EC_TEMP_SENSOR_OFFSET      200
+%define EC_TEMP_SENSOR_NOT_PRESENT 0xff
+%define EC_FAN_SPEED_NOT_PRESENT   0xffff
 
 ; EC_CMD_HOST_CMD protocol version
 %define EC_HOST_CMD_VERSION  0x00
@@ -636,42 +647,181 @@ er_fn er_cros_ec_probe
 ; er_cros_ec_read_battery — read battery status (simplified)
 ; Returns: rax = battery percentage (0-100), or 0xff on error
 ;
-; Uses EC_CMD_BATTERY_STATUS or reads from EC shared memory.
-; The Chrome EC maps battery info into its shared memory region
-; at offset EC_MEMMAP_BATTERY (typically 0x0100+).
-;
-; For simplicity, reads the battery percentage directly from
-; EC firmware's shared memory at offsets:
-;   EC_MEMMAP_BATT_PCT = 0x0105
+; Uses the same memmap parsing path as er_cros_ec_read_power_status.
 ; =================================================================
 er_fn er_cros_ec_read_battery
-    push    r12
-    %ifndef HOSTED_TEST
-    ; Read battery percentage from EC shared memory
-    mov     edi, 0x0105
-    er_call er_cros_ec_ec_read, .fail
-    mov     r12b, al
-
-    ; Validate range
-    cmp     r12b, 100
-    jbe     .valid
-    ; Could be 0xff = "charging" or similar
-    cmp     r12b, 0xff
-    je      .charging
-    xor     r12d, r12d
-.charging:
-.valid:
-    movzx   eax, r12b
-    pop     r12
+    sub     rsp, 24
+    lea     rsi, [rsp + 4]
+    lea     rdi, [rsp]
+    lea     rdx, [rsp + 8]
+    lea     rcx, [rsp + 12]
+    lea     r8, [rsp + 16]
+    lea     r9, [rsp + 20]
+    call    er_cros_ec_read_power_status
+    test    eax, eax
+    jnz     .rb_fail
+    mov     eax, [rsp + 4]
+    add     rsp, 24
     er_ok
     er_ret
-.fail:
+.rb_fail:
     mov     eax, 0xff
-    pop     r12
-    er_ret                      ; rdx has error from er_cros_ec_ec_read
-    %else
-    mov     eax, 50             ; simulated 50%
-    pop     r12
-    er_ok
+    add     rsp, 24
     er_ret
-    %endif
+
+; ==================================================================
+; _cros_ec_read_u16 — read little-endian uint16 from EC memmap
+; edi = low EC memmap offset. Returns eax=value.
+; =================================================================
+_cros_ec_read_u16:
+    push    rbx
+    push    r12
+    mov     r12d, edi
+    call    er_cros_ec_ec_read
+    movzx   ebx, al
+    lea     edi, [r12 + 1]
+    call    er_cros_ec_ec_read
+    movzx   eax, al
+    shl     eax, 8
+    or      eax, ebx
+    pop     r12
+    pop     rbx
+    ret
+
+; ==================================================================
+; _cros_ec_read_u32 — read little-endian uint32 from EC memmap
+; edi = low EC memmap offset. Returns eax=value.
+; =================================================================
+_cros_ec_read_u32:
+    push    rbx
+    push    r12
+    mov     r12d, edi
+    call    er_cros_ec_ec_read
+    movzx   ebx, al
+    lea     edi, [r12 + 1]
+    call    er_cros_ec_ec_read
+    movzx   eax, al
+    shl     eax, 8
+    or      ebx, eax
+    lea     edi, [r12 + 2]
+    call    er_cros_ec_ec_read
+    movzx   eax, al
+    shl     eax, 16
+    or      ebx, eax
+    lea     edi, [r12 + 3]
+    call    er_cros_ec_ec_read
+    movzx   eax, al
+    shl     eax, 24
+    or      eax, ebx
+    pop     r12
+    pop     rbx
+    ret
+
+; ==================================================================
+; er_cros_ec_read_power_status — read Framework/Chrome EC power status
+; int er_cros_ec_read_power_status(uint32_t* out_flags,
+;                                  uint32_t* out_percent,
+;                                  uint32_t* out_temp_c,
+;                                  uint32_t* out_fan_rpm,
+;                                  uint32_t* out_voltage_mv,
+;                                  uint32_t* out_rate_mw)
+; =================================================================
+er_fn er_cros_ec_read_power_status
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+    push    rbp
+
+    mov     rbx, rdi
+    mov     r12, rsi
+    mov     r13, rdx
+    mov     r14, rcx
+    mov     r15, r8
+    mov     rbp, r9
+    test    rbx, rbx
+    jz      .ps_bad_arg
+    test    r12, r12
+    jz      .ps_bad_arg
+    test    r13, r13
+    jz      .ps_bad_arg
+    test    r14, r14
+    jz      .ps_bad_arg
+    test    r15, r15
+    jz      .ps_bad_arg
+    test    rbp, rbp
+    jz      .ps_bad_arg
+
+    mov     edi, EC_MEMMAP_BATT_FLAG
+    call    er_cros_ec_ec_read
+    movzx   eax, al
+    mov     [rbx], eax
+
+    mov     edi, EC_MEMMAP_TEMP_SENSOR
+    call    er_cros_ec_ec_read
+    movzx   eax, al
+    cmp     eax, EC_TEMP_SENSOR_NOT_PRESENT
+    je      .ps_temp_unknown
+    cmp     eax, EC_TEMP_SENSOR_OFFSET
+    jb      .ps_temp_unknown
+    sub     eax, EC_TEMP_SENSOR_OFFSET
+    jmp     .ps_store_temp
+.ps_temp_unknown:
+    mov     eax, 0xffffffff
+.ps_store_temp:
+    mov     [r13], eax
+
+    mov     edi, EC_MEMMAP_FAN
+    call    _cros_ec_read_u16
+    cmp     eax, EC_FAN_SPEED_NOT_PRESENT
+    jne     .ps_store_fan
+    mov     eax, 0xffffffff
+.ps_store_fan:
+    mov     [r14], eax
+
+    mov     edi, EC_MEMMAP_BATT_VOLT
+    call    _cros_ec_read_u32
+    mov     [r15], eax
+
+    mov     edi, EC_MEMMAP_BATT_RATE
+    call    _cros_ec_read_u32
+    mov     [rbp], eax
+
+    mov     edi, EC_MEMMAP_BATT_CAP
+    call    _cros_ec_read_u32
+    mov     ecx, eax
+    mov     edi, EC_MEMMAP_BATT_LFCC
+    call    _cros_ec_read_u32
+    test    eax, eax
+    jz      .ps_pct_unknown
+    mov     ebx, eax
+    mov     eax, ecx
+    xor     edx, edx
+    mov     ecx, 100
+    mul     ecx
+    div     ebx
+    cmp     eax, 100
+    jbe     .ps_store_pct
+    mov     eax, 100
+    jmp     .ps_store_pct
+.ps_pct_unknown:
+    mov     eax, 0xffffffff
+.ps_store_pct:
+    mov     [r12], eax
+
+    xor     eax, eax
+    er_ok
+    jmp     .ps_out
+
+.ps_bad_arg:
+    er_err  ERROR_BAD_ARGUMENT
+    mov     eax, -1
+.ps_out:
+    pop     rbp
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret

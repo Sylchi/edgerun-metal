@@ -45,6 +45,9 @@ tls_label_key_len equ $ - tls_label_key
 tls_label_iv:
     db "iv"
 tls_label_iv_len equ $ - tls_label_iv
+tls_label_finished:
+    db "finished"
+tls_label_finished_len equ $ - tls_label_finished
 
 SECTION .bss
 
@@ -63,9 +66,12 @@ tls_parse_flags: resd 1
 tls_hkdf_out_ptr: resq 1
 tls_hkdf_info: resb TLS_HKDF_INFO_MAX_LEN
 tls_hkdf_msg: resb TLS_HKDF_INFO_MAX_LEN + 1
-tls_transcript: resb TLS_CLIENT_HELLO_PAYLOAD_LEN + TLS_RX_RECORD_MAX
+tls_transcript: resb TLS_TRANSCRIPT_MAX
+tls_transcript_len: resd 1
 tls_transcript_hash: resb TLS_RANDOM_LEN
 tls_empty_hash: resb TLS_RANDOM_LEN
+tls_finished_key: resb TLS_RANDOM_LEN
+tls_finished_verify: resb TLS_RANDOM_LEN
 tls_early_secret: resb TLS_RANDOM_LEN
 tls_derived_secret: resb TLS_RANDOM_LEN
 tls_handshake_secret: resb TLS_RANDOM_LEN
@@ -106,6 +112,7 @@ er_fn er_tls_init
     mov     dword [tls_conn_id], -1
     mov     qword [tls_client_hs_seq], 0
     mov     qword [tls_server_hs_seq], 0
+    mov     dword [tls_transcript_len], 0
     xor     eax, eax
     er_ok
     er_ret
@@ -1367,6 +1374,7 @@ er_fn er_tls_transcript_hash_ch_sh
 
     lea     rdi, [tls_transcript]
     lea     esi, [r13d - TLS_RECORD_HEADER_LEN + TLS_CLIENT_HELLO_PAYLOAD_LEN]
+    mov     [tls_transcript_len], esi
     mov     rdx, rbx
     call    er_tor_sha256
     cmp     eax, TLS_RANDOM_LEN
@@ -1389,6 +1397,269 @@ er_fn er_tls_transcript_hash_ch_sh
 .fail_hash:
     mov     eax, -1
     er_err  ERROR_TLS_HANDSHAKE
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+
+; ==================================================================
+; er_tls_transcript_append
+; rdi=handshake message, esi=len including handshake header.
+; ==================================================================
+global er_tls_transcript_append
+er_fn er_tls_transcript_append
+    push    rbx
+    push    r12
+
+    mov     r12, rdi
+    mov     ebx, esi
+    test    r12, r12
+    jz      .bad_append
+    cmp     ebx, TLS_HANDSHAKE_HEADER_LEN
+    jb      .bad_append
+    movzx   eax, byte [r12 + 1]
+    test    eax, eax
+    jne     .bad_append
+    movzx   eax, byte [r12 + 2]
+    shl     eax, 8
+    movzx   ecx, byte [r12 + 3]
+    or      eax, ecx
+    lea     ecx, [ebx - TLS_HANDSHAKE_HEADER_LEN]
+    cmp     eax, ecx
+    jne     .bad_append
+    mov     eax, [tls_transcript_len]
+    add     eax, ebx
+    cmp     eax, TLS_TRANSCRIPT_MAX
+    ja      .bad_append
+    lea     rdi, [tls_transcript]
+    mov     edx, [tls_transcript_len]
+    add     rdi, rdx
+    mov     rsi, r12
+    mov     edx, ebx
+    call    er_memcpy
+    add     [tls_transcript_len], ebx
+    xor     eax, eax
+    er_ok
+    pop     r12
+    pop     rbx
+    er_ret
+.bad_append:
+    mov     eax, -1
+    er_err  ERROR_INVALID_PARAM
+    pop     r12
+    pop     rbx
+    er_ret
+
+; ==================================================================
+; er_tls_transcript_hash_current
+; rdi=out hash[32].
+; ==================================================================
+global er_tls_transcript_hash_current
+er_fn er_tls_transcript_hash_current
+    test    rdi, rdi
+    jz      .bad_current_hash
+    lea     rdx, [rdi]
+    lea     rdi, [tls_transcript]
+    mov     esi, [tls_transcript_len]
+    call    er_tor_sha256
+    cmp     eax, TLS_RANDOM_LEN
+    jne     .fail_current_hash
+    xor     eax, eax
+    er_ok
+    er_ret
+.bad_current_hash:
+    mov     eax, -1
+    er_err  ERROR_INVALID_PARAM
+    er_ret
+.fail_current_hash:
+    mov     eax, -1
+    er_err  ERROR_TLS_HANDSHAKE
+    er_ret
+
+; ==================================================================
+; er_tls_server_finished_verify
+; rdi=Finished handshake message, esi=len including handshake header.
+; Uses server handshake traffic secret and current transcript hash.
+; ==================================================================
+global er_tls_server_finished_verify
+er_fn er_tls_server_finished_verify
+    push    rbx
+    push    r12
+
+    mov     r12, rdi
+    mov     ebx, esi
+    test    r12, r12
+    jz      .bad_finished
+    cmp     ebx, TLS_HANDSHAKE_HEADER_LEN + TLS_RANDOM_LEN
+    jne     .bad_finished
+    cmp     byte [r12], TLS_HANDSHAKE_FINISHED
+    jne     .bad_finished
+    cmp     byte [r12 + 1], 0
+    jne     .bad_finished
+    cmp     byte [r12 + 2], 0
+    jne     .bad_finished
+    cmp     byte [r12 + 3], TLS_RANDOM_LEN
+    jne     .bad_finished
+
+    lea     rdi, [tls_server_hs_traffic_secret]
+    lea     rsi, [rel tls_label_finished]
+    mov     edx, tls_label_finished_len
+    xor     ecx, ecx
+    xor     r8d, r8d
+    lea     r9, [tls_finished_key]
+    call    er_tls_hkdf_expand_label
+    test    eax, eax
+    js      .fail_finished
+
+    lea     rdi, [tls_transcript_hash]
+    call    er_tls_transcript_hash_current
+    test    eax, eax
+    js      .fail_finished
+
+    lea     rdi, [tls_finished_key]
+    mov     esi, TLS_RANDOM_LEN
+    lea     rdx, [tls_transcript_hash]
+    mov     ecx, TLS_RANDOM_LEN
+    lea     r8, [tls_finished_verify]
+    call    er_tor_hmac_sha256
+    cmp     eax, TLS_RANDOM_LEN
+    jne     .fail_finished
+
+    xor     eax, eax
+    xor     ecx, ecx
+.cmp_finished:
+    cmp     ecx, TLS_RANDOM_LEN
+    jae     .cmp_finished_done
+    movzx   edx, byte [tls_finished_verify + rcx]
+    xor     dl, [r12 + TLS_HANDSHAKE_HEADER_LEN + rcx]
+    or      al, dl
+    inc     ecx
+    jmp     .cmp_finished
+.cmp_finished_done:
+    test    al, al
+    jnz     .fail_finished
+
+    mov     rdi, r12
+    mov     esi, ebx
+    call    er_tls_transcript_append
+    test    eax, eax
+    js      .fail_finished
+    xor     eax, eax
+    er_ok
+    pop     r12
+    pop     rbx
+    er_ret
+.bad_finished:
+    mov     eax, -1
+    er_err  ERROR_INVALID_PARAM
+    pop     r12
+    pop     rbx
+    er_ret
+.fail_finished:
+    mov     eax, -1
+    er_err  ERROR_TLS_HANDSHAKE
+    pop     r12
+    pop     rbx
+    er_ret
+
+; ==================================================================
+; er_tls_process_server_hs_plain
+; rdi=plaintext handshake bytes, esi=len.
+; Returns eax=1 when Finished verified, eax=0 when more records are needed.
+; ==================================================================
+global er_tls_process_server_hs_plain
+er_fn er_tls_process_server_hs_plain
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+
+    mov     r12, rdi
+    mov     ebx, esi
+    xor     r13d, r13d
+    test    r12, r12
+    jz      .bad_process
+    cmp     ebx, TLS_HANDSHAKE_HEADER_LEN
+    jb      .bad_process
+.process_loop:
+    cmp     r13d, ebx
+    jae     .need_more
+    mov     eax, ebx
+    sub     eax, r13d
+    cmp     eax, TLS_HANDSHAKE_HEADER_LEN
+    jb      .bad_process
+    lea     r14, [r12 + r13]
+    movzx   eax, byte [r14 + 1]
+    test    eax, eax
+    jne     .bad_process
+    movzx   eax, byte [r14 + 2]
+    shl     eax, 8
+    movzx   ecx, byte [r14 + 3]
+    or      eax, ecx
+    add     eax, TLS_HANDSHAKE_HEADER_LEN
+    mov     ecx, ebx
+    sub     ecx, r13d
+    cmp     eax, ecx
+    ja      .bad_process
+    cmp     byte [r14], TLS_HANDSHAKE_ENCRYPTED_EXTENSIONS
+    je      .append_process
+    cmp     byte [r14], TLS_HANDSHAKE_CERTIFICATE
+    je      .append_process
+    cmp     byte [r14], TLS_HANDSHAKE_CERTIFICATE_VERIFY
+    je      .append_process
+    cmp     byte [r14], TLS_HANDSHAKE_FINISHED
+    je      .finished_process
+    jmp     .bad_process
+
+.append_process:
+    mov     rdi, r14
+    mov     esi, eax
+    push    rax
+    call    er_tls_transcript_append
+    test    eax, eax
+    pop     rax
+    js      .fail_process
+    add     r13d, eax
+    jmp     .process_loop
+
+.finished_process:
+    add     eax, r13d
+    cmp     eax, ebx
+    jne     .bad_process
+    mov     rdi, r14
+    mov     esi, ebx
+    sub     esi, r13d
+    call    er_tls_server_finished_verify
+    test    eax, eax
+    js      .fail_process
+    mov     eax, 1
+    er_ok
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+
+.need_more:
+    xor     eax, eax
+    er_ok
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+.bad_process:
+    mov     eax, -1
+    er_err  ERROR_INVALID_PARAM
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+.fail_process:
+    mov     eax, -1
+    er_err  ERROR_TLS_HANDSHAKE
+    pop     r14
     pop     r13
     pop     r12
     pop     rbx
@@ -1643,13 +1914,19 @@ er_fn er_tls_connect
     call    er_tls_server_hs_record_decrypt
     test    eax, eax
     js      .fail
-    cmp     eax, TLS_HANDSHAKE_HEADER_LEN
-    jb      .fail
-    cmp     byte [tls_transcript], TLS_HANDSHAKE_ENCRYPTED_EXTENSIONS
-    jne     .fail
+    lea     rdi, [tls_transcript]
+    mov     esi, eax
+    call    er_tls_process_server_hs_plain
+    test    eax, eax
+    js      .fail
+    cmp     eax, 1
+    je      .server_finished
+    mov     ecx, 500
+    jmp     .wait_encrypted_hs
 
-    ; Certificate verification and Finished validation are still required
-    ; before application data can flow.
+.server_finished:
+    ; Certificate trust policy and application traffic secrets are still
+    ; required before application data can flow.
     mov     eax, -1
     er_err  ERROR_TLS_UNSUPPORTED
     pop     rbx

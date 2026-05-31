@@ -125,8 +125,9 @@ verify the receipt
 - A deterministic x86_64 ASM EdgeRun WASM interpreter for running app code
   without WASI or a fake host filesystem.
 - A host-side x86_64 ASM WASM compiler emitter. The first committed slice emits
-  deterministic exported `i32.const` modules into caller-owned memory and proves
-  them through the canonical interpreter.
+  deterministic exported integer modules into caller-owned memory, compiles
+  `export name = decimal_i32;` and `export name = a + b;` source buffers, and
+  proves the result through the canonical interpreter.
 - App containment tests for host-mediated spawn, reclaim, and child-memory
   boundaries.
 - App authoring is converging on host-side compilation to WASM followed by the

@@ -159,12 +159,16 @@ pub const State = struct {
     const kbd_up_button_id: u32 = 90_008;
     const brightness_slider_id: u32 = 90_009;
     const kbd_slider_id: u32 = 90_010;
-    const refresh_interval_frames: u64 = 120;
+    const refresh_interval_frames: u64 = 600;
 
-    pub fn tick(self: *State) void {
+    pub fn tick(self: *State) bool {
         self.frame += 1;
-        if (!self.auto_refresh) return;
-        if (self.frame == 1 or self.frame - self.last_refresh_frame >= refresh_interval_frames) self.refresh();
+        if (!self.auto_refresh) return false;
+        if (self.frame == 1 or self.frame - self.last_refresh_frame >= refresh_interval_frames) {
+            self.refresh();
+            return true;
+        }
+        return false;
     }
 
     pub fn activate(self: *State, hit: ?interaction.Region, drag: ?ui_runtime.DragValue) void {
@@ -282,8 +286,8 @@ pub const State = struct {
         var dashboard_options = options;
         dashboard_options.style = hardwareStyle();
         try scene.pushGradientRect(bounds, hardware_bg_top, hardware_bg_bottom, 0.0);
-        try scene.pushRect(ui.Rect.init(bounds.x + bounds.w * 0.58, bounds.y - 120.0, bounds.w * 0.34, 260.0), hardware_orb, .shadow, 180.0, 80.0);
-        try scene.pushRect(ui.Rect.init(bounds.x - 90.0, bounds.y + bounds.h * 0.62, bounds.w * 0.28, 220.0), hardware_orb, .shadow, 150.0, 70.0);
+        try scene.pushGradientRect(ui.Rect.init(bounds.x, bounds.y, bounds.w, 96.0), hardware_orb, ui.Color.clear, 0.0);
+        try scene.pushRect(ui.Rect.init(bounds.x, bounds.y + bounds.h - 2.0, bounds.w, 2.0), hardware_rim, .fill, 0.0, 0.0);
 
         const outer = bounds.insetUniform(if (bounds.w >= 1000.0) 20.0 else 12.0);
         if (outer.w >= 980.0) {
@@ -841,4 +845,11 @@ test "backlight slider values clamp to device range" {
     try std.testing.expectEqual(@as(i32, 5), unitBacklightValue(firstBacklightDevice(.screen), reading, 0.5));
     try std.testing.expectEqual(@as(i32, 10), unitBacklightValue(firstBacklightDevice(.screen), reading, 2.0));
     try std.testing.expectEqual(@as(i32, 0), unitBacklightValue(firstBacklightDevice(.keyboard), reading, -1.0));
+}
+
+test "hardware dashboard tick reports whether a frame needs repaint" {
+    var state = State{ .auto_refresh = false };
+
+    try std.testing.expect(!state.tick());
+    try std.testing.expectEqual(@as(u64, 1), state.frame);
 }
