@@ -40,6 +40,57 @@ const rows = [_]RowDef{
 
 const Component = component_union.Component;
 
+const BacklightKind = enum {
+    screen,
+    keyboard,
+};
+
+const BacklightDevice = struct {
+    title: []const u8,
+    current_path: []const u8,
+    max_path: []const u8,
+    min_value: i32,
+    step_percent: i32,
+    unavailable_status: []const u8,
+    parse_status: []const u8,
+    write_failed_status: []const u8,
+    updated_status: []const u8,
+};
+
+const BacklightReading = struct {
+    current: i32,
+    max: i32,
+
+    fn unit(self: BacklightReading) f32 {
+        if (self.max <= 0) return 0.0;
+        return ui.clampUnit(@as(f32, @floatFromInt(self.current)) / @as(f32, @floatFromInt(self.max)));
+    }
+};
+
+const screen_backlight = BacklightDevice{
+    .title = "Screen",
+    .current_path = "/sys/class/backlight/amdgpu_bl2/brightness",
+    .max_path = "/sys/class/backlight/amdgpu_bl2/max_brightness",
+    .min_value = 1,
+    .step_percent = 5,
+    .unavailable_status = "Screen control unavailable",
+    .parse_status = "Screen parse failed",
+    .write_failed_status = "Screen brightness write failed",
+    .updated_status = "Screen brightness updated",
+};
+
+const keyboard_backlight = BacklightDevice{
+    .title = "Keyboard",
+    .current_path = "/sys/class/leds/chromeos::kbd_backlight/brightness",
+    .max_path = "/sys/class/leds/chromeos::kbd_backlight/max_brightness",
+    .min_value = 0,
+    .step_percent = 0,
+    .unavailable_status = "Keyboard control unavailable",
+    .parse_status = "Keyboard parse failed",
+    .write_failed_status = "Keyboard backlight write failed",
+    .updated_status = "Keyboard backlight updated",
+};
+
 pub const State = struct {
     details: [state_bytes]u8 = [_]u8{0} ** state_bytes,
     frame: u64 = 0,
@@ -81,12 +132,12 @@ pub const State = struct {
             auto_refresh_switch_id => self.auto_refresh = !self.auto_refresh,
             hide_unavailable_switch_id => self.hide_unavailable = !self.hide_unavailable,
             compact_rows_switch_id => self.compact_rows = !self.compact_rows,
-            brightness_down_button_id => self.adjustBacklight(-5),
-            brightness_up_button_id => self.adjustBacklight(5),
-            kbd_down_button_id => self.adjustKbdBacklight(-1),
-            kbd_up_button_id => self.adjustKbdBacklight(1),
-            brightness_slider_id => if (hit) |region| self.setBacklightUnit(region, drag),
-            kbd_slider_id => if (hit) |region| self.setKbdBacklightUnit(region, drag),
+            brightness_down_button_id => self.adjustBacklight(.screen, -1),
+            brightness_up_button_id => self.adjustBacklight(.screen, 1),
+            kbd_down_button_id => self.adjustBacklight(.keyboard, -1),
+            kbd_up_button_id => self.adjustBacklight(.keyboard, 1),
+            brightness_slider_id => if (hit) |region| self.setBacklightUnit(.screen, region, drag),
+            kbd_slider_id => if (hit) |region| self.setBacklightUnit(.keyboard, region, drag),
             else => {},
         }
     }
@@ -123,7 +174,7 @@ pub const State = struct {
         offset += detail_bytes;
 
         var screen_buf: [detail_bytes]u8 = [_]u8{0} ** detail_bytes;
-        if (readScreenBacklight(&screen_buf, self)) |_| {
+        if (readBacklightRow(.screen, &screen_buf, self)) |_| {
             writeDetail(self.details[offset..][0..detail_bytes], trimBuf(&screen_buf));
         } else |_| {
             self.screen_brightness_ready = false;
@@ -132,7 +183,7 @@ pub const State = struct {
         offset += detail_bytes;
 
         var kbd_buf: [detail_bytes]u8 = [_]u8{0} ** detail_bytes;
-        if (readKbdBacklight(&kbd_buf, self)) |_| {
+        if (readBacklightRow(.keyboard, &kbd_buf, self)) |_| {
             writeDetail(self.details[offset..][0..detail_bytes], trimBuf(&kbd_buf));
         } else |_| {
             self.keyboard_brightness_ready = false;
@@ -368,61 +419,53 @@ pub const State = struct {
         }
     }
 
-    fn adjustBacklight(self: *State, delta_percent: i32) void {
-        var max_buf: [16]u8 = undefined;
-        var cur_buf: [16]u8 = undefined;
-        const max_n = readSysfsStr("/sys/class/backlight/amdgpu_bl2/max_brightness", &max_buf) catch return self.setStatus("Screen control unavailable");
-        const cur_n = readSysfsStr("/sys/class/backlight/amdgpu_bl2/brightness", &cur_buf) catch return self.setStatus("Screen control unavailable");
-        const max_v = std.fmt.parseInt(i32, std.mem.trimEnd(u8, max_buf[0..max_n], &[_]u8{ '\n', '\r', ' ' }), 10) catch return self.setStatus("Screen parse failed");
-        const cur_v = std.fmt.parseInt(i32, std.mem.trimEnd(u8, cur_buf[0..cur_n], &[_]u8{ '\n', '\r', ' ' }), 10) catch return self.setStatus("Screen parse failed");
-        const delta = @divTrunc(max_v * delta_percent, 100);
-        const next = std.math.clamp(cur_v + delta, 1, max_v);
-        if (writeSysfsInt("/sys/class/backlight/amdgpu_bl2/brightness", next)) {
-            self.setStatus("Screen brightness updated");
-            self.refresh();
-        } else self.setStatus("Screen brightness write failed");
-    }
-
-    fn adjustKbdBacklight(self: *State, delta: i32) void {
-        var max_buf: [16]u8 = undefined;
-        var cur_buf: [16]u8 = undefined;
-        const max_n = readSysfsStr("/sys/class/leds/chromeos::kbd_backlight/max_brightness", &max_buf) catch return self.setStatus("Keyboard control unavailable");
-        const cur_n = readSysfsStr("/sys/class/leds/chromeos::kbd_backlight/brightness", &cur_buf) catch return self.setStatus("Keyboard control unavailable");
-        const max_v = std.fmt.parseInt(i32, std.mem.trimEnd(u8, max_buf[0..max_n], &[_]u8{ '\n', '\r', ' ' }), 10) catch return self.setStatus("Keyboard parse failed");
-        const cur_v = std.fmt.parseInt(i32, std.mem.trimEnd(u8, cur_buf[0..cur_n], &[_]u8{ '\n', '\r', ' ' }), 10) catch return self.setStatus("Keyboard parse failed");
-        const next = std.math.clamp(cur_v + delta, 0, max_v);
-        if (writeSysfsInt("/sys/class/leds/chromeos::kbd_backlight/brightness", next)) {
-            self.setStatus("Keyboard backlight updated");
-            self.refresh();
-        } else self.setStatus("Keyboard backlight write failed");
+    fn adjustBacklight(self: *State, kind: BacklightKind, direction: i32) void {
+        const device = backlightDevice(kind);
+        const reading = readBacklight(device) catch |err| return self.setStatus(backlightReadStatus(device, err));
+        const delta = if (device.step_percent == 0) direction else @divTrunc(reading.max * device.step_percent * direction, 100);
+        const next = std.math.clamp(reading.current + delta, device.min_value, reading.max);
+        self.writeBacklight(kind, next);
     }
 
     fn setStatus(self: *State, value: []const u8) void {
         writeDetail(&self.status, value);
     }
 
-    fn setBacklightUnit(self: *State, region: interaction.Region, drag: ?ui_runtime.DragValue) void {
+    fn setBacklightUnit(self: *State, kind: BacklightKind, region: interaction.Region, drag: ?ui_runtime.DragValue) void {
         const unit = unitFromDrag(region, drag) orelse return;
-        var max_buf: [16]u8 = undefined;
-        const max_n = readSysfsStr("/sys/class/backlight/amdgpu_bl2/max_brightness", &max_buf) catch return self.setStatus("Screen control unavailable");
-        const max_v = std.fmt.parseInt(i32, std.mem.trimEnd(u8, max_buf[0..max_n], &[_]u8{ '\n', '\r', ' ' }), 10) catch return self.setStatus("Screen parse failed");
-        const next = @as(i32, @intFromFloat(unit * @as(f32, @floatFromInt(max_v))));
-        if (writeSysfsInt("/sys/class/backlight/amdgpu_bl2/brightness", std.math.clamp(next, 1, max_v))) {
-            self.setStatus("Screen brightness updated");
-            self.refresh();
-        } else self.setStatus("Screen brightness write failed");
+        const device = backlightDevice(kind);
+        const reading = readBacklight(device) catch |err| return self.setStatus(backlightReadStatus(device, err));
+        const next = @as(i32, @intFromFloat(unit * @as(f32, @floatFromInt(reading.max))));
+        self.writeBacklight(kind, std.math.clamp(next, device.min_value, reading.max));
     }
 
-    fn setKbdBacklightUnit(self: *State, region: interaction.Region, drag: ?ui_runtime.DragValue) void {
-        const unit = unitFromDrag(region, drag) orelse return;
-        var max_buf: [16]u8 = undefined;
-        const max_n = readSysfsStr("/sys/class/leds/chromeos::kbd_backlight/max_brightness", &max_buf) catch return self.setStatus("Keyboard control unavailable");
-        const max_v = std.fmt.parseInt(i32, std.mem.trimEnd(u8, max_buf[0..max_n], &[_]u8{ '\n', '\r', ' ' }), 10) catch return self.setStatus("Keyboard parse failed");
-        const next = @as(i32, @intFromFloat(unit * @as(f32, @floatFromInt(max_v))));
-        if (writeSysfsInt("/sys/class/leds/chromeos::kbd_backlight/brightness", std.math.clamp(next, 0, max_v))) {
-            self.setStatus("Keyboard backlight updated");
+    fn writeBacklight(self: *State, kind: BacklightKind, value: i32) void {
+        const device = backlightDevice(kind);
+        writeBacklightValue(device, value) catch return self.setStatus(device.write_failed_status);
+        self.setStatus(device.updated_status);
+        switch (kind) {
+            .screen => self.screen_brightness = value,
+            .keyboard => self.keyboard_brightness = value,
+        }
+        if (readBacklight(device)) |reading| {
+            self.updateBacklightState(kind, reading);
             self.refresh();
-        } else self.setStatus("Keyboard backlight write failed");
+        } else |_| {}
+    }
+
+    fn updateBacklightState(self: *State, kind: BacklightKind, reading: BacklightReading) void {
+        switch (kind) {
+            .screen => {
+                self.screen_brightness = reading.current;
+                self.screen_brightness_max = reading.max;
+                self.screen_brightness_ready = true;
+            },
+            .keyboard => {
+                self.keyboard_brightness = reading.current;
+                self.keyboard_brightness_max = reading.max;
+                self.keyboard_brightness_ready = true;
+            },
+        }
     }
 
     fn screenBrightnessUnit(self: *const State) f32 {
@@ -526,37 +569,45 @@ fn readBattery(buf: *[detail_bytes]u8) !void {
     return error.ReadFailed;
 }
 
-fn readScreenBacklight(buf: *[detail_bytes]u8, state: *State) !void {
+fn readBacklightRow(kind: BacklightKind, buf: *[detail_bytes]u8, state: *State) !void {
+    const reading = try readBacklight(backlightDevice(kind));
+    state.updateBacklightState(kind, reading);
+    writeBuf(buf, "{d}/{d}", .{ reading.current, reading.max });
+}
+
+fn readBacklight(device: BacklightDevice) !BacklightReading {
     var cur_buf: [16]u8 = undefined;
     var max_buf: [16]u8 = undefined;
-    const cur_n = readSysfsStr("/sys/class/backlight/amdgpu_bl2/brightness", &cur_buf) catch return error.ReadFailed;
-    const max_n = readSysfsStr("/sys/class/backlight/amdgpu_bl2/max_brightness", &max_buf) catch return error.ReadFailed;
+    const cur_n = readSysfsStr(device.current_path, &cur_buf) catch return error.ReadFailed;
+    const max_n = readSysfsStr(device.max_path, &max_buf) catch return error.ReadFailed;
     const cur_text = std.mem.trimEnd(u8, cur_buf[0..cur_n], &[_]u8{ '\n', '\r', ' ' });
     const max_text = std.mem.trimEnd(u8, max_buf[0..max_n], &[_]u8{ '\n', '\r', ' ' });
     const cur_v = std.fmt.parseInt(i32, cur_text, 10) catch return error.ParseFailed;
     const max_v = std.fmt.parseInt(i32, max_text, 10) catch return error.ParseFailed;
-    state.screen_brightness = cur_v;
-    state.screen_brightness_max = @max(1, max_v);
-    state.screen_brightness_ready = true;
-    writeBuf(buf, "{s}/{s}", .{ cur_text, max_text });
+    return .{
+        .current = cur_v,
+        .max = @max(1, max_v),
+    };
 }
 
-fn readKbdBacklight(buf: *[detail_bytes]u8, state: *State) !void {
-    var path_buf: [64]u8 = undefined;
-    const bright_path = std.fmt.bufPrint(&path_buf, "/sys/class/leds/chromeos::kbd_backlight/brightness", .{}) catch return error.ReadFailed;
-    var val_buf: [16]u8 = undefined;
-    const vn = readSysfsStr(bright_path, &val_buf) catch return error.ReadFailed;
-    const val = std.mem.trimEnd(u8, val_buf[0..vn], &[_]u8{ '\n', ' ', '\r' });
-    var max_buf: [16]u8 = undefined;
-    const max_path = std.fmt.bufPrint(&path_buf, "/sys/class/leds/chromeos::kbd_backlight/max_brightness", .{}) catch return error.ReadFailed;
-    const mn = readSysfsStr(max_path, &max_buf) catch return error.ReadFailed;
-    const max = std.mem.trimEnd(u8, max_buf[0..mn], &[_]u8{ '\n', ' ', '\r' });
-    const cur_v = std.fmt.parseInt(i32, val, 10) catch return error.ParseFailed;
-    const max_v = std.fmt.parseInt(i32, max, 10) catch return error.ParseFailed;
-    state.keyboard_brightness = cur_v;
-    state.keyboard_brightness_max = @max(1, max_v);
-    state.keyboard_brightness_ready = true;
-    writeBuf(buf, "{s}/{s}", .{ val, max });
+fn writeBacklightValue(device: BacklightDevice, value: i32) !void {
+    if (!writeSysfsInt(device.current_path, value)) return error.WriteFailed;
+}
+
+fn backlightDevice(kind: BacklightKind) BacklightDevice {
+    return switch (kind) {
+        .screen => screen_backlight,
+        .keyboard => keyboard_backlight,
+    };
+}
+
+fn backlightReadStatus(device: BacklightDevice, err: anyerror) []const u8 {
+    _ = device.title;
+    return switch (err) {
+        error.ReadFailed => device.unavailable_status,
+        error.ParseFailed => device.parse_status,
+        else => device.unavailable_status,
+    };
 }
 
 fn readEcInfo(buf: *[detail_bytes]u8) !void {
