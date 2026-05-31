@@ -141,7 +141,54 @@ exec_decoded_fast_loop:
     mov     ebx, eax
     mov     edx, 1
     add     r8, DECODED_OP_SIZE * 8
-    jmp     .fast_loop
+    jmp     .fast_fuse_next
+
+.fast_fuse_next:
+    cmp     r8, r9
+    jae     .fast_return
+    mov     r11, r8
+    lea     rax, [r11 + DECODED_OP_SIZE * 9]
+    cmp     rax, r9
+    ja      .fast_loop
+    cmp     byte [r11 + 8], 0x41
+    jne     .fast_loop
+    cmp     r12d, [r11 + 12]
+    jne     .fast_loop
+    cmp     byte [r11 + DECODED_OP_SIZE + 8], 0x6C
+    jne     .fast_loop
+    cmp     byte [r11 + DECODED_OP_SIZE * 2 + 8], 0x41
+    jne     .fast_loop
+    mov     r13d, [r11 + DECODED_OP_SIZE * 2 + 12]
+    cmp     byte [r11 + DECODED_OP_SIZE * 3 + 8], 0x6A
+    jne     .fast_loop
+    cmp     byte [r11 + DECODED_OP_SIZE * 4 + 8], 0x22
+    jne     .fast_loop
+    cmp     r14d, [r11 + DECODED_OP_SIZE * 4 + 12]
+    jne     .fast_loop
+    cmp     byte [r11 + DECODED_OP_SIZE * 5 + 8], 0x41
+    jne     .fast_loop
+    cmp     r15d, [r11 + DECODED_OP_SIZE * 5 + 12]
+    jne     .fast_loop
+    cmp     byte [r11 + DECODED_OP_SIZE * 6 + 8], 0x76
+    jne     .fast_loop
+    cmp     byte [r11 + DECODED_OP_SIZE * 7 + 8], 0x20
+    jne     .fast_loop
+    cmp     r14d, [r11 + DECODED_OP_SIZE * 7 + 12]
+    jne     .fast_loop
+    cmp     byte [r11 + DECODED_OP_SIZE * 8 + 8], 0x73
+    jne     .fast_loop
+
+    mov     eax, ebx
+    imul    eax, r12d
+    add     eax, r13d
+    mov     [rel exec_locals + r14 * 8], rax
+    mov     edi, eax
+    mov     ecx, r15d
+    shr     edi, cl
+    xor     eax, edi
+    mov     ebx, eax
+    lea     r8, [r11 + DECODED_OP_SIZE * 9]
+    jmp     .fast_fuse_next
 
 .fast_i32_const:
     movsxd  rax, dword [r11 + 12]

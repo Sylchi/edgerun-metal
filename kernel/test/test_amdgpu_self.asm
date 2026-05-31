@@ -148,6 +148,23 @@ _start:
     ASSERT_EQ eax, -1
     ASSERT_RDX ERROR_BAD_ARGUMENT
 
+    mov     dword [rel scanout_cfg + AMDGPU_SCANOUT_PITCH_PIXELS], 640
+    mov     dword [rel scanout_cfg + AMDGPU_SCANOUT_WIDTH], 1280
+    mov     dword [rel scanout_cfg + AMDGPU_SCANOUT_HEIGHT], 720
+    lea     rdi, [rel bar0]
+    lea     rsi, [rel scanout_cfg]
+    call    er_amdgpu_program_hubp0_scanout
+    ASSERT_EQ eax, -1
+    ASSERT_RDX ERROR_BAD_ARGUMENT
+
+    mov     dword [rel scanout_cfg + AMDGPU_SCANOUT_PITCH_PIXELS], 1280
+    mov     dword [rel scanout_cfg + AMDGPU_SCANOUT_WIDTH], 0
+    lea     rdi, [rel bar0]
+    lea     rsi, [rel scanout_cfg]
+    call    er_amdgpu_program_hubp0_scanout
+    ASSERT_EQ eax, -1
+    ASSERT_RDX ERROR_BAD_ARGUMENT
+
     mov     rax, [rel failed]
     test    rax, rax
     jnz     .fail

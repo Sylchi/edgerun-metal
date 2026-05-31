@@ -27,13 +27,15 @@ extern er_memcpy
 
 %define AF_INET       2
 %define SOCK_STREAM   1
+%ifndef TOR_HOST_PORT
 %define TOR_HOST_PORT 19001
+%endif
 %define SHA256_CTX_SIZE 108
 
 SECTION .data
 sockaddr:
     dw AF_INET
-    db 0x4a, 0x39                ; 19001, network order
+    dw ((TOR_HOST_PORT & 0xff) << 8) | ((TOR_HOST_PORT >> 8) & 0xff)
     db 127, 0, 0, 1
     dq 0
 

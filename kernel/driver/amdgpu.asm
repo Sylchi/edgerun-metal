@@ -44,8 +44,6 @@ amdgpu_timing_1080p60:
 amdgpu_timing_720p60:
     dd 1650, 1390, 1430, 1280, 370
     dd 750, 725, 730, 720, 30
-amdgpu_scanout_1080p:
-    dd 0, 0, AMDGPU_FB_WIDTH, AMDGPU_FB_WIDTH, AMDGPU_FB_HEIGHT
 
 SECTION .text
 
@@ -487,14 +485,18 @@ er_fn er_amdgpu_dcn_init
 
     mov     rdi, r13
     call    _write_test_pattern
-    mov     eax, r13d
-    mov     [rel amdgpu_scanout_1080p + AMDGPU_SCANOUT_ADDR_LO], eax
+    sub     rsp, 24
+    mov     [rsp + AMDGPU_SCANOUT_ADDR_LO], r13d
     mov     rax, r13
     shr     rax, 32
-    mov     [rel amdgpu_scanout_1080p + AMDGPU_SCANOUT_ADDR_HI], eax
+    mov     [rsp + AMDGPU_SCANOUT_ADDR_HI], eax
+    mov     dword [rsp + AMDGPU_SCANOUT_PITCH_PIXELS], AMDGPU_FB_WIDTH
+    mov     dword [rsp + AMDGPU_SCANOUT_WIDTH], AMDGPU_FB_WIDTH
+    mov     dword [rsp + AMDGPU_SCANOUT_HEIGHT], AMDGPU_FB_HEIGHT
     mov     rdi, r12
-    lea     rsi, [rel amdgpu_scanout_1080p]
+    mov     rsi, rsp
     call    er_amdgpu_program_hubp0_scanout
+    add     rsp, 24
 
     ; ─── Step 9: Basic OTG0 timing ───
     mov     rdi, r12
@@ -525,6 +527,14 @@ er_fn er_amdgpu_program_hubp0_scanout
     mov     r13, rsi
     mov     edx, [r13 + AMDGPU_SCANOUT_PITCH_PIXELS]
     test    edx, edx
+    jz      .bad_arg
+    mov     eax, [r13 + AMDGPU_SCANOUT_WIDTH]
+    test    eax, eax
+    jz      .bad_arg
+    cmp     edx, eax
+    jb      .bad_arg
+    mov     eax, [r13 + AMDGPU_SCANOUT_HEIGHT]
+    test    eax, eax
     jz      .bad_arg
     mov     rdi, r12
     mov     esi, DCN_HUBP0_SURFACE_PITCH
