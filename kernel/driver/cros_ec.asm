@@ -66,6 +66,10 @@ er_ec_shadow: resb 4096        ; Simulated EC memory (offsets 0-4095)
 global er_ec_cmd_log, er_ec_cmd_count
 er_ec_cmd_log: resb 256        ; Command log
 er_ec_cmd_count: resq 1
+global er_ec_host_response_shadow
+global er_ec_host_request_shadow
+er_ec_host_request_shadow: resb 256
+er_ec_host_response_shadow: resb 256
 
 SECTION .text
 
@@ -383,23 +387,38 @@ er_fn _ec_calc_checksum
 ; =================================================================
 er_fn er_cros_ec_host_command
     push    rbx
+    push    rbp
     push    r12
     push    r13
     push    r14
     push    r15
 
-    mov     r12, rdi             ; r12 = command
+    mov     r12d, edi            ; r12 = command
     mov     r13b, sil            ; r13 = version
     mov     r14, rdx             ; r14 = req_data pointer
     mov     r15d, ecx            ; r15 = req_len
 
     mov     rbx, r8              ; rbx = resp_data
-    mov     r12d, r9d            ; r12 = resp_max_len (reuse r12)
+    mov     ebp, r9d             ; rbp = resp_max_len
 
-    ; ─── Build request header ────────────────────────────────────
-    ; Buffer is at EC_MEMMAP_HOST_CMD (0x800)
-    ; We'll write the header + request data to EC memory, then trigger,
-    ; then read back the response.
+    ; Checksum starts with every request byte except the checksum field.
+    mov     r11d, EC_HOST_CMD_VERSION
+    mov     eax, r12d
+    and     eax, 0xff
+    add     r11d, eax
+    mov     eax, r12d
+    shr     eax, 8
+    and     eax, 0xff
+    add     r11d, eax
+    movzx   eax, r13b
+    add     r11d, eax
+    mov     eax, r15d
+    and     eax, 0xff
+    add     r11d, eax
+    mov     eax, r15d
+    shr     eax, 8
+    and     eax, 0xff
+    add     r11d, eax
 
     ; Write struct_version = EC_HOST_CMD_VERSION
     mov     edi, EC_MEMMAP_HOST_CMD + EC_HRQ_STRUCT_VERSION
@@ -443,18 +462,18 @@ er_fn er_cros_ec_host_command
 
     ; ─── Write request data ──────────────────────────────────────
     test    r15d, r15d
-    jz      .trigger
+    jz      .write_checksum
 
     mov     r13d, r15d           ; r13 = remaining bytes
-    mov     r14, r14             ; source pointer
     mov     r15d, EC_MEMMAP_HOST_CMD + EC_HRQ_SIZE  ; dest offset
 
 .write_req_loop:
     test    r13d, r13d
-    jz      .trigger
+    jz      .write_checksum
 
     mov     edi, r15d
     movzx   esi, byte [r14]
+    add     r11d, esi
     call    er_cros_ec_ec_write
 
     inc     r14
@@ -462,12 +481,44 @@ er_fn er_cros_ec_host_command
     dec     r13d
     jmp     .write_req_loop
 
+    ; ─── Finalize request checksum ───────────────────────────────
+.write_checksum:
+    mov     eax, r11d
+    neg     al
+    movzx   esi, al
+    mov     edi, EC_MEMMAP_HOST_CMD + EC_HRQ_CHECKSUM
+    call    er_cros_ec_ec_write
+
     ; ─── Trigger command ─────────────────────────────────────────
     ; Write EC_HOST_CMD_VERSION to EC_MEMMAP_OLD_HOST_CMD (0x0200)
 .trigger:
     mov     edi, EC_MEMMAP_OLD_HOST_CMD
     mov     esi, EC_HOST_CMD_VERSION
     call    er_cros_ec_ec_write
+
+    %ifdef HOSTED_TEST
+    push    rcx
+    xor     ecx, ecx
+.copy_hosted_request:
+    cmp     ecx, 256
+    jae     .copy_hosted_request_done
+    movzx   esi, byte [er_ec_shadow + EC_MEMMAP_HOST_CMD + rcx]
+    mov     byte [er_ec_host_request_shadow + rcx], sil
+    inc     ecx
+    jmp     .copy_hosted_request
+.copy_hosted_request_done:
+    xor     ecx, ecx
+.copy_hosted_response:
+    cmp     ecx, 256
+    jae     .copy_hosted_done
+    movzx   esi, byte [er_ec_host_response_shadow + rcx]
+    lea     edi, [EC_MEMMAP_HOST_CMD + rcx]
+    call    er_cros_ec_ec_write
+    inc     ecx
+    jmp     .copy_hosted_response
+.copy_hosted_done:
+    pop     rcx
+    %endif
 
     ; ─── Read response header ────────────────────────────────────
     ; After trigger, the EC processes and writes the response
@@ -487,7 +538,8 @@ er_fn er_cros_ec_host_command
     mov     edi, EC_MEMMAP_HOST_CMD + EC_HRP_STRUCT_VERSION
     call    er_cros_ec_ec_read
     ; Check if version matches (EC_HOST_CMD_VERSION)
-    ; For now, just proceed
+    cmp     al, EC_HOST_CMD_VERSION
+    jne     .err
 
     ; Read result (16-bit LE)
     mov     edi, EC_MEMMAP_HOST_CMD + EC_HRP_RESULT
@@ -513,12 +565,13 @@ er_fn er_cros_ec_host_command
     mov     r14d, eax            ; r14 = response data length
 
     ; Cap at resp_max_len
-    cmp     r14d, r12d
+    cmp     r14d, ebp
     jbe     .read_resp
-    mov     r14d, r12d
+    mov     r14d, ebp
 
     ; ─── Read response data ──────────────────────────────────────
 .read_resp:
+    mov     ebp, r14d
     test    r14d, r14d
     jz      .done
 
@@ -540,11 +593,12 @@ er_fn er_cros_ec_host_command
     jmp     .read_resp_loop
 
 .done:
-    mov     eax, r14d
+    mov     eax, ebp
     pop     r15
     pop     r14
     pop     r13
     pop     r12
+    pop     rbp
     pop     rbx
     er_ok
     er_ret
@@ -555,6 +609,7 @@ er_fn er_cros_ec_host_command
     pop     r14
     pop     r13
     pop     r12
+    pop     rbp
     pop     rbx
     er_ret                      ; edx has error from last ec_write/ec_read
 

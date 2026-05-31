@@ -107,6 +107,11 @@ _start:
     jne     fail
 
     mov     rdi, [rel func_idx]
+    call    er_wasm_jit_compile
+    test    rdx, rdx
+    jnz     fail_error
+
+    mov     rdi, [rel func_idx]
     mov     qword [rel fail_stage], 7
     lea     rsi, [rel args]
     mov     edx, 1

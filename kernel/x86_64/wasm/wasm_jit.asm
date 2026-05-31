@@ -678,6 +678,7 @@ er_wasm_jit_compile:
 .ret_zero:
     call    jit_emit_xor_eax_eax
 .ret_common:
+    call    jit_emit_xor_edx_edx
     mov     al, 0x5D
     call    jit_emit_byte       ; pop rbp
     call    jit_emit_ret
@@ -706,6 +707,7 @@ er_wasm_jit_compile:
     call    jit_emit_xor_eax_eax
 
 .epi_common:
+    call    jit_emit_xor_edx_edx
     ; pop rbp
     mov     al, 0x5D
     call    jit_emit_byte
@@ -847,9 +849,10 @@ er_wasm_jit_exec:
     ; Call compiled code
     call    rbx
 
-    ; Result is in rax, rdx is error
+    ; Normal compiled arithmetic returns only rax. Compile-time refusals are
+    ; surfaced before this call; runtime traps must use explicit trap paths.
     mov     r15, rax             ; save return value
-    mov     r14, rdx             ; save error code
+    xor     r14d, r14d           ; save error code
 
     ; Restore previous frame
     call    exec_restore_frame_state
