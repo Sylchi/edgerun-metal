@@ -68,6 +68,8 @@ jit_state:
     .fixup_offset:   resq 256 ; code address where displacement field needs patching
     .return_emitted: resq 1   ; flag: epilogue already emitted inline
 
+jit_template_error: resq 1     ; template error channel; rdx is emitter scratch
+
 ; Template dispatch table (256 entries, filled at init)
 jit_template_table: resq 256
 
@@ -458,12 +460,14 @@ er_wasm_jit_compile:
     cmp     rax, rcx
     je      .unsupported_template
 
+    mov     qword [rel jit_template_error], 0
     push    r13
     push    r14
     call    rax
     pop     r14
     pop     r13
 
+    mov     rdx, [rel jit_template_error]
     test    rdx, rdx
     jnz     .compile_error
 

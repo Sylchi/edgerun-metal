@@ -65,15 +65,15 @@ er_fn jit_template_local_get
     call    jit_emit_load_global_to_reg
     mov     ecx, [rdi + 12]  ; local index
     shl     ecx, 3           ; *8
-    ; mov rax, [rdx + rcx]
+    ; mov rax, [rdx + disp32]
     mov     cl, 1            ; REX.W
     call    jit_emit_rex_nob
     mov     al, 0x8B         ; mov r64, r/m64
     call    jit_emit_byte
-    mov     al, 0x04         ; ModRM: mod=00, reg=0(rax), rm=4(SIB)
+    mov     al, 0x82         ; ModRM: mod=10, reg=0(rax), rm=2(rdx)
     call    jit_emit_modrm
-    mov     al, 0x0A         ; SIB: scale=0, index=1(rcx), base=2(rdx)
-    call    jit_emit_sib
+    mov     eax, ecx
+    call    jit_emit_dword
     ; push rax
     xor     ecx, ecx
     call    jit_emit_push_reg
@@ -94,17 +94,17 @@ er_fn jit_template_local_set
     call    jit_emit_load_global_to_reg
     mov     ecx, [rdi + 12]  ; local index
     shl     ecx, 3
-    ; mov [rdx + rcx], rax
+    ; mov [rdx + disp32], rax
     pop     rax              ; restore value
     push    rax
     mov     cl, 1            ; REX.W
     call    jit_emit_rex_nob
     mov     al, 0x89         ; mov r/m64, r64
     call    jit_emit_byte
-    mov     al, 0x04         ; ModRM: mod=00, reg=0(rax), rm=4(SIB)
+    mov     al, 0x82         ; ModRM: mod=10, reg=0(rax), rm=2(rdx)
     call    jit_emit_modrm
-    mov     al, 0x0A         ; SIB: scale=0, index=1(rcx), base=2(rdx)
-    call    jit_emit_sib
+    mov     eax, ecx
+    call    jit_emit_dword
     pop     rax              ; consumed
     ret
 
@@ -113,7 +113,7 @@ er_fn jit_template_local_set
 ; Emit: same as local.set but keep value on stack
 ; -----------------------------------------------------------------+
 er_fn jit_template_local_tee
-    ; duplicate TOS: mov rax, [rsp]; push rax
+    ; read TOS without consuming it
     mov     cl, 1            ; REX.W
     call    jit_emit_rex_nob
     mov     al, 0x8B         ; mov rax, [rsp]
@@ -122,42 +122,20 @@ er_fn jit_template_local_tee
     call    jit_emit_modrm
     mov     al, 0x24         ; SIB: [rsp]
     call    jit_emit_sib
-    mov     al, 0x00         ; disp8 = 0
-    call    jit_emit_byte
-    xor     ecx, ecx         ; rax
-    call    jit_emit_push_reg
-    ; now do local.set
-    mov     cl, 1            ; REX
-    call    jit_emit_rex_nob
-    mov     al, 0x89         ; mov r/m64, r64
-    call    jit_emit_byte
-    mov     al, 0x04         ; ModRM SIB
-    call    jit_emit_modrm
-    mov     al, 0x24         ; SIB: [rsp]
-    call    jit_emit_sib
-    mov     al, 0x00         ; disp8
-    call    jit_emit_byte
-    ; pop rax
-    xor     ecx, ecx
-    call    jit_emit_pop_reg
     ; load locals base into rdx
-    push    rax
     mov     cl, 2
     mov     eax, JitGlobals.locals
     call    jit_emit_load_global_to_reg
     mov     ecx, [rdi + 12]
     shl     ecx, 3
-    pop     rax
-    push    rax
     mov     cl, 1
     call    jit_emit_rex_nob
     mov     al, 0x89
     call    jit_emit_byte
-    mov     al, 0x04
+    mov     al, 0x82         ; mov [rdx + disp32], rax
     call    jit_emit_modrm
-    mov     al, 0x0A
-    call    jit_emit_sib
-    pop     rax
+    mov     eax, ecx
+    call    jit_emit_dword
     ret
 
 ; ------------------------------------------------------------------
@@ -178,10 +156,10 @@ er_fn jit_template_global_get
     call    jit_emit_rex_nob
     mov     al, 0x8B
     call    jit_emit_byte
-    mov     al, 0x04
+    mov     al, 0x82
     call    jit_emit_modrm
-    mov     al, 0x0A         ; SIB: [rdx + rcx]
-    call    jit_emit_sib
+    mov     eax, ecx
+    call    jit_emit_dword
     xor     ecx, ecx
     call    jit_emit_push_reg
     ret
@@ -205,10 +183,10 @@ er_fn jit_template_global_set
     call    jit_emit_rex_nob
     mov     al, 0x89
     call    jit_emit_byte
-    mov     al, 0x04
+    mov     al, 0x82
     call    jit_emit_modrm
-    mov     al, 0x0A
-    call    jit_emit_sib
+    mov     eax, ecx
+    call    jit_emit_dword
     pop     rax
     ret
 
@@ -237,6 +215,7 @@ er_fn jit_template_table_get
     jmp     jit_emit_push_reg       ; push rax
 .table_get_bad_index:
     mov     rdx, ERROR_NOT_IMPLEMENTED
+    mov     [rel jit_template_error], rdx
     ret
 
 ; ------------------------------------------------------------------
@@ -265,6 +244,7 @@ er_fn jit_template_table_set
     ret
 .table_set_bad_index:
     mov     rdx, ERROR_NOT_IMPLEMENTED
+    mov     [rel jit_template_error], rdx
     ret
 
 ; ------------------------------------------------------------------
@@ -954,6 +934,7 @@ er_fn jit_template_memory_size
 ; so both paths enforce the same constant and user-visible behavior.
 er_fn jit_template_memory_grow
     mov     rdx, ERROR_MEMORY_GROWTH
+    mov     [rel jit_template_error], rdx
     ret
 
 ; ==================================================================
@@ -1616,11 +1597,13 @@ er_fn jit_template_call
 .call_type_error:
     pop     r12
     ; rdx already has error from er_wasm_type_index_for_function
+    mov     [rel jit_template_error], rdx
     ret
 
 .call_too_many_params:
     pop     r12
-    er_err  ERROR_NOT_IMPLEMENTED
+    mov     rdx, ERROR_NOT_IMPLEMENTED
+    mov     [rel jit_template_error], rdx
     ret
 
 ; ------------------------------------------------------------------
@@ -1707,7 +1690,8 @@ er_fn jit_template_call_indirect
 
 .ci_too_many_params:
     pop     r12
-    er_err  ERROR_NOT_IMPLEMENTED
+    mov     rdx, ERROR_NOT_IMPLEMENTED
+    mov     [rel jit_template_error], rdx
     ret
 
 ; ==================================================================

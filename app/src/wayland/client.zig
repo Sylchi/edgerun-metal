@@ -81,9 +81,9 @@ pub const WaylandClient = struct {
     }
 
     pub fn eventLoop(self: *WaylandClient, seconds: u32, app: anytype) !void {
-        const deadline_ms = eventLoopDeadlineMs(std.time.milliTimestamp(), seconds);
+        const deadline_ms = eventLoopDeadlineMs(try monotonicMs(), seconds);
         while (!self.state.closed) {
-            const remaining_ms = eventLoopRemainingMs(std.time.milliTimestamp(), deadline_ms);
+            const remaining_ms = eventLoopRemainingMs(try monotonicMs(), deadline_ms);
             if (remaining_ms == 0) break;
             const step_ms: i32 = @min(remaining_ms, frame_poll_ms);
             var fds = [_]posix.pollfd{.{ .fd = self.fd, .events = linux.POLL.IN, .revents = 0 }};
@@ -273,3 +273,27 @@ pub const WaylandClient = struct {
 };
 
 const frame_poll_ms: i32 = 16;
+
+fn monotonicMs() !i64 {
+    var ts: linux.timespec = undefined;
+    if (linux.clock_gettime(.MONOTONIC, &ts) != 0) return error.ClockUnavailable;
+    return @as(i64, @intCast(ts.sec)) * std.time.ms_per_s + @divTrunc(@as(i64, @intCast(ts.nsec)), std.time.ns_per_ms);
+}
+
+fn eventLoopDeadlineMs(now_ms: i64, seconds: u32) i64 {
+    return now_ms + @as(i64, @intCast(seconds)) * std.time.ms_per_s;
+}
+
+fn eventLoopRemainingMs(now_ms: i64, deadline_ms: i64) i32 {
+    if (now_ms >= deadline_ms) return 0;
+    const remaining = deadline_ms - now_ms;
+    return @intCast(@min(remaining, std.math.maxInt(i32)));
+}
+
+test "wayland event loop remaining time uses elapsed wall clock" {
+    const deadline = eventLoopDeadlineMs(1_000, 5);
+
+    try std.testing.expectEqual(@as(i32, 5_000), eventLoopRemainingMs(1_000, deadline));
+    try std.testing.expectEqual(@as(i32, 3_750), eventLoopRemainingMs(2_250, deadline));
+    try std.testing.expectEqual(@as(i32, 0), eventLoopRemainingMs(6_000, deadline));
+}

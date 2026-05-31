@@ -8,6 +8,10 @@ extern er_ec_shadow
 extern er_ec_host_request_shadow
 extern er_ec_host_response_shadow
 extern er_cros_ec_host_command
+extern er_cros_ec_charge_control
+extern er_cros_ec_get_fan_target_rpm
+extern er_cros_ec_set_fan_target_rpm
+extern er_cros_ec_auto_fan_control
 extern er_cros_ec_read_power_status
 extern er_cros_ec_read_battery
 extern er_cros_ec_read_switches
@@ -28,6 +32,10 @@ extern er_cros_ec_read_battery_static
 %define EC_TEMP_SENSOR_OFFSET      200
 %define EC_SWITCH_LID_OPEN         0x01
 %define EC_HOST_CMD_VERSION        0x00
+%define EC_CMD_PWM_GET_FAN_TARGET_RPM 0x0020
+%define EC_CMD_PWM_SET_FAN_TARGET_RPM 0x0021
+%define EC_CMD_THERMAL_AUTO_FAN_CTRL  0x0052
+%define EC_CMD_CHARGE_CONTROL         0x0096
 %define EC_HRQ_STRUCT_VERSION      0
 %define EC_HRQ_CHECKSUM            1
 %define EC_HRQ_COMMAND             2
@@ -54,6 +62,7 @@ design_cap_out: resd 1
 design_mv_out: resd 1
 last_full_cap_out: resd 1
 cycle_count_out: resd 1
+fan_target_out: resd 1
 resp_out: resb 4
 
 SECTION .rodata
@@ -177,6 +186,71 @@ _start:
     ASSERT_EQ eax, 0xde
     movzx   eax, byte [rel resp_out + 1]
     ASSERT_EQ eax, 0xad
+
+    mov     byte [rel er_ec_host_response_shadow + EC_HRP_STRUCT_VERSION], EC_HOST_CMD_VERSION
+    mov     word [rel er_ec_host_response_shadow + EC_HRP_RESULT], 0
+    mov     word [rel er_ec_host_response_shadow + EC_HRP_DATA_LEN], 0
+    mov     edi, 1
+    call    er_cros_ec_charge_control
+    ASSERT_EQ eax, 0
+    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_CHECKSUM]
+    ASSERT_EQ eax, 0x64
+    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_COMMAND]
+    ASSERT_EQ eax, EC_CMD_CHARGE_CONTROL & 0xff
+    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_COMMAND + 1]
+    ASSERT_EQ eax, EC_CMD_CHARGE_CONTROL >> 8
+    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_COMMAND_VERSION]
+    ASSERT_EQ eax, 1
+    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_DATA_LEN]
+    ASSERT_EQ eax, 4
+    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_SIZE]
+    ASSERT_EQ eax, 1
+
+    mov     word [rel er_ec_host_response_shadow + EC_HRP_DATA_LEN], 4
+    mov     dword [rel er_ec_host_response_shadow + EC_HRP_SIZE], 3000
+    lea     rdi, [rel fan_target_out]
+    call    er_cros_ec_get_fan_target_rpm
+    ASSERT_EQ eax, 0
+    mov     eax, [rel fan_target_out]
+    ASSERT_EQ eax, 3000
+    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_CHECKSUM]
+    ASSERT_EQ eax, 0xe0
+    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_COMMAND]
+    ASSERT_EQ eax, EC_CMD_PWM_GET_FAN_TARGET_RPM
+
+    mov     word [rel er_ec_host_response_shadow + EC_HRP_DATA_LEN], 0
+    mov     edi, 2
+    mov     esi, 2500
+    call    er_cros_ec_set_fan_target_rpm
+    ASSERT_EQ eax, 0
+    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_CHECKSUM]
+    ASSERT_EQ eax, 0x0a
+    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_COMMAND]
+    ASSERT_EQ eax, EC_CMD_PWM_SET_FAN_TARGET_RPM
+    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_COMMAND_VERSION]
+    ASSERT_EQ eax, 1
+    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_DATA_LEN]
+    ASSERT_EQ eax, 5
+    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_SIZE]
+    ASSERT_EQ eax, 0xc4
+    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_SIZE + 1]
+    ASSERT_EQ eax, 0x09
+    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_SIZE + 4]
+    ASSERT_EQ eax, 2
+
+    mov     edi, 2
+    call    er_cros_ec_auto_fan_control
+    ASSERT_EQ eax, 0
+    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_CHECKSUM]
+    ASSERT_EQ eax, 0xaa
+    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_COMMAND]
+    ASSERT_EQ eax, EC_CMD_THERMAL_AUTO_FAN_CTRL
+    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_COMMAND_VERSION]
+    ASSERT_EQ eax, 1
+    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_DATA_LEN]
+    ASSERT_EQ eax, 1
+    movzx   eax, byte [rel er_ec_host_request_shadow + EC_HRQ_SIZE]
+    ASSERT_EQ eax, 2
 
     mov     rdi, 1
     mov     rax, [rel failed]

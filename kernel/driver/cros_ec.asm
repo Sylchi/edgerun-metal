@@ -34,6 +34,12 @@
 %define EC_CMD_BURST_DIS 0x83    ; Disable burst mode
 %define EC_CMD_QUERY     0x84    ; Query for pending event
 
+; Chrome EC host commands used by this driver.
+%define EC_CMD_PWM_GET_FAN_TARGET_RPM 0x0020
+%define EC_CMD_PWM_SET_FAN_TARGET_RPM 0x0021
+%define EC_CMD_THERMAL_AUTO_FAN_CTRL  0x0052
+%define EC_CMD_CHARGE_CONTROL         0x0096
+
 ; Chrome EC shared memory offsets (in EC address space)
 %define EC_MEMMAP_HOST_CMD  0x0800  ; Host command packet buffer
 %define EC_MEMMAP_OLD_HOST_CMD 0x0200 ; Legacy trigger
@@ -52,6 +58,15 @@
 %define EC_TEMP_SENSOR_NOT_PRESENT 0xff
 %define EC_FAN_SPEED_NOT_PRESENT   0xffff
 %define EC_SWITCH_LID_OPEN         0x01
+%define EC_VER_CHARGE_CONTROL      0x01
+%define CHARGE_CONTROL_NORMAL      0x00
+%define CHARGE_CONTROL_IDLE        0x01
+%define CHARGE_CONTROL_DISCHARGE   0x02
+%define CHARGE_CONTROL_COUNT       0x03
+%define EC_CHARGE_CONTROL_REQ_SIZE 0x04
+%define EC_FAN_TARGET_RESP_SIZE    0x04
+%define EC_FAN_TARGET_REQ_SIZE     0x05
+%define EC_FAN_AUTO_REQ_SIZE       0x01
 
 ; EC_CMD_HOST_CMD protocol version
 %define EC_HOST_CMD_VERSION  0x00
@@ -604,7 +619,8 @@ er_fn er_cros_ec_host_command
     er_ret
 
 .err:
-    xor     eax, eax
+    er_err  ERROR_IO
+    mov     eax, -1
     pop     r15
     pop     r14
     pop     r13
@@ -612,6 +628,122 @@ er_fn er_cros_ec_host_command
     pop     rbp
     pop     rbx
     er_ret                      ; edx has error from last ec_write/ec_read
+
+; ==================================================================
+; er_cros_ec_charge_control — set EC charge control mode
+; int er_cros_ec_charge_control(uint32_t mode)
+; =================================================================
+er_fn er_cros_ec_charge_control
+    cmp     edi, CHARGE_CONTROL_COUNT
+    jae     .cc_bad_arg
+    sub     rsp, 8
+    mov     [rsp], edi
+    mov     edi, EC_CMD_CHARGE_CONTROL
+    mov     esi, EC_VER_CHARGE_CONTROL
+    mov     rdx, rsp
+    mov     ecx, EC_CHARGE_CONTROL_REQ_SIZE
+    lea     r8, [rsp + 4]
+    xor     r9d, r9d
+    call    er_cros_ec_host_command
+    add     rsp, 8
+    cmp     eax, -1
+    je      .cc_fail
+    xor     eax, eax
+    er_ok
+    er_ret
+.cc_bad_arg:
+    er_err  ERROR_BAD_ARGUMENT
+    mov     eax, -1
+    er_ret
+.cc_fail:
+    mov     eax, -1
+    er_ret
+
+; ==================================================================
+; er_cros_ec_get_fan_target_rpm — read current EC fan target RPM
+; int er_cros_ec_get_fan_target_rpm(uint32_t* out_rpm)
+; =================================================================
+er_fn er_cros_ec_get_fan_target_rpm
+    test    rdi, rdi
+    jz      .gf_bad_arg
+    push    rbx
+    sub     rsp, 8
+    mov     rbx, rdi
+    mov     edi, EC_CMD_PWM_GET_FAN_TARGET_RPM
+    xor     esi, esi
+    xor     edx, edx
+    xor     ecx, ecx
+    mov     r8, rsp
+    mov     r9d, EC_FAN_TARGET_RESP_SIZE
+    call    er_cros_ec_host_command
+    cmp     eax, EC_FAN_TARGET_RESP_SIZE
+    jne     .gf_fail
+    mov     eax, [rsp]
+    mov     [rbx], eax
+    add     rsp, 8
+    pop     rbx
+    xor     eax, eax
+    er_ok
+    er_ret
+.gf_fail:
+    add     rsp, 8
+    pop     rbx
+    er_err  ERROR_INVALID_RESPONSE
+    mov     eax, -1
+    er_ret
+.gf_bad_arg:
+    er_err  ERROR_BAD_ARGUMENT
+    mov     eax, -1
+    er_ret
+
+; ==================================================================
+; er_cros_ec_set_fan_target_rpm — set EC fan target RPM
+; int er_cros_ec_set_fan_target_rpm(uint32_t fan_idx, uint32_t rpm)
+; =================================================================
+er_fn er_cros_ec_set_fan_target_rpm
+    sub     rsp, 16
+    mov     [rsp], esi
+    mov     [rsp + 4], dil
+    mov     edi, EC_CMD_PWM_SET_FAN_TARGET_RPM
+    mov     esi, 1
+    mov     rdx, rsp
+    mov     ecx, EC_FAN_TARGET_REQ_SIZE
+    lea     r8, [rsp + 8]
+    xor     r9d, r9d
+    call    er_cros_ec_host_command
+    add     rsp, 16
+    cmp     eax, -1
+    je      .sf_fail
+    xor     eax, eax
+    er_ok
+    er_ret
+.sf_fail:
+    mov     eax, -1
+    er_ret
+
+; ==================================================================
+; er_cros_ec_auto_fan_control — return fan to EC automatic control
+; int er_cros_ec_auto_fan_control(uint32_t fan_idx)
+; =================================================================
+er_fn er_cros_ec_auto_fan_control
+    sub     rsp, 8
+    mov     [rsp], dil
+    mov     edi, EC_CMD_THERMAL_AUTO_FAN_CTRL
+    mov     esi, 1
+    mov     rdx, rsp
+    mov     ecx, EC_FAN_AUTO_REQ_SIZE
+    lea     r8, [rsp + 4]
+    xor     r9d, r9d
+    call    er_cros_ec_host_command
+    add     rsp, 8
+    cmp     eax, -1
+    je      .af_fail
+    xor     eax, eax
+    er_ok
+    er_ret
+.af_fail:
+    mov     eax, -1
+    er_ret
 
 ; ==================================================================
 ; er_cros_ec_probe — check if Chrome EC is responding
