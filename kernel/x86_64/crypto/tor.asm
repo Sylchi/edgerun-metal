@@ -26,6 +26,7 @@ extern er_serial_putchar
 extern er_serial_puthex32
 extern er_serial_crlf
 extern er_memcpy
+extern er_memset
 extern er_http_parse_status
 extern er_http_find_body
 ; er_sprintf not available
@@ -90,6 +91,7 @@ tor_dir_tmp_stream: resw 1
 tor_dir_tmp_cmd: resb 1
 tor_dir_tmp_len: resd 1
 tor_dir_tmp_data: resb 512
+tor_dir_guard_id: resb 20
 
 SECTION .text
 
@@ -331,6 +333,11 @@ er_fn er_tor_directory_fetch_consensus
     mov     rsi, r14
     call    er_memcpy
 
+    ; Parse first relay entry from consensus and persist guard material
+    call    _tor_parse_consensus_first_relay
+    test    eax, eax
+    js      .fail
+
     xor     eax, eax
     er_ok
     pop     r14
@@ -347,6 +354,390 @@ er_fn er_tor_directory_fetch_consensus
     pop     r12
     pop     rbx
     er_ret
+
+; ==================================================================
+; _tor_b64_val — map base64 char to value
+; dil = char, returns eax=value or -1
+; ==================================================================
+_tor_b64_val:
+    movzx   eax, dil
+    cmp     al, 'A'
+    jb      .chk_l
+    cmp     al, 'Z'
+    ja      .chk_l
+    sub     eax, 'A'
+    ret
+.chk_l:
+    cmp     al, 'a'
+    jb      .chk_d
+    cmp     al, 'z'
+    ja      .chk_d
+    sub     eax, 'a'
+    add     eax, 26
+    ret
+.chk_d:
+    cmp     al, '0'
+    jb      .chk_plus
+    cmp     al, '9'
+    ja      .chk_plus
+    sub     eax, '0'
+    add     eax, 52
+    ret
+.chk_plus:
+    cmp     al, '+'
+    jne     .chk_slash
+    mov     eax, 62
+    ret
+.chk_slash:
+    cmp     al, '/'
+    jne     .bad
+    mov     eax, 63
+    ret
+.bad:
+    mov     eax, -1
+    ret
+
+; ==================================================================
+; _tor_decode_b64_20 — decode relay ID token into 20 bytes
+; rdi=token ptr, esi=token len, rdx=out[20]
+; returns eax=0 success, -1 failure
+; ==================================================================
+_tor_decode_b64_20:
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+
+    mov     r12, rdi
+    mov     r13d, esi
+    mov     r14, rdx
+    xor     r15d, r15d      ; in idx
+    xor     ebx, ebx        ; out idx
+
+.loop:
+    cmp     ebx, 20
+    jae     .ok
+    cmp     r15d, r13d
+    jae     .fail
+
+    movzx   edi, byte [r12 + r15]
+    inc     r15d
+    call    _tor_b64_val
+    cmp     eax, -1
+    je      .fail
+    mov     ecx, eax
+
+    cmp     r15d, r13d
+    jae     .fail
+    movzx   edi, byte [r12 + r15]
+    inc     r15d
+    call    _tor_b64_val
+    cmp     eax, -1
+    je      .fail
+    mov     edx, eax
+
+    mov     eax, ecx
+    shl     eax, 2
+    mov     esi, edx
+    shr     esi, 4
+    or      eax, esi
+    mov     [r14 + rbx], al
+    inc     ebx
+    cmp     ebx, 20
+    jae     .ok
+
+    cmp     r15d, r13d
+    jae     .ok
+    movzx   edi, byte [r12 + r15]
+    cmp     dil, '='
+    je      .ok
+    inc     r15d
+    call    _tor_b64_val
+    cmp     eax, -1
+    je      .fail
+    mov     esi, eax
+
+    mov     eax, edx
+    and     eax, 0x0F
+    shl     eax, 4
+    mov     ecx, esi
+    shr     ecx, 2
+    or      eax, ecx
+    mov     [r14 + rbx], al
+    inc     ebx
+    cmp     ebx, 20
+    jae     .ok
+
+    cmp     r15d, r13d
+    jae     .ok
+    movzx   edi, byte [r12 + r15]
+    cmp     dil, '='
+    je      .ok
+    inc     r15d
+    call    _tor_b64_val
+    cmp     eax, -1
+    je      .fail
+
+    mov     ecx, esi
+    and     ecx, 0x03
+    shl     ecx, 6
+    or      ecx, eax
+    mov     [r14 + rbx], cl
+    inc     ebx
+    jmp     .loop
+
+.ok:
+    xor     eax, eax
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    ret
+.fail:
+    mov     eax, -1
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    ret
+
+; ==================================================================
+; _tor_parse_u16_dec — parse unsigned decimal port
+; rdi=ptr, esi=len, returns eax=value or -1
+; ==================================================================
+_tor_parse_u16_dec:
+    xor     eax, eax
+    xor     ecx, ecx
+.lp:
+    cmp     ecx, esi
+    jae     .done
+    movzx   edx, byte [rdi + rcx]
+    cmp     dl, '0'
+    jb      .bad
+    cmp     dl, '9'
+    ja      .bad
+    imul    eax, eax, 10
+    sub     edx, '0'
+    add     eax, edx
+    cmp     eax, 65535
+    ja      .bad
+    inc     ecx
+    jmp     .lp
+.done:
+    ret
+.bad:
+    mov     eax, -1
+    ret
+
+; ==================================================================
+; _tor_parse_ipv4_token — parse dotted ipv4 to little-endian dword
+; rdi=ptr, esi=len
+; returns eax=ip dword (bytes in memory are wire order), or -1
+; ==================================================================
+_tor_parse_ipv4_token:
+    push    rbx
+    push    r12
+    push    r13
+    xor     eax, eax
+    xor     ebx, ebx          ; octet idx
+    xor     r12d, r12d        ; cursor
+    xor     r13d, r13d        ; current octet value
+
+.next_char:
+    cmp     r12d, esi
+    jae     .flush_last
+    movzx   ecx, byte [rdi + r12]
+    inc     r12d
+    cmp     cl, '.'
+    je      .flush_octet
+    cmp     cl, '0'
+    jb      .bad
+    cmp     cl, '9'
+    ja      .bad
+    imul    r13d, r13d, 10
+    sub     ecx, '0'
+    add     r13d, ecx
+    cmp     r13d, 255
+    ja      .bad
+    jmp     .next_char
+
+.flush_octet:
+    cmp     ebx, 3
+    jae     .bad
+    mov     ecx, ebx
+    shl     ecx, 3
+    mov     edx, r13d
+    shl     edx, cl
+    or      eax, edx
+    inc     ebx
+    xor     r13d, r13d
+    jmp     .next_char
+
+.flush_last:
+    cmp     ebx, 3
+    jne     .bad
+    mov     edx, r13d
+    shl     edx, 24
+    or      eax, edx
+    pop     r13
+    pop     r12
+    pop     rbx
+    ret
+
+.bad:
+    mov     eax, -1
+    pop     r13
+    pop     r12
+    pop     rbx
+    ret
+
+; ==================================================================
+; _tor_parse_consensus_first_relay — parse first "r " line relay info
+; writes TOR_STATE_GUARD_IP/PORT/FINGERPRINT and tor_dir_guard_id
+; returns eax=0 success, -1 failure
+; ==================================================================
+_tor_parse_consensus_first_relay:
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+
+    lea     r12, [tor_dir_body_buf]
+    mov     r13d, [tor_dir_body_len]
+    xor     r14d, r14d          ; cursor
+
+.scan_lines:
+    cmp     r14d, r13d
+    jae     .fail
+    cmp     byte [r12 + r14], 'r'
+    jne     .next_line
+    cmp     r14d, r13d
+    jae     .fail
+    cmp     byte [r12 + r14 + 1], ' '
+    jne     .next_line
+    lea     r15, [r12 + r14 + 2] ; token scan start
+    jmp     .parse_r_line
+
+.next_line:
+    cmp     r14d, r13d
+    jae     .fail
+    cmp     byte [r12 + r14], 0x0A
+    je      .line_advance
+    inc     r14d
+    jmp     .next_line
+.line_advance:
+    inc     r14d
+    jmp     .scan_lines
+
+.parse_r_line:
+    ; token indices on r-line after "r ":
+    ; 0=nickname 1=identity(b64) 2=desc 3=date 4=time 5=ip 6=orport 7=dirport
+    xor     ebx, ebx
+    xor     ecx, ecx             ; in_token flag
+    xor     edx, edx             ; token start offset from r15
+    xor     r8d, r8d             ; token len
+    xor     r9d, r9d             ; local cursor
+    mov     dword [tor_state + TOR_STATE_GUARD_IP], 0
+    mov     word [tor_state + TOR_STATE_GUARD_PORT], 0
+    lea     rdi, [tor_state + TOR_STATE_GUARD_FINGERPRINT]
+    xor     esi, esi
+    mov     edx, 20
+    call    er_memset
+
+.tok_loop:
+    movzx   eax, byte [r15 + r9]
+    cmp     al, 0x0A
+    je      .tok_line_end
+    cmp     al, 0
+    je      .tok_line_end
+    cmp     al, ' '
+    je      .tok_sep
+    test    ecx, ecx
+    jnz     .tok_cont
+    mov     edx, r9d
+    xor     r8d, r8d
+    mov     ecx, 1
+.tok_cont:
+    inc     r8d
+    inc     r9d
+    jmp     .tok_loop
+
+.tok_sep:
+    test    ecx, ecx
+    jz      .tok_skip_space
+    ; finalize token at [r15+rdx], len r8d
+    cmp     ebx, 1
+    je      .tok_identity
+    cmp     ebx, 5
+    je      .tok_ip
+    cmp     ebx, 6
+    je      .tok_orport
+    jmp     .tok_done
+
+.tok_identity:
+    lea     rdi, [r15 + rdx]
+    mov     esi, r8d
+    lea     rdx, [tor_dir_guard_id]
+    call    _tor_decode_b64_20
+    test    eax, eax
+    js      .fail
+    lea     rdi, [tor_state + TOR_STATE_GUARD_FINGERPRINT]
+    lea     rsi, [tor_dir_guard_id]
+    mov     edx, 20
+    call    er_memcpy
+    jmp     .tok_done
+
+.tok_ip:
+    lea     rdi, [r15 + rdx]
+    mov     esi, r8d
+    call    _tor_parse_ipv4_token
+    test    eax, eax
+    js      .fail
+    mov     [tor_state + TOR_STATE_GUARD_IP], eax
+    jmp     .tok_done
+
+.tok_orport:
+    lea     rdi, [r15 + rdx]
+    mov     esi, r8d
+    call    _tor_parse_u16_dec
+    test    eax, eax
+    js      .fail
+    mov     [tor_state + TOR_STATE_GUARD_PORT], ax
+    jmp     .tok_done
+
+.tok_done:
+    inc     ebx
+    xor     ecx, ecx
+    xor     r8d, r8d
+.tok_skip_space:
+    inc     r9d
+    jmp     .tok_loop
+
+.tok_line_end:
+    cmp     dword [tor_state + TOR_STATE_GUARD_IP], 0
+    je      .fail
+    cmp     word [tor_state + TOR_STATE_GUARD_PORT], 0
+    je      .fail
+    xor     eax, eax
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    ret
+
+.fail:
+    mov     eax, -1
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    ret
 
 ; ==================================================================
 ; _tor_tunnel_open_if_needed — open stream if not already open

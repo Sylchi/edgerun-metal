@@ -15,6 +15,7 @@ extern er_pci_write32
 %define IWL_HDR_MAGIC0 0x00000000
 %define IWL_HDR_MAGIC1 0x0A4C5749    ; "IWL\n" little-endian
 %define AX210_FW_MIN_SIZE 64
+%define AX210_FW_TLV_OFF  0x50
 
 SECTION .text
 
@@ -174,6 +175,106 @@ er_fn er_ax210_fw_get_blob
     mov     eax, -1
     ret
 
+; ==================================================================
+; er_ax210_fw_prepare_upload — validate and walk firmware TLV records
+; int er_ax210_fw_prepare_upload(void)
+;
+; This is a transport-independent preparation step. It parses TLV headers
+; with strict bounds checking and records summary stats for later upload.
+;
+; Returns: eax = 0 on success, -1 on parse/availability failure
+; ==================================================================
+er_fn er_ax210_fw_prepare_upload
+    mov     r8, [ax210_fw_ptr]
+    test    r8, r8
+    jz      .prep_not_ready
+    mov     r9, [ax210_fw_size]
+    cmp     r9, AX210_FW_TLV_OFF + 8
+    jb      .prep_bad
+
+    lea     r10, [r8 + AX210_FW_TLV_OFF]    ; cursor
+    lea     r11, [r8 + r9]                  ; end
+    xor     ecx, ecx                        ; tlv_count
+
+.tlv_loop:
+    mov     rax, r11
+    sub     rax, r10
+    cmp     rax, 8
+    jb      .tlv_done
+
+    mov     edx, dword [r10]                ; type
+    mov     esi, dword [r10 + 4]            ; len
+    mov     [ax210_fw_last_tlv_type], edx
+    mov     [ax210_fw_last_tlv_len], esi
+
+    mov     eax, esi
+    add     eax, 8
+    jc      .prep_bad
+    mov     ebx, eax                        ; rec_size
+
+    ; 4-byte alignment padding (common TLV layout)
+    add     ebx, 3
+    and     ebx, ~3
+
+    mov     rax, r11
+    sub     rax, r10
+    cmp     rax, rbx
+    jb      .prep_bad
+
+    add     r10, rbx
+    inc     ecx
+    jmp     .tlv_loop
+
+.tlv_done:
+    test    ecx, ecx
+    jz      .prep_bad
+    mov     [ax210_fw_tlv_count], ecx
+    er_ok
+    xor     eax, eax
+    ret
+
+.prep_not_ready:
+    er_err  ERROR_NOT_PRESENT
+    mov     eax, -1
+    ret
+
+.prep_bad:
+    er_err  ERROR_CORRUPT
+    mov     eax, -1
+    ret
+
+; ==================================================================
+; er_ax210_fw_get_tlv_stats — read parsed firmware TLV summary
+; int er_ax210_fw_get_tlv_stats(uint32_t* out_count, uint32_t* out_last_type,
+;                               uint32_t* out_last_len)
+; ==================================================================
+er_fn er_ax210_fw_get_tlv_stats
+    test    rdi, rdi
+    jz      .stats_bad
+    test    rsi, rsi
+    jz      .stats_bad
+    test    rdx, rdx
+    jz      .stats_bad
+    mov     eax, [ax210_fw_tlv_count]
+    test    eax, eax
+    jz      .stats_bad
+    mov     [rdi], eax
+    mov     eax, [ax210_fw_last_tlv_type]
+    mov     [rsi], eax
+    mov     eax, [ax210_fw_last_tlv_len]
+    mov     [rdx], eax
+    er_ok
+    xor     eax, eax
+    ret
+
+.stats_bad:
+    er_err  ERROR_BAD_ARGUMENT
+    mov     eax, -1
+    ret
+
 SECTION .bss
 ax210_fw_ptr:  resq 1
 ax210_fw_size: resq 1
+ax210_fw_tlv_count: resd 1
+ax210_fw_last_tlv_type: resd 1
+ax210_fw_last_tlv_len: resd 1

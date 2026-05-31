@@ -74,6 +74,7 @@ extern er_pci_find_class
 extern er_pci_read32
 extern er_ax210_probe_init
 extern er_ax210_fw_get_blob
+extern er_ax210_fw_prepare_upload
 extern er_nvme_probe
 extern er_nvme_init
 extern er_nvme_print_info
@@ -241,6 +242,8 @@ check_wifi:    db "check: wifi ax210 ", 0
 check_wifi_bar: db " bar ", 0
 check_wifi_fw_missing: db " fw missing", 0
 check_wifi_fw_ready: db " fw ready ", 0
+check_wifi_tlv_ok: db " tlv ok", 0
+check_wifi_tlv_bad: db " tlv bad", 0
 check_abs:     db "absent", 0
 check_virtio_net: db "check: virtio_net ", 0
 check_amdgpu:  db "check: amdgpu ", 0
@@ -1364,6 +1367,17 @@ er_fn er_kernel_main
     mov     rdi, COM1_PORT
     mov     esi, [rel ax210_fw_size]
     call    er_serial_puthex32
+    call    er_ax210_fw_prepare_upload
+    test    eax, eax
+    jnz     .wifi_tlv_bad
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_wifi_tlv_ok]
+    call    er_serial_puts
+    jmp     .wifi_done
+.wifi_tlv_bad:
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_wifi_tlv_bad]
+    call    er_serial_puts
     jmp     .wifi_done
 
 .wifi_fw_missing:

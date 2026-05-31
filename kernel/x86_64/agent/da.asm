@@ -127,6 +127,23 @@ shell_bar_rects:
 shell_bar_rects_end:
 shell_bar_count: dq (shell_bar_rects_end - shell_bar_rects) / 60
 
+; DA message dispatch table: [msg_type:1][pad:7][handler_ptr:8]
+da_msg_dispatch_table:
+    db DA_MSG_SURFACE_REGISTER, 0, 0, 0, 0, 0, 0, 0
+    dq _da_dispatch_register
+    db DA_MSG_SURFACE_UPDATE, 0, 0, 0, 0, 0, 0, 0
+    dq _da_dispatch_update
+    db DA_MSG_SURFACE_UNREGISTER, 0, 0, 0, 0, 0, 0, 0
+    dq _da_dispatch_unregister
+    db DA_MSG_LAUNCH_APP, 0, 0, 0, 0, 0, 0, 0
+    dq _da_dispatch_launch
+    db DA_MSG_APP_EXIT, 0, 0, 0, 0, 0, 0, 0
+    dq _da_dispatch_exit
+    db DA_MSG_SURFACE_FOCUS, 0, 0, 0, 0, 0, 0, 0
+    dq _da_dispatch_focus
+da_msg_dispatch_table_end:
+da_msg_dispatch_count: dq (da_msg_dispatch_table_end - da_msg_dispatch_table) / 16
+
 ; ==================================================================
 ; .text
 ; ==================================================================
@@ -194,80 +211,62 @@ _da_handler:
     mov     r12, rdi            ; cell_ptr
     mov     r13d, esi           ; sender_slot_id
 
-    movzx   eax, byte [r12 + LOCAL_CELL_PAYLOAD]
-    cmp     al, DA_MSG_SURFACE_REGISTER
-    je      .register
-    cmp     al, DA_MSG_SURFACE_UPDATE
-    je      .update
-    cmp     al, DA_MSG_SURFACE_UNREGISTER
-    je      .unregister
-    cmp     al, DA_MSG_LAUNCH_APP
-    je      .launch
-    cmp     al, DA_MSG_APP_EXIT
-    je      .exit
-    cmp     al, DA_MSG_SURFACE_FOCUS
-    je      .focus
-    ; Unknown message — ignore
-    pop     r13
-    pop     r12
-    pop     rbx
-    xor     eax, eax
-    er_ok
-    er_ret
+    movzx   ebx, byte [r12 + LOCAL_CELL_PAYLOAD]
+    lea     rax, [rel da_msg_dispatch_table]
+    mov     rcx, [rel da_msg_dispatch_count]
 
-.register:
+.dispatch_loop:
+    test    rcx, rcx
+    jz      .unknown
+    cmp     bl, byte [rax]
+    je      .dispatch_hit
+    add     rax, 16
+    dec     rcx
+    jmp     .dispatch_loop
+
+.dispatch_hit:
     mov     rdi, r12
     mov     esi, r13d
-    call    _da_register_surface
-    pop     r13
-    pop     r12
-    pop     rbx
-    er_ret
+    call    qword [rax + 8]
+    jmp     .done
+
+.unknown:
+    er_ok
 
 .done:
     pop     r13
     pop     r12
     pop     rbx
-    xor     eax, eax
-    er_ok
     er_ret
 
-.unregister:
-    call    _da_unregister_surface
-    jmp     .done
+; Dispatcher wrappers (uniform signature: rdi=cell_ptr, rsi=sender_slot_id)
+_da_dispatch_register:
+    call    _da_register_surface
+    ret
 
-.update:
+_da_dispatch_update:
     call    _da_update_surface
-    jmp     .done
+    er_ok
+    ret
 
-.launch:
-    mov     rdi, r12
-    mov     esi, r13d
+_da_dispatch_unregister:
+    call    _da_unregister_surface
+    er_ok
+    ret
+
+_da_dispatch_launch:
     call    _da_launch_app
-    pop     r13
-    pop     r12
-    pop     rbx
-    er_ret
+    ret
 
-.exit:
-    mov     rdi, r12
+_da_dispatch_exit:
     call    _da_app_exit
-    pop     r13
-    pop     r12
-    pop     rbx
-    xor     eax, eax
     er_ok
-    er_ret
+    ret
 
-.focus:
-    mov     rdi, r12
+_da_dispatch_focus:
     call    _da_focus_surface
-    pop     r13
-    pop     r12
-    pop     rbx
-    xor     eax, eax
     er_ok
-    er_ret
+    ret
 
 ; ==================================================================
 ; _da_find_surface_by_hash — find surface slot by app hash
