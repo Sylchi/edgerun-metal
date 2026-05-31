@@ -9,6 +9,7 @@
 extern er_amdgpu_dcn_init
 extern er_amdgpu_program_hubp0_scanout
 extern er_amdgpu_program_otg0_mode
+extern er_amdgpu_validate_scanout_config
 
 %define AMDGPU_TEST_BAR0_SIZE 0x28000
 
@@ -17,7 +18,7 @@ passed: resq 1
 failed: resq 1
 bar0: resb AMDGPU_TEST_BAR0_SIZE
 fb: resb AMDGPU_FB_SIZE
-scanout_cfg: resd 5
+scanout_cfg: resb AMDGPU_SCANOUT_SIZE
 
 SECTION .rodata
 pass_msg: db "PASS amdgpu", 10, 0
@@ -128,6 +129,9 @@ _start:
     mov     dword [rel scanout_cfg + AMDGPU_SCANOUT_PITCH_PIXELS], 1280
     mov     dword [rel scanout_cfg + AMDGPU_SCANOUT_WIDTH], 1280
     mov     dword [rel scanout_cfg + AMDGPU_SCANOUT_HEIGHT], 720
+    lea     rdi, [rel scanout_cfg]
+    call    er_amdgpu_validate_scanout_config
+    ASSERT_EQ eax, 0
     lea     rdi, [rel bar0]
     lea     rsi, [rel scanout_cfg]
     call    er_amdgpu_program_hubp0_scanout
@@ -142,6 +146,10 @@ _start:
     ASSERT_EQ eax, 1
 
     mov     dword [rel scanout_cfg + AMDGPU_SCANOUT_PITCH_PIXELS], 0
+    lea     rdi, [rel scanout_cfg]
+    call    er_amdgpu_validate_scanout_config
+    ASSERT_EQ eax, -1
+    ASSERT_RDX ERROR_BAD_ARGUMENT
     lea     rdi, [rel bar0]
     lea     rsi, [rel scanout_cfg]
     call    er_amdgpu_program_hubp0_scanout
@@ -151,6 +159,10 @@ _start:
     mov     dword [rel scanout_cfg + AMDGPU_SCANOUT_PITCH_PIXELS], 640
     mov     dword [rel scanout_cfg + AMDGPU_SCANOUT_WIDTH], 1280
     mov     dword [rel scanout_cfg + AMDGPU_SCANOUT_HEIGHT], 720
+    lea     rdi, [rel scanout_cfg]
+    call    er_amdgpu_validate_scanout_config
+    ASSERT_EQ eax, -1
+    ASSERT_RDX ERROR_BAD_ARGUMENT
     lea     rdi, [rel bar0]
     lea     rsi, [rel scanout_cfg]
     call    er_amdgpu_program_hubp0_scanout
@@ -159,6 +171,10 @@ _start:
 
     mov     dword [rel scanout_cfg + AMDGPU_SCANOUT_PITCH_PIXELS], 1280
     mov     dword [rel scanout_cfg + AMDGPU_SCANOUT_WIDTH], 0
+    lea     rdi, [rel scanout_cfg]
+    call    er_amdgpu_validate_scanout_config
+    ASSERT_EQ eax, -1
+    ASSERT_RDX ERROR_BAD_ARGUMENT
     lea     rdi, [rel bar0]
     lea     rsi, [rel scanout_cfg]
     call    er_amdgpu_program_hubp0_scanout

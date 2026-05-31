@@ -1931,7 +1931,7 @@ er_fn er_tls_derive_handshake_secrets
     xor     rdi, rdi
     xor     esi, esi
     lea     rdx, [rel tls_zero_secret]
-    xor     ecx, ecx
+    mov     ecx, TLS_RANDOM_LEN
     lea     r8, [tls_early_secret]
     call    er_tls_hkdf_extract
     test    eax, eax
@@ -2253,13 +2253,13 @@ er_fn er_tls_connect
     jmp     .wait_encrypted_hs
 
 .decrypt_encrypted_hs:
-    lea     rdi, [tls_transcript]
+    lea     rdi, [tls_record_inner]
     lea     rsi, [tls_rx_record]
     mov     edx, [tls_rx_len]
     call    er_tls_server_hs_record_decrypt
     test    eax, eax
     js      .fail
-    lea     rdi, [tls_transcript]
+    lea     rdi, [tls_record_inner]
     mov     esi, eax
     call    er_tls_process_server_hs_plain
     test    eax, eax

@@ -41,23 +41,24 @@ const rows = [_]RowDef{
 };
 
 const Component = component_union.Component;
-const hardware_bg_top = ui.Color{ .r = 7, .g = 10, .b = 12 };
-const hardware_bg_bottom = ui.Color{ .r = 11, .g = 14, .b = 17 };
-const hardware_panel = ui.Color{ .r = 20, .g = 22, .b = 25 };
-const hardware_row = ui.Color{ .r = 27, .g = 30, .b = 34 };
-const hardware_border = ui.Color{ .r = 43, .g = 48, .b = 54 };
-const hardware_text = ui.Color{ .r = 239, .g = 242, .b = 239 };
-const hardware_muted = ui.Color{ .r = 150, .g = 156, .b = 160 };
-const hardware_accent = ui.Color{ .r = 54, .g = 194, .b = 160 };
-const hardware_accent_blue = ui.Color{ .r = 95, .g = 167, .b = 232 };
-const hardware_accent_gold = ui.Color{ .r = 226, .g = 176, .b = 86 };
-const hardware_accent_dim = ui.Color{ .r = 22, .g = 91, .b = 76, .a = 74 };
-const hardware_orb = ui.Color{ .r = 54, .g = 194, .b = 160, .a = 14 };
+const hardware_bg_top = ui.Color{ .r = 8, .g = 8, .b = 9 };
+const hardware_bg_bottom = ui.Color{ .r = 13, .g = 14, .b = 15 };
+const hardware_panel = ui.Color{ .r = 22, .g = 22, .b = 24 };
+const hardware_row = ui.Color{ .r = 31, .g = 31, .b = 34 };
+const hardware_border = ui.Color{ .r = 45, .g = 45, .b = 49 };
+const hardware_text = ui.Color{ .r = 238, .g = 238, .b = 236 };
+const hardware_muted = ui.Color{ .r = 157, .g = 157, .b = 162 };
+const hardware_accent = ui.Color{ .r = 38, .g = 166, .b = 132 };
+const hardware_accent_blue = ui.Color{ .r = 88, .g = 145, .b = 214 };
+const hardware_accent_gold = ui.Color{ .r = 210, .g = 157, .b = 72 };
+const hardware_accent_dim = ui.Color{ .r = 23, .g = 72, .b = 62, .a = 76 };
+const hardware_orb = ui.Color{ .r = 38, .g = 166, .b = 132, .a = 9 };
 const hardware_rim = ui.Color{ .r = 255, .g = 255, .b = 255, .a = 8 };
-const hardware_selection = ui.Color{ .r = 255, .g = 255, .b = 255, .a = 210 };
-const hardware_selection_fill = ui.Color{ .r = 255, .g = 255, .b = 255, .a = 14 };
-const editor_panel = ui.Color{ .r = 18, .g = 20, .b = 23, .a = 248 };
-const editor_scrim = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 64 };
+const hardware_selection = ui.Color{ .r = 190, .g = 224, .b = 213, .a = 190 };
+const hardware_selection_fill = ui.Color{ .r = 190, .g = 224, .b = 213, .a = 10 };
+const editor_panel = ui.Color{ .r = 20, .g = 20, .b = 22, .a = 250 };
+const editor_scrim = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 38 };
+const subtle_divider = ui.Color{ .r = 255, .g = 255, .b = 255, .a = 10 };
 
 fn hardwareStyle(accent: ui.Color) ui.Style {
     return .{
@@ -147,7 +148,7 @@ pub const State = struct {
     last_refresh_frame: u64 = 0,
     auto_refresh: bool = true,
     hide_unavailable: bool = false,
-    compact_rows: bool = false,
+    compact_rows: bool = true,
     status: [detail_bytes]u8 = [_]u8{0} ** detail_bytes,
     screen_brightness: i32 = 0,
     screen_brightness_max: i32 = 1,
@@ -340,7 +341,7 @@ pub const State = struct {
         try scene.pushGradientRect(ui.Rect.init(bounds.x, bounds.y, bounds.w, 96.0), hardware_orb, ui.Color.clear, 0.0);
         try scene.pushRect(ui.Rect.init(bounds.x, bounds.y + bounds.h - 2.0, bounds.w, 2.0), hardware_rim, .fill, 0.0, 0.0);
 
-        const outer = bounds.insetUniform(if (bounds.w >= 1000.0) 20.0 else 12.0);
+        const outer = bounds.insetUniform(if (bounds.w >= 1000.0) 18.0 else 12.0);
         if (outer.w >= 980.0) {
             try self.renderWide(scene, collector, outer, dashboard_options);
         } else {
@@ -366,9 +367,9 @@ pub const State = struct {
     }
 
     fn renderWide(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
-        const gap: f32 = if (self.compact_rows) 12.0 else 16.0;
-        const header_h: f32 = 104.0;
-        const metric_h: f32 = 128.0;
+        const gap: f32 = if (self.compact_rows) 12.0 else 14.0;
+        const header_h: f32 = 88.0;
+        const metric_h: f32 = 112.0;
         try self.renderHeader(scene, collector, ui.Rect.init(bounds.x, bounds.y, bounds.w, header_h), options);
 
         const metric_y = bounds.y + header_h + gap;
@@ -377,8 +378,8 @@ pub const State = struct {
 
         const body_y = metric_y + metric_h + gap;
         const body_h = @max(1.0, bounds.y + bounds.h - body_y);
-        const controls_w = @min(410.0, @max(350.0, bounds.w * 0.27));
-        const inventory_w = @min(420.0, @max(350.0, bounds.w * 0.28));
+        const controls_w = @min(390.0, @max(340.0, bounds.w * 0.26));
+        const inventory_w = @min(410.0, @max(340.0, bounds.w * 0.27));
         const activity_w = bounds.w - controls_w - inventory_w - gap * 2.0;
         try self.renderControls(scene, collector, ui.Rect.init(bounds.x, body_y, controls_w, body_h), options);
         try self.renderActivity(scene, collector, ui.Rect.init(bounds.x + controls_w + gap, body_y, activity_w, body_h), options);
@@ -388,11 +389,11 @@ pub const State = struct {
     fn renderStacked(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
         const gap: f32 = 12.0;
         var y = bounds.y;
-        try self.renderHeader(scene, collector, ui.Rect.init(bounds.x, y, bounds.w, 104.0), options);
-        y += 104.0 + gap;
+        try self.renderHeader(scene, collector, ui.Rect.init(bounds.x, y, bounds.w, 88.0), options);
+        y += 88.0 + gap;
         const metric_w = (bounds.w - gap) * 0.5;
-        try self.renderMetrics(scene, collector, ui.Rect.init(bounds.x, y, bounds.w, 260.0), metric_w, gap, options);
-        y += 260.0 + gap;
+        try self.renderMetrics(scene, collector, ui.Rect.init(bounds.x, y, bounds.w, 230.0), metric_w, gap, options);
+        y += 230.0 + gap;
         try self.renderControls(scene, collector, ui.Rect.init(bounds.x, y, bounds.w, 390.0), options);
         y += 390.0 + gap;
         try self.renderActivity(scene, collector, ui.Rect.init(bounds.x, y, bounds.w, 330.0), options);

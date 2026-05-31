@@ -60,23 +60,6 @@ _mmio_write:
     mov     [rdi + rsi], edx
     ret
 
-; Helper: MMIO set bits (OR) 
-; rdi = bar0, rsi = byte_offset, edx = bits to set
-_mmio_set:
-    mov     eax, [rdi + rsi]
-    or      eax, edx
-    mov     [rdi + rsi], eax
-    ret
-
-; Helper: MMIO clear bits (AND NOT)
-; rdi = bar0, rsi = byte_offset, edx = bits to clear
-_mmio_clear:
-    mov     eax, [rdi + rsi]
-    not     edx
-    and     eax, edx
-    mov     [rdi + rsi], eax
-    ret
-
 ; ==================================================================
 ; er_amdgpu_probe — probe AMDGPU at given PCI location
 ; int er_amdgpu_probe(uint8_t bus, uint8_t dev, uint8_t func,
@@ -521,21 +504,13 @@ er_fn er_amdgpu_program_hubp0_scanout
     push    r13
     test    rdi, rdi
     jz      .bad_arg
-    test    rsi, rsi
-    jz      .bad_arg
     mov     r12, rdi
     mov     r13, rsi
+    mov     rdi, r13
+    call    er_amdgpu_validate_scanout_config
+    test    eax, eax
+    jnz     .bad_arg
     mov     edx, [r13 + AMDGPU_SCANOUT_PITCH_PIXELS]
-    test    edx, edx
-    jz      .bad_arg
-    mov     eax, [r13 + AMDGPU_SCANOUT_WIDTH]
-    test    eax, eax
-    jz      .bad_arg
-    cmp     edx, eax
-    jb      .bad_arg
-    mov     eax, [r13 + AMDGPU_SCANOUT_HEIGHT]
-    test    eax, eax
-    jz      .bad_arg
     mov     rdi, r12
     mov     esi, DCN_HUBP0_SURFACE_PITCH
     call    _mmio_write
@@ -566,6 +541,32 @@ er_fn er_amdgpu_program_hubp0_scanout
     mov     eax, -1
     pop     r13
     pop     r12
+    ret
+
+; ==================================================================
+; er_amdgpu_validate_scanout_config — validate scanout config fields
+; int er_amdgpu_validate_scanout_config(const uint32_t* cfg)
+; ==================================================================
+er_fn er_amdgpu_validate_scanout_config
+    test    rdi, rdi
+    jz      .bad_arg
+    mov     edx, [rdi + AMDGPU_SCANOUT_PITCH_PIXELS]
+    test    edx, edx
+    jz      .bad_arg
+    mov     eax, [rdi + AMDGPU_SCANOUT_WIDTH]
+    test    eax, eax
+    jz      .bad_arg
+    cmp     edx, eax
+    jb      .bad_arg
+    mov     eax, [rdi + AMDGPU_SCANOUT_HEIGHT]
+    test    eax, eax
+    jz      .bad_arg
+    xor     eax, eax
+    er_ok
+    ret
+.bad_arg:
+    er_err  ERROR_BAD_ARGUMENT
+    mov     eax, -1
     ret
 
 ; ==================================================================
