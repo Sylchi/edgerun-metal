@@ -6,6 +6,7 @@
 extern er_tor_hs_build_establish_rendezvous
 extern er_tor_hs_mac32_sha3
 extern er_tor_hs_kdf_sha3
+extern er_tor_hs_derive_intro_keys
 extern er_tor_hs_parse_rendezvous_established
 extern er_tor_hs_build_rendezvous1
 extern er_tor_hs_parse_rendezvous2
@@ -13,12 +14,14 @@ extern er_tor_hs_parse_introduce_ack
 extern er_tor_hs_build_introduce1_prefix
 extern er_tor_hs_build_introduce1_plaintext
 extern er_tor_hs_build_introduce1_encrypted
+extern er_tor_hs_build_introduce1_ntor_encrypted
 extern er_tor_hs_build_establish_intro_v3
 extern er_tor_hs_parse_intro_established
 extern er_tor_hs_establish_rendezvous
 extern er_tor_hs_establish_intro
 extern er_tor_hs_send_introduce1
 extern er_tor_hs_send_rendezvous1
+extern er_tor_aes256_ctr
 extern er_memcpy
 
 SECTION .data
@@ -30,11 +33,15 @@ cookie: db 0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09
 handshake: times 64 db 0x5a
 auth_key: times TOR_HS_INTRO_AUTH_KEY_LEN db 0xa5
 onion_key: times TOR_HS_ONION_KEY_LEN_NTOR db 0x4b
+client_priv: times TOR_CURVE25519_KEY_LEN db 0x11
+subcred: times TOR_HS_SUBCRED_LEN db 0x55
 handshake_auth: times TOR_HS_INTRO_HANDSHAKE_AUTH_LEN db 0x3c
 intro_sig: times TOR_HS_ED25519_SIG_LEN db 0xc3
 encrypted: db 1,2,3,4,5,6,7,8
 client_pk: times TOR_HS_CLIENT_PK_LEN db 0x21
 intro_mac: times TOR_HS_INTRODUCE1_MAC_LEN db 0x9d
+zero_iv: times 16 db 0
+hs_t_hsmac: db "tor-hs-ntor-curve25519-sha3-256-1:hs_mac"
 linkspecs:
     db 0,6,127,0,0,1,35,41
     db 2,20
@@ -68,6 +75,7 @@ SECTION .bss
 buf: resb TOR_HS_RELAY_DATA_MAX
 copy_buf: resb TOR_HS_RELAY_DATA_MAX
 crypto_out: resb 64
+iv_copy: resb 16
 copy_len: resd 1
 last_circ: resd 1
 last_stream: resw 1
@@ -247,6 +255,76 @@ _start:
     call    _mem_eq
     ASSERT eax
     lea     rdi, [rel intro_mac]
+    lea     rsi, [rel buf + TOR_HS_CLIENT_PK_LEN + 8]
+    mov     edx, TOR_HS_INTRODUCE1_MAC_LEN
+    call    _mem_eq
+    ASSERT eax
+
+    lea     rdi, [rel crypto_out]
+    lea     rsi, [rel auth_key]
+    lea     rdx, [rel onion_key]
+    lea     rcx, [rel client_priv]
+    lea     r8, [rel client_pk]
+    lea     r9, [rel subcred]
+    call    er_tor_hs_derive_intro_keys
+    ASSERT_EQ eax, 0
+
+    sub     rsp, 16
+    lea     rax, [rel encrypted]
+    mov     [rsp], rax
+    mov     qword [rsp + 8], 8
+    lea     rdi, [rel buf]
+    lea     rsi, [rel auth_key]
+    lea     rdx, [rel onion_key]
+    lea     rcx, [rel client_priv]
+    lea     r8, [rel client_pk]
+    lea     r9, [rel subcred]
+    call    er_tor_hs_build_introduce1_ntor_encrypted
+    add     rsp, 16
+    ASSERT_EQ eax, TOR_HS_CLIENT_PK_LEN + 8 + TOR_HS_INTRODUCE1_MAC_LEN
+    lea     rdi, [rel client_pk]
+    lea     rsi, [rel buf]
+    mov     edx, TOR_HS_CLIENT_PK_LEN
+    call    _mem_eq
+    ASSERT eax
+    lea     rdi, [rel iv_copy]
+    lea     rsi, [rel zero_iv]
+    mov     edx, 16
+    call    er_memcpy
+    lea     rdi, [rel copy_buf]
+    lea     rsi, [rel buf + TOR_HS_CLIENT_PK_LEN]
+    mov     edx, 8
+    lea     rcx, [rel crypto_out]
+    lea     r8, [rel iv_copy]
+    call    er_tor_aes256_ctr
+    lea     rdi, [rel encrypted]
+    lea     rsi, [rel copy_buf]
+    mov     edx, 8
+    call    _mem_eq
+    ASSERT eax
+
+    lea     rdi, [rel last_body]
+    lea     rsi, [rel auth_key]
+    mov     edx, TOR_HS_INTRO_AUTH_KEY_LEN
+    call    er_memcpy
+    mov     byte [rel last_body + TOR_HS_INTRO_AUTH_KEY_LEN], 0
+    lea     rdi, [rel last_body + TOR_HS_INTRO_AUTH_KEY_LEN + 1]
+    lea     rsi, [rel client_pk]
+    mov     edx, TOR_HS_CLIENT_PK_LEN
+    call    er_memcpy
+    lea     rdi, [rel last_body + TOR_HS_INTRO_AUTH_KEY_LEN + 1 + TOR_HS_CLIENT_PK_LEN]
+    lea     rsi, [rel buf + TOR_HS_CLIENT_PK_LEN]
+    mov     edx, 8
+    call    er_memcpy
+    lea     rdi, [rel copy_buf + 64]
+    lea     rsi, [rel hs_t_hsmac]
+    mov     edx, TOR_HS_NTOR_T_HSMAC_LEN
+    lea     rcx, [rel crypto_out + 32]
+    lea     r8, [rel last_body]
+    mov     r9d, TOR_HS_INTRO_AUTH_KEY_LEN + 1 + TOR_HS_CLIENT_PK_LEN + 8
+    call    er_tor_hs_mac32_sha3
+    ASSERT_EQ eax, 0
+    lea     rdi, [rel copy_buf + 64]
     lea     rsi, [rel buf + TOR_HS_CLIENT_PK_LEN + 8]
     mov     edx, TOR_HS_INTRODUCE1_MAC_LEN
     call    _mem_eq

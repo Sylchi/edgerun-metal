@@ -565,7 +565,7 @@ cmd_test_tor() {
 }
 
 cmd_test_tor_hs() {
-	build_test "test_tor_hs_self" "${TEST_DIR}/test_tor_hs_self.asm" "crypto/tor_hs" "crypto/sha3" "rt/runtime"
+	build_test "test_tor_hs_self" "${TEST_DIR}/test_tor_hs_self.asm" "crypto/tor_hs" "crypto/sha3" "crypto/tor_aes" "crypto/curve25519" "rt/runtime"
 }
 
 cmd_test_local_route() {

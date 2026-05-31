@@ -16,10 +16,12 @@ pub const Error = error{
     ParseFailed,
 };
 
-const row_count = 11;
+const row_count = 15;
 const detail_bytes = 80;
 const state_bytes = row_count * detail_bytes;
 const unavailable_detail = "unavailable";
+const sample_count = 12;
+const note_bytes = 240;
 
 const RowDef = struct {
     icon_kind: icon.Icon,
@@ -38,6 +40,10 @@ const rows = [_]RowDef{
     .{ .icon_kind = .shield_check, .title = "TPM" },
     .{ .icon_kind = .device_desktop, .title = "PCI Devices" },
     .{ .icon_kind = .network, .title = "Network" },
+    .{ .icon_kind = .device_floppy, .title = "Storage" },
+    .{ .icon_kind = .device_speaker, .title = "Audio" },
+    .{ .icon_kind = .camera, .title = "Camera" },
+    .{ .icon_kind = .wifi, .title = "Wireless" },
 };
 
 const Component = component_union.Component;
@@ -166,6 +172,15 @@ pub const State = struct {
     context_y: f32 = 0.0,
     accent_index: u8 = 0,
     selected_emphasis: bool = true,
+    profile_index: u8 = 0,
+    note: [note_bytes]u8 = [_]u8{0} ** note_bytes,
+    note_len: usize = 0,
+    temp_samples: [sample_count]f32 = [_]f32{0.0} ** sample_count,
+    temp_sample_len: usize = 0,
+    temp_sample_index: usize = 0,
+    memory_pressure: f32 = 0.0,
+    battery_unit: f32 = 0.0,
+    battery_ready: bool = false,
 
     const refresh_now_button_id: u32 = 90_001;
     const auto_refresh_switch_id: u32 = 90_002;
@@ -192,6 +207,11 @@ pub const State = struct {
     const editor_accent_prev_id: u32 = 91_083;
     const editor_accent_next_id: u32 = 91_084;
     const editor_emphasis_switch_id: u32 = 91_085;
+    const profile_input_id: u32 = 91_090;
+    const profile_cycle_button_id: u32 = 91_091;
+    const note_textarea_id: u32 = 91_092;
+    const note_append_button_id: u32 = 91_093;
+    const note_clear_button_id: u32 = 91_094;
 
     pub fn tick(self: *State) bool {
         self.frame += 1;
@@ -229,6 +249,9 @@ pub const State = struct {
             editor_accent_prev_id => self.shiftAccent(-1),
             editor_accent_next_id => self.shiftAccent(1),
             editor_emphasis_switch_id => self.selected_emphasis = !self.selected_emphasis,
+            profile_input_id, profile_cycle_button_id => self.cycleProfile(),
+            note_textarea_id, note_append_button_id => self.appendNote(),
+            note_clear_button_id => self.clearNote(),
             else => {},
         }
     }
@@ -341,6 +364,39 @@ pub const State = struct {
         } else |_| {
             writeUnavailable(self.details[offset..][0..detail_bytes]);
         }
+        offset += detail_bytes;
+
+        var storage_buf: [detail_bytes]u8 = [_]u8{0} ** detail_bytes;
+        if (readStorage(&storage_buf)) |_| {
+            writeDetail(self.details[offset..][0..detail_bytes], trimBuf(&storage_buf));
+        } else |_| {
+            writeUnavailable(self.details[offset..][0..detail_bytes]);
+        }
+        offset += detail_bytes;
+
+        var audio_buf: [detail_bytes]u8 = [_]u8{0} ** detail_bytes;
+        if (readAudio(&audio_buf)) |_| {
+            writeDetail(self.details[offset..][0..detail_bytes], trimBuf(&audio_buf));
+        } else |_| {
+            writeUnavailable(self.details[offset..][0..detail_bytes]);
+        }
+        offset += detail_bytes;
+
+        var camera_buf: [detail_bytes]u8 = [_]u8{0} ** detail_bytes;
+        if (readCamera(&camera_buf)) |_| {
+            writeDetail(self.details[offset..][0..detail_bytes], trimBuf(&camera_buf));
+        } else |_| {
+            writeUnavailable(self.details[offset..][0..detail_bytes]);
+        }
+        offset += detail_bytes;
+
+        var wireless_buf: [detail_bytes]u8 = [_]u8{0} ** detail_bytes;
+        if (readWireless(&wireless_buf)) |_| {
+            writeDetail(self.details[offset..][0..detail_bytes], trimBuf(&wireless_buf));
+        } else |_| {
+            writeUnavailable(self.details[offset..][0..detail_bytes]);
+        }
+        self.recordTelemetrySamples();
     }
 
     pub fn render(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {

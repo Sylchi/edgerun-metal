@@ -142,17 +142,112 @@ _aes_key_expand:
     ret
 
 ; ==================================================================
+; _aes_key_expand_256 — expand 256-bit key to 15 round keys
+; void _aes_key_expand_256(const u8 *key[32], u8 *round_keys[240])
+; ==================================================================
+_aes_key_expand_256:
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+
+    mov     r12, rdi        ; key
+    mov     r13, rsi        ; round_keys buffer
+    lea     r14, [rel aes_rcon]
+    lea     r15, [rel aes_sbox]
+
+    mov     rdi, r13
+    mov     rsi, r12
+    mov     edx, 32
+    call    er_memcpy
+
+    mov     ecx, 8          ; word index
+.expand_loop:
+    cmp     ecx, 60
+    jae     .done
+    lea     rbx, [r13 + rcx * 4]
+    lea     rsi, [rbx - 4]
+    lea     rdi, [rbx - 32]
+
+    mov     eax, ecx
+    and     eax, 7
+    cmp     eax, 0
+    je      .g_word
+    cmp     eax, 4
+    je      .sub_word
+
+    movzx   r8d, byte [rsi]
+    movzx   r9d, byte [rsi + 1]
+    movzx   r10d, byte [rsi + 2]
+    movzx   r11d, byte [rsi + 3]
+    jmp     .store_word
+
+.g_word:
+    movzx   eax, byte [rsi + 1]
+    movzx   r8d, byte [r15 + rax]
+    mov     eax, ecx
+    shr     eax, 3
+    dec     eax
+    xor     r8b, [r14 + rax]
+
+    movzx   eax, byte [rsi + 2]
+    movzx   r9d, byte [r15 + rax]
+    movzx   eax, byte [rsi + 3]
+    movzx   r10d, byte [r15 + rax]
+    movzx   eax, byte [rsi]
+    movzx   r11d, byte [r15 + rax]
+    jmp     .store_word
+
+.sub_word:
+    movzx   eax, byte [rsi]
+    movzx   r8d, byte [r15 + rax]
+    movzx   eax, byte [rsi + 1]
+    movzx   r9d, byte [r15 + rax]
+    movzx   eax, byte [rsi + 2]
+    movzx   r10d, byte [r15 + rax]
+    movzx   eax, byte [rsi + 3]
+    movzx   r11d, byte [r15 + rax]
+
+.store_word:
+    mov     al, [rdi]
+    xor     al, r8b
+    mov     [rbx], al
+    mov     al, [rdi + 1]
+    xor     al, r9b
+    mov     [rbx + 1], al
+    mov     al, [rdi + 2]
+    xor     al, r10b
+    mov     [rbx + 2], al
+    mov     al, [rdi + 3]
+    xor     al, r11b
+    mov     [rbx + 3], al
+
+    inc     ecx
+    jmp     .expand_loop
+
+.done:
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    ret
+
+; ==================================================================
 ; _aes_encrypt_block — encrypt one 16-byte block
-; void _aes_encrypt_block(u8 *block[16], const u8 *round_keys[176])
+; void _aes_encrypt_block(u8 *block[16], const u8 *round_keys, u32 rounds)
 ; ==================================================================
 _aes_encrypt_block:
     push    rbx
     push    r12
     push    r13
     push    r14
+    push    r15
 
     mov     r12, rdi        ; block
     mov     r13, rsi        ; round_keys buffer
+    mov     r15d, edx       ; rounds
 
     ; AddRoundKey (initial)
     mov     eax, [r13]
@@ -164,7 +259,6 @@ _aes_encrypt_block:
     mov     eax, [r13 + 12]
     xor     [r12 + 12], eax
 
-    ; 9 main rounds
     xor     r14d, r14d
     inc     r14d            ; round key index (1-based)
 
@@ -367,7 +461,7 @@ _aes_encrypt_block:
     pop     rbx
 
     ; MixColumns (done in all rounds except final)
-    cmp     r14d, 10
+    cmp     r14d, r15d
     je      .add_key        ; last round: skip MixColumns
 
     ; For each column, apply MixColumns matrix multiplication:
@@ -508,9 +602,12 @@ _aes_encrypt_block:
     xor     [r12 + 12], eax
 
     inc     r14d
-    cmp     r14d, 11
+    mov     eax, r15d
+    inc     eax
+    cmp     r14d, eax
     jl      .round_loop
 
+    pop     r15
     pop     r14
     pop     r13
     pop     r12
@@ -573,6 +670,7 @@ er_fn er_tor_aes_ctr
     call    er_memcpy
     lea     rdi, [rbx + 16]
     lea     rsi, [rsp + 48] ; round_keys buffer
+    mov     edx, 10
     call    _aes_encrypt_block
     mov     ecx, r15d       ; restore block size
 
@@ -610,6 +708,98 @@ er_fn er_tor_aes_ctr
 
 .done:
     add     rsp, 224
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ok
+    er_ret
+
+; ==================================================================
+; er_tor_aes256_ctr — AES-256-CTR encrypt/decrypt
+; void er_tor_aes256_ctr(u8 *out, const u8 *in, u32 len,
+;                        const u8 *key[32], u8 *iv[16])
+;
+; In CTR mode, encryption and decryption are the same operation.
+; IV is incremented after each block.
+; ==================================================================
+er_fn er_tor_aes256_ctr
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+
+    mov     r12, rdi        ; out
+    mov     r13, rsi        ; in
+    mov     r14d, edx       ; len
+    mov     r15, rcx        ; key
+
+    ; Combined stack frame: 32 (counter/work) + 16 (IV save + pad) + 240 (round_keys) = 288
+    sub     rsp, 288
+    mov     [rsp + 32], r8  ; save IV pointer
+
+    mov     rdi, r15
+    lea     rsi, [rsp + 48]
+    call    _aes_key_expand_256
+
+    mov     r8, [rsp + 32]
+    mov     rdi, rsp
+    mov     rsi, r8
+    mov     edx, 16
+    call    er_memcpy
+    mov     rbx, rsp
+
+.ctr_loop:
+    cmp     r14d, 0
+    je      .done
+
+    mov     ecx, 16
+    cmp     r14d, 16
+    jae     .full_block
+    mov     ecx, r14d
+.full_block:
+    mov     r15d, ecx
+    lea     rdi, [rbx + 16]
+    mov     rsi, rbx
+    mov     edx, 16
+    call    er_memcpy
+    lea     rdi, [rbx + 16]
+    lea     rsi, [rsp + 48]
+    mov     edx, 14
+    call    _aes_encrypt_block
+    mov     ecx, r15d
+
+    xor     r8d, r8d
+.xor_loop:
+    cmp     r8d, ecx
+    jae     .xor_done
+    mov     al, [r13 + r8]
+    xor     al, [rbx + 16 + r8]
+    mov     [r12 + r8], al
+    inc     r8d
+    jmp     .xor_loop
+.xor_done:
+    add     r12, rcx
+    add     r13, rcx
+    sub     r14d, ecx
+
+    mov     eax, [rbx + 12]
+    bswap   eax
+    add     eax, 1
+    bswap   eax
+    mov     [rbx + 12], eax
+    jnc     .ctr_loop
+    mov     eax, [rbx + 8]
+    bswap   eax
+    add     eax, 1
+    bswap   eax
+    mov     [rbx + 8], eax
+    jmp     .ctr_loop
+
+.done:
+    add     rsp, 288
     pop     r15
     pop     r14
     pop     r13

@@ -20,6 +20,7 @@ pub const Textarea = struct {
     id: u32,
     flags: common.ComponentFlags = .{},
     placeholder: []const u8,
+    value: []const u8 = "",
 
     pub fn node(self: Textarea) ui.Node {
         return ui.textareaNode(self.id, self.placeholder);
@@ -33,7 +34,9 @@ pub const Textarea = struct {
         try scene.pushRect(bounds, options.style.panel, .fill, component_primitives.control_radius, 0.0);
         try scene.pushRect(bounds, options.style.border, .border, component_primitives.control_radius, 0.0);
         if (contentInset(bounds, textarea_padding)) |text_bounds| {
-            try text_component.Text.renderWrapped(scene, text_bounds, self.placeholder, options.style.muted, .{
+            const text = self.displayValue();
+            const color = if (self.value.len == 0) options.style.muted else options.style.text;
+            try text_component.Text.renderWrapped(scene, text_bounds, text, color, .{
                 .line_height = component_primitives.control_label_height,
                 .average_char_width = control_average_char_width,
                 .max_lines = textarea_max_lines,
@@ -81,6 +84,10 @@ pub const Textarea = struct {
 
     pub fn fromNode(textarea: @FieldType(ui.Node, "textarea")) Error!Textarea {
         return .{ .id = textarea.id, .placeholder = textarea.placeholder };
+    }
+
+    fn displayValue(self: Textarea) []const u8 {
+        return if (self.value.len == 0) self.placeholder else self.value;
     }
 };
 
@@ -149,6 +156,19 @@ test "textarea component wraps placeholder inside shared control inset" {
     try std.testing.expectEqual(@as(f32, 20.0), first.text.origin.y);
     try std.testing.expect(component_test.textCount(scene.written()) > 1);
 }
+
+test "textarea component renders value when present" {
+    const textarea = Textarea{ .id = 21, .placeholder = "Describe this app state", .value = "Live note" };
+    var commands: [16]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+
+    try textarea.render(&scene, ui.Rect.init(4, 8, 160, 88), .{});
+
+    const value = component_test.textCommand(scene.written(), "Live note").?;
+    try std.testing.expectEqual(ui.Color.text, value.text.color);
+    try std.testing.expect(component_test.textCommand(scene.written(), "Describe this app state") == null);
+}
+
 
 test "textarea text grid maps pointer position to byte cursor" {
     const value = "aa\nbbbb\nc";

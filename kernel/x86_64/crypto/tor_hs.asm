@@ -8,12 +8,21 @@
 extern er_memcpy
 extern er_sha3_256
 extern er_shake256
+extern er_tor_aes256_ctr
+extern er_tor_curve25519_scalar_mult
 extern er_tor_send_relay
 extern er_tor_recv_relay
+
+SECTION .rodata
+tor_hs_ntor_protoid: db "tor-hs-ntor-curve25519-sha3-256-1"
+tor_hs_ntor_t_hsenc: db "tor-hs-ntor-curve25519-sha3-256-1:hs_key_extract"
+tor_hs_ntor_t_hsmac: db "tor-hs-ntor-curve25519-sha3-256-1:hs_mac"
+tor_hs_ntor_m_hsexpand: db "tor-hs-ntor-curve25519-sha3-256-1:hs_key_expand"
 
 SECTION .bss
 tor_hs_msg: resb TOR_HS_RELAY_DATA_MAX
 tor_hs_crypto_buf: resb TOR_HS_CRYPTO_BUF_MAX
+tor_hs_zero_iv: resb 16
 tor_hs_tmp_stream: resw 1
 tor_hs_tmp_cmd: resb 1
 tor_hs_tmp_len: resd 1
@@ -338,7 +347,7 @@ er_fn er_tor_hs_build_introduce1_prefix
     jz      .fail
     test    rsi, rsi
     jz      .fail
-    cmp     r13d, TOR_HS_RELAY_DATA_MAX - 56
+    cmp     r13d, TOR_HS_INTRODUCE1_ENCRYPTED_FIELD_MAX
     ja      .fail
 
     xor     eax, eax
@@ -362,7 +371,7 @@ er_fn er_tor_hs_build_introduce1_prefix
     mov     edx, r13d
     call    er_memcpy
 .done:
-    lea     eax, [r13d + 56]
+    lea     eax, [r13d + TOR_HS_INTRODUCE1_PREFIX_LEN]
     er_ok
     pop     r13
     pop     r12
@@ -400,7 +409,7 @@ er_fn er_tor_hs_build_introduce1_plaintext
     jz      .fail
     cmp     ebp, 255
     ja      .fail
-    cmp     r15d, TOR_HS_INTRODUCE1_MAX_LEN - TOR_HS_INTRODUCE1_PLAINTEXT_BASE_LEN
+    cmp     r15d, TOR_HS_INTRODUCE1_ENCRYPTED_DATA_MAX - TOR_HS_INTRODUCE1_PLAINTEXT_BASE_LEN
     ja      .fail
     test    r15d, r15d
     jz      .copy_cookie
@@ -467,7 +476,7 @@ er_fn er_tor_hs_build_introduce1_encrypted
     jz      .fail
     test    r15, r15
     jz      .fail
-    cmp     r14d, TOR_HS_INTRODUCE1_MAX_LEN - TOR_HS_CLIENT_PK_LEN - TOR_HS_INTRODUCE1_MAC_LEN
+    cmp     r14d, TOR_HS_INTRODUCE1_ENCRYPTED_DATA_MAX
     ja      .fail
     test    r14d, r14d
     jz      .copy_client_pk
@@ -503,6 +512,187 @@ er_fn er_tor_hs_build_introduce1_encrypted
     pop     r13
     pop     r12
     pop     rbx
+    er_ret
+
+; er_tor_hs_derive_intro_keys(out64, auth_key, onion_key, client_priv, client_pub, subcred)
+; Derives hs-ntor INTRODUCE1 ENC_KEY||MAC_KEY from the service onion key B
+; and caller-owned client keypair x/X.
+global er_tor_hs_derive_intro_keys
+er_fn er_tor_hs_derive_intro_keys
+    push    rbp
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+    mov     rbx, rdi
+    mov     r12, rsi
+    mov     r13, rdx
+    mov     r14, rcx
+    mov     r15, r8
+    mov     rbp, r9
+    test    rbx, rbx
+    jz      .fail
+    test    r12, r12
+    jz      .fail
+    test    r13, r13
+    jz      .fail
+    test    r14, r14
+    jz      .fail
+    test    r15, r15
+    jz      .fail
+    test    rbp, rbp
+    jz      .fail
+
+    lea     rdi, [rel tor_hs_crypto_buf]
+    mov     rsi, r14
+    mov     rdx, r13
+    call    er_tor_curve25519_scalar_mult
+
+    lea     rdi, [rel tor_hs_crypto_buf + 64]
+    lea     rsi, [rel tor_hs_crypto_buf]
+    mov     edx, TOR_CURVE25519_KEY_LEN
+    call    er_memcpy
+
+    lea     rdi, [rel tor_hs_crypto_buf + 64 + TOR_CURVE25519_KEY_LEN]
+    mov     rsi, r12
+    mov     edx, TOR_HS_INTRO_AUTH_KEY_LEN
+    call    er_memcpy
+
+    lea     rdi, [rel tor_hs_crypto_buf + 64 + TOR_CURVE25519_KEY_LEN + TOR_HS_INTRO_AUTH_KEY_LEN]
+    mov     rsi, r15
+    mov     edx, TOR_HS_CLIENT_PK_LEN
+    call    er_memcpy
+
+    lea     rdi, [rel tor_hs_crypto_buf + 64 + TOR_CURVE25519_KEY_LEN + TOR_HS_INTRO_AUTH_KEY_LEN + TOR_HS_CLIENT_PK_LEN]
+    mov     rsi, r13
+    mov     edx, TOR_HS_ONION_KEY_LEN_NTOR
+    call    er_memcpy
+
+    lea     rdi, [rel tor_hs_crypto_buf + 64 + TOR_CURVE25519_KEY_LEN + TOR_HS_INTRO_AUTH_KEY_LEN + TOR_HS_CLIENT_PK_LEN + TOR_HS_ONION_KEY_LEN_NTOR]
+    lea     rsi, [rel tor_hs_ntor_protoid]
+    mov     edx, TOR_HS_NTOR_PROTOID_LEN
+    call    er_memcpy
+
+    lea     rdi, [rel tor_hs_crypto_buf + 64 + TOR_HS_INTRO_SECRET_LEN]
+    lea     rsi, [rel tor_hs_ntor_t_hsenc]
+    mov     edx, TOR_HS_NTOR_T_HSENC_LEN
+    call    er_memcpy
+
+    lea     rdi, [rel tor_hs_crypto_buf + 64 + TOR_HS_INTRO_SECRET_LEN + TOR_HS_NTOR_T_HSENC_LEN]
+    lea     rsi, [rel tor_hs_ntor_m_hsexpand]
+    mov     edx, TOR_HS_NTOR_M_HSEXPAND_LEN
+    call    er_memcpy
+
+    lea     rdi, [rel tor_hs_crypto_buf + 64 + TOR_HS_INTRO_SECRET_LEN + TOR_HS_NTOR_T_HSENC_LEN + TOR_HS_NTOR_M_HSEXPAND_LEN]
+    mov     rsi, rbp
+    mov     edx, TOR_HS_SUBCRED_LEN
+    call    er_memcpy
+
+    lea     rdi, [rel tor_hs_crypto_buf + 64]
+    mov     esi, TOR_HS_INTRO_KDF_INPUT_LEN
+    mov     rdx, rbx
+    mov     ecx, TOR_HS_INTRO_KEY_MATERIAL_LEN
+    call    er_shake256
+    er_ok
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
+    er_ret
+.fail:
+    mov     eax, -1
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
+    er_ret
+
+; er_tor_hs_build_introduce1_ntor_encrypted(out, auth_key, onion_key, client_priv,
+;                                           client_pub, subcred, plaintext, plaintext_len)
+; Builds CLIENT_PK | AES_256_CTR(ENC_KEY, plaintext) | MAC.
+global er_tor_hs_build_introduce1_ntor_encrypted
+er_fn er_tor_hs_build_introduce1_ntor_encrypted
+    push    rbp
+    mov     rbp, rsp
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+    mov     rbx, rdi        ; out
+    mov     r12, rsi        ; auth_key
+    mov     r13, r8         ; client_pub
+    mov     r14, [rbp + 16] ; plaintext
+    mov     r15d, [rbp + 24] ; plaintext_len
+    test    rbx, rbx
+    jz      .fail
+    test    r14, r14
+    jz      .fail
+    cmp     r15d, TOR_HS_INTRODUCE1_ENCRYPTED_DATA_MAX
+    ja      .fail
+    lea     rdi, [rel tor_hs_crypto_buf + 512]
+    call    er_tor_hs_derive_intro_keys
+    test    eax, eax
+    js      .fail
+
+    mov     rdi, rbx
+    mov     rsi, r13
+    mov     edx, TOR_HS_CLIENT_PK_LEN
+    call    er_memcpy
+
+    lea     rdi, [rbx + TOR_HS_CLIENT_PK_LEN]
+    mov     rsi, r14
+    mov     edx, r15d
+    lea     rcx, [rel tor_hs_crypto_buf + 512]
+    lea     r8, [rel tor_hs_zero_iv]
+    call    er_tor_aes256_ctr
+
+    lea     rdi, [rel tor_hs_crypto_buf + 384]
+    mov     rsi, r12
+    mov     edx, TOR_HS_INTRO_AUTH_KEY_LEN
+    call    er_memcpy
+    mov     byte [rel tor_hs_crypto_buf + 384 + TOR_HS_INTRO_AUTH_KEY_LEN], 0
+    lea     rdi, [rel tor_hs_crypto_buf + 384 + TOR_HS_INTRO_AUTH_KEY_LEN + 1]
+    mov     rsi, r13
+    mov     edx, TOR_HS_CLIENT_PK_LEN
+    call    er_memcpy
+    lea     rdi, [rel tor_hs_crypto_buf + 384 + TOR_HS_INTRO_AUTH_KEY_LEN + 1 + TOR_HS_CLIENT_PK_LEN]
+    lea     rsi, [rbx + TOR_HS_CLIENT_PK_LEN]
+    mov     edx, r15d
+    call    er_memcpy
+
+    lea     rdi, [rbx + TOR_HS_CLIENT_PK_LEN + r15]
+    lea     rsi, [rel tor_hs_ntor_t_hsmac]
+    mov     edx, TOR_HS_NTOR_T_HSMAC_LEN
+    lea     rcx, [rel tor_hs_crypto_buf + 512 + 32]
+    lea     r8, [rel tor_hs_crypto_buf + 384]
+    mov     r9d, TOR_HS_INTRO_AUTH_KEY_LEN + 1 + TOR_HS_CLIENT_PK_LEN
+    add     r9d, r15d
+    call    er_tor_hs_mac32_sha3
+    test    eax, eax
+    js      .fail
+    lea     eax, [r15d + TOR_HS_CLIENT_PK_LEN + TOR_HS_INTRODUCE1_MAC_LEN]
+    er_ok
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
+    er_ret
+.fail:
+    mov     eax, -1
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
     er_ret
 
 ; er_tor_hs_build_establish_intro_v3(out, auth_key, handshake_auth, sig, sig_len)

@@ -6,6 +6,7 @@
 %include "x86_64/crypto/tor_constants.inc"
 
 extern er_tor_aes_ctr
+extern er_tor_aes256_ctr
 extern er_tor_set_role
 extern er_tor_get_role
 extern er_tor_get_role_caps
@@ -17,6 +18,12 @@ failed: dq 0
 
 test_key: db 0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6
           db 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c
+
+test_key256:
+          db 0x60, 0x3d, 0xeb, 0x10, 0x15, 0xca, 0x71, 0xbe
+          db 0x2b, 0x73, 0xae, 0xf0, 0x85, 0x7d, 0x77, 0x81
+          db 0x1f, 0x35, 0x2c, 0x07, 0x3b, 0x61, 0x08, 0xd7
+          db 0x2d, 0x98, 0x10, 0xa3, 0x09, 0x14, 0xdf, 0xf4
 
 test_iv:  db 0xf0, 0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7
           db 0xf8, 0xf9, 0xfa, 0xfb, 0xfc, 0xfd, 0xfe, 0xff
@@ -38,6 +45,16 @@ test_ct:  db 0x87, 0x4d, 0x61, 0x91, 0xb6, 0x20, 0xe3, 0x26
           db 0x5b, 0x4f, 0x09, 0x02, 0x0d, 0xb0, 0x3e, 0xab
           db 0x1e, 0x03, 0x1d, 0xda, 0x2f, 0xbe, 0x03, 0xd1
           db 0x79, 0x21, 0x70, 0xa0, 0xf3, 0x00, 0x9c, 0xee
+
+test_ct256:
+          db 0x60, 0x1e, 0xc3, 0x13, 0x77, 0x57, 0x89, 0xa5
+          db 0xb7, 0xa7, 0xf5, 0x04, 0xbb, 0xf3, 0xd2, 0x28
+          db 0xf4, 0x43, 0xe3, 0xca, 0x4d, 0x62, 0xb5, 0x9a
+          db 0xca, 0x84, 0xe9, 0x90, 0xca, 0xca, 0xf5, 0xc5
+          db 0x2b, 0x09, 0x30, 0xda, 0xa2, 0x3d, 0xe9, 0x4c
+          db 0xe8, 0x70, 0x17, 0xba, 0x2d, 0x84, 0x98, 0x8d
+          db 0xdf, 0xc9, 0xc5, 0x8d, 0xb6, 0x7a, 0xad, 0xa6
+          db 0x13, 0xc2, 0xdd, 0x08, 0x45, 0x79, 0x41, 0xa6
 
 SECTION .bss
 buf:      resb 64
@@ -220,9 +237,66 @@ _start:
     ASSERT eax
 
 ; ================================================================
-; Test 6: Tor role state accepts every defined node role
+; Test 6: AES-256-CTR encrypt — known-answer test
+; NIST SP 800-38A test vector F.5.5 (64 bytes, key=603d...)
 ; ================================================================
     TEST_LABEL "6"
+    lea     rdi, [rel iv_copy]
+    lea     rsi, [rel test_iv]
+    mov     edx, 16
+    call    er_memcpy
+
+    lea     rdi, [rel buf]
+    lea     rsi, [rel test_pt]
+    mov     edx, 64
+    lea     rcx, [rel test_key256]
+    lea     r8,  [rel iv_copy]
+    call    er_tor_aes256_ctr
+
+    lea     rsi, [rel buf]
+    lea     rdi, [rel test_ct256]
+    mov     edx, 64
+    call    _mem_eq
+    ASSERT eax
+
+; ================================================================
+; Test 7: AES-256-CTR roundtrip
+; ================================================================
+    TEST_LABEL "7"
+    lea     rdi, [rel iv_copy]
+    lea     rsi, [rel test_iv]
+    mov     edx, 16
+    call    er_memcpy
+
+    lea     rdi, [rel buf]
+    lea     rsi, [rel test_pt]
+    mov     edx, 64
+    lea     rcx, [rel test_key256]
+    lea     r8,  [rel iv_copy]
+    call    er_tor_aes256_ctr
+
+    lea     rdi, [rel iv_copy]
+    lea     rsi, [rel test_iv]
+    mov     edx, 16
+    call    er_memcpy
+
+    lea     rdi, [rel buf]
+    lea     rsi, [rel buf]
+    mov     edx, 64
+    lea     rcx, [rel test_key256]
+    lea     r8,  [rel iv_copy]
+    call    er_tor_aes256_ctr
+
+    lea     rsi, [rel buf]
+    lea     rdi, [rel test_pt]
+    mov     edx, 64
+    call    _mem_eq
+    ASSERT eax
+
+; ================================================================
+; Test 8: Tor role state accepts every defined node role
+; ================================================================
+    TEST_LABEL "8"
     mov     edi, TOR_ROLE_CLIENT
     call    er_tor_set_role
     ASSERT_EQ eax, 0
@@ -281,9 +355,9 @@ _start:
     ASSERT_EQ eax, TOR_ROLE_HS_RENDEZVOUS
 
 ; ================================================================
-; Test 7: Invalid roles fail without changing current role
+; Test 9: Invalid roles fail without changing current role
 ; ================================================================
-    TEST_LABEL "7"
+    TEST_LABEL "9"
     mov     edi, 0x7fffffff
     call    er_tor_set_role
     ASSERT_EQ eax, -1
