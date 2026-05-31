@@ -130,23 +130,17 @@ shell_bar_count: dq (shell_bar_rects_end - shell_bar_rects) / 60
 ; DA message dispatch table: [msg_type:1][pad:7][handler_ptr:8]
 da_msg_dispatch_table:
     db DA_MSG_SURFACE_REGISTER, 0, 0, 0, 0, 0, 0, 0
-    dd _da_dispatch_register
-    dd 0
+    dq _da_dispatch_register
     db DA_MSG_SURFACE_UPDATE, 0, 0, 0, 0, 0, 0, 0
-    dd _da_dispatch_update
-    dd 0
+    dq _da_dispatch_update
     db DA_MSG_SURFACE_UNREGISTER, 0, 0, 0, 0, 0, 0, 0
-    dd _da_dispatch_unregister
-    dd 0
+    dq _da_dispatch_unregister
     db DA_MSG_LAUNCH_APP, 0, 0, 0, 0, 0, 0, 0
-    dd _da_dispatch_launch
-    dd 0
+    dq _da_dispatch_launch
     db DA_MSG_APP_EXIT, 0, 0, 0, 0, 0, 0, 0
-    dd _da_dispatch_exit
-    dd 0
+    dq _da_dispatch_exit
     db DA_MSG_SURFACE_FOCUS, 0, 0, 0, 0, 0, 0, 0
-    dd _da_dispatch_focus
-    dd 0
+    dq _da_dispatch_focus
 da_msg_dispatch_table_end:
 da_msg_dispatch_count: dq (da_msg_dispatch_table_end - da_msg_dispatch_table) / 16
 
@@ -271,8 +265,7 @@ _da_handler:
 .dispatch_hit:
     mov     rdi, r12
     mov     esi, r13d
-    mov     eax, dword [rax + 8]
-    call    rax
+    call    qword [rax + 8]
     jmp     .done
 
 .unknown:
@@ -622,8 +615,10 @@ _da_unregister_surface:
 ;   [0] type=2 (DA_MSG_SURFACE_UPDATE, already consumed by handler)
 ;   [1] update_flags (DA_UPDATE_* bitmask)
 ;   [2] 32-byte app identity hash
-;   [34] rect_count (u16 LE)
-;   [36] N*60 bytes of rect data (up to 3 rects = 180 bytes)
+;   [34..35] rect_count (u16 LE)
+;   [36..37] icon_count (u16 LE)
+;   [38..39] reserved
+;   [40..] rect bytes then icon bytes
 ; ==================================================================
 _da_update_surface:
     push    rbx
@@ -668,7 +663,7 @@ _da_update_surface:
     test    ecx, ecx
     jz      .us_check_icons          ; no rects to copy
 
-    da_pool_append_from_payload DA_SURFACE_RECT_LEN, DA_SURFACE_RECT_PTR, DA_SURFACE_RECT_CAP, da_surface_rect_pool, DA_SURFACE_POOL_RECTS, (15 * 4), 36
+    da_pool_append_from_payload DA_SURFACE_RECT_LEN, DA_SURFACE_RECT_PTR, DA_SURFACE_RECT_CAP, da_surface_rect_pool, DA_SURFACE_POOL_RECTS, (15 * 4), 40
 
 .us_check_icons:
     ; ── Handle icon updates (same pattern, reserved for future) ──
@@ -686,11 +681,50 @@ _da_update_surface:
     test    bl, DA_UPDATE_APPEND_ICONS | DA_UPDATE_REPLACE_ICONS
     jz      .us_done
 
-    movzx   ecx, word [r12 + LOCAL_CELL_PAYLOAD + 34]
+    movzx   ecx, word [r12 + LOCAL_CELL_PAYLOAD + 36]
     test    ecx, ecx
     jz      .us_done
 
-    da_pool_append_from_payload DA_SURFACE_ICON_LEN, DA_SURFACE_ICON_PTR, DA_SURFACE_ICON_CAP, da_surface_icon_pool, DA_SURFACE_POOL_ICONS, (9 * 4), 36
+    mov     r8d, [r15 + DA_SURFACE_ICON_LEN]
+    mov     edx, DA_SURFACE_POOL_ICONS
+    sub     edx, r8d
+    jle     .us_done
+    cmp     ecx, edx
+    cmova   ecx, edx
+
+    ; dst = icon_pool[slot] + current_len * 36
+    mov     eax, r14d
+    imul    eax, DA_SURFACE_POOL_ICONS * 9 * 4
+    mov     edx, r8d
+    imul    edx, 9 * 4
+    add     eax, edx
+    lea     rdi, [rel da_surface_icon_pool + rax]
+
+    ; src = payload + 40 + rect_count*60
+    movzx   eax, word [r12 + LOCAL_CELL_PAYLOAD + 34]
+    imul    eax, 15 * 4
+    add     eax, 40
+    lea     rsi, [r12 + LOCAL_CELL_PAYLOAD]
+    add     rsi, rax
+
+    mov     r11d, ecx
+    mov     eax, ecx
+    imul    eax, 9 * 4
+    mov     edx, eax
+    call    er_memcpy
+
+    mov     eax, [r15 + DA_SURFACE_ICON_LEN]
+    add     eax, r11d
+    mov     [r15 + DA_SURFACE_ICON_LEN], eax
+
+    mov     eax, r14d
+    imul    eax, DA_SURFACE_POOL_ICONS * 9 * 4
+    lea     rax, [rel da_surface_icon_pool + rax]
+    mov     [r15 + DA_SURFACE_ICON_PTR], rax
+
+    cmp     qword [r15 + DA_SURFACE_ICON_CAP], 0
+    jnz     .us_done
+    mov     qword [r15 + DA_SURFACE_ICON_CAP], DA_SURFACE_POOL_ICONS
 
 .us_done:
     pop     r15
@@ -773,6 +807,43 @@ _da_publish_app_hash:
     ret
 
 ; ==================================================================
+; _da_find_app_by_hash
+; rdi = app_hash_ptr (32 bytes)
+; Returns eax=index, edx=0 on success
+;         edx=ERROR_LOCAL_NOT_FOUND if not found
+; ==================================================================
+_da_find_app_by_hash:
+    push    rbx
+    push    r12
+    mov     r12, rdi
+    xor     ebx, ebx
+.loop:
+    cmp     ebx, [rel da_app_count]
+    jae     .not_found
+    mov     eax, ebx
+    imul    eax, DA_APP_SIZE
+    lea     rdi, [rel da_app_registry + rax + DA_APP_HASH]
+    mov     rsi, r12
+    mov     edx, 32
+    call    er_memcmp
+    test    eax, eax
+    jz      .found
+    inc     ebx
+    jmp     .loop
+.found:
+    mov     eax, ebx
+    er_ok
+    pop     r12
+    pop     rbx
+    ret
+.not_found:
+    xor     eax, eax
+    er_err  ERROR_LOCAL_NOT_FOUND
+    pop     r12
+    pop     rbx
+    ret
+
+; ==================================================================
 ; _da_launch_common — shared launch core
 ; rdi = wasm_bytes_ptr
 ; rsi = wasm_bytes_len
@@ -787,12 +858,47 @@ _da_launch_common:
     push    r13
     push    r14
     push    r15
+    sub     rsp, 32
 
     mov     r12, rdi
     mov     r13, rsi
     mov     r14, rdx
     mov     r15, rcx
 
+    ; Compute app identity hash once.
+    mov     rdi, r12
+    mov     rsi, r13
+    lea     rdx, [rsp]
+    call    er_blake3_hash_bytes
+    test    rax, rax
+    jz      .hash_fail
+
+    ; Single-instance policy: existing hash reuses same app slot.
+    lea     rdi, [rsp]
+    call    _da_find_app_by_hash
+    test    edx, edx
+    jnz     .new_entry
+
+    ; Existing hash found.
+    imul    eax, DA_APP_SIZE
+    lea     r9, [rel da_app_registry + rax]
+    mov     [r9 + DA_APP_SLOT], r8d
+    cmp     byte [r9 + DA_APP_STATE], 1
+    jne     .reuse_entry
+
+    ; Already running: launch means focus existing surface.
+    call    _da_focus_clear_all_flags
+    lea     rdi, [rsp]
+    call    _da_find_surface_by_hash
+    test    edx, edx
+    jnz     .already_running
+    mov     edi, eax
+    call    _da_focus_assign_slot
+.already_running:
+    er_ok
+    jmp     .done
+
+.new_entry:
     mov     ebx, [rel da_app_count]
     cmp     ebx, DA_MAX_APPS
     jae     .full
@@ -800,13 +906,18 @@ _da_launch_common:
     mov     eax, ebx
     imul    eax, DA_APP_SIZE
     lea     r9, [rel da_app_registry + rax]
+    lea     rdi, [r9 + DA_APP_HASH]
+    lea     rsi, [rsp]
+    mov     edx, 32
+    call    er_memcpy
+    inc     dword [rel da_app_count]
 
-    mov     rdi, r12
-    mov     rsi, r13
-    lea     rdx, [r9 + DA_APP_HASH]
-    call    er_blake3_hash_bytes
-    test    rax, rax
-    jz      .hash_fail
+.reuse_entry:
+    ; Existing or new entry now loads/reloads in-place.
+    lea     rdi, [r9 + DA_APP_HASH]
+    lea     rsi, [rsp]
+    mov     edx, 32
+    call    er_memcpy
 
     mov     [r9 + DA_APP_SLOT], r8d
     mov     byte [r9 + DA_APP_STATE], 1
@@ -829,7 +940,6 @@ _da_launch_common:
     jnz     .load_fail
 
     mov     byte [rel da_app_loaded], 1
-    inc     dword [rel da_app_count]
     er_ok
     jmp     .done
 
@@ -845,6 +955,7 @@ _da_launch_common:
     mov     byte [r9 + DA_APP_STATE], 0
 
 .done:
+    add     rsp, 32
     pop     r15
     pop     r14
     pop     r13
@@ -876,25 +987,47 @@ _da_launch_app:
     ret
 
 ; ==================================================================
-; _da_app_exit — mark an app as exited
+; _da_app_exit — mark an app as exited by app hash
 ; rdi = cell_ptr
+; Cell payload: [type=11][hash:32]
 ; ==================================================================
 _da_app_exit:
     push    rbx
+    push    r12
+    push    r13
 
-    mov     ebx, [rel da_app_count]
-    test    ebx, ebx
-    jz      .done
+    lea     r12, [rdi + LOCAL_CELL_PAYLOAD + 1]
+    mov     rdi, r12
+    call    _da_find_app_by_hash
+    test    edx, edx
+    jnz     .done
 
-    dec     ebx
-    mov     eax, ebx
     imul    eax, DA_APP_SIZE
-    lea     rbx, [rel da_app_registry + rax]
-    mov     byte [rbx + DA_APP_STATE], 2
-    ; Clear persistent app state
+    lea     r13, [rel da_app_registry + rax]
+    mov     byte [r13 + DA_APP_STATE], 2
+
+    ; If this app currently has focus, clear focus.
+    lea     rdi, [rel da_focused_hash]
+    mov     rsi, r12
+    mov     edx, 32
+    call    er_memcmp
+    test    eax, eax
+    jnz     .check_loaded
+    call    _da_focus_clear_state
+
+.check_loaded:
+    ; If this app is the currently loaded runtime owner, clear loaded marker.
+    lea     rdi, [rel da_wasm_app_hash]
+    mov     rsi, r12
+    mov     edx, 32
+    call    er_memcmp
+    test    eax, eax
+    jnz     .done
     mov     byte [rel da_app_loaded], 0
 
 .done:
+    pop     r13
+    pop     r12
     pop     rbx
     xor     eax, eax
     er_ok

@@ -245,12 +245,14 @@ _wasm_import_da_surface_update:
     jz      .ret_fail
 
     ; Read params struct from WASM memory
-    ; params layout: update_flags(4), rect_count(4), rect_data(4) = 12 bytes
+    ; params layout: update_flags(4), rect_count(4), rect_data(4), icon_count(4), icon_data(4)
     mov     r12d, edi
     add     r12, r14
     mov     r13d, [r12]        ; r13d = update_flags
     mov     ebx, [r12 + 4]     ; ebx = rect_count
     mov     ecx, [r12 + 8]     ; ecx = rect_data offset
+    mov     r8d, [r12 + 12]    ; r8d = icon_count
+    mov     r9d, [r12 + 16]    ; r9d = icon_data offset
 
     ; Build update cell
     mov     rdi, rbp
@@ -270,25 +272,75 @@ _wasm_import_da_surface_update:
     mov     rdi, rbp
     sub     rdi, 256
     mov     [rdi + LOCAL_CELL_PAYLOAD + 34], bx
+    ; [36-37] icon_count
+    mov     [rdi + LOCAL_CELL_PAYLOAD + 36], r8w
+    ; [38-39] reserved
+    mov     word [rdi + LOCAL_CELL_PAYLOAD + 38], 0
 
-    ; If rect_count > 0, copy rect data from WASM memory
+    ; Clamp rect_count to fit payload budget.
+    ; Header = 40 bytes, payload max = 251 bytes, rect = 60 bytes.
     test    ebx, ebx
-    jz      .send
+    jz      .rect_done
 
     cmp     ebx, 3
-    jbe     .rect_count_ok_update
+    jbe     .rect_count_prelim_ok
     mov     ebx, 3
+.rect_count_prelim_ok:
+    mov     eax, ebx
+    imul    eax, 60
+    cmp     eax, 211               ; 251 - 40
+    jbe     .rect_count_ok_update
+    mov     ebx, 3                 ; defensive
 .rect_count_ok_update:
+    mov     [rdi + LOCAL_CELL_PAYLOAD + 34], bx
 
     mov     eax, ebx
     imul    eax, 60
     mov     edx, eax
-
-    lea     rdi, [rdi + LOCAL_CELL_PAYLOAD + 36]
-
+    lea     rdi, [rdi + LOCAL_CELL_PAYLOAD + 40]
     mov     esi, ecx
     add     rsi, r14
     call    er_memcpy
+.rect_done:
+
+    ; Clamp and copy icon payload after rect bytes.
+    test    r8d, r8d
+    jz      .send
+
+    mov     eax, ebx
+    imul    eax, 60
+    mov     r10d, eax                 ; rect_bytes
+    mov     r11d, 211
+    sub     r11d, r10d                ; remaining bytes
+    jle     .icons_zero
+    mov     eax, r11d
+    xor     edx, edx
+    mov     ecx, 36
+    div     ecx
+    cmp     r8d, eax
+    jbe     .icon_count_ok
+    mov     r8d, eax
+.icon_count_ok:
+    mov     rdi, rbp
+    sub     rdi, 256
+    mov     [rdi + LOCAL_CELL_PAYLOAD + 36], r8w
+
+    test    r8d, r8d
+    jz      .send
+    lea     rdi, [rdi + LOCAL_CELL_PAYLOAD + 40]
+    add     rdi, r10
+    mov     esi, r9d
+    add     rsi, r14
+    mov     eax, r8d
+    imul    eax, 36
+    mov     edx, eax
+    call    er_memcpy
+    jmp     .send
+
+.icons_zero:
+    mov     rdi, rbp
+    sub     rdi, 256
+    mov     word [rdi + LOCAL_CELL_PAYLOAD + 36], 0
 
 .send:
     mov     rdi, rbp

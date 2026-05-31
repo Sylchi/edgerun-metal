@@ -77,6 +77,8 @@ extern er_ax210_fw_get_blob
 extern er_ax210_fw_prepare_upload
 extern er_ax210_mmio_probe
 extern er_ax210_read_mac_csr
+extern er_rtl8922_probe_init
+extern er_rtl8922_mmio_probe
 extern er_nvme_probe
 extern er_nvme_init
 extern er_nvme_print_info
@@ -250,6 +252,10 @@ check_wifi_mmio_ok: db " mmio ", 0
 check_wifi_mmio_bad: db " mmio bad", 0
 check_wifi_mac: db " mac ", 0
 check_wifi_mac_bad: db " mac bad", 0
+check_wifi_rtl8922: db "check: wifi rtl8922 ", 0
+check_wifi_rtl8922_bar: db " bar ", 0
+check_wifi_rtl8922_mmio: db " mmio ", 0
+check_wifi_rtl8922_bad: db " mmio bad", 0
 check_abs:     db "absent", 0
 check_virtio_net: db "check: virtio_net ", 0
 check_amdgpu:  db "check: amdgpu ", 0
@@ -341,6 +347,9 @@ ax210_fw_ptr:  resq 1
 ax210_fw_size: resq 1
 ax210_mmio_probe: resd 1
 ax210_mac: resb 6
+rtl8922_present: resb 1
+rtl8922_bar: resq 1
+rtl8922_mmio_probe: resd 1
 
 %define VIRTIO_NET_STORAGE_size 4900
 virtio_net_dev:      resb VIRTIO_NET_DEVICE_size
@@ -1465,6 +1474,69 @@ er_fn er_kernel_main
     lea     rsi, [rel check_abs]
     call    er_serial_puts
 .wifi_done:
+    call    .crlf
+    add     rsp, 3
+
+    ; ─── Realtek RTL8922 Wi-Fi (PCIe) ───────────────────────────────
+    mov     byte [rtl8922_present], 0
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_wifi_rtl8922]
+    call    er_serial_puts
+    sub     rsp, 3
+    mov     rdi, rsp
+    lea     rsi, [rsp + 1]
+    lea     rdx, [rsp + 2]
+    lea     rcx, [rel rtl8922_bar]
+    call    er_rtl8922_probe_init
+    test    eax, eax
+    jz      .wifi_rtl8922_absent
+    mov     byte [rtl8922_present], 1
+    movzx   esi, byte [rsp]
+    mov     rdi, COM1_PORT
+    call    er_serial_putdec32
+    mov     rdi, COM1_PORT
+    mov     sil, ':'
+    call    er_serial_putchar
+    movzx   esi, byte [rsp + 1]
+    mov     rdi, COM1_PORT
+    call    er_serial_putdec32
+    mov     rdi, COM1_PORT
+    mov     sil, '.'
+    call    er_serial_putchar
+    movzx   esi, byte [rsp + 2]
+    mov     rdi, COM1_PORT
+    call    er_serial_putdec32
+    mov     rdi, COM1_PORT
+    mov     sil, ' '
+    call    er_serial_putchar
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_wifi_rtl8922_bar]
+    call    er_serial_puts
+    mov     rdi, COM1_PORT
+    mov     esi, [rel rtl8922_bar]
+    call    er_serial_puthex32
+    mov     rdi, [rel rtl8922_bar]
+    lea     rsi, [rel rtl8922_mmio_probe]
+    call    er_rtl8922_mmio_probe
+    test    eax, eax
+    jnz     .wifi_rtl8922_bad
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_wifi_rtl8922_mmio]
+    call    er_serial_puts
+    mov     rdi, COM1_PORT
+    mov     esi, [rel rtl8922_mmio_probe]
+    call    er_serial_puthex32
+    jmp     .wifi_rtl8922_done
+.wifi_rtl8922_bad:
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_wifi_rtl8922_bad]
+    call    er_serial_puts
+    jmp     .wifi_rtl8922_done
+.wifi_rtl8922_absent:
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_abs]
+    call    er_serial_puts
+.wifi_rtl8922_done:
     call    .crlf
     add     rsp, 3
 

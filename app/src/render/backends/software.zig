@@ -2026,15 +2026,46 @@ fn scaleAlphaByte(tint: u8, sample: u8) u8 {
 }
 
 fn sampleRgba(texture: RgbaTexture, u: f32, v: f32) ui.Color {
-    const x = @min(@as(usize, @intFromFloat(u * @as(f32, @floatFromInt(texture.width)))), texture.width - 1);
-    const y = @min(@as(usize, @intFromFloat(v * @as(f32, @floatFromInt(texture.height)))), texture.height - 1);
-    return texture.pixels[y * texture.width + x];
+    if (texture.width == 1 and texture.height == 1) return texture.pixels[0];
+    const max_x = texture.width - 1;
+    const max_y = texture.height - 1;
+    const fx = math.clampF(u, 0.0, 1.0) * @as(f32, @floatFromInt(max_x));
+    const fy = math.clampF(v, 0.0, 1.0) * @as(f32, @floatFromInt(max_y));
+    const x0 = @min(@as(usize, @intFromFloat(math.floorF(fx))), max_x);
+    const y0 = @min(@as(usize, @intFromFloat(math.floorF(fy))), max_y);
+    const x1 = @min(x0 + 1, max_x);
+    const y1 = @min(y0 + 1, max_y);
+    const tx = fx - @as(f32, @floatFromInt(x0));
+    const ty = fy - @as(f32, @floatFromInt(y0));
+    const c00 = texture.pixels[y0 * texture.width + x0];
+    const c10 = texture.pixels[y0 * texture.width + x1];
+    const c01 = texture.pixels[y1 * texture.width + x0];
+    const c11 = texture.pixels[y1 * texture.width + x1];
+    return .{
+        .r = sampleChannel(c00.r, c10.r, c01.r, c11.r, tx, ty),
+        .g = sampleChannel(c00.g, c10.g, c01.g, c11.g, tx, ty),
+        .b = sampleChannel(c00.b, c10.b, c01.b, c11.b, tx, ty),
+        .a = sampleChannel(c00.a, c10.a, c01.a, c11.a, tx, ty),
+    };
 }
 
 fn sampleAlpha(atlas: AlphaAtlas, u: f32, v: f32) u8 {
-    const x = @min(@as(usize, @intFromFloat(u * @as(f32, @floatFromInt(atlas.width)))), atlas.width - 1);
-    const y = @min(@as(usize, @intFromFloat(v * @as(f32, @floatFromInt(atlas.height)))), atlas.height - 1);
-    return atlas.alpha[y * atlas.width + x];
+    if (atlas.width == 1 and atlas.height == 1) return atlas.alpha[0];
+    const max_x = atlas.width - 1;
+    const max_y = atlas.height - 1;
+    const fx = math.clampF(u, 0.0, 1.0) * @as(f32, @floatFromInt(max_x));
+    const fy = math.clampF(v, 0.0, 1.0) * @as(f32, @floatFromInt(max_y));
+    const x0 = @min(@as(usize, @intFromFloat(math.floorF(fx))), max_x);
+    const y0 = @min(@as(usize, @intFromFloat(math.floorF(fy))), max_y);
+    const x1 = @min(x0 + 1, max_x);
+    const y1 = @min(y0 + 1, max_y);
+    const tx = fx - @as(f32, @floatFromInt(x0));
+    const ty = fy - @as(f32, @floatFromInt(y0));
+    const a00 = atlas.alpha[y0 * atlas.width + x0];
+    const a10 = atlas.alpha[y0 * atlas.width + x1];
+    const a01 = atlas.alpha[y1 * atlas.width + x0];
+    const a11 = atlas.alpha[y1 * atlas.width + x1];
+    return sampleChannel(a00, a10, a01, a11, tx, ty);
 }
 
 fn sampleChannel(a00: u8, a10: u8, a01: u8, a11: u8, tx: f32, ty: f32) u8 {
