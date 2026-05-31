@@ -35,29 +35,13 @@ er_fn er_fn_run
     test    rdx, rdx
     jnz     .error
 
-    ; Find the export
+    ; Resolve export to function index
     mov     rdi, r15
     mov     rsi, [rbp - 48]
-    call    er_wasm_find_export
+    call    _er_wasm_resolve_export_function_index
     test    rdx, rdx
     jnz     .error
-
-    ; er_wasm_find_export returns the export entry index.
-    ; We must look up the actual function index from the export entry.
-    mov     r15, rax        ; export_index
-    push    r10
-    mov     r10, r15
-    imul    r10, EXPORT_SIZE
-    movzx   eax, byte [exports_buf + r10 + 16]  ; kind
-    cmp     al, 0x00        ; function kind
-    jne     .error          ; not a function export
-    mov     r15, [exports_buf + r10 + 24]   ; function index
-    pop     r10
-
-    ; Apply data segments
-    mov     rdi, [runtime_memory_ptr]
-    mov     rsi, [executor_memory_pages]
-    call    er_wasm_apply_data_segments
+    mov     r15, rax
 
     ; Execute exported function
     mov     rdi, r15
@@ -309,6 +293,31 @@ _er_wasm_prime_loaded_module:
     ret
 
 ; ==================================================================
+; _er_wasm_resolve_export_function_index
+; rdi = export_name_ptr, rsi = export_name_len
+; Returns: rax=function_index, rdx=0 on success
+;          rdx=ERROR_MISSING_EXPORT on lookup/kind mismatch
+; ==================================================================
+_er_wasm_resolve_export_function_index:
+    call    er_wasm_find_export
+    test    rdx, rdx
+    jnz     .done
+
+    mov     rbx, rax
+    imul    rbx, EXPORT_SIZE
+    movzx   eax, byte [exports_buf + rbx + 16]
+    cmp     al, 0x00
+    jne     .not_function
+    mov     rax, [exports_buf + rbx + 24]
+    er_ok
+    ret
+
+.not_function:
+    er_err  ERROR_MISSING_EXPORT
+.done:
+    ret
+
+; ==================================================================
 ; er_fn_call — Call an exported function of a loaded module
 ; rdi = runtime_ptr, rsi = export_name_ptr, rdx = export_name_len
 ; Returns: rax = result value, rdx = error code
@@ -331,20 +340,13 @@ er_fn er_fn_call
     ; Update runtime pointer for import wrappers
     mov     [rel er_wasm_runtime_ptr], r12
 
-    ; Find the export
+    ; Resolve export to function index
     mov     rdi, r13
     mov     rsi, r14
-    call    er_wasm_find_export
+    call    _er_wasm_resolve_export_function_index
     test    rdx, rdx
     jnz     .error
-
-    ; Get function index from export entry
-    mov     rbx, rax        ; export_index
-    imul    rbx, EXPORT_SIZE
-    movzx   eax, byte [exports_buf + rbx + 16]  ; kind
-    cmp     al, 0x00        ; function kind
-    jne     .error_kind
-    mov     rbx, [exports_buf + rbx + 24]   ; function index
+    mov     rbx, rax
 
     ; Execute the function
     mov     rdi, rbx
@@ -357,11 +359,6 @@ er_fn er_fn_call
     ; Return result
     mov     rax, [exec_result_values]
     xor     edx, edx
-    jmp     .done
-
-.error_kind:
-    xor     eax, eax
-    mov     edx, ERROR_MISSING_EXPORT
     jmp     .done
 
 .error:

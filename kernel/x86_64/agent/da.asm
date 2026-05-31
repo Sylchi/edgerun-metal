@@ -439,7 +439,7 @@ _da_register_surface:
     lea     rbx, [rel da_surface_registry + rax]
 
     ; Zero the slot
-    mov     edi, ebx
+    mov     rdi, rbx
     xor     esi, esi
     mov     edx, DA_SURFACE_SIZE
     call    er_memset
@@ -526,25 +526,80 @@ _da_register_surface:
 _da_unregister_surface:
     push    rbx
     push    r12
+    push    r13
+    push    r14
 
     lea     rdi, [rdi + LOCAL_CELL_PAYLOAD + 5]
     call    _da_find_surface_by_hash
     test    edx, edx
     jnz     .done
 
-    ; Shift remaining surfaces down to fill the gap
-    mov     ebx, eax
-    mov     eax, ebx
-    imul    eax, DA_SURFACE_SIZE
-    lea     rdi, [rel da_surface_registry + rax]
+    mov     r13d, eax                          ; removed slot
+    mov     r14d, [rel da_surface_count]
+    dec     r14d                               ; last occupied slot
+    mov     r12d, [rel da_focused_slot]        ; focused slot before mutation
 
-    ; Zero the slot
+    ; If removed slot is not last, move last slot into removed slot.
+    cmp     r13d, r14d
+    je      .clear_removed
+
+    ; Copy surface entry bytes: dst=removed, src=last
+    mov     edi, r13d
+    call    _da_surface_ptr_by_slot
+    mov     rbx, rax                           ; dst surface entry
+    mov     edi, r14d
+    call    _da_surface_ptr_by_slot
+    mov     rsi, rax                           ; src surface entry
+    mov     rdi, rbx
+    mov     edx, DA_SURFACE_SIZE
+    call    er_memcpy
+
+    ; Copy rect pool bytes for moved slot
+    mov     eax, r13d
+    imul    eax, DA_SURFACE_POOL_RECTS * 15 * 4
+    lea     rdi, [rel da_surface_rect_pool + rax]
+    mov     eax, r14d
+    imul    eax, DA_SURFACE_POOL_RECTS * 15 * 4
+    lea     rsi, [rel da_surface_rect_pool + rax]
+    mov     edx, DA_SURFACE_POOL_RECTS * 15 * 4
+    call    er_memcpy
+
+    ; Copy icon pool bytes for moved slot
+    mov     eax, r13d
+    imul    eax, DA_SURFACE_POOL_ICONS * 9 * 4
+    lea     rdi, [rel da_surface_icon_pool + rax]
+    mov     eax, r14d
+    imul    eax, DA_SURFACE_POOL_ICONS * 9 * 4
+    lea     rsi, [rel da_surface_icon_pool + rax]
+    mov     edx, DA_SURFACE_POOL_ICONS * 9 * 4
+    call    er_memcpy
+
+    ; Rebind moved entry's pool pointers to the new slot pools.
+    mov     eax, r13d
+    imul    eax, DA_SURFACE_POOL_RECTS * 15 * 4
+    lea     rdx, [rel da_surface_rect_pool + rax]
+    mov     [rbx + DA_SURFACE_RECT_PTR], rdx
+    mov     eax, r13d
+    imul    eax, DA_SURFACE_POOL_ICONS * 9 * 4
+    lea     rdx, [rel da_surface_icon_pool + rax]
+    mov     [rbx + DA_SURFACE_ICON_PTR], rdx
+
+    ; If focus pointed at the moved last slot, remap to removed slot.
+    cmp     r12d, r14d
+    jne     .clear_removed
+    mov     dword [rel da_focused_slot], r13d
+
+ .clear_removed:
+    ; Clear old last slot entry.
+    mov     edi, r14d
+    call    _da_surface_ptr_by_slot
+    mov     rdi, rax
     xor     esi, esi
     mov     edx, DA_SURFACE_SIZE
     call    er_memset
 
-    ; If this was the focused surface, clear focus
-    cmp     ebx, [rel da_focused_slot]
+    ; If removed slot was focused (and not remapped above), clear focus.
+    cmp     r12d, r13d
     jne     .no_focus_clear
     call    _da_focus_clear_state
 .no_focus_clear:
@@ -552,6 +607,8 @@ _da_unregister_surface:
     dec     dword [rel da_surface_count]
 
 .done:
+    pop     r14
+    pop     r13
     pop     r12
     pop     rbx
     xor     eax, eax

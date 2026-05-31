@@ -104,10 +104,16 @@ pub fn renderFrameToViewport(gl: State, logical_width: i32, logical_height: i32,
     gl.gles.glClear(gles_gl.gl_color_buffer_bit);
     const scale = viewportScale(logical_width, logical_height, framebuffer_width, framebuffer_height);
     try drawRects(gl, logical_width, logical_height, scale, buffers.liveRects());
+    try drawText(gl, logical_width, logical_height, buffers.liveTextVertices());
     try drawImage(gl, logical_width, logical_height, buffers.liveImageVertices());
     try drawIconLines(gl, logical_width, logical_height, buffers.liveIconLineVertices());
     try drawRects(gl, logical_width, logical_height, scale, buffers.liveOverlayRects());
     try drawIconLines(gl, logical_width, logical_height, buffers.liveOverlayIconLineVertices());
+}
+
+fn drawText(gl: State, width: i32, height: i32, values: []const f32) !void {
+    if (values.len == 0) return;
+    try drawTexturedWithProgram(gl, width, height, values, gl.font_texture, gl.textured_program);
 }
 
 fn drawImage(gl: State, width: i32, height: i32, values: []const f32) !void {

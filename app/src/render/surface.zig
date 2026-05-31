@@ -289,6 +289,7 @@ pub fn dirtyTilesMarkIrBuffers(plan: TilePlan, buffers: renderer_ir.Buffers, til
     for (renderer_ir.drawBatches(buffers)) |batch| {
         const marked = switch (batch) {
             .rects, .overlay_rects => |rects| dirtyTilesMarkIrRects(plan, rects, tile_marks, list),
+            .text => |vertices| dirtyTilesMarkIrTextured(plan, vertices, tile_marks, list),
             .image => |vertices| dirtyTilesMarkIrTextured(plan, vertices, tile_marks, list),
             .svg, .overlay_icon => |icons| dirtyTilesMarkIrIcons(plan, icons, tile_marks, list),
             .icon_lines, .overlay_icon_lines => true,

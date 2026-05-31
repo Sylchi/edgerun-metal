@@ -370,6 +370,7 @@ fn encodeIrBuffers(
 ) Error!void {
     for (renderer_ir.drawBatches(buffers)) |batch| switch (batch) {
         .rects, .overlay_rects => |rects| try encodeIrRects(rects, out),
+        .text => |vertices| try encodeIrTextured(.text_quad, vertices, out),
         .image => |vertices| try encodeIrTextured(.image_quad, vertices, out),
         .svg, .overlay_icon => |instances| try encodeIrIcons(instances, out),
         .icon_lines, .overlay_icon_lines => {},

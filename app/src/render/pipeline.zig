@@ -152,8 +152,8 @@ pub fn packTextQuads(buffers: renderer_ir.Buffers, font_atlas: *renderer_font_at
                         @max(1.0, @round(gy + glyph_value.h) - @round(gy)),
                     );
                     try renderer_ir.pushClippedTexturedQuad(
-                        buffers.image_vertices,
-                        buffers.image_vertex_len,
+                        buffers.text_vertices,
+                        buffers.text_vertex_len,
                         snapped,
                         snapped,
                         glyph_value.u0,

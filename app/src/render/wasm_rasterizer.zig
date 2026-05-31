@@ -23,6 +23,7 @@ var last_error: ErrorCode = .ok;
 var rect_len: usize = 0;
 var icon_vertex_len: usize = 0;
 var icon_line_vertex_len: usize = 0;
+var text_vertex_len: usize = 0;
 var image_vertex_len: usize = 0;
 var overlay_rect_len: usize = 0;
 var overlay_icon_vertex_len: usize = 0;
@@ -66,12 +67,13 @@ pub fn rasterize(
     const rects = sliceOrEmpty(f32, rect_ptr, rect_cap);
     const icon_vertices = sliceOrEmpty(f32, icon_ptr, icon_cap);
     const icon_line_vertices = sliceOrEmpty(f32, icon_line_ptr, icon_line_cap);
-    const image_vertices = sliceOrEmpty(f32, image_ptr, image_cap);
+    const text_vertices = sliceOrEmpty(f32, image_ptr, image_cap);
 
     rect_len = rect_filled;
     icon_vertex_len = icon_filled;
     icon_line_vertex_len = icon_line_filled;
-    image_vertex_len = image_filled;
+    text_vertex_len = image_filled;
+    image_vertex_len = 0;
     overlay_rect_len = 0;
     overlay_icon_vertex_len = 0;
     overlay_icon_line_vertex_len = 0;
@@ -83,7 +85,9 @@ pub fn rasterize(
         .icon_vertex_len = &icon_vertex_len,
         .icon_line_vertices = icon_line_vertices,
         .icon_line_vertex_len = &icon_line_vertex_len,
-        .image_vertices = image_vertices,
+        .text_vertices = text_vertices,
+        .text_vertex_len = &text_vertex_len,
+        .image_vertices = &[_]f32{},
         .image_vertex_len = &image_vertex_len,
         .overlay_rects = &[_]f32{},
         .overlay_rect_len = &overlay_rect_len,
@@ -130,7 +134,7 @@ pub export fn er_wasm_rasterizer_last_error() u32 {
 }
 
 pub export fn er_wasm_rasterizer_state_size() u32 {
-    return @sizeOf(@TypeOf(rect_len)) * 7 +
+    return @sizeOf(@TypeOf(rect_len)) * 8 +
         @sizeOf(@TypeOf(frame_width)) * 2 +
         @sizeOf(@TypeOf(last_error));
 }

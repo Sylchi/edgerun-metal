@@ -89,6 +89,7 @@ pub fn renderFrame(gl: *State, width: i32, height: i32, scale: f32, buffers: ren
     wasm_gl.glViewport(0, 0, width, height);
     wasm_gl.glClear(wasm_gl.gl_color_buffer_bit);
     try drawRects(gl, width, height, scale, buffers.liveRects());
+    drawText(gl, width, height, buffers.liveTextVertices());
     drawImage(gl, width, height, buffers.liveImageVertices());
     drawIconLines(gl, width, height, buffers.liveIconLineVertices());
     try drawRects(gl, width, height, scale, buffers.liveOverlayRects());
@@ -132,6 +133,11 @@ fn rectDrawBounds(rect: anytype) ui.Rect {
         .shadow => rect.bounds.insetUniform(-rect.shadow),
         .fill, .border, .linear_gradient, .pie_slice => rect.bounds,
     };
+}
+
+fn drawText(gl: *State, width: i32, height: i32, values: []const f32) void {
+    if (values.len == 0) return;
+    drawTextured(gl, width, height, values, gl.font_texture, gl.textured_program);
 }
 
 fn drawImage(gl: *State, width: i32, height: i32, values: []const f32) void {

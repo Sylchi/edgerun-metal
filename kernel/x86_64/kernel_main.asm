@@ -76,6 +76,7 @@ extern er_ax210_probe_init
 extern er_ax210_fw_get_blob
 extern er_ax210_fw_prepare_upload
 extern er_ax210_mmio_probe
+extern er_ax210_read_mac_csr
 extern er_nvme_probe
 extern er_nvme_init
 extern er_nvme_print_info
@@ -247,6 +248,8 @@ check_wifi_tlv_ok: db " tlv ok", 0
 check_wifi_tlv_bad: db " tlv bad", 0
 check_wifi_mmio_ok: db " mmio ", 0
 check_wifi_mmio_bad: db " mmio bad", 0
+check_wifi_mac: db " mac ", 0
+check_wifi_mac_bad: db " mac bad", 0
 check_abs:     db "absent", 0
 check_virtio_net: db "check: virtio_net ", 0
 check_amdgpu:  db "check: amdgpu ", 0
@@ -337,6 +340,7 @@ ax210_bar0:    resq 1
 ax210_fw_ptr:  resq 1
 ax210_fw_size: resq 1
 ax210_mmio_probe: resd 1
+ax210_mac: resb 6
 
 %define VIRTIO_NET_STORAGE_size 4900
 virtio_net_dev:      resb VIRTIO_NET_DEVICE_size
@@ -1396,6 +1400,32 @@ er_fn er_kernel_main
     mov     rdi, COM1_PORT
     mov     esi, [rel ax210_mmio_probe]
     call    er_serial_puthex32
+    mov     rdi, [rel ax210_bar0]
+    lea     rsi, [rel ax210_mac]
+    call    er_ax210_read_mac_csr
+    test    eax, eax
+    jnz     .wifi_mac_bad
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_wifi_mac]
+    call    er_serial_puts
+    lea     rbx, [rel ax210_mac]
+    mov     ecx, 6
+.wifi_mac_loop:
+    mov     rdi, COM1_PORT
+    movzx   esi, byte [rbx]
+    call    .print_hex8
+    inc     rbx
+    dec     ecx
+    jz      .wifi_done
+    mov     rdi, COM1_PORT
+    mov     sil, ':'
+    call    er_serial_putchar
+    jmp     .wifi_mac_loop
+
+.wifi_mac_bad:
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_wifi_mac_bad]
+    call    er_serial_puts
     jmp     .wifi_done
 .wifi_tlv_bad:
     mov     rdi, COM1_PORT
@@ -1408,6 +1438,22 @@ er_fn er_kernel_main
     lea     rsi, [rel check_wifi_mmio_bad]
     call    er_serial_puts
     jmp     .wifi_done
+
+; rdi = COM port, esi = byte value (0..255)
+.print_hex8:
+    push    rbx
+    mov     edx, esi
+    mov     ebx, edx
+    shr     ebx, 4
+    and     ebx, 0xF
+    movzx   esi, byte [rel ov_hex + rbx]
+    call    er_serial_putchar
+    mov     ebx, edx
+    and     ebx, 0xF
+    movzx   esi, byte [rel ov_hex + rbx]
+    call    er_serial_putchar
+    pop     rbx
+    ret
 
 .wifi_fw_missing:
     mov     rdi, COM1_PORT

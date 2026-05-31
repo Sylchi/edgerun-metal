@@ -17,6 +17,7 @@ extern er_mmio_read32
 %define IWL_HDR_MAGIC1 0x0A4C5749    ; "IWL\n" little-endian
 %define AX210_FW_MIN_SIZE 64
 %define AX210_FW_TLV_OFF  0x50
+%define AX210_MAC_CSR_BASE 0x380
 
 SECTION .text
 
@@ -303,6 +304,142 @@ er_fn er_ax210_mmio_probe
 .mmio_bad:
     er_err  ERROR_NOT_PRESENT
     mov     eax, -1
+    ret
+
+; ==================================================================
+; er_ax210_read_mac_csr — read hardware MAC from CSR strap/otp registers
+; int er_ax210_read_mac_csr(uint64_t bar0, uint8_t* out_mac6)
+;
+; AX210 uses mac_addr_from_csr = 0x380:
+;   STRAP: +0x0/+0x4, OTP fallback: +0x8/+0xC
+; Returns: eax = 0 success, -1 failure (invalid/not-present)
+; ==================================================================
+er_fn er_ax210_read_mac_csr
+    push    r12
+    push    r13
+    push    r14
+    test    rdi, rdi
+    jz      .mac_bad_arg
+    test    rsi, rsi
+    jz      .mac_bad_arg
+    mov     r12, rdi            ; bar0
+    mov     r13, rsi            ; out_mac
+
+    ; Read strap pair first.
+    lea     rdi, [r12 + AX210_MAC_CSR_BASE + 0x0]
+    call    er_mmio_read32
+    mov     r14d, eax           ; mac_addr0
+    lea     rdi, [r12 + AX210_MAC_CSR_BASE + 0x4]
+    call    er_mmio_read32
+    mov     edx, eax            ; mac_addr1
+    mov     edi, r14d
+    mov     esi, edx
+    mov     rdx, r13
+    call    _ax210_flip_hw_address
+    mov     rdi, r13
+    call    _ax210_mac_is_valid
+    test    eax, eax
+    jnz     .mac_ok
+
+    ; Fallback to otp pair.
+    lea     rdi, [r12 + AX210_MAC_CSR_BASE + 0x8]
+    call    er_mmio_read32
+    mov     r14d, eax
+    lea     rdi, [r12 + AX210_MAC_CSR_BASE + 0xC]
+    call    er_mmio_read32
+    mov     edx, eax
+    mov     edi, r14d
+    mov     esi, edx
+    mov     rdx, r13
+    call    _ax210_flip_hw_address
+    mov     rdi, r13
+    call    _ax210_mac_is_valid
+    test    eax, eax
+    jz      .mac_bad
+
+.mac_ok:
+    er_ok
+    xor     eax, eax
+    jmp     .mac_out
+
+.mac_bad_arg:
+    er_err  ERROR_BAD_ARGUMENT
+    mov     eax, -1
+    jmp     .mac_out
+
+.mac_bad:
+    er_err  ERROR_NOT_PRESENT
+    mov     eax, -1
+
+.mac_out:
+    pop     r14
+    pop     r13
+    pop     r12
+    ret
+
+; _ax210_flip_hw_address(uint32_t mac_addr0, uint32_t mac_addr1, uint8_t* out)
+_ax210_flip_hw_address:
+    mov     eax, edi
+    shr     eax, 24
+    mov     [rdx + 0], al
+    mov     eax, edi
+    shr     eax, 16
+    mov     [rdx + 1], al
+    mov     eax, edi
+    shr     eax, 8
+    mov     [rdx + 2], al
+    mov     eax, edi
+    mov     [rdx + 3], al
+    mov     eax, esi
+    shr     eax, 8
+    mov     [rdx + 4], al
+    mov     eax, esi
+    mov     [rdx + 5], al
+    ret
+
+; _ax210_mac_is_valid(uint8_t* mac) -> eax=1 valid, 0 invalid
+_ax210_mac_is_valid:
+    movzx   eax, byte [rdi + 0]
+    movzx   ecx, byte [rdi + 1]
+    or      eax, ecx
+    movzx   ecx, byte [rdi + 2]
+    or      eax, ecx
+    movzx   ecx, byte [rdi + 3]
+    or      eax, ecx
+    movzx   ecx, byte [rdi + 4]
+    or      eax, ecx
+    movzx   ecx, byte [rdi + 5]
+    or      eax, ecx
+    jz      .invalid
+
+    movzx   eax, byte [rdi + 0]
+    cmp     eax, 0xFF
+    jne     .check_mcast
+    movzx   eax, byte [rdi + 1]
+    cmp     eax, 0xFF
+    jne     .check_mcast
+    movzx   eax, byte [rdi + 2]
+    cmp     eax, 0xFF
+    jne     .check_mcast
+    movzx   eax, byte [rdi + 3]
+    cmp     eax, 0xFF
+    jne     .check_mcast
+    movzx   eax, byte [rdi + 4]
+    cmp     eax, 0xFF
+    jne     .check_mcast
+    movzx   eax, byte [rdi + 5]
+    cmp     eax, 0xFF
+    je      .invalid
+
+.check_mcast:
+    movzx   eax, byte [rdi + 0]
+    test    eax, 1
+    jnz     .invalid
+    mov     eax, 1
+    ret
+
+.invalid:
+    xor     eax, eax
     ret
 
 SECTION .bss

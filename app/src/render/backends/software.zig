@@ -150,32 +150,31 @@ pub const Surface = struct {
 
     pub fn rasterizeIr(self: Surface, buffers: renderer_ir.Buffers) Error!void {
         renderer_ir.validateBuffers(buffers) catch return error.InvalidIrBuffer;
-        if (buffers.hasImageVertices()) return error.UnsupportedIrPrimitive;
+        if (buffers.hasTextVertices() or buffers.hasImageVertices()) return error.UnsupportedIrPrimitive;
         for (renderer_ir.drawBatches(buffers)) |batch| switch (batch) {
             .rects, .overlay_rects => |rects| try self.rasterizeIrRects(rects),
             .svg, .overlay_icon => |icons| try self.rasterizeIrIcons(icons),
-            .image, .icon_lines, .overlay_icon_lines => {},
+            .text, .image, .icon_lines, .overlay_icon_lines => {},
         };
     }
 
     pub fn rasterizeIrWithResources(self: Surface, buffers: renderer_ir.Buffers, resources: IrResources) Error!void {
         renderer_ir.validateBuffers(buffers) catch return error.InvalidIrBuffer;
-        const image_texture = if (!buffers.hasImageVertices())
-            null
-        else
-            resources.image;
-        if (image_texture) |texture| if (!texture.valid()) return error.InvalidIrResource;
+        const needs_text = buffers.hasTextVertices();
+        const needs_image = buffers.hasImageVertices();
+        if (needs_text and !resources.font.valid()) return error.InvalidIrResource;
+        const image_texture = if (!needs_image) null else resources.image orelse return error.InvalidIrResource;
+        if (image_texture) |texture| {
+            if (!texture.valid()) return error.InvalidIrResource;
+        }
 
         for (renderer_ir.drawBatches(buffers)) |batch| switch (batch) {
             .rects, .overlay_rects => |rects| try self.rasterizeIrRects(rects),
+            .text => |vertices| {
+                if (vertices.len != 0) try self.rasterizeAlphaTexturedQuads(vertices, resources.font);
+            },
             .image => |vertices| {
-                if (image_texture) |texture| {
-                    try self.rasterizeRgbaTexturedQuads(vertices, texture);
-                } else if (resources.font.valid()) {
-                    try self.rasterizeAlphaTexturedQuads(vertices, resources.font);
-                } else {
-                    return error.InvalidIrResource;
-                }
+                if (vertices.len != 0) try self.rasterizeRgbaTexturedQuads(vertices, image_texture.?);
             },
             .svg, .overlay_icon => |icons| try self.rasterizeIrIcons(icons),
             .icon_lines, .overlay_icon_lines => {},

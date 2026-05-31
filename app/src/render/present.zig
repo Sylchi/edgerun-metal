@@ -108,12 +108,12 @@ pub const Frame = struct {
 pub fn validateResources(buffers: renderer_ir.Buffers, resources: Resources) Error!void {
     const required = bufferRequirements(buffers);
     if (required.font_atlas and !resources.font_atlas) return error.MissingFontAtlas;
-    if (required.image_texture and !resources.image_texture and !resources.font_atlas) return error.MissingImageTexture;
+    if (required.image_texture and !resources.image_texture) return error.MissingImageTexture;
 }
 
 pub fn bufferRequirements(buffers: renderer_ir.Buffers) Requirements {
     return .{
-        .font_atlas = false,
+        .font_atlas = buffers.text_vertex_len.* != 0,
         .image_texture = buffers.image_vertex_len.* != 0,
     };
 }
