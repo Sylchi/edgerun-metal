@@ -3,8 +3,12 @@
 ; No libc, no external dependencies beyond runtime.o. Exits via syscall.
 
 %include "x86_64/macros.inc"
+%include "x86_64/crypto/tor_constants.inc"
 
 extern er_tor_aes_ctr
+extern er_tor_set_role
+extern er_tor_get_role
+extern er_tor_get_role_caps
 extern er_memcpy
 
 SECTION .data
@@ -38,6 +42,10 @@ test_ct:  db 0x87, 0x4d, 0x61, 0x91, 0xb6, 0x20, 0xe3, 0x26
 SECTION .bss
 buf:      resb 64
 iv_copy:  resb 16
+bench_buf: resb TOR_CELL_LEN
+tor_conn_id: resd 1
+tor_rx_cell: resb TOR_CELL_LEN
+tor_recv_len: resd 1
 
 %macro ASSERT 1
     test    %1, %1
@@ -108,22 +116,6 @@ _start:
     mov     edx, 64
     call    _mem_eq
     ASSERT eax
-    ; Dump first 16 bytes of buf to stdout
-    push    rax
-    push    rcx
-    push    rdx
-    push    rsi
-    push    rdi
-    mov     rdi, 1
-    lea     rsi, [rel buf]
-    mov     rdx, 16
-    mov     rax, 1
-    syscall
-    pop     rdi
-    pop     rsi
-    pop     rdx
-    pop     rcx
-    pop     rax
 
 ; ================================================================
 ; Test 2: AES-128-CTR roundtrip (decrypt = same operation in CTR)
@@ -228,6 +220,126 @@ _start:
     ASSERT eax
 
 ; ================================================================
+; Test 6: Tor role state accepts every defined node role
+; ================================================================
+    TEST_LABEL "6"
+    mov     edi, TOR_ROLE_CLIENT
+    call    er_tor_set_role
+    ASSERT_EQ eax, 0
+    call    er_tor_get_role_caps
+    ASSERT_EQ eax, TOR_CAP_CLIENT
+
+    mov     edi, TOR_ROLE_GUARD
+    call    er_tor_set_role
+    ASSERT_EQ eax, 0
+    call    er_tor_get_role_caps
+    ASSERT_EQ eax, TOR_CAP_OR_RELAY
+
+    mov     edi, TOR_ROLE_MIDDLE
+    call    er_tor_set_role
+    ASSERT_EQ eax, 0
+    call    er_tor_get_role_caps
+    ASSERT_EQ eax, TOR_CAP_OR_RELAY
+
+    mov     edi, TOR_ROLE_EXIT
+    call    er_tor_set_role
+    ASSERT_EQ eax, 0
+    call    er_tor_get_role_caps
+    ASSERT_EQ eax, TOR_CAP_OR_RELAY | TOR_CAP_EXIT
+
+    mov     edi, TOR_ROLE_DIRECTORY
+    call    er_tor_set_role
+    ASSERT_EQ eax, 0
+    call    er_tor_get_role_caps
+    ASSERT_EQ eax, TOR_CAP_DIRECTORY
+
+    mov     edi, TOR_ROLE_BRIDGE
+    call    er_tor_set_role
+    ASSERT_EQ eax, 0
+    call    er_tor_get_role_caps
+    ASSERT_EQ eax, TOR_CAP_OR_RELAY | TOR_CAP_BRIDGE
+
+    mov     edi, TOR_ROLE_HS_SERVICE
+    call    er_tor_set_role
+    ASSERT_EQ eax, 0
+    call    er_tor_get_role_caps
+    ASSERT_EQ eax, TOR_CAP_HS_SERVICE
+
+    mov     edi, TOR_ROLE_HS_INTRO
+    call    er_tor_set_role
+    ASSERT_EQ eax, 0
+    call    er_tor_get_role_caps
+    ASSERT_EQ eax, TOR_CAP_HS_INTRO
+
+    mov     edi, TOR_ROLE_HS_RENDEZVOUS
+    call    er_tor_set_role
+    ASSERT_EQ eax, 0
+    call    er_tor_get_role_caps
+    ASSERT_EQ eax, TOR_CAP_HS_RENDEZVOUS
+
+    call    er_tor_get_role
+    ASSERT_EQ eax, TOR_ROLE_HS_RENDEZVOUS
+
+; ================================================================
+; Test 7: Invalid roles fail without changing current role
+; ================================================================
+    TEST_LABEL "7"
+    mov     edi, 0x7fffffff
+    call    er_tor_set_role
+    ASSERT_EQ eax, -1
+    call    er_tor_get_role
+    ASSERT_EQ eax, TOR_ROLE_HS_RENDEZVOUS
+
+%ifdef TOR_BENCH
+; ================================================================
+; Local crypto bench: AES-CTR one Tor cell and batched cells
+; ================================================================
+    lea     rdi, [rel msg_bench_cell]
+    call    putstr
+    lea     rdi, [rel iv_copy]
+    lea     rsi, [rel test_iv]
+    mov     edx, 16
+    call    er_memcpy
+    call    rdtsc64
+    mov     r12, rax
+    lea     rdi, [rel bench_buf]
+    lea     rsi, [rel bench_buf]
+    mov     edx, TOR_CELL_LEN
+    lea     rcx, [rel test_key]
+    lea     r8,  [rel iv_copy]
+    call    er_tor_aes_ctr
+    call    rdtsc64
+    sub     rax, r12
+    mov     rdi, rax
+    call    puthex64
+    call    newline
+
+    lea     rdi, [rel msg_bench_batch]
+    call    putstr
+    mov     r13d, 1024
+    call    rdtsc64
+    mov     r12, rax
+.bench_loop:
+    lea     rdi, [rel iv_copy]
+    lea     rsi, [rel test_iv]
+    mov     edx, 16
+    call    er_memcpy
+    lea     rdi, [rel bench_buf]
+    lea     rsi, [rel bench_buf]
+    mov     edx, TOR_CELL_LEN
+    lea     rcx, [rel test_key]
+    lea     r8,  [rel iv_copy]
+    call    er_tor_aes_ctr
+    dec     r13d
+    jnz     .bench_loop
+    call    rdtsc64
+    sub     rax, r12
+    mov     rdi, rax
+    call    puthex64
+    call    newline
+%endif
+
+; ================================================================
 ; Done — report results
 ; ================================================================
     mov     rax, [rel failed]
@@ -254,4 +366,114 @@ _mem_eq:
     pop     rdi
     pop     rsi
     pop     rcx
+    ret
+
+%ifdef TOR_BENCH
+rdtsc64:
+    lfence
+    rdtsc
+    shl     rdx, 32
+    or      rax, rdx
+    ret
+
+putstr:
+    push    rdi
+    xor     rdx, rdx
+.len:
+    cmp     byte [rdi + rdx], 0
+    je      .write
+    inc     rdx
+    jmp     .len
+.write:
+    mov     rsi, rdi
+    mov     edi, 1
+    mov     eax, 1
+    syscall
+    pop     rdi
+    ret
+
+puthex64:
+    push    rbx
+    push    rcx
+    push    rdx
+    lea     rsi, [rel hexbuf + 18]
+    mov     byte [rsi], 0
+    mov     rbx, rdi
+    mov     ecx, 16
+.digit:
+    dec     rsi
+    mov     edx, ebx
+    and     edx, 0x0f
+    mov     dl, [rel hexdigits + rdx]
+    mov     [rsi], dl
+    shr     rbx, 4
+    dec     ecx
+    jnz     .digit
+    dec     rsi
+    mov     byte [rsi], 'x'
+    dec     rsi
+    mov     byte [rsi], '0'
+    mov     edi, 1
+    mov     edx, 18
+    mov     eax, 1
+    syscall
+    pop     rdx
+    pop     rcx
+    pop     rbx
+    ret
+
+newline:
+    mov     edi, 1
+    lea     rsi, [rel nl]
+    mov     edx, 1
+    mov     eax, 1
+    syscall
+    ret
+
+SECTION .data
+msg_bench_cell: db "tor bench cell cycles: ", 0
+msg_bench_batch: db "tor bench 1024 cells cycles: ", 0
+hexdigits: db "0123456789abcdef"
+nl: db 10
+hexbuf: times 19 db 0
+SECTION .text
+%endif
+
+global er_tor_cell_init
+global er_tor_link_handshake
+global er_tor_circuit_create
+global er_tor_send_relay
+global er_tor_recv_relay
+global er_tor_open_stream
+global er_tor_open_dir_stream
+global er_tor_ntor_keygen
+global er_tcp_recv
+global er_serial_puts
+global er_serial_putchar
+global er_serial_puthex32
+global er_serial_crlf
+global er_http_parse_status
+global er_http_find_body
+global er_tor_relay_crypt
+global tor_conn_id
+global tor_rx_cell
+global tor_recv_len
+
+er_tor_cell_init:
+er_tor_link_handshake:
+er_tor_circuit_create:
+er_tor_send_relay:
+er_tor_recv_relay:
+er_tor_open_stream:
+er_tor_open_dir_stream:
+er_tor_ntor_keygen:
+er_tcp_recv:
+er_serial_puts:
+er_serial_putchar:
+er_serial_puthex32:
+er_serial_crlf:
+er_http_parse_status:
+er_http_find_body:
+er_tor_relay_crypt:
+    xor     eax, eax
     ret

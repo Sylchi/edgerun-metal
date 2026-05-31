@@ -27,9 +27,9 @@ KERNEL_BIN="${ASM_BUILD}/kernel.bin"
 # ---- helpers ----
 mkdir -p "${ASM_BUILD}"
 
-elf64()   { ${YASM} -f elf64   ${ASM_INC} -o "$2" "$1" && test -f "$2"; }
-elf32()   { ${YASM} -f elf32   ${ASM_INC} -o "$2" "$1" && test -f "$2"; }
-elf64_dbg() { ${YASM} -f elf64 ${ASM_INC} -dX25519_DEBUG -o "$2" "$1" && test -f "$2"; }
+elf64()   { ${YASM} -f elf64   ${ASM_INC} ${ASM_DEFS:-} -o "$2" "$1" && test -f "$2"; }
+elf32()   { ${YASM} -f elf32   ${ASM_INC} ${ASM_DEFS:-} -o "$2" "$1" && test -f "$2"; }
+elf64_dbg() { ${YASM} -f elf64 ${ASM_INC} ${ASM_DEFS:-} -dX25519_DEBUG -o "$2" "$1" && test -f "$2"; }
 
 # Build object list string from KERNEL_ASM_SRCS with given prefix/suffix
 # Usage: kernel_objs <prefix> <suffix> [extra_objects...]
@@ -72,6 +72,7 @@ KERNEL_ASM_SRCS="
 	../driver/fb_text.asm
 	../driver/acpi.asm
 	../driver/portio.asm
+	../driver/hda.asm
 	../driver/xhci.asm
 	../driver/uvc.asm
 	../driver/rtl8125.asm
@@ -243,6 +244,10 @@ cmd_kernel_net_tpm() {
 	kill "${swtpm_pid}" 2>/dev/null || true
 	wait "${swtpm_pid}" 2>/dev/null || true
 	rm -f "${tpm_sock}"
+}
+
+cmd_kernel_net_tor() {
+	ASM_DEFS="${ASM_DEFS:-} -dER_KERNEL_TOR_AUTOSTART" cmd_kernel_net_tpm
 }
 
 # ---- TPM live test kernel ----
@@ -470,7 +475,37 @@ cmd_test_spi_flash() {
 }
 
 cmd_test_tor() {
-	build_test "test_tor_self" "${TEST_DIR}/test_tor_self.asm" "crypto/tor_aes" "rt/runtime"
+	local name="test_tor_self"
+	local src="${TEST_DIR}/${name}.asm"
+	local obj="${ASM_BUILD}/${name}.o"
+	local bin="${ASM_BUILD}/${name%_self}"
+	${YASM} -f elf64 ${ASM_INC} -o "$obj" "$src"
+	local tor_aes_o="${ASM_BUILD}/tor_aes.o"
+	elf64 "${ASM_DIR}/crypto/tor_aes.asm" "$tor_aes_o"
+	local tor_o="${ASM_BUILD}/tor.o"
+	elf64 "${ASM_DIR}/crypto/tor.asm" "$tor_o"
+	local runtime_o="${ASM_BUILD}/runtime.o"
+	elf64 "${ASM_DIR}/rt/runtime.asm" "$runtime_o"
+	ld -nostdlib -static -o "$bin" "$obj" "$tor_aes_o" "$tor_o" "$runtime_o"
+	echo "  LD  ${bin}"
+	"$bin"
+}
+
+cmd_bench_tor() {
+	local name="bench_tor"
+	local src="${TEST_DIR}/test_tor_self.asm"
+	local obj="${ASM_BUILD}/${name}.o"
+	local bin="${ASM_BUILD}/${name}"
+	${YASM} -f elf64 ${ASM_INC} -dTOR_BENCH -o "$obj" "$src"
+	local tor_aes_o="${ASM_BUILD}/tor_aes.o"
+	elf64 "${ASM_DIR}/crypto/tor_aes.asm" "$tor_aes_o"
+	local tor_o="${ASM_BUILD}/tor.o"
+	elf64 "${ASM_DIR}/crypto/tor.asm" "$tor_o"
+	local runtime_o="${ASM_BUILD}/runtime.o"
+	elf64 "${ASM_DIR}/rt/runtime.asm" "$runtime_o"
+	ld -nostdlib -static -o "$bin" "$obj" "$tor_aes_o" "$tor_o" "$runtime_o"
+	echo "  LD  ${bin}"
+	"$bin"
 }
 
 cmd_test_x25519() {
@@ -607,6 +642,7 @@ EdgeRun build targets:
   kernel-vnc          Build kernel + run in QEMU (VNC :0)
   kernel-net          Build kernel + run in QEMU with virtio-net
   kernel-net-tpm      Build kernel + run in QEMU with swtpm + virtio-net
+  kernel-net-tor      Build kernel with Tor autostart + run QEMU net/TPM
   kernel-tpm-live-test    Build kernel with TPM live test main
   kernel-tpm-live-test-qemu Build + run in QEMU with swtpm
   kernel-efi          Build kernel.efi (native UEFI PE32+)
@@ -626,6 +662,7 @@ EdgeRun build targets:
   test-fe-mul         Run _fe_mul field multiplication test (self-hosted ASM)
   test-spi-flash      Run SPI flash compile-check test (self-hosted ASM)
   test-tor            Run Tor AES-128-CTR KAT test (self-hosted ASM)
+  bench-tor           Run Tor local AES cell latency/throughput benchmark
   test-x25519         Run X25519 scalar mult RFC 7748 test vectors (self-hosted ASM)
   test-bench-render-ir Run render_ir RDTSC benchmark (self-hosted ASM)
   bench-wasm-jit      Run WASM JIT vs native RDTSC benchmark (self-hosted ASM)
@@ -644,6 +681,7 @@ case "${1:-help}" in
 	kernel-vnc)     cmd_kernel_vnc ;;
 	kernel-net)     cmd_kernel_net ;;
 	kernel-net-tpm) cmd_kernel_net_tpm ;;
+	kernel-net-tor) cmd_kernel_net_tor ;;
 	kernel-tpm-live-test)   cmd_kernel_tpm_live_test ;;
 	kernel-tpm-live-test-qemu) cmd_kernel_tpm_live_test_qemu ;;
 	kernel-efi)     cmd_kernel_efi ;;
@@ -663,6 +701,7 @@ case "${1:-help}" in
 	test-fe-mul)    cmd_test_fe_mul ;;
 	test-spi-flash) cmd_test_spi_flash ;;
 	test-tor)       cmd_test_tor ;;
+	bench-tor)      cmd_bench_tor ;;
 	test-x25519)     cmd_test_x25519 ;;
 	test-x25519-debug) cmd_test_x25519_debug ;;
 	test-bench-render-ir) cmd_test_bench_render_ir ;;

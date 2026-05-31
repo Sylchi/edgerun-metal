@@ -89,6 +89,8 @@ extern er_nvme_identify_ns
 extern er_nvme_print_ns_info
 extern er_xhci_probe
 extern er_xhci_init
+extern er_hda_probe_init
+extern er_hda_codec_vendor_id
 extern er_xhci_cmd_submit_noop
 extern er_xhci_cmd_submit_enable_slot
 extern er_xhci_cmd_submit_address_device
@@ -295,6 +297,12 @@ check_amdgpu_abs: db "check: amdgpu absent", 0
 check_amdgpu_dcn: db " DCN init: ", 0
 check_sdhci:     db "check: sdhci ", 0
 check_sdhci_abs: db "check: sdhci absent", 0
+check_hda:       db "check: hda ", 0
+check_hda_abs:   db "check: hda absent", 0
+check_hda_bar:   db " bar ", 0
+check_hda_gcap:  db " gcap ", 0
+check_hda_state: db " statests ", 0
+check_hda_codec: db " codec ", 0
 check_intel_gpu: db "check: intel_gpu ", 0
 check_intel_gpu_abs: db "check: intel_gpu absent", 0
 ok_text:       db "ok", 0
@@ -397,6 +405,10 @@ xhci_rx_count: resd 1
 xhci_last_cc: resd 1
 xhci_slot_id: resd 1
 xhci_addr_cc: resd 1
+hda_bar0: resd 1
+hda_gcap: resd 1
+hda_statests: resd 1
+hda_codec_vendor: resd 1
 
 %define VIRTIO_NET_STORAGE_size 4900
 virtio_net_dev:      resb VIRTIO_NET_DEVICE_size
@@ -1196,7 +1208,7 @@ er_fn er_kernel_main
     call    .crlf
     add     rsp, 4
     add     rsp, 3
-    jmp     .xhci_check
+    jmp     .hda_check
 
 .emmc_init_fail:
     mov     byte [device_flags + DEV_EMMC], 1
@@ -1206,7 +1218,7 @@ er_fn er_kernel_main
     call    .crlf
     add     rsp, 4
     add     rsp, 3
-    jmp     .xhci_check
+    jmp     .hda_check
 
 .emmc_fail:
     add     rsp, 4
@@ -1214,6 +1226,102 @@ er_fn er_kernel_main
     mov     byte [device_flags + DEV_EMMC], 1
     mov     rdi, COM1_PORT
     lea     rsi, [rel check_sdhci_abs]
+    call    er_serial_puts
+    call    .crlf
+    add     rsp, 3
+
+    ; ─── HD Audio ─────────────────────────────────────────────────
+.hda_check:
+    sub     rsp, 3
+    mov     rdi, 0x04           ; class = Multimedia
+    mov     esi, 0x03           ; subclass = HD Audio
+    xor     edx, edx            ; prog-if = HDA compatible
+    mov     rcx, rsp            ; &out_bus
+    lea     r8, [rsp + 1]       ; &out_dev
+    lea     r9, [rsp + 2]       ; &out_func
+    call    er_pci_find_class
+    test    eax, eax
+    jz      .hda_absent
+
+    movzx   r12d, byte [rsp]
+    movzx   r13d, byte [rsp + 1]
+    movzx   r14d, byte [rsp + 2]
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_hda]
+    call    er_serial_puts
+    mov     rdi, COM1_PORT
+    mov     esi, r12d
+    call    er_serial_putdec32
+    mov     rdi, COM1_PORT
+    mov     sil, ':'
+    call    er_serial_putchar
+    mov     rdi, COM1_PORT
+    mov     esi, r13d
+    call    er_serial_putdec32
+    mov     rdi, COM1_PORT
+    mov     sil, '.'
+    call    er_serial_putchar
+    mov     rdi, COM1_PORT
+    mov     esi, r14d
+    call    er_serial_putdec32
+
+    mov     rdi, r12
+    mov     rsi, r13
+    mov     rdx, r14
+    lea     rcx, [rel hda_bar0]
+    lea     r8, [rel hda_gcap]
+    lea     r9, [rel hda_statests]
+    call    er_hda_probe_init
+    test    eax, eax
+    jnz     .hda_fail
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_hda_bar]
+    call    er_serial_puts
+    mov     rdi, COM1_PORT
+    mov     esi, [rel hda_bar0]
+    call    er_serial_puthex32
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_hda_gcap]
+    call    er_serial_puts
+    mov     rdi, COM1_PORT
+    mov     esi, [rel hda_gcap]
+    call    er_serial_puthex32
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_hda_state]
+    call    er_serial_puts
+    mov     rdi, COM1_PORT
+    mov     esi, [rel hda_statests]
+    call    er_serial_puthex32
+    mov     edi, [rel hda_bar0]
+    mov     esi, [rel hda_statests]
+    lea     rdx, [rel hda_codec_vendor]
+    call    er_hda_codec_vendor_id
+    test    eax, eax
+    jnz     .hda_print_done
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_hda_codec]
+    call    er_serial_puts
+    mov     rdi, COM1_PORT
+    mov     esi, [rel hda_codec_vendor]
+    call    er_serial_puthex32
+.hda_print_done:
+    call    .crlf
+    add     rsp, 3
+    jmp     .xhci_check
+
+.hda_fail:
+    mov     rdi, COM1_PORT
+    mov     sil, ' '
+    call    er_serial_putchar
+    lea     rsi, [rel fail_text]
+    call    er_serial_puts
+    call    .crlf
+    add     rsp, 3
+    jmp     .xhci_check
+
+.hda_absent:
+    mov     rdi, COM1_PORT
+    lea     rsi, [rel check_hda_abs]
     call    er_serial_puts
     call    .crlf
     add     rsp, 3
