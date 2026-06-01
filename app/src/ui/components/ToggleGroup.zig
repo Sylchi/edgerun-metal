@@ -1,4 +1,3 @@
-const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../component_common.zig");
 const text_component = @import("Text.zig");
@@ -106,6 +105,6 @@ test "toggle group measurement follows segment labels" {
     const short_measured = short.measure(.{}, .{});
     const long_measured = long.measure(.{}, .{});
 
-    try std.testing.expect(short_measured.min.w < short_measured.preferred.w);
-    try std.testing.expect(long_measured.preferred.w > short_measured.preferred.w);
+    try component_test.expect(short_measured.min.w < short_measured.preferred.w);
+    try component_test.expect(long_measured.preferred.w > short_measured.preferred.w);
 }

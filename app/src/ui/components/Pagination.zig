@@ -1,4 +1,3 @@
-const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../component_common.zig");
 const interaction = @import("../interaction.zig");
@@ -97,6 +96,6 @@ test "pagination measurement follows labels and shared segment layout" {
     const pagination = Pagination{ .id = 120, .page = 1 };
     const measured = pagination.measure(.{}, .{});
 
-    try std.testing.expect(measured.min.w < measured.preferred.w);
-    try std.testing.expect(measured.preferred.h >= component_primitives.control_label_height);
+    try component_test.expect(measured.min.w < measured.preferred.w);
+    try component_test.expect(measured.preferred.h >= component_primitives.control_label_height);
 }

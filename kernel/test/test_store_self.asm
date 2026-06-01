@@ -2,6 +2,7 @@
 ; Covers blob hash staging, live index updates, and log replay rebuilding
 ; in-memory blob/key indexes from persisted records.
 
+%include "x86_64/macros.inc"
 %include "test/test_macros.inc"
 %include "x86_64/wasm_defines.inc"
 
@@ -205,6 +206,9 @@ _start:
     TEST_EXIT_FAILED
 
 map_store_scratch:
+%ifdef TEST_FLAT_KERNEL
+    ret
+%else
     mov     eax, SYS_MMAP
     mov     edi, STORE_SCRATCH
     mov     esi, SCRATCH_MAP_BYTES
@@ -220,6 +224,7 @@ map_store_scratch:
     syscall
 .mapped:
     ret
+%endif
 
 clear_test_memory:
     lea     rdi, [rel fake_disk]
@@ -248,9 +253,7 @@ copy_bytes:
     call    er_memcpy
     ret
 .too_large:
-    mov     edi, 91
-    mov     eax, SYS_EXIT
-    syscall
+    TEST_EXIT 91
 
 global er_nvme_read_blocks
 er_nvme_read_blocks:

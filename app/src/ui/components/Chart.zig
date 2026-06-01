@@ -1,4 +1,3 @@
-const std = @import("std");
 const common = @import("../component_common.zig");
 const interaction = @import("../interaction.zig");
 const ui = @import("../core.zig");
@@ -134,6 +133,6 @@ test "chart component measurement wraps long labels under narrow constraints" {
     const measured = chart.measure(.{ .width = .{ .at_most = chart_min_width }, .text_wrap = .wrap }, .{});
     const compact_measured = compact.measure(.{ .width = .{ .at_most = chart_min_width }, .text_wrap = .wrap }, .{});
 
-    try std.testing.expect(measured.preferred.w <= chart_min_width);
-    try std.testing.expect(measured.preferred.h > compact_measured.preferred.h);
+    try component_test.expect(measured.preferred.w <= chart_min_width);
+    try component_test.expect(measured.preferred.h > compact_measured.preferred.h);
 }

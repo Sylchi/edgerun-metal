@@ -140,19 +140,25 @@ pub fn decodeEpoch(in: []const u8) ?clock.Stamp {
 }
 
 test "writer encodes ids integers and epochs deterministically" {
-    const std = @import("std");
-    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const stamp = clock.Stamp{ .keeper = keeper, .tick = 2 };
     const id_value = identity.Id{ .bytes = [_]u8{3} ++ [_]u8{0} ** 31 };
     var raw: [106]u8 = undefined;
     var writer = Writer.init(&raw);
 
-    try testing.expect(writer.id(id_value));
-    try testing.expect(writer.writeU16(4));
-    try testing.expect(writer.writeU64(5));
-    try testing.expect(writer.epoch(stamp));
-    try testing.expectEqual(raw.len, writer.written().len);
-    try testing.expectEqual(stamp, decodeEpoch(raw[42..106]).?);
-    try testing.expect(bytes_mod.nonzero(&hash("edgerun:zig:v1:test", writer.written())));
+    try expect(writer.id(id_value));
+    try expect(writer.writeU16(4));
+    try expect(writer.writeU64(5));
+    try expect(writer.epoch(stamp));
+    try expectEqual(raw.len, writer.written().len);
+    try expect(stamp.order(decodeEpoch(raw[42..106]).?) == 0);
+    try expect(bytes_mod.nonzero(&hash("edgerun:zig:v1:test", writer.written())));
+}
+
+fn expect(condition: bool) !void {
+    if (!condition) return error.TestExpectedTrue;
+}
+
+fn expectEqual(expected: anytype, actual: @TypeOf(expected)) !void {
+    if (actual != expected) return error.TestExpectedEqual;
 }

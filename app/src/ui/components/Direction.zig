@@ -1,4 +1,3 @@
-const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../component_common.zig");
 const interaction = @import("../interaction.zig");

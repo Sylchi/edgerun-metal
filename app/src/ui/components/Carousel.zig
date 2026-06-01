@@ -1,4 +1,3 @@
-const std = @import("std");
 const common = @import("../component_common.zig");
 const interaction = @import("../interaction.zig");
 const ui = @import("../core.zig");
@@ -106,5 +105,5 @@ test "carousel measurement follows label text" {
     const short = Carousel{ .id = 990, .label = "Slide" };
     const long = Carousel{ .id = 990, .label = "Runtime authority walkthrough" };
 
-    try std.testing.expect(long.measure(.{}, .{}).preferred.w > short.measure(.{}, .{}).preferred.w);
+    try component_test.expect(long.measure(.{}, .{}).preferred.w > short.measure(.{}, .{}).preferred.w);
 }

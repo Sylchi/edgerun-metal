@@ -1,6 +1,7 @@
 ; EdgeRun NVMe IO command helper self-hosted test.
 ; Verifies command frame construction and the eax/rdx return contract.
 
+%include "x86_64/macros.inc"
 %include "test/test_macros.inc"
 %include "x86_64/wasm_defines.inc"
 
@@ -68,6 +69,9 @@ _start:
     TEST_EXIT_FAILED
 
 map_nvme_queue_page:
+%ifdef TEST_FLAT_KERNEL
+    ret
+%else
     mov     rdi, NVME_IO_CQ
     mov     rsi, 8192
     mov     rdx, PROT_READ_WRITE
@@ -78,6 +82,7 @@ map_nvme_queue_page:
     syscall
     ASSERT_EQ rax, NVME_IO_CQ
     ret
+%endif
 
 global er_mmio_write32
 er_mmio_write32:

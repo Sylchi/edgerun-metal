@@ -455,6 +455,7 @@ er_fn er_tcp_send
     push    r12
     push    r13
     push    r14
+    push    r15
 
     mov     r12d, edi       ; conn_id
     mov     r13, rsi        ; data
@@ -472,87 +473,59 @@ er_fn er_tcp_send
     cmp     dword [rbx + TCP_CONN_STATE], TCP_ESTABLISHED
     jne     .not_established
 
-    ; Limit length to MSS
-    movzx   eax, word [rbx + TCP_CONN_MSS]
+    test    r14d, r14d
+    jz      .done
+
+    test    r13, r13
+    jz      .bad_conn
+
+    cmp     dword [rbx + TCP_CONN_TX_LEN], 0
+    jne     .busy
+
+    movzx   eax, word [rbx + TCP_CONN_SND_WND]
+    test    eax, eax
+    jz      .busy
     cmp     r14d, eax
-    jbe     .len_ok
-    mov     r14d, eax
+    ja      .busy
 
-.len_ok:
-    ; Build TCP segment in buffer
-    lea     rdi, [tcp_seg_buf]
+    cmp     r14d, TCP_CONN_TX_CAP
+    ja      .bad_conn
 
-    ; Source port
-    movzx   eax, word [rbx + TCP_CONN_SRC_PORT]
-    xchg    ah, al
-    mov     [rdi + TCP_SRC_PORT], ax
-
-    ; Destination port
-    movzx   eax, word [rbx + TCP_CONN_DST_PORT]
-    xchg    ah, al
-    mov     [rdi + TCP_DST_PORT], ax
-
-    ; Sequence number = snd_nxt
-    mov     eax, [rbx + TCP_CONN_SND_NXT]
-    bswap   eax
-    mov     [rdi + TCP_SEQ_NUM], eax
-
-    ; ACK number = rcv_nxt
-    mov     eax, [rbx + TCP_CONN_RCV_NXT]
-    bswap   eax
-    mov     [rdi + TCP_ACK_NUM], eax
-
-    ; Data offset = 5 (20 bytes, no options)
-    mov     byte [rdi + TCP_DATA_OFF], TCP_DEFAULT_DATA_OFF
-
-    ; Flags = PSH | ACK
-    mov     byte [rdi + TCP_FLAGS], TCP_PSH | TCP_ACK
-
-    ; Window
-    movzx   eax, word [rbx + TCP_CONN_RCV_WND]
-    xchg    ah, al
-    mov     [rdi + TCP_WINDOW], ax
-
-    ; Checksum placeholder
-    mov     word [rdi + TCP_CHECKSUM], 0
-
-    ; Urgent pointer
-    mov     word [rdi + TCP_URGENT], 0
-
-    ; Copy payload after TCP header
-    cmp     r14d, 0
-    je      .checksum
-
-    lea     rdi, [tcp_seg_buf + TCP_HDR_LEN]
+    lea     rdi, [rbx + TCP_CONN_TX_BUF]
     mov     rsi, r13
     mov     edx, r14d
     call    er_memcpy
 
-.checksum:
-    ; Compute TCP checksum
+    mov     ecx, [rbx + TCP_CONN_SND_NXT]
     mov     rdi, rbx        ; conn
-    lea     rsi, [tcp_seg_buf]
-    mov     edx, TCP_HDR_LEN
-    add     edx, r14d       ; total TCP segment length
-    call    _tcp_compute_checksum
-
-    ; Send via IP
-    mov     edi, [rbx + TCP_CONN_DST_IP]  ; dst_ip
-    mov     esi, IP_PROTO_TCP
-    lea     rdx, [tcp_seg_buf]
-    mov     ecx, TCP_HDR_LEN
-    add     ecx, r14d
-    call    er_ip_send
+    lea     rsi, [rbx + TCP_CONN_TX_BUF]
+    mov     edx, r14d
+    call    _tcp_send_data_range
+    mov     r15d, eax
     test    eax, eax
-    js      .send_fail
+    jle     .send_fail
 
-    ; Update snd_nxt
     mov     eax, [rbx + TCP_CONN_SND_NXT]
-    add     eax, r14d
+    add     eax, r15d
     mov     [rbx + TCP_CONN_SND_NXT], eax
+    mov     [rbx + TCP_CONN_TX_LEN], r15d
+    cmp     r15d, r14d
+    jne     .send_fail
 
+.done:
     xor     eax, eax
     er_ok
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+
+.busy:
+    mov     eax, -1
+    er_err  ERROR_BUSY
+    pop     r15
     pop     r14
     pop     r13
     pop     r12
@@ -562,6 +535,7 @@ er_fn er_tcp_send
 .bad_conn:
     mov     eax, -1
     er_err  ERROR_INVALID_PARAM
+    pop     r15
     pop     r14
     pop     r13
     pop     r12
@@ -571,6 +545,7 @@ er_fn er_tcp_send
 .not_established:
     mov     eax, -1
     er_err  ERROR_TCP_CLOSED
+    pop     r15
     pop     r14
     pop     r13
     pop     r12
@@ -580,12 +555,134 @@ er_fn er_tcp_send
 .send_fail:
     mov     eax, -1
     er_err  ERROR_IO
+    pop     r15
     pop     r14
     pop     r13
     pop     r12
     pop     rbx
     er_ret
 ; ==================================================================
+
+_tcp_send_data_range:
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+
+    mov     r12, rdi        ; conn
+    mov     r13, rsi        ; data
+    mov     r14d, edx       ; remaining len
+    mov     r15d, ecx       ; next sequence number
+    xor     ebx, ebx        ; bytes successfully sent
+
+.range_loop:
+    test    r14d, r14d
+    jz      .range_done
+    movzx   edx, word [r12 + TCP_CONN_MSS]
+    cmp     r14d, edx
+    ja      .have_chunk
+    mov     edx, r14d
+.have_chunk:
+    mov     rdi, r12
+    mov     rsi, r13
+    mov     ecx, r15d
+    push    rdx
+    call    _tcp_send_data_segment
+    pop     r8
+    test    eax, eax
+    js      .range_done
+    add     r13, r8
+    add     r15d, r8d
+    add     ebx, r8d
+    sub     r14d, r8d
+    jmp     .range_loop
+
+.range_done:
+    mov     eax, ebx
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    ret
+
+_tcp_send_data_segment:
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+
+    mov     r12, rdi        ; conn
+    mov     r13, rsi        ; data
+    mov     r14d, edx       ; len
+    mov     r15d, ecx       ; sequence number
+
+    lea     rbx, [tcp_seg_buf]
+
+    movzx   eax, word [r12 + TCP_CONN_SRC_PORT]
+    xchg    ah, al
+    mov     [rbx + TCP_SRC_PORT], ax
+
+    movzx   eax, word [r12 + TCP_CONN_DST_PORT]
+    xchg    ah, al
+    mov     [rbx + TCP_DST_PORT], ax
+
+    mov     eax, r15d
+    bswap   eax
+    mov     [rbx + TCP_SEQ_NUM], eax
+
+    mov     eax, [r12 + TCP_CONN_RCV_NXT]
+    bswap   eax
+    mov     [rbx + TCP_ACK_NUM], eax
+
+    mov     byte [rbx + TCP_DATA_OFF], TCP_DEFAULT_DATA_OFF
+    mov     byte [rbx + TCP_FLAGS], TCP_PSH | TCP_ACK
+
+    movzx   eax, word [r12 + TCP_CONN_RCV_WND]
+    xchg    ah, al
+    mov     [rbx + TCP_WINDOW], ax
+
+    mov     word [rbx + TCP_CHECKSUM], 0
+    mov     word [rbx + TCP_URGENT], 0
+
+    lea     rdi, [tcp_seg_buf + TCP_HDR_LEN]
+    mov     rsi, r13
+    mov     edx, r14d
+    call    er_memcpy
+
+    mov     rdi, r12
+    lea     rsi, [tcp_seg_buf]
+    mov     edx, TCP_HDR_LEN
+    add     edx, r14d
+    call    _tcp_compute_checksum
+
+    mov     edi, [r12 + TCP_CONN_DST_IP]
+    mov     esi, IP_PROTO_TCP
+    lea     rdx, [tcp_seg_buf]
+    mov     ecx, TCP_HDR_LEN
+    add     ecx, r14d
+    call    er_ip_send
+    test    eax, eax
+    js      .fail
+
+    xor     eax, eax
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    ret
+
+.fail:
+    mov     eax, -1
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    ret
 
 er_fn er_tcp_recv
     push    rbx
@@ -596,6 +693,14 @@ er_fn er_tcp_recv
     mov     r12d, edi       ; conn_id
     mov     r13, rsi        ; buf
     mov     r14, rdx        ; len pointer
+
+    test    r14, r14
+    jz      .bad_conn
+    cmp     dword [r14], 0
+    je      .args_ok
+    test    r13, r13
+    jz      .bad_conn
+.args_ok:
 
     ; Get connection pointer
     mov     edi, r12d
@@ -717,6 +822,9 @@ er_fn er_tcp_close
     cmp     dword [rbx + TCP_CONN_STATE], TCP_ESTABLISHED
     jne     .check_closing
 
+    cmp     dword [rbx + TCP_CONN_TX_LEN], 0
+    jne     .busy
+
     ; Send FIN
     mov     rdi, rbx
     call    _tcp_send_fin
@@ -729,6 +837,9 @@ er_fn er_tcp_close
 .check_closing:
     cmp     dword [rbx + TCP_CONN_STATE], TCP_CLOSE_WAIT
     jne     .not_connected
+
+    cmp     dword [rbx + TCP_CONN_TX_LEN], 0
+    jne     .busy
 
     ; Send FIN from CLOSE_WAIT
     mov     rdi, rbx
@@ -761,6 +872,12 @@ er_fn er_tcp_close
 .fail:
     mov     eax, -1
     er_err  ERROR_IO
+    pop     rbx
+    er_ret
+
+.busy:
+    mov     eax, -1
+    er_err  ERROR_BUSY
     pop     rbx
     er_ret
 ; ==================================================================
@@ -835,6 +952,30 @@ _tcp_send_fin:
     push    r12
     mov     r12, rdi
 
+    mov     ecx, [r12 + TCP_CONN_SND_NXT]
+    mov     rdi, r12
+    call    _tcp_send_fin_segment
+    test    eax, eax
+    js      .fail
+
+    ; FIN consumes one sequence number
+    mov     eax, [r12 + TCP_CONN_SND_NXT]
+    inc     eax
+    mov     [r12 + TCP_CONN_SND_NXT], eax
+
+    pop     r12
+    ret
+.fail:
+    mov     eax, -1
+    pop     r12
+    ret
+
+_tcp_send_fin_segment:
+    push    r12
+    push    r13
+    mov     r12, rdi
+    mov     r13d, ecx
+
     lea     rdi, [tcp_seg_buf]
 
     ; Source port
@@ -847,8 +988,7 @@ _tcp_send_fin:
     xchg    ah, al
     mov     [rdi + TCP_DST_PORT], ax
 
-    ; Sequence number = snd_nxt
-    mov     eax, [r12 + TCP_CONN_SND_NXT]
+    mov     eax, r13d
     bswap   eax
     mov     [rdi + TCP_SEQ_NUM], eax
 
@@ -889,15 +1029,13 @@ _tcp_send_fin:
     test    eax, eax
     js      .fail
 
-    ; FIN consumes one sequence number
-    mov     eax, [r12 + TCP_CONN_SND_NXT]
-    inc     eax
-    mov     [r12 + TCP_CONN_SND_NXT], eax
-
+    xor     eax, eax
+    pop     r13
     pop     r12
     ret
 .fail:
     mov     eax, -1
+    pop     r13
     pop     r12
     ret
 
@@ -935,7 +1073,6 @@ er_fn er_tcp_handle
 
     ; Extract fields
     movzx   r15d, word [rbx + TCP_SRC_PORT]
-    xchg    r15b, r15b      ; network to host byte order (just swap bytes)
     rol     r15w, 8
 
     movzx   ecx, word [rbx + TCP_DST_PORT]
@@ -1151,14 +1288,49 @@ er_fn er_tcp_handle
     jmp     .done
 
 .ack_fin_wait_1:
+    mov     eax, [r12 + TCP_CONN_SND_NXT]
+    cmp     r9d, eax
+    jne     .done
     mov     dword [r12 + TCP_CONN_STATE], TCP_FIN_WAIT_2
     jmp     .done
 
 .ack_last_ack:
+    mov     eax, [r12 + TCP_CONN_SND_NXT]
+    cmp     r9d, eax
+    jne     .done
     mov     dword [r12 + TCP_CONN_STATE], TCP_CLOSED
     jmp     .done
 
 .ack_established:
+    mov     eax, [r12 + TCP_CONN_SND_NXT]
+    cmp     r9d, eax
+    ja      .done
+    mov     [r12 + TCP_CONN_SND_WND], r11w
+
+    cmp     dword [r12 + TCP_CONN_TX_LEN], 0
+    je      .check_rx_payload
+    mov     ecx, eax
+    sub     ecx, [r12 + TCP_CONN_TX_LEN]
+    cmp     r9d, ecx
+    jbe     .check_rx_payload
+    cmp     r9d, eax
+    jne     .partial_tx_ack
+    mov     dword [r12 + TCP_CONN_TX_LEN], 0
+    jmp     .check_rx_payload
+
+.partial_tx_ack:
+    sub     r9d, ecx
+    lea     rdi, [r12 + TCP_CONN_TX_BUF]
+    lea     rsi, [r12 + TCP_CONN_TX_BUF]
+    add     rsi, r9
+    mov     edx, [r12 + TCP_CONN_TX_LEN]
+    sub     edx, r9d
+    push    rdx
+    call    er_memcpy
+    pop     rdx
+    mov     [r12 + TCP_CONN_TX_LEN], edx
+
+.check_rx_payload:
     ; Process data payload if present
     cmp     r14d, 0
     je      .ack_only
@@ -1168,7 +1340,7 @@ er_fn er_tcp_handle
     ; Check if payload fits in rx buffer
     mov     eax, [r12 + TCP_CONN_RX_LEN]
     add     eax, r14d
-    cmp     eax, 1460       ; TCP_CONN_RX_BUF size
+    cmp     eax, TCP_CONN_RX_CAP
     ja      .ack_only       ; drop if full
 
     ; Copy payload to connection rx buffer
@@ -1238,23 +1410,39 @@ er_fn er_tcp_poll
     je      .check_syn_timeout
     cmp     eax, TCP_TIME_WAIT
     je      .check_timewait
+    cmp     eax, TCP_FIN_WAIT_1
+    je      .retransmit_fin
+    cmp     eax, TCP_LAST_ACK
+    je      .retransmit_fin
 
-    ; In the future: check retransmission timeouts for sent but unacked data
+    cmp     eax, TCP_ESTABLISHED
+    jne     .next_poll
+    cmp     dword [r12 + TCP_CONN_TX_LEN], 0
+    je      .next_poll
+    mov     ecx, [r12 + TCP_CONN_SND_NXT]
+    sub     ecx, [r12 + TCP_CONN_TX_LEN]
+    mov     rdi, r12
+    lea     rsi, [r12 + TCP_CONN_TX_BUF]
+    mov     edx, [r12 + TCP_CONN_TX_LEN]
+    call    _tcp_send_data_range
+    jmp     .next_poll
+
+.retransmit_fin:
+    mov     ecx, [r12 + TCP_CONN_SND_NXT]
+    dec     ecx
+    mov     rdi, r12
+    call    _tcp_send_fin_segment
 
 .next_poll:
     inc     ebx
     jmp     .poll_loop
 
 .check_syn_timeout:
-    ; For now, just check if too many ticks have passed
-    ; A proper implementation would track when SYN was sent
-    ; For simplicity, leave SYN_SENT connections alone (they'll time out eventually)
+    mov     rdi, r12
+    call    _tcp_send_syn
     jmp     .next_poll
 
 .check_timewait:
-    ; TIME_WAIT should last 2*MSL (~60 seconds)
-    ; For now, immediately transition to CLOSED
-    mov     dword [r12 + TCP_CONN_STATE], TCP_CLOSED
     jmp     .next_poll
 
 .done_poll:

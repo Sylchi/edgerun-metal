@@ -11,6 +11,7 @@ extern er_vp8_write_visible_inter_frame_tag
 extern er_vp8_is_key_frame
 extern er_vp8_parse_key_frame_header
 extern er_vp8_parse_key_frame_payload
+extern er_vp8_parse_inter_frame_payload
 extern er_vp8_decode_key_frame
 extern er_vp8_bool_reader_init
 extern er_vp8_bool_read
@@ -53,6 +54,8 @@ extern er_vp8_copy_default_coeff_probabilities
 extern er_vp8_read_large_coeff_value
 extern er_vp8_read_coeff_block
 extern er_vp8_read_residual_macroblock_single
+extern er_vp8_skip_residual_context
+extern er_vp8_read_residual_macroblock_context
 extern er_vp8_init_default_edges
 extern er_vp8_chroma_dimension
 extern er_vp8_write_luma_macroblock
@@ -194,6 +197,7 @@ intra4_edge:     resb VP8_INTRA4_EDGE_SIZE
 intra4_left:     resb VP8_BLOCK_SIZE
 top_modes:       resb VP8_MAX_LUMA_TOKEN_COLUMNS
 left_modes:      resb VP8_BLOCK_SIZE
+residual_context: resb VP8_RESIDUAL_CONTEXT_SIZE
 
 SECTION .data
 key_tag:        db 0x30, 0x00, 0x00
@@ -208,6 +212,7 @@ payload:        db 0x90, 0x00, 0x00, 0x9d, 0x01, 0x2a, 0x02, 0x00, 0x03, 0x00
 payload_empty:  db 0x10, 0x00, 0x00, 0x9d, 0x01, 0x2a, 0x02, 0x00, 0x03, 0x00
 payload_short:  db 0x50, 0x00, 0x00, 0x9d, 0x01, 0x2a, 0x02, 0x00, 0x03, 0x00
                 db 0xaa
+inter_payload:  db 0x31, 0x00, 0x00, 0xaa, 0xbb
 bool_zero:      db 0x00, 0x00, 0xaa
 bool_ones:      db 0xff, 0xff
 bool_long_ones: db 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff
@@ -466,6 +471,28 @@ _start:
     inc     qword [rel passed]
     jmp     .decode_gray_payload
 .fail_payload:
+    inc     qword [rel failed]
+
+.inter_payload:
+    mov     rdi, inter_payload
+    mov     esi, 5
+    mov     rdx, key_payload
+    call    er_vp8_parse_inter_frame_payload
+    cmp     eax, VP8_FRAME_TAG_SIZE + 1
+    jne     .fail_inter_payload
+    test    edx, edx
+    jnz     .fail_inter_payload
+    cmp     dword [rel key_payload + VP8_INTER_PAYLOAD_FIRST_OFFSET], VP8_FRAME_TAG_SIZE
+    jne     .fail_inter_payload
+    cmp     dword [rel key_payload + VP8_INTER_PAYLOAD_FIRST_LEN], 1
+    jne     .fail_inter_payload
+    cmp     dword [rel key_payload + VP8_INTER_PAYLOAD_TOKEN_OFFSET], VP8_FRAME_TAG_SIZE + 1
+    jne     .fail_inter_payload
+    cmp     dword [rel key_payload + VP8_INTER_PAYLOAD_TOKEN_LEN], 1
+    jne     .fail_inter_payload
+    inc     qword [rel passed]
+    jmp     .decode_gray_payload
+.fail_inter_payload:
     inc     qword [rel failed]
 
 .decode_gray_payload:
@@ -2464,6 +2491,53 @@ _start:
     jnz     .fail_coeff_block_decode
     cmp     word [rel macroblock_coeffs + VP8_Y2_BLOCK_INDEX * VP8_COEFF_BLOCK_BYTES], 0
     jne     .fail_coeff_block_decode
+    mov     rdi, residual_context
+    mov     esi, 1
+    mov     edx, VP8_RESIDUAL_CONTEXT_SIZE
+    call    er_vp8_memset
+    mov     rdi, residual_context
+    mov     esi, 2
+    mov     edx, 1
+    call    er_vp8_skip_residual_context
+    cmp     eax, 1
+    jne     .fail_coeff_block_decode
+    test    edx, edx
+    jnz     .fail_coeff_block_decode
+    cmp     dword [rel residual_context + VP8_RESIDUAL_CONTEXT_TOP_Y + 8], 0
+    jne     .fail_coeff_block_decode
+    cmp     dword [rel residual_context + VP8_RESIDUAL_CONTEXT_LEFT_Y], 0
+    jne     .fail_coeff_block_decode
+    cmp     word [rel residual_context + VP8_RESIDUAL_CONTEXT_TOP_U + 4], 0
+    jne     .fail_coeff_block_decode
+    cmp     word [rel residual_context + VP8_RESIDUAL_CONTEXT_TOP_V + 4], 0
+    jne     .fail_coeff_block_decode
+    cmp     word [rel residual_context + VP8_RESIDUAL_CONTEXT_LEFT_U], 0
+    jne     .fail_coeff_block_decode
+    cmp     word [rel residual_context + VP8_RESIDUAL_CONTEXT_LEFT_V], 0
+    jne     .fail_coeff_block_decode
+    cmp     byte [rel residual_context + VP8_RESIDUAL_CONTEXT_TOP_Y2 + 2], 0
+    jne     .fail_coeff_block_decode
+    cmp     byte [rel residual_context + VP8_RESIDUAL_CONTEXT_LEFT_Y2], 0
+    jne     .fail_coeff_block_decode
+    mov     rdi, residual_context
+    xor     esi, esi
+    mov     edx, VP8_RESIDUAL_CONTEXT_SIZE
+    call    er_vp8_memset
+    mov     rdi, bool_zero
+    mov     esi, 3
+    mov     rdx, bool_reader
+    call    er_vp8_bool_reader_init
+    mov     rdi, bool_reader
+    mov     rsi, token_probabilities
+    mov     edx, 1
+    mov     rcx, macroblock_coeffs
+    xor     r8d, r8d
+    mov     r9, residual_context
+    call    er_vp8_read_residual_macroblock_context
+    test    eax, eax
+    jnz     .fail_coeff_block_decode
+    test    edx, edx
+    jnz     .fail_coeff_block_decode
     inc     qword [rel passed]
     jmp     .dequantize_blocks
 .fail_coeff_block_decode:
@@ -3659,10 +3733,6 @@ _start:
     mov     rax, [rel failed]
     test    rax, rax
     jz      .ok
-    mov     edi, 1
-    mov     eax, 60
-    syscall
+    TEST_EXIT 1
 .ok:
-    xor     edi, edi
-    mov     eax, 60
-    syscall
+    TEST_EXIT 0

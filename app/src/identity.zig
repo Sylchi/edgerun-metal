@@ -227,40 +227,32 @@ fn hashMaterial(material: []const u8) [hash_size]u8 {
 }
 
 test "source is explicit material with deterministic id" {
-    const std = @import("std");
-    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
     const source = Source.prepare(.hash, &hashMaterial("app manifest")).?;
     const a = Identity.init(.app, source, epoch).?;
     const b = Identity.init(.app, source, epoch).?;
 
-    try testing.expect(a.id.eql(b.id));
-    try testing.expect(Identity.init(.app, Source.init(.hash, "short").?, epoch) == null);
+    try expect(a.id.eql(b.id));
+    try expect(Identity.init(.app, Source.init(.hash, "short").?, epoch) == null);
 }
 
 test "strict source preparation enforces C identity material sizes" {
-    const std = @import("std");
-    const testing = std.testing;
-    try testing.expect(Source.prepare(.hash, "short") == null);
+    try expect(Source.prepare(.hash, "short") == null);
     const source = Source.prepare(.hash, &hashMaterial("manifest")).?;
-    try testing.expect(source.valid());
-    try testing.expect(Source.prepare(.p256_public, &([_]u8{1} ** 64)) != null);
+    try expect(source.valid());
+    try expect(Source.prepare(.p256_public, &([_]u8{1} ** 64)) != null);
 }
 
 test "ed25519 public source is the routable hidden service identity" {
-    const std = @import("std");
-    const testing = std.testing;
     const public_key = [_]u8{7} ++ [_]u8{3} ** 31;
     const source = Source.prepare(.ed25519_public, &public_key).?;
     const id = source.id();
 
-    try testing.expect(bytes.eql(&public_key, &id.bytes));
+    try expect(bytes.eql(&public_key, &id.bytes));
 }
 
 test "identity derives child and delegated app identities" {
-    const std = @import("std");
-    const testing = std.testing;
     const keeper = clock.KeeperId{ .bytes = [_]u8{2} ++ [_]u8{0} ** 31 };
     const epoch = clock.Stamp{ .keeper = keeper };
     const parent = Identity.instantiate(.{
@@ -271,9 +263,9 @@ test "identity derives child and delegated app identities" {
     }).?;
 
     const child = parent.deriveChild(.app, epoch, "chat", "manifest").?;
-    try testing.expect(child.valid());
-    try testing.expectEqual(Kind.app, child.kind);
-    try testing.expectEqual(SourceKind.derived, child.source.kind);
+    try expect(child.valid());
+    try expectEqual(Kind.app, child.kind);
+    try expectEqual(SourceKind.derived, child.source.kind);
 
     const delegated = Identity.instantiateApp(.{
         .parent = parent,
@@ -282,15 +274,23 @@ test "identity derives child and delegated app identities" {
         .epoch = epoch,
         .required_parent_operations = .verify_and_sign,
     }).?;
-    try testing.expect(delegated.valid());
-    try testing.expectEqual(Kind.delegated, delegated.kind);
-    try testing.expectEqual(SourceKind.delegation, delegated.source.kind);
+    try expect(delegated.valid());
+    try expectEqual(Kind.delegated, delegated.kind);
+    try expectEqual(SourceKind.delegation, delegated.source.kind);
 
-    try testing.expect(Identity.instantiateApp(.{
+    try expect(Identity.instantiateApp(.{
         .parent = parent,
         .app_material = &hashMaterial("delegated-app"),
         .scope_hash = "short",
         .epoch = epoch,
         .required_parent_operations = .verify_and_sign,
     }) == null);
+}
+
+fn expect(condition: bool) !void {
+    if (!condition) return error.TestExpectedTrue;
+}
+
+fn expectEqual(expected: anytype, actual: @TypeOf(expected)) !void {
+    if (actual != expected) return error.TestExpectedEqual;
 }

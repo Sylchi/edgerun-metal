@@ -1,4 +1,3 @@
-const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../component_common.zig");
 const text_component = @import("Text.zig");
@@ -77,5 +76,5 @@ test "alert dialog measurement follows title and detail text" {
     const short = AlertDialog{ .id = 997, .title = "Delete?", .detail = "Body" };
     const long = AlertDialog{ .id = 997, .title = "Delete runtime authority?", .detail = "This action changes receipt state" };
 
-    try std.testing.expect(long.measure(.{}, .{}).preferred.w > short.measure(.{}, .{}).preferred.w);
+    try component_test.expect(long.measure(.{}, .{}).preferred.w > short.measure(.{}, .{}).preferred.w);
 }

@@ -1,4 +1,3 @@
-const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../component_common.zig");
 const interaction = @import("../interaction.zig");
@@ -146,6 +145,6 @@ test "toast measurement wraps long content under narrow constraints" {
     const measured = toast.measure(.{ .width = .{ .at_most = toast_min_width }, .text_wrap = .wrap }, .{});
     const compact_measured = compact.measure(.{ .width = .{ .at_most = toast_min_width }, .text_wrap = .wrap }, .{});
 
-    try std.testing.expect(measured.preferred.w <= toast_min_width);
-    try std.testing.expect(measured.preferred.h > compact_measured.preferred.h);
+    try component_test.expect(measured.preferred.w <= toast_min_width);
+    try component_test.expect(measured.preferred.h > compact_measured.preferred.h);
 }

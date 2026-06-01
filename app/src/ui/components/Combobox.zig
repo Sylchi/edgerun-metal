@@ -1,4 +1,3 @@
-const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../component_common.zig");
 const interaction = @import("../interaction.zig");
@@ -135,5 +134,5 @@ test "combobox measurement follows placeholder and selected text" {
     const short = Combobox{ .id = 991, .placeholder = "Find", .selected = "Zig" };
     const long = Combobox{ .id = 991, .placeholder = "Search runtime framework", .selected = "Component authority model" };
 
-    try std.testing.expect(long.measure(.{}, .{}).preferred.w > short.measure(.{}, .{}).preferred.w);
+    try component_test.expect(long.measure(.{}, .{}).preferred.w > short.measure(.{}, .{}).preferred.w);
 }

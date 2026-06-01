@@ -1763,15 +1763,13 @@ _start:
 .done:
     cmp     qword [rel failed], 0
     je      .exit_ok
+%ifndef TEST_FLAT_KERNEL
     mov     rdi, 1
     mov     rsi, failed
     mov     rdx, 8
     mov     rax, 1
     syscall
-    mov     rax, 60
-    mov     rdi, 1
-    syscall
+%endif
+    TEST_EXIT 1
 .exit_ok:
-    mov     rax, 60
-    xor     rdi, rdi
-    syscall
+    TEST_EXIT 0

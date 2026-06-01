@@ -1,4 +1,3 @@
-const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../component_common.zig");
 const interaction = @import("../interaction.zig");
@@ -122,5 +121,5 @@ test "radio group measurement follows option labels" {
     const short = RadioGroup{ .id = 70, .first = "A", .second = "B", .selected = 0 };
     const long = RadioGroup{ .id = 70, .first = "Default", .second = "Comfortable runtime mode", .selected = 1 };
 
-    try std.testing.expect(long.measure(.{}, .{}).preferred.w > short.measure(.{}, .{}).preferred.w);
+    try component_test.expect(long.measure(.{}, .{}).preferred.w > short.measure(.{}, .{}).preferred.w);
 }

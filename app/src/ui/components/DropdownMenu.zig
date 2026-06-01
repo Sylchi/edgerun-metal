@@ -1,4 +1,3 @@
-const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../component_common.zig");
 const text_component = @import("Text.zig");
@@ -76,5 +75,5 @@ test "dropdown menu measurement follows item text" {
     const short = DropdownMenu{ .id = 998, .first = "One", .second = "Two" };
     const long = DropdownMenu{ .id = 998, .first = "Runtime profile", .second = "Authority settings" };
 
-    try std.testing.expect(long.measure(.{}, .{}).preferred.w > short.measure(.{}, .{}).preferred.w);
+    try component_test.expect(long.measure(.{}, .{}).preferred.w > short.measure(.{}, .{}).preferred.w);
 }

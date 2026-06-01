@@ -1,4 +1,3 @@
-const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../component_common.zig");
 const interaction = @import("../interaction.zig");
@@ -138,5 +137,5 @@ test "breadcrumb measurement follows label content" {
     const short_measured = short.measure(.{}, .{});
     const long_measured = long.measure(.{}, .{});
 
-    try std.testing.expect(long_measured.preferred.w > short_measured.preferred.w);
+    try component_test.expect(long_measured.preferred.w > short_measured.preferred.w);
 }

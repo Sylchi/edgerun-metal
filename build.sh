@@ -350,67 +350,6 @@ cmd_kernel_tpm_live_test_qemu() {
 	rm -f "${tpm_sock}"
 }
 
-# Build a standalone self-hosted ASM test.
-# Usage: build_test <obj_name> <asm_src> [<dep_path>...]
-# Each dep_path is relative to ASM_DIR (without .asm suffix).
-build_test() {
-	local name="$1"; shift
-	local src="$1"; shift
-	local obj="${ASM_BUILD}/${name}.o"
-	local bin="${ASM_BUILD}/${name%_self}"
-	asm_x86_obj elf64 "$obj" "$src"
-	local extra_o=""
-	for dep; do
-		local dep_obj="${ASM_BUILD}/${dep##*/}.o"
-		local dep_src="${ASM_DIR}/${dep}.asm"
-		elf64 "$dep_src" "$dep_obj"
-		extra_o="$extra_o $dep_obj"
-	done
-	ld -nostdlib -static -o "$bin" "$obj" $extra_o
-	echo "  LD  ${bin}"
-	"$bin"
-}
-
-build_test_self() {
-	local name="$1"; shift
-	build_test "$name" "${TEST_DIR}/${name}.asm" "$@"
-}
-
-build_test_single_dep_obj() {
-	local name="$1"; shift
-	local dep_obj_name="$1"; shift
-	local dep_src="$1"; shift
-	local src="${TEST_DIR}/${name}.asm"
-	local obj="${ASM_BUILD}/${name}.o"
-	local bin="${ASM_BUILD}/${name%_self}"
-	local dep_obj="${ASM_BUILD}/${dep_obj_name}.o"
-	asm_x86_obj elf64 "$obj" "$src"
-	asm_x86_obj elf64 "$dep_obj" "$dep_src" "$@"
-	ld -nostdlib -static -o "$bin" "$obj" "$dep_obj"
-	echo "  LD  ${bin}"
-	"$bin"
-}
-
-build_test_stubbed() {
-	local name="$1"; shift
-	local stub="$1"; shift
-	local src="${TEST_DIR}/${name}.asm"
-	local obj="${ASM_BUILD}/${name}.o"
-	local stub_obj="${ASM_BUILD}/${stub}.o"
-	local bin="${ASM_BUILD}/${name%_self}"
-	asm_x86_obj elf64 "$obj" "$src"
-	asm_x86_obj elf64 "$stub_obj" "${TEST_DIR}/${stub}.asm"
-	local extra_o=""
-	for dep; do
-		local dep_obj="${ASM_BUILD}/${dep##*/}.o"
-		elf64 "${ASM_DIR}/${dep}.asm" "$dep_obj"
-		extra_o="$extra_o $dep_obj"
-	done
-	ld -nostdlib -static -o "$bin" "$obj" $extra_o "$stub_obj"
-	echo "  LD  ${bin}"
-	"$bin"
-}
-
 build_flat_kernel_test() {
 	local name="$1"; shift
 	local main_src="$1"; shift
@@ -420,25 +359,56 @@ build_flat_kernel_test() {
 	local image="${test_dir}/kernel.img"
 	local entry_obj="${test_dir}/entry.o"
 	local main_obj="${test_dir}/main.o"
-	local runtime_obj="${test_dir}/runtime.o"
+	local runtime_obj="${test_dir}/test_flat_runtime.o"
+	local need_runtime=0
+	for dep; do
+		if [ "$dep" = "rt/runtime" ]; then
+			need_runtime=1
+		fi
+	done
 	if [ -e "$test_dir" ] && [ ! -d "$test_dir" ]; then
 		rm -f "$test_dir"
 	fi
 	mkdir -p "$test_dir"
-	elf32 "${ASM_DIR}/entry.asm" "$entry_obj"
-	elf32 "$main_src" "$main_obj"
-	elf32 "${ASM_DIR}/rt/runtime.asm" "$runtime_obj"
+	asm_x86_obj elf32 "$entry_obj" "${ASM_DIR}/entry.asm" -DTEST_FLAT_KERNEL
+	asm_x86_obj elf32 "$main_obj" "$main_src" -DTEST_FLAT_KERNEL
+	if [ "$need_runtime" -eq 1 ]; then
+		runtime_obj="${test_dir}/runtime.o"
+		elf32 "${ASM_DIR}/rt/runtime.asm" "$runtime_obj"
+	else
+		asm_x86_obj elf32 "$runtime_obj" "${TEST_DIR}/test_flat_runtime.asm"
+	fi
 	local extra_o=""
 	for dep; do
+		if [ "$dep" = "rt/runtime" ]; then
+			continue
+		fi
 		local dep_obj="${test_dir}/${dep##*/}.o"
-		elf32 "${ASM_DIR}/${dep}.asm" "$dep_obj"
+		local dep_src="${ASM_DIR}/${dep}.asm"
+		local dep_defs=()
+		case "$dep" in
+			test:*)
+				local stub_name="${dep#test:}"
+				dep_obj="${test_dir}/${stub_name}.o"
+				dep_src="${TEST_DIR}/${stub_name}.asm"
+				;;
+			def:*)
+				local dep_spec="${dep#def:}"
+				local dep_path="${dep_spec%%:*}"
+				local dep_def="${dep_spec#*:}"
+				dep_obj="${test_dir}/${dep_path##*/}.o"
+				dep_src="${ASM_DIR}/${dep_path}.asm"
+				dep_defs=("$dep_def")
+				;;
+		esac
+		asm_x86_obj elf32 "$dep_obj" "$dep_src" -DTEST_FLAT_KERNEL "${dep_defs[@]}"
 		extra_o="$extra_o $dep_obj"
 	done
 	ld -m elf_i386 -T "${KERNEL_LD}" -o "$kernel_bin" "$entry_obj" "$main_obj" "$runtime_obj" $extra_o
 	test -s "$kernel_bin"
 	local bsize=$(stat -c '%s' "$kernel_bin")
 	local sectors=$(( (bsize + 511) / 512 ))
-	asm_x86_obj bin "$boot_bin" "${TEST_DIR}/test_x86_flat_boot.asm" -dKERNEL_SECTORS="${sectors}"
+	asm_x86_obj bin "$boot_bin" "${ASM_DIR}/boot_loader.asm" -dKERNEL_SECTORS="${sectors}"
 	test -s "$boot_bin"
 	cp "$boot_bin" "$image"
 	truncate -s $(( (sectors + 1) * 512 )) "$image"
@@ -446,15 +416,35 @@ build_flat_kernel_test() {
 	test -s "$image"
 	local qemu_log="${test_dir}/qemu.log"
 	local qemu_rc=0
-	timeout 10s qemu-system-x86_64 -cpu qemu64,+pdpe1gb -machine pc -display none -serial stdio -no-reboot \
+	timeout 10s qemu-system-x86_64 -cpu max -machine pc -display none -serial stdio -no-reboot \
 		-device isa-debug-exit,iobase=0xf4,iosize=0x04 \
-		-drive file="$image",format=raw,if=ide,index=0 -m 256 >"$qemu_log" 2>&1 || qemu_rc=$?
+		-drive file="$image",format=raw,if=ide,index=0 -m 256 >"$qemu_log" 2>&1 </dev/null || qemu_rc=$?
 	if [ "$qemu_rc" -ne 1 ]; then
 		cat "$qemu_log" >&2
 		echo "FAIL ${name}: qemu exit ${qemu_rc}" >&2
 		exit 1
 	fi
 	echo "PASS ${name}"
+}
+
+# Build a self-hosted ASM test as a flat bare-metal image.
+# Usage: build_test <obj_name> <asm_src> [<dep_path>...]
+# Each dep_path is relative to ASM_DIR (without .asm suffix).
+build_test() {
+	local name="$1"; shift
+	local src="$1"; shift
+	build_flat_kernel_test "${name%_self}" "$src" "$@"
+}
+
+build_test_self() {
+	local name="$1"; shift
+	build_test "$name" "${TEST_DIR}/${name}.asm" "$@"
+}
+
+build_test_stubbed() {
+	local name="$1"; shift
+	local stub="$1"; shift
+	build_flat_kernel_test "${name%_self}" "${TEST_DIR}/${name}.asm" "test:${stub}" "$@"
 }
 
 test_registry() {
@@ -1471,7 +1461,7 @@ cmd_test_wasm_compiler() {
 }
 
 cmd_test_ctype() {
-	build_flat_kernel_test "test_ctype" "${TEST_DIR}/test_ctype_kernel_main.asm" "rt/ctype"
+	build_test_self "test_ctype_self" "rt/ctype"
 }
 
 cmd_test_clock() {
@@ -1499,57 +1489,19 @@ cmd_test_ipv4() {
 }
 
 cmd_test_tcp() {
-	local name="test_tcp_self"
-	local obj="${ASM_BUILD}/${name}.o"
-	local tcp_obj="${ASM_BUILD}/tcp.o"
-	local stub_obj="${ASM_BUILD}/stubs_tcp.o"
-	local bin="${ASM_BUILD}/${name%_self}"
-	asm_x86_obj elf64 "$obj" "${TEST_DIR}/${name}.asm"
-	elf64 "${ASM_DIR}/net/tcp.asm" "$tcp_obj"
-	asm_x86_obj elf64 "$stub_obj" "${TEST_DIR}/stubs_tcp.asm"
-	ld -nostdlib -static -o "$bin" "$obj" "$tcp_obj" "$stub_obj"
-	echo "  LD  ${bin}"
-	"$bin"
+	build_flat_kernel_test "test_tcp" "${TEST_DIR}/test_tcp_self.asm" "test:stubs_tcp" "net/tcp"
 }
 
 cmd_test_store() {
-	local name="test_store_self"
-	local obj="${ASM_BUILD}/${name}.o"
-	local store_obj="${ASM_BUILD}/store_test.o"
-	local runtime_obj="${ASM_BUILD}/runtime_store_test.o"
-	local bytes_obj="${ASM_BUILD}/bytes_store_test.o"
-	local bin="${ASM_BUILD}/${name%_self}"
-	asm_x86_obj elf64 "$obj" "${TEST_DIR}/${name}.asm"
-	elf64 "${ASM_DIR}/../driver/store.asm" "$store_obj"
-	elf64 "${ASM_DIR}/rt/runtime.asm" "$runtime_obj"
-	elf64 "${ASM_DIR}/rt/bytes.asm" "$bytes_obj"
-	ld -nostdlib -static -o "$bin" "$obj" "$store_obj" "$runtime_obj" "$bytes_obj"
-	echo "  LD  ${bin}"
-	"$bin"
+	build_flat_kernel_test "test_store" "${TEST_DIR}/test_store_self.asm" "../driver/store" "rt/runtime" "rt/bytes"
 }
 
 cmd_test_sdhci() {
-	local name="test_sdhci_self"
-	local obj="${ASM_BUILD}/${name}.o"
-	local sdhci_obj="${ASM_BUILD}/intel_sdhci_test.o"
-	local bin="${ASM_BUILD}/${name%_self}"
-	asm_x86_obj elf64 "$obj" "${TEST_DIR}/${name}.asm"
-	elf64 "${ASM_DIR}/../driver/intel_sdhci.asm" "$sdhci_obj"
-	ld -nostdlib -static -o "$bin" "$obj" "$sdhci_obj"
-	echo "  LD  ${bin}"
-	"$bin"
+	build_flat_kernel_test "test_sdhci" "${TEST_DIR}/test_sdhci_self.asm" "../driver/intel_sdhci"
 }
 
 cmd_test_nvme() {
-	local name="test_nvme_self"
-	local obj="${ASM_BUILD}/${name}.o"
-	local nvme_obj="${ASM_BUILD}/nvme_test.o"
-	local bin="${ASM_BUILD}/${name%_self}"
-	asm_x86_obj elf64 "$obj" "${TEST_DIR}/${name}.asm"
-	elf64 "${ASM_DIR}/../driver/nvme.asm" "$nvme_obj"
-	ld -nostdlib -static -o "$bin" "$obj" "$nvme_obj"
-	echo "  LD  ${bin}"
-	"$bin"
+	build_flat_kernel_test "test_nvme" "${TEST_DIR}/test_nvme_self.asm" "../driver/nvme"
 }
 
 cmd_test_wasm_float() {
@@ -1685,11 +1637,11 @@ cmd_test_pi_usb() {
 }
 
 cmd_test_cros_ec() {
-	build_test_single_dep_obj "test_cros_ec_self" "cros_ec_hosted" "${ASM_DIR}/../driver/cros_ec.asm" -dHOSTED_TEST
+	build_flat_kernel_test "test_cros_ec" "${TEST_DIR}/test_cros_ec_self.asm" "def:../driver/cros_ec:-dHOSTED_TEST"
 }
 
 cmd_test_amdgpu() {
-	build_test_single_dep_obj "test_amdgpu_self" "amdgpu_hosted" "${ASM_DIR}/../driver/amdgpu.asm"
+	build_flat_kernel_test "test_amdgpu" "${TEST_DIR}/test_amdgpu_self.asm" "../driver/amdgpu"
 }
 
 cmd_test_tls() {

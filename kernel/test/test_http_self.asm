@@ -152,6 +152,9 @@ sse_body_empty_len equ $ - sse_body_empty
 SECTION .text
 
 putchar:
+%ifdef TEST_FLAT_KERNEL
+    ret
+%else
     push    rdi
     mov     eax, 1
     mov     edi, 1
@@ -160,6 +163,7 @@ putchar:
     syscall
     pop     rdi
     ret
+%endif
 
 puts:
     push    rbx
@@ -176,6 +180,9 @@ puts:
     ret
 
 print_hex_byte:
+%ifdef TEST_FLAT_KERNEL
+    ret
+%else
     push    rbx
     mov     ebx, eax
     shr     al, 4
@@ -202,6 +209,7 @@ print_hex_byte:
     pop     rax
     pop     rbx
     ret
+%endif
 
 print_hex_dword:
     push    rbx

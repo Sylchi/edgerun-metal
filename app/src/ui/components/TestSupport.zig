@@ -7,6 +7,10 @@ const ui = @import("../core.zig");
 
 const RenderOptions = common.RenderOptions;
 
+pub fn expect(condition: bool) !void {
+    if (!condition) return error.TestExpectedTrue;
+}
+
 pub fn epoch() clock.Stamp {
     return .{ .keeper = .{ .bytes = [_]u8{1} ++ [_]u8{0} ** 31 } };
 }

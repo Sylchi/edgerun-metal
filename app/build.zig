@@ -46,15 +46,45 @@ pub fn build(b: *std.Build) void {
         .description = "Run Zig clock tests",
     });
     _ = addZigTest(b, target, optimize, .{
+        .root = "src/bytes.zig",
+        .step = "bytes-test",
+        .description = "Run project byte helper tests",
+        .default_step = test_step,
+    });
+    _ = addZigTest(b, target, optimize, .{
+        .root = "src/math.zig",
+        .step = "math-test",
+        .description = "Run project math helper tests",
+        .default_step = test_step,
+    });
+    _ = addZigTest(b, target, optimize, .{
         .root = "src/crypto.zig",
         .step = "crypto-test",
         .description = "Run project crypto tests",
         .default_step = test_step,
     });
     _ = addZigTest(b, target, optimize, .{
+        .root = "src/preimage.zig",
+        .step = "preimage-test",
+        .description = "Run project preimage tests",
+        .default_step = test_step,
+    });
+    _ = addZigTest(b, target, optimize, .{
         .root = "src/identity.zig",
         .step = "identity-test",
         .description = "Run Zig identity tests",
+    });
+    _ = addZigTest(b, target, optimize, .{
+        .root = "src/seal.zig",
+        .step = "seal-test",
+        .description = "Run seal policy tests",
+        .default_step = test_step,
+    });
+    _ = addZigTest(b, target, optimize, .{
+        .root = "src/kernel_authority_test.zig",
+        .step = "kernel-authority-test",
+        .description = "Run kernel authority action tests",
+        .default_step = test_step,
     });
     _ = addZigTest(b, target, optimize, .{
         .root = "src/object.zig",
@@ -428,6 +458,10 @@ pub fn build(b: *std.Build) void {
 fn addNoStdProductionCheck(b: *std.Build) *std.Build.Step.Run {
     const script =
         \\failed=0
+        \\for f in src/bytes.zig src/math.zig src/clock.zig src/crypto.zig src/preimage.zig src/identity.zig src/seal.zig src/content/kernel_authority.zig src/media/video.zig src/render/vector_raster.zig src/render/wasm_gl.zig src/tpm.zig src/tls_tpm.zig src/ui/components/Component.zig src/ui/components/Direction.zig src/ui/components/TreeCodec.zig src/ui/components/AlertDialog.zig src/ui/components/Breadcrumb.zig src/ui/components/Carousel.zig src/ui/components/Combobox.zig src/ui/components/Dialog.zig src/ui/components/Drawer.zig src/ui/components/DropdownMenu.zig src/ui/components/HoverCard.zig src/ui/components/Popover.zig src/ui/components/RadioGroup.zig src/ui/components/Sheet.zig src/ui/components/Toggle.zig src/ui/components/ButtonGroup.zig src/ui/components/Chart.zig src/ui/components/InputGroup.zig src/ui/components/Pagination.zig src/ui/components/Toast.zig src/ui/components/ToggleGroup.zig src/ui/components/Tooltip.zig; do
+        \\  [ -f "$f" ] || continue
+        \\  awk '/std\.|@import\("std"\)/ { print FILENAME ":" FNR ":" $0; bad = 1 } END { exit bad }' "$f" || failed=1
+        \\done
         \\for f in src/arena.zig src/object.zig src/bytes.zig src/math.zig src/clock.zig src/crypto.zig src/boot_resource_map.zig src/pi_usb_control.zig src/app_encrypted_chat.zig src/app_pipeline_dashboard.zig src/content/kernel.zig src/content/resource_contract.zig src/content/resource_inventory.zig src/media/common.zig src/media/runtime_image.zig src/media/video_common.zig src/media/video_ivf.zig src/media/video_webm.zig src/media/audio_webm.zig src/media/jpeg.zig src/render/font.zig src/render/font_atlas_weighted.zig src/render/ir.zig src/render/pipeline.zig src/render/surface.zig src/shell/agent.zig src/shell/frame.zig src/svg_path_parser.zig src/ui/*.zig src/ui/layouts/*.zig src/ui/components/*.zig; do
         \\  [ -f "$f" ] || continue
         \\  case "$f" in */TestSupport.zig|*/ComponentApiTest.zig) continue ;; esac

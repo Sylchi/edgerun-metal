@@ -227,50 +227,59 @@ fn maxIntU64() u64 {
 }
 
 test "scalar clamp align and power helpers match C helper semantics" {
-    const testing = @import("std").testing;
-    try testing.expectEqual(@as(f32, 3.0), absF(-3.0));
-    try testing.expectEqual(@as(f32, 1.0), minF(1.0, 2.0));
-    try testing.expectEqual(@as(f32, 2.0), maxF(1.0, 2.0));
-    try testing.expectEqual(@as(f32, 1.0), clamp01F(4.0));
-    try testing.expectEqual(@as(usize, 4), clampSize(9, 1, 4));
-    try testing.expectEqual(@as(u64, 8), alignDownU64(15, 8));
-    try testing.expectEqual(@as(u64, 16), alignUpU64(15, 8));
-    try testing.expectEqual(maxIntU64() & ~@as(u64, 7), alignUpU64(maxIntU64() - 1, 8));
-    try testing.expectEqual(@as(u64, 16), nextPowerOfTwoU64(9));
-    try testing.expectEqual(maxIntU64(), nextPowerOfTwoU64(maxIntU64()));
-    try testing.expect(isPowerOfTwoU64(1024));
-    try testing.expect(!isPowerOfTwoU64(0));
+    try expectEqual(@as(f32, 3.0), absF(-3.0));
+    try expectEqual(@as(f32, 1.0), minF(1.0, 2.0));
+    try expectEqual(@as(f32, 2.0), maxF(1.0, 2.0));
+    try expectEqual(@as(f32, 1.0), clamp01F(4.0));
+    try expectEqual(@as(usize, 4), clampSize(9, 1, 4));
+    try expectEqual(@as(u64, 8), alignDownU64(15, 8));
+    try expectEqual(@as(u64, 16), alignUpU64(15, 8));
+    try expectEqual(maxIntU64() & ~@as(u64, 7), alignUpU64(maxIntU64() - 1, 8));
+    try expectEqual(@as(u64, 16), nextPowerOfTwoU64(9));
+    try expectEqual(maxIntU64(), nextPowerOfTwoU64(maxIntU64()));
+    try expect(isPowerOfTwoU64(1024));
+    try expect(!isPowerOfTwoU64(0));
 }
 
 test "float interpolation and geometry helpers match deterministic C formulas" {
-    const testing = @import("std").testing;
-    try testing.expectEqual(@as(f32, 5.0), lerpF(0.0, 10.0, 0.5));
-    try testing.expectEqual(@as(f32, 10.0), lerpClampedF(0.0, 10.0, 2.0));
-    try testing.expectEqual(@as(f32, 0.5), smoothstepF(0.0, 1.0, 0.5));
-    try testing.expectEqual(@as(f32, 0.5), smootherstepF(0.0, 1.0, 0.5));
-    try testing.expectEqual(@as(u8, 0), u8FromUnitF(-1.0));
-    try testing.expectEqual(@as(u8, 128), u8FromUnitF(0.5));
-    try testing.expectEqual(@as(u8, 255), u8FromUnitF(2.0));
-    try testing.expectEqual(@as(f32, 11.0), dot2F(1.0, 2.0, 3.0, 4.0));
-    try testing.expectEqual(@as(f32, 25.0), lengthSq2F(3.0, 4.0));
-    try testing.expectEqual(@as(f32, 25.0), distanceSq2F(0.0, 0.0, 3.0, 4.0));
+    try expectEqual(@as(f32, 5.0), lerpF(0.0, 10.0, 0.5));
+    try expectEqual(@as(f32, 10.0), lerpClampedF(0.0, 10.0, 2.0));
+    try expectEqual(@as(f32, 0.5), smoothstepF(0.0, 1.0, 0.5));
+    try expectEqual(@as(f32, 0.5), smootherstepF(0.0, 1.0, 0.5));
+    try expectEqual(@as(u8, 0), u8FromUnitF(-1.0));
+    try expectEqual(@as(u8, 128), u8FromUnitF(0.5));
+    try expectEqual(@as(u8, 255), u8FromUnitF(2.0));
+    try expectEqual(@as(f32, 11.0), dot2F(1.0, 2.0, 3.0, 4.0));
+    try expectEqual(@as(f32, 25.0), lengthSq2F(3.0, 4.0));
+    try expectEqual(@as(f32, 25.0), distanceSq2F(0.0, 0.0, 3.0, 4.0));
     const nan: f32 = @bitCast(@as(u32, 0x7fc0_0000));
-    try testing.expect(isFiniteF(1.0));
-    try testing.expect(!isFiniteF(nan));
+    try expect(isFiniteF(1.0));
+    try expect(!isFiniteF(nan));
 }
 
 test "rounding and approximate transcendental helpers stay in expected bands" {
-    const testing = @import("std").testing;
-    try testing.expectEqual(@as(f32, -2.0), floorF(-1.25));
-    try testing.expectEqual(@as(f32, -1.0), ceilF(-1.25));
-    try testing.expectEqual(@as(i64, -2), floorI64(-1.25));
-    try testing.expectEqual(@as(i64, -1), ceilI64(-1.25));
-    try testing.expectEqual(@as(isize, 2), lrintF(1.6));
-    try testing.expectEqual(@as(isize, -2), lrintF(-1.6));
-    try testing.expectApproxEqAbs(@as(f32, 5.0), sqrtF(25.0), 0.01);
-    try testing.expectApproxEqAbs(@as(f32, 5.0), length2F(3.0, 4.0), 0.01);
-    try testing.expectApproxEqAbs(@as(f32, 5.0), distance2F(0.0, 0.0, 3.0, 4.0), 0.01);
-    try testing.expectApproxEqAbs(@as(f32, 0.2), rsqrtF(25.0), 0.01);
-    try testing.expectApproxEqAbs(quarter_pi, atan2F(1.0, 1.0), 0.01);
-    try testing.expectApproxEqAbs(-half_pi, atan2F(-1.0, 0.0), 0.01);
+    try expectEqual(@as(f32, -2.0), floorF(-1.25));
+    try expectEqual(@as(f32, -1.0), ceilF(-1.25));
+    try expectEqual(@as(i64, -2), floorI64(-1.25));
+    try expectEqual(@as(i64, -1), ceilI64(-1.25));
+    try expectEqual(@as(isize, 2), lrintF(1.6));
+    try expectEqual(@as(isize, -2), lrintF(-1.6));
+    try expectApproxEqAbs(@as(f32, 5.0), sqrtF(25.0), 0.01);
+    try expectApproxEqAbs(@as(f32, 5.0), length2F(3.0, 4.0), 0.01);
+    try expectApproxEqAbs(@as(f32, 5.0), distance2F(0.0, 0.0, 3.0, 4.0), 0.01);
+    try expectApproxEqAbs(@as(f32, 0.2), rsqrtF(25.0), 0.01);
+    try expectApproxEqAbs(quarter_pi, atan2F(1.0, 1.0), 0.01);
+    try expectApproxEqAbs(-half_pi, atan2F(-1.0, 0.0), 0.01);
+}
+
+fn expect(condition: bool) !void {
+    if (!condition) return error.TestExpectedTrue;
+}
+
+fn expectEqual(expected: anytype, actual: @TypeOf(expected)) !void {
+    if (actual != expected) return error.TestExpectedEqual;
+}
+
+fn expectApproxEqAbs(expected: f32, actual: f32, tolerance: f32) !void {
+    if (absF(actual - expected) > tolerance) return error.TestExpectedApproxEqual;
 }

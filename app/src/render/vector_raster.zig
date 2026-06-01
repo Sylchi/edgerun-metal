@@ -1,4 +1,3 @@
-const std = @import("std");
 const math = @import("../math.zig");
 const font_vector = @import("font.zig");
 

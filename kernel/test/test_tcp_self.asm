@@ -1,6 +1,7 @@
 ; EdgeRun TCP checksum self-hosted test.
 
 %include "x86_64/macros.inc"
+%include "x86_64/wasm_defines.inc"
 %include "x86_64/net/net_constants.inc"
 %include "test/test_macros.inc"
 
@@ -12,6 +13,7 @@ extern er_tcp_handle
 extern er_tcp_send
 extern er_tcp_recv
 extern er_tcp_close
+extern er_tcp_poll
 extern tcp_stub_last_dst_ip
 extern tcp_stub_last_proto
 extern tcp_stub_last_len
@@ -70,6 +72,12 @@ _start:
     ASSERT_EQ byte [rel tcp_stub_last_packet + TCP_DATA_OFF], 0x60
     ASSERT_EQ word [rel tcp_stub_last_packet + TCP_SRC_PORT], 0x00c0
     ASSERT_EQ word [rel tcp_stub_last_packet + TCP_DST_PORT], 0xbb01
+    ASSERT_EQ dword [rel tcp_stub_send_count], 1
+
+    call    er_tcp_poll
+    ASSERT_RDX 0
+    ASSERT_EQ byte [rel tcp_stub_last_packet + TCP_FLAGS], TCP_SYN
+    ASSERT_EQ dword [rel tcp_stub_send_count], 2
 
     call    build_syn_ack
     lea     rdi, [rel ip_packet]
@@ -129,15 +137,146 @@ _start:
     ASSERT_EQ byte [rel tcp_stub_last_packet + TCP_HDR_LEN + 1], 'y'
 
     mov     edi, [rel conn_id]
+    xor     rsi, rsi
+    mov     edx, 1
+    call    er_tcp_send
+    ASSERT_EQ eax, -1
+    ASSERT_RDX ERROR_INVALID_PARAM
+
+    mov     dword [rel recv_len], 1
+    mov     edi, [rel conn_id]
+    xor     rsi, rsi
+    lea     rdx, [rel recv_len]
+    call    er_tcp_recv
+    ASSERT_EQ eax, -1
+    ASSERT_RDX ERROR_INVALID_PARAM
+
+    mov     edi, [rel conn_id]
+    lea     rsi, [rel recv_buf]
+    xor     edx, edx
+    call    er_tcp_recv
+    ASSERT_EQ eax, -1
+    ASSERT_RDX ERROR_INVALID_PARAM
+
+    mov     edi, [rel conn_id]
+    lea     rsi, [rel send_payload_2]
+    mov     edx, send_payload_2_len
+    call    er_tcp_send
+    ASSERT_EQ eax, -1
+    ASSERT_RDX ERROR_BUSY
+
+    call    er_tcp_poll
+    ASSERT_RDX 0
+    ASSERT_EQ byte [rel tcp_stub_last_packet + TCP_FLAGS], TCP_PSH | TCP_ACK
+    ASSERT_EQ dword [rel tcp_stub_last_packet + TCP_SEQ_NUM], 0x05030201
+    ASSERT_EQ byte [rel tcp_stub_last_packet + TCP_HDR_LEN], 'x'
+    ASSERT_EQ byte [rel tcp_stub_last_packet + TCP_HDR_LEN + 1], 'y'
+
+    mov     edi, [rel conn_id]
+    call    er_tcp_close
+    ASSERT_EQ eax, -1
+    ASSERT_RDX ERROR_BUSY
+
+    call    build_ack_high_packet
+    lea     rdi, [rel ip_packet]
+    mov     esi, IP_HDR_LEN + TCP_HDR_LEN
+    call    er_tcp_handle
+    ASSERT_RDX 0
+
+    mov     edi, [rel conn_id]
+    lea     rsi, [rel send_payload_2]
+    mov     edx, send_payload_2_len
+    call    er_tcp_send
+    ASSERT_EQ eax, -1
+    ASSERT_RDX ERROR_BUSY
+
+    call    build_ack_xy_packet
+    lea     rdi, [rel ip_packet]
+    mov     esi, IP_HDR_LEN + TCP_HDR_LEN
+    call    er_tcp_handle
+    ASSERT_RDX 0
+
+    mov     edi, [rel conn_id]
+    lea     rsi, [rel send_payload_2]
+    mov     edx, send_payload_2_len
+    call    er_tcp_send
+    ASSERT_RDX 0
+    ASSERT_EQ byte [rel tcp_stub_last_packet + TCP_FLAGS], TCP_PSH | TCP_ACK
+    ASSERT_EQ dword [rel tcp_stub_last_packet + TCP_SEQ_NUM], 0x07030201
+    ASSERT_EQ byte [rel tcp_stub_last_packet + TCP_HDR_LEN], 'z'
+    ASSERT_EQ byte [rel tcp_stub_last_packet + TCP_HDR_LEN + 1], 'z'
+
+    call    build_ack_zz_packet
+    lea     rdi, [rel ip_packet]
+    mov     esi, IP_HDR_LEN + TCP_HDR_LEN
+    call    er_tcp_handle
+    ASSERT_RDX 0
+
+    mov     edi, [rel conn_id]
+    lea     rsi, [rel big_payload]
+    mov     edx, big_payload_len
+    call    er_tcp_send
+    ASSERT_RDX 0
+    ASSERT_EQ byte [rel tcp_stub_last_packet + TCP_FLAGS], TCP_PSH | TCP_ACK
+    ASSERT_EQ dword [rel tcp_stub_last_packet + TCP_SEQ_NUM], 0xbd080201
+    ASSERT_EQ dword [rel tcp_stub_last_len], TCP_HDR_LEN + 1
+    ASSERT_EQ byte [rel tcp_stub_last_packet + TCP_HDR_LEN], 'q'
+
+    call    build_ack_big_partial_packet
+    lea     rdi, [rel ip_packet]
+    mov     esi, IP_HDR_LEN + TCP_HDR_LEN
+    call    er_tcp_handle
+    ASSERT_RDX 0
+
+    call    er_tcp_poll
+    ASSERT_RDX 0
+    ASSERT_EQ byte [rel tcp_stub_last_packet + TCP_FLAGS], TCP_PSH | TCP_ACK
+    ASSERT_EQ dword [rel tcp_stub_last_packet + TCP_SEQ_NUM], 0xbd080201
+    ASSERT_EQ dword [rel tcp_stub_last_len], TCP_HDR_LEN + 1
+
+    call    build_ack_big_packet
+    lea     rdi, [rel ip_packet]
+    mov     esi, IP_HDR_LEN + TCP_HDR_LEN
+    call    er_tcp_handle
+    ASSERT_RDX 0
+
+    mov     edi, [rel conn_id]
+    lea     rsi, [rel oversize_payload]
+    mov     edx, oversize_payload_len
+    call    er_tcp_send
+    ASSERT_EQ eax, -1
+    ASSERT_RDX ERROR_INVALID_PARAM
+
+    mov     edi, [rel conn_id]
     call    er_tcp_close
     ASSERT_RDX 0
     ASSERT_EQ byte [rel tcp_stub_last_packet + TCP_FLAGS], TCP_FIN | TCP_ACK
-    ASSERT_EQ dword [rel tcp_stub_last_packet + TCP_SEQ_NUM], 0x07030201
+    ASSERT_EQ dword [rel tcp_stub_last_packet + TCP_SEQ_NUM], 0xbe080201
+
+    call    er_tcp_poll
+    ASSERT_RDX 0
+    ASSERT_EQ byte [rel tcp_stub_last_packet + TCP_FLAGS], TCP_FIN | TCP_ACK
+    ASSERT_EQ dword [rel tcp_stub_last_packet + TCP_SEQ_NUM], 0xbe080201
+
+    call    build_ack_fin_packet
+    lea     rdi, [rel ip_packet]
+    mov     esi, IP_HDR_LEN + TCP_HDR_LEN
+    call    er_tcp_handle
+    ASSERT_RDX 0
+    mov     edi, [rel conn_id]
+    call    er_tcp_get_state
+    ASSERT_EQ eax, TCP_FIN_WAIT_2
 
     TEST_EXIT_FAILED
 
 send_payload: db "xy"
 send_payload_len equ $ - send_payload
+send_payload_2: db "zz"
+send_payload_2_len equ $ - send_payload_2
+big_payload: times TCP_DEFAULT_MSS + 1 db 'q'
+big_payload_len equ $ - big_payload
+oversize_payload: times TCP_CONN_TX_CAP + 1 db 'r'
+oversize_payload_len equ $ - oversize_payload
 
 build_ip_tcp_common:
     mov     byte [rel ip_packet + IP_VER_IHL], IP_DEFAULT_VER_IHL
@@ -193,5 +332,78 @@ build_bad_seq_packet:
     mov     dword [rel conn + TCP_CONN_DST_IP], 0x0200000a
     lea     rsi, [rel ip_packet + IP_HDR_LEN]
     mov     edx, TCP_HDR_LEN + 3
+    call    _tcp_compute_checksum
+    ret
+
+build_ack_common:
+    call    build_ip_tcp_common
+    mov     word [rel ip_packet + IP_TOTAL_LEN], 0x2800
+    mov     dword [rel ip_packet + IP_HDR_LEN + TCP_SEQ_NUM], 0x48332211
+    mov     byte [rel ip_packet + IP_HDR_LEN + TCP_FLAGS], TCP_ACK
+    ret
+
+build_ack_xy_packet:
+    call    build_ack_common
+    mov     dword [rel ip_packet + IP_HDR_LEN + TCP_ACK_NUM], 0x07030201
+    lea     rdi, [rel conn]
+    mov     dword [rel conn + TCP_CONN_SRC_IP], 0x0100000a
+    mov     dword [rel conn + TCP_CONN_DST_IP], 0x0200000a
+    lea     rsi, [rel ip_packet + IP_HDR_LEN]
+    mov     edx, TCP_HDR_LEN
+    call    _tcp_compute_checksum
+    ret
+
+build_ack_zz_packet:
+    call    build_ack_common
+    mov     dword [rel ip_packet + IP_HDR_LEN + TCP_ACK_NUM], 0x09030201
+    lea     rdi, [rel conn]
+    mov     dword [rel conn + TCP_CONN_SRC_IP], 0x0100000a
+    mov     dword [rel conn + TCP_CONN_DST_IP], 0x0200000a
+    lea     rsi, [rel ip_packet + IP_HDR_LEN]
+    mov     edx, TCP_HDR_LEN
+    call    _tcp_compute_checksum
+    ret
+
+build_ack_big_packet:
+    call    build_ack_common
+    mov     dword [rel ip_packet + IP_HDR_LEN + TCP_ACK_NUM], 0xbe080201
+    lea     rdi, [rel conn]
+    mov     dword [rel conn + TCP_CONN_SRC_IP], 0x0100000a
+    mov     dword [rel conn + TCP_CONN_DST_IP], 0x0200000a
+    lea     rsi, [rel ip_packet + IP_HDR_LEN]
+    mov     edx, TCP_HDR_LEN
+    call    _tcp_compute_checksum
+    ret
+
+build_ack_big_partial_packet:
+    call    build_ack_common
+    mov     dword [rel ip_packet + IP_HDR_LEN + TCP_ACK_NUM], 0xbd080201
+    lea     rdi, [rel conn]
+    mov     dword [rel conn + TCP_CONN_SRC_IP], 0x0100000a
+    mov     dword [rel conn + TCP_CONN_DST_IP], 0x0200000a
+    lea     rsi, [rel ip_packet + IP_HDR_LEN]
+    mov     edx, TCP_HDR_LEN
+    call    _tcp_compute_checksum
+    ret
+
+build_ack_high_packet:
+    call    build_ack_common
+    mov     dword [rel ip_packet + IP_HDR_LEN + TCP_ACK_NUM], 0xff030201
+    lea     rdi, [rel conn]
+    mov     dword [rel conn + TCP_CONN_SRC_IP], 0x0100000a
+    mov     dword [rel conn + TCP_CONN_DST_IP], 0x0200000a
+    lea     rsi, [rel ip_packet + IP_HDR_LEN]
+    mov     edx, TCP_HDR_LEN
+    call    _tcp_compute_checksum
+    ret
+
+build_ack_fin_packet:
+    call    build_ack_common
+    mov     dword [rel ip_packet + IP_HDR_LEN + TCP_ACK_NUM], 0xbf080201
+    lea     rdi, [rel conn]
+    mov     dword [rel conn + TCP_CONN_SRC_IP], 0x0100000a
+    mov     dword [rel conn + TCP_CONN_DST_IP], 0x0200000a
+    lea     rsi, [rel ip_packet + IP_HDR_LEN]
+    mov     edx, TCP_HDR_LEN
     call    _tcp_compute_checksum
     ret

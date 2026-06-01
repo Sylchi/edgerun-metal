@@ -2,6 +2,7 @@
 ; Provides buffer-backed er_in_al_dx / er_out_dx_al and _start,
 ; linking against serial.o (which declares these functions extern).
 
+%include "x86_64/macros.inc"
 %include "test/test_macros.inc"
 
 ; -------------------------------------------------------------------

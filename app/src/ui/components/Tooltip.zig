@@ -1,4 +1,3 @@
-const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../component_common.zig");
 const interaction = @import("../interaction.zig");
@@ -114,8 +113,8 @@ test "tooltip measurement wraps long content under narrow constraints" {
     const measured = tooltip.measure(.{ .width = .{ .at_most = tooltip_wrap_test_width }, .text_wrap = .wrap }, .{});
     const tip = contentBounds(ui.Rect.init(0, 0, tooltip_wrap_test_width, tooltip_min_height), tooltip.content);
 
-    try std.testing.expect(measured.preferred.w <= tooltip_wrap_test_width);
-    try std.testing.expect(tip.h > tooltip_content_h);
+    try component_test.expect(measured.preferred.w <= tooltip_wrap_test_width);
+    try component_test.expect(tip.h > tooltip_content_h);
 }
 
 const tooltip_wrap_test_width: f32 = 120.0;

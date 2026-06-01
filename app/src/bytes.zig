@@ -181,40 +181,49 @@ pub fn loadBe32(in: []const u8) ?u32 {
 }
 
 test "little endian roundtrip" {
-    const testing = @import("std").testing;
     var raw: [8]u8 = undefined;
 
-    try testing.expect(store64(&raw, 0x1122334455667788));
-    try testing.expectEqual(@as(u64, 0x1122334455667788), load64(&raw).?);
-    try testing.expectEqualSlices(u8, &raw, &stored64(0x1122334455667788));
+    try expect(store64(&raw, 0x1122334455667788));
+    try expectEqual(@as(u64, 0x1122334455667788), load64(&raw).?);
+    try expectEqualSlices(&raw, &stored64(0x1122334455667788));
 }
 
 test "byte zero copy and fixed length compare match C helpers" {
-    const testing = @import("std").testing;
     var dst = [_]u8{ 9, 9, 9, 9 };
     const src = [_]u8{ 1, 2, 3, 4 };
 
-    try testing.expect(copy(&dst, &src));
-    try testing.expect(eql(&dst, &src));
-    try testing.expect(nonzero(&dst));
-    try testing.expect(!zeroed(&dst));
+    try expect(copy(&dst, &src));
+    try expect(eql(&dst, &src));
+    try expect(nonzero(&dst));
+    try expect(!zeroed(&dst));
     zero(&dst);
-    try testing.expect(zeroed(&dst));
-    try testing.expect(eqlLen(&src, &[_]u8{ 1, 2, 9, 9 }, 2));
-    try testing.expect(!eqlLen(&src, &[_]u8{ 1, 9, 3, 4 }, 2));
-    try testing.expectEqual(@as(i2, -1), compareLen(&[_]u8{ 1, 2, 3 }, &[_]u8{ 1, 3, 0 }, 3));
-    try testing.expectEqual(@as(i2, 1), compareLen(&[_]u8{ 1, 4, 3 }, &[_]u8{ 1, 3, 9 }, 3));
-    try testing.expectEqual(@as(i2, 0), compareLen(&[_]u8{ 1, 4, 3 }, &[_]u8{ 1, 3, 9 }, 1));
+    try expect(zeroed(&dst));
+    try expect(eqlLen(&src, &[_]u8{ 1, 2, 9, 9 }, 2));
+    try expect(!eqlLen(&src, &[_]u8{ 1, 9, 3, 4 }, 2));
+    try expectEqual(@as(i2, -1), compareLen(&[_]u8{ 1, 2, 3 }, &[_]u8{ 1, 3, 0 }, 3));
+    try expectEqual(@as(i2, 1), compareLen(&[_]u8{ 1, 4, 3 }, &[_]u8{ 1, 3, 9 }, 3));
+    try expectEqual(@as(i2, 0), compareLen(&[_]u8{ 1, 4, 3 }, &[_]u8{ 1, 3, 9 }, 1));
 }
 
 test "big endian roundtrip" {
-    const testing = @import("std").testing;
     var raw: [8]u8 = undefined;
 
-    try testing.expect(storeBe32(&raw, 0x11223344));
-    try testing.expectEqual(@as(u32, 0x11223344), loadBe32(&raw).?);
-    try testing.expect(storeBe16(raw[0..2], 0xaabb));
-    try testing.expectEqual(@as(u16, 0xaabb), loadBe16(raw[0..2]).?);
-    try testing.expect(storeBe64(&raw, 0x1122334455667788));
-    try testing.expectEqualSlices(u8, &.{ 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88 }, &raw);
+    try expect(storeBe32(&raw, 0x11223344));
+    try expectEqual(@as(u32, 0x11223344), loadBe32(&raw).?);
+    try expect(storeBe16(raw[0..2], 0xaabb));
+    try expectEqual(@as(u16, 0xaabb), loadBe16(raw[0..2]).?);
+    try expect(storeBe64(&raw, 0x1122334455667788));
+    try expectEqualSlices(&.{ 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88 }, &raw);
+}
+
+fn expect(condition: bool) !void {
+    if (!condition) return error.TestExpectedTrue;
+}
+
+fn expectEqual(expected: anytype, actual: @TypeOf(expected)) !void {
+    if (actual != expected) return error.TestExpectedEqual;
+}
+
+fn expectEqualSlices(expected: []const u8, actual: []const u8) !void {
+    if (!eql(expected, actual)) return error.TestExpectedEqual;
 }

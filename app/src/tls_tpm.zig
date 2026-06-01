@@ -1,4 +1,3 @@
-const std = @import("std");
 const bytes = @import("bytes.zig");
 const tpm = @import("tpm.zig");
 

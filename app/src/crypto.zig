@@ -233,23 +233,21 @@ pub const blake3 = struct {
 };
 
 test "project blake3 matches fixed vectors" {
-    const testing = @import("std").testing;
     var out: [32]u8 = undefined;
 
     blake3.hash("", &out, .{});
-    try testing.expectEqualSlices(u8, &hexToBytes("af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262"), &out);
+    try expectEqualSlices(&hexToBytes("af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262"), &out);
 
     blake3.hash("abc", &out, .{});
-    try testing.expectEqualSlices(u8, &hexToBytes("6437b3ac38465133ffb63b75273a8db548c558465d79db03fd359c6cd5bd9d85"), &out);
+    try expectEqualSlices(&hexToBytes("6437b3ac38465133ffb63b75273a8db548c558465d79db03fd359c6cd5bd9d85"), &out);
 
     var data: [1500]u8 = undefined;
     for (&data, 0..) |*byte, index| byte.* = @truncate(index *% 31 +% 7);
     blake3.hash(&data, &out, .{});
-    try testing.expectEqualSlices(u8, &hexToBytes("f39bf6cbbf1da8ee9d126346f72350101792ed2d8e0c01c53995ebc3f476123c"), &out);
+    try expectEqualSlices(&hexToBytes("f39bf6cbbf1da8ee9d126346f72350101792ed2d8e0c01c53995ebc3f476123c"), &out);
 }
 
 test "project blake3 streaming matches one shot" {
-    const testing = @import("std").testing;
     var data: [1500]u8 = undefined;
     for (&data, 0..) |*byte, index| byte.* = @truncate(index *% 13 +% 19);
 
@@ -263,7 +261,11 @@ test "project blake3 streaming matches one shot" {
     var streamed: [32]u8 = undefined;
     hasher.final(&streamed);
 
-    try testing.expectEqualSlices(u8, &one_shot, &streamed);
+    try expectEqualSlices(&one_shot, &streamed);
+}
+
+fn expectEqualSlices(expected: []const u8, actual: []const u8) !void {
+    if (!bytes.eql(expected, actual)) return error.TestExpectedEqual;
 }
 
 fn hexToBytes(comptime hex: []const u8) [hex.len / 2]u8 {

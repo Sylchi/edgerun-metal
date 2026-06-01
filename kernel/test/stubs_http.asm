@@ -47,6 +47,16 @@ er_strlen:
     jmp     unexpected_http_stub_call
 
 unexpected_http_stub_call:
+%ifdef TEST_FLAT_KERNEL
+    mov     dx, 0xf4
+    mov     eax, UNEXPECTED_HTTP_STUB_EXIT
+    out     dx, eax
+.halt:
+    cli
+    hlt
+    jmp     .halt
+%else
     mov     edi, UNEXPECTED_HTTP_STUB_EXIT
     mov     eax, SYS_EXIT
     syscall
+%endif

@@ -1,4 +1,3 @@
-const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../component_common.zig");
 const text_component = @import("Text.zig");
@@ -70,5 +69,5 @@ test "hover card measurement follows trigger and content text" {
     const short = HoverCard{ .id = 997, .trigger = "Hover", .content = "@ui" };
     const long = HoverCard{ .id = 997, .trigger = "Inspect authority", .content = "@runtime-receipts" };
 
-    try std.testing.expect(long.measure(.{}, .{}).preferred.w > short.measure(.{}, .{}).preferred.w);
+    try component_test.expect(long.measure(.{}, .{}).preferred.w > short.measure(.{}, .{}).preferred.w);
 }

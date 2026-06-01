@@ -15,6 +15,8 @@ _start:
     mov     rdi, 1
     mov     rsi, pass_msg
     mov     rdx, 37
+%ifndef TEST_FLAT_KERNEL
     mov     rax, 1
     syscall
+%endif
     TEST_EXIT 0

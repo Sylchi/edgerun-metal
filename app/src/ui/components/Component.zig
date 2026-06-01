@@ -6,7 +6,6 @@ const ui = @import("../core.zig");
 const common = @import("../component_common.zig");
 const component_codec = @import("Codec.zig");
 const primitives = @import("Primitives.zig");
-const std = @import("std");
 const ui_icon = @import("../icon.zig");
 
 const accordion_component = @import("Accordion.zig");

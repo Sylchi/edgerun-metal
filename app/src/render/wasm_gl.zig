@@ -1,5 +1,3 @@
-const std = @import("std");
-
 pub const GLenum = i32;
 pub const GLint = i32;
 pub const GLuint = u32;

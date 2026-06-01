@@ -1,4 +1,3 @@
-const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../component_common.zig");
 const text_component = @import("Text.zig");
@@ -83,5 +82,5 @@ test "toggle measurement follows label text" {
     const short = Toggle{ .id = 44, .label = "B", .pressed = true };
     const long = Toggle{ .id = 44, .label = "Runtime authority", .pressed = true };
 
-    try std.testing.expect(long.measure(.{}, .{}).preferred.w > short.measure(.{}, .{}).preferred.w);
+    try component_test.expect(long.measure(.{}, .{}).preferred.w > short.measure(.{}, .{}).preferred.w);
 }

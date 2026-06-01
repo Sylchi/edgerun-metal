@@ -4,32 +4,23 @@
 ; switches to 32-bit protected mode, and jumps to the kernel entry. There is no
 ; filesystem, Multiboot contract, or ELF loader in this path.
 
-%include "x86_64/macros.inc"
-
 %ifndef KERNEL_SECTORS
 %error "KERNEL_SECTORS must be defined"
 %endif
 
 KERNEL_LOAD_ADDR equ 0x00100000
-KERNEL_LBA_START equ 1
+READ_BUFFER_ADDR equ 0x00008000
 BOOT_STACK_TOP equ 0x7c00
+PROT_STACK_TOP equ 0x7000
 A20_FAST_PORT equ 0x92
 CR0_PE_BIT equ 0x00000001
 PROT_CODE_SEL equ 0x08
 PROT_DATA_SEL equ 0x10
-ATA_DATA equ 0x1f0
-ATA_SECTOR_COUNT equ 0x1f2
-ATA_LBA_LOW equ 0x1f3
-ATA_LBA_MID equ 0x1f4
-ATA_LBA_HIGH equ 0x1f5
-ATA_DRIVE_HEAD equ 0x1f6
-ATA_STATUS_COMMAND equ 0x1f7
-ATA_STATUS_BSY equ 0x80
-ATA_STATUS_DRQ equ 0x08
-ATA_CMD_READ_SECTORS equ 0x20
-ATA_PRIMARY_MASTER_LBA equ 0xe0
-ATA_SECTOR_BYTES equ 512
-ATA_SECTOR_WORDS equ 256
+BIOS_EXT_READ equ 0x42
+BIOS_DISK_SERVICE equ 0x13
+FIRST_KERNEL_LBA equ 1
+SECTOR_BYTES equ 512
+DAP_SIZE equ 0x10
 
 [BITS 16]
 org 0x7c00
@@ -38,9 +29,37 @@ boot_start:
     cli
     xor     ax, ax
     mov     ds, ax
-    mov     es, ax
     mov     ss, ax
     mov     sp, BOOT_STACK_TOP
+
+    mov     ax, READ_BUFFER_ADDR >> 4
+    mov     es, ax
+    xor     bx, bx
+    mov     word [sectors_left], KERNEL_SECTORS
+    mov     dword [next_lba], FIRST_KERNEL_LBA
+.read_loop:
+    cmp     word [sectors_left], 0
+    je      .read_done
+    mov     [dap_offset], bx
+    mov     [dap_segment], es
+    mov     eax, [next_lba]
+    mov     [dap_lba], eax
+    mov     ah, BIOS_EXT_READ
+    lea     si, [dap]
+    sti
+    int     BIOS_DISK_SERVICE
+    cli
+    jc      boot_fail
+    add     bx, SECTOR_BYTES
+    jnc     .buffer_ok
+    mov     ax, es
+    add     ax, 0x1000
+    mov     es, ax
+.buffer_ok:
+    inc     dword [next_lba]
+    dec     word [sectors_left]
+    jmp     .read_loop
+.read_done:
 
     in      al, A20_FAST_PORT
     or      al, 0x02
@@ -50,6 +69,25 @@ boot_start:
     or      eax, CR0_PE_BIT
     mov     cr0, eax
     jmp     PROT_CODE_SEL:protected_start
+
+boot_fail:
+    hlt
+    jmp     boot_fail
+
+sectors_left: dw 0
+next_lba: dd 0
+
+align 4
+dap:
+    db DAP_SIZE
+    db 0
+    dw 1
+dap_offset:
+    dw 0
+dap_segment:
+    dw 0
+dap_lba:
+    dq 0
 
 align 4
 gdt_start:
@@ -70,75 +108,14 @@ protected_start:
     mov     fs, ax
     mov     gs, ax
     mov     ss, ax
-    mov     esp, KERNEL_LOAD_ADDR
+    mov     esp, PROT_STACK_TOP
     cld
-    mov     esi, KERNEL_LBA_START
+    mov     esi, READ_BUFFER_ADDR
     mov     edi, KERNEL_LOAD_ADDR
-    mov     ebx, KERNEL_SECTORS
-.read_loop:
-    test    ebx, ebx
-    jz      .jump_kernel
-    call    ata_read_sector
-    inc     esi
-    add     edi, ATA_SECTOR_BYTES
-    dec     ebx
-    jmp     .read_loop
-.jump_kernel:
+    mov     ecx, KERNEL_SECTORS * SECTOR_BYTES
+    rep     movsb
     xor     ebx, ebx
     jmp     KERNEL_LOAD_ADDR
-
-ata_wait_ready:
-    mov     dx, ATA_STATUS_COMMAND
-.busy:
-    in      al, dx
-    test    al, ATA_STATUS_BSY
-    jnz     .busy
-    ret
-
-ata_wait_drq:
-    mov     dx, ATA_STATUS_COMMAND
-.drq:
-    in      al, dx
-    test    al, ATA_STATUS_BSY
-    jnz     .drq
-    test    al, ATA_STATUS_DRQ
-    jz      .drq
-    ret
-
-ata_read_sector:
-    call    ata_wait_ready
-    mov     eax, esi
-    shr     eax, 24
-    and     al, 0x0f
-    or      al, ATA_PRIMARY_MASTER_LBA
-    mov     dx, ATA_DRIVE_HEAD
-    out     dx, al
-    mov     dx, ATA_SECTOR_COUNT
-    mov     al, 1
-    out     dx, al
-    mov     eax, esi
-    mov     dx, ATA_LBA_LOW
-    out     dx, al
-    mov     eax, esi
-    shr     eax, 8
-    mov     dx, ATA_LBA_MID
-    out     dx, al
-    mov     eax, esi
-    shr     eax, 16
-    mov     dx, ATA_LBA_HIGH
-    out     dx, al
-    mov     dx, ATA_STATUS_COMMAND
-    mov     al, ATA_CMD_READ_SECTORS
-    out     dx, al
-    call    ata_wait_drq
-    push    ecx
-    push    edi
-    mov     dx, ATA_DATA
-    mov     ecx, ATA_SECTOR_WORDS
-    rep     insw
-    pop     edi
-    pop     ecx
-    ret
 
 times 510 - ($ - $$) db 0
 dw 0xaa55

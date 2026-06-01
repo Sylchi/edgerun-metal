@@ -102,6 +102,8 @@ TCP_LAST_ACK    equ 8
 ; TCP connection table — connection structure offsets
 ; Each entry: TCP_CONN_SIZE bytes
 ; ==================================================================
+TCP_CONN_RX_CAP   equ 1460
+TCP_CONN_TX_CAP   equ TCP_CONN_RX_CAP * 4
 TCP_CONN_STATE     equ 0   ; u32 state
 TCP_CONN_SRC_IP    equ 4   ; u32 local IP
 TCP_CONN_DST_IP    equ 8   ; u32 remote IP
@@ -116,9 +118,9 @@ TCP_CONN_RCV_WND   equ 34  ; u16 receive window
 TCP_CONN_MSS       equ 36  ; u16 max segment size
 TCP_CONN_RX_LEN    equ 38  ; u32 bytes in rx buffer
 TCP_CONN_TX_LEN    equ 42  ; u32 bytes in tx buffer
-TCP_CONN_RX_BUF    equ 46  ; 1460 bytes receive buffer
-TCP_CONN_TX_BUF    equ 1506 ; 1460 bytes transmit buffer
-TCP_CONN_SIZE      equ 2966
+TCP_CONN_RX_BUF    equ 46
+TCP_CONN_TX_BUF    equ TCP_CONN_RX_BUF + TCP_CONN_RX_CAP
+TCP_CONN_SIZE      equ TCP_CONN_TX_BUF + TCP_CONN_TX_CAP
 
 ; Max concurrent TCP connections
 TCP_MAX_CONNS      equ 4
@@ -143,7 +145,7 @@ ETHERNET_MTU   equ 1500
 ETHERNET_MIN   equ 60   ; minimum frame size (padded)
 
 ; TCP MSS (MTU - IP header - TCP header)
-TCP_DEFAULT_MSS equ 1460  ; 1500 - 20 - 20
+TCP_DEFAULT_MSS equ TCP_CONN_RX_CAP
 
 ; Network error codes (extending wasm_defines.inc)
 ERROR_NET_UNREACHABLE equ 30

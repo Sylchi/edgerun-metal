@@ -117,7 +117,6 @@ fn testSignature() tpm_verifier.Signature {
 }
 
 test "kernel authority verifies signed allocation before mutating allocator" {
-    const testing = @import("std").testing;
     const allocation = kernel.Allocation.init(chunk("alloc-a"), chunk("root-user"), 128);
     var canonical: [64]u8 = undefined;
     const expected = try encodeAddAllocation(allocation, &canonical);
@@ -129,14 +128,13 @@ test "kernel authority verifies signed allocation before mutating allocator" {
 
     const digest = try addVerifiedAllocation(RecordingExecutor, &allocator, verifier, allocation, testSignature(), &scratch);
 
-    try testing.expectEqual(test_digest, digest);
-    try testing.expectEqual(@as(usize, 1), allocator.len);
-    try testing.expect(allocator.rangeValid(kernel.AddressRange.init(chunk("alloc-a"), 0, 128)));
-    try testing.expectEqual(RecordingExecutor.State.flushed, executor.state);
+    try expectEqualBytes(&test_digest, &digest);
+    try expectEqual(@as(usize, 1), allocator.len);
+    try expect(allocator.rangeValid(kernel.AddressRange.init(chunk("alloc-a"), 0, 128)));
+    try expectEqual(RecordingExecutor.State.flushed, executor.state);
 }
 
 test "kernel authority leaves allocator unchanged when signature verification fails" {
-    const testing = @import("std").testing;
     const allocation = kernel.Allocation.init(chunk("alloc-a"), chunk("root-user"), 128);
     var canonical: [64]u8 = undefined;
     const expected = try encodeAddAllocation(allocation, &canonical);
@@ -149,7 +147,25 @@ test "kernel authority leaves allocator unchanged when signature verification fa
     var allocator = kernel.Allocator.init(&allocation_slots);
     var scratch: [64]u8 = undefined;
 
-    try testing.expectError(error.VerifyFailed, addVerifiedAllocation(RecordingExecutor, &allocator, verifier, allocation, testSignature(), &scratch));
-    try testing.expectEqual(@as(usize, 0), allocator.len);
-    try testing.expectEqual(RecordingExecutor.State.flushed, executor.state);
+    try expectError(error.VerifyFailed, addVerifiedAllocation(RecordingExecutor, &allocator, verifier, allocation, testSignature(), &scratch));
+    try expectEqual(@as(usize, 0), allocator.len);
+    try expectEqual(RecordingExecutor.State.flushed, executor.state);
+}
+
+fn expect(condition: bool) !void {
+    if (!condition) return error.TestExpectedTrue;
+}
+
+fn expectEqual(expected: anytype, actual: @TypeOf(expected)) !void {
+    if (actual != expected) return error.TestExpectedEqual;
+}
+
+fn expectEqualBytes(expected: []const u8, actual: []const u8) !void {
+    if (!sameBytes(expected, actual)) return error.TestExpectedEqual;
+}
+
+fn expectError(expected: anyerror, actual: anytype) !void {
+    if (actual) |_| return error.TestExpectedError else |err| {
+        if (err != expected) return err;
+    }
 }

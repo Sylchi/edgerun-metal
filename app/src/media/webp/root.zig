@@ -273,6 +273,7 @@ const webp_vp8_intra16_mode_probability_2: u8 = 163;
 const webp_vp8_chroma_mode_probability_0: u8 = 142;
 const webp_vp8_chroma_mode_probability_1: u8 = 114;
 const webp_vp8_chroma_mode_probability_2: u8 = 183;
+const webp_vp8_inter_intra4_probability_default = [_]u8{ 120, 90, 79, 133, 87, 85, 80, 111, 151 };
 const webp_vp8_inter_intra16_probability_default = [_]u8{ 112, 86, 140, 37 };
 const webp_vp8_inter_chroma_probability_default = [_]u8{ 162, 101, 204 };
 const webp_vp8_inter_intra16_probability_count: usize = webp_vp8_inter_intra16_probability_default.len;
@@ -282,6 +283,27 @@ const webp_vp8_inter_copy_buffer_bits: usize = 2;
 const webp_vp8_motion_vector_component_count: usize = 2;
 const webp_vp8_motion_vector_probability_count: usize = 19;
 const webp_vp8_motion_vector_probability_update_bits: usize = 7;
+const webp_vp8_inter_zero_mode_probability: u8 = 7;
+const webp_vp8_inter_nearest_mode_probability: u8 = 1;
+const webp_vp8_inter_near_mode_probability: u8 = 1;
+const webp_vp8_inter_new_mode_probability: u8 = 143;
+const webp_vp8_inter_mode_context_count: usize = 6;
+const webp_vp8_inter_mode_probability_count: usize = 4;
+const webp_vp8_inter_context_zero: usize = 0;
+const webp_vp8_inter_context_nearest: usize = 1;
+const webp_vp8_inter_context_near: usize = 2;
+const webp_vp8_inter_context_split: usize = 3;
+const webp_vp8_inter_neighbor_weight: u8 = 2;
+const webp_vp8_inter_above_left_weight: u8 = 1;
+const webp_vp8_split_mv_probability_count: usize = 3;
+const webp_vp8_split_mv_partition_count: usize = 4;
+const webp_vp8_sub_mv_context_count: usize = 5;
+const webp_vp8_sub_mv_probability_count: usize = 3;
+const webp_vp8_sub_mv_context_left_above_zero: usize = 0;
+const webp_vp8_sub_mv_context_left_zero: usize = 1;
+const webp_vp8_sub_mv_context_above_zero: usize = 2;
+const webp_vp8_sub_mv_context_left_equals_above: usize = 3;
+const webp_vp8_sub_mv_context_left_differs_above: usize = 4;
 const webp_vp8_motion_vector_short_probability_index: usize = 0;
 const webp_vp8_motion_vector_sign_probability_index: usize = 1;
 const webp_vp8_motion_vector_small_probability_index: usize = 2;
@@ -293,9 +315,18 @@ const webp_vp8_motion_vector_long_high_bit_max: usize = 9;
 const webp_vp8_motion_vector_long_high_bit_min: usize = 4;
 const webp_vp8_motion_vector_long_bit3_index: usize = 3;
 const webp_vp8_motion_vector_long_bit3_threshold: i16 = 16;
+const webp_vp8_motion_vector_whole_pixel_shift: u4 = 2;
+const webp_vp8_motion_vector_fraction_mask: i16 = (@as(i16, 1) << webp_vp8_motion_vector_whole_pixel_shift) - 1;
+const webp_vp8_motion_vector_chroma_shift: u4 = webp_vp8_motion_vector_whole_pixel_shift + 1;
+const webp_vp8_motion_vector_chroma_fraction_mask: i16 = (@as(i16, 1) << webp_vp8_motion_vector_chroma_shift) - 1;
 const webp_vp8_motion_vector_update_literal_bits: usize = 7;
 const webp_vp8_motion_vector_update_shift: u3 = 1;
 const webp_vp8_motion_vector_update_zero_probability: u8 = 1;
+const webp_vp8_subpixel_filter_tap_count: usize = 6;
+const webp_vp8_subpixel_filter_tap_center: i16 = 2;
+const webp_vp8_subpixel_filter_round: i32 = 64;
+const webp_vp8_subpixel_filter_shift: u5 = 7;
+const webp_vp8_luma_filter_phase_scale: usize = 2;
 const webp_vp8_coeff_block_types: usize = 4;
 const webp_vp8_coeff_band_entries: usize = 17;
 const webp_vp8_y_block_count: usize = 16;
@@ -303,6 +334,9 @@ const webp_vp8_chroma_block_count: usize = 8;
 const webp_vp8_block_coeff_count: usize = 16;
 const webp_vp8_macroblock_coeff_block_count: usize = 25;
 const webp_vp8_y2_block_index: usize = 24;
+const webp_vp8_intra4_dc_mode: usize = 0;
+const webp_vp8_intra4_mode_count: usize = 10;
+const webp_vp8_intra4_probability_count: usize = 9;
 const webp_vp8_intra4_block_width: usize = 4;
 const webp_vp8_chroma_block_size: usize = 8;
 const webp_vp8_chroma_sample_scale: usize = webp_vp8_macroblock_size / webp_vp8_chroma_block_size;
@@ -760,12 +794,16 @@ fn decodeVp8FrameWithReferencesCheckedAndEntropy(data: []const u8, expected_head
     if (previous) |reference| {
         if (reference.len < count * @sizeOf(ui.Color)) return error.PixelBudget;
     }
-    _ = references;
+    const previous_yuv_references = Vp8ReferenceFrames{
+        .last = if (references.last) |reference| try vp8ReferenceFrame(frame.header, reference) else null,
+        .golden = if (references.golden) |reference| try vp8ReferenceFrame(frame.header, reference) else null,
+        .alternate = if (references.alternate) |reference| try vp8ReferenceFrame(frame.header, reference) else null,
+    };
     const current_reference = if (current_yuv) |reference| blk: {
         if (reference.len < try vp8VideoReferenceByteLen(frame.header)) return error.PixelBudget;
         break :blk try vp8ReferenceFrameMut(frame.header, reference);
     } else return error.PixelBudget;
-    try reconstructVp8Frame(&frame, current_reference, out[0..count]);
+    try reconstructVp8Frame(&frame, previous_yuv_references, current_reference, out[0..count]);
     if (entropy_state) |state| updateVp8EntropyState(state, &frame);
     return .{ .header = frame.header, .reference_update = frame.compressed_header.reference_update };
 }
@@ -2501,6 +2539,7 @@ fn updateVp8EntropyState(state: *Vp8EntropyState, frame: *const Vp8Frame) void {
 
 fn reconstructVp8Frame(
     frame: *const Vp8Frame,
+    previous_yuv: Vp8ReferenceFrames,
     reconstruction: Vp8ReferenceFrameMut,
     out: []ui.Color,
 ) DecodeError!void {
@@ -2511,26 +2550,76 @@ fn reconstructVp8Frame(
     var token_reader_ready = [_]bool{false} ** webp_vp8_token_partition_count_max;
 
     var prediction = Vp8PredictionState.init(frame.header.width);
+    var intra4_mode_state = Vp8Intra4ModeState.init(frame.header.width);
+    var inter_mode_state = Vp8InterModeState.init(frame.header.width);
     var residual_context = Vp8ResidualContextState.init(frame.header.width);
     var mb_y: usize = 0;
     while (mb_y < mb_h) : (mb_y += 1) {
         prediction.startRow(mb_y);
+        intra4_mode_state.startRow();
+        inter_mode_state.startRow();
         residual_context.startRow();
         var mb_x: usize = 0;
         while (mb_x < mb_w) : (mb_x += 1) {
-            const macroblock_header = try parseVp8MacroblockHeader(&frame.compressed_header, &header_reader);
+            const macroblock_header = try parseVp8MacroblockHeader(&frame.compressed_header, &header_reader, &intra4_mode_state, &inter_mode_state, mb_x);
+            switch (macroblock_header.prediction) {
+                .intra => {},
+                .inter_zero => {
+                    var coeffs = Vp8MacroblockCoeffs{};
+                    if (!macroblock_header.skip) {
+                        const token_reader = try vp8TokenReaderForMacroblockRow(frame, mb_y, &token_readers, &token_reader_ready);
+                        _ = try parseVp8ResidualMacroblockWithContext(token_reader, &frame.compressed_header.coeff_probabilities, vp8MacroblockHasY2(macroblock_header), &coeffs, &residual_context, mb_x);
+                    } else {
+                        residual_context.skipMacroblock(mb_x, vp8MacroblockHasY2(macroblock_header));
+                    }
+                    const reference_previous_yuv = previous_yuv.get(macroblock_header.reference) orelse return error.UnsupportedImage;
+                    try reconstructVp8InterMacroblock(frame, macroblock_header, &coeffs, mb_x, mb_y, .{}, reference_previous_yuv, &prediction, reconstruction);
+                    continue;
+                },
+                .inter_motion => |motion_vector| {
+                    var coeffs = Vp8MacroblockCoeffs{};
+                    if (!macroblock_header.skip) {
+                        const token_reader = try vp8TokenReaderForMacroblockRow(frame, mb_y, &token_readers, &token_reader_ready);
+                        _ = try parseVp8ResidualMacroblockWithContext(token_reader, &frame.compressed_header.coeff_probabilities, vp8MacroblockHasY2(macroblock_header), &coeffs, &residual_context, mb_x);
+                    } else {
+                        residual_context.skipMacroblock(mb_x, vp8MacroblockHasY2(macroblock_header));
+                    }
+                    const reference_previous_yuv = previous_yuv.get(macroblock_header.reference) orelse return error.UnsupportedImage;
+                    try reconstructVp8InterMacroblock(frame, macroblock_header, &coeffs, mb_x, mb_y, motion_vector, reference_previous_yuv, &prediction, reconstruction);
+                    continue;
+                },
+                .inter_split => |split_motion| {
+                    var coeffs = Vp8MacroblockCoeffs{};
+                    if (!macroblock_header.skip) {
+                        const token_reader = try vp8TokenReaderForMacroblockRow(frame, mb_y, &token_readers, &token_reader_ready);
+                        _ = try parseVp8ResidualMacroblockWithContext(token_reader, &frame.compressed_header.coeff_probabilities, vp8MacroblockHasY2(macroblock_header), &coeffs, &residual_context, mb_x);
+                    } else {
+                        residual_context.skipMacroblock(mb_x, vp8MacroblockHasY2(macroblock_header));
+                    }
+                    const reference_previous_yuv = previous_yuv.get(macroblock_header.reference) orelse return error.UnsupportedImage;
+                    try reconstructVp8InterSplitMacroblock(frame, macroblock_header, &coeffs, mb_x, mb_y, split_motion, reference_previous_yuv, &prediction, reconstruction);
+                    continue;
+                },
+            }
             var coeffs = Vp8MacroblockCoeffs{};
             if (!macroblock_header.skip) {
                 const token_reader = try vp8TokenReaderForMacroblockRow(frame, mb_y, &token_readers, &token_reader_ready);
-                _ = try parseVp8ResidualMacroblockWithContext(token_reader, &frame.compressed_header.coeff_probabilities, &coeffs, &residual_context, mb_x);
+                _ = try parseVp8ResidualMacroblockWithContext(token_reader, &frame.compressed_header.coeff_probabilities, vp8MacroblockHasY2(macroblock_header), &coeffs, &residual_context, mb_x);
             } else {
-                residual_context.skipMacroblock(mb_x);
+                residual_context.skipMacroblock(mb_x, vp8MacroblockHasY2(macroblock_header));
             }
             reconstructVp8Macroblock(frame, macroblock_header, &coeffs, mb_x, mb_y, &prediction, reconstruction);
         }
     }
     try filterVp8Frame(frame, reconstruction);
     writeVp8FrameRgba(frame.header, reconstruction, out);
+}
+
+fn vp8MacroblockHasY2(header: Vp8MacroblockHeader) bool {
+    return switch (header.prediction) {
+        .inter_split => false,
+        else => header.luma_mode != .b_pred,
+    };
 }
 
 fn reconstructVp8Macroblock(frame: *const Vp8Frame, macroblock_header: Vp8MacroblockHeader, coeffs: *const Vp8MacroblockCoeffs, mb_x: usize, mb_y: usize, prediction: *Vp8PredictionState, current_yuv: Vp8ReferenceFrameMut) void {
@@ -2542,8 +2631,12 @@ fn reconstructVp8Macroblock(frame: *const Vp8Frame, macroblock_header: Vp8Macrob
     predictVp8Chroma(macroblock_header.chroma_mode, prediction.vEdges(mb_x), &v_plane);
 
     const quant = frame_header_quant(&frame.compressed_header, macroblock_header.segment_id);
-    predictVp8Luma(macroblock_header.luma_mode, prediction.lumaEdges(mb_x), &y_plane);
-    addVp8LumaResidualsWithY2(quant, coeffs, &y_plane);
+    if (macroblock_header.luma_mode == .b_pred) {
+        reconstructVp8BPredLuma(quant, prediction.lumaEdges(mb_x), macroblock_header.intra4_modes, coeffs, &y_plane);
+    } else {
+        predictVp8Luma(macroblock_header.luma_mode, prediction.lumaEdges(mb_x), &y_plane);
+        addVp8LumaResidualsWithY2(quant, coeffs, &y_plane);
+    }
     addVp8ChromaResiduals(quant, coeffs, &u_plane, &v_plane);
     writeVp8ReferenceMacroblock(frame.header, mb_x, mb_y, &y_plane, &u_plane, &v_plane, current_yuv);
     prediction.finishMacroblock(mb_x, &y_plane, &u_plane, &v_plane);
@@ -2563,6 +2656,56 @@ fn vp8TokenReaderForMacroblockRow(
     return &readers[partition_index];
 }
 
+fn reconstructVp8InterMacroblock(
+    frame: *const Vp8Frame,
+    macroblock_header: Vp8MacroblockHeader,
+    coeffs: *const Vp8MacroblockCoeffs,
+    mb_x: usize,
+    mb_y: usize,
+    motion_vector: Vp8MotionVector,
+    previous_yuv: Vp8ReferenceFrame,
+    prediction: *Vp8PredictionState,
+    current_yuv: Vp8ReferenceFrameMut,
+) DecodeError!void {
+    var y_plane = [_]u8{0} ** (webp_vp8_macroblock_size * webp_vp8_macroblock_size);
+    var u_plane = [_]u8{0} ** (webp_vp8_chroma_block_size * webp_vp8_chroma_block_size);
+    var v_plane = [_]u8{0} ** (webp_vp8_chroma_block_size * webp_vp8_chroma_block_size);
+    try readVp8ReferenceInterMacroblock(frame.header, mb_x, mb_y, motion_vector, previous_yuv, &y_plane, &u_plane, &v_plane);
+
+    if (!macroblock_header.skip) {
+        const quant = frame_header_quant(&frame.compressed_header, macroblock_header.segment_id);
+        addVp8LumaResidualsWithY2(quant, coeffs, &y_plane);
+        addVp8ChromaResiduals(quant, coeffs, &u_plane, &v_plane);
+    }
+    writeVp8ReferenceMacroblock(frame.header, mb_x, mb_y, &y_plane, &u_plane, &v_plane, current_yuv);
+    prediction.finishMacroblock(mb_x, &y_plane, &u_plane, &v_plane);
+}
+
+fn reconstructVp8InterSplitMacroblock(
+    frame: *const Vp8Frame,
+    macroblock_header: Vp8MacroblockHeader,
+    coeffs: *const Vp8MacroblockCoeffs,
+    mb_x: usize,
+    mb_y: usize,
+    split_motion: Vp8InterSplitMotion,
+    previous_yuv: Vp8ReferenceFrame,
+    prediction: *Vp8PredictionState,
+    current_yuv: Vp8ReferenceFrameMut,
+) DecodeError!void {
+    var y_plane = [_]u8{0} ** (webp_vp8_macroblock_size * webp_vp8_macroblock_size);
+    var u_plane = [_]u8{0} ** (webp_vp8_chroma_block_size * webp_vp8_chroma_block_size);
+    var v_plane = [_]u8{0} ** (webp_vp8_chroma_block_size * webp_vp8_chroma_block_size);
+    try readVp8ReferenceInterSplitMacroblock(frame.header, mb_x, mb_y, split_motion, previous_yuv, &y_plane, &u_plane, &v_plane);
+
+    if (!macroblock_header.skip) {
+        const quant = frame_header_quant(&frame.compressed_header, macroblock_header.segment_id);
+        addVp8LumaResidualsWithoutY2(quant, coeffs, &y_plane);
+        addVp8ChromaResiduals(quant, coeffs, &u_plane, &v_plane);
+    }
+    writeVp8ReferenceMacroblock(frame.header, mb_x, mb_y, &y_plane, &u_plane, &v_plane, current_yuv);
+    prediction.finishMacroblock(mb_x, &y_plane, &u_plane, &v_plane);
+}
+
 const Vp8MacroblockFilterInfo = struct {
     segment_id: u8,
     reference: Vp8ReferenceName,
@@ -2579,22 +2722,26 @@ fn filterVp8Frame(frame: *const Vp8Frame, reconstruction: Vp8ReferenceFrameMut) 
     const mb_h = vp8MacroblockDimension(frame.header.height);
     var token_readers: [webp_vp8_token_partition_count_max]Vp8BoolReader = undefined;
     var token_reader_ready = [_]bool{false} ** webp_vp8_token_partition_count_max;
+    var intra4_mode_state = Vp8Intra4ModeState.init(frame.header.width);
+    var inter_mode_state = Vp8InterModeState.init(frame.header.width);
     var residual_context = Vp8ResidualContextState.init(frame.header.width);
 
     var mb_y: usize = 0;
     while (mb_y < mb_h) : (mb_y += 1) {
+        intra4_mode_state.startRow();
+        inter_mode_state.startRow();
         residual_context.startRow();
         var mb_x: usize = 0;
         while (mb_x < mb_w) : (mb_x += 1) {
-            const macroblock_header = try parseVp8MacroblockHeader(&frame.compressed_header, &header_reader);
+            const macroblock_header = try parseVp8MacroblockHeader(&frame.compressed_header, &header_reader, &intra4_mode_state, &inter_mode_state, mb_x);
             var non_zero = false;
             if (!macroblock_header.skip) {
                 var coeffs = Vp8MacroblockCoeffs{};
                 const token_reader = try vp8TokenReaderForMacroblockRow(frame, mb_y, &token_readers, &token_reader_ready);
-                const residual = try parseVp8ResidualMacroblockWithContext(token_reader, &frame.compressed_header.coeff_probabilities, &coeffs, &residual_context, mb_x);
+                const residual = try parseVp8ResidualMacroblockWithContext(token_reader, &frame.compressed_header.coeff_probabilities, vp8MacroblockHasY2(macroblock_header), &coeffs, &residual_context, mb_x);
                 non_zero = residual.non_zero;
             } else {
-                residual_context.skipMacroblock(mb_x);
+                residual_context.skipMacroblock(mb_x, vp8MacroblockHasY2(macroblock_header));
             }
             const info = Vp8MacroblockFilterInfo{
                 .segment_id = macroblock_header.segment_id,
@@ -2610,7 +2757,7 @@ fn filterVp8Frame(frame: *const Vp8Frame, reconstruction: Vp8ReferenceFrameMut) 
 
 fn filterVp8Macroblock(frame: *const Vp8Frame, info: Vp8MacroblockFilterInfo, reconstruction: Vp8ReferenceFrameMut, mb_x: usize, mb_y: usize) void {
     const parameters = vp8LoopFilterParameters(&frame.compressed_header, info) orelse return;
-    const filter_subblocks = info.non_zero;
+    const filter_subblocks = info.non_zero or info.luma_mode == .b_pred;
     const pixel_x = mb_x * webp_vp8_macroblock_size;
     const pixel_y = mb_y * webp_vp8_macroblock_size;
     const chroma_x = mb_x * webp_vp8_chroma_block_size;
@@ -2710,12 +2857,20 @@ fn vp8LoopFilterParameters(frame_header: *const Vp8CompressedFrameHeader, info: 
 fn vp8LoopFilterReferenceIndex(info: Vp8MacroblockFilterInfo) usize {
     return switch (info.prediction) {
         .intra => webp_vp8_loop_filter_ref_intra,
+        .inter_zero, .inter_motion, .inter_split => switch (info.reference) {
+            .last => webp_vp8_loop_filter_ref_last,
+            .golden => webp_vp8_loop_filter_ref_golden,
+            .alternate => webp_vp8_loop_filter_ref_alternate,
+        },
     };
 }
 
 fn vp8LoopFilterModeDeltaIndex(info: Vp8MacroblockFilterInfo) ?usize {
-    _ = info;
-    return null;
+    return switch (info.prediction) {
+        .intra => if (info.luma_mode == .b_pred) webp_vp8_loop_filter_mode_b_pred else null,
+        .inter_zero => webp_vp8_loop_filter_mode_zero,
+        .inter_motion, .inter_split => webp_vp8_loop_filter_mode_new,
+    };
 }
 
 fn filterVp8SimpleVerticalEdge(plane: []u8, width: usize, height: usize, edge_x: usize, edge_y: usize, filter_limit: u8) void {
@@ -2891,12 +3046,192 @@ fn vp8AbsDiff(left: u8, right: u8) u16 {
     return if (left >= right) left - right else right - left;
 }
 
+fn copyVp8InterZeroMacroblock(header: Header, mb_x: usize, mb_y: usize, previous: []const u8, out: []ui.Color) DecodeError!void {
+    return copyVp8InterMotionMacroblock(header, mb_x, mb_y, .{}, previous, out);
+}
+
+fn copyVp8InterMotionMacroblock(header: Header, mb_x: usize, mb_y: usize, motion_vector: Vp8MotionVector, previous: []const u8, out: []ui.Color) DecodeError!void {
+    const required_bytes = try checkedMul(try pixelCount(header), @sizeOf(ui.Color));
+    if (previous.len < required_bytes) return error.PixelBudget;
+    if ((motion_vector.row & webp_vp8_motion_vector_fraction_mask) != 0 or
+        (motion_vector.col & webp_vp8_motion_vector_fraction_mask) != 0)
+    {
+        return error.UnsupportedImage;
+    }
+    const pixel_row_offset = motion_vector.row >> webp_vp8_motion_vector_whole_pixel_shift;
+    const pixel_col_offset = motion_vector.col >> webp_vp8_motion_vector_whole_pixel_shift;
+    const pixel_x = mb_x * webp_vp8_macroblock_size;
+    const pixel_y = mb_y * webp_vp8_macroblock_size;
+    var local_y: usize = 0;
+    while (local_y < webp_vp8_macroblock_size and pixel_y + local_y < header.height) : (local_y += 1) {
+        var local_x: usize = 0;
+        while (local_x < webp_vp8_macroblock_size and pixel_x + local_x < header.width) : (local_x += 1) {
+            const out_index = (pixel_y + local_y) * header.width + pixel_x + local_x;
+            const src_y = try vp8MotionSourceCoordinate(pixel_y + local_y, pixel_row_offset, header.height);
+            const src_x = try vp8MotionSourceCoordinate(pixel_x + local_x, pixel_col_offset, header.width);
+            const byte_index = (src_y * header.width + src_x) * @sizeOf(ui.Color);
+            out[out_index] = .{
+                .r = previous[byte_index],
+                .g = previous[byte_index + 1],
+                .b = previous[byte_index + 2],
+                .a = previous[byte_index + 3],
+            };
+        }
+    }
+}
+
+fn vp8MotionSourceCoordinate(origin: usize, offset: i16, limit: usize) DecodeError!usize {
+    const value = @as(isize, @intCast(origin)) + @as(isize, offset);
+    if (value < 0) return error.UnsupportedImage;
+    const coordinate: usize = @intCast(value);
+    if (coordinate >= limit) return error.UnsupportedImage;
+    return coordinate;
+}
+
+fn vp8MotionSourceCoordinateClamped(origin: usize, offset: i16, limit: usize) usize {
+    const value = @as(isize, @intCast(origin)) + @as(isize, offset);
+    if (value <= 0) return 0;
+    const coordinate: usize = @intCast(value);
+    if (coordinate >= limit) return limit - 1;
+    return coordinate;
+}
+
+fn vp8ReferenceSample(
+    plane: []const u8,
+    width: usize,
+    height: usize,
+    origin_x: usize,
+    origin_y: usize,
+    row_offset: i16,
+    col_offset: i16,
+    row_fraction: usize,
+    col_fraction: usize,
+) u8 {
+    if (row_fraction == 0 and col_fraction == 0) {
+        const src_y = vp8MotionSourceCoordinateClamped(origin_y, row_offset, height);
+        const src_x = vp8MotionSourceCoordinateClamped(origin_x, col_offset, width);
+        return plane[src_y * width + src_x];
+    }
+    if (col_fraction == 0) {
+        return vp8ReferenceVerticalSample(plane, width, height, origin_x, origin_y, row_offset, col_offset, row_fraction);
+    }
+    if (row_fraction == 0) {
+        return vp8ReferenceHorizontalSample(plane, width, height, origin_x, origin_y, row_offset, col_offset, col_fraction);
+    }
+
+    const row_filter = webp_vp8_subpixel_filters[row_fraction];
+    var intermediate: [webp_vp8_subpixel_filter_tap_count]u8 = undefined;
+    var tap: usize = 0;
+    while (tap < webp_vp8_subpixel_filter_tap_count) : (tap += 1) {
+        const row_tap = @as(i16, @intCast(tap)) - webp_vp8_subpixel_filter_tap_center;
+        intermediate[tap] = vp8ReferenceHorizontalSample(plane, width, height, origin_x, origin_y, row_offset + row_tap, col_offset, col_fraction);
+    }
+    return vp8FilterSubpixelValues(&intermediate, &row_filter);
+}
+
+fn vp8ReferenceHorizontalSample(
+    plane: []const u8,
+    width: usize,
+    height: usize,
+    origin_x: usize,
+    origin_y: usize,
+    row_offset: i16,
+    col_offset: i16,
+    fraction: usize,
+) u8 {
+    const filter = webp_vp8_subpixel_filters[fraction];
+    var values: [webp_vp8_subpixel_filter_tap_count]u8 = undefined;
+    const src_y = vp8MotionSourceCoordinateClamped(origin_y, row_offset, height);
+    var tap: usize = 0;
+    while (tap < webp_vp8_subpixel_filter_tap_count) : (tap += 1) {
+        const col_tap = @as(i16, @intCast(tap)) - webp_vp8_subpixel_filter_tap_center;
+        const src_x = vp8MotionSourceCoordinateClamped(origin_x, col_offset + col_tap, width);
+        values[tap] = plane[src_y * width + src_x];
+    }
+    return vp8FilterSubpixelValues(&values, &filter);
+}
+
+fn vp8ReferenceVerticalSample(
+    plane: []const u8,
+    width: usize,
+    height: usize,
+    origin_x: usize,
+    origin_y: usize,
+    row_offset: i16,
+    col_offset: i16,
+    fraction: usize,
+) u8 {
+    const filter = webp_vp8_subpixel_filters[fraction];
+    var values: [webp_vp8_subpixel_filter_tap_count]u8 = undefined;
+    const src_x = vp8MotionSourceCoordinateClamped(origin_x, col_offset, width);
+    var tap: usize = 0;
+    while (tap < webp_vp8_subpixel_filter_tap_count) : (tap += 1) {
+        const row_tap = @as(i16, @intCast(tap)) - webp_vp8_subpixel_filter_tap_center;
+        const src_y = vp8MotionSourceCoordinateClamped(origin_y, row_offset + row_tap, height);
+        values[tap] = plane[src_y * width + src_x];
+    }
+    return vp8FilterSubpixelValues(&values, &filter);
+}
+
+fn vp8FilterSubpixelValues(values: *const [webp_vp8_subpixel_filter_tap_count]u8, filter: *const [webp_vp8_subpixel_filter_tap_count]i16) u8 {
+    var sum: i32 = webp_vp8_subpixel_filter_round;
+    var index: usize = 0;
+    while (index < webp_vp8_subpixel_filter_tap_count) : (index += 1) {
+        sum += @as(i32, values[index]) * @as(i32, filter[index]);
+    }
+    return clampU8(sum >> webp_vp8_subpixel_filter_shift);
+}
+
 const Vp8ReferenceFrameMut = struct {
     y: []u8,
     u: []u8,
     v: []u8,
     chroma_width: usize,
 };
+
+const Vp8ReferenceFrame = struct {
+    y: []const u8,
+    u: []const u8,
+    v: []const u8,
+    chroma_width: usize,
+};
+
+const Vp8ReferenceFrames = struct {
+    last: ?Vp8ReferenceFrame,
+    golden: ?Vp8ReferenceFrame,
+    alternate: ?Vp8ReferenceFrame,
+
+    fn get(self: Vp8ReferenceFrames, reference_name: Vp8ReferenceName) ?Vp8ReferenceFrame {
+        return switch (reference_name) {
+            .last => self.last,
+            .golden => self.golden,
+            .alternate => self.alternate,
+        };
+    }
+};
+
+fn vp8ReferenceFrames(header: Header, references: Vp8VideoReferenceSet) DecodeError!Vp8ReferenceFrames {
+    return .{
+        .last = if (references.last) |reference| try vp8ReferenceFrame(header, reference) else null,
+        .golden = if (references.golden) |reference| try vp8ReferenceFrame(header, reference) else null,
+        .alternate = if (references.alternate) |reference| try vp8ReferenceFrame(header, reference) else null,
+    };
+}
+
+fn vp8ReferenceFrame(header: Header, data: []const u8) DecodeError!Vp8ReferenceFrame {
+    const y_len = try pixelCount(header);
+    const chroma_width = vp8ChromaDimension(header.width);
+    const chroma_height = vp8ChromaDimension(header.height);
+    const chroma_len = try checkedMul(chroma_width, chroma_height);
+    const required_len = try checkedAdd(y_len, try checkedMul(chroma_len, 2));
+    if (data.len < required_len) return error.PixelBudget;
+    return .{
+        .y = data[0..y_len],
+        .u = data[y_len..][0..chroma_len],
+        .v = data[y_len + chroma_len ..][0..chroma_len],
+        .chroma_width = chroma_width,
+    };
+}
 
 fn vp8ReferenceFrameMut(header: Header, data: []u8) DecodeError!Vp8ReferenceFrameMut {
     const y_len = try pixelCount(header);
@@ -2952,13 +3287,218 @@ fn writeVp8ReferenceMacroblock(
     }
 }
 
+fn readVp8ReferenceInterMacroblock(
+    header: Header,
+    mb_x: usize,
+    mb_y: usize,
+    motion_vector: Vp8MotionVector,
+    previous: Vp8ReferenceFrame,
+    y_plane: *[webp_vp8_macroblock_size * webp_vp8_macroblock_size]u8,
+    u_plane: *[webp_vp8_chroma_block_size * webp_vp8_chroma_block_size]u8,
+    v_plane: *[webp_vp8_chroma_block_size * webp_vp8_chroma_block_size]u8,
+) DecodeError!void {
+    const pixel_row_offset = motion_vector.row >> webp_vp8_motion_vector_whole_pixel_shift;
+    const pixel_col_offset = motion_vector.col >> webp_vp8_motion_vector_whole_pixel_shift;
+    const pixel_row_fraction: usize = @intCast(motion_vector.row & webp_vp8_motion_vector_fraction_mask);
+    const pixel_col_fraction: usize = @intCast(motion_vector.col & webp_vp8_motion_vector_fraction_mask);
+    readVp8ReferenceInterLumaMacroblock(
+        header,
+        mb_x,
+        mb_y,
+        pixel_row_offset,
+        pixel_col_offset,
+        pixel_row_fraction * webp_vp8_luma_filter_phase_scale,
+        pixel_col_fraction * webp_vp8_luma_filter_phase_scale,
+        previous,
+        y_plane,
+    );
+    try readVp8ReferenceInterChromaMacroblock(
+        header,
+        mb_x,
+        mb_y,
+        motion_vector.row >> webp_vp8_motion_vector_chroma_shift,
+        motion_vector.col >> webp_vp8_motion_vector_chroma_shift,
+        @intCast(motion_vector.row & webp_vp8_motion_vector_chroma_fraction_mask),
+        @intCast(motion_vector.col & webp_vp8_motion_vector_chroma_fraction_mask),
+        previous,
+        u_plane,
+        v_plane,
+    );
+}
+
+fn readVp8ReferenceInterSplitMacroblock(
+    header: Header,
+    mb_x: usize,
+    mb_y: usize,
+    split_motion: Vp8InterSplitMotion,
+    previous: Vp8ReferenceFrame,
+    y_plane: *[webp_vp8_macroblock_size * webp_vp8_macroblock_size]u8,
+    u_plane: *[webp_vp8_chroma_block_size * webp_vp8_chroma_block_size]u8,
+    v_plane: *[webp_vp8_chroma_block_size * webp_vp8_chroma_block_size]u8,
+) DecodeError!void {
+    var block: usize = 0;
+    while (block < webp_vp8_y_block_count) : (block += 1) {
+        readVp8ReferenceInterLumaSubblock(header, mb_x, mb_y, block, split_motion.vectors[block], previous, y_plane);
+    }
+
+    const chroma_motion = vp8AverageSplitChromaMotion(split_motion);
+    const chroma_row_offset = chroma_motion.row >> webp_vp8_motion_vector_chroma_shift;
+    const chroma_col_offset = chroma_motion.col >> webp_vp8_motion_vector_chroma_shift;
+    try readVp8ReferenceInterChromaMacroblock(
+        header,
+        mb_x,
+        mb_y,
+        chroma_row_offset,
+        chroma_col_offset,
+        @intCast(chroma_motion.row & webp_vp8_motion_vector_chroma_fraction_mask),
+        @intCast(chroma_motion.col & webp_vp8_motion_vector_chroma_fraction_mask),
+        previous,
+        u_plane,
+        v_plane,
+    );
+}
+
+fn readVp8ReferenceInterLumaSubblock(
+    header: Header,
+    mb_x: usize,
+    mb_y: usize,
+    block: usize,
+    motion_vector: Vp8MotionVector,
+    previous: Vp8ReferenceFrame,
+    out: *[webp_vp8_macroblock_size * webp_vp8_macroblock_size]u8,
+) void {
+    const block_x = block % webp_vp8_intra4_block_width;
+    const block_y = block / webp_vp8_intra4_block_width;
+    const pixel_x = mb_x * webp_vp8_macroblock_size + block_x * webp_vp8_intra4_block_width;
+    const pixel_y = mb_y * webp_vp8_macroblock_size + block_y * webp_vp8_intra4_block_width;
+    const row_offset = motion_vector.row >> webp_vp8_motion_vector_whole_pixel_shift;
+    const col_offset = motion_vector.col >> webp_vp8_motion_vector_whole_pixel_shift;
+    const row_fraction: usize = @intCast(motion_vector.row & webp_vp8_motion_vector_fraction_mask);
+    const col_fraction: usize = @intCast(motion_vector.col & webp_vp8_motion_vector_fraction_mask);
+    var local_y: usize = 0;
+    while (local_y < webp_vp8_intra4_block_width) : (local_y += 1) {
+        var local_x: usize = 0;
+        while (local_x < webp_vp8_intra4_block_width) : (local_x += 1) {
+            const origin_y = @min(pixel_y + local_y, header.height - 1);
+            const origin_x = @min(pixel_x + local_x, header.width - 1);
+            out[(block_y * webp_vp8_intra4_block_width + local_y) * webp_vp8_macroblock_size + block_x * webp_vp8_intra4_block_width + local_x] = vp8ReferenceSample(
+                previous.y,
+                header.width,
+                header.height,
+                origin_x,
+                origin_y,
+                row_offset,
+                col_offset,
+                row_fraction * webp_vp8_luma_filter_phase_scale,
+                col_fraction * webp_vp8_luma_filter_phase_scale,
+            );
+        }
+    }
+}
+
+fn vp8AverageSplitChromaMotion(split_motion: Vp8InterSplitMotion) Vp8MotionVector {
+    var row_sum: i32 = 0;
+    var col_sum: i32 = 0;
+    for (split_motion.vectors) |motion_vector| {
+        row_sum += motion_vector.row;
+        col_sum += motion_vector.col;
+    }
+    return .{
+        .row = @intCast(@divTrunc(row_sum, @as(i32, webp_vp8_y_block_count))),
+        .col = @intCast(@divTrunc(col_sum, @as(i32, webp_vp8_y_block_count))),
+    };
+}
+
+fn readVp8ReferenceInterLumaMacroblock(
+    header: Header,
+    mb_x: usize,
+    mb_y: usize,
+    row_offset: i16,
+    col_offset: i16,
+    row_fraction: usize,
+    col_fraction: usize,
+    previous: Vp8ReferenceFrame,
+    out: *[webp_vp8_macroblock_size * webp_vp8_macroblock_size]u8,
+) void {
+    const pixel_x = mb_x * webp_vp8_macroblock_size;
+    const pixel_y = mb_y * webp_vp8_macroblock_size;
+    var local_y: usize = 0;
+    while (local_y < webp_vp8_macroblock_size) : (local_y += 1) {
+        var local_x: usize = 0;
+        while (local_x < webp_vp8_macroblock_size) : (local_x += 1) {
+            const origin_y = @min(pixel_y + local_y, header.height - 1);
+            const origin_x = @min(pixel_x + local_x, header.width - 1);
+            out[local_y * webp_vp8_macroblock_size + local_x] = vp8ReferenceSample(
+                previous.y,
+                header.width,
+                header.height,
+                origin_x,
+                origin_y,
+                row_offset,
+                col_offset,
+                row_fraction,
+                col_fraction,
+            );
+        }
+    }
+}
+
+fn readVp8ReferenceInterChromaMacroblock(
+    header: Header,
+    mb_x: usize,
+    mb_y: usize,
+    row_offset: i16,
+    col_offset: i16,
+    row_fraction: usize,
+    col_fraction: usize,
+    previous: Vp8ReferenceFrame,
+    u_plane: *[webp_vp8_chroma_block_size * webp_vp8_chroma_block_size]u8,
+    v_plane: *[webp_vp8_chroma_block_size * webp_vp8_chroma_block_size]u8,
+) DecodeError!void {
+    const chroma_x = mb_x * webp_vp8_chroma_block_size;
+    const chroma_y = mb_y * webp_vp8_chroma_block_size;
+    const chroma_height = vp8ChromaDimension(header.height);
+    const chroma_width = previous.chroma_width;
+    var local_y: usize = 0;
+    while (local_y < webp_vp8_chroma_block_size) : (local_y += 1) {
+        var local_x: usize = 0;
+        while (local_x < webp_vp8_chroma_block_size) : (local_x += 1) {
+            const origin_y = @min(chroma_y + local_y, chroma_height - 1);
+            const origin_x = @min(chroma_x + local_x, chroma_width - 1);
+            const plane_index = local_y * webp_vp8_chroma_block_size + local_x;
+            u_plane[plane_index] = vp8ReferenceSample(
+                previous.u,
+                chroma_width,
+                chroma_height,
+                origin_x,
+                origin_y,
+                row_offset,
+                col_offset,
+                row_fraction,
+                col_fraction,
+            );
+            v_plane[plane_index] = vp8ReferenceSample(
+                previous.v,
+                chroma_width,
+                chroma_height,
+                origin_x,
+                origin_y,
+                row_offset,
+                col_offset,
+                row_fraction,
+                col_fraction,
+            );
+        }
+    }
+}
+
 fn predictVp8Luma(mode: Vp8LumaMode, edges: Vp8Edges(webp_vp8_macroblock_size), plane: *[webp_vp8_macroblock_size * webp_vp8_macroblock_size]u8) void {
     switch (mode) {
         .dc => predictVp8Dc(webp_vp8_macroblock_size, edges, plane[0..]),
         .vertical => predictVp8Vertical(webp_vp8_macroblock_size, edges, plane[0..]),
         .horizontal => predictVp8Horizontal(webp_vp8_macroblock_size, edges, plane[0..]),
         .true_motion => predictVp8TrueMotion(webp_vp8_macroblock_size, edges, plane[0..]),
-        .b_pred => unreachable,
+        .b_pred => predictVp8Intra4DcOnly(edges, plane),
     }
 }
 
@@ -3000,6 +3540,247 @@ fn predictVp8TrueMotion(comptime size: usize, edges: Vp8Edges(size), plane: []u8
     }
 }
 
+fn predictVp8Intra4DcOnly(edges: Vp8Edges(webp_vp8_macroblock_size), plane: *[webp_vp8_macroblock_size * webp_vp8_macroblock_size]u8) void {
+    var block: usize = 0;
+    while (block < webp_vp8_y_block_count) : (block += 1) {
+        predictVp8Intra4Block(.dc, edges, plane, block);
+    }
+}
+
+fn predictVp8Intra4Block(mode: Vp8Intra4Mode, edges: Vp8Edges(webp_vp8_macroblock_size), plane: *[webp_vp8_macroblock_size * webp_vp8_macroblock_size]u8, block: usize) void {
+    const block_x = (block & 3) * webp_vp8_intra4_block_width;
+    const block_y = (block >> 2) * webp_vp8_intra4_block_width;
+    var a: [webp_vp8_intra4_block_width * 2]u8 = undefined;
+    var l: [webp_vp8_intra4_block_width]u8 = undefined;
+    var index: usize = 0;
+    while (index < a.len) : (index += 1) a[index] = vp8Intra4Top(edges, plane, block_x, block_y, index);
+    index = 0;
+    while (index < l.len) : (index += 1) l[index] = vp8Intra4Left(edges, plane, block_x, block_y, index);
+    const p = vp8Intra4TopLeft(edges, plane, block_x, block_y);
+    const e = [_]u8{ l[3], l[2], l[1], l[0], p, a[0], a[1], a[2], a[3] };
+    switch (mode) {
+        .dc => predictVp8Intra4DcBlockFromEdges(&a, &l, plane, block_x, block_y),
+        .true_motion => predictVp8Intra4TrueMotionBlock(&a, &l, p, plane, block_x, block_y),
+        .vertical => predictVp8Intra4VerticalBlock(&a, plane, block_x, block_y),
+        .horizontal => predictVp8Intra4HorizontalBlock(&l, p, plane, block_x, block_y),
+        .left_down => predictVp8Intra4LeftDownBlock(&a, plane, block_x, block_y),
+        .right_down => predictVp8Intra4RightDownBlock(&e, plane, block_x, block_y),
+        .vertical_right => predictVp8Intra4VerticalRightBlock(&e, plane, block_x, block_y),
+        .vertical_left => predictVp8Intra4VerticalLeftBlock(&a, plane, block_x, block_y),
+        .horizontal_down => predictVp8Intra4HorizontalDownBlock(&e, plane, block_x, block_y),
+        .horizontal_up => predictVp8Intra4HorizontalUpBlock(&l, plane, block_x, block_y),
+    }
+}
+
+fn predictVp8Intra4DcBlockFromEdges(a: *const [webp_vp8_intra4_block_width * 2]u8, l: *const [webp_vp8_intra4_block_width]u8, plane: *[webp_vp8_macroblock_size * webp_vp8_macroblock_size]u8, block_x: usize, block_y: usize) void {
+    var sum: usize = 0;
+    var index: usize = 0;
+    while (index < webp_vp8_intra4_block_width) : (index += 1) {
+        sum += @as(usize, a[index]) + @as(usize, l[index]);
+    }
+    const value: u8 = @intCast((sum + 4) >> 3);
+    var y: usize = 0;
+    while (y < webp_vp8_intra4_block_width) : (y += 1) {
+        @memset(plane[(block_y + y) * webp_vp8_macroblock_size + block_x ..][0..webp_vp8_intra4_block_width], value);
+    }
+}
+
+fn predictVp8Intra4TrueMotionBlock(a: *const [webp_vp8_intra4_block_width * 2]u8, l: *const [webp_vp8_intra4_block_width]u8, p: u8, plane: *[webp_vp8_macroblock_size * webp_vp8_macroblock_size]u8, block_x: usize, block_y: usize) void {
+    var y: usize = 0;
+    while (y < webp_vp8_intra4_block_width) : (y += 1) {
+        var x: usize = 0;
+        while (x < webp_vp8_intra4_block_width) : (x += 1) {
+            plane[(block_y + y) * webp_vp8_macroblock_size + block_x + x] = clampU8(@as(i32, l[y]) + @as(i32, a[x]) - @as(i32, p));
+        }
+    }
+}
+
+fn predictVp8Intra4VerticalBlock(a: *const [webp_vp8_intra4_block_width * 2]u8, plane: *[webp_vp8_macroblock_size * webp_vp8_macroblock_size]u8, block_x: usize, block_y: usize) void {
+    const values = [_]u8{
+        avg3(a[0], a[1], a[2]),
+        avg3(a[1], a[2], a[3]),
+        avg3(a[2], a[3], a[4]),
+        avg3(a[3], a[4], a[5]),
+    };
+    var y: usize = 0;
+    while (y < webp_vp8_intra4_block_width) : (y += 1) {
+        @memcpy(plane[(block_y + y) * webp_vp8_macroblock_size + block_x ..][0..webp_vp8_intra4_block_width], &values);
+    }
+}
+
+fn predictVp8Intra4HorizontalBlock(l: *const [webp_vp8_intra4_block_width]u8, p: u8, plane: *[webp_vp8_macroblock_size * webp_vp8_macroblock_size]u8, block_x: usize, block_y: usize) void {
+    const values = [_]u8{
+        avg3(p, l[0], l[1]),
+        avg3(l[0], l[1], l[2]),
+        avg3(l[1], l[2], l[3]),
+        avg3(l[2], l[3], l[3]),
+    };
+    var row: usize = 0;
+    while (row < webp_vp8_intra4_block_width) : (row += 1) {
+        const value = values[row];
+        @memset(plane[(block_y + row) * webp_vp8_macroblock_size + block_x ..][0..webp_vp8_intra4_block_width], value);
+    }
+}
+
+fn predictVp8Intra4LeftDownBlock(a: *const [webp_vp8_intra4_block_width * 2]u8, plane: *[webp_vp8_macroblock_size * webp_vp8_macroblock_size]u8, block_x: usize, block_y: usize) void {
+    writeVp8Intra4(plane, block_x, block_y, 0, 0, avg3(a[1], a[2], a[3]));
+    writeVp8Intra4(plane, block_x, block_y, 0, 1, avg3(a[2], a[3], a[4]));
+    writeVp8Intra4(plane, block_x, block_y, 1, 0, avg3(a[2], a[3], a[4]));
+    writeVp8Intra4(plane, block_x, block_y, 0, 2, avg3(a[3], a[4], a[5]));
+    writeVp8Intra4(plane, block_x, block_y, 1, 1, avg3(a[3], a[4], a[5]));
+    writeVp8Intra4(plane, block_x, block_y, 2, 0, avg3(a[3], a[4], a[5]));
+    writeVp8Intra4(plane, block_x, block_y, 0, 3, avg3(a[4], a[5], a[6]));
+    writeVp8Intra4(plane, block_x, block_y, 1, 2, avg3(a[4], a[5], a[6]));
+    writeVp8Intra4(plane, block_x, block_y, 2, 1, avg3(a[4], a[5], a[6]));
+    writeVp8Intra4(plane, block_x, block_y, 3, 0, avg3(a[4], a[5], a[6]));
+    writeVp8Intra4(plane, block_x, block_y, 1, 3, avg3(a[5], a[6], a[7]));
+    writeVp8Intra4(plane, block_x, block_y, 2, 2, avg3(a[5], a[6], a[7]));
+    writeVp8Intra4(plane, block_x, block_y, 3, 1, avg3(a[5], a[6], a[7]));
+    writeVp8Intra4(plane, block_x, block_y, 2, 3, avg3(a[6], a[7], a[7]));
+    writeVp8Intra4(plane, block_x, block_y, 3, 2, avg3(a[6], a[7], a[7]));
+    writeVp8Intra4(plane, block_x, block_y, 3, 3, avg3(a[6], a[7], a[7]));
+}
+
+fn predictVp8Intra4RightDownBlock(e: *const [9]u8, plane: *[webp_vp8_macroblock_size * webp_vp8_macroblock_size]u8, block_x: usize, block_y: usize) void {
+    writeVp8Intra4(plane, block_x, block_y, 3, 0, avg3p(e, 1));
+    writeVp8Intra4(plane, block_x, block_y, 3, 1, avg3p(e, 2));
+    writeVp8Intra4(plane, block_x, block_y, 2, 0, avg3p(e, 2));
+    writeVp8Intra4(plane, block_x, block_y, 3, 2, avg3p(e, 3));
+    writeVp8Intra4(plane, block_x, block_y, 2, 1, avg3p(e, 3));
+    writeVp8Intra4(plane, block_x, block_y, 1, 0, avg3p(e, 3));
+    writeVp8Intra4(plane, block_x, block_y, 3, 3, avg3p(e, 4));
+    writeVp8Intra4(plane, block_x, block_y, 2, 2, avg3p(e, 4));
+    writeVp8Intra4(plane, block_x, block_y, 1, 1, avg3p(e, 4));
+    writeVp8Intra4(plane, block_x, block_y, 0, 0, avg3p(e, 4));
+    writeVp8Intra4(plane, block_x, block_y, 2, 3, avg3p(e, 5));
+    writeVp8Intra4(plane, block_x, block_y, 1, 2, avg3p(e, 5));
+    writeVp8Intra4(plane, block_x, block_y, 0, 1, avg3p(e, 5));
+    writeVp8Intra4(plane, block_x, block_y, 1, 3, avg3p(e, 6));
+    writeVp8Intra4(plane, block_x, block_y, 0, 2, avg3p(e, 6));
+    writeVp8Intra4(plane, block_x, block_y, 0, 3, avg3p(e, 7));
+}
+
+fn predictVp8Intra4VerticalRightBlock(e: *const [9]u8, plane: *[webp_vp8_macroblock_size * webp_vp8_macroblock_size]u8, block_x: usize, block_y: usize) void {
+    writeVp8Intra4(plane, block_x, block_y, 3, 0, avg3p(e, 2));
+    writeVp8Intra4(plane, block_x, block_y, 2, 0, avg3p(e, 3));
+    writeVp8Intra4(plane, block_x, block_y, 3, 1, avg3p(e, 4));
+    writeVp8Intra4(plane, block_x, block_y, 1, 0, avg3p(e, 4));
+    writeVp8Intra4(plane, block_x, block_y, 2, 1, avg2p(e, 4));
+    writeVp8Intra4(plane, block_x, block_y, 0, 0, avg2p(e, 4));
+    writeVp8Intra4(plane, block_x, block_y, 3, 2, avg3p(e, 5));
+    writeVp8Intra4(plane, block_x, block_y, 1, 1, avg3p(e, 5));
+    writeVp8Intra4(plane, block_x, block_y, 2, 2, avg2p(e, 5));
+    writeVp8Intra4(plane, block_x, block_y, 0, 1, avg2p(e, 5));
+    writeVp8Intra4(plane, block_x, block_y, 3, 3, avg3p(e, 6));
+    writeVp8Intra4(plane, block_x, block_y, 1, 2, avg3p(e, 6));
+    writeVp8Intra4(plane, block_x, block_y, 2, 3, avg2p(e, 6));
+    writeVp8Intra4(plane, block_x, block_y, 0, 2, avg2p(e, 6));
+    writeVp8Intra4(plane, block_x, block_y, 1, 3, avg3p(e, 7));
+    writeVp8Intra4(plane, block_x, block_y, 0, 3, avg2p(e, 7));
+}
+
+fn predictVp8Intra4VerticalLeftBlock(a: *const [webp_vp8_intra4_block_width * 2]u8, plane: *[webp_vp8_macroblock_size * webp_vp8_macroblock_size]u8, block_x: usize, block_y: usize) void {
+    writeVp8Intra4(plane, block_x, block_y, 0, 0, avg2(a[0], a[1]));
+    writeVp8Intra4(plane, block_x, block_y, 1, 0, avg3(a[1], a[2], a[3]));
+    writeVp8Intra4(plane, block_x, block_y, 2, 0, avg2(a[1], a[2]));
+    writeVp8Intra4(plane, block_x, block_y, 0, 1, avg2(a[1], a[2]));
+    writeVp8Intra4(plane, block_x, block_y, 1, 1, avg3(a[2], a[3], a[4]));
+    writeVp8Intra4(plane, block_x, block_y, 3, 0, avg3(a[2], a[3], a[4]));
+    writeVp8Intra4(plane, block_x, block_y, 2, 1, avg2(a[2], a[3]));
+    writeVp8Intra4(plane, block_x, block_y, 0, 2, avg2(a[2], a[3]));
+    writeVp8Intra4(plane, block_x, block_y, 3, 1, avg3(a[3], a[4], a[5]));
+    writeVp8Intra4(plane, block_x, block_y, 1, 2, avg3(a[3], a[4], a[5]));
+    writeVp8Intra4(plane, block_x, block_y, 2, 2, avg2(a[3], a[4]));
+    writeVp8Intra4(plane, block_x, block_y, 0, 3, avg2(a[3], a[4]));
+    writeVp8Intra4(plane, block_x, block_y, 3, 2, avg3(a[4], a[5], a[6]));
+    writeVp8Intra4(plane, block_x, block_y, 1, 3, avg3(a[4], a[5], a[6]));
+    writeVp8Intra4(plane, block_x, block_y, 2, 3, avg3(a[5], a[6], a[7]));
+    writeVp8Intra4(plane, block_x, block_y, 3, 3, avg3(a[6], a[7], a[7]));
+}
+
+fn predictVp8Intra4HorizontalDownBlock(e: *const [9]u8, plane: *[webp_vp8_macroblock_size * webp_vp8_macroblock_size]u8, block_x: usize, block_y: usize) void {
+    writeVp8Intra4(plane, block_x, block_y, 3, 0, avg2p(e, 0));
+    writeVp8Intra4(plane, block_x, block_y, 3, 1, avg3p(e, 1));
+    writeVp8Intra4(plane, block_x, block_y, 2, 0, avg2p(e, 1));
+    writeVp8Intra4(plane, block_x, block_y, 3, 2, avg2p(e, 1));
+    writeVp8Intra4(plane, block_x, block_y, 2, 1, avg3p(e, 2));
+    writeVp8Intra4(plane, block_x, block_y, 3, 3, avg3p(e, 2));
+    writeVp8Intra4(plane, block_x, block_y, 2, 2, avg2p(e, 2));
+    writeVp8Intra4(plane, block_x, block_y, 1, 0, avg2p(e, 2));
+    writeVp8Intra4(plane, block_x, block_y, 2, 3, avg3p(e, 3));
+    writeVp8Intra4(plane, block_x, block_y, 1, 1, avg3p(e, 3));
+    writeVp8Intra4(plane, block_x, block_y, 1, 2, avg2p(e, 3));
+    writeVp8Intra4(plane, block_x, block_y, 0, 0, avg2p(e, 3));
+    writeVp8Intra4(plane, block_x, block_y, 1, 3, avg3p(e, 4));
+    writeVp8Intra4(plane, block_x, block_y, 0, 1, avg3p(e, 4));
+    writeVp8Intra4(plane, block_x, block_y, 0, 2, avg3p(e, 5));
+    writeVp8Intra4(plane, block_x, block_y, 0, 3, avg3p(e, 6));
+}
+
+fn predictVp8Intra4HorizontalUpBlock(l: *const [webp_vp8_intra4_block_width]u8, plane: *[webp_vp8_macroblock_size * webp_vp8_macroblock_size]u8, block_x: usize, block_y: usize) void {
+    writeVp8Intra4(plane, block_x, block_y, 0, 0, avg2(l[0], l[1]));
+    writeVp8Intra4(plane, block_x, block_y, 0, 1, avg3(l[1], l[2], l[3]));
+    writeVp8Intra4(plane, block_x, block_y, 0, 2, avg2(l[1], l[2]));
+    writeVp8Intra4(plane, block_x, block_y, 1, 0, avg2(l[1], l[2]));
+    writeVp8Intra4(plane, block_x, block_y, 0, 3, avg3(l[2], l[3], l[3]));
+    writeVp8Intra4(plane, block_x, block_y, 1, 1, avg3(l[2], l[3], l[3]));
+    writeVp8Intra4(plane, block_x, block_y, 1, 2, avg2(l[2], l[3]));
+    writeVp8Intra4(plane, block_x, block_y, 2, 0, avg2(l[2], l[3]));
+    writeVp8Intra4(plane, block_x, block_y, 1, 3, avg3(l[2], l[3], l[3]));
+    writeVp8Intra4(plane, block_x, block_y, 2, 1, avg3(l[2], l[3], l[3]));
+    writeVp8Intra4(plane, block_x, block_y, 2, 2, l[3]);
+    writeVp8Intra4(plane, block_x, block_y, 2, 3, l[3]);
+    writeVp8Intra4(plane, block_x, block_y, 3, 0, l[3]);
+    writeVp8Intra4(plane, block_x, block_y, 3, 1, l[3]);
+    writeVp8Intra4(plane, block_x, block_y, 3, 2, l[3]);
+    writeVp8Intra4(plane, block_x, block_y, 3, 3, l[3]);
+}
+
+fn vp8Intra4Top(edges: Vp8Edges(webp_vp8_macroblock_size), plane: *const [webp_vp8_macroblock_size * webp_vp8_macroblock_size]u8, block_x: usize, block_y: usize, offset: usize) u8 {
+    const x = block_x + offset;
+    if (block_y == 0) {
+        return if (x < webp_vp8_macroblock_size) edges.top[x] else edges.top_right[x - webp_vp8_macroblock_size];
+    }
+    return if (x < webp_vp8_macroblock_size)
+        plane[(block_y - 1) * webp_vp8_macroblock_size + x]
+    else
+        edges.top_right[x - webp_vp8_macroblock_size];
+}
+
+fn vp8Intra4Left(edges: Vp8Edges(webp_vp8_macroblock_size), plane: *const [webp_vp8_macroblock_size * webp_vp8_macroblock_size]u8, block_x: usize, block_y: usize, offset: usize) u8 {
+    return if (block_x == 0)
+        edges.left[block_y + offset]
+    else
+        plane[(block_y + offset) * webp_vp8_macroblock_size + block_x - 1];
+}
+
+fn vp8Intra4TopLeft(edges: Vp8Edges(webp_vp8_macroblock_size), plane: *const [webp_vp8_macroblock_size * webp_vp8_macroblock_size]u8, block_x: usize, block_y: usize) u8 {
+    if (block_y == 0 and block_x == 0) return edges.top_left;
+    if (block_y == 0) return edges.top[block_x - 1];
+    if (block_x == 0) return edges.left[block_y - 1];
+    return plane[(block_y - 1) * webp_vp8_macroblock_size + block_x - 1];
+}
+
+fn writeVp8Intra4(plane: *[webp_vp8_macroblock_size * webp_vp8_macroblock_size]u8, block_x: usize, block_y: usize, y: usize, x: usize, value: u8) void {
+    plane[(block_y + y) * webp_vp8_macroblock_size + block_x + x] = value;
+}
+
+fn avg2(x: u8, y: u8) u8 {
+    return @intCast((@as(u16, x) + @as(u16, y) + 1) >> 1);
+}
+
+fn avg3(x: u8, y: u8, z: u8) u8 {
+    return @intCast((@as(u16, x) + @as(u16, y) + @as(u16, y) + @as(u16, z) + 2) >> 2);
+}
+
+fn avg2p(values: *const [9]u8, index: usize) u8 {
+    return avg2(values[index], values[index + 1]);
+}
+
+fn avg3p(values: *const [9]u8, index: usize) u8 {
+    return avg3(values[index - 1], values[index], values[index + 1]);
+}
+
 fn vp8DcPredictionValue(comptime size: usize, edges: Vp8Edges(size)) u8 {
     var sum: usize = 0;
     if (edges.has_top) {
@@ -3013,6 +3794,21 @@ fn vp8DcPredictionValue(comptime size: usize, edges: Vp8Edges(size)) u8 {
     return vp8_neutral_luma;
 }
 
+fn reconstructVp8BPredLuma(
+    quant: Vp8Dequant,
+    edges: Vp8Edges(webp_vp8_macroblock_size),
+    intra4_modes: [webp_vp8_y_block_count]Vp8Intra4Mode,
+    coeffs: *const Vp8MacroblockCoeffs,
+    y_plane: *[webp_vp8_macroblock_size * webp_vp8_macroblock_size]u8,
+) void {
+    var block: usize = 0;
+    while (block < webp_vp8_y_block_count) : (block += 1) {
+        predictVp8Intra4Block(intra4_modes[block], edges, y_plane, block);
+        var block_coeffs = dequantizeVp8YBlockWithOwnDc(&coeffs.blocks[block], quant);
+        addVp8IdctBlock(&block_coeffs, yPlaneBlock(y_plane, block), webp_vp8_macroblock_size);
+    }
+}
+
 fn addVp8LumaResidualsWithY2(
     quant: Vp8Dequant,
     coeffs: *const Vp8MacroblockCoeffs,
@@ -3023,6 +3819,18 @@ fn addVp8LumaResidualsWithY2(
     var block: usize = 0;
     while (block < webp_vp8_y_block_count) : (block += 1) {
         var block_coeffs = dequantizeVp8YBlockWithY2Dc(&coeffs.blocks[block], quant, y_dc[block]);
+        addVp8IdctBlock(&block_coeffs, yPlaneBlock(y_plane, block), webp_vp8_macroblock_size);
+    }
+}
+
+fn addVp8LumaResidualsWithoutY2(
+    quant: Vp8Dequant,
+    coeffs: *const Vp8MacroblockCoeffs,
+    y_plane: *[webp_vp8_macroblock_size * webp_vp8_macroblock_size]u8,
+) void {
+    var block: usize = 0;
+    while (block < webp_vp8_y_block_count) : (block += 1) {
+        var block_coeffs = dequantizeVp8YBlockWithOwnDc(&coeffs.blocks[block], quant);
         addVp8IdctBlock(&block_coeffs, yPlaneBlock(y_plane, block), webp_vp8_macroblock_size);
     }
 }
@@ -3103,6 +3911,16 @@ fn dequantizeVp8Y2Block(block: *const [webp_vp8_block_coeff_count]i16, quant: Vp
 fn dequantizeVp8YBlockWithY2Dc(block: *const [webp_vp8_block_coeff_count]i16, quant: Vp8Dequant, dc: i32) [webp_vp8_block_coeff_count]i32 {
     var out: [webp_vp8_block_coeff_count]i32 = undefined;
     out[0] = dc;
+    var index: usize = 1;
+    while (index < out.len) : (index += 1) {
+        out[index] = @as(i32, block[index]) * quant.y_ac;
+    }
+    return out;
+}
+
+fn dequantizeVp8YBlockWithOwnDc(block: *const [webp_vp8_block_coeff_count]i16, quant: Vp8Dequant) [webp_vp8_block_coeff_count]i32 {
+    var out: [webp_vp8_block_coeff_count]i32 = undefined;
+    out[0] = @as(i32, block[0]) * quant.y_dc;
     var index: usize = 1;
     while (index < out.len) : (index += 1) {
         out[index] = @as(i32, block[index]) * quant.y_ac;
@@ -3588,6 +4406,8 @@ fn parseVp8MacroblockHeaders(frame_header: *const Vp8CompressedFrameHeader) Deco
     const mb_h = vp8MacroblockDimension(frame_header.header.height);
     if (mb_w > ~@as(usize, 0) / mb_h) return error.PixelBudget;
     const macroblock_count = mb_w * mb_h;
+    var intra4_mode_state = Vp8Intra4ModeState.init(frame_header.header.width);
+    var inter_mode_state = Vp8InterModeState.init(frame_header.header.width);
     var non_skipped_count: usize = 0;
     var flat_dc = true;
     var first_header: ?Vp8MacroblockHeader = null;
@@ -3595,10 +4415,12 @@ fn parseVp8MacroblockHeaders(frame_header: *const Vp8CompressedFrameHeader) Deco
     var uniform_modes = true;
     var mb_y: usize = 0;
     while (mb_y < mb_h) : (mb_y += 1) {
+        intra4_mode_state.startRow();
+        inter_mode_state.startRow();
         var mb_x: usize = 0;
         while (mb_x < mb_w) : (mb_x += 1) {
             const macroblock = mb_y * mb_w + mb_x;
-            const header = try parseVp8MacroblockHeader(frame_header, &reader);
+            const header = try parseVp8MacroblockHeader(frame_header, &reader, &intra4_mode_state, &inter_mode_state, mb_x);
             if (macroblock == 0) {
                 first_header = header;
             } else if (!sameVp8MacroblockModes(first_header.?, header)) {
@@ -3625,13 +4447,27 @@ fn sameVp8MacroblockModes(left: Vp8MacroblockHeader, right: Vp8MacroblockHeader)
         sameVp8MacroblockPrediction(left.prediction, right.prediction) and
         left.luma_mode == right.luma_mode and
         left.chroma_mode == right.chroma_mode and
-        left.skip == right.skip;
+        left.skip == right.skip and
+        std.mem.eql(Vp8Intra4Mode, &left.intra4_modes, &right.intra4_modes);
 }
 
 fn sameVp8MacroblockPrediction(left: Vp8MacroblockPrediction, right: Vp8MacroblockPrediction) bool {
     return switch (left) {
         .intra => switch (right) {
             .intra => true,
+            else => false,
+        },
+        .inter_zero => switch (right) {
+            .inter_zero => true,
+            else => false,
+        },
+        .inter_motion => |left_mv| switch (right) {
+            .inter_motion => |right_mv| left_mv.row == right_mv.row and left_mv.col == right_mv.col,
+            else => false,
+        },
+        .inter_split => |left_split| switch (right) {
+            .inter_split => |right_split| sameVp8SplitMotion(left_split, right_split),
+            else => false,
         },
     };
 }
@@ -3646,6 +4482,7 @@ const Vp8MacroblockHeader = struct {
     reference: Vp8ReferenceName,
     prediction: Vp8MacroblockPrediction,
     luma_mode: Vp8LumaMode,
+    intra4_modes: [webp_vp8_y_block_count]Vp8Intra4Mode,
     chroma_mode: Vp8ChromaMode,
 };
 
@@ -3654,9 +4491,199 @@ const Vp8MotionVector = struct {
     col: i16 = 0,
 };
 
+const Vp8InterModeRecord = union(enum) {
+    intra,
+    inter: Vp8MotionVector,
+    split: Vp8MotionVector,
+};
+
+const Vp8InterModeContext = struct {
+    probabilities: [webp_vp8_inter_mode_probability_count]u8,
+    nearest: Vp8MotionVector,
+    near: Vp8MotionVector,
+    best: Vp8MotionVector,
+};
+
+const Vp8InterModeState = struct {
+    top: [webp_max_legacy_dimension / webp_vp8_macroblock_size]Vp8InterModeRecord,
+    top_subblocks: [webp_vp8_max_luma_edge / webp_vp8_intra4_block_width]Vp8MotionVector,
+    left: Vp8InterModeRecord,
+    above_left: Vp8InterModeRecord,
+    left_subblocks: [webp_vp8_intra4_block_width]Vp8MotionVector,
+
+    fn init(width: usize) Vp8InterModeState {
+        _ = width;
+        return .{
+            .top = [_]Vp8InterModeRecord{.intra} ** (webp_max_legacy_dimension / webp_vp8_macroblock_size),
+            .top_subblocks = [_]Vp8MotionVector{.{}} ** (webp_vp8_max_luma_edge / webp_vp8_intra4_block_width),
+            .left = .intra,
+            .above_left = .intra,
+            .left_subblocks = [_]Vp8MotionVector{.{}} ** webp_vp8_intra4_block_width,
+        };
+    }
+
+    fn startRow(self: *Vp8InterModeState) void {
+        self.left = .intra;
+        self.above_left = .intra;
+        self.left_subblocks = [_]Vp8MotionVector{.{}} ** webp_vp8_intra4_block_width;
+    }
+
+    fn context(self: *const Vp8InterModeState, mb_x: usize) Vp8InterModeContext {
+        var vectors = [_]Vp8MotionVector{.{}} ** webp_vp8_inter_context_split;
+        var counts = [_]u8{0} ** webp_vp8_inter_mode_probability_count;
+        accumulateVp8InterModeNeighbor(self.top[mb_x], webp_vp8_inter_neighbor_weight, &vectors, &counts);
+        accumulateVp8InterModeNeighbor(self.left, webp_vp8_inter_neighbor_weight, &vectors, &counts);
+        accumulateVp8InterModeNeighbor(self.above_left, webp_vp8_inter_above_left_weight, &vectors, &counts);
+        if (counts[webp_vp8_inter_context_near] > counts[webp_vp8_inter_context_nearest]) {
+            std.mem.swap(u8, &counts[webp_vp8_inter_context_nearest], &counts[webp_vp8_inter_context_near]);
+            std.mem.swap(Vp8MotionVector, &vectors[webp_vp8_inter_context_nearest], &vectors[webp_vp8_inter_context_near]);
+        }
+        const best = if (counts[webp_vp8_inter_context_nearest] >= counts[webp_vp8_inter_context_zero])
+            vectors[webp_vp8_inter_context_nearest]
+        else
+            Vp8MotionVector{};
+        return .{
+            .probabilities = .{
+                vp8InterModeContextProbability(counts[webp_vp8_inter_context_zero], 0),
+                vp8InterModeContextProbability(counts[webp_vp8_inter_context_nearest], 1),
+                vp8InterModeContextProbability(counts[webp_vp8_inter_context_near], 2),
+                vp8InterModeContextProbability(counts[webp_vp8_inter_context_split], 3),
+            },
+            .nearest = vectors[webp_vp8_inter_context_nearest],
+            .near = vectors[webp_vp8_inter_context_near],
+            .best = best,
+        };
+    }
+
+    fn leftSubblock(self: *const Vp8InterModeState, local_y: usize) Vp8MotionVector {
+        return self.left_subblocks[local_y];
+    }
+
+    fn aboveSubblock(self: *const Vp8InterModeState, mb_x: usize, local_x: usize) Vp8MotionVector {
+        return self.top_subblocks[mb_x * webp_vp8_intra4_block_width + local_x];
+    }
+
+    fn finishMacroblock(self: *Vp8InterModeState, mb_x: usize, prediction: Vp8MacroblockPrediction) void {
+        const previous_top = self.top[mb_x];
+        const record = switch (prediction) {
+            .intra => Vp8InterModeRecord.intra,
+            .inter_zero => Vp8InterModeRecord{ .inter = .{} },
+            .inter_motion => |motion_vector| Vp8InterModeRecord{ .inter = motion_vector },
+            .inter_split => |split_motion| Vp8InterModeRecord{ .split = split_motion.vectors[webp_vp8_y_block_count - 1] },
+        };
+        const vectors = vp8MacroblockPredictionSubblockVectors(prediction);
+        const top_offset = mb_x * webp_vp8_intra4_block_width;
+        var local_x: usize = 0;
+        while (local_x < webp_vp8_intra4_block_width) : (local_x += 1) {
+            self.top_subblocks[top_offset + local_x] = vectors[(webp_vp8_intra4_block_width - 1) * webp_vp8_intra4_block_width + local_x];
+        }
+        var local_y: usize = 0;
+        while (local_y < webp_vp8_intra4_block_width) : (local_y += 1) {
+            self.left_subblocks[local_y] = vectors[local_y * webp_vp8_intra4_block_width + webp_vp8_intra4_block_width - 1];
+        }
+        self.top[mb_x] = record;
+        self.left = record;
+        self.above_left = previous_top;
+    }
+};
+
 const Vp8MacroblockPrediction = union(enum) {
     intra,
+    inter_zero,
+    inter_motion: Vp8MotionVector,
+    inter_split: Vp8InterSplitMotion,
 };
+
+const Vp8InterSplitMotion = struct {
+    vectors: [webp_vp8_y_block_count]Vp8MotionVector,
+};
+
+fn accumulateVp8InterModeNeighbor(
+    record: Vp8InterModeRecord,
+    weight: u8,
+    vectors: *[webp_vp8_inter_context_split]Vp8MotionVector,
+    counts: *[webp_vp8_inter_mode_probability_count]u8,
+) void {
+    switch (record) {
+        .intra => {},
+        .inter => |motion_vector| {
+            if (isZeroVp8MotionVector(motion_vector)) {
+                counts[webp_vp8_inter_context_zero] += weight;
+                return;
+            }
+            var index: usize = webp_vp8_inter_context_nearest;
+            while (index < webp_vp8_inter_context_split) : (index += 1) {
+                if (counts[index] != 0 and sameVp8MotionVector(vectors[index], motion_vector)) {
+                    counts[index] += weight;
+                    return;
+                }
+            }
+            index = webp_vp8_inter_context_nearest;
+            while (index < webp_vp8_inter_context_split) : (index += 1) {
+                if (counts[index] == 0) {
+                    vectors[index] = motion_vector;
+                    counts[index] = weight;
+                    return;
+                }
+            }
+        },
+        .split => |motion_vector| {
+            counts[webp_vp8_inter_context_split] += weight;
+            if (isZeroVp8MotionVector(motion_vector)) return;
+            var index: usize = webp_vp8_inter_context_nearest;
+            while (index < webp_vp8_inter_context_split) : (index += 1) {
+                if (counts[index] != 0 and sameVp8MotionVector(vectors[index], motion_vector)) {
+                    counts[index] += weight;
+                    return;
+                }
+            }
+            index = webp_vp8_inter_context_nearest;
+            while (index < webp_vp8_inter_context_split) : (index += 1) {
+                if (counts[index] == 0) {
+                    vectors[index] = motion_vector;
+                    counts[index] = weight;
+                    return;
+                }
+            }
+        },
+    }
+}
+
+fn sameVp8SplitMotion(left: Vp8InterSplitMotion, right: Vp8InterSplitMotion) bool {
+    var block: usize = 0;
+    while (block < webp_vp8_y_block_count) : (block += 1) {
+        if (!sameVp8MotionVector(left.vectors[block], right.vectors[block])) return false;
+    }
+    return true;
+}
+
+fn vp8MacroblockPredictionSubblockVectors(prediction: Vp8MacroblockPrediction) [webp_vp8_y_block_count]Vp8MotionVector {
+    return switch (prediction) {
+        .intra, .inter_zero => [_]Vp8MotionVector{.{}} ** webp_vp8_y_block_count,
+        .inter_motion => |motion_vector| [_]Vp8MotionVector{motion_vector} ** webp_vp8_y_block_count,
+        .inter_split => |split_motion| split_motion.vectors,
+    };
+}
+
+fn vp8InterModeContextProbability(count: u8, probability_index: usize) u8 {
+    const context = @min(@as(usize, count), webp_vp8_inter_mode_context_count - 1);
+    return webp_vp8_inter_mode_context_probabilities[context][probability_index];
+}
+
+fn sameVp8MotionVector(left: Vp8MotionVector, right: Vp8MotionVector) bool {
+    return left.row == right.row and left.col == right.col;
+}
+
+fn isZeroVp8MotionVector(motion_vector: Vp8MotionVector) bool {
+    return sameVp8MotionVector(motion_vector, .{});
+}
+
+fn addVp8MotionVector(left: Vp8MotionVector, right: Vp8MotionVector) Vp8MotionVector {
+    return .{
+        .row = left.row + right.row,
+        .col = left.col + right.col,
+    };
+}
 
 const Vp8LumaMode = enum(u8) {
     dc,
@@ -3680,31 +4707,84 @@ const Vp8ChromaMode = enum(u8) {
     true_motion,
 };
 
+const Vp8Intra4Mode = enum(u8) {
+    dc,
+    true_motion,
+    vertical,
+    horizontal,
+    right_down,
+    vertical_right,
+    left_down,
+    vertical_left,
+    horizontal_down,
+    horizontal_up,
+};
+
+const Vp8Intra4ModeState = struct {
+    top: [webp_vp8_max_luma_edge / webp_vp8_intra4_block_width]Vp8Intra4Mode,
+    left: [webp_vp8_intra4_block_width]Vp8Intra4Mode,
+
+    fn init(width: usize) Vp8Intra4ModeState {
+        _ = width;
+        return .{
+            .top = [_]Vp8Intra4Mode{.dc} ** (webp_vp8_max_luma_edge / webp_vp8_intra4_block_width),
+            .left = [_]Vp8Intra4Mode{.dc} ** webp_vp8_intra4_block_width,
+        };
+    }
+
+    fn startRow(self: *Vp8Intra4ModeState) void {
+        self.left = [_]Vp8Intra4Mode{.dc} ** webp_vp8_intra4_block_width;
+    }
+};
+
 fn parseVp8MacroblockHeader(
     frame_header: *const Vp8CompressedFrameHeader,
     reader: *Vp8BoolReader,
+    intra4_mode_state: *Vp8Intra4ModeState,
+    inter_mode_state: *Vp8InterModeState,
+    mb_x: usize,
 ) DecodeError!Vp8MacroblockHeader {
     const segment_id = if (frame_header.segment_update_map) try readVp8SegmentId(frame_header, reader) else 0;
     const skip = if (frame_header.use_skip_probability) try reader.readBool(frame_header.skip_probability) else false;
     if (frame_header.frame_type == .inter and try reader.readBool(frame_header.prob_intra)) {
-        return error.UnsupportedImage;
+        const reference = try readVp8ReferenceName(reader, frame_header);
+        const prediction = try readVp8InterPrediction(reader, frame_header, inter_mode_state, mb_x);
+        const header = Vp8MacroblockHeader{
+            .segment_id = segment_id,
+            .skip = skip,
+            .reference = reference,
+            .prediction = prediction,
+            .luma_mode = .dc,
+            .intra4_modes = [_]Vp8Intra4Mode{.dc} ** webp_vp8_y_block_count,
+            .chroma_mode = .dc,
+        };
+        inter_mode_state.finishMacroblock(mb_x, header.prediction);
+        return header;
     }
     const luma_mode: Vp8LumaMode = switch (frame_header.frame_type) {
         .key => if (try reader.readBool(webp_vp8_intra16_block_size_probability)) vp8LumaModeFromIntra16(try readVp8Intra16Mode(reader)) else .b_pred,
         .inter => try readVp8InterIntra16Mode(reader, &frame_header.intra16_probabilities),
     };
-    if (luma_mode == .b_pred) return error.UnsupportedImage;
+    const intra4_modes = if (luma_mode == .b_pred)
+        try readVp8Intra4Modes(reader, intra4_mode_state, mb_x, frame_header.frame_type)
+    else blk: {
+        const modes = vp8Intra4ModesFromLumaMode(luma_mode);
+        updateVp8Intra4ModeState(intra4_mode_state, mb_x, modes);
+        break :blk modes;
+    };
     const header = Vp8MacroblockHeader{
         .segment_id = segment_id,
         .skip = skip,
         .reference = .last,
         .prediction = .intra,
         .luma_mode = luma_mode,
+        .intra4_modes = intra4_modes,
         .chroma_mode = switch (frame_header.frame_type) {
             .key => try readVp8ChromaMode(reader),
             .inter => try readVp8InterChromaMode(reader, &frame_header.chroma_probabilities),
         },
     };
+    inter_mode_state.finishMacroblock(mb_x, header.prediction);
     return header;
 }
 
@@ -3717,6 +4797,17 @@ fn vp8LumaModeFromIntra16(mode: Vp8Intra16Mode) Vp8LumaMode {
     };
 }
 
+fn vp8Intra4ModesFromLumaMode(mode: Vp8LumaMode) [webp_vp8_y_block_count]Vp8Intra4Mode {
+    const intra4_mode: Vp8Intra4Mode = switch (mode) {
+        .dc => .dc,
+        .vertical => .vertical,
+        .horizontal => .horizontal,
+        .true_motion => .true_motion,
+        .b_pred => .dc,
+    };
+    return [_]Vp8Intra4Mode{intra4_mode} ** webp_vp8_y_block_count;
+}
+
 fn readVp8SegmentId(frame_header: *const Vp8CompressedFrameHeader, reader: *Vp8BoolReader) DecodeError!u8 {
     if (!try reader.readBool(frame_header.segment_probabilities[0])) {
         return if (try reader.readBool(frame_header.segment_probabilities[1])) 1 else 0;
@@ -3727,6 +4818,106 @@ fn readVp8SegmentId(frame_header: *const Vp8CompressedFrameHeader, reader: *Vp8B
 fn readVp8ReferenceName(reader: *Vp8BoolReader, frame_header: *const Vp8CompressedFrameHeader) DecodeError!Vp8ReferenceName {
     if (!try reader.readBool(frame_header.prob_last)) return .last;
     return if (try reader.readBool(frame_header.prob_golden)) .alternate else .golden;
+}
+
+fn readVp8InterPrediction(reader: *Vp8BoolReader, frame_header: *const Vp8CompressedFrameHeader, state: *const Vp8InterModeState, mb_x: usize) DecodeError!Vp8MacroblockPrediction {
+    const context = state.context(mb_x);
+    if (!try reader.readBool(context.probabilities[0])) return .inter_zero;
+    if (!try reader.readBool(context.probabilities[1])) return .{ .inter_motion = context.nearest };
+    if (!try reader.readBool(context.probabilities[2])) return .{ .inter_motion = context.near };
+    if (!try reader.readBool(context.probabilities[3])) {
+        const motion_vector = try readVp8MotionVector(reader, &frame_header.motion_vector_probabilities);
+        return .{ .inter_motion = addVp8MotionVector(context.best, motion_vector) };
+    }
+    return .{ .inter_split = try readVp8InterSplitMotion(reader, frame_header, state, mb_x, context.best) };
+}
+
+fn readVp8InterSplitMotion(
+    reader: *Vp8BoolReader,
+    frame_header: *const Vp8CompressedFrameHeader,
+    state: *const Vp8InterModeState,
+    mb_x: usize,
+    best: Vp8MotionVector,
+) DecodeError!Vp8InterSplitMotion {
+    const partition = webp_vp8_split_mv_partitions[try readVp8SplitMvPartition(reader)];
+    var vectors = [_]Vp8MotionVector{.{}} ** webp_vp8_y_block_count;
+    var decoded_partitions = [_]bool{false} ** webp_vp8_y_block_count;
+    var decoded_count: usize = 0;
+    while (decoded_count < webp_vp8_y_block_count) {
+        const partition_id = try nextVp8UndecodedSplitPartition(&partition, &decoded_partitions);
+        const block = firstVp8SplitPartitionBlock(&partition, partition_id);
+        const left = vp8SplitLeftMotionVector(state, &vectors, block);
+        const above = vp8SplitAboveMotionVector(state, mb_x, &vectors, block);
+        const vector = try readVp8SubMotionVector(reader, frame_header, left, above, best);
+        var index: usize = 0;
+        while (index < webp_vp8_y_block_count) : (index += 1) {
+            if (partition[index] == partition_id) {
+                vectors[index] = vector;
+                decoded_partitions[index] = true;
+                decoded_count += 1;
+            }
+        }
+    }
+    return .{ .vectors = vectors };
+}
+
+fn readVp8SplitMvPartition(reader: *Vp8BoolReader) DecodeError!usize {
+    if (!try reader.readBool(webp_vp8_split_mv_probabilities[0])) return 3;
+    if (!try reader.readBool(webp_vp8_split_mv_probabilities[1])) return 2;
+    return if (try reader.readBool(webp_vp8_split_mv_probabilities[2])) 1 else 0;
+}
+
+fn nextVp8UndecodedSplitPartition(partition: *const [webp_vp8_y_block_count]u8, decoded: *const [webp_vp8_y_block_count]bool) DecodeError!u8 {
+    var block: usize = 0;
+    while (block < webp_vp8_y_block_count) : (block += 1) {
+        if (!decoded[block]) return partition[block];
+    }
+    return error.BadImage;
+}
+
+fn firstVp8SplitPartitionBlock(partition: *const [webp_vp8_y_block_count]u8, partition_id: u8) usize {
+    var block: usize = 0;
+    while (block < webp_vp8_y_block_count) : (block += 1) {
+        if (partition[block] == partition_id) return block;
+    }
+    unreachable;
+}
+
+fn vp8SplitLeftMotionVector(state: *const Vp8InterModeState, vectors: *const [webp_vp8_y_block_count]Vp8MotionVector, block: usize) Vp8MotionVector {
+    const local_x = block % webp_vp8_intra4_block_width;
+    const local_y = block / webp_vp8_intra4_block_width;
+    return if (local_x == 0) state.leftSubblock(local_y) else vectors[block - 1];
+}
+
+fn vp8SplitAboveMotionVector(state: *const Vp8InterModeState, mb_x: usize, vectors: *const [webp_vp8_y_block_count]Vp8MotionVector, block: usize) Vp8MotionVector {
+    const local_x = block % webp_vp8_intra4_block_width;
+    const local_y = block / webp_vp8_intra4_block_width;
+    return if (local_y == 0) state.aboveSubblock(mb_x, local_x) else vectors[block - webp_vp8_intra4_block_width];
+}
+
+fn readVp8SubMotionVector(
+    reader: *Vp8BoolReader,
+    frame_header: *const Vp8CompressedFrameHeader,
+    left: Vp8MotionVector,
+    above: Vp8MotionVector,
+    best: Vp8MotionVector,
+) DecodeError!Vp8MotionVector {
+    const probabilities = webp_vp8_sub_mv_probabilities[vp8SubMotionContext(left, above)];
+    if (!try reader.readBool(probabilities[0])) return left;
+    if (!try reader.readBool(probabilities[1])) return above;
+    if (!try reader.readBool(probabilities[2])) return .{};
+    const motion_vector = try readVp8MotionVector(reader, &frame_header.motion_vector_probabilities);
+    return addVp8MotionVector(best, motion_vector);
+}
+
+fn vp8SubMotionContext(left: Vp8MotionVector, above: Vp8MotionVector) usize {
+    const left_zero = isZeroVp8MotionVector(left);
+    const above_zero = isZeroVp8MotionVector(above);
+    if (left_zero and above_zero) return webp_vp8_sub_mv_context_left_above_zero;
+    if (left_zero) return webp_vp8_sub_mv_context_left_zero;
+    if (above_zero) return webp_vp8_sub_mv_context_above_zero;
+    if (sameVp8MotionVector(left, above)) return webp_vp8_sub_mv_context_left_equals_above;
+    return webp_vp8_sub_mv_context_left_differs_above;
 }
 
 fn readVp8MotionVector(
@@ -3797,6 +4988,60 @@ fn readVp8InterIntra16Mode(reader: *Vp8BoolReader, probabilities: *const [webp_v
     return .b_pred;
 }
 
+fn readVp8Intra4Modes(reader: *Vp8BoolReader, state: *Vp8Intra4ModeState, mb_x: usize, frame_type: Vp8FrameType) DecodeError![webp_vp8_y_block_count]Vp8Intra4Mode {
+    var modes = [_]Vp8Intra4Mode{.dc} ** webp_vp8_y_block_count;
+    const top_offset = mb_x * webp_vp8_intra4_block_width;
+    var y: usize = 0;
+    while (y < webp_vp8_intra4_block_width) : (y += 1) {
+        var x: usize = 0;
+        while (x < webp_vp8_intra4_block_width) : (x += 1) {
+            const top_index = top_offset + x;
+            const mode = switch (frame_type) {
+                .key => try readVp8KeyFrameIntra4Mode(reader, state.top[top_index], state.left[y]),
+                .inter => try readVp8InterFrameIntra4Mode(reader),
+            };
+            state.top[top_index] = mode;
+            state.left[y] = mode;
+            modes[y * webp_vp8_intra4_block_width + x] = mode;
+        }
+    }
+    return modes;
+}
+
+fn updateVp8Intra4ModeState(state: *Vp8Intra4ModeState, mb_x: usize, modes: [webp_vp8_y_block_count]Vp8Intra4Mode) void {
+    const top_offset = mb_x * webp_vp8_intra4_block_width;
+    var x: usize = 0;
+    while (x < webp_vp8_intra4_block_width) : (x += 1) {
+        state.top[top_offset + x] = modes[(webp_vp8_intra4_block_width - 1) * webp_vp8_intra4_block_width + x];
+    }
+    var y: usize = 0;
+    while (y < webp_vp8_intra4_block_width) : (y += 1) {
+        state.left[y] = modes[y * webp_vp8_intra4_block_width + webp_vp8_intra4_block_width - 1];
+    }
+}
+
+fn readVp8KeyFrameIntra4Mode(reader: *Vp8BoolReader, top: Vp8Intra4Mode, left: Vp8Intra4Mode) DecodeError!Vp8Intra4Mode {
+    const probabilities = vp8Intra4ModeProbabilities(top, left);
+    return readVp8Intra4Mode(reader, probabilities);
+}
+
+fn readVp8InterFrameIntra4Mode(reader: *Vp8BoolReader) DecodeError!Vp8Intra4Mode {
+    return readVp8Intra4Mode(reader, &webp_vp8_inter_intra4_probability_default);
+}
+
+fn readVp8Intra4Mode(reader: *Vp8BoolReader, probabilities: *const [webp_vp8_intra4_probability_count]u8) DecodeError!Vp8Intra4Mode {
+    if (!try reader.readBool(probabilities[0])) return .dc;
+    if (!try reader.readBool(probabilities[1])) return .true_motion;
+    if (!try reader.readBool(probabilities[2])) return .vertical;
+    if (!try reader.readBool(probabilities[3])) {
+        if (!try reader.readBool(probabilities[4])) return .horizontal;
+        return if (try reader.readBool(probabilities[5])) .vertical_right else .right_down;
+    }
+    if (!try reader.readBool(probabilities[6])) return .left_down;
+    if (!try reader.readBool(probabilities[7])) return .vertical_left;
+    return if (try reader.readBool(probabilities[8])) .horizontal_up else .horizontal_down;
+}
+
 fn readVp8ChromaMode(reader: *Vp8BoolReader) DecodeError!Vp8ChromaMode {
     if (!try reader.readBool(webp_vp8_chroma_mode_probability_0)) return .dc;
     if (!try reader.readBool(webp_vp8_chroma_mode_probability_1)) return .vertical;
@@ -3808,6 +5053,13 @@ fn readVp8InterChromaMode(reader: *Vp8BoolReader, probabilities: *const [webp_vp
     if (!try reader.readBool(probabilities[1])) return .vertical;
     return if (try reader.readBool(probabilities[2])) .true_motion else .horizontal;
 }
+
+fn vp8Intra4ModeProbabilities(top: Vp8Intra4Mode, left: Vp8Intra4Mode) *const [webp_vp8_intra4_probability_count]u8 {
+    const offset = (@as(usize, @intFromEnum(top)) * webp_vp8_intra4_mode_count + @as(usize, @intFromEnum(left))) * webp_vp8_intra4_probability_count;
+    return webp_vp8_intra4_keyframe_probabilities[offset..][0..webp_vp8_intra4_probability_count];
+}
+
+const webp_vp8_intra4_keyframe_probabilities = vp8_tables.webp_vp8_intra4_keyframe_probabilities;
 
 const Vp8ResidualSummary = struct {
     non_zero: bool,
@@ -3855,7 +5107,7 @@ const Vp8ResidualContextState = struct {
         self.left_y2 = false;
     }
 
-    fn skipMacroblock(self: *Vp8ResidualContextState, mb_x: usize) void {
+    fn skipMacroblock(self: *Vp8ResidualContextState, mb_x: usize, has_y2: bool) void {
         const y_top_offset = mb_x * webp_vp8_intra4_block_width;
         @memset(self.top_y[y_top_offset..][0..webp_vp8_intra4_block_width], false);
         self.left_y = [_]bool{false} ** webp_vp8_intra4_block_width;
@@ -3866,32 +5118,43 @@ const Vp8ResidualContextState = struct {
         self.left_u = [_]bool{false} ** webp_vp8_chroma_sample_scale;
         self.left_v = [_]bool{false} ** webp_vp8_chroma_sample_scale;
 
-        self.top_y2[mb_x] = false;
-        self.left_y2 = false;
+        if (has_y2) {
+            self.top_y2[mb_x] = false;
+            self.left_y2 = false;
+        }
     }
 };
+
+fn parseVp8ResidualMacroblock(reader: *Vp8BoolReader, probabilities: *const [webp_vp8_coeff_update_probability_count]u8, luma_mode: Vp8LumaMode, coeffs: *Vp8MacroblockCoeffs) DecodeError!Vp8ResidualSummary {
+    var context = Vp8ResidualContextState.init(webp_vp8_macroblock_size);
+    return parseVp8ResidualMacroblockWithContext(reader, probabilities, luma_mode != .b_pred, coeffs, &context, 0);
+}
 
 fn parseVp8ResidualMacroblockWithContext(
     reader: *Vp8BoolReader,
     probabilities: *const [webp_vp8_coeff_update_probability_count]u8,
+    has_y2: bool,
     coeffs: *Vp8MacroblockCoeffs,
     context_state: *Vp8ResidualContextState,
     mb_x: usize,
 ) DecodeError!Vp8ResidualSummary {
     var non_zero = false;
-    const y2_context = @as(usize, @intFromBool(context_state.left_y2)) + @as(usize, @intFromBool(context_state.top_y2[mb_x]));
-    const y2 = try readVp8CoeffBlock(reader, probabilities, 1, 0, y2_context, &coeffs.blocks[webp_vp8_y2_block_index]);
-    context_state.left_y2 = y2.non_zero;
-    context_state.top_y2[mb_x] = y2.non_zero;
-    non_zero = non_zero or y2.non_zero;
-
+    if (has_y2) {
+        const y2_context = @as(usize, @intFromBool(context_state.left_y2)) + @as(usize, @intFromBool(context_state.top_y2[mb_x]));
+        const y2 = try readVp8CoeffBlock(reader, probabilities, 1, 0, y2_context, &coeffs.blocks[webp_vp8_y2_block_index]);
+        context_state.left_y2 = y2.non_zero;
+        context_state.top_y2[mb_x] = y2.non_zero;
+        non_zero = non_zero or y2.non_zero;
+    }
     var block: usize = 0;
+    const y_block_type: usize = if (has_y2) 0 else 3;
+    const y_start_index: usize = if (has_y2) 1 else 0;
     const y_top_offset = mb_x * webp_vp8_intra4_block_width;
     while (block < webp_vp8_y_block_count) : (block += 1) {
         const block_x = block % webp_vp8_intra4_block_width;
         const block_y = block / webp_vp8_intra4_block_width;
         const coeff_context = @as(usize, @intFromBool(context_state.left_y[block_y])) + @as(usize, @intFromBool(context_state.top_y[y_top_offset + block_x]));
-        const y = try readVp8CoeffBlock(reader, probabilities, 0, 1, coeff_context, &coeffs.blocks[block]);
+        const y = try readVp8CoeffBlock(reader, probabilities, y_block_type, y_start_index, coeff_context, &coeffs.blocks[block]);
         context_state.left_y[block_y] = y.non_zero;
         context_state.top_y[y_top_offset + block_x] = y.non_zero;
         non_zero = non_zero or y.non_zero;
@@ -4028,6 +5291,38 @@ const webp_vp8_coeff_default_probabilities = vp8_tables.webp_vp8_coeff_default_p
 const webp_vp8_motion_vector_default_probabilities = [_][webp_vp8_motion_vector_probability_count]u8{
     .{ 162, 128, 225, 146, 172, 147, 214, 39, 156, 128, 129, 132, 75, 145, 178, 206, 239, 254, 254 },
     .{ 164, 128, 204, 170, 119, 235, 140, 230, 228, 128, 130, 130, 74, 148, 180, 203, 236, 254, 254 },
+};
+const webp_vp8_inter_mode_context_probabilities = [_][webp_vp8_inter_mode_probability_count]u8{
+    .{ 7, 1, 1, 143 },
+    .{ 14, 18, 14, 107 },
+    .{ 135, 64, 57, 68 },
+    .{ 60, 56, 128, 65 },
+    .{ 159, 134, 128, 34 },
+    .{ 234, 188, 128, 28 },
+};
+const webp_vp8_split_mv_probabilities = [_]u8{ 110, 111, 150 };
+const webp_vp8_sub_mv_probabilities = [_][webp_vp8_sub_mv_probability_count]u8{
+    .{ 147, 136, 18 },
+    .{ 106, 145, 1 },
+    .{ 179, 121, 1 },
+    .{ 223, 1, 34 },
+    .{ 208, 1, 1 },
+};
+const webp_vp8_split_mv_partitions = [_][webp_vp8_y_block_count]u8{
+    .{ 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1 },
+    .{ 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1 },
+    .{ 0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 3, 3, 2, 2, 3, 3 },
+    .{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 },
+};
+const webp_vp8_subpixel_filters = [_][webp_vp8_subpixel_filter_tap_count]i16{
+    .{ 0, 0, 128, 0, 0, 0 },
+    .{ 0, -6, 123, 12, -1, 0 },
+    .{ 2, -11, 108, 36, -8, 1 },
+    .{ 0, -9, 93, 50, -6, 0 },
+    .{ 3, -16, 77, 77, -16, 3 },
+    .{ 0, -6, 50, 93, -9, 0 },
+    .{ 1, -8, 36, 108, -11, 2 },
+    .{ 0, -1, 12, 123, -6, 0 },
 };
 const webp_vp8_motion_vector_update_probabilities = [_][webp_vp8_motion_vector_probability_count]u8{
     .{ 237, 246, 253, 253, 254, 254, 254, 254, 254, 254, 254, 254, 254, 254, 250, 250, 252, 254, 254 },
@@ -4204,10 +5499,20 @@ test "webp decoder parses vp8 keyframe dimensions" {
     try std.testing.expectEqual(@as(usize, 7), header.height);
 }
 
-test "webp vp8 decoder rejects b_pred vp8x keyframes owned by asm vp8" {
+test "webp vp8 decoder writes neutral rgba pixels for supported zero residual keyframe" {
     const bytes = testWebpVp8x();
     var pixels: [6]ui.Color = undefined;
-    try std.testing.expectError(error.UnsupportedImage, decodeTestWebp(bytes, &pixels));
+    const header = try decodeTestWebp(bytes, &pixels);
+    try std.testing.expectEqual(@as(usize, 3), header.width);
+    try std.testing.expectEqual(@as(usize, 2), header.height);
+    try std.testing.expectEqualSlices(ui.Color, &[_]ui.Color{
+        .{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = png_alpha_opaque },
+        .{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = png_alpha_opaque },
+        .{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = png_alpha_opaque },
+        .{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = png_alpha_opaque },
+        .{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = png_alpha_opaque },
+        .{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = png_alpha_opaque },
+    }, &pixels);
 }
 
 test "webp vp8 decoder reconstructs real single macroblock pixels" {
@@ -4262,10 +5567,15 @@ test "webp vp8 decoder applies coefficient probability updates for color" {
     try std.testing.expectEqual(ui.Color{ .r = 239, .g = 15, .b = 15, .a = png_alpha_opaque }, pixels[pixels.len - 1]);
 }
 
-test "webp vp8 decoder rejects b_pred generated color test pattern owned by asm vp8" {
+test "webp vp8 decoder handles generated color test pattern" {
     const bytes = testWebpVp8Testsrc32();
     var pixels: [32 * 32]ui.Color = undefined;
-    try std.testing.expectError(error.UnsupportedImage, decodeTestWebp(bytes, &pixels));
+    const header = try decodeTestWebp(bytes, &pixels);
+    try std.testing.expectEqual(@as(usize, 32), header.width);
+    try std.testing.expectEqual(@as(usize, 32), header.height);
+    try std.testing.expectEqual(ui.Color{ .r = 1, .g = 0, .b = 23, .a = png_alpha_opaque }, pixels[0]);
+    try std.testing.expectEqual(ui.Color{ .r = 107, .g = 171, .b = 157, .a = png_alpha_opaque }, pixels[32 * 16 + 16]);
+    try std.testing.expectEqual(ui.Color{ .r = 0, .g = 87, .b = 53, .a = png_alpha_opaque }, pixels[pixels.len - 1]);
 }
 
 test "vp8 prediction state carries macroblock edges" {
@@ -4292,6 +5602,101 @@ test "vp8 prediction state carries macroblock edges" {
     predictVp8Horizontal(webp_vp8_macroblock_size, edges, &predicted);
     try std.testing.expectEqual(@as(u8, 40), predicted[0]);
     try std.testing.expectEqual(@as(u8, 55), predicted[predicted.len - 1]);
+}
+
+test "vp8 inter zero macroblock copies previous rgba pixels" {
+    const previous_pixels = [_]ui.Color{
+        .{ .r = 1, .g = 2, .b = 3, .a = png_alpha_opaque },
+        .{ .r = 4, .g = 5, .b = 6, .a = png_alpha_opaque },
+        .{ .r = 7, .g = 8, .b = 9, .a = png_alpha_opaque },
+        .{ .r = 10, .g = 11, .b = 12, .a = png_alpha_opaque },
+    };
+    const previous_bytes = std.mem.sliceAsBytes(&previous_pixels);
+    var out: [previous_pixels.len]ui.Color = undefined;
+    try copyVp8InterZeroMacroblock(.{ .width = 2, .height = 2 }, 0, 0, previous_bytes, &out);
+    try std.testing.expectEqualSlices(ui.Color, &previous_pixels, &out);
+}
+
+test "vp8 inter whole-pixel motion macroblock copies shifted previous rgba pixels" {
+    var previous_pixels: [32]ui.Color = undefined;
+    for (&previous_pixels, 0..) |*pixel, index| {
+        pixel.* = .{ .r = @intCast(index), .g = 2, .b = 3, .a = png_alpha_opaque };
+    }
+    const previous_bytes = std.mem.sliceAsBytes(&previous_pixels);
+    var out: [previous_pixels.len]ui.Color = undefined;
+    try copyVp8InterMotionMacroblock(.{ .width = 32, .height = 1 }, 1, 0, .{ .col = -4 }, previous_bytes, &out);
+    try std.testing.expectEqual(previous_pixels[15], out[16]);
+    try std.testing.expectEqual(previous_pixels[30], out[31]);
+    try std.testing.expectError(error.UnsupportedImage, copyVp8InterMotionMacroblock(.{ .width = 32, .height = 1 }, 1, 0, .{ .row = 1 }, previous_bytes, &out));
+}
+
+test "vp8 inter fractional motion filters yuv reference samples" {
+    var previous_y: [32]u8 = undefined;
+    for (&previous_y, 0..) |*value, index| {
+        value.* = @intCast(index * 4);
+    }
+    var previous_u = [_]u8{128} ** 8;
+    var previous_v = [_]u8{128} ** 8;
+    const previous = Vp8ReferenceFrame{
+        .y = &previous_y,
+        .u = &previous_u,
+        .v = &previous_v,
+        .chroma_width = 8,
+    };
+    var y_plane: [webp_vp8_macroblock_size * webp_vp8_macroblock_size]u8 = undefined;
+    var u_plane: [webp_vp8_chroma_block_size * webp_vp8_chroma_block_size]u8 = undefined;
+    var v_plane: [webp_vp8_chroma_block_size * webp_vp8_chroma_block_size]u8 = undefined;
+    try readVp8ReferenceInterMacroblock(.{ .width = 32, .height = 1 }, 0, 0, .{ .col = 2 }, previous, &y_plane, &u_plane, &v_plane);
+    try std.testing.expectEqual(@as(u8, 2), y_plane[0]);
+    try std.testing.expectEqual(@as(u8, 6), y_plane[1]);
+    try std.testing.expectEqual(@as(u8, 62), y_plane[15]);
+    try std.testing.expectEqual(@as(u8, 128), u_plane[0]);
+    try std.testing.expectEqual(@as(u8, 128), v_plane[0]);
+}
+
+test "vp8 split motion contexts classify neighboring vectors" {
+    try std.testing.expectEqual(webp_vp8_sub_mv_context_left_above_zero, vp8SubMotionContext(.{}, .{}));
+    try std.testing.expectEqual(webp_vp8_sub_mv_context_left_zero, vp8SubMotionContext(.{}, .{ .col = 4 }));
+    try std.testing.expectEqual(webp_vp8_sub_mv_context_above_zero, vp8SubMotionContext(.{ .row = -4 }, .{}));
+    try std.testing.expectEqual(webp_vp8_sub_mv_context_left_equals_above, vp8SubMotionContext(.{ .col = 4 }, .{ .col = 4 }));
+    try std.testing.expectEqual(webp_vp8_sub_mv_context_left_differs_above, vp8SubMotionContext(.{ .row = 4 }, .{ .col = 4 }));
+}
+
+test "vp8 split motion samples independent luma subblocks" {
+    var previous_y: [32 * 16]u8 = undefined;
+    var row: usize = 0;
+    while (row < 16) : (row += 1) {
+        var col: usize = 0;
+        while (col < 32) : (col += 1) {
+            previous_y[row * 32 + col] = @intCast(row * 10 + col);
+        }
+    }
+    var previous_u = [_]u8{128} ** (16 * 8);
+    var previous_v = [_]u8{128} ** (16 * 8);
+    const previous = Vp8ReferenceFrame{
+        .y = &previous_y,
+        .u = &previous_u,
+        .v = &previous_v,
+        .chroma_width = 16,
+    };
+
+    var split_motion = Vp8InterSplitMotion{ .vectors = [_]Vp8MotionVector{.{}} ** webp_vp8_y_block_count };
+    var block: usize = 0;
+    while (block < webp_vp8_y_block_count) : (block += 1) {
+        split_motion.vectors[block] = if (block < 8) .{ .col = -4 } else .{ .col = -8 };
+    }
+
+    var y_plane: [webp_vp8_macroblock_size * webp_vp8_macroblock_size]u8 = undefined;
+    var u_plane: [webp_vp8_chroma_block_size * webp_vp8_chroma_block_size]u8 = undefined;
+    var v_plane: [webp_vp8_chroma_block_size * webp_vp8_chroma_block_size]u8 = undefined;
+    try readVp8ReferenceInterSplitMacroblock(.{ .width = 32, .height = 16 }, 1, 0, split_motion, previous, &y_plane, &u_plane, &v_plane);
+
+    try std.testing.expectEqual(@as(u8, 15), y_plane[0]);
+    try std.testing.expectEqual(@as(u8, 18), y_plane[3]);
+    try std.testing.expectEqual(@as(u8, 94), y_plane[8 * webp_vp8_macroblock_size]);
+    try std.testing.expectEqual(@as(u8, 97), y_plane[8 * webp_vp8_macroblock_size + 3]);
+    try std.testing.expectEqual(@as(u8, 128), u_plane[0]);
+    try std.testing.expectEqual(@as(u8, 128), v_plane[0]);
 }
 
 test "vp8 normal loop filter smooths macroblock edges" {
@@ -4346,7 +5751,9 @@ test "webp decoder skips explicit vp8x metadata chunks" {
     writeU32Le(bytes[4..][0..4], bytes.len - 8);
 
     var pixels: [6]ui.Color = undefined;
-    try std.testing.expectError(error.UnsupportedImage, decodeTestWebp(&bytes, &pixels));
+    const header = try decodeTestWebp(&bytes, &pixels);
+    try std.testing.expectEqual(@as(usize, 3), header.width);
+    try std.testing.expectEqual(@as(usize, 2), header.height);
 }
 
 test "webp decoder applies raw alph chunk to vp8 pixels" {
@@ -4363,7 +5770,17 @@ test "webp decoder applies raw alph chunk to vp8 pixels" {
     const encoded = writeTestWebpVp8xAlph(&bytes, &alpha_payload);
 
     var pixels: [6]ui.Color = undefined;
-    try std.testing.expectError(error.UnsupportedImage, decodeTestWebp(encoded, &pixels));
+    const header = try decodeTestWebp(encoded, &pixels);
+    try std.testing.expectEqual(@as(usize, 3), header.width);
+    try std.testing.expectEqual(@as(usize, 2), header.height);
+    try std.testing.expectEqualSlices(ui.Color, &[_]ui.Color{
+        .{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = 0 },
+        .{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = 64 },
+        .{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = 128 },
+        .{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = 192 },
+        .{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = 255 },
+        .{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = 17 },
+    }, &pixels);
 }
 
 test "webp decoder applies filtered raw alph chunk to vp8 pixels" {
@@ -4380,7 +5797,13 @@ test "webp decoder applies filtered raw alph chunk to vp8 pixels" {
     const encoded = writeTestWebpVp8xAlph(&bytes, &alpha_payload);
 
     var pixels: [6]ui.Color = undefined;
-    try std.testing.expectError(error.UnsupportedImage, decodeTestWebp(encoded, &pixels));
+    _ = try decodeTestWebp(encoded, &pixels);
+    try std.testing.expectEqual(@as(u8, 10), pixels[0].a);
+    try std.testing.expectEqual(@as(u8, 20), pixels[1].a);
+    try std.testing.expectEqual(@as(u8, 30), pixels[2].a);
+    try std.testing.expectEqual(@as(u8, 40), pixels[3].a);
+    try std.testing.expectEqual(@as(u8, 50), pixels[4].a);
+    try std.testing.expectEqual(@as(u8, 60), pixels[5].a);
 }
 
 test "webp decoder applies compressed alph chunk to vp8 pixels" {
@@ -4404,7 +5827,12 @@ test "webp decoder applies compressed alph chunk to vp8 pixels" {
     defer std.testing.allocator.free(scratch);
 
     var pixels: [6]ui.Color = undefined;
-    try std.testing.expectError(error.UnsupportedImage, decodeWithScratch(encoded, &pixels, scratch));
+    const header = try decodeWithScratch(encoded, &pixels, scratch);
+    try std.testing.expectEqual(@as(usize, 3), header.width);
+    try std.testing.expectEqual(@as(usize, 2), header.height);
+    for (pixels) |pixel| {
+        try std.testing.expectEqual(ui.Color{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = 77 }, pixel);
+    }
 }
 
 test "webp animation header parses vp8x anim and frame metadata" {
@@ -4419,7 +5847,14 @@ test "webp animation header parses vp8x anim and frame metadata" {
     try std.testing.expectEqual(@as(usize, 1), header.frame_count);
 
     var pixels: [6]ui.Color = undefined;
-    try std.testing.expectError(error.UnsupportedImage, decodeTestWebpAnimationFrame(encoded, 0, &pixels));
+    const frame = try decodeTestWebpAnimationFrame(encoded, 0, &pixels);
+    try std.testing.expectEqual(@as(usize, 0), frame.info.x);
+    try std.testing.expectEqual(@as(usize, 0), frame.info.y);
+    try std.testing.expectEqual(@as(usize, 3), frame.info.width);
+    try std.testing.expectEqual(@as(usize, 2), frame.info.height);
+    try std.testing.expectEqual(@as(usize, 25), frame.info.duration_ms);
+    try std.testing.expectEqual(false, frame.info.blend);
+    try std.testing.expectEqual(true, frame.info.dispose_to_background);
 }
 
 test "webp animation frame decoder decodes anmf vp8 payload" {
@@ -4427,8 +5862,18 @@ test "webp animation frame decoder decodes anmf vp8 payload" {
     const encoded = writeTestWebpAnimation(&bytes, 40, 0);
 
     var pixels: [6]ui.Color = undefined;
+    const frame = try decodeTestWebpAnimationFrame(encoded, 0, &pixels);
     try std.testing.expectEqual(@as(usize, 10), webpAnimationFrameScratchByteLen(encoded, 0));
-    try std.testing.expectError(error.UnsupportedImage, decodeTestWebpAnimationFrame(encoded, 0, &pixels));
+    try std.testing.expectEqual(@as(usize, 3), frame.header.width);
+    try std.testing.expectEqual(@as(usize, 2), frame.header.height);
+    try std.testing.expectEqualSlices(ui.Color, &[_]ui.Color{
+        .{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = png_alpha_opaque },
+        .{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = png_alpha_opaque },
+        .{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = png_alpha_opaque },
+        .{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = png_alpha_opaque },
+        .{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = png_alpha_opaque },
+        .{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = png_alpha_opaque },
+    }, &pixels);
     try std.testing.expectError(error.BadImage, decodeWebpAnimationFrameWithScratch(encoded, 1, &pixels, &.{}));
 }
 
@@ -4441,8 +5886,21 @@ test "webp animation canvas frame blends and disposes decoded rectangles" {
     const scratch = try std.testing.allocator.alloc(u8, webpAnimationCanvasScratchByteLen(encoded, 1));
     defer std.testing.allocator.free(scratch);
     var canvas: [6]ui.Color = undefined;
-    try std.testing.expectError(error.UnsupportedImage, decodeWebpAnimationCanvasFrameWithScratch(encoded, 1, &canvas, scratch));
-    try std.testing.expectError(error.UnsupportedImage, decodeWebpAnimationCanvasFrameWithScratch(encoded, 0, &canvas, scratch));
+    const frame = try decodeWebpAnimationCanvasFrameWithScratch(encoded, 1, &canvas, scratch);
+
+    try std.testing.expectEqual(@as(usize, 3), frame.header.width);
+    try std.testing.expectEqual(@as(usize, 2), frame.header.height);
+    try std.testing.expectEqual(@as(usize, 35), frame.info.duration_ms);
+    try std.testing.expectEqual(true, frame.info.blend);
+    try std.testing.expectEqual(true, frame.info.dispose_to_background);
+    try std.testing.expectEqual(ui.Color{ .r = 191, .g = 63, .b = 63, .a = 255 }, canvas[0]);
+    try std.testing.expectEqual(ui.Color{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = png_alpha_opaque }, canvas[1]);
+
+    const first_frame = try decodeWebpAnimationCanvasFrameWithScratch(encoded, 0, &canvas, scratch);
+    try std.testing.expectEqual(@as(usize, 20), first_frame.info.duration_ms);
+    for (canvas) |pixel| {
+        try std.testing.expectEqual(ui.Color{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = png_alpha_opaque }, pixel);
+    }
 }
 
 test "webp animation canvas decoder steps frames sequentially" {
@@ -4455,10 +5913,21 @@ test "webp animation canvas decoder steps frames sequentially" {
 
     var decoder = try WebpAnimationCanvasDecoder.init(encoded);
     var canvas: [6]ui.Color = undefined;
-    try std.testing.expectError(error.UnsupportedImage, decoder.nextFrame(&canvas, scratch));
+    const first = (try decoder.nextFrame(&canvas, scratch)).?;
+    try std.testing.expectEqual(@as(usize, 20), first.info.duration_ms);
+    try std.testing.expectEqual(ui.Color{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = png_alpha_opaque }, canvas[0]);
+
+    const second = (try decoder.nextFrame(&canvas, scratch)).?;
+    try std.testing.expectEqual(@as(usize, 35), second.info.duration_ms);
+    try std.testing.expectEqual(ui.Color{ .r = 191, .g = 63, .b = 63, .a = 255 }, canvas[0]);
+    try std.testing.expectEqual(@as(?WebpAnimationFrame, null), try decoder.nextFrame(&canvas, scratch));
 
     decoder.reset();
-    try std.testing.expectError(error.UnsupportedImage, decoder.nextFrame(&canvas, scratch));
+    const first_again = (try decoder.nextFrame(&canvas, scratch)).?;
+    try std.testing.expectEqual(@as(usize, 20), first_again.info.duration_ms);
+    for (canvas) |pixel| {
+        try std.testing.expectEqual(ui.Color{ .r = vp8_neutral_luma, .g = vp8_neutral_luma, .b = vp8_neutral_luma, .a = png_alpha_opaque }, pixel);
+    }
 }
 
 test "webp animation header rejects malformed frame payloads" {
@@ -4863,6 +6332,16 @@ test "vp8 motion vector probability updates preserve defaults when absent" {
     try std.testing.expectEqual(@as(u8, 254), updatedVp8MotionVectorProbability(127));
 }
 
+test "vp8 intra4 keyframe probabilities expose full submode tree" {
+    try std.testing.expectEqual(@as(usize, webp_vp8_intra4_mode_count * webp_vp8_intra4_mode_count * webp_vp8_intra4_probability_count), webp_vp8_intra4_keyframe_probabilities.len);
+
+    try std.testing.expectEqualSlices(u8, &[_]u8{ 231, 120, 48, 89, 115, 113, 120, 152, 112 }, vp8Intra4ModeProbabilities(.dc, .dc));
+    try std.testing.expectEqualSlices(u8, &[_]u8{ 112, 19, 12, 61, 195, 128, 48, 4, 24 }, vp8Intra4ModeProbabilities(.horizontal_up, .horizontal_up));
+
+    var reader = try Vp8BoolReader.init(&[_]u8{0x00} ** 8);
+    try std.testing.expectEqual(Vp8Intra4Mode.dc, try readVp8KeyFrameIntra4Mode(&reader, .dc, .dc));
+}
+
 test "vp8 coefficient token reader accepts eob and category paths" {
     var eob_reader = try Vp8BoolReader.init(&[_]u8{0x00} ** 8);
     var coeffs: [webp_vp8_block_coeff_count]i16 = undefined;
@@ -4874,6 +6353,93 @@ test "vp8 coefficient token reader accepts eob and category paths" {
     var large_reader = try Vp8BoolReader.init(&[_]u8{0x00} ** 8);
     try std.testing.expectEqual(@as(i16, 2), try readVp8LargeCoeffValue(&large_reader, &webp_vp8_coeff_default_probabilities, 0, 1, 0));
     try std.testing.expectEqual(@as(i16, 2), try readVp8SignedCoeff(&large_reader, 2));
+}
+
+test "vp8 residual parser omits y2 block for b_pred macroblocks" {
+    var intra16_reader = try Vp8BoolReader.init(&[_]u8{0x00} ** 8);
+    var intra16_coeffs = Vp8MacroblockCoeffs{};
+    _ = try parseVp8ResidualMacroblock(&intra16_reader, &webp_vp8_coeff_default_probabilities, .dc, &intra16_coeffs);
+
+    var b_pred_reader = try Vp8BoolReader.init(&[_]u8{0x00} ** 8);
+    var b_pred_coeffs = Vp8MacroblockCoeffs{};
+    _ = try parseVp8ResidualMacroblock(&b_pred_reader, &webp_vp8_coeff_default_probabilities, .b_pred, &b_pred_coeffs);
+
+    try std.testing.expect(intra16_reader.bit_count < b_pred_reader.bit_count);
+    try std.testing.expectEqualSlices(i16, &([_]i16{0} ** webp_vp8_block_coeff_count), &b_pred_coeffs.blocks[webp_vp8_y2_block_index]);
+}
+
+test "vp8 b_pred y blocks dequantize their own dc coefficient" {
+    const quant = Vp8Dequant{
+        .y_dc = 4,
+        .y_ac = 5,
+        .y2_dc = 6,
+        .y2_ac = 7,
+        .uv_dc = 8,
+        .uv_ac = 9,
+    };
+    var block = [_]i16{0} ** webp_vp8_block_coeff_count;
+    block[0] = 3;
+    block[1] = -2;
+    const out = dequantizeVp8YBlockWithOwnDc(&block, quant);
+    try std.testing.expectEqual(@as(i32, 12), out[0]);
+    try std.testing.expectEqual(@as(i32, -10), out[1]);
+}
+
+test "vp8 b_pred reconstruction feeds earlier 4x4 blocks into later predictors" {
+    const quant = Vp8Dequant{
+        .y_dc = 4,
+        .y_ac = 5,
+        .y2_dc = 6,
+        .y2_ac = 7,
+        .uv_dc = 8,
+        .uv_ac = 9,
+    };
+    const edges = Vp8Edges(webp_vp8_macroblock_size){
+        .top = [_]u8{100} ** webp_vp8_macroblock_size,
+        .top_right = [_]u8{100} ** webp_vp8_intra4_block_width,
+        .left = [_]u8{20} ** webp_vp8_macroblock_size,
+        .top_left = 80,
+        .has_top = true,
+        .has_left = true,
+    };
+    var coeffs = Vp8MacroblockCoeffs{};
+    coeffs.blocks[0][0] = 16;
+    var plane = [_]u8{0} ** (webp_vp8_macroblock_size * webp_vp8_macroblock_size);
+    reconstructVp8BPredLuma(quant, edges, [_]Vp8Intra4Mode{.dc} ** webp_vp8_y_block_count, &coeffs, &plane);
+
+    try std.testing.expectEqual(@as(u8, 68), plane[0]);
+    try std.testing.expectEqual(@as(u8, 84), plane[4]);
+    try std.testing.expectEqual(@as(u8, 44), plane[4 * webp_vp8_macroblock_size]);
+}
+
+test "vp8 intra4 predictors cover non dc subblock modes" {
+    const edges = Vp8Edges(webp_vp8_macroblock_size){
+        .top = [_]u8{ 10, 20, 30, 40, 50, 60, 70, 80 } ++ [_]u8{90} ** 8,
+        .top_right = [_]u8{ 100, 110, 120, 130 },
+        .left = [_]u8{ 11, 21, 31, 41 } ++ [_]u8{51} ** 12,
+        .top_left = 7,
+        .has_top = true,
+        .has_left = true,
+    };
+
+    var vertical_left = [_]u8{0} ** (webp_vp8_macroblock_size * webp_vp8_macroblock_size);
+    predictVp8Intra4Block(.vertical_left, edges, &vertical_left, 0);
+    try std.testing.expectEqual(@as(u8, 15), vertical_left[0]);
+    try std.testing.expectEqual(@as(u8, 40), vertical_left[webp_vp8_macroblock_size + 1]);
+    try std.testing.expectEqual(@as(u8, 78), vertical_left[3 * webp_vp8_macroblock_size + 3]);
+
+    var horizontal_up = [_]u8{0} ** (webp_vp8_macroblock_size * webp_vp8_macroblock_size);
+    predictVp8Intra4Block(.horizontal_up, edges, &horizontal_up, 0);
+    try std.testing.expectEqual(@as(u8, 16), horizontal_up[0]);
+    try std.testing.expectEqual(@as(u8, 39), horizontal_up[webp_vp8_macroblock_size + 3]);
+    try std.testing.expectEqual(@as(u8, 41), horizontal_up[3 * webp_vp8_macroblock_size + 3]);
+
+    var horizontal = [_]u8{0} ** (webp_vp8_macroblock_size * webp_vp8_macroblock_size);
+    predictVp8Intra4Block(.horizontal, edges, &horizontal, 0);
+    try std.testing.expectEqual(@as(u8, 13), horizontal[0]);
+    try std.testing.expectEqual(@as(u8, 21), horizontal[webp_vp8_macroblock_size]);
+    try std.testing.expectEqual(@as(u8, 31), horizontal[2 * webp_vp8_macroblock_size]);
+    try std.testing.expectEqual(@as(u8, 39), horizontal[3 * webp_vp8_macroblock_size]);
 }
 
 test "webp decoder rejects malformed riff length and duplicate primary chunks" {

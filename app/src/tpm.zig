@@ -1,4 +1,3 @@
-const std = @import("std");
 const bytes = @import("bytes.zig");
 
 pub const header_len = 10;

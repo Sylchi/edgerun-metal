@@ -1,4 +1,3 @@
-const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../component_common.zig");
 const interaction = @import("../interaction.zig");
@@ -111,6 +110,6 @@ test "input group measurement wraps long addon and placeholder under narrow cons
 
     const measured = input_group.measure(.{ .width = .{ .at_most = input_group_min_width }, .text_wrap = .wrap }, .{});
 
-    try std.testing.expect(measured.preferred.w <= input_group_min_width);
-    try std.testing.expect(measured.preferred.h > input_group_min_height);
+    try component_test.expect(measured.preferred.w <= input_group_min_width);
+    try component_test.expect(measured.preferred.h > input_group_min_height);
 }

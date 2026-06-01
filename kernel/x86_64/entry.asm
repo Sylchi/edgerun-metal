@@ -18,7 +18,11 @@ extern er_kernel_main
 SECTION .bss
 align 16
 _er_stack_bottom:
+%ifdef TEST_FLAT_KERNEL
+    resb 1048576
+%else
     resb 16384
+%endif
 _er_stack_top:
 
 ; Boot info pointer. The raw QEMU loader passes zero; EFI fills its own record.
@@ -158,4 +162,6 @@ long_mode_entry:
     hlt
     jmp     .halt
 
+%ifndef TEST_FLAT_KERNEL
 %include "x86_64/entry_common.inc"
+%endif

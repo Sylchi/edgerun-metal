@@ -1,4 +1,3 @@
-const std = @import("std");
 const clock = @import("../../clock.zig");
 const common = @import("../component_common.zig");
 const text_component = @import("Text.zig");
@@ -85,5 +84,5 @@ test "popover measurement follows trigger and content text" {
     const short = Popover{ .id = 995, .trigger = "Open", .content = "Body" };
     const long = Popover{ .id = 995, .trigger = "Open authority", .content = "Runtime receipt controls" };
 
-    try std.testing.expect(long.measure(.{}, .{}).preferred.w > short.measure(.{}, .{}).preferred.w);
+    try component_test.expect(long.measure(.{}, .{}).preferred.w > short.measure(.{}, .{}).preferred.w);
 }

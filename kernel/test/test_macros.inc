@@ -10,6 +10,11 @@
 ; Tests increment qword [rel passed] on success,
 ; and always increment qword [rel total] (or [rel failed]).
 
+%ifdef TEST_FLAT_KERNEL
+%define _start er_kernel_main
+%define TEST_DEBUG_EXIT_PORT 0xf4
+%endif
+
 ; ------------------------------------------------------------------
 ; Basic comparison macros (eax/edx, rax/rdx)
 ; Expects: qword [rel passed] and qword [rel total] in .bss
@@ -50,6 +55,7 @@ failed: dq 0
 
 ; Emit a short debug label to stdout without disturbing caller registers.
 %macro TEST_DEBUG_LABEL 1
+%ifndef TEST_FLAT_KERNEL
     jmp     %%done
 %%str: db %1, 10
 %%end:
@@ -71,6 +77,7 @@ failed: dq 0
     pop     rdi
     pop     r11
     pop     rcx
+%endif
 %endmacro
 
 ; Pass if eax == edx (32-bit)
@@ -168,9 +175,7 @@ failed: dq 0
     jmp     %%done
 %%fail:
     inc     qword [rel failed]
-    mov     edi, %2
-    mov     eax, 60
-    syscall
+    TEST_EXIT %2
 %%done:
 %endmacro
 
@@ -332,9 +337,7 @@ failed: dq 0
     jmp     %%done
 %%fail:
     inc     qword [rel failed]
-    mov     edi, %4
-    mov     eax, 60
-    syscall
+    TEST_EXIT %4
 %%done:
     pop     rcx
     pop     rsi
@@ -373,15 +376,35 @@ failed: dq 0
 
 ; Exit with the supplied status code.
 %macro TEST_EXIT 1
+%ifdef TEST_FLAT_KERNEL
+    mov     dx, TEST_DEBUG_EXIT_PORT
+    mov     eax, %1
+    out     dx, eax
+%%halt:
+    cli
+    hlt
+    jmp     %%halt
+%else
     mov     edi, %1
     mov     eax, 60
     syscall
+%endif
 %endmacro
 
 ; Exit with status already in edi.
 %macro TEST_EXIT_EDI 0
+%ifdef TEST_FLAT_KERNEL
+    mov     dx, TEST_DEBUG_EXIT_PORT
+    mov     eax, edi
+    out     dx, eax
+%%halt:
+    cli
+    hlt
+    jmp     %%halt
+%else
     mov     eax, 60
     syscall
+%endif
 %endmacro
 
 ; Exit with status 1 if failed is non-zero, else 0.
@@ -390,8 +413,7 @@ failed: dq 0
     cmp     qword [rel failed], 0
     sete    dil
     xor     dil, 1
-    mov     eax, 60
-    syscall
+    TEST_EXIT_EDI
 %endmacro
 
 ; Exit with status 0 when passed equals total, else 1.
@@ -402,8 +424,7 @@ failed: dq 0
     sete    al
     xor     al, 1
     movzx   edi, al
-    mov     eax, 60
-    syscall
+    TEST_EXIT_EDI
 %endmacro
 
 ; Exit with status 0 when eax is zero, else status 1.
@@ -411,8 +432,7 @@ failed: dq 0
     xor     edi, edi
     test    eax, eax
     setnz   dil
-    mov     eax, 60
-    syscall
+    TEST_EXIT_EDI
 %endmacro
 
 ; Exit with status 0 when qword at %1 is zero, else 1.
@@ -420,8 +440,7 @@ failed: dq 0
     xor     edi, edi
     cmp     qword %1, 0
     setne   dil
-    mov     eax, 60
-    syscall
+    TEST_EXIT_EDI
 %endmacro
 
 ; Return eax=0 if failed is zero, else eax=-1.

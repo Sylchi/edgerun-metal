@@ -1,6 +1,7 @@
 ; EdgeRun Intel SDHCI command helper self-hosted test.
 ; Verifies command register construction and APP_CMD sequencing.
 
+%include "x86_64/macros.inc"
 %include "test/test_macros.inc"
 %include "driver/intel_sdhci_constants.inc"
 

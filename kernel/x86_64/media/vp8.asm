@@ -274,6 +274,57 @@ er_fn er_vp8_parse_key_frame_payload
     er_pop  rbx, r12, r13
     er_ret
 
+; er_vp8_parse_inter_frame_payload(buf, len, desc) -> eax=payload bytes consumed, rdx=error
+; desc: first_offset u32, first_len u32, token_offset u32, token_len u32.
+; rdi=buf, esi=len, rdx=desc
+er_fn er_vp8_parse_inter_frame_payload
+    er_push rbx, r12, r13
+    er_stack_alloc VP8_TAG_DESC_SIZE
+    test    rdi, rdi
+    jz      .invalid_param
+    test    rdx, rdx
+    jz      .invalid_param
+    mov     rbx, rdi
+    mov     r12d, esi
+    mov     r13, rdx
+    lea     rdx, [rsp]
+    call    er_vp8_parse_frame_tag
+    test    edx, edx
+    jnz     .done
+    cmp     byte [rsp + VP8_TAG_DESC_FRAME_TYPE], VP8_FRAME_TYPE_INTER
+    jne     .unsupported
+    mov     ecx, [rsp + VP8_TAG_DESC_FIRST_PARTITION_LEN]
+    test    ecx, ecx
+    jz      .corrupt
+    mov     eax, VP8_FRAME_TAG_SIZE
+    add     eax, ecx
+    jc      .corrupt
+    cmp     eax, r12d
+    ja      .corrupt
+    mov     [r13 + VP8_INTER_PAYLOAD_FIRST_OFFSET], dword VP8_FRAME_TAG_SIZE
+    mov     [r13 + VP8_INTER_PAYLOAD_FIRST_LEN], ecx
+    mov     [r13 + VP8_INTER_PAYLOAD_TOKEN_OFFSET], eax
+    mov     edx, r12d
+    sub     edx, eax
+    mov     [r13 + VP8_INTER_PAYLOAD_TOKEN_LEN], edx
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done
+.unsupported:
+    xor     eax, eax
+    er_err  ERROR_UNSUPPORTED
+    jmp     .done
+.corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+.done:
+    er_stack_free VP8_TAG_DESC_SIZE
+    er_pop  rbx, r12, r13
+    er_ret
+
 ; er_vp8_decode_key_frame(data, len, yuv_out, yuv_cap, out_rgba, out_pixel_cap)
 ; -> eax=pixels decoded, rdx=error
 ; ASM key-frame decode orchestration. It walks key-frame intra macroblocks,
@@ -351,6 +402,10 @@ er_fn er_vp8_decode_key_frame
     mov     esi, VP8_INTRA4_MODE_DC
     mov     edx, VP8_MAX_LUMA_TOKEN_COLUMNS
     call    er_vp8_memset
+    lea     rdi, [rsp + VP8_DECODE_STACK_RESIDUAL_CONTEXT]
+    xor     esi, esi
+    mov     edx, VP8_RESIDUAL_CONTEXT_SIZE
+    call    er_vp8_memset
     mov     eax, [rsp + VP8_DECODE_STACK_PAYLOAD + VP8_KEY_PAYLOAD_FIRST_OFFSET]
     lea     rdi, [r12 + rax]
     mov     esi, [rsp + VP8_DECODE_STACK_PAYLOAD + VP8_KEY_PAYLOAD_FIRST_LEN]
@@ -359,15 +414,35 @@ er_fn er_vp8_decode_key_frame
     call    er_vp8_parse_compressed_key_frame_header
     test    edx, edx
     jnz     .done_decode
-    cmp     byte [rsp + VP8_DECODE_STACK_COMPRESSED + VP8_COMPRESSED_HEADER_TOKEN_COUNT], 1
-    jne     .unsupported
     mov     eax, [rsp + VP8_DECODE_STACK_PAYLOAD + VP8_KEY_PAYLOAD_TOKEN_OFFSET]
     lea     rdi, [r12 + rax]
     mov     esi, [rsp + VP8_DECODE_STACK_PAYLOAD + VP8_KEY_PAYLOAD_TOKEN_LEN]
-    lea     rdx, [rsp + VP8_DECODE_STACK_TOKEN_READER]
+    movzx   edx, byte [rsp + VP8_DECODE_STACK_COMPRESSED + VP8_COMPRESSED_HEADER_TOKEN_COUNT]
+    lea     rcx, [rsp + VP8_DECODE_STACK_TOKEN_PARTITIONS]
+    call    er_vp8_parse_token_partitions
+    test    edx, edx
+    jnz     .done_decode
+    xor     ebx, ebx
+.init_token_reader_loop:
+    movzx   eax, byte [rsp + VP8_DECODE_STACK_COMPRESSED + VP8_COMPRESSED_HEADER_TOKEN_COUNT]
+    cmp     ebx, eax
+    jae     .token_readers_ready
+    mov     eax, ebx
+    imul    eax, VP8_TOKEN_PARTITION_ENTRY_SIZE
+    mov     r10d, [rsp + VP8_DECODE_STACK_TOKEN_PARTITIONS + VP8_TOKEN_PARTITIONS_TABLE + rax + VP8_TOKEN_PARTITION_OFFSET]
+    mov     esi, [rsp + VP8_DECODE_STACK_TOKEN_PARTITIONS + VP8_TOKEN_PARTITIONS_TABLE + rax + VP8_TOKEN_PARTITION_LEN]
+    mov     eax, [rsp + VP8_DECODE_STACK_PAYLOAD + VP8_KEY_PAYLOAD_TOKEN_OFFSET]
+    lea     rdi, [r12 + rax]
+    add     rdi, r10
+    mov     edx, ebx
+    imul    edx, VP8_BOOL_READER_SIZE
+    lea     rdx, [rsp + VP8_DECODE_STACK_TOKEN_READERS + rdx]
     call    er_vp8_bool_reader_init
     test    edx, edx
     jnz     .done_decode
+    inc     ebx
+    jmp     .init_token_reader_loop
+.token_readers_ready:
     mov     dword [rsp + VP8_DECODE_STACK_MB_Y], 0
 .decode_row_loop:
     mov     eax, [rsp + VP8_DECODE_STACK_MB_Y]
@@ -389,6 +464,19 @@ er_fn er_vp8_decode_key_frame
     mov     esi, VP8_INTRA4_MODE_DC
     mov     edx, VP8_BLOCK_SIZE
     call    er_vp8_memset
+    lea     rdi, [rsp + VP8_DECODE_STACK_RESIDUAL_CONTEXT + VP8_RESIDUAL_CONTEXT_LEFT_Y]
+    xor     esi, esi
+    mov     edx, VP8_BLOCK_SIZE
+    call    er_vp8_memset
+    lea     rdi, [rsp + VP8_DECODE_STACK_RESIDUAL_CONTEXT + VP8_RESIDUAL_CONTEXT_LEFT_U]
+    xor     esi, esi
+    mov     edx, 2
+    call    er_vp8_memset
+    lea     rdi, [rsp + VP8_DECODE_STACK_RESIDUAL_CONTEXT + VP8_RESIDUAL_CONTEXT_LEFT_V]
+    xor     esi, esi
+    mov     edx, 2
+    call    er_vp8_memset
+    mov     byte [rsp + VP8_DECODE_STACK_RESIDUAL_CONTEXT + VP8_RESIDUAL_CONTEXT_LEFT_Y2], 0
     mov     dword [rsp + VP8_DECODE_STACK_MB_X], 0
 .decode_mb_loop:
     mov     eax, [rsp + VP8_DECODE_STACK_MB_X]
@@ -408,7 +496,12 @@ er_fn er_vp8_decode_key_frame
     call    er_vp8_memset
     cmp     byte [rsp + VP8_DECODE_STACK_MB_HEADER + VP8_MACROBLOCK_HEADER_SKIP], 0
     jne     .skip_residual
-    lea     rdi, [rsp + VP8_DECODE_STACK_TOKEN_READER]
+    mov     eax, [rsp + VP8_DECODE_STACK_MB_Y]
+    xor     edx, edx
+    movzx   ecx, byte [rsp + VP8_DECODE_STACK_COMPRESSED + VP8_COMPRESSED_HEADER_TOKEN_COUNT]
+    div     ecx
+    imul    edx, VP8_BOOL_READER_SIZE
+    lea     rdi, [rsp + VP8_DECODE_STACK_TOKEN_READERS + rdx]
     lea     rsi, [rsp + VP8_DECODE_STACK_COEFF_PROBS]
     movzx   edx, byte [rsp + VP8_DECODE_STACK_MB_HEADER + VP8_MACROBLOCK_HEADER_LUMA_MODE]
     cmp     edx, VP8_LUMA_MODE_B_PRED
@@ -416,10 +509,24 @@ er_fn er_vp8_decode_key_frame
     movzx   edx, dl
     xor     edx, 1
     lea     rcx, [rsp + VP8_DECODE_STACK_COEFFS]
-    call    er_vp8_read_residual_macroblock_single
+    mov     r8d, [rsp + VP8_DECODE_STACK_MB_X]
+    lea     r9, [rsp + VP8_DECODE_STACK_RESIDUAL_CONTEXT]
+    call    er_vp8_read_residual_macroblock_context
     test    edx, edx
     jnz     .done_decode
+    jmp     .residual_done
 .skip_residual:
+    lea     rdi, [rsp + VP8_DECODE_STACK_RESIDUAL_CONTEXT]
+    mov     esi, [rsp + VP8_DECODE_STACK_MB_X]
+    movzx   edx, byte [rsp + VP8_DECODE_STACK_MB_HEADER + VP8_MACROBLOCK_HEADER_LUMA_MODE]
+    cmp     edx, VP8_LUMA_MODE_B_PRED
+    sete    dl
+    movzx   edx, dl
+    xor     edx, 1
+    call    er_vp8_skip_residual_context
+    test    edx, edx
+    jnz     .done_decode
+.residual_done:
     lea     rdi, [rsp + VP8_DECODE_STACK_COMPRESSED + VP8_COMPRESSED_HEADER_QUANT]
     lea     rsi, [rsp + VP8_DECODE_STACK_COMPRESSED + VP8_COMPRESSED_HEADER_SEGMENT]
     movzx   edx, byte [rsp + VP8_DECODE_STACK_MB_HEADER + VP8_MACROBLOCK_HEADER_SEGMENT_ID]
@@ -4102,6 +4209,219 @@ er_fn er_vp8_read_residual_macroblock_single
     er_err  ERROR_INVALID_PARAM
 .done_residual_single:
     er_stack_free 32
+    er_pop  rbx, r12, r13, r14, r15
+    er_ret
+
+; er_vp8_skip_residual_context(context, mb_x, has_y2) -> eax=1, rdx=error
+; Clears the top/left coefficient contexts for a skipped macroblock.
+; rdi=residual context, esi=mb_x, edx=has_y2.
+er_fn er_vp8_skip_residual_context
+    test    rdi, rdi
+    jz      .invalid_param
+    cmp     esi, VP8_MAX_MACROBLOCK_COLUMNS
+    jae     .invalid_param
+    mov     eax, esi
+    shl     eax, 2
+    mov     dword [rdi + VP8_RESIDUAL_CONTEXT_TOP_Y + rax], 0
+    mov     dword [rdi + VP8_RESIDUAL_CONTEXT_LEFT_Y], 0
+    mov     eax, esi
+    shl     eax, 1
+    mov     word [rdi + VP8_RESIDUAL_CONTEXT_TOP_U + rax], 0
+    mov     word [rdi + VP8_RESIDUAL_CONTEXT_TOP_V + rax], 0
+    mov     word [rdi + VP8_RESIDUAL_CONTEXT_LEFT_U], 0
+    mov     word [rdi + VP8_RESIDUAL_CONTEXT_LEFT_V], 0
+    test    edx, edx
+    jz      .ok
+    mov     byte [rdi + VP8_RESIDUAL_CONTEXT_TOP_Y2 + rsi], 0
+    mov     byte [rdi + VP8_RESIDUAL_CONTEXT_LEFT_Y2], 0
+.ok:
+    mov     eax, 1
+    er_ok
+    er_ret
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    er_ret
+
+; er_vp8_read_residual_macroblock_context(reader, probabilities, has_y2, coeffs, mb_x, context)
+; -> eax=nonzero block count, rdx=error
+; rdi=reader, rsi=probabilities[1056], edx=has_y2, rcx=coeffs, r8d=mb_x, r9=context.
+er_fn er_vp8_read_residual_macroblock_context
+    er_push rbx, r12, r13, r14, r15
+    er_stack_alloc 24
+    test    rdi, rdi
+    jz      .invalid_param
+    test    rsi, rsi
+    jz      .invalid_param
+    test    rcx, rcx
+    jz      .invalid_param
+    test    r9, r9
+    jz      .invalid_param
+    cmp     r8d, VP8_MAX_MACROBLOCK_COLUMNS
+    jae     .invalid_param
+    mov     r12, rdi
+    mov     r13, rsi
+    mov     r14, rcx
+    mov     r15, r9
+    mov     [rsp + 12], edx
+    mov     [rsp + 16], r8d
+    mov     dword [rsp], 0
+    mov     eax, r8d
+    shl     eax, 2
+    mov     [rsp + 4], eax
+    mov     eax, r8d
+    shl     eax, 1
+    mov     [rsp + 8], eax
+    cmp     dword [rsp + 12], 0
+    je      .y_blocks
+    movzx   r8d, byte [r15 + VP8_RESIDUAL_CONTEXT_LEFT_Y2]
+    mov     eax, [rsp + 16]
+    movzx   eax, byte [r15 + VP8_RESIDUAL_CONTEXT_TOP_Y2 + rax]
+    add     r8d, eax
+    mov     rdi, r12
+    mov     rsi, r13
+    mov     edx, 1
+    xor     ecx, ecx
+    lea     r9, [r14 + VP8_Y2_BLOCK_INDEX * VP8_COEFF_BLOCK_BYTES]
+    call    er_vp8_read_coeff_block
+    test    edx, edx
+    jnz     .done_residual_context
+    mov     byte [r15 + VP8_RESIDUAL_CONTEXT_LEFT_Y2], r8b
+    mov     eax, [rsp + 16]
+    mov     byte [r15 + VP8_RESIDUAL_CONTEXT_TOP_Y2 + rax], r8b
+    test    r8d, r8d
+    jz      .y_blocks
+    inc     dword [rsp]
+.y_blocks:
+    xor     ebx, ebx
+.y_loop:
+    cmp     ebx, VP8_Y_BLOCK_COUNT
+    jae     .u_blocks
+    mov     eax, ebx
+    and     eax, 3
+    mov     ecx, ebx
+    shr     ecx, 2
+    movzx   r8d, byte [r15 + VP8_RESIDUAL_CONTEXT_LEFT_Y + rcx]
+    mov     edx, [rsp + 4]
+    add     edx, eax
+    movzx   edx, byte [r15 + VP8_RESIDUAL_CONTEXT_TOP_Y + rdx]
+    add     r8d, edx
+    mov     edx, 3
+    xor     ecx, ecx
+    cmp     dword [rsp + 12], 0
+    je      .y_call
+    xor     edx, edx
+    mov     ecx, 1
+.y_call:
+    mov     rdi, r12
+    mov     rsi, r13
+    mov     r9, rbx
+    imul    r9, VP8_COEFF_BLOCK_BYTES
+    add     r9, r14
+    call    er_vp8_read_coeff_block
+    test    edx, edx
+    jnz     .done_residual_context
+    mov     eax, ebx
+    and     eax, 3
+    mov     ecx, ebx
+    shr     ecx, 2
+    mov     byte [r15 + VP8_RESIDUAL_CONTEXT_LEFT_Y + rcx], r8b
+    mov     edx, [rsp + 4]
+    add     edx, eax
+    mov     byte [r15 + VP8_RESIDUAL_CONTEXT_TOP_Y + rdx], r8b
+    test    r8d, r8d
+    jz      .next_y
+    inc     dword [rsp]
+.next_y:
+    inc     ebx
+    jmp     .y_loop
+.u_blocks:
+    xor     ebx, ebx
+.u_loop:
+    cmp     ebx, VP8_UV_BLOCK_COUNT
+    jae     .v_blocks
+    mov     eax, ebx
+    and     eax, 1
+    mov     ecx, ebx
+    shr     ecx, 1
+    movzx   r8d, byte [r15 + VP8_RESIDUAL_CONTEXT_LEFT_U + rcx]
+    mov     edx, [rsp + 8]
+    add     edx, eax
+    movzx   edx, byte [r15 + VP8_RESIDUAL_CONTEXT_TOP_U + rdx]
+    add     r8d, edx
+    mov     rdi, r12
+    mov     rsi, r13
+    mov     edx, 2
+    xor     ecx, ecx
+    mov     r9, rbx
+    add     r9, VP8_Y_BLOCK_COUNT
+    imul    r9, VP8_COEFF_BLOCK_BYTES
+    add     r9, r14
+    call    er_vp8_read_coeff_block
+    test    edx, edx
+    jnz     .done_residual_context
+    mov     eax, ebx
+    and     eax, 1
+    mov     ecx, ebx
+    shr     ecx, 1
+    mov     byte [r15 + VP8_RESIDUAL_CONTEXT_LEFT_U + rcx], r8b
+    mov     edx, [rsp + 8]
+    add     edx, eax
+    mov     byte [r15 + VP8_RESIDUAL_CONTEXT_TOP_U + rdx], r8b
+    test    r8d, r8d
+    jz      .next_u
+    inc     dword [rsp]
+.next_u:
+    inc     ebx
+    jmp     .u_loop
+.v_blocks:
+    xor     ebx, ebx
+.v_loop:
+    cmp     ebx, VP8_UV_BLOCK_COUNT
+    jae     .ok_context
+    mov     eax, ebx
+    and     eax, 1
+    mov     ecx, ebx
+    shr     ecx, 1
+    movzx   r8d, byte [r15 + VP8_RESIDUAL_CONTEXT_LEFT_V + rcx]
+    mov     edx, [rsp + 8]
+    add     edx, eax
+    movzx   edx, byte [r15 + VP8_RESIDUAL_CONTEXT_TOP_V + rdx]
+    add     r8d, edx
+    mov     rdi, r12
+    mov     rsi, r13
+    mov     edx, 2
+    xor     ecx, ecx
+    mov     r9, rbx
+    add     r9, VP8_Y_BLOCK_COUNT + VP8_UV_BLOCK_COUNT
+    imul    r9, VP8_COEFF_BLOCK_BYTES
+    add     r9, r14
+    call    er_vp8_read_coeff_block
+    test    edx, edx
+    jnz     .done_residual_context
+    mov     eax, ebx
+    and     eax, 1
+    mov     ecx, ebx
+    shr     ecx, 1
+    mov     byte [r15 + VP8_RESIDUAL_CONTEXT_LEFT_V + rcx], r8b
+    mov     edx, [rsp + 8]
+    add     edx, eax
+    mov     byte [r15 + VP8_RESIDUAL_CONTEXT_TOP_V + rdx], r8b
+    test    r8d, r8d
+    jz      .next_v
+    inc     dword [rsp]
+.next_v:
+    inc     ebx
+    jmp     .v_loop
+.ok_context:
+    mov     eax, [rsp]
+    er_ok
+    jmp     .done_residual_context
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+.done_residual_context:
+    er_stack_free 24
     er_pop  rbx, r12, r13, r14, r15
     er_ret
 
