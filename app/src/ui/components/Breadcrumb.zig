@@ -22,6 +22,8 @@ pub const Breadcrumb = struct {
     first: []const u8,
     current: []const u8,
 
+    const serialization = component_codec.TwoStringComponent(Breadcrumb, "breadcrumb", "first", "current");
+
     pub fn node(self: Breadcrumb) ui.Node {
         return ui.breadcrumbNode(self.id, self.first, self.current);
     }
@@ -61,18 +63,9 @@ pub const Breadcrumb = struct {
             .{ .w = primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
         ).applyExact(constraints);
     }
-
-    pub fn toObject(self: Breadcrumb, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
-        return component_codec.twoStringObject(.breadcrumb, self.id, self.first, self.current, ui_out, object_out, epoch);
-    }
-
-    pub fn writeRecord(self: Breadcrumb, writer: *component_codec.Writer, index: usize) bool {
-        return component_codec.twoStringRecord(writer, index, .breadcrumb, self.id, self.first, self.current);
-    }
-
-    pub fn fromView(view: object.View) Error!Breadcrumb {
-        return component_codec.decodeFromView(Breadcrumb, .breadcrumb, view);
-    }
+    pub const toObject = serialization.toObject;
+    pub const writeRecord = serialization.writeRecord;
+    pub const fromView = serialization.fromView;
 
     pub fn fromNode(breadcrumb: @FieldType(ui.Node, "breadcrumb")) Error!Breadcrumb {
         return .{ .id = breadcrumb.id, .first = breadcrumb.first, .current = breadcrumb.current };

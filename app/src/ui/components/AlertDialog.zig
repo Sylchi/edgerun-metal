@@ -19,6 +19,8 @@ pub const AlertDialog = struct {
     title: []const u8,
     detail: []const u8,
 
+    const serialization = component_codec.TwoStringComponent(AlertDialog, "alert_dialog", "title", "detail");
+
     pub fn node(self: AlertDialog) ui.Node {
         return ui.alertDialogNode(self.id, self.title, self.detail);
     }
@@ -42,18 +44,9 @@ pub const AlertDialog = struct {
         _ = options;
         return primitives.measureSidePanelTitleDetail(dialog_delete_label, self.title, self.detail, constraints, dialog_layout, dialog_trigger_padding, dialog_panel);
     }
-
-    pub fn toObject(self: AlertDialog, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
-        return component_codec.twoStringObject(.alert_dialog, self.id, self.title, self.detail, ui_out, object_out, epoch);
-    }
-
-    pub fn writeRecord(self: AlertDialog, writer: *component_codec.Writer, index: usize) bool {
-        return component_codec.twoStringRecord(writer, index, .alert_dialog, self.id, self.title, self.detail);
-    }
-
-    pub fn fromView(view: object.View) Error!AlertDialog {
-        return component_codec.decodeFromView(AlertDialog, .alert_dialog, view);
-    }
+    pub const toObject = serialization.toObject;
+    pub const writeRecord = serialization.writeRecord;
+    pub const fromView = serialization.fromView;
 
     pub fn fromNode(dialog: @FieldType(ui.Node, "alert_dialog")) Error!AlertDialog {
         return .{ .id = dialog.id, .title = dialog.title, .detail = dialog.detail };

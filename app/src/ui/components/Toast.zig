@@ -23,6 +23,8 @@ pub const Toast = struct {
     title: []const u8,
     detail: []const u8,
 
+    const serialization = component_codec.TwoStringComponent(Toast, "toast", "title", "detail");
+
     pub fn node(self: Toast) ui.Node {
         return ui.toastNode(self.id, self.title, self.detail);
     }
@@ -70,18 +72,9 @@ pub const Toast = struct {
             .{ .w = component_primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
         ).applyExact(constraints);
     }
-
-    pub fn toObject(self: Toast, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
-        return component_codec.twoStringObject(.toast, self.id, self.title, self.detail, ui_out, object_out, epoch);
-    }
-
-    pub fn writeRecord(self: Toast, writer: *component_codec.Writer, index: usize) bool {
-        return component_codec.twoStringRecord(writer, index, .toast, self.id, self.title, self.detail);
-    }
-
-    pub fn fromView(view: object.View) Error!Toast {
-        return component_codec.decodeFromView(Toast, .toast, view);
-    }
+    pub const toObject = serialization.toObject;
+    pub const writeRecord = serialization.writeRecord;
+    pub const fromView = serialization.fromView;
 
     pub fn fromNode(toast: @FieldType(ui.Node, "toast")) Error!Toast {
         return .{ .id = toast.id, .title = toast.title, .detail = toast.detail };

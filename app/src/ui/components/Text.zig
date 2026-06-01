@@ -1,7 +1,5 @@
 const std = @import("std");
-const clock = @import("../../clock.zig");
 const common = @import("../component_common.zig");
-const object = @import("../../object.zig");
 const ui = @import("../core.zig");
 const layout = @import("../layouts/Types.zig");
 const text_metrics = @import("../text_metrics.zig");
@@ -16,6 +14,8 @@ const constrainPreferredSize = component_primitives.constrainPreferredSize;
 
 pub const Text = struct {
     value: []const u8,
+
+    const serialization = component_codec.OneStringFixedIdComponent(Text, "text", 0, "value");
 
     pub fn node(self: Text) ui.Node {
         return .{ .text = .{ .value = self.value } };
@@ -53,17 +53,9 @@ pub const Text = struct {
         ).applyExact(constraints);
     }
 
-    pub fn toObject(self: Text, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
-        return component_codec.oneStringObject(.text, 0, self.value, ui_out, object_out, epoch);
-    }
-
-    pub fn writeRecord(self: Text, writer: *component_codec.Writer, index: usize) bool {
-        return component_codec.oneStringRecord(writer, index, .text, 0, self.value);
-    }
-
-    pub fn fromView(view: object.View) Error!Text {
-        return component_codec.decodeFromView(Text, .text, view);
-    }
+    pub const toObject = serialization.toObject;
+    pub const writeRecord = serialization.writeRecord;
+    pub const fromView = serialization.fromView;
 
     pub fn fromNode(text: @FieldType(ui.Node, "text")) Error!Text {
         return .{ .value = text.value };

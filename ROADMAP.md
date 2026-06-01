@@ -246,6 +246,14 @@ access — they operate on in-RAM object stores carved from their parent's arena
 spawn, and must call `er_flush()` to commit dirty objects to the append-log WAL
 on the block device.
 
+This is intentional, not a temporary shortcut. App working state belongs in RAM:
+scratch buffers, caches, decoded assets, partial edits, transient network
+responses, undo stacks, and failed attempts should not hit storage unless a
+caller crosses an explicit flush boundary. Memory is what running programs are
+for. Storage is slower, durable, and shared with the rest of the machine, so an
+app must not be able to burn flash, flood I/O queues, or manufacture durable
+state just by mutating its heap.
+
 ### P6a — Storage Justification in Manifest
 
 - **File:** `app/src/app.zig:398-447`
@@ -253,8 +261,9 @@ on the block device.
   explanation requirement
 - **Work:** Add `storage_justification: [64]u8` field. `hasStorage()` returns
   true only when justification is non-empty. Include in allocation body encoding
-  and hash.
-- **Enforces:** No app gets persistent storage without declaring why
+  and hash. The grant permits explicit flush capacity, not direct disk access.
+- **Enforces:** No app gets persistent storage or durable flush authority without
+  declaring why
 
 ### P6b — NVMe Read/Write Block Commands
 
@@ -306,7 +315,8 @@ on the block device.
   - `er_object_resolve(tree_hash, path) → child hash` — VFS path walk
 - **Dependencies:** P6a, P6d
 - **Enforces:** No app ever touches a block device. POSIX open/read/write does
-  not exist in the WASM import namespace.
+  not exist in the WASM import namespace. Unflushed app objects remain volatile
+  RAM state and are reclaimed with the app's memory slice.
 
 ### P6f — Boot-Time Store Load
 

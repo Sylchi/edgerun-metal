@@ -19,6 +19,8 @@ pub const DropdownMenu = struct {
     first: []const u8,
     second: []const u8,
 
+    const serialization = component_codec.TwoStringComponent(DropdownMenu, "dropdown_menu", "first", "second");
+
     pub fn node(self: DropdownMenu) ui.Node {
         return ui.dropdownMenuNode(self.id, self.first, self.second);
     }
@@ -39,18 +41,9 @@ pub const DropdownMenu = struct {
         _ = options;
         return primitives.measureSidePanelMenu(dropdown_menu_trigger, self.first, self.second, constraints, menu_panel_layout, menu_trigger_padding, menu_list_layout);
     }
-
-    pub fn toObject(self: DropdownMenu, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
-        return component_codec.twoStringObject(.dropdown_menu, self.id, self.first, self.second, ui_out, object_out, epoch);
-    }
-
-    pub fn writeRecord(self: DropdownMenu, writer: *component_codec.Writer, index: usize) bool {
-        return component_codec.twoStringRecord(writer, index, .dropdown_menu, self.id, self.first, self.second);
-    }
-
-    pub fn fromView(view: object.View) Error!DropdownMenu {
-        return component_codec.decodeFromView(DropdownMenu, .dropdown_menu, view);
-    }
+    pub const toObject = serialization.toObject;
+    pub const writeRecord = serialization.writeRecord;
+    pub const fromView = serialization.fromView;
 
     pub fn fromNode(menu: @FieldType(ui.Node, "dropdown_menu")) Error!DropdownMenu {
         return .{ .id = menu.id, .first = menu.first, .second = menu.second };

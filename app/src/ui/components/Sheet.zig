@@ -24,6 +24,8 @@ pub const Sheet = struct {
     title: []const u8,
     detail: []const u8,
 
+    const serialization = component_codec.TwoStringComponent(Sheet, "sheet", "title", "detail");
+
     pub fn node(self: Sheet) ui.Node {
         return ui.sheetNode(self.id, self.title, self.detail);
     }
@@ -56,18 +58,9 @@ pub const Sheet = struct {
             .{ .w = primitives.maxMeasuredWidth(constraints, preferred.w), .h = @max(preferred.h, panel.max.h) },
         ).applyExact(constraints);
     }
-
-    pub fn toObject(self: Sheet, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
-        return component_codec.twoStringObject(.sheet, self.id, self.title, self.detail, ui_out, object_out, epoch);
-    }
-
-    pub fn writeRecord(self: Sheet, writer: *component_codec.Writer, index: usize) bool {
-        return component_codec.twoStringRecord(writer, index, .sheet, self.id, self.title, self.detail);
-    }
-
-    pub fn fromView(view: object.View) Error!Sheet {
-        return component_codec.decodeFromView(Sheet, .sheet, view);
-    }
+    pub const toObject = serialization.toObject;
+    pub const writeRecord = serialization.writeRecord;
+    pub const fromView = serialization.fromView;
 
     pub fn fromNode(sheet: @FieldType(ui.Node, "sheet")) Error!Sheet {
         return .{ .id = sheet.id, .title = sheet.title, .detail = sheet.detail };

@@ -40,6 +40,9 @@ STORE_MAGIC_STR_LEN    equ 7
 %define RECORD_HEADER_SIZE  188
 %define HASH_SIZE           32
 %define MAX_KEY             64
+%define INDEX_PAYLOAD_PREFIX_SIZE 28
+%define INDEX_PAYLOAD_MIN_SIZE    (INDEX_PAYLOAD_PREFIX_SIZE + 1 + HASH_SIZE)
+%define INDEX_PAYLOAD_MAX_SIZE    (INDEX_PAYLOAD_PREFIX_SIZE + MAX_KEY + HASH_SIZE)
 
 ; Superblock offsets
 SUPER_MAGIC_OFF      equ 0   ; 8 bytes "ERSTORE\0\0"
@@ -110,6 +113,11 @@ BLOCK_BYTES          equ 512
 %define KL_CONTENT_TYPE  116 ; u32
 %define KL_VALUE_SIZE    120 ; u64
 %define KL_SLOT_SIZE     128
+
+SECTION .bss
+store_replay_header_hash: resb HASH_SIZE
+store_replay_payload:     resb INDEX_PAYLOAD_MAX_SIZE
+store_block_scratch:      resb BLOCK_BYTES
 
 SECTION .text
 
@@ -209,51 +217,79 @@ _store_blk_write:
 .wr_read_modify:
     ; Partial block — read existing block, patch, write
     push    r8
+    push    r9
+    push    r10
+    push    r11
     push    rcx
-    push    rcx
-    push    rdi
 
     mov     rdi, r12
     mov     rsi, r8
-    mov     rdx, STORE_SCRATCH
+    lea     rdx, [rel store_block_scratch]
     mov     ecx, 1
     call    er_nvme_read_blocks
     test    eax, eax
-    jnz     .wr_fail_pop
+    jnz     .wr_fail_restore
 
-    pop     rdi
     pop     rcx
+    pop     r11
+    pop     r10
+    pop     r9
+    pop     r8
+
     ; Copy patch into scratch buffer at intra-block offset
-    mov     rdi, STORE_SCRATCH
+    push    r8
+    push    r9
+    push    r10
+    push    r11
+    push    rcx
+    lea     rdi, [rel store_block_scratch]
     add     edi, r9d
     mov     esi, ecx
     mov     rdx, r10
     mov     ecx, esi
-    push    rcx
     call    er_bytes_copy
     pop     rcx
+    pop     r11
+    pop     r10
+    pop     r9
+    pop     r8
     jmp     .wr_do_write
 
 .wr_write_full:
+    push    r8
+    push    r9
+    push    r10
+    push    r11
     push    rcx
-    push    rdi
-    mov     rdi, STORE_SCRATCH
+    lea     rdi, [rel store_block_scratch]
     mov     esi, ecx
     mov     rdx, r10
     mov     ecx, esi
     call    er_bytes_copy
-    pop     rdi
     pop     rcx
+    pop     r11
+    pop     r10
+    pop     r9
+    pop     r8
 
 .wr_do_write:
+    push    r8
+    push    r9
+    push    r10
+    push    r11
+    push    rcx
     mov     rdi, r12
     mov     rsi, r8
-    mov     rdx, STORE_SCRATCH
+    lea     rdx, [rel store_block_scratch]
+    mov     ecx, 1
     call    er_nvme_write_blocks
     test    eax, eax
-    jnz     .wr_fail
+    jnz     .wr_fail_restore
 
     pop     rcx               ; bytes written
+    pop     r11
+    pop     r10
+    pop     r9
     pop     r8                ; LBA
     sub     r11, rcx          ; subtract bytes written
     add     r10, rcx          ; advance data cursor
@@ -267,12 +303,15 @@ _store_blk_write:
     pop     r13
     pop     r12
     pop     rbx
+    xor     eax, eax
     er_ok
     ret
 
-.wr_fail_pop:
+.wr_fail_restore:
     pop     rcx
-    pop     rcx
+    pop     r11
+    pop     r10
+    pop     r9
     pop     r8
 .wr_fail:
     pop     r15
@@ -322,26 +361,41 @@ _store_blk_read:
 .rd_full:
     ; Read block into scratch
     push    r8
-    push    rcx
+    push    r9
+    push    r10
+    push    r11
     push    rax
 
     mov     rdi, r12
     mov     rsi, r8
-    mov     rdx, STORE_SCRATCH
+    lea     rdx, [rel store_block_scratch]
     mov     ecx, 1
     call    er_nvme_read_blocks
     test    eax, eax
     jnz     .rd_fail_pop
 
     pop     rcx               ; bytes to copy
+    pop     r11
+    pop     r10
+    pop     r9
+    pop     r8
+
     ; Copy from scratch buffer + offset to output
+    push    r8
+    push    r9
+    push    r10
+    push    r11
+    push    rcx
     mov     rdi, r10
     mov     esi, ecx
-    mov     rdx, STORE_SCRATCH
+    lea     rdx, [rel store_block_scratch]
     add     edx, r9d
     call    er_bytes_copy
 
     pop     rcx
+    pop     r11
+    pop     r10
+    pop     r9
     pop     r8
     sub     r11, rcx
     add     r10, rcx
@@ -355,12 +409,15 @@ _store_blk_read:
     pop     r13
     pop     r12
     pop     rbx
+    xor     eax, eax
     er_ok
     ret
 
 .rd_fail_pop:
     pop     rax
-    pop     rcx
+    pop     r11
+    pop     r10
+    pop     r9
     pop     r8
     pop     r15
     pop     r14
@@ -397,7 +454,7 @@ er_fn er_store_init
     push    rcx
     push    rdi
     mov     rdi, r12
-    mov     ecx, r13d
+    mov     esi, r13d
     call    er_bytes_zero
     pop     rdi
     pop     rcx
@@ -453,6 +510,7 @@ er_fn er_store_init
     pop     r13
     pop     r12
     pop     rbx
+    xor     eax, eax
     er_ok
     ret
 
@@ -468,6 +526,7 @@ er_fn er_store_init
     pop     r13
     pop     r12
     pop     rbx
+    xor     eax, eax
     er_ok
     ret
 
@@ -503,7 +562,7 @@ _store_write_superblock:
 
     ; Build superblock in scratch buffer
     mov     rdi, STORE_SCRATCH
-    mov     ecx, SUPERBLOCK_SIZE
+    mov     esi, SUPERBLOCK_SIZE
     call    er_bytes_zero
 
     ; Magic: "ERSTORE"
@@ -556,6 +615,7 @@ _store_write_superblock:
 
     pop     r12
     pop     rbx
+    xor     eax, eax
     er_ok
     ret
 
@@ -585,6 +645,7 @@ er_fn er_store_sync
 .sync_clean:
     pop     r12
     pop     rbx
+    xor     eax, eax
     er_ok
     ret
 
@@ -704,16 +765,24 @@ _store_append_record:
     mov     r13w, si            ; type
     mov     r14, rdx            ; payload
     mov     r15d, ecx           ; payload_len
+    mov     rbx, r14            ; payload write pointer
 
-    ; Compute payload hash
-    mov     rdi, r14
+    ; Preserve payloads that are built in STORE_SCRATCH before the header
+    ; overwrites that buffer.
+    cmp     r14, STORE_SCRATCH
+    jne     .ar_payload_ready
+    mov     rdi, STORE_SCRATCH + RECORD_HEADER_SIZE
     mov     esi, r15d
-    mov     rdx, STORE_SCRATCH + RECORD_HEADER_SIZE  ; use area after header
-    call    er_preimage_raw_hash
+    mov     rdx, r14
+    mov     ecx, r15d
+    call    er_bytes_copy
+    mov     rbx, STORE_SCRATCH + RECORD_HEADER_SIZE
+
+.ar_payload_ready:
 
     ; Build record header at STORE_SCRATCH
     mov     rdi, STORE_SCRATCH
-    mov     ecx, RECORD_HEADER_SIZE
+    mov     esi, RECORD_HEADER_SIZE
     call    er_bytes_zero
 
     ; Magic
@@ -732,12 +801,11 @@ _store_append_record:
     ; Payload length
     mov     qword [STORE_SCRATCH + HDR_PAYLOAD_LEN_OFF], r15
 
-    ; Payload hash (already computed at STORE_SCRATCH + RECORD_HEADER_SIZE)
-    mov     rdi, STORE_SCRATCH + HDR_PAYLOAD_HASH_OFF
-    mov     esi, HASH_SIZE
-    mov     rdx, STORE_SCRATCH + RECORD_HEADER_SIZE
-    mov     ecx, HASH_SIZE
-    call    er_bytes_copy
+    ; Payload hash
+    mov     rdi, rbx
+    mov     esi, r15d
+    mov     rdx, STORE_SCRATCH + HDR_PAYLOAD_HASH_OFF
+    call    er_preimage_raw_hash
 
     ; Previous record hash
     mov     rdi, STORE_SCRATCH + HDR_PREV_HASH_OFF
@@ -768,7 +836,7 @@ _store_append_record:
     ; Write payload to disk
     mov     rdi, [r12 + ST_DEV_BAR0]
     mov     rsi, r8
-    mov     rdx, r14
+    mov     rdx, rbx
     mov     ecx, r15d
     call    _store_blk_write
     test    eax, eax
@@ -822,6 +890,7 @@ _store_replay:
     push    r13
     push    r14
     push    r15
+    push    rbp
 
     mov     r12, rdi
     mov     r13, [r12 + ST_LOG_START]   ; read cursor
@@ -870,6 +939,15 @@ _store_replay:
     cmp     rax, r14
     ja      .replay_corrupt     ; payload extends past log_end
 
+    push    r8
+    push    r15
+    mov     rdi, STORE_SCRATCH
+    mov     esi, RECORD_HEADER_SIZE
+    lea     rdx, [rel store_replay_header_hash]
+    call    er_preimage_raw_hash
+    pop     r15
+    pop     r8
+
     ; Apply record based on type
     movzx   eax, word [STORE_SCRATCH + HDR_TYPE_OFF]
     cmp     eax, REC_BLOB
@@ -883,12 +961,6 @@ _store_replay:
     jmp     .replay_skip         ; unknown type, skip
 
 .replay_blob:
-    ; Hash the payload
-    mov     rdi, r8
-    mov     esi, r15d
-    mov     rdx, STORE_SCRATCH + RECORD_HEADER_SIZE
-    call    er_preimage_raw_hash
-
     ; Insert blob slot
     mov     rdi, r12
     call    _store_next_blob_slot
@@ -907,7 +979,7 @@ _store_replay:
     ; Copy hash
     lea     rdi, [rbx + BL_HASH]
     mov     esi, HASH_SIZE
-    mov     rdx, STORE_SCRATCH + RECORD_HEADER_SIZE
+    mov     rdx, STORE_SCRATCH + HDR_PAYLOAD_HASH_OFF
     mov     ecx, HASH_SIZE
     call    er_bytes_copy
 
@@ -925,15 +997,22 @@ _store_replay:
     cmp     r15, 36
     jb      .replay_skip
 
-    mov     rdi, r8
+    mov     rdi, [r12 + ST_DEV_BAR0]
+    mov     rsi, r8
+    lea     rdx, [rel store_replay_payload]
+    mov     ecx, 36
+    call    _store_blk_read
+    test    eax, eax
+    jnz     .replay_fail
+
+    lea     rdi, [rel store_replay_payload]
     mov     esi, 4
     call    er_load32
     mov     r9d, eax            ; content_type
 
     ; Update blob slot's content_type
     mov     rdi, r12
-    add     r8, 4
-    mov     rsi, r8
+    lea     rsi, [rel store_replay_payload + 4]
     call    _store_find_blob
     cmp     eax, -1
     je      .replay_skip        ; blob not found, skip
@@ -948,42 +1027,126 @@ _store_replay:
 .replay_index:
     ; Payload: index_id(4) + value_kind(4) + content_type(4) + value_size(8) + key_len(8) + key(<=64) + hash(32)
     ; Fixed prefix before key: index_id(4) + value_kind(4) + content_type(4) + value_size(8) + key_len(8) = 28 bytes
-    cmp     r15, 28 + 1 + 32
+    cmp     r15, INDEX_PAYLOAD_MIN_SIZE
     jb      .replay_skip
+    cmp     r15, INDEX_PAYLOAD_MAX_SIZE
+    ja      .replay_skip
+
+    mov     rdi, [r12 + ST_DEV_BAR0]
+    mov     rsi, r8
+    lea     rdx, [rel store_replay_payload]
+    mov     ecx, r15d
+    call    _store_blk_read
+    test    eax, eax
+    jnz     .replay_fail
 
     ; Read key_len at offset 20
-    mov     rdi, r8
-    add     rdi, 20
+    lea     rdi, [rel store_replay_payload + 20]
     mov     esi, 8
     call    er_load64
     mov     r9, rax             ; key_len
+    test    r9, r9
+    jz      .replay_skip
+    cmp     r9, MAX_KEY
+    ja      .replay_skip
 
-    mov     rdi, r8
+    mov     rax, INDEX_PAYLOAD_PREFIX_SIZE
+    add     rax, r9
+    add     rax, HASH_SIZE
+    cmp     r15, rax
+    jb      .replay_skip
+
+    lea     rdi, [rel store_replay_payload]
     mov     esi, 4
     call    er_load32
     mov     r10d, eax           ; index_id
 
-    ; key is at offset 28, followed by hash at offset 28 + key_len
-    mov     rdi, r8
-    add     rdi, 28
-    mov     r11, rdi            ; key ptr
+    mov     rax, [rel store_replay_payload + 20]
 
-    ; hash is at offset 28 + key_len
-    mov     rdi, r8
-    add     rdi, 28
-    add     rdi, r9
-    mov     r8, rdi             ; hash ptr
+    mov     rdi, r12
+    mov     esi, r10d
+    lea     rdx, [rel store_replay_payload + INDEX_PAYLOAD_PREFIX_SIZE]
+    mov     ecx, eax
+    call    _store_find_key
+    cmp     eax, -1
+    jne     .replay_index_existing
 
-    ; Find or create key slot
-    ; TODO: implement key insertion
-    jmp     .replay_skip
+    lea     rbx, [r12 + ST_STRUCT_SIZE]
+    mov     rax, [r12 + ST_BLOB_COUNT]
+    mov     ecx, BL_SLOT_SIZE
+    mul     ecx
+    add     rbx, rax
+
+    xor     r8d, r8d
+.replay_index_find_free:
+    cmp     byte [rbx + KL_USED], 0
+    jz      .replay_index_new
+    inc     r8d
+    add     rbx, KL_SLOT_SIZE
+    cmp     r8d, 256
+    jb      .replay_index_find_free
+    jmp     .replay_corrupt
+
+.replay_index_new:
+    mov     byte [rbx + KL_USED], 1
+    mov     rax, [r12 + ST_KEY_COUNT]
+    inc     rax
+    mov     [r12 + ST_KEY_COUNT], rax
+    jmp     .replay_index_fill
+
+.replay_index_existing:
+    lea     rbx, [r12 + ST_STRUCT_SIZE]
+    push    rax
+    mov     rax, [r12 + ST_BLOB_COUNT]
+    mov     ecx, BL_SLOT_SIZE
+    mul     ecx
+    pop     rcx
+    add     rbx, rax
+    mov     eax, ecx
+    mov     ecx, KL_SLOT_SIZE
+    mul     ecx
+    add     rbx, rax
+
+.replay_index_fill:
+    mov     eax, [rel store_replay_payload]
+    mov     [rbx + KL_INDEX_ID], eax
+    mov     rax, [rel store_replay_payload + 20]
+    mov     [rbx + KL_KEY_LEN], rax
+
+    lea     rdi, [rbx + KL_KEY]
+    mov     esi, MAX_KEY
+    call    er_bytes_zero
+
+    mov     rax, [rel store_replay_payload + 20]
+    lea     rdi, [rbx + KL_KEY]
+    mov     esi, MAX_KEY
+    lea     rdx, [rel store_replay_payload + INDEX_PAYLOAD_PREFIX_SIZE]
+    mov     ecx, eax
+    call    er_bytes_copy
+
+    mov     rax, [rel store_replay_payload + 20]
+    lea     rdi, [rbx + KL_HASH]
+    mov     esi, HASH_SIZE
+    lea     rdx, [rel store_replay_payload + INDEX_PAYLOAD_PREFIX_SIZE]
+    add     rdx, rax
+    mov     ecx, HASH_SIZE
+    call    er_bytes_copy
+
+    mov     eax, [rel store_replay_payload + 4]
+    mov     [rbx + KL_VALUE_KIND], eax
+    mov     eax, [rel store_replay_payload + 8]
+    mov     [rbx + KL_CONTENT_TYPE], eax
+    mov     rax, [rel store_replay_payload + 12]
+    mov     [rbx + KL_VALUE_SIZE], rax
+    jmp     .replay_next
 
 .replay_next:
     ; Update last_record_hash
-    mov     rdi, STORE_SCRATCH
-    mov     esi, RECORD_HEADER_SIZE
-    lea     rdx, [r12 + ST_LAST_HASH]
-    call    er_preimage_raw_hash
+    lea     rdi, [r12 + ST_LAST_HASH]
+    mov     esi, HASH_SIZE
+    lea     rdx, [rel store_replay_header_hash]
+    mov     ecx, HASH_SIZE
+    call    er_bytes_copy
 
     ; Advance cursor
     mov     rax, r13
@@ -1005,11 +1168,13 @@ _store_replay:
     jmp     .replay_loop
 
 .replay_done:
+    pop     rbp
     pop     r15
     pop     r14
     pop     r13
     pop     r12
     pop     rbx
+    xor     eax, eax
     er_ok
     ret
 
@@ -1021,6 +1186,7 @@ _store_replay:
     jmp     .replay_done
 
 .replay_fail:
+    pop     rbp
     pop     r15
     pop     r14
     pop     r13
@@ -1041,6 +1207,7 @@ er_fn er_store_put_blob
     push    r12
     push    r13
     push    r14
+    push    r15
 
     mov     r12, rdi            ; state
     mov     r13, rsi            ; data
@@ -1053,11 +1220,11 @@ er_fn er_store_put_blob
     ; Hash the data
     mov     rdi, r13
     mov     esi, r14d
-    lea     rdx, [r12 + ST_STRUCT_SIZE]  ; use first blob slot hash area
+    mov     rdx, STORE_SCRATCH + RECORD_HEADER_SIZE
     call    er_preimage_raw_hash
 
     ; Check if already stored
-    lea     rsi, [r12 + ST_STRUCT_SIZE]
+    mov     rsi, STORE_SCRATCH + RECORD_HEADER_SIZE
     mov     rdi, r12
     call    _store_find_blob
     cmp     eax, -1
@@ -1069,7 +1236,7 @@ er_fn er_store_put_blob
     cmp     eax, -1
     je      .put_full
 
-    mov     r8d, eax            ; slot index
+    mov     r15d, eax           ; slot index
 
     ; Append blob record
     mov     rdi, r12
@@ -1080,14 +1247,14 @@ er_fn er_store_put_blob
     cmp     eax, -1
     je      .put_io
 
-    mov     r9, rax             ; payload offset
-
     ; Fill blob slot
+    push    rax                 ; payload offset
     lea     rbx, [r12 + ST_STRUCT_SIZE]
-    mov     eax, r8d
+    mov     eax, r15d
     mov     ecx, BL_SLOT_SIZE
     mul     ecx
     add     rbx, rax
+    pop     r15                 ; payload offset
 
     mov     byte [rbx + BL_USED], 1
     mov     dword [rbx + BL_CONTENT_TYPE], CONTENT_TYPE_RAW
@@ -1095,34 +1262,39 @@ er_fn er_store_put_blob
     ; Copy hash
     lea     rdi, [rbx + BL_HASH]
     mov     esi, HASH_SIZE
-    mov     rdx, STORE_SCRATCH + RECORD_HEADER_SIZE
+    mov     rdx, STORE_SCRATCH + HDR_PAYLOAD_HASH_OFF
     mov     ecx, HASH_SIZE
     call    er_bytes_copy
 
-    mov     qword [rbx + BL_OFFSET], r9
+    mov     qword [rbx + BL_OFFSET], r15
     mov     qword [rbx + BL_SIZE], r14
 
     mov     rax, [r12 + ST_BLOB_COUNT]
     inc     rax
     mov     [r12 + ST_BLOB_COUNT], rax
 
+    pop     r15
     pop     r14
     pop     r13
     pop     r12
     pop     rbx
+    xor     eax, eax
     er_ok
     ret
 
 .put_dup:
     ; Already stored — success
+    pop     r15
     pop     r14
     pop     r13
     pop     r12
     pop     rbx
+    xor     eax, eax
     er_ok
     ret
 
 .put_full:
+    pop     r15
     pop     r14
     pop     r13
     pop     r12
@@ -1131,6 +1303,7 @@ er_fn er_store_put_blob
     ret
 
 .put_bad:
+    pop     r15
     pop     r14
     pop     r13
     pop     r12
@@ -1139,6 +1312,7 @@ er_fn er_store_put_blob
     ret
 
 .put_io:
+    pop     r15
     pop     r14
     pop     r13
     pop     r12
@@ -1201,6 +1375,7 @@ er_fn er_store_get_blob
     pop     r13
     pop     r12
     pop     rbx
+    xor     eax, eax
     er_ok
     ret
 
@@ -1288,6 +1463,7 @@ er_fn er_store_blob_info
     pop     r13
     pop     r12
     pop     rbx
+    xor     eax, eax
     er_ok
     ret
 
@@ -1414,7 +1590,7 @@ er_fn er_store_index_put
     mov     ecx, r15d
     call    _store_find_key
     cmp     eax, -1
-    jne     .ip_update          ; update existing
+    jne     .ip_update_slot     ; update existing
 
     ; Find free key slot
     mov     rdi, r12
@@ -1471,16 +1647,40 @@ er_fn er_store_index_put
     mov     rax, [r12 + ST_KEY_COUNT]
     inc     rax
     mov     [r12 + ST_KEY_COUNT], rax
+    jmp     .ip_append_record
 
-.ip_update:
+.ip_update_slot:
+    lea     rbx, [r12 + ST_STRUCT_SIZE]
+    push    rax
+    mov     rax, [r12 + ST_BLOB_COUNT]
+    mov     ecx, BL_SLOT_SIZE
+    mul     ecx
+    pop     rcx
+    add     rbx, rax
+    mov     eax, ecx
+    mov     ecx, KL_SLOT_SIZE
+    mul     ecx
+    add     rbx, rax
+
+    lea     rdi, [rbx + KL_HASH]
+    mov     esi, HASH_SIZE
+    mov     rdx, rbp
+    mov     ecx, HASH_SIZE
+    call    er_bytes_copy
+
+    mov     dword [rbx + KL_VALUE_KIND], 1
+    mov     dword [rbx + KL_CONTENT_TYPE], CONTENT_TYPE_RAW
+    mov     qword [rbx + KL_VALUE_SIZE], 0
+
+.ip_append_record:
     ; Append index record (read blob info for value_size)
     ; Build payload: index_id(4) + value_kind(4) + content_type(4) + value_size(8) + key_len(8) + key + hash(32)
     ; = 28 + key_len + 32 bytes total
-    mov     edi, 28
+    mov     edi, INDEX_PAYLOAD_PREFIX_SIZE
     add     edi, r15d
     add     edi, HASH_SIZE
     mov     r9d, edi            ; payload_size
-    cmp     r9d, STORE_SCRATCH + 512
+    cmp     r9d, INDEX_PAYLOAD_MAX_SIZE
     ja      .ip_bad             ; payload too large
 
     ; Build payload at STORE_SCRATCH
@@ -1490,13 +1690,13 @@ er_fn er_store_index_put
     mov     qword [STORE_SCRATCH + 12], 0         ; value_size (unknown from here)
     mov     qword [STORE_SCRATCH + 20], r15       ; key_len
     ; Copy key at offset 28
-    mov     rdi, STORE_SCRATCH + 28
+    mov     rdi, STORE_SCRATCH + INDEX_PAYLOAD_PREFIX_SIZE
     mov     esi, r15d
     mov     rdx, r14
     mov     ecx, r15d
     call    er_bytes_copy
     ; Copy hash at offset 28 + key_len
-    mov     rdi, STORE_SCRATCH + 28
+    mov     rdi, STORE_SCRATCH + INDEX_PAYLOAD_PREFIX_SIZE
     add     edi, r15d
     mov     esi, HASH_SIZE
     mov     rdx, rbp
@@ -1504,10 +1704,12 @@ er_fn er_store_index_put
     call    er_bytes_copy
 
     ; Append record
+    mov     ecx, INDEX_PAYLOAD_PREFIX_SIZE
+    add     ecx, r15d
+    add     ecx, HASH_SIZE
     mov     rdi, r12
     mov     esi, REC_INDEX_PUT
     mov     rdx, STORE_SCRATCH
-    mov     ecx, r9d
     call    _store_append_record
     cmp     eax, -1
     je      .ip_io
@@ -1518,6 +1720,7 @@ er_fn er_store_index_put
     pop     r13
     pop     r12
     pop     rbx
+    xor     eax, eax
     er_ok
     ret
 
@@ -1554,12 +1757,13 @@ er_fn er_store_index_get
     push    r13
     push    r14
     push    r15
+    push    rbp
 
     mov     r12, rdi            ; state
     mov     r13d, esi           ; index_id
     mov     r14, rdx            ; key
     mov     r15d, ecx           ; key_len
-    ; r8 = out_hash (from stack or register, 5th param)
+    mov     rbp, r8             ; out_hash
 
     mov     rdi, r12
     mov     esi, r13d
@@ -1583,9 +1787,9 @@ er_fn er_store_index_get
     add     rbx, rax
 
     ; Copy hash to output
-    test    r8, r8
+    test    rbp, rbp
     jz      .ig_skip_hash
-    mov     rdi, r8
+    mov     rdi, rbp
     mov     esi, HASH_SIZE
     lea     rdx, [rbx + KL_HASH]
     mov     ecx, HASH_SIZE
@@ -1593,6 +1797,7 @@ er_fn er_store_index_get
 .ig_skip_hash:
 
     mov     eax, 1
+    pop     rbp
     pop     r15
     pop     r14
     pop     r13
@@ -1603,6 +1808,7 @@ er_fn er_store_index_get
 
 .ig_notfound:
     xor     eax, eax
+    pop     rbp
     pop     r15
     pop     r14
     pop     r13

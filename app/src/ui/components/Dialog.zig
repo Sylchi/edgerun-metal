@@ -19,6 +19,8 @@ pub const Dialog = struct {
     detail: []const u8,
     flags: common.ComponentFlags = .{},
 
+    const serialization = component_codec.TwoStringComponent(Dialog, "dialog", "title", "detail");
+
     pub fn node(self: Dialog) ui.Node {
         return ui.dialogNode(self.id, self.title, self.detail);
     }
@@ -39,18 +41,9 @@ pub const Dialog = struct {
         _ = options;
         return primitives.measureSidePanelTitleDetail(dialog_open_label, self.title, self.detail, constraints, dialog_layout, dialog_trigger_padding, dialog_panel);
     }
-
-    pub fn toObject(self: Dialog, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
-        return component_codec.twoStringObject(.dialog, self.id, self.title, self.detail, ui_out, object_out, epoch);
-    }
-
-    pub fn writeRecord(self: Dialog, writer: *component_codec.Writer, index: usize) bool {
-        return component_codec.twoStringRecord(writer, index, .dialog, self.id, self.title, self.detail);
-    }
-
-    pub fn fromView(view: object.View) Error!Dialog {
-        return component_codec.decodeFromView(Dialog, .dialog, view);
-    }
+    pub const toObject = serialization.toObject;
+    pub const writeRecord = serialization.writeRecord;
+    pub const fromView = serialization.fromView;
 
     pub fn fromNode(dialog: @FieldType(ui.Node, "dialog")) Error!Dialog {
         return .{ .id = dialog.id, .title = dialog.title, .detail = dialog.detail };

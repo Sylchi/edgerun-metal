@@ -173,7 +173,10 @@ AV1_SEQ_SEPARATE_UV_DELTA_Q         equ 51
 AV1_SEQ_NUM_UNITS_IN_DISPLAY_TICK   equ 52
 AV1_SEQ_TIME_SCALE                  equ 56
 AV1_SEQ_EQUAL_PICTURE_INTERVAL      equ 60
-AV1_SEQ_SIZE                        equ 64
+AV1_SEQ_NUM_TICKS_PER_PICTURE_MINUS_1 equ 64
+AV1_SEQ_INITIAL_DISPLAY_DELAY_MINUS_1 equ 68
+AV1_SEQ_LEVEL_TIER                  equ 72
+AV1_SEQ_SIZE                        equ 76
 
 AV1_FRAME_TYPE                      equ 0
 AV1_FRAME_SHOW_FRAME                equ 1
@@ -291,6 +294,9 @@ AV1_FRAME_FILM_GRAIN_CR_MULT        equ 1088
 AV1_FRAME_FILM_GRAIN_CR_LUMA_MULT   equ 1089
 AV1_FRAME_FILM_GRAIN_CR_OFFSET      equ 1092
 AV1_FRAME_FILM_GRAIN_SEED           equ 1096
+AV1_FRAME_QM_Y                      equ 1100
+AV1_FRAME_QM_U                      equ 1101
+AV1_FRAME_QM_V                      equ 1102
 AV1_FRAME_SIZE                      equ 1104
 
 AV1_SUPERRES_NUM                    equ 8
@@ -300,6 +306,8 @@ AV1_SUPERRES_DENOM_MAX              equ 16
 AV1_QUANT_BASE_Q_BITS               equ 8
 AV1_QUANT_DELTA_BITS                equ 6
 AV1_QUANT_DELTA_MAX                 equ 63
+AV1_QM_LEVEL_BITS                   equ 4
+AV1_QM_LEVEL_MAX                    equ 15
 AV1_LOOP_FILTER_LEVEL_BITS          equ 6
 AV1_LOOP_FILTER_SHARPNESS_BITS      equ 3
 AV1_LOOP_FILTER_LEVEL_MAX           equ 63
@@ -588,8 +596,11 @@ AV1_FRAME_REFRESH_ALL               equ 0xff
 AV1_SEQ_PROFILE_MAIN                equ 0
 AV1_SEQ_LEVEL_2_0                   equ 0
 AV1_SEQ_LEVEL_TIER_MAX              equ 7
+AV1_SEQ_LEVEL_MAX                   equ 31
 AV1_SEQ_PROFILE_BITS                equ 3
 AV1_SEQ_LEVEL_BITS                  equ 5
+AV1_SEQ_LEVEL_TIER_BITS             equ 1
+AV1_SEQ_INITIAL_DISPLAY_DELAY_BITS  equ 4
 AV1_SEQ_OPERATING_POINTS_BITS       equ 5
 AV1_SEQ_OPERATING_POINT_IDC_BITS    equ 12
 AV1_SEQ_DIMENSION_BITS_FIELD        equ 4
@@ -605,6 +616,7 @@ AV1_SEQ_HEIGHT_BITS_MIN             equ 1
 AV1_SEQ_HEIGHT_BITS_MAX             equ 16
 AV1_SEQ_DIMENSION_MAX               equ 1 << AV1_SEQ_WIDTH_BITS_MAX
 AV1_SEQ_BIT_DEPTH_8                 equ 8
+AV1_SEQ_BIT_DEPTH_10                equ 10
 AV1_SEQ_SELECT_SCREEN_CONTENT_TOOLS equ 2
 AV1_SEQ_SELECT_INTEGER_MV           equ 2
 AV1_SEQ_PROFILE_HIGH                equ 1

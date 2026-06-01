@@ -17,6 +17,8 @@ extern er_tpm_parse_get_random
 extern er_serial_putchar
 extern er_serial_puthex32
 
+global _tcp_compute_checksum
+
 SECTION .data
 
 ; Ephemeral port allocator
@@ -359,6 +361,7 @@ _tcp_compute_checksum:
     mov     r12, rdi        ; conn
     mov     r13, rsi        ; tcp_seg
     mov     r14d, edx       ; seg_len
+    xor     eax, eax        ; raw one's-complement sum
 
     ; Build pseudo-header on stack (12 bytes)
     sub     rsp, 16         ; 12 bytes + padding
@@ -382,25 +385,24 @@ _tcp_compute_checksum:
     xchg    ah, al
     mov     [rsp + TCP_PSEUDO_LEN_IDX], ax  ; equ and label naming...
 
-    ; First checksum pass: pseudo-header
+    xor     eax, eax
     mov     rdi, rsp
     mov     esi, TCP_PSEUDO_SIZE
-    call    er_checksum
-    mov     ebx, eax        ; partial sum
+    call    _tcp_checksum_add_bytes
 
-    ; Second pass: TCP segment (seg_len bytes)
     mov     rdi, r13
     mov     esi, r14d
-    call    er_checksum
-    add     ax, bx
-    adc     ax, 0
+    call    _tcp_checksum_add_bytes
 
     ; Fold 32-bit to 16-bit
-    mov     ecx, eax
-    shr     ecx, 16
+    mov     edx, eax
+    shr     edx, 16
     and     eax, 0xFFFF
-    add     ax, cx
-    adc     ax, 0
+    add     eax, edx
+    mov     edx, eax
+    shr     edx, 16
+    and     eax, 0xFFFF
+    add     eax, edx
 
     ; One's complement
     not     ax
@@ -422,6 +424,36 @@ _tcp_compute_checksum:
 
 ; Missing label for pseudo-header length field
 TCP_PSEUDO_LEN_IDX equ TCP_PSEUDO_LEN  ; use same offset
+
+; _tcp_checksum_add_bytes — accumulate network-order 16-bit words
+; eax = incoming sum, rdi = bytes, esi = length
+; returns eax = updated raw sum
+_tcp_checksum_add_bytes:
+    push    rbx
+    mov     rbx, rdi
+    mov     ecx, esi
+.add_loop:
+    cmp     ecx, 2
+    jb      .add_odd
+    movzx   edx, byte [rbx]
+    shl     edx, 8
+    movzx   r8d, byte [rbx + 1]
+    or      edx, r8d
+    add     eax, edx
+    adc     eax, 0
+    add     rbx, 2
+    sub     ecx, 2
+    jmp     .add_loop
+.add_odd:
+    test    ecx, ecx
+    jz      .add_done
+    movzx   edx, byte [rbx]
+    shl     edx, 8
+    add     eax, edx
+    adc     eax, 0
+.add_done:
+    pop     rbx
+    ret
 
 ; ==================================================================
 ; er_tcp_send — send data on established connection

@@ -25,6 +25,8 @@ pub const Sidebar = struct {
     title: []const u8,
     item: []const u8,
 
+    const serialization = component_codec.TwoStringComponent(Sidebar, "sidebar", "title", "item");
+
     pub fn node(self: Sidebar) ui.Node {
         return ui.sidebarNode(self.id, self.title, self.item);
     }
@@ -65,18 +67,9 @@ pub const Sidebar = struct {
             .{ .w = primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
         ).applyExact(constraints);
     }
-
-    pub fn toObject(self: Sidebar, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
-        return component_codec.twoStringObject(.sidebar, self.id, self.title, self.item, ui_out, object_out, epoch);
-    }
-
-    pub fn writeRecord(self: Sidebar, writer: *component_codec.Writer, index: usize) bool {
-        return component_codec.twoStringRecord(writer, index, .sidebar, self.id, self.title, self.item);
-    }
-
-    pub fn fromView(view: object.View) Error!Sidebar {
-        return component_codec.decodeFromView(Sidebar, .sidebar, view);
-    }
+    pub const toObject = serialization.toObject;
+    pub const writeRecord = serialization.writeRecord;
+    pub const fromView = serialization.fromView;
 
     pub fn fromNode(sidebar: @FieldType(ui.Node, "sidebar")) Error!Sidebar {
         return .{ .id = sidebar.id, .title = sidebar.title, .item = sidebar.item };

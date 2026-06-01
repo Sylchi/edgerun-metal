@@ -723,17 +723,20 @@ _start:
     mov     byte [rel seq + AV1_SEQ_PROFILE], AV1_SEQ_PROFILE_MAIN
     mov     byte [rel seq + AV1_SEQ_STILL_PICTURE], 0
     mov     byte [rel seq + AV1_SEQ_REDUCED_STILL], 0
-    mov     byte [rel seq + AV1_SEQ_LEVEL_IDX], AV1_SEQ_LEVEL_2_0
+    mov     byte [rel seq + AV1_SEQ_LEVEL_IDX], 13
+    mov     byte [rel seq + AV1_SEQ_LEVEL_TIER], 1
     mov     byte [rel seq + AV1_SEQ_WIDTH_BITS], 16
     mov     byte [rel seq + AV1_SEQ_HEIGHT_BITS], 16
     mov     dword [rel seq + AV1_SEQ_MAX_WIDTH], 320
     mov     dword [rel seq + AV1_SEQ_MAX_HEIGHT], 240
-    mov     byte [rel seq + AV1_SEQ_BIT_DEPTH], AV1_SEQ_BIT_DEPTH_8
+    mov     byte [rel seq + AV1_SEQ_BIT_DEPTH], AV1_SEQ_BIT_DEPTH_10
     mov     byte [rel seq + AV1_SEQ_TIMING_INFO_PRESENT], 1
     mov     dword [rel seq + AV1_SEQ_NUM_UNITS_IN_DISPLAY_TICK], 1001
     mov     dword [rel seq + AV1_SEQ_TIME_SCALE], 60000
-    mov     byte [rel seq + AV1_SEQ_EQUAL_PICTURE_INTERVAL], 0
-    mov     byte [rel seq + AV1_SEQ_INITIAL_DISPLAY_DELAY], 0
+    mov     byte [rel seq + AV1_SEQ_EQUAL_PICTURE_INTERVAL], 1
+    mov     dword [rel seq + AV1_SEQ_NUM_TICKS_PER_PICTURE_MINUS_1], 4
+    mov     byte [rel seq + AV1_SEQ_INITIAL_DISPLAY_DELAY], 1
+    mov     dword [rel seq + AV1_SEQ_INITIAL_DISPLAY_DELAY_MINUS_1], 7
     mov     byte [rel seq + AV1_SEQ_OPERATING_POINTS_MINUS_1], 0
     mov     word [rel seq + AV1_SEQ_OPERATING_POINT_IDC], 0
     mov     byte [rel seq + AV1_SEQ_FRAME_ID_NUMBERS_PRESENT], 0
@@ -793,7 +796,19 @@ _start:
     jne     .fail_sequence_non_reduced_decode
     cmp     dword [rel seq + AV1_SEQ_TIME_SCALE], 60000
     jne     .fail_sequence_non_reduced_decode
-    cmp     byte [rel seq + AV1_SEQ_EQUAL_PICTURE_INTERVAL], 0
+    cmp     byte [rel seq + AV1_SEQ_EQUAL_PICTURE_INTERVAL], 1
+    jne     .fail_sequence_non_reduced_decode
+    cmp     dword [rel seq + AV1_SEQ_NUM_TICKS_PER_PICTURE_MINUS_1], 4
+    jne     .fail_sequence_non_reduced_decode
+    cmp     byte [rel seq + AV1_SEQ_INITIAL_DISPLAY_DELAY], 1
+    jne     .fail_sequence_non_reduced_decode
+    cmp     dword [rel seq + AV1_SEQ_INITIAL_DISPLAY_DELAY_MINUS_1], 7
+    jne     .fail_sequence_non_reduced_decode
+    cmp     byte [rel seq + AV1_SEQ_LEVEL_IDX], 13
+    jne     .fail_sequence_non_reduced_decode
+    cmp     byte [rel seq + AV1_SEQ_LEVEL_TIER], 1
+    jne     .fail_sequence_non_reduced_decode
+    cmp     byte [rel seq + AV1_SEQ_BIT_DEPTH], AV1_SEQ_BIT_DEPTH_10
     jne     .fail_sequence_non_reduced_decode
     cmp     byte [rel seq + AV1_SEQ_USE_128X128_SUPERBLOCK], 1
     jne     .fail_sequence_non_reduced_decode
@@ -872,15 +887,43 @@ _start:
     jnz     .fail_sequence_encode_invalid_timing
     cmp     edx, ERROR_INVALID_PARAM
     jne     .fail_sequence_encode_invalid_timing
+    mov     byte [rel seq + AV1_SEQ_PROFILE], AV1_SEQ_PROFILE_MAIN
+    mov     byte [rel seq + AV1_SEQ_STILL_PICTURE], 0
+    mov     byte [rel seq + AV1_SEQ_REDUCED_STILL], 0
+    mov     byte [rel seq + AV1_SEQ_LEVEL_IDX], AV1_SEQ_LEVEL_2_0
+    mov     byte [rel seq + AV1_SEQ_LEVEL_TIER], 0
+    mov     byte [rel seq + AV1_SEQ_WIDTH_BITS], 16
+    mov     byte [rel seq + AV1_SEQ_HEIGHT_BITS], 16
+    mov     dword [rel seq + AV1_SEQ_MAX_WIDTH], 320
+    mov     dword [rel seq + AV1_SEQ_MAX_HEIGHT], 240
+    mov     byte [rel seq + AV1_SEQ_BIT_DEPTH], AV1_SEQ_BIT_DEPTH_8
     mov     dword [rel seq + AV1_SEQ_NUM_UNITS_IN_DISPLAY_TICK], 1001
+    mov     dword [rel seq + AV1_SEQ_TIME_SCALE], 60000
     mov     byte [rel seq + AV1_SEQ_EQUAL_PICTURE_INTERVAL], 1
+    mov     dword [rel seq + AV1_SEQ_NUM_TICKS_PER_PICTURE_MINUS_1], 2
+    mov     byte [rel seq + AV1_SEQ_INITIAL_DISPLAY_DELAY], 0
+    mov     dword [rel seq + AV1_SEQ_INITIAL_DISPLAY_DELAY_MINUS_1], 0
+    mov     byte [rel seq + AV1_SEQ_OPERATING_POINTS_MINUS_1], 0
+    mov     word [rel seq + AV1_SEQ_OPERATING_POINT_IDC], 0
     mov     rdi, outbuf
     mov     esi, 32
     mov     rdx, seq
     call    er_av1_sequence_encode
     test    eax, eax
+    jz      .fail_sequence_encode_invalid_timing
+    test    edx, edx
     jnz     .fail_sequence_encode_invalid_timing
-    cmp     edx, ERROR_UNSUPPORTED
+    mov     rdi, outbuf
+    mov     esi, 32
+    mov     rdx, seq
+    call    er_av1_sequence_decode
+    test    eax, eax
+    jz      .fail_sequence_encode_invalid_timing
+    test    edx, edx
+    jnz     .fail_sequence_encode_invalid_timing
+    cmp     byte [rel seq + AV1_SEQ_EQUAL_PICTURE_INTERVAL], 1
+    jne     .fail_sequence_encode_invalid_timing
+    cmp     dword [rel seq + AV1_SEQ_NUM_TICKS_PER_PICTURE_MINUS_1], 2
     jne     .fail_sequence_encode_invalid_timing
     inc     qword [rel passed]
     jmp     .done

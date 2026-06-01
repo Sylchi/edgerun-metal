@@ -28,6 +28,7 @@ extern er_av1_reduced_still_info_raw_frame_raw420
 extern er_av1_reduced_still_info_ivf_frame_raw420
 extern er_av1_reduced_still_decode_raw420
 extern er_av1_reduced_still_validate_raw420
+extern er_av1_reduced_still_validate_raw_frame_raw420
 extern er_av1_reduced_still_validate_ivf_frame_raw420
 extern er_av1_reduced_still_count_raw_frames
 extern er_av1_stream_decode_frame
@@ -1220,8 +1221,25 @@ _start:
 	cmp     dword [rel info + AV1_INFO_BYTES_CONSUMED], eax
 	jne     .fail_raw_info_second
 	inc     qword [rel passed]
-	jmp     .raw_seek_second
+	jmp     .raw_validate_second
 .fail_raw_info_second:
+	inc     qword [rel failed]
+
+.raw_validate_second:
+	mov     rdi, ivfbuf
+	mov     esi, [rel raw_len]
+	mov     edx, 1
+	mov     rcx, desc
+	call    er_av1_reduced_still_validate_raw_frame_raw420
+	test    eax, eax
+	jz      .fail_raw_validate_second
+	test    edx, edx
+	jnz     .fail_raw_validate_second
+	cmp     eax, [rel raw_len]
+	jne     .fail_raw_validate_second
+	inc     qword [rel passed]
+	jmp     .raw_seek_second
+.fail_raw_validate_second:
 	inc     qword [rel failed]
 
 .raw_seek_second:

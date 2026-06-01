@@ -824,7 +824,30 @@ er_fn er_av1_frame_decode
     call_read_bit
     mov     [r13 + AV1_FRAME_USING_QMATRIX], al
     test    eax, eax
-    jnz     .unsupported
+    jnz     .read_qmatrix_levels
+    mov     byte [r13 + AV1_FRAME_QM_Y], 0
+    mov     byte [r13 + AV1_FRAME_QM_U], 0
+    mov     byte [r13 + AV1_FRAME_QM_V], 0
+    jmp     .read_segmentation
+.read_qmatrix_levels:
+    read_bits AV1_QM_LEVEL_BITS
+    mov     [r13 + AV1_FRAME_QM_Y], al
+    cmp     byte [r12 + AV1_SEQ_MONO_CHROME], 1
+    je      .read_qmatrix_mono
+    read_bits AV1_QM_LEVEL_BITS
+    mov     [r13 + AV1_FRAME_QM_U], al
+    cmp     byte [r12 + AV1_SEQ_SEPARATE_UV_DELTA_Q], 1
+    jne     .read_qmatrix_copy_v
+    read_bits AV1_QM_LEVEL_BITS
+    mov     [r13 + AV1_FRAME_QM_V], al
+    jmp     .read_segmentation
+.read_qmatrix_copy_v:
+    mov     al, [r13 + AV1_FRAME_QM_U]
+    mov     [r13 + AV1_FRAME_QM_V], al
+    jmp     .read_segmentation
+.read_qmatrix_mono:
+    mov     byte [r13 + AV1_FRAME_QM_U], 0
+    mov     byte [r13 + AV1_FRAME_QM_V], 0
     jmp     .read_segmentation
 
 .read_segmentation:
@@ -855,7 +878,7 @@ er_fn er_av1_frame_decode
     call_read_bit
     mov     [r13 + AV1_FRAME_SEGMENTATION_UPDATE_DATA], al
     test    eax, eax
-    jz      .unsupported
+    jz      .read_segmentation_no_update_data
 .read_segmentation_data:
     xor     ebx, ebx
 .read_segmentation_segment_loop:
@@ -872,6 +895,22 @@ er_fn er_av1_frame_decode
     read_segment_feature AV1_SEGMENT_FEATURE_GLOBALMV, AV1_SEGMENT_GLOBALMV_BITS, AV1_SEGMENT_GLOBALMV_MAX, 0
     inc     ebx
     jmp     .read_segmentation_segment_loop
+.read_segmentation_no_update_data:
+    xor     ebx, ebx
+.read_segmentation_no_update_mask_loop:
+    cmp     ebx, AV1_SEGMENT_MAX_SEGMENTS
+    jae     .read_segmentation_no_update_data_loop_start
+    mov     byte [r13 + AV1_FRAME_SEGMENT_FEATURE_MASKS + rbx], 0
+    inc     ebx
+    jmp     .read_segmentation_no_update_mask_loop
+.read_segmentation_no_update_data_loop_start:
+    xor     ebx, ebx
+.read_segmentation_no_update_data_loop:
+    cmp     ebx, AV1_SEGMENT_MAX_SEGMENTS * AV1_SEGMENT_FEATURE_COUNT
+    jae     .read_delta_q_params
+    mov     dword [r13 + AV1_FRAME_SEGMENT_FEATURE_DATA + rbx * 4], 0
+    inc     ebx
+    jmp     .read_segmentation_no_update_data_loop
 
 .read_delta_q_params:
     cmp     byte [r13 + AV1_FRAME_BASE_Q_IDX], 0
@@ -1244,6 +1283,7 @@ er_fn er_av1_frame_decode
     ja      .corrupt
     mov     [r13 + AV1_FRAME_FILM_GRAIN_NUM_CR_POINTS], al
     read_film_grain_points AV1_FRAME_FILM_GRAIN_NUM_CR_POINTS, AV1_FRAME_FILM_GRAIN_CR_VALUES, AV1_FRAME_FILM_GRAIN_CR_SCALING
+    jmp     .read_film_grain_scaling
 .read_film_grain_chroma_counts_zero:
     mov     byte [r13 + AV1_FRAME_FILM_GRAIN_NUM_CB_POINTS], 0
     mov     byte [r13 + AV1_FRAME_FILM_GRAIN_NUM_CR_POINTS], 0
@@ -1447,8 +1487,20 @@ er_fn er_av1_frame_encode
     check_dword_signed_rcx AV1_FRAME_DELTA_Q_U_AC, AV1_QUANT_DELTA_MAX
     check_dword_signed_rcx AV1_FRAME_DELTA_Q_V_DC, AV1_QUANT_DELTA_MAX
     check_dword_signed_rcx AV1_FRAME_DELTA_Q_V_AC, AV1_QUANT_DELTA_MAX
-    cmp     byte [rcx + AV1_FRAME_USING_QMATRIX], 0
-    jne     .unsupported
+    cmp     byte [rcx + AV1_FRAME_USING_QMATRIX], 1
+    ja      .invalid_param
+    cmp     byte [rcx + AV1_FRAME_USING_QMATRIX], 1
+    jne     .check_qmatrix_done
+    check_byte_max_rcx AV1_FRAME_QM_Y, AV1_QM_LEVEL_MAX
+    cmp     byte [rdx + AV1_SEQ_MONO_CHROME], 1
+    je      .check_qmatrix_chroma_zero
+    check_byte_max_rcx AV1_FRAME_QM_U, AV1_QM_LEVEL_MAX
+    check_byte_max_rcx AV1_FRAME_QM_V, AV1_QM_LEVEL_MAX
+    jmp     .check_qmatrix_done
+.check_qmatrix_chroma_zero:
+    check_byte_zero_rcx AV1_FRAME_QM_U
+    check_byte_zero_rcx AV1_FRAME_QM_V
+.check_qmatrix_done:
     check_byte_max_rcx AV1_FRAME_LOOP_FILTER_LEVEL_Y_V, AV1_LOOP_FILTER_LEVEL_MAX
     check_byte_max_rcx AV1_FRAME_LOOP_FILTER_LEVEL_Y_H, AV1_LOOP_FILTER_LEVEL_MAX
     check_byte_max_rcx AV1_FRAME_LOOP_FILTER_LEVEL_U, AV1_LOOP_FILTER_LEVEL_MAX
@@ -1831,9 +1883,17 @@ er_fn er_av1_frame_encode
     write_delta_q_from AV1_FRAME_DELTA_Q_V_DC
     write_delta_q_from AV1_FRAME_DELTA_Q_V_AC
 .write_qmatrix:
-    cmp     byte [r13 + AV1_FRAME_USING_QMATRIX], 0
-    jne     .unsupported
-    write_bits 0, 1
+    movzx   esi, byte [r13 + AV1_FRAME_USING_QMATRIX]
+    write_one_from_esi
+    cmp     byte [r13 + AV1_FRAME_USING_QMATRIX], 1
+    jne     .write_segmentation
+    write_byte_field_bits AV1_FRAME_QM_Y, AV1_QM_LEVEL_BITS
+    cmp     byte [r12 + AV1_SEQ_MONO_CHROME], 1
+    je      .write_segmentation
+    write_byte_field_bits AV1_FRAME_QM_U, AV1_QM_LEVEL_BITS
+    cmp     byte [r12 + AV1_SEQ_SEPARATE_UV_DELTA_Q], 1
+    jne     .write_segmentation
+    write_byte_field_bits AV1_FRAME_QM_V, AV1_QM_LEVEL_BITS
     jmp     .write_segmentation
 
 .write_segmentation:
@@ -1849,7 +1909,9 @@ er_fn er_av1_frame_encode
 .write_segmentation_temporal_done:
     movzx   esi, byte [r13 + AV1_FRAME_SEGMENTATION_UPDATE_DATA]
     cmp     esi, 1
-    jne     .unsupported
+    ja      .invalid_param
+    test    esi, esi
+    jz      .write_segmentation_no_update_data
     write_one_from_esi
 .write_segmentation_data:
     xor     ebx, ebx
@@ -1866,6 +1928,9 @@ er_fn er_av1_frame_encode
     write_segment_feature AV1_SEGMENT_FEATURE_GLOBALMV, AV1_SEGMENT_GLOBALMV_BITS, AV1_SEGMENT_GLOBALMV_MAX, 0
     inc     ebx
     jmp     .write_segmentation_segment_loop
+.write_segmentation_no_update_data:
+    write_one_from_esi
+    jmp     .write_delta_q_params
 
 .write_delta_q_params:
     cmp     byte [r13 + AV1_FRAME_BASE_Q_IDX], 0
@@ -2150,6 +2215,7 @@ er_fn er_av1_frame_encode
 .write_film_grain_cr_count:
     write_byte_field_max_bits AV1_FRAME_FILM_GRAIN_NUM_CR_POINTS, AV1_FILM_GRAIN_CHROMA_POINTS_MAX, AV1_FILM_GRAIN_CHROMA_POINTS_BITS
     write_film_grain_points AV1_FRAME_FILM_GRAIN_NUM_CR_POINTS, AV1_FRAME_FILM_GRAIN_CR_VALUES, AV1_FRAME_FILM_GRAIN_CR_SCALING
+    jmp     .write_film_grain_scaling
 .write_film_grain_chroma_counts_zero_required:
     cmp     byte [r13 + AV1_FRAME_FILM_GRAIN_NUM_CB_POINTS], 0
     jne     .invalid_param

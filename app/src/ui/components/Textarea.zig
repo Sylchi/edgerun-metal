@@ -1,8 +1,6 @@
 const std = @import("std");
-const clock = @import("../../clock.zig");
 const common = @import("../component_common.zig");
 const interaction = @import("../interaction.zig");
-const object = @import("../../object.zig");
 const ui = @import("../core.zig");
 const text_component = @import("Text.zig");
 const layout = @import("../layouts/Types.zig");
@@ -21,6 +19,8 @@ pub const Textarea = struct {
     flags: common.ComponentFlags = .{},
     placeholder: []const u8,
     value: []const u8 = "",
+
+    const serialization = component_codec.OneStringComponent(Textarea, "textarea", "placeholder");
 
     pub fn node(self: Textarea) ui.Node {
         return ui.textareaNode(self.id, self.placeholder);
@@ -70,17 +70,9 @@ pub const Textarea = struct {
         ).applyExact(constraints);
     }
 
-    pub fn toObject(self: Textarea, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
-        return component_codec.oneStringObject(.textarea, self.id, self.placeholder, ui_out, object_out, epoch);
-    }
-
-    pub fn writeRecord(self: Textarea, writer: *component_codec.Writer, index: usize) bool {
-        return component_codec.oneStringRecord(writer, index, .textarea, self.id, self.placeholder);
-    }
-
-    pub fn fromView(view: object.View) Error!Textarea {
-        return component_codec.decodeFromView(Textarea, .textarea, view);
-    }
+    pub const toObject = serialization.toObject;
+    pub const writeRecord = serialization.writeRecord;
+    pub const fromView = serialization.fromView;
 
     pub fn fromNode(textarea: @FieldType(ui.Node, "textarea")) Error!Textarea {
         return .{ .id = textarea.id, .placeholder = textarea.placeholder };

@@ -2297,13 +2297,10 @@ er_fn er_av1_reduced_still_validate_raw420
     test    edx, edx
     jnz     .done
     mov     ebx, eax
-    mov     edi, [r12 + AV1_REDUCED_FRAME + AV1_FRAME_WIDTH]
-    mov     esi, [r12 + AV1_REDUCED_FRAME + AV1_FRAME_HEIGHT]
-    call    er_av1_tile_raw420_size
+    mov     rdi, r12
+    call    validate_reduced_raw420_size
     test    edx, edx
     jnz     .done
-    cmp     eax, [r12 + AV1_REDUCED_TILE_LEN]
-    jne     .corrupt
     mov     eax, ebx
     er_ok
     jmp     .done
@@ -2311,9 +2308,33 @@ er_fn er_av1_reduced_still_validate_raw420
     xor     eax, eax
     er_err  ERROR_INVALID_PARAM
     jmp     .done
-.corrupt:
+.done:
+    er_pop  rbx, r12
+    er_ret
+
+; er_av1_reduced_still_validate_raw_frame_raw420(stream, len, frame_index, reduced_desc)
+; Validates one indexed raw temporal-delimited reduced-still AV1 frame carries exactly one raw420 tile payload.
+; rdi=stream, esi=len, edx=frame_index, rcx=reduced_desc. Returns eax=next raw cursor.
+er_fn er_av1_reduced_still_validate_raw_frame_raw420
+    er_push rbx, r12
+    test    rcx, rcx
+    jz      .invalid_param
+    mov     r12, rcx
+    call    er_av1_reduced_still_decode_raw_frame
+    test    edx, edx
+    jnz     .done
+    mov     ebx, eax
+    mov     rdi, r12
+    call    validate_reduced_raw420_size
+    test    edx, edx
+    jnz     .done
+    mov     eax, ebx
+    er_ok
+    jmp     .done
+.invalid_param:
     xor     eax, eax
-    er_err  ERROR_CORRUPT
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done
 .done:
     er_pop  rbx, r12
     er_ret
@@ -2330,13 +2351,10 @@ er_fn er_av1_reduced_still_validate_ivf_frame_raw420
     test    edx, edx
     jnz     .done
     mov     ebx, eax
-    mov     edi, [r12 + AV1_REDUCED_FRAME + AV1_FRAME_WIDTH]
-    mov     esi, [r12 + AV1_REDUCED_FRAME + AV1_FRAME_HEIGHT]
-    call    er_av1_tile_raw420_size
+    mov     rdi, r12
+    call    validate_reduced_raw420_size
     test    edx, edx
     jnz     .done
-    cmp     eax, [r12 + AV1_REDUCED_TILE_LEN]
-    jne     .corrupt
     mov     eax, ebx
     er_ok
     jmp     .done
@@ -2344,9 +2362,6 @@ er_fn er_av1_reduced_still_validate_ivf_frame_raw420
     xor     eax, eax
     er_err  ERROR_INVALID_PARAM
     jmp     .done
-.corrupt:
-    xor     eax, eax
-    er_err  ERROR_CORRUPT
 .done:
     er_pop  rbx, r12
     er_ret
@@ -2477,4 +2492,23 @@ fill_info_raw420:
     er_err  ERROR_CORRUPT
 .done:
     er_pop  rbx, r12, r13
+    ret
+
+validate_reduced_raw420_size:
+    er_push rbx
+    mov     rbx, rdi
+    mov     edi, [rbx + AV1_REDUCED_FRAME + AV1_FRAME_WIDTH]
+    mov     esi, [rbx + AV1_REDUCED_FRAME + AV1_FRAME_HEIGHT]
+    call    er_av1_tile_raw420_size
+    test    edx, edx
+    jnz     .done
+    cmp     eax, [rbx + AV1_REDUCED_TILE_LEN]
+    jne     .corrupt
+    er_ok
+    jmp     .done
+.corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+.done:
+    er_pop  rbx
     ret

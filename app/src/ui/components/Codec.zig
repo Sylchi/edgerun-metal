@@ -85,6 +85,24 @@ pub fn emptyRecord(writer: *Writer, index: usize, kind: codec.RecordKind) bool {
     return writer.record(index, kind, 0, .{}, .{});
 }
 
+pub fn EmptyComponent(comptime ComponentType: type, comptime tag_name: []const u8) type {
+    return struct {
+        pub fn toObject(self: ComponentType, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
+            _ = self;
+            return emptyObject(@field(codec.RecordKind, tag_name), ui_out, object_out, epoch);
+        }
+
+        pub fn writeRecord(self: ComponentType, writer: *Writer, index: usize) bool {
+            _ = self;
+            return emptyRecord(writer, index, @field(codec.RecordKind, tag_name));
+        }
+
+        pub fn fromView(view: object.View) Error!ComponentType {
+            return ComponentType.fromNode(try nodeView(view, @field(std.meta.Tag(ui.Node), tag_name)));
+        }
+    };
+}
+
 pub fn refRecord(writer: *Writer, index: usize, kind: codec.RecordKind, id: u32, value: codec.StringRef) bool {
     return writer.record(index, kind, id, .{}, value);
 }
@@ -92,6 +110,38 @@ pub fn refRecord(writer: *Writer, index: usize, kind: codec.RecordKind, id: u32,
 pub fn oneStringRecord(writer: *Writer, index: usize, kind: codec.RecordKind, id: u32, value: []const u8) bool {
     const a = writer.string(value) orelse return false;
     return writer.record(index, kind, id, a, .{});
+}
+
+pub fn OneStringComponent(comptime ComponentType: type, comptime tag_name: []const u8, comptime value_field: []const u8) type {
+    return struct {
+        pub fn toObject(self: ComponentType, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
+            return oneStringObject(@field(codec.RecordKind, tag_name), self.id, @field(self, value_field), ui_out, object_out, epoch);
+        }
+
+        pub fn writeRecord(self: ComponentType, writer: *Writer, index: usize) bool {
+            return oneStringRecord(writer, index, @field(codec.RecordKind, tag_name), self.id, @field(self, value_field));
+        }
+
+        pub fn fromView(view: object.View) Error!ComponentType {
+            return decodeFromView(ComponentType, @field(std.meta.Tag(ui.Node), tag_name), view);
+        }
+    };
+}
+
+pub fn OneStringFixedIdComponent(comptime ComponentType: type, comptime tag_name: []const u8, comptime id: u32, comptime value_field: []const u8) type {
+    return struct {
+        pub fn toObject(self: ComponentType, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
+            return oneStringObject(@field(codec.RecordKind, tag_name), id, @field(self, value_field), ui_out, object_out, epoch);
+        }
+
+        pub fn writeRecord(self: ComponentType, writer: *Writer, index: usize) bool {
+            return oneStringRecord(writer, index, @field(codec.RecordKind, tag_name), id, @field(self, value_field));
+        }
+
+        pub fn fromView(view: object.View) Error!ComponentType {
+            return decodeFromView(ComponentType, @field(std.meta.Tag(ui.Node), tag_name), view);
+        }
+    };
 }
 
 pub fn stringAndRefRecord(writer: *Writer, index: usize, kind: codec.RecordKind, id: u32, value: []const u8, b: codec.StringRef) bool {
@@ -103,6 +153,22 @@ pub fn twoStringRecord(writer: *Writer, index: usize, kind: codec.RecordKind, id
     const a = writer.string(first) orelse return false;
     const b = writer.string(second) orelse return false;
     return writer.record(index, kind, id, a, b);
+}
+
+pub fn TwoStringComponent(comptime ComponentType: type, comptime tag_name: []const u8, comptime first_field: []const u8, comptime second_field: []const u8) type {
+    return struct {
+        pub fn toObject(self: ComponentType, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
+            return twoStringObject(@field(codec.RecordKind, tag_name), self.id, @field(self, first_field), @field(self, second_field), ui_out, object_out, epoch);
+        }
+
+        pub fn writeRecord(self: ComponentType, writer: *Writer, index: usize) bool {
+            return twoStringRecord(writer, index, @field(codec.RecordKind, tag_name), self.id, @field(self, first_field), @field(self, second_field));
+        }
+
+        pub fn fromView(view: object.View) Error!ComponentType {
+            return decodeFromView(ComponentType, @field(std.meta.Tag(ui.Node), tag_name), view);
+        }
+    };
 }
 
 pub fn boolRef(value: bool) codec.StringRef {

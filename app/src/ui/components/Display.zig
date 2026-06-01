@@ -15,6 +15,8 @@ const constrainPreferredSize = component_primitives.constrainPreferredSize;
 const contentInset = component_primitives.contentInset;
 
 pub const Separator = struct {
+    const serialization = component_codec.EmptyComponent(Separator, "separator");
+
     pub fn node(self: Separator) ui.Node {
         _ = self;
         return ui.separatorNode();
@@ -32,19 +34,9 @@ pub const Separator = struct {
         return measureFlexibleLine(separator_height, constraints);
     }
 
-    pub fn toObject(self: Separator, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
-        _ = self;
-        return component_codec.emptyObject(.separator, ui_out, object_out, epoch);
-    }
-
-    pub fn writeRecord(self: Separator, writer: *component_codec.Writer, index: usize) bool {
-        _ = self;
-        return component_codec.emptyRecord(writer, index, .separator);
-    }
-
-    pub fn fromView(view: object.View) Error!Separator {
-        return fromNode(try component_codec.nodeView(view, .separator));
-    }
+    pub const toObject = serialization.toObject;
+    pub const writeRecord = serialization.writeRecord;
+    pub const fromView = serialization.fromView;
 
     pub fn fromNode(separator: @FieldType(ui.Node, "separator")) Error!Separator {
         _ = separator;
@@ -53,6 +45,8 @@ pub const Separator = struct {
 };
 
 pub const Skeleton = struct {
+    const serialization = component_codec.EmptyComponent(Skeleton, "skeleton");
+
     pub fn node(self: Skeleton) ui.Node {
         _ = self;
         return ui.skeletonNode();
@@ -76,19 +70,9 @@ pub const Skeleton = struct {
         ).applyExact(constraints);
     }
 
-    pub fn toObject(self: Skeleton, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
-        _ = self;
-        return component_codec.emptyObject(.skeleton, ui_out, object_out, epoch);
-    }
-
-    pub fn writeRecord(self: Skeleton, writer: *component_codec.Writer, index: usize) bool {
-        _ = self;
-        return component_codec.emptyRecord(writer, index, .skeleton);
-    }
-
-    pub fn fromView(view: object.View) Error!Skeleton {
-        return fromNode(try component_codec.nodeView(view, .skeleton));
-    }
+    pub const toObject = serialization.toObject;
+    pub const writeRecord = serialization.writeRecord;
+    pub const fromView = serialization.fromView;
 
     pub fn fromNode(skeleton: @FieldType(ui.Node, "skeleton")) Error!Skeleton {
         _ = skeleton;
@@ -97,6 +81,8 @@ pub const Skeleton = struct {
 };
 
 pub const Spinner = struct {
+    const serialization = component_codec.EmptyComponent(Spinner, "spinner");
+
     pub fn node(self: Spinner) ui.Node {
         _ = self;
         return ui.spinnerNode();
@@ -116,19 +102,9 @@ pub const Spinner = struct {
         return measureIntrinsic(.{ .w = spinner_size, .h = spinner_size }, constraints);
     }
 
-    pub fn toObject(self: Spinner, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
-        _ = self;
-        return component_codec.emptyObject(.spinner, ui_out, object_out, epoch);
-    }
-
-    pub fn writeRecord(self: Spinner, writer: *component_codec.Writer, index: usize) bool {
-        _ = self;
-        return component_codec.emptyRecord(writer, index, .spinner);
-    }
-
-    pub fn fromView(view: object.View) Error!Spinner {
-        return fromNode(try component_codec.nodeView(view, .spinner));
-    }
+    pub const toObject = serialization.toObject;
+    pub const writeRecord = serialization.writeRecord;
+    pub const fromView = serialization.fromView;
 
     pub fn fromNode(spinner: @FieldType(ui.Node, "spinner")) Error!Spinner {
         _ = spinner;
@@ -215,6 +191,8 @@ pub const AspectRatio = struct {
 pub const Kbd = struct {
     label: []const u8,
 
+    const serialization = component_codec.OneStringFixedIdComponent(Kbd, "kbd", 0, "label");
+
     pub fn node(self: Kbd) ui.Node {
         return ui.kbdNode(self.label);
     }
@@ -243,17 +221,9 @@ pub const Kbd = struct {
         ).applyExact(constraints);
     }
 
-    pub fn toObject(self: Kbd, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
-        return component_codec.oneStringObject(.kbd, 0, self.label, ui_out, object_out, epoch);
-    }
-
-    pub fn writeRecord(self: Kbd, writer: *component_codec.Writer, index: usize) bool {
-        return component_codec.oneStringRecord(writer, index, .kbd, 0, self.label);
-    }
-
-    pub fn fromView(view: object.View) Error!Kbd {
-        return component_codec.decodeFromView(Kbd, .kbd, view);
-    }
+    pub const toObject = serialization.toObject;
+    pub const writeRecord = serialization.writeRecord;
+    pub const fromView = serialization.fromView;
 
     pub fn fromNode(kbd: @FieldType(ui.Node, "kbd")) Error!Kbd {
         return .{ .label = kbd.label };
@@ -262,6 +232,8 @@ pub const Kbd = struct {
 
 pub const Avatar = struct {
     label: []const u8,
+
+    const serialization = component_codec.OneStringFixedIdComponent(Avatar, "avatar", 0, "label");
 
     pub fn node(self: Avatar) ui.Node {
         return ui.avatarNode(self.label);
@@ -287,17 +259,9 @@ pub const Avatar = struct {
         return measureIntrinsic(.{ .w = avatar_size, .h = avatar_size }, constraints);
     }
 
-    pub fn toObject(self: Avatar, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
-        return component_codec.oneStringObject(.avatar, 0, self.label, ui_out, object_out, epoch);
-    }
-
-    pub fn writeRecord(self: Avatar, writer: *component_codec.Writer, index: usize) bool {
-        return component_codec.oneStringRecord(writer, index, .avatar, 0, self.label);
-    }
-
-    pub fn fromView(view: object.View) Error!Avatar {
-        return component_codec.decodeFromView(Avatar, .avatar, view);
-    }
+    pub const toObject = serialization.toObject;
+    pub const writeRecord = serialization.writeRecord;
+    pub const fromView = serialization.fromView;
 
     pub fn fromNode(avatar: @FieldType(ui.Node, "avatar")) Error!Avatar {
         return .{ .label = avatar.label };
@@ -306,6 +270,8 @@ pub const Avatar = struct {
 
 pub const Label = struct {
     value: []const u8,
+
+    const serialization = component_codec.OneStringFixedIdComponent(Label, "label", 0, "value");
 
     pub fn node(self: Label) ui.Node {
         return ui.labelNode(self.value);
@@ -327,17 +293,9 @@ pub const Label = struct {
         ).applyExact(constraints);
     }
 
-    pub fn toObject(self: Label, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
-        return component_codec.oneStringObject(.label, 0, self.value, ui_out, object_out, epoch);
-    }
-
-    pub fn writeRecord(self: Label, writer: *component_codec.Writer, index: usize) bool {
-        return component_codec.oneStringRecord(writer, index, .label, 0, self.value);
-    }
-
-    pub fn fromView(view: object.View) Error!Label {
-        return component_codec.decodeFromView(Label, .label, view);
-    }
+    pub const toObject = serialization.toObject;
+    pub const writeRecord = serialization.writeRecord;
+    pub const fromView = serialization.fromView;
 
     pub fn fromNode(label: @FieldType(ui.Node, "label")) Error!Label {
         return .{ .value = label.value };

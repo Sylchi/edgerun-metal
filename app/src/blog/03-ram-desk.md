@@ -10,6 +10,12 @@ RAM is where the living version of a program exists. The file on disk may contai
 
 > Mental model: memory is temporary authority to exist while work is happening.
 
+That boundary is deliberate. Apps should not turn every temporary thought into
+disk traffic. Scratch data, caches, previews, failed edits, and decoded media
+belong in memory until the app crosses an explicit commit or flush boundary.
+Memory is what running programs use for work; storage is what the system uses
+when work is meant to survive.
+
 ## Why this matters
 
 When an app is alive, its working state lives in RAM:
@@ -52,3 +58,8 @@ RAM is where a program lives while it is alive. Controlling memory means control
 ## EdgeRun seed
 
 EdgeRun apps receive memory from a parent runtime. Subapps can only use what the parent gave them. When an app closes, its memory can disappear cleanly, and sensitive work can be scoped to the operation that actually needed it.
+
+EdgeRun app storage follows the same rule: app writes first land in an in-memory
+object store. Only an explicit flush asks the kernel to commit selected dirty
+objects to durable storage. This prevents ordinary app activity from burning I/O
+or accidentally making temporary state permanent.

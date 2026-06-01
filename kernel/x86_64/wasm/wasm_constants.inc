@@ -13,335 +13,233 @@ default rel
 ; ------------------------------------------------------------------
 ; Binary op: pop right, pop left, compute, push
 %macro _wasm_binop 2
-    mov     rax, [exec_stack_len]
-    test    rax, rax
-    jz      .underflow_error
-    dec     rax
-    mov     [exec_stack_len], rax
-    mov     %1cx, [exec_stack + rax * 8]
-    mov     rax, [exec_stack_len]
-    test    rax, rax
-    jz      .underflow_error
-    dec     rax
-    mov     [exec_stack_len], rax
-    mov     %1ax, [exec_stack + rax * 8]
-    %2      %1ax, %1cx
     mov     r8, [exec_stack_len]
-    cmp     r8, MAX_STACK
-    jae     .overflow_error
+    cmp     r8, 2
+    jb      .underflow_error
+    sub     r8, 2
+    mov     %1cx, [exec_stack + r8 * 8 + 8]
+    mov     %1ax, [exec_stack + r8 * 8]
+    %2      %1ax, %1cx
     mov     [exec_stack + r8 * 8], %1ax
-    inc     qword [exec_stack_len]
+    inc     r8
+    mov     [exec_stack_len], r8
     jmp     .dispatch_next
 %endm
 
 ; Shift/rotate op: pop shift, pop value, shift using cl, push
 %macro _wasm_shiftop 2
-    mov     rax, [exec_stack_len]
-    test    rax, rax
-    jz      .underflow_error
-    dec     rax
-    mov     [exec_stack_len], rax
-    mov     %1cx, [exec_stack + rax * 8]
-    mov     rax, [exec_stack_len]
-    test    rax, rax
-    jz      .underflow_error
-    dec     rax
-    mov     [exec_stack_len], rax
-    mov     %1ax, [exec_stack + rax * 8]
-    %2      %1ax, cl
     mov     r8, [exec_stack_len]
-    cmp     r8, MAX_STACK
-    jae     .overflow_error
+    cmp     r8, 2
+    jb      .underflow_error
+    sub     r8, 2
+    mov     %1cx, [exec_stack + r8 * 8 + 8]
+    mov     %1ax, [exec_stack + r8 * 8]
+    %2      %1ax, cl
     mov     [exec_stack + r8 * 8], %1ax
-    inc     qword [exec_stack_len]
+    inc     r8
+    mov     [exec_stack_len], r8
     jmp     .dispatch_next
 %endm
 
 ; Compare op: pop right, pop left, cmp, setCC, push
 %macro _wasm_cmpop 2
-    mov     rax, [exec_stack_len]
-    test    rax, rax
-    jz      .underflow_error
-    dec     rax
-    mov     [exec_stack_len], rax
-    mov     %1cx, [exec_stack + rax * 8]
-    mov     rax, [exec_stack_len]
-    test    rax, rax
-    jz      .underflow_error
-    dec     rax
-    mov     [exec_stack_len], rax
-    mov     %1ax, [exec_stack + rax * 8]
+    mov     r8, [exec_stack_len]
+    cmp     r8, 2
+    jb      .underflow_error
+    sub     r8, 2
+    mov     %1cx, [exec_stack + r8 * 8 + 8]
+    mov     %1ax, [exec_stack + r8 * 8]
     cmp     %1ax, %1cx
     %2      al
     movzx   eax, al
-    mov     r8, [exec_stack_len]
-    cmp     r8, MAX_STACK
-    jae     .overflow_error
     mov     [exec_stack + r8 * 8], rax
-    inc     qword [exec_stack_len]
+    inc     r8
+    mov     [exec_stack_len], r8
     jmp     .dispatch_next
 %endm
 
 ; Unary op: pop value, compute, push
 %macro _wasm_unop 2
-    mov     rax, [exec_stack_len]
-    test    rax, rax
-    jz      .underflow_error
-    dec     rax
-    mov     [exec_stack_len], rax
-    mov     %1ax, [exec_stack + rax * 8]
-    %2      %1ax, %1ax
     mov     r8, [exec_stack_len]
-    cmp     r8, MAX_STACK
-    jae     .overflow_error
+    test    r8, r8
+    jz      .underflow_error
+    dec     r8
+    mov     %1ax, [exec_stack + r8 * 8]
+    %2      %1ax, %1ax
     mov     [exec_stack + r8 * 8], %1ax
-    inc     qword [exec_stack_len]
     jmp     .dispatch_next
 %endm
 
 ; Zero-test op: pop value, test+setz, push
 %macro _wasm_eqz 1
-    mov     rax, [exec_stack_len]
-    test    rax, rax
+    mov     r8, [exec_stack_len]
+    test    r8, r8
     jz      .underflow_error
-    dec     rax
-    mov     [exec_stack_len], rax
-    mov     %1ax, [exec_stack + rax * 8]
+    dec     r8
+    mov     %1ax, [exec_stack + r8 * 8]
     test    %1ax, %1ax
     setz    al
     movzx   eax, al
-    mov     r8, [exec_stack_len]
-    cmp     r8, MAX_STACK
-    jae     .overflow_error
     mov     [exec_stack + r8 * 8], rax
-    inc     qword [exec_stack_len]
     jmp     .dispatch_next
 %endm
 
 ; Float binary ops (SSE scalar)
 ; f32: pop right (low32), pop left (low32), compute, push result
 %macro _wasm_f32_binop 1
-    mov     rax, [exec_stack_len]
-    test    rax, rax
-    jz      .underflow_error
-    dec     rax
-    mov     [exec_stack_len], rax
-    movd    xmm1, [exec_stack + rax * 8]
-    mov     rax, [exec_stack_len]
-    test    rax, rax
-    jz      .underflow_error
-    dec     rax
-    mov     [exec_stack_len], rax
-    movd    xmm0, [exec_stack + rax * 8]
+    mov     r8, [exec_stack_len]
+    cmp     r8, 2
+    jb      .underflow_error
+    sub     r8, 2
+    movd    xmm1, [exec_stack + r8 * 8 + 8]
+    movd    xmm0, [exec_stack + r8 * 8]
     %1      xmm0, xmm1
     movd    eax, xmm0
-    mov     r8, [exec_stack_len]
-    cmp     r8, MAX_STACK
-    jae     .overflow_error
     mov     [exec_stack + r8 * 8], rax
-    inc     qword [exec_stack_len]
+    inc     r8
+    mov     [exec_stack_len], r8
     jmp     .dispatch_next
 %endm
 
 ; f64: pop right, pop left, compute, push result
 %macro _wasm_f64_binop 1
-    mov     rax, [exec_stack_len]
-    test    rax, rax
-    jz      .underflow_error
-    dec     rax
-    mov     [exec_stack_len], rax
-    movq    xmm1, [exec_stack + rax * 8]
-    mov     rax, [exec_stack_len]
-    test    rax, rax
-    jz      .underflow_error
-    dec     rax
-    mov     [exec_stack_len], rax
-    movq    xmm0, [exec_stack + rax * 8]
+    mov     r8, [exec_stack_len]
+    cmp     r8, 2
+    jb      .underflow_error
+    sub     r8, 2
+    movq    xmm1, [exec_stack + r8 * 8 + 8]
+    movq    xmm0, [exec_stack + r8 * 8]
     %1      xmm0, xmm1
     movq    rax, xmm0
-    mov     r8, [exec_stack_len]
-    cmp     r8, MAX_STACK
-    jae     .overflow_error
     mov     [exec_stack + r8 * 8], rax
-    inc     qword [exec_stack_len]
+    inc     r8
+    mov     [exec_stack_len], r8
     jmp     .dispatch_next
 %endm
 
 ; Float unary round ops: pop, compute via roundss/roundsd, push
 ; arg2 = rounding mode immediate (0=nearest, 1=floor, 2=ceil, 3=trunc)
 %macro _wasm_f32_unop_round 2
-    mov     rax, [exec_stack_len]
-    test    rax, rax
+    mov     r8, [exec_stack_len]
+    test    r8, r8
     jz      .underflow_error
-    dec     rax
-    mov     [exec_stack_len], rax
-    movd    xmm0, [exec_stack + rax * 8]
+    dec     r8
+    movd    xmm0, [exec_stack + r8 * 8]
     %1      xmm0, xmm0, %2
     movd    eax, xmm0
-    mov     r8, [exec_stack_len]
-    cmp     r8, MAX_STACK
-    jae     .overflow_error
     mov     [exec_stack + r8 * 8], rax
-    inc     qword [exec_stack_len]
     jmp     .dispatch_next
 %endm
 
 %macro _wasm_f64_unop_round 2
-    mov     rax, [exec_stack_len]
-    test    rax, rax
+    mov     r8, [exec_stack_len]
+    test    r8, r8
     jz      .underflow_error
-    dec     rax
-    mov     [exec_stack_len], rax
-    movq    xmm0, [exec_stack + rax * 8]
+    dec     r8
+    movq    xmm0, [exec_stack + r8 * 8]
     %1      xmm0, xmm0, %2
     movq    rax, xmm0
-    mov     r8, [exec_stack_len]
-    cmp     r8, MAX_STACK
-    jae     .overflow_error
     mov     [exec_stack + r8 * 8], rax
-    inc     qword [exec_stack_len]
     jmp     .dispatch_next
 %endm
 
 ; Float sqrt unary ops
 %macro _wasm_f32_unop_sqrt 0
-    mov     rax, [exec_stack_len]
-    test    rax, rax
+    mov     r8, [exec_stack_len]
+    test    r8, r8
     jz      .underflow_error
-    dec     rax
-    mov     [exec_stack_len], rax
-    movd    xmm0, [exec_stack + rax * 8]
+    dec     r8
+    movd    xmm0, [exec_stack + r8 * 8]
     sqrtss  xmm0, xmm0
     movd    eax, xmm0
-    mov     r8, [exec_stack_len]
-    cmp     r8, MAX_STACK
-    jae     .overflow_error
     mov     [exec_stack + r8 * 8], rax
-    inc     qword [exec_stack_len]
     jmp     .dispatch_next
 %endm
 
 %macro _wasm_f64_unop_sqrt 0
-    mov     rax, [exec_stack_len]
-    test    rax, rax
+    mov     r8, [exec_stack_len]
+    test    r8, r8
     jz      .underflow_error
-    dec     rax
-    mov     [exec_stack_len], rax
-    movq    xmm0, [exec_stack + rax * 8]
+    dec     r8
+    movq    xmm0, [exec_stack + r8 * 8]
     sqrtsd  xmm0, xmm0
     movq    rax, xmm0
-    mov     r8, [exec_stack_len]
-    cmp     r8, MAX_STACK
-    jae     .overflow_error
     mov     [exec_stack + r8 * 8], rax
-    inc     qword [exec_stack_len]
     jmp     .dispatch_next
 %endm
 
 ; Float comparison: returns 0 for NaN (eq, lt, gt, le, ge)
 ; arg = setCC instruction suffix (e.g., e, b, a, be, ae)
 %macro _wasm_f32_cmp 1
-    mov     rax, [exec_stack_len]
-    test    rax, rax
-    jz      .underflow_error
-    dec     rax
-    mov     [exec_stack_len], rax
-    movd    xmm1, [exec_stack + rax * 8]
-    mov     rax, [exec_stack_len]
-    test    rax, rax
-    jz      .underflow_error
-    dec     rax
-    mov     [exec_stack_len], rax
-    movd    xmm0, [exec_stack + rax * 8]
+    mov     r8, [exec_stack_len]
+    cmp     r8, 2
+    jb      .underflow_error
+    sub     r8, 2
+    movd    xmm1, [exec_stack + r8 * 8 + 8]
+    movd    xmm0, [exec_stack + r8 * 8]
     ucomiss xmm0, xmm1
     setnp   cl
     set%1   al
     and     al, cl
     movzx   eax, al
-    mov     r8, [exec_stack_len]
-    cmp     r8, MAX_STACK
-    jae     .overflow_error
     mov     [exec_stack + r8 * 8], rax
-    inc     qword [exec_stack_len]
+    inc     r8
+    mov     [exec_stack_len], r8
     jmp     .dispatch_next
 %endm
 
 %macro _wasm_f64_cmp 1
-    mov     rax, [exec_stack_len]
-    test    rax, rax
-    jz      .underflow_error
-    dec     rax
-    mov     [exec_stack_len], rax
-    movq    xmm1, [exec_stack + rax * 8]
-    mov     rax, [exec_stack_len]
-    test    rax, rax
-    jz      .underflow_error
-    dec     rax
-    mov     [exec_stack_len], rax
-    movq    xmm0, [exec_stack + rax * 8]
+    mov     r8, [exec_stack_len]
+    cmp     r8, 2
+    jb      .underflow_error
+    sub     r8, 2
+    movq    xmm1, [exec_stack + r8 * 8 + 8]
+    movq    xmm0, [exec_stack + r8 * 8]
     ucomisd xmm0, xmm1
     setnp   cl
     set%1   al
     and     al, cl
     movzx   eax, al
-    mov     r8, [exec_stack_len]
-    cmp     r8, MAX_STACK
-    jae     .overflow_error
     mov     [exec_stack + r8 * 8], rax
-    inc     qword [exec_stack_len]
+    inc     r8
+    mov     [exec_stack_len], r8
     jmp     .dispatch_next
 %endm
 
 ; Float ne comparison: returns 1 for NaN
 %macro _wasm_f32_cmp_ne 0
-    mov     rax, [exec_stack_len]
-    test    rax, rax
-    jz      .underflow_error
-    dec     rax
-    mov     [exec_stack_len], rax
-    movd    xmm1, [exec_stack + rax * 8]
-    mov     rax, [exec_stack_len]
-    test    rax, rax
-    jz      .underflow_error
-    dec     rax
-    mov     [exec_stack_len], rax
-    movd    xmm0, [exec_stack + rax * 8]
+    mov     r8, [exec_stack_len]
+    cmp     r8, 2
+    jb      .underflow_error
+    sub     r8, 2
+    movd    xmm1, [exec_stack + r8 * 8 + 8]
+    movd    xmm0, [exec_stack + r8 * 8]
     ucomiss xmm0, xmm1
     setp    cl      ; 1 if NaN
     setne   al      ; 1 if not equal (ordered)
     or      al, cl  ; 1 if NaN or not equal
     movzx   eax, al
-    mov     r8, [exec_stack_len]
-    cmp     r8, MAX_STACK
-    jae     .overflow_error
     mov     [exec_stack + r8 * 8], rax
-    inc     qword [exec_stack_len]
+    inc     r8
+    mov     [exec_stack_len], r8
     jmp     .dispatch_next
 %endm
 
 %macro _wasm_f64_cmp_ne 0
-    mov     rax, [exec_stack_len]
-    test    rax, rax
-    jz      .underflow_error
-    dec     rax
-    mov     [exec_stack_len], rax
-    movq    xmm1, [exec_stack + rax * 8]
-    mov     rax, [exec_stack_len]
-    test    rax, rax
-    jz      .underflow_error
-    dec     rax
-    mov     [exec_stack_len], rax
-    movq    xmm0, [exec_stack + rax * 8]
+    mov     r8, [exec_stack_len]
+    cmp     r8, 2
+    jb      .underflow_error
+    sub     r8, 2
+    movq    xmm1, [exec_stack + r8 * 8 + 8]
+    movq    xmm0, [exec_stack + r8 * 8]
     ucomisd xmm0, xmm1
     setp    cl
     setne   al
     or      al, cl
     movzx   eax, al
-    mov     r8, [exec_stack_len]
-    cmp     r8, MAX_STACK
-    jae     .overflow_error
     mov     [exec_stack + r8 * 8], rax
-    inc     qword [exec_stack_len]
+    inc     r8
+    mov     [exec_stack_len], r8
     jmp     .dispatch_next
 %endm
 

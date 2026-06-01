@@ -71,12 +71,20 @@ If the user revokes, the receipt is removed and the app's resources are reclaime
 - On revocation: grace period of N ticks, then forced reclamation
 
 ### Storage
-- Each app gets an identity-keyed encrypted block device partition
-- `APP identity hash → TPM → storage_key = TPM_Seal(APP_hash || user_grant)`
-- The storage layer never sees plaintext — it stores encrypted objects indexed by app identity
-- `min_storage_mb` reserves space; the user slider can increase it
+- Each app gets a preallocated in-memory object store carved from its granted
+  memory region. Ordinary app writes, caches, temporary state, decoded media,
+  undo stacks, and partial edits stay there.
+- Persistent storage is not a block device handed to the app. It is kernel-owned
+  flush authority: dirty RAM-store objects cross into the append-only durable
+  object store only through an explicit `er_flush()`-style operation.
+- `APP identity hash → TPM → app_flush_key = TPM_Seal(APP_hash || user_grant)`
+  gates durable object encryption and flush admission, not direct app I/O.
+- The storage layer never sees plaintext — it stores encrypted canonical objects
+  indexed by app identity after the kernel accepts the flush.
+- `min_storage_mb` reserves durable flush capacity; the user slider can increase
+  it. It does not increase the app's authority to issue raw reads or writes.
 - Storage is encrypted at rest with a key derived from the app identity + user grant signature
-- The TPM mediates key release: it only unseals `storage_key` for the specific APP identity AND only if a valid user grant exists
+- The TPM mediates key release: it only unseals `app_flush_key` for the specific APP identity AND only if a valid user grant exists
 
 ## Encryption Hierarchy
 
@@ -88,14 +96,14 @@ DEVICE key (TPM hardware seed)
               ├─ user_storage_key — for user-level documents
               └─ app_grant_authority — what this user authorized
                   └─ per APP:
-                      ├─ app_storage_key = TPM_Seal(APP_hash, user_grant, device_key)
+                      ├─ app_flush_key = TPM_Seal(APP_hash, user_grant, device_key)
                       └─ app_memory_region
 ```
 
 Key properties:
 - **TPM mediates all key release** — no principal derives another's key without TPM policy check
 - **Revocation is immediate**: removing the grant from the registry prevents TPM from unsealing the app key on next access
-- **Device compromise doesn't expose app data**: app storage key requires both TPM unseal AND valid grant
+- **Device compromise doesn't expose app data**: app flush key requires both TPM unseal AND valid grant
 - **User compromise doesn't expose other users**: each USER has independent key slots
 - **Guest users**: EPHEMERAL identity, no TPM-backed storage key — guest data is session-scoped and wiped on reboot
 

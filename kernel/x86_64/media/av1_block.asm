@@ -37,6 +37,7 @@ AV1_TILE_WALK_CHROMA_INDEX          equ 596
 AV1_TILE_WALK_REFS_PTR              equ 600
 AV1_TILE_WALK_REF_PLANE             equ 608
 AV1_TILE_WALK_REF_INDEX             equ 632
+AV1_TILE_WALK_CHROMA_MV             equ 636
 AV1_TILE_WALK_STACK_SIZE            equ 640
 
 AV1_COEFF_BULK_MAX_SYMBOLS          equ AV1_BLOCK_PIXELS_8X8 * 3
@@ -54,6 +55,34 @@ AV1_COEFF_BULK_COUNT                equ AV1_COEFF_BULK_BITS + AV1_BITS_SIZE
 AV1_COEFF_BULK_CAP                  equ AV1_COEFF_BULK_COUNT + 4
 AV1_COEFF_BULK_CUR                  equ AV1_COEFF_BULK_CAP + 4
 AV1_COEFF_BULK_STACK_SIZE           equ AV1_COEFF_BULK_CUR + 16
+
+%macro av1_check_edx 1
+    test    edx, edx
+    jnz     %1
+%endmacro
+
+%macro av1_call_check 2
+    call    %1
+    av1_check_edx %2
+%endmacro
+
+%macro av1_decode_residual_8x8 2
+    mov     rdi, r12
+    lea     rsi, [rsp + %1 + AV1_TILE_WALK_COEFFS]
+    mov     rdx, r14
+    mov     ecx, [rsp + %1 + AV1_TILE_WALK_DISABLE_UPDATE]
+    av1_call_check er_av1_block_decode_coeffs_8x8, %2
+    mov     rdi, rsp
+    add     rdi, %1 + AV1_TILE_WALK_DEQUANT
+    lea     rsi, [rsp + %1 + AV1_TILE_WALK_COEFFS]
+    mov     edx, [rsp + %1 + AV1_TILE_WALK_QSTEP]
+    av1_call_check er_av1_block_dequant_8x8, %2
+    mov     rdi, rsp
+    add     rdi, %1 + AV1_TILE_WALK_RESID
+    lea     rsi, [rsp + %1 + AV1_TILE_WALK_DEQUANT]
+    mov     edx, AV1_TX_TYPE_DCT_DCT
+    av1_call_check er_av1_block_inverse_tx_8x8, %2
+%endmacro
 
 SECTION .text
 
@@ -244,31 +273,10 @@ er_fn er_av1_block_encode_coeffs_8x8
     er_ok
     jmp     .done
 .start_writer:
-    movsx   eax, word [r12 + rbx * 2]
-    mov     [rsp + AV1_SYMBOL_SIZE + 8], eax
-.uniform_scan:
-    cmp     ebx, AV1_BLOCK_PIXELS_8X8
-    jae     .uniform_ready
-    movsx   eax, word [r12 + rbx * 2]
-    cmp     eax, [rsp + AV1_SYMBOL_SIZE + 8]
-    jne     .unsupported
-    inc     ebx
-    jmp     .uniform_scan
-.uniform_ready:
-    mov     eax, [rsp + AV1_SYMBOL_SIZE + 8]
-    test    eax, eax
-    jz      .write_zero_block
-    test    eax, eax
-    jns     .uniform_abs_ready
-    neg     eax
-.uniform_abs_ready:
-    cmp     eax, 1
-    jb      .unsupported
-    cmp     eax, AV1_BLOCK_COEFF_LEVEL_SYMBOLS
-    ja      .unsupported
     xor     ebx, ebx
     mov     rdi, rsp
     mov     rsi, r13
+    mov     edx, [rsp + AV1_SYMBOL_SIZE]
     call    er_av1_symbol_write_init
     test    edx, edx
     jnz     .done
@@ -457,6 +465,20 @@ er_fn er_av1_block_decode_mv
     er_err  ERROR_INVALID_PARAM
 .done:
     er_pop  rbx, r12, r13
+    er_ret
+
+; er_av1_mv_scale_420(mv) -> eax=packed chroma mv, rdx=error
+; Scales signed packed luma-pixel motion components for 4:2:0 chroma planes.
+er_fn er_av1_mv_scale_420
+    movsx   eax, di
+    sar     eax, 1
+    mov     edx, edi
+    sar     edx, 16
+    sar     edx, 1
+    shl     edx, 16
+    movzx   eax, ax
+    or      eax, edx
+    er_ok
     er_ret
 
 ; er_av1_block_dequant_8x8(dst, src, qstep)
@@ -1284,27 +1306,7 @@ er_fn er_av1_tile_decode_intra8x8_luma
     movzx   eax, byte [rsp + AV1_TILE_WALK_BLOCK + AV1_BLOCK_Y_MODE]
     cmp     eax, AV1_PRED_MODE_MAX_SUPPORTED
     ja      .unsupported
-    mov     rdi, r12
-    lea     rsi, [rsp + AV1_TILE_WALK_COEFFS]
-    mov     rdx, r14
-    mov     ecx, [rsp + AV1_TILE_WALK_DISABLE_UPDATE]
-    call    er_av1_block_decode_coeffs_8x8
-    test    edx, edx
-    jnz     .done
-    mov     rdi, rsp
-    add     rdi, AV1_TILE_WALK_DEQUANT
-    lea     rsi, [rsp + AV1_TILE_WALK_COEFFS]
-    mov     edx, [rsp + AV1_TILE_WALK_QSTEP]
-    call    er_av1_block_dequant_8x8
-    test    edx, edx
-    jnz     .done
-    mov     rdi, rsp
-    add     rdi, AV1_TILE_WALK_RESID
-    lea     rsi, [rsp + AV1_TILE_WALK_DEQUANT]
-    mov     edx, AV1_TX_TYPE_DCT_DCT
-    call    er_av1_block_inverse_tx_8x8
-    test    edx, edx
-    jnz     .done
+    av1_decode_residual_8x8 0, .done
     lea     rdi, [rsp + AV1_TILE_WALK_PRED]
     mov     esi, AV1_BLOCK_DIM_8
     xor     edx, edx
@@ -1474,27 +1476,7 @@ er_fn er_av1_tile_decode_intra8x8_luma
     cmp     r15d, [rsp + 8 + AV1_TILE_WALK_PLANE_WIDTH]
     jae     .chroma_next_row
     mov     [rsp + 8 + AV1_TILE_WALK_BLOCK_X], r15d
-    mov     rdi, r12
-    lea     rsi, [rsp + 8 + AV1_TILE_WALK_COEFFS]
-    mov     rdx, r14
-    mov     ecx, [rsp + 8 + AV1_TILE_WALK_DISABLE_UPDATE]
-    call    er_av1_block_decode_coeffs_8x8
-    test    edx, edx
-    jnz     .chroma_ret
-    mov     rdi, rsp
-    add     rdi, 8 + AV1_TILE_WALK_DEQUANT
-    lea     rsi, [rsp + 8 + AV1_TILE_WALK_COEFFS]
-    mov     edx, [rsp + 8 + AV1_TILE_WALK_QSTEP]
-    call    er_av1_block_dequant_8x8
-    test    edx, edx
-    jnz     .chroma_ret
-    mov     rdi, rsp
-    add     rdi, 8 + AV1_TILE_WALK_RESID
-    lea     rsi, [rsp + 8 + AV1_TILE_WALK_DEQUANT]
-    mov     edx, AV1_TX_TYPE_DCT_DCT
-    call    er_av1_block_inverse_tx_8x8
-    test    edx, edx
-    jnz     .chroma_ret
+    av1_decode_residual_8x8 8, .chroma_ret
     lea     rdi, [rsp + 8 + AV1_TILE_WALK_PRED]
     mov     esi, AV1_BLOCK_DIM_8
     xor     edx, edx
@@ -1528,7 +1510,7 @@ er_fn er_av1_tile_decode_intra8x8_luma
     ret
 
 ; er_av1_tile_decode_inter8x8_luma(ctx, image_desc, cdfs, refs, qstep, ref_index)
-; Walks luma blocks, predicts from a decoded reference slot with zero MV, and adds residuals.
+; Walks luma and 4:2:0 chroma blocks, predicts from a decoded reference slot, and adds residuals.
 er_fn er_av1_tile_decode_inter8x8_luma
     er_push rbx, r12, r13, r14, r15
     er_stack_alloc AV1_TILE_WALK_STACK_SIZE
@@ -1555,10 +1537,9 @@ er_fn er_av1_tile_decode_inter8x8_luma
     mov     [rsp + AV1_TILE_WALK_QSTEP], r8d
     mov     dword [rsp + AV1_TILE_WALK_DISABLE_UPDATE], 1
     mov     dword [rsp + AV1_TILE_WALK_COUNT], 0
+    mov     dword [rsp + AV1_TILE_WALK_CHROMA_MV], 0
     mov     rdi, r13
-    call    er_av1_image_validate_420
-    test    edx, edx
-    jnz     .done
+    av1_call_check er_av1_image_validate_420, .done
     mov     eax, [r13 + AV1_IMAGE_WIDTH]
     cmp     eax, AV1_BLOCK_WALK_MIN_DIM
     jb      .invalid_param
@@ -1575,9 +1556,7 @@ er_fn er_av1_tile_decode_inter8x8_luma
     mov     esi, r15d
     mov     edx, AV1_PLANE_Y
     lea     rcx, [rsp + AV1_TILE_WALK_REF_PLANE]
-    call    er_av1_refs_get_plane
-    test    edx, edx
-    jnz     .done
+    av1_call_check er_av1_refs_get_plane, .done
     mov     eax, [rsp + AV1_TILE_WALK_REF_PLANE + AV1_PLANE_WIDTH]
     cmp     eax, [rsp + AV1_TILE_WALK_WIDTH]
     jb      .unsupported
@@ -1595,40 +1574,22 @@ er_fn er_av1_tile_decode_inter8x8_luma
     jae     .next_row
     mov     [rsp + AV1_TILE_WALK_BLOCK_X], r15d
     mov     rdi, r12
-    call    er_av1_block_decode_mv
-    test    edx, edx
-    jnz     .done
+    av1_call_check er_av1_block_decode_mv, .done
     mov     [rsp + AV1_TILE_WALK_CHROMA_INDEX], eax
-    mov     rdi, r12
-    lea     rsi, [rsp + AV1_TILE_WALK_COEFFS]
-    mov     rdx, r14
-    mov     ecx, [rsp + AV1_TILE_WALK_DISABLE_UPDATE]
-    call    er_av1_block_decode_coeffs_8x8
-    test    edx, edx
-    jnz     .done
-    mov     rdi, rsp
-    add     rdi, AV1_TILE_WALK_DEQUANT
-    lea     rsi, [rsp + AV1_TILE_WALK_COEFFS]
-    mov     edx, [rsp + AV1_TILE_WALK_QSTEP]
-    call    er_av1_block_dequant_8x8
-    test    edx, edx
-    jnz     .done
-    mov     rdi, rsp
-    add     rdi, AV1_TILE_WALK_RESID
-    lea     rsi, [rsp + AV1_TILE_WALK_DEQUANT]
-    mov     edx, AV1_TX_TYPE_DCT_DCT
-    call    er_av1_block_inverse_tx_8x8
-    test    edx, edx
-    jnz     .done
+    cmp     dword [rsp + AV1_TILE_WALK_COUNT], 0
+    jne     .have_luma_mv
+    mov     edi, eax
+    av1_call_check er_av1_mv_scale_420, .done
+    mov     [rsp + AV1_TILE_WALK_CHROMA_MV], eax
+.have_luma_mv:
+    av1_decode_residual_8x8 0, .done
     lea     rdi, [rsp + AV1_TILE_WALK_PRED]
     mov     esi, AV1_BLOCK_DIM_8
     lea     rdx, [rsp + AV1_TILE_WALK_REF_PLANE]
     mov     ecx, [rsp + AV1_TILE_WALK_BLOCK_X]
     mov     r8d, [rsp + AV1_TILE_WALK_BLOCK_Y]
     mov     r9d, [rsp + AV1_TILE_WALK_CHROMA_INDEX]
-    call    er_av1_block_inter_predict_8x8
-    test    edx, edx
-    jnz     .done
+    av1_call_check er_av1_block_inter_predict_8x8, .done
     mov     eax, [rsp + AV1_TILE_WALK_BLOCK_Y]
     mul     dword [rsp + AV1_TILE_WALK_WIDTH]
     add     eax, [rsp + AV1_TILE_WALK_BLOCK_X]
@@ -1639,9 +1600,7 @@ er_fn er_av1_tile_decode_inter8x8_luma
     mov     ecx, AV1_BLOCK_DIM_8
     lea     r8, [rsp + AV1_TILE_WALK_RESID]
     xor     r9d, r9d
-    call    er_av1_block_reconstruct_add_8x8
-    test    edx, edx
-    jnz     .done
+    av1_call_check er_av1_block_reconstruct_add_8x8, .done
     inc     dword [rsp + AV1_TILE_WALK_COUNT]
     add     r15d, AV1_BLOCK_DIM_8
     jmp     .col_loop
@@ -1653,9 +1612,7 @@ er_fn er_av1_tile_decode_inter8x8_luma
     mov     esi, [rsp + AV1_TILE_WALK_REF_INDEX]
     mov     edx, AV1_PLANE_U
     lea     rcx, [rsp + AV1_TILE_WALK_REF_PLANE]
-    call    er_av1_refs_get_plane
-    test    edx, edx
-    jnz     .done
+    av1_call_check er_av1_refs_get_plane, .done
     mov     rax, [r13 + AV1_IMAGE_U_PTR]
     mov     [rsp + AV1_TILE_WALK_PLANE_PTR], rax
     mov     eax, [r13 + AV1_IMAGE_WIDTH]
@@ -1667,15 +1624,12 @@ er_fn er_av1_tile_decode_inter8x8_luma
     mov     eax, [r13 + AV1_IMAGE_U_LEN]
     mov     [rsp + AV1_TILE_WALK_PLANE_LEN], eax
     call    .decode_inter_chroma_plane
-    test    edx, edx
-    jnz     .done
+    av1_check_edx .done
     mov     rdi, [rsp + AV1_TILE_WALK_REFS_PTR]
     mov     esi, [rsp + AV1_TILE_WALK_REF_INDEX]
     mov     edx, AV1_PLANE_V
     lea     rcx, [rsp + AV1_TILE_WALK_REF_PLANE]
-    call    er_av1_refs_get_plane
-    test    edx, edx
-    jnz     .done
+    av1_call_check er_av1_refs_get_plane, .done
     mov     rax, [r13 + AV1_IMAGE_V_PTR]
     mov     [rsp + AV1_TILE_WALK_PLANE_PTR], rax
     mov     eax, [r13 + AV1_IMAGE_WIDTH]
@@ -1687,8 +1641,7 @@ er_fn er_av1_tile_decode_inter8x8_luma
     mov     eax, [r13 + AV1_IMAGE_V_LEN]
     mov     [rsp + AV1_TILE_WALK_PLANE_LEN], eax
     call    .decode_inter_chroma_plane
-    test    edx, edx
-    jnz     .done
+    av1_check_edx .done
     jmp     .ok
 .decode_inter_chroma_plane:
     mov     eax, [rsp + AV1_TILE_WALK_REF_PLANE + AV1_PLANE_WIDTH + 8]
@@ -1707,36 +1660,14 @@ er_fn er_av1_tile_decode_inter8x8_luma
     cmp     r15d, [rsp + AV1_TILE_WALK_PLANE_WIDTH + 8]
     jae     .chroma_inter_next_row
     mov     [rsp + AV1_TILE_WALK_BLOCK_X + 8], r15d
-    mov     rdi, r12
-    lea     rsi, [rsp + AV1_TILE_WALK_COEFFS + 8]
-    mov     rdx, r14
-    mov     ecx, [rsp + AV1_TILE_WALK_DISABLE_UPDATE + 8]
-    call    er_av1_block_decode_coeffs_8x8
-    test    edx, edx
-    jnz     .chroma_inter_ret
-    mov     rdi, rsp
-    add     rdi, AV1_TILE_WALK_DEQUANT + 8
-    lea     rsi, [rsp + AV1_TILE_WALK_COEFFS + 8]
-    mov     edx, [rsp + AV1_TILE_WALK_QSTEP + 8]
-    call    er_av1_block_dequant_8x8
-    test    edx, edx
-    jnz     .chroma_inter_ret
-    mov     rdi, rsp
-    add     rdi, AV1_TILE_WALK_RESID + 8
-    lea     rsi, [rsp + AV1_TILE_WALK_DEQUANT + 8]
-    mov     edx, AV1_TX_TYPE_DCT_DCT
-    call    er_av1_block_inverse_tx_8x8
-    test    edx, edx
-    jnz     .chroma_inter_ret
+    av1_decode_residual_8x8 8, .chroma_inter_ret
     lea     rdi, [rsp + AV1_TILE_WALK_PRED + 8]
     mov     esi, AV1_BLOCK_DIM_8
     lea     rdx, [rsp + AV1_TILE_WALK_REF_PLANE + 8]
     mov     ecx, [rsp + AV1_TILE_WALK_BLOCK_X + 8]
     mov     r8d, [rsp + AV1_TILE_WALK_BLOCK_Y + 8]
-    xor     r9d, r9d
-    call    er_av1_block_inter_predict_8x8
-    test    edx, edx
-    jnz     .chroma_inter_ret
+    mov     r9d, [rsp + AV1_TILE_WALK_CHROMA_MV + 8]
+    av1_call_check er_av1_block_inter_predict_8x8, .chroma_inter_ret
     mov     eax, [rsp + AV1_TILE_WALK_BLOCK_Y + 8]
     mul     dword [rsp + AV1_TILE_WALK_PLANE_WIDTH + 8]
     add     eax, [rsp + AV1_TILE_WALK_BLOCK_X + 8]
@@ -1747,9 +1678,7 @@ er_fn er_av1_tile_decode_inter8x8_luma
     mov     ecx, AV1_BLOCK_DIM_8
     lea     r8, [rsp + AV1_TILE_WALK_RESID + 8]
     xor     r9d, r9d
-    call    er_av1_block_reconstruct_add_8x8
-    test    edx, edx
-    jnz     .chroma_inter_ret
+    av1_call_check er_av1_block_reconstruct_add_8x8, .chroma_inter_ret
     inc     dword [rsp + AV1_TILE_WALK_COUNT + 8]
     add     r15d, AV1_BLOCK_DIM_8
     jmp     .chroma_inter_col_loop

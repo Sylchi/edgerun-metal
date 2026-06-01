@@ -1,8 +1,6 @@
 const std = @import("std");
-const clock = @import("../../clock.zig");
 const common = @import("../component_common.zig");
 const interaction = @import("../interaction.zig");
-const object = @import("../../object.zig");
 const ui = @import("../core.zig");
 const text_component = @import("Text.zig");
 const layout = @import("../layouts/Types.zig");
@@ -19,6 +17,8 @@ pub const InputOtp = struct {
     id: u32,
     flags: common.ComponentFlags = .{},
     value: []const u8 = "",
+
+    const serialization = component_codec.OneStringComponent(InputOtp, "input_otp", "value");
 
     pub fn node(self: InputOtp) ui.Node {
         return ui.inputOtpNode(self.id, self.value);
@@ -50,17 +50,9 @@ pub const InputOtp = struct {
         return layout.Measurement.flexible(preferred, preferred, preferred).applyExact(constraints);
     }
 
-    pub fn toObject(self: InputOtp, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
-        return component_codec.oneStringObject(.input_otp, self.id, self.value, ui_out, object_out, epoch);
-    }
-
-    pub fn writeRecord(self: InputOtp, writer: *component_codec.Writer, index: usize) bool {
-        return component_codec.oneStringRecord(writer, index, .input_otp, self.id, self.value);
-    }
-
-    pub fn fromView(view: object.View) Error!InputOtp {
-        return component_codec.decodeFromView(InputOtp, .input_otp, view);
-    }
+    pub const toObject = serialization.toObject;
+    pub const writeRecord = serialization.writeRecord;
+    pub const fromView = serialization.fromView;
 
     pub fn fromNode(input_otp: @FieldType(ui.Node, "input_otp")) Error!InputOtp {
         return .{ .id = input_otp.id, .value = input_otp.value };

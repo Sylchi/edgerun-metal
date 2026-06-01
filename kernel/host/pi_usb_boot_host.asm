@@ -13,6 +13,16 @@
 %include "host/bcm2708_usb_boot.inc"
 
 SAFE_FILE_BACKSLASH equ 0x5c
+USB_SCAN_MAX_NUM equ 127
+USB_DESCRIPTOR_DEVICE_LEN equ 18
+USB_DESCRIPTOR_TYPE_DEVICE equ 0x0100
+USB_REQUEST_GET_DESCRIPTOR equ 0x06
+USB_REQUEST_TYPE_STANDARD_IN equ 0x80
+USB_DEVICE_DESC_VENDOR equ 8
+USB_DEVICE_DESC_PRODUCT equ 10
+USB_DEVICE_DESC_SERIAL_INDEX equ 16
+BCM_SERIAL_INDEX_FIRST_ZERO equ 0
+BCM_SERIAL_INDEX_FIRST_THREE equ 3
 
 ; ---- .data section ----
 section .data
@@ -404,52 +414,26 @@ find_boot_device:
     push    r12
     push    r13
     push    r14
+    push    r15
 
     mov     r12d, edi       ; phase
-    mov     r13, rsp        ; save for cleanup
-
-    ; Open /sys/bus/usb/devices/
-    lea     rdi, [sysfs_usb_devices]
-    xor     esi, esi        ; O_RDONLY
-    xor     edx, edx
-    mov     eax, SYS_open
-    syscall
-    test    eax, eax
-    js      .done_none
-
-    mov     r14d, eax       ; dir_fd
-    ; We can't easily enumerate a directory via syscalls in pure asm.
-    ; Instead, iterate /sys/bus/usb/devices/*/uevent or use getdents.
-    ; For now, use a simpler approach: scan known patterns.
-    ; This is a placeholder — real implementation needs getdents.
-    ; For now, we'll directly check the USB device path.
-
-    ; Close dir
-    mov     edi, r14d
-    mov     eax, SYS_close
-    syscall
-
-    ; Direct approach: try common USB device paths
-    ; We'll scan /dev/bus/usb/001/ through /dev/bus/usb/010/
-    ; with device numbers 001 through 010.
-    ; For each, read the device descriptor via ioctl and check vendor/product.
 
     xor     ebx, ebx        ; bus number (1-based)
 .bus_loop:
     inc     ebx
-    cmp     ebx, 10
+    cmp     ebx, USB_SCAN_MAX_NUM
     ja      .done_none
 
-    xor     ecx, ecx        ; device number (1-based)
+    xor     r13d, r13d      ; device number (1-based)
 .dev_loop:
-    inc     ecx
-    cmp     ecx, 10
+    inc     r13d
+    cmp     r13d, USB_SCAN_MAX_NUM
     ja      .bus_loop
 
     ; Build path /dev/bus/usb/BBB/DDD
     lea     rdi, [dev_path]
     mov     esi, ebx
-    mov     edx, ecx
+    mov     edx, r13d
     call    format_usb_path
 
     ; Open the device
@@ -463,17 +447,17 @@ find_boot_device:
 
     mov     r14d, eax       ; fd
 
-    ; Read device descriptor (first 18 bytes via ioctl)
-    ; Use USBDEVFS_CONTROL to get device descriptor
-    ; Actually, easier: just read from the device file directly
-    ; The usbfs device file returns the raw descriptors when read.
+    mov     edi, r14d
+    mov     esi, r12d
+    call    is_bcm_boot_device
+    mov     r15d, eax
 
-    ; Close
     mov     edi, r14d
     mov     eax, SYS_close
     syscall
 
-    ; For now, just retry the dev loop
+    test    r15d, r15d
+    jnz     .found
     jmp     .dev_loop
 
 .done_none:
@@ -484,8 +468,79 @@ find_boot_device:
     lea     rax, [dev_path]
 
 .done:
+    pop     r15
     pop     r14
     pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
+    ret
+
+; is_bcm_boot_device(fd, phase) -> 1 if BCM2708 boot device matches phase
+is_bcm_boot_device:
+    push    rbp
+    mov     rbp, rsp
+    push    rbx
+    push    r12
+
+    mov     r12d, edi
+    mov     ebx, esi
+
+    mov     byte [usbctrl_buf + USBCTRL_REQUEST_TYPE], USB_REQUEST_TYPE_STANDARD_IN
+    mov     byte [usbctrl_buf + USBCTRL_REQUEST], USB_REQUEST_GET_DESCRIPTOR
+    mov     word [usbctrl_buf + USBCTRL_VALUE], USB_DESCRIPTOR_TYPE_DEVICE
+    mov     word [usbctrl_buf + USBCTRL_INDEX], 0
+    mov     word [usbctrl_buf + USBCTRL_LENGTH], USB_DESCRIPTOR_DEVICE_LEN
+    mov     eax, [TIMEOUT_MS]
+    mov     dword [usbctrl_buf + USBCTRL_TIMEOUT], eax
+    lea     rax, [sysfs_data_buf]
+    mov     qword [usbctrl_buf + USBCTRL_DATA], rax
+
+    mov     edi, r12d
+    mov     esi, USBDEVFS_CONTROL
+    lea     rdx, [usbctrl_buf]
+    mov     eax, SYS_ioctl
+    syscall
+    cmp     eax, USB_DESCRIPTOR_DEVICE_LEN
+    jl      .no
+
+    movzx   eax, word [sysfs_data_buf + USB_DEVICE_DESC_VENDOR]
+    cmp     eax, BCM_VENDOR_ID
+    jne     .no
+
+    movzx   eax, word [sysfs_data_buf + USB_DEVICE_DESC_PRODUCT]
+    cmp     eax, BCM_PRODUCT_ID_FIRST
+    je      .product_ok
+    cmp     eax, BCM_PRODUCT_ID_SECOND
+    jne     .no
+
+.product_ok:
+    cmp     ebx, 2
+    je      .yes
+
+    movzx   eax, byte [sysfs_data_buf + USB_DEVICE_DESC_SERIAL_INDEX]
+    cmp     eax, BCM_SERIAL_INDEX_FIRST_ZERO
+    je      .serial_first
+    cmp     eax, BCM_SERIAL_INDEX_FIRST_THREE
+    je      .serial_first
+
+    cmp     ebx, 1
+    je      .yes
+    jmp     .no
+
+.serial_first:
+    test    ebx, ebx
+    jz      .yes
+
+.no:
+    xor     eax, eax
+    pop     r12
+    pop     rbx
+    pop     rbp
+    ret
+
+.yes:
+    mov     eax, 1
     pop     r12
     pop     rbx
     pop     rbp
@@ -1370,6 +1425,7 @@ path_join:
 format_usb_path:
     push    rbp
     mov     rbp, rsp
+    mov     r8d, edx
 
     ; Write "/dev/bus/usb/"
     mov     rcx, usb_path_prefix
@@ -1408,11 +1464,7 @@ format_usb_path:
     inc     rdi
 
     ; Write device number (3 digits zero-padded)
-    mov     eax, edx       ; device number from function arg (was in edx)
-    ; Actually we need the device number from the original edx. Restore it.
-    ; The device number was in edx, but we clobbered it. Let me fix this approach.
-    ; For now, just write 001 as placeholder.
-    mov     eax, 1
+    mov     eax, r8d
     mov     ecx, 100
     xor     edx, edx
     div     ecx

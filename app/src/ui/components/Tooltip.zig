@@ -21,6 +21,8 @@ pub const Tooltip = struct {
     trigger: []const u8,
     content: []const u8,
 
+    const serialization = component_codec.TwoStringComponent(Tooltip, "tooltip", "trigger", "content");
+
     pub fn node(self: Tooltip) ui.Node {
         return ui.tooltipNode(self.id, self.trigger, self.content);
     }
@@ -57,18 +59,9 @@ pub const Tooltip = struct {
             .{ .w = component_primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
         ).applyExact(constraints);
     }
-
-    pub fn toObject(self: Tooltip, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
-        return component_codec.twoStringObject(.tooltip, self.id, self.trigger, self.content, ui_out, object_out, epoch);
-    }
-
-    pub fn writeRecord(self: Tooltip, writer: *component_codec.Writer, index: usize) bool {
-        return component_codec.twoStringRecord(writer, index, .tooltip, self.id, self.trigger, self.content);
-    }
-
-    pub fn fromView(view: object.View) Error!Tooltip {
-        return component_codec.decodeFromView(Tooltip, .tooltip, view);
-    }
+    pub const toObject = serialization.toObject;
+    pub const writeRecord = serialization.writeRecord;
+    pub const fromView = serialization.fromView;
 
     pub fn fromNode(tooltip: @FieldType(ui.Node, "tooltip")) Error!Tooltip {
         return .{ .id = tooltip.id, .trigger = tooltip.trigger, .content = tooltip.content };

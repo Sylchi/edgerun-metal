@@ -45,6 +45,12 @@ Local storage is a necessary foundation, not a complete solution. If the bytes a
 
 Useful storage needs structure: canonical object bytes, verification, encryption, explicit authority, and formats that do not require trusting a remote database to explain what the user has.
 
+It also needs restraint. A running app does not need raw storage for every
+operation. Most work should live in RAM until the user or runtime explicitly
+decides it should survive. Without that boundary, an app can waste flash writes,
+fill queues, make caches durable by accident, or turn a failed attempt into
+state that later code treats as real.
+
 ## Main lesson
 
 Storage is not ownership. Storage is just where bytes sit. Ownership depends on who can read them, verify them, change them, delete them, and move them without asking the original service for permission.
@@ -52,3 +58,8 @@ Storage is not ownership. Storage is just where bytes sit. Ownership depends on 
 ## EdgeRun seed
 
 EdgeRun storage should be sealed objects. If someone steals the disk, they get encrypted blobs without the authority to open them. If the user exports the store, they should get verifiable objects, not an app-shaped heap of unexplained files.
+
+EdgeRun apps therefore write to memory first. The durable object store is reached
+through explicit flush authority, not through POSIX files or direct block I/O.
+The app can work quickly in RAM, and the kernel decides what dirty objects are
+allowed to become durable.

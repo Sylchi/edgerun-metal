@@ -19,6 +19,8 @@ pub const ContextMenu = struct {
     first: []const u8,
     second: []const u8,
 
+    const serialization = component_codec.TwoStringComponent(ContextMenu, "context_menu", "first", "second");
+
     pub fn node(self: ContextMenu) ui.Node {
         return ui.contextMenuNode(self.id, self.first, self.second);
     }
@@ -39,18 +41,9 @@ pub const ContextMenu = struct {
         _ = options;
         return primitives.measureSidePanelMenu(context_menu_trigger, self.first, self.second, constraints, menu_panel_layout, menu_trigger_padding, menu_list_layout);
     }
-
-    pub fn toObject(self: ContextMenu, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
-        return component_codec.twoStringObject(.context_menu, self.id, self.first, self.second, ui_out, object_out, epoch);
-    }
-
-    pub fn writeRecord(self: ContextMenu, writer: *component_codec.Writer, index: usize) bool {
-        return component_codec.twoStringRecord(writer, index, .context_menu, self.id, self.first, self.second);
-    }
-
-    pub fn fromView(view: object.View) Error!ContextMenu {
-        return component_codec.decodeFromView(ContextMenu, .context_menu, view);
-    }
+    pub const toObject = serialization.toObject;
+    pub const writeRecord = serialization.writeRecord;
+    pub const fromView = serialization.fromView;
 
     pub fn fromNode(menu: @FieldType(ui.Node, "context_menu")) Error!ContextMenu {
         return .{ .id = menu.id, .first = menu.first, .second = menu.second };

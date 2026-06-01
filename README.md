@@ -82,6 +82,14 @@ requirements, and receipts. When it wants to run, the local machine grants exact
 slices of memory, storage, identity, and device authority. The app does its work
 inside those bounds and emits receipts.
 
+App storage starts as memory, not disk. An app writes canonical objects into its
+preallocated RAM store while it is running; those dirty objects become durable
+only when the app or runtime explicitly flushes them through the kernel object
+store. Apps do not get direct block-device or POSIX-style storage authority.
+Memory is the working surface; storage is the explicit commit boundary. This
+keeps caches, scratch data, undo stacks, decoded media, and failed attempts from
+trashing I/O or becoming accidental durable state.
+
 That changes what sharing software can mean. Instead of:
 
 ```text
@@ -193,7 +201,11 @@ If it changes state, it is a deterministic transition object or receipt.
 
 ### Slices And Ownership
 
-Apps own explicit preallocated memory and storage slices. Sharing is separate from ownership — no share receipt, no access. The allocator records range ownership transitions without needing to read app memory.
+Apps own explicit preallocated memory slices. Persistent storage is a
+kernel-mediated grant to flush selected dirty objects from that RAM slice into
+the append-only object store. Sharing is separate from ownership — no share
+receipt, no access. The allocator records range ownership transitions without
+needing to read app memory.
 
 ### Requirements
 

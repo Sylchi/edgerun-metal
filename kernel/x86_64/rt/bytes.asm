@@ -49,8 +49,9 @@ er_fn er_bytes_eql
     jne     .not_eql
     test    esi, esi
     jz      .eql
+    mov     r8d, esi
     mov     rsi, rdx
-    mov     edx, esi
+    mov     edx, r8d
     call    er_memcmp
     test    eax, eax
     jnz     .not_eql

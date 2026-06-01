@@ -51,24 +51,22 @@ er_fn er_memcmp
     test    rdx, rdx
     jz      .equal
 
-    mov     rcx, rdx
-    mov     r8, rcx
-    and     r8, 7
-    shr     rcx, 3
-    cld
-    repe    cmpsq
-    jne     .done
-    mov     rcx, r8
-    repe    cmpsb
-.done:
-
-    movzx   eax, byte [rdi - 1]
-    movzx   ecx, byte [rsi - 1]
-    sub     eax, ecx
-    ret
+.loop:
+    movzx   eax, byte [rdi]
+    movzx   ecx, byte [rsi]
+    cmp     eax, ecx
+    jne     .diff
+    inc     rdi
+    inc     rsi
+    dec     rdx
+    jnz     .loop
 
 .equal:
     xor     eax, eax
+    ret
+
+.diff:
+    sub     eax, ecx
     ret
 
 ; ==================================================================

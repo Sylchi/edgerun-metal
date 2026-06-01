@@ -19,6 +19,8 @@ pub const HoverCard = struct {
     trigger: []const u8,
     content: []const u8,
 
+    const serialization = component_codec.TwoStringComponent(HoverCard, "hover_card", "trigger", "content");
+
     pub fn node(self: HoverCard) ui.Node {
         return ui.hoverCardNode(self.id, self.trigger, self.content);
     }
@@ -35,18 +37,9 @@ pub const HoverCard = struct {
         _ = options;
         return primitives.measureSidePanelTitleDetail(self.trigger, self.content, hover_card_detail_label, constraints, hover_card_layout, primitives.control_text_padding, hover_card_panel);
     }
-
-    pub fn toObject(self: HoverCard, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
-        return component_codec.twoStringObject(.hover_card, self.id, self.trigger, self.content, ui_out, object_out, epoch);
-    }
-
-    pub fn writeRecord(self: HoverCard, writer: *component_codec.Writer, index: usize) bool {
-        return component_codec.twoStringRecord(writer, index, .hover_card, self.id, self.trigger, self.content);
-    }
-
-    pub fn fromView(view: object.View) Error!HoverCard {
-        return component_codec.decodeFromView(HoverCard, .hover_card, view);
-    }
+    pub const toObject = serialization.toObject;
+    pub const writeRecord = serialization.writeRecord;
+    pub const fromView = serialization.fromView;
 
     pub fn fromNode(hover_card: @FieldType(ui.Node, "hover_card")) Error!HoverCard {
         return .{ .id = hover_card.id, .trigger = hover_card.trigger, .content = hover_card.content };

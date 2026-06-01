@@ -132,6 +132,27 @@ pub fn build(b: *std.Build) void {
     const media_video_dump_step = b.step("media-video-dump", "Decode a VP8 IVF/WebM file to PPM frames");
     media_video_dump_step.dependOn(&run_media_video_dump.step);
 
+    const project_intro_video = b.addExecutable(.{
+        .name = "edgerun-project-intro-video",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/project_intro_video.zig"),
+            .target = target,
+            .optimize = optimize,
+            .strip = strip_release,
+        }),
+    });
+    addBootstrapObjects(project_intro_video, math_obj, runtime_obj);
+
+    const run_project_intro_video = b.addRunArtifact(project_intro_video);
+    const project_intro_video_step = b.step("project-intro-video", "Render project intro video frames through the UI renderer");
+    project_intro_video_step.dependOn(&run_project_intro_video.step);
+
+    _ = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
+        .root = "src/project_intro_video.zig",
+        .step = "project-intro-video-test",
+        .description = "Run project intro video frame generator tests",
+    });
+
     _ = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
         .root = "src/media_video_dump.zig",
         .step = "media-video-dump-test",

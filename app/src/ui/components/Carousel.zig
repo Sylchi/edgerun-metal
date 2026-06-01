@@ -1,8 +1,6 @@
 const std = @import("std");
-const clock = @import("../../clock.zig");
 const common = @import("../component_common.zig");
 const interaction = @import("../interaction.zig");
-const object = @import("../../object.zig");
 const ui = @import("../core.zig");
 const text_component = @import("Text.zig");
 const button_component = @import("Button.zig");
@@ -23,6 +21,8 @@ pub const Carousel = struct {
     id: u32,
     flags: common.ComponentFlags = .{},
     label: []const u8,
+
+    const serialization = component_codec.OneStringComponent(Carousel, "carousel", "label");
 
     pub fn node(self: Carousel) ui.Node {
         return ui.carouselNode(self.id, self.label);
@@ -57,17 +57,9 @@ pub const Carousel = struct {
         ).applyExact(constraints);
     }
 
-    pub fn toObject(self: Carousel, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
-        return component_codec.oneStringObject(.carousel, self.id, self.label, ui_out, object_out, epoch);
-    }
-
-    pub fn writeRecord(self: Carousel, writer: *component_codec.Writer, index: usize) bool {
-        return component_codec.oneStringRecord(writer, index, .carousel, self.id, self.label);
-    }
-
-    pub fn fromView(view: object.View) Error!Carousel {
-        return component_codec.decodeFromView(Carousel, .carousel, view);
-    }
+    pub const toObject = serialization.toObject;
+    pub const writeRecord = serialization.writeRecord;
+    pub const fromView = serialization.fromView;
 
     pub fn fromNode(carousel: @FieldType(ui.Node, "carousel")) Error!Carousel {
         return .{ .id = carousel.id, .label = carousel.label };

@@ -11,6 +11,7 @@ extern er_av1_block_decode_intra_symbols
 extern er_av1_block_decode_coeffs_8x8
 extern er_av1_block_encode_coeffs_8x8
 extern er_av1_block_decode_mv
+extern er_av1_mv_scale_420
 extern er_av1_block_dequant_8x8
 extern er_av1_block_inverse_tx_8x8
 extern er_av1_block_residual_sub_8x8
@@ -609,6 +610,18 @@ _start:
     jnz     .fail_mv_decode
     cmp     eax, 0xfff9fff9
     jne     .fail_mv_decode
+    mov     edi, 0x00020002
+    call    er_av1_mv_scale_420
+    cmp     eax, 0x00010001
+    jne     .fail_mv_decode
+    test    edx, edx
+    jnz     .fail_mv_decode
+    mov     edi, 0xfffefffe
+    call    er_av1_mv_scale_420
+    cmp     eax, 0xffffffff
+    jne     .fail_mv_decode
+    test    edx, edx
+    jnz     .fail_mv_decode
     xor     edi, edi
     call    er_av1_block_decode_mv
     test    eax, eax
@@ -876,6 +889,8 @@ _start:
     test    eax, eax
     jnz     .fail_coeff_encode_mixed
     cmp     edx, ERROR_UNSUPPORTED
+    jne     .fail_coeff_encode_mixed
+    cmp     word [rel coeffs + 126], -4
     jne     .fail_coeff_encode_mixed
     mov     word [rel coeffs], -4
     mov     word [rel coeffs + 126], -4

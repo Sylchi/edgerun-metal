@@ -1,8 +1,6 @@
 const std = @import("std");
-const clock = @import("../../clock.zig");
 const common = @import("../component_common.zig");
 const interaction = @import("../interaction.zig");
-const object = @import("../../object.zig");
 const ui = @import("../core.zig");
 const text_component = @import("Text.zig");
 const layout = @import("../layouts/Types.zig");
@@ -19,6 +17,8 @@ pub const Chart = struct {
     id: u32,
     flags: common.ComponentFlags = .{},
     label: []const u8,
+
+    const serialization = component_codec.OneStringComponent(Chart, "chart", "label");
 
     pub fn node(self: Chart) ui.Node {
         return ui.chartNode(self.id, self.label);
@@ -63,17 +63,9 @@ pub const Chart = struct {
         ).applyExact(constraints);
     }
 
-    pub fn toObject(self: Chart, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
-        return component_codec.oneStringObject(.chart, self.id, self.label, ui_out, object_out, epoch);
-    }
-
-    pub fn writeRecord(self: Chart, writer: *component_codec.Writer, index: usize) bool {
-        return component_codec.oneStringRecord(writer, index, .chart, self.id, self.label);
-    }
-
-    pub fn fromView(view: object.View) Error!Chart {
-        return component_codec.decodeFromView(Chart, .chart, view);
-    }
+    pub const toObject = serialization.toObject;
+    pub const writeRecord = serialization.writeRecord;
+    pub const fromView = serialization.fromView;
 
     pub fn fromNode(chart: @FieldType(ui.Node, "chart")) Error!Chart {
         return .{ .id = chart.id, .label = chart.label };

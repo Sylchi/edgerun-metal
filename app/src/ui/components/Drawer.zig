@@ -19,6 +19,8 @@ pub const Drawer = struct {
     title: []const u8,
     detail: []const u8,
 
+    const serialization = component_codec.TwoStringComponent(Drawer, "drawer", "title", "detail");
+
     pub fn node(self: Drawer) ui.Node {
         return ui.drawerNode(self.id, self.title, self.detail);
     }
@@ -50,18 +52,9 @@ pub const Drawer = struct {
             .{ .w = primitives.maxMeasuredWidth(constraints, preferred.w), .h = @max(preferred.h, drawer_content_y + panel.max.h) },
         ).applyExact(constraints);
     }
-
-    pub fn toObject(self: Drawer, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
-        return component_codec.twoStringObject(.drawer, self.id, self.title, self.detail, ui_out, object_out, epoch);
-    }
-
-    pub fn writeRecord(self: Drawer, writer: *component_codec.Writer, index: usize) bool {
-        return component_codec.twoStringRecord(writer, index, .drawer, self.id, self.title, self.detail);
-    }
-
-    pub fn fromView(view: object.View) Error!Drawer {
-        return component_codec.decodeFromView(Drawer, .drawer, view);
-    }
+    pub const toObject = serialization.toObject;
+    pub const writeRecord = serialization.writeRecord;
+    pub const fromView = serialization.fromView;
 
     pub fn fromNode(drawer: @FieldType(ui.Node, "drawer")) Error!Drawer {
         return .{ .id = drawer.id, .title = drawer.title, .detail = drawer.detail };

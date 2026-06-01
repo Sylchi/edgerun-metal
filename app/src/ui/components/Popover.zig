@@ -19,6 +19,8 @@ pub const Popover = struct {
     trigger: []const u8,
     content: []const u8,
 
+    const serialization = component_codec.TwoStringComponent(Popover, "popover", "trigger", "content");
+
     pub fn node(self: Popover) ui.Node {
         return ui.popoverNode(self.id, self.trigger, self.content);
     }
@@ -52,18 +54,9 @@ pub const Popover = struct {
             .{ .w = primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
         ).applyExact(constraints);
     }
-
-    pub fn toObject(self: Popover, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
-        return component_codec.twoStringObject(.popover, self.id, self.trigger, self.content, ui_out, object_out, epoch);
-    }
-
-    pub fn writeRecord(self: Popover, writer: *component_codec.Writer, index: usize) bool {
-        return component_codec.twoStringRecord(writer, index, .popover, self.id, self.trigger, self.content);
-    }
-
-    pub fn fromView(view: object.View) Error!Popover {
-        return component_codec.decodeFromView(Popover, .popover, view);
-    }
+    pub const toObject = serialization.toObject;
+    pub const writeRecord = serialization.writeRecord;
+    pub const fromView = serialization.fromView;
 
     pub fn fromNode(popover: @FieldType(ui.Node, "popover")) Error!Popover {
         return .{ .id = popover.id, .trigger = popover.trigger, .content = popover.content };

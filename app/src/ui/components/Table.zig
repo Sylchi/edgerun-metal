@@ -25,6 +25,8 @@ pub const Table = struct {
     role: []const u8,
     flags: common.ComponentFlags = .{},
 
+    const serialization = component_codec.TwoStringComponent(Table, "table", "name", "role");
+
     pub fn node(self: Table) ui.Node {
         return ui.tableNode(self.id, self.name, self.role);
     }
@@ -69,18 +71,9 @@ pub const Table = struct {
             .{ .w = primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
         ).applyExact(constraints);
     }
-
-    pub fn toObject(self: Table, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
-        return component_codec.twoStringObject(.table, self.id, self.name, self.role, ui_out, object_out, epoch);
-    }
-
-    pub fn writeRecord(self: Table, writer: *component_codec.Writer, index: usize) bool {
-        return component_codec.twoStringRecord(writer, index, .table, self.id, self.name, self.role);
-    }
-
-    pub fn fromView(view: object.View) Error!Table {
-        return component_codec.decodeFromView(Table, .table, view);
-    }
+    pub const toObject = serialization.toObject;
+    pub const writeRecord = serialization.writeRecord;
+    pub const fromView = serialization.fromView;
 
     pub fn fromNode(table: @FieldType(ui.Node, "table")) Error!Table {
         return .{ .id = table.id, .name = table.name, .role = table.role };

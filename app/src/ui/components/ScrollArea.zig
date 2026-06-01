@@ -1,8 +1,6 @@
 const std = @import("std");
 const math = @import("../../math.zig");
-const clock = @import("../../clock.zig");
 const common = @import("../component_common.zig");
-const object = @import("../../object.zig");
 const ui = @import("../core.zig");
 const text_component = @import("Text.zig");
 const layout = @import("../layouts/Types.zig");
@@ -14,6 +12,8 @@ const Error = common.Error;
 const RenderOptions = common.RenderOptions;
 
 pub const ScrollArea = struct {
+    const serialization = component_codec.EmptyComponent(ScrollArea, "scroll_area");
+
     pub fn node(self: ScrollArea) ui.Node {
         _ = self;
         return ui.scrollAreaNode();
@@ -51,19 +51,9 @@ pub const ScrollArea = struct {
         ).applyExact(constraints);
     }
 
-    pub fn toObject(self: ScrollArea, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
-        _ = self;
-        return component_codec.emptyObject(.scroll_area, ui_out, object_out, epoch);
-    }
-
-    pub fn writeRecord(self: ScrollArea, writer: *component_codec.Writer, index: usize) bool {
-        _ = self;
-        return component_codec.emptyRecord(writer, index, .scroll_area);
-    }
-
-    pub fn fromView(view: object.View) Error!ScrollArea {
-        return fromNode(try component_codec.nodeView(view, .scroll_area));
-    }
+    pub const toObject = serialization.toObject;
+    pub const writeRecord = serialization.writeRecord;
+    pub const fromView = serialization.fromView;
 
     pub fn fromNode(scroll_area: @FieldType(ui.Node, "scroll_area")) Error!ScrollArea {
         _ = scroll_area;

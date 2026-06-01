@@ -25,7 +25,9 @@ const png_compression_index: usize = 10;
 const png_filter_index: usize = 11;
 const png_interlace_index: usize = 12;
 const png_bit_depth_u8: u8 = 8;
+const png_color_grayscale: u8 = 0;
 const png_color_rgb: u8 = 2;
+const png_color_grayscale_alpha: u8 = 4;
 const png_color_rgba: u8 = 6;
 const png_method_deflate: u8 = 0;
 const png_filter_standard: u8 = 0;
@@ -173,7 +175,9 @@ fn isAsciiUpper(byte: u8) bool {
 
 fn pngChannels(color_type: u8) DecodeError!usize {
     return switch (color_type) {
+        png_color_grayscale => 1,
         png_color_rgb => 3,
+        png_color_grayscale_alpha => 2,
         png_color_rgba => png_rgba_channels,
         else => return error.UnsupportedImage,
     };
@@ -291,11 +295,19 @@ fn writePngPixels(decoded: []const u8, width: usize, height: usize, channels: us
         var x: usize = 0;
         while (x < width) : (x += 1) {
             const source = x * channels;
+            const gray = row[source];
             out[y * width + x] = .{
-                .r = row[source + 0],
-                .g = row[source + 1],
-                .b = row[source + 2],
+                .r = gray,
+                .g = switch (channels) {
+                    1, 2 => gray,
+                    else => row[source + 1],
+                },
+                .b = switch (channels) {
+                    1, 2 => gray,
+                    else => row[source + 2],
+                },
                 .a = switch (channels) {
+                    2 => row[source + 1],
                     png_rgba_channels => row[source + 3],
                     else => png_alpha_opaque,
                 },
@@ -320,6 +332,28 @@ test "png rgba decoder validates chunks and returns canonical pixels" {
     try std.testing.expectEqual(@as(usize, 1), header.height);
     try std.testing.expectEqual(ui.Color{ .r = 255, .g = 0, .b = 0, .a = 255 }, pixels[0]);
     try std.testing.expectEqual(ui.Color{ .r = 0, .g = 255, .b = 0, .a = 128 }, pixels[1]);
+}
+
+test "png grayscale decoder expands luma to opaque rgb pixels" {
+    const bytes = testPngGrayscale2x1();
+    var pixels: [2]ui.Color = undefined;
+    var scratch: [pngScratchByteLen(bytes.len, 2, 1)]u8 = undefined;
+    const header = try decodePng(bytes, &pixels, &scratch);
+    try std.testing.expectEqual(@as(usize, 2), header.width);
+    try std.testing.expectEqual(@as(usize, 1), header.height);
+    try std.testing.expectEqual(ui.Color{ .r = 0x20, .g = 0x20, .b = 0x20, .a = 255 }, pixels[0]);
+    try std.testing.expectEqual(ui.Color{ .r = 0xe0, .g = 0xe0, .b = 0xe0, .a = 255 }, pixels[1]);
+}
+
+test "png grayscale alpha decoder expands luma and preserves alpha" {
+    const bytes = testPngGrayscaleAlpha2x1();
+    var pixels: [2]ui.Color = undefined;
+    var scratch: [pngScratchByteLen(bytes.len, 2, 1)]u8 = undefined;
+    const header = try decodePng(bytes, &pixels, &scratch);
+    try std.testing.expectEqual(@as(usize, 2), header.width);
+    try std.testing.expectEqual(@as(usize, 1), header.height);
+    try std.testing.expectEqual(ui.Color{ .r = 0x20, .g = 0x20, .b = 0x20, .a = 0x80 }, pixels[0]);
+    try std.testing.expectEqual(ui.Color{ .r = 0xe0, .g = 0xe0, .b = 0xe0, .a = 0x40 }, pixels[1]);
 }
 
 test "png decoder requires explicit scratch" {
@@ -417,6 +451,35 @@ fn testPngRgba2x1() *const [74]u8 {
         0x03, 0x7e, 0x21, 0xc0, 0xfd, 0x8d, 0x00, 0x00,
         0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42,
         0x60, 0x82,
+    };
+}
+
+fn testPngGrayscale2x1() *const [71]u8 {
+    return &[_]u8{
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+        0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+        0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x01,
+        0x08, 0x00, 0x00, 0x00, 0x00, 0xd1, 0x49, 0x20,
+        0x56, 0x00, 0x00, 0x00, 0x0e, 0x49, 0x44, 0x41,
+        0x54, 0x78, 0x01, 0x01, 0x03, 0x00, 0xfc, 0xff,
+        0x00, 0x20, 0xe0, 0x01, 0x23, 0x01, 0x01, 0x1c,
+        0x95, 0x37, 0xd3, 0x00, 0x00, 0x00, 0x00, 0x49,
+        0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+    };
+}
+
+fn testPngGrayscaleAlpha2x1() *const [73]u8 {
+    return &[_]u8{
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+        0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+        0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x01,
+        0x08, 0x04, 0x00, 0x00, 0x00, 0x5e, 0x2b, 0xb7,
+        0x01, 0x00, 0x00, 0x00, 0x10, 0x49, 0x44, 0x41,
+        0x54, 0x78, 0x01, 0x01, 0x05, 0x00, 0xfa, 0xff,
+        0x00, 0x20, 0x80, 0xe0, 0x40, 0x04, 0x05, 0x01,
+        0xc1, 0x56, 0xb2, 0x3a, 0xf1, 0x00, 0x00, 0x00,
+        0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60,
+        0x82,
     };
 }
 

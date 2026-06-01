@@ -155,7 +155,10 @@ _start:
     mov     dword [rel frame + AV1_FRAME_DELTA_Q_U_AC], -1
     mov     dword [rel frame + AV1_FRAME_DELTA_Q_V_DC], 4
     mov     dword [rel frame + AV1_FRAME_DELTA_Q_V_AC], -5
-    mov     byte [rel frame + AV1_FRAME_USING_QMATRIX], 0
+    mov     byte [rel frame + AV1_FRAME_USING_QMATRIX], 1
+    mov     byte [rel frame + AV1_FRAME_QM_Y], 3
+    mov     byte [rel frame + AV1_FRAME_QM_U], 5
+    mov     byte [rel frame + AV1_FRAME_QM_V], 7
     mov     byte [rel frame + AV1_FRAME_TX_MODE], AV1_TX_MODE_LARGEST
     mov     byte [rel frame + AV1_FRAME_REFERENCE_SELECT], 0
     mov     byte [rel frame + AV1_FRAME_SKIP_MODE_PRESENT], 0
@@ -219,7 +222,13 @@ _start:
     jne     .fail_decode_non_reduced_keyframe
     cmp     dword [rel frame + AV1_FRAME_DELTA_Q_V_AC], -5
     jne     .fail_decode_non_reduced_keyframe
-    cmp     byte [rel frame + AV1_FRAME_USING_QMATRIX], 0
+    cmp     byte [rel frame + AV1_FRAME_USING_QMATRIX], 1
+    jne     .fail_decode_non_reduced_keyframe
+    cmp     byte [rel frame + AV1_FRAME_QM_Y], 3
+    jne     .fail_decode_non_reduced_keyframe
+    cmp     byte [rel frame + AV1_FRAME_QM_U], 5
+    jne     .fail_decode_non_reduced_keyframe
+    cmp     byte [rel frame + AV1_FRAME_QM_V], 7
     jne     .fail_decode_non_reduced_keyframe
     cmp     byte [rel frame + AV1_FRAME_TX_MODE], AV1_TX_MODE_LARGEST
     jne     .fail_decode_non_reduced_keyframe
@@ -646,8 +655,53 @@ _start:
     cmp     byte [rel frame + AV1_FRAME_SKIP_MODE_PRESENT], 0
     jne     .fail_decode_intra_only_frame
     inc     qword [rel passed]
-    jmp     .encode_inter_frame
+    jmp     .encode_segmentation_no_update_frame
 .fail_decode_intra_only_frame:
+    inc     qword [rel failed]
+
+.encode_segmentation_no_update_frame:
+    mov     byte [rel frame + AV1_FRAME_SEGMENTATION_ENABLED], 1
+    mov     byte [rel frame + AV1_FRAME_SEGMENTATION_UPDATE_MAP], 1
+    mov     byte [rel frame + AV1_FRAME_SEGMENTATION_TEMPORAL_UPDATE], 0
+    mov     byte [rel frame + AV1_FRAME_SEGMENTATION_UPDATE_DATA], 0
+    mov     byte [rel frame + AV1_FRAME_SEGMENT_FEATURE_MASKS], 0
+    mov     byte [rel frame + AV1_FRAME_SEGMENT_FEATURE_MASKS + 3], 0
+    mov     dword [rel frame + AV1_FRAME_SEGMENT_FEATURE_DATA + (AV1_SEGMENT_FEATURE_ALT_Q * 4)], 0
+    mov     dword [rel frame + AV1_FRAME_SEGMENT_FEATURE_DATA + (AV1_SEGMENT_FEATURE_REF_FRAME * 4)], 0
+    mov     dword [rel frame + AV1_FRAME_SEGMENT_FEATURE_DATA + (3 * AV1_SEGMENT_FEATURE_DATA_STRIDE) + (AV1_SEGMENT_FEATURE_ALT_LF_V * 4)], 0
+    mov     rdi, outbuf
+    mov     esi, 128
+    mov     rdx, seq
+    mov     rcx, frame
+    call    er_av1_frame_encode
+    test    eax, eax
+    jz      .fail_segmentation_no_update_frame
+    test    edx, edx
+    jnz     .fail_segmentation_no_update_frame
+    mov     rdi, outbuf
+    mov     esi, 128
+    mov     rdx, seq
+    mov     rcx, frame
+    call    er_av1_frame_decode
+    test    eax, eax
+    jz      .fail_segmentation_no_update_frame
+    test    edx, edx
+    jnz     .fail_segmentation_no_update_frame
+    cmp     byte [rel frame + AV1_FRAME_SEGMENTATION_ENABLED], 1
+    jne     .fail_segmentation_no_update_frame
+    cmp     byte [rel frame + AV1_FRAME_SEGMENTATION_UPDATE_MAP], 1
+    jne     .fail_segmentation_no_update_frame
+    cmp     byte [rel frame + AV1_FRAME_SEGMENTATION_TEMPORAL_UPDATE], 0
+    jne     .fail_segmentation_no_update_frame
+    cmp     byte [rel frame + AV1_FRAME_SEGMENTATION_UPDATE_DATA], 0
+    jne     .fail_segmentation_no_update_frame
+    cmp     byte [rel frame + AV1_FRAME_SEGMENT_FEATURE_MASKS], 0
+    jne     .fail_segmentation_no_update_frame
+    cmp     dword [rel frame + AV1_FRAME_SEGMENT_FEATURE_DATA + (AV1_SEGMENT_FEATURE_ALT_Q * 4)], 0
+    jne     .fail_segmentation_no_update_frame
+    inc     qword [rel passed]
+    jmp     .encode_inter_frame
+.fail_segmentation_no_update_frame:
     inc     qword [rel failed]
 
 .encode_inter_frame:
@@ -720,15 +774,25 @@ _start:
     mov     byte [rel frame + AV1_FRAME_FILM_GRAIN_NUM_Y_POINTS], 1
     mov     byte [rel frame + AV1_FRAME_FILM_GRAIN_Y_VALUES], 12
     mov     byte [rel frame + AV1_FRAME_FILM_GRAIN_Y_SCALING], 34
-    mov     byte [rel frame + AV1_FRAME_FILM_GRAIN_CHROMA_FROM_LUMA], 1
-    mov     byte [rel frame + AV1_FRAME_FILM_GRAIN_NUM_CB_POINTS], 0
-    mov     byte [rel frame + AV1_FRAME_FILM_GRAIN_NUM_CR_POINTS], 0
+    mov     byte [rel frame + AV1_FRAME_FILM_GRAIN_CHROMA_FROM_LUMA], 0
+    mov     byte [rel frame + AV1_FRAME_FILM_GRAIN_NUM_CB_POINTS], 1
+    mov     byte [rel frame + AV1_FRAME_FILM_GRAIN_CB_VALUES], 44
+    mov     byte [rel frame + AV1_FRAME_FILM_GRAIN_CB_SCALING], 55
+    mov     byte [rel frame + AV1_FRAME_FILM_GRAIN_NUM_CR_POINTS], 1
+    mov     byte [rel frame + AV1_FRAME_FILM_GRAIN_CR_VALUES], 66
+    mov     byte [rel frame + AV1_FRAME_FILM_GRAIN_CR_SCALING], 77
     mov     byte [rel frame + AV1_FRAME_FILM_GRAIN_SCALING_MINUS_8], 2
     mov     byte [rel frame + AV1_FRAME_FILM_GRAIN_AR_LAG], 0
     mov     dword [rel frame + AV1_FRAME_FILM_GRAIN_AR_CB_COEFFS], 7
     mov     dword [rel frame + AV1_FRAME_FILM_GRAIN_AR_CR_COEFFS], -8
     mov     byte [rel frame + AV1_FRAME_FILM_GRAIN_AR_SHIFT_MINUS_6], 1
     mov     byte [rel frame + AV1_FRAME_FILM_GRAIN_SCALE_SHIFT], 3
+    mov     byte [rel frame + AV1_FRAME_FILM_GRAIN_CB_MULT], 91
+    mov     byte [rel frame + AV1_FRAME_FILM_GRAIN_CB_LUMA_MULT], 92
+    mov     dword [rel frame + AV1_FRAME_FILM_GRAIN_CB_OFFSET], 123
+    mov     byte [rel frame + AV1_FRAME_FILM_GRAIN_CR_MULT], 93
+    mov     byte [rel frame + AV1_FRAME_FILM_GRAIN_CR_LUMA_MULT], 94
+    mov     dword [rel frame + AV1_FRAME_FILM_GRAIN_CR_OFFSET], 321
     mov     byte [rel frame + AV1_FRAME_FILM_GRAIN_OVERLAP], 1
     mov     byte [rel frame + AV1_FRAME_FILM_GRAIN_CLIP_RESTRICTED], 1
     mov     rdi, outbuf
@@ -827,7 +891,19 @@ _start:
     jne     .fail_decode_inter_frame
     cmp     byte [rel frame + AV1_FRAME_FILM_GRAIN_Y_SCALING], 34
     jne     .fail_decode_inter_frame
-    cmp     byte [rel frame + AV1_FRAME_FILM_GRAIN_CHROMA_FROM_LUMA], 1
+    cmp     byte [rel frame + AV1_FRAME_FILM_GRAIN_CHROMA_FROM_LUMA], 0
+    jne     .fail_decode_inter_frame
+    cmp     byte [rel frame + AV1_FRAME_FILM_GRAIN_NUM_CB_POINTS], 1
+    jne     .fail_decode_inter_frame
+    cmp     byte [rel frame + AV1_FRAME_FILM_GRAIN_CB_VALUES], 44
+    jne     .fail_decode_inter_frame
+    cmp     byte [rel frame + AV1_FRAME_FILM_GRAIN_CB_SCALING], 55
+    jne     .fail_decode_inter_frame
+    cmp     byte [rel frame + AV1_FRAME_FILM_GRAIN_NUM_CR_POINTS], 1
+    jne     .fail_decode_inter_frame
+    cmp     byte [rel frame + AV1_FRAME_FILM_GRAIN_CR_VALUES], 66
+    jne     .fail_decode_inter_frame
+    cmp     byte [rel frame + AV1_FRAME_FILM_GRAIN_CR_SCALING], 77
     jne     .fail_decode_inter_frame
     cmp     byte [rel frame + AV1_FRAME_FILM_GRAIN_SCALING_MINUS_8], 2
     jne     .fail_decode_inter_frame
@@ -840,6 +916,18 @@ _start:
     cmp     byte [rel frame + AV1_FRAME_FILM_GRAIN_AR_SHIFT_MINUS_6], 1
     jne     .fail_decode_inter_frame
     cmp     byte [rel frame + AV1_FRAME_FILM_GRAIN_SCALE_SHIFT], 3
+    jne     .fail_decode_inter_frame
+    cmp     byte [rel frame + AV1_FRAME_FILM_GRAIN_CB_MULT], 91
+    jne     .fail_decode_inter_frame
+    cmp     byte [rel frame + AV1_FRAME_FILM_GRAIN_CB_LUMA_MULT], 92
+    jne     .fail_decode_inter_frame
+    cmp     dword [rel frame + AV1_FRAME_FILM_GRAIN_CB_OFFSET], 123
+    jne     .fail_decode_inter_frame
+    cmp     byte [rel frame + AV1_FRAME_FILM_GRAIN_CR_MULT], 93
+    jne     .fail_decode_inter_frame
+    cmp     byte [rel frame + AV1_FRAME_FILM_GRAIN_CR_LUMA_MULT], 94
+    jne     .fail_decode_inter_frame
+    cmp     dword [rel frame + AV1_FRAME_FILM_GRAIN_CR_OFFSET], 321
     jne     .fail_decode_inter_frame
     cmp     byte [rel frame + AV1_FRAME_FILM_GRAIN_OVERLAP], 1
     jne     .fail_decode_inter_frame
