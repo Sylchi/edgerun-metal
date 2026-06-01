@@ -319,6 +319,7 @@ _store_blk_write:
     pop     r13
     pop     r12
     pop     rbx
+    mov     eax, -1
     er_err  ERROR_IO
     ret
 
@@ -424,6 +425,7 @@ _store_blk_read:
     pop     r13
     pop     r12
     pop     rbx
+    mov     eax, -1
     er_err  ERROR_IO
     ret
 
@@ -536,6 +538,7 @@ er_fn er_store_init
     pop     r13
     pop     r12
     pop     rbx
+    mov     eax, -1
     er_err  ERROR_UNSUPPORTED
     ret
 
@@ -545,6 +548,7 @@ er_fn er_store_init
     pop     r13
     pop     r12
     pop     rbx
+    mov     eax, -1
     er_err  ERROR_IO
     ret
 
@@ -622,6 +626,7 @@ _store_write_superblock:
 .sb_fail:
     pop     r12
     pop     rbx
+    mov     eax, -1
     er_err  ERROR_IO
     ret
 
@@ -652,6 +657,7 @@ er_fn er_store_sync
 .sync_fail:
     pop     r12
     pop     rbx
+    mov     eax, -1
     er_err  ERROR_IO
     ret
 
@@ -876,6 +882,7 @@ _store_append_record:
     pop     r13
     pop     r12
     pop     rbx
+    mov     eax, -1
     er_err  ERROR_IO
     ret
 
@@ -961,6 +968,8 @@ _store_replay:
     jmp     .replay_skip         ; unknown type, skip
 
 .replay_blob:
+    mov     rbp, r8             ; payload offset
+
     ; Insert blob slot
     mov     rdi, r12
     call    _store_next_blob_slot
@@ -983,7 +992,7 @@ _store_replay:
     mov     ecx, HASH_SIZE
     call    er_bytes_copy
 
-    mov     qword [rbx + BL_OFFSET], r8
+    mov     qword [rbx + BL_OFFSET], rbp
     mov     qword [rbx + BL_SIZE], r15
 
     mov     rax, [r12 + ST_BLOB_COUNT]
@@ -1192,6 +1201,7 @@ _store_replay:
     pop     r13
     pop     r12
     pop     rbx
+    mov     eax, -1
     er_err  ERROR_IO
     ret
 
@@ -1299,6 +1309,7 @@ er_fn er_store_put_blob
     pop     r13
     pop     r12
     pop     rbx
+    mov     eax, -1
     er_err  ERROR_NO_SPACE
     ret
 
@@ -1308,6 +1319,7 @@ er_fn er_store_put_blob
     pop     r13
     pop     r12
     pop     rbx
+    mov     eax, -1
     er_err  ERROR_UNSUPPORTED
     ret
 
@@ -1317,6 +1329,7 @@ er_fn er_store_put_blob
     pop     r13
     pop     r12
     pop     rbx
+    mov     eax, -1
     er_err  ERROR_IO
     ret
 
@@ -1368,6 +1381,7 @@ er_fn er_store_get_blob
     jnz     .get_io
 
     ; Write actual size
+    mov     r8, [rbx + BL_SIZE]
     mov     qword [r15], r8
 
     pop     r15
@@ -1385,6 +1399,7 @@ er_fn er_store_get_blob
     pop     r13
     pop     r12
     pop     rbx
+    mov     eax, -1
     er_err  ERROR_NOT_FOUND
     ret
 
@@ -1394,6 +1409,7 @@ er_fn er_store_get_blob
     pop     r13
     pop     r12
     pop     rbx
+    mov     eax, -1
     er_err  ERROR_NO_SPACE
     ret
 
@@ -1403,6 +1419,7 @@ er_fn er_store_get_blob
     pop     r13
     pop     r12
     pop     rbx
+    mov     eax, -1
     er_err  ERROR_IO
     ret
 
@@ -1450,7 +1467,7 @@ er_fn er_store_blob_info
     mov     [r15], rax
 .info_skip_size:
 
-    mov     rdi, [rsp]          ; out_content_type from stack
+    mov     rdi, [rsp + 48]     ; out_content_type from stack
     test    rdi, rdi
     jz      .info_skip_ct
     mov     eax, [rbx + BL_CONTENT_TYPE]
@@ -1463,7 +1480,6 @@ er_fn er_store_blob_info
     pop     r13
     pop     r12
     pop     rbx
-    xor     eax, eax
     er_ok
     ret
 
@@ -1617,6 +1633,7 @@ er_fn er_store_index_put
     pop     r13
     pop     r12
     pop     rbx
+    mov     eax, -1
     er_err  ERROR_NO_SPACE
     ret
 
@@ -1731,6 +1748,7 @@ er_fn er_store_index_put
     pop     r13
     pop     r12
     pop     rbx
+    mov     eax, -1
     er_err  ERROR_UNSUPPORTED
     ret
 
@@ -1741,6 +1759,7 @@ er_fn er_store_index_put
     pop     r13
     pop     r12
     pop     rbx
+    mov     eax, -1
     er_err  ERROR_IO
     ret
 

@@ -1180,11 +1180,17 @@ er_fn er_tpm_encrypt_decrypt2
     test    r8, r8
     jz      .err
 
+    mov     r10d, [rsp + 8]     ; caller stack arg: decrypt flag
+    and     r10d, 1
+
     push    rbx
     push    r12
     push    r13
     push    r14
     push    r15
+    sub     rsp, 16
+    mov     [rsp], rdi          ; original command buffer
+    mov     [rsp + 8], r10d     ; normalized decrypt flag
     mov     r12d, esi
     mov     rbx, rdx
     mov     r13d, ecx
@@ -1204,8 +1210,9 @@ er_fn er_tpm_encrypt_decrypt2
     mov     esi, r12d
     call    _tpm_write_auth_handle
     ; rax = cursor after auth handle
-    ; decrypt flag (1 byte): always encrypt=0 for now
-    mov     byte [rax], 0x00
+    ; decrypt flag (1 byte): 0 = encrypt, 1 = decrypt
+    mov     ecx, [rsp + 8]
+    mov     byte [rax], cl
     inc     rax
     ; mode (2 BE)
     mov     ecx, r15d
@@ -1222,6 +1229,8 @@ er_fn er_tpm_encrypt_decrypt2
     mov     edx, r13d
     call    _tpm_write_tpm2b
 
+    mov     rax, [rsp]
+    add     rsp, 16
     pop     r15
     pop     r14
     pop     r13
@@ -1229,6 +1238,7 @@ er_fn er_tpm_encrypt_decrypt2
     pop     rbx
     ret
 .err_pop5:
+    add     rsp, 16
     pop     r15
     pop     r14
     pop     r13
@@ -1343,7 +1353,7 @@ er_fn er_tpm_parse_sha256_digest
 ; ==================================================================
 ; er_tpm_parse_p256_public — parse P-256 public key from CreatePrimary
 ; rdi = response, esi = length, rdx = x_out[32], rcx = y_out[32]
-; → rax = 64 on success, 0 on error (TODO)
+; → rax = 64 on success, 0 on error
 ; =================================================================
 er_fn er_tpm_parse_p256_public
     test    rdi, rdi
@@ -1357,6 +1367,7 @@ er_fn er_tpm_parse_p256_public
     push    r12
     push    r13
     push    r14
+    push    r15
     mov     r12, rdx            ; x_out
     mov     r13, rcx            ; y_out
 
@@ -1368,9 +1379,11 @@ er_fn er_tpm_parse_p256_public
 
     pop     rdi                 ; rdi = response
     pop     rsi                 ; rsi = length
+    lea     r15, [rdi + rsi]    ; response end
 
     ; Determine handle offset from tag
     movzx   eax, word [rdi]
+    xchg    al, ah
     cmp     eax, TPM_ST_SESSIONS
     je      .has_param_size
     ; TPM_ST_NO_SESSIONS: handle at +10
@@ -1388,11 +1401,21 @@ er_fn er_tpm_parse_p256_public
     lea     r14, [rdi + rbx + 4]
 
     ; Read TPM2B_PUBLIC size
+    lea     rax, [r14 + 2]
+    cmp     rax, r15
+    ja      .err_pop4
     movzx   eax, word [r14]
     xchg    al, ah
+    lea     rdx, [r14 + rax + 2]
+    cmp     rdx, r15
+    ja      .err_pop4
+    mov     rbx, rdx            ; public area end
     add     r14, 2
 
     ; Type: must be TPM_ALG_ECC (0x0023)
+    lea     rax, [r14 + 2]
+    cmp     rax, rbx
+    ja      .err_pop4
     movzx   eax, word [r14]
     xchg    al, ah
     cmp     eax, TPM_ALG_ECC
@@ -1400,40 +1423,64 @@ er_fn er_tpm_parse_p256_public
     add     r14, 2
 
     ; Skip nameAlg (2), objectAttributes (4)
+    lea     rax, [r14 + 6]
+    cmp     rax, rbx
+    ja      .err_pop4
     add     r14, 6
 
     ; Skip authPolicy TPM2B
+    lea     rax, [r14 + 2]
+    cmp     rax, rbx
+    ja      .err_pop4
     movzx   eax, word [r14]
     xchg    al, ah
     lea     r14, [r14 + rax + 2]
+    cmp     r14, rbx
+    ja      .err_pop4
 
     ; Skip ECC params: symmetric(2), scheme(4), curveID(2), kdf(2)
+    lea     rax, [r14 + 10]
+    cmp     rax, rbx
+    ja      .err_pop4
     add     r14, 10
 
     ; unique: x TPM2B
+    lea     rax, [r14 + 2]
+    cmp     rax, rbx
+    ja      .err_pop4
     movzx   eax, word [r14]
     xchg    al, ah
-    cmp     eax, 32
+    cmp     eax, TPM_P256_POINT_BYTES
     jne     .err_pop4
     add     r14, 2
-    mov     ecx, 32
+    lea     rax, [r14 + TPM_P256_POINT_BYTES]
+    cmp     rax, rbx
+    ja      .err_pop4
+    mov     ecx, TPM_P256_POINT_BYTES
     mov     rsi, r14
     mov     rdi, r12
     rep     movsb
     mov     r14, rsi
 
     ; unique: y TPM2B
+    lea     rax, [r14 + 2]
+    cmp     rax, rbx
+    ja      .err_pop4
     movzx   eax, word [r14]
     xchg    al, ah
-    cmp     eax, 32
+    cmp     eax, TPM_P256_POINT_BYTES
     jne     .err_pop4
     add     r14, 2
-    mov     ecx, 32
+    lea     rax, [r14 + TPM_P256_POINT_BYTES]
+    cmp     rax, rbx
+    ja      .err_pop4
+    mov     ecx, TPM_P256_POINT_BYTES
     mov     rsi, r14
     mov     rdi, r13
     rep     movsb
 
-    mov     eax, 64
+    mov     eax, TPM_P256_PUBLIC_KEY_LEN
+    pop     r15
     pop     r14
     pop     r13
     pop     r12
@@ -1441,10 +1488,11 @@ er_fn er_tpm_parse_p256_public
     ret
 
 .err_pop6:
-    add     rsp, 48
+    add     rsp, 56
     xor     eax, eax
     ret
 .err_pop4:
+    pop     r15
     pop     r14
     pop     r13
     pop     r12

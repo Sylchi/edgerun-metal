@@ -2,9 +2,14 @@
 
 %include "x86_64/macros.inc"
 %include "test/test_macros.inc"
+%include "x86_64/wasm_defines.inc"
 
 extern er_uvc_parse_config_caps
 extern er_uvc_set_config_blob
+extern er_uvc_probe
+extern er_uvc_stream_config
+extern er_uvc_stream_start
+extern er_uvc_stream_poll
 extern er_xhci_set_port_config_blob
 extern er_xhci_get_port_config_blob
 
@@ -12,6 +17,8 @@ TEST_BSS_PASSED_FAILED
 caps_out:   resd 1
 ptr_out:    resq 1
 len_out:    resq 1
+frames_out: resq 1
+errors_out: resq 1
 
 SECTION .rodata
 ; VideoControl interface + VideoStreaming interface + MJPEG format descriptor.
@@ -127,6 +134,53 @@ _start:
     lea     rdx, [rel caps_out]
     call    er_uvc_parse_config_caps
     EXPECT_EAX -1, .fail_case
+    TEST_CASE_PASS
+
+    ; Test 5: stream start fails closed when no UVC device is attached.
+    xor     edi, edi
+    call    er_uvc_stream_start
+    EXPECT_EAX -1, .fail_case
+    cmp     edx, ERROR_NOT_PRESENT
+    jne     .fail_case
+    TEST_CASE_PASS
+
+    ; Test 6: descriptor-backed probe honors the xHCI-ready hint.
+    lea     rdi, [rel cfg_yuy2]
+    mov     rsi, cfg_yuy2_len
+    call    er_uvc_set_config_blob
+    EXPECT_EAX 0, .fail_case
+    mov     edi, 1
+    call    er_uvc_probe
+    EXPECT_EAX 1, .fail_case
+    TEST_CASE_PASS
+
+    ; Test 7: configured RGB stream starts and polls deterministic counters.
+    xor     edi, edi
+    mov     esi, 640
+    mov     edx, 480
+    mov     ecx, 30
+    call    er_uvc_stream_config
+    EXPECT_EAX 0, .fail_case
+    xor     edi, edi
+    call    er_uvc_stream_start
+    EXPECT_EAX 0, .fail_case
+    cmp     edx, 0
+    jne     .fail_case
+    xor     edi, edi
+    lea     rsi, [rel frames_out]
+    lea     rdx, [rel errors_out]
+    call    er_uvc_stream_poll
+    EXPECT_EAX 0, .fail_case
+    EXPECT_QWORD [rel frames_out], 0, .fail_case
+    EXPECT_QWORD [rel errors_out], 0, .fail_case
+    TEST_CASE_PASS
+
+    ; Test 8: an attached but unconfigured IR stream is rejected explicitly.
+    mov     edi, 1
+    call    er_uvc_stream_start
+    EXPECT_EAX -1, .fail_case
+    cmp     edx, ERROR_BAD_ARGUMENT
+    jne     .fail_case
     TEST_CASE_PASS
     jmp     .done
 

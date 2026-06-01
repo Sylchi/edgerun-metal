@@ -66,6 +66,23 @@ AV1_COEFF_BULK_STACK_SIZE           equ AV1_COEFF_BULK_CUR + 16
     av1_check_edx %2
 %endmacro
 
+%macro av1_read_symbol_check 4
+    mov     rdi, r12
+    lea     rsi, [r14 + %1]
+    mov     edx, %2
+    mov     ecx, %3
+    av1_call_check er_av1_symbol_read_symbol, %4
+%endmacro
+
+%macro av1_write_symbol_check 4
+    mov     rdi, rsp
+    lea     rsi, [r14 + %1]
+    mov     edx, %2
+    mov     ecx, %3
+    mov     r8d, r15d
+    av1_call_check er_av1_symbol_write_symbol, %4
+%endmacro
+
 %macro av1_decode_residual_8x8 2
     mov     rdi, r12
     lea     rsi, [rsp + %1 + AV1_TILE_WALK_COEFFS]
@@ -82,6 +99,19 @@ AV1_COEFF_BULK_STACK_SIZE           equ AV1_COEFF_BULK_CUR + 16
     lea     rsi, [rsp + %1 + AV1_TILE_WALK_DEQUANT]
     mov     edx, AV1_TX_TYPE_DCT_DCT
     av1_call_check er_av1_block_inverse_tx_8x8, %2
+%endmacro
+
+%macro av1_reconstruct_current_8x8 2
+    lea     rdx, [rsp + %1 + AV1_TILE_WALK_PRED]
+    mov     ecx, AV1_BLOCK_DIM_8
+    lea     r8, [rsp + %1 + AV1_TILE_WALK_RESID]
+    xor     r9d, r9d
+    av1_call_check er_av1_block_reconstruct_add_8x8, %2
+%endmacro
+
+%macro av1_zero_residual_8x8 1
+    lea     rdi, [rsp + %1 + AV1_TILE_WALK_RESID]
+    av1_call_check er_av1_block_zero_residual_8x8, .done
 %endmacro
 
 SECTION .text
@@ -119,37 +149,13 @@ er_fn er_av1_block_decode_intra_symbols
     mov     r13, rsi
     mov     r14, rdx
     mov     r15d, ecx
-    mov     rdi, r12
-    lea     rsi, [r14 + AV1_BLOCK_CDFS_PARTITION]
-    mov     edx, AV1_BLOCK_PARTITION_SYMBOLS_W8
-    mov     ecx, r15d
-    call    er_av1_symbol_read_symbol
-    test    edx, edx
-    jnz     .done
+    av1_read_symbol_check AV1_BLOCK_CDFS_PARTITION, AV1_BLOCK_PARTITION_SYMBOLS_W8, r15d, .done
     mov     [r13 + AV1_BLOCK_PARTITION], al
-    mov     rdi, r12
-    lea     rsi, [r14 + AV1_BLOCK_CDFS_Y_MODE]
-    mov     edx, AV1_BLOCK_Y_MODE_SYMBOLS
-    mov     ecx, r15d
-    call    er_av1_symbol_read_symbol
-    test    edx, edx
-    jnz     .done
+    av1_read_symbol_check AV1_BLOCK_CDFS_Y_MODE, AV1_BLOCK_Y_MODE_SYMBOLS, r15d, .done
     mov     [r13 + AV1_BLOCK_Y_MODE], al
-    mov     rdi, r12
-    lea     rsi, [r14 + AV1_BLOCK_CDFS_SKIP]
-    mov     edx, AV1_BLOCK_SKIP_SYMBOLS
-    mov     ecx, r15d
-    call    er_av1_symbol_read_symbol
-    test    edx, edx
-    jnz     .done
+    av1_read_symbol_check AV1_BLOCK_CDFS_SKIP, AV1_BLOCK_SKIP_SYMBOLS, r15d, .done
     mov     [r13 + AV1_BLOCK_SKIP], al
-    mov     rdi, r12
-    lea     rsi, [r14 + AV1_BLOCK_CDFS_TX_SIZE]
-    mov     edx, AV1_BLOCK_TX_SIZE_SYMBOLS_8X8
-    mov     ecx, r15d
-    call    er_av1_symbol_read_symbol
-    test    edx, edx
-    jnz     .done
+    av1_read_symbol_check AV1_BLOCK_CDFS_TX_SIZE, AV1_BLOCK_TX_SIZE_SYMBOLS_8X8, r15d, .done
     mov     [r13 + AV1_BLOCK_TX_SIZE], al
     mov     eax, AV1_BLOCK_SIZE
     er_ok
@@ -190,22 +196,10 @@ er_fn er_av1_block_decode_coeffs_8x8
 .decode_loop:
     cmp     ebx, AV1_BLOCK_PIXELS_8X8
     jae     .ok
-    mov     rdi, r12
-    lea     rsi, [r14 + AV1_BLOCK_CDFS_COEFF_NONZERO]
-    mov     edx, AV1_BLOCK_COEFF_NONZERO_SYMBOLS
-    mov     ecx, [rsp]
-    call    er_av1_symbol_read_symbol
-    test    edx, edx
-    jnz     .done
+    av1_read_symbol_check AV1_BLOCK_CDFS_COEFF_NONZERO, AV1_BLOCK_COEFF_NONZERO_SYMBOLS, [rsp], .done
     test    eax, eax
     jz      .next_coeff
-    mov     rdi, r12
-    lea     rsi, [r14 + AV1_BLOCK_CDFS_COEFF_LEVEL]
-    mov     edx, AV1_BLOCK_COEFF_LEVEL_SYMBOLS
-    mov     ecx, [rsp]
-    call    er_av1_symbol_read_symbol
-    test    edx, edx
-    jnz     .done
+    av1_read_symbol_check AV1_BLOCK_CDFS_COEFF_LEVEL, AV1_BLOCK_COEFF_LEVEL_SYMBOLS, [rsp], .done
     inc     eax
     mov     [rsp + 8], eax
     mov     rdi, r12
@@ -287,24 +281,10 @@ er_fn er_av1_block_encode_coeffs_8x8
     mov     [rsp + AV1_SYMBOL_SIZE + 8], eax
     test    eax, eax
     jnz     .write_nonzero
-    mov     rdi, rsp
-    lea     rsi, [r14 + AV1_BLOCK_CDFS_COEFF_NONZERO]
-    mov     edx, AV1_BLOCK_COEFF_NONZERO_SYMBOLS
-    xor     ecx, ecx
-    mov     r8d, r15d
-    call    er_av1_symbol_write_symbol
-    test    edx, edx
-    jnz     .done
+    av1_write_symbol_check AV1_BLOCK_CDFS_COEFF_NONZERO, AV1_BLOCK_COEFF_NONZERO_SYMBOLS, 0, .done
     jmp     .next_coeff
 .write_nonzero:
-    mov     rdi, rsp
-    lea     rsi, [r14 + AV1_BLOCK_CDFS_COEFF_NONZERO]
-    mov     edx, AV1_BLOCK_COEFF_NONZERO_SYMBOLS
-    mov     ecx, 1
-    mov     r8d, r15d
-    call    er_av1_symbol_write_symbol
-    test    edx, edx
-    jnz     .done
+    av1_write_symbol_check AV1_BLOCK_CDFS_COEFF_NONZERO, AV1_BLOCK_COEFF_NONZERO_SYMBOLS, 1, .done
     mov     eax, [rsp + AV1_SYMBOL_SIZE + 8]
     xor     esi, esi
     test    eax, eax
@@ -318,28 +298,17 @@ er_fn er_av1_block_encode_coeffs_8x8
     ja      .unsupported
     dec     eax
     mov     [rsp + AV1_SYMBOL_SIZE + 12], esi
-    mov     rdi, rsp
-    lea     rsi, [r14 + AV1_BLOCK_CDFS_COEFF_LEVEL]
-    mov     edx, AV1_BLOCK_COEFF_LEVEL_SYMBOLS
-    mov     ecx, eax
-    mov     r8d, r15d
-    call    er_av1_symbol_write_symbol
-    test    edx, edx
-    jnz     .done
+    av1_write_symbol_check AV1_BLOCK_CDFS_COEFF_LEVEL, AV1_BLOCK_COEFF_LEVEL_SYMBOLS, eax, .done
     mov     rdi, rsp
     mov     esi, [rsp + AV1_SYMBOL_SIZE + 12]
-    call    er_av1_symbol_write_bool
-    test    edx, edx
-    jnz     .done
+    av1_call_check er_av1_symbol_write_bool, .done
     inc     dword [rsp + AV1_SYMBOL_SIZE + 4]
 .next_coeff:
     inc     ebx
     jmp     .encode_loop
 .finish:
     mov     rdi, rsp
-    call    er_av1_symbol_write_finish
-    test    edx, edx
-    jnz     .done
+    av1_call_check er_av1_symbol_write_finish, .done
     jmp     .done
 .invalid_param:
     xor     eax, eax
@@ -525,6 +494,23 @@ er_fn er_av1_block_dequant_8x8
     er_err  ERROR_INVALID_PARAM
 .done:
     er_pop  rbx, r12, r13, r14
+    er_ret
+
+; er_av1_block_zero_residual_8x8(dst) -> eax=64, rdx=error
+; Clears a signed 8x8 residual block for skipped transform blocks.
+er_fn er_av1_block_zero_residual_8x8
+    test    rdi, rdi
+    jz      .invalid_param
+    xor     eax, eax
+    mov     ecx, (AV1_BLOCK_PIXELS_8X8 * 2) / 8
+    cld
+    rep     stosq
+    mov     eax, AV1_BLOCK_PIXELS_8X8
+    er_ok
+    er_ret
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
     er_ret
 
 ; er_av1_block_inverse_tx_8x8(dst, coeffs, tx_type)
@@ -1306,7 +1292,13 @@ er_fn er_av1_tile_decode_intra8x8_luma
     movzx   eax, byte [rsp + AV1_TILE_WALK_BLOCK + AV1_BLOCK_Y_MODE]
     cmp     eax, AV1_PRED_MODE_MAX_SUPPORTED
     ja      .unsupported
+    cmp     byte [rsp + AV1_TILE_WALK_BLOCK + AV1_BLOCK_SKIP], 0
+    je      .decode_luma_residual
+    av1_zero_residual_8x8 0
+    jmp     .luma_residual_ready
+.decode_luma_residual:
     av1_decode_residual_8x8 0, .done
+.luma_residual_ready:
     lea     rdi, [rsp + AV1_TILE_WALK_PRED]
     mov     esi, AV1_BLOCK_DIM_8
     xor     edx, edx
@@ -1326,13 +1318,7 @@ er_fn er_av1_tile_decode_intra8x8_luma
     call    .block_dst_ptr
     mov     rdi, rax
     mov     esi, [rsp + AV1_TILE_WALK_WIDTH]
-    lea     rdx, [rsp + AV1_TILE_WALK_PRED]
-    mov     ecx, AV1_BLOCK_DIM_8
-    lea     r8, [rsp + AV1_TILE_WALK_RESID]
-    xor     r9d, r9d
-    call    er_av1_block_reconstruct_add_8x8
-    test    edx, edx
-    jnz     .done
+    av1_reconstruct_current_8x8 0, .done
     inc     dword [rsp + AV1_TILE_WALK_COUNT]
     add     r15d, AV1_BLOCK_DIM_8
     jmp     .col_loop
@@ -1491,13 +1477,7 @@ er_fn er_av1_tile_decode_intra8x8_luma
     mov     rdi, [rsp + 8 + AV1_TILE_WALK_PLANE_PTR]
     add     rdi, rax
     mov     esi, [rsp + 8 + AV1_TILE_WALK_PLANE_WIDTH]
-    lea     rdx, [rsp + 8 + AV1_TILE_WALK_PRED]
-    mov     ecx, AV1_BLOCK_DIM_8
-    lea     r8, [rsp + 8 + AV1_TILE_WALK_RESID]
-    xor     r9d, r9d
-    call    er_av1_block_reconstruct_add_8x8
-    test    edx, edx
-    jnz     .chroma_ret
+    av1_reconstruct_current_8x8 8, .chroma_ret
     inc     dword [rsp + 8 + AV1_TILE_WALK_COUNT]
     add     r15d, AV1_BLOCK_DIM_8
     jmp     .chroma_col_loop
@@ -1596,11 +1576,7 @@ er_fn er_av1_tile_decode_inter8x8_luma
     mov     rdi, [r13 + AV1_IMAGE_Y_PTR]
     add     rdi, rax
     mov     esi, [rsp + AV1_TILE_WALK_WIDTH]
-    lea     rdx, [rsp + AV1_TILE_WALK_PRED]
-    mov     ecx, AV1_BLOCK_DIM_8
-    lea     r8, [rsp + AV1_TILE_WALK_RESID]
-    xor     r9d, r9d
-    av1_call_check er_av1_block_reconstruct_add_8x8, .done
+    av1_reconstruct_current_8x8 0, .done
     inc     dword [rsp + AV1_TILE_WALK_COUNT]
     add     r15d, AV1_BLOCK_DIM_8
     jmp     .col_loop
@@ -1674,11 +1650,7 @@ er_fn er_av1_tile_decode_inter8x8_luma
     mov     rdi, [rsp + AV1_TILE_WALK_PLANE_PTR + 8]
     add     rdi, rax
     mov     esi, [rsp + AV1_TILE_WALK_PLANE_WIDTH + 8]
-    lea     rdx, [rsp + AV1_TILE_WALK_PRED + 8]
-    mov     ecx, AV1_BLOCK_DIM_8
-    lea     r8, [rsp + AV1_TILE_WALK_RESID + 8]
-    xor     r9d, r9d
-    av1_call_check er_av1_block_reconstruct_add_8x8, .chroma_inter_ret
+    av1_reconstruct_current_8x8 8, .chroma_inter_ret
     inc     dword [rsp + AV1_TILE_WALK_COUNT + 8]
     add     r15d, AV1_BLOCK_DIM_8
     jmp     .chroma_inter_col_loop

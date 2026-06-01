@@ -722,6 +722,7 @@ _nvme_io_blocks:
     pause
     dec     ebx
     jnz     .poll_cq
+    mov     eax, -1
     er_err  ERROR_TIMEOUT
     jmp     .out
 
@@ -731,14 +732,17 @@ _nvme_io_blocks:
     and     eax, 0x7FFE
     jnz     .io_fail
 
+    xor     eax, eax
     er_ok
     jmp     .out
 
 .bad_arg:
+    mov     eax, -1
     er_err  ERROR_UNSUPPORTED
     jmp     .out
 
 .io_fail:
+    mov     eax, -1
     er_err  ERROR_IO
 .out:
     pop     r15

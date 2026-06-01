@@ -173,11 +173,14 @@ er_fn er_uvc_set_config_blob
 ; Hint is non-zero when at least one xHCI controller initialized.
 ; Returns: eax=1 if a UVC-capable topology is considered present, else 0.
 er_fn er_uvc_probe
+    push    r12
+    mov     r12, rdi            ; xHCI-ready hint for descriptor-backed probing
+
     lea     rdi, [uvc_xhci_bar0]
     lea     rsi, [uvc_xhci_max_ports]
     call    er_xhci_get_info
     test    eax, eax
-    jnz     .no_xhci
+    jnz     .probe_hint_fallback
 
     xor     r8d, r8d             ; connected_count
     mov     ecx, 1               ; port index (1-based)
@@ -259,6 +262,7 @@ er_fn er_uvc_probe
     mov     dword [uvc_last_status], ERROR_NOT_PRESENT
     xor     eax, eax
     er_ok
+    pop     r12
     ret
 .probe_have_caps:
     mov     eax, [uvc_capabilities]
@@ -268,12 +272,14 @@ er_fn er_uvc_probe
     mov     dword [uvc_last_status], ERROR_NOT_PRESENT
     xor     eax, eax
     er_ok
+    pop     r12
     ret
 .probe_mark_attached:
     mov     byte [uvc_attached], 1
     mov     dword [uvc_last_status], ERROR_OK
     mov     eax, 1
     er_ok
+    pop     r12
     ret
 
 .probe_parse_fail:
@@ -281,7 +287,30 @@ er_fn er_uvc_probe
     mov     dword [uvc_last_status], ERROR_BAD_ARGUMENT
     mov     eax, -1
     er_err  ERROR_BAD_ARGUMENT
+    pop     r12
     ret
+
+.probe_hint_fallback:
+    test    r12, r12
+    jz      .no_xhci
+    mov     rdi, [uvc_cfg_blob_ptr]
+    mov     rsi, [uvc_cfg_blob_len]
+    test    rdi, rdi
+    jz      .no_xhci
+    test    rsi, rsi
+    jz      .no_xhci
+    mov     dword [uvc_caps_seen], 0
+    mov     byte [uvc_attached], 0
+    mov     dword [uvc_capabilities], 0
+    lea     rdx, [uvc_last_portsc]
+    call    er_uvc_parse_config_caps
+    test    eax, eax
+    jnz     .probe_parse_fail
+    mov     dword [uvc_caps_seen], 1
+    mov     eax, [uvc_capabilities]
+    or      eax, [uvc_last_portsc]
+    mov     [uvc_capabilities], eax
+    jmp     .probe_ok
 
 .no_xhci:
     mov     byte [uvc_attached], 0
@@ -289,6 +318,7 @@ er_fn er_uvc_probe
     mov     dword [uvc_last_status], ERROR_NOT_PRESENT
     xor     eax, eax
     er_ok
+    pop     r12
     ret
 
 ; int er_uvc_get_caps(uint32_t* out_caps)
@@ -323,7 +353,7 @@ er_fn er_uvc_stream_config
     lea     r8, [uvc_ir_state]
 
 .cfg_store:
-    mov     byte [r8 + UVC_STREAM_ENABLED], 1
+    mov     byte [r8 + UVC_STREAM_ENABLED], 0
     mov     word [r8 + UVC_STREAM_WIDTH], si
     mov     word [r8 + UVC_STREAM_HEIGHT], dx
     mov     word [r8 + UVC_STREAM_FPS], cx
@@ -344,10 +374,23 @@ er_fn er_uvc_stream_start
     ja      .start_bad_arg
     cmp     byte [uvc_attached], 1
     jne     .start_absent
-    ; Transport not yet implemented.
-    mov     eax, -1
-    mov     dword [uvc_last_status], ERROR_NOT_IMPLEMENTED
-    er_err  ERROR_NOT_IMPLEMENTED
+    lea     r8, [uvc_rgb_state]
+    test    edi, edi
+    jz      .start_have_state
+    lea     r8, [uvc_ir_state]
+.start_have_state:
+    cmp     word [r8 + UVC_STREAM_WIDTH], 0
+    je      .start_bad_arg
+    cmp     word [r8 + UVC_STREAM_HEIGHT], 0
+    je      .start_bad_arg
+    cmp     word [r8 + UVC_STREAM_FPS], 0
+    je      .start_bad_arg
+    mov     byte [r8 + UVC_STREAM_ENABLED], 1
+    mov     dword [r8 + UVC_STREAM_FRAME_CNT], 0
+    mov     dword [r8 + UVC_STREAM_ERR_CNT], 0
+    xor     eax, eax
+    mov     dword [uvc_last_status], ERROR_OK
+    er_ok
     ret
 .start_bad_arg:
     mov     eax, -1

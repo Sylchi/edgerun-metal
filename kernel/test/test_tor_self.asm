@@ -14,6 +14,8 @@ extern er_tor_set_role_caps
 extern er_tor_enable_role
 extern er_tor_get_role
 extern er_tor_get_role_caps
+extern er_tor_set_guard_material
+extern er_tor_init
 extern er_tor_hsdir_build_publish_header
 extern er_tor_hsdir_build_fetch_request
 extern er_local_cell_init
@@ -78,6 +80,16 @@ hsdir_fetch_expected_len equ $ - hsdir_fetch_expected
 route_hash:
           db "tor-route-test-identity"
           times 32 - ($ - route_hash) db 0
+guard_fingerprint:
+          db 0x01, 0x23, 0x45, 0x67, 0x89
+          db 0xab, 0xcd, 0xef, 0x10, 0x32
+          db 0x54, 0x76, 0x98, 0xba, 0xdc
+          db 0xfe, 0x11, 0x22, 0x33, 0x44
+guard_onion_key:
+          db 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38
+          db 0x39, 0x3a, 0x3b, 0x3c, 0x3d, 0x3e, 0x3f, 0x40
+          db 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48
+          db 0x49, 0x4a, 0x4b, 0x4c, 0x4d, 0x4e, 0x4f, 0x50
 
 SECTION .bss
 buf:      resb 64
@@ -93,6 +105,9 @@ last_relay_len: resd 1
 tor_conn_id: resd 1
 tor_rx_cell: resb TOR_CELL_LEN
 tor_recv_len: resd 1
+circuit_create_count: resd 1
+last_circuit_node_id: resb 20
+last_circuit_onion_key: resb 32
 SECTION .text
 global _start
 _start:
@@ -413,6 +428,44 @@ _start:
     lea     rax, [rel route_cell]
     ASSERT_EQ qword [rel last_relay_data], rax
 
+; ================================================================
+; Test 14: Tor init fails closed without guard identity/key material
+; ================================================================
+    TEST_DEBUG_LABEL "14"
+    mov     dword [rel circuit_create_count], 0
+    call    er_tor_init
+    ASSERT_EQ eax, -1
+    ASSERT_RDX ERROR_TOR_CIRC_BUILD_FAIL
+    ASSERT_EQ dword [rel circuit_create_count], 0
+
+; ================================================================
+; Test 15: Tor init uses configured guard material, not generated material
+; ================================================================
+    TEST_DEBUG_LABEL "15"
+    xor     edi, edi
+    mov     esi, 19001
+    lea     rdx, [rel guard_fingerprint]
+    lea     rcx, [rel guard_onion_key]
+    call    er_tor_set_guard_material
+    ASSERT_EQ eax, -1
+    ASSERT_RDX ERROR_TOR_PROTOCOL_ERR
+
+    mov     edi, 0x6402000a
+    mov     esi, 19001
+    lea     rdx, [rel guard_fingerprint]
+    lea     rcx, [rel guard_onion_key]
+    call    er_tor_set_guard_material
+    ASSERT_EQ eax, 0
+    ASSERT_RDX 0
+
+    mov     dword [rel circuit_create_count], 0
+    call    er_tor_init
+    ASSERT_EQ eax, -1
+    ASSERT_RDX ERROR_TOR_PROTOCOL_ERR
+    ASSERT_EQ dword [rel circuit_create_count], 1
+    ASSERT_MEM_EQ [rel guard_fingerprint], [rel last_circuit_node_id], 20
+    ASSERT_MEM_EQ [rel guard_onion_key], [rel last_circuit_onion_key], 32
+
 %ifdef TOR_BENCH
 ; ================================================================
 ; Local crypto bench: AES-CTR one Tor cell and batched cells
@@ -580,7 +633,6 @@ global _wasm_import_da_surface_unregister
 
 er_tor_cell_init:
 er_tor_link_handshake:
-er_tor_circuit_create:
 er_tor_circuit_extend:
 er_tor_recv_relay:
 er_tor_open_stream:
@@ -614,6 +666,27 @@ _wasm_import_da_surface_update:
 _wasm_import_da_surface_unregister:
     xor     eax, eax
     er_ok
+    ret
+
+er_tor_circuit_create:
+    push    rbx
+    push    r12
+    mov     rbx, rsi
+    mov     r12, rdx
+    inc     dword [rel circuit_create_count]
+    mov     dword [rdi], 0x12345678
+    lea     rdi, [rel last_circuit_node_id]
+    mov     rsi, rbx
+    mov     edx, 20
+    call    er_memcpy
+    lea     rdi, [rel last_circuit_onion_key]
+    mov     rsi, r12
+    mov     edx, 32
+    call    er_memcpy
+    xor     eax, eax
+    er_ok
+    pop     r12
+    pop     rbx
     ret
 
 er_tor_send_relay:

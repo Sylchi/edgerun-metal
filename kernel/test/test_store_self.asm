@@ -3,6 +3,7 @@
 ; in-memory blob/key indexes from persisted records.
 
 %include "test/test_macros.inc"
+%include "x86_64/wasm_defines.inc"
 
 STORE_SCRATCH        equ 0x306000
 SCRATCH_MAP_BYTES    equ 8192
@@ -21,6 +22,7 @@ extern er_store_init
 extern er_store_sync
 extern er_store_put_blob
 extern er_store_get_blob
+extern er_store_blob_info
 extern er_store_index_put
 extern er_store_index_get
 extern er_memset
@@ -37,6 +39,9 @@ hash_two:       resb 32
 out_hash:       resb 32
 out_blob:       resb 64
 out_len:        resq 1
+out_offset:     resq 1
+out_size:       resq 1
+out_content_type: resd 1
 
 SECTION .text
 global _start
@@ -142,6 +147,42 @@ _start:
     ASSERT_EQ edx, 0
     ASSERT_QWORD [rel out_len], blob_two_len
     ASSERT_MEM_EQ [rel out_blob], [rel blob_two], blob_two_len
+
+    mov     qword [rel out_offset], 0
+    mov     qword [rel out_size], 0
+    mov     dword [rel out_content_type], 0xffffffff
+    lea     rdi, [rel state_b]
+    lea     rsi, [rel hash_two]
+    lea     rdx, [rel out_offset]
+    lea     rcx, [rel out_size]
+    lea     rax, [rel out_content_type]
+    push    rax
+    call    er_store_blob_info
+    add     rsp, 8
+    ASSERT_EQ eax, 1
+    ASSERT_EQ edx, 0
+    ASSERT_QWORD [rel out_size], blob_two_len
+    ASSERT_DWORD [rel out_content_type], 0
+
+    mov     qword [rel out_len], 64
+    lea     rdi, [rel state_b]
+    lea     rsi, [rel zero_hash]
+    lea     rdx, [rel out_blob]
+    lea     rcx, [rel out_len]
+    call    er_store_get_blob
+    ASSERT_EQ eax, -1
+    ASSERT_EQ edx, ERROR_NOT_FOUND
+
+    lea     rdi, [rel state_b]
+    lea     rsi, [rel zero_hash]
+    lea     rdx, [rel out_offset]
+    lea     rcx, [rel out_size]
+    lea     rax, [rel out_content_type]
+    push    rax
+    call    er_store_blob_info
+    add     rsp, 8
+    ASSERT_EQ eax, 0
+    ASSERT_EQ edx, ERROR_NOT_FOUND
 
     ; Reopen a second time to catch replay state carried in globals.
     lea     rdi, [rel state_c]
@@ -284,3 +325,4 @@ blob_two:       db "second persisted blob payload"
 blob_two_len    equ $ - blob_two
 key_alpha:      db "alpha"
 key_alpha_len   equ $ - key_alpha
+zero_hash:      times 32 db 0

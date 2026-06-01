@@ -26,6 +26,8 @@ extern er_serial_putchar
 extern er_serial_crlf
 
 SECTION .text
+global _sdhci_send_cmd
+global _sdhci_send_app_cmd
 
 ; ==================================================================
 ; _sdhci_wait_bits — poll register at [bar0+offset] for mask bits
@@ -39,28 +41,45 @@ SECTION .text
 ; ==================================================================
 _sdhci_wait_bits:
     push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+    mov     r12d, edi           ; bar0
+    mov     r13d, esi           ; offset
+    mov     r14d, edx           ; mask
+    mov     r15d, ecx           ; set
     mov     ebx, r8d            ; timeout
 .loop:
-    mov     rdi, rdi            ; bar0 + offset
-    add     edi, esi
+    mov     edi, r12d
+    add     edi, r13d
     call    er_mmio_read32
-    test    ecx, ecx
+    test    r15d, r15d
     jnz     .wait_set
-    test    eax, edx
+    test    eax, r14d
     jz      .done
     jmp     .dec
 .wait_set:
-    test    eax, edx
+    test    eax, r14d
     jnz     .done
 .dec:
     dec     ebx
     jnz     .loop
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
     pop     rbx
     mov     eax, -1
     er_err  ERROR_TIMEOUT
     ret
 .done:
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
     pop     rbx
+    xor     eax, eax
     xor     edx, edx
     ret
 
@@ -71,9 +90,11 @@ _sdhci_wait_bits:
 ; ==================================================================
 _sdhci_wait_cmd_done:
     push    rbx
+    push    r12
+    mov     r12d, edi
     mov     ebx, esi            ; timeout
 .cmd_loop:
-    mov     edi, edi
+    mov     edi, r12d
     add     edi, SDHCI_INT_STATUS
     call    er_mmio_read32
     test    eax, SDHCI_INT_ERROR
@@ -82,26 +103,29 @@ _sdhci_wait_cmd_done:
     jnz     .cmd_ok
     dec     ebx
     jnz     .cmd_loop
+    pop     r12
     pop     rbx
     mov     eax, -1
     er_err  ERROR_TIMEOUT
     ret
 .cmd_err:
     ; Clear error status
-    mov     edi, edi
+    mov     edi, r12d
     add     edi, SDHCI_INT_STATUS
     mov     esi, SDHCI_INT_ERROR
     call    er_mmio_write32
+    pop     r12
     pop     rbx
     mov     eax, -1
     er_err  ERROR_IO
     ret
 .cmd_ok:
     ; Clear command complete
-    mov     edi, edi
+    mov     edi, r12d
     add     edi, SDHCI_INT_STATUS
     mov     esi, SDHCI_INT_CMD_COMPLETE
     call    er_mmio_write32
+    pop     r12
     pop     rbx
     xor     eax, eax
     xor     edx, edx
@@ -113,9 +137,11 @@ _sdhci_wait_cmd_done:
 ; ==================================================================
 _sdhci_wait_data_done:
     push    rbx
+    push    r12
+    mov     r12d, edi
     mov     ebx, esi
 .data_loop:
-    mov     edi, edi
+    mov     edi, r12d
     add     edi, SDHCI_INT_STATUS
     call    er_mmio_read32
     test    eax, SDHCI_INT_ERROR
@@ -124,24 +150,27 @@ _sdhci_wait_data_done:
     jnz     .data_ok
     dec     ebx
     jnz     .data_loop
+    pop     r12
     pop     rbx
     mov     eax, -1
     er_err  ERROR_TIMEOUT
     ret
 .data_err:
-    mov     edi, edi
+    mov     edi, r12d
     add     edi, SDHCI_INT_STATUS
     mov     esi, SDHCI_INT_ERROR
     call    er_mmio_write32
+    pop     r12
     pop     rbx
     mov     eax, -1
     er_err  ERROR_IO
     ret
 .data_ok:
-    mov     edi, edi
+    mov     edi, r12d
     add     edi, SDHCI_INT_STATUS
     mov     esi, SDHCI_INT_XFER_COMPLETE
     call    er_mmio_write32
+    pop     r12
     pop     rbx
     xor     eax, eax
     xor     edx, edx
@@ -157,9 +186,14 @@ _sdhci_send_cmd:
     push    rbx
     push    r12
     push    r13
+    push    r14
+    push    r15
 
     mov     r12d, edi            ; bar0
     mov     r13d, esi            ; arg
+    mov     r14d, edx            ; cmd_idx
+    mov     r15d, ecx            ; has_data
+    mov     ebx, r8d             ; resp_long
 
     ; Wait for command inhibit to clear
     mov     edi, r12d
@@ -178,17 +212,17 @@ _sdhci_send_cmd:
     call    er_mmio_write32
 
     ; Build command register value
-    movzx   eax, dl              ; cmd_idx
+    movzx   eax, r14b            ; cmd_idx
     shl     eax, SDHCI_CMD_INDEX_SHIFT
     or      eax, SDHCI_CMD_CRC_CHECK | SDHCI_CMD_INDEX_CHECK
-    test    r8b, r8b
+    test    ebx, ebx
     jz      .not_long
     or      eax, SDHCI_CMD_RESP_LONG
     jmp     .resp_done
 .not_long:
     or      eax, SDHCI_CMD_RESP_SHORT
 .resp_done:
-    test    cl, cl
+    test    r15d, r15d
     jz      .no_data
     or      eax, SDHCI_CMD_DATA
 .no_data:
@@ -204,12 +238,16 @@ _sdhci_send_cmd:
     mov     edi, r12d
     mov     esi, SDHCI_POLL_MAX
     call    _sdhci_wait_cmd_done
+    pop     r15
+    pop     r14
     pop     r13
     pop     r12
     pop     rbx
     ret
 
 .fail:
+    pop     r15
+    pop     r14
     pop     r13
     pop     r12
     pop     rbx
@@ -228,10 +266,15 @@ _sdhci_send_app_cmd:
     push    r12
     push    r13
     push    r14
+    push    r15
+    push    rbp
 
     mov     r12d, edi            ; bar0
     mov     r13w, si             ; rca
     mov     r14d, edx            ; arg
+    mov     r15d, ecx            ; app cmd_idx
+    mov     ebx, r8d             ; has_data
+    mov     ebp, r9d             ; resp_long
 
     ; Send CMD55 (APP_CMD) with RCA
     mov     edi, r12d
@@ -247,20 +290,25 @@ _sdhci_send_app_cmd:
     ; Send the application command
     mov     edi, r12d
     mov     esi, r14d
-    mov     edx, ecx             ; cmd_idx from rcx (4th arg, was in r8+r9 stack area)
-    ; Re-setup args properly
-    movzx   r8d, byte [rsp]      ; actually we need to get r8 from stack
-    mov     r9d, ecx             ; save
-    ; This needs careful re-thinking. Simpler: just call with inline params.
-    ; For now, return error to avoid complexity
+    mov     edx, r15d
+    mov     ecx, ebx
+    mov     r8d, ebp
+    call    _sdhci_send_cmd
+    test    eax, eax
+    jnz     .fail
+
+    pop     rbp
+    pop     r15
     pop     r14
     pop     r13
     pop     r12
     pop     rbx
-    mov     eax, -1
-    er_err  ERROR_UNSUPPORTED
+    xor     eax, eax
+    er_ok
     ret
 .fail:
+    pop     rbp
+    pop     r15
     pop     r14
     pop     r13
     pop     r12

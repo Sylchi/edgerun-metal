@@ -125,6 +125,7 @@ tor_dir_tmp_len: resd 1
 tor_dir_tmp_data: resb 512
 tor_dir_guard_id: resb 20
 tor_guard_onion_key: resb 32
+tor_guard_material_ready: resd 1
 tor_hs_intro_circ_id: resd 1
 tor_hs_rend_circ_id: resd 1
 tor_hs_service_intro_circ_id: resd 1
@@ -160,6 +161,56 @@ tor_hs_descriptor_sig_msg: resb TOR_RECV_BUF_SIZE
 %define TOR_SIGNING_MAX_MSG 16384
 
 SECTION .text
+
+; ==================================================================
+; _tor_bytes_any_nonzero — validate fixed-size identity/key material
+; rdi=buf, esi=len. returns eax=1 when any byte is non-zero, else 0.
+; ==================================================================
+_tor_bytes_any_nonzero:
+    test    rdi, rdi
+    jz      .none
+    test    esi, esi
+    jz      .none
+    xor     ecx, ecx
+.scan:
+    cmp     ecx, esi
+    jae     .none
+    cmp     byte [rdi + rcx], 0
+    jne     .found
+    inc     ecx
+    jmp     .scan
+.found:
+    mov     eax, 1
+    ret
+.none:
+    xor     eax, eax
+    ret
+
+; ==================================================================
+; _tor_guard_material_ready — true only for configured guard material
+; ==================================================================
+_tor_guard_material_ready:
+    cmp     dword [tor_guard_material_ready], 1
+    jne     .no
+    cmp     dword [tor_state + TOR_STATE_GUARD_IP], 0
+    je      .no
+    cmp     word [tor_state + TOR_STATE_GUARD_PORT], 0
+    je      .no
+    lea     rdi, [tor_state + TOR_STATE_GUARD_FINGERPRINT]
+    mov     esi, 20
+    call    _tor_bytes_any_nonzero
+    test    eax, eax
+    jz      .no
+    lea     rdi, [tor_guard_onion_key]
+    mov     esi, 32
+    call    _tor_bytes_any_nonzero
+    test    eax, eax
+    jz      .no
+    mov     eax, 1
+    ret
+.no:
+    xor     eax, eax
+    ret
 
 ; ==================================================================
 ; er_tor_hs_signing_sign
@@ -672,6 +723,74 @@ er_fn er_tor_set_role_caps
 .bad_caps:
     mov     eax, -1
     er_err  ERROR_TOR_ROLE_INVALID
+    er_ret
+
+; ==================================================================
+; er_tor_set_guard_material — configure authenticated guard material
+; edi=guard_ip, esi=guard_port, rdx=fingerprint20, rcx=ntor_onion_key32
+; returns eax=0 on success, -1 on invalid material
+; ==================================================================
+global er_tor_set_guard_material
+er_fn er_tor_set_guard_material
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    mov     ebx, edi
+    mov     r12d, esi
+    mov     r13, rdx
+    mov     r14, rcx
+    mov     dword [tor_guard_material_ready], 0
+    test    ebx, ebx
+    jz      .bad_material
+    test    r12w, r12w
+    jz      .bad_material
+    cmp     r12d, 65535
+    ja      .bad_material
+    test    r13, r13
+    jz      .bad_material
+    test    r14, r14
+    jz      .bad_material
+    mov     rdi, r13
+    mov     esi, 20
+    call    _tor_bytes_any_nonzero
+    test    eax, eax
+    jz      .bad_material
+    mov     rdi, r14
+    mov     esi, 32
+    call    _tor_bytes_any_nonzero
+    test    eax, eax
+    jz      .bad_material
+
+    mov     [tor_state + TOR_STATE_GUARD_IP], ebx
+    mov     [tor_state + TOR_STATE_GUARD_PORT], r12w
+    lea     rdi, [tor_state + TOR_STATE_GUARD_FINGERPRINT]
+    mov     rsi, r13
+    mov     edx, 20
+    call    er_memcpy
+    lea     rdi, [tor_dir_guard_id]
+    mov     rsi, r13
+    mov     edx, 20
+    call    er_memcpy
+    lea     rdi, [tor_guard_onion_key]
+    mov     rsi, r14
+    mov     edx, 32
+    call    er_memcpy
+    mov     dword [tor_guard_material_ready], 1
+    xor     eax, eax
+    er_ok
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    er_ret
+.bad_material:
+    mov     eax, -1
+    er_err  ERROR_TOR_PROTOCOL_ERR
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
     er_ret
 
 ; ==================================================================
@@ -1353,6 +1472,7 @@ er_fn er_tor_directory_fetch_guard_descriptor
     call    _tor_parse_descriptor_ntor_key
     test    eax, eax
     js      .fail
+    mov     dword [tor_guard_material_ready], 1
     xor     eax, eax
     er_ok
     pop     r12
@@ -3067,24 +3187,16 @@ er_fn er_tor_init
     mov     dword [tor_dir_stream_open], 0
     mov     word [tor_dir_stream_id], 0
     mov     word [tor_hs_live_stream_next_id], 1
+    call    _tor_guard_material_ready
+    test    eax, eax
+    jz      .circ_fail
+
     ; === Phase 1: Connect to guard relay ===
     lea     rdi, [rel str_tor_connect]
     call    _tor_print_status
 
-    ; Load default guard IP and port
-    ; The IP is stored as db 0x0A,0x00,0x02,0x02 — loading as a dword
-    ; gives 0x0202000A, whose in-memory bytes (0A 00 02 02) already match
-    ; the network-order representation. No bswap — er_ip_send stores this
-    ; dword directly into the IP header, and the memory byte order produces
-    ; the correct big-endian wire format.
-    mov     edi, [rel tor_default_guard_ip]
-    movzx   esi, word [rel tor_default_guard_port]
-
-    ; Store guard IP/port in tor_state
-    mov     [tor_state + TOR_STATE_GUARD_IP], edi
-    mov     [tor_state + TOR_STATE_GUARD_PORT], si
-
     ; Print the guard IP we're connecting to
+    mov     edi, [tor_state + TOR_STATE_GUARD_IP]
     call    _tor_print_ip
     lea     rdi, [rel str_tor_arrow]
     call    _tor_print_status
@@ -3104,41 +3216,16 @@ er_fn er_tor_init
     lea     rdi, [rel str_tor_link_ok]
     call    _tor_print_status
 
-    ; === Phase 2: Build bootstrap circuit ===
-    ; Bootstrap uses temporary key material to bring up a one-hop
-    ; directory channel. A real app circuit is built after descriptor fetch.
-
-    sub     rsp, 128        ; node_id(20) + onion_key(32) + padding
-
-    ; Use dummy node ID (20 bytes of the guard's IP repeated)
-    ; In reality this comes from the relay's identity key fingerprint
-    mov     rdi, rsp
-    mov     eax, [tor_state + TOR_STATE_GUARD_IP]
-    mov     ecx, 5
-.fill_id:
-    mov     [rdi], eax
-    add     rdi, 4
-    dec     ecx
-    jnz     .fill_id        ; writes 20 bytes
-
-    ; Onion key is the guard's public curve25519 key
-    ; For testing, generate a random one
-    lea     rdi, [rsp + 20]
-    lea     rsi, [rsp + 52]
-    call    er_tor_ntor_keygen
-
-    ; Create circuit
+    ; === Phase 2: Build directory circuit from configured guard material ===
     lea     rdi, [tor_circ_id_app]
-    mov     rsi, rsp         ; node_id
-    lea     rdx, [rsp + 20]  ; onion_key
+    lea     rsi, [tor_state + TOR_STATE_GUARD_FINGERPRINT]
+    lea     rdx, [tor_guard_onion_key]
     call    er_tor_circuit_create
     test    eax, eax
     js      .circ_fail
 
     lea     rdi, [rel str_tor_circ_ok]
     call    _tor_print_status
-
-    add     rsp, 128
 
     ; Mark ready before directory channel setup/fetch
     mov     dword [tor_state + TOR_STATE_LINK_ESTABLISHED], 1
@@ -3188,7 +3275,6 @@ er_fn er_tor_init
 .circ_fail:
     lea     rdi, [rel str_tor_circ_fail]
     call    _tor_print_status
-    add     rsp, 128
     mov     eax, -1
     er_err  ERROR_TOR_CIRC_BUILD_FAIL
     pop     r14

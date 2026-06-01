@@ -13,6 +13,7 @@ extern er_av1_block_encode_coeffs_8x8
 extern er_av1_block_decode_mv
 extern er_av1_mv_scale_420
 extern er_av1_block_dequant_8x8
+extern er_av1_block_zero_residual_8x8
 extern er_av1_block_inverse_tx_8x8
 extern er_av1_block_residual_sub_8x8
 extern er_av1_block_forward_tx_8x8
@@ -948,8 +949,35 @@ _start:
     cmp     word [rel resid], AV1_COEFF_MAX_16
     jne     .fail_dequant
     inc     qword [rel passed]
-    jmp     .coeff_reconstruct
+    jmp     .zero_residual
 .fail_dequant:
+    inc     qword [rel failed]
+
+.zero_residual:
+    mov     word [rel resid], -12
+    mov     word [rel resid + 2], 10
+    mov     word [rel resid + 126], 99
+    mov     rdi, resid
+    call    er_av1_block_zero_residual_8x8
+    cmp     eax, AV1_BLOCK_PIXELS_8X8
+    jne     .fail_zero_residual
+    test    edx, edx
+    jnz     .fail_zero_residual
+    cmp     word [rel resid], 0
+    jne     .fail_zero_residual
+    cmp     word [rel resid + 2], 0
+    jne     .fail_zero_residual
+    cmp     word [rel resid + 126], 0
+    jne     .fail_zero_residual
+    xor     edi, edi
+    call    er_av1_block_zero_residual_8x8
+    test    eax, eax
+    jnz     .fail_zero_residual
+    cmp     edx, ERROR_INVALID_PARAM
+    jne     .fail_zero_residual
+    inc     qword [rel passed]
+    jmp     .coeff_reconstruct
+.fail_zero_residual:
     inc     qword [rel failed]
 
 .coeff_reconstruct:

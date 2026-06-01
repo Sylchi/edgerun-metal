@@ -141,6 +141,7 @@ KERNEL_ASM_SRCS="
 	crypto/local_route.asm
 	crypto/local_circuit.asm
 	media/av1_bits.asm
+	media/mp4.asm
 	media/av1_obu.asm
 	media/av1_ivf.asm
 	media/av1_sequence.asm
@@ -427,9 +428,12 @@ test-serial|unit|driver|yes|cmd_test_serial|Run serial driver test
 test-cros-ec|unit|driver|yes|cmd_test_cros_ec|Run Chrome EC memmap parser test
 test-amdgpu|unit|driver|yes|cmd_test_amdgpu|Run AMDGPU DCN register-plan test
 test-uvc|unit|driver|yes|cmd_test_uvc|Run UVC descriptor parser test
+test-nvme|unit|driver|yes|cmd_test_nvme|Run NVMe IO command helper test
+test-sdhci|unit|driver|yes|cmd_test_sdhci|Run Intel SDHCI command helper test
 test-sw-fb|contract|ui|yes|cmd_test_sw_fb|Run software framebuffer test
 test-render-ir|contract|ui|yes|cmd_test_render_ir|Run render IR test
 test-fe-mul|unit|crypto|yes|cmd_test_fe_mul|Run field multiplication test
+test-store|unit|driver|yes|cmd_test_store|Run persistent store replay test
 test-spi-flash|unit|driver|yes|cmd_test_spi_flash|Run SPI flash compile check
 test-pi-audio|emulator|pi|yes|cmd_test_pi_audio|Run Pi Zero W PWM audio emulator test
 test-pi-bt|emulator|pi|yes|cmd_test_pi_bt|Run Pi Zero W CYW43438 Bluetooth UART emulator test
@@ -442,6 +446,7 @@ test-sha3|unit|crypto|yes|cmd_test_sha3|Run SHA3-256 known-answer tests
 test-sha512|unit|crypto|yes|cmd_test_sha512|Run SHA-512 known-answer tests
 test-ed25519|unit|crypto|yes|cmd_test_ed25519|Run Ed25519 ASM helper tests
 test-tls|contract|crypto|yes|cmd_test_tls|Run TLS ClientHello self-test
+test-tpm|unit|crypto|yes|cmd_test_tpm|Run TPM command builder test
 test-tor|contract|crypto|yes|cmd_test_tor|Run Tor AES-128-CTR KAT test
 test-tor-cell|contract|crypto|yes|cmd_test_tor_cell|Run Tor cell EXTEND2 helper test
 test-tor-hs|contract|crypto|yes|cmd_test_tor_hs|Run Tor onion-service message tests
@@ -449,6 +454,7 @@ test-tor-hs-app|contract|crypto|yes|cmd_test_tor_hs_app|Run Tor hidden-service a
 test-local-route|contract|route|yes|cmd_test_local_route|Run local cell route queue/dispatch test
 test-local-circuit|contract|route|yes|cmd_test_local_circuit|Run local circuit open/send/recv/close test
 test-av1-obu|unit|media|yes|cmd_test_av1_obu|Run AV1 OBU header codec test
+test-av1-mp4|unit|media|yes|cmd_test_av1_mp4|Run AV1 MP4 container parser test
 test-av1-ivf|unit|media|yes|cmd_test_av1_ivf|Run AV1 IVF container parser test
 test-av1-sequence|unit|media|yes|cmd_test_av1_sequence|Run AV1 sequence header test
 test-av1-frame|unit|media|yes|cmd_test_av1_frame|Run AV1 frame header test
@@ -1490,6 +1496,46 @@ cmd_test_tcp() {
 	"$bin"
 }
 
+cmd_test_store() {
+	local name="test_store_self"
+	local obj="${ASM_BUILD}/${name}.o"
+	local store_obj="${ASM_BUILD}/store_test.o"
+	local runtime_obj="${ASM_BUILD}/runtime_store_test.o"
+	local bytes_obj="${ASM_BUILD}/bytes_store_test.o"
+	local bin="${ASM_BUILD}/${name%_self}"
+	asm_x86_obj elf64 "$obj" "${TEST_DIR}/${name}.asm"
+	elf64 "${ASM_DIR}/../driver/store.asm" "$store_obj"
+	elf64 "${ASM_DIR}/rt/runtime.asm" "$runtime_obj"
+	elf64 "${ASM_DIR}/rt/bytes.asm" "$bytes_obj"
+	ld -nostdlib -static -o "$bin" "$obj" "$store_obj" "$runtime_obj" "$bytes_obj"
+	echo "  LD  ${bin}"
+	"$bin"
+}
+
+cmd_test_sdhci() {
+	local name="test_sdhci_self"
+	local obj="${ASM_BUILD}/${name}.o"
+	local sdhci_obj="${ASM_BUILD}/intel_sdhci_test.o"
+	local bin="${ASM_BUILD}/${name%_self}"
+	asm_x86_obj elf64 "$obj" "${TEST_DIR}/${name}.asm"
+	elf64 "${ASM_DIR}/../driver/intel_sdhci.asm" "$sdhci_obj"
+	ld -nostdlib -static -o "$bin" "$obj" "$sdhci_obj"
+	echo "  LD  ${bin}"
+	"$bin"
+}
+
+cmd_test_nvme() {
+	local name="test_nvme_self"
+	local obj="${ASM_BUILD}/${name}.o"
+	local nvme_obj="${ASM_BUILD}/nvme_test.o"
+	local bin="${ASM_BUILD}/${name%_self}"
+	asm_x86_obj elf64 "$obj" "${TEST_DIR}/${name}.asm"
+	elf64 "${ASM_DIR}/../driver/nvme.asm" "$nvme_obj"
+	ld -nostdlib -static -o "$bin" "$obj" "$nvme_obj"
+	echo "  LD  ${bin}"
+	"$bin"
+}
+
 cmd_test_wasm_float() {
 	build_test_ldscript "test_wasm_float"
 }
@@ -1500,6 +1546,10 @@ cmd_test_sw_fb() {
 
 cmd_test_av1_obu() {
 	build_test "test_av1_obu_self" "${TEST_DIR}/test_av1_obu_self.asm" "media/av1_obu"
+}
+
+cmd_test_av1_mp4() {
+	build_test "test_av1_mp4_self" "${TEST_DIR}/test_av1_mp4_self.asm" "media/mp4"
 }
 
 cmd_test_av1_ivf() {
@@ -1617,6 +1667,18 @@ cmd_test_amdgpu() {
 
 cmd_test_tls() {
 	build_test_self "test_tls_self" "crypto/tls" "crypto/tor_aes" "rt/runtime"
+}
+
+cmd_test_tpm() {
+	local name="test_tpm_self"
+	local obj="${ASM_BUILD}/${name}.o"
+	local tpm_obj="${ASM_BUILD}/tpm_test.o"
+	local bin="${ASM_BUILD}/${name%_self}"
+	asm_x86_obj elf64 "$obj" "${TEST_DIR}/${name}.asm"
+	elf64 "${ASM_DIR}/tpm/tpm.asm" "$tpm_obj"
+	ld -nostdlib -static -o "$bin" "$obj" "$tpm_obj"
+	echo "  LD  ${bin}"
+	"$bin"
 }
 
 cmd_test_sha3() {
