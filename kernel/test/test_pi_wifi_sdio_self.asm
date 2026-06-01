@@ -5,6 +5,7 @@
 .syntax unified
 .cpu arm1176jzf-s
 .arm
+.include "test/test_arm_macros.inc"
 
 .equ CMD0_VAL,        (0 << 24)
 .equ CMD3_VAL,        (3 << 24) | (2 << 16) | (1 << 19) | (1 << 20)
@@ -101,57 +102,17 @@
 _start:
     ldr     sp, =stack_top
 
-    bl      test_cyw43438_ready_probe
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      test_cyw43438_sdio_not_ready_fails
-    cmp     r0, #0
-    movne   r4, #2
-    bne     .Lfail_code
-
-    bl      test_cyw43438_io_not_ready_fails
-    cmp     r0, #0
-    movne   r4, #3
-    bne     .Lfail_code
-
-    bl      test_cyw43438_backplane_write32
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      test_cyw43438_backplane_update32
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      test_cyw43438_func2_write_word
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      test_cyw43438_func2_write_words
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      test_cyw43438_func2_write_backplane_words
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      test_cyw43438_func2_rejects_bad_addr
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    mov     r0, #0
-    b       semihost_exit
-
-.Lfail_code:
-    mov     r0, r4
-    b       semihost_exit
+    TEST_ARM_CALL test_cyw43438_ready_probe
+    TEST_ARM_CALL_CODE test_cyw43438_sdio_not_ready_fails, 2
+    TEST_ARM_CALL_CODE test_cyw43438_io_not_ready_fails, 3
+    TEST_ARM_CALL test_cyw43438_backplane_write32
+    TEST_ARM_CALL test_cyw43438_backplane_update32
+    TEST_ARM_CALL test_cyw43438_func2_write_word
+    TEST_ARM_CALL test_cyw43438_func2_write_words
+    TEST_ARM_CALL test_cyw43438_func2_write_backplane_words
+    TEST_ARM_CALL test_cyw43438_func2_rejects_bad_addr
+    TEST_ARM_EXIT_OK
+    TEST_ARM_EXIT_FAIL
 
 test_cyw43438_ready_probe:
     push    {lr}

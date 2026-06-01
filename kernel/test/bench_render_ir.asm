@@ -3,6 +3,7 @@
 ; sw_fb_render_ir_rects (shadow), and sw_fb_render_ir_icons.
 
 %include "x86_64/macros.inc"
+%include "test/test_macros.inc"
 
 %define ITER 10000
 
@@ -170,9 +171,7 @@ _start:
     mov     eax, 1                  ; sys_write
     syscall
 
-    xor     edi, edi
-    mov     eax, 60
-    syscall
+    TEST_EXIT 0
 
 ; format_results(rdi=buf, rsi=buf_size, rdx=fill, rcx=rr_fill,
 ;                r8=rr_shadow, r9=icon)

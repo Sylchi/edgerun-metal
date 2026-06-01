@@ -17,6 +17,8 @@ extern er_route_send
 extern er_local_cell_send_to_slot
 extern er_local_cell_recv
 extern er_local_cell_poll
+extern er_local_cell_imports
+extern er_local_cell_import_count
 
 SECTION .data
 sync_hash:
@@ -33,6 +35,9 @@ temp_hash:
     times 32 - ($ - temp_hash) db 0
 zero_hash:
     times 32 db 0
+expected_da_register:   db "da_surface_register"
+expected_da_update:     db "da_surface_update"
+expected_da_unregister: db "da_surface_unregister"
 
 TEST_BSS_PASSED_FAILED
 sync_slot:          resd 1
@@ -73,6 +78,29 @@ _start:
     lea     rsi, [rel test_cell]
     call    er_route_send
     ASSERT_RDX ERROR_INVALID_PARAM
+
+    ASSERT_EQ qword [rel er_local_cell_import_count], 3
+
+    lea     rbx, [rel er_local_cell_imports]
+    ASSERT_EQ qword [rbx + HOST_IMPORT_MODULE_LEN_OFF], 2
+    ASSERT_EQ qword [rbx + HOST_IMPORT_NAME_LEN_OFF], 19
+    ASSERT_EQ qword [rbx + HOST_IMPORT_FN_PTR_OFF], _wasm_import_da_surface_register
+    mov     rsi, [rbx + HOST_IMPORT_NAME_PTR_OFF]
+    ASSERT_MEM_EQ [rel expected_da_register], [rsi], 19
+
+    add     rbx, HOST_IMPORT_SIZE
+    ASSERT_EQ qword [rbx + HOST_IMPORT_MODULE_LEN_OFF], 2
+    ASSERT_EQ qword [rbx + HOST_IMPORT_NAME_LEN_OFF], 17
+    ASSERT_EQ qword [rbx + HOST_IMPORT_FN_PTR_OFF], _wasm_import_da_surface_update
+    mov     rsi, [rbx + HOST_IMPORT_NAME_PTR_OFF]
+    ASSERT_MEM_EQ [rel expected_da_update], [rsi], 17
+
+    add     rbx, HOST_IMPORT_SIZE
+    ASSERT_EQ qword [rbx + HOST_IMPORT_MODULE_LEN_OFF], 2
+    ASSERT_EQ qword [rbx + HOST_IMPORT_NAME_LEN_OFF], 21
+    ASSERT_EQ qword [rbx + HOST_IMPORT_FN_PTR_OFF], _wasm_import_da_surface_unregister
+    mov     rsi, [rbx + HOST_IMPORT_NAME_PTR_OFF]
+    ASSERT_MEM_EQ [rel expected_da_unregister], [rsi], 21
 
     lea     rdi, [rel sync_hash]
     call    er_local_route_register
@@ -215,7 +243,6 @@ async_handler:
     er_ok
     ret
 
-; local_route import table symbols are not exercised by this test.
 global _wasm_import_da_surface_register
 global _wasm_import_da_surface_update
 global _wasm_import_da_surface_unregister

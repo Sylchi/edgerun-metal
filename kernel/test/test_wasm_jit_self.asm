@@ -9,6 +9,7 @@
 %define HAVE_ER_WASM_RUNTIME_PTR
 %include "x86_64/wasm/wasm_interpreter.asm"
 %include "x86_64/wasm/wasm_jit_debug.asm"
+%include "test/test_macros.inc"
 
 LINUX_SYS_MPROTECT equ 10
 LINUX_PROT_READ    equ 1
@@ -307,17 +308,13 @@ _start:
     lea     rdi, [rel .str_pass]
     call    jit_debug_print_str
     call    jit_debug_newline
-    xor     edi, edi
-    mov     eax, 60
-    syscall
+    TEST_EXIT 0
 
 .fail:
     lea     rdi, [rel .str_fail]
     call    jit_debug_print_str
     call    jit_debug_newline
-    mov     edi, 1
-    mov     eax, 60
-    syscall
+    TEST_EXIT 1
 
 .str_test1:  db "=== Test 1: func 0 (block i32.const 42 end) ===", 0
 .str_test1b: db "=== Test 1.5: func 0 via er_wasm_jit_exec ===", 0

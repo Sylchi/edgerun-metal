@@ -6,6 +6,7 @@
 
 %define HAVE_ER_WASM_RUNTIME_PTR
 %include "x86_64/wasm/wasm_interpreter.asm"
+%include "test/test_macros.inc"
 
 %ifndef ZIG_WASM_BENCH_PATH
 %define ZIG_WASM_BENCH_PATH ".build/kernel/zig_wasm_bench.wasm"
@@ -13,7 +14,6 @@
 
 extern er_bench
 
-LINUX_SYS_EXIT     equ 60
 LINUX_SYS_MPROTECT equ 10
 LINUX_PROT_READ    equ 1
 LINUX_PROT_WRITE   equ 2
@@ -164,9 +164,7 @@ _start:
 
     lea     rdi, [rel str_done]
     call    puts
-    xor     edi, edi
-    mov     eax, LINUX_SYS_EXIT
-    syscall
+    TEST_EXIT 0
 
 fail:
     lea     rdi, [rel str_fail]
@@ -176,16 +174,14 @@ fail:
     jnz     .exit
     mov     edi, 1
 .exit:
-    mov     eax, LINUX_SYS_EXIT
-    syscall
+    TEST_EXIT_EDI
 
 fail_error:
     mov     r12, rdx
     lea     rdi, [rel str_fail]
     call    puts
     mov     edi, r12d
-    mov     eax, LINUX_SYS_EXIT
-    syscall
+    TEST_EXIT_EDI
 
 make_jit_cache_executable:
     lea     rdi, [rel jit_code_cache]

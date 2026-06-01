@@ -3,6 +3,7 @@
 .syntax unified
 .cpu arm1176jzf-s
 .arm
+.include "test/test_arm_macros.inc"
 
 .equ GPIO_FUNCTION_INPUT, 0
 .equ GPIO_FUNCTION_OUTPUT, 1
@@ -39,32 +40,12 @@
 _start:
     ldr     sp, =stack_top
 
-    bl      test_gpio_select_preserves_bits
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      test_gpio_set_clear_and_level
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      test_gpio_led_helpers
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      test_gpio_rejects_invalid_values
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    mov     r0, #0
-    b       semihost_exit
-
-.Lfail_code:
-    mov     r0, r4
-    b       semihost_exit
+    TEST_ARM_CALL test_gpio_select_preserves_bits
+    TEST_ARM_CALL test_gpio_set_clear_and_level
+    TEST_ARM_CALL test_gpio_led_helpers
+    TEST_ARM_CALL test_gpio_rejects_invalid_values
+    TEST_ARM_EXIT_OK
+    TEST_ARM_EXIT_FAIL
 
 test_gpio_select_preserves_bits:
     push    {lr}

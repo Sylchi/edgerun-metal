@@ -9,6 +9,9 @@
 %include "x86_64/macros.inc"
 
 extern er_sha512
+extern er_sha512_init
+extern er_sha512_update
+extern er_sha512_final
 extern _fe_copy
 extern _fe_add
 extern _fe_sub
@@ -27,6 +30,7 @@ extern _fe_tobytes
 %define ED25519_POINT_Y     40
 %define ED25519_POINT_Z     80
 %define ED25519_POINT_T     120
+%define SHA512_CTX_SIZE     208
 
 SECTION .rodata
 ed25519_order_l:
@@ -51,10 +55,10 @@ ed25519_base_y_bytes:
     db 0x66,0x66,0x66,0x66,0x66,0x66,0x66,0x66
     db 0x66,0x66,0x66,0x66,0x66,0x66,0x66,0x66
 ed25519_d2_bytes:
-    db 0x59,0x18,0xf2,0x9f,0x4c,0xc9,0x46,0x63
-    db 0xd6,0x70,0x58,0x5f,0x44,0x51,0x70,0x7a
-    db 0x45,0x83,0x46,0xb4,0x3b,0x91,0x3d,0xa9
-    db 0x50,0x9b,0x2f,0x5b,0xf1,0x56,0x36,0x2b
+    db 0x59,0xf1,0xb2,0x26,0x94,0x9b,0xd6,0xeb
+    db 0x56,0xb1,0x83,0x82,0x9a,0x14,0xe0,0x00
+    db 0x30,0xd1,0xf3,0xee,0xf2,0x80,0x8e,0x19
+    db 0xe7,0xfc,0xdf,0x56,0xdc,0xd9,0x06,0x24
 
 SECTION .text
 
@@ -391,6 +395,153 @@ _ed25519_point_encode:
     pop     r13
     pop     r12
     pop     rbx
+    ret
+
+; er_ed25519_sign(seed32, msg, msg_len, out_sig64)
+; Deterministic RFC 8032 Ed25519 signature.
+er_fn er_ed25519_sign
+    test    rdi, rdi
+    jz      .fail
+    test    rcx, rcx
+    jz      .fail
+    test    edx, edx
+    jz      .args_ok
+    test    rsi, rsi
+    jz      .fail
+.args_ok:
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+    sub     rsp, 576
+    ; 0 scalar, 32 prefix, 64 public, 96 nonce_hash, 160 nonce,
+    ; 192 R, 224 challenge_hash, 288 challenge, 320 s, 352 sha512 ctx.
+    mov     r12, rdi
+    mov     r13, rsi
+    mov     r14d, edx
+    mov     r15, rcx
+
+    mov     rdi, r12
+    lea     rsi, [rsp]
+    lea     rdx, [rsp + 32]
+    call    er_ed25519_seed_scalar_prefix
+    test    eax, eax
+    jnz     .fail_pop
+
+    lea     rdi, [rsp + 64]
+    lea     rsi, [rsp]
+    call    er_ed25519_point_base_mul
+    test    eax, eax
+    jnz     .fail_pop
+
+    lea     rdi, [rsp + 352]
+    call    er_sha512_init
+    test    rax, rax
+    jz      .fail_pop
+    lea     rdi, [rsp + 352]
+    lea     rsi, [rsp + 32]
+    mov     edx, ED25519_PREFIX_LEN
+    call    er_sha512_update
+    test    rax, rax
+    jz      .fail_pop
+    test    r14d, r14d
+    jz      .nonce_final
+    lea     rdi, [rsp + 352]
+    mov     rsi, r13
+    mov     edx, r14d
+    call    er_sha512_update
+    test    rax, rax
+    jz      .fail_pop
+.nonce_final:
+    lea     rdi, [rsp + 352]
+    lea     rsi, [rsp + 96]
+    call    er_sha512_final
+    test    rax, rax
+    jz      .fail_pop
+    lea     rdi, [rsp + 96]
+    lea     rsi, [rsp + 160]
+    call    er_ed25519_scalar_reduce64
+    test    eax, eax
+    jnz     .fail_pop
+
+    lea     rdi, [rsp + 192]
+    lea     rsi, [rsp + 160]
+    call    er_ed25519_point_base_mul
+    test    eax, eax
+    jnz     .fail_pop
+
+    lea     rdi, [rsp + 352]
+    call    er_sha512_init
+    test    rax, rax
+    jz      .fail_pop
+    lea     rdi, [rsp + 352]
+    lea     rsi, [rsp + 192]
+    mov     edx, 32
+    call    er_sha512_update
+    test    rax, rax
+    jz      .fail_pop
+    lea     rdi, [rsp + 352]
+    lea     rsi, [rsp + 64]
+    mov     edx, 32
+    call    er_sha512_update
+    test    rax, rax
+    jz      .fail_pop
+    test    r14d, r14d
+    jz      .challenge_final
+    lea     rdi, [rsp + 352]
+    mov     rsi, r13
+    mov     edx, r14d
+    call    er_sha512_update
+    test    rax, rax
+    jz      .fail_pop
+.challenge_final:
+    lea     rdi, [rsp + 352]
+    lea     rsi, [rsp + 224]
+    call    er_sha512_final
+    test    rax, rax
+    jz      .fail_pop
+    lea     rdi, [rsp + 224]
+    lea     rsi, [rsp + 288]
+    call    er_ed25519_scalar_reduce64
+    test    eax, eax
+    jnz     .fail_pop
+
+    lea     rdi, [rsp + 288]
+    lea     rsi, [rsp]
+    lea     rdx, [rsp + 160]
+    lea     rcx, [rsp + 320]
+    call    er_ed25519_scalar_muladd
+    test    eax, eax
+    jnz     .fail_pop
+
+    mov     rdi, r15
+    lea     rsi, [rsp + 192]
+    mov     ecx, 32
+    rep     movsb
+    lea     rsi, [rsp + 320]
+    mov     ecx, 32
+    rep     movsb
+
+    xor     eax, eax
+    er_ok
+    add     rsp, 576
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    ret
+.fail_pop:
+    add     rsp, 576
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+.fail:
+    mov     eax, -1
+    mov     edx, 1
     ret
 
 ; _ed25519_scalar_add_mod(acc32, addend32)

@@ -3,6 +3,7 @@
 .syntax unified
 .cpu arm1176jzf-s
 .arm
+.include "test/test_arm_macros.inc"
 
 .equ EMMC_BLKSIZECNT, 0x04
 .equ EMMC_ARG1,       0x08
@@ -44,77 +45,21 @@
 _start:
     ldr     sp, =stack_top
 
-    bl      test_sdhc_read_block
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      test_sdsc_read_uses_byte_address
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      test_sdhc_write_block
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      test_read_null_buffer_rejected
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      test_write_null_buffer_rejected
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      test_read_misaligned_buffer_rejected
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      test_write_misaligned_buffer_rejected
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      test_read_command_error_rejected
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      test_write_command_error_rejected
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      test_read_ready_error_rejected
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      test_write_ready_error_rejected
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      test_read_data_done_error_rejected
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      test_write_data_done_error_rejected
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    mov     r0, #0
-    b       semihost_exit
-
-.Lfail_code:
-    mov     r0, r4
-    b       semihost_exit
+    TEST_ARM_CALL test_sdhc_read_block
+    TEST_ARM_CALL test_sdsc_read_uses_byte_address
+    TEST_ARM_CALL test_sdhc_write_block
+    TEST_ARM_CALL test_read_null_buffer_rejected
+    TEST_ARM_CALL test_write_null_buffer_rejected
+    TEST_ARM_CALL test_read_misaligned_buffer_rejected
+    TEST_ARM_CALL test_write_misaligned_buffer_rejected
+    TEST_ARM_CALL test_read_command_error_rejected
+    TEST_ARM_CALL test_write_command_error_rejected
+    TEST_ARM_CALL test_read_ready_error_rejected
+    TEST_ARM_CALL test_write_ready_error_rejected
+    TEST_ARM_CALL test_read_data_done_error_rejected
+    TEST_ARM_CALL test_write_data_done_error_rejected
+    TEST_ARM_EXIT_OK
+    TEST_ARM_EXIT_FAIL
 
 test_sdhc_read_block:
     push    {lr}

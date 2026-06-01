@@ -5,6 +5,7 @@
 %include "x86_64/macros.inc"
 %include "x86_64/wasm_defines.inc"
 %include "x86_64/tpm/tpm_constants.inc"
+%include "test/test_macros.inc"
 
 extern er_tpm_hash_sha256
 extern er_tpm_crb_transfer
@@ -77,9 +78,7 @@ _start:
     call    er_serial_puts
     call    er_serial_crlf
 
-    xor     edi, edi
-    mov     eax, 60
-    syscall
+    TEST_EXIT 0
 
 ; ──────────────────────────────────────────────────────────────────────
 ; bench_tpm_sha256(edi = data_len)

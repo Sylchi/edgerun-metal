@@ -1639,7 +1639,7 @@ cmd_test_ed25519() {
 }
 
 cmd_test_tor() {
-	build_test_self "test_tor_self" "crypto/tor_aes" "crypto/tor" "crypto/local_cell" "crypto/local_route" "crypto/local_circuit" "rt/runtime"
+	build_test_self "test_tor_self" "crypto/tor_aes" "crypto/tor" "crypto/ed25519" "crypto/sha512" "crypto/curve25519" "crypto/local_cell" "crypto/local_route" "crypto/local_circuit" "rt/runtime"
 }
 
 cmd_test_tor_cell() {
@@ -1820,7 +1820,9 @@ cmd_lib_tor() {
 
 	local runtime_o="${ASM_BUILD}/lib_runtime.o"
 	local sha256_o="${ASM_BUILD}/lib_sha256.o"
+	local sha512_o="${ASM_BUILD}/lib_sha512.o"
 	local sha3_o="${ASM_BUILD}/lib_sha3.o"
+	local ed25519_o="${ASM_BUILD}/lib_ed25519.o"
 	local tor_aes_o="${ASM_BUILD}/lib_tor_aes.o"
 	local curve25519_o="${ASM_BUILD}/lib_curve25519.o"
 	local tls_o="${ASM_BUILD}/lib_tls.o"
@@ -1833,7 +1835,9 @@ cmd_lib_tor() {
 
 	elf64 "${ASM_DIR}/rt/runtime.asm" "$runtime_o"
 	elf64 "${ASM_DIR}/crypto/sha256.asm" "$sha256_o"
+	elf64 "${ASM_DIR}/crypto/sha512.asm" "$sha512_o"
 	elf64 "${ASM_DIR}/crypto/sha3.asm" "$sha3_o"
+	elf64 "${ASM_DIR}/crypto/ed25519.asm" "$ed25519_o"
 	elf64 "${ASM_DIR}/crypto/tor_aes.asm" "$tor_aes_o"
 	elf64 "${ASM_DIR}/crypto/curve25519.asm" "$curve25519_o"
 	elf64 "${ASM_DIR}/crypto/tls.asm" "$tls_o"
@@ -1850,7 +1854,7 @@ cmd_lib_tor() {
 		"$tor_hs_app_o" "$runtime_o"
 	ar rcs "${lib_dir}/libedgerun_tor_core.a" \
 		"$tor_o" "$tor_cell_o" "$tor_hs_o" "$tor_hs_app_o" \
-		"$tls_o" "$sha256_o" "$sha3_o" "$tor_aes_o" \
+		"$tls_o" "$sha256_o" "$sha512_o" "$sha3_o" "$ed25519_o" "$tor_aes_o" \
 		"$tor_ntor_o" "$curve25519_o" "$tor_digest_o" "$runtime_o"
 
 	echo "  AR  ${lib_dir}/libedgerun_tor_hs.a"

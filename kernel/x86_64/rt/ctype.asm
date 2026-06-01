@@ -29,13 +29,14 @@ er_fn er_isalpha
     cmp     dil, 'A'
     jb      .alpha_lower
     cmp     dil, 'Z'
-    jbe     .alpha_true
+    ja      .alpha_lower
+    mov     eax, 1
+    er_ret
 .alpha_lower:
     cmp     dil, 'a'
     jb      .alpha_false
     cmp     dil, 'z'
     ja      .alpha_false
-.alpha_true:
     mov     eax, 1
     er_ret
 .alpha_false:
@@ -50,21 +51,25 @@ er_fn er_isalnum
     cmp     dil, '0'
     jb      .alnum_alpha
     cmp     dil, '9'
-    jbe     .alnum_true
+    ja      .alnum_alpha
+    mov     eax, 1
+    er_ret
 .alnum_alpha:
     cmp     dil, 'A'
     jb      .alnum_false
     cmp     dil, 'Z'
-    jbe     .alnum_true
+    ja      .alnum_lower
+    mov     eax, 1
+    er_ret
+.alnum_lower:
     cmp     dil, 'a'
     jb      .alnum_false
     cmp     dil, 'z'
-    jbe     .alnum_true
+    ja      .alnum_false
+    mov     eax, 1
+    er_ret
 .alnum_false:
     xor     eax, eax
-    er_ret
-.alnum_true:
-    mov     eax, 1
     er_ret
 
 ; ==================================================================
@@ -74,12 +79,16 @@ er_fn er_isalnum
 ; ==================================================================
 er_fn er_isspace
     cmp     dil, ' '
-    je      .space_true
+    jb      .space_range
+    cmp     dil, ' '
+    ja      .space_range
+    mov     eax, 1
+    er_ret
+.space_range:
     cmp     dil, 9
     jb      .space_false
     cmp     dil, 13
     ja      .space_false
-.space_true:
     mov     eax, 1
     er_ret
 .space_false:
@@ -94,20 +103,25 @@ er_fn er_isxdigit
     cmp     dil, '0'
     jb      .xdigit_false
     cmp     dil, '9'
-    jbe     .xdigit_true
+    ja      .xdigit_upper
+    mov     eax, 1
+    er_ret
+.xdigit_upper:
     cmp     dil, 'A'
     jb      .xdigit_false
     cmp     dil, 'F'
-    jbe     .xdigit_true
+    ja      .xdigit_lower
+    mov     eax, 1
+    er_ret
+.xdigit_lower:
     cmp     dil, 'a'
     jb      .xdigit_false
     cmp     dil, 'f'
-    jbe     .xdigit_true
+    ja      .xdigit_false
+    mov     eax, 1
+    er_ret
 .xdigit_false:
     xor     eax, eax
-    er_ret
-.xdigit_true:
-    mov     eax, 1
     er_ret
 
 ; ==================================================================

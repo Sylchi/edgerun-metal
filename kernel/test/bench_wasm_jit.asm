@@ -11,6 +11,7 @@
 
 %define HAVE_ER_WASM_RUNTIME_PTR
 %include "x86_64/wasm/wasm_interpreter.asm"
+%include "test/test_macros.inc"
 
 ITERS_NATIVE  equ 10000000
 ITERS_JIT     equ 5000000
@@ -225,16 +226,12 @@ _start:
     ; ── done ──
     lea     rdi, [rel str_done]
     call    puts
-    xor     edi, edi
-    mov     eax, 60
-    syscall
+    TEST_EXIT 0
 
 .fail:
     lea     rdi, [rel str_fail]
     call    puts
-    mov     edi, 1
-    mov     eax, 60
-    syscall
+    TEST_EXIT 1
 
 ; ── native reference: same body as JIT produces ──
 .native_ref:

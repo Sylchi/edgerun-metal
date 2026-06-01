@@ -733,84 +733,6 @@ er_fn er_local_cell_poll
     er_ret
 
 ; ==================================================================
-; WASM host import wrappers
-;
-; These are the callback functions that the WASM interpreter dispatches
-; to when a WASM module calls an imported function from module "er".
-;
-; Calling convention: System V AMD64 ABI
-;   rdi, rsi, rdx, rcx, r8, r9 = args (from WASM exec stack)
-;   rax = return value
-;
-; WASM i32 values are zero-extended to 64-bit by the interpreter.
-; Linear memory offsets (passed as i32) need conversion to host pointers.
-; ==================================================================
-
-; er_wasm_local_cell_send(rdi=dest_hash_ptr(i32), rsi=cell_ptr(i32)) -> i32
-_wasm_import_local_cell_send:
-    mov     eax, -1
-    er_err  ERROR_INVALID_PARAM
-    ret
-
-; er_wasm_local_cell_recv(rdi=slot_id(i32), rsi=out_cell_ptr(i32)) -> i32
-_wasm_import_local_cell_recv:
-    mov     eax, -1
-    er_err  ERROR_INVALID_PARAM
-    ret
-
-; er_wasm_local_route_register(rdi=hash_ptr(i32)) -> i32 (slot_id)
-_wasm_import_local_route_register:
-    mov     eax, -1
-    er_err  ERROR_INVALID_PARAM
-    ret
-
-; er_wasm_local_route_lookup(rdi=hash_ptr(i32)) -> i32 (slot_id or -1)
-_wasm_import_local_route_lookup:
-    mov     eax, -1
-    er_err  ERROR_INVALID_PARAM
-    ret
-
-; er_wasm_local_route_unregister(rdi=slot_id(i32)) -> i32
-_wasm_import_local_route_unregister:
-    mov     eax, -1
-    er_err  ERROR_INVALID_PARAM
-    ret
-
-; er_wasm_local_cell_available(rdi=slot_id(i32)) -> i32 (count)
-_wasm_import_local_cell_available:
-    mov     eax, -1
-    er_err  ERROR_INVALID_PARAM
-    ret
-
-; ==================================================================
-; Circuit WASM import wrappers
-; ==================================================================
-
-; er_wasm_circuit_open(rdi=dest_hash_ptr(i32), rsi=own_slot(i32)) -> i32 (fd)
-_wasm_import_circuit_open:
-    mov     eax, -1
-    er_err  ERROR_INVALID_PARAM
-    ret
-
-; er_wasm_circuit_send(rdi=fd(i32), rsi=cell_ptr(i32)) -> i32
-_wasm_import_circuit_send:
-    mov     eax, -1
-    er_err  ERROR_INVALID_PARAM
-    ret
-
-; er_wasm_circuit_recv(rdi=fd(i32), rsi=out_cell_ptr(i32)) -> i32
-_wasm_import_circuit_recv:
-    mov     eax, -1
-    er_err  ERROR_INVALID_PARAM
-    ret
-
-; er_wasm_circuit_close(rdi=fd(i32)) -> i32
-_wasm_import_circuit_close:
-    mov     eax, -1
-    er_err  ERROR_INVALID_PARAM
-    ret
-
-; ==================================================================
 ; Host import table
 ;
 ; Array of HostImport struct entries (HOST_IMPORT_SIZE each).
@@ -823,26 +745,6 @@ er_module_name: db "er"
 er_module_name_len: dq 2
 
 ; Function name strings
-fn_send:       db "cell_send"
-fn_send_len:   dq 9
-fn_recv:       db "cell_recv"
-fn_recv_len:   dq 9
-fn_register:   db "route_register"
-fn_register_len: dq 14
-fn_lookup:     db "route_lookup"
-fn_lookup_len: dq 12
-fn_unregister: db "route_unregister"
-fn_unregister_len: dq 16
-fn_available:  db "cell_available"
-fn_available_len: dq 14
-fn_circ_open:  db "circuit_open"
-fn_circ_open_len: dq 11
-fn_circ_send:  db "circuit_send"
-fn_circ_send_len: dq 12
-fn_circ_recv:  db "circuit_recv"
-fn_circ_recv_len: dq 12
-fn_circ_close: db "circuit_close"
-fn_circ_close_len: dq 12
 fn_da_register:  db "da_surface_register"
 fn_da_register_len: dq 19
 fn_da_update:    db "da_surface_update"
@@ -850,96 +752,26 @@ fn_da_update_len: dq 17
 fn_da_unregister: db "da_surface_unregister"
 fn_da_unregister_len: dq 21
 
-; Import table — 13 entries × 40 bytes = 520 bytes total
+; Import table — DA-only app imports. Raw route/circuit authority is not exported.
 ; Note: assembled as ELF32, use dd (4-byte) with zero upper padding
-; to keep 8-byte-per-field struct layout (HOST_IMPORT_SIZE = 40).
+; to keep the HostImport 8-byte-per-field struct layout.
 global er_local_cell_imports
 er_local_cell_imports:
-; Entry 0: local_cell_send
-dd er_module_name, 0
-dd 2, 0
-dd fn_send, 0
-dd 9, 0
-dd _wasm_import_local_cell_send, 0
-
-; Entry 1: local_cell_recv
-dd er_module_name, 0
-dd 2, 0
-dd fn_recv, 0
-dd 9, 0
-dd _wasm_import_local_cell_recv, 0
-
-; Entry 2: local_route_register
-dd er_module_name, 0
-dd 2, 0
-dd fn_register, 0
-dd 14, 0
-dd _wasm_import_local_route_register, 0
-
-; Entry 3: local_route_lookup
-dd er_module_name, 0
-dd 2, 0
-dd fn_lookup, 0
-dd 12, 0
-dd _wasm_import_local_route_lookup, 0
-
-; Entry 4: local_route_unregister
-dd er_module_name, 0
-dd 2, 0
-dd fn_unregister, 0
-dd 16, 0
-dd _wasm_import_local_route_unregister, 0
-
-; Entry 5: local_cell_available
-dd er_module_name, 0
-dd 2, 0
-dd fn_available, 0
-dd 14, 0
-dd _wasm_import_local_cell_available, 0
-
-; Entry 6: circuit_open
-dd er_module_name, 0
-dd 2, 0
-dd fn_circ_open, 0
-dd 11, 0
-dd _wasm_import_circuit_open, 0
-
-; Entry 7: circuit_send
-dd er_module_name, 0
-dd 2, 0
-dd fn_circ_send, 0
-dd 12, 0
-dd _wasm_import_circuit_send, 0
-
-; Entry 8: circuit_recv
-dd er_module_name, 0
-dd 2, 0
-dd fn_circ_recv, 0
-dd 12, 0
-dd _wasm_import_circuit_recv, 0
-
-; Entry 9: circuit_close
-dd er_module_name, 0
-dd 2, 0
-dd fn_circ_close, 0
-dd 12, 0
-dd _wasm_import_circuit_close, 0
-
-; Entry 10: da_surface_register
+; Entry 0: da_surface_register
 dd er_module_name, 0
 dd 2, 0
 dd fn_da_register, 0
 dd 19, 0
 dd _wasm_import_da_surface_register, 0
 
-; Entry 11: da_surface_update
+; Entry 1: da_surface_update
 dd er_module_name, 0
 dd 2, 0
 dd fn_da_update, 0
 dd 17, 0
 dd _wasm_import_da_surface_update, 0
 
-; Entry 12: da_surface_unregister
+; Entry 2: da_surface_unregister
 dd er_module_name, 0
 dd 2, 0
 dd fn_da_unregister, 0
@@ -948,4 +780,4 @@ dd _wasm_import_da_surface_unregister, 0
 
 ; Import count
 global er_local_cell_import_count
-er_local_cell_import_count: dq 13
+er_local_cell_import_count: dq 3

@@ -3,6 +3,7 @@
 .syntax unified
 .cpu arm1176jzf-s
 .arm
+.include "test/test_arm_macros.inc"
 
 .equ MAILBOX_RD,   0x00
 .equ MAILBOX_WR,   0x00
@@ -55,31 +56,17 @@ _start:
     bl      reset_gpu_emulator
     ldr     r0, =fb_out
     bl      gpu_framebuffer_init
-    cmp     r0, #0
-    movne   r4, #1
-    bne     .Lfail_code
+    TEST_ARM_EXPECT_ZERO_CODE 1
 
-    bl      check_mailbox_write
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      check_framebuffer_out
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
+    TEST_ARM_CALL check_mailbox_write
+    TEST_ARM_CALL check_framebuffer_out
 
     ldr     r0, =fb_out
     ldr     r1, =GPU_FB_COLOR
     bl      gpu_framebuffer_fill
-    cmp     r0, #0
-    movne   r4, #41
-    bne     .Lfail_code
+    TEST_ARM_EXPECT_ZERO_CODE 41
 
-    bl      check_framebuffer_fill
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
+    TEST_ARM_CALL check_framebuffer_fill
 
     bl      reset_framebuffer
     ldr     r0, =fb_out
@@ -92,14 +79,9 @@ _start:
     push    {r4}
     bl      gpu_framebuffer_fill_rect
     add     sp, sp, #8
-    cmp     r0, #0
-    movne   r4, #51
-    bne     .Lfail_code
+    TEST_ARM_EXPECT_ZERO_CODE 51
 
-    bl      check_framebuffer_rect
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
+    TEST_ARM_CALL check_framebuffer_rect
 
     ldr     r0, =fb_out
     ldr     r1, =638
@@ -111,9 +93,7 @@ _start:
     push    {r4}
     bl      gpu_framebuffer_fill_rect
     add     sp, sp, #8
-    cmp     r0, #1
-    movne   r4, #57
-    bne     .Lfail_code
+    TEST_ARM_EXPECT_EQ_CODE 1, 57
 
     bl      reset_framebuffer
     ldr     r0, =fb_out
@@ -128,14 +108,9 @@ _start:
     push    {r4}
     bl      gpu_framebuffer_blit
     add     sp, sp, #12
-    cmp     r0, #0
-    movne   r4, #61
-    bne     .Lfail_code
+    TEST_ARM_EXPECT_ZERO_CODE 61
 
-    bl      check_framebuffer_blit
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
+    TEST_ARM_CALL check_framebuffer_blit
 
     ldr     r0, =fb_out
     mov     r1, #0
@@ -149,9 +124,7 @@ _start:
     push    {r4}
     bl      gpu_framebuffer_blit
     add     sp, sp, #12
-    cmp     r0, #1
-    movne   r4, #68
-    bne     .Lfail_code
+    TEST_ARM_EXPECT_EQ_CODE 1, 68
 
     bl      reset_framebuffer
     bl      init_alpha_dest
@@ -167,14 +140,9 @@ _start:
     push    {r4}
     bl      gpu_framebuffer_blit_alpha
     add     sp, sp, #12
-    cmp     r0, #0
-    movne   r4, #71
-    bne     .Lfail_code
+    TEST_ARM_EXPECT_ZERO_CODE 71
 
-    bl      check_framebuffer_alpha_blit
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
+    TEST_ARM_CALL check_framebuffer_alpha_blit
 
     ldr     r0, =fb_out
     mov     r1, #0
@@ -188,9 +156,7 @@ _start:
     push    {r4}
     bl      gpu_framebuffer_blit_alpha
     add     sp, sp, #12
-    cmp     r0, #1
-    movne   r4, #77
-    bne     .Lfail_code
+    TEST_ARM_EXPECT_EQ_CODE 1, 77
 
     bl      reset_framebuffer
     bl      init_copy_source
@@ -206,14 +172,9 @@ _start:
     push    {r4}
     bl      gpu_framebuffer_copy_rect
     add     sp, sp, #12
-    cmp     r0, #0
-    movne   r4, #81
-    bne     .Lfail_code
+    TEST_ARM_EXPECT_ZERO_CODE 81
 
-    bl      check_framebuffer_copy_rect
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
+    TEST_ARM_CALL check_framebuffer_copy_rect
 
     ldr     r0, =fb_out
     ldr     r1, =639
@@ -227,9 +188,7 @@ _start:
     push    {r4}
     bl      gpu_framebuffer_copy_rect
     add     sp, sp, #12
-    cmp     r0, #1
-    movne   r4, #89
-    bne     .Lfail_code
+    TEST_ARM_EXPECT_EQ_CODE 1, 89
 
     bl      reset_framebuffer
     ldr     r0, =fb_out
@@ -240,14 +199,9 @@ _start:
     push    {r4}
     bl      gpu_framebuffer_draw_glyph
     add     sp, sp, #4
-    cmp     r0, #0
-    movne   r4, #91
-    bne     .Lfail_code
+    TEST_ARM_EXPECT_ZERO_CODE 91
 
-    bl      check_framebuffer_glyph
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
+    TEST_ARM_CALL check_framebuffer_glyph
 
     ldr     r0, =fb_out
     ldr     r1, =633
@@ -257,9 +211,7 @@ _start:
     push    {r4}
     bl      gpu_framebuffer_draw_glyph
     add     sp, sp, #4
-    cmp     r0, #1
-    movne   r4, #97
-    bne     .Lfail_code
+    TEST_ARM_EXPECT_EQ_CODE 1, 97
 
     ldr     r0, =fb_out
     mov     r1, #0
@@ -269,9 +221,7 @@ _start:
     push    {r4}
     bl      gpu_framebuffer_draw_glyph
     add     sp, sp, #4
-    cmp     r0, #1
-    movne   r4, #98
-    bne     .Lfail_code
+    TEST_ARM_EXPECT_EQ_CODE 1, 98
 
     bl      reset_framebuffer
     ldr     r0, =fb_out
@@ -284,14 +234,9 @@ _start:
     push    {r4}
     bl      gpu_framebuffer_draw_text8
     add     sp, sp, #8
-    cmp     r0, #0
-    movne   r4, #101
-    bne     .Lfail_code
+    TEST_ARM_EXPECT_ZERO_CODE 101
 
-    bl      check_framebuffer_text8
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
+    TEST_ARM_CALL check_framebuffer_text8
 
     bl      reset_framebuffer
     ldr     r0, =fb_out
@@ -304,14 +249,9 @@ _start:
     push    {r4}
     bl      gpu_framebuffer_draw_text8
     add     sp, sp, #8
-    cmp     r0, #1
-    movne   r4, #107
-    bne     .Lfail_code
+    TEST_ARM_EXPECT_EQ_CODE 1, 107
 
-    bl      check_framebuffer_text8_reject_clean
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
+    TEST_ARM_CALL check_framebuffer_text8_reject_clean
 
     ldr     r0, =fb_out
     mov     r1, #0
@@ -323,16 +263,9 @@ _start:
     push    {r4}
     bl      gpu_framebuffer_draw_text8
     add     sp, sp, #8
-    cmp     r0, #1
-    movne   r4, #108
-    bne     .Lfail_code
-
-    mov     r0, #0
-    b       semihost_exit
-
-.Lfail_code:
-    mov     r0, r4
-    b       semihost_exit
+    TEST_ARM_EXPECT_EQ_CODE 1, 108
+    TEST_ARM_EXIT_OK
+    TEST_ARM_EXIT_FAIL
 
 check_mailbox_write:
     push    {lr}

@@ -8,6 +8,7 @@
 
 %define HAVE_ER_WASM_RUNTIME_PTR
 %include "x86_64/wasm/wasm_interpreter.asm"
+%include "test/test_macros.inc"
 
 SECTION .data
 
@@ -1823,17 +1824,13 @@ _start:
     lea     rdi, [rel str_pass]
     call    print_str
     call    print_newline
-    xor     edi, edi
-    mov     eax, 60
-    syscall
+    TEST_EXIT 0
 
 .fail:
     lea     rdi, [rel str_fail]
     call    print_str
     call    print_newline
-    mov     edi, 1
-    mov     eax, 60
-    syscall
+    TEST_EXIT 1
 
 ; ==================================================================
 ; Minimal print helpers

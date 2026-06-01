@@ -41,6 +41,7 @@ extern er_fn_call_args
 extern er_wasm_runtime_ptr
 extern edgerun_signing_wasm_start
 extern edgerun_signing_wasm_len
+extern er_ed25519_sign
 
 extern er_serial_puts
 extern er_serial_putchar
@@ -258,40 +259,14 @@ er_fn er_tor_hs_signing_sign
 .msg_ready:
     cmp     r13d, TOR_SIGNING_MAX_MSG
     ja      .fail
-    call    _tor_signing_prepare_runtime
-    test    eax, eax
-    js      .fail
-
-    lea     rdi, [tor_signing_memory + TOR_SIGNING_SEED_OFF]
-    mov     rsi, rbx
-    mov     edx, 32
-    call    er_memcpy
-    test    r13d, r13d
-    jz      .call
-    lea     rdi, [tor_signing_memory + TOR_SIGNING_MSG_OFF]
+    mov     rdi, rbx
     mov     rsi, r12
     mov     edx, r13d
-    call    er_memcpy
-.call:
-    mov     qword [tor_signing_args], TOR_SIGNING_SEED_OFF
-    mov     qword [tor_signing_args + 8], TOR_SIGNING_MSG_OFF
-    mov     [tor_signing_args + 16], r13
-    mov     qword [tor_signing_args + 24], TOR_SIGNING_SIG_OFF
-    lea     rdi, [tor_signing_runtime]
-    lea     rsi, [rel tor_signing_name_sign]
-    mov     edx, tor_signing_name_sign_len
-    lea     rcx, [tor_signing_args]
-    mov     r8d, 4
-    call    er_fn_call_args
-    test    rdx, rdx
-    jnz     .fail
+    mov     rcx, r14
+    call    er_ed25519_sign
     test    eax, eax
     jnz     .fail
 
-    mov     rdi, r14
-    lea     rsi, [tor_signing_memory + TOR_SIGNING_SIG_OFF]
-    mov     edx, TOR_HS_ED25519_SIG_LEN
-    call    er_memcpy
     xor     eax, eax
     er_ok
     pop     r14

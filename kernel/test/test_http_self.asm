@@ -319,19 +319,14 @@ _start:
     mov     eax, 27
     call    print_dec
 
-    cmp     qword [rel failed], 0
-    jnz     .exit_fail
     xor     edi, edi
-    jmp     .exit
-.exit_fail:
-    mov     edi, 1
-.exit:
+    cmp     qword [rel failed], 0
+    setne   dil
     pop     r14
     pop     r13
     pop     r12
     pop     rbx
-    mov     eax, 60
-    syscall
+    TEST_EXIT_EDI
 
 ; -------------------------------------------------------------------
 ; Strings

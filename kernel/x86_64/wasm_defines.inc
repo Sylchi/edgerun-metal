@@ -196,6 +196,16 @@ wasm_version: db 0x01, 0x00, 0x00, 0x00
 %define RUNTIME_SIZE                 88
 
 ; ==================================================================
+; HostImport struct offsets
+; ==================================================================
+HOST_IMPORT_SIZE        equ 40
+%define HOST_IMPORT_MODULE_PTR_OFF    0
+%define HOST_IMPORT_MODULE_LEN_OFF    8
+%define HOST_IMPORT_NAME_PTR_OFF      16
+%define HOST_IMPORT_NAME_LEN_OFF      24
+%define HOST_IMPORT_FN_PTR_OFF        32
+
+; ==================================================================
 ; Error codes (returned in rdx)
 ; Range 1-19: WASM interpreter errors
 ; Range 20-29: Generic driver / system errors

@@ -30,6 +30,8 @@ ER_ASM_SYM_SIZE_OFF equ 616
 ER_ASM_SYM_NAME_OFF equ 985
 ER_ASM_SYM_NAME_CAP equ 30
 ER_ASM_TEXT_SH_SIZE_OFF equ 1376
+ER_ASM_SYMTAB_SH_SIZE_OFF equ 1440
+ER_ASM_STRTAB_SH_SIZE_OFF equ 1504
 ER_ASM_EQU_CAP equ 8
 ER_ASM_INCLUDE_CAP equ 4
 ER_ASM_GLOBAL_CAP equ 16
@@ -254,32 +256,11 @@ er_fn is_supported_exit_subset
     jne     .no
     cmp     qword [rel directive_count], 2
     jb      .no
-    cmp     qword [rel instr_count], 8
-    je      .branch_fn_shape
-    cmp     qword [rel label_count], 1
-    jne     .no
-    cmp     qword [rel instr_count], 3
-    je      .exit_shape
-    cmp     qword [rel instr_count], 2
-    jne     .no
-    cmp     qword [rel exit_instr_step], 4
-    je      .yes
-    cmp     qword [rel exit_instr_step], 6
-    je      .yes
-    cmp     qword [rel exit_instr_step], 8
-    jne     .no
-.yes:
-    mov     eax, 1
-    ret
-.exit_shape:
-    cmp     qword [rel exit_instr_step], 3
-    jne     .no
-    mov     eax, 1
-    ret
-.branch_fn_shape:
-    cmp     qword [rel label_count], 2
-    jne     .no
-    cmp     qword [rel exit_instr_step], 28
+    cmp     qword [rel instr_count], 1
+    jb      .no
+    cmp     qword [rel global_count], 1
+    jb      .no
+    cmp     qword [rel pending_global_ptr], 0
     jne     .no
     mov     eax, 1
     ret
@@ -373,6 +354,11 @@ er_fn patch_global_symbols
     inc     r13
     jmp     .str_loop
 .sym_start:
+    mov     rax, [rel global_count]
+    inc     rax
+    imul    rax, rax, ER_ASM_SYMTAB_ENTRY_SIZE
+    mov     [rel object_buf + ER_ASM_SYMTAB_SH_SIZE_OFF], rax
+    mov     [rel object_buf + ER_ASM_STRTAB_SH_SIZE_OFF], r12
     xor     r13d, r13d
 .sym_loop:
     cmp     r13, [rel global_count]
@@ -614,6 +600,7 @@ er_fn record_er_fn_directive
     mov     r11, r13
     mov     rax, [rel text_len]
     call    add_global_symbol
+    mov     qword [rel exit_instr_step], 0
     inc     qword [rel label_count]
     mov     eax, 1
     jmp     .done
@@ -1135,42 +1122,21 @@ er_fn track_exit_instruction
     mov     qword [rel exit_instr_step], 20
     jmp     .done
 .ret_or_xor_zero:
-    mov     rdi, r12
-    mov     rsi, r13
-    lea     rdx, [rel tok_ret]
-    mov     ecx, tok_ret_len
-    call    token_eq
+    call    match_ret_line
     test    eax, eax
     jz      .xor_zero
-    call    expect_line_end
-    test    eax, eax
-    jz      .bad
     call    emit_ret
     mov     qword [rel exit_instr_step], 4
     jmp     .done
 .ret_after_xor_eax:
-    mov     rdi, r12
-    mov     rsi, r13
-    lea     rdx, [rel tok_ret]
-    mov     ecx, tok_ret_len
-    call    token_eq
-    test    eax, eax
-    jz      .bad
-    call    expect_line_end
+    call    match_ret_line
     test    eax, eax
     jz      .bad
     call    emit_ret
     mov     qword [rel exit_instr_step], 6
     jmp     .done
 .ret_after_mov_eax_edi:
-    mov     rdi, r12
-    mov     rsi, r13
-    lea     rdx, [rel tok_ret]
-    mov     ecx, tok_ret_len
-    call    token_eq
-    test    eax, eax
-    jz      .bad
-    call    expect_line_end
+    call    match_ret_line
     test    eax, eax
     jz      .bad
     call    emit_ret
@@ -1342,7 +1308,7 @@ er_fn handle_code_label
     call    patch_branches_to_current
     cmp     qword [rel exit_subset_bad], 0
     jne     .done
-    mov     qword [rel exit_instr_step], 26
+    mov     qword [rel exit_instr_step], 0
 .done:
     ret
 

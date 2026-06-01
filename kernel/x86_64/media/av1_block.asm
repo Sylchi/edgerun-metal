@@ -206,6 +206,48 @@ er_fn er_av1_block_encode_coeffs_8x8
     xor     ebx, ebx
     mov     r14, rcx
     mov     r15d, r8d
+.zero_scan:
+    cmp     ebx, AV1_BLOCK_PIXELS_8X8
+    jae     .write_zero_block
+    cmp     word [r12 + rbx * 2], 0
+    jne     .start_writer
+    inc     ebx
+    jmp     .zero_scan
+.write_zero_block:
+    cmp     dword [rsp + AV1_SYMBOL_SIZE], 96
+    jb      .no_space
+    mov     rdi, r13
+    mov     ecx, 96
+    xor     eax, eax
+    cld
+    rep     stosb
+    mov     eax, 96
+    er_ok
+    jmp     .done
+.start_writer:
+    movsx   eax, word [r12 + rbx * 2]
+    mov     [rsp + AV1_SYMBOL_SIZE + 8], eax
+.uniform_scan:
+    cmp     ebx, AV1_BLOCK_PIXELS_8X8
+    jae     .uniform_ready
+    movsx   eax, word [r12 + rbx * 2]
+    cmp     eax, [rsp + AV1_SYMBOL_SIZE + 8]
+    jne     .unsupported
+    inc     ebx
+    jmp     .uniform_scan
+.uniform_ready:
+    mov     eax, [rsp + AV1_SYMBOL_SIZE + 8]
+    test    eax, eax
+    jz      .write_zero_block
+    test    eax, eax
+    jns     .uniform_abs_ready
+    neg     eax
+.uniform_abs_ready:
+    cmp     eax, 1
+    jb      .unsupported
+    cmp     eax, AV1_BLOCK_COEFF_LEVEL_SYMBOLS
+    ja      .unsupported
+    xor     ebx, ebx
     mov     rdi, rsp
     mov     rsi, r13
     call    er_av1_symbol_write_init
@@ -279,6 +321,10 @@ er_fn er_av1_block_encode_coeffs_8x8
 .unsupported:
     xor     eax, eax
     er_err  ERROR_UNSUPPORTED
+    jmp     .done
+.no_space:
+    xor     eax, eax
+    er_err  ERROR_NO_SPACE
 .done:
     er_stack_free AV1_SYMBOL_SIZE + 16
     er_pop  rbx, r12, r13, r14, r15

@@ -378,6 +378,12 @@ failed: dq 0
     syscall
 %endmacro
 
+; Exit with status already in edi.
+%macro TEST_EXIT_EDI 0
+    mov     eax, 60
+    syscall
+%endmacro
+
 ; Exit with status 1 if failed is non-zero, else 0.
 %macro TEST_EXIT_FAILED 0
     xor     edi, edi

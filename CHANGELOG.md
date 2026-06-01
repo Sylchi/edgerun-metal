@@ -8,7 +8,10 @@
   `app/src/signing_wasm.zig`; the old Cargo/Rust signing guest path was removed.
 - Native ASM signing replacement started with `kernel/x86_64/crypto/sha512.asm`
   and `kernel/x86_64/crypto/ed25519.asm` seed scalar/prefix derivation,
-  scalar `reduce64`, and scalar `mulAdd`; all are covered by registry tests.
+  scalar `reduce64`, scalar `mulAdd`, and Edwards25519 basepoint
+  multiplication/encoding; normal Ed25519 signing now uses ASM in
+  `er_tor_hs_signing_sign`. Blinded signing still uses the embedded WASM guest
+  until arbitrary Edwards point decode/multiply lands.
 - `./build.sh bench-wasm-jit` links and runs after adding the benchmark's WASM
   runtime pointer stub and executable JIT cache setup.
 - Root docs now use the current `kernel/x86_64/` layout and registry-driven

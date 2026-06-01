@@ -8,8 +8,7 @@
 %include "x86_64/wasm/wasm_compiler.asm"
 %include "x86_64/wasm/tsx_parser.asm"
 %include "x86_64/wasm/wasm_test_data.asm"
-
-LINUX_SYS_EXIT equ 60
+%include "test/test_macros.inc"
 
 SECTION .data
 dummy_mem: times 256 db 0
@@ -1413,14 +1412,10 @@ _start:
     cmp     rdx, ERROR_PARSE
     jne     .fail
 
-    xor     edi, edi
-    mov     eax, LINUX_SYS_EXIT
-    syscall
+    TEST_EXIT 0
 
 .fail:
-    mov     edi, 1
-    mov     eax, LINUX_SYS_EXIT
-    syscall
+    TEST_EXIT 1
 
 _bytes_equal:
     test    rdx, rdx

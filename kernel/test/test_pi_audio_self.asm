@@ -3,6 +3,7 @@
 .syntax unified
 .cpu arm1176jzf-s
 .arm
+.include "test/test_arm_macros.inc"
 
 .equ PWM_CTL,         0x00
 .equ PWM_STA,         0x04
@@ -37,27 +38,11 @@
 _start:
     ldr     sp, =stack_top
 
-    bl      test_audio_init
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      test_audio_write_stereo
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      test_audio_rejects_out_of_range
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    mov     r0, #0
-    b       semihost_exit
-
-.Lfail_code:
-    mov     r0, r4
-    b       semihost_exit
+    TEST_ARM_CALL test_audio_init
+    TEST_ARM_CALL test_audio_write_stereo
+    TEST_ARM_CALL test_audio_rejects_out_of_range
+    TEST_ARM_EXIT_OK
+    TEST_ARM_EXIT_FAIL
 
 test_audio_init:
     push    {lr}

@@ -3,6 +3,7 @@
 .syntax unified
 .cpu arm1176jzf-s
 .arm
+.include "test/test_arm_macros.inc"
 
 .equ GPIO_FUNCTION_ALT3, 7
 .equ GPIO_FUNCTION_OUTPUT, 1
@@ -39,27 +40,11 @@
 _start:
     ldr     sp, =stack_top
     bl      reset_bt_emulator
-    bl      pi_bt_init
-    cmp     r0, #0
-    movne   r4, #1
-    bne     .Lfail_code
-
-    bl      check_gpio_state
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      check_uart_trace
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    mov     r0, #0
-    b       semihost_exit
-
-.Lfail_code:
-    mov     r0, r4
-    b       semihost_exit
+    TEST_ARM_CALL_CODE pi_bt_init, 1
+    TEST_ARM_CALL check_gpio_state
+    TEST_ARM_CALL check_uart_trace
+    TEST_ARM_EXIT_OK
+    TEST_ARM_EXIT_FAIL
 
 check_gpio_state:
     push    {lr}

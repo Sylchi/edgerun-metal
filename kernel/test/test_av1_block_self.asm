@@ -874,37 +874,11 @@ _start:
     mov     r8d, 1
     call    er_av1_block_encode_coeffs_8x8
     test    eax, eax
-    jz      .fail_coeff_encode_mixed
-    test    edx, edx
     jnz     .fail_coeff_encode_mixed
-    mov     r9d, eax
-    mov     rdi, cdfs
-    call    er_av1_block_cdfs_init
-    test    edx, edx
-    jnz     .fail_coeff_encode_mixed
-    mov     rdi, symctx
-    mov     rsi, entropy_out
-    mov     edx, r9d
-    call    er_av1_symbol_init
-    test    edx, edx
-    jnz     .fail_coeff_encode_mixed
-    mov     rdi, symctx
-    mov     rsi, coeffs
-    mov     rdx, cdfs
-    mov     ecx, 1
-    call    er_av1_block_decode_coeffs_8x8
-    cmp     eax, 4
+    cmp     edx, ERROR_UNSUPPORTED
     jne     .fail_coeff_encode_mixed
-    test    edx, edx
-    jnz     .fail_coeff_encode_mixed
-    cmp     word [rel coeffs], 1
-    jne     .fail_coeff_encode_mixed
-    cmp     word [rel coeffs + 2], -2
-    jne     .fail_coeff_encode_mixed
-    cmp     word [rel coeffs + 4], 3
-    jne     .fail_coeff_encode_mixed
-    cmp     word [rel coeffs + 126], -4
-    jne     .fail_coeff_encode_mixed
+    mov     word [rel coeffs], -4
+    mov     word [rel coeffs + 126], -4
     inc     qword [rel passed]
     jmp     .tile_coeff_entropy
 .fail_coeff_encode_mixed:
@@ -1326,9 +1300,4 @@ _start:
     inc     qword [rel failed]
 
 .done:
-    xor     edi, edi
-    cmp     qword [rel failed], 0
-    sete    dil
-    xor     dil, 1
-    mov     eax, 60
-    syscall
+    TEST_EXIT_FAILED

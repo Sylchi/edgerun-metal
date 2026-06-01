@@ -783,12 +783,7 @@ _start:
 	inc     qword [rel failed]
 
 .done:
-	xor     edi, edi
-	cmp     qword [rel failed], 0
-    sete    dil
-    xor     dil, 1
-    mov     eax, 60
-    syscall
+    TEST_EXIT_FAILED
 
 expect_header_error:
     mov     r8d, edx

@@ -3,6 +3,7 @@
 .syntax unified
 .cpu arm1176jzf-s
 .arm
+.include "test/test_arm_macros.inc"
 
 .equ DWC_GAHBCFG,           0x008
 .equ DWC_GUSBCFG,           0x00c
@@ -98,107 +99,27 @@
 _start:
     ldr     sp, =stack_top
 
-    bl      test_dwc2_init_programs_core
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      test_dwc2_init_rejects_bad_core
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      test_dwc2_init_ahb_idle_timeout
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      test_dwc2_init_reset_timeout
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      test_dwc2_port_detect_reports_speed
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      test_dwc2_port_detect_resets_to_enable
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      test_dwc2_port_detect_reset_timeout
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      test_dwc2_port_detect_rejects_null
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      test_dwc2_find_ethernet_ecm
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      test_dwc2_find_ethernet_ncm
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      test_dwc2_rejects_incomplete_ethernet
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      test_dwc2_find_mass_storage
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      test_dwc2_rejects_incomplete_mass_storage
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      test_dwc2_rejects_bad_mass_storage_protocol
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      test_dwc2_msc_read10_bot
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      test_dwc2_msc_test_unit_ready_bot
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      test_dwc2_msc_inquiry_bot
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      test_dwc2_msc_read_capacity_bot
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    bl      test_dwc2_msc_read10_rejects_bad_csw
-    cmp     r0, #0
-    movne   r4, r0
-    bne     .Lfail_code
-
-    mov     r0, #0
-    b       semihost_exit
-
-.Lfail_code:
-    mov     r0, r4
-    b       semihost_exit
+    TEST_ARM_CALL test_dwc2_init_programs_core
+    TEST_ARM_CALL test_dwc2_init_rejects_bad_core
+    TEST_ARM_CALL test_dwc2_init_ahb_idle_timeout
+    TEST_ARM_CALL test_dwc2_init_reset_timeout
+    TEST_ARM_CALL test_dwc2_port_detect_reports_speed
+    TEST_ARM_CALL test_dwc2_port_detect_resets_to_enable
+    TEST_ARM_CALL test_dwc2_port_detect_reset_timeout
+    TEST_ARM_CALL test_dwc2_port_detect_rejects_null
+    TEST_ARM_CALL test_dwc2_find_ethernet_ecm
+    TEST_ARM_CALL test_dwc2_find_ethernet_ncm
+    TEST_ARM_CALL test_dwc2_rejects_incomplete_ethernet
+    TEST_ARM_CALL test_dwc2_find_mass_storage
+    TEST_ARM_CALL test_dwc2_rejects_incomplete_mass_storage
+    TEST_ARM_CALL test_dwc2_rejects_bad_mass_storage_protocol
+    TEST_ARM_CALL test_dwc2_msc_read10_bot
+    TEST_ARM_CALL test_dwc2_msc_test_unit_ready_bot
+    TEST_ARM_CALL test_dwc2_msc_inquiry_bot
+    TEST_ARM_CALL test_dwc2_msc_read_capacity_bot
+    TEST_ARM_CALL test_dwc2_msc_read10_rejects_bad_csw
+    TEST_ARM_EXIT_OK
+    TEST_ARM_EXIT_FAIL
 
 test_dwc2_init_programs_core:
     push    {lr}
