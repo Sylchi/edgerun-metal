@@ -988,6 +988,14 @@ pub const View = struct {
         try self.interactive(selectableCard(id, title_value, detail_value, variant), bounds);
     }
 
+    pub fn surfaceControlAt(self: View, bounds: ui.Rect, id: ?u32, variant: SurfaceVariant, selected: bool) (ui.RenderError || interaction.Error)!void {
+        if (id) |control_id| {
+            try self.interactiveWithControl(selectableCard(control_id, "", "", variant), bounds, .{ .active = selected });
+        } else {
+            try self.drawWithControl(card("", "", variant), bounds, .{ .active = selected });
+        }
+    }
+
     pub fn panelAt(self: View, bounds: ui.Rect, title_value: []const u8, detail_value: []const u8) ui.RenderError!void {
         try self.surfaceAt(bounds, title_value, detail_value, .panel);
     }
@@ -1018,23 +1026,7 @@ pub const View = struct {
     }
 
     pub fn panelScaffold(self: View, bounds: ui.Rect, props: PanelScaffoldProps) (ui.RenderError || interaction.Error)!ui.Rect {
-        if (props.id) |id| {
-            try self.interactiveWithControl(selectableCard(id, "", "", props.variant), bounds, .{ .active = props.selected });
-        } else {
-            try self.drawWithControl(card("", "", props.variant), bounds, .{ .active = props.selected });
-        }
-
-        const inner = bounds.insetUniform(props.inset);
-        const header_h = @max(primitives.min_extent, props.header_h);
-        const gap = @max(0.0, props.header_gap);
-        const header = ui.Rect.init(inner.x, inner.y, inner.w, header_h);
-        try self.section(header, .{
-            .title = props.title,
-            .detail = props.detail,
-            .icon = props.icon,
-        });
-        const body_y = inner.y + header_h + gap;
-        return ui.Rect.init(inner.x, body_y, inner.w, @max(primitives.min_extent, inner.y + inner.h - body_y));
+        return app_surfaces_component.panelScaffold(self, bounds, props);
     }
 
     pub fn workspaceTopBar(self: View, bounds: ui.Rect, props: WorkspaceTopBarProps) ui.RenderError!void {
@@ -1076,10 +1068,7 @@ pub const View = struct {
     }
 
     pub fn actionToolbar(self: View, bounds: ui.Rect, props: ActionToolbarProps) (ui.RenderError || interaction.Error)!void {
-        switch (props.direction) {
-            .row => try self.iconButtonRow(bounds, props.specs, props.button_w, props.gap),
-            .column => try self.iconButtonColumn(bounds, props.specs, props.button_h, props.gap),
-        }
+        try app_surfaces_component.actionToolbar(self, bounds, props);
     }
 
     pub fn selectableRow(self: View, bounds: ui.Rect, id: u32, title_value: []const u8, detail_value: []const u8, icon_value: ui_icon.Icon, active: bool) (ui.RenderError || interaction.Error)!void {
@@ -1091,83 +1080,11 @@ pub const View = struct {
     }
 
     pub fn panelList(self: View, bounds: ui.Rect, props: PanelListProps) (ui.RenderError || interaction.Error)!void {
-        const panel_body = try self.panelScaffold(bounds, .{
-            .title = props.title,
-            .detail = props.detail,
-            .icon = props.icon,
-            .id = props.id,
-            .variant = props.variant,
-            .selected = props.selected,
-            .inset = props.inset,
-            .header_h = props.header_h,
-            .header_gap = props.header_gap,
-        });
-        var list = self.column(panel_body, props.gap);
-        if (props.items.len == 0) {
-            try self.emptyAt(list.remaining(), props.empty_title, props.empty_detail);
-            return;
-        }
-        for (props.items) |item| {
-            const row_bounds = list.takeIfFits(props.row_h) orelse break;
-            if (item.id) |id| {
-                if (item.icon) |icon_value| {
-                    try self.selectableRow(row_bounds, id, item.title, item.detail, icon_value, item.active);
-                } else {
-                    try self.selectableRowText(row_bounds, id, item.title, item.detail, item.active);
-                }
-            } else if (item.icon) |icon_value| {
-                try self.drawWithControl(rowItemIcon(0, item.title, item.detail, icon_value), row_bounds, .{ .active = item.active });
-            } else {
-                try self.rowItemAt(row_bounds, 0, item.title, item.detail);
-            }
-        }
+        try app_surfaces_component.panelList(self, bounds, props);
     }
 
     pub fn pageHeader(self: View, bounds: ui.Rect, props: PageHeaderProps) (ui.RenderError || interaction.Error)!void {
-        if (props.id) |id| {
-            try self.interactiveWithControl(selectableCard(id, "", "", props.variant), bounds, .{ .active = props.selected });
-        } else if (props.fill) |fill_color| {
-            try self.fill(bounds, fill_color, props.radius);
-            if (props.border) |border_color| try self.stroke(bounds, border_color, props.radius);
-        } else {
-            try self.drawWithControl(card("", "", props.variant), bounds, .{ .active = props.selected });
-        }
-        if (props.fill == null) {
-            if (props.border) |border_color| try self.stroke(bounds, border_color, props.radius);
-        }
-
-        const inner = bounds.insetUniform(props.inset);
-        var text_x = inner.x;
-        if (props.icon) |icon_value| {
-            const chip = ui.Rect.init(inner.x, inner.y, 36.0, 36.0);
-            try self.fill(chip, props.accent orelse self.options.style.row, 9.0);
-            try self.icon(chip.withHeightCentered(18.0).withWidthCentered(18.0), icon_value, self.options.style.accent);
-            text_x += 52.0;
-        }
-
-        const action_w: f32 = if (props.trailing_action != null) 44.0 else 0.0;
-        const badges_w = app_surfaces_component.headerBadgesWidth(props.badges);
-        const reserved = action_w + badges_w + if (badges_w > 0.0 and action_w > 0.0) @as(f32, 10.0) else @as(f32, 0.0);
-        const text_w = @max(primitives.min_extent, inner.x + inner.w - text_x - reserved);
-        try self.strongText(ui.Rect.init(text_x, inner.y - 2.0, text_w, 24.0), props.title, self.options.style.text);
-        if (props.detail.len != 0) {
-            try self.text(ui.Rect.init(text_x, inner.y + 28.0, text_w, 18.0), props.detail, props.detail_color orelse self.options.style.muted);
-        }
-
-        var x = inner.x + inner.w - action_w;
-        if (props.trailing_action) |action| {
-            try self.iconButtonAt(ui.Rect.init(x, inner.y + 1.0, 34.0, 34.0), action.id, action.label, action.icon, action.variant);
-            x -= 10.0;
-        }
-        var badge_index = props.badges.len;
-        while (badge_index > 0) {
-            badge_index -= 1;
-            const badge_value = props.badges[badge_index];
-            x -= badge_value.width;
-            const badge_app = if (badge_value.accent) |accent_color| self.withAccent(accent_color) else self;
-            try badge_app.badgeAt(ui.Rect.init(x, inner.y + 4.0, badge_value.width, 28.0), badge_value.label, badge_value.variant);
-            x -= 10.0;
-        }
+        try app_surfaces_component.pageHeader(self, bounds, props);
     }
 
     pub fn workspaceRail(self: View, bounds: ui.Rect, props: WorkspaceRailProps) (ui.RenderError || interaction.Error)!void {
@@ -1203,62 +1120,11 @@ pub const View = struct {
     }
 
     pub fn metricCard(self: View, bounds: ui.Rect, props: MetricCardProps) (ui.RenderError || interaction.Error)!void {
-        const card_component_value = if (props.id) |id|
-            selectablePanel(id, "", "")
-        else
-            panel("", "");
-        if (props.id != null) {
-            try self.interactiveWithControl(card_component_value, bounds, .{ .active = props.selected });
-        } else {
-            try self.drawWithControl(card_component_value, bounds, .{ .active = props.selected });
-        }
-
-        const inner = bounds.insetUniform(14.0);
-        const text_x = if (props.icon != null) inner.x + 40.0 else inner.x;
-        const text_w = @max(primitives.min_extent, inner.x + inner.w - text_x);
-        if (props.icon) |icon_value| {
-            const chip = ui.Rect.init(inner.x, inner.y, 28.0, 28.0);
-            try self.scene.pushRect(chip, self.options.style.row, .fill, 7.0, 0.0);
-            try self.scene.pushRect(chip, self.options.style.border, .border, 7.0, 0.0);
-            try self.icon(chip.withHeightCentered(15.0).withWidthCentered(15.0), icon_value, self.options.style.accent);
-        }
-        try self.strongText(ui.Rect.init(text_x, inner.y - 1.0, text_w, 17.0), props.title, self.options.style.text);
-        if (props.detail.len != 0) {
-            try self.text(ui.Rect.init(text_x, inner.y + 21.0, text_w, 14.0), props.detail, self.options.style.muted);
-        }
-        const value_y = if (props.detail.len != 0) inner.y + 58.0 else inner.y + 36.0;
-        if (props.value.len != 0) {
-            try self.text(ui.Rect.init(inner.x, value_y, inner.w, 20.0), props.value, self.options.style.text);
-        }
-        if (props.progress) |value| {
-            try self.draw(progress(value), ui.Rect.init(inner.x, inner.y + inner.h - 24.0, inner.w, 18.0));
-        }
+        try app_surfaces_component.metricCard(self, bounds, props);
     }
 
     pub fn segmentMap(self: View, bounds: ui.Rect, props: SegmentMapProps) (ui.RenderError || interaction.Error)!void {
-        try self.scene.pushRect(bounds, props.background, .fill, props.radius, 0.0);
-        try self.scene.pushRect(bounds, props.border, .border, props.radius, 0.0);
-        const inner = bounds.insetUniform(8.0);
-        var total_weight: f32 = 0.0;
-        for (props.segments) |segment| {
-            total_weight += @max(0.0, segment.weight);
-        }
-        if (props.segments.len == 0 or total_weight <= 0.0) return;
-
-        var x = inner.x;
-        for (props.segments, 0..) |segment, index| {
-            const remaining = @max(primitives.min_extent, inner.x + inner.w - x);
-            const normalized = @max(0.0, segment.weight) / total_weight;
-            const width = if (index == props.segments.len - 1) remaining else @max(18.0, inner.w * normalized);
-            const block_w = @max(primitives.min_extent, @min(width, remaining));
-            const block_h = @max(18.0, inner.h * @max(0.05, @min(1.0, segment.height)));
-            const block = ui.Rect.init(x, inner.y + inner.h - block_h, block_w, block_h);
-            try self.interactive(selectableSubtle(segment.id, "", ""), block);
-            try self.scene.pushRect(block, segment.color, .fill, props.radius - 3.0, 0.0);
-            try self.scene.pushRect(block, if (segment.selected) props.selected_border else props.border, .border, props.radius - 3.0, 0.0);
-            x += width + props.gap;
-            if (x >= inner.x + inner.w) break;
-        }
+        try app_surfaces_component.segmentMap(self, bounds, props);
     }
 
     pub fn timelineLane(self: View, axis: ui.Rect, props: TimelineLaneProps) (ui.RenderError || interaction.Error)!void {
@@ -1350,48 +1216,15 @@ pub const View = struct {
     }
 
     pub fn controlGroup(self: View, bounds: ui.Rect, props: ControlGroupProps) (ui.RenderError || interaction.Error)!void {
-        try self.interactive(selectableSubtle(props.id, "", ""), bounds);
-        const inner = bounds.insetUniform(14.0);
-        try self.strongText(ui.Rect.init(inner.x, inner.y, inner.w * 0.55, 18.0), props.title, self.options.style.text);
-        try self.text(ui.Rect.init(inner.x + inner.w * 0.55, inner.y + 1.0, inner.w * 0.45, 15.0), props.value, self.options.style.muted);
-        try self.interactive(slider(props.slider_id, "", props.slider_value), ui.Rect.init(inner.x, inner.y + 27.0, inner.w, 26.0));
-        const half_w = (inner.w - 10.0) * 0.5;
-        try self.interactive(buttonIcon(props.down_id, props.down_label, .outline, props.down_icon), ui.Rect.init(inner.x, inner.y + 66.0, half_w, 32.0));
-        try self.interactive(buttonIcon(props.up_id, props.up_label, .primary, props.up_icon), ui.Rect.init(inner.x + half_w + 10.0, inner.y + 66.0, half_w, 32.0));
+        try app_surfaces_component.controlGroup(self, bounds, props);
     }
 
     pub fn pathRow(self: View, bounds: ui.Rect, props: PathRowProps) (ui.RenderError || interaction.Error)!void {
-        const fill_color = if (props.selected) props.selected_fill orelse self.options.style.panel else props.fill orelse self.options.style.row;
-        const border_color = if (props.selected) props.accent else props.border orelse self.options.style.border;
-        const text_color = props.text orelse self.options.style.text;
-        const muted_color = props.muted orelse self.options.style.muted;
-
-        try self.interactive(selectableSubtle(props.id, "", ""), bounds);
-        try self.scene.pushRect(bounds, fill_color, .fill, 7.0, 0.0);
-        try self.scene.pushRect(bounds, border_color, .border, 7.0, 0.0);
-
-        const marker_h = @max(primitives.min_extent, bounds.h - 18.0);
-        try self.scene.pushRect(ui.Rect.init(bounds.x + 9.0, bounds.y + 9.0, 7.0, marker_h), props.accent, .fill, 4.0, 0.0);
-        try self.strongText(ui.Rect.init(bounds.x + 24.0, bounds.y + 7.0, @max(primitives.min_extent, bounds.w - 92.0), 16.0), props.title, text_color);
-        try self.text(ui.Rect.init(bounds.x + 24.0, bounds.y + 27.0, @max(primitives.min_extent, bounds.w - 92.0), 14.0), props.detail, muted_color);
-        try self.text(ui.Rect.init(bounds.x + bounds.w - 62.0, bounds.y + 8.0, 56.0, 14.0), props.trailing, muted_color);
-        try self.withAccent(props.progress_color).draw(progress(props.progress), ui.Rect.init(bounds.x + bounds.w - 62.0, bounds.y + bounds.h - 16.0, 50.0, 6.0));
+        try app_surfaces_component.pathRow(self, bounds, props);
     }
 
     pub fn pipelineNode(self: View, bounds: ui.Rect, props: PipelineNodeProps) (ui.RenderError || interaction.Error)!void {
-        const fill_color = if (props.selected) props.selected_fill orelse self.options.style.panel else props.fill orelse self.options.style.row;
-        const border_color = if (props.selected) props.accent else props.border orelse self.options.style.border;
-        const text_color = props.text orelse self.options.style.text;
-        const muted_color = props.muted orelse self.options.style.muted;
-
-        try self.interactive(selectableSubtle(props.id, "", ""), bounds);
-        try self.scene.pushRect(bounds, fill_color, .fill, 8.0, 0.0);
-        try self.scene.pushRect(bounds, border_color, .border, 8.0, 0.0);
-
-        const marker_h = @max(primitives.min_extent, bounds.h - 20.0);
-        try self.scene.pushRect(ui.Rect.init(bounds.x + 10.0, bounds.y + 10.0, 8.0, marker_h), props.accent, .fill, 5.0, 0.0);
-        try self.strongText(ui.Rect.init(bounds.x + 28.0, bounds.y + 10.0, @max(primitives.min_extent, bounds.w - 36.0), 18.0), props.title, text_color);
-        try self.text(ui.Rect.init(bounds.x + 28.0, bounds.y + 32.0, @max(primitives.min_extent, bounds.w - 36.0), 16.0), props.detail, muted_color);
+        try app_surfaces_component.pipelineNode(self, bounds, props);
     }
 
     pub fn floatingPanel(self: View, bounds: ui.Rect, props: FloatingPanelProps) ui.RenderError!ui.Rect {
@@ -1399,18 +1232,7 @@ pub const View = struct {
     }
 
     pub fn messageBubble(self: View, bounds: ui.Rect, props: MessageBubbleProps) ui.RenderError!void {
-        const fill_color = if (props.outbound) props.outbound_fill else props.inbound_fill orelse self.options.style.row;
-        const border_color = if (props.outbound) props.outbound_border else self.options.style.border;
-        try self.scene.pushRect(bounds, fill_color, .fill, props.radius, 0.0);
-        try self.scene.pushRect(bounds, border_color, .border, props.radius, 0.0);
-        try self.wrapped(bounds.insetUniform(11.0), props.body, 2);
-        if (props.media_label.len == 0) return;
-
-        const media = ui.Rect.init(bounds.x + 10.0, bounds.y + 42.0, @max(primitives.min_extent, bounds.w - 20.0), 66.0);
-        try self.draw(subtle(props.media_label, props.media_detail), media);
-        if (props.media_icon) |icon_value| {
-            try self.icon(ui.Rect.init(media.x + media.w - 28.0, media.y + 10.0, 18.0, 18.0), icon_value, self.options.style.accent);
-        }
+        try app_surfaces_component.messageBubble(self, bounds, props);
     }
 
     pub fn semanticView(self: View, bounds: ui.Rect, props: SemanticViewProps) (ui.RenderError || interaction.Error)!void {

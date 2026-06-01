@@ -296,9 +296,109 @@ pub fn headerBadgesWidth(badges: []const HeaderBadge) f32 {
     return width;
 }
 
+pub fn panelScaffold(view: anytype, bounds: ui.Rect, props: PanelScaffoldProps) (ui.RenderError || interaction.Error)!ui.Rect {
+    try view.surfaceControlAt(bounds, props.id, props.variant, props.selected);
+
+    const inner = bounds.insetUniform(props.inset);
+    const header_h = @max(primitives.min_extent, props.header_h);
+    const gap = @max(0.0, props.header_gap);
+    const header = ui.Rect.init(inner.x, inner.y, inner.w, header_h);
+    try section(view, header, .{
+        .title = props.title,
+        .detail = props.detail,
+        .icon = props.icon,
+    });
+    const body_y = inner.y + header_h + gap;
+    return ui.Rect.init(inner.x, body_y, inner.w, @max(primitives.min_extent, inner.y + inner.h - body_y));
+}
+
+pub fn actionToolbar(view: anytype, bounds: ui.Rect, props: ActionToolbarProps) (ui.RenderError || interaction.Error)!void {
+    switch (props.direction) {
+        .row => try view.iconButtonRow(bounds, props.specs, props.button_w, props.gap),
+        .column => try view.iconButtonColumn(bounds, props.specs, props.button_h, props.gap),
+    }
+}
+
+pub fn panelList(view: anytype, bounds: ui.Rect, props: PanelListProps) (ui.RenderError || interaction.Error)!void {
+    const panel_body = try panelScaffold(view, bounds, .{
+        .title = props.title,
+        .detail = props.detail,
+        .icon = props.icon,
+        .id = props.id,
+        .variant = props.variant,
+        .selected = props.selected,
+        .inset = props.inset,
+        .header_h = props.header_h,
+        .header_gap = props.header_gap,
+    });
+    var list = view.column(panel_body, props.gap);
+    if (props.items.len == 0) {
+        try view.emptyAt(list.remaining(), props.empty_title, props.empty_detail);
+        return;
+    }
+    for (props.items) |item| {
+        const row_bounds = list.takeIfFits(props.row_h) orelse break;
+        if (item.id) |id| {
+            if (item.icon) |icon_value| {
+                try view.selectableRow(row_bounds, id, item.title, item.detail, icon_value, item.active);
+            } else {
+                try view.selectableRowText(row_bounds, id, item.title, item.detail, item.active);
+            }
+        } else if (item.icon) |icon_value| {
+            try view.rowItemIconAt(row_bounds, 0, item.title, item.detail, icon_value, .{ .active = item.active });
+        } else {
+            try view.rowItemAt(row_bounds, 0, item.title, item.detail);
+        }
+    }
+}
+
+pub fn pageHeader(view: anytype, bounds: ui.Rect, props: PageHeaderProps) (ui.RenderError || interaction.Error)!void {
+    if (props.fill) |fill_color| {
+        try view.fill(bounds, fill_color, props.radius);
+        if (props.id) |id| try view.buttonHit(bounds, id);
+        if (props.selected) try view.selectionOverlay(bounds, props.accent orelse view.options.style.accent, view.options.style.row, 1.0, true);
+    } else {
+        try view.surfaceControlAt(bounds, props.id, props.variant, props.selected);
+    }
+    if (props.border) |border_color| try view.stroke(bounds, border_color, props.radius);
+
+    const inner = bounds.insetUniform(props.inset);
+    var text_x = inner.x;
+    if (props.icon) |icon_value| {
+        const chip = ui.Rect.init(inner.x, inner.y, 36.0, 36.0);
+        try view.fill(chip, props.accent orelse view.options.style.row, 9.0);
+        try view.icon(chip.withHeightCentered(18.0).withWidthCentered(18.0), icon_value, view.options.style.accent);
+        text_x += 52.0;
+    }
+
+    const action_w: f32 = if (props.trailing_action != null) 44.0 else 0.0;
+    const badges_w = headerBadgesWidth(props.badges);
+    const reserved = action_w + badges_w + if (badges_w > 0.0 and action_w > 0.0) @as(f32, 10.0) else @as(f32, 0.0);
+    const text_w = @max(primitives.min_extent, inner.x + inner.w - text_x - reserved);
+    try view.strongText(ui.Rect.init(text_x, inner.y - 2.0, text_w, 24.0), props.title, view.options.style.text);
+    if (props.detail.len != 0) {
+        try view.text(ui.Rect.init(text_x, inner.y + 28.0, text_w, 18.0), props.detail, props.detail_color orelse view.options.style.muted);
+    }
+
+    var x = inner.x + inner.w - action_w;
+    if (props.trailing_action) |action| {
+        try view.iconButtonAt(ui.Rect.init(x, inner.y + 1.0, 34.0, 34.0), action.id, action.label, action.icon, action.variant);
+        x -= 10.0;
+    }
+    var badge_index = props.badges.len;
+    while (badge_index > 0) {
+        badge_index -= 1;
+        const badge_value = props.badges[badge_index];
+        x -= badge_value.width;
+        const badge_view = if (badge_value.accent) |accent_color| view.withAccent(accent_color) else view;
+        try badge_view.badgeAt(ui.Rect.init(x, inner.y + 4.0, badge_value.width, 28.0), badge_value.label, badge_value.variant);
+        x -= 10.0;
+    }
+}
+
 pub fn workspaceRail(view: anytype, bounds: ui.Rect, props: WorkspaceRailProps) (ui.RenderError || interaction.Error)!void {
     try view.fill(bounds, props.fill, 0.0);
-    try view.actionToolbar(ui.Rect.init(bounds.x + props.pad_x, bounds.y + props.pad_top, @max(primitives.min_extent, bounds.w - props.pad_x * 2.0), @max(primitives.min_extent, bounds.h - props.pad_top)), .{
+    try actionToolbar(view, ui.Rect.init(bounds.x + props.pad_x, bounds.y + props.pad_top, @max(primitives.min_extent, bounds.w - props.pad_x * 2.0), @max(primitives.min_extent, bounds.h - props.pad_top)), .{
         .specs = props.actions,
         .direction = .column,
         .button_h = props.button_h,
@@ -329,7 +429,7 @@ pub fn composeBar(view: anytype, bounds: ui.Rect, props: ComposeBarProps) (ui.Re
     if (props.fill) |fill_color| try view.fill(bounds, fill_color, 0.0);
     try view.line(ui.Rect.init(bounds.x, bounds.y, bounds.w, 1.0));
     const tool_y = bounds.y + @max(0.0, (bounds.h - 38.0) * 0.5);
-    try view.actionToolbar(ui.Rect.init(bounds.x + props.inset_x, tool_y, props.toolbar_w, 38.0), .{
+    try actionToolbar(view, ui.Rect.init(bounds.x + props.inset_x, tool_y, props.toolbar_w, 38.0), .{
         .specs = props.actions,
         .button_w = props.toolbar_button_w,
         .gap = props.toolbar_gap,
@@ -420,26 +520,54 @@ pub fn labelValue(view: anytype, bounds: ui.Rect, label: []const u8, value: []co
     }
 }
 
+pub fn metricCard(view: anytype, bounds: ui.Rect, props: MetricCardProps) (ui.RenderError || interaction.Error)!void {
+    try view.surfaceControlAt(bounds, props.id, .panel, props.selected);
+
+    const inner = bounds.insetUniform(14.0);
+    const text_x = if (props.icon != null) inner.x + 40.0 else inner.x;
+    const text_w = @max(primitives.min_extent, inner.x + inner.w - text_x);
+    if (props.icon) |icon_value| {
+        const chip = ui.Rect.init(inner.x, inner.y, 28.0, 28.0);
+        try view.fill(chip, view.options.style.row, 7.0);
+        try view.stroke(chip, view.options.style.border, 7.0);
+        try view.icon(chip.withHeightCentered(15.0).withWidthCentered(15.0), icon_value, view.options.style.accent);
+    }
+    try view.strongText(ui.Rect.init(text_x, inner.y - 1.0, text_w, 17.0), props.title, view.options.style.text);
+    if (props.detail.len != 0) {
+        try view.text(ui.Rect.init(text_x, inner.y + 21.0, text_w, 14.0), props.detail, view.options.style.muted);
+    }
+    const value_y = if (props.detail.len != 0) inner.y + 58.0 else inner.y + 36.0;
+    if (props.value.len != 0) {
+        try view.text(ui.Rect.init(inner.x, value_y, inner.w, 20.0), props.value, view.options.style.text);
+    }
+    if (props.progress) |value| {
+        try view.progressAt(ui.Rect.init(inner.x, inner.y + inner.h - 24.0, inner.w, 18.0), value);
+    }
+}
+
 pub fn segmentMap(view: anytype, bounds: ui.Rect, props: SegmentMapProps) (ui.RenderError || interaction.Error)!void {
     try view.fill(bounds, props.background, props.radius);
     try view.stroke(bounds, props.border, props.radius);
-    if (props.segments.len == 0) return;
-
+    const inner = bounds.insetUniform(8.0);
     var total_weight: f32 = 0.0;
-    for (props.segments) |segment| total_weight += @max(0.0, segment.weight);
-    if (total_weight <= 0.001) return;
-
-    const gap_total = props.gap * @as(f32, @floatFromInt(if (props.segments.len > 0) props.segments.len - 1 else 0));
-    const usable_w = @max(primitives.min_extent, bounds.w - gap_total);
-    var x = bounds.x;
     for (props.segments) |segment| {
-        const w = @max(4.0, usable_w * (@max(0.0, segment.weight) / total_weight));
-        const h = @max(8.0, bounds.h * @max(0.0, @min(1.0, segment.height)));
-        const block = ui.Rect.init(x, bounds.y + (bounds.h - h) * 0.5, w, h);
+        total_weight += @max(0.0, segment.weight);
+    }
+    if (props.segments.len == 0 or total_weight <= 0.0) return;
+
+    var x = inner.x;
+    for (props.segments, 0..) |segment, index| {
+        const remaining = @max(primitives.min_extent, inner.x + inner.w - x);
+        const normalized = @max(0.0, segment.weight) / total_weight;
+        const width = if (index == props.segments.len - 1) remaining else @max(18.0, inner.w * normalized);
+        const block_w = @max(primitives.min_extent, @min(width, remaining));
+        const block_h = @max(18.0, inner.h * @max(0.05, @min(1.0, segment.height)));
+        const block = ui.Rect.init(x, inner.y + inner.h - block_h, block_w, block_h);
         try view.selectableSubtleAt(block, segment.id, "", "");
-        try view.fill(block, segment.color, @max(2.0, props.radius - 2.0));
-        if (segment.selected) try view.stroke(block.insetUniform(-2.0), props.selected_border, props.radius);
-        x += w + props.gap;
+        try view.fill(block, segment.color, props.radius - 3.0);
+        try view.stroke(block, if (segment.selected) props.selected_border else props.border, props.radius - 3.0);
+        x += width + props.gap;
+        if (x >= inner.x + inner.w) break;
     }
 }
 

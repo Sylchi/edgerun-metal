@@ -41,7 +41,20 @@ asm_x86_obj() {
 	local format="$1"; shift
 	local dst="$1"; shift
 	local src="$1"; shift
-	${YASM} -f "$format" ${ASM_INC} ${ASM_DEFS:-} "$@" -o "$dst" "$src"
+	local err="${dst}.yasm.err"
+	if ! ${YASM} -f "$format" ${ASM_INC} ${ASM_DEFS:-} "$@" -o "$dst" "$src" 2>"$err"; then
+		cat "$err" >&2
+		rm -f "$err"
+		return 1
+	fi
+	if [ -s "$err" ]; then
+		cat "$err" >&2
+		if grep -i 'warning:' "$err" >/dev/null 2>&1; then
+			rm -f "$err"
+			return 1
+		fi
+	fi
+	rm -f "$err"
 	test -f "$dst"
 }
 
@@ -343,6 +356,8 @@ build_test() {
 test_registry() {
  cat <<'EOF'
 test-registry|unit|build|yes|cmd_test_registry|Validate test registry metadata
+test-x86-asm-boundary|unit|build|yes|cmd_check_x86_asm_boundary|Validate x86 ASM goes through one assembler boundary
+test-x86-asm-inventory|unit|build|yes|cmd_test_x86_asm_inventory|Validate x86 ASM syntax inventory generation
 test-ctype|unit|rt|yes|cmd_test_ctype|Run ctype test
 test-clock|unit|rt|yes|cmd_test_clock|Run deterministic clock test
 test-http|unit|net|yes|cmd_test_http|Run HTTP parser/SSE test
@@ -431,6 +446,151 @@ cmd_test_registry() {
   exit 1
  fi
  printf 'PASS test-registry %d entries\n' "$count"
+}
+
+cmd_check_x86_asm_boundary() {
+ local line_no=0 in_helper=0 in_boundary_check=0 failed=0
+ local line
+ while IFS= read -r line; do
+  line_no=$((line_no + 1))
+  case "$line" in
+   asm_x86_obj\(\)\ \{) in_helper=1 ;;
+   cmd_check_x86_asm_boundary\(\)\ \{) in_boundary_check=1 ;;
+  esac
+  case "$line" in
+   *'${YASM}'*|*'$YASM'*)
+    case "$line" in
+     YASM=*) ;;
+     *)
+      if [ "$in_helper" -ne 1 ] && [ "$in_boundary_check" -ne 1 ]; then
+       printf 'FAIL x86-asm-boundary: direct YASM use at build.sh:%d\n' "$line_no" >&2
+       failed=1
+      fi
+      ;;
+    esac
+    ;;
+  esac
+  if [ "$in_helper" -eq 1 ] && [ "$line" = "}" ]; then
+   in_helper=0
+  fi
+  if [ "$in_boundary_check" -eq 1 ] && [ "$line" = "}" ]; then
+   in_boundary_check=0
+  fi
+ done < "$0"
+ if [ "$failed" -ne 0 ]; then
+  exit 1
+ fi
+ echo "PASS x86-asm-boundary"
+}
+
+x86_asm_source_list() {
+ find kernel/x86_64 kernel/driver kernel/test kernel/host -type f \( -name '*.asm' -o -name '*.inc' \) ! -name 'test_pi_*' | sort
+}
+
+cmd_x86_asm_inventory() {
+ mkdir -p "${ASM_BUILD}"
+ local source_list="${ASM_BUILD}/x86_asm_sources.txt"
+ local out="${ASM_BUILD}/x86_asm_inventory.tsv"
+ x86_asm_source_list > "$source_list"
+ local source_count
+ source_count=$(wc -l < "$source_list")
+ if [ "$source_count" -eq 0 ]; then
+  echo "FAIL x86-asm-inventory: no x86 ASM sources found" >&2
+  exit 1
+ fi
+ {
+  printf 'kind\tname\tcount\n'
+  printf 'source_files\tx86_asm\t%s\n' "$source_count"
+  while IFS= read -r src; do
+   awk '
+   function trim(s) {
+     sub(/^[ \t]+/, "", s)
+     sub(/[ \t]+$/, "", s)
+     return s
+    }
+    function is_directive(s) {
+     return s == "section" || s == "global" || s == "extern" || s == "default" || s == "bits" ||
+            s == "db" || s == "dw" || s == "dd" || s == "dq" ||
+            s == "resb" || s == "resw" || s == "resd" || s == "resq" ||
+            s == "times" || s == "incbin" || s == "align" || s == "equ" ||
+            s == "struc" || s == "endstruc" || s == "istruc" || s == "iend" || s == "at"
+    }
+    {
+     line = $0
+     sub(/;.*/, "", line)
+     line = trim(line)
+     if (line == "") {
+      next
+     }
+     if (line ~ /^\[[Bb][Ii][Tt][Ss][ \t]+/) {
+      print "directive\tbits"
+      next
+     }
+     if (line ~ /^[A-Za-z0-9_.$?%]+:[ \t]*/) {
+      print "label\tlocal_or_global"
+      sub(/^[A-Za-z0-9_.$?%]+:[ \t]*/, "", line)
+      line = trim(line)
+      if (line == "") {
+       next
+      }
+     }
+     if (line ~ /^%[A-Za-z]/) {
+      token = line
+      sub(/[ \t].*/, "", token)
+      print "preproc\t" token
+      next
+     }
+     token = line
+     sub(/[ \t].*/, "", token)
+     low = tolower(token)
+     if (is_directive(low)) {
+      print "directive\t" low
+      next
+     }
+     rest = line
+     sub(/^[^ \t]+[ \t]+/, "", rest)
+     rest_token = rest
+     sub(/[ \t].*/, "", rest_token)
+     rest_low = tolower(rest_token)
+     if (token ~ /^\./ && is_directive(rest_low)) {
+      print "label\tlocal_or_global"
+      print "directive\t" rest_low
+      next
+     }
+     if (line ~ /^[A-Za-z_.$?][A-Za-z0-9_.$?]*[ \t]+equ[ \t]/) {
+      print "directive\tequ"
+      next
+     }
+     if (token ~ /^%[0-9]+$/) {
+      print "macro_token\tparameter_mnemonic"
+      next
+     }
+     print "instruction\t" low
+    }
+   ' "$src"
+  done < "$source_list" | sort | uniq -c | awk '{ printf "%s\t%s\t%s\n", $2, $3, $1 }'
+ } > "$out"
+ cat "$out"
+}
+
+cmd_test_x86_asm_inventory() {
+ local out
+ out=$(cmd_x86_asm_inventory)
+ printf '%s\n' "$out" | awk -F '\t' '
+  $1 == "source_files" && $2 == "x86_asm" && $3 > 0 { source_seen = 1 }
+  $1 == "preproc" && $2 == "%include" && $3 > 0 { include_seen = 1 }
+  $1 == "preproc" && $2 == "%macro" && $3 > 0 { macro_seen = 1 }
+  $1 == "directive" && $2 == "section" && $3 > 0 { section_seen = 1 }
+  $1 == "directive" && $2 == "bits" && $3 > 0 { bits_seen = 1 }
+  $1 == "instruction" && $2 == "mov" && $3 > 0 { mov_seen = 1 }
+  $1 == "instruction" && ($2 == ".arm" || $2 == ".syntax" || $2 == ".cpu") { arm_seen = 1 }
+  END {
+   if (!source_seen || !include_seen || !macro_seen || !section_seen || !bits_seen || !mov_seen || arm_seen) {
+    exit 1
+   }
+  }
+ '
+ echo "PASS x86-asm-inventory"
 }
 
 cmd_test_list() {
@@ -1208,6 +1368,7 @@ EdgeRun build targets:
   test-status --category NAME Run default tests in one category
   test-status --subsystem NAME Run default tests in one subsystem
   test-status --core    Run default unit + contract tests as TSV status
+  x86-asm-inventory  Emit the x86 ASM syntax inventory used to scope assembler replacement
 EOF
  cmd_test_help
  cat <<'EOF'
@@ -1253,6 +1414,7 @@ case "${1:-help}" in
 		;;
 	test-list)      cmd_test_list ;;
 	test-status)    shift; cmd_test_status "$@" ;;
+	x86-asm-inventory) cmd_x86_asm_inventory ;;
 	test-*)         cmd_test_registered "$1" ;;
 	bench-tor)      cmd_bench_tor ;;
 	bench-tor-hs)   cmd_bench_tor_hs ;;

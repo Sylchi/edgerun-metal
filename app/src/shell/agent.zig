@@ -35,6 +35,7 @@ const max_tools: usize = 7;
 const context_window_tokens: u32 = 32 * 1024;
 pub const agent_cell_payload_size: usize = 251;
 pub const agent_cell_inline_args_size: usize = 149;
+pub const agent_request_body_size: usize = 196;
 pub const agent_event_body_size: usize = 198;
 pub const stage_transition_body_size: usize = 168;
 pub const tool_request_body_size: usize = 132;
@@ -729,6 +730,32 @@ fn stageStatusFromInt(value: u16) ?StageStatus {
     };
 }
 
+fn intentActionFromInt(value: u16) ?intent.Action {
+    return switch (value) {
+        1 => .spawn_app,
+        2 => .grant_resource,
+        3 => .seal_data,
+        4 => .unseal_data,
+        5 => .sync_data,
+        6 => .emit_ui_event,
+        7 => .sign_data,
+        8 => .random_bytes,
+        else => null,
+    };
+}
+
+fn intentConsequenceFromInt(value: u16) ?intent.Consequence {
+    return switch (value) {
+        1 => .reads_private_state,
+        2 => .writes_private_state,
+        3 => .delegates_resources,
+        4 => .exports_data,
+        5 => .attests_state,
+        6 => .creates_secret_material,
+        else => null,
+    };
+}
+
 fn testSpawnReceipt(parent: identity.Id, child: identity.Id, epoch: clock.Stamp, memory_amount: u64, tick_amount: u64, storage_amount: u64) grant.SpawnReceipt {
     return .{
         .parent = parent,
@@ -792,6 +819,85 @@ fn publicExportRequirements() object.Requirements {
         .access = .explicit_io,
     };
 }
+
+pub const AgentRequest = struct {
+    user: identity.Id,
+    device: identity.Id,
+    actor: identity.Id,
+    subject: identity.Id,
+    action: intent.Action,
+    consequence: intent.Consequence,
+    request_id: [intent.id_size]u8,
+    requirements_hash: [object.id_size]u8,
+
+    pub fn init(user: identity.Id, device: identity.Id, actor: identity.Id, subject: identity.Id, action: intent.Action, consequence: intent.Consequence, request_id: [intent.id_size]u8, requirements: object.Requirements) ?AgentRequest {
+        if (!user.valid() or !device.valid() or !actor.valid() or !subject.valid() or !bytes.nonzero(&request_id)) return null;
+        return .{
+            .user = user,
+            .device = device,
+            .actor = actor,
+            .subject = subject,
+            .action = action,
+            .consequence = consequence,
+            .request_id = request_id,
+            .requirements_hash = requirements.hash(),
+        };
+    }
+
+    pub fn encodeBody(self: AgentRequest, out: []u8) bool {
+        if (out.len < agent_request_body_size) return false;
+        @memset(out[0..agent_request_body_size], 0);
+        return bytes.copy(out[0..32], &self.user.bytes) and
+            bytes.copy(out[32..64], &self.device.bytes) and
+            bytes.copy(out[64..96], &self.actor.bytes) and
+            bytes.copy(out[96..128], &self.subject.bytes) and
+            bytes.store16(out[128..130], @intFromEnum(self.action)) and
+            bytes.store16(out[130..132], @intFromEnum(self.consequence)) and
+            bytes.copy(out[132..164], &self.request_id) and
+            bytes.copy(out[164..196], &self.requirements_hash);
+    }
+
+    pub fn decodeBody(in: []const u8) ?AgentRequest {
+        if (in.len < agent_request_body_size) return null;
+        const request = AgentRequest{
+            .user = .{ .bytes = idFromBytes(in[0..32]) },
+            .device = .{ .bytes = idFromBytes(in[32..64]) },
+            .actor = .{ .bytes = idFromBytes(in[64..96]) },
+            .subject = .{ .bytes = idFromBytes(in[96..128]) },
+            .action = intentActionFromInt(bytes.load16(in[128..130]) orelse return null) orelse return null,
+            .consequence = intentConsequenceFromInt(bytes.load16(in[130..132]) orelse return null) orelse return null,
+            .request_id = idFromBytes(in[132..164]),
+            .requirements_hash = idFromBytes(in[164..196]),
+        };
+        if (!request.user.valid() or !request.device.valid() or !request.actor.valid() or !request.subject.valid() or !bytes.nonzero(&request.request_id) or !bytes.nonzero(&request.requirements_hash)) return null;
+        return request;
+    }
+
+    pub fn receipt(self: AgentRequest, epoch: clock.Stamp) ?intent.Receipt {
+        if (!epoch.valid()) return null;
+        return .{
+            .intent = .{
+                .user = self.user,
+                .device = self.device,
+                .actor = self.actor,
+                .subject = self.subject,
+                .action = self.action,
+                .consequence = self.consequence,
+                .epoch = epoch,
+                .request = self.request_id,
+            },
+            .admitted_by = self.device,
+            .not_before = epoch,
+            .not_after = epoch,
+        };
+    }
+
+    pub fn writeObject(self: AgentRequest, requirements: object.Requirements, epoch: clock.Stamp, out: []u8) ![]u8 {
+        var body: [agent_request_body_size]u8 = undefined;
+        if (!self.encodeBody(&body)) return error.BadUiStreamPatch;
+        return try (object.NodeWriter{ .out = out }).bytesNode(requirements, epoch, &body);
+    }
+};
 
 fn TextBuf(comptime capacity: usize) type {
     return struct {
@@ -969,6 +1075,22 @@ pub const StageTransition = struct {
             .input_object = self.input_object,
             .grant_or_receipt = self.completion_receipt,
         };
+    }
+
+    pub fn fromEnvelope(stage_slot: AgentSlot, envelope_value: AgentCellEnvelope) ?StageTransition {
+        const status: StageStatus = switch (envelope_value.msg_type) {
+            .stage_result => .completed,
+            .@"error" => .failed,
+            else => return null,
+        };
+        return init(
+            stage_slot,
+            envelope_value.input_object,
+            envelope_value.grant_or_receipt,
+            envelope_value.request_object,
+            envelope_value.grant_or_receipt,
+            status,
+        );
     }
 
     pub fn encodeBody(self: StageTransition, out: []u8) bool {
@@ -1318,6 +1440,40 @@ test "agent default pipeline is deterministic object flow" {
     try std.testing.expect(!stageOutputFeedsInput(.plan, .review));
 }
 
+test "agent request is canonical object and emits intent receipt" {
+    const req = sessionTestRequirements();
+    const epoch = clock.Stamp{ .keeper = .{ .bytes = [_]u8{10} ++ [_]u8{0} ** 31 } };
+    const user = stageIdentity(81);
+    const device = stageIdentity(82);
+    const actor = default_agents[0].identity;
+    const subject = stageIdentity(83);
+    const request_id = intent.requestId("agent request object").?;
+    const request = AgentRequest.init(user, device, actor, subject, .emit_ui_event, .attests_state, request_id, req).?;
+
+    var body: [agent_request_body_size]u8 = undefined;
+    try std.testing.expect(request.encodeBody(&body));
+    const decoded = AgentRequest.decodeBody(&body).?;
+    try std.testing.expect(decoded.user.eql(user));
+    try std.testing.expect(decoded.device.eql(device));
+    try std.testing.expect(decoded.actor.eql(actor));
+    try std.testing.expect(decoded.subject.eql(subject));
+    try std.testing.expectEqual(intent.Action.emit_ui_event, decoded.action);
+    try std.testing.expectEqual(intent.Consequence.attests_state, decoded.consequence);
+    try std.testing.expect(bytes.eql(&request_id, &decoded.request_id));
+    try std.testing.expect(bytes.eql(&req.hash(), &decoded.requirements_hash));
+
+    const receipt = decoded.receipt(epoch).?;
+    try std.testing.expect(receipt.permits(actor, subject, .emit_ui_event, .attests_state));
+    try std.testing.expect(bytes.nonzero(&receipt.id().?));
+
+    var raw: [512]u8 = undefined;
+    const canonical = try decoded.writeObject(req, epoch, &raw);
+    const view = try object.View.decode(canonical);
+    try std.testing.expectEqual(object.Kind.bytes, view.header.kind);
+    try std.testing.expectEqual(@as(u64, agent_request_body_size), view.header.body_len);
+    try std.testing.expect(AgentRequest.decodeBody(view.body) != null);
+}
+
 test "agent stage admits only sufficient spawn receipts" {
     const stage_slot = default_agents[0];
     const parent = stageIdentity(88);
@@ -1570,6 +1726,13 @@ test "agent stage transition binds grants receipts and object kinds" {
     try std.testing.expect(bytes.eql(&transition.output_object, &envelope.request_object));
     try std.testing.expect(bytes.eql(&transition.input_object, &envelope.input_object));
     try std.testing.expect(bytes.eql(&transition.completion_receipt, &envelope.grant_or_receipt));
+
+    const transition_from_envelope = StageTransition.fromEnvelope(stage_slot, envelope).?;
+    try std.testing.expect(transition_from_envelope.matchesStage(stage_slot));
+    try std.testing.expect(bytes.eql(&transition.input_object, &transition_from_envelope.input_object));
+    try std.testing.expect(bytes.eql(&transition.output_object, &transition_from_envelope.output_object));
+    try std.testing.expect(bytes.eql(&transition.completion_receipt, &transition_from_envelope.completion_receipt));
+    try std.testing.expectEqual(StageStatus.completed, transition_from_envelope.status);
 }
 
 test "agent cell envelope matches kernel payload offsets" {
