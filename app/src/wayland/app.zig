@@ -6,7 +6,6 @@ const interaction = @import("../ui/interaction.zig");
 const app_chrome = @import("../ui/chrome.zig");
 const app_agent = @import("../shell/agent.zig");
 const app_cursor = @import("../ui/cursor.zig");
-const app_frame = @import("../shell/frame.zig");
 const app_images = @import("../app_images.zig");
 const app_location = @import("../location.zig");
 const app_native_input = @import("../input/native.zig");
@@ -21,6 +20,7 @@ const bytes_mod = @import("../bytes.zig");
 const surface = @import("surface.zig");
 const icon_pack = @import("../ui/icon_pack.zig");
 
+const linux = std.os.linux;
 const posix = std.posix;
 
 pub const AppState = app_native_input.State;
@@ -29,6 +29,7 @@ pub const default_refresh_hz = surface.default_refresh_hz;
 pub const max_commands: usize = 4096;
 pub const max_clips: usize = 64;
 pub const max_interaction_regions: usize = 1024;
+const lens_base_id: u32 = 305_000;
 
 pub const IrStorage = surface.IrStorage;
 pub const GpuRecorder = surface.GpuRecorder;
@@ -43,39 +44,186 @@ pub const unionPixelRect = surface.unionPixelRect;
 pub const fixedToFloat = surface.fixedToFloat;
 pub const appBackground = surface.defaultBackground;
 
+pub const WorkspaceLens = enum(u32) {
+    agent = lens_base_id,
+    pipeline = lens_base_id + 1,
+    hardware = lens_base_id + 2,
+    chat = lens_base_id + 3,
+    network = lens_base_id + 4,
+};
+
 pub fn renderNativeAppScene(scene: *ui.Scene, collector: *interaction.Collector, width: u32, height: u32, state: AppState, dashboard_state: *app_dashboard.State, dashboard_mode: bool, hardware_state: ?*app_hardware_dashboard.State, hardware_mode: bool, chat_state: ?*app_encrypted_chat.State, chat_mode: bool, pipeline_state: ?*app_pipeline_dashboard.State, pipeline_mode: bool) !void {
+    try renderNativeWorkspaceScene(scene, collector, width, height, state, dashboard_state, hardware_state, chat_state, pipeline_state, lensFromLegacyModes(dashboard_mode, hardware_mode, chat_mode, pipeline_mode));
+}
+
+fn renderNativeWorkspaceScene(scene: *ui.Scene, collector: *interaction.Collector, width: u32, height: u32, state: AppState, dashboard_state: *app_dashboard.State, hardware_state: ?*app_hardware_dashboard.State, chat_state: ?*app_encrypted_chat.State, pipeline_state: ?*app_pipeline_dashboard.State, active_lens: WorkspaceLens) !void {
     try renderClientDecoration(scene, collector, @floatFromInt(width));
     const content_y = protocol.client_decor_h;
     const content_h = @max(1.0, @as(f32, @floatFromInt(height)) - content_y);
     const bounds = ui.Rect.init(0, content_y, @floatFromInt(width), content_h);
-    if (dashboard_mode) {
-        try dashboard_state.refresh();
-        try dashboard_state.render(scene, bounds, .{});
-    } else if (hardware_mode) {
-        if (hardware_state) |hs| {
-            try hs.render(scene, collector, bounds, hardwareRenderOptions(state));
-        }
-    } else if (chat_mode) {
-        if (chat_state) |cs| {
-            try cs.render(scene, collector, bounds, hardwareRenderOptions(state));
-        }
-    } else if (pipeline_mode) {
-        if (pipeline_state) |ps| {
-            try ps.render(scene, collector, bounds, hardwareRenderOptions(state));
-        }
-    } else {
-        try app_frame.render(scene, collector, bounds, .{
-            .location = state.location,
-            .scroll_y = state.scroll_y,
-            .hover_x = state.hover_x,
-            .hover_y = state.hover_y,
-            .agent = state.agent,
-            .public_identity = state.public_identity,
-            .public_identity_ready = state.public_identity_ready,
-        });
-    }
+    try renderWorkspaceSystem(scene, collector, bounds, state, dashboard_state, hardware_state, chat_state, pipeline_state, active_lens);
     try renderResizeAffordance(scene, @floatFromInt(width), @floatFromInt(height));
     try addResizeHits(scene, collector, @floatFromInt(width), @floatFromInt(height));
+}
+
+fn renderWorkspaceSystem(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: AppState, dashboard_state: *app_dashboard.State, hardware_state: ?*app_hardware_dashboard.State, chat_state: ?*app_encrypted_chat.State, pipeline_state: ?*app_pipeline_dashboard.State, active_lens: WorkspaceLens) !void {
+    const app = component.renderer(scene, collector, hardwareRenderOptions(state));
+    try app.fill(bounds, @import("../ui/theme.zig").Palette.bg, 0.0);
+    const shell = app.workspaceShell(bounds, .{ .sidebar_w = 292.0 });
+    try renderWorkspaceLensRail(app, shell.rail, active_lens);
+    try renderWorkspaceLensTop(app, shell.top, active_lens, state);
+    try renderWorkspaceLensSidebar(app, shell.sidebar, state, active_lens);
+    try renderWorkspaceLensMain(scene, collector, shell.main, state, dashboard_state, hardware_state, chat_state, pipeline_state, active_lens);
+    try app.workspaceStatusBar(shell.status, .{ .text = locationStatus(state.location), .fill = @import("../ui/theme.zig").workspace_status_bg });
+}
+
+fn renderWorkspaceLensRail(app: component.View, bounds: ui.Rect, active_lens: WorkspaceLens) !void {
+    const design = @import("../ui/theme.zig");
+    try app.fill(bounds, design.workspace_rail_bg, 0.0);
+    const specs = [_]component.IconButtonSpec{
+        .{ .id = @intFromEnum(WorkspaceLens.agent), .label = "Agent", .icon = .ai_agent, .variant = if (active_lens == .agent) .primary else .ghost },
+        .{ .id = @intFromEnum(WorkspaceLens.pipeline), .label = "Pipeline", .icon = .git_branch, .variant = if (active_lens == .pipeline) .primary else .ghost },
+        .{ .id = @intFromEnum(WorkspaceLens.hardware), .label = "Hardware", .icon = .cpu, .variant = if (active_lens == .hardware) .primary else .ghost },
+        .{ .id = @intFromEnum(WorkspaceLens.chat), .label = "Chat", .icon = .message_2, .variant = if (active_lens == .chat) .primary else .ghost },
+        .{ .id = @intFromEnum(WorkspaceLens.network), .label = "Network", .icon = .network, .variant = if (active_lens == .network) .primary else .ghost },
+    };
+    try app.actionToolbar(ui.Rect.init(bounds.x + 6.0, bounds.y + design.workspace_rail_pad, bounds.w - 12.0, @max(1.0, bounds.h - design.workspace_rail_pad)), .{
+        .specs = &specs,
+        .direction = .column,
+        .button_h = design.workspace_icon_button,
+        .gap = 8.0,
+    });
+}
+
+fn renderWorkspaceLensTop(app: component.View, bounds: ui.Rect, active_lens: WorkspaceLens, state: AppState) !void {
+    try app.workspaceTopBar(bounds, .{
+        .title = "EdgeRun workspace",
+        .detail = lensDetail(active_lens),
+        .trailing_top = "active lens",
+        .trailing_bottom = lensTitle(active_lens),
+        .fill = @import("../ui/theme.zig").workspace_sidebar_bg,
+        .detail_color = @import("../ui/theme.zig").Palette.muted,
+    });
+    _ = state;
+}
+
+fn renderWorkspaceLensSidebar(app: component.View, bounds: ui.Rect, state: AppState, active_lens: WorkspaceLens) !void {
+    const design = @import("../ui/theme.zig");
+    try app.fill(bounds, design.workspace_sidebar_bg, 0.0);
+    try app.fill(ui.Rect.init(bounds.x + bounds.w - 1.0, bounds.y, 1.0, bounds.h), design.Palette.border, 0.0);
+    const nav_h: f32 = 116.0;
+    var nav_rows = app.column(ui.Rect.init(bounds.x + 12.0, bounds.y + 12.0, bounds.w - 24.0, nav_h - 18.0), 6.0);
+    for (app_location.topLevelBindings()) |binding| {
+        const row = nav_rows.take(44.0);
+        try app_chrome.renderNavItem(app.scene, app.collector.?, .{
+            .kind = .workspace_sidebar,
+            .binding = binding,
+            .bounds = row,
+            .active = std.meta.eql(state.location, binding.location),
+        });
+    }
+    const items = [_]component.PanelListItem{
+        lensItem(.agent, active_lens),
+        lensItem(.pipeline, active_lens),
+        lensItem(.hardware, active_lens),
+        lensItem(.chat, active_lens),
+        lensItem(.network, active_lens),
+    };
+    try app.panelList(ui.Rect.init(bounds.x + 12.0, bounds.y + nav_h, bounds.w - 24.0, @max(1.0, bounds.h - nav_h - 12.0)), .{
+        .title = "EDGERUN",
+        .detail = "workspace objects",
+        .icon = .layout_dashboard,
+        .items = &items,
+        .row_h = 52.0,
+        .gap = 6.0,
+        .inset = 12.0,
+    });
+}
+
+fn renderWorkspaceLensMain(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: AppState, dashboard_state: *app_dashboard.State, hardware_state: ?*app_hardware_dashboard.State, chat_state: ?*app_encrypted_chat.State, pipeline_state: ?*app_pipeline_dashboard.State, active_lens: WorkspaceLens) !void {
+    if (try scene.pushClip(bounds)) {
+        defer scene.popClip();
+        const content = bounds.insetUniform(12.0);
+        switch (active_lens) {
+            .agent => try app_agent.render(scene, collector, content, state.agent),
+            .pipeline => if (pipeline_state) |ps| try ps.render(scene, collector, content, hardwareRenderOptions(state)),
+            .hardware => if (hardware_state) |hs| try hs.render(scene, collector, content, hardwareRenderOptions(state)),
+            .chat => if (chat_state) |cs| try cs.render(scene, collector, content, hardwareRenderOptions(state)),
+            .network => {
+                try dashboard_state.refresh();
+                try dashboard_state.render(scene, content, @import("../ui/theme.zig").appStyle());
+            },
+        }
+    }
+}
+
+fn lensItem(lens: WorkspaceLens, active_lens: WorkspaceLens) component.PanelListItem {
+    return .{
+        .id = @intFromEnum(lens),
+        .title = lensTitle(lens),
+        .detail = lensDetail(lens),
+        .icon = lensIcon(lens),
+        .active = lens == active_lens,
+    };
+}
+
+fn lensFromLegacyModes(dashboard_mode: bool, hardware_mode: bool, chat_mode: bool, pipeline_mode: bool) WorkspaceLens {
+    if (pipeline_mode) return .pipeline;
+    if (hardware_mode) return .hardware;
+    if (chat_mode) return .chat;
+    if (dashboard_mode) return .network;
+    return .agent;
+}
+
+fn initialLens(options: @import("options.zig").Options) WorkspaceLens {
+    return lensFromLegacyModes(options.dashboard, options.hardware, options.chat, options.pipeline);
+}
+
+fn lensFromHit(hit_id: u32) ?WorkspaceLens {
+    return switch (hit_id) {
+        @intFromEnum(WorkspaceLens.agent) => .agent,
+        @intFromEnum(WorkspaceLens.pipeline) => .pipeline,
+        @intFromEnum(WorkspaceLens.hardware) => .hardware,
+        @intFromEnum(WorkspaceLens.chat) => .chat,
+        @intFromEnum(WorkspaceLens.network) => .network,
+        else => null,
+    };
+}
+
+fn lensTitle(lens: WorkspaceLens) []const u8 {
+    return switch (lens) {
+        .agent => "Agent",
+        .pipeline => "Pipeline",
+        .hardware => "Hardware",
+        .chat => "Chat",
+        .network => "Network",
+    };
+}
+
+fn lensDetail(lens: WorkspaceLens) []const u8 {
+    return switch (lens) {
+        .agent => "intent, tools, and visible work log",
+        .pipeline => "paths, transforms, budgets, commit",
+        .hardware => "resource signals and local controls",
+        .chat => "messages as runtime events",
+        .network => "host connectivity and transport state",
+    };
+}
+
+fn locationStatus(location: app_location.Location) []const u8 {
+    if (app_location.isSourceWorkspace(location)) return "workspace";
+    if (app_location.isAppPreview(location)) return "preview";
+    return "object";
+}
+
+fn lensIcon(lens: WorkspaceLens) @import("../ui/icon.zig").Icon {
+    return switch (lens) {
+        .agent => .ai_agent,
+        .pipeline => .git_branch,
+        .hardware => .cpu,
+        .chat => .message_2,
+        .network => .network,
+    };
 }
 
 fn renderClientDecoration(scene: *ui.Scene, collector: *interaction.Collector, width: f32) !void {
@@ -186,7 +334,11 @@ pub const NativeApp = struct {
     hardware: bool = false,
     chat: bool = false,
     pipeline: bool = false,
+    active_lens: WorkspaceLens = .agent,
     ui_stream: @import("options.zig").UiStreamMode = .off,
+    ui_stream_fd: posix.fd_t = 0,
+    ui_stream_buffer: [client.max_socket_read_bytes]u8 = undefined,
+    ui_stream_len: usize = 0,
 
     pub fn create(client_ptr: *client.WaylandClient, allocator: std.mem.Allocator, options: @import("options.zig").Options) !*NativeApp {
         const surf = try surface.Surface.create(allocator, client_ptr, options);
@@ -209,7 +361,9 @@ pub const NativeApp = struct {
         self.hardware = options.hardware;
         self.chat = options.chat;
         self.pipeline = options.pipeline;
+        self.active_lens = initialLens(options);
         self.ui_stream = options.ui_stream;
+        self.ui_stream_len = 0;
         if (self.hardware) self.hardware_app.refresh();
         if (client_ptr.state.configured_width != 0 and client_ptr.state.configured_height != 0) {
             try self.surface.resize(client_ptr, client_ptr.state.configured_width, client_ptr.state.configured_height);
@@ -230,7 +384,7 @@ pub const NativeApp = struct {
     pub fn render(self: *NativeApp, client_ptr: *client.WaylandClient) !void {
         var scene = ui.Scene.initWithClips(&self.commands, &self.clips);
         var collector = interaction.Collector.init(&self.regions);
-        try renderNativeAppScene(&scene, &collector, self.surface.width, self.surface.height, self.state, &self.dashboard_app, self.dashboard, &self.hardware_app, self.hardware, &self.chat_app, self.chat, &self.pipeline_app, self.pipeline);
+        try renderNativeWorkspaceScene(&scene, &collector, self.surface.width, self.surface.height, self.state, &self.dashboard_app, &self.hardware_app, &self.chat_app, &self.pipeline_app, self.active_lens);
         self.region_len = collector.written().len;
         const cursor_kind = self.state.cursorKind();
         if (self.surface.present != .cpu) try app_cursor.render(&scene, self.state.hover_x, self.state.hover_y, cursor_kind);
@@ -246,8 +400,37 @@ pub const NativeApp = struct {
     }
 
     pub fn tickIdleFrame(self: *NativeApp, client_ptr: *client.WaylandClient) void {
-        if (!self.hardware) return;
-        if (self.hardware_app.tick()) self.renderSafe(client_ptr);
+        var needs_render = self.receiveUiStream();
+        if (self.hardware_app.tick()) needs_render = true;
+        if (needs_render) self.renderSafe(client_ptr);
+    }
+
+    fn receiveUiStream(self: *NativeApp) bool {
+        if (self.ui_stream != .receive and self.ui_stream != .both) return false;
+        var fds = [_]posix.pollfd{.{ .fd = self.ui_stream_fd, .events = linux.POLL.IN, .revents = 0 }};
+        const ready = posix.poll(&fds, 0) catch return false;
+        if (ready == 0 or (fds[0].revents & linux.POLL.IN) == 0) return false;
+        if (self.ui_stream_len == self.ui_stream_buffer.len) self.ui_stream_len = 0;
+        const n = posix.read(self.ui_stream_fd, self.ui_stream_buffer[self.ui_stream_len..]) catch return false;
+        if (n == 0) return false;
+        self.ui_stream_len += n;
+        var offset: usize = 0;
+        var applied = false;
+        while (offset < self.ui_stream_len) {
+            const frame_len = app_agent.messageLen(self.ui_stream_buffer[offset..self.ui_stream_len]) orelse break;
+            self.state.agent.applyMessage(self.ui_stream_buffer[offset..][0..frame_len]) catch |err| {
+                self.state.agent.connected = false;
+                self.state.agent.thinking = false;
+                self.state.agent.status.set(@errorName(err));
+            };
+            offset += frame_len;
+            applied = true;
+        }
+        if (offset != 0) {
+            std.mem.copyForwards(u8, self.ui_stream_buffer[0 .. self.ui_stream_len - offset], self.ui_stream_buffer[offset..self.ui_stream_len]);
+            self.ui_stream_len -= offset;
+        }
+        return applied;
     }
 
     pub fn refreshAgentHostConnectivity(self: *NativeApp) void {
@@ -325,13 +508,10 @@ pub const NativeApp = struct {
                 if (button == protocol.wl_pointer_button_left) {
                     if (state == protocol.wl_pointer_button_released) {
                         app_native_input.processPointerEvent(&self.state, &.{}, self.regionSlice(), self.routedPointerHit(), .pointer_up);
-                        if (self.hardware and self.state.last_action_kind == .activated) {
+                        if (self.state.last_action_kind == .activated) {
+                            self.activateWorkspaceLens();
                             self.hardware_app.activate(self.state.runtime.hovered, self.state.runtime.persisted_value);
-                        }
-                        if (self.chat and self.state.last_action_kind == .activated) {
                             self.chat_app.activate(self.state.runtime.hovered);
-                        }
-                        if (self.pipeline and self.state.last_action_kind == .activated) {
                             self.pipeline_app.activate(self.state.runtime.hovered, self.state.runtime.persisted_value);
                         }
                         try self.activateClientDecoration(client_ptr);
@@ -342,7 +522,7 @@ pub const NativeApp = struct {
                     }
                 } else if (button == protocol.wl_pointer_button_right and state == protocol.wl_pointer_button_released) {
                     app_native_input.processPointerEvent(&self.state, &.{}, self.regionSlice(), self.routedPointerHit(), .pointer_move);
-                    if (self.hardware) self.hardware_app.openContext(self.state.runtime.hovered, self.state.hover_x, self.state.hover_y);
+                    if (self.active_lens == .hardware) self.hardware_app.openContext(self.state.runtime.hovered, self.state.hover_x, self.state.hover_y);
                 }
                 return true;
             },
@@ -368,6 +548,11 @@ pub const NativeApp = struct {
 
     fn activateClientDecoration(self: *NativeApp, client_ptr: *client.WaylandClient) !void {
         try activateClientDecorationForState(&self.state, client_ptr);
+    }
+
+    fn activateWorkspaceLens(self: *NativeApp) void {
+        const hit_id = self.state.runtime.hoverHitId();
+        if (lensFromHit(hit_id)) |lens| self.active_lens = lens;
     }
 };
 

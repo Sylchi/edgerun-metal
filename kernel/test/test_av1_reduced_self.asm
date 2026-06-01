@@ -8,7 +8,11 @@ extern er_av1_reduced_still_encode
 extern er_av1_reduced_still_encode_split
 extern er_av1_reduced_still_encode_ivf
 extern er_av1_reduced_still_encode_raw420
+extern er_av1_reduced_still_encode_raw420_redundant
 extern er_av1_reduced_still_encode_raw420_delimited
+extern er_av1_reduced_still_encode_raw420_with_metadata
+extern er_av1_reduced_still_encode_raw420_with_metadata_padding
+extern er_av1_reduced_still_append_raw420
 extern er_av1_reduced_still_encode_ivf_raw420
 extern er_av1_reduced_still_begin_ivf_raw420
 extern er_av1_reduced_still_append_ivf_raw420
@@ -16,19 +20,32 @@ extern er_av1_reduced_still_decode
 extern er_av1_reduced_still_decode_auto
 extern er_av1_reduced_still_decode_ivf_frame
 extern er_av1_reduced_still_decode_ivf_frame_raw420
+extern er_av1_reduced_still_decode_raw_frame
+extern er_av1_reduced_still_decode_raw_frame_raw420
+extern er_av1_reduced_still_info_raw420
+extern er_av1_reduced_still_info_raw_frame_raw420
+extern er_av1_reduced_still_info_ivf_frame_raw420
 extern er_av1_reduced_still_decode_raw420
 extern er_av1_reduced_still_validate_raw420
 extern er_av1_reduced_still_validate_ivf_frame_raw420
+extern er_av1_reduced_still_count_raw_frames
+extern er_av1_stream_decode_frame
+extern er_av1_stream_encode_frame
 extern er_av1_ivf_encode_header
 extern er_av1_ivf_write_frame
+extern er_av1_obu_decode_unit
 extern er_av1_tile_raw420_fill_desc
 
 SECTION .bss
 passed:  resq 1
 failed:  resq 1
 raw_len: resd 1
+raw_cursor: resd 1
 ivf_len: resd 1
 desc:    resb AV1_REDUCED_SIZE
+stream_desc: resb AV1_STREAM_SIZE
+entries: resb AV1_TILE_ENTRY_SIZE * 4
+info:    resb AV1_INFO_SIZE
 image:   resb AV1_IMAGE_SIZE
 ivf_desc: resb AV1_IVF_HDR_SIZE
 outbuf:  resb 128
@@ -39,17 +56,159 @@ decoded_v: resb 2
 
 SECTION .data
 tile: db 0xaa, 0xbb, 0xcc
+tile0: db 0x10, 0x11
+tile1: db 0x20, 0x21, 0x22
+tile2: db 0x30
+tile3: db 0x40, 0x41, 0x42, 0x43
 plane_y: db 1, 2, 3, 4, 5, 6, 7, 8
 plane_u: db 9, 10
 plane_v: db 11, 12
 plane2_y: db 21, 22, 23, 24, 25, 26, 27, 28
 plane2_u: db 29, 30
 plane2_v: db 31, 32
+metadata_cll: db 0x01, 0x02, 0x03, 0x04
 bad_stream: db 0x32, 0x01, 0x00 ; OBU_FRAME with one zero payload byte, no sequence first
 
 SECTION .text
 global _start
 _start:
+    mov     byte [rel stream_desc + AV1_STREAM_SEQ + AV1_SEQ_PROFILE], AV1_SEQ_PROFILE_MAIN
+    mov     byte [rel stream_desc + AV1_STREAM_SEQ + AV1_SEQ_STILL_PICTURE], 0
+    mov     byte [rel stream_desc + AV1_STREAM_SEQ + AV1_SEQ_REDUCED_STILL], 0
+    mov     byte [rel stream_desc + AV1_STREAM_SEQ + AV1_SEQ_LEVEL_IDX], AV1_SEQ_LEVEL_2_0
+    mov     byte [rel stream_desc + AV1_STREAM_SEQ + AV1_SEQ_WIDTH_BITS], 16
+    mov     byte [rel stream_desc + AV1_STREAM_SEQ + AV1_SEQ_HEIGHT_BITS], 16
+    mov     dword [rel stream_desc + AV1_STREAM_SEQ + AV1_SEQ_MAX_WIDTH], 320
+    mov     dword [rel stream_desc + AV1_STREAM_SEQ + AV1_SEQ_MAX_HEIGHT], 240
+    mov     byte [rel stream_desc + AV1_STREAM_SEQ + AV1_SEQ_BIT_DEPTH], AV1_SEQ_BIT_DEPTH_8
+    mov     byte [rel stream_desc + AV1_STREAM_SEQ + AV1_SEQ_TIMING_INFO_PRESENT], 0
+    mov     byte [rel stream_desc + AV1_STREAM_SEQ + AV1_SEQ_INITIAL_DISPLAY_DELAY], 0
+    mov     byte [rel stream_desc + AV1_STREAM_SEQ + AV1_SEQ_OPERATING_POINTS_MINUS_1], 0
+    mov     word [rel stream_desc + AV1_STREAM_SEQ + AV1_SEQ_OPERATING_POINT_IDC], 0
+    mov     byte [rel stream_desc + AV1_STREAM_SEQ + AV1_SEQ_FRAME_ID_NUMBERS_PRESENT], 0
+    mov     byte [rel stream_desc + AV1_STREAM_SEQ + AV1_SEQ_USE_128X128_SUPERBLOCK], 1
+    mov     byte [rel stream_desc + AV1_STREAM_SEQ + AV1_SEQ_ENABLE_FILTER_INTRA], 1
+    mov     byte [rel stream_desc + AV1_STREAM_SEQ + AV1_SEQ_ENABLE_INTRA_EDGE_FILTER], 1
+    mov     byte [rel stream_desc + AV1_STREAM_SEQ + AV1_SEQ_ENABLE_INTERINTRA_COMPOUND], 0
+    mov     byte [rel stream_desc + AV1_STREAM_SEQ + AV1_SEQ_ENABLE_MASKED_COMPOUND], 0
+    mov     byte [rel stream_desc + AV1_STREAM_SEQ + AV1_SEQ_ENABLE_WARPED_MOTION], 0
+    mov     byte [rel stream_desc + AV1_STREAM_SEQ + AV1_SEQ_ENABLE_DUAL_FILTER], 0
+    mov     byte [rel stream_desc + AV1_STREAM_SEQ + AV1_SEQ_ENABLE_ORDER_HINT], 0
+    mov     byte [rel stream_desc + AV1_STREAM_SEQ + AV1_SEQ_ENABLE_JNT_COMP], 0
+    mov     byte [rel stream_desc + AV1_STREAM_SEQ + AV1_SEQ_ENABLE_REF_FRAME_MVS], 0
+    mov     byte [rel stream_desc + AV1_STREAM_SEQ + AV1_SEQ_FORCE_SCREEN_CONTENT_TOOLS], AV1_SEQ_SELECT_SCREEN_CONTENT_TOOLS
+    mov     byte [rel stream_desc + AV1_STREAM_SEQ + AV1_SEQ_FORCE_INTEGER_MV], AV1_SEQ_SELECT_INTEGER_MV
+    mov     byte [rel stream_desc + AV1_STREAM_SEQ + AV1_SEQ_ORDER_HINT_BITS], 0
+    mov     byte [rel stream_desc + AV1_STREAM_SEQ + AV1_SEQ_ENABLE_SUPERRES], 0
+    mov     byte [rel stream_desc + AV1_STREAM_SEQ + AV1_SEQ_ENABLE_CDEF], 0
+    mov     byte [rel stream_desc + AV1_STREAM_SEQ + AV1_SEQ_ENABLE_RESTORATION], 0
+    mov     byte [rel stream_desc + AV1_STREAM_SEQ + AV1_SEQ_MONO_CHROME], 0
+    mov     byte [rel stream_desc + AV1_STREAM_SEQ + AV1_SEQ_COLOR_DESCRIPTION_PRESENT], 0
+    mov     byte [rel stream_desc + AV1_STREAM_SEQ + AV1_SEQ_COLOR_RANGE], 1
+    mov     byte [rel stream_desc + AV1_STREAM_SEQ + AV1_SEQ_CHROMA_SAMPLE_POSITION], AV1_CHROMA_SAMPLE_POSITION_UNKNOWN
+    mov     byte [rel stream_desc + AV1_STREAM_SEQ + AV1_SEQ_SEPARATE_UV_DELTA_Q], 0
+    mov     byte [rel stream_desc + AV1_STREAM_SEQ + AV1_SEQ_FILM_GRAIN], 0
+    mov     byte [rel stream_desc + AV1_STREAM_FRAME + AV1_FRAME_TYPE], AV1_FRAME_TYPE_KEY
+    mov     byte [rel stream_desc + AV1_STREAM_FRAME + AV1_FRAME_SHOW_FRAME], 1
+    mov     byte [rel stream_desc + AV1_STREAM_FRAME + AV1_FRAME_DISABLE_CDF_UPDATE], 1
+    mov     byte [rel stream_desc + AV1_STREAM_FRAME + AV1_FRAME_ALLOW_SCREEN_CONTENT_TOOLS], 1
+    mov     byte [rel stream_desc + AV1_STREAM_FRAME + AV1_FRAME_FORCE_INTEGER_MV], 1
+    mov     byte [rel stream_desc + AV1_STREAM_FRAME + AV1_FRAME_FRAME_SIZE_OVERRIDE], 1
+    mov     dword [rel stream_desc + AV1_STREAM_FRAME + AV1_FRAME_WIDTH], 320
+    mov     dword [rel stream_desc + AV1_STREAM_FRAME + AV1_FRAME_HEIGHT], 240
+    mov     dword [rel stream_desc + AV1_STREAM_FRAME + AV1_FRAME_RENDER_WIDTH], 320
+    mov     dword [rel stream_desc + AV1_STREAM_FRAME + AV1_FRAME_RENDER_HEIGHT], 240
+    mov     byte [rel stream_desc + AV1_STREAM_FRAME + AV1_FRAME_ALLOW_INTRABC], 1
+    mov     byte [rel stream_desc + AV1_STREAM_FRAME + AV1_FRAME_TILE_INFO_UNIFORM], 1
+    mov     byte [rel stream_desc + AV1_STREAM_FRAME + AV1_FRAME_TILE_INFO_COLS_LOG2], 1
+    mov     byte [rel stream_desc + AV1_STREAM_FRAME + AV1_FRAME_TILE_INFO_ROWS_LOG2], 1
+    mov     byte [rel stream_desc + AV1_STREAM_FRAME + AV1_FRAME_TILE_INFO_TILE_SIZE_BYTES], 2
+    mov     dword [rel stream_desc + AV1_STREAM_FRAME + AV1_FRAME_TILE_INFO_CONTEXT_UPDATE_ID], 2
+    mov     dword [rel stream_desc + AV1_STREAM_FRAME + AV1_FRAME_TILE_INFO_COLS], 2
+    mov     dword [rel stream_desc + AV1_STREAM_FRAME + AV1_FRAME_TILE_INFO_ROWS], 2
+    mov     dword [rel stream_desc + AV1_STREAM_FRAME + AV1_FRAME_TILE_INFO_COUNT], 4
+    lea     rax, [rel tile0]
+    mov     [rel entries + AV1_TILE_ENTRY_SIZE * 0 + AV1_TILE_ENTRY_PTR], rax
+    mov     dword [rel entries + AV1_TILE_ENTRY_SIZE * 0 + AV1_TILE_ENTRY_LEN], 2
+    lea     rax, [rel tile1]
+    mov     [rel entries + AV1_TILE_ENTRY_SIZE * 1 + AV1_TILE_ENTRY_PTR], rax
+    mov     dword [rel entries + AV1_TILE_ENTRY_SIZE * 1 + AV1_TILE_ENTRY_LEN], 3
+    lea     rax, [rel tile2]
+    mov     [rel entries + AV1_TILE_ENTRY_SIZE * 2 + AV1_TILE_ENTRY_PTR], rax
+    mov     dword [rel entries + AV1_TILE_ENTRY_SIZE * 2 + AV1_TILE_ENTRY_LEN], 1
+    lea     rax, [rel tile3]
+    mov     [rel entries + AV1_TILE_ENTRY_SIZE * 3 + AV1_TILE_ENTRY_PTR], rax
+    mov     dword [rel entries + AV1_TILE_ENTRY_SIZE * 3 + AV1_TILE_ENTRY_LEN], 4
+    mov     rdi, ivfbuf
+    mov     esi, 192
+    lea     rdx, [rel stream_desc + AV1_STREAM_SEQ]
+    lea     rcx, [rel stream_desc + AV1_STREAM_FRAME]
+    mov     r8, entries
+    mov     r9d, 4
+    call    er_av1_stream_encode_frame
+    test    eax, eax
+    jz      .fail_stream_encode
+    test    edx, edx
+    jnz     .fail_stream_encode
+    mov     [rel ivf_len], eax
+    inc     qword [rel passed]
+    jmp     .stream_decode
+.fail_stream_encode:
+    inc     qword [rel failed]
+
+.stream_decode:
+    mov     rdi, ivfbuf
+    mov     esi, [rel ivf_len]
+    mov     rdx, stream_desc
+    mov     rcx, entries
+    mov     r8d, 4
+    call    er_av1_stream_decode_frame
+    cmp     eax, [rel ivf_len]
+    jne     .fail_stream_decode
+    test    edx, edx
+    jnz     .fail_stream_decode
+    cmp     byte [rel stream_desc + AV1_STREAM_SEEN_SEQUENCE], 1
+    jne     .fail_stream_decode
+    cmp     byte [rel stream_desc + AV1_STREAM_SEEN_FRAME], 1
+    jne     .fail_stream_decode
+    cmp     byte [rel stream_desc + AV1_STREAM_SEEN_TILE], 1
+    jne     .fail_stream_decode
+    cmp     dword [rel stream_desc + AV1_STREAM_FRAME + AV1_FRAME_WIDTH], 320
+    jne     .fail_stream_decode
+    cmp     dword [rel stream_desc + AV1_STREAM_TILE_GROUP + AV1_TILE_GROUP_START], 0
+    jne     .fail_stream_decode
+    cmp     dword [rel stream_desc + AV1_STREAM_TILE_GROUP + AV1_TILE_GROUP_END], 3
+    jne     .fail_stream_decode
+    cmp     qword [rel entries + AV1_TILE_ENTRY_SIZE * 3 + AV1_TILE_ENTRY_OFFSET], 13
+    jne     .fail_stream_decode
+    cmp     dword [rel entries + AV1_TILE_ENTRY_SIZE * 3 + AV1_TILE_ENTRY_LEN], 4
+    jne     .fail_stream_decode
+    cmp     dword [rel entries + AV1_TILE_ENTRY_SIZE * 3 + AV1_TILE_ENTRY_ROW], 1
+    jne     .fail_stream_decode
+    cmp     dword [rel entries + AV1_TILE_ENTRY_SIZE * 3 + AV1_TILE_ENTRY_COL], 1
+    jne     .fail_stream_decode
+    inc     qword [rel passed]
+    jmp     .stream_decode_small_cap
+.fail_stream_decode:
+    inc     qword [rel failed]
+
+.stream_decode_small_cap:
+    mov     rdi, ivfbuf
+    mov     esi, [rel ivf_len]
+    mov     rdx, stream_desc
+    mov     rcx, entries
+    mov     r8d, 3
+    call    er_av1_stream_decode_frame
+    test    eax, eax
+    jnz     .fail_stream_decode_small_cap
+    cmp     edx, ERROR_INVALID_PARAM
+    jne     .fail_stream_decode_small_cap
+    inc     qword [rel passed]
+    jmp     .encode
+.fail_stream_decode_small_cap:
+    inc     qword [rel failed]
+
+.encode:
     mov     rdi, outbuf
     mov     esi, 128
     mov     edx, 64
@@ -98,8 +257,97 @@ _start:
     cmp     byte [rel outbuf + rax + 2], 0xcc
     jne     .fail_decode
     inc     qword [rel passed]
-    jmp     .wrap_ivf
+    jmp     .duplicate_sequence_before_frame
 .fail_decode:
+    inc     qword [rel failed]
+
+.duplicate_sequence_before_frame:
+    mov     rdi, outbuf
+    mov     esi, [rel raw_len]
+    mov     rdx, desc
+    call    er_av1_obu_decode_unit
+    test    eax, eax
+    jz      .fail_duplicate_sequence_before_frame
+    test    edx, edx
+    jnz     .fail_duplicate_sequence_before_frame
+    mov     [rel raw_cursor], eax
+    mov     ecx, eax
+    mov     rsi, outbuf
+    mov     rdi, ivfbuf
+.copy_seq_prefix:
+    test    ecx, ecx
+    jz      .copy_full_after_prefix
+    mov     al, [rsi]
+    mov     [rdi], al
+    inc     rsi
+    inc     rdi
+    dec     ecx
+    jmp     .copy_seq_prefix
+.copy_full_after_prefix:
+    mov     ecx, [rel raw_len]
+    mov     rsi, outbuf
+.copy_full_stream:
+    test    ecx, ecx
+    jz      .decode_duplicate_sequence_before_frame
+    mov     al, [rsi]
+    mov     [rdi], al
+    inc     rsi
+    inc     rdi
+    dec     ecx
+    jmp     .copy_full_stream
+.decode_duplicate_sequence_before_frame:
+    mov     esi, [rel raw_len]
+    add     esi, [rel raw_cursor]
+    mov     rdi, ivfbuf
+    mov     rdx, desc
+    call    er_av1_reduced_still_decode
+    test    eax, eax
+    jz      .fail_duplicate_sequence_before_frame
+    test    edx, edx
+    jnz     .fail_duplicate_sequence_before_frame
+    inc     qword [rel passed]
+    jmp     .reject_sequence_after_frame
+.fail_duplicate_sequence_before_frame:
+    inc     qword [rel failed]
+
+.reject_sequence_after_frame:
+    mov     ecx, [rel raw_len]
+    mov     rsi, outbuf
+    mov     rdi, ivfbuf
+.copy_full_before_suffix:
+    test    ecx, ecx
+    jz      .copy_seq_suffix
+    mov     al, [rsi]
+    mov     [rdi], al
+    inc     rsi
+    inc     rdi
+    dec     ecx
+    jmp     .copy_full_before_suffix
+.copy_seq_suffix:
+    mov     ecx, [rel raw_cursor]
+    mov     rsi, outbuf
+.copy_seq_suffix_loop:
+    test    ecx, ecx
+    jz      .decode_sequence_after_frame
+    mov     al, [rsi]
+    mov     [rdi], al
+    inc     rsi
+    inc     rdi
+    dec     ecx
+    jmp     .copy_seq_suffix_loop
+.decode_sequence_after_frame:
+    mov     esi, [rel raw_len]
+    add     esi, [rel raw_cursor]
+    mov     rdi, ivfbuf
+    mov     rdx, desc
+    call    er_av1_reduced_still_decode
+    test    eax, eax
+    jnz     .fail_reject_sequence_after_frame
+    cmp     edx, ERROR_CORRUPT
+    jne     .fail_reject_sequence_after_frame
+    inc     qword [rel passed]
+    jmp     .wrap_ivf
+.fail_reject_sequence_after_frame:
     inc     qword [rel failed]
 
 .wrap_ivf:
@@ -164,6 +412,7 @@ _start:
     jz      .fail_encode_split
     test    edx, edx
     jnz     .fail_encode_split
+    mov     [rel raw_len], eax
     inc     qword [rel passed]
     mov     rdi, outbuf
     mov     esi, eax
@@ -187,8 +436,84 @@ _start:
     cmp     byte [rel outbuf + rax + 2], 0xcc
     jne     .fail_encode_split
     inc     qword [rel passed]
-    jmp     .encode_split_no_space
+    jmp     .reject_missing_split_tile
 .fail_encode_split:
+    inc     qword [rel failed]
+
+.reject_missing_split_tile:
+    mov     dword [rel raw_cursor], 0
+.scan_split_tile_for_missing:
+    mov     ecx, [rel raw_cursor]
+    cmp     ecx, [rel raw_len]
+    jae     .fail_reject_missing_split_tile
+    mov     rdi, outbuf
+    add     rdi, rcx
+    mov     esi, [rel raw_len]
+    sub     esi, ecx
+    mov     rdx, desc
+    call    er_av1_obu_decode_unit
+    test    eax, eax
+    jz      .fail_reject_missing_split_tile
+    test    edx, edx
+    jnz     .fail_reject_missing_split_tile
+    cmp     byte [rel desc + AV1_OBU_DESC_TYPE], AV1_OBU_TYPE_TILE_GROUP
+    je      .decode_missing_split_tile
+    add     [rel raw_cursor], eax
+    jmp     .scan_split_tile_for_missing
+.decode_missing_split_tile:
+    mov     [rel ivf_len], eax
+    mov     rdi, outbuf
+    mov     esi, [rel raw_cursor]
+    mov     rdx, desc
+    call    er_av1_reduced_still_decode
+    test    eax, eax
+    jnz     .fail_reject_missing_split_tile
+    cmp     edx, ERROR_CORRUPT
+    jne     .fail_reject_missing_split_tile
+    inc     qword [rel passed]
+    jmp     .reject_duplicate_split_tile
+.fail_reject_missing_split_tile:
+    inc     qword [rel failed]
+
+.reject_duplicate_split_tile:
+    mov     ecx, [rel raw_len]
+    mov     rsi, outbuf
+    mov     rdi, ivfbuf
+.copy_split_stream:
+    test    ecx, ecx
+    jz      .copy_split_tile_again
+    mov     al, [rsi]
+    mov     [rdi], al
+    inc     rsi
+    inc     rdi
+    dec     ecx
+    jmp     .copy_split_stream
+.copy_split_tile_again:
+    mov     ecx, [rel ivf_len]
+    mov     eax, [rel raw_cursor]
+    lea     rsi, [rel outbuf + rax]
+.copy_split_tile_again_loop:
+    test    ecx, ecx
+    jz      .decode_duplicate_split_tile
+    mov     al, [rsi]
+    mov     [rdi], al
+    inc     rsi
+    inc     rdi
+    dec     ecx
+    jmp     .copy_split_tile_again_loop
+.decode_duplicate_split_tile:
+    mov     esi, [rel raw_len]
+    add     esi, [rel ivf_len]
+    mov     rdi, ivfbuf
+    mov     rdx, desc
+    call    er_av1_reduced_still_decode
+    test    eax, eax
+    jnz     .fail_reject_duplicate_split_tile
+    cmp     edx, ERROR_CORRUPT
+    jne     .fail_reject_duplicate_split_tile
+    inc     qword [rel passed]
+    jmp     .encode_split_no_space
+.fail_reject_duplicate_split_tile:
     inc     qword [rel failed]
 
 .encode_split_no_space:
@@ -509,6 +834,27 @@ _start:
     jnz     .fail_encode_raw420
     mov     [rel raw_len], eax
     inc     qword [rel passed]
+    mov     rdi, outbuf
+    mov     esi, [rel raw_len]
+    mov     rdx, info
+    call    er_av1_reduced_still_info_raw420
+    test    eax, eax
+    jz      .fail_encode_raw420
+    test    edx, edx
+    jnz     .fail_encode_raw420
+    cmp     eax, [rel raw_len]
+    jne     .fail_encode_raw420
+    cmp     dword [rel info + AV1_INFO_WIDTH], 4
+    jne     .fail_encode_raw420
+    cmp     dword [rel info + AV1_INFO_HEIGHT], 2
+    jne     .fail_encode_raw420
+    cmp     dword [rel info + AV1_INFO_RAW420_LEN], 12
+    jne     .fail_encode_raw420
+    cmp     dword [rel info + AV1_INFO_TILE_LEN], 12
+    jne     .fail_encode_raw420
+    cmp     dword [rel info + AV1_INFO_BYTES_CONSUMED], eax
+    jne     .fail_encode_raw420
+    inc     qword [rel passed]
     mov     rdi, image
     mov     esi, 4
     mov     edx, 2
@@ -548,8 +894,87 @@ _start:
 	cmp     byte [rel decoded_v + 1], 12
 	jne     .fail_encode_raw420
 	inc     qword [rel passed]
-	jmp     .encode_raw420_delimited
+	jmp     .encode_raw420_redundant
 .fail_encode_raw420:
+	inc     qword [rel failed]
+
+.encode_raw420_redundant:
+	mov     rdi, image
+	mov     esi, 4
+	mov     edx, 2
+	mov     rcx, plane_y
+	mov     r8, plane_u
+	mov     r9, plane_v
+	call    er_av1_tile_raw420_fill_desc
+	test    edx, edx
+	jnz     .fail_encode_raw420_redundant
+	mov     rdi, outbuf
+	mov     esi, 128
+	mov     rdx, image
+	call    er_av1_reduced_still_encode_raw420_redundant
+	test    eax, eax
+	jz      .fail_encode_raw420_redundant
+	test    edx, edx
+	jnz     .fail_encode_raw420_redundant
+	mov     [rel raw_len], eax
+	xor     ecx, ecx
+.scan_redundant:
+	cmp     ecx, [rel raw_len]
+	jae     .fail_encode_raw420_redundant
+	cmp     byte [rel outbuf + rcx], 0x3a
+	je      .decode_redundant
+	inc     ecx
+	jmp     .scan_redundant
+.decode_redundant:
+	mov     [rel raw_cursor], ecx
+	mov     qword [rel decoded_y], 0
+	mov     word [rel decoded_u], 0
+	mov     word [rel decoded_v], 0
+	mov     rdi, image
+	mov     esi, 4
+	mov     edx, 2
+	mov     rcx, decoded_y
+	mov     r8, decoded_u
+	mov     r9, decoded_v
+	call    er_av1_tile_raw420_fill_desc
+	test    edx, edx
+	jnz     .fail_encode_raw420_redundant
+	mov     rdi, outbuf
+	mov     esi, [rel raw_len]
+	mov     rdx, image
+	mov     rcx, desc
+	call    er_av1_reduced_still_decode_raw420
+	test    eax, eax
+	jz      .fail_encode_raw420_redundant
+	test    edx, edx
+	jnz     .fail_encode_raw420_redundant
+	cmp     byte [rel decoded_y], 1
+	jne     .fail_encode_raw420_redundant
+	cmp     byte [rel decoded_y + 7], 8
+	jne     .fail_encode_raw420_redundant
+	cmp     byte [rel decoded_u], 9
+	jne     .fail_encode_raw420_redundant
+	cmp     byte [rel decoded_v + 1], 12
+	jne     .fail_encode_raw420_redundant
+	inc     qword [rel passed]
+	jmp     .reject_bad_redundant
+.fail_encode_raw420_redundant:
+	inc     qword [rel failed]
+
+.reject_bad_redundant:
+	mov     eax, [rel raw_cursor]
+	xor     byte [rel outbuf + rax + 2], 1
+	mov     rdi, outbuf
+	mov     esi, [rel raw_len]
+	mov     rdx, desc
+	call    er_av1_reduced_still_decode
+	test    eax, eax
+	jnz     .fail_reject_bad_redundant
+	cmp     edx, ERROR_CORRUPT
+	jne     .fail_reject_bad_redundant
+	inc     qword [rel passed]
+	jmp     .encode_raw420_delimited
+.fail_reject_bad_redundant:
 	inc     qword [rel failed]
 
 .encode_raw420_delimited:
@@ -604,8 +1029,274 @@ _start:
 	cmp     byte [rel decoded_v + 1], 12
 	jne     .fail_encode_raw420_delimited
 	inc     qword [rel passed]
-	jmp     .decode_raw420_overlong_tile
+	jmp     .encode_raw420_metadata
 .fail_encode_raw420_delimited:
+	inc     qword [rel failed]
+
+.encode_raw420_metadata:
+	mov     rdi, image
+	mov     esi, 4
+	mov     edx, 2
+	mov     rcx, plane_y
+	mov     r8, plane_u
+	mov     r9, plane_v
+	call    er_av1_tile_raw420_fill_desc
+	test    edx, edx
+	jnz     .fail_encode_raw420_metadata
+	mov     rdi, outbuf
+	mov     esi, 128
+	mov     rdx, image
+	mov     ecx, AV1_METADATA_TYPE_HDR_CLL
+	mov     r8, metadata_cll
+	mov     r9d, AV1_METADATA_HDR_CLL_LEN
+	call    er_av1_reduced_still_encode_raw420_with_metadata
+	test    eax, eax
+	jz      .fail_encode_raw420_metadata
+	test    edx, edx
+	jnz     .fail_encode_raw420_metadata
+	mov     [rel raw_len], eax
+	mov     qword [rel decoded_y], 0
+	mov     word [rel decoded_u], 0
+	mov     word [rel decoded_v], 0
+	mov     rdi, image
+	mov     esi, 4
+	mov     edx, 2
+	mov     rcx, decoded_y
+	mov     r8, decoded_u
+	mov     r9, decoded_v
+	call    er_av1_tile_raw420_fill_desc
+	test    edx, edx
+	jnz     .fail_encode_raw420_metadata
+	mov     rdi, outbuf
+	mov     esi, [rel raw_len]
+	mov     rdx, image
+	mov     rcx, desc
+	call    er_av1_reduced_still_decode_raw420
+	test    eax, eax
+	jz      .fail_encode_raw420_metadata
+	test    edx, edx
+	jnz     .fail_encode_raw420_metadata
+	cmp     byte [rel decoded_y], 1
+	jne     .fail_encode_raw420_metadata
+	cmp     byte [rel decoded_y + 7], 8
+	jne     .fail_encode_raw420_metadata
+	cmp     byte [rel decoded_u], 9
+	jne     .fail_encode_raw420_metadata
+	cmp     byte [rel decoded_v + 1], 12
+	jne     .fail_encode_raw420_metadata
+	inc     qword [rel passed]
+	jmp     .encode_raw420_metadata_padding
+.fail_encode_raw420_metadata:
+	inc     qword [rel failed]
+
+.encode_raw420_metadata_padding:
+	mov     rdi, image
+	mov     esi, 4
+	mov     edx, 2
+	mov     rcx, plane_y
+	mov     r8, plane_u
+	mov     r9, plane_v
+	call    er_av1_tile_raw420_fill_desc
+	test    edx, edx
+	jnz     .fail_encode_raw420_metadata_padding
+	mov     rdi, outbuf
+	mov     esi, 128
+	mov     rdx, image
+	mov     ecx, AV1_METADATA_TYPE_HDR_CLL
+	mov     r8, metadata_cll
+	mov     r9d, AV1_METADATA_HDR_CLL_LEN
+	mov     r10d, 3
+	call    er_av1_reduced_still_encode_raw420_with_metadata_padding
+	test    eax, eax
+	jz      .fail_encode_raw420_metadata_padding
+	test    edx, edx
+	jnz     .fail_encode_raw420_metadata_padding
+	mov     [rel raw_len], eax
+	mov     qword [rel decoded_y], 0
+	mov     word [rel decoded_u], 0
+	mov     word [rel decoded_v], 0
+	mov     rdi, image
+	mov     esi, 4
+	mov     edx, 2
+	mov     rcx, decoded_y
+	mov     r8, decoded_u
+	mov     r9, decoded_v
+	call    er_av1_tile_raw420_fill_desc
+	test    edx, edx
+	jnz     .fail_encode_raw420_metadata_padding
+	mov     rdi, outbuf
+	mov     esi, [rel raw_len]
+	mov     rdx, image
+	mov     rcx, desc
+	call    er_av1_reduced_still_decode_raw420
+	test    eax, eax
+	jz      .fail_encode_raw420_metadata_padding
+	test    edx, edx
+	jnz     .fail_encode_raw420_metadata_padding
+	cmp     byte [rel decoded_y], 1
+	jne     .fail_encode_raw420_metadata_padding
+	cmp     byte [rel decoded_y + 7], 8
+	jne     .fail_encode_raw420_metadata_padding
+	cmp     byte [rel decoded_u], 9
+	jne     .fail_encode_raw420_metadata_padding
+	cmp     byte [rel decoded_v + 1], 12
+	jne     .fail_encode_raw420_metadata_padding
+	inc     qword [rel passed]
+	jmp     .raw_append_count
+.fail_encode_raw420_metadata_padding:
+	inc     qword [rel failed]
+
+.raw_append_count:
+	mov     rdi, image
+	mov     esi, 4
+	mov     edx, 2
+	mov     rcx, plane_y
+	mov     r8, plane_u
+	mov     r9, plane_v
+	call    er_av1_tile_raw420_fill_desc
+	test    edx, edx
+	jnz     .fail_raw_append_count
+	mov     rdi, ivfbuf
+	mov     esi, 192
+	xor     edx, edx
+	mov     rcx, image
+	call    er_av1_reduced_still_append_raw420
+	test    eax, eax
+	jz      .fail_raw_append_count
+	test    edx, edx
+	jnz     .fail_raw_append_count
+	mov     [rel raw_cursor], eax
+	mov     rdi, image
+	mov     esi, 4
+	mov     edx, 2
+	mov     rcx, plane2_y
+	mov     r8, plane2_u
+	mov     r9, plane2_v
+	call    er_av1_tile_raw420_fill_desc
+	test    edx, edx
+	jnz     .fail_raw_append_count
+	mov     rdi, ivfbuf
+	mov     esi, 192
+	mov     edx, [rel raw_cursor]
+	mov     rcx, image
+	call    er_av1_reduced_still_append_raw420
+	test    eax, eax
+	jz      .fail_raw_append_count
+	test    edx, edx
+	jnz     .fail_raw_append_count
+	mov     [rel raw_len], eax
+	mov     rdi, ivfbuf
+	mov     esi, [rel raw_len]
+	call    er_av1_reduced_still_count_raw_frames
+	cmp     eax, 2
+	jne     .fail_raw_append_count
+	test    edx, edx
+	jnz     .fail_raw_append_count
+	inc     qword [rel passed]
+	jmp     .raw_info_second
+.fail_raw_append_count:
+	inc     qword [rel failed]
+
+.raw_info_second:
+	mov     rdi, ivfbuf
+	mov     esi, [rel raw_len]
+	mov     edx, 1
+	mov     rcx, info
+	call    er_av1_reduced_still_info_raw_frame_raw420
+	test    eax, eax
+	jz      .fail_raw_info_second
+	test    edx, edx
+	jnz     .fail_raw_info_second
+	cmp     eax, [rel raw_len]
+	jne     .fail_raw_info_second
+	cmp     dword [rel info + AV1_INFO_WIDTH], 4
+	jne     .fail_raw_info_second
+	cmp     dword [rel info + AV1_INFO_HEIGHT], 2
+	jne     .fail_raw_info_second
+	cmp     dword [rel info + AV1_INFO_RAW420_LEN], 12
+	jne     .fail_raw_info_second
+	cmp     dword [rel info + AV1_INFO_BYTES_CONSUMED], eax
+	jne     .fail_raw_info_second
+	inc     qword [rel passed]
+	jmp     .raw_seek_second
+.fail_raw_info_second:
+	inc     qword [rel failed]
+
+.raw_seek_second:
+	mov     rdi, ivfbuf
+	mov     esi, [rel raw_len]
+	mov     edx, 1
+	mov     rcx, desc
+	call    er_av1_reduced_still_decode_raw_frame
+	test    eax, eax
+	jz      .fail_raw_seek_second
+	test    edx, edx
+	jnz     .fail_raw_seek_second
+	cmp     eax, [rel raw_len]
+	jne     .fail_raw_seek_second
+	mov     eax, [rel desc + AV1_REDUCED_TILE_OFFSET]
+	cmp     byte [rel ivfbuf + rax], 21
+	jne     .fail_raw_seek_second
+	cmp     byte [rel ivfbuf + rax + 7], 28
+	jne     .fail_raw_seek_second
+	cmp     byte [rel ivfbuf + rax + 8], 29
+	jne     .fail_raw_seek_second
+	cmp     byte [rel ivfbuf + rax + 11], 32
+	jne     .fail_raw_seek_second
+	inc     qword [rel passed]
+	jmp     .raw_decode_second
+.fail_raw_seek_second:
+	inc     qword [rel failed]
+
+.raw_decode_second:
+	mov     qword [rel decoded_y], 0
+	mov     word [rel decoded_u], 0
+	mov     word [rel decoded_v], 0
+	mov     rdi, image
+	mov     esi, 4
+	mov     edx, 2
+	mov     rcx, decoded_y
+	mov     r8, decoded_u
+	mov     r9, decoded_v
+	call    er_av1_tile_raw420_fill_desc
+	test    edx, edx
+	jnz     .fail_raw_decode_second
+	mov     rdi, ivfbuf
+	mov     esi, [rel raw_len]
+	mov     edx, 1
+	mov     rcx, image
+	mov     r8, desc
+	call    er_av1_reduced_still_decode_raw_frame_raw420
+	test    eax, eax
+	jz      .fail_raw_decode_second
+	test    edx, edx
+	jnz     .fail_raw_decode_second
+	cmp     byte [rel decoded_y], 21
+	jne     .fail_raw_decode_second
+	cmp     byte [rel decoded_y + 7], 28
+	jne     .fail_raw_decode_second
+	cmp     byte [rel decoded_u], 29
+	jne     .fail_raw_decode_second
+	cmp     byte [rel decoded_v + 1], 32
+	jne     .fail_raw_decode_second
+	inc     qword [rel passed]
+	jmp     .raw_seek_missing
+.fail_raw_decode_second:
+	inc     qword [rel failed]
+
+.raw_seek_missing:
+	mov     rdi, ivfbuf
+	mov     esi, [rel raw_len]
+	mov     edx, 2
+	mov     rcx, desc
+	call    er_av1_reduced_still_decode_raw_frame
+	test    eax, eax
+	jnz     .fail_raw_seek_missing
+	cmp     edx, ERROR_NO_DATA
+	jne     .fail_raw_seek_missing
+	inc     qword [rel passed]
+	jmp     .decode_raw420_overlong_tile
+.fail_raw_seek_missing:
 	inc     qword [rel failed]
 
 .decode_raw420_overlong_tile:
@@ -801,6 +1492,23 @@ _start:
     jz      .fail_decode_ivf_frame_index
     test    edx, edx
     jnz     .fail_decode_ivf_frame_index
+    mov     rdi, ivfbuf
+    mov     esi, [rel ivf_len]
+    mov     edx, 1
+    mov     rcx, info
+    call    er_av1_reduced_still_info_ivf_frame_raw420
+    test    eax, eax
+    jz      .fail_decode_ivf_frame_index
+    test    edx, edx
+    jnz     .fail_decode_ivf_frame_index
+    cmp     dword [rel info + AV1_INFO_WIDTH], 4
+    jne     .fail_decode_ivf_frame_index
+    cmp     dword [rel info + AV1_INFO_HEIGHT], 2
+    jne     .fail_decode_ivf_frame_index
+    cmp     dword [rel info + AV1_INFO_RAW420_LEN], 12
+    jne     .fail_decode_ivf_frame_index
+    cmp     dword [rel info + AV1_INFO_TILE_LEN], 12
+    jne     .fail_decode_ivf_frame_index
     mov     rdi, ivfbuf
     mov     esi, [rel ivf_len]
     mov     edx, 1

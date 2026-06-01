@@ -518,6 +518,10 @@ pub fn build(b: *std.Build) void {
     const gen_icon_objects_step = b.step("gen-icon-objects", "Convert Tabler SVG icons to pre-compiled IR canonical objects");
     gen_icon_objects_step.dependOn(&run_gen_icon_objects.step);
     // Test compilation needs the generated files in src/gen/
+    chat_ui_tests.step.dependOn(&run_gen_icon_objects.step);
+    pipeline_ui_tests.step.dependOn(&run_gen_icon_objects.step);
+    ui_core_tests.step.dependOn(&run_gen_icon_objects.step);
+    component_gallery_tests.step.dependOn(&run_gen_icon_objects.step);
     drm_gbm_tests.step.dependOn(&run_gen_icon_objects.step);
     wayland_window_tests.step.dependOn(&run_gen_icon_objects.step);
     test_step.dependOn(&run_gen_icon_objects.step);

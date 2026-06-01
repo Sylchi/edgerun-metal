@@ -404,13 +404,13 @@ pub const State = struct {
 
         const outer = bounds.insetUniform(if (bounds.w >= 1000.0) 22.0 else 12.0);
         if (outer.w >= 980.0) {
-            try self.renderWide(scene, collector, outer, dashboard_options);
+            try self.renderWide(app, outer);
         } else {
-            try self.renderStacked(scene, collector, outer, dashboard_options);
+            try self.renderStacked(app, outer);
         }
         self.refreshSelectedRegion(collector.written());
         try self.renderSelectionOverlay(scene, bounds);
-        try self.renderContextAndEditor(scene, collector, bounds, dashboard_options);
+        try self.renderContextAndEditor(app, scene, bounds);
     }
 
     fn detail(self: *const State, row: usize) []const u8 {
@@ -427,57 +427,52 @@ pub const State = struct {
         return if (len == 0) "Ready" else self.status[0..len];
     }
 
-    fn renderWide(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
+    fn renderWide(self: *State, app: component_union.View, bounds: ui.Rect) !void {
         const gap: f32 = if (self.compact_rows) 14.0 else 16.0;
         const header_h: f32 = 78.0;
         const metric_h: f32 = 96.0;
-        try self.renderHeader(scene, collector, ui.Rect.init(bounds.x, bounds.y, bounds.w, header_h), options);
+        try self.renderHeader(app, ui.Rect.init(bounds.x, bounds.y, bounds.w, header_h));
 
         const metric_y = bounds.y + header_h + gap;
-        const metric_w = (bounds.w - gap * 3.0) * 0.25;
-        try self.renderMetrics(scene, collector, ui.Rect.init(bounds.x, metric_y, bounds.w, metric_h), metric_w, gap, options);
+        try self.renderMetrics(app, ui.Rect.init(bounds.x, metric_y, bounds.w, metric_h), gap);
 
         const body_y = metric_y + metric_h + gap;
         const body_h = @max(1.0, bounds.y + bounds.h - body_y);
         const controls_w = @min(370.0, @max(330.0, bounds.w * 0.24));
         const inventory_w = @min(390.0, @max(330.0, bounds.w * 0.25));
         const activity_w = bounds.w - controls_w - inventory_w - gap * 2.0;
-        try self.renderControls(scene, collector, ui.Rect.init(bounds.x, body_y, controls_w, body_h), options);
-        try self.renderActivity(scene, collector, ui.Rect.init(bounds.x + controls_w + gap, body_y, activity_w, body_h), options);
-        try self.renderInventory(scene, collector, ui.Rect.init(bounds.x + controls_w + gap + activity_w + gap, body_y, inventory_w, body_h), options);
+        try self.renderControls(app, ui.Rect.init(bounds.x, body_y, controls_w, body_h));
+        try self.renderActivity(app, ui.Rect.init(bounds.x + controls_w + gap, body_y, activity_w, body_h));
+        try self.renderInventory(app, ui.Rect.init(bounds.x + controls_w + gap + activity_w + gap, body_y, inventory_w, body_h));
     }
 
-    fn renderStacked(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
+    fn renderStacked(self: *State, app: component_union.View, bounds: ui.Rect) !void {
         const gap: f32 = 12.0;
-        var y = bounds.y;
-        try self.renderHeader(scene, collector, ui.Rect.init(bounds.x, y, bounds.w, 78.0), options);
-        y += 78.0 + gap;
-        const metric_w = (bounds.w - gap) * 0.5;
-        try self.renderMetrics(scene, collector, ui.Rect.init(bounds.x, y, bounds.w, 230.0), metric_w, gap, options);
-        y += 230.0 + gap;
-        try self.renderControls(scene, collector, ui.Rect.init(bounds.x, y, bounds.w, 390.0), options);
-        y += 390.0 + gap;
-        try self.renderActivity(scene, collector, ui.Rect.init(bounds.x, y, bounds.w, 330.0), options);
-        y += 330.0 + gap;
-        try self.renderInventory(scene, collector, ui.Rect.init(bounds.x, y, bounds.w, @max(260.0, bounds.y + bounds.h - y)), options);
+        var stack = app.column(bounds, gap);
+        try self.renderHeader(app, stack.take(78.0));
+        try self.renderMetrics(app, stack.take(230.0), gap);
+        try self.renderControls(app, stack.take(390.0));
+        try self.renderActivity(app, stack.take(330.0));
+        const inventory = stack.remaining();
+        try self.renderInventory(app, ui.Rect.init(inventory.x, inventory.y, inventory.w, @max(260.0, inventory.h)));
     }
 
-    fn renderHeader(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
-        const app = component_union.renderer(scene, collector, options);
-        try app.interactive(component_union.selectableElevated(select_header_id, "", ""), bounds);
+    fn renderHeader(self: *State, app: component_union.View, bounds: ui.Rect) !void {
+        try app.selectableElevatedAt(bounds, select_header_id, "", "");
         try app.gradient(bounds.insetUniform(1.0), ui.Color{ .r = 38, .g = 92, .b = 79, .a = 7 }, ui.Color.clear, 12.0);
         const chip = ui.Rect.init(bounds.x + 20.0, bounds.y + 20.0, 36.0, 36.0);
         try app.fill(chip, hardware_accent_dim, 9.0);
-        try app.icon(chip.withHeightCentered(18.0).withWidthCentered(18.0), .device_desktop, options.style.accent);
+        try app.icon(chip.withHeightCentered(18.0).withWidthCentered(18.0), .device_desktop, app.options.style.accent);
         try app.title(ui.Rect.init(bounds.x + 72.0, bounds.y + 17.0, @max(1.0, bounds.w - 330.0), 22.0), "Hardware Command Center");
         try app.muted(ui.Rect.init(bounds.x + 72.0, bounds.y + 46.0, @max(1.0, bounds.w - 330.0), 16.0), fittedText(self.detail(0), @max(1.0, bounds.w - 330.0)));
-        try app.interactive(component_union.badge(self.statusLabel(), .secondary), ui.Rect.init(bounds.x + bounds.w - 230.0, bounds.y + 24.0, 150.0, 28.0));
-        try app.interactive(component_union.iconButtonNamed(refresh_now_button_id, "Refresh", .reload, .outline), ui.Rect.init(bounds.x + bounds.w - 54.0, bounds.y + 21.0, 34.0, 34.0));
+        try app.badgeAt(ui.Rect.init(bounds.x + bounds.w - 230.0, bounds.y + 24.0, 150.0, 28.0), self.statusLabel(), .secondary);
+        try app.iconButtonAt(ui.Rect.init(bounds.x + bounds.w - 54.0, bounds.y + 21.0, 34.0, 34.0), refresh_now_button_id, "Refresh", .reload, .outline);
     }
 
-    fn renderMetrics(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, metric_w: f32, gap: f32, options: RenderOptions) !void {
+    fn renderMetrics(self: *State, app: component_union.View, bounds: ui.Rect, gap: f32) !void {
         const cards_per_row: usize = if (bounds.w >= 980.0) 4 else 2;
         const row_h = if (cards_per_row == 4) bounds.h else (bounds.h - gap) * 0.5;
+        const grid = app.grid(bounds, cards_per_row, gap, row_h);
         const data = [_]struct { id: u32, title: []const u8, value: []const u8, detail: []const u8, icon_kind: icon.Icon }{
             .{ .id = select_metric_base_id, .title = "Thermals", .value = self.detail(1), .detail = "CPU sensor", .icon_kind = .temperature },
             .{ .id = select_metric_base_id + 1, .title = "Memory", .value = memoryMetricValue(self.detail(2)), .detail = "Live pressure", .icon_kind = .database },
@@ -485,138 +480,148 @@ pub const State = struct {
             .{ .id = select_metric_base_id + 3, .title = "Keyboard", .value = self.detail(5), .detail = "Backlight level", .icon_kind = .keyboard },
         };
         for (data, 0..) |entry, index| {
-            const col = index % cards_per_row;
-            const row = index / cards_per_row;
-            const rect = ui.Rect.init(
-                bounds.x + @as(f32, @floatFromInt(col)) * (metric_w + gap),
-                bounds.y + @as(f32, @floatFromInt(row)) * (row_h + gap),
-                metric_w,
-                row_h,
-            );
-            try self.renderMetricCard(scene, collector, rect, entry.id, entry.title, entry.value, entry.detail, entry.icon_kind, options);
+            const card = grid.item(index);
+            try app.metricCard(card, .{
+                .id = entry.id,
+                .title = entry.title,
+                .detail = fittedText(entry.detail, @max(1.0, card.w - 68.0)),
+                .value = fittedText(displayValue(entry.value), @max(1.0, card.w - 28.0)),
+                .icon = entry.icon_kind,
+            });
         }
     }
 
-    fn renderControls(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
-        const app = component_union.renderer(scene, collector, options);
-        try app.interactive(component_union.selectableElevated(select_controls_id, "", ""), bounds);
-        const inner = bounds.insetUniform(18.0);
-        var y = inner.y;
-        try self.renderSectionHeader(scene, inner.x, y, "Controls", "Display and keyboard knobs.", .adjustments_plus, options);
-        y += 54.0;
+    fn renderControls(self: *State, app: component_union.View, bounds: ui.Rect) !void {
+        const body = try app.panelScaffold(bounds, .{
+            .id = select_controls_id,
+            .variant = .elevated,
+            .title = "Controls",
+            .detail = fittedText("Display and keyboard knobs.", 300.0),
+            .icon = .adjustments_plus,
+            .inset = 18.0,
+            .header_gap = 12.0,
+        });
+        var stack = app.column(body, 0.0);
 
-        try self.renderControlGroup(scene, collector, ui.Rect.init(inner.x, y, inner.w, 112.0), select_control_base_id, "Screen", self.detail(4), brightness_slider_id, self.screenBrightnessUnit(), brightness_down_button_id, brightness_up_button_id, "Screen -", "Screen +", .brightness_down, .brightness_up, options);
-        y += 126.0;
+        const controls = [_]struct {
+            id: u32,
+            title: []const u8,
+            value: []const u8,
+            slider_id: u32,
+            slider_value: f32,
+            down_id: u32,
+            down_label: []const u8,
+            down_icon: icon.Icon,
+            up_id: u32,
+            up_label: []const u8,
+            up_icon: icon.Icon,
+        }{
+            .{ .id = select_control_base_id, .title = "Screen", .value = self.detail(4), .slider_id = brightness_slider_id, .slider_value = self.screenBrightnessUnit(), .down_id = brightness_down_button_id, .down_label = "Screen -", .down_icon = .brightness_down, .up_id = brightness_up_button_id, .up_label = "Screen +", .up_icon = .brightness_up },
+            .{ .id = select_control_base_id + 1, .title = "Keyboard", .value = self.detail(5), .slider_id = kbd_slider_id, .slider_value = self.keyboardBrightnessUnit(), .down_id = kbd_down_button_id, .down_label = "Keys -", .down_icon = .adjustments_minus, .up_id = kbd_up_button_id, .up_label = "Keys +", .up_icon = .adjustments_plus },
+        };
+        for (controls, 0..) |control, index| {
+            const row = stack.take(112.0);
+            try app.controlGroup(row, .{
+                .id = control.id,
+                .title = control.title,
+                .value = fittedText(displayValue(control.value), @max(1.0, row.w * 0.45)),
+                .slider_id = control.slider_id,
+                .slider_value = control.slider_value,
+                .down_id = control.down_id,
+                .down_label = control.down_label,
+                .down_icon = control.down_icon,
+                .up_id = control.up_id,
+                .up_label = control.up_label,
+                .up_icon = control.up_icon,
+            });
+            stack.skip(if (index == controls.len - 1) 20.0 else 14.0);
+        }
 
-        try self.renderControlGroup(scene, collector, ui.Rect.init(inner.x, y, inner.w, 112.0), select_control_base_id + 1, "Keyboard", self.detail(5), kbd_slider_id, self.keyboardBrightnessUnit(), kbd_down_button_id, kbd_up_button_id, "Keys -", "Keys +", .adjustments_minus, .adjustments_plus, options);
-        y += 132.0;
+        try app.title(stack.take(20.0), "Session");
+        stack.skip(10.0);
+        try app.switchAt(stack.take(32.0), auto_refresh_switch_id, "Auto Refresh", self.auto_refresh);
+        stack.skip(6.0);
+        try app.switchAt(stack.take(32.0), hide_unavailable_switch_id, "Hide Unavailable", self.hide_unavailable);
+        stack.skip(6.0);
+        try app.switchAt(stack.take(32.0), compact_rows_switch_id, "Compact Density", self.compact_rows);
+        stack.skip(14.0);
 
-        try app.title(ui.Rect.init(inner.x, y, inner.w, 20.0), "Session");
-        y += 30.0;
-        try app.interactive(component_union.switchControl(auto_refresh_switch_id, "Auto Refresh", self.auto_refresh), ui.Rect.init(inner.x, y, inner.w, 32.0));
-        y += 38.0;
-        try app.interactive(component_union.switchControl(hide_unavailable_switch_id, "Hide Unavailable", self.hide_unavailable), ui.Rect.init(inner.x, y, inner.w, 32.0));
-        y += 38.0;
-        try app.interactive(component_union.switchControl(compact_rows_switch_id, "Compact Density", self.compact_rows), ui.Rect.init(inner.x, y, inner.w, 32.0));
-        y += 46.0;
-
-        if (y + 108.0 <= inner.y + inner.h) {
-            try app.title(ui.Rect.init(inner.x, y, inner.w, 20.0), "Profile");
-            y += 28.0;
-            try app.interactive(component_union.selectIcon(profile_input_id, profileName(self.profile_index), .adjustments), ui.Rect.init(inner.x, y, inner.w, 40.0));
+        if (stack.remaining().h >= 68.0) {
+            try app.title(stack.take(20.0), "Profile");
+            stack.skip(8.0);
+            try app.selectAt(stack.take(40.0), profile_input_id, profileName(self.profile_index), .adjustments);
         }
     }
 
-    fn renderActivity(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
-        const app = component_union.renderer(scene, collector, options);
-        try app.interactive(component_union.selectableElevated(select_activity_id, "", ""), bounds);
-        const inner = bounds.insetUniform(18.0);
-        try self.renderSectionHeader(scene, inner.x, inner.y, "Live Hardware", "Telemetry and direct controls.", .cpu, options);
+    fn renderActivity(self: *State, app: component_union.View, bounds: ui.Rect) !void {
+        const body = try app.panelScaffold(bounds, .{
+            .id = select_activity_id,
+            .variant = .elevated,
+            .title = "Live Hardware",
+            .detail = fittedText("Telemetry and direct controls.", 300.0),
+            .icon = .cpu,
+            .inset = 18.0,
+            .header_gap = 12.0,
+        });
         const chart_h = @min(330.0, @max(190.0, bounds.h * 0.48));
-        try app.interactive(component_union.chart(90_020, "System Activity"), ui.Rect.init(inner.x, inner.y + 54.0, inner.w, chart_h));
+        try app.chartAt(ui.Rect.init(body.x, body.y, body.w, chart_h), 90_020, "System Activity");
 
-        const lower_y = inner.y + 68.0 + chart_h;
+        const lower_y = body.y + 14.0 + chart_h;
         const card_gap: f32 = 12.0;
         const card_h = @min(122.0, @max(102.0, bounds.y + bounds.h - lower_y - 20.0));
-        const half = (inner.w - card_gap) * 0.5;
-        try self.renderLevelCard(scene, collector, ui.Rect.init(inner.x, lower_y, half, card_h), select_level_base_id, "Screen Level", self.detail(4), self.screenBrightnessUnit(), .brightness, options);
-        try self.renderLevelCard(scene, collector, ui.Rect.init(inner.x + half + card_gap, lower_y, half, card_h), select_level_base_id + 1, "Keyboard Level", self.detail(5), self.keyboardBrightnessUnit(), .keyboard, options);
+        const half = (body.w - card_gap) * 0.5;
+        const levels = [_]struct { id: u32, title: []const u8, value: []const u8, unit: f32, icon_kind: icon.Icon }{
+            .{ .id = select_level_base_id, .title = "Screen Level", .value = self.detail(4), .unit = self.screenBrightnessUnit(), .icon_kind = .brightness },
+            .{ .id = select_level_base_id + 1, .title = "Keyboard Level", .value = self.detail(5), .unit = self.keyboardBrightnessUnit(), .icon_kind = .keyboard },
+        };
+        for (levels, 0..) |level, index| {
+            try app.metricCard(ui.Rect.init(body.x + @as(f32, @floatFromInt(index)) * (half + card_gap), lower_y, half, card_h), .{
+                .id = level.id,
+                .title = level.title,
+                .detail = fittedText(displayValue(level.value), @max(1.0, half - 72.0)),
+                .value = "",
+                .icon = level.icon_kind,
+                .progress = level.unit,
+            });
+        }
 
         const footer_y = lower_y + card_h + 12.0;
         if (footer_y + 76.0 <= bounds.y + bounds.h) {
-            try app.interactive(component_union.subtle("", ""), ui.Rect.init(inner.x, footer_y, inner.w, 76.0));
-            try app.title(ui.Rect.init(inner.x + 16.0, footer_y + 15.0, inner.w - 32.0, 20.0), "Demo posture");
-            try app.muted(ui.Rect.init(inner.x + 16.0, footer_y + 42.0, inner.w - 32.0, 18.0), if (self.auto_refresh) "Auto-refresh is live; sliders route through existing handlers." else "Auto-refresh paused; manual refresh remains available.");
+            try app.subtleAt(
+                ui.Rect.init(body.x, footer_y, body.w, 76.0),
+                "Demo posture",
+                if (self.auto_refresh) "Auto-refresh is live; sliders route through existing handlers." else "Auto-refresh paused; manual refresh remains available.",
+            );
         }
     }
 
-    fn renderInventory(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
-        const app = component_union.renderer(scene, collector, options);
-        try app.interactive(component_union.selectableElevated(select_inventory_id, "", ""), bounds);
-        const inner = bounds.insetUniform(18.0);
-        var y = inner.y;
-        try self.renderSectionHeader(scene, inner.x, y, "Inventory", "Detected runtime capabilities.", .server, options);
-        y += 54.0;
-        const row_h: f32 = if (self.compact_rows) 42.0 else 50.0;
+    fn renderInventory(self: *State, app: component_union.View, bounds: ui.Rect) !void {
+        var items: [row_count]component_union.PanelListItem = undefined;
+        var item_count: usize = 0;
         for (&rows, 0..) |row, index| {
             const row_detail = self.detail(index);
             if (self.hide_unavailable and std.mem.eql(u8, row_detail, unavailable_detail)) continue;
-            if (y + row_h > inner.y + inner.h) break;
-            try app.interactive(component_union.rowItemIcon(@intCast(index), row.title, row_detail, row.icon_kind), ui.Rect.init(inner.x, y, inner.w, row_h));
-            y += row_h + 6.0;
+            items[item_count] = .{
+                .id = @intCast(index),
+                .title = row.title,
+                .detail = row_detail,
+                .icon = row.icon_kind,
+            };
+            item_count += 1;
         }
-    }
-
-    fn renderSectionHeader(self: *State, scene: *ui.Scene, x: f32, y: f32, title: []const u8, detail_text: []const u8, icon_kind: icon.Icon, options: RenderOptions) !void {
-        _ = self;
-        const app = component_union.renderer(scene, null, options);
-        try app.section(ui.Rect.init(x, y, 342.0, 42.0), .{
-            .title = title,
-            .detail = fittedText(detail_text, 300.0),
-            .icon = icon_kind,
-        });
-    }
-
-    fn renderMetricCard(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, select_id: u32, title: []const u8, value: []const u8, detail_text: []const u8, icon_kind: icon.Icon, options: RenderOptions) !void {
-        _ = self;
-        const app = component_union.renderer(scene, collector, options);
-        try app.metricCard(bounds, .{
-            .id = select_id,
-            .title = title,
-            .detail = fittedText(detail_text, @max(1.0, bounds.w - 68.0)),
-            .value = fittedText(displayValue(value), @max(1.0, bounds.w - 28.0)),
-            .icon = icon_kind,
-        });
-    }
-
-    fn renderControlGroup(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, select_id: u32, title: []const u8, value: []const u8, slider_id: u32, slider_value: f32, down_id: u32, up_id: u32, down_label: []const u8, up_label: []const u8, down_icon: icon.Icon, up_icon: icon.Icon, options: RenderOptions) !void {
-        _ = self;
-        const app = component_union.renderer(scene, collector, options);
-        try app.controlGroup(bounds, .{
-            .id = select_id,
-            .title = title,
-            .value = fittedText(displayValue(value), @max(1.0, bounds.w * 0.45)),
-            .slider_id = slider_id,
-            .slider_value = slider_value,
-            .down_id = down_id,
-            .down_label = down_label,
-            .down_icon = down_icon,
-            .up_id = up_id,
-            .up_label = up_label,
-            .up_icon = up_icon,
-        });
-    }
-
-    fn renderLevelCard(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, select_id: u32, title: []const u8, value: []const u8, unit: f32, icon_kind: icon.Icon, options: RenderOptions) !void {
-        _ = self;
-        const app = component_union.renderer(scene, collector, options);
-        try app.metricCard(bounds, .{
-            .id = select_id,
-            .title = title,
-            .detail = fittedText(displayValue(value), @max(1.0, bounds.w - 72.0)),
-            .value = "",
-            .icon = icon_kind,
-            .progress = unit,
+        try app.panelList(bounds, .{
+            .id = select_inventory_id,
+            .variant = .elevated,
+            .title = "Inventory",
+            .detail = fittedText("Detected runtime capabilities.", 300.0),
+            .icon = .server,
+            .inset = 18.0,
+            .header_gap = 12.0,
+            .row_h = if (self.compact_rows) 42.0 else 50.0,
+            .gap = 6.0,
+            .items = items[0..item_count],
+            .empty_title = "No inventory",
+            .empty_detail = "No detected runtime capabilities.",
         });
     }
 
@@ -628,14 +633,13 @@ pub const State = struct {
         try scene.pushOverlayRect(selected.bounds.insetUniform(-2.0), scaleAlpha(hardware_selection, progress), .border, 14.0, 0.0);
     }
 
-    fn renderContextAndEditor(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
-        if (self.context_open) try self.renderContextMenu(scene, collector, bounds, options);
-        if (self.editor_open) try self.renderEditor(scene, collector, bounds, options);
+    fn renderContextAndEditor(self: *State, app: component_union.View, scene: *ui.Scene, bounds: ui.Rect) !void {
+        if (self.context_open) try self.renderContextMenu(app, scene, bounds);
+        if (self.editor_open) try self.renderEditor(app, scene, bounds);
     }
 
-    fn renderContextMenu(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
+    fn renderContextMenu(self: *State, app: component_union.View, scene: *ui.Scene, bounds: ui.Rect) !void {
         const mark = scene.cursor();
-        const app = component_union.renderer(scene, collector, options);
         const menu_w: f32 = 220.0;
         const menu_h: f32 = 118.0;
         const x = std.math.clamp(self.context_x, bounds.x + 8.0, bounds.x + bounds.w - menu_w - 8.0);
@@ -643,55 +647,52 @@ pub const State = struct {
         const menu = ui.Rect.init(x, y, menu_w, menu_h);
         _ = try app.floatingPanel(menu, .{
             .fill = editor_panel,
-            .border = options.style.border,
+            .border = app.options.style.border,
             .shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 96 },
             .radius = 12.0,
             .shadow_outset = 2.0,
         });
         try app.title(ui.Rect.init(menu.x + 14.0, menu.y + 12.0, menu.w - 28.0, 18.0), selectedComponentLabel(self.selected_component));
         try app.muted(ui.Rect.init(menu.x + 14.0, menu.y + 36.0, menu.w - 28.0, 16.0), "Context menu");
-        try app.interactive(component_union.buttonText(context_open_editor_id, "Open editor", .primary), ui.Rect.init(menu.x + 12.0, menu.y + 66.0, 118.0, 34.0));
-        try app.interactive(component_union.buttonText(context_close_id, "Close", .outline), ui.Rect.init(menu.x + 138.0, menu.y + 66.0, 70.0, 34.0));
+        try app.buttonAt(ui.Rect.init(menu.x + 12.0, menu.y + 66.0, 118.0, 34.0), context_open_editor_id, "Open editor", .primary);
+        try app.buttonAt(ui.Rect.init(menu.x + 138.0, menu.y + 66.0, 70.0, 34.0), context_close_id, "Close", .outline);
         const progress = self.contextProgress();
         scene.applyOpacitySince(mark, progress);
         scene.translateSince(mark, 0.0, (1.0 - progress) * 8.0);
         scene.promoteSinceToOverlay(mark);
     }
 
-    fn renderEditor(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
+    fn renderEditor(self: *State, app: component_union.View, scene: *ui.Scene, bounds: ui.Rect) !void {
         const mark = scene.cursor();
-        const app = component_union.renderer(scene, collector, options);
         const panel_w = @min(360.0, @max(300.0, bounds.w * 0.24));
         const panel = ui.Rect.init(bounds.x + bounds.w - panel_w - 18.0, bounds.y + 18.0, panel_w, @min(398.0, bounds.h - 36.0));
         const inner = try app.floatingPanel(panel, .{
             .fill = editor_panel,
-            .border = options.style.border,
+            .border = app.options.style.border,
             .shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 82 },
             .radius = 14.0,
             .shadow_outset = 1.0,
             .scrim = editor_scrim,
             .scrim_height = 76.0,
         });
-        try app.boldText(ui.Rect.init(inner.x, inner.y, inner.w - 42.0, 24.0), "Component Editor", options.style.text);
-        try app.interactive(component_union.iconButtonNamed(editor_close_id, "Close editor", .x, .outline), ui.Rect.init(inner.x + inner.w - 34.0, inner.y - 2.0, 32.0, 32.0));
+        try app.boldText(ui.Rect.init(inner.x, inner.y, inner.w - 42.0, 24.0), "Component Editor", app.options.style.text);
+        try app.iconButtonAt(ui.Rect.init(inner.x + inner.w - 34.0, inner.y - 2.0, 32.0, 32.0), editor_close_id, "Close editor", .x, .outline);
         try app.muted(ui.Rect.init(inner.x, inner.y + 31.0, inner.w, 17.0), selectedComponentLabel(self.selected_component));
         try app.muted(ui.Rect.init(inner.x, inner.y + 54.0, inner.w, 17.0), "Live changes apply immediately.");
 
         const preview = ui.Rect.init(inner.x, inner.y + 86.0, inner.w, 74.0);
-        try app.interactive(component_union.subtle("", ""), preview);
-        try app.title(ui.Rect.init(preview.x + 14.0, preview.y + 12.0, preview.w - 28.0, 19.0), "Selected");
-        try app.muted(ui.Rect.init(preview.x + 14.0, preview.y + 39.0, preview.w - 28.0, 17.0), selectedComponentLabel(self.selected_component));
+        try app.subtleAt(preview, "Selected", selectedComponentLabel(self.selected_component));
 
         const accent_y = inner.y + 184.0;
         try app.title(ui.Rect.init(inner.x, accent_y, inner.w, 20.0), "Accent");
         try app.muted(ui.Rect.init(inner.x, accent_y + 25.0, inner.w, 18.0), accentName(self.accent_index));
         const button_w = (inner.w - 10.0) * 0.5;
-        try app.interactive(component_union.buttonText(editor_accent_prev_id, "Accent -", .outline), ui.Rect.init(inner.x, accent_y + 52.0, button_w, 34.0));
-        try app.interactive(component_union.buttonText(editor_accent_next_id, "Accent +", .primary), ui.Rect.init(inner.x + button_w + 10.0, accent_y + 52.0, button_w, 34.0));
+        try app.buttonAt(ui.Rect.init(inner.x, accent_y + 52.0, button_w, 34.0), editor_accent_prev_id, "Accent -", .outline);
+        try app.buttonAt(ui.Rect.init(inner.x + button_w + 10.0, accent_y + 52.0, button_w, 34.0), editor_accent_next_id, "Accent +", .primary);
 
         try app.line(ui.Rect.init(inner.x, accent_y + 106.0, inner.w, 1.0));
-        try app.interactive(component_union.switchControl(editor_emphasis_switch_id, "Selected emphasis", self.selected_emphasis), ui.Rect.init(inner.x, accent_y + 122.0, inner.w, 32.0));
-        try app.interactive(component_union.switchControl(compact_rows_switch_id, "Compact inventory", self.compact_rows), ui.Rect.init(inner.x, accent_y + 162.0, inner.w, 32.0));
+        try app.switchAt(ui.Rect.init(inner.x, accent_y + 122.0, inner.w, 32.0), editor_emphasis_switch_id, "Selected emphasis", self.selected_emphasis);
+        try app.switchAt(ui.Rect.init(inner.x, accent_y + 162.0, inner.w, 32.0), compact_rows_switch_id, "Compact inventory", self.compact_rows);
         const progress = self.editorProgress();
         scene.applyOpacitySince(mark, progress);
         scene.translateSince(mark, (1.0 - progress) * 18.0, 0.0);

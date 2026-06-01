@@ -5,6 +5,12 @@ pub const header_h: f32 = 56.0;
 pub const content_pad: f32 = 20.0;
 pub const content_wide: f32 = 1180.0;
 pub const surface_radius: f32 = 8.0;
+pub const workspace_rail_pad: f32 = 12.0;
+pub const workspace_icon_button: f32 = 36.0;
+pub const workspace_rail_bg = ui.Color{ .r = 37, .g = 37, .b = 38 };
+pub const workspace_sidebar_bg = ui.Color{ .r = 24, .g = 24, .b = 24 };
+pub const workspace_main_bg = ui.Color{ .r = 10, .g = 12, .b = 16 };
+pub const workspace_status_bg = ui.Color{ .r = 0, .g = 122, .b = 204 };
 
 pub const Icon = struct {
     pub const button_box: f32 = 34.0;

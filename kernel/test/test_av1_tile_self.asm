@@ -5,7 +5,13 @@
 %include "x86_64/media/av1_constants.inc"
 
 extern er_av1_tile_group_decode_single
+extern er_av1_tile_group_decode
+extern er_av1_tile_group_decode_uniform
 extern er_av1_tile_group_encode_single
+extern er_av1_tile_group_encode
+extern er_av1_tile_group_encode_uniform
+extern er_av1_tile_info_decode
+extern er_av1_tile_info_encode
 extern er_av1_tile_raw420_size
 extern er_av1_tile_raw420_fill_desc
 extern er_av1_tile_raw420_validate
@@ -16,6 +22,8 @@ SECTION .bss
 passed:    resq 1
 failed:    resq 1
 desc:      resb AV1_TILE_GROUP_SIZE
+tileinfo:  resb AV1_TILE_INFO_SIZE
+entries:   resb AV1_TILE_ENTRY_SIZE * 4
 image:     resb AV1_IMAGE_SIZE
 outbuf:    resb 32
 decoded_y: resb 8
@@ -24,6 +32,10 @@ decoded_v: resb 2
 
 SECTION .data
 tile: db 0xaa, 0xbb, 0xcc
+tile0: db 0x10, 0x11
+tile1: db 0x20, 0x21, 0x22
+tile2: db 0x30
+tile3: db 0x40, 0x41, 0x42, 0x43
 plane_y: db 1, 2, 3, 4, 5, 6, 7, 8
 plane_u: db 9, 10
 plane_v: db 11, 12
@@ -31,6 +43,482 @@ plane_v: db 11, 12
 SECTION .text
 global _start
 _start:
+    mov     byte [rel tileinfo + AV1_TILE_INFO_UNIFORM], 1
+    mov     byte [rel tileinfo + AV1_TILE_INFO_COLS_LOG2], 1
+    mov     byte [rel tileinfo + AV1_TILE_INFO_ROWS_LOG2], 1
+    mov     byte [rel tileinfo + AV1_TILE_INFO_TILE_SIZE_BYTES], 2
+    mov     dword [rel tileinfo + AV1_TILE_INFO_CONTEXT_UPDATE_ID], 2
+    mov     rdi, outbuf
+    mov     esi, 32
+    mov     rdx, tileinfo
+    call    er_av1_tile_info_encode
+    test    eax, eax
+    jz      .fail_tile_info_encode
+    test    edx, edx
+    jnz     .fail_tile_info_encode
+    inc     qword [rel passed]
+    jmp     .tile_info_decode
+.fail_tile_info_encode:
+    inc     qword [rel failed]
+
+.tile_info_decode:
+    mov     rdi, outbuf
+    mov     esi, 32
+    mov     rdx, tileinfo
+    call    er_av1_tile_info_decode
+    test    eax, eax
+    jz      .fail_tile_info_decode
+    test    edx, edx
+    jnz     .fail_tile_info_decode
+    cmp     byte [rel tileinfo + AV1_TILE_INFO_UNIFORM], 1
+    jne     .fail_tile_info_decode
+    cmp     byte [rel tileinfo + AV1_TILE_INFO_COLS_LOG2], 1
+    jne     .fail_tile_info_decode
+    cmp     byte [rel tileinfo + AV1_TILE_INFO_ROWS_LOG2], 1
+    jne     .fail_tile_info_decode
+    cmp     dword [rel tileinfo + AV1_TILE_INFO_COLS], 2
+    jne     .fail_tile_info_decode
+    cmp     dword [rel tileinfo + AV1_TILE_INFO_ROWS], 2
+    jne     .fail_tile_info_decode
+    cmp     dword [rel tileinfo + AV1_TILE_INFO_COUNT], 4
+    jne     .fail_tile_info_decode
+    cmp     dword [rel tileinfo + AV1_TILE_INFO_CONTEXT_UPDATE_ID], 2
+    jne     .fail_tile_info_decode
+    cmp     byte [rel tileinfo + AV1_TILE_INFO_TILE_SIZE_BYTES], 2
+    jne     .fail_tile_info_decode
+    inc     qword [rel passed]
+    jmp     .tile_info_nonuniform_reject
+.fail_tile_info_decode:
+    inc     qword [rel failed]
+
+.tile_info_nonuniform_reject:
+    mov     byte [rel outbuf], 0
+    mov     rdi, outbuf
+    mov     esi, 1
+    mov     rdx, tileinfo
+    call    er_av1_tile_info_decode
+    test    eax, eax
+    jnz     .fail_tile_info_nonuniform_reject
+    cmp     edx, ERROR_UNSUPPORTED
+    jne     .fail_tile_info_nonuniform_reject
+    inc     qword [rel passed]
+    jmp     .uniform_setup_entries
+.fail_tile_info_nonuniform_reject:
+    inc     qword [rel failed]
+
+.uniform_setup_entries:
+    lea     rax, [rel tile0]
+    mov     [rel entries + AV1_TILE_ENTRY_SIZE * 0 + AV1_TILE_ENTRY_PTR], rax
+    mov     dword [rel entries + AV1_TILE_ENTRY_SIZE * 0 + AV1_TILE_ENTRY_LEN], 2
+    lea     rax, [rel tile1]
+    mov     [rel entries + AV1_TILE_ENTRY_SIZE * 1 + AV1_TILE_ENTRY_PTR], rax
+    mov     dword [rel entries + AV1_TILE_ENTRY_SIZE * 1 + AV1_TILE_ENTRY_LEN], 3
+    lea     rax, [rel tile2]
+    mov     [rel entries + AV1_TILE_ENTRY_SIZE * 2 + AV1_TILE_ENTRY_PTR], rax
+    mov     dword [rel entries + AV1_TILE_ENTRY_SIZE * 2 + AV1_TILE_ENTRY_LEN], 1
+    lea     rax, [rel tile3]
+    mov     [rel entries + AV1_TILE_ENTRY_SIZE * 3 + AV1_TILE_ENTRY_PTR], rax
+    mov     dword [rel entries + AV1_TILE_ENTRY_SIZE * 3 + AV1_TILE_ENTRY_LEN], 4
+    jmp     .uniform_encode
+
+.uniform_encode:
+    mov     rdi, outbuf
+    mov     esi, 32
+    mov     rdx, tileinfo
+    mov     rcx, entries
+    mov     r8d, 4
+    call    er_av1_tile_group_encode_uniform
+    cmp     eax, 16
+    jne     .fail_uniform_encode
+    test    edx, edx
+    jnz     .fail_uniform_encode
+    cmp     byte [rel outbuf + 0], 1
+    jne     .fail_uniform_encode
+    cmp     byte [rel outbuf + 1], 0
+    jne     .fail_uniform_encode
+    cmp     byte [rel outbuf + 2], 0x10
+    jne     .fail_uniform_encode
+    cmp     byte [rel outbuf + 3], 0x11
+    jne     .fail_uniform_encode
+    cmp     byte [rel outbuf + 4], 2
+    jne     .fail_uniform_encode
+    cmp     byte [rel outbuf + 5], 0
+    jne     .fail_uniform_encode
+    cmp     byte [rel outbuf + 6], 0x20
+    jne     .fail_uniform_encode
+    cmp     byte [rel outbuf + 8], 0x22
+    jne     .fail_uniform_encode
+    cmp     byte [rel outbuf + 9], 0
+    jne     .fail_uniform_encode
+    cmp     byte [rel outbuf + 10], 0
+    jne     .fail_uniform_encode
+    cmp     byte [rel outbuf + 11], 0x30
+    jne     .fail_uniform_encode
+    cmp     byte [rel outbuf + 12], 0x40
+    jne     .fail_uniform_encode
+    cmp     byte [rel outbuf + 15], 0x43
+    jne     .fail_uniform_encode
+    inc     qword [rel passed]
+    jmp     .uniform_encode_no_space
+.fail_uniform_encode:
+    inc     qword [rel failed]
+
+.uniform_encode_no_space:
+    mov     rdi, outbuf
+    mov     esi, 15
+    mov     rdx, tileinfo
+    mov     rcx, entries
+    mov     r8d, 4
+    call    er_av1_tile_group_encode_uniform
+    test    eax, eax
+    jnz     .fail_uniform_encode_no_space
+    cmp     edx, ERROR_NO_SPACE
+    jne     .fail_uniform_encode_no_space
+    inc     qword [rel passed]
+    jmp     .uniform_decode
+.fail_uniform_encode_no_space:
+    inc     qword [rel failed]
+
+.uniform_decode:
+    mov     rdi, outbuf
+    mov     esi, 16
+    mov     rdx, tileinfo
+    mov     rcx, entries
+    mov     r8d, 4
+    call    er_av1_tile_group_decode_uniform
+    cmp     eax, 16
+    jne     .fail_uniform_decode
+    test    edx, edx
+    jnz     .fail_uniform_decode
+    cmp     qword [rel entries + AV1_TILE_ENTRY_SIZE * 0 + AV1_TILE_ENTRY_OFFSET], 2
+    jne     .fail_uniform_decode
+    cmp     dword [rel entries + AV1_TILE_ENTRY_SIZE * 0 + AV1_TILE_ENTRY_LEN], 2
+    jne     .fail_uniform_decode
+    cmp     dword [rel entries + AV1_TILE_ENTRY_SIZE * 0 + AV1_TILE_ENTRY_ROW], 0
+    jne     .fail_uniform_decode
+    cmp     dword [rel entries + AV1_TILE_ENTRY_SIZE * 0 + AV1_TILE_ENTRY_COL], 0
+    jne     .fail_uniform_decode
+    cmp     qword [rel entries + AV1_TILE_ENTRY_SIZE * 1 + AV1_TILE_ENTRY_OFFSET], 6
+    jne     .fail_uniform_decode
+    cmp     dword [rel entries + AV1_TILE_ENTRY_SIZE * 1 + AV1_TILE_ENTRY_LEN], 3
+    jne     .fail_uniform_decode
+    cmp     dword [rel entries + AV1_TILE_ENTRY_SIZE * 1 + AV1_TILE_ENTRY_ROW], 0
+    jne     .fail_uniform_decode
+    cmp     dword [rel entries + AV1_TILE_ENTRY_SIZE * 1 + AV1_TILE_ENTRY_COL], 1
+    jne     .fail_uniform_decode
+    cmp     qword [rel entries + AV1_TILE_ENTRY_SIZE * 2 + AV1_TILE_ENTRY_OFFSET], 11
+    jne     .fail_uniform_decode
+    cmp     dword [rel entries + AV1_TILE_ENTRY_SIZE * 2 + AV1_TILE_ENTRY_LEN], 1
+    jne     .fail_uniform_decode
+    cmp     dword [rel entries + AV1_TILE_ENTRY_SIZE * 2 + AV1_TILE_ENTRY_ROW], 1
+    jne     .fail_uniform_decode
+    cmp     dword [rel entries + AV1_TILE_ENTRY_SIZE * 2 + AV1_TILE_ENTRY_COL], 0
+    jne     .fail_uniform_decode
+    cmp     qword [rel entries + AV1_TILE_ENTRY_SIZE * 3 + AV1_TILE_ENTRY_OFFSET], 12
+    jne     .fail_uniform_decode
+    cmp     dword [rel entries + AV1_TILE_ENTRY_SIZE * 3 + AV1_TILE_ENTRY_LEN], 4
+    jne     .fail_uniform_decode
+    cmp     dword [rel entries + AV1_TILE_ENTRY_SIZE * 3 + AV1_TILE_ENTRY_ROW], 1
+    jne     .fail_uniform_decode
+    cmp     dword [rel entries + AV1_TILE_ENTRY_SIZE * 3 + AV1_TILE_ENTRY_COL], 1
+    jne     .fail_uniform_decode
+    inc     qword [rel passed]
+    jmp     .uniform_decode_no_data
+.fail_uniform_decode:
+    inc     qword [rel failed]
+
+.uniform_decode_no_data:
+    mov     rdi, outbuf
+    mov     esi, 10
+    mov     rdx, tileinfo
+    mov     rcx, entries
+    mov     r8d, 4
+    call    er_av1_tile_group_decode_uniform
+    test    eax, eax
+    jnz     .fail_uniform_decode_no_data
+    cmp     edx, ERROR_NO_DATA
+    jne     .fail_uniform_decode_no_data
+    inc     qword [rel passed]
+    jmp     .obu_group_setup_full
+.fail_uniform_decode_no_data:
+    inc     qword [rel failed]
+
+.obu_group_setup_full:
+    mov     dword [rel desc + AV1_TILE_GROUP_START], 0
+    mov     dword [rel desc + AV1_TILE_GROUP_END], 3
+    lea     rax, [rel tile0]
+    mov     [rel entries + AV1_TILE_ENTRY_SIZE * 0 + AV1_TILE_ENTRY_PTR], rax
+    mov     dword [rel entries + AV1_TILE_ENTRY_SIZE * 0 + AV1_TILE_ENTRY_LEN], 2
+    lea     rax, [rel tile1]
+    mov     [rel entries + AV1_TILE_ENTRY_SIZE * 1 + AV1_TILE_ENTRY_PTR], rax
+    mov     dword [rel entries + AV1_TILE_ENTRY_SIZE * 1 + AV1_TILE_ENTRY_LEN], 3
+    lea     rax, [rel tile2]
+    mov     [rel entries + AV1_TILE_ENTRY_SIZE * 2 + AV1_TILE_ENTRY_PTR], rax
+    mov     dword [rel entries + AV1_TILE_ENTRY_SIZE * 2 + AV1_TILE_ENTRY_LEN], 1
+    lea     rax, [rel tile3]
+    mov     [rel entries + AV1_TILE_ENTRY_SIZE * 3 + AV1_TILE_ENTRY_PTR], rax
+    mov     dword [rel entries + AV1_TILE_ENTRY_SIZE * 3 + AV1_TILE_ENTRY_LEN], 4
+    jmp     .obu_group_encode_full
+
+.obu_group_encode_full:
+    mov     rdi, outbuf
+    mov     esi, 32
+    mov     rdx, tileinfo
+    mov     rcx, desc
+    mov     r8, entries
+    mov     r9d, 4
+    call    er_av1_tile_group_encode
+    cmp     eax, 17
+    jne     .fail_obu_group_encode_full
+    test    edx, edx
+    jnz     .fail_obu_group_encode_full
+    cmp     byte [rel outbuf], 0
+    jne     .fail_obu_group_encode_full
+    cmp     dword [rel desc + AV1_TILE_GROUP_DATA_OFFSET], 1
+    jne     .fail_obu_group_encode_full
+    cmp     dword [rel desc + AV1_TILE_GROUP_DATA_LEN], 16
+    jne     .fail_obu_group_encode_full
+    cmp     byte [rel outbuf + 1], 1
+    jne     .fail_obu_group_encode_full
+    cmp     byte [rel outbuf + 3], 0x10
+    jne     .fail_obu_group_encode_full
+    cmp     byte [rel outbuf + 16], 0x43
+    jne     .fail_obu_group_encode_full
+    inc     qword [rel passed]
+    jmp     .obu_group_decode_full
+.fail_obu_group_encode_full:
+    inc     qword [rel failed]
+
+.obu_group_decode_full:
+    mov     rdi, outbuf
+    mov     esi, 17
+    mov     rdx, tileinfo
+    mov     rcx, desc
+    mov     r8, entries
+    mov     r9d, 4
+    call    er_av1_tile_group_decode
+    cmp     eax, 17
+    jne     .fail_obu_group_decode_full
+    test    edx, edx
+    jnz     .fail_obu_group_decode_full
+    cmp     dword [rel desc + AV1_TILE_GROUP_START], 0
+    jne     .fail_obu_group_decode_full
+    cmp     dword [rel desc + AV1_TILE_GROUP_END], 3
+    jne     .fail_obu_group_decode_full
+    cmp     dword [rel desc + AV1_TILE_GROUP_DATA_OFFSET], 1
+    jne     .fail_obu_group_decode_full
+    cmp     dword [rel desc + AV1_TILE_GROUP_DATA_LEN], 16
+    jne     .fail_obu_group_decode_full
+    cmp     qword [rel entries + AV1_TILE_ENTRY_SIZE * 0 + AV1_TILE_ENTRY_OFFSET], 3
+    jne     .fail_obu_group_decode_full
+    cmp     dword [rel entries + AV1_TILE_ENTRY_SIZE * 0 + AV1_TILE_ENTRY_LEN], 2
+    jne     .fail_obu_group_decode_full
+    cmp     dword [rel entries + AV1_TILE_ENTRY_SIZE * 0 + AV1_TILE_ENTRY_ROW], 0
+    jne     .fail_obu_group_decode_full
+    cmp     dword [rel entries + AV1_TILE_ENTRY_SIZE * 0 + AV1_TILE_ENTRY_COL], 0
+    jne     .fail_obu_group_decode_full
+    cmp     qword [rel entries + AV1_TILE_ENTRY_SIZE * 3 + AV1_TILE_ENTRY_OFFSET], 13
+    jne     .fail_obu_group_decode_full
+    cmp     dword [rel entries + AV1_TILE_ENTRY_SIZE * 3 + AV1_TILE_ENTRY_LEN], 4
+    jne     .fail_obu_group_decode_full
+    cmp     dword [rel entries + AV1_TILE_ENTRY_SIZE * 3 + AV1_TILE_ENTRY_ROW], 1
+    jne     .fail_obu_group_decode_full
+    cmp     dword [rel entries + AV1_TILE_ENTRY_SIZE * 3 + AV1_TILE_ENTRY_COL], 1
+    jne     .fail_obu_group_decode_full
+    inc     qword [rel passed]
+    jmp     .obu_group_setup_range
+.fail_obu_group_decode_full:
+    inc     qword [rel failed]
+
+.obu_group_setup_range:
+    mov     dword [rel desc + AV1_TILE_GROUP_START], 1
+    mov     dword [rel desc + AV1_TILE_GROUP_END], 2
+    lea     rax, [rel tile1]
+    mov     [rel entries + AV1_TILE_ENTRY_SIZE * 0 + AV1_TILE_ENTRY_PTR], rax
+    mov     dword [rel entries + AV1_TILE_ENTRY_SIZE * 0 + AV1_TILE_ENTRY_LEN], 3
+    lea     rax, [rel tile2]
+    mov     [rel entries + AV1_TILE_ENTRY_SIZE * 1 + AV1_TILE_ENTRY_PTR], rax
+    mov     dword [rel entries + AV1_TILE_ENTRY_SIZE * 1 + AV1_TILE_ENTRY_LEN], 1
+    jmp     .obu_group_encode_range
+
+.obu_group_encode_range:
+    mov     rdi, outbuf
+    mov     esi, 32
+    mov     rdx, tileinfo
+    mov     rcx, desc
+    mov     r8, entries
+    mov     r9d, 2
+    call    er_av1_tile_group_encode
+    cmp     eax, 7
+    jne     .fail_obu_group_encode_range
+    test    edx, edx
+    jnz     .fail_obu_group_encode_range
+    cmp     byte [rel outbuf], 0xb0
+    jne     .fail_obu_group_encode_range
+    cmp     dword [rel desc + AV1_TILE_GROUP_DATA_OFFSET], 1
+    jne     .fail_obu_group_encode_range
+    cmp     dword [rel desc + AV1_TILE_GROUP_DATA_LEN], 6
+    jne     .fail_obu_group_encode_range
+    cmp     byte [rel outbuf + 1], 2
+    jne     .fail_obu_group_encode_range
+    cmp     byte [rel outbuf + 3], 0x20
+    jne     .fail_obu_group_encode_range
+    cmp     byte [rel outbuf + 6], 0x30
+    jne     .fail_obu_group_encode_range
+    inc     qword [rel passed]
+    jmp     .obu_group_decode_range
+.fail_obu_group_encode_range:
+    inc     qword [rel failed]
+
+.obu_group_decode_range:
+    mov     rdi, outbuf
+    mov     esi, 7
+    mov     rdx, tileinfo
+    mov     rcx, desc
+    mov     r8, entries
+    mov     r9d, 2
+    call    er_av1_tile_group_decode
+    cmp     eax, 7
+    jne     .fail_obu_group_decode_range
+    test    edx, edx
+    jnz     .fail_obu_group_decode_range
+    cmp     dword [rel desc + AV1_TILE_GROUP_START], 1
+    jne     .fail_obu_group_decode_range
+    cmp     dword [rel desc + AV1_TILE_GROUP_END], 2
+    jne     .fail_obu_group_decode_range
+    cmp     qword [rel entries + AV1_TILE_ENTRY_SIZE * 0 + AV1_TILE_ENTRY_OFFSET], 3
+    jne     .fail_obu_group_decode_range
+    cmp     dword [rel entries + AV1_TILE_ENTRY_SIZE * 0 + AV1_TILE_ENTRY_LEN], 3
+    jne     .fail_obu_group_decode_range
+    cmp     dword [rel entries + AV1_TILE_ENTRY_SIZE * 0 + AV1_TILE_ENTRY_ROW], 0
+    jne     .fail_obu_group_decode_range
+    cmp     dword [rel entries + AV1_TILE_ENTRY_SIZE * 0 + AV1_TILE_ENTRY_COL], 1
+    jne     .fail_obu_group_decode_range
+    cmp     qword [rel entries + AV1_TILE_ENTRY_SIZE * 1 + AV1_TILE_ENTRY_OFFSET], 6
+    jne     .fail_obu_group_decode_range
+    cmp     dword [rel entries + AV1_TILE_ENTRY_SIZE * 1 + AV1_TILE_ENTRY_LEN], 1
+    jne     .fail_obu_group_decode_range
+    cmp     dword [rel entries + AV1_TILE_ENTRY_SIZE * 1 + AV1_TILE_ENTRY_ROW], 1
+    jne     .fail_obu_group_decode_range
+    cmp     dword [rel entries + AV1_TILE_ENTRY_SIZE * 1 + AV1_TILE_ENTRY_COL], 0
+    jne     .fail_obu_group_decode_range
+    inc     qword [rel passed]
+    jmp     .obu_group_decode_bad_padding
+.fail_obu_group_decode_range:
+    inc     qword [rel failed]
+
+.obu_group_decode_bad_padding:
+    mov     byte [rel outbuf], 0xb1
+    mov     rdi, outbuf
+    mov     esi, 7
+    mov     rdx, tileinfo
+    mov     rcx, desc
+    mov     r8, entries
+    mov     r9d, 2
+    call    er_av1_tile_group_decode
+    test    eax, eax
+    jnz     .fail_obu_group_decode_bad_padding
+    cmp     edx, ERROR_CORRUPT
+    jne     .fail_obu_group_decode_bad_padding
+    inc     qword [rel passed]
+    jmp     .obu_group_decode_bad_range
+.fail_obu_group_decode_bad_padding:
+    inc     qword [rel failed]
+
+.obu_group_decode_bad_range:
+    mov     byte [rel outbuf], 0xc8
+    mov     rdi, outbuf
+    mov     esi, 7
+    mov     rdx, tileinfo
+    mov     rcx, desc
+    mov     r8, entries
+    mov     r9d, 2
+    call    er_av1_tile_group_decode
+    test    eax, eax
+    jnz     .fail_obu_group_decode_bad_range
+    cmp     edx, ERROR_CORRUPT
+    jne     .fail_obu_group_decode_bad_range
+    inc     qword [rel passed]
+    jmp     .obu_group_decode_small_cap
+.fail_obu_group_decode_bad_range:
+    inc     qword [rel failed]
+
+.obu_group_decode_small_cap:
+    mov     byte [rel outbuf], 0xb0
+    mov     rdi, outbuf
+    mov     esi, 7
+    mov     rdx, tileinfo
+    mov     rcx, desc
+    mov     r8, entries
+    mov     r9d, 1
+    call    er_av1_tile_group_decode
+    test    eax, eax
+    jnz     .fail_obu_group_decode_small_cap
+    cmp     edx, ERROR_INVALID_PARAM
+    jne     .fail_obu_group_decode_small_cap
+    inc     qword [rel passed]
+    jmp     .obu_group_encode_bad_range
+.fail_obu_group_decode_small_cap:
+    inc     qword [rel failed]
+
+.obu_group_encode_bad_range:
+    mov     dword [rel desc + AV1_TILE_GROUP_START], 3
+    mov     dword [rel desc + AV1_TILE_GROUP_END], 1
+    mov     rdi, outbuf
+    mov     esi, 32
+    mov     rdx, tileinfo
+    mov     rcx, desc
+    mov     r8, entries
+    mov     r9d, 2
+    call    er_av1_tile_group_encode
+    test    eax, eax
+    jnz     .fail_obu_group_encode_bad_range
+    cmp     edx, ERROR_CORRUPT
+    jne     .fail_obu_group_encode_bad_range
+    inc     qword [rel passed]
+    jmp     .obu_group_encode_bad_count
+.fail_obu_group_encode_bad_range:
+    inc     qword [rel failed]
+
+.obu_group_encode_bad_count:
+    mov     dword [rel desc + AV1_TILE_GROUP_START], 1
+    mov     dword [rel desc + AV1_TILE_GROUP_END], 2
+    mov     rdi, outbuf
+    mov     esi, 32
+    mov     rdx, tileinfo
+    mov     rcx, desc
+    mov     r8, entries
+    mov     r9d, 1
+    call    er_av1_tile_group_encode
+    test    eax, eax
+    jnz     .fail_obu_group_encode_bad_count
+    cmp     edx, ERROR_INVALID_PARAM
+    jne     .fail_obu_group_encode_bad_count
+    inc     qword [rel passed]
+    jmp     .obu_group_encode_no_space
+.fail_obu_group_encode_bad_count:
+    inc     qword [rel failed]
+
+.obu_group_encode_no_space:
+    mov     dword [rel desc + AV1_TILE_GROUP_START], 1
+    mov     dword [rel desc + AV1_TILE_GROUP_END], 2
+    mov     rdi, outbuf
+    xor     esi, esi
+    mov     rdx, tileinfo
+    mov     rcx, desc
+    mov     r8, entries
+    mov     r9d, 2
+    call    er_av1_tile_group_encode
+    test    eax, eax
+    jnz     .fail_obu_group_encode_no_space
+    cmp     edx, ERROR_NO_SPACE
+    jne     .fail_obu_group_encode_no_space
+    inc     qword [rel passed]
+    jmp     .decode
+.fail_obu_group_encode_no_space:
+    inc     qword [rel failed]
+
+.decode:
     mov     rdi, tile
     mov     esi, 3
     mov     rdx, desc

@@ -318,8 +318,52 @@ tsx_nested: db "<App><Title text=",34,"hi",34,"/><Body count={40 + 2}>ok</Body><
 TSX_NESTED_LEN equ $ - tsx_nested
 tsx_boolean_attr: db "<Input disabled value='x' />"
 TSX_BOOLEAN_ATTR_LEN equ $ - tsx_boolean_attr
+tsx_quoted_lt_attr: db "<Input pattern=",34,"<tag attr='x'>",34," />"
+TSX_QUOTED_LT_ATTR_LEN equ $ - tsx_quoted_lt_attr
 tsx_deep: db "<A><B><C><D /></C></B></A>"
 TSX_DEEP_LEN equ $ - tsx_deep
+tsx_fragment: db "<><App /><span data-x='1'>text</span></>"
+TSX_FRAGMENT_LEN equ $ - tsx_fragment
+tsx_member_expr: db "<UI.Card data-id={",34,"a<b",34,"}>{items.map(x => <Row key={x.id} />)}</UI.Card>"
+TSX_MEMBER_EXPR_LEN equ $ - tsx_member_expr
+tsx_spread_attr: db "<Panel {...props} a={/* comment */ `x{y}`} />"
+TSX_SPREAD_ATTR_LEN equ $ - tsx_spread_attr
+tsx_expr_comment_child: db "<App>{/* hidden <Tag /> */}{items // comment",10,"}</App>"
+TSX_EXPR_COMMENT_CHILD_LEN equ $ - tsx_expr_comment_child
+tsx_wrapped: db "  ((<App />));  "
+TSX_WRAPPED_LEN equ $ - tsx_wrapped
+tsx_raw_text: db "<script>if (a < b) { draw(); }</script>"
+TSX_RAW_TEXT_LEN equ $ - tsx_raw_text
+tsx_regex_attr: db "<App matcher={/}/} />"
+TSX_REGEX_ATTR_LEN equ $ - tsx_regex_attr
+tsx_regex_child: db "<App>{/}/.test(x) && <B />}</App>"
+TSX_REGEX_CHILD_LEN equ $ - tsx_regex_child
+tsx_generic_tag: db "<List<Item> items={items} />"
+TSX_GENERIC_TAG_LEN equ $ - tsx_generic_tag
+tsx_nested_generic_tag: db "<Box<Map<Key, Value>> />"
+TSX_NESTED_GENERIC_TAG_LEN equ $ - tsx_nested_generic_tag
+tsx_generic_comment_tag: db "<Box</* > */Item> />"
+TSX_GENERIC_COMMENT_TAG_LEN equ $ - tsx_generic_comment_tag
+tsx_generic_object_tag: db "<Box<Record<string, { value: Item }>> />"
+TSX_GENERIC_OBJECT_TAG_LEN equ $ - tsx_generic_object_tag
+tsx_source_file:
+    db "import x from 'y';",10
+    db "const fake = ",34,"<Nope />",34,";",10
+    db "if (a < B) { value = 1; }",10
+    db "const id = <T,>(value: T) => value;",10
+    db "const cast = <Thing>value;",10
+    db "const rx = /(<Fake \/>|<StillNope>)/g;",10
+    db "const templateFake = `<Nope />`;",10
+    db "const templateExpr = `${<Inline />}`;",10
+    db "const templateNested = `${`inner ${<NestedInline />}`}`;",10
+    db "const view = <App foo=",34,"x",34," />;",10
+    db "function render() { return (<Panel><Child /></Panel>); }",10
+    db "function* g() { yield <Yielded />; }",10
+    db "switch (kind) { case <CaseView />: break; }",10
+    db "async function h() { await <Awaited />; }",10
+    db "function fail() { throw <Thrown />; }",10
+    db "<Statement />;",10
+TSX_SOURCE_FILE_LEN equ $ - tsx_source_file
 tsx_mismatch: db "<App><Body /></Panel>"
 TSX_MISMATCH_LEN equ $ - tsx_mismatch
 tsx_unclosed: db "<App><Body /></App"
@@ -336,7 +380,20 @@ wasm_compile_tsx_valid_cases:
     dq tsx_single, TSX_SINGLE_LEN, 1, 0, 0
     dq tsx_nested, TSX_NESTED_LEN, 3, 2, 1
     dq tsx_boolean_attr, TSX_BOOLEAN_ATTR_LEN, 1, 2, 0
+    dq tsx_quoted_lt_attr, TSX_QUOTED_LT_ATTR_LEN, 1, 1, 0
     dq tsx_deep, TSX_DEEP_LEN, 4, 0, 0
+    dq tsx_fragment, TSX_FRAGMENT_LEN, 3, 1, 1
+    dq tsx_member_expr, TSX_MEMBER_EXPR_LEN, 1, 1, 0
+    dq tsx_spread_attr, TSX_SPREAD_ATTR_LEN, 1, 2, 0
+    dq tsx_expr_comment_child, TSX_EXPR_COMMENT_CHILD_LEN, 1, 0, 0
+    dq tsx_wrapped, TSX_WRAPPED_LEN, 1, 0, 0
+    dq tsx_raw_text, TSX_RAW_TEXT_LEN, 1, 0, 1
+    dq tsx_regex_attr, TSX_REGEX_ATTR_LEN, 1, 1, 0
+    dq tsx_regex_child, TSX_REGEX_CHILD_LEN, 1, 0, 0
+    dq tsx_generic_tag, TSX_GENERIC_TAG_LEN, 1, 1, 0
+    dq tsx_nested_generic_tag, TSX_NESTED_GENERIC_TAG_LEN, 1, 0, 0
+    dq tsx_generic_comment_tag, TSX_GENERIC_COMMENT_TAG_LEN, 1, 0, 0
+    dq tsx_generic_object_tag, TSX_GENERIC_OBJECT_TAG_LEN, 1, 0, 0
 WASM_COMPILE_TSX_VALID_CASE_SIZE equ 40
 wasm_compile_tsx_valid_cases_end:
 WASM_COMPILE_TSX_VALID_CASES equ (wasm_compile_tsx_valid_cases_end - wasm_compile_tsx_valid_cases) / WASM_COMPILE_TSX_VALID_CASE_SIZE
@@ -1121,6 +1178,20 @@ _start:
     cmp     qword [rel tsx_nodes + 104], 1
     jne     .fail
     cmp     qword [rel tsx_nodes + 112], 1
+    jne     .fail
+
+    lea     rdi, [rel tsx_source_file]
+    mov     esi, TSX_SOURCE_FILE_LEN
+    call    er_wasmc_scan_tsx_source
+    test    rdx, rdx
+    jnz     .fail
+    cmp     rax, 9
+    jne     .fail
+    cmp     rcx, 10
+    jne     .fail
+    cmp     r8, 1
+    jne     .fail
+    cmp     r9, 0
     jne     .fail
 
     xor     edi, edi

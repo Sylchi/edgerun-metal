@@ -464,7 +464,7 @@ cmd_test_av1_frame() {
 }
 
 cmd_test_av1_tile() {
-	build_test "test_av1_tile_self" "${TEST_DIR}/test_av1_tile_self.asm" "media/av1_tile"
+	build_test "test_av1_tile_self" "${TEST_DIR}/test_av1_tile_self.asm" "media/av1_bits" "media/av1_tile"
 }
 
 cmd_test_av1_reduced() {

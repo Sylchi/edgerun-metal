@@ -128,6 +128,32 @@ pub const State = struct {
     }
 };
 
+pub fn messageLen(message: []const u8) ?usize {
+    if (message.len < 1) return null;
+    return switch (message[0]) {
+        1 => if (patchLen(message[1..])) |len| 1 + len else null,
+        else => 1,
+    };
+}
+
+fn patchLen(patch: []const u8) ?usize {
+    if (patch.len < 2) return null;
+    const payload = patch[2..];
+    return switch (patch[0]) {
+        8, 48 => blk: {
+            const first = readString(payload, 0) catch return null;
+            const second = readString(payload, first.next) catch return null;
+            break :blk 2 + second.next;
+        },
+        13, 26 => blk: {
+            const value = readString(payload, 0) catch return null;
+            break :blk 2 + value.next;
+        },
+        42 => if (payload.len < 4) null else 6,
+        else => 2,
+    };
+}
+
 pub fn contentHeight(width: f32, state: State) f32 {
     _ = width;
     _ = state;
@@ -139,72 +165,77 @@ pub fn render(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Re
     const pad: f32 = 24.0;
     const gap: f32 = 14.0;
     const content = bounds.insetUniform(pad);
+    const app = component.renderer(scene, collector, .{ .style = style });
 
-    var y = content.y;
-    try renderHero(scene, ui.Rect.init(content.x, y, content.w, 112.0), state, style);
-    y += 112.0 + gap;
+    var page = app.column(content, gap);
+    try renderHero(scene, page.take(112.0), state, style);
 
     const status_h: f32 = 118.0;
     const context_h: f32 = 118.0;
     const half_gap: f32 = 12.0;
     const half_w = (content.w - half_gap) * 0.5;
-    try renderStatusCard(scene, collector, ui.Rect.init(content.x, y, half_w, status_h), state, style);
-    try renderContextCard(scene, ui.Rect.init(content.x + half_w + half_gap, y, half_w, context_h), state, style);
-    y += @max(status_h, context_h) + gap;
+    var summary = app.row(page.take(@max(status_h, context_h)), half_gap);
+    try renderStatusCard(scene, collector, summary.take(half_w), state, style);
+    try renderContextCard(scene, summary.take(half_w), state, style);
 
     const prompt_h: f32 = 96.0;
-    const prompt_rect = ui.Rect.init(content.x, y, content.w - 136.0, prompt_h);
-    const run_rect = ui.Rect.init(prompt_rect.x + prompt_rect.w + 12.0, y + prompt_h - 40.0, 124.0, 40.0);
-    const app = component.renderer(scene, collector, .{ .style = style });
-    try app.interactive(component.textarea(input_hit_id, state.input.slice()), prompt_rect);
+    const prompt_row = page.take(prompt_h);
+    const prompt_rect = ui.Rect.init(prompt_row.x, prompt_row.y, prompt_row.w - 136.0, prompt_h);
+    const run_rect = ui.Rect.init(prompt_rect.x + prompt_rect.w + 12.0, prompt_row.y + prompt_h - 40.0, 124.0, 40.0);
+    try app.textareaPlaceholderAt(prompt_rect, input_hit_id, state.input.slice());
     const run_button = if (state.thinking)
         component.buttonIcon(run_hit_id, state.run_label.slice(), .primary, .send).loading()
     else
         component.buttonIcon(run_hit_id, state.run_label.slice(), .primary, .send);
     try app.interactive(run_button, run_rect);
-    y += prompt_h + gap;
 
     const agent_h: f32 = 306.0;
     const transcript_h: f32 = 306.0;
-    try renderAgents(scene, collector, ui.Rect.init(content.x, y, half_w, agent_h), state, style);
-    try renderTranscript(scene, ui.Rect.init(content.x + half_w + half_gap, y, half_w, transcript_h), state, style);
-    y += @max(agent_h, transcript_h) + gap;
+    var agents = app.row(page.take(@max(agent_h, transcript_h)), half_gap);
+    try renderAgents(scene, collector, agents.take(half_w), state, style);
+    try renderTranscript(scene, agents.take(half_w), state, style);
 
     const tool_h: f32 = 220.0;
-    try renderRows(scene, ui.Rect.init(content.x, y, half_w, tool_h), "Pipeline events", "fixed prompts, handoffs and tool choices", state.tools, style);
-    try renderOutputRows(scene, ui.Rect.init(content.x + half_w + half_gap, y, half_w, tool_h), state, style);
+    var tools = app.row(page.take(tool_h), half_gap);
+    try renderRows(scene, tools.take(half_w), "Pipeline events", "fixed prompts, handoffs and tool choices", state.tools, style);
+    try renderOutputRows(scene, tools.take(half_w), state, style);
 }
 
 fn renderHero(scene: *ui.Scene, bounds: ui.Rect, state: State, style: ui.Style) !void {
     _ = state;
     const app = component.renderer(scene, null, .{ .style = style });
-    try app.draw(component.elevated(
+    try app.elevatedAt(
+        bounds,
         "Owned local agent pipeline",
         "User gives one request. Dispatcher classifies it; Codebase selects context; Architect compresses the plan; Toolsmith chooses tools; Executor makes one focused patch; Reviewer checks it; Summarizer writes durable memory. Fixed prompts keep devstral-20b cache-friendly on 32k context.",
-    ), bounds);
+    );
 }
 
 fn renderStatusCard(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State, style: ui.Style) !void {
     const app = component.renderer(scene, collector, .{ .style = style });
-    try app.draw(component.panel("Runtime", ""), bounds);
+    const body = try app.panelScaffold(bounds, .{
+        .title = "Runtime",
+        .inset = 16.0,
+        .header_gap = 0.0,
+    });
     const badge_label = if (state.thinking) "pipeline" else if (state.connected) "ready" else "offline";
     const badge_variant: component.BadgeVariant = if (state.thinking) .default else if (state.connected) .secondary else .outline;
-    try app.draw(component.badge(badge_label, badge_variant), ui.Rect.init(bounds.x + 16.0, bounds.y + 42.0, 112.0, 24.0));
+    try app.badgeAt(ui.Rect.init(body.x, body.y, 112.0, 24.0), badge_label, badge_variant);
     if (state.thinking) {
-        try app.body(ui.Rect.init(bounds.x + 140.0, bounds.y + 44.0, bounds.w - 156.0, 18.0), state.status.slice());
-        try app.draw(component.progress(state.progress), ui.Rect.init(bounds.x + 16.0, bounds.y + 68.0, bounds.w - 32.0, 12.0));
+        try app.body(ui.Rect.init(body.x + 124.0, body.y + 2.0, @max(1.0, body.w - 124.0), 18.0), state.status.slice());
+        try app.progressAt(ui.Rect.init(body.x, body.y + 26.0, body.w, 12.0), state.progress);
         return;
     }
     if (state.connected) {
-        try app.body(ui.Rect.init(bounds.x + 140.0, bounds.y + 44.0, bounds.w - 156.0, 18.0), state.status.slice());
-        try app.draw(component.progress(state.progress), ui.Rect.init(bounds.x + 16.0, bounds.y + 68.0, bounds.w - 32.0, 12.0));
+        try app.body(ui.Rect.init(body.x + 124.0, body.y + 2.0, @max(1.0, body.w - 124.0), 18.0), state.status.slice());
+        try app.progressAt(ui.Rect.init(body.x, body.y + 26.0, body.w, 12.0), state.progress);
         return;
     }
     const host_notice = if (state.host_launch_requested) host_launch_requested_notice else host_not_connected_notice;
-    try app.body(ui.Rect.init(bounds.x + 16.0, bounds.y + 44.0, bounds.w - 32.0, 18.0), host_notice);
-    try app.body(ui.Rect.init(bounds.x + 16.0, bounds.y + 64.0, bounds.w - 32.0, 18.0), state.host_url);
-    const launch_rect = ui.Rect.init(bounds.x + 16.0, bounds.y + 84.0, bounds.w - 32.0, 22.0);
-    try app.interactive(component.buttonIcon(open_host_binary_button_id, "Open host API", .secondary, .network), launch_rect);
+    try app.body(ui.Rect.init(body.x, body.y + 2.0, body.w, 18.0), host_notice);
+    try app.body(ui.Rect.init(body.x, body.y + 22.0, body.w, 18.0), state.host_url);
+    const launch_rect = ui.Rect.init(body.x, body.y + 42.0, body.w, 22.0);
+    try app.buttonIconAt(launch_rect, open_host_binary_button_id, "Open host API", .secondary, .network);
 }
 
 fn renderContextCard(scene: *ui.Scene, bounds: ui.Rect, state: State, style: ui.Style) !void {
@@ -212,58 +243,80 @@ fn renderContextCard(scene: *ui.Scene, bounds: ui.Rect, state: State, style: ui.
     var detail_buf: [128]u8 = undefined;
     const total = pipelineContextUsed(state);
     const detail = std.fmt.bufPrint(&detail_buf, "{d} / {d} tokens across {d} fixed-role prompts", .{ total, context_window_tokens, state.agents.len }) catch "32k context budget";
-    try app.draw(component.panel("32k context budget", detail), bounds);
-    try app.draw(component.progress(math.clampF(@as(f32, @floatFromInt(total)) / @as(f32, @floatFromInt(context_window_tokens)), 0.0, 1.0)), ui.Rect.init(bounds.x + 16.0, bounds.y + 68.0, bounds.w - 32.0, 12.0));
+    const body = try app.panelScaffold(bounds, .{
+        .title = "32k context budget",
+        .detail = detail,
+        .inset = 16.0,
+        .header_gap = 10.0,
+    });
+    try app.progressAt(ui.Rect.init(body.x, body.y, body.w, 12.0), math.clampF(@as(f32, @floatFromInt(total)) / @as(f32, @floatFromInt(context_window_tokens)), 0.0, 1.0));
 }
 
 fn renderAgents(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State, style: ui.Style) !void {
     const app = component.renderer(scene, collector, .{ .style = style });
-    try app.draw(component.panel("Expert pipeline", "automatic role chain"), bounds);
-    var y = bounds.y + 58.0;
+    const body = try app.panelScaffold(bounds, .{
+        .title = "Expert pipeline",
+        .detail = "automatic role chain",
+        .inset = 8.0,
+        .header_gap = 8.0,
+    });
+    var list = app.column(body, 2.0);
     for (state.agents, 0..) |agent, index| {
         var detail_buf: [176]u8 = undefined;
         const detail = std.fmt.bufPrint(&detail_buf, "{s} · {s} · {d} tokens", .{ agent.role, agent.model, agent.context_used }) catch agent.role;
-        try app.interactiveWithControl(component.rowItem(agent_row_id_base + @as(u32, @intCast(index)), agent.name, detail), ui.Rect.init(bounds.x + 8.0, y, bounds.w - 16.0, 34.0), .{ .active = agent.active });
-        y += 36.0;
+        const row = list.takeIfFits(34.0) orelse break;
+        try app.selectableRowText(row, agent_row_id_base + @as(u32, @intCast(index)), agent.name, detail, agent.active);
     }
 }
 
 fn renderTranscript(scene: *ui.Scene, bounds: ui.Rect, state: State, style: ui.Style) !void {
     const app = component.renderer(scene, null, .{ .style = style });
-    try app.draw(component.elevated("Result", state.assistant.slice()), bounds);
+    try app.elevatedAt(bounds, "Result", state.assistant.slice());
 }
 
 fn renderRows(scene: *ui.Scene, bounds: ui.Rect, title: []const u8, detail: []const u8, rows: RowList, style: ui.Style) !void {
     const app = component.renderer(scene, null, .{ .style = style });
-    try app.draw(component.panel(title, detail), bounds);
-    var list = app.column(ui.Rect.init(bounds.x + 8.0, bounds.y + 58.0, bounds.w - 16.0, @max(1.0, bounds.h - 66.0)), 4.0);
-    if (rows.len == 0) {
-        try app.draw(component.empty("No events yet", "waiting for pipeline stream"), list.remaining());
-        return;
+    var items: [max_rows]component.PanelListItem = undefined;
+    for (rows.items[0..rows.len], 0..) |row, index| {
+        items[index] = .{ .title = row.title.slice(), .detail = row.detail.slice() };
     }
-    for (rows.items[0..rows.len]) |row| {
-        try app.draw(component.rowItem(0, row.title.slice(), row.detail.slice()), list.take(42.0));
-    }
+    try app.panelList(bounds, .{
+        .title = title,
+        .detail = detail,
+        .inset = 8.0,
+        .header_gap = 8.0,
+        .items = items[0..rows.len],
+        .empty_title = "No events yet",
+        .empty_detail = "waiting for pipeline stream",
+    });
 }
 
 fn renderOutputRows(scene: *ui.Scene, bounds: ui.Rect, state: State, style: ui.Style) !void {
     const app = component.renderer(scene, null, .{ .style = style });
-    try app.draw(component.panel("Output", "stdout, stderr and diff preview"), bounds);
-    var list = app.column(ui.Rect.init(bounds.x + 8.0, bounds.y + 58.0, bounds.w - 16.0, @max(1.0, bounds.h - 66.0)), 4.0);
-    var rendered = false;
-    rendered = try renderRowGroup(app, &list, state.stdout_rows, rendered);
-    rendered = try renderRowGroup(app, &list, state.stderr_rows, rendered);
-    rendered = try renderRowGroup(app, &list, state.diff_rows, rendered);
-    if (!rendered) try app.draw(component.empty("No output yet", "tool output will appear here"), list.remaining());
+    var items: [max_rows * 3]component.PanelListItem = undefined;
+    var len: usize = 0;
+    len = appendRows(&items, len, state.stdout_rows);
+    len = appendRows(&items, len, state.stderr_rows);
+    len = appendRows(&items, len, state.diff_rows);
+    try app.panelList(bounds, .{
+        .title = "Output",
+        .detail = "stdout, stderr and diff preview",
+        .inset = 8.0,
+        .header_gap = 8.0,
+        .items = items[0..len],
+        .empty_title = "No output yet",
+        .empty_detail = "tool output will appear here",
+    });
 }
 
-fn renderRowGroup(app: component.View, list: *component.StackCursor, rows: RowList, rendered: bool) !bool {
-    var any = rendered;
+fn appendRows(items: []component.PanelListItem, offset: usize, rows: RowList) usize {
+    var next = offset;
     for (rows.items[0..rows.len]) |row| {
-        try app.draw(component.rowItem(0, row.title.slice(), row.detail.slice()), list.take(42.0));
-        any = true;
+        if (next >= items.len) break;
+        items[next] = .{ .title = row.title.slice(), .detail = row.detail.slice() };
+        next += 1;
     }
-    return any;
+    return next;
 }
 
 fn pipelineContextUsed(state: State) u32 {
@@ -332,6 +385,12 @@ test "agent state applies existing ui_stream patch bytes" {
     try std.testing.expectEqualStrings("ready", state.status.slice());
     try state.applyMessage(&.{ 1, 8, assistant_component_id, 9, 'a', 's', 's', 'i', 's', 't', 'a', 'n', 't', 2, 'o', 'k' });
     try std.testing.expectEqualStrings("ok", state.assistant.slice());
+}
+
+test "agent stream reports complete patch lengths" {
+    try std.testing.expectEqual(@as(?usize, 9), messageLen(&.{ 1, 13, status_component_id, 5, 'r', 'e', 'a', 'd', 'y' }));
+    try std.testing.expectEqual(@as(?usize, null), messageLen(&.{ 1, 13, status_component_id, 5, 'r', 'e' }));
+    try std.testing.expectEqual(@as(?usize, 16), messageLen(&.{ 1, 8, assistant_component_id, 9, 'a', 's', 's', 'i', 's', 't', 'a', 'n', 't', 2, 'o', 'k' }));
 }
 
 test "agent render composes native components" {

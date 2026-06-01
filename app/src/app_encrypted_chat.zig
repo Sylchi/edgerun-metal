@@ -30,15 +30,6 @@ const Chat = encrypted_chat.ChatState(max_contacts, max_messages);
 
 pub const ThemeMode = enum { dark, light };
 
-const workspace_rail_w: f32 = 48.0;
-const workspace_sidebar_w: f32 = 260.0;
-const workspace_top_h: f32 = 56.0;
-const workspace_status_h: f32 = 24.0;
-const workspace_rail_bg = ui.Color{ .r = 37, .g = 37, .b = 38 };
-const workspace_sidebar_bg = ui.Color{ .r = 24, .g = 24, .b = 24 };
-const workspace_main_bg = ui.Color{ .r = 10, .g = 12, .b = 16 };
-const workspace_status_bg = ui.Color{ .r = 0, .g = 122, .b = 204 };
-
 pub const State = struct {
     chat: Chat,
     selected_index: usize = 0,
@@ -126,103 +117,105 @@ pub const State = struct {
     fn renderWorkspace(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
         const app = component.renderer(scene, collector, options);
         try app.fill(bounds, design.Palette.bg, 0.0);
-        const rail = ui.Rect.init(bounds.x, bounds.y, workspace_rail_w, @max(1.0, bounds.h - workspace_status_h));
-        const top = ui.Rect.init(rail.x + rail.w, bounds.y, @max(1.0, bounds.w - rail.w), workspace_top_h);
-        const sidebar = ui.Rect.init(rail.x + rail.w, bounds.y + workspace_top_h, workspace_sidebar_w, @max(1.0, bounds.h - workspace_top_h - workspace_status_h));
-        const main = ui.Rect.init(sidebar.x + sidebar.w, bounds.y + workspace_top_h, @max(1.0, bounds.w - rail.w - sidebar.w), @max(1.0, bounds.h - workspace_top_h - workspace_status_h));
-        const status = ui.Rect.init(bounds.x, bounds.y + bounds.h - workspace_status_h, bounds.w, workspace_status_h);
-        try renderRail(self, scene, collector, rail, options);
-        try renderTop(self, scene, top, options);
-        try self.renderContacts(scene, collector, sidebar, options);
-        try self.renderConversation(scene, collector, main, options);
-        try renderStatus(self, scene, status);
+        const shell = app.workspaceShell(bounds, .{});
+        try renderRail(self, app, shell.rail);
+        try renderTop(self, app, shell.top);
+        try self.renderContacts(app, shell.sidebar);
+        try self.renderConversation(app, shell.main);
+        try renderStatus(self, app, shell.status);
     }
 
     fn renderStacked(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
+        const app = component.renderer(scene, collector, options);
         const contacts_h = @min(250.0, @max(190.0, bounds.h * 0.34));
-        try self.renderContacts(scene, collector, ui.Rect.init(bounds.x, bounds.y, bounds.w, contacts_h), options);
-        try self.renderConversation(scene, collector, ui.Rect.init(bounds.x, bounds.y + contacts_h, bounds.w, @max(1.0, bounds.h - contacts_h)), options);
+        try self.renderContacts(app, ui.Rect.init(bounds.x, bounds.y, bounds.w, contacts_h));
+        try self.renderConversation(app, ui.Rect.init(bounds.x, bounds.y + contacts_h, bounds.w, @max(1.0, bounds.h - contacts_h)));
     }
 
-    fn renderContacts(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
+    fn renderContacts(self: *State, app: component.View, bounds: ui.Rect) !void {
         const inner = bounds.insetUniform(16.0);
-        const app = component.renderer(scene, collector, options);
-        try app.fill(bounds, workspace_sidebar_bg, 0.0);
+        try app.fill(bounds, design.workspace_sidebar_bg, 0.0);
         try app.fill(ui.Rect.init(bounds.x + bounds.w - 1.0, bounds.y, 1.0, bounds.h), design.Palette.border, 0.0);
         try app.title(ui.Rect.init(inner.x, inner.y + 2.0, inner.w, 16.0), "EDGERUN");
         try app.muted(ui.Rect.init(inner.x, inner.y + 24.0, inner.w, 14.0), "chat");
 
         const icon_y = inner.y + 54.0;
-        try app.renderIconButtonNamed(ui.Rect.init(inner.x, icon_y, 34.0, 34.0), create_route_button_id, "Create route", .link_plus, .outline);
-        try app.renderIconButtonNamed(ui.Rect.init(inner.x + 42.0, icon_y, 34.0, 34.0), import_button_id, "Import", .download, .outline);
-        try app.renderIconButtonNamed(ui.Rect.init(inner.x + 84.0, icon_y, 34.0, 34.0), seal_button_id, if (self.sealed) "Unseal" else "Seal", if (self.sealed) .lock_open else .lock, .outline);
-        try app.renderIconButtonNamed(ui.Rect.init(inner.x + 126.0, icon_y, 34.0, 34.0), theme_button_id, "Theme", .moon, .outline);
+        const actions = self.actionButtons();
+        try app.actionToolbar(ui.Rect.init(inner.x, icon_y, inner.w, 34.0), .{
+            .specs = &actions,
+            .button_w = 34.0,
+            .gap = 8.0,
+        });
 
         if (self.own_route_len != 0) {
-            try app.interactive(component.subtle("my onion route", self.ownRouteBytes()), ui.Rect.init(inner.x, inner.y + 92.0, inner.w, 44.0));
+            try app.subtleAt(ui.Rect.init(inner.x, inner.y + 92.0, inner.w, 44.0), "my onion route", self.ownRouteBytes());
         }
 
-        var y = inner.y + 150.0;
+        var rows = app.column(ui.Rect.init(inner.x, inner.y + 150.0, inner.w, @max(1.0, inner.y + inner.h - (inner.y + 150.0))), 4.0);
         if (self.chat.contact_count == 0) {
-            try app.draw(component.empty("No contacts", "Import a route to begin."), ui.Rect.init(inner.x, y, inner.w, @min(150.0, @max(96.0, inner.y + inner.h - y))));
+            try app.emptyAt(rows.take(@min(150.0, @max(96.0, rows.remaining().h))), "No contacts", "Import a route to begin.");
             return;
         }
         var index: usize = 0;
-        while (index < self.chat.contact_count and y + 64.0 <= inner.y + inner.h) : (index += 1) {
+        while (index < self.chat.contact_count and rows.remaining().h >= 64.0) : (index += 1) {
             const contact = &self.chat.contacts[index];
-            const row = ui.Rect.init(inner.x, y, inner.w, 64.0);
+            const row = rows.take(64.0);
             const detail = std.fmt.bufPrint(&self.route_buf, "{s}", .{contact.contactRouteBytes()}) catch contact.contactRouteBytes();
             try app.selectableRow(row, contact_row_base_id + @as(u32, @intCast(index)), contact.nameBytes(), detail, .message_2, index == self.selected_index);
-            y += 68.0;
         }
     }
 
-    fn renderConversation(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
-        const app = component.renderer(scene, null, options);
-        try app.fill(bounds, workspace_main_bg, 0.0);
+    fn renderConversation(self: *State, app: component.View, bounds: ui.Rect) !void {
+        try app.fill(bounds, design.workspace_main_bg, 0.0);
         const selected = self.selectedContact() orelse {
-            try app.draw(component.empty("No contact", "Import a route to begin."), bounds.insetUniform(18.0));
+            try app.emptyAt(bounds.insetUniform(18.0), "No contact", "Import a route to begin.");
             return;
         };
-        const active_app = component.renderer(scene, collector, options);
 
         const import_y = bounds.y + 18.0;
         if (bounds.h >= 620.0) {
-            try active_app.renderTextareaValue(ui.Rect.init(bounds.x + 18.0, import_y, bounds.w - 36.0, 40.0), import_textarea_id, "", self.import_preview);
+            try app.textareaAt(ui.Rect.init(bounds.x + 18.0, import_y, bounds.w - 36.0, 40.0), import_textarea_id, "", self.import_preview);
         }
 
         const compose_h: f32 = 74.0;
         const compose_y = bounds.y + bounds.h - compose_h;
         const list_y = if (bounds.h >= 620.0) import_y + 58.0 else bounds.y + 18.0;
-        try self.renderMessages(scene, ui.Rect.init(bounds.x, list_y, bounds.w, @max(1.0, compose_y - list_y)), selected.id, options);
+        try self.renderMessages(app, ui.Rect.init(bounds.x, list_y, bounds.w, @max(1.0, compose_y - list_y)), selected.id);
 
         try app.line(ui.Rect.init(bounds.x, compose_y, bounds.w, 1.0));
         const tool_y = compose_y + 18.0;
-        try active_app.renderIconButtonNamed(ui.Rect.init(bounds.x + 18.0, tool_y, 34.0, 38.0), image_button_id, "Image", .photo, .outline);
-        try active_app.renderIconButtonNamed(ui.Rect.init(bounds.x + 58.0, tool_y, 34.0, 38.0), video_button_id, "Video", .video, .outline);
-        try active_app.renderIconButtonNamed(ui.Rect.init(bounds.x + 98.0, tool_y, 34.0, 38.0), emoji_button_id, "Emoji", .mood_smile, .outline);
-        try active_app.renderTextareaValue(ui.Rect.init(bounds.x + 144.0, compose_y + 15.0, @max(1.0, bounds.w - 230.0), 44.0), compose_textarea_id, "", self.compose);
-        try active_app.renderIconButtonNamed(ui.Rect.init(bounds.x + bounds.w - 68.0, compose_y + 18.0, 44.0, 38.0), send_button_id, "Send", .send, .outline);
+        try app.actionToolbar(ui.Rect.init(bounds.x + 18.0, tool_y, 120.0, 38.0), .{
+            .specs = &.{
+            .{ .id = image_button_id, .label = "Image", .icon = .photo },
+            .{ .id = video_button_id, .label = "Video", .icon = .video },
+            .{ .id = emoji_button_id, .label = "Emoji", .icon = .mood_smile },
+            },
+            .button_w = 34.0,
+            .gap = 6.0,
+        });
+        try app.textareaAt(ui.Rect.init(bounds.x + 144.0, compose_y + 15.0, @max(1.0, bounds.w - 230.0), 44.0), compose_textarea_id, "", self.compose);
+        try app.iconButtonAt(ui.Rect.init(bounds.x + bounds.w - 68.0, compose_y + 18.0, 44.0, 38.0), send_button_id, "Send", .send, .outline);
 
         const msg_text = std.fmt.bufPrint(&self.message_count_buf, "{d} messages", .{self.visibleMessageCount(selected.id)}) catch "messages";
         try app.muted(ui.Rect.init(bounds.x + 18.0, bounds.y + bounds.h - 18.0, 160.0, 14.0), msg_text);
     }
 
-    fn renderMessages(self: *State, scene: *ui.Scene, bounds: ui.Rect, contact_id: identity.Id, options: RenderOptions) !void {
-        const app = component.renderer(scene, null, options);
-        try app.fill(bounds, workspace_main_bg, 0.0);
-        var y = bounds.y + 12.0;
+    fn renderMessages(self: *State, app: component.View, bounds: ui.Rect, contact_id: identity.Id) !void {
+        try app.fill(bounds, design.workspace_main_bg, 0.0);
+        var rows = app.column(bounds.insetLtrb(0.0, 12.0, 0.0, 0.0), 8.0);
         var index: usize = 0;
-        while (index < self.chat.message_count and y + 44.0 <= bounds.y + bounds.h) : (index += 1) {
+        while (index < self.chat.message_count and rows.remaining().h >= 44.0) : (index += 1) {
             const message = &self.chat.messages[index];
             if (!message.contact_id.eql(contact_id)) continue;
             const outbound = message.direction == .outbound;
             const media_h: f32 = if (message.media_kind == .none) 0.0 else 78.0;
             const bubble_h: f32 = 42.0 + media_h;
+            if (rows.remaining().h < bubble_h) break;
             const min_bubble_w: f32 = if (message.media_kind == .none) 86.0 else 220.0;
             const bubble_w = @min(bounds.w * 0.68, @max(min_bubble_w, @as(f32, @floatFromInt(message.body_len)) * 7.2 + 30.0));
             const x = if (outbound) bounds.x + bounds.w - bubble_w - 24.0 else bounds.x + 24.0;
-            const bubble = ui.Rect.init(x, y, bubble_w, bubble_h);
+            const slot = rows.take(bubble_h);
+            const bubble = ui.Rect.init(x, slot.y, bubble_w, bubble_h);
             const media_label = switch (message.media_kind) {
                 .image => "image",
                 .video => "video",
@@ -240,7 +233,6 @@ pub const State = struct {
                 .media_detail = if (message.media_kind == .none) "" else message.mediaRefBytes(),
                 .media_icon = media_icon,
             });
-            y += bubble_h + 8.0;
         }
     }
 
@@ -332,42 +324,50 @@ pub const State = struct {
     fn currentStyle(self: *const State) ui.Style {
         return if (self.theme_mode == .dark) design.appStyle() else messengerLightStyle();
     }
+
+    fn actionButtons(self: *const State) [4]component.IconButtonSpec {
+        return .{
+            .{ .id = create_route_button_id, .label = "Create route", .icon = .link_plus },
+            .{ .id = import_button_id, .label = "Import", .icon = .download },
+            .{ .id = seal_button_id, .label = if (self.sealed) "Unseal" else "Seal", .icon = if (self.sealed) .lock_open else .lock },
+            .{ .id = theme_button_id, .label = "Theme", .icon = .moon },
+        };
+    }
 };
 
-fn renderRail(self: *State, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, options: RenderOptions) !void {
-    const app = component.renderer(scene, collector, options);
-    try app.fill(bounds, workspace_rail_bg, 0.0);
-    const route_rect = ui.Rect.init(bounds.x + 6.0, bounds.y + 12.0, bounds.w - 12.0, 36.0);
-    const import_rect = ui.Rect.init(bounds.x + 6.0, bounds.y + 56.0, bounds.w - 12.0, 36.0);
-    const seal_rect = ui.Rect.init(bounds.x + 6.0, bounds.y + 100.0, bounds.w - 12.0, 36.0);
-    const theme_rect = ui.Rect.init(bounds.x + 6.0, bounds.y + 144.0, bounds.w - 12.0, 36.0);
-    try app.renderIconButtonNamed(route_rect, create_route_button_id, "Create route", .link_plus, .outline);
-    try app.renderIconButtonNamed(import_rect, import_button_id, "Import", .download, .outline);
-    try app.renderIconButtonNamed(seal_rect, seal_button_id, if (self.sealed) "Unseal" else "Seal", if (self.sealed) .lock_open else .lock, .outline);
-    try app.renderIconButtonNamed(theme_rect, theme_button_id, "Theme", .moon, .outline);
+fn renderRail(self: *State, app: component.View, bounds: ui.Rect) !void {
+    try app.fill(bounds, design.workspace_rail_bg, 0.0);
+    const actions = self.actionButtons();
+    try app.actionToolbar(ui.Rect.init(bounds.x + 6.0, bounds.y + 12.0, bounds.w - 12.0, @max(1.0, bounds.h - 12.0)), .{
+        .specs = &actions,
+        .direction = .column,
+        .button_h = 36.0,
+        .gap = 8.0,
+    });
 }
 
-fn renderTop(self: *State, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) !void {
+fn renderTop(self: *State, app: component.View, bounds: ui.Rect) !void {
     const selected = self.selectedContact();
-    const app = component.renderer(scene, null, options);
-    try app.fill(bounds, workspace_sidebar_bg, 0.0);
-    try app.line(ui.Rect.init(bounds.x, bounds.y + bounds.h - 1.0, bounds.w, 1.0));
     const title = if (selected) |contact| contact.nameBytes() else "Chat";
-    try app.title(ui.Rect.init(bounds.x + 16.0, bounds.y + 13.0, bounds.w - 260.0, 18.0), title);
-    try app.text(ui.Rect.init(bounds.x + 16.0, bounds.y + 34.0, bounds.w - 260.0, 14.0), self.status, design.Palette.dim);
+    var remote_buf: []const u8 = "";
+    var local_buf: []const u8 = "";
     if (selected) |contact| {
-        const remote = std.fmt.bufPrint(&self.remote_buf, "remote {s}", .{contact.routeBytes()}) catch contact.routeBytes();
-        const local = std.fmt.bufPrint(&self.route_buf, "local {s}", .{contact.contactRouteBytes()}) catch contact.contactRouteBytes();
-        try app.muted(ui.Rect.init(bounds.x + bounds.w - 230.0, bounds.y + 13.0, 210.0, 14.0), remote);
-        try app.muted(ui.Rect.init(bounds.x + bounds.w - 230.0, bounds.y + 32.0, 210.0, 14.0), local);
+        remote_buf = std.fmt.bufPrint(&self.remote_buf, "remote {s}", .{contact.routeBytes()}) catch contact.routeBytes();
+        local_buf = std.fmt.bufPrint(&self.route_buf, "local {s}", .{contact.contactRouteBytes()}) catch contact.contactRouteBytes();
     }
+    try app.workspaceTopBar(bounds, .{
+        .title = title,
+        .detail = self.status,
+        .trailing_top = remote_buf,
+        .trailing_bottom = local_buf,
+        .fill = design.workspace_sidebar_bg,
+        .detail_color = design.Palette.dim,
+    });
 }
 
-fn renderStatus(self: *State, scene: *ui.Scene, bounds: ui.Rect) !void {
-    const app = component.renderer(scene, null, .{});
-    try app.fill(bounds, workspace_status_bg, 0.0);
+fn renderStatus(self: *State, app: component.View, bounds: ui.Rect) !void {
     const text = if (self.sealed) "chat: sealed" else "chat: active";
-    try app.text(ui.Rect.init(bounds.x + 12.0, bounds.y + 5.0, bounds.w - 24.0, 14.0), text, ui.Color{ .r = 255, .g = 255, .b = 255 });
+    try app.workspaceStatusBar(bounds, .{ .text = text, .fill = design.workspace_status_bg });
 }
 
 fn messengerDarkStyle() ui.Style {

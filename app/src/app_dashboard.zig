@@ -3,6 +3,7 @@ const codec = @import("ui/codec.zig");
 const dashboard = @import("ui/dashboard.zig");
 const device_tree = @import("ui/device_tree.zig");
 const ui = @import("ui/core.zig");
+const component = @import("ui/components/Component.zig");
 
 const Error = dashboard.Error || error{ IfstatusFailed, CodecReadFailed };
 
@@ -25,7 +26,8 @@ pub const State = struct {
 
     pub fn render(self: *State, scene: *ui.Scene, bounds: ui.Rect, style: ui.Style) Error!void {
         if (!self.tree_valid) {
-            try scene.pushText(bounds, "ifstatus unavailable", style.muted);
+            const app = component.renderer(scene, null, .{ .style = style });
+            try app.muted(bounds, "ifstatus unavailable");
             return;
         }
         try self.device_tree.render(scene, bounds, style);

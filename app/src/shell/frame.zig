@@ -8,17 +8,6 @@ const app_location = @import("../location.zig");
 const design = @import("../ui/theme.zig");
 const ui = @import("../ui/core.zig");
 const component = @import("../ui/components/Component.zig");
-const workspace_rail_w: f32 = 48.0;
-const workspace_sidebar_w: f32 = 260.0;
-const workspace_top_h: f32 = 56.0;
-const workspace_status_h: f32 = 24.0;
-const workspace_rail_pad: f32 = 12.0;
-const workspace_icon_button: f32 = 36.0;
-const workspace_content_pad: f32 = 24.0;
-const workspace_rail_bg = ui.Color{ .r = 37, .g = 37, .b = 38 };
-const workspace_sidebar_bg = ui.Color{ .r = 24, .g = 24, .b = 24 };
-const workspace_main_bg = ui.Color{ .r = 10, .g = 12, .b = 16 };
-const workspace_status_bg = ui.Color{ .r = 0, .g = 122, .b = 204 };
 
 pub const State = struct {
     location: app_location.Location = .{},
@@ -51,33 +40,27 @@ pub fn contentHeight(width: f32, state: State) f32 {
 fn renderWorkspace(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
     const app = component.renderer(scene, collector, .{ .style = design.appStyle() });
     try app.fill(bounds, design.Palette.bg, 0.0);
-    const rail = ui.Rect.init(bounds.x, bounds.y, workspace_rail_w, @max(1.0, bounds.h - workspace_status_h));
-    const top = ui.Rect.init(rail.x + rail.w, bounds.y, @max(1.0, bounds.w - rail.w), workspace_top_h);
-    const sidebar = ui.Rect.init(rail.x + rail.w, bounds.y + workspace_top_h, workspace_sidebar_w, @max(1.0, bounds.h - workspace_top_h - workspace_status_h));
-    const main = ui.Rect.init(sidebar.x + sidebar.w, bounds.y + workspace_top_h, @max(1.0, bounds.w - rail.w - sidebar.w), @max(1.0, bounds.h - workspace_top_h - workspace_status_h));
-    const status = ui.Rect.init(bounds.x, bounds.y + bounds.h - workspace_status_h, bounds.w, workspace_status_h);
-    try renderWorkspaceRail(scene, collector, rail, state.location);
-    try renderWorkspaceTop(scene, collector, top, state);
-    try renderWorkspaceSidebar(scene, collector, sidebar, state);
-    try renderWorkspaceMain(scene, collector, main, state);
-    try renderWorkspaceStatus(scene, status, state);
+    const shell = app.workspaceShell(bounds, .{});
+    try renderWorkspaceRail(app, scene, collector, shell.rail, state.location);
+    try renderWorkspaceTop(app, shell.top, state);
+    try renderWorkspaceSidebar(app, scene, collector, shell.sidebar, state);
+    try renderWorkspaceMain(app, scene, collector, shell.main, state);
+    try renderWorkspaceStatus(app, shell.status, state);
 }
 
-fn renderWorkspaceTop(scene: *ui.Scene, _collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
-    _ = _collector;
-    const app = component.renderer(scene, null, .{ .style = design.appStyle() });
-    try app.fill(bounds, workspace_sidebar_bg, 0.0);
-    try app.line(ui.Rect.init(bounds.x, bounds.y + bounds.h - 1.0, bounds.w, 1.0));
-    try app.body(ui.Rect.init(bounds.x + 16.0, bounds.y + 18.0, bounds.w - 32.0, 16.0), statusText(state.location));
+fn renderWorkspaceTop(app: component.View, bounds: ui.Rect, state: State) !void {
+    try app.workspaceTopBar(bounds, .{
+        .title = statusText(state.location),
+        .fill = design.workspace_sidebar_bg,
+    });
 }
 
-fn renderWorkspaceRail(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, active: app_location.Location) !void {
-    const app = component.renderer(scene, collector, .{ .style = design.appStyle() });
-    try app.fill(bounds, workspace_rail_bg, 0.0);
+fn renderWorkspaceRail(app: component.View, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, active: app_location.Location) !void {
+    try app.fill(bounds, design.workspace_rail_bg, 0.0);
     const items = app_location.topLevelWorkspaceBindings();
-    var rail = app.column(ui.Rect.init(bounds.x + 6.0, bounds.y + workspace_rail_pad, bounds.w - 12.0, @max(1.0, bounds.h - workspace_rail_pad)), 8.0);
+    var rail = app.column(ui.Rect.init(bounds.x + 6.0, bounds.y + design.workspace_rail_pad, bounds.w - 12.0, @max(1.0, bounds.h - design.workspace_rail_pad)), 8.0);
     for (items) |item| {
-        const item_bounds = rail.take(workspace_icon_button);
+        const item_bounds = rail.take(design.workspace_icon_button);
         try app_chrome.renderNavItem(scene, collector, .{
             .kind = .workspace_rail,
             .binding = item,
@@ -88,9 +71,8 @@ fn renderWorkspaceRail(scene: *ui.Scene, collector: *interaction.Collector, boun
     }
 }
 
-fn renderWorkspaceSidebar(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
-    const app = component.renderer(scene, collector, .{ .style = design.appStyle() });
-    try app.fill(bounds, workspace_sidebar_bg, 0.0);
+fn renderWorkspaceSidebar(app: component.View, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, state: State) !void {
+    try app.fill(bounds, design.workspace_sidebar_bg, 0.0);
     try app.fill(ui.Rect.init(bounds.x + bounds.w - 1.0, bounds.y, 1.0, bounds.h), design.Palette.border, 0.0);
     try app.title(ui.Rect.init(bounds.x + 16.0, bounds.y + 14.0, bounds.w - 32.0, 16.0), "EDGERUN");
     try app.muted(ui.Rect.init(bounds.x + 16.0, bounds.y + 36.0, bounds.w - 32.0, 14.0), "preview");
@@ -107,19 +89,16 @@ fn renderWorkspaceSidebar(scene: *ui.Scene, collector: *interaction.Collector, b
     }
 }
 
-fn renderWorkspaceMain(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, _: State) !void {
-    const app = component.renderer(scene, collector, .{ .style = design.appStyle() });
-    try app.fill(bounds, workspace_main_bg, 0.0);
+fn renderWorkspaceMain(app: component.View, scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, _: State) !void {
+    try app.fill(bounds, design.workspace_main_bg, 0.0);
     if (try scene.pushClip(bounds)) {
         defer scene.popClip();
         try app_agent.render(scene, collector, shiftedPageBounds(bounds), .{});
     }
 }
 
-fn renderWorkspaceStatus(scene: *ui.Scene, bounds: ui.Rect, state: State) !void {
-    const app = component.renderer(scene, null, .{ .style = design.appStyle() });
-    try app.fill(bounds, workspace_status_bg, 0.0);
-    try app.text(ui.Rect.init(bounds.x + 12.0, bounds.y + 5.0, bounds.w - 24.0, 14.0), statusText(state.location), ui.Color{ .r = 255, .g = 255, .b = 255 });
+fn renderWorkspaceStatus(app: component.View, bounds: ui.Rect, state: State) !void {
+    try app.workspaceStatusBar(bounds, .{ .text = statusText(state.location), .fill = design.workspace_status_bg });
 }
 
 fn shiftedPageBounds(bounds: ui.Rect) ui.Rect {

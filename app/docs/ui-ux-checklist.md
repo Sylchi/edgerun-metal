@@ -25,6 +25,7 @@ This checklist tracks the large UI/UX work items for the current Zig UI path. Ea
 - [x] Canonical IconButton component.
 - [x] Button and input size variants.
 - [x] Shared component chrome helpers.
+- [ ] Semantic UI model for intent-driven views.
 - [ ] Real application shell component.
 - [ ] Deterministic animation states.
 - [ ] Blog learning progress UX.

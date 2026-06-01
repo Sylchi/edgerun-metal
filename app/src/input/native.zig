@@ -71,6 +71,14 @@ pub fn activateHovered(state: *State) void {
         state.agent.status.set(app_agent.host_launch_requested_notice);
         return;
     }
+    if (hover_hit_id == app_agent.run_hit_id) {
+        state.agent.connected = true;
+        state.agent.thinking = true;
+        state.agent.progress = 0.05;
+        state.agent.status.set("waiting for ui_stream from host");
+        state.agent.run_label.set("Running");
+        return;
+    }
     if (app_location.actionFromHit(hover_hit_id)) |action| switch (action) {
         .reveal_identity => {
             state.public_identity_ready = true;
@@ -135,6 +143,18 @@ test "native input requests host launch from open-host action" {
     try std.testing.expect(state.agent.host_launch_requested);
     try std.testing.expect(!state.agent.connected);
     try std.testing.expect(state.agent.status.len > 0);
+}
+
+test "native input starts agent stream from run action" {
+    var state = State{};
+    state.runtime.hovered = .{ .kind = .button, .id = app_agent.run_hit_id, .bounds = ui.Rect.init(0, 0, 1, 1) };
+
+    activateHovered(&state);
+
+    try std.testing.expect(state.agent.connected);
+    try std.testing.expect(state.agent.thinking);
+    try std.testing.expectEqual(@as(f32, 0.05), state.agent.progress);
+    try std.testing.expectEqualStrings("Running", state.agent.run_label.slice());
 }
 
 test "native input pointer path uses shared runtime activation" {

@@ -6,6 +6,7 @@
 %include "test/test_macros.inc"
 
 extern er_av1_obu_type_valid
+extern er_av1_metadata_type_valid
 extern er_av1_leb128_decode
 extern er_av1_leb128_encode
 extern er_av1_obu_decode_header
@@ -13,13 +14,18 @@ extern er_av1_obu_encode_header
 extern er_av1_obu_decode_unit
 extern er_av1_obu_encode_prefix
 extern er_av1_obu_encode_temporal_delimiter
+extern er_av1_metadata_decode
+extern er_av1_padding_decode
+extern er_av1_obu_encode_metadata
+extern er_av1_obu_encode_padding
 
 SECTION .bss
 passed: resq 1
 failed: resq 1
 desc:   resb AV1_OBU_DESC_SIZE
+metadata_desc: resb AV1_METADATA_DESC_SIZE
 value:  resq 1
-outbuf: resb 16
+outbuf: resb 32
 
 SECTION .data
 seq_header:     db 0x0a
@@ -41,6 +47,11 @@ obu_unsized:    db 0x08, 0xaa, 0xbb
 obu_ext_sized:  db 0x36, 0x68, 0x02, 0xaa, 0xbb
 obu_trunc_size: db 0x0a, 0x80
 obu_trunc_body: db 0x0a, 0x03, 0xaa
+metadata_cll:   db 0x01, 0x01, 0x02, 0x03, 0x04
+metadata_cll_short: db 0x01, 0x01, 0x02, 0x03
+metadata_payload: db 0x01, 0x02, 0x03, 0x04
+padding_good:   db 0x00, 0x00, 0x00
+padding_bad:    db 0x00, 0x01, 0x00
 
 SECTION .text
 global _start
@@ -576,8 +587,201 @@ _start:
 	cmp     edx, ERROR_NO_SPACE
 	jne     .fail_obu_encode_temporal_delimiter_no_space
 	inc     qword [rel passed]
-	jmp     .done
+	jmp     .metadata_type_valid
 .fail_obu_encode_temporal_delimiter_no_space:
+	inc     qword [rel failed]
+
+.metadata_type_valid:
+	mov     edi, AV1_METADATA_TYPE_HDR_CLL
+	call    er_av1_metadata_type_valid
+	cmp     eax, 1
+	jne     .fail_metadata_type_valid
+	test    edx, edx
+	jnz     .fail_metadata_type_valid
+	inc     qword [rel passed]
+	jmp     .metadata_type_invalid
+.fail_metadata_type_valid:
+	inc     qword [rel failed]
+
+.metadata_type_invalid:
+	mov     edi, 6
+	call    er_av1_metadata_type_valid
+	test    eax, eax
+	jnz     .fail_metadata_type_invalid
+	test    edx, edx
+	jnz     .fail_metadata_type_invalid
+	inc     qword [rel passed]
+	jmp     .metadata_decode_cll
+.fail_metadata_type_invalid:
+	inc     qword [rel failed]
+
+.metadata_decode_cll:
+	mov     rdi, metadata_cll
+	mov     esi, 5
+	mov     rdx, metadata_desc
+	call    er_av1_metadata_decode
+	cmp     eax, 5
+	jne     .fail_metadata_decode_cll
+	test    edx, edx
+	jnz     .fail_metadata_decode_cll
+	cmp     dword [rel metadata_desc + AV1_METADATA_DESC_TYPE], AV1_METADATA_TYPE_HDR_CLL
+	jne     .fail_metadata_decode_cll
+	cmp     dword [rel metadata_desc + AV1_METADATA_DESC_PAYLOAD_OFFSET], 1
+	jne     .fail_metadata_decode_cll
+	cmp     dword [rel metadata_desc + AV1_METADATA_DESC_PAYLOAD_LEN], AV1_METADATA_HDR_CLL_LEN
+	jne     .fail_metadata_decode_cll
+	inc     qword [rel passed]
+	jmp     .metadata_decode_cll_short
+.fail_metadata_decode_cll:
+	inc     qword [rel failed]
+
+.metadata_decode_cll_short:
+	mov     rdi, metadata_cll_short
+	mov     esi, 4
+	mov     rdx, metadata_desc
+	call    er_av1_metadata_decode
+	test    eax, eax
+	jnz     .fail_metadata_decode_cll_short
+	cmp     edx, ERROR_CORRUPT
+	jne     .fail_metadata_decode_cll_short
+	inc     qword [rel passed]
+	jmp     .metadata_encode_cll
+.fail_metadata_decode_cll_short:
+	inc     qword [rel failed]
+
+.metadata_encode_cll:
+	mov     rdi, outbuf
+	mov     esi, 32
+	mov     edx, AV1_METADATA_TYPE_HDR_CLL
+	mov     rcx, metadata_payload
+	mov     r8d, AV1_METADATA_HDR_CLL_LEN
+	call    er_av1_obu_encode_metadata
+	cmp     eax, 7
+	jne     .fail_metadata_encode_cll
+	test    edx, edx
+	jnz     .fail_metadata_encode_cll
+	cmp     byte [rel outbuf], 0x2a
+	jne     .fail_metadata_encode_cll
+	cmp     byte [rel outbuf + 1], 0x05
+	jne     .fail_metadata_encode_cll
+	cmp     byte [rel outbuf + 2], AV1_METADATA_TYPE_HDR_CLL
+	jne     .fail_metadata_encode_cll
+	cmp     byte [rel outbuf + 6], 0x04
+	jne     .fail_metadata_encode_cll
+	mov     rdi, outbuf
+	mov     esi, 7
+	mov     rdx, desc
+	call    er_av1_obu_decode_unit
+	cmp     eax, 7
+	jne     .fail_metadata_encode_cll
+	test    edx, edx
+	jnz     .fail_metadata_encode_cll
+	mov     eax, [rel desc + AV1_OBU_DESC_PAYLOAD_OFFSET]
+	lea     rdi, [rel outbuf + rax]
+	mov     esi, [rel desc + AV1_OBU_DESC_PAYLOAD_LEN]
+	mov     rdx, metadata_desc
+	call    er_av1_metadata_decode
+	cmp     eax, 5
+	jne     .fail_metadata_encode_cll
+	test    edx, edx
+	jnz     .fail_metadata_encode_cll
+	inc     qword [rel passed]
+	jmp     .metadata_encode_no_space
+.fail_metadata_encode_cll:
+	inc     qword [rel failed]
+
+.metadata_encode_no_space:
+	mov     rdi, outbuf
+	mov     esi, 6
+	mov     edx, AV1_METADATA_TYPE_HDR_CLL
+	mov     rcx, metadata_payload
+	mov     r8d, AV1_METADATA_HDR_CLL_LEN
+	call    er_av1_obu_encode_metadata
+	test    eax, eax
+	jnz     .fail_metadata_encode_no_space
+	cmp     edx, ERROR_NO_SPACE
+	jne     .fail_metadata_encode_no_space
+	inc     qword [rel passed]
+	jmp     .padding_decode
+.fail_metadata_encode_no_space:
+	inc     qword [rel failed]
+
+.padding_decode:
+	mov     rdi, padding_good
+	mov     esi, 3
+	call    er_av1_padding_decode
+	cmp     eax, 3
+	jne     .fail_padding_decode
+	test    edx, edx
+	jnz     .fail_padding_decode
+	inc     qword [rel passed]
+	jmp     .padding_decode_bad
+.fail_padding_decode:
+	inc     qword [rel failed]
+
+.padding_decode_bad:
+	mov     rdi, padding_bad
+	mov     esi, 3
+	call    er_av1_padding_decode
+	test    eax, eax
+	jnz     .fail_padding_decode_bad
+	cmp     edx, ERROR_CORRUPT
+	jne     .fail_padding_decode_bad
+	inc     qword [rel passed]
+	jmp     .padding_encode
+.fail_padding_decode_bad:
+	inc     qword [rel failed]
+
+.padding_encode:
+	mov     rdi, outbuf
+	mov     esi, 32
+	mov     edx, 3
+	call    er_av1_obu_encode_padding
+	cmp     eax, 5
+	jne     .fail_padding_encode
+	test    edx, edx
+	jnz     .fail_padding_encode
+	cmp     byte [rel outbuf], 0x7a
+	jne     .fail_padding_encode
+	cmp     byte [rel outbuf + 1], 0x03
+	jne     .fail_padding_encode
+	cmp     byte [rel outbuf + 2], 0x00
+	jne     .fail_padding_encode
+	cmp     byte [rel outbuf + 4], 0x00
+	jne     .fail_padding_encode
+	mov     rdi, outbuf
+	mov     esi, 5
+	mov     rdx, desc
+	call    er_av1_obu_decode_unit
+	cmp     eax, 5
+	jne     .fail_padding_encode
+	test    edx, edx
+	jnz     .fail_padding_encode
+	mov     eax, [rel desc + AV1_OBU_DESC_PAYLOAD_OFFSET]
+	lea     rdi, [rel outbuf + rax]
+	mov     esi, [rel desc + AV1_OBU_DESC_PAYLOAD_LEN]
+	call    er_av1_padding_decode
+	cmp     eax, 3
+	jne     .fail_padding_encode
+	test    edx, edx
+	jnz     .fail_padding_encode
+	inc     qword [rel passed]
+	jmp     .padding_encode_no_space
+.fail_padding_encode:
+	inc     qword [rel failed]
+
+.padding_encode_no_space:
+	mov     rdi, outbuf
+	mov     esi, 4
+	mov     edx, 3
+	call    er_av1_obu_encode_padding
+	test    eax, eax
+	jnz     .fail_padding_encode_no_space
+	cmp     edx, ERROR_NO_SPACE
+	jne     .fail_padding_encode_no_space
+	inc     qword [rel passed]
+	jmp     .done
+.fail_padding_encode_no_space:
 	inc     qword [rel failed]
 
 .done:

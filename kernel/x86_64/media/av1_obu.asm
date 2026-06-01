@@ -23,6 +23,22 @@ er_fn er_av1_obu_type_valid
     er_ok
     er_ret
 
+; er_av1_metadata_type_valid(type) -> eax=1 valid, eax=0 invalid
+; rdi=type
+er_fn er_av1_metadata_type_valid
+    cmp     edi, AV1_METADATA_TYPE_MAX
+    ja      .invalid
+    mov     eax, AV1_METADATA_VALID_TYPE_MASK
+    bt      eax, edi
+    setc    al
+    movzx   eax, al
+    er_ok
+    er_ret
+.invalid:
+    xor     eax, eax
+    er_ok
+    er_ret
+
 ; er_av1_leb128_decode(buf, len, value_out) -> eax=bytes_read, rdx=error
 ; rdi=buf, esi=len, rdx=value_out(qword)
 er_fn er_av1_leb128_decode
@@ -278,6 +294,107 @@ er_fn er_av1_obu_decode_unit
     er_pop  rbx, r12, r13, r14, r15
     er_ret
 
+; er_av1_metadata_decode(payload, len, desc)
+; Decodes metadata_type and records metadata body offset/length relative to payload.
+; rdi=payload, esi=len, rdx=desc. Returns eax=bytes_consumed, rdx=error.
+er_fn er_av1_metadata_decode
+    er_push rbx, r12, r13, r14
+    er_stack_alloc 8
+    test    rdi, rdi
+    jz      .invalid_param
+    test    rdx, rdx
+    jz      .invalid_param
+    test    esi, esi
+    jz      .no_data
+    mov     r12, rdi
+    mov     r13d, esi
+    mov     r14, rdx
+    mov     rdx, rsp
+    call    er_av1_leb128_decode
+    test    edx, edx
+    jnz     .done
+    mov     ebx, eax
+    mov     rax, [rsp]
+    cmp     rax, AV1_METADATA_TYPE_MAX
+    ja      .unsupported
+    mov     edi, eax
+    call    er_av1_metadata_type_valid
+    test    eax, eax
+    jz      .unsupported
+    mov     eax, [rsp]
+    mov     [r14 + AV1_METADATA_DESC_TYPE], eax
+    mov     [r14 + AV1_METADATA_DESC_PAYLOAD_OFFSET], ebx
+    mov     eax, r13d
+    sub     eax, ebx
+    mov     [r14 + AV1_METADATA_DESC_PAYLOAD_LEN], eax
+    mov     ecx, [r14 + AV1_METADATA_DESC_TYPE]
+    cmp     ecx, AV1_METADATA_TYPE_HDR_CLL
+    je      .check_hdr_cll
+    cmp     ecx, AV1_METADATA_TYPE_HDR_MDCV
+    je      .check_hdr_mdcv
+    mov     eax, r13d
+    er_ok
+    jmp     .done
+.check_hdr_cll:
+    cmp     eax, AV1_METADATA_HDR_CLL_LEN
+    jne     .corrupt
+    mov     eax, r13d
+    er_ok
+    jmp     .done
+.check_hdr_mdcv:
+    cmp     eax, AV1_METADATA_HDR_MDCV_LEN
+    jne     .corrupt
+    mov     eax, r13d
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done
+.no_data:
+    xor     eax, eax
+    er_err  ERROR_NO_DATA
+    jmp     .done
+.unsupported:
+    xor     eax, eax
+    er_err  ERROR_UNSUPPORTED
+    jmp     .done
+.corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+.done:
+    er_stack_free 8
+    er_pop  rbx, r12, r13, r14
+    er_ret
+
+; er_av1_padding_decode(payload, len)
+; Validates a padding payload. All padding bytes must be zero.
+; rdi=payload, esi=len. Returns eax=bytes_consumed, rdx=error.
+er_fn er_av1_padding_decode
+    test    esi, esi
+    jz      .ok
+    test    rdi, rdi
+    jz      .invalid_param
+    xor     ecx, ecx
+.loop:
+    cmp     byte [rdi + rcx], AV1_PADDING_BYTE
+    jne     .corrupt
+    inc     ecx
+    cmp     ecx, esi
+    jb      .loop
+.ok:
+    mov     eax, esi
+    er_ok
+    er_ret
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    er_ret
+.corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+    er_ret
+
 ; er_av1_obu_encode_prefix(out, cap, type, payload_len, temporal_id, spatial_id)
 ; -> eax=prefix_len, rdx=error. Always writes obu_has_size_field=1.
 ; rdi=out, esi=cap, edx=type, ecx=payload_len, r8d=temporal_id, r9d=spatial_id
@@ -320,6 +437,142 @@ er_fn er_av1_obu_encode_temporal_delimiter
 	xor     r9d, r9d
 	call    er_av1_obu_encode_prefix
 	er_ret
+
+; er_av1_obu_encode_padding(out, cap, padding_len)
+; -> eax=bytes_written, rdx=error. Emits a sized PADDING OBU with zero bytes.
+; rdi=out, esi=cap, edx=padding_len
+er_fn er_av1_obu_encode_padding
+    er_push rbx, r12, r13
+    test    rdi, rdi
+    jz      .invalid_param
+    mov     r12, rdi
+    mov     r13d, esi
+    mov     ebx, edx
+    mov     edx, AV1_OBU_TYPE_PADDING
+    mov     ecx, ebx
+    xor     r8d, r8d
+    xor     r9d, r9d
+    call    er_av1_obu_encode_prefix
+    test    edx, edx
+    jnz     .done
+    mov     r11d, eax
+    add     eax, ebx
+    jc      .no_space
+    cmp     eax, r13d
+    ja      .no_space
+    lea     rdi, [r12 + r11]
+    mov     ecx, ebx
+    call    zero_bytes
+    mov     eax, r11d
+    add     eax, ebx
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done
+.no_space:
+    xor     eax, eax
+    er_err  ERROR_NO_SPACE
+.done:
+    er_pop  rbx, r12, r13
+    er_ret
+
+; er_av1_obu_encode_metadata(out, cap, metadata_type, payload, payload_len)
+; -> eax=bytes_written, rdx=error. Emits a sized METADATA OBU.
+; rdi=out, esi=cap, edx=metadata_type, rcx=payload, r8d=payload_len
+er_fn er_av1_obu_encode_metadata
+    er_push rbx, r12, r13, r14, r15
+    er_stack_alloc 16
+    test    rdi, rdi
+    jz      .invalid_param
+    test    r8d, r8d
+    jz      .payload_checked
+    test    rcx, rcx
+    jz      .invalid_param
+.payload_checked:
+    mov     r12, rdi
+    mov     r13d, esi
+    mov     r14, rcx
+    mov     r15d, r8d
+    mov     [rsp + 8], edx
+    mov     edi, edx
+    call    er_av1_metadata_type_valid
+    test    eax, eax
+    jz      .unsupported
+    mov     edx, [rsp + 8]
+    cmp     edx, AV1_METADATA_TYPE_HDR_CLL
+    je      .check_hdr_cll
+    cmp     edx, AV1_METADATA_TYPE_HDR_MDCV
+    je      .check_hdr_mdcv
+    jmp     .encode_type
+.check_hdr_cll:
+    cmp     r15d, AV1_METADATA_HDR_CLL_LEN
+    jne     .corrupt
+    jmp     .encode_type
+.check_hdr_mdcv:
+    cmp     r15d, AV1_METADATA_HDR_MDCV_LEN
+    jne     .corrupt
+.encode_type:
+    mov     rdi, rsp
+    mov     esi, 8
+    mov     edx, [rsp + 8]
+    call    er_av1_leb128_encode
+    test    edx, edx
+    jnz     .done
+    mov     ebx, eax
+    mov     ecx, ebx
+    add     ecx, r15d
+    jc      .no_space
+    mov     rdi, r12
+    mov     esi, r13d
+    mov     edx, AV1_OBU_TYPE_METADATA
+    xor     r8d, r8d
+    xor     r9d, r9d
+    call    er_av1_obu_encode_prefix
+    test    edx, edx
+    jnz     .done
+    mov     r11d, eax
+    mov     eax, r11d
+    add     eax, ebx
+    jc      .no_space
+    add     eax, r15d
+    jc      .no_space
+    cmp     eax, r13d
+    ja      .no_space
+    mov     ecx, ebx
+    mov     rsi, rsp
+    lea     rdi, [r12 + r11]
+    call    copy_bytes
+    lea     rdi, [r12 + r11]
+    add     rdi, rbx
+    mov     rsi, r14
+    mov     ecx, r15d
+    call    copy_bytes
+    mov     eax, r11d
+    add     eax, ebx
+    add     eax, r15d
+    er_ok
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done
+.unsupported:
+    xor     eax, eax
+    er_err  ERROR_UNSUPPORTED
+    jmp     .done
+.no_space:
+    xor     eax, eax
+    er_err  ERROR_NO_SPACE
+    jmp     .done
+.corrupt:
+    xor     eax, eax
+    er_err  ERROR_CORRUPT
+.done:
+    er_stack_free 16
+    er_pop  rbx, r12, r13, r14, r15
+    er_ret
 
 ; er_av1_obu_encode_header(out, cap, type, has_size, temporal_id, spatial_id)
 ; -> eax=header_len, rdx=error
@@ -392,3 +645,27 @@ er_fn er_av1_obu_encode_header
 .done:
     er_pop  rbx, r12, r13
     er_ret
+
+copy_bytes:
+    test    ecx, ecx
+    jz      .done
+.loop:
+    mov     al, [rsi]
+    mov     [rdi], al
+    inc     rsi
+    inc     rdi
+    dec     ecx
+    jnz     .loop
+.done:
+    ret
+
+zero_bytes:
+    test    ecx, ecx
+    jz      .done
+.loop:
+    mov     byte [rdi], AV1_PADDING_BYTE
+    inc     rdi
+    dec     ecx
+    jnz     .loop
+.done:
+    ret

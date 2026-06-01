@@ -484,17 +484,18 @@ fn galleryBodyHeight(width: f32, columns: usize, gap: f32, selected_index: ?usiz
 
 fn renderCatalogSection(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, columns: usize, gap: f32, selected_index: ?usize) GalleryError!void {
     const app = component_union.renderer(scene, null, .{ .style = componentStyle() });
-    var cursor_y = bounds.y;
+    var stack = app.column(bounds, 0.0);
     if (selectedComponent(selected_index)) |entry| {
         const selected_h = selectedComponentHeight(bounds.w);
-        try renderSelectedComponent(scene, collector, ui.Rect.init(bounds.x, cursor_y, bounds.w, selected_h), entry, selected_index.?);
-        cursor_y += selected_h + selected_component_gap;
+        try renderSelectedComponent(scene, collector, stack.take(selected_h), entry, selected_index.?);
+        stack.skip(selected_component_gap);
     }
 
-    try clippedText(app, ui.Rect.init(bounds.x, cursor_y, bounds.w, 22), "Component Catalog", palette.text);
-    try clippedWrappedText(app, ui.Rect.init(bounds.x, cursor_y + 32, bounds.w, 42), "Every public component starts here. Cards, previews, and opened component pages use the shared component system used by web host, CPU, and GPU hosts.", palette.muted, 18, 9.4, 2);
+    const intro = stack.take(catalog_intro_h);
+    try clippedText(app, ui.Rect.init(intro.x, intro.y, intro.w, 22), "Component Catalog", palette.text);
+    try clippedWrappedText(app, ui.Rect.init(intro.x, intro.y + 32, intro.w, 42), "Every public component starts here. Cards, previews, and opened component pages use the shared component system used by web host, CPU, and GPU hosts.", palette.muted, 18, 9.4, 2);
 
-    const grid = app.grid(ui.Rect.init(bounds.x, cursor_y + catalog_intro_h, bounds.w, @max(1.0, bounds.h - catalog_intro_h)), columns, gap, catalog_card_h);
+    const grid = app.grid(stack.remaining(), columns, gap, catalog_card_h);
     for (component_catalog, 0..) |entry, index| {
         const card_bounds = grid.item(index);
         const card_id = first_catalog_card_id + @as(u32, @intCast(index));
@@ -542,7 +543,7 @@ fn renderSelectedComponent(scene: *ui.Scene, collector: *interaction.Collector, 
         .style = componentStyle(),
         .control = .{ .active = true },
     });
-    try app.draw(component_union.elevated("", ""), bounds);
+    try app.elevatedAt(bounds, "", "");
 
     const inset = bounds.insetUniform(18);
     try catalogSource(scene, sourceBadgeBounds(inset, true), true);
@@ -569,15 +570,16 @@ fn renderOpenedComponentRenderings(scene: *ui.Scene, collector: *interaction.Col
     var render_style = componentStyle();
     render_style.panel = palette.code_bg;
     const app = component_union.renderer(scene, null, .{ .style = render_style });
-    try app.draw(component_union.panel("Rendered component", entry.name), bounds);
+    try app.panelAt(bounds, "Rendered component", entry.name);
 
     const inner = ui.Rect.init(bounds.x + card_content_x, bounds.y + 72, bounds.w - card_content_x * 2, bounds.h - 92);
     if (inner.w < 360.0) {
         const main_h = @min(112.0, inner.h * 0.45);
         const second_h = @min(88.0, inner.h * 0.32);
-        try previewSlot(scene, collector, ui.Rect.init(inner.x, inner.y, inner.w, main_h), "default", entry, id);
-        try previewSlot(scene, collector, ui.Rect.init(inner.x, inner.y + main_h + 14.0, inner.w, second_h), "compact", entry, id + 1);
-        try previewSlot(scene, collector, ui.Rect.init(inner.x, inner.y + main_h + second_h + 28.0, inner.w, second_h), "small", entry, id + 2);
+        var stack = app.column(inner, 14.0);
+        try previewSlot(scene, collector, stack.take(main_h), "default", entry, id);
+        try previewSlot(scene, collector, stack.take(second_h), "compact", entry, id + 1);
+        try previewSlot(scene, collector, stack.take(second_h), "small", entry, id + 2);
     } else {
         const split = app.splitLeft(inner, inner.w * 0.58, 14.0);
         try previewSlot(scene, collector, split.first, "default", entry, id);
@@ -589,7 +591,7 @@ fn renderOpenedComponentRenderings(scene: *ui.Scene, collector: *interaction.Col
 
 fn previewSlot(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, label: []const u8, entry: ComponentSpec, id: u32) GalleryError!void {
     const app = component_union.renderer(scene, null, .{ .style = componentStyle() });
-    try app.draw(component_union.subtle(label, ""), bounds);
+    try app.subtleAt(bounds, label, "");
     try renderReferencePreview(scene, collector, bounds.insetLtrb(12.0, 32.0, 12.0, 12.0), entry, id);
 }
 
@@ -597,26 +599,29 @@ fn renderComponentApi(scene: *ui.Scene, bounds: ui.Rect, entry: ComponentSpec) G
     var api_style = componentStyle();
     api_style.panel = palette.code_bg;
     const app = component_union.renderer(scene, null, .{ .style = api_style });
-    try app.draw(component_union.panel("API", ""), bounds);
+    try app.panelAt(bounds, "API", "");
     const content_w = @max(1.0, bounds.w - card_content_x * 2);
-    var cursor_y = bounds.y + 50;
-    cursor_y = try renderApiField(scene, ui.Rect.init(bounds.x + card_content_x, cursor_y, content_w, bounds.h - 50), "component path", entry.component_path);
-    cursor_y = try renderApiField(scene, ui.Rect.init(bounds.x + card_content_x, cursor_y + 12, content_w, bounds.h - cursor_y), "source component", entry.source_component);
-    _ = try renderApiField(scene, ui.Rect.init(bounds.x + card_content_x, cursor_y + 12, content_w, bounds.h - cursor_y), "builder", entry.edge_builder);
+    var fields = app.column(ui.Rect.init(bounds.x + card_content_x, bounds.y + 50, content_w, @max(1.0, bounds.h - 50)), 12.0);
+    try renderApiField(scene, fields.take(apiFieldHeight(content_w, entry.component_path)), "component path", entry.component_path);
+    try renderApiField(scene, fields.take(apiFieldHeight(content_w, entry.source_component)), "source component", entry.source_component);
+    try renderApiField(scene, fields.take(apiFieldHeight(content_w, entry.edge_builder)), "builder", entry.edge_builder);
 }
 
-fn renderApiField(scene: *ui.Scene, bounds: ui.Rect, label_value: []const u8, value: []const u8) GalleryError!f32 {
+fn apiFieldHeight(width: f32, value: []const u8) f32 {
+    return 20.0 + app_layout.wrappedTextHeightWith(value, width, api_value_line_h, api_value_max_lines, api_value_avg_w);
+}
+
+fn renderApiField(scene: *ui.Scene, bounds: ui.Rect, label_value: []const u8, value: []const u8) GalleryError!void {
     const app = component_union.renderer(scene, null, .{ .style = componentStyle() });
     try clippedText(app, ui.Rect.init(bounds.x, bounds.y, bounds.w, api_label_h), label_value, palette.muted);
     const value_h = app_layout.wrappedTextHeightWith(value, bounds.w, api_value_line_h, api_value_max_lines, api_value_avg_w);
     try clippedWrappedText(app, ui.Rect.init(bounds.x, bounds.y + 20, bounds.w, value_h), value, palette.text, api_value_line_h, api_value_avg_w, api_value_max_lines);
-    return bounds.y + 20 + value_h;
 }
 
 fn renderComponentContract(scene: *ui.Scene, bounds: ui.Rect, entry: ComponentSpec) GalleryError!void {
     const app = component_union.renderer(scene, null, .{ .style = componentStyle() });
-    try app.draw(component_union.subtle("Contract", "Render through `Component.render`, collect hits through `Component.collectInteractions`, and keep backend concerns out of component code."), bounds);
-    try app.draw(component_union.badge(entry.category.label(), .outline), contractBadgeBounds(bounds, entry.category.label()));
+    try app.subtleAt(bounds, "Contract", "Render through `Component.render`, collect hits through `Component.collectInteractions`, and keep backend concerns out of component code.");
+    try app.badgeAt(contractBadgeBounds(bounds, entry.category.label()), entry.category.label(), .outline);
 }
 
 fn renderCatalogCard(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, entry: ComponentSpec, card_id: u32, preview_id: u32, selected: bool) GalleryError!void {
@@ -628,7 +633,7 @@ fn renderCatalogCard(scene: *ui.Scene, collector: *interaction.Collector, bounds
         .style = componentStyle(),
         .control = .{ .active = selected, .hovered = is_hovered },
     });
-    try app.interactive(component_union.selectableCard(card_id, entry.name, entry.category.label(), if (is_hovered or selected) .elevated else .panel), bounds);
+    try app.selectableSurfaceAt(bounds, card_id, entry.name, entry.category.label(), if (is_hovered or selected) .elevated else .panel);
 
     const inset = bounds.insetUniform(catalog_card_pad);
     const source_bounds = sourceBadgeBounds(inset, selected);
@@ -640,7 +645,7 @@ fn renderCatalogCard(scene: *ui.Scene, collector: *interaction.Collector, bounds
 
 fn catalogSource(scene: *ui.Scene, bounds: ui.Rect, selected: bool) GalleryError!void {
     const app = component_union.renderer(scene, null, .{ .style = componentStyle() });
-    try app.draw(component_union.badge(if (selected) "selected" else "EdgeRun", if (selected) .default else .outline), bounds);
+    try app.badgeAt(bounds, if (selected) "selected" else "EdgeRun", if (selected) .default else .outline);
 }
 
 fn sourceBadgeBounds(inset: ui.Rect, selected: bool) ui.Rect {
@@ -822,14 +827,16 @@ fn galleryEpoch() clock.Stamp {
 }
 
 fn renderBadgeVariants(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect) GalleryError!void {
-    var cursor = ui.LinearCursor.init(bounds, .row, 6);
+    const app = component_union.renderer(scene, null, .{ .style = componentStyle() });
+    var cursor = app.row(bounds, 6);
     try renderComponentPreview(scene, collector, cursor.take(64), .{ .badge = .{ .label = "Default" } });
     try renderComponentPreview(scene, collector, cursor.take(72), .{ .badge = .{ .label = "Outline", .variant = .outline } });
     try renderComponentPreview(scene, collector, cursor.take(44), .{ .badge = .{ .label = "Link", .variant = .link } });
 }
 
 fn renderButtonVariants(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, id: u32) GalleryError!void {
-    var cursor = ui.LinearCursor.init(bounds, .row, 6);
+    const app = component_union.renderer(scene, null, .{ .style = componentStyle() });
+    var cursor = app.row(bounds, 6);
     try renderComponentPreview(scene, collector, cursor.take(70), .{ .button = .{ .id = id, .label = "Default" } });
     try renderComponentPreview(scene, collector, cursor.take(76), .{ .button = .{ .id = id + 1, .label = "Second", .variant = .secondary } });
     try renderComponentPreview(scene, collector, cursor.take(54), .{ .button = .{ .id = id + 2, .label = "Link", .variant = .link } });

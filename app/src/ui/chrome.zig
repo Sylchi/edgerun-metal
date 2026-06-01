@@ -84,12 +84,13 @@ pub fn renderActionItem(scene: *ui.Scene, collector: *interaction.Collector, pro
         .withStyle(design.appStyle())
         .withControl(control)
         .withControlSize(props.control_size orelse .default);
-    try app.interactive(component_union.button(
+    try app.buttonSlotAt(
+        props.bounds,
         props.id,
         props.label,
         props.variant orelse activeVariant(props.active, .secondary, .outline),
         props.icon_slot orelse .none,
-    ), props.bounds);
+    );
 }
 
 pub fn renderRouteItem(scene: *ui.Scene, collector: *interaction.Collector, props: RouteNavProps) (ui.RenderError || interaction.Error)!void {
@@ -140,20 +141,14 @@ pub fn renderHeader(scene: *ui.Scene, collector: *interaction.Collector, bounds:
     try app.fill(bounds, palette.bg, 0.0);
     try app.line(ui.Rect.init(bounds.x, bounds.y + bounds.h - 1.0, bounds.w, 1.0));
 
-    try app.interactive(
-        component_union.button(logo_binding.id, "EdgeRun", .ghost, component_union.IconSlot.named(.leading, .terminal)),
-        ui.Rect.init(content.x, bounds.y + 13.0, 148.0, 36.0),
-    );
+    try app.buttonIconAt(ui.Rect.init(content.x, bounds.y + 13.0, 148.0, 36.0), logo_binding.id, "EdgeRun", .ghost, .terminal);
 }
 
 fn renderCompactHeader(scene: *ui.Scene, collector: *interaction.Collector, bounds: ui.Rect, content: ui.Rect, _: ActiveNav) (ui.RenderError || interaction.Error)!void {
     const logo_binding = app_location.subNavBinding(.logo);
     const app = component_union.renderer(scene, collector, .{ .style = design.appStyle() });
 
-    try app.interactive(
-        component_union.button(logo_binding.id, "EdgeRun", .ghost, component_union.IconSlot.named(.leading, .terminal)),
-        ui.Rect.init(content.x, bounds.y + 13.0, 118.0, 36.0),
-    );
+    try app.buttonIconAt(ui.Rect.init(content.x, bounds.y + 13.0, 118.0, 36.0), logo_binding.id, "EdgeRun", .ghost, .terminal);
 }
 
 pub fn renderNavItem(scene: *ui.Scene, collector: *interaction.Collector, props: NavProps) (ui.RenderError || interaction.Error)!void {
@@ -162,22 +157,22 @@ pub fn renderNavItem(scene: *ui.Scene, collector: *interaction.Collector, props:
         .top_text => {
             const variant = props.variant orelse activeVariant(props.active, .secondary, .ghost);
             const label = props.label orelse props.binding.row_title;
-            try app.interactive(component_union.button(props.binding.id, label, variant, props.icon_slot orelse .none), props.bounds);
+            try app.buttonSlotAt(props.bounds, props.binding.id, label, variant, props.icon_slot orelse .none);
         },
         .top_icon => {
             const variant = props.variant orelse activeVariant(props.active, .secondary, .ghost);
             const label = props.label orelse props.binding.icon.label;
             const icon = props.icon orelse props.binding.icon;
-            try app.interactive(component_union.iconButton(props.binding.id, label, icon, variant), props.bounds);
+            try app.iconButtonValueAt(props.bounds, props.binding.id, label, icon, variant);
         },
         .workspace_rail => {
             const icon = props.icon orelse props.binding.icon;
             const variant = props.variant orelse activeVariant(props.active, .secondary, .ghost);
-            try app.interactive(component_union.iconButton(props.binding.id, props.binding.rail_label, icon, variant), props.bounds);
+            try app.iconButtonValueAt(props.bounds, props.binding.id, props.binding.rail_label, icon, variant);
         },
         .workspace_sidebar => {
             const title = props.label orelse props.binding.row_title;
-            try app.interactiveWithControl(component_union.rowItem(props.binding.id, title, props.binding.row_detail), props.bounds, .{ .active = props.active });
+            try app.selectableRowText(props.bounds, props.binding.id, title, props.binding.row_detail, props.active);
         },
     }
 }

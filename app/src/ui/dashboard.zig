@@ -1,6 +1,7 @@
 const std = @import("std");
 const bytes = @import("../bytes.zig");
 const ui = @import("core.zig");
+const component = @import("components/Component.zig");
 const device_tree = @import("device_tree.zig");
 const ui_stream = @import("codec.zig");
 
@@ -10,25 +11,23 @@ pub const Dashboard = struct {
     devices: []device_tree.DeviceTree,
 
     pub fn render(self: *Dashboard, scene: *ui.Scene, bounds: ui.Rect, style: ui.Style) Error!void {
-        var cursor = ui.LinearCursor.init(bounds, .column, device_gap);
+        const app = component.renderer(scene, null, .{ .style = style });
+        var cursor = app.column(bounds, device_gap);
         for (self.devices) |*device| {
             const header_h: f32 = device_header_height;
             const panel_bounds = cursor.take(header_h + device_preferred_height);
             if (!panel_bounds.usable()) break;
 
-            // Draw device panel background
-            try scene.pushRect(panel_bounds, style.panel, .fill, panel_radius, 0.0);
+            try app.fill(panel_bounds, style.panel, panel_radius);
 
-            // Draw device name header
             const header_rect = ui.Rect.init(
                 panel_bounds.x + panel_inset,
                 panel_bounds.y + panel_inset,
                 panel_bounds.w - panel_inset * 2,
                 header_h - panel_inset,
             );
-            try scene.pushText(header_rect, device.name, style.accent);
+            try app.text(header_rect, device.name, style.accent);
 
-            // Draw device content
             const content_bounds = ui.Rect.init(
                 panel_bounds.x + panel_inset,
                 panel_bounds.y + header_h,
