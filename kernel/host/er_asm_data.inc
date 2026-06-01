@@ -156,12 +156,24 @@ tok_out: db "out"
 tok_out_len equ $ - tok_out
 tok_crc32: db "crc32"
 tok_crc32_len equ $ - tok_crc32
+tok_cdq: db "cdq"
+tok_cdq_len equ $ - tok_cdq
+tok_cqo: db "cqo"
+tok_cqo_len equ $ - tok_cqo
+tok_bsr: db "bsr"
+tok_bsr_len equ $ - tok_bsr
+tok_bsf: db "bsf"
+tok_bsf_len equ $ - tok_bsf
+tok_idiv: db "idiv"
+tok_idiv_len equ $ - tok_idiv
 tok_movzx: db "movzx"
 tok_movzx_len equ $ - tok_movzx
 tok_mul: db "mul"
 tok_mul_len equ $ - tok_mul
 tok_div: db "div"
 tok_div_len equ $ - tok_div
+tok_imul: db "imul"
+tok_imul_len equ $ - tok_imul
 tok_call: db "call"
 tok_call_len equ $ - tok_call
 tok_push: db "push"
@@ -282,6 +294,8 @@ tok_mem_rsi: db "[rsi]"
 tok_mem_rsi_len equ $ - tok_mem_rsi
 tok_mem_rcx: db "[rcx]"
 tok_mem_rcx_len equ $ - tok_mem_rcx
+tok_mem_rdx: db "[rdx]"
+tok_mem_rdx_len equ $ - tok_mem_rdx
 tok_mem_r8: db "[r8]"
 tok_mem_r8_len equ $ - tok_mem_r8
 tok_mem_r9: db "[r9]"
@@ -341,8 +355,8 @@ exit_object_start:
     dw 0
     dw 0
     dw 64
+    dw 6
     dw 5
-    dw 4
 
     times ER_ASM_TEXT_CAP db 0
 
@@ -350,8 +364,10 @@ exit_object_start:
 
     times ER_ASM_STRTAB_CAP db 0
 
-    db 0, ".text", 0, ".symtab", 0, ".strtab", 0, ".shstrtab", 0
-    times 7 db 0
+    times ER_ASM_RELA_CAP db 0
+
+    db 0, ".text", 0, ".symtab", 0, ".strtab", 0, ".rela.text", 0, ".shstrtab", 0
+    times 4 db 0
 
     dd 0
     dd 0
@@ -398,11 +414,22 @@ exit_object_start:
     dq 0
 
     dd 23
+    dd 4
+    dq 0
+    dq 0
+    dq ER_ASM_RELA_OFF
+    dq ER_ASM_RELA_CAP
+    dd 2
+    dd 1
+    dq 8
+    dq 24
+
+    dd 34
     dd 3
     dq 0
     dq 0
     dq ER_ASM_SHSTRTAB_OFF
-    dq 33
+    dq 44
     dd 0
     dd 0
     dq 1

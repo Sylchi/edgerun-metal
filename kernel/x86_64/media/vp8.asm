@@ -6,6 +6,39 @@
 
 SECTION .text
 
+; er_vp8_memset(dst, value, len) -> eax=dst, rdx=ok
+er_fn er_vp8_memset
+    mov     rax, rdi
+    test    rdi, rdi
+    jz      .invalid_param
+    mov     ecx, edx
+    mov     eax, esi
+    rep     stosb
+    mov     eax, 1
+    er_ok
+    er_ret
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    er_ret
+
+; er_vp8_memcpy(dst, src, len) -> eax=dst, rdx=ok
+er_fn er_vp8_memcpy
+    mov     rax, rdi
+    test    rdi, rdi
+    jz      .invalid_param
+    test    rsi, rsi
+    jz      .invalid_param
+    mov     ecx, edx
+    rep     movsb
+    mov     eax, 1
+    er_ok
+    er_ret
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    er_ret
+
 ; er_vp8_parse_frame_tag(buf, len, desc) -> eax=VP8_FRAME_TAG_SIZE, rdx=error
 ; desc: frame_type u8, version u8, show_frame u8, pad, first_partition_len u32.
 ; rdi=buf, esi=len, rdx=desc
@@ -239,6 +272,272 @@ er_fn er_vp8_parse_key_frame_payload
 .done:
     er_stack_free VP8_TAG_DESC_SIZE
     er_pop  rbx, r12, r13
+    er_ret
+
+; er_vp8_decode_key_frame(data, len, yuv_out, yuv_cap, out_rgba, out_pixel_cap)
+; -> eax=pixels decoded, rdx=error
+; ASM key-frame decode orchestration. It walks key-frame intra macroblocks,
+; reconstructs YUV, then converts the visible frame to RGBA.
+er_fn er_vp8_decode_key_frame
+    er_push rbx, r12, r13, r14, r15
+    er_stack_alloc VP8_DECODE_STACK_TOTAL
+    test    rdi, rdi
+    jz      .invalid_param
+    test    rdx, rdx
+    jz      .invalid_param
+    test    r8, r8
+    jz      .invalid_param
+    mov     r12, rdi
+    mov     r13d, esi
+    mov     [rsp + VP8_DECODE_STACK_YUV], rdx
+    mov     [rsp + VP8_DECODE_STACK_OUT], r8
+    mov     [rsp + VP8_DECODE_STACK_YUV_CAP], rcx
+    mov     [rsp + VP8_DECODE_STACK_OUT_CAP], r9
+    lea     rdx, [rsp + VP8_DECODE_STACK_PAYLOAD]
+    call    er_vp8_parse_key_frame_payload
+    test    edx, edx
+    jnz     .done_decode
+    movzx   eax, word [rsp + VP8_DECODE_STACK_PAYLOAD + VP8_KEY_PAYLOAD_WIDTH]
+    mov     [rsp + VP8_DECODE_STACK_WIDTH], eax
+    movzx   eax, word [rsp + VP8_DECODE_STACK_PAYLOAD + VP8_KEY_PAYLOAD_HEIGHT]
+    mov     [rsp + VP8_DECODE_STACK_HEIGHT], eax
+    mov     edi, [rsp + VP8_DECODE_STACK_WIDTH]
+    call    er_vp8_macroblock_dimension
+    test    edx, edx
+    jnz     .done_decode
+    mov     [rsp + VP8_DECODE_STACK_MB_WIDTH], eax
+    mov     edi, [rsp + VP8_DECODE_STACK_HEIGHT]
+    call    er_vp8_macroblock_dimension
+    test    edx, edx
+    jnz     .done_decode
+    mov     [rsp + VP8_DECODE_STACK_MB_HEIGHT], eax
+    mov     eax, [rsp + VP8_DECODE_STACK_WIDTH]
+    imul    eax, [rsp + VP8_DECODE_STACK_HEIGHT]
+    jc      .invalid_param
+    cmp     [rsp + VP8_DECODE_STACK_OUT_CAP], rax
+    jb      .no_space
+    mov     ebx, eax
+    mov     [rsp + VP8_DECODE_STACK_PIXEL_COUNT], eax
+    mov     edi, [rsp + VP8_DECODE_STACK_WIDTH]
+    call    er_vp8_chroma_dimension
+    test    edx, edx
+    jnz     .done_decode
+    mov     [rsp + VP8_DECODE_STACK_CHROMA_WIDTH], eax
+    mov     edi, [rsp + VP8_DECODE_STACK_HEIGHT]
+    call    er_vp8_chroma_dimension
+    test    edx, edx
+    jnz     .done_decode
+    mov     [rsp + VP8_DECODE_STACK_CHROMA_HEIGHT], eax
+    mov     eax, [rsp + VP8_DECODE_STACK_CHROMA_WIDTH]
+    imul    eax, [rsp + VP8_DECODE_STACK_CHROMA_HEIGHT]
+    jc      .invalid_param
+    mov     [rsp + VP8_DECODE_STACK_CHROMA_COUNT], eax
+    lea     eax, [rbx + rax * 2]
+    cmp     [rsp + VP8_DECODE_STACK_YUV_CAP], rax
+    jb      .no_space
+    lea     rdi, [rsp + VP8_DECODE_STACK_TOP_Y]
+    mov     esi, VP8_PLANE_EDGE_DEFAULT
+    mov     edx, VP8_MAX_LUMA_EDGE
+    call    er_vp8_memset
+    lea     rdi, [rsp + VP8_DECODE_STACK_TOP_U]
+    mov     esi, VP8_PLANE_EDGE_DEFAULT
+    mov     edx, VP8_MAX_CHROMA_EDGE
+    call    er_vp8_memset
+    lea     rdi, [rsp + VP8_DECODE_STACK_TOP_V]
+    mov     esi, VP8_PLANE_EDGE_DEFAULT
+    mov     edx, VP8_MAX_CHROMA_EDGE
+    call    er_vp8_memset
+    mov     eax, [rsp + VP8_DECODE_STACK_PAYLOAD + VP8_KEY_PAYLOAD_FIRST_OFFSET]
+    lea     rdi, [r12 + rax]
+    mov     esi, [rsp + VP8_DECODE_STACK_PAYLOAD + VP8_KEY_PAYLOAD_FIRST_LEN]
+    lea     rdx, [rsp + VP8_DECODE_STACK_COEFF_PROBS]
+    lea     rcx, [rsp + VP8_DECODE_STACK_COMPRESSED]
+    call    er_vp8_parse_compressed_key_frame_header
+    test    edx, edx
+    jnz     .done_decode
+    cmp     byte [rsp + VP8_DECODE_STACK_COMPRESSED + VP8_COMPRESSED_HEADER_TOKEN_COUNT], 1
+    jne     .unsupported
+    mov     eax, [rsp + VP8_DECODE_STACK_PAYLOAD + VP8_KEY_PAYLOAD_TOKEN_OFFSET]
+    lea     rdi, [r12 + rax]
+    mov     esi, [rsp + VP8_DECODE_STACK_PAYLOAD + VP8_KEY_PAYLOAD_TOKEN_LEN]
+    lea     rdx, [rsp + VP8_DECODE_STACK_TOKEN_READER]
+    call    er_vp8_bool_reader_init
+    test    edx, edx
+    jnz     .done_decode
+    mov     dword [rsp + VP8_DECODE_STACK_MB_Y], 0
+.decode_row_loop:
+    mov     eax, [rsp + VP8_DECODE_STACK_MB_Y]
+    cmp     eax, [rsp + VP8_DECODE_STACK_MB_HEIGHT]
+    jae     .write_rgba
+    lea     rdi, [rsp + VP8_DECODE_STACK_LEFT_Y]
+    mov     esi, VP8_PLANE_LEFT_DEFAULT
+    mov     edx, VP8_MACROBLOCK_SIZE
+    call    er_vp8_memset
+    lea     rdi, [rsp + VP8_DECODE_STACK_LEFT_U]
+    mov     esi, VP8_PLANE_LEFT_DEFAULT
+    mov     edx, VP8_CHROMA_BLOCK_SIZE
+    call    er_vp8_memset
+    lea     rdi, [rsp + VP8_DECODE_STACK_LEFT_V]
+    mov     esi, VP8_PLANE_LEFT_DEFAULT
+    mov     edx, VP8_CHROMA_BLOCK_SIZE
+    call    er_vp8_memset
+    mov     dword [rsp + VP8_DECODE_STACK_MB_X], 0
+.decode_mb_loop:
+    mov     eax, [rsp + VP8_DECODE_STACK_MB_X]
+    cmp     eax, [rsp + VP8_DECODE_STACK_MB_WIDTH]
+    jae     .next_decode_row
+    lea     rdi, [rsp + VP8_DECODE_STACK_COMPRESSED]
+    mov     esi, [rsp + VP8_DECODE_STACK_MB_X]
+    lea     rdx, [rsp + VP8_DECODE_STACK_MB_HEADER]
+    call    er_vp8_read_key_macroblock_header
+    test    edx, edx
+    jnz     .done_decode
+    lea     rdi, [rsp + VP8_DECODE_STACK_COEFFS]
+    xor     esi, esi
+    mov     edx, VP8_MACROBLOCK_COEFF_BYTES
+    call    er_vp8_memset
+    cmp     byte [rsp + VP8_DECODE_STACK_MB_HEADER + VP8_MACROBLOCK_HEADER_SKIP], 0
+    jne     .skip_residual
+    lea     rdi, [rsp + VP8_DECODE_STACK_TOKEN_READER]
+    lea     rsi, [rsp + VP8_DECODE_STACK_COEFF_PROBS]
+    movzx   edx, byte [rsp + VP8_DECODE_STACK_MB_HEADER + VP8_MACROBLOCK_HEADER_LUMA_MODE]
+    cmp     edx, VP8_LUMA_MODE_B_PRED
+    sete    dl
+    movzx   edx, dl
+    xor     edx, 1
+    lea     rcx, [rsp + VP8_DECODE_STACK_COEFFS]
+    call    er_vp8_read_residual_macroblock_single
+    test    edx, edx
+    jnz     .done_decode
+.skip_residual:
+    lea     rdi, [rsp + VP8_DECODE_STACK_COMPRESSED + VP8_COMPRESSED_HEADER_QUANT]
+    lea     rsi, [rsp + VP8_DECODE_STACK_COMPRESSED + VP8_COMPRESSED_HEADER_SEGMENT]
+    movzx   edx, byte [rsp + VP8_DECODE_STACK_MB_HEADER + VP8_MACROBLOCK_HEADER_SEGMENT_ID]
+    lea     rcx, [rsp + VP8_DECODE_STACK_DEQUANT]
+    call    er_vp8_build_dequant
+    test    edx, edx
+    jnz     .done_decode
+    lea     rdi, [rsp + VP8_DECODE_STACK_Y_EDGES]
+    lea     rsi, [rsp + VP8_DECODE_STACK_TOP_Y]
+    lea     rdx, [rsp + VP8_DECODE_STACK_LEFT_Y]
+    mov     ecx, [rsp + VP8_DECODE_STACK_MB_X]
+    mov     r8d, [rsp + VP8_DECODE_STACK_MB_Y]
+    mov     r9d, [rsp + VP8_DECODE_STACK_MB_WIDTH]
+    call    er_vp8_make_luma_edges
+    test    edx, edx
+    jnz     .done_decode
+    lea     rdi, [rsp + VP8_DECODE_STACK_U_EDGES]
+    lea     rsi, [rsp + VP8_DECODE_STACK_TOP_U]
+    lea     rdx, [rsp + VP8_DECODE_STACK_LEFT_U]
+    mov     ecx, [rsp + VP8_DECODE_STACK_MB_X]
+    mov     r8d, [rsp + VP8_DECODE_STACK_MB_Y]
+    call    er_vp8_make_chroma_edges
+    test    edx, edx
+    jnz     .done_decode
+    lea     rdi, [rsp + VP8_DECODE_STACK_V_EDGES]
+    lea     rsi, [rsp + VP8_DECODE_STACK_TOP_V]
+    lea     rdx, [rsp + VP8_DECODE_STACK_LEFT_V]
+    mov     ecx, [rsp + VP8_DECODE_STACK_MB_X]
+    mov     r8d, [rsp + VP8_DECODE_STACK_MB_Y]
+    call    er_vp8_make_chroma_edges
+    test    edx, edx
+    jnz     .done_decode
+    lea     rdi, [rsp + VP8_DECODE_STACK_DEQUANT]
+    movzx   esi, byte [rsp + VP8_DECODE_STACK_MB_HEADER + VP8_MACROBLOCK_HEADER_LUMA_MODE]
+    movzx   edx, byte [rsp + VP8_DECODE_STACK_MB_HEADER + VP8_MACROBLOCK_HEADER_CHROMA_MODE]
+    lea     rcx, [rsp + VP8_DECODE_STACK_Y_EDGES]
+    lea     r8, [rsp + VP8_DECODE_STACK_U_EDGES]
+    lea     r9, [rsp + VP8_DECODE_STACK_V_EDGES]
+    lea     rax, [rsp + VP8_DECODE_STACK_V_PLANE]
+    push    rax
+    lea     rax, [rsp + 8 + VP8_DECODE_STACK_U_PLANE]
+    push    rax
+    lea     rax, [rsp + 16 + VP8_DECODE_STACK_Y_PLANE]
+    push    rax
+    lea     rax, [rsp + 24 + VP8_DECODE_STACK_COEFFS]
+    push    rax
+    lea     rax, [rsp + 32 + VP8_DECODE_STACK_MB_HEADER + VP8_MACROBLOCK_HEADER_INTRA4_MODES]
+    push    rax
+    call    er_vp8_reconstruct_intra_macroblock
+    add     rsp, 40
+    test    edx, edx
+    jnz     .done_decode
+    mov     edi, [rsp + VP8_DECODE_STACK_WIDTH]
+    mov     esi, [rsp + VP8_DECODE_STACK_HEIGHT]
+    mov     edx, [rsp + VP8_DECODE_STACK_MB_X]
+    mov     ecx, [rsp + VP8_DECODE_STACK_MB_Y]
+    lea     r8, [rsp + VP8_DECODE_STACK_Y_PLANE]
+    mov     r9, [rsp + VP8_DECODE_STACK_YUV]
+    call    er_vp8_write_luma_macroblock
+    test    edx, edx
+    jnz     .done_decode
+    mov     edi, [rsp + VP8_DECODE_STACK_CHROMA_WIDTH]
+    mov     esi, [rsp + VP8_DECODE_STACK_CHROMA_HEIGHT]
+    mov     edx, [rsp + VP8_DECODE_STACK_MB_X]
+    mov     ecx, [rsp + VP8_DECODE_STACK_MB_Y]
+    lea     r8, [rsp + VP8_DECODE_STACK_U_PLANE]
+    lea     r9, [rsp + VP8_DECODE_STACK_V_PLANE]
+    mov     r10, [rsp + VP8_DECODE_STACK_YUV]
+    mov     eax, [rsp + VP8_DECODE_STACK_PIXEL_COUNT]
+    lea     r11, [r10 + rax]
+    mov     eax, [rsp + VP8_DECODE_STACK_CHROMA_COUNT]
+    lea     r10, [r11 + rax]
+    push    r10
+    push    r11
+    call    er_vp8_write_chroma_macroblock
+    add     rsp, 16
+    test    edx, edx
+    jnz     .done_decode
+    lea     rdi, [rsp + VP8_DECODE_STACK_TOP_Y]
+    lea     rsi, [rsp + VP8_DECODE_STACK_TOP_U]
+    lea     rdx, [rsp + VP8_DECODE_STACK_TOP_V]
+    lea     rcx, [rsp + VP8_DECODE_STACK_LEFT_Y]
+    lea     r8, [rsp + VP8_DECODE_STACK_LEFT_U]
+    lea     r9, [rsp + VP8_DECODE_STACK_LEFT_V]
+    lea     rax, [rsp + VP8_DECODE_STACK_V_PLANE]
+    push    rax
+    lea     rax, [rsp + 8 + VP8_DECODE_STACK_U_PLANE]
+    push    rax
+    lea     rax, [rsp + 16 + VP8_DECODE_STACK_Y_PLANE]
+    push    rax
+    mov     eax, [rsp + 24 + VP8_DECODE_STACK_MB_X]
+    push    rax
+    call    er_vp8_finish_prediction_state
+    add     rsp, 32
+    test    edx, edx
+    jnz     .done_decode
+    inc     dword [rsp + VP8_DECODE_STACK_MB_X]
+    jmp     .decode_mb_loop
+.next_decode_row:
+    inc     dword [rsp + VP8_DECODE_STACK_MB_Y]
+    jmp     .decode_row_loop
+.write_rgba:
+    mov     rdi, [rsp + VP8_DECODE_STACK_YUV]
+    mov     eax, [rsp + VP8_DECODE_STACK_PIXEL_COUNT]
+    lea     rsi, [rdi + rax]
+    mov     eax, [rsp + VP8_DECODE_STACK_CHROMA_COUNT]
+    lea     rdx, [rsi + rax]
+    mov     ecx, [rsp + VP8_DECODE_STACK_WIDTH]
+    mov     r8d, [rsp + VP8_DECODE_STACK_HEIGHT]
+    mov     r9d, [rsp + VP8_DECODE_STACK_CHROMA_WIDTH]
+    push    qword [rsp + VP8_DECODE_STACK_OUT]
+    call    er_vp8_write_frame_rgba
+    add     rsp, 8
+    jmp     .done_decode
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+    jmp     .done_decode
+.unsupported:
+    xor     eax, eax
+    er_err  ERROR_UNSUPPORTED
+    jmp     .done_decode
+.no_space:
+    xor     eax, eax
+    er_err  ERROR_NO_SPACE
+.done_decode:
+    er_stack_free VP8_DECODE_STACK_TOTAL
+    er_pop  rbx, r12, r13, r14, r15
     er_ret
 
 ; er_vp8_bool_reader_init(buf, len, reader) -> eax=VP8_BOOL_READER_SIZE, rdx=error
@@ -1219,7 +1518,30 @@ er_fn er_vp8_read_key_macroblock_header
     mov     byte [r13 + VP8_MACROBLOCK_HEADER_SEGMENT_ID], 0
     mov     byte [r13 + VP8_MACROBLOCK_HEADER_SKIP], 0
     cmp     byte [r12 + VP8_COMPRESSED_HEADER_SEGMENT + VP8_SEGMENT_UPDATE_MAP], 0
-    jne     .unsupported
+    je      .skip_segment_id
+    mov     rdi, r12
+    movzx   esi, byte [r12 + VP8_COMPRESSED_HEADER_SEGMENT + VP8_SEGMENT_PROBABILITIES]
+    call    er_vp8_bool_read
+    test    edx, edx
+    jnz     .done_key_mb
+    test    eax, eax
+    jnz     .segment_high
+    mov     rdi, r12
+    movzx   esi, byte [r12 + VP8_COMPRESSED_HEADER_SEGMENT + VP8_SEGMENT_PROBABILITIES + 1]
+    call    er_vp8_bool_read
+    test    edx, edx
+    jnz     .done_key_mb
+    mov     [r13 + VP8_MACROBLOCK_HEADER_SEGMENT_ID], al
+    jmp     .skip_segment_id
+.segment_high:
+    mov     rdi, r12
+    movzx   esi, byte [r12 + VP8_COMPRESSED_HEADER_SEGMENT + VP8_SEGMENT_PROBABILITIES + 2]
+    call    er_vp8_bool_read
+    test    edx, edx
+    jnz     .done_key_mb
+    add     al, 2
+    mov     [r13 + VP8_MACROBLOCK_HEADER_SEGMENT_ID], al
+.skip_segment_id:
     cmp     byte [r12 + VP8_COMPRESSED_HEADER_USE_SKIP], 0
     je      .read_luma_selector
     mov     rdi, r12
@@ -3466,16 +3788,16 @@ er_fn er_vp8_read_coeff_block
     inc     r15d
     jmp     .scan_loop
 .read_block_bool:
-    mov     [rsp + 8], r8d
+    mov     [rsp + 16], r8d
     mov     edi, r15d
     call    er_vp8_coeff_band
     test    edx, edx
     jnz     .read_block_done
     mov     rdi, r13
-    mov     esi, [rsp]
+    mov     esi, [rsp + 8]
     mov     edx, eax
     mov     ecx, ebx
-    mov     r8d, [rsp + 8]
+    mov     r8d, [rsp + 16]
     call    er_vp8_coeff_probability_from
     test    edx, edx
     jnz     .read_block_done
@@ -3494,6 +3816,449 @@ er_fn er_vp8_read_coeff_block
     er_err  ERROR_INVALID_PARAM
 .done_block:
     er_stack_free 16
+    er_pop  rbx, r12, r13, r14, r15
+    er_ret
+
+; er_vp8_read_residual_macroblock_single(reader, probabilities, has_y2, coeffs)
+; -> eax=nonzero block count, rdx=error
+; Single-macroblock residual reader with local top/left contexts initialized empty.
+; rdi=reader, rsi=probabilities[1056], edx=has_y2, rcx=coeffs[25][16] i16.
+er_fn er_vp8_read_residual_macroblock_single
+    er_push rbx, r12, r13, r14, r15
+    er_stack_alloc 32
+    test    rdi, rdi
+    jz      .invalid_param
+    test    rsi, rsi
+    jz      .invalid_param
+    test    rcx, rcx
+    jz      .invalid_param
+    mov     r12, rdi
+    mov     r13, rsi
+    mov     r14, rcx
+    mov     r15d, edx
+    mov     dword [rsp], 0
+    mov     qword [rsp + 4], 0
+    mov     qword [rsp + 12], 0
+    mov     qword [rsp + 20], 0
+    test    r15d, r15d
+    jz      .y_blocks
+    mov     rdi, r12
+    mov     rsi, r13
+    mov     edx, 1
+    xor     ecx, ecx
+    xor     r8d, r8d
+    lea     r9, [r14 + VP8_Y2_BLOCK_INDEX * VP8_COEFF_BLOCK_BYTES]
+    call    er_vp8_read_coeff_block
+    test    edx, edx
+    jnz     .done_residual_single
+    test    r8d, r8d
+    jz      .y_blocks
+    inc     dword [rsp]
+.y_blocks:
+    xor     ebx, ebx
+.y_loop:
+    cmp     ebx, VP8_Y_BLOCK_COUNT
+    jae     .u_blocks
+    mov     eax, ebx
+    and     eax, 3
+    mov     ecx, ebx
+    shr     ecx, 2
+    xor     r8d, r8d
+    test    eax, eax
+    jz      .y_no_left
+    movzx   r8d, byte [rsp + 4 + rcx]
+.y_no_left:
+    movzx   edx, byte [rsp + 8 + rax]
+    add     r8d, edx
+    mov     edx, 3
+    xor     ecx, ecx
+    test    r15d, r15d
+    jz      .y_call
+    xor     edx, edx
+    mov     ecx, 1
+.y_call:
+    mov     rdi, r12
+    mov     rsi, r13
+    mov     r9, rbx
+    imul    r9, VP8_COEFF_BLOCK_BYTES
+    add     r9, r14
+    call    er_vp8_read_coeff_block
+    test    edx, edx
+    jnz     .done_residual_single
+    mov     eax, ebx
+    and     eax, 3
+    mov     ecx, ebx
+    shr     ecx, 2
+    mov     [rsp + 4 + rcx], r8b
+    mov     [rsp + 8 + rax], r8b
+    test    r8d, r8d
+    jz      .next_y
+    inc     dword [rsp]
+.next_y:
+    inc     ebx
+    jmp     .y_loop
+.u_blocks:
+    xor     ebx, ebx
+.u_loop:
+    cmp     ebx, VP8_UV_BLOCK_COUNT
+    jae     .v_blocks
+    mov     eax, ebx
+    and     eax, 1
+    mov     ecx, ebx
+    shr     ecx, 1
+    xor     r8d, r8d
+    test    eax, eax
+    jz      .u_no_left
+    movzx   r8d, byte [rsp + 12 + rcx]
+.u_no_left:
+    movzx   edx, byte [rsp + 14 + rax]
+    add     r8d, edx
+    mov     rdi, r12
+    mov     rsi, r13
+    mov     edx, 2
+    xor     ecx, ecx
+    mov     r9, rbx
+    add     r9, VP8_Y_BLOCK_COUNT
+    imul    r9, VP8_COEFF_BLOCK_BYTES
+    add     r9, r14
+    call    er_vp8_read_coeff_block
+    test    edx, edx
+    jnz     .done_residual_single
+    mov     eax, ebx
+    and     eax, 1
+    mov     ecx, ebx
+    shr     ecx, 1
+    mov     [rsp + 12 + rcx], r8b
+    mov     [rsp + 14 + rax], r8b
+    test    r8d, r8d
+    jz      .next_u
+    inc     dword [rsp]
+.next_u:
+    inc     ebx
+    jmp     .u_loop
+.v_blocks:
+    xor     ebx, ebx
+.v_loop:
+    cmp     ebx, VP8_UV_BLOCK_COUNT
+    jae     .ok
+    mov     eax, ebx
+    and     eax, 1
+    mov     ecx, ebx
+    shr     ecx, 1
+    xor     r8d, r8d
+    test    eax, eax
+    jz      .v_no_left
+    movzx   r8d, byte [rsp + 16 + rcx]
+.v_no_left:
+    movzx   edx, byte [rsp + 18 + rax]
+    add     r8d, edx
+    mov     rdi, r12
+    mov     rsi, r13
+    mov     edx, 2
+    xor     ecx, ecx
+    mov     r9, rbx
+    add     r9, VP8_Y_BLOCK_COUNT + VP8_UV_BLOCK_COUNT
+    imul    r9, VP8_COEFF_BLOCK_BYTES
+    add     r9, r14
+    call    er_vp8_read_coeff_block
+    test    edx, edx
+    jnz     .done_residual_single
+    mov     eax, ebx
+    and     eax, 1
+    mov     ecx, ebx
+    shr     ecx, 1
+    mov     [rsp + 16 + rcx], r8b
+    mov     [rsp + 18 + rax], r8b
+    test    r8d, r8d
+    jz      .next_v
+    inc     dword [rsp]
+.next_v:
+    inc     ebx
+    jmp     .v_loop
+.ok:
+    mov     eax, [rsp]
+    er_ok
+    jmp     .done_residual_single
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+.done_residual_single:
+    er_stack_free 32
+    er_pop  rbx, r12, r13, r14, r15
+    er_ret
+
+; er_vp8_init_default_edges(edges, size) -> eax=edges bytes initialized, rdx=error
+; size must be 8 or 16. Top samples default to 127, left samples to 129,
+; top-left defaults to 127, and has_top/has_left are cleared.
+er_fn er_vp8_init_default_edges
+    er_push rbx, r12
+    test    rdi, rdi
+    jz      .invalid_param
+    cmp     esi, VP8_CHROMA_BLOCK_SIZE
+    je      .size_ok
+    cmp     esi, VP8_MACROBLOCK_SIZE
+    jne     .invalid_param
+.size_ok:
+    mov     r12, rdi
+    mov     ebx, esi
+    xor     ecx, ecx
+.top_loop:
+    cmp     ecx, ebx
+    jae     .left_start
+    mov     byte [r12 + rcx], VP8_PLANE_EDGE_DEFAULT
+    inc     ecx
+    jmp     .top_loop
+.left_start:
+    xor     ecx, ecx
+.left_loop:
+    cmp     ecx, ebx
+    jae     .top_right_start
+    mov     eax, ebx
+    add     eax, ecx
+    mov     byte [r12 + rax], VP8_PLANE_LEFT_DEFAULT
+    inc     ecx
+    jmp     .left_loop
+.top_right_start:
+    mov     eax, ebx
+    shl     eax, 1
+    mov     byte [r12 + rax], VP8_PLANE_EDGE_DEFAULT
+    mov     byte [r12 + rax + 1], 0
+    mov     byte [r12 + rax + 2], 0
+    cmp     ebx, VP8_MACROBLOCK_SIZE
+    jne     .ok_8
+    xor     ecx, ecx
+.top_right_loop_16:
+    cmp     ecx, VP8_BLOCK_SIZE
+    jae     .ok_16
+    mov     byte [r12 + VP8_EDGES_TOP_RIGHT_16 + rcx], VP8_PLANE_EDGE_DEFAULT
+    inc     ecx
+    jmp     .top_right_loop_16
+.ok_16:
+    mov     eax, VP8_EDGES_SIZE_16
+    er_ok
+    jmp     .done_init_edges
+.ok_8:
+    mov     eax, VP8_EDGES_SIZE_8
+    er_ok
+    jmp     .done_init_edges
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+.done_init_edges:
+    er_pop  rbx, r12
+    er_ret
+
+; er_vp8_make_luma_edges(edges, top_y, left_y, mb_x, mb_y, mb_w)
+er_fn er_vp8_make_luma_edges
+    er_push rbx, r12, r13, r14, r15
+    er_stack_alloc 8
+    test    rdi, rdi
+    jz      .invalid_param
+    test    rsi, rsi
+    jz      .invalid_param
+    test    rdx, rdx
+    jz      .invalid_param
+    test    r9d, r9d
+    jz      .invalid_param
+    mov     rbx, rdi
+    mov     r12, rsi
+    mov     r13, rdx
+    mov     r14d, ecx
+    mov     r15d, r8d
+    mov     [rsp], r9d
+    mov     esi, VP8_MACROBLOCK_SIZE
+    call    er_vp8_init_default_edges
+    test    edx, edx
+    jnz     .done_luma_edges
+    mov     eax, r14d
+    shl     eax, 4
+    test    r15d, r15d
+    jz      .left_luma
+    lea     rdi, [rbx + VP8_EDGES_TOP]
+    lea     rsi, [r12 + rax]
+    mov     edx, VP8_MACROBLOCK_SIZE
+    call    er_vp8_memcpy
+    mov     byte [rbx + VP8_EDGES_HAS_TOP_16], 1
+    mov     ecx, r14d
+    inc     ecx
+    cmp     ecx, [rsp]
+    jae     .repeat_top_right_luma
+    mov     eax, r14d
+    shl     eax, 4
+    lea     rdi, [rbx + VP8_EDGES_TOP_RIGHT_16]
+    lea     rsi, [r12 + rax + VP8_MACROBLOCK_SIZE]
+    mov     edx, VP8_BLOCK_SIZE
+    call    er_vp8_memcpy
+    jmp     .left_luma
+.repeat_top_right_luma:
+    movzx   esi, byte [rbx + VP8_EDGES_TOP + VP8_MACROBLOCK_SIZE - 1]
+    lea     rdi, [rbx + VP8_EDGES_TOP_RIGHT_16]
+    mov     edx, VP8_BLOCK_SIZE
+    call    er_vp8_memset
+.left_luma:
+    test    r14d, r14d
+    jz      .ok_luma_edges
+    lea     rdi, [rbx + VP8_EDGES_LEFT_16]
+    mov     rsi, r13
+    mov     edx, VP8_MACROBLOCK_SIZE
+    call    er_vp8_memcpy
+    mov     byte [rbx + VP8_EDGES_HAS_LEFT_16], 1
+    test    r15d, r15d
+    jz      .ok_luma_edges
+    mov     eax, r14d
+    shl     eax, 4
+    movzx   ecx, byte [r12 + rax - 1]
+    mov     [rbx + VP8_EDGES_TOP_LEFT_16], cl
+.ok_luma_edges:
+    mov     eax, VP8_EDGES_SIZE_16
+    er_ok
+    jmp     .done_luma_edges
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+.done_luma_edges:
+    er_stack_free 8
+    er_pop  rbx, r12, r13, r14, r15
+    er_ret
+
+; er_vp8_make_chroma_edges(edges, top, left, mb_x, mb_y)
+er_fn er_vp8_make_chroma_edges
+    er_push rbx, r12, r13, r14, r15
+    test    rdi, rdi
+    jz      .invalid_param
+    test    rsi, rsi
+    jz      .invalid_param
+    test    rdx, rdx
+    jz      .invalid_param
+    mov     rbx, rdi
+    mov     r12, rsi
+    mov     r13, rdx
+    mov     r14d, ecx
+    mov     r15d, r8d
+    mov     esi, VP8_CHROMA_BLOCK_SIZE
+    call    er_vp8_init_default_edges
+    test    edx, edx
+    jnz     .done_chroma_edges
+    mov     eax, r14d
+    shl     eax, 3
+    test    r15d, r15d
+    jz      .left_chroma
+    lea     rdi, [rbx + VP8_EDGES_TOP]
+    lea     rsi, [r12 + rax]
+    mov     edx, VP8_CHROMA_BLOCK_SIZE
+    call    er_vp8_memcpy
+    mov     byte [rbx + VP8_EDGES_HAS_TOP_8], 1
+.left_chroma:
+    test    r14d, r14d
+    jz      .ok_chroma_edges
+    lea     rdi, [rbx + VP8_EDGES_LEFT_8]
+    mov     rsi, r13
+    mov     edx, VP8_CHROMA_BLOCK_SIZE
+    call    er_vp8_memcpy
+    mov     byte [rbx + VP8_EDGES_HAS_LEFT_8], 1
+    test    r15d, r15d
+    jz      .ok_chroma_edges
+    mov     eax, r14d
+    shl     eax, 3
+    movzx   ecx, byte [r12 + rax - 1]
+    mov     [rbx + VP8_EDGES_TOP_LEFT_8], cl
+.ok_chroma_edges:
+    mov     eax, VP8_EDGES_SIZE_8
+    er_ok
+    jmp     .done_chroma_edges
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+.done_chroma_edges:
+    er_pop  rbx, r12, r13, r14, r15
+    er_ret
+
+; er_vp8_finish_prediction_state(top_y, top_u, top_v, left_y, left_u, left_v, mb_x, y_plane, u_plane, v_plane)
+er_fn er_vp8_finish_prediction_state
+    er_push rbx, r12, r13, r14, r15
+    test    rdi, rdi
+    jz      .invalid_param
+    test    rsi, rsi
+    jz      .invalid_param
+    test    rdx, rdx
+    jz      .invalid_param
+    test    rcx, rcx
+    jz      .invalid_param
+    test    r8, r8
+    jz      .invalid_param
+    test    r9, r9
+    jz      .invalid_param
+    mov     rbx, rdi
+    mov     r12, rsi
+    mov     r13, rdx
+    mov     r14, rcx
+    mov     r15, r8
+    mov     r11, r9
+    mov     eax, [rsp + 48]
+    mov     r10, [rsp + 56]
+    test    r10, r10
+    jz      .invalid_param
+    mov     rcx, [rsp + 64]
+    test    rcx, rcx
+    jz      .invalid_param
+    mov     rdx, [rsp + 72]
+    test    rdx, rdx
+    jz      .invalid_param
+    mov     esi, eax
+    shl     esi, 4
+    lea     rdi, [rbx + rsi]
+    lea     rsi, [r10 + (VP8_MACROBLOCK_SIZE - 1) * VP8_MACROBLOCK_SIZE]
+    mov     edx, VP8_MACROBLOCK_SIZE
+    call    er_vp8_memcpy
+    xor     ecx, ecx
+.copy_left_y:
+    cmp     ecx, VP8_MACROBLOCK_SIZE
+    jae     .copy_top_u
+    mov     edx, ecx
+    shl     edx, 4
+    movzx   esi, byte [r10 + rdx + VP8_MACROBLOCK_SIZE - 1]
+    mov     [r14 + rcx], sil
+    inc     ecx
+    jmp     .copy_left_y
+.copy_top_u:
+    mov     eax, [rsp + 48]
+    mov     esi, eax
+    shl     esi, 3
+    mov     rcx, [rsp + 64]
+    lea     rdi, [r12 + rsi]
+    lea     rsi, [rcx + (VP8_CHROMA_BLOCK_SIZE - 1) * VP8_CHROMA_BLOCK_SIZE]
+    mov     edx, VP8_CHROMA_BLOCK_SIZE
+    call    er_vp8_memcpy
+    mov     eax, [rsp + 48]
+    mov     esi, eax
+    shl     esi, 3
+    mov     rdx, [rsp + 72]
+    lea     rdi, [r13 + rsi]
+    lea     rsi, [rdx + (VP8_CHROMA_BLOCK_SIZE - 1) * VP8_CHROMA_BLOCK_SIZE]
+    mov     edx, VP8_CHROMA_BLOCK_SIZE
+    call    er_vp8_memcpy
+    mov     rcx, [rsp + 64]
+    mov     rdx, [rsp + 72]
+    xor     eax, eax
+.copy_left_uv:
+    cmp     eax, VP8_CHROMA_BLOCK_SIZE
+    jae     .ok_finish
+    mov     esi, eax
+    shl     esi, 3
+    movzx   edi, byte [rcx + rsi + VP8_CHROMA_BLOCK_SIZE - 1]
+    mov     [r15 + rax], dil
+    movzx   edi, byte [rdx + rsi + VP8_CHROMA_BLOCK_SIZE - 1]
+    mov     [r11 + rax], dil
+    inc     eax
+    jmp     .copy_left_uv
+.ok_finish:
+    mov     eax, VP8_MACROBLOCK_SIZE
+    er_ok
+    jmp     .done_finish
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+.done_finish:
     er_pop  rbx, r12, r13, r14, r15
     er_ret
 
@@ -4498,7 +5263,7 @@ er_fn er_vp8_reconstruct_intra_macroblock
     mov     rcx, r15
     mov     r8, [rsp + 16]
     mov     r9, [rsp + 32]
-    push    qword [rsp + 48]
+    push    qword [rsp + 40]
     call    er_vp8_reconstruct_chroma
     add     rsp, 8
     test    edx, edx

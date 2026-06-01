@@ -1503,6 +1503,23 @@ er_fn match_common_mov
     call    expect_comma
     test    eax, eax
     jz      .bad
+    push    r14
+    lea     rdi, [rel tok_eax]
+    mov     esi, tok_eax_len
+    call    expect_operand
+    test    eax, eax
+    jz      .edi_value
+    pop     r11
+    call    expect_line_end
+    test    eax, eax
+    jz      .bad
+    mov     edi, 0x89
+    call    append_text_byte
+    mov     edi, 0xc7
+    call    append_text_byte
+    jmp     .yes
+.edi_value:
+    pop     r14
     call    expect_value_operand
     test    eax, eax
     jz      .bad
@@ -1553,6 +1570,9 @@ er_fn match_common_mov
     call    expect_line_end
     test    eax, eax
     jz      .bad
+    mov     rax, 0xffffffff
+    cmp     [rel imm_u32_value], rax
+    ja      .bad
     mov     edi, 0xb8
     call    append_text_byte
     mov     rdi, [rel imm_u32_value]
@@ -2816,4 +2836,3 @@ er_fn match_more_runtime_ops
 .yes:
     mov     eax, 1
     ret
-

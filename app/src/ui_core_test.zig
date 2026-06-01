@@ -8,6 +8,7 @@ const icon = @import("ui/icon.zig");
 const icon_pack = @import("ui/icon_pack.zig");
 const icon_vector = @import("ui/icon_vector.zig");
 const interaction = @import("ui/interaction.zig");
+const jc3248_frame = @import("ui/jc3248_frame.zig");
 const layout = @import("ui/layout.zig");
 const resolver = @import("ui/resolver.zig");
 const runtime = @import("ui/runtime.zig");
@@ -25,6 +26,7 @@ test {
     _ = icon_pack;
     _ = icon_vector;
     _ = interaction;
+    _ = jc3248_frame;
     _ = layout;
     _ = resolver;
     _ = runtime;

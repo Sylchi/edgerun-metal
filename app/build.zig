@@ -10,12 +10,13 @@ pub fn build(b: *std.Build) void {
     var math_obj: ?std.Build.LazyPath = null;
     var runtime_obj: ?std.Build.LazyPath = null;
     if (is_x86_64) {
+        const host_asm = hostAssembler(b);
         {
-            const cmd = b.addSystemCommand(&.{ "yasm", "-f", "elf64", "-I", "../kernel", "../kernel/x86_64/rt/math.asm", "-o" });
+            const cmd = b.addSystemCommand(&.{ host_asm, "-f", "elf64", "-I", "../kernel", "../kernel/x86_64/rt/math.asm", "-o" });
             math_obj = cmd.addOutputFileArg("math.o");
         }
         {
-            const cmd = b.addSystemCommand(&.{ "yasm", "-f", "elf64", "-I", "../kernel", "../kernel/x86_64/rt/runtime.asm", "-o" });
+            const cmd = b.addSystemCommand(&.{ host_asm, "-f", "elf64", "-I", "../kernel", "../kernel/x86_64/rt/runtime.asm", "-o" });
             runtime_obj = cmd.addOutputFileArg("runtime.o");
         }
     }
@@ -25,61 +26,61 @@ pub fn build(b: *std.Build) void {
     const media_test_step = b.step("media-test", "Run media codec and container tests");
     const host_test_step = b.step("host-test", "Run host integration tests");
 
-    _ = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
+    _ = addZigTest(b, target, optimize, .{
         .root = "src/pi_usb_boot_host.zig",
         .step = "pi-usb-boot-host-test",
         .description = "Run Pi USB boot host tests",
         .default_step = test_step,
         .suite_step = host_test_step,
     });
-    _ = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
+    _ = addZigTest(b, target, optimize, .{
         .root = "src/pi_usb_control_host.zig",
         .step = "pi-usb-control-host-test",
         .description = "Run Pi USB control host tests",
         .default_step = test_step,
         .suite_step = host_test_step,
     });
-    _ = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
+    _ = addZigTest(b, target, optimize, .{
         .root = "src/clock.zig",
         .step = "clock-test",
         .description = "Run Zig clock tests",
     });
-    _ = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
+    _ = addZigTest(b, target, optimize, .{
         .root = "src/identity.zig",
         .step = "identity-test",
         .description = "Run Zig identity tests",
     });
-    _ = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
+    _ = addZigTest(b, target, optimize, .{
         .root = "src/object.zig",
         .step = "object-test",
         .description = "Run Zig object tests",
     });
-    _ = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
+    _ = addZigTest(b, target, optimize, .{
         .root = "src/store.zig",
         .step = "storage-test",
         .description = "Run Zig storage tests",
     });
-    _ = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
+    _ = addZigTest(b, target, optimize, .{
         .root = "src/encrypted_chat.zig",
         .step = "chat-test",
         .description = "Run encrypted chat app state tests",
         .default_step = test_step,
     });
-    _ = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
+    _ = addZigTest(b, target, optimize, .{
         .root = "src/app_encrypted_chat.zig",
         .step = "chat-ui-test",
         .description = "Run encrypted chat app UI tests",
         .default_step = test_step,
         .suite_step = ui_test_step,
     });
-    _ = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
+    _ = addZigTest(b, target, optimize, .{
         .root = "src/app_pipeline_dashboard.zig",
         .step = "pipeline-ui-test",
         .description = "Run user-scheduled pipeline UI tests",
         .default_step = test_step,
         .suite_step = ui_test_step,
     });
-    _ = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
+    _ = addZigTest(b, target, optimize, .{
         .root = "src/sdk.zig",
         .step = "sdk-test",
         .description = "Run Zig SDK tests",
@@ -147,38 +148,38 @@ pub fn build(b: *std.Build) void {
     const project_intro_video_step = b.step("project-intro-video", "Render project intro video frames through the UI renderer");
     project_intro_video_step.dependOn(&run_project_intro_video.step);
 
-    _ = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
+    _ = addZigTest(b, target, optimize, .{
         .root = "src/project_intro_video.zig",
         .step = "project-intro-video-test",
         .description = "Run project intro video frame generator tests",
     });
 
-    _ = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
+    _ = addZigTest(b, target, optimize, .{
         .root = "src/media_video_dump.zig",
         .step = "media-video-dump-test",
         .description = "Run media video dump host-tool tests",
     });
-    _ = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
+    _ = addZigTest(b, target, optimize, .{
         .root = "src/media_test.zig",
         .step = "media-codec-test",
         .description = "Run media codec and container tests",
         .default_step = test_step,
         .suite_step = media_test_step,
     });
-    _ = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
+    _ = addZigTest(b, target, optimize, .{
         .root = "src/ui_core_test.zig",
         .step = "ui-core-test",
         .description = "Run Zig UI core tests",
         .suite_step = ui_test_step,
     });
-    _ = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
+    _ = addZigTest(b, target, optimize, .{
         .root = "src/ui_codec_test.zig",
         .step = "ui-codec-test",
         .description = "Run Zig UI codec and stream tests",
         .default_step = test_step,
         .suite_step = ui_test_step,
     });
-    _ = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
+    _ = addZigTest(b, target, optimize, .{
         .root = "src/component_gallery_test.zig",
         .step = "component-gallery-test",
         .description = "Run canonical component gallery tests",
@@ -231,7 +232,7 @@ pub fn build(b: *std.Build) void {
     const wayland_window_step = b.step("wayland-window", "Open a native Wayland shm window using canonical UI IR");
     wayland_window_step.dependOn(&run_wayland_window.step);
 
-    _ = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
+    _ = addZigTest(b, target, optimize, .{
         .root = "src/wayland_window_host.zig",
         .step = "wayland-window-test",
         .description = "Run native Wayland host protocol tests",
@@ -239,18 +240,6 @@ pub fn build(b: *std.Build) void {
         .suite_step = ui_test_step,
     });
 
-    const xdg_shell_header_cmd = b.addSystemCommand(&.{
-        "wayland-scanner",
-        "client-header",
-        "/usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml",
-    });
-    _ = &xdg_shell_header_cmd;
-    const xdg_shell_code_cmd = b.addSystemCommand(&.{
-        "wayland-scanner",
-        "private-code",
-        "/usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml",
-    });
-    _ = &xdg_shell_code_cmd;
     const drm_gbm_window = b.addExecutable(.{
         .name = "edgerun-drm-gbm-window",
         .root_module = b.createModule(.{
@@ -266,7 +255,7 @@ pub fn build(b: *std.Build) void {
     const drm_gbm_window_step = b.step("drm-gbm-window", "Render canonical UI IR through EGL/GLES to a DRM/GBM scanout surface (DynLib, no @cImport, no libdrm/libc linkage)");
     drm_gbm_window_step.dependOn(&run_drm_gbm_window.step);
 
-    _ = addZigTest(b, target, optimize, math_obj, runtime_obj, .{
+    _ = addZigTest(b, target, optimize, .{
         .root = "src/drm_gbm_host.zig",
         .step = "drm-gbm-test",
         .description = "Run DRM/GBM host tests",
@@ -405,6 +394,19 @@ fn addBootstrapObjects(compile: *std.Build.Step.Compile, math_obj: ?std.Build.La
     if (runtime_obj) |obj| compile.root_module.addObjectFile(obj);
 }
 
+fn hostAssembler(b: *std.Build) []const u8 {
+    if (b.option([]const u8, "host-asm", "Assembler for host bootstrap ASM objects")) |value| return value;
+    if (envNonEmpty(b, "ER_ASM")) |value| return value;
+    if (envNonEmpty(b, "YASM")) |value| return value;
+    return "yasm";
+}
+
+fn envNonEmpty(b: *std.Build, name: []const u8) ?[]const u8 {
+    const value = b.graph.environ_map.get(name) orelse return null;
+    if (value.len == 0) return null;
+    return value;
+}
+
 const ZigTestOptions = struct {
     root: []const u8,
     step: []const u8,
@@ -417,8 +419,6 @@ fn addZigTest(
     b: *std.Build,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
-    math_obj: ?std.Build.LazyPath,
-    runtime_obj: ?std.Build.LazyPath,
     options: ZigTestOptions,
 ) *std.Build.Step.Compile {
     const tests = b.addTest(.{
@@ -428,7 +428,6 @@ fn addZigTest(
             .optimize = optimize,
         }),
     });
-    addBootstrapObjects(tests, math_obj, runtime_obj);
 
     const run_tests = b.addRunArtifact(tests);
     const test_step = b.step(options.step, options.description);

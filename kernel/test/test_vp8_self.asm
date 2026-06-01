@@ -11,6 +11,7 @@ extern er_vp8_write_visible_inter_frame_tag
 extern er_vp8_is_key_frame
 extern er_vp8_parse_key_frame_header
 extern er_vp8_parse_key_frame_payload
+extern er_vp8_decode_key_frame
 extern er_vp8_bool_reader_init
 extern er_vp8_bool_read
 extern er_vp8_bool_read_flag
@@ -49,6 +50,8 @@ extern er_vp8_coeff_default_probability
 extern er_vp8_copy_default_coeff_probabilities
 extern er_vp8_read_large_coeff_value
 extern er_vp8_read_coeff_block
+extern er_vp8_read_residual_macroblock_single
+extern er_vp8_init_default_edges
 extern er_vp8_chroma_dimension
 extern er_vp8_write_luma_macroblock
 extern er_vp8_write_chroma_macroblock
@@ -128,6 +131,13 @@ VP8_TEST_CHROMA_WIDTH               equ 10
 VP8_TEST_CHROMA_HEIGHT              equ 9
 VP8_TEST_FRAME_Y_BYTES              equ VP8_TEST_FRAME_WIDTH * VP8_TEST_FRAME_HEIGHT
 VP8_TEST_FRAME_UV_BYTES             equ VP8_TEST_CHROMA_WIDTH * VP8_TEST_CHROMA_HEIGHT
+VP8_TEST_GRAY_PAYLOAD_LEN           equ 24
+VP8_TEST_GRAY_YUV_BYTES             equ 6
+VP8_TEST_WIDE_GRAY_PAYLOAD_LEN      equ 34
+VP8_TEST_WIDE_GRAY_WIDTH            equ 32
+VP8_TEST_WIDE_GRAY_HEIGHT           equ 16
+VP8_TEST_WIDE_GRAY_PIXELS           equ VP8_TEST_WIDE_GRAY_WIDTH * VP8_TEST_WIDE_GRAY_HEIGHT
+VP8_TEST_WIDE_GRAY_YUV_BYTES        equ VP8_TEST_WIDE_GRAY_PIXELS + 2 * ((VP8_TEST_WIDE_GRAY_WIDTH / 2) * (VP8_TEST_WIDE_GRAY_HEIGHT / 2))
 VP8_TEST_LUMA_CLIP_FIRST            equ 16 * VP8_TEST_FRAME_WIDTH + 16
 VP8_TEST_LUMA_CLIP_LAST             equ 17 * VP8_TEST_FRAME_WIDTH + 19
 VP8_TEST_LUMA_CLIP_BEFORE           equ VP8_TEST_LUMA_CLIP_FIRST - 1
@@ -164,6 +174,10 @@ frame_y:         resb VP8_TEST_FRAME_Y_BYTES
 frame_u:         resb VP8_TEST_FRAME_UV_BYTES
 frame_v:         resb VP8_TEST_FRAME_UV_BYTES
 frame_rgba:      resd VP8_TEST_FRAME_WIDTH * VP8_TEST_FRAME_HEIGHT
+gray_yuv:        resb VP8_TEST_GRAY_YUV_BYTES
+gray_rgba:       resd 4
+wide_gray_yuv:   resb VP8_TEST_WIDE_GRAY_YUV_BYTES
+wide_gray_rgba:  resd VP8_TEST_WIDE_GRAY_PIXELS
 edges:           resb VP8_EDGES_SIZE_16
 intra4_top:      resb VP8_BLOCK_SIZE * 2
 intra4_edge:     resb VP8_INTRA4_EDGE_SIZE
@@ -206,6 +220,14 @@ mv_probs:       db 162, 128, 225, 146, 172, 147, 214, 39, 156, 128, 129, 132, 75
                 db 164, 128, 204, 170, 119, 235, 140, 230, 228, 128, 130, 130, 74, 148, 180, 203, 236, 254, 254
 token_parts:    db 0x03, 0x00, 0x00, 0xaa, 0xbb, 0xcc, 0xdd, 0xee
 token_parts_bad: db 0x06, 0x00, 0x00, 0xaa
+vp8_gray_payload: db 0x50, 0x01, 0x00, 0x9d, 0x01, 0x2a, 0x02, 0x00
+                  db 0x02, 0x00, 0x01, 0x40, 0x26, 0x25, 0xa4, 0x00
+                  db 0x04, 0x74, 0x00, 0x00, 0xe4, 0x40, 0x00, 0x00
+vp8_wide_gray_payload: db 0xb0, 0x02, 0x00, 0x9d, 0x01, 0x2a, 0x20, 0x00
+                       db 0x10, 0x00, 0x3e, 0x6d, 0x2c, 0x93, 0x45, 0xa4
+                       db 0x22, 0xa1, 0x98, 0x04, 0x00, 0x40, 0x06, 0xc4
+                       db 0xb4, 0x80, 0x00, 0x4a, 0xc4, 0x00, 0x00, 0xe4
+                       db 0x40, 0x00
 
 SECTION .text
 global _start
@@ -429,8 +451,52 @@ _start:
     cmp     dword [rel key_payload + VP8_KEY_PAYLOAD_TOKEN_LEN], VP8_TEST_PAYLOAD_TOKEN_LEN
     jne     .fail_payload
     inc     qword [rel passed]
-    jmp     .bad_payload
+    jmp     .decode_gray_payload
 .fail_payload:
+    inc     qword [rel failed]
+
+.decode_gray_payload:
+    mov     rdi, vp8_gray_payload
+    mov     esi, VP8_TEST_GRAY_PAYLOAD_LEN
+    mov     rdx, gray_yuv
+    mov     ecx, VP8_TEST_GRAY_YUV_BYTES
+    mov     r8, gray_rgba
+    mov     r9d, 4
+    call    er_vp8_decode_key_frame
+    cmp     eax, 4
+    jne     .fail_decode_gray_payload
+    test    edx, edx
+    jnz     .fail_decode_gray_payload
+    cmp     dword [rel gray_rgba], 0xff7e7e7e
+    jne     .fail_decode_gray_payload
+    cmp     dword [rel gray_rgba + 12], 0xff7e7e7e
+    jne     .fail_decode_gray_payload
+    inc     qword [rel passed]
+    jmp     .decode_wide_gray_payload
+.fail_decode_gray_payload:
+    inc     qword [rel failed]
+
+.decode_wide_gray_payload:
+    mov     rdi, vp8_wide_gray_payload
+    mov     esi, VP8_TEST_WIDE_GRAY_PAYLOAD_LEN
+    mov     rdx, wide_gray_yuv
+    mov     ecx, VP8_TEST_WIDE_GRAY_YUV_BYTES
+    mov     r8, wide_gray_rgba
+    mov     r9d, VP8_TEST_WIDE_GRAY_PIXELS
+    call    er_vp8_decode_key_frame
+    cmp     eax, VP8_TEST_WIDE_GRAY_PIXELS
+    jne     .fail_decode_wide_gray_payload
+    test    edx, edx
+    jnz     .fail_decode_wide_gray_payload
+    cmp     dword [rel wide_gray_rgba], 0xff7e7e7e
+    jne     .fail_decode_wide_gray_payload
+    cmp     dword [rel wide_gray_rgba + 16 * 4], 0xff7e7e7e
+    jne     .fail_decode_wide_gray_payload
+    cmp     dword [rel wide_gray_rgba + (VP8_TEST_WIDE_GRAY_PIXELS - 1) * 4], 0xff7e7e7e
+    jne     .fail_decode_wide_gray_payload
+    inc     qword [rel passed]
+    jmp     .bad_payload
+.fail_decode_wide_gray_payload:
     inc     qword [rel failed]
 
 .bad_payload:
@@ -1535,6 +1601,21 @@ _start:
     jne     .fail_macroblock_geometry
     test    edx, edx
     jnz     .fail_macroblock_geometry
+    mov     rdi, edges
+    mov     esi, VP8_MACROBLOCK_SIZE
+    call    er_vp8_init_default_edges
+    cmp     eax, VP8_EDGES_SIZE_16
+    jne     .fail_macroblock_geometry
+    test    edx, edx
+    jnz     .fail_macroblock_geometry
+    cmp     byte [rel edges + VP8_EDGES_TOP], VP8_PLANE_EDGE_DEFAULT
+    jne     .fail_macroblock_geometry
+    cmp     byte [rel edges + VP8_EDGES_LEFT_16], VP8_PLANE_LEFT_DEFAULT
+    jne     .fail_macroblock_geometry
+    cmp     byte [rel edges + VP8_EDGES_HAS_TOP_16], 0
+    jne     .fail_macroblock_geometry
+    cmp     byte [rel edges + VP8_EDGES_TOP_RIGHT_16], VP8_PLANE_EDGE_DEFAULT
+    jne     .fail_macroblock_geometry
     xor     ecx, ecx
 .clear_frame_y:
     cmp     ecx, VP8_TEST_FRAME_Y_BYTES
@@ -2280,6 +2361,21 @@ _start:
     test    edx, edx
     jnz     .fail_coeff_block_decode
     cmp     word [rel coeff_block + 2], -(VP8_COEFF_CAT6_BASE + 2047)
+    jne     .fail_coeff_block_decode
+    mov     rdi, bool_zero
+    mov     esi, 3
+    mov     rdx, bool_reader
+    call    er_vp8_bool_reader_init
+    mov     rdi, bool_reader
+    mov     rsi, token_probabilities
+    mov     edx, 1
+    mov     rcx, macroblock_coeffs
+    call    er_vp8_read_residual_macroblock_single
+    test    eax, eax
+    jnz     .fail_coeff_block_decode
+    test    edx, edx
+    jnz     .fail_coeff_block_decode
+    cmp     word [rel macroblock_coeffs + VP8_Y2_BLOCK_INDEX * VP8_COEFF_BLOCK_BYTES], 0
     jne     .fail_coeff_block_decode
     inc     qword [rel passed]
     jmp     .dequantize_blocks

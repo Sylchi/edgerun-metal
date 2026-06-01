@@ -144,6 +144,7 @@ KERNEL_ASM_SRCS="
 	media/av1_bits.asm
 	media/vp8.asm
 	media/vp9.asm
+	media/webp.asm
 	media/mp4.asm
 	media/av1_obu.asm
 	media/av1_ivf.asm
@@ -253,7 +254,6 @@ cmd_kernel_efi() {
 		-o "${KERNEL_EFI}" ${objs}
 	local esize=$(stat -c '%s' "${KERNEL_EFI}")
 	printf 'efi:  %s (%d bytes)\n' "${KERNEL_EFI}" "${esize}"
-	sync_kernel_efi_to_esp
 }
 
 sync_kernel_efi_to_esp() {
@@ -269,13 +269,12 @@ sync_kernel_efi_to_esp() {
 
 cmd_install_efi() {
 	cmd_kernel_efi
-	if efibootmgr 2>/dev/null | grep -qi 'edgerun'; then
-		echo "edgerun boot entry already exists"
-	else
-		sudo -n efibootmgr -c -L "EdgeRun" -l "\\EFI\\edgerun\\bootx64.efi" \
-			-d /dev/nvme0n1 -p 1 2>&1
-	fi
-	echo "reboot and select 'EdgeRun' from boot menu"
+	sync_kernel_efi_to_esp
+	cmd_er_efiboot >/dev/null
+	local bootnum="${ER_EFI_BOOTNUM:-0ED9}"
+	sudo -n "${HOST_BUILD}/er_efiboot" --create-file "$bootnum" EdgeRun '\EFI\edgerun\bootx64.efi'
+	sudo -n "${HOST_BUILD}/er_efiboot" --prepend-order "$bootnum"
+	echo "installed EdgeRun EFI boot entry Boot${bootnum}"
 }
 
 cmd_kernel_net() {
@@ -302,7 +301,7 @@ cmd_kernel_net_tpm() {
 		-chardev socket,id=chrtpm,path="${tpm_sock}" \
 		-tpmdev emulator,id=tpm0,chardev=chrtpm \
 		-device tpm-crb,tpmdev=tpm0 \
-		-netdev user,id=net0,guestfwd=tcp:10.0.2.100:19001-cmd:nc\ 127.0.0.1\ 19001 \
+		-netdev user,id=net0 \
 		-device virtio-net-pci,netdev=net0 || true
 	kill "${swtpm_pid}" 2>/dev/null || true
 	wait "${swtpm_pid}" 2>/dev/null || true
@@ -432,12 +431,14 @@ build_test_stubbed() {
 test_registry() {
  cat <<'EOF'
 test-registry|unit|build|yes|cmd_test_registry|Validate test registry metadata
+test-deps-audit|unit|build|yes|cmd_deps_audit|Validate dependency manifests and tracked binary artifacts
 test-x86-asm-boundary|unit|build|yes|cmd_check_x86_asm_boundary|Validate x86 ASM goes through one assembler boundary
 test-x86-asm-selector|unit|build|yes|cmd_test_x86_asm_selector|Validate ER_ASM selects a single x86 assembler
 test-x86-asm-inventory|unit|build|yes|cmd_test_x86_asm_inventory|Validate x86 ASM syntax inventory generation
 test-x86-asm-warning-fatal|unit|build|yes|cmd_test_x86_asm_warning_fatal|Validate x86 ASM warnings fail the build
 test-er-asm-parse|unit|build|yes|cmd_test_er_asm_parse|Run owned ASM assembler parser smoke test
 test-er-asm-cli|unit|build|yes|cmd_test_er_asm_cli|Validate owned assembler accepts x86 assembler CLI shape
+test-er-efiboot|unit|build|yes|cmd_test_er_efiboot|Validate owned EFI variable manager dry-run operations
 test-ctype|unit|rt|yes|cmd_test_ctype|Run ctype test with owned assembler runtime object
 test-clock|unit|rt|yes|cmd_test_clock|Run deterministic clock test
 test-identity|unit|crypto|yes|cmd_test_identity|Run identity source test
@@ -477,6 +478,7 @@ test-av1-obu|unit|media|yes|cmd_test_av1_obu|Run AV1 OBU header codec test
 test-av1-mp4|unit|media|yes|cmd_test_av1_mp4|Run AV1 MP4 container parser test
 test-vp8|unit|media|yes|cmd_test_vp8|Run VP8 frame header parser test
 test-vp9|unit|media|yes|cmd_test_vp9|Run VP9 uncompressed frame header parser test
+test-webp|unit|media|yes|cmd_test_webp|Run WebP container parser test
 test-av1-ivf|unit|media|yes|cmd_test_av1_ivf|Run AV1 IVF container parser test
 test-av1-sequence|unit|media|yes|cmd_test_av1_sequence|Run AV1 sequence header test
 test-av1-frame|unit|media|yes|cmd_test_av1_frame|Run AV1 frame header test
@@ -1163,7 +1165,7 @@ EOF
  expect_er_asm_status "$src_named" 49 "named global" -e ermain
  expect_er_asm_status "$src_long_named" 50 "long global" -e er_isdigit
  "${HOST_BUILD}/er_asm" -f elf64 -o "$out" "$src_return_fn"
- ER_ASM="" asm_x86_obj elf64 "$caller_obj" "$caller_src"
+ ER_ASM="${HOST_BUILD}/er_asm" asm_x86_obj elf64 "$caller_obj" "$caller_src"
  expect_linked_out_status 51 "return function" "$caller_obj"
  rm -f "$caller_obj"
  "${HOST_BUILD}/er_asm" -f elf64 -o "$out" "$src_zero_fn"
@@ -1265,6 +1267,11 @@ EOF
  nm "$out" | grep -q 'er_crc32c'
  nm "$out" | grep -q 'er_fnv1a64'
  rm -f "$out"
+ "${HOST_BUILD}/er_asm" -f elf64 -I kernel -o "$out" "${ASM_DIR}/rt/math_int.asm"
+ test -f "$out"
+ nm "$out" | grep -q 'er_abs_i32'
+ nm "$out" | grep -q 'er_divmod_i32'
+ rm -f "$out"
  expect_er_asm_reject "$bad_hex_src" "out-of-range hex immediate"
  expect_er_asm_reject "$bad_dup_equ_src" "duplicate equ"
  expect_er_asm_reject "$bad_define_tail_src" "trailing define junk"
@@ -1273,6 +1280,48 @@ EOF
  expect_er_asm_reject "${ASM_DIR}/macros.inc" "unsupported source"
  cleanup_er_asm_cli
  echo "PASS er-asm-cli"
+}
+
+cmd_test_er_efiboot() {
+	cmd_er_efiboot >/dev/null
+	local tool="${HOST_BUILD}/er_efiboot"
+	local guid="8be4df61-93ca-11d2-aa0d-00e098032b8c"
+	local out
+	out=$("$tool" --dry-run --set-next 0007)
+	[ "$out" = "dry-run /sys/firmware/efi/efivars/BootNext-${guid}6 bytes" ] || {
+		echo "FAIL er-efiboot set-next dry-run: ${out}" >&2
+		return 1
+	}
+	out=$("$tool" --dry-run --set-order 0007,0001,0002)
+	[ "$out" = "dry-run /sys/firmware/efi/efivars/BootOrder-${guid}10 bytes" ] || {
+		echo "FAIL er-efiboot set-order dry-run: ${out}" >&2
+		return 1
+	}
+	out=$("$tool" --dry-run --prepend-order 0007)
+	[ "$out" = "dry-run /sys/firmware/efi/efivars/BootOrder-${guid}6 bytes" ] || {
+		echo "FAIL er-efiboot prepend-order dry-run: ${out}" >&2
+		return 1
+	}
+	out=$("$tool" --dry-run --create-file 0007 EdgeRun '\EFI\edgerun\bootx64.efi')
+	[ "$out" = "dry-run /sys/firmware/efi/efivars/Boot0007-${guid}84 bytes" ] || {
+		echo "FAIL er-efiboot create-file dry-run: ${out}" >&2
+		return 1
+	}
+	out=$("$tool" --dry-run --read-file 0007)
+	[ "$out" = "dry-run /sys/firmware/efi/efivars/Boot0007-${guid}0 bytes" ] || {
+		echo "FAIL er-efiboot read-file dry-run: ${out}" >&2
+		return 1
+	}
+	out=$("$tool" --dry-run --delete-file 0007)
+	[ "$out" = "dry-run /sys/firmware/efi/efivars/Boot0007-${guid}0 bytes" ] || {
+		echo "FAIL er-efiboot delete-file dry-run: ${out}" >&2
+		return 1
+	}
+	if "$tool" --set-next bad >/dev/null 2>&1; then
+		echo "FAIL er-efiboot rejected invalid boot number" >&2
+		return 1
+	fi
+	echo "PASS er-efiboot"
 }
 
 cmd_test_list() {
@@ -1587,7 +1636,11 @@ cmd_test_vp8() {
 }
 
 cmd_test_vp9() {
-	build_test "test_vp9_self" "${TEST_DIR}/test_vp9_self.asm" "media/vp9"
+	build_test "test_vp9_self" "${TEST_DIR}/test_vp9_self.asm" "media/vp8" "media/vp9"
+}
+
+cmd_test_webp() {
+	build_test "test_webp_self" "${TEST_DIR}/test_webp_self.asm" "media/webp" "media/vp8"
 }
 
 cmd_test_av1_ivf() {
@@ -1846,7 +1899,7 @@ cmd_bench_wasm_jit() {
 	"$bin"
 }
 
-cmd_bench_zig_wasm() {
+build_zig_wasm_bench_artifacts() {
 	local zig_src="app/bench/zig_wasm_bench.zig"
 	local native_obj="${ASM_BUILD}/zig_wasm_bench_native.o"
 	local wasm_bin="${ASM_BUILD}/zig_wasm_bench.wasm"
@@ -1863,106 +1916,56 @@ cmd_bench_zig_wasm() {
 	fi
 	ld -T "${TEST_DIR}/test_jit.ld" -nostdlib -static -o "$bin" "$asm_obj" "$native_obj" "$runtime_o"
 	echo "  LD  ${bin}"
+}
+
+cmd_bench_zig_wasm() {
+	build_zig_wasm_bench_artifacts
+	local bin="${ASM_BUILD}/bench_zig_wasm"
 	"$bin"
-	if ! command -v node >/dev/null 2>&1; then
-		echo "node is required for bench-zig-wasm V8 comparison" >&2
-		return 1
-	fi
-	local node_bench="${ASM_BUILD}/bench_zig_wasm_node.mjs"
-	cat > "$node_bench" <<'EOF'
-import { readFileSync } from 'node:fs';
-
-const wasmPath = process.argv[2];
-const bytes = readFileSync(wasmPath);
-const { instance } = await WebAssembly.instantiate(bytes, {});
-const erBench = instance.exports.er_bench;
-if (typeof erBench !== 'function') {
-  throw new Error('missing er_bench export');
 }
 
-let acc = 12345;
-for (let i = 0; i < 100000; i += 1) {
-  acc = erBench(acc >>> 0) >>> 0;
-}
-
-const iters = 5000000;
-const start = process.hrtime.bigint();
-for (let i = 0; i < iters; i += 1) {
-  acc = erBench(acc >>> 0) >>> 0;
-}
-const elapsed = process.hrtime.bigint() - start;
-const nsPerCall = elapsed / BigInt(iters);
-console.log(`v8_node_ns: ${nsPerCall.toString()}`);
-console.log(`v8_node_result: 0x${(acc >>> 0).toString(16).padStart(8, '0')}`);
-EOF
-	node "$node_bench" "$wasm_bin"
-}
-
-cmd_lib_tor() {
-	local lib_dir="${BUILD_DIR}/lib"
-	mkdir -p "${lib_dir}" "${ASM_BUILD}"
-
+build_tor_host_objects() {
+	mkdir -p "${ASM_BUILD}"
 	local runtime_o="${ASM_BUILD}/lib_runtime.o"
 	local sha256_o="${ASM_BUILD}/lib_sha256.o"
-	local sha512_o="${ASM_BUILD}/lib_sha512.o"
 	local sha3_o="${ASM_BUILD}/lib_sha3.o"
-	local ed25519_o="${ASM_BUILD}/lib_ed25519.o"
 	local tor_aes_o="${ASM_BUILD}/lib_tor_aes.o"
 	local curve25519_o="${ASM_BUILD}/lib_curve25519.o"
 	local tls_o="${ASM_BUILD}/lib_tls.o"
-	local tor_ntor_o="${ASM_BUILD}/lib_tor_ntor.o"
-	local tor_digest_o="${ASM_BUILD}/lib_tor_digest.o"
-	local tor_cell_o="${ASM_BUILD}/lib_tor_cell.o"
 	local tor_hs_o="${ASM_BUILD}/lib_tor_hs.o"
-	local tor_hs_app_o="${ASM_BUILD}/lib_tor_hs_app.o"
-	local tor_o="${ASM_BUILD}/lib_tor.o"
 
 	elf64 "${ASM_DIR}/rt/runtime.asm" "$runtime_o"
 	elf64 "${ASM_DIR}/crypto/sha256.asm" "$sha256_o"
-	elf64 "${ASM_DIR}/crypto/sha512.asm" "$sha512_o"
 	elf64 "${ASM_DIR}/crypto/sha3.asm" "$sha3_o"
-	elf64 "${ASM_DIR}/crypto/ed25519.asm" "$ed25519_o"
 	elf64 "${ASM_DIR}/crypto/tor_aes.asm" "$tor_aes_o"
 	elf64 "${ASM_DIR}/crypto/curve25519.asm" "$curve25519_o"
 	elf64 "${ASM_DIR}/crypto/tls.asm" "$tls_o"
-	elf64 "${ASM_DIR}/crypto/tor_ntor.asm" "$tor_ntor_o"
-	elf64 "${ASM_DIR}/crypto/tor_digest.asm" "$tor_digest_o"
-	elf64 "${ASM_DIR}/crypto/tor_cell.asm" "$tor_cell_o"
 	elf64 "${ASM_DIR}/crypto/tor_hs.asm" "$tor_hs_o"
-	elf64 "${ASM_DIR}/crypto/tor_hs_app.asm" "$tor_hs_app_o"
-	elf64 "${ASM_DIR}/crypto/tor.asm" "$tor_o"
-
-	ar rcs "${lib_dir}/libedgerun_tor_hs.a" \
-		"$tor_hs_o" "$sha3_o" "$tor_aes_o" "$curve25519_o" "$runtime_o"
-	ar rcs "${lib_dir}/libedgerun_tor_hs_app.a" \
-		"$tor_hs_app_o" "$runtime_o"
-	ar rcs "${lib_dir}/libedgerun_tor_core.a" \
-		"$tor_o" "$tor_cell_o" "$tor_hs_o" "$tor_hs_app_o" \
-		"$tls_o" "$sha256_o" "$sha512_o" "$sha3_o" "$ed25519_o" "$tor_aes_o" \
-		"$tor_ntor_o" "$curve25519_o" "$tor_digest_o" "$runtime_o"
-
-	echo "  AR  ${lib_dir}/libedgerun_tor_hs.a"
-	echo "  AR  ${lib_dir}/libedgerun_tor_hs_app.a"
-	echo "  AR  ${lib_dir}/libedgerun_tor_core.a"
 }
 
 cmd_tor_hs_host() {
-	cmd_lib_tor
+	build_tor_host_objects
 	mkdir -p "${HOST_BUILD}"
 	local obj="${HOST_BUILD}/tor_hs_host.o"
 	local bin="${HOST_BUILD}/tor_hs_host"
 	asm_x86_obj elf64 "$obj" "${TEST_DIR}/test_tor_hs_self.asm"
-	ld -nostdlib -static -o "$bin" "$obj" "${BUILD_DIR}/lib/libedgerun_tor_hs.a"
+	ld -nostdlib -static -o "$bin" "$obj" \
+		"${ASM_BUILD}/lib_tor_hs.o" "${ASM_BUILD}/lib_sha3.o" \
+		"${ASM_BUILD}/lib_tor_aes.o" "${ASM_BUILD}/lib_curve25519.o" \
+		"${ASM_BUILD}/lib_runtime.o"
 	echo "  LD  ${bin}"
 }
 
 cmd_tor_live_host() {
-	cmd_lib_tor
+	build_tor_host_objects
 	mkdir -p "${HOST_BUILD}"
 	local obj="${HOST_BUILD}/tor_live_host.o"
 	local bin="${HOST_BUILD}/tor_live_host"
 	asm_x86_obj elf64 "$obj" "${TEST_DIR}/test_tor_live_host.asm"
-	ld -nostdlib -static -o "$bin" "$obj" "${BUILD_DIR}/lib/libedgerun_tor_core.a"
+	ld -nostdlib -static -o "$bin" "$obj" \
+		"${ASM_BUILD}/lib_tls.o" "${ASM_BUILD}/lib_sha256.o" \
+		"${ASM_BUILD}/lib_tor_aes.o" "${ASM_BUILD}/lib_curve25519.o" \
+		"${ASM_BUILD}/lib_runtime.o"
 	echo "  LD  ${bin}"
 }
 
@@ -2031,6 +2034,15 @@ cmd_esp32_serial_boot() {
 	echo "  LD  ${obj}"
 }
 
+cmd_er_efiboot() {
+	mkdir -p "${HOST_BUILD}"
+	local src="kernel/host/er_efiboot.asm"
+	local obj="${HOST_BUILD}/er_efiboot.o"
+	asm_x86_obj elf64 "$obj" "$src"
+	ld -o "${HOST_BUILD}/er_efiboot" "$obj"
+	echo "  LD  ${HOST_BUILD}/er_efiboot"
+}
+
 cmd_jc3248_firmware() {
 	mkdir -p "${ESP32S3_BUILD}"
 	local src="kernel/esp32s3/jc3248w535/firmware_image.asm"
@@ -2048,6 +2060,75 @@ cmd_clean() {
 	rm -rf "${BUILD_DIR}"
 }
 
+cmd_deps_audit() {
+	local failed=0
+	local prunes=( -path './.git' -o -path './.build' -o -path './app/.zig-cache' -o -path './app/zig-out' )
+	local manifests
+	manifests=$(find . \( "${prunes[@]}" \) -prune -o -type f \( \
+		-name '.gitmodules' -o \
+		-name 'build.zig.zon' -o \
+		-name 'package.json' -o -name 'package-lock.json' -o -name 'yarn.lock' -o -name 'pnpm-lock.yaml' -o \
+		-name 'Cargo.toml' -o -name 'Cargo.lock' -o \
+		-name 'go.mod' -o -name 'go.sum' -o \
+		-name 'requirements*.txt' -o -name 'pyproject.toml' -o \
+		-name 'CMakeLists.txt' -o \
+		-name '*.csproj' -o -name 'pom.xml' -o -name 'build.gradle' -o -name 'gradle.lockfile' -o \
+		-name 'composer.json' -o -name 'Gemfile' -o -name 'Gemfile.lock' \
+		\) -print | sort)
+	if [ -n "${manifests}" ]; then
+		echo "error: undeclared external dependency manifests found:" >&2
+		printf '%s\n' "${manifests}" >&2
+		failed=1
+	fi
+
+	local nested_git
+	nested_git=$(find . -path './.git' -prune -o -name '.git' -print | sort)
+	if [ -n "${nested_git}" ]; then
+		echo "error: nested git repositories found:" >&2
+		printf '%s\n' "${nested_git}" >&2
+		failed=1
+	fi
+
+	local binaries
+	binaries=$(find . \( "${prunes[@]}" \) -prune -o -type f \( \
+		-name '*.a' -o -name '*.bin' -o -name '*.clm_blob' -o -name '*.elf' -o \
+		-name '*.fw' -o -name '*.hcd' -o -name '*.img' -o -name '*.o' -o \
+		-name '*.so' -o -name '*.dylib' -o -name '*.dll' -o \
+		-name '*.ucode' -o -name '*.wasm' -o -name '*.jar' -o -name '*.class' -o -name '*.pyc' \
+		\) -print | sort | while IFS= read -r path; do
+		case "$path" in
+			./app/src/gen/icon_asset_pack_index.bin|\
+			./app/src/gen/icon_asset_pack_ir.bin|\
+			./app/src/gen/icon_names.bin|\
+			./kernel/driver/font_atlas.bin|\
+			./kernel/driver/font_glyph_table.bin|\
+			./kernel/x86_64/wasm/agent_minimal.wasm|\
+			./kernel/x86_64/wasm/da_test.wasm|\
+			./kernel/x86_64/wasm/test_imports.wasm|\
+			./kernel/x86_64/wasm/test_mem.wasm|\
+			./kernel/x86_64/wasm/test_mem_noret.wasm|\
+			./kernel/x86_64/wasm/test_mem_simple.wasm|\
+			./kernel/x86_64/wasm/test_table.wasm|\
+			./kernel/x86_64/wasm/test_tblonly.wasm|\
+			./kernel/x86_64/wasm/wasm_return42.bin)
+				;;
+			*)
+				printf '%s\n' "$path"
+				;;
+		esac
+	done)
+	if [ -n "${binaries}" ]; then
+		echo "error: undeclared binary artifacts found:" >&2
+		printf '%s\n' "${binaries}" >&2
+		failed=1
+	fi
+
+	if [ "$failed" -ne 0 ]; then
+		return 1
+	fi
+	echo "PASS deps-audit"
+}
+
 cmd_help() {
 	cat <<'EOF'
 EdgeRun build targets:
@@ -2059,7 +2140,7 @@ EdgeRun build targets:
   kernel-net-tor      Build kernel.img with Tor autostart + boot QEMU net/TPM
   kernel-tpm-live-test    Build kernel with TPM live test main
   kernel-tpm-live-test-qemu Build + run in QEMU with swtpm
-  kernel-efi          Build kernel.efi and copy it to the EdgeRun ESP path
+  kernel-efi          Build kernel.efi
   install-efi         Build + install kernel.efi to ESP + add boot entry
   test                Run all self-hosted ASM tests
   test-core           Run default unit + contract tests, excluding emulator tests
@@ -2072,6 +2153,7 @@ EdgeRun build targets:
   test-status --category NAME Run default tests in one category
   test-status --subsystem NAME Run default tests in one subsystem
   test-status --core    Run default unit + contract tests as TSV status
+  deps-audit         Check for undeclared external dependency manifests and blobs
   x86-asm-inventory  Emit the x86 ASM syntax inventory used to scope assembler replacement
 EOF
  cmd_test_help
@@ -2083,13 +2165,13 @@ EOF
   er-asm              Build owned x86 ASM assembler front-end
   er-asm-obj SRC [O] Assemble one x86 source object with owned er_asm; no yasm fallback
   er-asm-all          Try every x86 .asm source with owned er_asm; no yasm fallback
-  lib-tor             Build reusable Tor static archives under .build/lib
   tor-hs-host         Build hosted hidden-service library smoke binary
   tor-live-host       Build hosted live Tor ORPort probe binary
   pi-kernel           Build Pi Zero W kernel.img (ARMv6)
   pi-usb-boot         Build Pi USB boot host tool (x86_64)
   pi-boot             Build + boot Pi Zero via USB
   esp32-serial-boot   Build ESP32 serial boot host tool (x86_64)
+  er-efiboot          Build repo-owned EFI variable manager
   jc3248-firmware     Build JC3248W535 ESP32-S3 firmware descriptor
   clean               Remove .build/
 EOF
@@ -2121,6 +2203,7 @@ case "${1:-help}" in
 		;;
 	test-list)      cmd_test_list ;;
 	test-status)    shift; cmd_test_status "$@" ;;
+	deps-audit)     cmd_deps_audit ;;
 	x86-asm-inventory) cmd_x86_asm_inventory ;;
 	test-*)         cmd_test_registered "$1" ;;
 	bench-tor)      cmd_bench_tor ;;
@@ -2130,7 +2213,6 @@ case "${1:-help}" in
 	er-asm)          cmd_er_asm ;;
 	er-asm-obj)      shift; cmd_er_asm_obj "$@" ;;
 	er-asm-all)      cmd_er_asm_all ;;
-	lib-tor)         cmd_lib_tor ;;
 	tor-hs-host)     cmd_tor_hs_host ;;
 	tor-live-host)   cmd_tor_live_host ;;
 	test-tor-live-host) cmd_test_tor_live_host ;;
@@ -2138,6 +2220,7 @@ case "${1:-help}" in
 	pi-usb-boot)    cmd_pi_usb_boot ;;
 	pi-boot)        cmd_pi_boot ;;
 	esp32-serial-boot) cmd_esp32_serial_boot ;;
+	er-efiboot)     cmd_er_efiboot ;;
 	jc3248-firmware) cmd_jc3248_firmware ;;
 	clean)          cmd_clean ;;
 	help|--help|-h) cmd_help ;;

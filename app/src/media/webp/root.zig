@@ -2,7 +2,6 @@ const std = @import("std");
 const bytes_mod = @import("../../bytes.zig");
 const ui = @import("../../ui/core.zig");
 const common = @import("../common.zig");
-const raw_vp8 = @import("../vp8.zig");
 const vp8_tables = @import("vp8_tables.zig");
 
 const Header = common.Header;
@@ -38,6 +37,39 @@ const webp_chunk_anim = "ANIM";
 const webp_chunk_anmf = "ANMF";
 const riff_header_size: usize = 12;
 const riff_chunk_header_size: usize = 8;
+
+const Vp8FrameType = enum {
+    key,
+    inter,
+};
+
+const Vp8FrameTag = struct {
+    frame_type: Vp8FrameType,
+    first_partition_len: usize,
+};
+
+const Vp8KeyFramePayload = struct {
+    header: Header,
+    first_partition: []const u8,
+    token_partitions: []const u8,
+};
+
+const vp8_frame_tag_size: usize = 3;
+const vp8_key_frame_header_size: usize = 10;
+const vp8_frame_type_key: u32 = 0;
+const vp8_version_max: u32 = 3;
+const vp8_show_frame_visible: u32 = 1;
+const vp8_first_partition_len_shift: u5 = 5;
+const vp8_first_partition_len_bits: u5 = 19;
+const vp8_first_partition_len_max: usize = (@as(usize, 1) << vp8_first_partition_len_bits) - 1;
+const vp8_frame_type_mask: u32 = 0x01;
+const vp8_version_mask: u32 = 0x0e;
+const vp8_version_shift: u5 = 1;
+const vp8_show_frame_mask: u32 = 0x10;
+const vp8_show_frame_shift: u5 = 4;
+const vp8_start_code_offset: usize = 3;
+const vp8_key_frame_start_code = [_]u8{ 0x9d, 0x01, 0x2a };
+const vp8_dimension_mask: u16 = 0x3fff;
 const webp_vp8x_payload_size: usize = 10;
 const webp_vp8x_flags_index: usize = 0;
 const webp_vp8x_width_index: usize = 4;
@@ -339,7 +371,7 @@ const test_webp_vp8_first_partition_len: usize = 160;
 const test_webp_vp8_first_partition_extra_len: usize = test_webp_vp8_first_partition_len - test_webp_vp8_base_partition_len;
 const test_webp_vp8_token_partition_len: usize = 64;
 const test_webp_vp8_fixture_tail_len: usize = test_webp_vp8_first_partition_extra_len + test_webp_vp8_token_partition_len;
-const test_webp_vp8_chunk_len: usize = raw_vp8.key_frame_header_size + test_webp_vp8_first_partition_len + test_webp_vp8_token_partition_len;
+const test_webp_vp8_chunk_len: usize = vp8_key_frame_header_size + test_webp_vp8_first_partition_len + test_webp_vp8_token_partition_len;
 const test_webp_vp8_len: usize = riff_header_size + riff_chunk_header_size + test_webp_vp8_chunk_len;
 const test_webp_vp8x_len: usize = riff_header_size + riff_chunk_header_size + webp_vp8x_payload_size + riff_chunk_header_size + test_webp_vp8_chunk_len;
 const test_webp_vp8_gray_len: usize = 44;
@@ -368,6 +400,59 @@ pub fn isWebp(bytes: []const u8) bool {
         bytes_mod.eql(bytes[0..4], riff_signature) and
         bytes_mod.eql(bytes[8..12], webp_signature);
 }
+
+fn parseVp8FrameTag(data: []const u8) DecodeError!Vp8FrameTag {
+    if (data.len < vp8_frame_tag_size) return error.BadImage;
+    const tag = readU24Le(data[0..vp8_frame_tag_size]);
+    const version = (tag & vp8_version_mask) >> vp8_version_shift;
+    const visible = (tag & vp8_show_frame_mask) >> vp8_show_frame_shift;
+    if (version > vp8_version_max) return error.UnsupportedImage;
+    if (visible != vp8_show_frame_visible) return error.UnsupportedImage;
+    return .{
+        .frame_type = if ((tag & vp8_frame_type_mask) == vp8_frame_type_key) .key else .inter,
+        .first_partition_len = @intCast(tag >> vp8_first_partition_len_shift),
+    };
+}
+
+fn writeVisibleVp8KeyFrameTag(bytes: *[vp8_frame_tag_size]u8, first_partition_len: usize) DecodeError!void {
+    if (first_partition_len > vp8_first_partition_len_max) return error.BadImage;
+    const frame_tag = @as(u32, vp8_show_frame_mask) | (@as(u32, @intCast(first_partition_len)) << vp8_first_partition_len_shift);
+    bytes[0] = @intCast(frame_tag & 0xff);
+    bytes[1] = @intCast((frame_tag >> 8) & 0xff);
+    bytes[2] = @intCast((frame_tag >> 16) & 0xff);
+}
+
+fn parseVp8KeyFrameHeader(data: []const u8) DecodeError!Header {
+    return parseVp8KeyFrameHeaderWithTag(data, try parseVp8FrameTag(data));
+}
+
+fn parseVp8KeyFramePayload(data: []const u8) DecodeError!Vp8KeyFramePayload {
+    const tag = try parseVp8FrameTag(data);
+    const header = try parseVp8KeyFrameHeaderWithTag(data, tag);
+    if (tag.first_partition_len == 0) return error.BadImage;
+    if (tag.first_partition_len > data.len - vp8_key_frame_header_size) return error.BadImage;
+    const first_partition_start = vp8_key_frame_header_size;
+    const first_partition_end = first_partition_start + tag.first_partition_len;
+    return .{
+        .header = header,
+        .first_partition = data[first_partition_start..first_partition_end],
+        .token_partitions = data[first_partition_end..],
+    };
+}
+
+fn parseVp8KeyFrameHeaderWithTag(data: []const u8, tag: Vp8FrameTag) DecodeError!Header {
+    if (data.len < vp8_key_frame_header_size) return error.BadImage;
+    switch (tag.frame_type) {
+        .key => {},
+        .inter => return error.UnsupportedImage,
+    }
+    if (!bytes_mod.eql(data[vp8_start_code_offset..][0..vp8_key_frame_start_code.len], &vp8_key_frame_start_code)) return error.BadImage;
+    const width = @as(usize, readU16Le(data[6..][0..2]) & vp8_dimension_mask);
+    const height = @as(usize, readU16Le(data[8..][0..2]) & vp8_dimension_mask);
+    if (width == 0 or height == 0) return error.BadImage;
+    return .{ .width = width, .height = height };
+}
+
 pub fn decodeWebpHeader(bytes: []const u8) DecodeError!Header {
     return (try parseWebp(bytes)).header;
 }
@@ -600,7 +685,7 @@ pub fn decodeWebpWithScratch(bytes: []const u8, out: []ui.Color, scratch: []u8) 
 }
 
 pub fn decodeVp8KeyFrame(data: []const u8, expected_header: Header, out: []ui.Color) DecodeError!Header {
-    const frame_tag = try raw_vp8.parseFrameTag(data);
+    const frame_tag = try parseVp8FrameTag(data);
     switch (frame_tag.frame_type) {
         .key => return decodeVp8Frame(data, expected_header, out),
         .inter => return error.UnsupportedImage,
@@ -876,7 +961,7 @@ fn webpAnimationPayloadScratchByteLen(data: []const u8, expected_header: Header)
             alpha_data = chunk.data;
         } else if (bytes_mod.eql(chunk.chunk_type, webp_chunk_vp8)) {
             if (vp8_data != null or vp8l_data != null) return error.BadImage;
-            const header = try raw_vp8.parseKeyFrameHeader(chunk.data);
+            const header = try parseVp8KeyFrameHeader(chunk.data);
             if (header.width != expected_header.width or header.height != expected_header.height) return error.UnsupportedImage;
             vp8_data = chunk.data;
         } else if (bytes_mod.eql(chunk.chunk_type, webp_chunk_vp8l)) {
@@ -1185,10 +1270,10 @@ fn parseWebp(bytes: []const u8) DecodeError!WebpInfo {
         } else if (bytes_mod.eql(chunk.chunk_type, webp_chunk_vp8)) {
             if (saw_primary) return error.BadImage;
             if (header == null) {
-                header = try raw_vp8.parseKeyFrameHeader(chunk.data);
+                header = try parseVp8KeyFrameHeader(chunk.data);
                 primary_chunk = webp_chunk_vp8;
             } else {
-                _ = try raw_vp8.parseKeyFrameHeader(chunk.data);
+                _ = try parseVp8KeyFrameHeader(chunk.data);
             }
             if (primary_data.len == 0) primary_data = chunk.data;
             vp8_data = chunk.data;
@@ -2244,7 +2329,7 @@ const Vp8lBitReader = struct {
 };
 
 const Vp8Frame = struct {
-    frame_type: raw_vp8.FrameType,
+    frame_type: Vp8FrameType,
     header: Header,
     first_partition: []const u8,
     token_partitions: []const u8,
@@ -2395,7 +2480,7 @@ const Vp8PredictionState = struct {
 };
 
 fn parseVp8Frame(data: []const u8, expected_header: Header, entropy_state: ?*const Vp8EntropyState) DecodeError!Vp8Frame {
-    const tag = try raw_vp8.parseFrameTag(data);
+    const tag = try parseVp8FrameTag(data);
     return switch (tag.frame_type) {
         .key => parseVp8KeyFrame(data),
         .inter => parseVp8InterFrame(data, tag, expected_header, entropy_state),
@@ -2403,7 +2488,7 @@ fn parseVp8Frame(data: []const u8, expected_header: Header, entropy_state: ?*con
 }
 
 fn parseVp8KeyFrame(data: []const u8) DecodeError!Vp8Frame {
-    const payload = try raw_vp8.parseKeyFramePayload(data);
+    const payload = try parseVp8KeyFramePayload(data);
     const first_partition = payload.first_partition;
     const frame_header = try parseVp8CompressedFrameHeader(.key, payload.header, first_partition, null);
     const macroblocks = try parseVp8MacroblockHeaders(&frame_header);
@@ -2421,10 +2506,10 @@ fn parseVp8KeyFrame(data: []const u8) DecodeError!Vp8Frame {
     };
 }
 
-fn parseVp8InterFrame(data: []const u8, tag: raw_vp8.FrameTag, header: Header, entropy_state: ?*const Vp8EntropyState) DecodeError!Vp8Frame {
+fn parseVp8InterFrame(data: []const u8, tag: Vp8FrameTag, header: Header, entropy_state: ?*const Vp8EntropyState) DecodeError!Vp8Frame {
     if (tag.first_partition_len == 0) return error.BadImage;
-    if (tag.first_partition_len > data.len - raw_vp8.frame_tag_size) return error.BadImage;
-    const first_partition_start = raw_vp8.frame_tag_size;
+    if (tag.first_partition_len > data.len - vp8_frame_tag_size) return error.BadImage;
+    const first_partition_start = vp8_frame_tag_size;
     const first_partition_end = first_partition_start + tag.first_partition_len;
     const first_partition = data[first_partition_start..first_partition_end];
     const frame_header = try parseVp8CompressedFrameHeader(.inter, header, first_partition, entropy_state);
@@ -3998,7 +4083,7 @@ fn clampU8(value: i32) u8 {
 }
 
 const Vp8CompressedFrameHeader = struct {
-    frame_type: raw_vp8.FrameType,
+    frame_type: Vp8FrameType,
     header: Header,
     reader: Vp8BoolReader,
     token_partition_count: usize,
@@ -4046,7 +4131,7 @@ const Vp8QuantIndices = struct {
     uv_ac_delta: i8,
 };
 
-fn parseVp8CompressedFrameHeader(frame_type: raw_vp8.FrameType, header: Header, data: []const u8, entropy_state: ?*const Vp8EntropyState) DecodeError!Vp8CompressedFrameHeader {
+fn parseVp8CompressedFrameHeader(frame_type: Vp8FrameType, header: Header, data: []const u8, entropy_state: ?*const Vp8EntropyState) DecodeError!Vp8CompressedFrameHeader {
     var reader = try Vp8BoolReader.init(data);
     switch (frame_type) {
         .key => {
@@ -4903,7 +4988,7 @@ fn readVp8InterIntra16Mode(reader: *Vp8BoolReader, probabilities: *const [webp_v
     return .b_pred;
 }
 
-fn readVp8Intra4Modes(reader: *Vp8BoolReader, state: *Vp8Intra4ModeState, mb_x: usize, frame_type: raw_vp8.FrameType) DecodeError![webp_vp8_y_block_count]Vp8Intra4Mode {
+fn readVp8Intra4Modes(reader: *Vp8BoolReader, state: *Vp8Intra4ModeState, mb_x: usize, frame_type: Vp8FrameType) DecodeError![webp_vp8_y_block_count]Vp8Intra4Mode {
     var modes = [_]Vp8Intra4Mode{.dc} ** webp_vp8_y_block_count;
     const top_offset = mb_x * webp_vp8_intra4_block_width;
     var y: usize = 0;
@@ -6164,17 +6249,17 @@ test "webp vp8l decoder rejects truncated lossless pixel stream" {
 test "webp vp8 decoder rejects malformed first partition sizes" {
     const payload_offset = riff_header_size + riff_chunk_header_size;
     var empty_partition = testWebpVp8().*;
-    try raw_vp8.writeVisibleKeyFrameTag(empty_partition[payload_offset..][0..raw_vp8.frame_tag_size], 0);
+    try writeVisibleVp8KeyFrameTag(empty_partition[payload_offset..][0..vp8_frame_tag_size], 0);
     var pixels: [1]ui.Color = undefined;
     var scratch: [128]u8 = undefined;
     try std.testing.expectError(error.BadImage, decodeWithScratch(&empty_partition, &pixels, &scratch));
 
     var short_bool_partition = testWebpVp8().*;
-    try raw_vp8.writeVisibleKeyFrameTag(short_bool_partition[payload_offset..][0..raw_vp8.frame_tag_size], 1);
+    try writeVisibleVp8KeyFrameTag(short_bool_partition[payload_offset..][0..vp8_frame_tag_size], 1);
     try std.testing.expectError(error.BadImage, decodeWithScratch(&short_bool_partition, &pixels, &scratch));
 
     var oversized_partition = testWebpVp8().*;
-    try raw_vp8.writeVisibleKeyFrameTag(oversized_partition[payload_offset..][0..raw_vp8.frame_tag_size], test_webp_vp8_first_partition_len + test_webp_vp8_token_partition_len + 1);
+    try writeVisibleVp8KeyFrameTag(oversized_partition[payload_offset..][0..vp8_frame_tag_size], test_webp_vp8_first_partition_len + test_webp_vp8_token_partition_len + 1);
     try std.testing.expectError(error.BadImage, decodeWithScratch(&oversized_partition, &pixels, &scratch));
 }
 

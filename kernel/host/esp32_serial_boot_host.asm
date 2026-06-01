@@ -43,6 +43,8 @@ opt_jc3248_lcd_cmd_value: resd 1
 opt_jc3248_lcd_unlock: resb 1
 opt_jc3248_lcd_wake: resb 1
 opt_jc3248_lcd_smoke: resb 1
+opt_jc3248_lcd_stripes: resb 1
+opt_jc3248_lcd_status: resb 1
 
 binary_data:    resq 1
 binary_size:    resd 1
@@ -65,6 +67,26 @@ stack_top:
 
 section .text
 global _start
+
+%macro jc_lcd_cmd_data_checked 3
+    mov     edi, r12d
+    mov     esi, %1
+    lea     rdx, [%2]
+    mov     ecx, %3
+    call    jc3248_lcd_cmd_data
+    test    eax, eax
+    jnz     .fail
+%endmacro
+
+%macro jc_lcd_chunk_burst_checked 3
+    mov     edi, r12d
+    lea     rsi, [%1]
+    mov     edx, %2
+    mov     ecx, %3
+    call    jc3248_lcd_send_chunks
+    test    eax, eax
+    jnz     .fail
+%endmacro
 
 _start:
     mov     r14, [rsp]
@@ -96,6 +118,8 @@ _start:
     mov     byte [opt_jc3248_lcd_unlock], 0
     mov     byte [opt_jc3248_lcd_wake], 0
     mov     byte [opt_jc3248_lcd_smoke], 0
+    mov     byte [opt_jc3248_lcd_stripes], 0
+    mov     byte [opt_jc3248_lcd_status], 0
     mov     qword [opt_binary], 0
 
     cmp     r14, 2
@@ -135,6 +159,10 @@ _start:
     cmp     byte [opt_jc3248_lcd_wake], 1
     je      .skip_binary_read
     cmp     byte [opt_jc3248_lcd_smoke], 1
+    je      .skip_binary_read
+    cmp     byte [opt_jc3248_lcd_stripes], 1
+    je      .skip_binary_read
+    cmp     byte [opt_jc3248_lcd_status], 1
     je      .skip_binary_read
     cmp     qword [opt_binary], 0
     je      .help_exit
@@ -225,6 +253,10 @@ _start:
     je      .jc3248_lcd_wake
     cmp     byte [opt_jc3248_lcd_smoke], 1
     je      .jc3248_lcd_smoke
+    cmp     byte [opt_jc3248_lcd_stripes], 1
+    je      .jc3248_lcd_stripes
+    cmp     byte [opt_jc3248_lcd_status], 1
+    je      .jc3248_lcd_status
 
     mov     edi, [serial_fd]
     mov     rsi, [binary_data]
@@ -434,6 +466,38 @@ _start:
     call    sys_exit
 .jc3248_lcd_smoke_err:
     lea     rdi, [m_jc3248_lcd_smoke_err]
+    call    print_str
+    call    print_crlf
+    mov     edi, 1
+    call    sys_exit
+.jc3248_lcd_stripes:
+    mov     edi, [serial_fd]
+    call    jc3248_lcd_stripes
+    test    eax, eax
+    jnz     .jc3248_lcd_stripes_err
+    lea     rdi, [m_jc3248_lcd_stripes]
+    call    print_str
+    call    print_crlf
+    xor     edi, edi
+    call    sys_exit
+.jc3248_lcd_stripes_err:
+    lea     rdi, [m_jc3248_lcd_stripes_err]
+    call    print_str
+    call    print_crlf
+    mov     edi, 1
+    call    sys_exit
+.jc3248_lcd_status:
+    mov     edi, [serial_fd]
+    call    jc3248_lcd_status
+    test    eax, eax
+    jnz     .jc3248_lcd_status_err
+    lea     rdi, [m_jc3248_lcd_status]
+    call    print_str
+    call    print_crlf
+    xor     edi, edi
+    call    sys_exit
+.jc3248_lcd_status_err:
+    lea     rdi, [m_jc3248_lcd_status_err]
     call    print_str
     call    print_crlf
     mov     edi, 1
@@ -728,8 +792,26 @@ parse_options:
     lea     rsi, [str_jc3248_lcd_smoke]
     call    str_eq
     test    eax, eax
-    jz      .ck_target
+    jz      .ck_jc3248_lcd_stripes
     mov     byte [opt_jc3248_lcd_smoke], 1
+    jmp     .loop
+
+.ck_jc3248_lcd_stripes:
+    mov     rdi, r14
+    lea     rsi, [str_jc3248_lcd_stripes]
+    call    str_eq
+    test    eax, eax
+    jz      .ck_jc3248_lcd_status
+    mov     byte [opt_jc3248_lcd_stripes], 1
+    jmp     .loop
+
+.ck_jc3248_lcd_status:
+    mov     rdi, r14
+    lea     rsi, [str_jc3248_lcd_status]
+    call    str_eq
+    test    eax, eax
+    jz      .ck_target
+    mov     byte [opt_jc3248_lcd_status], 1
     jmp     .loop
 
 .ck_target:
@@ -1591,7 +1673,7 @@ esp_read_reg:
     pop     rbp
     ret
 .read_wait:
-    mov     edi, 100
+    mov     edi, 5
     call    sleep_ms
 .read_next:
     dec     ebx
@@ -1663,7 +1745,7 @@ esp_write_reg:
     pop     rbp
     ret
 .read_wait:
-    mov     edi, 100
+    mov     edi, 5
     call    sleep_ms
 .read_next:
     dec     ebx
@@ -2156,6 +2238,92 @@ jc3248_lcd_cmd:
     pop     rbp
     ret
 
+; jc3248_lcd_cmd_no_init(fd, cmd8) -> eax=0 ok
+jc3248_lcd_cmd_no_init:
+    push    rbp
+    mov     rbp, rsp
+    push    r12
+    push    r13
+
+    mov     r12d, edi
+    mov     r13d, esi
+
+    mov     edi, r12d
+    mov     esi, ESP32S3_SPI_USR
+    call    jc3248_spi2_wait_clear
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     esi, ESP32S3_SPI2_W0
+    mov     edx, r13d
+    shl     edx, 16
+    or      edx, JC3248_LCD_OPCODE_WRITE_CMD
+    mov     ecx, 0xffffffff
+    xor     r8d, r8d
+    call    esp_write_reg
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     esi, ESP32S3_SPI2_MS_DLEN
+    mov     edx, 31
+    mov     ecx, 0xffffffff
+    xor     r8d, r8d
+    call    esp_write_reg
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     esi, ESP32S3_SPI2_MISC
+    mov     edx, ESP32S3_SPI_MISC_INIT
+    mov     ecx, 0xffffffff
+    xor     r8d, r8d
+    call    esp_write_reg
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     esi, ESP32S3_SPI2_USER
+    mov     edx, ESP32S3_SPI_USR_MOSI
+    mov     ecx, 0xffffffff
+    xor     r8d, r8d
+    call    esp_write_reg
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    call    jc3248_spi2_apply_config
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     esi, ESP32S3_SPI2_CMD
+    mov     edx, ESP32S3_SPI_USR
+    mov     ecx, ESP32S3_SPI_USR
+    xor     r8d, r8d
+    call    esp_write_reg
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     esi, ESP32S3_SPI_USR
+    call    jc3248_spi2_wait_clear
+    test    eax, eax
+    jnz     .fail
+
+    xor     eax, eax
+    pop     r13
+    pop     r12
+    pop     rbp
+    ret
+.fail:
+    mov     eax, 1
+    pop     r13
+    pop     r12
+    pop     rbp
+    ret
+
 ; jc3248_lcd_unlock(fd) -> eax=0 ok
 jc3248_lcd_unlock:
     push    rbp
@@ -2245,9 +2413,152 @@ jc3248_lcd_wake:
     pop     rbp
     ret
 
+; jc3248_lcd_board_init(fd) -> eax=0 ok
+jc3248_lcd_board_init:
+    push    rbp
+    mov     rbp, rsp
+    push    r12
+
+    mov     r12d, edi
+
+    mov     edi, r12d
+    call    jc3248_spi2_init
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, 120
+    call    sleep_ms
+
+    mov     edi, r12d
+    mov     esi, 0x01
+    call    jc3248_lcd_cmd_no_init
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, 150
+    call    sleep_ms
+
+    jc_lcd_cmd_data_checked 0x36, lcd_madctl_data, 1
+    jc_lcd_cmd_data_checked 0x3a, lcd_pixfmt_data, 1
+    jc_lcd_cmd_data_checked 0xbb, lcd_unlock_data, 8
+
+    jc_lcd_cmd_data_checked 0xa0, lcd_init_a0, 17
+    jc_lcd_cmd_data_checked 0xa2, lcd_init_a2, 31
+    jc_lcd_cmd_data_checked 0xd0, lcd_init_d0, 30
+    jc_lcd_cmd_data_checked 0xa3, lcd_init_a3, 22
+    jc_lcd_cmd_data_checked 0xc1, lcd_init_c1, 30
+    jc_lcd_cmd_data_checked 0xc3, lcd_init_c3, 11
+    jc_lcd_cmd_data_checked 0xc4, lcd_init_c4, 29
+    jc_lcd_cmd_data_checked 0xc5, lcd_init_c5, 23
+    jc_lcd_cmd_data_checked 0xc6, lcd_init_c6, 20
+    jc_lcd_cmd_data_checked 0xc7, lcd_init_c7, 20
+    jc_lcd_cmd_data_checked 0xc9, lcd_init_c9, 4
+    jc_lcd_cmd_data_checked 0xcf, lcd_init_cf, 27
+    jc_lcd_cmd_data_checked 0xd5, lcd_init_d5, 30
+    jc_lcd_cmd_data_checked 0xd6, lcd_init_d6, 30
+    jc_lcd_cmd_data_checked 0xd7, lcd_init_d7, 19
+    jc_lcd_cmd_data_checked 0xd8, lcd_init_d8, 12
+    jc_lcd_cmd_data_checked 0xd9, lcd_init_d9, 12
+    jc_lcd_cmd_data_checked 0xdd, lcd_init_dd, 12
+    jc_lcd_cmd_data_checked 0xdf, lcd_init_df, 8
+    jc_lcd_cmd_data_checked 0xe0, lcd_init_e0, 17
+    jc_lcd_cmd_data_checked 0xe1, lcd_init_e1, 17
+    jc_lcd_cmd_data_checked 0xe2, lcd_init_e2, 17
+    jc_lcd_cmd_data_checked 0xe3, lcd_init_e3, 17
+    jc_lcd_cmd_data_checked 0xe4, lcd_init_e4, 17
+    jc_lcd_cmd_data_checked 0xe5, lcd_init_e5, 17
+    jc_lcd_cmd_data_checked 0xa4, lcd_init_a4_0, 16
+    jc_lcd_cmd_data_checked 0xa4, lcd_init_a4_1, 4
+    jc_lcd_cmd_data_checked 0xbb, lcd_init_bb_lock, 8
+
+    mov     edi, r12d
+    mov     esi, 0x13
+    call    jc3248_lcd_cmd_no_init
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     esi, 0x11
+    call    jc3248_lcd_cmd_no_init
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, 120
+    call    sleep_ms
+
+    jc_lcd_cmd_data_checked 0x2c, lcd_init_2c_tail, 4
+
+    mov     edi, r12d
+    mov     esi, 0x29
+    call    jc3248_lcd_cmd_no_init
+    test    eax, eax
+    jnz     .fail
+
+    xor     eax, eax
+    pop     r12
+    pop     rbp
+    ret
+.fail:
+    mov     eax, 1
+    pop     r12
+    pop     rbp
+    ret
+
 ; jc3248_lcd_smoke_fill(fd) -> eax=0 ok
 ; Sends a tiny red RGB565 pixel burst after wake/init-lite commands.
 jc3248_lcd_smoke_fill:
+    push    rbp
+    mov     rbp, rsp
+    push    r12
+
+    mov     r12d, edi
+
+    mov     edi, r12d
+    call    jc3248_lcd_board_init
+    test    eax, eax
+    jnz     .fail
+
+    jc_lcd_cmd_data_checked 0x36, lcd_madctl_data, 1
+    jc_lcd_cmd_data_checked 0x3a, lcd_pixfmt_data, 1
+    jc_lcd_cmd_data_checked 0x2a, lcd_col_data, 4
+    jc_lcd_cmd_data_checked 0x2b, lcd_status_row_data, 4
+
+    mov     byte [lcd_cmd_word + 0], JC3248_LCD_OPCODE_WRITE_COLOR
+    mov     byte [lcd_cmd_word + 1], 0
+    mov     byte [lcd_cmd_word + 2], 0x2c
+    mov     byte [lcd_cmd_word + 3], 0
+
+    mov     edi, r12d
+    lea     rsi, [lcd_cmd_word]
+    mov     edx, 4
+    xor     ecx, ecx
+    mov     r8d, 1
+    call    jc3248_spi2_write_buf
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    lea     rsi, [lcd_red_pixels]
+    mov     edx, 64
+    mov     ecx, 1
+    xor     r8d, r8d
+    call    jc3248_spi2_write_buf
+    test    eax, eax
+    jnz     .fail
+
+    xor     eax, eax
+    pop     r12
+    pop     rbp
+    ret
+.fail:
+    mov     eax, 1
+    pop     r12
+    pop     rbp
+    ret
+
+; jc3248_lcd_stripes(fd) -> eax=0 ok
+; Sends three 64-byte RGB565 bursts: red, green, blue.
+jc3248_lcd_stripes:
     push    rbp
     mov     rbp, rsp
     push    r12
@@ -2301,6 +2612,24 @@ jc3248_lcd_smoke_fill:
     lea     rsi, [lcd_red_pixels]
     mov     edx, 64
     mov     ecx, 1
+    mov     r8d, 1
+    call    jc3248_spi2_write_buf
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    lea     rsi, [lcd_green_pixels]
+    mov     edx, 64
+    mov     ecx, 1
+    mov     r8d, 1
+    call    jc3248_spi2_write_buf
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    lea     rsi, [lcd_blue_pixels]
+    mov     edx, 64
+    mov     ecx, 1
     xor     r8d, r8d
     call    jc3248_spi2_write_buf
     test    eax, eax
@@ -2313,6 +2642,127 @@ jc3248_lcd_smoke_fill:
 .fail:
     mov     eax, 1
     pop     r12
+    pop     rbp
+    ret
+
+; jc3248_lcd_status(fd) -> eax=0 ok
+; Renders a bounded hardware status band: blue/green/cyan/white blocks.
+jc3248_lcd_status:
+    push    rbp
+    mov     rbp, rsp
+    push    r12
+
+    mov     r12d, edi
+
+    mov     edi, r12d
+    call    jc3248_lcd_wake
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     esi, 0x36
+    lea     rdx, [lcd_madctl_data]
+    mov     ecx, 1
+    call    jc3248_lcd_cmd_data
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     esi, 0x3a
+    lea     rdx, [lcd_pixfmt_data]
+    mov     ecx, 1
+    call    jc3248_lcd_cmd_data
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     esi, 0x2a
+    lea     rdx, [lcd_col_data]
+    mov     ecx, 4
+    call    jc3248_lcd_cmd_data
+    test    eax, eax
+    jnz     .fail
+
+    mov     byte [lcd_cmd_word + 0], JC3248_LCD_OPCODE_WRITE_COLOR
+    mov     byte [lcd_cmd_word + 1], 0
+    mov     byte [lcd_cmd_word + 2], 0x2c
+    mov     byte [lcd_cmd_word + 3], 0
+
+    mov     edi, r12d
+    lea     rsi, [lcd_cmd_word]
+    mov     edx, 4
+    xor     ecx, ecx
+    mov     r8d, 1
+    call    jc3248_spi2_write_buf
+    test    eax, eax
+    jnz     .fail
+
+    jc_lcd_chunk_burst_checked lcd_blue_pixels, 30, 0
+    jc_lcd_chunk_burst_checked lcd_green_pixels, 30, 0
+    jc_lcd_chunk_burst_checked lcd_cyan_pixels, 30, 0
+    jc_lcd_chunk_burst_checked lcd_white_pixels, 30, 1
+
+    xor     eax, eax
+    pop     r12
+    pop     rbp
+    ret
+.fail:
+    mov     eax, 1
+    pop     r12
+    pop     rbp
+    ret
+
+; jc3248_lcd_send_chunks(fd, buf, count, release_last) -> eax=0 ok
+jc3248_lcd_send_chunks:
+    push    rbp
+    mov     rbp, rsp
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+
+    mov     r12d, edi
+    mov     r13, rsi
+    mov     r14d, edx
+    mov     r15d, ecx
+
+.loop:
+    test    r14d, r14d
+    jz      .ok
+    mov     ebx, 1
+    cmp     r14d, 1
+    jne     .send
+    test    r15d, r15d
+    jz      .send
+    xor     ebx, ebx
+.send:
+    mov     edi, r12d
+    mov     rsi, r13
+    mov     edx, 64
+    mov     ecx, 1
+    mov     r8d, ebx
+    call    jc3248_spi2_write_buf
+    test    eax, eax
+    jnz     .fail
+    dec     r14d
+    jmp     .loop
+.ok:
+    xor     eax, eax
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
+    ret
+.fail:
+    mov     eax, 1
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
     pop     rbp
     ret
 
@@ -3006,6 +3456,8 @@ str_jc3248_lcd_cmd: db "--jc3248-lcd-cmd", 0
 str_jc3248_lcd_unlock: db "--jc3248-lcd-unlock", 0
 str_jc3248_lcd_wake: db "--jc3248-lcd-wake", 0
 str_jc3248_lcd_smoke: db "--jc3248-lcd-smoke", 0
+str_jc3248_lcd_stripes: db "--jc3248-lcd-stripes", 0
+str_jc3248_lcd_status: db "--jc3248-lcd-status", 0
 str_target:         db "--target", 0
 str_jc3248w535:     db "jc3248w535", 0
 str_help:           db "--help", 0
@@ -3044,6 +3496,10 @@ m_jc3248_lcd_wake: db "JC3248 LCD wake sent", 0
 m_jc3248_lcd_wake_err: db "JC3248 LCD wake failed", 0
 m_jc3248_lcd_smoke: db "JC3248 LCD smoke fill sent", 0
 m_jc3248_lcd_smoke_err: db "JC3248 LCD smoke fill failed", 0
+m_jc3248_lcd_stripes: db "JC3248 LCD stripes sent", 0
+m_jc3248_lcd_stripes_err: db "JC3248 LCD stripes failed", 0
+m_jc3248_lcd_status: db "JC3248 LCD status rendered", 0
+m_jc3248_lcd_status_err: db "JC3248 LCD status failed", 0
 m_on:               db "on", 0
 m_off:              db "off", 0
 m_dl_err:           db "Download failed", 0
@@ -3067,6 +3523,8 @@ usage_str:          db "Usage: esp32_serial_boot_host [options] <binary> [entry_
                     db "  --jc3248-lcd-unlock Send AXS15231B 0xBB unlock prefix", 0x0a
                     db "  --jc3248-lcd-wake  Send unlock, normal, sleep-out, display-on", 0x0a
                     db "  --jc3248-lcd-smoke Send 64 bytes of red RGB565 pixels", 0x0a
+                    db "  --jc3248-lcd-stripes Send red/green/blue RGB565 bursts", 0x0a
+                    db "  --jc3248-lcd-status Render bounded hardware status band", 0x0a
                     db "  --port <device>      Serial port (default: /dev/ttyUSB0)", 0x0a
                     db "  --baud <rate>        Baud rate (default: 115200)", 0x0a
                     db "  --entry <hex>        RAM load/entry address (default: 0x40374000)", 0x0a
@@ -3076,7 +3534,41 @@ usage_str:          db "Usage: esp32_serial_boot_host [options] <binary> [entry_
 
 lcd_cmd_word:        db 0, 0, 0, 0
 lcd_unlock_data:     db 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x5a, 0xa5
+lcd_init_a0:         db 0xc0,0x10,0x00,0x02,0x00,0x00,0x04,0x3f,0x20,0x05,0x3f,0x3f,0x00,0x00,0x00,0x00,0x00
+lcd_init_a2:         db 0x30,0x3c,0x24,0x14,0xd0,0x20,0xff,0xe0,0x40,0x19,0x80,0x80,0x80,0x20,0xf9,0x10,0x02,0xff,0xff,0xf0,0x90,0x01,0x32,0xa0,0x91,0xe0,0x20,0x7f,0xff,0x00,0x5a
+lcd_init_d0:         db 0xe0,0x40,0x51,0x24,0x08,0x05,0x10,0x01,0x20,0x15,0x42,0xc2,0x22,0x22,0xaa,0x03,0x10,0x12,0x60,0x14,0x1e,0x51,0x15,0x00,0x8a,0x20,0x00,0x03,0x3a,0x12
+lcd_init_a3:         db 0xa0,0x06,0xaa,0x00,0x08,0x02,0x0a,0x04,0x04,0x04,0x04,0x04,0x04,0x04,0x04,0x04,0x04,0x04,0x04,0x00,0x55,0x55
+lcd_init_c1:         db 0x31,0x04,0x02,0x02,0x71,0x05,0x24,0x55,0x02,0x00,0x41,0x00,0x53,0xff,0xff,0xff,0x4f,0x52,0x00,0x4f,0x52,0x00,0x45,0x3b,0x0b,0x02,0x0d,0x00,0xff,0x40
+lcd_init_c3:         db 0x00,0x00,0x00,0x50,0x03,0x00,0x00,0x00,0x01,0x80,0x01
+lcd_init_c4:         db 0x00,0x24,0x33,0x80,0x00,0xea,0x64,0x32,0xc8,0x64,0xc8,0x32,0x90,0x90,0x11,0x06,0xdc,0xfa,0x00,0x00,0x80,0xfe,0x10,0x10,0x00,0x0a,0x0a,0x44,0x50
+lcd_init_c5:         db 0x18,0x00,0x00,0x03,0xfe,0x3a,0x4a,0x20,0x30,0x10,0x88,0xde,0x0d,0x08,0x0f,0x0f,0x01,0x3a,0x4a,0x20,0x10,0x10,0x00
+lcd_init_c6:         db 0x05,0x0a,0x05,0x0a,0x00,0xe0,0x2e,0x0b,0x12,0x22,0x12,0x22,0x01,0x03,0x00,0x3f,0x6a,0x18,0xc8,0x22
+lcd_init_c7:         db 0x50,0x32,0x28,0x00,0xa2,0x80,0x8f,0x00,0x80,0xff,0x07,0x11,0x9c,0x67,0xff,0x24,0x0c,0x0d,0x0e,0x0f
+lcd_init_c9:         db 0x33,0x44,0x44,0x01
+lcd_init_cf:         db 0x2c,0x1e,0x88,0x58,0x13,0x18,0x56,0x18,0x1e,0x68,0x88,0x00,0x65,0x09,0x22,0xc4,0x0c,0x77,0x22,0x44,0xaa,0x55,0x08,0x08,0x12,0xa0,0x08
+lcd_init_d5:         db 0x40,0x8e,0x8d,0x01,0x35,0x04,0x92,0x74,0x04,0x92,0x74,0x04,0x08,0x6a,0x04,0x46,0x03,0x03,0x03,0x03,0x82,0x01,0x03,0x00,0xe0,0x51,0xa1,0x00,0x00,0x00
+lcd_init_d6:         db 0x10,0x32,0x54,0x76,0x98,0xba,0xdc,0xfe,0x93,0x00,0x01,0x83,0x07,0x07,0x00,0x07,0x07,0x00,0x03,0x03,0x03,0x03,0x03,0x03,0x00,0x84,0x00,0x20,0x01,0x00
+lcd_init_d7:         db 0x03,0x01,0x0b,0x09,0x0f,0x0d,0x1e,0x1f,0x18,0x1d,0x1f,0x19,0x40,0x8e,0x04,0x00,0x20,0xa0,0x1f
+lcd_init_d8:         db 0x02,0x00,0x0a,0x08,0x0e,0x0c,0x1e,0x1f,0x18,0x1d,0x1f,0x19
+lcd_init_d9:         times 12 db 0x1f
+lcd_init_dd:         times 12 db 0x1f
+lcd_init_df:         db 0x44,0x73,0x4b,0x69,0x00,0x0a,0x02,0x90
+lcd_init_e0:         db 0x3b,0x28,0x10,0x16,0x0c,0x06,0x11,0x28,0x5c,0x21,0x0d,0x35,0x13,0x2c,0x33,0x28,0x0d
+lcd_init_e1:         db 0x37,0x28,0x10,0x16,0x0b,0x06,0x11,0x28,0x5c,0x21,0x0d,0x35,0x14,0x2c,0x33,0x28,0x0f
+lcd_init_e2:         db 0x3b,0x07,0x12,0x18,0x0e,0x0d,0x17,0x35,0x44,0x32,0x0c,0x14,0x14,0x36,0x3a,0x2f,0x0d
+lcd_init_e3:         db 0x37,0x07,0x12,0x18,0x0e,0x0d,0x17,0x35,0x44,0x32,0x0c,0x14,0x14,0x36,0x32,0x2f,0x0f
+lcd_init_e4:         db 0x3b,0x07,0x12,0x18,0x0e,0x0d,0x17,0x39,0x44,0x2e,0x0c,0x14,0x14,0x36,0x3a,0x2f,0x0d
+lcd_init_e5:         db 0x37,0x07,0x12,0x18,0x0e,0x0d,0x17,0x39,0x44,0x2e,0x0c,0x14,0x14,0x36,0x3a,0x2f,0x0f
+lcd_init_a4_0:       db 0x85,0x85,0x95,0x82,0xaf,0xaa,0xaa,0x80,0x10,0x30,0x40,0x40,0x20,0xff,0x60,0x30
+lcd_init_a4_1:       db 0x85,0x85,0x95,0x85
+lcd_init_bb_lock:    times 8 db 0x00
+lcd_init_2c_tail:    db 0x00,0x00,0x00,0x00
 lcd_madctl_data:     db 0x70
 lcd_pixfmt_data:     db 0x55
 lcd_col_data:        db 0x00, 0x00, 0x01, 0x3f
+lcd_status_row_data: db 0x00, 0x00, 0x00, 0x0b
 lcd_red_pixels:      times 32 db 0xf8, 0x00
+lcd_green_pixels:    times 32 db 0x07, 0xe0
+lcd_blue_pixels:     times 32 db 0x00, 0x1f
+lcd_cyan_pixels:     times 32 db 0x07, 0xff
+lcd_white_pixels:    times 32 db 0xff, 0xff

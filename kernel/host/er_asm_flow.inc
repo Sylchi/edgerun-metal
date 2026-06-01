@@ -482,9 +482,11 @@ er_fn track_real_instruction
     ret
 .math_mov_hash:
     pop     r14
+    push    r14
     call    match_math_hash_mov
     test    eax, eax
-    jnz     .math_mov_done
+    jnz     .math_mov_hash_done
+    pop     r14
     mov     rdi, r12
     mov     rsi, r13
     lea     rdx, [rel tok_mov]
@@ -492,8 +494,13 @@ er_fn track_real_instruction
     call    token_eq
     test    eax, eax
     jz      .xor
+    call    match_math_int_ops
+    test    eax, eax
+    jnz     .math_mov_done
     xor     eax, eax
     ret
+.math_mov_hash_done:
+    pop     r11
 .math_mov_done:
     mov     eax, 1
     ret
@@ -527,7 +534,16 @@ er_fn track_real_instruction
     ret
 .shift:
     pop     r14
+    push    r14
     call    match_math_hash_xor
+    test    eax, eax
+    jz      .shift_int_ops
+    pop     r11
+    mov     eax, 1
+    ret
+.shift_int_ops:
+    pop     r14
+    call    match_math_int_ops
     test    eax, eax
     jz      .shift_ops
     mov     eax, 1
@@ -578,7 +594,16 @@ er_fn track_real_instruction
     ret
 .arith_math:
     pop     r14
+    push    r14
     call    match_math_hash_arith
+    test    eax, eax
+    jz      .arith_int
+    pop     r11
+    mov     eax, 1
+    ret
+.arith_int:
+    pop     r14
+    call    match_math_int_ops
     test    eax, eax
     jz      .branch
     mov     eax, 1
@@ -598,6 +623,12 @@ er_fn track_real_instruction
 .movzx:
     call    match_math_hash_movzx
     test    eax, eax
+    jz      .int_ops
+    mov     eax, 1
+    ret
+.int_ops:
+    call    match_math_int_ops
+    test    eax, eax
     jz      .mul
     mov     eax, 1
     ret
@@ -610,7 +641,21 @@ er_fn track_real_instruction
 .call:
     call    match_call_label
     test    eax, eax
+    jz      .portio
+    mov     eax, 1
+    ret
+.portio:
+    call    match_in_al_dx
+    test    eax, eax
+    jz      .out_dx_al
+    call    emit_in_al_dx
+    mov     eax, 1
+    ret
+.out_dx_al:
+    call    match_out_dx_al
+    test    eax, eax
     jz      .syscall
+    call    emit_out_dx_al
     mov     eax, 1
     ret
 .syscall:
@@ -1384,4 +1429,3 @@ er_fn append_zero_qword
     call    append_text_byte
     xor     edi, edi
     jmp     append_text_byte
-

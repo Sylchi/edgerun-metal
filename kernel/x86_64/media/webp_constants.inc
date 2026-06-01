@@ -1,0 +1,82 @@
+; EdgeRun WebP container constants.
+
+%ifndef ER_WEBP_CONSTANTS_INC
+%define ER_WEBP_CONSTANTS_INC
+
+WEBP_RIFF_SIGNATURE                 equ 0x46464952
+WEBP_SIGNATURE                      equ 0x50424557
+WEBP_CHUNK_VP8                      equ 0x20385056
+WEBP_CHUNK_VP8L                     equ 0x4c385056
+WEBP_CHUNK_VP8X                     equ 0x58385056
+WEBP_CHUNK_ALPH                     equ 0x48504c41
+WEBP_CHUNK_ANIM                     equ 0x4d494e41
+WEBP_CHUNK_ANMF                     equ 0x464d4e41
+WEBP_CHUNK_ICCP                     equ 0x50434349
+WEBP_CHUNK_EXIF                     equ 0x46495845
+WEBP_CHUNK_XMP                      equ 0x20504d58
+
+WEBP_RIFF_HEADER_SIZE               equ 12
+WEBP_CHUNK_HEADER_SIZE              equ 8
+WEBP_RIFF_LEN_OFFSET                equ 4
+WEBP_SIGNATURE_OFFSET               equ 8
+WEBP_MAX_CANVAS_DIMENSION           equ 16777216
+WEBP_MAX_LEGACY_DIMENSION           equ 16384
+
+WEBP_VP8X_PAYLOAD_SIZE              equ 10
+WEBP_VP8X_FLAGS_INDEX               equ 0
+WEBP_VP8X_WIDTH_INDEX               equ 4
+WEBP_VP8X_HEIGHT_INDEX              equ 7
+WEBP_VP8X_FLAG_ICC                  equ 0x20
+WEBP_VP8X_FLAG_ALPHA                equ 0x10
+WEBP_VP8X_FLAG_EXIF                 equ 0x08
+WEBP_VP8X_FLAG_XMP                  equ 0x04
+WEBP_VP8X_FLAG_ANIMATION            equ 0x02
+WEBP_VP8X_KNOWN_FLAGS               equ WEBP_VP8X_FLAG_ICC | WEBP_VP8X_FLAG_ALPHA | WEBP_VP8X_FLAG_EXIF | WEBP_VP8X_FLAG_XMP | WEBP_VP8X_FLAG_ANIMATION
+
+WEBP_VP8L_SIGNATURE                 equ 0x2f
+WEBP_VP8L_HEADER_SIZE               equ 5
+WEBP_VP8L_DIMENSION_MASK            equ 0x3fff
+WEBP_VP8L_HEIGHT_SHIFT              equ 14
+WEBP_VP8L_VERSION_SHIFT             equ 29
+WEBP_VP8L_VERSION_MASK              equ 0x7
+
+WEBP_ALPH_HEADER_SIZE               equ 1
+WEBP_ALPH_COMPRESSION_MASK          equ 0x03
+WEBP_ALPH_FILTER_MASK               equ 0x0c
+WEBP_ALPH_FILTER_SHIFT              equ 2
+WEBP_ALPH_COMPRESSION_NONE          equ 0
+WEBP_ALPH_COMPRESSION_VP8L          equ 1
+WEBP_ALPH_FILTER_NONE               equ 0
+WEBP_ALPH_FILTER_HORIZONTAL         equ 1
+WEBP_ALPH_FILTER_VERTICAL           equ 2
+WEBP_ALPH_FILTER_GRADIENT           equ 3
+
+WEBP_HDR_WIDTH                      equ 0
+WEBP_HDR_HEIGHT                     equ 4
+WEBP_HDR_PRIMARY_TYPE               equ 8
+WEBP_HDR_PRIMARY_OFFSET             equ 12
+WEBP_HDR_PRIMARY_LEN                equ 16
+WEBP_HDR_FLAGS                      equ 20
+WEBP_HDR_ALPHA_OFFSET               equ 24
+WEBP_HDR_ALPHA_LEN                  equ 28
+WEBP_HDR_SIZE                       equ 32
+
+WEBP_CHUNK_DESC_TYPE                equ 0
+WEBP_CHUNK_DESC_DATA_OFFSET         equ 4
+WEBP_CHUNK_DESC_DATA_LEN            equ 8
+WEBP_CHUNK_DESC_NEXT_CURSOR         equ 12
+WEBP_CHUNK_DESC_SIZE                equ 16
+
+WEBP_PARSE_STACK_CHUNK              equ 0
+WEBP_PARSE_STACK_VP8_HEADER         equ WEBP_PARSE_STACK_CHUNK + WEBP_CHUNK_DESC_SIZE
+WEBP_PARSE_STACK_TOTAL              equ WEBP_PARSE_STACK_VP8_HEADER + 4
+
+WEBP_DECODE_STACK_HEADER            equ 0
+WEBP_DECODE_STACK_YUV               equ WEBP_DECODE_STACK_HEADER + WEBP_HDR_SIZE
+WEBP_DECODE_STACK_OUT               equ WEBP_DECODE_STACK_YUV + 8
+WEBP_DECODE_STACK_YUV_CAP           equ WEBP_DECODE_STACK_OUT + 8
+WEBP_DECODE_STACK_OUT_CAP           equ WEBP_DECODE_STACK_YUV_CAP + 8
+WEBP_DECODE_STACK_PIXEL_COUNT       equ WEBP_DECODE_STACK_OUT_CAP + 8
+WEBP_DECODE_STACK_TOTAL             equ WEBP_DECODE_STACK_PIXEL_COUNT + 8
+
+%endif
