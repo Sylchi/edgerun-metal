@@ -1,8 +1,7 @@
-; EdgeRun x86_64 kernel entry point with multiboot v1 support.
+; EdgeRun x86_64 kernel entry point.
 ;
-; Phase 1 (32-bit protected mode): multiboot header, page tables, GDT,
-;                                transition to 64-bit long mode.
-; Phase 2 (64-bit long mode):     stack, BSS zero, er_kernel_main.
+; Phase 1 (32-bit protected mode): page tables, GDT, transition to long mode.
+; Phase 2 (64-bit long mode):      stack, BSS zero, er_kernel_main.
 
 %include "x86_64/macros.inc"
 
@@ -11,6 +10,10 @@ extern __bss_end
 extern er_bss_zero
 extern er_kernel_main
 
+; Segment selectors
+%define SEL_CODE64  0x08
+%define SEL_DATA64  0x10
+
 ; Stack in .bss (zeroed by _start before use)
 SECTION .bss
 align 16
@@ -18,22 +21,46 @@ _er_stack_bottom:
     resb 16384
 _er_stack_top:
 
-; Multiboot info structure pointer (saved from ebx at entry)
+; Boot info pointer. The raw QEMU loader passes zero; EFI fills its own record.
 global mb_info_ptr
 mb_info_ptr:    dq 0
 
-; ─── Multiboot v1 header (must be in first 8192 bytes) ────────────────
-; Request: align modules, memory info, video mode (linear framebuffer)
 SECTION .text._start
-align 4
-mb_header:
-    dd 0x1BADB002
-    dd 0x00000007          ; flags: bit0=align, bit1=meminfo, bit2=video
-    dd -(0x1BADB002 + 0x00000007)
-    dd 0                   ; mode: 0=prefer LFB
-    dd 1024                ; width
-    dd 768                 ; height
-    dd 32                  ; depth
+; ─── Phase 1: 32-bit entry ────────────────────────────────────────────
+[BITS 32]
+global _start
+_start:
+    ; Save boot info structure pointer. Zero means no boot-info record.
+    mov     [mb_info_ptr], ebx
+
+    ; Disable interrupts
+    cli
+
+    ; Load GDT
+    lgdt [gdt_descriptor]
+
+    ; Set PAE, PGE, OSFXSR, OSXMMEXCPT in CR4
+    mov     eax, cr4
+    or      eax, 0x000006A0        ; PAE + PGE + OSFXSR + OSXMMEXCPT
+    mov     cr4, eax
+
+    ; Load PML4 address into CR3
+    mov     eax, boot_pml4
+    mov     cr3, eax
+
+    ; Enable Long Mode in EFER MSR
+    mov     ecx, 0xC0000080        ; EFER MSR
+    rdmsr
+    or      eax, 0x00000100        ; LME = 1
+    wrmsr
+
+    ; Enable paging (sets PG bit in CR0)
+    mov     eax, cr0
+    or      eax, 0x80000001        ; PG + PE
+    mov     cr0, eax
+
+    ; Far jump to 64-bit code
+    jmp     SEL_CODE64:long_mode_entry
 
 ; ─── Boot page tables ──────────────────────────────────────────────────
 ; CPU must support pdpe1gb (AMD Ryzen 7840U does). Identity-map full 8GB.
@@ -98,50 +125,9 @@ gdt_descriptor:
     dw gdt_end - gdt_null - 1
     dd gdt_null
 
-; Segment selectors
-%define SEL_CODE64  0x08
-%define SEL_DATA64  0x10
-
-; ─── Phase 1: 32-bit entry (multiboot) ────────────────────────────────
-[BITS 32]
-global _start
-_start:
-    ; Save multiboot info structure pointer (ebx holds physical address)
-    ; Must be saved immediately before anything clobbers ebx
-    mov     [mb_info_ptr], ebx
-
-    ; Disable interrupts
-    cli
-
-    ; Load GDT
-    lgdt [gdt_descriptor]
-
-    ; Set PAE, PGE, OSFXSR, OSXMMEXCPT in CR4
-    mov     eax, cr4
-    or      eax, 0x000006A0        ; PAE + PGE + OSFXSR + OSXMMEXCPT
-    mov     cr4, eax
-
-    ; Load PML4 address into CR3
-    mov     eax, boot_pml4
-    mov     cr3, eax
-
-    ; Enable Long Mode in EFER MSR
-    mov     ecx, 0xC0000080        ; EFER MSR
-    rdmsr
-    or      eax, 0x00000100        ; LME = 1
-    wrmsr
-
-    ; Enable paging (sets PG bit in CR0)
-    mov     eax, cr0
-    or      eax, 0x80000001        ; PG + PE
-    mov     cr0, eax
-
-    ; Far jump to 64-bit code
-    jmp     SEL_CODE64:.64bit
-
 ; ─── Phase 2: 64-bit entry ────────────────────────────────────────────
 [BITS 64]
-.64bit:
+long_mode_entry:
     ; Load data segment descriptor
     mov     ax, SEL_DATA64
     db      0x8E, 0xD8       ; mov ds, ax (raw encode to suppress YASM seg warning)
@@ -156,7 +142,7 @@ _start:
     ldmxcsr [rsp]
     pop     rax
 
-    ; Zero BSS using multiboot-provided stack
+    ; Zero BSS using the loader-provided temporary stack.
     lea     rdi, [rel __bss_start]
     lea     rsi, [rel __bss_end]
     call    er_bss_zero

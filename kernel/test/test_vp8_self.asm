@@ -28,6 +28,8 @@ extern er_vp8_ac_quant
 extern er_vp8_build_dequant
 extern er_vp8_parse_segmentation_header
 extern er_vp8_parse_loop_filter_header
+extern er_vp8_parse_compressed_key_frame_header
+extern er_vp8_read_key_macroblock_header
 extern er_vp8_read_reference_copy
 extern er_vp8_parse_inter_reference_header
 extern er_vp8_read_intra16_mode
@@ -59,6 +61,9 @@ extern er_vp8_reference_subpixel_sample
 extern er_vp8_abs_diff_u8
 extern er_vp8_saturate_i8
 extern er_vp8_filter_normal_macroblock_vertical_edge
+extern er_vp8_filter_normal_macroblock_horizontal_edge
+extern er_vp8_filter_simple_vertical_edge
+extern er_vp8_filter_simple_horizontal_edge
 extern er_vp8_dequantize_y2_block
 extern er_vp8_dequantize_y_block_with_own_dc
 extern er_vp8_dequantize_y_block_with_y2_dc
@@ -67,6 +72,8 @@ extern er_vp8_inverse_wht
 extern er_vp8_idct_mul_shift
 extern er_vp8_inverse_idct
 extern er_vp8_clamp_u8
+extern er_vp8_yuv_to_rgba
+extern er_vp8_write_frame_rgba
 extern er_vp8_add_pixel
 extern er_vp8_add_idct_block
 extern er_vp8_y_plane_block_offset
@@ -143,6 +150,9 @@ reference:      resb VP8_REFERENCE_HEADER_SIZE
 motion_vector:  resb VP8_MOTION_VECTOR_SIZE
 subpixel_taps:  resb VP8_SUBPIXEL_FILTER_TAP_COUNT
 token_probabilities: resb VP8_COEFF_UPDATE_PROBABILITY_COUNT
+compressed_header: resb VP8_COMPRESSED_HEADER_SIZE
+macroblock_header: resb VP8_MACROBLOCK_HEADER_SIZE
+first_partition_zero: resb VP8_TEST_KEY_FIRST_PARTITION_LEN
 coeff_block:     resb VP8_COEFF_BLOCK_BYTES
 macroblock_coeffs: resb VP8_MACROBLOCK_COEFF_BLOCK_COUNT * VP8_COEFF_BLOCK_BYTES
 modes:           resb VP8_Y_BLOCK_COUNT
@@ -153,6 +163,7 @@ v_plane:         resb VP8_CHROMA_BLOCK_SIZE * VP8_CHROMA_BLOCK_SIZE
 frame_y:         resb VP8_TEST_FRAME_Y_BYTES
 frame_u:         resb VP8_TEST_FRAME_UV_BYTES
 frame_v:         resb VP8_TEST_FRAME_UV_BYTES
+frame_rgba:      resd VP8_TEST_FRAME_WIDTH * VP8_TEST_FRAME_HEIGHT
 edges:           resb VP8_EDGES_SIZE_16
 intra4_top:      resb VP8_BLOCK_SIZE * 2
 intra4_edge:     resb VP8_INTRA4_EDGE_SIZE
@@ -1067,8 +1078,63 @@ _start:
     cmp     byte [rel loop_filter + VP8_LOOP_FILTER_MODE_DELTAS + 3], 0
     jne     .fail_loop_filter_full
     inc     qword [rel passed]
-    jmp     .reference_zero
+    jmp     .compressed_key_header
 .fail_loop_filter_full:
+    inc     qword [rel failed]
+
+.compressed_key_header:
+    mov     rdi, first_partition_zero
+    mov     esi, VP8_TEST_KEY_FIRST_PARTITION_LEN
+    mov     rdx, token_probabilities
+    mov     rcx, compressed_header
+    call    er_vp8_parse_compressed_key_frame_header
+    cmp     eax, VP8_COMPRESSED_HEADER_SIZE
+    jne     .fail_compressed_key_header
+    test    edx, edx
+    jnz     .fail_compressed_key_header
+    cmp     byte [rel compressed_header + VP8_COMPRESSED_HEADER_TOKEN_COUNT], 1
+    jne     .fail_compressed_key_header
+    cmp     byte [rel compressed_header + VP8_COMPRESSED_HEADER_QUANT + VP8_QUANT_Y_AC], 0
+    jne     .fail_compressed_key_header
+    cmp     byte [rel compressed_header + VP8_COMPRESSED_HEADER_QUANT + VP8_QUANT_Y_DC_DELTA], 0
+    jne     .fail_compressed_key_header
+    cmp     byte [rel compressed_header + VP8_COMPRESSED_HEADER_REFRESH_ENTROPY], 0
+    jne     .fail_compressed_key_header
+    cmp     dword [rel compressed_header + VP8_COMPRESSED_HEADER_TOKEN_UPDATES], 0
+    jne     .fail_compressed_key_header
+    cmp     byte [rel compressed_header + VP8_COMPRESSED_HEADER_USE_SKIP], 0
+    jne     .fail_compressed_key_header
+    cmp     byte [rel compressed_header + VP8_COMPRESSED_HEADER_SKIP_PROB], 0
+    jne     .fail_compressed_key_header
+    cmp     byte [rel token_probabilities], 128
+    jne     .fail_compressed_key_header
+    mov     rdi, mode_full
+    mov     esi, VP8_BOOL_INITIAL_BYTES
+    mov     rdx, compressed_header
+    call    er_vp8_bool_reader_init
+    cmp     eax, VP8_BOOL_READER_SIZE
+    jne     .fail_compressed_key_header
+    test    edx, edx
+    jnz     .fail_compressed_key_header
+    mov     byte [rel compressed_header + VP8_COMPRESSED_HEADER_SEGMENT + VP8_SEGMENT_UPDATE_MAP], 0
+    mov     byte [rel compressed_header + VP8_COMPRESSED_HEADER_USE_SKIP], 0
+    mov     rdi, compressed_header
+    xor     esi, esi
+    mov     rdx, macroblock_header
+    call    er_vp8_read_key_macroblock_header
+    cmp     eax, VP8_MACROBLOCK_HEADER_SIZE
+    jne     .fail_compressed_key_header
+    test    edx, edx
+    jnz     .fail_compressed_key_header
+    cmp     byte [rel macroblock_header + VP8_MACROBLOCK_HEADER_SKIP], 0
+    jne     .fail_compressed_key_header
+    cmp     byte [rel macroblock_header + VP8_MACROBLOCK_HEADER_LUMA_MODE], VP8_LUMA_MODE_TRUE_MOTION
+    jne     .fail_compressed_key_header
+    cmp     byte [rel macroblock_header + VP8_MACROBLOCK_HEADER_CHROMA_MODE], VP8_CHROMA_MODE_TRUE_MOTION
+    jne     .fail_compressed_key_header
+    inc     qword [rel passed]
+    jmp     .reference_zero
+.fail_compressed_key_header:
     inc     qword [rel failed]
 
 .reference_zero:
@@ -1727,6 +1793,35 @@ _start:
     call    er_vp8_saturate_i8
     cmp     eax, 127
     jne     .fail_macroblock_geometry
+    mov     edi, 128
+    mov     esi, 128
+    mov     edx, 128
+    call    er_vp8_yuv_to_rgba
+    cmp     eax, 0xff808080
+    jne     .fail_macroblock_geometry
+    mov     byte [rel frame_y], 128
+    mov     byte [rel frame_y + 1], 128
+    mov     byte [rel frame_y + 2], 128
+    mov     byte [rel frame_y + 3], 128
+    mov     byte [rel frame_u], 128
+    mov     byte [rel frame_v], 128
+    mov     rdi, frame_y
+    mov     rsi, frame_u
+    mov     rdx, frame_v
+    mov     ecx, 2
+    mov     r8d, 2
+    mov     r9d, 1
+    push    frame_rgba
+    call    er_vp8_write_frame_rgba
+    add     rsp, 8
+    cmp     eax, 4
+    jne     .fail_macroblock_geometry
+    test    edx, edx
+    jnz     .fail_macroblock_geometry
+    cmp     dword [rel frame_rgba], 0xff808080
+    jne     .fail_macroblock_geometry
+    cmp     dword [rel frame_rgba + 12], 0xff808080
+    jne     .fail_macroblock_geometry
     xor     ecx, ecx
 .fill_filter_plane:
     cmp     ecx, VP8_TEST_FRAME_Y_BYTES
@@ -1779,6 +1874,191 @@ _start:
     cmp     byte [rel frame_y + 9], 83
     jne     .fail_macroblock_geometry
     cmp     byte [rel frame_y + 10], 83
+    jne     .fail_macroblock_geometry
+    xor     ecx, ecx
+.fill_horizontal_filter_plane:
+    cmp     ecx, VP8_TEST_FRAME_Y_BYTES
+    jae     .paint_horizontal_filter_bottom
+    mov     byte [rel frame_y + rcx], 80
+    inc     ecx
+    jmp     .fill_horizontal_filter_plane
+.paint_horizontal_filter_bottom:
+    mov     r8d, 8
+.paint_horizontal_filter_row:
+    cmp     r8d, VP8_MACROBLOCK_SIZE
+    jae     .call_filter_horizontal
+    mov     eax, r8d
+    imul    eax, VP8_TEST_FRAME_WIDTH
+    xor     ecx, ecx
+.paint_horizontal_filter_col:
+    cmp     ecx, VP8_MACROBLOCK_SIZE
+    jae     .paint_horizontal_filter_next_row
+    mov     byte [rel frame_y + rax + rcx], 84
+    inc     ecx
+    jmp     .paint_horizontal_filter_col
+.paint_horizontal_filter_next_row:
+    inc     r8d
+    jmp     .paint_horizontal_filter_row
+.call_filter_horizontal:
+    mov     rdi, frame_y
+    mov     esi, VP8_TEST_FRAME_WIDTH
+    mov     edx, VP8_TEST_FRAME_HEIGHT
+    xor     ecx, ecx
+    mov     r8d, 8
+    mov     r9d, 20
+    push    2
+    push    0
+    push    20
+    call    er_vp8_filter_normal_macroblock_horizontal_edge
+    add     rsp, 24
+    cmp     eax, VP8_MACROBLOCK_SIZE
+    jne     .fail_macroblock_geometry
+    test    edx, edx
+    jnz     .fail_macroblock_geometry
+    cmp     byte [rel frame_y + 5 * VP8_TEST_FRAME_WIDTH], 81
+    jne     .fail_macroblock_geometry
+    cmp     byte [rel frame_y + 6 * VP8_TEST_FRAME_WIDTH], 81
+    jne     .fail_macroblock_geometry
+    cmp     byte [rel frame_y + 7 * VP8_TEST_FRAME_WIDTH], 82
+    jne     .fail_macroblock_geometry
+    cmp     byte [rel frame_y + 8 * VP8_TEST_FRAME_WIDTH], 82
+    jne     .fail_macroblock_geometry
+    cmp     byte [rel frame_y + 9 * VP8_TEST_FRAME_WIDTH], 83
+    jne     .fail_macroblock_geometry
+    cmp     byte [rel frame_y + 10 * VP8_TEST_FRAME_WIDTH], 83
+    jne     .fail_macroblock_geometry
+    xor     ecx, ecx
+.fill_hev_filter_plane:
+    cmp     ecx, VP8_TEST_FRAME_Y_BYTES
+    jae     .paint_hev_filter_edge
+    mov     byte [rel frame_y + rcx], 40
+    inc     ecx
+    jmp     .fill_hev_filter_plane
+.paint_hev_filter_edge:
+    xor     r8d, r8d
+.paint_hev_filter_row:
+    cmp     r8d, VP8_MACROBLOCK_SIZE
+    jae     .call_hev_filter_vertical
+    mov     eax, r8d
+    imul    eax, VP8_TEST_FRAME_WIDTH
+    mov     byte [rel frame_y + rax + 7], 80
+    mov     byte [rel frame_y + rax + 8], 84
+    mov     byte [rel frame_y + rax + 9], 84
+    mov     byte [rel frame_y + rax + 10], 84
+    inc     r8d
+    jmp     .paint_hev_filter_row
+.call_hev_filter_vertical:
+    mov     rdi, frame_y
+    mov     esi, VP8_TEST_FRAME_WIDTH
+    mov     edx, VP8_MACROBLOCK_SIZE
+    mov     ecx, 8
+    xor     r8d, r8d
+    mov     r9d, 20
+    push    2
+    push    0
+    push    50
+    call    er_vp8_filter_normal_macroblock_vertical_edge
+    add     rsp, 24
+    cmp     eax, VP8_MACROBLOCK_SIZE
+    jne     .fail_macroblock_geometry
+    test    edx, edx
+    jnz     .fail_macroblock_geometry
+    cmp     byte [rel frame_y + 6], 40
+    jne     .fail_macroblock_geometry
+    cmp     byte [rel frame_y + 7], 76
+    jne     .fail_macroblock_geometry
+    cmp     byte [rel frame_y + 8], 88
+    jne     .fail_macroblock_geometry
+    cmp     byte [rel frame_y + 9], 84
+    jne     .fail_macroblock_geometry
+    xor     ecx, ecx
+.fill_simple_filter_plane:
+    cmp     ecx, VP8_TEST_FRAME_Y_BYTES
+    jae     .paint_simple_filter_right
+    mov     byte [rel frame_y + rcx], 80
+    inc     ecx
+    jmp     .fill_simple_filter_plane
+.paint_simple_filter_right:
+    xor     r8d, r8d
+.paint_simple_filter_row:
+    cmp     r8d, VP8_MACROBLOCK_SIZE
+    jae     .call_simple_filter_vertical
+    mov     eax, r8d
+    imul    eax, VP8_TEST_FRAME_WIDTH
+    add     eax, 8
+    xor     ecx, ecx
+.paint_simple_filter_col:
+    cmp     ecx, 12
+    jae     .paint_simple_filter_next_row
+    mov     byte [rel frame_y + rax + rcx], 84
+    inc     ecx
+    jmp     .paint_simple_filter_col
+.paint_simple_filter_next_row:
+    inc     r8d
+    jmp     .paint_simple_filter_row
+.call_simple_filter_vertical:
+    mov     rdi, frame_y
+    mov     esi, VP8_TEST_FRAME_WIDTH
+    mov     edx, VP8_MACROBLOCK_SIZE
+    mov     ecx, 8
+    xor     r8d, r8d
+    mov     r9d, 20
+    call    er_vp8_filter_simple_vertical_edge
+    cmp     eax, VP8_MACROBLOCK_SIZE
+    jne     .fail_macroblock_geometry
+    test    edx, edx
+    jnz     .fail_macroblock_geometry
+    cmp     byte [rel frame_y + 6], 80
+    jne     .fail_macroblock_geometry
+    cmp     byte [rel frame_y + 7], 81
+    jne     .fail_macroblock_geometry
+    cmp     byte [rel frame_y + 8], 83
+    jne     .fail_macroblock_geometry
+    cmp     byte [rel frame_y + 9], 84
+    jne     .fail_macroblock_geometry
+    xor     ecx, ecx
+.fill_simple_horizontal_filter_plane:
+    cmp     ecx, VP8_TEST_FRAME_Y_BYTES
+    jae     .paint_simple_horizontal_filter_bottom
+    mov     byte [rel frame_y + rcx], 80
+    inc     ecx
+    jmp     .fill_simple_horizontal_filter_plane
+.paint_simple_horizontal_filter_bottom:
+    mov     r8d, 8
+.paint_simple_horizontal_filter_row:
+    cmp     r8d, VP8_MACROBLOCK_SIZE
+    jae     .call_simple_filter_horizontal
+    mov     eax, r8d
+    imul    eax, VP8_TEST_FRAME_WIDTH
+    xor     ecx, ecx
+.paint_simple_horizontal_filter_col:
+    cmp     ecx, VP8_MACROBLOCK_SIZE
+    jae     .paint_simple_horizontal_filter_next_row
+    mov     byte [rel frame_y + rax + rcx], 84
+    inc     ecx
+    jmp     .paint_simple_horizontal_filter_col
+.paint_simple_horizontal_filter_next_row:
+    inc     r8d
+    jmp     .paint_simple_horizontal_filter_row
+.call_simple_filter_horizontal:
+    mov     rdi, frame_y
+    mov     esi, VP8_TEST_FRAME_WIDTH
+    mov     edx, VP8_TEST_FRAME_HEIGHT
+    xor     ecx, ecx
+    mov     r8d, 8
+    mov     r9d, 20
+    call    er_vp8_filter_simple_horizontal_edge
+    cmp     eax, VP8_MACROBLOCK_SIZE
+    jne     .fail_macroblock_geometry
+    test    edx, edx
+    jnz     .fail_macroblock_geometry
+    cmp     byte [rel frame_y + 6 * VP8_TEST_FRAME_WIDTH], 80
+    jne     .fail_macroblock_geometry
+    cmp     byte [rel frame_y + 7 * VP8_TEST_FRAME_WIDTH], 81
+    jne     .fail_macroblock_geometry
+    cmp     byte [rel frame_y + 8 * VP8_TEST_FRAME_WIDTH], 83
+    jne     .fail_macroblock_geometry
+    cmp     byte [rel frame_y + 9 * VP8_TEST_FRAME_WIDTH], 84
     jne     .fail_macroblock_geometry
     inc     qword [rel passed]
     jmp     .coeff_tables

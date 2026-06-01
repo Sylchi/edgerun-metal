@@ -4,6 +4,7 @@
 %include "x86_64/wasm_defines.inc"
 %include "x86_64/media/mp4_constants.inc"
 
+extern er_av1_obu_route_sample
 extern er_av1_obu_scan_units
 
 %macro mp4_load_be32 2
@@ -693,6 +694,39 @@ er_fn er_mp4_file_video_sample_obu_scan
     mov     esi, [rsp + MP4_SAMPLE_DESC_PAYLOAD_LEN]
     mov     rdx, r14
     call    er_av1_obu_scan_units
+    jmp     .done
+.invalid_param:
+    xor     eax, eax
+    er_err  ERROR_INVALID_PARAM
+.done:
+    er_stack_free MP4_SAMPLE_DESC_SIZE
+    er_pop  rbx, r12, r13, r14
+    er_ret
+
+; er_mp4_file_video_sample_obu_route(buf, len, sample_index, out_route) -> eax=unit count, rdx=error
+; Validates a file video sample payload, then routes first AV1 OBU payload offsets relative to that sample.
+; rdi=buf, esi=len, edx=sample_index, rcx=out_route
+er_fn er_mp4_file_video_sample_obu_route
+    er_push rbx, r12, r13, r14
+    er_stack_alloc MP4_SAMPLE_DESC_SIZE
+    test    rdi, rdi
+    jz      .invalid_param
+    test    rcx, rcx
+    jz      .invalid_param
+    mov     r12, rdi
+    mov     r13d, esi
+    mov     ebx, edx
+    mov     r14, rcx
+    mov     edx, ebx
+    mov     rcx, rsp
+    call    er_mp4_file_video_sample_payload
+    test    edx, edx
+    jnz     .done
+    mov     eax, [rsp + MP4_SAMPLE_DESC_PAYLOAD_OFFSET]
+    lea     rdi, [r12 + rax]
+    mov     esi, [rsp + MP4_SAMPLE_DESC_PAYLOAD_LEN]
+    mov     rdx, r14
+    call    er_av1_obu_route_sample
     jmp     .done
 .invalid_param:
     xor     eax, eax

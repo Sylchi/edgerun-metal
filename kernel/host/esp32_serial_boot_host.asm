@@ -37,6 +37,12 @@ opt_write_reg_delay: resd 1
 opt_jc3248_bl: resb 1
 opt_jc3248_spi2: resb 1
 opt_jc3248_qspi_route: resb 1
+opt_jc3248_spi2_init: resb 1
+opt_jc3248_lcd_cmd: resb 1
+opt_jc3248_lcd_cmd_value: resd 1
+opt_jc3248_lcd_unlock: resb 1
+opt_jc3248_lcd_wake: resb 1
+opt_jc3248_lcd_smoke: resb 1
 
 binary_data:    resq 1
 binary_size:    resd 1
@@ -44,6 +50,7 @@ binary_size:    resd 1
 serial_fd:      resd 1
 download_packets: resd 1
 read_reg_value: resd 1
+spi_word_index: resd 1
 
 ; Buffers: packet building (raw), SLIP output, receive
 pkt_buf:        resb 16384 + 256
@@ -83,6 +90,12 @@ _start:
     mov     byte [opt_jc3248_bl], 0
     mov     byte [opt_jc3248_spi2], 0
     mov     byte [opt_jc3248_qspi_route], 0
+    mov     byte [opt_jc3248_spi2_init], 0
+    mov     byte [opt_jc3248_lcd_cmd], 0
+    mov     dword [opt_jc3248_lcd_cmd_value], 0
+    mov     byte [opt_jc3248_lcd_unlock], 0
+    mov     byte [opt_jc3248_lcd_wake], 0
+    mov     byte [opt_jc3248_lcd_smoke], 0
     mov     qword [opt_binary], 0
 
     cmp     r14, 2
@@ -112,6 +125,16 @@ _start:
     cmp     byte [opt_jc3248_spi2], 1
     je      .skip_binary_read
     cmp     byte [opt_jc3248_qspi_route], 1
+    je      .skip_binary_read
+    cmp     byte [opt_jc3248_spi2_init], 1
+    je      .skip_binary_read
+    cmp     byte [opt_jc3248_lcd_cmd], 1
+    je      .skip_binary_read
+    cmp     byte [opt_jc3248_lcd_unlock], 1
+    je      .skip_binary_read
+    cmp     byte [opt_jc3248_lcd_wake], 1
+    je      .skip_binary_read
+    cmp     byte [opt_jc3248_lcd_smoke], 1
     je      .skip_binary_read
     cmp     qword [opt_binary], 0
     je      .help_exit
@@ -192,6 +215,16 @@ _start:
     je      .jc3248_spi2
     cmp     byte [opt_jc3248_qspi_route], 1
     je      .jc3248_qspi_route
+    cmp     byte [opt_jc3248_spi2_init], 1
+    je      .jc3248_spi2_init
+    cmp     byte [opt_jc3248_lcd_cmd], 1
+    je      .jc3248_lcd_cmd
+    cmp     byte [opt_jc3248_lcd_unlock], 1
+    je      .jc3248_lcd_unlock
+    cmp     byte [opt_jc3248_lcd_wake], 1
+    je      .jc3248_lcd_wake
+    cmp     byte [opt_jc3248_lcd_smoke], 1
+    je      .jc3248_lcd_smoke
 
     mov     edi, [serial_fd]
     mov     rsi, [binary_data]
@@ -318,6 +351,89 @@ _start:
     call    sys_exit
 .jc3248_qspi_route_err:
     lea     rdi, [m_jc3248_qspi_route_err]
+    call    print_str
+    call    print_crlf
+    mov     edi, 1
+    call    sys_exit
+.jc3248_spi2_init:
+    mov     edi, [serial_fd]
+    call    jc3248_spi2_init
+    test    eax, eax
+    jnz     .jc3248_spi2_init_err
+    lea     rdi, [m_jc3248_spi2_init]
+    call    print_str
+    call    print_crlf
+    xor     edi, edi
+    call    sys_exit
+.jc3248_spi2_init_err:
+    lea     rdi, [m_jc3248_spi2_init_err]
+    call    print_str
+    call    print_crlf
+    mov     edi, 1
+    call    sys_exit
+.jc3248_lcd_cmd:
+    mov     edi, [serial_fd]
+    mov     esi, [opt_jc3248_lcd_cmd_value]
+    call    jc3248_lcd_cmd
+    test    eax, eax
+    jnz     .jc3248_lcd_cmd_err
+    lea     rdi, [m_jc3248_lcd_cmd]
+    call    print_str
+    mov     edi, [opt_jc3248_lcd_cmd_value]
+    call    print_hex32
+    call    print_crlf
+    xor     edi, edi
+    call    sys_exit
+.jc3248_lcd_cmd_err:
+    lea     rdi, [m_jc3248_lcd_cmd_err]
+    call    print_str
+    call    print_crlf
+    mov     edi, 1
+    call    sys_exit
+.jc3248_lcd_unlock:
+    mov     edi, [serial_fd]
+    call    jc3248_lcd_unlock
+    test    eax, eax
+    jnz     .jc3248_lcd_unlock_err
+    lea     rdi, [m_jc3248_lcd_unlock]
+    call    print_str
+    call    print_crlf
+    xor     edi, edi
+    call    sys_exit
+.jc3248_lcd_unlock_err:
+    lea     rdi, [m_jc3248_lcd_unlock_err]
+    call    print_str
+    call    print_crlf
+    mov     edi, 1
+    call    sys_exit
+.jc3248_lcd_wake:
+    mov     edi, [serial_fd]
+    call    jc3248_lcd_wake
+    test    eax, eax
+    jnz     .jc3248_lcd_wake_err
+    lea     rdi, [m_jc3248_lcd_wake]
+    call    print_str
+    call    print_crlf
+    xor     edi, edi
+    call    sys_exit
+.jc3248_lcd_wake_err:
+    lea     rdi, [m_jc3248_lcd_wake_err]
+    call    print_str
+    call    print_crlf
+    mov     edi, 1
+    call    sys_exit
+.jc3248_lcd_smoke:
+    mov     edi, [serial_fd]
+    call    jc3248_lcd_smoke_fill
+    test    eax, eax
+    jnz     .jc3248_lcd_smoke_err
+    lea     rdi, [m_jc3248_lcd_smoke]
+    call    print_str
+    call    print_crlf
+    xor     edi, edi
+    call    sys_exit
+.jc3248_lcd_smoke_err:
+    lea     rdi, [m_jc3248_lcd_smoke_err]
     call    print_str
     call    print_crlf
     mov     edi, 1
@@ -560,8 +676,60 @@ parse_options:
     lea     rsi, [str_jc3248_qspi_route]
     call    str_eq
     test    eax, eax
-    jz      .ck_target
+    jz      .ck_jc3248_spi2_init
     mov     byte [opt_jc3248_qspi_route], 1
+    jmp     .loop
+
+.ck_jc3248_spi2_init:
+    mov     rdi, r14
+    lea     rsi, [str_jc3248_spi2_init]
+    call    str_eq
+    test    eax, eax
+    jz      .ck_jc3248_lcd_cmd
+    mov     byte [opt_jc3248_spi2_init], 1
+    jmp     .loop
+
+.ck_jc3248_lcd_cmd:
+    mov     rdi, r14
+    lea     rsi, [str_jc3248_lcd_cmd]
+    call    str_eq
+    test    eax, eax
+    jz      .ck_jc3248_lcd_unlock
+    cmp     ebx, r12d
+    jae     .bad
+    mov     rdi, [r13 + rbx * 8]
+    inc     ebx
+    call    parse_hex32
+    and     eax, 0xff
+    mov     [opt_jc3248_lcd_cmd_value], eax
+    mov     byte [opt_jc3248_lcd_cmd], 1
+    jmp     .loop
+
+.ck_jc3248_lcd_unlock:
+    mov     rdi, r14
+    lea     rsi, [str_jc3248_lcd_unlock]
+    call    str_eq
+    test    eax, eax
+    jz      .ck_jc3248_lcd_wake
+    mov     byte [opt_jc3248_lcd_unlock], 1
+    jmp     .loop
+
+.ck_jc3248_lcd_wake:
+    mov     rdi, r14
+    lea     rsi, [str_jc3248_lcd_wake]
+    call    str_eq
+    test    eax, eax
+    jz      .ck_jc3248_lcd_smoke
+    mov     byte [opt_jc3248_lcd_wake], 1
+    jmp     .loop
+
+.ck_jc3248_lcd_smoke:
+    mov     rdi, r14
+    lea     rsi, [str_jc3248_lcd_smoke]
+    call    str_eq
+    test    eax, eax
+    jz      .ck_target
+    mov     byte [opt_jc3248_lcd_smoke], 1
     jmp     .loop
 
 .ck_target:
@@ -1781,6 +1949,651 @@ jc3248_route_spi_pin:
     ret
 
 ; ==================================================================
+; jc3248_spi2_init(fd) -> eax=0 ok
+; Configures SPI2 master registers after clock enable and QSPI routing.
+; ==================================================================
+jc3248_spi2_init:
+    push    rbp
+    mov     rbp, rsp
+    push    r12
+
+    mov     r12d, edi
+
+    mov     edi, r12d
+    call    jc3248_spi2_enable
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    call    jc3248_qspi_route
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     esi, ESP32S3_SPI2_SLAVE
+    xor     edx, edx
+    mov     ecx, 0xffffffff
+    xor     r8d, r8d
+    call    esp_write_reg
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     esi, ESP32S3_SPI2_DMA_CONF
+    xor     edx, edx
+    mov     ecx, 0xffffffff
+    xor     r8d, r8d
+    call    esp_write_reg
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     esi, ESP32S3_SPI2_DMA_INT_CLR
+    mov     edx, 0xffffffff
+    mov     ecx, 0xffffffff
+    xor     r8d, r8d
+    call    esp_write_reg
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     esi, ESP32S3_SPI2_CLOCK
+    mov     edx, ESP32S3_SPI_CLOCK_INIT
+    mov     ecx, 0xffffffff
+    xor     r8d, r8d
+    call    esp_write_reg
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     esi, ESP32S3_SPI2_CTRL
+    xor     edx, edx
+    mov     ecx, 0xffffffff
+    xor     r8d, r8d
+    call    esp_write_reg
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     esi, ESP32S3_SPI2_MISC
+    mov     edx, ESP32S3_SPI_MISC_INIT
+    mov     ecx, 0xffffffff
+    xor     r8d, r8d
+    call    esp_write_reg
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     esi, ESP32S3_SPI2_USER1
+    xor     edx, edx
+    mov     ecx, 0xffffffff
+    xor     r8d, r8d
+    call    esp_write_reg
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     esi, ESP32S3_SPI2_USER2
+    xor     edx, edx
+    mov     ecx, 0xffffffff
+    xor     r8d, r8d
+    call    esp_write_reg
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     esi, ESP32S3_SPI2_USER
+    mov     edx, ESP32S3_SPI_USR_MOSI
+    mov     ecx, 0xffffffff
+    xor     r8d, r8d
+    call    esp_write_reg
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    call    jc3248_spi2_apply_config
+    test    eax, eax
+    jnz     .fail
+
+    xor     eax, eax
+    pop     r12
+    pop     rbp
+    ret
+.fail:
+    mov     eax, 1
+    pop     r12
+    pop     rbp
+    ret
+
+; jc3248_lcd_cmd(fd, cmd8) -> eax=0 ok
+jc3248_lcd_cmd:
+    push    rbp
+    mov     rbp, rsp
+    push    r12
+    push    r13
+
+    mov     r12d, edi
+    mov     r13d, esi
+
+    mov     edi, r12d
+    call    jc3248_spi2_init
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     esi, ESP32S3_SPI_USR
+    call    jc3248_spi2_wait_clear
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     esi, ESP32S3_SPI2_W0
+    mov     edx, r13d
+    shl     edx, 16
+    or      edx, JC3248_LCD_OPCODE_WRITE_CMD
+    mov     ecx, 0xffffffff
+    xor     r8d, r8d
+    call    esp_write_reg
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     esi, ESP32S3_SPI2_MS_DLEN
+    mov     edx, 31
+    mov     ecx, 0xffffffff
+    xor     r8d, r8d
+    call    esp_write_reg
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     esi, ESP32S3_SPI2_MISC
+    mov     edx, ESP32S3_SPI_MISC_INIT
+    mov     ecx, 0xffffffff
+    xor     r8d, r8d
+    call    esp_write_reg
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     esi, ESP32S3_SPI2_USER
+    mov     edx, ESP32S3_SPI_USR_MOSI
+    mov     ecx, 0xffffffff
+    xor     r8d, r8d
+    call    esp_write_reg
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    call    jc3248_spi2_apply_config
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     esi, ESP32S3_SPI2_CMD
+    mov     edx, ESP32S3_SPI_USR
+    mov     ecx, ESP32S3_SPI_USR
+    xor     r8d, r8d
+    call    esp_write_reg
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     esi, ESP32S3_SPI_USR
+    call    jc3248_spi2_wait_clear
+    test    eax, eax
+    jnz     .fail
+
+    xor     eax, eax
+    pop     r13
+    pop     r12
+    pop     rbp
+    ret
+.fail:
+    mov     eax, 1
+    pop     r13
+    pop     r12
+    pop     rbp
+    ret
+
+; jc3248_lcd_unlock(fd) -> eax=0 ok
+jc3248_lcd_unlock:
+    push    rbp
+    mov     rbp, rsp
+    push    r12
+
+    mov     r12d, edi
+    mov     byte [lcd_cmd_word + 0], JC3248_LCD_OPCODE_WRITE_CMD
+    mov     byte [lcd_cmd_word + 1], 0
+    mov     byte [lcd_cmd_word + 2], 0xbb
+    mov     byte [lcd_cmd_word + 3], 0
+
+    mov     edi, r12d
+    call    jc3248_spi2_init
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    lea     rsi, [lcd_cmd_word]
+    mov     edx, 4
+    xor     ecx, ecx
+    mov     r8d, 1
+    call    jc3248_spi2_write_buf
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    lea     rsi, [lcd_unlock_data]
+    mov     edx, 8
+    xor     ecx, ecx
+    xor     r8d, r8d
+    call    jc3248_spi2_write_buf
+    test    eax, eax
+    jnz     .fail
+
+    xor     eax, eax
+    pop     r12
+    pop     rbp
+    ret
+.fail:
+    mov     eax, 1
+    pop     r12
+    pop     rbp
+    ret
+
+; jc3248_lcd_wake(fd) -> eax=0 ok
+jc3248_lcd_wake:
+    push    rbp
+    mov     rbp, rsp
+    push    r12
+
+    mov     r12d, edi
+
+    mov     edi, r12d
+    call    jc3248_lcd_unlock
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     esi, 0x13
+    call    jc3248_lcd_cmd
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     esi, 0x11
+    call    jc3248_lcd_cmd
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, 120
+    call    sleep_ms
+
+    mov     edi, r12d
+    mov     esi, 0x29
+    call    jc3248_lcd_cmd
+    test    eax, eax
+    jnz     .fail
+
+    xor     eax, eax
+    pop     r12
+    pop     rbp
+    ret
+.fail:
+    mov     eax, 1
+    pop     r12
+    pop     rbp
+    ret
+
+; jc3248_lcd_smoke_fill(fd) -> eax=0 ok
+; Sends a tiny red RGB565 pixel burst after wake/init-lite commands.
+jc3248_lcd_smoke_fill:
+    push    rbp
+    mov     rbp, rsp
+    push    r12
+
+    mov     r12d, edi
+
+    mov     edi, r12d
+    call    jc3248_lcd_wake
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     esi, 0x36
+    lea     rdx, [lcd_madctl_data]
+    mov     ecx, 1
+    call    jc3248_lcd_cmd_data
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     esi, 0x3a
+    lea     rdx, [lcd_pixfmt_data]
+    mov     ecx, 1
+    call    jc3248_lcd_cmd_data
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     esi, 0x2a
+    lea     rdx, [lcd_col_data]
+    mov     ecx, 4
+    call    jc3248_lcd_cmd_data
+    test    eax, eax
+    jnz     .fail
+
+    mov     byte [lcd_cmd_word + 0], JC3248_LCD_OPCODE_WRITE_COLOR
+    mov     byte [lcd_cmd_word + 1], 0
+    mov     byte [lcd_cmd_word + 2], 0x2c
+    mov     byte [lcd_cmd_word + 3], 0
+
+    mov     edi, r12d
+    lea     rsi, [lcd_cmd_word]
+    mov     edx, 4
+    xor     ecx, ecx
+    mov     r8d, 1
+    call    jc3248_spi2_write_buf
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    lea     rsi, [lcd_red_pixels]
+    mov     edx, 64
+    mov     ecx, 1
+    xor     r8d, r8d
+    call    jc3248_spi2_write_buf
+    test    eax, eax
+    jnz     .fail
+
+    xor     eax, eax
+    pop     r12
+    pop     rbp
+    ret
+.fail:
+    mov     eax, 1
+    pop     r12
+    pop     rbp
+    ret
+
+; jc3248_lcd_cmd_data(fd, cmd8, data, len) -> eax=0 ok
+jc3248_lcd_cmd_data:
+    push    rbp
+    mov     rbp, rsp
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+
+    mov     r12d, edi
+    mov     r13d, esi
+    mov     r14, rdx
+    mov     r15d, ecx
+
+    mov     byte [lcd_cmd_word + 0], JC3248_LCD_OPCODE_WRITE_CMD
+    mov     byte [lcd_cmd_word + 1], 0
+    mov     byte [lcd_cmd_word + 2], r13b
+    mov     byte [lcd_cmd_word + 3], 0
+
+    mov     edi, r12d
+    lea     rsi, [lcd_cmd_word]
+    mov     edx, 4
+    xor     ecx, ecx
+    mov     r8d, 1
+    call    jc3248_spi2_write_buf
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     rsi, r14
+    mov     edx, r15d
+    xor     ecx, ecx
+    xor     r8d, r8d
+    call    jc3248_spi2_write_buf
+    test    eax, eax
+    jnz     .fail
+
+    xor     eax, eax
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbp
+    ret
+.fail:
+    mov     eax, 1
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbp
+    ret
+
+; jc3248_spi2_write_buf(fd, buf, len, quad, keep_cs) -> eax=0 ok
+jc3248_spi2_write_buf:
+    push    rbp
+    mov     rbp, rsp
+    push    rbx
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+
+    mov     r12d, edi
+    mov     r13, rsi
+    mov     r14d, edx
+    mov     r15d, ecx
+    mov     ebx, r8d
+
+    test    r14d, r14d
+    jz      .ok
+    cmp     r14d, 64
+    ja      .fail
+
+    mov     edi, r12d
+    mov     esi, ESP32S3_SPI_USR
+    call    jc3248_spi2_wait_clear
+    test    eax, eax
+    jnz     .fail
+
+    mov     dword [spi_word_index], 0
+.clear_loop:
+    mov     eax, [spi_word_index]
+    cmp     eax, 16
+    jae     .pack_start
+    shl     eax, 2
+    add     eax, ESP32S3_SPI2_W0
+    mov     edi, r12d
+    mov     esi, eax
+    xor     edx, edx
+    mov     ecx, 0xffffffff
+    xor     r8d, r8d
+    call    esp_write_reg
+    test    eax, eax
+    jnz     .fail
+    inc     dword [spi_word_index]
+    jmp     .clear_loop
+
+.pack_start:
+    xor     r9d, r9d
+.pack_loop:
+    cmp     r9d, r14d
+    jae     .write_len
+    xor     edx, edx
+    xor     r10d, r10d
+.byte_loop:
+    cmp     r10d, 4
+    jae     .write_word
+    cmp     r9d, r14d
+    jae     .write_word
+    movzx   eax, byte [r13 + r9]
+    mov     ecx, r10d
+    shl     ecx, 3
+    shl     eax, cl
+    or      edx, eax
+    inc     r9d
+    inc     r10d
+    jmp     .byte_loop
+.write_word:
+    mov     eax, r9d
+    dec     eax
+    shr     eax, 2
+    shl     eax, 2
+    add     eax, ESP32S3_SPI2_W0
+    push    r9
+    mov     edi, r12d
+    mov     esi, eax
+    mov     ecx, 0xffffffff
+    xor     r8d, r8d
+    call    esp_write_reg
+    pop     r9
+    test    eax, eax
+    jnz     .fail
+    jmp     .pack_loop
+
+.write_len:
+    mov     eax, r14d
+    shl     eax, 3
+    dec     eax
+    mov     edi, r12d
+    mov     esi, ESP32S3_SPI2_MS_DLEN
+    mov     edx, eax
+    mov     ecx, 0xffffffff
+    xor     r8d, r8d
+    call    esp_write_reg
+    test    eax, eax
+    jnz     .fail
+
+    mov     edx, ESP32S3_SPI_USR_MOSI
+    test    r15d, r15d
+    jz      .user_ok
+    or      edx, ESP32S3_SPI_FWRITE_QUAD
+.user_ok:
+    mov     edi, r12d
+    mov     esi, ESP32S3_SPI2_USER
+    mov     ecx, 0xffffffff
+    xor     r8d, r8d
+    call    esp_write_reg
+    test    eax, eax
+    jnz     .fail
+
+    mov     edx, ESP32S3_SPI_MISC_INIT
+    test    ebx, ebx
+    jz      .misc_ok
+    or      edx, ESP32S3_SPI_CS_KEEP_ACTIVE
+.misc_ok:
+    mov     edi, r12d
+    mov     esi, ESP32S3_SPI2_MISC
+    mov     ecx, 0xffffffff
+    xor     r8d, r8d
+    call    esp_write_reg
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    call    jc3248_spi2_apply_config
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     esi, ESP32S3_SPI2_CMD
+    mov     edx, ESP32S3_SPI_USR
+    mov     ecx, ESP32S3_SPI_USR
+    xor     r8d, r8d
+    call    esp_write_reg
+    test    eax, eax
+    jnz     .fail
+
+    mov     edi, r12d
+    mov     esi, ESP32S3_SPI_USR
+    call    jc3248_spi2_wait_clear
+    test    eax, eax
+    jnz     .fail
+
+.ok:
+    xor     eax, eax
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
+    ret
+.fail:
+    mov     eax, 1
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
+    ret
+
+; jc3248_spi2_apply_config(fd) -> eax=0 ok
+jc3248_spi2_apply_config:
+    push    rbp
+    mov     rbp, rsp
+    push    r12
+    mov     r12d, edi
+    mov     edi, r12d
+    mov     esi, ESP32S3_SPI2_CMD
+    mov     edx, ESP32S3_SPI_UPDATE
+    mov     ecx, ESP32S3_SPI_UPDATE
+    xor     r8d, r8d
+    call    esp_write_reg
+    test    eax, eax
+    jnz     .fail
+    mov     edi, r12d
+    mov     esi, ESP32S3_SPI_UPDATE
+    call    jc3248_spi2_wait_clear
+    test    eax, eax
+    jnz     .fail
+    xor     eax, eax
+    pop     r12
+    pop     rbp
+    ret
+.fail:
+    mov     eax, 1
+    pop     r12
+    pop     rbp
+    ret
+
+; jc3248_spi2_wait_clear(fd, mask) -> eax=0 ok
+jc3248_spi2_wait_clear:
+    push    rbp
+    mov     rbp, rsp
+    push    rbx
+    push    r12
+    push    r13
+    mov     r12d, edi
+    mov     r13d, esi
+    mov     ebx, 1000
+.loop:
+    mov     edi, r12d
+    mov     esi, ESP32S3_SPI2_CMD
+    call    esp_read_reg
+    test    edx, edx
+    jnz     .fail
+    test    eax, r13d
+    jz      .ok
+    dec     ebx
+    jnz     .loop
+.fail:
+    mov     eax, 1
+    pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
+    ret
+.ok:
+    xor     eax, eax
+    pop     r13
+    pop     r12
+    pop     rbx
+    pop     rbp
+    ret
+
+; ==================================================================
 ; check_response() -> 0 ok, 1 fail
 ; Checks recv_buf content for valid response.
 ; ==================================================================
@@ -2188,6 +3001,11 @@ str_jc3248_bl_on:   db "--jc3248-bl-on", 0
 str_jc3248_bl_off:  db "--jc3248-bl-off", 0
 str_jc3248_spi2:    db "--jc3248-spi2-enable", 0
 str_jc3248_qspi_route: db "--jc3248-qspi-route", 0
+str_jc3248_spi2_init: db "--jc3248-spi2-init", 0
+str_jc3248_lcd_cmd: db "--jc3248-lcd-cmd", 0
+str_jc3248_lcd_unlock: db "--jc3248-lcd-unlock", 0
+str_jc3248_lcd_wake: db "--jc3248-lcd-wake", 0
+str_jc3248_lcd_smoke: db "--jc3248-lcd-smoke", 0
 str_target:         db "--target", 0
 str_jc3248w535:     db "jc3248w535", 0
 str_help:           db "--help", 0
@@ -2216,6 +3034,16 @@ m_jc3248_spi2:      db "JC3248 SPI2 enabled", 0
 m_jc3248_spi2_err:  db "JC3248 SPI2 enable failed", 0
 m_jc3248_qspi_route: db "JC3248 QSPI routed", 0
 m_jc3248_qspi_route_err: db "JC3248 QSPI route failed", 0
+m_jc3248_spi2_init: db "JC3248 SPI2 initialized", 0
+m_jc3248_spi2_init_err: db "JC3248 SPI2 init failed", 0
+m_jc3248_lcd_cmd:  db "JC3248 LCD cmd ", 0
+m_jc3248_lcd_cmd_err: db "JC3248 LCD cmd failed", 0
+m_jc3248_lcd_unlock: db "JC3248 LCD unlock sent", 0
+m_jc3248_lcd_unlock_err: db "JC3248 LCD unlock failed", 0
+m_jc3248_lcd_wake: db "JC3248 LCD wake sent", 0
+m_jc3248_lcd_wake_err: db "JC3248 LCD wake failed", 0
+m_jc3248_lcd_smoke: db "JC3248 LCD smoke fill sent", 0
+m_jc3248_lcd_smoke_err: db "JC3248 LCD smoke fill failed", 0
 m_on:               db "on", 0
 m_off:              db "off", 0
 m_dl_err:           db "Download failed", 0
@@ -2234,9 +3062,21 @@ usage_str:          db "Usage: esp32_serial_boot_host [options] <binary> [entry_
                     db "  --jc3248-bl-off     Configure GPIO1 and turn backlight off", 0x0a
                     db "  --jc3248-spi2-enable Enable SPI2 peripheral clock/reset", 0x0a
                     db "  --jc3248-qspi-route Route LCD QSPI pins through GPIO matrix", 0x0a
+                    db "  --jc3248-spi2-init  Configure SPI2 master registers", 0x0a
+                    db "  --jc3248-lcd-cmd <hex> Send one AXS15231B command byte", 0x0a
+                    db "  --jc3248-lcd-unlock Send AXS15231B 0xBB unlock prefix", 0x0a
+                    db "  --jc3248-lcd-wake  Send unlock, normal, sleep-out, display-on", 0x0a
+                    db "  --jc3248-lcd-smoke Send 64 bytes of red RGB565 pixels", 0x0a
                     db "  --port <device>      Serial port (default: /dev/ttyUSB0)", 0x0a
                     db "  --baud <rate>        Baud rate (default: 115200)", 0x0a
                     db "  --entry <hex>        RAM load/entry address (default: 0x40374000)", 0x0a
                     db "  --dry-run            Scan port but don't write", 0x0a
                     db "  --help               Show this help", 0x0a
                     db 0
+
+lcd_cmd_word:        db 0, 0, 0, 0
+lcd_unlock_data:     db 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x5a, 0xa5
+lcd_madctl_data:     db 0x70
+lcd_pixfmt_data:     db 0x55
+lcd_col_data:        db 0x00, 0x00, 0x01, 0x3f
+lcd_red_pixels:      times 32 db 0xf8, 0x00

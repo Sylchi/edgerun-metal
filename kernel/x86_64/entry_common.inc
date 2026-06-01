@@ -1,5 +1,5 @@
 ; EdgeRun shared entry-point utility functions — x86_64 assembly
-; Included by both entry.asm (multiboot) and efi_entry.asm (UEFI).
+; Included by both entry.asm (raw loader) and efi_entry.asm (UEFI).
 
 ; ==================================================================
 ; er_halt — stop execution

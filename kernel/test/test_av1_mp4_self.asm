@@ -19,6 +19,7 @@ extern er_mp4_file_video_sample_tables_find
 extern er_mp4_file_video_sample_locate
 extern er_mp4_file_video_sample_payload
 extern er_mp4_file_video_sample_obu_scan
+extern er_mp4_file_video_sample_obu_route
 extern er_mp4_visual_sample_entry_decode
 extern er_mp4_mdhd_decode
 extern er_mp4_tkhd_decode
@@ -1540,8 +1541,33 @@ _start:
     cmp     dword [rel obu_stats + AV1_OBU_STATS_TYPE_COUNTS + AV1_OBU_TYPE_SEQUENCE_HEADER * 4], 0
     jne     .fail_file_video_sample_obu_scan
     inc     qword [rel passed]
-    jmp     .sample_payload
+    jmp     .file_video_sample_obu_route
 .fail_file_video_sample_obu_scan:
+    inc     qword [rel failed]
+
+.file_video_sample_obu_route:
+    mov     rdi, mp4_file_video_payload
+    mov     esi, mp4_file_video_payload_len
+    mov     edx, 2
+    mov     rcx, obu_route
+    call    er_mp4_file_video_sample_obu_route
+    cmp     eax, 1
+    jne     .fail_file_video_sample_obu_route
+    test    edx, edx
+    jnz     .fail_file_video_sample_obu_route
+    cmp     dword [rel obu_route + AV1_OBU_ROUTE_STATS + AV1_OBU_STATS_TOTAL], 1
+    jne     .fail_file_video_sample_obu_route
+    cmp     dword [rel obu_route + AV1_OBU_ROUTE_STATS + AV1_OBU_STATS_TYPE_COUNTS + AV1_OBU_TYPE_FRAME_HEADER * 4], 1
+    jne     .fail_file_video_sample_obu_route
+    cmp     dword [rel obu_route + AV1_OBU_ROUTE_FRAME_HEADER_OFFSET], 2
+    jne     .fail_file_video_sample_obu_route
+    cmp     dword [rel obu_route + AV1_OBU_ROUTE_FRAME_HEADER_LEN], 4
+    jne     .fail_file_video_sample_obu_route
+    cmp     dword [rel obu_route + AV1_OBU_ROUTE_SEQUENCE_OFFSET], 0
+    jne     .fail_file_video_sample_obu_route
+    inc     qword [rel passed]
+    jmp     .sample_payload
+.fail_file_video_sample_obu_route:
     inc     qword [rel failed]
 
 .sample_payload:

@@ -1,12 +1,9 @@
-/* EdgeRun x86_64 bare-metal linker script
- * Produces a flat binary loaded at 0x100000 (1 MiB) — the conventional
- * entry point for x86_64 multiboot kernels.
- *
- * Compiled as ELF32 for QEMU multiboot compatibility; the 64-bit code
- * is embedded within the 32-bit ELF container.
+/* EdgeRun x86_64 bare-metal linker script.
+ * Produces the flat kernel payload loaded by the repo-owned boot loader at
+ * 0x100000 (1 MiB).
  */
 
-OUTPUT_FORMAT(elf32-i386)
+OUTPUT_FORMAT(binary)
 ENTRY(_start)
 
 SECTIONS

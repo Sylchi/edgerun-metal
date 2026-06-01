@@ -26,9 +26,10 @@ YASM="${YASM:-yasm}"
 ASM_INC="-I kernel"
 KERNEL_LD="${ASM_DIR}/linker.ld"
 KERNEL_EFI_LD="${ASM_DIR}/efi_linker.ld"
-KERNEL_ELF="${ASM_BUILD}/kernel.elf"
 KERNEL_EFI="${ASM_BUILD}/kernel.efi"
 KERNEL_BIN="${ASM_BUILD}/kernel.bin"
+KERNEL_BOOT="${ASM_BUILD}/boot_loader.bin"
+KERNEL_IMG="${ASM_BUILD}/kernel.img"
 EFI_ESP="${EFI_ESP:-/boot}"
 EFI_BOOT_DIR="${EFI_ESP}/EFI/edgerun"
 EFI_BOOT_PATH="${EFI_BOOT_DIR}/bootx64.efi"
@@ -142,6 +143,7 @@ KERNEL_ASM_SRCS="
 	crypto/local_circuit.asm
 	media/av1_bits.asm
 	media/vp8.asm
+	media/vp9.asm
 	media/mp4.asm
 	media/av1_obu.asm
 	media/av1_ivf.asm
@@ -204,26 +206,44 @@ assemble_kernel_efi() {
 # ---- targets ----
 cmd_kernel() {
 	assemble_kernel
+	rm -f "${ASM_BUILD}/kernel.elf"
 	local objs=$(kernel_objs "kernel" ".o" "kernel_main_elf32.o")
-	ld -m elf_i386 -T "${KERNEL_LD}" -o "${KERNEL_ELF}" ${objs}
-	strip --strip-all "${KERNEL_ELF}"
-	objcopy -O binary "${KERNEL_ELF}" "${KERNEL_BIN}"
-	local esize=$(stat -c '%s' "${KERNEL_ELF}")
+	ld -m elf_i386 -T "${KERNEL_LD}" -o "${KERNEL_BIN}" ${objs}
 	local bsize=$(stat -c '%s' "${KERNEL_BIN}")
-	printf 'kernel: %s (%d bytes)\n' "${KERNEL_ELF}" "${esize}"
-	printf 'flat:   %s (%d bytes)\n' "${KERNEL_BIN}" "${bsize}"
+	printf 'kernel: %s (%d bytes)\n' "${KERNEL_BIN}" "${bsize}"
+}
+
+build_current_kernel_boot_image() {
+	local bsize=$(stat -c '%s' "${KERNEL_BIN}")
+	local sectors=$(( (bsize + 511) / 512 ))
+	asm_x86_obj bin "${KERNEL_BOOT}" "${ASM_DIR}/boot_loader.asm" -dKERNEL_SECTORS="${sectors}"
+	local lsize=$(stat -c '%s' "${KERNEL_BOOT}")
+	if [ "${lsize}" -ne 512 ]; then
+		echo "error: boot loader must be exactly 512 bytes" >&2
+		exit 1
+	fi
+	cp "${KERNEL_BOOT}" "${KERNEL_IMG}"
+	truncate -s $(( (sectors + 1) * 512 )) "${KERNEL_IMG}"
+	dd if="${KERNEL_BIN}" of="${KERNEL_IMG}" bs=512 seek=1 conv=notrunc status=none
+	local isize=$(stat -c '%s' "${KERNEL_IMG}")
+	printf 'boot:   %s (%d bytes, %d kernel sectors)\n' "${KERNEL_IMG}" "${isize}" "${sectors}"
+}
+
+build_kernel_boot_image() {
+	cmd_kernel
+	build_current_kernel_boot_image
 }
 
 cmd_kernel_hello() {
-	cmd_kernel
+	build_kernel_boot_image
 	qemu-system-x86_64 -machine q35 -display none -serial stdio -no-reboot \
-		-kernel "${KERNEL_ELF}" -m 256
+		-drive file="${KERNEL_IMG}",format=raw,if=ide,index=0 -m 256
 }
 
 cmd_kernel_vnc() {
-	cmd_kernel
+	build_kernel_boot_image
 	qemu-system-x86_64 -machine q35 -vga std -vnc :0 -serial stdio -no-reboot \
-		-kernel "${KERNEL_ELF}" -m 256
+		-drive file="${KERNEL_IMG}",format=raw,if=ide,index=0 -m 256
 }
 
 cmd_kernel_efi() {
@@ -259,15 +279,15 @@ cmd_install_efi() {
 }
 
 cmd_kernel_net() {
-	cmd_kernel
+	build_kernel_boot_image
 	qemu-system-x86_64 -machine q35 -display none -serial stdio \
-		-no-reboot -kernel "${KERNEL_ELF}" -m 256 \
+		-no-reboot -drive file="${KERNEL_IMG}",format=raw,if=ide,index=0 -m 256 \
 		-netdev user,id=net0 \
 		-device virtio-net-pci,netdev=net0
 }
 
 cmd_kernel_net_tpm() {
-	cmd_kernel
+	build_kernel_boot_image
 	local tpm_sock="/tmp/swtpm-tpm0.sock"
 	local tpm_dir="/tmp/swtpm-tpm0"
 	mkdir -p "${tpm_dir}"
@@ -278,7 +298,7 @@ cmd_kernel_net_tpm() {
 	while [ ! -S "${tpm_sock}" ]; do sleep 0.1; done
 	echo "Running QEMU with swtpm + virtio-net..."
 	qemu-system-x86_64 -machine q35 -display none -serial stdio \
-		-no-reboot -kernel "${KERNEL_ELF}" -m 256 \
+		-no-reboot -drive file="${KERNEL_IMG}",format=raw,if=ide,index=0 -m 256 \
 		-chardev socket,id=chrtpm,path="${tpm_sock}" \
 		-tpmdev emulator,id=tpm0,chardev=chrtpm \
 		-device tpm-crb,tpmdev=tpm0 \
@@ -302,18 +322,16 @@ cmd_kernel_tpm_live_test() {
 	elf32 "$lt_src" "$lt_dst"
 	echo "  AS  ${lt_dst}"
 	# Link with live test main instead of kernel_main_elf32.o
+	rm -f "${ASM_BUILD}/kernel.elf"
 	local objs=$(kernel_objs "kernel" ".o" "kernel_tpm_live_test_main_elf32.o")
-	ld -m elf_i386 -T "${KERNEL_LD}" -o "${KERNEL_ELF}" ${objs}
-	strip --strip-all "${KERNEL_ELF}"
-	objcopy -O binary "${KERNEL_ELF}" "${KERNEL_BIN}"
-	local esize=$(stat -c '%s' "${KERNEL_ELF}")
+	ld -m elf_i386 -T "${KERNEL_LD}" -o "${KERNEL_BIN}" ${objs}
 	local bsize=$(stat -c '%s' "${KERNEL_BIN}")
-	printf 'kernel: %s (%d bytes)\n' "${KERNEL_ELF}" "${esize}"
-	printf 'flat:   %s (%d bytes)\n' "${KERNEL_BIN}" "${bsize}"
+	printf 'kernel: %s (%d bytes)\n' "${KERNEL_BIN}" "${bsize}"
 }
 
 cmd_kernel_tpm_live_test_qemu() {
 	cmd_kernel_tpm_live_test
+	build_current_kernel_boot_image
 	local tpm_sock="/tmp/swtpm-tpm0.sock"
 	local tpm_dir="/tmp/swtpm-tpm0"
 	mkdir -p "${tpm_dir}"
@@ -324,7 +342,7 @@ cmd_kernel_tpm_live_test_qemu() {
 	while [ ! -S "${tpm_sock}" ]; do sleep 0.1; done
 	echo "Running QEMU with swtpm + TPM live test..."
 	qemu-system-x86_64 -machine q35 -display none -serial stdio \
-		-no-reboot -kernel "${KERNEL_ELF}" -m 256 \
+		-no-reboot -drive file="${KERNEL_IMG}",format=raw,if=ide,index=0 -m 256 \
 		-chardev socket,id=chrtpm,path="${tpm_sock}" \
 		-tpmdev emulator,id=tpm0,chardev=chrtpm \
 		-device tpm-crb,tpmdev=tpm0 || true
@@ -458,6 +476,7 @@ test-local-circuit|contract|route|yes|cmd_test_local_circuit|Run local circuit o
 test-av1-obu|unit|media|yes|cmd_test_av1_obu|Run AV1 OBU header codec test
 test-av1-mp4|unit|media|yes|cmd_test_av1_mp4|Run AV1 MP4 container parser test
 test-vp8|unit|media|yes|cmd_test_vp8|Run VP8 frame header parser test
+test-vp9|unit|media|yes|cmd_test_vp9|Run VP9 uncompressed frame header parser test
 test-av1-ivf|unit|media|yes|cmd_test_av1_ivf|Run AV1 IVF container parser test
 test-av1-sequence|unit|media|yes|cmd_test_av1_sequence|Run AV1 sequence header test
 test-av1-frame|unit|media|yes|cmd_test_av1_frame|Run AV1 frame header test
@@ -1567,6 +1586,10 @@ cmd_test_vp8() {
 	build_test "test_vp8_self" "${TEST_DIR}/test_vp8_self.asm" "media/vp8"
 }
 
+cmd_test_vp9() {
+	build_test "test_vp9_self" "${TEST_DIR}/test_vp9_self.asm" "media/vp9"
+}
+
 cmd_test_av1_ivf() {
 	build_test "test_av1_ivf_self" "${TEST_DIR}/test_av1_ivf_self.asm" "media/av1_ivf"
 }
@@ -2028,12 +2051,12 @@ cmd_clean() {
 cmd_help() {
 	cat <<'EOF'
 EdgeRun build targets:
-  kernel              Build kernel.elf + kernel.bin
-  kernel-hello        Build kernel + run in QEMU (serial)
-  kernel-vnc          Build kernel + run in QEMU (VNC :0)
-  kernel-net          Build kernel + run in QEMU with virtio-net
-  kernel-net-tpm      Build kernel + run in QEMU with swtpm + virtio-net
-  kernel-net-tor      Build kernel with Tor autostart + run QEMU net/TPM
+  kernel              Build flat x86_64 kernel.bin
+  kernel-hello        Build kernel.img and boot it in QEMU (serial)
+  kernel-vnc          Build kernel.img and boot it in QEMU (VNC :0)
+  kernel-net          Build kernel.img and boot it in QEMU with virtio-net
+  kernel-net-tpm      Build kernel.img and boot it in QEMU with swtpm + virtio-net
+  kernel-net-tor      Build kernel.img with Tor autostart + boot QEMU net/TPM
   kernel-tpm-live-test    Build kernel with TPM live test main
   kernel-tpm-live-test-qemu Build + run in QEMU with swtpm
   kernel-efi          Build kernel.efi and copy it to the EdgeRun ESP path
